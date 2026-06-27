@@ -237,6 +237,50 @@ func TestMCPAutoprogrammingStatusExecutorV0ListaGoalActivoAunqueColaNoVisible(t 
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0PublicaAccionBatchParaGoalsActivos(t *testing.T) {
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	for _, pair := range []struct {
+		runRef  string
+		goalRef string
+	}{
+		{"run-ref-autop-status-goal-batch-001", "goal-ref-autop-status-goal-batch-001"},
+		{"run-ref-autop-status-goal-batch-002", "goal-ref-autop-status-goal-batch-002"},
+	} {
+		if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+			RunRef:  pair.runRef,
+			GoalRef: pair.goalRef,
+			Status:  orquestagoal.GoalStatusRunningV0,
+			Spec: orquestagoal.GoalWorkSpecV0{
+				RunRef:       pair.runRef,
+				GoalRef:      pair.goalRef,
+				Objective:    "Observar goals activos en lote.",
+				DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+				WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+			},
+			LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+				GoalRef: pair.goalRef,
+				Status:  orquestagoal.GoalStatusRunningV0,
+			},
+		}); err != nil {
+			t.Fatalf("SaveGoalWorkStateV0: %v", err)
+		}
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.Operator == nil ||
+		!hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "observe_active_goals", "goals", "") ||
+		!hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "observe_goal", "run", "run-ref-autop-status-goal-batch-001") ||
+		!hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "observe_goal", "run", "run-ref-autop-status-goal-batch-002") {
+		t.Fatalf("operator=%+v", result.Operator)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0ColaMixtaGoalFirstNoSupervisaColaGlobal(t *testing.T) {
 	goalRunRef := "run-ref-autop-status-goal-first-queue-001"
 	legacyRunRef := "run-ref-autop-status-legacy-queue-001"

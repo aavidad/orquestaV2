@@ -71,6 +71,34 @@ func TestAutoprogrammingSuperviseAPIRouteV0(t *testing.T) {
 	}
 }
 
+func TestAutoprogrammingObserveActiveGoalsAPIRouteV0(t *testing.T) {
+	executor := &recordingAutoprogrammingObserveActiveGoalsExecutorV0{}
+	handler := NewHTTPHandlerV0(ConfigV0{
+		Timeout:                           time.Second,
+		AutoprogrammingObserveActiveGoals: executor,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/autoprogramming/goals/observe-active",
+		strings.NewReader(`{"request_id":"request-ref-app-gateway-observe-active-goals-001","max_items":3}`),
+	)
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPAutoprogrammingObserveActiveGoalsToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if executor.Input.MaxItems != 3 ||
+		result.Estado != orquestamcp.MCPAutoprogrammingObserveActiveGoalsEstadoOKV0 {
+		t.Fatalf("input=%+v result=%+v", executor.Input, result)
+	}
+}
+
 func TestAutoprogrammingSuperviseAPIRouteV0DevuelveAcceptedBackgroundSinColgar(t *testing.T) {
 	supervisor := newBlockingAutoprogrammingSuperviseExecutorV0()
 	handler := NewHTTPHandlerV0(ConfigV0{
@@ -171,6 +199,20 @@ func (executor *recordingAutoprogrammingSuperviseExecutorV0) Execute(
 		Estado: orquestamcp.MCPRunSupervisorEstadoOKV0,
 		RunRef: input.RunRef,
 		Ticks:  input.MaxTicks,
+	}, nil
+}
+
+type recordingAutoprogrammingObserveActiveGoalsExecutorV0 struct {
+	Input orquestamcp.MCPAutoprogrammingObserveActiveGoalsToolInputV0
+}
+
+func (executor *recordingAutoprogrammingObserveActiveGoalsExecutorV0) Execute(
+	_ context.Context,
+	input orquestamcp.MCPAutoprogrammingObserveActiveGoalsToolInputV0,
+) (orquestamcp.MCPAutoprogrammingObserveActiveGoalsToolResultV0, error) {
+	executor.Input = input
+	return orquestamcp.MCPAutoprogrammingObserveActiveGoalsToolResultV0{
+		Estado: orquestamcp.MCPAutoprogrammingObserveActiveGoalsEstadoOKV0,
 	}, nil
 }
 

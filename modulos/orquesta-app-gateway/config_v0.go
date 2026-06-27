@@ -34,6 +34,7 @@ type ConfigV0 struct {
 	FunctionContracts                           orquestacore.FunctionContractReadIndexPortV0
 	AutoprogrammingPrepareRun                   orquestamcp.MCPTransportAutoprogrammingPrepareRunExecutorV0
 	AutoprogrammingObserveGoal                  orquestamcp.MCPTransportAutoprogrammingObserveGoalExecutorV0
+	AutoprogrammingObserveActiveGoals           orquestamcp.MCPTransportAutoprogrammingObserveActiveGoalsExecutorV0
 	AutoprogrammingGoalStates                   orquestagoal.GoalWorkStateStorePortV0
 	AllowLegacyAutoprogrammingSupervisorActions bool
 	GovernanceCatalog                           orquestagovernance.GovernanceCatalogProviderV0

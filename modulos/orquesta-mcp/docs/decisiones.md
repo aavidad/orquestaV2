@@ -72,8 +72,10 @@ Impacto: ambos handlers pasan a `accepted_background` tras un timeout corto,
 mantienen una tabla activa en memoria por `operation_ref` y, si llega la misma
 operacion mientras sigue viva, devuelven `202` con diagnostico
 `*_operation_already_running` sin invocar de nuevo el executor. La consulta de
-progreso sigue siendo por stats/status de run/cola; no se mete runtime ni OPES
-en MCP.
+progreso sigue siendo por stats/status de run/cola; no se mete runtime ni OPES.
+Actualizacion 2026-06-27: se cubre explicitamente body `{}` de cola global para
+los dos endpoints, devolviendo `operation-ref-*-queue` en vez de dejar el HTTP
+abierto.
 Contratos afectados: rest.bridge.orquesta.runs.supervise.v0;
 rest.bridge.orquesta.autoprogramming.supervise.v0.
 Estado: aceptada localmente
@@ -651,6 +653,9 @@ Actualizacion 2026-06-27 noche: si ese store implementa
 `GoalWorkStateListPortV0`, `autoprogramming/status` lista goals `running` aunque
 no esten visibles en la cola; esos estados cuentan como superficie de estado
 disponible y publican `observe_goal`.
+Actualizacion 2026-06-27 noche 2: con varios goals activos, `status` publica
+tambien `observe_active_goals`; el tool batch lista por puerto y delega cada run
+en `observe_goal`, sin reabrir `supervise` legacy.
 Contratos afectados: mcp.tool.orquesta.autoprogramming.status.v0.
 Estado: aceptada localmente.
 ```

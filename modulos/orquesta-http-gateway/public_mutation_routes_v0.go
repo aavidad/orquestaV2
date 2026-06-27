@@ -18,6 +18,7 @@ func PublicRouteMutabilityV0(route string) string {
 	switch route {
 	case RouteAutoprogrammingPrepareRunV0,
 		RouteAutoprogrammingObserveGoalV0,
+		RouteAutoprogrammingObserveActiveGoalsV0,
 		RouteAutoprogrammingSelfImprovementV0,
 		RouteAutoprogrammingSuperviseV0,
 		RouteRunControlV0,

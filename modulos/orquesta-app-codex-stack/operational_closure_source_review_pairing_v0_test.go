@@ -13,7 +13,7 @@ import (
 // evidencia coincide con la review aceptada concreta, no uno arbitrario del map.
 func TestCodexStackOperationalClosureAcceptedResultDeterministicPairingV0(t *testing.T) {
 	const (
-		requestID  = "review-request-g03"
+		requestID   = "review-request-g03"
 		deliveryRef = "delivery-ref-g03"
 	)
 	resultRework1 := orquestacoreworkflow.ReviewResultV0{

@@ -53,7 +53,9 @@ Evidencia esperada: `/api/v0/runs/supervise` y
 `/api/v0/autoprogramming/supervise` devuelven `202 accepted_background` si el
 executor sigue vivo; una segunda llamada con el mismo `operation_ref` no vuelve
 a invocar el executor y devuelve diagnostico `*_operation_already_running`.
-Ultima ejecucion: 2026-06-26; pasa con `go test -count=1 ./modulos/orquesta-mcp`.
+Tambien cubre body `{}` para cola global, observado en OPES, con
+`operation-ref-*-queue`.
+Ultima ejecucion: 2026-06-27; pasa con `go test -count=1 ./modulos/orquesta-mcp`.
 Riesgos: el ledger es memoria del handler HTTP; tras restart la fuente de verdad
 para progreso sigue siendo `director.stats`, `autoprogramming.status` y cola.
 ```
@@ -670,6 +672,22 @@ como tool opt-in, `POST /api/v0/autoprogramming/goal/observe` acepta solo POST,
 exige `run_ref`, delega en executor inyectado y devuelve la misma proyeccion
 compacta de goal/cierre que la ruta de app-director. Sin executor devuelve
 `mcp_transport_tool_unbound` por transporte.
+
+## Prueba autoprogramacion observe active goals 2026-06-27
+
+Comando:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp \
+  -run 'AutoprogrammingObserveActiveGoals|RegisterMCPTransport|AutoprogrammingStatusExecutorV0PublicaAccionBatch'
+```
+
+Evidencia esperada: `orquesta.autoprogramming.observe_active_goals.v0` queda
+registrado como tool opt-in, `POST
+/api/v0/autoprogramming/goals/observe-active` delega en executor inyectado,
+lista solo goals activos por defecto, conserva incidencias por run y
+`autoprogramming/status` publica `observe_active_goals` cuando hay varios goals
+activos.
 
 ## Prueba automejora goal-first 2026-06-27
 

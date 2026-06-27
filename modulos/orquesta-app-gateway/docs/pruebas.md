@@ -31,6 +31,8 @@ git diff --check -- modulos/orquesta-app-gateway
 - `/api/v0/autoprogramming/supervise` responde `202 accepted_background` si el
   supervisor sigue vivo tras el timeout publico y no duplica una operacion
   activa con el mismo `idempotency_key`.
+- `/api/v0/autoprogramming/goals/observe-active` delega en el executor MCP
+  inyectado para observar goals activos sin pasar por supervision legacy.
 - `/api/v0/director/stats` mantiene el contrato MCP/API completo de
   `DirectorRunStatsV0` y `DirectorDecisionContextV0`; el gateway solo compone
   rutas y transporte in-process.

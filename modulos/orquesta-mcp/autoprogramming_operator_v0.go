@@ -295,6 +295,21 @@ func mcpAutoprogrammingObserveGoalSafeActionV0(runRef string) MCPAutoprogramming
 	}
 }
 
+func mcpAutoprogrammingObserveActiveGoalsSafeActionV0(runRefs []string) MCPAutoprogrammingSafeActionV0 {
+	return MCPAutoprogrammingSafeActionV0{
+		Action:       "observe_active_goals",
+		Scope:        "goals",
+		Method:       "POST",
+		Endpoint:     MCPAutoprogrammingObserveActiveGoalsHTTPPathV0,
+		Reason:       "goal_first_batch",
+		RequiresPost: true,
+		Payload: map[string]any{
+			"run_refs":     compactStringsMCPV0(runRefs),
+			"requested_by": "orquesta-autoprogramming-status",
+		},
+	}
+}
+
 func mcpAutoprogrammingOperatorWithGoalFirstActionsV0(
 	operator *MCPAutoprogrammingOperatorV0,
 	allowLegacySupervisorActions bool,
@@ -308,6 +323,9 @@ func mcpAutoprogrammingOperatorWithGoalFirstActionsV0(
 		return operator
 	}
 	next := make([]MCPAutoprogrammingSafeActionV0, 0, len(operator.SafeActions)+len(goalFirst))
+	if len(goalFirst) > 1 {
+		next = append(next, mcpAutoprogrammingObserveActiveGoalsSafeActionV0(runRefs))
+	}
 	for _, runRef := range runRefs {
 		runRef = strings.TrimSpace(runRef)
 		if runRef == "" || !goalFirst[runRef] {

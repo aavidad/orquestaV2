@@ -1457,6 +1457,37 @@ Invariantes:
 ```
 
 ```text
+Nombre: mcp.tool.orquesta.autoprogramming.observe_active_goals.v0
+Campos:
+  descriptor:
+    name: orquesta.autoprogramming.observe_active_goals.v0
+    resource_uri: orquesta://contracts/autoprogramming-observe-active-goals/v0
+  rest:
+    method: POST
+    path: /api/v0/autoprogramming/goals/observe-active
+  input:
+    request_id, correlation_id: refs externas opcionales
+    run_refs?: filtro opcional de runs goal-first
+    statuses?: filtro opcional de estados; por defecto observa `running`
+    max_items?: limite de estados listados
+    occurred_at, requested_by: metadata opcional
+  output_ok:
+    estado: ok
+    observations?: resultados compactos de observe_goal por run
+    issues?: incidencias por run sin cancelar todo el lote
+    evidence_refs?: evidencias agregadas
+  output_error:
+    estado: error
+    errores_publicos
+Invariantes:
+  - Adaptador inbound fino.
+  - Lista estados por `GoalWorkStateListPortV0`.
+  - Observa cada `run_ref` con `orquesta.autoprogramming.observe_goal.v0` para
+    reutilizar cierre y reconciliacion de composicion.
+  - No ejecuta `supervise` legacy ni arranca proveedor.
+```
+
+```text
 Nombre: mcp.tool.orquesta.autoprogramming.status.v0
 Tipo: puerto_entrada
 Version: v0
@@ -1514,7 +1545,9 @@ Invariantes:
     detectar goals activos aunque no aparezcan en la cola visible. Cuando la
     consulta es de cola y hay candidatos goal-first, no recomienda
     `supervise queue`; emite `observe_goal` por run goal-first y `supervise run`
-    acotado para candidatos legacy visibles.
+    acotado para candidatos legacy visibles. Si hay mas de un goal activo,
+    publica tambien `observe_active_goals` contra
+    `/api/v0/autoprogramming/goals/observe-active`.
   - Las clases `running_without_recent_stats`, `running_stale*` y las
     proyecciones legacy de tareas/agentes (`registered`, `process_ref`,
     `task_ref`) aplican solo a runs sin `GoalWorkStateV0`. En goal-first el

@@ -25,6 +25,7 @@ type MCPTransportBindingsV0 struct {
 	WorkspaceTimeline                           orquestaobservability.WorkspaceTimelineSourcePortV0
 	AutoprogrammingPrepareRun                   MCPTransportAutoprogrammingPrepareRunExecutorV0
 	AutoprogrammingObserveGoal                  MCPTransportAutoprogrammingObserveGoalExecutorV0
+	AutoprogrammingObserveActiveGoals           MCPTransportAutoprogrammingObserveActiveGoalsExecutorV0
 	AutoprogrammingGoalStates                   orquestagoal.GoalWorkStateStorePortV0
 	AllowLegacyAutoprogrammingSupervisorActions bool
 	ServerShutdown                              MCPTransportServerShutdownExecutorV0
@@ -80,6 +81,10 @@ type MCPTransportAutoprogrammingPrepareRunExecutorV0 interface {
 
 type MCPTransportAutoprogrammingObserveGoalExecutorV0 interface {
 	Execute(context.Context, MCPAutoprogrammingObserveGoalToolInputV0) (MCPAutoprogrammingObserveGoalToolResultV0, error)
+}
+
+type MCPTransportAutoprogrammingObserveActiveGoalsExecutorV0 interface {
+	Execute(context.Context, MCPAutoprogrammingObserveActiveGoalsToolInputV0) (MCPAutoprogrammingObserveActiveGoalsToolResultV0, error)
 }
 
 type MCPTransportAutoprogrammingStatusExecutorV0 interface {

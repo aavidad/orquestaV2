@@ -6,6 +6,7 @@ func TestPublicRouteMutabilityV0ClasificaMutacionesPublicas(t *testing.T) {
 	for _, route := range []string{
 		RouteAutoprogrammingPrepareRunV0,
 		RouteAutoprogrammingObserveGoalV0,
+		RouteAutoprogrammingObserveActiveGoalsV0,
 		RouteAutoprogrammingSuperviseV0,
 		RouteRunControlV0,
 		RouteRunQueuePriorityV0,

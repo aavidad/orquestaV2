@@ -223,7 +223,11 @@ terminal no ejecutable. El binding MCP/REST del stack usa
 `StackV0.ObserveAppDirectorGoalV0` para no saltarse esa reconciliacion.
 Autoprogramacion expone la misma observacion con tool/ruta propios:
 `orquesta.autoprogramming.observe_goal.v0` y
-`/api/v0/autoprogramming/goal/observe`.
+`/api/v0/autoprogramming/goal/observe`. El batch
+`orquesta.autoprogramming.observe_active_goals.v0` /
+`/api/v0/autoprogramming/goals/observe-active` lista estados goal por el store
+inyectado y delega cada `run_ref` en ese mismo wrapper, sin saltarse la
+reconciliacion de cola.
 Si un operador llama `runs.supervisor` con un `run_ref` que ya tiene
 `GoalWorkStateV0`, el executor no drena el loop legacy: devuelve
 `stop_reason=goal_first_observe_required`, diagnostico

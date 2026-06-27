@@ -110,6 +110,36 @@ func TestMCPRunSupervisorHTTPHandlerV0DevuelveAcceptedSiExecutorSigueVivo(t *tes
 	}
 }
 
+func TestMCPRunSupervisorHTTPHandlerV0BodyVacioNoSeCuelga(t *testing.T) {
+	executor := &fakeMCPRunSupervisorHTTPExecutorV0{
+		delay: 25 * time.Millisecond,
+		result: MCPRunSupervisorToolResultV0{
+			Estado: MCPRunSupervisorEstadoOKV0,
+		},
+	}
+	req := httptest.NewRequest(
+		http.MethodPost,
+		MCPRunSupervisorHTTPPathV0,
+		bytes.NewBufferString(`{}`),
+	)
+	rec := httptest.NewRecorder()
+
+	newMCPRunSupervisorHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.StopReason != "accepted_background" ||
+		result.OperationRef != "operation-ref-run-supervisor-queue" ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "run_supervisor_background_accepted") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPRunSupervisorHTTPHandlerV0NoDuplicaOperacionActiva(t *testing.T) {
 	executor := &blockingMCPRunSupervisorHTTPExecutorV0{
 		started: make(chan struct{}),

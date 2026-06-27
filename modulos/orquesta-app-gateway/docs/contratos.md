@@ -114,6 +114,9 @@ Entrada de composicion:
 - `/api/v0/autoprogramming/goal/observe` delega en `orquesta-mcp`; este modulo
   no observa goals, no valida cierre, no toca cola y no conoce runtime goal,
   Codex, DB, filesystem ni proveedor.
+- `/api/v0/autoprogramming/goals/observe-active` delega en `orquesta-mcp`;
+  este modulo no lista estados goal, no ejecuta supervision legacy y no decide
+  cierre.
 - `/api/v0/autoprogramming/self-improvement` delega en `orquesta-mcp`; este
   modulo no decide prioridad, cola, runtime ni preparacion salvo puerto
   inyectado.

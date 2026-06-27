@@ -3,75 +3,77 @@ package orquestahttpgateway
 import "net/http"
 
 const (
-	RouteHomeV0                           = "/"
-	RouteNuevaAppV0                       = "/nueva-app"
-	RouteOpsDashboardV0                   = "/ops"
-	RouteAutoprogrammingPageV0            = "/autoprogramming"
-	RouteAppChangePageV0                  = "/app-change"
-	RouteDirectorStatsPageV0              = "/director-stats"
-	RouteRunControlPageV0                 = "/run-control"
-	RouteRunQueuePageV0                   = "/run-queue"
-	RouteAppSpecV0                        = "/api/v0/apps/spec"
-	RouteAppDirectorV0                    = "/api/v0/apps/director"
-	RouteAppDirectorGoalObserveV0         = "/api/v0/apps/director/goal/observe"
-	RouteAppIntakeGuidedTurnV0            = "/api/v0/apps/intake/guided-turn"
-	RouteAppChangeV0                      = "/api/v0/apps/"
-	RouteDirectorStatsV0                  = "/api/v0/director/stats"
-	RouteRunControlV0                     = "/api/v0/runs/control"
-	RouteRuntimeModelsV0                  = "/api/v0/runtime/models"
-	RouteRunQueuePriorityV0               = "/api/v0/runs/queue/priority"
-	RouteRunSupervisorV0                  = "/api/v0/runs/supervise"
-	RouteOpsAgentRuntimeDetailV0          = "/api/v0/ops/agent-runtime-detail"
-	RouteOperationalStatusV0              = "/api/v0/operational-status/query"
-	RouteFunctionContractListV0           = "/api/v0/core/function-contracts/list"
-	RouteFunctionContractViewV0           = "/api/v0/core/function-contracts/view"
-	RouteServerShutdownV0                 = "/api/v0/server/shutdown"
-	RouteHumanDirectorWorkReviewPlanV0    = "/api/v0/director/human-work/review-plan"
-	RouteAutoprogrammingValidateRequestV0 = "/api/v0/autoprogramming/validate-request"
-	RouteAutoprogrammingSelfImprovementV0 = "/api/v0/autoprogramming/self-improvement"
-	RouteAutoprogrammingPrepareRunV0      = "/api/v0/autoprogramming/prepare-run"
-	RouteAutoprogrammingObserveGoalV0     = "/api/v0/autoprogramming/goal/observe"
-	RouteAutoprogrammingStatusV0          = "/api/v0/autoprogramming/status"
-	RouteAutoprogrammingSuperviseV0       = "/api/v0/autoprogramming/supervise"
-	RouteGovernanceCatalogQueryV0         = "/api/v0/governance/catalog/query"
-	RouteDomainWorkV0                     = "/api/v0/domain-work"
-	RouteExternalWorkRunV0                = "/api/v0/external-work/run"
+	RouteHomeV0                              = "/"
+	RouteNuevaAppV0                          = "/nueva-app"
+	RouteOpsDashboardV0                      = "/ops"
+	RouteAutoprogrammingPageV0               = "/autoprogramming"
+	RouteAppChangePageV0                     = "/app-change"
+	RouteDirectorStatsPageV0                 = "/director-stats"
+	RouteRunControlPageV0                    = "/run-control"
+	RouteRunQueuePageV0                      = "/run-queue"
+	RouteAppSpecV0                           = "/api/v0/apps/spec"
+	RouteAppDirectorV0                       = "/api/v0/apps/director"
+	RouteAppDirectorGoalObserveV0            = "/api/v0/apps/director/goal/observe"
+	RouteAppIntakeGuidedTurnV0               = "/api/v0/apps/intake/guided-turn"
+	RouteAppChangeV0                         = "/api/v0/apps/"
+	RouteDirectorStatsV0                     = "/api/v0/director/stats"
+	RouteRunControlV0                        = "/api/v0/runs/control"
+	RouteRuntimeModelsV0                     = "/api/v0/runtime/models"
+	RouteRunQueuePriorityV0                  = "/api/v0/runs/queue/priority"
+	RouteRunSupervisorV0                     = "/api/v0/runs/supervise"
+	RouteOpsAgentRuntimeDetailV0             = "/api/v0/ops/agent-runtime-detail"
+	RouteOperationalStatusV0                 = "/api/v0/operational-status/query"
+	RouteFunctionContractListV0              = "/api/v0/core/function-contracts/list"
+	RouteFunctionContractViewV0              = "/api/v0/core/function-contracts/view"
+	RouteServerShutdownV0                    = "/api/v0/server/shutdown"
+	RouteHumanDirectorWorkReviewPlanV0       = "/api/v0/director/human-work/review-plan"
+	RouteAutoprogrammingValidateRequestV0    = "/api/v0/autoprogramming/validate-request"
+	RouteAutoprogrammingSelfImprovementV0    = "/api/v0/autoprogramming/self-improvement"
+	RouteAutoprogrammingPrepareRunV0         = "/api/v0/autoprogramming/prepare-run"
+	RouteAutoprogrammingObserveGoalV0        = "/api/v0/autoprogramming/goal/observe"
+	RouteAutoprogrammingObserveActiveGoalsV0 = "/api/v0/autoprogramming/goals/observe-active"
+	RouteAutoprogrammingStatusV0             = "/api/v0/autoprogramming/status"
+	RouteAutoprogrammingSuperviseV0          = "/api/v0/autoprogramming/supervise"
+	RouteGovernanceCatalogQueryV0            = "/api/v0/governance/catalog/query"
+	RouteDomainWorkV0                        = "/api/v0/domain-work"
+	RouteExternalWorkRunV0                   = "/api/v0/external-work/run"
 )
 
 type RouteHandlersV0 struct {
-	Home                           http.Handler
-	NuevaApp                       http.Handler
-	OpsDashboard                   http.Handler
-	AutoprogrammingPage            http.Handler
-	AppChangePage                  http.Handler
-	DirectorStatsPage              http.Handler
-	RunControlPage                 http.Handler
-	RunQueuePage                   http.Handler
-	AppSpec                        http.Handler
-	AppDirector                    http.Handler
-	AppDirectorGoalObserve         http.Handler
-	AppIntakeGuidedTurn            http.Handler
-	AppChange                      http.Handler
-	DirectorStats                  http.Handler
-	RunControl                     http.Handler
-	RuntimeModels                  http.Handler
-	RunQueuePriority               http.Handler
-	RunSupervisor                  http.Handler
-	OpsAgentRuntimeDetail          http.Handler
-	OperationalStatus              http.Handler
-	FunctionContractList           http.Handler
-	FunctionContractView           http.Handler
-	ServerShutdown                 http.Handler
-	HumanDirectorWorkReviewPlan    http.Handler
-	AutoprogrammingValidateRequest http.Handler
-	AutoprogrammingSelfImprovement http.Handler
-	AutoprogrammingPrepareRun      http.Handler
-	AutoprogrammingObserveGoal     http.Handler
-	AutoprogrammingStatus          http.Handler
-	AutoprogrammingSupervise       http.Handler
-	GovernanceCatalogQuery         http.Handler
-	DomainWork                     http.Handler
-	ExternalWorkRun                http.Handler
+	Home                              http.Handler
+	NuevaApp                          http.Handler
+	OpsDashboard                      http.Handler
+	AutoprogrammingPage               http.Handler
+	AppChangePage                     http.Handler
+	DirectorStatsPage                 http.Handler
+	RunControlPage                    http.Handler
+	RunQueuePage                      http.Handler
+	AppSpec                           http.Handler
+	AppDirector                       http.Handler
+	AppDirectorGoalObserve            http.Handler
+	AppIntakeGuidedTurn               http.Handler
+	AppChange                         http.Handler
+	DirectorStats                     http.Handler
+	RunControl                        http.Handler
+	RuntimeModels                     http.Handler
+	RunQueuePriority                  http.Handler
+	RunSupervisor                     http.Handler
+	OpsAgentRuntimeDetail             http.Handler
+	OperationalStatus                 http.Handler
+	FunctionContractList              http.Handler
+	FunctionContractView              http.Handler
+	ServerShutdown                    http.Handler
+	HumanDirectorWorkReviewPlan       http.Handler
+	AutoprogrammingValidateRequest    http.Handler
+	AutoprogrammingSelfImprovement    http.Handler
+	AutoprogrammingPrepareRun         http.Handler
+	AutoprogrammingObserveGoal        http.Handler
+	AutoprogrammingObserveActiveGoals http.Handler
+	AutoprogrammingStatus             http.Handler
+	AutoprogrammingSupervise          http.Handler
+	GovernanceCatalogQuery            http.Handler
+	DomainWork                        http.Handler
+	ExternalWorkRun                   http.Handler
 }
 
 func NewAppGatewayMuxV0(handlers RouteHandlersV0) http.Handler {
@@ -134,6 +136,7 @@ func gatewayRouteRegistrationsV0(handlers RouteHandlersV0) []gatewayRouteRegistr
 		{ref: RouteRefAutoprogrammingSelfImprovementV0, route: RouteAutoprogrammingSelfImprovementV0, handler: handlers.AutoprogrammingSelfImprovement},
 		{ref: RouteRefAutoprogrammingPrepareRunV0, route: RouteAutoprogrammingPrepareRunV0, handler: handlers.AutoprogrammingPrepareRun},
 		{ref: RouteRefAutoprogrammingObserveGoalV0, route: RouteAutoprogrammingObserveGoalV0, handler: handlers.AutoprogrammingObserveGoal},
+		{ref: RouteRefAutoprogrammingObserveActiveGoalsV0, route: RouteAutoprogrammingObserveActiveGoalsV0, handler: handlers.AutoprogrammingObserveActiveGoals},
 		{ref: RouteRefAutoprogrammingStatusV0, route: RouteAutoprogrammingStatusV0, handler: handlers.AutoprogrammingStatus},
 		{ref: RouteRefAutoprogrammingSuperviseV0, route: RouteAutoprogrammingSuperviseV0, handler: handlers.AutoprogrammingSupervise},
 		{ref: RouteRefGovernanceCatalogQueryV0, route: RouteGovernanceCatalogQueryV0, handler: handlers.GovernanceCatalogQuery},

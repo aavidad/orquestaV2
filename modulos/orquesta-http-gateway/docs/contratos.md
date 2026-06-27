@@ -132,6 +132,11 @@ goal de autoprogramacion por `run_ref`. El gateway no observa goals, no valida
 cierre, no sincroniza cola y no conoce Codex, OPES, scheduler, runtime, DB ni
 reglas de dominio.
 
+`RouteAutoprogrammingObserveActiveGoalsV0` apunta al contrato REST/MCP que
+observa en lote goals activos de autoprogramacion. El gateway solo monta el
+handler inyectado; no lista estados goal, no ejecuta `supervise` legacy y no
+arranca proveedor.
+
 `RouteAutoprogrammingStatusV0` y `RouteAutoprogrammingSuperviseV0` apuntan a
 contratos REST/MCP finos para estado/diagnostico y supervision puntual de
 autoprogramacion. El gateway solo registra handlers inyectados.

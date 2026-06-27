@@ -162,6 +162,39 @@ func TestMCPAutoprogrammingSuperviseHTTPHandlerV0DevuelveAcceptedSiExecutorSigue
 	}
 }
 
+func TestMCPAutoprogrammingSuperviseHTTPHandlerV0BodyVacioNoSeCuelga(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingSuperviseHTTPExecutorV0{
+		delay: 25 * time.Millisecond,
+		result: MCPRunSupervisorToolResultV0{
+			Estado: MCPRunSupervisorEstadoOKV0,
+		},
+	}
+	req := httptest.NewRequest(
+		http.MethodPost,
+		MCPAutoprogrammingSuperviseHTTPPathV0,
+		bytes.NewBufferString(`{}`),
+	)
+	rec := httptest.NewRecorder()
+
+	newMCPAutoprogrammingSuperviseHTTPHandlerWithTimeoutV0(
+		executor,
+		time.Millisecond,
+	).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.StopReason != "accepted_background" ||
+		result.OperationRef != "operation-ref-autoprogramming-supervise-queue" ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_supervise_background_accepted") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPAutoprogrammingSuperviseHTTPHandlerV0NoDuplicaOperacionActiva(t *testing.T) {
 	executor := &blockingMCPAutoprogrammingSuperviseHTTPExecutorV0{
 		started: make(chan struct{}),

@@ -139,9 +139,9 @@ func codexStackBaseConfigForTestV0(
 		ReviewGate: ReviewGateConfigV0{
 			FileEvidence: orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 		},
-		RequiredTests:              requiredTests,
-		DomainWork:                 domainWork,
-		AllowLegacyExternalWorkRun: true,
+		RequiredTests:                 requiredTests,
+		DomainWork:                    domainWork,
+		AllowLegacyExternalWorkRun:    true,
 		AllowLegacyAutoprogrammingRun: true,
 		DomainDelivery: DomainWorkDeliveryBridgeConfigV0{
 			Enabled: domainWork != nil,
@@ -171,6 +171,7 @@ func TestBuildStackV0ExponeBindingsMCPNativosV0(t *testing.T) {
 		stack.MCPTransportBindings.RunQueuePriority == nil ||
 		stack.MCPTransportBindings.RunSupervisor == nil ||
 		stack.MCPTransportBindings.AutoprogrammingPrepareRun == nil ||
+		stack.MCPTransportBindings.AutoprogrammingObserveActiveGoals == nil ||
 		stack.MCPTransportBindings.ServerShutdown == nil {
 		t.Fatalf("bindings MCP incompletos: %+v", stack.MCPTransportBindings)
 	}

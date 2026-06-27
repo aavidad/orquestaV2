@@ -59,6 +59,8 @@ func mcpTransportToolInputDTOByNameV0(name string) (any, bool) {
 		return MCPAutoprogrammingPrepareRunToolInputV0{}, true
 	case MCPAutoprogrammingObserveGoalToolNameV0:
 		return MCPAutoprogrammingObserveGoalToolInputV0{}, true
+	case MCPAutoprogrammingObserveActiveGoalsToolNameV0:
+		return MCPAutoprogrammingObserveActiveGoalsToolInputV0{}, true
 	case MCPAutoprogrammingStatusToolNameV0:
 		return mcpAutoprogrammingStatusTransportInputV0{}, true
 	case MCPAutoprogrammingSuperviseToolNameV0:

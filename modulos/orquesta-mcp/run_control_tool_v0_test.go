@@ -116,10 +116,10 @@ func TestMCPRunControlExecutorV0ResuelveRunPorJobExterno(t *testing.T) {
 }
 
 type fakeMCPRunControlPortV0 struct {
-	pause  orquestaruncontrol.PauseRunCommandV0
-	resume orquestaruncontrol.ResumeRunCommandV0
-	stop   orquestaruncontrol.StopRunCommandV0
-	cancel orquestaruncontrol.CancelRunCommandV0
+	pause      orquestaruncontrol.PauseRunCommandV0
+	resume     orquestaruncontrol.ResumeRunCommandV0
+	stop       orquestaruncontrol.StopRunCommandV0
+	cancel     orquestaruncontrol.CancelRunCommandV0
 	checkpoint orquestaruncontrol.RecordRunCheckpointCommandV0
 }
 

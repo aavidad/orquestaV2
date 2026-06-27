@@ -39,6 +39,10 @@ Estado vigente:
   `accepted_background` si el executor sigue vivo y deduplica una operacion
   activa por `operation_ref`; el progreso se consulta por status/stats, no
   relanzando la misma supervision.
+- `/api/v0/autoprogramming/goals/observe-active` observa en lote goals
+  goal-first activos listados por `GoalWorkStateListPortV0`; reutiliza el
+  executor `observe_goal` por cada `run_ref` para conservar cierre y
+  reconciliacion de la composicion.
 - `orquesta.director.stats.v0` puede publicar un bloque `goal` goal-first si la
   composicion inyecta un `GoalStateStore`; ese bloque solo proyecta estado ya
   persistido por `run_ref`, no observa ni cierra el Goal.
