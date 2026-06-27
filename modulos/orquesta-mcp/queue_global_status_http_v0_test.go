@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestMCPQueueGlobalStatusHTTPHandlerV0GetProyectaEstadoCompacto(t *testing.T) {
@@ -13,6 +14,23 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0GetProyectaEstadoCompacto(t *testing.T
 		result: MCPAutoprogrammingStatusToolResultV0{
 			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
 			QueueRef: "global",
+			Queue: &MCPRunQueuePriorityToolResultV0{
+				Estado:   MCPRunQueuePriorityEstadoOKV0,
+				QueueRef: "global",
+				Ranked: []MCPRunQueueRankedCandidateCompactV0{{
+					Rank:         1,
+					RunRef:       "run-ref-global-status-stale-001",
+					AppRef:       "app-ref-global-status-001",
+					Status:       "running",
+					EvidenceRefs: []string{"evidence-ref-queue-stale-001"},
+				}, {
+					Rank:         2,
+					RunRef:       "run-ref-global-status-queued-001",
+					AppRef:       "app-ref-global-status-001",
+					Status:       "ready",
+					EvidenceRefs: []string{"evidence-ref-queue-ready-001"},
+				}},
+			},
 			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
 				Queued:                    2,
 				QueuedNotDispatched:       1,
@@ -37,12 +55,13 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0GetProyectaEstadoCompacto(t *testing.T
 				}},
 			},
 			StaleRunning: []MCPAutoprogrammingActionableRunV0{{
-				Code:   "stale_running",
-				RunRef: "run-ref-global-status-stale-001",
+				Code:              "stale_running",
+				RunRef:            "run-ref-global-status-stale-001",
+				RecommendedAction: "observe_run_ref_with_process_refs_before_reconcile",
 			}},
 			Diagnostics: []MCPAutoprogrammingDiagnosticV0{{
 				Code:  "queued_not_dispatched",
-				Scope: "queue",
+				Scope: "run:run-ref-global-status-queued-001",
 			}},
 		},
 	}
@@ -76,11 +95,72 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0GetProyectaEstadoCompacto(t *testing.T
 		result.Summary.RunningWithoutRecentStats != 1 ||
 		result.Summary.Blocked != 1 ||
 		!result.Summary.NeedsAttention ||
+		!result.Summary.NeedsAction ||
+		result.Summary.WillFinishAlone ||
 		len(result.GoalRunRefs) != 1 ||
 		result.GoalRunRefs[0] != "run-ref-global-status-goal-001" ||
+		len(result.Items) != 4 ||
+		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-stale-001", "stale_running", true, "restart_observer") ||
+		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-queued-001", "queued_not_dispatched", true, "reencolar") ||
+		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-active-001", "running_live", false, "") ||
+		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-goal-001", "observer_required", true, "restart_observer") ||
 		len(result.SafeActions) != 1 ||
 		len(result.StaleRunning) != 1 ||
 		len(result.Diagnostics) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	goalItem := mcpQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-goal-001")
+	if len(goalItem.EvidenceRefs) == 0 {
+		t.Fatalf("safe action sin evidencia fallback: %+v", goalItem)
+	}
+}
+
+func TestMCPQueueGlobalStatusHTTPHandlerV0WillFinishAloneSinAccionPendiente(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			Queue: &MCPRunQueuePriorityToolResultV0{
+				Estado:   MCPRunQueuePriorityEstadoOKV0,
+				QueueRef: "global",
+				Ranked: []MCPRunQueueRankedCandidateCompactV0{{
+					Rank:         1,
+					RunRef:       "run-ref-global-status-live-001",
+					AppRef:       "app-ref-global-status-live-001",
+					Status:       "running",
+					EvidenceRefs: []string{"evidence-ref-live-queue-001"},
+				}},
+			},
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				RunningLive: 1,
+				AgentsLive:  1,
+			},
+			Operator: &MCPAutoprogrammingOperatorV0{
+				ActiveRuns: []MCPAutoprogrammingActiveRunV0{{
+					RunRef: "run-ref-global-status-live-001",
+					AppRef: "app-ref-global-status-live-001",
+					Status: "running",
+				}},
+			},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	NewMCPQueueGlobalStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Summary.NeedsAttention ||
+		result.Summary.NeedsAction ||
+		!result.Summary.WillFinishAlone ||
+		len(result.Items) != 1 ||
+		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-live-001", "running_live", false, "") {
 		t.Fatalf("result=%+v", result)
 	}
 }
@@ -105,17 +185,48 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0ExecutorNil(t *testing.T) {
 	}
 }
 
+func TestMCPQueueGlobalStatusHTTPHandlerV0TimeoutDevuelveJSONPublico(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{waitForCancel: true}
+	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
+	req.Header.Set("X-Correlation-ID", "corr-queue-global-timeout-001")
+	rec := httptest.NewRecorder()
+
+	newMCPQueueGlobalStatusHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusGatewayTimeout ||
+		rec.Header().Get("X-Correlation-ID") != "corr-queue-global-timeout-001" {
+		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPAutoprogrammingStatusEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "queue_global_status_timeout" ||
+		!result.Summary.NeedsAction ||
+		result.Summary.WillFinishAlone ||
+		!hasMCPQueueGlobalStatusDiagnosticCodeForTestV0(result.Diagnostics, "queue_global_status_timeout") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 type fakeMCPQueueGlobalStatusExecutorV0 struct {
-	input  MCPAutoprogrammingStatusToolInputV0
-	result MCPAutoprogrammingStatusToolResultV0
-	err    error
+	input         MCPAutoprogrammingStatusToolInputV0
+	result        MCPAutoprogrammingStatusToolResultV0
+	err           error
+	waitForCancel bool
 }
 
 func (executor *fakeMCPQueueGlobalStatusExecutorV0) Execute(
-	_ context.Context,
+	ctx context.Context,
 	input MCPAutoprogrammingStatusToolInputV0,
 ) (MCPAutoprogrammingStatusToolResultV0, error) {
 	executor.input = input
+	if executor.waitForCancel {
+		<-ctx.Done()
+		return MCPAutoprogrammingStatusToolResultV0{}, ctx.Err()
+	}
 	if executor.result.Estado == "" {
 		executor.result = MCPAutoprogrammingStatusToolResultV0{
 			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
@@ -123,4 +234,46 @@ func (executor *fakeMCPQueueGlobalStatusExecutorV0) Execute(
 		}
 	}
 	return executor.result, executor.err
+}
+
+func mcpQueueGlobalStatusItemForTestV0(
+	items []MCPQueueGlobalStatusItemV0,
+	runRef string,
+) MCPQueueGlobalStatusItemV0 {
+	for _, item := range items {
+		if item.RunRef == runRef {
+			return item
+		}
+	}
+	return MCPQueueGlobalStatusItemV0{}
+}
+
+func hasMCPQueueGlobalStatusItemForTestV0(
+	items []MCPQueueGlobalStatusItemV0,
+	runRef string,
+	status string,
+	needsAction bool,
+	recommendedAction string,
+) bool {
+	for _, item := range items {
+		if item.RunRef == runRef &&
+			item.Status == status &&
+			item.NeedsAction == needsAction &&
+			item.RecommendedAction == recommendedAction {
+			return true
+		}
+	}
+	return false
+}
+
+func hasMCPQueueGlobalStatusDiagnosticCodeForTestV0(
+	diagnostics []MCPAutoprogrammingDiagnosticV0,
+	code string,
+) bool {
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Code == code {
+			return true
+		}
+	}
+	return false
 }

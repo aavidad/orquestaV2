@@ -1,10 +1,12 @@
 package orquestamcp
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -14,6 +16,8 @@ const (
 	defaultMCPQueueGlobalStatusQueueLimitV0 = 200
 )
 
+const defaultMCPQueueGlobalStatusHTTPResponseTimeoutV0 = 2 * time.Second
+
 type MCPQueueGlobalStatusResultV0 struct {
 	SchemaVersion string                              `json:"schema_version"`
 	Estado        string                              `json:"estado"`
@@ -21,6 +25,7 @@ type MCPQueueGlobalStatusResultV0 struct {
 	CorrelationID string                              `json:"correlation_id,omitempty"`
 	QueueRef      string                              `json:"queue_ref,omitempty"`
 	Summary       MCPQueueGlobalStatusSummaryV0       `json:"summary"`
+	Items         []MCPQueueGlobalStatusItemV0        `json:"items,omitempty"`
 	QueueHealth   *MCPAutoprogrammingQueueHealthV0    `json:"queue_health,omitempty"`
 	ActiveRuns    []MCPAutoprogrammingActiveRunV0     `json:"active_runs,omitempty"`
 	GoalRunRefs   []string                            `json:"goal_run_refs,omitempty"`
@@ -47,16 +52,41 @@ type MCPQueueGlobalStatusSummaryV0 struct {
 	SafeActions               int  `json:"safe_actions,omitempty"`
 	Diagnostics               int  `json:"diagnostics,omitempty"`
 	NeedsAttention            bool `json:"needs_attention,omitempty"`
+	NeedsAction               bool `json:"needs_action,omitempty"`
+	WillFinishAlone           bool `json:"will_finish_alone"`
+}
+
+type MCPQueueGlobalStatusItemV0 struct {
+	RunRef            string   `json:"run_ref,omitempty"`
+	AppRef            string   `json:"app_ref,omitempty"`
+	Status            string   `json:"status"`
+	NeedsAction       bool     `json:"needs_action,omitempty"`
+	RecommendedAction string   `json:"recommended_action,omitempty"`
+	EvidenceRefs      []string `json:"evidence_refs,omitempty"`
 }
 
 func NewMCPQueueGlobalStatusHTTPHandlerV0(
 	executor MCPTransportAutoprogrammingStatusExecutorV0,
 ) http.Handler {
-	return mcpQueueGlobalStatusHTTPHandlerV0{executor: executor}
+	return newMCPQueueGlobalStatusHTTPHandlerWithTimeoutV0(
+		executor,
+		defaultMCPQueueGlobalStatusHTTPResponseTimeoutV0,
+	)
+}
+
+func newMCPQueueGlobalStatusHTTPHandlerWithTimeoutV0(
+	executor MCPTransportAutoprogrammingStatusExecutorV0,
+	responseTimeout time.Duration,
+) http.Handler {
+	return mcpQueueGlobalStatusHTTPHandlerV0{
+		executor:        executor,
+		responseTimeout: responseTimeout,
+	}
 }
 
 type mcpQueueGlobalStatusHTTPHandlerV0 struct {
-	executor MCPTransportAutoprogrammingStatusExecutorV0
+	executor        MCPTransportAutoprogrammingStatusExecutorV0
+	responseTimeout time.Duration
 }
 
 func (handler mcpQueueGlobalStatusHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +131,11 @@ func (handler mcpQueueGlobalStatusHTTPHandlerV0) ServeHTTP(w http.ResponseWriter
 		))
 		return
 	}
-	status, err := handler.executor.Execute(r.Context(), input)
+	result, err, timedOut := handler.executeQueueGlobalStatusWithResponseTimeoutV0(r, input)
+	if timedOut {
+		writeMCPQueueGlobalStatusHTTPV0(w, http.StatusGatewayTimeout, result)
+		return
+	}
 	if err != nil {
 		writeMCPQueueGlobalStatusHTTPV0(w, http.StatusInternalServerError, newMCPQueueGlobalStatusHTTPErrorV0(
 			input,
@@ -111,13 +145,43 @@ func (handler mcpQueueGlobalStatusHTTPHandlerV0) ServeHTTP(w http.ResponseWriter
 		))
 		return
 	}
-	result := newMCPQueueGlobalStatusResultV0(input, status)
 	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), result.CorrelationID)
 	httpStatus := http.StatusOK
 	if result.Estado == MCPAutoprogrammingStatusEstadoErrorV0 {
 		httpStatus = http.StatusBadRequest
 	}
 	writeMCPQueueGlobalStatusHTTPV0(w, httpStatus, result)
+}
+
+type mcpQueueGlobalStatusHTTPExecutionV0 struct {
+	result MCPAutoprogrammingStatusToolResultV0
+	err    error
+}
+
+func (handler mcpQueueGlobalStatusHTTPHandlerV0) executeQueueGlobalStatusWithResponseTimeoutV0(
+	r *http.Request,
+	input MCPAutoprogrammingStatusToolInputV0,
+) (MCPQueueGlobalStatusResultV0, error, bool) {
+	timeout := handler.responseTimeout
+	if timeout <= 0 {
+		status, err := handler.executor.Execute(r.Context(), input)
+		return newMCPQueueGlobalStatusResultV0(input, status), err, false
+	}
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	done := make(chan mcpQueueGlobalStatusHTTPExecutionV0, 1)
+	go func() {
+		status, err := handler.executor.Execute(ctx, input)
+		done <- mcpQueueGlobalStatusHTTPExecutionV0{result: status, err: err}
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case execution := <-done:
+		return newMCPQueueGlobalStatusResultV0(input, execution.result), execution.err, false
+	case <-timer.C:
+		return newMCPQueueGlobalStatusTimeoutResultV0(r, input), nil, true
+	}
 }
 
 func mcpQueueGlobalStatusHTTPInputV0(
@@ -175,7 +239,10 @@ func newMCPQueueGlobalStatusResultV0(
 	}
 	goalRunRefs := mcpQueueGlobalStatusGoalRunRefsV0(safeActions)
 	diagnostics := append([]MCPAutoprogrammingDiagnosticV0(nil), status.Diagnostics...)
+	items := mcpQueueGlobalStatusItemsV0(status.Queue, activeRuns, safeActions, diagnostics, status.StaleRunning)
 	summary := mcpQueueGlobalStatusSummaryV0(status.QueueHealth, activeRuns, goalRunRefs, safeActions, diagnostics, status.StaleRunning)
+	summary.NeedsAction = mcpQueueGlobalStatusNeedsActionV0(summary, items)
+	summary.WillFinishAlone = !summary.NeedsAction
 	return MCPQueueGlobalStatusResultV0{
 		SchemaVersion: MCPQueueGlobalStatusSchemaVersionV0,
 		Estado:        firstNonEmptyMCPV0(status.Estado, MCPAutoprogrammingStatusEstadoOKV0),
@@ -183,6 +250,7 @@ func newMCPQueueGlobalStatusResultV0(
 		CorrelationID: firstNonEmptyMCPV0(status.CorrelationID, input.CorrelationID, input.RequestID),
 		QueueRef:      firstNonEmptyMCPV0(status.QueueRef, input.QueueRef),
 		Summary:       summary,
+		Items:         items,
 		QueueHealth:   status.QueueHealth,
 		ActiveRuns:    activeRuns,
 		GoalRunRefs:   goalRunRefs,
@@ -240,6 +308,265 @@ func mcpQueueGlobalStatusGoalRunRefsV0(
 		refs = append(refs, strings.TrimSpace(action.RunRef))
 	}
 	return compactStringsMCPV0(refs)
+}
+
+func mcpQueueGlobalStatusItemsV0(
+	queue *MCPRunQueuePriorityToolResultV0,
+	activeRuns []MCPAutoprogrammingActiveRunV0,
+	safeActions []MCPAutoprogrammingSafeActionV0,
+	diagnostics []MCPAutoprogrammingDiagnosticV0,
+	staleRunning []MCPAutoprogrammingActionableRunV0,
+) []MCPQueueGlobalStatusItemV0 {
+	byRunRef := map[string]*MCPQueueGlobalStatusItemV0{}
+	order := []string{}
+	queueItem := (*MCPQueueGlobalStatusItemV0)(nil)
+	ensure := func(runRef string) *MCPQueueGlobalStatusItemV0 {
+		runRef = strings.TrimSpace(runRef)
+		if runRef == "" {
+			if queueItem == nil {
+				queueItem = &MCPQueueGlobalStatusItemV0{Status: "queue_needs_action"}
+				order = append(order, "")
+			}
+			return queueItem
+		}
+		if item := byRunRef[runRef]; item != nil {
+			return item
+		}
+		item := &MCPQueueGlobalStatusItemV0{RunRef: runRef}
+		byRunRef[runRef] = item
+		order = append(order, runRef)
+		return item
+	}
+	if queue != nil {
+		for _, candidate := range queue.Ranked {
+			item := ensure(candidate.RunRef)
+			item.AppRef = firstNonEmptyMCPV0(item.AppRef, candidate.AppRef)
+			item.Status = firstNonEmptyMCPV0(
+				mcpQueueGlobalStatusCandidateStatusV0(candidate),
+				item.Status,
+				"queued",
+			)
+			item.EvidenceRefs = compactStringsMCPV0(append(item.EvidenceRefs, candidate.EvidenceRefs...))
+		}
+	}
+	for _, active := range activeRuns {
+		item := ensure(active.RunRef)
+		item.AppRef = firstNonEmptyMCPV0(item.AppRef, active.AppRef)
+		if mcpQueueGlobalStatusCanPromoteActiveRunV0(item.Status) {
+			item.Status = mcpQueueGlobalStatusActiveRunStatusV0(active)
+		}
+	}
+	for _, stale := range staleRunning {
+		item := ensure(stale.RunRef)
+		item.AppRef = firstNonEmptyMCPV0(item.AppRef, stale.AppRef)
+		item.Status = firstNonEmptyMCPV0(stale.Code, "running_stale")
+		item.NeedsAction = true
+		item.RecommendedAction = mcpQueueGlobalStatusNormalizeRecommendedActionV0(
+			stale.RecommendedAction,
+			"cancel_stale",
+		)
+		item.EvidenceRefs = compactStringsMCPV0(append(item.EvidenceRefs, stale.EvidenceRefs...))
+	}
+	for _, action := range safeActions {
+		item := ensure(action.RunRef)
+		item.Status = firstNonEmptyMCPV0(item.Status, mcpQueueGlobalStatusSafeActionStatusV0(action))
+		item.NeedsAction = true
+		item.RecommendedAction = firstNonEmptyMCPV0(
+			item.RecommendedAction,
+			mcpQueueGlobalStatusRecommendedActionFromSafeActionV0(action),
+		)
+		item.EvidenceRefs = compactStringsMCPV0(append(
+			item.EvidenceRefs,
+			mcpQueueGlobalStatusEvidenceRefsFromSafeActionV0(action)...,
+		))
+	}
+	for _, diagnostic := range diagnostics {
+		runRef := mcpQueueGlobalStatusDiagnosticRunRefV0(diagnostic)
+		if runRef == "" && strings.TrimSpace(diagnostic.Code) != mcpAutoprogrammingQueuedNotDispatchedV0 {
+			continue
+		}
+		item := ensure(runRef)
+		item.Status = firstNonEmptyMCPV0(diagnostic.Code, item.Status, "needs_action")
+		item.NeedsAction = true
+		item.RecommendedAction = firstNonEmptyMCPV0(
+			item.RecommendedAction,
+			mcpQueueGlobalStatusRecommendedActionFromDiagnosticV0(diagnostic),
+		)
+		item.EvidenceRefs = compactStringsMCPV0(append(item.EvidenceRefs, diagnostic.EvidenceRefs...))
+	}
+	out := make([]MCPQueueGlobalStatusItemV0, 0, len(order))
+	for _, runRef := range order {
+		item := queueItem
+		if runRef != "" {
+			item = byRunRef[runRef]
+		}
+		if item == nil {
+			continue
+		}
+		item.Status = firstNonEmptyMCPV0(item.Status, "unknown")
+		out = append(out, *item)
+	}
+	return out
+}
+
+func mcpQueueGlobalStatusCanPromoteActiveRunV0(status string) bool {
+	switch strings.TrimSpace(status) {
+	case "", "ready", mcpAutoprogrammingHealthQueuedV0, mcpAutoprogrammingHealthRunningWithoutRecentStatsV0:
+		return true
+	default:
+		return false
+	}
+}
+
+func mcpQueueGlobalStatusNeedsActionV0(
+	summary MCPQueueGlobalStatusSummaryV0,
+	items []MCPQueueGlobalStatusItemV0,
+) bool {
+	if summary.NeedsAttention ||
+		summary.QueuedNotDispatched > 0 ||
+		summary.RunningWithoutRecentStats > 0 ||
+		summary.SafeActions > 0 {
+		return true
+	}
+	for _, item := range items {
+		if item.NeedsAction {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpQueueGlobalStatusCandidateStatusV0(candidate MCPRunQueueRankedCandidateCompactV0) string {
+	if mcpAutoprogrammingQueuedNotDispatchedStatusV0(candidate.Status) {
+		return "ready"
+	}
+	return classifyMCPAutoprogrammingQueueStatusV0(candidate.Status)
+}
+
+func mcpQueueGlobalStatusActiveRunStatusV0(active MCPAutoprogrammingActiveRunV0) string {
+	switch strings.ToLower(strings.TrimSpace(active.Status)) {
+	case "", "running":
+		return mcpAutoprogrammingHealthRunningLiveV0
+	default:
+		return strings.ToLower(strings.TrimSpace(active.Status))
+	}
+}
+
+func mcpQueueGlobalStatusSafeActionStatusV0(action MCPAutoprogrammingSafeActionV0) string {
+	switch strings.TrimSpace(action.Action) {
+	case "observe_goal", "observe_active_goals":
+		return "observer_required"
+	case "retry":
+		return "retry_required"
+	case "review":
+		return "review_required"
+	case "supervise":
+		return "waiting_outbox"
+	default:
+		return "needs_action"
+	}
+}
+
+func mcpQueueGlobalStatusRecommendedActionFromSafeActionV0(action MCPAutoprogrammingSafeActionV0) string {
+	switch strings.TrimSpace(action.Action) {
+	case "observe_goal", "observe_active_goals":
+		return "restart_observer"
+	case "retry":
+		return "retry"
+	case "review":
+		return "repair_runtime"
+	case "supervise":
+		return "reencolar"
+	default:
+		return mcpQueueGlobalStatusNormalizeRecommendedActionV0(action.Action, "repair_runtime")
+	}
+}
+
+func mcpQueueGlobalStatusRecommendedActionFromDiagnosticV0(diagnostic MCPAutoprogrammingDiagnosticV0) string {
+	switch strings.TrimSpace(diagnostic.Code) {
+	case mcpAutoprogrammingQueuedNotDispatchedV0:
+		return "reencolar"
+	default:
+		return "repair_runtime"
+	}
+}
+
+func mcpQueueGlobalStatusNormalizeRecommendedActionV0(action string, fallback string) string {
+	action = strings.ToLower(strings.TrimSpace(action))
+	switch action {
+	case "retry", "reencolar", "cancel_stale", "restart_observer", "repair_runtime":
+		return action
+	}
+	if strings.Contains(action, "observe") || strings.Contains(action, "observer") {
+		return "restart_observer"
+	}
+	if strings.Contains(action, "queue") ||
+		strings.Contains(action, "reencol") ||
+		strings.Contains(action, "supervis") ||
+		strings.Contains(action, "dispatch") {
+		return "reencolar"
+	}
+	if strings.Contains(action, "retry") ||
+		strings.Contains(action, "relaunch") ||
+		strings.Contains(action, "replan") {
+		return "retry"
+	}
+	if strings.Contains(action, "cancel") || strings.Contains(action, "stale") {
+		return "cancel_stale"
+	}
+	return firstNonEmptyMCPV0(fallback, "repair_runtime")
+}
+
+func mcpQueueGlobalStatusEvidenceRefsFromSafeActionV0(action MCPAutoprogrammingSafeActionV0) []string {
+	switch strings.TrimSpace(action.Action) {
+	case "observe_goal", "observe_active_goals":
+		return []string{"evidence-ref-queue-global-status-observer-required"}
+	case "retry":
+		return []string{"evidence-ref-queue-global-status-retry-required"}
+	case "review":
+		return []string{"evidence-ref-queue-global-status-review-required"}
+	case "supervise":
+		return []string{"evidence-ref-queue-global-status-supervision-required"}
+	default:
+		return []string{"evidence-ref-queue-global-status-operator-action"}
+	}
+}
+
+func mcpQueueGlobalStatusDiagnosticRunRefV0(diagnostic MCPAutoprogrammingDiagnosticV0) string {
+	const prefix = "run:"
+	scope := strings.TrimSpace(diagnostic.Scope)
+	if strings.HasPrefix(scope, prefix) {
+		return strings.TrimSpace(strings.TrimPrefix(scope, prefix))
+	}
+	return ""
+}
+
+func newMCPQueueGlobalStatusTimeoutResultV0(
+	r *http.Request,
+	input MCPAutoprogrammingStatusToolInputV0,
+) MCPQueueGlobalStatusResultV0 {
+	result := MCPQueueGlobalStatusResultV0{
+		SchemaVersion: MCPQueueGlobalStatusSchemaVersionV0,
+		Estado:        MCPAutoprogrammingStatusEstadoErrorV0,
+		RequestID:     strings.TrimSpace(input.RequestID),
+		CorrelationID: firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), input.CorrelationID, input.RequestID),
+		QueueRef:      firstNonEmptyMCPV0(input.QueueRef, defaultMCPQueueGlobalStatusQueueRefV0),
+		Summary:       MCPQueueGlobalStatusSummaryV0{},
+		Diagnostics: []MCPAutoprogrammingDiagnosticV0{{
+			Code:         "queue_global_status_timeout",
+			Scope:        "executor",
+			Message:      "consulta global de cola cancelada por timeout HTTP; reintentar lectura acotada o revisar runtime",
+			EvidenceRefs: []string{"evidence-ref-queue-global-status-timeout"},
+		}},
+		Errores: []MCPValidationIssueV0{{
+			Code:    "queue_global_status_timeout",
+			Field:   "executor",
+			Message: "consulta global de cola excedio la ventana HTTP acotada",
+		}},
+	}
+	result.Summary.NeedsAction = true
+	result.Summary.WillFinishAlone = false
+	return result
 }
 
 func newMCPQueueGlobalStatusHTTPErrorV0(
