@@ -17,6 +17,39 @@ func artifactPathInvalidIssueV0() orquestaruntime.ExternalAgentConnectorErrorV0 
 	}
 }
 
+func TestCodexReceiptAckIssuesAllRecoverableV0ReceiptFaltanteEsRecuperable(t *testing.T) {
+	issues := []orquestaruntime.ExternalAgentConnectorErrorV0{{
+		Code:     orquestaruntime.ExternalAgentConnectorErrorCodeV0(orquestaruntimecodex.CodexConnectorAckArtifactV0),
+		Field:    "test_receipts",
+		Evidence: []string{"missing_required_test_receipt"},
+	}}
+	if !codexReceiptAckIssuesAllRecoverableV0(issues) {
+		t.Fatalf("missing_required_test_receipt debe llegar a review/rework, no tumbar el tick")
+	}
+}
+
+func TestCodexReceiptAckIssuesAllRecoverableV0DetalleSensibleRedactableEsRecuperable(t *testing.T) {
+	issues := []orquestaruntime.ExternalAgentConnectorErrorV0{{
+		Code:     orquestaruntime.ExternalAgentConnectorErrorCodeV0(orquestaruntimecodex.CodexConnectorAckForbiddenV0),
+		Field:    "agent_ack",
+		Evidence: []string{"forbidden_sensitive_detail"},
+	}}
+	if !codexReceiptAckIssuesAllRecoverableV0(issues) {
+		t.Fatalf("forbidden_sensitive_detail debe conservarse como gate-issue redactado")
+	}
+}
+
+func TestCodexReceiptAckIssuesAllRecoverableV0SalidaCrudaEsDura(t *testing.T) {
+	issues := []orquestaruntime.ExternalAgentConnectorErrorV0{{
+		Code:     orquestaruntime.ExternalAgentConnectorErrorCodeV0(orquestaruntimecodex.CodexConnectorAckForbiddenV0),
+		Field:    "test_receipts",
+		Evidence: []string{"raw_test_output_forbidden"},
+	}}
+	if codexReceiptAckIssuesAllRecoverableV0(issues) {
+		t.Fatalf("raw_test_output_forbidden no debe suavizarse")
+	}
+}
+
 func TestCodexReceiptAckIssuesAllRecoverableV0RutaNormalizableEsRecuperable(t *testing.T) {
 	issues := []orquestaruntime.ExternalAgentConnectorErrorV0{artifactPathInvalidIssueV0()}
 	if !codexReceiptAckIssuesAllRecoverableV0(issues) {

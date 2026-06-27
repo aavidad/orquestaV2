@@ -219,18 +219,6 @@ func liveAgentsMCPAutoprogrammingRunStatsV0(
 	return mcpAutoprogrammingRunLivenessV0(stats).AgentsLive
 }
 
-func mcpAutoprogrammingRunStatsHasUnknownProcessSignalV0(
-	stats orquestacionnucleoapp.DirectorRunStatsV0,
-) bool {
-	return mcpAutoprogrammingRunLivenessV0(stats).UnknownProcess
-}
-
-func mcpAutoprogrammingRunStatsHasConfirmedNoLiveProcessV0(
-	stats orquestacionnucleoapp.DirectorRunStatsV0,
-) bool {
-	return mcpAutoprogrammingRunLivenessV0(stats).ConfirmedNoLiveProcess
-}
-
 func mcpAutoprogrammingRunStatusCompletedV0(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
 	case "closed", "cerrada", "completed", "complete", "delivered":

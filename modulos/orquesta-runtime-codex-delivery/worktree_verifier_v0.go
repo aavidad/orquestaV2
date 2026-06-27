@@ -64,10 +64,10 @@ func (source CodexDeliveryObservationSourceV0) verifyDescriptorWorktreeV0(
 	var ackGateRefs []string
 	if len(issues) > 0 {
 		// Solo cortamos en duro por issues no recuperables (forma rota,
-		// correlacion ajena, detalle sensible, artefacto de control/fuera de
-		// write-set). Las discrepancias recuperables de forma/ruta y la
-		// evidencia reviewable de tests se conservan como gate-issue y dejan
-		// continuar; ver docs/estado_actual_2026-05-17.md:39-64.
+		// correlacion ajena, salida cruda, artefacto de control/fuera de
+		// write-set). Tests/receipts incompletos, detalle sensible redactable
+		// y discrepancias recuperables de forma/ruta se conservan como
+		// gate-issue y dejan continuar.
 		if !codexReceiptAckIssuesAllRecoverableV0(issues) {
 			return nil, fmt.Errorf("codex_worktree_verification: ack_invalid")
 		}

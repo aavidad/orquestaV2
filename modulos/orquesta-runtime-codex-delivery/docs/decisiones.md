@@ -2,6 +2,23 @@
 
 ```text
 Fecha: 2026-06-27
+Decision: La validacion ACK strict se aplica tambien a delivery/review, pero
+los incumplimientos recuperables no tumban el tick.
+Motivo: la politica de recuperacion de ACK existia en el verificador de
+worktree, pero `CodexDeliveryObservationSourceV0` cortaba antes cuando
+`ReadCodexDeliveryObservationFileV0` devolvia `missing_required_test_receipt`,
+`artifact_path_invalid` o detalle sensible redactable. Eso bloqueaba otros ACKs
+validos del mismo lote y escondia trabajo ya materializado.
+Impacto: delivery puede registrar una observacion revisable con
+`gate-issue:ack_*`; review gate usa la misma validacion strict de delivery y
+convierte receipts/tests incompletos en `changes_requested`. Correlacion ajena,
+JSON/forma ilegible, salida cruda (`raw_test_output_forbidden`), artefactos de
+control y efectos fuera del proyecto/write-set siguen siendo cortes duros.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-27
 Decision: La fuente de delivery ingiere ACK padre/subrol como rail de review.
 Motivo: la mitigacion de review gate no servia si la entrega nunca se registraba
 por error de correlacion. OPES necesita ver

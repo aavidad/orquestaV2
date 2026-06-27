@@ -93,7 +93,7 @@ func (source CodexReviewGateObservationSourceV0) observationFromReviewGateDescri
 	request orquestacionnucleoapp.ReviewGateObservationRequestV0,
 	descriptor CodexReceiptDescriptorV0,
 ) (orquestacionnucleoapp.ReviewGateObservationV0, bool, error) {
-	ack, issues := orquestaruntimecodex.ReadAndValidateCodexAgentAckFileV0(
+	ack, issues := orquestaruntimecodex.ReadAndValidateCodexDeliveryAckFileV0(
 		strings.TrimSpace(descriptor.AckPath),
 		descriptor.Spec,
 	)

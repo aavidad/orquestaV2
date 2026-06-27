@@ -80,3 +80,15 @@ func assertCodexReviewGateAcceptedWithEvidenceV0(
 		t.Fatalf("evidence_refs=%v, want %q", got.EvidenceRefs, wantEvidence)
 	}
 }
+
+func codexReviewGateObservationByDeliveryForTestV0(
+	observations []orquestacionnucleoapp.ReviewGateObservationV0,
+	deliveryRef string,
+) orquestacionnucleoapp.ReviewGateObservationV0 {
+	for _, observation := range observations {
+		if observation.DeliveryRef == deliveryRef {
+			return observation
+		}
+	}
+	return orquestacionnucleoapp.ReviewGateObservationV0{}
+}

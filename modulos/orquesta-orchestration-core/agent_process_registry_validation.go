@@ -6,22 +6,10 @@ import (
 	orquestaagentprocessregistry "orquesta/modulos/orquesta-agent-process-registry"
 )
 
-func normalizeAgentProcessRecordV0(
-	record AgentProcessRecordV0,
-) AgentProcessRecordV0 {
-	return NormalizeAgentProcessRegistryRecordV0(record)
-}
-
 func NormalizeAgentProcessRegistryRecordV0(
 	record AgentProcessRecordV0,
 ) AgentProcessRecordV0 {
 	return orquestaagentprocessregistry.NormalizeAgentProcessRegistryRecordV0(record)
-}
-
-func validateAgentProcessRecordV0(
-	record AgentProcessRecordV0,
-) error {
-	return ValidateAgentProcessRegistryRecordV0(record)
 }
 
 func ValidateAgentProcessRegistryRecordV0(

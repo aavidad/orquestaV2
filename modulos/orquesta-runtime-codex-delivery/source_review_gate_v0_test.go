@@ -43,6 +43,74 @@ func TestCodexReviewGateObservationSourceV0AceptaACKValido(t *testing.T) {
 	}
 }
 
+func TestCodexReviewGateObservationSourceV0ACKStrictSinReceiptNoBloqueaOtros(t *testing.T) {
+	incompleteSpec := codexDeliverySpecWithRefsForTestV0(
+		"agent-ref-review-missing-receipt-001",
+		"task-ref-review-missing-receipt-001",
+		"ack-ref-review-missing-receipt-001",
+	)
+	incompleteSpec.AgentPacket.Policies = append(incompleteSpec.AgentPacket.Policies, "ack_terminal_strict")
+	incompleteAck := codexDeliveryAckForTestV0(incompleteSpec)
+	incompleteAck.TestReceipts = nil
+	completeSpec := codexDeliverySpecWithRefsForTestV0(
+		"agent-ref-review-valid-001",
+		"task-ref-review-valid-001",
+		"ack-ref-review-valid-001",
+	)
+	completeSpec.AgentPacket.Policies = append(completeSpec.AgentPacket.Policies, "ack_terminal_strict")
+	store := NewInMemoryCodexReceiptDescriptorStoreV0(
+		CodexReceiptDescriptorV0{
+			DescriptorRef: "receipt-ref-review-missing-receipt-001",
+			RunID:         "run-ref-001",
+			AgentRef:      incompleteSpec.RequestID,
+			Spec:          incompleteSpec,
+			AckPath:       writeCodexDeliveryAckForTestV0(t, incompleteSpec, incompleteAck),
+		},
+		CodexReceiptDescriptorV0{
+			DescriptorRef: "receipt-ref-review-valid-001",
+			RunID:         "run-ref-001",
+			AgentRef:      completeSpec.RequestID,
+			Spec:          completeSpec,
+			AckPath:       writeCodexDeliveryAckForTestV0(t, completeSpec, codexDeliveryAckForTestV0(completeSpec)),
+		},
+	)
+	request := codexReviewGateRequestForTestV0(incompleteSpec, nil)
+	request.Run.Agents = []string{incompleteSpec.RequestID, completeSpec.RequestID}
+	request.Run.StartedAgents = []string{incompleteSpec.RequestID, completeSpec.RequestID}
+	request.Run.Deliveries = []string{
+		incompleteSpec.AgentPacket.DeliveryRefs.AckRef,
+		completeSpec.AgentPacket.DeliveryRefs.AckRef,
+	}
+
+	observations, err := (CodexReviewGateObservationSourceV0{Store: store}).
+		BuildReviewGateObservationsV0(context.Background(), request)
+
+	if err != nil {
+		t.Fatalf("BuildReviewGateObservationsV0 no debe tumbar el lote por receipt faltante: %v", err)
+	}
+	if len(observations) != 2 {
+		t.Fatalf("observations=%+v", observations)
+	}
+	incompleteObservation := codexReviewGateObservationByDeliveryForTestV0(
+		observations,
+		incompleteSpec.AgentPacket.DeliveryRefs.AckRef,
+	)
+	if incompleteObservation.Status != orquestacoreworkflow.ReviewResultStatusChangesRequestedV0 ||
+		!stringInCodexDeliverySetV0(
+			incompleteObservation.EvidenceRefs,
+			"gate-issue:missing_required_test_receipt",
+		) {
+		t.Fatalf("review incompleta no quedo como changes_requested con evidencia: %+v", incompleteObservation)
+	}
+	completeObservation := codexReviewGateObservationByDeliveryForTestV0(
+		observations,
+		completeSpec.AgentPacket.DeliveryRefs.AckRef,
+	)
+	if completeObservation.Status != orquestacoreworkflow.ReviewResultStatusAcceptedV0 {
+		t.Fatalf("review valida no aceptada: %+v", completeObservation)
+	}
+}
+
 func TestCodexReviewGateObservationSourceV0AceptaWriteSetRaiz(t *testing.T) {
 	spec := codexDeliverySpecForTestV0()
 	spec.AgentPacket.Task.WriteSet = []string{"."}

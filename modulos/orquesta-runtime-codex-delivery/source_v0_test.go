@@ -154,6 +154,59 @@ func TestCodexDeliveryObservationSourceV0ACKPadreConChildTaskRefNoTumbaTick(t *t
 	}
 }
 
+func TestCodexDeliveryObservationSourceV0ACKStrictSinReceiptNoBloqueaOtros(t *testing.T) {
+	incompleteSpec := codexDeliverySpecWithRefsForTestV0(
+		"agent-ref-strict-missing-receipt-001",
+		"task-ref-strict-missing-receipt-001",
+		"ack-ref-strict-missing-receipt-001",
+	)
+	incompleteSpec.AgentPacket.Policies = append(incompleteSpec.AgentPacket.Policies, "ack_terminal_strict")
+	incompleteAck := codexDeliveryAckForTestV0(incompleteSpec)
+	incompleteAck.TestReceipts = nil
+	completeSpec := codexDeliverySpecWithRefsForTestV0(
+		"agent-ref-strict-valid-001",
+		"task-ref-strict-valid-001",
+		"ack-ref-strict-valid-001",
+	)
+	completeSpec.AgentPacket.Policies = append(completeSpec.AgentPacket.Policies, "ack_terminal_strict")
+	store := &staticCodexReceiptStoreV0{
+		Descriptors: []CodexReceiptDescriptorV0{
+			{
+				DescriptorRef: "receipt-ref-strict-missing-receipt-001",
+				Spec:          incompleteSpec,
+				AckPath:       writeCodexDeliveryAckForTestV0(t, incompleteSpec, incompleteAck),
+			},
+			{
+				DescriptorRef: "receipt-ref-strict-valid-001",
+				Spec:          completeSpec,
+				AckPath:       writeCodexDeliveryAckForTestV0(t, completeSpec, codexDeliveryAckForTestV0(completeSpec)),
+			},
+		},
+	}
+	request := codexDeliveryRequestForTestV0(incompleteSpec, nil)
+	request.Run.Agents = []string{incompleteSpec.RequestID, completeSpec.RequestID}
+	request.Run.StartedAgents = []string{incompleteSpec.RequestID, completeSpec.RequestID}
+
+	observations, err := (CodexDeliveryObservationSourceV0{Store: store}).
+		BuildAgentDeliveryObservationsV0(context.Background(), request)
+
+	if err != nil {
+		t.Fatalf("BuildAgentDeliveryObservationsV0 no debe tumbar el tick por receipt faltante: %v", err)
+	}
+	if len(observations) != 2 ||
+		!codexDeliveryObservationRefsForTestV0(observations, incompleteSpec.RequestID) ||
+		!codexDeliveryObservationRefsForTestV0(observations, completeSpec.RequestID) {
+		t.Fatalf("observations=%+v", observations)
+	}
+	incompleteObservation := codexDeliveryObservationByAgentForTestV0(observations, incompleteSpec.RequestID)
+	if !stringInCodexDeliverySetV0(
+		incompleteObservation.EvidenceRefs,
+		"gate-issue:ack_test_receipts:missing_required_test_receipt",
+	) {
+		t.Fatalf("receipt faltante no conservado como gate-issue: %+v", incompleteObservation.EvidenceRefs)
+	}
+}
+
 func TestCodexDeliveryObservationSourceV0IngiereACKTardioSinProcesoVivoConWaitAgentRefs(t *testing.T) {
 	scopedSpec := codexDeliverySpecWithRefsForTestV0(
 		"agent-ref-late-scoped-001",

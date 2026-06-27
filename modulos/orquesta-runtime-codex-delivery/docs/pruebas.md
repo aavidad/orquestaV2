@@ -9,6 +9,9 @@ Cobertura:
 - lee un ACK valido desde path externo y devuelve una observacion neutral;
 - conserva un ACK `completed` con evidencia de tests fallidos como entrega
   revisable con `gate-issue:failed_test_evidence`, sin tumbar el tick;
+- conserva un ACK strict sin `test_receipts` como entrega revisable con
+  `gate-issue:ack_test_receipts:missing_required_test_receipt`, sin bloquear
+  otros ACKs validos del mismo lote;
 - omite deliveries ya registradas en el run;
 - omite descriptors ya reflejados antes de invocar el verificador de worktree;
 - omite un ACK con `status=failed` sin bloquear otros ACKs completados del
@@ -70,6 +73,8 @@ Cobertura:
 - pide cambios si falta un test obligatorio o falta un fichero material; si un
   fichero supera el limite de lineas, conserva la entrega como rail blando con
   follow-up no bloqueante;
+- aplica la misma validacion ACK strict en review gate y convierte receipts
+  faltantes en `changes_requested`, sin bloquear otras entregas validas;
 - sigue emitiendo la observacion de review gate tras `RequestReview` para que
   el scheduler pueda registrar resultado y pedir rework en ciclos posteriores;
 - sigue emitiendo la observacion de review gate si el agente ya esta parado y

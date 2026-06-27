@@ -184,6 +184,18 @@ func codexDeliveryObservationRefsForTestV0(
 	return false
 }
 
+func codexDeliveryObservationByAgentForTestV0(
+	observations []orquestacionnucleoapp.AgentDeliveryObservationV0,
+	agentRef string,
+) orquestacionnucleoapp.AgentDeliveryObservationV0 {
+	for _, observation := range observations {
+		if observation.AgentRef == agentRef {
+			return observation
+		}
+	}
+	return orquestacionnucleoapp.AgentDeliveryObservationV0{}
+}
+
 func manyCodexDeliveryEvidenceRefsForTestV0() []string {
 	refs := make([]string, 0, 40)
 	for index := 0; index < 40; index++ {

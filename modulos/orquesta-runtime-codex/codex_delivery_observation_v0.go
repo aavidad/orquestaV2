@@ -19,13 +19,7 @@ func ReadCodexDeliveryObservationFileV0(
 	path string,
 	spec orquestaruntime.ExternalAgentLaunchSpecV0,
 ) (CodexDeliveryObservationV0, []orquestaruntime.ExternalAgentConnectorErrorV0) {
-	data, err := ReadCodexControlFileBytesV0(path, CodexAgentAckFileNameV0)
-	if err != nil {
-		return CodexDeliveryObservationV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{
-			CodexControlFileReadIssueV0(err, CodexAgentAckFileNameV0, spec.CorrelationID, "ack_not_ready"),
-		}
-	}
-	ack, issues := validateCodexDeliveryAckBytesForSpecV0(data, spec)
+	ack, issues := ReadAndValidateCodexDeliveryAckFileV0(path, spec)
 	if len(issues) > 0 {
 		if codexDeliveryObservationIssuesReviewableV0(issues) {
 			return BuildCodexDeliveryObservationWithReviewRailsV0(
@@ -37,6 +31,19 @@ func ReadCodexDeliveryObservationFileV0(
 		return CodexDeliveryObservationV0{}, issues
 	}
 	return BuildCodexDeliveryObservationV0(ack, spec)
+}
+
+func ReadAndValidateCodexDeliveryAckFileV0(
+	path string,
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+) (CodexAgentAckV0, []orquestaruntime.ExternalAgentConnectorErrorV0) {
+	data, err := ReadCodexControlFileBytesV0(path, CodexAgentAckFileNameV0)
+	if err != nil {
+		return CodexAgentAckV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{
+			CodexControlFileReadIssueV0(err, CodexAgentAckFileNameV0, spec.CorrelationID, "ack_not_ready"),
+		}
+	}
+	return validateCodexDeliveryAckBytesForSpecV0(data, spec)
 }
 
 func validateCodexDeliveryAckBytesForSpecV0(

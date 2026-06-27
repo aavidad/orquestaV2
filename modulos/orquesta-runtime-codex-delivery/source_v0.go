@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
 
@@ -87,6 +88,13 @@ func (source CodexDeliveryObservationSourceV0) observationFromDescriptorV0(
 		if codexReceiptIssueMeansAckWithoutDeliveryV0(issue) {
 			return orquestacionnucleoapp.AgentDeliveryObservationV0{}, false, nil
 		}
+		ack, ackIssues := orquestaruntimecodex.ReadAndValidateCodexDeliveryAckFileV0(
+			strings.TrimSpace(descriptor.AckPath),
+			descriptor.Spec,
+		)
+		if len(ackIssues) > 0 && codexReceiptAckIssuesAllRecoverableV0(ackIssues) {
+			return source.observationFromRecoverableAckV0(ctx, descriptor, ack, ackIssues)
+		}
 		return orquestacionnucleoapp.AgentDeliveryObservationV0{}, false, fmt.Errorf(
 			"codex_delivery_observation: %s:%s",
 			issue.Code,
@@ -110,6 +118,61 @@ func (source CodexDeliveryObservationSourceV0) observationFromDescriptorV0(
 		Summary:      codexObservation.Summary,
 		EvidenceRefs: evidenceRefs,
 	}, true, nil
+}
+
+func (source CodexDeliveryObservationSourceV0) observationFromRecoverableAckV0(
+	ctx context.Context,
+	descriptor CodexReceiptDescriptorV0,
+	ack orquestaruntimecodex.CodexAgentAckV0,
+	issues []orquestaruntime.ExternalAgentConnectorErrorV0,
+) (orquestacionnucleoapp.AgentDeliveryObservationV0, bool, error) {
+	worktreeEvidenceRefs, err := source.verifyDescriptorWorktreeV0(ctx, descriptor)
+	if err != nil {
+		return orquestacionnucleoapp.AgentDeliveryObservationV0{}, false, err
+	}
+	packet := descriptor.Spec.AgentPacket
+	deliveryRef := firstNonEmptyCodexDeliveryValueV0(
+		ack.AckRef,
+		packet.DeliveryRefs.AckRef,
+	)
+	if strings.TrimSpace(deliveryRef) == "" {
+		return orquestacionnucleoapp.AgentDeliveryObservationV0{}, false, nil
+	}
+	agentRef := firstNonEmptyCodexDeliveryValueV0(
+		ack.RequestID,
+		descriptor.AgentRef,
+		descriptor.Spec.RequestID,
+		packet.RequestID,
+	)
+	taskRef := firstNonEmptyCodexDeliveryValueV0(ack.TaskRef, packet.Task.TaskRef)
+	evidenceRefs := codexDeliveryObservationCoreEvidenceRefsV0(append([]string{
+		deliveryRef,
+		strings.TrimSpace(packet.DeliveryRefs.MailboxRef),
+		strings.TrimSpace(packet.DeliveryRefs.ReadinessRef),
+		strings.TrimSpace(packet.DeliveryRefs.CheckpointRef),
+	}, append(
+		orquestaruntimecodex.CodexRequiredTestReceiptEvidenceRefsV0(ack.TestReceipts),
+		append(codexReceiptAckIssueGateRefsV0(issues), worktreeEvidenceRefs...)...,
+	)...))
+	return orquestacionnucleoapp.AgentDeliveryObservationV0{
+		CandidateRef: "delivery-candidate-ref-" + strings.TrimSpace(deliveryRef),
+		ArtifactRef:  strings.TrimSpace(deliveryRef),
+		DeliveryRef:  strings.TrimSpace(deliveryRef),
+		PhaseID:      strings.TrimSpace(packet.Phase),
+		TaskID:       strings.TrimSpace(taskRef),
+		AgentRef:     strings.TrimSpace(agentRef),
+		Summary:      "Entrega compacta conservada con incidencias recuperables de ACK para review.",
+		EvidenceRefs: evidenceRefs,
+	}, true, nil
+}
+
+func firstNonEmptyCodexDeliveryValueV0(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // promotedObservationFromMaterializedArtifactV0 sintetiza una entrega cuando el

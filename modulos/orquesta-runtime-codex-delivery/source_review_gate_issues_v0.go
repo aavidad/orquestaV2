@@ -22,7 +22,7 @@ func codexReviewGateIssuesEvaluableV0(
 func codexReviewGateIssueEvaluableV0(
 	issue orquestaruntime.ExternalAgentConnectorErrorV0,
 ) bool {
-	if string(issue.Code) == string(orquestaruntimecodex.CodexConnectorAckArtifactV0) {
+	if codexReceiptAckIssueRecoverableV0(issue) {
 		return true
 	}
 	return string(issue.Code) == string(orquestaruntimecodex.CodexConnectorAckCorrelationV0) &&
