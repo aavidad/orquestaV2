@@ -22,6 +22,10 @@ func TestCodexStackV0ExternalWorkRunCreaRunSinDirectorInicial(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 
 	result := postExternalWorkRunStackV0(t, stack)
+	if result.RoutePolicy != orquestamcp.MCPExternalWorkRunRoutePolicyLegacyDirectorLoopV0 ||
+		result.DirectorExecutionMode != orquestamcp.MCPExternalWorkRunDirectorExecutionModeLegacyLoopV0 {
+		t.Fatalf("external-work debe declararse legacy hasta migracion Goal-first: %+v", result)
+	}
 	run, err := stack.Stores.RunStore.LoadRunV0(context.Background(), result.RunRef)
 	if err != nil {
 		t.Fatalf("LoadRunV0: %v", err)

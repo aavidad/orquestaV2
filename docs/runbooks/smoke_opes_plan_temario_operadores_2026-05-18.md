@@ -18,7 +18,9 @@ externo y lo resuelve mediante Director/supervisor, agentes y `DomainWork`.
 
 ## Quien orquesta
 
-La ruta valida no es un script paralelo ni stdin:
+La ruta legacy vigente para este smoke no es un script paralelo ni stdin. Hasta
+que exista external-work Goal-first, este camino debe tratarse como
+compatibilidad `legacy_director_loop`:
 
 ```text
 OPES plan_temario pending
@@ -126,8 +128,10 @@ Esta prueba valida:
   superiores, derivacion A1/A2 o A1 -> B/C1 -> C2/AP, asimilacion y criterios
   de calidad;
 - el bridge filtra `job_type=plan_temario` y puede acotar por `job_ref`;
-- `/api/v0/external-work/run` recibe el trabajo;
-- `/api/v0/runs/supervise` empuja la run;
+- `/api/v0/external-work/run` recibe el trabajo y declara
+  `route_policy=legacy_director_loop`;
+- `/api/v0/runs/supervise` empuja la run legacy o la sustituye el supervisor
+  residente;
 - el artefacto termina en `DomainWork.submit_artifact`;
 - el paquete de agente y el wrapper Codex materializado usan `xhigh`.
 

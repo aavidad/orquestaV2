@@ -65,6 +65,41 @@ Pruebas de contrato:
 ```
 
 ```text
+Nombre: mcp.tool.orquesta.external_work.run.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: bridges de app externa, OPES legacy y operadores automatizados
+Campos:
+  descriptor:
+    name: orquesta.external_work.run.v0
+    resource_uri: orquesta://contracts/external-work-run/v0
+  rest:
+    method: POST
+    path: /api/v0/external-work/run
+  input:
+    external_work_run_request?: StartExternalWorkRunRequestV0
+    app_change_request?: AppChangeRequestV0
+  output_ok:
+    estado: ok
+    route_policy: legacy_director_loop
+    director_execution_mode: legacy_director_loop
+    run_ref, change_ref, director_question_ref, evidence_refs?, next_actions?
+  output_error:
+    estado: error
+    errores_publicos: issues compactos
+Invariantes:
+  - Compatibilidad legacy explicita hasta migrar external-work a GoalWorkSpecV0.
+  - No crea GoalWorkStateV0 ni arranca Codex Goal.
+  - Crea run operativo y encola para el loop historico por puertos inyectados.
+  - No conoce OPES, DB, runtime, filesystem, proveedor ni credenciales.
+Pruebas de contrato:
+  - Descriptor y resultado declaran `route_policy=legacy_director_loop`.
+  - HTTP delega en executor fake y preserva errores publicos.
+  - Transporte MCP queda opt-in y devuelve unbound si falta puerto.
+```
+
+```text
 Nombre: mcp.tool.orquesta.domain_work.v0
 Tipo: puerto_entrada
 Version: v0

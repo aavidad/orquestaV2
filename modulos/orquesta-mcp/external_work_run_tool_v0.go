@@ -14,6 +14,11 @@ const (
 	MCPExternalWorkRunEstadoOKV0       = "ok"
 	MCPExternalWorkRunEstadoErrorV0    = "error"
 	MCPExternalWorkRunInputAmbiguousV0 = "external_work_run_input_ambiguous"
+
+	MCPExternalWorkRunRoutePolicyLegacyDirectorLoopV0   = "legacy_director_loop"
+	MCPExternalWorkRunNextActionSuperviseLegacyRunV0    = "supervise_legacy_run_or_wait_resident"
+	MCPExternalWorkRunNextActionMigrateGoalFirstV0      = "migrate_external_work_to_goal_first"
+	MCPExternalWorkRunDirectorExecutionModeLegacyLoopV0 = "legacy_director_loop"
 )
 
 type MCPExternalWorkRunToolDescriptorV0 struct {
@@ -33,16 +38,19 @@ type MCPExternalWorkRunToolInputV0 struct {
 }
 
 type MCPExternalWorkRunToolResultV0 struct {
-	Estado              string                      `json:"estado"`
-	RequestID           string                      `json:"request_id,omitempty"`
-	CorrelationID       string                      `json:"correlation_id,omitempty"`
-	RunRef              string                      `json:"run_ref,omitempty"`
-	ProjectRef          string                      `json:"project_ref,omitempty"`
-	AppRef              string                      `json:"app_ref,omitempty"`
-	ChangeRef           string                      `json:"change_ref,omitempty"`
-	DirectorQuestionRef string                      `json:"director_question_ref,omitempty"`
-	EvidenceRefs        []string                    `json:"evidence_refs,omitempty"`
-	Errores             []MCPExternalWorkRunIssueV0 `json:"errores_publicos,omitempty"`
+	Estado                string                      `json:"estado"`
+	RoutePolicy           string                      `json:"route_policy,omitempty"`
+	DirectorExecutionMode string                      `json:"director_execution_mode,omitempty"`
+	RequestID             string                      `json:"request_id,omitempty"`
+	CorrelationID         string                      `json:"correlation_id,omitempty"`
+	RunRef                string                      `json:"run_ref,omitempty"`
+	ProjectRef            string                      `json:"project_ref,omitempty"`
+	AppRef                string                      `json:"app_ref,omitempty"`
+	ChangeRef             string                      `json:"change_ref,omitempty"`
+	DirectorQuestionRef   string                      `json:"director_question_ref,omitempty"`
+	EvidenceRefs          []string                    `json:"evidence_refs,omitempty"`
+	NextActions           []string                    `json:"next_actions,omitempty"`
+	Errores               []MCPExternalWorkRunIssueV0 `json:"errores_publicos,omitempty"`
 }
 
 type MCPExternalWorkRunIssueV0 struct {
@@ -55,12 +63,13 @@ func MCPExternalWorkRunDescriptorV0() MCPExternalWorkRunToolDescriptorV0 {
 		Name:        MCPExternalWorkRunToolNameV0,
 		Version:     MCPExternalWorkRunToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,external_work_run_request?:StartExternalWorkRunRequestV0,app_change_request?:AppChangeRequestV0}",
-		Output:      "ok:{run_ref,change_ref,director_question_ref}|error:{errores_publicos}",
+		Output:      "ok:{route_policy,director_execution_mode,run_ref,change_ref,director_question_ref,next_actions?}|error:{errores_publicos}",
 		ResourceURI: MCPExternalWorkRunResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
-			"no arranca director LLM inicial",
-			"crea run operativo y encola por puertos inyectados",
+			"compatibilidad legacy explicita hasta migrar external-work a GoalWorkSpecV0",
+			"no crea GoalWorkStateV0 ni arranca Codex Goal",
+			"crea run operativo y encola para loop historico por puertos inyectados",
 			"sin OPES, DB, runtime, filesystem ni proveedor hardcodeado",
 		},
 	}
@@ -131,16 +140,22 @@ func newMCPExternalWorkRunResultV0(
 		estado = MCPExternalWorkRunEstadoErrorV0
 	}
 	return MCPExternalWorkRunToolResultV0{
-		Estado:              estado,
-		RequestID:           strings.TrimSpace(result.RequestID),
-		CorrelationID:       strings.TrimSpace(result.CorrelationID),
-		RunRef:              strings.TrimSpace(result.RunRef),
-		ProjectRef:          strings.TrimSpace(result.ProjectRef),
-		AppRef:              strings.TrimSpace(result.AppRef),
-		ChangeRef:           strings.TrimSpace(result.ChangeRef),
-		DirectorQuestionRef: strings.TrimSpace(result.DirectorQuestionRef),
-		EvidenceRefs:        compactStringsMCPV0(result.EvidenceRefs),
-		Errores:             externalWorkRunIssuesMCPV0(result.Issues),
+		Estado:                estado,
+		RoutePolicy:           MCPExternalWorkRunRoutePolicyLegacyDirectorLoopV0,
+		DirectorExecutionMode: MCPExternalWorkRunDirectorExecutionModeLegacyLoopV0,
+		RequestID:             strings.TrimSpace(result.RequestID),
+		CorrelationID:         strings.TrimSpace(result.CorrelationID),
+		RunRef:                strings.TrimSpace(result.RunRef),
+		ProjectRef:            strings.TrimSpace(result.ProjectRef),
+		AppRef:                strings.TrimSpace(result.AppRef),
+		ChangeRef:             strings.TrimSpace(result.ChangeRef),
+		DirectorQuestionRef:   strings.TrimSpace(result.DirectorQuestionRef),
+		EvidenceRefs:          compactStringsMCPV0(result.EvidenceRefs),
+		NextActions: compactStringsMCPV0([]string{
+			MCPExternalWorkRunNextActionSuperviseLegacyRunV0,
+			MCPExternalWorkRunNextActionMigrateGoalFirstV0,
+		}),
+		Errores: externalWorkRunIssuesMCPV0(result.Issues),
 	}
 }
 

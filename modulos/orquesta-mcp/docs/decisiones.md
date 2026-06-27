@@ -103,7 +103,10 @@ Alternativas: reutilizar `/api/v0/apps/director`; llamar a `request_change`
 despues de crear el run manualmente; crear un endpoint OPES especifico. Se
 descartan porque mezclan responsabilidades o acoplan Orquesta a una app.
 Impacto: MCP delega en `orquesta-external-work-run`, queda opt-in por executor
-inyectado y publica `POST /api/v0/external-work/run`.
+inyectado y publica `POST /api/v0/external-work/run`. Desde el corte
+Goal-first, el resultado declara `route_policy=legacy_director_loop` y
+`director_execution_mode=legacy_director_loop`: no crea `GoalWorkStateV0` ni
+arranca Codex Goal hasta que exista el camino external-work Goal-first.
 Contratos afectados: mcp.tool.orquesta.external_work.run.v0;
 rest.bridge.orquesta.external_work.run.v0; StartExternalWorkRunV0.
 Estado: aceptada localmente

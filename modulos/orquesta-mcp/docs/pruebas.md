@@ -483,7 +483,9 @@ go test -count=1 ./modulos/orquesta-mcp \
 
 Evidencia esperada: el registro MCP publica `orquesta.external_work.run.v0`
 como tool opt-in. Sin executor productivo devuelve unbound por transporte; con
-executor inyectado el handler REST delega en el caso de uso.
+executor inyectado el handler REST delega en el caso de uso y el descriptor/
+resultado declaran `route_policy=legacy_director_loop` mientras no exista
+external-work Goal-first.
 
 ## Prueba stats con run_ref obsoleto 2026-05-13
 
