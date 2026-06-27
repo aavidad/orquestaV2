@@ -64,6 +64,17 @@ Cobertura Go actual:
   operativa `supervise_with_resident_mode_or_run_ref`; desde 2026-06-27 tambien
   fija `executions=0`, limites efectivos y `top_candidates` para diagnosticar
   runs `ready` sin dispatch real.
+- `TestCodexStackRunSupervisorEvidenceDiagnosticsMCPV0ExponeStreamFDWarning`
+  valida que `evidence-ref-warning-stream-fd` sale como
+  `codex_runtime_stream_fd_warning` con accion de seguir observando sin relanzar
+  por ese aviso.
+- `TestCodexStackRunSupervisorEvidenceDiagnosticsMCPV0ExponeQuotaYCapacidad`
+  valida la traduccion de evidencias de cuota y capacidad a diagnosticos
+  publicos `codex_provider_quota_exhausted` y
+  `codex_provider_capacity_limited`.
+- `TestCodexStackRunSupervisorErrorResultMCPV0IncluyeDiagnosticosPorEvidencia`
+  fija que un error con snapshot parcial conserva los diagnosticos derivados de
+  evidencias y no deja solo refs opacas.
 - `TestNormalizeAutoprogrammingResidentInputV0DespachaLoteAmplioSinEsperarAgentesLargos`
   valida que `resident_mode` normaliza a capacidad operativa 70 para
   `MaxRunsPerTick`, `MaxExecutions`, `MaxDispatchesPerWait` y

@@ -1,5 +1,29 @@
 # Tareas: orquesta-app-codex-stack
 
+## APP-CODEX-STACK-048
+
+Objetivo: que evidencias opacas del supervisor Codex salgan como diagnosticos
+publicos accionables en MCP/HTTP.
+
+Estado: hecho local.
+
+Write-set aplicado:
+
+- `evidence-ref-warning-stream-fd` se proyecta como
+  `codex_runtime_stream_fd_warning` con accion de seguir observando sin
+  relanzar solo por ese aviso;
+- evidencias de cuota (`provider-quota-exhausted`,
+  `provider-usage-limit-retry-after`, `codex-usage-quota-*`) se proyectan como
+  `codex_provider_quota_exhausted`;
+- evidencias de capacidad limitada se proyectan como
+  `codex_provider_capacity_limited`;
+- la traduccion aplica tanto a resultados OK como a errores con snapshot
+  parcial, sin cambiar el estado del run ni bloquear entregas.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackRunSupervisor.*Diagnostics|TestCodexStackRunSupervisorErrorResultMCPV0IncluyeDiagnosticosPorEvidencia'`
+
 ## APP-CODEX-STACK-047
 
 Objetivo: que una supervision global `no_execution` con runs `ready` no quede

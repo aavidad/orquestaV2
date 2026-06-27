@@ -2,6 +2,23 @@
 
 ```text
 Fecha: 2026-06-27
+Decision: El supervisor Codex traduce evidencias runtime/cuota a diagnosticos
+publicos, no a rails.
+Motivo: OPES documento casos donde el operador ve refs como
+`evidence-ref-warning-stream-fd` o evidencias de cuota, pero la salida MCP/HTTP
+no explica si hay que esperar, relanzar o replanificar. Eso empuja a inspeccion
+manual de logs y a relanzamientos inseguros.
+Impacto: `CodexStackRunSupervisorExecutorV0` anade diagnosticos derivados de
+`Last.EvidenceRefs`: `codex_runtime_stream_fd_warning`,
+`codex_provider_quota_exhausted` y `codex_provider_capacity_limited`. Se
+conservan las evidencias originales y las acciones son advisory; no cambian
+estado, no filtran entregas y no bloquean agentes.
+Contratos afectados: salida MCP/HTTP de `orquesta.runs.supervisor.v0`.
+Estado: aceptada localmente.
+```
+
+```text
+Fecha: 2026-06-27
 Decision: Con backend Goal completo, autoprogramacion del stack Codex usa
 goal-first por defecto.
 Motivo: la foto vigente dice que Codex Goal hace el loop automatico. Exigir que

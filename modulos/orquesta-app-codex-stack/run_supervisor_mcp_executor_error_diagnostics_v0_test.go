@@ -183,6 +183,82 @@ func TestCodexStackRunSupervisorErrorResultMCPV0DistingueErrorConAgenteVivo(t *t
 	}
 }
 
+func TestCodexStackRunSupervisorEvidenceDiagnosticsMCPV0ExponeStreamFDWarning(t *testing.T) {
+	diagnostics := codexStackRunSupervisorEvidenceDiagnosticsMCPV0(
+		CodexSupervisorRuntimeSnapshotV0{
+			SessionRef: "run-ref-stream-fd-warning-001",
+			AgentRef:   "agent-ref-stream-fd-warning-001",
+			ProcessRef: "process-ref-stream-fd-warning-001",
+			EvidenceRefs: []string{
+				"evidence-ref-warning-stream-fd",
+			},
+		},
+	)
+
+	if len(diagnostics) != 1 ||
+		diagnostics[0].Code != codexStackCodexRuntimeStreamFDWarningDiagnosticV0 ||
+		!strings.Contains(diagnostics[0].Scope, "run:run-ref-stream-fd-warning-001") ||
+		!strings.Contains(diagnostics[0].Message, "continue_observing_do_not_relaunch_by_itself") ||
+		!codexStackStringInSetForTestV0(diagnostics[0].EvidenceRefs, "evidence-ref-warning-stream-fd") {
+		t.Fatalf("diagnostics=%+v", diagnostics)
+	}
+}
+
+func TestCodexStackRunSupervisorEvidenceDiagnosticsMCPV0ExponeQuotaYCapacidad(t *testing.T) {
+	diagnostics := codexStackRunSupervisorEvidenceDiagnosticsMCPV0(
+		CodexSupervisorRuntimeSnapshotV0{
+			SessionRef: "run-ref-quota-001",
+			EvidenceRefs: []string{
+				"evidence-ref-provider-usage-limit-retry-after",
+				"evidence-ref-codex-usage-quota-exhausted",
+				"evidence-ref-capacity-limited",
+			},
+		},
+	)
+
+	if !codexStackDiagnosticsContainCodeForTestV0(diagnostics, codexStackCodexProviderQuotaExhaustedDiagnosticV0) ||
+		!codexStackDiagnosticsContainCodeForTestV0(diagnostics, codexStackCodexProviderCapacityLimitedDiagnosticV0) {
+		t.Fatalf("diagnostics=%+v", diagnostics)
+	}
+	quota := codexStackDiagnosticByCodeForTestV0(diagnostics, codexStackCodexProviderQuotaExhaustedDiagnosticV0)
+	if !strings.Contains(quota.Message, "wait_for_quota_or_requeue_capacity_limited") ||
+		!codexStackStringInSetForTestV0(quota.EvidenceRefs, "evidence-ref-provider-usage-limit-retry-after") ||
+		!codexStackStringInSetForTestV0(quota.EvidenceRefs, "evidence-ref-codex-usage-quota-exhausted") {
+		t.Fatalf("quota=%+v", quota)
+	}
+	capacity := codexStackDiagnosticByCodeForTestV0(diagnostics, codexStackCodexProviderCapacityLimitedDiagnosticV0)
+	if !strings.Contains(capacity.Message, "wait_for_capacity_or_requeue_capacity_limited") ||
+		!codexStackStringInSetForTestV0(capacity.EvidenceRefs, "evidence-ref-capacity-limited") {
+		t.Fatalf("capacity=%+v", capacity)
+	}
+}
+
+func TestCodexStackRunSupervisorErrorResultMCPV0IncluyeDiagnosticosPorEvidencia(t *testing.T) {
+	partial := CodexSupervisorResultV0{
+		StopReason: CodexSupervisorStopRuntimeErrorV0,
+		Ticks:      1,
+		Last: CodexSupervisorRuntimeSnapshotV0{
+			Status:     CodexSupervisorRuntimeFailedV0,
+			SessionRef: "run-ref-error-evidence-001",
+			EvidenceRefs: []string{
+				"evidence-ref-warning-stream-fd",
+				"evidence-ref-provider-quota-exhausted",
+			},
+		},
+	}
+
+	result := codexStackRunSupervisorErrorResultMCPV0(
+		orquestamcp.MCPRunSupervisorToolInputV0{RunRef: "run-ref-error-evidence-001"},
+		partial,
+		errors.New("runtime error"),
+	)
+
+	if !codexStackDiagnosticsContainCodeForTestV0(result.Diagnostics, codexStackCodexRuntimeStreamFDWarningDiagnosticV0) ||
+		!codexStackDiagnosticsContainCodeForTestV0(result.Diagnostics, codexStackCodexProviderQuotaExhaustedDiagnosticV0) {
+		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+}
+
 func TestCodexStackRunSupervisorRequestedNotStartedDiagnosticsMCPV0ExponeExternalWorkQAVisual(t *testing.T) {
 	ctx := context.Background()
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
@@ -400,4 +476,16 @@ func TestCodexStackRunSupervisorQueueDiagnosticsMCPV0ExponeNoExecutionConReady(t
 		!strings.Contains(diagnostics[0].Message, "action=supervise_with_resident_mode_or_run_ref") {
 		t.Fatalf("diagnostics=%+v", diagnostics)
 	}
+}
+
+func codexStackDiagnosticByCodeForTestV0(
+	diagnostics []orquestamcp.MCPAutoprogrammingDiagnosticV0,
+	code string,
+) orquestamcp.MCPAutoprogrammingDiagnosticV0 {
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Code == code {
+			return diagnostic
+		}
+	}
+	return orquestamcp.MCPAutoprogrammingDiagnosticV0{}
 }

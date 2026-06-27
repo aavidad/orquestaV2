@@ -98,6 +98,10 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 	)
 	output.Diagnostics = append(
 		output.Diagnostics,
+		codexStackRunSupervisorEvidenceDiagnosticsMCPV0(result.Last)...,
+	)
+	output.Diagnostics = append(
+		output.Diagnostics,
 		executor.Stack.codexStackRunSupervisorQueueDiagnosticsMCPV0(ctx, input, result)...,
 	)
 	requestedNotStartedDiagnostics := executor.Stack.codexStackRunSupervisorRequestedNotStartedDiagnosticsMCPV0(ctx, input, result)

@@ -15,6 +15,9 @@ import (
 const (
 	codexStackExternalWorkAgentRequestedNotStartedDiagnosticV0 = "external_work_agent_requested_not_started"
 	codexStackExternalWorkStoppedNoDeliveryDiagnosticV0        = "external_work_accepted_stopped_without_delivery"
+	codexStackCodexRuntimeStreamFDWarningDiagnosticV0          = "codex_runtime_stream_fd_warning"
+	codexStackCodexProviderQuotaExhaustedDiagnosticV0          = "codex_provider_quota_exhausted"
+	codexStackCodexProviderCapacityLimitedDiagnosticV0         = "codex_provider_capacity_limited"
 )
 
 func codexStackRunSupervisorErrorResultMCPV0(
@@ -52,14 +55,15 @@ func codexStackRunSupervisorErrorResultMCPV0(
 	result.History = codexStackRunSupervisorHistoryMCPV0(partial.History)
 	result.EvidenceRefs = compactStringsV0(partial.Last.EvidenceRefs)
 	liveDiagnostics := codexStackRunSupervisorLiveErrorDiagnosticsMCPV0(result.RunRef, partial, err)
+	evidenceDiagnostics := codexStackRunSupervisorEvidenceDiagnosticsMCPV0(partial.Last)
 	result.NextActions = codexStackRunSupervisorLiveErrorNextActionsMCPV0(partial)
 	if diagnostics := codexStackRunSupervisorDiagnosticsMCPV0(partial.Last.Diagnostics); len(diagnostics) > 0 {
 		diagnostics = codexStackRunSupervisorDiagnosticsWithFallbackErrorV0(diagnostics, err)
-		result.Diagnostics = append(liveDiagnostics, diagnostics...)
+		result.Diagnostics = append(append(liveDiagnostics, evidenceDiagnostics...), diagnostics...)
 		return result
 	}
-	if len(liveDiagnostics) > 0 {
-		result.Diagnostics = liveDiagnostics
+	if len(liveDiagnostics) > 0 || len(evidenceDiagnostics) > 0 {
+		result.Diagnostics = append(liveDiagnostics, evidenceDiagnostics...)
 		return result
 	}
 	if len(result.EvidenceRefs) > 0 {
@@ -71,6 +75,98 @@ func codexStackRunSupervisorErrorResultMCPV0(
 		}}
 	}
 	return result
+}
+
+func codexStackRunSupervisorEvidenceDiagnosticsMCPV0(
+	snapshot CodexSupervisorRuntimeSnapshotV0,
+) []orquestamcp.MCPAutoprogrammingDiagnosticV0 {
+	evidenceRefs := compactStringsV0(snapshot.EvidenceRefs)
+	if len(evidenceRefs) == 0 {
+		return nil
+	}
+	scope := codexStackRunSupervisorEvidenceScopeMCPV0(snapshot)
+	out := []orquestamcp.MCPAutoprogrammingDiagnosticV0{}
+	if refs := codexStackRunSupervisorStreamFDWarningEvidenceRefsV0(evidenceRefs); len(refs) > 0 {
+		out = append(out, orquestamcp.MCPAutoprogrammingDiagnosticV0{
+			Code:         codexStackCodexRuntimeStreamFDWarningDiagnosticV0,
+			Scope:        scope,
+			Message:      "warning=stream_fd action=continue_observing_do_not_relaunch_by_itself",
+			EvidenceRefs: refs,
+		})
+	}
+	if refs := codexStackRunSupervisorQuotaEvidenceRefsV0(evidenceRefs); len(refs) > 0 {
+		out = append(out, orquestamcp.MCPAutoprogrammingDiagnosticV0{
+			Code:         codexStackCodexProviderQuotaExhaustedDiagnosticV0,
+			Scope:        scope,
+			Message:      "provider_quota_exhausted action=wait_for_quota_or_requeue_capacity_limited",
+			EvidenceRefs: refs,
+		})
+	}
+	if refs := codexStackRunSupervisorCapacityEvidenceRefsV0(evidenceRefs); len(refs) > 0 {
+		out = append(out, orquestamcp.MCPAutoprogrammingDiagnosticV0{
+			Code:         codexStackCodexProviderCapacityLimitedDiagnosticV0,
+			Scope:        scope,
+			Message:      "provider_capacity_limited action=wait_for_capacity_or_requeue_capacity_limited",
+			EvidenceRefs: refs,
+		})
+	}
+	return out
+}
+
+func codexStackRunSupervisorEvidenceScopeMCPV0(
+	snapshot CodexSupervisorRuntimeSnapshotV0,
+) string {
+	return strings.Join(compactStringsV0([]string{
+		"run:" + strings.TrimSpace(snapshot.SessionRef),
+		"agent:" + strings.TrimSpace(snapshot.AgentRef),
+		"process:" + strings.TrimSpace(snapshot.ProcessRef),
+	}), " ")
+}
+
+func codexStackRunSupervisorStreamFDWarningEvidenceRefsV0(
+	evidenceRefs []string,
+) []string {
+	out := []string{}
+	for _, ref := range evidenceRefs {
+		ref = strings.TrimSpace(ref)
+		if ref == "evidence-ref-warning-stream-fd" {
+			out = append(out, ref)
+		}
+	}
+	return compactStringsV0(out)
+}
+
+func codexStackRunSupervisorQuotaEvidenceRefsV0(
+	evidenceRefs []string,
+) []string {
+	out := []string{}
+	for _, ref := range evidenceRefs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		switch {
+		case ref == "evidence-ref-provider-quota-exhausted",
+			ref == "evidence-ref-provider-usage-limit-retry-after",
+			ref == "evidence-ref-codex-usage-quota-exhausted",
+			ref == "evidence-ref-codex-usage-quota-limited":
+			out = append(out, ref)
+		}
+	}
+	return compactStringsV0(out)
+}
+
+func codexStackRunSupervisorCapacityEvidenceRefsV0(
+	evidenceRefs []string,
+) []string {
+	out := []string{}
+	for _, ref := range evidenceRefs {
+		ref = strings.TrimSpace(ref)
+		if ref == "evidence-ref-capacity-limited" || ref == "evidence-ref-capacity-warning" {
+			out = append(out, ref)
+		}
+	}
+	return compactStringsV0(out)
 }
 
 func codexStackRunSupervisorLiveErrorDiagnosticsMCPV0(
