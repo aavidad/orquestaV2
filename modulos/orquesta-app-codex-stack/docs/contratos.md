@@ -132,6 +132,11 @@ Manejo real de agentes en Orquesta:
   como `stopped`, `/api/v0/runs/supervise` proyecta `stop_pending` y deja el
   control como `stop_requested`, con siguiente accion de volver a supervisar
   hasta confirmacion real;
+- si `RunControl` ya esta en `stop_requested`/`cancel_requested` pero el run o
+  el ultimo snapshot muestran dispatch iniciado, agentes arrancados o proceso
+  vivo, `runs/supervise` publica el diagnostico advisory
+  `stop_pending_but_dispatch_in_progress`: el operador debe observar agentes y
+  confirmar stop cooperativo, no matar entregas utiles por la carrera;
 - progreso parado/lento entra por `ProgressSupervisionCandidateProviderV0` y el
   replan por `AssessmentReplanSourceV0`, que puede pedir `replace_agent`.
 

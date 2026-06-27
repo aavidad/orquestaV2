@@ -297,6 +297,10 @@ Cobertura Go actual:
   `external_work_accepted_no_agent_materialized` para una run external-work
   `done` sin agentes pedidos, arrancados, en vuelo ni entregas, y recomienda
   relanzar o replantear con error causal en vez de aceptar el cierre silencioso.
+- `TestCodexStackRunSupervisorStopPendingDispatchDiagnosticsMCPV0ExponeMaterializacionTardia`
+  valida que una run con `RunControl=stop_requested` y agentes/proceso ya vivos
+  publica `stop_pending_but_dispatch_in_progress`, con accion de esperar u
+  observar confirmacion de stop sin matar una entrega potencialmente util.
 - `TestCodexStackRealRequiredTestRunnerEndToEndOptInV0` queda desactivado por
   defecto y valida con un agente Codex real acotado el ciclo del Director
   Operativo: task con `RequiredTests`, `WaitAgentRefs`, ACK/entrega, review

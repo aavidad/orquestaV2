@@ -10,6 +10,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestarails "orquesta/modulos/orquesta-rails"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 )
 
@@ -17,6 +18,7 @@ const (
 	codexStackExternalWorkAgentRequestedNotStartedDiagnosticV0 = "external_work_agent_requested_not_started"
 	codexStackExternalWorkStoppedNoDeliveryDiagnosticV0        = "external_work_accepted_stopped_without_delivery"
 	codexStackExternalWorkNoAgentMaterializedDiagnosticV0      = "external_work_accepted_no_agent_materialized"
+	codexStackStopPendingDispatchInProgressDiagnosticV0        = "stop_pending_but_dispatch_in_progress"
 	codexStackCodexRuntimeStreamFDWarningDiagnosticV0          = "codex_runtime_stream_fd_warning"
 	codexStackCodexProviderQuotaExhaustedDiagnosticV0          = "codex_provider_quota_exhausted"
 	codexStackCodexProviderCapacityLimitedDiagnosticV0         = "codex_provider_capacity_limited"
@@ -232,6 +234,62 @@ func codexStackRunSupervisorLiveErrorNextActionsMCPV0(
 		"wait_agents",
 		"retry_supervise",
 		"do_not_relaunch_same_run_ref_while_process_live",
+	}
+}
+
+func (stack *StackV0) codexStackRunSupervisorStopPendingDispatchDiagnosticsMCPV0(
+	ctx context.Context,
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+	result CodexSupervisorResultV0,
+) []orquestamcp.MCPAutoprogrammingDiagnosticV0 {
+	if stack == nil || stack.Stores.RunControl == nil || stack.Stores.RunStore == nil {
+		return nil
+	}
+	runRef := strings.TrimSpace(firstNonEmptyQueuedSourceV0(input.RunRef, result.Last.SessionRef))
+	if runRef == "" {
+		return nil
+	}
+	state, err := stack.Stores.RunControl.ReadRunControlStateV0(ctx, orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef})
+	if err != nil || !codexStackRunControlStopPendingV0(state.Status) {
+		return nil
+	}
+	run, err := stack.Stores.RunStore.LoadRunV0(ctx, runRef)
+	if err != nil {
+		return nil
+	}
+	started := compactStringsV0(run.StartedAgents)
+	inFlight := stackDrainPendingStartedAgentRefsV0(run)
+	if len(started) == 0 &&
+		len(inFlight) == 0 &&
+		result.StopReason != CodexSupervisorStopDispatchV0 &&
+		result.Last.Status != CodexSupervisorRuntimeRunningLiveV0 {
+		return nil
+	}
+	message := strings.Join(compactStringsV0([]string{
+		"control_status=" + strings.TrimSpace(string(state.Status)),
+		"started_agents=" + strconv.Itoa(len(started)),
+		"in_flight=" + strconv.Itoa(len(inFlight)),
+		"last_status=" + strings.TrimSpace(string(result.Last.Status)),
+		"action=wait_agents_or_confirm_stop_do_not_kill_useful_delivery",
+	}), " ")
+	return []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+		Code:    codexStackStopPendingDispatchInProgressDiagnosticV0,
+		Scope:   codexStackRunSupervisorLiveErrorScopeMCPV0(runRef, result.Last),
+		Message: message,
+		EvidenceRefs: compactStringsV0(append(
+			append([]string{}, result.Last.EvidenceRefs...),
+			append(state.EvidenceRefs, "evidence-ref-stop-pending-dispatch-in-progress")...,
+		)),
+	}}
+}
+
+func codexStackRunControlStopPendingV0(status orquestaruncontrol.RunControlStatusV0) bool {
+	switch orquestaruncontrol.NormalizeRunControlStatusV0(status) {
+	case orquestaruncontrol.RunControlStatusStopRequestedV0,
+		orquestaruncontrol.RunControlStatusCancelRequestedV0:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -486,6 +544,28 @@ func codexStackRunSupervisorWithNoAgentMaterializedActionsMCPV0(
 		"relaunch_or_replan_external_work_with_causal_error",
 		"inspect_external_work_payload_and_runtime_binding",
 		"do_not_mark_completed_without_agent_start_or_delivery",
+	))
+	return output
+}
+
+func codexStackRunSupervisorWithStopPendingDispatchActionsMCPV0(
+	output orquestamcp.MCPRunSupervisorToolResultV0,
+	diagnostics []orquestamcp.MCPAutoprogrammingDiagnosticV0,
+) orquestamcp.MCPRunSupervisorToolResultV0 {
+	hasStopPendingDispatch := false
+	for _, diagnostic := range diagnostics {
+		if strings.TrimSpace(diagnostic.Code) == codexStackStopPendingDispatchInProgressDiagnosticV0 {
+			hasStopPendingDispatch = true
+			break
+		}
+	}
+	if !hasStopPendingDispatch {
+		return output
+	}
+	output.NextActions = compactStringsV0(append(output.NextActions,
+		"wait_agents_or_confirm_stop",
+		"observe_run_control_and_director_stats",
+		"do_not_kill_live_agents_with_useful_output",
 	))
 	return output
 }

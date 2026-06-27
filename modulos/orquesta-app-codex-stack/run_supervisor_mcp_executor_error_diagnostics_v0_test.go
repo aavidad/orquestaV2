@@ -8,6 +8,7 @@ import (
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
@@ -466,6 +467,76 @@ func TestCodexStackRunSupervisorNoAgentMaterializedDiagnosticsMCPV0ExponeExterna
 	if !codexStackStringInSetForTestV0(output.NextActions, "relaunch_or_replan_external_work_with_causal_error") ||
 		!codexStackStringInSetForTestV0(output.NextActions, "inspect_external_work_payload_and_runtime_binding") ||
 		!codexStackStringInSetForTestV0(output.NextActions, "do_not_mark_completed_without_agent_start_or_delivery") {
+		t.Fatalf("next_actions=%+v", output.NextActions)
+	}
+}
+
+func TestCodexStackRunSupervisorStopPendingDispatchDiagnosticsMCPV0ExponeMaterializacionTardia(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runRef := "run-opes-integracion-social-b-t014-rework-productivo-20260627-19023i"
+	agentRef := "agent-ref-integracion-social-t014-padre"
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, orquestacoreworkflow.OrchestrationRunV0{
+		RunID:         runRef,
+		ProjectRef:    "opes",
+		AppSpecRef:    "app-spec-external-work-opes-integracion-social",
+		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		Tasks:         []string{"task-ref-integracion-social-t014"},
+		Agents:        []string{agentRef},
+		StartedAgents: []string{agentRef},
+	}); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if _, err := stack.Stores.RunControl.StopRunV0(ctx, orquestaruncontrol.StopRunCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "opes",
+		Reason:       "descartar ola contaminada tras dispatch tardio",
+		Forced:       true,
+		EvidenceRefs: []string{"evidence-ref-mcp-run-control-checkpoint-recorded"},
+	}); err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+	result := CodexSupervisorResultV0{
+		StopReason: CodexSupervisorStopPendingV0,
+		Last: CodexSupervisorRuntimeSnapshotV0{
+			Status:     CodexSupervisorRuntimeRunningLiveV0,
+			SessionRef: runRef,
+			AgentRef:   agentRef,
+			ProcessRef: "process-ref-integracion-social-t014-padre",
+			EvidenceRefs: []string{
+				"evidence-ref-codex-supervisor-process-live",
+			},
+		},
+	}
+
+	diagnostics := stack.codexStackRunSupervisorStopPendingDispatchDiagnosticsMCPV0(
+		ctx,
+		orquestamcp.MCPRunSupervisorToolInputV0{RunRef: runRef},
+		result,
+	)
+	output := codexStackRunSupervisorWithStopPendingDispatchActionsMCPV0(
+		orquestamcp.NewMCPRunSupervisorOKResultV0(
+			orquestamcp.MCPRunSupervisorToolInputV0{RunRef: runRef},
+			runRef,
+			string(CodexSupervisorStopPendingV0),
+			1,
+			codexStackRunSupervisorSnapshotMCPV0(result.Last),
+			nil,
+		),
+		diagnostics,
+	)
+
+	if len(diagnostics) != 1 ||
+		diagnostics[0].Code != codexStackStopPendingDispatchInProgressDiagnosticV0 ||
+		!strings.Contains(diagnostics[0].Message, "control_status=stop_requested") ||
+		!strings.Contains(diagnostics[0].Message, "started_agents=1") ||
+		!strings.Contains(diagnostics[0].Message, "wait_agents_or_confirm_stop_do_not_kill_useful_delivery") ||
+		!codexStackStringInSetForTestV0(diagnostics[0].EvidenceRefs, "evidence-ref-stop-pending-dispatch-in-progress") {
+		t.Fatalf("diagnostics=%+v", diagnostics)
+	}
+	if !codexStackStringInSetForTestV0(output.NextActions, "wait_agents_or_confirm_stop") ||
+		!codexStackStringInSetForTestV0(output.NextActions, "observe_run_control_and_director_stats") ||
+		!codexStackStringInSetForTestV0(output.NextActions, "do_not_kill_live_agents_with_useful_output") {
 		t.Fatalf("next_actions=%+v", output.NextActions)
 	}
 }
