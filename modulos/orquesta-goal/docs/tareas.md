@@ -73,3 +73,23 @@ Evidencia local:
 go test -count=1 ./modulos/orquesta-goal ./modulos/orquesta-app-director-service
 go test -count=1 ./modulos/orquesta-app-codex-stack -run 'GoalFirst|Autoprogramming|ExternalWork'
 ```
+
+## GOAL-005 listado neutral de estados goal
+
+Estado: cerrado localmente 2026-06-27.
+
+Criterio:
+
+- `GoalWorkStateListPortV0` permite listar estados por `run_refs`, `statuses`,
+  `active_only` y `max_items` sin ampliar ni romper `GoalWorkStateStorePortV0`.
+- `orquesta-state-file` implementa el puerto leyendo documentos
+  `app_director_goal_states/` y validando cada `GoalWorkStateV0`.
+- `autoprogramming/status` puede detectar goals `running` aunque no esten
+  visibles en la cola y recomendar `observe_goal` sin despertar el supervisor
+  legacy.
+
+Evidencia local:
+
+```bash
+go test -count=1 ./modulos/orquesta-goal ./modulos/orquesta-state-file ./modulos/orquesta-mcp
+```

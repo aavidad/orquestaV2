@@ -25,6 +25,8 @@ Cobertura actual:
 - observacion terminal valida closure, persiste `LastClosure` y deja a la
   composicion la proyeccion a run/cola/dominio;
 - fallo al guardar estado tras launch se devuelve sin relanzar automaticamente;
+- filtro `GoalWorkStateListRequestV0{active_only:true}` selecciona estados
+  `running` y excluye terminales;
 - reglas blandas advisory no bloquean el contrato;
 - `complete` con spec invalido no valida cierre;
 - `complete` sin `goal_ref` causal igual al spec no valida cierre;

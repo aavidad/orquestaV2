@@ -260,6 +260,34 @@ func GoalWorkResultTerminalV0(status string) bool {
 	}
 }
 
+func NormalizeGoalWorkStateListRequestV0(
+	request GoalWorkStateListRequestV0,
+) GoalWorkStateListRequestV0 {
+	request.RunRefs = compactGoalStringsV0(request.RunRefs)
+	request.Statuses = compactGoalStringsV0(request.Statuses)
+	if request.ActiveOnly && len(request.Statuses) == 0 {
+		request.Statuses = []string{GoalStatusRunningV0}
+	}
+	if request.MaxItems < 0 {
+		request.MaxItems = 0
+	}
+	return request
+}
+
+func GoalWorkStateMatchesListRequestV0(
+	state GoalWorkStateV0,
+	request GoalWorkStateListRequestV0,
+) bool {
+	request = NormalizeGoalWorkStateListRequestV0(request)
+	if len(request.RunRefs) > 0 && !goalStringInSetV0(request.RunRefs, state.RunRef) {
+		return false
+	}
+	if len(request.Statuses) > 0 && !goalStringInSetV0(request.Statuses, state.Status) {
+		return false
+	}
+	return strings.TrimSpace(state.RunRef) != "" && strings.TrimSpace(state.GoalRef) != ""
+}
+
 func goalWorkSpecWithRunRefV0(spec GoalWorkSpecV0, runRef string) GoalWorkSpecV0 {
 	spec = NormalizeGoalWorkSpecV0(spec)
 	runRef = strings.TrimSpace(runRef)
@@ -311,6 +339,16 @@ func firstGoalLifecycleValueV0(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func goalStringInSetV0(values []string, want string) bool {
+	want = strings.TrimSpace(want)
+	for _, value := range values {
+		if strings.TrimSpace(value) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func compactGoalStringsV0(values []string) []string {

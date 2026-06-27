@@ -130,14 +130,6 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 			result.RunRef = run.RunRef
 		}
 	}
-	if okCount == 0 {
-		result.Estado = MCPAutoprogrammingStatusEstadoErrorV0
-		result.Errores = []MCPValidationIssueV0{{
-			Code:    "autoprogramming_status_no_disponible",
-			Field:   "ports",
-			Message: "estado de autoprogramacion no disponible",
-		}}
-	}
 	if mcpAutoprogrammingReplanAmplificationBlockedV0(result.Run) {
 		result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingDiagnosticV0(
 			"supervisor_replan_amplification_blocked",
@@ -170,8 +162,19 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	}
 	healthRun, healthObservedRuns := mcpAutoprogrammingPreferredRunStatsForQueueHealthV0(result.Run, observedRuns...)
 	goalStates := executor.goalStatesForAutoprogrammingStatusV0(ctx, result, input)
+	if len(goalStates) > 0 {
+		okCount++
+	}
 	goalStatesByRunRef := mcpAutoprogrammingGoalStatesByRunRefV0(goalStates)
 	goalFirstRunRefs := mcpAutoprogrammingGoalFirstRunRefSetFromStatesV0(goalStates)
+	if okCount == 0 {
+		result.Estado = MCPAutoprogrammingStatusEstadoErrorV0
+		result.Errores = []MCPValidationIssueV0{{
+			Code:    "autoprogramming_status_no_disponible",
+			Field:   "ports",
+			Message: "estado de autoprogramacion no disponible",
+		}}
+	}
 	result.Projects = buildMCPAutoprogrammingProjectsV0(result.Queue, result.Run)
 	result.Tasks = buildMCPAutoprogrammingTasksV0(result.Run, goalFirstRunRefs)
 	result.Agents = buildMCPAutoprogrammingAgentsV0(result.Run, goalFirstRunRefs)
@@ -243,6 +246,22 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) goalStatesForAutoprogramm
 			continue
 		}
 		out = append(out, state)
+	}
+	if lister, ok := executor.GoalStateStore.(orquestagoal.GoalWorkStateListPortV0); ok {
+		listed, err := lister.ListGoalWorkStatesV0(ctx, orquestagoal.GoalWorkStateListRequestV0{
+			ActiveOnly: true,
+			MaxItems:   mcpAutoprogrammingRunningStatsMaxV0,
+		})
+		if err == nil {
+			for _, state := range listed {
+				runRef := strings.TrimSpace(state.RunRef)
+				if runRef == "" || seen[runRef] || strings.TrimSpace(state.GoalRef) == "" {
+					continue
+				}
+				seen[runRef] = true
+				out = append(out, state)
+			}
+		}
 	}
 	return out
 }

@@ -3,6 +3,7 @@ package orquestamcp
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"strings"
 	"testing"
 
@@ -191,6 +192,48 @@ func TestMCPAutoprogrammingStatusExecutorV0RecomiendaObserveGoalParaRunGoalFirst
 		result.OpsSnapshot.Decision.RunRef != runRef ||
 		result.OpsSnapshot.Decision.ReasonCode != "goal_first_observe_required" {
 		t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0ListaGoalActivoAunqueColaNoVisible(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-listed-001"
+	goalRef := "goal-ref-autop-status-goal-listed-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Observar goal aunque no aparezca en cola.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:      goalRef,
+			Status:       orquestagoal.GoalStatusRunningV0,
+			EvidenceRefs: []string{"evidence-ref-goal-listed-status-test"},
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-listed-status-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.Estado != MCPAutoprogrammingStatusEstadoOKV0 ||
+		len(result.Errores) != 0 ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_goal_first_observe_required") ||
+		result.Operator == nil ||
+		!hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "observe_goal", "run", runRef) ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "run", runRef) {
+		t.Fatalf("result=%+v diagnostics=%+v operator=%+v", result, result.Diagnostics, result.Operator)
 	}
 }
 
@@ -1272,6 +1315,30 @@ func hasStringMCPAutoprogrammingStatusTestV0(values []string, want string) bool 
 		}
 	}
 	return false
+}
+
+func (store *mcpGoalStateStoreForTestV0) ListGoalWorkStatesV0(
+	_ context.Context,
+	request orquestagoal.GoalWorkStateListRequestV0,
+) ([]orquestagoal.GoalWorkStateV0, error) {
+	request = orquestagoal.NormalizeGoalWorkStateListRequestV0(request)
+	out := make([]orquestagoal.GoalWorkStateV0, 0, len(store.states))
+	for _, state := range store.states {
+		if !orquestagoal.GoalWorkStateMatchesListRequestV0(state, request) {
+			continue
+		}
+		out = append(out, state)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return strings.TrimSpace(out[i].RunRef) < strings.TrimSpace(out[j].RunRef)
+	})
+	if request.MaxItems > 0 && len(out) > request.MaxItems {
+		out = out[:request.MaxItems]
+	}
+	if out == nil {
+		return []orquestagoal.GoalWorkStateV0{}, nil
+	}
+	return out, nil
 }
 
 func hasMCPAutoprogrammingSafeActionForTestV0(

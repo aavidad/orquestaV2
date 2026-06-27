@@ -647,6 +647,10 @@ activos de cola por `run_ref`, publica `autoprogramming_goal_first_observe_requi
 anade `observe_goal` por cada goal-first y suprime `supervise queue` si la cola
 contiene algun goal-first. Para candidatos legacy de la misma cola conserva
 acciones acotadas `supervise run` por `run_ref`.
+Actualizacion 2026-06-27 noche: si ese store implementa
+`GoalWorkStateListPortV0`, `autoprogramming/status` lista goals `running` aunque
+no esten visibles en la cola; esos estados cuentan como superficie de estado
+disponible y publican `observe_goal`.
 Contratos afectados: mcp.tool.orquesta.autoprogramming.status.v0.
 Estado: aceptada localmente.
 ```

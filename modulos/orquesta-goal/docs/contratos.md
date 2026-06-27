@@ -64,5 +64,8 @@ cola, API o dominio.
 - `GoalWorkClosureValidatorPortV0`: valida si el resultado cierra el contrato.
 - `GoalWorkStateStorePortV0`: guarda y carga el estado durable del goal por
   `run_ref`.
+- `GoalWorkStateListPortV0`: puerto opcional para listar estados goal por
+  `run_refs`, estados o `active_only`; no sustituye a `LoadGoalWorkStateV0` ni
+  obliga a todos los stores de test a implementarlo.
 
 Los adaptadores concretos implementan esos puertos fuera del nucleo.

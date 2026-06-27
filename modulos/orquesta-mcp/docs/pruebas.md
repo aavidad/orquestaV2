@@ -579,6 +579,10 @@ Evidencia adicional 2026-06-27:
 valida que, sin `run_ref` explicito, una cola mixta con candidato goal-first y
 legacy no recomienda `supervise queue`; recomienda `observe_goal` para el
 goal-first y `supervise run` para el candidato legacy concreto.
+`TestMCPAutoprogrammingStatusExecutorV0ListaGoalActivoAunqueColaNoVisible`
+valida que un `GoalWorkStateListPortV0` con un goal `running` basta para que
+`autoprogramming/status` quede `ok` y recomiende `observe_goal` aunque no haya
+cola visible.
 Revalidacion adicional 2026-06-27: el mismo camino alinea
 `ops_snapshot.decision` con la accion segura goal-first. Si hay `observe_goal`,
 el snapshot publica `decision.action=observe_goal` y `reason_code=

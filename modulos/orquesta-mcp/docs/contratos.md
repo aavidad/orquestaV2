@@ -1510,9 +1510,11 @@ Invariantes:
   - Si la composicion inyecta `GoalWorkStateStore` y la run pertenece a
     goal-first, recomienda observar el goal por
     `/api/v0/autoprogramming/goal/observe` en vez de empujar supervision legacy
-    de esa run. Cuando la consulta es de cola y hay candidatos goal-first, no
-    recomienda `supervise queue`; emite `observe_goal` por run goal-first y
-    `supervise run` acotado para candidatos legacy visibles.
+    de esa run. Si el store implementa tambien `GoalWorkStateListPortV0`, puede
+    detectar goals activos aunque no aparezcan en la cola visible. Cuando la
+    consulta es de cola y hay candidatos goal-first, no recomienda
+    `supervise queue`; emite `observe_goal` por run goal-first y `supervise run`
+    acotado para candidatos legacy visibles.
   - Las clases `running_without_recent_stats`, `running_stale*` y las
     proyecciones legacy de tareas/agentes (`registered`, `process_ref`,
     `task_ref`) aplican solo a runs sin `GoalWorkStateV0`. En goal-first el

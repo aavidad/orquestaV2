@@ -16,6 +16,9 @@ Casos relevantes:
   `run_ref + plan_ref`;
 - recuperar `RequiredTestEvidenceV0` por `run_ref + evidence_ref` y rechazar la
   misma ref con payload distinto;
+- recuperar `GoalWorkStateV0` tras recrear instancia y listar estados goal
+  activos/terminales con filtros `active_only`, `statuses`, `run_refs` y
+  `max_items`;
 - conservar `required_test_evidence_refs` dentro del plan state para que el
   cierre posterior pueda consumir evidencias ya aceptadas;
 - verificar tras recrear instancia que `OperationalDirectorPlanStateV0`,

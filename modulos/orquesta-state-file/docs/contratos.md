@@ -14,6 +14,8 @@
 - `RequiredTestEvidenceStorePortV0`
 - `OperationalDirectorPlanStateStorePortV0`
 - `OperationalDirectorPlanStateWriterPortV0`
+- `GoalWorkStateStorePortV0`
+- `GoalWorkStateListPortV0`
 - `AgentProcessRegistryPortV0`
 
 ## STF-002: FileOutboxLedgerV0
@@ -38,6 +40,9 @@ store de runs/tareas para evitar mezclar responsabilidades.
 - `operational_director_plan_states/`: un documento mutable por
   `run_id + plan_ref`; conserva el estado vivo del Director Operativo,
   incluyendo `accepted_review_refs` en pasos `review_deliveries`.
+- `app_director_goal_states/`: un documento por `run_ref`; conserva
+  `GoalWorkStateV0` para rutas goal-first y permite listar estados activos sin
+  depender de la cola legacy.
 - `agent_processes/`: un documento por `run_id + agent_request_id`.
 - `outbox_ledger_v0.json`: ledger durable del subpaquete `outbox`.
 

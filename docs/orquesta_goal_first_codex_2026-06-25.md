@@ -65,6 +65,9 @@ Orquesta decide si el resultado cierra:
 - `StartGoalWorkV0`/`ObserveGoalWorkV0`: lifecycle neutral por puertos para
   lanzar, persistir estado, observar y validar closure sin importar runtime,
   servidor, filesystem, colas ni dominio.
+- `GoalWorkStateListPortV0`: puerto opcional para listar estados goal activos o
+  filtrados por refs/estado; permite a status/residentes recomendar
+  `observe_goal` sin volver al supervisor legacy.
 
 `modulos/orquesta-runtime-codex-goal` define el adaptador Codex:
 

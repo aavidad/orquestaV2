@@ -13,6 +13,7 @@ Implementa:
 - `RequiredTestEvidenceStorePortV0`;
 - `OperationalDirectorPlanStateStorePortV0` /
   `OperationalDirectorPlanStateWriterPortV0`;
+- `GoalWorkStateStorePortV0` / `GoalWorkStateListPortV0`;
 - `AgentProcessRegistryPortV0`.
 
 El subpaquete `outbox` implementa el ledger durable de outbox usado por el

@@ -46,10 +46,74 @@ func TestStoreV0AppDirectorGoalStateRechazaRunRefInconsistente(t *testing.T) {
 	}
 }
 
+func TestStoreV0AppDirectorGoalStateListaActivosTrasRecreate(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewStoreV0(ConfigV0{RootDir: root})
+	if err != nil {
+		t.Fatalf("NewStoreV0: %v", err)
+	}
+	running := appDirectorGoalStateWithRefsForTestV0(
+		"run-ref-state-file-active-001",
+		"goal-ref-state-file-active-001",
+		orquestagoal.GoalStatusRunningV0,
+	)
+	complete := appDirectorGoalStateWithRefsForTestV0(
+		"run-ref-state-file-complete-001",
+		"goal-ref-state-file-complete-001",
+		orquestagoal.GoalStatusCompleteV0,
+	)
+	blocked := appDirectorGoalStateWithRefsForTestV0(
+		"run-ref-state-file-blocked-001",
+		"goal-ref-state-file-blocked-001",
+		orquestagoal.GoalStatusBlockedV0,
+	)
+	for _, state := range []orquestagoal.GoalWorkStateV0{complete, running, blocked} {
+		if err := store.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+			t.Fatalf("SaveGoalWorkStateV0: %v", err)
+		}
+	}
+	recovered, err := NewStoreV0(ConfigV0{RootDir: root})
+	if err != nil {
+		t.Fatalf("NewStoreV0 recovered: %v", err)
+	}
+	active, err := recovered.ListGoalWorkStatesV0(context.Background(), orquestagoal.GoalWorkStateListRequestV0{
+		ActiveOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("ListGoalWorkStatesV0 active: %v", err)
+	}
+	if len(active) != 1 || active[0].RunRef != running.RunRef {
+		t.Fatalf("active=%+v", active)
+	}
+	terminal, err := recovered.ListGoalWorkStatesV0(context.Background(), orquestagoal.GoalWorkStateListRequestV0{
+		RunRefs:  []string{blocked.RunRef, complete.RunRef, "run-ref-state-file-missing"},
+		Statuses: []string{orquestagoal.GoalStatusBlockedV0, orquestagoal.GoalStatusCompleteV0},
+		MaxItems: 1,
+	})
+	if err != nil {
+		t.Fatalf("ListGoalWorkStatesV0 terminal: %v", err)
+	}
+	if len(terminal) != 1 || terminal[0].RunRef != blocked.RunRef {
+		t.Fatalf("terminal=%+v", terminal)
+	}
+}
+
 func appDirectorGoalStateForTestV0() orquestagoal.GoalWorkStateV0 {
+	return appDirectorGoalStateWithRefsForTestV0(
+		"run-ref-state-file-app-001",
+		"goal-ref-state-file-app-001",
+		orquestagoal.GoalStatusRunningV0,
+	)
+}
+
+func appDirectorGoalStateWithRefsForTestV0(
+	runRef string,
+	goalRef string,
+	status string,
+) orquestagoal.GoalWorkStateV0 {
 	spec := orquestagoal.NormalizeGoalWorkSpecV0(orquestagoal.GoalWorkSpecV0{
-		GoalRef:      "goal-ref-state-file-app-001",
-		RunRef:       "run-ref-state-file-app-001",
+		GoalRef:      goalRef,
+		RunRef:       runRef,
 		Objective:    "Construir app desde goal",
 		DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
 		WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "generated-apps/state-file-app"}},
@@ -58,7 +122,7 @@ func appDirectorGoalStateForTestV0() orquestagoal.GoalWorkStateV0 {
 		},
 	})
 	result := orquestagoal.NormalizeGoalWorkResultV0(orquestagoal.GoalWorkResultV0{
-		Status:          orquestagoal.GoalStatusRunningV0,
+		Status:          status,
 		GoalRef:         spec.GoalRef,
 		ExternalGoalRef: "thread-ref-state-file-app-001",
 		EvidenceRefs:    []string{"evidence-ref-state-file-observed"},
@@ -68,11 +132,11 @@ func appDirectorGoalStateForTestV0() orquestagoal.GoalWorkStateV0 {
 		RunRef:          spec.RunRef,
 		GoalRef:         spec.GoalRef,
 		ExternalGoalRef: "thread-ref-state-file-app-001",
-		Status:          orquestagoal.GoalStatusRunningV0,
+		Status:          status,
 		Spec:            spec,
 		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
 			SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
-			Status:          orquestagoal.GoalStatusRunningV0,
+			Status:          status,
 			GoalRef:         spec.GoalRef,
 			ExternalGoalRef: "thread-ref-state-file-app-001",
 		},

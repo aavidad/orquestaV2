@@ -153,6 +153,13 @@ type GoalWorkStateV0 struct {
 	EvidenceRefs    []string                 `json:"evidence_refs,omitempty"`
 }
 
+type GoalWorkStateListRequestV0 struct {
+	RunRefs    []string `json:"run_refs,omitempty"`
+	Statuses   []string `json:"statuses,omitempty"`
+	ActiveOnly bool     `json:"active_only,omitempty"`
+	MaxItems   int      `json:"max_items,omitempty"`
+}
+
 type GoalRequiredTestResultV0 struct {
 	TestRef      string   `json:"test_ref"`
 	Status       string   `json:"status"`
@@ -187,4 +194,8 @@ type GoalWorkClosureValidatorPortV0 interface {
 type GoalWorkStateStorePortV0 interface {
 	SaveGoalWorkStateV0(context.Context, GoalWorkStateV0) error
 	LoadGoalWorkStateV0(context.Context, string) (GoalWorkStateV0, error)
+}
+
+type GoalWorkStateListPortV0 interface {
+	ListGoalWorkStatesV0(context.Context, GoalWorkStateListRequestV0) ([]GoalWorkStateV0, error)
 }

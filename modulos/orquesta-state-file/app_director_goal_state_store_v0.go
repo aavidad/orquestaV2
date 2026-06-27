@@ -2,6 +2,10 @@ package orquestastatefile
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
@@ -58,6 +62,39 @@ func (store *StoreV0) LoadGoalWorkStateV0(
 	return state, nil
 }
 
+func (store *StoreV0) ListGoalWorkStatesV0(
+	ctx context.Context,
+	request orquestagoal.GoalWorkStateListRequestV0,
+) ([]orquestagoal.GoalWorkStateV0, error) {
+	ctx = contextOrBackgroundV0(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	request = orquestagoal.NormalizeGoalWorkStateListRequestV0(request)
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	var states []orquestagoal.GoalWorkStateV0
+	var err error
+	if len(request.RunRefs) > 0 {
+		states, err = store.listAppDirectorGoalStatesByRunRefsLockedV0(ctx, request)
+	} else {
+		states, err = store.listAppDirectorGoalStatesFromDirLockedV0(ctx, request)
+	}
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(states, func(i, j int) bool {
+		return strings.TrimSpace(states[i].RunRef) < strings.TrimSpace(states[j].RunRef)
+	})
+	if request.MaxItems > 0 && len(states) > request.MaxItems {
+		states = states[:request.MaxItems]
+	}
+	if states == nil {
+		return []orquestagoal.GoalWorkStateV0{}, nil
+	}
+	return states, nil
+}
+
 func (store *StoreV0) saveAppDirectorGoalStateLockedV0(
 	state orquestagoal.GoalWorkStateV0,
 ) error {
@@ -68,6 +105,81 @@ func (store *StoreV0) saveAppDirectorGoalStateLockedV0(
 		GoalRef:       state.GoalRef,
 		State:         state,
 	})
+}
+
+func (store *StoreV0) listAppDirectorGoalStatesByRunRefsLockedV0(
+	ctx context.Context,
+	request orquestagoal.GoalWorkStateListRequestV0,
+) ([]orquestagoal.GoalWorkStateV0, error) {
+	out := make([]orquestagoal.GoalWorkStateV0, 0, len(request.RunRefs))
+	for _, runRef := range request.RunRefs {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		state, ok, err := store.readAppDirectorGoalStateFileLockedV0(runRef)
+		if err != nil {
+			return nil, err
+		}
+		if !ok || !orquestagoal.GoalWorkStateMatchesListRequestV0(state, request) {
+			continue
+		}
+		out = append(out, state)
+	}
+	return out, nil
+}
+
+func (store *StoreV0) listAppDirectorGoalStatesFromDirLockedV0(
+	ctx context.Context,
+	request orquestagoal.GoalWorkStateListRequestV0,
+) ([]orquestagoal.GoalWorkStateV0, error) {
+	dir := filepath.Join(store.rootDir, appDirectorGoalStatesDirV0)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]orquestagoal.GoalWorkStateV0, 0, len(entries))
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		document, ok, err := readJSONFileV0[appDirectorGoalStateDocumentV0](filepath.Join(dir, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		state, err := validateAppDirectorGoalStateDocumentV0(document, document.RunRef)
+		if err != nil {
+			return nil, err
+		}
+		if !orquestagoal.GoalWorkStateMatchesListRequestV0(state, request) {
+			continue
+		}
+		out = append(out, state)
+	}
+	return out, nil
+}
+
+func (store *StoreV0) readAppDirectorGoalStateFileLockedV0(
+	runRef string,
+) (orquestagoal.GoalWorkStateV0, bool, error) {
+	runRef = normalizeRefV0(runRef)
+	if runRef == "" {
+		return orquestagoal.GoalWorkStateV0{}, false, nil
+	}
+	document, ok, err := readJSONFileV0[appDirectorGoalStateDocumentV0](store.appDirectorGoalStatePathV0(runRef))
+	if err != nil || !ok {
+		return orquestagoal.GoalWorkStateV0{}, ok, err
+	}
+	state, err := validateAppDirectorGoalStateDocumentV0(document, runRef)
+	if err != nil {
+		return orquestagoal.GoalWorkStateV0{}, false, err
+	}
+	return state, true, nil
 }
 
 func validateAppDirectorGoalStateDocumentV0(

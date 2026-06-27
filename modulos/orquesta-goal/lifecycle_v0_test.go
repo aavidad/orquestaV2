@@ -234,6 +234,23 @@ func TestObserveGoalWorkV0TerminalBloqueadoNoDecideRun(t *testing.T) {
 	}
 }
 
+func TestGoalWorkStateMatchesListRequestV0FiltraActivos(t *testing.T) {
+	state := mustGoalLifecycleStateForTestV0(t)
+	if !GoalWorkStateMatchesListRequestV0(state, GoalWorkStateListRequestV0{ActiveOnly: true}) {
+		t.Fatalf("state running deberia coincidir: %+v", state)
+	}
+	state.Status = GoalStatusCompleteV0
+	if GoalWorkStateMatchesListRequestV0(state, GoalWorkStateListRequestV0{ActiveOnly: true}) {
+		t.Fatalf("state terminal no deberia coincidir: %+v", state)
+	}
+	if !GoalWorkStateMatchesListRequestV0(state, GoalWorkStateListRequestV0{
+		RunRefs:  []string{" run-ref-goal-lifecycle-001 "},
+		Statuses: []string{GoalStatusCompleteV0},
+	}) {
+		t.Fatalf("filtro explicito deberia coincidir: %+v", state)
+	}
+}
+
 func validGoalLifecycleSpecForTestV0() GoalWorkSpecV0 {
 	return GoalWorkSpecV0{
 		GoalRef:      "goal-ref-lifecycle-001",
