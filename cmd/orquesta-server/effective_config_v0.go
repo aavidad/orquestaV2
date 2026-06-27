@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
@@ -143,6 +144,17 @@ func serverIdleSelfImprovementGoalFirstSettingV0(config orquestaserver.ConfigV0)
 
 func serverEffectiveConfigDiagnosticsFromEnvV0() []orquestaserver.ServerDiagnosticV0 {
 	diagnostics := []orquestaserver.ServerDiagnosticV0{}
+	if strings.TrimSpace(codexGoalBackendFromEnvV0()) == "" &&
+		!boolEnvOrDefaultV0(envExternalWorkLegacyDirectorLoopV0, false) {
+		diagnostics = append(diagnostics, orquestaserver.ServerDiagnosticV0{
+			Code:    orquestamcp.MCPExternalWorkRunGoalBackendRequiredV0,
+			Scope:   "external_work",
+			Message: "external_work goal-first no ejecutable sin " + envCodexGoalBackendV0 + "; export " + envCodexGoalBackendV0 + "=" + codexGoalBackendAppServerStdioV0 + " y reinicia el servidor",
+			EvidenceRefs: []string{
+				"evidence-ref-server-external-work-goal-backend-required",
+			},
+		})
+	}
 	if strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementGoalFirstV0)) == "" &&
 		strings.TrimSpace(codexGoalBackendFromEnvV0()) != "" {
 		diagnostics = append(diagnostics, orquestaserver.ServerDiagnosticV0{

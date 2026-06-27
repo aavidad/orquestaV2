@@ -167,6 +167,9 @@ func TestServerConfigFromEnvV0ExternalWorkLegacyDirectorLoopPorDefectoFalseV0(t 
 	if setting.Value != "false" || setting.Source != "defaulted" {
 		t.Fatalf("setting external-work legacy=%+v", setting)
 	}
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, orquestamcp.MCPExternalWorkRunGoalBackendRequiredV0, envCodexGoalBackendV0, codexGoalBackendAppServerStdioV0) {
+		t.Fatalf("diagnostico goal backend requerido ausente: %+v", config.EffectiveConfig.Diagnostics)
+	}
 }
 
 func TestServerConfigFromEnvV0AutoprogrammingLegacyDirectorLoopPorDefectoFalseV0(t *testing.T) {
@@ -207,6 +210,9 @@ func TestServerConfigFromEnvV0ExternalWorkLegacyDirectorLoopOptInVisibleV0(t *te
 	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envExternalWorkLegacyDirectorLoopV0)
 	if setting.Value != "true" || setting.Source != "explicit" {
 		t.Fatalf("setting external-work legacy=%+v", setting)
+	}
+	if effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, orquestamcp.MCPExternalWorkRunGoalBackendRequiredV0) {
+		t.Fatalf("diagnostico goal backend no debe aparecer con legacy opt-in: %+v", config.EffectiveConfig.Diagnostics)
 	}
 }
 
