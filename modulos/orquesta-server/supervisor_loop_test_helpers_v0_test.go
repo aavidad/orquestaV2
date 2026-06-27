@@ -2,10 +2,12 @@ package orquestaserver
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 )
 
@@ -133,6 +135,57 @@ func (store *memoryStateStoreV0) LoadServerStateV0(context.Context) (StateV0, er
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	return store.last, nil
+}
+
+type memoryGoalStateStoreV0 struct {
+	mu     sync.Mutex
+	states map[string]orquestagoal.GoalWorkStateV0
+}
+
+func newMemoryGoalStateStoreV0() *memoryGoalStateStoreV0 {
+	return &memoryGoalStateStoreV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+}
+
+func (store *memoryGoalStateStoreV0) SaveGoalWorkStateV0(
+	_ context.Context,
+	state orquestagoal.GoalWorkStateV0,
+) error {
+	normalized, err := orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		return err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	store.states[normalized.RunRef] = normalized
+	return nil
+}
+
+func (store *memoryGoalStateStoreV0) LoadGoalWorkStateV0(
+	_ context.Context,
+	runRef string,
+) (orquestagoal.GoalWorkStateV0, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	state, ok := store.states[runRef]
+	if !ok {
+		return orquestagoal.GoalWorkStateV0{}, errors.New("goal state not found")
+	}
+	return state, nil
+}
+
+func (store *memoryGoalStateStoreV0) ListGoalWorkStatesV0(
+	_ context.Context,
+	request orquestagoal.GoalWorkStateListRequestV0,
+) ([]orquestagoal.GoalWorkStateV0, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	out := make([]orquestagoal.GoalWorkStateV0, 0, len(store.states))
+	for _, state := range store.states {
+		if orquestagoal.GoalWorkStateMatchesListRequestV0(state, request) {
+			out = append(out, state)
+		}
+	}
+	return out, nil
 }
 
 type fixedClockV0 struct{ now time.Time }

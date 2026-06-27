@@ -16,8 +16,17 @@ func (runtime *RuntimeV0) launchIdleSelfImprovementGoalsV0(
 	failures := make([]IdleSelfImprovementResultV0, 0, len(requests))
 	for _, request := range requests {
 		spec := runtime.idleSelfImprovementGoalWorkSpecV0(request)
-		receipt, err := launcher.LaunchGoalWorkV0(ctx, spec)
-		result := idleSelfImprovementGoalLaunchResultV0(request, spec, receipt, err)
+		start, err := orquestagoal.StartGoalWorkV0(ctx, orquestagoal.GoalWorkStartRequestV0{
+			RunRef: spec.RunRef,
+			Spec:   spec,
+			EvidenceRefs: []string{
+				"evidence-ref-idle-self-improvement-goal-state-v0",
+			},
+		}, orquestagoal.GoalWorkLifecyclePortsV0{
+			Launcher:   launcher,
+			StateStore: runtime.goalStateStore,
+		})
+		result := idleSelfImprovementGoalLaunchResultV0(request, spec, start.State, start.Receipt, err)
 		if err != nil || !result.Accepted {
 			failed = true
 			failures = append(failures, result)
@@ -68,6 +77,7 @@ func (runtime *RuntimeV0) idleSelfImprovementGoalWorkSpecV0(
 	return orquestagoal.NormalizeGoalWorkSpecV0(orquestagoal.GoalWorkSpecV0{
 		GoalRef:            idleSelfImprovementGoalRefV0(request),
 		RequestRef:         request.RequestRef,
+		RunRef:             idleSelfImprovementGoalRunRefV0(request),
 		ProjectRef:         request.ProjectRef,
 		DomainRef:          "domain-ref-autoprogramming",
 		WorkKind:           "idle_self_improvement",
@@ -84,6 +94,16 @@ func (runtime *RuntimeV0) idleSelfImprovementGoalWorkSpecV0(
 		ClosurePolicy:      orquestagoal.GoalClosurePolicyV0{RequireRequiredTests: len(tests) > 0},
 		ReworkPolicy:       orquestagoal.GoalReworkPolicyV0{PreferNewGoal: true, MaxReworkGoals: 1, PreserveArtifacts: true},
 	})
+}
+
+func idleSelfImprovementGoalRunRefV0(request IdleSelfImprovementRequestV0) string {
+	if ref := strings.TrimSpace(request.RequestRef); ref != "" {
+		return ref
+	}
+	if ref := strings.TrimSpace(request.ActiveAttemptRef); ref != "" {
+		return ref
+	}
+	return "run-ref-idle-self-improvement-" + idleSelfImprovementHashV0(request.FailureSummary)
 }
 
 func idleSelfImprovementGoalRefV0(request IdleSelfImprovementRequestV0) string {
@@ -114,14 +134,15 @@ func idleSelfImprovementGoalObjectiveV0(request IdleSelfImprovementRequestV0) st
 func idleSelfImprovementGoalLaunchResultV0(
 	request IdleSelfImprovementRequestV0,
 	spec orquestagoal.GoalWorkSpecV0,
+	state orquestagoal.GoalWorkStateV0,
 	receipt orquestagoal.GoalLaunchReceiptV0,
 	err error,
 ) IdleSelfImprovementResultV0 {
 	result := IdleSelfImprovementResultV0{
 		RequestRef:      request.RequestRef,
-		RunRef:          firstNonEmptyConfigStringV0(receipt.ExternalGoalRef, spec.GoalRef),
+		RunRef:          firstNonEmptyConfigStringV0(state.RunRef, spec.RunRef),
 		GoalRef:         spec.GoalRef,
-		ExternalGoalRef: receipt.ExternalGoalRef,
+		ExternalGoalRef: firstNonEmptyConfigStringV0(state.ExternalGoalRef, receipt.ExternalGoalRef),
 		Status:          firstNonEmptyConfigStringV0(receipt.Status, orquestagoal.GoalStatusAcceptedV0),
 		Message:         "goal_first_launched",
 		EvidenceRefs:    append([]string(nil), receipt.EvidenceRefs...),

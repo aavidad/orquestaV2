@@ -257,6 +257,17 @@ func TestRuntimeV0SupervisorDeduplicaRescatesYConservaCausaV0(t *testing.T) {
 func TestRuntimeV0IdleSelfImprovementGoalFirstLanzaGoalSpecV0(t *testing.T) {
 	now := time.Date(2026, 6, 25, 12, 0, 0, 0, time.UTC)
 	store := &memoryStateStoreV0{}
+	goalStates := newMemoryGoalStateStoreV0()
+	externalState := goalWorkStateForServerTestV0(
+		"run-ref-external-work-active-001",
+		"goal-ref-external-work-active-001",
+		"external-goal-ref-external-work-active-001",
+		"external_work",
+		orquestagoal.GoalStatusRunningV0,
+	)
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), externalState); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 external: %v", err)
+	}
 	supervisor := &goalFirstSupervisorForTestV0{started: make(chan struct{}, 1)}
 	runtime, err := NewRuntimeV0(ConfigV0{
 		StateDir:                         t.TempDir(),
@@ -272,9 +283,10 @@ func TestRuntimeV0IdleSelfImprovementGoalFirstLanzaGoalSpecV0(t *testing.T) {
 		IdleSelfImprovementCompactRules:  []string{"AGENTS.md"},
 		AuditDisabled:                    true,
 	}, RuntimeDepsV0{
-		Supervisor: supervisor,
-		StateStore: store,
-		Clock:      fixedClockV0{now: now},
+		Supervisor:     supervisor,
+		GoalStateStore: goalStates,
+		StateStore:     store,
+		Clock:          fixedClockV0{now: now},
 	})
 	if err != nil {
 		t.Fatalf("NewRuntimeV0: %v", err)
@@ -292,6 +304,7 @@ func TestRuntimeV0IdleSelfImprovementGoalFirstLanzaGoalSpecV0(t *testing.T) {
 	spec := supervisor.lastSpec
 	if supervisor.launchCalls != 1 ||
 		spec.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
+		spec.RunRef != spec.RequestRef ||
 		spec.WorkKind != "idle_self_improvement" ||
 		spec.ProjectRef != "project-ref-orquesta" ||
 		len(spec.WriteSet) != 1 ||
@@ -309,6 +322,28 @@ func TestRuntimeV0IdleSelfImprovementGoalFirstLanzaGoalSpecV0(t *testing.T) {
 		!containsStringForTestV0(spec.SkillRefs, DefaultIdleSelfImprovementSkillRefAutoV0) ||
 		!containsStringForTestV0(spec.SkillRefs, DefaultIdleSelfImprovementSkillRefIntV0) {
 		t.Fatalf("spec=%+v calls=%d", spec, supervisor.launchCalls)
+	}
+	goalState, err := goalStates.LoadGoalWorkStateV0(context.Background(), spec.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0 idle: %v", err)
+	}
+	if goalState.Status != orquestagoal.GoalStatusRunningV0 ||
+		goalState.RunRef != spec.RunRef ||
+		goalState.Spec.WorkKind != "idle_self_improvement" ||
+		goalState.ExternalGoalRef != "external-"+spec.GoalRef ||
+		!containsStringForTestV0(goalState.EvidenceRefs, "evidence-ref-idle-self-improvement-goal-state-v0") {
+		t.Fatalf("goal_state=%+v", goalState)
+	}
+	active, err := goalStates.ListGoalWorkStatesV0(context.Background(), orquestagoal.GoalWorkStateListRequestV0{
+		ActiveOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("ListGoalWorkStatesV0 active: %v", err)
+	}
+	if len(active) != 2 ||
+		!containsGoalWorkStateRunRefForTestV0(active, spec.RunRef) ||
+		!containsGoalWorkStateRunRefForTestV0(active, externalState.RunRef) {
+		t.Fatalf("active=%+v idle=%s external=%s", active, spec.RunRef, externalState.RunRef)
 	}
 	if store.last.IdleSelfImprovementReason == "" ||
 		!strings.Contains(store.last.IdleSelfImprovementReason, "goal_ref="+spec.GoalRef) ||
@@ -562,11 +597,53 @@ func (fake *goalFirstSupervisorForTestV0) LaunchGoalWorkV0(
 		fake.started <- struct{}{}
 	}
 	return orquestagoal.GoalLaunchReceiptV0{
-		SchemaVersion: orquestagoal.GoalWorkLaunchReceiptSchemaV0,
-		Status:        orquestagoal.GoalStatusAcceptedV0,
-		GoalRef:       spec.GoalRef,
-		EvidenceRefs:  []string{"evidence-ref-goal-first-test"},
+		SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+		Status:          orquestagoal.GoalStatusAcceptedV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: "external-" + spec.GoalRef,
+		EvidenceRefs:    []string{"evidence-ref-goal-first-test"},
 	}, nil
+}
+
+func goalWorkStateForServerTestV0(
+	runRef string,
+	goalRef string,
+	externalGoalRef string,
+	workKind string,
+	status string,
+) orquestagoal.GoalWorkStateV0 {
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			GoalRef:      goalRef,
+			RunRef:       runRef,
+			Objective:    "goal activo de prueba",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WorkKind:     workKind,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-server"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:          status,
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return state
+}
+
+func containsGoalWorkStateRunRefForTestV0(
+	states []orquestagoal.GoalWorkStateV0,
+	runRef string,
+) bool {
+	for _, state := range states {
+		if state.RunRef == runRef {
+			return true
+		}
+	}
+	return false
 }
 
 func containsGoalContextRefForTestV0(values []orquestagoal.GoalContextRefV0, target string) bool {

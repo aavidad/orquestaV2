@@ -6,12 +6,15 @@ import (
 	"net"
 	"net/http"
 	"sync"
+
+	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
 type RuntimeDepsV0 struct {
 	AppHandler       http.Handler
 	Supervisor       SupervisorPortV0
 	ResidentDirector ResidentDirectorPortV0
+	GoalStateStore   orquestagoal.GoalWorkStateStorePortV0
 	StateStore       StateStorePortV0
 	AuditSink        AuditSinkPortV0
 	StartupCheck     StartupCheckPortV0
@@ -24,6 +27,7 @@ type RuntimeV0 struct {
 	appHandler                  http.Handler
 	supervisor                  SupervisorPortV0
 	residentDirector            ResidentDirectorPortV0
+	goalStateStore              orquestagoal.GoalWorkStateStorePortV0
 	asyncWork                   runtimeAsyncWorkGroupV0
 	supervisorTickActive        int32
 	supervisorTickPending       int32
@@ -74,6 +78,7 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		appHandler:        deps.AppHandler,
 		supervisor:        deps.Supervisor,
 		residentDirector:  deps.ResidentDirector,
+		goalStateStore:    deps.GoalStateStore,
 		stateStore:        deps.StateStore,
 		auditSink:         deps.AuditSink,
 		startupCheck:      deps.StartupCheck,
