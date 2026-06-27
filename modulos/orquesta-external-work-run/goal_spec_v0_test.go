@@ -60,7 +60,54 @@ func TestBuildExternalWorkGoalWorkSpecV0CompilaContratoNeutral(t *testing.T) {
 	}
 }
 
-func TestBuildExternalWorkGoalWorkSpecV0UsaWriteSetLogicoSinPayload(t *testing.T) {
+func TestBuildExternalWorkGoalWorkSpecV0InlineaInputFieldsOperativosSeguros(t *testing.T) {
+	request := validExternalWorkRunRequestForTestV0()
+	request.AppChangeRequest.ExternalWork.InputFields = append(
+		request.AppChangeRequest.ExternalWork.InputFields,
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:  "course_root_abs",
+			Value: "/home/alberto/Trabajo/OPES/opes-salidas/curso",
+		},
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:   "required_outputs",
+			Values: []string{"04_markdown/tema_001.md", "paquete_final/tests.json"},
+		},
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:      "output_contract",
+			ValueJSON: []byte(`{"artifact_type":"content_block","min_words":1200}`),
+		},
+	)
+
+	spec, issues := BuildExternalWorkGoalWorkSpecV0(
+		request,
+		StartExternalWorkRunConfigV0{OccurredAt: "2026-05-10T10:00:00Z"},
+	)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	context := strings.Join(externalWorkRunTestContextPurposesV0(spec.ContextRefs), "\n")
+	for _, want := range []string{
+		"input_fields.course_root_abs",
+		"/home/alberto/Trabajo/OPES/opes-salidas/curso",
+		"input_fields.required_outputs",
+		"04_markdown/tema_001.md",
+		"paquete_final/tests.json",
+		"input_fields.output_contract",
+		`"artifact_type":"content_block"`,
+	} {
+		if !strings.Contains(context, want) {
+			t.Fatalf("context no contiene %q:\n%s", want, context)
+		}
+	}
+	if !externalWorkRunTestContainsStringV0(
+		spec.AcceptanceCriteria,
+		"Usar los input_fields inlineados en context_refs[input_field_value] como contrato operativo; si falta un valor por redaccion o presupuesto, bloquear con rework de dominio en vez de inventarlo.",
+	) {
+		t.Fatalf("acceptance_criteria=%+v", spec.AcceptanceCriteria)
+	}
+}
+
+func TestBuildExternalWorkGoalWorkSpecV0RedactaInputFieldsSensibles(t *testing.T) {
 	request := validExternalWorkRunRequestForTestV0()
 	request.AppChangeRequest.ExternalWork.InputFields = append(
 		request.AppChangeRequest.ExternalWork.InputFields,
@@ -83,15 +130,19 @@ func TestBuildExternalWorkGoalWorkSpecV0UsaWriteSetLogicoSinPayload(t *testing.T
 		!strings.HasPrefix(spec.WriteSet[0].Path, "domain-work/opes/draft_content_block/") {
 		t.Fatalf("write_set=%+v", spec.WriteSet)
 	}
+	context := strings.Join(externalWorkRunTestContextPurposesV0(spec.ContextRefs), "\n")
 	for _, ctx := range spec.ContextRefs {
 		if strings.Contains(ctx.Ref, "valor-que-no-debe") ||
 			strings.Contains(ctx.Ref, "otro-valor-privado") ||
-			strings.Contains(ctx.Ref, "no-copiar") {
+			strings.Contains(ctx.Ref, "no-copiar") ||
+			strings.Contains(ctx.Purpose, "valor-que-no-debe") ||
+			strings.Contains(ctx.Purpose, "otro-valor-privado") ||
+			strings.Contains(ctx.Purpose, "no-copiar") ||
+			strings.Contains(ctx.Ref, "private_notes") ||
+			strings.Contains(ctx.Purpose, "private_notes") ||
+			strings.Contains(context, "secret") {
 			t.Fatalf("context_refs contiene payload: %+v", spec.ContextRefs)
 		}
-	}
-	if !externalWorkRunTestContainsContextRefV0(spec.ContextRefs, "input_field", "input-field-private_notes") {
-		t.Fatalf("context_refs no declaran nombre de campo: %+v", spec.ContextRefs)
 	}
 }
 
@@ -153,15 +204,12 @@ func externalWorkRunTestContainsStringV0(values []string, want string) bool {
 	return false
 }
 
-func externalWorkRunTestContainsContextRefV0(
+func externalWorkRunTestContextPurposesV0(
 	values []orquestagoal.GoalContextRefV0,
-	kind string,
-	ref string,
-) bool {
+) []string {
+	out := make([]string, 0, len(values))
 	for _, value := range values {
-		if value.Kind == kind && value.Ref == ref {
-			return true
-		}
+		out = append(out, value.Purpose)
 	}
-	return false
+	return out
 }

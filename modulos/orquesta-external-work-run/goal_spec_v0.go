@@ -3,9 +3,11 @@ package orquestaexternalworkrun
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -16,7 +18,16 @@ const (
 	ExternalWorkGoalWorkProfileKindV0 = "domain_work"
 
 	externalWorkGoalSpecEvidenceRefV0 = "evidence-ref-external-work-goal-spec-v0"
+
+	externalWorkGoalInputFieldMaxInlineFieldsV0 = 32
+	externalWorkGoalInputFieldMaxPurposeBytesV0 = 1200
+	externalWorkGoalInputFieldMaxTotalBytesV0   = 12000
 )
+
+type externalWorkGoalInputFieldBudgetV0 struct {
+	Fields int
+	Bytes  int
+}
 
 func BuildExternalWorkGoalWorkSpecV0(
 	request StartExternalWorkRunRequestV0,
@@ -120,7 +131,7 @@ func externalWorkGoalContextRefsV0(
 		len(domainRequest.WorkRefs)+
 		len(domainRequest.InputRefs)+
 		len(change.MetadataRefs)+
-		len(work.InputFields))
+		(2*len(work.InputFields)))
 	appendRef := func(kind, ref, purpose string, required bool) {
 		ref = strings.TrimSpace(ref)
 		if ref == "" {
@@ -152,8 +163,21 @@ func externalWorkGoalContextRefsV0(
 	for _, ref := range change.MetadataRefs {
 		appendRef("metadata", ref, "Evidencia o metadata compacta asociada al cambio.", false)
 	}
+	var inputBudget externalWorkGoalInputFieldBudgetV0
 	for _, field := range work.InputFields {
-		appendRef("input_field", "input-field-"+compactExternalWorkRunRefV0(field.Name), "Nombre de campo disponible; el payload queda fuera del spec Goal.", false)
+		fieldRef := "input-field-" + externalWorkGoalSafeInputFieldRefPartV0(field.Name)
+		appendRef("input_field", fieldRef, externalWorkGoalInputFieldNamePurposeV0(field.Name), false)
+		if purpose, ok := externalWorkGoalInputFieldPurposeV0(field, &inputBudget); ok {
+			valueRef := fieldRef + "-value-" + shortExternalWorkGoalHashV0(purpose)
+			appendRef("input_field_value", valueRef, purpose, false)
+			continue
+		}
+		appendRef(
+			"input_field_value",
+			fieldRef+"-payload-ref",
+			externalWorkGoalInputFieldOmittedPurposeV0(field.Name),
+			false,
+		)
 	}
 	return externalWorkGoalCompactContextRefsV0(refs)
 }
@@ -235,6 +259,9 @@ func externalWorkGoalAcceptanceCriteriaV0(
 	domainRequest orquestadomainwork.DomainWorkJobRequestV0,
 ) []string {
 	criteria := append([]string(nil), domainRequest.AcceptanceCriteria...)
+	if len(domainRequest.InputFields) > 0 {
+		criteria = append(criteria, "Usar los input_fields inlineados en context_refs[input_field_value] como contrato operativo; si falta un valor por redaccion o presupuesto, bloquear con rework de dominio en vez de inventarlo.")
+	}
 	for _, constraint := range domainRequest.Constraints {
 		constraint = strings.TrimSpace(constraint)
 		if constraint != "" {
@@ -246,6 +273,222 @@ func externalWorkGoalAcceptanceCriteriaV0(
 		return []string{"Entregar un artefacto aceptable por el contrato DomainWork y confirmable con receipt de dominio."}
 	}
 	return criteria
+}
+
+func externalWorkGoalInputFieldPurposeV0(
+	field orquestadomainwork.DomainWorkFieldV0,
+	budget *externalWorkGoalInputFieldBudgetV0,
+) (string, bool) {
+	name := strings.TrimSpace(field.Name)
+	if name == "" || budget == nil {
+		return "", false
+	}
+	if budget.Fields >= externalWorkGoalInputFieldMaxInlineFieldsV0 {
+		return "", false
+	}
+	summary, ok := externalWorkGoalInputFieldSummaryV0(field)
+	if !ok {
+		return "", false
+	}
+	raw, err := json.Marshal(summary)
+	if err != nil {
+		return "", false
+	}
+	purpose := "Campo input_fields." + name + " inlineado de forma acotada: " + string(raw)
+	purpose, _ = boundedExternalWorkGoalTextV0(purpose, externalWorkGoalInputFieldMaxPurposeBytesV0)
+	if budget.Bytes+len(purpose) > externalWorkGoalInputFieldMaxTotalBytesV0 {
+		return "", false
+	}
+	budget.Fields++
+	budget.Bytes += len(purpose)
+	return purpose, true
+}
+
+func externalWorkGoalInputFieldSummaryV0(
+	field orquestadomainwork.DomainWorkFieldV0,
+) (map[string]any, bool) {
+	name := strings.TrimSpace(field.Name)
+	if externalWorkGoalFieldNameSensitiveV0(name) {
+		return nil, false
+	}
+	summary := map[string]any{"name": name}
+	if value := externalWorkGoalSanitizeInputValueV0(name, field.Value); value != "" {
+		summary["value"] = value
+	}
+	values := externalWorkGoalSanitizeInputValuesV0(name, field.Values)
+	if len(values) > 0 {
+		summary["values"] = values
+	}
+	if valueJSON := externalWorkGoalSanitizeInputJSONV0(name, field.ValueJSON); valueJSON != "" {
+		summary["value_json"] = externalWorkGoalInputJSONSummaryValueV0(valueJSON)
+	}
+	if len(summary) == 1 {
+		return nil, false
+	}
+	return summary, true
+}
+
+func externalWorkGoalInputJSONSummaryValueV0(value string) any {
+	var decoded any
+	if err := json.Unmarshal([]byte(value), &decoded); err == nil {
+		return decoded
+	}
+	return value
+}
+
+func externalWorkGoalInputFieldOmittedPurposeV0(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || externalWorkGoalFieldNameSensitiveV0(name) {
+		return "Campo input_fields sensible no inlineado; el payload completo permanece en AppChange/DomainWork como contrato durable."
+	}
+	return "Campo input_fields." + name + " no inlineado por sensibilidad, tamano o presupuesto; el payload completo permanece en AppChange/DomainWork como contrato durable."
+}
+
+func externalWorkGoalInputFieldNamePurposeV0(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || externalWorkGoalFieldNameSensitiveV0(name) {
+		return "Nombre de campo input_fields sensible no inlineado; disponible solo como ref opaca."
+	}
+	return "Nombre de campo input_fields." + name + " disponible en el contrato DomainWork."
+}
+
+func externalWorkGoalSafeInputFieldRefPartV0(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || externalWorkGoalFieldNameSensitiveV0(name) {
+		return "redacted-" + shortExternalWorkGoalHashV0(name)
+	}
+	return compactExternalWorkRunRefV0(name)
+}
+
+func externalWorkGoalSanitizeInputValuesV0(name string, values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if sanitized := externalWorkGoalSanitizeInputValueV0(name, value); sanitized != "" {
+			out = append(out, sanitized)
+		}
+	}
+	if out == nil {
+		return []string{}
+	}
+	return out
+}
+
+func externalWorkGoalSanitizeInputJSONV0(name string, value json.RawMessage) string {
+	text := strings.TrimSpace(string(value))
+	if text == "" {
+		return ""
+	}
+	return externalWorkGoalSanitizeInputValueV0(name, text)
+}
+
+func externalWorkGoalSanitizeInputValueV0(name string, value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if externalWorkGoalFieldNameSensitiveV0(name) || externalWorkGoalValueLooksSensitiveV0(value) {
+		return "redacted-sensitive-value"
+	}
+	if !externalWorkGoalFieldAllowsOperationalPathV0(name) {
+		value = redactExternalWorkGoalLocalPathV0(value)
+	}
+	value, _ = boundedExternalWorkGoalTextV0(value, externalWorkGoalInputFieldMaxPurposeBytesV0/2)
+	return value
+}
+
+func externalWorkGoalFieldAllowsOperationalPathV0(name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if strings.HasSuffix(name, "_abs") ||
+		strings.HasSuffix(name, "_path") ||
+		strings.HasSuffix(name, "_paths") ||
+		strings.HasSuffix(name, "_dir") ||
+		strings.HasSuffix(name, "_dirs") ||
+		strings.HasSuffix(name, "_root") {
+		return true
+	}
+	switch name {
+	case "course_root_abs",
+		"topic_dir_abs",
+		"topic_manifest_abs",
+		"program_json_abs",
+		"required_read_refs",
+		"required_outputs",
+		"output_contract":
+		return true
+	default:
+		return false
+	}
+}
+
+func externalWorkGoalFieldNameSensitiveV0(name string) bool {
+	name = strings.ReplaceAll(strings.ToLower(strings.TrimSpace(name)), "_", "-")
+	for _, marker := range []string{
+		"access-token",
+		"refresh-token",
+		"api-key",
+		"secret",
+		"secreto",
+		"password",
+		"credential",
+		"credencial",
+		"private",
+		"token",
+		"prompt",
+		"transcript",
+		"completion",
+	} {
+		if strings.Contains(name, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func externalWorkGoalValueLooksSensitiveV0(value string) bool {
+	lower := strings.ToLower(value)
+	for _, marker := range []string{
+		"access_token=",
+		"refresh_token=",
+		"api_key=",
+		"api-key:",
+		"authorization:",
+		"bearer ",
+		"client_secret=",
+		"password=",
+		"secret=",
+		"-----begin ",
+		"sk-",
+	} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func redactExternalWorkGoalLocalPathV0(value string) string {
+	replacer := strings.NewReplacer(
+		"/home/", "/home-redacted/",
+		"/Users/", "/users-redacted/",
+		"/users/", "/users-redacted/",
+		"$HOME", "HOME_REF",
+		"~/", "HOME_REF/",
+	)
+	return replacer.Replace(value)
+}
+
+func boundedExternalWorkGoalTextV0(value string, maxBytes int) (string, bool) {
+	value = strings.TrimSpace(value)
+	if maxBytes <= 0 {
+		return "", true
+	}
+	if len(value) <= maxBytes {
+		return value, false
+	}
+	for maxBytes > 0 && !utf8.ValidString(value[:maxBytes]) {
+		maxBytes--
+	}
+	return value[:maxBytes] + "...[truncated]", true
 }
 
 func externalWorkGoalArtifactTypeV0(workKind string) string {

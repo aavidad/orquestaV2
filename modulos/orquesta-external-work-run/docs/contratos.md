@@ -52,7 +52,12 @@ Invariantes:
 
 - no arranca runtime ni supervisor;
 - no conoce OPES, DB, proveedor, modelo ni filesystem;
-- no copia payloads de campos al spec Goal: solo refs y nombres de campos;
+- conserva nombres de `input_fields` y, cuando el campo no parece sensible ni
+  supera el presupuesto de contexto, incluye un resumen inline acotado en
+  `context_refs` con `kind=input_field_value`;
+- los campos sensibles, privados o demasiado grandes no se inlinean: quedan como
+  ref durable al payload `AppChange`/`DomainWork` y el Goal debe bloquear con
+  rework si necesita un valor omitido;
 - declara `director_kind=runtime_goal`; el adaptador de composicion puede
   especializarlo, por ejemplo a Codex Goal, al lanzar;
 - conserva `AllowedWriteSet` si viene declarado y si no usa un write-set logico

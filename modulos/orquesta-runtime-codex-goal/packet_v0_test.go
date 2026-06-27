@@ -20,6 +20,7 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"request-ref-001",
 		"implementation",
 		"docs/estado_actual_2026-05-17.md",
+		"kind=doc",
 		"modulos/orquesta-goal",
 		"test_ref=test-ref-goal",
 		"go test -count=1 ./modulos/orquesta-goal",
@@ -57,6 +58,30 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		len(packet.RequiredTests) != 1 ||
 		packet.RequiredTests[0].Command != "go test -count=1 ./modulos/orquesta-goal" {
 		t.Fatalf("packet no conserva gobierno: %+v", packet)
+	}
+}
+
+func TestBuildCodexGoalPromptV0IncluyePropositoDeContextRefs(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.ContextRefs = append(spec.ContextRefs, orquestagoal.GoalContextRefV0{
+		Kind:    "input_field_value",
+		Ref:     "input-field-output_contract-value-abc123",
+		Purpose: `Campo input_fields.output_contract inlineado de forma acotada: {"artifact_type":"content_block"}`,
+	})
+
+	packet, issues := BuildCodexGoalStartPacketV0(spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	for _, want := range []string{
+		"input-field-output_contract-value-abc123 kind=input_field_value",
+		`Campo input_fields.output_contract inlineado de forma acotada`,
+		`"artifact_type":"content_block"`,
+	} {
+		if !strings.Contains(packet.Prompt, want) {
+			t.Fatalf("prompt no contiene %q:\n%s", want, packet.Prompt)
+		}
 	}
 }
 

@@ -198,8 +198,16 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	for _, ctx := range spec.ContextRefs {
 		b.WriteString("- ")
 		b.WriteString(ctx.Ref)
+		if ctx.Kind != "" {
+			b.WriteString(" kind=")
+			b.WriteString(ctx.Kind)
+		}
 		if ctx.Required {
 			b.WriteString(" [required]")
+		}
+		if ctx.Purpose != "" {
+			b.WriteString(": ")
+			b.WriteString(ctx.Purpose)
 		}
 		b.WriteString("\n")
 	}
