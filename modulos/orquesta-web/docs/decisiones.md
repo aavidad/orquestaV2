@@ -17,6 +17,23 @@ Estado:
 ## Decisiones iniciales
 
 ```text
+Fecha: 2026-06-27
+Decision: El wizard `/nueva-app` permite arquitectura sin preferencia y tabs
+operables por teclado.
+Motivo: `hexagonal` debe ser fallback conservador, no una imposicion visible del
+formulario, y el wizard no debe depender solo de click/raton para cambiar de
+paso.
+Alternativas: mantener `hexagonal` seleccionado por defecto; dejar solo botones
+Siguiente/Atras; mover la decision de arquitectura al backend sin exponerla.
+Impacto: el select de arquitectura incluye `sin_preferencia` con valor vacio y
+el mapper mantiene el fallback `hexagonal`; los tabs actualizan `tabIndex` y
+soportan flechas, Home y End. Web sigue siendo adaptador fino y no decide
+arquitectura de negocio.
+Contratos afectados: `NuevaAppHTMLHandlerV0`, `WebNuevaAppFormV0`.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-06-25
 Decision: El panel goal-first de `/nueva-app` observa automaticamente el goal
 con polling acotado, manteniendo el refresco manual.
@@ -555,3 +572,13 @@ En cuarentena para el primer corte:
 - JavaScript embebido de recomendaciones: contiene reglas de negocio duplicadas.
 - Selector obligatorio de proyecto heredado: acopla nueva app a proyecto existente; `SolicitarNuevaApp v0` no define ese prerequisito.
 - Imports directos a `db` o `fabricaapp` desde web: solo admisibles en adaptadores concretos si respetan puerto publico; no en componentes/handlers de UI.
+
+```text
+Fecha: 2026-06-27
+Decision: El selector experto de almacenamiento de `/nueva-app` proyecta el catalogo de capacidades de factory.
+Motivo: el operador necesita ver todas las opciones documentadas sin que la web invente un enum propio ni fuerce proveedores concretos.
+Alternativas: mantener opciones hardcodeadas en el template; usar texto libre; convertir `sin_preferencia` en valor enviado por defecto.
+Impacto: `nueva_app_html_render_v0.go` usa `SupportedDataStorageTypesV0`, conserva una opcion vacia para no crear storage si el usuario no elige y los tests HTML verifican las capacidades nuevas.
+Contratos afectados: NuevaAppHTMLHandlerV0, WebNuevaAppFormV0, AppSpecRequestV0.
+Estado: aceptada localmente.
+```

@@ -53,7 +53,7 @@ Riesgos: instancia temporal no se versiona como fixture porque FTY-002 solo pidi
 Caso: Unit tests del validador puro AppSpecRequestV0
 Tipo: unit
 Comando: go test ./modulos/orquesta-factory
-Evidencia esperada: tests en verde para fixtures validos/invalidos, patrones soportados/no soportados y locale invalido.
+Evidencia esperada: tests en verde para fixtures validos/invalidos, patrones soportados/no soportados, capacidades documentadas de `datos.storage[].tipo`, rechazo de proveedor directo y locale invalido.
 Ultima ejecucion: 2026-05-04, OK.
 Riesgos: el validador Go implementa reglas publicas minimas; no reemplaza el JSON Schema canonico completo.
 ```
@@ -62,7 +62,7 @@ Riesgos: el validador Go implementa reglas publicas minimas; no reemplaza el JSO
 Caso: Unit tests del caso de uso SolicitarNuevaAppV0
 Tipo: unit
 Comando: go test ./modulos/orquesta-factory
-Evidencia esperada: request minima produce AppSpecV0 valida con defaults; opciones explicitas false se respetan; persistencia se expresa como conector; deploy no soportado y proveedor directo fallan con errores publicos.
+Evidencia esperada: request minima produce AppSpecV0 valida con defaults; opciones explicitas false se respetan; persistencia se expresa como conector; `sin_preferencia` y `sin_persistencia` no crean conectores `storage-*`; deploy no soportado y proveedor directo fallan con errores publicos.
 Ultima ejecucion: 2026-05-04, OK.
 Riesgos: el caso de uso genera AppSpecV0 pero todavia no genera BacklogInicialPropuestoV0; eso queda en FTY-005.
 ```

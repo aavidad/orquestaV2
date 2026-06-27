@@ -19,6 +19,32 @@ const (
 	ErrConectorRequeridoNoDisponible = "conector_requerido_no_disponible"
 )
 
+var supportedDataStorageTypesV0 = []string{
+	"sin_preferencia",
+	"sin_persistencia",
+	"relacional",
+	"documental",
+	"vectorial",
+	"objetos",
+	"objetos_blob",
+	"clave_valor",
+	"clave_valor_cache",
+	"series_temporales",
+	"grafo",
+	"cache",
+	"busqueda",
+	"eventos_auditoria",
+	"mixta",
+}
+
+func SupportedDataStorageTypesV0() []string {
+	return append([]string(nil), supportedDataStorageTypesV0...)
+}
+
+func DataStorageTypeSupportedV0(value string) bool {
+	return containsV0(strings.TrimSpace(value), supportedDataStorageTypesV0...)
+}
+
 type AppSpecRequestV0 struct {
 	SchemaVersion        string                 `json:"schema_version"`
 	RequestID            string                 `json:"request_id"`
@@ -246,7 +272,7 @@ func validateDatosV0(req AppSpecRequestV0) []ValidationIssue {
 	var issues []ValidationIssue
 	for index, storage := range req.Datos.Storage {
 		tipo := strings.TrimSpace(storage.Tipo)
-		if tipo != "" && !containsV0(tipo, "relacional", "documental", "vectorial", "objetos", "clave_valor", "series_temporales", "grafo", "cache", "busqueda") {
+		if tipo != "" && !DataStorageTypeSupportedV0(tipo) {
 			issues = append(issues, issue(ErrAppSpecInvalida, fmt.Sprintf("datos.storage.%d.tipo", index), "tipo de almacenamiento no soportado"))
 		}
 	}

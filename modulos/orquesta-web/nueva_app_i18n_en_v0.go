@@ -219,7 +219,7 @@ func nuevaAppI18nEnglishV0() map[string]string {
 		"nueva_app.ayuda.datos.tipos_detallados.retencion":     "How long this data should be kept or reviewed.",
 		"nueva_app.ayuda.datos.tipos_detallados.volumen":       "Expected volume: low, medium, high, large history, or fast growth.",
 		"nueva_app.ayuda.datos.tipos_detallados.restricciones": "Comma-separated data restrictions: audit, encryption, minimization, offline, anonymized.",
-		"nueva_app.ayuda.datos.storage.tipo":                   "Storage capability: relational, document, vector, object, key-value, time-series, graph, cache, or search.",
+		"nueva_app.ayuda.datos.storage.tipo":                   "Storage capability: no preference, no persistence, relational, document, vector, object/blob, key-value/cache, time-series, graph, search, audit events, or mixed.",
 		"nueva_app.ayuda.datos.storage.proposito":              "Why this storage capability is needed, without choosing provider or DSN.",
 		"nueva_app.ayuda.datos.storage.requerido":              "True if the app cannot meet the goal without this capability.",
 		"nueva_app.ayuda.datos.storage.restricciones":          "Comma-separated storage restrictions, without credentials or concrete backend.",

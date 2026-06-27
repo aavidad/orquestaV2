@@ -131,3 +131,13 @@ Impacto: `NewAppSpecHTTPHandlerV0`, path, clock y envelopes REST pasan al paquet
 Contratos afectados: SolicitarNuevaApp v0 transporte REST.
 Estado: aceptada localmente.
 ```
+
+```text
+Fecha: 2026-06-27
+Decision: `datos.storage[].tipo` usa un catalogo canonico de capacidades en factory.
+Motivo: `/nueva-app` y la guia documental ya necesitaban distinguir ausencia de persistencia, objetos/blob, cache clave-valor, eventos de auditoria y storage mixto sin convertir el contrato en proveedores concretos como PostgreSQL.
+Alternativas: dejar listas duplicadas en web/schema/validador; aceptar strings libres; introducir proveedores de DB como enums.
+Impacto: `SupportedDataStorageTypesV0` es la fuente Go del validador; los schemas JSON se alinean; `sin_preferencia` y `sin_persistencia` no crean conectores `storage-*`; los proveedores concretos siguen rechazados o entran como restricciones/adaptadores externos.
+Contratos afectados: AppSpecRequestV0, AppSpecV0, SolicitarNuevaApp v0.
+Estado: aceptada localmente.
+```

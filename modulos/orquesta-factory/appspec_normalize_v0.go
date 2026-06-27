@@ -136,11 +136,12 @@ func (n appSpecNormalizerV0) connectors() ConnectorsSpecV0 {
 		})
 	}
 	for _, storage := range normalizeDataStorageV0(n.req.Datos.Storage) {
-		if strings.TrimSpace(storage.Tipo) == "" || strings.TrimSpace(storage.Proposito) == "" {
+		tipo := strings.TrimSpace(storage.Tipo)
+		if tipo == "" || !dataStorageTypeCreatesConnectorV0(tipo) || strings.TrimSpace(storage.Proposito) == "" {
 			continue
 		}
 		spec := ConnectorSpecV0{
-			Nombre:    "storage-" + strings.TrimSpace(storage.Tipo),
+			Nombre:    "storage-" + tipo,
 			Proposito: strings.TrimSpace(storage.Proposito),
 			Contrato:  "PersistenceRepository v0",
 		}
@@ -165,6 +166,15 @@ func (n appSpecNormalizerV0) connectors() ConnectorsSpecV0 {
 		optional = append(optional, spec)
 	}
 	return ConnectorsSpecV0{Required: emptyConnectorsV0(required), Optional: emptyConnectorsV0(optional)}
+}
+
+func dataStorageTypeCreatesConnectorV0(tipo string) bool {
+	switch strings.TrimSpace(tipo) {
+	case "", "sin_preferencia", "sin_persistencia":
+		return false
+	default:
+		return true
+	}
 }
 
 func normalizeDataTypesV0(datos DatosRequestV0) []DataTypeSpecV0 {

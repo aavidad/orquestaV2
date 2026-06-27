@@ -235,7 +235,7 @@ Riesgos: Refactor mecanico; no anade cobertura nueva ni cambia contratos REST/JS
 Caso: WEB-INT-013 primera UI HTML nueva app
 Tipo: integration
 Comando: `go test -count=1 ./modulos/orquesta-web`
-Evidencia esperada: `TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar`, `TestNuevaAppHTMLHandlerV0POSTValidoDelegaYRenderizaResultado` y `TestNuevaAppHTMLHandlerV0POSTInvalidoRenderizaErrorPublico` validan GET HTML en `/nueva-app`, POST form-urlencoded contra fake `SolicitarNuevaAppClientV0`, render de estado/resumen/backlog y error publico localizado, sin DB, runtime, provider/model, HOME ni OAuth.
+Evidencia esperada: `TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar`, `TestNuevaAppHTMLHandlerV0POSTValidoDelegaYRenderizaResultado` y `TestNuevaAppHTMLHandlerV0POSTInvalidoRenderizaErrorPublico` validan GET HTML en `/nueva-app`, POST form-urlencoded contra fake `SolicitarNuevaAppClientV0`, render de estado/resumen/backlog y error publico localizado, wizard con roles tab y teclado flechas/Home/End, arquitectura opcional con `sin_preferencia` y fallback posterior `hexagonal`, catalogo experto de storage alineado con factory, sin DB, runtime, provider/model, HOME ni OAuth.
 Ultima ejecucion: 2026-05-06; pasa.
 Riesgos: UI v0 server-rendered y deliberadamente basica; no preserva todos los valores del formulario tras submit ni incluye interacciones cliente.
 ```

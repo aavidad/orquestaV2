@@ -86,6 +86,20 @@ func TestValidateAppSpecRequestV0AcceptsDetailedDataWithoutFunctionalNeed(t *tes
 	}
 }
 
+func TestValidateAppSpecRequestV0AcceptsDocumentedStorageCapabilities(t *testing.T) {
+	req := validMinimalRequestV0()
+	for _, tipo := range SupportedDataStorageTypesV0() {
+		req.Datos.Storage = append(req.Datos.Storage, DataStorageRequestV0{
+			Tipo:      tipo,
+			Proposito: "Capacidad documentada " + tipo,
+		})
+	}
+
+	if issues := ValidateAppSpecRequestV0(req); len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+}
+
 func TestValidateAppSpecRequestV0RejectsUnsupportedStorageType(t *testing.T) {
 	req := validMinimalRequestV0()
 	req.Datos.Storage = []DataStorageRequestV0{{Tipo: "postgres"}}

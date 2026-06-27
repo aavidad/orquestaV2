@@ -3,13 +3,16 @@ package orquestaweb
 import (
 	"html/template"
 	"net/http"
+
+	orquestafactory "orquesta/modulos/orquesta-factory"
 )
 
 type nuevaAppHTMLDataV0 struct {
-	Page   NuevaAppWebPageV0
-	Labels map[string]string
-	Help   map[string]string
-	HTML   map[string]string
+	Page         NuevaAppWebPageV0
+	Labels       map[string]string
+	Help         map[string]string
+	HTML         map[string]string
+	StorageTypes []string
 }
 
 func writeNuevaAppHTMLPageV0(w http.ResponseWriter, status int, page NuevaAppWebPageV0) WebHTMLWriteResultV0 {
@@ -27,10 +30,11 @@ func writeNuevaAppHTMLPageWithTemplateV0(
 
 func nuevaAppHTMLDataFromPageV0(page NuevaAppWebPageV0) nuevaAppHTMLDataV0 {
 	return nuevaAppHTMLDataV0{
-		Page:   page,
-		Labels: nuevaAppHTMLLabelsV0(page.Formulario.Campos),
-		Help:   nuevaAppHTMLHelpV0(page.Locale, NewNuevaAppI18nCatalogV0()),
-		HTML:   nuevaAppHTMLTextosV0(page.Locale, NewNuevaAppI18nCatalogV0()),
+		Page:         page,
+		Labels:       nuevaAppHTMLLabelsV0(page.Formulario.Campos),
+		Help:         nuevaAppHTMLHelpV0(page.Locale, NewNuevaAppI18nCatalogV0()),
+		HTML:         nuevaAppHTMLTextosV0(page.Locale, NewNuevaAppI18nCatalogV0()),
+		StorageTypes: orquestafactory.SupportedDataStorageTypesV0(),
 	}
 }
 
@@ -406,7 +410,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
       </div>
       <div class="step" data-step="2" role="tabpanel" id="nueva-app-step-panel-2" aria-labelledby="nueva-app-step-tab-2" tabindex="-1">
         <fieldset><legend>{{index .Labels "preferencias_tecnicas"}}</legend><div class="grid">
-          <label data-help="{{index .Help "preferencias_tecnicas.arquitectura"}}">{{index .Labels "preferencias_tecnicas.arquitectura"}}<select name="preferencias_tecnicas.arquitectura"><option value="hexagonal">hexagonal</option><option value="clean_architecture">clean_architecture</option><option value="onion">onion</option><option value="modular_monolith">modular_monolith</option><option value="layered">layered</option><option value="event_driven">event_driven</option><option value="microservices">microservices</option><option value="serverless">serverless</option><option value="plugin_based">plugin_based</option><option value="data_pipeline">data_pipeline</option></select></label>
+          <label data-help="{{index .Help "preferencias_tecnicas.arquitectura"}}">{{index .Labels "preferencias_tecnicas.arquitectura"}}<select name="preferencias_tecnicas.arquitectura"><option value="">sin_preferencia</option><option value="hexagonal">hexagonal</option><option value="clean_architecture">clean_architecture</option><option value="onion">onion</option><option value="modular_monolith">modular_monolith</option><option value="layered">layered</option><option value="event_driven">event_driven</option><option value="microservices">microservices</option><option value="serverless">serverless</option><option value="plugin_based">plugin_based</option><option value="data_pipeline">data_pipeline</option></select></label>
           <label data-help="{{index .Help "preferencias_tecnicas.lenguaje"}}">{{index .Labels "preferencias_tecnicas.lenguaje"}}<input name="preferencias_tecnicas.lenguaje" placeholder="go, typescript..."></label>
           <label data-help="{{index .Help "preferencias_tecnicas.framework"}}">{{index .Labels "preferencias_tecnicas.framework"}}<input name="preferencias_tecnicas.framework"></label>
           <label data-help="{{index .Help "preferencias_tecnicas.preferencias"}}">{{index .Labels "preferencias_tecnicas.preferencias"}}<input name="preferencias_tecnicas.preferencias"></label>
@@ -444,13 +448,13 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
             <label data-help="{{index .Help "datos.tipos_detallados.restricciones"}}">{{index .Labels "datos.tipos_detallados.0.restricciones"}}<input name="datos.tipos_detallados.1.restricciones"></label>
           </div></div>
           <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.almacenamiento_1"}}</p><div class="grid">
-            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.0.tipo"><option value=""></option><option value="relacional">relacional</option><option value="documental">documental</option><option value="vectorial">vectorial</option><option value="objetos">objetos</option><option value="clave_valor">clave_valor</option><option value="series_temporales">series_temporales</option><option value="grafo">grafo</option><option value="cache">cache</option><option value="busqueda">busqueda</option></select></label>
+            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.0.tipo"><option value=""></option>{{range .StorageTypes}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
             <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.0.proposito"></label>
             <label data-help="{{index .Help "datos.storage.requerido"}}"><span>{{index .Labels "datos.storage.0.requerido"}}</span><select name="datos.storage.0.requerido"><option value="false">false</option><option value="true">true</option></select></label>
             <label data-help="{{index .Help "datos.storage.restricciones"}}">{{index .Labels "datos.storage.0.restricciones"}}<input name="datos.storage.0.restricciones"></label>
           </div></div>
           <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.almacenamiento_2"}}</p><div class="grid">
-            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.1.tipo"><option value=""></option><option value="relacional">relacional</option><option value="documental">documental</option><option value="vectorial">vectorial</option><option value="objetos">objetos</option><option value="clave_valor">clave_valor</option><option value="series_temporales">series_temporales</option><option value="grafo">grafo</option><option value="cache">cache</option><option value="busqueda">busqueda</option></select></label>
+            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.1.tipo"><option value=""></option>{{range .StorageTypes}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
             <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.1.proposito"></label>
             <label data-help="{{index .Help "datos.storage.requerido"}}"><span>{{index .Labels "datos.storage.0.requerido"}}</span><select name="datos.storage.1.requerido"><option value="false">false</option><option value="true">true</option></select></label>
             <label data-help="{{index .Help "datos.storage.restricciones"}}">{{index .Labels "datos.storage.0.restricciones"}}<input name="datos.storage.1.restricciones"></label>
@@ -668,6 +672,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
         const active=i===step;
         node.classList.toggle('active',active);
         node.setAttribute('aria-selected',active?'true':'false');
+        node.tabIndex=active?0:-1;
       });
       prev.disabled=step===0;
       next.hidden=step===steps.length-1;
@@ -676,6 +681,20 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
       if(moveFocus&&steps[step]){
         setTimeout(()=>{steps[step].focus({preventScroll:true});steps[step].scrollIntoView({block:'start',behavior:motionBehavior()});},0);
       }
+    }
+    function handleTabKeydown(event,node){
+      const current=tabs.indexOf(node);
+      if(current<0)return;
+      let nextIndex=current;
+      if(event.key==='ArrowRight'||event.key==='ArrowDown')nextIndex=current+1;
+      else if(event.key==='ArrowLeft'||event.key==='ArrowUp')nextIndex=current-1;
+      else if(event.key==='Home')nextIndex=0;
+      else if(event.key==='End')nextIndex=tabs.length-1;
+      else return;
+      event.preventDefault();
+      nextIndex=(nextIndex+tabs.length)%tabs.length;
+      show(nextIndex,false);
+      tabs[nextIndex].focus({preventScroll:true});
     }
     function errorID(el){return 'field-error-'+String(el.name||'field').replace(/[^a-zA-Z0-9_-]/g,'-');}
     function requiredFields(){return [...form.querySelectorAll('[data-required="true"]')];}
@@ -890,7 +909,10 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
       if(kind==='ops'){setValue('tipo_app','web');setChecked('web',true);setValue('preferencias_tecnicas.framework','html/js + api');setValue('calidad.observabilidad','true');}
       renderSummary();
     }
-    tabs.forEach(node=>node.addEventListener('click',()=>show(Number(node.dataset.gotoStep||0),true)));
+    tabs.forEach(node=>{
+      node.addEventListener('click',()=>show(Number(node.dataset.gotoStep||0),true));
+      node.addEventListener('keydown',event=>handleTabKeydown(event,node));
+    });
     prev.addEventListener('click',()=>show(step-1,true));
     next.addEventListener('click',()=>show(step+1,true));
     form.addEventListener('input',renderSummary);

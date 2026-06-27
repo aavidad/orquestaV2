@@ -602,15 +602,21 @@
         "tipo": {
           "type": "string",
           "enum": [
+            "sin_preferencia",
+            "sin_persistencia",
             "relacional",
             "documental",
             "vectorial",
             "objetos",
+            "objetos_blob",
             "clave_valor",
+            "clave_valor_cache",
             "series_temporales",
             "grafo",
             "cache",
-            "busqueda"
+            "busqueda",
+            "eventos_auditoria",
+            "mixta"
           ]
         },
         "proposito": {

@@ -145,6 +145,13 @@ Invariantes:
   y aplicacion de adaptadores, IO, runtime, proveedores y bootstrap/composicion.
 - `datos.db_required=true` obliga a declarar necesidad funcional o datos/storage
   detallados, no proveedor.
+- `datos.storage[].tipo` describe capacidades neutrales, no proveedores ni DSN.
+  Se soportan `sin_preferencia`, `sin_persistencia`, `relacional`,
+  `documental`, `vectorial`, `objetos`, `objetos_blob`, `clave_valor`,
+  `clave_valor_cache`, `series_temporales`, `grafo`, `cache`, `busqueda`,
+  `eventos_auditoria` y `mixta`. `sin_preferencia` y `sin_persistencia` no
+  materializan conectores `storage-*`; el resto solo los materializa si hay
+  proposito.
 - Las integraciones se expresan como conectores, no como llamadas directas a DB,
   filesystem, runtime, LLM, cache, cola ni deploy.
 

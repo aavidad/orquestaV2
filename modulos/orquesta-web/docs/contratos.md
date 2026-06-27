@@ -477,6 +477,12 @@ Implementacion actual:
 - Las opciones expertas de datos, almacenamiento e integraciones deben entrar
   como necesidades, tipos, sensibilidad, retencion, integraciones y
   restricciones publicas; no como tablas, SQL, DSN, proveedor ni runtime.
+- El selector experto de almacenamiento se alimenta del catalogo de capacidades
+  de `orquesta-factory`: `sin_preferencia`, `sin_persistencia`, `relacional`,
+  `documental`, `vectorial`, `objetos`, `objetos_blob`, `clave_valor`,
+  `clave_valor_cache`, `series_temporales`, `grafo`, `cache`, `busqueda`,
+  `eventos_auditoria` y `mixta`. La opcion vacia conserva el comportamiento de
+  "no elegir todavia" y no crea storage al enviar.
 - `calidad.accesibilidad` transporta el nivel de accesibilidad elegido por el
   operador. El HTML expone `basica`, `normal`, `wcag_aa` y `no_aplica`;
   `calidad.accesibilidad_opciones` permite declarar niveles aceptados por
@@ -597,6 +603,10 @@ Invariantes:
 - El formulario expone asistente guiado, request_id, locale, nombre, objetivo,
   descripcion, tipo_app, plataformas, arquitectura, i18n, datos, almacenamiento,
   deploy, calidad, agentes e integraciones multiples sin decidir negocio.
+- La seleccion de arquitectura permite `sin_preferencia`/valor vacio en UI; el
+  mapper/factory aplican el fallback `hexagonal` si no se elige patron.
+- El wizard usa roles `tablist`/`tab`/`tabpanel` y soporta teclado con flechas,
+  Home y End para cambiar de paso sin depender solo del puntero.
 - La guia documental de opciones del wizard vive en
   `docs/guia_nueva_app_opciones_2026-06-25.md` y distingue asistente guiado,
   modo basico y modo experto opcional para datos, almacenamiento, accesibilidad

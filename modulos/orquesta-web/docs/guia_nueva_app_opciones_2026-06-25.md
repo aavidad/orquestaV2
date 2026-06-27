@@ -945,6 +945,12 @@ Opciones recomendadas:
 - `series_temporales`: metricas, sensores, eventos temporales densos.
 - `mixta`: varias necesidades con conectores separados.
 
+Aliases aceptados por compatibilidad:
+
+- `objetos`: equivalente amplio cuando aun no se distingue `objetos_blob`.
+- `clave_valor`: equivalente amplio cuando aun no se distingue cache/sesiones.
+- `cache`: alias corto para `clave_valor_cache` cuando el dato es efimero.
+
 Cuando usar cada una:
 
 - `relacional`: CRUD transaccional, usuarios, permisos, expedientes, pagos.

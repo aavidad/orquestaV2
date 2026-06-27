@@ -219,7 +219,7 @@ func nuevaAppI18nSpanishV0() map[string]string {
 		"nueva_app.ayuda.datos.tipos_detallados.retencion":     "Durante cuanto tiempo debe conservarse o revisarse este dato.",
 		"nueva_app.ayuda.datos.tipos_detallados.volumen":       "Volumen esperado: bajo, medio, alto, historico grande o crecimiento rapido.",
 		"nueva_app.ayuda.datos.tipos_detallados.restricciones": "Restricciones separadas por comas: auditoria, cifrado, minimizacion, offline, anonimizado.",
-		"nueva_app.ayuda.datos.storage.tipo":                   "Capacidad de almacenamiento: relacional, documental, vectorial, objetos, clave_valor, series_temporales, grafo, cache o busqueda.",
+		"nueva_app.ayuda.datos.storage.tipo":                   "Capacidad de almacenamiento: sin_preferencia, sin_persistencia, relacional, documental, vectorial, objetos_blob, clave_valor_cache, series_temporales, grafo, busqueda, eventos_auditoria o mixta.",
 		"nueva_app.ayuda.datos.storage.proposito":              "Para que se necesita este almacenamiento, sin elegir proveedor ni DSN.",
 		"nueva_app.ayuda.datos.storage.requerido":              "True si la app no puede cumplir el objetivo sin esta capacidad.",
 		"nueva_app.ayuda.datos.storage.restricciones":          "Restricciones de almacenamiento separadas por comas, sin credenciales ni backend concreto.",

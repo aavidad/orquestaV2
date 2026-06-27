@@ -199,6 +199,33 @@ func TestSolicitarNuevaAppV0PreservaDatosExpertosArquitecturaYAccesibilidadV0(t 
 	}
 }
 
+func TestSolicitarNuevaAppV0NoCreaConectorStorageParaSinPreferenciaOPersistencia(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.Datos.Storage = []DataStorageRequestV0{
+		{
+			Tipo:      "sin_preferencia",
+			Proposito: "El operador delega la decision en Orquesta",
+			Requerido: true,
+		},
+		{
+			Tipo:      "sin_persistencia",
+			Proposito: "La app no guarda estado durable propio",
+			Requerido: true,
+		},
+	}
+
+	spec, issues := SolicitarNuevaAppV0(req, time.Date(2026, 6, 27, 11, 0, 0, 0, time.UTC))
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %+v", issues)
+	}
+	if factoryConnectorNamedV0(spec.Connectors.Required, "storage-sin_preferencia") ||
+		factoryConnectorNamedV0(spec.Connectors.Required, "storage-sin_persistencia") ||
+		factoryConnectorNamedV0(spec.Connectors.Optional, "storage-sin_preferencia") ||
+		factoryConnectorNamedV0(spec.Connectors.Optional, "storage-sin_persistencia") {
+		t.Fatalf("connectors=%+v", spec.Connectors)
+	}
+}
+
 func TestSolicitarNuevaAppV0DocumentationTypeUsesDocumentationPlatform(t *testing.T) {
 	req := validMinimalRequestV0()
 	req.TipoApp = "documentacion"
