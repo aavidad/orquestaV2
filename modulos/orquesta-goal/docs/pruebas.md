@@ -27,6 +27,12 @@ Cobertura actual:
 - fallo al guardar estado tras launch se devuelve sin relanzar automaticamente;
 - filtro `GoalWorkStateListRequestV0{active_only:true}` selecciona estados
   `running` y excluye terminales;
+- `ObserveActiveGoalWorksV0` lista estados activos y observa solo los goals
+  `running` por defecto;
+- `ObserveActiveGoalWorksV0` conserva incidencia por goal si una observacion
+  falla y continua con otros goals activos;
+- `ObserveActiveGoalWorksV0` exige un store que implemente
+  `GoalWorkStateListPortV0`;
 - reglas blandas advisory no bloquean el contrato;
 - `complete` con spec invalido no valida cierre;
 - `complete` sin `goal_ref` causal igual al spec no valida cierre;

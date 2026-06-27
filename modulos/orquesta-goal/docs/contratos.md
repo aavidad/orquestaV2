@@ -57,6 +57,15 @@ producto externo. Devuelve si el goal esta terminal, si la closure fue aceptada
 o si necesita rework; cada composicion proyecta eso a su propio `RunStore`,
 cola, API o dominio.
 
+`ObserveActiveGoalWorksV0` es la pasada residente neutral: exige que el store
+inyectado implemente tambien `GoalWorkStateListPortV0`, lista por defecto
+estados vivos `running` y llama a `ObserveGoalWorkV0` para cada `run_ref`.
+Si un goal individual falla al observarse, conserva una incidencia por goal y
+continua con el resto; los errores de puertos ausentes o fallo al listar se
+devuelven como errores del batch completo. Si una observacion sale terminal,
+se aplica el mismo `GoalWorkClosureValidatorPortV0` que en una observacion
+individual.
+
 ## Puertos
 
 - `GoalWorkLauncherPortV0`: lanza un goal desde un spec.
@@ -66,6 +75,7 @@ cola, API o dominio.
   `run_ref`.
 - `GoalWorkStateListPortV0`: puerto opcional para listar estados goal por
   `run_refs`, estados o `active_only`; no sustituye a `LoadGoalWorkStateV0` ni
-  obliga a todos los stores de test a implementarlo.
+  obliga a todos los stores de test a implementarlo. `ObserveActiveGoalWorksV0`
+  lo exige solo en composiciones que quieran pasada residente de goals activos.
 
 Los adaptadores concretos implementan esos puertos fuera del nucleo.

@@ -93,3 +93,24 @@ Evidencia local:
 ```bash
 go test -count=1 ./modulos/orquesta-goal ./modulos/orquesta-state-file ./modulos/orquesta-mcp
 ```
+
+## GOAL-006 pasada residente neutral de goals activos
+
+Estado: cerrado localmente 2026-06-27.
+
+Criterio:
+
+- `ObserveActiveGoalWorksV0` usa `GoalWorkStateListPortV0` para listar estados
+  activos `running` por defecto.
+- Cada estado listado se observa con `ObserveGoalWorkV0`, reutilizando la misma
+  persistencia, normalizacion y validacion de cierre terminal.
+- Un fallo por goal queda en `GoalWorkObserveActiveIssueV0` y no cancela la
+  pasada de los demas goals; los errores de wiring/listado si bloquean el batch.
+- El contrato sigue neutral: sin Codex, OPES, HTTP, filesystem, colas ni
+  scheduler legacy dentro del modulo.
+
+Evidencia local:
+
+```bash
+go test -count=1 ./modulos/orquesta-goal
+```

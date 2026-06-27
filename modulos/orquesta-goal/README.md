@@ -20,6 +20,9 @@ Incluye:
 - Lifecycle neutral `StartGoalWorkV0`/`ObserveGoalWorkV0` sobre puertos:
   lanza, persiste estado, observa y valida cierre sin tocar runs, HTTP,
   filesystem, Codex ni OPES.
+- Observacion batch neutral `ObserveActiveGoalWorksV0`: lista estados goal
+  activos por puerto opcional y reutiliza `ObserveGoalWorkV0` para una pasada
+  residente sin reconstruir el loop director historico.
 - Validacion estructural de refs, write-set relativo, observaciones, resultados
   y evidencias requeridas.
 

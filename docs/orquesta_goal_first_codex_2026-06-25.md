@@ -68,6 +68,9 @@ Orquesta decide si el resultado cierra:
 - `GoalWorkStateListPortV0`: puerto opcional para listar estados goal activos o
   filtrados por refs/estado; permite a status/residentes recomendar
   `observe_goal` sin volver al supervisor legacy.
+- `ObserveActiveGoalWorksV0`: pasada residente neutral sobre estados goal
+  activos; lista por puerto, observa cada `run_ref` con el lifecycle existente y
+  conserva incidencias por goal sin reconstruir el loop director historico.
 
 `modulos/orquesta-runtime-codex-goal` define el adaptador Codex:
 
@@ -252,6 +255,10 @@ Goal.
    `StartGoalWorkV0`/`ObserveGoalWorkV0`; `/nueva-app` delega launch/observe en
    ese ciclo y `autoprogramming`/`external-work` reutilizan el constructor
    neutral de `GoalWorkStateV0`.
+   Estado 2026-06-27 noche 2: `orquesta-goal` incorpora
+   `ObserveActiveGoalWorksV0` para que residentes/status puedan hacer una
+   pasada neutral sobre goals `running` listados por `GoalWorkStateListPortV0`,
+   sin usar supervisor legacy para decidir el ciclo interno del trabajo.
 
 ## No hacer
 
