@@ -86,6 +86,7 @@ func MCPExternalWorkRunDescriptorV0() MCPExternalWorkRunToolDescriptorV0 {
 			"sin backend Goal completo la composicion goal-first devuelve error operativo y no degrada a legacy",
 			"legacy solo con composicion opt-in y director_execution_mode=legacy_director_loop",
 			"con backend Goal completo la composicion puede devolver route_policy=goal_first y goal_ref",
+			"goal-first solo publica observer_required cuando no hay observador residente garantizado",
 			"la ruta legacy opt-in crea run operativo y encola para loop historico por puertos inyectados",
 			"sin OPES, DB, runtime, filesystem ni proveedor hardcodeado",
 		},

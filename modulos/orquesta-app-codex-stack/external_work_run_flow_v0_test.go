@@ -202,6 +202,33 @@ func TestCodexStackV0ExternalWorkRunConBackendGoalArrancaGoalFirstSinColaLegacy(
 	}
 }
 
+func TestCodexStackV0ExternalWorkRunConObservadorResidenteNoMarcaObserverRequired(t *testing.T) {
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	config := codexStackBaseConfigForTestV0(t, newFakeCodexStackRuntimeV0(), nil, nil)
+	config.AppGoalLauncher = launcher
+	config.AppGoalObserver = &goalFirstQueueObserverForTestV0{}
+	config.AppGoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	config.Stores.AppGoalStateStore = goalStates
+	config.GoalObserverResidentEnabled = true
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+
+	result := postExternalWorkRunStackV0(t, stack)
+
+	if result.Estado != orquestamcp.MCPExternalWorkRunEstadoOKV0 ||
+		result.GoalRef == "" ||
+		codexStackStringInSetForTestV0(result.NextActions, orquestamcp.MCPExternalWorkRunNextActionObserverRequiredV0) ||
+		codexStackStringInSetForTestV0(result.NextActions, orquestamcp.MCPExternalWorkRunNextActionObserveGoalV0) ||
+		!codexStackStringInSetForTestV0(result.NextActions, orquestamcp.MCPExternalWorkRunNextActionObserveActiveGoalsV0) ||
+		codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-external-work-goal-first-observer-required") ||
+		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-external-work-goal-first-resident-observer") {
+		t.Fatalf("result goal-first residente inesperado=%+v", result)
+	}
+}
+
 func TestCodexStackV0ExternalWorkGoalFirstSinStateNoDrenaLegacy(t *testing.T) {
 	stack := mustBuildCodexStackWithGoalBackendForTestV0(
 		t,

@@ -20,6 +20,7 @@ type CodexStackExternalWorkGoalFirstExecutorV0 struct {
 	Ports                   orquestaappdirectorservice.StartAppDirectorPortsV0
 	Config                  orquestaexternalworkrun.StartExternalWorkRunConfigV0
 	AppChangeStore          orquestaappchange.AppChangeRecordStorePortV0
+	GoalObserverResident    bool
 	AllowLegacyDirectorLoop bool
 }
 
@@ -30,6 +31,7 @@ func NewCodexStackExternalWorkGoalFirstExecutorV0(
 	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
 	config orquestaexternalworkrun.StartExternalWorkRunConfigV0,
 	appChangeStore orquestaappchange.AppChangeRecordStorePortV0,
+	goalObserverResident bool,
 	allowLegacyDirectorLoop bool,
 ) CodexStackExternalWorkGoalFirstExecutorV0 {
 	return CodexStackExternalWorkGoalFirstExecutorV0{
@@ -37,6 +39,7 @@ func NewCodexStackExternalWorkGoalFirstExecutorV0(
 		Ports:                   ports,
 		Config:                  config,
 		AppChangeStore:          appChangeStore,
+		GoalObserverResident:    goalObserverResident,
 		AllowLegacyDirectorLoop: allowLegacyDirectorLoop,
 	}
 }
@@ -105,7 +108,7 @@ func (executor CodexStackExternalWorkGoalFirstExecutorV0) Execute(
 	if err := executor.Ports.GoalStateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
 		return externalWorkGoalFirstIssueResultV0(request, "external_work_goal_state_save_failed", "goal_state"), nil
 	}
-	return externalWorkGoalFirstResultV0(request, state), nil
+	return executor.externalWorkGoalFirstResultV0(request, state), nil
 }
 
 func (executor CodexStackExternalWorkGoalFirstExecutorV0) externalWorkGoalFirstExistingRunResultV0(
@@ -147,7 +150,7 @@ func (executor CodexStackExternalWorkGoalFirstExecutorV0) externalWorkGoalFirstE
 	if !reflect.DeepEqual(orquestagoal.NormalizeGoalWorkSpecV0(state.Spec), orquestagoal.NormalizeGoalWorkSpecV0(spec)) {
 		return externalWorkGoalFirstIssueResultV0(request, "external_work_goal_state_spec_mismatch", "goal_state.spec"), true, nil
 	}
-	return externalWorkGoalFirstResultV0(request, state), true, nil
+	return executor.externalWorkGoalFirstResultV0(request, state), true, nil
 }
 
 func externalWorkGoalFirstValidateInputV0(
@@ -364,10 +367,20 @@ func externalWorkGoalFirstNewGoalStateV0(
 	})
 }
 
-func externalWorkGoalFirstResultV0(
+func (executor CodexStackExternalWorkGoalFirstExecutorV0) externalWorkGoalFirstResultV0(
 	request orquestaexternalworkrun.StartExternalWorkRunRequestV0,
 	state orquestagoal.GoalWorkStateV0,
 ) orquestamcp.MCPExternalWorkRunToolResultV0 {
+	evidenceRefs := []string{"evidence-ref-external-work-goal-first-resident-observer"}
+	nextActions := []string{orquestamcp.MCPExternalWorkRunNextActionObserveActiveGoalsV0}
+	if !executor.GoalObserverResident {
+		evidenceRefs = []string{"evidence-ref-external-work-goal-first-observer-required"}
+		nextActions = []string{
+			orquestamcp.MCPExternalWorkRunNextActionObserverRequiredV0,
+			orquestamcp.MCPExternalWorkRunNextActionObserveGoalV0,
+			orquestamcp.MCPExternalWorkRunNextActionObserveActiveGoalsV0,
+		}
+	}
 	return orquestamcp.MCPExternalWorkRunToolResultV0{
 		Estado:                orquestamcp.MCPExternalWorkRunEstadoOKV0,
 		RoutePolicy:           orquestamcp.MCPExternalWorkRunRoutePolicyGoalFirstV0,
@@ -381,14 +394,10 @@ func externalWorkGoalFirstResultV0(
 		GoalRef:               strings.TrimSpace(state.GoalRef),
 		ExternalGoalRef:       strings.TrimSpace(state.ExternalGoalRef),
 		EvidenceRefs: compactStringsV0(append(
-			[]string{"evidence-ref-external-work-goal-first-observer-required"},
+			evidenceRefs,
 			state.EvidenceRefs...,
 		)),
-		NextActions: []string{
-			orquestamcp.MCPExternalWorkRunNextActionObserverRequiredV0,
-			orquestamcp.MCPExternalWorkRunNextActionObserveGoalV0,
-			orquestamcp.MCPExternalWorkRunNextActionObserveActiveGoalsV0,
-		},
+		NextActions: nextActions,
 	}
 }
 

@@ -35,6 +35,7 @@ func externalWorkRunExecutorV0(
 			RequestedBy:          config.Capacity.RequestedBy,
 		},
 		config.Stores.AppChangeStore,
+		config.GoalObserverResidentEnabled,
 		config.AllowLegacyExternalWorkRun,
 	)
 }
