@@ -205,7 +205,7 @@ func codexAckRequiredTestContextualRefOnlyEvidenceRefsV0(
 	command string,
 ) ([]string, bool) {
 	if !codexStackOperationalClosureRequiredTestIsContextualRefOnlyV0(command) ||
-		!stringInSetV0([]string(ack.Tests), command) ||
+		!orquestaruntimecodex.CodexTestCommandInSetV0([]string(ack.Tests), command) ||
 		!codexStackOperationalClosureAckHasNotePrefixV0([]string(ack.Notes), "contexto_ref_only_resuelto") {
 		return nil, false
 	}
@@ -229,8 +229,11 @@ func codexAckRequiredTestReceiptMatchesV0(
 	receipt orquestaruntimecodex.CodexRequiredTestReceiptV0,
 	command string,
 ) bool {
-	return strings.TrimSpace(receipt.SchemaVersion) == orquestaruntimecodex.CodexRequiredTestReceiptSchemaVersionV0 &&
-		strings.TrimSpace(receipt.Command) == strings.TrimSpace(command) &&
+	return orquestaruntimecodex.CodexSchemaVersionCompatibleV0(
+		receipt.SchemaVersion,
+		orquestaruntimecodex.CodexRequiredTestReceiptSchemaVersionV0,
+	) &&
+		orquestaruntimecodex.CodexTestCommandMatchesV0(receipt.Command, command) &&
 		strings.EqualFold(strings.TrimSpace(receipt.Status), "passed") &&
 		receipt.ExitCode != nil &&
 		*receipt.ExitCode == 0 &&
@@ -261,7 +264,7 @@ func (runner codexAckRequiredTestRunnerV0) codexAckRequiredTestEvidenceAlreadyVa
 	item := items[0]
 	return item.Status == orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 &&
 		strings.TrimSpace(item.TaskRef) == request.TaskRef &&
-		strings.TrimSpace(item.TestCommand) == strings.TrimSpace(command) &&
+		orquestaruntimecodex.CodexTestCommandMatchesV0(item.TestCommand, command) &&
 		strings.TrimSpace(item.DeliveryRef) == request.DeliveryRef &&
 		strings.TrimSpace(item.ReviewRequestID) == request.ReviewRequestID &&
 		strings.TrimSpace(item.ReviewResultRef) == request.ReviewResultRef &&

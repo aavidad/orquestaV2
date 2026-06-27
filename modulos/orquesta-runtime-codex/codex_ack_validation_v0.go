@@ -68,6 +68,23 @@ func codexAgentAckWithSpecDefaultsV0(
 	ack CodexAgentAckV0,
 	spec orquestaruntime.ExternalAgentLaunchSpecV0,
 ) CodexAgentAckV0 {
+	ack = codexAgentAckWithMissingSpecDefaultsV0(ack, spec)
+	packet := spec.AgentPacket
+	if codexAgentAckIdentityMatchesSpecV0(ack, spec) {
+		if strings.TrimSpace(ack.CorrelationID) != strings.TrimSpace(packet.CorrelationID) {
+			ack.CorrelationID = packet.CorrelationID
+		}
+		if !codexAgentAckParentTaskCollisionV0(ack, spec) {
+			ack.TaskRef = packet.Task.TaskRef
+		}
+	}
+	return ack
+}
+
+func codexAgentAckWithMissingSpecDefaultsV0(
+	ack CodexAgentAckV0,
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+) CodexAgentAckV0 {
 	packet := spec.AgentPacket
 	if strings.TrimSpace(ack.RequestID) == "" {
 		ack.RequestID = firstNonEmptyCodexAckValueV0(spec.RequestID, packet.RequestID)
@@ -83,14 +100,6 @@ func codexAgentAckWithSpecDefaultsV0(
 	}
 	if strings.TrimSpace(ack.TaskRef) == "" {
 		ack.TaskRef = packet.Task.TaskRef
-	}
-	if codexAgentAckIdentityMatchesSpecV0(ack, spec) {
-		if strings.TrimSpace(ack.CorrelationID) != strings.TrimSpace(packet.CorrelationID) {
-			ack.CorrelationID = packet.CorrelationID
-		}
-		if !codexAgentAckParentTaskCollisionV0(ack, spec) {
-			ack.TaskRef = packet.Task.TaskRef
-		}
 	}
 	return ack
 }

@@ -125,6 +125,107 @@ func TestCodexAckRequiredTestRunnerV0MaterializaReceiptsComoEvidenciaDurable(t *
 	}
 }
 
+func TestCodexAckRequiredTestRunnerV0MaterializaReceiptsConSchemaYComandoCompatibles(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-codex-ack-required-test-compatible"
+	taskRef := "task-ref-codex-ack-required-test-compatible"
+	agentRef := "agent-ref-codex-ack-required-test-compatible"
+	deliveryRef := "ack-ref-codex-ack-required-test-compatible"
+	requiredTests := []string{"go test -count=1 ./modulos/orquesta-app-codex-stack"}
+	receiptExitCode := 0
+	receiptRedacted := true
+	ackPath := filepath.Join(t.TempDir(), orquestaruntimecodex.CodexAgentAckFileNameV0)
+	ack := orquestaruntimecodex.CodexAgentAckV0{
+		SchemaVersion: orquestaruntimecodex.CodexAgentAckSchemaVersionV0 + ".1",
+		RequestID:     agentRef,
+		CorrelationID: "corr-codex-ack-required-test-compatible",
+		AckRef:        deliveryRef,
+		TargetModule:  "orquesta-app-stack-programacion",
+		TaskRef:       taskRef,
+		Status:        "completed",
+		Files:         orquestaruntimecodex.EvidenceListV0{"README.md"},
+		Tests:         orquestaruntimecodex.EvidenceListV0{"go test ./modulos/orquesta-app-codex-stack -count=1"},
+		TestReceipts: []orquestaruntimecodex.CodexRequiredTestReceiptV0{{
+			SchemaVersion:  orquestaruntimecodex.CodexRequiredTestReceiptSchemaVersionV0 + ".1",
+			Command:        "go   test   ./modulos/orquesta-app-codex-stack   -count=1",
+			Status:         "passed",
+			ExitCode:       &receiptExitCode,
+			EvidenceRefs:   []string{"required-test-receipt-ref-compatible-001"},
+			OccurredAt:     "2026-05-24T10:00:00Z",
+			Sequence:       1,
+			OutputRedacted: &receiptRedacted,
+		}},
+	}
+	data, err := json.Marshal(ack)
+	if err != nil {
+		t.Fatalf("Marshal ACK: %v", err)
+	}
+	if err := os.WriteFile(ackPath, data, 0o600); err != nil {
+		t.Fatalf("Write ACK: %v", err)
+	}
+	descriptor := orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+		DescriptorRef: "descriptor-ref-codex-ack-required-test-compatible",
+		RunID:         runRef,
+		AgentRef:      agentRef,
+		AckPath:       ackPath,
+		Spec: orquestaruntime.ExternalAgentLaunchSpecV0{
+			RequestID:     agentRef,
+			CorrelationID: "corr-codex-ack-required-test-compatible",
+			AgentPacket: orquestaruntime.AgentStartPacketV0{
+				RequestID:     agentRef,
+				CorrelationID: "corr-codex-ack-required-test-compatible",
+				TargetModule:  "orquesta-app-stack-programacion",
+				Task: orquestaruntime.AgentStartTaskV0{
+					TaskRef:       taskRef,
+					RequiredTests: requiredTests,
+					WriteSet:      []string{"README.md"},
+				},
+				DeliveryRefs: orquestaruntime.AgentStartDeliveryRefsV0{
+					AckRef: deliveryRef,
+				},
+				Policies: []string{"ack_terminal_strict"},
+			},
+		},
+	}
+	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	runner := codexAckRequiredTestRunnerV0{
+		ReceiptStore:   orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(descriptor),
+		EvidenceReader: evidenceStore,
+		EvidenceWriter: evidenceStore,
+	}
+	request := orquestacionnucleoapp.RequiredTestExecutionRequestV0{
+		RunRef:            runRef,
+		TaskRef:           taskRef,
+		TestCommands:      requiredTests,
+		DeliveryRef:       deliveryRef,
+		ReviewRequestID:   "review-request-ref-codex-ack-required-test-compatible",
+		ReviewResultRef:   "review-result-ref-codex-ack-required-test-compatible",
+		AcceptedReviewRef: "accepted-review-ref-codex-ack-required-test-compatible",
+		OccurredAt:        "2026-05-25T16:30:00Z",
+		CorrelationID:     "corr-codex-ack-required-test-compatible",
+	}
+
+	result, err := runner.RunRequiredTestsV0(ctx, request)
+	if err != nil {
+		t.Fatalf("RunRequiredTestsV0: %v", err)
+	}
+	if len(result.EvidenceRefs) != 1 ||
+		len(result.PassedEvidenceRefs) != 1 ||
+		len(result.FailedEvidenceRefs) != 0 {
+		t.Fatalf("resultado inesperado: %+v", result)
+	}
+	evidence, err := evidenceStore.LoadRequiredTestEvidenceV0(ctx, runRef, result.EvidenceRefs)
+	if err != nil {
+		t.Fatalf("LoadRequiredTestEvidenceV0: %v", err)
+	}
+	if len(evidence) != 1 ||
+		evidence[0].Status != orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 ||
+		evidence[0].TestCommand != requiredTests[0] ||
+		evidence[0].EvidenceRefs[0] != "required-test-receipt-ref-compatible-001" {
+		t.Fatalf("evidencia=%+v", evidence)
+	}
+}
+
 func TestCodexAckRequiredTestRunnerV0MaterializaContextoRefOnlyDesdeNotaSinReceipt(t *testing.T) {
 	ctx := context.Background()
 	runRef := "run-ref-codex-ack-required-test-ref-only"

@@ -6,6 +6,10 @@ import (
 )
 
 func codexSchemaVersionCompatibleV0(value string, current string) bool {
+	return CodexSchemaVersionCompatibleV0(value, current)
+}
+
+func CodexSchemaVersionCompatibleV0(value string, current string) bool {
 	value = strings.TrimSpace(value)
 	current = strings.TrimSpace(current)
 	if value == current {
@@ -39,6 +43,10 @@ func codexSchemaVersionCompatibleV0(value string, current string) bool {
 }
 
 func canonicalTestCommandV0(value string) string {
+	return CanonicalCodexTestCommandV0(value)
+}
+
+func CanonicalCodexTestCommandV0(value string) string {
 	fields := strings.Fields(value)
 	if len(fields) == 0 {
 		return ""
@@ -124,6 +132,10 @@ func codexTestCommandFlagUsuallyHasValueV0(flag string) bool {
 }
 
 func codexTestCommandInSetV0(values []string, want string) bool {
+	return CodexTestCommandInSetV0(values, want)
+}
+
+func CodexTestCommandInSetV0(values []string, want string) bool {
 	want = canonicalTestCommandV0(want)
 	if want == "" {
 		return false
@@ -134,4 +146,9 @@ func codexTestCommandInSetV0(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func CodexTestCommandMatchesV0(got string, want string) bool {
+	want = canonicalTestCommandV0(want)
+	return want != "" && canonicalTestCommandV0(got) == want
 }

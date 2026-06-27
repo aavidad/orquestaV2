@@ -30,6 +30,9 @@ func ValidateStrictCompletedCodexAgentAckBytesForSpecV0(
 			codexIssueV0(CodexConnectorAckInvalidV0, CodexAgentAckFileNameV0, spec.CorrelationID, "json_invalid"),
 		}
 	}
+	if codexStrictAckHasRecoverableCompletionEvidenceV0(ack) {
+		ack = codexAgentAckWithMissingSpecDefaultsV0(ack, spec)
+	}
 	issues := codexStrictCompletedAckIssuesV0(ack, spec)
 	issues = append(issues, codexStrictCompletedAckRawTestReceiptIssuesV0(data, spec.CorrelationID)...)
 	if len(issues) > 0 {
@@ -37,6 +40,10 @@ func ValidateStrictCompletedCodexAgentAckBytesForSpecV0(
 	}
 	validated, issues := ValidateCodexAgentAckBytesForSpecV0(data, spec)
 	return validated, issues
+}
+
+func codexStrictAckHasRecoverableCompletionEvidenceV0(ack CodexAgentAckV0) bool {
+	return ack.Files != nil || codexAckHasNonFileCompletionEvidenceV0(ack)
 }
 
 func CodexAgentPacketRequiresStrictTerminalAckV0(
