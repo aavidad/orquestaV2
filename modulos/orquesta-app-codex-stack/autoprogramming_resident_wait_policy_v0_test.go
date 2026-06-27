@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
 
@@ -12,10 +13,11 @@ func TestAutoprogrammingResidentModeV0PermiteOverrideEsperaAmpliaV0(t *testing.T
 	executor := NewCodexStackRunSupervisorExecutorV0(&stack)
 
 	result, err := executor.Execute(context.Background(), orquestamcp.MCPRunSupervisorToolInputV0{
-		RequestID:        "request-autoprogramming-resident-wait-policy-001",
-		CorrelationID:    "corr-autoprogramming-resident-wait-policy-001",
-		ResidentMode:     true,
-		MaxExternalWaits: 3,
+		RequestID:             "request-autoprogramming-resident-wait-policy-001",
+		CorrelationID:         "corr-autoprogramming-resident-wait-policy-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		ResidentMode:          true,
+		MaxExternalWaits:      3,
 	})
 	if err != nil {
 		t.Fatalf("Execute resident: %v", err)
@@ -31,10 +33,11 @@ func TestAutoprogrammingResidentModeV0BloqueaOverrideEsperaDescontroladaV0(t *te
 	executor := NewCodexStackRunSupervisorExecutorV0(&stack)
 
 	result, err := executor.Execute(context.Background(), orquestamcp.MCPRunSupervisorToolInputV0{
-		RequestID:        "request-autoprogramming-resident-wait-policy-002",
-		CorrelationID:    "corr-autoprogramming-resident-wait-policy-002",
-		ResidentMode:     true,
-		MaxExternalWaits: 71,
+		RequestID:             "request-autoprogramming-resident-wait-policy-002",
+		CorrelationID:         "corr-autoprogramming-resident-wait-policy-002",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		ResidentMode:          true,
+		MaxExternalWaits:      71,
 	})
 	if err != nil {
 		t.Fatalf("Execute resident: %v", err)

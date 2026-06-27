@@ -25,9 +25,9 @@ compatibilidad `legacy_director_loop`:
 ```text
 OPES plan_temario pending
   -> opes-drain-once / opes bridge loop
-  -> /api/v0/external-work/run
+  -> /api/v0/external-work/run con director_execution_mode=legacy_director_loop
   -> cola de runs de Orquesta
-  -> supervisor residente o POST /api/v0/runs/supervise
+  -> supervisor residente con allow_legacy_drain desde opt-in o POST /api/v0/runs/supervise con director_execution_mode=legacy_director_loop
   -> ContinueAppDirectorV0 / DrainRunV0
   -> outbox LaunchRuntimeAgent
   -> Codex xhigh
@@ -37,7 +37,11 @@ OPES plan_temario pending
 
 Si `cmd/orquesta-server run` esta activo, el supervisor global del servidor ya
 empuja la cola en cada tick. `POST /api/v0/runs/supervise` queda como empuje
-manual/acotado para una run concreta, no como canal alternativo.
+manual/acotado para una run concreta, no como canal alternativo. En ambos
+casos legacy hacen falta las dos llaves: opt-in de composicion
+(`ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1` para esta ruta OPES) y
+`director_execution_mode=legacy_director_loop`; el tick residente traduce ese
+opt-in a `allow_legacy_drain`.
 
 ## Regla operativa
 
@@ -258,6 +262,7 @@ siguiente tick del servidor:
 curl -sS -X POST http://127.0.0.1:<puerto-orquesta>/api/v0/runs/supervise \
   -H 'Content-Type: application/json' \
   -d '{
+    "director_execution_mode":"legacy_director_loop",
     "run_ref":"<run_ref>",
     "max_ticks":8,
     "max_bursts":16,

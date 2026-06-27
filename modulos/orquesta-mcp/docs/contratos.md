@@ -32,8 +32,9 @@ Campos:
   input:
     request_id, correlation_id: refs externas opcionales
     director_execution_mode: opcional; `legacy_director_loop` requerido para
-      drenar una run legacy por `run_ref` salvo opt-in de composicion; `goal_first`
-      se observa por herramientas Goal y no por este supervisor
+      drenar una run legacy por `run_ref`, siempre junto al opt-in de
+      composicion; `goal_first` se observa por herramientas Goal y no por este
+      supervisor
     run_ref: opcional; si existe limita la accion a esa run
     queue_ref: opcional; si no hay run_ref permite avanzar cola inyectada
     max_ticks, continue_message y limites acotados de drain/supervisor
@@ -1560,7 +1561,8 @@ Invariantes:
   - Adaptador inbound fino.
   - Delega la supervision puntual en `runs.supervisor` inyectado.
   - Para empujar un `run_ref` legacy debe transportar
-    `director_execution_mode=legacy_director_loop`, salvo opt-in de composicion.
+    `director_execution_mode=legacy_director_loop` y la composicion debe haber
+    habilitado opt-in legacy.
   - Para runs goal-first no ejecuta el loop historico: el operador debe usar
     `observe_goal`.
   - El HTTP no mantiene al cliente bloqueado indefinidamente si ya delego el

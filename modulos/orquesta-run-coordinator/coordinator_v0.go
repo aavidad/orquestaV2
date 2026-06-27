@@ -182,6 +182,7 @@ func drainRequestV0(
 		SupersedesRunRef: strings.TrimSpace(candidate.SupersedesRunRef),
 		RescueReason:     strings.TrimSpace(candidate.RescueReason),
 		ActiveAttemptRef: strings.TrimSpace(attempt.ActiveAttemptRef),
+		AllowLegacyDrain: command.AllowLegacyDrain,
 		Limits:           command.DrainLimits,
 	}
 }

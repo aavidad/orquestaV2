@@ -149,6 +149,7 @@ func superviseOPESExternalWorkRunV0(
 	body, err := json.Marshal(map[string]any{
 		"request_id":              "req-opes-bridge-supervise-" + opesBridgeCompactRunPartV0(runRef),
 		"correlation_id":          strings.TrimSpace(correlationID),
+		"director_execution_mode": "legacy_director_loop",
 		"run_ref":                 runRef,
 		"max_ticks":               4,
 		"max_bursts":              16,

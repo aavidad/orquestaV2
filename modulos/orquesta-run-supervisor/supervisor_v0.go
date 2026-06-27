@@ -174,6 +174,7 @@ func coordinatorCommandV0(
 		MaxRuns:              maxRuns,
 		OccurredAt:           command.OccurredAt,
 		CorrelationID:        command.CorrelationID,
+		AllowLegacyDrain:     command.AllowLegacyDrain,
 		DrainLimits:          command.DrainLimits,
 		RankingPolicy:        command.RankingPolicy,
 		ContinueOnDrainError: true,

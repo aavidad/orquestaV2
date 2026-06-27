@@ -29,6 +29,7 @@ type RunCoordinatorTickCommandV0 struct {
 	MaxRuns              int                                      `json:"max_runs,omitempty"`
 	OccurredAt           time.Time                                `json:"occurred_at"`
 	CorrelationID        string                                   `json:"correlation_id,omitempty"`
+	AllowLegacyDrain     bool                                     `json:"allow_legacy_drain,omitempty"`
 	DrainLimits          RunDrainLimitsV0                         `json:"drain_limits,omitempty"`
 	RankingPolicy        orquestarunqueue.RunQueueRankingPolicyV0 `json:"ranking_policy,omitempty"`
 	ContinueOnDrainError bool                                     `json:"continue_on_drain_error,omitempty"`
@@ -61,6 +62,7 @@ type RunDrainRequestV0 struct {
 	SupersedesRunRef string                                  `json:"supersedes_run_ref,omitempty"`
 	RescueReason     string                                  `json:"rescue_reason,omitempty"`
 	ActiveAttemptRef string                                  `json:"active_attempt_ref,omitempty"`
+	AllowLegacyDrain bool                                    `json:"allow_legacy_drain,omitempty"`
 	Limits           RunDrainLimitsV0                        `json:"limits,omitempty"`
 }
 

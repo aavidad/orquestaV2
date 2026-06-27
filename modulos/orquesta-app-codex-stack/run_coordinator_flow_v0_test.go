@@ -87,8 +87,9 @@ func TestCodexStackV0RunGlobalTickResidenteNoBloqueaEnExternalWaiterV0(t *testin
 	}
 
 	result, err := stack.RunGlobalTickV0(context.Background(), orquestaruncoordinator.RunCoordinatorTickCommandV0{
-		QueueRef: DefaultRunQueueRefV0,
-		MaxRuns:  1,
+		QueueRef:         DefaultRunQueueRefV0,
+		MaxRuns:          1,
+		AllowLegacyDrain: true,
 		DrainLimits: orquestaruncoordinator.RunDrainLimitsV0{
 			MaxBursts:            1,
 			MaxStepsPerBurst:     1,
@@ -106,6 +107,48 @@ func TestCodexStackV0RunGlobalTickResidenteNoBloqueaEnExternalWaiterV0(t *testin
 		result.Executions[0].RunRef != runRef ||
 		result.Executions[0].Outcome != string(orquestacionnucleoapp.ProgressiveLoopStatusMaxBurstsV0) {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestCodexStackV0RunGlobalTickBloqueaLegacySinAllowLegacyDrainV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, legacyAutoprogrammingPrepareRunInputForStackTestV0(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-legacy-drain-disabled-001",
+		CorrelationID:          "corr-autoprogramming-legacy-drain-disabled-001",
+		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
+	}))
+	if !prepared.Accepted || prepared.RunRef == "" {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+
+	result, err := stack.RunGlobalTickV0(context.Background(), orquestaruncoordinator.RunCoordinatorTickCommandV0{
+		QueueRef:   DefaultRunQueueRefV0,
+		MaxRuns:    1,
+		OccurredAt: time.Date(2026, 6, 27, 22, 0, 0, 0, time.UTC),
+		DrainLimits: orquestaruncoordinator.RunDrainLimitsV0{
+			MaxBursts:            1,
+			MaxStepsPerBurst:     1,
+			MaxDispatchesPerWait: 1,
+			MaxCommands:          1,
+			MaxOutboxPerCycle:    1,
+			MaxDecisionCycles:    1,
+			MaxExternalWaits:     1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunGlobalTickV0: %v result=%+v", err, result)
+	}
+	if len(result.Executions) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	execution := result.Executions[0]
+	if execution.RunRef != prepared.RunRef ||
+		execution.Outcome != "legacy_director_loop_disabled" ||
+		execution.QueueStatus != orquestarunqueue.RunStatusStoppedV0 ||
+		!codexStackDrainDiagnosticsContainKindStatusForTestV0(execution.Diagnostics, "legacy_director_loop", "blocked") ||
+		runtime.launchCountV0() != 0 {
+		t.Fatalf("execution=%+v launches=%d", execution, runtime.launchCountV0())
 	}
 }
 
@@ -2021,9 +2064,10 @@ func markRunControlStoppedAutoResumeForTestV0(
 func globalTickCommandForTestV0() orquestaruncoordinator.RunCoordinatorTickCommandV0 {
 	now := time.Date(2026, 5, 11, 12, 5, 0, 0, time.UTC)
 	return orquestaruncoordinator.RunCoordinatorTickCommandV0{
-		QueueRef:   DefaultRunQueueRefV0,
-		MaxRuns:    1,
-		OccurredAt: now,
+		QueueRef:         DefaultRunQueueRefV0,
+		MaxRuns:          1,
+		AllowLegacyDrain: true,
+		OccurredAt:       now,
 		DrainLimits: orquestaruncoordinator.RunDrainLimitsV0{
 			MaxBursts:            2,
 			MaxStepsPerBurst:     4,

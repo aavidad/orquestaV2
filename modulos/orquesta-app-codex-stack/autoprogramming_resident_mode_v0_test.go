@@ -19,10 +19,11 @@ func TestAutoprogrammingResidentModeV0NormalizaBacklogDurableV0(t *testing.T) {
 	executor := NewCodexStackRunSupervisorExecutorV0(&stack)
 
 	result, err := executor.Execute(context.Background(), orquestamcp.MCPRunSupervisorToolInputV0{
-		RequestID:     "request-autoprogramming-resident-001",
-		CorrelationID: "corr-autoprogramming-resident-001",
-		ResidentMode:  true,
-		MaxTicks:      1,
+		RequestID:             "request-autoprogramming-resident-001",
+		CorrelationID:         "corr-autoprogramming-resident-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		ResidentMode:          true,
+		MaxTicks:              1,
 	})
 	if err != nil {
 		t.Fatalf("Execute resident: %v", err)
@@ -37,18 +38,18 @@ func TestAutoprogrammingResidentModeV0NormalizaBacklogDurableV0(t *testing.T) {
 func TestAutoprogrammingResidentModeV0TomaRunPreparadaDeColaV0(t *testing.T) {
 	runtime := newFakeCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
-	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, legacyAutoprogrammingPrepareRunInputForStackTestV0(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-resident-queue-001",
 		CorrelationID:          "corr-autoprogramming-resident-queue-001",
 		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
-	})
+	}))
 
-	result := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+	result := postRunSupervisorStackV0(t, stack, legacyRunSupervisorInputForStackTestV0(orquestamcp.MCPRunSupervisorToolInputV0{
 		RequestID:     "request-autoprogramming-resident-supervise-001",
 		CorrelationID: "corr-autoprogramming-resident-queue-001",
 		ResidentMode:  true,
 		MaxTicks:      1,
-	})
+	}))
 	if result.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
 		result.RunRef != prepared.RunRef ||
 		runtime.launchCountV0() != 1 ||
@@ -61,7 +62,7 @@ func TestAutoprogrammingResidentModeV0RelanzaFronteraDependienteTrasACKV0(t *tes
 	runtime := newPendingAckCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
 	request := autoprogrammingBridgeDependentRequestForTestV0()
-	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, legacyAutoprogrammingPrepareRunInputForStackTestV0(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-resident-dependent-001",
 		CorrelationID:          "corr-autoprogramming-resident-dependent-001",
 		AutoprogrammingRequest: request,
@@ -70,7 +71,7 @@ func TestAutoprogrammingResidentModeV0RelanzaFronteraDependienteTrasACKV0(t *tes
 		MaxDispatchesPerWait:   3,
 		MaxCommands:            5,
 		MaxOutboxPerCycle:      5,
-	})
+	}))
 	if !prepared.Accepted || prepared.RunRef == "" || len(prepared.WaitAgentRefs) != 1 || len(prepared.WorkflowTaskRefs) != 2 {
 		t.Fatalf("prepared=%+v", prepared)
 	}
@@ -86,7 +87,7 @@ func TestAutoprogrammingResidentModeV0RelanzaFronteraDependienteTrasACKV0(t *tes
 	dependentTaskRef := tasks[1].TaskID
 	dependentAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(dependentTaskRef)
 
-	first := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+	first := postRunSupervisorStackV0(t, stack, legacyRunSupervisorInputForStackTestV0(orquestamcp.MCPRunSupervisorToolInputV0{
 		RequestID:         "request-autoprogramming-resident-dependent-supervise-001",
 		CorrelationID:     "corr-autoprogramming-resident-dependent-001",
 		ResidentMode:      true,
@@ -94,7 +95,7 @@ func TestAutoprogrammingResidentModeV0RelanzaFronteraDependienteTrasACKV0(t *tes
 		MaxRunsPerTick:    1,
 		MaxExecutions:     1,
 		AllowRepeatedRuns: true,
-	})
+	}))
 	if first.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
 		first.RunRef != prepared.RunRef ||
 		runtime.launchCountV0() != 1 {
@@ -105,7 +106,7 @@ func TestAutoprogrammingResidentModeV0RelanzaFronteraDependienteTrasACKV0(t *tes
 		t.Fatalf("write base ack: %v", err)
 	}
 
-	second := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+	second := postRunSupervisorStackV0(t, stack, legacyRunSupervisorInputForStackTestV0(orquestamcp.MCPRunSupervisorToolInputV0{
 		RequestID:         "request-autoprogramming-resident-dependent-supervise-002",
 		CorrelationID:     "corr-autoprogramming-resident-dependent-001",
 		ResidentMode:      true,
@@ -113,7 +114,7 @@ func TestAutoprogrammingResidentModeV0RelanzaFronteraDependienteTrasACKV0(t *tes
 		MaxRunsPerTick:    1,
 		MaxExecutions:     1,
 		AllowRepeatedRuns: true,
-	})
+	}))
 	run, err := stack.Ports.RunStore.LoadRunV0(context.Background(), prepared.RunRef)
 	if err != nil {
 		t.Fatalf("LoadRunV0: %v", err)
@@ -171,13 +172,13 @@ func TestAutoprogrammingResidentModeV0TomaAutomejoraAutoPreparadaCuandoEstaParad
 		t.Fatalf("self-improvement result=%+v", self)
 	}
 
-	result := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+	result := postRunSupervisorStackV0(t, stack, legacyRunSupervisorInputForStackTestV0(orquestamcp.MCPRunSupervisorToolInputV0{
 		RequestID:      "request-autoprogramming-resident-idle-picks-self-improvement-001",
 		CorrelationID:  "corr-autoprogramming-resident-self-improvement-queue-001",
 		ResidentMode:   true,
 		MaxTicks:       1,
 		MaxRunsPerTick: 1,
-	})
+	}))
 	if result.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
 		result.RunRef != self.PreparedRun.RunRef ||
 		runtime.launchCountV0() != 1 ||
@@ -213,11 +214,11 @@ func TestAutoprogrammingResidentModeV0SigueBacklogTrasEjecucionDoneV0(t *testing
 
 func TestAutoprogrammingResidentModeV0BloqueoCreaReparacionDurableV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
-	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, legacyAutoprogrammingPrepareRunInputForStackTestV0(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-resident-source-001",
 		CorrelationID:          "corr-autoprogramming-resident-selfrepair-001",
 		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
-	})
+	}))
 	result := orquestamcp.MCPRunSupervisorToolResultV0{
 		Estado:  orquestamcp.MCPRunSupervisorEstadoOKV0,
 		RunRef:  prepared.RunRef,
@@ -264,11 +265,11 @@ func TestAutoprogrammingResidentModeV0BloqueoCreaReparacionDurableV0(t *testing.
 
 func TestAutoprogrammingResidentModeV0BloqueoDeReparacionNoCreaSegundaReparacionV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
-	primary := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+	primary := postAutoprogrammingPrepareRunStackV0(t, stack, legacyAutoprogrammingPrepareRunInputForStackTestV0(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-resident-primary-loop-001",
 		CorrelationID:          "corr-autoprogramming-resident-loopguard-001",
 		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
-	})
+	}))
 	primaryResult := orquestamcp.MCPRunSupervisorToolResultV0{
 		Estado:       orquestamcp.MCPRunSupervisorEstadoOKV0,
 		RunRef:       primary.RunRef,

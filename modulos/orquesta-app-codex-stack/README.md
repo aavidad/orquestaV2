@@ -35,7 +35,8 @@ Estado actual: composition Go opt-in con test fake, smoke real desactivado por
 defecto y supervisor Codex unitario para `launch -> sigue -> done` sobre el ciclo
 normal de agentes. La entrada `POST /api/v0/autoprogramming/prepare-run` prepara
 runs de autoprogramacion por stores del stack solo para modo legacy y devuelve
-`run_ref`/`wait_agent_refs` para supervision posterior. Cuando el backend Goal
+`run_ref`/`wait_agent_refs` para supervision posterior solo con opt-in de
+composicion y `director_execution_mode=legacy_director_loop`. Cuando el backend Goal
 esta completo, el stack marca la request como goal-first salvo que declare
 `legacy-required` o `covered`; entonces devuelve o lanza `goal_specs[]` sin
 tasks legacy ni `continue` de loop historico.

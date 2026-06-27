@@ -630,11 +630,11 @@ func TestCodexStackV0ExternalWorkRunOPESSubrolesSupervisorDirectoSinLimitesLanza
 		},
 	})
 
-	supervisor := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+	supervisor := postRunSupervisorStackV0(t, stack, legacyRunSupervisorInputForStackTestV0(orquestamcp.MCPRunSupervisorToolInputV0{
 		RequestID:     "req-opes-subroles-supervisor-defaults-001",
 		CorrelationID: "corr-opes-subroles-supervisor-defaults-001",
 		RunRef:        result.RunRef,
-	})
+	}))
 	if supervisor.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 {
 		t.Fatalf("supervisor=%+v", supervisor)
 	}

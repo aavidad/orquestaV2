@@ -97,6 +97,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0PreparaRunYSupervisorArranca(t 
 	prepareInput := orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-api-001",
 		CorrelationID:          "corr-autoprogramming-api-001",
+		DirectorExecutionMode:  orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		OccurredAt:             "2026-05-22T11:15:00Z",
 		RequestedBy:            "orquesta-stack-api-test",
 		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
@@ -117,18 +118,19 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0PreparaRunYSupervisorArranca(t 
 	}
 
 	supervisor := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
-		RequestID:            "request-autoprogramming-supervisor-001",
-		CorrelationID:        "corr-autoprogramming-api-001",
-		RunRef:               prepared.RunRef,
-		MaxTicks:             1,
-		MaxRunsPerTick:       1,
-		MaxExecutions:        1,
-		MaxBursts:            3,
-		MaxStepsPerBurst:     3,
-		MaxDispatchesPerWait: 3,
-		MaxCommands:          5,
-		MaxOutboxPerCycle:    5,
-		AllowRepeatedRuns:    true,
+		RequestID:             "request-autoprogramming-supervisor-001",
+		CorrelationID:         "corr-autoprogramming-api-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		RunRef:                prepared.RunRef,
+		MaxTicks:              1,
+		MaxRunsPerTick:        1,
+		MaxExecutions:         1,
+		MaxBursts:             3,
+		MaxStepsPerBurst:      3,
+		MaxDispatchesPerWait:  3,
+		MaxCommands:           5,
+		MaxOutboxPerCycle:     5,
+		AllowRepeatedRuns:     true,
 	})
 	if supervisor.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
 		supervisor.RunRef != prepared.RunRef ||
@@ -167,6 +169,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0BloqueaLegacySinOptInV0(t *test
 	result := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-api-legacy-optin-required-001",
 		CorrelationID:          "corr-autoprogramming-api-legacy-optin-required-001",
+		DirectorExecutionMode:  orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		AutoprogrammingRequest: request,
 	})
 	if result.Estado != orquestamcp.MCPAutoprogrammingPrepareRunEstadoErrorV0 ||
@@ -251,12 +254,28 @@ func TestCodexStackRunSupervisorV0BloqueaSupervisorGlobalLegacySinOptInV0(t *tes
 			t.Fatalf("Execute %s: %v", input.RequestID, err)
 		}
 		if result.Estado != orquestamcp.MCPRunSupervisorEstadoErrorV0 ||
-			result.StopReason != "legacy_supervise_requires_explicit_opt_in" ||
+			result.StopReason != "legacy_supervise_requires_director_execution_mode" ||
 			len(result.Errores) != 1 ||
-			result.Errores[0].Code != "legacy_supervise_requires_explicit_opt_in" ||
+			result.Errores[0].Code != "legacy_supervise_requires_director_execution_mode" ||
 			!autoprogrammingBridgeStringInSetForTestV0(result.NextActions, "use_goal_first_prepare_run_and_observe_goal") {
 			t.Fatalf("result %s=%+v", input.RequestID, result)
 		}
+	}
+	optInResult, err := executor.Execute(context.Background(), orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:             "request-autoprogramming-supervisor-legacy-mode-without-optin-001",
+		CorrelationID:         "corr-autoprogramming-supervisor-legacy-optin-required-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		ResidentMode:          true,
+		MaxTicks:              1,
+	})
+	if err != nil {
+		t.Fatalf("Execute legacy mode without opt-in: %v", err)
+	}
+	if optInResult.Estado != orquestamcp.MCPRunSupervisorEstadoErrorV0 ||
+		optInResult.StopReason != "legacy_supervise_requires_explicit_opt_in" ||
+		len(optInResult.Errores) != 1 ||
+		optInResult.Errores[0].Code != "legacy_supervise_requires_explicit_opt_in" {
+		t.Fatalf("optInResult=%+v", optInResult)
 	}
 	if runtime.launchCountV0() != 0 {
 		t.Fatalf("runtime no debe lanzarse sin opt-in, launches=%d", runtime.launchCountV0())
@@ -308,6 +327,27 @@ func TestCodexStackRunSupervisorV0BloqueaRunRefLegacySinModoExplicitoV0(t *testi
 		t.Fatalf("runtime no debe lanzarse sin marca legacy, launches=%d", runtime.launchCountV0())
 	}
 
+	optInResult, err := NewCodexStackRunSupervisorExecutorV0(&stack).Execute(
+		context.Background(),
+		orquestamcp.MCPRunSupervisorToolInputV0{
+			RequestID:             "request-autoprogramming-supervisor-runref-legacy-without-optin-001",
+			CorrelationID:         "corr-autoprogramming-supervisor-runref-mode-required-001",
+			DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+			RunRef:                runRef,
+			MaxTicks:              1,
+		},
+	)
+	if err != nil {
+		t.Fatalf("Execute legacy without opt-in: %v", err)
+	}
+	if optInResult.Estado != orquestamcp.MCPRunSupervisorEstadoErrorV0 ||
+		optInResult.StopReason != "legacy_run_supervise_requires_explicit_opt_in" ||
+		len(optInResult.Errores) != 1 ||
+		optInResult.Errores[0].Code != "legacy_run_supervise_requires_explicit_opt_in" {
+		t.Fatalf("optInResult=%+v", optInResult)
+	}
+
+	stack.AllowLegacyAutoprogrammingRun = true
 	allowed, err := NewCodexStackRunSupervisorExecutorV0(&stack).Execute(
 		context.Background(),
 		orquestamcp.MCPRunSupervisorToolInputV0{
@@ -319,11 +359,12 @@ func TestCodexStackRunSupervisorV0BloqueaRunRefLegacySinModoExplicitoV0(t *testi
 		},
 	)
 	if err != nil {
-		t.Fatalf("Execute con modo legacy: %v", err)
+		t.Fatalf("Execute con opt-in y modo legacy: %v", err)
 	}
 	if allowed.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
 		allowed.RunRef != runRef ||
-		allowed.StopReason == "legacy_run_supervise_requires_director_execution_mode" {
+		allowed.StopReason == "legacy_run_supervise_requires_director_execution_mode" ||
+		allowed.StopReason == "legacy_run_supervise_requires_explicit_opt_in" {
 		t.Fatalf("allowed=%+v launches=%d", allowed, runtime.launchCountV0())
 	}
 }
@@ -899,6 +940,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0EncolaYSupervisorGlobalArranca(
 	prepareInput := orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-queue-api-001",
 		CorrelationID:          "corr-autoprogramming-queue-api-001",
+		DirectorExecutionMode:  orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		OccurredAt:             "2026-05-22T11:25:00Z",
 		RequestedBy:            "orquesta-stack-api-test",
 		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
@@ -926,18 +968,19 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0EncolaYSupervisorGlobalArranca(
 	}
 
 	supervisor := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
-		RequestID:            "request-autoprogramming-global-supervisor-001",
-		CorrelationID:        "corr-autoprogramming-queue-api-001",
-		QueueRef:             DefaultRunQueueRefV0,
-		MaxTicks:             1,
-		MaxRunsPerTick:       1,
-		MaxExecutions:        1,
-		MaxBursts:            3,
-		MaxStepsPerBurst:     3,
-		MaxDispatchesPerWait: 3,
-		MaxCommands:          5,
-		MaxOutboxPerCycle:    5,
-		AllowRepeatedRuns:    true,
+		RequestID:             "request-autoprogramming-global-supervisor-001",
+		CorrelationID:         "corr-autoprogramming-queue-api-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		QueueRef:              DefaultRunQueueRefV0,
+		MaxTicks:              1,
+		MaxRunsPerTick:        1,
+		MaxExecutions:         1,
+		MaxBursts:             3,
+		MaxStepsPerBurst:      3,
+		MaxDispatchesPerWait:  3,
+		MaxCommands:           5,
+		MaxOutboxPerCycle:     5,
+		AllowRepeatedRuns:     true,
 	})
 	if supervisor.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
 		supervisor.RunRef != prepared.RunRef ||
@@ -962,6 +1005,7 @@ func TestCodexStackAutoprogrammingSupervisorGlobalReemplazaAskDirectorPerdido(t 
 	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-global-stopped-001",
 		CorrelationID:          "corr-autoprogramming-global-stopped-001",
+		DirectorExecutionMode:  orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		OccurredAt:             "2026-05-22T11:35:00Z",
 		RequestedBy:            "orquesta-stack-api-test",
 		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
@@ -975,18 +1019,19 @@ func TestCodexStackAutoprogrammingSupervisorGlobalReemplazaAskDirectorPerdido(t 
 		t.Fatalf("prepared=%+v", prepared)
 	}
 	first := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
-		RequestID:            "request-autoprogramming-global-stopped-supervisor-001",
-		CorrelationID:        "corr-autoprogramming-global-stopped-001",
-		QueueRef:             DefaultRunQueueRefV0,
-		MaxTicks:             1,
-		MaxRunsPerTick:       1,
-		MaxExecutions:        1,
-		MaxBursts:            3,
-		MaxStepsPerBurst:     3,
-		MaxDispatchesPerWait: 3,
-		MaxCommands:          5,
-		MaxOutboxPerCycle:    5,
-		AllowRepeatedRuns:    true,
+		RequestID:             "request-autoprogramming-global-stopped-supervisor-001",
+		CorrelationID:         "corr-autoprogramming-global-stopped-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		QueueRef:              DefaultRunQueueRefV0,
+		MaxTicks:              1,
+		MaxRunsPerTick:        1,
+		MaxExecutions:         1,
+		MaxBursts:             3,
+		MaxStepsPerBurst:      3,
+		MaxDispatchesPerWait:  3,
+		MaxCommands:           5,
+		MaxOutboxPerCycle:     5,
+		AllowRepeatedRuns:     true,
 	})
 	if first.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 || runtime.launchCountV0() != 1 {
 		t.Fatalf("first=%+v launches=%d", first, runtime.launchCountV0())
@@ -999,18 +1044,19 @@ func TestCodexStackAutoprogrammingSupervisorGlobalReemplazaAskDirectorPerdido(t 
 	runtime.markStoppedForTestV0(record.ProcessRef)
 
 	second := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
-		RequestID:            "request-autoprogramming-global-stopped-supervisor-002",
-		CorrelationID:        "corr-autoprogramming-global-stopped-001",
-		QueueRef:             DefaultRunQueueRefV0,
-		MaxTicks:             1,
-		MaxRunsPerTick:       1,
-		MaxExecutions:        1,
-		MaxBursts:            8,
-		MaxStepsPerBurst:     6,
-		MaxDispatchesPerWait: 8,
-		MaxCommands:          20,
-		MaxOutboxPerCycle:    8,
-		AllowRepeatedRuns:    true,
+		RequestID:             "request-autoprogramming-global-stopped-supervisor-002",
+		CorrelationID:         "corr-autoprogramming-global-stopped-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		QueueRef:              DefaultRunQueueRefV0,
+		MaxTicks:              1,
+		MaxRunsPerTick:        1,
+		MaxExecutions:         1,
+		MaxBursts:             8,
+		MaxStepsPerBurst:      6,
+		MaxDispatchesPerWait:  8,
+		MaxCommands:           20,
+		MaxOutboxPerCycle:     8,
+		AllowRepeatedRuns:     true,
 	})
 	if second.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 {
 		t.Fatalf("second=%+v", second)
@@ -1027,18 +1073,19 @@ func TestCodexStackAutoprogrammingSupervisorGlobalReemplazaAskDirectorPerdido(t 
 	}
 
 	third := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
-		RequestID:            "request-autoprogramming-global-stopped-supervisor-003",
-		CorrelationID:        "corr-autoprogramming-global-stopped-001",
-		QueueRef:             DefaultRunQueueRefV0,
-		MaxTicks:             1,
-		MaxRunsPerTick:       1,
-		MaxExecutions:        1,
-		MaxBursts:            8,
-		MaxStepsPerBurst:     6,
-		MaxDispatchesPerWait: 8,
-		MaxCommands:          20,
-		MaxOutboxPerCycle:    8,
-		AllowRepeatedRuns:    true,
+		RequestID:             "request-autoprogramming-global-stopped-supervisor-003",
+		CorrelationID:         "corr-autoprogramming-global-stopped-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		QueueRef:              DefaultRunQueueRefV0,
+		MaxTicks:              1,
+		MaxRunsPerTick:        1,
+		MaxExecutions:         1,
+		MaxBursts:             8,
+		MaxStepsPerBurst:      6,
+		MaxDispatchesPerWait:  8,
+		MaxCommands:           20,
+		MaxOutboxPerCycle:     8,
+		AllowRepeatedRuns:     true,
 	})
 	if third.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 {
 		t.Fatalf("third=%+v", third)
@@ -1068,6 +1115,7 @@ func TestCodexStackAutoprogrammingSupervisorResidenteReemplazaAskDirectorPerdido
 	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-resident-lost-001",
 		CorrelationID:          "corr-autoprogramming-resident-lost-001",
+		DirectorExecutionMode:  orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		OccurredAt:             "2026-05-22T11:45:00Z",
 		RequestedBy:            "orquesta-stack-resident-test",
 		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
@@ -1086,6 +1134,7 @@ func TestCodexStackAutoprogrammingSupervisorResidenteReemplazaAskDirectorPerdido
 		MaxRunsPerTick:    1,
 		MaxExecutions:     1,
 		AllowRepeatedRuns: true,
+		AllowLegacyDrain:  true,
 		CorrelationID:     "corr-autoprogramming-resident-lost-001",
 		DrainLimits: orquestaruncoordinator.RunDrainLimitsV0{
 			MaxBursts:            8,
@@ -1144,6 +1193,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0RespetaPrioridadSolicitada(t *t
 	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-low-priority-001",
 		CorrelationID:          "corr-autoprogramming-low-priority-001",
+		DirectorExecutionMode:  orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
 		PriorityScore:          10,
 	})
@@ -1168,6 +1218,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0ReabreCandidatoStoppedComoReady
 	input := orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-reopen-stopped-001",
 		CorrelationID:          "corr-autoprogramming-reopen-stopped-001",
+		DirectorExecutionMode:  orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
 	}
 	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, input)
@@ -1217,6 +1268,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0NoReencolaRunCerradaV0(t *testi
 	input := orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-closed-idempotent-001",
 		CorrelationID:          "corr-autoprogramming-closed-idempotent-001",
+		DirectorExecutionMode:  orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
 	}
 	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, input)
@@ -1251,6 +1303,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0NoReencolaRunCanceladaPorContro
 	input := orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-cancel-control-001",
 		CorrelationID:          "corr-autoprogramming-cancel-control-001",
+		DirectorExecutionMode:  orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
 	}
 	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, input)
@@ -1288,6 +1341,7 @@ func TestCodexStackServerShutdownV0CierraRunPreparadaSinEntrarAlDirector(t *test
 	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-shutdown-001",
 		CorrelationID:          "corr-autoprogramming-shutdown-001",
+		DirectorExecutionMode:  orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		OccurredAt:             "2026-05-23T12:00:00Z",
 		RequestedBy:            "orquesta-stack-api-test",
 		AutoprogrammingRequest: autoprogrammingBridgeRequestForTestV0(),
@@ -1342,11 +1396,6 @@ func postAutoprogrammingPrepareRunStackV0(
 	input orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0,
 ) orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0 {
 	t.Helper()
-	if strings.TrimSpace(input.DirectorExecutionMode) == "" &&
-		stack.AllowLegacyAutoprogrammingRun &&
-		!autoprogrammingBridgeGoalFirstBackendAvailableV0(stack.Ports) {
-		input.DirectorExecutionMode = orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0
-	}
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(input); err != nil {
 		t.Fatalf("encode prepare run: %v", err)
@@ -1363,6 +1412,31 @@ func postAutoprogrammingPrepareRunStackV0(
 		t.Fatalf("decode prepare run: %v", err)
 	}
 	return result
+}
+
+func legacyAutoprogrammingPrepareRunInputForStackTestV0(
+	input orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0,
+) orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0 {
+	if strings.TrimSpace(input.DirectorExecutionMode) == "" {
+		input.DirectorExecutionMode = orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0
+	}
+	return input
+}
+
+func legacyRunSupervisorInputForStackTestV0(
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+) orquestamcp.MCPRunSupervisorToolInputV0 {
+	if strings.TrimSpace(input.DirectorExecutionMode) == "" {
+		input.DirectorExecutionMode = orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0
+	}
+	return input
+}
+
+func legacyRunSupervisorCommandForStackTestV0(
+	command orquestarunsupervisor.RunSupervisorCommandV0,
+) orquestarunsupervisor.RunSupervisorCommandV0 {
+	command.AllowLegacyDrain = true
+	return command
 }
 
 func autoprogrammingGoalRequiredTestResultsForTestV0(

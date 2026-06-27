@@ -35,6 +35,7 @@ type StackV0 struct {
 	CodexRuntimeWorkDir           string
 	CodexSnapshotSource           orquestaruntimecodexdelivery.CodexProcessSnapshotSourcePortV0
 	AllowLegacyAutoprogrammingRun bool
+	AllowLegacyExternalWorkRun    bool
 }
 
 func BuildStackV0(config ConfigV0) (StackV0, error) {
@@ -64,6 +65,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		CodexRuntimeWorkDir:           config.Codex.RuntimeWorkDir,
 		CodexSnapshotSource:           config.Codex.SnapshotSource,
 		AllowLegacyAutoprogrammingRun: config.AllowLegacyAutoprogrammingRun,
+		AllowLegacyExternalWorkRun:    config.AllowLegacyExternalWorkRun,
 	}
 	stack.MCPTransportBindings = buildStackMCPTransportBindingsV0(config, ports, queueConfig, &stack)
 	stack.Handler = buildStackHTTPHandlerV0(config, stack.MCPTransportBindings)

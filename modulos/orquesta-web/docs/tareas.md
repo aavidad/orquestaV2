@@ -249,7 +249,9 @@ Contrato: Consume `/api/v0/autoprogramming/prepare-run`,
 solo para compatibilidad legacy explicita, `/api/v0/runs/supervise` por
 navegador same-origin. `status.safe_actions` decide la accion: `observe_goal`
 para runs goal-first y `runs/supervise` solo para legacy/resident sin
-`GoalWorkStateV0`; conserva refs opacas y no lee stores/runtime/proveedor.
+`GoalWorkStateV0`, con opt-in de composicion y
+`director_execution_mode=legacy_director_loop`; conserva refs opacas y no lee
+stores/runtime/proveedor.
 Validacion: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
 Bloqueos: La planificacion real sigue en la composicion/director; la pantalla
 solo construye payloads compactos y muestra respuestas publicas.
@@ -298,9 +300,11 @@ web.
 Write-set: ops_dashboard_html_chunk_0_v0.go, ops_dashboard_html_chunk_4_v0.go,
 ops_dashboard_endpoint_v0_test.go y docs locales.
 Simbolo foco: superviseOps
-Contrato: La UI consume `POST /api/v0/runs/supervise`; `run_ref` acota un run y
-sin `run_ref` usa `queue_ref=global`. La tabla de cola reutiliza el mismo helper
-con `run_ref`, sin relanzar toda la cola. La respuesta visible conserva `estado`,
+Contrato: La UI consume `POST /api/v0/runs/supervise` solo cuando la API publica
+la accion legacy segura; `run_ref` acota un run y sin `run_ref` usa
+`queue_ref=global` con `director_execution_mode=legacy_director_loop`. La tabla
+de cola reutiliza el mismo helper con `run_ref`, sin relanzar toda la cola. La
+respuesta visible conserva `estado`,
 `run_ref`, `stop_reason`, `ticks`, `last.status`, `history`, diagnosticos y
 siguientes acciones.
 Validacion: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0`.

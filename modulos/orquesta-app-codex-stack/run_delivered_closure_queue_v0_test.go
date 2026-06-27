@@ -222,8 +222,9 @@ func TestRunGlobalTickV0ReabreDeliveredOPESConACKIngeridoYCierraTaskV0(t *testin
 	}
 
 	result, err := stack.RunGlobalTickV0(ctx, orquestaruncoordinator.RunCoordinatorTickCommandV0{
-		QueueRef: DefaultRunQueueRefV0,
-		MaxRuns:  1,
+		QueueRef:         DefaultRunQueueRefV0,
+		MaxRuns:          1,
+		AllowLegacyDrain: true,
 		DrainLimits: orquestaruncoordinator.RunDrainLimitsV0{
 			MaxBursts:            4,
 			MaxStepsPerBurst:     6,

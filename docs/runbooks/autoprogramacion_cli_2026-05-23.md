@@ -77,7 +77,7 @@ La CLI consume solo rutas publicas versionadas:
 - `POST /api/v0/autoprogramming/goal/observe`
 - `POST /api/v0/autoprogramming/supervise` (compatibilidad legacy/diagnostico;
   no avanzar runs `goal_first`; para `run_ref` legacy exige
-  `director_execution_mode=legacy_director_loop` salvo opt-in de composicion)
+  opt-in de composicion y `director_execution_mode=legacy_director_loop`)
 - `POST /api/v0/runs/queue/priority`
 - `POST /api/v0/director/stats`
 - `POST /api/v0/runs/control`
@@ -186,7 +186,7 @@ orquesta-cli servidor estado --server-url http://127.0.0.1:8787 --json
 orquesta-cli autoprogramacion preparar --server-url http://127.0.0.1:8787 --input prepare-run.json --json
 orquesta-cli autoprogramacion estado ver --server-url http://127.0.0.1:8787 --run-ref RUN_REF --json
 orquesta-cli autoprogramacion cola listar --server-url http://127.0.0.1:8787 --json
-orquesta-cli autoprogramacion supervisar --server-url http://127.0.0.1:8787 --max-ticks 1 --json
+orquesta-cli autoprogramacion supervisar --server-url http://127.0.0.1:8787 --run-ref RUN_REF --director-execution-mode legacy_director_loop --max-ticks 1 --json
 orquesta-cli autoprogramacion run ver --server-url http://127.0.0.1:8787 --run-ref RUN_REF --json
 orquesta-cli autoprogramacion run controlar --server-url http://127.0.0.1:8787 --run-ref RUN_REF --action pause --json
 ```

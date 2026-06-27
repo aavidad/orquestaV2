@@ -223,7 +223,8 @@ Invariantes:
   capacidades `goal_capability:*`; si el operador desactiva Goal, conserva la
   ruta legacy acotada.
 - La preparacion legacy deja una run continuable; la supervision posterior usa
-  `run_ref` y el endpoint acotado `/api/v0/autoprogramming/supervise`.
+  `run_ref` y el endpoint acotado `/api/v0/autoprogramming/supervise`, siempre
+  con opt-in de composicion y `director_execution_mode=legacy_director_loop`.
 - Si el contrato externo devuelve `goal`, la web observa cierre por
   `/api/v0/autoprogramming/goal/observe` con polling acotado. Si solo devuelve
   `goal_specs[]`, lo proyecta como handoff sin empujar a supervisor legacy.

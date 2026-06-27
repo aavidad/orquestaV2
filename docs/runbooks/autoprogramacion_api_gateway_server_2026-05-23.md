@@ -24,7 +24,8 @@ Rutas REST estables expuestas por el gateway:
 - `POST /api/v0/autoprogramming/goal/observe`
 - `POST /api/v0/autoprogramming/status`
 - `POST /api/v0/autoprogramming/supervise` (compatibilidad legacy/diagnostico;
-  no avanzar runs `goal_first`)
+  no avanzar runs `goal_first`; legacy solo con opt-in de composicion y
+  `director_execution_mode=legacy_director_loop`)
 - `POST /api/v0/director/human-work/review-plan`
 - `POST /api/v0/apps/director`
 - `POST /api/v0/apps/{app_ref}/changes`
@@ -152,8 +153,8 @@ El borde servidor queda alineado con los clientes revisados:
   clientes finos.
 - `supervise` queda como compatibilidad legacy/diagnostico para runs no
   migrados; no debe empujar el loop historico sobre runs `goal_first` y debe
-  transportar `director_execution_mode=legacy_director_loop` para empujar un
-  `run_ref` legacy salvo opt-in de composicion.
+  transportar `director_execution_mode=legacy_director_loop` junto al opt-in de
+  composicion para empujar un `run_ref` legacy.
 - Si el servidor no inyecta un puerto real para alguna ruta, debe devolver error
   publico del contrato; web/CLI no deben reconstruirlo con acceso local.
 - Revalidacion `task-autoprogramming-7447aef8a77d-g01`: web y CLI quedan como

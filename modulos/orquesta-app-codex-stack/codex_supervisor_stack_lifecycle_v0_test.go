@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoroperativo "orquesta/modulos/orquesta-director-operativo"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -126,11 +127,12 @@ func TestCodexStackRunSupervisorAPIV0EmpujaRunExistenteSinRelanzarAgentes(t *tes
 	director := postDirectorAPIV0(t, stack)
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(orquestamcp.MCPRunSupervisorToolInputV0{
-		RequestID:     "request-ref-run-supervisor-api-001",
-		CorrelationID: "corr-run-supervisor-api-001",
-		RunRef:        director.RunRef,
-		MaxTicks:      2,
-		MaxBursts:     2,
+		RequestID:             "request-ref-run-supervisor-api-001",
+		CorrelationID:         "corr-run-supervisor-api-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		RunRef:                director.RunRef,
+		MaxTicks:              2,
+		MaxBursts:             2,
 	}); err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -422,6 +424,7 @@ func TestCodexStackRunSupervisorAPIV0BloqueoRequiredTestsEvidenceMissingDevuelve
 	if err := json.NewEncoder(body).Encode(orquestamcp.MCPRunSupervisorToolInputV0{
 		RequestID:                  "request-ref-run-supervisor-required-tests-missing-001",
 		CorrelationID:              "corr-run-supervisor-required-tests-missing-001",
+		DirectorExecutionMode:      orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		RunRef:                     refs.RunRef,
 		OperationalDirectorPlanRef: refs.PlanRef,
 		MaxTicks:                   1,
@@ -528,6 +531,7 @@ func TestCodexStackRunSupervisorAPIV0PlanStateRunNotActiveDevuelveOKYDetieneCola
 	if err := json.NewEncoder(body).Encode(orquestamcp.MCPRunSupervisorToolInputV0{
 		RequestID:                  "request-ref-run-supervisor-plan-state-run-not-active-001",
 		CorrelationID:              "corr-run-supervisor-plan-state-run-not-active-001",
+		DirectorExecutionMode:      orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		RunRef:                     refs.RunRef,
 		OperationalDirectorPlanRef: refs.PlanRef,
 		MaxTicks:                   1,
@@ -627,6 +631,7 @@ func TestCodexStackRunSupervisorAPIV0ActiveStepNoReentrableDevuelveNeedsReplanV0
 	if err := json.NewEncoder(body).Encode(orquestamcp.MCPRunSupervisorToolInputV0{
 		RequestID:                  "request-ref-run-supervisor-active-step-needs-replan-001",
 		CorrelationID:              "corr-run-supervisor-active-step-needs-replan-001",
+		DirectorExecutionMode:      orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
 		RunRef:                     refs.RunRef,
 		OperationalDirectorPlanRef: refs.PlanRef,
 		MaxTicks:                   1,
@@ -727,6 +732,7 @@ func TestCodexStackRunSupervisorGlobalV0ActiveStepNoReentrableNoRompeTickV0(t *t
 		MaxRunsPerTick:    1,
 		MaxExecutions:     1,
 		StopOnNoExecution: true,
+		AllowLegacyDrain:  true,
 		OccurredAt:        codexStackRunSupervisorTimeV0("2026-06-25T12:00:00Z"),
 		DrainLimits: orquestaruncoordinator.RunDrainLimitsV0{
 			MaxBursts:            1,
@@ -864,17 +870,18 @@ func TestCodexStackRunSupervisorAPIV0RecuperaPlanRefYReintentaRequiredTestsBloqu
 
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(orquestamcp.MCPRunSupervisorToolInputV0{
-		RequestID:            "request-ref-run-supervisor-required-tests-retry-without-plan-ref-001",
-		CorrelationID:        "corr-run-supervisor-required-tests-retry-without-plan-ref-001",
-		RunRef:               refs.RunRef,
-		MaxTicks:             1,
-		MaxBursts:            2,
-		MaxStepsPerBurst:     4,
-		MaxDispatchesPerWait: 2,
-		MaxCommands:          8,
-		MaxOutboxPerCycle:    4,
-		MaxDecisionCycles:    1,
-		MaxExternalWaits:     1,
+		RequestID:             "request-ref-run-supervisor-required-tests-retry-without-plan-ref-001",
+		CorrelationID:         "corr-run-supervisor-required-tests-retry-without-plan-ref-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		RunRef:                refs.RunRef,
+		MaxTicks:              1,
+		MaxBursts:             2,
+		MaxStepsPerBurst:      4,
+		MaxDispatchesPerWait:  2,
+		MaxCommands:           8,
+		MaxOutboxPerCycle:     4,
+		MaxDecisionCycles:     1,
+		MaxExternalWaits:      1,
 	}); err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -920,17 +927,18 @@ func TestCodexStackRunSupervisorAPIV0ConsumeDecisionFileYArrancaProgramacion(t *
 
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(orquestamcp.MCPRunSupervisorToolInputV0{
-		RequestID:            "request-ref-run-supervisor-api-decisions-001",
-		CorrelationID:        "corr-run-supervisor-api-decisions-001",
-		RunRef:               director.RunRef,
-		MaxTicks:             4,
-		MaxBursts:            16,
-		MaxStepsPerBurst:     8,
-		MaxDispatchesPerWait: 8,
-		MaxCommands:          20,
-		MaxOutboxPerCycle:    8,
-		MaxDecisionCycles:    4,
-		MaxExternalWaits:     4,
+		RequestID:             "request-ref-run-supervisor-api-decisions-001",
+		CorrelationID:         "corr-run-supervisor-api-decisions-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		RunRef:                director.RunRef,
+		MaxTicks:              4,
+		MaxBursts:             16,
+		MaxStepsPerBurst:      8,
+		MaxDispatchesPerWait:  8,
+		MaxCommands:           20,
+		MaxOutboxPerCycle:     8,
+		MaxDecisionCycles:     4,
+		MaxExternalWaits:      4,
 	}); err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -977,20 +985,21 @@ func TestCodexStackRunSupervisorAPIV0ColaGlobalConsumeDecisionFileYArrancaProgra
 
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(orquestamcp.MCPRunSupervisorToolInputV0{
-		RequestID:            "request-ref-run-supervisor-api-queue-decisions-001",
-		CorrelationID:        "corr-run-supervisor-api-queue-decisions-001",
-		QueueRef:             DefaultRunQueueRefV0,
-		MaxTicks:             4,
-		MaxRunsPerTick:       1,
-		MaxExecutions:        4,
-		MaxBursts:            16,
-		MaxStepsPerBurst:     8,
-		MaxDispatchesPerWait: 8,
-		MaxCommands:          20,
-		MaxOutboxPerCycle:    8,
-		MaxDecisionCycles:    4,
-		MaxExternalWaits:     4,
-		AllowRepeatedRuns:    true,
+		RequestID:             "request-ref-run-supervisor-api-queue-decisions-001",
+		CorrelationID:         "corr-run-supervisor-api-queue-decisions-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		QueueRef:              DefaultRunQueueRefV0,
+		MaxTicks:              4,
+		MaxRunsPerTick:        1,
+		MaxExecutions:         4,
+		MaxBursts:             16,
+		MaxStepsPerBurst:      8,
+		MaxDispatchesPerWait:  8,
+		MaxCommands:           20,
+		MaxOutboxPerCycle:     8,
+		MaxDecisionCycles:     4,
+		MaxExternalWaits:      4,
+		AllowRepeatedRuns:     true,
 	}); err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -1076,20 +1085,21 @@ func postRunSupervisorQueueStackV0(
 	t.Helper()
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(orquestamcp.MCPRunSupervisorToolInputV0{
-		RequestID:            "request-ref-run-supervisor-api-" + ref,
-		CorrelationID:        "corr-run-supervisor-api-" + ref,
-		QueueRef:             DefaultRunQueueRefV0,
-		MaxTicks:             4,
-		MaxRunsPerTick:       1,
-		MaxExecutions:        4,
-		MaxBursts:            16,
-		MaxStepsPerBurst:     8,
-		MaxDispatchesPerWait: 8,
-		MaxCommands:          20,
-		MaxOutboxPerCycle:    8,
-		MaxDecisionCycles:    4,
-		MaxExternalWaits:     4,
-		AllowRepeatedRuns:    true,
+		RequestID:             "request-ref-run-supervisor-api-" + ref,
+		CorrelationID:         "corr-run-supervisor-api-" + ref,
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		QueueRef:              DefaultRunQueueRefV0,
+		MaxTicks:              4,
+		MaxRunsPerTick:        1,
+		MaxExecutions:         4,
+		MaxBursts:             16,
+		MaxStepsPerBurst:      8,
+		MaxDispatchesPerWait:  8,
+		MaxCommands:           20,
+		MaxOutboxPerCycle:     8,
+		MaxDecisionCycles:     4,
+		MaxExternalWaits:      4,
+		AllowRepeatedRuns:     true,
 	}); err != nil {
 		t.Fatalf("encode: %v", err)
 	}

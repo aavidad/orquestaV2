@@ -40,6 +40,7 @@ type RunSupervisorCommandV0 struct {
 	MaxExecutions     int                                      `json:"max_executions,omitempty"`
 	StopOnNoExecution bool                                     `json:"stop_on_no_execution,omitempty"`
 	AllowRepeatedRuns bool                                     `json:"allow_repeated_runs,omitempty"`
+	AllowLegacyDrain  bool                                     `json:"allow_legacy_drain,omitempty"`
 	OccurredAt        time.Time                                `json:"occurred_at"`
 	CorrelationID     string                                   `json:"correlation_id,omitempty"`
 	DrainLimits       orquestaruncoordinator.RunDrainLimitsV0  `json:"drain_limits,omitempty"`

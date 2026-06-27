@@ -17,6 +17,8 @@ func serverSupervisorCommandFromEnvV0(
 		MaxExecutions:     codexExecutionModeCapIntEnvOrDefaultV0(executionMode, envServerMaxExecutionsPerTickV0, defaultCodexServerMaxExecutionsV0),
 		StopOnNoExecution: true,
 		AllowRepeatedRuns: boolEnvOrDefaultV0(envServerAllowRepeatedRunsV0, false),
+		AllowLegacyDrain: boolEnvOrDefaultV0(envAutoprogrammingLegacyDirectorLoopV0, false) ||
+			boolEnvOrDefaultV0(envExternalWorkLegacyDirectorLoopV0, false),
 		DrainLimits: orquestaruncoordinator.RunDrainLimitsV0{
 			MaxBursts:            intEnvOrDefaultV0(envServerDrainMaxBurstsV0, 4),
 			MaxStepsPerBurst:     intEnvOrDefaultV0(envServerDrainMaxStepsV0, 6),

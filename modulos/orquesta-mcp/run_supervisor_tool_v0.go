@@ -86,8 +86,8 @@ func MCPRunSupervisorDescriptorV0() MCPRunSupervisorToolDescriptorV0 {
 		Invariantes: []string{
 			"adaptador inbound fino",
 			"run_ref limita la accion a una run",
-			"sin run_ref avanza solo cola legacy/resident inyectada si la composicion lo habilita",
-			"run_ref legacy exige director_execution_mode=legacy_director_loop salvo opt-in de composicion",
+			"sin run_ref avanza solo cola legacy/resident inyectada si la composicion lo habilita y el payload declara director_execution_mode=legacy_director_loop",
+			"run_ref legacy exige opt-in de composicion y director_execution_mode=legacy_director_loop",
 			"runs goal-first deben observarse por observe_goal y no por supervise",
 			"no usa stdin ni canal paralelo",
 			"los lanzamientos salen por outbox y dispatcher existentes",

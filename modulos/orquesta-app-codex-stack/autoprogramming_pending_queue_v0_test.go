@@ -13,7 +13,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0NoRelanzaAgentePendienteEnTicks
 	runtime := newPendingAckCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
 
-	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, legacyAutoprogrammingPrepareRunInputForStackTestV0(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-pending-queue-api-001",
 		CorrelationID:          "corr-autoprogramming-pending-queue-api-001",
 		OccurredAt:             "2026-05-22T11:35:00Z",
@@ -24,7 +24,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0NoRelanzaAgentePendienteEnTicks
 		MaxDispatchesPerWait:   3,
 		MaxCommands:            5,
 		MaxOutboxPerCycle:      5,
-	})
+	}))
 	if !prepared.Accepted || prepared.RunRef == "" || len(prepared.WaitAgentRefs) != 1 {
 		t.Fatalf("prepared=%+v", prepared)
 	}
@@ -59,7 +59,7 @@ func TestCodexStackAutoprogrammingRunGlobalTickV0RelanzaFronteraDependienteTrasA
 	stack := mustBuildCodexStackForTestV0(t, runtime)
 	request := autoprogrammingBridgeDependentRequestForTestV0()
 
-	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, legacyAutoprogrammingPrepareRunInputForStackTestV0(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-dependent-queue-api-001",
 		CorrelationID:          "corr-autoprogramming-dependent-queue-api-001",
 		OccurredAt:             "2026-06-19T10:15:00Z",
@@ -70,7 +70,7 @@ func TestCodexStackAutoprogrammingRunGlobalTickV0RelanzaFronteraDependienteTrasA
 		MaxDispatchesPerWait:   3,
 		MaxCommands:            5,
 		MaxOutboxPerCycle:      5,
-	})
+	}))
 	if !prepared.Accepted || prepared.RunRef == "" || len(prepared.WaitAgentRefs) != 1 || len(prepared.WorkflowTaskRefs) != 2 {
 		t.Fatalf("prepared=%+v", prepared)
 	}
@@ -124,7 +124,7 @@ func TestCodexStackAutoprogrammingRunGlobalTickV0RelanzaFronteraDependienteTrasA
 		)
 	}
 
-	replayed := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+	replayed := postAutoprogrammingPrepareRunStackV0(t, stack, legacyAutoprogrammingPrepareRunInputForStackTestV0(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-dependent-queue-api-001",
 		CorrelationID:          "corr-autoprogramming-dependent-queue-api-001",
 		OccurredAt:             "2026-06-19T10:16:00Z",
@@ -135,7 +135,7 @@ func TestCodexStackAutoprogrammingRunGlobalTickV0RelanzaFronteraDependienteTrasA
 		MaxDispatchesPerWait:   3,
 		MaxCommands:            5,
 		MaxOutboxPerCycle:      5,
-	})
+	}))
 	if len(replayed.WaitAgentRefs) != 1 || replayed.WaitAgentRefs[0] != dependentAgentRef {
 		t.Fatalf("replay wait_agent_refs=%v want %s", replayed.WaitAgentRefs, dependentAgentRef)
 	}

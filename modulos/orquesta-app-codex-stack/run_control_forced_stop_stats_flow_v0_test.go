@@ -33,12 +33,13 @@ func TestCodexStackV0StopForzadoPorAPIDrenaAgentesYActualizaStats(t *testing.T) 
 	}
 
 	tick, err := stack.RunGlobalTickV0(context.Background(), orquestaruncoordinator.RunCoordinatorTickCommandV0{
-		QueueRef:       DefaultRunQueueRefV0,
-		MaxRuns:        1,
-		OccurredAt:     time.Date(2026, 5, 13, 8, 30, 0, 0, time.UTC),
-		CorrelationID:  "corr-stack-stop-forzado-stats-001",
-		DrainLimits:    stopStatsDrainLimitsV0(),
-		ExcludeRunRefs: nil,
+		QueueRef:         DefaultRunQueueRefV0,
+		MaxRuns:          1,
+		AllowLegacyDrain: true,
+		OccurredAt:       time.Date(2026, 5, 13, 8, 30, 0, 0, time.UTC),
+		CorrelationID:    "corr-stack-stop-forzado-stats-001",
+		DrainLimits:      stopStatsDrainLimitsV0(),
+		ExcludeRunRefs:   nil,
 	})
 	if err != nil {
 		t.Fatalf("RunGlobalTickV0: %v tick=%+v", err, tick)
@@ -91,7 +92,7 @@ func TestCodexStackV0RunSupervisorStopForzadoQuedaPendingSiRuntimeNoConfirmaV0(t
 		t.Fatalf("control=%+v", control)
 	}
 
-	supervisor := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+	supervisor := postRunSupervisorStackV0(t, stack, legacyRunSupervisorInputForStackTestV0(orquestamcp.MCPRunSupervisorToolInputV0{
 		RequestID:            "request-ref-stop-pending-runtime-001",
 		CorrelationID:        "corr-stop-pending-runtime-001",
 		RunRef:               director.RunRef,
@@ -103,7 +104,7 @@ func TestCodexStackV0RunSupervisorStopForzadoQuedaPendingSiRuntimeNoConfirmaV0(t
 		MaxOutboxPerCycle:    8,
 		MaxDecisionCycles:    1,
 		MaxExternalWaits:     1,
-	})
+	}))
 	if supervisor.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
 		supervisor.StopReason != string(CodexSupervisorStopPendingV0) ||
 		supervisor.Last.Status != string(CodexSupervisorRuntimeStopPendingV0) ||

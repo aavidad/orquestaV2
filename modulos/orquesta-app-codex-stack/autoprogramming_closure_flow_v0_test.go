@@ -26,7 +26,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0CierraConPlanStateYTestsRealesV
 	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
 	stack := codexStackRealRequiredTestRunnerStackV0(t, cfg, runtime, evidenceStore, goCommand, outputDir)
 
-	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, legacyAutoprogrammingPrepareRunInputForStackTestV0(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-closure-flow-001",
 		CorrelationID:          "corr-autoprogramming-closure-flow-001",
 		OccurredAt:             "2026-05-23T18:00:00Z",
@@ -37,7 +37,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0CierraConPlanStateYTestsRealesV
 		MaxDispatchesPerWait:   4,
 		MaxCommands:            16,
 		MaxOutboxPerCycle:      8,
-	})
+	}))
 	if !prepared.Accepted ||
 		prepared.Continue == nil ||
 		prepared.Continue.OperationalDirectorPlanRef == "" ||
@@ -48,7 +48,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0CierraConPlanStateYTestsRealesV
 
 	var last orquestamcp.MCPRunSupervisorToolResultV0
 	for cycle := 1; cycle <= 16; cycle++ {
-		last = postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+		last = postRunSupervisorStackV0(t, stack, legacyRunSupervisorInputForStackTestV0(orquestamcp.MCPRunSupervisorToolInputV0{
 			RequestID:                  fmt.Sprintf("request-autoprogramming-closure-supervisor-%03d", cycle),
 			CorrelationID:              fmt.Sprintf("corr-autoprogramming-closure-supervisor-%03d", cycle),
 			RunRef:                     prepared.RunRef,
@@ -64,7 +64,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0CierraConPlanStateYTestsRealesV
 			MaxDecisionCycles:          8,
 			MaxExternalWaits:           1,
 			AllowRepeatedRuns:          true,
-		})
+		}))
 		if last.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 {
 			t.Fatalf("supervisor cycle=%d result=%+v", cycle, last)
 		}
@@ -122,7 +122,7 @@ func TestCodexStackAutoprogrammingSupervisorGlobalCierraDerivandoPlanStateV0(t *
 	evidenceStore := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
 	stack := codexStackRealRequiredTestRunnerStackV0(t, cfg, runtime, evidenceStore, goCommand, outputDir)
 
-	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, legacyAutoprogrammingPrepareRunInputForStackTestV0(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-global-closure-flow-001",
 		CorrelationID:          "corr-autoprogramming-global-closure-flow-001",
 		OccurredAt:             "2026-05-23T18:30:00Z",
@@ -133,7 +133,7 @@ func TestCodexStackAutoprogrammingSupervisorGlobalCierraDerivandoPlanStateV0(t *
 		MaxDispatchesPerWait:   4,
 		MaxCommands:            16,
 		MaxOutboxPerCycle:      8,
-	})
+	}))
 	if !prepared.Accepted || prepared.RunRef == "" || prepared.Continue == nil ||
 		prepared.Continue.OperationalDirectorPlanRef == "" {
 		t.Fatalf("prepared=%+v", prepared)
@@ -141,7 +141,7 @@ func TestCodexStackAutoprogrammingSupervisorGlobalCierraDerivandoPlanStateV0(t *
 	planRef := prepared.Continue.OperationalDirectorPlanRef
 
 	for cycle := 1; cycle <= 16; cycle++ {
-		result := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+		result := postRunSupervisorStackV0(t, stack, legacyRunSupervisorInputForStackTestV0(orquestamcp.MCPRunSupervisorToolInputV0{
 			RequestID:            fmt.Sprintf("request-autoprogramming-global-closure-supervisor-%03d", cycle),
 			CorrelationID:        fmt.Sprintf("corr-autoprogramming-global-closure-supervisor-%03d", cycle),
 			QueueRef:             DefaultRunQueueRefV0,
@@ -156,7 +156,7 @@ func TestCodexStackAutoprogrammingSupervisorGlobalCierraDerivandoPlanStateV0(t *
 			MaxDecisionCycles:    8,
 			MaxExternalWaits:     1,
 			AllowRepeatedRuns:    true,
-		})
+		}))
 		if result.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 {
 			t.Fatalf("supervisor cycle=%d result=%+v", cycle, result)
 		}

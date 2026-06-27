@@ -92,7 +92,7 @@ func TestCodexStackV0OPESPlanTemarioOperadoresSupervisorXHighEnviaDocumentPlan(t
 		t.Fatalf("request no construida")
 	}
 	run := postExternalWorkRunRequestStackV0(t, stack, request)
-	supervisor := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+	supervisor := postRunSupervisorStackV0(t, stack, legacyRunSupervisorInputForStackTestV0(orquestamcp.MCPRunSupervisorToolInputV0{
 		RequestID:            "request-ref-plan-temario-operadores-supervisor-001",
 		CorrelationID:        "corr-plan-temario-operadores-supervisor-001",
 		RunRef:               run.RunRef,
@@ -105,7 +105,7 @@ func TestCodexStackV0OPESPlanTemarioOperadoresSupervisorXHighEnviaDocumentPlan(t
 		MaxExternalWaits:     2,
 		ContinueMessage:      "sigue hasta entregar document_plan",
 		AllowRepeatedRuns:    true,
-	})
+	}))
 	if supervisor.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
 		supervisor.RunRef != run.RunRef ||
 		supervisor.Last.Status == string(CodexSupervisorRuntimeFailedV0) {

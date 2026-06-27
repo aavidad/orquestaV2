@@ -130,8 +130,9 @@ del error; no cae al loop historico.
 La web `/nueva-app` acepta esa respuesta, muestra las refs dentro del bloque
 `director` y observa por `POST /api/v0/apps/director/goal/observe` con polling
 acotado. La compatibilidad de Director/agentes historica solo se activa si el
-caller transporta `director_execution_mode=legacy_director_loop`; sin ese opt-in
-explicito, la ausencia de backend Goal es un error operativo y no un fallback.
+caller transporta `director_execution_mode=legacy_director_loop` y la
+composicion ha habilitado el opt-in legacy correspondiente; sin esa doble llave,
+la ausencia de backend Goal es un error operativo y no un fallback.
 
 Los backends `app_server_proxy` y `app_server_stdio` observan
 `thread/goal/get`; cuando el goal queda terminal leen `thread/read` con
@@ -169,13 +170,16 @@ siguen esa frontera. `/api/v0/autoprogramming/status` publica `observe_goal`
 para runs con `GoalWorkStateV0` y no publica `supervise`/`retry`/`review`
 legacy salvo que la composicion habilite explicitamente compatibilidad legacy
 (`AllowLegacyAutoprogrammingRun` / `ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP`).
-El supervisor Codex bloquea ademas la supervision global sin `run_ref` cuando
-ese opt-in no esta activo, devolviendo `legacy_supervise_requires_explicit_opt_in`
-en vez de entrar al loop historico.
+El supervisor Codex bloquea ademas la supervision global sin `run_ref` si falta
+la marca `director_execution_mode=legacy_director_loop` o si falta el opt-in de
+composicion, devolviendo respectivamente
+`legacy_supervise_requires_director_execution_mode` o
+`legacy_supervise_requires_explicit_opt_in` en vez de entrar al loop historico.
 Actualizacion adicional 2026-06-27: incluso con `run_ref`, la supervision de
-una run legacy desde el stack Codex exige ahora
-`director_execution_mode=legacy_director_loop` salvo opt-in de composicion. El
-bloqueo publico es `legacy_run_supervise_requires_director_execution_mode`. Las
+una run legacy desde el stack Codex exige ahora opt-in de composicion y
+`director_execution_mode=legacy_director_loop`. Sin modo legacy devuelve
+`legacy_run_supervise_requires_director_execution_mode`; con modo legacy pero
+sin opt-in devuelve `legacy_run_supervise_requires_explicit_opt_in`. Las
 rutas goal-first se resuelven antes de ese bloqueo y siguen redirigiendo a
 `observe_goal`, de modo que la marca legacy no se usa para observar Codex Goal.
 Actualizacion adicional 2026-06-27 noche: `orquesta.external_work.run.v0` ya no
@@ -224,8 +228,8 @@ Goal.
    `runs/supervise`, `autoprogramming/supervise`, `external-work/run`, CLI,
    `/ops` y scripts exponen
    `director_execution_mode` para distinguir `goal_first` de
-   `legacy_director_loop`. Las vias de supervision legacy requieren la marca
-   explicita salvo opt-in de composicion; falta cerrar la matriz completa y
+   `legacy_director_loop`. Las vias de supervision legacy requieren opt-in de
+   composicion y la marca explicita; falta cerrar la matriz completa y
    smokes reales equivalentes antes de retirar rutas historicas.
 7. Conectar el contrato de `/nueva-app` a `GoalWorkSpecV0` y launcher
    goal-first.

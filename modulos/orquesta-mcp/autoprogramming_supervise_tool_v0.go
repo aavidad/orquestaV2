@@ -25,7 +25,7 @@ func MCPAutoprogrammingSuperviseDescriptorV0() MCPAutoprogrammingSuperviseToolDe
 		Invariantes: []string{
 			"adaptador inbound fino",
 			"compatibilidad legacy/resident para runs del loop historico",
-			"run_ref legacy exige director_execution_mode=legacy_director_loop salvo opt-in de composicion",
+			"legacy exige opt-in de composicion y director_execution_mode=legacy_director_loop",
 			"supervision puntual via runs.supervisor inyectado",
 			"run_ref acota una run de autoprogramacion si se proporciona",
 			"sin run_ref delega la decision de cola al executor inyectado",

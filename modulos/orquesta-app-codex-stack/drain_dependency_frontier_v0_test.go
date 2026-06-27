@@ -90,7 +90,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0TickGlobalTrasACKLanzaFronteraD
 	request.Tasks[1].DependsOn = []string{bootstrapTaskRef}
 	request.WriteSet = append(request.Tasks[0].WriteSet, request.Tasks[1].WriteSet...)
 
-	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, legacyAutoprogrammingPrepareRunInputForStackTestV0(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:              "request-autoprogramming-dependency-frontier-001",
 		CorrelationID:          "corr-autoprogramming-dependency-frontier-001",
 		OccurredAt:             "2026-06-18T09:00:00Z",
@@ -101,7 +101,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0TickGlobalTrasACKLanzaFronteraD
 		MaxDispatchesPerWait:   3,
 		MaxCommands:            8,
 		MaxOutboxPerCycle:      5,
-	})
+	}))
 	if !prepared.Accepted || prepared.RunRef == "" || len(prepared.WorkflowTaskRefs) != 2 {
 		t.Fatalf("prepared=%+v", prepared)
 	}

@@ -314,7 +314,7 @@ Campos:
   - `servidor estado`: GET `/api/v0/server/status`.
   - `preparar`: POST `/api/v0/autoprogramming/prepare-run` con `MCPAutoprogrammingPrepareRunToolInputV0`.
   - `estado ver`: POST `/api/v0/autoprogramming/status` con `MCPAutoprogrammingStatusToolInputV0`.
-  - `supervisar`: POST `/api/v0/autoprogramming/supervise` con `MCPRunSupervisorToolInputV0`.
+  - `supervisar`: POST `/api/v0/autoprogramming/supervise` con `MCPRunSupervisorToolInputV0`; legacy requiere `--director-execution-mode legacy_director_loop` y opt-in de servidor.
   - `cola listar`: POST `/api/v0/runs/queue/priority` con action `rank`.
   - `run ver`: POST `/api/v0/director/stats` con `run_ref` opaco.
   - `run controlar`: POST `/api/v0/runs/control` con `MCPRunControlToolInputV0`.

@@ -73,15 +73,17 @@ sin crear un canal paralelo.
 
 - No existe todavia smoke real de recursion padre/hijo/nieto con parent refs,
   presupuesto global, profundidad/fanout y review causal completa.
-- El supervisor global del servidor ya reentra runs legacy/resident por
-  intervalo. La API `POST /api/v0/runs/supervise` permite pedir una pasada
-  acotada desde la app sin cambiar el nucleo ni crear canal paralelo, pero solo
-  para runs sin `GoalWorkStateV0`.
+- El supervisor global del servidor solo reentra runs legacy/resident por
+  intervalo si la composicion habilita la compatibilidad legacy y el comando
+  interno transporta `allow_legacy_drain`. La API `POST /api/v0/runs/supervise`
+  permite pedir una pasada acotada desde la app sin cambiar el nucleo ni crear
+  canal paralelo, pero solo para runs sin `GoalWorkStateV0`, con opt-in de
+  composicion y `director_execution_mode=legacy_director_loop`.
 - Desde el 2026-05-22, `POST /api/v0/autoprogramming/prepare-run` encola la run
   preparada en la cola global del stack Codex. Por tanto, el supervisor
-  residente o una pasada de `/api/v0/runs/supervise` sin `run_ref` ya cubren el
+  residente o una pasada de `/api/v0/runs/supervise` sin `run_ref` cubren el
   camino `prepare-run -> cola global -> supervisor` con Codex fake en el smoke
-  `AUTOPROGRAMMING-SUPERVISED-FAKE`.
+  `AUTOPROGRAMMING-SUPERVISED-FAKE` solo en compatibilidad legacy explicita.
 
 ## Validacion
 

@@ -117,6 +117,9 @@ func (drainer stackRunDrainerV0) DrainRunV0(
 	if disposition, ok := stack.goalFirstSupervisorDispositionV0(ctx, request.RunRef); ok {
 		return disposition.drainResultV0(request), nil
 	}
+	if !request.AllowLegacyDrain || !stack.legacyDrainAllowedForRunV0(ctx, request.RunRef) {
+		return stack.legacyDrainDisabledCoordinatorResultV0(request), nil
+	}
 	drainRequest, err := stack.stackDrainRequestFromCoordinatorV0(ctx, request)
 	if err != nil {
 		result := orquestacionnucleoapp.ManagedProgressiveLoopResultV0{}
@@ -137,6 +140,47 @@ func (drainer stackRunDrainerV0) DrainRunV0(
 		return stackDrainCoordinatorResultV0(request, result, "error", "", err.Error()), err
 	}
 	return stackDrainCoordinatorResultV0(request, result, stackDrainOutcomeV0(result), queueStatus, ""), nil
+}
+
+func (stack StackV0) legacyDrainAllowedForRunV0(ctx context.Context, runRef string) bool {
+	if stack.AllowLegacyAutoprogrammingRun && stack.AllowLegacyExternalWorkRun {
+		return true
+	}
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" || stack.Ports.RunStore == nil {
+		return false
+	}
+	run, err := stack.Ports.RunStore.LoadRunV0(ctx, runRef)
+	if err != nil {
+		return false
+	}
+	if codexStackRunLooksExternalWorkV0(run.ProjectRef, run.AppSpecRef) ||
+		codexStackRunLooksOPESDirectWorkStrictV0(run.ProjectRef, run.AppSpecRef) {
+		return stack.AllowLegacyExternalWorkRun
+	}
+	return stack.AllowLegacyAutoprogrammingRun
+}
+
+func (stack StackV0) legacyDrainDisabledCoordinatorResultV0(
+	request orquestaruncoordinator.RunDrainRequestV0,
+) orquestaruncoordinator.RunDrainResultV0 {
+	evidenceRefs := []string{"evidence-ref-run-supervisor-legacy-drain-disabled"}
+	diagnostics := []orquestaruncoordinator.RunDrainDiagnosticV0{{
+		Kind:         "legacy_director_loop",
+		Status:       "blocked",
+		RunRef:       strings.TrimSpace(request.RunRef),
+		Error:        "legacy_director_loop_disabled",
+		TargetPort:   "run_supervisor",
+		EvidenceRefs: evidenceRefs,
+	}}
+	return orquestaruncoordinator.RunDrainResultV0{
+		RunRef:       strings.TrimSpace(request.RunRef),
+		AppRef:       strings.TrimSpace(request.AppRef),
+		Outcome:      "legacy_director_loop_disabled",
+		QueueStatus:  orquestarunqueue.RunStatusStoppedV0,
+		EvidenceRefs: evidenceRefs,
+		Diagnostics:  diagnostics,
+	}
 }
 
 func stackDrainOperationalPlanStateNeedsReplanCoordinatorResultV0(

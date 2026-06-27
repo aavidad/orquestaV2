@@ -71,8 +71,9 @@ API HTTP versionada:
 - `POST /api/v0/director/human-work/review-plan`
 - `POST /api/v0/runs/supervise` (compatibilidad legacy/diagnostico; no usar
   como avance normal de runs `goal_first`; el supervisor global sin `run_ref`
-  exige opt-in legacy en la composicion Codex; con `run_ref` legacy exige
-  `director_execution_mode=legacy_director_loop` salvo opt-in de composicion)
+  exige opt-in legacy en la composicion Codex y
+  `director_execution_mode=legacy_director_loop`; con `run_ref` legacy exige
+  las mismas dos llaves)
 - `POST /api/v0/runs/control`
 - `POST /api/v0/runs/queue/priority`
 - `POST /api/v0/autoprogramming/validate-request`
@@ -114,10 +115,10 @@ CLI vigente:
   legacy desde `prepare-run` es compatibilidad historica: requiere opt-in de
   composicion y `director_execution_mode=legacy_director_loop` en el payload.
   `supervise` queda para runs legacy/resident sin `GoalWorkStateV0` o para
-  diagnostico controlado y requiere la misma marca cuando se empuja un
-  `run_ref` legacy. En `/ops` y MCP, las acciones seguras publicadas por
-  `autoprogramming/status` son la fuente de verdad: `observe_goal` gana a
-  `supervise` cuando un run tiene estado Goal.
+  diagnostico controlado y requiere opt-in de composicion mas la misma marca
+  cuando se empuja un `run_ref` legacy. En `/ops` y MCP, las acciones seguras
+  publicadas por `autoprogramming/status` son la fuente de verdad:
+  `observe_goal` gana a `supervise` cuando un run tiene estado Goal.
 
 MCP/toolbelt vigente para IA cuando el transporte esta disponible:
 

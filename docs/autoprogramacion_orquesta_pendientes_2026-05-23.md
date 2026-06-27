@@ -269,13 +269,15 @@ mas idle self-improvement no reencolan contenedores goal-first como `ready`
 legacy; sincronizan `delivered` para observar goal o conservan `stopped` si
 falta `GoalWorkStateV0`.
 Avance local adicional 2026-06-27 noche: el executor Codex de
-`runs/supervise` tambien bloquea la supervision legacy por `run_ref` si la
-composicion no tiene opt-in global y el caller no manda
-`director_execution_mode=legacy_director_loop`. El bloqueo publico es
-`legacy_run_supervise_requires_director_execution_mode`. La deteccion de runs
-goal-first ocurre antes de esa guarda y sigue devolviendo `observe_goal`, no
-drain legacy. `autoprogramming/status`, `/ops`, CLI, contratos MCP y scripts de
-smoke transportan ya la marca legacy en las vias historicas explicitas.
+`runs/supervise` tambien bloquea la supervision legacy por `run_ref` si falta
+cualquiera de las dos llaves: opt-in de composicion y
+`director_execution_mode=legacy_director_loop`. Sin modo legacy devuelve
+`legacy_run_supervise_requires_director_execution_mode`; con modo legacy pero
+sin opt-in devuelve `legacy_run_supervise_requires_explicit_opt_in`. La
+deteccion de runs goal-first ocurre antes de esa guarda y sigue devolviendo
+`observe_goal`, no drain legacy. `autoprogramming/status`, `/ops`, CLI,
+contratos MCP y scripts de smoke transportan ya la marca legacy en las vias
+historicas explicitas.
 Avance local adicional 2026-06-27 noche 2: `external-work/run` sigue siendo la
 entrada neutral para OPES/apps externas, pero la composicion Codex no degrada a
 loop historico solo por opt-in de entorno. Para crear una run legacy externa
