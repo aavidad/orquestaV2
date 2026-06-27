@@ -75,6 +75,7 @@ func topicRegistryUpdateRequestV0(
 
 func topicRegistryActionForRecordV0(record OPESCausalArtifactRecordV0) string {
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+		record.CompleteJob &&
 		len(followupRefsForRecordV0(record)) == 0 {
 		return "release"
 	}
@@ -92,6 +93,9 @@ func topicRegistryStatusForRecordV0(record OPESCausalArtifactRecordV0) string {
 	}
 	normalized := strings.ToLower(strings.TrimSpace(status))
 	if len(followupRefsForRecordV0(record)) > 0 || strings.Contains(normalized, "pendiente") {
+		return "pendiente_continuar"
+	}
+	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 && !record.CompleteJob {
 		return "pendiente_continuar"
 	}
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 {

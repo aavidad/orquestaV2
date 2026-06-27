@@ -161,6 +161,7 @@ func followupRefsForRecordV0(record OPESCausalArtifactRecordV0) []string {
 	refs := fieldStringsV0(
 		record.PayloadFields,
 		"followup_refs",
+		"pending_refs",
 		"pending_followup_refs",
 		"rework_refs",
 		"missing_required_refs",

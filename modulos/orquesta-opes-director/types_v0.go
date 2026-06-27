@@ -21,6 +21,7 @@ const (
 	ErrOPESCausalArtifactInvalidV0        = "opes_causal_artifact_invalid"
 	ErrOPESCausalJobRejectedV0            = "opes_causal_job_rejected"
 	ErrOPESCausalTopicRegistryFailedV0    = "opes_causal_topic_registry_failed"
+	ErrOPESCausalRejectedTransientRetryV0 = "opes_causal_rejected_transient_retry_pending"
 )
 
 type OPESCausalProducerRequestV0 struct {
@@ -45,8 +46,9 @@ type OPESCausalArtifactRecordSourcePortV0 interface {
 }
 
 type OPESCausalArtifactRecordFilterV0 struct {
-	DomainRef string
-	Limit     int
+	DomainRef     string
+	CorrelationID string
+	Limit         int
 }
 
 type OPESCausalArtifactRecordV0 struct {

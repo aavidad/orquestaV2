@@ -103,9 +103,13 @@ func (source serverOPESCausalArtifactSourceV0) ListOPESCausalArtifactRecordsV0(
 		return nil, err
 	}
 	domainRef := strings.TrimSpace(filter.DomainRef)
+	correlationID := strings.TrimSpace(filter.CorrelationID)
 	out := make([]orquestaopesdirector.OPESCausalArtifactRecordV0, 0, len(records))
 	for _, record := range records {
 		if domainRef != "" && strings.TrimSpace(record.DomainRef) != domainRef {
+			continue
+		}
+		if correlationID != "" && strings.TrimSpace(record.CorrelationID) != correlationID {
 			continue
 		}
 		status := strings.TrimSpace(record.Status)

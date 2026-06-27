@@ -7,9 +7,12 @@ import (
 	orquestadocumentplanexpander "orquesta/modulos/orquesta-document-plan-expander"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestaopesbridge "orquesta/modulos/orquesta-opes-bridge"
+	orquestaopestopicregistry "orquesta/modulos/orquesta-opes-topic-registry"
 )
 
 const defaultOPESCausalProducerMaxActionsV0 = 20
+
+const opesTopicRegistryAppliedEvidenceV0 = "evidence-ref-opes-topic-registry-applied"
 
 func ProduceOPESCausalJobsV0(
 	ctx context.Context,
@@ -35,7 +38,7 @@ func ProduceOPESCausalJobsV0(
 	}
 	records, err := ports.ArtifactSource.ListOPESCausalArtifactRecordsV0(
 		ctx,
-		OPESCausalArtifactRecordFilterV0{DomainRef: request.DomainRef},
+		OPESCausalArtifactRecordFilterV0{DomainRef: request.DomainRef, CorrelationID: request.CorrelationID},
 	)
 	if err != nil {
 		return result, err
@@ -46,7 +49,10 @@ func ProduceOPESCausalJobsV0(
 			break
 		}
 		record = normalizeArtifactRecordV0(record, request.DomainRef)
-		if record.DomainRef != request.DomainRef || record.JobRef == "" || record.ArtifactRef == "" {
+		if !artifactRecordMatchesProducerScopeV0(record, request) ||
+			record.DomainRef != request.DomainRef ||
+			record.JobRef == "" ||
+			record.ArtifactRef == "" {
 			continue
 		}
 		result.ProcessedRefs = compactStringsV0(append(result.ProcessedRefs, artifactRecordSourceRefV0(record)))
@@ -61,9 +67,28 @@ func ProduceOPESCausalJobsV0(
 				return result, err
 			} else if ok {
 				result.SkippedRefs = compactStringsV0(append(result.SkippedRefs, existing.Job.JobRef))
+				if shouldRetryExistingTopicRegistryUpdateV0(existing, jobRequest, ports.TopicRegistryUpdater) {
+					var attempted bool
+					result, _, attempted, _ = applyTopicRegistryUpdateIfConfiguredV0(ctx, result, ports.TopicRegistryUpdater, jobRequest)
+					if attempted {
+						actions++
+					}
+				}
 				continue
 			}
 			result.RequestedJobs = append(result.RequestedJobs, jobRequest)
+			var attemptedTopicRegistryUpdate bool
+			var appliedTopicRegistryUpdate bool
+			result, jobRequest, attemptedTopicRegistryUpdate, appliedTopicRegistryUpdate = applyTopicRegistryUpdateIfConfiguredV0(
+				ctx,
+				result,
+				ports.TopicRegistryUpdater,
+				jobRequest,
+			)
+			if attemptedTopicRegistryUpdate && !appliedTopicRegistryUpdate {
+				actions++
+				continue
+			}
 			job, err := ports.JobCreator.CreateDomainWorkJobV0(ctx, jobRequest)
 			if err != nil {
 				return result, err
@@ -74,7 +99,6 @@ func ProduceOPESCausalJobsV0(
 			}
 			result.CreatedJobs = append(result.CreatedJobs, job)
 			result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, job.EvidenceRefs...))
-			result = applyTopicRegistryUpdateIfConfiguredV0(ctx, result, ports.TopicRegistryUpdater, jobRequest)
 			actions++
 		}
 	}
@@ -88,9 +112,9 @@ func applyTopicRegistryUpdateIfConfiguredV0(
 	result OPESCausalProducerResultV0,
 	updater OPESCausalTopicRegistryUpdaterPortV0,
 	request orquestadomainwork.DomainWorkJobRequestV0,
-) OPESCausalProducerResultV0 {
+) (OPESCausalProducerResultV0, orquestadomainwork.DomainWorkJobRequestV0, bool, bool) {
 	if updater == nil || request.WorkKind != opesTopicRegistryUpdateWorkKindV0 {
-		return result
+		return result, request, false, true
 	}
 	update, err := updater.ApplyOPESCausalTopicRegistryUpdateV0(ctx, request)
 	result.TopicRegistryUpdates = append(result.TopicRegistryUpdates, update)
@@ -98,10 +122,15 @@ func applyTopicRegistryUpdateIfConfiguredV0(
 	for _, issue := range update.Issues {
 		result.Issues = append(result.Issues, issueV0(issue.Code, "topic_registry."+issue.Field))
 	}
-	if err != nil {
+	if err != nil || update.Status != orquestaopestopicregistry.TopicRegistryUpdateStatusAppliedV0 {
 		result.Issues = append(result.Issues, issueV0(ErrOPESCausalTopicRegistryFailedV0, "topic_registry.command"))
+		return result, request, true, false
 	}
-	return result
+	request.EvidenceRefs = compactStringsV0(append(
+		append([]string(nil), request.EvidenceRefs...),
+		append(update.EvidenceRefs, opesTopicRegistryAppliedEvidenceV0)...,
+	))
+	return result, request, true, true
 }
 
 func normalizeProducerRequestV0(request OPESCausalProducerRequestV0) OPESCausalProducerRequestV0 {
@@ -124,10 +153,56 @@ func causalRequestsForArtifactRecordV0(
 	case "accepted":
 		return acceptedArtifactRequestsV0(record)
 	case "rejected":
+		if rejectedArtifactTransientRetryPendingV0(record.IssueRefs) {
+			return nil, []orquestadomainwork.DomainWorkIssueV0{
+				issueV0(ErrOPESCausalRejectedTransientRetryV0, "artifact.issue_refs"),
+			}
+		}
 		return []orquestadomainwork.DomainWorkJobRequestV0{rejectedArtifactCorrectionRequestV0(record)}, nil
 	default:
 		return nil, nil
 	}
+}
+
+func artifactRecordMatchesProducerScopeV0(
+	record OPESCausalArtifactRecordV0,
+	request OPESCausalProducerRequestV0,
+) bool {
+	if request.CorrelationID == "" {
+		return true
+	}
+	return strings.TrimSpace(record.CorrelationID) == request.CorrelationID
+}
+
+func rejectedArtifactTransientRetryPendingV0(issueRefs []string) bool {
+	for _, issue := range issueRefs {
+		switch strings.TrimSpace(issue) {
+		case "domain-work-submit-execute-error",
+			"domain_work_port_no_disponible",
+			"opes_http_request_failed",
+			"opes_http_timeout",
+			"opes_http_cancelled",
+			"retry_budget_exhausted",
+			"opes_http_status_429",
+			"opes_http_status_502",
+			"opes_http_status_503",
+			"opes_http_status_504":
+			return true
+		}
+	}
+	return false
+}
+
+func shouldRetryExistingTopicRegistryUpdateV0(
+	existing orquestadomainwork.DomainWorkJobRecordV0,
+	request orquestadomainwork.DomainWorkJobRequestV0,
+	updater OPESCausalTopicRegistryUpdaterPortV0,
+) bool {
+	if updater == nil || request.WorkKind != opesTopicRegistryUpdateWorkKindV0 {
+		return false
+	}
+	return !stringsInSetV0(existing.Job.EvidenceRefs, opesTopicRegistryAppliedEvidenceV0) &&
+		!stringsInSetV0(existing.Request.EvidenceRefs, opesTopicRegistryAppliedEvidenceV0)
 }
 
 func acceptedArtifactRequestsV0(

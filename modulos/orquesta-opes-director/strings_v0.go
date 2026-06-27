@@ -25,6 +25,19 @@ func compactStringsV0(values []string) []string {
 	return out
 }
 
+func stringsInSetV0(values []string, target string) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return false
+	}
+	for _, value := range values {
+		if strings.TrimSpace(value) == target {
+			return true
+		}
+	}
+	return false
+}
+
 func safeRefV0(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
