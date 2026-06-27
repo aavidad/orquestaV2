@@ -99,6 +99,52 @@ func TestCodexStackV0ExternalWorkRunConBackendGoalArrancaGoalFirstSinColaLegacy(
 	if len(ranking.Ranked) != 0 {
 		t.Fatalf("goal-first no debe encolar loop legacy: ranking=%+v", ranking)
 	}
+	supervisor := postRunSupervisorStackV0(t, stack, orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:     "req-external-work-goal-supervise-001",
+		CorrelationID: "corr-external-work-goal-supervise-001",
+		RunRef:        result.RunRef,
+	})
+	if supervisor.StopReason != "goal_first_observe_required" ||
+		!codexStackStringInSetForTestV0(supervisor.NextActions, "observe_goal") ||
+		!codexStackStringInSetForTestV0(supervisor.NextActions, "do_not_supervise_goal_first_with_legacy_loop") {
+		t.Fatalf("supervisor goal-first inesperado=%+v", supervisor)
+	}
+}
+
+func TestCodexStackV0ExternalWorkGoalFirstSinStateNoDrenaLegacy(t *testing.T) {
+	stack := mustBuildCodexStackWithGoalBackendForTestV0(
+		t,
+		newFakeCodexStackRuntimeV0(),
+		&goalFirstQueueLauncherForTestV0{},
+		&goalFirstQueueObserverForTestV0{},
+		newGoalFirstQueueStateStoreForTestV0(),
+	)
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:         "run-external-work-goal-missing-state-001",
+		ProjectRef:    "opes",
+		AppSpecRef:    "app-spec-external-work-opes",
+		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Phases:        orquestacoreworkflow.OrchestrationPhaseCatalogV0(),
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+
+	supervisor, err := NewCodexStackRunSupervisorExecutorV0(&stack).Execute(context.Background(), orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:     "req-external-work-goal-missing-state-001",
+		CorrelationID: "corr-external-work-goal-missing-state-001",
+		RunRef:        run.RunID,
+	})
+	if err != nil {
+		t.Fatalf("RunSupervisor Execute: %v", err)
+	}
+	if supervisor.Estado != orquestamcp.MCPRunSupervisorEstadoErrorV0 ||
+		supervisor.StopReason != "goal_first_state_missing" ||
+		!codexStackStringInSetForTestV0(supervisor.NextActions, "inspect_goal_state_store") {
+		t.Fatalf("supervisor=%+v", supervisor)
+	}
 }
 
 func TestCodexStackV0ExternalWorkRunAceptaContratoAmplioV0(t *testing.T) {

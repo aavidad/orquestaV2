@@ -1570,4 +1570,9 @@ Cobertura:
 - `TestCodexStackV0ExternalWorkRunConBackendGoalArrancaGoalFirstSinColaLegacy`
   fija que `/api/v0/external-work/run`, con backend Goal completo, devuelve
   `route_policy=goal_first`, persiste `GoalWorkStateV0`, crea run contenedora
-  sin tareas/preguntas legacy y no encola el loop historico.
+  sin tareas/preguntas legacy, no encola el loop historico y redirige
+  `/runs/supervise` a `observe_goal`.
+- `TestCodexStackV0ExternalWorkGoalFirstSinStateNoDrenaLegacy` fija que una run
+  external-work contenedora sin `GoalWorkStateV0` devuelve
+  `goal_first_state_missing`, no drena el loop legacy y deja accion de reparar
+  el state.

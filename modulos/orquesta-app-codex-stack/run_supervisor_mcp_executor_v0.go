@@ -155,13 +155,13 @@ func (executor CodexStackRunSupervisorExecutorV0) goalFirstRunSupervisorResultV0
 	)
 	result.EvidenceRefs = evidenceRefs
 	result.NextActions = []string{
-		"observe_autoprogramming_goal",
+		"observe_goal",
 		"do_not_supervise_goal_first_with_legacy_loop",
 	}
 	result.Diagnostics = []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
 		Code:         "run_supervisor_goal_first_not_legacy",
 		Scope:        "run:" + runRef,
-		Message:      "run_ref pertenece a goal-first; usar orquesta.autoprogramming.observe_goal.v0 o /api/v0/autoprogramming/goal/observe",
+		Message:      "run_ref pertenece a goal-first; usar orquesta.apps.observe_director_goal.v0 o /api/v0/apps/director/goal/observe",
 		EvidenceRefs: evidenceRefs,
 	}}
 	return result, true
@@ -200,7 +200,7 @@ func (executor CodexStackRunSupervisorExecutorV0) goalFirstMissingStateRunSuperv
 	result.NextActions = []string{
 		"repair_goal_state_from_launcher_receipt_or_mark_blocked",
 		"do_not_supervise_goal_first_with_legacy_loop",
-		"inspect_autoprogramming_goal_state_store",
+		"inspect_goal_state_store",
 	}
 	result.Diagnostics = []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
 		Code:         "run_supervisor_goal_first_state_missing",
@@ -214,10 +214,17 @@ func (executor CodexStackRunSupervisorExecutorV0) goalFirstMissingStateRunSuperv
 func codexStackRunSupervisorGoalFirstContainerWithoutStateV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) bool {
-	return strings.HasPrefix(strings.TrimSpace(run.AppSpecRef), "app-spec-ref-autoprogramming-") &&
+	return codexStackRunSupervisorGoalFirstAppSpecRefV0(run.AppSpecRef) &&
 		run.CurrentPhase == orquestacoreworkflow.OrchestrationPhaseProgramacionV0 &&
 		len(compactStringsV0(run.Tasks)) == 0 &&
-		len(compactStringsV0(run.FunctionContracts)) == 0
+		len(compactStringsV0(run.FunctionContracts)) == 0 &&
+		len(compactStringsV0(run.DirectorQuestions)) == 0
+}
+
+func codexStackRunSupervisorGoalFirstAppSpecRefV0(appSpecRef string) bool {
+	appSpecRef = strings.TrimSpace(appSpecRef)
+	return strings.HasPrefix(appSpecRef, "app-spec-ref-autoprogramming-") ||
+		strings.HasPrefix(appSpecRef, "app-spec-external-work-")
 }
 
 func codexStackGoalFirstSupervisorStatusV0(

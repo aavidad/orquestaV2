@@ -125,7 +125,7 @@ func TestServerAutoprogrammingHTTPGoalFirstPreparaSupervisaObservaYCierraV0(t *t
 		supervisor.RunRef != prepared.RunRef ||
 		supervisor.StopReason != "goal_first_observe_required" ||
 		supervisor.Last.Status != "running_live" ||
-		!goalFirstHTTPStringInSetForTestV0(supervisor.NextActions, "observe_autoprogramming_goal") ||
+		!goalFirstHTTPStringInSetForTestV0(supervisor.NextActions, "observe_goal") ||
 		!goalFirstHTTPDiagnosticsContainCodeForTestV0(supervisor.Diagnostics, "run_supervisor_goal_first_not_legacy") {
 		t.Fatalf("supervisor=%+v", supervisor)
 	}

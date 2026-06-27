@@ -380,7 +380,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaL
 		supervisor.RunRef != prepared.RunRef ||
 		supervisor.StopReason != "goal_first_observe_required" ||
 		supervisor.Last.Status != string(CodexSupervisorRuntimeRunningLiveV0) ||
-		!codexStackStringInSetForTestV0(supervisor.NextActions, "observe_autoprogramming_goal") ||
+		!codexStackStringInSetForTestV0(supervisor.NextActions, "observe_goal") ||
 		!codexStackDiagnosticsContainCodeForTestV0(supervisor.Diagnostics, "run_supervisor_goal_first_not_legacy") ||
 		runtime.launchCountV0() != 0 {
 		t.Fatalf("supervisor=%+v launches=%d", supervisor, runtime.launchCountV0())
