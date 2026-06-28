@@ -69,6 +69,7 @@ func cliRESTResponseMaxBytesForCommandV0(command string) int64 {
 		CliDefaultCommandAutoprogPrepareV0,
 		CliDefaultCommandAutoprogQueueV0,
 		CliDefaultCommandAutoprogStatusV0,
+		CliDefaultCommandAutoprogObserveGoalV0,
 		CliDefaultCommandAutoprogRunV0,
 		CliDefaultCommandAutoprogSuperviseV0,
 		CliDefaultCommandAutoprogRunControlV0:

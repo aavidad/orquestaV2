@@ -111,7 +111,7 @@ func TestAutoprogrammingCliClientV0ConsultaColaYRunPorAPI(t *testing.T) {
 	}
 }
 
-func TestAutoprogrammingCliClientV0ConsultaEstadoYSupervisaPorAPI(t *testing.T) {
+func TestAutoprogrammingCliClientV0ConsultaEstadoObserveGoalYSupervisaPorAPI(t *testing.T) {
 	seen := map[string]bool{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen[r.URL.Path] = true
@@ -134,6 +134,20 @@ func TestAutoprogrammingCliClientV0ConsultaEstadoYSupervisaPorAPI(t *testing.T) 
 						RunRef: input.RunRef,
 					}},
 				},
+			})
+		case AutoprogrammingObserveGoalCliEndpointV0:
+			var input orquestamcp.MCPAutoprogrammingObserveGoalToolInputV0
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Fatalf("decode observe goal: %v", err)
+			}
+			if input.RunRef != "run-ref-status-001" || input.RequestedBy != "operator" {
+				t.Fatalf("observe goal input=%+v", input)
+			}
+			_ = json.NewEncoder(w).Encode(orquestamcp.MCPAutoprogrammingObserveGoalToolResultV0{
+				Estado:     orquestamcp.MCPAutoprogrammingObserveGoalEstadoOKV0,
+				RunRef:     input.RunRef,
+				GoalRef:    "goal-ref-cli-observe-001",
+				GoalStatus: "complete",
 			})
 		case AutoprogrammingSuperviseCliEndpointV0:
 			var input orquestamcp.MCPRunSupervisorToolInputV0
@@ -161,16 +175,21 @@ func TestAutoprogrammingCliClientV0ConsultaEstadoYSupervisaPorAPI(t *testing.T) 
 		RunRef:               "run-ref-status-001",
 		IncludeAgentProgress: true,
 	})
+	observeGoalEnv := client.ObservarGoal(context.Background(), autoprogInvocationV0(server.URL), orquestamcp.MCPAutoprogrammingObserveGoalToolInputV0{
+		RunRef:      "run-ref-status-001",
+		RequestedBy: "operator",
+	})
 	superviseEnv := client.Supervisar(context.Background(), autoprogInvocationV0(server.URL), orquestamcp.MCPRunSupervisorToolInputV0{
 		DirectorExecutionMode: "legacy_director_loop",
 		RunRef:                "run-ref-status-001",
 		MaxTicks:              1,
 	})
 
-	if !statusEnv.OK || !superviseEnv.OK ||
+	if !statusEnv.OK || !observeGoalEnv.OK || !superviseEnv.OK ||
 		!seen[AutoprogrammingStatusCliEndpointV0] ||
+		!seen[AutoprogrammingObserveGoalCliEndpointV0] ||
 		!seen[AutoprogrammingSuperviseCliEndpointV0] {
-		t.Fatalf("status=%+v supervise=%+v seen=%+v", statusEnv, superviseEnv, seen)
+		t.Fatalf("status=%+v observe_goal=%+v supervise=%+v seen=%+v", statusEnv, observeGoalEnv, superviseEnv, seen)
 	}
 }
 

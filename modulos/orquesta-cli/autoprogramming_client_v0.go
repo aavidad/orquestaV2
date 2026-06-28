@@ -12,12 +12,13 @@ import (
 )
 
 const (
-	AutoprogrammingPrepareRunCliEndpointV0 = "/api/v0/autoprogramming/prepare-run"
-	AutoprogrammingStatusCliEndpointV0     = "/api/v0/autoprogramming/status"
-	AutoprogrammingSuperviseCliEndpointV0  = "/api/v0/autoprogramming/supervise"
-	AutoprogrammingRunQueueCliEndpointV0   = "/api/v0/runs/queue/priority"
-	AutoprogrammingRunStatsCliEndpointV0   = "/api/v0/director/stats"
-	AutoprogrammingRunControlCliEndpointV0 = "/api/v0/runs/control"
+	AutoprogrammingPrepareRunCliEndpointV0  = "/api/v0/autoprogramming/prepare-run"
+	AutoprogrammingStatusCliEndpointV0      = "/api/v0/autoprogramming/status"
+	AutoprogrammingObserveGoalCliEndpointV0 = orquestamcp.MCPAutoprogrammingObserveGoalHTTPPathV0
+	AutoprogrammingSuperviseCliEndpointV0   = "/api/v0/autoprogramming/supervise"
+	AutoprogrammingRunQueueCliEndpointV0    = "/api/v0/runs/queue/priority"
+	AutoprogrammingRunStatsCliEndpointV0    = "/api/v0/director/stats"
+	AutoprogrammingRunControlCliEndpointV0  = "/api/v0/runs/control"
 )
 
 type AutoprogrammingCliClientV0 struct {
@@ -71,6 +72,16 @@ func (client *AutoprogrammingCliClientV0) ConsultarEstado(
 	input.RequestID = firstNonEmptyCliStringV0(input.RequestID, inv.RequestID)
 	input.CorrelationID = firstNonEmptyCliStringV0(input.CorrelationID, inv.CorrelationID)
 	return client.postV0(ctx, inv, CliDefaultCommandAutoprogStatusV0, AutoprogrammingStatusCliEndpointV0, input, decodeAutoprogStatusV0)
+}
+
+func (client *AutoprogrammingCliClientV0) ObservarGoal(
+	ctx context.Context,
+	inv CliInvocationContextV0,
+	input orquestamcp.MCPAutoprogrammingObserveGoalToolInputV0,
+) CliOutputEnvelopeV0 {
+	input.RequestID = firstNonEmptyCliStringV0(input.RequestID, inv.RequestID)
+	input.CorrelationID = firstNonEmptyCliStringV0(input.CorrelationID, inv.CorrelationID)
+	return client.postV0(ctx, inv, CliDefaultCommandAutoprogObserveGoalV0, AutoprogrammingObserveGoalCliEndpointV0, input, decodeAutoprogObserveGoalV0)
 }
 
 func (client *AutoprogrammingCliClientV0) ConsultarRun(
@@ -163,6 +174,11 @@ func decodeAutoprogQueueV0(resp *http.Response, inv CliInvocationContextV0, star
 
 func decodeAutoprogStatusV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
 	var result orquestamcp.MCPAutoprogrammingStatusToolResultV0
+	return decodeAutoprogToolResponseV0(resp, inv, start, &result)
+}
+
+func decodeAutoprogObserveGoalV0(resp *http.Response, inv CliInvocationContextV0, start time.Time) CliOutputEnvelopeV0 {
+	var result orquestamcp.MCPAutoprogrammingObserveGoalToolResultV0
 	return decodeAutoprogToolResponseV0(resp, inv, start, &result)
 }
 

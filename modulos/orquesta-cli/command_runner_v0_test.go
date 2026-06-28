@@ -19,7 +19,8 @@ func TestRunOrquestaCLIV0HelpEspanolSinRed(t *testing.T) {
 		t.Fatalf("code=%d", code)
 	}
 	if !bytes.Contains(stdout.Bytes(), []byte("Uso: orquesta-cli")) ||
-		!bytes.Contains(stdout.Bytes(), []byte("app spec solicitar")) {
+		!bytes.Contains(stdout.Bytes(), []byte("app spec solicitar")) ||
+		!bytes.Contains(stdout.Bytes(), []byte("autoprogramacion goal observar")) {
 		t.Fatalf("help inesperada: %s", stdout.String())
 	}
 }
@@ -238,7 +239,7 @@ func TestRunOrquestaCLIV0AutoprogramacionColaListarUsaAPI(t *testing.T) {
 	}
 }
 
-func TestRunOrquestaCLIV0AutoprogramacionEstadoYSupervisarUsanAPI(t *testing.T) {
+func TestRunOrquestaCLIV0AutoprogramacionEstadoObserveGoalYSupervisarUsanAPI(t *testing.T) {
 	seen := map[string]bool{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen[r.URL.Path] = true
@@ -247,6 +248,20 @@ func TestRunOrquestaCLIV0AutoprogramacionEstadoYSupervisarUsanAPI(t *testing.T) 
 			_ = json.NewEncoder(w).Encode(orquestamcp.MCPAutoprogrammingStatusToolResultV0{
 				Estado: orquestamcp.MCPAutoprogrammingStatusEstadoOKV0,
 				RunRef: "run-ref-cli-status-001",
+			})
+		case AutoprogrammingObserveGoalCliEndpointV0:
+			var input orquestamcp.MCPAutoprogrammingObserveGoalToolInputV0
+			if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+				t.Fatalf("decode observe goal: %v", err)
+			}
+			if input.RunRef != "run-ref-cli-status-001" || input.RequestedBy != "operator" {
+				t.Fatalf("observe goal input=%+v", input)
+			}
+			_ = json.NewEncoder(w).Encode(orquestamcp.MCPAutoprogrammingObserveGoalToolResultV0{
+				Estado:     orquestamcp.MCPAutoprogrammingObserveGoalEstadoOKV0,
+				RunRef:     input.RunRef,
+				GoalRef:    "goal-ref-cli-observe-001",
+				GoalStatus: "complete",
 			})
 		case AutoprogrammingSuperviseCliEndpointV0:
 			var input orquestamcp.MCPRunSupervisorToolInputV0
@@ -275,6 +290,12 @@ func TestRunOrquestaCLIV0AutoprogramacionEstadoYSupervisarUsanAPI(t *testing.T) 
 		"--run-ref", "run-ref-cli-status-001",
 		"--json",
 	}, nil)
+	observeGoalEnv, observeGoalCode := runCLIAndDecodeEnvelopeV0(t, []string{
+		"autoprogramacion", "goal", "observar",
+		"--server-url", server.URL,
+		"--run-ref", "run-ref-cli-status-001",
+		"--json",
+	}, nil)
 	superviseEnv, superviseCode := runCLIAndDecodeEnvelopeV0(t, []string{
 		"autoprogramacion", "supervisar",
 		"--server-url", server.URL,
@@ -284,10 +305,12 @@ func TestRunOrquestaCLIV0AutoprogramacionEstadoYSupervisarUsanAPI(t *testing.T) 
 		"--json",
 	}, nil)
 
-	if statusCode != 0 || superviseCode != 0 || !statusEnv.OK || !superviseEnv.OK ||
+	if statusCode != 0 || observeGoalCode != 0 || superviseCode != 0 ||
+		!statusEnv.OK || !observeGoalEnv.OK || !superviseEnv.OK ||
 		!seen[AutoprogrammingStatusCliEndpointV0] ||
+		!seen[AutoprogrammingObserveGoalCliEndpointV0] ||
 		!seen[AutoprogrammingSuperviseCliEndpointV0] {
-		t.Fatalf("status=%+v/%d supervise=%+v/%d seen=%+v", statusEnv, statusCode, superviseEnv, superviseCode, seen)
+		t.Fatalf("status=%+v/%d observe_goal=%+v/%d supervise=%+v/%d seen=%+v", statusEnv, statusCode, observeGoalEnv, observeGoalCode, superviseEnv, superviseCode, seen)
 	}
 }
 

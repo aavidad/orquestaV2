@@ -105,6 +105,30 @@ func runCLIAutoprogrammingStatusV0(ctx context.Context, args []string) (CliOutpu
 	return env, exitCodeForEnvelopeV0(env)
 }
 
+func runCLIAutoprogrammingObserveGoalV0(ctx context.Context, args []string) (CliOutputEnvelopeV0, int) {
+	fs, common := newCLIFlagSetV0(CliDefaultCommandAutoprogObserveGoalV0)
+	runRef := fs.String("run-ref", "", "ref opaca del run goal-first")
+	requestedBy := fs.String("requested-by", "operator", "actor solicitante")
+	if err := fs.Parse(args); err != nil {
+		return cliParseErrorEnvelopeV0(CliDefaultCommandAutoprogObserveGoalV0, err)
+	}
+	if fs.NArg() != 0 {
+		return cliUnexpectedArgsEnvelopeV0(CliDefaultCommandAutoprogObserveGoalV0, common)
+	}
+	inv := invocationFromCLIFlagsV0(CliDefaultCommandAutoprogObserveGoalV0, common)
+	input := orquestamcp.MCPAutoprogrammingObserveGoalToolInputV0{
+		RunRef:      strings.TrimSpace(*runRef),
+		RequestedBy: strings.TrimSpace(*requestedBy),
+	}
+	client, err := NewAutoprogrammingCliClientV0(common.ServerURL, common.Timeout)
+	if err != nil {
+		env := autoprogClientErrorEnvelopeV0(inv, err, runnerNowV0(OrquestaCLIRunnerV0{}))
+		return env, exitCodeForEnvelopeV0(env)
+	}
+	env := client.ObservarGoal(ctx, inv, input)
+	return env, exitCodeForEnvelopeV0(env)
+}
+
 func runCLIAutoprogrammingRunV0(ctx context.Context, args []string) (CliOutputEnvelopeV0, int) {
 	fs, common := newCLIFlagSetV0(CliDefaultCommandAutoprogRunV0)
 	runRef := fs.String("run-ref", "", "ref opaca del run")

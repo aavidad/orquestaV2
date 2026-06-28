@@ -78,6 +78,8 @@ func autoprogEstadoAndIssuesV0(target any) (string, []orquestamcp.MCPValidationI
 		return strings.TrimSpace(result.Estado), result.Errores
 	case *orquestamcp.MCPAutoprogrammingStatusToolResultV0:
 		return strings.TrimSpace(result.Estado), result.Errores
+	case *orquestamcp.MCPAutoprogrammingObserveGoalToolResultV0:
+		return strings.TrimSpace(result.Estado), result.Errores
 	case *orquestamcp.MCPDirectorStatsToolResultV0:
 		return strings.TrimSpace(result.Estado), result.Errores
 	case *orquestamcp.MCPRunSupervisorToolResultV0:

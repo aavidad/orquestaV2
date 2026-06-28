@@ -309,11 +309,12 @@ Nombre: AutoprogrammingCliClientV0
 Tipo: puerto_salida
 Version: v0
 Propietario: orquesta-cli
-Consumidores: comandos `servidor estado`, `autoprogramacion preparar|estado ver|supervisar|cola listar|run ver|run controlar`
+Consumidores: comandos `servidor estado`, `autoprogramacion preparar|estado ver|goal observar|supervisar|cola listar|run ver|run controlar`
 Campos:
   - `servidor estado`: GET `/api/v0/server/status`.
   - `preparar`: POST `/api/v0/autoprogramming/prepare-run` con `MCPAutoprogrammingPrepareRunToolInputV0`.
   - `estado ver`: POST `/api/v0/autoprogramming/status` con `MCPAutoprogrammingStatusToolInputV0`.
+  - `goal observar`: POST `/api/v0/autoprogramming/goal/observe` con `MCPAutoprogrammingObserveGoalToolInputV0`; camino preferente goal-first para observar cierre y evidencias sin ejecutar loop legacy.
   - `supervisar`: POST `/api/v0/autoprogramming/supervise` con `MCPRunSupervisorToolInputV0`; legacy requiere `--director-execution-mode legacy_director_loop` y opt-in de servidor.
   - `cola listar`: POST `/api/v0/runs/queue/priority` con action `rank`.
   - `run ver`: POST `/api/v0/director/stats` con `run_ref` opaco.
@@ -322,12 +323,13 @@ Invariantes:
   - Cliente fino server-first; no lee stores, runtime, worktrees, DB ni filesystem interno.
   - `branch_ref`, `worktree_ref` y `run_ref` se tratan como refs opacas y no se recomputan en CLI.
   - La CLI no arranca agentes ni supervisor por si misma; solo consume endpoints publicos.
+  - En composiciones goal-first, `goal observar` es la accion operativa normal tras `preparar`; `supervisar` queda como compatibilidad legacy acotada.
 Errores:
   - error_transporte
   - respuesta_invalida
   - opcion_invalida
 Pruebas de contrato:
-  - httptest valida rutas, headers, rechazo de respuestas invalidas, preservacion de refs opacas en prepare-run y que estado/supervision/control viajan por API publica.
+  - httptest valida rutas, headers, rechazo de respuestas invalidas, preservacion de refs opacas en prepare-run y que estado/observe-goal/supervision/control viajan por API publica.
 Estado:
   - Completado ejecutable como adaptador secundario.
 ```
@@ -364,7 +366,7 @@ Campos:
   - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_EVIDENCE_REFS: lista CSV de refs opacas de evidencia; default vacio.
   - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_ACCEPTANCE: lista CSV de criterios de aceptacion para la tarea idle; default del servidor documenta disparo tras 60s y apagado con `0`.
   - ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_COMPACT_RULES: lista CSV de reglas compactas para agentes; default incluye comunicacion compacta y trabajo secundario.
-  - Comandos de observacion CLI: `servidor estado`, `autoprogramacion cola listar`, `autoprogramacion estado ver`, `autoprogramacion supervisar`, `autoprogramacion run ver` y `autoprogramacion run controlar`.
+  - Comandos de observacion CLI: `servidor estado`, `autoprogramacion cola listar`, `autoprogramacion estado ver`, `autoprogramacion goal observar`, `autoprogramacion supervisar`, `autoprogramacion run ver` y `autoprogramacion run controlar`.
   - Perfil por entorno: conjunto documentado de variables que el operador exporta al proceso servidor residente antes de arrancarlo; no es un DTO leido por CLI.
   - Salida observable por CLI: estado publico del servidor, contadores de ticks/ejecuciones/skips cuando el servidor los expone, cola priorizada, stats publicas de run y respuesta de control de run.
 Invariantes:
