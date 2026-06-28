@@ -69,8 +69,13 @@ las normalizaba de nuevo. Se corrige en `orquesta-goal` haciendo que
 `NormalizeGoalWorkSpecV0` clone en profundidad las slices antes de normalizar, y
 queda fijado con `TestNormalizeGoalWorkSpecV0NoMutaSlicesDeEntrada`. Evidencia:
 `go test -race -count=1 ./...`, `go vet ./...`, `go test -count=1 ./...` y
-`git diff --check` verdes. `staticcheck` y `govulncheck` no estaban instalados en
-este entorno durante este corte.
+`git diff --check` verdes.
+
+Avance 2026-06-28 noche posterior: se instalaron las herramientas de analisis
+en el entorno local y tambien quedan verdes `staticcheck ./...` y
+`govulncheck ./...` (`No vulnerabilities found.`). El workflow
+`.github/workflows/go-quality.yml` ya ejecuta `git diff --check`, `go build`,
+`go vet`, `go test`, `govulncheck`, `staticcheck` y `go test -race`.
 
 ## T4 — Corregir copia por valor de mutex/Builder (`go vet`)
 
