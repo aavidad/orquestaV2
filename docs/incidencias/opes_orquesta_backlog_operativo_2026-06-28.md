@@ -240,6 +240,19 @@ Sigue pendiente ejecutar/cerrar la secuencia temporal real completa hasta
 `finalize_temario_package`; no se debe sustituir por OPES productivo ni por el
 loop legacy.
 
+Avance 2026-06-28 mediodia: se fija una regresion de delivery Codex para ACK
+estricto parcial: si el agente omite `tests` pero aporta `test_receipts`
+validos, la entrega llega a review con `gate-issue:ack_tests:required` y no
+tumba el tick ni la ola. Evidencia: commit `6049798f` y
+`TestCodexDeliveryObservationSourceV0ACKStrictSinTestsPeroConReceiptsLlegaAReviewV0`.
+Tras ese corte, la bateria local dura queda verde:
+`git diff --check`, `go vet ./...`, `go test -count=1 ./...`,
+`staticcheck ./...`, `govulncheck ./...` y
+`go test -race -count=1 -timeout=20m ./...`. Esto no cierra el 100% global:
+el hueco restante de ORQ-OPES-002 sigue siendo el smoke OPES temporal real
+completo de 23 `work_kind`, con TTS/HTML/paquete final y cola final sin
+pendientes reales.
+
 ## ORQ-OPES-003 external_work_no_agent_no_delivery
 
 Estado: parcial; legacy 1+6 y guard de cierre goal-first cubiertos, pendiente
