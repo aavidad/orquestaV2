@@ -956,6 +956,71 @@ func TestMCPAutoprogrammingStatusExecutorV0ProcesoParadoEsRunningStaleNoProcessV
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0ProcesoParadoConAckCleanupEsperaACKV0(t *testing.T) {
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		statsByRun: map[string]*orquestacionnucleoapp.DirectorRunStatsV0{
+			"run-ref-running-process-stopped-ack-cleanup-001": {
+				RunRef: "run-ref-running-process-stopped-ack-cleanup-001",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					AgentsInFlight: 1,
+				},
+				Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+					StalledAgents: 1,
+					Tasks: []orquestacionnucleoapp.DirectorTaskProgressV0{{
+						TaskRef:        "task-ref-running-process-stopped-ack-cleanup-001",
+						AgentRequestID: "agent-ref-running-process-stopped-ack-cleanup-001",
+						DirectorProgressTemporalV0: orquestacionnucleoapp.DirectorProgressTemporalV0{
+							Classification: orquestacionnucleoapp.DirectorProgressClassificationAckCleanupV0,
+							LastAckAt:      "2026-06-25T20:10:00Z",
+						},
+					}},
+				},
+				Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{
+					AgentRequestID: "agent-ref-running-process-stopped-ack-cleanup-001",
+					Status:         orquestacionnucleoapp.DirectorAgentStatusRunningV0,
+					InFlight:       true,
+					LastProgress: &orquestacionnucleoapp.DirectorAgentProgressV0{
+						TaskRef: "task-ref-running-process-stopped-ack-cleanup-001",
+						DirectorProgressTemporalV0: orquestacionnucleoapp.DirectorProgressTemporalV0{
+							Classification: orquestacionnucleoapp.DirectorProgressClassificationAckCleanupV0,
+							LastAckAt:      "2026-06-25T20:10:00Z",
+						},
+					},
+					Process: &orquestacionnucleoapp.DirectorAgentProcessStatsV0{
+						ProcessRef: "process-ref-running-process-stopped-ack-cleanup-001",
+						Status:     orquestacionnucleoapp.DirectorAgentProcessStatusStoppedV0,
+					},
+				}},
+			},
+		},
+	}
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        "run-ref-running-process-stopped-ack-cleanup-001",
+				AppRef:        "opes",
+				Status:        "running",
+				PriorityScore: 90,
+			}},
+		},
+		Stats: stats,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.RunningStale != 1 ||
+		result.QueueHealth.RunningStaleNoProcess != 1 ||
+		len(result.StaleRunning) != 1 ||
+		result.StaleRunning[0].Code != "running_stale_no_process" ||
+		result.StaleRunning[0].Reason != "running_stale_no_live_process_pending_ack" ||
+		result.StaleRunning[0].RecommendedAction != "wait_for_ack_before_reconcile" {
+		t.Fatalf("queue_health=%+v stale_running=%+v", result.QueueHealth, result.StaleRunning)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0EnriqueceRunExplicitoParaQueueHealthV0(t *testing.T) {
 	runRef := "run-ref-running-live-explicit-001"
 	publicStats := &orquestacionnucleoapp.DirectorRunStatsV0{

@@ -14,6 +14,7 @@ func mcpAutoprogrammingRunLivenessV0(
 			AgentsInFlight:    stats.Counts.AgentsInFlight,
 			AgentsFailed:      stats.Counts.AgentsFailed,
 			AgentsLost:        stats.Counts.AgentsLost,
+			PendingAckCount:   mcpAutoprogrammingAckCleanupCountV0(stats),
 			ClosureBlocked:    stats.Closure.Blocked,
 			ClosureClosed:     stats.Closure.Closed,
 			ProgressingAgents: stats.Progress.ProgressingAgents,
@@ -30,6 +31,44 @@ func mcpAutoprogrammingRunLivenessAgentsV0(
 		out = append(out, mcpAutoprogrammingRunLivenessAgentV0(agent))
 	}
 	return out
+}
+
+func mcpAutoprogrammingAckCleanupCountV0(
+	stats orquestacionnucleoapp.DirectorRunStatsV0,
+) int {
+	pendingByAgent := map[string]bool{}
+	for _, task := range stats.Progress.Tasks {
+		if !mcpAutoprogrammingProgressIsAckCleanupV0(task.DirectorProgressTemporalV0) {
+			continue
+		}
+		agentRef := task.AgentRequestID
+		if agentRef == "" {
+			agentRef = task.TaskRef
+		}
+		if agentRef != "" {
+			pendingByAgent[agentRef] = true
+		}
+	}
+	for _, agent := range stats.Agents {
+		if agent.LastProgress == nil ||
+			!mcpAutoprogrammingProgressIsAckCleanupV0(agent.LastProgress.DirectorProgressTemporalV0) {
+			continue
+		}
+		agentRef := agent.AgentRequestID
+		if agentRef == "" {
+			agentRef = agent.LastProgress.TaskRef
+		}
+		if agentRef != "" {
+			pendingByAgent[agentRef] = true
+		}
+	}
+	return len(pendingByAgent)
+}
+
+func mcpAutoprogrammingProgressIsAckCleanupV0(
+	progress orquestacionnucleoapp.DirectorProgressTemporalV0,
+) bool {
+	return progress.Classification == orquestacionnucleoapp.DirectorProgressClassificationAckCleanupV0
 }
 
 func mcpAutoprogrammingRunLivenessAgentV0(

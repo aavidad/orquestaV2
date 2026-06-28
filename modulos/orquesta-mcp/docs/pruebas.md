@@ -625,6 +625,15 @@ si requiere operador o `no_action_reason` si puede esperar/cerrar sin accion.
 `accepted` se clasifica como terminal/completado y no cae a
 `repair_runtime`.
 
+Evidencia adicional 2026-06-28:
+`TestMCPAutoprogrammingStatusExecutorV0ProcesoParadoConAckCleanupEsperaACKV0`
+fija que una run `running` con proceso verificado como `stopped` pero con
+progreso en `ack_registered_cleanup` no recomienda reconciliacion agresiva:
+publica `running_stale_no_process` con razon
+`running_stale_no_live_process_pending_ack` y accion
+`wait_for_ack_before_reconcile`. La clasificacion neutral sigue cubierta por
+`TestClassifyRunLivenessV0AckPendienteNoEsSeguroReconciliar`.
+
 Evidencia adicional 2026-06-26: `autoprogramming/status` diagnostica
 `external_work_accepted_stopped_without_delivery` cuando una run external-work
 queda terminal `stopped` con evidencias de arranque/cola/coordinador, pero los
