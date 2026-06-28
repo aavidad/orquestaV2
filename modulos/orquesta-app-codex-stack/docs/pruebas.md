@@ -1630,3 +1630,30 @@ Cobertura:
   `TestCodexStackExternalJobStatsSourceV0GoalFirstSinStateNoPareceLegacyRegistrado`
   cubren la proyeccion focal de `external_job` desde Goal: running, cierre
   aceptado y contenedor goal-first sin state.
+
+Reconciliacion `running_stale` generica 2026-06-28:
+
+```bash
+go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackV0RunGlobalTickReconciliaRunningStale|TestCodexStackV0NoParaRunningGenerico|TestCodexStackV0NoReconciliaRunningGenerico|TestCodexStackV0NoParaOPESRunning|TestCodexStackV0NoReconciliaOPESRunning|TestCodexStackV0RunGlobalTickReconciliaOPESUsageLimit'
+```
+
+Cobertura:
+
+- `TestCodexStackV0RunGlobalTickReconciliaRunningStaleGenericoConProcesoParadoV0`
+  fija que una run no-OPES `running` con agente iniciado, registro de proceso y
+  snapshot concordante `stopped`, pero sin tarea legacy abierta recuperable, se
+  reconcilia como `stopped`, marca el agente como `lost` y permite ejecutar el
+  siguiente candidato `ready`.
+- `TestCodexStackV0NoParaRunningGenericoSinRegistroProcesoV0` fija que una run
+  generica sin registros de proceso no se cierra por ausencia de evidencia.
+- `TestCodexStackV0NoReconciliaRunningGenericoConProcessRefNoEncontradoV0`
+  fija que un `ProcessRef` registrado pero no adoptado por el runtime queda no
+  verificable y no muta cola ni run-control.
+- Las pruebas OPES existentes conservan la frontera: no se cierra sin proceso ni
+  evidencia terminal, no se cierra con snapshot ausente, y la excepcion de
+  limite de proveedor sigue acotada a OPES/external-work.
+- Los tests `TestCodexStackAutoprogrammingSupervisorGlobalReemplazaAskDirectorPerdido`,
+  `TestCodexStackAutoprogrammingSupervisorResidenteReemplazaAskDirectorPerdido`
+  y `TestCodexStackRunSupervisorAPIV0ColaGlobalConsumeDecisionFile*` cubren que
+  esta preparacion no pisa replan/reemplazos ni decisiones diferidas del loop
+  legacy.

@@ -71,7 +71,7 @@ func (stack StackV0) reconcileQueuedRunningStaleCandidateV0(
 	if !stackRunIsActiveV0(run) || len(compactStringsV0(run.StartedAgents)) == 0 {
 		return nil
 	}
-	if !codexStackRunLooksOPESDirectWorkV0(run.ProjectRef, run.AppSpecRef) {
+	if len(stackDrainPendingStartedAgentRefsV0(run)) == 0 {
 		return nil
 	}
 	liveness, err := stack.queuedRunningStaleProcessLivenessV0(ctx, run.RunID)
@@ -82,7 +82,7 @@ func (stack StackV0) reconcileQueuedRunningStaleCandidateV0(
 	if err != nil {
 		return err
 	}
-	if liveness.RecordCount == 0 && !queuedRunningStaleCauseAllowsNoProcessReconcileV0(cause) {
+	if !queuedRunningStaleRunCanReconcileV0(run, liveness, cause) {
 		return nil
 	}
 	if liveness.RecordCount == 0 {
@@ -116,6 +116,10 @@ func (stack StackV0) reconcileQueuedRunningStaleCandidateV0(
 		return err
 	}
 	if stack.runningStaleCandidateStillHasLiveProcessV0(ctx, latest) {
+		return nil
+	}
+	if !codexStackRunLooksExternalWorkV0(run.ProjectRef, run.AppSpecRef) &&
+		stackRunHasRecoverableTerminalAssessmentV0(latest) {
 		return nil
 	}
 	reason := firstNonEmptyQueuedSourceV0(
@@ -235,6 +239,21 @@ func queuedRunningStaleCauseAllowsNoProcessReconcileV0(cause queuedRunningStaleC
 	return strings.TrimSpace(cause.Reason) == "provider_usage_limit_retry_after"
 }
 
+func queuedRunningStaleRunCanReconcileV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	liveness queuedRunningStaleProcessLivenessV0,
+	cause queuedRunningStaleCauseV0,
+) bool {
+	if !liveness.Verifiable || liveness.Live {
+		return false
+	}
+	if liveness.RecordCount > 0 {
+		return true
+	}
+	return codexStackRunLooksOPESDirectWorkV0(run.ProjectRef, run.AppSpecRef) &&
+		queuedRunningStaleCauseAllowsNoProcessReconcileV0(cause)
+}
+
 func (stack StackV0) queuedRunningStaleProcessLivenessV0(
 	ctx context.Context,
 	runRef string,
@@ -258,24 +277,30 @@ func (stack StackV0) queuedRunningStaleProcessLivenessV0(
 		Verifiable:  true,
 		RecordCount: len(records),
 	}
-	missingSnapshot := false
+	unknownSnapshot := false
 	for _, record := range records {
 		snapshot, err := stack.CodexSnapshotSource.SnapshotV0(strings.TrimSpace(record.ProcessRef))
 		if err != nil {
 			if codexStackProcessRuntimeMissingV0(err) {
-				missingSnapshot = true
+				unknownSnapshot = true
 				continue
 			}
 			return queuedRunningStaleProcessLivenessV0{}, err
 		}
-		if !runControlRegisteredProcessMatchesSnapshotV0(record, snapshot) ||
-			snapshot.Status == orquestaruntime.ProcessRuntimeRunningV0 ||
-			snapshot.Status == orquestaruntime.ProcessRuntimeStoppingV0 {
+		if !runControlRegisteredProcessMatchesSnapshotV0(record, snapshot) {
 			result.Live = true
 			return result, nil
 		}
+		switch snapshot.Status {
+		case orquestaruntime.ProcessRuntimeRunningV0, orquestaruntime.ProcessRuntimeStoppingV0:
+			result.Live = true
+			return result, nil
+		case orquestaruntime.ProcessRuntimeStoppedV0:
+		default:
+			unknownSnapshot = true
+		}
 	}
-	if missingSnapshot {
+	if unknownSnapshot {
 		result.Verifiable = false
 	}
 	return result, nil

@@ -165,6 +165,191 @@ func TestCodexStackV0RunGlobalTickReconciliaRunningStaleAntesDeReadyV0(t *testin
 	}
 }
 
+func TestCodexStackV0RunGlobalTickReconciliaRunningStaleGenericoConProcesoParadoV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	staleRunRef := "run-generic-running-stale-no-live-001"
+	staleTaskRef := "task-generic-running-stale-no-live-001"
+	staleAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(staleTaskRef)
+	staleRun := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(staleRunRef, staleTaskRef)
+	staleRun.AppSpecRef = "app-spec-ref-generic-running-stale-no-live"
+	staleRun.Tasks = nil
+	staleRun.FunctionContracts = nil
+	staleRun.Agents = []string{staleAgentRef}
+	staleRun.StartedAgents = []string{staleAgentRef}
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), staleRun); err != nil {
+		t.Fatalf("SaveRunV0 stale: %v", err)
+	}
+	processRef := "process-ref-generic-running-stale-no-live-001"
+	runtime.snapshots[processRef] = orquestaruntime.ProcessRuntimeSnapshotV0{
+		SchemaVersion: orquestaruntime.ProcessRuntimeConnectorVersionV0,
+		ProcessRef:    processRef,
+		SessionRef:    "session-ref-generic-running-stale-no-live-001",
+		LaunchRef:     "launch-ref-generic-running-stale-no-live-001",
+		Status:        orquestaruntime.ProcessRuntimeStoppedV0,
+	}
+	if err := stack.Stores.ProcessRegistry.RecordAgentProcessV0(
+		context.Background(),
+		orquestacionnucleoapp.AgentProcessRegistryRecordV0{
+			RunID:          staleRunRef,
+			AgentRequestID: staleAgentRef,
+			ProcessRef:     processRef,
+			SessionRef:     "session-ref-generic-running-stale-no-live-001",
+			LaunchRef:      "launch-ref-generic-running-stale-no-live-001",
+			ReadinessRef:   "readiness-ref-generic-running-stale-no-live-001",
+			EvidenceRefs:   []string{"evidence-ref-test-generic-running-stale-no-live"},
+		},
+	); err != nil {
+		t.Fatalf("RecordAgentProcessV0 stale: %v", err)
+	}
+	setRunQueueCandidateForTestV0(
+		t,
+		stack,
+		staleRunRef,
+		orquestarunqueue.RunStatusRunningV0,
+		100,
+		time.Date(2026, 6, 28, 9, 0, 0, 0, time.UTC),
+	)
+	ready := postDirectorAPIWithNameV0(t, stack, "ready-after-generic-running-stale", "Ready After Generic Running Stale")
+	setStackRunPriorityForTestV0(t, stack, ready.RunRef, ready.AppSpec.Slug, 10)
+
+	result, err := stack.RunGlobalTickV0(context.Background(), globalTickCommandForTestV0())
+	if err != nil {
+		t.Fatalf("RunGlobalTickV0: %v", err)
+	}
+	if got := executionRefsForStackCoordinatorTestV0(result); len(got) != 1 || got[0] != ready.RunRef {
+		t.Fatalf("executions got %#v want %#v result=%+v", got, []string{ready.RunRef}, result)
+	}
+	staleCandidate := mustQueueCandidateForTestV0(t, stack, staleRunRef)
+	if staleCandidate.Status != orquestarunqueue.RunStatusStoppedV0 ||
+		!codexStackStringInSetV0(staleCandidate.EvidenceRefs, "evidence-ref-run-queue-running-stale-no-live-process-reconciled") {
+		t.Fatalf("staleCandidate=%+v", staleCandidate)
+	}
+	state, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: staleRunRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0 stale: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusStoppedV0 ||
+		!codexStackStringInSetV0(state.EvidenceRefs, "evidence-ref-run-control-running-stale-no-live-process") {
+		t.Fatalf("state=%+v", state)
+	}
+	latest := mustLoadCodexStackRunForTestV0(t, stack, staleRunRef)
+	if !codexStackStringInSetV0(latest.LostAgents, staleAgentRef) {
+		t.Fatalf("run stale generica no reconciliada como lost: lost=%v assessments=%v", latest.LostAgents, latest.AgentAssessments)
+	}
+}
+
+func TestCodexStackV0NoParaRunningGenericoSinRegistroProcesoV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	staleRunRef := "run-generic-running-no-process-001"
+	staleTaskRef := "task-generic-running-no-process-001"
+	staleAgentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(staleTaskRef)
+	staleRun := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(staleRunRef, staleTaskRef)
+	staleRun.Agents = []string{staleAgentRef}
+	staleRun.StartedAgents = []string{staleAgentRef}
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), staleRun); err != nil {
+		t.Fatalf("SaveRunV0 stale: %v", err)
+	}
+	if err := stack.Ports.DirectorTaskStore.SaveWorkflowTaskV0(
+		context.Background(),
+		stackDeliveredAutoprogrammingTaskForTestV0(staleRunRef, staleTaskRef),
+	); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0 stale: %v", err)
+	}
+	setRunQueueCandidateForTestV0(
+		t,
+		stack,
+		staleRunRef,
+		orquestarunqueue.RunStatusRunningV0,
+		100,
+		time.Date(2026, 6, 28, 9, 10, 0, 0, time.UTC),
+	)
+
+	if err := stack.reconcileQueuedRunningStaleRunsV0(context.Background(), globalTickCommandForTestV0()); err != nil {
+		t.Fatalf("reconcileQueuedRunningStaleRunsV0: %v", err)
+	}
+	candidate := mustQueueCandidateForTestV0(t, stack, staleRunRef)
+	if candidate.Status != orquestarunqueue.RunStatusRunningV0 ||
+		codexStackStringInSetV0(candidate.EvidenceRefs, "evidence-ref-run-queue-running-stale-no-live-process-reconciled") {
+		t.Fatalf("candidate=%+v", candidate)
+	}
+	state, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: staleRunRef},
+	)
+	if err == nil && state.Status == orquestaruncontrol.RunControlStatusStoppedV0 {
+		t.Fatalf("state stopped sin registro de proceso: %+v", state)
+	}
+}
+
+func TestCodexStackV0NoReconciliaRunningGenericoConProcessRefNoEncontradoV0(t *testing.T) {
+	runtime := missingSnapshotCodexStackRuntimeForTestV0{fakeCodexStackRuntimeV0: newFakeCodexStackRuntimeV0()}
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	runRef := "run-generic-running-process-ref-missing-001"
+	taskRef := "task-generic-running-process-ref-missing-001"
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, taskRef)
+	run.Agents = []string{agentRef}
+	run.StartedAgents = []string{agentRef}
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if err := stack.Ports.DirectorTaskStore.SaveWorkflowTaskV0(
+		context.Background(),
+		stackDeliveredAutoprogrammingTaskForTestV0(runRef, taskRef),
+	); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+	if err := stack.Stores.ProcessRegistry.RecordAgentProcessV0(
+		context.Background(),
+		orquestacionnucleoapp.AgentProcessRegistryRecordV0{
+			RunID:          runRef,
+			AgentRequestID: agentRef,
+			ProcessRef:     "process-ref-generic-running-process-ref-missing-001",
+			SessionRef:     "session-ref-generic-running-process-ref-missing-001",
+			LaunchRef:      "launch-ref-generic-running-process-ref-missing-001",
+			ReadinessRef:   "readiness-ref-generic-running-process-ref-missing-001",
+			EvidenceRefs:   []string{"evidence-ref-process-registry-present"},
+		},
+	); err != nil {
+		t.Fatalf("RecordAgentProcessV0: %v", err)
+	}
+	setRunQueueCandidateForTestV0(
+		t,
+		stack,
+		runRef,
+		orquestarunqueue.RunStatusRunningV0,
+		100,
+		time.Date(2026, 6, 28, 9, 20, 0, 0, time.UTC),
+	)
+
+	liveness, err := stack.queuedRunningStaleProcessLivenessV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("queuedRunningStaleProcessLivenessV0: %v", err)
+	}
+	if liveness.Verifiable || liveness.Live || liveness.RecordCount != 1 {
+		t.Fatalf("liveness=%+v", liveness)
+	}
+	if err := stack.reconcileQueuedRunningStaleRunsV0(context.Background(), globalTickCommandForTestV0()); err != nil {
+		t.Fatalf("reconcileQueuedRunningStaleRunsV0: %v", err)
+	}
+	candidate := mustQueueCandidateForTestV0(t, stack, runRef)
+	if candidate.Status != orquestarunqueue.RunStatusRunningV0 ||
+		codexStackStringInSetV0(candidate.EvidenceRefs, "evidence-ref-run-queue-running-stale-no-live-process-reconciled") {
+		t.Fatalf("candidate=%+v", candidate)
+	}
+	state, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err == nil && state.Status == orquestaruncontrol.RunControlStatusStoppedV0 {
+		t.Fatalf("state stopped con snapshot no verificable: %+v", state)
+	}
+}
+
 func TestCodexStackV0NoParaOPESRunningSinRegistroProcesoNiEvidenciaTerminalV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	staleRunRef := "run-opes-running-no-process-no-terminal-001"

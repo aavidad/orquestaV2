@@ -2,6 +2,26 @@
 
 ```text
 Fecha: 2026-06-28
+Decision: `running_stale` generico se reconcilia solo con proceso terminal
+verificado.
+Motivo: el estado `running` de cola puede bloquear capacidad aunque el runtime
+ya no tenga ningun agente vivo. Antes el reconciler solo liberaba el caso OPES,
+pero una composicion no-OPES con registro de proceso y snapshot `stopped`
+equivalente tambien tiene evidencia dura suficiente. En cambio, ausencia de
+registro, snapshot no encontrado o estado desconocido siguen siendo ambiguos y
+no deben cerrar trabajo.
+Impacto: `reconcileQueuedRunningStaleCandidateV0` deja de depender del dominio
+cuando queda algun agente pendiente real, `ProcessRegistry` observa registros y
+todos los snapshots concordantes son `stopped`; marca agentes pendientes como
+`lost`, cierra run-control en `stopped` y libera la cola solo si no acaba de
+abrir una recuperacion legacy no-external por assessment. La excepcion historica
+de OPES/external-work por limite de proveedor sin registro de proceso queda
+acotada a ese dominio y no se convierte en regla generica.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-28
 Decision: El cierre goal-first de OPES 1+6 exige seis evidencias de subrol.
 Motivo: en goal-first no se materializan `WorkflowTaskV0` hijos legacy; Codex
 Goal puede actuar como director interno, pero no debe sustituir el contrato
