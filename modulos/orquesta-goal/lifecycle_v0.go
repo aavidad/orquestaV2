@@ -91,16 +91,17 @@ func StartGoalWorkV0(
 		EvidenceRefs:  request.EvidenceRefs,
 	})
 	if err != nil {
-		return GoalWorkStartResultV0{}, err
+		return GoalWorkStartResultV0{Receipt: NormalizeGoalLaunchReceiptV0(receipt)}, err
 	}
-	if err := ports.StateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
-		return GoalWorkStartResultV0{}, err
-	}
-	return GoalWorkStartResultV0{
+	result := GoalWorkStartResultV0{
 		State:        state,
 		Receipt:      state.LaunchReceipt,
 		EvidenceRefs: append([]string(nil), state.EvidenceRefs...),
-	}, nil
+	}
+	if err := ports.StateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
+		return result, err
+	}
+	return result, nil
 }
 
 func ObserveGoalWorkV0(

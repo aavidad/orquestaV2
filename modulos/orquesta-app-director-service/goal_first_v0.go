@@ -45,7 +45,14 @@ func startAppDirectorGoalFirstV0(
 		},
 	)
 	if err != nil {
-		if markerErr := saveAppDirectorGoalFirstLaunchFailedMarkerV0(ctx, prepared.Run.RunID, goalSpec, prepared.EvidenceRefs, ports); markerErr != nil {
+		if markerErr := saveAppDirectorGoalFirstLaunchFailedMarkerV0(
+			ctx,
+			prepared.Run.RunID,
+			goalSpec,
+			goalStarted.Receipt,
+			prepared.EvidenceRefs,
+			ports,
+		); markerErr != nil {
 			return StartAppDirectorResultV0{}, false, markerErr
 		}
 		return StartAppDirectorResultV0{}, false, err
@@ -69,6 +76,7 @@ func saveAppDirectorGoalFirstLaunchFailedMarkerV0(
 	ctx context.Context,
 	runRef string,
 	spec orquestagoal.GoalWorkSpecV0,
+	receipt orquestagoal.GoalLaunchReceiptV0,
 	evidenceRefs []string,
 	ports StartAppDirectorPortsV0,
 ) error {
@@ -80,15 +88,19 @@ func saveAppDirectorGoalFirstLaunchFailedMarkerV0(
 		AppDirectorGoalFirstRunMarkerV0{
 			SchemaVersion: AppDirectorGoalFirstRunMarkerSchemaV0,
 			RunRef:        strings.TrimSpace(runRef),
-			GoalRef:       strings.TrimSpace(spec.GoalRef),
-			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
-			Status:        orquestagoal.GoalStatusBlockedV0,
+			GoalRef:       firstStartAppDirectorGoalValueV0(receipt.GoalRef, spec.GoalRef),
+			ExternalGoalRef: firstStartAppDirectorGoalValueV0(
+				receipt.ExternalGoalRef,
+				spec.GoalRef,
+			),
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			Status:       orquestagoal.GoalStatusBlockedV0,
 			EvidenceRefs: compactStartAppDirectorStringsV0(append(
 				[]string{
 					"evidence-ref-app-director-goal-first-launch-failed-v0",
 					"evidence-ref-app-director-goal-first-run-marker-v0",
 				},
-				evidenceRefs...,
+				append(evidenceRefs, receipt.EvidenceRefs...)...,
 			)),
 		},
 	)
@@ -212,6 +224,18 @@ func launchAppDirectorGoalReworkIfAllowedV0(
 		},
 	)
 	if err != nil {
+		if ports.GoalFirstRunMarkerStore != nil {
+			if markerErr := ports.GoalFirstRunMarkerStore.SaveGoalWorkRunMarkerV0(
+				ctx,
+				appDirectorGoalFirstRunMarkerFromLaunchV0(
+					state.RunRef,
+					goalStarted.Receipt,
+					goalStarted.EvidenceRefs,
+				),
+			); markerErr != nil {
+				return run, true, markerErr
+			}
+		}
 		return run, true, err
 	}
 	if ports.GoalFirstRunMarkerStore != nil {

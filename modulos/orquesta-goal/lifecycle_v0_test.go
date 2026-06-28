@@ -60,12 +60,17 @@ func TestStartGoalWorkV0LanzaYGuardaEstadoNeutral(t *testing.T) {
 
 func TestStartGoalWorkV0DevuelveErrorSiStoreFallaSinRelanzar(t *testing.T) {
 	launcher := &goalLifecycleLauncherForTestV0{
-		receipt: GoalLaunchReceiptV0{Status: GoalStatusRunningV0},
+		receipt: GoalLaunchReceiptV0{
+			Status:          GoalStatusRunningV0,
+			GoalRef:         "goal-ref-lifecycle-001",
+			ExternalGoalRef: "thread-ref-goal-lifecycle-partial-001",
+			EvidenceRefs:    []string{"evidence-ref-goal-lifecycle-partial-launch"},
+		},
 	}
 	store := newGoalLifecycleStoreForTestV0()
 	store.saveErr = errors.New("state_store_unavailable")
 
-	_, err := StartGoalWorkV0(
+	result, err := StartGoalWorkV0(
 		context.Background(),
 		GoalWorkStartRequestV0{
 			RunRef: "run-ref-goal-lifecycle-001",
@@ -78,6 +83,11 @@ func TestStartGoalWorkV0DevuelveErrorSiStoreFallaSinRelanzar(t *testing.T) {
 	)
 	if err == nil || err.Error() != "state_store_unavailable" {
 		t.Fatalf("err=%v", err)
+	}
+	if result.Receipt.ExternalGoalRef != "thread-ref-goal-lifecycle-partial-001" ||
+		result.State.ExternalGoalRef != "thread-ref-goal-lifecycle-partial-001" ||
+		!goalLifecycleStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-goal-lifecycle-partial-launch") {
+		t.Fatalf("result parcial sin receipt/state util: %+v", result)
 	}
 	if launcher.calls != 1 || store.saves != 1 || len(store.states) != 0 {
 		t.Fatalf("calls=%d saves=%d states=%+v", launcher.calls, store.saves, store.states)

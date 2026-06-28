@@ -391,6 +391,52 @@ func TestStartAppDirectorV0GoalFirstLauncherDegradadoPersisteMarkerV0(t *testing
 	}
 }
 
+func TestStartAppDirectorV0GoalFirstStateStoreFallaPersisteMarkerConExternalGoalRefV0(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	launcher := &serviceGoalLauncherForTestV0{}
+	goalStates := newServiceGoalStateStoreForTestV0()
+	goalStates.saveErr = errors.New("goal_state_store_unavailable")
+	markers := newServiceGoalFirstRunMarkerStoreForTestV0()
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = AppDirectorExecutionModeGoalFirstV0
+
+	result, err := StartAppDirectorV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{
+			RunStore:                store,
+			EventSink:               sink,
+			OutboxLedger:            ledger,
+			GoalLauncher:            launcher,
+			GoalObserver:            serviceGoalObserverForTestV0{},
+			GoalClosureValidator:    orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+			GoalStateStore:          goalStates,
+			GoalFirstRunMarkerStore: markers,
+		},
+	)
+
+	if err == nil || err.Error() != "goal_state_store_unavailable" {
+		t.Fatalf("err=%v result=%+v", err, result)
+	}
+	marker, err := markers.LoadGoalWorkRunMarkerV0(context.Background(), request.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkRunMarkerV0: %v", err)
+	}
+	if marker.RunRef != request.RunRef ||
+		marker.ExternalGoalRef != "thread-ref-service-goal-001" ||
+		marker.Status != orquestagoal.GoalStatusBlockedV0 ||
+		!serviceStringInSetV0(marker.EvidenceRefs, "evidence-ref-service-goal-launched-001") ||
+		!serviceStringInSetV0(marker.EvidenceRefs, "evidence-ref-app-director-goal-first-launch-failed-v0") {
+		t.Fatalf("marker=%+v", marker)
+	}
+	if serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentRequestedV0) ||
+		serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentStartedV0) {
+		t.Fatalf("goal-first con state store degradado no debe caer al loop legacy: %+v", sink.EventsV0())
+	}
+}
+
 func TestStartAppDirectorV0GoalFirstBundleIncompletoNoCaeALoopLegacy(t *testing.T) {
 	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
 	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
@@ -1044,7 +1090,8 @@ func (observer serviceGoalObserverForTestV0) ObserveGoalWorkV0(
 }
 
 type serviceGoalStateStoreForTestV0 struct {
-	states map[string]AppDirectorGoalStateV0
+	states  map[string]AppDirectorGoalStateV0
+	saveErr error
 }
 
 func newServiceGoalStateStoreForTestV0() *serviceGoalStateStoreForTestV0 {
@@ -1055,6 +1102,9 @@ func (store *serviceGoalStateStoreForTestV0) SaveGoalWorkStateV0(
 	_ context.Context,
 	state AppDirectorGoalStateV0,
 ) error {
+	if store.saveErr != nil {
+		return store.saveErr
+	}
 	normalized, err := NewAppDirectorGoalStateV0(state)
 	if err != nil {
 		return err
