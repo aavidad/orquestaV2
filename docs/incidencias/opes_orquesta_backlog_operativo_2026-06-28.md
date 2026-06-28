@@ -16,8 +16,8 @@ Reglas de uso:
 
 ## ORQ-OPES-001 estado_operativo_global_accionable
 
-Estado: parcial, con marcador goal-first cubierto en MCP y `/ops` el
-2026-06-28.
+Estado: casi cerrado para la superficie local MCP/web; pendiente contrato
+global exhaustivo por cada run visible y smoke temporal real.
 
 Problema: las vistas de estado mezclan procesos vivos, runs stale, colas y
 contenedores goal-first sin una decision unica accionable. El operador necesita
@@ -42,8 +42,20 @@ run como bloqueado reparable, emite accion `goal_first_state_missing` con
 esa run. `ops_snapshot.decision` publica `repair_goal_state` en vez de derivar
 `wait_deliveries` desde stats legacy residuales. Evidencia:
 `TestMCPAutoprogrammingStatusExecutorV0GoalFirstMarkerSinStateNoSupervisaLegacy`.
-Sigue vivo el cierre global de `/ops` y de reconciliacion completa de todos los
-casos visibles.
+
+Avance 2026-06-28 adicional: `director.stats` tambien lee el marker goal-first
+por puerto opt-in cuando falta `GoalWorkStateV0`, proyecta
+`stats.status=goal_first_state_missing`, `closure.blocked_by=
+goal_first_state_missing` y `ops_snapshot.decision.action=repair_goal_state`.
+`/queue/global-status` normaliza esa situacion como accion
+`repair_goal_state`, y `/ops` evita los botones de supervision legacy para esa
+run; muestra reparar `GoalWorkStateV0` antes de observar o supervisar.
+Evidencia:
+`TestMCPDirectorStatsToolExecutorV0GoalFirstMarkerSinStatePublicaRepairGoalState`,
+`TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstStateMissingRecomiendaRepararState`
+y `TestOpsDashboardWebEndpointV0GoalFirstUsaObserveGoalEnAvance`.
+Sigue vivo el cierre de contrato unico exhaustivo "accion segura o razon de no
+accion" para todos los tipos de run visible.
 
 ## ORQ-OPES-002 reconciliacion_ack_artefactos_cierre_cola
 
@@ -153,6 +165,9 @@ Avance 2026-06-28:
 - `opes-drain-once` evalua la capacidad declarada por env antes de dry-run,
   claim o submit; `generate_audio_asset` sin `speech_synthesis` queda en
   `external_capability_missing` sin postear a Orquesta;
+- el resumen publico de `opes-drain-once` expone `operational_reason` tanto en
+  `results[]` como en `errors[]`, para que el operador vea
+  `external_capability_missing:speech_synthesis` sin revisar logs;
 - el wrapper de derivados reales bloquea `drain-once`/finalizacion con audio si
   no se declara `ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available`;
 - el smoke fake de derivados declara `speech_synthesis` y sigue cubriendo la

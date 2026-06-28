@@ -65,7 +65,7 @@ func TestBuildDirectorPortsV0CableaAppGoalLauncher(t *testing.T) {
 		&StackV0{},
 	)
 	stats, ok := bindings.DirectorStats.(orquestamcp.MCPDirectorStatsToolExecutorV0)
-	if !ok || stats.GoalStateSource == nil {
+	if !ok || stats.GoalStateSource == nil || stats.GoalMarkerSource == nil {
 		t.Fatalf("director stats sin goal state source: ok=%v stats=%+v", ok, stats)
 	}
 }

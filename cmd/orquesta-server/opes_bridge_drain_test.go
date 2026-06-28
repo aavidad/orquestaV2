@@ -1947,8 +1947,10 @@ func TestRunOPESDrainOnceV0AudioSinSpeechSynthesisNoPosteaOrquestaV0(t *testing.
 		summary.Skipped != 1 ||
 		len(summary.Results) != 1 ||
 		summary.Results[0].Status != "external_capability_missing" ||
+		summary.Results[0].OperationalReason != "external_capability_missing:speech_synthesis" ||
 		len(summary.Errors) != 1 ||
-		summary.Errors[0].Code != orquestadomainwork.ErrDomainWorkExternalCapabilityMissingV0 {
+		summary.Errors[0].Code != orquestadomainwork.ErrDomainWorkExternalCapabilityMissingV0 ||
+		summary.Errors[0].Reason != "external_capability_missing:speech_synthesis" {
 		t.Fatalf("posts=%d summary=%+v", posts, summary)
 	}
 }

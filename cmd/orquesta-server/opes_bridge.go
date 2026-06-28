@@ -48,6 +48,7 @@ type opesDrainJobResultV0 struct {
 	GoalRef                string   `json:"goal_ref,omitempty"`
 	ExternalGoalRef        string   `json:"external_goal_ref,omitempty"`
 	NextActions            []string `json:"next_actions,omitempty"`
+	OperationalReason      string   `json:"operational_reason,omitempty"`
 	Status                 string   `json:"status"`
 	SupervisionStatus      string   `json:"supervision_status,omitempty"`
 	SupervisionStopReason  string   `json:"supervision_stop_reason,omitempty"`
@@ -60,6 +61,7 @@ type opesDrainJobResultV0 struct {
 type opesDrainPublicErrorV0 struct {
 	JobRef string `json:"job_ref,omitempty"`
 	Code   string `json:"code"`
+	Reason string `json:"reason,omitempty"`
 }
 
 func opesDrainOnceCommandV0(stdout io.Writer, stderr io.Writer) int {
@@ -217,11 +219,13 @@ func runOPESDrainSingleOnceV0(
 		); blocked {
 			summary.Skipped++
 			result.Status = "external_capability_missing"
+			result.OperationalReason = evaluation.OperationalReason
 			result.NextActions = opesBridgeExternalCapabilityNextActionsV0(evaluation)
 			summary.Results = append(summary.Results, result)
 			summary.Errors = append(summary.Errors, opesDrainPublicErrorV0{
 				JobRef: job.ID,
 				Code:   opesBridgeExternalCapabilityErrorCodeV0(evaluation),
+				Reason: evaluation.OperationalReason,
 			})
 			continue
 		}

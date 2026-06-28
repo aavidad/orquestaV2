@@ -108,7 +108,10 @@ queda como fallback para servidores antiguos sin snapshot. No cambia endpoints,
 no lee stores/runtime/DB y no introduce rails de contenido.
 Actualizacion 2026-06-28: la UI reconoce `decision.action=repair_goal_state`
 para runs goal-first con state ausente y lo muestra como reparacion de estado,
-no como espera de entregas ni supervision legacy.
+no como espera de entregas ni supervision legacy. El avance seleccionado,
+avance de fila y accion global consultan `runNeedsGoalStateRepair` desde
+`ops_snapshot.decision` y `stale_running`; si aplica, muestran reparar
+`GoalWorkStateV0` y no llaman `runs/supervise` legacy.
 Contratos afectados: `/ops`, `orquesta.director.stats.v0`,
 `orquesta.autoprogramming.status.v0`, `DirectorAutonomousOpsSnapshotV0`.
 Estado: aceptada localmente.

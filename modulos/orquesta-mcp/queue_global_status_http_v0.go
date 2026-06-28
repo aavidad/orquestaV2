@@ -386,7 +386,11 @@ func mcpQueueGlobalStatusItemsV0(
 			continue
 		}
 		item := ensure(runRef)
-		item.Status = firstNonEmptyMCPV0(diagnostic.Code, item.Status, "needs_action")
+		item.Status = firstNonEmptyMCPV0(
+			mcpQueueGlobalStatusStatusFromDiagnosticV0(diagnostic),
+			item.Status,
+			"needs_action",
+		)
 		item.NeedsAction = true
 		item.RecommendedAction = firstNonEmptyMCPV0(
 			item.RecommendedAction,
@@ -443,6 +447,15 @@ func mcpQueueGlobalStatusCandidateStatusV0(candidate MCPRunQueueRankedCandidateC
 	return classifyMCPAutoprogrammingQueueStatusV0(candidate.Status)
 }
 
+func mcpQueueGlobalStatusStatusFromDiagnosticV0(diagnostic MCPAutoprogrammingDiagnosticV0) string {
+	switch strings.TrimSpace(diagnostic.Code) {
+	case "autoprogramming_goal_first_state_missing":
+		return mcpAutoprogrammingActionGoalFirstStateMissingV0
+	default:
+		return strings.TrimSpace(diagnostic.Code)
+	}
+}
+
 func mcpQueueGlobalStatusActiveRunStatusV0(active MCPAutoprogrammingActiveRunV0) string {
 	switch strings.ToLower(strings.TrimSpace(active.Status)) {
 	case "", "running":
@@ -486,6 +499,8 @@ func mcpQueueGlobalStatusRecommendedActionFromDiagnosticV0(diagnostic MCPAutopro
 	switch strings.TrimSpace(diagnostic.Code) {
 	case mcpAutoprogrammingQueuedNotDispatchedV0:
 		return "reencolar"
+	case mcpAutoprogrammingActionGoalFirstStateMissingV0, "autoprogramming_goal_first_state_missing":
+		return "repair_goal_state"
 	default:
 		return "repair_runtime"
 	}
@@ -494,8 +509,13 @@ func mcpQueueGlobalStatusRecommendedActionFromDiagnosticV0(diagnostic MCPAutopro
 func mcpQueueGlobalStatusNormalizeRecommendedActionV0(action string, fallback string) string {
 	action = strings.ToLower(strings.TrimSpace(action))
 	switch action {
-	case "retry", "reencolar", "cancel_stale", "restart_observer", "repair_runtime":
+	case "retry", "reencolar", "cancel_stale", "restart_observer", "repair_runtime", "repair_goal_state":
 		return action
+	}
+	if strings.Contains(action, "goal_state") ||
+		strings.Contains(action, "repair_goal") ||
+		strings.Contains(action, "state_missing") {
+		return "repair_goal_state"
 	}
 	if strings.Contains(action, "observe") || strings.Contains(action, "observer") {
 		return "restart_observer"

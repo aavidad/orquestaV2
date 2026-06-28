@@ -468,7 +468,13 @@ Ultima ejecucion: 2026-06-08, pasa con `go test -count=1 ./modulos/orquesta-web 
 Revalidacion 2026-06-28: la shell `/ops` contiene etiqueta y razon para
 `repair_goal_state`, accion publicada por el snapshot cuando un goal-first tiene
 marcador durable pero falta `GoalWorkStateV0`.
-Riesgos: La fuente contractual ya es `ops_snapshot`; falta ampliar el snapshot
+Revalidacion adicional 2026-06-28:
+`TestOpsDashboardWebEndpointV0GoalFirstUsaObserveGoalEnAvance` fija
+`runNeedsGoalStateRepair`, `repairGoalStateOps` y el consumo de
+`stale_running`; los botones de avance seleccionado, fila y accion global no
+empujan `runs/supervise` legacy cuando la run necesita reparar
+`GoalWorkStateV0`.
+Riesgos: La fuente contractual ya es `ops_snapshot`; queda ampliar el snapshot
 con modelos/runtime, waits, olas y cohortes cuando esos puertos se publiquen.
 ```
 

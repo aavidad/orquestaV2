@@ -607,6 +607,15 @@ tareas/agentes y no recomienda `observe_goal`, `supervise run` ni
 `supervise queue` hasta reparar el state. Tambien fija que
 `ops_snapshot.decision.action=repair_goal_state` y no `wait_deliveries` aunque
 existan stats legacy residuales con agentes en vuelo.
+`TestMCPDirectorStatsToolExecutorV0GoalFirstMarkerSinStatePublicaRepairGoalState`
+extiende la misma regla a `orquesta.director.stats.v0`: si hay marker goal-first
+sin `GoalWorkStateV0`, `stats.status=goal_first_state_missing`,
+`closure.blocked_by=goal_first_state_missing` y el snapshot de ops recomienda
+`repair_goal_state`.
+`TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstStateMissingRecomiendaRepararState`
+fija que `/api/v0/queue/global-status` normaliza el item y la accion publica a
+`goal_first_state_missing`/`repair_goal_state`, no a cancelar stale ni reencolar
+legacy.
 
 Evidencia adicional 2026-06-26: `autoprogramming/status` diagnostica
 `external_work_accepted_stopped_without_delivery` cuando una run external-work

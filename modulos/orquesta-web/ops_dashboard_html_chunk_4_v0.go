@@ -122,6 +122,16 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
 	      return String(decision.action || '') === 'observe_goal' &&
 	        (!runRef || String(decision.run_ref || '') === String(runRef || ''));
 	    }
+	    function runNeedsGoalStateRepair(runRef) {
+	      const ref = String(runRef || '');
+	      const decision = ((lastSnapshot.opsSnapshot || {}).decision || {});
+	      if (String(decision.action || '') === 'repair_goal_state' &&
+	        (!ref || String(decision.run_ref || '') === ref)) return true;
+	      return (Array.isArray(lastSnapshot.staleRunning) ? lastSnapshot.staleRunning : []).some(function(item) {
+	        return String((item || {}).code || '') === 'goal_first_state_missing' &&
+	          (!ref || String((item || {}).run_ref || '') === ref);
+	      });
+	    }
 	    function firstAutoprogrammingSafeAction(actionName, scope) {
 	      return allAutoprogrammingSafeActions().find(function(action) {
 	        return String((action || {}).action || '') === actionName &&
@@ -143,17 +153,21 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
 	        Boolean(goal.available || goal.goal_ref || goal.can_observe);
 	    }
 	    function selectedRunAdvanceActionLabel(run) {
+	      if (runNeedsGoalStateRepair((run || {}).run_ref)) return 'Reparar goal';
 	      return runIsGoalFirst(run) ? 'Observar goal' : 'Avanzar run';
 	    }
 	    function queueAdvanceActionLabel(run) {
+	      if (runNeedsGoalStateRepair((run || {}).run_ref)) return 'R';
 	      return runIsGoalFirst(run) ? 'G' : '↪';
 	    }
 	    function queueAdvanceActionTitle(run) {
+	      if (runNeedsGoalStateRepair((run || {}).run_ref)) return 'Reparar GoalWorkStateV0 antes de avanzar';
 	      return runIsGoalFirst(run) ? 'Observar goal desde fila' : 'Avanzar run desde fila';
 	    }
 	    async function advanceQueueRow(runRef) {
 	      const run = runByRef(runRef);
 	      if (!run) return;
+	      if (runNeedsGoalStateRepair(run.run_ref || runRef)) return repairGoalStateOps(run, 'fila');
 	      if (runIsGoalFirst(run)) return observeGoalOps(run, 'goal desde fila');
 	      return superviseQueueRow(runRef);
 	    }
@@ -264,6 +278,15 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
       await refreshAll();
     }
     async function superviseGlobalWave() {
+      const repairRun = (lastSnapshot.runs || []).find(function(run) {
+        return runNeedsGoalStateRepair(run.run_ref);
+      });
+      if (repairRun) {
+        await repairGoalStateOps(repairRun, 'cola');
+        supervisorMessage = controlMessage;
+        text('director-supervisor-message', supervisorMessage);
+        return;
+      }
       const observeAction = firstAutoprogrammingSafeAction('observe_goal', 'run');
       if (observeAction) {
         supervisorMessage = 'Observando goal...';
@@ -309,6 +332,7 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
     async function advanceSelectedRun() {
       const run = runByRef(selectedRunRef);
       if (!run) return;
+      if (runNeedsGoalStateRepair(run.run_ref)) return repairGoalStateOps(run, 'seleccionado');
       if (runIsGoalFirst(run)) return observeGoalOps(run, 'goal seleccionado');
       return superviseSelectedRun();
     }
@@ -350,6 +374,14 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
       } catch (err) {
         controlMessage = err.message || String(err);
       }
+      await refreshAll();
+    }
+    async function repairGoalStateOps(run, label) {
+      if (!run || !run.run_ref) return;
+      selectedRunRef = run.run_ref || selectedRunRef || '';
+      selectedAgentRef = '';
+      controlMessage = 'Reparar GoalWorkStateV0 antes de supervision legacy (' + (label || 'run') + ').';
+      renderSelectedDetail();
       await refreshAll();
     }
     async function superviseOps(scope, label) {

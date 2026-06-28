@@ -88,6 +88,7 @@ const opsDashboardHTMLChunk2V0 = `    }
       const ranked = stableSortByFirstSeen(data.ranked || [], 'queue', function(item) { return item.run_ref; });
       const activeRuns = data.auto.operator && data.auto.operator.active_runs ? data.auto.operator.active_runs : [];
       const safeActions = data.auto.operator && Array.isArray(data.auto.operator.safe_actions) ? data.auto.operator.safe_actions : [];
+      const staleRunning = Array.isArray(data.auto.stale_running) ? data.auto.stale_running : [];
       const runs = stableSortByFirstSeen(buildRuns(ranked, data.stats || []), 'runs', function(run) { return run.run_ref; });
       const rawAgents = mergeRuntimeAgents(buildAgents(data.stats || []));
       const agents = stableSortByFirstSeen(mergeAgentDisplayCache(rawAgents, runs), 'agents', agentKey);
@@ -113,7 +114,7 @@ const opsDashboardHTMLChunk2V0 = `    }
       renderFlowSummary(ranked, runs, agents, queueCount, activeAgentCount);
       renderDirectorDecision((data.auto || {}).ops_snapshot, ranked, runs, agents, queueCount, activeAgentCount);
       updateCompletedHistory(runs, ranked);
-      lastSnapshot = {runs: runs, agents: agents, ranked: ranked, tasks: tasks, safeActions: safeActions, opsSnapshot: (data.auto || {}).ops_snapshot || null};
+      lastSnapshot = {runs: runs, agents: agents, ranked: ranked, tasks: tasks, safeActions: safeActions, staleRunning: staleRunning, opsSnapshot: (data.auto || {}).ops_snapshot || null};
       if (!selectedRunRef && runs.length) selectedRunRef = runs[0].run_ref;
       renderProjects(runs);
       renderPhaseMatrix(runs);

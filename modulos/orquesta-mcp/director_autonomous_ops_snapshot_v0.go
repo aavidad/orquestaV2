@@ -227,6 +227,16 @@ func directorOpsDecisionFromRunMCPV0(
 	evidenceRefs []string,
 ) orquestaobservability.DirectorAutonomousOpsDecisionV0 {
 	switch {
+	case strings.TrimSpace(run.Status) == "goal_first_state_missing":
+		return orquestaobservability.DirectorAutonomousOpsDecisionV0{
+			Action:       orquestaobservability.DirectorAutonomousOpsActionRepairGoalStateV0,
+			Scope:        "run",
+			RunRef:       run.RunRef,
+			Attention:    true,
+			ReasonCode:   "goal_first_state_missing",
+			SummaryKey:   "director.ops.decision.repair_goal_state",
+			EvidenceRefs: compactStringsMCPV0(evidenceRefs),
+		}
 	case run.Blocked || run.AgentsNeedAttention > 0 || run.AgentsFailed > 0:
 		return orquestaobservability.DirectorAutonomousOpsDecisionV0{
 			Action:       orquestaobservability.DirectorAutonomousOpsActionReviewReplanV0,

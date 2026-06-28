@@ -165,6 +165,53 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0WillFinishAloneSinAccionPendiente(t *t
 	}
 }
 
+func TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstStateMissingRecomiendaRepararState(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				Blocked: 1,
+			},
+			StaleRunning: []MCPAutoprogrammingActionableRunV0{{
+				Code:              mcpAutoprogrammingActionGoalFirstStateMissingV0,
+				RunRef:            "run-ref-global-status-goal-state-missing-001",
+				RecommendedAction: "repair_goal_state_before_legacy_supervision",
+				EvidenceRefs:      []string{"evidence-ref-goal-state-missing-global-status"},
+			}},
+			Diagnostics: []MCPAutoprogrammingDiagnosticV0{{
+				Code:         "autoprogramming_goal_first_state_missing",
+				Scope:        "run:run-ref-global-status-goal-state-missing-001",
+				EvidenceRefs: []string{"evidence-ref-goal-state-missing-diagnostic"},
+			}},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	NewMCPQueueGlobalStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !result.Summary.NeedsAttention ||
+		!result.Summary.NeedsAction ||
+		result.Summary.WillFinishAlone ||
+		!hasMCPQueueGlobalStatusItemForTestV0(
+			result.Items,
+			"run-ref-global-status-goal-state-missing-001",
+			mcpAutoprogrammingActionGoalFirstStateMissingV0,
+			true,
+			"repair_goal_state",
+		) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPQueueGlobalStatusHTTPHandlerV0ExecutorNil(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
 	rec := httptest.NewRecorder()

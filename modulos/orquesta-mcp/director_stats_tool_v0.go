@@ -113,6 +113,10 @@ type MCPDirectorGoalStateSourcePortV0 interface {
 	LoadGoalWorkStateV0(context.Context, string) (orquestagoal.GoalWorkStateV0, error)
 }
 
+type MCPDirectorGoalRunMarkerSourcePortV0 interface {
+	LoadGoalWorkRunMarkerV0(context.Context, string) (orquestagoal.GoalWorkRunMarkerV0, error)
+}
+
 type MCPDirectorStatsToolExecutorV0 struct {
 	RunStore          orquestacionnucleoapp.RunStorePortV0
 	RunControl        orquestaruncontrol.RunControlReaderPortV0
@@ -122,6 +126,7 @@ type MCPDirectorStatsToolExecutorV0 struct {
 	AgentUsageSource  orquestacionnucleoapp.AgentUsageStatsProviderPortV0
 	ExternalJobSource MCPDirectorExternalJobStatsSourcePortV0
 	GoalStateSource   MCPDirectorGoalStateSourcePortV0
+	GoalMarkerSource  MCPDirectorGoalRunMarkerSourcePortV0
 }
 
 func MCPDirectorStatsDescriptorV0() MCPDirectorStatsToolDescriptorV0 {
@@ -247,17 +252,21 @@ func (executor MCPDirectorStatsToolExecutorV0) resolveGoalStatsV0(
 	ctx context.Context,
 	runRef string,
 ) *MCPDirectorGoalStatsV0 {
-	if executor.GoalStateSource == nil {
-		return nil
+	if executor.GoalStateSource != nil {
+		state, err := executor.GoalStateSource.LoadGoalWorkStateV0(ctx, strings.TrimSpace(runRef))
+		if err == nil {
+			state, err = orquestagoal.NewGoalWorkStateV0(state)
+			if err == nil {
+				return mcpDirectorGoalStatsFromStateV0(state)
+			}
+		}
 	}
-	state, err := executor.GoalStateSource.LoadGoalWorkStateV0(ctx, strings.TrimSpace(runRef))
-	if err != nil {
-		return nil
-	}
-	state, err = orquestagoal.NewGoalWorkStateV0(state)
-	if err != nil {
-		return nil
-	}
+	return executor.resolveGoalMarkerStatsV0(ctx, runRef)
+}
+
+func mcpDirectorGoalStatsFromStateV0(
+	state orquestagoal.GoalWorkStateV0,
+) *MCPDirectorGoalStatsV0 {
 	goal := MCPDirectorGoalStatsV0{
 		DirectorExecutionMode: "goal_first",
 		RunRef:                strings.TrimSpace(state.RunRef),
@@ -274,14 +283,56 @@ func (executor MCPDirectorStatsToolExecutorV0) resolveGoalStatsV0(
 	return &goal
 }
 
+func (executor MCPDirectorStatsToolExecutorV0) resolveGoalMarkerStatsV0(
+	ctx context.Context,
+	runRef string,
+) *MCPDirectorGoalStatsV0 {
+	source := executor.goalMarkerSourceV0()
+	if source == nil {
+		return nil
+	}
+	marker, err := source.LoadGoalWorkRunMarkerV0(ctx, strings.TrimSpace(runRef))
+	if err != nil {
+		return nil
+	}
+	marker, err = orquestagoal.NewGoalWorkRunMarkerV0(marker)
+	if err != nil {
+		return nil
+	}
+	return &MCPDirectorGoalStatsV0{
+		DirectorExecutionMode: "goal_first",
+		RunRef:                strings.TrimSpace(marker.RunRef),
+		GoalRef:               strings.TrimSpace(marker.GoalRef),
+		ExternalGoalRef:       strings.TrimSpace(marker.ExternalGoalRef),
+		Status:                "goal_first_state_missing",
+		ClosureStatus:         orquestagoal.GoalStatusBlockedV0,
+		ClosureNeedsRework:    true,
+		EvidenceRefs: compactStringsMCPV0(append(
+			[]string{"evidence-ref-director-stats-goal-first-state-missing"},
+			marker.EvidenceRefs...,
+		)),
+	}
+}
+
+func (executor MCPDirectorStatsToolExecutorV0) goalMarkerSourceV0() MCPDirectorGoalRunMarkerSourcePortV0 {
+	if executor.GoalMarkerSource != nil {
+		return executor.GoalMarkerSource
+	}
+	source, _ := executor.GoalStateSource.(MCPDirectorGoalRunMarkerSourcePortV0)
+	return source
+}
+
 func applyMCPDirectorGoalRunProjectionV0(
 	goal *MCPDirectorGoalStatsV0,
 	stats *orquestacionnucleoapp.DirectorRunStatsV0,
 ) {
-	if goal == nil || stats == nil || strings.TrimSpace(goal.GoalRef) == "" {
+	if goal == nil || stats == nil {
 		return
 	}
 	status := strings.ToLower(strings.TrimSpace(goal.Status))
+	if strings.TrimSpace(goal.GoalRef) == "" && status != "goal_first_state_missing" {
+		return
+	}
 	closureStatus := strings.ToLower(strings.TrimSpace(goal.ClosureStatus))
 	switch {
 	case goal.ClosureAccepted || closureStatus == orquestagoal.GoalStatusAcceptedV0:
@@ -293,12 +344,23 @@ func applyMCPDirectorGoalRunProjectionV0(
 	case goal.ClosureNeedsRework ||
 		closureStatus == orquestagoal.GoalStatusBlockedV0 ||
 		status == orquestagoal.GoalStatusBlockedV0 ||
-		status == orquestagoal.GoalStatusInvalidV0:
-		stats.Status = orquestagoal.GoalStatusBlockedV0
+		status == orquestagoal.GoalStatusInvalidV0 ||
+		status == "goal_first_state_missing":
+		blockedBy := "goal_first"
+		if status == "goal_first_state_missing" {
+			blockedBy = "goal_first_state_missing"
+		}
+		stats.Status = status
+		if stats.Status == "" {
+			stats.Status = orquestagoal.GoalStatusBlockedV0
+		}
+		if status != "goal_first_state_missing" {
+			stats.Status = orquestagoal.GoalStatusBlockedV0
+		}
 		stats.Closure = orquestacionnucleoapp.DirectorClosureStatsV0{
 			Status:      orquestacionnucleoapp.DirectorClosureStatusBlockedV0,
 			Blocked:     true,
-			BlockedBy:   []string{"goal_first"},
+			BlockedBy:   []string{blockedBy},
 			BlockerRefs: compactStringsMCPV0(goal.EvidenceRefs),
 		}
 	case status == orquestagoal.GoalStatusCompleteV0:

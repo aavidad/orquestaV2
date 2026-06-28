@@ -34,8 +34,13 @@ suprime acciones legacy y exige reparar/reconstruir `GoalWorkStateV0` antes de
 observar el goal por el camino normal. `ops_snapshot.decision` publica
 `repair_goal_state` para que `/ops` no derive `wait_deliveries` desde stats
 legacy residuales de esa misma run.
+Actualizacion 2026-06-28: `orquesta.director.stats.v0` aplica la misma
+proyeccion si recibe el marker por puerto opt-in: `stats.status=
+goal_first_state_missing`, cierre bloqueado reparable y
+`ops_snapshot.decision.action=repair_goal_state`. La salida compacta de
+`/queue/global-status` normaliza la accion como `repair_goal_state`.
 Contratos afectados: mcp.tool.orquesta.autoprogramming.status.v0;
-GoalWorkRunMarkerStorePortV0.
+orquesta.director.stats.v0; GoalWorkRunMarkerStorePortV0.
 Estado: aceptada localmente
 ```
 

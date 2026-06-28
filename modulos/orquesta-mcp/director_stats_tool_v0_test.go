@@ -175,6 +175,54 @@ func TestMCPDirectorStatsToolExecutorV0ExponeGoalFirstSiExisteEstado(t *testing.
 	assertTransportPayloadSaneadoMCPTestV0(t, result, 13000)
 }
 
+func TestMCPDirectorStatsToolExecutorV0GoalFirstMarkerSinStatePublicaRepairGoalState(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-goal-marker-missing-state-001")
+	markers := newMCPGoalRunMarkerStoreForStatusTestV0()
+	if err := markers.SaveGoalWorkRunMarkerV0(context.Background(), orquestagoal.GoalWorkRunMarkerV0{
+		RunRef:          run.RunID,
+		GoalRef:         "goal-ref-mcp-director-stats-marker-missing-state-001",
+		ExternalGoalRef: "thread-ref-mcp-director-stats-marker-missing-state-001",
+		DirectorKind:    orquestagoal.GoalDirectorKindCodexGoalV0,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		EvidenceRefs:    []string{"evidence-ref-mcp-director-stats-marker-missing-state-001"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkRunMarkerV0: %v", err)
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:         orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		GoalStateSource:  mcpDirectorGoalStateSourceForTestV0{},
+		GoalMarkerSource: markers,
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{
+		RequestID:     "request-ref-mcp-director-stats-goal-marker-missing-state-001",
+		CorrelationID: "corr-mcp-director-stats-goal-marker-missing-state-001",
+		RunRef:        run.RunID,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.Goal == nil ||
+		result.Goal.DirectorExecutionMode != "goal_first" ||
+		result.Goal.Status != "goal_first_state_missing" ||
+		result.Goal.ClosureStatus != orquestagoal.GoalStatusBlockedV0 ||
+		!result.Goal.ClosureNeedsRework ||
+		result.Stats == nil ||
+		result.Stats.Status != "goal_first_state_missing" ||
+		result.Stats.Closure.Status != orquestacionnucleoapp.DirectorClosureStatusBlockedV0 ||
+		!result.Stats.Closure.Blocked ||
+		!containsStringMCPTestV0(result.Stats.Closure.BlockedBy, "goal_first_state_missing") {
+		t.Fatalf("goal=%+v stats=%+v", result.Goal, result.Stats)
+	}
+	if result.OpsSnapshot == nil ||
+		result.OpsSnapshot.Decision.Action != orquestaobservability.DirectorAutonomousOpsActionRepairGoalStateV0 ||
+		result.OpsSnapshot.Decision.RunRef != run.RunID ||
+		result.OpsSnapshot.Decision.ReasonCode != "goal_first_state_missing" ||
+		!result.OpsSnapshot.Decision.Attention {
+		t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
+	}
+}
+
 func TestMCPDirectorStatsToolExecutorV0GoalFirstAceptadoCierraStats(t *testing.T) {
 	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-goal-accepted-001")
 	state := mcpDirectorGoalStateForTestV0(run.RunID)

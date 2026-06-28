@@ -1611,7 +1611,10 @@ Invariantes:
     porque la observacion normal del goal necesita el estado persistido.
     `ops_snapshot.decision` se alinea con esa senal como
     `repair_goal_state` y no deriva `wait_deliveries` desde stats legacy
-    residuales.
+    residuales. `orquesta.director.stats.v0` usa la misma proyeccion cuando
+    recibe el marker por puerto opt-in: `stats.status=goal_first_state_missing`,
+    `closure.blocked_by=goal_first_state_missing` y decision
+    `repair_goal_state`.
   - Las clases `running_without_recent_stats`, `running_stale*` y las
     proyecciones legacy de tareas/agentes (`registered`, `process_ref`,
     `task_ref`) aplican solo a runs sin `GoalWorkStateV0`. En goal-first el
