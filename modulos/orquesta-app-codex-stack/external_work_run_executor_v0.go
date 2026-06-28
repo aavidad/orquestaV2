@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	orquestaexternalworkrun "orquesta/modulos/orquesta-external-work-run"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
 
@@ -26,9 +27,23 @@ func externalWorkRunExecutorV0(
 		externalWorkRunStartConfigV0(config, queueConfig),
 		config.Stores.AppChangeStore,
 		domainWorkSubmissionRecordReaderV0(config.DomainDelivery.Ledger),
-		config.GoalObserverResidentEnabled,
+		externalWorkGoalObserverResidentAvailableV0(config),
+		externalWorkGoalActiveObserverAvailableV0(config),
 		config.AllowLegacyExternalWorkRun,
 	)
+}
+
+func externalWorkGoalObserverResidentAvailableV0(config ConfigV0) bool {
+	return config.GoalObserverResidentEnabled && externalWorkGoalActiveObserverAvailableV0(config)
+}
+
+func externalWorkGoalActiveObserverAvailableV0(config ConfigV0) bool {
+	if config.AppGoalObserver == nil ||
+		config.Stores.AppGoalStateStore == nil {
+		return false
+	}
+	_, ok := config.Stores.AppGoalStateStore.(orquestagoal.GoalWorkStateListPortV0)
+	return ok
 }
 
 func externalWorkRunStartConfigV0(

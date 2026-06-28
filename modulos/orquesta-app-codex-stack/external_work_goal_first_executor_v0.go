@@ -22,6 +22,7 @@ type CodexStackExternalWorkGoalFirstExecutorV0 struct {
 	AppChangeStore          orquestaappchange.AppChangeRecordStorePortV0
 	DomainSubmissionLedger  DomainWorkArtifactSubmissionRecordReaderPortV0
 	GoalObserverResident    bool
+	GoalActiveObserver      bool
 	AllowLegacyDirectorLoop bool
 }
 
@@ -34,6 +35,7 @@ func NewCodexStackExternalWorkGoalFirstExecutorV0(
 	appChangeStore orquestaappchange.AppChangeRecordStorePortV0,
 	domainSubmissionLedger DomainWorkArtifactSubmissionRecordReaderPortV0,
 	goalObserverResident bool,
+	goalActiveObserver bool,
 	allowLegacyDirectorLoop bool,
 ) CodexStackExternalWorkGoalFirstExecutorV0 {
 	return CodexStackExternalWorkGoalFirstExecutorV0{
@@ -43,6 +45,7 @@ func NewCodexStackExternalWorkGoalFirstExecutorV0(
 		AppChangeStore:          appChangeStore,
 		DomainSubmissionLedger:  domainSubmissionLedger,
 		GoalObserverResident:    goalObserverResident,
+		GoalActiveObserver:      goalActiveObserver,
 		AllowLegacyDirectorLoop: allowLegacyDirectorLoop,
 	}
 }
@@ -386,7 +389,9 @@ func (executor CodexStackExternalWorkGoalFirstExecutorV0) externalWorkGoalFirstR
 		nextActions = []string{
 			orquestamcp.MCPExternalWorkRunNextActionObserverRequiredV0,
 			orquestamcp.MCPExternalWorkRunNextActionObserveGoalV0,
-			orquestamcp.MCPExternalWorkRunNextActionObserveActiveGoalsV0,
+		}
+		if executor.GoalActiveObserver {
+			nextActions = append(nextActions, orquestamcp.MCPExternalWorkRunNextActionObserveActiveGoalsV0)
 		}
 	}
 	return orquestamcp.MCPExternalWorkRunToolResultV0{
