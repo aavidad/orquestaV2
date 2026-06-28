@@ -1535,6 +1535,11 @@ Cobertura:
   padre solo tenia write-set de coordinacion; el job queda como
   `integration_required` con razon
   `product_not_consolidated_due_write_set_narrowing`, no como completado.
+- `TestExternalJobIntegrationDecisionSourceV0CreaIntegradorParaPadreLegacyEstrecho`
+  fija que la microtarea OPES de integracion no rehace por defecto: declara
+  recuperacion `02_markdown -> 04_markdown` y sugiere
+  `consolidate_checkpoint_topic_from_existing_material` para consolidar
+  material existente bajo el write-set autorizado.
 - `TestCodexStackExternalJobStatsSourceV0ExponeColisionAckPadreSubrol`
   fija que una evidencia `invalid_parent_ack_subrole_collision` no queda
   escondida como cohorte abierta generica: el job externo publica

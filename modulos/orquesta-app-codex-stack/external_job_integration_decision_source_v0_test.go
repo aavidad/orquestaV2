@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
@@ -37,13 +38,19 @@ func TestExternalJobIntegrationDecisionSourceV0CreaIntegradorParaPadreLegacyEstr
 	task := decisions[0].CreateMicrotask.Task
 	if task.TaskID != externalJobIntegrationTaskRefV0(fixture.parent.TaskID) ||
 		task.ParentTaskRef != fixture.parent.TaskID ||
+		task.Title != "Consolidar producto OPES canonico desde material existente" ||
 		task.WorkProfileKind != string(orquestacoreworkflow.WorkProfileDomainWorkV0) ||
 		!codexStackStringInSetForTestV0(task.WriteSet, "temas/tema_032") ||
 		!codexStackStringInSetForTestV0(task.WriteSet, "temas/tema_032/coordinacion") ||
 		!codexStackStringInSetForTestV0(task.DependsOn, fixture.parent.TaskID) ||
 		!codexStackStringInSetForTestV0(task.DependsOn, fixture.parent.ChildTaskRefs[0]) ||
 		!codexStackStringInSetForTestV0(task.ContextRefs, "external-job-integration-required") ||
-		!codexStackStringInSetForTestV0(task.ContextRefs, externalJobIntegrationReasonV0) {
+		!codexStackStringInSetForTestV0(task.ContextRefs, externalJobIntegrationReasonV0) ||
+		!codexStackStringInSetForTestV0(task.ContextRefs, "opes-integration-required") ||
+		!codexStackStringInSetForTestV0(task.ContextRefs, "opes-non-canonical-material-recovery:02_markdown->04_markdown") ||
+		!codexStackStringInSetForTestV0(task.ContextRefs, "work_kind:consolidate_checkpoint_topic_from_existing_material") ||
+		!codexStackStringInSetForTestV0(task.ContextRefs, "subroles_required:6") ||
+		!externalJobIntegrationCriterionContainsForTestV0(task.AcceptanceCriteria, "02_markdown/04_markdown") {
 		t.Fatalf("task=%+v parent=%+v", task, fixture.parent)
 	}
 	if len(task.FunctionContractRefs) != 1 ||
@@ -51,6 +58,15 @@ func TestExternalJobIntegrationDecisionSourceV0CreaIntegradorParaPadreLegacyEstr
 		task.FunctionContractRefs[0].FunctionName != "ApplyExternalDomainWorkV0" {
 		t.Fatalf("function_contract_refs=%+v", task.FunctionContractRefs)
 	}
+}
+
+func externalJobIntegrationCriterionContainsForTestV0(criteria []string, want string) bool {
+	for _, criterion := range criteria {
+		if strings.Contains(criterion, want) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestExternalJobIntegrationDecisionSourceV0CreaIntegradorGenericoSinOPES(t *testing.T) {

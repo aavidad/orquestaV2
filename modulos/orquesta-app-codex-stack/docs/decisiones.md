@@ -1938,6 +1938,24 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-28
+Decision: El integrador de producto OPES recupera material valido en rutas no
+canonicas antes de pedir reescritura.
+Motivo: una run legacy puede dejar borradores utiles en rutas como
+`02_markdown` mientras el contrato operativo espera `04_markdown` u otra ruta
+canonica autorizada. Esa diferencia de forma es recuperable y no debe provocar
+reintentos ciegos ni descarte de material valido.
+Impacto: `ExternalJobIntegrationDecisionSourceV0` especializa las microtareas
+OPES de integracion con contexto
+`opes-non-canonical-material-recovery:02_markdown->04_markdown` y
+`work_kind:consolidate_checkpoint_topic_from_existing_material`. El agente debe
+promover/consolidar bajo el write-set de producto autorizado, conservar
+evidencia de reutilizacion y bloquear solo si falta write-set seguro,
+evidencia o autorizacion externa.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-06-26
 Decision: En stats de external_work, un agente perdido o fallido prevalece
 sobre started/in_flight.

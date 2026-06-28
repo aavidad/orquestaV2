@@ -209,34 +209,56 @@ func externalJobIntegrationMicrotaskV0(
 	writeSet []string,
 ) orquestadirectoragent.DirectorAgentMicrotaskV0 {
 	dependsOn := compactCodexStackStringsV0(append([]string{parent.TaskID}, childRefs...))
+	title := "Integrar producto externo canonico"
+	summary := "Consolidar los artefactos utiles de subtrabajos externos en el producto canonico autorizado; " +
+		"no rehacer material valido y dejar bloqueo causal si falta evidencia."
+	acceptanceCriteria := []string{
+		"Consolidar Markdown canonico, informe de extension o checkpoint bajo el write-set de producto autorizado.",
+		"Usar entregas de subtrabajos como insumo y conservar evidencia de reutilizacion, rework o bloqueo.",
+		"No marcar el job externo como cerrado si faltan artefactos, pruebas o validaciones exigidas por el contrato externo.",
+	}
+	contextRefs := []string{
+		"external-job-integration-required",
+		externalJobIntegrationReasonV0,
+		strings.TrimSpace(record.Request.ExternalWork.JobRef),
+	}
+	if externalJobIntegrationExternalWorkLooksOPESV0(record.Request.AppRef, record.Request.ExternalWork) {
+		title = "Consolidar producto OPES canonico desde material existente"
+		summary = "Consolidar material OPES util ya producido en el producto canonico autorizado; " +
+			"si hay Markdown valido en rutas no canonicas, promoverlo sin rehacerlo."
+		acceptanceCriteria = append(acceptanceCriteria,
+			"Si existen borradores OPES validos en rutas no canonicas como 02_markdown, tratarlos como material recuperable y consolidarlos hacia 04_markdown o la ruta canonica autorizada.",
+			"Usar o sugerir work_kind consolidate_checkpoint_topic_from_existing_material cuando el trabajo sea promocion de material existente y no redaccion desde cero.",
+			"No bloquear ni descartar entregas por diferencia recuperable de ruta 02_markdown/04_markdown; dejar bloqueo solo si falta write-set seguro, evidencia o autorizacion externa.",
+		)
+		contextRefs = append(contextRefs,
+			"opes-integration-required",
+			"opes-non-canonical-material-recovery:02_markdown->04_markdown",
+			"work_kind:consolidate_checkpoint_topic_from_existing_material",
+		)
+		if required := externalJobIntegrationSubrolesRequiredCountV0(record.Request.ExternalWork.InputFields); required > 0 {
+			contextRefs = append(contextRefs, fmt.Sprintf("subroles_required:%d", required))
+		}
+	}
 	return orquestadirectoragent.DirectorAgentMicrotaskV0{
-		SchemaVersion:   orquestadirectoragent.DirectorAgentMicrotaskSchemaVersionV0,
-		TaskID:          taskRef,
-		RunID:           run.RunID,
-		PhaseID:         string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
-		WorkProfileKind: string(orquestacoreworkflow.WorkProfileDomainWorkV0),
-		Title:           "Integrar producto externo canonico",
-		Summary: "Consolidar los artefactos utiles de subtrabajos externos en el producto canonico autorizado; " +
-			"no rehacer material valido y dejar bloqueo causal si falta evidencia.",
-		WriteSet: writeSet,
-		AcceptanceCriteria: []string{
-			"Consolidar Markdown canonico, informe de extension o checkpoint bajo el write-set de producto autorizado.",
-			"Usar entregas de subtrabajos como insumo y conservar evidencia de reutilizacion, rework o bloqueo.",
-			"No marcar el job externo como cerrado si faltan artefactos, pruebas o validaciones exigidas por el contrato externo.",
-		},
-		RequiredTests: []string{"validar integracion canonica de producto externo"},
-		DependsOn:     dependsOn,
-		ContextRefs: compactCodexStackStringsV0([]string{
-			"external-job-integration-required",
-			externalJobIntegrationReasonV0,
-			strings.TrimSpace(record.Request.ExternalWork.JobRef),
-		}),
-		ParentTaskRef:   parent.TaskID,
-		CohortRef:       parent.CohortRef,
-		WaveRef:         parent.WaveRef,
-		DelegationDepth: parent.DelegationDepth + 1,
-		MaxChildAgents:  0,
-		ChildTaskRefs:   nil,
+		SchemaVersion:      orquestadirectoragent.DirectorAgentMicrotaskSchemaVersionV0,
+		TaskID:             taskRef,
+		RunID:              run.RunID,
+		PhaseID:            string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		WorkProfileKind:    string(orquestacoreworkflow.WorkProfileDomainWorkV0),
+		Title:              title,
+		Summary:            summary,
+		WriteSet:           writeSet,
+		AcceptanceCriteria: acceptanceCriteria,
+		RequiredTests:      []string{"validar integracion canonica de producto externo"},
+		DependsOn:          dependsOn,
+		ContextRefs:        compactCodexStackStringsV0(contextRefs),
+		ParentTaskRef:      parent.TaskID,
+		CohortRef:          parent.CohortRef,
+		WaveRef:            parent.WaveRef,
+		DelegationDepth:    parent.DelegationDepth + 1,
+		MaxChildAgents:     0,
+		ChildTaskRefs:      nil,
 		FunctionContractRefs: []orquestadirectoragent.DirectorAgentFunctionContractRefV0{{
 			ContractRef:  contractRef,
 			FunctionName: "ApplyExternalDomainWorkV0",
