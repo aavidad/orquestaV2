@@ -195,6 +195,13 @@ cuando hay evidencia nueva.
 - Con un fichero que dispara un hallazgo conocido de staticcheck, la fuente emite
   una sección con `Ref` estable y criterio verificable; segunda pasada no la
   duplica.
+- Avance 2026-06-28: ademas del planner unitario, queda cubierto el camino
+  operacional goal-first del runtime. `TestRuntimeV0SelfAuditBacklogGoalFirstLanzaSpecOperacionalV0`
+  arranca `RuntimeV0` aislado con `IdleSelfImprovementGoalFirst=true`, planner
+  self-audit opt-in y launcher Goal fake; verifica que el hallazgo de
+  `staticcheck` se transforma en `GoalWorkSpecV0` con write-set, required test,
+  contexto `self_audit://staticcheck`, cierre por tests requeridos y estado goal
+  persistido, sin proveedor Codex real ni fallback legacy.
 
 ### Resultado
 Orquesta detecta sus propios fallos y los mete en su backlog goal-first: se audita
