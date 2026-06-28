@@ -85,6 +85,19 @@ Commits: `aa38ca6e`, `7b1ecb06`, `5b315988`. Sigue pendiente el smoke temporal
 real OPES con combinacion real de estados, derivados, cierre y TTS; no se debe
 rellenar ese hueco con OPES productivo ni reactivar el Director legacy.
 
+Avance 2026-06-28 noche 2: `/queue/global-status` queda cubierto con una
+mezcla realista de runs goal-first y liveness: `running_live`,
+`running_without_recent_stats`, `goal_first_state_missing`, `observer_required`,
+`ready` y `completed`. Cada item visible debe traer exactamente una accion
+operativa (`recommended_action`) o una razon estable de no accion
+(`no_action_reason`). Las safe actions `observe_goal` promocionan el estado
+publico a `observer_required` si el estado previo solo era cola/running sin
+stats, evitando confundir observacion goal-first con reparacion runtime.
+Evidencia:
+`TestMCPQueueGlobalStatusHTTPHandlerV0MezclaGoalFirstYLivenessAccionORazon`.
+Commit: `d5394290`. Pendiente real: validar el mismo contrato contra un
+servidor temporal con OPES temporal REST vivo y scope acotado.
+
 ## ORQ-OPES-002 reconciliacion_ack_artefactos_cierre_cola
 
 Estado: parcial; cierre goal-first DomainWork ya no acepta receipts
@@ -156,6 +169,11 @@ de otro endpoint. Evidencia:
 `TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeProbeJSONDeOtroEndpointV0`,
 `TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeProbeJSONNominalV0` y
 `TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeConfirmadoSinEvidenciaV0`.
+Avance 2026-06-28 noche 2: el preflight real con modo effectful tambien exige
+`ORQUESTA_BASE_URL` explicito, porque sin una Orquesta temporal goal-first no
+puede crear runs ni observar cierres. Evidencia:
+`TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinOrquestaBaseURLV0`.
+Commit: `f0da12f5`.
 
 ## ORQ-OPES-003 external_work_no_agent_no_delivery
 
