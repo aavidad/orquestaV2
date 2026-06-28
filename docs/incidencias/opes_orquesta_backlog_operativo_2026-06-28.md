@@ -16,8 +16,10 @@ Reglas de uso:
 
 ## ORQ-OPES-001 estado_operativo_global_accionable
 
-Estado: cerrado para la superficie local MCP/web; pendiente smoke temporal real
-con OPES para validar la misma mezcla contra datos externos acotados.
+Estado: cerrado para la superficie local MCP/web y validado en smoke temporal
+real OPES `final3` para la mezcla goal-first de derivados/cierre. Queda solo
+medicion residual de eficiencia sobre ACKs reales terminados, no cierre
+funcional pendiente.
 
 Problema: las vistas de estado mezclan procesos vivos, runs stale, colas y
 contenedores goal-first sin una decision unica accionable. El operador necesita
@@ -88,9 +90,10 @@ Evidencia: `TestMCPAutoprogrammingStatusExecutorV0ListaGoalMarkerSinStateAunqueC
 `TestStartGoalWorkV0DevuelveErrorSiStoreFallaSinRelanzar`,
 `TestStartAppDirectorV0GoalFirstStateStoreFallaPersisteMarkerConExternalGoalRefV0`
 y `TestServerAutoprogrammingHTTPGoalFirstPreparaSupervisaObservaYCierraV0`.
-Commits: `aa38ca6e`, `7b1ecb06`, `5b315988`. Sigue pendiente el smoke temporal
-real OPES con combinacion real de estados, derivados, cierre y TTS; no se debe
-rellenar ese hueco con OPES productivo ni reactivar el Director legacy.
+Commits: `aa38ca6e`, `7b1ecb06`, `5b315988`. Esta nota historica quedo
+superada por el smoke temporal `final3` documentado mas abajo y en
+`docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`;
+no se debe relanzar como pendiente funcional ni reactivar el Director legacy.
 
 Avance 2026-06-28 noche 2: `/queue/global-status` queda cubierto con una
 mezcla realista de runs goal-first y liveness: `running_live`,
@@ -102,8 +105,9 @@ publico a `observer_required` si el estado previo solo era cola/running sin
 stats, evitando confundir observacion goal-first con reparacion runtime.
 Evidencia:
 `TestMCPQueueGlobalStatusHTTPHandlerV0MezclaGoalFirstYLivenessAccionORazon`.
-Commit: `d5394290`. Pendiente real: validar el mismo contrato contra un
-servidor temporal con OPES temporal REST vivo y scope acotado.
+Commit: `d5394290`. La validacion temporal con OPES REST vivo y scope acotado
+queda cubierta despues por `final3`; cualquier nueva ejecucion debe tratarse
+como regresion/medicion opt-in, no como requisito abierto.
 
 Avance 2026-06-28 noche 6: `/ops` ya consume
 `/api/v0/queue/global-status` en paralelo a `autoprogramming/status`, fusiona
@@ -127,8 +131,11 @@ paralelo. Evidencia:
 
 ## ORQ-OPES-002 reconciliacion_ack_artefactos_cierre_cola
 
-Estado: parcial; cierre goal-first DomainWork ya no acepta receipts
-incompletos y la secuencia fake/offline de derivados OPES ya cierra por ledger.
+Estado: cerrado para el cierre funcional goal-first de derivados OPES temporal:
+DomainWork no acepta receipts incompletos, la secuencia fake/offline cierra por
+ledger y el smoke real `final3` cierra 24/24 jobs hasta paquete final. Queda
+solo medicion residual de eficiencia con ACKs reales escritos y procesos
+terminados.
 
 Problema: en trabajos OPES hay ACKs y entregas parciales utiles, pero el cierre
 de cola no siempre reconcilia artefactos canonicos, pendientes reales,
@@ -248,9 +255,9 @@ el goal remoto haya quedado `blocked`, siempre que el fichero pertenezca al
 `TestProbeOPESDerivativesRESTContractTransportCompatCompletoV0` y reobservacion
 real
 `/tmp/orquesta-opes-goal-full-20260628T093857Z/manual_reobserve_after_durable_blocked_fix.json`.
-Sigue pendiente ejecutar/cerrar la secuencia temporal real completa hasta
-`finalize_temario_package`; no se debe sustituir por OPES productivo ni por el
-loop legacy.
+Esta nota quedo superada por el intento `final3`: la secuencia temporal real
+completa ya cerro hasta `finalize_temario_package` sin OPES productivo ni loop
+legacy.
 
 Avance 2026-06-28 mediodia: se fija una regresion de delivery Codex para ACK
 estricto parcial: si el agente omite `tests` pero aporta `test_receipts`
