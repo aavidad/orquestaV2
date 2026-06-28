@@ -43,8 +43,10 @@ La composicion `cmd/orquesta-server` aporta implementaciones opt-in con
 `codex app-server`, no `codex exec`, y mantienen el transporte fuera de este
 modulo. `app_server_proxy` habla con un daemon/socket local ya disponible;
 `app_server_tmux` lanza `codex app-server --listen unix://<socket>` dentro de
-una sesion `tmux` opaca y valida el protocolo por `proxy --sock`. Si el
-transporte no esta disponible, la
+una sesion `tmux` opaca y habla WebSocket sobre el Unix socket privado. Para no
+competir con las sqlite de la sesion Codex principal, la composicion proyecta
+`auth.json` y `config.toml` a un `CODEX_HOME` aislado bajo el runtime del
+app-server. Si el transporte no esta disponible, la
 composicion puede devolver `IssueCode` compacto; el launcher neutral lo conserva
 en el `GoalLaunchReceiptV0` invalidado para que el operador vea la causa real.
 

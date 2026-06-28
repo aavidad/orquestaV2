@@ -298,6 +298,8 @@ func codexAppServerIssueCodeFromMessageV0(message string) string {
 		return "codex_app_server_command_missing"
 	case strings.Contains(normalized, "permission denied"):
 		return "codex_app_server_permission_denied"
+	case strings.Contains(normalized, "operation not permitted"):
+		return "codex_app_server_operation_not_permitted"
 	}
 	return ""
 }

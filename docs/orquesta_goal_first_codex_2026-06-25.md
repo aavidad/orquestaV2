@@ -92,10 +92,13 @@ El 2026-06-25 se cablea en `cmd/orquesta-server` un transporte real opt-in con
 `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`. El 2026-06-28 se fija
 `app_server_tmux` como backend local operativo: Orquesta asegura un
 `codex app-server --listen unix://<socket>` dentro de una sesion `tmux` opaca y
-habla con el por `codex app-server proxy --sock <socket>`. La CLI local de
-Codex no expone un subcomando estable `goal`, y usar `codex exec` no equivaldria
-al loop persistente de Codex Goal; por eso el wiring usa `codex app-server`
-como frontera de composicion. Sin esa variable, la composicion no expone
+habla con el por WebSocket sobre un Unix socket privado y corto bajo
+`RuntimeWorkDir`. El app-server usa un `CODEX_HOME` aislado bajo ese runtime con
+`auth.json` y `config.toml` proyectados desde el CODEX_HOME fuente para no
+competir con las sqlite de la sesion Codex principal. La CLI local de Codex no
+expone un subcomando estable `goal`, y usar `codex exec` no equivaldria al loop
+persistente de Codex Goal; por eso el wiring usa `codex app-server` como
+frontera de composicion. Sin esa variable, la composicion no expone
 launcher/observer y Orquesta publica capacidad goal faltante cuando
 `IdleSelfImprovementGoalFirst` esta activo. El backend antiguo
 `app_server_stdio` queda retirado y no debe usarse para operacion ni smokes
@@ -135,15 +138,17 @@ idle y actualice el tracker residente con cobertura equivalente. Evidencia:
 
 La composicion hace un preflight rapido del backend app-server al arrancar el
 stack. Para `app_server_tmux`, primero asegura la sesion `tmux`, crea el socket
-privado bajo `RuntimeWorkDir` y valida `thread/loaded/list` por
-`proxy --sock`; no considera listo un tmux vivo sin respuesta de protocolo. Para
+privado bajo `RuntimeWorkDir` y valida `thread/loaded/list` por WebSocket UDS;
+no considera listo un tmux vivo sin respuesta de protocolo. Para
 `app_server_proxy`, valida el daemon/socket ya gestionado. Si falta el socket
-local, tmux no esta disponible, la instalacion standalone requerida por
+local, tmux no esta disponible, el path del socket excede limites del sistema,
+la instalacion standalone requerida por
 `codex app-server daemon` no existe o el backend no responde, se inyecta un
 backend goal degradado con reason code compacto
 (`codex_app_server_control_socket_missing`,
 `codex_app_server_tmux_command_missing`,
-`codex_app_server_standalone_missing`, etc.). Esto evita volver al loop legacy
+`codex_app_server_standalone_missing`,
+`codex_app_server_websocket_handshake_failed`, etc.). Esto evita volver al loop legacy
 cuando el operador habia pedido goal-first y deja la accion pendiente clara.
 
 ## `/nueva-app` goal-first

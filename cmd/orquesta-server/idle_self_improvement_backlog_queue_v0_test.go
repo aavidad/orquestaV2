@@ -214,6 +214,50 @@ func TestIdleSelfImprovementBacklogPlannerV0NoExcluyeRunStaleRetryableV0(t *test
 	}
 }
 
+func TestIdleSelfImprovementBacklogPlannerV0EstadoCubiertoNoRelanzaT29V0(t *testing.T) {
+	projectDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	content := `## T29 provider-usage-quota-accounting
+
+Objetivo: convertir uso real de proveedor y cuota en puerto/adaptador explicito,
+observable y redactado, sin meter proveedor/modelo/coste en el nucleo.
+
+Estado: cubierto 2026-05-24 r2 para orquesta-runtime-worktree,
+orquesta-runtime-codex, orquesta-app-codex-stack y cmd/orquesta-server.
+
+Alcance:
+
+- modulos/orquesta-orchestration-core
+- cmd/orquesta-server
+
+## T30 siguiente-pendiente
+
+Objetivo: tarea pendiente real.
+`
+	if err := os.WriteFile(filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0), []byte(content), 0o600); err != nil {
+		t.Fatalf("write backlog: %v", err)
+	}
+	result, err := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).PlanV0(
+		orquestaserver.IdleSelfImprovementPlanRequestV0{
+			MaxRequests: 1,
+			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+				RequestRef: "request-ref-base",
+				ProjectRef: "project-ref-orquesta",
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	if len(result.Requests) != 1 ||
+		result.Requests[0].SuggestedArea != "t30-siguiente-pendiente" ||
+		strings.Contains(result.Requests[0].RequestRef, "t29-provider-usage-quota-accounting") {
+		t.Fatalf("result=%+v", result.Requests)
+	}
+}
+
 func TestIdleSelfImprovementBacklogPlannerV0ExcluyeRunCerradoAunqueNoSeaVisibleV0(t *testing.T) {
 	projectDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {

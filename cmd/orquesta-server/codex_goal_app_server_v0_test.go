@@ -768,6 +768,11 @@ func TestCodexAppServerIssueCodeForErrorV0ClasificaDiagnosticosV0(t *testing.T) 
 			message: "Permission denied (os error 13)",
 			want:    "codex_app_server_permission_denied",
 		},
+		{
+			name:    "operation not permitted",
+			message: "Error: Operation not permitted (os error 1)",
+			want:    "codex_app_server_operation_not_permitted",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

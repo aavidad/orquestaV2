@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	orquestaserver "orquesta/modulos/orquesta-server"
@@ -133,6 +135,46 @@ Objetivo: dar identidad estable.
 	}
 }
 
+func TestBacklogScanRequestV0CompactaEntradasParaGoalFirstV0(t *testing.T) {
+	projectDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	var content strings.Builder
+	content.WriteString("# Backlog\n\n")
+	for i := 1; i <= 80; i++ {
+		content.WriteString(fmt.Sprintf("## Escaneo backlog 2026-05-27 entrada-%03d\n\nEvidencia %03d.\n\n", i, i))
+	}
+	content.WriteString("## T249 backlog-scan-entry-identity-and-order-policy\n\nObjetivo: dar identidad estable.\n")
+	if err := os.WriteFile(
+		filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0),
+		[]byte(content.String()),
+		0o600,
+	); err != nil {
+		t.Fatalf("write backlog: %v", err)
+	}
+	planner := idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}
+	request := idleSelfImprovementBacklogScannerRequestV0(
+		orquestaserver.IdleSelfImprovementRequestV0{ProjectRef: "project-ref-orquesta"},
+		orquestaserver.IdleSelfImprovementPlanRequestV0{Trigger: "capacity_free"},
+	)
+	request = planner.withBacklogScannerMergeLeaseV0(request)
+
+	if !containsStringPrefixForBacklogScanEntriesTestV0(request.ContextRefs, "backlog_scan_entries:") ||
+		!containsStringPrefixForBacklogScanEntriesTestV0(request.ContextRefs, "backlog_scan_entries_omitted:") {
+		t.Fatalf("context_refs sin resumen/omitted: %+v", request.ContextRefs)
+	}
+	if got := countStringPrefixForBacklogScanEntriesTestV0(request.ContextRefs, "backlog_scan_entry:"); got != backlogScanPromptEntrySampleLimitV0 {
+		t.Fatalf("scan_entry context count=%d want=%d context=%+v", got, backlogScanPromptEntrySampleLimitV0, request.ContextRefs)
+	}
+	if got := countStringPrefixForBacklogScanEntriesTestV0(request.AcceptanceCriteria, "backlog_scan_entry:"); got != backlogScanPromptEntrySampleLimitV0 {
+		t.Fatalf("scan_entry criteria count=%d want=%d criteria=%+v", got, backlogScanPromptEntrySampleLimitV0, request.AcceptanceCriteria)
+	}
+	if len(request.ContextRefs) > 80 || len(request.AcceptanceCriteria) > 80 {
+		t.Fatalf("foto de scanner no compactada: context=%d criteria=%d", len(request.ContextRefs), len(request.AcceptanceCriteria))
+	}
+}
+
 func hasBacklogScanIssueForTestV0(
 	issues []orquestaserver.BacklogScanEntryIssueV0,
 	code string,
@@ -152,4 +194,14 @@ func containsStringPrefixForBacklogScanEntriesTestV0(values []string, prefix str
 		}
 	}
 	return false
+}
+
+func countStringPrefixForBacklogScanEntriesTestV0(values []string, prefix string) int {
+	count := 0
+	for _, value := range values {
+		if strings.HasPrefix(value, prefix) {
+			count++
+		}
+	}
+	return count
 }

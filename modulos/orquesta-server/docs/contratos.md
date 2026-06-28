@@ -135,8 +135,9 @@ Configuracion externa relacionada:
   `cmd/orquesta-server`, inyecta launcher/observer Codex Goal usando
   `codex app-server`. `app_server_proxy` usa un daemon/socket compatible ya
   disponible; `app_server_tmux` usa `codex app-server --listen unix://<socket>`
-  dentro de una sesion `tmux` y valida por `proxy --sock`. No usa `codex exec`
-  como sustituto, no
+  dentro de una sesion `tmux`, socket Unix corto bajo `RuntimeWorkDir`,
+  WebSocket UDS y `CODEX_HOME` aislado con `auth.json`/`config.toml`
+  proyectados desde el CODEX_HOME fuente. No usa `codex exec` como sustituto, no
   arranca backend si no esta configurado y no mete Codex en el modulo servidor.
   En observaciones terminales lee `thread/read` y fusiona el marcador
   `ORQUESTA_GOAL_RESULT_V0` o el archivo durable
@@ -144,7 +145,7 @@ Configuracion externa relacionada:
   receipts y evidencias; el cierre aceptado sigue dependiendo del validador
   neutral. El archivo durable debe tener `goal_ref` coincidente y tiene
   prioridad sobre un marcador textual incompleto. Al
-  montar la composicion ejecuta un preflight rapido; si falla, conserva puertos
+  montar la composicion ejecuta un preflight de protocolo; si falla, conserva puertos
   goal-first degradados y devuelve reason codes compactos como
   `codex_app_server_control_socket_missing` o
   `codex_app_server_standalone_missing`, sin caer al loop legacy.

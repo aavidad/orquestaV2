@@ -208,7 +208,8 @@ func backlogScanDocTokenV0(doc orquestaserver.BacklogScanDocumentV0) string {
 
 func backlogScanEntryTokensV0(doc orquestaserver.BacklogScanDocumentV0) []string {
 	out := []string{}
-	for _, entry := range doc.ScanEntries {
+	entries := compactBacklogScanEntriesForPromptV0(doc.ScanEntries)
+	for _, entry := range entries {
 		out = append(out,
 			"backlog_scan_entry:"+entry.Ref+
 				":line:"+strconv.Itoa(entry.Line)+
@@ -222,13 +223,46 @@ func backlogScanEntryTokensV0(doc orquestaserver.BacklogScanDocumentV0) []string
 				":sha256:"+doc.ScanEntryDigest,
 		)
 	}
-	for _, issue := range doc.ScanEntryIssues {
+	if omitted := len(doc.ScanEntries) - len(entries); omitted > 0 {
+		out = append(out,
+			"backlog_scan_entries_omitted:"+doc.Path+
+				":count:"+strconv.Itoa(omitted),
+		)
+	}
+	issues := compactBacklogScanEntryIssuesForPromptV0(doc.ScanEntryIssues)
+	for _, issue := range issues {
 		out = append(out, "backlog_scan_entry_issue:"+
 			issue.Code+
 			":line:"+strconv.Itoa(issue.Line)+
 			":ref:"+issue.ScanEntryRef)
 	}
+	if omitted := len(doc.ScanEntryIssues) - len(issues); omitted > 0 {
+		out = append(out,
+			"backlog_scan_entry_issues_omitted:"+doc.Path+
+				":count:"+strconv.Itoa(omitted),
+		)
+	}
 	return out
+}
+
+const backlogScanPromptEntrySampleLimitV0 = 16
+
+func compactBacklogScanEntriesForPromptV0(
+	entries []orquestaserver.BacklogScanEntryV0,
+) []orquestaserver.BacklogScanEntryV0 {
+	if len(entries) <= backlogScanPromptEntrySampleLimitV0 {
+		return entries
+	}
+	return entries[:backlogScanPromptEntrySampleLimitV0]
+}
+
+func compactBacklogScanEntryIssuesForPromptV0(
+	issues []orquestaserver.BacklogScanEntryIssueV0,
+) []orquestaserver.BacklogScanEntryIssueV0 {
+	if len(issues) <= backlogScanPromptEntrySampleLimitV0 {
+		return issues
+	}
+	return issues[:backlogScanPromptEntrySampleLimitV0]
 }
 
 func backlogScanHashV0(value string) string {

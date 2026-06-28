@@ -94,7 +94,7 @@ func idleSelfImprovementSectionStateV0(lines []string) idleSelfImprovementBacklo
 	if idleSelfImprovementBacklogTextContainsAnyV0(stateValue,
 		"completada", "completado", "cerrada", "cerrado", "hecha", "hecho", "done",
 		"resuelta", "resuelto", "sincronizado", "no-op", "no op", "aparcado",
-		"cerrada localmente", "cerrado localmente",
+		"cerrada localmente", "cerrado localmente", "cubierta", "cubierto",
 	) {
 		return idleSelfImprovementBacklogStateV0{
 			Completed:    true,

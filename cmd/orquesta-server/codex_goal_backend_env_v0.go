@@ -57,14 +57,16 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_no_soportado:%s", backend)
 	}
 	runtimeConfig := codexRuntimeEnvConfigFromEnvV0()
-	protocol := serverCodexAppServerCommandProtocolV0{
+	commandProtocol := serverCodexAppServerCommandProtocolV0{
 		CommandPath: runtimeConfig.CommandPath,
 		Args:        codexGoalBackendArgsV0(backend),
 		PathEnv:     runtimeConfig.PathEnv,
 		Timeout:     time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
 	}
-	preflightProtocol := protocol
-	preflightProtocol.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
+	var runtimeProtocol serverCodexAppServerProtocolPortV0 = commandProtocol
+	commandPreflightProtocol := commandProtocol
+	commandPreflightProtocol.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
+	var preflightProtocol serverCodexAppServerProbePortV0 = commandPreflightProtocol
 	if backend == codexGoalBackendAppServerTmuxV0 {
 		socketPath, err := codexAppServerTmuxSocketPathV0(config)
 		if err != nil {
@@ -73,15 +75,31 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 			}
 			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 		}
-		protocol.Args = codexGoalBackendProxyArgsForSocketV0(socketPath)
-		preflightProtocol = protocol
-		preflightProtocol.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
+		tmuxCodeHomePath, err := codexAppServerTmuxCodeHomePathV0(config)
+		if err != nil {
+			degraded := serverCodexUnavailableGoalBackendV0{
+				IssueCode: codexAppServerIssueCodeForErrorV0(err, "codex_app_server_tmux_unavailable"),
+			}
+			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
+		}
+		websocketProtocol := serverCodexAppServerWebSocketProtocolV0{
+			SocketPath: socketPath,
+			Timeout:    time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
+		}
+		runtimeProtocol = websocketProtocol
+		preflightProtocol = serverCodexAppServerWebSocketProtocolV0{
+			SocketPath: socketPath,
+			Timeout:    time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond,
+		}
 		tmuxBackend := serverCodexAppServerTmuxBackendV0{
-			CommandPath: runtimeConfig.CommandPath,
-			PathEnv:     runtimeConfig.PathEnv,
-			SocketPath:  socketPath,
-			SessionName: codexAppServerTmuxSessionNameV0(config),
-			Timeout:     codexAppServerTmuxStartupTimeoutV0(time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond),
+			CommandPath:       runtimeConfig.CommandPath,
+			PathEnv:           runtimeConfig.PathEnv,
+			SocketPath:        socketPath,
+			SessionName:       codexAppServerTmuxSessionNameV0(config),
+			HomeDir:           runtimeConfig.HomeDir,
+			CodeHomeDir:       tmuxCodeHomePath,
+			SourceCodeHomeDir: runtimeConfig.CodeHomeDir,
+			Timeout:           codexAppServerTmuxStartupTimeoutV0(time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond),
 		}
 		if err := tmuxBackend.EnsureV0(context.Background(), preflightProtocol); err != nil {
 			degraded := serverCodexUnavailableGoalBackendV0{
@@ -96,7 +114,6 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		}
 		return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 	}
-	var runtimeProtocol serverCodexAppServerProtocolPortV0 = protocol
 	client := serverCodexAppServerGoalBackendV0{
 		Protocol:        runtimeProtocol,
 		CWD:             firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir),
