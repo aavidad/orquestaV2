@@ -322,6 +322,75 @@ func TestStartAppDirectorV0GoalFirstLauncherDegradadoNoCaeALoopLegacy(t *testing
 	}
 }
 
+func TestStartAppDirectorV0GoalFirstLauncherDegradadoPersisteMarkerV0(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	launcher := &serviceGoalLauncherForTestV0{err: errors.New("goal_launcher_unavailable")}
+	goalStates := newServiceGoalStateStoreForTestV0()
+	markers := newServiceGoalFirstRunMarkerStoreForTestV0()
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = AppDirectorExecutionModeGoalFirstV0
+
+	result, err := StartAppDirectorV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{
+			RunStore:                store,
+			EventSink:               sink,
+			OutboxLedger:            ledger,
+			GoalLauncher:            launcher,
+			GoalObserver:            serviceGoalObserverForTestV0{},
+			GoalClosureValidator:    orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+			GoalStateStore:          goalStates,
+			GoalFirstRunMarkerStore: markers,
+			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+				serviceCapacityDispatcherForTestV0(store, sink, ledger),
+				serviceAgentLauncherDispatcherForTestV0(store, sink, ledger),
+			},
+		},
+	)
+
+	if err == nil || err.Error() != "goal_launcher_unavailable" {
+		t.Fatalf("err=%v result=%+v", err, result)
+	}
+	marker, err := markers.LoadGoalWorkRunMarkerV0(context.Background(), request.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkRunMarkerV0: %v", err)
+	}
+	if marker.RunRef != request.RunRef ||
+		marker.Status != orquestagoal.GoalStatusBlockedV0 ||
+		!serviceStringInSetV0(marker.EvidenceRefs, "evidence-ref-app-director-goal-first-launch-failed-v0") {
+		t.Fatalf("marker=%+v", marker)
+	}
+	continued, err := ContinueAppDirectorV0(
+		context.Background(),
+		ContinueAppDirectorRequestV0{
+			RunRef:        request.RunRef,
+			OccurredAt:    "2026-05-09T22:33:00Z",
+			CorrelationID: "corr-service-goal-first-launch-failed-marker",
+		},
+		StartAppDirectorPortsV0{
+			RunStore:                store,
+			GoalStateStore:          goalStates,
+			GoalFirstRunMarkerStore: markers,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0: %v", err)
+	}
+	if continued.Status != ContinueAppDirectorStatusPendingV0 ||
+		continued.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
+		len(continued.OperationalClosureIssues) != 1 ||
+		continued.OperationalClosureIssues[0].Code != continueAppDirectorGoalFirstStateMissingCodeV0 {
+		t.Fatalf("continued=%+v", continued)
+	}
+	if serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentRequestedV0) ||
+		serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventAgentStartedV0) {
+		t.Fatalf("goal-first degradado no debe caer al loop legacy: %+v", sink.EventsV0())
+	}
+}
+
 func TestStartAppDirectorV0GoalFirstBundleIncompletoNoCaeALoopLegacy(t *testing.T) {
 	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
 	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()

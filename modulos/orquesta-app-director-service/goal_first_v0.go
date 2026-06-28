@@ -45,6 +45,9 @@ func startAppDirectorGoalFirstV0(
 		},
 	)
 	if err != nil {
+		if markerErr := saveAppDirectorGoalFirstLaunchFailedMarkerV0(ctx, prepared.Run.RunID, goalSpec, prepared.EvidenceRefs, ports); markerErr != nil {
+			return StartAppDirectorResultV0{}, false, markerErr
+		}
 		return StartAppDirectorResultV0{}, false, err
 	}
 	if ports.GoalFirstRunMarkerStore != nil {
@@ -60,6 +63,35 @@ func startAppDirectorGoalFirstV0(
 		}
 	}
 	return startAppDirectorGoalFirstResultV0(request, spec, prepared, goalStarted.Receipt), true, nil
+}
+
+func saveAppDirectorGoalFirstLaunchFailedMarkerV0(
+	ctx context.Context,
+	runRef string,
+	spec orquestagoal.GoalWorkSpecV0,
+	evidenceRefs []string,
+	ports StartAppDirectorPortsV0,
+) error {
+	if ports.GoalFirstRunMarkerStore == nil {
+		return nil
+	}
+	return ports.GoalFirstRunMarkerStore.SaveGoalWorkRunMarkerV0(
+		ctx,
+		AppDirectorGoalFirstRunMarkerV0{
+			SchemaVersion: AppDirectorGoalFirstRunMarkerSchemaV0,
+			RunRef:        strings.TrimSpace(runRef),
+			GoalRef:       strings.TrimSpace(spec.GoalRef),
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			Status:        orquestagoal.GoalStatusBlockedV0,
+			EvidenceRefs: compactStartAppDirectorStringsV0(append(
+				[]string{
+					"evidence-ref-app-director-goal-first-launch-failed-v0",
+					"evidence-ref-app-director-goal-first-run-marker-v0",
+				},
+				evidenceRefs...,
+			)),
+		},
+	)
 }
 
 func ObserveAppDirectorGoalV0(

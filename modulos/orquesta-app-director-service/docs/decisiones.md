@@ -17,6 +17,21 @@ Estado: aceptada.
 
 ```text
 Fecha: 2026-06-28
+Decision: Persistir marker goal-first tambien si falla el launcher tras crear
+el run.
+Motivo: `StartAppDirectorV0` persiste intake/run antes de llamar al launcher.
+Sin marker, una reentrada posterior sobre un run sin `GoalWorkStateV0` podia no
+reconocer el contenedor como goal-first y caer en compatibilidad legacy. Con el
+marker bloqueado, la reentrada queda en `wait_external` con
+`app_director_goal_first_state_missing` y requiere reparacion/observacion
+goal-first.
+Impacto: el fallo de launcher conserva el error original, no crea agentes
+legacy y deja evidencia durable `evidence-ref-app-director-goal-first-launch-failed-v0`.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-28
 Decision: `ContinueAppDirectorV0` no drena loop legacy sobre runs goal-first con `GoalWorkStateV0` o `GoalWorkRunMarkerV0` persistido.
 Motivo: con Codex Goal, el director operativo interno del trabajo vive en el goal; reentrar por el loop historico puede pedir puertos legacy o reactivar un ciclo que ya no es la fuente de verdad.
 Impacto: el servicio comprueba `GoalStateStore` antes de validar puertos legacy. Si encuentra estado goal-first valido, devuelve `wait_external`, evidencia de observacion requerida y codigo `app_director_goal_first_observe_required`. Si el estado falta pero existe marcador durable, devuelve `app_director_goal_first_state_missing` y no ejecuta legacy. Solo sin estado ni marcador mantiene compatibilidad legacy. Si el estado existe pero no es valido/cargable, no cae al loop antiguo.

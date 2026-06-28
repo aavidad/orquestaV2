@@ -68,7 +68,10 @@ Puertos opcionales:
 - `GoalFirstRunMarkerStore`, opcional pero recomendado en composiciones
   goal-first. Persiste un `GoalWorkRunMarkerV0` minimo por `run_ref` para
   recordar que el contenedor pertenece a un goal aunque `GoalWorkStateV0` no se
-  pueda cargar en una reentrada posterior;
+  pueda cargar en una reentrada posterior. Si el launcher falla despues de
+  persistir el run, el servicio guarda un marker `blocked` con evidencia de
+  fallo para que `ContinueAppDirectorV0` no reactive el loop legacy sobre ese
+  contenedor;
 - `max_decision_cycles`, limite acotado para consumir decisiones y volver a ejecutar el loop sin quedar en bucle.
 
 Salida: `StartAppDirectorResultV0`.
