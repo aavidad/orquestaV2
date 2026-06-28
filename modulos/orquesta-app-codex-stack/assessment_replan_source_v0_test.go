@@ -349,6 +349,45 @@ func TestAssessmentReplanSourceV0NoDuplicaSiReplacementYaExiste(t *testing.T) {
 	}
 }
 
+func TestAssessmentReplanSourceV0DeduplicaAssessmentSemanticoConRefsDistintas(t *testing.T) {
+	runRef := "run-ref-assessment-replan-stack-semantic-001"
+	oldAgentRef := "agent-ref-assessment-semantic-old-001"
+	taskRef := "task-ref-assessment-stack-semantic-001"
+	source := AssessmentReplanSourceV0{
+		Store: orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(
+			assessmentReplanDescriptorForTestV0(runRef, oldAgentRef, taskRef),
+		),
+	}
+	request := assessmentReplanRequestForTestV0(runRef, oldAgentRef, taskRef, false)
+	request.Run.AgentAssessments = []string{
+		assessmentReplanProjectionForTestV0("assessment-ref-semantic-a", oldAgentRef, taskRef),
+		assessmentReplanProjectionForTestV0("assessment-ref-semantic-b", oldAgentRef, taskRef),
+	}
+
+	plans, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentAssessmentReplanPlansV0 semantic: %v", err)
+	}
+	if len(plans) != 1 ||
+		!assessmentReplanEvidenceContainsForTestV0(plans[0].EvidenceRefs, "assessment-recursion-guard:") {
+		t.Fatalf("assessment semantico duplicado debe producir un unico plan con guarda: %+v", plans)
+	}
+	firstPlan := plans[0]
+	request.Run.AgentAssessments = []string{
+		assessmentReplanProjectionForTestV0("assessment-ref-semantic-c", oldAgentRef, taskRef),
+	}
+
+	again, err := source.BuildAgentAssessmentReplanPlansV0(context.Background(), request)
+	if err != nil {
+		t.Fatalf("BuildAgentAssessmentReplanPlansV0 semantic again: %v", err)
+	}
+	if len(again) != 1 ||
+		again[0].ReplanRef != firstPlan.ReplanRef ||
+		again[0].AgentRequestID != firstPlan.AgentRequestID {
+		t.Fatalf("assessment semantico debe conservar refs: first=%+v again=%+v", firstPlan, again)
+	}
+}
+
 func TestAssessmentReplanSourceV0NoEncadenaReemplazosParaMismaTarea(t *testing.T) {
 	runRef := "run-ref-assessment-replan-stack-chain-001"
 	oldAgentRef := "agent-ref-assessment-chain-old-001"
@@ -554,6 +593,31 @@ func assessmentReplanRequestForTestV0(
 		OccurredAt:   "2026-05-10T13:00:00Z",
 		EvidenceRefs: []string{"evidence-ref-assessment-replan-test"},
 	}
+}
+
+func assessmentReplanProjectionForTestV0(
+	assessmentRef string,
+	agentRef string,
+	taskRef string,
+) string {
+	return orquestacoreworkflow.AgentAssessmentProjectionRefV0(orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+		AssessmentRef:  assessmentRef,
+		PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+		AgentRequestID: agentRef,
+		TaskRef:        taskRef,
+		Verdict:        orquestacoreworkflow.AgentAssessmentVerdictLoopDetectedV0,
+		Action:         orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+		Severity:       orquestacoreworkflow.AgentAssessmentSeverityCriticalV0,
+	})
+}
+
+func assessmentReplanEvidenceContainsForTestV0(refs []string, want string) bool {
+	for _, ref := range refs {
+		if strings.Contains(ref, want) {
+			return true
+		}
+	}
+	return false
 }
 
 func assessmentReplanDescriptorForTestV0(

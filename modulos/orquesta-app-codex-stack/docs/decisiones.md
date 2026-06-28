@@ -1956,6 +1956,22 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-28
+Decision: El replan por assessment usa una huella semantica estable y no el
+`assessment_ref` como llave principal.
+Motivo: un mismo bloqueo puede llegar con varios `assessment_ref` o agentes de
+revision distintos. Si las refs del replacement dependen de esos ids, Orquesta
+puede abrir replacements equivalentes y alimentar recursion artificial.
+Impacto: `AssessmentReplanSourceV0` calcula
+`assessment-recursion-guard` con `run_ref`, `task_ref`, `delivery_ref`,
+`verdict`, `action` y `severity`; en un mismo tick deduplica esa huella y genera
+refs deterministas para el mismo bloqueo. El contador de followups fallidos
+queda fuera de la huella base y entra en el sufijo para permitir un nuevo
+intento solo cuando el replacement anterior fallo terminalmente.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-06-26
 Decision: En stats de external_work, un agente perdido o fallido prevalece
 sobre started/in_flight.

@@ -1,6 +1,7 @@
 package orquestaappcodexstack
 
 import (
+	"strconv"
 	"strings"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -26,6 +27,7 @@ func assessmentReplanSuffixV0(
 	runRef string,
 	projection orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
 	taskRef string,
+	failedFollowupCount int,
 ) string {
 	base := assessmentReplanSafeRefV0(taskRef)
 	if base == "sin-ref" {
@@ -33,9 +35,24 @@ func assessmentReplanSuffixV0(
 	}
 	return base + "-" + assessmentReplanDigestV0(
 		runRef,
-		projection.AssessmentRef,
-		projection.AgentRequestID,
+		assessmentReplanSemanticKeyV0(runRef, projection, taskRef),
 		taskRef,
+		strconv.Itoa(failedFollowupCount),
+	)
+}
+
+func assessmentReplanSemanticKeyV0(
+	runRef string,
+	projection orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
+	taskRef string,
+) string {
+	return assessmentReplanDigestV0(
+		runRef,
+		taskRef,
+		projection.DeliveryRef,
+		projection.Verdict,
+		projection.Action,
+		projection.Severity,
 	)
 }
 

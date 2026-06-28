@@ -34,6 +34,7 @@ func (source AssessmentReplanSourceV0) BuildAgentAssessmentReplanPlansV0(
 	}
 	taskByAgent := assessmentReplanTaskByAgentV0(descriptors)
 	plans := make([]orquestacionnucleoapp.AgentAssessmentReplanPlanV0, 0, len(request.Run.ConfirmedStoppedAgents)+len(request.Run.LostAgents))
+	plannedSemanticKeys := map[string]bool{}
 	for _, projection := range assessmentReplanTerminalProjectionsV0(request.Run) {
 		if !assessmentReplanProjectionReadyV0(request.Run, projection) {
 			continue
@@ -42,20 +43,26 @@ func (source AssessmentReplanSourceV0) BuildAgentAssessmentReplanPlansV0(
 		if taskRef == "" {
 			continue
 		}
+		semanticKey := assessmentReplanSemanticKeyV0(request.Run.RunID, projection, taskRef)
+		if plannedSemanticKeys[semanticKey] {
+			continue
+		}
 		if assessmentReplanProjectionAlreadyCoveredV0(request.Run, projection, taskRef, descriptors) {
 			continue
 		}
-		if assessmentReplanTaskTerminalFailedFollowupCountV0(request.Run, taskRef) >= assessmentReplanMaxTerminalFailedFollowupsV0 {
+		failedFollowupCount := assessmentReplanTaskTerminalFailedFollowupCountV0(request.Run, taskRef)
+		if failedFollowupCount >= assessmentReplanMaxTerminalFailedFollowupsV0 {
 			continue
 		}
 		if assessmentReplanTaskHasMaterializedFollowupV0(request.Run, taskRef) {
 			continue
 		}
-		plan := source.planForAssessmentV0(request, projection, taskRef)
+		plan := source.planForAssessmentV0(request, projection, taskRef, semanticKey, failedFollowupCount)
 		if assessmentReplanReplacementAlreadyRequestedV0(request.Run, plan.AgentRequestID) {
 			continue
 		}
 		plans = append(plans, plan)
+		plannedSemanticKeys[semanticKey] = true
 	}
 	return plans, nil
 }
@@ -131,9 +138,11 @@ func (source AssessmentReplanSourceV0) planForAssessmentV0(
 	request orquestacionnucleoapp.AgentAssessmentReplanPlanRequestV0,
 	projection orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
 	taskRef string,
+	semanticKey string,
+	failedFollowupCount int,
 ) orquestacionnucleoapp.AgentAssessmentReplanPlanV0 {
-	suffix := assessmentReplanSuffixV0(request.Run.RunID, projection, taskRef)
-	evidence := assessmentReplanEvidenceRefsV0(request, projection)
+	suffix := assessmentReplanSuffixV0(request.Run.RunID, projection, taskRef, failedFollowupCount)
+	evidence := assessmentReplanEvidenceRefsV0(request, projection, semanticKey)
 	summary := "Reemplazar agente bloqueado tras evaluacion de progreso."
 	return orquestacionnucleoapp.AgentAssessmentReplanPlanV0{
 		CandidateRef:               "assessment-replan-candidate-ref-" + suffix,
@@ -220,9 +229,11 @@ func assessmentReplanCapacityV0(
 func assessmentReplanEvidenceRefsV0(
 	request orquestacionnucleoapp.AgentAssessmentReplanPlanRequestV0,
 	projection orquestacoreworkflow.AgentWorkAssessmentProjectionV0,
+	semanticKey string,
 ) []string {
 	refs := []string{
 		"evidence-ref-assessment-replan",
+		"assessment-recursion-guard:" + strings.TrimSpace(semanticKey),
 		projection.AssessmentRef,
 		projection.AgentRequestID,
 	}

@@ -1540,6 +1540,10 @@ Cobertura:
   recuperacion `02_markdown -> 04_markdown` y sugiere
   `consolidate_checkpoint_topic_from_existing_material` para consolidar
   material existente bajo el write-set autorizado.
+- `TestAssessmentReplanSourceV0DeduplicaAssessmentSemanticoConRefsDistintas`
+  fija que dos assessments con refs distintas pero mismo `run/task/verdict/
+  action/severity` comparten `assessment-recursion-guard`, `replan_ref` y
+  `agent_request_id`, evitando recursion artificial.
 - `TestCodexStackExternalJobStatsSourceV0ExponeColisionAckPadreSubrol`
   fija que una evidencia `invalid_parent_ack_subrole_collision` no queda
   escondida como cohorte abierta generica: el job externo publica
