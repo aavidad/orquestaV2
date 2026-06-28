@@ -87,3 +87,34 @@ func TestRESTRunQueueClientV0SetPriorityErroresPublicosNoSonTransporte(t *testin
 		t.Fatalf("vm=%+v", vm)
 	}
 }
+
+func TestRESTRunQueueClientV0ConservaErroresPublicosEnTimeout(t *testing.T) {
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusGatewayTimeout)
+		_ = json.NewEncoder(w).Encode(orquestamcp.MCPRunQueuePriorityToolResultV0{
+			Estado: orquestamcp.MCPRunQueuePriorityEstadoErrorV0,
+			Action: orquestamcp.MCPRunQueuePriorityActionSetV0,
+			Errores: []orquestamcp.MCPValidationIssueV0{{
+				Code:    "run_queue_priority_timeout",
+				Field:   "executor",
+				Message: "consulta de cola excedio la ventana HTTP acotada",
+			}},
+		})
+	}))
+	defer server.Close()
+
+	client := NewRESTRunQueueClientV0(server.URL, time.Second)
+	vm, err := client.ConsultarRunQueue(context.Background(), WebRunQueueQueryV0{
+		Action: WebRunQueueActionSetV0,
+	})
+
+	if err != nil {
+		t.Fatalf("timeout publico no debe perderse como transporte: %v", err)
+	}
+	if vm.Estado != WebRunQueueEstadoErrorV0 ||
+		vm.Action != WebRunQueueActionSetV0 ||
+		len(vm.ErroresPublicos) != 1 ||
+		vm.ErroresPublicos[0].Code != "run_queue_priority_timeout" {
+		t.Fatalf("vm=%+v", vm)
+	}
+}

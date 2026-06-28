@@ -132,18 +132,17 @@ func decodeRunQueueResponseV0(
 	resp *http.Response,
 	query WebRunQueueQueryV0,
 ) (WebRunQueueViewModelV0, error) {
-	if (resp.StatusCode < 200 || resp.StatusCode > 299) && resp.StatusCode != http.StatusBadRequest {
-		discardWebHTTPResponseBodyV0(resp)
-		return WebRunQueueViewModelV0{}, runQueueClientErrorV0(WebRunQueueErrTransporteV0, resp.StatusCode)
-	}
 	var result orquestamcp.MCPRunQueuePriorityToolResultV0
 	if !decodeWebHTTPJSONResponseV0(resp, &result) {
+		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+			return WebRunQueueViewModelV0{}, runQueueClientErrorV0(WebRunQueueErrTransporteV0, resp.StatusCode)
+		}
 		return WebRunQueueViewModelV0{}, runQueueClientErrorV0(WebRunQueueErrRespuestaInvalidaV0, resp.StatusCode)
 	}
 	if result.Estado == "" {
 		return WebRunQueueViewModelV0{}, runQueueClientErrorV0(WebRunQueueErrRespuestaInvalidaV0, resp.StatusCode)
 	}
-	if resp.StatusCode == http.StatusBadRequest && result.Estado != WebRunQueueEstadoErrorV0 {
+	if (resp.StatusCode < 200 || resp.StatusCode > 299) && result.Estado != WebRunQueueEstadoErrorV0 {
 		return WebRunQueueViewModelV0{}, runQueueClientErrorV0(WebRunQueueErrTransporteV0, resp.StatusCode)
 	}
 	return NewWebRunQueueViewModelV0(query.Locale, result), nil

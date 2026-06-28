@@ -207,6 +207,74 @@ func TestServerRunSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0(t *testing.T) 
 	}
 }
 
+func TestServerRunQueuePriorityHTTPSetPriorityClienteRealRecibeTimeoutJSONV0(t *testing.T) {
+	queue := newBlockingServerRunQueuePriorityExecutorV0()
+	gateway := orquestaappgateway.NewHTTPHandlerV0(orquestaappgateway.ConfigV0{
+		Timeout:          time.Second,
+		RunQueuePriority: queue,
+	})
+	handler, err := buildServerAppHandlerV0(orquestaappcodexstack.StackV0{
+		Handler: gateway,
+	})
+	if err != nil {
+		t.Fatalf("buildServerAppHandlerV0: %v", err)
+	}
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	body := []byte(`{
+		"request_id":"request-ref-server-run-queue-priority-timeout-001",
+		"correlation_id":"corr-server-run-queue-priority-timeout-001",
+		"idempotency_key":"idem-server-run-queue-priority-timeout-001",
+		"action":"set_priority",
+		"queue_ref":"global",
+		"run_ref":"run-ref-server-run-queue-priority-timeout-001",
+		"priority_score":90
+	}`)
+	client := &http.Client{Timeout: 3 * time.Second}
+	req, err := http.NewRequest(
+		http.MethodPost,
+		server.URL+orquestamcp.MCPRunQueuePriorityHTTPPathV0,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Correlation-ID", "corr-server-run-queue-priority-timeout-001")
+
+	started := time.Now()
+	resp, err := client.Do(req)
+	elapsed := time.Since(started)
+	if err != nil {
+		t.Fatalf("client.Do elapsed=%s err=%v", elapsed, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusGatewayTimeout || elapsed > 3*time.Second {
+		t.Fatalf("status=%d elapsed=%s", resp.StatusCode, elapsed)
+	}
+	var result orquestamcp.MCPRunQueuePriorityToolResultV0
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPRunQueuePriorityEstadoErrorV0 ||
+		result.Action != orquestamcp.MCPRunQueuePriorityActionSetV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "run_queue_priority_timeout" ||
+		resp.Header.Get("X-Correlation-ID") != "corr-server-run-queue-priority-timeout-001" {
+		t.Fatalf("result=%+v headers=%v", result, resp.Header)
+	}
+	if queue.callsV0() != 1 {
+		t.Fatalf("calls=%d", queue.callsV0())
+	}
+	select {
+	case <-queue.done:
+	case <-time.After(time.Second):
+		t.Fatalf("queue executor no recibio cancelacion tras timeout HTTP")
+	}
+}
+
 func postServerAutoprogrammingSuperviseForTestV0(
 	t *testing.T,
 	handler http.Handler,
@@ -246,10 +314,23 @@ type blockingServerAutoprogrammingSuperviseExecutorV0 struct {
 	done    chan struct{}
 }
 
+type blockingServerRunQueuePriorityExecutorV0 struct {
+	mu    sync.Mutex
+	once  sync.Once
+	calls int
+	done  chan struct{}
+}
+
 func newBlockingServerAutoprogrammingSuperviseExecutorV0() *blockingServerAutoprogrammingSuperviseExecutorV0 {
 	return &blockingServerAutoprogrammingSuperviseExecutorV0{
 		release: make(chan struct{}),
 		done:    make(chan struct{}),
+	}
+}
+
+func newBlockingServerRunQueuePriorityExecutorV0() *blockingServerRunQueuePriorityExecutorV0 {
+	return &blockingServerRunQueuePriorityExecutorV0{
+		done: make(chan struct{}),
 	}
 }
 
@@ -270,7 +351,28 @@ func (executor *blockingServerAutoprogrammingSuperviseExecutorV0) Execute(
 	}, nil
 }
 
+func (executor *blockingServerRunQueuePriorityExecutorV0) Execute(
+	ctx context.Context,
+	input orquestamcp.MCPRunQueuePriorityToolInputV0,
+) (orquestamcp.MCPRunQueuePriorityToolResultV0, error) {
+	executor.mu.Lock()
+	executor.calls++
+	executor.mu.Unlock()
+	<-ctx.Done()
+	executor.once.Do(func() { close(executor.done) })
+	return orquestamcp.MCPRunQueuePriorityToolResultV0{
+		Estado: orquestamcp.MCPRunQueuePriorityEstadoOKV0,
+		Action: strings.TrimSpace(input.Action),
+	}, nil
+}
+
 func (executor *blockingServerAutoprogrammingSuperviseExecutorV0) callsV0() int {
+	executor.mu.Lock()
+	defer executor.mu.Unlock()
+	return executor.calls
+}
+
+func (executor *blockingServerRunQueuePriorityExecutorV0) callsV0() int {
 	executor.mu.Lock()
 	defer executor.mu.Unlock()
 	return executor.calls

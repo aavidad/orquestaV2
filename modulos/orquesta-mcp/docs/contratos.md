@@ -1209,13 +1209,14 @@ Invariantes:
   - Ranking por `RunQueueReaderPortV0`.
   - Cambio de puntuacion solo por `RunQueuePriorityWriterPortV0`.
   - No lee DB ni muta scheduler interno.
-  - El bridge HTTP de `rank` cancela la lectura y devuelve `504` JSON con
-    `run_queue_priority_timeout` si la cola no responde dentro de la ventana
-    publica; `set_priority` sigue sin ejecutarse en background para no dejar
-    escrituras tardias.
+  - El bridge HTTP de `rank` y `set_priority` cancela el contexto del puerto y
+    devuelve `504` JSON con `run_queue_priority_timeout` si la cola no responde
+    dentro de la ventana publica; ninguna accion queda esperando sin cuerpo HTTP.
 Pruebas de contrato:
   - Ranking delega en `orquesta-run-queue`.
   - `set_priority` delega en writer fake.
+  - `rank` y `set_priority` devuelven timeout JSON publico si el puerto no
+    responde dentro de la ventana HTTP.
   - Transporte queda opt-in sin binding.
 ```
 

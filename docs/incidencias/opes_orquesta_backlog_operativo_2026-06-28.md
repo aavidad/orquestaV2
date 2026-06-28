@@ -298,5 +298,14 @@ continuacion publica unica despues del despacho en segundo plano. Evidencia:
 `TestMCPRunSupervisorHTTPHandlerV0DevuelveAcceptedSiExecutorSigueVivo`,
 `TestServerAutoprogrammingSuperviseHTTPDevuelveAcceptedBackgroundSinColgarV0` y
 `TestServerRunSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0`.
+Avance 2026-06-28 noche 4: `/api/v0/runs/queue/priority` ya no excluye
+`set_priority` de la ventana HTTP acotada. Si el puerto de cola queda bloqueado,
+el cliente recibe `504` con JSON publico `run_queue_priority_timeout` tambien en
+mutaciones, y el contexto del puerto se cancela. Evidencia:
+`TestMCPRunQueuePriorityHTTPHandlerV0SetPriorityClienteRealRecibeTimeoutJSON` y
+`TestServerRunQueuePriorityHTTPSetPriorityClienteRealRecibeTimeoutJSONV0`.
+El cliente web `/run-queue` conserva ese JSON publico en el view model en vez de
+convertirlo en transporte opaco. Evidencia:
+`TestRESTRunQueueClientV0ConservaErroresPublicosEnTimeout`.
 Sigue vivo el cierre de streaming/flush amplio y observacion posterior sobre
 colas OPES reales temporales.

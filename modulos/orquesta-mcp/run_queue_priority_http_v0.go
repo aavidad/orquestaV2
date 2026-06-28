@@ -99,7 +99,7 @@ func (handler mcpRunQueuePriorityHTTPHandlerV0) executeRunQueuePriorityWithRespo
 	action string,
 ) (MCPRunQueuePriorityToolResultV0, error, bool) {
 	timeout := handler.responseTimeout
-	if timeout <= 0 || strings.EqualFold(strings.TrimSpace(action), MCPRunQueuePriorityActionSetV0) {
+	if timeout <= 0 {
 		result, err := handler.executor.Execute(r.Context(), input)
 		return result, err, false
 	}

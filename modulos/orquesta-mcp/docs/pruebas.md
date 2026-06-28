@@ -645,6 +645,10 @@ Evidencia adicional 2026-06-27:
 las lecturas HTTP de estado y cola devuelven `504` con JSON publico
 decodificable si el executor no responde; no cuelgan el cliente ni dejan una
 lectura opaca en background.
+Evidencia adicional 2026-06-28:
+`TestMCPRunQueuePriorityHTTPHandlerV0SetPriorityClienteRealRecibeTimeoutJSON`
+fija la misma garantia para `set_priority`: el cliente HTTP real recibe `504`
+con `run_queue_priority_timeout` y el puerto ve su contexto cancelado.
 `TestMCPAutoprogrammingStatusExecutorV0DiagnosticaQueuedNotDispatchedV0` fija
 `queued_not_dispatched` y `queue_health.queued_not_dispatched` para runs
 `ready`/`queued`/`pending` sin goal-first ni dispatch observado.
