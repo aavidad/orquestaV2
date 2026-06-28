@@ -66,6 +66,25 @@ consume tambien `ops_snapshot.decision` por run y elimina el fallback global a
 validarlo contra un servidor temporal con combinacion real de estados y no solo
 unit/html contract.
 
+Avance 2026-06-28 noche: el stack goal-first deja de depender de que el
+`run_ref` aparezca en input o cola para descubrir marcadores activos. Se anade
+`GoalWorkRunMarkerListPortV0`, `StoreV0` lista markers durables activos y
+`autoprogramming/status` publica `goal_first_state_missing` aunque la cola no
+vea la run. Ademas `StartGoalWorkV0` devuelve `GoalWorkStartResultV0` parcial
+si el launcher ya produjo receipt pero falla `SaveGoalWorkStateV0`; el
+app-director usa ese receipt para persistir `external_goal_ref` y evidencias en
+el marker de fallo, sin caer al loop legacy. El servidor HTTP queda cubierto
+con wiring por defecto: observador goal-first activo por defecto,
+`AppGoalStateStore` inyectado y legacy supervisor desactivado salvo opt-in.
+Evidencia: `TestMCPAutoprogrammingStatusExecutorV0ListaGoalMarkerSinStateAunqueColaNoVisible`,
+`TestStoreV0AppDirectorGoalFirstRunMarkerListaActivosTrasRecreate`,
+`TestStartGoalWorkV0DevuelveErrorSiStoreFallaSinRelanzar`,
+`TestStartAppDirectorV0GoalFirstStateStoreFallaPersisteMarkerConExternalGoalRefV0`
+y `TestServerAutoprogrammingHTTPGoalFirstPreparaSupervisaObservaYCierraV0`.
+Commits: `aa38ca6e`, `7b1ecb06`, `5b315988`. Sigue pendiente el smoke temporal
+real OPES con combinacion real de estados, derivados, cierre y TTS; no se debe
+rellenar ese hueco con OPES productivo ni reactivar el Director legacy.
+
 ## ORQ-OPES-002 reconciliacion_ack_artefactos_cierre_cola
 
 Estado: parcial; cierre goal-first DomainWork ya no acepta receipts
