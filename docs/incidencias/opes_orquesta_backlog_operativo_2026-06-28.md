@@ -94,7 +94,8 @@ un padre cuando el contrato exige subroles reales.
 
 ## ORQ-OPES-004 capability_externa_tts_edge_host_runner
 
-Estado: vivo.
+Estado: parcial; contrato neutral cerrado en `orquesta-domain-work`, pendiente
+de cableado en composicion OPES temporal real.
 
 Problema: la generacion de audio/TTS para OPES necesita frontera de capacidad
 externa clara. Orquesta no debe asumir runner local, modelo, credenciales ni
@@ -109,6 +110,17 @@ Alcance inicial:
 Criterio de cierre: una composicion temporal puede declarar capacidad TTS,
 fallar con razon operativa si no existe, y registrar receipts/evidencias cuando
 produce audio sin acoplar el nucleo a proveedor concreto.
+
+Avance 2026-06-28:
+
+- `audio_asset` deriva requisito neutral `speech_synthesis`;
+- `DomainWorkExternalCapabilitySourcePortV0` permite que la composicion declare
+  capacidades disponibles o no disponibles;
+- `EvaluateDomainWorkExternalCapabilitiesV0` bloquea con
+  `domain_work_external_capability_missing` y `operational_reason` cuando falta
+  TTS;
+- sigue pendiente smoke/composicion OPES temporal que use esa capacidad y
+  registre receipt/evidencia de audio real o fake controlado.
 
 ## ORQ-OPES-005 robustez_api_supervision_stream_fd_timeout
 

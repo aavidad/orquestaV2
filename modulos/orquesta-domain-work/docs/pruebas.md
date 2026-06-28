@@ -21,6 +21,10 @@ Cobertura:
 - politica de tests requeridos de dominio como contrato/puerto:
   `required_tests` viaja por `test_ref`, criteria refs, input refs,
   external refs y evidencias, sin banco comun ni semantica OPES;
+- capacidades externas de dominio: jobs de audio derivan requisito
+  `speech_synthesis`, ausencia de capacidad bloquea con
+  `domain_work_external_capability_missing`, y aliases `tts`/`text_to_speech`
+  se normalizan sin acoplar proveedor ni runner;
 - identidad canonica de jobs con fingerprint `sha256`, `request_id` excluido,
   `required_tests` incluido y base de `job_ref` compartida por adaptadores;
 - suite reusable `contracttest` para stores `DomainWorkJobRecordStorePortV0`;

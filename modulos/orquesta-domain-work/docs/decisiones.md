@@ -1,6 +1,23 @@
 # Decisiones: orquesta-domain-work
 
 ```text
+Fecha: 2026-06-28
+Decision: Anadir contrato neutral de capacidades externas para jobs de dominio.
+Motivo: los trabajos que producen `audio_asset` necesitan una frontera clara
+para TTS/sintesis de voz sin asumir runner local, credenciales, modelo, host de
+edge ni proveedor dentro del nucleo.
+Alternativas: meter TTS en OPES; usar strings en `input_fields`; bloquear por
+heuristicas de work_kind en adaptadores; implementar un runner real dentro del
+contrato puro.
+Impacto: `audio_asset` deriva requisito `speech_synthesis`; la composicion
+declara capacidades por `DomainWorkExternalCapabilitySourcePortV0`;
+`EvaluateDomainWorkExternalCapabilitiesV0` bloquea con razon operativa si falta
+la capacidad y conserva refs/evidencias. El modulo sigue sin red, DB,
+filesystem, runtime, OPES, Codex ni proveedor.
+Estado: aceptada_local
+```
+
+```text
 Fecha: 2026-05-17
 Decision: Reconocer `orquesta-domain-work-sql` como adaptador SQL externo de
 `DomainWorkJobRecordStorePortV0`.

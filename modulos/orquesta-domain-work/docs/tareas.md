@@ -13,6 +13,9 @@
 - Validar refs compactas e idempotencia minima.
 - Validar planes documentales con secciones, visuales, revisiones y
   entregables.
+- Definir frontera neutral de capacidades externas para jobs de dominio:
+  `audio_asset` exige `speech_synthesis`, la composicion declara disponibilidad
+  por puerto y el contrato bloquea con razon operativa si falta.
 - Documentar frontera con OPES/programacion/otras apps.
 - Crear primer conector REST OPES de jobs/artefactos en
   `orquesta-opes-connector`.

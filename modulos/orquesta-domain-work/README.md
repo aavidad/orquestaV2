@@ -12,6 +12,8 @@ Responsabilidad:
 - modelar la entrega de artefactos por puerto;
 - modelar politica de tests requeridos de dominio por refs, criterios de
   aceptacion y puerto del adaptador propietario;
+- modelar descubrimiento/evaluacion de capacidades externas declaradas por
+  composicion, por ejemplo sintesis de voz para artefactos `audio_asset`;
 - validar que el contrato no arrastra DB, rutas, runtime, proveedor ni modelo.
 
 Este modulo permite que OPES, programacion u otra app futura consuman la
@@ -42,6 +44,9 @@ Regla de juicio:
 - los tests requeridos de dominio los declara o resuelve el adaptador externo
   por `DomainWorkRequiredTestPolicyPortV0`; no existe banco comun de tests ni
   strings OPES en este contrato;
+- las capacidades externas las declara o descubre la composicion mediante
+  `DomainWorkExternalCapabilitySourcePortV0`; el contrato solo expresa la
+  necesidad y el bloqueo operativo, no ejecuta proveedores;
 - si el dominio necesita planificacion inteligente, debe pedir un trabajo de
   planificacion a Orquesta, no implementarla dentro del dominio.
 
@@ -50,6 +55,7 @@ Fuera de alcance:
 - REST, MCP, HTTP o clientes reales;
 - DB, ficheros, colas, workers o rutas internas de apps externas;
 - seleccion de agentes, modelos, cuotas, leases, sesiones o tmux;
+- runners TTS, hosts edge, credenciales, proveedores de voz o colas de audio;
 - payloads de dominio sin contrato.
 - planificacion documental sin contrato: usar `DomainDocumentPlanV0`
   (`PlanTemaV0`/`PlanTemarioV0`) para planes de tema, temario o documento.

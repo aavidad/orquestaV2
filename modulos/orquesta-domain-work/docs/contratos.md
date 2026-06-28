@@ -69,6 +69,7 @@ Campos principales:
 - `DomainWorkJobRecordSourcePortV0`
 - `DomainWorkArtifactSubmitterPortV0`
 - `DomainWorkRequiredTestPolicyPortV0`
+- `DomainWorkExternalCapabilitySourcePortV0`
 
 Son puertos hexagonales. Un conector de DB, cola, REST, app propietaria o
 runtime debe vivir en otro modulo y consumir estos contratos sin filtrar
@@ -113,6 +114,39 @@ Contrato minimo para politica de tests requeridos de dominio:
   a comandos dentro del contrato puro;
 - cualquier mapeo productivo a runner, API o validador real pertenece al
   adaptador/composicion que implementa el puerto.
+
+## DomainWorkExternalCapabilityQueryV0
+
+Contrato generico para preguntar que capacidades externas necesita un job de
+dominio y que capacidades declara la composicion.
+
+Reglas:
+
+- `BuildDomainWorkExternalCapabilityQueryV0` deriva los requisitos desde el
+  contrato neutral del job, sin leer runtime ni proveedor concreto;
+- un job cuyo `work_kind` produce `audio_asset` requiere la capacidad externa
+  `speech_synthesis`;
+- aliases recuperables como `tts` o `text_to_speech` se normalizan a
+  `speech_synthesis`;
+- `EvaluateDomainWorkExternalCapabilitiesV0` no ejecuta TTS ni selecciona
+  proveedor: solo marca `ready=true` si hay una capacidad declarada disponible;
+- si falta la capacidad requerida, devuelve issue
+  `domain_work_external_capability_missing`, `missing_requirements` y
+  `operational_reason` para que la composicion bloquee de forma explicita;
+- evidencias y refs de disponibilidad viajan en
+  `DomainWorkExternalCapabilityV0`; la entrega real de audio sigue usando
+  `DomainWorkArtifactSubmissionV0` con `artifact_type=audio_asset`,
+  `payload_refs`, `evidence_refs` y `complete_job` cuando corresponda.
+
+Contrato minimo para una fuente de capacidades:
+
+- recibe `DomainWorkExternalCapabilityQueryV0` normalizado;
+- devuelve capacidades declaradas por composicion con `capability_ref`, `kind`,
+  `available`, `operational_reason`, `external_refs` y `evidence_refs`;
+- no abre red, no ejecuta runners, no resuelve credenciales y no fija modelo,
+  host ni proveedor dentro del contrato puro;
+- cualquier mapeo a TTS real, edge host, cola de audio o API de voz pertenece a
+  un adaptador opt-in fuera de `orquesta-domain-work`.
 
 Referencia ejecutable:
 
