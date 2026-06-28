@@ -479,6 +479,7 @@ ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=drain-once \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
+ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT=<ruta-scope-probe-json-temporal> \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-temporal-001 \
 ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
@@ -497,6 +498,13 @@ el OPES temporal filtra realmente por `program_id`; como alternativa usar
 `ORQUESTA_OPES_BRIDGE_CORRELATION_ID`,
 `ORQUESTA_OPES_BRIDGE_TOPIC_ID` o
 `ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE=1`.
+Si se usa `program_id` como unico scope, el preflight real exige ademas
+`ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF` durable real o un JSON
+`opes_derivatives_scope_probe.json` generado por `scope-probe`, con
+`scope_probe_status=ok`, `job_type`, `seen > 0` y negative check de
+`program_id`. Para operadores es preferible pasar ese JSON con
+`ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT=<ruta-scope-probe-json-temporal>`; no
+inventar el ref de evidencia.
 Si el target es `drain-once`, `run-until-finalize` o `run-until-final` y la
 secuencia incluye `generate_audio_asset`, declarar
 `ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available`; sin esa capability
@@ -523,6 +531,7 @@ ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
+ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT=<ruta-scope-probe-json-temporal> \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-temporal-001 \
 ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
@@ -542,6 +551,7 @@ ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
+ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT=<ruta-scope-probe-json-temporal> \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-temporal-001 \
 ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \

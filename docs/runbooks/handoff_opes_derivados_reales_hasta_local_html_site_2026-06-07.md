@@ -95,6 +95,7 @@ ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=scope-probe \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
+SMOKE_ID=opes-derivatives-scope-temporal \
 scripts/smoke_opes_derivatives_rest.sh
 ```
 
@@ -105,6 +106,9 @@ consulta negativa con un valor imposible. Solo si devuelve
 `ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1` para el preflight/ejecucion.
 Si no hay jobs pendientes, el probe no puede demostrar el filtro: crear un job
 temporal de smoke o usar `topic_id`, `correlation_id` o cola temporal dedicada.
+El JSON aceptado por el preflight debe incluir `scope_probe_status=ok`,
+`job_type`, `seen > 0`, el `program_id` esperado y negative check de
+`program_id`.
 
 Preflight ejecutable sin OPES/Codex:
 
@@ -118,6 +122,7 @@ ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=preflight-only \
 ORQUESTA_OPES_DERIVATIVES_PREFLIGHT_TARGET_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
+ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT=tmp/orquesta-smokes/opes-derivatives-scope-temporal/opes_derivatives_scope_probe.json \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-temporal-001 \
 ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
@@ -129,8 +134,15 @@ Tambien es valido sustituir `program_id` por
 `ORQUESTA_OPES_BRIDGE_CORRELATION_ID`, `ORQUESTA_OPES_BRIDGE_TOPIC_ID` o
 `ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE=1`. El preflight solo valida
 guardas locales y no consulta OPES. Si el objetivo es `drain-once`,
-`run-until-finalize` o `run-until-final` y la secuencia incluye
-`generate_audio_asset`, la composicion temporal debe declarar
+`run-until-finalize` o `run-until-final`, y el unico scope es `program_id`,
+debe existir `ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF` o un
+`opes_derivatives_scope_probe.json` valido en `SMOKE_OUT_DIR` generado por
+`scope-probe`.
+`ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF` solo debe usarse si apunta a
+una evidencia durable real generada por la composicion temporal; para operadores
+es preferible reutilizar `ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT`.
+Si la secuencia incluye `generate_audio_asset`, la composicion temporal debe
+declarar
 `ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available` y
 `ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS` con refs compactas del
 runner/capacidad TTS temporal; si no, el preflight y `opes-drain-once` bloquean
@@ -180,6 +192,7 @@ ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
+ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT=tmp/orquesta-smokes/opes-derivatives-scope-temporal/opes_derivatives_scope_probe.json \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-temporal-001 \
 ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \

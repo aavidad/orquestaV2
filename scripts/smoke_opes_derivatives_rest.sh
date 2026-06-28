@@ -18,6 +18,7 @@ INPUT_LEDGER_PATH="${ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH:-$SMOKE_OUT_DIR/exte
 MAX_TICKS="${ORQUESTA_OPES_BRIDGE_MAX_TICKS:-40}"
 TICK_SLEEP_SECONDS="${ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS:-5}"
 SCOPE_PROBE_NEGATIVE_SUFFIX="${ORQUESTA_OPES_SCOPE_PROBE_NEGATIVE_SUFFIX:-__orquesta_scope_probe_absent__}"
+SCOPE_PROBE_OUTPUT="${ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT:-$SMOKE_OUT_DIR/opes_derivatives_scope_probe.json}"
 FAKE_SERVER="${ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER:-0}"
 FAKE_PENDING_TYPE="${ORQUESTA_OPES_DERIVATIVES_FAKE_PENDING_TYPE:-assemble_topic}"
 FAKE_GOAL_FIRST="${ORQUESTA_OPES_DERIVATIVES_FAKE_GOAL_FIRST:-1}"
@@ -515,6 +516,58 @@ speech_synthesis_evidence_refs_present() {
   return 1
 }
 
+compact_evidence_ref_present() {
+  local refs="$1"
+  refs="${refs//,/ }"
+  refs="${refs//;/ }"
+  local ref
+  for ref in $refs; do
+    if [[ "$ref" == evidence-ref-* || "$ref" == receipt-ref-* || "$ref" == artifact-ref-* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+scope_probe_file_matches_program_id() {
+  local file="$1"
+  [[ -f "$file" ]] || return 1
+  smoke_require_tool python3
+  python3 - "$file" "${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-}" <<'PY'
+import json
+import sys
+
+path, expected_program_id = sys.argv[1:]
+try:
+    with open(path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+except Exception:
+    raise SystemExit(1)
+if data.get("scope_probe_status") != "ok":
+    raise SystemExit(1)
+job_type = str(data.get("job_type") or "").strip()
+if not job_type:
+    raise SystemExit(1)
+try:
+    seen = int(data.get("seen"))
+except Exception:
+    raise SystemExit(1)
+if seen < 1:
+    raise SystemExit(1)
+scopes = data.get("scopes") or {}
+if str(scopes.get("program_id") or "").strip() != expected_program_id.strip():
+    raise SystemExit(1)
+if "program_id" not in [str(item).strip() for item in (data.get("negative_checks") or [])]:
+    raise SystemExit(1)
+raise SystemExit(0)
+PY
+}
+
+scope_filter_evidence_present() {
+  compact_evidence_ref_present "${ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF:-}" ||
+    scope_probe_file_matches_program_id "$SCOPE_PROBE_OUTPUT"
+}
+
 require_derivatives_real_preflight() {
   if [[ "$FAKE_SERVER" == "1" ]]; then
     return
@@ -573,6 +626,16 @@ require_derivatives_real_preflight() {
     echo "smoke derivados real bloqueado: program_id documental no basta; confirma filtro real con ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 o usa cola temporal dedicada/correlation_id/topic_id" >&2
     exit 2
   fi
+  if [[ -n "${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-}" &&
+    -z "${ORQUESTA_OPES_BRIDGE_TOPIC_ID:-}" &&
+    -z "${ORQUESTA_OPES_BRIDGE_CORRELATION_ID:-}" &&
+    "${ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE:-0}" != "1" &&
+    "${ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED:-0}" == "1" ]]; then
+    if ! scope_filter_evidence_present; then
+      echo "smoke derivados real bloqueado: SCOPE_FILTER_CONFIRMED=1 requiere ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF o scope-probe JSON valido en $SCOPE_PROBE_OUTPUT" >&2
+      exit 2
+    fi
+  fi
   if [[ -z "${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-}" &&
     -z "${ORQUESTA_OPES_BRIDGE_TOPIC_ID:-}" &&
     -z "${ORQUESTA_OPES_BRIDGE_CORRELATION_ID:-}" &&
@@ -620,6 +683,8 @@ write_metadata() {
     echo "tick_sleep_seconds=$TICK_SLEEP_SECONDS"
     echo "scope_summary=$(preflight_scope_summary)"
     echo "scope_filter_confirmed=${ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED:-0}"
+    echo "scope_filter_evidence_ref=${ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF:-}"
+    echo "scope_probe_output=$SCOPE_PROBE_OUTPUT"
     echo "dedicated_temporal_queue=${ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE:-0}"
     echo "speech_synthesis_capability=${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY:-}"
     echo "goal_backend=${ORQUESTA_CODEX_GOAL_BACKEND:-}"
@@ -649,7 +714,8 @@ opes_bridge_scan_limit() {
 
 run_scope_probe() {
   smoke_require_tool python3
-  local output_file="$SMOKE_OUT_DIR/opes_derivatives_scope_probe.json"
+  local output_file="$SCOPE_PROBE_OUTPUT"
+  mkdir -p "$(dirname "$output_file")"
   python3 - \
     "$OPES_BASE_URL_EFFECTIVE" \
     "$SEQUENCE" \

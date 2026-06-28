@@ -122,6 +122,17 @@ compatibilidad con `supervision_evidence_ref`, pero tambien expone en
 temporal real una superficie publica para comprobar inventario de artefactos y
 receipts sin leer logs ni stores internos. Evidencia:
 `TestRunOPESDrainOnceV0GoalFirstSupervisionObservaGoalSinSupervisorLegacyV0`.
+Avance 2026-06-28 adicional: cuando el smoke real usa solo `program_id` como
+scope, `SCOPE_FILTER_CONFIRMED=1` deja de bastar como declaracion nominal. El
+preflight exige `ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF` o un
+`opes_derivatives_scope_probe.json` valido con `scope_probe_status=ok`,
+`job_type`, `seen > 0` y negative check de `program_id`; el productor
+`scope-probe` y el consumidor `preflight` comparten
+`ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT`. Evidencia:
+`TestSmokeOPESDerivativesRESTWrapperScopeProbeFakeServerV0`,
+`TestSmokeOPESDerivativesRESTWrapperPreflightRealAceptaScopeProbeJSONV0`,
+`TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeProbeJSONNominalV0` y
+`TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeConfirmadoSinEvidenciaV0`.
 
 ## ORQ-OPES-003 external_work_no_agent_no_delivery
 
