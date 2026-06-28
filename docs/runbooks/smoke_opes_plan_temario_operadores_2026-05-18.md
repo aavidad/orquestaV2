@@ -600,6 +600,24 @@ persiste la metadata goal-first recuperada y cambia a observacion de Goal sin
 drenar el loop legacy. Sin supervision forzada, el resultado queda como
 `goal_first_observe_pending` porque Codex Goal mantiene su propio loop.
 
+Nota reanudacion 2026-06-28: `run-until-finalize` puede continuarse sin pisar
+evidencia previa usando el mismo `SMOKE_OUT_DIR`, el mismo
+`ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH` y el mismo servidor Orquesta temporal,
+con:
+
+```bash
+ORQUESTA_OPES_DERIVATIVES_RESUME=1 \
+ORQUESTA_OPES_BRIDGE_MAX_TICKS=<ticks-adicionales> \
+scripts/smoke_opes_derivatives_rest.sh
+```
+
+Con `RESUME=1`, el wrapper empieza en el siguiente
+`opes_derivatives_rest_tick_<n>_drain_summary.json` libre. Si un tick no
+selecciona job nuevo pero el ledger tiene runs goal-first sin cierre aceptado,
+el wrapper observa esos goals por `/api/v0/apps/director/goal/observe` antes de
+declarar que no hay pendientes. Esto permite continuar smokes largos cortados
+por cuota/tiempo sin volver al loop legacy ni relanzar trabajos ya enviados.
+
 Bloqueo verificable T12 si no hay entorno temporal: ejecutar primero el smoke
 fake aislado y despues repetir el comando `run-until-finalize` anterior cuando
 existan OPES temporal, servidor Orquesta temporal y cuota/modelo confirmados.

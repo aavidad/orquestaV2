@@ -17,6 +17,7 @@ LIMIT="${ORQUESTA_OPES_BRIDGE_LIMIT:-1}"
 INPUT_LEDGER_PATH="${ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH:-$SMOKE_OUT_DIR/external-bridge-input-ledger.json}"
 MAX_TICKS="${ORQUESTA_OPES_BRIDGE_MAX_TICKS:-40}"
 TICK_SLEEP_SECONDS="${ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS:-5}"
+RUN_UNTIL_RESUME="${ORQUESTA_OPES_DERIVATIVES_RESUME:-0}"
 GOAL_TIMEOUT_RECOVERY_ATTEMPTS="${ORQUESTA_OPES_DERIVATIVES_GOAL_TIMEOUT_RECOVERY_ATTEMPTS:-3}"
 GOAL_TIMEOUT_RECOVERY_SLEEP_SECONDS="${ORQUESTA_OPES_DERIVATIVES_GOAL_TIMEOUT_RECOVERY_SLEEP_SECONDS:-20}"
 SCOPE_PROBE_NEGATIVE_SUFFIX="${ORQUESTA_OPES_SCOPE_PROBE_NEGATIVE_SUFFIX:-__orquesta_scope_probe_absent__}"
@@ -748,6 +749,7 @@ write_metadata() {
     echo "input_ledger_path=$INPUT_LEDGER_PATH"
     echo "max_ticks=$MAX_TICKS"
     echo "tick_sleep_seconds=$TICK_SLEEP_SECONDS"
+    echo "resume=$RUN_UNTIL_RESUME"
     echo "goal_timeout_recovery_attempts=$GOAL_TIMEOUT_RECOVERY_ATTEMPTS"
     echo "goal_timeout_recovery_sleep_seconds=$GOAL_TIMEOUT_RECOVERY_SLEEP_SECONDS"
     echo "scope_summary=$(preflight_scope_summary)"
@@ -1124,6 +1126,85 @@ for result in data.get("results") or []:
 PY
 }
 
+run_until_start_tick() {
+  if [[ "$RUN_UNTIL_RESUME" != "1" ]]; then
+    printf '1\n'
+    return
+  fi
+  python3 - "$SMOKE_OUT_DIR" <<'PY'
+import glob
+import os
+import re
+import sys
+
+smoke_dir = sys.argv[1]
+max_tick = 0
+for path in glob.glob(os.path.join(smoke_dir, "opes_derivatives_rest_tick_*_drain_summary.json")):
+    match = re.search(r"_tick_(\d+)_drain_summary\.json$", os.path.basename(path))
+    if not match:
+        continue
+    max_tick = max(max_tick, int(match.group(1)))
+print(max_tick + 1)
+PY
+}
+
+json_ledger_unaccepted_goal_records() {
+  python3 - "$INPUT_LEDGER_PATH" "$SMOKE_OUT_DIR" <<'PY'
+import glob
+import json
+import os
+import sys
+
+ledger_path, smoke_dir = sys.argv[1:]
+
+accepted = set()
+for path in glob.glob(os.path.join(smoke_dir, "observe_goal_*_response.json")):
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:
+        continue
+    run_ref = str(data.get("run_ref") or "").strip()
+    if not run_ref:
+        continue
+    if bool(data.get("closure_accepted")) or (
+        str(data.get("goal_status") or "").strip() == "complete"
+        and str(data.get("closure_status") or "").strip() == "accepted"
+    ):
+        accepted.add(run_ref)
+
+try:
+    with open(ledger_path, "r", encoding="utf-8") as fh:
+        ledger = json.load(fh)
+except Exception:
+    raise SystemExit(0)
+
+entries = ledger.get("entries") if isinstance(ledger, dict) else []
+if not isinstance(entries, list):
+    raise SystemExit(0)
+
+seen = set()
+for entry in entries:
+    if not isinstance(entry, dict):
+        continue
+    run_ref = str(entry.get("run_ref") or "").strip()
+    if not run_ref or run_ref in seen or run_ref in accepted:
+        continue
+    actions = [str(item).strip() for item in (entry.get("next_actions") or [])]
+    goal_first = (
+        str(entry.get("route_policy") or "").strip() == "goal_first"
+        or str(entry.get("director_execution_mode") or "").strip() == "goal_first"
+        or bool(str(entry.get("goal_ref") or "").strip())
+        or bool(str(entry.get("external_goal_ref") or "").strip())
+        or "observe_goal" in actions
+    )
+    if not goal_first:
+        continue
+    seen.add(run_ref)
+    print(run_ref + "\t1")
+PY
+}
+
 write_supervise_payload() {
   local run_ref="$1"
   local tick="$2"
@@ -1377,6 +1458,70 @@ raise SystemExit(1)
 PY
 }
 
+process_run_record_for_tick() {
+  local tick="$1"
+  local record="$2"
+  local run_ref=""
+  local goal_first=""
+  IFS=$'\t' read -r run_ref goal_first <<<"$record"
+  if [[ -z "$run_ref" ]]; then
+    return 0
+  fi
+  if [[ "$goal_first" == "1" ]]; then
+    local observe_stdout="$SMOKE_OUT_DIR/observe_goal_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
+    post_observe_goal "$run_ref" "$tick" |
+      tee "$observe_stdout"
+    if observe_goal_response_is_blocked "$observe_stdout"; then
+      if observe_goal_response_is_active_timeout "$observe_stdout" &&
+        recover_goal_active_timeout_if_possible "$run_ref" "$tick"; then
+        return 0
+      fi
+      observe_goal_response_blocks_run_until "$observe_stdout" "$run_ref" "$tick" || true
+      exit 1
+    fi
+    return 0
+  fi
+  local supervise_stdout="$SMOKE_OUT_DIR/supervise_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
+  post_supervise_run "$run_ref" "$tick" | tee "$supervise_stdout"
+  if supervise_response_requires_goal_observe "$supervise_stdout"; then
+    local observe_stdout="$SMOKE_OUT_DIR/observe_goal_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
+    post_observe_goal "$run_ref" "$tick" |
+      tee "$observe_stdout"
+    if observe_goal_response_is_blocked "$observe_stdout"; then
+      if observe_goal_response_is_active_timeout "$observe_stdout" &&
+        recover_goal_active_timeout_if_possible "$run_ref" "$tick"; then
+        return 0
+      fi
+      observe_goal_response_blocks_run_until "$observe_stdout" "$run_ref" "$tick" || true
+      exit 1
+    fi
+  fi
+}
+
+observe_unaccepted_ledger_goals() {
+  local tick="$1"
+  local run_records=()
+  while IFS= read -r record; do
+    [[ -n "$record" ]] && run_records+=("$record")
+  done < <(json_ledger_unaccepted_goal_records)
+  if [[ "${#run_records[@]}" -eq 0 ]]; then
+    return 1
+  fi
+  echo "run_until_ledger_observe=started"
+  echo "tick=$tick"
+  echo "ledger_goal_records=${#run_records[@]}"
+  local index=0
+  local record
+  for record in "${run_records[@]}"; do
+    index=$((index + 1))
+    process_run_record_for_tick "${tick}_ledger_${index}" "$record"
+  done
+  echo "run_until_ledger_observe=completed"
+  echo "tick=$tick"
+  echo "ledger_goal_records=${#run_records[@]}"
+  return 0
+}
+
 write_goal_receipts_manifest() {
   local final_type="${1:-}"
   local output_file="$SMOKE_OUT_DIR/goal_receipts_manifest.json"
@@ -1582,12 +1727,30 @@ run_until_final_type() {
   esac
   local final_seen=0
   local final_summary=""
-  for tick in $(seq 1 "$MAX_TICKS"); do
+  local start_tick
+  start_tick="$(run_until_start_tick)"
+  if ! [[ "$start_tick" =~ ^[0-9]+$ ]] || [[ "$start_tick" -lt 1 ]]; then
+    echo "tick inicial invalido: $start_tick" >&2
+    exit 1
+  fi
+  local end_tick=$((start_tick + MAX_TICKS - 1))
+  if [[ "$RUN_UNTIL_RESUME" == "1" ]]; then
+    echo "run_until_resume=enabled"
+    echo "run_until_start_tick=$start_tick"
+    echo "run_until_end_tick=$end_tick"
+  fi
+  for tick in $(seq "$start_tick" "$end_tick"); do
     local summary_file="$SMOKE_OUT_DIR/opes_derivatives_rest_tick_${tick}_drain_summary.json"
     run_execute_drain_once_to "$summary_file"
     local selected
     selected="$(json_summary_field "$summary_file" "selected_job_type")"
     if [[ -z "$selected" ]]; then
+      if observe_unaccepted_ledger_goals "$tick"; then
+        if [[ "$tick" -lt "$end_tick" ]]; then
+          sleep "$TICK_SLEEP_SECONDS"
+        fi
+        continue
+      fi
       if [[ "$final_seen" == "1" ]]; then
         final_summary="$summary_file"
         write_goal_receipts_manifest "$final_type"
@@ -1615,44 +1778,17 @@ run_until_final_type() {
     fi
     local record
     for record in "${run_records[@]}"; do
-      local run_ref=""
-      local goal_first=""
-      IFS=$'\t' read -r run_ref goal_first <<<"$record"
-      if [[ "$goal_first" == "1" ]]; then
-        local observe_stdout="$SMOKE_OUT_DIR/observe_goal_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
-        post_observe_goal "$run_ref" "$tick" |
-          tee "$observe_stdout"
-        if observe_goal_response_is_blocked "$observe_stdout"; then
-          if observe_goal_response_is_active_timeout "$observe_stdout" &&
-            recover_goal_active_timeout_if_possible "$run_ref" "$tick"; then
-            continue
-          fi
-          observe_goal_response_blocks_run_until "$observe_stdout" "$run_ref" "$tick" || true
-          exit 1
-        fi
-        continue
-      fi
-      local supervise_stdout="$SMOKE_OUT_DIR/supervise_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
-      post_supervise_run "$run_ref" "$tick" | tee "$supervise_stdout"
-      if supervise_response_requires_goal_observe "$supervise_stdout"; then
-        local observe_stdout="$SMOKE_OUT_DIR/observe_goal_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
-        post_observe_goal "$run_ref" "$tick" |
-          tee "$observe_stdout"
-        if observe_goal_response_is_blocked "$observe_stdout"; then
-          if observe_goal_response_is_active_timeout "$observe_stdout" &&
-            recover_goal_active_timeout_if_possible "$run_ref" "$tick"; then
-            continue
-          fi
-          observe_goal_response_blocks_run_until "$observe_stdout" "$run_ref" "$tick" || true
-          exit 1
-        fi
-      fi
+      process_run_record_for_tick "$tick" "$record"
     done
-    if [[ "$tick" -lt "$MAX_TICKS" ]]; then
+    if [[ "$tick" -lt "$end_tick" ]]; then
       sleep "$TICK_SLEEP_SECONDS"
     fi
   done
   echo "no se alcanzo $final_type en $MAX_TICKS ticks" >&2
+  if [[ "$RUN_UNTIL_RESUME" == "1" ]]; then
+    echo "resume_start_tick=$start_tick" >&2
+    echo "resume_end_tick=$end_tick" >&2
+  fi
   exit 1
 }
 

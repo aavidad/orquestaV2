@@ -2504,6 +2504,75 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilFinalizePermiteVariosJ
 	}
 }
 
+func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilResumeNoPisaTicksV0(t *testing.T) {
+	requireLocalTCPForTestV0(t)
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 no disponible")
+	}
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("curl no disponible")
+	}
+	repoRoot := filepath.Clean("../..")
+	outDir := filepath.Join(t.TempDir(), "out")
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		t.Fatalf("mkdir outDir: %v", err)
+	}
+	oldTick := filepath.Join(outDir, "opes_derivatives_rest_tick_7_drain_summary.json")
+	if err := os.WriteFile(oldTick, []byte(`{"selected_job_type":"old"}`), 0o600); err != nil {
+		t.Fatalf("write old tick: %v", err)
+	}
+	cmd := exec.Command("bash", "scripts/smoke_opes_derivatives_rest.sh")
+	cmd.Dir = repoRoot
+	cmd.Env = cleanOPESSmokeEnvForDrainTestV0(os.Environ())
+	cmd.Env = append(cmd.Env,
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1",
+		"ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize",
+		"ORQUESTA_OPES_DERIVATIVES_EXECUTE=1",
+		"ORQUESTA_OPES_TEMPORAL_CONFIRM=1",
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-fake-operario-001",
+		"ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=update_topic_registry",
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_PENDING_TYPE=update_topic_registry",
+		"ORQUESTA_OPES_BRIDGE_LIMIT=1",
+		"ORQUESTA_OPES_BRIDGE_MAX_TICKS=2",
+		"ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS=0",
+		"ORQUESTA_OPES_DERIVATIVES_RESUME=1",
+		"SMOKE_ID=test-derivatives-rest-run-until-resume",
+		"SMOKE_OUT_DIR="+outDir,
+	)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("script err=%v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, `run_until_resume=enabled`) ||
+		!strings.Contains(output, `run_until_start_tick=8`) ||
+		!strings.Contains(output, `run_until_end_tick=9`) ||
+		!strings.Contains(output, `goal_receipts_manifest_status=ok`) ||
+		!strings.Contains(output, `run_until_status=completed`) ||
+		!strings.Contains(output, `final_job_type=update_topic_registry`) {
+		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
+	}
+	oldRaw, err := os.ReadFile(oldTick)
+	if err != nil {
+		t.Fatalf("read old tick: %v", err)
+	}
+	if string(oldRaw) != `{"selected_job_type":"old"}` {
+		t.Fatalf("tick antiguo pisado: %s", string(oldRaw))
+	}
+	for _, want := range []string{
+		"opes_derivatives_rest_tick_8_drain_summary.json",
+		"opes_derivatives_rest_tick_9_drain_summary.json",
+	} {
+		if _, err := os.Stat(filepath.Join(outDir, want)); err != nil {
+			t.Fatalf("no se creo %s: %v", want, err)
+		}
+	}
+}
+
 func TestProbeOPESDerivativesRESTContractTransportCompatCompletoV0(t *testing.T) {
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 no disponible")

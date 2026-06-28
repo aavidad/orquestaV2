@@ -277,8 +277,9 @@ El smoke real queda cerrado cuando OPES temporal demuestra:
 - Arranque reproducible de OPES temporal con datos de prueba, sin depender de
   estado manual de una sesion previa.
 - Contrato OPES REST para los 23 `work_kind` canonicos o secuencia equivalente
-  publicada: el probe del 2026-06-28 demuestra que hoy faltan 10 tipos antes de
-  poder cerrar `finalize_temario_package` de forma real.
+  publicada: el probe del 2026-06-28 ya acepta los 23 tipos canonicos; queda
+  ejecutar la secuencia temporal completa con goals reales hasta
+  `finalize_temario_package`.
 - Smoke real hasta `finalize_temario_package` con manuales graficos incluidos,
   no solo hasta HTML local.
 - Fuente real de cierre causal OPES por puerto: receipts OPES, dedupe,

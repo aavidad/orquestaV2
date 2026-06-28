@@ -236,8 +236,12 @@ nueva e independiente de cada implementacion interna.
   ejecutar/cerrar toda la cola temporal real hasta `finalize_temario_package`.
 - Reejecutar el smoke largo despues de la compactacion actual del
   `GoalWorkSpecV0` para medir si baja el tiempo/tokens por goal.
-- Convertir el smoke real largo en continuable/paralelizable por fases cuando
-  el contrato de dependencias lo permita; con `limit=1` y goals Codex reales, 80
-  ticks no bastan para 23 work kinds.
+- El wrapper ya soporta continuacion con
+  `ORQUESTA_OPES_DERIVATIVES_RESUME=1`, mismo `SMOKE_OUT_DIR`, mismo ledger y
+  misma Orquesta temporal. Falta usar esa continuacion en un run real largo
+  hasta `finalize_temario_package`.
+- Paralelizar por fases sigue pendiente cuando el contrato de dependencias lo
+  permita; con `limit=1` y goals Codex reales, 80 ticks no bastan para 23 work
+  kinds.
 - No volver al loop legacy para tapar este caso: la ruta correcta sigue siendo
   goal-first con cierre por artefactos, tests y receipt de dominio.
