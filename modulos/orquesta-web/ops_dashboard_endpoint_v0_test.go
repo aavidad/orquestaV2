@@ -182,10 +182,13 @@ func TestOpsDashboardWebEndpointV0GoalFirstUsaObserveGoalEnAvance(t *testing.T) 
 		"const goalRun = (lastSnapshot.runs || []).find(function(run) { return runIsGoalFirst(run); })",
 		"function autoprogrammingObserveGoalSafeAction",
 		"function autoprogrammingObserveGoalDecision",
+		"function runOpsSnapshotDecision",
 		"function runNeedsGoalStateRepair",
 		"async function repairGoalStateOps",
 		"opsSnapshot: (data.auto || {}).ops_snapshot || null",
 		"staleRunning: staleRunning",
+		"const decision = runOpsSnapshotDecision(ref)",
+		"ops_snapshot || {}).decision",
 		"autoprogrammingObserveGoalDecision((run || {}).run_ref)",
 		"if (runNeedsGoalStateRepair(run.run_ref)) return repairGoalStateOps(run, 'seleccionado')",
 		"if (runNeedsGoalStateRepair(run.run_ref || runRef)) return repairGoalStateOps(run, 'fila')",
@@ -200,12 +203,32 @@ func TestOpsDashboardWebEndpointV0GoalFirstUsaObserveGoalEnAvance(t *testing.T) 
 		"if (runIsGoalFirst(run)) return observeGoalOps(run, 'goal seleccionado')",
 		"if (runIsGoalFirst(run)) return observeGoalOps(run, 'goal desde fila')",
 		"Reparar GoalWorkStateV0 antes de supervision legacy",
+		"return 'Reparar goal'",
 		"Observar goal",
 		"goalOpsResultText",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("html goal-first no contiene %q", want)
 		}
+	}
+}
+
+func TestOpsDashboardWebEndpointV0SinSafeActionNoLlamaSupervisorLegacyGlobal(t *testing.T) {
+	body := opsDashboardHTMLV0()
+	fn := htmlFunctionSliceForTest(t, body, "async function superviseGlobalWave", "async function advanceSelectedRun")
+
+	for _, want := range []string{
+		"const superviseAction = firstAutoprogrammingSafeAction('supervise', 'queue')",
+		"if (!superviseAction)",
+		"Sin accion segura de cola",
+		"executeAutoprogrammingSafeActionOps(superviseAction, 'ola global')",
+	} {
+		if !strings.Contains(fn, want) {
+			t.Fatalf("superviseGlobalWave no contiene %q:\n%s", want, fn)
+		}
+	}
+	if strings.Contains(fn, "superviseOps({queue_ref: 'global'}") {
+		t.Fatalf("superviseGlobalWave conserva fallback legacy global:\n%s", fn)
 	}
 }
 

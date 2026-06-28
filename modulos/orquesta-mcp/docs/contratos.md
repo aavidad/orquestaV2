@@ -1637,6 +1637,42 @@ Invariantes:
 ```
 
 ```text
+Nombre: rest.bridge.orquesta.queue.global_status.v0
+Tipo: puerto_entrada_http
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: `/ops`, cockpit operativo, operadores automatizados
+Campos:
+  rest:
+    method: GET|POST
+    path: /api/v0/queue/global-status
+  input:
+    request_id?, correlation_id?, run_ref?, app_ref?, queue_ref?,
+    queue_limit?, occurred_at?
+  output_ok:
+    estado: ok
+    summary: resumen compacto de cola, liveness, bloqueos y acciones
+    items[]:
+      run_ref?, app_ref?, status, needs_action?, recommended_action?,
+      no_action_reason?, evidence_refs?
+    queue_health?, active_runs?, goal_run_refs?, stale_running?,
+    safe_actions?, diagnostics?
+Invariantes:
+  - Es una proyeccion read-only de `orquesta.autoprogramming.status.v0`.
+  - Cada item visible debe exponer `recommended_action` si necesita operador o
+    `no_action_reason` si no debe actuarse. No deja filas mudas.
+  - `goal_first_state_missing` se normaliza a `repair_goal_state`.
+  - `accepted`/`completed`/`closed`/`delivered` se tratan como terminales sin
+    accion, incluidos candidatos de `queue.terminal`.
+  - No ejecuta `supervise`, no reencola, no observa goal y no lee runtime por su
+    cuenta.
+Pruebas de contrato:
+  - `TestMCPQueueGlobalStatusHTTPHandlerV0CadaRunVisibleTieneAccionORazon`
+  - `TestMCPQueueGlobalStatusHTTPHandlerV0AcceptedNoRequiereAccion`
+  - `TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstStateMissingRecomiendaRepararState`
+```
+
+```text
 Nombre: mcp.tool.orquesta.autoprogramming.supervise.v0
 Tipo: puerto_entrada
 Version: v0

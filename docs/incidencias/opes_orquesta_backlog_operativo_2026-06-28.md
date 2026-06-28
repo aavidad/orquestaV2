@@ -57,6 +57,15 @@ y `TestOpsDashboardWebEndpointV0GoalFirstUsaObserveGoalEnAvance`.
 Sigue vivo el cierre de contrato unico exhaustivo "accion segura o razon de no
 accion" para todos los tipos de run visible.
 
+Avance 2026-06-28 tarde: `/queue/global-status` empieza a cumplir ese contrato
+item por item: cada run visible publica `recommended_action` si requiere
+operador o `no_action_reason` si puede esperar/cerrar sin accion; candidatos
+`terminal` y estados `accepted` quedan como terminales sin accion. `/ops`
+consume tambien `ops_snapshot.decision` por run y elimina el fallback global a
+`runs/supervise` cuando no hay `safe_action` de cola publicada. Sigue pendiente
+validarlo contra un servidor temporal con combinacion real de estados y no solo
+unit/html contract.
+
 ## ORQ-OPES-002 reconciliacion_ack_artefactos_cierre_cola
 
 Estado: parcial; cierre goal-first DomainWork ya no acepta receipts

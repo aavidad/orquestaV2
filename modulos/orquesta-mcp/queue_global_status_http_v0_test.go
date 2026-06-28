@@ -113,6 +113,10 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0GetProyectaEstadoCompacto(t *testing.T
 	if len(goalItem.EvidenceRefs) == 0 {
 		t.Fatalf("safe action sin evidencia fallback: %+v", goalItem)
 	}
+	liveItem := mcpQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-active-001")
+	if liveItem.NoActionReason != "running_live_wait_processes" {
+		t.Fatalf("run live sin razon de no accion: %+v", liveItem)
+	}
 }
 
 func TestMCPQueueGlobalStatusHTTPHandlerV0WillFinishAloneSinAccionPendiente(t *testing.T) {
@@ -163,6 +167,82 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0WillFinishAloneSinAccionPendiente(t *t
 		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-live-001", "running_live", false, "") {
 		t.Fatalf("result=%+v", result)
 	}
+	item := mcpQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-live-001")
+	if item.NoActionReason != "running_live_wait_processes" {
+		t.Fatalf("item sin razon estable de no accion: %+v", item)
+	}
+}
+
+func TestMCPQueueGlobalStatusHTTPHandlerV0CadaRunVisibleTieneAccionORazon(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			Queue: &MCPRunQueuePriorityToolResultV0{
+				Estado:   MCPRunQueuePriorityEstadoOKV0,
+				QueueRef: "global",
+				Ranked: []MCPRunQueueRankedCandidateCompactV0{{
+					Rank:   1,
+					RunRef: "run-ref-global-status-completed-001",
+					Status: "completed",
+				}, {
+					Rank:   2,
+					RunRef: "run-ref-global-status-failed-001",
+					Status: "failed",
+				}, {
+					Rank:   3,
+					RunRef: "run-ref-global-status-queued-healthy-001",
+					Status: "pending",
+				}},
+				Terminal: []MCPRunQueueRankedCandidateCompactV0{{
+					Rank:   4,
+					RunRef: "run-ref-global-status-accepted-terminal-001",
+					Status: "accepted",
+				}},
+			},
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				Queued:    1,
+				Completed: 1,
+				Failed:    1,
+			},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	NewMCPQueueGlobalStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !result.Summary.NeedsAction ||
+		result.Summary.WillFinishAlone ||
+		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-failed-001", "failed", true, "repair_runtime") {
+		t.Fatalf("result=%+v", result)
+	}
+	completed := mcpQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-completed-001")
+	queued := mcpQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-queued-healthy-001")
+	accepted := mcpQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-accepted-terminal-001")
+	if completed.NeedsAction ||
+		completed.NoActionReason != "terminal_completed" ||
+		queued.NeedsAction ||
+		queued.NoActionReason != "queued_waiting_scheduler" ||
+		accepted.NeedsAction ||
+		accepted.NoActionReason != "terminal_completed" {
+		t.Fatalf("completed=%+v queued=%+v accepted=%+v", completed, queued, accepted)
+	}
+	for _, item := range result.Items {
+		if item.NeedsAction == (item.RecommendedAction == "") {
+			t.Fatalf("item sin contrato accion/razon: %+v", item)
+		}
+		if !item.NeedsAction && item.NoActionReason == "" {
+			t.Fatalf("item sin razon de no accion: %+v", item)
+		}
+	}
 }
 
 func TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstStateMissingRecomiendaRepararState(t *testing.T) {
@@ -209,6 +289,46 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstStateMissingRecomiendaReparar
 			"repair_goal_state",
 		) {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPQueueGlobalStatusHTTPHandlerV0AcceptedNoRequiereAccion(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			Queue: &MCPRunQueuePriorityToolResultV0{
+				Estado:   MCPRunQueuePriorityEstadoOKV0,
+				QueueRef: "global",
+				Ranked: []MCPRunQueueRankedCandidateCompactV0{{
+					Rank:   1,
+					RunRef: "run-ref-global-status-accepted-ranked-001",
+					Status: "accepted",
+				}},
+			},
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				Completed: 1,
+			},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	NewMCPQueueGlobalStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	item := mcpQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-accepted-ranked-001")
+	if item.Status != mcpAutoprogrammingHealthCompletedV0 ||
+		item.NeedsAction ||
+		item.RecommendedAction != "" ||
+		item.NoActionReason != "terminal_completed" {
+		t.Fatalf("item=%+v result=%+v", item, result)
 	}
 }
 

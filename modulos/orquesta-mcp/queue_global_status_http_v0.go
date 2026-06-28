@@ -62,6 +62,7 @@ type MCPQueueGlobalStatusItemV0 struct {
 	Status            string   `json:"status"`
 	NeedsAction       bool     `json:"needs_action,omitempty"`
 	RecommendedAction string   `json:"recommended_action,omitempty"`
+	NoActionReason    string   `json:"no_action_reason,omitempty"`
 	EvidenceRefs      []string `json:"evidence_refs,omitempty"`
 }
 
@@ -348,6 +349,16 @@ func mcpQueueGlobalStatusItemsV0(
 			)
 			item.EvidenceRefs = compactStringsMCPV0(append(item.EvidenceRefs, candidate.EvidenceRefs...))
 		}
+		for _, candidate := range queue.Terminal {
+			item := ensure(candidate.RunRef)
+			item.AppRef = firstNonEmptyMCPV0(item.AppRef, candidate.AppRef)
+			item.Status = firstNonEmptyMCPV0(
+				mcpQueueGlobalStatusCandidateStatusV0(candidate),
+				item.Status,
+				mcpAutoprogrammingHealthCompletedV0,
+			)
+			item.EvidenceRefs = compactStringsMCPV0(append(item.EvidenceRefs, candidate.EvidenceRefs...))
+		}
 	}
 	for _, active := range activeRuns {
 		item := ensure(active.RunRef)
@@ -408,9 +419,77 @@ func mcpQueueGlobalStatusItemsV0(
 			continue
 		}
 		item.Status = firstNonEmptyMCPV0(item.Status, "unknown")
+		mcpQueueGlobalStatusFinalizeItemV0(item)
 		out = append(out, *item)
 	}
 	return out
+}
+
+func mcpQueueGlobalStatusFinalizeItemV0(item *MCPQueueGlobalStatusItemV0) {
+	if item == nil {
+		return
+	}
+	item.Status = firstNonEmptyMCPV0(strings.TrimSpace(item.Status), "unknown")
+	if item.NeedsAction {
+		item.RecommendedAction = mcpQueueGlobalStatusNormalizeRecommendedActionV0(
+			item.RecommendedAction,
+			mcpQueueGlobalStatusRecommendedActionForStatusV0(item.Status),
+		)
+		item.NoActionReason = ""
+		return
+	}
+	if action := mcpQueueGlobalStatusRecommendedActionForStatusV0(item.Status); action != "" {
+		item.NeedsAction = true
+		item.RecommendedAction = action
+		item.NoActionReason = ""
+		return
+	}
+	item.NoActionReason = mcpQueueGlobalStatusNoActionReasonV0(item.Status)
+}
+
+func mcpQueueGlobalStatusRecommendedActionForStatusV0(status string) string {
+	switch strings.TrimSpace(status) {
+	case mcpAutoprogrammingActionGoalFirstStateMissingV0:
+		return "repair_goal_state"
+	case "queued_not_dispatched":
+		return "reencolar"
+	case mcpAutoprogrammingHealthRunningStaleV0,
+		mcpAutoprogrammingHealthRunningStaleNoProcessV0,
+		"stale_running":
+		return "cancel_stale"
+	case mcpAutoprogrammingHealthRunningWithoutRecentStatsV0,
+		mcpAutoprogrammingHealthBlockedV0,
+		mcpAutoprogrammingHealthLostV0,
+		mcpAutoprogrammingHealthFailedV0,
+		mcpAutoprogrammingHealthUnclassifiedV0,
+		"needs_action",
+		"queue_needs_action",
+		"unknown":
+		return "repair_runtime"
+	case "observer_required":
+		return "restart_observer"
+	case "retry_required":
+		return "retry"
+	case "review_required":
+		return "repair_runtime"
+	case "waiting_outbox":
+		return "reencolar"
+	default:
+		return ""
+	}
+}
+
+func mcpQueueGlobalStatusNoActionReasonV0(status string) string {
+	switch strings.TrimSpace(status) {
+	case mcpAutoprogrammingHealthRunningLiveV0:
+		return "running_live_wait_processes"
+	case mcpAutoprogrammingHealthQueuedV0, "ready":
+		return "queued_waiting_scheduler"
+	case mcpAutoprogrammingHealthCompletedV0, "accepted", "closed", "delivered":
+		return "terminal_completed"
+	default:
+		return "no_operator_action_required"
+	}
 }
 
 func mcpQueueGlobalStatusCanPromoteActiveRunV0(status string) bool {

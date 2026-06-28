@@ -471,9 +471,12 @@ marcador durable pero falta `GoalWorkStateV0`.
 Revalidacion adicional 2026-06-28:
 `TestOpsDashboardWebEndpointV0GoalFirstUsaObserveGoalEnAvance` fija
 `runNeedsGoalStateRepair`, `repairGoalStateOps` y el consumo de
-`stale_running`; los botones de avance seleccionado, fila y accion global no
-empujan `runs/supervise` legacy cuando la run necesita reparar
-`GoalWorkStateV0`.
+`stale_running` y `ops_snapshot` por run; los botones de avance seleccionado y
+fila no empujan `runs/supervise` legacy cuando la run necesita reparar
+`GoalWorkStateV0`. `TestOpsDashboardWebEndpointV0SinSafeActionNoLlamaSupervisorLegacyGlobal`
+fija que la accion global solo ejecuta `supervise` si viene publicado como
+`safe_action`; sin esa accion muestra una razon y no llama al supervisor legacy
+por fallback.
 Riesgos: La fuente contractual ya es `ops_snapshot`; queda ampliar el snapshot
 con modelos/runtime, waits, olas y cohortes cuando esos puertos se publiquen.
 ```
@@ -522,11 +525,12 @@ Comando: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpoi
 Evidencia esperada: `/ops` contiene boton global `Acción segura`, `Avanzar run`
 y `Avanzar run desde fila`; para runs legacy usa `superviseSelectedRun`,
 `superviseQueueRow` y `superviseOps` contra `POST /api/v0/runs/supervise` solo
-cuando no hay accion Goal; para runs goal-first usa `advanceSelectedRun`,
+por accion acotada, no como fallback global; para runs goal-first usa
+`advanceSelectedRun`,
 `advanceQueueRow` y `observeGoalOps` contra
 `POST /api/v0/apps/director/goal/observe`, mostrando `stop_reason`, `ticks`,
 `last.status` o estado de Goal segun corresponda.
-Ultima ejecucion: 2026-06-27, pasa con `go test -count=1 ./modulos/orquesta-web -run 'TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto|TestOpsDashboardWebEndpointV0GoalFirstUsaObserveGoalEnAvance|TestOpsDashboardWebEndpointV0SupervisorPayloadAcotado'`.
+Ultima ejecucion: 2026-06-28, pasa con `go test -count=1 ./modulos/orquesta-web -run 'TestOpsDashboardWebEndpointV0(RenderizaPanelLiveCompleto|GoalFirstUsaObserveGoalEnAvance|SinSafeActionNoLlamaSupervisorLegacyGlobal|SupervisorPayloadAcotado)'`.
 Riesgos: La prueba HTML fija el contrato de UI; una prueba local con servidor
 temporal debe validar que el executor real/fake responde.
 ```

@@ -39,6 +39,11 @@ proyeccion si recibe el marker por puerto opt-in: `stats.status=
 goal_first_state_missing`, cierre bloqueado reparable y
 `ops_snapshot.decision.action=repair_goal_state`. La salida compacta de
 `/queue/global-status` normaliza la accion como `repair_goal_state`.
+Actualizacion 2026-06-28 tarde: cada item visible de `/queue/global-status`
+debe tener `recommended_action` si requiere operador o `no_action_reason` si es
+seguro no actuar. Estados `accepted`/`completed`/`closed`/`delivered` quedan
+como terminales sin accion, incluidos los candidatos publicados en
+`queue.terminal`.
 Contratos afectados: mcp.tool.orquesta.autoprogramming.status.v0;
 orquesta.director.stats.v0; GoalWorkRunMarkerStorePortV0.
 Estado: aceptada localmente

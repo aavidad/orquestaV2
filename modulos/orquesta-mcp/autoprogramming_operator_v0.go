@@ -500,7 +500,7 @@ func mcpAutoprogrammingDeduplicateSafeActionsV0(
 
 func mcpAutoprogrammingTerminalRunV0(status string) bool {
 	switch strings.ToLower(strings.TrimSpace(status)) {
-	case "completed", "complete", "closed", "done", "cancelled", "canceled", "failed", "stopped":
+	case "accepted", "completed", "complete", "closed", "done", "cancelled", "canceled", "failed", "stopped":
 		return true
 	default:
 		return false

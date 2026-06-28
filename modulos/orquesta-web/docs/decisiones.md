@@ -30,6 +30,11 @@ botones de detalle y cola enrutan a
 `POST /api/v0/apps/director/goal/observe` para goal-first, y mantienen
 `POST /api/v0/runs/supervise` solo para compatibilidad legacy. La web no lee
 stores ni runtime.
+Actualizacion 2026-06-28: `/ops` tambien mira `ops_snapshot.decision` dentro
+del run seleccionado, no solo el snapshot global, para detectar
+`repair_goal_state`. Si no existe `safe_action` de cola publicada, el boton
+global informa que no hay accion segura y no llama al supervisor legacy por
+fallback.
 Contratos afectados: `/ops`, `DirectorStatsClientV0`,
 `/api/v0/apps/director/goal/observe`, `/api/v0/runs/supervise`.
 Estado: aceptada localmente.

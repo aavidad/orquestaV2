@@ -140,7 +140,7 @@ func classifyMCPAutoprogrammingQueueStatusV0(status string) string {
 		return mcpAutoprogrammingHealthRunningWithoutRecentStatsV0
 	case "paused", "stopped", "stop_requested", "cancel_requested", "blocked", "needs_replan":
 		return mcpAutoprogrammingHealthBlockedV0
-	case "delivered", "closed", "completed":
+	case "accepted", "delivered", "closed", "completed":
 		return mcpAutoprogrammingHealthCompletedV0
 	case "lost":
 		return mcpAutoprogrammingHealthLostV0

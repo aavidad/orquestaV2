@@ -616,6 +616,12 @@ sin `GoalWorkStateV0`, `stats.status=goal_first_state_missing`,
 fija que `/api/v0/queue/global-status` normaliza el item y la accion publica a
 `goal_first_state_missing`/`repair_goal_state`, no a cancelar stale ni reencolar
 legacy.
+`TestMCPQueueGlobalStatusHTTPHandlerV0CadaRunVisibleTieneAccionORazon` fija el
+contrato publico item por item: cada run visible publica una accion recomendada
+si requiere operador o `no_action_reason` si puede esperar/cerrar sin accion.
+`TestMCPQueueGlobalStatusHTTPHandlerV0AcceptedNoRequiereAccion` cubre que
+`accepted` se clasifica como terminal/completado y no cae a
+`repair_runtime`.
 
 Evidencia adicional 2026-06-26: `autoprogramming/status` diagnostica
 `external_work_accepted_stopped_without_delivery` cuando una run external-work

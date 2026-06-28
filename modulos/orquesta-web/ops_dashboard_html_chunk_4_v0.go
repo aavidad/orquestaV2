@@ -122,9 +122,23 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
 	      return String(decision.action || '') === 'observe_goal' &&
 	        (!runRef || String(decision.run_ref || '') === String(runRef || ''));
 	    }
+	    function runOpsSnapshotDecision(runRef) {
+	      const ref = String(runRef || '');
+	      const decisions = [];
+	      const topDecision = ((lastSnapshot.opsSnapshot || {}).decision || {});
+	      if (topDecision.action) decisions.push(topDecision);
+	      (lastSnapshot.runs || []).forEach(function(run) {
+	        if (ref && String((run || {}).run_ref || '') !== ref) return;
+	        const decision = ((((run || {}).ops_snapshot || {}).decision) || {});
+	        if (decision.action) decisions.push(decision);
+	      });
+	      return decisions.find(function(decision) {
+	        return !ref || !decision.run_ref || String(decision.run_ref || '') === ref;
+	      }) || {};
+	    }
 	    function runNeedsGoalStateRepair(runRef) {
 	      const ref = String(runRef || '');
-	      const decision = ((lastSnapshot.opsSnapshot || {}).decision || {});
+	      const decision = runOpsSnapshotDecision(ref);
 	      if (String(decision.action || '') === 'repair_goal_state' &&
 	        (!ref || String(decision.run_ref || '') === ref)) return true;
 	      return (Array.isArray(lastSnapshot.staleRunning) ? lastSnapshot.staleRunning : []).some(function(item) {
@@ -157,7 +171,7 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
 	      return runIsGoalFirst(run) ? 'Observar goal' : 'Avanzar run';
 	    }
 	    function queueAdvanceActionLabel(run) {
-	      if (runNeedsGoalStateRepair((run || {}).run_ref)) return 'R';
+	      if (runNeedsGoalStateRepair((run || {}).run_ref)) return 'Reparar goal';
 	      return runIsGoalFirst(run) ? 'G' : '↪';
 	    }
 	    function queueAdvanceActionTitle(run) {
@@ -308,7 +322,7 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
         return;
       }
       const superviseAction = firstAutoprogrammingSafeAction('supervise', 'queue');
-      if (allAutoprogrammingSafeActions().length && !superviseAction) {
+      if (!superviseAction) {
         supervisorMessage = 'Sin accion segura de cola; revisa la accion por run publicada.';
         text('director-supervisor-message', supervisorMessage);
         await refreshAll();
@@ -317,12 +331,7 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
       supervisorMessage = 'Lanzando ola...';
       text('director-supervisor-message', supervisorMessage);
       try {
-        if (superviseAction) {
-          supervisorMessage = await executeAutoprogrammingSafeActionOps(superviseAction, 'ola global');
-        } else {
-          const result = await superviseOps({queue_ref: 'global'}, 'ola global');
-          supervisorMessage = supervisorResultText(result);
-        }
+        supervisorMessage = await executeAutoprogrammingSafeActionOps(superviseAction, 'ola global');
       } catch (err) {
         supervisorMessage = err.message || String(err);
       }
