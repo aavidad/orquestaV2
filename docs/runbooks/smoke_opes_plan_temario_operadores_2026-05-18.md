@@ -502,7 +502,8 @@ Si se usa `program_id` como unico scope, el preflight real exige ademas
 `ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF` durable real o un JSON
 `opes_derivatives_scope_probe.json` generado por `scope-probe`, con
 `scope_probe_status=ok`, `job_type`, `seen > 0` y negative check de
-`program_id`. Para operadores es preferible pasar ese JSON con
+`program_id`, ligado al mismo OPES temporal por `base_url_hash` y con
+`fake_server=false`. Para operadores es preferible pasar ese JSON con
 `ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT=<ruta-scope-probe-json-temporal>`; no
 inventar el ref de evidencia.
 Si el target es `drain-once`, `run-until-finalize` o `run-until-final` y la

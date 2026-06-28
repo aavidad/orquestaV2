@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -2271,6 +2273,20 @@ func TestSmokeOPESDerivativesRESTWrapperScopeProbeFakeServerV0(t *testing.T) {
 	if _, err := os.Stat(scopeProbeFile); err != nil {
 		t.Fatalf("scope probe output no creado: %v", err)
 	}
+	probeRaw, err := os.ReadFile(scopeProbeFile)
+	if err != nil {
+		t.Fatalf("read scope probe output: %v", err)
+	}
+	var probe map[string]any
+	if err := json.Unmarshal(probeRaw, &probe); err != nil {
+		t.Fatalf("decode scope probe output: %v body=%s", err, string(probeRaw))
+	}
+	baseURLHash, _ := probe["base_url_hash"].(string)
+	if probe["fake_server"] != true ||
+		strings.TrimSpace(baseURLHash) == "" ||
+		!scopeProbeStringSliceContainsForTestV0(probe["scope_kind"], "program_id") {
+		t.Fatalf("scope probe metadata incompleta: %+v", probe)
+	}
 }
 
 func TestSmokeOPESDerivativesRESTWrapperScopeProbeBloqueaSinScopeV0(t *testing.T) {
@@ -2325,13 +2341,11 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealAceptaScopeProbeJSONV0(t *t
 		t.Skip("python3 no disponible")
 	}
 	probeFile := filepath.Join(t.TempDir(), "opes_derivatives_scope_probe.json")
-	if err := os.WriteFile(probeFile, []byte(`{
-  "scope_probe_status": "ok",
-  "job_type": "update_topic_registry",
-  "seen": 1,
-  "scopes": {"program_id": "program-ref-operadores-preflight"},
-  "negative_checks": ["program_id"]
-}`), 0o600); err != nil {
+	if err := os.WriteFile(
+		probeFile,
+		[]byte(scopeProbeJSONForPreflightTestV0("http://127.0.0.1:19090", false)),
+		0o600,
+	); err != nil {
 		t.Fatalf("write probe: %v", err)
 	}
 	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
@@ -2347,6 +2361,58 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealAceptaScopeProbeJSONV0(t *t
 	}
 	if !strings.Contains(stdout, "preflight_status=ok") {
 		t.Fatalf("stdout=%s stderr=%s", stdout, stderr)
+	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeProbeJSONFakeV0(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 no disponible")
+	}
+	probeFile := filepath.Join(t.TempDir(), "opes_derivatives_scope_probe.json")
+	if err := os.WriteFile(
+		probeFile,
+		[]byte(scopeProbeJSONForPreflightTestV0("http://127.0.0.1:19090", true)),
+		0o600,
+	); err != nil {
+		t.Fatalf("write probe: %v", err)
+	}
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT="+probeFile,
+		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+	)
+	if err == nil ||
+		!strings.Contains(stderr, "SCOPE_FILTER_CONFIRMED=1 requiere") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeProbeJSONDeOtroEndpointV0(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 no disponible")
+	}
+	probeFile := filepath.Join(t.TempDir(), "opes_derivatives_scope_probe.json")
+	if err := os.WriteFile(
+		probeFile,
+		[]byte(scopeProbeJSONForPreflightTestV0("http://127.0.0.1:18080", false)),
+		0o600,
+	); err != nil {
+		t.Fatalf("write probe: %v", err)
+	}
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT="+probeFile,
+		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+	)
+	if err == nil ||
+		!strings.Contains(stderr, "SCOPE_FILTER_CONFIRMED=1 requiere") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
 	}
 }
 
@@ -2374,6 +2440,34 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeProbeJSONNomina
 		!strings.Contains(stderr, "SCOPE_FILTER_CONFIRMED=1 requiere") {
 		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
 	}
+}
+
+func scopeProbeJSONForPreflightTestV0(baseURL string, fakeServer bool) string {
+	hash := sha256.Sum256([]byte(strings.TrimRight(baseURL, "/")))
+	return fmt.Sprintf(`{
+  "scope_probe_status": "ok",
+  "job_type": "update_topic_registry",
+  "seen": 1,
+  "scopes": {"program_id": "program-ref-operadores-preflight"},
+  "scope_kind": ["program_id"],
+  "base_url_hash": "%x",
+  "fake_server": %t,
+  "created_at": "2026-06-28T00:00:00Z",
+  "negative_checks": ["program_id"]
+}`, hash, fakeServer)
+}
+
+func scopeProbeStringSliceContainsForTestV0(value any, needle string) bool {
+	items, ok := value.([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range items {
+		if strings.TrimSpace(fmt.Sprint(item)) == needle {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinSpeechSynthesisV0(t *testing.T) {

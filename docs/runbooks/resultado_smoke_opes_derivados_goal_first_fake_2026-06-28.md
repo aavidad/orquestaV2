@@ -36,13 +36,19 @@ ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=preflight-only \
 ORQUESTA_OPES_DERIVATIVES_PREFLIGHT_TARGET_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-temporal-preflight \
 ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
+ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE=1 \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available \
+ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-temporal-preflight \
 ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 scripts/smoke_opes_derivatives_rest.sh
 ```
 
 Resultado: `preflight_status=ok`, `preflight_target_mode=run-until-finalize`.
+Revalidado despues de endurecer guardas de scope/TTS con
+`SMOKE_ID=preflight-current-guard-check`; salida:
+`preflight_scope=dedicated_temporal_queue,program_id` y
+`preflight_output_dir=/tmp/opes-salidas/derivatives-rest-preflight-current-guard-check`.
 
 Tests offline focales:
 

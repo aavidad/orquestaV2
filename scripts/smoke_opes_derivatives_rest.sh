@@ -533,17 +533,28 @@ scope_probe_file_matches_program_id() {
   local file="$1"
   [[ -f "$file" ]] || return 1
   smoke_require_tool python3
-  python3 - "$file" "${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-}" <<'PY'
+  python3 - "$file" "${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-}" "$OPES_BASE_URL_EFFECTIVE" <<'PY'
+import hashlib
 import json
 import sys
 
-path, expected_program_id = sys.argv[1:]
+path, expected_program_id, expected_base_url = sys.argv[1:]
 try:
     with open(path, "r", encoding="utf-8") as fh:
         data = json.load(fh)
 except Exception:
     raise SystemExit(1)
 if data.get("scope_probe_status") != "ok":
+    raise SystemExit(1)
+if bool(data.get("fake_server")):
+    raise SystemExit(1)
+expected_hash = hashlib.sha256(expected_base_url.rstrip("/").encode("utf-8")).hexdigest()
+if str(data.get("base_url_hash") or "").strip() != expected_hash:
+    raise SystemExit(1)
+scope_kind = data.get("scope_kind") or []
+if isinstance(scope_kind, str):
+    scope_kind = [scope_kind]
+if "program_id" not in [str(item).strip() for item in scope_kind]:
     raise SystemExit(1)
 job_type = str(data.get("job_type") or "").strip()
 if not job_type:
@@ -724,14 +735,17 @@ run_scope_probe() {
     "${ORQUESTA_OPES_BRIDGE_TOPIC_ID:-}" \
     "${ORQUESTA_OPES_BRIDGE_CORRELATION_ID:-}" \
     "$SCOPE_PROBE_NEGATIVE_SUFFIX" \
-    "$output_file" <<'PY'
+    "$output_file" \
+    "$FAKE_SERVER" <<'PY'
+import datetime
+import hashlib
 import json
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 
-base_url, sequence_raw, limit, program_id, topic_id, correlation_id, negative_suffix, output_file = sys.argv[1:]
+base_url, sequence_raw, limit, program_id, topic_id, correlation_id, negative_suffix, output_file, fake_server = sys.argv[1:]
 sequence = [item.strip() for item in sequence_raw.replace(";", ",").split(",") if item.strip()]
 scopes = {
     "program_id": program_id.strip(),
@@ -854,6 +868,10 @@ result = {
     "job_type": positive["job_type"],
     "seen": len(positive["jobs"]),
     "scopes": active_scopes,
+    "scope_kind": list(active_scopes.keys()),
+    "base_url_hash": hashlib.sha256(base_url.rstrip("/").encode("utf-8")).hexdigest(),
+    "fake_server": fake_server == "1",
+    "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
     "negative_checks": negative_checks,
 }
 with open(output_file, "w", encoding="utf-8") as fh:

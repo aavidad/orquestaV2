@@ -89,11 +89,13 @@ causales. No deben ralentizar todos los temarios como pasos fijos.
 Probe de scope contra OPES temporal, sin efectos:
 
 ```bash
+SCOPE_PROBE_OUTPUT=/tmp/opes-salidas/opes-derivatives-scope-temporal/opes_derivatives_scope_probe.json
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:<puerto-opes-temporal> \
 ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1 \
 ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=scope-probe \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
+ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT="$SCOPE_PROBE_OUTPUT" \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 SMOKE_ID=opes-derivatives-scope-temporal \
 scripts/smoke_opes_derivatives_rest.sh
@@ -108,7 +110,9 @@ Si no hay jobs pendientes, el probe no puede demostrar el filtro: crear un job
 temporal de smoke o usar `topic_id`, `correlation_id` o cola temporal dedicada.
 El JSON aceptado por el preflight debe incluir `scope_probe_status=ok`,
 `job_type`, `seen > 0`, el `program_id` esperado y negative check de
-`program_id`.
+`program_id`. Ademas queda ligado al OPES temporal consultado mediante
+`base_url_hash` y debe declarar `fake_server=false`; no reutilizar JSON de fake,
+de otro puerto ni de otro entorno.
 
 Preflight ejecutable sin OPES/Codex:
 
@@ -122,7 +126,7 @@ ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=preflight-only \
 ORQUESTA_OPES_DERIVATIVES_PREFLIGHT_TARGET_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
-ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT=tmp/orquesta-smokes/opes-derivatives-scope-temporal/opes_derivatives_scope_probe.json \
+ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT=/tmp/opes-salidas/opes-derivatives-scope-temporal/opes_derivatives_scope_probe.json \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-temporal-001 \
 ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
@@ -137,7 +141,7 @@ guardas locales y no consulta OPES. Si el objetivo es `drain-once`,
 `run-until-finalize` o `run-until-final`, y el unico scope es `program_id`,
 debe existir `ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF` o un
 `opes_derivatives_scope_probe.json` valido en `SMOKE_OUT_DIR` generado por
-`scope-probe`.
+`scope-probe` contra el mismo `ORQUESTA_OPES_BASE_URL`.
 `ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF` solo debe usarse si apunta a
 una evidencia durable real generada por la composicion temporal; para operadores
 es preferible reutilizar `ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT`.
@@ -184,6 +188,8 @@ scripts/smoke_opes_derivatives_rest.sh
 ## Ejecucion real temporal
 
 ```bash
+SMOKE_ID=opes-derivatives-real-$(date -u +%Y%m%dT%H%M%SZ)
+SMOKE_OUT_DIR=/tmp/opes-salidas/derivatives-real-$SMOKE_ID
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:<puerto-opes-temporal> \
 ORQUESTA_BASE_URL=http://127.0.0.1:<puerto-orquesta-temporal> \
 ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1 \
@@ -192,15 +198,15 @@ ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
-ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT=tmp/orquesta-smokes/opes-derivatives-scope-temporal/opes_derivatives_scope_probe.json \
+ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT=/tmp/opes-salidas/opes-derivatives-scope-temporal/opes_derivatives_scope_probe.json \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-temporal-001 \
 ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_MAX_TICKS=30 \
 ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS=5 \
-SMOKE_ID=opes-derivatives-real-$(date -u +%Y%m%dT%H%M%SZ) \
-SMOKE_OUT_DIR=/tmp/opes-salidas/derivatives-real-$SMOKE_ID \
+SMOKE_ID="$SMOKE_ID" \
+SMOKE_OUT_DIR="$SMOKE_OUT_DIR" \
 scripts/smoke_opes_derivatives_rest.sh
 ```
 
