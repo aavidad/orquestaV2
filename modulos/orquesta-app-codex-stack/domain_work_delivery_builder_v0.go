@@ -120,10 +120,13 @@ func domainWorkDeliveryPayloadFieldsV0(
 	body string,
 ) []orquestadomainwork.DomainWorkFieldV0 {
 	if parsed, ok := domainWorkDeliveryJSONPayloadFieldsV0(body, artifactType); ok {
+		contentTypeFields := make([]orquestadomainwork.DomainWorkFieldV0, 0, len(fields)+len(parsed))
+		contentTypeFields = append(contentTypeFields, fields...)
+		contentTypeFields = append(contentTypeFields, parsed...)
 		fields = appendDomainWorkFieldIfMissingV0(
 			fields,
 			"content_type",
-			domainWorkDeliveryContentTypeV0(fields, artifactType),
+			domainWorkDeliveryContentTypeV0(contentTypeFields, artifactType),
 		)
 		fields = appendDomainWorkFieldIfMissingV0(fields, "title", title)
 		return append(fields, parsed...)
@@ -381,7 +384,7 @@ func domainWorkDeliveryContentTypeV0(
 		return "image/svg+xml"
 	case "mermaid":
 		return "text/mermaid"
-	case "html_panel":
+	case "html", "html_panel":
 		return "text/html"
 	default:
 		return "text/markdown"

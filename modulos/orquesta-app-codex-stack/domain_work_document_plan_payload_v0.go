@@ -18,6 +18,13 @@ func canonicalDomainWorkDeliveryPayloadBodyV0(
 		}
 		return body
 	}
+	if strings.TrimSpace(artifactType) == "visual_asset" {
+		canonical, ok := canonicalDomainWorkVisualAssetPayloadJSONV0(body)
+		if ok {
+			return canonical
+		}
+		return body
+	}
 	if strings.TrimSpace(artifactType) != orquestadomainwork.DomainDocumentPlanArtifactTypeV0 {
 		return body
 	}

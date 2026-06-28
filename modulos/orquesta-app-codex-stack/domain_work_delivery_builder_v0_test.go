@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -1039,6 +1040,25 @@ func domainWorkFieldValuesForTestV0(
 	return false
 }
 
+func domainWorkFieldValuesContainForTestV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	name string,
+	values ...string,
+) bool {
+	for _, field := range fields {
+		if field.Name != name {
+			continue
+		}
+		for _, value := range values {
+			if !stringInSetV0(field.Values, value) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 func domainWorkFieldHasJSONForTestV0(
 	fields []orquestadomainwork.DomainWorkFieldV0,
 	name string,
@@ -1143,5 +1163,309 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaVisualAssetOPES(t *t
 	}
 	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) != 0 {
 		t.Fatalf("submission invalida: %+v", issues)
+	}
+}
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0NormalizaVisualAssetRicoOPES(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "generate_visual_asset", "visual_asset.json")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	svg := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420" role="img" aria-label="Mapa conceptual"></svg>`
+	payload := `{
+		"artifact_type":"visual_asset",
+		"payload_json":{
+			"schema_version":"opes.visual_asset.v1",
+			"contract_status":"complete",
+			"source_refs":{
+				"course_id":"course-ref-001",
+				"program_id":"program-ref-001",
+				"topic_id":"topic-ref-001",
+				"visual_ref":"visual-ref-001",
+				"official_order":1
+			},
+			"input_contract":{
+				"expected_artifact_type":"visual_asset",
+				"asset_type":"diagram",
+				"aspect_ratio":"16:9"
+			},
+			"assets":[{
+				"asset_id":"asset-ref-001",
+				"artifact_type":"visual_asset",
+				"asset_type":"diagram",
+				"visual_kind":"full_topic_concept_map_prompt",
+				"placement_ref":"topic-ref-001#visual-ref-001#official_order=1",
+				"program_id":"program-ref-001",
+				"topic_id":"topic-ref-001",
+				"course_id":"course-ref-001",
+				"title":"Mapa conceptual del tema completo",
+				"didactic_objective":"Relacionar los conceptos principales del tema.",
+				"editorial_rationale":"Ayuda a revisar el bloque antes del test.",
+				"recommended_placement":{"placement_ref":"topic-ref-001#after-introduction"},
+				"alt_text":"Mapa conceptual con los conceptos principales conectados.",
+				"generation_prompt":{
+					"language":"es",
+					"prompt":"Genera un mapa conceptual limpio para topic-ref-001.",
+					"negative_prompt":"No incluir marcas de agua ni datos no citados."
+				},
+				"diagram_blueprint":{
+					"format":"svg_wireframe",
+					"purpose":"Mapa conceptual accesible.",
+					"svg":` + strconv.Quote(svg) + `
+				}
+			}]
+		}
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-visual-rich-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-visual-rich-001", Title: "Generar recurso visual OPES"},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-visual-rich-001",
+						ChangeRef:     "change-ref-visual-rich-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-visual-rich-001",
+							WorkKind:   "generate_visual_asset",
+							InputFields: []orquestadomainwork.DomainWorkFieldV0{
+								{Name: "chapter_id", Value: "chapter-ref-001"},
+								{Name: "language_code", Value: "es"},
+							},
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-visual-rich-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{"external/opes/generate_visual_asset/visual_asset.json"},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef:  "ack-ref-visual-rich-001",
+					AgentRef:     "agent-ref-visual-rich-001",
+					Summary:      "Visual validado.",
+					EvidenceRefs: []string{"ack-ref-visual-rich-001"},
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if submission.ArtifactType != "visual_asset" ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "content_type", "image/svg+xml") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "topic_id", "topic-ref-001") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "asset_type", "diagram") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "format", "svg") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "title", "Mapa conceptual del tema completo") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "caption", "Relacionar los conceptos principales del tema.") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "alt_text", "Mapa conceptual con los conceptos principales conectados.") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "body", svg) ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "svg", svg) ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "prompt", "Genera un mapa conceptual limpio para topic-ref-001.") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "negative_prompt", "No incluir marcas de agua ni datos no citados.") ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "assets") ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "source_ref_details") {
+		t.Fatalf("submission=%+v", submission)
+	}
+	if domainWorkFieldHasNameV0(submission.PayloadFields, "source_refs") {
+		t.Fatalf("source_refs debe llegar compacto: %+v", submission.PayloadFields)
+	}
+	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) != 0 {
+		t.Fatalf("submission invalida: %+v", issues)
+	}
+}
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0NormalizaVisualAssetsPromptOPES(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "generate_visual_asset", "visual_asset.json")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	prompt := "Create a clean instructional horizontal flow diagram in Spanish."
+	payload := `{
+		"artifact_type":"visual_asset",
+		"payload_json":{
+			"expected_artifact_type":"visual_asset",
+			"topic_id":"topic-ref-001",
+			"visual_assets":[{
+				"asset_ref":"visual-ref-001",
+				"asset_type":"diagram",
+				"placement_ref":"topic-ref-001::visual-ref-001::official_order-1",
+				"title":"Diagrama de referencia visual solicitada",
+				"didactic_objective":"Mostrar en un unico esquema la relacion entre curso, programa, tema y visual solicitado.",
+				"alt_text":"Diagrama de flujo que conecta curso, programa, tema y visual.",
+				"diagram_spec":{"recommended_format":"svg","layout":"left_to_right_flow"},
+				"render_prompt":` + strconv.Quote(prompt) + `
+			}]
+		}
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-visual-prompt-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-visual-prompt-001", Title: "Generar recurso visual OPES"},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-visual-prompt-001",
+						ChangeRef:     "change-ref-visual-prompt-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-visual-prompt-001",
+							WorkKind:   "generate_visual_asset",
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-visual-prompt-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{"external/opes/generate_visual_asset/visual_asset.json"},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef:  "ack-ref-visual-prompt-001",
+					AgentRef:     "agent-ref-visual-prompt-001",
+					Summary:      "Visual validado.",
+					EvidenceRefs: []string{"ack-ref-visual-prompt-001"},
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if submission.ArtifactType != "visual_asset" ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "content_type", "text/markdown") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "topic_id", "topic-ref-001") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "asset_type", "diagram") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "format", "markdown") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "caption", "Mostrar en un unico esquema la relacion entre curso, programa, tema y visual solicitado.") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "alt_text", "Diagrama de flujo que conecta curso, programa, tema y visual.") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "body", prompt) ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "prompt", prompt) ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "visual_assets") {
+		t.Fatalf("submission=%+v", submission)
+	}
+	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) != 0 {
+		t.Fatalf("submission invalida: %+v", issues)
+	}
+}
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0NormalizaVisualAssetsPromptObjetoOPES(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "generate_visual_asset", "visual_asset.json")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	instruction := "Genera un diagrama didactico para el tema usando solo el paquete de dominio recibido."
+	payload := `{
+		"artifact_type":"visual_asset",
+		"payload_json":{
+			"course_id":"course-ref-001",
+			"program_id":"program-ref-001",
+			"topic_id":"topic-ref-001",
+			"expected_artifact_type":"visual_asset",
+			"visual_assets":[{
+				"asset_ref":"visual-ref-001",
+				"asset_type":"diagram",
+				"placement_ref":"topic-ref-001:official_order:1:visual-ref-001",
+				"didactic_objective":"Sintetizar visualmente un punto importante del tema completo.",
+				"alt_text":"Diagrama didactico del tema vinculado a topic-ref-001.",
+				"prompt":{
+					"language":"es",
+					"instruction":` + strconv.Quote(instruction) + `,
+					"composition":{
+						"format":"diagram",
+						"style":"administrativo claro, alto contraste"
+					}
+				}
+			}]
+		}
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-visual-prompt-object-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-visual-prompt-object-001", Title: "Generar recurso visual OPES"},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-visual-prompt-object-001",
+						ChangeRef:     "change-ref-visual-prompt-object-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-visual-prompt-object-001",
+							WorkKind:   "generate_visual_asset",
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-visual-prompt-object-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{"external/opes/generate_visual_asset/visual_asset.json"},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef:  "ack-ref-visual-prompt-object-001",
+					AgentRef:     "agent-ref-visual-prompt-object-001",
+					Summary:      "Visual validado.",
+					EvidenceRefs: []string{"ack-ref-visual-prompt-object-001"},
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if submission.ArtifactType != "visual_asset" ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "content_type", "text/markdown") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "topic_id", "topic-ref-001") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "asset_type", "diagram") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "format", "markdown") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "caption", "Sintetizar visualmente un punto importante del tema completo.") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "alt_text", "Diagrama didactico del tema vinculado a topic-ref-001.") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "body", instruction) ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "prompt", instruction) ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "image_prompt", instruction) ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "style", "administrativo claro, alto contraste") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "language_code", "es") ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "visual_assets") {
+		t.Fatalf("submission=%+v", submission)
+	}
+	if domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "prompt") {
+		t.Fatalf("prompt debe llegar plano para OPES: %+v", submission.PayloadFields)
+	}
+	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) != 0 {
+		t.Fatalf("submission invalida: %+v", issues)
+	}
+}
+
+func TestDomainWorkDeliveryContentTypeV0VisualHTML(t *testing.T) {
+	got := domainWorkDeliveryContentTypeV0(
+		[]orquestadomainwork.DomainWorkFieldV0{{Name: "format", Value: "html"}},
+		"visual_asset",
+	)
+	if got != "text/html" {
+		t.Fatalf("content_type=%q", got)
 	}
 }

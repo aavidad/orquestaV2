@@ -1544,6 +1544,17 @@ expected_index = {work_kind: index for index, work_kind in enumerate(expected_wo
 runs = {}
 run_order = []
 
+def derive_domain_receipt_refs(evidence_refs):
+    refs = []
+    for raw in evidence_refs or []:
+        ref = str(raw or "").strip()
+        if not ref:
+            continue
+        for prefix in ("domain-work-goal-receipt-derived-", "opes-artifact-ref-"):
+            if ref.startswith(prefix) and len(ref) > len(prefix):
+                refs.append(ref[len(prefix):])
+    return sorted(set(refs))
+
 def tick_sort_key(path):
     match = re.search(r"_tick_(\d+)_drain_summary\.json$", os.path.basename(path))
     if not match:
@@ -1623,6 +1634,10 @@ for path in sorted(glob.glob(os.path.join(smoke_dir, "observe_goal_*_response.js
         entry["domain_receipt_refs"] = domain_receipt_refs
     if evidence_refs:
         entry["evidence_refs"] = sorted(set(entry.get("evidence_refs") or []) | set(evidence_refs))
+    if not entry.get("domain_receipt_refs"):
+        derived_receipt_refs = derive_domain_receipt_refs(entry.get("evidence_refs") or [])
+        if derived_receipt_refs:
+            entry["domain_receipt_refs"] = derived_receipt_refs
     response_accepted = bool(response.get("closure_accepted"))
     entry["closure_accepted"] = bool(entry.get("closure_accepted")) or response_accepted
     closure_status = str(response.get("closure_status") or "").strip()
