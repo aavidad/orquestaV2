@@ -97,8 +97,11 @@ func TestBuildExternalWorkGoalWorkSpecV0InlineaInputFieldsOperativosSeguros(t *t
 	if len(issues) != 0 {
 		t.Fatalf("issues=%+v", issues)
 	}
-	context := strings.Join(externalWorkRunTestContextPurposesV0(spec.ContextRefs), "\n")
+	context := externalWorkRunTestContextTextV0(spec.ContextRefs)
 	for _, want := range []string{
+		"kind=input_field_payload",
+		"app_change_payload:run-external-work-opes-job-ref-001-change-ref-001:change-ref-001:external_work.input_fields.course_root_abs",
+		"AppChangeRecordFilterV0",
 		"input_fields.course_root_abs",
 		"local_path_ref:",
 		"basename=curso",
@@ -159,7 +162,7 @@ func TestBuildExternalWorkGoalWorkSpecV0RedactaInputFieldsSensibles(t *testing.T
 		!strings.HasPrefix(spec.WriteSet[0].Path, "domain-work/opes/draft_content_block/") {
 		t.Fatalf("write_set=%+v", spec.WriteSet)
 	}
-	context := strings.Join(externalWorkRunTestContextPurposesV0(spec.ContextRefs), "\n")
+	context := externalWorkRunTestContextTextV0(spec.ContextRefs)
 	for _, ctx := range spec.ContextRefs {
 		if strings.Contains(ctx.Ref, "valor-que-no-debe") ||
 			strings.Contains(ctx.Ref, "otro-valor-privado") ||
@@ -233,12 +236,12 @@ func externalWorkRunTestContainsStringV0(values []string, want string) bool {
 	return false
 }
 
-func externalWorkRunTestContextPurposesV0(
+func externalWorkRunTestContextTextV0(
 	values []orquestagoal.GoalContextRefV0,
-) []string {
-	out := make([]string, 0, len(values))
+) string {
+	parts := make([]string, 0, len(values))
 	for _, value := range values {
-		out = append(out, value.Purpose)
+		parts = append(parts, value.Ref+" kind="+value.Kind+" "+value.Purpose)
 	}
-	return out
+	return strings.Join(parts, "\n")
 }

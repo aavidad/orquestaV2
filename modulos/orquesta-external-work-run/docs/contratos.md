@@ -58,8 +58,11 @@ Invariantes:
 - los campos operativos tipo `course_root_abs`, `topic_dir_abs`,
   `program_json_abs`, `required_read_refs`, `required_outputs` u
   `output_contract` conservan valores relativos/contractuales y una
-  `payload_ref`; si el valor es una ruta local absoluta, el spec solo publica
-  `local_path_ref:<hash>` y `basename`, no el path real;
+  `payload_ref` opaca de tipo `app_change_payload:<run>:<change>:...`, ademas de
+  una `context_ref` `kind=input_field_payload` resoluble desde el
+  `AppChangeStore` por `RunRef`/`ChangeRef`; si el valor es una ruta local
+  absoluta, el spec solo publica `local_path_ref:<hash>` y `basename`, no el path
+  real;
 - los campos sensibles, privados o demasiado grandes no se inlinean: quedan como
   ref durable al payload `AppChange`/`DomainWork` y el Goal debe bloquear con
   rework si necesita un valor omitido;

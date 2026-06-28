@@ -1127,7 +1127,8 @@ Resultado: `ok`.
 Evidencia:
 
 - `external_work.input_fields` llega al `agent_packet.context.entries` como
-  contexto de dominio acotado;
+  contexto de dominio acotado y conserva `input_field_payload` resoluble desde
+  `AppChangeStore` por `RunRef`/`ChangeRef`;
 - una entrega real fake de `draft_content_block` invoca `DomainWork`
   `submit_artifact`;
 - el artefacto usa `job_ref`, `content_block`, `body` leido desde fichero del
@@ -1627,7 +1628,8 @@ Cobertura:
   `program_json_abs`, `required_read_refs`, `required_outputs` y
   `output_contract`) dentro de `GoalWorkSpecV0.ContextRefs` y del
   `GoalWorkStateV0` persistido; las rutas absolutas se publican solo como
-  `local_path_ref`/`basename`, sin exponer `/home/alberto/Trabajo/OPES`.
+  `local_path_ref`/`basename`, sin exponer `/home/alberto/Trabajo/OPES`, y el
+  payload completo queda referenciado como `app_change_payload`.
 - `TestCodexStackV0ExternalWorkGoalFirstSinStateNoDrenaLegacy` fija que una run
   external-work contenedora sin `GoalWorkStateV0` devuelve
   `goal_first_state_missing`, no drena el loop legacy y deja accion de reparar

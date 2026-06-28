@@ -255,6 +255,9 @@ func TestCodexStackV0ExternalWorkRunGoalFirstConservaInputFieldsOPESV0(t *testin
 	}
 	launchedContext := codexStackGoalContextRefsTextForTestV0(launcher.specs[0].ContextRefs)
 	for _, want := range []string{
+		"input_field_payload",
+		"app_change_payload:" + result.RunRef + ":" + change.ChangeRef + ":external_work.input_fields.course_root_abs",
+		"AppChangeRecordFilterV0",
 		"input_fields.course_root_abs",
 		"basename=curso",
 		"input_fields.topic_dir_abs",
