@@ -566,6 +566,29 @@ Validación ejecutada:
 - `go test -count=1 ./modulos/orquesta-i18n-docs -run TestPublicErrorCatalogV0`
 - `go test -count=1 ./cmd/orquesta-server -run 'TestServerAutoprogrammingObserveGoalHTTPClienteRealRecibeTimeoutJSONV0|TestServerObserveAppDirectorGoalHTTPClienteRealRecibeTimeoutJSONV0'`
 
-No cierra toda la incidencia 14: queda pendiente un smoke OPES temporal bajo
-carga real que demuestre que `supervise/status/observe_goal` no dejan clientes
-sin cuerpo mientras los agentes siguen vivos.
+## Revalidacion Orquesta 2026-06-28 - familia HTTP/goal-first bajo OPES temporal
+
+La evidencia posterior cierra la parte verificable de esta familia:
+
+- `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`
+  documenta un smoke OPES temporal completo con ruta goal-first: Orquesta acepto
+  external-work, creo runs Goal, observo cierre por artefactos/receipt y dejo
+  24/24 jobs en `completed`, incluido `completed_syllabus_package`, sin volver
+  al loop legacy.
+- Las rutas que historicamente dejaban clientes HTTP sin cuerpo ya tienen tests
+  con cliente real:
+  `TestServerAutoprogrammingSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0`,
+  `TestServerRunSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0`,
+  `TestServerAutoprogrammingObserveGoalHTTPClienteRealRecibeTimeoutJSONV0`,
+  `TestServerObserveAppDirectorGoalHTTPClienteRealRecibeTimeoutJSONV0`,
+  `TestServerRunQueuePriorityHTTPSetPriorityClienteRealRecibeTimeoutJSONV0`,
+  `TestServerRunControlHTTPClienteRealRecibeTimeoutJSONV0` y
+  `TestServerExternalWorkRunHTTPClienteRealRecibeTimeoutJSONV0`.
+- El contrato actual es: si la supervisión no puede terminar dentro de la
+  ventana HTTP, devuelve `202 accepted_background` con `operation_ref` y acciones
+  de polling, o `504` con JSON público y cancelación del contexto del executor.
+
+Conclusion: la incidencia 14 ya no queda abierta por "cliente HTTP sin cuerpo"
+en el repo actual. La frontera no cubierta es una reproduccion exacta de la ola
+legacy `19023d` con `supervise` largo; el camino vigente OPES debe ir por
+goal-first, no por el loop legacy como solucion productiva.
