@@ -38,6 +38,21 @@ func TestServerAppHTTPGoalFirstLanzaObservaYCierraV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildStackFromEnvWithGoalBackendV0: %v", err)
 	}
+	if !config.GoalObserverEnabled ||
+		config.GoalObserverEnabledConfigured ||
+		stack.Stores.AppGoalStateStore == nil ||
+		stack.Ports.GoalStateStore == nil ||
+		stack.Ports.GoalFirstRunMarkerStore == nil {
+		t.Fatalf("wiring goal-first por defecto incompleto: config=%+v stores=%+v ports=%+v", config, stack.Stores, stack.Ports)
+	}
+	if _, ok := stack.Stores.AppGoalStateStore.(orquestagoal.GoalWorkRunMarkerListPortV0); !ok {
+		t.Fatalf("AppGoalStateStore debe listar markers goal-first activos")
+	}
+	if stack.AllowLegacyAutoprogrammingRun ||
+		stack.AllowLegacyExternalWorkRun ||
+		stack.MCPTransportBindings.AllowLegacyAutoprogrammingSupervisorActions {
+		t.Fatalf("legacy loop no debe quedar habilitado por defecto: stack=%+v bindings=%+v", stack, stack.MCPTransportBindings)
+	}
 	handler, err := buildServerAppHandlerV0(stack)
 	if err != nil {
 		t.Fatalf("buildServerAppHandlerV0: %v", err)
