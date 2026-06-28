@@ -1520,6 +1520,14 @@ Cobertura:
   store como tras reinicio, observa el goal con un stack nuevo, cierra la run
   persistida y guarda `LastResult`/`LastClosure` en `GoalWorkStateV0` sin
   relanzar ni supervisar loop legacy.
+- `TestServerAppHTTPGoalFirstReanudaTrasRestartSinLegacyV0` y
+  `TestServerAppHTTPGoalFirstRestartMarkerSinStateNoDrenaLegacyV0` cubren la
+  composicion `cmd/orquesta-server`: `BuildStackFromEnvV0` persiste
+  `GoalWorkStateV0` y `GoalWorkRunMarkerV0` bajo el mismo `stateDir`, un stack
+  reconstruido devuelve `observe_required` por `ContinueAppDirectorV0`, el
+  supervisor HTTP no drena legacy, el cierre por observe no relanza goal y, si
+  falta el state pero queda marker, devuelve `goal_first_state_missing` sin
+  crear tasks/agentes legacy.
 - `TestObserveAppDirectorGoalV0SincronizaColaStoppedSiGoalInvalid` fija que un
   goal observado como `invalid` bloquea la run y sincroniza la cola como
   `stopped`, no como candidata viva para supervision legacy.

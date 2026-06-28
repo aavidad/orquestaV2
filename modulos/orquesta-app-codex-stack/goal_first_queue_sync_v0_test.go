@@ -308,9 +308,10 @@ func TestObserveAppDirectorGoalV0ReanudaTrasRestartDesdeStateFile(t *testing.T) 
 		EvidenceRefs:      spec.ClosurePolicy.RequiredEvidenceRefs,
 		DomainReceiptRefs: []string{"domain-receipt-ref-goal-first-restart-001"},
 	}}
+	restartLauncher := &goalFirstQueueLauncherForTestV0{}
 	restartedStack := goalFirstQueueStateFileStackForTestV0(
 		reopenedStore,
-		&goalFirstQueueLauncherForTestV0{},
+		restartLauncher,
 		observer,
 		orquestarunmemory.NewRunMemoryStoreV0(),
 	)
@@ -331,6 +332,9 @@ func TestObserveAppDirectorGoalV0ReanudaTrasRestartDesdeStateFile(t *testing.T) 
 		result.GoalRef != started.GoalRef {
 		t.Fatalf("result=%+v", result)
 	}
+	if len(restartLauncher.specs) != 0 {
+		t.Fatalf("restart relanzo goal inesperadamente: specs=%d", len(restartLauncher.specs))
+	}
 	persistedRun, err := reopenedStore.LoadRunV0(ctx, started.Run.RunID)
 	if err != nil {
 		t.Fatalf("LoadRunV0 reopened: %v", err)
@@ -339,6 +343,11 @@ func TestObserveAppDirectorGoalV0ReanudaTrasRestartDesdeStateFile(t *testing.T) 
 		len(persistedRun.Closures) != 1 ||
 		len(persistedRun.Validations) != 1 {
 		t.Fatalf("persistedRun=%+v", persistedRun)
+	}
+	if len(persistedRun.Tasks) != 0 ||
+		len(persistedRun.Agents) != 0 ||
+		len(persistedRun.StartedAgents) != 0 {
+		t.Fatalf("restart activo loop legacy: tasks=%v agents=%v started=%v", persistedRun.Tasks, persistedRun.Agents, persistedRun.StartedAgents)
 	}
 	persistedState, err := reopenedStore.LoadGoalWorkStateV0(ctx, started.Run.RunID)
 	if err != nil {

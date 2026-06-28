@@ -6,12 +6,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 )
 
@@ -153,6 +157,182 @@ func TestServerAutoprogrammingHTTPGoalFirstPreparaSupervisaObservaYCierraV0(t *t
 		observed.ClosureStatus != orquestagoal.GoalStatusAcceptedV0 ||
 		!observed.ClosureAccepted {
 		t.Fatalf("observed=%+v", observed)
+	}
+}
+
+func TestServerAppHTTPGoalFirstReanudaTrasRestartSinLegacyV0(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	runtimeDir := filepath.Join(t.TempDir(), "runtime")
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envServerStateDirV0, stateDir)
+	t.Setenv(envCodexRuntimeWorkDirV0, runtimeDir)
+	t.Setenv(envCodexCommandV0, filepath.Join(projectDir, "codex-bin"))
+	t.Setenv(envOPESBaseURLV0, "")
+	t.Setenv("OPES_BASE_URL", "")
+
+	startBackend := &goalFirstHTTPBackendForTestV0{}
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	startStack, err := buildStackFromEnvWithGoalBackendV0(config, serverCodexGoalBackendV0{
+		Starter:  startBackend,
+		Observer: startBackend,
+	})
+	if err != nil {
+		t.Fatalf("buildStackFromEnvWithGoalBackendV0 start: %v", err)
+	}
+	startHandler, err := buildServerAppHandlerV0(startStack)
+	if err != nil {
+		t.Fatalf("buildServerAppHandlerV0 start: %v", err)
+	}
+	started := postGoalFirstStartForTestV0(t, startHandler)
+	if startBackend.startCalls != 1 || started.RunRef == "" || started.GoalRef == "" {
+		t.Fatalf("start incompleto backend=%+v started=%+v", startBackend, started)
+	}
+	if _, err := startStack.Stores.AppGoalStateStore.LoadGoalWorkStateV0(context.Background(), started.RunRef); err != nil {
+		t.Fatalf("GoalWorkStateV0 no persistido: %v", err)
+	}
+	if _, err := startStack.Ports.GoalFirstRunMarkerStore.LoadGoalWorkRunMarkerV0(context.Background(), started.RunRef); err != nil {
+		t.Fatalf("GoalWorkRunMarkerV0 no persistido: %v", err)
+	}
+
+	restartBackend := &goalFirstHTTPBackendForTestV0{packet: startBackend.packet}
+	restartedStack, err := buildStackFromEnvWithGoalBackendV0(config, serverCodexGoalBackendV0{
+		Starter:  restartBackend,
+		Observer: restartBackend,
+	})
+	if err != nil {
+		t.Fatalf("buildStackFromEnvWithGoalBackendV0 restart: %v", err)
+	}
+	continued, err := orquestaappdirectorservice.ContinueAppDirectorV0(
+		context.Background(),
+		orquestaappdirectorservice.ContinueAppDirectorRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-http-goal-first-restart-continue-001",
+			RequestedBy:   "orquesta-server-goal-first-restart-test",
+		},
+		restartedStack.Ports,
+	)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0 restart: %v", err)
+	}
+	if continued.Status != orquestaappdirectorservice.StartAppDirectorStatusPendingV0 ||
+		continued.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
+		len(continued.StartedAgents) != 0 ||
+		!goalFirstHTTPClosureIssuesContainCodeForTestV0(continued.OperationalClosureIssues, "app_director_goal_first_observe_required") {
+		t.Fatalf("continued=%+v", continued)
+	}
+	restartHandler, err := buildServerAppHandlerV0(restartedStack)
+	if err != nil {
+		t.Fatalf("buildServerAppHandlerV0 restart: %v", err)
+	}
+	supervisor := postRunSupervisorGoalFirstForTestV0(t, restartHandler, started.RunRef)
+	if supervisor.StopReason != "goal_first_observe_required" ||
+		!goalFirstHTTPStringInSetForTestV0(supervisor.NextActions, "observe_goal") ||
+		!goalFirstHTTPDiagnosticsContainCodeForTestV0(supervisor.Diagnostics, "run_supervisor_goal_first_not_legacy") {
+		t.Fatalf("supervisor=%+v", supervisor)
+	}
+	observed := postGoalFirstObserveForTestV0(t, restartHandler, started.RunRef)
+	if observed.GoalStatus != orquestagoal.GoalStatusCompleteV0 ||
+		observed.RunStatus != "cerrada" ||
+		!observed.ClosureAccepted ||
+		restartBackend.startCalls != 0 ||
+		restartBackend.observeCalls != 1 {
+		t.Fatalf("observed=%+v restartBackend=%+v", observed, restartBackend)
+	}
+	persistedRun, err := restartedStack.Stores.RunStore.LoadRunV0(context.Background(), started.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 restart: %v", err)
+	}
+	if persistedRun.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		len(persistedRun.Tasks) != 0 ||
+		len(persistedRun.Agents) != 0 ||
+		len(persistedRun.StartedAgents) != 0 {
+		t.Fatalf("loop legacy activado tras restart: run=%+v", persistedRun)
+	}
+}
+
+func TestServerAppHTTPGoalFirstRestartMarkerSinStateNoDrenaLegacyV0(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	runtimeDir := filepath.Join(t.TempDir(), "runtime")
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envServerStateDirV0, stateDir)
+	t.Setenv(envCodexRuntimeWorkDirV0, runtimeDir)
+	t.Setenv(envCodexCommandV0, filepath.Join(projectDir, "codex-bin"))
+	t.Setenv(envOPESBaseURLV0, "")
+	t.Setenv("OPES_BASE_URL", "")
+
+	startBackend := &goalFirstHTTPBackendForTestV0{}
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	startStack, err := buildStackFromEnvWithGoalBackendV0(config, serverCodexGoalBackendV0{
+		Starter:  startBackend,
+		Observer: startBackend,
+	})
+	if err != nil {
+		t.Fatalf("buildStackFromEnvWithGoalBackendV0 start: %v", err)
+	}
+	startHandler, err := buildServerAppHandlerV0(startStack)
+	if err != nil {
+		t.Fatalf("buildServerAppHandlerV0 start: %v", err)
+	}
+	started := postGoalFirstStartForTestV0(t, startHandler)
+	if _, err := startStack.Ports.GoalFirstRunMarkerStore.LoadGoalWorkRunMarkerV0(context.Background(), started.RunRef); err != nil {
+		t.Fatalf("GoalWorkRunMarkerV0 no persistido: %v", err)
+	}
+	removeGoalFirstHTTPStateFilesForTestV0(t, stateDir)
+
+	restartBackend := &goalFirstHTTPBackendForTestV0{packet: startBackend.packet}
+	restartedStack, err := buildStackFromEnvWithGoalBackendV0(config, serverCodexGoalBackendV0{
+		Starter:  restartBackend,
+		Observer: restartBackend,
+	})
+	if err != nil {
+		t.Fatalf("buildStackFromEnvWithGoalBackendV0 restart: %v", err)
+	}
+	continued, err := orquestaappdirectorservice.ContinueAppDirectorV0(
+		context.Background(),
+		orquestaappdirectorservice.ContinueAppDirectorRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-http-goal-first-marker-missing-state-001",
+			RequestedBy:   "orquesta-server-goal-first-restart-test",
+		},
+		restartedStack.Ports,
+	)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0 marker sin state: %v", err)
+	}
+	if continued.Status != orquestaappdirectorservice.StartAppDirectorStatusPendingV0 ||
+		continued.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
+		len(continued.StartedAgents) != 0 ||
+		!goalFirstHTTPClosureIssuesContainCodeForTestV0(continued.OperationalClosureIssues, "app_director_goal_first_state_missing") {
+		t.Fatalf("continued=%+v", continued)
+	}
+	restartHandler, err := buildServerAppHandlerV0(restartedStack)
+	if err != nil {
+		t.Fatalf("buildServerAppHandlerV0 restart: %v", err)
+	}
+	supervisor := postRunSupervisorGoalFirstForTestV0(t, restartHandler, started.RunRef)
+	if supervisor.StopReason != "goal_first_state_missing" ||
+		!goalFirstHTTPStringInSetForTestV0(supervisor.NextActions, "repair_goal_state_from_launcher_receipt_or_mark_blocked") ||
+		!goalFirstHTTPDiagnosticsContainCodeForTestV0(supervisor.Diagnostics, "run_supervisor_goal_first_state_missing") ||
+		restartBackend.startCalls != 0 ||
+		restartBackend.observeCalls != 0 {
+		t.Fatalf("supervisor=%+v restartBackend=%+v", supervisor, restartBackend)
+	}
+	persistedRun, err := restartedStack.Stores.RunStore.LoadRunV0(context.Background(), started.RunRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0 restart: %v", err)
+	}
+	if len(persistedRun.Tasks) != 0 ||
+		len(persistedRun.Agents) != 0 ||
+		len(persistedRun.StartedAgents) != 0 {
+		t.Fatalf("loop legacy activado con marker sin state: run=%+v", persistedRun)
 	}
 }
 
@@ -373,14 +553,48 @@ func postAutoprogrammingGoalFirstObserveForTestV0(
 	return result
 }
 
+func postRunSupervisorGoalFirstForTestV0(
+	t *testing.T,
+	handler http.Handler,
+	runRef string,
+) orquestamcp.MCPRunSupervisorToolResultV0 {
+	t.Helper()
+	payload, err := json.Marshal(orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:     "request-http-goal-first-run-supervisor-001",
+		CorrelationID: "corr-http-goal-first-run-supervisor-001",
+		RunRef:        runRef,
+		MaxTicks:      1,
+	})
+	if err != nil {
+		t.Fatalf("marshal run supervise: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, orquestamcp.MCPRunSupervisorHTTPPathV0, bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Correlation-ID", "corr-http-goal-first-run-supervisor-001")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK && rec.Code != http.StatusBadRequest {
+		t.Fatalf("run supervise code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode run supervise: %v", err)
+	}
+	return result
+}
+
 type goalFirstHTTPBackendForTestV0 struct {
-	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0
+	packet       orquestaruntimecodexgoal.CodexGoalStartPacketV0
+	startCalls   int
+	observeCalls int
 }
 
 func (backend *goalFirstHTTPBackendForTestV0) StartCodexGoalV0(
 	_ context.Context,
 	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
 ) (orquestaruntimecodexgoal.CodexGoalStartReceiptV0, error) {
+	backend.startCalls++
 	backend.packet = packet
 	return orquestaruntimecodexgoal.CodexGoalStartReceiptV0{
 		Status:          orquestagoal.GoalStatusRunningV0,
@@ -394,6 +608,7 @@ func (backend *goalFirstHTTPBackendForTestV0) ObserveCodexGoalV0(
 	_ context.Context,
 	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
 ) (orquestaruntimecodexgoal.CodexGoalObservationReceiptV0, error) {
+	backend.observeCalls++
 	return orquestaruntimecodexgoal.CodexGoalObservationReceiptV0{
 		Status:          orquestagoal.GoalStatusCompleteV0,
 		GoalRef:         request.GoalRef,
@@ -466,4 +681,33 @@ func goalFirstHTTPDiagnosticsContainCodeForTestV0(
 		}
 	}
 	return false
+}
+
+func goalFirstHTTPClosureIssuesContainCodeForTestV0(
+	issues []orquestacionnucleoapp.ErrorV0,
+	want string,
+) bool {
+	for _, issue := range issues {
+		if issue.Code == want {
+			return true
+		}
+	}
+	return false
+}
+
+func removeGoalFirstHTTPStateFilesForTestV0(t *testing.T, stateDir string) {
+	t.Helper()
+	dir := filepath.Join(stateDir, "orchestration-state", "app_director_goal_states")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir goal states: %v", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, entry.Name())); err != nil {
+			t.Fatalf("Remove goal state %s: %v", entry.Name(), err)
+		}
+	}
 }
