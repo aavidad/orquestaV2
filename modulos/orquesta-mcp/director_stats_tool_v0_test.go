@@ -166,9 +166,9 @@ func TestMCPDirectorStatsToolExecutorV0ExponeGoalFirstSiExisteEstado(t *testing.
 		len(result.Goal.EvidenceRefs) != 1 ||
 		result.Stats == nil ||
 		result.Stats.Status != orquestagoal.GoalStatusRunningV0 ||
-		result.Stats.Closure.Status != orquestacionnucleoapp.DirectorClosureStatusReadyV0 ||
-		!result.Stats.Closure.Ready ||
-		result.Stats.Closure.Blocked ||
+		result.Stats.Closure.Status != orquestacionnucleoapp.DirectorClosureStatusBlockedV0 ||
+		result.Stats.Closure.Ready ||
+		!result.Stats.Closure.Blocked ||
 		result.Stats.Closure.Closed {
 		t.Fatalf("goal=%+v result=%+v", result.Goal, result)
 	}

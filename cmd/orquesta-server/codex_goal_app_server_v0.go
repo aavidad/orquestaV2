@@ -248,53 +248,11 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 	if strings.TrimSpace(goal.ThreadID) != "" {
 		receipt.ExternalGoalRef = strings.TrimSpace(goal.ThreadID)
 	}
+	if promoted, promotedReceipt := backend.promoteCodexAppServerActiveGoalResultFileV0(request, receipt, status); promoted {
+		return promotedReceipt, nil
+	}
 	if codexGoalWorkStatusIsTerminalV0(status) {
-		var marker codexAppServerGoalResultMarkerV0
-		markerFound := false
-		markerIssue := ""
-		thread, readErr := backend.Protocol.ReadThreadV0(ctx, receipt.ExternalGoalRef, true)
-		if readErr == nil {
-			marked, found, err := codexAppServerGoalResultFromThreadV0(thread)
-			if err != nil {
-				markerIssue = "codex_app_server_goal_result_marker_invalid"
-			} else if found {
-				if codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, request.GoalRef) {
-					markerIssue = "codex_app_server_goal_result_marker_goal_ref_mismatch"
-				} else {
-					marker = marked
-					markerFound = true
-				}
-			}
-		}
-		fileMarked, fileFound, err := codexAppServerGoalResultFromWorkspaceV0(backend.CWD, request.GoalRef)
-		if err != nil && !markerFound {
-			receipt.IssueCode = "codex_app_server_goal_result_file_invalid"
-			return receipt, nil
-		}
-		resultFound := false
-		if fileFound {
-			mergeCodexAppServerGoalResultV0(
-				&receipt,
-				fileMarked,
-				"evidence-ref-codex-app-server-goal-result-file",
-			)
-			resultFound = true
-		} else if markerFound {
-			mergeCodexAppServerGoalResultV0(
-				&receipt,
-				marker,
-				"evidence-ref-codex-app-server-goal-result-marker",
-			)
-			resultFound = true
-		}
-		if markerIssue != "" && !resultFound {
-			receipt.IssueCode = markerIssue
-			return receipt, nil
-		}
-		if readErr != nil && !resultFound {
-			receipt.IssueCode = "codex_app_server_thread_read_failed"
-			return receipt, nil
-		}
+		return backend.observeCodexAppServerTerminalGoalResultV0(ctx, request, receipt)
 	}
 	return receipt, nil
 }

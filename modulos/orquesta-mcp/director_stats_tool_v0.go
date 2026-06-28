@@ -310,8 +310,10 @@ func applyMCPDirectorGoalRunProjectionV0(
 	default:
 		stats.Status = orquestagoal.GoalStatusRunningV0
 		stats.Closure = orquestacionnucleoapp.DirectorClosureStatsV0{
-			Status: orquestacionnucleoapp.DirectorClosureStatusReadyV0,
-			Ready:  true,
+			Status:      orquestacionnucleoapp.DirectorClosureStatusBlockedV0,
+			Blocked:     true,
+			BlockedBy:   []string{"goal_first_running"},
+			BlockerRefs: compactStringsMCPV0(goal.EvidenceRefs),
 		}
 	}
 }

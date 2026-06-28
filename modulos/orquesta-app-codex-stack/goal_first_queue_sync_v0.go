@@ -17,6 +17,15 @@ func (stack StackV0) ObserveAppDirectorGoalV0(
 	if err != nil {
 		return result, err
 	}
+	if submitted, err := stack.submitDomainWorkArtifactAfterGoalObservationV0(ctx, request, result); err != nil || submitted {
+		if err != nil {
+			return result, err
+		}
+		result, err = orquestaappdirectorservice.ObserveAppDirectorGoalV0(ctx, request, stack.Ports)
+		if err != nil {
+			return result, err
+		}
+	}
 	if err := stack.syncGoalFirstQueueAfterObservationV0(ctx, request, result); err != nil {
 		return result, err
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -8,12 +9,92 @@ import (
 	"path/filepath"
 	"strings"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 )
 
 const codexAppServerGoalResultFileMaxBytesV0 = 128 * 1024
 
 var errCodexAppServerGoalResultWalkDoneV0 = errors.New("codex_app_server_goal_result_walk_done")
+
+func (backend serverCodexAppServerGoalBackendV0) promoteCodexAppServerActiveGoalResultFileV0(
+	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
+	receipt orquestaruntimecodexgoal.CodexGoalObservationReceiptV0,
+	status string,
+) (bool, orquestaruntimecodexgoal.CodexGoalObservationReceiptV0) {
+	if codexGoalWorkStatusIsTerminalV0(status) {
+		return false, receipt
+	}
+	fileMarked, fileFound, err := codexAppServerGoalResultFromWorkspaceV0(backend.CWD, request.GoalRef)
+	if err != nil {
+		receipt.IssueCode = "codex_app_server_goal_result_file_invalid"
+		return true, receipt
+	}
+	if !fileFound {
+		return false, receipt
+	}
+	receipt.Status = orquestagoal.GoalStatusCompleteV0
+	mergeCodexAppServerGoalResultV0(
+		&receipt,
+		fileMarked,
+		"evidence-ref-codex-app-server-goal-result-file",
+	)
+	return true, receipt
+}
+
+func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerTerminalGoalResultV0(
+	ctx context.Context,
+	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
+	receipt orquestaruntimecodexgoal.CodexGoalObservationReceiptV0,
+) (orquestaruntimecodexgoal.CodexGoalObservationReceiptV0, error) {
+	var marker codexAppServerGoalResultMarkerV0
+	markerFound := false
+	markerIssue := ""
+	thread, readErr := backend.Protocol.ReadThreadV0(ctx, receipt.ExternalGoalRef, true)
+	if readErr == nil {
+		marked, found, err := codexAppServerGoalResultFromThreadV0(thread)
+		if err != nil {
+			markerIssue = "codex_app_server_goal_result_marker_invalid"
+		} else if found {
+			if codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, request.GoalRef) {
+				markerIssue = "codex_app_server_goal_result_marker_goal_ref_mismatch"
+			} else {
+				marker = marked
+				markerFound = true
+			}
+		}
+	}
+	fileMarked, fileFound, err := codexAppServerGoalResultFromWorkspaceV0(backend.CWD, request.GoalRef)
+	if err != nil && !markerFound {
+		receipt.IssueCode = "codex_app_server_goal_result_file_invalid"
+		return receipt, nil
+	}
+	resultFound := false
+	if fileFound {
+		mergeCodexAppServerGoalResultV0(
+			&receipt,
+			fileMarked,
+			"evidence-ref-codex-app-server-goal-result-file",
+		)
+		resultFound = true
+	} else if markerFound {
+		mergeCodexAppServerGoalResultV0(
+			&receipt,
+			marker,
+			"evidence-ref-codex-app-server-goal-result-marker",
+		)
+		resultFound = true
+	}
+	if markerIssue != "" && !resultFound {
+		receipt.IssueCode = markerIssue
+		return receipt, nil
+	}
+	if readErr != nil && !resultFound {
+		receipt.IssueCode = "codex_app_server_thread_read_failed"
+		return receipt, nil
+	}
+	return receipt, nil
+}
 
 func codexAppServerGoalResultFromWorkspaceV0(
 	root string,
