@@ -364,3 +364,43 @@ Evidencia:
 `TestApplyStoppedAgentReconciliationV0ReproyectaAssessmentDurableStale`,
 `TestStoppedAgentSupervisionInputV0ClaveCambiaConPayloadYRepiteIgual` y
 `TestCodexProgressExactAssessmentForReportV0AceptaSufijoDigest`.
+
+## ORQ-OPES-007 contrato_rest_opes_derivados_canonicos
+
+Estado: abierto; bloqueo externo verificado contra OPES temporal real.
+
+Problema: Orquesta ya ejecuta en fake/offline la secuencia canonica de 23
+`work_kind` de OPES hasta `finalize_temario_package`, pero la API publica
+actual de OPES temporal (`POST /api/jobs`) no permite sembrar ni crear todos
+esos tipos como trabajos externos reales. Esto bloquea el smoke real completo
+antes de llegar a Codex Goal, cierre causal o TTS.
+
+Evidencia 2026-06-28: nueva herramienta
+`scripts/probe_opes_derivatives_rest_contract.sh`, ejecutada contra OPES
+temporal local con SQLite bajo `/tmp`, devuelve
+`contract_probe_status=incomplete`, `accepted_count=13` y
+`rejected_count=10`. La subsecuencia
+aceptada pasa `scope-probe` con `program_id` y `correlation_id`, por lo que el
+problema no es el filtro ni el loop. Resultado detallado:
+`docs/runbooks/resultado_probe_opes_derivados_rest_contract_2026-06-28.md`.
+
+Tipos rechazados por REST con `invalid document job`:
+
+- `update_topic_registry`;
+- `review_codex`;
+- `review_gemini`;
+- `review_claude`;
+- `review_pair_codex_gemini`;
+- `review_pair_codex_claude`;
+- `review_pair_gemini_claude`;
+- `review_director_consolidation`;
+- `generate_learning_games`;
+- `finalize_temario_package`.
+
+Criterio de cierre: OPES temporal debe aceptar por contrato publico los 23
+`work_kind` canonicos o publicar una secuencia equivalente que cubra los mismos
+entregables (`topic_registry_update`, revisiones independientes/cruzadas,
+`learning_games_package` y `completed_syllabus_package`) con dedupe,
+`external_job_ref`, artefactos por puerto y scope acotado. No vale sembrar por
+DB interna ni compartir filesystem entre Orquesta y OPES para cerrar esta
+incidencia.

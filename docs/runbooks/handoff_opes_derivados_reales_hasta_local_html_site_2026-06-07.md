@@ -114,6 +114,31 @@ El JSON aceptado por el preflight debe incluir `scope_probe_status=ok`,
 `base_url_hash` y debe declarar `fake_server=false`; no reutilizar JSON de fake,
 de otro puerto ni de otro entorno.
 
+Probe de contrato REST de creacion de jobs temporales:
+
+```bash
+ORQUESTA_OPES_BASE_URL=http://127.0.0.1:<puerto-opes-temporal> \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
+ORQUESTA_OPES_CONTRACT_PROBE_CREATE=1 \
+SMOKE_ID=opes-derivatives-contract-temporal \
+scripts/probe_opes_derivatives_rest_contract.sh
+```
+
+Este probe usa solo la API publica `POST /api/jobs` de OPES temporal y deja
+`opes_derivatives_rest_contract_probe.json` bajo `/tmp/opes-salidas`. Si
+devuelve `contract_probe_status=incomplete`, el smoke real completo no debe
+reclamarse como bloqueo de loop de Orquesta: falta que OPES acepte por REST
+todos los `work_kind` canonicos o que publique una secuencia equivalente con
+los mismos entregables.
+
+Resultado del 2026-06-28: la OPES temporal actual acepta por REST 13 de 23
+tipos y rechaza con `invalid document job`:
+`update_topic_registry`, `review_codex`, `review_gemini`, `review_claude`,
+`review_pair_codex_gemini`, `review_pair_codex_claude`,
+`review_pair_gemini_claude`, `review_director_consolidation`,
+`generate_learning_games` y `finalize_temario_package`. Evidencia:
+`docs/runbooks/resultado_probe_opes_derivados_rest_contract_2026-06-28.md`.
+
 Preflight ejecutable sin OPES/Codex:
 
 ```bash
@@ -252,6 +277,9 @@ El smoke real queda cerrado cuando OPES temporal demuestra:
 
 - Arranque reproducible de OPES temporal con datos de prueba, sin depender de
   estado manual de una sesion previa.
+- Contrato OPES REST para los 23 `work_kind` canonicos o secuencia equivalente
+  publicada: el probe del 2026-06-28 demuestra que hoy faltan 10 tipos antes de
+  poder cerrar `finalize_temario_package` de forma real.
 - Smoke real hasta `finalize_temario_package` con manuales graficos incluidos,
   no solo hasta HTML local.
 - Fuente real de cierre causal OPES por puerto: receipts OPES, dedupe,
