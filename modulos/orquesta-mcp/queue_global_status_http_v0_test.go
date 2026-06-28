@@ -100,7 +100,7 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0GetProyectaEstadoCompacto(t *testing.T
 		len(result.GoalRunRefs) != 1 ||
 		result.GoalRunRefs[0] != "run-ref-global-status-goal-001" ||
 		len(result.Items) != 4 ||
-		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-stale-001", "stale_running", true, "restart_observer") ||
+		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-stale-001", "stale_running", true, "inspect_liveness") ||
 		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-queued-001", "queued_not_dispatched", true, "reencolar") ||
 		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-active-001", "running_live", false, "") ||
 		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-goal-001", "observer_required", true, "restart_observer") ||

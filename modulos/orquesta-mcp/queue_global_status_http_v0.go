@@ -588,13 +588,19 @@ func mcpQueueGlobalStatusRecommendedActionFromDiagnosticV0(diagnostic MCPAutopro
 func mcpQueueGlobalStatusNormalizeRecommendedActionV0(action string, fallback string) string {
 	action = strings.ToLower(strings.TrimSpace(action))
 	switch action {
-	case "retry", "reencolar", "cancel_stale", "restart_observer", "repair_runtime", "repair_goal_state":
+	case "retry", "reencolar", "cancel_stale", "restart_observer", "repair_runtime", "repair_goal_state", "inspect_liveness":
 		return action
 	}
 	if strings.Contains(action, "goal_state") ||
 		strings.Contains(action, "repair_goal") ||
 		strings.Contains(action, "state_missing") {
 		return "repair_goal_state"
+	}
+	if strings.Contains(action, "process_ref") ||
+		strings.Contains(action, "liveness") ||
+		strings.Contains(action, "live_process") ||
+		strings.Contains(action, "before_reconcile") {
+		return "inspect_liveness"
 	}
 	if strings.Contains(action, "observe") || strings.Contains(action, "observer") {
 		return "restart_observer"
