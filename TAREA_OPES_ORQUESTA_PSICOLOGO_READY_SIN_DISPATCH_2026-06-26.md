@@ -55,3 +55,56 @@ Cuando una run OPES está `ready` y `supervise` es acción segura, Orquesta debe
 ## Acción pedida al agente de Orquesta
 
 Corregir en la app de Orquesta, no con workaround OPES: revisar reconciliación `ready`/`running_stale_no_process`, dispatch de outbox y contrato de `/api/v0/autoprogramming/supervise` para que una cola con candidatos materialice agentes o devuelva bloqueo operativo actionable.
+
+## Revalidación Orquesta 2026-06-28
+
+Estado: revalidada en Orquesta como incidencia cubierta para el stack actual,
+sin reabrir el servidor productivo de Psicólogo `19024`.
+
+Evidencia de cola y supervisor:
+
+- `TestCodexStackV0RunGlobalTickReconciliaRunningStaleAntesDeReadyV0` valida
+  que una run OPES en `running` con `process.status=stopped` se reconcilia como
+  `stopped`, queda marcada con
+  `evidence-ref-run-queue-running-stale-no-live-process-reconciled`, se registra
+  el agente como `lost` y el mismo tick despacha la run `ready` siguiente.
+- `TestCodexStackRunSupervisorQueueDiagnosticsMCPV0ExponeNoExecutionConReady`
+  valida que una supervisión global que termina sin ejecuciones pero conserva
+  candidatos ejecutables ya no queda muda: publica
+  `run_supervisor_queue_no_execution_with_ready_candidates`, `executions=0`,
+  límites efectivos, `top_candidates` y la acción
+  `supervise_with_resident_mode_or_run_ref`.
+- `TestCodexStackRunSupervisorQueueDiagnosticsMCPV0ExponePresionWaitingOutbox`
+  cubre el diagnóstico de presión de cola cuando el runtime está en
+  `waiting_outbox`, con conteo de `ready`, `running`, `stopped` y ejecutables.
+- `TestServerAutoprogrammingSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0`
+  valida que `POST /api/v0/autoprogramming/supervise` responde a cliente HTTP
+  real con `202 accepted_background`, `operation_ref` y acciones de polling en
+  vez de dejar el cliente colgado.
+- `TestServerQueueGlobalStatusHTTPClienteRealMontadoEnStackV0` valida que el
+  endpoint público de estado global de cola está montado para observar la cola
+  tras el `accepted_background`.
+
+Lectura operativa:
+
+- El resultado esperado queda cubierto por dos salidas válidas: dispatch real
+  cuando el tick puede ejecutar, o diagnóstico público accionable cuando una
+  supervisión termina con candidatos `ready` pero `executions=0`.
+- La reconciliación `running_stale_no_process` ya no debe bloquear candidatos
+  `ready`: el tick reconcilia primero el stale y después ejecuta el candidato
+  listo.
+- Para trabajos OPES nuevos con backend Goal, la ruta preferente no es volver al
+  loop residente legacy: el smoke real temporal documentado en
+  `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`
+  cerró 24/24 jobs del scope temporal hasta `completed_syllabus_package` con
+  `ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=0`,
+  `ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=0` y
+  `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false`.
+
+Frontera:
+
+- No se tocó ni se drenó el Orquesta productivo de Psicólogo `19024`. La
+  revalidación se basa en tests focales del stack/HTTP y en smoke OPES temporal
+  goal-first. Si vuelve a aparecer una cola real `ready` sin dispatch, el dato
+  decisivo a capturar es el diagnóstico público del supervisor y el estado de
+  `/api/v0/runs/queue/global/status`, no sólo el `status` agregado legacy.
