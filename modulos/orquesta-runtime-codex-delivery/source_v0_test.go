@@ -207,6 +207,42 @@ func TestCodexDeliveryObservationSourceV0ACKStrictSinReceiptNoBloqueaOtros(t *te
 	}
 }
 
+func TestCodexDeliveryObservationSourceV0ACKStrictSinTestsPeroConReceiptsLlegaAReviewV0(t *testing.T) {
+	spec := codexDeliverySpecWithRefsForTestV0(
+		"agent-ref-strict-no-tests-valid-receipts-001",
+		"task-ref-strict-no-tests-valid-receipts-001",
+		"ack-ref-strict-no-tests-valid-receipts-001",
+	)
+	spec.AgentPacket.Policies = append(spec.AgentPacket.Policies, "ack_terminal_strict")
+	ack := codexDeliveryAckForTestV0(spec)
+	ack.Tests = nil
+	store := &staticCodexReceiptStoreV0{
+		Descriptors: []CodexReceiptDescriptorV0{{
+			DescriptorRef: "receipt-ref-strict-no-tests-valid-receipts-001",
+			Spec:          spec,
+			AckPath:       writeCodexDeliveryAckForTestV0(t, spec, ack),
+		}},
+	}
+
+	observations, err := (CodexDeliveryObservationSourceV0{Store: store}).
+		BuildAgentDeliveryObservationsV0(context.Background(), codexDeliveryRequestForTestV0(spec, nil))
+
+	if err != nil {
+		t.Fatalf("BuildAgentDeliveryObservationsV0 no debe tumbar el tick por tests ausente recuperable: %v", err)
+	}
+	if len(observations) != 1 ||
+		observations[0].AgentRef != spec.RequestID ||
+		observations[0].DeliveryRef != spec.AgentPacket.DeliveryRefs.AckRef {
+		t.Fatalf("observations=%+v", observations)
+	}
+	if !stringInCodexDeliverySetV0(
+		observations[0].EvidenceRefs,
+		"gate-issue:ack_tests:required",
+	) {
+		t.Fatalf("tests ausente no conservado como gate-issue: %+v", observations[0].EvidenceRefs)
+	}
+}
+
 func TestCodexDeliveryObservationSourceV0IngiereACKTardioSinProcesoVivoConWaitAgentRefs(t *testing.T) {
 	scopedSpec := codexDeliverySpecWithRefsForTestV0(
 		"agent-ref-late-scoped-001",
