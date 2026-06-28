@@ -1040,25 +1040,6 @@ func domainWorkFieldValuesForTestV0(
 	return false
 }
 
-func domainWorkFieldValuesContainForTestV0(
-	fields []orquestadomainwork.DomainWorkFieldV0,
-	name string,
-	values ...string,
-) bool {
-	for _, field := range fields {
-		if field.Name != name {
-			continue
-		}
-		for _, value := range values {
-			if !stringInSetV0(field.Values, value) {
-				return false
-			}
-		}
-		return true
-	}
-	return false
-}
-
 func domainWorkFieldHasJSONForTestV0(
 	fields []orquestadomainwork.DomainWorkFieldV0,
 	name string,
