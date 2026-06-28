@@ -7,9 +7,16 @@ import (
 )
 
 func domainWorkDeliveryArtifactTypeMatchesV0(actual string, expected string) bool {
-	actual = domainWorkDeliveryCanonicalArtifactTypeV0(actual)
-	expected = domainWorkDeliveryCanonicalArtifactTypeV0(expected)
-	return actual != "" && actual == expected
+	actualAliases := domainWorkDeliveryArtifactTypeAliasKeysV0(actual)
+	expectedAliases := domainWorkDeliveryArtifactTypeAliasKeysV0(expected)
+	for _, actualAlias := range actualAliases {
+		for _, expectedAlias := range expectedAliases {
+			if actualAlias != "" && actualAlias == expectedAlias {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func domainWorkDeliveryCanonicalArtifactTypeV0(value string) string {
@@ -67,6 +74,49 @@ func domainWorkDeliveryCanonicalArtifactTypeV0(value string) string {
 	default:
 		return strings.TrimSpace(value)
 	}
+}
+
+func domainWorkDeliveryArtifactTypeAliasKeysV0(value string) []string {
+	key := normalizeDomainWorkDeliveryAliasV0(value)
+	canonical := normalizeDomainWorkDeliveryAliasV0(domainWorkDeliveryCanonicalArtifactTypeV0(value))
+	aliases := compactStringsV0([]string{key, canonical})
+	switch {
+	case codexStackStringInSetV0(aliases, "interactive_practice_package") ||
+		codexStackStringInSetV0(aliases, "learning_games_package") ||
+		codexStackStringInSetV0(aliases, "generate_learning_games") ||
+		codexStackStringInSetV0(aliases, "generate_interactive_practice") ||
+		codexStackStringInSetV0(aliases, "generate_practice_package"):
+		aliases = append(aliases,
+			"interactive_practice_package",
+			"learning_games_package",
+			"generate_learning_games",
+			"generate_interactive_practice",
+			"generate_practice_package",
+		)
+	case codexStackStringInSetV0(aliases, "help_package") ||
+		codexStackStringInSetV0(aliases, "help_manual_package") ||
+		codexStackStringInSetV0(aliases, "generate_help_manual_assets") ||
+		codexStackStringInSetV0(aliases, "generate_help_manuals"):
+		aliases = append(aliases,
+			"help_package",
+			"help_manual_package",
+			"generate_help_manual_assets",
+			"generate_help_manuals",
+		)
+	case codexStackStringInSetV0(aliases, "final_domain_package") ||
+		codexStackStringInSetV0(aliases, "completed_syllabus_package") ||
+		codexStackStringInSetV0(aliases, "finalize_temario_package") ||
+		codexStackStringInSetV0(aliases, "finalize_syllabus_package") ||
+		codexStackStringInSetV0(aliases, "finalize_topic_package"):
+		aliases = append(aliases,
+			"final_domain_package",
+			"completed_syllabus_package",
+			"finalize_temario_package",
+			"finalize_syllabus_package",
+			"finalize_topic_package",
+		)
+	}
+	return compactStringsV0(aliases)
 }
 
 func domainWorkDeliveryCanonicalPayloadFieldNameV0(artifactType string, name string) string {

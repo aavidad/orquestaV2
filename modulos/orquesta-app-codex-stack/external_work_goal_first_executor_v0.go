@@ -20,6 +20,7 @@ type CodexStackExternalWorkGoalFirstExecutorV0 struct {
 	Ports                   orquestaappdirectorservice.StartAppDirectorPortsV0
 	Config                  orquestaexternalworkrun.StartExternalWorkRunConfigV0
 	AppChangeStore          orquestaappchange.AppChangeRecordStorePortV0
+	DomainSubmissionLedger  DomainWorkArtifactSubmissionRecordReaderPortV0
 	GoalObserverResident    bool
 	AllowLegacyDirectorLoop bool
 }
@@ -31,6 +32,7 @@ func NewCodexStackExternalWorkGoalFirstExecutorV0(
 	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
 	config orquestaexternalworkrun.StartExternalWorkRunConfigV0,
 	appChangeStore orquestaappchange.AppChangeRecordStorePortV0,
+	domainSubmissionLedger DomainWorkArtifactSubmissionRecordReaderPortV0,
 	goalObserverResident bool,
 	allowLegacyDirectorLoop bool,
 ) CodexStackExternalWorkGoalFirstExecutorV0 {
@@ -39,6 +41,7 @@ func NewCodexStackExternalWorkGoalFirstExecutorV0(
 		Ports:                   ports,
 		Config:                  config,
 		AppChangeStore:          appChangeStore,
+		DomainSubmissionLedger:  domainSubmissionLedger,
 		GoalObserverResident:    goalObserverResident,
 		AllowLegacyDirectorLoop: allowLegacyDirectorLoop,
 	}
@@ -80,6 +83,7 @@ func (executor CodexStackExternalWorkGoalFirstExecutorV0) Execute(
 		return externalWorkGoalFirstInputErrorResultV0(request, issues), nil
 	}
 	spec.DirectorKind = orquestagoal.GoalDirectorKindCodexGoalV0
+	spec = executor.externalWorkGoalFirstEnrichSpecV0(ctx, request, spec)
 	spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
 	if issues := orquestagoal.ValidateGoalWorkSpecV0(spec); len(issues) > 0 {
 		return externalWorkGoalFirstGoalSpecErrorResultV0(request, issues), nil

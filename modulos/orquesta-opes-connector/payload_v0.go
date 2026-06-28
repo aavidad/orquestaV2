@@ -3,6 +3,8 @@ package orquestaopesconnector
 import (
 	"encoding/json"
 	"net/url"
+	"strconv"
+	"strings"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 )
@@ -89,6 +91,7 @@ func opesArtifactPayloadV0(
 	submission orquestadomainwork.DomainWorkArtifactSubmissionV0,
 ) opesArtifactRequestV0 {
 	payload := domainWorkFieldsToObjectV0(submission.PayloadFields)
+	payload = canonicalOPESArtifactPayloadObjectV0(submission.ArtifactType, payload)
 	addStringSliceV0(payload, "payload_refs", submission.PayloadRefs)
 	addStringSliceV0(payload, "evidence_refs", submission.EvidenceRefs)
 	return opesArtifactRequestV0{
@@ -98,6 +101,147 @@ func opesArtifactPayloadV0(
 		PayloadJSON:    payload,
 		ExternalRefs:   domainWorkExternalRefsMapV0(submission.ExternalRefs),
 		CompleteJob:    submission.CompleteJob,
+	}
+}
+
+func canonicalOPESArtifactPayloadObjectV0(
+	artifactType string,
+	payload map[string]any,
+) map[string]any {
+	if strings.TrimSpace(artifactType) != orquestadomainwork.DomainWorkArtifactTypeAudioAssetV0 {
+		return payload
+	}
+	normalizeOPESAudioAssetPayloadObjectV0(payload)
+	return payload
+}
+
+func normalizeOPESAudioAssetPayloadObjectV0(payload map[string]any) {
+	if payload == nil {
+		return
+	}
+	if value, ok := payload["duration_seconds"]; ok {
+		if numeric, ok := opesPositiveIntFromAnyV0(value); ok {
+			payload["duration_seconds"] = numeric
+		} else {
+			if _, exists := payload["duration_seconds_raw"]; !exists {
+				payload["duration_seconds_raw"] = value
+			}
+			delete(payload, "duration_seconds")
+		}
+	}
+	if value, ok := payload["source_refs"]; ok {
+		if !opesSourceRefsAlreadyCompactV0(value) {
+			if _, exists := payload["source_ref_details"]; !exists {
+				payload["source_ref_details"] = value
+			}
+		}
+		if refs, ok := opesCompactRefsFromAnyV0(value); ok {
+			payload["source_refs"] = refs
+			return
+		}
+		delete(payload, "source_refs")
+	}
+}
+
+func opesSourceRefsAlreadyCompactV0(value any) bool {
+	switch typed := value.(type) {
+	case []string:
+		return true
+	case []any:
+		for _, item := range typed {
+			if _, ok := item.(string); !ok {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+func opesPositiveIntFromAnyV0(value any) (int, bool) {
+	switch typed := value.(type) {
+	case int:
+		return typed, typed > 0
+	case int64:
+		return int(typed), typed > 0
+	case float64:
+		if typed <= 0 {
+			return 0, false
+		}
+		return int(typed), true
+	case json.Number:
+		parsed, err := typed.Int64()
+		if err == nil && parsed > 0 {
+			return int(parsed), true
+		}
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(typed))
+		if err == nil && parsed > 0 {
+			return parsed, true
+		}
+	}
+	return 0, false
+}
+
+func opesCompactRefsFromAnyV0(value any) ([]string, bool) {
+	refs := []string{}
+	seen := map[string]struct{}{}
+	var add func(string)
+	add = func(ref string) {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			return
+		}
+		if _, exists := seen[ref]; exists {
+			return
+		}
+		seen[ref] = struct{}{}
+		refs = append(refs, ref)
+	}
+	switch typed := value.(type) {
+	case []string:
+		for _, ref := range typed {
+			add(ref)
+		}
+	case []any:
+		for _, item := range typed {
+			if text, ok := item.(string); ok {
+				add(text)
+				continue
+			}
+			if object, ok := item.(map[string]any); ok {
+				for _, key := range opesSourceRefCandidateKeysV0() {
+					if text, ok := object[key].(string); ok {
+						add(text)
+					}
+				}
+			}
+		}
+	case map[string]any:
+		for _, key := range opesSourceRefCandidateKeysV0() {
+			if text, ok := typed[key].(string); ok {
+				add(text)
+			}
+		}
+	default:
+		return nil, false
+	}
+	return refs, len(refs) > 0
+}
+
+func opesSourceRefCandidateKeysV0() []string {
+	return []string{
+		"source_ref",
+		"source_artifact_ref",
+		"source_content_artifact_ref",
+		"source_content_ref",
+		"assembled_topic_artifact_ref",
+		"assembled_topic_artifact_id",
+		"artifact_ref",
+		"topic_id",
+		"program_id",
+		"course_id",
 	}
 }
 

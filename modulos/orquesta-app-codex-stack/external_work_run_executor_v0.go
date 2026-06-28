@@ -25,6 +25,7 @@ func externalWorkRunExecutorV0(
 		ports,
 		externalWorkRunStartConfigV0(config, queueConfig),
 		config.Stores.AppChangeStore,
+		domainWorkSubmissionRecordReaderV0(config.DomainDelivery.Ledger),
 		config.GoalObserverResidentEnabled,
 		config.AllowLegacyExternalWorkRun,
 	)

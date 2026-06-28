@@ -25,6 +25,13 @@ func canonicalDomainWorkDeliveryPayloadBodyV0(
 		}
 		return body
 	}
+	if strings.TrimSpace(artifactType) == "audio_asset" {
+		canonical, ok := canonicalDomainWorkAudioAssetPayloadJSONV0(body)
+		if ok {
+			return canonical
+		}
+		return body
+	}
 	if strings.TrimSpace(artifactType) != orquestadomainwork.DomainDocumentPlanArtifactTypeV0 {
 		return body
 	}

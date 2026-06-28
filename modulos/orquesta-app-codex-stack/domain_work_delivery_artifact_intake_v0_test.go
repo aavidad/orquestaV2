@@ -10,6 +10,7 @@ import (
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
@@ -164,6 +165,91 @@ func TestDomainWorkDeliveryArtifactIntakeV0SeleccionaFicheroPorTipoArtefacto(t *
 	if intake.FileRef != "external/opes/draft_content_block" ||
 		!strings.Contains(intake.Body, "Contenido elegido.") {
 		t.Fatalf("intake=%+v", intake)
+	}
+}
+
+func TestDomainWorkDeliveryArtifactIntakeV0EquivaleAliasPublicosOPES(t *testing.T) {
+	tests := []struct {
+		name     string
+		actual   string
+		expected string
+	}{
+		{
+			name:     "learning_games_publico_vs_practica_neutral",
+			actual:   "learning_games_package",
+			expected: "interactive_practice_package",
+		},
+		{
+			name:     "manuales_ayuda_publico_vs_help_neutral",
+			actual:   "help_manual_package",
+			expected: "help_package",
+		},
+		{
+			name:     "paquete_temario_publico_vs_final_neutral",
+			actual:   "completed_syllabus_package",
+			expected: "final_domain_package",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !domainWorkDeliveryArtifactTypeMatchesV0(tt.actual, tt.expected) ||
+				!domainWorkDeliveryArtifactTypeMatchesV0(tt.expected, tt.actual) {
+				t.Fatalf("alias no equivalente actual=%q expected=%q", tt.actual, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGoalFirstDomainWorkArtifactFileRefV0ResuelveAliasPublicosOPESDesdeWriteSet(t *testing.T) {
+	projectDir := t.TempDir()
+	tests := []struct {
+		name         string
+		scope        string
+		fileName     string
+		contractType string
+	}{
+		{
+			name:         "learning_games",
+			scope:        "external/opes/generate_learning_games/job-001",
+			fileName:     "learning_games_package.json",
+			contractType: "interactive_practice_package",
+		},
+		{
+			name:         "help_manuals",
+			scope:        "external/opes/generate_help_manual_assets/job-002",
+			fileName:     "help_manual_package.json",
+			contractType: "help_package",
+		},
+		{
+			name:         "completed_syllabus",
+			scope:        "external/opes/finalize_temario_package/job-003",
+			fileName:     "completed_syllabus_package.json",
+			contractType: "final_domain_package",
+		},
+	}
+	stack := StackV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writeDomainWorkArtifactIntakeTestFileV0(
+				t,
+				projectDir,
+				filepath.ToSlash(filepath.Join(tt.scope, tt.fileName)),
+				[]byte(`{"artifact_type":"`+strings.TrimSuffix(tt.fileName, ".json")+`"}`),
+			)
+			fileRef, ok, err := stack.goalFirstDomainWorkArtifactFileRefV0(
+				orquestagoal.GoalWorkSpecV0{
+					WriteSet: []orquestagoal.GoalWriteScopeV0{{Path: tt.scope}},
+				},
+				tt.contractType,
+			)
+			if err != nil || !ok {
+				t.Fatalf("ok=%v err=%v", ok, err)
+			}
+			want := filepath.ToSlash(filepath.Join(tt.scope, tt.fileName))
+			if fileRef != want {
+				t.Fatalf("fileRef=%q want=%q", fileRef, want)
+			}
+		})
 	}
 }
 

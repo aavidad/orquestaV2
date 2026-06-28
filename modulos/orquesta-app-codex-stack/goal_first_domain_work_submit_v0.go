@@ -3,6 +3,7 @@ package orquestaappcodexstack
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -288,12 +289,7 @@ func (stack StackV0) goalFirstDomainWorkArtifactFileRefV0(
 	if artifactType == "" {
 		return "", false, nil
 	}
-	candidates := []string{
-		artifactType + ".json",
-		artifactType + ".md",
-		"artifact.json",
-		"artifact.md",
-	}
+	candidates := goalFirstDomainWorkArtifactCandidateNamesV0(artifactType)
 	for _, scope := range spec.WriteSet {
 		scopePath := filepath.ToSlash(strings.Trim(filepath.Clean(strings.TrimSpace(scope.Path)), "/"))
 		if scopePath == "" || scopePath == "." {
@@ -316,8 +312,75 @@ func (stack StackV0) goalFirstDomainWorkArtifactFileRefV0(
 				return fileRef, true, nil
 			}
 		}
+		fileRef, ok, err := stack.goalFirstDomainWorkArtifactFileRefInScopeV0(scopePath, artifactType)
+		if err != nil || ok {
+			return fileRef, ok, err
+		}
 	}
 	return "", false, nil
+}
+
+func goalFirstDomainWorkArtifactCandidateNamesV0(artifactType string) []string {
+	aliases := domainWorkDeliveryArtifactTypeAliasKeysV0(artifactType)
+	candidates := make([]string, 0, len(aliases)*4+2)
+	for _, alias := range aliases {
+		candidates = append(candidates,
+			alias+".json",
+			alias+".md",
+			"artifact_"+alias+".json",
+			"artifact_"+alias+".md",
+		)
+	}
+	candidates = append(candidates, "artifact.json", "artifact.md")
+	return compactStringsV0(candidates)
+}
+
+func (stack StackV0) goalFirstDomainWorkArtifactFileRefInScopeV0(
+	scopePath string,
+	artifactType string,
+) (string, bool, error) {
+	scopeAbs, ok := safeDomainWorkDeliveryFilePathV0(stack.Codex.ProjectWorkDir, scopePath)
+	if !ok {
+		return "", false, nil
+	}
+	info, err := os.Stat(scopeAbs)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	if !info.IsDir() {
+		if info.Mode().IsRegular() && domainWorkDeliveryArtifactFileRefMatchesV0(scopePath, artifactType) {
+			return scopePath, true, nil
+		}
+		return "", false, nil
+	}
+	found := ""
+	err = filepath.WalkDir(scopeAbs, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if found != "" || entry.IsDir() {
+			return nil
+		}
+		if entry.Type() != 0 && !entry.Type().IsRegular() {
+			return nil
+		}
+		rel, err := filepath.Rel(stack.Codex.ProjectWorkDir, path)
+		if err != nil {
+			return err
+		}
+		fileRef := filepath.ToSlash(rel)
+		if domainWorkDeliveryArtifactFileRefMatchesV0(fileRef, artifactType) {
+			found = fileRef
+		}
+		return nil
+	})
+	if err != nil {
+		return "", false, err
+	}
+	return found, found != "", nil
 }
 
 func (stack StackV0) goalFirstDomainWorkRunV0(

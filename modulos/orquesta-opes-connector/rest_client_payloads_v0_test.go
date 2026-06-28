@@ -132,6 +132,7 @@ func opesAudioArtifactSubmissionForTestV0() orquestadomainwork.DomainWorkArtifac
 			{Name: "audio_ref", Value: "audio-ref-topic-001-mp3"},
 			{Name: "manifest_ref", Value: "manifest-ref-topic-001-audio"},
 			{Name: "source_artifact_ref", Value: "artifact-assembled-topic-001"},
+			{Name: "source_refs", ValueJSON: []byte(`{"course_id":"course-ref-001","program_id":"program-ref-001","topic_id":"topic-ref-001","assembled_topic_artifact_id":"artifact-assembled-topic-001"}`)},
 		},
 		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
 			{Kind: "delivery_ref", Ref: "delivery-ref-audio-001"},

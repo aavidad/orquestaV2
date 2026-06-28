@@ -296,9 +296,16 @@ func TestRESTClientV0SubmitDomainWorkArtifactEnviaAudioAsset(t *testing.T) {
 		received.PayloadJSON["assembled_topic_artifact_id"] != "artifact-assembled-topic-001" ||
 		received.PayloadJSON["language_code"] != "es" ||
 		received.PayloadJSON["format"] != "mp3" ||
+		received.PayloadJSON["duration_seconds"] != float64(1830) ||
 		received.PayloadJSON["audio_ref"] != "audio-ref-topic-001-mp3" ||
 		received.PayloadJSON["manifest_ref"] != "manifest-ref-topic-001-audio" ||
 		received.PayloadJSON["source_artifact_ref"] != "artifact-assembled-topic-001" {
 		t.Fatalf("payload=%+v", received)
+	}
+	if _, ok := received.PayloadJSON["source_refs"].([]any); !ok {
+		t.Fatalf("source_refs debe enviarse como array JSON: %+v", received.PayloadJSON["source_refs"])
+	}
+	if _, ok := received.PayloadJSON["source_ref_details"].(map[string]any); !ok {
+		t.Fatalf("source_ref_details debe conservar detalle rico: %+v", received.PayloadJSON["source_ref_details"])
 	}
 }

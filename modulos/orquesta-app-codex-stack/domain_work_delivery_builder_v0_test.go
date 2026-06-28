@@ -595,7 +595,7 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0EntregaAudioAssetOPES(t *te
 		!domainWorkFieldValueForTestV0(submission.PayloadFields, "language_code", "es") ||
 		!domainWorkFieldValueForTestV0(submission.PayloadFields, "format", "mp3") ||
 		!domainWorkFieldValueForTestV0(submission.PayloadFields, "mime_type", "audio/mpeg") ||
-		!domainWorkFieldValueForTestV0(submission.PayloadFields, "duration_seconds", "1830") ||
+		!domainWorkFieldJSONIntForTestV0(submission.PayloadFields, "duration_seconds", 1830) ||
 		!domainWorkFieldValueForTestV0(submission.PayloadFields, "audio_ref", "audio-ref-topic-001-mp3") ||
 		!domainWorkFieldValueForTestV0(submission.PayloadFields, "manifest_ref", "manifest-ref-topic-001-audio") ||
 		!domainWorkFieldValueForTestV0(submission.PayloadFields, "checksum", "sha256-ref-audio-001") {
@@ -669,6 +669,97 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0NormalizaAudioPorApartadosO
 	}
 	if !domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "segments") ||
 		domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "section_audio_links") {
+		t.Fatalf("payload_fields=%+v", submission.PayloadFields)
+	}
+	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) != 0 {
+		t.Fatalf("submission invalida: %+v", issues)
+	}
+}
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0ElevaAudioManifestOPES(t *testing.T) {
+	projectDir := t.TempDir()
+	bodyPath := filepath.Join(projectDir, "external", "opes", "generate_audio_asset", "job-ref-audio-manifest-001")
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	payload := `{
+		"schema_version":"opes.audio_asset.v1",
+		"source_refs":{
+			"course_id":"course-ref-001",
+			"program_id":"program-ref-001",
+			"topic_id":"topic-ref-001",
+			"assembled_topic_artifact_id":"artifact-assembled-topic-001"
+		},
+		"audio_manifest":{
+			"audio_profile_ref":"accessible-es",
+			"audio_ref":"audio-ref-topic-v1",
+			"manifest_ref":"audio-manifest-ref-v1",
+			"language":"es",
+			"duration_seconds_approx":{"global_topic":34,"package_total":62,"segments_total":28},
+			"formats":[{"format":"mp3","media_type":"audio/mpeg","role":"primary_delivery"}],
+			"segments":[{"section_ref":"sec-1","audio_ref":"audio-ref-sec-1","duration_seconds_approx":8}]
+		}
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run:  orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-audio-manifest-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{TaskID: "task-ref-audio-manifest-001", Title: "Generar audio desde manifest OPES"},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-audio-manifest-001",
+						ChangeRef:     "change-ref-audio-manifest-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-audio-manifest-001",
+							WorkKind:   "generate_audio_asset",
+							InputFields: []orquestadomainwork.DomainWorkFieldV0{
+								{Name: "topic_id", Value: "topic-ref-001"},
+								{Name: "assembled_topic_artifact_id", Value: "artifact-assembled-topic-001"},
+							},
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-audio-manifest-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{"external/opes/generate_audio_asset/job-ref-audio-manifest-001"},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef: "ack-ref-audio-manifest-001",
+					AgentRef:    "agent-ref-audio-manifest-001",
+					Summary:     "Manifest de audio generado.",
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if !domainWorkFieldValueForTestV0(submission.PayloadFields, "topic_id", "topic-ref-001") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "assembled_topic_artifact_id", "artifact-assembled-topic-001") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "audio_ref", "audio-ref-topic-v1") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "manifest_ref", "audio-manifest-ref-v1") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "audio_profile_ref", "accessible-es") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "language_code", "es") ||
+		!domainWorkFieldJSONIntForTestV0(submission.PayloadFields, "duration_seconds", 62) ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "format", "mp3") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "mime_type", "audio/mpeg") ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "segments") ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "source_ref_details") ||
+		!domainWorkFieldValuesForTestV0(submission.PayloadFields, "source_refs", []string{
+			"artifact-assembled-topic-001",
+			"topic-ref-001",
+			"program-ref-001",
+			"course-ref-001",
+		}) {
 		t.Fatalf("payload_fields=%+v", submission.PayloadFields)
 	}
 	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) != 0 {
@@ -1046,6 +1137,23 @@ func domainWorkFieldHasJSONForTestV0(
 ) bool {
 	for _, field := range fields {
 		if field.Name == name && len(field.ValueJSON) > 0 && json.Valid(field.ValueJSON) {
+			return true
+		}
+	}
+	return false
+}
+
+func domainWorkFieldJSONIntForTestV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	name string,
+	want int,
+) bool {
+	for _, field := range fields {
+		if field.Name != name || len(field.ValueJSON) == 0 {
+			continue
+		}
+		var got int
+		if err := json.Unmarshal(field.ValueJSON, &got); err == nil && got == want {
 			return true
 		}
 	}

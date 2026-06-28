@@ -440,6 +440,77 @@ func TestServerCodexAppServerGoalBackendV0BloqueaGoalActivoPorTimeoutV0(t *testi
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0BloqueaGoalActivoPorCreatedAtSiTimeUsedFaltaV0(t *testing.T) {
+	now := time.Date(2026, 6, 28, 17, 20, 0, 0, time.UTC)
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID:  "thread-ref-goal-timeout-created-001",
+			Status:    "active",
+			CreatedAt: serverCodexAppServerTimestampFromTimeV0(now.Add(-3 * time.Second)),
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		Timeout:  2 * time.Second,
+		Now:      func() time.Time { return now },
+	}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-timeout-created-001",
+		ExternalGoalRef: "thread-ref-goal-timeout-created-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusBlockedV0 ||
+		receipt.IssueCode != "codex_app_server_goal_active_timeout" {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0BloqueaGoalActivoPorRuntimeSiTimeUsedFaltaV0(t *testing.T) {
+	now := time.Date(2026, 6, 28, 17, 25, 0, 0, time.UTC)
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-timeout-runtime-001"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-goal-timeout-runtime-001"},
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID: "thread-ref-goal-timeout-runtime-001",
+			Status:   "active",
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		Timeout:  2 * time.Second,
+		Runtime:  &serverCodexAppServerGoalRuntimeV0{},
+		Now:      func() time.Time { return now },
+	}
+	if _, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		SchemaVersion: orquestaruntimecodexgoal.CodexGoalStartPacketSchemaV0,
+		GoalRef:       "goal-ref-timeout-runtime-001",
+		Objective:     "probar timeout runtime",
+		Prompt:        "haz una entrega compacta",
+	}); err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	now = now.Add(3 * time.Second)
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-timeout-runtime-001",
+		ExternalGoalRef: "thread-ref-goal-timeout-runtime-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusBlockedV0 ||
+		receipt.IssueCode != "codex_app_server_goal_active_timeout" {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0ObservaResultadoDurableSiThreadReadFallaV0(t *testing.T) {
 	projectDir := t.TempDir()
 	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")

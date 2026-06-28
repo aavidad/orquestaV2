@@ -170,6 +170,8 @@ type serverCodexAppServerGoalBackendV0 struct {
 	ApprovalPolicy  string
 	ServiceTier     string
 	Timeout         time.Duration
+	Runtime         *serverCodexAppServerGoalRuntimeV0
+	Now             func() time.Time
 }
 
 type serverCodexAppServerProtocolPortV0 interface {
@@ -213,6 +215,7 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_turn_start_failed")
 		return codexAppServerStartReceiptV0(packet, threadID, code), err
 	}
+	backend.recordCodexAppServerGoalStartedAtV0(threadID, backend.nowCodexAppServerGoalV0())
 	return orquestaruntimecodexgoal.CodexGoalStartReceiptV0{
 		Status:          orquestagoal.GoalStatusRunningV0,
 		GoalRef:         packet.GoalRef,
@@ -274,10 +277,11 @@ func (backend serverCodexAppServerGoalBackendV0) codexAppServerActiveGoalTimeout
 	if timeout <= 0 {
 		timeout = time.Duration(defaultCodexGoalTimeoutMSV0) * time.Millisecond
 	}
-	if timeout <= 0 || goal.TimeUsedSeconds <= 0 {
+	elapsed, ok := backend.codexAppServerActiveGoalElapsedV0(goal)
+	if timeout <= 0 || !ok {
 		return false, receipt
 	}
-	if time.Duration(goal.TimeUsedSeconds)*time.Second < timeout {
+	if elapsed < timeout {
 		return false, receipt
 	}
 	receipt.Status = orquestagoal.GoalStatusBlockedV0

@@ -120,6 +120,7 @@ func domainWorkDeliveryPayloadFieldsV0(
 	body string,
 ) []orquestadomainwork.DomainWorkFieldV0 {
 	if parsed, ok := domainWorkDeliveryJSONPayloadFieldsV0(body, artifactType); ok {
+		parsed = append(parsed, domainWorkDeliveryDerivedPayloadFieldsV0(artifactType, parsed)...)
 		contentTypeFields := make([]orquestadomainwork.DomainWorkFieldV0, 0, len(fields)+len(parsed))
 		contentTypeFields = append(contentTypeFields, fields...)
 		contentTypeFields = append(contentTypeFields, parsed...)
@@ -145,6 +146,187 @@ func domainWorkDeliveryPayloadFieldsV0(
 		fields = append(fields, orquestadomainwork.DomainWorkFieldV0{Name: bodyField, Value: strings.TrimSpace(body)})
 	}
 	return fields
+}
+
+func domainWorkDeliveryDerivedPayloadFieldsV0(
+	artifactType string,
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if domainWorkDeliveryCanonicalArtifactTypeV0(artifactType) != "audio_asset" {
+		return nil
+	}
+	var manifest map[string]json.RawMessage
+	for _, field := range fields {
+		if strings.TrimSpace(field.Name) != "audio_manifest" || len(field.ValueJSON) == 0 {
+			continue
+		}
+		if err := json.Unmarshal(field.ValueJSON, &manifest); err != nil {
+			return nil
+		}
+		break
+	}
+	if len(manifest) == 0 {
+		return nil
+	}
+	derived := make([]orquestadomainwork.DomainWorkFieldV0, 0, 8)
+	derived = appendAudioManifestStringFieldIfMissingV0(derived, fields, manifest, "audio_ref", "audio_ref")
+	derived = appendAudioManifestStringFieldIfMissingV0(derived, fields, manifest, "manifest_ref", "manifest_ref")
+	derived = appendAudioManifestStringFieldIfMissingV0(derived, fields, manifest, "audio_profile_ref", "audio_profile_ref")
+	derived = appendAudioManifestStringFieldIfMissingV0(derived, fields, manifest, "language_code", "language")
+	derived = appendAudioManifestDurationFieldIfMissingV0(derived, fields, manifest)
+	derived = appendAudioManifestFormatFieldsIfMissingV0(derived, fields, manifest)
+	derived = appendAudioManifestRawFieldIfMissingV0(derived, fields, manifest, "segments", "segments")
+	if sourceRefs, ok := manifest["source_refs"]; ok {
+		if field, ok := domainWorkDeliveryJSONFieldV0("audio_asset", "source_refs", sourceRefs); ok && !domainWorkFieldHasNameV0(fields, field.Name) {
+			derived = append(derived, field)
+		}
+	}
+	return derived
+}
+
+func appendAudioManifestStringFieldIfMissingV0(
+	out []orquestadomainwork.DomainWorkFieldV0,
+	existing []orquestadomainwork.DomainWorkFieldV0,
+	manifest map[string]json.RawMessage,
+	fieldName string,
+	manifestName string,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if domainWorkFieldHasNameV0(existing, fieldName) {
+		return out
+	}
+	value := audioManifestStringV0(manifest, manifestName)
+	if value == "" {
+		return out
+	}
+	return append(out, orquestadomainwork.DomainWorkFieldV0{Name: fieldName, Value: value})
+}
+
+func appendAudioManifestRawFieldIfMissingV0(
+	out []orquestadomainwork.DomainWorkFieldV0,
+	existing []orquestadomainwork.DomainWorkFieldV0,
+	manifest map[string]json.RawMessage,
+	fieldName string,
+	manifestName string,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if domainWorkFieldHasNameV0(existing, fieldName) {
+		return out
+	}
+	raw := manifest[manifestName]
+	if len(raw) == 0 || !json.Valid(raw) {
+		return out
+	}
+	return append(out, orquestadomainwork.DomainWorkFieldV0{Name: fieldName, ValueJSON: append([]byte(nil), raw...)})
+}
+
+func appendAudioManifestDurationFieldIfMissingV0(
+	out []orquestadomainwork.DomainWorkFieldV0,
+	existing []orquestadomainwork.DomainWorkFieldV0,
+	manifest map[string]json.RawMessage,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if domainWorkFieldHasNameV0(existing, "duration_seconds") {
+		return out
+	}
+	value := audioManifestIntV0(manifest, "duration_seconds")
+	if value <= 0 {
+		value = audioManifestIntV0(manifest, "duration_seconds_approx")
+	}
+	if value <= 0 {
+		value = audioManifestNestedIntV0(manifest, "duration_seconds_approx", "package_total")
+	}
+	if value <= 0 {
+		value = audioManifestNestedIntV0(manifest, "duration_seconds_approx", "global_topic")
+	}
+	if value <= 0 {
+		value = audioManifestNestedIntV0(manifest, "topic_audio", "duration_seconds_approx")
+	}
+	if value <= 0 {
+		return out
+	}
+	return append(out, orquestadomainwork.DomainWorkFieldV0{Name: "duration_seconds", ValueJSON: []byte(strconv.Itoa(value))})
+}
+
+func appendAudioManifestFormatFieldsIfMissingV0(
+	out []orquestadomainwork.DomainWorkFieldV0,
+	existing []orquestadomainwork.DomainWorkFieldV0,
+	manifest map[string]json.RawMessage,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if domainWorkFieldHasNameV0(existing, "format") && domainWorkFieldHasNameV0(existing, "mime_type") {
+		return out
+	}
+	format, mimeType := audioManifestPrimaryFormatV0(manifest)
+	if format != "" && !domainWorkFieldHasNameV0(existing, "format") {
+		out = append(out, orquestadomainwork.DomainWorkFieldV0{Name: "format", Value: format})
+	}
+	if mimeType != "" && !domainWorkFieldHasNameV0(existing, "mime_type") {
+		out = append(out, orquestadomainwork.DomainWorkFieldV0{Name: "mime_type", Value: mimeType})
+	}
+	return out
+}
+
+func audioManifestStringV0(manifest map[string]json.RawMessage, name string) string {
+	raw := manifest[name]
+	if len(raw) == 0 {
+		return ""
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return strings.TrimSpace(value)
+	}
+	return ""
+}
+
+func audioManifestIntV0(manifest map[string]json.RawMessage, name string) int {
+	raw := manifest[name]
+	if len(raw) == 0 {
+		return 0
+	}
+	var value int
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return value
+	}
+	var numeric float64
+	if err := json.Unmarshal(raw, &numeric); err == nil {
+		return int(numeric)
+	}
+	return 0
+}
+
+func audioManifestNestedIntV0(manifest map[string]json.RawMessage, objectName string, name string) int {
+	raw := manifest[objectName]
+	if len(raw) == 0 {
+		return 0
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return 0
+	}
+	return audioManifestIntV0(object, name)
+}
+
+func audioManifestPrimaryFormatV0(manifest map[string]json.RawMessage) (string, string) {
+	raw := manifest["formats"]
+	if len(raw) == 0 {
+		return "", ""
+	}
+	var formats []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &formats); err != nil {
+		var stringsOnly []string
+		if err := json.Unmarshal(raw, &stringsOnly); err == nil && len(stringsOnly) > 0 {
+			return strings.TrimSpace(stringsOnly[0]), ""
+		}
+		return "", ""
+	}
+	for _, item := range formats {
+		format := audioManifestStringV0(item, "format")
+		mimeType := audioManifestStringV0(item, "media_type")
+		if mimeType == "" {
+			mimeType = audioManifestStringV0(item, "mime_type")
+		}
+		if format != "" || mimeType != "" {
+			return format, mimeType
+		}
+	}
+	return "", ""
 }
 
 func domainWorkDeliveryPayloadBodyV0(body string, artifactType string) string {
@@ -207,6 +389,13 @@ func domainWorkDeliveryJSONFieldV0(
 		if refs, ok := compactSourceRefsFromRichPayloadV0(raw); ok {
 			return orquestadomainwork.DomainWorkFieldV0{Name: name, Values: refs}, true
 		}
+		return orquestadomainwork.DomainWorkFieldV0{Name: "source_ref_details", ValueJSON: append([]byte(nil), raw...)}, true
+	}
+	if artifactType == "audio_asset" && name == "duration_seconds" {
+		if encoded, ok := canonicalAudioAssetDurationJSONV0(raw); ok {
+			return orquestadomainwork.DomainWorkFieldV0{Name: name, ValueJSON: encoded}, true
+		}
+		return orquestadomainwork.DomainWorkFieldV0{Name: "duration_seconds_raw", ValueJSON: append([]byte(nil), raw...)}, true
 	}
 	var text string
 	if err := json.Unmarshal(raw, &text); err == nil {

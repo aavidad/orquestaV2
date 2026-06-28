@@ -95,12 +95,14 @@ type serverCodexAppServerThreadLoadedListResponseV0 struct {
 }
 
 type serverCodexAppServerThreadGoalV0 struct {
-	ThreadID        string `json:"threadId"`
-	Objective       string `json:"objective"`
-	Status          string `json:"status"`
-	TokenBudget     *int   `json:"tokenBudget,omitempty"`
-	TokensUsed      int    `json:"tokensUsed,omitempty"`
-	TimeUsedSeconds int    `json:"timeUsedSeconds,omitempty"`
+	ThreadID        string                          `json:"threadId"`
+	Objective       string                          `json:"objective"`
+	Status          string                          `json:"status"`
+	TokenBudget     *int                            `json:"tokenBudget,omitempty"`
+	TokensUsed      int                             `json:"tokensUsed,omitempty"`
+	TimeUsedSeconds int                             `json:"timeUsedSeconds,omitempty"`
+	CreatedAt       serverCodexAppServerTimestampV0 `json:"createdAt,omitempty"`
+	UpdatedAt       serverCodexAppServerTimestampV0 `json:"updatedAt,omitempty"`
 }
 
 type serverCodexAppServerThreadReadResponseV0 struct {

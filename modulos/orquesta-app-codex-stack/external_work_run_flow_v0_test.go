@@ -304,6 +304,116 @@ func TestCodexStackV0ExternalWorkRunGoalFirstConservaInputFieldsOPESV0(t *testin
 	}
 }
 
+func TestCodexStackV0ExternalWorkRunGoalFirstPaqueteFinalIncluyeArtefactosAceptadosV0(t *testing.T) {
+	stack, _, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		DomainWorkArtifactSubmissionRecordV0{
+			IdempotencyKey: "idem-research-accepted",
+			Status:         DomainWorkArtifactSubmissionStatusAcceptedV0,
+			RunRef:         "run-research-001",
+			CorrelationID:  "corr-external-work-stack-001",
+			DomainRef:      "opes",
+			JobRef:         "job-research-001",
+			ArtifactRef:    "artifact-research-001",
+			ArtifactType:   "exam_research_report",
+			Summary:        "Investigacion de examenes aceptada por OPES temporal.",
+			ReceiptRef:     "receipt-ref-research-001",
+			PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+				{Name: "work_kind", Value: "research_exam_precedents"},
+				{Name: "body", Value: "Resumen compacto de fuentes."},
+			},
+		},
+	); err != nil {
+		t.Fatalf("Record research: %v", err)
+	}
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		DomainWorkArtifactSubmissionRecordV0{
+			IdempotencyKey: "idem-html-accepted",
+			Status:         DomainWorkArtifactSubmissionStatusAcceptedV0,
+			RunRef:         "run-html-001",
+			CorrelationID:  "corr-external-work-stack-001",
+			DomainRef:      "opes",
+			JobRef:         "job-html-001",
+			ArtifactRef:    "artifact-html-001",
+			ArtifactType:   "local_html_site",
+			Summary:        "HTML local aceptado por OPES temporal.",
+			ReceiptRef:     "receipt-ref-html-001",
+			PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+				{Name: "work_kind", Value: "generate_html_site"},
+				{Name: "site_ref", Value: "site-ref-001"},
+			},
+		},
+	); err != nil {
+		t.Fatalf("Record html: %v", err)
+	}
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		DomainWorkArtifactSubmissionRecordV0{
+			IdempotencyKey: "idem-other-correlation",
+			Status:         DomainWorkArtifactSubmissionStatusAcceptedV0,
+			RunRef:         "run-other-001",
+			CorrelationID:  "corr-otra",
+			DomainRef:      "opes",
+			JobRef:         "job-other-001",
+			ArtifactType:   "audio_asset",
+			ReceiptRef:     "receipt-ref-other-001",
+			PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+				{Name: "work_kind", Value: "generate_audio_asset"},
+			},
+		},
+	); err != nil {
+		t.Fatalf("Record other: %v", err)
+	}
+	change := defaultExternalWorkRunChangeForTestV0()
+	change.ChangeRef = "opes-job-final-001"
+	change.ExternalWork.JobRef = "job-final-001"
+	change.ExternalWork.WorkKind = "finalize_temario_package"
+	change.ExternalWork.InputFields = []orquestadomainwork.DomainWorkFieldV0{
+		{Name: "topic_id", Value: "topic-ref-001"},
+		{Name: "expected_artifact_type", Value: "completed_syllabus_package"},
+	}
+
+	result := postExternalWorkRunStackWithChangeV0(t, stack, change)
+
+	if result.GoalRef == "" || len(launcher.specs) != 1 {
+		t.Fatalf("goal-first no lanzo spec final: result=%+v specs=%+v", result, launcher.specs)
+	}
+	launchedContext := codexStackGoalContextRefsTextForTestV0(launcher.specs[0].ContextRefs)
+	for _, want := range []string{
+		"accepted_domain_artifact_manifest",
+		"count=2",
+		"accepted_domain_artifact",
+		"artifact_type=exam_research_report",
+		"artifact_dir=external/opes/research_exam_precedents/job-research-001",
+		"path_candidates=external/opes/research_exam_precedents/job-research-001/exam_research_report.json",
+		"receipt_ref=receipt-ref-research-001",
+		"artifact_type=local_html_site",
+		"artifact_dir=external/opes/generate_html_site/job-html-001",
+		"receipt_ref=receipt-ref-html-001",
+	} {
+		if !strings.Contains(launchedContext, want) {
+			t.Fatalf("context_refs final no contienen %q:\n%s", want, launchedContext)
+		}
+	}
+	for _, forbidden := range []string{
+		"receipt-ref-other-001",
+	} {
+		if strings.Contains(launchedContext, forbidden) {
+			t.Fatalf("context_refs final incluyen %q:\n%s", forbidden, launchedContext)
+		}
+	}
+	criteria := strings.Join(launcher.specs[0].AcceptanceCriteria, "\n")
+	if !strings.Contains(criteria, "accepted_domain_artifact_manifest") ||
+		!codexStackStringInSetForTestV0(
+			launcher.specs[0].EvidenceRefs,
+			externalWorkGoalFirstAcceptedArtifactContextEvidenceV0,
+		) {
+		t.Fatalf("spec final sin criterio/evidencia de artefactos aceptados: %+v", launcher.specs[0])
+	}
+}
+
 func TestCodexStackV0ExternalWorkRunConObservadorResidenteNoMarcaObserverRequired(t *testing.T) {
 	launcher := &goalFirstQueueLauncherForTestV0{}
 	goalStates := newGoalFirstQueueStateStoreForTestV0()

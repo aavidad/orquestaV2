@@ -8,14 +8,12 @@ Se ejecuto un smoke real acotado contra OPES temporal local y Orquesta temporal
 con `ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio`. Tambien se intento recorrer
 la secuencia real completa de derivados hasta `finalize_temario_package`.
 
-Resultado: contrato REST y scope OPES temporales validados; unitario cerrado
-para `update_topic_registry`; primer intento completo con timeout por defecto
-bloqueado correctamente; segundo intento completo con timeout ampliado cierra el
-primer goal real y deja el segundo goal activo al llegar a `MAX_TICKS=80`.
-Orquesta acepta `POST /api/v0/external-work/run`, crea run goal-first, arranca
-Goal Codex real observable, valida artefacto/receipt y cierra el run sin
-reabrir el loop legacy. Lo pendiente no es volver al Director antiguo, sino
-reducir contexto y paralelizar/continuar la secuencia real de 23 work kinds.
+Resultado: contrato REST y scope OPES temporales validados; ruta goal-first real
+cerrada hasta `finalize_temario_package` contra OPES temporal local. Orquesta
+acepta `POST /api/v0/external-work/run`, crea run goal-first, arranca Goal Codex
+real observable, valida artefacto/receipt y cierra cada run sin reabrir el loop
+legacy. El ultimo smoke dejo 24/24 jobs del scope temporal en `completed`,
+incluido `completed_syllabus_package`.
 
 ## Configuracion valida
 
@@ -176,6 +174,45 @@ Sexto intento de secuencia completa con timeout ampliado:
   ticks. La causa operativa observada es duracion/secuencialidad de goals reales
   con `limit=1`, no rechazo de contrato, scope ni vuelta al loop legacy.
 
+Septimo intento/continuacion manual hasta paquete final:
+
+- Root temporal: `/tmp/orquesta-opes-final3-20260628T130000Z`.
+- OPES temporal: `http://127.0.0.1:18196`.
+- Orquesta temporal: `http://127.0.0.1:19196`.
+- Configuracion relevante:
+  `ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio`,
+  `ORQUESTA_CODEX_GOAL_TIMEOUT_MS=900000`,
+  `ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=0`,
+  `ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=0`,
+  `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false`,
+  `ORQUESTA_OPES_BRIDGE_LIMIT=1`.
+- Scope: `program_id=program-ref-orquesta-contract-probe-final3-probe-20260628T130000Z`,
+  `topic_id=topic-ref-orquesta-contract-probe-final3-probe-20260628T130000Z`,
+  `correlation_id=corr-orquesta-contract-probe-final3-probe-20260628T130000Z`.
+- Jobs OPES del scope: `total=24`, `completed=24`, `pending=[]`.
+- Cierres finales observados:
+  - `generate_audio_asset`: run cerrado, `artifact_type=audio_asset`,
+    receipt OPES `a7cfd91d575ccb4327dd0ff611836610`.
+  - `generate_tutor_assets`: run cerrado, `artifact_type=tutor_bot_package`,
+    receipt OPES `31d657680f53f002fcf7dc70ae8ae074`.
+  - `generate_learning_games`: run cerrado tras alias publico
+    `interactive_practice_package`/`learning_games_package`, receipt OPES
+    `f7d104f42c3501c5d3c9cad5a383499d`.
+  - `generate_html_site`: run cerrado tras autocorreccion del goal, receipt
+    OPES `1b3d54ca8cdfa60a47b25ac4fdf8c1e0`.
+  - `generate_help_manual_assets`: run cerrado, `artifact_type=help_manual_package`,
+    receipt OPES `e967097e59e0f301c61f0009455db025`.
+  - `finalize_temario_package`: run cerrado, `artifact_type=completed_syllabus_package`,
+    receipt OPES `eb22d739f038f63f2f0a57d549901040`.
+- Paquete final materializado:
+  `/tmp/orquesta-opes-final3-20260628T130000Z/project/external/opes/finalize_temario_package/a3bbc1fd1e2b32e0ab745eb6b72245d9/completed_syllabus_package.json`.
+- Observacion final: `goal_status=complete`, `run_status=cerrada`,
+  `closure_status=accepted`, `closure_accepted=true`,
+  `summary=completed_syllabus_package materializado bajo el write-set autorizado`.
+- Lectura: la secuencia real temporal de derivados/cierre OPES queda cerrada
+  por goal-first, receipts de dominio y evidencias durables. No se uso el loop
+  legacy para cerrar el smoke.
+
 ## Cambios derivados del ajuste actual
 
 - `BuildExternalWorkGoalWorkSpecV0` compacta `input_fields`: inlinea campos
@@ -186,6 +223,20 @@ Sexto intento de secuencia completa con timeout ampliado:
 - El criterio de aceptacion ya no bloquea por cualquier campo omitido por
   presupuesto; solo exige rework si falta un input imprescindible para el
   artefacto.
+- El submit goal-first acepta alias publicos de artefacto de salida:
+  `interactive_practice_package`/`learning_games_package`,
+  `help_package`/`help_manual_package` y
+  `final_domain_package`/`completed_syllabus_package`.
+- `audio_asset` normaliza `duration_seconds` numerico y `source_refs` como
+  array para el contrato OPES.
+- `Codex app-server goal` calcula timeout tambien desde `createdAt` o desde
+  tracker runtime si `timeUsedSeconds` no viene en la observacion remota.
+- Para proximos cierres de paquete final, la composicion Codex enriquece el
+  `GoalWorkSpecV0` con `accepted_domain_artifact_manifest` y refs
+  `accepted_domain_artifact` desde el ledger aceptado del mismo dominio y
+  correlacion. Esta mejora se implemento despues de lanzar el paquete final de
+  este smoke; queda cubierta por unitarias y evita que cierres futuros dependan
+  de inferir el inventario de artefactos previos.
 
 ## Contexto previo del mismo corte
 
@@ -231,17 +282,12 @@ nueva e independiente de cada implementacion interna.
 
 ## Pendiente
 
-- Extender de `update_topic_registry` a la secuencia completa de 23
-  `work_kind`. El contrato REST y el scope real ya estan validados; falta
-  ejecutar/cerrar toda la cola temporal real hasta `finalize_temario_package`.
-- Reejecutar el smoke largo despues de la compactacion actual del
-  `GoalWorkSpecV0` para medir si baja el tiempo/tokens por goal.
-- El wrapper ya soporta continuacion con
-  `ORQUESTA_OPES_DERIVATIVES_RESUME=1`, mismo `SMOKE_OUT_DIR`, mismo ledger y
-  misma Orquesta temporal. Falta usar esa continuacion en un run real largo
-  hasta `finalize_temario_package`.
-- Paralelizar por fases sigue pendiente cuando el contrato de dependencias lo
-  permita; con `limit=1` y goals Codex reales, 80 ticks no bastan para 23 work
-  kinds.
+- Reejecutar un smoke real nuevo desde cero con el enriquecimiento de contexto
+  de artefactos aceptados ya cargado en el servidor, para medir ahorro de
+  tokens/tiempo en `finalize_temario_package`.
+- Automatizar la continuacion larga en wrapper sin observacion manual entre
+  tramos cuando el operador quiera recorrer toda la secuencia real.
+- Paralelizar por fases cuando el contrato de dependencias lo permita; este
+  cierre se hizo con `limit=1` para reducir riesgo operativo.
 - No volver al loop legacy para tapar este caso: la ruta correcta sigue siendo
   goal-first con cierre por artefactos, tests y receipt de dominio.
