@@ -134,6 +134,7 @@ var publicErrorCatalogV0 = []PublicErrorDescriptorV0{
 	publicErrorV0("autoprogramming_status_executor_error", "http", "mcp", 500, -32000, false, PublicErrorSeverityErrorV0),
 	publicErrorV0("autoprogramming_supervise_no_configurado", "http", "mcp", 503, -32000, true, PublicErrorSeverityWarnV0),
 	publicErrorV0("autoprogramming_supervise_executor_error", "http", "mcp", 500, -32000, false, PublicErrorSeverityErrorV0),
+	publicErrorV0("autoprogramming_observe_goal_timeout", "http", "mcp", 504, -32000, true, PublicErrorSeverityWarnV0),
 	publicErrorV0("domain_work_no_configurado", "http", "mcp", 503, -32000, true, PublicErrorSeverityWarnV0),
 	publicErrorV0("domain_work_error", "http", "mcp", 500, -32000, false, PublicErrorSeverityErrorV0),
 	publicErrorV0("external_work_run_no_configurado", "http", "mcp", 503, -32000, true, PublicErrorSeverityWarnV0),

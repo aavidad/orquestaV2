@@ -521,6 +521,70 @@ func TestServerObserveAppDirectorGoalHTTPClienteRealRecibeTimeoutJSONV0(t *testi
 	}
 }
 
+func TestServerAutoprogrammingObserveGoalHTTPClienteRealRecibeTimeoutJSONV0(t *testing.T) {
+	observeGoal := newBlockingServerAutoprogrammingObserveGoalExecutorV0()
+	gateway := orquestaappgateway.NewHTTPHandlerV0(orquestaappgateway.ConfigV0{
+		Timeout:                    time.Second,
+		AutoprogrammingObserveGoal: observeGoal,
+	})
+	handler, err := buildServerAppHandlerV0(orquestaappcodexstack.StackV0{
+		Handler: gateway,
+	})
+	if err != nil {
+		t.Fatalf("buildServerAppHandlerV0: %v", err)
+	}
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	body := []byte(`{
+		"request_id":"request-ref-server-autop-observe-goal-timeout-001",
+		"correlation_id":"corr-server-autop-observe-goal-timeout-001",
+		"run_ref":"run-ref-server-autop-observe-goal-timeout-001"
+	}`)
+	client := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequest(
+		http.MethodPost,
+		server.URL+orquestamcp.MCPAutoprogrammingObserveGoalHTTPPathV0,
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Correlation-ID", "corr-server-autop-observe-goal-timeout-header-001")
+
+	started := time.Now()
+	resp, err := client.Do(req)
+	elapsed := time.Since(started)
+	if err != nil {
+		t.Fatalf("client.Do elapsed=%s err=%v", elapsed, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusGatewayTimeout || elapsed > 4*time.Second {
+		t.Fatalf("status=%d elapsed=%s", resp.StatusCode, elapsed)
+	}
+	var result orquestamcp.MCPAutoprogrammingObserveGoalToolResultV0
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPAutoprogrammingObserveGoalEstadoErrorV0 ||
+		result.RunRef != "run-ref-server-autop-observe-goal-timeout-001" ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != orquestamcp.MCPAutoprogrammingObserveGoalHTTPTimeoutCodeV0 ||
+		resp.Header.Get("X-Correlation-ID") != "corr-server-autop-observe-goal-timeout-header-001" {
+		t.Fatalf("result=%+v headers=%v", result, resp.Header)
+	}
+	if observeGoal.callsV0() != 1 {
+		t.Fatalf("calls=%d", observeGoal.callsV0())
+	}
+	select {
+	case <-observeGoal.done:
+	case <-time.After(time.Second):
+		t.Fatalf("autoprogramming observe goal executor no recibio cancelacion tras timeout HTTP")
+	}
+}
+
 func postServerAutoprogrammingSuperviseForTestV0(
 	t *testing.T,
 	handler http.Handler,
@@ -592,6 +656,13 @@ type blockingServerObserveAppDirectorGoalExecutorV0 struct {
 	done  chan struct{}
 }
 
+type blockingServerAutoprogrammingObserveGoalExecutorV0 struct {
+	mu    sync.Mutex
+	once  sync.Once
+	calls int
+	done  chan struct{}
+}
+
 func newBlockingServerAutoprogrammingSuperviseExecutorV0() *blockingServerAutoprogrammingSuperviseExecutorV0 {
 	return &blockingServerAutoprogrammingSuperviseExecutorV0{
 		release: make(chan struct{}),
@@ -619,6 +690,12 @@ func newBlockingServerExternalWorkRunExecutorV0() *blockingServerExternalWorkRun
 
 func newBlockingServerObserveAppDirectorGoalExecutorV0() *blockingServerObserveAppDirectorGoalExecutorV0 {
 	return &blockingServerObserveAppDirectorGoalExecutorV0{
+		done: make(chan struct{}),
+	}
+}
+
+func newBlockingServerAutoprogrammingObserveGoalExecutorV0() *blockingServerAutoprogrammingObserveGoalExecutorV0 {
+	return &blockingServerAutoprogrammingObserveGoalExecutorV0{
 		done: make(chan struct{}),
 	}
 }
@@ -706,6 +783,21 @@ func (executor *blockingServerObserveAppDirectorGoalExecutorV0) Execute(
 	}, nil
 }
 
+func (executor *blockingServerAutoprogrammingObserveGoalExecutorV0) Execute(
+	ctx context.Context,
+	input orquestamcp.MCPAutoprogrammingObserveGoalToolInputV0,
+) (orquestamcp.MCPAutoprogrammingObserveGoalToolResultV0, error) {
+	executor.mu.Lock()
+	executor.calls++
+	executor.mu.Unlock()
+	<-ctx.Done()
+	executor.once.Do(func() { close(executor.done) })
+	return orquestamcp.MCPAutoprogrammingObserveGoalToolResultV0{
+		Estado: orquestamcp.MCPAutoprogrammingObserveGoalEstadoOKV0,
+		RunRef: strings.TrimSpace(input.RunRef),
+	}, nil
+}
+
 func (executor *blockingServerRunQueuePriorityExecutorV0) Execute(
 	ctx context.Context,
 	input orquestamcp.MCPRunQueuePriorityToolInputV0,
@@ -746,6 +838,12 @@ func (executor *blockingServerExternalWorkRunExecutorV0) callsV0() int {
 }
 
 func (executor *blockingServerObserveAppDirectorGoalExecutorV0) callsV0() int {
+	executor.mu.Lock()
+	defer executor.mu.Unlock()
+	return executor.calls
+}
+
+func (executor *blockingServerAutoprogrammingObserveGoalExecutorV0) callsV0() int {
 	executor.mu.Lock()
 	defer executor.mu.Unlock()
 	return executor.calls

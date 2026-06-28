@@ -18,6 +18,7 @@ func TestMCPPublicErrorCatalogV0CubreCodigosCompartidosYHTTPV0(t *testing.T) {
 		MCPExternalWorkRunHTTPNotConfiguredCodeV0,
 		MCPExternalWorkRunHTTPExecutorErrorCodeV0,
 		MCPExternalWorkRunHTTPTimeoutCodeV0,
+		MCPAutoprogrammingObserveGoalHTTPTimeoutCodeV0,
 		"run_control_timeout",
 		"director_stats_executor_error",
 		"server_shutdown_executor_error",

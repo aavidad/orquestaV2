@@ -530,3 +530,33 @@ Queda pendiente de esta familia: comprobar con una ola OPES temporal nueva que
 el operador ya no recibe llamadas sin cuerpo en las rutas de supervisión y
 estado bajo carga real, y cerrar las incidencias independientes de
 `running_stale` con procesos vivos y write-set estrechado del `agent_packet`.
+
+## Mitigación Orquesta 2026-06-28 - timeout HTTP en `autoprogramming/goal/observe`
+
+Seguimiento del mismo patrón: la ruta anunciada por `autoprogramming/status` y
+usada por la superficie OPES/operador para goals,
+`/api/v0/autoprogramming/goal/observe`, seguía ejecutando el observer directo
+sin timeout HTTP propio. Se alineó con la ruta app-director:
+
+- si el executor no responde dentro de la ventana HTTP acotada, devuelve
+  `504 Gateway Timeout` con JSON público;
+- el error usa `autoprogramming_observe_goal_timeout`, `field=executor` y
+  conserva `run_ref`/`X-Correlation-ID`;
+- el contexto del executor se cancela para no retener el cliente HTTP;
+- la respuesta se flushea igual que en el resto de endpoints MCP acotados;
+- el código queda catalogado en errores públicos i18n.
+
+Cobertura añadida:
+
+- `TestMCPAutoprogrammingObserveGoalHTTPHandlerV0TimeoutDevuelveJSONPublico`
+- `TestServerAutoprogrammingObserveGoalHTTPClienteRealRecibeTimeoutJSONV0`
+
+Validación ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPAutoprogrammingObserveGoalHTTPHandlerV0|TestMCPPublicErrorCatalogV0'`
+- `go test -count=1 ./modulos/orquesta-i18n-docs -run TestPublicErrorCatalogV0`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerAutoprogrammingObserveGoalHTTPClienteRealRecibeTimeoutJSONV0|TestServerObserveAppDirectorGoalHTTPClienteRealRecibeTimeoutJSONV0'`
+
+No cierra toda la incidencia 14: queda pendiente un smoke OPES temporal bajo
+carga real que demuestre que `supervise/status/observe_goal` no dejan clientes
+sin cuerpo mientras los agentes siguen vivos.
