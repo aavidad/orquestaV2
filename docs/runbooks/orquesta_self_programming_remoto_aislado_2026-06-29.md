@@ -12,6 +12,9 @@ autoprograme a si misma sin influir en `uso-app`, OPES productivo ni temarios.
   productivos ni `/var/run/docker.sock`.
 - No se abren puertos externos. La web queda publicada solo en
   `127.0.0.1:19039` del host y se accede por tunel SSH.
+- En el host se usa `sudo` solo para preparar `/srv/orquesta-self` y operar
+  Docker. Dentro del contenedor Orquesta debe ejecutarse como `10001:10001`, no
+  como root.
 - Las pruebas reales de conectores deben usar fakes, temporales o rutas bajo
   `/srv/orquesta-self`; nunca OPES productivo.
 - Si mas adelante se hace una prueba de temario, el material generado no se
@@ -80,8 +83,9 @@ El Goal residente no debe descubrir el proyecto desde cero. Debe recibir
 1. `go test -count=1 ./cmd/orquesta-server -run 'TestSelfProgrammingOnly'`.
 2. `docker compose config` no contiene `/home/berserk/deploy/opes`,
    `/var/run/docker.sock`, `0.0.0.0:19039:` ni rutas de temarios.
-3. `docker inspect` confirma que solo hay binds bajo `/srv/orquesta-self` y el
-   puerto esta ligado a `127.0.0.1`.
+3. `docker inspect` confirma usuario `10001:10001`, `CapDrop=["ALL"]`,
+   `no-new-privileges:true`, binds solo bajo `/srv/orquesta-self` y puerto
+   ligado a `127.0.0.1`.
 4. `/api/v0/server/status` muestra goal-first y no muestra OPES activo.
 
 ## Acceso
