@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestCodexExecResolverV0ElevaReasoningCuandoPacketPideHigh(t *testing.T) {
+func TestCodexExecResolverV0NoElevaReasoningPorCapacityHigh(t *testing.T) {
 	profile := codexProfileForTestV0(t)
 	profile.ReasoningEffort = "medium"
 	spec := codexSpecForTestV0()
@@ -20,7 +20,7 @@ func TestCodexExecResolverV0ElevaReasoningCuandoPacketPideHigh(t *testing.T) {
 		t.Fatalf("issues inesperadas: %+v", issues)
 	}
 
-	requireWrapperReasoningForTestV0(t, profile.RuntimeWorkDir, "high")
+	requireWrapperReasoningForTestV0(t, profile.RuntimeWorkDir, "medium")
 }
 
 func TestCodexExecResolverV0ConservaXHighCuandoPacketLoPide(t *testing.T) {
@@ -36,6 +36,21 @@ func TestCodexExecResolverV0ConservaXHighCuandoPacketLoPide(t *testing.T) {
 	}
 
 	requireWrapperReasoningForTestV0(t, profile.RuntimeWorkDir, "xhigh")
+}
+
+func TestCodexExecResolverV0UsaMediumSiPerfilNoDeclaraReasoning(t *testing.T) {
+	profile := codexProfileForTestV0(t)
+	profile.ReasoningEffort = ""
+	spec := codexSpecForTestV0()
+	spec.AgentPacket.CapacityLevel = "high"
+
+	_, issues := NewCodexExecResolverV0(profile).
+		ResolveExternalAgentProcessCommandV0(context.Background(), spec)
+	if len(issues) != 0 {
+		t.Fatalf("issues inesperadas: %+v", issues)
+	}
+
+	requireWrapperReasoningForTestV0(t, profile.RuntimeWorkDir, "medium")
 }
 
 func requireWrapperReasoningForTestV0(t *testing.T, runtimeWorkDir string, effort string) {

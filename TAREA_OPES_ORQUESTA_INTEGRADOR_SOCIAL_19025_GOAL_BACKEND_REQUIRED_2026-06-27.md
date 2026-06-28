@@ -399,3 +399,34 @@ Accion esperada: Orquesta debe aceptar un perfil OPES compacto por defecto
 (`medium`, salida breve, ACK/evidencia corta) y elevar esfuerzo solo por tarea o
 subrol cuando el Director OPES lo pida expresamente. Tambien conviene exponer en
 estado/API el perfil efectivo usado por cada agente para auditar consumo.
+
+### Revalidacion 2026-06-28
+
+Estado del repo actual:
+
+- El backend Goal requerido ya aparece como diagnostico visible de configuracion
+  efectiva cuando `ORQUESTA_CODEX_GOAL_BACKEND` no esta definido y la ruta
+  external-work no esta en modo legacy. La accion publicada es reiniciar con
+  `ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio`.
+- `external-work/run` ya conserva causa publica accionable cuando falla el
+  launcher (`codex_app_server_control_socket_missing`,
+  `codex_app_server_goal_active_timeout`, etc.) y hay cobertura en
+  `external_work_run_flow_v0_test.go` / `opes_bridge_drain_test.go`.
+- `GoalWorkSpecV0` de external-work ya incluye campos OPES seguros y payload
+  refs (`course_root_abs`, `topic_dir_abs`, `required_read_refs`,
+  `required_outputs`, `output_contract`, resumen de input fields), con cobertura
+  en `goal_spec_v0_test.go` y en el flujo Codex stack.
+- El smoke temporal real
+  `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`
+  cerro 24/24 jobs con ruta goal-first, sin loop legacy.
+- Se corrige esta incidencia concreta de consumo: el wrapper Codex deja de
+  elevar `model_reasoning_effort` de `medium` a `high` solo porque
+  `AgentPacket.CapacityLevel=high`. El esfuerzo efectivo queda gobernado por el
+  perfil (`ORQUESTA_CODEX_REASONING_EFFORT`, default `medium`) y solo `xhigh`
+  sigue como elevacion explicita desde el paquete. Prueba:
+  `go test -count=1 ./modulos/orquesta-runtime-codex`.
+
+Pendiente no cerrado por este ajuste: crear una fase de promocion canonica /
+integracion editorial cuando un subrol OPES entregue material `integrable` fuera
+del Markdown canonico. Ese cierre pertenece a la composicion/contrato OPES, no a
+la politica generica de esfuerzo Codex.
