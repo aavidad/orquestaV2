@@ -631,8 +631,10 @@ fija que una run `running` con proceso verificado como `stopped` pero con
 progreso en `ack_registered_cleanup` no recomienda reconciliacion agresiva:
 publica `running_stale_no_process` con razon
 `running_stale_no_live_process_pending_ack` y accion
-`wait_for_ack_before_reconcile`. La clasificacion neutral sigue cubierta por
-`TestClassifyRunLivenessV0AckPendienteNoEsSeguroReconciliar`.
+`wait_for_ack_before_reconcile`. Tambien expone senales agregadas publicas
+cuando hay stats causales: `process_alive_count`, `ack_detected`,
+`last_ack_at`, `last_output_at` y `last_artifact_at`. La clasificacion neutral
+sigue cubierta por `TestClassifyRunLivenessV0AckPendienteNoEsSeguroReconciliar`.
 
 Evidencia adicional 2026-06-26: `autoprogramming/status` diagnostica
 `external_work_accepted_stopped_without_delivery` cuando una run external-work

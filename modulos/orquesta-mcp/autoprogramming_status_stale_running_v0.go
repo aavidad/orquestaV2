@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 )
 
@@ -115,29 +116,29 @@ func mcpAutoprogrammingStaleRunningActionForCandidateV0(
 			liveness := mcpAutoprogrammingRunLivenessV0(*observed.Stats)
 			switch liveness.Class {
 			case orquestaruncoordinator.RunLivenessClassRunningWithoutRecentStatsV0:
-				return mcpAutoprogrammingActionableRunFromCandidateV0(
+				return mcpAutoprogrammingActionableRunWithObservedStatsV0(mcpAutoprogrammingActionableRunFromCandidateV0(
 					candidate,
 					mcpAutoprogrammingActionRunningWithoutRecentStatsV0,
 					"info",
 					firstNonEmptyMCPV0(liveness.Reason, "queue_candidate_running_requires_liveness_confirmation"),
 					firstNonEmptyMCPV0(liveness.RecommendedAction, "observe_run_ref_with_process_refs_before_reconcile"),
-				), true
+				), observed), true
 			case orquestaruncoordinator.RunLivenessClassRunningStaleNoProcessV0:
-				return mcpAutoprogrammingActionableRunFromCandidateV0(
+				return mcpAutoprogrammingActionableRunWithObservedStatsV0(mcpAutoprogrammingActionableRunFromCandidateV0(
 					candidate,
 					mcpAutoprogrammingActionRunningStaleNoProcessV0,
 					"warning",
 					firstNonEmptyMCPV0(liveness.Reason, "running_stale_no_live_process_detected"),
 					firstNonEmptyMCPV0(liveness.RecommendedAction, "reconcile_if_no_live_process_or_wait_for_late_ack"),
-				), true
+				), observed), true
 			default:
-				return mcpAutoprogrammingActionableRunFromCandidateV0(
+				return mcpAutoprogrammingActionableRunWithObservedStatsV0(mcpAutoprogrammingActionableRunFromCandidateV0(
 					candidate,
 					mcpAutoprogrammingActionRunningWithoutRecentStatsV0,
 					"info",
 					firstNonEmptyMCPV0(liveness.Reason, "queue_candidate_running_requires_liveness_confirmation"),
 					firstNonEmptyMCPV0(liveness.RecommendedAction, "observe_run_ref_with_process_refs_before_reconcile"),
-				), true
+				), observed), true
 			}
 		}
 		return mcpAutoprogrammingActionableRunFromCandidateV0(
@@ -267,6 +268,96 @@ func mcpAutoprogrammingActionableRunFromCandidateV0(
 		RecommendedAction: strings.TrimSpace(recommendedAction),
 		EvidenceRefs:      compactStringsMCPV0(candidate.EvidenceRefs),
 	}
+}
+
+func mcpAutoprogrammingActionableRunWithObservedStatsV0(
+	action MCPAutoprogrammingActionableRunV0,
+	observed *MCPDirectorStatsToolResultV0,
+) MCPAutoprogrammingActionableRunV0 {
+	if observed == nil || observed.Stats == nil {
+		return action
+	}
+	stats := *observed.Stats
+	liveness := mcpAutoprogrammingRunLivenessV0(stats)
+	action.ProcessAliveCount = liveness.AgentsLive
+	action.AckDetected, action.LastAckAt = mcpAutoprogrammingStatsAckSummaryV0(stats)
+	action.LastOutputAt = mcpAutoprogrammingStatsLastActivityAtV0(stats)
+	action.LastArtifactAt = mcpAutoprogrammingStatsLastArtifactAtV0(stats)
+	return action
+}
+
+func mcpAutoprogrammingStatsAckSummaryV0(
+	stats orquestacionnucleoapp.DirectorRunStatsV0,
+) (bool, string) {
+	lastAckAt := ""
+	ackDetected := false
+	for _, task := range stats.Progress.Tasks {
+		ackDetected = ackDetected || task.SecondsSinceAck > 0 || strings.TrimSpace(task.LastAckAt) != ""
+		lastAckAt = maxMCPAutoprogrammingTimestampV0(lastAckAt, task.LastAckAt)
+	}
+	for _, agent := range stats.Agents {
+		if agent.LastProgress == nil {
+			continue
+		}
+		ackDetected = ackDetected ||
+			agent.LastProgress.SecondsSinceAck > 0 ||
+			strings.TrimSpace(agent.LastProgress.LastAckAt) != ""
+		lastAckAt = maxMCPAutoprogrammingTimestampV0(lastAckAt, agent.LastProgress.LastAckAt)
+	}
+	return ackDetected, lastAckAt
+}
+
+func mcpAutoprogrammingStatsLastActivityAtV0(
+	stats orquestacionnucleoapp.DirectorRunStatsV0,
+) string {
+	last := ""
+	for _, task := range stats.Progress.Tasks {
+		last = maxMCPAutoprogrammingTimestampV0(last, task.LastActivityAt)
+	}
+	for _, agent := range stats.Agents {
+		if agent.LastProgress == nil {
+			continue
+		}
+		last = maxMCPAutoprogrammingTimestampV0(last, agent.LastProgress.LastActivityAt)
+	}
+	return last
+}
+
+func mcpAutoprogrammingStatsLastArtifactAtV0(
+	stats orquestacionnucleoapp.DirectorRunStatsV0,
+) string {
+	last := ""
+	for _, task := range stats.Progress.Tasks {
+		if strings.TrimSpace(task.DeliveryRef) == "" {
+			continue
+		}
+		last = maxMCPAutoprogrammingTimestampV0(last, firstNonEmptyMCPV0(task.LastActivityAt, task.LastAckAt))
+	}
+	for _, agent := range stats.Agents {
+		if agent.LastProgress == nil || strings.TrimSpace(agent.LastProgress.DeliveryRef) == "" {
+			continue
+		}
+		last = maxMCPAutoprogrammingTimestampV0(
+			last,
+			firstNonEmptyMCPV0(agent.LastProgress.LastActivityAt, agent.LastProgress.LastAckAt),
+		)
+	}
+	return last
+}
+
+func maxMCPAutoprogrammingTimestampV0(
+	current string,
+	candidate string,
+) string {
+	current = strings.TrimSpace(current)
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return current
+	}
+	if current == "" || candidate > current {
+		return candidate
+	}
+	return current
 }
 
 func mcpAutoprogrammingCandidateHasEvidenceV0(

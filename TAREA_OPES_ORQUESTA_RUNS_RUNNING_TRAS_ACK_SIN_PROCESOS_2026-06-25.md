@@ -79,6 +79,9 @@ Cambios verificados:
   progreso en `ack_registered_cleanup`. La acción pública pasa a
   `wait_for_ack_before_reconcile`, no a relanzar ni a reconciliar de forma
   agresiva.
+- Esa misma regresión fija señales agregadas en `stale_running[]` cuando hay
+  stats causales: `process_alive_count`, `ack_detected`, `last_ack_at`,
+  `last_output_at` y `last_artifact_at`.
 - `TestClassifyRunLivenessV0AckPendienteNoEsSeguroReconciliar` mantiene la
   regla neutral de liveness: si hay ACK/cleanup pendiente, el stale no es seguro
   para reconciliación automática.
@@ -87,9 +90,6 @@ Cambios verificados:
 
 Pendiente real:
 
-- Agregar a la superficie pública de run campos agregados del estilo
-  `ack_detected`, `last_output_at` y `last_artifact_at` cuando existan datos
-  causales suficientes, sin inventarlos desde strings ni rutas OPES.
 - Probar una tanda OPES temporal pequeña con ACKs reales ya escritos y procesos
   terminados, verificando que `autoprogramming/status` no queda en
   `supervise:queue` y que el cierre causal se materializa sin relanzar trabajo.

@@ -971,6 +971,7 @@ func TestMCPAutoprogrammingStatusExecutorV0ProcesoParadoConAckCleanupEsperaACKV0
 						AgentRequestID: "agent-ref-running-process-stopped-ack-cleanup-001",
 						DirectorProgressTemporalV0: orquestacionnucleoapp.DirectorProgressTemporalV0{
 							Classification: orquestacionnucleoapp.DirectorProgressClassificationAckCleanupV0,
+							LastActivityAt: "2026-06-25T20:11:00Z",
 							LastAckAt:      "2026-06-25T20:10:00Z",
 						},
 					}},
@@ -980,9 +981,11 @@ func TestMCPAutoprogrammingStatusExecutorV0ProcesoParadoConAckCleanupEsperaACKV0
 					Status:         orquestacionnucleoapp.DirectorAgentStatusRunningV0,
 					InFlight:       true,
 					LastProgress: &orquestacionnucleoapp.DirectorAgentProgressV0{
-						TaskRef: "task-ref-running-process-stopped-ack-cleanup-001",
+						TaskRef:     "task-ref-running-process-stopped-ack-cleanup-001",
+						DeliveryRef: "delivery-ref-running-process-stopped-ack-cleanup-001",
 						DirectorProgressTemporalV0: orquestacionnucleoapp.DirectorProgressTemporalV0{
 							Classification: orquestacionnucleoapp.DirectorProgressClassificationAckCleanupV0,
+							LastActivityAt: "2026-06-25T20:12:00Z",
 							LastAckAt:      "2026-06-25T20:10:00Z",
 						},
 					},
@@ -1016,7 +1019,12 @@ func TestMCPAutoprogrammingStatusExecutorV0ProcesoParadoConAckCleanupEsperaACKV0
 		len(result.StaleRunning) != 1 ||
 		result.StaleRunning[0].Code != "running_stale_no_process" ||
 		result.StaleRunning[0].Reason != "running_stale_no_live_process_pending_ack" ||
-		result.StaleRunning[0].RecommendedAction != "wait_for_ack_before_reconcile" {
+		result.StaleRunning[0].RecommendedAction != "wait_for_ack_before_reconcile" ||
+		result.StaleRunning[0].ProcessAliveCount != 0 ||
+		!result.StaleRunning[0].AckDetected ||
+		result.StaleRunning[0].LastAckAt != "2026-06-25T20:10:00Z" ||
+		result.StaleRunning[0].LastOutputAt != "2026-06-25T20:12:00Z" ||
+		result.StaleRunning[0].LastArtifactAt != "2026-06-25T20:12:00Z" {
 		t.Fatalf("queue_health=%+v stale_running=%+v", result.QueueHealth, result.StaleRunning)
 	}
 }
