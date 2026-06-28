@@ -72,3 +72,30 @@ Orquesta debe hacer una de estas cosas:
 4. entregar artefactos o ACK de bloqueo real.
 
 No debe cerrar `stopped` sin agente, sin entrega y sin motivo operativo visible.
+
+## Revalidación Orquesta 2026-06-28
+
+Estado: revalidada como cubierta para el contrato público actual de Orquesta.
+
+Evidencia:
+
+- `TestCodexStackRunSupervisorStoppedNoDeliveryDiagnosticsMCPV0ExponeExternalWorkVisualSinEntrega`
+  reproduce la run
+  `run-opes-psicologo-rework-visual-019-030-20260626` con evidencias de
+  external-work aceptado/encolado/coordinado y valida que un `stopped` sin
+  agentes ni entregas emite
+  `external_work_accepted_stopped_without_delivery`.
+- El diagnóstico incluye `agents_requested=0`, `started_agents=0`,
+  `in_flight=0`, `deliveries=0` y acción
+  `relaunch_or_replan_external_work_with_causal_error`.
+- `TestMCPDirectorStatsToolExecutorV0DiagnosticaExternalWorkStoppedSinEntrega`
+  fija el mismo issue en `orquesta.director.stats.v0`.
+- `TestMCPAutoprogrammingStatusExecutorV0DiagnosticaExternalWorkStoppedSinEntregaV0`
+  valida que `autoprogramming/status` propaga el patrón como acción pública, no
+  como terminal válido silencioso.
+
+Frontera:
+
+- No se reejecutó la ola productiva de rework visual Psicólogo 019-030. La
+  corrección verificable es que Orquesta ya no puede dejar ese patrón sin causa
+  accionable visible para operador/director.

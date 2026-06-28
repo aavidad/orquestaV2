@@ -76,3 +76,31 @@ En Tractorista AP el contenido textual y tests existen, pero faltan integración
 HTML/RAG/visuales. Orquesta aceptó el cierre y no lanzó nada. El trabajo tuvo
 que continuar con auditoría humana y subagentes externos, dejando Orquesta como
 fuente de fallo documentada en lugar de director autónomo.
+
+## Revalidación Orquesta 2026-06-28
+
+Estado: revalidada como cubierta para el contrato público actual de Orquesta.
+
+Evidencia:
+
+- `TestCodexStackRunSupervisorNoAgentMaterializedDiagnosticsMCPV0ExponeExternalWorkDoneSinAgentes`
+  valida que una run external-work terminal `done` sin agentes arrancados ni
+  entregas emite el diagnóstico
+  `external_work_accepted_no_agent_materialized`, con
+  `terminal_status=done`, `deliveries=0` y acción
+  `relaunch_or_replan_external_work_with_causal_error`.
+- `TestMCPDirectorStatsToolExecutorV0DiagnosticaExternalWorkDoneSinAgenteMaterializado`
+  fija el mismo issue en `orquesta.director.stats.v0`.
+- `TestMCPAutoprogrammingStatusExecutorV0DiagnosticaExternalWorkDoneSinAgenteMaterializadoV0`
+  valida que `autoprogramming/status` lo propaga como diagnóstico/actionable run
+  y no lo presenta como cierre silencioso válido.
+- La salida del supervisor añade acciones:
+  `relaunch_or_replan_external_work_with_causal_error`,
+  `inspect_external_work_payload_and_runtime_binding` y
+  `do_not_mark_completed_without_agent_start_or_delivery`.
+
+Frontera:
+
+- No se reejecutó el cierre productivo de Tractorista AP. La corrección
+  verificable es que Orquesta ya no deja este patrón como `done` opaco sin
+  agente, ACK o producto: lo convierte en diagnóstico causal público.

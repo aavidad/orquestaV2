@@ -82,3 +82,31 @@ En esta ejecución, la auditoría local sí detectó fallos reales:
 5. Añadir prueba de regresión con un payload OPES de QA visual que exige
    agentes y verifica que no queda en `wait-subagents-terminal-without-delivery`
    sin diagnóstico causal.
+
+## Revalidación Orquesta 2026-06-28
+
+Estado: revalidada como cubierta para el contrato público actual de Orquesta.
+
+Evidencia:
+
+- `TestCodexStackRunSupervisorRequestedNotStartedDiagnosticsMCPV0ExponeExternalWorkQAVisual`
+  reproduce la run
+  `run-opes-qa-visual-remota-tcae-psicologo-asg-operario-20260626` con
+  `wait-subagents-terminal-without-delivery` y valida que
+  `/api/v0/runs/supervise` expone
+  `external_work_agent_requested_not_started`, `requested_agents=1`,
+  `started_agents=0`, `in_flight=0` y la acción
+  `retry_materialization_or_check_capacity_auth_runtime_queue_outbox_policy`.
+- `TestMCPDirectorStatsToolExecutorV0DiagnosticaExternalWorkAgenteSolicitadoNoArrancado`
+  fija que `orquesta.director.stats.v0` publica el issue
+  `external_work_agent_requested_not_started` en vez de dejar sólo el blocker
+  genérico.
+- La salida del supervisor añade acciones públicas:
+  `retry_materialization`, `check_capacity_auth_runtime_queue_outbox_policy` y
+  `do_not_mark_completed_without_agent_start_or_delivery`.
+
+Frontera:
+
+- No se reejecutó la QA visual productiva de Psicólogo/ASG/Operario. La
+  corrección verificable es que Orquesta ya no deja este patrón sin diagnóstico
+  causal ni lo presenta como cierre válido.
