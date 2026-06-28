@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 
+	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestaopesbridge "orquesta/modulos/orquesta-opes-bridge"
 	orquestaopesconnector "orquesta/modulos/orquesta-opes-connector"
 )
@@ -209,6 +211,20 @@ func runOPESDrainSingleOnceV0(
 			continue
 		}
 		result.ChangeRef = request.AppChangeRequest.ChangeRef
+		if evaluation, blocked := opesBridgeExternalCapabilityBlockedV0(
+			request.AppChangeRequest,
+			config.ExternalCapabilities,
+		); blocked {
+			summary.Skipped++
+			result.Status = "external_capability_missing"
+			result.NextActions = opesBridgeExternalCapabilityNextActionsV0(evaluation)
+			summary.Results = append(summary.Results, result)
+			summary.Errors = append(summary.Errors, opesDrainPublicErrorV0{
+				JobRef: job.ID,
+				Code:   opesBridgeExternalCapabilityErrorCodeV0(evaluation),
+			})
+			continue
+		}
 		if config.DryRun {
 			result.Status = "dry_run"
 			summary.Results = append(summary.Results, result)
@@ -311,4 +327,42 @@ func opesJobPayloadStringV0(payload string, key string) string {
 		return strings.TrimSpace(value)
 	}
 	return ""
+}
+
+func opesBridgeExternalCapabilityBlockedV0(
+	request orquestaappchange.AppChangeRequestV0,
+	capabilities []orquestadomainwork.DomainWorkExternalCapabilityV0,
+) (orquestadomainwork.DomainWorkExternalCapabilityEvaluationV0, bool) {
+	domainRequest, ok := orquestaappchange.DomainWorkJobRequestFromAppChangeV0(request)
+	if !ok {
+		return orquestadomainwork.DomainWorkExternalCapabilityEvaluationV0{}, false
+	}
+	evaluation := orquestadomainwork.EvaluateDomainWorkExternalCapabilitiesV0(
+		domainRequest,
+		capabilities,
+	)
+	return evaluation, !evaluation.Ready && len(evaluation.MissingRequirements) > 0
+}
+
+func opesBridgeExternalCapabilityErrorCodeV0(
+	evaluation orquestadomainwork.DomainWorkExternalCapabilityEvaluationV0,
+) string {
+	if len(evaluation.Issues) > 0 && strings.TrimSpace(evaluation.Issues[0].Code) != "" {
+		return strings.TrimSpace(evaluation.Issues[0].Code)
+	}
+	return orquestadomainwork.ErrDomainWorkExternalCapabilityMissingV0
+}
+
+func opesBridgeExternalCapabilityNextActionsV0(
+	evaluation orquestadomainwork.DomainWorkExternalCapabilityEvaluationV0,
+) []string {
+	for _, requirement := range evaluation.MissingRequirements {
+		if requirement.Kind == orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0 {
+			return []string{
+				"declare_speech_synthesis_capability",
+				"configure_or_skip_audio_asset_generation",
+			}
+		}
+	}
+	return []string{"declare_required_external_capability"}
 }

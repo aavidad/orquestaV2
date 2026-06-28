@@ -104,8 +104,8 @@ Sigue pendiente prueba real temporal con agentes/subagentes y cola OPES acotada.
 
 ## ORQ-OPES-004 capability_externa_tts_edge_host_runner
 
-Estado: parcial; contrato neutral cerrado en `orquesta-domain-work`, pendiente
-de cableado en composicion OPES temporal real.
+Estado: parcial; contrato neutral y bridge OPES cubiertos, pendiente smoke OPES
+temporal real de derivados/cierre.
 
 Problema: la generacion de audio/TTS para OPES necesita frontera de capacidad
 externa clara. Orquesta no debe asumir runner local, modelo, credenciales ni
@@ -129,8 +129,20 @@ Avance 2026-06-28:
 - `EvaluateDomainWorkExternalCapabilitiesV0` bloquea con
   `domain_work_external_capability_missing` y `operational_reason` cuando falta
   TTS;
-- sigue pendiente smoke/composicion OPES temporal que use esa capacidad y
-  registre receipt/evidencia de audio real o fake controlado.
+- `opes-drain-once` evalua la capacidad declarada por env antes de dry-run,
+  claim o submit; `generate_audio_asset` sin `speech_synthesis` queda en
+  `external_capability_missing` sin postear a Orquesta;
+- el wrapper de derivados reales bloquea `drain-once`/finalizacion con audio si
+  no se declara `ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available`;
+- el smoke fake de derivados declara `speech_synthesis` y sigue cubriendo la
+  cadena hasta `generate_audio_asset`/finalizacion. Evidencia:
+  `TestRunOPESDrainOnceV0AudioSinSpeechSynthesisNoPosteaOrquestaV0`,
+  `TestRunOPESDrainOnceV0AudioConSpeechSynthesisPosteaOrquestaV0`,
+  `TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinSpeechSynthesisV0`
+  y
+  `TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilFinalizeV0`;
+- sigue pendiente smoke OPES temporal real que use esa capacidad y registre
+  receipt/evidencia de audio real o fake controlado.
 
 ## ORQ-OPES-005 robustez_api_supervision_stream_fd_timeout
 

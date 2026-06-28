@@ -393,6 +393,9 @@ PY
       export ORQUESTA_OPES_TEMPORAL_CONFIRM="${ORQUESTA_OPES_TEMPORAL_CONFIRM:-1}"
       export ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF="${ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF:-evidence-ref-opes-derivatives-fake-goal-first}"
       export ORQUESTA_OPES_BRIDGE_PROGRAM_ID="${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-program-ref-fake-operario-001}"
+      export ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY:-available}"
+      export ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY_REF="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY_REF:-speech-synthesis-fake-opes-derivatives}"
+      export ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS:-evidence-ref-opes-derivatives-fake-speech-synthesis}"
       return
     fi
     sleep 0.1
@@ -462,6 +465,29 @@ preflight_scope_summary() {
   IFS="$old_ifs"
 }
 
+sequence_has_job_type() {
+  local needle="$1"
+  local normalized="${SEQUENCE//,/ }"
+  normalized="${normalized//;/ }"
+  local item
+  for item in $normalized; do
+    if [[ "$item" == "$needle" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+speech_synthesis_capability_available() {
+  local capability="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY:-}"
+  case "${capability,,}" in
+    1 | true | yes | y | si | available | enabled | ready | ok)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
 require_derivatives_real_preflight() {
   if [[ "$FAKE_SERVER" == "1" ]]; then
     return
@@ -494,6 +520,14 @@ require_derivatives_real_preflight() {
   if [[ "$LIMIT" != "1" && "${ORQUESTA_OPES_DERIVATIVES_ALLOW_LIMIT_GT_1:-0}" != "1" ]]; then
     echo "smoke derivados real bloqueado: usa ORQUESTA_OPES_BRIDGE_LIMIT=1 en el primer pase real" >&2
     echo "si la cola temporal ya esta aislada y revisada, exporta ORQUESTA_OPES_DERIVATIVES_ALLOW_LIMIT_GT_1=1" >&2
+    exit 2
+  fi
+  if [[ "$target_mode" == "run-until-finalize" ||
+    "$target_mode" == "run-until-final" ||
+    "$target_mode" == "drain-once" ]] &&
+    sequence_has_job_type "generate_audio_asset" &&
+    ! speech_synthesis_capability_available; then
+    echo "smoke derivados real bloqueado: generate_audio_asset requiere ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available en la composicion temporal" >&2
     exit 2
   fi
   if [[ -n "${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-}" &&
@@ -552,6 +586,7 @@ write_metadata() {
     echo "scope_summary=$(preflight_scope_summary)"
     echo "scope_filter_confirmed=${ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED:-0}"
     echo "dedicated_temporal_queue=${ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE:-0}"
+    echo "speech_synthesis_capability=${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY:-}"
     echo "goal_backend=${ORQUESTA_CODEX_GOAL_BACKEND:-}"
     echo "goal_first_confirmed=${ORQUESTA_OPES_DERIVATIVES_ORQUESTA_GOAL_FIRST_CONFIRMED:-0}"
     echo "output_dir=$SMOKE_OUT_DIR"

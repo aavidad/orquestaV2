@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestaopesbridge "orquesta/modulos/orquesta-opes-bridge"
 )
 
@@ -29,6 +30,7 @@ type opesDrainConfigV0 struct {
 	RunConfig                    orquestaopesbridge.JobRunConfigV0
 	InputLedger                  externalBridgeInputLedgerV0
 	Destination                  opesDrainDestinationPolicyV0
+	ExternalCapabilities         []orquestadomainwork.DomainWorkExternalCapabilityV0
 }
 
 func opesDrainConfigFromEnvV0() (opesDrainConfigV0, error) {
@@ -93,8 +95,9 @@ func opesDrainConfigFromEnvWithBaseURLV0(
 			PriorityScore: intEnvOrDefaultV0(envOPESBridgePriorityV0, 70),
 			RequestedBy:   "orquesta-opes-bridge",
 		},
-		InputLedger: inputLedger,
-		Destination: destination,
+		InputLedger:          inputLedger,
+		Destination:          destination,
+		ExternalCapabilities: opesBridgeExternalCapabilitiesFromEnvV0(),
 	}, nil
 }
 
@@ -152,4 +155,40 @@ func parseOPESBridgeJobTypeSequenceV0(raw string) []string {
 		return []string{}
 	}
 	return out
+}
+
+func opesBridgeExternalCapabilitiesFromEnvV0() []orquestadomainwork.DomainWorkExternalCapabilityV0 {
+	raw := strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisCapabilityV0))
+	if raw == "" {
+		return []orquestadomainwork.DomainWorkExternalCapabilityV0{}
+	}
+	available, reason := opesBridgeCapabilityAvailabilityFromEnvV0(raw)
+	reason = firstNonEmptyV0(strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisReasonV0)), reason)
+	capabilityRef := strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisCapabilityRefV0))
+	if capabilityRef == "" {
+		capabilityRef = orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0
+	}
+	return []orquestadomainwork.DomainWorkExternalCapabilityV0{
+		orquestadomainwork.NormalizeDomainWorkExternalCapabilityV0(
+			orquestadomainwork.DomainWorkExternalCapabilityV0{
+				CapabilityRef:     capabilityRef,
+				Kind:              orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0,
+				Available:         available,
+				OperationalReason: reason,
+				EvidenceRefs:      parseOPESBridgeJobTypeSequenceV0(os.Getenv(envOPESBridgeSpeechSynthesisEvidenceRefsV0)),
+			},
+		),
+	}
+}
+
+func opesBridgeCapabilityAvailabilityFromEnvV0(raw string) (bool, string) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes", "y", "si", "available", "enabled", "ready", "ok":
+		return true, ""
+	case "0", "false", "no", "n", "unavailable", "disabled", "missing", "blocked":
+		return false, orquestadomainwork.DomainWorkExternalCapabilityReasonMissingV0 +
+			":" + orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0
+	default:
+		return false, "speech_synthesis_capability_invalid"
+	}
 }

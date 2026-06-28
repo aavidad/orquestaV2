@@ -90,6 +90,22 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 			envOPESBridgeWaitResidentIntervalMSV0,
 			strconv.Itoa(intEnvOrDefaultV0(envOPESBridgeWaitResidentIntervalMSV0, int(defaultOPESBridgeResidentDispatchIntervalV0/time.Millisecond))),
 		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeSpeechSynthesisCapabilityV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisCapabilityV0)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeSpeechSynthesisCapabilityRefV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisCapabilityRefV0)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeSpeechSynthesisEvidenceRefsV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisEvidenceRefsV0)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeSpeechSynthesisReasonV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisReasonV0)),
+		),
 		serverConfigSettingFromRegistryV0(envCapacityReasoningEffortV0, string(stackCapacity.ReasoningEffort)),
 		serverConfigSettingFromRegistryV0(envCapacityPolicyRefV0, stackCapacity.PolicyRef),
 		serverConfigSettingFromRegistryV0(envCapacityPoolRefV0, stackCapacity.PoolRef),

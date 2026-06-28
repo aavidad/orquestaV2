@@ -1816,6 +1816,136 @@ func TestRunOPESDrainOnceV0SecuenciaDerivadosOPESHastaAssembleTopicV0(t *testing
 	}
 }
 
+func TestRunOPESDrainOnceV0AudioSinSpeechSynthesisNoPosteaOrquestaV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-audio-001",
+			"type":           "generate_audio_asset",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   opesDerivedPayloadForDrainTestV0("generate_audio_asset"),
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	posts := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		posts++
+		t.Fatalf("no debe postear a Orquesta sin speech_synthesis: %s %s", r.Method, r.URL.Path)
+	}))
+	defer orquestaServer.Close()
+
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:     opesServer.URL,
+		OrquestaBaseURL: orquestaServer.URL,
+		Limit:           1,
+		JobType:         "generate_audio_asset",
+		HTTPTimeout:     time.Second,
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if posts != 0 ||
+		summary.Submitted != 0 ||
+		summary.Skipped != 1 ||
+		len(summary.Results) != 1 ||
+		summary.Results[0].Status != "external_capability_missing" ||
+		len(summary.Errors) != 1 ||
+		summary.Errors[0].Code != orquestadomainwork.ErrDomainWorkExternalCapabilityMissingV0 {
+		t.Fatalf("posts=%d summary=%+v", posts, summary)
+	}
+}
+
+func TestRunOPESDrainOnceV0AudioConSpeechSynthesisPosteaOrquestaV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-audio-002",
+			"type":           "generate_audio_asset",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   opesDerivedPayloadForDrainTestV0("generate_audio_asset"),
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	posts := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v0/external-work/run" || r.Method != http.MethodPost {
+			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		posts++
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"run_ref": "run-ref-audio-002",
+			"estado":  "accepted",
+		})
+	}))
+	defer orquestaServer.Close()
+
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:     opesServer.URL,
+		OrquestaBaseURL: orquestaServer.URL,
+		Limit:           1,
+		JobType:         "generate_audio_asset",
+		HTTPTimeout:     time.Second,
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+		ExternalCapabilities: []orquestadomainwork.DomainWorkExternalCapabilityV0{
+			orquestadomainwork.NormalizeDomainWorkExternalCapabilityV0(
+				orquestadomainwork.DomainWorkExternalCapabilityV0{
+					Kind:      orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0,
+					Available: true,
+				},
+			),
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if posts != 1 ||
+		summary.Submitted != 1 ||
+		summary.Skipped != 0 ||
+		len(summary.Results) != 1 ||
+		summary.Results[0].Status != "submitted" ||
+		summary.Results[0].RunRef != "run-ref-audio-002" {
+		t.Fatalf("posts=%d summary=%+v", posts, summary)
+	}
+}
+
+func TestOPESBridgeExternalCapabilitiesFromEnvV0DeclaraSpeechSynthesis(t *testing.T) {
+	t.Setenv(envOPESBridgeSpeechSynthesisCapabilityV0, "available")
+	t.Setenv(envOPESBridgeSpeechSynthesisCapabilityRefV0, "speech-synthesis-temporal")
+	t.Setenv(envOPESBridgeSpeechSynthesisEvidenceRefsV0, "evidence-ref-tts-1,evidence-ref-tts-2")
+
+	capabilities := opesBridgeExternalCapabilitiesFromEnvV0()
+
+	if len(capabilities) != 1 ||
+		!capabilities[0].Available ||
+		capabilities[0].Kind != orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0 ||
+		capabilities[0].CapabilityRef != "speech-synthesis-temporal" ||
+		strings.Join(capabilities[0].EvidenceRefs, ",") != "evidence-ref-tts-1,evidence-ref-tts-2" {
+		t.Fatalf("capabilities=%+v", capabilities)
+	}
+}
+
 func domainWorkFieldValueForDrainTestV0(
 	fields []orquestadomainwork.DomainWorkFieldV0,
 	name string,
@@ -2010,6 +2140,7 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealAceptaScopeYGoalFirstV0(t *
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
 	)
 	if err != nil {
 		t.Fatalf("preflight err=%v stdout=%s stderr=%s", err, stdout, stderr)
@@ -2021,10 +2152,23 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealAceptaScopeYGoalFirstV0(t *
 	}
 }
 
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinSpeechSynthesisV0(t *testing.T) {
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
+		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio",
+	)
+	if err == nil ||
+		!strings.Contains(stderr, "generate_audio_asset requiere ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
+}
+
 func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaProgramIDSinFiltroConfirmadoV0(t *testing.T) {
 	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
 	)
 	if err == nil ||
 		!strings.Contains(stderr, "program_id documental no basta") {
@@ -2038,6 +2182,7 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaProductivoV0(t *test
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
 		"ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM=1",
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
 	)
 	if err == nil ||
 		!strings.Contains(stderr, "no ejecutar esta cadena contra OPES productivo") {
@@ -2050,6 +2195,7 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinGoalFirstV0(t *te
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
 		"ORQUESTA_CODEX_GOAL_BACKEND=",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
 	)
 	if err == nil ||
 		!strings.Contains(stderr, "falta Orquesta temporal goal-first") {

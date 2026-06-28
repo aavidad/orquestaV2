@@ -479,6 +479,7 @@ ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=drain-once \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
+ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available \
 ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 scripts/smoke_opes_derivatives_rest.sh
@@ -495,6 +496,10 @@ el OPES temporal filtra realmente por `program_id`; como alternativa usar
 `ORQUESTA_OPES_BRIDGE_CORRELATION_ID`,
 `ORQUESTA_OPES_BRIDGE_TOPIC_ID` o
 `ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE=1`.
+Si el target es `drain-once`, `run-until-finalize` o `run-until-final` y la
+secuencia incluye `generate_audio_asset`, declarar
+`ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available`; sin esa capability
+el wrapper bloquea la prueba y `opes-drain-once` no postea el job de audio.
 
 Para dejar avanzar la secuencia completa hasta que OPES deje de exponer el
 ultimo tipo configurado pendiente despues de supervisar su run, usar el modo
@@ -514,6 +519,7 @@ ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
+ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available \
 ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_MAX_TICKS=20 \
@@ -531,6 +537,7 @@ ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
+ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available \
 ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_MAX_TICKS=20 \

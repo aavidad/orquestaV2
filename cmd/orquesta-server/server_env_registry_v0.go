@@ -141,68 +141,72 @@ const (
 	envCapacityModelRefV0        = "ORQUESTA_CAPACITY_MODEL_REF"
 	envCapacityQuotaRefV0        = "ORQUESTA_CAPACITY_QUOTA_REF"
 
-	envOPESBaseURLV0                        = "ORQUESTA_OPES_BASE_URL"
-	envOPESBaseURLLegacyV0                  = "OPES_BASE_URL"
-	envOPESTimeoutSecondsV0                 = "ORQUESTA_OPES_TIMEOUT_SECONDS"
-	envOPESDefaultMaxAttemptsV0             = "ORQUESTA_OPES_DEFAULT_MAX_ATTEMPTS"
-	envOPESBridgeEnabledV0                  = "ORQUESTA_OPES_BRIDGE_ENABLED"
-	envOPESBridgeConfirmV0                  = "ORQUESTA_OPES_BRIDGE_CONFIRM"
-	envOPESBridgeDryRunV0                   = "ORQUESTA_OPES_BRIDGE_DRY_RUN"
-	envOPESBridgeJobTypeV0                  = "ORQUESTA_OPES_BRIDGE_JOB_TYPE"
-	envOPESBridgeJobRefV0                   = "ORQUESTA_OPES_BRIDGE_JOB_REF"
-	envOPESBridgeProgramIDV0                = "ORQUESTA_OPES_BRIDGE_PROGRAM_ID"
-	envOPESBridgeTopicIDV0                  = "ORQUESTA_OPES_BRIDGE_TOPIC_ID"
-	envOPESBridgeCorrelationIDV0            = "ORQUESTA_OPES_BRIDGE_CORRELATION_ID"
-	envOPESBridgeJobTypeSequenceV0          = "ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE"
-	envOPESBridgeLimitV0                    = "ORQUESTA_OPES_BRIDGE_LIMIT"
-	envOPESBridgeTimeoutSecondsV0           = "ORQUESTA_OPES_BRIDGE_TIMEOUT_SECONDS"
-	envOPESBridgePriorityV0                 = "ORQUESTA_OPES_BRIDGE_PRIORITY"
-	envOPESBridgeIntervalSecondsV0          = "ORQUESTA_OPES_BRIDGE_INTERVAL_SECONDS"
-	envOPESBridgeInitialDelaySecondsV0      = "ORQUESTA_OPES_BRIDGE_INITIAL_DELAY_SECONDS"
-	envOPESBridgeMaxTicksV0                 = "ORQUESTA_OPES_BRIDGE_MAX_TICKS"
-	envOPESBridgeSuperviseSubmittedV0       = "ORQUESTA_OPES_BRIDGE_SUPERVISE_SUBMITTED"
-	envOPESBridgeWaitResidentSecondsV0      = "ORQUESTA_OPES_BRIDGE_WAIT_RESIDENT_SECONDS"
-	envOPESBridgeWaitResidentIntervalMSV0   = "ORQUESTA_OPES_BRIDGE_WAIT_RESIDENT_INTERVAL_MS"
-	envOPESBridgeAllowUnfilteredV0          = "ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED"
-	envOPESBridgeInputLedgerDisabledV0      = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_DISABLED"
-	envOPESBridgeInputLedgerPathV0          = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH"
-	envOPESTemporalConfirmV0                = "ORQUESTA_OPES_TEMPORAL_CONFIRM"
-	envOPESBridgeProductiveConfirmV0        = "ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM"
-	envOPESBridgeDestinationEvidenceV0      = "ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF"
-	envOPESRegistryFinalPkgEnabledV0        = "ORQUESTA_OPES_REGISTRY_FINALPKG_ENABLED"
-	envOPESRegistryFinalPkgConfirmV0        = "ORQUESTA_OPES_REGISTRY_FINALPKG_CONFIRM"
-	envOPESRegistryFinalPkgDryRunV0         = "ORQUESTA_OPES_REGISTRY_FINALPKG_DRY_RUN"
-	envOPESRegistryFinalPkgRegistryV0       = "ORQUESTA_OPES_REGISTRY_FINALPKG_REGISTRY_PATH"
-	envOPESRegistryFinalPkgCourseIDV0       = "ORQUESTA_OPES_REGISTRY_FINALPKG_COURSE_ID"
-	envOPESRegistryFinalPkgCourseRootV0     = "ORQUESTA_OPES_REGISTRY_FINALPKG_COURSE_ROOT"
-	envOPESRegistryFinalPkgTemplateRunV0    = "ORQUESTA_OPES_REGISTRY_FINALPKG_TEMPLATE_RUN_REF"
-	envOPESRegistryFinalPkgTemplateTopicV0  = "ORQUESTA_OPES_REGISTRY_FINALPKG_TEMPLATE_TOPIC_ID"
-	envOPESRegistryFinalPkgBatchSizeV0      = "ORQUESTA_OPES_REGISTRY_FINALPKG_BATCH_SIZE"
-	envOPESRegistryFinalPkgMaxInFlightV0    = "ORQUESTA_OPES_REGISTRY_FINALPKG_MAX_IN_FLIGHT"
-	envOPESRegistryFinalPkgIntervalV0       = "ORQUESTA_OPES_REGISTRY_FINALPKG_INTERVAL_SECONDS"
-	envOPESRegistryFinalPkgMaxTicksV0       = "ORQUESTA_OPES_REGISTRY_FINALPKG_MAX_TICKS"
-	envOPESRegistryFinalPkgQueueRefV0       = "ORQUESTA_OPES_REGISTRY_FINALPKG_QUEUE_REF"
-	envOPESRegistryFinalPkgReconcileV0      = "ORQUESTA_OPES_REGISTRY_FINALPKG_RECONCILE_ENABLED"
-	envOPESRegistryFinalPkgReconcileLimitV0 = "ORQUESTA_OPES_REGISTRY_FINALPKG_RECONCILE_LIMIT"
-	envOPESTopicRegistryEnabledV0           = "ORQUESTA_OPES_TOPIC_REGISTRY_ENABLED"
-	envOPESTopicRegistryToolPathV0          = "ORQUESTA_OPES_TOPIC_REGISTRY_TOOL_PATH"
-	envOPESTopicRegistryAgentIDV0           = "ORQUESTA_OPES_TOPIC_REGISTRY_AGENT_ID"
-	envOPESTopicRegistryForceV0             = "ORQUESTA_OPES_TOPIC_REGISTRY_FORCE"
-	envDomainWorkHTTPBaseURLV0              = "ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL"
-	envDomainWorkFileDirV0                  = "ORQUESTA_DOMAIN_WORK_FILE_DIR"
-	envDomainWorkFileEnabledV0              = "ORQUESTA_DOMAIN_WORK_FILE_ENABLED"
-	envDomainWorkHTTPCreatePathV0           = "ORQUESTA_DOMAIN_WORK_HTTP_CREATE_PATH"
-	envDomainWorkHTTPSubmitPathV0           = "ORQUESTA_DOMAIN_WORK_HTTP_SUBMIT_PATH"
-	envDomainWorkHTTPTimeoutSecondsV0       = "ORQUESTA_DOMAIN_WORK_HTTP_TIMEOUT_SECONDS"
-	envDomainWorkHTTPEgressModeV0           = "ORQUESTA_DOMAIN_WORK_HTTP_EGRESS_MODE"
-	envDomainWorkHTTPAllowedHostsV0         = "ORQUESTA_DOMAIN_WORK_HTTP_ALLOWED_HOSTS"
-	envRequiredTestRunnerEnabledV0          = "ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED"
-	envRequiredTestMaxOutputBytesV0         = "ORQUESTA_REQUIRED_TEST_MAX_OUTPUT_BYTES"
-	envRequiredTestOutputMaxArtifactsV0     = "ORQUESTA_REQUIRED_TEST_OUTPUT_MAX_ARTIFACTS"
-	envRequiredTestGoCommandV0              = "ORQUESTA_REQUIRED_TEST_GO_COMMAND"
-	envRequiredTestAllowedCommandsV0        = "ORQUESTA_REQUIRED_TEST_ALLOWED_COMMANDS"
-	envRequiredTestOutputDirV0              = "ORQUESTA_REQUIRED_TEST_OUTPUT_DIR"
-	envRequiredTestEnvV0                    = "ORQUESTA_REQUIRED_TEST_ENV"
+	envOPESBaseURLV0                            = "ORQUESTA_OPES_BASE_URL"
+	envOPESBaseURLLegacyV0                      = "OPES_BASE_URL"
+	envOPESTimeoutSecondsV0                     = "ORQUESTA_OPES_TIMEOUT_SECONDS"
+	envOPESDefaultMaxAttemptsV0                 = "ORQUESTA_OPES_DEFAULT_MAX_ATTEMPTS"
+	envOPESBridgeEnabledV0                      = "ORQUESTA_OPES_BRIDGE_ENABLED"
+	envOPESBridgeConfirmV0                      = "ORQUESTA_OPES_BRIDGE_CONFIRM"
+	envOPESBridgeDryRunV0                       = "ORQUESTA_OPES_BRIDGE_DRY_RUN"
+	envOPESBridgeJobTypeV0                      = "ORQUESTA_OPES_BRIDGE_JOB_TYPE"
+	envOPESBridgeJobRefV0                       = "ORQUESTA_OPES_BRIDGE_JOB_REF"
+	envOPESBridgeProgramIDV0                    = "ORQUESTA_OPES_BRIDGE_PROGRAM_ID"
+	envOPESBridgeTopicIDV0                      = "ORQUESTA_OPES_BRIDGE_TOPIC_ID"
+	envOPESBridgeCorrelationIDV0                = "ORQUESTA_OPES_BRIDGE_CORRELATION_ID"
+	envOPESBridgeJobTypeSequenceV0              = "ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE"
+	envOPESBridgeLimitV0                        = "ORQUESTA_OPES_BRIDGE_LIMIT"
+	envOPESBridgeTimeoutSecondsV0               = "ORQUESTA_OPES_BRIDGE_TIMEOUT_SECONDS"
+	envOPESBridgePriorityV0                     = "ORQUESTA_OPES_BRIDGE_PRIORITY"
+	envOPESBridgeIntervalSecondsV0              = "ORQUESTA_OPES_BRIDGE_INTERVAL_SECONDS"
+	envOPESBridgeInitialDelaySecondsV0          = "ORQUESTA_OPES_BRIDGE_INITIAL_DELAY_SECONDS"
+	envOPESBridgeMaxTicksV0                     = "ORQUESTA_OPES_BRIDGE_MAX_TICKS"
+	envOPESBridgeSuperviseSubmittedV0           = "ORQUESTA_OPES_BRIDGE_SUPERVISE_SUBMITTED"
+	envOPESBridgeWaitResidentSecondsV0          = "ORQUESTA_OPES_BRIDGE_WAIT_RESIDENT_SECONDS"
+	envOPESBridgeWaitResidentIntervalMSV0       = "ORQUESTA_OPES_BRIDGE_WAIT_RESIDENT_INTERVAL_MS"
+	envOPESBridgeSpeechSynthesisCapabilityV0    = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY"
+	envOPESBridgeSpeechSynthesisCapabilityRefV0 = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY_REF"
+	envOPESBridgeSpeechSynthesisEvidenceRefsV0  = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS"
+	envOPESBridgeSpeechSynthesisReasonV0        = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_REASON"
+	envOPESBridgeAllowUnfilteredV0              = "ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED"
+	envOPESBridgeInputLedgerDisabledV0          = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_DISABLED"
+	envOPESBridgeInputLedgerPathV0              = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH"
+	envOPESTemporalConfirmV0                    = "ORQUESTA_OPES_TEMPORAL_CONFIRM"
+	envOPESBridgeProductiveConfirmV0            = "ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM"
+	envOPESBridgeDestinationEvidenceV0          = "ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF"
+	envOPESRegistryFinalPkgEnabledV0            = "ORQUESTA_OPES_REGISTRY_FINALPKG_ENABLED"
+	envOPESRegistryFinalPkgConfirmV0            = "ORQUESTA_OPES_REGISTRY_FINALPKG_CONFIRM"
+	envOPESRegistryFinalPkgDryRunV0             = "ORQUESTA_OPES_REGISTRY_FINALPKG_DRY_RUN"
+	envOPESRegistryFinalPkgRegistryV0           = "ORQUESTA_OPES_REGISTRY_FINALPKG_REGISTRY_PATH"
+	envOPESRegistryFinalPkgCourseIDV0           = "ORQUESTA_OPES_REGISTRY_FINALPKG_COURSE_ID"
+	envOPESRegistryFinalPkgCourseRootV0         = "ORQUESTA_OPES_REGISTRY_FINALPKG_COURSE_ROOT"
+	envOPESRegistryFinalPkgTemplateRunV0        = "ORQUESTA_OPES_REGISTRY_FINALPKG_TEMPLATE_RUN_REF"
+	envOPESRegistryFinalPkgTemplateTopicV0      = "ORQUESTA_OPES_REGISTRY_FINALPKG_TEMPLATE_TOPIC_ID"
+	envOPESRegistryFinalPkgBatchSizeV0          = "ORQUESTA_OPES_REGISTRY_FINALPKG_BATCH_SIZE"
+	envOPESRegistryFinalPkgMaxInFlightV0        = "ORQUESTA_OPES_REGISTRY_FINALPKG_MAX_IN_FLIGHT"
+	envOPESRegistryFinalPkgIntervalV0           = "ORQUESTA_OPES_REGISTRY_FINALPKG_INTERVAL_SECONDS"
+	envOPESRegistryFinalPkgMaxTicksV0           = "ORQUESTA_OPES_REGISTRY_FINALPKG_MAX_TICKS"
+	envOPESRegistryFinalPkgQueueRefV0           = "ORQUESTA_OPES_REGISTRY_FINALPKG_QUEUE_REF"
+	envOPESRegistryFinalPkgReconcileV0          = "ORQUESTA_OPES_REGISTRY_FINALPKG_RECONCILE_ENABLED"
+	envOPESRegistryFinalPkgReconcileLimitV0     = "ORQUESTA_OPES_REGISTRY_FINALPKG_RECONCILE_LIMIT"
+	envOPESTopicRegistryEnabledV0               = "ORQUESTA_OPES_TOPIC_REGISTRY_ENABLED"
+	envOPESTopicRegistryToolPathV0              = "ORQUESTA_OPES_TOPIC_REGISTRY_TOOL_PATH"
+	envOPESTopicRegistryAgentIDV0               = "ORQUESTA_OPES_TOPIC_REGISTRY_AGENT_ID"
+	envOPESTopicRegistryForceV0                 = "ORQUESTA_OPES_TOPIC_REGISTRY_FORCE"
+	envDomainWorkHTTPBaseURLV0                  = "ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL"
+	envDomainWorkFileDirV0                      = "ORQUESTA_DOMAIN_WORK_FILE_DIR"
+	envDomainWorkFileEnabledV0                  = "ORQUESTA_DOMAIN_WORK_FILE_ENABLED"
+	envDomainWorkHTTPCreatePathV0               = "ORQUESTA_DOMAIN_WORK_HTTP_CREATE_PATH"
+	envDomainWorkHTTPSubmitPathV0               = "ORQUESTA_DOMAIN_WORK_HTTP_SUBMIT_PATH"
+	envDomainWorkHTTPTimeoutSecondsV0           = "ORQUESTA_DOMAIN_WORK_HTTP_TIMEOUT_SECONDS"
+	envDomainWorkHTTPEgressModeV0               = "ORQUESTA_DOMAIN_WORK_HTTP_EGRESS_MODE"
+	envDomainWorkHTTPAllowedHostsV0             = "ORQUESTA_DOMAIN_WORK_HTTP_ALLOWED_HOSTS"
+	envRequiredTestRunnerEnabledV0              = "ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED"
+	envRequiredTestMaxOutputBytesV0             = "ORQUESTA_REQUIRED_TEST_MAX_OUTPUT_BYTES"
+	envRequiredTestOutputMaxArtifactsV0         = "ORQUESTA_REQUIRED_TEST_OUTPUT_MAX_ARTIFACTS"
+	envRequiredTestGoCommandV0                  = "ORQUESTA_REQUIRED_TEST_GO_COMMAND"
+	envRequiredTestAllowedCommandsV0            = "ORQUESTA_REQUIRED_TEST_ALLOWED_COMMANDS"
+	envRequiredTestOutputDirV0                  = "ORQUESTA_REQUIRED_TEST_OUTPUT_DIR"
+	envRequiredTestEnvV0                        = "ORQUESTA_REQUIRED_TEST_ENV"
 
 	defaultCodexWaitIntervalMSV0               = 2000
 	defaultCodexStalledTicksV0                 = 300
@@ -396,6 +400,26 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "opes_bridge",
 		Label:       "Intervalo espera OPES",
 		Description: "Intervalo en milisegundos entre lecturas pasivas de director/stats durante la espera residente OPES.",
+	},
+	envOPESBridgeSpeechSynthesisCapabilityV0: {
+		Scope:       "opes_bridge",
+		Label:       "Speech synthesis OPES",
+		Description: "Declaracion opt-in de capacidad speech_synthesis para trabajos OPES que generan audio_asset.",
+	},
+	envOPESBridgeSpeechSynthesisCapabilityRefV0: {
+		Scope:       "opes_bridge",
+		Label:       "Speech synthesis ref",
+		Description: "Ref opaca de la capacidad speech_synthesis declarada por la composicion OPES bridge.",
+	},
+	envOPESBridgeSpeechSynthesisEvidenceRefsV0: {
+		Scope:       "opes_bridge",
+		Label:       "Speech synthesis evidencias",
+		Description: "Refs de evidencia asociadas a la capacidad speech_synthesis declarada por la composicion OPES bridge.",
+	},
+	envOPESBridgeSpeechSynthesisReasonV0: {
+		Scope:       "opes_bridge",
+		Label:       "Speech synthesis razon",
+		Description: "Razon operativa cuando speech_synthesis no esta disponible o se declara de forma invalida.",
 	},
 	envCapacityReasoningEffortV0: {
 		Scope:       "capacity",
