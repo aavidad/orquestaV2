@@ -28,10 +28,17 @@ func (planner idleSelfImprovementBacklogPlannerV0) loadBacklogSectionsV0() (
 	}
 	sections = append(sections, planner.loadFederatedBacklogSectionsV0()...)
 	if planner.SelfAuditBacklogEnabled {
-		sections = append(sections, selfAuditBacklogSectionsV0(context.Background(), planner.ProjectWorkDir)...)
+		sections = append(sections, selfAuditBacklogSectionsV0(planner.contextV0(), planner.ProjectWorkDir)...)
 	}
 	idleSelfImprovementAnnotateBacklogTaskIDAliasIndexV0(sections)
 	return sections, nil
+}
+
+func (planner idleSelfImprovementBacklogPlannerV0) contextV0() context.Context {
+	if planner.Context != nil {
+		return planner.Context
+	}
+	return context.Background()
 }
 
 func (planner idleSelfImprovementBacklogPlannerV0) backlogScannerDocumentRefsV0() []string {

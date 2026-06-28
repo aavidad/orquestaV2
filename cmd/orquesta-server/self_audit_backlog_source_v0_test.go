@@ -104,6 +104,49 @@ func TestIdleSelfImprovementBacklogPlannerV0IncluyeSelfAuditSoloConFlagV0(t *tes
 	}
 }
 
+func TestIdleSelfImprovementBacklogPlannerV0SelfAuditRespetaContextCanceladoV0(t *testing.T) {
+	runnerCalls := 0
+	restore := replaceSelfAuditRunnerForTestV0(func(_ context.Context, _ string, _ selfAuditCommandV0) selfAuditCommandResultV0 {
+		runnerCalls++
+		return selfAuditCommandResultV0{
+			Output: "cmd/orquesta-server/self_audit_fixture_v0.go:12:3: should replace loop with copy (S1011)\n",
+		}
+	})
+	defer restore()
+
+	projectDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0),
+		[]byte("# Backlog\n\nSin secciones Txx.\n"),
+		0o600,
+	); err != nil {
+		t.Fatalf("write backlog: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := (idleSelfImprovementBacklogPlannerV0{
+		ProjectWorkDir:          projectDir,
+		SelfAuditBacklogEnabled: true,
+		Context:                 ctx,
+	}).PlanV0(orquestaserver.IdleSelfImprovementPlanRequestV0{
+		MaxRequests: 1,
+		BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+			RequestRef: "request-ref-base",
+			ProjectRef: "project-ref-orquesta",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	if runnerCalls != 0 {
+		t.Fatalf("self-audit no debe lanzar comandos con contexto cancelado: calls=%d", runnerCalls)
+	}
+}
+
 func TestIdleSelfImprovementBacklogPlannerV0DeduplicaSelfAuditConKnownRefV0(t *testing.T) {
 	restore := replaceSelfAuditRunnerForTestV0(func(_ context.Context, _ string, command selfAuditCommandV0) selfAuditCommandResultV0 {
 		if command.ToolRef != "staticcheck" {

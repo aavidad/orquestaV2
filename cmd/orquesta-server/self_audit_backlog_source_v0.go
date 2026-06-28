@@ -43,8 +43,14 @@ func selfAuditBacklogSectionsV0(
 	if projectDir == "" {
 		return nil
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	var sections []idleSelfImprovementBacklogSectionV0
 	for _, command := range selfAuditCommandsV0() {
+		if ctx.Err() != nil {
+			break
+		}
 		result := runSelfAuditCommandV0(ctx, projectDir, command)
 		findings := selfAuditFindingsFromCommandV0(command, result)
 		for _, finding := range findings {

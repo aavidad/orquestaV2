@@ -21,12 +21,14 @@ func (supervisor serverStackSupervisorV0) PlanIdleSelfImprovementV0(
 	return (idleSelfImprovementBacklogPlannerV0{
 		ProjectWorkDir:          supervisor.projectWorkDir,
 		SelfAuditBacklogEnabled: supervisor.selfAuditBacklogEnabled,
+		Context:                 ctx,
 	}).PlanV0(request)
 }
 
 type idleSelfImprovementBacklogPlannerV0 struct {
 	ProjectWorkDir          string
 	SelfAuditBacklogEnabled bool
+	Context                 context.Context
 }
 
 func (planner idleSelfImprovementBacklogPlannerV0) PlanV0(
