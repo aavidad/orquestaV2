@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
@@ -350,6 +351,39 @@ func TestServerCodexAppServerGoalBackendV0PromueveResultadoDurableAunqueGoalSiga
 		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-file") ||
 		len(receipt.RequiredTestResults) != 1 ||
 		receipt.RequiredTestResults[0].TestRef != "test-ref-goal-active" {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get"}) {
+		t.Fatalf("calls=%v", protocol.calls)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0BloqueaGoalActivoPorTimeoutV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID:        "thread-ref-goal-timeout-001",
+			Status:          "active",
+			TimeUsedSeconds: 3,
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		Timeout:  2 * time.Second,
+	}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-timeout-001",
+		ExternalGoalRef: "thread-ref-goal-timeout-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusBlockedV0 ||
+		receipt.IssueCode != "codex_app_server_goal_active_timeout" ||
+		receipt.Summary != "codex_app_server_goal_active_timeout" ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-active-timeout") {
 		t.Fatalf("receipt=%+v", receipt)
 	}
 	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get"}) {

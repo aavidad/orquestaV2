@@ -133,7 +133,7 @@ func TestBuildExternalWorkGoalWorkSpecV0InlineaInputFieldsOperativosSeguros(t *t
 	}
 	if !externalWorkRunTestContainsStringV0(
 		spec.AcceptanceCriteria,
-		"Usar los input_fields inlineados en context_refs[input_field_value] como contrato operativo; si falta un valor por redaccion o presupuesto, bloquear con rework de dominio en vez de inventarlo.",
+		"Usar los input_fields inlineados en context_refs[input_field_value] como contrato operativo compacto; los campos omitidos por redaccion o presupuesto quedan como payload_ref y solo deben resolverse si son imprescindibles para el artefacto. Bloquear con rework de dominio solo si falta un input imprescindible, no por un campo accesorio omitido.",
 	) {
 		t.Fatalf("acceptance_criteria=%+v", spec.AcceptanceCriteria)
 	}
@@ -175,6 +175,42 @@ func TestBuildExternalWorkGoalWorkSpecV0RedactaInputFieldsSensibles(t *testing.T
 			strings.Contains(context, "secret") {
 			t.Fatalf("context_refs contiene payload: %+v", spec.ContextRefs)
 		}
+	}
+}
+
+func TestBuildExternalWorkGoalWorkSpecV0NoInlineaInputFieldsMasivos(t *testing.T) {
+	request := validExternalWorkRunRequestForTestV0()
+	largeValues := make([]string, 0, 12)
+	for i := 0; i < 12; i++ {
+		largeValues = append(largeValues, "regla editorial extensa que debe quedar solo por payload_ref "+string(rune('a'+i)))
+	}
+	request.AppChangeRequest.ExternalWork.InputFields = append(
+		request.AppChangeRequest.ExternalWork.InputFields,
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:   "opes_global_editorial_policy",
+			Values: largeValues,
+		},
+	)
+
+	spec, issues := BuildExternalWorkGoalWorkSpecV0(
+		request,
+		StartExternalWorkRunConfigV0{OccurredAt: "2026-05-10T10:00:00Z"},
+	)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	context := externalWorkRunTestContextTextV0(spec.ContextRefs)
+	for _, want := range []string{
+		"kind=input_field_payload",
+		"external_work.input_fields.opes_global_editorial_policy",
+		"input_fields.opes_global_editorial_policy no inlineado por sensibilidad, tamano o presupuesto",
+	} {
+		if !strings.Contains(context, want) {
+			t.Fatalf("context no contiene %q:\n%s", want, context)
+		}
+	}
+	if strings.Contains(context, "regla editorial extensa que debe quedar solo por payload_ref") {
+		t.Fatalf("context contiene campo masivo inlineado:\n%s", context)
 	}
 }
 

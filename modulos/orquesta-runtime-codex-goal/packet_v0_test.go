@@ -26,6 +26,8 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"go test -count=1 ./modulos/orquesta-goal",
 		"criterio-ref-goal-first",
 		"artifact-ref-goal-summary",
+		"Materializa cada artefacto requerido dentro de un write-set autorizado",
+		"<artifact_type>.json",
 		"Evidencia requerida: evidence-ref-required",
 		CodexGoalResultMarkerV0,
 		CodexGoalResultFileNameV0,

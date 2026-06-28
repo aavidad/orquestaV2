@@ -86,6 +86,7 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		ReasoningEffort: runtimeConfig.ReasoningEffort,
 		Sandbox:         runtimeConfig.Sandbox,
 		ApprovalPolicy:  runtimeConfig.ApprovalPolicy,
+		Timeout:         time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
 	}
 	return serverCodexGoalBackendV0{Starter: client, Observer: client}, nil
 }

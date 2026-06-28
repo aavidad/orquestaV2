@@ -169,6 +169,7 @@ type serverCodexAppServerGoalBackendV0 struct {
 	Sandbox         string
 	ApprovalPolicy  string
 	ServiceTier     string
+	Timeout         time.Duration
 }
 
 type serverCodexAppServerProtocolPortV0 interface {
@@ -251,10 +252,44 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 	if promoted, promotedReceipt := backend.promoteCodexAppServerActiveGoalResultFileV0(request, receipt, status); promoted {
 		return promotedReceipt, nil
 	}
+	if timedOut, timeoutReceipt := backend.codexAppServerActiveGoalTimeoutV0(request, goal, status, receipt); timedOut {
+		return timeoutReceipt, nil
+	}
 	if codexGoalWorkStatusIsTerminalV0(status) {
 		return backend.observeCodexAppServerTerminalGoalResultV0(ctx, request, receipt)
 	}
 	return receipt, nil
+}
+
+func (backend serverCodexAppServerGoalBackendV0) codexAppServerActiveGoalTimeoutV0(
+	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
+	goal *serverCodexAppServerThreadGoalV0,
+	status string,
+	receipt orquestaruntimecodexgoal.CodexGoalObservationReceiptV0,
+) (bool, orquestaruntimecodexgoal.CodexGoalObservationReceiptV0) {
+	if goal == nil || status != orquestagoal.GoalStatusRunningV0 {
+		return false, receipt
+	}
+	timeout := backend.Timeout
+	if timeout <= 0 {
+		timeout = time.Duration(defaultCodexGoalTimeoutMSV0) * time.Millisecond
+	}
+	if timeout <= 0 || goal.TimeUsedSeconds <= 0 {
+		return false, receipt
+	}
+	if time.Duration(goal.TimeUsedSeconds)*time.Second < timeout {
+		return false, receipt
+	}
+	receipt.Status = orquestagoal.GoalStatusBlockedV0
+	receipt.Summary = "codex_app_server_goal_active_timeout"
+	receipt.IssueCode = "codex_app_server_goal_active_timeout"
+	receipt.EvidenceRefs = compactServerStackStringsV0(append(
+		receipt.EvidenceRefs,
+		"evidence-ref-codex-app-server-goal-active-timeout",
+	))
+	receipt.GoalRef = strings.TrimSpace(firstNonEmptyServerStackV0(receipt.GoalRef, request.GoalRef))
+	receipt.ExternalGoalRef = strings.TrimSpace(firstNonEmptyServerStackV0(receipt.ExternalGoalRef, request.ExternalGoalRef))
+	return true, receipt
 }
 
 func (backend serverCodexAppServerGoalBackendV0) FingerprintGoalObservationV0(

@@ -19,9 +19,11 @@ const (
 
 	externalWorkGoalSpecEvidenceRefV0 = "evidence-ref-external-work-goal-spec-v0"
 
-	externalWorkGoalInputFieldMaxInlineFieldsV0 = 32
-	externalWorkGoalInputFieldMaxPurposeBytesV0 = 1200
-	externalWorkGoalInputFieldMaxTotalBytesV0   = 12000
+	externalWorkGoalInputFieldMaxInlineFieldsV0 = 16
+	externalWorkGoalInputFieldMaxPurposeBytesV0 = 700
+	externalWorkGoalInputFieldMaxTotalBytesV0   = 5000
+	externalWorkGoalInputFieldMaxValuesV0       = 8
+	externalWorkGoalInputFieldMaxRawBytesV0     = 900
 )
 
 type externalWorkGoalInputFieldBudgetV0 struct {
@@ -269,7 +271,7 @@ func externalWorkGoalAcceptanceCriteriaV0(
 ) []string {
 	criteria := append([]string(nil), domainRequest.AcceptanceCriteria...)
 	if len(domainRequest.InputFields) > 0 {
-		criteria = append(criteria, "Usar los input_fields inlineados en context_refs[input_field_value] como contrato operativo; si falta un valor por redaccion o presupuesto, bloquear con rework de dominio en vez de inventarlo.")
+		criteria = append(criteria, "Usar los input_fields inlineados en context_refs[input_field_value] como contrato operativo compacto; los campos omitidos por redaccion o presupuesto quedan como payload_ref y solo deben resolverse si son imprescindibles para el artefacto. Bloquear con rework de dominio solo si falta un input imprescindible, no por un campo accesorio omitido.")
 	}
 	for _, constraint := range domainRequest.Constraints {
 		constraint = strings.TrimSpace(constraint)
@@ -322,6 +324,9 @@ func externalWorkGoalInputFieldSummaryV0(
 	if externalWorkGoalFieldNameSensitiveV0(name) {
 		return nil, false
 	}
+	if externalWorkGoalInputFieldTooLargeForInlineV0(field) {
+		return nil, false
+	}
 	summary := map[string]any{"name": name}
 	if value := externalWorkGoalSanitizeInputValueV0(name, field.Value); value != "" {
 		summary["value"] = value
@@ -340,6 +345,15 @@ func externalWorkGoalInputFieldSummaryV0(
 		summary["payload_ref"] = payloadRef
 	}
 	return summary, true
+}
+
+func externalWorkGoalInputFieldTooLargeForInlineV0(field orquestadomainwork.DomainWorkFieldV0) bool {
+	total := len(strings.TrimSpace(field.Value)) + len(strings.TrimSpace(string(field.ValueJSON)))
+	for _, value := range field.Values {
+		total += len(strings.TrimSpace(value))
+	}
+	return len(field.Values) > externalWorkGoalInputFieldMaxValuesV0 ||
+		total > externalWorkGoalInputFieldMaxRawBytesV0
 }
 
 func externalWorkGoalInputJSONSummaryValueV0(value string) any {

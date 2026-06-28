@@ -425,3 +425,15 @@ publico y scope acotado, sin sembrar por DB interna ni compartir filesystem
 entre Orquesta y OPES. Lo pendiente pertenece al smoke real effectful:
 materializar agentes goal-first, subir artefactos, validar receipts, TTS y
 cierre hasta `completed_syllabus_package`.
+
+Avance 2026-06-28 noche 3: se ejecuto smoke real effectful acotado a
+`update_topic_registry` con Orquesta temporal goal-first y OPES temporal. El
+guard OPES se supera cuando `ORQUESTA_CODEX_PROJECT_WORKDIR` y
+`ORQUESTA_OPES_PROJECT_WORKDIR` apuntan al mismo workspace temporal; el submit
+crea run `goal_first` y `external_goal_ref` real. No cierra dentro de la
+ventana del smoke: `goal_status=running` hasta 30 ticks con
+`app_server_stdio`. Tambien se compacto `GoalWorkSpecV0` para no inlinear
+politicas OPES masivas y dejar `payload_ref`, y el observer Codex marca
+`blocked` con `codex_app_server_goal_active_timeout` cuando el goal remoto
+permanece `active` mas alla de `ORQUESTA_CODEX_GOAL_TIMEOUT_MS`. Evidencia:
+`docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`.

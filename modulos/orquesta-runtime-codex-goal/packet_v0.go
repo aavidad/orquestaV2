@@ -261,6 +261,10 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 		}
 		b.WriteString("\n")
 	}
+	if len(spec.ArtifactContracts) > 0 && len(spec.WriteSet) > 0 {
+		b.WriteString("- Materializa cada artefacto requerido dentro de un write-set autorizado. Para artefactos DomainWork, Orquesta detecta ")
+		b.WriteString("<artifact_type>.json, <artifact_type>.md, artifact.json o artifact.md directamente bajo el write-set; usa el artifact_type declarado y contenido verificable.\n")
+	}
 	b.WriteString("\nCierre:\n")
 	b.WriteString("- Devuelve complete solo con evidencias verificables.\n")
 	if spec.ClosurePolicy.RequireRequiredTests {
