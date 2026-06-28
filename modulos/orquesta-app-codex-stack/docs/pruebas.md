@@ -1630,6 +1630,13 @@ Cobertura:
   `GoalWorkStateV0` persistido; las rutas absolutas se publican solo como
   `local_path_ref`/`basename`, sin exponer `/home/alberto/Trabajo/OPES`, y el
   payload completo queda referenciado como `app_change_payload`.
+- `TestCodexStackV0ExternalWorkGoalFirstCierraSecuenciaOPESDerivadosConReceiptsLedgerV0`
+  recorre los 23 derivados OPES posteriores a `plan_temario`, desde
+  `update_topic_registry` hasta `finalize_temario_package`, usando el bridge
+  OPES fake/offline: cada run `goal_first` sube el artefacto por `DomainWork`,
+  registra receipt aceptado en el ledger y cierra la run por evidencia causal
+  `goal_domain_receipt_ledger_accepted`, sin tocar OPES productivo ni usar
+  receipts inventados.
 - `TestCodexStackV0ExternalWorkGoalFirstSinStateNoDrenaLegacy` fija que una run
   external-work contenedora sin `GoalWorkStateV0` devuelve
   `goal_first_state_missing`, no drena el loop legacy y deja accion de reparar
