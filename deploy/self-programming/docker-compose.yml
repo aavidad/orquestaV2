@@ -1,0 +1,28 @@
+services:
+  orquesta-self:
+    image: orquesta-self-programming:local
+    container_name: orquesta-self-programming
+    restart: unless-stopped
+    init: true
+    user: "10001:10001"
+    env_file:
+      - /srv/orquesta-self/orquesta-self.env
+    ports:
+      - "127.0.0.1:19039:19039"
+    volumes:
+      - /srv/orquesta-self/state:/workspace/state
+      - /srv/orquesta-self/runtime:/workspace/runtime
+      - /srv/orquesta-self/worktrees/orquesta:/workspace/project
+      - /srv/orquesta-self/codex-home:/home/orquesta/.codex:ro
+      - /srv/orquesta-self/cache/go:/home/orquesta/.cache/go-build
+      - /srv/orquesta-self/cache/gomod:/home/orquesta/go/pkg/mod
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: false
+    pids_limit: 512
+    mem_limit: 4g
+    cpus: 2

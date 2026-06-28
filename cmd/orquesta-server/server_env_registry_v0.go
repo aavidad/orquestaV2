@@ -17,6 +17,8 @@ const (
 	envServerControlPrincipalV0                      = "ORQUESTA_SERVER_CONTROL_PRINCIPAL"
 	envServerControlPermissionRefV0                  = "ORQUESTA_SERVER_CONTROL_PERMISSION_REF"
 	envServerControlPublicReasonV0                   = "ORQUESTA_SERVER_CONTROL_PUBLIC_REASON"
+	envServerSelfProgrammingOnlyV0                   = "ORQUESTA_SERVER_SELF_PROGRAMMING_ONLY"
+	envServerSelfProgrammingRootV0                   = "ORQUESTA_SERVER_SELF_PROGRAMMING_ROOT"
 	envServerTickIntervalMSV0                        = "ORQUESTA_SERVER_TICK_INTERVAL_MS"
 	envServerMaxRunsPerTickV0                        = "ORQUESTA_SERVER_MAX_RUNS_PER_TICK"
 	envServerMaxExecutionsPerTickV0                  = "ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK"
@@ -269,6 +271,16 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "control_plane",
 		Label:       "Motivo control-plane",
 		Description: "Motivo publico registrado para el modo de acceso del control-plane.",
+	},
+	envServerSelfProgrammingOnlyV0: {
+		Scope:       "self_programming",
+		Label:       "Solo autoprogramacion",
+		Description: "Perfil de composicion que permite solo autoprogramacion aislada de Orquesta y bloquea conectores productivos.",
+	},
+	envServerSelfProgrammingRootV0: {
+		Scope:       "self_programming",
+		Label:       "Raiz autoprogramacion",
+		Description: "Raiz aislada bajo la que deben vivir proyecto, runtime y estado en modo self-programming.",
 	},
 	envServerMaxRunsPerTickV0: {
 		Scope:       "server_supervisor",

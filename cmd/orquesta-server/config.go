@@ -117,8 +117,12 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		},
 		SupervisorCommand: serverSupervisorCommandFromEnvV0(executionMode, supervisorMaxExternalWaits),
 	}
+	config = orquestaserver.NormalizeConfigV0(config)
+	if err := validateServerSelfProgrammingOnlyConfigV0(config); err != nil {
+		return orquestaserver.ConfigV0{}, err
+	}
 	config.EffectiveConfig = serverEffectiveConfigFromEnvV0(config)
-	return orquestaserver.NormalizeConfigV0(config), orquestaserver.ValidateConfigV0(config)
+	return config, orquestaserver.ValidateConfigV0(config)
 }
 
 func startupCleanupModeEffectiveValueV0() string {

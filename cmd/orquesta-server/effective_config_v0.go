@@ -26,6 +26,11 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverConfigSettingFromRegistryV0(envServerControlPrincipalV0, config.ControlPlane.Principal),
 		serverConfigSettingFromRegistryV0(envServerControlPermissionRefV0, config.ControlPlane.PermissionRef),
 		serverConfigSettingFromRegistryV0(envServerControlPublicReasonV0, config.ControlPlane.PublicReason),
+		serverConfigSettingFromRegistryV0(envServerSelfProgrammingOnlyV0, strconv.FormatBool(serverSelfProgrammingOnlyFromEnvV0())),
+		serverSensitiveConfigSettingFromRegistryV0(
+			envServerSelfProgrammingRootV0,
+			configuredEnvValueV0(envServerSelfProgrammingRootV0, "self-programming-root-configured"),
+		),
 		serverConfigSettingFromRegistryV0(envServerMaxRunsPerTickV0, strconv.Itoa(config.SupervisorCommand.MaxRunsPerTick)),
 		serverConfigSettingFromRegistryV0(envServerMaxExecutionsPerTickV0, strconv.Itoa(config.SupervisorCommand.MaxExecutions)),
 		serverConfigSettingFromRegistryV0(envServerQueueLimitV0, strconv.Itoa(serverRunQueueLimitFromEnvV0())),
