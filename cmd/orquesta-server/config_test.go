@@ -193,6 +193,10 @@ func TestServerConfigFromEnvV0ObservadorGoalFirstResidentePorDefectoV0(t *testin
 	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerGoalObserverMaxItemsV0); got != "70" {
 		t.Fatalf("%s=%q want 70", envServerGoalObserverMaxItemsV0, got)
 	}
+	fingerprint := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerGoalObserverFingerprintEnabledV0)
+	if fingerprint.Value != "true" || fingerprint.Source != "defaulted" {
+		t.Fatalf("setting goal observer fingerprint=%+v", fingerprint)
+	}
 }
 
 func TestServerConfigFromEnvV0PermiteApagarObservadorGoalFirstV0(t *testing.T) {
@@ -217,6 +221,23 @@ func TestServerConfigFromEnvV0PermiteApagarObservadorGoalFirstV0(t *testing.T) {
 	interval := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerGoalObserverIntervalMSV0)
 	if interval.Value != "1500" || interval.Source != "explicit" {
 		t.Fatalf("setting goal observer interval=%+v", interval)
+	}
+}
+
+func TestServerConfigFromEnvV0PermiteApagarFingerprintObservadorGoalFirstV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envServerGoalObserverFingerprintEnabledV0, "false")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if serverGoalObserverFingerprintEnabledFromEnvV0() {
+		t.Fatalf("%s=false debe apagar la guarda", envServerGoalObserverFingerprintEnabledV0)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerGoalObserverFingerprintEnabledV0)
+	if setting.Value != "false" || setting.Source != "explicit" {
+		t.Fatalf("setting goal observer fingerprint=%+v", setting)
 	}
 }
 

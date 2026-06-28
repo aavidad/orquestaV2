@@ -31,7 +31,7 @@ func init() {
 	serverEffectiveEnvRegistryV0[envServerGoalObserverFingerprintEnabledV0] = serverEnvSettingMetadataV0{
 		Scope:       "goal_observer",
 		Label:       "Fingerprint observador goal-first",
-		Description: "Activa una guarda opt-in para saltar observaciones residentes cuando la senal externa del goal no ha cambiado.",
+		Description: "Activa por defecto una guarda opt-out para saltar observaciones residentes cuando la senal externa del goal no ha cambiado.",
 	}
 }
 
@@ -43,5 +43,5 @@ func serverGoalObserverEnabledFromEnvV0() (bool, bool) {
 }
 
 func serverGoalObserverFingerprintEnabledFromEnvV0() bool {
-	return boolEnvOrDefaultV0(envServerGoalObserverFingerprintEnabledV0, false)
+	return boolEnvOrDefaultV0(envServerGoalObserverFingerprintEnabledV0, true)
 }

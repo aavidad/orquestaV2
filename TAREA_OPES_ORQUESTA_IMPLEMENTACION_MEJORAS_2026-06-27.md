@@ -181,6 +181,18 @@ ha cambiado, cuando el ticker de T1 corra cada pocos segundos.
 La autonomía (vigilar hasta cierre) deja de tener coste por tick; solo se trabaja
 cuando hay evidencia nueva.
 
+### Revalidación 2026-06-28
+La guarda ya está implementada en `orquesta-goal` y cableada en
+`orquesta-server`: el tick residente calcula una huella barata por run, salta
+la observación cuando no cambia y conserva la observación completa solo ante
+evidencia nueva o fingerprint no disponible. El backend Codex app-server expone
+esa huella desde `GetGoalV0` sin llamada LLM.
+
+El ajuste pendiente era operativo: la variable
+`ORQUESTA_SERVER_GOAL_OBSERVER_FINGERPRINT_ENABLED` quedaba desactivada por
+defecto. Desde este corte queda activada por defecto y solo se apaga con
+`ORQUESTA_SERVER_GOAL_OBSERVER_FINGERPRINT_ENABLED=false`.
+
 ---
 
 ## M3 — Endpoint único de estado global accionable (Tier 1)
