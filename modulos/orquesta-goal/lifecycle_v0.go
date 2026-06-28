@@ -47,7 +47,8 @@ type GoalWorkStateFromLaunchRequestV0 struct {
 }
 
 type GoalWorkLifecycleIssueErrorV0 struct {
-	Field string `json:"field"`
+	Field  string            `json:"field"`
+	Issues []GoalWorkIssueV0 `json:"issues,omitempty"`
 }
 
 func (err GoalWorkLifecycleIssueErrorV0) Error() string {
@@ -130,6 +131,13 @@ func ObserveGoalWorkV0(
 	}
 	result, err := ports.Observer.ObserveGoalWorkV0(ctx, GoalObservationRequestFromStateV0(state))
 	if err != nil {
+		result = NormalizeGoalWorkResultV0(result)
+		if len(result.Issues) > 0 {
+			return GoalWorkObserveResultV0{}, GoalWorkLifecycleIssueErrorV0{
+				Field:  "goal_result",
+				Issues: append([]GoalWorkIssueV0(nil), result.Issues...),
+			}
+		}
 		return GoalWorkObserveResultV0{}, err
 	}
 	result = NormalizeGoalWorkResultV0(result)

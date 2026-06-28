@@ -236,6 +236,46 @@ func TestObserveGoalWorkV0TerminalBloqueadoNoDecideRun(t *testing.T) {
 	}
 }
 
+func TestObserveGoalWorkV0ConservaIssuesDeObserverFallidoV0(t *testing.T) {
+	store := newGoalLifecycleStoreForTestV0()
+	state := mustGoalLifecycleStateForTestV0(t)
+	if err := store.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	observer := &goalLifecycleObserverForTestV0{
+		result: GoalWorkResultV0{
+			SchemaVersion: GoalWorkResultSchemaV0,
+			Status:        GoalStatusInvalidV0,
+			GoalRef:       state.GoalRef,
+			Issues: []GoalWorkIssueV0{{
+				Code:  "codex_app_server_control_socket_missing",
+				Field: "codex_goal_backend",
+			}},
+		},
+		err: errors.New("codex_goal_observation_rejected"),
+	}
+
+	_, err := ObserveGoalWorkV0(
+		context.Background(),
+		GoalWorkObserveRequestV0{RunRef: state.RunRef},
+		GoalWorkLifecyclePortsV0{
+			Observer:   observer,
+			StateStore: store,
+		},
+	)
+	var lifecycleIssue GoalWorkLifecycleIssueErrorV0
+	if !errors.As(err, &lifecycleIssue) ||
+		lifecycleIssue.Field != "goal_result" ||
+		len(lifecycleIssue.Issues) != 1 ||
+		lifecycleIssue.Issues[0].Code != "codex_app_server_control_socket_missing" ||
+		lifecycleIssue.Issues[0].Field != "codex_goal_backend" {
+		t.Fatalf("err=%v lifecycleIssue=%+v", err, lifecycleIssue)
+	}
+	if store.saves != 1 {
+		t.Fatalf("store saves=%d", store.saves)
+	}
+}
+
 func TestGoalWorkStateMatchesListRequestV0FiltraActivos(t *testing.T) {
 	state := mustGoalLifecycleStateForTestV0(t)
 	if !GoalWorkStateMatchesListRequestV0(state, GoalWorkStateListRequestV0{ActiveOnly: true}) {
@@ -465,7 +505,7 @@ func (observer *goalLifecycleObserverForTestV0) ObserveGoalWorkV0(
 ) (GoalWorkResultV0, error) {
 	observer.requests = append(observer.requests, request)
 	if observer.err != nil {
-		return GoalWorkResultV0{}, observer.err
+		return observer.result, observer.err
 	}
 	return observer.result, nil
 }

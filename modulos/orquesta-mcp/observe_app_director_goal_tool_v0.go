@@ -171,6 +171,9 @@ func mcpObserveAppDirectorGoalPublicIssueFromErrorV0(err error) (mcpObserveAppDi
 	}
 	var lifecycleIssue orquestagoal.GoalWorkLifecycleIssueErrorV0
 	if errors.As(err, &lifecycleIssue) {
+		if issue, ok := mcpObserveAppDirectorGoalPublicIssueFromGoalIssuesV0(lifecycleIssue.Issues); ok {
+			return issue, true
+		}
 		return mcpObserveAppDirectorGoalPublicIssueForFieldV0(lifecycleIssue.Field), true
 	}
 	var coreIssue orquestacionnucleoapp.ErrorV0
@@ -182,6 +185,23 @@ func mcpObserveAppDirectorGoalPublicIssueFromErrorV0(err error) (mcpObserveAppDi
 			Code:    "observe_app_director_goal_state_not_found",
 			Field:   "goal_state",
 			Message: "goal_state_not_found",
+		}, true
+	}
+	return mcpObserveAppDirectorGoalPublicIssueV0{}, false
+}
+
+func mcpObserveAppDirectorGoalPublicIssueFromGoalIssuesV0(
+	issues []orquestagoal.GoalWorkIssueV0,
+) (mcpObserveAppDirectorGoalPublicIssueV0, bool) {
+	for _, issue := range issues {
+		code := strings.TrimSpace(issue.Code)
+		if code == "" {
+			continue
+		}
+		return mcpObserveAppDirectorGoalPublicIssueV0{
+			Code:    code,
+			Field:   strings.TrimSpace(issue.Field),
+			Message: code,
 		}, true
 	}
 	return mcpObserveAppDirectorGoalPublicIssueV0{}, false

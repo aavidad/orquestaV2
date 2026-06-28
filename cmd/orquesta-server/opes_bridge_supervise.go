@@ -185,13 +185,25 @@ func opesBridgeObserveSubmittedGoalV0(
 	)
 	if err != nil {
 		result.SupervisionStatus = "retry_pending"
-		result.SupervisionStopReason = "goal_observation_unavailable"
+		result.SupervisionStopReason = opesBridgeGoalObservationStopReasonV0(err)
 		return
 	}
 	result.SupervisionStatus = supervision.Status
 	result.SupervisionStopReason = supervision.StopReason
 	result.SupervisionProcessRef = supervision.ProcessRef
 	result.SupervisionEvidenceRef = supervision.EvidenceRef
+}
+
+func opesBridgeGoalObservationStopReasonV0(err error) string {
+	const fallback = "goal_observation_unavailable"
+	if err == nil {
+		return fallback
+	}
+	code := compactCommandHTTPErrorCodeV0(err.Error())
+	if code == "" {
+		return fallback
+	}
+	return fallback + ":" + code
 }
 
 func opesBridgePersistSubmittedGoalFirstMetadataV0(

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
 func TestMCPObserveAppDirectorGoalHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
@@ -109,6 +110,27 @@ func TestMCPObserveAppDirectorGoalHTTPHandlerV0ErrorOperativoNoDevuelve500(t *te
 		result.Errores[0].Field != "goal_state_store" ||
 		result.Errores[0].Message != "goal_state_store_not_configured" {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPObserveAppDirectorGoalErrorResultFromErrorV0PreservaIssueCodeV0(t *testing.T) {
+	result, ok := NewMCPObserveAppDirectorGoalErrorResultFromErrorV0(
+		MCPObserveAppDirectorGoalToolInputV0{RunRef: "run-ref-goal-issue-001"},
+		orquestagoal.GoalWorkLifecycleIssueErrorV0{
+			Field: "goal_result",
+			Issues: []orquestagoal.GoalWorkIssueV0{{
+				Code:  "codex_app_server_control_socket_missing",
+				Field: "codex_goal_backend",
+			}},
+		},
+	)
+	if !ok ||
+		result.Estado != MCPObserveAppDirectorGoalEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "codex_app_server_control_socket_missing" ||
+		result.Errores[0].Field != "codex_goal_backend" ||
+		result.Errores[0].Message != "codex_app_server_control_socket_missing" {
+		t.Fatalf("ok=%v result=%+v", ok, result)
 	}
 }
 

@@ -269,6 +269,93 @@ func TestRunOPESDrainOnceV0GoalFirstSupervisionObservaGoalSinSupervisorLegacyV0(
 	}
 }
 
+func TestRunOPESDrainOnceV0GoalFirstObserveErrorConservaCodigoPublicoV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-goal-observe-error-001",
+			"type":           "draft_content_block",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   `{"topic_id":"topic-ref-001","title":"Bloque goal observe error"}`,
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	observes := 0
+	supervisions := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v0/apps/director/goal/observe":
+			observes++
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"estado": "error",
+				"errores_publicos": []map[string]string{{
+					"code":  "codex_app_server_control_socket_missing",
+					"field": "codex_goal_backend",
+				}},
+			})
+		case "/api/v0/runs/supervise":
+			supervisions++
+			t.Fatalf("goal-first con observe_goal fallido no debe llamar a runs/supervise")
+		default:
+			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer orquestaServer.Close()
+
+	ledger, err := newFileExternalBridgeInputLedgerV0(
+		filepath.Join(t.TempDir(), "external-bridge-input-ledger.json"),
+	)
+	if err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	if err := opesBridgeRecordSubmittedV0(
+		context.Background(),
+		ledger,
+		orquestaopesconnector.ExternalJobV0{ID: "job-ref-goal-observe-error-001"},
+		"run-ref-goal-observe-error-001",
+		"change-ref-goal-observe-error-001",
+		externalBridgeInputRunMetadataV0{
+			RoutePolicy:           "goal_first",
+			DirectorExecutionMode: "goal_first",
+			GoalRef:               "goal-ref-goal-observe-error-001",
+			ExternalGoalRef:       "thread-ref-goal-observe-error-001",
+			NextActions:           []string{"observe_goal"},
+		},
+	); err != nil {
+		t.Fatalf("record ledger: %v", err)
+	}
+
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:        opesServer.URL,
+		OrquestaBaseURL:    orquestaServer.URL,
+		Limit:              1,
+		JobType:            "draft_content_block",
+		HTTPTimeout:        time.Second,
+		SuperviseSubmitted: true,
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+		InputLedger: ledger,
+	})
+	if err != nil ||
+		observes != 1 ||
+		supervisions != 0 ||
+		summary.AlreadySubmitted != 1 ||
+		summary.Results[0].SupervisionStatus != "retry_pending" ||
+		!strings.Contains(summary.Results[0].SupervisionStopReason, "codex_app_server_control_socket_missing") {
+		t.Fatalf("observes=%d supervisions=%d summary=%+v err=%v", observes, supervisions, summary, err)
+	}
+}
+
 func TestRunOPESDrainOnceV0AlreadySubmittedGoalFirstLedgerAntiguoPivotaPorStatsAntesDeSupervisorV0(t *testing.T) {
 	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
