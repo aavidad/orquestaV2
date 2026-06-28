@@ -1,9 +1,11 @@
 package orquestamcp
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const (
@@ -11,19 +13,36 @@ const (
 	MCPExternalWorkRunHTTPErrorCodeV0             = "external_work_run_http_error"
 	MCPExternalWorkRunHTTPNotConfiguredCodeV0     = "external_work_run_no_configurado"
 	MCPExternalWorkRunHTTPExecutorErrorCodeV0     = "external_work_run_error"
+	MCPExternalWorkRunHTTPTimeoutCodeV0           = "external_work_run_timeout"
 	MCPExternalWorkRunHTTPInvalidBodyCodeV0       = MCPPublicErrBodyInvalidV0
 	MCPExternalWorkRunHTTPUnsupportedPathCodeV0   = MCPPublicErrPathUnsupportedV0
 	MCPExternalWorkRunHTTPUnsupportedMethodCodeV0 = MCPPublicErrMethodNotAllowedV0
 )
 
+const defaultMCPExternalWorkRunHTTPResponseTimeoutV0 = 2 * time.Second
+
 func NewMCPExternalWorkRunHTTPHandlerV0(
 	executor MCPTransportExternalWorkRunExecutorV0,
 ) http.Handler {
-	return mcpExternalWorkRunHTTPHandlerV0{executor: executor}
+	return newMCPExternalWorkRunHTTPHandlerWithTimeoutV0(
+		executor,
+		defaultMCPExternalWorkRunHTTPResponseTimeoutV0,
+	)
+}
+
+func newMCPExternalWorkRunHTTPHandlerWithTimeoutV0(
+	executor MCPTransportExternalWorkRunExecutorV0,
+	responseTimeout time.Duration,
+) http.Handler {
+	return mcpExternalWorkRunHTTPHandlerV0{
+		executor:        executor,
+		responseTimeout: responseTimeout,
+	}
 }
 
 type mcpExternalWorkRunHTTPHandlerV0 struct {
-	executor MCPTransportExternalWorkRunExecutorV0
+	executor        MCPTransportExternalWorkRunExecutorV0
+	responseTimeout time.Duration
 }
 
 func (handler mcpExternalWorkRunHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +87,11 @@ func (handler mcpExternalWorkRunHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, 
 		))
 		return
 	}
-	result, err := handler.executor.Execute(r.Context(), input)
+	result, err, timedOut := handler.executeExternalWorkRunWithResponseTimeoutV0(r, input)
+	if timedOut {
+		writeMCPExternalWorkRunHTTPV0(w, http.StatusGatewayTimeout, result)
+		return
+	}
 	if err != nil {
 		writeMCPExternalWorkRunHTTPV0(w, http.StatusInternalServerError, newMCPExternalWorkRunHTTPErrorV0(
 			r,
@@ -83,6 +106,37 @@ func (handler mcpExternalWorkRunHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, 
 		status = http.StatusBadRequest
 	}
 	writeMCPExternalWorkRunHTTPV0(w, status, result)
+}
+
+type mcpExternalWorkRunHTTPExecutionV0 struct {
+	result MCPExternalWorkRunToolResultV0
+	err    error
+}
+
+func (handler mcpExternalWorkRunHTTPHandlerV0) executeExternalWorkRunWithResponseTimeoutV0(
+	r *http.Request,
+	input MCPExternalWorkRunToolInputV0,
+) (MCPExternalWorkRunToolResultV0, error, bool) {
+	timeout := handler.responseTimeout
+	if timeout <= 0 {
+		result, err := handler.executor.Execute(r.Context(), input)
+		return result, err, false
+	}
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	done := make(chan mcpExternalWorkRunHTTPExecutionV0, 1)
+	go func() {
+		result, err := handler.executor.Execute(ctx, input)
+		done <- mcpExternalWorkRunHTTPExecutionV0{result: result, err: err}
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case execution := <-done:
+		return execution.result, execution.err, false
+	case <-timer.C:
+		return newMCPExternalWorkRunHTTPTimeoutResultV0(r, input), nil, true
+	}
 }
 
 func newMCPExternalWorkRunHTTPErrorV0(
@@ -101,6 +155,17 @@ func newMCPExternalWorkRunHTTPErrorV0(
 	}
 }
 
+func newMCPExternalWorkRunHTTPTimeoutResultV0(
+	r *http.Request,
+	input MCPExternalWorkRunToolInputV0,
+) MCPExternalWorkRunToolResultV0 {
+	result := newMCPExternalWorkRunHTTPErrorV0(r, input, "executor", MCPExternalWorkRunHTTPTimeoutCodeV0)
+	if len(result.Errores) > 0 {
+		result.Errores[0].Message = "external-work run excedio la ventana HTTP acotada"
+	}
+	return result
+}
+
 func writeMCPExternalWorkRunHTTPV0(
 	w http.ResponseWriter,
 	status int,
@@ -112,4 +177,5 @@ func writeMCPExternalWorkRunHTTPV0(
 	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(result)
+	flushMCPHTTPResponseV0(w)
 }

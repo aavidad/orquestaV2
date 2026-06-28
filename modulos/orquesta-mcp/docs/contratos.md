@@ -63,7 +63,8 @@ Invariantes:
 Pruebas de contrato:
   - HTTP delega en executor fake y preserva correlation id.
   - HTTP devuelve `202 accepted_background` si el executor no responde dentro de
-    la ventana acotada.
+    la ventana acotada, hace flush de la respuesta JSON y publica
+    `poll_queue_global_status`.
   - Transporte MCP queda opt-in y devuelve unbound si falta puerto.
   - Payload compacto sin secretos ni detalles internos.
 ```
@@ -139,9 +140,13 @@ Invariantes:
   - No crea GoalWorkStateV0 ni arranca Codex Goal.
   - Crea run operativo y encola para el loop historico por puertos inyectados.
   - No conoce OPES, DB, runtime, filesystem, proveedor ni credenciales.
+  - El bridge HTTP cancela el contexto del executor y devuelve `504` JSON con
+    `external_work_run_timeout` si el puerto no responde dentro de la ventana
+    publica; no deja al cliente esperando sin cuerpo.
 Pruebas de contrato:
   - Descriptor y resultado declaran `route_policy=legacy_director_loop`.
   - HTTP delega en executor fake y preserva errores publicos.
+  - HTTP devuelve timeout JSON publico y cancela el executor si queda bloqueado.
   - Transporte MCP queda opt-in y devuelve unbound si falta puerto.
 ```
 
@@ -1182,11 +1187,15 @@ Invariantes:
     accion controla la run completa, no un bloque OPES aislado dentro de una
     run compartida.
   - No usa DB, runtime, filesystem, scheduler interno ni proceso de agente.
+  - El bridge HTTP cancela el contexto del puerto y devuelve `504` JSON con
+    `run_control_timeout` si el control no responde dentro de la ventana
+    publica; no deja al cliente esperando sin cuerpo.
 Pruebas de contrato:
   - Executor delega en puerto fake.
   - Executor resuelve run por job externo mediante puerto fake.
   - Transporte queda opt-in sin binding.
   - HTTP POST delega y propaga correlacion.
+  - HTTP timeout devuelve JSON publico y cancela el puerto.
 ```
 
 ```text

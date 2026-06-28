@@ -55,7 +55,9 @@ executor sigue vivo; una segunda llamada con el mismo `operation_ref` no vuelve
 a invocar el executor y devuelve diagnostico `*_operation_already_running`.
 Tambien cubre body `{}` para cola global, observado en OPES, con
 `operation-ref-*-queue`. Desde 2026-06-28 tambien cubre un cliente HTTP real
-contra `/api/v0/runs/supervise` para verificar cuerpo JSON finito.
+contra `/api/v0/runs/supervise` para verificar cuerpo JSON finito. Desde
+2026-06-28 noche tambien valida flush HTTP en los `202 accepted_background` y
+`poll_queue_global_status` como continuacion publica.
 Ultima ejecucion: 2026-06-28; pasa con `go test -count=1 ./modulos/orquesta-mcp`.
 Riesgos: el ledger es memoria del handler HTTP; tras restart la fuente de verdad
 para progreso sigue siendo `director.stats`, `autoprogramming.status` y cola.
@@ -649,6 +651,12 @@ Evidencia adicional 2026-06-28:
 `TestMCPRunQueuePriorityHTTPHandlerV0SetPriorityClienteRealRecibeTimeoutJSON`
 fija la misma garantia para `set_priority`: el cliente HTTP real recibe `504`
 con `run_queue_priority_timeout` y el puerto ve su contexto cancelado.
+`TestMCPRunControlHTTPHandlerV0TimeoutDevuelveJSONPublico` y
+`TestMCPExternalWorkRunHTTPHandlerV0TimeoutDevuelveJSONPublico` fijan la misma
+garantia para control de run y external-work/run: `504` JSON publico,
+correlacion preservada y cancelacion cooperativa del executor. En servidor
+ensamblado lo cubren `TestServerRunControlHTTPClienteRealRecibeTimeoutJSONV0` y
+`TestServerExternalWorkRunHTTPClienteRealRecibeTimeoutJSONV0`.
 `TestMCPAutoprogrammingStatusExecutorV0DiagnosticaQueuedNotDispatchedV0` fija
 `queued_not_dispatched` y `queue_health.queued_not_dispatched` para runs
 `ready`/`queued`/`pending` sin goal-first ni dispatch observado.

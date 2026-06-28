@@ -278,4 +278,5 @@ func writeMCPRunSupervisorHTTPV0(
 	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(result)
+	flushMCPHTTPResponseV0(w)
 }

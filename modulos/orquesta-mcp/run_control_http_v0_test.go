@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestMCPRunControlHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
@@ -62,9 +63,51 @@ func TestMCPRunControlHTTPHandlerV0MetodoYExecutorNil(t *testing.T) {
 	}
 }
 
+func TestMCPRunControlHTTPHandlerV0TimeoutDevuelveJSONPublico(t *testing.T) {
+	executor := &blockingMCPRunControlHTTPExecutorV0{done: make(chan struct{})}
+	body := bytes.NewBuffer(nil)
+	_ = json.NewEncoder(body).Encode(MCPRunControlToolInputV0{
+		Action:         "stop",
+		RunRef:         "run-ref-control-http-timeout-001",
+		RequestID:      "request-ref-run-control-http-timeout-001",
+		CorrelationID:  "corr-run-control-http-timeout-input-001",
+		IdempotencyKey: "idem-run-control-http-timeout-001",
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, MCPRunControlHTTPPathV0, body)
+	req.Header.Set("X-Correlation-ID", "corr-run-control-http-timeout-header-001")
+
+	newMCPRunControlHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusGatewayTimeout ||
+		rec.Header().Get("X-Correlation-ID") != "corr-run-control-http-timeout-header-001" {
+		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	var result MCPRunControlToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPRunControlEstadoErrorV0 ||
+		result.Action != "stop" ||
+		result.RunRef != "run-ref-control-http-timeout-001" ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "run_control_timeout" {
+		t.Fatalf("result=%+v", result)
+	}
+	select {
+	case <-executor.done:
+	case <-time.After(time.Second):
+		t.Fatalf("executor no recibio cancelacion tras timeout HTTP")
+	}
+}
+
 type fakeMCPRunControlHTTPExecutorV0 struct {
 	input  MCPRunControlToolInputV0
 	result MCPRunControlToolResultV0
+}
+
+type blockingMCPRunControlHTTPExecutorV0 struct {
+	done chan struct{}
 }
 
 func (executor *fakeMCPRunControlHTTPExecutorV0) Execute(
@@ -73,4 +116,17 @@ func (executor *fakeMCPRunControlHTTPExecutorV0) Execute(
 ) (MCPRunControlToolResultV0, error) {
 	executor.input = input
 	return executor.result, nil
+}
+
+func (executor *blockingMCPRunControlHTTPExecutorV0) Execute(
+	ctx context.Context,
+	input MCPRunControlToolInputV0,
+) (MCPRunControlToolResultV0, error) {
+	<-ctx.Done()
+	close(executor.done)
+	return MCPRunControlToolResultV0{
+		Estado: MCPRunControlEstadoOKV0,
+		Action: normalizeMCPRunControlActionV0(input.Action),
+		RunRef: input.RunRef,
+	}, nil
 }

@@ -95,6 +95,9 @@ func TestMCPRunSupervisorHTTPHandlerV0DevuelveAcceptedSiExecutorSigueVivo(t *tes
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
+	if !rec.Flushed {
+		t.Fatalf("accepted_background no hizo flush de la respuesta HTTP")
+	}
 	var result MCPRunSupervisorToolResultV0
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode: %v", err)

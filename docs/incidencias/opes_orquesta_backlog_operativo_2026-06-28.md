@@ -307,5 +307,16 @@ mutaciones, y el contexto del puerto se cancela. Evidencia:
 El cliente web `/run-queue` conserva ese JSON publico en el view model en vez de
 convertirlo en transporte opaco. Evidencia:
 `TestRESTRunQueueClientV0ConservaErroresPublicosEnTimeout`.
-Sigue vivo el cierre de streaming/flush amplio y observacion posterior sobre
-colas OPES reales temporales.
+Avance 2026-06-28 noche 5: los writers HTTP de
+`/api/v0/autoprogramming/supervise` y `/api/v0/runs/supervise` hacen `flush`
+despues de emitir JSON, y los tests de `accepted_background` lo fijan con
+`httptest.ResponseRecorder`. Ademas `/api/v0/runs/control` y
+`/api/v0/external-work/run` quedan acotados por timeout HTTP: devuelven `504`
+con JSON publico `run_control_timeout` o `external_work_run_timeout`, preservan
+correlacion y cancelan el contexto del executor. Evidencia:
+`TestMCPRunControlHTTPHandlerV0TimeoutDevuelveJSONPublico`,
+`TestMCPExternalWorkRunHTTPHandlerV0TimeoutDevuelveJSONPublico`,
+`TestServerRunControlHTTPClienteRealRecibeTimeoutJSONV0` y
+`TestServerExternalWorkRunHTTPClienteRealRecibeTimeoutJSONV0`.
+Sigue vivo el cierre de observacion posterior sobre colas OPES reales
+temporales.

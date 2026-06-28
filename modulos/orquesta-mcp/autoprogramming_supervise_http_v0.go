@@ -316,6 +316,7 @@ func writeMCPAutoprogrammingSuperviseHTTPV0(
 	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(result)
+	flushMCPHTTPResponseV0(w)
 }
 
 func writeMCPAutoprogrammingSuperviseHTTPResultV0(
@@ -350,4 +351,5 @@ func writeMCPAutoprogrammingSuperviseHTTPResultV0(
 	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)
+	flushMCPHTTPResponseV0(w)
 }
