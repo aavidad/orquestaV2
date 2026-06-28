@@ -380,7 +380,11 @@ func mcpQueueGlobalStatusItemsV0(
 	}
 	for _, action := range safeActions {
 		item := ensure(action.RunRef)
-		item.Status = firstNonEmptyMCPV0(item.Status, mcpQueueGlobalStatusSafeActionStatusV0(action))
+		if mcpQueueGlobalStatusShouldPromoteSafeActionStatusV0(item.Status, action) {
+			item.Status = mcpQueueGlobalStatusSafeActionStatusV0(action)
+		} else {
+			item.Status = firstNonEmptyMCPV0(item.Status, mcpQueueGlobalStatusSafeActionStatusV0(action))
+		}
 		item.NeedsAction = true
 		item.RecommendedAction = firstNonEmptyMCPV0(
 			item.RecommendedAction,
@@ -445,6 +449,27 @@ func mcpQueueGlobalStatusFinalizeItemV0(item *MCPQueueGlobalStatusItemV0) {
 		return
 	}
 	item.NoActionReason = mcpQueueGlobalStatusNoActionReasonV0(item.Status)
+}
+
+func mcpQueueGlobalStatusShouldPromoteSafeActionStatusV0(
+	status string,
+	action MCPAutoprogrammingSafeActionV0,
+) bool {
+	switch strings.TrimSpace(action.Action) {
+	case "observe_goal", "observe_active_goals":
+	default:
+		return false
+	}
+	switch strings.TrimSpace(status) {
+	case "",
+		mcpAutoprogrammingHealthQueuedV0,
+		"ready",
+		mcpAutoprogrammingHealthRunningLiveV0,
+		mcpAutoprogrammingHealthRunningWithoutRecentStatsV0:
+		return true
+	default:
+		return false
+	}
 }
 
 func mcpQueueGlobalStatusRecommendedActionForStatusV0(status string) string {

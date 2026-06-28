@@ -245,6 +245,110 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0CadaRunVisibleTieneAccionORazon(t *tes
 	}
 }
 
+func TestMCPQueueGlobalStatusHTTPHandlerV0MezclaGoalFirstYLivenessAccionORazon(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			Queue: &MCPRunQueuePriorityToolResultV0{
+				Estado:   MCPRunQueuePriorityEstadoOKV0,
+				QueueRef: "global",
+				Ranked: []MCPRunQueueRankedCandidateCompactV0{{
+					Rank:   1,
+					RunRef: "run-ref-global-status-running-live-001",
+					AppRef: "app-ref-global-status-mixed",
+					Status: "running",
+				}, {
+					Rank:   2,
+					RunRef: "run-ref-global-status-running-stale-001",
+					AppRef: "app-ref-global-status-mixed",
+					Status: "running",
+				}, {
+					Rank:   3,
+					RunRef: "run-ref-global-status-goal-missing-001",
+					AppRef: "app-ref-global-status-mixed",
+					Status: "running",
+				}, {
+					Rank:   4,
+					RunRef: "run-ref-global-status-goal-observe-001",
+					AppRef: "app-ref-global-status-mixed",
+					Status: "running",
+				}, {
+					Rank:   5,
+					RunRef: "run-ref-global-status-ready-001",
+					AppRef: "app-ref-global-status-mixed",
+					Status: "ready",
+				}},
+				Terminal: []MCPRunQueueRankedCandidateCompactV0{{
+					Rank:   6,
+					RunRef: "run-ref-global-status-complete-001",
+					AppRef: "app-ref-global-status-mixed",
+					Status: "completed",
+				}},
+			},
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				Queued:                    1,
+				RunningLive:               2,
+				RunningWithoutRecentStats: 1,
+				Blocked:                   1,
+				Completed:                 1,
+			},
+			Operator: &MCPAutoprogrammingOperatorV0{
+				ActiveRuns: []MCPAutoprogrammingActiveRunV0{{
+					RunRef: "run-ref-global-status-running-live-001",
+					AppRef: "app-ref-global-status-mixed",
+					Status: "running",
+				}},
+				SafeActions: []MCPAutoprogrammingSafeActionV0{{
+					Action:   "observe_goal",
+					Scope:    "run",
+					RunRef:   "run-ref-global-status-goal-observe-001",
+					Method:   http.MethodPost,
+					Endpoint: MCPAutoprogrammingObserveGoalHTTPPathV0,
+				}},
+			},
+			StaleRunning: []MCPAutoprogrammingActionableRunV0{{
+				Code:              mcpAutoprogrammingActionRunningWithoutRecentStatsV0,
+				RunRef:            "run-ref-global-status-running-stale-001",
+				AppRef:            "app-ref-global-status-mixed",
+				RecommendedAction: "observe_run_ref_with_process_refs_before_reconcile",
+				EvidenceRefs:      []string{"evidence-ref-global-status-running-stale"},
+			}, {
+				Code:              mcpAutoprogrammingActionGoalFirstStateMissingV0,
+				RunRef:            "run-ref-global-status-goal-missing-001",
+				AppRef:            "app-ref-global-status-mixed",
+				RecommendedAction: "repair_goal_state_before_legacy_supervision",
+				EvidenceRefs:      []string{"evidence-ref-global-status-goal-missing"},
+			}},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	NewMCPQueueGlobalStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(result.Items) != 6 ||
+		!result.Summary.NeedsAttention ||
+		!result.Summary.NeedsAction ||
+		result.Summary.WillFinishAlone ||
+		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-running-live-001", "running_live", false, "") ||
+		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-running-stale-001", mcpAutoprogrammingActionRunningWithoutRecentStatsV0, true, "inspect_liveness") ||
+		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-goal-missing-001", mcpAutoprogrammingActionGoalFirstStateMissingV0, true, "repair_goal_state") ||
+		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-goal-observe-001", "observer_required", true, "restart_observer") ||
+		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-ready-001", "ready", false, "") ||
+		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-complete-001", mcpAutoprogrammingHealthCompletedV0, false, "") {
+		t.Fatalf("result=%+v", result)
+	}
+	assertMCPQueueGlobalStatusItemsHaveActionOrReasonForTestV0(t, result.Items)
+}
+
 func TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstStateMissingRecomiendaRepararState(t *testing.T) {
 	executor := &fakeMCPQueueGlobalStatusExecutorV0{
 		result: MCPAutoprogrammingStatusToolResultV0{
@@ -443,4 +547,18 @@ func hasMCPQueueGlobalStatusDiagnosticCodeForTestV0(
 		}
 	}
 	return false
+}
+
+func assertMCPQueueGlobalStatusItemsHaveActionOrReasonForTestV0(
+	t *testing.T,
+	items []MCPQueueGlobalStatusItemV0,
+) {
+	t.Helper()
+	for _, item := range items {
+		hasAction := item.NeedsAction && item.RecommendedAction != ""
+		hasReason := !item.NeedsAction && item.NoActionReason != ""
+		if hasAction == hasReason {
+			t.Fatalf("item debe tener exactamente accion o razon de no accion: %+v", item)
+		}
+	}
 }
