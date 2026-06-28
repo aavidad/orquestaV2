@@ -258,6 +258,10 @@ var nuevaAppHTMLHelpKeysV0 = []string{
 	"calidad.compliance",
 	"deploy.target",
 	"deploy.restricciones",
+	"documentacion.usuario",
+	"documentacion.desarrollo",
+	"documentacion.sistemas",
+	"documentacion.locales",
 	"agentes.revision_humana",
 	"agentes.autonomia",
 	"agentes.preferencias",
@@ -538,6 +542,12 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
         <fieldset><legend>{{index .Labels "deploy"}}</legend><div class="grid">
           <label data-help="{{index .Help "deploy.target"}}">{{index .Labels "deploy.target"}}<select name="deploy.target"><option value="sin_preferencia">sin_preferencia</option><option value="local">local</option><option value="contenedor">contenedor</option><option value="paas">paas</option><option value="serverless">serverless</option><option value="kubernetes">kubernetes</option><option value="desktop">desktop</option><option value="mobile_store">mobile_store</option></select></label>
           <label data-help="{{index .Help "deploy.restricciones"}}">{{index .Labels "deploy.restricciones"}}<input name="deploy.restricciones"></label>
+        </div></fieldset>
+        <fieldset><legend>{{index .Labels "documentacion"}}</legend><div class="grid">
+          <label data-help="{{index .Help "documentacion.usuario"}}"><span>{{index .Labels "documentacion.usuario"}}</span><select name="documentacion.usuario"><option value="true">true</option><option value="false">false</option></select></label>
+          <label data-help="{{index .Help "documentacion.desarrollo"}}"><span>{{index .Labels "documentacion.desarrollo"}}</span><select name="documentacion.desarrollo"><option value="true">true</option><option value="false">false</option></select></label>
+          <label data-help="{{index .Help "documentacion.sistemas"}}"><span>{{index .Labels "documentacion.sistemas"}}</span><select name="documentacion.sistemas"><option value="true">true</option><option value="false">false</option></select></label>
+          <label data-help="{{index .Help "documentacion.locales"}}">{{index .Labels "documentacion.locales"}}<input name="documentacion.locales" placeholder="es-ES,en-US"></label>
         </div></fieldset>
       </div>
       <div class="step" data-step="5" role="tabpanel" id="nueva-app-step-panel-5" aria-labelledby="nueva-app-step-tab-5" tabindex="-1">

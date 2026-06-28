@@ -1364,6 +1364,153 @@ Errores frecuentes:
 
 Tooltip: `nueva_app.ayuda.deploy.restricciones`.
 
+### `documentacion.usuario`
+
+Tipo UI: select booleano.
+
+Opciones:
+
+- `true`
+- `false`
+
+Default:
+
+- `true` si falta.
+
+Que implica:
+
+- pide manual funcional orientado a usuarios finales;
+- debe cubrir pantallas, flujos principales, errores esperables y decisiones de
+  uso;
+- no sustituye al contrato ni a los tests, pero ayuda a validar que la app se
+  puede operar por una persona real.
+
+Cuando usar `true`:
+
+- aplicaciones con UI, paneles internos, portales publicos, apps moviles,
+  herramientas operativas o cualquier entrega que vaya a usar alguien distinto
+  del programador.
+
+Cuando usar `false`:
+
+- librerias internas, tareas de investigacion, refactors sin interfaz o pruebas
+  tecnicas acotadas donde no hay usuario final directo.
+
+Errores frecuentes:
+
+- marcar `false` para ahorrar tiempo en una app con usuarios reales;
+- confundir documentacion de usuario con comentarios de codigo;
+- no indicar idiomas cuando el producto es multilingue.
+
+Tooltip: `nueva_app.ayuda.documentacion.usuario`.
+
+### `documentacion.desarrollo`
+
+Tipo UI: select booleano.
+
+Opciones:
+
+- `true`
+- `false`
+
+Default:
+
+- `true` si falta.
+
+Que implica:
+
+- pide guia para continuar el proyecto: arquitectura, comandos, estructura,
+  tests, decisiones relevantes y puntos de extension;
+- debe explicar la arquitectura elegida, por ejemplo hexagonal, clean,
+  monolito modular, eventos u otra opcion seleccionada;
+- sirve para que otro agente o programador pueda seguir sin reconstruir todo el
+  contexto.
+
+Cuando usar `true`:
+
+- apps que seguiran evolucionando, codigo generado por agentes, integraciones,
+  dominio no trivial o cualquier entrega que deba mantenerse.
+
+Cuando usar `false`:
+
+- prototipos descartables o entregas puramente documentales sin codigo.
+
+Errores frecuentes:
+
+- dejarla fuera en apps que luego se mantendran;
+- pedir una guia de desarrollo y no exigir comandos verificables;
+- mezclar secretos, rutas privadas o credenciales dentro de la guia.
+
+Tooltip: `nueva_app.ayuda.documentacion.desarrollo`.
+
+### `documentacion.sistemas`
+
+Tipo UI: select booleano.
+
+Opciones:
+
+- `true`
+- `false`
+
+Default:
+
+- `true` si falta.
+
+Que implica:
+
+- pide documentacion operativa: configuracion, despliegue, variables, logs,
+  healthchecks, backups, restauracion, limites y diagnostico;
+- no autoriza deploy real por si sola; solo describe como se opera la app cuando
+  el adaptador autorizado exista.
+
+Cuando usar `true`:
+
+- apps con servidor, base de datos, colas, integraciones externas, tareas
+  programadas, observabilidad o despliegue fuera del entorno local.
+
+Cuando usar `false`:
+
+- scripts locales pequenos, investigacion o artefactos sin runtime operativo.
+
+Errores frecuentes:
+
+- escribir credenciales o DSN reales;
+- omitir rollback o recuperacion en una app productiva;
+- elegir `deploy.target` sin documentar como se verifica el arranque.
+
+Tooltip: `nueva_app.ayuda.documentacion.sistemas`.
+
+### `documentacion.locales`
+
+Tipo UI: input de lista por comas.
+
+Ejemplos:
+
+- `es-ES`
+- `es-ES,en-US`
+- `es-ES,ca-ES,gl-ES,eu-ES`
+
+Default:
+
+- vacio hereda `i18n.locales`;
+- si tambien falta i18n, la factory puede mantener `es-ES`.
+
+Que implica:
+
+- controla idiomas de manuales y guias;
+- puede ser distinto de los idiomas de la UI si el equipo solo necesita
+  documentacion en un subconjunto;
+- debe usar locales claros, no nombres ambiguos como `spanish`.
+
+Errores frecuentes:
+
+- poner idiomas no soportados por la composicion;
+- pedir muchos idiomas sin justificarlo en producto;
+- duplicar locales en `i18n.locales` y `documentacion.locales` con valores
+  contradictorios.
+
+Tooltip: `nueva_app.ayuda.documentacion.locales`.
+
 ## Paso 6: Revision, Agentes Y Restricciones
 
 ### `agentes.revision_humana`
@@ -1472,10 +1619,6 @@ basico actual. No deben olvidarse al ampliar la UI:
 - `preferencias_tecnicas.restricciones`: restricciones tecnicas separadas.
 - `datos.retencion`: conservacion y borrado.
 - `integraciones[].restricciones`: limites no sensibles por integracion.
-- `documentacion.usuario`: manual de usuario.
-- `documentacion.desarrollo`: manual de desarrollo.
-- `documentacion.sistemas`: manual de sistemas/deploy.
-- `documentacion.locales`: idiomas de documentacion.
 
 Recomendacion:
 
