@@ -258,6 +258,22 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-28
+Decision: El cierre goal-first por DomainWork exige receipt aceptado y artefacto
+completo.
+Motivo: el cierre legacy de `domain_work` ya bloqueaba receipts aceptados con
+`complete_job=false`, pero el wrapper goal-first podia aceptar el receipt del
+ledger solo por estar aceptado y cubrir el contrato de artefacto. Eso permitia
+cerrar trabajos externos con material parcial.
+Impacto: `domainWorkGoalReceiptClosureValidatorV0` mantiene el requisito de
+receipt aceptado, pero solo considera cubierto un contrato si el record
+correspondiente tiene `CompleteJob=true`. Si falta, publica
+`domain_work_receipt_artifact_incomplete`, bloquea la closure y pide rework.
+No introduce reglas OPES en el core ni toca el conector real.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-06-27
 Decision: El supervisor legacy bloquea contenedores goal-first sin
 `GoalWorkStateV0` cargable.

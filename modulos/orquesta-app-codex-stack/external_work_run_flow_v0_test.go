@@ -356,6 +356,44 @@ func TestCodexStackV0ExternalWorkGoalFirstCierraConReceiptAceptadoEnLedger(t *te
 	}
 }
 
+func TestCodexStackV0ExternalWorkGoalFirstNoCierraReceiptDomainWorkIncompleteV0(t *testing.T) {
+	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	started := postExternalWorkRunStackV0(t, stack)
+	spec := launcher.specs[0]
+	receiptRef := "receipt-ref-goal-first-domain-incomplete-001"
+	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
+	record.CompleteJob = false
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		record,
+	); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-incomplete-receipt-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework ||
+		!goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptLedgerIncompleteArtifactV0) {
+		t.Fatalf("receipt incompleto cerro goal-first: result=%+v", result)
+	}
+}
+
 func TestCodexStackV0ExternalWorkGoalFirstSinStateNoDrenaLegacy(t *testing.T) {
 	stack := mustBuildCodexStackWithGoalBackendForTestV0(
 		t,
@@ -990,6 +1028,7 @@ func externalWorkGoalFirstAcceptedReceiptRecordForTestV0(
 		ArtifactRef:    contract.ArtifactRef,
 		ArtifactType:   contract.ArtifactType,
 		Summary:        "Artefacto external-work aceptado por conector DomainWork.",
+		CompleteJob:    true,
 		ReceiptRef:     receiptRef,
 		EvidenceRefs:   []string{"evidence-ref-" + receiptRef},
 	}

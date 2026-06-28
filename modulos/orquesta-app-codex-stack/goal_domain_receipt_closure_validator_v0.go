@@ -12,6 +12,7 @@ const (
 	goalDomainReceiptLedgerMissingEvidenceRefV0    = "evidence-ref-goal-domain-receipt-ledger-missing"
 	goalDomainReceiptLedgerUnavailableIssueV0      = "domain_work_receipt_ledger_unavailable"
 	goalDomainReceiptLedgerAcceptedMissingIssueV0  = "domain_work_receipt_not_accepted"
+	goalDomainReceiptLedgerIncompleteArtifactV0    = "domain_work_receipt_artifact_incomplete"
 	goalDomainReceiptLedgerRequiredRunRefIssueV0   = "domain_work_receipt_run_ref_required"
 	goalDomainReceiptLedgerRequiredReceiptIssueV0  = "domain_work_receipt_ref_required"
 	goalDomainReceiptLedgerRequiredContractIssueV0 = "domain_work_receipt_contract_required"
@@ -108,7 +109,14 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) validateAcceptedDomainR
 			Field: goalDomainReceiptLedgerRequiredArtifactFieldV0,
 		}
 	}
-	return goalDomainReceiptEvidenceRefsV0(matching), orquestagoal.GoalWorkIssueV0{}
+	completeMatching := goalDomainReceiptCompleteRecordsV0(matching)
+	if !goalDomainReceiptAllContractsCoveredV0(required, completeMatching) {
+		return nil, orquestagoal.GoalWorkIssueV0{
+			Code:  goalDomainReceiptLedgerIncompleteArtifactV0,
+			Field: goalDomainReceiptLedgerRequiredArtifactFieldV0,
+		}
+	}
+	return goalDomainReceiptEvidenceRefsV0(completeMatching), orquestagoal.GoalWorkIssueV0{}
 }
 
 func goalDomainReceiptBlockedClosureV0(
@@ -198,6 +206,19 @@ func goalDomainReceiptAllContractsCoveredV0(
 		}
 	}
 	return true
+}
+
+func goalDomainReceiptCompleteRecordsV0(
+	records []DomainWorkArtifactSubmissionRecordV0,
+) []DomainWorkArtifactSubmissionRecordV0 {
+	out := make([]DomainWorkArtifactSubmissionRecordV0, 0, len(records))
+	for _, record := range records {
+		record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+		if record.CompleteJob {
+			out = append(out, record)
+		}
+	}
+	return out
 }
 
 func goalDomainReceiptRecordMatchesContractV0(

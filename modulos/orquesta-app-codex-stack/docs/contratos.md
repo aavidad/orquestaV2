@@ -244,6 +244,12 @@ Si un operador llama `runs.supervisor` con un `run_ref` que ya tiene
 `stop_reason=goal_first_observe_required`, diagnostico
 `run_supervisor_goal_first_not_legacy` y `next_actions` que apuntan a observar
 el goal por la ruta/tool goal-first.
+Cuando un `GoalWorkSpecV0` exige `ClosurePolicy.RequireDomainReceipt`, el
+wrapper de cierre del stack solo acepta receipts DomainWork persistidos en el
+ledger si cubren los contratos requeridos y el record asociado declara
+`complete_job=true`. Un receipt aceptado pero incompleto bloquea el cierre con
+`domain_work_receipt_artifact_incomplete` y rework; no puede cerrar un trabajo
+goal-first por error.
 
 ## Bridge de entregas a dominio externo
 

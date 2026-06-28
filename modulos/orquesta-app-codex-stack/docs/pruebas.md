@@ -1491,6 +1491,10 @@ Cobertura:
   encola `ready`, impide que `runs.supervisor` drene ese contenedor como loop
   legacy, observa el goal por `run_ref`, valida cierre con tests requeridos y
   sincroniza la cola solo como terminal `closed`.
+- `TestCodexStackV0ExternalWorkGoalFirstNoCierraReceiptDomainWorkIncompleteV0`
+  fija que un receipt DomainWork aceptado pero con `complete_job=false` no
+  satisface `ClosurePolicy.RequireDomainReceipt`: la run queda bloqueada,
+  `NeedsRework=true` y aparece `domain_work_receipt_artifact_incomplete`.
 - `TestPrepareAutoprogrammingRunV0GoalReadyMultiGoalLanzaBatchSinLegacy` y
   `TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaBatchGoalsSinColaLegacy`
   fijan el batch goal-first: dos `GoalWorkSpecV0` producen dos runs derivados

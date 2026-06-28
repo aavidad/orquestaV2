@@ -1289,6 +1289,25 @@ Validacion:
 
 - `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestOperationalClosureSourceV0(NoCierraOPESFinalSinMinimosYComunes|CierraOPESFinalConMinimosYComunes)'`.
 
+## APP-CODEX-STACK-033
+
+Objetivo: impedir que el cierre goal-first acepte receipts DomainWork parciales.
+
+Estado: hecho local 2026-06-28.
+
+Trabajo aplicado:
+
+- `domainWorkGoalReceiptClosureValidatorV0` exige `CompleteJob=true` en el
+  record aceptado que cubre cada contrato de artefacto requerido;
+- si solo existe receipt aceptado con `complete_job=false`, la closure bloquea
+  con `domain_work_receipt_artifact_incomplete` y `NeedsRework=true`;
+- el helper positivo de external-work goal-first marca el receipt completo para
+  no esconder el requisito.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackV0ExternalWorkGoalFirst(CierraConReceiptAceptadoEnLedger|NoCierraReceiptDomainWorkIncomplete|BloqueaReceiptInventadoSinLedger)'`.
+
 Reglas cerradas:
 
 - no mete mínimos concretos en el núcleo genérico;

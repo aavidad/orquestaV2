@@ -47,7 +47,8 @@ casos visibles.
 
 ## ORQ-OPES-002 reconciliacion_ack_artefactos_cierre_cola
 
-Estado: vivo.
+Estado: parcial; cierre goal-first DomainWork ya no acepta receipts
+incompletos.
 
 Problema: en trabajos OPES hay ACKs y entregas parciales utiles, pero el cierre
 de cola no siempre reconcilia artefactos canonicos, pendientes reales,
@@ -62,6 +63,15 @@ Alcance inicial:
 Criterio de cierre: un smoke OPES temporal puede demostrar que los artefactos
 entregados se inventarian, se asignan a estado canonico o rework y la cola no
 queda en falso `ready`, `running_stale` o `complete` sin evidencias.
+
+Avance 2026-06-28: el cierre goal-first por DomainWork exige que el receipt
+aceptado del ledger cubra contratos requeridos y que el record declare
+`complete_job=true`. Un receipt aceptado con `complete_job=false` bloquea con
+`domain_work_receipt_artifact_incomplete` y rework, evitando cierre falso de
+artefactos parciales. Evidencia:
+`TestCodexStackV0ExternalWorkGoalFirstNoCierraReceiptDomainWorkIncompleteV0`.
+Sigue vivo el smoke OPES temporal completo de derivados/cierre, inventario de
+artefactos canonicos y cola final sin pendientes reales.
 
 ## ORQ-OPES-003 external_work_no_agent_no_delivery
 
