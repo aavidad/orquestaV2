@@ -143,6 +143,41 @@ Resultado 2026-06-28T02:56:33Z:
 - Manifest goal/receipts:
   `/tmp/opes-salidas/derivatives-rest-20260628T025633Z/goal_receipts_manifest.json`.
 
+Revalidacion posterior tras cierre goal-first y limpieza de tests:
+
+```bash
+ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1 \
+ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize \
+ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
+ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1 \
+ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-fake-operario-001 \
+ORQUESTA_OPES_BRIDGE_LIMIT=1 \
+ORQUESTA_OPES_BRIDGE_MAX_TICKS=30 \
+ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS=0 \
+SMOKE_ID=derivatives-fake-current-20260628T141818Z \
+scripts/smoke_opes_derivatives_rest.sh
+```
+
+Resultado 2026-06-28T14:18:22Z:
+
+- `run_until_status=completed`.
+- `run_until_mode=run-until-finalize`.
+- `final_job_type=finalize_temario_package`.
+- `empty_after_final=true`.
+- `goal_receipts_manifest_status=ok`.
+- `goal_receipts_manifest_entries=23`.
+- Manifest verificado con 23 entradas, primer `work_kind=update_topic_registry`,
+  ultimo `work_kind=finalize_temario_package`, sin `missing` ni `unexpected`.
+- El tick final quedo `status=completed`, `seen=0`, `submitted=0` y con los 23
+  tipos canonicos en `empty_job_types`.
+- Salida local:
+  `/tmp/opes-salidas/derivatives-rest-derivatives-fake-current-20260628T141818Z`.
+- Resumen final:
+  `/tmp/opes-salidas/derivatives-rest-derivatives-fake-current-20260628T141818Z/opes_derivatives_rest_tick_24_drain_summary.json`.
+- Manifest goal/receipts:
+  `/tmp/opes-salidas/derivatives-rest-derivatives-fake-current-20260628T141818Z/goal_receipts_manifest.json`.
+
 ## Estado
 
 Cerrado para fake/offline:
