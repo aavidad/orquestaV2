@@ -302,8 +302,8 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
     [data-help]{position:relative;cursor:help}
     [data-help]::after{content:attr(data-help);display:none;position:absolute;left:0;bottom:calc(100% + 8px);z-index:50;width:300px;max-width:calc(100vw - 32px);padding:9px 10px;border-radius:8px;background:#102017;color:#f7fff2;box-shadow:0 12px 28px rgba(15,30,20,.24);font-size:.82rem;line-height:1.35;font-weight:600;white-space:normal;overflow-wrap:anywhere;pointer-events:none}
     [data-help]::before{content:"";display:none;position:absolute;left:12px;bottom:calc(100% + 2px);z-index:51;border:6px solid transparent;border-top-color:#102017;pointer-events:none}
-    [data-help]:hover::after,[data-help]:focus::after,[data-help]:focus-within::after{display:block}
-    [data-help]:hover::before,[data-help]:focus::before,[data-help]:focus-within::before{display:block}
+    [data-help]:hover::after,[data-help]:focus::after,[data-help]:focus-within::after,[data-help].help-open::after{display:block}
+    [data-help]:hover::before,[data-help]:focus::before,[data-help]:focus-within::before,[data-help].help-open::before{display:block}
     .help-text{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);border:0;white-space:nowrap}
     button{width:max-content;padding:10px 14px;border:0;border-radius:9px;background:var(--brand);color:#fff;font-weight:850;cursor:pointer}
     button.secondary{background:#e8efe8;color:var(--ink);border:1px solid var(--line)}
@@ -492,6 +492,22 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
             <label data-help="{{index .Help "datos.tipos_detallados.volumen"}}">{{index .Labels "datos.tipos_detallados.0.volumen"}}<input name="datos.tipos_detallados.1.volumen"></label>
             <label data-help="{{index .Help "datos.tipos_detallados.restricciones"}}">{{index .Labels "datos.tipos_detallados.0.restricciones"}}<input name="datos.tipos_detallados.1.restricciones"></label>
           </div></div>
+          <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.dato_3"}}</p><div class="grid">
+            <label data-help="{{index .Help "datos.tipos_detallados.nombre"}}">{{index .Labels "datos.tipos_detallados.0.nombre"}}<input name="datos.tipos_detallados.2.nombre"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.proposito"}}">{{index .Labels "datos.tipos_detallados.0.proposito"}}<input name="datos.tipos_detallados.2.proposito"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.sensibilidad"}}">{{index .Labels "datos.tipos_detallados.0.sensibilidad"}}<input name="datos.tipos_detallados.2.sensibilidad"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.retencion"}}">{{index .Labels "datos.tipos_detallados.0.retencion"}}<input name="datos.tipos_detallados.2.retencion"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.volumen"}}">{{index .Labels "datos.tipos_detallados.0.volumen"}}<input name="datos.tipos_detallados.2.volumen"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.restricciones"}}">{{index .Labels "datos.tipos_detallados.0.restricciones"}}<input name="datos.tipos_detallados.2.restricciones"></label>
+          </div></div>
+          <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.dato_4"}}</p><div class="grid">
+            <label data-help="{{index .Help "datos.tipos_detallados.nombre"}}">{{index .Labels "datos.tipos_detallados.0.nombre"}}<input name="datos.tipos_detallados.3.nombre"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.proposito"}}">{{index .Labels "datos.tipos_detallados.0.proposito"}}<input name="datos.tipos_detallados.3.proposito"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.sensibilidad"}}">{{index .Labels "datos.tipos_detallados.0.sensibilidad"}}<input name="datos.tipos_detallados.3.sensibilidad"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.retencion"}}">{{index .Labels "datos.tipos_detallados.0.retencion"}}<input name="datos.tipos_detallados.3.retencion"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.volumen"}}">{{index .Labels "datos.tipos_detallados.0.volumen"}}<input name="datos.tipos_detallados.3.volumen"></label>
+            <label data-help="{{index .Help "datos.tipos_detallados.restricciones"}}">{{index .Labels "datos.tipos_detallados.0.restricciones"}}<input name="datos.tipos_detallados.3.restricciones"></label>
+          </div></div>
           <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.almacenamiento_1"}}</p><div class="grid">
             <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.0.tipo"><option value=""></option>{{range .StorageTypes}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
             <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.0.proposito"></label>
@@ -503,6 +519,18 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
             <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.1.proposito"></label>
             <label data-help="{{index .Help "datos.storage.requerido"}}"><span>{{index .Labels "datos.storage.0.requerido"}}</span><select name="datos.storage.1.requerido"><option value="false">false</option><option value="true">true</option></select></label>
             <label data-help="{{index .Help "datos.storage.restricciones"}}">{{index .Labels "datos.storage.0.restricciones"}}<input name="datos.storage.1.restricciones"></label>
+          </div></div>
+          <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.almacenamiento_3"}}</p><div class="grid">
+            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.2.tipo"><option value=""></option>{{range .StorageTypes}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
+            <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.2.proposito"></label>
+            <label data-help="{{index .Help "datos.storage.requerido"}}"><span>{{index .Labels "datos.storage.0.requerido"}}</span><select name="datos.storage.2.requerido"><option value="false">false</option><option value="true">true</option></select></label>
+            <label data-help="{{index .Help "datos.storage.restricciones"}}">{{index .Labels "datos.storage.0.restricciones"}}<input name="datos.storage.2.restricciones"></label>
+          </div></div>
+          <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.almacenamiento_4"}}</p><div class="grid">
+            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.3.tipo"><option value=""></option>{{range .StorageTypes}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
+            <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.3.proposito"></label>
+            <label data-help="{{index .Help "datos.storage.requerido"}}"><span>{{index .Labels "datos.storage.0.requerido"}}</span><select name="datos.storage.3.requerido"><option value="false">false</option><option value="true">true</option></select></label>
+            <label data-help="{{index .Help "datos.storage.restricciones"}}">{{index .Labels "datos.storage.0.restricciones"}}<input name="datos.storage.3.restricciones"></label>
           </div></div>
         </div></details></fieldset>
         <fieldset><legend>{{index .Labels "integraciones"}}</legend><div class="expert-block">
@@ -527,6 +555,13 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.2.proposito"></label>
               <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.2.requerido"><option value="false">false</option><option value="true">true</option></select></label>
               <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.2.restricciones"></label>
+            </div></div>
+            <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_4"}}</p><div class="grid">
+              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.3.tipo"><option value=""></option><option value="api">api</option><option value="webhook">webhook</option><option value="email">email</option><option value="calendar">calendar</option><option value="maps">maps</option><option value="file_import">file_import</option><option value="payments">payments</option><option value="auth">auth</option><option value="analytics">analytics</option><option value="search">search</option><option value="notifications">notifications</option></select></label>
+              <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.3.nombre"></label>
+              <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.3.proposito"></label>
+              <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.3.requerido"><option value="false">false</option><option value="true">true</option></select></label>
+              <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.3.restricciones"></label>
             </div></div>
           </div></details>
         </div></fieldset>
@@ -643,6 +678,11 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
       node.setAttribute('aria-describedby',described.join(' '));
     }
     function initAccessibleHelp(){
+      const closeHelpBubbles=function(except){
+        wizard.querySelectorAll('[data-help].help-open').forEach(node=>{
+          if(node!==except)node.classList.remove('help-open');
+        });
+      };
       wizard.querySelectorAll('[data-help]').forEach((node,index)=>{
         const help=String(node.dataset.help||'').trim();
         if(!help)return;
@@ -658,6 +698,18 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
         addDescribedBy(node,id);
         const target=node.matches('button,a,input,select,textarea')?node:node.querySelector('input,select,textarea,button,a');
         addDescribedBy(target,id);
+        node.addEventListener('pointerdown',event=>{
+          if(event.pointerType==='mouse')return;
+          const opened=node.classList.contains('help-open');
+          closeHelpBubbles(node);
+          node.classList.toggle('help-open',!opened);
+        });
+        node.addEventListener('keydown',event=>{
+          if(event.key==='Escape')node.classList.remove('help-open');
+        });
+      });
+      document.addEventListener('pointerdown',event=>{
+        if(!event.target.closest('[data-help]'))closeHelpBubbles();
       });
     }
     async function observeGoal(panelOrButton,options){

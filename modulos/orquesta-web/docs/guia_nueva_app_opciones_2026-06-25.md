@@ -898,6 +898,7 @@ eventos de auditoria 5 anos; adjuntos 18 meses; borrado bajo solicitud
 
 El bloque experto debe permitir varias filas de tipo de dato. Cada fila debe
 describir dominio, sensibilidad y ciclo de vida sin obligar a modelar tablas.
+El HTML actual muestra cuatro filas, el mismo limite que parsea el endpoint v0.
 
 Campos recomendados:
 
@@ -959,6 +960,8 @@ Reglas:
 
 La preferencia de persistencia describe forma de almacenamiento o consulta. No
 es proveedor ni decision cerrada de adaptador.
+El HTML actual muestra cuatro preferencias de almacenamiento, el mismo limite
+que parsea el endpoint v0.
 
 Opciones recomendadas:
 
@@ -1036,6 +1039,13 @@ Opciones actuales:
 - `webhook`
 - `email`
 - `calendar`
+- `maps`
+- `file_import`
+- `payments`
+- `auth`
+- `analytics`
+- `search`
+- `notifications`
 
 Que implica:
 
@@ -1048,6 +1058,13 @@ Cuando usar:
 - `webhook`: recibir eventos o notificar cambios.
 - `email`: enviar, recibir o procesar correo.
 - `calendar`: agenda, citas, eventos o disponibilidad.
+- `maps`: mapas, geocodificacion o rutas como capacidad.
+- `file_import`: entrada de ficheros externos.
+- `payments`: pagos como capacidad, sin credenciales ni proveedor impuesto.
+- `auth`: autenticacion externa o identidad federada.
+- `analytics`: medicion de uso o eventos de producto.
+- `search`: busqueda externa o indice especializado.
+- `notifications`: avisos push, SMS u otros canales no email.
 
 Errores frecuentes:
 
@@ -1122,9 +1139,9 @@ Tooltip: `nueva_app.ayuda.integraciones.0.requerido`.
 
 ### Modo Basico: `integraciones.0.restricciones`
 
-Campo contractual no visible en HTML actual.
+Tipo UI: input de lista por comas.
 
-Usalo por JSON/API para:
+Usalo para:
 
 - limites de tasa, sandbox, formato, ventana horaria, requisitos de retry o
   compatibilidad.
@@ -1136,8 +1153,8 @@ No usar para:
 ### Modo Experto: Varias Integraciones
 
 El DTO `WebNuevaAppFormV0` ya modela `integraciones[]`; el HTML muestra una
-integracion principal y filas expertas adicionales sin crear dependencias
-directas.
+integracion principal y tres filas expertas adicionales, hasta cuatro
+integraciones visibles en total sin crear dependencias directas.
 
 Campos recomendados por integracion:
 
@@ -1617,8 +1634,6 @@ basico actual. No deben olvidarse al ampliar la UI:
 
 - `usuarios_objetivo`: perfiles de usuario.
 - `preferencias_tecnicas.restricciones`: restricciones tecnicas separadas.
-- `datos.retencion`: conservacion y borrado.
-- `integraciones[].restricciones`: limites no sensibles por integracion.
 
 Recomendacion:
 
@@ -1630,6 +1645,8 @@ Recomendacion:
 
 Los tooltips del wizard salen de claves `nueva_app.ayuda.*` y se renderizan en
 atributos `data-help`. Son ayudas breves para decision inmediata.
+Con raton aparecen al pasar por encima o enfocar; en pantallas tactiles pueden
+quedar abiertos al tocar el campo y se cierran tocando fuera o con Escape.
 
 Relacion con esta guia:
 
