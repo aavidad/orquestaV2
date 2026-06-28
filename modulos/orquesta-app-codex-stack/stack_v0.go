@@ -221,6 +221,7 @@ func buildDirectorPortsV0(
 		RequiredTestEvidenceStore:   requiredTestEvidenceStoreV0(config),
 		RequiredTestRunner:          requiredTestRunnerV0(config),
 		GoalLauncher:                config.AppGoalLauncher,
+		GoalReworkLauncher:          config.AppGoalReworkLauncher,
 		GoalObserver:                config.AppGoalObserver,
 		GoalClosureValidator:        appGoalClosureValidatorV0(config),
 		GoalStateStore:              config.Stores.AppGoalStateStore,

@@ -137,6 +137,8 @@ Evidencia 2026-05-09:
 - `TestStartAppDirectorV0GoalFirstBundleIncompletoNoCaeALoopLegacy`;
 - `TestObserveAppDirectorGoalV0PersisteResultadoCompletoYClosure`;
 - `TestObserveAppDirectorGoalV0BloqueaRunSiClosureNoAcepta`;
+- `TestObserveAppDirectorGoalV0LanzaReworkGoalSiPolicyYPuertoDisponibles`;
+- `TestObserveAppDirectorGoalV0BloqueaSiReworkGoalAgotaPresupuesto`;
 - `TestObserveAppDirectorGoalV0BloqueaRunSiGoalTerminaInvalid`;
 - `TestContinueAppDirectorV0GoalFirstContainerNoEjecutaLoopLegacySinPuertosLegacy`;
 - `TestBuildContinueAppDirectorLoopRuntimeV0GoalFirstContainerCierraSinLoopLegacy`;
@@ -159,9 +161,12 @@ Evidencia 2026-06-28:
 - `govulncheck ./...`.
 
 Cobertura esperada: `goal-first` no arranca loop legacy en el arranque, pero al
-observar un goal terminal cierra la run si la closure es aceptada y la bloquea
-si faltan artefactos/evidencias del contrato o si el runtime devuelve estado
-terminal `invalid`.
+observar un goal terminal cierra la run si la closure es aceptada. Si la closure
+necesita rework, `ReworkPolicy.PreferNewGoal` esta activo, queda presupuesto y
+hay `GoalReworkLauncher`, lanza un nuevo goal causal sobre el mismo `run_ref`
+sin entrar en el loop legacy; si falta ese puerto, se agota el presupuesto, el
+goal devuelve estado terminal `invalid` o el cierre exige recibo de dominio,
+bloquea la run.
 Tambien cubre que `continue` y el builder del runtime no reentran en el loop
 legacy cuando hay `GoalWorkStateV0` persistido; devuelven la senal de
 observacion requerida sin exigir `OutboxLedger` ni dispatchers legacy. Cuando

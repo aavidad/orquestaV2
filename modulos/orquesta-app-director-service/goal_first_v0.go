@@ -2,6 +2,7 @@ package orquestaappdirectorservice
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -100,6 +101,11 @@ func ObserveAppDirectorGoalV0(
 		if err != nil {
 			return ObserveAppDirectorGoalResultV0{}, err
 		}
+		if refreshed, refreshErr := ports.GoalStateStore.LoadGoalWorkStateV0(ctx, request.RunRef); refreshErr == nil {
+			if normalized, normalizeErr := NewAppDirectorGoalStateV0(refreshed); normalizeErr == nil {
+				state = normalized
+			}
+		}
 	}
 	return ObserveAppDirectorGoalResultV0{
 		SchemaVersion:         ObserveAppDirectorGoalResultSchemaV0,
@@ -137,9 +143,214 @@ func reflectAppDirectorGoalClosureInRunV0(
 		return run, nil
 	}
 	if !closure.Accepted {
+		if reworkRun, launched, err := launchAppDirectorGoalReworkIfAllowedV0(ctx, request, run, state, result, closure, ports); launched || err != nil {
+			return reworkRun, err
+		}
 		return blockAppDirectorGoalRunV0(ctx, request, state, result, closure, ports)
 	}
 	return closeAppDirectorGoalRunV0(ctx, request, run, state, result, closure, ports)
+}
+
+func launchAppDirectorGoalReworkIfAllowedV0(
+	ctx context.Context,
+	request ObserveAppDirectorGoalRequestV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	state AppDirectorGoalStateV0,
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+	ports StartAppDirectorPortsV0,
+) (orquestacoreworkflow.OrchestrationRunV0, bool, error) {
+	if !appDirectorGoalShouldLaunchReworkV0(state, result, closure, ports) {
+		return run, false, nil
+	}
+	spec, ok := appDirectorGoalReworkSpecV0(state, result, closure)
+	if !ok {
+		return run, false, nil
+	}
+	goalStarted, err := orquestagoal.StartGoalWorkV0(
+		ctx,
+		orquestagoal.GoalWorkStartRequestV0{
+			RunRef:       state.RunRef,
+			Spec:         spec,
+			EvidenceRefs: appDirectorGoalCommandEvidenceRefsV0(state, result, closure),
+		},
+		orquestagoal.GoalWorkLifecyclePortsV0{
+			Launcher:   ports.GoalReworkLauncher,
+			StateStore: ports.GoalStateStore,
+		},
+	)
+	if err != nil {
+		return run, true, err
+	}
+	if ports.GoalFirstRunMarkerStore != nil {
+		if err := ports.GoalFirstRunMarkerStore.SaveGoalWorkRunMarkerV0(
+			ctx,
+			appDirectorGoalFirstRunMarkerFromLaunchV0(
+				state.RunRef,
+				goalStarted.Receipt,
+				goalStarted.EvidenceRefs,
+			),
+		); err != nil {
+			return run, true, err
+		}
+	}
+	if appDirectorGoalRunHasBlockerV0(run, appDirectorGoalBlockerRefV0(state)) {
+		resolved, err := resolveAppDirectorGoalReworkBlockerV0(ctx, request, run, state, result, closure, ports)
+		return resolved, true, err
+	}
+	loaded, err := ports.RunStore.LoadRunV0(ctx, state.RunRef)
+	return loaded, true, err
+}
+
+func appDirectorGoalShouldLaunchReworkV0(
+	state AppDirectorGoalStateV0,
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+	ports StartAppDirectorPortsV0,
+) bool {
+	if !closure.NeedsRework ||
+		!state.Spec.ReworkPolicy.PreferNewGoal ||
+		state.Spec.ClosurePolicy.RequireDomainReceipt ||
+		strings.TrimSpace(result.Status) != orquestagoal.GoalStatusCompleteV0 ||
+		ports.GoalReworkLauncher == nil ||
+		ports.GoalStateStore == nil {
+		return false
+	}
+	maxRework := appDirectorGoalMaxReworkGoalsV0(state.Spec)
+	if maxRework <= 0 {
+		return false
+	}
+	return appDirectorGoalReworkIndexV0(state.Spec.GoalRef) < maxRework
+}
+
+func appDirectorGoalMaxReworkGoalsV0(spec orquestagoal.GoalWorkSpecV0) int {
+	if spec.ReworkPolicy.MaxReworkGoals > 0 {
+		return spec.ReworkPolicy.MaxReworkGoals
+	}
+	return spec.Budget.MaxReworkGoals
+}
+
+func appDirectorGoalReworkSpecV0(
+	state AppDirectorGoalStateV0,
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+) (orquestagoal.GoalWorkSpecV0, bool) {
+	nextIndex := appDirectorGoalReworkIndexV0(state.Spec.GoalRef) + 1
+	if nextIndex <= 0 {
+		return orquestagoal.GoalWorkSpecV0{}, false
+	}
+	spec := state.Spec
+	spec.GoalRef = appDirectorGoalReworkGoalRefV0(state.Spec.GoalRef, nextIndex)
+	spec.ContextRefs = append(append([]orquestagoal.GoalContextRefV0(nil), spec.ContextRefs...),
+		orquestagoal.GoalContextRefV0{
+			Kind:     "goal",
+			Ref:      state.GoalRef,
+			Purpose:  "Goal anterior que necesita rework causal.",
+			Required: true,
+		},
+		orquestagoal.GoalContextRefV0{
+			Kind:     "closure",
+			Ref:      appDirectorGoalClosureRefV0(state),
+			Purpose:  "Cierre no aceptado que origina este rework.",
+			Required: true,
+		},
+	)
+	spec.EvidenceRefs = compactStartAppDirectorStringsV0(append(append(append(append(
+		[]string{"evidence-ref-app-director-goal-rework-v0"},
+		spec.EvidenceRefs...,
+	), state.EvidenceRefs...), result.EvidenceRefs...), closure.EvidenceRefs...))
+	spec.AcceptanceCriteria = compactStartAppDirectorStringsV0(append(
+		append([]string(nil), spec.AcceptanceCriteria...),
+		"Rework causal: resolver el cierre no aceptado del goal anterior "+state.GoalRef+"; issues: "+appDirectorGoalClosureIssueSummaryV0(closure)+".",
+	))
+	if spec.ReworkPolicy.PreserveArtifacts {
+		spec.AcceptanceCriteria = compactStartAppDirectorStringsV0(append(
+			spec.AcceptanceCriteria,
+			"Conservar y reutilizar artefactos aprovechables del goal anterior; rehacer solo lo que incumpla el contrato.",
+		))
+	}
+	spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
+	if issues := orquestagoal.ValidateGoalWorkSpecV0(spec); len(issues) > 0 {
+		return orquestagoal.GoalWorkSpecV0{}, false
+	}
+	return spec, true
+}
+
+func appDirectorGoalReworkGoalRefV0(goalRef string, index int) string {
+	base := appDirectorGoalReworkBaseGoalRefV0(goalRef)
+	if base == "" {
+		base = strings.TrimSpace(goalRef)
+	}
+	return base + "-rework-" + strconv.Itoa(index)
+}
+
+func appDirectorGoalReworkBaseGoalRefV0(goalRef string) string {
+	goalRef = strings.TrimSpace(goalRef)
+	if marker := strings.LastIndex(goalRef, "-rework-"); marker > 0 {
+		if _, err := strconv.Atoi(goalRef[marker+len("-rework-"):]); err == nil {
+			return goalRef[:marker]
+		}
+	}
+	return goalRef
+}
+
+func appDirectorGoalReworkIndexV0(goalRef string) int {
+	goalRef = strings.TrimSpace(goalRef)
+	marker := strings.LastIndex(goalRef, "-rework-")
+	if marker <= 0 {
+		return 0
+	}
+	value, err := strconv.Atoi(goalRef[marker+len("-rework-"):])
+	if err != nil || value < 0 {
+		return 0
+	}
+	return value
+}
+
+func appDirectorGoalClosureIssueSummaryV0(closure orquestagoal.GoalClosureValidationV0) string {
+	items := make([]string, 0, len(closure.Issues))
+	for _, issue := range closure.Issues {
+		item := strings.TrimSpace(issue.Field)
+		if code := strings.TrimSpace(issue.Code); code != "" {
+			if item != "" {
+				item += "="
+			}
+			item += code
+		}
+		if item != "" {
+			items = append(items, item)
+		}
+	}
+	if len(items) == 0 {
+		return "sin_issue_detallado"
+	}
+	if len(items) > 8 {
+		items = items[:8]
+	}
+	return strings.Join(items, ", ")
+}
+
+func resolveAppDirectorGoalReworkBlockerV0(
+	ctx context.Context,
+	request ObserveAppDirectorGoalRequestV0,
+	run orquestacoreworkflow.OrchestrationRunV0,
+	state AppDirectorGoalStateV0,
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+	ports StartAppDirectorPortsV0,
+) (orquestacoreworkflow.OrchestrationRunV0, error) {
+	blockerRef := appDirectorGoalBlockerRefV0(state)
+	if !appDirectorGoalRunHasBlockerV0(run, blockerRef) {
+		return run, nil
+	}
+	return applyAppDirectorGoalWorkflowCommandV0(ctx, request, state.RunRef, "resolve-goal-rework-blocker", blockerRef, ports, func(meta orquestacoreworkflow.OrchestrationCommandMetaV0) (orquestacoreworkflow.OrchestrationCommandV0, error) {
+		return orquestacoreworkflow.NewResolveRunBlockerCommandV0(meta, orquestacoreworkflow.ResolveRunBlockerCommandPayloadV0{
+			BlockerID:    blockerRef,
+			ReasonCode:   "goal_first_rework_started",
+			Summary:      "Goal-first reanudado mediante nuevo goal causal de rework.",
+			EvidenceRefs: appDirectorGoalCommandEvidenceRefsV0(state, result, closure),
+		})
+	})
 }
 
 func blockAppDirectorGoalRunV0(

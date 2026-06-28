@@ -41,6 +41,7 @@ type ConfigV0 struct {
 	ReviewGate                    ReviewGateConfigV0
 	RequiredTests                 orquestacionnucleoapp.RequiredTestRunnerPortV0
 	AppGoalLauncher               orquestagoal.GoalWorkLauncherPortV0
+	AppGoalReworkLauncher         orquestagoal.GoalWorkLauncherPortV0
 	AppGoalObserver               orquestagoal.GoalWorkObservationPortV0
 	AppGoalClosureValidator       orquestagoal.GoalWorkClosureValidatorPortV0
 	DomainTests                   DomainWorkRequiredTestConfigV0

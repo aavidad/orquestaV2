@@ -58,8 +58,13 @@ Puertos opcionales:
   y `ClosurePolicy.RequireRequiredTests=true`; un goal `complete` sin
   `required_test_results` pasados queda bloqueado y pide rework. Un goal
   observado como `blocked` o `invalid` tambien es terminal para Orquesta: se
-  valida como cierre no aceptado, bloquea la run durable y no reabre el loop
-  legacy;
+  valida como cierre no aceptado. Si `ReworkPolicy.PreferNewGoal` esta activo,
+  el resultado terminal es `complete`, el spec no exige `RequireDomainReceipt`,
+  queda presupuesto y la composicion inyecta `GoalReworkLauncher`, el servicio
+  lanza un nuevo `GoalWorkSpecV0` causal de rework sobre el mismo `run_ref`,
+  conserva evidencias/artefactos aprovechables y no reabre el loop legacy. Si
+  falta ese puerto, se agota el presupuesto de rework, el goal termina `invalid`
+  o el cierre falla por recibos de dominio, bloquea la run durable;
 - `GoalFirstRunMarkerStore`, opcional pero recomendado en composiciones
   goal-first. Persiste un `GoalWorkRunMarkerV0` minimo por `run_ref` para
   recordar que el contenedor pertenece a un goal aunque `GoalWorkStateV0` no se

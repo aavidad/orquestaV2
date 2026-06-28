@@ -11,14 +11,17 @@ import (
 
 func TestBuildDirectorPortsV0CableaAppGoalLauncher(t *testing.T) {
 	launcher := &codexStackGoalLauncherForTestV0{}
+	reworkLauncher := &codexStackGoalLauncherForTestV0{}
 	observer := &codexStackGoalObserverForTestV0{}
 	stateStore := &codexStackGoalStateStoreForTestV0{}
 	ports := buildDirectorPortsV0(ConfigV0{
-		AppGoalLauncher: launcher,
-		AppGoalObserver: observer,
-		Stores:          StoresV0{AppGoalStateStore: stateStore},
+		AppGoalLauncher:       launcher,
+		AppGoalReworkLauncher: reworkLauncher,
+		AppGoalObserver:       observer,
+		Stores:                StoresV0{AppGoalStateStore: stateStore},
 	})
 	if ports.GoalLauncher == nil ||
+		ports.GoalReworkLauncher == nil ||
 		ports.GoalObserver == nil ||
 		ports.GoalClosureValidator == nil ||
 		ports.GoalStateStore == nil ||
@@ -36,6 +39,18 @@ func TestBuildDirectorPortsV0CableaAppGoalLauncher(t *testing.T) {
 	})
 	if err != nil || receipt.GoalRef != "goal-ref-stack-wiring-001" || launcher.calls != 1 {
 		t.Fatalf("receipt=%+v err=%v calls=%d", receipt, err, launcher.calls)
+	}
+	reworkReceipt, err := ports.GoalReworkLauncher.LaunchGoalWorkV0(context.Background(), orquestagoal.GoalWorkSpecV0{
+		GoalRef:      "goal-ref-stack-wiring-rework-001",
+		Objective:    "Probar cableado de rework goal-first.",
+		DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+		WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "generated-apps/test"}},
+		EvidenceRefs: []string{"evidence-ref-stack-wiring-rework-001"},
+		RuleRefs:     []orquestagoal.GoalRuleRefV0{{Ref: "AGENTS.md"}},
+		ContextRefs:  []orquestagoal.GoalContextRefV0{{Ref: "context-ref-stack-wiring-rework-001"}},
+	})
+	if err != nil || reworkReceipt.GoalRef != "goal-ref-stack-wiring-rework-001" || reworkLauncher.calls != 1 {
+		t.Fatalf("reworkReceipt=%+v err=%v calls=%d", reworkReceipt, err, reworkLauncher.calls)
 	}
 	result, err := ports.GoalObserver.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
 		GoalRef: "goal-ref-stack-wiring-001",
