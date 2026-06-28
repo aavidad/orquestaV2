@@ -13,7 +13,7 @@ services:
       - /srv/orquesta-self/state:/workspace/state
       - /srv/orquesta-self/runtime:/workspace/runtime
       - /srv/orquesta-self/worktrees/orquesta:/workspace/project
-      - /srv/orquesta-self/codex-home:/home/orquesta/.codex:ro
+      - /srv/orquesta-self/codex-home:/home/orquesta/.codex
       - /srv/orquesta-self/cache/go:/home/orquesta/.cache/go-build
       - /srv/orquesta-self/cache/gomod:/home/orquesta/go/pkg/mod
     tmpfs:

@@ -28,7 +28,7 @@ func TestSelfProgrammingDeployContractV0NoMontaProduccionNiExponePuertoPublicoV0
 		"/srv/orquesta-self/state:/workspace/state",
 		"/srv/orquesta-self/runtime:/workspace/runtime",
 		"/srv/orquesta-self/worktrees/orquesta:/workspace/project",
-		"/srv/orquesta-self/codex-home:/home/orquesta/.codex:ro",
+		"/srv/orquesta-self/codex-home:/home/orquesta/.codex",
 		"ORQUESTA_SERVER_SELF_PROGRAMMING_ONLY=true",
 		"ORQUESTA_SERVER_SELF_PROGRAMMING_ROOT=/workspace",
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
