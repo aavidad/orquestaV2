@@ -52,20 +52,25 @@ Invariantes:
 
 - no arranca runtime ni supervisor;
 - no conoce OPES, DB, proveedor, modelo ni filesystem;
-- conserva nombres de `input_fields` y, cuando el campo no parece sensible ni
-  supera el presupuesto de contexto, incluye un resumen inline acotado en
-  `context_refs` con `kind=input_field_value`;
+- conserva una vista compacta de `input_fields` y, cuando el campo no parece
+  sensible ni supera el presupuesto de contexto, incluye un resumen inline
+  acotado en `context_refs` con `kind=input_field_value`;
 - los campos operativos tipo `course_root_abs`, `topic_dir_abs`,
   `program_json_abs`, `required_read_refs`, `required_outputs` u
   `output_contract` conservan valores relativos/contractuales y una
-  `payload_ref` opaca de tipo `app_change_payload:<run>:<change>:...`, ademas de
-  una `context_ref` `kind=input_field_payload` resoluble desde el
-  `AppChangeStore` por `RunRef`/`ChangeRef`; si el valor es una ruta local
-  absoluta, el spec solo publica `local_path_ref:<hash>` y `basename`, no el path
-  real;
-- los campos sensibles, privados o demasiado grandes no se inlinean: quedan como
-  ref durable al payload `AppChange`/`DomainWork` y el Goal debe bloquear con
-  rework si necesita un valor omitido;
+  `payload_ref` opaca de tipo `app_change_payload:<run>:<change>:...` dentro del
+  resumen inline; si el valor es una ruta local absoluta, el spec solo publica
+  `local_path_ref:<hash>` y `basename`, no el path real;
+- para campos prioritarios que no puedan inlinearse, el spec puede publicar
+  hasta cuatro `context_refs` `kind=input_field_payload` resolubles desde el
+  `AppChangeStore`; el resto queda resumido solo por conteo para no inflar el
+  contexto;
+- los campos sensibles, privados o demasiado grandes no se inlinean ni exponen
+  nombre si no son prioritarios: quedan durables en `AppChange`/`DomainWork` y
+  el Goal debe bloquear con rework si necesita un valor omitido;
+- siempre anade `kind=input_fields_summary` con total, inlineados, refs de
+  payload publicadas y omitidos para que el adaptador pueda auditar economia de
+  contexto;
 - declara `director_kind=runtime_goal`; el adaptador de composicion puede
   especializarlo, por ejemplo a Codex Goal, al lanzar;
 - conserva `AllowedWriteSet` si viene declarado y si no usa un write-set logico

@@ -5,14 +5,17 @@ Fecha: 2026-06-28.
 ## Resumen
 
 Se ejecuto un smoke real acotado contra OPES temporal local y Orquesta temporal
-con `ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio`, limitado a
-`update_topic_registry`.
+con `ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio`. Tambien se intento recorrer
+la secuencia real completa de derivados hasta `finalize_temario_package`.
 
-Resultado: unitario cerrado para `update_topic_registry`. Orquesta supera el
-guard de `project_work_dir`, acepta `POST /api/v0/external-work/run`, crea run
-goal-first, arranca un Goal Codex real observable, recupera una entrega tardia
-tras `codex_app_server_goal_active_timeout`, valida artefacto/receipt y cierra
-el run sin reabrir el loop legacy.
+Resultado: contrato REST y scope OPES temporales validados; unitario cerrado
+para `update_topic_registry`; primer intento completo con timeout por defecto
+bloqueado correctamente; segundo intento completo con timeout ampliado cierra el
+primer goal real y deja el segundo goal activo al llegar a `MAX_TICKS=80`.
+Orquesta acepta `POST /api/v0/external-work/run`, crea run goal-first, arranca
+Goal Codex real observable, valida artefacto/receipt y cierra el run sin
+reabrir el loop legacy. Lo pendiente no es volver al Director antiguo, sino
+reducir contexto y paralelizar/continuar la secuencia real de 23 work kinds.
 
 ## Configuracion valida
 
@@ -62,9 +65,11 @@ Segundo intento con contexto compactado:
 - Resultado: submit correcto, `route_policy=goal_first`,
   `director_execution_mode=goal_first`, `external_goal_ref=019f0d61-58a1-7ad0-b634-27d67e84cb10`,
   `goal_status=running` hasta 30 ticks.
-- Spec observado: `spec_bytes=24154`, `context_refs=61`,
+- Spec observado antes de la compactacion final de este corte:
+  `spec_bytes=24154`, `context_refs=61`,
   `input_values=15`, `payloads=15`. Las politicas OPES masivas quedaron como
-  `payload-ref`, no inlineadas.
+  `payload-ref`, no inlineadas. El contrato vigente reduce mas esas refs y se
+  cubre por unitarias; queda pendiente reejecutar el smoke largo con ese spec.
 
 Tercer intento con recuperacion tardia de goal:
 
@@ -113,13 +118,82 @@ Cuarto intento con required tests de dominio reconciliadas por Orquesta:
 - OPES temporal: `generation_jobs.status=completed` para el job
   `ea21c0901c8440626d075d26c50ddfea` y `job_artifacts_count=1`.
 
-## Cambios derivados
+Quinto intento de secuencia completa con timeout por defecto:
 
-- `BuildExternalWorkGoalWorkSpecV0` conserva campos masivos como
-  `input_field_payload` y no los inlinea en `context_refs[input_field_value]`.
+- Root temporal: `/tmp/orquesta-opes-real-20260628T112147Z`.
+- OPES temporal: `http://127.0.0.1:18192`.
+- Orquesta temporal: `http://127.0.0.1:19192`.
+- Probe de contrato REST:
+  `/tmp/orquesta-opes-real-20260628T112147Z/smoke/opes_derivatives_rest_contract_probe.json`;
+  `status=ok`, `accepted_count=23`, `rejected_count=0`,
+  `transport_compat=true`.
+- Scope-probe:
+  `/tmp/orquesta-opes-real-20260628T112147Z/smoke/opes_derivatives_scope_probe.json`;
+  `scope_probe_status=ok`.
+- Run:
+  `run-external-work-opes-df79e68c50ba7bfc6e32c5ae895635c9-opes-job-df79e68c50ba7bfc6e32c5ae895635c9`.
+- Resultado en tick 30, tras recuperacion acotada:
+  `goal_status=blocked`, `closure_status=blocked`,
+  `run_status=bloqueada`, `summary=codex_app_server_goal_active_timeout`.
+- Lectura: el timeout por defecto de 30s no basta para el primer Goal Codex
+  real de la secuencia. El bloqueo es controlado y no apunta a fallo de scope ni
+  de contrato REST.
+
+Sexto intento de secuencia completa con timeout ampliado:
+
+- Root temporal: `/tmp/orquesta-opes-real-long-20260628T112901Z`.
+- OPES temporal: `http://127.0.0.1:18192`.
+- Orquesta temporal: `http://127.0.0.1:19192`.
+- Configuracion relevante:
+  `ORQUESTA_CODEX_GOAL_TIMEOUT_MS=600000`,
+  `ORQUESTA_OPES_BRIDGE_MAX_TICKS=80`,
+  `ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS=5`,
+  `ORQUESTA_OPES_BRIDGE_LIMIT=1`.
+- Probe de contrato REST:
+  `/tmp/orquesta-opes-real-long-20260628T112901Z/smoke/opes_derivatives_rest_contract_probe.json`;
+  `status=ok`, `accepted_count=23`, `rejected_count=0`,
+  `transport_compat=true`.
+- Scope-probe:
+  `/tmp/orquesta-opes-real-long-20260628T112901Z/smoke/opes_derivatives_scope_probe.json`;
+  `scope_probe_status=ok`, `job_type=update_topic_registry`, `seen=1`,
+  negative checks por `program_id`, `topic_id` y `correlation_id`.
+- Primer run cerrado:
+  `run-external-work-opes-180b79d04fa1f664c14a07594bf38fb0-opes-job-180b79d04fa1f664c14a07594bf38fb0`.
+- Observacion tick 68:
+  `/tmp/orquesta-opes-real-long-20260628T112901Z/smoke/run_until_finalize/observe_goal_68_run-external-work-opes-180b79d04fa1f664c14a07594bf38fb0-opes-job-180b79d04fa1f664c14a07594bf38fb0_response.json`;
+  `run_status=cerrada`, `goal_status=complete`,
+  `closure_status=accepted`, `closure_accepted=true`,
+  `evidence-ref-goal-domain-receipt-ledger-accepted` y
+  `opes-artifact-ref-1dfc63c0cfc29eb01e3fcbb592e262a9`.
+- Artefactos del primer run:
+  `/tmp/orquesta-opes-real-long-20260628T112901Z/project/external/opes/update_topic_registry/180b79d04fa1f664c14a07594bf38fb0/topic_registry_update.json`
+  y
+  `/tmp/orquesta-opes-real-long-20260628T112901Z/project/external/opes/update_topic_registry/180b79d04fa1f664c14a07594bf38fb0/docs/orquesta_goal_result_v0.json`.
+- Segundo run observado al tick 80:
+  `run-external-work-opes-0ff60cf481e5f87a5a0552091282fcc0-opes-job-0ff60cf481e5f87a5a0552091282fcc0`;
+  `goal_status=running`, `summary=codex_app_server_goal_status_active`.
+- Resultado global del wrapper: no alcanzo `finalize_temario_package` en 80
+  ticks. La causa operativa observada es duracion/secuencialidad de goals reales
+  con `limit=1`, no rechazo de contrato, scope ni vuelta al loop legacy.
+
+## Cambios derivados del ajuste actual
+
+- `BuildExternalWorkGoalWorkSpecV0` compacta `input_fields`: inlinea campos
+  seguros/prioritarios, limita refs resolubles de payload y resume los campos
+  masivos no prioritarios sin exponer nombre ni valor en el contexto del Goal.
+  Esta mitigacion queda cubierta por unitarias y debe revalidarse en el
+  siguiente smoke real largo.
 - El criterio de aceptacion ya no bloquea por cualquier campo omitido por
   presupuesto; solo exige rework si falta un input imprescindible para el
   artefacto.
+
+## Contexto previo del mismo corte
+
+Los puntos siguientes pertenecen a cambios previos ya introducidos durante el
+corte del 2026-06-28. El quinto y sexto intento documentados arriba verifican
+sus efectos observables en el smoke temporal, pero no deben leerse como prueba
+nueva e independiente de cada implementacion interna.
+
 - `BuildCodexGoalPromptV0` instruye a materializar artefactos DomainWork bajo
   el write-set autorizado con nombres detectables por Orquesta.
 - El observer `app_server_stdio`/`app_server_proxy` marca como
@@ -160,5 +234,10 @@ Cuarto intento con required tests de dominio reconciliadas por Orquesta:
 - Extender de `update_topic_registry` a la secuencia completa de 23
   `work_kind`. El contrato REST y el scope real ya estan validados; falta
   ejecutar/cerrar toda la cola temporal real hasta `finalize_temario_package`.
+- Reejecutar el smoke largo despues de la compactacion actual del
+  `GoalWorkSpecV0` para medir si baja el tiempo/tokens por goal.
+- Convertir el smoke real largo en continuable/paralelizable por fases cuando
+  el contrato de dependencias lo permita; con `limit=1` y goals Codex reales, 80
+  ticks no bastan para 23 work kinds.
 - No volver al loop legacy para tapar este caso: la ruta correcta sigue siendo
   goal-first con cierre por artefactos, tests y receipt de dominio.

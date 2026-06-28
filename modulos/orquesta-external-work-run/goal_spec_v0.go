@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -24,6 +25,7 @@ const (
 	externalWorkGoalInputFieldMaxTotalBytesV0   = 5000
 	externalWorkGoalInputFieldMaxValuesV0       = 8
 	externalWorkGoalInputFieldMaxRawBytesV0     = 900
+	externalWorkGoalInputFieldMaxPayloadRefsV0  = 4
 )
 
 type externalWorkGoalInputFieldBudgetV0 struct {
@@ -165,32 +167,96 @@ func externalWorkGoalContextRefsV0(
 	for _, ref := range change.MetadataRefs {
 		appendRef("metadata", ref, "Evidencia o metadata compacta asociada al cambio.", false)
 	}
+	refs = append(refs, externalWorkGoalInputFieldContextRefsV0(request, work.InputFields)...)
+	return externalWorkGoalCompactContextRefsV0(refs)
+}
+
+func externalWorkGoalInputFieldContextRefsV0(
+	request StartExternalWorkRunRequestV0,
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []orquestagoal.GoalContextRefV0 {
+	if len(fields) == 0 {
+		return []orquestagoal.GoalContextRefV0{}
+	}
+	ordered := externalWorkGoalPrioritizedInputFieldsV0(fields)
+	refs := make([]orquestagoal.GoalContextRefV0, 0, len(ordered)+1)
 	var inputBudget externalWorkGoalInputFieldBudgetV0
-	for _, field := range work.InputFields {
-		fieldRef := "input-field-" + externalWorkGoalSafeInputFieldRefPartV0(field.Name)
-		appendRef("input_field", fieldRef, externalWorkGoalInputFieldNamePurposeV0(field.Name), false)
-		payloadRef, payloadOK := externalWorkGoalInputFieldPayloadRefV0(request, field.Name)
-		if payloadOK {
-			appendRef(
-				"input_field_payload",
-				payloadRef,
-				externalWorkGoalInputFieldPayloadPurposeV0(request, field.Name),
-				false,
-			)
+	inlineCount := 0
+	payloadCount := 0
+	omittedCount := 0
+	appendRef := func(kind, ref, purpose string) {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			return
 		}
-		if purpose, ok := externalWorkGoalInputFieldPurposeV0(field, payloadRef, &inputBudget); ok {
-			valueRef := fieldRef + "-value-" + shortExternalWorkGoalHashV0(purpose)
-			appendRef("input_field_value", valueRef, purpose, false)
+		refs = append(refs, orquestagoal.GoalContextRefV0{
+			Kind:    kind,
+			Ref:     ref,
+			Purpose: purpose,
+		})
+	}
+	for _, field := range ordered {
+		name := strings.TrimSpace(field.Name)
+		if name == "" {
 			continue
 		}
-		appendRef(
-			"input_field_value",
-			fieldRef+"-payload-ref",
-			externalWorkGoalInputFieldOmittedPurposeV0(field.Name),
-			false,
-		)
+		fieldRef := "input-field-" + externalWorkGoalSafeInputFieldRefPartV0(name)
+		payloadRef, payloadOK := externalWorkGoalInputFieldPayloadRefV0(request, name)
+		if purpose, ok := externalWorkGoalInputFieldPurposeV0(field, payloadRef, &inputBudget); ok {
+			valueRef := fieldRef + "-value-" + shortExternalWorkGoalHashV0(purpose)
+			appendRef("input_field_value", valueRef, purpose)
+			inlineCount++
+			continue
+		}
+		if payloadOK &&
+			payloadCount < externalWorkGoalInputFieldMaxPayloadRefsV0 &&
+			externalWorkGoalInputFieldShouldExposePayloadRefV0(name) {
+			appendRef("input_field_payload", payloadRef, externalWorkGoalInputFieldPayloadCompactPurposeV0(name))
+			payloadCount++
+			continue
+		}
+		omittedCount++
 	}
+	appendRef(
+		"input_fields_summary",
+		"input-fields-summary-"+shortExternalWorkGoalHashV0(externalWorkGoalInputFieldSummarySeedV0(fields)),
+		externalWorkGoalInputFieldsSummaryPurposeV0(len(fields), inlineCount, payloadCount, omittedCount),
+	)
 	return externalWorkGoalCompactContextRefsV0(refs)
+}
+
+func externalWorkGoalPrioritizedInputFieldsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	out := append([]orquestadomainwork.DomainWorkFieldV0(nil), fields...)
+	sort.SliceStable(out, func(i, j int) bool {
+		return externalWorkGoalInputFieldPriorityV0(out[i].Name) <
+			externalWorkGoalInputFieldPriorityV0(out[j].Name)
+	})
+	return out
+}
+
+func externalWorkGoalInputFieldPriorityV0(name string) int {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "course_id", "program_id", "topic_id", "work_kind", "transport_job_type",
+		"expected_artifact_type", "official_order", "probe_ref":
+		return 10
+	case "document_plan_artifact_id", "assembled_topic_artifact_id", "audio_profile_ref":
+		return 20
+	case "required_read_refs", "required_outputs", "output_contract",
+		"course_root_abs", "topic_dir_abs", "topic_manifest_abs", "program_json_abs":
+		return 30
+	default:
+		return 100
+	}
+}
+
+func externalWorkGoalInputFieldShouldExposePayloadRefV0(name string) bool {
+	if strings.TrimSpace(name) == "" || externalWorkGoalFieldNameSensitiveV0(name) {
+		return false
+	}
+	return externalWorkGoalInputFieldPriorityV0(name) <= 30 ||
+		externalWorkGoalFieldAllowsOperationalPathV0(name)
 }
 
 func externalWorkGoalRuleRefsV0() []orquestagoal.GoalRuleRefV0 {
@@ -271,7 +337,7 @@ func externalWorkGoalAcceptanceCriteriaV0(
 ) []string {
 	criteria := append([]string(nil), domainRequest.AcceptanceCriteria...)
 	if len(domainRequest.InputFields) > 0 {
-		criteria = append(criteria, "Usar los input_fields inlineados en context_refs[input_field_value] como contrato operativo compacto; los campos omitidos por redaccion o presupuesto quedan como payload_ref y solo deben resolverse si son imprescindibles para el artefacto. Bloquear con rework de dominio solo si falta un input imprescindible, no por un campo accesorio omitido.")
+		criteria = append(criteria, "Usar los input_fields inlineados en context_refs[input_field_value] como contrato operativo compacto; los campos omitidos por redaccion o presupuesto quedan durables en AppChange/DomainWork y solo deben resolverse si son imprescindibles para el artefacto. Bloquear con rework de dominio solo si falta un input imprescindible, no por un campo accesorio omitido.")
 	}
 	for _, constraint := range domainRequest.Constraints {
 		constraint = strings.TrimSpace(constraint)
@@ -364,20 +430,34 @@ func externalWorkGoalInputJSONSummaryValueV0(value string) any {
 	return value
 }
 
-func externalWorkGoalInputFieldOmittedPurposeV0(name string) string {
-	name = strings.TrimSpace(name)
-	if name == "" || externalWorkGoalFieldNameSensitiveV0(name) {
-		return "Campo input_fields sensible no inlineado; el payload completo permanece en AppChange/DomainWork como contrato durable."
-	}
-	return "Campo input_fields." + name + " no inlineado por sensibilidad, tamano o presupuesto; el payload completo permanece en AppChange/DomainWork como contrato durable."
+func externalWorkGoalInputFieldsSummaryPurposeV0(total, inlineCount, payloadCount, omittedCount int) string {
+	return fmt.Sprintf(
+		"Contrato DomainWork trae %d input_fields; inlineados=%d, payload_refs=%d, omitidos=%d por presupuesto/sensibilidad. Los payloads completos siguen en AppChange/DomainWork; no bloquear por campos accesorios omitidos.",
+		total,
+		inlineCount,
+		payloadCount,
+		omittedCount,
+	)
 }
 
-func externalWorkGoalInputFieldNamePurposeV0(name string) string {
+func externalWorkGoalInputFieldPayloadCompactPurposeV0(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" || externalWorkGoalFieldNameSensitiveV0(name) {
-		return "Nombre de campo input_fields sensible no inlineado; disponible solo como ref opaca."
+		return "Payload de input_field sensible conservado como ref opaca en AppChange/DomainWork."
 	}
-	return "Nombre de campo input_fields." + name + " disponible en el contrato DomainWork."
+	return "Payload de input_fields." + name + " conservado como ref opaca en AppChange/DomainWork; resolver solo si es imprescindible para el artefacto."
+}
+
+func externalWorkGoalInputFieldSummarySeedV0(fields []orquestadomainwork.DomainWorkFieldV0) string {
+	parts := make([]string, 0, len(fields))
+	for _, field := range fields {
+		name := strings.TrimSpace(field.Name)
+		if name == "" || externalWorkGoalFieldNameSensitiveV0(name) {
+			continue
+		}
+		parts = append(parts, name)
+	}
+	return strings.Join(parts, ",")
 }
 
 func externalWorkGoalInputFieldPayloadRefV0(
@@ -392,22 +472,6 @@ func externalWorkGoalInputFieldPayloadRefV0(
 	changeRef := compactExternalWorkRunRefV0(request.AppChangeRequest.ChangeRef)
 	fieldRef := externalWorkGoalSafeInputFieldRefPartV0(name)
 	return "app_change_payload:" + runRef + ":" + changeRef + ":external_work.input_fields." + fieldRef, true
-}
-
-func externalWorkGoalInputFieldPayloadPurposeV0(
-	request StartExternalWorkRunRequestV0,
-	name string,
-) string {
-	name = strings.TrimSpace(name)
-	if name == "" || externalWorkGoalFieldNameSensitiveV0(name) {
-		return "Payload completo de input_fields sensible no expuesto al Goal."
-	}
-	return "Payload completo de input_fields." + name +
-		" conservado en AppChangeStore/DomainWork; resolver con AppChangeRecordFilterV0{RunRef:" +
-		compactExternalWorkRunRefV0(request.RunRef) +
-		"} y ChangeRef " +
-		compactExternalWorkRunRefV0(request.AppChangeRequest.ChangeRef) +
-		"; no inventar valores si no esta accesible."
 }
 
 func externalWorkGoalSafeInputFieldRefPartV0(name string) string {

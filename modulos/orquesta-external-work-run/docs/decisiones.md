@@ -37,6 +37,23 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-28
+Decision: Compactar los context_refs de input_fields al compilar GoalWorkSpecV0.
+Motivo: el smoke real OPES temporal mostro que el camino goal-first funciona,
+pero cada goal puede crecer demasiado si se copian todos los campos de dominio,
+políticas editoriales o refs resolubles. El Goal necesita contexto operativo
+prioritario, no todo el payload.
+Alternativas: mantener una ref por nombre, payload y valor de cada campo;
+filtrar por dominio OPES; ampliar timeout sin reducir contexto. Se descartan
+porque inflan tokens, acoplan dominio o solo ocultan el problema.
+Impacto: los campos seguros/prioritarios se inlinean de forma acotada, se
+publican pocas refs resolubles cuando hace falta y siempre queda un resumen
+auditable de total/inlineados/payload_refs/omitidos. Los payloads completos
+siguen durables en AppChange/DomainWork.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-05-13
 Decision: La cola forma parte del caso de uso.
 Motivo: en servidor residente, guardar el run no basta; el supervisor global

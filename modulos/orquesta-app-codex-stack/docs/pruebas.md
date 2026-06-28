@@ -1127,8 +1127,8 @@ Resultado: `ok`.
 Evidencia:
 
 - `external_work.input_fields` llega al `agent_packet.context.entries` como
-  contexto de dominio acotado y conserva `input_field_payload` resoluble desde
-  `AppChangeStore` por `RunRef`/`ChangeRef`;
+  contexto de dominio acotado: los campos seguros se inlinean, las refs de
+  payload quedan limitadas y el resto se audita por `input_fields_summary`;
 - una entrega real fake de `draft_content_block` invoca `DomainWork`
   `submit_artifact`;
 - el artefacto usa `job_ref`, `content_block`, `body` leido desde fichero del
@@ -1628,8 +1628,9 @@ Cobertura:
   `program_json_abs`, `required_read_refs`, `required_outputs` y
   `output_contract`) dentro de `GoalWorkSpecV0.ContextRefs` y del
   `GoalWorkStateV0` persistido; las rutas absolutas se publican solo como
-  `local_path_ref`/`basename`, sin exponer `/home/alberto/Trabajo/OPES`, y el
-  payload completo queda referenciado como `app_change_payload`.
+  `local_path_ref`/`basename`, sin exponer `/home/alberto/Trabajo/OPES`; los
+  payloads quedan durables en AppChange/DomainWork y el spec publica
+  `input_fields_summary` para auditar inlineados/omitidos.
 - `TestCodexStackV0ExternalWorkGoalFirstCierraSecuenciaOPESDerivadosConReceiptsLedgerV0`
   recorre los 23 derivados OPES posteriores a `plan_temario`, desde
   `update_topic_registry` hasta `finalize_temario_package`, usando el bridge

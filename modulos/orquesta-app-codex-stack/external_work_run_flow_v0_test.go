@@ -255,9 +255,6 @@ func TestCodexStackV0ExternalWorkRunGoalFirstConservaInputFieldsOPESV0(t *testin
 	}
 	launchedContext := codexStackGoalContextRefsTextForTestV0(launcher.specs[0].ContextRefs)
 	for _, want := range []string{
-		"input_field_payload",
-		"app_change_payload:" + result.RunRef + ":" + change.ChangeRef + ":external_work.input_fields.course_root_abs",
-		"AppChangeRecordFilterV0",
 		"input_fields.course_root_abs",
 		"basename=curso",
 		"input_fields.topic_dir_abs",
@@ -275,6 +272,11 @@ func TestCodexStackV0ExternalWorkRunGoalFirstConservaInputFieldsOPESV0(t *testin
 		"input_fields.output_contract",
 		`"artifact_type":"content_block"`,
 		"payload_ref",
+		"input_fields_summary",
+		"Contrato DomainWork trae 8 input_fields",
+		"inlineados=8",
+		"payload_refs=0",
+		"omitidos=0",
 	} {
 		if !strings.Contains(launchedContext, want) {
 			t.Fatalf("context_refs no conservan %q:\n%s", want, launchedContext)

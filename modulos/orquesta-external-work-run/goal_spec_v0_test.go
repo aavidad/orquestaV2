@@ -99,9 +99,6 @@ func TestBuildExternalWorkGoalWorkSpecV0InlineaInputFieldsOperativosSeguros(t *t
 	}
 	context := externalWorkRunTestContextTextV0(spec.ContextRefs)
 	for _, want := range []string{
-		"kind=input_field_payload",
-		"app_change_payload:run-external-work-opes-job-ref-001-change-ref-001:change-ref-001:external_work.input_fields.course_root_abs",
-		"AppChangeRecordFilterV0",
 		"input_fields.course_root_abs",
 		"local_path_ref:",
 		"basename=curso",
@@ -118,6 +115,11 @@ func TestBuildExternalWorkGoalWorkSpecV0InlineaInputFieldsOperativosSeguros(t *t
 		"input_fields.output_contract",
 		`"artifact_type":"content_block"`,
 		"payload_ref",
+		"kind=input_fields_summary",
+		"Contrato DomainWork trae 7 input_fields",
+		"inlineados=7",
+		"payload_refs=0",
+		"omitidos=0",
 	} {
 		if !strings.Contains(context, want) {
 			t.Fatalf("context no contiene %q:\n%s", want, context)
@@ -133,7 +135,7 @@ func TestBuildExternalWorkGoalWorkSpecV0InlineaInputFieldsOperativosSeguros(t *t
 	}
 	if !externalWorkRunTestContainsStringV0(
 		spec.AcceptanceCriteria,
-		"Usar los input_fields inlineados en context_refs[input_field_value] como contrato operativo compacto; los campos omitidos por redaccion o presupuesto quedan como payload_ref y solo deben resolverse si son imprescindibles para el artefacto. Bloquear con rework de dominio solo si falta un input imprescindible, no por un campo accesorio omitido.",
+		"Usar los input_fields inlineados en context_refs[input_field_value] como contrato operativo compacto; los campos omitidos por redaccion o presupuesto quedan durables en AppChange/DomainWork y solo deben resolverse si son imprescindibles para el artefacto. Bloquear con rework de dominio solo si falta un input imprescindible, no por un campo accesorio omitido.",
 	) {
 		t.Fatalf("acceptance_criteria=%+v", spec.AcceptanceCriteria)
 	}
@@ -201,16 +203,75 @@ func TestBuildExternalWorkGoalWorkSpecV0NoInlineaInputFieldsMasivos(t *testing.T
 	}
 	context := externalWorkRunTestContextTextV0(spec.ContextRefs)
 	for _, want := range []string{
-		"kind=input_field_payload",
-		"external_work.input_fields.opes_global_editorial_policy",
-		"input_fields.opes_global_editorial_policy no inlineado por sensibilidad, tamano o presupuesto",
+		"kind=input_fields_summary",
+		"Contrato DomainWork trae 2 input_fields",
+		"inlineados=1",
+		"payload_refs=0",
+		"omitidos=1",
 	} {
 		if !strings.Contains(context, want) {
 			t.Fatalf("context no contiene %q:\n%s", want, context)
 		}
 	}
-	if strings.Contains(context, "regla editorial extensa que debe quedar solo por payload_ref") {
-		t.Fatalf("context contiene campo masivo inlineado:\n%s", context)
+	for _, forbidden := range []string{
+		"opes_global_editorial_policy",
+		"regla editorial extensa que debe quedar solo por payload_ref",
+	} {
+		if strings.Contains(context, forbidden) {
+			t.Fatalf("context contiene campo masivo omitido %q:\n%s", forbidden, context)
+		}
+	}
+}
+
+func TestBuildExternalWorkGoalWorkSpecV0LimitaPayloadRefsDeInputFields(t *testing.T) {
+	request := validExternalWorkRunRequestForTestV0()
+	largeValue := strings.Repeat("contrato extenso ", 90)
+	request.AppChangeRequest.ExternalWork.InputFields = []orquestadomainwork.DomainWorkFieldV0{
+		{Name: "course_id", Value: largeValue},
+		{Name: "program_id", Value: largeValue},
+		{Name: "topic_id", Value: largeValue},
+		{Name: "expected_artifact_type", Value: largeValue},
+		{Name: "official_order", Value: largeValue},
+		{Name: "probe_ref", Value: largeValue},
+		{Name: "opes_global_editorial_policy", Value: largeValue},
+		{Name: "private_notes", Value: largeValue},
+	}
+
+	spec, issues := BuildExternalWorkGoalWorkSpecV0(
+		request,
+		StartExternalWorkRunConfigV0{OccurredAt: "2026-05-10T10:00:00Z"},
+	)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	context := externalWorkRunTestContextTextV0(spec.ContextRefs)
+	if got := strings.Count(context, "kind=input_field_payload"); got != externalWorkGoalInputFieldMaxPayloadRefsV0 {
+		t.Fatalf("payload refs=%d context=\n%s", got, context)
+	}
+	for _, want := range []string{
+		"external_work.input_fields.course_id",
+		"external_work.input_fields.program_id",
+		"external_work.input_fields.topic_id",
+		"external_work.input_fields.expected_artifact_type",
+		"Contrato DomainWork trae 8 input_fields",
+		"inlineados=0",
+		"payload_refs=4",
+		"omitidos=4",
+	} {
+		if !strings.Contains(context, want) {
+			t.Fatalf("context no contiene %q:\n%s", want, context)
+		}
+	}
+	for _, forbidden := range []string{
+		"external_work.input_fields.official_order",
+		"external_work.input_fields.probe_ref",
+		"opes_global_editorial_policy",
+		"private_notes",
+		"contrato extenso",
+	} {
+		if strings.Contains(context, forbidden) {
+			t.Fatalf("context contiene campo omitido %q:\n%s", forbidden, context)
+		}
 	}
 }
 
