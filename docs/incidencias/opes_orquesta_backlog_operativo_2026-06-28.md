@@ -192,6 +192,19 @@ puede crear runs ni observar cierres. Evidencia:
 `TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinOrquestaBaseURLV0`.
 Commit: `f0da12f5`.
 
+Avance 2026-06-28 noche 4: el bridge OPES proyecta un `goal/observe` bloqueado
+como `supervision_status=blocked`, conserva `goal_evidence_refs` y usa un
+`summary`/codigo publico compacto como `supervision_stop_reason` cuando existe
+(por ejemplo `codex_app_server_goal_active_timeout`). El wrapper
+`run-until-finalize` deja de esperar a `MAX_TICKS` si `observe_goal` devuelve
+`goal_status=blocked|invalid`, `closure_status=blocked|rejected`,
+`run_status=blocked` o `closure_needs_rework=true`; falla temprano con
+`run_until_status=blocked`, `run_ref`, `tick`, `observe_goal_response` y
+`stop_reason`. Evidencia:
+`TestRunOPESDrainOnceV0GoalFirstObserveBlockedProyectaSupervisionV0`,
+`TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilGoalBlockedV0` y
+`TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilClosureBlockedV0`.
+
 ## ORQ-OPES-003 external_work_no_agent_no_delivery
 
 Estado: parcial; legacy 1+6 y guard de cierre goal-first cubiertos, pendiente

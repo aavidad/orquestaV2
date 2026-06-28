@@ -23,6 +23,7 @@ type opesBridgeObserveGoalResponseV0 struct {
 	ClosureStatus         string                 `json:"closure_status"`
 	ClosureAccepted       bool                   `json:"closure_accepted"`
 	ClosureNeedsRework    bool                   `json:"closure_needs_rework"`
+	Summary               string                 `json:"summary"`
 	ArtifactRefs          []string               `json:"artifact_refs"`
 	DomainReceiptRefs     []string               `json:"domain_receipt_refs"`
 	EvidenceRefs          []string               `json:"evidence_refs"`
@@ -89,6 +90,7 @@ func opesBridgeSupervisionFromObserveGoalV0(
 	status := strings.TrimSpace(decoded.GoalStatus)
 	runStatus := strings.TrimSpace(decoded.RunStatus)
 	closureStatus := strings.TrimSpace(decoded.ClosureStatus)
+	blockReason := opesBridgeObserveGoalBlockedStopReasonV0(decoded)
 	artifactRefs := compactStringsV0(decoded.ArtifactRefs)
 	domainReceiptRefs := compactStringsV0(decoded.DomainReceiptRefs)
 	evidenceRefs := compactStringsV0(decoded.EvidenceRefs)
@@ -110,7 +112,7 @@ func opesBridgeSupervisionFromObserveGoalV0(
 	case decoded.ClosureNeedsRework || closureStatus == "blocked" || status == "blocked" || status == "invalid" || runStatus == "blocked":
 		return opesExternalWorkRunSupervisionV0{
 			Status:            "blocked",
-			StopReason:        firstNonEmptyEnvlessV0(closureStatus, status, "goal_first_blocked"),
+			StopReason:        firstNonEmptyEnvlessV0(blockReason, closureStatus, status, runStatus, "goal_first_blocked"),
 			EvidenceRef:       evidenceRef,
 			ArtifactRefs:      artifactRefs,
 			DomainReceiptRefs: domainReceiptRefs,
@@ -144,4 +146,18 @@ func opesBridgeSupervisionFromObserveGoalV0(
 			EvidenceRefs:      evidenceRefs,
 		}
 	}
+}
+
+func opesBridgeObserveGoalBlockedStopReasonV0(decoded opesBridgeObserveGoalResponseV0) string {
+	for _, issue := range decoded.Errores {
+		code := strings.TrimSpace(issue["code"])
+		if code != "" {
+			return code
+		}
+	}
+	summary := strings.TrimSpace(decoded.Summary)
+	if summary == "" || strings.ContainsAny(summary, " \t\r\n") {
+		return ""
+	}
+	return summary
 }

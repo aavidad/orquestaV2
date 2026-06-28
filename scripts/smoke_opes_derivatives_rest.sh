@@ -22,6 +22,9 @@ SCOPE_PROBE_OUTPUT="${ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT:-$SMOKE_OUT_DIR/op
 FAKE_SERVER="${ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER:-0}"
 FAKE_PENDING_TYPE="${ORQUESTA_OPES_DERIVATIVES_FAKE_PENDING_TYPE:-assemble_topic}"
 FAKE_GOAL_FIRST="${ORQUESTA_OPES_DERIVATIVES_FAKE_GOAL_FIRST:-1}"
+FAKE_OBSERVE_STATUS="${ORQUESTA_OPES_DERIVATIVES_FAKE_OBSERVE_STATUS-complete}"
+FAKE_CLOSURE_STATUS="${ORQUESTA_OPES_DERIVATIVES_FAKE_CLOSURE_STATUS-accepted}"
+FAKE_CLOSURE_ACCEPTED="${ORQUESTA_OPES_DERIVATIVES_FAKE_CLOSURE_ACCEPTED-1}"
 FAKE_DIR=""
 FAKE_PID=""
 
@@ -84,6 +87,9 @@ limit = sys.argv[3]
 pending_type = sys.argv[4]
 mode = sys.argv[5]
 goal_first = sys.argv[6] == "1"
+observe_status = sys.argv[7].strip()
+closure_status = sys.argv[8].strip()
+closure_accepted = sys.argv[9].strip() == "1"
 active_index = sequence.index(pending_type) if mode == "dry-run-once" else 0
 expected_scan_limit = str(min(max(max(int(limit), 1) * 100, 100), 500))
 runs = {}
@@ -367,23 +373,30 @@ class Handler(BaseHTTPRequestHandler):
             if not run.get("goal_first"):
                 send_json(self, 400, {"error": "run_not_goal_first", "run_ref": run_ref})
                 return
-            if not run["observed"]:
+            accepted = observe_status == "complete" and closure_status == "accepted" and closure_accepted
+            if accepted and not run["observed"]:
                 run["observed"] = True
                 if run["stage"] == active_index:
                     active_index += 1
+            run_status = "closed" if accepted else "blocked"
+            artifact_refs = ["artifact-ref-fake-" + run["work_kind"]] if accepted else []
+            domain_receipt_refs = ["domain-receipt-ref-fake-" + run["job_ref"]] if accepted else []
+            evidence_refs = ["evidence-ref-fake-goal-observed"] if accepted else ["evidence-ref-fake-goal-blocked"]
+            summary = "fake_goal_" + observe_status if observe_status in {"blocked", "invalid"} else ""
             send_json(self, 200, {
                 "estado": "ok",
                 "run_ref": run_ref,
-                "run_status": "closed",
+                "run_status": run_status,
                 "director_execution_mode": "goal_first",
                 "goal_ref": run["goal_ref"],
                 "external_goal_ref": run["external_goal_ref"],
-                "goal_status": "complete",
-                "closure_status": "accepted",
-                "closure_accepted": True,
-                "artifact_refs": ["artifact-ref-fake-" + run["work_kind"]],
-                "domain_receipt_refs": ["domain-receipt-ref-fake-" + run["job_ref"]],
-                "evidence_refs": ["evidence-ref-fake-goal-observed"],
+                "goal_status": observe_status,
+                "closure_status": closure_status,
+                "closure_accepted": closure_accepted,
+                "summary": summary,
+                "artifact_refs": artifact_refs,
+                "domain_receipt_refs": domain_receipt_refs,
+                "evidence_refs": evidence_refs,
             })
             return
         send_json(self, 404, {"error": "unexpected_path", "path": parsed.path})
@@ -396,7 +409,7 @@ with open(url_file, "w", encoding="utf-8") as fh:
     fh.write(f"http://127.0.0.1:{server.server_port}\n")
 server.serve_forever()
 PY
-  python3 "$server_py" "$url_file" "$SEQUENCE" "$LIMIT" "$FAKE_PENDING_TYPE" "$MODE" "$FAKE_GOAL_FIRST" &
+  python3 "$server_py" "$url_file" "$SEQUENCE" "$LIMIT" "$FAKE_PENDING_TYPE" "$MODE" "$FAKE_GOAL_FIRST" "$FAKE_OBSERVE_STATUS" "$FAKE_CLOSURE_STATUS" "$FAKE_CLOSURE_ACCEPTED" &
   FAKE_PID="$!"
   for _ in $(seq 1 50); do
     if [[ -s "$url_file" ]]; then
@@ -1155,6 +1168,60 @@ post_observe_goal() {
   cat "$response_file"
 }
 
+observe_goal_response_blocks_run_until() {
+  local response_file="$1"
+  local run_ref="$2"
+  local tick="$3"
+  python3 - "$response_file" "$run_ref" "$tick" <<'PY'
+import json
+import sys
+
+response_file, run_ref, tick = sys.argv[1:]
+try:
+    with open(response_file, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+except Exception:
+    sys.exit(1)
+
+goal_status = str(data.get("goal_status") or "").strip()
+closure_status = str(data.get("closure_status") or "").strip()
+run_status = str(data.get("run_status") or "").strip()
+summary = str(data.get("summary") or "").strip()
+needs_rework = bool(data.get("closure_needs_rework"))
+errores = data.get("errores_publicos") or []
+issue_code = ""
+for issue in errores:
+    if isinstance(issue, dict):
+        issue_code = str(issue.get("code") or "").strip()
+        if issue_code:
+            break
+
+blocked = (
+    goal_status in {"blocked", "invalid"}
+    or closure_status in {"blocked", "rejected"}
+    or run_status == "blocked"
+    or needs_rework
+)
+if not blocked:
+    sys.exit(1)
+
+stop_reason = issue_code or summary or closure_status or goal_status or run_status or "goal_first_blocked"
+print("run_until_status=blocked")
+print(f"run_ref={run_ref}")
+print(f"tick={tick}")
+print(f"observe_goal_response={response_file}")
+if goal_status:
+    print(f"goal_status={goal_status}")
+if closure_status:
+    print(f"closure_status={closure_status}")
+if run_status:
+    print(f"run_status={run_status}")
+print(f"closure_accepted={str(bool(data.get('closure_accepted'))).lower()}")
+print(f"stop_reason={stop_reason}")
+sys.exit(0)
+PY
+}
+
 supervise_response_requires_goal_observe() {
   local file="$1"
   python3 - "$file" <<'PY'
@@ -1334,15 +1401,23 @@ run_until_final_type() {
       local goal_first=""
       IFS=$'\t' read -r run_ref goal_first <<<"$record"
       if [[ "$goal_first" == "1" ]]; then
+        local observe_stdout="$SMOKE_OUT_DIR/observe_goal_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
         post_observe_goal "$run_ref" "$tick" |
-          tee "$SMOKE_OUT_DIR/observe_goal_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
+          tee "$observe_stdout"
+        if observe_goal_response_blocks_run_until "$observe_stdout" "$run_ref" "$tick"; then
+          exit 1
+        fi
         continue
       fi
       local supervise_stdout="$SMOKE_OUT_DIR/supervise_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
       post_supervise_run "$run_ref" "$tick" | tee "$supervise_stdout"
       if supervise_response_requires_goal_observe "$supervise_stdout"; then
+        local observe_stdout="$SMOKE_OUT_DIR/observe_goal_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
         post_observe_goal "$run_ref" "$tick" |
-          tee "$SMOKE_OUT_DIR/observe_goal_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
+          tee "$observe_stdout"
+        if observe_goal_response_blocks_run_until "$observe_stdout" "$run_ref" "$tick"; then
+          exit 1
+        fi
       fi
     done
     if [[ "$tick" -lt "$MAX_TICKS" ]]; then

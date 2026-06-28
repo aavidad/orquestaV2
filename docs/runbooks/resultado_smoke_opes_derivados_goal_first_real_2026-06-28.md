@@ -81,12 +81,17 @@ Segundo intento con contexto compactado:
 - El observer `app_server_stdio`/`app_server_proxy` marca como
   `blocked` con `codex_app_server_goal_active_timeout` si el goal remoto sigue
   `active` y `timeUsedSeconds` supera `ORQUESTA_CODEX_GOAL_TIMEOUT_MS`.
+- El wrapper `run-until-finalize` ya corta en el primer `goal/observe` que
+  devuelva `goal_status=blocked|invalid`, `closure_status=blocked|rejected`,
+  `run_status=blocked` o `closure_needs_rework=true`; emite
+  `run_until_status=blocked`, `run_ref`, `tick`, `observe_goal_response` y
+  `stop_reason` en vez de esperar a `MAX_TICKS`.
 
 ## Pendiente
 
 - Repetir effectful con backend Codex real para confirmar que un goal activo
-  demasiado tiempo queda como bloqueo operativo explicito o que completa con
-  artefactos y receipt.
+  demasiado tiempo queda como bloqueo operativo explicito observado por el
+  wrapper o que completa con artefactos y receipt.
 - Extender de `update_topic_registry` a la secuencia completa de 23
   `work_kind` solo despues de cerrar el caso unitario.
 - No volver al loop legacy para tapar este caso: la ruta correcta sigue siendo

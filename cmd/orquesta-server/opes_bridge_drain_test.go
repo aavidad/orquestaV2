@@ -380,6 +380,107 @@ func TestRunOPESDrainOnceV0GoalFirstSupervisionObservaGoalSinSupervisorLegacyV0(
 	}
 }
 
+func TestRunOPESDrainOnceV0GoalFirstObserveBlockedProyectaSupervisionV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-goal-observe-blocked-001",
+			"type":           "draft_content_block",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   `{"topic_id":"topic-ref-001","title":"Bloque goal observe blocked"}`,
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	observes := 0
+	supervisions := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v0/apps/director/goal/observe":
+			observes++
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("decode observe: %v", err)
+			}
+			if body["run_ref"] != "run-ref-goal-observe-blocked-001" {
+				t.Fatalf("observe body=%+v", body)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"estado":                  "ok",
+				"run_ref":                 "run-ref-goal-observe-blocked-001",
+				"run_status":              "blocked",
+				"director_execution_mode": "goal_first",
+				"goal_ref":                "goal-ref-goal-observe-blocked-001",
+				"external_goal_ref":       "thread-ref-goal-observe-blocked-001",
+				"goal_status":             "blocked",
+				"closure_status":          "blocked",
+				"closure_accepted":        false,
+				"summary":                 "codex_app_server_goal_active_timeout",
+				"evidence_refs":           []string{"evidence-ref-goal-observe-blocked-timeout"},
+			})
+		case "/api/v0/runs/supervise":
+			supervisions++
+			t.Fatalf("goal-first bloqueado no debe llamar a runs/supervise")
+		default:
+			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer orquestaServer.Close()
+
+	ledger, err := newFileExternalBridgeInputLedgerV0(
+		filepath.Join(t.TempDir(), "external-bridge-input-ledger.json"),
+	)
+	if err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	if err := opesBridgeRecordSubmittedV0(
+		context.Background(),
+		ledger,
+		orquestaopesconnector.ExternalJobV0{ID: "job-ref-goal-observe-blocked-001"},
+		"run-ref-goal-observe-blocked-001",
+		"change-ref-goal-observe-blocked-001",
+		externalBridgeInputRunMetadataV0{
+			RoutePolicy:           "goal_first",
+			DirectorExecutionMode: "goal_first",
+			GoalRef:               "goal-ref-goal-observe-blocked-001",
+			ExternalGoalRef:       "thread-ref-goal-observe-blocked-001",
+			NextActions:           []string{"observe_goal"},
+		},
+	); err != nil {
+		t.Fatalf("record ledger: %v", err)
+	}
+
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:        opesServer.URL,
+		OrquestaBaseURL:    orquestaServer.URL,
+		Limit:              1,
+		JobType:            "draft_content_block",
+		HTTPTimeout:        time.Second,
+		SuperviseSubmitted: true,
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+		InputLedger: ledger,
+	})
+	if err != nil ||
+		observes != 1 ||
+		supervisions != 0 ||
+		summary.AlreadySubmitted != 1 ||
+		summary.Results[0].SupervisionStatus != "blocked" ||
+		summary.Results[0].SupervisionStopReason != "codex_app_server_goal_active_timeout" ||
+		summary.Results[0].SupervisionEvidenceRef != "evidence-ref-goal-observe-blocked-timeout" ||
+		!containsStringForTestV0(summary.Results[0].GoalEvidenceRefs, "evidence-ref-goal-observe-blocked-timeout") {
+		t.Fatalf("observes=%d supervisions=%d summary=%+v err=%v", observes, supervisions, summary, err)
+	}
+}
+
 func TestRunOPESDrainOnceV0GoalFirstObserveErrorConservaCodigoPublicoV0(t *testing.T) {
 	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
@@ -2335,6 +2436,97 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilFinalizeV0(t *testing.
 		!strings.Contains(output, `final_job_type=finalize_temario_package`) ||
 		!strings.Contains(output, `empty_after_final=true`) {
 		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
+	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilGoalBlockedV0(t *testing.T) {
+	requireLocalTCPForTestV0(t)
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 no disponible")
+	}
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("curl no disponible")
+	}
+	repoRoot := filepath.Clean("../..")
+	cmd := exec.Command("bash", "scripts/smoke_opes_derivatives_rest.sh")
+	cmd.Dir = repoRoot
+	cmd.Env = cleanOPESSmokeEnvForDrainTestV0(os.Environ())
+	cmd.Env = append(cmd.Env,
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1",
+		"ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize",
+		"ORQUESTA_OPES_DERIVATIVES_EXECUTE=1",
+		"ORQUESTA_OPES_TEMPORAL_CONFIRM=1",
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-fake-operario-001",
+		"ORQUESTA_OPES_BRIDGE_LIMIT=1",
+		"ORQUESTA_OPES_BRIDGE_MAX_TICKS=5",
+		"ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS=0",
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_OBSERVE_STATUS=blocked",
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_CLOSURE_STATUS=",
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_CLOSURE_ACCEPTED=0",
+		"SMOKE_ID=test-derivatives-rest-run-until-goal-blocked",
+		"SMOKE_OUT_DIR="+filepath.Join(t.TempDir(), "out"),
+	)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	output := stdout.String()
+	if err == nil ||
+		!strings.Contains(output, `"selected_job_type":"update_topic_registry"`) ||
+		!strings.Contains(output, `run_until_status=blocked`) ||
+		!strings.Contains(output, `goal_status=blocked`) ||
+		!strings.Contains(output, `stop_reason=fake_goal_blocked`) ||
+		strings.Contains(output, `"selected_job_type":"research_exam_precedents"`) ||
+		strings.Contains(stderr.String(), "no se alcanzo") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, output, stderr.String())
+	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilClosureBlockedV0(t *testing.T) {
+	requireLocalTCPForTestV0(t)
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 no disponible")
+	}
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("curl no disponible")
+	}
+	repoRoot := filepath.Clean("../..")
+	cmd := exec.Command("bash", "scripts/smoke_opes_derivatives_rest.sh")
+	cmd.Dir = repoRoot
+	cmd.Env = cleanOPESSmokeEnvForDrainTestV0(os.Environ())
+	cmd.Env = append(cmd.Env,
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1",
+		"ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize",
+		"ORQUESTA_OPES_DERIVATIVES_EXECUTE=1",
+		"ORQUESTA_OPES_TEMPORAL_CONFIRM=1",
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-fake-operario-001",
+		"ORQUESTA_OPES_BRIDGE_LIMIT=1",
+		"ORQUESTA_OPES_BRIDGE_MAX_TICKS=5",
+		"ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS=0",
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_OBSERVE_STATUS=complete",
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_CLOSURE_STATUS=blocked",
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_CLOSURE_ACCEPTED=0",
+		"SMOKE_ID=test-derivatives-rest-run-until-closure-blocked",
+		"SMOKE_OUT_DIR="+filepath.Join(t.TempDir(), "out"),
+	)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	output := stdout.String()
+	if err == nil ||
+		!strings.Contains(output, `"selected_job_type":"update_topic_registry"`) ||
+		!strings.Contains(output, `run_until_status=blocked`) ||
+		!strings.Contains(output, `goal_status=complete`) ||
+		!strings.Contains(output, `closure_status=blocked`) ||
+		!strings.Contains(output, `stop_reason=blocked`) ||
+		strings.Contains(output, `"selected_job_type":"research_exam_precedents"`) ||
+		strings.Contains(stderr.String(), "no se alcanzo") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, output, stderr.String())
 	}
 }
 
