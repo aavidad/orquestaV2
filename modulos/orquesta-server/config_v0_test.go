@@ -2,6 +2,7 @@ package orquestaserver
 
 import (
 	"testing"
+	"time"
 
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 )
@@ -59,7 +60,8 @@ func TestNormalizeConfigV0ObservadorGoalFirstActivoPorDefectoV0(t *testing.T) {
 	config := NormalizeConfigV0(ConfigV0{})
 
 	if !config.GoalObserverEnabled ||
-		config.GoalObserverMaxItems != DefaultGoalObserverMaxItemsV0 {
+		config.GoalObserverMaxItems != DefaultGoalObserverMaxItemsV0 ||
+		config.GoalObserverInterval != DefaultTickIntervalV0 {
 		t.Fatalf("goal observer config=%+v", config)
 	}
 }
@@ -73,5 +75,26 @@ func TestNormalizeConfigV0PermiteDesactivarObservadorGoalFirstV0(t *testing.T) {
 
 	if config.GoalObserverEnabled || config.GoalObserverMaxItems != 12 {
 		t.Fatalf("goal observer config=%+v", config)
+	}
+}
+
+func TestNormalizeConfigV0ObservadorGoalFirstHeredaTickSiNoTieneIntervaloPropioV0(t *testing.T) {
+	config := NormalizeConfigV0(ConfigV0{
+		TickInterval: 17 * time.Second,
+	})
+
+	if config.GoalObserverInterval != 17*time.Second {
+		t.Fatalf("goal observer interval=%s want=17s", config.GoalObserverInterval)
+	}
+}
+
+func TestNormalizeConfigV0ObservadorGoalFirstPermiteIntervaloPropioV0(t *testing.T) {
+	config := NormalizeConfigV0(ConfigV0{
+		TickInterval:         time.Hour,
+		GoalObserverInterval: 1500 * time.Millisecond,
+	})
+
+	if config.GoalObserverInterval != 1500*time.Millisecond {
+		t.Fatalf("goal observer interval=%s want=1500ms", config.GoalObserverInterval)
 	}
 }

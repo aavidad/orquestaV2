@@ -162,6 +162,45 @@ func TestRuntimeV0GoalObservationLoopCierraGoalActivoSinDirectorResidenteV0(t *t
 	}
 }
 
+func TestRuntimeV0GoalObservationLoopUsaIntervaloPropioV0(t *testing.T) {
+	supervisor := &fakeSupervisorV0{
+		goalStarted: make(chan struct{}, 3),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		Addr:                          "127.0.0.1:0",
+		StateDir:                      t.TempDir(),
+		TickInterval:                  time.Hour,
+		GoalObserverInterval:          10 * time.Millisecond,
+		GoalObserverEnabledConfigured: true,
+		GoalObserverEnabled:           true,
+		GoalObserverMaxItems:          5,
+		ResidentDirectorEnabled:       false,
+		AuditDisabled:                 true,
+		ShutdownGracePeriod:           time.Second,
+	}, RuntimeDepsV0{
+		Supervisor:     supervisor,
+		GoalStateStore: newMemoryGoalStateStoreV0(),
+		StateStore:     &threadSafeStateStoreV0{},
+		Clock:          fixedClockV0{now: time.Date(2026, 6, 27, 11, 30, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	runCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runtime.RunV0(runCtx) }()
+
+	waitForRuntimeTestV0(t, supervisor.goalStarted)
+	waitForRuntimeTestV0(t, supervisor.goalStarted)
+	cancel()
+	if err := waitRuntimeDoneV0(t, done); err != nil {
+		t.Fatalf("RunV0: %v", err)
+	}
+	if supervisor.goalObservationCalls < 2 {
+		t.Fatalf("goal observer calls=%d, no uso intervalo propio", supervisor.goalObservationCalls)
+	}
+}
+
 func TestRuntimeV0GoalObservationFingerprintSaltaRunSinCambiosV0(t *testing.T) {
 	store := &memoryStateStoreV0{}
 	goalStore := newMemoryGoalStateStoreV0()

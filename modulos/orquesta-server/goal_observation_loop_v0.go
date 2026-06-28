@@ -14,7 +14,7 @@ func (runtime *RuntimeV0) runGoalObservationLoopV0(ctx context.Context) {
 		return
 	}
 	runtime.runGoalObservationTickAsyncV0(ctx)
-	ticker := time.NewTicker(runtime.config.TickInterval)
+	ticker := time.NewTicker(runtime.config.GoalObserverInterval)
 	defer ticker.Stop()
 	for {
 		select {

@@ -99,6 +99,7 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		SelfAuditBacklogEnabled:          boolEnvOrDefaultV0(envSelfAuditBacklogEnabledV0, false),
 		GoalObserverEnabled:              goalObserverEnabled,
 		GoalObserverEnabledConfigured:    goalObserverConfigured,
+		GoalObserverInterval:             time.Duration(intEnvOrZeroV0(envServerGoalObserverIntervalMSV0)) * time.Millisecond,
 		GoalObserverMaxItems:             intEnvOrDefaultV0(envServerGoalObserverMaxItemsV0, orquestaserver.DefaultGoalObserverMaxItemsV0),
 		ResidentDirectorEnabled:          serverResidentDirectorEnabledFromEnvV0(),
 		ResidentDirectorMaxActions:       intEnvOrDefaultV0(envServerResidentDirectorMaxActionsV0, orquestaserver.DefaultResidentDirectorMaxActionsV0),

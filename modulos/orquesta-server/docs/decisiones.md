@@ -458,3 +458,14 @@ para el disparador idle. El alias historico
 cuando la canonica no existe; el estado efectivo publica un diagnostico de
 migracion. Si ambas existen, gana la canonica y el alias queda ignorado con
 diagnostico publico.
+
+## SRV-017: intervalo propio del observador goal-first
+
+Decision: el observador residente de `GoalWorkStateV0` tiene
+`GoalObserverInterval` y `ORQUESTA_SERVER_GOAL_OBSERVER_INTERVAL_MS`.
+Motivo: Codex Goal ya hace el loop interno del trabajo; Orquesta solo debe
+observar/cerrar por evidencias. Esa observacion no tiene por que compartir la
+cadencia del supervisor/director residente legacy.
+Impacto: si el intervalo propio no se configura, hereda `TickInterval` y no
+cambia instalaciones existentes. Si se configura, `runGoalObservationLoopV0`
+usa ese ticker y `effective_config` lo publica como setting canonico.

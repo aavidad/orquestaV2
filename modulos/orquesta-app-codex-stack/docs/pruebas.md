@@ -1621,6 +1621,13 @@ Cobertura:
   `orquesta.director.stats.v0` por `external_job_ref` devuelve
   `external_job.director_execution_mode=goal_first` y estado derivado de
   `GoalWorkStateV0`.
+- `TestCodexStackV0ExternalWorkRunGoalFirstConservaInputFieldsOPESV0` fija que
+  la ruta integrada `/external-work/run` conserva campos OPES operativos
+  (`course_root_abs`, `topic_dir_abs`, `topic_manifest_abs`,
+  `program_json_abs`, `required_read_refs`, `required_outputs` y
+  `output_contract`) dentro de `GoalWorkSpecV0.ContextRefs` y del
+  `GoalWorkStateV0` persistido; las rutas absolutas se publican solo como
+  `local_path_ref`/`basename`, sin exponer `/home/alberto/Trabajo/OPES`.
 - `TestCodexStackV0ExternalWorkGoalFirstSinStateNoDrenaLegacy` fija que una run
   external-work contenedora sin `GoalWorkStateV0` devuelve
   `goal_first_state_missing`, no drena el loop legacy y deja accion de reparar

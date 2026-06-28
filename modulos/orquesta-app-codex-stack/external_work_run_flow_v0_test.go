@@ -206,6 +206,99 @@ func TestCodexStackV0ExternalWorkRunConBackendGoalArrancaGoalFirstSinColaLegacy(
 	}
 }
 
+func TestCodexStackV0ExternalWorkRunGoalFirstConservaInputFieldsOPESV0(t *testing.T) {
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack := mustBuildCodexStackWithGoalBackendForTestV0(
+		t,
+		newFakeCodexStackRuntimeV0(),
+		launcher,
+		&goalFirstQueueObserverForTestV0{},
+		goalStates,
+	)
+	change := defaultExternalWorkRunChangeForTestV0()
+	change.ExternalWork.InputFields = append(change.ExternalWork.InputFields,
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:  "course_root_abs",
+			Value: "/home/alberto/Trabajo/OPES/opes-salidas/curso",
+		},
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:  "topic_dir_abs",
+			Value: "/home/alberto/Trabajo/OPES/opes-salidas/curso/tema_001",
+		},
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:  "topic_manifest_abs",
+			Value: "/home/alberto/Trabajo/OPES/opes-salidas/curso/tema_001/manifest.json",
+		},
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:  "program_json_abs",
+			Value: "/home/alberto/Trabajo/OPES/programas/programa.json",
+		},
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:   "required_read_refs",
+			Values: []string{"temario/tema_001.md", "normativa/ley-ref-001"},
+		},
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:   "required_outputs",
+			Values: []string{"04_markdown/tema_001.md", "paquete_final/tests.json"},
+		},
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:      "output_contract",
+			ValueJSON: []byte(`{"artifact_type":"content_block","min_words":1200}`),
+		},
+	)
+
+	result := postExternalWorkRunStackWithChangeV0(t, stack, change)
+
+	if result.GoalRef == "" || len(launcher.specs) != 1 {
+		t.Fatalf("goal-first no lanzo spec: result=%+v specs=%+v", result, launcher.specs)
+	}
+	launchedContext := codexStackGoalContextRefsTextForTestV0(launcher.specs[0].ContextRefs)
+	for _, want := range []string{
+		"input_fields.course_root_abs",
+		"basename=curso",
+		"input_fields.topic_dir_abs",
+		"basename=tema_001",
+		"input_fields.topic_manifest_abs",
+		"basename=manifest.json",
+		"input_fields.program_json_abs",
+		"basename=programa.json",
+		"input_fields.required_read_refs",
+		"temario/tema_001.md",
+		"normativa/ley-ref-001",
+		"input_fields.required_outputs",
+		"04_markdown/tema_001.md",
+		"paquete_final/tests.json",
+		"input_fields.output_contract",
+		`"artifact_type":"content_block"`,
+		"payload_ref",
+	} {
+		if !strings.Contains(launchedContext, want) {
+			t.Fatalf("context_refs no conservan %q:\n%s", want, launchedContext)
+		}
+	}
+	for _, forbidden := range []string{
+		"/home/alberto/Trabajo/OPES",
+		"/home-redacted/",
+	} {
+		if strings.Contains(launchedContext, forbidden) {
+			t.Fatalf("context_refs exponen ruta local %q:\n%s", forbidden, launchedContext)
+		}
+	}
+	criteria := strings.Join(launcher.specs[0].AcceptanceCriteria, "\n")
+	if !strings.Contains(criteria, "Usar los input_fields inlineados") {
+		t.Fatalf("acceptance no exige usar input_fields: %v", launcher.specs[0].AcceptanceCriteria)
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), result.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	persistedContext := codexStackGoalContextRefsTextForTestV0(state.Spec.ContextRefs)
+	if persistedContext != launchedContext {
+		t.Fatalf("context_refs persistidos difieren\nlaunched:\n%s\npersisted:\n%s", launchedContext, persistedContext)
+	}
+}
+
 func TestCodexStackV0ExternalWorkRunConObservadorResidenteNoMarcaObserverRequired(t *testing.T) {
 	launcher := &goalFirstQueueLauncherForTestV0{}
 	goalStates := newGoalFirstQueueStateStoreForTestV0()
@@ -1323,6 +1416,14 @@ func goalDomainReceiptOPESSubroleEvidenceRefsForTestV0() []string {
 		"domain-work-opes-subrole-tests-tutor",
 		"domain-work-opes-subrole-html-rag-audio-qa",
 	}
+}
+
+func codexStackGoalContextRefsTextForTestV0(refs []orquestagoal.GoalContextRefV0) string {
+	parts := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		parts = append(parts, strings.TrimSpace(ref.Kind+" "+ref.Ref+" "+ref.Purpose))
+	}
+	return strings.Join(parts, "\n")
 }
 
 func postExternalWorkRunStackWithChangeV0(

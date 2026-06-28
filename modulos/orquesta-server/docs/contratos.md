@@ -126,6 +126,11 @@ Configuracion externa relacionada:
   activo y falta el launcher, el runtime publica
   `goal_launcher_unavailable` y no cae silenciosamente al loop legacy de
   `PrepareIdleSelfImprovementV0`.
+- `ORQUESTA_SERVER_GOAL_OBSERVER_INTERVAL_MS`: intervalo propio del observador
+  residente de goals activos. Si no se define, hereda
+  `ORQUESTA_SERVER_TICK_INTERVAL_MS` para conservar compatibilidad; si se
+  define, el observador goal-first puede ir mas ligero o mas frecuente sin
+  cambiar el tick del supervisor/director residente legacy.
 - `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy|app_server_stdio`: solo en
   `cmd/orquesta-server`, inyecta launcher/observer Codex Goal usando
   `codex app-server`. `app_server_proxy` usa un daemon/socket compatible ya

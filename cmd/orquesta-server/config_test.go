@@ -180,11 +180,15 @@ func TestServerConfigFromEnvV0ObservadorGoalFirstResidentePorDefectoV0(t *testin
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
 	if !config.GoalObserverEnabled ||
-		config.GoalObserverMaxItems != orquestaserver.DefaultGoalObserverMaxItemsV0 {
+		config.GoalObserverMaxItems != orquestaserver.DefaultGoalObserverMaxItemsV0 ||
+		config.GoalObserverInterval != config.TickInterval {
 		t.Fatalf("goal observer config=%+v", config)
 	}
 	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerGoalObserverEnabledV0); got != "true" {
 		t.Fatalf("%s=%q want true", envServerGoalObserverEnabledV0, got)
+	}
+	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerGoalObserverIntervalMSV0); got != "5000" {
+		t.Fatalf("%s=%q want 5000", envServerGoalObserverIntervalMSV0, got)
 	}
 	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerGoalObserverMaxItemsV0); got != "70" {
 		t.Fatalf("%s=%q want 70", envServerGoalObserverMaxItemsV0, got)
@@ -194,18 +198,25 @@ func TestServerConfigFromEnvV0ObservadorGoalFirstResidentePorDefectoV0(t *testin
 func TestServerConfigFromEnvV0PermiteApagarObservadorGoalFirstV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerGoalObserverEnabledV0, "false")
+	t.Setenv(envServerGoalObserverIntervalMSV0, "1500")
 	t.Setenv(envServerGoalObserverMaxItemsV0, "11")
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	if config.GoalObserverEnabled || config.GoalObserverMaxItems != 11 {
+	if config.GoalObserverEnabled ||
+		config.GoalObserverInterval != 1500*time.Millisecond ||
+		config.GoalObserverMaxItems != 11 {
 		t.Fatalf("goal observer config=%+v", config)
 	}
 	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerGoalObserverEnabledV0)
 	if setting.Value != "false" || setting.Source != "explicit" {
 		t.Fatalf("setting goal observer=%+v", setting)
+	}
+	interval := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerGoalObserverIntervalMSV0)
+	if interval.Value != "1500" || interval.Source != "explicit" {
+		t.Fatalf("setting goal observer interval=%+v", interval)
 	}
 }
 

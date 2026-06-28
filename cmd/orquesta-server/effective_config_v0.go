@@ -34,6 +34,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverConfigSettingFromRegistryV0(envServerDrainMaxExternalWaitsV0, strconv.Itoa(config.SupervisorCommand.DrainLimits.MaxExternalWaits)),
 		serverConfigSettingFromRegistryV0(envServerAutonomyEnabledV0, strconv.FormatBool(serverAutonomyEffectiveEnabledFromEnvV0())),
 		serverConfigSettingFromRegistryV0(envServerGoalObserverEnabledV0, strconv.FormatBool(config.GoalObserverEnabled)),
+		serverConfigSettingFromRegistryV0(envServerGoalObserverIntervalMSV0, strconv.Itoa(int(config.GoalObserverInterval/time.Millisecond))),
 		serverConfigSettingFromRegistryV0(envServerGoalObserverMaxItemsV0, strconv.Itoa(config.GoalObserverMaxItems)),
 		serverConfigSettingFromRegistryV0(
 			envServerGoalObserverFingerprintEnabledV0,

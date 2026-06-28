@@ -375,3 +375,23 @@
   `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server` si ese
   comando exacto termina con exit code 0 en esta ejecucion; no hereda pruebas
   previas ni cierra SRV-TASK-024 sin codigo y smoke causal.
+
+Validacion observador goal-first 2026-06-28:
+
+```bash
+go test -count=1 ./modulos/orquesta-server -run 'TestNormalizeConfigV0ObservadorGoalFirst|TestRuntimeV0GoalObservationLoopUsaIntervaloPropioV0'
+go test -count=1 ./cmd/orquesta-server -run 'TestServerConfigFromEnvV0ObservadorGoalFirstResidentePorDefectoV0|TestServerConfigFromEnvV0PermiteApagarObservadorGoalFirstV0'
+```
+
+Cobertura:
+
+- `TestNormalizeConfigV0ObservadorGoalFirstHeredaTickSiNoTieneIntervaloPropioV0`
+  fija compatibilidad: sin intervalo propio, el observador goal-first hereda el
+  `TickInterval` general.
+- `TestNormalizeConfigV0ObservadorGoalFirstPermiteIntervaloPropioV0` fija que
+  la composicion puede configurar una cadencia independiente.
+- `TestRuntimeV0GoalObservationLoopUsaIntervaloPropioV0` ejecuta el runtime con
+  `TickInterval` de una hora y `GoalObserverInterval` corto, y observa dos
+  ticks goal-first sin depender del supervisor legacy.
+- `TestServerConfigFromEnvV0PermiteApagarObservadorGoalFirstV0` cubre
+  `ORQUESTA_SERVER_GOAL_OBSERVER_INTERVAL_MS` en config efectiva.
