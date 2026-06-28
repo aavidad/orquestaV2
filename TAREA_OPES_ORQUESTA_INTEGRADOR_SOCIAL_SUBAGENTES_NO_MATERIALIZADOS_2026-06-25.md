@@ -518,6 +518,7 @@ Evidencia:
 - `GET /` contra `http://127.0.0.1:18793/` no devuelve cuerpo antes de un
   timeout de 8 segundos.
 - `POST /api/v0/director/stats` tampoco devuelve cuerpo antes de timeout.
+
 - La instancia `8787` responde, pero no se usa para OPES porque puede
   pertenecer al agente que está programando el núcleo de Orquesta.
 - No se ha tocado código ni ramas de Orquesta desde OPES.
@@ -535,3 +536,34 @@ Tarea adicional para agente de Orquesta:
 - Añadir health/readiness con diagnóstico: `http_server_accepting_but_handlers_blocked`,
   `state_store_blocked`, `supervisor_lock_blocked` o equivalente.
 - Proveer un cierre seguro por API que no deje el proceso HTTP bloqueado.
+
+## Revalidacion Orquesta 2026-06-28
+
+Estado actual frente al pendiente tecnico original:
+
+- En ruta legacy/stack, el contrato OPES 1+6 ya se materializa como padre + seis
+  `WorkflowTaskV0` hijos y seis lanzamientos reales cuando el supervisor drena
+  la run. Cobertura:
+  `TestCodexStackV0ExternalWorkRunOPESSubrolesMaterializaPadreYSeisHijosV0` y
+  `TestCodexStackV0ExternalWorkRunOPESSubrolesSupervisorDirectoSinLimitesLanzaSeisYDejaColaRunningV0`.
+- El padre conserva el write-set de producto autorizado y los hijos quedan
+  acotados a `subroles/<rol>`, cubierto por
+  `TestCodexStackV0ExternalWorkRunOPESSubrolesPadreConservaWriteSetProductoAutorizadoV0`.
+- En ruta goal-first vigente, Codex Goal actua como director interno del trabajo
+  y Orquesta no debe reactivar el loop legacy solo para crear `WorkflowTaskV0`
+  hijos. La garantia equivalente es cierre por evidencia: si el spec declara
+  `opes.padre-tema-6-subroles.v1`, un receipt no cierra sin seis refs
+  `domain-work-opes-subrole-*`, y sí cierra cuando las seis existen. Cobertura:
+  `TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESSubrolesSinSeisEvidenciasV0`
+  y
+  `TestCodexStackV0ExternalWorkGoalFirstCierraOPESSubrolesConSeisEvidenciasV0`.
+- La fuente de cierre operacional tampoco acepta un padre OPES 1+6 sin hijos
+  materializados en la ruta legacy:
+  `TestOperationalClosureSourceV0NoCierraPadreOPESSubrolesSinHijosMaterializados`.
+
+Conclusion: el pendiente tecnico original queda cerrado para las dos rutas
+soportadas. Legacy materializa padre + seis hijos; goal-first adelgaza el loop y
+exige seis evidencias de subrol en el receipt antes de cerrar. Los bloqueos por
+cuota, auth, HTTP sin cuerpo, stale queue y promocion canonica quedaron
+desglosados en incidencias posteriores y no deben reabrir este bug como
+"subagentes no materializados" si la evidencia pertenece a otra familia.
