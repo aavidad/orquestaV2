@@ -477,6 +477,13 @@ fila no empujan `runs/supervise` legacy cuando la run necesita reparar
 fija que la accion global solo ejecuta `supervise` si viene publicado como
 `safe_action`; sin esa accion muestra una razon y no llama al supervisor legacy
 por fallback.
+Revalidacion adicional 2026-06-28 noche: `/ops` consume
+`/api/v0/queue/global-status` y fusiona por `run_ref` `recommended_action`,
+`no_action_reason` y `needs_action` antes de `buildRuns`; si falla, conserva
+`autoprogramming/status` con `fallback_autoprogramming_status`. Evidencia:
+`TestOpsDashboardWebEndpointV0GlobalStatusFallbackAutoprogramming`,
+`TestOpsDashboardWebEndpointV0PropagaAccionGlobalStatusPorRunYCola` y
+`TestOpsDashboardWebEndpointV0GlobalStatusNoEjecutaAccionPorSiSolo`.
 Riesgos: La fuente contractual ya es `ops_snapshot`; queda ampliar el snapshot
 con modelos/runtime, waits, olas y cohortes cuando esos puertos se publiquen.
 ```

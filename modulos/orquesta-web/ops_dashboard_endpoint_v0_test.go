@@ -22,6 +22,7 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 		"/api/v0/server/status",
 		"/api/v0/server/resources",
 		"/api/v0/autoprogramming/status",
+		"/api/v0/queue/global-status",
 		"/api/v0/director/stats",
 		"/api/v0/observability/workspace-timeline",
 		"sources: ['director_stats', 'run_queue', 'runtime_progress']",
@@ -144,6 +145,14 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 		"data-stable-id",
 		"queueStableID",
 		"queueDetail",
+		"globalStatus",
+		"queueGlobalStatusByRun",
+		"recommended_action",
+		"no_action_reason",
+		"needs_action",
+		"fallback_autoprogramming_status",
+		"tableCell('Acción'",
+		"Acción recomendada",
 		"renderTasks",
 		"matchesStatus",
 		"row-actions",
@@ -167,6 +176,98 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("html no contiene %q", want)
+		}
+	}
+}
+
+func TestOpsDashboardWebEndpointV0GlobalStatusFallbackAutoprogramming(t *testing.T) {
+	body := opsDashboardHTMLV0()
+	fn := htmlFunctionSliceForTest(t, body, "async function refreshAll", "function markLive")
+
+	for _, want := range []string{
+		"let globalStatus = {};",
+		"fetchJSON('/api/v0/queue/global-status'",
+		"fetchJSON('/api/v0/autoprogramming/status'",
+		"if (result[2].status === 'fulfilled') auto = result[2].value",
+		"if (result[3].status === 'fulfilled') globalStatus = result[3].value; else diagnostics.push(result[3].reason.message)",
+		"render({server: server, resources: resources, auto: auto, globalStatus: globalStatus",
+	} {
+		if !strings.Contains(fn, want) {
+			t.Fatalf("refreshAll no contiene %q:\n%s", want, fn)
+		}
+	}
+	autoFetch := strings.Index(fn, "fetchJSON('/api/v0/autoprogramming/status'")
+	globalFetch := strings.Index(fn, "fetchJSON('/api/v0/queue/global-status'")
+	autoAssign := strings.Index(fn, "if (result[2].status === 'fulfilled') auto = result[2].value")
+	globalAssign := strings.Index(fn, "if (result[3].status === 'fulfilled') globalStatus = result[3].value")
+	renderCall := strings.Index(fn, "render({server: server, resources: resources, auto: auto, globalStatus: globalStatus")
+	if autoFetch < 0 || globalFetch < 0 || autoAssign < 0 || globalAssign < 0 || renderCall < 0 ||
+		!(autoFetch < globalFetch && globalFetch < autoAssign && autoAssign < globalAssign && globalAssign < renderCall) {
+		t.Fatalf("orden global-status/autoprogramming invalido: autoFetch=%d globalFetch=%d autoAssign=%d globalAssign=%d render=%d\n%s", autoFetch, globalFetch, autoAssign, globalAssign, renderCall, fn)
+	}
+}
+
+func TestOpsDashboardWebEndpointV0PropagaAccionGlobalStatusPorRunYCola(t *testing.T) {
+	body := opsDashboardHTMLV0()
+	refreshFn := htmlFunctionSliceForTest(t, body, "async function refreshAll", "function markLive")
+	renderFn := htmlFunctionSliceForTest(t, body, "function render(data)", "function renderFlowSummary")
+	policyFn := htmlFunctionSliceForTest(t, body, "function queueGlobalStatusItems", "function opsQueueRunProjection")
+	detailFn := htmlFunctionSliceForTest(t, body, "function queueDetail", "function taskIDFromRef")
+
+	for _, want := range []string{
+		"function queueGlobalStatusByRun",
+		"function enrichQueueWithGlobalStatus",
+		"const queueActionItem",
+		"item.recommended_action",
+		"item.no_action_reason",
+		"recommended_action: queueRecommendedAction(item)",
+		"no_action_reason: queueNoActionReason(item)",
+		"needs_action: Boolean(item.needs_action)",
+		"global_status_evidence_refs",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("html no propaga global-status, falta %q", want)
+		}
+	}
+	for _, want := range []string{
+		"queueActionText",
+		"queueActionCell",
+		"accion=' + queueActionText(item)",
+	} {
+		if !strings.Contains(detailFn, want) {
+			t.Fatalf("queue detail no contiene %q:\n%s", want, detailFn)
+		}
+	}
+	if !strings.Contains(policyFn, "merged.recommended_action = globalItem.recommended_action") ||
+		!strings.Contains(policyFn, "merged.no_action_reason = globalItem.no_action_reason") {
+		t.Fatalf("policy no fusiona accion/razon global-status:\n%s", policyFn)
+	}
+	enrichRefresh := strings.Index(refreshFn, "const ranked = enrichQueueWithGlobalStatus")
+	runRefs := strings.Index(refreshFn, "const runRefs = ranked.slice")
+	enrichRender := strings.Index(renderFn, "enrichQueueWithGlobalStatus(data.ranked || [], globalStatus)")
+	buildRuns := strings.Index(renderFn, "buildRuns(ranked, data.stats || [])")
+	if enrichRefresh < 0 || runRefs < 0 || !(enrichRefresh < runRefs) {
+		t.Fatalf("refresh debe enriquecer ranked antes de pedir stats: enrich=%d runRefs=%d\n%s", enrichRefresh, runRefs, refreshFn)
+	}
+	if enrichRender < 0 || buildRuns < 0 || !(enrichRender < buildRuns) {
+		t.Fatalf("render debe enriquecer ranked antes de buildRuns: enrich=%d buildRuns=%d\n%s", enrichRender, buildRuns, renderFn)
+	}
+}
+
+func TestOpsDashboardWebEndpointV0GlobalStatusNoEjecutaAccionPorSiSolo(t *testing.T) {
+	body := opsDashboardHTMLV0()
+	policyFn := htmlFunctionSliceForTest(t, body, "function queueGlobalStatusItems", "function opsQueueRunProjection")
+	detailFn := htmlFunctionSliceForTest(t, body, "function queueDetail", "function taskIDFromRef")
+
+	for _, fn := range []string{policyFn, detailFn} {
+		for _, forbidden := range []string{
+			"fetchJSON(item.recommended_action",
+			"fetchJSON(run.recommended_action",
+			"fetchJSON(queueRecommendedAction",
+		} {
+			if strings.Contains(fn, forbidden) {
+				t.Fatalf("global-status no debe ejecutar recommended_action como endpoint; contiene %q:\n%s", forbidden, fn)
+			}
 		}
 	}
 }

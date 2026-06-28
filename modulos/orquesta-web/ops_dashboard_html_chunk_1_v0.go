@@ -107,7 +107,31 @@ const opsDashboardHTMLChunk1V0 = `      if (!n) return '-';
     }
     function queueDetail(item) {
       if (item && item.detail) return item.detail;
-      return ['run_ref=' + ((item || {}).run_ref || '-'), 'app_ref=' + ((item || {}).app_ref || '-'), 'status=' + ((item || {}).status || '-')].join('; ');
+      return [
+        'run_ref=' + ((item || {}).run_ref || '-'),
+        'app_ref=' + ((item || {}).app_ref || '-'),
+        'status=' + ((item || {}).status || '-'),
+        'accion=' + queueActionText(item)
+      ].join('; ');
+    }
+    function queueRecommendedAction(item) {
+      return String((item && item.recommended_action) || '').trim();
+    }
+    function queueNoActionReason(item) {
+      return String((item && item.no_action_reason) || '').trim();
+    }
+    function queueActionText(item) {
+      const action = queueRecommendedAction(item);
+      if (action) return action;
+      const reason = queueNoActionReason(item);
+      if (reason) return reason;
+      return 'fallback_autoprogramming_status';
+    }
+    function queueActionCell(item) {
+      const action = queueRecommendedAction(item);
+      if (action) return statusPill(action);
+      const reason = queueNoActionReason(item);
+      return '<span class="sub mono">' + esc(reason || 'fallback_autoprogramming_status') + '</span>';
     }
     function taskIDFromRef(value) {
       const raw = String(value || '');

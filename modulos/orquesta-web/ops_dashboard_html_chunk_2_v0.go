@@ -21,6 +21,7 @@ const opsDashboardHTMLChunk2V0 = `    }
       let server = {};
       let resources = {};
       let auto = {};
+      let globalStatus = {};
       let timeline = {};
       try {
         const result = await Promise.allSettled([
@@ -36,6 +37,15 @@ const opsDashboardHTMLChunk2V0 = `    }
               include_process_refs: false,
               include_agent_progress: true,
               include_agent_usage: true
+            })
+          }),
+          fetchJSON('/api/v0/queue/global-status', {
+            method: 'POST',
+            headers: {'content-type': 'application/json'},
+            body: JSON.stringify({
+              request_id: 'ops-queue-global-status-' + Date.now(),
+              queue_ref: 'global',
+              queue_limit: queueLimit
             })
           }),
           fetchJSON('/api/v0/observability/workspace-timeline', {
@@ -59,9 +69,10 @@ const opsDashboardHTMLChunk2V0 = `    }
         if (result[0].status === 'fulfilled') server = result[0].value; else diagnostics.push(result[0].reason.message);
         if (result[1].status === 'fulfilled') resources = result[1].value; else diagnostics.push(result[1].reason.message);
         if (result[2].status === 'fulfilled') auto = result[2].value; else diagnostics.push(result[2].reason.message);
-        if (result[3].status === 'fulfilled') timeline = result[3].value; else diagnostics.push(result[3].reason.message);
+        if (result[3].status === 'fulfilled') globalStatus = result[3].value; else diagnostics.push(result[3].reason.message);
+        if (result[4].status === 'fulfilled') timeline = result[4].value; else diagnostics.push(result[4].reason.message);
         const queue = auto.queue || {};
-        const ranked = queue.ranked || [];
+        const ranked = enrichQueueWithGlobalStatus(queue.ranked || [], globalStatus);
         const runRefs = ranked.slice(0, maxRuns).map(function(item) { return item.run_ref; }).filter(Boolean);
         const statResults = await Promise.allSettled(runRefs.map(fetchRunStats));
         const stats = statResults.map(function(item, index) {
@@ -69,11 +80,11 @@ const opsDashboardHTMLChunk2V0 = `    }
           if (projection.stats_fetch_status !== 'ok') diagnostics.push(runRefs[index] + ': ' + projection.stats_reason_code);
           return projection;
         });
-        render({server: server, resources: resources, auto: auto, timeline: timeline, ranked: ranked, stats: stats, diagnostics: diagnostics});
+        render({server: server, resources: resources, auto: auto, globalStatus: globalStatus, timeline: timeline, ranked: ranked, stats: stats, diagnostics: diagnostics});
         markLive(true);
       } catch (err) {
         diagnostics.push(err.message || String(err));
-        render({server: server, resources: resources, auto: auto, timeline: timeline, ranked: [], stats: [], diagnostics: diagnostics});
+        render({server: server, resources: resources, auto: auto, globalStatus: globalStatus, timeline: timeline, ranked: [], stats: [], diagnostics: diagnostics});
         markLive(false);
       }
     }
@@ -85,7 +96,9 @@ const opsDashboardHTMLChunk2V0 = `    }
     function render(data) {
       lastServer = data.server || {};
       const queue = data.auto.queue || {};
-      const ranked = stableSortByFirstSeen(data.ranked || [], 'queue', function(item) { return item.run_ref; });
+      const globalStatus = data.globalStatus || {};
+      const ranked = stableSortByFirstSeen(enrichQueueWithGlobalStatus(data.ranked || [], globalStatus), 'queue', function(item) { return item.run_ref; });
+      const queueActionItem = queueGlobalStatusQueueItem(globalStatus);
       const activeRuns = data.auto.operator && data.auto.operator.active_runs ? data.auto.operator.active_runs : [];
       const safeActions = data.auto.operator && Array.isArray(data.auto.operator.safe_actions) ? data.auto.operator.safe_actions : [];
       const staleRunning = Array.isArray(data.auto.stale_running) ? data.auto.stale_running : [];
@@ -114,7 +127,7 @@ const opsDashboardHTMLChunk2V0 = `    }
       renderFlowSummary(ranked, runs, agents, queueCount, activeAgentCount);
       renderDirectorDecision((data.auto || {}).ops_snapshot, ranked, runs, agents, queueCount, activeAgentCount);
       updateCompletedHistory(runs, ranked);
-      lastSnapshot = {runs: runs, agents: agents, ranked: ranked, tasks: tasks, safeActions: safeActions, staleRunning: staleRunning, opsSnapshot: (data.auto || {}).ops_snapshot || null};
+      lastSnapshot = {runs: runs, agents: agents, ranked: ranked, tasks: tasks, safeActions: safeActions, staleRunning: staleRunning, opsSnapshot: (data.auto || {}).ops_snapshot || null, globalStatus: globalStatus, queueActionItem: queueActionItem};
       if (!selectedRunRef && runs.length) selectedRunRef = runs[0].run_ref;
       renderProjects(runs);
       renderPhaseMatrix(runs);

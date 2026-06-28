@@ -690,10 +690,15 @@ Campos:
   queue_health con `agents_live`, ops_snapshot, diagnostics y errores_publicos.
 Invariantes:
 - Consume `POST /api/v0/autoprogramming/status`.
+- En `/ops`, consume tambien `POST /api/v0/queue/global-status` para fusionar
+  `recommended_action`, `no_action_reason` y `needs_action` por `run_ref`;
+  si falla, conserva `autoprogramming/status` como fallback parcial.
 - Delega estado de cola/run en `orquesta.autoprogramming.status.v0`.
 - Pide progreso de agentes por defecto cuando no se explicitan flags.
 - Consume `ops_snapshot` si el servidor lo publica; no reconstruye la decision
   del Director salvo fallback legacy de compatibilidad.
+- `recommended_action` de `queue/global-status` es senal read-only; la UI no lo
+  ejecuta como endpoint ni payload arbitrario.
 - Proyecta refs opacas; no convierte worktree_ref/branch_ref en rutas ni ramas.
 - No lee stores, DB, runtime, filesystem, Codex, OPES ni proveedor.
 Errores:

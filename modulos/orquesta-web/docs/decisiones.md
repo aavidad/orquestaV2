@@ -117,6 +117,12 @@ no como espera de entregas ni supervision legacy. El avance seleccionado,
 avance de fila y accion global consultan `runNeedsGoalStateRepair` desde
 `ops_snapshot.decision` y `stale_running`; si aplica, muestran reparar
 `GoalWorkStateV0` y no llaman `runs/supervise` legacy.
+Actualizacion 2026-06-28 noche: `/ops` usa
+`/api/v0/queue/global-status` como fuente item-by-item de accion operativa y
+razon de no accion, fusionada por `run_ref` antes de construir runs. La senal
+`recommended_action` no se ejecuta como endpoint: solo informa la fila y mapea
+a botones ya existentes; si el endpoint global falla, el panel conserva
+`autoprogramming/status` como fallback parcial.
 Contratos afectados: `/ops`, `orquesta.director.stats.v0`,
 `orquesta.autoprogramming.status.v0`, `DirectorAutonomousOpsSnapshotV0`.
 Estado: aceptada localmente.

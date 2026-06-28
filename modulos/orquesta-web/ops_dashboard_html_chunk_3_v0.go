@@ -140,7 +140,7 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
     }
     function renderQueue(ranked) {
       if (!ranked.length) {
-        byId('queue-body').innerHTML = '<tr><td colspan="7" class="empty">Sin tareas en cola</td></tr>';
+        byId('queue-body').innerHTML = '<tr><td colspan="8" class="empty">Sin tareas en cola</td></tr>';
         return;
       }
       byId('queue-body').innerHTML = ranked.map(function(item) {
@@ -157,6 +157,7 @@ const opsDashboardHTMLChunk3V0 = `          currently_visible: true,
           tableCell('Estado', statusPill(item.status || 'unknown')) +
           tableCell('Prioridad', esc(item.priority_score || 0)) +
           tableCell('Validación', statusPill(validationState(item))) +
+          tableCell('Acción', queueActionCell(item), 'title="' + esc(queueActionText(item)) + '"') +
           tableCell('Control', '<div class="row-actions">' +
             '<button class="small" type="button" title="Subir prioridad" onclick="event.stopPropagation(); setQueueRowPriority(\'' + jsArg(item.run_ref || '') + '\', 25)">↑</button>' +
             '<button class="small" type="button" title="Bajar prioridad" onclick="event.stopPropagation(); setQueueRowPriority(\'' + jsArg(item.run_ref || '') + '\', -25)">↓</button>' +

@@ -251,8 +251,8 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
           <h2>Cola</h2>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>#</th><th>Tarea</th><th>Proyecto</th><th>Estado</th><th>Prioridad</th><th>Validación</th><th>Control</th></tr></thead>
-              <tbody id="queue-body"><tr><td colspan="7" class="empty">Sin cola</td></tr></tbody>
+              <thead><tr><th>#</th><th>Tarea</th><th>Proyecto</th><th>Estado</th><th>Prioridad</th><th>Validación</th><th>Acción</th><th>Control</th></tr></thead>
+              <tbody id="queue-body"><tr><td colspan="8" class="empty">Sin cola</td></tr></tbody>
             </table>
           </div>
         </div>

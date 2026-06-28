@@ -320,3 +320,12 @@ correlacion y cancelan el contexto del executor. Evidencia:
 `TestServerExternalWorkRunHTTPClienteRealRecibeTimeoutJSONV0`.
 Sigue vivo el cierre de observacion posterior sobre colas OPES reales
 temporales.
+Avance 2026-06-28 noche 6: `/ops` ya consume
+`/api/v0/queue/global-status` en paralelo a `autoprogramming/status`, fusiona
+`recommended_action`, `no_action_reason` y `needs_action` por `run_ref`, muestra
+la accion en la tabla de cola y en el detalle seleccionado, y conserva fallback
+`fallback_autoprogramming_status` si el endpoint global no responde. La UI no
+ejecuta `recommended_action` como endpoint arbitrario. Evidencia:
+`TestOpsDashboardWebEndpointV0GlobalStatusFallbackAutoprogramming`,
+`TestOpsDashboardWebEndpointV0PropagaAccionGlobalStatusPorRunYCola` y
+`TestOpsDashboardWebEndpointV0GlobalStatusNoEjecutaAccionPorSiSolo`.

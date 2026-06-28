@@ -55,6 +55,81 @@ const opsDashboardHTMLLiveCachePolicyV0 = `    function opsClampPercent(value) {
       if (isTerminalRun(run)) return 100;
       return opsHasLiveSignals(run) ? 1 : 0;
     }
+    function queueGlobalStatusItems(globalStatus) {
+      return Array.isArray((globalStatus || {}).items) ? (globalStatus || {}).items : [];
+    }
+    function queueGlobalStatusByRun(globalStatus) {
+      const byRun = {};
+      queueGlobalStatusItems(globalStatus).forEach(function(item) {
+        const runRef = String((item || {}).run_ref || '');
+        if (!runRef) return;
+        byRun[runRef] = item;
+      });
+      return byRun;
+    }
+    function queueGlobalStatusQueueItem(globalStatus) {
+      return queueGlobalStatusItems(globalStatus).find(function(item) {
+        return !String((item || {}).run_ref || '') && (queueRecommendedAction(item) || queueNoActionReason(item));
+      }) || null;
+    }
+    function opsMergeEvidenceRefs(left, right) {
+      const seen = {};
+      return ([]).concat(left || [], right || []).filter(function(value) {
+        const key = String(value || '').trim();
+        if (!key || seen[key]) return false;
+        seen[key] = true;
+        return true;
+      });
+    }
+    function enrichQueueItemWithGlobalStatus(item, globalItem, globalLoaded, fallbackRank) {
+      const merged = Object.assign({}, item || {});
+      if (fallbackRank != null && merged.rank == null) merged.rank = fallbackRank;
+      merged.global_status_loaded = Boolean(globalLoaded);
+      if (!globalLoaded) {
+        if (!queueRecommendedAction(merged) && !queueNoActionReason(merged)) merged.no_action_reason = 'fallback_autoprogramming_status';
+        return merged;
+      }
+      if (!globalItem) {
+        if (!queueRecommendedAction(merged) && !queueNoActionReason(merged)) merged.no_action_reason = 'global_status_item_missing';
+        return merged;
+      }
+      merged.run_ref = merged.run_ref || globalItem.run_ref || '';
+      merged.app_ref = merged.app_ref || globalItem.app_ref || '';
+      merged.status = merged.status || globalItem.status || 'unknown';
+      merged.global_status = globalItem.status || '';
+      merged.needs_action = Boolean(globalItem.needs_action);
+      merged.global_status_evidence_refs = globalItem.evidence_refs || [];
+      merged.evidence_refs = opsMergeEvidenceRefs(merged.evidence_refs, globalItem.evidence_refs);
+      if (queueRecommendedAction(globalItem)) merged.recommended_action = globalItem.recommended_action;
+      if (queueNoActionReason(globalItem)) merged.no_action_reason = globalItem.no_action_reason;
+      if (!queueRecommendedAction(merged) && !queueNoActionReason(merged)) merged.no_action_reason = 'no_operator_action_required';
+      return merged;
+    }
+    function enrichQueueWithGlobalStatus(ranked, globalStatus) {
+      const globalLoaded = Array.isArray((globalStatus || {}).items);
+      const byRun = queueGlobalStatusByRun(globalStatus);
+      const seen = {};
+      const out = (ranked || []).map(function(item, index) {
+        const runRef = String((item || {}).run_ref || '');
+        if (runRef) seen[runRef] = true;
+        return enrichQueueItemWithGlobalStatus(item, byRun[runRef], globalLoaded, index + 1);
+      });
+      if (globalLoaded) {
+        queueGlobalStatusItems(globalStatus).forEach(function(item) {
+          const runRef = String((item || {}).run_ref || '');
+          if (!runRef || seen[runRef]) return;
+          seen[runRef] = true;
+          out.push(enrichQueueItemWithGlobalStatus({
+            rank: out.length + 1,
+            run_ref: item.run_ref,
+            app_ref: item.app_ref,
+            status: item.status || 'unknown',
+            priority_score: 0
+          }, item, true));
+        });
+      }
+      return out;
+    }
     function opsQueueRunProjection(item) {
       const run = Object.assign({}, item, {
         validation: validationState(item),
@@ -69,6 +144,11 @@ const opsDashboardHTMLLiveCachePolicyV0 = `    function opsClampPercent(value) {
         loop_detected_agents: Number(item.loop_detected_agents || 0),
         stopped_agents: Number(item.stopped_agents || 0),
         checkpoint_agents_pending: Number(item.checkpoint_agents_pending || 0),
+        recommended_action: queueRecommendedAction(item),
+        no_action_reason: queueNoActionReason(item),
+        needs_action: Boolean(item.needs_action),
+        global_status: item.global_status || '',
+        global_status_evidence_refs: item.global_status_evidence_refs || [],
         progress_source: 'queue_snapshot',
         freshness: 'stats_unavailable',
         stats_fetch_status: 'not_requested',
@@ -142,6 +222,11 @@ const opsDashboardHTMLLiveCachePolicyV0 = `    function opsClampPercent(value) {
         director_execution_mode: ((payload.goal || {}).director_execution_mode) || (existing || {}).director_execution_mode,
         usage_summary: stats.usage_summary || (existing || {}).usage_summary,
         ops_snapshot: payload.ops_snapshot || (existing || {}).ops_snapshot,
+        recommended_action: (existing || {}).recommended_action,
+        no_action_reason: (existing || {}).no_action_reason,
+        needs_action: Boolean((existing || {}).needs_action),
+        global_status: (existing || {}).global_status || '',
+        global_status_evidence_refs: (existing || {}).global_status_evidence_refs || [],
         blocked: closure.blocked,
         validation: (existing || {}).validation || 'pendiente'
       });

@@ -15,6 +15,7 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
         '<div class="kv"><div class="k">Proyecto</div><div class="mono">' + esc(run.app_ref || '-') + '</div></div>' +
         '<div class="kv"><div class="k">Estado</div><div>' + statusPill(run.status || 'unknown') + '</div></div>' +
         '<div class="kv"><div class="k">Validación</div><div>' + statusPill(run.validation || validationState(run)) + '</div></div>' +
+        '<div class="kv"><div class="k">Acción recomendada</div><div>' + queueActionCell(run) + '</div></div>' +
         '<div class="kv"><div class="k">Progreso</div><div>' + bar(run.percent_complete || 0, !!run.blocked) + '<span class="sub">' + esc(String(run.percent_complete || 0)) + '% · fase ' + esc(run.current_phase || '-') + '</span></div></div>' +
         (isCompletedSnapshot ? '<div class="kv"><div class="k">Observada</div><div class="mono">' + esc(run.observed_at || '-') + '</div></div>' : '') +
         '<div class="kv"><div class="k">Agentes</div><div>' + esc(String(run.agents_in_flight || 0)) + ' activos · ' + esc(String(run.agents_started || runAgents.length || 0)) + ' observados</div></div>' +
@@ -138,6 +139,8 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
 	    }
 	    function runNeedsGoalStateRepair(runRef) {
 	      const ref = String(runRef || '');
+	      const run = runByRef(ref);
+	      if (queueRecommendedAction(run) === 'repair_goal_state') return true;
 	      const decision = runOpsSnapshotDecision(ref);
 	      if (String(decision.action || '') === 'repair_goal_state' &&
 	        (!ref || String(decision.run_ref || '') === ref)) return true;
@@ -168,14 +171,20 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
 	    }
 	    function selectedRunAdvanceActionLabel(run) {
 	      if (runNeedsGoalStateRepair((run || {}).run_ref)) return 'Reparar goal';
+	      if (queueRecommendedAction(run) === 'restart_observer') return 'Reiniciar observador';
+	      if (queueRecommendedAction(run) === 'reencolar') return 'Reencolar';
 	      return runIsGoalFirst(run) ? 'Observar goal' : 'Avanzar run';
 	    }
 	    function queueAdvanceActionLabel(run) {
 	      if (runNeedsGoalStateRepair((run || {}).run_ref)) return 'Reparar goal';
+	      if (queueRecommendedAction(run) === 'restart_observer') return 'Obs';
+	      if (queueRecommendedAction(run) === 'reencolar') return '↻';
 	      return runIsGoalFirst(run) ? 'G' : '↪';
 	    }
 	    function queueAdvanceActionTitle(run) {
 	      if (runNeedsGoalStateRepair((run || {}).run_ref)) return 'Reparar GoalWorkStateV0 antes de avanzar';
+	      if (queueRecommendedAction(run) === 'restart_observer') return 'Reiniciar observacion del goal';
+	      if (queueRecommendedAction(run) === 'reencolar') return 'Reencolar o reactivar run visible';
 	      return runIsGoalFirst(run) ? 'Observar goal desde fila' : 'Avanzar run desde fila';
 	    }
 	    async function advanceQueueRow(runRef) {
