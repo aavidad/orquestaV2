@@ -196,6 +196,10 @@ OPES tenga que deducirlo.
 - Test: dada una run `running` cuyo proceso no existe en `ProcessRegistry`,
   `status` la reporta `running_stale` con `recommended_action` segura.
 - Test: run con proceso vivo → `running_live`; `alive_percentage` coherente.
+  Avance 2026-06-28: cubierto el camino integrado de estado global sin
+  `run_ref` con `MCPDirectorStatsToolExecutorV0` real, `RunStore`,
+  `ProcessRegistry` y `ProcessSnapshot=running`; `autoprogramming/status`
+  publica `running_live=1` y `agents_live=1`, sin `stale_running`.
 - Test: `status` responde con cuerpo y `recommended_action` aun bajo presión de
   cola (no cuelga, no responde sin cuerpo).
 

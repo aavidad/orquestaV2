@@ -7,9 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func TestMCPAutoprogrammingStatusDescriptorV0EsAdaptadorFino(t *testing.T) {
@@ -692,6 +694,65 @@ func TestMCPAutoprogrammingStatusExecutorV0ObservaRunningConProcesoVivoV0(t *tes
 		result.QueueHealth.RunningWithoutRecentStats != 0 ||
 		len(result.StaleRunning) != 0 {
 		t.Fatalf("queue_health=%+v stale_running=%+v", result.QueueHealth, result.StaleRunning)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0NoMarcaStaleConDirectorStatsSnapshotRunningV0(t *testing.T) {
+	runRef := "run-ref-autop-status-snapshot-running-001"
+	processRef := "process-ref-autop-status-snapshot-running-001"
+	run := mcpDirectorStatsRunForTestV0(t, runRef)
+	registry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
+	if err := registry.RecordAgentProcessV0(context.Background(), orquestacionnucleoapp.AgentProcessRecordV0{
+		RunID:          run.RunID,
+		AgentRequestID: "agent-ref-stats-001",
+		ProcessRef:     processRef,
+		SessionRef:     "session-ref-autop-status-snapshot-running-001",
+		LaunchRef:      "launch-ref-autop-status-snapshot-running-001",
+		ReadinessRef:   "readiness-ref-autop-status-snapshot-running-001",
+		EvidenceRefs:   []string{"evidence-ref-autop-status-snapshot-running-001"},
+	}); err != nil {
+		t.Fatalf("record process: %v", err)
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        runRef,
+				AppRef:        "opes",
+				Status:        "running",
+				PriorityScore: 90,
+			}},
+		},
+		Stats: MCPDirectorStatsToolExecutorV0{
+			RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+			ProcessRegistry: registry,
+			ProcessSnapshot: mcpDirectorStatsSnapshotSourceForTestV0{
+				snapshots: map[string]orquestaruntime.ProcessRuntimeSnapshotV0{
+					processRef: {
+						ProcessRef: processRef,
+						Status:     orquestaruntime.ProcessRuntimeRunningV0,
+					},
+				},
+			},
+		},
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.RunningLive != 1 ||
+		result.QueueHealth.AgentsLive != 1 ||
+		result.QueueHealth.RunningStale != 0 ||
+		result.QueueHealth.RunningStaleNoProcess != 0 ||
+		result.QueueHealth.RunningWithoutRecentStats != 0 ||
+		len(result.StaleRunning) != 0 {
+		t.Fatalf("queue_health=%+v stale_running=%+v", result.QueueHealth, result.StaleRunning)
+	}
+	if hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "running_stale_no_process") ||
+		hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "running_without_recent_stats") {
+		t.Fatalf("diagnostics=%+v", result.Diagnostics)
 	}
 }
 

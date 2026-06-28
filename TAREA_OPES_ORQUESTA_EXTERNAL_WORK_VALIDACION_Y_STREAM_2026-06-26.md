@@ -390,6 +390,15 @@ Aceptación esperada:
 - Mostrar conteo `agents_live` o evidencia equivalente para que el director sepa
   si debe esperar o intervenir.
 
+Avance 2026-06-28: añadida regresión integrada en
+`modulos/orquesta-mcp/autoprogramming_status_tool_v0_test.go` para el camino
+real `autoprogramming/status -> MCPDirectorStatsToolExecutorV0 -> RunStore +
+ProcessRegistry + ProcessSnapshot`. Una run `running` con snapshot de proceso
+`running` queda como `queue_health.running_live=1`, `agents_live=1` y no produce
+`running_stale` ni `running_without_recent_stats`. Esto cubre el falso positivo
+observado con procesos vivos; la reconciliación automática de runs muertos sigue
+como trabajo separado.
+
 ## Incidencia 13: el `agent_packet` estrecha el write-set y bloquea consolidación de producto
 
 En la ola `19023`, T032 sí produjo trabajo útil: seis subroles reales y un
