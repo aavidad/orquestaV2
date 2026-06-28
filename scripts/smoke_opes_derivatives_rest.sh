@@ -17,6 +17,8 @@ LIMIT="${ORQUESTA_OPES_BRIDGE_LIMIT:-1}"
 INPUT_LEDGER_PATH="${ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH:-$SMOKE_OUT_DIR/external-bridge-input-ledger.json}"
 MAX_TICKS="${ORQUESTA_OPES_BRIDGE_MAX_TICKS:-40}"
 TICK_SLEEP_SECONDS="${ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS:-5}"
+GOAL_TIMEOUT_RECOVERY_ATTEMPTS="${ORQUESTA_OPES_DERIVATIVES_GOAL_TIMEOUT_RECOVERY_ATTEMPTS:-3}"
+GOAL_TIMEOUT_RECOVERY_SLEEP_SECONDS="${ORQUESTA_OPES_DERIVATIVES_GOAL_TIMEOUT_RECOVERY_SLEEP_SECONDS:-20}"
 SCOPE_PROBE_NEGATIVE_SUFFIX="${ORQUESTA_OPES_SCOPE_PROBE_NEGATIVE_SUFFIX:-__orquesta_scope_probe_absent__}"
 SCOPE_PROBE_OUTPUT="${ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT:-$SMOKE_OUT_DIR/opes_derivatives_scope_probe.json}"
 FAKE_SERVER="${ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER:-0}"
@@ -25,6 +27,7 @@ FAKE_GOAL_FIRST="${ORQUESTA_OPES_DERIVATIVES_FAKE_GOAL_FIRST:-1}"
 FAKE_OBSERVE_STATUS="${ORQUESTA_OPES_DERIVATIVES_FAKE_OBSERVE_STATUS-complete}"
 FAKE_CLOSURE_STATUS="${ORQUESTA_OPES_DERIVATIVES_FAKE_CLOSURE_STATUS-accepted}"
 FAKE_CLOSURE_ACCEPTED="${ORQUESTA_OPES_DERIVATIVES_FAKE_CLOSURE_ACCEPTED-1}"
+FAKE_OBSERVE_TIMEOUTS_BEFORE_SUCCESS="${ORQUESTA_OPES_DERIVATIVES_FAKE_OBSERVE_TIMEOUTS_BEFORE_SUCCESS:-0}"
 FAKE_DIR=""
 FAKE_PID=""
 
@@ -90,6 +93,10 @@ goal_first = sys.argv[6] == "1"
 observe_status = sys.argv[7].strip()
 closure_status = sys.argv[8].strip()
 closure_accepted = sys.argv[9].strip() == "1"
+try:
+    observe_timeouts_before_success = max(int(sys.argv[10]), 0)
+except Exception:
+    observe_timeouts_before_success = 0
 active_index = sequence.index(pending_type) if mode == "dry-run-once" else 0
 expected_scan_limit = str(min(max(max(int(limit), 1) * 100, 100), 500))
 runs = {}
@@ -323,6 +330,7 @@ class Handler(BaseHTTPRequestHandler):
                 "goal_first": goal_first,
                 "goal_ref": goal_ref,
                 "external_goal_ref": external_goal_ref,
+                "observe_attempts": 0,
             }
             if goal_first:
                 send_json(self, 200, {
@@ -373,6 +381,26 @@ class Handler(BaseHTTPRequestHandler):
             if not run.get("goal_first"):
                 send_json(self, 400, {"error": "run_not_goal_first", "run_ref": run_ref})
                 return
+            run["observe_attempts"] = int(run.get("observe_attempts") or 0) + 1
+            if run["observe_attempts"] <= observe_timeouts_before_success:
+                send_json(self, 200, {
+                    "estado": "ok",
+                    "run_ref": run_ref,
+                    "run_status": "blocked",
+                    "director_execution_mode": "goal_first",
+                    "goal_ref": run["goal_ref"],
+                    "external_goal_ref": run["external_goal_ref"],
+                    "goal_status": "blocked",
+                    "closure_status": "blocked",
+                    "closure_accepted": False,
+                    "closure_needs_rework": True,
+                    "summary": "codex_app_server_goal_active_timeout",
+                    "artifact_refs": [],
+                    "domain_receipt_refs": [],
+                    "evidence_refs": ["evidence-ref-fake-goal-active-timeout"],
+                    "errores_publicos": [{"code": "codex_app_server_goal_active_timeout", "field": "status"}],
+                })
+                return
             accepted = observe_status == "complete" and closure_status == "accepted" and closure_accepted
             if accepted and not run["observed"]:
                 run["observed"] = True
@@ -409,7 +437,7 @@ with open(url_file, "w", encoding="utf-8") as fh:
     fh.write(f"http://127.0.0.1:{server.server_port}\n")
 server.serve_forever()
 PY
-  python3 "$server_py" "$url_file" "$SEQUENCE" "$LIMIT" "$FAKE_PENDING_TYPE" "$MODE" "$FAKE_GOAL_FIRST" "$FAKE_OBSERVE_STATUS" "$FAKE_CLOSURE_STATUS" "$FAKE_CLOSURE_ACCEPTED" &
+  python3 "$server_py" "$url_file" "$SEQUENCE" "$LIMIT" "$FAKE_PENDING_TYPE" "$MODE" "$FAKE_GOAL_FIRST" "$FAKE_OBSERVE_STATUS" "$FAKE_CLOSURE_STATUS" "$FAKE_CLOSURE_ACCEPTED" "$FAKE_OBSERVE_TIMEOUTS_BEFORE_SUCCESS" &
   FAKE_PID="$!"
   for _ in $(seq 1 50); do
     if [[ -s "$url_file" ]]; then
@@ -710,6 +738,8 @@ write_metadata() {
     echo "input_ledger_path=$INPUT_LEDGER_PATH"
     echo "max_ticks=$MAX_TICKS"
     echo "tick_sleep_seconds=$TICK_SLEEP_SECONDS"
+    echo "goal_timeout_recovery_attempts=$GOAL_TIMEOUT_RECOVERY_ATTEMPTS"
+    echo "goal_timeout_recovery_sleep_seconds=$GOAL_TIMEOUT_RECOVERY_SLEEP_SECONDS"
     echo "scope_summary=$(preflight_scope_summary)"
     echo "scope_filter_confirmed=${ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED:-0}"
     echo "scope_filter_evidence_ref=${ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF:-}"
@@ -1168,6 +1198,56 @@ post_observe_goal() {
   cat "$response_file"
 }
 
+observe_goal_response_stop_reason() {
+  local response_file="$1"
+  python3 - "$response_file" <<'PY'
+import json
+import sys
+
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+except Exception:
+    sys.exit(1)
+
+estado = str(data.get("estado") or "").strip()
+goal_status = str(data.get("goal_status") or "").strip()
+closure_status = str(data.get("closure_status") or "").strip()
+run_status = str(data.get("run_status") or "").strip()
+summary = str(data.get("summary") or "").strip()
+needs_rework = bool(data.get("closure_needs_rework"))
+issue_code = ""
+for issue in data.get("errores_publicos") or []:
+    if isinstance(issue, dict):
+        issue_code = str(issue.get("code") or "").strip()
+        if issue_code:
+            break
+
+blocked = (
+    estado == "error"
+    or goal_status in {"blocked", "invalid"}
+    or closure_status in {"blocked", "rejected"}
+    or run_status == "blocked"
+    or needs_rework
+)
+if not blocked:
+    sys.exit(1)
+print(issue_code or summary or closure_status or goal_status or run_status or "goal_first_blocked")
+PY
+}
+
+observe_goal_response_is_blocked() {
+  local response_file="$1"
+  observe_goal_response_stop_reason "$response_file" >/dev/null
+}
+
+observe_goal_response_is_active_timeout() {
+  local response_file="$1"
+  local reason
+  reason="$(observe_goal_response_stop_reason "$response_file" 2>/dev/null || true)"
+  [[ "$reason" == "codex_app_server_goal_active_timeout" ]]
+}
+
 observe_goal_response_blocks_run_until() {
   local response_file="$1"
   local run_ref="$2"
@@ -1183,6 +1263,7 @@ try:
 except Exception:
     sys.exit(1)
 
+estado = str(data.get("estado") or "").strip()
 goal_status = str(data.get("goal_status") or "").strip()
 closure_status = str(data.get("closure_status") or "").strip()
 run_status = str(data.get("run_status") or "").strip()
@@ -1197,7 +1278,8 @@ for issue in errores:
             break
 
 blocked = (
-    goal_status in {"blocked", "invalid"}
+    estado == "error"
+    or goal_status in {"blocked", "invalid"}
     or closure_status in {"blocked", "rejected"}
     or run_status == "blocked"
     or needs_rework
@@ -1220,6 +1302,51 @@ print(f"closure_accepted={str(bool(data.get('closure_accepted'))).lower()}")
 print(f"stop_reason={stop_reason}")
 sys.exit(0)
 PY
+}
+
+recover_goal_active_timeout_if_possible() {
+  local run_ref="$1"
+  local tick="$2"
+  local attempts="$GOAL_TIMEOUT_RECOVERY_ATTEMPTS"
+  local sleep_seconds="$GOAL_TIMEOUT_RECOVERY_SLEEP_SECONDS"
+  if ! [[ "$attempts" =~ ^[0-9]+$ ]]; then
+    echo "ORQUESTA_OPES_DERIVATIVES_GOAL_TIMEOUT_RECOVERY_ATTEMPTS debe ser entero >= 0" >&2
+    return 1
+  fi
+  if ! [[ "$sleep_seconds" =~ ^[0-9]+$ ]]; then
+    echo "ORQUESTA_OPES_DERIVATIVES_GOAL_TIMEOUT_RECOVERY_SLEEP_SECONDS debe ser entero >= 0" >&2
+    return 1
+  fi
+  if [[ "$attempts" -le 0 ]]; then
+    return 1
+  fi
+  echo "run_until_timeout_recovery=started"
+  echo "run_ref=$run_ref"
+  echo "tick=$tick"
+  echo "timeout_recovery_attempts=$attempts"
+  local attempt
+  for attempt in $(seq 1 "$attempts"); do
+    if [[ "$sleep_seconds" -gt 0 ]]; then
+      sleep "$sleep_seconds"
+    fi
+    local recovery_tick="${tick}_recovery_${attempt}"
+    local observe_stdout="$SMOKE_OUT_DIR/observe_goal_${recovery_tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
+    post_observe_goal "$run_ref" "$recovery_tick" |
+      tee "$observe_stdout"
+    if ! observe_goal_response_is_blocked "$observe_stdout"; then
+      echo "run_until_timeout_recovery=completed"
+      echo "run_ref=$run_ref"
+      echo "tick=$tick"
+      echo "timeout_recovery_attempt=$attempt"
+      echo "observe_goal_response=$observe_stdout"
+      return 0
+    fi
+    if ! observe_goal_response_is_active_timeout "$observe_stdout"; then
+      observe_goal_response_blocks_run_until "$observe_stdout" "$run_ref" "$recovery_tick" || true
+      return 1
+    fi
+  done
+  return 1
 }
 
 supervise_response_requires_goal_observe() {
@@ -1310,11 +1437,20 @@ for path in sorted(glob.glob(os.path.join(smoke_dir, "observe_goal_*_response.js
     entry["observed"] = True
     entry["goal_ref"] = entry["goal_ref"] or str(response.get("goal_ref") or "").strip()
     entry["external_goal_ref"] = entry["external_goal_ref"] or str(response.get("external_goal_ref") or "").strip()
-    entry["artifact_refs"] = [str(item).strip() for item in (response.get("artifact_refs") or []) if str(item).strip()]
-    entry["domain_receipt_refs"] = [str(item).strip() for item in (response.get("domain_receipt_refs") or []) if str(item).strip()]
-    entry["evidence_refs"] = [str(item).strip() for item in (response.get("evidence_refs") or []) if str(item).strip()]
-    entry["closure_accepted"] = bool(response.get("closure_accepted"))
-    entry["closure_status"] = str(response.get("closure_status") or "").strip()
+    artifact_refs = [str(item).strip() for item in (response.get("artifact_refs") or []) if str(item).strip()]
+    domain_receipt_refs = [str(item).strip() for item in (response.get("domain_receipt_refs") or []) if str(item).strip()]
+    evidence_refs = [str(item).strip() for item in (response.get("evidence_refs") or []) if str(item).strip()]
+    if artifact_refs:
+        entry["artifact_refs"] = artifact_refs
+    if domain_receipt_refs:
+        entry["domain_receipt_refs"] = domain_receipt_refs
+    if evidence_refs:
+        entry["evidence_refs"] = sorted(set(entry.get("evidence_refs") or []) | set(evidence_refs))
+    response_accepted = bool(response.get("closure_accepted"))
+    entry["closure_accepted"] = bool(entry.get("closure_accepted")) or response_accepted
+    closure_status = str(response.get("closure_status") or "").strip()
+    if closure_status and (response_accepted or not entry.get("closure_status")):
+        entry["closure_status"] = closure_status
 
 entries = [runs[key] for key in sorted(runs)]
 issues = []
@@ -1404,7 +1540,12 @@ run_until_final_type() {
         local observe_stdout="$SMOKE_OUT_DIR/observe_goal_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
         post_observe_goal "$run_ref" "$tick" |
           tee "$observe_stdout"
-        if observe_goal_response_blocks_run_until "$observe_stdout" "$run_ref" "$tick"; then
+        if observe_goal_response_is_blocked "$observe_stdout"; then
+          if observe_goal_response_is_active_timeout "$observe_stdout" &&
+            recover_goal_active_timeout_if_possible "$run_ref" "$tick"; then
+            continue
+          fi
+          observe_goal_response_blocks_run_until "$observe_stdout" "$run_ref" "$tick" || true
           exit 1
         fi
         continue
@@ -1415,7 +1556,12 @@ run_until_final_type() {
         local observe_stdout="$SMOKE_OUT_DIR/observe_goal_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
         post_observe_goal "$run_ref" "$tick" |
           tee "$observe_stdout"
-        if observe_goal_response_blocks_run_until "$observe_stdout" "$run_ref" "$tick"; then
+        if observe_goal_response_is_blocked "$observe_stdout"; then
+          if observe_goal_response_is_active_timeout "$observe_stdout" &&
+            recover_goal_active_timeout_if_possible "$run_ref" "$tick"; then
+            continue
+          fi
+          observe_goal_response_blocks_run_until "$observe_stdout" "$run_ref" "$tick" || true
           exit 1
         fi
       fi

@@ -205,6 +205,20 @@ como `supervision_status=blocked`, conserva `goal_evidence_refs` y usa un
 `TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilGoalBlockedV0` y
 `TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilClosureBlockedV0`.
 
+Avance 2026-06-28 noche 5: el corte temprano por
+`codex_app_server_goal_active_timeout` ya no pierde entregas tardias de Codex
+Goal. `ObserveAppDirectorGoalV0` reobserva de forma idempotente un run ya
+bloqueado por el mismo blocker causal, incorpora `orquesta_goal_result_v0.json`,
+artefactos, required tests y receipts, y evita reemitir un `RunBlocked` con
+payload incompatible. El wrapper `run-until-finalize` mantiene el corte inmediato
+para bloqueos reales, pero si el `stop_reason` es exactamente
+`codex_app_server_goal_active_timeout` ejecuta una recuperacion acotada por
+`ORQUESTA_OPES_DERIVATIVES_GOAL_TIMEOUT_RECOVERY_ATTEMPTS` y
+`ORQUESTA_OPES_DERIVATIVES_GOAL_TIMEOUT_RECOVERY_SLEEP_SECONDS` antes de fallar.
+Evidencia:
+`TestObserveAppDirectorGoalV0RecuperaEntregaTardiaTrasTimeoutBloqueadoV0` y
+`TestSmokeOPESDerivativesRESTWrapperFakeServerRecuperaTimeoutActivoV0`.
+
 ## ORQ-OPES-003 external_work_no_agent_no_delivery
 
 Estado: parcial; legacy 1+6 y guard de cierre goal-first cubiertos, pendiente
@@ -450,3 +464,13 @@ politicas OPES masivas y dejar `payload_ref`, y el observer Codex marca
 `blocked` con `codex_app_server_goal_active_timeout` cuando el goal remoto
 permanece `active` mas alla de `ORQUESTA_CODEX_GOAL_TIMEOUT_MS`. Evidencia:
 `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`.
+
+Avance 2026-06-28 noche 5: el mismo caso unitario `update_topic_registry` queda
+cerrado tras reobservacion tardia goal-first. Evidencia temporal:
+root `/tmp/orquesta-opes-goal-real-20260628T090415Z`, OPES temporal
+`127.0.0.1:55323`, Orquesta reobservada con binario parcheado en
+`127.0.0.1:40385`, `goal_status=complete`, `closure_status=accepted`,
+`run_status=cerrada`, `artifact_refs=1`, `domain_receipt_refs=1`,
+`generation_jobs.status=completed` y `job_artifacts_count=1`. Esto cierra el
+caso unitario real de `update_topic_registry`; sigue pendiente extender la
+secuencia temporal a los 23 `work_kind` y cubrir TTS/HTML/paquete final.

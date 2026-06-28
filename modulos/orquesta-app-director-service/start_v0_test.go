@@ -569,6 +569,77 @@ func TestObserveAppDirectorGoalV0BloqueaRunSiFaltanRequiredTestsV0(t *testing.T)
 	}
 }
 
+func TestObserveAppDirectorGoalV0RecuperaEntregaTardiaTrasTimeoutBloqueadoV0(t *testing.T) {
+	store, sink, goalStates, launcher, started := serviceStartGoalFirstForObserveTestV0(t)
+	spec := launcher.specs[0]
+	timeoutObserver := serviceGoalObserverForTestV0{result: orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: started.ExternalGoalRef,
+		Summary:         "codex_app_server_goal_active_timeout",
+		EvidenceRefs:    []string{"evidence-ref-codex-app-server-goal-active-timeout"},
+	}}
+	if _, err := ObserveAppDirectorGoalV0(
+		context.Background(),
+		ObserveAppDirectorGoalRequestV0{RunRef: spec.RunRef},
+		StartAppDirectorPortsV0{
+			RunStore:             store,
+			EventSink:            sink,
+			GoalStateStore:       goalStates,
+			GoalObserver:         timeoutObserver,
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		},
+	); err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0 timeout: %v", err)
+	}
+	lateObserver := serviceGoalObserverForTestV0{result: orquestagoal.GoalWorkResultV0{
+		SchemaVersion:       orquestagoal.GoalWorkResultSchemaV0,
+		Status:              orquestagoal.GoalStatusCompleteV0,
+		GoalRef:             spec.GoalRef,
+		ExternalGoalRef:     started.ExternalGoalRef,
+		ArtifactRefs:        serviceRequiredArtifactRefsForGoalSpecV0(spec),
+		DomainReceiptRefs:   []string{"domain-receipt-ref-service-late-result"},
+		EvidenceRefs:        spec.ClosurePolicy.RequiredEvidenceRefs,
+		RequiredTestResults: []orquestagoal.GoalRequiredTestResultV0{},
+	}}
+
+	result, err := ObserveAppDirectorGoalV0(
+		context.Background(),
+		ObserveAppDirectorGoalRequestV0{RunRef: spec.RunRef},
+		StartAppDirectorPortsV0{
+			RunStore:             store,
+			EventSink:            sink,
+			GoalStateStore:       goalStates,
+			GoalObserver:         lateObserver,
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0 late result: %v", err)
+	}
+	if result.Status != orquestagoal.GoalStatusCompleteV0 ||
+		result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		!result.Closure.NeedsRework ||
+		len(result.GoalResult.ArtifactRefs) == 0 ||
+		len(result.GoalResult.DomainReceiptRefs) == 0 ||
+		len(result.Closure.Issues) == 0 ||
+		result.Closure.Issues[0].Field != "required_tests" {
+		t.Fatalf("result=%+v", result)
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), spec.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if state.LastResult == nil ||
+		len(state.LastResult.ArtifactRefs) == 0 ||
+		len(state.LastResult.DomainReceiptRefs) == 0 ||
+		state.LastClosure == nil ||
+		state.LastClosure.Issues[0].Field != "required_tests" {
+		t.Fatalf("state=%+v", state)
+	}
+}
+
 func TestObserveAppDirectorGoalV0BloqueaRunSiClosureNoAcepta(t *testing.T) {
 	store, sink, goalStates, launcher, started := serviceStartGoalFirstForObserveTestV0(t)
 	spec := launcher.specs[0]

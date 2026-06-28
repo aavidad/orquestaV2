@@ -418,6 +418,13 @@ func blockAppDirectorGoalRunV0(
 	ports StartAppDirectorPortsV0,
 ) (orquestacoreworkflow.OrchestrationRunV0, error) {
 	blockerRef := appDirectorGoalBlockerRefV0(state)
+	run, err := ports.RunStore.LoadRunV0(ctx, state.RunRef)
+	if err != nil {
+		return orquestacoreworkflow.OrchestrationRunV0{}, err
+	}
+	if appDirectorGoalRunHasBlockerV0(run, blockerRef) {
+		return run, nil
+	}
 	command, err := orquestacoreworkflow.NewBlockRunCommandV0(
 		appDirectorGoalCommandMetaV0(request, state.RunRef, "block-goal", blockerRef),
 		orquestacoreworkflow.BlockRunCommandPayloadV0{

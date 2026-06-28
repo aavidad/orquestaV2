@@ -8,14 +8,11 @@ Se ejecuto un smoke real acotado contra OPES temporal local y Orquesta temporal
 con `ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio`, limitado a
 `update_topic_registry`.
 
-Resultado: parcial. Orquesta ya supera el guard de `project_work_dir`, acepta
-`POST /api/v0/external-work/run`, crea run goal-first y arranca un Goal Codex
-real observable. El cierre no se alcanza dentro de la ventana del smoke:
-`goal_status=running` hasta el tick final.
-
-Esto no reabre el loop legacy del Director. El fallo pendiente esta en la
-terminacion del backend Codex app-server o en la ventana de observacion del
-smoke real effectful.
+Resultado: unitario cerrado para `update_topic_registry`. Orquesta supera el
+guard de `project_work_dir`, acepta `POST /api/v0/external-work/run`, crea run
+goal-first, arranca un Goal Codex real observable, recupera una entrega tardia
+tras `codex_app_server_goal_active_timeout`, valida artefacto/receipt y cierra
+el run sin reabrir el loop legacy.
 
 ## Configuracion valida
 
@@ -69,6 +66,27 @@ Segundo intento con contexto compactado:
   `input_values=15`, `payloads=15`. Las politicas OPES masivas quedaron como
   `payload-ref`, no inlineadas.
 
+Tercer intento con recuperacion tardia de goal:
+
+- Root temporal: `/tmp/orquesta-opes-goal-real-20260628T090415Z`.
+- OPES temporal: `http://127.0.0.1:55323`.
+- Orquesta temporal inicial: `http://127.0.0.1:34773`; reobservacion con binario
+  parcheado sobre el mismo state en `http://127.0.0.1:40385`.
+- Run:
+  `run-external-work-opes-025eda715c48af87913b0f92a2f26fb3-opes-job-025eda715c48af87913b0f92a2f26fb3`.
+- Goal externo: `019f0d7a-1dea-7b00-9ad3-d73a0d2f5579`.
+- Tick 20 inicial: `goal_status=blocked`,
+  `summary=codex_app_server_goal_active_timeout`, `run_status=bloqueada`.
+- Artefactos tardios recuperados:
+  `external/opes/update_topic_registry/025eda715c48af87913b0f92a2f26fb3/topic_registry_update.json`
+  y
+  `external/opes/update_topic_registry/025eda715c48af87913b0f92a2f26fb3/docs/orquesta_goal_result_v0.json`.
+- Reobservacion parcheada: `estado=ok`, `goal_status=complete`,
+  `closure_status=accepted`, `closure_accepted=true`, `run_status=cerrada`,
+  `artifact_refs=1`, `domain_receipt_refs=1`.
+- OPES temporal: `generation_jobs.status=completed` para 1 job y
+  `job_artifacts_count=1`.
+
 ## Cambios derivados
 
 - `BuildExternalWorkGoalWorkSpecV0` conserva campos masivos como
@@ -86,12 +104,18 @@ Segundo intento con contexto compactado:
   `run_status=blocked` o `closure_needs_rework=true`; emite
   `run_until_status=blocked`, `run_ref`, `tick`, `observe_goal_response` y
   `stop_reason` en vez de esperar a `MAX_TICKS`.
+- Si el bloqueo es exactamente `codex_app_server_goal_active_timeout`, el
+  wrapper hace una recuperacion acotada configurable con
+  `ORQUESTA_OPES_DERIVATIVES_GOAL_TIMEOUT_RECOVERY_ATTEMPTS` y
+  `ORQUESTA_OPES_DERIVATIVES_GOAL_TIMEOUT_RECOVERY_SLEEP_SECONDS` antes de
+  declarar fallo, porque Codex Goal puede escribir `orquesta_goal_result_v0.json`
+  despues del primer corte activo.
+- `ObserveAppDirectorGoalV0` es idempotente cuando un run ya tiene el blocker
+  causal del goal: una reobservacion tardia puede incorporar artefactos y
+  receipts sin volver a emitir un `RunBlocked` incompatible.
 
 ## Pendiente
 
-- Repetir effectful con backend Codex real para confirmar que un goal activo
-  demasiado tiempo queda como bloqueo operativo explicito observado por el
-  wrapper o que completa con artefactos y receipt.
 - Extender de `update_topic_registry` a la secuencia completa de 23
   `work_kind` solo despues de cerrar el caso unitario.
 - No volver al loop legacy para tapar este caso: la ruta correcta sigue siendo
