@@ -40,15 +40,21 @@ func serverOPESAutomationContextFromEnvV0() bool {
 	}
 	for _, key := range []string{
 		envOPESProjectWorkDirV0,
-		envOPESBridgeEnabledV0,
 		envOPESBridgeJobTypeV0,
 		envOPESBridgeJobRefV0,
 		envOPESBridgeJobTypeSequenceV0,
-		envOPESRegistryFinalPkgEnabledV0,
-		envOPESTopicRegistryEnabledV0,
 		envOPESTopicRegistryToolPathV0,
 	} {
 		if strings.TrimSpace(os.Getenv(key)) != "" {
+			return true
+		}
+	}
+	for _, key := range []string{
+		envOPESBridgeEnabledV0,
+		envOPESRegistryFinalPkgEnabledV0,
+		envOPESTopicRegistryEnabledV0,
+	} {
+		if boolEnvOrDefaultV0(key, false) {
 			return true
 		}
 	}
