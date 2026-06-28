@@ -562,11 +562,15 @@ func (observer *goalFirstQueueObserverForTestV0) ObserveGoalWorkV0(
 }
 
 type goalFirstQueueStateStoreForTestV0 struct {
-	states map[string]orquestagoal.GoalWorkStateV0
+	states  map[string]orquestagoal.GoalWorkStateV0
+	markers map[string]orquestagoal.GoalWorkRunMarkerV0
 }
 
 func newGoalFirstQueueStateStoreForTestV0() *goalFirstQueueStateStoreForTestV0 {
-	return &goalFirstQueueStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	return &goalFirstQueueStateStoreForTestV0{
+		states:  map[string]orquestagoal.GoalWorkStateV0{},
+		markers: map[string]orquestagoal.GoalWorkRunMarkerV0{},
+	}
 }
 
 func (store *goalFirstQueueStateStoreForTestV0) SaveGoalWorkStateV0(
@@ -625,4 +629,45 @@ func (store *goalFirstQueueStateStoreForTestV0) ListGoalWorkStatesV0(
 		}
 	}
 	return out, nil
+}
+
+func (store *goalFirstQueueStateStoreForTestV0) SaveGoalWorkRunMarkerV0(
+	_ context.Context,
+	marker orquestagoal.GoalWorkRunMarkerV0,
+) error {
+	normalized, err := orquestagoal.NewGoalWorkRunMarkerV0(marker)
+	if err != nil {
+		return err
+	}
+	store.markers[normalized.RunRef] = normalized
+	return nil
+}
+
+func (store *goalFirstQueueStateStoreForTestV0) LoadGoalWorkRunMarkerV0(
+	_ context.Context,
+	runRef string,
+) (orquestagoal.GoalWorkRunMarkerV0, error) {
+	marker, ok := store.markers[strings.TrimSpace(runRef)]
+	if !ok {
+		return orquestagoal.GoalWorkRunMarkerV0{}, fmt.Errorf("goal marker no encontrado: %s", runRef)
+	}
+	return marker, nil
+}
+
+func saveCodexStackGoalFirstRunMarkerForTestV0(
+	t *testing.T,
+	ctx context.Context,
+	store orquestagoal.GoalWorkRunMarkerStorePortV0,
+	runRef string,
+) {
+	t.Helper()
+	if err := store.SaveGoalWorkRunMarkerV0(ctx, orquestagoal.GoalWorkRunMarkerV0{
+		RunRef:       runRef,
+		GoalRef:      "goal-ref-" + runRef,
+		DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+		Status:       orquestagoal.GoalStatusRunningV0,
+		EvidenceRefs: []string{"evidence-ref-goal-first-marker-" + runRef},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkRunMarkerV0: %v", err)
+	}
 }

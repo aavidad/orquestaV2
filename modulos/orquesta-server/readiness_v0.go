@@ -5,6 +5,8 @@ import "strings"
 const (
 	ServerReadinessEndpointV0      = "/api/v0/server/readiness"
 	ServerReadinessSchemaVersionV0 = "orquesta_server_readiness.v0"
+
+	serverReadinessExternalWorkGoalBackendRequiredCodeV0 = "external_work_goal_backend_required"
 )
 
 type ServerReadinessV0 struct {
@@ -26,6 +28,7 @@ type ServerReadinessV0 struct {
 	IdleSelfImprovementGoalStatus          string                   `json:"idle_self_improvement_goal_status,omitempty"`
 	IdleSelfImprovementGoalReasonCode      string                   `json:"idle_self_improvement_goal_reason_code,omitempty"`
 	IdleSelfImprovementGoalClosureAccepted bool                     `json:"idle_self_improvement_goal_closure_accepted,omitempty"`
+	Diagnostics                            []ServerDiagnosticV0     `json:"diagnostics,omitempty"`
 	EvidenceRefs                           []string                 `json:"evidence_refs,omitempty"`
 }
 
@@ -33,6 +36,7 @@ func NewServerReadinessV0(state StateV0) ServerReadinessV0 {
 	status := strings.TrimSpace(state.Status)
 	startupStatus := strings.TrimSpace(state.StartupStatus)
 	ready := state.StartupReady && status == "running"
+	diagnostics := serverReadinessBlockingDiagnosticsV0(state.EffectiveConfig.Diagnostics)
 	if strings.TrimSpace(state.AuditStatus) == "degraded" &&
 		strings.TrimSpace(state.AuditLastSeverity) == "warning" {
 		ready = false
@@ -40,11 +44,21 @@ func NewServerReadinessV0(state StateV0) ServerReadinessV0 {
 	if state.SelfWatchdogShutdownRequested {
 		ready = false
 	}
+	if len(diagnostics) > 0 {
+		ready = false
+	}
 	if status == "" {
 		status = "unknown"
 	}
 	if startupStatus == "" && !state.StartupReady {
 		startupStatus = "startup_unknown"
+	}
+	if len(diagnostics) > 0 {
+		startupStatus = "startup_degraded_" + strings.TrimSpace(diagnostics[0].Code)
+	}
+	startupMessage := publicReadinessMessageV0(state.StartupMessage)
+	if startupMessage == "" && len(diagnostics) > 0 {
+		startupMessage = publicReadinessMessageV0(diagnostics[0].Message)
 	}
 	goal := NewServerPublicIdleSelfImprovementGoalStateV0(state)
 	return ServerReadinessV0{
@@ -54,7 +68,7 @@ func NewServerReadinessV0(state StateV0) ServerReadinessV0 {
 		LivenessStatus:                         "ok",
 		StartupReady:                           state.StartupReady,
 		StartupStatus:                          startupStatus,
-		StartupMessage:                         publicReadinessMessageV0(state.StartupMessage),
+		StartupMessage:                         startupMessage,
 		StartupRevision:                        normalizeStartupRevisionSummaryV0(state.StartupRevision),
 		LastHeartbeatAt:                        strings.TrimSpace(state.LastHeartbeatAt),
 		LastStartupCheckAt:                     strings.TrimSpace(state.LastStartupCheckAt),
@@ -66,8 +80,32 @@ func NewServerReadinessV0(state StateV0) ServerReadinessV0 {
 		IdleSelfImprovementGoalStatus:          serverReadinessGoalStatusV0(goal),
 		IdleSelfImprovementGoalReasonCode:      serverReadinessGoalReasonCodeV0(goal),
 		IdleSelfImprovementGoalClosureAccepted: serverReadinessGoalClosureAcceptedV0(goal),
-		EvidenceRefs:                           compactServerStringsV0(append(append([]string(nil), state.StartupEvidenceRefs...), state.ExternalBridgeEvidenceRefs...)),
+		Diagnostics:                            diagnostics,
+		EvidenceRefs: compactServerStringsV0(append(
+			append(append([]string(nil), state.StartupEvidenceRefs...), state.ExternalBridgeEvidenceRefs...),
+			serverReadinessDiagnosticEvidenceRefsV0(diagnostics)...,
+		)),
 	}
+}
+
+func serverReadinessBlockingDiagnosticsV0(diagnostics []ServerDiagnosticV0) []ServerDiagnosticV0 {
+	normalized := normalizeServerEffectiveConfigDiagnosticsV0(diagnostics)
+	out := make([]ServerDiagnosticV0, 0, len(normalized))
+	for _, diagnostic := range normalized {
+		switch diagnostic.Code {
+		case serverReadinessExternalWorkGoalBackendRequiredCodeV0:
+			out = append(out, diagnostic)
+		}
+	}
+	return out
+}
+
+func serverReadinessDiagnosticEvidenceRefsV0(diagnostics []ServerDiagnosticV0) []string {
+	refs := []string{}
+	for _, diagnostic := range diagnostics {
+		refs = append(refs, diagnostic.EvidenceRefs...)
+	}
+	return compactServerStringsV0(refs)
 }
 
 func serverReadinessGoalActiveV0(goal *ServerPublicIdleSelfImprovementGoalStateV0) bool {

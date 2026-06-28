@@ -172,11 +172,12 @@ func agentUsageSourceV0(config ConfigV0) CodexStackAgentUsageSourceV0 {
 
 func externalJobStatsSourceV0(config ConfigV0) CodexStackExternalJobStatsSourceV0 {
 	return CodexStackExternalJobStatsSourceV0{
-		RunStore:       config.Stores.RunStore,
-		AppChangeStore: config.Stores.AppChangeStore,
-		ReceiptStore:   config.Stores.ReceiptStore,
-		TaskStore:      config.Stores.TaskStore,
-		GoalStateStore: config.Stores.AppGoalStateStore,
+		RunStore:                config.Stores.RunStore,
+		AppChangeStore:          config.Stores.AppChangeStore,
+		ReceiptStore:            config.Stores.ReceiptStore,
+		TaskStore:               config.Stores.TaskStore,
+		GoalStateStore:          config.Stores.AppGoalStateStore,
+		GoalFirstRunMarkerStore: appGoalFirstRunMarkerStoreV0(config),
 	}
 }
 

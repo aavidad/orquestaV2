@@ -74,6 +74,10 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverConfigSettingFromRegistryV0(envCodexMaxBatchReadyV0, strconv.Itoa(codexRuntime.Limits.MaxBatchReady)),
 		serverConfigSettingFromRegistryV0(envCodexMaxConcurrencyV0, strconv.Itoa(codexRuntime.Limits.MaxLiveProcesses)),
 		serverConfigSettingFromRegistryV0(envCodexReasoningEffortV0, codexRuntime.ReasoningEffort),
+		serverConfigSettingFromRegistryV0(
+			envCodexPromoteMaterializedArtifactWithoutAckV0,
+			strconv.FormatBool(codexPromoteMaterializedArtifactWithoutAckFromEnvV0()),
+		),
 		serverConfigSettingFromRegistryV0(envCodexGoalBackendV0, codexGoalBackendFromEnvV0()),
 		serverConfigSettingFromRegistryV0(envCodexGoalTimeoutMSV0, strconv.Itoa(codexGoalTimeoutMSFromEnvV0())),
 		serverConfigSettingFromRegistryV0(envCodexGoalPreflightTimeoutMSV0, strconv.Itoa(codexGoalPreflightTimeoutMSFromEnvV0())),

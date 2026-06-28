@@ -293,7 +293,23 @@ func (executor CodexStackRunSupervisorExecutorV0) goalFirstMissingStateRunSuperv
 	input orquestamcp.MCPRunSupervisorToolInputV0,
 	runRef string,
 ) (orquestamcp.MCPRunSupervisorToolResultV0, bool) {
-	if executor.Stack == nil || executor.Stack.Ports.RunStore == nil {
+	if executor.Stack == nil {
+		return orquestamcp.MCPRunSupervisorToolResultV0{}, false
+	}
+	if marker, ok := executor.Stack.goalFirstRunMarkerWithoutStateV0(ctx, runRef); ok {
+		return goalFirstMissingStateRunSupervisorResultFromEvidenceV0(
+			input,
+			runRef,
+			compactStringsV0(append(
+				[]string{
+					"evidence-ref-run-supervisor-goal-first-marker",
+					"evidence-ref-run-supervisor-goal-first-state-missing",
+				},
+				marker.EvidenceRefs...,
+			)),
+		), true
+	}
+	if executor.Stack.Ports.RunStore == nil {
 		return orquestamcp.MCPRunSupervisorToolResultV0{}, false
 	}
 	run, err := executor.Stack.Ports.RunStore.LoadRunV0(ctx, runRef)
@@ -304,6 +320,15 @@ func (executor CodexStackRunSupervisorExecutorV0) goalFirstMissingStateRunSuperv
 		"evidence-ref-run-supervisor-goal-first-container",
 		"evidence-ref-run-supervisor-goal-first-state-missing",
 	}
+	return goalFirstMissingStateRunSupervisorResultFromEvidenceV0(input, runRef, evidenceRefs), true
+}
+
+func goalFirstMissingStateRunSupervisorResultFromEvidenceV0(
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+	runRef string,
+	evidenceRefs []string,
+) orquestamcp.MCPRunSupervisorToolResultV0 {
+	evidenceRefs = compactStringsV0(evidenceRefs)
 	result := orquestamcp.NewMCPRunSupervisorErrorResultV0(
 		input,
 		"goal_first_state_missing",
@@ -329,7 +354,7 @@ func (executor CodexStackRunSupervisorExecutorV0) goalFirstMissingStateRunSuperv
 		Message:      "run_ref parece contenedor goal-first pero no hay GoalWorkStateV0 cargable; no se ejecuta drain legacy",
 		EvidenceRefs: evidenceRefs,
 	}}
-	return result, true
+	return result
 }
 
 func codexStackRunSupervisorGoalFirstContainerWithoutStateV0(
@@ -346,6 +371,25 @@ func codexStackRunSupervisorGoalFirstAppSpecRefV0(appSpecRef string) bool {
 	appSpecRef = strings.TrimSpace(appSpecRef)
 	return strings.HasPrefix(appSpecRef, "app-spec-ref-autoprogramming-") ||
 		strings.HasPrefix(appSpecRef, "app-spec-external-work-")
+}
+
+func (stack StackV0) goalFirstRunMarkerWithoutStateV0(
+	ctx context.Context,
+	runRef string,
+) (orquestagoal.GoalWorkRunMarkerV0, bool) {
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" || stack.Ports.GoalFirstRunMarkerStore == nil {
+		return orquestagoal.GoalWorkRunMarkerV0{}, false
+	}
+	marker, err := stack.Ports.GoalFirstRunMarkerStore.LoadGoalWorkRunMarkerV0(ctx, runRef)
+	if err != nil {
+		return orquestagoal.GoalWorkRunMarkerV0{}, false
+	}
+	marker, err = orquestagoal.NewGoalWorkRunMarkerV0(marker)
+	if err != nil || marker.RunRef != runRef {
+		return orquestagoal.GoalWorkRunMarkerV0{}, false
+	}
+	return marker, true
 }
 
 func codexStackGoalFirstSupervisorStatusV0(

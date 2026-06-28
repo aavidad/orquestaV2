@@ -16,26 +16,27 @@ import (
 )
 
 type StackV0 struct {
-	Handler                       http.Handler
-	MCPTransportBindings          orquestamcp.MCPTransportBindingsV0
-	Ports                         orquestaappdirectorservice.StartAppDirectorPortsV0
-	Stores                        StoresV0
-	RunQueue                      RunQueueConfigV0
-	RunSupervisor                 RunSupervisorConfigV0
-	DirectorLimits                orquestaweb.WebArrancarDirectorAppLimitsV0
-	Clock                         orquestafactoryhttp.AppSpecHTTPClockV0
-	AutoprogrammingPromotion      AutoprogrammingPromotionConfigV0
-	DomainWork                    orquestamcp.MCPDomainWorkExecutorPortV0
-	RuntimeModels                 orquestaruntime.RuntimeModelManagerPortV0
-	DecisionCouncil               DecisionCouncilConfigV0
-	DomainDelivery                DomainWorkDeliveryBridgeConfigV0
-	ProviderRuntimes              []RuntimeProviderConfigV0
-	EgressSanitizer               EgressSanitizerConfigV0
-	Codex                         CodexRuntimeConfigV0
-	CodexRuntimeWorkDir           string
-	CodexSnapshotSource           orquestaruntimecodexdelivery.CodexProcessSnapshotSourcePortV0
-	AllowLegacyAutoprogrammingRun bool
-	AllowLegacyExternalWorkRun    bool
+	Handler                               http.Handler
+	MCPTransportBindings                  orquestamcp.MCPTransportBindingsV0
+	Ports                                 orquestaappdirectorservice.StartAppDirectorPortsV0
+	Stores                                StoresV0
+	RunQueue                              RunQueueConfigV0
+	RunSupervisor                         RunSupervisorConfigV0
+	DirectorLimits                        orquestaweb.WebArrancarDirectorAppLimitsV0
+	Clock                                 orquestafactoryhttp.AppSpecHTTPClockV0
+	AutoprogrammingPromotion              AutoprogrammingPromotionConfigV0
+	DomainWork                            orquestamcp.MCPDomainWorkExecutorPortV0
+	RuntimeModels                         orquestaruntime.RuntimeModelManagerPortV0
+	DecisionCouncil                       DecisionCouncilConfigV0
+	DomainDelivery                        DomainWorkDeliveryBridgeConfigV0
+	ProviderRuntimes                      []RuntimeProviderConfigV0
+	EgressSanitizer                       EgressSanitizerConfigV0
+	Codex                                 CodexRuntimeConfigV0
+	CodexRuntimeWorkDir                   string
+	CodexSnapshotSource                   orquestaruntimecodexdelivery.CodexProcessSnapshotSourcePortV0
+	PromoteMaterializedArtifactWithoutAck bool
+	AllowLegacyAutoprogrammingRun         bool
+	AllowLegacyExternalWorkRun            bool
 }
 
 func BuildStackV0(config ConfigV0) (StackV0, error) {
@@ -48,24 +49,25 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 	queueConfig := normalizeRunQueueConfigV0(config.RunQueue)
 	supervisorConfig := normalizeRunSupervisorConfigV0(config.RunSupervisor)
 	stack := StackV0{
-		Ports:                         ports,
-		Stores:                        config.Stores,
-		RunQueue:                      queueConfig,
-		RunSupervisor:                 supervisorConfig,
-		DirectorLimits:                config.DirectorLimits,
-		Clock:                         config.Clock,
-		AutoprogrammingPromotion:      config.AutoprogrammingPromotion,
-		DomainWork:                    config.DomainWork,
-		RuntimeModels:                 config.RuntimeModels,
-		DecisionCouncil:               config.DecisionCouncil,
-		DomainDelivery:                config.DomainDelivery,
-		ProviderRuntimes:              CanonicalRuntimeProviderConfigsV0(config),
-		EgressSanitizer:               NormalizeEgressSanitizerConfigV0(config.EgressSanitizer),
-		Codex:                         config.Codex,
-		CodexRuntimeWorkDir:           config.Codex.RuntimeWorkDir,
-		CodexSnapshotSource:           config.Codex.SnapshotSource,
-		AllowLegacyAutoprogrammingRun: config.AllowLegacyAutoprogrammingRun,
-		AllowLegacyExternalWorkRun:    config.AllowLegacyExternalWorkRun,
+		Ports:                                 ports,
+		Stores:                                config.Stores,
+		RunQueue:                              queueConfig,
+		RunSupervisor:                         supervisorConfig,
+		DirectorLimits:                        config.DirectorLimits,
+		Clock:                                 config.Clock,
+		AutoprogrammingPromotion:              config.AutoprogrammingPromotion,
+		DomainWork:                            config.DomainWork,
+		RuntimeModels:                         config.RuntimeModels,
+		DecisionCouncil:                       config.DecisionCouncil,
+		DomainDelivery:                        config.DomainDelivery,
+		ProviderRuntimes:                      CanonicalRuntimeProviderConfigsV0(config),
+		EgressSanitizer:                       NormalizeEgressSanitizerConfigV0(config.EgressSanitizer),
+		Codex:                                 config.Codex,
+		CodexRuntimeWorkDir:                   config.Codex.RuntimeWorkDir,
+		CodexSnapshotSource:                   config.Codex.SnapshotSource,
+		PromoteMaterializedArtifactWithoutAck: config.PromoteMaterializedArtifactWithoutAck,
+		AllowLegacyAutoprogrammingRun:         config.AllowLegacyAutoprogrammingRun,
+		AllowLegacyExternalWorkRun:            config.AllowLegacyExternalWorkRun,
 	}
 	stack.MCPTransportBindings = buildStackMCPTransportBindingsV0(config, ports, queueConfig, &stack)
 	stack.Handler = buildStackHTTPHandlerV0(config, stack.MCPTransportBindings)

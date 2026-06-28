@@ -239,12 +239,13 @@ func buildStackFromEnvWithGoalBackendV0(
 			LineBudgetSnapshotStore: worktreeSnapshotStore,
 			SnapshotReadBudget:      codexServerWorktreeSnapshotReadBudgetFromEnvV0(),
 		},
-		RequiredTests:               requiredTestRunner,
-		DomainTests:                 domainWorkRequiredTestConfigFromEnvV0(),
-		AutoprogrammingPromotion:    autoprogrammingPromotionConfigFromEnvV0(serverConfig),
-		DomainWork:                  domainWorkExecutor,
-		ExternalWorkRunGuard:        externalWorkRunProjectWorkDirGuardConfigFromEnvV0(serverConfig),
-		GoalObserverResidentEnabled: serverConfig.GoalObserverEnabled,
+		RequiredTests:                         requiredTestRunner,
+		DomainTests:                           domainWorkRequiredTestConfigFromEnvV0(),
+		AutoprogrammingPromotion:              autoprogrammingPromotionConfigFromEnvV0(serverConfig),
+		DomainWork:                            domainWorkExecutor,
+		ExternalWorkRunGuard:                  externalWorkRunProjectWorkDirGuardConfigFromEnvV0(serverConfig),
+		GoalObserverResidentEnabled:           serverConfig.GoalObserverEnabled,
+		PromoteMaterializedArtifactWithoutAck: codexPromoteMaterializedArtifactWithoutAckFromEnvV0(),
 		AllowLegacyAutoprogrammingRun: boolEnvOrDefaultV0(
 			envAutoprogrammingLegacyDirectorLoopV0,
 			false,
@@ -266,6 +267,10 @@ func buildStackFromEnvWithGoalBackendV0(
 	}
 	stack.Handler = withFunctionContractRoutesV0(stack.Handler, stateStore)
 	return stack, nil
+}
+
+func codexPromoteMaterializedArtifactWithoutAckFromEnvV0() bool {
+	return boolEnvOrDefaultV0(envCodexPromoteMaterializedArtifactWithoutAckV0, true)
 }
 
 func codexStackCapacityConfigFromEnvV0() orquestaappcodexstack.CapacityConfigV0 {

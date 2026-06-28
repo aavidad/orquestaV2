@@ -91,6 +91,52 @@ func TestHandlerV0ReadinessNoExponePathsNiRuntimeDirsV0(t *testing.T) {
 	}
 }
 
+func TestHandlerV0ReadinessBloqueaExternalWorkGoalFirstSinBackendV0(t *testing.T) {
+	tracker := NewStatusTrackerV0(ConfigV0{
+		Addr: "127.0.0.1:8787",
+		EffectiveConfig: ServerEffectiveConfigV0{
+			Diagnostics: []ServerDiagnosticV0{{
+				Code:    "external_work_goal_backend_required",
+				Scope:   "external_work",
+				Message: "external_work goal-first no ejecutable sin ORQUESTA_CODEX_GOAL_BACKEND",
+				EvidenceRefs: []string{
+					"evidence-ref-server-external-work-goal-backend-required",
+				},
+			}},
+		},
+	}, time.Now().UTC())
+	tracker.MarkServingV0("127.0.0.1:8787", time.Now().UTC())
+	tracker.MarkStartupReadyV0(StartupCheckResultV0{
+		Status: StartupCheckStatusReadyV0,
+		Ready:  true,
+	}, time.Now().UTC())
+	handler := NewHandlerV0(HandlerConfigV0{Tracker: tracker})
+
+	health := httptest.NewRecorder()
+	handler.ServeHTTP(health, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if health.Code != http.StatusOK {
+		t.Fatalf("healthz status=%d body=%s", health.Code, health.Body.String())
+	}
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, ServerReadinessEndpointV0, nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("readiness status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var readiness ServerReadinessV0
+	if err := json.Unmarshal(rec.Body.Bytes(), &readiness); err != nil {
+		t.Fatalf("json=%v body=%s", err, rec.Body.String())
+	}
+	if readiness.Ready ||
+		!readiness.StartupReady ||
+		readiness.LivenessStatus != "ok" ||
+		readiness.StartupStatus != "startup_degraded_external_work_goal_backend_required" ||
+		len(readiness.Diagnostics) != 1 ||
+		readiness.Diagnostics[0].Code != "external_work_goal_backend_required" ||
+		!containsServerStringForTestV0(readiness.EvidenceRefs, "evidence-ref-server-external-work-goal-backend-required") {
+		t.Fatalf("readiness=%+v", readiness)
+	}
+}
+
 func assertServerPathV0(t *testing.T, handler http.Handler, path string, want string) {
 	t.Helper()
 	rec := httptest.NewRecorder()

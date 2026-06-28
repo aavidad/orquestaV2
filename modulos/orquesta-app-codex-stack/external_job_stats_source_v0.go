@@ -36,11 +36,12 @@ const (
 )
 
 type CodexStackExternalJobStatsSourceV0 struct {
-	RunStore       orquestacionnucleoapp.RunStorePortV0
-	AppChangeStore orquestaappchange.AppChangeRecordSourcePortV0
-	ReceiptStore   CodexReceiptStorePortV0
-	TaskStore      orquestacionnucleoapp.WorkflowTaskStorePortV0
-	GoalStateStore orquestagoal.GoalWorkStateStorePortV0
+	RunStore                orquestacionnucleoapp.RunStorePortV0
+	AppChangeStore          orquestaappchange.AppChangeRecordSourcePortV0
+	ReceiptStore            CodexReceiptStorePortV0
+	TaskStore               orquestacionnucleoapp.WorkflowTaskStorePortV0
+	GoalStateStore          orquestagoal.GoalWorkStateStorePortV0
+	GoalFirstRunMarkerStore orquestagoal.GoalWorkRunMarkerStorePortV0
 }
 
 func (source CodexStackExternalJobStatsSourceV0) ResolveDirectorExternalJobStatsV0(
@@ -115,6 +116,9 @@ func (source CodexStackExternalJobStatsSourceV0) externalJobStatsForRecordV0(
 		if source.applyExternalJobGoalFirstStatsV0(ctx, &stats) {
 			return stats, true, nil
 		}
+		if source.applyExternalJobGoalFirstMarkerMissingStateV0(ctx, &stats) {
+			return stats, true, nil
+		}
 		return stats, true, nil
 	}
 	run, err := source.RunStore.LoadRunV0(ctx, runRef)
@@ -122,13 +126,23 @@ func (source CodexStackExternalJobStatsSourceV0) externalJobStatsForRecordV0(
 		if source.applyExternalJobGoalFirstStatsV0(ctx, &stats) {
 			return stats, true, nil
 		}
+		if source.applyExternalJobGoalFirstMarkerMissingStateV0(ctx, &stats) {
+			return stats, true, nil
+		}
 		return stats, true, nil
 	}
 	if source.applyExternalJobGoalFirstStatsV0(ctx, &stats) {
 		return stats, true, nil
 	}
+	if source.applyExternalJobGoalFirstMarkerMissingStateV0(ctx, &stats) {
+		return stats, true, nil
+	}
 	if codexStackRunSupervisorGoalFirstContainerWithoutStateV0(run) {
-		source.markExternalJobGoalFirstStateMissingV0(run, &stats)
+		source.markExternalJobGoalFirstStateMissingV0(
+			run.RunID,
+			[]string{"evidence-ref-external-job-goal-first-container", run.AppSpecRef},
+			&stats,
+		)
 		return stats, true, nil
 	}
 	stats.Status = externalJobStatusFromRunV0(run, taskRef, agentRef)
@@ -157,6 +171,33 @@ func (source CodexStackExternalJobStatsSourceV0) applyExternalJobGoalFirstStatsV
 		return false
 	}
 	source.markExternalJobGoalFirstV0(stats, state)
+	return true
+}
+
+func (source CodexStackExternalJobStatsSourceV0) applyExternalJobGoalFirstMarkerMissingStateV0(
+	ctx context.Context,
+	stats *orquestamcp.MCPDirectorExternalJobStatsV0,
+) bool {
+	if stats == nil || source.GoalFirstRunMarkerStore == nil || strings.TrimSpace(stats.RunRef) == "" {
+		return false
+	}
+	runRef := strings.TrimSpace(stats.RunRef)
+	marker, err := source.GoalFirstRunMarkerStore.LoadGoalWorkRunMarkerV0(ctx, runRef)
+	if err != nil {
+		return false
+	}
+	marker, err = orquestagoal.NewGoalWorkRunMarkerV0(marker)
+	if err != nil || marker.RunRef != runRef {
+		return false
+	}
+	source.markExternalJobGoalFirstStateMissingV0(
+		marker.RunRef,
+		compactCodexStackStringsV0(append(
+			[]string{"evidence-ref-external-job-goal-first-marker"},
+			marker.EvidenceRefs...,
+		)),
+		stats,
+	)
 	return true
 }
 
@@ -201,7 +242,8 @@ func (source CodexStackExternalJobStatsSourceV0) markExternalJobGoalFirstV0(
 }
 
 func (source CodexStackExternalJobStatsSourceV0) markExternalJobGoalFirstStateMissingV0(
-	run orquestacoreworkflow.OrchestrationRunV0,
+	runRef string,
+	evidenceRefs []string,
 	stats *orquestamcp.MCPDirectorExternalJobStatsV0,
 ) {
 	if stats == nil {
@@ -214,19 +256,23 @@ func (source CodexStackExternalJobStatsSourceV0) markExternalJobGoalFirstStateMi
 	stats.StatusReason = codexStackExternalJobStatusReasonGoalFirstStateMissingV0
 	stats.IssueRefs = compactCodexStackStringsV0(append(
 		stats.IssueRefs,
-		"issue-ref-external-job-goal-state-missing-"+codexStackOperationalClosureSafeRefV0(run.RunID),
+		"issue-ref-external-job-goal-state-missing-"+codexStackOperationalClosureSafeRefV0(runRef),
 	))
 	stats.EvidenceRefs = compactCodexStackStringsV0(append(
 		stats.EvidenceRefs,
-		run.RunID,
-		"evidence-ref-external-job-goal-first-container",
-		"evidence-ref-external-job-goal-state-missing",
+		compactCodexStackStringsV0(append(
+			[]string{
+				runRef,
+				"evidence-ref-external-job-goal-state-missing",
+			},
+			evidenceRefs...,
+		))...,
 	))
 	stats.Diagnostics = append(stats.Diagnostics, orquestamcp.MCPDirectorExternalJobDiagnosticV0{
 		Code:         codexStackExternalJobStatusReasonGoalFirstStateMissingV0,
 		Scope:        strings.TrimSpace(stats.JobRef),
 		Message:      "run external-work goal-first sin GoalWorkStateV0 observable; no se proyecta como tarea legacy registrada",
-		EvidenceRefs: compactCodexStackStringsV0([]string{run.RunID, run.AppSpecRef}),
+		EvidenceRefs: compactCodexStackStringsV0(append([]string{runRef}, evidenceRefs...)),
 	})
 }
 

@@ -214,6 +214,35 @@ func TestCodexStackExternalJobStatsSourceV0GoalFirstSinStateNoPareceLegacyRegist
 	}
 }
 
+func TestCodexStackExternalJobStatsSourceV0GoalFirstMarcadoSinStateNoUsaAppSpecLegacy(t *testing.T) {
+	fixture := newCodexStackExternalJobGoalFirstStatsFixtureV0(t, orquestagoal.GoalStatusRunningV0, false)
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	saveCodexStackGoalFirstRunMarkerForTestV0(t, context.Background(), goalStates, fixture.runRef)
+	fixture.run.AppSpecRef = "app-spec-neutral-domain-work-opes"
+	fixture.source.RunStore = orquestacionnucleoapp.NewInMemoryRunStoreV0(fixture.run)
+	fixture.source.GoalStateStore = newGoalFirstQueueStateStoreForTestV0()
+	fixture.source.GoalFirstRunMarkerStore = goalStates
+
+	stats, ok, err := fixture.source.ResolveDirectorExternalJobStatsV0(
+		context.Background(),
+		fixture.request,
+	)
+
+	if err != nil {
+		t.Fatalf("ResolveDirectorExternalJobStatsV0: %v", err)
+	}
+	if !ok ||
+		stats.Status != codexStackExternalJobStatusGoalStateMissingV0 ||
+		stats.StatusReason != codexStackExternalJobStatusReasonGoalFirstStateMissingV0 ||
+		stats.DirectorExecutionMode != "goal_first" ||
+		stats.TaskRef != "" ||
+		stats.AgentRef != "" ||
+		!codexStackStringInSetForTestV0(stats.EvidenceRefs, "evidence-ref-external-job-goal-first-marker") ||
+		!codexStackExternalJobDiagnosticForTestV0(stats.Diagnostics, codexStackExternalJobStatusReasonGoalFirstStateMissingV0) {
+		t.Fatalf("stats=%+v", stats)
+	}
+}
+
 type codexStackExternalJobSubrolesStatsFixtureV0 struct {
 	source  CodexStackExternalJobStatsSourceV0
 	request orquestamcp.MCPDirectorExternalJobStatsRequestV0
@@ -303,6 +332,7 @@ type codexStackExternalJobGoalFirstStatsFixtureV0 struct {
 	request orquestamcp.MCPDirectorExternalJobStatsRequestV0
 	runRef  string
 	goalRef string
+	run     orquestacoreworkflow.OrchestrationRunV0
 }
 
 func newCodexStackExternalJobGoalFirstStatsFixtureV0(
@@ -393,11 +423,12 @@ func newCodexStackExternalJobGoalFirstStatsFixtureV0(
 	}
 	return codexStackExternalJobGoalFirstStatsFixtureV0{
 		source: CodexStackExternalJobStatsSourceV0{
-			RunStore:       orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
-			AppChangeStore: orquestaappchange.NewInMemoryAppChangeStoreV0(record),
-			ReceiptStore:   orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(),
-			TaskStore:      orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(),
-			GoalStateStore: goalStates,
+			RunStore:                orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+			AppChangeStore:          orquestaappchange.NewInMemoryAppChangeStoreV0(record),
+			ReceiptStore:            orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(),
+			TaskStore:               orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(),
+			GoalStateStore:          goalStates,
+			GoalFirstRunMarkerStore: goalStates,
 		},
 		request: orquestamcp.MCPDirectorExternalJobStatsRequestV0{
 			AppRef:         "opes",
@@ -405,6 +436,7 @@ func newCodexStackExternalJobGoalFirstStatsFixtureV0(
 		},
 		runRef:  runRef,
 		goalRef: goalRef,
+		run:     run,
 	}
 }
 

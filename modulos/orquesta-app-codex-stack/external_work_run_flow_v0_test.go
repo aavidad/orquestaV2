@@ -561,6 +561,45 @@ func TestCodexStackV0ExternalWorkGoalFirstSinStateNoDrenaLegacy(t *testing.T) {
 	}
 }
 
+func TestCodexStackV0ExternalWorkGoalFirstMarcadoSinStateNoDrenaLegacyAunqueAppSpecNeutral(t *testing.T) {
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack := mustBuildCodexStackWithGoalBackendForTestV0(
+		t,
+		newFakeCodexStackRuntimeV0(),
+		&goalFirstQueueLauncherForTestV0{},
+		&goalFirstQueueObserverForTestV0{},
+		goalStates,
+	)
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:         "run-external-work-goal-marker-missing-state-001",
+		ProjectRef:    "opes",
+		AppSpecRef:    "app-spec-neutral-domain-work-opes",
+		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Phases:        orquestacoreworkflow.OrchestrationPhaseCatalogV0(),
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	saveCodexStackGoalFirstRunMarkerForTestV0(t, context.Background(), goalStates, run.RunID)
+
+	supervisor, err := NewCodexStackRunSupervisorExecutorV0(&stack).Execute(context.Background(), orquestamcp.MCPRunSupervisorToolInputV0{
+		RequestID:     "req-external-work-goal-marker-missing-state-001",
+		CorrelationID: "corr-external-work-goal-marker-missing-state-001",
+		RunRef:        run.RunID,
+	})
+	if err != nil {
+		t.Fatalf("RunSupervisor Execute: %v", err)
+	}
+	if supervisor.Estado != orquestamcp.MCPRunSupervisorEstadoErrorV0 ||
+		supervisor.StopReason != "goal_first_state_missing" ||
+		!codexStackStringInSetForTestV0(supervisor.EvidenceRefs, "evidence-ref-run-supervisor-goal-first-marker") ||
+		!codexStackStringInSetForTestV0(supervisor.NextActions, "inspect_goal_state_store") {
+		t.Fatalf("supervisor=%+v", supervisor)
+	}
+}
+
 func TestCodexStackV0ExternalWorkRunAceptaContratoAmplioV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	body := bytes.NewBuffer(nil)

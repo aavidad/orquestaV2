@@ -282,6 +282,49 @@ func TestServerConfigFromEnvV0ExternalWorkLegacyDirectorLoopOptInVisibleV0(t *te
 	}
 }
 
+func TestServerConfigFromEnvV0PromocionMaterialSinACKOptOutVisibleV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envCodexPromoteMaterializedArtifactWithoutAckV0, "false")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envCodexPromoteMaterializedArtifactWithoutAckV0)
+	if setting.Value != "false" || setting.Source != "explicit" {
+		t.Fatalf("setting promote without ack=%+v", setting)
+	}
+}
+
+func TestBuildStackFromEnvV0CableaPromocionMaterialSinACKV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0 default: %v", err)
+	}
+	stack, err := buildStackFromEnvWithGoalBackendV0(config, serverCodexGoalBackendV0{})
+	if err != nil {
+		t.Fatalf("buildStackFromEnvWithGoalBackendV0 default: %v", err)
+	}
+	if !stack.PromoteMaterializedArtifactWithoutAck {
+		t.Fatalf("promote without ack default=%v", stack.PromoteMaterializedArtifactWithoutAck)
+	}
+
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envCodexPromoteMaterializedArtifactWithoutAckV0, "false")
+	config, err = serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0 optout: %v", err)
+	}
+	stack, err = buildStackFromEnvWithGoalBackendV0(config, serverCodexGoalBackendV0{})
+	if err != nil {
+		t.Fatalf("buildStackFromEnvWithGoalBackendV0 optout: %v", err)
+	}
+	if stack.PromoteMaterializedArtifactWithoutAck {
+		t.Fatalf("promote without ack optout=%v", stack.PromoteMaterializedArtifactWithoutAck)
+	}
+}
+
 func TestServerConfigFromEnvV0PerfilAutonomiaActivaDirectorResidenteV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerAutonomyEnabledV0, "true")
@@ -409,6 +452,7 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 		"ORQUESTA_CODEX_MAX_BATCH_READY":                     "10",
 		"ORQUESTA_CODEX_MAX_CONCURRENCY":                     "10",
 		"ORQUESTA_CODEX_REASONING_EFFORT":                    "high",
+		envCodexPromoteMaterializedArtifactWithoutAckV0:      "true",
 		"ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT":    "6",
 		envOPESBridgeWaitResidentSecondsV0:                   "15",
 		envOPESBridgeWaitResidentIntervalMSV0:                "250",

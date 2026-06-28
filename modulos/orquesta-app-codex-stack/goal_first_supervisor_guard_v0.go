@@ -64,6 +64,16 @@ func (stack StackV0) goalFirstSupervisorDispositionV0(
 			return codexStackGoalFirstSupervisorDispositionFromStateV0(runRef, state), true
 		}
 	}
+	if marker, ok := stack.goalFirstRunMarkerWithoutStateV0(ctx, runRef); ok {
+		evidenceRefs := compactStringsV0(append(
+			[]string{
+				"evidence-ref-run-supervisor-goal-first-marker",
+				"evidence-ref-run-supervisor-goal-first-state-missing",
+			},
+			marker.EvidenceRefs...,
+		))
+		return codexStackGoalFirstStateMissingDispositionV0(runRef, evidenceRefs), true
+	}
 	if stack.Ports.RunStore == nil {
 		return codexStackGoalFirstSupervisorDispositionV0{}, false
 	}
@@ -75,6 +85,14 @@ func (stack StackV0) goalFirstSupervisorDispositionV0(
 		"evidence-ref-run-supervisor-goal-first-container",
 		"evidence-ref-run-supervisor-goal-first-state-missing",
 	}
+	return codexStackGoalFirstStateMissingDispositionV0(runRef, evidenceRefs), true
+}
+
+func codexStackGoalFirstStateMissingDispositionV0(
+	runRef string,
+	evidenceRefs []string,
+) codexStackGoalFirstSupervisorDispositionV0 {
+	evidenceRefs = compactStringsV0(evidenceRefs)
 	return codexStackGoalFirstSupervisorDispositionV0{
 		RunRef:       runRef,
 		Outcome:      codexStackGoalFirstStateMissingOutcomeV0,
@@ -89,7 +107,7 @@ func (stack StackV0) goalFirstSupervisorDispositionV0(
 			TargetPort:   "goal_state_store",
 			EvidenceRefs: evidenceRefs,
 		}},
-	}, true
+	}
 }
 
 func codexStackGoalFirstSupervisorDispositionFromStateV0(
