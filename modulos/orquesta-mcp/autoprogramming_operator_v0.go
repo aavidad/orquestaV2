@@ -346,6 +346,32 @@ func mcpAutoprogrammingOperatorWithGoalFirstActionsV0(
 	return operator
 }
 
+func mcpAutoprogrammingOperatorWithGoalFirstStateMissingActionsV0(
+	operator *MCPAutoprogrammingOperatorV0,
+	allowLegacySupervisorActions bool,
+	runRefs ...string,
+) *MCPAutoprogrammingOperatorV0 {
+	if operator == nil {
+		return operator
+	}
+	goalFirst := mcpAutoprogrammingGoalFirstRunRefSetV0(runRefs)
+	if len(goalFirst) == 0 {
+		return operator
+	}
+	next := make([]MCPAutoprogrammingSafeActionV0, 0, len(operator.SafeActions)+len(goalFirst))
+	if allowLegacySupervisorActions {
+		next = append(next, mcpAutoprogrammingLegacyRunActionsForActiveRunsV0(operator, goalFirst)...)
+	}
+	for _, action := range operator.SafeActions {
+		if mcpAutoprogrammingGoalFirstSuppressesLegacyActionV0(operator, action, goalFirst) {
+			continue
+		}
+		next = append(next, action)
+	}
+	operator.SafeActions = mcpAutoprogrammingDeduplicateSafeActionsV0(next)
+	return operator
+}
+
 func mcpAutoprogrammingGoalFirstSuppressesLegacyActionV0(
 	operator *MCPAutoprogrammingOperatorV0,
 	action MCPAutoprogrammingSafeActionV0,

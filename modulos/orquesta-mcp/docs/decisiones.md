@@ -17,6 +17,27 @@ Estado:
 ## Decisiones tomadas
 
 ```text
+Fecha: 2026-06-28
+Decision: `autoprogramming/status` usa `GoalWorkRunMarkerV0` como marcador
+durable minimo de goal-first cuando falta `GoalWorkStateV0`.
+Motivo: `StartAppDirectorV0` ya puede dejar evidencia durable de que una run
+debia ser goal-first antes de que exista state completo. Si el status no lee
+ese marcador, una perdida o ausencia de state puede parecer legacy y activar
+supervision antigua.
+Alternativas: tratar el marcador como run legacy hasta reconstruir state; emitir
+`observe_goal` aunque falte state; cerrar el run como fallo terminal. Se
+descartan porque reabren el loop historico, esconden la reparacion necesaria o
+cierran sin evidencia de trabajo.
+Impacto: una run con marcador y sin state se publica como
+`autoprogramming_goal_first_state_missing`, cuenta como bloqueada reparable,
+suprime acciones legacy y exige reparar/reconstruir `GoalWorkStateV0` antes de
+observar el goal por el camino normal.
+Contratos afectados: mcp.tool.orquesta.autoprogramming.status.v0;
+GoalWorkRunMarkerStorePortV0.
+Estado: aceptada localmente
+```
+
+```text
 Fecha: 2026-06-27
 Decision: `autoprogramming/status` publica `observe_goal` como unica accion
 normal para runs goal-first y no recomienda `supervise queue` si la cola activa

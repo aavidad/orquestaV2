@@ -15,16 +15,19 @@ const (
 	mcpAutoprogrammingActionProviderUsageLimitRetryV0         = "provider_usage_limit_retry_after"
 	mcpAutoprogrammingActionExternalWorkStoppedNoDeliveryV0   = "external_work_accepted_stopped_without_delivery"
 	mcpAutoprogrammingActionExternalWorkNoAgentMaterializedV0 = "external_work_accepted_no_agent_materialized"
+	mcpAutoprogrammingActionGoalFirstStateMissingV0           = "goal_first_state_missing"
 	mcpAutoprogrammingEvidenceRunningStaleReconciledV0        = "evidence-ref-run-queue-running-stale-no-live-process-reconciled"
 	mcpAutoprogrammingEvidenceProviderUsageLimitRetryV0       = "evidence-ref-provider-usage-limit-retry-after"
 	mcpAutoprogrammingEvidenceExternalWorkRunStartedV0        = "evidence-ref-external-work-run-started"
 	mcpAutoprogrammingEvidenceExternalWorkRunQueuedV0         = "evidence-ref-external-work-run-queued"
 	mcpAutoprogrammingEvidenceRunCoordinatorExecutedV0        = "evidence-ref-run-coordinator-executed"
+	mcpAutoprogrammingEvidenceGoalFirstStateMissingV0         = "evidence-ref-autoprogramming-status-goal-first-state-missing"
 )
 
 func buildMCPAutoprogrammingStaleRunningV0(
 	queue *MCPRunQueuePriorityToolResultV0,
 	goalStatesByRunRef map[string]orquestagoal.GoalWorkStateV0,
+	goalRunMarkersByRunRef map[string]orquestagoal.GoalWorkRunMarkerV0,
 	run *MCPDirectorStatsToolResultV0,
 	observedRuns ...*MCPDirectorStatsToolResultV0,
 ) []MCPAutoprogrammingActionableRunV0 {
@@ -37,7 +40,7 @@ func buildMCPAutoprogrammingStaleRunningV0(
 		append([]MCPRunQueueRankedCandidateCompactV0{}, queue.Ranked...),
 		queue.Terminal...,
 	) {
-		action, ok := mcpAutoprogrammingStaleRunningActionForCandidateV0(candidate, goalStatesByRunRef, observedByRunRef)
+		action, ok := mcpAutoprogrammingStaleRunningActionForCandidateV0(candidate, goalStatesByRunRef, goalRunMarkersByRunRef, observedByRunRef)
 		if ok {
 			out = append(out, action)
 		}
@@ -48,6 +51,7 @@ func buildMCPAutoprogrammingStaleRunningV0(
 func mcpAutoprogrammingStaleRunningActionForCandidateV0(
 	candidate MCPRunQueueRankedCandidateCompactV0,
 	goalStatesByRunRef map[string]orquestagoal.GoalWorkStateV0,
+	goalRunMarkersByRunRef map[string]orquestagoal.GoalWorkRunMarkerV0,
 	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
 ) (MCPAutoprogrammingActionableRunV0, bool) {
 	status := strings.ToLower(strings.TrimSpace(candidate.Status))
@@ -57,6 +61,9 @@ func mcpAutoprogrammingStaleRunningActionForCandidateV0(
 	}
 	if _, ok := goalStatesByRunRef[runRef]; ok {
 		return MCPAutoprogrammingActionableRunV0{}, false
+	}
+	if marker, ok := goalRunMarkersByRunRef[runRef]; ok {
+		return mcpAutoprogrammingGoalFirstStateMissingActionV0(candidate, marker), true
 	}
 	if mcpAutoprogrammingCandidateHasEvidenceV0(candidate, mcpAutoprogrammingEvidenceProviderUsageLimitRetryV0) {
 		return mcpAutoprogrammingActionableRunFromCandidateV0(
@@ -142,6 +149,25 @@ func mcpAutoprogrammingStaleRunningActionForCandidateV0(
 		), true
 	}
 	return MCPAutoprogrammingActionableRunV0{}, false
+}
+
+func mcpAutoprogrammingGoalFirstStateMissingActionV0(
+	candidate MCPRunQueueRankedCandidateCompactV0,
+	marker orquestagoal.GoalWorkRunMarkerV0,
+) MCPAutoprogrammingActionableRunV0 {
+	return MCPAutoprogrammingActionableRunV0{
+		Code:              mcpAutoprogrammingActionGoalFirstStateMissingV0,
+		Severity:          "blocked",
+		RunRef:            strings.TrimSpace(candidate.RunRef),
+		AppRef:            strings.TrimSpace(candidate.AppRef),
+		Status:            strings.TrimSpace(candidate.Status),
+		Reason:            "goal-first container missing GoalWorkStateV0",
+		RecommendedAction: "repair_goal_state_before_legacy_supervision",
+		EvidenceRefs: compactStringsMCPV0(append(
+			append([]string{mcpAutoprogrammingEvidenceGoalFirstStateMissingV0}, candidate.EvidenceRefs...),
+			marker.EvidenceRefs...,
+		)),
+	}
 }
 
 func mcpAutoprogrammingStoppedExternalWorkAcceptedWithoutDeliveryV0(

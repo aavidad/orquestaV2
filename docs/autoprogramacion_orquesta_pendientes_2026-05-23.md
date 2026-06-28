@@ -358,9 +358,14 @@ Pendiente verificable:
   `GoalWorkRunMarkerV0` por `GoalWorkRunMarkerStorePortV0` y el stack Codex lo
   cablea desde el mismo state-file. Si falta `GoalWorkStateV0`, `Continue` ya
   reconoce el marcador y devuelve `app_director_goal_first_state_missing` sin
-  lanzar loop legacy. Queda como mejora de diagnostico que
-  `autoprogramming/status` publique reparacion/observacion mas rica usando ese
-  marcador cuando no haya state completo.
+  lanzar loop legacy.
+- Revalidacion adicional 2026-06-28 tarde: `autoprogramming/status` tambien
+  reconoce `GoalWorkRunMarkerV0` cuando falta `GoalWorkStateV0`. Publica
+  `autoprogramming_goal_first_state_missing`, cuenta la run como bloqueada
+  reparable, emite `goal_first_state_missing` con
+  `repair_goal_state_before_legacy_supervision` y suprime `supervise`/`retry`/
+  `review` legacy para esa run hasta reconstruir el state. Evidencia focal:
+  `TestMCPAutoprogrammingStatusExecutorV0GoalFirstMarkerSinStateNoSupervisaLegacy`.
 
 Validacion focal:
 

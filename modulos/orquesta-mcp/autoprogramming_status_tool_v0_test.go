@@ -195,6 +195,88 @@ func TestMCPAutoprogrammingStatusExecutorV0RecomiendaObserveGoalParaRunGoalFirst
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0GoalFirstMarkerSinStateNoSupervisaLegacy(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-marker-missing-state-001"
+	goalRef := "goal-ref-autop-status-goal-marker-missing-state-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	goalMarkers := newMCPGoalRunMarkerStoreForStatusTestV0()
+	if err := goalMarkers.SaveGoalWorkRunMarkerV0(context.Background(), orquestagoal.GoalWorkRunMarkerV0{
+		RunRef:       runRef,
+		GoalRef:      goalRef,
+		DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+		Status:       orquestagoal.GoalStatusRunningV0,
+		EvidenceRefs: []string{"evidence-ref-goal-marker-missing-state-status-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkRunMarkerV0: %v", err)
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        runRef,
+				AppRef:        "app-ref-goal-marker-missing-state",
+				Status:        "running",
+				PriorityScore: 90,
+			}},
+		},
+		Stats: &fakeMCPAutoprogrammingRunStatusV0{
+			stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+				RunRef:     runRef,
+				ProjectRef: "app-ref-goal-marker-missing-state",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					TasksTotal:     1,
+					AgentsInFlight: 1,
+				},
+				Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+					Tasks: []orquestacionnucleoapp.DirectorTaskProgressV0{{
+						TaskRef:        "task-ref-goal-marker-legacy-residual-001",
+						Status:         "in_progress",
+						AgentRequestID: "agent-ref-goal-marker-legacy-residual-001",
+					}},
+				},
+				Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{
+					AgentRequestID: "agent-ref-goal-marker-legacy-residual-001",
+					Status:         orquestacionnucleoapp.DirectorAgentStatusRunningV0,
+					InFlight:       true,
+				}},
+			},
+		},
+		GoalStateStore:               goalStates,
+		GoalRunMarkerStore:           goalMarkers,
+		AllowLegacySupervisorActions: true,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{
+		RunRef: runRef,
+	})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_goal_first_state_missing") {
+		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.Blocked != 1 ||
+		result.QueueHealth.RunningLive != 0 ||
+		result.QueueHealth.RunningWithoutRecentStats != 0 ||
+		result.QueueHealth.RunningStale != 0 ||
+		result.QueueHealth.RunningStaleNoProcess != 0 ||
+		len(result.StaleRunning) != 1 ||
+		result.StaleRunning[0].Code != mcpAutoprogrammingActionGoalFirstStateMissingV0 ||
+		result.StaleRunning[0].RecommendedAction != "repair_goal_state_before_legacy_supervision" {
+		t.Fatalf("queue_health=%+v stale_running=%+v", result.QueueHealth, result.StaleRunning)
+	}
+	if len(result.Tasks) != 0 || len(result.Agents) != 0 {
+		t.Fatalf("goal-first marker no debe exponer proyecciones legacy: tasks=%+v agents=%+v", result.Tasks, result.Agents)
+	}
+	if result.Operator == nil ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "observe_goal", "run", runRef) ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "run", runRef) ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "queue", "") {
+		t.Fatalf("operator=%+v", result.Operator)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0ListaGoalActivoAunqueColaNoVisible(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-listed-001"
 	goalRef := "goal-ref-autop-status-goal-listed-001"
@@ -1490,6 +1572,39 @@ func TestMCPAutoprogrammingStatusTransportV0AceptaIncludesFlexibles(t *testing.T
 		!stats.input.IncludeAgentUsage {
 		t.Fatalf("stats input no normalizado: %+v", stats.input)
 	}
+}
+
+type mcpGoalRunMarkerStoreForStatusTestV0 struct {
+	markers map[string]orquestagoal.GoalWorkRunMarkerV0
+}
+
+func newMCPGoalRunMarkerStoreForStatusTestV0() *mcpGoalRunMarkerStoreForStatusTestV0 {
+	return &mcpGoalRunMarkerStoreForStatusTestV0{
+		markers: map[string]orquestagoal.GoalWorkRunMarkerV0{},
+	}
+}
+
+func (store *mcpGoalRunMarkerStoreForStatusTestV0) SaveGoalWorkRunMarkerV0(
+	_ context.Context,
+	marker orquestagoal.GoalWorkRunMarkerV0,
+) error {
+	normalized, err := orquestagoal.NewGoalWorkRunMarkerV0(marker)
+	if err != nil {
+		return err
+	}
+	store.markers[normalized.RunRef] = normalized
+	return nil
+}
+
+func (store *mcpGoalRunMarkerStoreForStatusTestV0) LoadGoalWorkRunMarkerV0(
+	_ context.Context,
+	runRef string,
+) (orquestagoal.GoalWorkRunMarkerV0, error) {
+	marker, ok := store.markers[strings.TrimSpace(runRef)]
+	if !ok {
+		return orquestagoal.GoalWorkRunMarkerV0{}, context.Canceled
+	}
+	return marker, nil
 }
 
 func hasStringMCPAutoprogrammingStatusTestV0(values []string, want string) bool {

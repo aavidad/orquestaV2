@@ -16,6 +16,23 @@ Estado:
 ```
 
 ```text
+ID: MCP-040
+Objetivo: Evitar supervision legacy cuando `autoprogramming/status` ve marcador
+goal-first sin state completo.
+Write-set: autoprogramming_status_*_v0.go,
+autoprogramming_operator_v0.go, autoprogramming_status_tool_v0_test.go, docs
+locales.
+Simbolo foco: MCPAutoprogrammingStatusToolExecutorV0.GoalRunMarkerStore
+Contrato: mcp.tool.orquesta.autoprogramming.status.v0;
+GoalWorkRunMarkerStorePortV0.
+Validacion: go test -count=1 ./modulos/orquesta-mcp -run
+'TestMCPAutoprogrammingStatusExecutorV0(GoalFirstMarkerSinStateNoSupervisaLegacy|RecomiendaObserveGoalParaRunGoalFirst|ColaMixtaGoalFirstNoSupervisaColaGlobal)|TestMCPAutoprogrammingStatusHTTPHandlerV0NoMarcaRunningStaleSiHayAgentesVivos'
+Bloqueos: No reconstruye el state ni toca runtime Codex/OPES; solo publica la
+accion segura reparable y bloquea el retorno al supervisor legacy.
+Estado: completada 2026-06-28
+```
+
+```text
 ID: MCP-037
 Objetivo: Reconciliar T198 como cierre focal de `descriptor_source` para resources MCP.
 Write-set: docs locales y backlog T198.

@@ -594,6 +594,16 @@ Revalidacion adicional 2026-06-27: el mismo camino alinea
 el snapshot publica `decision.action=observe_goal` y `reason_code=
 goal_first_observe_required`, no `supervise_queue`.
 
+Evidencia adicional 2026-06-28:
+`TestMCPAutoprogrammingStatusExecutorV0GoalFirstMarkerSinStateNoSupervisaLegacy`
+valida que un run con `GoalWorkRunMarkerV0` pero sin `GoalWorkStateV0` no cae al
+supervisor legacy: publica diagnostico
+`autoprogramming_goal_first_state_missing`, cuenta `queue_health.blocked=1`,
+emite accion `goal_first_state_missing` con
+`repair_goal_state_before_legacy_supervision`, oculta proyecciones legacy de
+tareas/agentes y no recomienda `observe_goal`, `supervise run` ni
+`supervise queue` hasta reparar el state.
+
 Evidencia adicional 2026-06-26: `autoprogramming/status` diagnostica
 `external_work_accepted_stopped_without_delivery` cuando una run external-work
 queda terminal `stopped` con evidencias de arranque/cola/coordinador, pero los

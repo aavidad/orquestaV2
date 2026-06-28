@@ -1600,6 +1600,15 @@ Invariantes:
     acotado para candidatos legacy visibles. Si hay mas de un goal activo,
     publica tambien `observe_active_goals` contra
     `/api/v0/autoprogramming/goals/observe-active`.
+  - Si la composicion inyecta `GoalWorkRunMarkerStorePortV0`, o el
+    `GoalWorkStateStore` lo implementa, una run con marcador goal-first pero
+    sin `GoalWorkStateV0` se clasifica como
+    `autoprogramming_goal_first_state_missing`: `queue_health.blocked` aumenta,
+    `stale_running[].code=goal_first_state_missing` recomienda
+    `repair_goal_state_before_legacy_supervision`, no publica proyecciones
+    legacy de tareas/agentes y no sugiere `supervise`/`retry`/`review` legacy
+    para esa run. Tampoco emite `observe_goal` hasta reconstruir el state,
+    porque la observacion normal del goal necesita el estado persistido.
   - Las clases `running_without_recent_stats`, `running_stale*` y las
     proyecciones legacy de tareas/agentes (`registered`, `process_ref`,
     `task_ref`) aplican solo a runs sin `GoalWorkStateV0`. En goal-first el

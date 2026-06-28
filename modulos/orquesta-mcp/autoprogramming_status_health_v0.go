@@ -24,6 +24,7 @@ const (
 func buildMCPAutoprogrammingQueueHealthV0(
 	queue *MCPRunQueuePriorityToolResultV0,
 	goalStatesByRunRef map[string]orquestagoal.GoalWorkStateV0,
+	goalRunMarkersByRunRef map[string]orquestagoal.GoalWorkRunMarkerV0,
 	run *MCPDirectorStatsToolResultV0,
 	observedRuns ...*MCPDirectorStatsToolResultV0,
 ) *MCPAutoprogrammingQueueHealthV0 {
@@ -42,6 +43,10 @@ func buildMCPAutoprogrammingQueueHealthV0(
 				applyMCPAutoprogrammingGoalHealthV0(&health, state)
 				continue
 			}
+			if marker, ok := goalRunMarkersByRunRef[runRef]; ok {
+				applyMCPAutoprogrammingGoalMarkerHealthV0(&health, marker)
+				continue
+			}
 			applyMCPAutoprogrammingHealthClassV0(
 				&health,
 				classifyMCPAutoprogrammingQueueStatusV0(item.Status),
@@ -58,12 +63,14 @@ func buildMCPAutoprogrammingQueueHealthV0(
 		if item, ok := queueCandidateForRunMCPAutoprogrammingHealthV0(queue, runRef); ok {
 			applyMCPAutoprogrammingHealthClassV0(
 				&health,
-				classifyMCPAutoprogrammingQueuedRunHealthV0(item, goalStatesByRunRef),
+				classifyMCPAutoprogrammingQueuedRunHealthV0(item, goalStatesByRunRef, goalRunMarkersByRunRef),
 				-1,
 			)
 		}
 		if state, ok := goalStatesByRunRef[runRef]; ok {
 			applyMCPAutoprogrammingGoalHealthV0(&health, state)
+		} else if marker, ok := goalRunMarkersByRunRef[runRef]; ok {
+			applyMCPAutoprogrammingGoalMarkerHealthV0(&health, marker)
 		} else {
 			health.AgentsLive += liveAgentsMCPAutoprogrammingRunStatsV0(*run.Stats)
 			applyMCPAutoprogrammingRunHealthV0(&health, *run.Stats)
@@ -82,7 +89,7 @@ func buildMCPAutoprogrammingQueueHealthV0(
 		if item, ok := queueCandidateForRunMCPAutoprogrammingHealthV0(queue, runRef); ok {
 			applyMCPAutoprogrammingHealthClassV0(
 				&health,
-				classifyMCPAutoprogrammingQueuedRunHealthV0(item, goalStatesByRunRef),
+				classifyMCPAutoprogrammingQueuedRunHealthV0(item, goalStatesByRunRef, goalRunMarkersByRunRef),
 				-1,
 			)
 		}
@@ -90,12 +97,19 @@ func buildMCPAutoprogrammingQueueHealthV0(
 			applyMCPAutoprogrammingGoalHealthV0(&health, state)
 			continue
 		}
+		if marker, ok := goalRunMarkersByRunRef[runRef]; ok {
+			applyMCPAutoprogrammingGoalMarkerHealthV0(&health, marker)
+			continue
+		}
 		health.AgentsLive += liveAgentsMCPAutoprogrammingRunStatsV0(*observed.Stats)
 		applyMCPAutoprogrammingRunHealthV0(&health, *observed.Stats)
 	}
 	health.QueuedNotDispatched = countMCPAutoprogrammingQueuedNotDispatchedV0(
 		queue,
-		mcpAutoprogrammingGoalRunRefSetV0(goalStatesByRunRef),
+		mcpAutoprogrammingMergeGoalFirstStructSetsV0(
+			mcpAutoprogrammingGoalRunRefSetV0(goalStatesByRunRef),
+			mcpAutoprogrammingGoalRunMarkerRefSetV0(goalRunMarkersByRunRef),
+		),
 		append([]*MCPDirectorStatsToolResultV0{run}, observedRuns...)...,
 	)
 	health.StatsRuns = countMCPAutoprogrammingSeenRunsV0(statsSeen)
@@ -106,9 +120,14 @@ func buildMCPAutoprogrammingQueueHealthV0(
 func classifyMCPAutoprogrammingQueuedRunHealthV0(
 	item MCPRunQueueRankedCandidateCompactV0,
 	goalStatesByRunRef map[string]orquestagoal.GoalWorkStateV0,
+	goalRunMarkersByRunRef map[string]orquestagoal.GoalWorkRunMarkerV0,
 ) string {
-	if state, ok := goalStatesByRunRef[strings.TrimSpace(item.RunRef)]; ok {
+	runRef := strings.TrimSpace(item.RunRef)
+	if state, ok := goalStatesByRunRef[runRef]; ok {
 		return classifyMCPAutoprogrammingGoalStateV0(state)
+	}
+	if _, ok := goalRunMarkersByRunRef[runRef]; ok {
+		return mcpAutoprogrammingHealthBlockedV0
 	}
 	return classifyMCPAutoprogrammingQueueStatusV0(item.Status)
 }
@@ -141,6 +160,45 @@ func applyMCPAutoprogrammingGoalHealthV0(
 		classifyMCPAutoprogrammingGoalStateV0(state),
 		1,
 	)
+}
+
+func applyMCPAutoprogrammingGoalMarkerHealthV0(
+	health *MCPAutoprogrammingQueueHealthV0,
+	_ orquestagoal.GoalWorkRunMarkerV0,
+) {
+	applyMCPAutoprogrammingHealthClassV0(
+		health,
+		mcpAutoprogrammingHealthBlockedV0,
+		1,
+	)
+}
+
+func mcpAutoprogrammingGoalRunMarkerRefSetV0(
+	markers map[string]orquestagoal.GoalWorkRunMarkerV0,
+) map[string]struct{} {
+	out := map[string]struct{}{}
+	for runRef := range markers {
+		runRef = strings.TrimSpace(runRef)
+		if runRef != "" {
+			out[runRef] = struct{}{}
+		}
+	}
+	return out
+}
+
+func mcpAutoprogrammingMergeGoalFirstStructSetsV0(
+	sets ...map[string]struct{},
+) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, set := range sets {
+		for runRef := range set {
+			runRef = strings.TrimSpace(runRef)
+			if runRef != "" {
+				out[runRef] = struct{}{}
+			}
+		}
+	}
+	return out
 }
 
 func classifyMCPAutoprogrammingGoalStateV0(

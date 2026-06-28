@@ -68,6 +68,7 @@ type MCPAutoprogrammingStatusToolExecutorV0 struct {
 	Queue                        MCPTransportRunQueuePriorityExecutorV0
 	Stats                        MCPTransportDirectorStatsExecutorV0
 	GoalStateStore               orquestagoal.GoalWorkStateStorePortV0
+	GoalRunMarkerStore           orquestagoal.GoalWorkRunMarkerStorePortV0
 	AllowLegacySupervisorActions bool
 }
 
@@ -166,12 +167,20 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 		okCount++
 	}
 	goalStatesByRunRef := mcpAutoprogrammingGoalStatesByRunRefV0(goalStates)
-	goalFirstRunRefs := mcpAutoprogrammingGoalFirstRunRefSetFromStatesV0(goalStates)
+	goalRunMarkers := executor.goalRunMarkersForAutoprogrammingStatusV0(ctx, result, input, goalStatesByRunRef)
+	if len(goalRunMarkers) > 0 {
+		okCount++
+	}
+	goalRunMarkersByRunRef := mcpAutoprogrammingGoalRunMarkersByRunRefV0(goalRunMarkers)
+	goalFirstRunRefs := mcpAutoprogrammingMergeGoalFirstRunRefSetsV0(
+		mcpAutoprogrammingGoalFirstRunRefSetFromStatesV0(goalStates),
+		mcpAutoprogrammingGoalFirstRunRefSetFromMarkersV0(goalRunMarkers),
+	)
 	result.Diagnostics = append(
 		result.Diagnostics,
 		diagnosticsFromQueuedNotDispatchedMCPAutoprogrammingV0(
 			result.Queue,
-			mcpAutoprogrammingGoalRunRefSetV0(goalStatesByRunRef),
+			mcpAutoprogrammingGoalFirstRunStructSetV0(goalFirstRunRefs),
 			append([]*MCPDirectorStatsToolResultV0{result.Run}, observedRuns...)...,
 		)...,
 	)
@@ -186,8 +195,8 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	result.Projects = buildMCPAutoprogrammingProjectsV0(result.Queue, result.Run)
 	result.Tasks = buildMCPAutoprogrammingTasksV0(result.Run, goalFirstRunRefs)
 	result.Agents = buildMCPAutoprogrammingAgentsV0(result.Run, goalFirstRunRefs)
-	result.QueueHealth = buildMCPAutoprogrammingQueueHealthV0(result.Queue, goalStatesByRunRef, healthRun, healthObservedRuns...)
-	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, goalStatesByRunRef, healthRun, healthObservedRuns...)
+	result.QueueHealth = buildMCPAutoprogrammingQueueHealthV0(result.Queue, goalStatesByRunRef, goalRunMarkersByRunRef, healthRun, healthObservedRuns...)
+	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, goalStatesByRunRef, goalRunMarkersByRunRef, healthRun, healthObservedRuns...)
 	result.Diagnostics = append(result.Diagnostics, diagnosticsFromStaleRunningMCPAutoprogrammingV0(result.StaleRunning)...)
 	result.Operator = newMCPAutoprogrammingOperatorV0(
 		result.Queue,
@@ -205,6 +214,16 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	}
 	for _, goalState := range goalStates {
 		result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingGoalFirstDiagnosticsV0(goalState)...)
+	}
+	for _, marker := range goalRunMarkers {
+		result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingGoalFirstStateMissingDiagnosticsV0(marker)...)
+	}
+	if len(goalRunMarkers) > 0 {
+		result.Operator = mcpAutoprogrammingOperatorWithGoalFirstStateMissingActionsV0(
+			result.Operator,
+			executor.AllowLegacySupervisorActions,
+			mcpAutoprogrammingGoalRunMarkerRunRefsV0(goalRunMarkers)...,
+		)
 	}
 	if len(goalStates) > 0 {
 		result.Operator = mcpAutoprogrammingOperatorWithGoalFirstActionsV0(
@@ -231,15 +250,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) goalStatesForAutoprogramm
 	if executor.GoalStateStore == nil {
 		return nil
 	}
-	runRefs := compactStringsMCPV0([]string{result.RunRef, input.RunRef})
-	if result.Queue != nil {
-		for _, candidate := range result.Queue.Ranked {
-			if mcpAutoprogrammingTerminalRunV0(candidate.Status) {
-				continue
-			}
-			runRefs = append(runRefs, strings.TrimSpace(candidate.RunRef))
-		}
-	}
+	runRefs := executor.goalRunRefsForAutoprogrammingStatusV0(result, input)
 	seen := map[string]bool{}
 	out := make([]orquestagoal.GoalWorkStateV0, 0, len(runRefs))
 	for _, runRef := range compactStringsMCPV0(runRefs) {
@@ -274,12 +285,84 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) goalStatesForAutoprogramm
 	return out
 }
 
+func (executor MCPAutoprogrammingStatusToolExecutorV0) goalRunMarkersForAutoprogrammingStatusV0(
+	ctx context.Context,
+	result MCPAutoprogrammingStatusToolResultV0,
+	input MCPAutoprogrammingStatusToolInputV0,
+	goalStatesByRunRef map[string]orquestagoal.GoalWorkStateV0,
+) []orquestagoal.GoalWorkRunMarkerV0 {
+	store := executor.goalRunMarkerStoreForAutoprogrammingStatusV0()
+	if store == nil {
+		return nil
+	}
+	runRefs := executor.goalRunRefsForAutoprogrammingStatusV0(result, input)
+	seen := map[string]bool{}
+	out := make([]orquestagoal.GoalWorkRunMarkerV0, 0, len(runRefs))
+	for _, runRef := range runRefs {
+		runRef = strings.TrimSpace(runRef)
+		if runRef == "" || seen[runRef] {
+			continue
+		}
+		seen[runRef] = true
+		if _, ok := goalStatesByRunRef[runRef]; ok {
+			continue
+		}
+		marker, err := store.LoadGoalWorkRunMarkerV0(ctx, runRef)
+		if err != nil {
+			continue
+		}
+		marker, err = orquestagoal.NewGoalWorkRunMarkerV0(marker)
+		if err != nil || strings.TrimSpace(marker.RunRef) == "" {
+			continue
+		}
+		out = append(out, marker)
+	}
+	return out
+}
+
+func (executor MCPAutoprogrammingStatusToolExecutorV0) goalRunMarkerStoreForAutoprogrammingStatusV0() orquestagoal.GoalWorkRunMarkerStorePortV0 {
+	if executor.GoalRunMarkerStore != nil {
+		return executor.GoalRunMarkerStore
+	}
+	store, _ := executor.GoalStateStore.(orquestagoal.GoalWorkRunMarkerStorePortV0)
+	return store
+}
+
+func (executor MCPAutoprogrammingStatusToolExecutorV0) goalRunRefsForAutoprogrammingStatusV0(
+	result MCPAutoprogrammingStatusToolResultV0,
+	input MCPAutoprogrammingStatusToolInputV0,
+) []string {
+	runRefs := compactStringsMCPV0([]string{result.RunRef, input.RunRef})
+	if result.Queue != nil {
+		for _, candidate := range append(
+			append([]MCPRunQueueRankedCandidateCompactV0{}, result.Queue.Ranked...),
+			result.Queue.Terminal...,
+		) {
+			if mcpAutoprogrammingTerminalRunV0(candidate.Status) {
+				continue
+			}
+			runRefs = append(runRefs, strings.TrimSpace(candidate.RunRef))
+		}
+	}
+	return compactStringsMCPV0(runRefs)
+}
+
 func mcpAutoprogrammingGoalStateRunRefsV0(
 	states []orquestagoal.GoalWorkStateV0,
 ) []string {
 	out := make([]string, 0, len(states))
 	for _, state := range states {
 		out = append(out, strings.TrimSpace(state.RunRef))
+	}
+	return compactStringsMCPV0(out)
+}
+
+func mcpAutoprogrammingGoalRunMarkerRunRefsV0(
+	markers []orquestagoal.GoalWorkRunMarkerV0,
+) []string {
+	out := make([]string, 0, len(markers))
+	for _, marker := range markers {
+		out = append(out, strings.TrimSpace(marker.RunRef))
 	}
 	return compactStringsMCPV0(out)
 }
@@ -298,6 +381,20 @@ func mcpAutoprogrammingGoalStatesByRunRefV0(
 	return out
 }
 
+func mcpAutoprogrammingGoalRunMarkersByRunRefV0(
+	markers []orquestagoal.GoalWorkRunMarkerV0,
+) map[string]orquestagoal.GoalWorkRunMarkerV0 {
+	out := map[string]orquestagoal.GoalWorkRunMarkerV0{}
+	for _, marker := range markers {
+		runRef := strings.TrimSpace(marker.RunRef)
+		if runRef == "" {
+			continue
+		}
+		out[runRef] = marker
+	}
+	return out
+}
+
 func mcpAutoprogrammingGoalFirstRunRefSetFromStatesV0(
 	states []orquestagoal.GoalWorkStateV0,
 ) map[string]bool {
@@ -308,6 +405,47 @@ func mcpAutoprogrammingGoalFirstRunRefSetFromStatesV0(
 			continue
 		}
 		out[runRef] = true
+	}
+	return out
+}
+
+func mcpAutoprogrammingGoalFirstRunRefSetFromMarkersV0(
+	markers []orquestagoal.GoalWorkRunMarkerV0,
+) map[string]bool {
+	out := map[string]bool{}
+	for _, marker := range markers {
+		runRef := strings.TrimSpace(marker.RunRef)
+		if runRef != "" {
+			out[runRef] = true
+		}
+	}
+	return out
+}
+
+func mcpAutoprogrammingMergeGoalFirstRunRefSetsV0(
+	sets ...map[string]bool,
+) map[string]bool {
+	out := map[string]bool{}
+	for _, set := range sets {
+		for runRef, ok := range set {
+			runRef = strings.TrimSpace(runRef)
+			if ok && runRef != "" {
+				out[runRef] = true
+			}
+		}
+	}
+	return out
+}
+
+func mcpAutoprogrammingGoalFirstRunStructSetV0(
+	set map[string]bool,
+) map[string]struct{} {
+	out := map[string]struct{}{}
+	for runRef, ok := range set {
+		runRef = strings.TrimSpace(runRef)
+		if ok && runRef != "" {
+			out[runRef] = struct{}{}
+		}
 	}
 	return out
 }
@@ -326,6 +464,24 @@ func mcpAutoprogrammingGoalFirstDiagnosticsV0(
 		EvidenceRefs: compactStringsMCPV0(append(
 			[]string{"evidence-ref-autoprogramming-status-goal-first-observe-required"},
 			state.EvidenceRefs...,
+		)),
+	}}
+}
+
+func mcpAutoprogrammingGoalFirstStateMissingDiagnosticsV0(
+	marker orquestagoal.GoalWorkRunMarkerV0,
+) []MCPAutoprogrammingDiagnosticV0 {
+	return []MCPAutoprogrammingDiagnosticV0{{
+		Code:  "autoprogramming_goal_first_state_missing",
+		Scope: "run:" + strings.TrimSpace(marker.RunRef),
+		Message: strings.Join(compactStringsMCPV0([]string{
+			"goal_ref=" + strings.TrimSpace(marker.GoalRef),
+			"goal_status=" + strings.TrimSpace(marker.Status),
+			"action=repair_goal_state",
+		}), " "),
+		EvidenceRefs: compactStringsMCPV0(append(
+			[]string{"evidence-ref-autoprogramming-status-goal-first-state-missing"},
+			marker.EvidenceRefs...,
 		)),
 	}}
 }
