@@ -2552,6 +2552,20 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinGoalFirstV0(t *te
 	}
 }
 
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinOrquestaBaseURLV0(t *testing.T) {
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+		"ORQUESTA_BASE_URL=",
+		"ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE=1",
+		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+	)
+	if err == nil ||
+		!strings.Contains(stderr, "falta ORQUESTA_BASE_URL explicito") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
+}
+
 func TestSmokeOPESPlanTemarioWrapperFakeServerV0(t *testing.T) {
 	requireLocalTCPForTestV0(t)
 	if _, err := exec.LookPath("python3"); err != nil {

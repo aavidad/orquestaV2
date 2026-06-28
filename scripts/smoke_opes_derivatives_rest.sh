@@ -613,6 +613,10 @@ require_derivatives_real_preflight() {
     echo "si la cola temporal ya esta aislada y revisada, exporta ORQUESTA_OPES_DERIVATIVES_ALLOW_LIMIT_GT_1=1" >&2
     exit 2
   fi
+  if [[ -z "$ORQUESTA_BASE_URL_EFFECTIVE" ]]; then
+    echo "smoke derivados real bloqueado: falta ORQUESTA_BASE_URL explicito para crear runs goal-first en Orquesta temporal" >&2
+    exit 2
+  fi
   if [[ "$target_mode" == "run-until-finalize" ||
     "$target_mode" == "run-until-final" ||
     "$target_mode" == "drain-once" ]] &&
