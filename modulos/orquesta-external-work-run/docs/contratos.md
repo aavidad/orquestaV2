@@ -55,6 +55,11 @@ Invariantes:
 - conserva nombres de `input_fields` y, cuando el campo no parece sensible ni
   supera el presupuesto de contexto, incluye un resumen inline acotado en
   `context_refs` con `kind=input_field_value`;
+- los campos operativos tipo `course_root_abs`, `topic_dir_abs`,
+  `program_json_abs`, `required_read_refs`, `required_outputs` u
+  `output_contract` conservan valores relativos/contractuales y una
+  `payload_ref`; si el valor es una ruta local absoluta, el spec solo publica
+  `local_path_ref:<hash>` y `basename`, no el path real;
 - los campos sensibles, privados o demasiado grandes no se inlinean: quedan como
   ref durable al payload `AppChange`/`DomainWork` y el Goal debe bloquear con
   rework si necesita un valor omitido;

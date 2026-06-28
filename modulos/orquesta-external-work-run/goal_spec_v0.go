@@ -325,6 +325,7 @@ func externalWorkGoalInputFieldSummaryV0(
 	if len(summary) == 1 {
 		return nil, false
 	}
+	summary["payload_ref"] = externalWorkGoalInputFieldPayloadRefV0(name)
 	return summary, true
 }
 
@@ -350,6 +351,14 @@ func externalWorkGoalInputFieldNamePurposeV0(name string) string {
 		return "Nombre de campo input_fields sensible no inlineado; disponible solo como ref opaca."
 	}
 	return "Nombre de campo input_fields." + name + " disponible en el contrato DomainWork."
+}
+
+func externalWorkGoalInputFieldPayloadRefV0(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" || externalWorkGoalFieldNameSensitiveV0(name) {
+		return "external-work-input-field-payload-redacted-" + shortExternalWorkGoalHashV0(name)
+	}
+	return "external-work-input-field-payload-" + compactExternalWorkRunRefV0(name)
 }
 
 func externalWorkGoalSafeInputFieldRefPartV0(name string) string {
@@ -389,11 +398,61 @@ func externalWorkGoalSanitizeInputValueV0(name string, value string) string {
 	if externalWorkGoalFieldNameSensitiveV0(name) || externalWorkGoalValueLooksSensitiveV0(value) {
 		return "redacted-sensitive-value"
 	}
-	if !externalWorkGoalFieldAllowsOperationalPathV0(name) {
+	if externalWorkGoalFieldAllowsOperationalPathV0(name) {
+		value = externalWorkGoalSanitizeOperationalValueV0(value)
+	} else {
 		value = redactExternalWorkGoalLocalPathV0(value)
 	}
 	value, _ = boundedExternalWorkGoalTextV0(value, externalWorkGoalInputFieldMaxPurposeBytesV0/2)
 	return value
+}
+
+func externalWorkGoalSanitizeOperationalValueV0(value string) string {
+	value = strings.TrimSpace(value)
+	if externalWorkGoalValueLooksAbsoluteLocalPathV0(value) {
+		return externalWorkGoalLocalPathRefSummaryV0(value)
+	}
+	return redactExternalWorkGoalLocalPathV0(value)
+}
+
+func externalWorkGoalValueLooksAbsoluteLocalPathV0(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	if strings.HasPrefix(value, "/") ||
+		strings.HasPrefix(value, "~/") ||
+		strings.HasPrefix(value, "$HOME/") ||
+		strings.HasPrefix(strings.ToLower(value), "%userprofile%\\") {
+		return true
+	}
+	if len(value) >= 3 && value[1] == ':' && (value[2] == '\\' || value[2] == '/') {
+		return true
+	}
+	return false
+}
+
+func externalWorkGoalLocalPathRefSummaryV0(value string) string {
+	hash := shortExternalWorkGoalHashV0(value)
+	base := externalWorkGoalPathBaseV0(value)
+	if base == "" {
+		return "local_path_ref:" + hash
+	}
+	return "local_path_ref:" + hash + " basename=" + base
+}
+
+func externalWorkGoalPathBaseV0(value string) string {
+	value = strings.TrimRight(strings.TrimSpace(value), `/\`)
+	if value == "" {
+		return ""
+	}
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r == '/' || r == '\\'
+	})
+	if len(parts) == 0 {
+		return ""
+	}
+	return compactExternalWorkRunRefV0(parts[len(parts)-1])
 }
 
 func externalWorkGoalFieldAllowsOperationalPathV0(name string) bool {

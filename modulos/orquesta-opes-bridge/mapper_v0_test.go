@@ -176,8 +176,10 @@ func TestBuildExternalWorkGoalWorkSpecV0MarcaReworkSiSeisSubrolesSinWriteSetProd
 			spec.AcceptanceCriteria,
 			"si subroles_required exige seis subroles y falta topic_dir/product_write_set/allowed_write_set seguro, no cerrar como producto canonico consolidado; devolver pendiente_continuar o rework solicitando write-set de producto",
 		) ||
-		!goalContextPurposeContainsForTestV0(spec.ContextRefs, `"product_write_set_status","value":"missing_for_canonical_consolidation"`) ||
-		!goalContextPurposeContainsForTestV0(spec.ContextRefs, `"product_write_set_rework_action","value":"request_safe_topic_dir_or_product_write_set"`) {
+		!goalContextPurposeContainsForTestV0(spec.ContextRefs, `"name":"product_write_set_status"`) ||
+		!goalContextPurposeContainsForTestV0(spec.ContextRefs, `"value":"missing_for_canonical_consolidation"`) ||
+		!goalContextPurposeContainsForTestV0(spec.ContextRefs, `"name":"product_write_set_rework_action"`) ||
+		!goalContextPurposeContainsForTestV0(spec.ContextRefs, `"value":"request_safe_topic_dir_or_product_write_set"`) {
 		t.Fatalf("spec=%+v", spec)
 	}
 }

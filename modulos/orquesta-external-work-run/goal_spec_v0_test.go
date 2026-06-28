@@ -69,6 +69,18 @@ func TestBuildExternalWorkGoalWorkSpecV0InlineaInputFieldsOperativosSeguros(t *t
 			Value: "/home/alberto/Trabajo/OPES/opes-salidas/curso",
 		},
 		orquestadomainwork.DomainWorkFieldV0{
+			Name:  "topic_dir_abs",
+			Value: "/home/alberto/Trabajo/OPES/opes-salidas/curso/tema_001",
+		},
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:  "program_json_abs",
+			Value: "/home/alberto/Trabajo/OPES/programas/programa.json",
+		},
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:   "required_read_refs",
+			Values: []string{"temario/tema_001.md", "normativa/ley-ref-001"},
+		},
+		orquestadomainwork.DomainWorkFieldV0{
 			Name:   "required_outputs",
 			Values: []string{"04_markdown/tema_001.md", "paquete_final/tests.json"},
 		},
@@ -88,15 +100,32 @@ func TestBuildExternalWorkGoalWorkSpecV0InlineaInputFieldsOperativosSeguros(t *t
 	context := strings.Join(externalWorkRunTestContextPurposesV0(spec.ContextRefs), "\n")
 	for _, want := range []string{
 		"input_fields.course_root_abs",
-		"/home/alberto/Trabajo/OPES/opes-salidas/curso",
+		"local_path_ref:",
+		"basename=curso",
+		"input_fields.topic_dir_abs",
+		"basename=tema_001",
+		"input_fields.program_json_abs",
+		"basename=programa.json",
+		"input_fields.required_read_refs",
+		"temario/tema_001.md",
+		"normativa/ley-ref-001",
 		"input_fields.required_outputs",
 		"04_markdown/tema_001.md",
 		"paquete_final/tests.json",
 		"input_fields.output_contract",
 		`"artifact_type":"content_block"`,
+		"payload_ref",
 	} {
 		if !strings.Contains(context, want) {
 			t.Fatalf("context no contiene %q:\n%s", want, context)
+		}
+	}
+	for _, forbidden := range []string{
+		"/home/alberto/Trabajo/OPES",
+		"/home-redacted/",
+	} {
+		if strings.Contains(context, forbidden) {
+			t.Fatalf("context contiene ruta local cruda %q:\n%s", forbidden, context)
 		}
 	}
 	if !externalWorkRunTestContainsStringV0(

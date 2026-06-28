@@ -108,6 +108,35 @@ Resultado:
 - Ledger:
   `/tmp/opes-salidas/manual-run-until-manifest-test/external-bridge-input-ledger.json`.
 
+Revalidacion posterior con el estado actual del repo:
+
+```bash
+ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1 \
+ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize \
+ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
+ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1 \
+ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-fake-operario-001 \
+ORQUESTA_OPES_BRIDGE_LIMIT=1 \
+ORQUESTA_OPES_BRIDGE_MAX_TICKS=30 \
+ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS=0 \
+scripts/smoke_opes_derivatives_rest.sh
+```
+
+Resultado 2026-06-28T02:56:33Z:
+
+- `run_until_status=completed`.
+- `final_job_type=finalize_temario_package`.
+- `empty_after_final=true`.
+- `goal_receipts_manifest_status=ok`.
+- `goal_receipts_manifest_entries=23`.
+- Salida local:
+  `/tmp/opes-salidas/derivatives-rest-20260628T025633Z`.
+- Resumen final:
+  `/tmp/opes-salidas/derivatives-rest-20260628T025633Z/opes_derivatives_rest_tick_24_drain_summary.json`.
+- Manifest goal/receipts:
+  `/tmp/opes-salidas/derivatives-rest-20260628T025633Z/goal_receipts_manifest.json`.
+
 ## Estado
 
 Cerrado para fake/offline:
