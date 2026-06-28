@@ -70,9 +70,10 @@ func codexAgentAckWithSpecDefaultsV0(
 	ack = codexAgentAckWithMissingSpecDefaultsV0(ack, spec)
 	packet := spec.AgentPacket
 	if codexAgentAckIdentityMatchesSpecV0(ack, spec) {
-		if strings.TrimSpace(ack.CorrelationID) != strings.TrimSpace(packet.CorrelationID) {
-			ack.CorrelationID = packet.CorrelationID
-		}
+		ack.RequestID = firstNonEmptyCodexAckValueV0(spec.RequestID, packet.RequestID)
+		ack.AckRef = packet.DeliveryRefs.AckRef
+		ack.TargetModule = packet.TargetModule
+		ack.CorrelationID = packet.CorrelationID
 		if !codexAgentAckParentTaskCollisionV0(ack, spec) {
 			ack.TaskRef = packet.Task.TaskRef
 		}
@@ -108,10 +109,10 @@ func codexAgentAckIdentityMatchesSpecV0(
 	spec orquestaruntime.ExternalAgentLaunchSpecV0,
 ) bool {
 	packet := spec.AgentPacket
-	return strings.TrimSpace(ack.RequestID) == strings.TrimSpace(spec.RequestID) &&
-		strings.TrimSpace(ack.RequestID) == strings.TrimSpace(packet.RequestID) &&
-		strings.TrimSpace(ack.TargetModule) == strings.TrimSpace(packet.TargetModule) &&
-		strings.TrimSpace(ack.AckRef) == strings.TrimSpace(packet.DeliveryRefs.AckRef)
+	return codexAckRefTolerantEqualV0(ack.RequestID, spec.RequestID) &&
+		codexAckRefTolerantEqualV0(ack.RequestID, packet.RequestID) &&
+		codexAckTextEqualV0(ack.TargetModule, packet.TargetModule) &&
+		codexAckRefTolerantEqualV0(ack.AckRef, packet.DeliveryRefs.AckRef)
 }
 
 func firstNonEmptyCodexAckValueV0(values ...string) string {
@@ -164,14 +165,7 @@ func (v *codexAckValidatorV0) validateCorrelation(
 	ack CodexAgentAckV0,
 	spec orquestaruntime.ExternalAgentLaunchSpecV0,
 ) {
-	packet := spec.AgentPacket
-	if ack.RequestID != spec.RequestID ||
-		ack.RequestID != packet.RequestID ||
-		ack.CorrelationID != spec.CorrelationID ||
-		ack.CorrelationID != packet.CorrelationID ||
-		ack.TargetModule != packet.TargetModule ||
-		ack.TaskRef != packet.Task.TaskRef ||
-		ack.AckRef != packet.DeliveryRefs.AckRef {
+	if !codexAgentAckCorrelationMatchesSpecV0(ack, spec) {
 		evidence := "correlation_mismatch"
 		if codexAgentAckParentChildTaskCollisionV0(ack, spec) {
 			evidence = CodexAgentAckInvalidParentChildTaskCollisionEvidenceV0
@@ -180,6 +174,20 @@ func (v *codexAckValidatorV0) validateCorrelation(
 		}
 		v.add(CodexConnectorAckCorrelationV0, "agent_ack", evidence)
 	}
+}
+
+func codexAgentAckCorrelationMatchesSpecV0(
+	ack CodexAgentAckV0,
+	spec orquestaruntime.ExternalAgentLaunchSpecV0,
+) bool {
+	packet := spec.AgentPacket
+	return codexAckRefTolerantEqualV0(ack.RequestID, spec.RequestID) &&
+		codexAckRefTolerantEqualV0(ack.RequestID, packet.RequestID) &&
+		codexAckRefTolerantEqualV0(ack.CorrelationID, spec.CorrelationID) &&
+		codexAckRefTolerantEqualV0(ack.CorrelationID, packet.CorrelationID) &&
+		codexAckTextEqualV0(ack.TargetModule, packet.TargetModule) &&
+		codexAckRefTolerantEqualV0(ack.TaskRef, packet.Task.TaskRef) &&
+		codexAckRefTolerantEqualV0(ack.AckRef, packet.DeliveryRefs.AckRef)
 }
 
 func codexAgentAckParentTaskCollisionV0(
@@ -206,9 +214,9 @@ func codexAgentAckParentChildTaskCollisionV0(
 	if !codexAgentAckParentTaskRefMismatchWithMatchingIdentityV0(ack, spec) {
 		return false
 	}
-	taskRef := strings.TrimSpace(ack.TaskRef)
+	taskRef := codexAckComparableRefV0(ack.TaskRef)
 	for _, childTaskRef := range spec.AgentPacket.Task.ChildTaskRefs {
-		if taskRef == strings.TrimSpace(childTaskRef) {
+		if taskRef != "" && taskRef == codexAckComparableRefV0(childTaskRef) {
 			return true
 		}
 	}
@@ -220,12 +228,12 @@ func codexAgentAckParentTaskRefMismatchWithMatchingIdentityV0(
 	spec orquestaruntime.ExternalAgentLaunchSpecV0,
 ) bool {
 	packet := spec.AgentPacket
-	taskRef := strings.TrimSpace(ack.TaskRef)
-	parentTaskRef := strings.TrimSpace(packet.Task.TaskRef)
-	return strings.TrimSpace(ack.RequestID) == strings.TrimSpace(spec.RequestID) &&
-		strings.TrimSpace(ack.RequestID) == strings.TrimSpace(packet.RequestID) &&
-		strings.TrimSpace(ack.AckRef) == strings.TrimSpace(packet.DeliveryRefs.AckRef) &&
-		strings.TrimSpace(ack.TargetModule) == strings.TrimSpace(packet.TargetModule) &&
+	taskRef := codexAckComparableRefV0(ack.TaskRef)
+	parentTaskRef := codexAckComparableRefV0(packet.Task.TaskRef)
+	return codexAckRefTolerantEqualV0(ack.RequestID, spec.RequestID) &&
+		codexAckRefTolerantEqualV0(ack.RequestID, packet.RequestID) &&
+		codexAckRefTolerantEqualV0(ack.AckRef, packet.DeliveryRefs.AckRef) &&
+		codexAckTextEqualV0(ack.TargetModule, packet.TargetModule) &&
 		taskRef != "" &&
 		parentTaskRef != "" &&
 		taskRef != parentTaskRef

@@ -85,14 +85,7 @@ func codexStrictCompletedAckIssuesV0(
 	v.validateStrictFiles(ack, spec.AgentPacket)
 	v.validateStrictTests(ack, spec.AgentPacket)
 	v.validateStrictTestReceipts(ack, spec.AgentPacket)
-	packet := spec.AgentPacket
-	if strings.TrimSpace(ack.RequestID) != strings.TrimSpace(spec.RequestID) ||
-		strings.TrimSpace(ack.RequestID) != strings.TrimSpace(packet.RequestID) ||
-		strings.TrimSpace(ack.CorrelationID) != strings.TrimSpace(spec.CorrelationID) ||
-		strings.TrimSpace(ack.CorrelationID) != strings.TrimSpace(packet.CorrelationID) ||
-		strings.TrimSpace(ack.TargetModule) != strings.TrimSpace(packet.TargetModule) ||
-		strings.TrimSpace(ack.TaskRef) != strings.TrimSpace(packet.Task.TaskRef) ||
-		strings.TrimSpace(ack.AckRef) != strings.TrimSpace(packet.DeliveryRefs.AckRef) {
+	if !codexAgentAckCorrelationMatchesSpecV0(ack, spec) {
 		evidence := "correlation_mismatch"
 		if codexAgentAckParentChildTaskCollisionV0(ack, spec) {
 			evidence = CodexAgentAckInvalidParentChildTaskCollisionEvidenceV0

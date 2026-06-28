@@ -26,9 +26,36 @@ func TestStrictCompletedCodexAgentAckV0RechazaCorrelacionNormalizableV0(t *testi
 	requireCodexIssueV0(t, issues, CodexConnectorAckCorrelationV0)
 }
 
+func TestStrictCompletedCodexAgentAckV0ToleraRefsConEnvoltorioCosmeticoV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":" ` + "`" + `req-codex-001` + "`" + ` ","correlation_id":"\"corr-codex-001\"","ack_ref":"'ack-ref-001'","target_module":" orquesta-generated-app ","task_ref":" ` + "`" + `task-ref-001` + "`" + ` ","status":"completed","files":["README.md"],"tests":["go test ./..."],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-001"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true}]}`
+
+	validated, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("refs cosmeticas no deben bloquear strict: %+v", issues)
+	}
+	if validated.RequestID != spec.RequestID ||
+		validated.CorrelationID != spec.CorrelationID ||
+		validated.AckRef != spec.AgentPacket.DeliveryRefs.AckRef ||
+		validated.TaskRef != spec.AgentPacket.Task.TaskRef {
+		t.Fatalf("ACK strict no normalizado contra spec: %+v", validated)
+	}
+}
+
 func TestStrictCompletedCodexAgentAckV0ClasificaColisionPadreSubrolV0(t *testing.T) {
 	spec := codexSpecForTestV0()
 	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001-subrol-redaccion","status":"completed","files":["README.md"],"tests":["go test ./..."]}`
+
+	_, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	requireCodexIssueV0(t, issues, CodexConnectorAckCorrelationV0)
+	requireCodexIssueEvidenceV0(t, issues, CodexAgentAckInvalidParentSubroleCollisionEvidenceV0)
+}
+
+func TestStrictCompletedCodexAgentAckV0ClasificaColisionPadreSubrolConEnvoltorioCosmeticoV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":" ` + "`" + `req-codex-001` + "`" + ` ","correlation_id":"corr-codex-001","ack_ref":"'ack-ref-001'","target_module":" orquesta-generated-app ","task_ref":" ` + "`" + `task-ref-001-subrol-redaccion` + "`" + ` ","status":"completed","files":["README.md"],"tests":["go test ./..."],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-001"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true}]}`
 
 	_, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0([]byte(ack), spec)
 
@@ -40,6 +67,17 @@ func TestStrictCompletedCodexAgentAckV0ClasificaColisionPadreChildTaskRefV0(t *t
 	spec := codexSpecForTestV0()
 	spec.AgentPacket.Task.ChildTaskRefs = []string{"task-ref-child-redaccion-001"}
 	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-child-redaccion-001","status":"completed","files":["README.md"],"tests":["go test ./..."]}`
+
+	_, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	requireCodexIssueV0(t, issues, CodexConnectorAckCorrelationV0)
+	requireCodexIssueEvidenceV0(t, issues, CodexAgentAckInvalidParentChildTaskCollisionEvidenceV0)
+}
+
+func TestStrictCompletedCodexAgentAckV0ClasificaColisionPadreChildTaskRefConEnvoltorioCosmeticoV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	spec.AgentPacket.Task.ChildTaskRefs = []string{"task-ref-child-redaccion-001"}
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"` + "`" + `ack-ref-001` + "`" + `","target_module":"orquesta-generated-app","task_ref":" ` + "`" + `task-ref-child-redaccion-001` + "`" + ` ","status":"completed","files":["README.md"],"tests":["go test ./..."],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-001"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true}]}`
 
 	_, issues := ValidateStrictCompletedCodexAgentAckBytesForSpecV0([]byte(ack), spec)
 

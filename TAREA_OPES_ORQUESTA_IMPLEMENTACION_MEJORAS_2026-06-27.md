@@ -85,6 +85,37 @@ fijen el contrato de las reglas:
 - Solo las condiciones genuinamente inseguras producen hard.
 Esto convierte "no rechazar por tonterías" en invariante verificable.
 
+### Avance Orquesta 2026-06-28 - refs ACK tolerantes acotadas
+
+Se cerró la parte de comparación de refs/correlación sin marcar M1 completo:
+
+- `codexAckRefTolerantEqualV0` y `codexAckComparableRefV0` aceptan solo
+  variaciones cosméticas recuperables: espacios y envoltorios simples
+  `` `ref` ``, `"ref"` y `'ref'`;
+- regular y strict reutilizan `codexAgentAckCorrelationMatchesSpecV0`;
+- cuando la identidad cuadra, el ACK se canoniza contra el packet/spec;
+- las colisiones padre/subrol y padre/`child_task_refs` siguen siendo hard
+  incluso si vienen maquilladas con espacios o backticks;
+- se añadió property test acotado para combinaciones de wrappers cosméticos.
+
+Cobertura añadida:
+
+- `TestCodexAgentAckReceiptV0ToleraRefsConEnvoltorioCosmeticoV0`
+- `TestCodexAgentAckReceiptV0PropiedadRefsCosmeticasValidanV0`
+- `TestCodexAgentAckReceiptV0DetectaColisionSubrolConEnvoltorioCosmeticoV0`
+- `TestCodexAgentAckReceiptV0DetectaColisionChildConEnvoltorioCosmeticoV0`
+- equivalentes strict en `codex_ack_strict_validation_v0_test.go`.
+
+Validación ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex -run 'TestCodexAgentAckReceiptV0|TestStrictCompletedCodexAgentAckV0'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack`
+
+Sigue pendiente de M1: reconciliación completa cuando falta `agent_ack.json`
+como contrato transversal. Hoy la recuperación existe sobre todo en
+`orquesta-runtime-codex-delivery` y `orquesta-app-codex-stack`; no se ha movido
+al conector puro.
+
 ### Resultado
 El trabajo útil deja de caerse por tecnicismos; los rechazos pasan a ser avisos
 recuperables que llegan a review; y la verificación sigue siendo **código puro**

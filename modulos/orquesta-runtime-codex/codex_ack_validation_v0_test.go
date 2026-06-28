@@ -1,9 +1,11 @@
 package orquestaruntimecodex
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/quick"
 
 	orquestacontext "orquesta/modulos/orquesta-context"
 )
@@ -184,6 +186,52 @@ func TestCodexAgentAckReceiptV0NormalizaRefsRedundantesSiLaIdentidadCuadra(t *te
 	}
 }
 
+func TestCodexAgentAckReceiptV0ToleraRefsConEnvoltorioCosmeticoV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":" ` + "`" + `req-codex-001` + "`" + ` ","correlation_id":"\"corr-codex-001\"","ack_ref":"'ack-ref-001'","target_module":" orquesta-generated-app ","task_ref":" ` + "`" + `task-ref-001` + "`" + ` ","status":"completed","files":["README.md"],"tests":["go test ./..."]}`
+
+	got, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("refs cosmeticas no deben bloquear: %+v", issues)
+	}
+	if got.TaskRef != spec.AgentPacket.Task.TaskRef ||
+		got.CorrelationID != spec.CorrelationID {
+		t.Fatalf("ack no normalizado contra spec: %+v", got)
+	}
+}
+
+func TestCodexAgentAckReceiptV0PropiedadRefsCosmeticasValidanV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	wrappers := []struct {
+		prefix string
+		suffix string
+	}{
+		{"", ""},
+		{" ", " "},
+		{"`", "`"},
+		{" `", "` "},
+		{"\"", "\""},
+		{"'", "'"},
+	}
+	property := func(requestVariant uint8, correlationVariant uint8, ackVariant uint8, taskVariant uint8) bool {
+		requestID := codexAckWrapForTestV0(spec.RequestID, wrappers[int(requestVariant)%len(wrappers)])
+		correlationID := codexAckWrapForTestV0(spec.CorrelationID, wrappers[int(correlationVariant)%len(wrappers)])
+		ackRef := codexAckWrapForTestV0(spec.AgentPacket.DeliveryRefs.AckRef, wrappers[int(ackVariant)%len(wrappers)])
+		taskRef := codexAckWrapForTestV0(spec.AgentPacket.Task.TaskRef, wrappers[int(taskVariant)%len(wrappers)])
+		data := `{"schema_version":"codex_agent_ack.v0","request_id":` + codexAckJSONStringForTestV0(requestID) + `,"correlation_id":` + codexAckJSONStringForTestV0(correlationID) + `,"ack_ref":` + codexAckJSONStringForTestV0(ackRef) + `,"target_module":" orquesta-generated-app ","task_ref":` + codexAckJSONStringForTestV0(taskRef) + `,"status":"completed","files":["README.md"],"tests":["go test ./..."]}`
+		got, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(data), spec)
+		return len(issues) == 0 &&
+			got.RequestID == spec.RequestID &&
+			got.CorrelationID == spec.CorrelationID &&
+			got.AckRef == spec.AgentPacket.DeliveryRefs.AckRef &&
+			got.TaskRef == spec.AgentPacket.Task.TaskRef
+	}
+	if err := quick.Check(property, &quick.Config{MaxCount: 80}); err != nil {
+		t.Fatalf("refs cosmeticas deben validar: %v", err)
+	}
+}
+
 func TestCodexAgentAckReceiptV0DetectaColisionACKPadreConTaskRefSubrolV0(t *testing.T) {
 	spec := codexSpecForTestV0()
 	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001-subrole-s3","status":"completed","files":["README.md"],"tests":["go test ./..."]}`
@@ -194,6 +242,19 @@ func TestCodexAgentAckReceiptV0DetectaColisionACKPadreConTaskRefSubrolV0(t *test
 	requireCodexIssueEvidenceV0(t, issues, CodexAgentAckInvalidParentSubroleCollisionEvidenceV0)
 	if got.TaskRef != "task-ref-001-subrole-s3" {
 		t.Fatalf("task_ref de subrol no debe normalizarse como typo recuperable: %+v", got)
+	}
+}
+
+func TestCodexAgentAckReceiptV0DetectaColisionSubrolConEnvoltorioCosmeticoV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":" ` + "`" + `req-codex-001` + "`" + ` ","correlation_id":"corr-codex-001","ack_ref":"'ack-ref-001'","target_module":" orquesta-generated-app ","task_ref":" ` + "`" + `task-ref-001-subrole-s3` + "`" + ` ","status":"completed","files":["README.md"],"tests":["go test ./..."]}`
+
+	got, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	requireCodexIssueV0(t, issues, CodexConnectorAckCorrelationV0)
+	requireCodexIssueEvidenceV0(t, issues, CodexAgentAckInvalidParentSubroleCollisionEvidenceV0)
+	if got.TaskRef == spec.AgentPacket.Task.TaskRef {
+		t.Fatalf("task_ref de subrol con envoltorio no debe normalizarse al padre: %+v", got)
 	}
 }
 
@@ -208,6 +269,20 @@ func TestCodexAgentAckReceiptV0DetectaColisionACKPadreConChildTaskRefV0(t *testi
 	requireCodexIssueEvidenceV0(t, issues, CodexAgentAckInvalidParentChildTaskCollisionEvidenceV0)
 	if got.TaskRef != "task-ref-child-redaccion-001" {
 		t.Fatalf("child task_ref no debe normalizarse como typo recuperable: %+v", got)
+	}
+}
+
+func TestCodexAgentAckReceiptV0DetectaColisionChildConEnvoltorioCosmeticoV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	spec.AgentPacket.Task.ChildTaskRefs = []string{"task-ref-child-redaccion-001"}
+	ack := `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"` + "`" + `ack-ref-001` + "`" + `","target_module":"orquesta-generated-app","task_ref":" ` + "`" + `task-ref-child-redaccion-001` + "`" + ` ","status":"completed","files":["README.md"],"tests":["go test ./..."]}`
+
+	got, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	requireCodexIssueV0(t, issues, CodexConnectorAckCorrelationV0)
+	requireCodexIssueEvidenceV0(t, issues, CodexAgentAckInvalidParentChildTaskCollisionEvidenceV0)
+	if got.TaskRef == spec.AgentPacket.Task.TaskRef {
+		t.Fatalf("child task_ref con envoltorio no debe normalizarse al padre: %+v", got)
 	}
 }
 
@@ -423,4 +498,19 @@ func TestCodexAgentAckReceiptV0RechazaControlFilesConWriteSetRaiz(t *testing.T) 
 
 func codexValidAckJSONV0() string {
 	return `{"schema_version":"codex_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"test_receipts":[{"schema_version":"codex_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-001"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true}],"notes":["done"]}`
+}
+
+func codexAckWrapForTestV0(value string, wrapper struct {
+	prefix string
+	suffix string
+}) string {
+	return wrapper.prefix + value + wrapper.suffix
+}
+
+func codexAckJSONStringForTestV0(value string) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+	return string(data)
 }

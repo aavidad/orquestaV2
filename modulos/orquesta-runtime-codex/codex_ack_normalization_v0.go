@@ -42,6 +42,29 @@ func CodexSchemaVersionCompatibleV0(value string, current string) bool {
 	return segmentHasDigit
 }
 
+func codexAckRefTolerantEqualV0(left string, right string) bool {
+	left = codexAckComparableRefV0(left)
+	right = codexAckComparableRefV0(right)
+	return left != "" && right != "" && left == right
+}
+
+func codexAckComparableRefV0(value string) string {
+	value = strings.TrimSpace(value)
+	for {
+		next := strings.TrimSpace(strings.Trim(value, "`\"'"))
+		if next == value {
+			return value
+		}
+		value = next
+	}
+}
+
+func codexAckTextEqualV0(left string, right string) bool {
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+	return left != "" && right != "" && left == right
+}
+
 func canonicalTestCommandV0(value string) string {
 	return CanonicalCodexTestCommandV0(value)
 }
