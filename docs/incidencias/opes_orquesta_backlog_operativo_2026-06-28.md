@@ -102,7 +102,8 @@ produce audio sin acoplar el nucleo a proveedor concreto.
 
 ## ORQ-OPES-005 robustez_api_supervision_stream_fd_timeout
 
-Estado: vivo.
+Estado: parcial; respuesta finita de supervise cubierta para
+`autoprogramming/supervise` y `/runs/supervise`.
 
 Problema: `/autoprogramming/supervise` y rutas de supervision pueden despachar
 trabajo pero dejar al cliente HTTP esperando indefinidamente. La API debe
@@ -119,3 +120,14 @@ Alcance inicial:
 Criterio de cierre: un test o smoke local reproduce despacho con cliente HTTP y
 verifica respuesta finita, cuerpo operativo en castellano y continuidad del
 trabajo por observacion posterior.
+
+Avance 2026-06-28: `/api/v0/runs/supervise` tiene smoke con cliente HTTP real
+contra `httptest.Server` en MCP y servidor ensamblado: si el executor queda
+vivo, responde `202 accepted_background` con `operation_ref`, diagnostico y JSON
+decodificable sin colgar. Evidencia:
+`TestMCPRunSupervisorHTTPHandlerV0ClienteRealRecibeCuerpoSinColgar` y
+`TestServerRunSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0`.
+`/api/v0/autoprogramming/supervise` ya tenia cobertura equivalente en servidor
+con `TestServerAutoprogrammingSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0`.
+Sigue vivo el cierre de streaming/flush amplio y observacion posterior sobre
+colas OPES reales temporales.

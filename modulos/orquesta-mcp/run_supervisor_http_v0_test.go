@@ -110,6 +110,60 @@ func TestMCPRunSupervisorHTTPHandlerV0DevuelveAcceptedSiExecutorSigueVivo(t *tes
 	}
 }
 
+func TestMCPRunSupervisorHTTPHandlerV0ClienteRealRecibeCuerpoSinColgar(t *testing.T) {
+	executor := &blockingMCPRunSupervisorHTTPExecutorV0{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	handler := newMCPRunSupervisorHTTPHandlerWithTimeoutV0(executor, time.Millisecond)
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	body := bytes.NewBufferString(`{
+		"request_id":"request-ref-supervisor-http-real-client-001",
+		"correlation_id":"corr-supervisor-http-real-client-001",
+		"idempotency_key":"idem-supervisor-http-real-client-001",
+		"run_ref":"run-ref-supervisor-http-real-client-001",
+		"max_ticks":20
+	}`)
+	req, err := http.NewRequest(
+		http.MethodPost,
+		server.URL+MCPRunSupervisorHTTPPathV0,
+		body,
+	)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Correlation-ID", "corr-supervisor-http-real-client-001")
+
+	client := &http.Client{Timeout: time.Second}
+	started := time.Now()
+	resp, err := client.Do(req)
+	elapsed := time.Since(started)
+	if err != nil {
+		t.Fatalf("client.Do elapsed=%s err=%v", elapsed, err)
+	}
+	defer resp.Body.Close()
+	close(executor.release)
+
+	if resp.StatusCode != http.StatusAccepted || elapsed > time.Second {
+		t.Fatalf("status=%d elapsed=%s", resp.StatusCode, elapsed)
+	}
+	var result MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.Estado != MCPRunSupervisorEstadoOKV0 ||
+		result.StopReason != "accepted_background" ||
+		result.OperationRef == "" ||
+		result.Last.Status != "accepted_background" ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "run_supervisor_background_accepted") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPRunSupervisorHTTPHandlerV0BodyVacioNoSeCuelga(t *testing.T) {
 	executor := &fakeMCPRunSupervisorHTTPExecutorV0{
 		delay: 25 * time.Millisecond,

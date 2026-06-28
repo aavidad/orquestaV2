@@ -99,6 +99,10 @@ progreso sigue siendo por stats/status de run/cola; no se mete runtime ni OPES.
 Actualizacion 2026-06-27: se cubre explicitamente body `{}` de cola global para
 los dos endpoints, devolviendo `operation-ref-*-queue` en vez de dejar el HTTP
 abierto.
+Actualizacion 2026-06-28: `/api/v0/runs/supervise` queda cubierto tambien con
+cliente HTTP real contra `httptest.Server`, tanto en MCP como en el servidor
+ensamblado, validando `202 accepted_background` y cuerpo JSON decodificable sin
+colgar al cliente.
 Contratos afectados: rest.bridge.orquesta.runs.supervise.v0;
 rest.bridge.orquesta.autoprogramming.supervise.v0.
 Estado: aceptada localmente

@@ -48,20 +48,22 @@ tool no debe importar conectores reales ni crear stores.
 ```text
 Caso: MCP-CT-038 supervise HTTP background deduplicado
 Tipo: contract
-Comando: go test -count=1 ./modulos/orquesta-mcp -run 'TestMCP.*SupervisorHTTPHandlerV0NoDuplicaOperacionActiva|TestMCP.*SupervisorHTTPHandlerV0DevuelveAcceptedSiExecutorSigueVivo'
+Comando: go test -count=1 ./modulos/orquesta-mcp -run 'TestMCP.*SupervisorHTTPHandlerV0NoDuplicaOperacionActiva|TestMCP.*SupervisorHTTPHandlerV0DevuelveAcceptedSiExecutorSigueVivo|TestMCPRunSupervisorHTTPHandlerV0ClienteRealRecibeCuerpoSinColgar'
 Evidencia esperada: `/api/v0/runs/supervise` y
 `/api/v0/autoprogramming/supervise` devuelven `202 accepted_background` si el
 executor sigue vivo; una segunda llamada con el mismo `operation_ref` no vuelve
 a invocar el executor y devuelve diagnostico `*_operation_already_running`.
 Tambien cubre body `{}` para cola global, observado en OPES, con
-`operation-ref-*-queue`.
-Ultima ejecucion: 2026-06-27; pasa con `go test -count=1 ./modulos/orquesta-mcp`.
+`operation-ref-*-queue`. Desde 2026-06-28 tambien cubre un cliente HTTP real
+contra `/api/v0/runs/supervise` para verificar cuerpo JSON finito.
+Ultima ejecucion: 2026-06-28; pasa con `go test -count=1 ./modulos/orquesta-mcp`.
 Riesgos: el ledger es memoria del handler HTTP; tras restart la fuente de verdad
 para progreso sigue siendo `director.stats`, `autoprogramming.status` y cola.
 Cobertura servidor 2026-06-28: `go test -count=1 ./cmd/orquesta-server -run
-'TestServerAutoprogrammingSuperviseHTTP.*SinColgarV0'` monta
+'TestServer(AutoprogrammingSupervise|RunSupervise)HTTP.*SinColgarV0'` monta
 `httptest.Server`, usa `http.Client` real y valida que el cliente recibe cuerpo
-JSON `accepted_background` sin quedarse bloqueado.
+JSON `accepted_background` sin quedarse bloqueado en
+`/api/v0/autoprogramming/supervise` y `/api/v0/runs/supervise`.
 ```
 
 ```text
