@@ -17,6 +17,7 @@ LIMIT="${ORQUESTA_OPES_BRIDGE_LIMIT:-1}"
 INPUT_LEDGER_PATH="${ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH:-$SMOKE_OUT_DIR/external-bridge-input-ledger.json}"
 MAX_TICKS="${ORQUESTA_OPES_BRIDGE_MAX_TICKS:-40}"
 TICK_SLEEP_SECONDS="${ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS:-5}"
+SCOPE_PROBE_NEGATIVE_SUFFIX="${ORQUESTA_OPES_SCOPE_PROBE_NEGATIVE_SUFFIX:-__orquesta_scope_probe_absent__}"
 FAKE_SERVER="${ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER:-0}"
 FAKE_PENDING_TYPE="${ORQUESTA_OPES_DERIVATIVES_FAKE_PENDING_TYPE:-assemble_topic}"
 FAKE_GOAL_FIRST="${ORQUESTA_OPES_DERIVATIVES_FAKE_GOAL_FIRST:-1}"
@@ -58,8 +59,8 @@ trap cleanup EXIT
 
 start_fake_opes() {
   smoke_require_tool python3
-  if [[ "$MODE" != "dry-run-once" ]] && ! is_run_until_mode "$MODE"; then
-    echo "fake OPES solo soporta dry-run-once, run-until-finalize o run-until-assemble" >&2
+  if [[ "$MODE" != "dry-run-once" && "$MODE" != "scope-probe" ]] && ! is_run_until_mode "$MODE"; then
+    echo "fake OPES solo soporta dry-run-once, scope-probe, run-until-finalize o run-until-assemble" >&2
     exit 2
   fi
   if [[ -z "$FAKE_PENDING_TYPE" ]]; then
@@ -256,13 +257,24 @@ class Handler(BaseHTTPRequestHandler):
         if active_index >= len(sequence) or job_index != active_index:
             send_json(self, 200, [])
             return
+        payload = payload_for(job_type)
+        if query.get("program_id", [""])[0] and payload.get("program_id") != query.get("program_id", [""])[0]:
+            send_json(self, 200, [])
+            return
+        if query.get("topic_id", [""])[0] and payload.get("topic_id") != query.get("topic_id", [""])[0]:
+            send_json(self, 200, [])
+            return
+        correlation_id = "corr-ref-fake-" + job_type.replace("_", "-") + "-001"
+        if query.get("correlation_id", [""])[0] and correlation_id != query.get("correlation_id", [""])[0]:
+            send_json(self, 200, [])
+            return
         send_json(self, 200, [{
                 "id": "job-ref-fake-" + job_type.replace("_", "-") + "-001",
                 "type": job_type,
                 "status": "pending",
                 "execution_mode": "external",
-                "payload_json": json.dumps(payload_for(job_type)),
-                "correlation_id": "corr-ref-fake-" + job_type.replace("_", "-") + "-001",
+                "payload_json": json.dumps(payload),
+                "correlation_id": correlation_id,
                 "idempotency_key": "idem-ref-fake-" + job_type.replace("_", "-") + "-001",
                 "requested_by": "opes-fake"
             }])
@@ -392,7 +404,9 @@ PY
       fi
       export ORQUESTA_OPES_TEMPORAL_CONFIRM="${ORQUESTA_OPES_TEMPORAL_CONFIRM:-1}"
       export ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF="${ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF:-evidence-ref-opes-derivatives-fake-goal-first}"
-      export ORQUESTA_OPES_BRIDGE_PROGRAM_ID="${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-program-ref-fake-operario-001}"
+      if [[ "$MODE" != "scope-probe" ]]; then
+        export ORQUESTA_OPES_BRIDGE_PROGRAM_ID="${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-program-ref-fake-operario-001}"
+      fi
       export ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY:-available}"
       export ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY_REF="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY_REF:-speech-synthesis-fake-opes-derivatives}"
       export ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS:-evidence-ref-opes-derivatives-fake-speech-synthesis}"
@@ -598,6 +612,171 @@ run_preflight_only() {
   echo "preflight_target_mode=$(preflight_target_mode)"
   echo "preflight_scope=$(preflight_scope_summary)"
   echo "preflight_output_dir=$SMOKE_OUT_DIR"
+}
+
+opes_bridge_scan_limit() {
+  local base="$LIMIT"
+  if [[ "$base" -lt 1 ]]; then
+    base=1
+  fi
+  local scan=$((base * 10))
+  if [[ "$scan" -gt 100 ]]; then
+    scan=100
+  fi
+  printf '%s\n' "$scan"
+}
+
+run_scope_probe() {
+  smoke_require_tool python3
+  local output_file="$SMOKE_OUT_DIR/opes_derivatives_scope_probe.json"
+  python3 - \
+    "$OPES_BASE_URL_EFFECTIVE" \
+    "$SEQUENCE" \
+    "$(opes_bridge_scan_limit)" \
+    "${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-}" \
+    "${ORQUESTA_OPES_BRIDGE_TOPIC_ID:-}" \
+    "${ORQUESTA_OPES_BRIDGE_CORRELATION_ID:-}" \
+    "$SCOPE_PROBE_NEGATIVE_SUFFIX" \
+    "$output_file" <<'PY'
+import json
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+base_url, sequence_raw, limit, program_id, topic_id, correlation_id, negative_suffix, output_file = sys.argv[1:]
+sequence = [item.strip() for item in sequence_raw.replace(";", ",").split(",") if item.strip()]
+scopes = {
+    "program_id": program_id.strip(),
+    "topic_id": topic_id.strip(),
+    "correlation_id": correlation_id.strip(),
+}
+active_scopes = {key: value for key, value in scopes.items() if value}
+if not active_scopes:
+    raise SystemExit("scope-probe requiere ORQUESTA_OPES_BRIDGE_PROGRAM_ID, TOPIC_ID o CORRELATION_ID")
+if not sequence:
+    raise SystemExit("scope-probe requiere JOB_TYPE_SEQUENCE no vacia")
+
+def normalize_jobs(raw):
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, dict):
+        for key in ("jobs", "items", "results", "data"):
+            value = raw.get(key)
+            if isinstance(value, list):
+                return value
+    raise SystemExit("scope-probe recibio respuesta OPES no reconocida")
+
+def payload_map(job):
+    raw = job.get("payload_json") or job.get("payload") or "{}"
+    if isinstance(raw, dict):
+        return raw
+    if not isinstance(raw, str) or not raw.strip():
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+def job_scope_value(job, key):
+    if key == "correlation_id":
+        return str(job.get("correlation_id") or "").strip()
+    payload = payload_map(job)
+    value = payload.get(key)
+    if value is None:
+        value = (job.get("external_refs") or {}).get(key) if isinstance(job.get("external_refs"), dict) else None
+    return str(value or "").strip()
+
+def get_jobs(job_type, overrides=None):
+    params = {
+        "execution_mode": "external",
+        "status": "pending",
+        "job_type": job_type,
+        "limit": str(limit),
+    }
+    params.update(active_scopes)
+    if overrides:
+        params.update(overrides)
+    url = base_url.rstrip("/") + "/api/jobs?" + urllib.parse.urlencode(params)
+    request = urllib.request.Request(url, headers={"Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            body = response.read()
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:500]
+        raise SystemExit(f"scope-probe GET {job_type} HTTP {exc.code}: {detail}")
+    return normalize_jobs(json.loads(body.decode("utf-8") or "[]"))
+
+positive = None
+for job_type in sequence:
+    jobs = get_jobs(job_type)
+    if not jobs:
+        continue
+    mismatches = []
+    for job in jobs:
+        for key, expected in active_scopes.items():
+            got = job_scope_value(job, key)
+            if got != expected:
+                mismatches.append({
+                    "job_ref": job.get("id") or job.get("job_ref") or "",
+                    "scope": key,
+                    "expected": expected,
+                    "got": got,
+                })
+    if mismatches:
+        result = {
+            "scope_probe_status": "failed_scope_mismatch",
+            "job_type": job_type,
+            "mismatches": mismatches,
+        }
+        with open(output_file, "w", encoding="utf-8") as fh:
+            json.dump(result, fh, ensure_ascii=False, indent=2)
+        raise SystemExit("scope-probe fallo: OPES devolvio jobs fuera del scope configurado")
+    positive = {"job_type": job_type, "jobs": jobs}
+    break
+
+if positive is None:
+    result = {
+        "scope_probe_status": "no_matching_jobs",
+        "scopes": active_scopes,
+        "sequence": sequence,
+    }
+    with open(output_file, "w", encoding="utf-8") as fh:
+        json.dump(result, fh, ensure_ascii=False, indent=2)
+    raise SystemExit("scope-probe no encontro jobs pendientes para demostrar el filtro real")
+
+negative_checks = []
+for key, value in active_scopes.items():
+    impossible = value + negative_suffix
+    jobs = get_jobs(positive["job_type"], {key: impossible})
+    if jobs:
+        result = {
+            "scope_probe_status": "failed_negative_filter",
+            "job_type": positive["job_type"],
+            "scope": key,
+            "unexpected_jobs": [job.get("id") or job.get("job_ref") or "" for job in jobs],
+        }
+        with open(output_file, "w", encoding="utf-8") as fh:
+            json.dump(result, fh, ensure_ascii=False, indent=2)
+        raise SystemExit(f"scope-probe fallo: OPES no respeto filtro negativo {key}")
+    negative_checks.append(key)
+
+result = {
+    "scope_probe_status": "ok",
+    "job_type": positive["job_type"],
+    "seen": len(positive["jobs"]),
+    "scopes": active_scopes,
+    "negative_checks": negative_checks,
+}
+with open(output_file, "w", encoding="utf-8") as fh:
+    json.dump(result, fh, ensure_ascii=False, indent=2)
+print("scope_probe_status=ok")
+print("scope_probe_job_type=" + positive["job_type"])
+print("scope_probe_seen=" + str(len(positive["jobs"])))
+print("scope_probe_negative_checks=" + ",".join(negative_checks))
+print("scope_probe_output=" + output_file)
+PY
 }
 
 run_dry_run_once() {
@@ -808,6 +987,113 @@ raise SystemExit(1)
 PY
 }
 
+write_goal_receipts_manifest() {
+  local output_file="$SMOKE_OUT_DIR/goal_receipts_manifest.json"
+  python3 - "$SMOKE_OUT_DIR" "$output_file" <<'PY'
+import glob
+import json
+import os
+import sys
+
+smoke_dir, output_file = sys.argv[1:]
+runs = {}
+for path in sorted(glob.glob(os.path.join(smoke_dir, "opes_derivatives_rest_tick_*_drain_summary.json"))):
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            summary = json.load(fh)
+    except Exception:
+        continue
+    for result in summary.get("results") or []:
+        run_ref = str(result.get("run_ref") or "").strip()
+        if not run_ref:
+            continue
+        actions = [str(item).strip() for item in (result.get("next_actions") or [])]
+        goal_first = (
+            str(result.get("route_policy") or "").strip() == "goal_first"
+            or str(result.get("director_execution_mode") or "").strip() == "goal_first"
+            or bool(str(result.get("goal_ref") or "").strip())
+            or bool(str(result.get("external_goal_ref") or "").strip())
+            or "observe_goal" in actions
+        )
+        runs.setdefault(run_ref, {
+            "run_ref": run_ref,
+            "job_ref": str(result.get("job_ref") or "").strip(),
+            "work_kind": str(result.get("work_kind") or "").strip(),
+            "goal_ref": str(result.get("goal_ref") or "").strip(),
+            "external_goal_ref": str(result.get("external_goal_ref") or "").strip(),
+            "goal_first": goal_first,
+            "artifact_refs": [],
+            "domain_receipt_refs": [],
+            "evidence_refs": [],
+            "closure_accepted": False,
+            "closure_status": "",
+            "observed": False,
+        })
+        runs[run_ref]["goal_first"] = runs[run_ref]["goal_first"] or goal_first
+
+for path in sorted(glob.glob(os.path.join(smoke_dir, "observe_goal_*_response.json"))):
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            response = json.load(fh)
+    except Exception:
+        continue
+    run_ref = str(response.get("run_ref") or "").strip()
+    if not run_ref:
+        continue
+    entry = runs.setdefault(run_ref, {
+        "run_ref": run_ref,
+        "job_ref": "",
+        "work_kind": "",
+        "goal_ref": "",
+        "external_goal_ref": "",
+        "goal_first": True,
+        "artifact_refs": [],
+        "domain_receipt_refs": [],
+        "evidence_refs": [],
+        "closure_accepted": False,
+        "closure_status": "",
+        "observed": False,
+    })
+    entry["observed"] = True
+    entry["goal_ref"] = entry["goal_ref"] or str(response.get("goal_ref") or "").strip()
+    entry["external_goal_ref"] = entry["external_goal_ref"] or str(response.get("external_goal_ref") or "").strip()
+    entry["artifact_refs"] = [str(item).strip() for item in (response.get("artifact_refs") or []) if str(item).strip()]
+    entry["domain_receipt_refs"] = [str(item).strip() for item in (response.get("domain_receipt_refs") or []) if str(item).strip()]
+    entry["evidence_refs"] = [str(item).strip() for item in (response.get("evidence_refs") or []) if str(item).strip()]
+    entry["closure_accepted"] = bool(response.get("closure_accepted"))
+    entry["closure_status"] = str(response.get("closure_status") or "").strip()
+
+entries = [runs[key] for key in sorted(runs)]
+issues = []
+for entry in entries:
+    if not entry.get("goal_first"):
+        continue
+    if not entry.get("observed"):
+        issues.append({"run_ref": entry["run_ref"], "code": "goal_not_observed"})
+    if not entry.get("closure_accepted"):
+        issues.append({"run_ref": entry["run_ref"], "code": "goal_closure_not_accepted"})
+    if not entry.get("artifact_refs"):
+        issues.append({"run_ref": entry["run_ref"], "code": "goal_artifact_refs_missing"})
+    if not entry.get("domain_receipt_refs"):
+        issues.append({"run_ref": entry["run_ref"], "code": "goal_domain_receipt_refs_missing"})
+
+manifest = {
+    "schema_version": "orquesta_opes_derivatives_goal_receipts_manifest.v0",
+    "entries": entries,
+    "issues": issues,
+}
+with open(output_file, "w", encoding="utf-8") as fh:
+    json.dump(manifest, fh, ensure_ascii=False, indent=2)
+if issues:
+    print("goal_receipts_manifest_status=failed")
+    print("goal_receipts_manifest=" + output_file)
+    raise SystemExit(1)
+print("goal_receipts_manifest_status=ok")
+print("goal_receipts_manifest=" + output_file)
+print("goal_receipts_manifest_entries=" + str(len(entries)))
+PY
+}
+
 run_until_final_type() {
   smoke_require_tools python3 curl
   local final_type
@@ -833,10 +1119,12 @@ run_until_final_type() {
     if [[ -z "$selected" ]]; then
       if [[ "$final_seen" == "1" ]]; then
         final_summary="$summary_file"
+        write_goal_receipts_manifest
         echo "run_until_status=completed"
         echo "run_until_mode=$MODE"
         echo "final_job_type=$final_type"
         echo "final_summary=$final_summary"
+        echo "empty_after_final=true"
         return
       fi
       echo "sin pendientes antes de alcanzar $final_type en tick $tick" >&2
@@ -871,14 +1159,6 @@ run_until_final_type() {
           tee "$SMOKE_OUT_DIR/observe_goal_${tick}_${run_ref//[^a-zA-Z0-9_.-]/_}_stdout.json"
       fi
     done
-    if [[ "$selected" == "$final_type" ]]; then
-      final_summary="$summary_file"
-      echo "run_until_status=completed"
-      echo "run_until_mode=$MODE"
-      echo "final_job_type=$final_type"
-      echo "final_summary=$final_summary"
-      return
-    fi
     if [[ "$tick" -lt "$MAX_TICKS" ]]; then
       sleep "$TICK_SLEEP_SECONDS"
     fi
@@ -892,12 +1172,19 @@ main() {
   require_temporal_opes
   require_sequence_only
   write_metadata
+  if [[ "$MODE" == "scope-probe" ]]; then
+    run_scope_probe
+    return
+  fi
   require_derivatives_real_preflight
   cd "$repo_root"
 
   case "$MODE" in
     preflight-only)
       run_preflight_only
+      ;;
+    scope-probe)
+      run_scope_probe
       ;;
     dry-run-once)
       smoke_require_tool go
@@ -912,7 +1199,7 @@ main() {
       run_until_final_type
       ;;
     *)
-      echo "modo no soportado: $MODE (usa preflight-only, dry-run-once, drain-once, run-until-finalize, run-until-final o run-until-assemble)" >&2
+      echo "modo no soportado: $MODE (usa preflight-only, scope-probe, dry-run-once, drain-once, run-until-finalize, run-until-final o run-until-assemble)" >&2
       exit 2
       ;;
   esac

@@ -53,6 +53,26 @@ go test -count=1 ./modulos/orquesta-opes-bridge ./cmd/orquesta-server \
 
 Resultado: verde.
 
+Scope probe fake, sin efectos:
+
+```bash
+ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1 \
+ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=scope-probe \
+ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-fake-operario-001 \
+ORQUESTA_OPES_BRIDGE_LIMIT=1 \
+SMOKE_ID=manual-scope-probe-test \
+SMOKE_OUT_DIR=/tmp/opes-salidas/manual-scope-probe-test \
+scripts/smoke_opes_derivatives_rest.sh
+```
+
+Resultado:
+
+- `scope_probe_status=ok`.
+- `scope_probe_job_type=update_topic_registry`.
+- `scope_probe_negative_checks=program_id`.
+- Salida local:
+  `/tmp/opes-salidas/manual-scope-probe-test/opes_derivatives_scope_probe.json`.
+
 Smoke fake end-to-end hasta paquete:
 
 ```bash
@@ -73,14 +93,20 @@ Resultado:
 - `run_until_status=completed`.
 - `run_until_mode=run-until-finalize`.
 - `final_job_type=finalize_temario_package`.
+- `empty_after_final=true`.
+- `goal_receipts_manifest_status=ok`.
+- `goal_receipts_manifest_entries=23`.
 - Director execution mode por derivado: `goal_first`.
-- 23 ticks, uno por tipo de la secuencia canonica de derivados.
+- 24 ticks: 23 tipos de la secuencia canonica de derivados mas un tick final
+  vacio que demuestra que no quedan pendientes en la secuencia.
 - Salida local:
-  `/tmp/opes-salidas/derivatives-rest-derivatives-fake-20260628T021625Z`.
+  `/tmp/opes-salidas/manual-run-until-manifest-test`.
 - Resumen final:
-  `/tmp/opes-salidas/derivatives-rest-derivatives-fake-20260628T021625Z/opes_derivatives_rest_tick_23_drain_summary.json`.
+  `/tmp/opes-salidas/manual-run-until-manifest-test/opes_derivatives_rest_tick_24_drain_summary.json`.
+- Manifest goal/receipts:
+  `/tmp/opes-salidas/manual-run-until-manifest-test/goal_receipts_manifest.json`.
 - Ledger:
-  `/tmp/opes-salidas/derivatives-rest-derivatives-fake-20260628T021625Z/external-bridge-input-ledger.json`.
+  `/tmp/opes-salidas/manual-run-until-manifest-test/external-bridge-input-ledger.json`.
 
 ## Estado
 
@@ -90,7 +116,12 @@ Cerrado para fake/offline:
 - bridge por `JOB_TYPE_SEQUENCE`;
 - ruta goal-first;
 - observacion/cierre aceptado por goal fake;
+- manifest `goal_receipts_manifest.json` con artefactos y receipts de dominio
+  por cada run goal-first;
+- tick final vacio despues de `finalize_temario_package`;
 - ledger y salidas por directorio de smoke;
+- `scope-probe` para confirmar filtros OPES antes de declarar
+  `ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1`;
 - guardas de preflight para temporal, scope, audio y goal-first.
 
 Pendiente real:

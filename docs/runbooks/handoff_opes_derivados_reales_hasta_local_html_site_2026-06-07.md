@@ -86,6 +86,26 @@ causales. No deben ralentizar todos los temarios como pasos fijos.
 - Guardar ledger en una ruta del smoke:
   `ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH=<salida>/external-bridge-input-ledger.json`.
 
+Probe de scope contra OPES temporal, sin efectos:
+
+```bash
+ORQUESTA_OPES_BASE_URL=http://127.0.0.1:<puerto-opes-temporal> \
+ORQUESTA_OPES_DERIVATIVES_REST_CONFIRM=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
+ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=scope-probe \
+ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
+ORQUESTA_OPES_BRIDGE_LIMIT=1 \
+scripts/smoke_opes_derivatives_rest.sh
+```
+
+El probe consulta `GET /api/jobs` con la secuencia, comprueba que los jobs
+devueltos respetan `program_id`, `topic_id` o `correlation_id` y ejecuta una
+consulta negativa con un valor imposible. Solo si devuelve
+`scope_probe_status=ok` debe declararse
+`ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1` para el preflight/ejecucion.
+Si no hay jobs pendientes, el probe no puede demostrar el filtro: crear un job
+temporal de smoke o usar `topic_id`, `correlation_id` o cola temporal dedicada.
+
 Preflight ejecutable sin OPES/Codex:
 
 ```bash
@@ -179,6 +199,10 @@ ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=update_topic_registry,research_exam_prece
 - `metadata.txt` del smoke.
 - Resumen JSON de cada tick.
 - Ledger de idempotencia.
+- `goal_receipts_manifest.json` con `artifact_refs`, `domain_receipt_refs` y
+  cierre aceptado por cada run goal-first.
+- Tick final vacio despues del ultimo tipo configurado, con toda la secuencia en
+  `empty_job_types`.
 - `run_ref`, `job_ref`, `work_kind` y `artifact_type` por derivado.
 - Receipts OPES de `POST /api/jobs/<job_ref>/artifacts`.
 - Para HTML: ruta o ref de `local_html_site`, capturas visuales y manifest.
@@ -210,9 +234,6 @@ El smoke real queda cerrado cuando OPES temporal demuestra:
 - Fuente real de cierre causal OPES por puerto: receipts OPES, dedupe,
   validacion/rechazo, replan causal por task y `OperationalClosureSource`
   inyectado en composicion, no una afirmacion textual de que OPES acepto.
-- Preflight ejecutable que demuestre que OPES filtra realmente por
-  `program_id` o, si no lo hace, obligue a usar cola temporal dedicada o
-  `job_ref` exactos. `program_id` documental no basta para no tocar jobs ajenos.
 - Smokes parciales aun utiles: `draft_content_block` con agente real y
   `generate_visual_asset` con agente real quedan como validaciones acotadas si
   la cadena completa falla o consume demasiada cuota.

@@ -2215,10 +2215,79 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilFinalizeV0(t *testing.
 		!strings.Contains(output, `"closure_status": "accepted"`) ||
 		!strings.Contains(output, `"closure_accepted": true`) ||
 		!strings.Contains(output, `"artifact_refs": ["artifact-ref-fake-finalize_temario_package"]`) ||
+		!strings.Contains(output, `goal_receipts_manifest_status=ok`) ||
+		!strings.Contains(output, `goal_receipts_manifest_entries=23`) ||
 		!strings.Contains(output, `run_until_status=completed`) ||
 		!strings.Contains(output, `run_until_mode=run-until-finalize`) ||
-		!strings.Contains(output, `final_job_type=finalize_temario_package`) {
+		!strings.Contains(output, `final_job_type=finalize_temario_package`) ||
+		!strings.Contains(output, `empty_after_final=true`) {
 		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
+	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperScopeProbeFakeServerV0(t *testing.T) {
+	requireLocalTCPForTestV0(t)
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 no disponible")
+	}
+	repoRoot := filepath.Clean("../..")
+	cmd := exec.Command("bash", "scripts/smoke_opes_derivatives_rest.sh")
+	cmd.Dir = repoRoot
+	cmd.Env = cleanOPESSmokeEnvForDrainTestV0(os.Environ())
+	outDir := filepath.Join(t.TempDir(), "out")
+	cmd.Env = append(cmd.Env,
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1",
+		"ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=scope-probe",
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-fake-operario-001",
+		"ORQUESTA_OPES_BRIDGE_LIMIT=1",
+		"SMOKE_ID=test-derivatives-rest-scope-probe",
+		"SMOKE_OUT_DIR="+outDir,
+	)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("script err=%v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "scope_probe_status=ok") ||
+		!strings.Contains(output, "scope_probe_job_type=update_topic_registry") ||
+		!strings.Contains(output, "scope_probe_negative_checks=program_id") ||
+		!strings.Contains(output, "scope_probe_output=") {
+		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "opes_derivatives_scope_probe.json")); err != nil {
+		t.Fatalf("scope probe output no creado: %v", err)
+	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperScopeProbeBloqueaSinScopeV0(t *testing.T) {
+	requireLocalTCPForTestV0(t)
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 no disponible")
+	}
+	repoRoot := filepath.Clean("../..")
+	cmd := exec.Command("bash", "scripts/smoke_opes_derivatives_rest.sh")
+	cmd.Dir = repoRoot
+	cmd.Env = cleanOPESSmokeEnvForDrainTestV0(os.Environ())
+	cmd.Env = append(cmd.Env,
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1",
+		"ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=scope-probe",
+		"ORQUESTA_OPES_BRIDGE_LIMIT=1",
+		"SMOKE_ID=test-derivatives-rest-scope-probe-no-scope",
+		"SMOKE_OUT_DIR="+filepath.Join(t.TempDir(), "out"),
+	)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err == nil ||
+		!strings.Contains(stderr.String(), "scope-probe requiere ORQUESTA_OPES_BRIDGE_PROGRAM_ID") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 }
 

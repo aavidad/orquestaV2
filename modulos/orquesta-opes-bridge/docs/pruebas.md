@@ -65,6 +65,11 @@
   OPES productivo, `ALLOW_UNFILTERED`, `LIMIT` amplio sin override, `program_id`
   sin filtro real confirmado o cola/scope alternativo, Orquesta sin Goal
   confirmado y mezcla con el reconciliador independiente de paquetes finales.
+- `scope-probe` del wrapper consulta OPES temporal sin efectos, exige scope
+  explicito (`program_id`, `topic_id` o `correlation_id`), comprueba que los
+  jobs devueltos respetan ese scope y ejecuta una consulta negativa para
+  detectar instancias que ignoren filtros antes de declarar
+  `ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1`.
 
 Comando:
 
