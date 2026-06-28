@@ -16,6 +16,7 @@ const (
 
 	RouteRefHomeV0                              = "route-ref-home-v0"
 	RouteRefNuevaAppV0                          = "route-ref-nueva-app-v0"
+	RouteRefNuevaAppGuideV0                     = "route-ref-nueva-app-guide-v0"
 	RouteRefOpsDashboardV0                      = "route-ref-ops-dashboard-v0"
 	RouteRefAutoprogrammingPageV0               = "route-ref-autoprogramming-page-v0"
 	RouteRefAppChangePageV0                     = "route-ref-app-change-page-v0"

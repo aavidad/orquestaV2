@@ -31,6 +31,7 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 	}
 	for _, want := range []string{
 		`<form method="post" action="/nueva-app" novalidate>`,
+		`href="/nueva-app/guia">Guia</a>`,
 		`id="nueva-app-wizard"`,
 		`id="guided-assistant"`,
 		`data-guided-action="analyze"`,
@@ -97,8 +98,12 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`name="datos.db_required"`,
 		`name="datos.tipos_detallados.0.nombre"`,
 		`name="datos.tipos_detallados.3.nombre"`,
+		`Dato 3`,
+		`Dato 4`,
 		`name="datos.storage.0.tipo"`,
 		`name="datos.storage.3.tipo"`,
+		`Almacenamiento 3`,
+		`Almacenamiento 4`,
 		`value="sin_persistencia"`,
 		`value="vectorial"`,
 		`value="objetos_blob"`,
@@ -118,6 +123,7 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`name="integraciones.0.tipo"`,
 		`name="integraciones.1.tipo"`,
 		`name="integraciones.3.tipo"`,
+		`Integracion 4`,
 		`value="maps"`,
 		`.help-open::after`,
 		`closeHelpBubbles`,

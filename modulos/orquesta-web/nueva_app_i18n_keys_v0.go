@@ -119,6 +119,7 @@ var nuevaAppI18nRequiredKeysV0 = []string{
 	"nueva_app.wizard.nav.home",
 	"nueva_app.wizard.nav.ops",
 	"nueva_app.wizard.nav.autoprogramming",
+	"nueva_app.wizard.nav.guide",
 	"nueva_app.wizard.lead",
 	"nueva_app.wizard.steps_label",
 	"nueva_app.wizard.step.idea",

@@ -5,6 +5,7 @@ import "net/http"
 const (
 	RouteHomeV0                              = "/"
 	RouteNuevaAppV0                          = "/nueva-app"
+	RouteNuevaAppGuideV0                     = "/nueva-app/guia"
 	RouteOpsDashboardV0                      = "/ops"
 	RouteAutoprogrammingPageV0               = "/autoprogramming"
 	RouteAppChangePageV0                     = "/app-change"
@@ -45,6 +46,7 @@ const (
 type RouteHandlersV0 struct {
 	Home                              http.Handler
 	NuevaApp                          http.Handler
+	NuevaAppGuide                     http.Handler
 	OpsDashboard                      http.Handler
 	AutoprogrammingPage               http.Handler
 	AppChangePage                     http.Handler
@@ -116,6 +118,7 @@ func gatewayRouteRegistrationsV0(handlers RouteHandlersV0) []gatewayRouteRegistr
 	return []gatewayRouteRegistrationV0{
 		{ref: RouteRefHomeV0, route: RouteHomeV0, handler: handlers.Home},
 		{ref: RouteRefNuevaAppV0, route: RouteNuevaAppV0, handler: handlers.NuevaApp},
+		{ref: RouteRefNuevaAppGuideV0, route: RouteNuevaAppGuideV0, handler: handlers.NuevaAppGuide},
 		{ref: RouteRefOpsDashboardV0, route: RouteOpsDashboardV0, handler: handlers.OpsDashboard},
 		{ref: RouteRefAutoprogrammingPageV0, route: RouteAutoprogrammingPageV0, handler: handlers.AutoprogrammingPage},
 		{ref: RouteRefAppChangePageV0, route: RouteAppChangePageV0, handler: handlers.AppChangePage},

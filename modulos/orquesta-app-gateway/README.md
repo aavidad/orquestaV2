@@ -5,6 +5,7 @@ Raiz de composicion HTTP de Orquesta.
 Este modulo ensambla handlers ya existentes:
 
 - web `/nueva-app`;
+- web `/nueva-app/guia`;
 - web `/app-change`;
 - web `/director-stats`;
 - web `/run-control`;

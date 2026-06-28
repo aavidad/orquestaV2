@@ -82,6 +82,7 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.nav.home",
 		"nueva_app.wizard.nav.ops",
 		"nueva_app.wizard.nav.autoprogramming",
+		"nueva_app.wizard.nav.guide",
 		"nueva_app.wizard.lead",
 		"nueva_app.wizard.steps_label",
 		"nueva_app.wizard.step.idea",
@@ -127,11 +128,16 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.datos_experto",
 		"nueva_app.wizard.dato_1",
 		"nueva_app.wizard.dato_2",
+		"nueva_app.wizard.dato_3",
+		"nueva_app.wizard.dato_4",
 		"nueva_app.wizard.almacenamiento_1",
 		"nueva_app.wizard.almacenamiento_2",
+		"nueva_app.wizard.almacenamiento_3",
+		"nueva_app.wizard.almacenamiento_4",
 		"nueva_app.wizard.integracion_1",
 		"nueva_app.wizard.integracion_2",
 		"nueva_app.wizard.integracion_3",
+		"nueva_app.wizard.integracion_4",
 		"nueva_app.wizard.integraciones_adicionales",
 		"nueva_app.wizard.revision_final",
 		"nueva_app.wizard.resumen_vivo",
@@ -357,7 +363,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Par
       <h1>{{.Page.Titulo}}</h1>
       <p class="lead">{{index .HTML "nueva_app.wizard.lead"}}</p>
     </div>
-    <nav class="topnav"><a href="/">{{index .HTML "nueva_app.wizard.nav.home"}}</a><a href="/ops">{{index .HTML "nueva_app.wizard.nav.ops"}}</a><a href="/autoprogramming">{{index .HTML "nueva_app.wizard.nav.autoprogramming"}}</a></nav>
+    <nav class="topnav"><a href="/">{{index .HTML "nueva_app.wizard.nav.home"}}</a><a href="/ops">{{index .HTML "nueva_app.wizard.nav.ops"}}</a><a href="/autoprogramming">{{index .HTML "nueva_app.wizard.nav.autoprogramming"}}</a><a href="/nueva-app/guia">{{index .HTML "nueva_app.wizard.nav.guide"}}</a></nav>
   </header>
   <form method="post" action="/nueva-app" novalidate>
     <section class="wizard" id="nueva-app-wizard"

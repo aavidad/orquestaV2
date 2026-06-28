@@ -248,7 +248,9 @@ Evidencia esperada: la guia documenta modo basico, asistente guiado y modo
 experto, catalogo ampliado de arquitectura con fallback `hexagonal`, datos
 multiples, sensibilidad por tipo, almacenamiento por capacidad, varias
 integraciones, niveles de accesibilidad elegibles por runtime/adaptador y
-relacion con tooltips, sin fijar proveedor concreto.
+relacion con tooltips, sin fijar proveedor concreto; `/nueva-app` enlaza a
+`/nueva-app/guia` y `NuevaAppGuideWebEndpointV0` sirve el Markdown embebido como
+HTML de lectura.
 Ultima ejecucion: 2026-06-25; documental y cubierta por tests web/factory.
 Riesgos: las composiciones externas deben seguir tratando arquitectura, storage,
 mapas y accesibilidad como contratos/capacidades, no como proveedor impuesto.

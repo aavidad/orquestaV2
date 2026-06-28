@@ -35,7 +35,7 @@ negocio; enlaza a `/ops`, `/nueva-app`, `/autoprogramming`, `/app-change`,
 `/director-stats`, `/run-queue` y `/run-control` para que el operador pueda
 usar Orquesta desde la web sin recordar rutas API.
 
-La guia de opciones de `/nueva-app` esta en
+La guia de opciones de `/nueva-app` esta servida en `/nueva-app/guia` y vive en
 `docs/guia_nueva_app_opciones_2026-06-25.md`. Documenta el asistente guiado, el
 modo basico y el modo experto opcional para arquitectura, datos,
 almacenamiento, integraciones multiples, accesibilidad, autonomia, calidad y

@@ -120,6 +120,7 @@ func nuevaAppI18nEnglishV0() map[string]string {
 		"nueva_app.wizard.nav.home":                            "Home",
 		"nueva_app.wizard.nav.ops":                             "Ops",
 		"nueva_app.wizard.nav.autoprogramming":                 "Autoprogramming",
+		"nueva_app.wizard.nav.guide":                           "Guide",
 		"nueva_app.wizard.lead":                                "Describe the app in short steps. Orquesta will generate the contract, start the Director if configured, and show the resulting backlog.",
 		"nueva_app.wizard.steps_label":                         "Wizard steps",
 		"nueva_app.wizard.step.idea":                           "1 Idea",
