@@ -257,16 +257,10 @@ func appGoalClosureValidatorV0(
 	if base == nil {
 		base = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
 	}
-	if !config.DomainDelivery.Enabled {
-		return base
+	return domainWorkGoalReceiptClosureValidatorV0{
+		Base:   base,
+		Ledger: domainWorkSubmissionRecordReaderV0(config.DomainDelivery.Ledger),
 	}
-	if reader := domainWorkSubmissionRecordReaderV0(config.DomainDelivery.Ledger); reader != nil {
-		return domainWorkGoalReceiptClosureValidatorV0{
-			Base:   base,
-			Ledger: reader,
-		}
-	}
-	return base
 }
 
 func requiredTestEvidenceStoreV0(

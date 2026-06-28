@@ -40,6 +40,10 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 		fields = domainWorkDeliveryMarkEmptyValidationScanInvalidV0(fields)
 		completeJob = false
 	}
+	if issueRef := domainWorkStructuredNonTerminalArtifactIssueRefV0(fields); issueRef != "" {
+		fields = domainWorkDeliveryMarkStructuredNonTerminalInvalidV0(fields, issueRef)
+		completeJob = false
+	}
 	fields = redactDomainWorkDeliveryPayloadFieldsV0(fields)
 	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(
 		orquestadomainwork.DomainWorkArtifactSubmissionV0{
@@ -226,6 +230,14 @@ func domainWorkDeliveryHasEmptyValidationScanV0(
 func domainWorkDeliveryMarkEmptyValidationScanInvalidV0(
 	fields []orquestadomainwork.DomainWorkFieldV0,
 ) []orquestadomainwork.DomainWorkFieldV0 {
+	return domainWorkDeliveryMarkStructuredNonTerminalInvalidV0(fields, domainWorkInvalidValidationEmptyScanIssueRefV0)
+}
+
+func domainWorkDeliveryMarkStructuredNonTerminalInvalidV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	issueRef string,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	issueRef = strings.TrimSpace(issueRef)
 	out := make([]orquestadomainwork.DomainWorkFieldV0, 0, len(fields)+2)
 	for _, field := range fields {
 		if domainWorkValidationStatusFieldV0(field.Name) &&
@@ -235,10 +247,10 @@ func domainWorkDeliveryMarkEmptyValidationScanInvalidV0(
 		out = append(out, field)
 	}
 	out = appendDomainWorkFieldIfMissingV0(out, "validation_status", "invalid")
-	if !domainWorkFieldHasNameV0(out, "validation_issue_refs") {
+	if issueRef != "" && !domainWorkFieldHasNameV0(out, "validation_issue_refs") {
 		out = append(out, orquestadomainwork.DomainWorkFieldV0{
 			Name:   "validation_issue_refs",
-			Values: []string{domainWorkInvalidValidationEmptyScanIssueRefV0},
+			Values: []string{issueRef},
 		})
 	}
 	return out

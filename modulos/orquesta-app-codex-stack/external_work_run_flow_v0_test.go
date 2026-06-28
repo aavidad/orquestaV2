@@ -421,6 +421,50 @@ func TestCodexStackV0ExternalWorkGoalFirstBloqueaReceiptInventadoSinLedger(t *te
 	}
 }
 
+func TestCodexStackV0ExternalWorkGoalFirstBloqueaReceiptSiDomainDeliveryDesactivadoV0(t *testing.T) {
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	observer := &goalFirstQueueObserverForTestV0{}
+	config := codexStackBaseConfigForTestV0(
+		t,
+		newFakeCodexStackRuntimeV0(),
+		nil,
+		nil,
+	)
+	config.AppGoalLauncher = launcher
+	config.AppGoalObserver = observer
+	config.AppGoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	config.Stores.AppGoalStateStore = newGoalFirstQueueStateStoreForTestV0()
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+	started := postExternalWorkRunStackV0(t, stack)
+	spec := launcher.specs[0]
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		"receipt-ref-goal-first-sin-domain-delivery-001",
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-no-domain-delivery-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework ||
+		!goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptLedgerAcceptedMissingIssueV0) {
+		t.Fatalf("receipt sin DomainDelivery no bloqueo cierre: result=%+v", result)
+	}
+}
+
 func TestCodexStackV0ExternalWorkGoalFirstSubeArtifactDomainWorkYCierraV0(t *testing.T) {
 	stack, observer, launcher, domainWork := buildExternalWorkGoalFirstDomainDeliveryStackWithExecutorForTestV0(t)
 	started := postExternalWorkRunStackV0(t, stack)
@@ -473,6 +517,57 @@ func TestCodexStackV0ExternalWorkGoalFirstSubeArtifactDomainWorkYCierraV0(t *tes
 		!codexStackStringInSetForTestV0(records[0].EvidenceRefs, "domain-work-goal-receipt-alias-"+safeDomainWorkEvidenceRefV0(receiptRef)) ||
 		!codexStackStringInSetForTestV0(result.Closure.EvidenceRefs, goalDomainReceiptLedgerAcceptedEvidenceRefV0) {
 		t.Fatalf("accepted record no enlaza receipt del goal: record=%+v closure=%+v", records[0], result.Closure)
+	}
+}
+
+func TestCodexStackV0ExternalWorkGoalFirstNoCierraArtifactBloqueadoAunqueOPESAcepteReceiptV0(t *testing.T) {
+	stack, observer, launcher, domainWork := buildExternalWorkGoalFirstDomainDeliveryStackWithExecutorForTestV0(t)
+	started := postExternalWorkRunStackV0(t, stack)
+	spec := launcher.specs[0]
+	contract := spec.ArtifactContracts[0]
+	writeGoalFirstDomainWorkBlockedArtifactForTestV0(t, stack.Codex.ProjectWorkDir, spec, contract.ArtifactType)
+	receiptRef := "receipt-ref-goal-first-structured-blocker-001"
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-structured-blocker-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework ||
+		!goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptStructuredArtifactIssueCodeV0) {
+		t.Fatalf("artifact con bloqueo estructurado cerro goal-first: result=%+v domainWork=%+v", result, domainWork)
+	}
+	if domainWork.called != 1 ||
+		domainWork.input.Action != orquestamcp.MCPDomainWorkActionSubmitArtifactV0 ||
+		domainWork.input.ArtifactSubmission.CompleteJob {
+		t.Fatalf("submission bloqueada debe subirse como incompleta: domainWork=%+v", domainWork)
+	}
+	records, err := stack.DomainDelivery.Ledger.(DomainWorkArtifactSubmissionRecordReaderPortV0).ListDomainWorkArtifactSubmissionsV0(
+		context.Background(),
+		DomainWorkArtifactSubmissionRecordFilterV0{
+			RunRef: started.RunRef,
+			Status: DomainWorkArtifactSubmissionStatusAcceptedV0,
+		},
+	)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("records=%+v err=%v", records, err)
+	}
+	if records[0].CompleteJob ||
+		!domainWorkFieldValuesForTestV0(records[0].PayloadFields, "validation_issue_refs", []string{domainWorkStructuredNonTerminalArtifactIssueCodeV0}) {
+		t.Fatalf("record bloqueado debe conservar evidencia estructurada: record=%+v", records[0])
 	}
 }
 
@@ -660,6 +755,47 @@ func TestCodexStackV0ExternalWorkGoalFirstNoCierraReceiptDomainWorkIncompleteV0(
 		!result.Closure.NeedsRework ||
 		!goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptLedgerIncompleteArtifactV0) {
 		t.Fatalf("receipt incompleto cerro goal-first: result=%+v", result)
+	}
+}
+
+func TestCodexStackV0ExternalWorkGoalFirstNoCierraReceiptConPayloadNoTerminalEnLedgerV0(t *testing.T) {
+	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	started := postExternalWorkRunStackV0(t, stack)
+	spec := launcher.specs[0]
+	receiptRef := "receipt-ref-goal-first-domain-structured-blocked-001"
+	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
+	record.PayloadFields = append(record.PayloadFields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "ready", ValueJSON: []byte(`false`)},
+		orquestadomainwork.DomainWorkFieldV0{Name: "public_blocker", ValueJSON: []byte(`{"blocked_step":"apply_topic_registry_update"}`)},
+	)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		record,
+	); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-structured-ledger-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework ||
+		!goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptStructuredArtifactIssueCodeV0) {
+		t.Fatalf("receipt con payload no terminal cerro goal-first: result=%+v", result)
 	}
 }
 
@@ -1417,6 +1553,26 @@ func writeGoalFirstDomainWorkArtifactForTestV0(
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	body := `{"artifact_type":"` + artifactType + `","payload_json":{"body":"Contenido OPES aceptable para cierre goal-first.","topic_id":"tema-001"}}`
+	if err := os.WriteFile(filepath.Join(dir, artifactType+".json"), []byte(body), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+}
+
+func writeGoalFirstDomainWorkBlockedArtifactForTestV0(
+	t *testing.T,
+	projectDir string,
+	spec orquestagoal.GoalWorkSpecV0,
+	artifactType string,
+) {
+	t.Helper()
+	if len(spec.WriteSet) == 0 {
+		t.Fatalf("spec sin write-set=%+v", spec)
+	}
+	dir := filepath.Join(projectDir, filepath.FromSlash(spec.WriteSet[0].Path))
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	body := `{"artifact_type":"` + artifactType + `","payload_json":{"ready":false,"status":"blocked","public_blocker":{"blocked_step":"apply_topic_registry_update"},"pending":["submit_artifact"]}}`
 	if err := os.WriteFile(filepath.Join(dir, artifactType+".json"), []byte(body), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}

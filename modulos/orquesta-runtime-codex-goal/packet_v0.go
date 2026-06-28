@@ -274,9 +274,12 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 		b.WriteString("- Deben existir los artefactos requeridos.\n")
 	}
 	if spec.ClosurePolicy.RequireDomainReceipt {
-		b.WriteString("- Debe existir receipt de dominio.\n")
 		if strings.TrimSpace(spec.WorkProfileKind) == "domain_work" {
-			b.WriteString("- En trabajos domain_work, no intentes llamar conectores REST/MCP de la app externa desde el sandbox salvo que el contrato te entregue ese puerto: materializa el artefacto en el write-set y deja submit_artifact/receipt al adaptador externo de Orquesta.\n")
+			b.WriteString("- El receipt de dominio lo obtiene Orquesta fuera del goal despues de observar tu artefacto; no bloquees por no tener conector REST/MCP de la app externa.\n")
+			b.WriteString("- En trabajos domain_work, no intentes llamar conectores REST/MCP de la app externa desde el sandbox salvo que el contrato te entregue ese puerto: materializa el artefacto en el write-set como entrega terminal y deja submit_artifact/receipt al adaptador externo de Orquesta.\n")
+			b.WriteString("- No pongas public_blocker, pending, ready=false ni estados no terminales por faltar el conector externo; si el artefacto esta materializado para que Orquesta lo suba, el resultado del goal puede ser complete con domain_receipt_refs vacio.\n")
+		} else {
+			b.WriteString("- Debe existir receipt de dominio.\n")
 		}
 	}
 	for _, evidenceRef := range spec.ClosurePolicy.RequiredEvidenceRefs {
@@ -305,6 +308,9 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	b.WriteString("- El JSON debe usar esta forma: {\"goal_ref\":\"")
 	b.WriteString(spec.GoalRef)
 	b.WriteString("\",\"summary\":\"...\",\"artifact_refs\":[],\"required_test_results\":[{\"test_ref\":\"...\",\"status\":\"passed\",\"evidence_refs\":[]}],\"domain_receipt_refs\":[],\"evidence_refs\":[]}.\n")
+	if spec.ClosurePolicy.RequireDomainReceipt && strings.TrimSpace(spec.WorkProfileKind) == "domain_work" {
+		b.WriteString("- En domain_work deja domain_receipt_refs vacio salvo que el contrato te haya dado un receipt real; Orquesta lo derivara del ledger despues de submit_artifact.\n")
+	}
 	if len(spec.RequiredTests) > 0 {
 		b.WriteString("- En required_test_results usa literalmente los test_ref declarados arriba; no los resumas ni inventes aliases.\n")
 	}

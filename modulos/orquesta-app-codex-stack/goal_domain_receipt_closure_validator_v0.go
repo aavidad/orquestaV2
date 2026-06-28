@@ -17,8 +17,10 @@ const (
 	goalDomainReceiptLedgerRequiredReceiptIssueV0       = "domain_work_receipt_ref_required"
 	goalDomainReceiptLedgerRequiredContractIssueV0      = "domain_work_receipt_contract_required"
 	goalDomainReceiptLedgerRequiredArtifactIssueV0      = "domain_work_receipt_artifact_required"
+	goalDomainReceiptStructuredArtifactIssueCodeV0      = "domain_work_receipt_artifact_structured_non_terminal"
 	goalDomainReceiptOPESSubrolesEvidenceMissingIssueV0 = "domain_work_opes_subroles_evidence_missing"
 	goalDomainReceiptLedgerRequiredArtifactFieldV0      = "domain_receipt_refs.artifact_contracts"
+	goalDomainReceiptStructuredArtifactFieldV0          = "domain_receipt_refs.artifact_payload"
 	goalDomainReceiptLedgerUnavailableIssueFieldV0      = "domain_receipt_refs.ledger"
 	goalDomainReceiptLedgerMissingIssueFieldV0          = "domain_receipt_refs"
 	goalDomainReceiptLedgerRequiredRunRefFieldV0        = "domain_receipt_refs.run_ref"
@@ -212,6 +214,9 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) validateAcceptedDomainR
 			Field: goalDomainReceiptLedgerRequiredArtifactFieldV0,
 		}
 	}
+	if issue := goalDomainReceiptStructuredArtifactIssueV0(matching); issue.Code != "" {
+		return nil, issue
+	}
 	completeMatching := goalDomainReceiptCompleteRecordsV0(matching)
 	if !goalDomainReceiptAllContractsCoveredV0(required, completeMatching) {
 		return nil, orquestagoal.GoalWorkIssueV0{
@@ -324,11 +329,26 @@ func goalDomainReceiptCompleteRecordsV0(
 	out := make([]DomainWorkArtifactSubmissionRecordV0, 0, len(records))
 	for _, record := range records {
 		record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
-		if record.CompleteJob {
+		if record.CompleteJob && domainWorkStructuredNonTerminalArtifactIssueRefV0(record.PayloadFields) == "" {
 			out = append(out, record)
 		}
 	}
 	return out
+}
+
+func goalDomainReceiptStructuredArtifactIssueV0(
+	records []DomainWorkArtifactSubmissionRecordV0,
+) orquestagoal.GoalWorkIssueV0 {
+	for _, record := range records {
+		record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+		if domainWorkStructuredNonTerminalArtifactIssueRefV0(record.PayloadFields) != "" {
+			return orquestagoal.GoalWorkIssueV0{
+				Code:  goalDomainReceiptStructuredArtifactIssueCodeV0,
+				Field: goalDomainReceiptStructuredArtifactFieldV0,
+			}
+		}
+	}
+	return orquestagoal.GoalWorkIssueV0{}
 }
 
 func goalDomainReceiptRequiredTestPassedV0(

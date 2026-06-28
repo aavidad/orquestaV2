@@ -101,6 +101,9 @@ func TestBuildCodexGoalPromptV0DomainWorkDelegaReceiptEnAdaptadorV0(t *testing.T
 		"En trabajos domain_work",
 		"materializa el artefacto en el write-set",
 		"deja submit_artifact/receipt al adaptador externo de Orquesta",
+		"no bloquees por no tener conector REST/MCP",
+		"domain_receipt_refs vacio",
+		"No pongas public_blocker, pending, ready=false",
 	} {
 		if !strings.Contains(packet.Prompt, want) {
 			t.Fatalf("prompt no contiene %q:\n%s", want, packet.Prompt)
