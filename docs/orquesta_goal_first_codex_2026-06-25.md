@@ -172,8 +172,15 @@ ORQUESTA_GOAL_RESULT_V0 {"goal_ref":"...","summary":"...","artifact_refs":[],"re
 Las refs del marcador o del archivo durable se convierten a `GoalWorkResultV0`
 y pasan por el validador de cierre de Orquesta. Si faltan las
 evidencias/artefactos exigidos por el spec, Orquesta no inventa refs: el goal
-puede estar `complete`, pero el run queda bloqueado por cierre no aceptado. El
-archivo durable debe incluir `goal_ref` coincidente.
+puede estar `complete`, pero el run no se cierra sin evidencias. Desde el
+2026-06-28, si `ReworkPolicy.PreferNewGoal` esta activo, el resultado terminal
+es `complete`, el spec no exige `RequireDomainReceipt`, queda presupuesto y la
+composicion inyecta `GoalReworkLauncher`, Orquesta lanza un nuevo goal causal
+de rework sobre el mismo `run_ref` y conserva evidencias/artefactos
+aprovechables. Si falta ese puerto, se agota el presupuesto, el goal termina
+`invalid`/`blocked` o el cierre falla por recibos de dominio, el run queda
+bloqueado por cierre no aceptado. El archivo durable debe incluir `goal_ref`
+coincidente.
 
 ## Relacion con el Director actual
 
@@ -261,6 +268,11 @@ Goal.
    Estado 2026-06-25: hecho de forma opt-in para lanzamiento, refs publicas,
    observacion y cierre validado por Orquesta cuando el goal devuelve marcador
    estructurado o archivo durable.
+   Estado 2026-06-28: `cmd/orquesta-server` inyecta `AppGoalReworkLauncher`
+   desde el mismo backend Codex Goal. `ObserveAppDirectorGoalV0` solo lo usa en
+   cierre `complete` no aceptado, sin `RequireDomainReceipt` y con presupuesto
+   disponible; external-work/DomainWork conserva bloqueo fuerte ante receipts
+   inventados, incompletos o sin evidencias OPES requeridas.
 8. Conectar autoprogramacion a observacion goal-first.
    Estado 2026-06-26: `orquesta.autoprogramming.observe_goal.v0` y `POST
    /api/v0/autoprogramming/goal/observe` observan el `GoalWorkStateV0` por

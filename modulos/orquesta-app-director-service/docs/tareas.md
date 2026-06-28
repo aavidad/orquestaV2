@@ -262,11 +262,15 @@ Estado: hecho.
 Cambio: `ObserveAppDirectorGoalV0` exige `RunStore` y `EventSink` cuando el
 goal llega a estado terminal. Si la closure es aceptada, abre
 `validacion_final`, registra validacion run-level sin microtareas, abre
-`cierre` y emite `CloseRun`. Si la closure no es aceptada, emite `BlockRun` con
-blocker estable de goal-first. Los estados observados `blocked` e `invalid`
-tambien son terminales para Orquesta y quedan como run bloqueada con rework
-necesario, no como observacion viva indefinida. El servicio sigue sin conocer
-runtime, proveedor ni DB; todo cruza por puertos.
+`cierre` y emite `CloseRun`. Si la closure no es aceptada y el spec permite
+rework goal-first opt-in (`ReworkPolicy.PreferNewGoal`, resultado `complete`,
+sin `RequireDomainReceipt`, presupuesto disponible y `GoalReworkLauncher`
+inyectado), lanza un nuevo `GoalWorkSpecV0` causal sobre el mismo `run_ref`. Si
+no puede relanzar, emite `BlockRun` con blocker estable de goal-first. Los
+estados observados `blocked` e `invalid` tambien son terminales para Orquesta y
+quedan como run bloqueada con rework necesario, no como observacion viva
+indefinida. El servicio sigue sin conocer runtime, proveedor ni DB; todo cruza
+por puertos.
 
 Validacion:
 
