@@ -442,3 +442,45 @@ Pendiente para Orquesta:
 - La reconciliación debería reconstruir el estado desde archivos presentes,
   procesos vivos y últimos mensajes, evitando que una entrega útil quede como
   fallo opaco.
+
+## Revalidacion Orquesta 2026-06-28
+
+Estado del repo actual frente a esta incidencia:
+
+- Las llamadas HTTP que antes podian quedarse sin cuerpo tienen cobertura con
+  cliente real:
+  - `TestServerAutoprogrammingSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0`
+    valida `202 accepted_background`, `operation_ref` y acciones de polling.
+  - `TestServerRunSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0` cubre
+    `/api/v0/runs/supervise`.
+  - `TestServerRunQueuePriorityHTTPSetPriorityClienteRealRecibeTimeoutJSONV0`,
+    `TestServerRunControlHTTPClienteRealRecibeTimeoutJSONV0`,
+    `TestServerExternalWorkRunHTTPClienteRealRecibeTimeoutJSONV0` y
+    `TestServerObserveAppDirectorGoalHTTPClienteRealRecibeTimeoutJSONV0`
+    validan error JSON acotado en timeout, no conexion colgada sin respuesta.
+- `waiting_outbox` ya publica acciones humanas:
+  `waiting_outbox_supervise_again_or_wait_for_capacity` e
+  `inspect_queue_pressure_if_repeated`, con diagnostico de presion de cola.
+- La cola distingue estados vivos/stale y hay reconciliacion:
+  `reconcileQueuedRunningStaleRunsV0` marca `running_stale` sin proceso vivo
+  verificable como `stopped` con evidencia
+  `evidence-ref-run-queue-running-stale-no-live-process-reconciled`.
+- El caso `stop_requested` seguido de materializacion tardia esta modelado por
+  `TestCodexStackRunSupervisorStopPendingDispatchDiagnosticsMCPV0ExponeMaterializacionTardia`:
+  publica `stop_pending_dispatch_in_progress`, `control_status=stop_requested`
+  y acciones `wait_agents_or_confirm_stop`,
+  `observe_run_control_and_director_stats` y
+  `do_not_kill_live_agents_with_useful_output`.
+- La vista global humana existe en `/api/v0/runs/queue/global/status`, cubierta
+  por `TestServerQueueGlobalStatusHTTPClienteRealMontadoEnStackV0`.
+
+Conclusion: los sintomas principales de 19023f ya no son pendientes de codigo
+en el repo actual; quedan cubiertos por respuestas HTTP acotadas, diagnosticos
+de cola, reconciliacion de `running_stale` y acciones para materializacion
+tardia tras stop.
+
+Frontera pendiente: no se reejecuto la ola productiva real 19023f/19023i. La
+validacion disponible es de tests de stack/HTTP y smokes temporales OPES
+goal-first. La entrega util sin `agent_ack.json` queda cubierta por la linea
+general de recuperacion artifact-sin-ACK y por M1, pero si reaparece en OPES
+real debe abrirse una incidencia especifica con el runtime/ACK exacto.
