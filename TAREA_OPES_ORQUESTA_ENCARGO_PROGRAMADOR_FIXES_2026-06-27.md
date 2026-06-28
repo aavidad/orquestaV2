@@ -106,12 +106,20 @@ Fix: usar siempre `*outputBufferV0`:
 Verificación: `go vet ./modulos/orquesta-runtime-required-test/...` limpio y
 `go test ./modulos/orquesta-runtime-required-test/...` verde.
 
+Revalidación 2026-06-28: T4 queda cerrado. `go vet ./...` ejecutado localmente
+queda sin salida y la suite completa pasa.
+
 ## T5 — Subir toolchain Go y dependencias (vulnerabilidades)
 
 `govulncheck` reporta 16 vulns de stdlib por `go1.25.5` (p.ej. `GO-2026-4341`
 net/url, `GO-2026-4340`/`GO-2026-4337` crypto/tls).
 Fix: subir toolchain a ≥`go1.25.7`; `go get golang.org/x/text@latest`; recompilar.
 Verificación: `govulncheck ./...` sin vulnerabilidades alcanzables.
+
+Revalidación 2026-06-28: T5 queda cerrado. `go.mod` declara
+`toolchain go1.25.11` y `golang.org/x/text v0.38.0`; el workflow de CI usa Go
+`1.25.11`; `govulncheck ./...` ejecutado localmente devuelve
+`No vulnerabilities found.`
 
 ## T6 — Revisar intake de artefactos (¿solo primer fichero?)
 
@@ -121,6 +129,15 @@ así que solo lee `ack.Files[0]` y no filtra por `artifactType`.
 Hacer: confirmar contra el contrato de `DomainWork`/ACK. Si puede haber varios
 ficheros, filtrar por `artifactType`; si siempre es uno, reescribir como
 `if len(ack.Files) > 0 { ... }` para dejar la intención explícita.
+
+Revalidación 2026-06-28: T6 queda cerrado en el código actual. El intake usa
+`selectDomainWorkDeliveryArtifactFileV0`, escanea todos los `ACK.files`, valida
+rutas con `safeDomainWorkDeliveryFilePathV0`, selecciona por `artifactType` y
+rechaza la entrega si hay varios ficheros sin coincidencia inequívoca. Evidencia:
+`TestDomainWorkDeliveryArtifactIntakeV0SeleccionaFicheroPorTipoArtefacto` y
+`TestDomainWorkDeliveryArtifactIntakeV0ExigeTipoSiHayVariosFicheros`; además
+`staticcheck` focal sobre `orquesta-app-codex-stack` no reporta `SA4004` para
+ese fichero.
 
 ## T7 — DECIDIR: validación muerta (cablear o borrar) — NO borrar sin decidir
 
@@ -139,6 +156,13 @@ cada bloque, decidir **cablear** (si era protección prevista) o **borrar**:
   `modulos/orquesta-orchestration-core/agent_process_registry_validation.go:9,21`.
 - Cierre exige tests:
   `modulos/orquesta-orchestration-core/operational_director_closure_validation_v0.go:106`.
+
+Revalidación 2026-06-28: T7 queda cerrado contra el estado actual. Ejecutado
+`staticcheck ./...` con herramienta instalada temporalmente en `/tmp/orquesta-go-tools`;
+no quedan `U1000`. Por tanto, la lista de validación muerta del baseline ya no
+aplica como pendiente ejecutable. Las políticas ACK/rails que siguen vivas no se
+borran ni se fuerzan como veto duro; se mantienen alineadas con la regla vigente
+de conservar trabajo útil y elevar soft-rails a review.
 
 ## T8 — Borrar código muerto obsoleto (Grupo A)
 
@@ -161,6 +185,10 @@ helpers sueltos. Borrar (lista completa: `staticcheck ./... | grep U1000`):
   `orquesta-persistence/outbox_ledger_*`, y los 21 helpers en `*_test.go`.
 Verificación: `staticcheck ./... | grep -c U1000` baja a 0 (tras T7) y suite verde.
 
+Revalidación 2026-06-28: T8 queda cerrado por ausencia de `U1000` en el repo
+actual. No se borra código adicional sin una referencia viva y una evidencia
+concreta de no uso.
+
 ## T9 — Limpiezas menores (staticcheck)
 
 - `SA4006` asignaciones muertas: `drain_attempt_v0.go:248,253`,
@@ -174,10 +202,20 @@ Verificación: `staticcheck ./... | grep -c U1000` baja a 0 (tras T7) y suite ve
 - `SA1012` (×22): tests con `nil` context → `context.TODO()`.
 - Estilo: `ST1005/ST1008/S1016/S1009/S1017/S1011/S1001/S1002`.
 
+Revalidación 2026-06-28: solo quedaba `S1021` en
+`modulos/orquesta-opes-connector/payload_v0.go`; se corrigió fusionando la
+declaración/asignación de la función local. `staticcheck ./...` queda sin salida.
+
 ## T10 — CI: gates que habrían pillado esto
 
 Añadir al pipeline: `go vet ./...`, `go test -race ./...`, `staticcheck ./...`
 (al menos categorías SA + copylocks) y `govulncheck ./...`.
+
+Revalidación 2026-06-28: T10 ya está en `.github/workflows/go-quality.yml`.
+El workflow usa Go `1.25.11`, ejecuta `git diff --check`, `go build ./...`,
+`go vet ./...`, `go test -count=1 ./...`, instala `govulncheck` y
+`staticcheck`, ejecuta ambos, y tiene job separado de `go test -race -count=1
+-timeout=20m ./...`.
 
 ---
 

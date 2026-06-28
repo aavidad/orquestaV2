@@ -106,6 +106,10 @@ Corrección: subir el toolchain (≥ `go1.25.7`) y revisar las 3 vulnerabilidade
 adicionales en paquetes importados (p.ej. `golang.org/x/text v0.29.0` →
 `go get golang.org/x/text@latest`). Recompilar y reejecutar `govulncheck ./...`.
 
+Estado 2026-06-28: cerrado contra el repo actual. `go.mod` fija
+`toolchain go1.25.11` y `golang.org/x/text v0.38.0`; el workflow de calidad usa
+Go `1.25.11`; `govulncheck ./...` devuelve `No vulnerabilities found.`
+
 ---
 
 ## Hallazgo 4 — REVISAR DISEÑO: el intake de artefactos solo procesa el primer fichero
@@ -128,6 +132,13 @@ esto es un bug (ignora el resto). Si por contrato es siempre un único fichero,
 conviene reescribir como `if len(ack.Files) > 0 { ... }` para dejar la intención
 explícita. **Confirmar contra el contrato de `DomainWork`/ACK** antes de cambiar.
 
+Estado 2026-06-28: cerrado en el código vigente. El intake ya no retorna dentro
+del `for`; delega en `selectDomainWorkDeliveryArtifactFileV0`, valida todas las
+rutas declaradas, selecciona por tipo de artefacto y bloquea solo la ambigüedad
+real de varios ficheros sin match. Verificado con tests focales de
+`domain_work_delivery_artifact_intake_v0_test.go` y staticcheck focal sin
+`SA4004` para ese fichero.
+
 ---
 
 ## Hallazgo 5 — Código muerto (PARA BORRAR / PARA CABLEAR)
@@ -139,6 +150,13 @@ hay que distinguir dos grupos: lo realmente obsoleto (borrar) y la
 antes de borrar; borrarla elimina protecciones previstas).
 
 Reproducir la lista completa: `staticcheck ./... | grep U1000`.
+
+Estado 2026-06-28: este hallazgo queda cerrado contra el repo actual.
+`staticcheck ./...` ejecutado con herramienta temporal en `/tmp/orquesta-go-tools`
+no reporta `U1000`; por tanto, la lista histórica ya no es pendiente ejecutable.
+No borrar piezas legacy adicionales solo por aparecer en este baseline antiguo:
+si reaparece código muerto, debe venir con salida actual de staticcheck y
+referencias revisadas.
 
 ### Grupo A — BORRAR (obsoleto, sin sentido conservar)
 
@@ -244,6 +262,11 @@ Verificadas como inofensivas pero conviene sanearlas:
 - `SA1012` (×22): tests que pasan `nil` como `context.Context`; usar
   `context.TODO()`.
 - Estilo: `ST1005`/`ST1008`/`S1016`/`S1009`/`S1017`/`S1011`/`S1001`/`S1002`.
+
+Estado 2026-06-28: cerrado. Solo quedaba un `S1021` actual en
+`modulos/orquesta-opes-connector/payload_v0.go`; se corrigió y
+`staticcheck ./...` queda sin salida. `govulncheck ./...` devuelve
+`No vulnerabilities found.`
 
 ---
 

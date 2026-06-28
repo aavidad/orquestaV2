@@ -227,6 +227,14 @@ defecto. Desde este corte queda activada por defecto y solo se apaga con
 - Cola mixta (ready/running_live/running_stale/waiting_outbox) → summary correcto,
   `WillFinishAlone=false` si hay stale; respuesta acotada con cuerpo bajo presión.
 
+### Revalidación 2026-06-28
+M3 queda implementado como `GET/POST /api/v0/queue/global-status` en
+`orquesta-mcp` y montado en gateway/stack. La proyección compacta mezcla cola,
+runs activos, estados goal-first y acciones seguras; publica `will_finish_alone`,
+`summary`, `items`, `needs_action`, `recommended_action` y razones sin acción.
+Verificado con tests focales `QueueGlobalStatus` en `orquesta-mcp` y
+`cmd/orquesta-server`.
+
 ---
 
 ## M4 — Auditoría como fuente de auto-mejora (O-1, capacidad estrella)
@@ -266,6 +274,12 @@ defecto. Desde este corte queda activada por defecto y solo se apaga con
 Orquesta detecta sus propios fallos y los mete en su backlog goal-first: se audita
 y se arregla solo, usando el cerebro de auto-mejora ya cableado.
 
+### Revalidación 2026-06-28
+M4 queda opt-in por `ORQUESTA_SELF_AUDIT_BACKLOG_ENABLED`; la fuente
+`selfAuditBacklogSectionsV0` genera secciones estables y el planner las deduplica
+antes de lanzar goal-first. Verificado con tests focales `SelfAuditBacklog` en
+`cmd/orquesta-server`.
+
 ---
 
 ## M5 — Dry-run del wizard con coste estimado (W-1)
@@ -300,6 +314,15 @@ y se arregla solo, usando el cerebro de auto-mejora ya cableado.
 - `BuildExternalWorkDryRunV0` devuelve el mismo spec que el lanzamiento real para
   la misma entrada (paridad), más estimaciones > 0.
 - Web: el paso de preview no lanza agentes (verifica que no se crea run/runtime).
+
+### Revalidación 2026-06-28
+M5 queda implementado para la capa external-work como
+`POST /api/v0/external-work/dry-run` y herramienta MCP. Compila el mismo
+`GoalWorkSpecV0` que el lanzamiento real, expone write-set, tests requeridos,
+modelo y estimaciones, y está cableado en el stack Codex con la misma guarda de
+`project_workdir`. La web de nueva app mantiene wizard guiado, preview/backlog y
+documentación de opciones; la paridad de dry-run y las rutas web se verificaron
+con tests focales `ExternalWorkDryRun`, `NuevaApp`, `Preview` e `Intake`.
 
 ---
 

@@ -187,8 +187,7 @@ func opesPositiveIntFromAnyV0(value any) (int, bool) {
 func opesCompactRefsFromAnyV0(value any) ([]string, bool) {
 	refs := []string{}
 	seen := map[string]struct{}{}
-	var add func(string)
-	add = func(ref string) {
+	add := func(ref string) {
 		ref = strings.TrimSpace(ref)
 		if ref == "" {
 			return
