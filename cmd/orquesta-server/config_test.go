@@ -872,8 +872,8 @@ func TestCodexRuntimeConfigV0UsaUmbralesConservadoresPorDefecto(t *testing.T) {
 	if config.ProgressBudget.MaxExpected != 20*time.Minute {
 		t.Fatalf("max_expected=%s want 20m", config.ProgressBudget.MaxExpected)
 	}
-	if config.ReasoningEffort != "high" {
-		t.Fatalf("reasoning_effort=%q want high (default subido para fiabilidad de ACK)", config.ReasoningEffort)
+	if config.ReasoningEffort != "medium" {
+		t.Fatalf("reasoning_effort=%q want medium", config.ReasoningEffort)
 	}
 }
 

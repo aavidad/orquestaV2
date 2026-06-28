@@ -30,7 +30,7 @@ func TestDecideCapacityReasoningPolicyV0OPESDocumentalOptInXHigh(t *testing.T) {
 	}
 }
 
-func TestDecideCapacityReasoningPolicyV0OPESGenericoUsaHighSinXHigh(t *testing.T) {
+func TestDecideCapacityReasoningPolicyV0OPESGenericoUsaMediumCompacto(t *testing.T) {
 	got := DecideCapacityReasoningPolicyV0(CapacityReasoningPolicyInputV0{
 		DomainRefs: []string{"domain-ref-opes"},
 		WriteSet: []string{
@@ -38,9 +38,9 @@ func TestDecideCapacityReasoningPolicyV0OPESGenericoUsaHighSinXHigh(t *testing.T
 		},
 	})
 
-	if got.CapacityLevel != "high" ||
-		got.ReasoningEffort != "high" ||
-		got.PolicyRef != CapacityPolicyRefHighRiskV0 {
+	if got.CapacityLevel != "medium" ||
+		got.ReasoningEffort != "medium" ||
+		got.PolicyRef != CapacityPolicyRefOPESCompactV0 {
 		t.Fatalf("policy=%+v", got)
 	}
 }

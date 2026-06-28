@@ -82,13 +82,12 @@ func codexRuntimeEnvConfigFromEnvV0() codexRuntimeEnvConfigV0 {
 		HomeDir:     homeDirV0(),
 		PathEnv:     envOrDefaultV0(envCodexPathV0, os.Getenv("PATH")),
 		Model:       strings.TrimSpace(os.Getenv(envCodexModelV0)),
-		// Default high: sube la fiabilidad del ACK del agente (con medium los
-		// agentes tienden a cerrar el turno sin escribir el acuse). Configurable por
-		// ORQUESTA_CODEX_REASONING_EFFORT para bajar a medium si el coste aprieta.
-		// La recuperacion de artefacto-sin-ACK sigue siendo la red de seguridad.
+		// Default medium: Goal-first y la recuperacion de artefacto-sin-ACK
+		// reducen el coste de exigir high por defecto. Las composiciones pueden
+		// subirlo con ORQUESTA_CODEX_REASONING_EFFORT cuando el riesgo lo justifique.
 		ReasoningEffort: codexReasoningEffortPolicyV0(envOrDefaultV0(
 			envCodexReasoningEffortV0,
-			string(orquestacoreworkflow.OrchestrationCapacityHighV0),
+			string(orquestacoreworkflow.OrchestrationCapacityMediumV0),
 		)),
 		Profile:                  strings.TrimSpace(os.Getenv(envCodexProfileV0)),
 		Sandbox:                  codexSandboxFromEnvV0(envCodexSandboxV0, "workspace-write"),

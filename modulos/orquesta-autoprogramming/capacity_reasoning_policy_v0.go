@@ -9,6 +9,7 @@ const (
 	CapacityPolicyRefBackgroundMediumV0 = "capacity-policy-ref-background-medium-v0"
 	CapacityPolicyRefHighRiskV0         = "capacity-policy-ref-high-risk-v0"
 	CapacityPolicyRefOPESDocumentV0     = "capacity-policy-ref-opes-document-v0"
+	CapacityPolicyRefOPESCompactV0      = "capacity-policy-ref-opes-compact-medium-v0"
 )
 
 type CapacityReasoningPolicyInputV0 struct {
@@ -39,7 +40,7 @@ func DecideCapacityReasoningPolicyV0(
 	case capacityReasoningContainsAnyV0(input, []string{
 		"opes",
 	}):
-		return capacityReasoningDecisionV0("high", CapacityPolicyRefHighRiskV0)
+		return capacityReasoningDecisionV0("medium", CapacityPolicyRefOPESCompactV0)
 	case capacityReasoningContainsAnyV0(input, []string{
 		"architecture_decision", "arquitectura amplia", "risk:high", "riesgo_alto",
 		"programacion", "programming", "crear_app_completa", "go.mod", "cmd/",

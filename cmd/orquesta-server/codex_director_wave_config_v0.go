@@ -32,7 +32,7 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 	commandPath := flags.String("command", strings.TrimSpace(os.Getenv(envCodexCommandV0)), "ruta al binario codex")
 	sourceCodeHome := flags.String("source-code-home", strings.TrimSpace(os.Getenv(envCodexWaveSourceCodeHomeV0)), "CODEX_HOME fuente para copiar credenciales/config")
 	model := flags.String("model", firstNonEmptyEnvV0(envCodexWaveModelV0, envCodexModelV0), "modelo Codex opcional")
-	reasoningEffort := flags.String("reasoning-effort", envOrDefaultV0(envCodexWaveReasoningEffortV0, envOrDefaultV0(envCodexReasoningEffortV0, "high")), "esfuerzo de razonamiento")
+	reasoningEffort := flags.String("reasoning-effort", envOrDefaultV0(envCodexWaveReasoningEffortV0, envOrDefaultV0(envCodexReasoningEffortV0, "medium")), "esfuerzo de razonamiento")
 	profile := flags.String("profile", firstNonEmptyEnvV0(envCodexWaveProfileV0, envCodexProfileV0), "perfil Codex opcional")
 	sandbox := flags.String("sandbox", envOrDefaultV0(envCodexWaveSandboxV0, "workspace-write"), "sandbox Codex")
 	approval := flags.String("approval-policy", envOrDefaultV0(envCodexWaveApprovalPolicyV0, "never"), "politica de aprobacion Codex")

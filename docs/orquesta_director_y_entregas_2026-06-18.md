@@ -87,16 +87,17 @@ compacto (ahorro de tokens, importante con cientos de agentes). Dado que el ACK 
 se manda de forma fiable haga lo que haga el prompt, se prioriza el ahorro: la red
 de seguridad real es la promoción del punto 1, no el prompt.
 
-### 5b. Reasoning effort por defecto = high (fiabilidad de ACK)
+### 5b. Reasoning effort por defecto = medium (Goal-first y coste)
 `cmd/orquesta-server/codex_runtime_config_v0.go`, `codex_director_wave_config_v0.go`.
 
-Evidencia: con `medium` los agentes Codex tendían a cerrar el turno sin escribir el ACK
-(0 de 3 en varias olas); el primer agente Bolsa con `high` sí lo escribió. El default del
-runtime Codex sube a `high`. Sigue siendo **configurable** por
-`ORQUESTA_CODEX_REASONING_EFFORT` (override a `medium` si el coste de tokens aprieta, p.
-ej. cientos de agentes). Importante: `high` **sube la tasa de ACK, no la garantiza al
-100%** (1 caso observado); la recuperación de artefacto-sin-ACK sigue siendo la red de
-seguridad. Es una cintura coste/fiabilidad, no una bala de plata.
+Evidencia anterior: con `medium` algunos agentes Codex cerraban el turno sin
+escribir ACK; por eso se subio temporalmente a `high`. Corte posterior: con
+Goal-first, result files durables, receipts de dominio y promocion controlada de
+artefacto-sin-ACK, el ACK ya no debe forzar el coste base de todas las olas. El
+default vuelve a `medium`; `ORQUESTA_CODEX_REASONING_EFFORT` y
+`ORQUESTA_CODEX_WAVE_REASONING_EFFORT` siguen permitiendo subir a `high` o
+`xhigh` cuando haya riesgo tecnico justificado u orden explicita. La red de
+seguridad real sigue siendo el cierre por evidencias, no el prompt ni el effort.
 
 ### 6. Spec de app con write-set y dependencias por tarea (sin código por app)
 `modulos/orquesta-autoprogramming/autoprogramming_task_group_v0.go`,
