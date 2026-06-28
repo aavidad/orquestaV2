@@ -188,6 +188,12 @@ OPES tenga que deducirlo.
    Una run con `stop_requested` + checkpoint no debe reaparecer al frente de la
    cola sin causa explícita.
 
+   Revalidación 2026-06-28: el stack Codex actual ejecuta
+   `reconcileQueuedRunningStaleRunsV0` desde `prepareRunCoordinatorTickV0`,
+   antes del drenaje. Los tests `RunningStale|OrphanQueue` prueban retirada de
+   cola `running` sin proceso vivo verificable, conservación cuando falta
+   evidencia suficiente y avance posterior de runs `ready`.
+
 4. **`status` siempre acotado y diagnóstico:** mantener el timeout ya presente en
    los handlers MCP (`*_http_v0.go`, 2 s → 202) y garantizar cuerpo JSON con
    `recommended_action` aunque no pueda despachar.

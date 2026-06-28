@@ -116,6 +116,22 @@ como contrato transversal. Hoy la recuperación existe sobre todo en
 `orquesta-runtime-codex-delivery` y `orquesta-app-codex-stack`; no se ha movido
 al conector puro.
 
+Revalidación 2026-06-28: no conviene duplicar ahora una segunda ruta de ACK
+sintético mientras el flujo productivo ya recupera artefactos sin ACK como
+observaciones con `gate-issue:artifact_without_ack_requires_review`. La ruta viva
+está en `CodexDeliveryObservationSourceV0` con
+`PromoteMaterializedArtifactWithoutAck`, emite `evidence-ref-artifact-without-ack`
+y el stack reproyecta assessments durables sin perder trabajo. Pruebas focales
+verdes:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-delivery -run 'ArtifactoSinAck|SinACK|Recoverable'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'LiveAgentReconciliation|StoppedAgent|MissingAck|ArtifactWithoutAck|Drain'`
+
+Pendiente real de M1 queda acotado a consumidores futuros que necesiten un
+contrato puro de ACK reconciliado (`completed_without_ack_file`) fuera de
+`orquesta-runtime-codex-delivery`/`orquesta-app-codex-stack`; no es un bloqueo
+del flujo goal-first actual.
+
 ### Resultado
 El trabajo útil deja de caerse por tecnicismos; los rechazos pasan a ser avisos
 recuperables que llegan a review; y la verificación sigue siendo **código puro**

@@ -46,12 +46,28 @@ runs `running` sin proceso vivo ni ACK pendiente.
 Verificación: test que, dada una run `running` sin proceso vivo, `status` la
 reporte `running_stale` y proponga acción segura.
 
+Revalidación 2026-06-28: T2 queda cubierto en el stack Codex actual. La
+clasificación pura vive en `orquesta-run-coordinator/liveness_v0.go`;
+`autoprogramming/status` la usa para separar `running_live`,
+`running_stale_no_process` y `running_without_recent_stats`; y
+`orquesta-app-codex-stack` ejecuta `reconcileQueuedRunningStaleRunsV0` antes de
+coordinar el tick. Pruebas focales verdes:
+`go test -count=1 ./modulos/orquesta-mcp -run NoMarcaStaleConDirectorStatsSnapshotRunning`
+y `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'RunningStale|OrphanQueue'`.
+Queda fuera de esta marca cualquier composición no Codex que no inyecte store,
+registry y snapshot equivalentes.
+
 ## T3 — Arreglar data races en tests de `orquesta-server`
 
 Confirmado con `go test -race ./modulos/orquesta-server/`. Fallan:
 `TestRuntimeV0SupervisorAsyncCoalesceaUnTickPendienteV0`,
 `TestRuntimeV0ResidentDirectorAsyncCoalesceaUnTickPendienteV0`,
 `TestRuntimeV0IdleSelfImprovementGoalFirstLanzaGoalSpecV0`.
+
+Revalidación 2026-06-28: no reproduce en el árbol actual con
+`go test -race -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`.
+Ambos paquetes pasan. Si reaparece, conservar la traza concreta porque la
+incidencia original ya no es reproducible con esta matriz.
 
 Causa: leen `store.last` mientras la goroutine async escribe; sincronizan con
 `time.Sleep` (`supervisor_loop_async_idle_v0_test.go:45-47`).
