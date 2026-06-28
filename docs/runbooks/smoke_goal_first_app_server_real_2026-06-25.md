@@ -8,7 +8,7 @@ Validar la ruta real no-OPES de `/nueva-app` con Codex Goal persistente:
 
 1. Orquesta levanta un servidor temporal.
 2. `/api/v0/apps/director` compila `GoalWorkSpecV0` y lanza Codex por
-   `ORQUESTA_CODEX_GOAL_BACKEND` (`app_server_stdio` por defecto en este
+   `ORQUESTA_CODEX_GOAL_BACKEND` (`app_server_tmux` por defecto en este
    smoke; `app_server_proxy` si se quiere validar daemon/socket).
 3. Codex trabaja en un proyecto temporal, no en el repo Orquesta.
 4. `/api/v0/apps/director/goal/observe` lee `thread/goal/get` y `thread/read`.
@@ -28,7 +28,7 @@ ORQUESTA_CODEX_COMMAND="$(command -v codex)" \
 
 Debe devolver `smoke_goal_first_app_server_preflight=ok` si el backend
 seleccionado responde a `thread/loaded/list`. Por defecto usa
-`app_server_stdio` y no necesita daemon. Para validar el socket persistente,
+`app_server_tmux` y no necesita daemon. Para validar el socket persistente,
 exporta `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`; si el CLI existe pero
 no hay daemon/socket, devuelve `smoke_goal_first_app_server_preflight=blocked`
 con reason code diagnostico, por ejemplo
@@ -59,7 +59,7 @@ ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 \
 Variables utiles:
 
 - `ORQUESTA_CODEX_COMMAND`: ruta de `codex`; por defecto resuelve `codex`.
-- `ORQUESTA_CODEX_GOAL_BACKEND`: `app_server_stdio` por defecto; tambien admite
+- `ORQUESTA_CODEX_GOAL_BACKEND`: `app_server_tmux` por defecto; tambien admite
   `app_server_proxy` para daemon/socket.
 - `ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY=1`: comprueba el backend app-server
   sin arrancar Orquesta ni ejecutar una generacion.
@@ -102,17 +102,17 @@ Variables utiles:
 
 En esta maquina `command -v codex` resuelve
 `/home/alberto/.nvm/versions/node/v20.19.2/bin/codex` y el CLI expone
-`codex app-server`. Comprobacion 2026-06-26: `codex app-server --stdio`
-responde a `initialize` y `thread/loaded/list`; Orquesta debe mandar tambien la
-notificacion `initialized` y mantener stdin abierto hasta recibir la respuesta
-RPC. El socket manual creado con
+`codex app-server`. Comprobacion vigente: `app_server_tmux` arranca
+`codex app-server --listen unix://<socket>` en una sesion tmux y valida
+`thread/loaded/list` mediante `codex app-server proxy --sock <socket>`.
+El socket manual creado con
 `codex app-server --listen unix://$HOME/.codex/app-server-control/app-server-control.sock`
 no respondio a `codex app-server proxy` en esta instalacion, aunque
 `daemon version` lo liste como `running`; por eso el smoke real local usa
-`app_server_stdio` mientras el backend proxy queda como ruta opt-in a validar
+`app_server_tmux` mientras el backend proxy queda como ruta opt-in a validar
 cuando exista un daemon/socket gestionado compatible.
 
-Ejecucion real 2026-06-26 con `app_server_stdio`:
+Ejecucion real 2026-06-26 con `app_server_tmux`:
 `smoke_goal_first_app_server_real=ok`, `goal_status=complete`,
 `run_status=cerrada`, `closure_status=accepted`, `closure_accepted=true`,
 `artifact_refs=2`, `evidence_refs=9`, `smoke_root=/tmp/orquesta-goal-first-app-server.2dZTDh`.

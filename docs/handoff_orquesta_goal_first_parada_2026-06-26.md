@@ -37,7 +37,7 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
 ## Estado por frente
 
 - `/nueva-app` goal-first: alrededor de 90%. La ruta real con Codex
-  `app_server_stdio` esta cerrada por smoke con `goal_status=complete`,
+  `app_server_tmux` esta cerrada por smoke con `goal_status=complete`,
   `run_status=cerrada`, `closure_status=accepted`, artefactos y evidencias.
   Falta restart/resume de goal en vuelo, negativos completos y rework automatico
   cuando el cierre no es aceptado.
@@ -130,5 +130,5 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
 - `WaitAgentRefs` P1.
 - `CODEX-WAVE-REAL`.
 - `CODEX-RECURSION-REAL`.
-- `CODEX-GOAL-FIRST-APP-SERVER-REAL` con `app_server_stdio`.
+- `CODEX-GOAL-FIRST-APP-SERVER-REAL` con `app_server_tmux`.
 - Cierre causal offline ya cubierto en matriz vigente.

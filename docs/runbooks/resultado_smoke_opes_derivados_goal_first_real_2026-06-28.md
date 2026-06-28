@@ -5,7 +5,7 @@ Fecha: 2026-06-28.
 ## Resumen
 
 Se ejecuto un smoke real acotado contra OPES temporal local y Orquesta temporal
-con `ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio`. Tambien se intento recorrer
+con `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`. Tambien se intento recorrer
 la secuencia real completa de derivados hasta `finalize_temario_package`.
 
 Resultado: contrato REST y scope OPES temporales validados; ruta goal-first real
@@ -31,7 +31,7 @@ ORQUESTA_CODEX_PROJECT_WORKDIR=/tmp/orquesta-effectful-slim-20260628T083731Z/pro
 ORQUESTA_OPES_PROJECT_WORKDIR=/tmp/orquesta-effectful-slim-20260628T083731Z/project
 ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-effectful-slim-20260628T083731Z/runtime
 ORQUESTA_SERVER_STATE_DIR=/tmp/orquesta-effectful-slim-20260628T083731Z/state
-ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18191
 ORQUESTA_OPES_TEMPORAL_CONFIRM=1
 ```
@@ -180,7 +180,7 @@ Septimo intento/continuacion manual hasta paquete final:
 - OPES temporal: `http://127.0.0.1:18196`.
 - Orquesta temporal: `http://127.0.0.1:19196`.
 - Configuracion relevante:
-  `ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio`,
+  `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`,
   `ORQUESTA_CODEX_GOAL_TIMEOUT_MS=900000`,
   `ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=0`,
   `ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=0`,
@@ -247,7 +247,7 @@ nueva e independiente de cada implementacion interna.
 
 - `BuildCodexGoalPromptV0` instruye a materializar artefactos DomainWork bajo
   el write-set autorizado con nombres detectables por Orquesta.
-- El observer `app_server_stdio`/`app_server_proxy` marca como
+- El observer `app_server_tmux`/`app_server_proxy` marca como
   `blocked` con `codex_app_server_goal_active_timeout` si el goal remoto sigue
   `active` y `timeUsedSeconds` supera `ORQUESTA_CODEX_GOAL_TIMEOUT_MS`.
 - El wrapper `run-until-finalize` ya corta en el primer `goal/observe` que
@@ -274,7 +274,7 @@ nueva e independiente de cada implementacion interna.
   solo por required tests de dominio sin comando y las pruebas con comando ya
   estan pasadas. El receipt aceptado del ledger sintetiza la evidencia
   `required_test_results=passed` para esas pruebas de dominio.
-- El backend `app_server_stdio` promociona un
+- El backend `app_server_tmux` promociona un
   `orquesta_goal_result_v0.json` durable aunque el goal remoto haya quedado
   `blocked` por timeout/conector, siempre que el fichero pertenezca al
   `goal_ref`. Esto conserva artefactos tardios y deja que Orquesta cierre por

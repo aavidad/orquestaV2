@@ -215,10 +215,10 @@ inventa evidencias y el cierre queda bloqueado por el validador. Se anade smoke
 real opt-in `scripts/smoke_goal_first_app_server_real.sh` con runbook
 `docs/runbooks/smoke_goal_first_app_server_real_2026-06-25.md`.
 Avance local adicional 2026-06-26: se anade backend opt-in
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio` para usar
-`codex app-server --stdio` cuando `app_server_proxy` no responde al socket
-local. El cliente RPC manda `initialize`, `initialized` y la llamada objetivo,
-manteniendo stdin abierto hasta recibir la respuesta `id=2`; esto corrige el
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` para usar
+`codex app-server --listen unix://<socket>` dentro de una sesion `tmux` cuando
+`app_server_proxy` no responde al socket local. Orquesta valida el backend con
+`codex app-server proxy --sock <socket>` y `thread/loaded/list`; esto corrige el
 preflight y evita falsos `codex_app_server_unavailable` antes de crear el goal.
 Avance local adicional 2026-06-26: el backend app-server tambien acepta el
 archivo durable `orquesta_goal_result_v0.json` bajo el write-set como fallback
@@ -304,10 +304,10 @@ legacy de autoprogramacion transportan ya la marca explicita.
 Pendiente verificable:
 
 - `cmd/orquesta-server` ya cablea starter/observer opt-in con
-  `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_stdio`, usando
+  `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_tmux`, usando
   `codex app-server` como frontera real, hace preflight diagnosticable y ya
   transforma el resultado final estructurado en refs de cierre. Smoke real
-  cerrado el 2026-06-26 con `app_server_stdio`: `goal_status=complete`,
+  cerrado el 2026-06-26 con `app_server_tmux`: `goal_status=complete`,
   `run_status=cerrada`, `closure_status=accepted`, `closure_accepted=true`,
   `artifact_refs=2`, `evidence_refs=9`.
 - `/nueva-app` ya queda conectada localmente a `GoalWorkSpecV0` y al backend
@@ -330,7 +330,7 @@ Pendiente verificable:
   2026-06-26: el socket manual aparecia como `running` para
   `daemon version`, pero `codex app-server proxy` no devolvia respuesta RPC y
   `/api/v0/apps/director` fallaba como `codex_app_server_unavailable`. La ruta
-  local viable es `app_server_stdio`. Repeticion real 2026-06-26: el goal
+  local viable es `app_server_tmux`. Repeticion real 2026-06-26: el goal
   genero la app temporal, corrigio tests tras `listen EPERM`, paso
   `npm run verify`, escribio `orquesta_goal_result_v0.json` con el `test_ref`
   literal y Orquesta acepto el cierre sin caer al loop legacy.

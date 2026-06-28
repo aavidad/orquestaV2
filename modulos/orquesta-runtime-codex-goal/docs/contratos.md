@@ -39,11 +39,12 @@ Puerto de composicion que crea el goal real. El adaptador no implementa llamadas
 directas a herramientas internas; solo define la frontera.
 
 La composicion `cmd/orquesta-server` aporta implementaciones opt-in con
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_stdio`: usan
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_tmux`: usan
 `codex app-server`, no `codex exec`, y mantienen el transporte fuera de este
 modulo. `app_server_proxy` habla con un daemon/socket local ya disponible;
-`app_server_stdio` lanza `codex app-server --stdio` y mantiene stdin abierto
-hasta recibir la respuesta RPC. Si el transporte no esta disponible, la
+`app_server_tmux` lanza `codex app-server --listen unix://<socket>` dentro de
+una sesion `tmux` opaca y valida el protocolo por `proxy --sock`. Si el
+transporte no esta disponible, la
 composicion puede devolver `IssueCode` compacto; el launcher neutral lo conserva
 en el `GoalLaunchReceiptV0` invalidado para que el operador vea la causa real.
 

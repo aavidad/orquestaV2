@@ -52,7 +52,8 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	if backend == "" {
 		return serverCodexGoalBackendV0{}, nil
 	}
-	if backend != codexGoalBackendAppServerProxyV0 && backend != codexGoalBackendAppServerStdioV0 {
+	if backend != codexGoalBackendAppServerProxyV0 &&
+		backend != codexGoalBackendAppServerTmuxV0 {
 		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_no_soportado:%s", backend)
 	}
 	runtimeConfig := codexRuntimeEnvConfigFromEnvV0()
@@ -64,6 +65,31 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	}
 	preflightProtocol := protocol
 	preflightProtocol.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
+	if backend == codexGoalBackendAppServerTmuxV0 {
+		socketPath, err := codexAppServerTmuxSocketPathV0(config)
+		if err != nil {
+			degraded := serverCodexUnavailableGoalBackendV0{
+				IssueCode: codexAppServerIssueCodeForErrorV0(err, "codex_app_server_tmux_unavailable"),
+			}
+			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
+		}
+		protocol.Args = codexGoalBackendProxyArgsForSocketV0(socketPath)
+		preflightProtocol = protocol
+		preflightProtocol.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
+		tmuxBackend := serverCodexAppServerTmuxBackendV0{
+			CommandPath: runtimeConfig.CommandPath,
+			PathEnv:     runtimeConfig.PathEnv,
+			SocketPath:  socketPath,
+			SessionName: codexAppServerTmuxSessionNameV0(config),
+			Timeout:     codexAppServerTmuxStartupTimeoutV0(time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond),
+		}
+		if err := tmuxBackend.EnsureV0(context.Background(), preflightProtocol); err != nil {
+			degraded := serverCodexUnavailableGoalBackendV0{
+				IssueCode: codexAppServerIssueCodeForErrorV0(err, "codex_app_server_tmux_unavailable"),
+			}
+			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
+		}
+	}
 	if err := preflightProtocol.ProbeV0(context.Background()); err != nil {
 		degraded := serverCodexUnavailableGoalBackendV0{
 			IssueCode: codexAppServerIssueCodeForErrorV0(err, "codex_app_server_unavailable"),
@@ -71,14 +97,6 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 	}
 	var runtimeProtocol serverCodexAppServerProtocolPortV0 = protocol
-	if backend == codexGoalBackendAppServerStdioV0 {
-		runtimeProtocol = &serverCodexAppServerPersistentCommandProtocolV0{
-			CommandPath: runtimeConfig.CommandPath,
-			Args:        codexGoalBackendArgsV0(backend),
-			PathEnv:     runtimeConfig.PathEnv,
-			Timeout:     time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
-		}
-	}
 	client := serverCodexAppServerGoalBackendV0{
 		Protocol:        runtimeProtocol,
 		CWD:             firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir),
@@ -98,9 +116,15 @@ func codexGoalBackendFromEnvV0() string {
 
 func codexGoalBackendArgsV0(backend string) []string {
 	switch strings.TrimSpace(backend) {
-	case codexGoalBackendAppServerStdioV0:
-		return []string{"app-server", "--stdio"}
 	default:
 		return []string{"app-server", "proxy"}
 	}
+}
+
+func codexGoalBackendProxyArgsForSocketV0(socketPath string) []string {
+	socketPath = strings.TrimSpace(socketPath)
+	if socketPath == "" {
+		return []string{"app-server", "proxy"}
+	}
+	return []string{"app-server", "proxy", "--sock", socketPath}
 }

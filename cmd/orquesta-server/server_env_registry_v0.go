@@ -380,7 +380,7 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 	envCodexGoalBackendV0: {
 		Scope:       "codex_goal",
 		Label:       "Backend Codex Goal",
-		Description: "Backend opt-in para lanzar y observar Codex Goal desde la composicion.",
+		Description: "Backend opt-in para lanzar y observar Codex Goal desde la composicion: app_server_tmux recomendado; app_server_proxy solo con daemon/socket compatible.",
 	},
 	envCodexGoalTimeoutMSV0: {
 		Scope:       "codex_goal",

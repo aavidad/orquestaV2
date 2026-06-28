@@ -16,7 +16,7 @@ El paquete no arranca Codex por si mismo. La composicion debe inyectar un puerto
 real cuando el entorno soporte Codex Goal.
 
 El wiring local disponible vive en `cmd/orquesta-server` y solo se activa con
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_stdio`. Usa
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_tmux`. Usa
 `codex app-server` como frontera de composicion; no convierte `codex exec` en
 sustituto de Goal.
 

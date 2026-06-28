@@ -720,7 +720,7 @@ require_derivatives_real_preflight() {
   fi
   if [[ -z "${ORQUESTA_CODEX_GOAL_BACKEND:-}" &&
     "${ORQUESTA_OPES_DERIVATIVES_ORQUESTA_GOAL_FIRST_CONFIRMED:-0}" != "1" ]]; then
-    echo "smoke derivados real bloqueado: falta Orquesta temporal goal-first; exporta ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio al arrancar servidor o confirma ORQUESTA_OPES_DERIVATIVES_ORQUESTA_GOAL_FIRST_CONFIRMED=1" >&2
+    echo "smoke derivados real bloqueado: falta Orquesta temporal goal-first; exporta ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux al arrancar servidor o confirma ORQUESTA_OPES_DERIVATIVES_ORQUESTA_GOAL_FIRST_CONFIRMED=1" >&2
     exit 2
   fi
 }

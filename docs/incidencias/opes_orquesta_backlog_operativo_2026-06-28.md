@@ -247,7 +247,7 @@ si el goal declara una required test de dominio sin comando como `blocked`
 porque no puede usar conectores OPES dentro del sandbox, Orquesta ejecuta
 `submit_artifact` por su adaptador externo, registra receipt aceptado en ledger
 y sintetiza la evidencia de required test de dominio desde ese ledger. Ademas,
-`app_server_stdio` promociona un `orquesta_goal_result_v0.json` durable aunque
+`app_server_tmux` promociona un `orquesta_goal_result_v0.json` durable aunque
 el goal remoto haya quedado `blocked`, siempre que el fichero pertenezca al
 `goal_ref`. Evidencia:
 `TestCodexStackV0ExternalWorkGoalFirstSubeArtifactSiRequiredTestDominioBloqueadoV0`,
@@ -537,7 +537,7 @@ guard OPES se supera cuando `ORQUESTA_CODEX_PROJECT_WORKDIR` y
 `ORQUESTA_OPES_PROJECT_WORKDIR` apuntan al mismo workspace temporal; el submit
 crea run `goal_first` y `external_goal_ref` real. No cierra dentro de la
 ventana del smoke: `goal_status=running` hasta 30 ticks con
-`app_server_stdio`. Tambien se compacto `GoalWorkSpecV0` para no inlinear
+`app_server_tmux`. Tambien se compacto `GoalWorkSpecV0` para no inlinear
 politicas OPES masivas y dejar `payload_ref`, y el observer Codex marca
 `blocked` con `codex_app_server_goal_active_timeout` cuando el goal remoto
 permanece `active` mas alla de `ORQUESTA_CODEX_GOAL_TIMEOUT_MS`. Evidencia:

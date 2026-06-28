@@ -863,34 +863,17 @@ func TestServerCodexGoalBackendFromEnvV0PreflightOKConservaBackendRealV0(t *test
 	}
 }
 
-func TestServerCodexGoalBackendFromEnvV0StdioPreflightOKV0(t *testing.T) {
-	script := filepath.Join(t.TempDir(), "codex-fake-stdio-ok")
-	if err := os.WriteFile(script, []byte(fakeCodexAppServerPreflightScriptV0("stdio")), 0o700); err != nil {
-		t.Fatalf("write fake codex: %v", err)
-	}
+func TestServerCodexGoalBackendFromEnvV0StdioNoEsBackendOperativoV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
-	t.Setenv(envCodexCommandV0, script)
-	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerStdioV0)
-	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "1000")
+	t.Setenv(envCodexGoalBackendV0, "app_server_stdio")
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	backend, err := serverCodexGoalBackendFromEnvV0(config)
-	if err != nil {
-		t.Fatalf("serverCodexGoalBackendFromEnvV0: %v", err)
-	}
-	starter, ok := backend.Starter.(serverCodexAppServerGoalBackendV0)
-	if !ok {
-		t.Fatalf("starter real=%T", backend.Starter)
-	}
-	protocol, ok := starter.Protocol.(*serverCodexAppServerPersistentCommandProtocolV0)
-	if !ok {
-		t.Fatalf("protocol=%T", starter.Protocol)
-	}
-	if !reflect.DeepEqual(protocol.Args, []string{"app-server", "--stdio"}) {
-		t.Fatalf("args=%v", protocol.Args)
+	_, err = serverCodexGoalBackendFromEnvV0(config)
+	if err == nil || !strings.Contains(err.Error(), "codex_goal_backend_no_soportado:app_server_stdio") {
+		t.Fatalf("err=%v", err)
 	}
 }
 
@@ -1008,9 +991,6 @@ func TestServerEffectiveConfigV0ExponeGoalFirstYBackendV0(t *testing.T) {
 
 func fakeCodexAppServerPreflightScriptV0(mode string) string {
 	argsCheck := ""
-	if mode == "stdio" {
-		argsCheck = "if [ \"$1\" != \"app-server\" ] || [ \"$2\" != \"--stdio\" ]; then\n  echo \"args inesperados: $*\" >&2\n  exit 1\nfi\n"
-	}
 	return "#!/bin/sh\n" + argsCheck + "while IFS= read -r line; do\n  case \"$line\" in\n    *'\"id\":1'*) printf '{\"id\":1,\"result\":{}}\\n' ;;\n    *'\"id\":2'*) printf '{\"id\":2,\"result\":{\"data\":[]}}\\n'; exit 0 ;;\n  esac\ndone\nexit 1\n"
 }
 

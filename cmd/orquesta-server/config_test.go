@@ -167,7 +167,7 @@ func TestServerConfigFromEnvV0ExternalWorkLegacyDirectorLoopPorDefectoFalseV0(t 
 	if setting.Value != "false" || setting.Source != "defaulted" {
 		t.Fatalf("setting external-work legacy=%+v", setting)
 	}
-	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, orquestamcp.MCPExternalWorkRunGoalBackendRequiredV0, envCodexGoalBackendV0, codexGoalBackendAppServerStdioV0) {
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, orquestamcp.MCPExternalWorkRunGoalBackendRequiredV0, envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0) {
 		t.Fatalf("diagnostico goal backend requerido ausente: %+v", config.EffectiveConfig.Diagnostics)
 	}
 }

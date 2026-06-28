@@ -33,7 +33,7 @@ keep_dir="${ORQUESTA_KEEP_SMOKE_DIR:-0}"
 request_timeout="${ORQUESTA_GOAL_FIRST_SMOKE_REQUEST_TIMEOUT_SECONDS:-90}"
 polls="${ORQUESTA_GOAL_FIRST_SMOKE_POLLS:-120}"
 sleep_seconds="${ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS:-5}"
-goal_backend="${ORQUESTA_CODEX_GOAL_BACKEND:-app_server_stdio}"
+goal_backend="${ORQUESTA_CODEX_GOAL_BACKEND:-app_server_tmux}"
 
 cleanup() {
   if [[ -n "$server_pid" ]] && kill -0 "$server_pid" >/dev/null 2>&1; then
@@ -123,65 +123,6 @@ codex_app_server_ready() {
   "$command_path" app-server daemon version >"$daemon_stdout" 2>"$daemon_stderr"
 }
 
-codex_app_server_stdio_ready() {
-  local command_path="$1"
-  python3 - "$command_path" >"$daemon_stdout" 2>"$daemon_stderr" <<'PY'
-import json
-import select
-import subprocess
-import sys
-import time
-
-command = sys.argv[1]
-process = subprocess.Popen(
-    [command, "app-server", "--stdio"],
-    stdin=subprocess.PIPE,
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
-    text=True,
-    bufsize=1,
-)
-def send(message):
-    process.stdin.write(json.dumps(message, separators=(",", ":")) + "\n")
-    process.stdin.flush()
-
-def wait_for_response(response_id, timeout=8):
-    deadline = time.time() + timeout
-    needle = f'"id":{response_id}'
-    while time.time() < deadline:
-        readable, _, _ = select.select([process.stdout, process.stderr], [], [], 0.25)
-        for stream in readable:
-            line = stream.readline()
-            if not line:
-                continue
-            if stream is process.stdout:
-                print(line, end="")
-                if needle in line:
-                    return True
-            else:
-                print(line, end="", file=sys.stderr)
-    return False
-
-send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"clientInfo": {"name": "orquesta-smoke-preflight", "version": "0"}, "capabilities": {"experimentalApi": True}}})
-initialized = wait_for_response(1)
-if initialized:
-    send({"jsonrpc": "2.0", "method": "initialized", "params": {}})
-    send({"jsonrpc": "2.0", "id": 2, "method": "thread/loaded/list", "params": {}})
-found = initialized and wait_for_response(2)
-
-process.stdin.close()
-process.terminate()
-try:
-    process.wait(timeout=3)
-except subprocess.TimeoutExpired:
-    process.kill()
-
-if not found:
-    print("codex app-server stdio no devolvio thread/loaded/list", file=sys.stderr)
-    sys.exit(1)
-PY
-}
-
 json_get() {
   local file="$1"
   local expr="$2"
@@ -218,7 +159,7 @@ if [[ ! -x "$codex_command" ]]; then
 fi
 
 case "$goal_backend" in
-  app_server_proxy|app_server_stdio) ;;
+  app_server_tmux|app_server_proxy) ;;
   *)
     echo "ORQUESTA_CODEX_GOAL_BACKEND no soportado para este smoke: $goal_backend" >&2
     exit 2
@@ -226,20 +167,20 @@ case "$goal_backend" in
 esac
 
 if [[ "${ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY:-0}" == "1" ]]; then
-  if [[ "$goal_backend" == "app_server_stdio" ]]; then
-    if codex_app_server_stdio_ready "$codex_command"; then
-      echo "smoke_goal_first_app_server_preflight=ok"
+  if [[ "$goal_backend" == "app_server_tmux" ]]; then
+    need_cmd tmux
+    "$codex_command" app-server --help >"$preflight_stdout" 2>"$preflight_stderr" || {
+      echo "smoke_goal_first_app_server_preflight=blocked"
+      echo "reason=codex_app_server_cli_missing"
       echo "codex_command=$codex_command"
       echo "goal_backend=$goal_backend"
-      tail -n 1 "$daemon_stdout" || true
-      exit 0
-    fi
-    echo "smoke_goal_first_app_server_preflight=blocked"
-    echo "reason=$(codex_app_server_error_reason "$daemon_stderr")"
+      tail -n 40 "$preflight_stderr" >&2 || true
+      exit 2
+    }
+    echo "smoke_goal_first_app_server_preflight=ok"
     echo "codex_command=$codex_command"
     echo "goal_backend=$goal_backend"
-    tail -n 40 "$daemon_stderr" >&2 || true
-    exit 2
+    exit 0
   fi
   codex_app_server_preflight "$codex_command"
   exit $?
@@ -294,14 +235,14 @@ aceptable para smoke. Persistencia puede ser en memoria si la solicitud no exige
 base de datos.
 EOF
 
-if [[ "$goal_backend" == "app_server_stdio" ]]; then
-  echo "comprobando Codex app-server stdio..."
-  codex_app_server_stdio_ready "$codex_command" || {
-    echo "codex app-server stdio no esta disponible; reason=$(codex_app_server_error_reason "$daemon_stderr"); stderr:" >&2
+if [[ "$goal_backend" == "app_server_tmux" ]]; then
+  need_cmd tmux
+  "$codex_command" app-server --help >"$daemon_stdout" 2>"$daemon_stderr" || {
+    echo "codex app-server no esta disponible para tmux; reason=codex_app_server_cli_missing; stderr:" >&2
     tail -n 80 "$daemon_stderr" >&2 || true
     exit 2
   }
-  echo "Codex app-server stdio accesible"
+  echo "Codex app-server preparado para tmux"
 else
   echo "comprobando daemon Codex app-server..."
   if codex_app_server_ready "$codex_command"; then

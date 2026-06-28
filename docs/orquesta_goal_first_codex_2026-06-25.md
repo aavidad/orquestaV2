@@ -89,14 +89,17 @@ El adaptador no conoce HOME, modelo, proveedor, OAuth, token, command path ni
 filesystem productivo. El arranque real queda en composicion opt-in.
 
 El 2026-06-25 se cablea en `cmd/orquesta-server` un transporte real opt-in con
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`. El 2026-06-26 se anade
-`app_server_stdio` para instalaciones donde `codex app-server --stdio` responde
-pero `codex app-server proxy` no obtiene respuesta del socket manual. La CLI
-local de Codex no expone un subcomando estable `goal`, y usar `codex exec` no
-equivaldria al loop persistente de Codex Goal; por eso el wiring usa
-`codex app-server` como frontera de composicion. Sin esa variable, la
-composicion no expone launcher/observer y Orquesta publica capacidad goal
-faltante cuando `IdleSelfImprovementGoalFirst` esta activo.
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`. El 2026-06-28 se fija
+`app_server_tmux` como backend local operativo: Orquesta asegura un
+`codex app-server --listen unix://<socket>` dentro de una sesion `tmux` opaca y
+habla con el por `codex app-server proxy --sock <socket>`. La CLI local de
+Codex no expone un subcomando estable `goal`, y usar `codex exec` no equivaldria
+al loop persistente de Codex Goal; por eso el wiring usa `codex app-server`
+como frontera de composicion. Sin esa variable, la composicion no expone
+launcher/observer y Orquesta publica capacidad goal faltante cuando
+`IdleSelfImprovementGoalFirst` esta activo. El backend antiguo
+`app_server_stdio` queda retirado y no debe usarse para operacion ni smokes
+nuevos; si aparece en una configuracion, debe tratarse como valor no soportado.
 Desde el 2026-06-26, si `ORQUESTA_CODEX_GOAL_BACKEND` esta configurada y
 `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_GOAL_FIRST_ENABLED` no esta definida,
 la automejora residente deriva automaticamente goal-first. El operador puede
@@ -131,12 +134,15 @@ idle y actualice el tracker residente con cobertura equivalente. Evidencia:
 `TestRuntimeV0IdleSelfImprovementGoalFirstCompleteValidaCierreConSpecPersistidoV0`.
 
 La composicion hace un preflight rapido del backend app-server al arrancar el
-stack. El cliente manda `initialize`, `initialized` y la llamada real
-`thread/loaded/list`, manteniendo stdin abierto hasta recibir `id=2`; esto es
-necesario para `app_server_stdio` y compatible con `app_server_proxy`. Si falta
-el socket local, la instalacion standalone requerida por `codex app-server
-daemon` o el backend no responde, se inyecta un backend goal degradado con
-reason code compacto (`codex_app_server_control_socket_missing`,
+stack. Para `app_server_tmux`, primero asegura la sesion `tmux`, crea el socket
+privado bajo `RuntimeWorkDir` y valida `thread/loaded/list` por
+`proxy --sock`; no considera listo un tmux vivo sin respuesta de protocolo. Para
+`app_server_proxy`, valida el daemon/socket ya gestionado. Si falta el socket
+local, tmux no esta disponible, la instalacion standalone requerida por
+`codex app-server daemon` no existe o el backend no responde, se inyecta un
+backend goal degradado con reason code compacto
+(`codex_app_server_control_socket_missing`,
+`codex_app_server_tmux_command_missing`,
 `codex_app_server_standalone_missing`, etc.). Esto evita volver al loop legacy
 cuando el operador habia pedido goal-first y deja la accion pendiente clara.
 
@@ -171,7 +177,7 @@ observacion, y finalmente llama a `POST /api/v0/apps/director/goal/observe`
 hasta cierre aceptado. Comando:
 `go test -count=1 ./cmd/orquesta-server -run TestServerNuevaAppHTMLGoalFirstPOSTRenderizaYObservaV0`.
 
-Los backends `app_server_proxy` y `app_server_stdio` observan
+Los backends `app_server_proxy` y `app_server_tmux` observan
 `thread/goal/get`; cuando el goal queda terminal leen `thread/read` con
 `includeTurns=true` y extraen de la respuesta final un marcador estructurado o,
 si el hilo no aporta marcador legible, el archivo durable
@@ -260,10 +266,10 @@ Goal.
 3. Cablear un launcher real de Codex Goal en `cmd/orquesta-server` solo cuando
    exista puerto seguro para crear/observar goals.
    Estado 2026-06-26: `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o
-   `app_server_stdio` inyecta starter/observer por `codex app-server`, hace
+   `app_server_tmux` inyecta starter/observer por `codex app-server`, hace
    preflight de `thread/loaded/list`, observa `thread/read` y traduce
    `ORQUESTA_GOAL_RESULT_V0` o `orquesta_goal_result_v0.json` a refs de cierre;
-   smoke real local cerrado el 2026-06-26 con `app_server_stdio`.
+   smoke real local cerrado el 2026-06-26 con `app_server_tmux`.
 4. Ejecutar smoke no-OPES temporal con repo de prueba.
 5. Ejecutar smoke OPES temporal acotado de un derivado.
 6. Marcar rutas antiguas como legacy cuando tengan equivalencia goal-first

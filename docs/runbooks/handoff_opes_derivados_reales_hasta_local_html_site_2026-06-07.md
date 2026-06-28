@@ -76,7 +76,7 @@ causales. No deben ralentizar todos los temarios como pasos fijos.
 - No declarar `ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED=1` ni
   `ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM=1` en este smoke.
 - Arrancar Orquesta temporal con Codex Goal
-  (`ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio` o `app_server_proxy`) o, si
+  (`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` o `app_server_proxy`) o, si
   ya esta levantada fuera del entorno del wrapper, confirmar
   `ORQUESTA_OPES_DERIVATIVES_ORQUESTA_GOAL_FIRST_CONFIRMED=1`.
 - No mezclar el reconciliador independiente de paquetes finales:
@@ -153,7 +153,7 @@ ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
 ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT=/tmp/opes-salidas/opes-derivatives-scope-temporal/opes_derivatives_scope_probe.json \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-temporal-001 \
-ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 scripts/smoke_opes_derivatives_rest.sh
 ```
@@ -225,7 +225,7 @@ ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
 ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT=/tmp/opes-salidas/opes-derivatives-scope-temporal/opes_derivatives_scope_probe.json \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-temporal-001 \
-ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_MAX_TICKS=30 \
 ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS=5 \

@@ -131,11 +131,12 @@ Configuracion externa relacionada:
   `ORQUESTA_SERVER_TICK_INTERVAL_MS` para conservar compatibilidad; si se
   define, el observador goal-first puede ir mas ligero o mas frecuente sin
   cambiar el tick del supervisor/director residente legacy.
-- `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy|app_server_stdio`: solo en
+- `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy|app_server_tmux`: solo en
   `cmd/orquesta-server`, inyecta launcher/observer Codex Goal usando
   `codex app-server`. `app_server_proxy` usa un daemon/socket compatible ya
-  disponible; `app_server_stdio` usa `codex app-server --stdio` y mantiene stdin
-  abierto hasta recibir la respuesta RPC. No usa `codex exec` como sustituto, no
+  disponible; `app_server_tmux` usa `codex app-server --listen unix://<socket>`
+  dentro de una sesion `tmux` y valida por `proxy --sock`. No usa `codex exec`
+  como sustituto, no
   arranca backend si no esta configurado y no mete Codex en el modulo servidor.
   En observaciones terminales lee `thread/read` y fusiona el marcador
   `ORQUESTA_GOAL_RESULT_V0` o el archivo durable
