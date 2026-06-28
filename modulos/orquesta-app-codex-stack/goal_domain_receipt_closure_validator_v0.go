@@ -41,6 +41,7 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) ValidateGoalWorkClosure
 ) (orquestagoal.GoalClosureValidationV0, error) {
 	if spec.ClosurePolicy.RequireDomainReceipt {
 		result = validator.goalResultWithAcceptedDomainReceiptRefsV0(ctx, spec, result)
+		result = validator.goalResultWithAcceptedDomainRequiredTestResultsV0(ctx, spec, result)
 	}
 	base := validator.Base
 	if base == nil {
@@ -100,6 +101,54 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) goalResultWithAcceptedD
 				break
 			}
 		}
+	}
+	return orquestagoal.NormalizeGoalWorkResultV0(result)
+}
+
+func (validator domainWorkGoalReceiptClosureValidatorV0) goalResultWithAcceptedDomainRequiredTestResultsV0(
+	ctx context.Context,
+	spec orquestagoal.GoalWorkSpecV0,
+	result orquestagoal.GoalWorkResultV0,
+) orquestagoal.GoalWorkResultV0 {
+	spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
+	result = orquestagoal.NormalizeGoalWorkResultV0(result)
+	if !spec.ClosurePolicy.RequireRequiredTests ||
+		strings.TrimSpace(spec.RunRef) == "" ||
+		validator.Ledger == nil {
+		return result
+	}
+	required := goalDomainReceiptRequiredArtifactContractsV0(spec)
+	if len(required) == 0 {
+		return result
+	}
+	records, err := validator.Ledger.ListDomainWorkArtifactSubmissionsV0(
+		ctx,
+		DomainWorkArtifactSubmissionRecordFilterV0{
+			RunRef: spec.RunRef,
+			Status: DomainWorkArtifactSubmissionStatusAcceptedV0,
+		},
+	)
+	if err != nil {
+		return result
+	}
+	complete := goalDomainReceiptCompleteRecordsV0(records)
+	if !goalDomainReceiptAllContractsCoveredV0(required, complete) {
+		return result
+	}
+	evidenceRefs := goalDomainReceiptEvidenceRefsV0(complete)
+	for _, test := range spec.RequiredTests {
+		testRef := strings.TrimSpace(test.TestRef)
+		if testRef == "" ||
+			strings.TrimSpace(test.Command) != "" ||
+			strings.TrimSpace(test.CommandRef) != "" ||
+			goalDomainReceiptRequiredTestPassedV0(result.RequiredTestResults, testRef) {
+			continue
+		}
+		result.RequiredTestResults = append(result.RequiredTestResults, orquestagoal.GoalRequiredTestResultV0{
+			TestRef:      testRef,
+			Status:       "passed",
+			EvidenceRefs: compactStringsV0(append(append([]string(nil), evidenceRefs...), test.EvidenceRefs...)),
+		})
 	}
 	return orquestagoal.NormalizeGoalWorkResultV0(result)
 }
@@ -280,6 +329,26 @@ func goalDomainReceiptCompleteRecordsV0(
 		}
 	}
 	return out
+}
+
+func goalDomainReceiptRequiredTestPassedV0(
+	results []orquestagoal.GoalRequiredTestResultV0,
+	testRef string,
+) bool {
+	testRef = strings.TrimSpace(testRef)
+	if testRef == "" {
+		return false
+	}
+	for _, result := range results {
+		if strings.TrimSpace(result.TestRef) != testRef {
+			continue
+		}
+		status := strings.TrimSpace(result.Status)
+		if status == orquestagoal.GoalStatusAcceptedV0 || status == "passed" {
+			return true
+		}
+	}
+	return false
 }
 
 func goalDomainReceiptRecordMatchesContractV0(

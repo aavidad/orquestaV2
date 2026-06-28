@@ -520,6 +520,74 @@ func TestCodexStackV0ExternalWorkGoalFirstDerivaReceiptDesdeLedgerSiGoalNoLoDecl
 	}
 }
 
+func TestCodexStackV0ExternalWorkGoalFirstSubeArtifactSiRequiredTestDominioBloqueadoV0(t *testing.T) {
+	stack, observer, launcher, domainWork := buildExternalWorkGoalFirstDomainDeliveryStackWithExecutorForTestV0(t)
+	change := defaultExternalWorkRunChangeForTestV0()
+	change.ExternalWork.RequiredTests = []orquestadomainwork.DomainWorkRequiredTestV0{{
+		TestRef: "opes-domain-test-draft-content-block-job-ref-001",
+		AcceptanceCriteria: []string{
+			"OPES acepta el artefacto por contrato publico submit_artifact.",
+			"El receipt OPES conserva job_ref, delivery_ref y trazabilidad causal.",
+		},
+		EvidenceRefs: []string{"opes-job-job-ref-001"},
+	}}
+	started := postExternalWorkRunStackWithChangeV0(t, stack, change)
+	spec := launcher.specs[0]
+	contract := spec.ArtifactContracts[0]
+	if len(spec.RequiredTests) != 1 ||
+		spec.RequiredTests[0].Command != "" ||
+		spec.RequiredTests[0].CommandRef != "" {
+		t.Fatalf("required test de dominio inesperado=%+v", spec.RequiredTests)
+	}
+	writeGoalFirstDomainWorkArtifactForTestV0(t, stack.Codex.ProjectWorkDir, spec, contract.ArtifactType)
+	receiptRef := "domain-receipt-blocked-public-v0"
+	result := externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+	result.RequiredTestResults = []orquestagoal.GoalRequiredTestResultV0{{
+		TestRef:      spec.RequiredTests[0].TestRef,
+		Status:       orquestagoal.GoalStatusBlockedV0,
+		EvidenceRefs: []string{"evidence-ref-external-work-goal-spec-v0"},
+	}}
+	observer.result = result
+
+	observed, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-domain-test-blocked-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if observed.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		!observed.Closure.Accepted ||
+		domainWork.called != 1 ||
+		domainWork.input.Action != orquestamcp.MCPDomainWorkActionSubmitArtifactV0 ||
+		!codexStackStringInSetForTestV0(observed.Closure.EvidenceRefs, goalDomainReceiptLedgerAcceptedEvidenceRefV0) {
+		t.Fatalf("goal-first no reconcilio required_test dominio por ledger: result=%+v domainWork=%+v", observed, domainWork)
+	}
+	records, err := stack.DomainDelivery.Ledger.(DomainWorkArtifactSubmissionRecordReaderPortV0).ListDomainWorkArtifactSubmissionsV0(
+		context.Background(),
+		DomainWorkArtifactSubmissionRecordFilterV0{
+			RunRef: started.RunRef,
+			Status: DomainWorkArtifactSubmissionStatusAcceptedV0,
+		},
+	)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("records=%+v err=%v", records, err)
+	}
+	if records[0].ReceiptRef != receiptRef ||
+		records[0].ArtifactRef != contract.ArtifactRef ||
+		!records[0].CompleteJob {
+		t.Fatalf("record ledger inesperado=%+v contract=%+v", records[0], contract)
+	}
+}
+
 func TestCodexStackV0ExternalWorkGoalFirstCierraConReceiptAceptadoEnLedger(t *testing.T) {
 	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
 	started := postExternalWorkRunStackV0(t, stack)

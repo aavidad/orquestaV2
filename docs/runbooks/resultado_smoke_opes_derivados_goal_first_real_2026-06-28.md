@@ -87,6 +87,32 @@ Tercer intento con recuperacion tardia de goal:
 - OPES temporal: `generation_jobs.status=completed` para 1 job y
   `job_artifacts_count=1`.
 
+Cuarto intento con required tests de dominio reconciliadas por Orquesta:
+
+- Root OPES temporal:
+  `/tmp/orquesta-opes-contract-real-20260628T093857Z`.
+- OPES temporal: `http://127.0.0.1:46733`.
+- Root Orquesta temporal:
+  `/tmp/orquesta-opes-goal-full-20260628T093857Z`.
+- Orquesta temporal parcheada: `http://127.0.0.1:45103`.
+- Probe de contrato REST real:
+  `/tmp/orquesta-opes-contract-real-20260628T093857Z/probe/opes_derivatives_rest_contract_probe.json`;
+  `contract_probe_status=ok`, `accepted_count=23`, `rejected_count=0`,
+  `transport_compat=true`.
+- Scope-probe real:
+  `/tmp/orquesta-opes-contract-real-20260628T093857Z/scope/opes_derivatives_scope_probe.json`;
+  `scope_probe_status=ok`, `scope_probe_job_type=update_topic_registry`,
+  `scope_probe_seen=1` y negative checks por `program_id,correlation_id`.
+- Reobservacion:
+  `/tmp/orquesta-opes-goal-full-20260628T093857Z/manual_reobserve_after_durable_blocked_fix.json`.
+- Run:
+  `run-external-work-opes-ea21c0901c8440626d075d26c50ddfea-opes-job-ea21c0901c8440626d075d26c50ddfea`.
+- Resultado: `run_status=cerrada`, `goal_status=complete`,
+  `closure_status=accepted`, `closure_accepted=true`,
+  `evidence-ref-goal-domain-receipt-ledger-accepted` presente.
+- OPES temporal: `generation_jobs.status=completed` para el job
+  `ea21c0901c8440626d075d26c50ddfea` y `job_artifacts_count=1`.
+
 ## Cambios derivados
 
 - `BuildExternalWorkGoalWorkSpecV0` conserva campos masivos como
@@ -113,10 +139,26 @@ Tercer intento con recuperacion tardia de goal:
 - `ObserveAppDirectorGoalV0` es idempotente cuando un run ya tiene el blocker
   causal del goal: una reobservacion tardia puede incorporar artefactos y
   receipts sin volver a emitir un `RunBlocked` incompatible.
+- El manifiesto `goal_receipts_manifest.json` de `run-until-finalize` ya no
+  acepta solo "N runs con receipts": valida la secuencia configurada hasta el
+  final esperado, detecta `work_kind` faltantes, inesperados o desordenados y
+  exige que `finalize_temario_package` sea el ultimo cierre cuando ese es el
+  objetivo del smoke. Las repeticiones de un mismo `work_kind` son validas para
+  colas reales con varios bloques, visuales, tests o assets en una fase.
+- El submit goal-first de DomainWork tambien se activa cuando el cierre falla
+  solo por required tests de dominio sin comando y las pruebas con comando ya
+  estan pasadas. El receipt aceptado del ledger sintetiza la evidencia
+  `required_test_results=passed` para esas pruebas de dominio.
+- El backend `app_server_stdio` promociona un
+  `orquesta_goal_result_v0.json` durable aunque el goal remoto haya quedado
+  `blocked` por timeout/conector, siempre que el fichero pertenezca al
+  `goal_ref`. Esto conserva artefactos tardios y deja que Orquesta cierre por
+  adaptador externo.
 
 ## Pendiente
 
 - Extender de `update_topic_registry` a la secuencia completa de 23
-  `work_kind` solo despues de cerrar el caso unitario.
+  `work_kind`. El contrato REST y el scope real ya estan validados; falta
+  ejecutar/cerrar toda la cola temporal real hasta `finalize_temario_package`.
 - No volver al loop legacy para tapar este caso: la ruta correcta sigue siendo
   goal-first con cierre por artefactos, tests y receipt de dominio.

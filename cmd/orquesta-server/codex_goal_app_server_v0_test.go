@@ -358,6 +358,55 @@ func TestServerCodexAppServerGoalBackendV0PromueveResultadoDurableAunqueGoalSiga
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0PromueveResultadoDurableAunqueGoalQuedeBloqueadoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	resultDir := filepath.Join(projectDir, "external", "opes", "update_topic_registry", "docs")
+	if err := os.MkdirAll(resultDir, 0o755); err != nil {
+		t.Fatalf("mkdir result dir: %v", err)
+	}
+	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0)
+	payload := `{
+		"goal_ref":"goal-ref-codex-app-server-file-blocked-001",
+		"summary":"resultado durable con artefacto aunque el goal remoto quedo bloqueado",
+		"artifact_refs":["artifact-ref-goal-blocked"],
+		"required_test_results":[{"test_ref":"opes-domain-test-blocked","status":"blocked","evidence_refs":["evidence-ref-spec"]}],
+		"domain_receipt_refs":["domain-receipt-blocked-public-v0"],
+		"evidence_refs":["evidence-ref-required-blocked"]
+	}`
+	if err := os.WriteFile(resultPath, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write result file: %v", err)
+	}
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID: "thread-ref-goal-file-blocked-001",
+			Status:   "blocked",
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: projectDir}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-codex-app-server-file-blocked-001",
+		ExternalGoalRef: "thread-ref-goal-file-blocked-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusCompleteV0 ||
+		receipt.Summary != "resultado durable con artefacto aunque el goal remoto quedo bloqueado" ||
+		!containsStringForTestV0(receipt.ArtifactRefs, "artifact-ref-goal-blocked") ||
+		!containsStringForTestV0(receipt.DomainReceiptRefs, "domain-receipt-blocked-public-v0") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-file") ||
+		len(receipt.RequiredTestResults) != 1 ||
+		receipt.RequiredTestResults[0].TestRef != "opes-domain-test-blocked" {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get"}) {
+		t.Fatalf("calls=%v", protocol.calls)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0BloqueaGoalActivoPorTimeoutV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		observedGoal: &serverCodexAppServerThreadGoalV0{

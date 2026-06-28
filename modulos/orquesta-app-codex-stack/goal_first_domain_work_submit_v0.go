@@ -29,7 +29,7 @@ func (stack StackV0) submitDomainWorkArtifactAfterGoalObservationV0(
 	request orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0,
 	result orquestaappdirectorservice.ObserveAppDirectorGoalResultV0,
 ) (bool, error) {
-	if !stack.goalFirstDomainWorkSubmitReadyV0(result) {
+	if !stack.goalFirstDomainWorkSubmitPortsReadyV0(result) {
 		return false, nil
 	}
 	state, err := stack.Ports.GoalStateStore.LoadGoalWorkStateV0(ctx, result.RunRef)
@@ -41,6 +41,9 @@ func (stack StackV0) submitDomainWorkArtifactAfterGoalObservationV0(
 		return false, nil
 	}
 	spec := orquestagoal.NormalizeGoalWorkSpecV0(state.Spec)
+	if !goalFirstDomainWorkSubmitReadyForSpecV0(spec, result) {
+		return false, nil
+	}
 	record, ok, err := stack.goalFirstDomainWorkAppChangeRecordV0(ctx, result.RunRef)
 	if err != nil || !ok {
 		return false, err
@@ -81,7 +84,7 @@ func (stack StackV0) submitDomainWorkArtifactAfterGoalObservationV0(
 	return stack.submitGoalFirstDomainWorkArtifactV0(ctx, request, run, task, observation, submission, result.GoalResult)
 }
 
-func (stack StackV0) goalFirstDomainWorkSubmitReadyV0(
+func (stack StackV0) goalFirstDomainWorkSubmitPortsReadyV0(
 	result orquestaappdirectorservice.ObserveAppDirectorGoalResultV0,
 ) bool {
 	return stack.DomainWork != nil &&
@@ -92,8 +95,21 @@ func (stack StackV0) goalFirstDomainWorkSubmitReadyV0(
 		stack.Stores.AppChangeStore != nil &&
 		strings.TrimSpace(stack.Codex.ProjectWorkDir) != "" &&
 		result.GoalResult.Status == orquestagoal.GoalStatusCompleteV0 &&
-		!result.Closure.Accepted &&
-		goalFirstDomainWorkClosureNeedsReceiptV0(result.Closure)
+		!result.Closure.Accepted
+}
+
+func goalFirstDomainWorkSubmitReadyForSpecV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	result orquestaappdirectorservice.ObserveAppDirectorGoalResultV0,
+) bool {
+	spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
+	if !spec.ClosurePolicy.RequireDomainReceipt {
+		return false
+	}
+	if goalFirstDomainWorkClosureNeedsReceiptV0(result.Closure) {
+		return true
+	}
+	return goalFirstDomainWorkClosureNeedsDomainTestEvidenceV0(spec, result.GoalResult, result.Closure)
 }
 
 func goalFirstDomainWorkClosureNeedsReceiptV0(
@@ -109,6 +125,82 @@ func goalFirstDomainWorkClosureNeedsReceiptV0(
 			if strings.TrimSpace(issue.Field) == "domain_receipt_refs" {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+func goalFirstDomainWorkClosureNeedsDomainTestEvidenceV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+) bool {
+	if !goalFirstDomainWorkClosureHasIssueFieldV0(closure, "required_tests") ||
+		!goalFirstDomainWorkHasDomainOnlyRequiredTestsV0(spec.RequiredTests) {
+		return false
+	}
+	return goalFirstDomainWorkCommandRequiredTestsPassedV0(spec.RequiredTests, result.RequiredTestResults)
+}
+
+func goalFirstDomainWorkClosureHasIssueFieldV0(
+	closure orquestagoal.GoalClosureValidationV0,
+	field string,
+) bool {
+	field = strings.TrimSpace(field)
+	if field == "" {
+		return false
+	}
+	for _, issue := range closure.Issues {
+		if strings.TrimSpace(issue.Field) == field {
+			return true
+		}
+	}
+	return false
+}
+
+func goalFirstDomainWorkHasDomainOnlyRequiredTestsV0(
+	required []orquestagoal.GoalRequiredTestV0,
+) bool {
+	for _, test := range required {
+		if strings.TrimSpace(test.TestRef) != "" &&
+			strings.TrimSpace(test.Command) == "" &&
+			strings.TrimSpace(test.CommandRef) == "" {
+			return true
+		}
+	}
+	return false
+}
+
+func goalFirstDomainWorkCommandRequiredTestsPassedV0(
+	required []orquestagoal.GoalRequiredTestV0,
+	results []orquestagoal.GoalRequiredTestResultV0,
+) bool {
+	for _, test := range required {
+		if strings.TrimSpace(test.Command) == "" && strings.TrimSpace(test.CommandRef) == "" {
+			continue
+		}
+		if !goalFirstDomainWorkRequiredTestPassedV0(test.TestRef, results) {
+			return false
+		}
+	}
+	return true
+}
+
+func goalFirstDomainWorkRequiredTestPassedV0(
+	testRef string,
+	results []orquestagoal.GoalRequiredTestResultV0,
+) bool {
+	testRef = strings.TrimSpace(testRef)
+	if testRef == "" {
+		return false
+	}
+	for _, result := range results {
+		if strings.TrimSpace(result.TestRef) != testRef {
+			continue
+		}
+		status := strings.TrimSpace(result.Status)
+		if status == orquestagoal.GoalStatusAcceptedV0 || status == "passed" {
+			return true
 		}
 	}
 	return false

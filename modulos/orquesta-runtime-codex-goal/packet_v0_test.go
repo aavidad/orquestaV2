@@ -87,6 +87,27 @@ func TestBuildCodexGoalPromptV0IncluyePropositoDeContextRefs(t *testing.T) {
 	}
 }
 
+func TestBuildCodexGoalPromptV0DomainWorkDelegaReceiptEnAdaptadorV0(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.WorkProfileKind = "domain_work"
+	spec.ClosurePolicy.RequireDomainReceipt = true
+
+	packet, issues := BuildCodexGoalStartPacketV0(spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	for _, want := range []string{
+		"En trabajos domain_work",
+		"materializa el artefacto en el write-set",
+		"deja submit_artifact/receipt al adaptador externo de Orquesta",
+	} {
+		if !strings.Contains(packet.Prompt, want) {
+			t.Fatalf("prompt no contiene %q:\n%s", want, packet.Prompt)
+		}
+	}
+}
+
 func TestBuildCodexGoalStartPacketV0RechazaPromptDemasiadoGrande(t *testing.T) {
 	spec := validCodexGoalSpecV0()
 	spec.Objective = strings.Repeat("x", CodexGoalMaxPromptBytesV0)

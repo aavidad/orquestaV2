@@ -275,6 +275,9 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	}
 	if spec.ClosurePolicy.RequireDomainReceipt {
 		b.WriteString("- Debe existir receipt de dominio.\n")
+		if strings.TrimSpace(spec.WorkProfileKind) == "domain_work" {
+			b.WriteString("- En trabajos domain_work, no intentes llamar conectores REST/MCP de la app externa desde el sandbox salvo que el contrato te entregue ese puerto: materializa el artefacto en el write-set y deja submit_artifact/receipt al adaptador externo de Orquesta.\n")
+		}
 	}
 	for _, evidenceRef := range spec.ClosurePolicy.RequiredEvidenceRefs {
 		b.WriteString("- Evidencia requerida: ")

@@ -219,6 +219,27 @@ Evidencia:
 `TestObserveAppDirectorGoalV0RecuperaEntregaTardiaTrasTimeoutBloqueadoV0` y
 `TestSmokeOPESDerivativesRESTWrapperFakeServerRecuperaTimeoutActivoV0`.
 
+Avance 2026-06-28 noche 7: el contrato REST OPES temporal real queda probado
+para los 23 derivados (`accepted_count=23`, `rejected_count=0`,
+`transport_compat=true`) y el scope-probe real confirma aislamiento por
+`program_id,correlation_id`. El primer job real `update_topic_registry` ya
+cierra con Orquesta goal-first tras recuperar artefacto tardio de Codex Goal:
+si el goal declara una required test de dominio sin comando como `blocked`
+porque no puede usar conectores OPES dentro del sandbox, Orquesta ejecuta
+`submit_artifact` por su adaptador externo, registra receipt aceptado en ledger
+y sintetiza la evidencia de required test de dominio desde ese ledger. Ademas,
+`app_server_stdio` promociona un `orquesta_goal_result_v0.json` durable aunque
+el goal remoto haya quedado `blocked`, siempre que el fichero pertenezca al
+`goal_ref`. Evidencia:
+`TestCodexStackV0ExternalWorkGoalFirstSubeArtifactSiRequiredTestDominioBloqueadoV0`,
+`TestServerCodexAppServerGoalBackendV0PromueveResultadoDurableAunqueGoalQuedeBloqueadoV0`,
+`TestProbeOPESDerivativesRESTContractTransportCompatCompletoV0` y reobservacion
+real
+`/tmp/orquesta-opes-goal-full-20260628T093857Z/manual_reobserve_after_durable_blocked_fix.json`.
+Sigue pendiente ejecutar/cerrar la secuencia temporal real completa hasta
+`finalize_temario_package`; no se debe sustituir por OPES productivo ni por el
+loop legacy.
+
 ## ORQ-OPES-003 external_work_no_agent_no_delivery
 
 Estado: parcial; legacy 1+6 y guard de cierre goal-first cubiertos, pendiente

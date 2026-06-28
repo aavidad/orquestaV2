@@ -28,6 +28,7 @@ FAKE_OBSERVE_STATUS="${ORQUESTA_OPES_DERIVATIVES_FAKE_OBSERVE_STATUS-complete}"
 FAKE_CLOSURE_STATUS="${ORQUESTA_OPES_DERIVATIVES_FAKE_CLOSURE_STATUS-accepted}"
 FAKE_CLOSURE_ACCEPTED="${ORQUESTA_OPES_DERIVATIVES_FAKE_CLOSURE_ACCEPTED-1}"
 FAKE_OBSERVE_TIMEOUTS_BEFORE_SUCCESS="${ORQUESTA_OPES_DERIVATIVES_FAKE_OBSERVE_TIMEOUTS_BEFORE_SUCCESS:-0}"
+FAKE_JOBS_PER_TYPE="${ORQUESTA_OPES_DERIVATIVES_FAKE_JOBS_PER_TYPE:-1}"
 FAKE_DIR=""
 FAKE_PID=""
 
@@ -97,6 +98,10 @@ try:
     observe_timeouts_before_success = max(int(sys.argv[10]), 0)
 except Exception:
     observe_timeouts_before_success = 0
+try:
+    jobs_per_type = max(int(sys.argv[11]), 1)
+except Exception:
+    jobs_per_type = 1
 active_index = sequence.index(pending_type) if mode == "dry-run-once" else 0
 expected_scan_limit = str(min(max(max(int(limit), 1) * 100, 100), 500))
 runs = {}
@@ -283,16 +288,20 @@ class Handler(BaseHTTPRequestHandler):
         if query.get("correlation_id", [""])[0] and correlation_id != query.get("correlation_id", [""])[0]:
             send_json(self, 200, [])
             return
-        send_json(self, 200, [{
-                "id": "job-ref-fake-" + job_type.replace("_", "-") + "-001",
+        jobs = []
+        for job_number in range(1, jobs_per_type + 1):
+            suffix = f"{job_number:03d}"
+            jobs.append({
+                "id": "job-ref-fake-" + job_type.replace("_", "-") + "-" + suffix,
                 "type": job_type,
                 "status": "pending",
                 "execution_mode": "external",
                 "payload_json": json.dumps(payload),
                 "correlation_id": correlation_id,
-                "idempotency_key": "idem-ref-fake-" + job_type.replace("_", "-") + "-001",
+                "idempotency_key": "idem-ref-fake-" + job_type.replace("_", "-") + "-" + suffix,
                 "requested_by": "opes-fake"
-            }])
+            })
+        send_json(self, 200, jobs)
 
     def do_POST(self):
         global active_index
@@ -437,7 +446,7 @@ with open(url_file, "w", encoding="utf-8") as fh:
     fh.write(f"http://127.0.0.1:{server.server_port}\n")
 server.serve_forever()
 PY
-  python3 "$server_py" "$url_file" "$SEQUENCE" "$LIMIT" "$FAKE_PENDING_TYPE" "$MODE" "$FAKE_GOAL_FIRST" "$FAKE_OBSERVE_STATUS" "$FAKE_CLOSURE_STATUS" "$FAKE_CLOSURE_ACCEPTED" "$FAKE_OBSERVE_TIMEOUTS_BEFORE_SUCCESS" &
+  python3 "$server_py" "$url_file" "$SEQUENCE" "$LIMIT" "$FAKE_PENDING_TYPE" "$MODE" "$FAKE_GOAL_FIRST" "$FAKE_OBSERVE_STATUS" "$FAKE_CLOSURE_STATUS" "$FAKE_CLOSURE_ACCEPTED" "$FAKE_OBSERVE_TIMEOUTS_BEFORE_SUCCESS" "$FAKE_JOBS_PER_TYPE" &
   FAKE_PID="$!"
   for _ in $(seq 1 50); do
     if [[ -s "$url_file" ]]; then
@@ -731,6 +740,7 @@ write_metadata() {
     echo "fake_server=$FAKE_SERVER"
     echo "fake_pending_type=$FAKE_PENDING_TYPE"
     echo "fake_goal_first=$FAKE_GOAL_FIRST"
+    echo "fake_jobs_per_type=$FAKE_JOBS_PER_TYPE"
     echo "opes_base_url=$OPES_BASE_URL_EFFECTIVE"
     echo "orquesta_base_url=$ORQUESTA_BASE_URL_EFFECTIVE"
     echo "sequence=$SEQUENCE"
@@ -1368,16 +1378,34 @@ PY
 }
 
 write_goal_receipts_manifest() {
+  local final_type="${1:-}"
   local output_file="$SMOKE_OUT_DIR/goal_receipts_manifest.json"
-  python3 - "$SMOKE_OUT_DIR" "$output_file" <<'PY'
+  python3 - "$SMOKE_OUT_DIR" "$output_file" "$SEQUENCE" "$final_type" <<'PY'
 import glob
 import json
 import os
+import re
 import sys
 
-smoke_dir, output_file = sys.argv[1:]
+smoke_dir, output_file, sequence_raw, final_type = sys.argv[1:]
+expected_all = [item.strip() for item in sequence_raw.replace(";", ",").split(",") if item.strip()]
+final_type = str(final_type or "").strip()
+if final_type and final_type in expected_all:
+    expected_work_kinds = expected_all[:expected_all.index(final_type) + 1]
+else:
+    expected_work_kinds = expected_all
+expected_set = set(expected_work_kinds)
+expected_index = {work_kind: index for index, work_kind in enumerate(expected_work_kinds)}
 runs = {}
-for path in sorted(glob.glob(os.path.join(smoke_dir, "opes_derivatives_rest_tick_*_drain_summary.json"))):
+run_order = []
+
+def tick_sort_key(path):
+    match = re.search(r"_tick_(\d+)_drain_summary\.json$", os.path.basename(path))
+    if not match:
+        return (10**9, path)
+    return (int(match.group(1)), path)
+
+for path in sorted(glob.glob(os.path.join(smoke_dir, "opes_derivatives_rest_tick_*_drain_summary.json")), key=tick_sort_key):
     try:
         with open(path, "r", encoding="utf-8") as fh:
             summary = json.load(fh)
@@ -1387,6 +1415,8 @@ for path in sorted(glob.glob(os.path.join(smoke_dir, "opes_derivatives_rest_tick
         run_ref = str(result.get("run_ref") or "").strip()
         if not run_ref:
             continue
+        if run_ref not in runs:
+            run_order.append(run_ref)
         actions = [str(item).strip() for item in (result.get("next_actions") or [])]
         goal_first = (
             str(result.get("route_policy") or "").strip() == "goal_first"
@@ -1420,6 +1450,8 @@ for path in sorted(glob.glob(os.path.join(smoke_dir, "observe_goal_*_response.js
     run_ref = str(response.get("run_ref") or "").strip()
     if not run_ref:
         continue
+    if run_ref not in runs:
+        run_order.append(run_ref)
     entry = runs.setdefault(run_ref, {
         "run_ref": run_ref,
         "job_ref": "",
@@ -1452,7 +1484,7 @@ for path in sorted(glob.glob(os.path.join(smoke_dir, "observe_goal_*_response.js
     if closure_status and (response_accepted or not entry.get("closure_status")):
         entry["closure_status"] = closure_status
 
-entries = [runs[key] for key in sorted(runs)]
+entries = [runs[key] for key in run_order]
 issues = []
 for entry in entries:
     if not entry.get("goal_first"):
@@ -1466,13 +1498,63 @@ for entry in entries:
     if not entry.get("domain_receipt_refs"):
         issues.append({"run_ref": entry["run_ref"], "code": "goal_domain_receipt_refs_missing"})
 
+covered_work_kinds = [str(entry.get("work_kind") or "").strip() for entry in entries if str(entry.get("work_kind") or "").strip()]
+work_kind_counts = {}
+for work_kind in covered_work_kinds:
+    work_kind_counts[work_kind] = work_kind_counts.get(work_kind, 0) + 1
+missing_work_kinds = [work_kind for work_kind in expected_work_kinds if work_kind not in work_kind_counts]
+unexpected_work_kinds = sorted(work_kind for work_kind in work_kind_counts if work_kind not in expected_set)
+repeated_work_kinds = [work_kind for work_kind in expected_work_kinds if work_kind_counts.get(work_kind, 0) > 1]
+previous_index = -1
+order_issue = None
+for position, work_kind in enumerate(covered_work_kinds):
+    if work_kind not in expected_index:
+        continue
+    current_index = expected_index[work_kind]
+    if current_index < previous_index:
+        order_issue = {
+            "code": "work_kind_order_mismatch",
+            "position": position,
+            "work_kind": work_kind,
+            "previous_work_kind": covered_work_kinds[position - 1] if position > 0 else "",
+        }
+        break
+    previous_index = current_index
+
+for work_kind in missing_work_kinds:
+    issues.append({"work_kind": work_kind, "code": "expected_work_kind_missing"})
+for work_kind in unexpected_work_kinds:
+    issues.append({"work_kind": work_kind, "code": "unexpected_work_kind"})
+if order_issue is not None:
+    issues.append(order_issue)
+if final_type:
+    if final_type not in work_kind_counts:
+        issues.append({"work_kind": final_type, "code": "final_work_kind_missing"})
+    elif covered_work_kinds and covered_work_kinds[-1] != final_type:
+        issues.append({
+            "work_kind": final_type,
+            "code": "final_work_kind_not_last",
+            "last_work_kind": covered_work_kinds[-1],
+        })
+
 manifest = {
     "schema_version": "orquesta_opes_derivatives_goal_receipts_manifest.v0",
+    "expected_work_kinds": expected_work_kinds,
+    "covered_work_kinds": covered_work_kinds,
+    "missing_work_kinds": missing_work_kinds,
+    "unexpected_work_kinds": unexpected_work_kinds,
+    "repeated_work_kinds": repeated_work_kinds,
+    "final_work_kind": final_type,
+    "sequence_complete": not missing_work_kinds and not unexpected_work_kinds and order_issue is None and (not final_type or (covered_work_kinds and covered_work_kinds[-1] == final_type)),
     "entries": entries,
     "issues": issues,
 }
 with open(output_file, "w", encoding="utf-8") as fh:
     json.dump(manifest, fh, ensure_ascii=False, indent=2)
+print("goal_receipts_manifest_expected=" + str(len(expected_work_kinds)))
+print("goal_receipts_manifest_covered=" + str(len(covered_work_kinds)))
+if final_type:
+    print("goal_receipts_manifest_final_work_kind=" + final_type)
 if issues:
     print("goal_receipts_manifest_status=failed")
     print("goal_receipts_manifest=" + output_file)
@@ -1508,7 +1590,7 @@ run_until_final_type() {
     if [[ -z "$selected" ]]; then
       if [[ "$final_seen" == "1" ]]; then
         final_summary="$summary_file"
-        write_goal_receipts_manifest
+        write_goal_receipts_manifest "$final_type"
         echo "run_until_status=completed"
         echo "run_until_mode=$MODE"
         echo "final_job_type=$final_type"

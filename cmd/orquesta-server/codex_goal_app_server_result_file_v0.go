@@ -22,7 +22,7 @@ func (backend serverCodexAppServerGoalBackendV0) promoteCodexAppServerActiveGoal
 	receipt orquestaruntimecodexgoal.CodexGoalObservationReceiptV0,
 	status string,
 ) (bool, orquestaruntimecodexgoal.CodexGoalObservationReceiptV0) {
-	if codexGoalWorkStatusIsTerminalV0(status) {
+	if !codexAppServerGoalStatusAllowsDurableResultPromotionV0(status) {
 		return false, receipt
 	}
 	fileMarked, fileFound, err := codexAppServerGoalResultFromWorkspaceV0(backend.CWD, request.GoalRef)
@@ -40,6 +40,15 @@ func (backend serverCodexAppServerGoalBackendV0) promoteCodexAppServerActiveGoal
 		"evidence-ref-codex-app-server-goal-result-file",
 	)
 	return true, receipt
+}
+
+func codexAppServerGoalStatusAllowsDurableResultPromotionV0(status string) bool {
+	switch strings.TrimSpace(status) {
+	case orquestagoal.GoalStatusRunningV0, orquestagoal.GoalStatusBlockedV0:
+		return true
+	default:
+		return false
+	}
 }
 
 func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerTerminalGoalResultV0(

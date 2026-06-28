@@ -2430,6 +2430,9 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilFinalizeV0(t *testing.
 		!strings.Contains(output, `"closure_accepted": true`) ||
 		!strings.Contains(output, `"artifact_refs": ["artifact-ref-fake-finalize_temario_package"]`) ||
 		!strings.Contains(output, `goal_receipts_manifest_status=ok`) ||
+		!strings.Contains(output, `goal_receipts_manifest_expected=23`) ||
+		!strings.Contains(output, `goal_receipts_manifest_covered=23`) ||
+		!strings.Contains(output, `goal_receipts_manifest_final_work_kind=finalize_temario_package`) ||
 		!strings.Contains(output, `goal_receipts_manifest_entries=23`) ||
 		!strings.Contains(output, `run_until_status=completed`) ||
 		!strings.Contains(output, `run_until_mode=run-until-finalize`) ||
@@ -2437,6 +2440,193 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilFinalizeV0(t *testing.
 		!strings.Contains(output, `empty_after_final=true`) {
 		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
 	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilFinalizePermiteVariosJobsPorFaseV0(t *testing.T) {
+	requireLocalTCPForTestV0(t)
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 no disponible")
+	}
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("curl no disponible")
+	}
+	repoRoot := filepath.Clean("../..")
+	outDir := filepath.Join(t.TempDir(), "out")
+	cmd := exec.Command("bash", "scripts/smoke_opes_derivatives_rest.sh")
+	cmd.Dir = repoRoot
+	cmd.Env = cleanOPESSmokeEnvForDrainTestV0(os.Environ())
+	cmd.Env = append(cmd.Env,
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1",
+		"ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize",
+		"ORQUESTA_OPES_DERIVATIVES_EXECUTE=1",
+		"ORQUESTA_OPES_TEMPORAL_CONFIRM=1",
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-fake-operario-001",
+		"ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=update_topic_registry,finalize_temario_package",
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_PENDING_TYPE=update_topic_registry",
+		"ORQUESTA_OPES_DERIVATIVES_FAKE_JOBS_PER_TYPE=2",
+		"ORQUESTA_OPES_BRIDGE_LIMIT=2",
+		"ORQUESTA_OPES_BRIDGE_MAX_TICKS=5",
+		"ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS=0",
+		"SMOKE_ID=test-derivatives-rest-run-until-fake-multi-jobs",
+		"SMOKE_OUT_DIR="+outDir,
+	)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("script err=%v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, `"selected_job_type":"update_topic_registry"`) ||
+		!strings.Contains(output, `"selected_job_type":"finalize_temario_package"`) ||
+		!strings.Contains(output, `goal_receipts_manifest_status=ok`) ||
+		!strings.Contains(output, `goal_receipts_manifest_expected=2`) ||
+		!strings.Contains(output, `goal_receipts_manifest_covered=4`) ||
+		!strings.Contains(output, `goal_receipts_manifest_entries=4`) ||
+		!strings.Contains(output, `run_until_status=completed`) ||
+		!strings.Contains(output, `final_job_type=finalize_temario_package`) ||
+		strings.Contains(output, `duplicate_work_kind`) ||
+		strings.Contains(output, `work_kind_order_mismatch`) {
+		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
+	}
+	manifestRaw, err := os.ReadFile(filepath.Join(outDir, "goal_receipts_manifest.json"))
+	if err != nil {
+		t.Fatalf("leer manifest: %v", err)
+	}
+	manifest := string(manifestRaw)
+	if !strings.Contains(manifest, `"sequence_complete": true`) ||
+		!strings.Contains(manifest, `"repeated_work_kinds"`) ||
+		!strings.Contains(manifest, `"update_topic_registry"`) ||
+		!strings.Contains(manifest, `"finalize_temario_package"`) {
+		t.Fatalf("manifest=%s", manifest)
+	}
+}
+
+func TestProbeOPESDerivativesRESTContractTransportCompatCompletoV0(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 no disponible")
+	}
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("curl no disponible")
+	}
+	sequence := orquestaopesbridge.OPESFullTemarioJobTypeSequenceV0()[1:]
+	createdJobs := make([]map[string]any, 0, len(sequence))
+	seenCanonical := map[string]bool{}
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/health":
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/jobs":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			input, _ := payload["input"].(map[string]any)
+			workKind := strings.TrimSpace(fmt.Sprint(input["work_kind"]))
+			transportJobType := strings.TrimSpace(fmt.Sprint(payload["job_type"]))
+			if workKind == "" {
+				http.Error(w, `{"error":"work_kind_missing"}`, http.StatusBadRequest)
+				return
+			}
+			expectedTransport := orquestaopesbridge.OPESBridgeTransportJobTypeForWorkKindV0(workKind)
+			if transportJobType != expectedTransport {
+				http.Error(w, fmt.Sprintf(`{"error":"unexpected_transport","work_kind":%q,"got":%q,"want":%q}`, workKind, transportJobType, expectedTransport), http.StatusBadRequest)
+				return
+			}
+			job := map[string]any{
+				"id":             fmt.Sprintf("job-ref-contract-%02d", len(createdJobs)+1),
+				"type":           transportJobType,
+				"status":         "pending",
+				"execution_mode": "external",
+				"payload_json":   mustJSONForDrainTestV0(t, input),
+				"correlation_id": strings.TrimSpace(fmt.Sprint(payload["correlation_id"])),
+				"requested_by":   strings.TrimSpace(fmt.Sprint(payload["requested_by"])),
+			}
+			createdJobs = append(createdJobs, job)
+			seenCanonical[workKind] = true
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"created":  true,
+				"job":      job,
+				"job_type": transportJobType,
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/jobs":
+			_ = json.NewEncoder(w).Encode(createdJobs)
+		default:
+			http.Error(w, "unexpected request", http.StatusNotFound)
+		}
+	}))
+	defer opesServer.Close()
+
+	repoRoot := filepath.Clean("../..")
+	outDir := filepath.Join(t.TempDir(), "out")
+	summaryFile := filepath.Join(outDir, "contract_probe.json")
+	cmd := exec.Command("bash", "scripts/probe_opes_derivatives_rest_contract.sh")
+	cmd.Dir = repoRoot
+	cmd.Env = cleanOPESSmokeEnvForDrainTestV0(os.Environ())
+	cmd.Env = append(cmd.Env,
+		"ORQUESTA_OPES_BASE_URL="+opesServer.URL,
+		"ORQUESTA_OPES_TEMPORAL_CONFIRM=1",
+		"ORQUESTA_OPES_CONTRACT_PROBE_CREATE=1",
+		"ORQUESTA_OPES_CONTRACT_PROBE_EXPECT_FULL_SEQUENCE=1",
+		"ORQUESTA_OPES_CONTRACT_PROBE_TRANSPORT_COMPAT=1",
+		"ORQUESTA_OPES_CONTRACT_PROBE_PROGRAM_ID=program-ref-contract-test",
+		"ORQUESTA_OPES_CONTRACT_PROBE_TOPIC_ID=topic-ref-contract-test",
+		"ORQUESTA_OPES_CONTRACT_PROBE_CORRELATION_ID=corr-contract-test",
+		"ORQUESTA_OPES_CONTRACT_PROBE_OUTPUT="+summaryFile,
+		"SMOKE_ID=test-opes-contract-transport-compat",
+		"SMOKE_OUT_DIR="+outDir,
+	)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("script err=%v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, `contract_probe_status=ok`) ||
+		!strings.Contains(output, `transport_compat=true`) ||
+		!strings.Contains(output, `accepted_count=23`) ||
+		!strings.Contains(output, `rejected_count=0`) ||
+		!strings.Contains(output, `review_textual`) ||
+		!strings.Contains(output, `generate_help_manual_assets`) ||
+		!strings.Contains(output, `finalize_temario_package`) {
+		t.Fatalf("stdout=%s stderr=%s", output, stderr.String())
+	}
+	if len(createdJobs) != len(sequence) {
+		t.Fatalf("created=%d want=%d", len(createdJobs), len(sequence))
+	}
+	for _, workKind := range sequence {
+		if !seenCanonical[workKind] {
+			t.Fatalf("work_kind canonico no visto: %s", workKind)
+		}
+	}
+	summaryRaw, err := os.ReadFile(summaryFile)
+	if err != nil {
+		t.Fatalf("read summary: %v", err)
+	}
+	summary := string(summaryRaw)
+	if !strings.Contains(summary, `"status": "ok"`) ||
+		!strings.Contains(summary, `"accepted_count": 23`) ||
+		!strings.Contains(summary, `"rejected_count": 0`) ||
+		!strings.Contains(summary, `"transport_compat": true`) {
+		t.Fatalf("summary=%s", summary)
+	}
+}
+
+func mustJSONForDrainTestV0(t *testing.T, value any) string {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal json: %v", err)
+	}
+	return string(raw)
 }
 
 func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilGoalBlockedV0(t *testing.T) {
