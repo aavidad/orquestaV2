@@ -494,3 +494,39 @@ Aceptación esperada:
   consultable en vez de mantener el HTTP bloqueado.
 - Si hay timeout interno, no debe duplicar despachos ya materializados al
   reintentar.
+
+## Mitigación Orquesta 2026-06-28 - timeout HTTP en observación goal-first
+
+Seguimiento relacionado, sin marcar cerrada toda la incidencia 14: las rutas
+`/api/v0/autoprogramming/supervise`, `/api/v0/runs/supervise`,
+`/api/v0/autoprogramming/status` y `/api/v0/external-work/run` ya tenían ventana
+HTTP acotada o aceptación en segundo plano en el código actual. El hueco análogo
+que seguía directo en el flujo goal-first era
+`/api/v0/apps/director/goal/observe`.
+
+Se añadió timeout público en `modulos/orquesta-mcp` para esa ruta:
+
+- si el executor no responde dentro de la ventana HTTP acotada, devuelve
+  `504 Gateway Timeout` con JSON público;
+- el error usa `observe_app_director_goal_timeout`, `field=executor` y conserva
+  `run_ref`/`X-Correlation-ID`;
+- el contexto del executor se cancela para no dejar la llamada HTTP retenida;
+- la respuesta se flushea igual que en otros endpoints MCP acotados.
+
+Cobertura añadida:
+
+- `TestMCPObserveAppDirectorGoalHTTPHandlerV0TimeoutDevuelveJSONPublico`
+- `TestServerObserveAppDirectorGoalHTTPClienteRealRecibeTimeoutJSONV0`
+
+Validación ejecutada:
+
+- `git diff --check`
+- `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPObserveAppDirectorGoalHTTPHandlerV0(Delega|Timeout|RunRef|Error)|TestMCPObserveAppDirectorGoalErrorResultFromErrorV0|TestMCPObserveAppDirectorGoalToolExecutorV0RunRef'`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerObserveAppDirectorGoalHTTPClienteRealRecibeTimeoutJSONV0|TestServerExternalWorkRunHTTPClienteRealRecibeTimeoutJSONV0'`
+- `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway`
+- `go test -count=1 ./...`
+
+Queda pendiente de esta familia: comprobar con una ola OPES temporal nueva que
+el operador ya no recibe llamadas sin cuerpo en las rutas de supervisión y
+estado bajo carga real, y cerrar las incidencias independientes de
+`running_stale` con procesos vivos y write-set estrechado del `agent_packet`.

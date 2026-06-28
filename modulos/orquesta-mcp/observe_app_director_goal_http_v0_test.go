@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestagoal "orquesta/modulos/orquesta-goal"
@@ -55,6 +56,44 @@ func TestMCPObserveAppDirectorGoalHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
 		result.RunStatus != "closed" ||
 		result.DirectorExecutionMode != orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0 {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPObserveAppDirectorGoalHTTPHandlerV0TimeoutDevuelveJSONPublico(t *testing.T) {
+	executor := &blockingMCPObserveAppDirectorGoalHTTPExecutorV0{done: make(chan struct{})}
+	body := &bytes.Buffer{}
+	if err := json.NewEncoder(body).Encode(MCPObserveAppDirectorGoalToolInputV0{
+		RequestID:     "req-goal-http-timeout-001",
+		CorrelationID: "corr-goal-http-timeout-input-001",
+		RunRef:        "run-ref-goal-http-timeout-001",
+	}); err != nil {
+		t.Fatalf("encode input: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, MCPObserveAppDirectorGoalHTTPPathV0, body)
+	req.Header.Set("X-Correlation-ID", "corr-goal-http-timeout-header-001")
+	rec := httptest.NewRecorder()
+
+	newMCPObserveAppDirectorGoalHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusGatewayTimeout ||
+		rec.Header().Get("X-Correlation-ID") != "corr-goal-http-timeout-header-001" {
+		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	var result MCPObserveAppDirectorGoalToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.Estado != MCPObserveAppDirectorGoalEstadoErrorV0 ||
+		result.RunRef != "run-ref-goal-http-timeout-001" ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != MCPObserveAppDirectorGoalHTTPTimeoutCodeV0 ||
+		result.Errores[0].Field != "executor" {
+		t.Fatalf("result=%+v", result)
+	}
+	select {
+	case <-executor.done:
+	case <-time.After(time.Second):
+		t.Fatalf("executor no recibio cancelacion tras timeout HTTP")
 	}
 }
 
@@ -168,4 +207,20 @@ func (executor *fakeMCPObserveAppDirectorGoalHTTPExecutorV0) Execute(
 		}
 	}
 	return executor.result, nil
+}
+
+type blockingMCPObserveAppDirectorGoalHTTPExecutorV0 struct {
+	done chan struct{}
+}
+
+func (executor *blockingMCPObserveAppDirectorGoalHTTPExecutorV0) Execute(
+	ctx context.Context,
+	input MCPObserveAppDirectorGoalToolInputV0,
+) (MCPObserveAppDirectorGoalToolResultV0, error) {
+	<-ctx.Done()
+	close(executor.done)
+	return MCPObserveAppDirectorGoalToolResultV0{
+		Estado: MCPObserveAppDirectorGoalEstadoOKV0,
+		RunRef: input.RunRef,
+	}, nil
 }

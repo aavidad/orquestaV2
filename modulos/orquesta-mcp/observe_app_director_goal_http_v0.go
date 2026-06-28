@@ -1,21 +1,42 @@
 package orquestamcp
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 )
 
-const MCPObserveAppDirectorGoalHTTPPathV0 = "/api/v0/apps/director/goal/observe"
+const (
+	MCPObserveAppDirectorGoalHTTPPathV0        = "/api/v0/apps/director/goal/observe"
+	MCPObserveAppDirectorGoalHTTPTimeoutCodeV0 = "observe_app_director_goal_timeout"
+)
+
+const defaultMCPObserveAppDirectorGoalHTTPResponseTimeoutV0 = 2 * time.Second
 
 func NewMCPObserveAppDirectorGoalHTTPHandlerV0(
 	executor MCPTransportObserveAppDirectorGoalExecutorV0,
 ) http.Handler {
-	return mcpObserveAppDirectorGoalHTTPHandlerV0{executor: executor}
+	return newMCPObserveAppDirectorGoalHTTPHandlerWithTimeoutV0(
+		executor,
+		defaultMCPObserveAppDirectorGoalHTTPResponseTimeoutV0,
+	)
+}
+
+func newMCPObserveAppDirectorGoalHTTPHandlerWithTimeoutV0(
+	executor MCPTransportObserveAppDirectorGoalExecutorV0,
+	responseTimeout time.Duration,
+) http.Handler {
+	return mcpObserveAppDirectorGoalHTTPHandlerV0{
+		executor:        executor,
+		responseTimeout: responseTimeout,
+	}
 }
 
 type mcpObserveAppDirectorGoalHTTPHandlerV0 struct {
-	executor MCPTransportObserveAppDirectorGoalExecutorV0
+	executor        MCPTransportObserveAppDirectorGoalExecutorV0
+	responseTimeout time.Duration
 }
 
 func (handler mcpObserveAppDirectorGoalHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +80,11 @@ func (handler mcpObserveAppDirectorGoalHTTPHandlerV0) ServeHTTP(w http.ResponseW
 		writeMCPObserveAppDirectorGoalHTTPV0(w, http.StatusBadRequest, newMCPObserveAppDirectorGoalHTTPErrorV0(r, input, "run_ref", "run_ref_requerido"))
 		return
 	}
-	result, err := handler.executor.Execute(r.Context(), input)
+	result, err, timedOut := handler.executeObserveAppDirectorGoalWithResponseTimeoutV0(r, input)
+	if timedOut {
+		writeMCPObserveAppDirectorGoalHTTPV0(w, http.StatusGatewayTimeout, result)
+		return
+	}
 	if err != nil {
 		if result.Estado == MCPObserveAppDirectorGoalEstadoErrorV0 && len(result.Errores) > 0 {
 			result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), result.CorrelationID, input.CorrelationID, input.RequestID)
@@ -87,6 +112,37 @@ func (handler mcpObserveAppDirectorGoalHTTPHandlerV0) ServeHTTP(w http.ResponseW
 	writeMCPObserveAppDirectorGoalHTTPV0(w, status, result)
 }
 
+type mcpObserveAppDirectorGoalHTTPExecutionV0 struct {
+	result MCPObserveAppDirectorGoalToolResultV0
+	err    error
+}
+
+func (handler mcpObserveAppDirectorGoalHTTPHandlerV0) executeObserveAppDirectorGoalWithResponseTimeoutV0(
+	r *http.Request,
+	input MCPObserveAppDirectorGoalToolInputV0,
+) (MCPObserveAppDirectorGoalToolResultV0, error, bool) {
+	timeout := handler.responseTimeout
+	if timeout <= 0 {
+		result, err := handler.executor.Execute(r.Context(), input)
+		return result, err, false
+	}
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	done := make(chan mcpObserveAppDirectorGoalHTTPExecutionV0, 1)
+	go func() {
+		result, err := handler.executor.Execute(ctx, input)
+		done <- mcpObserveAppDirectorGoalHTTPExecutionV0{result: result, err: err}
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case execution := <-done:
+		return execution.result, execution.err, false
+	case <-timer.C:
+		return newMCPObserveAppDirectorGoalHTTPTimeoutResultV0(r, input), nil, true
+	}
+}
+
 func newMCPObserveAppDirectorGoalHTTPErrorV0(
 	r *http.Request,
 	input MCPObserveAppDirectorGoalToolInputV0,
@@ -101,6 +157,20 @@ func newMCPObserveAppDirectorGoalHTTPErrorV0(
 	return result
 }
 
+func newMCPObserveAppDirectorGoalHTTPTimeoutResultV0(
+	r *http.Request,
+	input MCPObserveAppDirectorGoalToolInputV0,
+) MCPObserveAppDirectorGoalToolResultV0 {
+	result := NewMCPObserveAppDirectorGoalErrorResultV0(
+		input,
+		MCPObserveAppDirectorGoalHTTPTimeoutCodeV0,
+		"executor",
+		"observe_app_director_goal excedio la ventana HTTP acotada",
+	)
+	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), result.CorrelationID, input.CorrelationID, input.RequestID)
+	return result
+}
+
 func writeMCPObserveAppDirectorGoalHTTPV0(
 	w http.ResponseWriter,
 	status int,
@@ -112,4 +182,5 @@ func writeMCPObserveAppDirectorGoalHTTPV0(
 	}
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(result)
+	flushMCPHTTPResponseV0(w)
 }
