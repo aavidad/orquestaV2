@@ -108,9 +108,11 @@ func codexProgressExactAssessmentForReportV0(
 	report orquestaruntime.AgentProgressReportV0,
 ) (orquestacoreworkflow.AgentWorkAssessmentProjectionV0, bool) {
 	wantAssessmentRef := "assessment-ref-" + strings.TrimSpace(report.ReportID)
+	wantAssessmentPrefix := wantAssessmentRef + "-"
 	for _, raw := range assessments {
 		projection, ok := orquestacoreworkflow.ParseAgentAssessmentProjectionV0(raw)
-		if ok && projection.AssessmentRef == wantAssessmentRef {
+		if ok && (projection.AssessmentRef == wantAssessmentRef ||
+			strings.HasPrefix(projection.AssessmentRef, wantAssessmentPrefix)) {
 			return projection, true
 		}
 	}

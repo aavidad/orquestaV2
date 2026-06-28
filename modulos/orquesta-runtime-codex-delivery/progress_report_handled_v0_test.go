@@ -69,3 +69,27 @@ func TestCodexProgressReportAlreadyHandledV0StoppedNoQuedaTapadoPorStopRequested
 		t.Fatalf("stopped confirmado si debe quedar tratado")
 	}
 }
+
+func TestCodexProgressExactAssessmentForReportV0AceptaSufijoDigest(t *testing.T) {
+	report := orquestaruntime.AgentProgressReportV0{
+		ReportID:       "agent-progress-report-ref-live-reconciliation-key-000052",
+		AgentRequestID: "agent-ref-live-reconciliation-key-001",
+		Status:         orquestaruntime.AgentStoppedV0,
+		Summary:        "Proceso observado como parado.",
+	}
+	assessment := orquestacoreworkflow.AgentAssessmentProjectionRefV0(
+		orquestacoreworkflow.AgentWorkAssessedPayloadV0{
+			AssessmentRef:  "assessment-ref-" + report.ReportID + "-0123456789abcdef01234567",
+			PhaseID:        string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			AgentRequestID: report.AgentRequestID,
+			Verdict:        orquestacoreworkflow.AgentAssessmentVerdictCapacityLimitedV0,
+			Action:         orquestacoreworkflow.AgentAssessmentActionStopAgentV0,
+			Severity:       orquestacoreworkflow.AgentAssessmentSeverityHighV0,
+			Summary:        "Capacidad externa limitada.",
+		},
+	)
+	projection, ok := codexProgressExactAssessmentForReportV0([]string{assessment}, report)
+	if !ok || projection.AssessmentRef != "assessment-ref-"+report.ReportID+"-0123456789abcdef01234567" {
+		t.Fatalf("projection=%+v ok=%v", projection, ok)
+	}
+}

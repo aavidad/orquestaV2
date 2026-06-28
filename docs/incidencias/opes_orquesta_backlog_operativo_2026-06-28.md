@@ -16,8 +16,8 @@ Reglas de uso:
 
 ## ORQ-OPES-001 estado_operativo_global_accionable
 
-Estado: casi cerrado para la superficie local MCP/web; pendiente contrato
-global exhaustivo por cada run visible y smoke temporal real.
+Estado: cerrado para la superficie local MCP/web; pendiente smoke temporal real
+con OPES para validar la misma mezcla contra datos externos acotados.
 
 Problema: las vistas de estado mezclan procesos vivos, runs stale, colas y
 contenedores goal-first sin una decision unica accionable. El operador necesita
@@ -104,6 +104,16 @@ Evidencia:
 `TestMCPQueueGlobalStatusHTTPHandlerV0MezclaGoalFirstYLivenessAccionORazon`.
 Commit: `d5394290`. Pendiente real: validar el mismo contrato contra un
 servidor temporal con OPES temporal REST vivo y scope acotado.
+
+Avance 2026-06-28 noche 6: `/ops` ya consume
+`/api/v0/queue/global-status` en paralelo a `autoprogramming/status`, fusiona
+`recommended_action`, `no_action_reason` y `needs_action` por `run_ref` antes
+de pedir stats y construir runs, muestra la accion en cola/detalle, conserva
+`fallback_autoprogramming_status` si el endpoint global cae y no ejecuta
+`recommended_action` como endpoint arbitrario. Evidencia:
+`TestOpsDashboardWebEndpointV0GlobalStatusFallbackAutoprogramming`,
+`TestOpsDashboardWebEndpointV0PropagaAccionGlobalStatusPorRunYCola` y
+`TestOpsDashboardWebEndpointV0GlobalStatusNoEjecutaAccionPorSiSolo`.
 
 ## ORQ-OPES-002 reconciliacion_ack_artefactos_cierre_cola
 
@@ -329,3 +339,28 @@ ejecuta `recommended_action` como endpoint arbitrario. Evidencia:
 `TestOpsDashboardWebEndpointV0GlobalStatusFallbackAutoprogramming`,
 `TestOpsDashboardWebEndpointV0PropagaAccionGlobalStatusPorRunYCola` y
 `TestOpsDashboardWebEndpointV0GlobalStatusNoEjecutaAccionPorSiSolo`.
+
+## ORQ-OPES-006 idempotencia_reconciliacion_agente_vivo
+
+Estado: cerrado offline para stack Codex; pendiente validar en Orquesta OPES
+residente actualizado sin cortar agentes vivos.
+
+Problema: un supervisor residente puede repetir `AgentWorkAssessed` desde
+`live-agent-reconciliation` con el mismo `ReportID` pero payload enriquecido
+por evidencias nuevas. Si el `EventSink` ya hizo durable el evento y el
+`RunStore` quedo stale, el siguiente tick podia chocar con
+`events.idempotency: event_id conflictivo`.
+
+Alcance cerrado: la reconciliacion de agentes parados ahora deriva
+`CommandID`, `IdempotencyKey`, `AssessmentRef` y `QuestionID` con sufijo digest
+del payload observable; las repeticiones identicas conservan ids y payloads
+distintos ya no comparten `event_id`. Antes de emitir un nuevo
+`AgentWorkAssessed`, el stack busca eventos durables por `event_id` exacto o
+por base `assessment-ref-<reportID>`, reproyecta la assessment durable en el
+`RunStore` y reconstruye el comando desde ese payload durable para recuperar
+tambien el `AgentStopRequested` pendiente sin duplicar historia. El observador
+Codex reconoce `assessment-ref-<reportID>-<digest>` como reporte ya tratado.
+Evidencia:
+`TestApplyStoppedAgentReconciliationV0ReproyectaAssessmentDurableStale`,
+`TestStoppedAgentSupervisionInputV0ClaveCambiaConPayloadYRepiteIgual` y
+`TestCodexProgressExactAssessmentForReportV0AceptaSufijoDigest`.

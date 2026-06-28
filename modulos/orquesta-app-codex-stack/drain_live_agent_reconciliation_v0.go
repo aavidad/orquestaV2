@@ -640,7 +640,11 @@ func (stack StackV0) applyStoppedAgentReconciliationV0(
 	if err != nil {
 		return err
 	}
-	commands := []orquestacoreworkflow.OrchestrationCommandV0{result.AssessCommand}
+	assessCommand, err := stack.recoverDurableAgentWorkAssessedBeforeReconciliationV0(ctx, run, result.AssessCommand)
+	if err != nil {
+		return err
+	}
+	commands := []orquestacoreworkflow.OrchestrationCommandV0{assessCommand}
 	if result.AskDirectorCommand != nil {
 		commands = append(commands, *result.AskDirectorCommand)
 	}
@@ -668,11 +672,17 @@ func stoppedAgentSupervisionInputV0(
 ) orquestadirector.AgentProgressSupervisionInputV0 {
 	report := observation.Report
 	reportID := strings.TrimSpace(report.ReportID)
+	key := liveAgentReconciliationAssessmentKeyV0(run, observation)
+	refSuffix := ""
+	if key != "" {
+		refSuffix = "-" + key
+	}
+	assessmentRef := "assessment-ref-" + reportID + refSuffix
 	return orquestadirector.AgentProgressSupervisionInputV0{
 		CommandMeta: orquestacoreworkflow.OrchestrationCommandMetaV0{
-			CommandID:      "cmd-live-agent-reconciliation-" + codexStackOperationalClosureSafeRefV0(reportID),
+			CommandID:      "cmd-live-agent-reconciliation-" + codexStackOperationalClosureSafeRefV0(reportID+refSuffix),
 			RunID:          strings.TrimSpace(run.RunID),
-			IdempotencyKey: "idem-live-agent-reconciliation-" + codexStackOperationalClosureSafeRefV0(reportID),
+			IdempotencyKey: "idem-live-agent-reconciliation-" + codexStackOperationalClosureSafeRefV0(reportID+refSuffix),
 			CorrelationID:  strings.TrimSpace(request.CorrelationID),
 			RequestedBy:    "orquesta-app-codex-stack-live-agent-reconciliation",
 			OccurredAt:     firstNonEmptyQueuedSourceV0(strings.TrimSpace(request.OccurredAt), "1970-01-01T00:00:00Z"),
@@ -681,8 +691,8 @@ func stoppedAgentSupervisionInputV0(
 		PhaseID:       stoppedAgentObservationPhaseV0(run, observation),
 		TaskRef:       strings.TrimSpace(observation.TaskRef),
 		DeliveryRef:   strings.TrimSpace(observation.DeliveryRef),
-		AssessmentRef: firstNonEmptyQueuedSourceV0(strings.TrimSpace(observation.AssessmentRef), "assessment-ref-"+reportID),
-		QuestionID:    firstNonEmptyQueuedSourceV0(strings.TrimSpace(observation.QuestionID), "question-ref-"+reportID),
+		AssessmentRef: firstNonEmptyQueuedSourceV0(strings.TrimSpace(observation.AssessmentRef), assessmentRef),
+		QuestionID:    firstNonEmptyQueuedSourceV0(strings.TrimSpace(observation.QuestionID), "question-ref-"+reportID+refSuffix),
 	}
 }
 
