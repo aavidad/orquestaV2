@@ -640,3 +640,20 @@ Impacto: `nueva_app_html_render_v0.go` usa `SupportedDataStorageTypesV0`, conser
 Contratos afectados: NuevaAppHTMLHandlerV0, WebNuevaAppFormV0, AppSpecRequestV0.
 Estado: aceptada localmente.
 ```
+
+```text
+Fecha: 2026-06-28
+Decision: `/nueva-app` muestra etiquetas humanas localizadas para opciones del
+wizard y sirve la guia larga como HTML estructurado.
+Motivo: el operador debe poder entender todas las opciones sin leer enums como
+`true`, `false`, `clean_architecture` o `local_path` en la UI principal, y la
+guia debe ser navegable como documentacion, no como Markdown volcado en un
+`pre`.
+Alternativas: traducir los valores antes de enviarlos; duplicar enums en
+factory; mantener la guia como preformateado.
+Impacto: la web conserva los `value` contractuales de `AppSpecRequestV0`, solo
+traduce el texto visible mediante `optionLabel`, y renderiza la guia embebida
+con titulos, listas, parrafos y bloques de codigo escapados.
+Contratos afectados: NuevaAppHTMLHandlerV0, NuevaAppGuideWebEndpointV0.
+Estado: aceptada localmente.
+```

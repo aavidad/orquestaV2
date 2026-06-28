@@ -20,7 +20,7 @@ func TestNuevaAppGuideWebEndpointV0GETSirveGuiaEmbebida(t *testing.T) {
 	for _, want := range []string{
 		`Guia de opciones de nueva app`,
 		`Documento completo de uso y contrato visible para el wizard.`,
-		`# Guia de opciones del wizard`,
+		`<article><h2>Guia de opciones del wizard`,
 		`Modo Experto`,
 		`clean_architecture`,
 		`calidad.accesibilidad`,
@@ -29,6 +29,9 @@ func TestNuevaAppGuideWebEndpointV0GETSirveGuiaEmbebida(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("guia no contiene %q\n%s", want, body)
 		}
+	}
+	if strings.Contains(body, `<pre># Guia de opciones del wizard`) {
+		t.Fatalf("guia vuelve a servir markdown completo en pre\n%s", body)
 	}
 }
 
