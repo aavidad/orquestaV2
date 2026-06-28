@@ -103,6 +103,9 @@ func (executor MCPAutoprogrammingObserveActiveGoalsToolExecutorV0) Execute(
 		return mcpAutoprogrammingObserveActiveGoalsErrorV0(input, "autoprogramming_goal_state_list_failed", "goal_state_store", publicMCPExecutorErrorMessageFromErrorV0("autoprogramming_goal_state_list_failed", err)), nil
 	}
 	for _, state := range states {
+		if !orquestagoal.GoalWorkStatePendingObservationV0(state) {
+			continue
+		}
 		runRef := strings.TrimSpace(state.RunRef)
 		if runRef == "" {
 			result.Issues = append(result.Issues, MCPValidationIssueV0{
@@ -156,7 +159,11 @@ func mcpAutoprogrammingObserveActiveGoalsListRequestV0(
 		MaxItems: input.MaxItems,
 	})
 	if len(request.Statuses) == 0 {
-		request.ActiveOnly = true
+		request.ActiveOnly = false
+		request.Statuses = []string{
+			orquestagoal.GoalStatusRunningV0,
+			orquestagoal.GoalStatusCompleteV0,
+		}
 	}
 	return orquestagoal.NormalizeGoalWorkStateListRequestV0(request)
 }

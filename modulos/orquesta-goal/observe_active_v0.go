@@ -48,6 +48,9 @@ func ObserveActiveGoalWorksV0(
 	}
 	out := GoalWorkObserveActiveResultV0{}
 	for _, state := range states {
+		if !GoalWorkStatePendingObservationV0(state) {
+			continue
+		}
 		runRef := strings.TrimSpace(state.RunRef)
 		if runRef == "" {
 			out.Issues = append(out.Issues, GoalWorkObserveActiveIssueV0{
@@ -79,7 +82,8 @@ func defaultActiveGoalWorkStateListRequestV0(
 ) GoalWorkStateListRequestV0 {
 	request = NormalizeGoalWorkStateListRequestV0(request)
 	if len(request.Statuses) == 0 {
-		request.ActiveOnly = true
+		request.ActiveOnly = false
+		request.Statuses = []string{GoalStatusRunningV0, GoalStatusCompleteV0}
 	}
 	return NormalizeGoalWorkStateListRequestV0(request)
 }

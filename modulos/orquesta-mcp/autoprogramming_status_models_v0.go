@@ -15,6 +15,7 @@ type MCPAutoprogrammingQueueHealthV0 struct {
 	Queued                    int `json:"queued,omitempty"`
 	QueuedNotDispatched       int `json:"queued_not_dispatched,omitempty"`
 	RunningLive               int `json:"running_live,omitempty"`
+	GoalClosurePending        int `json:"goal_closure_pending,omitempty"`
 	AgentsLive                int `json:"agents_live,omitempty"`
 	RunningStale              int `json:"running_stale,omitempty"`
 	RunningStaleNoProcess     int `json:"running_stale_no_process,omitempty"`

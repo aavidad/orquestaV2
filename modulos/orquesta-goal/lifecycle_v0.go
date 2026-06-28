@@ -269,6 +269,27 @@ func GoalWorkResultTerminalV0(status string) bool {
 	}
 }
 
+func GoalWorkStatePendingObservationV0(state GoalWorkStateV0) bool {
+	switch strings.TrimSpace(state.Status) {
+	case GoalStatusRunningV0:
+		return true
+	case GoalStatusCompleteV0:
+		if state.LastClosure == nil {
+			return true
+		}
+		closureStatus := strings.TrimSpace(state.LastClosure.Status)
+		if state.LastClosure.Accepted || closureStatus == GoalStatusAcceptedV0 {
+			return false
+		}
+		if state.LastClosure.NeedsRework || closureStatus == GoalStatusBlockedV0 {
+			return false
+		}
+		return true
+	default:
+		return false
+	}
+}
+
 func NormalizeGoalWorkStateListRequestV0(
 	request GoalWorkStateListRequestV0,
 ) GoalWorkStateListRequestV0 {

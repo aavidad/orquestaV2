@@ -122,6 +122,34 @@ Ambos terminan en el mismo `GoalStateStore`; el observador los trata igual.
   `goal_observer_required`.
 - `go test -race ./modulos/orquesta-server/...` verde.
 
+### Avance Orquesta 2026-06-28 - `complete` pendiente de cierre observable
+
+Se corrigió un hueco del observador goal-first: un goal con
+`status=complete` pero sin `LastClosure.Accepted=true` ya no queda invisible ni
+se etiqueta como `running_live`.
+
+- `GoalWorkStatePendingObservationV0` define qué estados deben volver a
+  observarse: `running` y `complete` sin closure aceptado/bloqueado.
+- `ObserveActiveGoalWorksV0` y
+  `orquesta.autoprogramming.observe_active_goals.v0` listan por defecto
+  `running, complete` y filtran con ese helper.
+- `autoprogramming/status` también lista esos goals pendientes por el lister y
+  publica `queue_health.goal_closure_pending` en vez de inflar
+  `running_live`.
+- Los goals `complete` con closure aceptado o rework/bloqueo no se reobservan.
+
+Cobertura añadida:
+
+- `TestObserveActiveGoalWorksV0ListaYObservaPendientesDeObservacion`
+- `TestMCPAutoprogrammingObserveActiveGoalsToolExecutorV0ListaYObservaActivos`
+  actualizado para `running + complete pendiente`.
+- `TestMCPAutoprogrammingStatusExecutorV0ListaGoalCompletePendingClosure`
+
+Validación ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-goal ./modulos/orquesta-mcp -run 'ObserveActive|AutoprogrammingStatusExecutorV0(ListaGoalCompletePendingClosure|RecomiendaObserveGoalParaRunGoalFirst)'`
+- `go test -count=1 ./modulos/orquesta-goal ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./cmd/orquesta-server`
+
 ---
 
 ## T2 — Estado vivo de cola: `running_live` vs `running_stale`

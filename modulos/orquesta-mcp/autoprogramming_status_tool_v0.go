@@ -268,13 +268,19 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) goalStatesForAutoprogramm
 	}
 	if lister, ok := executor.GoalStateStore.(orquestagoal.GoalWorkStateListPortV0); ok {
 		listed, err := lister.ListGoalWorkStatesV0(ctx, orquestagoal.GoalWorkStateListRequestV0{
-			ActiveOnly: true,
-			MaxItems:   mcpAutoprogrammingRunningStatsMaxV0,
+			Statuses: []string{
+				orquestagoal.GoalStatusRunningV0,
+				orquestagoal.GoalStatusCompleteV0,
+			},
+			MaxItems: mcpAutoprogrammingRunningStatsMaxV0,
 		})
 		if err == nil {
 			for _, state := range listed {
 				runRef := strings.TrimSpace(state.RunRef)
-				if runRef == "" || seen[runRef] || strings.TrimSpace(state.GoalRef) == "" {
+				if runRef == "" ||
+					seen[runRef] ||
+					strings.TrimSpace(state.GoalRef) == "" ||
+					!orquestagoal.GoalWorkStatePendingObservationV0(state) {
 					continue
 				}
 				seen[runRef] = true

@@ -196,6 +196,69 @@ func TestMCPAutoprogrammingStatusExecutorV0RecomiendaObserveGoalParaRunGoalFirst
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0ListaGoalCompletePendingClosure(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-complete-pending-001"
+	goalRef := "goal-ref-autop-status-goal-complete-pending-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusCompleteV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Validar cierre pendiente de goal-first.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:      goalRef,
+			Status:       orquestagoal.GoalStatusRunningV0,
+			EvidenceRefs: []string{"evidence-ref-goal-complete-pending-status-test"},
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-complete-pending-status-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        runRef,
+				AppRef:        "app-ref-goal-complete-pending",
+				Status:        "running",
+				PriorityScore: 80,
+			}},
+		},
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_goal_first_observe_required") {
+		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.RunningLive != 0 ||
+		result.QueueHealth.GoalClosurePending != 1 ||
+		result.QueueHealth.QueueRuns != 1 ||
+		result.QueueHealth.ObservedRuns != 1 {
+		t.Fatalf("queue_health=%+v", result.QueueHealth)
+	}
+	if result.Operator == nil ||
+		!hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "observe_goal", "run", runRef) {
+		t.Fatalf("operator=%+v", result.Operator)
+	}
+	if result.OpsSnapshot == nil ||
+		result.OpsSnapshot.Decision.Action != "observe_goal" ||
+		result.OpsSnapshot.Decision.RunRef != runRef ||
+		result.OpsSnapshot.Decision.ReasonCode != "goal_first_observe_required" {
+		t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0GoalFirstMarkerSinStateNoSupervisaLegacy(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-marker-missing-state-001"
 	goalRef := "goal-ref-autop-status-goal-marker-missing-state-001"

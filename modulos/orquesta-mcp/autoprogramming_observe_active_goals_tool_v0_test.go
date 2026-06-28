@@ -24,6 +24,23 @@ func TestMCPAutoprogrammingObserveActiveGoalsToolExecutorV0ListaYObservaActivos(
 		"goal-ref-observe-active-goals-complete-001",
 		orquestagoal.GoalStatusCompleteV0,
 	)
+	accepted, err := store.LoadGoalWorkStateV0(context.Background(), "run-ref-observe-active-goals-complete-001")
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0 accepted base: %v", err)
+	}
+	accepted.RunRef = "run-ref-observe-active-goals-accepted-001"
+	accepted.GoalRef = "goal-ref-observe-active-goals-accepted-001"
+	accepted.Spec.RunRef = accepted.RunRef
+	accepted.Spec.GoalRef = accepted.GoalRef
+	accepted.LaunchReceipt.GoalRef = accepted.GoalRef
+	accepted.Status = orquestagoal.GoalStatusCompleteV0
+	accepted.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:   orquestagoal.GoalStatusAcceptedV0,
+		Accepted: true,
+	}
+	if err := store.SaveGoalWorkStateV0(context.Background(), accepted); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 accepted: %v", err)
+	}
 	observer := &fakeMCPAutoprogrammingObserveActiveGoalsExecutorForTestV0{
 		results: map[string]MCPAutoprogrammingObserveGoalToolResultV0{
 			"run-ref-observe-active-goals-001": {
@@ -32,6 +49,13 @@ func TestMCPAutoprogrammingObserveActiveGoalsToolExecutorV0ListaYObservaActivos(
 				GoalRef:      "goal-ref-observe-active-goals-001",
 				GoalStatus:   orquestagoal.GoalStatusRunningV0,
 				EvidenceRefs: []string{"evidence-ref-observe-active-goals-001"},
+			},
+			"run-ref-observe-active-goals-complete-001": {
+				Estado:       MCPAutoprogrammingObserveGoalEstadoOKV0,
+				RunRef:       "run-ref-observe-active-goals-complete-001",
+				GoalRef:      "goal-ref-observe-active-goals-complete-001",
+				GoalStatus:   orquestagoal.GoalStatusCompleteV0,
+				EvidenceRefs: []string{"evidence-ref-observe-active-goals-complete-001"},
 			},
 		},
 	}
@@ -47,12 +71,14 @@ func TestMCPAutoprogrammingObserveActiveGoalsToolExecutorV0ListaYObservaActivos(
 		t.Fatalf("Execute: %v", err)
 	}
 	if result.Estado != MCPAutoprogrammingObserveActiveGoalsEstadoOKV0 ||
-		len(result.Observations) != 1 ||
-		result.Observations[0].RunRef != "run-ref-observe-active-goals-001" ||
+		len(result.Observations) != 2 ||
 		len(result.Issues) != 0 ||
-		len(observer.inputs) != 1 ||
-		observer.inputs[0].RunRef != "run-ref-observe-active-goals-001" ||
-		!hasStringMCPAutoprogrammingObserveActiveGoalsTestV0(result.EvidenceRefs, "evidence-ref-observe-active-goals-001") {
+		len(observer.inputs) != 2 ||
+		!hasInputRunMCPAutoprogrammingObserveActiveGoalsTestV0(observer.inputs, "run-ref-observe-active-goals-001") ||
+		!hasInputRunMCPAutoprogrammingObserveActiveGoalsTestV0(observer.inputs, "run-ref-observe-active-goals-complete-001") ||
+		hasInputRunMCPAutoprogrammingObserveActiveGoalsTestV0(observer.inputs, "run-ref-observe-active-goals-accepted-001") ||
+		!hasStringMCPAutoprogrammingObserveActiveGoalsTestV0(result.EvidenceRefs, "evidence-ref-observe-active-goals-001") ||
+		!hasStringMCPAutoprogrammingObserveActiveGoalsTestV0(result.EvidenceRefs, "evidence-ref-observe-active-goals-complete-001") {
 		t.Fatalf("result=%+v inputs=%+v", result, observer.inputs)
 	}
 }
@@ -335,6 +361,18 @@ func (store *mcpAutoprogrammingObserveActiveGoalsStoreForTestV0) ListGoalWorkSta
 func hasStringMCPAutoprogrammingObserveActiveGoalsTestV0(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func hasInputRunMCPAutoprogrammingObserveActiveGoalsTestV0(
+	inputs []MCPAutoprogrammingObserveGoalToolInputV0,
+	want string,
+) bool {
+	for _, input := range inputs {
+		if input.RunRef == want {
 			return true
 		}
 	}

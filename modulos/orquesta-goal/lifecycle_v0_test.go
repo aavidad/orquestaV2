@@ -325,7 +325,7 @@ func TestGoalWorkRunMarkerMatchesListRequestV0FiltraActivos(t *testing.T) {
 	}
 }
 
-func TestObserveActiveGoalWorksV0ListaYObservaSoloActivos(t *testing.T) {
+func TestObserveActiveGoalWorksV0ListaYObservaPendientesDeObservacion(t *testing.T) {
 	store := newGoalLifecycleStoreForTestV0()
 	running := mustGoalLifecycleStateWithRefsForTestV0(
 		t,
@@ -339,11 +339,24 @@ func TestObserveActiveGoalWorksV0ListaYObservaSoloActivos(t *testing.T) {
 		"goal-ref-lifecycle-complete-001",
 		GoalStatusCompleteV0,
 	)
+	accepted := mustGoalLifecycleStateWithRefsForTestV0(
+		t,
+		"run-ref-goal-lifecycle-accepted-001",
+		"goal-ref-lifecycle-accepted-001",
+		GoalStatusCompleteV0,
+	)
+	accepted.LastClosure = &GoalClosureValidationV0{
+		Status:   GoalStatusAcceptedV0,
+		Accepted: true,
+	}
 	if err := store.SaveGoalWorkStateV0(context.Background(), running); err != nil {
 		t.Fatalf("SaveGoalWorkStateV0 running: %v", err)
 	}
 	if err := store.SaveGoalWorkStateV0(context.Background(), complete); err != nil {
 		t.Fatalf("SaveGoalWorkStateV0 complete: %v", err)
+	}
+	if err := store.SaveGoalWorkStateV0(context.Background(), accepted); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 accepted: %v", err)
 	}
 	observer := &goalLifecycleObserverByGoalForTestV0{
 		results: map[string]GoalWorkResultV0{
@@ -371,14 +384,18 @@ func TestObserveActiveGoalWorksV0ListaYObservaSoloActivos(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ObserveActiveGoalWorksV0: %v", err)
 	}
-	if len(result.Observations) != 1 ||
-		result.Observations[0].State.RunRef != running.RunRef ||
+	if len(result.Observations) != 2 ||
 		len(result.Issues) != 0 ||
-		len(observer.requests) != 1 ||
-		observer.requests[0].GoalRef != running.GoalRef {
+		len(observer.requests) != 2 ||
+		!goalLifecycleObservedGoalRefForTestV0(observer.requests, running.GoalRef) ||
+		!goalLifecycleObservedGoalRefForTestV0(observer.requests, complete.GoalRef) ||
+		goalLifecycleObservedGoalRefForTestV0(observer.requests, accepted.GoalRef) {
 		t.Fatalf("result=%+v requests=%+v", result, observer.requests)
 	}
 	if !goalLifecycleStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-goal-active-001") {
+		t.Fatalf("evidence=%v", result.EvidenceRefs)
+	}
+	if !goalLifecycleStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-goal-complete-001") {
 		t.Fatalf("evidence=%v", result.EvidenceRefs)
 	}
 }
@@ -651,6 +668,18 @@ func (goalLifecycleStoreWithoutListForTestV0) LoadGoalWorkStateV0(
 func goalLifecycleStringInSetForTestV0(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func goalLifecycleObservedGoalRefForTestV0(
+	requests []GoalObservationRequestV0,
+	want string,
+) bool {
+	for _, request := range requests {
+		if request.GoalRef == want {
 			return true
 		}
 	}

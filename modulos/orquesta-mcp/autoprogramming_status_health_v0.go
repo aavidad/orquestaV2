@@ -11,6 +11,7 @@ import (
 const (
 	mcpAutoprogrammingHealthQueuedV0                    = "queued"
 	mcpAutoprogrammingHealthRunningLiveV0               = "running_live"
+	mcpAutoprogrammingHealthGoalClosurePendingV0        = "goal_closure_pending"
 	mcpAutoprogrammingHealthRunningStaleV0              = "running_stale"
 	mcpAutoprogrammingHealthRunningStaleNoProcessV0     = "running_stale_no_process"
 	mcpAutoprogrammingHealthRunningWithoutRecentStatsV0 = "running_without_recent_stats"
@@ -217,8 +218,9 @@ func classifyMCPAutoprogrammingGoalStateV0(
 	switch status {
 	case orquestagoal.GoalStatusBlockedV0, orquestagoal.GoalStatusInvalidV0:
 		return mcpAutoprogrammingHealthBlockedV0
-	case orquestagoal.GoalStatusCompleteV0,
-		orquestagoal.GoalStatusRunningV0,
+	case orquestagoal.GoalStatusCompleteV0:
+		return mcpAutoprogrammingHealthGoalClosurePendingV0
+	case orquestagoal.GoalStatusRunningV0,
 		orquestagoal.GoalStatusAcceptedV0:
 		return mcpAutoprogrammingHealthRunningLiveV0
 	default:
@@ -315,6 +317,8 @@ func applyMCPAutoprogrammingHealthClassV0(
 		health.Queued = nonNegativeMCPAutoprogrammingHealthV0(health.Queued + delta)
 	case mcpAutoprogrammingHealthRunningLiveV0:
 		health.RunningLive = nonNegativeMCPAutoprogrammingHealthV0(health.RunningLive + delta)
+	case mcpAutoprogrammingHealthGoalClosurePendingV0:
+		health.GoalClosurePending = nonNegativeMCPAutoprogrammingHealthV0(health.GoalClosurePending + delta)
 	case mcpAutoprogrammingHealthRunningStaleV0:
 		health.RunningStale = nonNegativeMCPAutoprogrammingHealthV0(health.RunningStale + delta)
 	case mcpAutoprogrammingHealthRunningStaleNoProcessV0:
