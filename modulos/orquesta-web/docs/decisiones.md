@@ -128,6 +128,10 @@ Impacto: `agentNeedsAttention` y `runNeedsAttention` solo marcan atencion por
 senales duras o explicitas: `needs_attention`, `loop_detected`, stopped,
 failed/error, checkpoint pendiente, bloqueo o validacion bloqueada. No cambian
 endpoints, stores, runtime, DB, OPES ni proveedor.
+Actualizacion 2026-06-28: la misma regla aplica a
+`WebAutoprogrammingRunProgressV0`; `stalled_agents` se muestra como telemetria
+en `/autoprogramming/status`, pero no activa `needs_attention` si no hay fallo
+de agente ni cierre bloqueado.
 Estado: aceptada localmente.
 ```
 

@@ -224,6 +224,39 @@ func TestWebAutoprogrammingStatusViewModelV0AgregaColaYRunVivos(t *testing.T) {
 	}
 }
 
+func TestWebAutoprogrammingStatusViewModelV0StalledSoloNoEsAtencionDura(t *testing.T) {
+	vm := NewWebAutoprogrammingStatusViewModelV0("es", orquestamcp.MCPAutoprogrammingStatusToolResultV0{
+		Estado: orquestamcp.MCPAutoprogrammingStatusEstadoOKV0,
+		Run: &orquestamcp.MCPDirectorStatsToolResultV0{
+			Estado: orquestamcp.MCPDirectorStatsEstadoOKV0,
+			RunRef: "run-ref-autop-status-stalled-only-001",
+			Stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+				RunRef:       "run-ref-autop-status-stalled-only-001",
+				ProjectRef:   "app-ref-autop-status-stalled-only-001",
+				Status:       "running",
+				CurrentPhase: "programacion",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					TasksTotal:  3,
+					TasksClosed: 1,
+				},
+				Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+					PercentComplete: 33,
+					StalledAgents:   2,
+				},
+				Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
+					Status: "open",
+				},
+			},
+		},
+	})
+
+	if len(vm.Runs) != 1 ||
+		vm.Runs[0].StalledAgents != 2 ||
+		vm.Runs[0].NeedsAttention {
+		t.Fatalf("runs=%+v", vm.Runs)
+	}
+}
+
 func TestWebAutoprogrammingStatusViewModelV0SinPuertosNoInventaEstadoLive(t *testing.T) {
 	vm := NewWebAutoprogrammingStatusViewModelV0("en", orquestamcp.MCPAutoprogrammingStatusToolResultV0{
 		Estado: orquestamcp.MCPAutoprogrammingStatusEstadoErrorV0,

@@ -496,6 +496,18 @@ duplique el rail blando en la decision visible del Director.
 ```
 
 ```text
+Caso: WEB-UT-030B autoprogramming status no convierte stalled-only en atencion dura
+Tipo: unit/viewmodel
+Comando: `go test -count=1 ./modulos/orquesta-web -run TestWebAutoprogrammingStatusViewModelV0StalledSoloNoEsAtencionDura`
+Evidencia esperada: un run con `stalled_agents > 0`, sin agentes fallidos y sin
+cierre bloqueado conserva la telemetria `stalled_agents` pero expone
+`needs_attention=false`.
+Ultima ejecucion: 2026-06-28, pasa con el comando focal.
+Riesgos: No cambia el contrato MCP ni oculta la senal; solo evita tratarla como
+bloqueo duro desde la web.
+```
+
+```text
 Caso: WEB-UT-031 panel ops invoca run supervisor
 Tipo: unit/html contract
 Comando: `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0`

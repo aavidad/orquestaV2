@@ -328,8 +328,7 @@ func webAutoprogrammingRunProgressV0(result *orquestamcp.MCPDirectorStatsToolRes
 		ClosureStatus:      trimV0(stats.Closure.Status),
 		ClosureBlockedBy:   compactStringsV0(stats.Closure.BlockedBy),
 		ClosureBlockerRefs: compactStringsV0(stats.Closure.BlockerRefs),
-		NeedsAttention: stats.Counts.AgentsFailed > 0 ||
-			stats.Progress.StalledAgents > 0 || stats.Closure.Blocked,
+		NeedsAttention:     stats.Counts.AgentsFailed > 0 || stats.Closure.Blocked,
 	}
 }
 
