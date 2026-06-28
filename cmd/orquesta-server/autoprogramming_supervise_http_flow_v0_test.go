@@ -207,6 +207,58 @@ func TestServerRunSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0(t *testing.T) 
 	}
 }
 
+func TestServerQueueGlobalStatusHTTPClienteRealMontadoEnStackV0(t *testing.T) {
+	queue := &serverQueueGlobalStatusQueueExecutorV0{}
+	gateway := orquestaappgateway.NewHTTPHandlerV0(orquestaappgateway.ConfigV0{
+		Timeout:          time.Second,
+		RunQueuePriority: queue,
+	})
+	handler, err := buildServerAppHandlerV0(orquestaappcodexstack.StackV0{
+		Handler: gateway,
+	})
+	if err != nil {
+		t.Fatalf("buildServerAppHandlerV0: %v", err)
+	}
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	client := &http.Client{Timeout: 3 * time.Second}
+	req, err := http.NewRequest(
+		http.MethodGet,
+		server.URL+orquestamcp.MCPQueueGlobalStatusHTTPPathV0+"?request_id=request-ref-server-queue-global-status-001&queue_ref=global",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Correlation-ID", "corr-server-queue-global-status-001")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("client.Do: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d", resp.StatusCode)
+	}
+	var result orquestamcp.MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if result.SchemaVersion != orquestamcp.MCPQueueGlobalStatusSchemaVersionV0 ||
+		result.Estado != orquestamcp.MCPAutoprogrammingStatusEstadoOKV0 ||
+		result.QueueRef != "global" ||
+		len(result.Items) != 1 ||
+		result.Items[0].RunRef != "run-ref-server-queue-global-status-001" ||
+		!result.Items[0].NeedsAction ||
+		result.Items[0].RecommendedAction != "reencolar" ||
+		queue.Input.Action != orquestamcp.MCPRunQueuePriorityActionRankV0 ||
+		queue.Input.QueueRef != "global" {
+		t.Fatalf("result=%+v queue_input=%+v", result, queue.Input)
+	}
+}
+
 func TestServerRunQueuePriorityHTTPSetPriorityClienteRealRecibeTimeoutJSONV0(t *testing.T) {
 	queue := newBlockingServerRunQueuePriorityExecutorV0()
 	gateway := orquestaappgateway.NewHTTPHandlerV0(orquestaappgateway.ConfigV0{
@@ -444,6 +496,10 @@ type blockingServerAutoprogrammingSuperviseExecutorV0 struct {
 	done    chan struct{}
 }
 
+type serverQueueGlobalStatusQueueExecutorV0 struct {
+	Input orquestamcp.MCPRunQueuePriorityToolInputV0
+}
+
 type blockingServerRunQueuePriorityExecutorV0 struct {
 	mu    sync.Mutex
 	once  sync.Once
@@ -504,6 +560,26 @@ func (executor *blockingServerAutoprogrammingSuperviseExecutorV0) Execute(
 		RunRef:     strings.TrimSpace(input.RunRef),
 		StopReason: "released",
 		Ticks:      1,
+	}, nil
+}
+
+func (executor *serverQueueGlobalStatusQueueExecutorV0) Execute(
+	_ context.Context,
+	input orquestamcp.MCPRunQueuePriorityToolInputV0,
+) (orquestamcp.MCPRunQueuePriorityToolResultV0, error) {
+	executor.Input = input
+	return orquestamcp.MCPRunQueuePriorityToolResultV0{
+		Estado:   orquestamcp.MCPRunQueuePriorityEstadoOKV0,
+		Action:   orquestamcp.MCPRunQueuePriorityActionRankV0,
+		QueueRef: strings.TrimSpace(input.QueueRef),
+		Count:    1,
+		Ranked: []orquestamcp.MCPRunQueueRankedCandidateCompactV0{{
+			Rank:         1,
+			RunRef:       "run-ref-server-queue-global-status-001",
+			AppRef:       "app-ref-server-queue-global-status-001",
+			Status:       "ready",
+			EvidenceRefs: []string{"evidence-ref-server-queue-global-status-001"},
+		}},
 	}, nil
 }
 

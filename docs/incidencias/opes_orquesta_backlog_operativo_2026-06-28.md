@@ -115,6 +115,16 @@ de pedir stats y construir runs, muestra la accion en cola/detalle, conserva
 `TestOpsDashboardWebEndpointV0PropagaAccionGlobalStatusPorRunYCola` y
 `TestOpsDashboardWebEndpointV0GlobalStatusNoEjecutaAccionPorSiSolo`.
 
+Avance 2026-06-28 noche 7: el montaje real de servidor queda cubierto en
+`cmd/orquesta-server`: `buildServerAppHandlerV0` sirve
+`/api/v0/queue/global-status` por `httptest.Server`, devuelve JSON
+`queue_global_status.v0` y conserva la accion `reencolar` para una run visible
+de cola. La observacion de 404 en procesos residentes previos debe tratarse
+como binario/stack vivo no actualizado hasta reinicio controlado, no como
+regresion del handler MCP. No se reinician puertos vivos durante trabajo OPES
+paralelo. Evidencia:
+`TestServerQueueGlobalStatusHTTPClienteRealMontadoEnStackV0`.
+
 ## ORQ-OPES-002 reconciliacion_ack_artefactos_cierre_cola
 
 Estado: parcial; cierre goal-first DomainWork ya no acepta receipts
