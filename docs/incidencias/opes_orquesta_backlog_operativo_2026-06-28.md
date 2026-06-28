@@ -66,6 +66,13 @@ consume tambien `ops_snapshot.decision` por run y elimina el fallback global a
 validarlo contra un servidor temporal con combinacion real de estados y no solo
 unit/html contract.
 
+Avance 2026-06-28 noche 3: `/ops` prioriza la decision
+`run.ops_snapshot.decision` del run seleccionado antes que un snapshot global sin
+`run_ref`. Esto evita que un `idle` global tape un
+`repair_goal_state` local y que la UI derive esa fila a observar/supervisar
+legacy. Evidencia:
+`TestOpsDashboardWebEndpointV0DecisionPorRunTienePrioridadSobreSnapshotGlobal`.
+
 Avance 2026-06-28 noche: el stack goal-first deja de depender de que el
 `run_ref` aparezca en input o cola para descubrir marcadores activos. Se anade
 `GoalWorkRunMarkerListPortV0`, `StoreV0` lista markers durables activos y
@@ -283,5 +290,13 @@ decodificable sin colgar. Evidencia:
 `TestServerRunSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0`.
 `/api/v0/autoprogramming/supervise` ya tenia cobertura equivalente en servidor
 con `TestServerAutoprogrammingSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0`.
+Avance 2026-06-28 noche 3: las respuestas `accepted_background` de
+`/api/v0/autoprogramming/supervise` y `/api/v0/runs/supervise` publican tambien
+`poll_queue_global_status` en `next_actions`, de forma que el cliente tiene una
+continuacion publica unica despues del despacho en segundo plano. Evidencia:
+`TestMCPAutoprogrammingSuperviseHTTPHandlerV0DevuelveAcceptedSiExecutorSigueVivo`,
+`TestMCPRunSupervisorHTTPHandlerV0DevuelveAcceptedSiExecutorSigueVivo`,
+`TestServerAutoprogrammingSuperviseHTTPDevuelveAcceptedBackgroundSinColgarV0` y
+`TestServerRunSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0`.
 Sigue vivo el cierre de streaming/flush amplio y observacion posterior sobre
 colas OPES reales temporales.

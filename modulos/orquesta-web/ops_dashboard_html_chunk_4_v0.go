@@ -125,13 +125,13 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
 	    function runOpsSnapshotDecision(runRef) {
 	      const ref = String(runRef || '');
 	      const decisions = [];
-	      const topDecision = ((lastSnapshot.opsSnapshot || {}).decision || {});
-	      if (topDecision.action) decisions.push(topDecision);
 	      (lastSnapshot.runs || []).forEach(function(run) {
 	        if (ref && String((run || {}).run_ref || '') !== ref) return;
 	        const decision = ((((run || {}).ops_snapshot || {}).decision) || {});
 	        if (decision.action) decisions.push(decision);
 	      });
+	      const topDecision = ((lastSnapshot.opsSnapshot || {}).decision || {});
+	      if (topDecision.action) decisions.push(topDecision);
 	      return decisions.find(function(decision) {
 	        return !ref || !decision.run_ref || String(decision.run_ref || '') === ref;
 	      }) || {};

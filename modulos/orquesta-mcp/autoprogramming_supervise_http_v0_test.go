@@ -156,7 +156,8 @@ func TestMCPAutoprogrammingSuperviseHTTPHandlerV0DevuelveAcceptedSiExecutorSigue
 		result.StopReason != "accepted_background" ||
 		result.OperationRef == "" ||
 		!strings.Contains(result.OperationRef, "idem-autop-supervise-http-background-001") ||
-		len(result.NextActions) == 0 ||
+		!hasMCPRunSupervisorNextActionForTestV0(result.NextActions, "poll_autoprogramming_status") ||
+		!hasMCPRunSupervisorNextActionForTestV0(result.NextActions, "poll_queue_global_status") ||
 		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_supervise_background_accepted") {
 		t.Fatalf("result=%+v", result)
 	}
@@ -190,7 +191,8 @@ func TestMCPAutoprogrammingSuperviseHTTPHandlerV0BodyVacioNoSeCuelga(t *testing.
 	}
 	if result.StopReason != "accepted_background" ||
 		result.OperationRef != "operation-ref-autoprogramming-supervise-queue" ||
-		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_supervise_background_accepted") {
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_supervise_background_accepted") ||
+		!hasMCPRunSupervisorNextActionForTestV0(result.NextActions, "poll_queue_global_status") {
 		t.Fatalf("result=%+v", result)
 	}
 }

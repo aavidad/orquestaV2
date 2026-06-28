@@ -193,6 +193,7 @@ func newMCPRunSupervisorAcceptedBackgroundV0(
 	result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, result.OperationRef))
 	result.NextActions = []string{
 		"poll_director_stats_or_run_queue",
+		"poll_queue_global_status",
 		"do_not_relaunch_same_run_ref_while_operation_ref_pending",
 	}
 	result.Diagnostics = []MCPAutoprogrammingDiagnosticV0{{

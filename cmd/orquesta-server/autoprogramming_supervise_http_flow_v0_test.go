@@ -50,7 +50,8 @@ func TestServerAutoprogrammingSuperviseHTTPDevuelveAcceptedBackgroundSinColgarV0
 		firstResult.Last.Status != "accepted_background" ||
 		firstResult.OperationRef == "" ||
 		!serverAutoprogrammingSuperviseHasDiagnosticV0(firstResult.Diagnostics, "autoprogramming_supervise_background_accepted") ||
-		!serverAutoprogrammingSuperviseStringInSetV0(firstResult.NextActions, "poll_autoprogramming_status") {
+		!serverAutoprogrammingSuperviseStringInSetV0(firstResult.NextActions, "poll_autoprogramming_status") ||
+		!serverAutoprogrammingSuperviseStringInSetV0(firstResult.NextActions, "poll_queue_global_status") {
 		t.Fatalf("first_result=%+v", firstResult)
 	}
 
@@ -128,7 +129,8 @@ func TestServerAutoprogrammingSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0(t 
 	if result.StopReason != "accepted_background" ||
 		result.Last.Status != "accepted_background" ||
 		result.OperationRef == "" ||
-		!serverAutoprogrammingSuperviseHasDiagnosticV0(result.Diagnostics, "autoprogramming_supervise_background_accepted") {
+		!serverAutoprogrammingSuperviseHasDiagnosticV0(result.Diagnostics, "autoprogramming_supervise_background_accepted") ||
+		!serverAutoprogrammingSuperviseStringInSetV0(result.NextActions, "poll_queue_global_status") {
 		t.Fatalf("result=%+v", result)
 	}
 
@@ -192,7 +194,8 @@ func TestServerRunSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0(t *testing.T) 
 	if result.StopReason != "accepted_background" ||
 		result.Last.Status != "accepted_background" ||
 		result.OperationRef == "" ||
-		!serverAutoprogrammingSuperviseHasDiagnosticV0(result.Diagnostics, "run_supervisor_background_accepted") {
+		!serverAutoprogrammingSuperviseHasDiagnosticV0(result.Diagnostics, "run_supervisor_background_accepted") ||
+		!serverAutoprogrammingSuperviseStringInSetV0(result.NextActions, "poll_queue_global_status") {
 		t.Fatalf("result=%+v", result)
 	}
 

@@ -105,7 +105,8 @@ func TestMCPRunSupervisorHTTPHandlerV0DevuelveAcceptedSiExecutorSigueVivo(t *tes
 		!strings.Contains(result.OperationRef, "idem-supervisor-http-background-001") ||
 		len(result.Diagnostics) != 1 ||
 		result.Diagnostics[0].Code != "run_supervisor_background_accepted" ||
-		len(result.NextActions) < 2 {
+		!hasMCPRunSupervisorNextActionForTestV0(result.NextActions, "poll_director_stats_or_run_queue") ||
+		!hasMCPRunSupervisorNextActionForTestV0(result.NextActions, "poll_queue_global_status") {
 		t.Fatalf("result=%+v", result)
 	}
 }
@@ -159,7 +160,8 @@ func TestMCPRunSupervisorHTTPHandlerV0ClienteRealRecibeCuerpoSinColgar(t *testin
 		result.StopReason != "accepted_background" ||
 		result.OperationRef == "" ||
 		result.Last.Status != "accepted_background" ||
-		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "run_supervisor_background_accepted") {
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "run_supervisor_background_accepted") ||
+		!hasMCPRunSupervisorNextActionForTestV0(result.NextActions, "poll_queue_global_status") {
 		t.Fatalf("result=%+v", result)
 	}
 }
@@ -344,6 +346,15 @@ type blockingMCPRunSupervisorHTTPExecutorV0 struct {
 	calls   int
 	started chan struct{}
 	release chan struct{}
+}
+
+func hasMCPRunSupervisorNextActionForTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func (executor *blockingMCPRunSupervisorHTTPExecutorV0) Execute(

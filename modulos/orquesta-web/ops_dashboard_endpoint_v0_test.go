@@ -213,6 +213,26 @@ func TestOpsDashboardWebEndpointV0GoalFirstUsaObserveGoalEnAvance(t *testing.T) 
 	}
 }
 
+func TestOpsDashboardWebEndpointV0DecisionPorRunTienePrioridadSobreSnapshotGlobal(t *testing.T) {
+	body := opsDashboardHTMLV0()
+	fn := htmlFunctionSliceForTest(t, body, "function runOpsSnapshotDecision", "function runNeedsGoalStateRepair")
+	runDecision := strings.Index(fn, "(run || {}).ops_snapshot")
+	topDecision := strings.Index(fn, "const topDecision")
+
+	if runDecision < 0 || topDecision < 0 || !(runDecision < topDecision) {
+		t.Fatalf("runOpsSnapshotDecision debe evaluar ops_snapshot por run antes del snapshot global:\n%s", fn)
+	}
+	for _, want := range []string{
+		"if (ref && String((run || {}).run_ref || '') !== ref) return",
+		"return decisions.find(function(decision)",
+		"String(decision.run_ref || '') === ref",
+	} {
+		if !strings.Contains(fn, want) {
+			t.Fatalf("runOpsSnapshotDecision no contiene %q:\n%s", want, fn)
+		}
+	}
+}
+
 func TestOpsDashboardWebEndpointV0SinSafeActionNoLlamaSupervisorLegacyGlobal(t *testing.T) {
 	body := opsDashboardHTMLV0()
 	fn := htmlFunctionSliceForTest(t, body, "async function superviseGlobalWave", "async function advanceSelectedRun")
