@@ -118,6 +118,18 @@ actividad y bloqueo semantico si el goal queda `invalid` o `blocked`. El
 statefile local puede contener spec/receipt/result/closure completos para
 restauracion, pero no es API publica.
 
+`observePendingIdleSelfImprovementGoalV0` queda como puente de compatibilidad
+de automejora goal-first, no como loop director legacy. El observador generico
+de goals activos cierra apps y external-work desde `GoalWorkStateStore`, pero la
+automejora residente tambien necesita actualizar `IdleSelfImprovementOperationalMessage`,
+`IdleSelfImprovementGoalResult` y `IdleSelfImprovementGoalClosure` para liberar
+el gating de intentos posteriores. No se debe retirar ese helper hasta que el
+observador generico enrute goals `idle_self_improvement` por el backend/workdir
+idle y actualice el tracker residente con cobertura equivalente. Evidencia:
+`TestRuntimeV0IdleSelfImprovementGoalFirstObservaGoalPendienteV0`,
+`TestRuntimeV0IdleSelfImprovementGoalFirstCompleteNoCierraSinValidacionV0` y
+`TestRuntimeV0IdleSelfImprovementGoalFirstCompleteValidaCierreConSpecPersistidoV0`.
+
 La composicion hace un preflight rapido del backend app-server al arrancar el
 stack. El cliente manda `initialize`, `initialized` y la llamada real
 `thread/loaded/list`, manteniendo stdin abierto hasta recibir `id=2`; esto es

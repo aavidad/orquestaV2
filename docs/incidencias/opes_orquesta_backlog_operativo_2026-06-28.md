@@ -48,7 +48,7 @@ casos visibles.
 ## ORQ-OPES-002 reconciliacion_ack_artefactos_cierre_cola
 
 Estado: parcial; cierre goal-first DomainWork ya no acepta receipts
-incompletos.
+incompletos y la secuencia fake/offline de derivados OPES ya cierra por ledger.
 
 Problema: en trabajos OPES hay ACKs y entregas parciales utiles, pero el cierre
 de cola no siempre reconcilia artefactos canonicos, pendientes reales,
@@ -76,8 +76,23 @@ La recuperacion DomainWork sin `agent_ack.json` deja de depender de frases en
 write-set/project workdir. Evidencia:
 `TestRecoverDomainWorkAckV0RecuperaArtefactoValidoSinSenalDeLog` y
 `TestCodexStackV0OPESExternalWorkRecuperaEntregaSinACKConArtefactoValido`.
-Sigue vivo el smoke OPES temporal completo de derivados/cierre, inventario de
+El 2026-06-28 tambien queda cubierta la cadena fake/offline de derivados OPES
+posterior a `plan_temario`: `update_topic_registry` ->
+`finalize_temario_package`, 23 work kinds en total, usando el bridge OPES como
+consumidor, sin OPES productivo. Cada run `goal_first` sube artefacto por
+`DomainWork`, registra receipt aceptado en ledger y cierra por
+`evidence-ref-goal-domain-receipt-ledger-accepted`, sin receipts inventados.
+Evidencia:
+`TestCodexStackV0ExternalWorkGoalFirstCierraSecuenciaOPESDerivadosConReceiptsLedgerV0`.
+Sigue vivo el smoke OPES temporal real de derivados/cierre, inventario de
 artefactos canonicos y cola final sin pendientes reales.
+
+Avance 2026-06-28 adicional: `external_work.input_fields` goal-first conserva
+refs durables `input_field_payload`/`app_change_payload:<run>:<change>:...`
+resolubles desde `AppChangeStore` por `RunRef`/`ChangeRef`, sin exponer rutas
+locales absolutas al Goal. Evidencia:
+`TestBuildExternalWorkGoalWorkSpecV0InlineaInputFieldsOperativosSeguros` y
+`TestCodexStackV0ExternalWorkRunGoalFirstConservaInputFieldsOPESV0`.
 
 ## ORQ-OPES-003 external_work_no_agent_no_delivery
 

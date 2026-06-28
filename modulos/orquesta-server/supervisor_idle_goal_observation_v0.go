@@ -20,6 +20,9 @@ const (
 )
 
 func (runtime *RuntimeV0) observePendingIdleSelfImprovementGoalV0(ctx context.Context, now time.Time) bool {
+	// Compatibility bridge for idle_self_improvement goal-first. The generic
+	// active-goal observer closes app/external-work goals, but this helper still
+	// updates the idle tracker and gates later self-improvement attempts.
 	if runtime == nil || !runtime.config.IdleSelfImprovementGoalFirst || runtime.tracker == nil {
 		return false
 	}
