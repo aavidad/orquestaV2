@@ -9,6 +9,7 @@ import (
 )
 
 func NormalizeGoalWorkSpecV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
+	spec = cloneGoalWorkSpecSlicesV0(spec)
 	spec.SchemaVersion = GoalWorkSpecSchemaV0
 	spec.GoalRef = strings.TrimSpace(spec.GoalRef)
 	spec.RequestRef = strings.TrimSpace(spec.RequestRef)
@@ -57,6 +58,27 @@ func NormalizeGoalWorkSpecV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
 	for i := range spec.ClosurePolicy.RequiredEvidenceRefs {
 		spec.ClosurePolicy.RequiredEvidenceRefs[i] = strings.TrimSpace(spec.ClosurePolicy.RequiredEvidenceRefs[i])
 	}
+	return spec
+}
+
+func cloneGoalWorkSpecSlicesV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
+	spec.ContextRefs = append([]GoalContextRefV0(nil), spec.ContextRefs...)
+	spec.RuleRefs = append([]GoalRuleRefV0(nil), spec.RuleRefs...)
+	spec.SkillRefs = append([]string(nil), spec.SkillRefs...)
+	spec.WriteSet = append([]GoalWriteScopeV0(nil), spec.WriteSet...)
+	spec.RequiredTests = append([]GoalRequiredTestV0(nil), spec.RequiredTests...)
+	for i := range spec.RequiredTests {
+		spec.RequiredTests[i].AcceptanceCriteria = append([]string(nil), spec.RequiredTests[i].AcceptanceCriteria...)
+		spec.RequiredTests[i].AcceptanceCriteriaRefs = append([]string(nil), spec.RequiredTests[i].AcceptanceCriteriaRefs...)
+		spec.RequiredTests[i].EvidenceRefs = append([]string(nil), spec.RequiredTests[i].EvidenceRefs...)
+	}
+	spec.AcceptanceCriteria = append([]string(nil), spec.AcceptanceCriteria...)
+	spec.ArtifactContracts = append([]GoalArtifactContractV0(nil), spec.ArtifactContracts...)
+	for i := range spec.ArtifactContracts {
+		spec.ArtifactContracts[i].EvidenceRefs = append([]string(nil), spec.ArtifactContracts[i].EvidenceRefs...)
+	}
+	spec.EvidenceRefs = append([]string(nil), spec.EvidenceRefs...)
+	spec.ClosurePolicy.RequiredEvidenceRefs = append([]string(nil), spec.ClosurePolicy.RequiredEvidenceRefs...)
 	return spec
 }
 

@@ -61,6 +61,17 @@ Fix: sustituir `time.Sleep(...)` por
 con `time.Sleep` como sincronización.
 Verificación: `go test -race ./modulos/orquesta-server/...` en verde.
 
+Avance 2026-06-28 noche: el gate ampliado `go test -race ./...` destapo una
+carrera adicional en `cmd/orquesta-server`
+(`TestRuntimeV0SelfAuditBacklogGoalFirstLanzaSpecOperacionalV0`): el launcher
+fake retenia un `GoalWorkSpecV0` con slices compartidas y el lifecycle goal-first
+las normalizaba de nuevo. Se corrige en `orquesta-goal` haciendo que
+`NormalizeGoalWorkSpecV0` clone en profundidad las slices antes de normalizar, y
+queda fijado con `TestNormalizeGoalWorkSpecV0NoMutaSlicesDeEntrada`. Evidencia:
+`go test -race -count=1 ./...`, `go vet ./...`, `go test -count=1 ./...` y
+`git diff --check` verdes. `staticcheck` y `govulncheck` no estaban instalados en
+este entorno durante este corte.
+
 ## T4 — Corregir copia por valor de mutex/Builder (`go vet`)
 
 `go vet` marca copylocks en `modulos/orquesta-runtime-required-test`.

@@ -38,6 +38,50 @@ func TestNormalizeGoalWorkSpecV0UsaRuntimeGoalPorDefecto(t *testing.T) {
 	}
 }
 
+func TestNormalizeGoalWorkSpecV0NoMutaSlicesDeEntrada(t *testing.T) {
+	spec := GoalWorkSpecV0{
+		GoalRef:           " goal-ref-001 ",
+		Objective:         " Objetivo ",
+		ContextRefs:       []GoalContextRefV0{{Kind: " doc ", Ref: " context-ref-001 ", Purpose: " soporte "}},
+		RuleRefs:          []GoalRuleRefV0{{Kind: " rule ", Ref: " rule-ref-001 ", Enforcement: " "}},
+		SkillRefs:         []string{" skill-ref-001 "},
+		WriteSet:          []GoalWriteScopeV0{{Path: " docs/foo.md ", Purpose: " editar "}},
+		RequiredTests:     []GoalRequiredTestV0{{TestRef: " test-ref-001 ", CommandRef: " command-ref-001 ", Command: " go test ./... ", AcceptanceCriteria: []string{" criterio "}, AcceptanceCriteriaRefs: []string{" criteria-ref-001 "}, EvidenceRefs: []string{" evidence-ref-test-001 "}}},
+		ArtifactContracts: []GoalArtifactContractV0{{ArtifactRef: " artifact-ref-001 ", ArtifactType: " markdown ", EvidenceRefs: []string{" evidence-ref-artifact-001 "}}},
+		EvidenceRefs:      []string{" evidence-ref-spec-001 "},
+		ClosurePolicy:     GoalClosurePolicyV0{RequiredEvidenceRefs: []string{" evidence-ref-closure-001 "}},
+	}
+
+	normalized := NormalizeGoalWorkSpecV0(spec)
+	normalized.ContextRefs[0].Kind = "changed"
+	normalized.RuleRefs[0].Ref = "changed"
+	normalized.SkillRefs[0] = "changed"
+	normalized.WriteSet[0].Path = "changed"
+	normalized.RequiredTests[0].Command = "changed"
+	normalized.RequiredTests[0].AcceptanceCriteria[0] = "changed"
+	normalized.RequiredTests[0].AcceptanceCriteriaRefs[0] = "changed"
+	normalized.RequiredTests[0].EvidenceRefs[0] = "changed"
+	normalized.ArtifactContracts[0].ArtifactRef = "changed"
+	normalized.ArtifactContracts[0].EvidenceRefs[0] = "changed"
+	normalized.EvidenceRefs[0] = "changed"
+	normalized.ClosurePolicy.RequiredEvidenceRefs[0] = "changed"
+
+	if spec.ContextRefs[0].Kind != " doc " ||
+		spec.RuleRefs[0].Ref != " rule-ref-001 " ||
+		spec.SkillRefs[0] != " skill-ref-001 " ||
+		spec.WriteSet[0].Path != " docs/foo.md " ||
+		spec.RequiredTests[0].Command != " go test ./... " ||
+		spec.RequiredTests[0].AcceptanceCriteria[0] != " criterio " ||
+		spec.RequiredTests[0].AcceptanceCriteriaRefs[0] != " criteria-ref-001 " ||
+		spec.RequiredTests[0].EvidenceRefs[0] != " evidence-ref-test-001 " ||
+		spec.ArtifactContracts[0].ArtifactRef != " artifact-ref-001 " ||
+		spec.ArtifactContracts[0].EvidenceRefs[0] != " evidence-ref-artifact-001 " ||
+		spec.EvidenceRefs[0] != " evidence-ref-spec-001 " ||
+		spec.ClosurePolicy.RequiredEvidenceRefs[0] != " evidence-ref-closure-001 " {
+		t.Fatalf("NormalizeGoalWorkSpecV0 muto el spec de entrada: %+v", spec)
+	}
+}
+
 func TestValidateGoalWorkSpecV0RechazaObjetivoVacio(t *testing.T) {
 	issues := ValidateGoalWorkSpecV0(GoalWorkSpecV0{
 		GoalRef:      "goal-ref-001",
