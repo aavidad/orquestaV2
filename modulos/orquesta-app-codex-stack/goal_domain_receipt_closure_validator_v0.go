@@ -39,6 +39,9 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) ValidateGoalWorkClosure
 	spec orquestagoal.GoalWorkSpecV0,
 	result orquestagoal.GoalWorkResultV0,
 ) (orquestagoal.GoalClosureValidationV0, error) {
+	if spec.ClosurePolicy.RequireDomainReceipt {
+		result = validator.goalResultWithAcceptedDomainReceiptRefsV0(ctx, spec, result)
+	}
 	base := validator.Base
 	if base == nil {
 		base = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
@@ -53,6 +56,52 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) ValidateGoalWorkClosure
 	}
 	closure.EvidenceRefs = compactStringsV0(append(closure.EvidenceRefs, receiptEvidence...))
 	return closure, nil
+}
+
+func (validator domainWorkGoalReceiptClosureValidatorV0) goalResultWithAcceptedDomainReceiptRefsV0(
+	ctx context.Context,
+	spec orquestagoal.GoalWorkSpecV0,
+	result orquestagoal.GoalWorkResultV0,
+) orquestagoal.GoalWorkResultV0 {
+	spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
+	result = orquestagoal.NormalizeGoalWorkResultV0(result)
+	if len(compactStringsV0(result.DomainReceiptRefs)) > 0 ||
+		strings.TrimSpace(spec.RunRef) == "" ||
+		validator.Ledger == nil {
+		return result
+	}
+	required := goalDomainReceiptRequiredArtifactContractsV0(spec)
+	if len(required) == 0 {
+		return result
+	}
+	records, err := validator.Ledger.ListDomainWorkArtifactSubmissionsV0(
+		ctx,
+		DomainWorkArtifactSubmissionRecordFilterV0{
+			RunRef: spec.RunRef,
+			Status: DomainWorkArtifactSubmissionStatusAcceptedV0,
+		},
+	)
+	if err != nil {
+		return result
+	}
+	complete := goalDomainReceiptCompleteRecordsV0(records)
+	if !goalDomainReceiptAllContractsCoveredV0(required, complete) {
+		return result
+	}
+	for _, record := range complete {
+		record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+		if strings.TrimSpace(record.ReceiptRef) == "" {
+			continue
+		}
+		for _, contract := range required {
+			if goalDomainReceiptRecordMatchesContractV0(record, contract) {
+				result.DomainReceiptRefs = append(result.DomainReceiptRefs, record.ReceiptRef)
+				result.EvidenceRefs = append(result.EvidenceRefs, "domain-work-goal-receipt-derived-"+safeDomainWorkEvidenceRefV0(record.ReceiptRef))
+				break
+			}
+		}
+	}
+	return orquestagoal.NormalizeGoalWorkResultV0(result)
 }
 
 func (validator domainWorkGoalReceiptClosureValidatorV0) validateAcceptedDomainReceiptsV0(

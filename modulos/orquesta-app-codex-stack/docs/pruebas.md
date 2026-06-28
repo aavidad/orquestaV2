@@ -1495,6 +1495,11 @@ Cobertura:
   fija que un receipt DomainWork aceptado pero con `complete_job=false` no
   satisface `ClosurePolicy.RequireDomainReceipt`: la run queda bloqueada,
   `NeedsRework=true` y aparece `domain_work_receipt_artifact_incomplete`.
+- `TestCodexStackV0ExternalWorkGoalFirstDerivaReceiptDesdeLedgerSiGoalNoLoDeclaraV0`
+  cubre un goal que termina con artefacto materializado y tests pasados, pero
+  sin `DomainReceiptRefs`: el wrapper sube el artefacto por DomainWork, registra
+  el receipt aceptado en ledger, lo deriva en la reobservacion y cierra solo con
+  evidencia causal del ledger.
 - `TestPrepareAutoprogrammingRunV0GoalReadyMultiGoalLanzaBatchSinLegacy` y
   `TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaBatchGoalsSinColaLegacy`
   fijan el batch goal-first: dos `GoalWorkSpecV0` producen dos runs derivados

@@ -378,6 +378,52 @@ func TestCodexStackV0ExternalWorkGoalFirstSubeArtifactDomainWorkYCierraV0(t *tes
 	}
 }
 
+func TestCodexStackV0ExternalWorkGoalFirstDerivaReceiptDesdeLedgerSiGoalNoLoDeclaraV0(t *testing.T) {
+	stack, observer, launcher, domainWork := buildExternalWorkGoalFirstDomainDeliveryStackWithExecutorForTestV0(t)
+	started := postExternalWorkRunStackV0(t, stack)
+	spec := launcher.specs[0]
+	contract := spec.ArtifactContracts[0]
+	writeGoalFirstDomainWorkArtifactForTestV0(t, stack.Codex.ProjectWorkDir, spec, contract.ArtifactType)
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-derived-receipt-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		!result.Closure.Accepted ||
+		domainWork.called != 1 ||
+		domainWork.input.Action != orquestamcp.MCPDomainWorkActionSubmitArtifactV0 {
+		t.Fatalf("goal-first sin DomainReceiptRefs no subio artefacto y cerro: result=%+v domainWork=%+v", result, domainWork)
+	}
+	derivedReceipt := "receipt-ref-" + contract.ArtifactRef
+	records, err := stack.DomainDelivery.Ledger.(DomainWorkArtifactSubmissionRecordReaderPortV0).ListDomainWorkArtifactSubmissionsV0(
+		context.Background(),
+		DomainWorkArtifactSubmissionRecordFilterV0{
+			RunRef: started.RunRef,
+			Status: DomainWorkArtifactSubmissionStatusAcceptedV0,
+		},
+	)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("records=%+v err=%v", records, err)
+	}
+	if records[0].ReceiptRef != derivedReceipt ||
+		!codexStackStringInSetForTestV0(result.Closure.EvidenceRefs, "domain-work-goal-receipt-derived-"+safeDomainWorkEvidenceRefV0(derivedReceipt)) ||
+		!codexStackStringInSetForTestV0(result.Closure.EvidenceRefs, goalDomainReceiptLedgerAcceptedEvidenceRefV0) {
+		t.Fatalf("receipt derivado no queda evidenciado: record=%+v closure=%+v", records[0], result.Closure)
+	}
+}
+
 func TestCodexStackV0ExternalWorkGoalFirstCierraConReceiptAceptadoEnLedger(t *testing.T) {
 	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
 	started := postExternalWorkRunStackV0(t, stack)

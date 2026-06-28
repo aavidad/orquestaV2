@@ -93,7 +93,6 @@ func (stack StackV0) goalFirstDomainWorkSubmitReadyV0(
 		strings.TrimSpace(stack.Codex.ProjectWorkDir) != "" &&
 		result.GoalResult.Status == orquestagoal.GoalStatusCompleteV0 &&
 		!result.Closure.Accepted &&
-		len(compactStringsV0(result.GoalResult.DomainReceiptRefs)) > 0 &&
 		goalFirstDomainWorkClosureNeedsReceiptV0(result.Closure)
 }
 
@@ -106,6 +105,10 @@ func goalFirstDomainWorkClosureNeedsReceiptV0(
 			goalDomainReceiptLedgerRequiredArtifactIssueV0,
 			goalDomainReceiptLedgerIncompleteArtifactV0:
 			return true
+		case orquestagoal.ErrGoalClosureInvalidV0:
+			if strings.TrimSpace(issue.Field) == "domain_receipt_refs" {
+				return true
+			}
 		}
 	}
 	return false

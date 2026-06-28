@@ -287,6 +287,23 @@ Estado: aceptada.
 
 ```text
 Fecha: 2026-06-28
+Decision: Goal-first DomainWork puede derivar `domain_receipt_refs` desde ledger
+cuando el goal materializa artefacto requerido pero omite el receipt en su
+resultado.
+Motivo: Codex Goal puede terminar con `artifact_refs` y fichero valido dentro
+del write-set, pero sin declarar `DomainReceiptRefs`. Eso no debe convertir una
+entrega util en rework si Orquesta puede subir el artefacto por el puerto
+DomainWork y el ledger devuelve un receipt aceptado y completo.
+Impacto: `StackV0.ObserveAppDirectorGoalV0` intenta el submit cuando la closure
+falla por falta de `domain_receipt_refs` o por receipt DomainWork pendiente; el
+validador de cierre solo deriva refs desde records `accepted` y `CompleteJob`
+que cubren todos los contratos requeridos. No acepta receipts inventados ni
+cierra si el ledger no acredita el artefacto.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-28
 Decision: El cierre goal-first por DomainWork exige receipt aceptado y artefacto
 completo.
 Motivo: el cierre legacy de `domain_work` ya bloqueaba receipts aceptados con
