@@ -23,10 +23,16 @@ func autoprogrammingHTMLV0() string {
     .panel { border:1px solid var(--line); background:rgba(24,29,34,.92); border-radius:14px; padding:16px; }
     form { display:grid; gap:12px; }
     label { display:grid; gap:5px; color:var(--muted); }
+    label.invalid { color:#fecaca; }
     input, textarea, select { width:100%; border:1px solid var(--line); background:#0e1216; color:var(--text); border-radius:8px; padding:9px; font:inherit; }
+    input[aria-invalid="true"], textarea[aria-invalid="true"], select[aria-invalid="true"] { border-color:var(--bad); box-shadow:0 0 0 1px rgba(249,112,102,.35); }
     textarea { min-height:78px; resize:vertical; }
     .row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
     .hint { color:var(--muted); }
+    .validation-summary { border:1px solid rgba(249,112,102,.7); border-left:4px solid var(--bad); background:rgba(249,112,102,.12); color:#fecaca; border-radius:8px; padding:10px; }
+    .validation-summary[hidden] { display:none; }
+    .validation-summary strong { display:block; margin-bottom:4px; color:#fff1f2; }
+    .validation-summary ul { margin:0; padding-left:18px; }
     .result { display:grid; gap:10px; }
     .toggle { display:flex; align-items:center; gap:8px; width:max-content; max-width:100%; color:var(--text); }
     .toggle input { width:auto; }
@@ -72,18 +78,22 @@ func autoprogrammingHTMLV0() string {
     <section class="grid">
       <div class="panel">
         <h2>Preparar run</h2>
-        <form id="prepare-form">
-          <div class="row">
-            <label>Proyecto <input name="project_ref" value="project-ref-orquesta-web" required></label>
-            <label>Worktree ref <input name="worktree_ref" value="worktree-ref-orquesta-web" required></label>
+        <form id="prepare-form" novalidate>
+          <div id="prepare-errors" class="validation-summary" role="alert" aria-live="assertive" hidden>
+            <strong>Faltan campos obligatorios</strong>
+            <ul id="prepare-errors-list"></ul>
           </div>
           <div class="row">
-            <label>Branch ref <input name="branch_ref" value="branch-ref-autoprogramming-web" required></label>
+            <label>Proyecto <input name="project_ref" value="project-ref-orquesta-web" data-required="Proyecto" aria-required="true"></label>
+            <label>Worktree ref <input name="worktree_ref" value="worktree-ref-orquesta-web" data-required="Worktree ref" aria-required="true"></label>
+          </div>
+          <div class="row">
+            <label>Branch ref <input name="branch_ref" value="branch-ref-autoprogramming-web" data-required="Branch ref" aria-required="true"></label>
             <label>Prioridad <input name="priority_score" type="number" value="80" min="0" max="100"></label>
           </div>
           <div class="row">
-            <label>Task ref <input name="task_ref" value="task-ref-web-autoprogramming-001" required></label>
-            <label>Area <input name="area" value="web" required></label>
+            <label>Task ref <input name="task_ref" value="task-ref-web-autoprogramming-001" data-required="Task ref" aria-required="true"></label>
+            <label>Area <input name="area" value="web" data-required="Area" aria-required="true"></label>
           </div>
           <label>Titulo <input name="title" value="Mejorar superficie web de operador"></label>
           <label>Objetivo <textarea name="objective">Implementar un corte pequeno, probado y usable desde la web de Orquesta.</textarea></label>
@@ -161,6 +171,8 @@ El cambio queda cubierto por tests</textarea></label>
     const closureStatusNode = document.getElementById('closure-status');
     const goalNote = document.getElementById('goal-note');
     const goalListNode = document.getElementById('goal-list');
+    const prepareErrors = document.getElementById('prepare-errors');
+    const prepareErrorsList = document.getElementById('prepare-errors-list');
     let currentRunRef = '';
     let currentGoalRef = '';
     let currentExternalGoalRef = '';
@@ -504,6 +516,34 @@ El cambio queda cubierto por tests</textarea></label>
         }
       };
     }
+    function prepareRequiredFields(form) {
+      return Array.from(form.querySelectorAll('[data-required]'));
+    }
+    function clearPrepareValidation(form) {
+      prepareErrors.hidden = true;
+      prepareErrorsList.textContent = '';
+      prepareRequiredFields(form).forEach(field => {
+        field.removeAttribute('aria-invalid');
+        const label = field.closest('label');
+        if (label) label.classList.remove('invalid');
+      });
+    }
+    function validatePrepareForm(form) {
+      const missing = prepareRequiredFields(form).filter(field => !String(field.value || '').trim());
+      clearPrepareValidation(form);
+      if (!missing.length) return true;
+      missing.forEach(field => {
+        field.setAttribute('aria-invalid', 'true');
+        const label = field.closest('label');
+        if (label) label.classList.add('invalid');
+        const item = document.createElement('li');
+        item.textContent = 'Completa el campo ' + (field.dataset.required || field.name || 'obligatorio') + '.';
+        prepareErrorsList.appendChild(item);
+      });
+      prepareErrors.hidden = false;
+      missing[0].focus();
+      return false;
+    }
     async function refreshStatus() {
       const id = requestId('web-autoprogramming-status');
       const data = await postJSON('/api/v0/autoprogramming/status', {
@@ -565,9 +605,14 @@ El cambio queda cubierto por tests</textarea></label>
     }
     document.getElementById('prepare-form').addEventListener('submit', async function(event) {
       event.preventDefault();
+      if (!validatePrepareForm(event.target)) return;
       const data = await postJSON('/api/v0/autoprogramming/prepare-run', preparePayload(event.target));
       setResult('prepare', data);
       if (currentRunRef && currentGoalRef) await observeGoal(true);
+    });
+    prepareRequiredFields(document.getElementById('prepare-form')).forEach(field => {
+      field.addEventListener('input', () => clearPrepareValidation(document.getElementById('prepare-form')));
+      field.addEventListener('change', () => clearPrepareValidation(document.getElementById('prepare-form')));
     });
     document.getElementById('refresh-status').addEventListener('click', refreshStatus);
     document.getElementById('observe-goal').addEventListener('click', function() {

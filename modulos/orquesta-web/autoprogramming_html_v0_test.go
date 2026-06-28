@@ -23,3 +23,27 @@ func TestAutoprogrammingHTMLV0RenderizaSelectorGoalBatch(t *testing.T) {
 		t.Fatalf("HTML autoprogramming vuelve a fijar silenciosamente goals[0]")
 	}
 }
+
+func TestAutoprogrammingHTMLV0UsaValidacionLocalizadaSinRequiredNativo(t *testing.T) {
+	body := autoprogrammingHTMLV0()
+
+	for _, want := range []string{
+		`id="prepare-form" novalidate`,
+		`id="prepare-errors"`,
+		`Faltan campos obligatorios`,
+		`data-required="Proyecto"`,
+		`aria-required="true"`,
+		`function validatePrepareForm(form)`,
+		`Completa el campo `,
+		`aria-invalid`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("HTML autoprogramming no contiene validacion localizada %q", want)
+		}
+	}
+	if strings.Contains(body, " required>") ||
+		strings.Contains(body, " required ") ||
+		strings.Contains(body, " required/") {
+		t.Fatalf("HTML autoprogramming no debe usar validacion nativa required: %s", body)
+	}
+}
