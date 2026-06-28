@@ -1,6 +1,20 @@
 # Decisiones: orquesta-app-codex-stack
 
 ```text
+Fecha: 2026-06-28
+Decision: El cierre goal-first de OPES 1+6 exige seis evidencias de subrol.
+Motivo: en goal-first no se materializan `WorkflowTaskV0` hijos legacy; Codex
+Goal puede actuar como director interno, pero no debe sustituir el contrato
+OPES 1+6 por un solo receipt o una tabla de roles escrita por el padre.
+Impacto: `domainWorkGoalReceiptClosureValidatorV0` detecta
+`opes.padre-tema-6-subroles.v1` en `GoalWorkSpec.ContextRefs` y exige seis
+refs compactas `domain-work-opes-subrole-*` en el resultado o receipt aceptado.
+Si faltan, bloquea con `domain_work_opes_subroles_evidence_missing` y rework.
+No afecta trabajos no-OPES ni OPES sin contrato 1+6.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-06-27
 Decision: El supervisor global no drena legacy cuando el run es goal-first.
 Motivo: con Codex Goal, el goal actua como loop automatico del trabajo. Si un

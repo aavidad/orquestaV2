@@ -75,7 +75,8 @@ artefactos canonicos y cola final sin pendientes reales.
 
 ## ORQ-OPES-003 external_work_no_agent_no_delivery
 
-Estado: vivo.
+Estado: parcial; legacy 1+6 y guard de cierre goal-first cubiertos, pendiente
+smoke OPES temporal real.
 
 Problema: algunas tareas de external work aparecen preparadas o listas pero no
 materializan agente real ni entrega observable. El sistema debe distinguir
@@ -91,6 +92,15 @@ Alcance inicial:
 Criterio de cierre: si el contrato requiere agente, existe ACK, entrega,
 bloqueo operativo explicito o rework causal. No basta con una tabla escrita por
 un padre cuando el contrato exige subroles reales.
+
+Avance 2026-06-28: la ruta goal-first de external-work OPES que declara
+`opes.padre-tema-6-subroles.v1` ya no cierra con un unico receipt aceptado,
+aunque `complete_job=true`. El validador exige seis evidencias compactas de
+subrol `domain-work-opes-subrole-*` en el resultado o en el receipt aceptado, o
+bloquea con `domain_work_opes_subroles_evidence_missing`. Evidencia:
+`TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESSubrolesSinSeisEvidenciasV0`
+y `TestCodexStackV0ExternalWorkGoalFirstCierraOPESSubrolesConSeisEvidenciasV0`.
+Sigue pendiente prueba real temporal con agentes/subagentes y cola OPES acotada.
 
 ## ORQ-OPES-004 capability_externa_tts_edge_host_runner
 

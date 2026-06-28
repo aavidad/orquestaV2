@@ -8,20 +8,25 @@ import (
 )
 
 const (
-	goalDomainReceiptLedgerAcceptedEvidenceRefV0   = "evidence-ref-goal-domain-receipt-ledger-accepted"
-	goalDomainReceiptLedgerMissingEvidenceRefV0    = "evidence-ref-goal-domain-receipt-ledger-missing"
-	goalDomainReceiptLedgerUnavailableIssueV0      = "domain_work_receipt_ledger_unavailable"
-	goalDomainReceiptLedgerAcceptedMissingIssueV0  = "domain_work_receipt_not_accepted"
-	goalDomainReceiptLedgerIncompleteArtifactV0    = "domain_work_receipt_artifact_incomplete"
-	goalDomainReceiptLedgerRequiredRunRefIssueV0   = "domain_work_receipt_run_ref_required"
-	goalDomainReceiptLedgerRequiredReceiptIssueV0  = "domain_work_receipt_ref_required"
-	goalDomainReceiptLedgerRequiredContractIssueV0 = "domain_work_receipt_contract_required"
-	goalDomainReceiptLedgerRequiredArtifactIssueV0 = "domain_work_receipt_artifact_required"
-	goalDomainReceiptLedgerRequiredArtifactFieldV0 = "domain_receipt_refs.artifact_contracts"
-	goalDomainReceiptLedgerUnavailableIssueFieldV0 = "domain_receipt_refs.ledger"
-	goalDomainReceiptLedgerMissingIssueFieldV0     = "domain_receipt_refs"
-	goalDomainReceiptLedgerRequiredRunRefFieldV0   = "domain_receipt_refs.run_ref"
-	goalDomainReceiptLedgerRequiredReceiptFieldV0  = "domain_receipt_refs.receipt_ref"
+	goalDomainReceiptLedgerAcceptedEvidenceRefV0        = "evidence-ref-goal-domain-receipt-ledger-accepted"
+	goalDomainReceiptLedgerMissingEvidenceRefV0         = "evidence-ref-goal-domain-receipt-ledger-missing"
+	goalDomainReceiptLedgerUnavailableIssueV0           = "domain_work_receipt_ledger_unavailable"
+	goalDomainReceiptLedgerAcceptedMissingIssueV0       = "domain_work_receipt_not_accepted"
+	goalDomainReceiptLedgerIncompleteArtifactV0         = "domain_work_receipt_artifact_incomplete"
+	goalDomainReceiptLedgerRequiredRunRefIssueV0        = "domain_work_receipt_run_ref_required"
+	goalDomainReceiptLedgerRequiredReceiptIssueV0       = "domain_work_receipt_ref_required"
+	goalDomainReceiptLedgerRequiredContractIssueV0      = "domain_work_receipt_contract_required"
+	goalDomainReceiptLedgerRequiredArtifactIssueV0      = "domain_work_receipt_artifact_required"
+	goalDomainReceiptOPESSubrolesEvidenceMissingIssueV0 = "domain_work_opes_subroles_evidence_missing"
+	goalDomainReceiptLedgerRequiredArtifactFieldV0      = "domain_receipt_refs.artifact_contracts"
+	goalDomainReceiptLedgerUnavailableIssueFieldV0      = "domain_receipt_refs.ledger"
+	goalDomainReceiptLedgerMissingIssueFieldV0          = "domain_receipt_refs"
+	goalDomainReceiptLedgerRequiredRunRefFieldV0        = "domain_receipt_refs.run_ref"
+	goalDomainReceiptLedgerRequiredReceiptFieldV0       = "domain_receipt_refs.receipt_ref"
+	goalDomainReceiptOPESSubrolesEvidenceFieldV0        = "domain_receipt_refs.opes_subroles"
+	goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0  = "evidence-ref-goal-domain-receipt-opes-subroles-accepted"
+	goalDomainReceiptOPESSubrolesEvidencePrefixV0       = "domain-work-opes-subrole-"
+	goalDomainReceiptOPESSubrolesRequiredCountV0        = 6
 )
 
 type domainWorkGoalReceiptClosureValidatorV0 struct {
@@ -116,7 +121,14 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) validateAcceptedDomainR
 			Field: goalDomainReceiptLedgerRequiredArtifactFieldV0,
 		}
 	}
-	return goalDomainReceiptEvidenceRefsV0(completeMatching), orquestagoal.GoalWorkIssueV0{}
+	if issue := goalDomainReceiptOPESSubrolesIssueV0(spec, result, completeMatching); issue.Code != "" {
+		return nil, issue
+	}
+	evidenceRefs := goalDomainReceiptEvidenceRefsV0(completeMatching)
+	if goalDomainReceiptRequiresOPESSubrolesV0(spec) {
+		evidenceRefs = append(evidenceRefs, goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0)
+	}
+	return evidenceRefs, orquestagoal.GoalWorkIssueV0{}
 }
 
 func goalDomainReceiptBlockedClosureV0(
@@ -229,6 +241,82 @@ func goalDomainReceiptRecordMatchesContractV0(
 	artifactType := strings.TrimSpace(contract.ArtifactType)
 	return (artifactRef != "" && strings.TrimSpace(record.ArtifactRef) == artifactRef) ||
 		(artifactType != "" && strings.TrimSpace(record.ArtifactType) == artifactType)
+}
+
+func goalDomainReceiptOPESSubrolesIssueV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	result orquestagoal.GoalWorkResultV0,
+	records []DomainWorkArtifactSubmissionRecordV0,
+) orquestagoal.GoalWorkIssueV0 {
+	if !goalDomainReceiptRequiresOPESSubrolesV0(spec) {
+		return orquestagoal.GoalWorkIssueV0{}
+	}
+	evidenceRefs := append([]string(nil), result.EvidenceRefs...)
+	for _, record := range records {
+		record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+		evidenceRefs = append(evidenceRefs, record.EvidenceRefs...)
+	}
+	if goalDomainReceiptOPESSubroleEvidenceCountV0(evidenceRefs) >= goalDomainReceiptOPESSubrolesRequiredCountV0 {
+		return orquestagoal.GoalWorkIssueV0{}
+	}
+	return orquestagoal.GoalWorkIssueV0{
+		Code:  goalDomainReceiptOPESSubrolesEvidenceMissingIssueV0,
+		Field: goalDomainReceiptOPESSubrolesEvidenceFieldV0,
+	}
+}
+
+func goalDomainReceiptRequiresOPESSubrolesV0(
+	spec orquestagoal.GoalWorkSpecV0,
+) bool {
+	spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
+	for _, ref := range spec.ContextRefs {
+		if strings.TrimSpace(ref.Kind) == "domain_interface" &&
+			strings.TrimSpace(ref.Ref) == "opes.padre-tema-6-subroles.v1" {
+			return true
+		}
+	}
+	return goalDomainReceiptHasOPESSubrolesRequiredFieldV0(spec)
+}
+
+func goalDomainReceiptHasOPESSubrolesRequiredFieldV0(
+	spec orquestagoal.GoalWorkSpecV0,
+) bool {
+	hasField := false
+	hasValue := false
+	for _, ref := range spec.ContextRefs {
+		kind := strings.TrimSpace(ref.Kind)
+		switch kind {
+		case "input_field":
+			if strings.TrimSpace(ref.Ref) == "input-field-subroles_required" {
+				hasField = true
+			}
+		case "input_field_value":
+			purpose := strings.TrimSpace(ref.Purpose)
+			if strings.Contains(purpose, `"name":"subroles_required"`) &&
+				strings.Contains(purpose, `"value":"6"`) {
+				hasValue = true
+			}
+		}
+	}
+	return hasField && hasValue
+}
+
+func goalDomainReceiptOPESSubroleEvidenceCountV0(
+	refs []string,
+) int {
+	seen := map[string]struct{}{}
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if !strings.HasPrefix(ref, goalDomainReceiptOPESSubrolesEvidencePrefixV0) {
+			continue
+		}
+		suffix := strings.TrimPrefix(ref, goalDomainReceiptOPESSubrolesEvidencePrefixV0)
+		if suffix == "" {
+			continue
+		}
+		seen[suffix] = struct{}{}
+	}
+	return len(seen)
 }
 
 func goalDomainReceiptEvidenceRefsV0(

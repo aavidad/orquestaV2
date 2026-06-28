@@ -1545,6 +1545,13 @@ Cobertura:
   pero sin `child_task_refs` reales pese a declarar `subroles_required=6`; la
   fuente de cierre no emite closure hasta que el contrato 1+6 este
   materializado causalmente.
+- `TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESSubrolesSinSeisEvidenciasV0`
+  fija el equivalente goal-first: si el spec declara
+  `opes.padre-tema-6-subroles.v1`, un unico receipt aceptado con
+  `complete_job=true` no cierra sin seis evidencias `domain-work-opes-subrole-*`.
+- `TestCodexStackV0ExternalWorkGoalFirstCierraOPESSubrolesConSeisEvidenciasV0`
+  fija la ruta positiva goal-first: seis evidencias de subrol en el receipt
+  aceptado permiten cierre, sin reactivar `WorkflowTaskV0` legacy.
 - `TestCodexStackV0NoReconciliaOPESRunningConProcessRefNoEncontradoV0` fija que
   una run OPES `running` con registro de proceso pero snapshot no adoptado tras
   reinicio no se degrada como `running_stale` confirmado; queda pendiente de
