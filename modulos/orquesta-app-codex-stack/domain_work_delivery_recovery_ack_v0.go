@@ -1,9 +1,6 @@
 package orquestaappcodexstack
 
 import (
-	"path/filepath"
-	"strings"
-
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
@@ -31,8 +28,7 @@ func recoverDomainWorkAckV0(
 	record orquestaappchange.AppChangeRecordV0,
 ) (orquestaruntimecodex.CodexAgentAckV0, bool) {
 	if !workflowTaskHasDomainWorkContractV0(task) ||
-		record.Request.ExternalWork == nil ||
-		!domainWorkRecoveryLastMessageConfirmsAckFailureV0(descriptor) {
+		record.Request.ExternalWork == nil {
 		return orquestaruntimecodex.CodexAgentAckV0{}, false
 	}
 	files, ok := domainWorkRecoveryArtifactFilesV0(
@@ -67,52 +63,4 @@ func recoverDomainWorkAckV0(
 		return orquestaruntimecodex.CodexAgentAckV0{}, false
 	}
 	return ack, true
-}
-
-func domainWorkRecoveryLastMessageConfirmsAckFailureV0(
-	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0,
-) bool {
-	ackRef := strings.TrimSpace(descriptor.Spec.AgentPacket.DeliveryRefs.AckRef)
-	if ackRef == "" {
-		return false
-	}
-	runtimeDir := filepath.Dir(strings.TrimSpace(descriptor.AckPath))
-	if domainWorkRecoveryFileContainsV0(
-		filepath.Join(runtimeDir, orquestaruntimecodex.CodexLastMessageFileNameV0),
-		"ACK "+ackRef+" failed",
-	) {
-		return true
-	}
-	if domainWorkRecoveryFileContainsAnyV0(
-		filepath.Join(runtimeDir, orquestaruntimecodex.CodexStderrFileNameV0),
-		[]string{"turn interrupted", "turn was interrupted", "tokens used"},
-	) {
-		return true
-	}
-	return domainWorkRecoveryFileContainsV0(
-		filepath.Join(runtimeDir, orquestaruntimecodex.CodexStderrFileNameV0),
-		"patch rejected: writing outside of the project",
-	)
-}
-
-func domainWorkRecoveryFileContainsV0(path string, needle string) bool {
-	data, ok := codexStackReadTailFileV0(path, codexStackRuntimeLogTailMaxBytesV0)
-	if !ok {
-		return false
-	}
-	return strings.Contains(string(data), needle)
-}
-
-func domainWorkRecoveryFileContainsAnyV0(path string, needles []string) bool {
-	data, ok := codexStackReadTailFileV0(path, codexStackRuntimeLogTailMaxBytesV0)
-	if !ok {
-		return false
-	}
-	normalized := strings.ToLower(string(data))
-	for _, needle := range needles {
-		if strings.Contains(normalized, strings.ToLower(strings.TrimSpace(needle))) {
-			return true
-		}
-	}
-	return false
 }

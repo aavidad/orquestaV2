@@ -273,6 +273,20 @@ Estado: aceptada.
 
 ```text
 Fecha: 2026-06-28
+Decision: La recuperacion DomainWork sin ACK no depende de frases en logs.
+Motivo: exigir textos concretos en `last_message` o `stderr` convertia una
+senal recuperable en rail fragil y podia descartar material valido cuando el
+agente materializaba el write-set pero no escribia `agent_ack.json`.
+Impacto: `recoverDomainWorkAckV0` sintetiza ACK solo si hay contrato
+`ApplyExternalDomainWorkV0`, external work causal y artefacto real dentro del
+write-set/project workdir. No lee strings de runtime para habilitar la
+recuperacion; conserva validacion de ACK contra el spec y submit DomainWork por
+ledger idempotente.
+Estado: aceptada.
+```
+
+```text
+Fecha: 2026-06-28
 Decision: El cierre goal-first por DomainWork exige receipt aceptado y artefacto
 completo.
 Motivo: el cierre legacy de `domain_work` ya bloqueaba receipts aceptados con

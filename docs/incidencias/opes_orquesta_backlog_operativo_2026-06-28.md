@@ -70,6 +70,12 @@ aceptado del ledger cubra contratos requeridos y que el record declare
 `domain_work_receipt_artifact_incomplete` y rework, evitando cierre falso de
 artefactos parciales. Evidencia:
 `TestCodexStackV0ExternalWorkGoalFirstNoCierraReceiptDomainWorkIncompleteV0`.
+La recuperacion DomainWork sin `agent_ack.json` deja de depender de frases en
+`last_message`/`stderr`: ahora requiere contrato causal
+`ApplyExternalDomainWorkV0`, external work y artefacto materializado dentro del
+write-set/project workdir. Evidencia:
+`TestRecoverDomainWorkAckV0RecuperaArtefactoValidoSinSenalDeLog` y
+`TestCodexStackV0OPESExternalWorkRecuperaEntregaSinACKConArtefactoValido`.
 Sigue vivo el smoke OPES temporal completo de derivados/cierre, inventario de
 artefactos canonicos y cola final sin pendientes reales.
 

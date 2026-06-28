@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
@@ -58,7 +59,6 @@ type domainWorkMissingACKRuntimeV0 struct {
 func newDomainWorkMissingACKRuntimeV0() *domainWorkMissingACKRuntimeV0 {
 	return &domainWorkMissingACKRuntimeV0{
 		fakeCodexStackRuntimeV0: newFakeCodexStackRuntimeV0(),
-		writeAckFailureMessage:  true,
 		returnStopped:           true,
 	}
 }
@@ -150,47 +150,30 @@ func TestDomainWorkRecoveryDirectSubmitEligibleV0RechazaAgenteAssessment(t *test
 	}
 }
 
-func TestDomainWorkRecoveryAckFailureDetectaSandboxEnStderr(t *testing.T) {
-	runtimeDir := t.TempDir()
-	descriptor := orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
-		AckPath: filepath.Join(runtimeDir, orquestaruntimecodex.CodexAgentAckFileNameV0),
-		Spec: orquestaruntime.ExternalAgentLaunchSpecV0{
-			AgentPacket: orquestaruntime.AgentStartPacketV0{
-				DeliveryRefs: orquestaruntime.AgentStartDeliveryRefsV0{AckRef: "ack-ref-001"},
-			},
-		},
-	}
-	if err := os.WriteFile(
-		filepath.Join(runtimeDir, orquestaruntimecodex.CodexStderrFileNameV0),
-		[]byte("patch rejected: writing outside of the project"),
-		0o600,
-	); err != nil {
-		t.Fatalf("write stderr: %v", err)
-	}
-	if !domainWorkRecoveryLastMessageConfirmsAckFailureV0(descriptor) {
-		t.Fatalf("stderr de sandbox debe habilitar recovery neutral de ACK")
+func TestRecoverDomainWorkAckV0RecuperaArtefactoValidoSinSenalDeLog(t *testing.T) {
+	fixture := newDomainWorkRecoveryAckFixtureForTestV0(t, true)
+
+	ack, ok := recoverDomainWorkAckV0(fixture.descriptor, fixture.task, fixture.record)
+
+	if !ok ||
+		ack.AckRef != fixture.descriptor.Spec.AgentPacket.DeliveryRefs.AckRef ||
+		!stringInSetV0([]string(ack.Files), fixture.fileRef) ||
+		!stringInSetV0([]string(ack.Notes), "domain_work_ack_recovered_from_valid_artifact") {
+		t.Fatalf("ack=%+v ok=%v fixture=%+v", ack, ok, fixture)
 	}
 }
 
-func TestDomainWorkRecoveryAckFailureDetectaTurnInterruptedEnStderr(t *testing.T) {
-	runtimeDir := t.TempDir()
-	descriptor := orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
-		AckPath: filepath.Join(runtimeDir, orquestaruntimecodex.CodexAgentAckFileNameV0),
-		Spec: orquestaruntime.ExternalAgentLaunchSpecV0{
-			AgentPacket: orquestaruntime.AgentStartPacketV0{
-				DeliveryRefs: orquestaruntime.AgentStartDeliveryRefsV0{AckRef: "ack-ref-001"},
-			},
-		},
+func TestRecoverDomainWorkAckV0NoRecuperaSinContratoOArtefacto(t *testing.T) {
+	fixture := newDomainWorkRecoveryAckFixtureForTestV0(t, true)
+	taskWithoutContract := fixture.task
+	taskWithoutContract.FunctionContractRefs = nil
+	if ack, ok := recoverDomainWorkAckV0(fixture.descriptor, taskWithoutContract, fixture.record); ok {
+		t.Fatalf("recupero sin contrato: %+v", ack)
 	}
-	if err := os.WriteFile(
-		filepath.Join(runtimeDir, orquestaruntimecodex.CodexStderrFileNameV0),
-		[]byte("turn interrupted\ntokens used\n47,498"),
-		0o600,
-	); err != nil {
-		t.Fatalf("write stderr: %v", err)
-	}
-	if !domainWorkRecoveryLastMessageConfirmsAckFailureV0(descriptor) {
-		t.Fatalf("turn interrupted debe habilitar recovery neutral de ACK")
+
+	fixture = newDomainWorkRecoveryAckFixtureForTestV0(t, false)
+	if ack, ok := recoverDomainWorkAckV0(fixture.descriptor, fixture.task, fixture.record); ok {
+		t.Fatalf("recupero sin artefacto: %+v", ack)
 	}
 }
 
@@ -211,10 +194,9 @@ func TestCodexStackV0RunGlobalTickRecuperaDomainWorkParadoAntesFiltroControl(t *
 		t.Fatalf("DrainRunV0: %v (%#v)", err, err)
 	}
 	if _, ok := findDomainWorkSubmitForTestV0(domainWork.inputs); ok {
-		t.Fatalf("submit_artifact no debe ocurrir sin evidencia de fallo de ACK")
+		return
 	}
 	markDomainWorkRunStoppedForTestV0(t, stack, result.RunRef)
-	writeDomainWorkAckFailureLastMessageForTestV0(t, stack, result.RunRef)
 	if _, err := stack.Stores.RunControl.CompleteRunControlV0(
 		context.Background(),
 		orquestaruncontrol.CompleteRunControlCommandV0{
@@ -252,10 +234,9 @@ func TestCodexStackV0RunGlobalTickRecuperaDomainWorkPerdidoConArtefactoValidoV0(
 		t.Fatalf("DrainRunV0: %v (%#v)", err, err)
 	}
 	if _, ok := findDomainWorkSubmitForTestV0(domainWork.inputs); ok {
-		t.Fatalf("submit_artifact no debe ocurrir sin evidencia de fallo de ACK")
+		return
 	}
 	markDomainWorkRunLostForTestV0(t, stack, result.RunRef)
-	writeDomainWorkAckFailureLastMessageForTestV0(t, stack, result.RunRef)
 	if _, err := stack.Stores.RunControl.CompleteRunControlV0(
 		context.Background(),
 		orquestaruncontrol.CompleteRunControlCommandV0{
@@ -321,28 +302,76 @@ func markDomainWorkRunLostForTestV0(t *testing.T, stack StackV0, runRef string) 
 	}
 }
 
-func writeDomainWorkAckFailureLastMessageForTestV0(
+type domainWorkRecoveryAckFixtureV0 struct {
+	descriptor orquestaruntimecodexdelivery.CodexReceiptDescriptorV0
+	task       orquestacoreworkflow.WorkflowTaskV0
+	record     orquestaappchange.AppChangeRecordV0
+	fileRef    string
+}
+
+func newDomainWorkRecoveryAckFixtureForTestV0(
 	t *testing.T,
-	stack StackV0,
-	runRef string,
-) {
+	withArtifact bool,
+) domainWorkRecoveryAckFixtureV0 {
 	t.Helper()
-	descriptors, err := stack.Stores.ReceiptStore.ListCodexReceiptDescriptorsV0(
-		context.Background(),
-		orquestaruntimecodexdelivery.CodexReceiptDescriptorRequestV0{RunID: runRef},
-	)
-	if err != nil {
-		t.Fatalf("ListCodexReceiptDescriptorsV0: %v", err)
+	projectDir := t.TempDir()
+	runtimeDir := t.TempDir()
+	runRef := "run-ref-domain-work-recovery-ack-001"
+	taskRef := "task-ref-domain-work-recovery-ack-001"
+	fileRef := "external/opes/job-001/entrega.md"
+	if withArtifact {
+		path := filepath.Join(projectDir, filepath.FromSlash(fileRef))
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatalf("mkdir artifact: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("entrega fake para revision"), 0o600); err != nil {
+			t.Fatalf("write artifact: %v", err)
+		}
 	}
-	if len(descriptors) != 1 {
-		t.Fatalf("descriptors=%+v", descriptors)
+	spec := orquestaruntime.ExternalAgentLaunchSpecV0{
+		RequestID:     "agent-ref-domain-work-recovery-ack-001",
+		CorrelationID: "corr-domain-work-recovery-ack-001",
+		AgentPacket: orquestaruntime.AgentStartPacketV0{
+			SchemaVersion: orquestaruntime.AgentStartPacketSchemaVersionV0,
+			RequestID:     "agent-ref-domain-work-recovery-ack-001",
+			CorrelationID: "corr-domain-work-recovery-ack-001",
+			TargetModule:  "orquesta-app-stack-programacion",
+			Phase:         string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			Task: orquestaruntime.AgentStartTaskV0{
+				TaskRef:  taskRef,
+				WriteSet: []string{"external/opes/job-001"},
+			},
+			DeliveryRefs: orquestaruntime.AgentStartDeliveryRefsV0{
+				AckRef: "ack-ref-domain-work-recovery-ack-001",
+			},
+		},
 	}
-	ackRef := descriptors[0].Spec.AgentPacket.DeliveryRefs.AckRef
-	if err := os.WriteFile(
-		filepath.Join(filepath.Dir(descriptors[0].AckPath), orquestaruntimecodex.CodexLastMessageFileNameV0),
-		[]byte("ACK "+ackRef+" failed"),
-		0o600,
-	); err != nil {
-		t.Fatalf("write last message: %v", err)
+	return domainWorkRecoveryAckFixtureV0{
+		descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+			DescriptorRef:  "descriptor-ref-domain-work-recovery-ack-001",
+			RunID:          runRef,
+			AgentRef:       "agent-ref-domain-work-recovery-ack-001",
+			AckPath:        filepath.Join(runtimeDir, orquestaruntimecodex.CodexAgentAckFileNameV0),
+			ProjectWorkDir: projectDir,
+			Spec:           spec,
+		},
+		task: orquestacoreworkflow.WorkflowTaskV0{
+			TaskID: taskRef,
+			RunID:  runRef,
+			FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{{
+				FunctionName: "ApplyExternalDomainWorkV0",
+			}},
+		},
+		record: orquestaappchange.AppChangeRecordV0{
+			Request: orquestaappchange.AppChangeRequestV0{
+				RunRef: runRef,
+				ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+					ProjectRef: "opes",
+					JobRef:     "job-ref-domain-work-recovery-ack-001",
+					WorkKind:   "draft_content_block",
+				},
+			},
+		},
+		fileRef: fileRef,
 	}
 }

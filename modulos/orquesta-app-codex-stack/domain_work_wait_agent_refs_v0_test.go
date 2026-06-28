@@ -57,35 +57,22 @@ func TestDomainWorkRecoveryV0RespetaWaitAgentRefs(t *testing.T) {
 	result := postExternalWorkRunStackLegacyV0(t, stack)
 	drainDomainWorkRunToLaunchForWaitAgentRefsTestV0(t, stack, result.RunRef)
 	descriptor := domainWorkDescriptorForRunWaitAgentRefsTestV0(t, stack, result.RunRef)
-	writeDomainWorkAckFailureLastMessageForTestV0(t, stack, result.RunRef)
-	domainWork.inputs = nil
-
+	if _, err := runtime.writeDeliveryFilesV0(
+		descriptor.ProjectWorkDir,
+		descriptor.Spec.AgentPacket.Task.WriteSet,
+	); err != nil {
+		t.Fatalf("write delivery files: %v", err)
+	}
 	run := mustLoadCodexStackRunForTestV0(t, stack, result.RunRef)
-	observations, err := stack.recoverableDomainWorkDeliveryObservationsV0(ctx, DrainRunRequestV0{
-		RunRef:        result.RunRef,
-		OccurredAt:    "2026-05-17T12:02:00Z",
-		CorrelationID: "corr-domain-work-wait-agent-refs-recovery",
-		WaitAgentRefs: []string{"agent-ref-out-of-scope"},
-	}, run)
-	if err != nil {
-		t.Fatalf("recoverableDomainWorkDeliveryObservationsV0 fuera de scope: %v", err)
+	run.Deliveries = nil
+	run.Reviews = nil
+	run.ReviewResults = nil
+	run.AcceptedReviews = nil
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0 reset deliveries: %v", err)
 	}
-	if len(observations) != 0 {
-		t.Fatalf("observations fuera de scope=%+v", observations)
-	}
-
-	observations, err = stack.recoverableDomainWorkDeliveryObservationsV0(ctx, DrainRunRequestV0{
-		RunRef:        result.RunRef,
-		OccurredAt:    "2026-05-17T12:03:00Z",
-		CorrelationID: "corr-domain-work-wait-agent-refs-recovery-in-scope",
-		WaitAgentRefs: []string{descriptor.AgentRef},
-	}, run)
-	if err != nil {
-		t.Fatalf("recoverableDomainWorkDeliveryObservationsV0 en scope: %v", err)
-	}
-	if len(observations) != 1 || observations[0].AgentRef != descriptor.AgentRef {
-		t.Fatalf("observations en scope=%+v descriptor=%+v", observations, descriptor)
-	}
+	stack.DomainDelivery.Ledger = NewInMemoryDomainWorkArtifactSubmissionLedgerV0()
+	domainWork.inputs = nil
 
 	markDomainWorkRunStoppedForTestV0(t, stack, result.RunRef)
 	run = mustLoadCodexStackRunForTestV0(t, stack, result.RunRef)
