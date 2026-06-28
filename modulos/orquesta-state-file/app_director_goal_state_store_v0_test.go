@@ -81,6 +81,58 @@ func TestStoreV0AppDirectorGoalFirstRunMarkerSobreviveRecreate(t *testing.T) {
 	}
 }
 
+func TestStoreV0AppDirectorGoalFirstRunMarkerListaActivosTrasRecreate(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewStoreV0(ConfigV0{RootDir: root})
+	if err != nil {
+		t.Fatalf("NewStoreV0: %v", err)
+	}
+	running := appDirectorGoalRunMarkerWithRefsForTestV0(
+		"run-ref-state-file-marker-active-001",
+		"goal-ref-state-file-marker-active-001",
+		orquestagoal.GoalStatusRunningV0,
+	)
+	complete := appDirectorGoalRunMarkerWithRefsForTestV0(
+		"run-ref-state-file-marker-complete-001",
+		"goal-ref-state-file-marker-complete-001",
+		orquestagoal.GoalStatusCompleteV0,
+	)
+	blocked := appDirectorGoalRunMarkerWithRefsForTestV0(
+		"run-ref-state-file-marker-blocked-001",
+		"goal-ref-state-file-marker-blocked-001",
+		orquestagoal.GoalStatusBlockedV0,
+	)
+	for _, marker := range []orquestagoal.GoalWorkRunMarkerV0{complete, running, blocked} {
+		if err := store.SaveGoalWorkRunMarkerV0(context.Background(), marker); err != nil {
+			t.Fatalf("SaveGoalWorkRunMarkerV0: %v", err)
+		}
+	}
+	recovered, err := NewStoreV0(ConfigV0{RootDir: root})
+	if err != nil {
+		t.Fatalf("NewStoreV0 recovered: %v", err)
+	}
+	active, err := recovered.ListGoalWorkRunMarkersV0(context.Background(), orquestagoal.GoalWorkRunMarkerListRequestV0{
+		ActiveOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("ListGoalWorkRunMarkersV0 active: %v", err)
+	}
+	if len(active) != 1 || active[0].RunRef != running.RunRef {
+		t.Fatalf("active=%+v", active)
+	}
+	terminal, err := recovered.ListGoalWorkRunMarkersV0(context.Background(), orquestagoal.GoalWorkRunMarkerListRequestV0{
+		RunRefs:  []string{blocked.RunRef, complete.RunRef, "run-ref-state-file-marker-missing"},
+		Statuses: []string{orquestagoal.GoalStatusBlockedV0, orquestagoal.GoalStatusCompleteV0},
+		MaxItems: 1,
+	})
+	if err != nil {
+		t.Fatalf("ListGoalWorkRunMarkersV0 terminal: %v", err)
+	}
+	if len(terminal) != 1 || terminal[0].RunRef != blocked.RunRef {
+		t.Fatalf("terminal=%+v", terminal)
+	}
+}
+
 func TestStoreV0AppDirectorGoalStateListaActivosTrasRecreate(t *testing.T) {
 	root := t.TempDir()
 	store, err := NewStoreV0(ConfigV0{RootDir: root})
@@ -130,6 +182,21 @@ func TestStoreV0AppDirectorGoalStateListaActivosTrasRecreate(t *testing.T) {
 	}
 	if len(terminal) != 1 || terminal[0].RunRef != blocked.RunRef {
 		t.Fatalf("terminal=%+v", terminal)
+	}
+}
+
+func appDirectorGoalRunMarkerWithRefsForTestV0(
+	runRef string,
+	goalRef string,
+	status string,
+) orquestagoal.GoalWorkRunMarkerV0 {
+	return orquestagoal.GoalWorkRunMarkerV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: "thread-ref-state-file-marker-001",
+		DirectorKind:    orquestagoal.GoalDirectorKindCodexGoalV0,
+		Status:          status,
+		EvidenceRefs:    []string{"evidence-ref-state-file-goal-marker-list"},
 	}
 }
 

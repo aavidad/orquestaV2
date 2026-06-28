@@ -2,6 +2,9 @@ package orquestastatefile
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
@@ -59,6 +62,39 @@ func (store *StoreV0) LoadGoalWorkRunMarkerV0(
 	return marker, nil
 }
 
+func (store *StoreV0) ListGoalWorkRunMarkersV0(
+	ctx context.Context,
+	request orquestagoal.GoalWorkRunMarkerListRequestV0,
+) ([]orquestagoal.GoalWorkRunMarkerV0, error) {
+	ctx = contextOrBackgroundV0(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	request = orquestagoal.NormalizeGoalWorkRunMarkerListRequestV0(request)
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	var markers []orquestagoal.GoalWorkRunMarkerV0
+	var err error
+	if len(request.RunRefs) > 0 {
+		markers, err = store.listAppDirectorGoalMarkersByRunRefsLockedV0(ctx, request)
+	} else {
+		markers, err = store.listAppDirectorGoalMarkersFromDirLockedV0(ctx, request)
+	}
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(markers, func(i, j int) bool {
+		return strings.TrimSpace(markers[i].RunRef) < strings.TrimSpace(markers[j].RunRef)
+	})
+	if request.MaxItems > 0 && len(markers) > request.MaxItems {
+		markers = markers[:request.MaxItems]
+	}
+	if markers == nil {
+		return []orquestagoal.GoalWorkRunMarkerV0{}, nil
+	}
+	return markers, nil
+}
+
 func (store *StoreV0) saveAppDirectorGoalMarkerLockedV0(
 	marker orquestagoal.GoalWorkRunMarkerV0,
 ) error {
@@ -69,6 +105,81 @@ func (store *StoreV0) saveAppDirectorGoalMarkerLockedV0(
 		GoalRef:       strings.TrimSpace(marker.GoalRef),
 		Marker:        marker,
 	})
+}
+
+func (store *StoreV0) listAppDirectorGoalMarkersByRunRefsLockedV0(
+	ctx context.Context,
+	request orquestagoal.GoalWorkRunMarkerListRequestV0,
+) ([]orquestagoal.GoalWorkRunMarkerV0, error) {
+	out := make([]orquestagoal.GoalWorkRunMarkerV0, 0, len(request.RunRefs))
+	for _, runRef := range request.RunRefs {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		marker, ok, err := store.readAppDirectorGoalMarkerFileLockedV0(runRef)
+		if err != nil {
+			return nil, err
+		}
+		if !ok || !orquestagoal.GoalWorkRunMarkerMatchesListRequestV0(marker, request) {
+			continue
+		}
+		out = append(out, marker)
+	}
+	return out, nil
+}
+
+func (store *StoreV0) listAppDirectorGoalMarkersFromDirLockedV0(
+	ctx context.Context,
+	request orquestagoal.GoalWorkRunMarkerListRequestV0,
+) ([]orquestagoal.GoalWorkRunMarkerV0, error) {
+	dir := filepath.Join(store.rootDir, appDirectorGoalMarkersDirV0)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]orquestagoal.GoalWorkRunMarkerV0, 0, len(entries))
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		document, ok, err := readJSONFileV0[appDirectorGoalMarkerDocumentV0](filepath.Join(dir, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		marker, err := validateAppDirectorGoalMarkerDocumentV0(document, document.RunRef)
+		if err != nil {
+			return nil, err
+		}
+		if !orquestagoal.GoalWorkRunMarkerMatchesListRequestV0(marker, request) {
+			continue
+		}
+		out = append(out, marker)
+	}
+	return out, nil
+}
+
+func (store *StoreV0) readAppDirectorGoalMarkerFileLockedV0(
+	runRef string,
+) (orquestagoal.GoalWorkRunMarkerV0, bool, error) {
+	runRef = normalizeRefV0(runRef)
+	if runRef == "" {
+		return orquestagoal.GoalWorkRunMarkerV0{}, false, nil
+	}
+	document, ok, err := readJSONFileV0[appDirectorGoalMarkerDocumentV0](store.appDirectorGoalMarkerPathV0(runRef))
+	if err != nil || !ok {
+		return orquestagoal.GoalWorkRunMarkerV0{}, ok, err
+	}
+	marker, err := validateAppDirectorGoalMarkerDocumentV0(document, runRef)
+	if err != nil {
+		return orquestagoal.GoalWorkRunMarkerV0{}, false, err
+	}
+	return marker, true, nil
 }
 
 func validateAppDirectorGoalMarkerDocumentV0(

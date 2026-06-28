@@ -296,6 +296,34 @@ func GoalWorkStateMatchesListRequestV0(
 	return strings.TrimSpace(state.RunRef) != "" && strings.TrimSpace(state.GoalRef) != ""
 }
 
+func NormalizeGoalWorkRunMarkerListRequestV0(
+	request GoalWorkRunMarkerListRequestV0,
+) GoalWorkRunMarkerListRequestV0 {
+	request.RunRefs = compactGoalStringsV0(request.RunRefs)
+	request.Statuses = compactGoalStringsV0(request.Statuses)
+	if request.ActiveOnly && len(request.Statuses) == 0 {
+		request.Statuses = []string{GoalStatusRunningV0}
+	}
+	if request.MaxItems < 0 {
+		request.MaxItems = 0
+	}
+	return request
+}
+
+func GoalWorkRunMarkerMatchesListRequestV0(
+	marker GoalWorkRunMarkerV0,
+	request GoalWorkRunMarkerListRequestV0,
+) bool {
+	request = NormalizeGoalWorkRunMarkerListRequestV0(request)
+	if len(request.RunRefs) > 0 && !goalStringInSetV0(request.RunRefs, marker.RunRef) {
+		return false
+	}
+	if len(request.Statuses) > 0 && !goalStringInSetV0(request.Statuses, marker.Status) {
+		return false
+	}
+	return strings.TrimSpace(marker.RunRef) != ""
+}
+
 func goalWorkSpecWithRunRefV0(spec GoalWorkSpecV0, runRef string) GoalWorkSpecV0 {
 	spec = NormalizeGoalWorkSpecV0(spec)
 	runRef = strings.TrimSpace(runRef)

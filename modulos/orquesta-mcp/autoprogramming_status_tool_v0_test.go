@@ -327,6 +327,42 @@ func TestMCPAutoprogrammingStatusExecutorV0ListaGoalActivoAunqueColaNoVisible(t 
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0ListaGoalMarkerSinStateAunqueColaNoVisible(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-marker-listed-001"
+	goalRef := "goal-ref-autop-status-goal-marker-listed-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	goalMarkers := newMCPGoalRunMarkerStoreForStatusTestV0()
+	if err := goalMarkers.SaveGoalWorkRunMarkerV0(context.Background(), orquestagoal.GoalWorkRunMarkerV0{
+		RunRef:       runRef,
+		GoalRef:      goalRef,
+		DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+		Status:       orquestagoal.GoalStatusRunningV0,
+		EvidenceRefs: []string{"evidence-ref-goal-marker-listed-status-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkRunMarkerV0: %v", err)
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		GoalStateStore:               goalStates,
+		GoalRunMarkerStore:           goalMarkers,
+		AllowLegacySupervisorActions: true,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.Estado != MCPAutoprogrammingStatusEstadoOKV0 ||
+		len(result.Errores) != 0 ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_goal_first_state_missing") ||
+		len(result.Tasks) != 0 ||
+		len(result.Agents) != 0 ||
+		result.Operator == nil ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "run", runRef) ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "queue", "") {
+		t.Fatalf("result=%+v diagnostics=%+v operator=%+v", result, result.Diagnostics, result.Operator)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0PublicaAccionBatchParaGoalsActivos(t *testing.T) {
 	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
 	for _, pair := range []struct {
@@ -1613,6 +1649,30 @@ func (store *mcpGoalRunMarkerStoreForStatusTestV0) LoadGoalWorkRunMarkerV0(
 		return orquestagoal.GoalWorkRunMarkerV0{}, context.Canceled
 	}
 	return marker, nil
+}
+
+func (store *mcpGoalRunMarkerStoreForStatusTestV0) ListGoalWorkRunMarkersV0(
+	_ context.Context,
+	request orquestagoal.GoalWorkRunMarkerListRequestV0,
+) ([]orquestagoal.GoalWorkRunMarkerV0, error) {
+	request = orquestagoal.NormalizeGoalWorkRunMarkerListRequestV0(request)
+	out := make([]orquestagoal.GoalWorkRunMarkerV0, 0, len(store.markers))
+	for _, marker := range store.markers {
+		if !orquestagoal.GoalWorkRunMarkerMatchesListRequestV0(marker, request) {
+			continue
+		}
+		out = append(out, marker)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return strings.TrimSpace(out[i].RunRef) < strings.TrimSpace(out[j].RunRef)
+	})
+	if request.MaxItems > 0 && len(out) > request.MaxItems {
+		out = out[:request.MaxItems]
+	}
+	if out == nil {
+		return []orquestagoal.GoalWorkRunMarkerV0{}, nil
+	}
+	return out, nil
 }
 
 func hasStringMCPAutoprogrammingStatusTestV0(values []string, want string) bool {

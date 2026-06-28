@@ -179,6 +179,13 @@ type GoalWorkStateListRequestV0 struct {
 	MaxItems   int      `json:"max_items,omitempty"`
 }
 
+type GoalWorkRunMarkerListRequestV0 struct {
+	RunRefs    []string `json:"run_refs,omitempty"`
+	Statuses   []string `json:"statuses,omitempty"`
+	ActiveOnly bool     `json:"active_only,omitempty"`
+	MaxItems   int      `json:"max_items,omitempty"`
+}
+
 type GoalRequiredTestResultV0 struct {
 	TestRef      string   `json:"test_ref"`
 	Status       string   `json:"status"`
@@ -218,6 +225,10 @@ type GoalWorkStateStorePortV0 interface {
 type GoalWorkRunMarkerStorePortV0 interface {
 	SaveGoalWorkRunMarkerV0(context.Context, GoalWorkRunMarkerV0) error
 	LoadGoalWorkRunMarkerV0(context.Context, string) (GoalWorkRunMarkerV0, error)
+}
+
+type GoalWorkRunMarkerListPortV0 interface {
+	ListGoalWorkRunMarkersV0(context.Context, GoalWorkRunMarkerListRequestV0) ([]GoalWorkRunMarkerV0, error)
 }
 
 type GoalWorkStateListPortV0 interface {

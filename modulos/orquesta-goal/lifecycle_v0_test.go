@@ -293,6 +293,28 @@ func TestGoalWorkStateMatchesListRequestV0FiltraActivos(t *testing.T) {
 	}
 }
 
+func TestGoalWorkRunMarkerMatchesListRequestV0FiltraActivos(t *testing.T) {
+	marker := GoalWorkRunMarkerV0{
+		RunRef:       "run-ref-goal-marker-list-001",
+		GoalRef:      "goal-ref-marker-list-001",
+		DirectorKind: GoalDirectorKindCodexGoalV0,
+		Status:       GoalStatusRunningV0,
+	}
+	if !GoalWorkRunMarkerMatchesListRequestV0(marker, GoalWorkRunMarkerListRequestV0{ActiveOnly: true}) {
+		t.Fatalf("marker running deberia coincidir: %+v", marker)
+	}
+	marker.Status = GoalStatusCompleteV0
+	if GoalWorkRunMarkerMatchesListRequestV0(marker, GoalWorkRunMarkerListRequestV0{ActiveOnly: true}) {
+		t.Fatalf("marker terminal no deberia coincidir: %+v", marker)
+	}
+	if !GoalWorkRunMarkerMatchesListRequestV0(marker, GoalWorkRunMarkerListRequestV0{
+		RunRefs:  []string{" run-ref-goal-marker-list-001 "},
+		Statuses: []string{GoalStatusCompleteV0},
+	}) {
+		t.Fatalf("filtro explicito deberia coincidir: %+v", marker)
+	}
+}
+
 func TestObserveActiveGoalWorksV0ListaYObservaSoloActivos(t *testing.T) {
 	store := newGoalLifecycleStoreForTestV0()
 	running := mustGoalLifecycleStateWithRefsForTestV0(

@@ -317,6 +317,26 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) goalRunMarkersForAutoprog
 		}
 		out = append(out, marker)
 	}
+	if lister, ok := store.(orquestagoal.GoalWorkRunMarkerListPortV0); ok {
+		listed, err := lister.ListGoalWorkRunMarkersV0(ctx, orquestagoal.GoalWorkRunMarkerListRequestV0{
+			ActiveOnly: true,
+			MaxItems:   mcpAutoprogrammingRunningStatsMaxV0,
+		})
+		if err == nil {
+			for _, marker := range listed {
+				marker, markerErr := orquestagoal.NewGoalWorkRunMarkerV0(marker)
+				runRef := strings.TrimSpace(marker.RunRef)
+				if markerErr != nil || runRef == "" || seen[runRef] {
+					continue
+				}
+				seen[runRef] = true
+				if _, ok := goalStatesByRunRef[runRef]; ok {
+					continue
+				}
+				out = append(out, marker)
+			}
+		}
+	}
 	return out
 }
 
