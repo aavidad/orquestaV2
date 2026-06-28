@@ -212,6 +212,8 @@ func TestRunOPESDrainOnceV0GoalFirstSupervisionObservaGoalSinSupervisorLegacyV0(
 				"closure_status":          "accepted",
 				"closure_accepted":        true,
 				"evidence_refs":           []string{"evidence-ref-goal-observe-accepted"},
+				"artifact_refs":           []string{"artifact-ref-goal-observe-html", "artifact-ref-goal-observe-audio"},
+				"domain_receipt_refs":     []string{"domain-receipt-ref-goal-observe-package"},
 			})
 		case "/api/v0/runs/supervise":
 			supervisions++
@@ -264,7 +266,11 @@ func TestRunOPESDrainOnceV0GoalFirstSupervisionObservaGoalSinSupervisorLegacyV0(
 		summary.AlreadySubmitted != 1 ||
 		summary.Results[0].SupervisionStatus != "closed" ||
 		summary.Results[0].SupervisionStopReason != "accepted" ||
-		summary.Results[0].SupervisionEvidenceRef != "evidence-ref-goal-observe-accepted" {
+		summary.Results[0].SupervisionEvidenceRef != "evidence-ref-goal-observe-accepted" ||
+		!containsStringForTestV0(summary.Results[0].GoalArtifactRefs, "artifact-ref-goal-observe-html") ||
+		!containsStringForTestV0(summary.Results[0].GoalArtifactRefs, "artifact-ref-goal-observe-audio") ||
+		!containsStringForTestV0(summary.Results[0].GoalDomainReceiptRefs, "domain-receipt-ref-goal-observe-package") ||
+		!containsStringForTestV0(summary.Results[0].GoalEvidenceRefs, "evidence-ref-goal-observe-accepted") {
 		t.Fatalf("observes=%d supervisions=%d summary=%+v err=%v", observes, supervisions, summary, err)
 	}
 }

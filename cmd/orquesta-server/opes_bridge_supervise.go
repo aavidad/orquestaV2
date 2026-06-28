@@ -192,6 +192,9 @@ func opesBridgeObserveSubmittedGoalV0(
 	result.SupervisionStopReason = supervision.StopReason
 	result.SupervisionProcessRef = supervision.ProcessRef
 	result.SupervisionEvidenceRef = supervision.EvidenceRef
+	result.GoalArtifactRefs = compactStringsV0(supervision.ArtifactRefs)
+	result.GoalDomainReceiptRefs = compactStringsV0(supervision.DomainReceiptRefs)
+	result.GoalEvidenceRefs = compactStringsV0(supervision.EvidenceRefs)
 }
 
 func opesBridgeGoalObservationStopReasonV0(err error) string {

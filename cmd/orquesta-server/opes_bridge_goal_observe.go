@@ -89,41 +89,59 @@ func opesBridgeSupervisionFromObserveGoalV0(
 	status := strings.TrimSpace(decoded.GoalStatus)
 	runStatus := strings.TrimSpace(decoded.RunStatus)
 	closureStatus := strings.TrimSpace(decoded.ClosureStatus)
+	artifactRefs := compactStringsV0(decoded.ArtifactRefs)
+	domainReceiptRefs := compactStringsV0(decoded.DomainReceiptRefs)
+	evidenceRefs := compactStringsV0(decoded.EvidenceRefs)
 	evidenceRef := firstNonEmptyEnvlessV0(
-		firstNonEmptyEnvlessV0(decoded.EvidenceRefs...),
-		firstNonEmptyEnvlessV0(decoded.DomainReceiptRefs...),
-		firstNonEmptyEnvlessV0(decoded.ArtifactRefs...),
+		firstNonEmptyEnvlessV0(evidenceRefs...),
+		firstNonEmptyEnvlessV0(domainReceiptRefs...),
+		firstNonEmptyEnvlessV0(artifactRefs...),
 	)
 	switch {
 	case decoded.ClosureAccepted || closureStatus == "accepted" || runStatus == "closed":
 		return opesExternalWorkRunSupervisionV0{
-			Status:      "closed",
-			StopReason:  firstNonEmptyEnvlessV0(closureStatus, "goal_first_accepted"),
-			EvidenceRef: evidenceRef,
+			Status:            "closed",
+			StopReason:        firstNonEmptyEnvlessV0(closureStatus, "goal_first_accepted"),
+			EvidenceRef:       evidenceRef,
+			ArtifactRefs:      artifactRefs,
+			DomainReceiptRefs: domainReceiptRefs,
+			EvidenceRefs:      evidenceRefs,
 		}
 	case decoded.ClosureNeedsRework || closureStatus == "blocked" || status == "blocked" || status == "invalid" || runStatus == "blocked":
 		return opesExternalWorkRunSupervisionV0{
-			Status:      "blocked",
-			StopReason:  firstNonEmptyEnvlessV0(closureStatus, status, "goal_first_blocked"),
-			EvidenceRef: evidenceRef,
+			Status:            "blocked",
+			StopReason:        firstNonEmptyEnvlessV0(closureStatus, status, "goal_first_blocked"),
+			EvidenceRef:       evidenceRef,
+			ArtifactRefs:      artifactRefs,
+			DomainReceiptRefs: domainReceiptRefs,
+			EvidenceRefs:      evidenceRefs,
 		}
 	case status == "complete":
 		return opesExternalWorkRunSupervisionV0{
-			Status:      "completed",
-			StopReason:  firstNonEmptyEnvlessV0(closureStatus, "goal_first_complete_pending_closure"),
-			EvidenceRef: evidenceRef,
+			Status:            "completed",
+			StopReason:        firstNonEmptyEnvlessV0(closureStatus, "goal_first_complete_pending_closure"),
+			EvidenceRef:       evidenceRef,
+			ArtifactRefs:      artifactRefs,
+			DomainReceiptRefs: domainReceiptRefs,
+			EvidenceRefs:      evidenceRefs,
 		}
 	case status == "running":
 		return opesExternalWorkRunSupervisionV0{
-			Status:      "running",
-			StopReason:  firstNonEmptyEnvlessV0(runStatus, "goal_first_running"),
-			EvidenceRef: evidenceRef,
+			Status:            "running",
+			StopReason:        firstNonEmptyEnvlessV0(runStatus, "goal_first_running"),
+			EvidenceRef:       evidenceRef,
+			ArtifactRefs:      artifactRefs,
+			DomainReceiptRefs: domainReceiptRefs,
+			EvidenceRefs:      evidenceRefs,
 		}
 	default:
 		return opesExternalWorkRunSupervisionV0{
-			Status:      firstNonEmptyEnvlessV0(status, runStatus, "goal_first_observe_pending"),
-			StopReason:  firstNonEmptyEnvlessV0(closureStatus, "goal_first_observe_pending"),
-			EvidenceRef: evidenceRef,
+			Status:            firstNonEmptyEnvlessV0(status, runStatus, "goal_first_observe_pending"),
+			StopReason:        firstNonEmptyEnvlessV0(closureStatus, "goal_first_observe_pending"),
+			EvidenceRef:       evidenceRef,
+			ArtifactRefs:      artifactRefs,
+			DomainReceiptRefs: domainReceiptRefs,
+			EvidenceRefs:      evidenceRefs,
 		}
 	}
 }

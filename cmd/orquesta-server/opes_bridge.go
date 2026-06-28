@@ -54,6 +54,9 @@ type opesDrainJobResultV0 struct {
 	SupervisionStopReason  string   `json:"supervision_stop_reason,omitempty"`
 	SupervisionProcessRef  string   `json:"supervision_process_ref,omitempty"`
 	SupervisionEvidenceRef string   `json:"supervision_evidence_ref,omitempty"`
+	GoalArtifactRefs       []string `json:"goal_artifact_refs,omitempty"`
+	GoalDomainReceiptRefs  []string `json:"goal_domain_receipt_refs,omitempty"`
+	GoalEvidenceRefs       []string `json:"goal_evidence_refs,omitempty"`
 	RunRecoveryStatus      string   `json:"run_recovery_status,omitempty"`
 	RunRecoveryEvidenceRef string   `json:"run_recovery_evidence_ref,omitempty"`
 }

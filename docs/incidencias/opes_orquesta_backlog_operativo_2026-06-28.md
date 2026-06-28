@@ -115,6 +115,14 @@ locales absolutas al Goal. Evidencia:
 `TestBuildExternalWorkGoalWorkSpecV0InlineaInputFieldsOperativosSeguros` y
 `TestCodexStackV0ExternalWorkRunGoalFirstConservaInputFieldsOPESV0`.
 
+Avance 2026-06-28 tarde: la observacion `observe_goal` del bridge OPES mantiene
+compatibilidad con `supervision_evidence_ref`, pero tambien expone en
+`results[]` los arrays `goal_artifact_refs`, `goal_domain_receipt_refs` y
+`goal_evidence_refs` devueltos por el cierre goal-first. Esto deja al smoke
+temporal real una superficie publica para comprobar inventario de artefactos y
+receipts sin leer logs ni stores internos. Evidencia:
+`TestRunOPESDrainOnceV0GoalFirstSupervisionObservaGoalSinSupervisorLegacyV0`.
+
 ## ORQ-OPES-003 external_work_no_agent_no_delivery
 
 Estado: parcial; legacy 1+6 y guard de cierre goal-first cubiertos, pendiente

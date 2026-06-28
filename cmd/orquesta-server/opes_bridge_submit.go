@@ -128,6 +128,9 @@ type opesExternalWorkRunSupervisionV0 struct {
 	StopReason            string
 	ProcessRef            string
 	EvidenceRef           string
+	ArtifactRefs          []string
+	DomainReceiptRefs     []string
+	EvidenceRefs          []string
 	RoutePolicy           string
 	DirectorExecutionMode string
 	GoalRef               string
@@ -211,6 +214,7 @@ func superviseOPESExternalWorkRunV0(
 		StopReason:            strings.TrimSpace(decoded.StopReason),
 		ProcessRef:            strings.TrimSpace(decoded.Last.ProcessRef),
 		EvidenceRef:           firstNonEmptyEnvlessV0(decoded.Last.EvidenceRefs...),
+		EvidenceRefs:          compactStringsV0(decoded.Last.EvidenceRefs),
 		RoutePolicy:           strings.TrimSpace(decoded.RoutePolicy),
 		DirectorExecutionMode: strings.TrimSpace(decoded.DirectorExecutionMode),
 		GoalRef:               strings.TrimSpace(decoded.GoalRef),
