@@ -2305,6 +2305,7 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealAceptaScopeYGoalFirstV0(t *
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
 	)
 	if err != nil {
 		t.Fatalf("preflight err=%v stdout=%s stderr=%s", err, stdout, stderr)
@@ -2328,11 +2329,25 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinSpeechSynthesisV0
 	}
 }
 
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSpeechSynthesisSinEvidenciaV0(t *testing.T) {
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
+		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
+	)
+	if err == nil ||
+		!strings.Contains(stderr, "SPEECH_SYNTHESIS_EVIDENCE_REFS") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
+}
+
 func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaProgramIDSinFiltroConfirmadoV0(t *testing.T) {
 	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
 	)
 	if err == nil ||
 		!strings.Contains(stderr, "program_id documental no basta") {
@@ -2347,6 +2362,7 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaProductivoV0(t *test
 		"ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM=1",
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
 	)
 	if err == nil ||
 		!strings.Contains(stderr, "no ejecutar esta cadena contra OPES productivo") {
@@ -2360,6 +2376,7 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinGoalFirstV0(t *te
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
 		"ORQUESTA_CODEX_GOAL_BACKEND=",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
 	)
 	if err == nil ||
 		!strings.Contains(stderr, "falta Orquesta temporal goal-first") {

@@ -502,6 +502,19 @@ speech_synthesis_capability_available() {
   return 1
 }
 
+speech_synthesis_evidence_refs_present() {
+  local refs="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS:-}"
+  refs="${refs//,/ }"
+  refs="${refs//;/ }"
+  local ref
+  for ref in $refs; do
+    if [[ "$ref" == evidence-ref-* || "$ref" == receipt-ref-* || "$ref" == artifact-ref-* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 require_derivatives_real_preflight() {
   if [[ "$FAKE_SERVER" == "1" ]]; then
     return
@@ -542,6 +555,14 @@ require_derivatives_real_preflight() {
     sequence_has_job_type "generate_audio_asset" &&
     ! speech_synthesis_capability_available; then
     echo "smoke derivados real bloqueado: generate_audio_asset requiere ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available en la composicion temporal" >&2
+    exit 2
+  fi
+  if [[ "$target_mode" == "run-until-finalize" ||
+    "$target_mode" == "run-until-final" ||
+    "$target_mode" == "drain-once" ]] &&
+    sequence_has_job_type "generate_audio_asset" &&
+    ! speech_synthesis_evidence_refs_present; then
+    echo "smoke derivados real bloqueado: speech_synthesis disponible requiere ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS con refs de capacidad/runner temporal" >&2
     exit 2
   fi
   if [[ -n "${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-}" &&

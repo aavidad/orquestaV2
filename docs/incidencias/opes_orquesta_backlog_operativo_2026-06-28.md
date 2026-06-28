@@ -187,10 +187,15 @@ Avance 2026-06-28:
   `external_capability_missing:speech_synthesis` sin revisar logs;
 - el wrapper de derivados reales bloquea `drain-once`/finalizacion con audio si
   no se declara `ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available`;
+- el mismo wrapper real exige
+  `ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS` cuando se declara TTS
+  disponible, para que el smoke temporal no se cierre con una capacidad
+  meramente nominal;
 - el smoke fake de derivados declara `speech_synthesis` y sigue cubriendo la
   cadena hasta `generate_audio_asset`/finalizacion. Evidencia:
   `TestRunOPESDrainOnceV0AudioSinSpeechSynthesisNoPosteaOrquestaV0`,
   `TestRunOPESDrainOnceV0AudioConSpeechSynthesisPosteaOrquestaV0`,
+  `TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSpeechSynthesisSinEvidenciaV0`,
   `TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinSpeechSynthesisV0`
   y
   `TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilFinalizeV0`;

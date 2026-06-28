@@ -119,6 +119,7 @@ ORQUESTA_OPES_DERIVATIVES_PREFLIGHT_TARGET_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available \
+ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-temporal-001 \
 ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 scripts/smoke_opes_derivatives_rest.sh
@@ -130,9 +131,11 @@ Tambien es valido sustituir `program_id` por
 guardas locales y no consulta OPES. Si el objetivo es `drain-once`,
 `run-until-finalize` o `run-until-final` y la secuencia incluye
 `generate_audio_asset`, la composicion temporal debe declarar
-`ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available`; si no, el
-preflight y `opes-drain-once` bloquean la fase de audio con
-`external_capability_missing`.
+`ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available` y
+`ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS` con refs compactas del
+runner/capacidad TTS temporal; si no, el preflight y `opes-drain-once` bloquean
+la fase de audio con `external_capability_missing` o con evidencia de capacidad
+insuficiente.
 
 ## Pruebas offline/fake
 
@@ -178,6 +181,7 @@ ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id-temporal> \
 ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
 ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available \
+ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-temporal-001 \
 ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_MAX_TICKS=30 \
