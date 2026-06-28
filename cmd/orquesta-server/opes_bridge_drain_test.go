@@ -2336,6 +2336,82 @@ func opesDerivedPayloadForDrainTestV0(jobType string) string {
 	}
 }
 
+func TestOPESJobContextV0GenerateQuestionBankUsaPayloadFuenteSinConsultarBloquesV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("no debe consultar OPES blocks con payload fuente suficiente: %s %s", r.Method, r.URL.Path)
+	}))
+	defer opesServer.Close()
+	client := orquestaopesconnector.NewRESTClientV0(orquestaopesconnector.RESTClientConfigV0{
+		BaseURL: opesServer.URL,
+	})
+
+	context, err := opesJobContextV0(context.Background(), client, orquestaopesconnector.ExternalJobV0{
+		ID:   "job-ref-question-bank-rich-001",
+		Type: "generate_question_bank",
+		PayloadJSON: `{
+			"topic_id":"topic-ref-001",
+			"topic_title":"Prevencion de riesgos",
+			"official_epigraph_text":"Epigrafe oficial.",
+			"source_lesson_markdown":"Contenido fuente.",
+			"section_plan":[{"title":"Riesgos"}]
+		}`,
+	})
+	if err != nil || len(context.TopicBlocks) != 0 {
+		t.Fatalf("context=%+v err=%v", context, err)
+	}
+}
+
+func TestOPESJobContextV0GenerateQuestionBankHidrataBloquesSiFaltaFuenteV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/topics/topic-ref-001/blocks" || r.Method != http.MethodGet {
+			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]orquestaopesconnector.TopicBlockV0{{
+			ID:       "block-ref-001",
+			StableID: "stable-ref-001",
+			Title:    "Riesgos",
+			Markdown: "Contenido fuente del bloque.",
+		}})
+	}))
+	defer opesServer.Close()
+	client := orquestaopesconnector.NewRESTClientV0(orquestaopesconnector.RESTClientConfigV0{
+		BaseURL: opesServer.URL,
+	})
+
+	context, err := opesJobContextV0(context.Background(), client, orquestaopesconnector.ExternalJobV0{
+		ID:          "job-ref-question-bank-blocks-001",
+		Type:        "generate_question_bank",
+		PayloadJSON: `{"topic_id":"topic-ref-001","minimum_questions":50}`,
+	})
+	if err != nil || len(context.TopicBlocks) != 1 {
+		t.Fatalf("context=%+v err=%v", context, err)
+	}
+}
+
+func TestOPESJobContextV0GenerateQuestionBankBloqueaSinFuentePublicaV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/topics/topic-ref-001/blocks" || r.Method != http.MethodGet {
+			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]orquestaopesconnector.TopicBlockV0{})
+	}))
+	defer opesServer.Close()
+	client := orquestaopesconnector.NewRESTClientV0(orquestaopesconnector.RESTClientConfigV0{
+		BaseURL: opesServer.URL,
+	})
+
+	_, err := opesJobContextV0(context.Background(), client, orquestaopesconnector.ExternalJobV0{
+		ID:          "job-ref-question-bank-empty-001",
+		Type:        "generate_question_bank",
+		PayloadJSON: `{"topic_id":"topic-ref-001","minimum_questions":50}`,
+	})
+	if err == nil || err.Error() != "question_bank_source_context_required" {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestSmokeOPESDerivativesRESTWrapperFakeServerV0(t *testing.T) {
 	requireLocalTCPForTestV0(t)
 	if _, err := exec.LookPath("python3"); err != nil {

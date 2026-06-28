@@ -99,6 +99,7 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) goalResultWithAcceptedD
 		for _, contract := range required {
 			if goalDomainReceiptRecordMatchesContractV0(record, contract) {
 				result.DomainReceiptRefs = append(result.DomainReceiptRefs, record.ReceiptRef)
+				result.ArtifactRefs = append(result.ArtifactRefs, contract.ArtifactRef)
 				result.EvidenceRefs = append(result.EvidenceRefs, "domain-work-goal-receipt-derived-"+safeDomainWorkEvidenceRefV0(record.ReceiptRef))
 				break
 			}

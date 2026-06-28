@@ -161,6 +161,26 @@ func TestCodexLaunchSpecResolverV0MarcaContextoExternoTruncadoComoRiesgoDeCierre
 	}
 }
 
+func TestExternalWorkPrioritizedContextFieldsV0PriorizaFuenteEditorialOPES(t *testing.T) {
+	fields := []orquestadomainwork.DomainWorkFieldV0{
+		{Name: "probe_ref", Value: "probe-ref-001"},
+		{Name: "source_lesson_markdown", Value: "Contenido fuente del tema."},
+		{Name: "section_plan", ValueJSON: []byte(`[{"title":"Seccion"}]`)},
+		{Name: "official_epigraph_text", Value: "Epigrafe oficial."},
+		{Name: "notes", Value: "detalle secundario"},
+	}
+
+	got := externalWorkPrioritizedContextFieldsV0(fields)
+	if len(got) != len(fields) ||
+		got[0].Name != "source_lesson_markdown" ||
+		got[1].Name != "section_plan" ||
+		got[2].Name != "official_epigraph_text" ||
+		got[3].Name != "probe_ref" ||
+		got[4].Name != "notes" {
+		t.Fatalf("fields=%+v", got)
+	}
+}
+
 func codexStackContextContainsForTestV0(
 	entries []orquestacontext.ContextMaterializedEntryV0,
 	want string,

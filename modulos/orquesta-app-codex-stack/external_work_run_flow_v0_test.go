@@ -617,6 +617,111 @@ func TestCodexStackV0ExternalWorkGoalFirstDerivaReceiptDesdeLedgerSiGoalNoLoDecl
 	}
 }
 
+func TestCodexStackV0ExternalWorkGoalFirstReintentaArtifactTrasRechazoHTTP400V0(t *testing.T) {
+	stack, observer, launcher, domainWork := buildExternalWorkGoalFirstDomainDeliveryStackWithExecutorForTestV0(t)
+	started := postExternalWorkRunStackV0(t, stack)
+	spec := launcher.specs[0]
+	contract := spec.ArtifactContracts[0]
+	writeGoalFirstDomainWorkArtifactForTestV0(t, stack.Codex.ProjectWorkDir, spec, contract.ArtifactType)
+	rejected := externalWorkGoalFirstRejectedReceiptRecordForTestV0(
+		started.RunRef,
+		spec,
+		[]string{"domain-work-submit-artifact-rejected", "opes_http_status_400"},
+	)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		rejected,
+	); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0 rejected: %v", err)
+	}
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-retry-http-400-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		!result.Closure.Accepted ||
+		domainWork.called != 1 ||
+		domainWork.input.Action != orquestamcp.MCPDomainWorkActionSubmitArtifactV0 ||
+		!codexStackStringInSetForTestV0(result.Closure.EvidenceRefs, goalDomainReceiptLedgerAcceptedEvidenceRefV0) {
+		t.Fatalf("goal-first no reintento tras 400 y cerro: result=%+v domainWork=%+v", result, domainWork)
+	}
+	records, err := stack.DomainDelivery.Ledger.(DomainWorkArtifactSubmissionRecordReaderPortV0).ListDomainWorkArtifactSubmissionsV0(
+		context.Background(),
+		DomainWorkArtifactSubmissionRecordFilterV0{
+			RunRef: started.RunRef,
+			Status: DomainWorkArtifactSubmissionStatusAcceptedV0,
+		},
+	)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("accepted records=%+v err=%v", records, err)
+	}
+	if records[0].IdempotencyKey != rejected.IdempotencyKey ||
+		records[0].ReceiptRef == "" ||
+		records[0].ArtifactRef != contract.ArtifactRef {
+		t.Fatalf("record aceptado inesperado=%+v rejected=%+v", records[0], rejected)
+	}
+}
+
+func TestCodexStackV0ExternalWorkGoalFirstReconciliaArtifactRefRecuperableV0(t *testing.T) {
+	stack, observer, launcher, domainWork := buildExternalWorkGoalFirstDomainDeliveryStackWithExecutorForTestV0(t)
+	started := postExternalWorkRunStackV0(t, stack)
+	spec := launcher.specs[0]
+	contract := spec.ArtifactContracts[0]
+	writeGoalFirstDomainWorkArtifactForTestV0(t, stack.Codex.ProjectWorkDir, spec, contract.ArtifactType)
+	result := externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+	)
+	result.ArtifactRefs = []string{contract.ArtifactRef + "-alias-recuperable"}
+	observer.result = result
+
+	observed, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-artifact-ref-recover-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if observed.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		!observed.Closure.Accepted ||
+		domainWork.called != 1 ||
+		domainWork.input.Action != orquestamcp.MCPDomainWorkActionSubmitArtifactV0 ||
+		domainWork.input.ArtifactSubmission.ArtifactRef != contract.ArtifactRef ||
+		!codexStackStringInSetForTestV0(observed.Closure.EvidenceRefs, goalDomainReceiptLedgerAcceptedEvidenceRefV0) {
+		t.Fatalf("goal-first no reconcilio artifact_ref recuperable: result=%+v domainWork=%+v", observed, domainWork)
+	}
+	records, err := stack.DomainDelivery.Ledger.(DomainWorkArtifactSubmissionRecordReaderPortV0).ListDomainWorkArtifactSubmissionsV0(
+		context.Background(),
+		DomainWorkArtifactSubmissionRecordFilterV0{
+			RunRef: started.RunRef,
+			Status: DomainWorkArtifactSubmissionStatusAcceptedV0,
+		},
+	)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("records=%+v err=%v", records, err)
+	}
+	if records[0].ArtifactRef != contract.ArtifactRef ||
+		records[0].ArtifactType != contract.ArtifactType {
+		t.Fatalf("record aceptado inesperado=%+v contract=%+v", records[0], contract)
+	}
+}
+
 func TestCodexStackV0ExternalWorkGoalFirstSubeArtifactSiRequiredTestDominioBloqueadoV0(t *testing.T) {
 	stack, observer, launcher, domainWork := buildExternalWorkGoalFirstDomainDeliveryStackWithExecutorForTestV0(t)
 	change := defaultExternalWorkRunChangeForTestV0()
@@ -1621,6 +1726,35 @@ func externalWorkGoalFirstAcceptedReceiptRecordForTestV0(
 		CompleteJob:    true,
 		ReceiptRef:     receiptRef,
 		EvidenceRefs:   []string{"evidence-ref-" + receiptRef},
+	}
+}
+
+func externalWorkGoalFirstRejectedReceiptRecordForTestV0(
+	runRef string,
+	spec orquestagoal.GoalWorkSpecV0,
+	issueRefs []string,
+) DomainWorkArtifactSubmissionRecordV0 {
+	contract := orquestagoal.GoalArtifactContractV0{}
+	if len(spec.ArtifactContracts) > 0 {
+		contract = spec.ArtifactContracts[0]
+	}
+	work := defaultExternalWorkRunChangeForTestV0().ExternalWork
+	task := goalFirstDomainWorkTaskV0(spec, contract)
+	return DomainWorkArtifactSubmissionRecordV0{
+		IdempotencyKey: domainWorkArtifactIdempotencyKeyV0(work, contract.ArtifactType),
+		Status:         DomainWorkArtifactSubmissionStatusRejectedV0,
+		RunRef:         runRef,
+		TaskRef:        task.TaskID,
+		DeliveryRef:    contract.ArtifactRef,
+		CorrelationID:  "corr-external-work-stack-001",
+		DomainRef:      spec.DomainRef,
+		JobRef:         "job-ref-001",
+		ArtifactRef:    contract.ArtifactRef,
+		ArtifactType:   contract.ArtifactType,
+		Summary:        "Artefacto external-work rechazado por conector DomainWork.",
+		CompleteJob:    true,
+		IssueRefs:      compactStringsV0(issueRefs),
+		EvidenceRefs:   []string{"evidence-ref-domain-work-rejected-for-test"},
 	}
 }
 

@@ -91,7 +91,8 @@ func domainWorkRejectedSubmissionRecoverableV0(issueRefs []string) bool {
 			"opes_http_cancelled",
 			"retry_budget_exhausted":
 			return true
-		case "opes_http_status_429",
+		case "opes_http_status_400",
+			"opes_http_status_429",
 			"opes_http_status_502",
 			"opes_http_status_503",
 			"opes_http_status_504":

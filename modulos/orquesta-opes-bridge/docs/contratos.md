@@ -92,7 +92,10 @@ Reglas:
   `expected_artifact_type=question_bank` y tests por tema con 4 opciones A-D,
   una correcta exacta, distractores plausibles, explicacion tutor, JSON por
   tema, HTML revisable, metadata, informe, validacion estructural y validacion
-  de dificultad/proximidad. No debe sobrescribir bancos originales. Si el
+  de dificultad/proximidad. El job debe aportar fuente publica suficiente del
+  tema (`topic_title`, epigrafe/texto oficial, contenido fuente o bloques de
+  tema y plan/secciones); si no existe, el bridge debe bloquear con contexto
+  insuficiente antes de consumir un goal editorial. No debe sobrescribir bancos originales. Si el
   adaptador OPES/USO importa en Postgres local, debe exigir backup previo, SQL
   con `DELETE` acotado al banco nuevo y verificacion de conteos;
 - para `generate_tutor_assets`, el bridge exige

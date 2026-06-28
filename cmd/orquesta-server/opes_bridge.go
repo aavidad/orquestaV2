@@ -400,11 +400,18 @@ func opesJobContextV0(
 	client orquestaopesconnector.RESTClientV0,
 	job orquestaopesconnector.ExternalJobV0,
 ) (orquestaopesbridge.JobContextV0, error) {
-	if strings.TrimSpace(job.Type) != "summarize_topic" {
+	workKind := orquestaopesbridge.EffectiveWorkKindForExternalJobV0(job)
+	if workKind == "generate_question_bank" && opesQuestionBankPayloadHasPublicSourceContextV0(job.PayloadJSON) {
+		return orquestaopesbridge.JobContextV0{}, nil
+	}
+	if workKind != "summarize_topic" && workKind != "generate_question_bank" {
 		return orquestaopesbridge.JobContextV0{}, nil
 	}
 	topicID := opesJobPayloadStringV0(job.PayloadJSON, "topic_id")
 	if topicID == "" {
+		if workKind == "generate_question_bank" {
+			return orquestaopesbridge.JobContextV0{}, fmt.Errorf("question_bank_source_context_required")
+		}
 		return orquestaopesbridge.JobContextV0{}, fmt.Errorf("topic_id_required")
 	}
 	blocks, err := client.ListTopicBlocksV0(ctx, topicID)
@@ -412,9 +419,58 @@ func opesJobContextV0(
 		return orquestaopesbridge.JobContextV0{}, fmt.Errorf("topic_blocks_fetch_error")
 	}
 	if len(blocks) == 0 {
+		if workKind == "generate_question_bank" {
+			return orquestaopesbridge.JobContextV0{}, fmt.Errorf("question_bank_source_context_required")
+		}
 		return orquestaopesbridge.JobContextV0{}, fmt.Errorf("topic_blocks_empty")
 	}
 	return orquestaopesbridge.JobContextV0{TopicBlocks: blocks}, nil
+}
+
+func opesQuestionBankPayloadHasPublicSourceContextV0(payload string) bool {
+	return opesJobPayloadHasAnyValueV0(payload, "topic_title", "title", "planned_title") &&
+		opesJobPayloadHasAnyValueV0(payload,
+			"source_lesson_markdown",
+			"source_text",
+			"topic_text",
+			"syllabus_full",
+			"topic_blocks",
+		) &&
+		opesJobPayloadHasAnyValueV0(payload,
+			"official_epigraph_text",
+			"official_topic_text",
+			"official_text",
+			"topic_official_text",
+			"section_plan",
+			"sections",
+			"document_plan",
+		)
+}
+
+func opesJobPayloadHasAnyValueV0(payload string, keys ...string) bool {
+	var values map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(strings.TrimSpace(payload)), &values); err != nil {
+		return false
+	}
+	for _, key := range keys {
+		raw := values[key]
+		if opesJobPayloadRawHasValueV0(raw) {
+			return true
+		}
+	}
+	return false
+}
+
+func opesJobPayloadRawHasValueV0(raw json.RawMessage) bool {
+	raw = json.RawMessage(strings.TrimSpace(string(raw)))
+	if len(raw) == 0 || string(raw) == "null" || string(raw) == `""` || string(raw) == "[]" || string(raw) == "{}" {
+		return false
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return strings.TrimSpace(text) != ""
+	}
+	return json.Valid(raw)
 }
 
 func opesJobPayloadStringV0(payload string, key string) string {

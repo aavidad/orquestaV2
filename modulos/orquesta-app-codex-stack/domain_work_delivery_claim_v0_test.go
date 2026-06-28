@@ -160,6 +160,24 @@ func TestCodexStackV0DomainWorkSubmitAcceptedYRejectedFuncionalBloqueanReintento
 	}
 
 	ledger = NewInMemoryDomainWorkArtifactSubmissionLedgerV0()
+	rejected400 := domainWorkSubmissionRecordForRetryTestV0(DomainWorkArtifactSubmissionStatusRejectedV0)
+	rejected400.IssueRefs = []string{"domain-work-submit-artifact-rejected", "opes_http_status_400"}
+	if err := ledger.RecordDomainWorkArtifactSubmissionV0(ctx, rejected400); err != nil {
+		t.Fatalf("record rejected 400: %v", err)
+	}
+	stack = StackV0{DomainDelivery: DomainWorkDeliveryBridgeConfigV0{Ledger: ledger}}
+	submitted, err = stack.domainWorkSubmissionAlreadyRecordedV0(
+		ctx,
+		orquestacoreworkflow.OrchestrationRunV0{RunID: rejected400.RunRef},
+		orquestacoreworkflow.WorkflowTaskV0{TaskID: rejected400.TaskRef},
+		orquestacionnucleoapp.AgentDeliveryObservationV0{DeliveryRef: rejected400.DeliveryRef},
+		domainWorkSubmissionForRetryTestV0(),
+	)
+	if err != nil || submitted {
+		t.Fatalf("rejected 400 debe permitir reintento: submitted=%v err=%v", submitted, err)
+	}
+
+	ledger = NewInMemoryDomainWorkArtifactSubmissionLedgerV0()
 	accepted := domainWorkSubmissionRecordForRetryTestV0(DomainWorkArtifactSubmissionStatusAcceptedV0)
 	accepted.ReceiptRef = "receipt-ref-retry"
 	if err := ledger.RecordDomainWorkArtifactSubmissionV0(ctx, accepted); err != nil {

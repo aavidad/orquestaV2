@@ -136,6 +136,14 @@ payload_by_type = {
     "generate_question_bank": {
         "program_id": "program-ref-fake-operario-001",
         "topic_id": "topic-ref-fake-operario-001",
+        "topic_title": "Prevencion de riesgos en operaciones auxiliares municipales",
+        "official_epigraph_text": "Conceptos basicos de seguridad, senalizacion, equipos de proteccion individual y actuacion ante incidencias.",
+        "source_lesson_markdown": "El tema explica identificacion de riesgos, medidas preventivas, uso de EPI, senalizacion y comunicacion de incidencias en trabajos auxiliares municipales.",
+        "section_plan": [
+            {"section_ref": "sec-riesgos", "title": "Identificacion de riesgos"},
+            {"section_ref": "sec-epi", "title": "Medidas preventivas y EPI"},
+            {"section_ref": "sec-incidencias", "title": "Comunicacion de incidencias"}
+        ],
         "question_bank_ref": "question-bank-ref-fake-001",
         "minimum_questions": 50,
     },

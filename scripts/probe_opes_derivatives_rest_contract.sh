@@ -148,6 +148,20 @@ def input_for(index, job_type):
         "topic_id": topic_id,
         "course_id": "course-ref-orquesta-contract-probe",
         "official_order": 1,
+        "topic_title": "Prevencion de riesgos en operaciones auxiliares municipales",
+        "official_epigraph_text": "Conceptos basicos de seguridad, senalizacion, equipos de proteccion individual y actuacion ante incidencias en trabajos auxiliares municipales.",
+        "source_lesson_markdown": (
+            "La prevencion de riesgos en operaciones auxiliares municipales exige reconocer peligros antes de iniciar la tarea, "
+            "usar equipos de proteccion individual adecuados, respetar la senalizacion y mantener ordenada la zona de trabajo. "
+            "Cuando aparece una incidencia, el personal debe detener la actividad si hay riesgo, avisar por el canal establecido "
+            "y registrar la situacion para que pueda corregirse. Los contenidos del tema se organizan en identificacion de riesgos, "
+            "medidas preventivas, uso de EPI, senalizacion, comunicacion de incidencias y repaso mediante casos breves."
+        ),
+        "section_plan": [
+            {"section_ref": "sec-riesgos", "title": "Identificacion de riesgos"},
+            {"section_ref": "sec-medidas", "title": "Medidas preventivas y EPI"},
+            {"section_ref": "sec-incidencias", "title": "Comunicacion y actuacion ante incidencias"},
+        ],
         "work_kind": job_type,
         "expected_artifact_type": expected_artifact_type(job_type),
         "probe_ref": f"orquesta-contract-probe-{index:02d}",

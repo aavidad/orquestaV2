@@ -109,7 +109,10 @@ func goalFirstDomainWorkSubmitReadyForSpecV0(
 	if goalFirstDomainWorkClosureNeedsReceiptV0(result.Closure) {
 		return true
 	}
-	return goalFirstDomainWorkClosureNeedsDomainTestEvidenceV0(spec, result.GoalResult, result.Closure)
+	if goalFirstDomainWorkClosureNeedsDomainTestEvidenceV0(spec, result.GoalResult, result.Closure) {
+		return true
+	}
+	return goalFirstDomainWorkClosureNeedsArtifactReconciliationV0(spec, result.Closure)
 }
 
 func goalFirstDomainWorkClosureNeedsReceiptV0(
@@ -156,6 +159,17 @@ func goalFirstDomainWorkClosureHasIssueFieldV0(
 		}
 	}
 	return false
+}
+
+func goalFirstDomainWorkClosureNeedsArtifactReconciliationV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	closure orquestagoal.GoalClosureValidationV0,
+) bool {
+	if !goalFirstDomainWorkClosureHasIssueFieldV0(closure, "artifact_refs") {
+		return false
+	}
+	_, ok := goalFirstDomainWorkSingleRequiredContractV0(spec)
+	return ok
 }
 
 func goalFirstDomainWorkHasDomainOnlyRequiredTestsV0(
@@ -230,17 +244,40 @@ func goalFirstDomainWorkContractV0(
 	result orquestagoal.GoalWorkResultV0,
 ) (orquestagoal.GoalArtifactContractV0, bool) {
 	resultRefs := compactStringsV0(result.ArtifactRefs)
+	var required []orquestagoal.GoalArtifactContractV0
 	for _, contract := range spec.ArtifactContracts {
 		contract.ArtifactRef = strings.TrimSpace(contract.ArtifactRef)
 		contract.ArtifactType = strings.TrimSpace(contract.ArtifactType)
 		if !contract.Required || contract.ArtifactRef == "" || contract.ArtifactType == "" {
 			continue
 		}
+		required = append(required, contract)
 		if len(resultRefs) == 0 || codexStackStringInSetV0(resultRefs, contract.ArtifactRef) {
 			return contract, true
 		}
 	}
+	if len(required) == 1 {
+		return required[0], true
+	}
 	return orquestagoal.GoalArtifactContractV0{}, false
+}
+
+func goalFirstDomainWorkSingleRequiredContractV0(
+	spec orquestagoal.GoalWorkSpecV0,
+) (orquestagoal.GoalArtifactContractV0, bool) {
+	var found orquestagoal.GoalArtifactContractV0
+	for _, contract := range spec.ArtifactContracts {
+		contract.ArtifactRef = strings.TrimSpace(contract.ArtifactRef)
+		contract.ArtifactType = strings.TrimSpace(contract.ArtifactType)
+		if !contract.Required || contract.ArtifactRef == "" || contract.ArtifactType == "" {
+			continue
+		}
+		if found.ArtifactRef != "" {
+			return orquestagoal.GoalArtifactContractV0{}, false
+		}
+		found = contract
+	}
+	return found, found.ArtifactRef != ""
 }
 
 func (stack StackV0) goalFirstDomainWorkArtifactFileRefV0(
