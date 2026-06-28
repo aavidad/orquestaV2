@@ -390,6 +390,47 @@ Aceptación esperada:
 - Mostrar conteo `agents_live` o evidencia equivalente para que el director sepa
   si debe esperar o intervenir.
 
+## Incidencia 13: el `agent_packet` estrecha el write-set y bloquea consolidación de producto
+
+En la ola `19023`, T032 sí produjo trabajo útil: seis subroles reales y un
+borrador ampliado de redacción con 10.851 palabras, por encima del mínimo B de
+10.800. Sin embargo, el informe del padre dejó constancia de una contradicción
+entre el contrato externo y el paquete activo:
+
+```text
+La solicitud externa original permitía `temas/tema_032`, pero el paquete activo
+gana. Por eso no se crea texto publicable, HTML, tests, visuales, RAG ni audio
+en esta unidad.
+```
+
+Evidencia:
+
+- solicitud `external-work/run`: `allowed_write_set` incluía `temas/tema_032`;
+- `agent_packet` del padre limitó la escritura efectiva a coordinación;
+- el subrol S3 escribió `temas/tema_032/subroles/redaccion/borrador_ampliado.md`
+  con 10.851 palabras;
+- el padre no pudo consolidar `temas/tema_032/borrador_ampliado.md` ni cerrar el
+  tema como texto canónico revisable.
+
+Problema: para temarios OPES, el padre debe poder consolidar los artefactos de
+producto dentro del directorio del tema. Si el paquete activo gana con un
+write-set más estrecho que la solicitud externa, Orquesta genera trabajo útil
+pero lo deja sin integración canónica.
+
+Aceptación esperada:
+
+- El `agent_packet` del padre debe heredar el write-set de producto autorizado
+  por `external-work/run`, al menos `temas/tema_NNN` y su coordinación.
+- Los subroles pueden tener write-set estrecho, pero el padre integrador debe
+  poder consolidar Markdown canónico, informes de extensión y checkpoint del
+  tema.
+- Si Orquesta estrecha el write-set por seguridad, debe crear una fase
+  explícita `integration_required` y lanzar un agente integrador con write-set
+  suficiente, no cerrar con producto disperso.
+- La API/vista debe marcar `product_not_consolidated_due_write_set_narrowing`,
+  no `completed`, cuando hay borrador útil en subrol pero falta artefacto
+  canónico del tema.
+
 ## No hacer
 
 No arreglar esto con parches ad hoc en la sesión OPES. Debe corregirse en la
@@ -422,3 +463,34 @@ Queda pendiente: exponer una lista pública separada `stale_running`/acciones en
 `autoprogramming/status` y web, reconciliar el registro OPES `en_progreso` desde
 el bridge de dominio, y cerrar las incidencias independientes de ACK de subrol
 en ruta de padre, assessments recursivos y validaciones con `files_scanned=0`.
+
+## Incidencia 14: `/api/v0/autoprogramming/supervise` despacha agentes pero deja el cliente HTTP colgado
+
+En la ola OPES aislada `19023d` para Integración Social B, temas T038-T043,
+la cola quedó correctamente en `ready` y `autoprogramming/status` recomendó
+`supervise:queue`. Al llamar:
+
+```text
+POST http://127.0.0.1:19023/api/v0/autoprogramming/supervise
+body {}
+```
+
+la llamada no devolvió respuesta en más de 90 segundos. Se cortó solo el cliente
+HTTP local (`curl`), sin matar procesos de Orquesta. Aun así, el despacho sí se
+había producido: `ps` mostró procesos Codex vivos de la ola `19023d`, incluyendo
+T038 con padre y seis subroles reales, y T039 iniciando padre/subroles.
+
+Problema: una API de supervisión que ejecuta la acción pero no responde deja al
+director sin señal fiable. Además puede parecer un fallo total aunque el trabajo
+siga vivo.
+
+Aceptación esperada:
+
+- `autoprogramming/supervise` debe responder con `202 accepted`, `200 ok` o
+  estado parcial aun cuando los agentes sigan vivos.
+- La respuesta debe incluir runs despachados, runs pendientes, procesos vivos
+  detectados y siguiente acción segura.
+- Si la supervisión sigue en segundo plano, debe devolver un `operation_ref`
+  consultable en vez de mantener el HTTP bloqueado.
+- Si hay timeout interno, no debe duplicar despachos ya materializados al
+  reintentar.
