@@ -48,9 +48,12 @@ func TestExternalJobIntegrationDecisionSourceV0CreaIntegradorParaPadreLegacyEstr
 		!codexStackStringInSetForTestV0(task.ContextRefs, externalJobIntegrationReasonV0) ||
 		!codexStackStringInSetForTestV0(task.ContextRefs, "opes-integration-required") ||
 		!codexStackStringInSetForTestV0(task.ContextRefs, "opes-non-canonical-material-recovery:02_markdown->04_markdown") ||
+		!codexStackStringInSetForTestV0(task.ContextRefs, "opes-subrole-integrable-material-recovery:subroles->canonical_markdown") ||
 		!codexStackStringInSetForTestV0(task.ContextRefs, "work_kind:consolidate_checkpoint_topic_from_existing_material") ||
 		!codexStackStringInSetForTestV0(task.ContextRefs, "subroles_required:6") ||
-		!externalJobIntegrationCriterionContainsForTestV0(task.AcceptanceCriteria, "02_markdown/04_markdown") {
+		!externalJobIntegrationCriterionContainsForTestV0(task.AcceptanceCriteria, "02_markdown/04_markdown") ||
+		!externalJobIntegrationCriterionContainsForTestV0(task.AcceptanceCriteria, "subroles/<rol>") ||
+		!externalJobIntegrationCriterionContainsForTestV0(task.AcceptanceCriteria, "integrable") {
 		t.Fatalf("task=%+v parent=%+v", task, fixture.parent)
 	}
 	if len(task.FunctionContractRefs) != 1 ||

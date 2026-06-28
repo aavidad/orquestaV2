@@ -225,15 +225,17 @@ func externalJobIntegrationMicrotaskV0(
 	if externalJobIntegrationExternalWorkLooksOPESV0(record.Request.AppRef, record.Request.ExternalWork) {
 		title = "Consolidar producto OPES canonico desde material existente"
 		summary = "Consolidar material OPES util ya producido en el producto canonico autorizado; " +
-			"si hay Markdown valido en rutas no canonicas, promoverlo sin rehacerlo."
+			"si hay Markdown valido en rutas no canonicas o piezas integrables de subroles, promoverlo sin rehacerlo."
 		acceptanceCriteria = append(acceptanceCriteria,
 			"Si existen borradores OPES validos en rutas no canonicas como 02_markdown, tratarlos como material recuperable y consolidarlos hacia 04_markdown o la ruta canonica autorizada.",
+			"Si un subrol OPES entrega bloques publicables o material declarado integrable bajo subroles/<rol>, promoverlo al Markdown canonico autorizado o dejar bloqueo causal con la evidencia concreta.",
 			"Usar o sugerir work_kind consolidate_checkpoint_topic_from_existing_material cuando el trabajo sea promocion de material existente y no redaccion desde cero.",
 			"No bloquear ni descartar entregas por diferencia recuperable de ruta 02_markdown/04_markdown; dejar bloqueo solo si falta write-set seguro, evidencia o autorizacion externa.",
 		)
 		contextRefs = append(contextRefs,
 			"opes-integration-required",
 			"opes-non-canonical-material-recovery:02_markdown->04_markdown",
+			"opes-subrole-integrable-material-recovery:subroles->canonical_markdown",
 			"work_kind:consolidate_checkpoint_topic_from_existing_material",
 		)
 		if required := externalJobIntegrationSubrolesRequiredCountV0(record.Request.ExternalWork.InputFields); required > 0 {

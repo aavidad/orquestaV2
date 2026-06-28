@@ -1999,10 +1999,12 @@ reintentos ciegos ni descarte de material valido.
 Impacto: `ExternalJobIntegrationDecisionSourceV0` especializa las microtareas
 OPES de integracion con contexto
 `opes-non-canonical-material-recovery:02_markdown->04_markdown` y
-`work_kind:consolidate_checkpoint_topic_from_existing_material`. El agente debe
-promover/consolidar bajo el write-set de producto autorizado, conservar
-evidencia de reutilizacion y bloquear solo si falta write-set seguro,
-evidencia o autorizacion externa.
+`opes-subrole-integrable-material-recovery:subroles->canonical_markdown` junto
+con `work_kind:consolidate_checkpoint_topic_from_existing_material`. El agente
+debe promover/consolidar bajo el write-set de producto autorizado tanto
+borradores de rutas no canonicas como bloques publicables de subroles, conservar
+evidencia de reutilizacion y bloquear solo si falta write-set seguro, evidencia
+o autorizacion externa.
 Estado: aceptada.
 ```
 

@@ -426,7 +426,21 @@ Estado del repo actual:
   sigue como elevacion explicita desde el paquete. Prueba:
   `go test -count=1 ./modulos/orquesta-runtime-codex`.
 
-Pendiente no cerrado por este ajuste: crear una fase de promocion canonica /
-integracion editorial cuando un subrol OPES entregue material `integrable` fuera
-del Markdown canonico. Ese cierre pertenece a la composicion/contrato OPES, no a
-la politica generica de esfuerzo Codex.
+Revalidacion adicional: la promocion canonica OPES para padres legacy estrechos
+ya queda cubierta en la composicion `orquesta-app-codex-stack`.
+`ExternalJobIntegrationDecisionSourceV0` crea una microtarea de integracion
+cuando el padre OPES 1+6 conserva solo write-set de coordinacion y los subroles
+son el insumo causal. La microtarea declara:
+
+- recuperacion `02_markdown -> 04_markdown`;
+- recuperacion de bloques publicables o material `integrable` bajo
+  `subroles/<rol>`;
+- `work_kind:consolidate_checkpoint_topic_from_existing_material`;
+- bloqueo causal si falta write-set seguro, evidencia o autorizacion externa.
+
+Prueba focal:
+`go test -count=1 ./modulos/orquesta-app-codex-stack -run TestExternalJobIntegrationDecisionSourceV0CreaIntegradorParaPadreLegacyEstrecho`.
+
+Frontera: esto no convierte a Orquesta en editor OPES ni inspecciona contenido
+Markdown con heuristicas de strings. La composicion crea la fase de integracion
+canonica y el dominio OPES/agent valida si el material es realmente publicable.

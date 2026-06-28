@@ -1543,9 +1543,10 @@ Cobertura:
   `product_not_consolidated_due_write_set_narrowing`, no como completado.
 - `TestExternalJobIntegrationDecisionSourceV0CreaIntegradorParaPadreLegacyEstrecho`
   fija que la microtarea OPES de integracion no rehace por defecto: declara
-  recuperacion `02_markdown -> 04_markdown` y sugiere
-  `consolidate_checkpoint_topic_from_existing_material` para consolidar
-  material existente bajo el write-set autorizado.
+  recuperacion `02_markdown -> 04_markdown`, recuperacion de material integrable
+  bajo `subroles/<rol>` y sugiere
+  `consolidate_checkpoint_topic_from_existing_material` para consolidar material
+  existente bajo el write-set autorizado.
 - `TestAssessmentReplanSourceV0DeduplicaAssessmentSemanticoConRefsDistintas`
   fija que dos assessments con refs distintas pero mismo `run/task/verdict/
   action/severity` comparten `assessment-recursion-guard`, `replan_ref` y
