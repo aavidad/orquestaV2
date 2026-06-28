@@ -52,7 +52,7 @@ func selfAuditBacklogSectionsV0(
 			break
 		}
 		result := runSelfAuditCommandV0(ctx, projectDir, command)
-		findings := selfAuditFindingsFromCommandV0(command, result)
+		findings := selfAuditFindingsFromCommandV0(projectDir, command, result)
 		for _, finding := range findings {
 			sections = append(sections, selfAuditBacklogSectionV0(finding))
 		}
@@ -92,6 +92,7 @@ func runSelfAuditCommandDefaultV0(
 }
 
 func selfAuditFindingsFromCommandV0(
+	projectDir string,
 	command selfAuditCommandV0,
 	result selfAuditCommandResultV0,
 ) []selfAuditFindingV0 {
@@ -99,33 +100,46 @@ func selfAuditFindingsFromCommandV0(
 		return nil
 	}
 	var findings []selfAuditFindingV0
+	seen := map[string]bool{}
 	for _, line := range strings.Split(strings.ReplaceAll(result.Output, "\r\n", "\n"), "\n") {
-		if finding, ok := selfAuditFindingFromLineV0(command, line); ok {
+		if finding, ok := selfAuditFindingFromLineV0(projectDir, command, line); ok {
+			key := selfAuditFindingDedupeKeyV0(finding)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
 			findings = append(findings, finding)
 		}
+	}
+	globalFindings := selfAuditGlobalFindingsFromOutputV0(command, result.Output)
+	if strings.TrimSpace(command.ToolRef) == "go-test-race" && len(findings) > 0 {
+		globalFindings = nil
+	}
+	for _, finding := range globalFindings {
+		key := selfAuditFindingDedupeKeyV0(finding)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		findings = append(findings, finding)
 	}
 	return findings
 }
 
 func selfAuditFindingFromLineV0(
+	projectDir string,
 	command selfAuditCommandV0,
 	line string,
 ) (selfAuditFindingV0, bool) {
-	parts := strings.SplitN(strings.TrimSpace(line), ":", 4)
-	if len(parts) < 4 {
-		return selfAuditFindingV0{}, false
-	}
-	rel, ok := cleanSelfAuditFindingPathV0(parts[0])
+	rel, lineNumber, message, ok := selfAuditPathLineMessageFromLineV0(projectDir, line)
 	if !ok {
 		return selfAuditFindingV0{}, false
 	}
-	lineNumber, err := strconv.Atoi(strings.TrimSpace(parts[1]))
-	if err != nil || lineNumber <= 0 {
-		return selfAuditFindingV0{}, false
+	if selfAuditLineMessageIsNoiseV0(command, message) {
+		message = ""
 	}
-	message := strings.TrimSpace(parts[3])
 	if message == "" {
-		return selfAuditFindingV0{}, false
+		message = selfAuditDefaultLineFindingMessageV0(command, rel, lineNumber)
 	}
 	return selfAuditFindingV0{
 		ToolRef: strings.TrimSpace(command.ToolRef),
@@ -135,6 +149,131 @@ func selfAuditFindingFromLineV0(
 		Message: selfAuditCompactMessageV0(message),
 		Command: strings.TrimSpace(command.TestCommand),
 	}, true
+}
+
+func selfAuditPathLineMessageFromLineV0(
+	projectDir string,
+	line string,
+) (string, int, string, bool) {
+	line = strings.TrimSpace(line)
+	goIndex := strings.LastIndex(line, ".go:")
+	if goIndex < 0 {
+		return "", 0, "", false
+	}
+	pathPart := strings.TrimSpace(line[:goIndex+len(".go")])
+	if fields := strings.Fields(pathPart); len(fields) > 0 {
+		pathPart = fields[len(fields)-1]
+	}
+	rel, ok := cleanSelfAuditFindingPathV0(projectDir, pathPart)
+	if !ok {
+		return "", 0, "", false
+	}
+	rest := strings.TrimSpace(line[goIndex+len(".go:"):])
+	lineDigits := selfAuditLeadingDigitsV0(rest)
+	if lineDigits == "" {
+		return "", 0, "", false
+	}
+	lineNumber, err := strconv.Atoi(lineDigits)
+	if err != nil || lineNumber <= 0 {
+		return "", 0, "", false
+	}
+	message := strings.TrimSpace(rest[len(lineDigits):])
+	if strings.HasPrefix(message, ":") {
+		message = strings.TrimSpace(strings.TrimPrefix(message, ":"))
+		columnDigits := selfAuditLeadingDigitsV0(message)
+		if columnDigits != "" {
+			message = strings.TrimSpace(message[len(columnDigits):])
+			message = strings.TrimSpace(strings.TrimPrefix(message, ":"))
+		}
+	}
+	return rel, lineNumber, message, true
+}
+
+func selfAuditGlobalFindingsFromOutputV0(
+	command selfAuditCommandV0,
+	output string,
+) []selfAuditFindingV0 {
+	switch strings.TrimSpace(command.ToolRef) {
+	case "govulncheck":
+		return selfAuditGovulncheckFindingsFromOutputV0(command, output)
+	case "go-test-race":
+		if strings.Contains(output, "WARNING: DATA RACE") || strings.Contains(output, "DATA RACE") {
+			return []selfAuditFindingV0{{
+				ToolRef: "go-test-race",
+				Path:    idleSelfImprovementBacklogDocRelV0,
+				Line:    1,
+				Code:    "data-race",
+				Message: "go test -race reporta una data race sin ruta recuperable; registrar triage y acotar write-set",
+				Command: strings.TrimSpace(command.TestCommand),
+			}}
+		}
+	}
+	return nil
+}
+
+func selfAuditGovulncheckFindingsFromOutputV0(
+	command selfAuditCommandV0,
+	output string,
+) []selfAuditFindingV0 {
+	seen := map[string]bool{}
+	var findings []selfAuditFindingV0
+	for _, line := range strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n") {
+		for _, token := range strings.FieldsFunc(line, func(r rune) bool {
+			return r == ' ' || r == '\t' || r == ',' || r == ';' || r == ':' || r == '(' || r == ')' || r == '[' || r == ']'
+		}) {
+			code := strings.TrimSpace(token)
+			if !strings.HasPrefix(code, "GO-") || seen[code] {
+				continue
+			}
+			seen[code] = true
+			findings = append(findings, selfAuditFindingV0{
+				ToolRef: "govulncheck",
+				Path:    "go.mod",
+				Line:    1,
+				Code:    code,
+				Message: "govulncheck reporta vulnerabilidad " + code,
+				Command: strings.TrimSpace(command.TestCommand),
+			})
+		}
+	}
+	return findings
+}
+
+func selfAuditDefaultLineFindingMessageV0(
+	command selfAuditCommandV0,
+	path string,
+	lineNumber int,
+) string {
+	if strings.TrimSpace(command.ToolRef) == "go-test-race" {
+		return "go test -race reporta actividad concurrente en " + path + ":" + strconv.Itoa(lineNumber)
+	}
+	return strings.TrimSpace(command.ToolRef) + " reporta hallazgo en " + path + ":" + strconv.Itoa(lineNumber)
+}
+
+func selfAuditLineMessageIsNoiseV0(command selfAuditCommandV0, message string) bool {
+	message = strings.TrimSpace(message)
+	return strings.TrimSpace(command.ToolRef) == "go-test-race" &&
+		(strings.HasPrefix(message, "+0x") || strings.HasPrefix(message, "0x"))
+}
+
+func selfAuditFindingDedupeKeyV0(finding selfAuditFindingV0) string {
+	return strings.Join([]string{
+		strings.TrimSpace(finding.ToolRef),
+		strings.TrimSpace(finding.Path),
+		strconv.Itoa(finding.Line),
+		strings.TrimSpace(finding.Code),
+	}, "|")
+}
+
+func selfAuditLeadingDigitsV0(value string) string {
+	var out strings.Builder
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			break
+		}
+		out.WriteRune(r)
+	}
+	return out.String()
 }
 
 func selfAuditBacklogSectionV0(finding selfAuditFindingV0) idleSelfImprovementBacklogSectionV0 {
@@ -173,11 +312,21 @@ func selfAuditBacklogSectionV0(finding selfAuditFindingV0) idleSelfImprovementBa
 	return section
 }
 
-func cleanSelfAuditFindingPathV0(value string) (string, bool) {
+func cleanSelfAuditFindingPathV0(projectDir string, value string) (string, bool) {
 	value = filepath.ToSlash(strings.TrimSpace(value))
 	value = strings.TrimPrefix(value, "./")
-	if value == "" || filepath.IsAbs(value) || strings.Contains(value, "\\") {
+	if value == "" || strings.Contains(value, "\\") {
 		return "", false
+	}
+	if filepath.IsAbs(value) {
+		if strings.TrimSpace(projectDir) == "" {
+			return "", false
+		}
+		rel, err := filepath.Rel(projectDir, value)
+		if err != nil || rel == ".." || strings.HasPrefix(filepath.ToSlash(rel), "../") {
+			return "", false
+		}
+		value = filepath.ToSlash(rel)
 	}
 	parts := strings.Split(value, "/")
 	for _, part := range parts {
@@ -193,6 +342,9 @@ func cleanSelfAuditFindingPathV0(value string) (string, bool) {
 }
 
 func selfAuditFindingCodeV0(toolRef string, message string) string {
+	if strings.TrimSpace(toolRef) == "go-test-race" {
+		return "data-race"
+	}
 	message = strings.TrimSpace(message)
 	if start := strings.LastIndex(message, "("); start >= 0 && strings.HasSuffix(message, ")") {
 		code := strings.TrimSpace(strings.TrimSuffix(message[start+1:], ")"))

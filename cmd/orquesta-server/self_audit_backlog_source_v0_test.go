@@ -44,6 +44,66 @@ func TestSelfAuditBacklogSectionsV0StaticcheckFindingEmiteSeccionEstableV0(t *te
 	}
 }
 
+func TestSelfAuditBacklogSectionsV0GovulncheckGlobalEmiteSeccionV0(t *testing.T) {
+	restore := replaceSelfAuditRunnerForTestV0(func(_ context.Context, _ string, command selfAuditCommandV0) selfAuditCommandResultV0 {
+		if command.ToolRef != "govulncheck" {
+			return selfAuditCommandResultV0{}
+		}
+		return selfAuditCommandResultV0{
+			Output: "Vulnerability #1: GO-2026-4341\n  More info: https://pkg.go.dev/vuln/GO-2026-4341\n",
+		}
+	})
+	defer restore()
+
+	sections := selfAuditBacklogSectionsV0(context.Background(), t.TempDir())
+
+	if len(sections) != 1 {
+		t.Fatalf("sections=%+v", sections)
+	}
+	section := sections[0]
+	if section.SourceKind != "self_audit" ||
+		section.SourcePath != "self_audit://govulncheck" ||
+		section.Scope[0] != "go.mod" ||
+		section.Tests[0] != "govulncheck ./..." ||
+		!strings.Contains(section.Criteria[0], "GO-2026-4341") ||
+		!containsStringForTestV0(section.Inputs, "self_audit_tool:govulncheck") {
+		t.Fatalf("section=%+v", section)
+	}
+}
+
+func TestSelfAuditBacklogSectionsV0RaceAbsPathEmiteSeccionConRutaRelativaV0(t *testing.T) {
+	projectDir := t.TempDir()
+	racePath := filepath.Join(projectDir, "modulos", "orquesta-server", "race_v0.go")
+	restore := replaceSelfAuditRunnerForTestV0(func(_ context.Context, _ string, command selfAuditCommandV0) selfAuditCommandResultV0 {
+		if command.ToolRef != "go-test-race" {
+			return selfAuditCommandResultV0{}
+		}
+		return selfAuditCommandResultV0{
+			Output: strings.Join([]string{
+				"WARNING: DATA RACE",
+				"Read at 0x00 by goroutine 8:",
+				"  orquesta/modulos/orquesta-server.(*runtimeV0).tick()",
+				"      " + racePath + ":42 +0x123",
+			}, "\n"),
+		}
+	})
+	defer restore()
+
+	sections := selfAuditBacklogSectionsV0(context.Background(), projectDir)
+
+	if len(sections) != 1 {
+		t.Fatalf("sections=%+v", sections)
+	}
+	section := sections[0]
+	if section.Scope[0] != "modulos/orquesta-server/race_v0.go" ||
+		section.Tests[0] != "go test -race ./..." ||
+		!strings.Contains(section.Objective, "data-race") ||
+		!strings.Contains(section.Objective, "modulos/orquesta-server/race_v0.go") ||
+		!containsStringForTestV0(section.Inputs, "self_audit_tool:go-test-race") {
+		t.Fatalf("section=%+v", section)
+	}
+}
+
 func TestIdleSelfImprovementBacklogPlannerV0IncluyeSelfAuditSoloConFlagV0(t *testing.T) {
 	restore := replaceSelfAuditRunnerForTestV0(func(_ context.Context, _ string, command selfAuditCommandV0) selfAuditCommandResultV0 {
 		if command.ToolRef != "staticcheck" {
