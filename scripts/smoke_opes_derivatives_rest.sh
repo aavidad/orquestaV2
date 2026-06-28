@@ -85,9 +85,7 @@ pending_type = sys.argv[4]
 mode = sys.argv[5]
 goal_first = sys.argv[6] == "1"
 active_index = sequence.index(pending_type) if mode == "dry-run-once" else 0
-expected_scan_limit = limit
-if mode != "dry-run-once":
-    expected_scan_limit = str(min(max(int(limit), 1) * 10, 100))
+expected_scan_limit = str(min(max(max(int(limit), 1) * 100, 100), 500))
 runs = {}
 
 payload_by_type = {
@@ -243,6 +241,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         job_type = query.get("job_type", [""])[0]
         if job_type not in sequence:
+            if job_type in {"review_textual", "generate_tutor_assets", "generate_help_manual_assets"}:
+                send_json(self, 200, [])
+                return
             send_json(self, 400, {"error": "unexpected_job_type", "got": job_type, "sequence": sequence})
             return
         if query.get("status", [""])[0] != "pending":
@@ -720,9 +721,12 @@ opes_bridge_scan_limit() {
   if [[ "$base" -lt 1 ]]; then
     base=1
   fi
-  local scan=$((base * 10))
-  if [[ "$scan" -gt 100 ]]; then
+  local scan=$((base * 100))
+  if [[ "$scan" -lt 100 ]]; then
     scan=100
+  fi
+  if [[ "$scan" -gt 500 ]]; then
+    scan=500
   fi
   printf '%s\n' "$scan"
 }
@@ -793,6 +797,67 @@ def job_scope_value(job, key):
         value = (job.get("external_refs") or {}).get(key) if isinstance(job.get("external_refs"), dict) else None
     return str(value or "").strip()
 
+def transport_job_type(work_kind):
+    review_types = {
+        "update_topic_registry",
+        "claim_topic_registry",
+        "release_topic_registry",
+        "review_codex",
+        "review_gemini",
+        "review_claude",
+        "review_pair_codex_gemini",
+        "review_pair_codex_claude",
+        "review_pair_gemini_claude",
+        "review_director_consolidation",
+        "review_director_final",
+        "review_consensus_director",
+        "generate_agent_candidate_codex",
+        "generate_agent_candidate_gemini",
+        "generate_agent_candidate_claude",
+        "generate_provider_candidate",
+        "vote_agent_candidates_codex",
+        "vote_agent_candidates_gemini",
+        "vote_agent_candidates_claude",
+        "vote_provider_candidates",
+        "select_agent_candidate_director",
+        "select_provider_candidate_director",
+    }
+    games_types = {
+        "generate_learning_games",
+        "create_learning_games",
+        "generate_course_games",
+    }
+    final_types = {
+        "finalize_temario_package",
+        "close_temario_package",
+        "finalize_topic_package",
+        "finalize_domain_package",
+        "finalize_syllabus_package",
+    }
+    work_kind = str(work_kind or "").strip()
+    if work_kind in review_types:
+        return "review_textual"
+    if work_kind in games_types:
+        return "generate_tutor_assets"
+    if work_kind in final_types:
+        return "generate_help_manual_assets"
+    return work_kind
+
+def query_job_types(work_kind):
+    out = []
+    for candidate in (work_kind, transport_job_type(work_kind)):
+        candidate = str(candidate or "").strip()
+        if candidate and candidate not in out:
+            out.append(candidate)
+    return out
+
+def effective_work_kind(job):
+    payload = payload_map(job)
+    value = payload.get("work_kind")
+    if value is None:
+        value = job.get("work_kind") or job.get("type") or job.get("job_type")
+    return str(value or "").strip()
+
 def get_jobs(job_type, overrides=None):
     params = {
         "execution_mode": "external",
@@ -815,31 +880,35 @@ def get_jobs(job_type, overrides=None):
 
 positive = None
 for job_type in sequence:
-    jobs = get_jobs(job_type)
-    if not jobs:
-        continue
-    mismatches = []
-    for job in jobs:
-        for key, expected in active_scopes.items():
-            got = job_scope_value(job, key)
-            if got != expected:
-                mismatches.append({
-                    "job_ref": job.get("id") or job.get("job_ref") or "",
-                    "scope": key,
-                    "expected": expected,
-                    "got": got,
-                })
-    if mismatches:
-        result = {
-            "scope_probe_status": "failed_scope_mismatch",
-            "job_type": job_type,
-            "mismatches": mismatches,
-        }
-        with open(output_file, "w", encoding="utf-8") as fh:
-            json.dump(result, fh, ensure_ascii=False, indent=2)
-        raise SystemExit("scope-probe fallo: OPES devolvio jobs fuera del scope configurado")
-    positive = {"job_type": job_type, "jobs": jobs}
-    break
+    for query_job_type in query_job_types(job_type):
+        jobs = [job for job in get_jobs(query_job_type) if effective_work_kind(job) == job_type]
+        if not jobs:
+            continue
+        mismatches = []
+        for job in jobs:
+            for key, expected in active_scopes.items():
+                got = job_scope_value(job, key)
+                if got != expected:
+                    mismatches.append({
+                        "job_ref": job.get("id") or job.get("job_ref") or "",
+                        "scope": key,
+                        "expected": expected,
+                        "got": got,
+                    })
+        if mismatches:
+            result = {
+                "scope_probe_status": "failed_scope_mismatch",
+                "job_type": job_type,
+                "transport_job_type": query_job_type,
+                "mismatches": mismatches,
+            }
+            with open(output_file, "w", encoding="utf-8") as fh:
+                json.dump(result, fh, ensure_ascii=False, indent=2)
+            raise SystemExit("scope-probe fallo: OPES devolvio jobs fuera del scope configurado")
+        positive = {"job_type": job_type, "transport_job_type": query_job_type, "jobs": jobs}
+        break
+    if positive is not None:
+        break
 
 if positive is None:
     result = {
@@ -854,11 +923,16 @@ if positive is None:
 negative_checks = []
 for key, value in active_scopes.items():
     impossible = value + negative_suffix
-    jobs = get_jobs(positive["job_type"], {key: impossible})
+    jobs = [
+        job
+        for job in get_jobs(positive["transport_job_type"], {key: impossible})
+        if effective_work_kind(job) == positive["job_type"]
+    ]
     if jobs:
         result = {
             "scope_probe_status": "failed_negative_filter",
             "job_type": positive["job_type"],
+            "transport_job_type": positive["transport_job_type"],
             "scope": key,
             "unexpected_jobs": [job.get("id") or job.get("job_ref") or "" for job in jobs],
         }
@@ -870,6 +944,7 @@ for key, value in active_scopes.items():
 result = {
     "scope_probe_status": "ok",
     "job_type": positive["job_type"],
+    "transport_job_type": positive["transport_job_type"],
     "seen": len(positive["jobs"]),
     "scopes": active_scopes,
     "scope_kind": list(active_scopes.keys()),
@@ -882,6 +957,8 @@ with open(output_file, "w", encoding="utf-8") as fh:
     json.dump(result, fh, ensure_ascii=False, indent=2)
 print("scope_probe_status=ok")
 print("scope_probe_job_type=" + positive["job_type"])
+if positive["transport_job_type"] != positive["job_type"]:
+    print("scope_probe_transport_job_type=" + positive["transport_job_type"])
 print("scope_probe_seen=" + str(len(positive["jobs"])))
 print("scope_probe_negative_checks=" + ",".join(negative_checks))
 print("scope_probe_output=" + output_file)

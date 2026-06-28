@@ -48,11 +48,12 @@ func BuildExternalWorkRunRequestWithContextV0(
 	}
 	config = normalizeJobRunConfigV0(config)
 	safeJob := compactOPESBridgeRefV0(job.ID)
-	workKind := compactOPESBridgeRefV0(job.Type)
 	fields, ok := payloadFieldsV0(job.PayloadJSON)
 	if !ok {
 		return orquestaexternalworkrun.StartExternalWorkRunRequestV0{}, false
 	}
+	transportJobType := compactOPESBridgeRefV0(job.Type)
+	workKind := effectiveWorkKindFromFieldsV0(transportJobType, fields)
 	fields = appendTopicBlocksFieldV0(fields, jobContext.TopicBlocks)
 	fields = withOPESGlobalEditorialPolicyFieldV0(fields)
 	fields = withOPESHTMLPublicationPolicyFieldV0(fields)
@@ -60,20 +61,23 @@ func BuildExternalWorkRunRequestWithContextV0(
 	fields = withOPESTemarioAgentRulesFieldV0(fields)
 	fields = appendFieldIfMissingV0(fields, "job_id", job.ID)
 	fields = appendFieldIfMissingV0(fields, "job_type", job.Type)
+	if transportJobType != workKind {
+		fields = appendFieldIfMissingV0(fields, "transport_job_type", transportJobType)
+	}
 	var opaqueOK bool
 	fields, opaqueOK = appendOpaqueExecutionRefFieldsV0(fields, job.ExternalRefs)
 	if !opaqueOK {
 		return orquestaexternalworkrun.StartExternalWorkRunRequestV0{}, false
 	}
-	fields = appendFieldIfMissingV0(fields, "expected_artifact_type", expectedArtifactTypeV0(job.Type))
-	fields = appendFieldIfMissingV0(fields, "context_budget_profile", contextProfileForJobTypeV0(job.Type))
-	fields = appendExpansionDocumentContractFieldsV0(fields, job.Type)
-	fields = appendDocumentPlanContractFieldsV0(fields, job.Type)
+	fields = appendFieldIfMissingV0(fields, "expected_artifact_type", expectedArtifactTypeV0(workKind))
+	fields = appendFieldIfMissingV0(fields, "context_budget_profile", contextProfileForJobTypeV0(workKind))
+	fields = appendExpansionDocumentContractFieldsV0(fields, workKind)
+	fields = appendDocumentPlanContractFieldsV0(fields, workKind)
 	productWriteSet := productWriteSetFromPayloadFieldsV0(fields)
 	fields = appendProductWriteSetContractFieldsV0(fields, productWriteSet)
 	workRefs := workRefsForPayloadV0(job, fields)
 	acceptanceCriteria := appendProductWriteSetAcceptanceCriteriaV0(
-		acceptanceCriteriaForJobV0(job.Type),
+		acceptanceCriteriaForJobV0(workKind),
 		fields,
 		productWriteSet,
 	)
@@ -85,7 +89,7 @@ func BuildExternalWorkRunRequestWithContextV0(
 		ChangeRef:          "opes-job-" + safeJob,
 		ActorRef:           "opes",
 		Locale:             config.Locale,
-		UserIntent:         userIntentForJobV0(job.Type),
+		UserIntent:         userIntentForJobV0(workKind),
 		TargetArea:         "domain_work",
 		CurrentStateRefs:   currentStateRefsForJobV0(safeJob, workRefs),
 		AcceptanceCriteria: acceptanceCriteria,
@@ -95,10 +99,10 @@ func BuildExternalWorkRunRequestWithContextV0(
 			ProjectRef:    config.ProjectRef,
 			JobRef:        job.ID,
 			InterfaceRefs: interfaceRefsForJobFieldsV0(fields),
-			WorkKind:      job.Type,
+			WorkKind:      workKind,
 			WorkRefs:      workRefs,
 			InputFields:   fields,
-			RequiredTests: opesRequiredTestsForJobV0(job.Type, job.ID, workRefs),
+			RequiredTests: opesRequiredTestsForJobV0(workKind, job.ID, workRefs),
 		},
 	}
 	return orquestaexternalworkrun.StartExternalWorkRunRequestV0{
@@ -113,6 +117,24 @@ func BuildExternalWorkRunRequestWithContextV0(
 		RequestedBy:      config.RequestedBy,
 		AppChangeRequest: change,
 	}, true
+}
+
+func EffectiveWorkKindForExternalJobV0(job orquestaopesconnector.ExternalJobV0) string {
+	fields, ok := payloadFieldsV0(job.PayloadJSON)
+	if !ok {
+		return compactOPESBridgeRefV0(job.Type)
+	}
+	return effectiveWorkKindFromFieldsV0(job.Type, fields)
+}
+
+func effectiveWorkKindFromFieldsV0(
+	transportJobType string,
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) string {
+	if value := strings.TrimSpace(fieldValueV0(fields, "work_kind")); value != "" {
+		return compactOPESBridgeRefV0(value)
+	}
+	return compactOPESBridgeRefV0(transportJobType)
 }
 
 func interfaceRefsForJobFieldsV0(

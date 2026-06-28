@@ -125,18 +125,17 @@ scripts/probe_opes_derivatives_rest_contract.sh
 ```
 
 Este probe usa solo la API publica `POST /api/jobs` de OPES temporal y deja
-`opes_derivatives_rest_contract_probe.json` bajo `/tmp/opes-salidas`. Si
-devuelve `contract_probe_status=incomplete`, el smoke real completo no debe
-reclamarse como bloqueo de loop de Orquesta: falta que OPES acepte por REST
-todos los `work_kind` canonicos o que publique una secuencia equivalente con
-los mismos entregables.
+`opes_derivatives_rest_contract_probe.json` bajo `/tmp/opes-salidas`. Por
+defecto usa compatibilidad de transporte: `payload_json.work_kind` conserva el
+trabajo canonico y `job_type` viaja con el tipo agregado que acepta el REST OPES
+cuando difiere. Para reproducir el modo legado, exportar
+`ORQUESTA_OPES_CONTRACT_PROBE_TRANSPORT_COMPAT=0`.
 
-Resultado del 2026-06-28: la OPES temporal actual acepta por REST 13 de 23
-tipos y rechaza con `invalid document job`:
-`update_topic_registry`, `review_codex`, `review_gemini`, `review_claude`,
-`review_pair_codex_gemini`, `review_pair_codex_claude`,
-`review_pair_gemini_claude`, `review_director_consolidation`,
-`generate_learning_games` y `finalize_temario_package`. Evidencia:
+Resultado del 2026-06-28: en modo legado OPES temporal aceptaba 13 de 23 tipos
+y rechazaba 10 con `invalid document job`. Con compatibilidad de transporte
+desde Orquesta, el probe temporal acepta 23 de 23, el `scope-probe` localiza
+`update_topic_registry` via `transport_job_type=review_textual` y el `dry-run`
+del bridge selecciona ese `work_kind` canonico sin crear runs. Evidencia:
 `docs/runbooks/resultado_probe_opes_derivados_rest_contract_2026-06-28.md`.
 
 Preflight ejecutable sin OPES/Codex:

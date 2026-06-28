@@ -61,6 +61,7 @@ type opesDrainPublicSummaryV0 struct {
 	JobType                string                  `json:"job_type,omitempty"`
 	JobTypeSequence        []string                `json:"job_type_sequence,omitempty"`
 	SelectedJobType        string                  `json:"selected_job_type,omitempty"`
+	TransportJobType       string                  `json:"transport_job_type,omitempty"`
 	EmptyJobTypes          []string                `json:"empty_job_types,omitempty"`
 	JobRef                 string                  `json:"job_ref,omitempty"`
 	ProgramID              string                  `json:"program_id,omitempty"`
@@ -77,14 +78,15 @@ type opesDrainPublicSummaryV0 struct {
 }
 
 type opesDrainPublicFilterV0 struct {
-	Mode            string   `json:"mode"`
-	JobType         string   `json:"job_type,omitempty"`
-	JobTypeSequence []string `json:"job_type_sequence,omitempty"`
-	SelectedJobType string   `json:"selected_job_type,omitempty"`
-	JobRef          string   `json:"job_ref,omitempty"`
-	ProgramID       string   `json:"program_id,omitempty"`
-	TopicID         string   `json:"topic_id,omitempty"`
-	CorrelationID   string   `json:"correlation_id,omitempty"`
+	Mode             string   `json:"mode"`
+	JobType          string   `json:"job_type,omitempty"`
+	TransportJobType string   `json:"transport_job_type,omitempty"`
+	JobTypeSequence  []string `json:"job_type_sequence,omitempty"`
+	SelectedJobType  string   `json:"selected_job_type,omitempty"`
+	JobRef           string   `json:"job_ref,omitempty"`
+	ProgramID        string   `json:"program_id,omitempty"`
+	TopicID          string   `json:"topic_id,omitempty"`
+	CorrelationID    string   `json:"correlation_id,omitempty"`
 }
 
 type runStatusPublicSummaryV0 struct {
@@ -187,6 +189,7 @@ func commandPublicOPESDrainPayloadV0(summary opesDrainSummaryV0) opesDrainPublic
 		JobType:                strings.TrimSpace(summary.JobType),
 		JobTypeSequence:        append([]string(nil), summary.JobTypeSequence...),
 		SelectedJobType:        strings.TrimSpace(summary.SelectedJobType),
+		TransportJobType:       strings.TrimSpace(summary.TransportJobType),
 		EmptyJobTypes:          append([]string(nil), summary.EmptyJobTypes...),
 		JobRef:                 strings.TrimSpace(summary.JobRef),
 		ProgramID:              strings.TrimSpace(summary.ProgramID),
@@ -205,13 +208,14 @@ func commandPublicOPESDrainPayloadV0(summary opesDrainSummaryV0) opesDrainPublic
 
 func commandPublicOPESDrainFilterV0(summary opesDrainSummaryV0) opesDrainPublicFilterV0 {
 	filter := opesDrainPublicFilterV0{
-		JobType:         strings.TrimSpace(summary.JobType),
-		JobTypeSequence: append([]string(nil), summary.JobTypeSequence...),
-		SelectedJobType: strings.TrimSpace(summary.SelectedJobType),
-		JobRef:          strings.TrimSpace(summary.JobRef),
-		ProgramID:       strings.TrimSpace(summary.ProgramID),
-		TopicID:         strings.TrimSpace(summary.TopicID),
-		CorrelationID:   strings.TrimSpace(summary.CorrelationID),
+		JobType:          strings.TrimSpace(summary.JobType),
+		TransportJobType: strings.TrimSpace(summary.TransportJobType),
+		JobTypeSequence:  append([]string(nil), summary.JobTypeSequence...),
+		SelectedJobType:  strings.TrimSpace(summary.SelectedJobType),
+		JobRef:           strings.TrimSpace(summary.JobRef),
+		ProgramID:        strings.TrimSpace(summary.ProgramID),
+		TopicID:          strings.TrimSpace(summary.TopicID),
+		CorrelationID:    strings.TrimSpace(summary.CorrelationID),
 	}
 	switch {
 	case filter.JobRef != "":

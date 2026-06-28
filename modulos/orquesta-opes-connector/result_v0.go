@@ -17,7 +17,7 @@ func domainWorkJobFromOPESV0(
 		Status:         orquestadomainwork.DomainWorkStatusAcceptedV0,
 		JobRef:         response.ID,
 		DomainRef:      request.DomainRef,
-		WorkKind:       firstNonEmptyV0(response.Type, request.WorkKind),
+		WorkKind:       firstNonEmptyV0(request.WorkKind, response.Type),
 		CorrelationID:  firstNonEmptyV0(response.CorrelationID, request.CorrelationID),
 		IdempotencyKey: firstNonEmptyV0(response.IdempotencyKey, request.IdempotencyKey),
 		ExternalRefs:   externalRefsFromMapV0(response.ExternalRefs, request.ExternalRefs),

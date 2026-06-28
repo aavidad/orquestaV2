@@ -21,6 +21,7 @@ type opesDrainSummaryV0 struct {
 	JobType          string                       `json:"job_type,omitempty"`
 	JobTypeSequence  []string                     `json:"job_type_sequence,omitempty"`
 	SelectedJobType  string                       `json:"selected_job_type,omitempty"`
+	TransportJobType string                       `json:"transport_job_type,omitempty"`
 	EmptyJobTypes    []string                     `json:"empty_job_types,omitempty"`
 	JobRef           string                       `json:"job_ref,omitempty"`
 	ProgramID        string                       `json:"program_id,omitempty"`
@@ -40,6 +41,7 @@ type opesDrainSummaryV0 struct {
 type opesDrainJobResultV0 struct {
 	JobRef                 string   `json:"job_ref"`
 	WorkKind               string   `json:"work_kind"`
+	TransportJobType       string   `json:"transport_job_type,omitempty"`
 	ContextBlocks          int      `json:"context_blocks,omitempty"`
 	RunRef                 string   `json:"run_ref,omitempty"`
 	ChangeRef              string   `json:"change_ref,omitempty"`
@@ -154,16 +156,7 @@ func runOPESDrainSingleOnceV0(
 		BaseURL:    config.OPESBaseURL,
 		HTTPClient: httpClient,
 	})
-	jobs, err := client.ListExternalJobsV0(ctx, orquestaopesconnector.ExternalJobQueryV0{
-		ExecutionMode: "external",
-		Status:        "pending",
-		JobType:       config.JobType,
-		JobRef:        config.JobRef,
-		ProgramID:     config.ProgramID,
-		TopicID:       config.TopicID,
-		CorrelationID: config.CorrelationID,
-		Limit:         opesBridgeScanLimitV0(config),
-	})
+	jobs, transportJobType, err := opesBridgeListExternalJobsForWorkKindV0(ctx, client, config)
 	if err != nil {
 		return opesDrainSummaryV0{}, err
 	}
@@ -172,19 +165,28 @@ func runOPESDrainSingleOnceV0(
 		OrquestaBaseURL: config.OrquestaBaseURL,
 		Limit:           config.Limit,
 		JobType:         config.JobType,
-		JobRef:          config.JobRef,
-		ProgramID:       config.ProgramID,
-		TopicID:         config.TopicID,
-		CorrelationID:   config.CorrelationID,
-		DryRun:          config.DryRun,
-		Seen:            len(jobs),
-		Destination:     config.Destination,
+		TransportJobType: opesBridgePublicTransportJobTypeV0(
+			config.JobType,
+			transportJobType,
+		),
+		JobRef:        config.JobRef,
+		ProgramID:     config.ProgramID,
+		TopicID:       config.TopicID,
+		CorrelationID: config.CorrelationID,
+		DryRun:        config.DryRun,
+		Seen:          len(jobs),
+		Destination:   config.Destination,
 	}
 	for _, job := range jobs {
 		if !config.DryRun && summary.Submitted >= config.Limit {
 			break
 		}
-		result := opesDrainJobResultV0{JobRef: job.ID, WorkKind: job.Type}
+		workKind := orquestaopesbridge.EffectiveWorkKindForExternalJobV0(job)
+		result := opesDrainJobResultV0{
+			JobRef:           job.ID,
+			WorkKind:         workKind,
+			TransportJobType: opesBridgePublicTransportJobTypeV0(workKind, job.Type),
+		}
 		if opesBridgeSkipRecordedInputV0(
 			ctx,
 			config.InputLedger,
@@ -284,20 +286,111 @@ func runOPESDrainSingleOnceV0(
 	return summary, nil
 }
 
+func opesBridgeListExternalJobsForWorkKindV0(
+	ctx context.Context,
+	client orquestaopesconnector.RESTClientV0,
+	config opesDrainConfigV0,
+) ([]orquestaopesconnector.ExternalJobV0, string, error) {
+	requestedWorkKind := strings.TrimSpace(config.JobType)
+	queryJobTypes := opesBridgeQueryJobTypesForWorkKindV0(requestedWorkKind)
+	if len(queryJobTypes) == 0 {
+		queryJobTypes = []string{""}
+	}
+	for _, queryJobType := range queryJobTypes {
+		jobs, err := client.ListExternalJobsV0(ctx, orquestaopesconnector.ExternalJobQueryV0{
+			ExecutionMode: "external",
+			Status:        "pending",
+			JobType:       queryJobType,
+			JobRef:        config.JobRef,
+			ProgramID:     config.ProgramID,
+			TopicID:       config.TopicID,
+			CorrelationID: config.CorrelationID,
+			Limit:         opesBridgeScanLimitV0(config),
+		})
+		if err != nil {
+			return nil, "", err
+		}
+		jobs = opesBridgeFilterExternalJobsByWorkKindV0(jobs, requestedWorkKind)
+		if len(jobs) > 0 {
+			return jobs, queryJobType, nil
+		}
+	}
+	return []orquestaopesconnector.ExternalJobV0{}, "", nil
+}
+
+func opesBridgeQueryJobTypesForWorkKindV0(workKind string) []string {
+	workKind = strings.TrimSpace(workKind)
+	if workKind == "" {
+		return []string{}
+	}
+	transportJobType := orquestaopesbridge.OPESBridgeTransportJobTypeForWorkKindV0(workKind)
+	out := make([]string, 0, 2)
+	for _, candidate := range []string{workKind, transportJobType} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" || opesBridgeStringInSliceV0(out, candidate) {
+			continue
+		}
+		out = append(out, candidate)
+	}
+	return out
+}
+
+func opesBridgeStringInSliceV0(values []string, needle string) bool {
+	for _, value := range values {
+		if value == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func opesBridgeFilterExternalJobsByWorkKindV0(
+	jobs []orquestaopesconnector.ExternalJobV0,
+	requestedWorkKind string,
+) []orquestaopesconnector.ExternalJobV0 {
+	requestedWorkKind = strings.TrimSpace(requestedWorkKind)
+	if requestedWorkKind == "" {
+		return jobs
+	}
+	requestedWorkKind = orquestaopesbridge.EffectiveWorkKindForExternalJobV0(
+		orquestaopesconnector.ExternalJobV0{Type: requestedWorkKind},
+	)
+	out := make([]orquestaopesconnector.ExternalJobV0, 0, len(jobs))
+	for _, job := range jobs {
+		if orquestaopesbridge.EffectiveWorkKindForExternalJobV0(job) != requestedWorkKind {
+			continue
+		}
+		out = append(out, job)
+	}
+	if out == nil {
+		return []orquestaopesconnector.ExternalJobV0{}
+	}
+	return out
+}
+
+func opesBridgePublicTransportJobTypeV0(workKind string, transportJobType string) string {
+	workKind = strings.TrimSpace(workKind)
+	transportJobType = strings.TrimSpace(transportJobType)
+	if workKind == "" || transportJobType == "" || workKind == transportJobType {
+		return ""
+	}
+	return transportJobType
+}
+
 func opesBridgeScanLimitV0(config opesDrainConfigV0) int {
 	limit := config.Limit
 	if limit < 1 {
 		limit = 1
 	}
-	if config.DryRun || strings.TrimSpace(config.JobRef) != "" {
+	if strings.TrimSpace(config.JobRef) != "" {
 		return limit
 	}
-	scanLimit := limit * 10
-	if scanLimit < limit {
-		return limit
-	}
-	if scanLimit > 100 {
+	scanLimit := limit * 100
+	if scanLimit < 100 {
 		return 100
+	}
+	if scanLimit > 500 {
+		return 500
 	}
 	return scanLimit
 }

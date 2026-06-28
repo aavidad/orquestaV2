@@ -172,6 +172,109 @@ func TestRunOPESDrainOnceV0GoalFirstPropagaMetadataYLedgerV0(t *testing.T) {
 	}
 }
 
+func TestRunOPESDrainOnceV0ConsultaTransporteYConservaWorkKindCanonicoV0(t *testing.T) {
+	var queriedJobTypes []string
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		jobType := strings.TrimSpace(r.URL.Query().Get("job_type"))
+		queriedJobTypes = append(queriedJobTypes, jobType)
+		w.Header().Set("Content-Type", "application/json")
+		if jobType == "review_textual" {
+			jobs := make([]map[string]any, 0, 12)
+			for i := 0; i < 11; i++ {
+				jobs = append(jobs, map[string]any{
+					"id":             fmt.Sprintf("job-ref-review-other-%02d", i),
+					"type":           "review_textual",
+					"status":         "pending",
+					"execution_mode": "external",
+					"payload_json":   fmt.Sprintf(`{"program_id":"program-ref-001","topic_id":"topic-ref-001","work_kind":"review_gemini","probe_ref":"other-%02d"}`, i),
+					"requested_by":   "opes",
+				})
+			}
+			jobs = append(jobs, map[string]any{
+				"id":             "job-ref-review-codex-001",
+				"type":           "review_textual",
+				"status":         "pending",
+				"execution_mode": "external",
+				"payload_json":   `{"program_id":"program-ref-001","topic_id":"topic-ref-001","work_kind":"review_codex","review_scope":"tema completo"}`,
+				"requested_by":   "opes",
+			})
+			_ = json.NewEncoder(w).Encode(jobs)
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
+	}))
+	defer opesServer.Close()
+
+	var submitted map[string]any
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if writeOrquestaRunSuperviseOKForDrainTestV0(t, w, r) {
+			return
+		}
+		if r.URL.Path != "/api/v0/external-work/run" || r.Method != http.MethodPost {
+			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&submitted); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"estado":  "accepted",
+			"run_ref": "run-ref-review-codex-001",
+		})
+	}))
+	defer orquestaServer.Close()
+
+	ledger, err := newFileExternalBridgeInputLedgerV0(
+		filepath.Join(t.TempDir(), "external-bridge-input-ledger.json"),
+	)
+	if err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	config := opesDrainConfigV0{
+		OPESBaseURL:     opesServer.URL,
+		OrquestaBaseURL: orquestaServer.URL,
+		Limit:           1,
+		JobType:         "review_codex",
+		HTTPTimeout:     time.Second,
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+		InputLedger: ledger,
+	}
+
+	summary, err := runOPESDrainOnceV0(context.Background(), config)
+
+	if err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if strings.Join(queriedJobTypes, ",") != "review_codex,review_textual" {
+		t.Fatalf("queriedJobTypes=%+v", queriedJobTypes)
+	}
+	if summary.Seen != 1 ||
+		summary.Submitted != 1 ||
+		summary.TransportJobType != "review_textual" ||
+		len(summary.Results) != 1 ||
+		summary.Results[0].WorkKind != "review_codex" ||
+		summary.Results[0].TransportJobType != "review_textual" {
+		t.Fatalf("summary=%+v", summary)
+	}
+	work, ok := nestedMapForDrainTestV0(
+		submitted,
+		"external_work_run_request",
+		"app_change_request",
+		"external_work",
+	)
+	if !ok ||
+		work["work_kind"] != "review_codex" ||
+		!inputFieldValueForDrainTestV0(work, "transport_job_type", "review_textual") {
+		t.Fatalf("submitted=%+v", submitted)
+	}
+}
+
 func TestRunOPESDrainOnceV0GoalFirstSupervisionObservaGoalSinSupervisorLegacyV0(t *testing.T) {
 	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
@@ -1062,7 +1165,7 @@ func TestRunOPESDrainOnceV0SecuenciaPasesSaltaTiposSinPendientesV0(t *testing.T)
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
 			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
 		}
-		if r.URL.Query().Get("limit") != "10" {
+		if r.URL.Query().Get("limit") != "100" {
 			t.Fatalf("limit=%q", r.URL.Query().Get("limit"))
 		}
 		jobType := r.URL.Query().Get("job_type")
@@ -1657,7 +1760,7 @@ func TestRunOPESDrainOnceV0EscaneaMasQueLimitYEnviaSiguientesNoEnviadosV0(t *tes
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
 			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
 		}
-		if r.URL.Query().Get("limit") != "30" {
+		if r.URL.Query().Get("limit") != "300" {
 			t.Fatalf("limit=%q", r.URL.Query().Get("limit"))
 		}
 		jobs := []map[string]any{}
@@ -2679,4 +2782,33 @@ func cleanOPESSmokeEnvForDrainTestV0(env []string) []string {
 		out = append(out, item)
 	}
 	return out
+}
+
+func nestedMapForDrainTestV0(root map[string]any, path ...string) (map[string]any, bool) {
+	current := root
+	for _, item := range path {
+		next, ok := current[item].(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		current = next
+	}
+	return current, true
+}
+
+func inputFieldValueForDrainTestV0(work map[string]any, name string, value string) bool {
+	fields, ok := work["input_fields"].([]any)
+	if !ok {
+		return false
+	}
+	for _, field := range fields {
+		fieldMap, ok := field.(map[string]any)
+		if !ok {
+			continue
+		}
+		if fieldMap["name"] == name && fieldMap["value"] == value {
+			return true
+		}
+	}
+	return false
 }

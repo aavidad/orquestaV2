@@ -19,6 +19,7 @@ CORRELATION_ID="${ORQUESTA_OPES_CONTRACT_PROBE_CORRELATION_ID:-corr-orquesta-con
 REQUESTED_BY="${ORQUESTA_OPES_CONTRACT_PROBE_REQUESTED_BY:-orquesta-contract-probe}"
 SUMMARY_FILE="${ORQUESTA_OPES_CONTRACT_PROBE_OUTPUT:-$SMOKE_OUT_DIR/opes_derivatives_rest_contract_probe.json}"
 EXPECT_FULL_SEQUENCE="${ORQUESTA_OPES_CONTRACT_PROBE_EXPECT_FULL_SEQUENCE:-0}"
+TRANSPORT_COMPAT="${ORQUESTA_OPES_CONTRACT_PROBE_TRANSPORT_COMPAT:-1}"
 
 smoke_require_tools curl python3
 smoke_require_confirm ORQUESTA_OPES_TEMPORAL_CONFIRM 1 "probe contrato OPES bloqueado: confirma instancia temporal con ORQUESTA_OPES_TEMPORAL_CONFIRM=1"
@@ -45,7 +46,7 @@ if ! curl -fsS -m 5 "${OPES_BASE_URL_EFFECTIVE%/}/api/health" >"$health_file"; t
   exit 2
 fi
 
-python3 - "$OPES_BASE_URL_EFFECTIVE" "$SEQUENCE" "$PROGRAM_ID" "$TOPIC_ID" "$CORRELATION_ID" "$REQUESTED_BY" "$SUMMARY_FILE" "$EXPECT_FULL_SEQUENCE" <<'PY'
+python3 - "$OPES_BASE_URL_EFFECTIVE" "$SEQUENCE" "$PROGRAM_ID" "$TOPIC_ID" "$CORRELATION_ID" "$REQUESTED_BY" "$SUMMARY_FILE" "$EXPECT_FULL_SEQUENCE" "$TRANSPORT_COMPAT" <<'PY'
 import json
 import os
 import sys
@@ -62,6 +63,7 @@ correlation_id = sys.argv[5].strip()
 requested_by = sys.argv[6].strip()
 summary_file = sys.argv[7]
 expect_full = sys.argv[8] == "1"
+transport_compat = sys.argv[9] == "1"
 
 
 def expected_artifact_type(job_type):
@@ -93,6 +95,53 @@ def expected_artifact_type(job_type):
     return mapping.get(job_type, "work_delivery")
 
 
+def transport_job_type(work_kind):
+    review_types = {
+        "update_topic_registry",
+        "claim_topic_registry",
+        "release_topic_registry",
+        "review_codex",
+        "review_gemini",
+        "review_claude",
+        "review_pair_codex_gemini",
+        "review_pair_codex_claude",
+        "review_pair_gemini_claude",
+        "review_director_consolidation",
+        "review_director_final",
+        "review_consensus_director",
+        "generate_agent_candidate_codex",
+        "generate_agent_candidate_gemini",
+        "generate_agent_candidate_claude",
+        "generate_provider_candidate",
+        "vote_agent_candidates_codex",
+        "vote_agent_candidates_gemini",
+        "vote_agent_candidates_claude",
+        "vote_provider_candidates",
+        "select_agent_candidate_director",
+        "select_provider_candidate_director",
+    }
+    games_types = {
+        "generate_learning_games",
+        "create_learning_games",
+        "generate_course_games",
+    }
+    final_types = {
+        "finalize_temario_package",
+        "close_temario_package",
+        "finalize_topic_package",
+        "finalize_domain_package",
+        "finalize_syllabus_package",
+    }
+    work_kind = str(work_kind or "").strip()
+    if work_kind in review_types:
+        return "review_textual"
+    if work_kind in games_types:
+        return "generate_tutor_assets"
+    if work_kind in final_types:
+        return "generate_help_manual_assets"
+    return work_kind
+
+
 def input_for(index, job_type):
     payload = {
         "program_id": program_id,
@@ -115,6 +164,10 @@ def input_for(index, job_type):
         payload["document_plan_artifact_id"] = "artifact-ref-contract-probe-document-plan"
     if job_type == "generate_html_site":
         payload["assembled_topic_artifact_id"] = "artifact-ref-contract-probe-assembled-topic"
+    if transport_compat:
+        transport_type = transport_job_type(job_type)
+        if transport_type != job_type:
+            payload["transport_job_type"] = transport_type
     return payload
 
 
@@ -143,8 +196,9 @@ accepted = []
 rejected = []
 responses = []
 for index, job_type in enumerate(sequence, start=1):
+    request_job_type = transport_job_type(job_type) if transport_compat else job_type
     payload = {
-        "job_type": job_type,
+        "job_type": request_job_type,
         "input": input_for(index, job_type),
         "correlation_id": correlation_id,
         "idempotency_key": f"orquesta-contract-probe:{correlation_id}:{index:02d}:{job_type}",
@@ -159,6 +213,7 @@ for index, job_type in enumerate(sequence, start=1):
     item = {
         "index": index,
         "job_type": job_type,
+        "transport_job_type": request_job_type,
         "http_status": status,
     }
     if 200 <= status <= 299:
@@ -202,11 +257,14 @@ summary = {
     "schema_version": "orquesta_opes_derivatives_rest_contract_probe.v0",
     "created_at_unix": int(time.time()),
     "status": status,
+    "transport_compat": transport_compat,
     "sequence_count": len(sequence),
     "accepted_count": len(accepted),
     "rejected_count": len(rejected),
     "accepted_job_types": [item["job_type"] for item in accepted],
+    "accepted_transport_job_types": [item["transport_job_type"] for item in accepted],
     "rejected_job_types": [item["job_type"] for item in rejected],
+    "rejected_transport_job_types": [item["transport_job_type"] for item in rejected],
     "program_id": program_id,
     "topic_id": topic_id,
     "correlation_id": correlation_id,
@@ -225,8 +283,11 @@ with open(summary_file, "w", encoding="utf-8") as handle:
     handle.write("\n")
 
 print(f"contract_probe_status={status}")
+print(f"transport_compat={str(transport_compat).lower()}")
 print("accepted_job_types=" + ",".join(summary["accepted_job_types"]))
+print("accepted_transport_job_types=" + ",".join(summary["accepted_transport_job_types"]))
 print("rejected_job_types=" + ",".join(summary["rejected_job_types"]))
+print("rejected_transport_job_types=" + ",".join(summary["rejected_transport_job_types"]))
 print(f"accepted_count={len(accepted)}")
 print(f"rejected_count={len(rejected)}")
 print(f"summary_file={summary_file}")

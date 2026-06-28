@@ -367,13 +367,14 @@ Evidencia:
 
 ## ORQ-OPES-007 contrato_rest_opes_derivados_canonicos
 
-Estado: abierto; bloqueo externo verificado contra OPES temporal real.
+Estado: cerrado para creacion/listado REST desde Orquesta; pendiente smoke
+real effectful goal-first hasta paquete final.
 
-Problema: Orquesta ya ejecuta en fake/offline la secuencia canonica de 23
-`work_kind` de OPES hasta `finalize_temario_package`, pero la API publica
-actual de OPES temporal (`POST /api/jobs`) no permite sembrar ni crear todos
-esos tipos como trabajos externos reales. Esto bloquea el smoke real completo
-antes de llegar a Codex Goal, cierre causal o TTS.
+Problema: Orquesta ya ejecutaba en fake/offline la secuencia canonica de 23
+`work_kind` de OPES hasta `finalize_temario_package`, pero la API publica OPES
+temporal (`POST /api/jobs`) no permitia sembrar ni crear todos esos tipos como
+`job_type` directos. Esto bloqueaba el smoke real completo antes de llegar a
+Codex Goal, cierre causal o TTS.
 
 Evidencia 2026-06-28: nueva herramienta
 `scripts/probe_opes_derivatives_rest_contract.sh`, ejecutada contra OPES
@@ -397,10 +398,30 @@ Tipos rechazados por REST con `invalid document job`:
 - `generate_learning_games`;
 - `finalize_temario_package`.
 
-Criterio de cierre: OPES temporal debe aceptar por contrato publico los 23
-`work_kind` canonicos o publicar una secuencia equivalente que cubra los mismos
-entregables (`topic_registry_update`, revisiones independientes/cruzadas,
-`learning_games_package` y `completed_syllabus_package`) con dedupe,
-`external_job_ref`, artefactos por puerto y scope acotado. No vale sembrar por
-DB interna ni compartir filesystem entre Orquesta y OPES para cerrar esta
-incidencia.
+Resolucion 2026-06-28: Orquesta separa `work_kind` canonico y `job_type` de
+transporte. El bridge deriva `external_work.work_kind` desde
+`payload_json.work_kind`, conserva `job.type` como `transport_job_type` cuando
+difiere, y el drain consulta primero el tipo canonico y despues el transporte
+equivalente. El connector crea jobs OPES con `payload_json.work_kind` canonico
+y `job_type` de transporte (`review_textual`, `generate_tutor_assets` o
+`generate_help_manual_assets`) sin perder criterios, artefactos ni tests
+requeridos de Orquesta.
+
+Evidencia real temporal posterior:
+
+- `contract_probe_status=ok`, `transport_compat=true`, `accepted_count=23`,
+  `rejected_count=0`;
+- `scope_probe_status=ok`, `job_type=update_topic_registry`,
+  `transport_job_type=review_textual`;
+- `dry-run` del bridge con `selected_job_type=update_topic_registry`,
+  `transport_job_type=review_textual`, `seen=1`, `submitted=0`.
+
+Evidencia local:
+`docs/runbooks/resultado_probe_opes_derivados_rest_contract_2026-06-28.md`.
+
+Criterio de cierre cumplido para creacion/listado: OPES temporal acepta una
+secuencia equivalente que cubre los mismos `work_kind` canonicos por contrato
+publico y scope acotado, sin sembrar por DB interna ni compartir filesystem
+entre Orquesta y OPES. Lo pendiente pertenece al smoke real effectful:
+materializar agentes goal-first, subir artefactos, validar receipts, TTS y
+cierre hasta `completed_syllabus_package`.

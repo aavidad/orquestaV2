@@ -62,6 +62,7 @@ func opesCreateJobPayloadV0(
 	maxAttempts int,
 ) opesCreateJobRequestV0 {
 	input := domainWorkFieldsToObjectV0(request.InputFields)
+	addStringV0(input, "work_kind", request.WorkKind)
 	addStringSliceV0(input, "work_refs", request.WorkRefs)
 	addStringSliceV0(input, "input_refs", request.InputRefs)
 	addStringSliceV0(input, "interface_refs", request.InterfaceRefs)
@@ -69,8 +70,12 @@ func opesCreateJobPayloadV0(
 	addStringSliceV0(input, "acceptance_criteria", request.AcceptanceCriteria)
 	addStringSliceV0(input, "evidence_refs", request.EvidenceRefs)
 	addStringV0(input, "objective", request.Objective)
+	transportJobType := opesTransportJobTypeForWorkKindV0(request.WorkKind)
+	if transportJobType != request.WorkKind {
+		addStringV0(input, "transport_job_type", transportJobType)
+	}
 	return opesCreateJobRequestV0{
-		JobType:        request.WorkKind,
+		JobType:        transportJobType,
 		Input:          input,
 		MaxAttempts:    maxAttempts,
 		CorrelationID:  request.CorrelationID,

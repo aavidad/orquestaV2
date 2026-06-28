@@ -18,8 +18,16 @@ Reglas:
 - `project_ref=opes`;
 - `app_ref=opes`;
 - `external_work.job_ref` conserva `job.id`;
-- `external_work.work_kind` conserva `job.type`;
-- `input_fields` copia el `payload_json` sin interpretar dominio;
+- `external_work.work_kind` conserva el trabajo canonico OPES: primero
+  `payload_json.work_kind` y, solo si falta, `job.type`;
+- cuando el REST OPES solo acepta un tipo agregado, `job.type` actua como
+  `transport_job_type` y se conserva en `input_fields.transport_job_type`
+  junto a `input_fields.job_type`; por ejemplo, `review_codex`,
+  `review_pair_*`, `update_topic_registry` y cierres editoriales viajan por
+  tipos de transporte como `review_textual`, `generate_tutor_assets` o
+  `generate_help_manual_assets` sin perder el `work_kind` canonico;
+- `input_fields` copia el `payload_json` y solo normaliza metadatos de contrato
+  necesarios para routing, evidencias y compatibilidad de transporte;
 - para `summarize_topic`, el bridge hidrata `topic_blocks` desde
   `GET /api/topics/{topic_id}/blocks`; si no puede obtenerlos, no crea el run
   para evitar resumenes pobres;

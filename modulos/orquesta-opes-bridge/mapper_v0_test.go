@@ -67,6 +67,42 @@ func goalContextPurposeContainsForTestV0(
 	return false
 }
 
+func TestBuildExternalWorkRunRequestV0UsaWorkKindCanonicoConJobTypeTransporte(t *testing.T) {
+	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
+		ID:   "job-ref-review-codex-001",
+		Type: "review_textual",
+		PayloadJSON: `{
+			"program_id":"program-ref-001",
+			"topic_id":"topic-ref-001",
+			"work_kind":"review_codex",
+			"review_scope":"tema completo"
+		}`,
+	}, JobRunConfigV0{})
+
+	if !ok {
+		t.Fatalf("request no construida")
+	}
+	work := req.AppChangeRequest.ExternalWork
+	if work == nil ||
+		work.WorkKind != "review_codex" ||
+		req.AppChangeRequest.AllowedWriteSet[0] != "external/opes/review_codex/job-ref-review-codex-001" ||
+		!strings.Contains(req.AppChangeRequest.UserIntent, "review_codex") ||
+		!fieldValueForTestV0(work.InputFields, "job_type", "review_textual") ||
+		!fieldValueForTestV0(work.InputFields, "transport_job_type", "review_textual") ||
+		!fieldValueForTestV0(work.InputFields, "work_kind", "review_codex") ||
+		!fieldValueForTestV0(work.InputFields, "expected_artifact_type", orquestadomainwork.DomainWorkArtifactTypeAgentReviewReportV0) ||
+		!fieldValueForTestV0(work.InputFields, "context_budget_profile", "large") {
+		t.Fatalf("request=%+v work=%+v", req, work)
+	}
+	if len(work.RequiredTests) == 0 ||
+		!containsStringForTestV0(
+			work.RequiredTests[0].AcceptanceCriteriaRefs,
+			"opes-required-artifact-"+orquestadomainwork.DomainWorkArtifactTypeAgentReviewReportV0,
+		) {
+		t.Fatalf("required_tests=%+v", work.RequiredTests)
+	}
+}
+
 func TestBuildExternalWorkRunRequestV0MapeaExpansionComoLarge(t *testing.T) {
 	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
 		ID:   "job-ref-expansion-001",

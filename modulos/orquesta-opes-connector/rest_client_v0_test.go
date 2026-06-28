@@ -65,6 +65,50 @@ func TestRESTClientV0CreateDomainWorkJobCreaJobExterno(t *testing.T) {
 	}
 }
 
+func TestRESTClientV0CreateDomainWorkJobUsaJobTypeTransporteSinPerderWorkKind(t *testing.T) {
+	var received opesCreateJobRequestV0
+	client := newRESTClientForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodPost {
+			t.Fatalf("request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&received); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":              "job-ref-review-codex-001",
+			"type":            "review_textual",
+			"status":          "accepted",
+			"correlation_id":  "corr-opes-review-001",
+			"idempotency_key": "idem-opes-review-001",
+		})
+	}))
+	request := opesJobRequestForTestV0()
+	request.WorkKind = "review_codex"
+	request.CorrelationID = "corr-opes-review-001"
+	request.IdempotencyKey = "idem-opes-review-001"
+	request.InputFields = append(request.InputFields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "work_kind", Value: "review_gemini"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "transport_job_type", Value: "review_legacy"},
+	)
+
+	result, err := client.CreateDomainWorkJobV0(context.Background(), request)
+
+	if err != nil {
+		t.Fatalf("CreateDomainWorkJobV0: %v", err)
+	}
+	if result.Status != orquestadomainwork.DomainWorkStatusAcceptedV0 ||
+		result.JobRef != "job-ref-review-codex-001" ||
+		result.WorkKind != "review_codex" {
+		t.Fatalf("result=%+v", result)
+	}
+	if received.JobType != "review_textual" ||
+		received.Input["work_kind"] != "review_codex" ||
+		received.Input["transport_job_type"] != "review_textual" {
+		t.Fatalf("payload=%+v", received)
+	}
+}
+
 func TestRESTClientV0SubmitDomainWorkArtifactEnviaArtefacto(t *testing.T) {
 	var received opesArtifactRequestV0
 	client := newRESTClientForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
