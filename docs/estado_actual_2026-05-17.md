@@ -327,10 +327,12 @@ Lo pendiente no debe confundirse con lo hecho:
 - en la espina `DirectorCycleStepV0 -> runner -> scheduler -> workflow ->
   cycle-outbox`, el codigo offline ya cubre el tick neutral con outbox pendiente
   como corte de seguridad; lo pendiente para esa linea se clasifica aparte:
-  composicion residente/restart (`T65`), smoke neutral de proceso real (`T66`),
-  proveedor real si aplica y OPES temporal real de derivados/cierre. No se debe
-  reabrir como "pendiente generico" review/tests/rework/cierre ya cubiertos por
-  PlanState y pruebas offline;
+  composicion residente/restart (`T65`), smoke neutral de proceso real (`T66`)
+  y proveedor real si aplica. OPES temporal real de derivados/cierre quedo
+  cerrado despues por la ruta goal-first documentada en
+  `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`;
+  no se debe reabrir como "pendiente generico" review/tests/rework/cierre ya
+  cubiertos por PlanState y pruebas offline;
 - el `PlanState` ya cubre la salida positiva
   `review_deliveries -> run_required_tests/replan_or_close` cuando existe la
   cadena causal `DeliveryRegistered -> ReviewRequested ->
@@ -355,7 +357,10 @@ Lo pendiente no debe confundirse con lo hecho:
   no-OPES temporal `EXT-NO-OPES` ya cerro app HTTP/file externa con submitter
   real opt-in, `codex-fake`, review, tests requeridos y plan cerrado;
   `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` ya cerraron Codex real amplio y
-  recursivo; sigue pendiente OPES temporal real de derivados/cierre;
+  recursivo; OPES temporal real de derivados/cierre quedo cerrado despues por
+  goal-first hasta `completed_syllabus_package`, con pendiente residual solo de
+  revalidar optimizaciones posteriores de contexto/coste y QA editorial fuera
+  del smoke;
 - si una composicion real distinta del stack Codex todavia no inyecta una fuente
   `OperationalClosureSource`, el cierre queda pendiente de wiring real en esa
   composicion;
@@ -559,12 +564,14 @@ verificable para esa composicion.
 ## Siguiente ruta
 
 1. Mantener la frontera conceptual: core neutral primero, composiciones despues.
-2. Cerrar el frente real abierto de OPES temporal real de derivados/cierre. El
-   smoke Codex real acotado con runner ya esta cerrado en
-   `CODEX-REQTEST-REAL-E2E`, el no-OPES temporal con runtime fake en
+2. Mantener cerrado el frente OPES temporal real de derivados/cierre por
+   goal-first y no relanzarlo salvo regresion demostrada. El smoke largo del
+   2026-06-28 cerro 24/24 jobs hasta `completed_syllabus_package`; queda como
+   residual reejecutar con optimizaciones posteriores de contexto/coste si se
+   necesita medir eficiencia. El smoke Codex real acotado con runner ya esta
+   cerrado en `CODEX-REQTEST-REAL-E2E`, el no-OPES temporal con runtime fake en
    `EXT-NO-OPES`, la ola/cohorte amplia en `CODEX-WAVE-REAL` y el arbol
-   recursivo en `CODEX-RECURSION-REAL`; no cubren derivados OPES
-   reales.
+   recursivo en `CODEX-RECURSION-REAL`.
 3. Consolidar `orquesta-domain-work` y los contratos de artefactos como entrada
    comun para OPES, programacion y futuros dominios.
 4. Seguir vaciando policy de `cmd` y adaptadores concretos hacia

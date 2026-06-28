@@ -164,7 +164,9 @@ consumidor, sin OPES productivo. Cada run `goal_first` sube artefacto por
 `evidence-ref-goal-domain-receipt-ledger-accepted`, sin receipts inventados.
 Evidencia:
 `TestCodexStackV0ExternalWorkGoalFirstCierraSecuenciaOPESDerivadosConReceiptsLedgerV0`.
-Sigue vivo el smoke OPES temporal real de derivados/cierre, inventario de
+La validacion real temporal posterior queda cubierta por el runbook
+`docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`:
+24/24 jobs cerrados hasta `completed_syllabus_package`, inventario de
 artefactos canonicos y cola final sin pendientes reales.
 
 Avance 2026-06-28 adicional: `external_work.input_fields` goal-first conserva
@@ -258,10 +260,34 @@ tumba el tick ni la ola. Evidencia: commit `6049798f` y
 Tras ese corte, la bateria local dura queda verde:
 `git diff --check`, `go vet ./...`, `go test -count=1 ./...`,
 `staticcheck ./...`, `govulncheck ./...` y
-`go test -race -count=1 -timeout=20m ./...`. Esto no cierra el 100% global:
-el hueco restante de ORQ-OPES-002 sigue siendo el smoke OPES temporal real
-completo de 23 `work_kind`, con TTS/HTML/paquete final y cola final sin
-pendientes reales.
+`go test -race -count=1 -timeout=20m ./...`.
+
+Avance 2026-06-28 cierre goal-first real: el smoke OPES temporal largo ya llego
+hasta paquete final con el loop legacy desactivado. En
+`docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`,
+el intento `final3` documenta OPES temporal `127.0.0.1:18196`, Orquesta
+temporal `127.0.0.1:19196`,
+`ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=0`,
+`ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=0` y
+`ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false`; el scope temporal quedo con
+`total=24`, `completed=24`, `pending=[]`, incluido
+`finalize_temario_package` con `artifact_type=completed_syllabus_package`,
+`goal_status=complete`, `run_status=cerrada`, `closure_status=accepted` y
+`closure_accepted=true`. Esto cierra el smoke real temporal de derivados/cierre
+OPES para la ruta goal-first. No cierra cursos productivos ni sustituye QA
+editorial de artefactos.
+
+Avance 2026-06-28 posterior: `autoprogramming/status` mitiga el patron
+`running` tras ACK/proceso parado sin relanzar ni reconciliar agresivamente.
+Cuando `director.stats` observa `ack_registered_cleanup`, la accion publica en
+`stale_running[]` queda en `wait_for_ack_before_reconcile`; ademas expone
+`process_alive_count`, `ack_detected`, `last_ack_at`, `last_output_at` y
+`last_artifact_at` si hay stats causales. Evidencia:
+`TestMCPAutoprogrammingStatusExecutorV0ProcesoParadoConAckCleanupEsperaACKV0`
+y `TestClassifyRunLivenessV0AckPendienteNoEsSeguroReconciliar`. Queda como
+frontera residual probar una tanda OPES temporal pequena con ACKs reales ya
+escritos y procesos terminados para validar la metrica de eficiencia de ese
+caso exacto, no la ruta goal-first de derivados ya cerrada.
 
 ## ORQ-OPES-003 external_work_no_agent_no_delivery
 
@@ -438,8 +464,9 @@ Evidencia:
 
 ## ORQ-OPES-007 contrato_rest_opes_derivados_canonicos
 
-Estado: cerrado para creacion/listado REST desde Orquesta; pendiente smoke
-real effectful goal-first hasta paquete final.
+Estado: cerrado para creacion/listado REST desde Orquesta y para smoke real
+effectful goal-first hasta paquete final; pendiente solo revalidar
+optimizaciones posteriores de contexto/coste.
 
 Problema: Orquesta ya ejecutaba en fake/offline la secuencia canonica de 23
 `work_kind` de OPES hasta `finalize_temario_package`, pero la API publica OPES
@@ -493,9 +520,9 @@ Evidencia local:
 Criterio de cierre cumplido para creacion/listado: OPES temporal acepta una
 secuencia equivalente que cubre los mismos `work_kind` canonicos por contrato
 publico y scope acotado, sin sembrar por DB interna ni compartir filesystem
-entre Orquesta y OPES. Lo pendiente pertenece al smoke real effectful:
-materializar agentes goal-first, subir artefactos, validar receipts, TTS y
-cierre hasta `completed_syllabus_package`.
+entre Orquesta y OPES. El criterio effectful tambien queda cerrado por el smoke
+goal-first temporal posterior: materializa goals, sube artefactos, valida
+receipts, atraviesa audio/HTML y cierra hasta `completed_syllabus_package`.
 
 Avance 2026-06-28 noche 3: se ejecuto smoke real effectful acotado a
 `update_topic_registry` con Orquesta temporal goal-first y OPES temporal. El
@@ -516,5 +543,16 @@ root `/tmp/orquesta-opes-goal-real-20260628T090415Z`, OPES temporal
 `127.0.0.1:40385`, `goal_status=complete`, `closure_status=accepted`,
 `run_status=cerrada`, `artifact_refs=1`, `domain_receipt_refs=1`,
 `generation_jobs.status=completed` y `job_artifacts_count=1`. Esto cierra el
-caso unitario real de `update_topic_registry`; sigue pendiente extender la
-secuencia temporal a los 23 `work_kind` y cubrir TTS/HTML/paquete final.
+caso unitario real de `update_topic_registry`; la extension a la secuencia
+temporal completa quedo cubierta por la resolucion posterior `final3`.
+
+Resolucion real temporal posterior 2026-06-28: la secuencia completa se cerro
+en el mismo runbook con scope temporal `final3`: 24/24 jobs completados,
+incluyendo audio, tutor, juegos, HTML, manual de ayuda y
+`finalize_temario_package`. El paquete final quedo materializado en
+`/tmp/orquesta-opes-final3-20260628T130000Z/project/external/opes/finalize_temario_package/a3bbc1fd1e2b32e0ab745eb6b72245d9/completed_syllabus_package.json`.
+La lectura operativa es que el contrato REST OPES canonico, el bridge
+goal-first, los receipts de dominio y el cierre por evidencias funcionan en
+temporal sin usar el loop legacy. Pendiente residual: reejecutar un smoke largo
+con el enriquecimiento posterior de `accepted_domain_artifact_manifest` ya
+cargado para medir ahorro de tokens/tiempo, no para probar cierre funcional.
