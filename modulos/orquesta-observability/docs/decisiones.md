@@ -56,6 +56,9 @@ sin meter proveedor, runtime, OPES ni logica de UI en el nucleo.
 Impacto: Observability define solo el shape y las invariantes; el builder vive
 en el adaptador que ya dispone de stats/cola/contexto. El snapshot no ejecuta
 efectos, no filtra entregas y no sustituye el cierre causal del Director.
+Actualizacion 2026-06-28: se anade `decision.action=repair_goal_state` como
+senal read-only para runs goal-first con marcador durable y `GoalWorkStateV0`
+ausente. Sigue sin reparar ni ejecutar nada desde observability.
 Contratos afectados: `DirectorAutonomousOpsSnapshotV0`.
 Estado: aceptada_local
 ```

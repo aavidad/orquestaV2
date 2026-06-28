@@ -444,6 +444,9 @@ Invariantes:
 - `decision.action=observe_goal` es una senal neutral de cockpit para observar
   un goal ya publicado por puertos externos; no implica que observabilidad
   conozca ni ejecute el backend de Goal.
+- `decision.action=repair_goal_state` es una senal neutral de cockpit para un
+  run goal-first con marcador durable pero sin state completo; no repara por si
+  misma ni autoriza supervision legacy.
 - Las formas no disponibles se dejan vacias; waits, olas, cohortes y modelos se
   rellenaran cuando entren por puertos publicos.
 

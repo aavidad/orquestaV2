@@ -364,7 +364,9 @@ Pendiente verificable:
   `autoprogramming_goal_first_state_missing`, cuenta la run como bloqueada
   reparable, emite `goal_first_state_missing` con
   `repair_goal_state_before_legacy_supervision` y suprime `supervise`/`retry`/
-  `review` legacy para esa run hasta reconstruir el state. Evidencia focal:
+  `review` legacy para esa run hasta reconstruir el state. `ops_snapshot` se
+  alinea con `repair_goal_state` para que `/ops` no derive `wait_deliveries`
+  desde stats legacy residuales. Evidencia focal:
   `TestMCPAutoprogrammingStatusExecutorV0GoalFirstMarkerSinStateNoSupervisaLegacy`.
 
 Validacion focal:

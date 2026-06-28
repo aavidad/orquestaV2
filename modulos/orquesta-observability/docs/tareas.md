@@ -149,6 +149,8 @@ Validacion: gofmt; go test -count=1 ./modulos/orquesta-observability
 Bloqueos: No implementa builder productivo ni endpoint; MCP/Web lo consumen por
 contratos separados.
 Estado: completada
+Revalidacion 2026-06-28: `repair_goal_state` queda como accion read-only de
+cockpit para state goal-first ausente; no anade runtime ni reparacion directa.
 ```
 
 ## Plantilla

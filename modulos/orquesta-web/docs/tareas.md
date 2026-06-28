@@ -542,6 +542,8 @@ TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto
 Bloqueos: El snapshot actual no incorpora todavia runtime models, waits, olas o
 cohortes si no llegan por los contratos publicos existentes.
 Estado: completada localmente.
+Revalidacion 2026-06-28: `/ops` pinta `repair_goal_state` como reparacion de
+estado goal-first y no fuerza al operador hacia supervision legacy.
 ```
 
 ```text

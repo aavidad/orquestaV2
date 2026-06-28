@@ -29,6 +29,7 @@ func buildMCPAutoprogrammingOpsSnapshotV0(
 	queue *MCPRunQueuePriorityToolResultV0,
 	run *MCPDirectorStatsToolResultV0,
 	operator *MCPAutoprogrammingOperatorV0,
+	staleRunning []MCPAutoprogrammingActionableRunV0,
 	observedAt string,
 ) *orquestaobservability.DirectorAutonomousOpsSnapshotV0 {
 	snapshot := orquestaobservability.DirectorAutonomousOpsSnapshotV0{
@@ -44,7 +45,7 @@ func buildMCPAutoprogrammingOpsSnapshotV0(
 		}
 		snapshot.Agents = directorOpsAgentsFromStatsMCPV0(*run.Stats)
 	}
-	snapshot.Decision = directorOpsDecisionFromAutoprogrammingSafeActionsMCPV0(operator, snapshot)
+	snapshot.Decision = directorOpsDecisionFromAutoprogrammingSafeActionsMCPV0(operator, snapshot, staleRunning)
 	return &snapshot
 }
 
@@ -158,7 +159,22 @@ func directorOpsDecisionFromSnapshotMCPV0(
 func directorOpsDecisionFromAutoprogrammingSafeActionsMCPV0(
 	operator *MCPAutoprogrammingOperatorV0,
 	snapshot orquestaobservability.DirectorAutonomousOpsSnapshotV0,
+	staleRunning []MCPAutoprogrammingActionableRunV0,
 ) orquestaobservability.DirectorAutonomousOpsDecisionV0 {
+	for _, action := range staleRunning {
+		if strings.TrimSpace(action.Code) != mcpAutoprogrammingActionGoalFirstStateMissingV0 {
+			continue
+		}
+		return orquestaobservability.DirectorAutonomousOpsDecisionV0{
+			Action:       orquestaobservability.DirectorAutonomousOpsActionRepairGoalStateV0,
+			Scope:        "run",
+			RunRef:       strings.TrimSpace(action.RunRef),
+			Attention:    true,
+			ReasonCode:   "goal_first_state_missing",
+			SummaryKey:   "director.ops.decision.repair_goal_state",
+			EvidenceRefs: compactStringsMCPV0(action.EvidenceRefs),
+		}
+	}
 	safeActions := directorOpsAutoprogrammingSafeActionsMCPV0(operator)
 	for _, action := range safeActions {
 		if strings.TrimSpace(action.Action) != "observe_goal" {

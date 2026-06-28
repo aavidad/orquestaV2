@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
@@ -274,6 +275,13 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalFirstMarkerSinStateNoSupervisaLeg
 		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "run", runRef) ||
 		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "queue", "") {
 		t.Fatalf("operator=%+v", result.Operator)
+	}
+	if result.OpsSnapshot == nil ||
+		result.OpsSnapshot.Decision.Action != orquestaobservability.DirectorAutonomousOpsActionRepairGoalStateV0 ||
+		result.OpsSnapshot.Decision.RunRef != runRef ||
+		result.OpsSnapshot.Decision.ReasonCode != "goal_first_state_missing" ||
+		!result.OpsSnapshot.Decision.Attention {
+		t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
 	}
 }
 

@@ -31,7 +31,9 @@ cierran sin evidencia de trabajo.
 Impacto: una run con marcador y sin state se publica como
 `autoprogramming_goal_first_state_missing`, cuenta como bloqueada reparable,
 suprime acciones legacy y exige reparar/reconstruir `GoalWorkStateV0` antes de
-observar el goal por el camino normal.
+observar el goal por el camino normal. `ops_snapshot.decision` publica
+`repair_goal_state` para que `/ops` no derive `wait_deliveries` desde stats
+legacy residuales de esa misma run.
 Contratos afectados: mcp.tool.orquesta.autoprogramming.status.v0;
 GoalWorkRunMarkerStorePortV0.
 Estado: aceptada localmente

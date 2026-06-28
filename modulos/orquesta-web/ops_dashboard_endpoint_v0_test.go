@@ -121,6 +121,8 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 		"Revisar y replanificar",
 		"Esperar entregas acotadas",
 		"Lanzar siguiente ola",
+		"Reparar estado goal-first",
+		"repair_goal_state",
 		"Estado del Director",
 		"closure_status",
 		"progress_source",

@@ -238,7 +238,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 		result.Operator,
 		result.Diagnostics,
 	)
-	result.OpsSnapshot = buildMCPAutoprogrammingOpsSnapshotV0(result.Queue, result.Run, result.Operator, input.OccurredAt)
+	result.OpsSnapshot = buildMCPAutoprogrammingOpsSnapshotV0(result.Queue, result.Run, result.Operator, result.StaleRunning, input.OccurredAt)
 	return result, nil
 }
 

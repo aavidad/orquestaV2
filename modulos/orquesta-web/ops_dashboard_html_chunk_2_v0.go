@@ -223,6 +223,8 @@ const opsDashboardHTMLChunk2V0 = `    }
           return 'Lanzar siguiente ola';
         case 'observe_goal':
           return 'Observar goal';
+        case 'repair_goal_state':
+          return 'Reparar estado goal-first';
         case 'close_or_validate':
           return 'Cerrar o validar';
         case 'closed':
@@ -240,6 +242,7 @@ const opsDashboardHTMLChunk2V0 = `    }
       const reason = decision.reason_code || 'ops_snapshot';
       if (decision.action === 'supervise_queue') return (queue.count || 0) + ' trabajos preparados en cola; decision del snapshot operativo (' + reason + ').';
       if (decision.action === 'observe_goal') return 'Run goal-first ' + (decision.run_ref || run.run_ref || 'seleccionada') + '; observar Goal en vez de supervision legacy (' + reason + ').';
+      if (decision.action === 'repair_goal_state') return 'Run goal-first ' + (decision.run_ref || run.run_ref || 'seleccionada') + ' sin estado completo; reparar GoalWorkStateV0 antes de supervision legacy (' + reason + ').';
       if (decision.action === 'wait_deliveries') return (run.agents_in_flight || 0) + ' agentes en vuelo; mantener waits por refs (' + reason + ').';
       if (decision.action === 'review_replan') return 'Atencion requerida en ' + (decision.run_ref || run.run_ref || 'run') + '; revisar evidencia y replan si procede (' + reason + ').';
       if (decision.action === 'continue_run') return (run.tasks_open || 0) + ' tareas abiertas; continuar supervision causal (' + reason + ').';

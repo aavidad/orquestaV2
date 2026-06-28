@@ -128,7 +128,8 @@ Comando: go test -count=1 ./modulos/orquesta-observability
 Evidencia esperada: el modulo compila el DTO read-only con cola, runs, agentes,
 decision compacta y privacy metadata-only. La validacion integrada del contrato
 se cierra desde MCP/Web al publicar y consumir `ops_snapshot`.
-Ultima ejecucion: 2026-06-08; pasa en el corte que publica el DTO.
+Ultima ejecucion: 2026-06-28; pasa con `go test -count=1 ./modulos/orquesta-observability`
+tras anadir `decision.action=repair_goal_state`.
 Riesgos: El DTO no rellena por si solo waits, olas, cohortes ni modelos; esas
 fuentes deben entrar por puertos publicos posteriores.
 ```

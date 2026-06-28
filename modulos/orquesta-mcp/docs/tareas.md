@@ -30,6 +30,8 @@ Validacion: go test -count=1 ./modulos/orquesta-mcp -run
 Bloqueos: No reconstruye el state ni toca runtime Codex/OPES; solo publica la
 accion segura reparable y bloquea el retorno al supervisor legacy.
 Estado: completada 2026-06-28
+Revalidacion: `ops_snapshot.decision` queda en `repair_goal_state` para ese
+caso, aunque haya stats legacy residuales con agentes en vuelo.
 ```
 
 ```text

@@ -1609,6 +1609,9 @@ Invariantes:
     legacy de tareas/agentes y no sugiere `supervise`/`retry`/`review` legacy
     para esa run. Tampoco emite `observe_goal` hasta reconstruir el state,
     porque la observacion normal del goal necesita el estado persistido.
+    `ops_snapshot.decision` se alinea con esa senal como
+    `repair_goal_state` y no deriva `wait_deliveries` desde stats legacy
+    residuales.
   - Las clases `running_without_recent_stats`, `running_stale*` y las
     proyecciones legacy de tareas/agentes (`registered`, `process_ref`,
     `task_ref`) aplican solo a runs sin `GoalWorkStateV0`. En goal-first el

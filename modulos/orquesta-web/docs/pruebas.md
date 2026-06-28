@@ -463,6 +463,9 @@ la decision visible prefiere `DirectorAutonomousOpsSnapshotV0` publicado por
 servidor aun no envia snapshot. No anade endpoint, store, DB, runtime ni
 proveedor.
 Ultima ejecucion: 2026-06-08, pasa con `go test -count=1 ./modulos/orquesta-web -run TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto`.
+Revalidacion 2026-06-28: la shell `/ops` contiene etiqueta y razon para
+`repair_goal_state`, accion publicada por el snapshot cuando un goal-first tiene
+marcador durable pero falta `GoalWorkStateV0`.
 Riesgos: La fuente contractual ya es `ops_snapshot`; falta ampliar el snapshot
 con modelos/runtime, waits, olas y cohortes cuando esos puertos se publiquen.
 ```

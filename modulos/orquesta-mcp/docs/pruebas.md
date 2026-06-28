@@ -602,7 +602,9 @@ supervisor legacy: publica diagnostico
 emite accion `goal_first_state_missing` con
 `repair_goal_state_before_legacy_supervision`, oculta proyecciones legacy de
 tareas/agentes y no recomienda `observe_goal`, `supervise run` ni
-`supervise queue` hasta reparar el state.
+`supervise queue` hasta reparar el state. Tambien fija que
+`ops_snapshot.decision.action=repair_goal_state` y no `wait_deliveries` aunque
+existan stats legacy residuales con agentes en vuelo.
 
 Evidencia adicional 2026-06-26: `autoprogramming/status` diagnostica
 `external_work_accepted_stopped_without_delivery` cuando una run external-work

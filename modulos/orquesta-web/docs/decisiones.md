@@ -106,6 +106,9 @@ Impacto: `renderDirectorDecision` consume `DirectorAutonomousOpsSnapshotV0`
 desde `autoprogramming.status` o `director.stats`; `directorDecisionSummary`
 queda como fallback para servidores antiguos sin snapshot. No cambia endpoints,
 no lee stores/runtime/DB y no introduce rails de contenido.
+Actualizacion 2026-06-28: la UI reconoce `decision.action=repair_goal_state`
+para runs goal-first con state ausente y lo muestra como reparacion de estado,
+no como espera de entregas ni supervision legacy.
 Contratos afectados: `/ops`, `orquesta.director.stats.v0`,
 `orquesta.autoprogramming.status.v0`, `DirectorAutonomousOpsSnapshotV0`.
 Estado: aceptada localmente.

@@ -16,7 +16,8 @@ Reglas de uso:
 
 ## ORQ-OPES-001 estado_operativo_global_accionable
 
-Estado: parcial, con marcador goal-first cubierto en MCP el 2026-06-28.
+Estado: parcial, con marcador goal-first cubierto en MCP y `/ops` el
+2026-06-28.
 
 Problema: las vistas de estado mezclan procesos vivos, runs stale, colas y
 contenedores goal-first sin una decision unica accionable. El operador necesita
@@ -38,7 +39,8 @@ Avance 2026-06-28: `autoprogramming/status` lee `GoalWorkRunMarkerV0` por
 puerto opt-in, publica `autoprogramming_goal_first_state_missing`, cuenta el
 run como bloqueado reparable, emite accion `goal_first_state_missing` con
 `repair_goal_state_before_legacy_supervision` y suprime acciones legacy para
-esa run. Evidencia:
+esa run. `ops_snapshot.decision` publica `repair_goal_state` en vez de derivar
+`wait_deliveries` desde stats legacy residuales. Evidencia:
 `TestMCPAutoprogrammingStatusExecutorV0GoalFirstMarkerSinStateNoSupervisaLegacy`.
 Sigue vivo el cierre global de `/ops` y de reconciliacion completa de todos los
 casos visibles.
