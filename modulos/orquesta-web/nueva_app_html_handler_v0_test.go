@@ -70,6 +70,7 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`data-help="Opciones: crear app completa`,
 		`data-help="Interfaz web para navegador."`,
 		`data-help="Opciones: sin elegir`,
+		`data-help="Perfiles de usuarios separados por comas.`,
 		`Alcance de validacion`,
 		`Compatibilidad historica`,
 		`Forzar loop historico del Director`,
@@ -199,6 +200,11 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		!strings.Contains(body, `applyServerGuided`) ||
 		!strings.Contains(body, `function configureRentalData()`) {
 		t.Fatalf("GET HTML conserva validacion nativa del navegador\n%s", body)
+	}
+	if strings.Contains(body, `data-help=""`) ||
+		strings.Contains(body, `data-help="Texto no disponible.`) ||
+		strings.Contains(body, `data-help="Text unavailable.`) {
+		t.Fatalf("GET HTML contiene tooltip vacio o generico\n%s", body)
 	}
 }
 
