@@ -207,12 +207,12 @@ El cambio queda cubierto por tests</textarea></label>
     }
     function resultRunRef(value) {
       const goal = selectedGoal(value);
-      const spec = (((value || {}).goal_specs || [])[0]) || {};
+      const spec = (((value || {}).goal_spec_summaries || [])[0]) || {};
       return String(goal.run_ref || (value || {}).run_ref || spec.run_ref || '').trim();
     }
     function goalInfo(value) {
       const goal = selectedGoal(value);
-      const spec = (((value || {}).goal_specs || [])[0]) || {};
+      const spec = (((value || {}).goal_spec_summaries || [])[0]) || {};
       return {
         run_ref: resultRunRef(value),
         goal_ref: String(goal.goal_ref || (value || {}).goal_ref || spec.goal_ref || '').trim(),
@@ -232,7 +232,7 @@ El cambio queda cubierto por tests</textarea></label>
       if (single.run_ref || single.goal_ref || single.external_goal_ref || single.goal_status) {
         return [Object.assign({_index:0}, single)];
       }
-      const specs = Array.isArray((value || {}).goal_specs) ? (value || {}).goal_specs : [];
+      const specs = Array.isArray((value || {}).goal_spec_summaries) ? (value || {}).goal_spec_summaries : [];
       return specs.map((spec, index) => ({
         _index: index,
         run_ref: spec.run_ref || '',

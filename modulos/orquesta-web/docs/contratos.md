@@ -210,9 +210,10 @@ Campos:
   branch_ref, tasks, write_set, required_tests, priority_score y limites de
   continuacion.
 - view_model: estado, accepted, run_ref, project_ref, worktree_ref,
-  branch_ref, phase_id, workflow_task_refs, wait_agent_refs, goal_specs
-  opcional cuando el prepare-run ya trae contratos Goal, goal opcional cuando
-  la composicion lo lanza, continue y errores_publicos.
+  branch_ref, phase_id, workflow_task_refs, wait_agent_refs,
+  goal_spec_summaries opcional cuando el prepare-run ya trae handoff Goal
+  compacto, goal opcional cuando la composicion lo lanza, continue y
+  errores_publicos.
 Invariantes:
 - La web llama al bridge REST `/api/v0/autoprogramming/prepare-run`; no lee
   stores, runtime, procesos, Git, DB ni filesystem.
@@ -227,7 +228,8 @@ Invariantes:
   con opt-in de composicion y `director_execution_mode=legacy_director_loop`.
 - Si el contrato externo devuelve `goal`, la web observa cierre por
   `/api/v0/autoprogramming/goal/observe` con polling acotado. Si solo devuelve
-  `goal_specs[]`, lo proyecta como handoff sin empujar a supervisor legacy.
+  `goal_spec_summaries[]`, lo proyecta como handoff sin empujar a supervisor
+  legacy.
 - `priority_score` se transporta al contrato prepare-run para que la cola
   mantenga el trabajo secundario acotado sin bloquear trabajo primario.
 Errores:

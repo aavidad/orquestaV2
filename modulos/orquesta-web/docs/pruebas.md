@@ -188,7 +188,7 @@ Evidencia esperada: `RESTAutoprogrammingPrepareRunClientV0` envia
 `POST /api/v0/autoprogramming/prepare-run`, correlation header,
 `worktree_isolated=true`, `worktree_ref`, `branch_ref`, write-set y tests
 obligatorios; `priority_score` cruza como dato de cola opcional; la respuesta
-proyecta run, workflow tasks, agentes de espera, `goal_specs` opcional,
+proyecta run, workflow tasks, agentes de espera, `goal_spec_summaries` opcional,
 continue y errores publicos sin leer runtime/stores.
 Ultima ejecucion: 2026-05-23; pasa.
 Riesgos: El executor real de prepare-run se inyecta fuera de web; este corte
