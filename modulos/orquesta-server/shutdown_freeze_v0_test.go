@@ -79,8 +79,9 @@ func TestRuntimeV0ServerShutdownRechazadoNoCongelaSupervisorV0(t *testing.T) {
 	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"estado": "error",
-			"status": "requester_not_authorized",
+			"estado":         "error",
+			"status":         "requester_not_authorized",
+			"shutdown_ready": true,
 		})
 	})
 	runtime, err := NewRuntimeV0(ConfigV0{
@@ -102,8 +103,8 @@ func TestRuntimeV0ServerShutdownRechazadoNoCongelaSupervisorV0(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, serverShutdownRoutePathV0, nil)
 	runtime.HandlerV0().ServeHTTP(httptest.NewRecorder(), req)
-	if runtime.StateV0().SupervisorFrozen {
-		t.Fatalf("shutdown rechazado congelo supervisor: %+v", runtime.StateV0())
+	if runtime.StateV0().SupervisorFrozen || runtime.StateV0().ShutdownReady {
+		t.Fatalf("shutdown rechazado publico ready o congelo supervisor: %+v", runtime.StateV0())
 	}
 
 	runtime.runSupervisorTickV0(context.Background())
@@ -296,6 +297,26 @@ func TestShutdownProjectionFromHTTPV0ReadySinConfirmacionesQuedaStopPendingV0(t 
 				t.Fatalf("projection=%+v keep_frozen=%v", projection, keepFrozen)
 			}
 		})
+	}
+}
+
+func TestShutdownProjectionFromHTTPV0RechazadoNoPublicaReadyV0(t *testing.T) {
+	body := []byte(`{"estado":"error","status":"requester_not_authorized","shutdown_ready":true}`)
+
+	projection, keepFrozen := shutdownProjectionFromHTTPV0(http.StatusForbidden, body)
+
+	if keepFrozen || projection.Ready {
+		t.Fatalf("projection=%+v keep_frozen=%v", projection, keepFrozen)
+	}
+}
+
+func TestShutdownProjectionFromHTTPV0StopPendingNoPublicaReadyV0(t *testing.T) {
+	body := []byte(`{"estado":"ok","status":"stop_pending","shutdown_ready":true}`)
+
+	projection, keepFrozen := shutdownProjectionFromHTTPV0(http.StatusOK, body)
+
+	if !keepFrozen || projection.Ready || projection.Status != "stop_pending" {
+		t.Fatalf("projection=%+v keep_frozen=%v", projection, keepFrozen)
 	}
 }
 

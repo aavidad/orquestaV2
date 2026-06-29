@@ -110,9 +110,14 @@ func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjecti
 	}
 	projection = normalizeShutdownStopConfirmationV0(projection)
 	if statusCode >= http.StatusBadRequest || shutdownFreezeResultIsRejectedV0(payload) {
+		projection.Ready = false
 		return projection, false
 	}
 	if payload.ShutdownReady {
+		if projection.Status == "stop_pending" {
+			projection.Ready = false
+			return projection, true
+		}
 		return projection, projection.Status == "stop_pending"
 	}
 	return projection, true
