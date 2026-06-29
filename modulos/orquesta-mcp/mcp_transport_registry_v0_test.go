@@ -24,6 +24,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		MCPBootstrapResourceNameV0,
 		MCPCoreWorkflowContractsResourceNameV0,
 		MCPOperatorOperationsResourceNameV0,
+		"orquesta.contracts.solicitar_nueva_app.v0",
 	} {
 		if _, ok := transport.resources[name]; !ok {
 			t.Fatalf("resource no registrado: %s", name)
@@ -72,8 +73,37 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 			t.Fatalf("tool no registrado: %s", name)
 		}
 	}
-	assertTransportPayloadSaneadoMCPTestV0(t, transport.resources, 9000)
+	assertTransportPayloadSaneadoMCPTestV0(t, transport.resources, 22000)
 	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 29200)
+}
+
+func TestMCPTransportV0SirveResourceIndividualSolicitarNuevaApp(t *testing.T) {
+	transport := newFakeMCPTransportV0()
+	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{}); err != nil {
+		t.Fatalf("register transport: %v", err)
+	}
+	envelope, ok := transport.resources["orquesta.contracts.solicitar_nueva_app.v0"]
+	if !ok {
+		t.Fatalf("resource individual no registrado")
+	}
+	if envelope.URI != MCPNuevaAppResourceURIV0 || envelope.DescriptorSource.Owner != "orquesta-factory" {
+		t.Fatalf("envelope solicitar nueva app: %+v", envelope)
+	}
+	output, err := transport.ReadResourceV0(context.Background(), "orquesta.contracts.solicitar_nueva_app.v0")
+	if err != nil {
+		t.Fatalf("read resource: %v", err)
+	}
+	var contract MCPSharedContractCompactV0
+	if err := json.Unmarshal(output, &contract); err != nil {
+		t.Fatalf("decode contract: %v", err)
+	}
+	if contract.Contract != "SolicitarNuevaApp v0" ||
+		contract.ResourceURI != MCPNuevaAppResourceURIV0 ||
+		contract.Owner != "orquesta-factory" ||
+		!containsSharedContractsTestStringV0(contract.PublicErrors, "conector_requerido_no_disponible") {
+		t.Fatalf("contract individual: %+v", contract)
+	}
+	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 1800)
 }
 
 func TestMCPTransportV0SirveResourceYToolConFakeEnMemoria(t *testing.T) {

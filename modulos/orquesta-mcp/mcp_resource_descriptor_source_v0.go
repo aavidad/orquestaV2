@@ -37,8 +37,28 @@ func mcpResourceDescriptorSourceForResourceV0(name string) MCPResourceDescriptor
 	case MCPOperatorOperationsResourceNameV0:
 		return mcpResourceDescriptorSourceV0("orquesta-operator-mcp", "modulos/orquesta-operator-mcp/operator_capabilities_v0.go", "OperatorMCPCapabilitiesV0", "operatorToolPublicErrorsV0")
 	default:
+		if contract, ok := mcpSharedContractResourceFromTransportNameV0(name); ok {
+			return mcpResourceDescriptorSourceV0(
+				contract.Owner,
+				firstNonEmptyMCPV0(firstStringMCPV0(contract.CanonicalRefs), "docs/estado_actual_2026-05-17.md"),
+				contract.Input,
+				"mcpSharedContractSourcesV0",
+			)
+		}
 		return MCPResourceDescriptorSourceV0{Status: MCPResourceDescriptorStatusStaleV0}
 	}
+}
+
+func mcpSharedContractResourceFromTransportNameV0(name string) (MCPSharedContractCompactV0, bool) {
+	trimmed := strings.TrimSpace(name)
+	const prefix = "orquesta.contracts."
+	if !strings.HasPrefix(trimmed, prefix) {
+		return MCPSharedContractCompactV0{}, false
+	}
+	slug := strings.TrimPrefix(trimmed, prefix)
+	slug = strings.TrimSuffix(slug, ".v0")
+	slug = strings.ReplaceAll(slug, "_", "-")
+	return MCPSharedContractResourceByNameV0(slug)
 }
 
 func mcpResourceDescriptorSourceV0(
@@ -76,4 +96,13 @@ func ValidateMCPResourceDescriptorSourceV0(source MCPResourceDescriptorSourceV0)
 		strings.TrimSpace(source.DTOOrValidator) != "" &&
 		strings.TrimSpace(source.PublicErrorsSource) != "" &&
 		len(compactStringsMCPV0(source.Verification)) > 0
+}
+
+func firstStringMCPV0(values []string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }

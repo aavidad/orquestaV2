@@ -233,10 +233,10 @@ Riesgos: Nuevos tipos de error del core deben mapearse sin acoplar MCP a interna
 ```text
 Caso: MCP-CT-001 schema del tool orquesta.apps.solicitar_nueva.v0
 Tipo: contract
-Comando: pendiente; futuro test de contrato del adaptador MCP
-Evidencia esperada: El input MCP contiene app_spec_request compatible con AppSpecRequestV0 y respuesta opcional; rechaza campos de control no documentados.
-Ultima ejecucion: no ejecutada; solo documentada el 2026-05-04
-Riesgos: Falta schema canonico publicado de AppSpecRequestV0.
+Comando: go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPNuevaAppDescriptorV0Compacto|TestMCPTransportToolInputSchemaV0CubreToolsRegistrados'
+Evidencia esperada: El input MCP contiene `app_spec_request` compatible con AppSpecRequestV0 y envelope local compacto; el registro de transporte comprueba que el descriptor no anuncia campos stale.
+Ultima ejecucion: 2026-06-29; pasa.
+Riesgos: El detalle extenso del schema sigue viviendo en `orquesta-factory`; MCP solo publica el envelope y no duplica reglas de negocio.
 ```
 
 ```text
@@ -251,37 +251,37 @@ Riesgos: El slice sigue sin servidor MCP real; el adaptador local consume el pue
 ```text
 Caso: MCP-CT-003 serializacion de errores publicos
 Tipo: contract
-Comando: pendiente; futuro test parametrizado por error publico
+Comando: go test -count=1 ./modulos/orquesta-mcp -run TestNewMCPNuevaAppErrorResultV0SerializaErroresPublicosCanonicos
 Evidencia esperada: app_spec_invalida, opcion_incompatible, target_no_soportado, idioma_invalido y conector_requerido_no_disponible salen como output_error estable con code, message y field opcional.
-Ultima ejecucion: no ejecutada; solo documentada el 2026-05-04
-Riesgos: Puede cambiar el envelope si factory publica un formato de error canonico incompatible.
+Ultima ejecucion: 2026-06-29; pasa.
+Riesgos: Puede cambiar el envelope si factory publica un formato de error canonico incompatible; en ese caso debe actualizarse el DTO MCP junto al contrato owner.
 ```
 
 ```text
 Caso: MCP-CT-004 snapshot del resource contractual
 Tipo: contract
-Comando: pendiente; futuro snapshot de resource orquesta://contracts/solicitar-nueva-app/v0
+Comando: go test -count=1 ./modulos/orquesta-mcp -run 'TestNewMCPSharedContractsResourceV0CompactoYSinDumps|TestMCPTransportV0SirveResourceIndividualSolicitarNuevaApp'
 Evidencia esperada: Resource compacto con propietario, input/output, errores e invariantes; sin dumps de DB ni detalles internos.
-Ultima ejecucion: no ejecutada; solo documentada el 2026-05-04
-Riesgos: Falta ubicacion definitiva del detalle canonico de SolicitarNuevaApp v0.
+Ultima ejecucion: 2026-06-29; pasa.
+Riesgos: El resource individual sirve una proyeccion compacta; el detalle canonico sigue en `orquesta-factory`.
 ```
 
 ```text
 Caso: MCP-CT-005 snapshot del prompt minimo
 Tipo: contract
-Comando: pendiente; futuro snapshot de prompt orquesta.solicitar_nueva_app.v0
+Comando: go test -count=1 ./modulos/orquesta-mcp -run TestMCPNuevaAppPromptV0MinimoPideAclaracionesSinRuntime
 Evidencia esperada: Prompt orienta a pedir datos faltantes, respeta i18n y no sugiere CLI/DB/runtime.
-Ultima ejecucion: no ejecutada; solo documentada el 2026-05-04
-Riesgos: Preguntas minimas no pueden cerrarse hasta conocer campos obligatorios de AppSpecRequestV0.
+Ultima ejecucion: 2026-06-29; pasa.
+Riesgos: Prompt puro para clientes MCP; no ejecuta negocio ni sustituye la validacion owner.
 ```
 
 ```text
 Caso: MCP-SM-001 smoke MCP nueva app
 Tipo: smoke
-Comando: pendiente; futuro cliente MCP local invocando resource, prompt y tool
-Evidencia esperada: Una IA puede leer el contrato, preparar una solicitud y obtener respuesta del puerto sin usar CLI/DB.
-Ultima ejecucion: no ejecutada; solo documentada el 2026-05-04
-Riesgos: Requiere servidor MCP implementado en una tarea futura; esta tarea no lo implementa.
+Comando: go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPTransportV0SirveResourceIndividualSolicitarNuevaApp|TestMCPNuevaAppPromptV0MinimoPideAclaracionesSinRuntime|TestMCPNuevaAppToolExecutorV0ReturnsOKResultFromFactoryHTTPPort'
+Evidencia esperada: Una IA puede leer el contrato desde el transporte MCP opt-in, usar el prompt minimo y obtener respuesta del puerto HTTP local sin usar CLI/DB/runtime.
+Ultima ejecucion: 2026-06-29; pasa con transporte fake local y `httptest`.
+Riesgos: No cubre un servidor MCP de red real; ese transporte debe envolver este registro opt-in sin duplicar logica.
 ```
 
 ```text
