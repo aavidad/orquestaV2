@@ -385,8 +385,11 @@ Response:
 - turn: `WebNuevaAppIntakeGuidedTurnV0`.
 - session: `WebNuevaAppIntakeSessionV0` resultante.
 Invariantes:
-- Es calculo puro de intake; no persiste sesion, no arranca Director, no llama
-  LLM/MCP, no abre filesystem y no toca runtime.
+- Es calculo puro de intake cuando no hay puerto inyectado; si la composicion
+  aporta `WebNuevaAppIntakeAssistantPortV0`, el handler delega el turno
+  conversacional por contrato y conserva fallback local. La web no elige
+  proveedor, no llama LLM/MCP directamente, no persiste sesion, no arranca
+  Director, no abre filesystem y no toca runtime.
 - El handler acepta solo JSON y mantiene limites de body/control plane comunes.
 - Las respuestas devuelven formulario parcial editable; factory y Director
   siguen cerrando validacion/ejecucion.

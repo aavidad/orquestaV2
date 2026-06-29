@@ -280,12 +280,14 @@ de validacion de enums de factory. `TestWebNuevaAppIntakeGuided*` valida que
 una necesidad libre de app movil para alquileres cercanos produce decisiones de
 plataforma, datos, storage, mapas, arquitectura y accesibilidad compatibles con
 factory. `TestNuevaAppIntakeGuidedHTTPHandler*` valida el endpoint JSON
-`POST /api/v0/apps/intake/guided-turn`, acciones de seguimiento y errores HTTP,
-sin DB, runtime, filesystem productivo, LLM real ni MCP directo.
+`POST /api/v0/apps/intake/guided-turn`, acciones de seguimiento, errores HTTP,
+puerto conversacional inyectable y fallback local si el asistente falla, sin DB,
+runtime, filesystem productivo, LLM real ni MCP directo.
 Ultima ejecucion: 2026-06-25; pasa con `GOCACHE=/tmp/orquesta-go-cache`.
-Riesgos: No arranca agente de intake real; el endpoint es calculo puro de
-wizard y el handoff solo declara contrato compacto. La disponibilidad de la
-ruta depende de la composicion/gateway.
+Riesgos: El agente de intake real depende de adaptador/composicion que implemente
+`WebNuevaAppIntakeAssistantPortV0`; el fallback local sigue siendo determinista
+y el handoff solo declara contrato compacto. La disponibilidad de la ruta
+depende de la composicion/gateway.
 ```
 
 ## Validaciones realizadas en este arranque
