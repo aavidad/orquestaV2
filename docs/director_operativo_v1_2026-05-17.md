@@ -188,8 +188,9 @@ estado durable de espera. P1 WaitAgentRefs tambien queda cerrado para ingesta
 Codex: pending, wait y ACK/deliveries usan el mismo scope. El ciclo durable
 offline posterior ya tiene pruebas para review/rework/replan/cierre, runner de
 tests y replay focal. `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` ya cubren la
-repeticion con Codex real amplio y recursion real; lo que sigue pendiente es
-OPES temporal real de derivados/cierre.
+repeticion con Codex real amplio y recursion real; OPES temporal real de
+derivados/cierre quedo cerrado funcionalmente por goal-first. Quedan residuales
+de calidad editorial, coste y automatizacion larga.
 
 Tramo P0 ya disponible:
 
@@ -256,8 +257,9 @@ El paso operativo `run_required_tests` ya puede consumir evidencia causal,
 generarla mediante runner inyectado por puerto, guardar `RequiredTestEvidenceV0`,
 bloquear por fallo/falta de evidencia, reentrar cuando aparece evidencia
 posterior y replanificar un fallo causal acotado. Esa garantia ya tiene
-ejecucion documentada con Codex real de ola/cohorte amplia y recursion real. Lo
-pendiente verificable es OPES temporal real de derivados/cierre.
+ejecucion documentada con Codex real de ola/cohorte amplia y recursion real.
+OPES temporal real de derivados/cierre queda cerrado funcionalmente por
+goal-first; el residual verificable es editorial/coste/automatizacion larga.
 
 ## Espera por cohortes y oleadas
 

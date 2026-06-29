@@ -331,8 +331,9 @@ implementacion, test focal y evidencia en la matriz.
   deterministas de `QualityGateRecorded` y `ReplanDecisionRecorded`, aun sin
   `CommandEffects` frescos.
 
-El orden recomendado ahora es cerrar OPES temporal real de derivados/cierre. El
-smoke Codex real acotado con runner ya quedo cerrado por
+El orden recomendado ahora es conservar el cierre funcional de OPES temporal
+real de derivados/cierre y avanzar solo residuales editoriales/coste/
+automatizacion larga. El smoke Codex real acotado con runner ya quedo cerrado por
 `CODEX-REQTEST-REAL-E2E`; el no-OPES temporal con runtime fake ya quedo cerrado
 por `EXT-NO-OPES`; `CODEX-WAVE-REAL` cubre ola/cohorte amplia con varios
 agentes Codex vivos y `CODEX-RECURSION-REAL` cubre el arbol recursivo 1->2->4
@@ -378,8 +379,8 @@ activo, avanzar a `review_deliveries` cuando el wait queda consumido y mover
 `review_deliveries` a `run_required_tests` o `replan_or_close` cuando la cadena
 causal de review aceptada pertenece al scope activo.
 
-Pendiente verificable despues de este corte: OPES temporal real de
-derivados/cierre. El runner real acotado con un agente Codex vivo ya tiene
+OPES temporal real de derivados/cierre quedo cerrado funcionalmente por
+goal-first. El runner real acotado con un agente Codex vivo ya tiene
 evidencia en `CODEX-REQTEST-REAL-E2E`; el cierre no-OPES temporal esta cubierto
 por `EXT-NO-OPES`; la ola/cohorte Codex real y la recursion Codex real estan
 cubiertas por `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL`.
@@ -403,8 +404,8 @@ por estado durable o por una fuente inyectada y verificable:
 ## Pendiente verificable
 
 Estas piezas ya tienen cierre offline/fake-runtime donde se indica. La misma
-garantia ya se llevo a Codex real amplio/recursion; lo que sigue pendiente es
-OPES temporal real de derivados/cierre.
+garantia ya se llevo a Codex real amplio/recursion; OPES temporal real de
+derivados/cierre quedo cerrado funcionalmente por goal-first.
 
 1. Cobertura Codex real con runner:
    el runner por puerto, el executor local opt-in, el consumo de
@@ -461,9 +462,9 @@ y cierre por refs opacas.
 
 Los huecos restantes no se consideran cerrados hasta tener evidencia propia:
 
-- OPES temporal real de derivados/cierre hasta
-  `generate_html_site -> local_html_site`, con refs causales suficientes y sin
-  asumir cierre desde dry-run o automatizacion offline;
+- residuales de OPES temporal real de derivados/cierre: calidad editorial,
+  coste, automatizacion larga y reejecucion desde cero cuando aporte evidencia
+  nueva;
 - cualquier blocker nuevo no cubierto debe traer prueba focal de replan y replay
   idempotente antes de declararse parte del tramo cerrado.
 

@@ -41,9 +41,9 @@ Cobertura actual:
 Pendiente de integracion:
 
 - no ampliar este contrato puro con runtime, proveedor ni reglas de producto;
-- completar el smoke real OPES temporal de derivados/cierre hasta
-  `assemble_topic`; no reabrir `CODEX-WAVE-REAL` ni `CODEX-RECURSION-REAL`
-  salvo regresion demostrada;
+- conservar el cierre funcional del smoke real OPES temporal de derivados/cierre
+  por goal-first; no reabrir `CODEX-WAVE-REAL`, `CODEX-RECURSION-REAL` ni
+  `OPES-DER-RESTO` salvo regresion demostrada;
 
 Invariantes de integracion ya cubiertos fuera del modulo puro:
 

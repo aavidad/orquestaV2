@@ -131,8 +131,9 @@ La recursion Codex productiva queda cerrada en modo proveedor real por
 refs, limites, waits acotados, presupuesto, review causal, cierre de arbol y
 supervisor fake que avanza sin llamadas manuales por nivel. El smoke real ejecuto
 el mismo arbol con Codex vivo, ACK/entregas reales y cierre causal del arbol.
-El hueco real abierto sigue siendo OPES temporal real de derivados/cierre por
-conectores, no el contrato puro de este modulo.
+OPES temporal real de derivados/cierre quedo cerrado funcionalmente por
+goal-first. Lo que queda fuera de este modulo son residuales editoriales, coste,
+automatizacion larga o blockers nuevos con evidencia propia, no el contrato puro.
 
 ## Ejemplos y errores frecuentes
 

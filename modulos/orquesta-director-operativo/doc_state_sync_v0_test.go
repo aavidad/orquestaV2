@@ -45,12 +45,12 @@ func TestDirectorOperativoDocsV0NoReabrenSmokesCerrados(t *testing.T) {
 		"docs/director_operativo_v1_2026-05-17.md": {
 			"CODEX-WAVE-REAL",
 			"CODEX-RECURSION-REAL",
-			"lo que sigue pendiente es\nOPES temporal real de derivados/cierre",
+			"OPES temporal real de\nderivados/cierre quedo cerrado funcionalmente por goal-first",
 		},
 		"docs/corte_cierre_generico_director_operativo_2026-05-17.md": {
 			"CODEX-WAVE-REAL",
 			"CODEX-RECURSION-REAL",
-			"Sigue pendiente OPES temporal real de derivados/cierre",
+			"OPES temporal real de derivados/cierre quedo cerrado\nfuncionalmente por goal-first",
 		},
 	}
 	for rel, snippets := range requiredEvidence {

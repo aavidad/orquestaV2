@@ -46,8 +46,9 @@ Estado tras el primer corte:
 - waits por cohorte/ola/parent, ingesta acotada por `WaitAgentRefs`,
   review/rework/replan, tests requeridos durables, cierre causal y recursion
   Codex real ya tienen evidencia fuera de este modulo puro;
-- el pendiente real vigente no es ampliar este contrato con runtime: es cerrar
-  OPES temporal real de derivados/cierre por conectores de dominio.
+- el pendiente real vigente no es ampliar este contrato con runtime: OPES temporal real de derivados/cierre
+  quedo cerrado funcionalmente por goal-first; los residuales son calidad
+  editorial, coste y automatizacion larga por conectores de dominio.
 
 ## Frontera vigente
 
