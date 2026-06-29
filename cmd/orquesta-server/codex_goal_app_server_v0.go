@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	codexGoalBackendAppServerProxyV0 = "app_server_proxy"
-	codexGoalBackendAppServerTmuxV0  = "app_server_tmux"
+	codexGoalBackendAppServerProxyV0      = "app_server_proxy"
+	codexGoalBackendAppServerTmuxV0       = "app_server_tmux"
+	codexAppServerGoalObjectiveMaxRunesV0 = 4000
 )
 
 type serverCodexGoalBackendV0 struct {
@@ -202,7 +203,7 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	}
 	if _, err := backend.Protocol.SetGoalV0(ctx, serverCodexAppServerThreadGoalSetParamsV0{
 		ThreadID:    threadID,
-		Objective:   strings.TrimSpace(packet.Objective),
+		Objective:   codexAppServerGoalObjectiveV0(packet.Objective),
 		Status:      "active",
 		TokenBudget: tokenBudget,
 	}); err != nil {
@@ -341,6 +342,24 @@ func codexAppServerGoalFingerprintHashV0(goal serverCodexAppServerThreadGoalV0) 
 		fmt.Sprintf("%d", tokenBudget),
 	}, "\x00")))
 	return fmt.Sprintf("%x", sum[:])
+}
+
+func codexAppServerGoalObjectiveV0(objective string) string {
+	objective = strings.TrimSpace(objective)
+	if len([]rune(objective)) <= codexAppServerGoalObjectiveMaxRunesV0 {
+		return objective
+	}
+	sum := sha256.Sum256([]byte(objective))
+	suffix := fmt.Sprintf(
+		"\n\n[objective_compacted original_sha256=%x original_bytes=%d prompt_contains_full_objective]",
+		sum[:],
+		len([]byte(objective)),
+	)
+	limit := codexAppServerGoalObjectiveMaxRunesV0 - len([]rune(suffix))
+	if limit < 1 {
+		return strings.TrimSpace(string([]rune(suffix)[:codexAppServerGoalObjectiveMaxRunesV0]))
+	}
+	return strings.TrimSpace(string([]rune(objective)[:limit])) + suffix
 }
 
 func (backend serverCodexAppServerGoalBackendV0) threadStartParamsV0() serverCodexAppServerThreadStartParamsV0 {

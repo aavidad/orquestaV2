@@ -167,6 +167,48 @@ func TestServerCodexAppServerGoalBackendV0LanzaThreadGoalYTurnV0(t *testing.T) {
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0CompactaObjetivoLargoParaAppServerV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-long-objective"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-goal-long-objective", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-goal-long-objective", Status: "inProgress"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol}
+	longObjective := "cerrar automejora goal-first: " + strings.Repeat("contexto operativo ", 260)
+	fullPrompt := "prompt conserva el objetivo completo:\n" + longObjective
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		SchemaVersion: orquestaruntimecodexgoal.CodexGoalStartPacketSchemaV0,
+		GoalRef:       "goal-ref-codex-app-server-long-objective",
+		Objective:     longObjective,
+		Prompt:        fullPrompt,
+	})
+
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if got := len([]rune(protocol.setParams.Objective)); got > codexAppServerGoalObjectiveMaxRunesV0 {
+		t.Fatalf("objective len=%d max=%d", got, codexAppServerGoalObjectiveMaxRunesV0)
+	}
+	for _, want := range []string{
+		"cerrar automejora goal-first",
+		"objective_compacted",
+		"original_sha256=",
+		"prompt_contains_full_objective",
+	} {
+		if !strings.Contains(protocol.setParams.Objective, want) {
+			t.Fatalf("objective compactado no contiene %q:\n%s", want, protocol.setParams.Objective)
+		}
+	}
+	if protocol.turnParams.InputText != fullPrompt ||
+		!strings.Contains(protocol.turnParams.InputText, longObjective) {
+		t.Fatalf("prompt no conserva objetivo completo")
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0ObservaGoalPorThreadIDV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		observedGoal: &serverCodexAppServerThreadGoalV0{
