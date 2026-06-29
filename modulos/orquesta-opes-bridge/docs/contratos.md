@@ -79,7 +79,10 @@ Reglas:
   `common_topic_ref`, `source_content_ref`, `audio_manifest_ref` y `audio_ref`
   para reutilizar audio comun compatible; cualquier app RTX/GPU queda como
   adaptador OPES externo y no se expone como proveedor, ruta local ni proceso en
-  el contrato publico;
+  el contrato publico. En pasadas finas de preparacion de audio no debe usar
+  `10_tutor_rag/corpus/` ni otros corpus RAG regenerables como fuente primaria
+  de rework textual: primero se corrigen HTML final/local, bancos de tests y
+  tutor fuente, y el RAG se reconstruye despues desde esas fuentes limpias;
 - para `research_exam_precedents`, el bridge exige
   `expected_artifact_type=exam_research_report` y el job debe buscar por
   internet examenes, convocatorias, temarios y pruebas de administraciones
@@ -100,7 +103,11 @@ Reglas:
   con `DELETE` acotado al banco nuevo y verificacion de conteos;
 - para `generate_tutor_assets`, el bridge exige
   `expected_artifact_type=tutor_bot_package` y debe producir tutor/bots del
-  temario por refs opacas;
+  temario por refs opacas. Si genera corpus RAG, el corpus es derivado
+  regenerable: se construye desde HTML final/local, bancos de tests y tutor
+  fuente limpios, se valida contra el temario final aprobado y solo se toca
+  directamente si una tarea explicita declara rework de RAG/corpus y no existe
+  fuente canonica disponible;
 - para `generate_html_site`, el bridge exige
   `expected_artifact_type=local_html_site` y debe producir un HTML local
   operativo con logos USO y formato real de curso USO/TCAE promocion interna:
@@ -119,13 +126,17 @@ Reglas:
   `expected_artifact_type=agent_review_report` y cada job debe emitir una
   revision independiente del curso o artefacto asignado. En bancos publicables
   la revision cubre el 100% de preguntas/opciones/respuestas/distractores y
-  explicaciones tutor, por lotes si hace falta;
+  explicaciones tutor, por lotes si hace falta. En correctores y QA textual,
+  `10_tutor_rag/corpus/` y otros corpus RAG regenerables quedan excluidos por
+  defecto como fuente primaria: los hallazgos deben corregirse en HTML
+  final/local, tests/bancos o tutor fuente y regenerar RAG al final;
 - para `review_pair_codex_gemini`, `review_pair_codex_claude` y
   `review_pair_gemini_claude`, el bridge exige
   `expected_artifact_type=agent_pair_review_report` y debe producir matriz de
   acuerdos, discrepancias, accepted_refs, rework_refs, blocked_refs y
   evidence_refs. No descarta trabajo recuperable por alias, formato reparable o
-  texto blando;
+  texto blando y aplica la misma prioridad de fuentes canonicas frente a corpus
+  RAG regenerables;
 - para `generate_agent_candidate_codex`, `generate_agent_candidate_gemini` y
   `generate_agent_candidate_claude`, el bridge exige
   `expected_artifact_type=agent_candidate_artifact`. Cada job propone una
@@ -149,7 +160,9 @@ Reglas:
   temario terminado al 100% para revision local: resumido, ampliado, fuentes,
   investigacion, tests, visuales finales, audios por apartado, tutor/bots, HTML
   local, manuales graficos, manifest, checksums, matriz de revisiones y
-  validacion visual. Sin este artefacto el curso no se marca `ready`;
+  validacion visual. El cierre reconstruye RAG/corpus desde HTML/tests/tutor
+  limpios y valida el RAG reconstruido contra el temario final aprobado. Sin
+  este artefacto el curso no se marca `ready`;
 - la asignacion a Codex, Gemini o Claude no pertenece a OPES ni al bridge. La
   composicion Orquesta puede enrutar `review_gemini` y
   `review_pair_codex_gemini` al adaptador Gemini CLI opt-in, y

@@ -450,8 +450,18 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 			if tc.artifactType == "audio_asset" &&
 				(!strings.Contains(strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n"), "devolver manifest de audio") ||
 					!strings.Contains(strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n"), "reutilizar audio comun compatible") ||
-					!strings.Contains(strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n"), "no incluir rutas locales, proveedor, GPU, modelo ni procesos internos")) {
+					!strings.Contains(strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n"), "no incluir rutas locales, proveedor, GPU, modelo ni procesos internos") ||
+					!strings.Contains(strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n"), "10_tutor_rag/corpus/") ||
+					!strings.Contains(strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n"), "HTML/tests/tutor limpios")) {
 				t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+			}
+			if tc.artifactType == "tutor_bot_package" {
+				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
+				if !strings.Contains(criteriaText, "HTML final/local, bancos de tests y tutor fuente limpios") ||
+					!strings.Contains(criteriaText, "10_tutor_rag/corpus/") ||
+					!strings.Contains(criteriaText, "validar el RAG reconstruido contra el temario final aprobado") {
+					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+				}
 			}
 			if tc.artifactType == "local_html_site" {
 				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
@@ -506,7 +516,9 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
 				if !strings.Contains(criteriaText, "revision independiente") ||
 					!strings.Contains(criteriaText, "100% de preguntas") ||
-					!strings.Contains(criteriaText, "no tirar trabajo recuperable") {
+					!strings.Contains(criteriaText, "no tirar trabajo recuperable") ||
+					!strings.Contains(criteriaText, "corpus RAG regenerables como derivados") ||
+					!strings.Contains(criteriaText, "10_tutor_rag/corpus/") {
 					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
 				}
 			}
@@ -514,7 +526,9 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
 				if !strings.Contains(criteriaText, "revision por pares") ||
 					!strings.Contains(criteriaText, "acuerdos, desacuerdos") ||
-					!strings.Contains(criteriaText, "agent_pair_review_report") {
+					!strings.Contains(criteriaText, "agent_pair_review_report") ||
+					!strings.Contains(criteriaText, "corpus RAG regenerables como derivados") ||
+					!strings.Contains(criteriaText, "solo tocar corpus RAG directamente") {
 					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
 				}
 			}
@@ -522,7 +536,9 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
 				if !strings.Contains(criteriaText, "Codex, Gemini y Claude") ||
 					!strings.Contains(criteriaText, "Codex-Gemini, Codex-Claude y Gemini-Claude") ||
-					!strings.Contains(criteriaText, "director_review_matrix") {
+					!strings.Contains(criteriaText, "director_review_matrix") ||
+					!strings.Contains(criteriaText, "HTML/tests/tutor limpios") ||
+					!strings.Contains(criteriaText, "fuente canonica disponible") {
 					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
 				}
 			}
@@ -531,6 +547,8 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 				if !strings.Contains(criteriaText, "temario terminado al 100%") ||
 					!strings.Contains(criteriaText, "convertir pendientes causales") ||
 					!strings.Contains(criteriaText, "RAG/corpus") ||
+					!strings.Contains(criteriaText, "reconstruir el RAG al final") ||
+					!strings.Contains(criteriaText, "10_tutor_rag/corpus/") ||
 					!strings.Contains(criteriaText, "triple visto bueno") ||
 					!strings.Contains(criteriaText, "listo_para_revision_operador") {
 					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)

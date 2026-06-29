@@ -227,6 +227,15 @@ func opesSearchScopeAcceptanceCriteriaV0() []string {
 	}
 }
 
+func regenerableRAGCorpusAcceptanceCriteriaV0() []string {
+	return []string{
+		"para correctores, QA textual y preparacion de audio, tratar corpus RAG regenerables como derivados, no como fuente primaria de rework textual",
+		"corregir primero fuentes canonicas: HTML final/local, bancos de tests y tutor fuente; excluir por defecto 10_tutor_rag/corpus/ y otros corpus regenerables de pasadas finas de ortografia, QA y audio",
+		"reconstruir el RAG al final desde HTML/tests/tutor limpios y validar el RAG reconstruido contra el temario final aprobado",
+		"solo tocar corpus RAG directamente si una tarea explicita declara rework de RAG/corpus y no hay fuente canonica disponible",
+	}
+}
+
 func visualAssetAcceptanceCriteriaV0() []string {
 	return []string{
 		"crear o especificar infografias utiles para el tema completo, no decorativas",
@@ -271,7 +280,7 @@ func localHTMLSiteAcceptanceCriteriaV0() []string {
 }
 
 func topicAudioAcceptanceCriteriaV0() []string {
-	return []string{
+	return append([]string{
 		"derivar el audio desde el tema ensamblado aprobado o refs de paquete final",
 		"antes de generar TTS resolver common_topic_ref, source_content_ref, audio_manifest_ref y audio_ref existentes; reutilizar audio comun compatible cuando exista",
 		"si un comun no encaja exactamente, conservarlo como candidato y crear derivacion localizada; no regenerar ni tirar trabajo por alias, orden, titulo o metadatos reparables",
@@ -282,16 +291,17 @@ func topicAudioAcceptanceCriteriaV0() []string {
 		"revisar lectura de numeros romanos como numeros antes de TTS",
 		"validar escucha/transcripcion automatica cuando el adaptador OPES lo soporte",
 		"no incluir rutas locales, proveedor, GPU, modelo ni procesos internos en el payload publico",
-	}
+	}, regenerableRAGCorpusAcceptanceCriteriaV0()...)
 }
 
 func tutorBotAcceptanceCriteriaV0() []string {
-	return []string{
+	return append([]string{
 		"crear paquete de tutor y bots del temario para uso local antes de produccion",
 		"incluir intents, prompts o configuracion opaca, mapa tema/apartado, fuentes permitidas y limites de respuesta",
 		"el tutor debe explicar errores de test, proponer repaso, responder dudas por tema y no inventar fuera de fuentes",
+		"si produce corpus RAG, derivarlo desde HTML final/local, bancos de tests y tutor fuente limpios, con anclas citables por tema/apartado",
 		"devolver configuracion portable sin secretos, rutas internas, proveedor ni modelo fijado en OPES",
-	}
+	}, regenerableRAGCorpusAcceptanceCriteriaV0()...)
 }
 
 func learningGamesAcceptanceCriteriaV0() []string {
@@ -318,7 +328,7 @@ func helpManualPackageAcceptanceCriteriaV0() []string {
 }
 
 func independentAgentReviewAcceptanceCriteriaV0(jobType string) []string {
-	return []string{
+	return append([]string{
 		"emitir revision independiente del curso o artefacto asignado con rol=" + strings.TrimPrefix(strings.TrimSpace(jobType), "review_"),
 		"revisar contenido, fuentes, tests, visuales, audios, tutor, HTML, manuales, i18n, accesibilidad y paquete segun el alcance recibido",
 		"para bancos de test publicables, revisar el 100% de preguntas, opciones, respuesta correcta, distractores y explicaciones tutor; si hay limite externo, partir en lotes y conservar evidencia",
@@ -326,7 +336,7 @@ func independentAgentReviewAcceptanceCriteriaV0(jobType string) []string {
 		"para audios, comprobar manifest, MP3 por apartado cuando proceda, lectura de tablas/listas/esquemas y estado de QA o transcripcion",
 		"clasificar hallazgos como aceptar, rework localizado, reutilizar como insumo o bloqueo real; no tirar trabajo recuperable por alias, formato reparable o palabra suelta",
 		"devolver informe compacto con decision, issue_refs, evidence_refs, rework_refs y elementos aceptados",
-	}
+	}, regenerableRAGCorpusAcceptanceCriteriaV0()...)
 }
 
 func agentCandidateAcceptanceCriteriaV0(jobType string) []string {
@@ -362,7 +372,7 @@ func agentCandidateSelectionAcceptanceCriteriaV0() []string {
 }
 
 func pairedAgentReviewAcceptanceCriteriaV0(jobType string) []string {
-	return []string{
+	return append([]string{
 		"ejecutar revision por pares " + strings.TrimPrefix(strings.TrimSpace(jobType), "review_pair_") + " sobre el mismo paquete o artefacto",
 		"comparar criterios de ambos roles y registrar acuerdos, desacuerdos, riesgos no vistos por una parte y decision propuesta",
 		"en tests, contrastar pregunta por pregunta y opcion por opcion cuando el banco sea publicable; dividir por lotes si hace falta",
@@ -370,21 +380,21 @@ func pairedAgentReviewAcceptanceCriteriaV0(jobType string) []string {
 		"en audios, contrastar manifest, segmentos, comprensibilidad y correspondencia con el texto final visible",
 		"proponer rework causal y acotado; conservar borradores, insumos y piezas recuperables antes de pedir rehacer",
 		"devolver agent_pair_review_report con matriz de consenso, discrepancias, accepted_refs, rework_refs, blocked_refs y evidence_refs",
-	}
+	}, regenerableRAGCorpusAcceptanceCriteriaV0()...)
 }
 
 func directorConsolidationAcceptanceCriteriaV0() []string {
-	return []string{
+	return append([]string{
 		"consolidar revisiones independientes de Codex, Gemini y Claude y revisiones por pares Codex-Gemini, Codex-Claude y Gemini-Claude",
 		"resolver discrepancias con decision del Director: aceptar, pedir rework, derivar tarea, conservar como insumo o bloquear por causa real",
 		"verificar que no quedan P0/P1 abiertos en contenido, tests, visuales, audios, tutor, HTML, manuales, i18n, accesibilidad ni paquete",
 		"confirmar que todo bloqueo restante es seguridad real, datos sensibles, causalidad rota, refs imposibles, efecto externo no autorizado o falta de entorno",
 		"devolver director_review_matrix con decision final, rework_refs, accepted_artifact_refs y evidence_refs",
-	}
+	}, regenerableRAGCorpusAcceptanceCriteriaV0()...)
 }
 
 func finalizedTemarioPackageAcceptanceCriteriaV0() []string {
-	return []string{
+	return append([]string{
 		"entregar paquete de temario terminado al 100% para revision local del operador antes de produccion",
 		"incluir temario resumido y ampliado separados, fuentes, exam_research_report, visuales finales, question_bank, audios por apartado, tutor/bots, HTML local, manuales graficos y manifest de trazabilidad",
 		"incluir informe_extension_temario.json y .md con minimos por nivel: A1 20.250, A2 14.400, B 10.800, C1 7.200, C2 4.500 y AP 3.150 palabras en ampliado publicable",
@@ -398,7 +408,7 @@ func finalizedTemarioPackageAcceptanceCriteriaV0() []string {
 		"verificar audio con manifest y QA/Whisper cuando el curso exija audios; si falta audio, estado pendiente_continuar",
 		"exigir triple visto bueno y revisiones por pares cerradas; si falta una revision obligatoria, estado pendiente_continuar, no ready",
 		"devolver completed_syllabus_package con package_ref, manifest_ref, checksum_refs, validation_report_ref, review_matrix_ref y estado listo_para_revision_operador",
-	}
+	}, regenerableRAGCorpusAcceptanceCriteriaV0()...)
 }
 
 func finalizedTopicPackageAcceptanceCriteriaV0() []string {

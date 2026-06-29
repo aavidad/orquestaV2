@@ -36,6 +36,11 @@
   -> agent_pair_review_report`, `review_director_consolidation ->
   director_review_matrix` y `finalize_temario_package ->
   completed_syllabus_package`.
+- Contrato de corpus RAG regenerable: audio, tutor, QA independiente, QA por
+  pares, consolidacion del Director y cierre de temario transportan que
+  `10_tutor_rag/corpus/` no es fuente primaria de rework textual por defecto;
+  se corrigen HTML final/local, bancos de tests y tutor fuente, se reconstruye
+  RAG al final y se valida contra el temario final aprobado.
 - Alcance blando de busqueda OPES: `plan_temario` transporta en
   `opes_temario_agent_rules_2026_06_04` la regla de empezar por
   curso/tema/programa/canon/material reutilizable y excluir por defecto backups,
