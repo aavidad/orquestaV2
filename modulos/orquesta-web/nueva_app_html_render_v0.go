@@ -9,11 +9,13 @@ import (
 )
 
 type nuevaAppHTMLDataV0 struct {
-	Page         NuevaAppWebPageV0
-	Labels       map[string]string
-	Help         map[string]string
-	HTML         map[string]string
-	StorageTypes []string
+	Page                 NuevaAppWebPageV0
+	Labels               map[string]string
+	Help                 map[string]string
+	HTML                 map[string]string
+	StorageTypes         []string
+	IntegrationTypes     []string
+	AccessibilityOptions []string
 }
 
 func writeNuevaAppHTMLPageV0(w http.ResponseWriter, status int, page NuevaAppWebPageV0) WebHTMLWriteResultV0 {
@@ -31,11 +33,46 @@ func writeNuevaAppHTMLPageWithTemplateV0(
 
 func nuevaAppHTMLDataFromPageV0(page NuevaAppWebPageV0) nuevaAppHTMLDataV0 {
 	return nuevaAppHTMLDataV0{
-		Page:         page,
-		Labels:       nuevaAppHTMLLabelsV0(page.Formulario.Campos),
-		Help:         nuevaAppHTMLHelpV0(page.Locale, NewNuevaAppI18nCatalogV0()),
-		HTML:         nuevaAppHTMLTextosV0(page.Locale, NewNuevaAppI18nCatalogV0()),
-		StorageTypes: orquestafactory.SupportedDataStorageTypesV0(),
+		Page:                 page,
+		Labels:               nuevaAppHTMLLabelsV0(page.Formulario.Campos),
+		Help:                 nuevaAppHTMLHelpV0(page.Locale, NewNuevaAppI18nCatalogV0()),
+		HTML:                 nuevaAppHTMLTextosV0(page.Locale, NewNuevaAppI18nCatalogV0()),
+		StorageTypes:         orquestafactory.SupportedDataStorageTypesV0(),
+		IntegrationTypes:     nuevaAppHTMLIntegrationTypesV0(),
+		AccessibilityOptions: nuevaAppHTMLAccessibilityOptionsV0(),
+	}
+}
+
+func nuevaAppHTMLIntegrationTypesV0() []string {
+	return []string{
+		"api",
+		"webhook",
+		"email",
+		"calendar",
+		"maps",
+		"file_import",
+		"file_export",
+		"messaging",
+		"llm",
+		"storage",
+		"payments",
+		"auth",
+		"analytics",
+		"search",
+		"notifications",
+		"other",
+	}
+}
+
+func nuevaAppHTMLAccessibilityOptionsV0() []string {
+	return []string{
+		"normal",
+		"wcag_aa",
+		"teclado",
+		"lectores_pantalla",
+		"contraste_alto",
+		"movimiento_reducido",
+		"subtitulos_transcripciones",
 	}
 }
 
@@ -152,7 +189,12 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.summary.platforms",
 		"nueva_app.wizard.summary.architecture",
 		"nueva_app.wizard.summary.data",
+		"nueva_app.wizard.summary.integrations",
+		"nueva_app.wizard.summary.sensitivity",
 		"nueva_app.wizard.summary.quality",
+		"nueva_app.wizard.summary.accessibility",
+		"nueva_app.wizard.summary.documentation",
+		"nueva_app.wizard.summary.deploy",
 		"nueva_app.wizard.summary.autonomy",
 		"nueva_app.wizard.summary.no_name",
 		"nueva_app.wizard.summary.pending",
@@ -379,16 +421,26 @@ var nuevaAppHTMLOptionLabelsESV0 = map[string]string{
 	"calendar":                   "Calendario",
 	"maps":                       "Mapas",
 	"file_import":                "Importacion de archivos",
+	"file_export":                "Exportacion de archivos",
+	"messaging":                  "Mensajeria",
+	"llm":                        "LLM/IA",
+	"storage":                    "Almacenamiento externo",
 	"payments":                   "Pagos",
 	"auth":                       "Autenticacion",
 	"analytics":                  "Analitica",
 	"search":                     "Busqueda",
 	"notifications":              "Notificaciones",
+	"other":                      "Otra integracion",
 	"basica":                     "Basica",
 	"media":                      "Media",
 	"alta":                       "Alta",
 	"profunda":                   "Profunda",
 	"wcag_aa":                    "WCAG AA",
+	"teclado":                    "Navegacion por teclado",
+	"lectores_pantalla":          "Lectores de pantalla",
+	"contraste_alto":             "Contraste alto",
+	"movimiento_reducido":        "Movimiento reducido",
+	"subtitulos_transcripciones": "Subtitulos/transcripciones",
 	"no_aplica":                  "No aplica",
 	"local":                      "Local",
 	"contenedor":                 "Contenedor",
@@ -461,16 +513,26 @@ var nuevaAppHTMLOptionLabelsENV0 = map[string]string{
 	"calendar":                   "Calendar",
 	"maps":                       "Maps",
 	"file_import":                "File import",
+	"file_export":                "File export",
+	"messaging":                  "Messaging",
+	"llm":                        "LLM/AI",
+	"storage":                    "External storage",
 	"payments":                   "Payments",
 	"auth":                       "Authentication",
 	"analytics":                  "Analytics",
 	"search":                     "Search",
 	"notifications":              "Notifications",
+	"other":                      "Other integration",
 	"basica":                     "Basic",
 	"media":                      "Medium",
 	"alta":                       "High",
 	"profunda":                   "Deep",
 	"wcag_aa":                    "WCAG AA",
+	"teclado":                    "Keyboard navigation",
+	"lectores_pantalla":          "Screen readers",
+	"contraste_alto":             "High contrast",
+	"movimiento_reducido":        "Reduced motion",
+	"subtitulos_transcripciones": "Captions/transcripts",
 	"no_aplica":                  "Not applicable",
 	"local":                      "Local",
 	"contenedor":                 "Container",
@@ -581,7 +643,12 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       data-summary-platforms="{{index .HTML "nueva_app.wizard.summary.platforms"}}"
       data-summary-architecture="{{index .HTML "nueva_app.wizard.summary.architecture"}}"
       data-summary-data="{{index .HTML "nueva_app.wizard.summary.data"}}"
+      data-summary-integrations="{{index .HTML "nueva_app.wizard.summary.integrations"}}"
+      data-summary-sensitivity="{{index .HTML "nueva_app.wizard.summary.sensitivity"}}"
       data-summary-quality="{{index .HTML "nueva_app.wizard.summary.quality"}}"
+      data-summary-accessibility="{{index .HTML "nueva_app.wizard.summary.accessibility"}}"
+      data-summary-documentation="{{index .HTML "nueva_app.wizard.summary.documentation"}}"
+      data-summary-deploy="{{index .HTML "nueva_app.wizard.summary.deploy"}}"
       data-summary-autonomy="{{index .HTML "nueva_app.wizard.summary.autonomy"}}"
       data-summary-no-name="{{index .HTML "nueva_app.wizard.summary.no_name"}}"
       data-summary-pending="{{index .HTML "nueva_app.wizard.summary.pending"}}"
@@ -749,7 +816,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
         </div></details></fieldset>
         <fieldset><legend>{{index .Labels "integraciones"}}</legend><div class="expert-block">
           <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_1"}}</p><div class="grid">
-	            <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.0.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option><option value="api">{{optionLabel $.Page.Locale "integration" "api"}}</option><option value="webhook">{{optionLabel $.Page.Locale "integration" "webhook"}}</option><option value="email">{{optionLabel $.Page.Locale "integration" "email"}}</option><option value="calendar">{{optionLabel $.Page.Locale "integration" "calendar"}}</option><option value="maps">{{optionLabel $.Page.Locale "integration" "maps"}}</option><option value="file_import">{{optionLabel $.Page.Locale "integration" "file_import"}}</option><option value="payments">{{optionLabel $.Page.Locale "integration" "payments"}}</option><option value="auth">{{optionLabel $.Page.Locale "integration" "auth"}}</option><option value="analytics">{{optionLabel $.Page.Locale "integration" "analytics"}}</option><option value="search">{{optionLabel $.Page.Locale "integration" "search"}}</option><option value="notifications">{{optionLabel $.Page.Locale "integration" "notifications"}}</option></select></label>
+	            <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.0.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
             <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.0.nombre"></label>
             <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.0.proposito"></label>
 	            <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.0.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
@@ -757,21 +824,21 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
           </div></div>
           <details><summary>{{index .HTML "nueva_app.wizard.integraciones_adicionales"}}</summary><div class="expert-block">
             <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_2"}}</p><div class="grid">
-	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.1.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option><option value="api">{{optionLabel $.Page.Locale "integration" "api"}}</option><option value="webhook">{{optionLabel $.Page.Locale "integration" "webhook"}}</option><option value="email">{{optionLabel $.Page.Locale "integration" "email"}}</option><option value="calendar">{{optionLabel $.Page.Locale "integration" "calendar"}}</option><option value="maps">{{optionLabel $.Page.Locale "integration" "maps"}}</option><option value="file_import">{{optionLabel $.Page.Locale "integration" "file_import"}}</option><option value="payments">{{optionLabel $.Page.Locale "integration" "payments"}}</option><option value="auth">{{optionLabel $.Page.Locale "integration" "auth"}}</option><option value="analytics">{{optionLabel $.Page.Locale "integration" "analytics"}}</option><option value="search">{{optionLabel $.Page.Locale "integration" "search"}}</option><option value="notifications">{{optionLabel $.Page.Locale "integration" "notifications"}}</option></select></label>
+	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.1.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.1.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.1.proposito"></label>
 	              <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.1.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
               <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.1.restricciones"></label>
             </div></div>
             <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_3"}}</p><div class="grid">
-	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.2.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option><option value="api">{{optionLabel $.Page.Locale "integration" "api"}}</option><option value="webhook">{{optionLabel $.Page.Locale "integration" "webhook"}}</option><option value="email">{{optionLabel $.Page.Locale "integration" "email"}}</option><option value="calendar">{{optionLabel $.Page.Locale "integration" "calendar"}}</option><option value="maps">{{optionLabel $.Page.Locale "integration" "maps"}}</option><option value="file_import">{{optionLabel $.Page.Locale "integration" "file_import"}}</option><option value="payments">{{optionLabel $.Page.Locale "integration" "payments"}}</option><option value="auth">{{optionLabel $.Page.Locale "integration" "auth"}}</option><option value="analytics">{{optionLabel $.Page.Locale "integration" "analytics"}}</option><option value="search">{{optionLabel $.Page.Locale "integration" "search"}}</option><option value="notifications">{{optionLabel $.Page.Locale "integration" "notifications"}}</option></select></label>
+	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.2.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.2.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.2.proposito"></label>
 	              <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.2.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
               <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.2.restricciones"></label>
             </div></div>
             <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_4"}}</p><div class="grid">
-	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.3.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option><option value="api">{{optionLabel $.Page.Locale "integration" "api"}}</option><option value="webhook">{{optionLabel $.Page.Locale "integration" "webhook"}}</option><option value="email">{{optionLabel $.Page.Locale "integration" "email"}}</option><option value="calendar">{{optionLabel $.Page.Locale "integration" "calendar"}}</option><option value="maps">{{optionLabel $.Page.Locale "integration" "maps"}}</option><option value="file_import">{{optionLabel $.Page.Locale "integration" "file_import"}}</option><option value="payments">{{optionLabel $.Page.Locale "integration" "payments"}}</option><option value="auth">{{optionLabel $.Page.Locale "integration" "auth"}}</option><option value="analytics">{{optionLabel $.Page.Locale "integration" "analytics"}}</option><option value="search">{{optionLabel $.Page.Locale "integration" "search"}}</option><option value="notifications">{{optionLabel $.Page.Locale "integration" "notifications"}}</option></select></label>
+	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.3.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.3.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.3.proposito"></label>
 	              <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.3.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
@@ -784,7 +851,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
         <fieldset><legend>{{index .Labels "calidad"}}</legend><div class="grid">
 	          <label data-help="{{index .Help "calidad.pruebas"}}">{{index .Labels "calidad.pruebas"}}<select name="calidad.pruebas"><option value="basica">{{optionLabel $.Page.Locale "quality.tests" "basica"}}</option><option value="media">{{optionLabel $.Page.Locale "quality.tests" "media"}}</option><option value="alta">{{optionLabel $.Page.Locale "quality.tests" "alta"}}</option></select></label>
 	          <label data-help="{{index .Help "calidad.accesibilidad"}}">{{index .Labels "calidad.accesibilidad"}}<select name="calidad.accesibilidad"><option value="basica">{{optionLabel $.Page.Locale "accessibility" "basica"}}</option><option value="normal">{{optionLabel $.Page.Locale "accessibility" "normal"}}</option><option value="wcag_aa">{{optionLabel $.Page.Locale "accessibility" "wcag_aa"}}</option><option value="no_aplica">{{optionLabel $.Page.Locale "accessibility" "no_aplica"}}</option></select></label>
-          <label data-help="{{index .Help "calidad.accesibilidad_opciones"}}">{{index .Labels "calidad.accesibilidad_opciones"}}<input name="calidad.accesibilidad_opciones" placeholder="normal,wcag_aa"></label>
+          <div data-help="{{index .Help "calidad.accesibilidad_opciones"}}"><p class="expert-row-title">{{index .Labels "calidad.accesibilidad_opciones"}}</p><div class="checks">{{range .AccessibilityOptions}}<label><input type="checkbox" name="calidad.accesibilidad_opciones" value="{{.}}">{{optionLabel $.Page.Locale "accessibility" .}}</label>{{end}}</div></div>
 	          <label data-help="{{index .Help "calidad.observabilidad"}}"><span>{{index .Labels "calidad.observabilidad"}}</span><select name="calidad.observabilidad"><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option></select></label>
           <label data-help="{{index .Help "calidad.compliance"}}">{{index .Labels "calidad.compliance"}}<input name="calidad.compliance"></label>
         </div></fieldset>
@@ -866,6 +933,14 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     function field(name){return form.elements[name];}
     function val(name){const el=field(name);return el?String(el.value||'').trim():'';}
     function checked(name){return [...form.querySelectorAll('input[name="'+name+'"]:checked')].map(el=>el.value).join(', ');}
+    function selectedIntegrationTypes(){
+      const out=[];
+      for(let index=0;index<4;index++){
+        const value=val('integraciones.'+index+'.tipo');
+        if(value)out.push(value);
+      }
+      return out.join(', ');
+    }
     function renderSummary(){
       const copy=wizard.dataset;
       const items=[
@@ -875,7 +950,12 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
         [copy.summaryPlatforms,checked('plataformas')||'-'],
         [copy.summaryArchitecture,val('preferencias_tecnicas.arquitectura')||'hexagonal'],
         [copy.summaryData,val('datos.db_required')==='true'?copy.summaryDbRequired:copy.summaryNoDbRequired],
+        [copy.summaryIntegrations,selectedIntegrationTypes()||'-'],
+        [copy.summarySensitivity,val('datos.sensibilidad')||'-'],
         [copy.summaryQuality,val('calidad.pruebas')||'-'],
+        [copy.summaryAccessibility,(val('calidad.accesibilidad')||'-')+' / '+(checked('calidad.accesibilidad_opciones')||'-')],
+        [copy.summaryDocumentation,val('documentacion.profundidad')||'-'],
+        [copy.summaryDeploy,val('deploy.target')||'-'],
         [copy.summaryAutonomy,val('agentes.autonomia')||'-']
       ];
       const html=items.map(i=>'<div><strong>'+escapeHTML(i[0])+':</strong> '+escapeHTML(i[1])+'</div>').join('');
