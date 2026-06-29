@@ -82,7 +82,8 @@ func StartGoalWorkV0(
 	}
 	receipt, err := ports.Launcher.LaunchGoalWorkV0(ctx, spec)
 	if err != nil {
-		return GoalWorkStartResultV0{}, err
+		result := persistPartialGoalLaunchStateV0(ctx, runRef, spec, receipt, request.EvidenceRefs, ports.StateStore)
+		return result, err
 	}
 	state, err := NewGoalWorkStateFromLaunchV0(GoalWorkStateFromLaunchRequestV0{
 		RunRef:        runRef,
@@ -102,6 +103,45 @@ func StartGoalWorkV0(
 		return result, err
 	}
 	return result, nil
+}
+
+func persistPartialGoalLaunchStateV0(
+	ctx context.Context,
+	runRef string,
+	spec GoalWorkSpecV0,
+	receipt GoalLaunchReceiptV0,
+	evidenceRefs []string,
+	store GoalWorkStateStorePortV0,
+) GoalWorkStartResultV0 {
+	receipt = NormalizeGoalLaunchReceiptV0(receipt)
+	if receipt.GoalRef == "" && receipt.ExternalGoalRef == "" {
+		return GoalWorkStartResultV0{}
+	}
+	if receipt.Status == "" || receipt.Status == GoalStatusAcceptedV0 || receipt.Status == GoalStatusRunningV0 {
+		receipt.Status = GoalStatusInvalidV0
+	}
+	receipt.Issues = append(receipt.Issues, GoalWorkIssueV0{
+		Code:  "goal_launch_partial_error",
+		Field: "goal_launcher",
+	})
+	state, err := NewGoalWorkStateFromLaunchV0(GoalWorkStateFromLaunchRequestV0{
+		RunRef:        runRef,
+		Spec:          spec,
+		LaunchReceipt: receipt,
+		EvidenceRefs:  evidenceRefs,
+	})
+	if err != nil {
+		return GoalWorkStartResultV0{Receipt: receipt}
+	}
+	result := GoalWorkStartResultV0{
+		State:        state,
+		Receipt:      state.LaunchReceipt,
+		EvidenceRefs: append([]string(nil), state.EvidenceRefs...),
+	}
+	if store != nil {
+		_ = store.SaveGoalWorkStateV0(ctx, state)
+	}
+	return result
 }
 
 func ObserveGoalWorkV0(

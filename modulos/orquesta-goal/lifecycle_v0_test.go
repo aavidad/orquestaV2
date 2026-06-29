@@ -94,6 +94,53 @@ func TestStartGoalWorkV0DevuelveErrorSiStoreFallaSinRelanzar(t *testing.T) {
 	}
 }
 
+func TestStartGoalWorkV0PersisteEstadoParcialSiLauncherFallaConExternalRefV0(t *testing.T) {
+	launcher := &goalLifecycleLauncherForTestV0{
+		receipt: GoalLaunchReceiptV0{
+			Status:          GoalStatusRunningV0,
+			GoalRef:         "goal-ref-lifecycle-partial-launch-error-001",
+			ExternalGoalRef: "thread-ref-lifecycle-partial-launch-error-001",
+			EvidenceRefs:    []string{"evidence-ref-lifecycle-partial-launch-error"},
+		},
+		err: errors.New("turn_start_failed"),
+	}
+	store := newGoalLifecycleStoreForTestV0()
+	spec := validGoalLifecycleSpecForTestV0()
+	spec.GoalRef = "goal-ref-lifecycle-partial-launch-error-001"
+
+	result, err := StartGoalWorkV0(
+		context.Background(),
+		GoalWorkStartRequestV0{
+			RunRef:       "run-ref-lifecycle-partial-launch-error-001",
+			Spec:         spec,
+			EvidenceRefs: []string{"evidence-ref-lifecycle-partial-request"},
+		},
+		GoalWorkLifecyclePortsV0{
+			Launcher:   launcher,
+			StateStore: store,
+		},
+	)
+
+	if err == nil || err.Error() != "turn_start_failed" {
+		t.Fatalf("err=%v", err)
+	}
+	if result.State.Status != GoalStatusInvalidV0 ||
+		result.State.ExternalGoalRef != "thread-ref-lifecycle-partial-launch-error-001" ||
+		result.Receipt.Status != GoalStatusInvalidV0 ||
+		!goalLifecycleStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-lifecycle-partial-launch-error") {
+		t.Fatalf("result parcial=%+v", result)
+	}
+	loaded, loadErr := store.LoadGoalWorkStateV0(context.Background(), "run-ref-lifecycle-partial-launch-error-001")
+	if loadErr != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", loadErr)
+	}
+	if loaded.Status != GoalStatusInvalidV0 ||
+		loaded.ExternalGoalRef != "thread-ref-lifecycle-partial-launch-error-001" ||
+		store.saves != 1 {
+		t.Fatalf("loaded=%+v saves=%d", loaded, store.saves)
+	}
+}
+
 func TestStartGoalWorkV0RechazaRunRefAusenteAntesDeLanzar(t *testing.T) {
 	launcher := &goalLifecycleLauncherForTestV0{
 		receipt: GoalLaunchReceiptV0{Status: GoalStatusRunningV0},
@@ -537,7 +584,7 @@ func (launcher *goalLifecycleLauncherForTestV0) LaunchGoalWorkV0(
 	launcher.calls++
 	launcher.specs = append(launcher.specs, spec)
 	if launcher.err != nil {
-		return GoalLaunchReceiptV0{}, launcher.err
+		return launcher.receipt, launcher.err
 	}
 	return launcher.receipt, nil
 }
