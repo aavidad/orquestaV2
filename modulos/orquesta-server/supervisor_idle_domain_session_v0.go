@@ -53,8 +53,7 @@ func idleSelfImprovementDomainSessionOptInV0(config ConfigV0) bool {
 }
 
 func idleSelfImprovementDomainSessionConfiguredV0(config ConfigV0, state StateV0) bool {
-	if strings.TrimSpace(state.ExternalBridgeComponent) != "" ||
-		strings.TrimSpace(state.ExternalBridgeStatus) != "" {
+	if idleSelfImprovementExternalBridgeActiveV0(state) {
 		return true
 	}
 	for _, setting := range config.EffectiveConfig.Settings {
@@ -71,6 +70,19 @@ func idleSelfImprovementDomainSessionConfiguredV0(config ConfigV0, state StateV0
 		}
 	}
 	return false
+}
+
+func idleSelfImprovementExternalBridgeActiveV0(state StateV0) bool {
+	status := strings.ToLower(strings.TrimSpace(state.ExternalBridgeStatus))
+	if status == "" {
+		return false
+	}
+	switch status {
+	case "disabled", "inactive", "stopped", "stop", "idle", "off", "false", "0", "absent", "not_configured":
+		return false
+	default:
+		return true
+	}
 }
 
 func idleSelfImprovementDomainSessionSettingActiveV0(setting ServerConfigSettingV0) bool {
