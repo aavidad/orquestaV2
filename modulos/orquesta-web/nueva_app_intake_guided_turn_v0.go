@@ -70,24 +70,75 @@ func guidedInitialDecisionsV0(need string) []WebNuevaAppIntakeDecisionV0 {
 		{Field: "nombre", Value: guidedTitleFromNeedV0(need)},
 	}
 	var platforms []string
+	appType := ""
 	if guidedContainsAnyV0(normalized, "movil", "mobile", "android", "ios", "iphone", "apple") {
-		decisions = append(decisions, WebNuevaAppIntakeDecisionV0{Field: "tipo_app", Value: "mobile"})
+		appType = "mobile"
 		platforms = append(platforms, "mobile")
 	}
 	if guidedContainsAnyV0(normalized, "api", "backend", "servicio") {
+		if appType == "" {
+			appType = "api"
+		}
 		platforms = append(platforms, "api")
 	}
-	if guidedContainsAnyV0(normalized, "web", "panel", "gestion") {
+	if guidedContainsAnyV0(normalized, "web", "panel", "portal", "gestion") {
+		if appType == "" {
+			appType = "web"
+		}
 		platforms = append(platforms, "web")
+	}
+	if appType != "" {
+		decisions = append(decisions, WebNuevaAppIntakeDecisionV0{Field: "tipo_app", Value: appType})
 	}
 	if len(platforms) > 0 {
 		decisions = append(decisions, WebNuevaAppIntakeDecisionV0{Field: "plataformas", Values: compactStringsV0(platforms)})
 	}
+	nextIntegrationIndex := 0
 	if guidedContainsAnyV0(normalized, "piso", "pisos", "alquiler", "alquileres", "vivienda", "rent") {
 		decisions = append(decisions, guidedRentalDataDecisionsV0()...)
 	}
 	if guidedContainsAnyV0(normalized, "mapa", "mapas", "map", "maps", "cerca", "cercano", "cercanos", "ubicacion", "geo", "openstreet") {
 		decisions = append(decisions, guidedMapDecisionsV0(strings.Contains(normalized, "openstreet"))...)
+		nextIntegrationIndex = 1
+	}
+	if guidedContainsAnyV0(normalized, "calendario", "calendar", "agenda", "cita", "citas") {
+		decisions = append(decisions, guidedCapabilityIntegrationDecisionsV0(
+			nextIntegrationIndex,
+			"calendar",
+			"calendario",
+			"Sincronizar eventos, citas o agenda con adaptador autorizado.",
+			"oauth gestionado",
+		)...)
+		nextIntegrationIndex++
+	}
+	if guidedContainsAnyV0(normalized, "pago", "pagos", "payment", "payments", "cobro", "stripe") {
+		decisions = append(decisions, guidedCapabilityIntegrationDecisionsV0(
+			nextIntegrationIndex,
+			"payments",
+			"pagos",
+			"Procesar pagos mediante un adaptador externo autorizado.",
+			"proveedor gestionado",
+		)...)
+		nextIntegrationIndex++
+	}
+	if guidedContainsAnyV0(normalized, "login", "auth", "autenticacion", "permisos", "roles", "sso") {
+		decisions = append(decisions, guidedCapabilityIntegrationDecisionsV0(
+			nextIntegrationIndex,
+			"auth",
+			"autenticacion",
+			"Gestionar acceso, permisos, roles o SSO sin acoplar secretos al nucleo.",
+			"sso u oauth gestionado",
+		)...)
+		nextIntegrationIndex++
+	}
+	if guidedContainsAnyV0(normalized, "notificacion", "notificaciones", "notification", "notifications", "alerta", "alertas") {
+		decisions = append(decisions, guidedCapabilityIntegrationDecisionsV0(
+			nextIntegrationIndex,
+			"notifications",
+			"notificaciones",
+			"Enviar avisos o alertas por canales autorizados.",
+			"proveedor gestionado",
+		)...)
 	}
 	return decisions
 }
@@ -208,6 +259,25 @@ func guidedMapDecisionsV0(preferOpenStreetMap bool) []WebNuevaAppIntakeDecisionV
 		)
 	}
 	return decisions
+}
+
+func guidedCapabilityIntegrationDecisionsV0(
+	index int,
+	kind string,
+	name string,
+	purpose string,
+	auth string,
+) []WebNuevaAppIntakeDecisionV0 {
+	if index < 0 || index > 3 {
+		return nil
+	}
+	prefix := "integraciones." + string(rune('0'+index)) + "."
+	return []WebNuevaAppIntakeDecisionV0{
+		{Field: prefix + "tipo", Value: kind},
+		{Field: prefix + "nombre", Value: name},
+		{Field: prefix + "proposito", Value: purpose},
+		{Field: prefix + "auth", Value: auth},
+	}
 }
 
 func guidedTitleFromNeedV0(need string) string {

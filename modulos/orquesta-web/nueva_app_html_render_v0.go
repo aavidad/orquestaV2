@@ -724,6 +724,8 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
           </div>
           <label data-help="{{index .Help "objetivo"}}">{{index .Labels "objetivo"}}<textarea name="objetivo" data-required="true" aria-required="true" data-label="{{index .Labels "objetivo"}}" placeholder="{{index .HTML "nueva_app.wizard.placeholder.objetivo"}}"></textarea></label>
           <label data-help="{{index .Help "descripcion"}}">{{index .Labels "descripcion"}}<textarea name="descripcion" placeholder="{{index .HTML "nueva_app.wizard.placeholder.descripcion"}}"></textarea></label>
+          <label data-help="{{index .Help "usuarios_objetivo"}}">{{index .Labels "usuarios_objetivo"}}<input name="usuarios_objetivo"></label>
+          <label data-help="{{index .Help "restricciones"}}">{{index .Labels "restricciones"}}<input name="restricciones"></label>
           <details><summary>{{index .HTML "nueva_app.wizard.identidad_avanzada"}}</summary><div class="grid">
             <label data-help="{{index .Help "request_id"}}">{{index .Labels "request_id"}}<input name="request_id" autocomplete="off"></label>
             <label data-help="{{index .Help "locale"}}">{{index .Labels "locale"}}<select name="locale">{{range .Page.Opciones.Locales}}<option value="{{.Valor}}">{{.Label}}</option>{{end}}</select></label>
@@ -756,6 +758,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
           <label data-help="{{index .Help "preferencias_tecnicas.lenguaje"}}">{{index .Labels "preferencias_tecnicas.lenguaje"}}<input name="preferencias_tecnicas.lenguaje" placeholder="go, typescript..."></label>
           <label data-help="{{index .Help "preferencias_tecnicas.framework"}}">{{index .Labels "preferencias_tecnicas.framework"}}<input name="preferencias_tecnicas.framework"></label>
           <label data-help="{{index .Help "preferencias_tecnicas.preferencias"}}">{{index .Labels "preferencias_tecnicas.preferencias"}}<input name="preferencias_tecnicas.preferencias"></label>
+          <label data-help="{{index .Help "preferencias_tecnicas.restricciones"}}">{{index .Labels "preferencias_tecnicas.restricciones"}}<input name="preferencias_tecnicas.restricciones"></label>
         </div></fieldset>
         <fieldset><legend>{{index .Labels "i18n"}}</legend><div class="grid">
 	          <label data-help="{{index .Help "i18n.enabled"}}"><span>{{index .Labels "i18n.enabled"}}</span><select name="i18n.enabled"><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option></select></label>
@@ -812,6 +815,30 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
             <label data-help="{{index .Help "datos.fuentes.owner"}}">{{index .Labels "datos.fuentes.0.owner"}}<input name="datos.fuentes.0.owner"></label>
             <label data-help="{{index .Help "datos.fuentes.frecuencia"}}">{{index .Labels "datos.fuentes.0.frecuencia"}}<input name="datos.fuentes.0.frecuencia"></label>
             <label data-help="{{index .Help "datos.fuentes.restricciones"}}">{{index .Labels "datos.fuentes.0.restricciones"}}<input name="datos.fuentes.0.restricciones"></label>
+          </div></div>
+          <div class="expert-row"><p class="expert-row-title">{{index .Labels "datos.fuentes"}} 2</p><div class="grid">
+            <label data-help="{{index .Help "datos.fuentes.nombre"}}">{{index .Labels "datos.fuentes.0.nombre"}}<input name="datos.fuentes.1.nombre"></label>
+            <label data-help="{{index .Help "datos.fuentes.tipo"}}">{{index .Labels "datos.fuentes.0.tipo"}}<input name="datos.fuentes.1.tipo"></label>
+            <label data-help="{{index .Help "datos.fuentes.proposito"}}">{{index .Labels "datos.fuentes.0.proposito"}}<input name="datos.fuentes.1.proposito"></label>
+            <label data-help="{{index .Help "datos.fuentes.owner"}}">{{index .Labels "datos.fuentes.0.owner"}}<input name="datos.fuentes.1.owner"></label>
+            <label data-help="{{index .Help "datos.fuentes.frecuencia"}}">{{index .Labels "datos.fuentes.0.frecuencia"}}<input name="datos.fuentes.1.frecuencia"></label>
+            <label data-help="{{index .Help "datos.fuentes.restricciones"}}">{{index .Labels "datos.fuentes.0.restricciones"}}<input name="datos.fuentes.1.restricciones"></label>
+          </div></div>
+          <div class="expert-row"><p class="expert-row-title">{{index .Labels "datos.fuentes"}} 3</p><div class="grid">
+            <label data-help="{{index .Help "datos.fuentes.nombre"}}">{{index .Labels "datos.fuentes.0.nombre"}}<input name="datos.fuentes.2.nombre"></label>
+            <label data-help="{{index .Help "datos.fuentes.tipo"}}">{{index .Labels "datos.fuentes.0.tipo"}}<input name="datos.fuentes.2.tipo"></label>
+            <label data-help="{{index .Help "datos.fuentes.proposito"}}">{{index .Labels "datos.fuentes.0.proposito"}}<input name="datos.fuentes.2.proposito"></label>
+            <label data-help="{{index .Help "datos.fuentes.owner"}}">{{index .Labels "datos.fuentes.0.owner"}}<input name="datos.fuentes.2.owner"></label>
+            <label data-help="{{index .Help "datos.fuentes.frecuencia"}}">{{index .Labels "datos.fuentes.0.frecuencia"}}<input name="datos.fuentes.2.frecuencia"></label>
+            <label data-help="{{index .Help "datos.fuentes.restricciones"}}">{{index .Labels "datos.fuentes.0.restricciones"}}<input name="datos.fuentes.2.restricciones"></label>
+          </div></div>
+          <div class="expert-row"><p class="expert-row-title">{{index .Labels "datos.fuentes"}} 4</p><div class="grid">
+            <label data-help="{{index .Help "datos.fuentes.nombre"}}">{{index .Labels "datos.fuentes.0.nombre"}}<input name="datos.fuentes.3.nombre"></label>
+            <label data-help="{{index .Help "datos.fuentes.tipo"}}">{{index .Labels "datos.fuentes.0.tipo"}}<input name="datos.fuentes.3.tipo"></label>
+            <label data-help="{{index .Help "datos.fuentes.proposito"}}">{{index .Labels "datos.fuentes.0.proposito"}}<input name="datos.fuentes.3.proposito"></label>
+            <label data-help="{{index .Help "datos.fuentes.owner"}}">{{index .Labels "datos.fuentes.0.owner"}}<input name="datos.fuentes.3.owner"></label>
+            <label data-help="{{index .Help "datos.fuentes.frecuencia"}}">{{index .Labels "datos.fuentes.0.frecuencia"}}<input name="datos.fuentes.3.frecuencia"></label>
+            <label data-help="{{index .Help "datos.fuentes.restricciones"}}">{{index .Labels "datos.fuentes.0.restricciones"}}<input name="datos.fuentes.3.restricciones"></label>
           </div></div>
           <div class="expert-row"><p class="expert-row-title">{{index .Labels "datos.operacion"}}</p><div class="grid">
             <label data-help="{{index .Help "datos.operacion.criticidad"}}">{{index .Labels "datos.operacion.criticidad"}}<input name="datos.operacion.criticidad"></label>
@@ -980,6 +1007,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     const next=wizard.querySelector('[data-next-step]');
     const errors=document.getElementById('wizard-errors');
     function field(name){return form.elements[name];}
+    function fieldList(el){return el&&typeof el.length==='number'&&!el.tagName;}
     function val(name){const el=field(name);return el?String(el.value||'').trim():'';}
     function checked(name){return [...form.querySelectorAll('input[name="'+name+'"]:checked')].map(el=>el.value).join(', ');}
     function selectedIntegrationTypes(){
@@ -1210,7 +1238,23 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       return true;
     }
     function dispatchField(el){if(!el)return;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}
-    function setValue(name,value){const el=field(name);if(el){el.value=value;clearFieldError(el);dispatchField(el);}}
+    function setValue(name,value){
+      const el=field(name);
+      if(!el)return;
+      if(fieldList(el)){
+        const values=String(value||'').split(',').map(v=>v.trim()).filter(Boolean);
+        Array.prototype.forEach.call(el,item=>{
+          if(item.type==='checkbox'||item.type==='radio'){item.checked=values.includes(item.value);}
+          else{item.value=String(value||'');}
+          clearFieldError(item);
+          dispatchField(item);
+        });
+        return;
+      }
+      el.value=value;
+      clearFieldError(el);
+      dispatchField(el);
+    }
     function addCSV(name,values){
       const current=val(name).split(',').map(v=>v.trim()).filter(Boolean);
       values.forEach(value=>{if(value&&!current.includes(value)){current.push(value);}});
@@ -1340,6 +1384,18 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       }
       guidedLog(wizard.dataset.guidedMsgMaps);
     }
+    function firstEmptyIntegrationIndex(){
+      for(let index=0;index<4;index++){if(!val('integraciones.'+index+'.tipo'))return index;}
+      return -1;
+    }
+    function configureIntegration(type,name,proposito,auth){
+      const index=firstEmptyIntegrationIndex();
+      if(index<0)return;
+      setValue('integraciones.'+index+'.tipo',type);
+      setValue('integraciones.'+index+'.nombre',name);
+      setValue('integraciones.'+index+'.proposito',proposito);
+      if(auth)setValue('integraciones.'+index+'.auth',auth);
+    }
     async function applyGuidedNeed(){
       const input=document.getElementById('guided-need');
       const text=input?String(input.value||'').trim():'';
@@ -1350,10 +1406,14 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       if(!val('nombre'))setValue('nombre',titleFromNeed(text));
       const lower=text.toLowerCase();
       if(/m[oó]vil|mobile|android|ios|iphone|apple/.test(lower)){setValue('tipo_app','mobile');setChecked('mobile',true);}
-      if(/api|backend|servicio/.test(lower)){setChecked('api',true);}
-      if(/web|panel|gestion|gesti[oó]n/.test(lower)){setChecked('web',true);}
+      if(/api|backend|servicio/.test(lower)){if(!val('tipo_app'))setValue('tipo_app','api');setChecked('api',true);}
+      if(/web|panel|portal|gestion|gesti[oó]n/.test(lower)){if(!val('tipo_app'))setValue('tipo_app','web');setChecked('web',true);}
       if(/piso|pisos|alquiler|vivienda|rent/.test(lower)){configureRentalData();}
       if(/map|mapa|cerca|cercan|ubicaci[oó]n|geo|openstreet/.test(lower)){configureMaps(/openstreet/.test(lower));}
+      if(/calendario|calendar|agenda|cita|citas/.test(lower)){configureIntegration('calendar','calendario','Sincronizar eventos, citas o agenda con adaptador autorizado.','oauth gestionado');}
+      if(/pago|pagos|payment|payments|cobro|stripe/.test(lower)){configureIntegration('payments','pagos','Procesar pagos mediante un adaptador externo autorizado.','proveedor gestionado');}
+      if(/login|auth|autenticaci[oó]n|permisos|roles|sso/.test(lower)){configureIntegration('auth','autenticacion','Gestionar acceso, permisos, roles o SSO sin acoplar secretos al nucleo.','sso u oauth gestionado');}
+      if(/notificaci[oó]n|notificaciones|notification|notifications|alerta|alertas/.test(lower)){configureIntegration('notifications','notificaciones','Enviar avisos o alertas por canales autorizados.','proveedor gestionado');}
       document.getElementById('guided-followups').hidden=false;
       guidedLog(wizard.dataset.guidedMsgAnalyzed);
       renderSummary();
