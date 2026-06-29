@@ -247,7 +247,7 @@ nueva e independiente de cada implementacion interna.
 
 - `BuildCodexGoalPromptV0` instruye a materializar artefactos DomainWork bajo
   el write-set autorizado con nombres detectables por Orquesta.
-- El observer `app_server_tmux`/`app_server_proxy` marca como
+- El observer `app_server_tmux` marca como
   `blocked` con `codex_app_server_goal_active_timeout` si el goal remoto sigue
   `active` y `timeUsedSeconds` supera `ORQUESTA_CODEX_GOAL_TIMEOUT_MS`.
 - El wrapper `run-until-finalize` ya corta en el primer `goal/observe` que

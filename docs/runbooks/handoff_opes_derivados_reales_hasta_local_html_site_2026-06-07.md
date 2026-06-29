@@ -87,9 +87,11 @@ causales. No deben ralentizar todos los temarios como pasos fijos.
 - No declarar `ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED=1` ni
   `ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM=1` en este smoke.
 - Arrancar Orquesta temporal con Codex Goal
-  (`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` o `app_server_proxy`) o, si
-  ya esta levantada fuera del entorno del wrapper, confirmar
+  (`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`) o, si ya esta levantada fuera
+  del entorno del wrapper, confirmar
   `ORQUESTA_OPES_DERIVATIVES_ORQUESTA_GOAL_FIRST_CONFIRMED=1`.
+  `app_server_proxy` no es ruta normal para este smoke; solo debe usarse como
+  diagnostico aislado con confirmacion explicita del operador.
 - No mezclar el reconciliador independiente de paquetes finales:
   `ORQUESTA_OPES_REGISTRY_FINALPKG_ENABLED` debe quedar desactivado.
 - No mezclar `ORQUESTA_OPES_BRIDGE_JOB_TYPE` ni
