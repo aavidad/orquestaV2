@@ -1,4 +1,4 @@
-package orquestaopesconnector
+package orquestaopestopicregistry
 
 import (
 	"go/parser"
@@ -9,15 +9,15 @@ import (
 	"testing"
 )
 
-func TestArchitectureV0NoImportaDBLegacyNiRuntime(t *testing.T) {
-	for _, file := range productionOPESConnectorFilesV0(t) {
+func TestArchitectureV0TopicRegistryNoImportaRuntimeServidorNiConectorHTTP(t *testing.T) {
+	for _, file := range productionOPESTopicRegistryFilesV0(t) {
 		parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, parser.ImportsOnly)
 		if err != nil {
 			t.Fatalf("parse %s: %v", file, err)
 		}
 		for _, spec := range parsed.Imports {
 			path := strings.Trim(spec.Path.Value, `"`)
-			for _, forbidden := range forbiddenOPESConnectorImportsV0() {
+			for _, forbidden := range forbiddenOPESTopicRegistryImportsV0() {
 				if path == forbidden || strings.HasPrefix(path, forbidden+"/") {
 					t.Fatalf("%s importa %s", file, path)
 				}
@@ -26,7 +26,7 @@ func TestArchitectureV0NoImportaDBLegacyNiRuntime(t *testing.T) {
 	}
 }
 
-func productionOPESConnectorFilesV0(t *testing.T) []string {
+func productionOPESTopicRegistryFilesV0(t *testing.T) []string {
 	t.Helper()
 	var files []string
 	err := filepath.WalkDir(".", func(path string, entry os.DirEntry, err error) error {
@@ -45,15 +45,17 @@ func productionOPESConnectorFilesV0(t *testing.T) []string {
 	return files
 }
 
-func forbiddenOPESConnectorImportsV0() []string {
+func forbiddenOPESTopicRegistryImportsV0() []string {
 	return []string{
 		"database/sql",
-		"os/exec",
+		"net/http",
 		"orquesta/cmd",
 		"orquesta/db",
 		"orquesta/modulos/orquesta-app-codex-stack",
 		"orquesta/modulos/orquesta-app-director-service",
 		"orquesta/modulos/orquesta-mcp",
+		"orquesta/modulos/orquesta-opes-bridge",
+		"orquesta/modulos/orquesta-opes-connector",
 		"orquesta/modulos/orquesta-runtime-codex",
 		"orquesta/modulos/orquesta-runtime-codex-goal",
 		"orquesta/modulos/orquesta-server",

@@ -70,11 +70,16 @@
   jobs devueltos respetan ese scope y ejecuta una consulta negativa para
   detectar instancias que ignoren filtros antes de declarar
   `ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1`.
+- Guardas de arquitectura en los adaptadores OPES: `orquesta-opes-bridge`,
+  `orquesta-opes-connector`, `orquesta-opes-director` y
+  `orquesta-opes-topic-registry` no importan servidor, MCP, web, runtime Codex,
+  stack Codex, DB ni rutas de control; el registry mantiene `os/exec` solo como
+  adaptador CLI con runner inyectado y pruebas fake.
 
 Comando:
 
 ```sh
-go test -count=1 ./modulos/orquesta-opes-bridge
+go test -count=1 ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector ./modulos/orquesta-opes-director ./modulos/orquesta-opes-topic-registry
 ```
 
 ## Reconciliacion T12 2026-05-27
