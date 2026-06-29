@@ -131,14 +131,15 @@ Configuracion externa relacionada:
   `ORQUESTA_SERVER_TICK_INTERVAL_MS` para conservar compatibilidad; si se
   define, el observador goal-first puede ir mas ligero o mas frecuente sin
   cambiar el tick del supervisor/director residente legacy.
-- `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy|app_server_tmux`: solo en
-  `cmd/orquesta-server`, inyecta launcher/observer Codex Goal usando
-  `codex app-server`. `app_server_proxy` usa un daemon/socket compatible ya
-  disponible; `app_server_tmux` usa `codex app-server --listen unix://<socket>`
-  dentro de una sesion `tmux`, socket Unix corto bajo `RuntimeWorkDir`,
+- `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`: solo en `cmd/orquesta-server`,
+  inyecta launcher/observer Codex Goal usando `codex app-server`.
+  `app_server_tmux` usa `codex app-server --listen unix://<socket>` dentro de
+  una sesion `tmux`, socket Unix corto bajo `RuntimeWorkDir`,
   WebSocket UDS y `CODEX_HOME` aislado con `auth.json`/`config.toml`
   proyectados desde el CODEX_HOME fuente. No usa `codex exec` como sustituto, no
   arranca backend si no esta configurado y no mete Codex en el modulo servidor.
+  `app_server_proxy` queda como compatibilidad diagnostica no recomendada para
+  el camino goal-first normal.
   En observaciones terminales lee `thread/read` y fusiona el marcador
   `ORQUESTA_GOAL_RESULT_V0` o el archivo durable
   `orquesta_goal_result_v0.json` como refs opacas de artefactos, tests,

@@ -22,12 +22,13 @@ crear u observar un goal. Solo prepara paquetes estables y llama a puertos
 inyectados. La composicion que tenga acceso real a Codex Goal implementa esos
 puertos.
 
-La composicion actual `cmd/orquesta-server` puede inyectar un backend opt-in
-con `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_tmux`. Ese
-wiring usa `codex app-server` y queda fuera de este modulo; el modo proxy habla
-con daemon/socket compatible y el modo tmux arranca
+La composicion actual `cmd/orquesta-server` debe usar
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` para trabajo goal-first normal.
+Ese wiring usa `codex app-server` y queda fuera de este modulo: arranca
 `codex app-server --listen unix://<socket>` en una sesion `tmux` y observa por
-`proxy --sock`.
+WebSocket sobre socket Unix privado. `app_server_proxy` queda como
+compatibilidad diagnostica condicionada a daemon/socket compatible; no es ruta
+normal de self-programming ni de smokes vigentes.
 El paquete conserva el gobierno externo de Orquesta: contexto, reglas,
 write-set, tests, criterios de aceptacion, artefactos, evidencias, presupuesto y
 politicas de cierre/rework.

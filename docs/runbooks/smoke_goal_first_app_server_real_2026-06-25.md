@@ -8,8 +8,7 @@ Validar la ruta real no-OPES de `/nueva-app` con Codex Goal persistente:
 
 1. Orquesta levanta un servidor temporal.
 2. `/api/v0/apps/director` compila `GoalWorkSpecV0` y lanza Codex por
-   `ORQUESTA_CODEX_GOAL_BACKEND` (`app_server_tmux` por defecto en este
-   smoke; `app_server_proxy` si se quiere validar daemon/socket).
+   `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`.
 3. Codex trabaja en un proyecto temporal, no en el repo Orquesta.
 4. `/api/v0/apps/director/goal/observe` lee `thread/goal/get` y `thread/read`.
 5. El marcador `ORQUESTA_GOAL_RESULT_V0` o el archivo durable
@@ -26,27 +25,10 @@ ORQUESTA_CODEX_COMMAND="$(command -v codex)" \
 ./scripts/smoke_goal_first_app_server_real.sh
 ```
 
-Debe devolver `smoke_goal_first_app_server_preflight=ok` si el backend
-seleccionado responde a `thread/loaded/list`. Por defecto usa
-`app_server_tmux` y no necesita daemon. Para validar el socket persistente,
-exporta `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`; si el CLI existe pero
-no hay daemon/socket, devuelve `smoke_goal_first_app_server_preflight=blocked`
-con reason code diagnostico, por ejemplo
-`codex_app_server_control_socket_missing`.
-
-Si `codex app-server daemon start` falla por standalone gestionado ausente,
-pero el CLI instalado por Node incluye app-server, se puede levantar app-server
-directo contra el socket estandar que usa `codex app-server proxy`:
-
-```bash
-mkdir -p "$HOME/.codex/app-server-control"
-codex app-server --listen "unix://$HOME/.codex/app-server-control/app-server-control.sock"
-```
-
-En otra terminal, repite el preflight con
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`. El smoke real por proxy reutiliza
-un app-server ya accesible y solo intenta `daemon start` si
-`codex app-server daemon version` no puede conectar.
+Debe devolver `smoke_goal_first_app_server_preflight=ok` si `app_server_tmux`
+responde a `thread/loaded/list`. No necesita daemon externo. `app_server_proxy`
+queda como compatibilidad diagnostica para investigaciones de socket ya
+existente, no como smoke vigente ni ruta normal.
 
 Smoke real, con ejecucion de Codex:
 
@@ -59,8 +41,7 @@ ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 \
 Variables utiles:
 
 - `ORQUESTA_CODEX_COMMAND`: ruta de `codex`; por defecto resuelve `codex`.
-- `ORQUESTA_CODEX_GOAL_BACKEND`: `app_server_tmux` por defecto; tambien admite
-  `app_server_proxy` para daemon/socket.
+- `ORQUESTA_CODEX_GOAL_BACKEND`: `app_server_tmux` por defecto y ruta vigente.
 - `ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY=1`: comprueba el backend app-server
   sin arrancar Orquesta ni ejecutar una generacion.
 - `ORQUESTA_CODEX_MODEL`: por defecto `gpt-5.5`.

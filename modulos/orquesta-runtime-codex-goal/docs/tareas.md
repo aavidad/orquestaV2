@@ -19,17 +19,19 @@ Estado: cerrado localmente para wiring opt-in; smoke real app-server por
 2026-06-29.
 
 `cmd/orquesta-server` puede inyectar starter y observer reales con
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_tmux`. Esos
-backends hablan con `codex app-server`, crean thread persistente, fijan
-`thread/goal/set`, arrancan `turn/start` y observan con `thread/goal/get`.
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`. Ese backend habla con
+`codex app-server`, crea thread persistente, fija `thread/goal/set`, arranca
+`turn/start` y observa con `thread/goal/get`. `app_server_proxy` queda como
+compatibilidad diagnostica, no como ruta normal.
 
 Sigue siendo opt-in de composicion: el modulo no conoce comando, shell, daemon,
 modelo ni rutas. Sin la variable de backend no se expone launcher/observer.
 
 ## CODEX-GOAL-003 smoke opt-in
 
-Estado: cerrado localmente con `app_server_tmux`; `app_server_proxy` sigue
-opt-in pendiente de daemon/socket compatible.
+Estado: cerrado localmente con `app_server_tmux`; `app_server_proxy` queda
+fuera del camino goal-first normal y solo podria usarse como diagnostico opt-in
+de daemon/socket compatible.
 
 Ejecutar un goal temporal sobre repo de prueba y validar que Orquesta recibe
 `complete`/`blocked` con evidencias.
