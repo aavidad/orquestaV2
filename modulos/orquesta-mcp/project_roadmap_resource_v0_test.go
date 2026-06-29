@@ -79,9 +79,11 @@ func TestNewMCPProjectRoadmapResourceV0CompactoYUtilParaNucleo(t *testing.T) {
 	if !containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-004"].Contracts, "RuntimeLaunchRequest v0") {
 		t.Fatalf("runtime/capacidad: %+v", byID["CORE-ROADMAP-004"])
 	}
-	if byID["CORE-ROADMAP-005"].Status != "cerrado_funcional_opes_derivados_temporal" ||
-		!containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-005"].CanonicalRefs, "docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md") ||
-		!containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-005"].BacklogRefs, "docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md#pendiente") {
+	if byID["CORE-ROADMAP-005"].Status != "vigente_puerto_neutral_conectores_opt_in" ||
+		byID["CORE-ROADMAP-005"].Area != "domain_work_consumidores_externos" ||
+		!containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-005"].Contracts, "DomainWorkJobRequestV0") ||
+		containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-005"].CanonicalRefs, "docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md") ||
+		containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-005"].BacklogRefs, "docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md#pendiente") {
 		t.Fatalf("domain work consumidores: %+v", byID["CORE-ROADMAP-005"])
 	}
 	if byID["CORE-ROADMAP-006"].Status != "vigente_dry_run_por_puerto" ||
@@ -137,12 +139,13 @@ func TestNewMCPProjectRoadmapResourceV0CompactoYUtilParaNucleo(t *testing.T) {
 
 func TestMCPProjectRoadmapLookupV0NormalizaEntradas(t *testing.T) {
 	itemCases := map[string]string{
-		" RuntimeLaunchRequest v0 ": "CORE-ROADMAP-004",
-		"runtime_launch_request":    "CORE-ROADMAP-004",
-		"domain_work_consumidores":  "CORE-ROADMAP-005",
-		"deployment_plan":           "CORE-ROADMAP-006",
-		"DeploymentPlan v0":         "CORE-ROADMAP-006",
-		"CORE_ROADMAP_002":          "CORE-ROADMAP-002",
+		" RuntimeLaunchRequest v0 ":         "CORE-ROADMAP-004",
+		"runtime_launch_request":            "CORE-ROADMAP-004",
+		"domain_work_consumidores":          "CORE-ROADMAP-005",
+		"domain_work_consumidores_externos": "CORE-ROADMAP-005",
+		"deployment_plan":                   "CORE-ROADMAP-006",
+		"DeploymentPlan v0":                 "CORE-ROADMAP-006",
+		"CORE_ROADMAP_002":                  "CORE-ROADMAP-002",
 	}
 
 	for input, wantID := range itemCases {
