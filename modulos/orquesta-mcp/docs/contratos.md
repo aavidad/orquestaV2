@@ -91,16 +91,18 @@ Campos:
     estado: ok
     route_policy: goal_first
     director_execution_mode: goal_first
-    spec: GoalWorkSpecV0 con director_kind=codex_goal en composicion Codex
-    write_set, required_tests, est_model, est_tokens, est_cost_usd,
-    est_wall_clock, evidence_refs
+    spec_summary: schema_version, goal_ref, run_ref, director_kind, spec_hash,
+      context_refs, rule_refs, required_test_refs, artifact_types y contadores
+    est_model, est_tokens, est_cost_usd, est_wall_clock, evidence_refs
   output_error:
     estado: error
     errores_publicos: issues compactos
 Invariantes:
   - Compila el mismo contrato GoalWorkSpecV0 que external_work.run goal-first.
   - No lanza agentes, no crea run, no encola y no escribe en stores.
-  - Expone refs, write-set, pruebas y contratos sin copiar payloads de dominio.
+  - Expone un resumen compacto de refs, contadores, tipos y hash; no publica el
+    GoalWorkSpecV0 completo, comandos de tests, write-set detallado ni payloads
+    de dominio.
   - En el stack Codex aplica la misma guarda operativa que el lanzamiento.
 ```
 

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -41,16 +40,14 @@ func TestBuildExternalWorkDryRunV0CompilaMismoSpecGoalFirstSinLanzarV0(t *testin
 	}
 	want.DirectorKind = orquestagoal.GoalDirectorKindCodexGoalV0
 	want = orquestagoal.NormalizeGoalWorkSpecV0(want)
-	if !reflect.DeepEqual(result.Spec, want) {
-		t.Fatalf("spec dry-run no coincide\nwant=%+v\ngot=%+v", want, result.Spec)
-	}
-	if result.Spec.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 {
-		t.Fatalf("director_kind=%q", result.Spec.DirectorKind)
-	}
-	if !mcpExternalWorkRunStringInSetTestV0(result.WriteSet, "deliveries/opes/job-ref-dry-run") ||
-		!mcpExternalWorkRunStringInSetTestV0(result.RequiredTests, "go test -count=1 ./modulos/orquesta-mcp") ||
-		!mcpExternalWorkRunStringInSetTestV0(result.RequiredTests, "domain-test-ref-qc") {
-		t.Fatalf("write_set=%+v required_tests=%+v", result.WriteSet, result.RequiredTests)
+	wantSummary := mcpGoalWorkSpecSummaryV0(want)
+	if result.SpecSummary.GoalRef != want.GoalRef ||
+		result.SpecSummary.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
+		result.SpecSummary.SpecHash != wantSummary.SpecHash ||
+		result.SpecSummary.WriteSetCount != len(want.WriteSet) ||
+		result.SpecSummary.RequiredTestCount != len(want.RequiredTests) ||
+		!mcpExternalWorkRunStringInSetTestV0(result.SpecSummary.RequiredTestRefs, "domain-test-ref-qc") {
+		t.Fatalf("spec_summary dry-run no coincide\nwant=%+v\ngot=%+v", wantSummary, result.SpecSummary)
 	}
 	if result.EstModel != "gpt-test" || result.EstTokens <= 0 || result.EstCostUSD <= 0 || result.EstWallClock == "" {
 		t.Fatalf("estimate invalida: model=%q tokens=%d cost=%f wall=%q", result.EstModel, result.EstTokens, result.EstCostUSD, result.EstWallClock)
@@ -58,9 +55,13 @@ func TestBuildExternalWorkDryRunV0CompilaMismoSpecGoalFirstSinLanzarV0(t *testin
 	if !mcpExternalWorkRunStringInSetTestV0(result.EvidenceRefs, MCPExternalWorkDryRunEvidenceRefV0) {
 		t.Fatalf("evidence_refs=%+v", result.EvidenceRefs)
 	}
-	for _, ctx := range result.Spec.ContextRefs {
-		if strings.Contains(ctx.Ref, "valor-privado") || strings.Contains(ctx.Ref, "no-copiar") {
-			t.Fatalf("context_refs contiene payload: %+v", result.Spec.ContextRefs)
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal result: %v", err)
+	}
+	for _, forbidden := range []string{`"spec":`, `"objective":`, `"write_set":[`, `"required_tests":[`, "go test -count=1 ./modulos/orquesta-mcp", "valor-privado", "no-copiar"} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("dry-run publico filtra %q en %s", forbidden, string(encoded))
 		}
 	}
 }
@@ -80,7 +81,7 @@ func TestBuildExternalWorkDryRunV0RechazaEntradaAmbiguaV0(t *testing.T) {
 	}
 }
 
-func TestMCPExternalWorkDryRunHTTPV0DevuelveSpecSinExecutorExternoV0(t *testing.T) {
+func TestMCPExternalWorkDryRunHTTPV0DevuelveResumenSinExecutorExternoV0(t *testing.T) {
 	input := validExternalWorkDryRunInputMCPTestV0()
 	var body bytes.Buffer
 	if err := json.NewEncoder(&body).Encode(input); err != nil {
@@ -102,8 +103,9 @@ func TestMCPExternalWorkDryRunHTTPV0DevuelveSpecSinExecutorExternoV0(t *testing.
 		t.Fatalf("decode: %v", err)
 	}
 	if result.Estado != MCPExternalWorkRunEstadoOKV0 ||
-		result.Spec.GoalRef == "" ||
-		result.GoalRef != result.Spec.GoalRef {
+		result.SpecSummary.GoalRef == "" ||
+		result.GoalRef != result.SpecSummary.GoalRef ||
+		result.SpecSummary.SpecHash == "" {
 		t.Fatalf("result=%+v", result)
 	}
 }
@@ -126,7 +128,7 @@ func TestMCPExternalWorkDryRunTransportV0RegistradoYCallableSinBindingV0(t *test
 	}
 	if result.Estado != MCPExternalWorkRunEstadoOKV0 ||
 		result.RoutePolicy != MCPExternalWorkRunRoutePolicyGoalFirstV0 ||
-		result.Spec.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 {
+		result.SpecSummary.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 {
 		t.Fatalf("result=%+v", result)
 	}
 }

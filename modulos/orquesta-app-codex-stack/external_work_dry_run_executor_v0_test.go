@@ -28,8 +28,8 @@ func TestCodexStackExternalWorkDryRunExecutorV0UsaModeloPorDefectoYConfigV0(t *t
 	}
 	if result.Estado != orquestamcp.MCPExternalWorkRunEstadoOKV0 ||
 		result.EstModel != "codex-model-from-capacity" ||
-		result.Spec.GoalRef == "" ||
-		result.Spec.DirectorKind != "codex_goal" {
+		result.SpecSummary.GoalRef == "" ||
+		result.SpecSummary.DirectorKind != "codex_goal" {
 		t.Fatalf("result=%+v", result)
 	}
 }
