@@ -82,6 +82,18 @@ func (runtime *RuntimeV0) recordShutdownHTTPResultV0(ctx context.Context, status
 		keepFrozen,
 		runtime.clock.Now(),
 	), "shutdown_result")
+	if projection.Ready && !keepFrozen {
+		runtime.requestShutdownReadyV0()
+	}
+}
+
+func (runtime *RuntimeV0) requestShutdownReadyV0() {
+	if runtime == nil || runtime.shutdownReadyRequested == nil {
+		return
+	}
+	runtime.shutdownReadyOnce.Do(func() {
+		close(runtime.shutdownReadyRequested)
+	})
 }
 
 func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjectionV0, bool) {

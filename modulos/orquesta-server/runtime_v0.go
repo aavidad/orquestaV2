@@ -53,6 +53,8 @@ type RuntimeV0 struct {
 	tracker                     *StatusTrackerV0
 	handoffRequested            chan struct{}
 	handoffOnce                 sync.Once
+	shutdownReadyRequested      chan struct{}
+	shutdownReadyOnce           sync.Once
 }
 
 func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
@@ -103,6 +105,7 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		),
 		goalObservationWakeups: make(chan GoalObservationWakeupV0, 1),
 		handoffRequested:       make(chan struct{}),
+		shutdownReadyRequested: make(chan struct{}),
 	}, nil
 }
 
@@ -166,6 +169,8 @@ func (runtime *RuntimeV0) RunWithShutdownCauseV0(
 		return runtime.shutdownRuntimeV0(server, cancelRun, shutdownCauseFromFuncV0(cause))
 	case <-runtime.handoffRequested:
 		return runtime.handoffRuntimeV0(server, cancelRun)
+	case <-runtime.shutdownReadyRequested:
+		return runtime.shutdownRuntimeV0(server, cancelRun, ShutdownSignalCauseV0{SignalName: "http_shutdown_ready", Count: 1})
 	case decision := <-selfWatchdogStop:
 		return runtime.shutdownRuntimeV0(server, cancelRun, selfWatchdogShutdownCauseV0(decision))
 	case err := <-serverDone:

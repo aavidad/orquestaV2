@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -152,6 +153,66 @@ func TestRuntimeV0ServerShutdownReadyDescongelaSupervisorV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0ServerShutdownReadyDetieneRuntimeHTTPV0(t *testing.T) {
+	hook := newNotifyingRuntimeShutdownHookV0()
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != serverShutdownRoutePathV0 {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"estado":         "ok",
+			"status":         "ready",
+			"shutdown_ready": true,
+		})
+	})
+	runtime, err := NewRuntimeV0(ConfigV0{
+		Addr:                "127.0.0.1:0",
+		StateDir:            t.TempDir(),
+		AuditDisabled:       true,
+		TickInterval:        time.Hour,
+		ShutdownGracePeriod: 500 * time.Millisecond,
+	}, RuntimeDepsV0{
+		AppHandler:    app,
+		StateStore:    &threadSafeStateStoreV0{},
+		ShutdownHooks: []RuntimeShutdownHookPortV0{hook},
+		Clock:         fixedClockV0{now: time.Date(2026, 6, 29, 18, 0, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- runtime.RunV0(ctx) }()
+
+	addr := waitRuntimeAddrV0(t, runtime)
+	resp, err := http.Post("http://"+addr+serverShutdownRoutePathV0, "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST shutdown: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("shutdown status=%d", resp.StatusCode)
+	}
+	if err := waitRuntimeDoneV0(t, done); err != nil {
+		t.Fatalf("RunV0: %v", err)
+	}
+	waitForRuntimeTestV0(t, hook.called)
+	if got := atomic.LoadInt32(&hook.calls); got != 1 {
+		t.Fatalf("shutdown hook calls=%d", got)
+	}
+	state := runtime.StateV0()
+	if state.Status != "stopped" ||
+		state.ShutdownStatus != "stopped" ||
+		!state.ShutdownReady ||
+		state.ShutdownSignalName != "http_shutdown_ready" ||
+		state.ShutdownSignalCount != 1 {
+		t.Fatalf("runtime no paro por shutdown HTTP ready: %+v", state)
+	}
+}
+
 func TestRuntimeV0ServerShutdownReadyConAgenteVivoQuedaStopPendingV0(t *testing.T) {
 	store := &memoryStateStoreV0{}
 	supervisor := &countingShutdownFreezeSupervisorV0{}
@@ -250,4 +311,37 @@ func (supervisor *countingShutdownFreezeSupervisorV0) RunGlobalSupervisorV0(
 	return orquestarunsupervisor.RunSupervisorResultV0{
 		StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
 	}, nil
+}
+
+type notifyingRuntimeShutdownHookV0 struct {
+	called chan struct{}
+	calls  int32
+}
+
+func newNotifyingRuntimeShutdownHookV0() *notifyingRuntimeShutdownHookV0 {
+	return &notifyingRuntimeShutdownHookV0{called: make(chan struct{})}
+}
+
+func (hook *notifyingRuntimeShutdownHookV0) ShutdownV0(context.Context) error {
+	if atomic.AddInt32(&hook.calls, 1) == 1 {
+		close(hook.called)
+	}
+	return nil
+}
+
+func waitRuntimeAddrV0(t *testing.T, runtime *RuntimeV0) string {
+	t.Helper()
+	deadline := time.After(time.Second)
+	tick := time.NewTicker(5 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-deadline:
+			t.Fatalf("timeout esperando addr runtime: %+v", runtime.StateV0())
+		case <-tick.C:
+			if state := runtime.StateV0(); state.Status == "running" && state.Addr != "" {
+				return state.Addr
+			}
+		}
+	}
 }
