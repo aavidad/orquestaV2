@@ -276,8 +276,9 @@ Goal.
    Estado 2026-06-26: `orquesta-autoprogramming` sigue siendo puro y compila
    `goal_specs[]` cuando `goal_migration=goal_ready`. En la composicion Codex
    stack, `POST /api/v0/autoprogramming/prepare-run` conserva dos rutas: si no
-   hay backend goal-first completo, devuelve `goal_specs[]` sin `run_ref` como
-   handoff; si estan inyectados `GoalLauncher`, `GoalObserver`,
+   hay backend goal-first completo, conserva specs completas como handoff interno
+   y publica `goal_spec_summaries[]` sin `run_ref`; si estan inyectados
+   `GoalLauncher`, `GoalObserver`,
    `GoalClosureValidator` y `GoalStateStore`, crea un run contenedor sin
    `WorkflowTaskV0` legacy, lanza el goal, persiste `GoalWorkStateV0`, devuelve
    `goal{run_ref,goal_ref,external_goal_ref,goal_status}` y no encola

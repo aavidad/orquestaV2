@@ -126,7 +126,7 @@ dominio.
 `RouteAutoprogrammingPrepareRunV0` apunta al contrato REST/MCP que prepara una
 run de autoprogramacion continuable por executor inyectado. El gateway no crea
 runs ni arranca agentes; solo monta el handler y no recorta `goal?` ni
-`goal_specs?` cuando el handler inyectado los publica.
+`goal_spec_summaries?` cuando el handler inyectado los publica.
 
 `RouteAutoprogrammingObserveGoalV0` apunta al contrato REST/MCP que observa un
 goal de autoprogramacion por `run_ref`. El gateway no observa goals, no valida
