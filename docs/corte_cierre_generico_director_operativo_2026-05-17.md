@@ -195,7 +195,9 @@ duplica ese gate y reentra a `replan_or_close` cuando aparece evidencia `passed`
 causal posterior. El runner por puerto, el ejecutor local opt-in, el smoke Codex
 real acotado `CODEX-REQTEST-REAL-E2E`, el smoke no-OPES temporal
 `EXT-NO-OPES`, `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` ya tienen
-evidencia. Sigue pendiente OPES temporal real de derivados/cierre.
+evidencia. OPES temporal real de derivados/cierre quedo cerrado
+funcionalmente por goal-first; quedan pendientes residuales de calidad
+editorial, coste y automatizacion larga.
 
 Desde el corte del 2026-05-22, `ContinueAppDirectorV0` no bloquea el
 `PlanState` si el cierre de una task devuelve solo `run.open_tasks`: conserva el
@@ -262,7 +264,9 @@ implementacion, test focal y evidencia en la matriz.
   bloqueante idempotente sin replan automatico, y reentra a `replan_or_close` si
   la evidencia `passed` aparece despues. El smoke real acotado con runner, la
   ola/cohorte Codex real amplia y la recursion Codex real quedan cerrados con
-  proveedor; sigue pendiente OPES temporal real de derivados/cierre.
+  proveedor; OPES temporal real de derivados/cierre queda cerrado
+  funcionalmente por goal-first con pendientes residuales de calidad editorial,
+  coste y automatizacion larga.
 - [x] Replan negativo: cerrada la observacion durable de review negativa. El
   `PlanState` guarda refs/attempt para `ReworkRequested` y
   `ReplanDecisionRecorded`. El corte del 2026-05-21 ya convierte followups

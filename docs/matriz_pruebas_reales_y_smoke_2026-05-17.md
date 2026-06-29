@@ -336,8 +336,10 @@ evidencia focal propia.
   configuracion Codex validada, pero no ejecuta agente Codex vivo.
   `CODEX-REQTEST-REAL-E2E` ya une entrega Codex, review causal, runner de tests
   y cierre de Director Operativo en caso acotado; `CODEX-WAVE-REAL` y
-  `CODEX-RECURSION-REAL` cubren Codex real amplio y recursivo. Falta OPES
-  temporal real de derivados/cierre.
+  `CODEX-RECURSION-REAL` cubren Codex real amplio y recursivo. OPES temporal
+  real de derivados/cierre queda cerrado funcionalmente por goal-first en
+  `OPES-DER-RESTO`; quedan pendientes residuales de calidad editorial, coste y
+  automatizacion larga.
 - Shutdown cooperativo esta validado para Codex; otros runtimes/proveedores
   necesitan su propio puerto de checkpoint.
 - Uso/coste real necesita conector productivo de proveedor; hoy la cobertura

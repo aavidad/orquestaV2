@@ -79,8 +79,9 @@ func TestNewMCPProjectRoadmapResourceV0CompactoYUtilParaNucleo(t *testing.T) {
 	if !containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-004"].Contracts, "RuntimeLaunchRequest v0") {
 		t.Fatalf("runtime/capacidad: %+v", byID["CORE-ROADMAP-004"])
 	}
-	if byID["CORE-ROADMAP-005"].Status != "abierto_opes_derivados_cierre" ||
-		!containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-005"].BacklogRefs, "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md#T18-opes-operational-closure-source") {
+	if byID["CORE-ROADMAP-005"].Status != "cerrado_funcional_opes_derivados_temporal" ||
+		!containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-005"].CanonicalRefs, "docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md") ||
+		!containsProjectRoadmapTestStringV0(byID["CORE-ROADMAP-005"].BacklogRefs, "docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md#pendiente") {
 		t.Fatalf("domain work consumidores: %+v", byID["CORE-ROADMAP-005"])
 	}
 	if byID["CORE-ROADMAP-006"].Status != "vigente_dry_run_por_puerto" ||

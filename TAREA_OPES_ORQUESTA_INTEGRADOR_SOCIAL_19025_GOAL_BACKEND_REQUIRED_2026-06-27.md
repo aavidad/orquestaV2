@@ -70,7 +70,11 @@ Si el backend Goal falta y `external-work/run` es una ruta esperada, el estado
 no deberia presentarse como listo sin advertencia operativa. Como minimo debe
 mostrar un diagnostico visible con accion concreta:
 
-`export ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio` y reiniciar servidor.
+Actualizacion 2026-06-29: `app_server_stdio` queda retirado como backend
+operativo. La accion vigente es configurar `app_server_tmux` y reiniciar el
+servidor aislado:
+
+`export ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` y reiniciar servidor.
 
 ## Workaround aplicado por OPES
 
@@ -78,7 +82,7 @@ No se toca codigo de Orquesta porque hay otro agente trabajando en el nucleo.
 Se reinicia solo el servidor OPES `19025` con:
 
 ```bash
-ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux
 ORQUESTA_CODEX_COMMAND=/home/alberto/.nvm/versions/node/v20.19.2/bin/codex
 ```
 
@@ -88,7 +92,7 @@ Despues se reintentaran las peticiones de temas 019-024.
 
 Reinicio limpio con state/runtime nuevo:
 
-- `ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio`
+- `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`
 - `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=true`
 - `ORQUESTA_SERVER_STATE_DIR=.../19025_goal_state`
 - `ORQUESTA_CODEX_RUNTIME_WORKDIR=.../19025_goal_runtime`
@@ -99,7 +103,8 @@ Estado efectivo correcto:
 - `startup_status=startup_ready`
 - `resident_director_status=running/ok`
 - `state_persist_status=ok`
-- `ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio`
+- `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` (corregido el 2026-06-29;
+  el valor historico `app_server_stdio` ya no es backend operativo)
 
 Resultado al relanzar temas 019-024:
 
@@ -407,7 +412,8 @@ Estado del repo actual:
 - El backend Goal requerido ya aparece como diagnostico visible de configuracion
   efectiva cuando `ORQUESTA_CODEX_GOAL_BACKEND` no esta definido y la ruta
   external-work no esta en modo legacy. La accion publicada es reiniciar con
-  `ORQUESTA_CODEX_GOAL_BACKEND=app_server_stdio`.
+  `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`; el valor historico
+  `app_server_stdio` ya no debe usarse en operacion ni smokes nuevos.
 - `external-work/run` ya conserva causa publica accionable cuando falla el
   launcher (`codex_app_server_control_socket_missing`,
   `codex_app_server_goal_active_timeout`, etc.) y hay cobertura en

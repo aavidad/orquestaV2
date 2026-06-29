@@ -118,11 +118,11 @@ func mcpProjectRoadmapSourcesV0() []mcpProjectRoadmapItemSourceV0 {
 		{
 			ID:          "CORE-ROADMAP-005",
 			Area:        "domain_work_consumidores",
-			Status:      "abierto_opes_derivados_cierre",
+			Status:      "cerrado_funcional_opes_derivados_temporal",
 			Owner:       "orquesta-domain-work",
-			Focus:       "OPES consume Orquesta por DomainWork; plan/temario esta cubierto y falta smoke temporal real de derivados/cierre.",
+			Focus:       "OPES consume Orquesta por DomainWork; plan/temario y derivados/cierre quedaron cerrados funcionalmente en OPES temporal goal-first; quedan pendientes editoriales, coste y automatizacion larga.",
 			SummaryKey:  "mcp.project.roadmap.core.domain_work_consumidores.summary.v0",
-			ProgressKey: "mcp.project.roadmap.core.domain_work_consumidores.opes_derivados_abierto.v0",
+			ProgressKey: "mcp.project.roadmap.core.domain_work_consumidores.opes_derivados_cerrado_temporal.v0",
 			Contracts: []string{
 				"DomainWorkJobRequestV0",
 				"DomainWorkArtifactSubmissionV0",
@@ -139,12 +139,14 @@ func mcpProjectRoadmapSourcesV0() []mcpProjectRoadmapItemSourceV0 {
 				"modulos/orquesta-document-plan-expander/docs/contratos.md",
 				"docs/corte_opes_como_consumidor_orquesta_2026-05-18.md",
 				"docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md",
+				"docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md",
 			},
 			BacklogRefs: mcpRoadmapBacklogRefsV0(
-				"docs/autoprogramacion_orquesta_pendientes_2026-05-23.md#T18-opes-operational-closure-source",
+				"docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md#pendiente",
 			),
 			Verification: mcpMCPResourceVerificationV0(
 				"docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md",
+				"docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md",
 			),
 		},
 	}, mcpProjectRoadmapDeploymentSourcesV0()...)
