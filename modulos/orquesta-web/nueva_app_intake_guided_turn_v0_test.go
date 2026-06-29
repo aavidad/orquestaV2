@@ -97,6 +97,20 @@ func TestApplyWebNuevaAppIntakeGuidedAnswerV0NormalizaTipoAppLibreV0(t *testing.
 	}
 }
 
+func TestApplyWebNuevaAppIntakeGuidedAnswerV0NormalizaSDKComoPluginVisibleV0(t *testing.T) {
+	session := NewWebNuevaAppIntakeSessionV0("session-guided-free-sdk", "es", "SDK", "Crear una libreria para integraciones internas")
+
+	session = ApplyWebNuevaAppIntakeGuidedAnswerV0(session, "tipo_app", "library sdk reutilizable")
+
+	if session.Form.TipoApp != "plugin" || session.Estado != WebNuevaAppIntakeEstadoLista {
+		t.Fatalf("sdk/library debe normalizarse a opcion visible plugin: %+v", session.Form)
+	}
+	req := session.Form.ToAppSpecRequestV0()
+	if issues := orquestafactory.ValidateAppSpecRequestV0(req); len(issues) != 0 {
+		t.Fatalf("request debe ser valida tras alias sdk/library: %+v", issues)
+	}
+}
+
 func TestApplyWebNuevaAppIntakeGuidedAnswerV0SplitLibrePlataformasV0(t *testing.T) {
 	session := NewWebNuevaAppIntakeSessionV0("session-guided-free-platforms", "es", "Portal", "Publicar viviendas")
 

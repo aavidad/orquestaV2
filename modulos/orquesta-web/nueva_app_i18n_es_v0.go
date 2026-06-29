@@ -311,7 +311,7 @@ func nuevaAppI18nSpanishV0() map[string]string {
 		"nueva_app.ayuda.datos.operacion.restricciones":        "Restricciones de backup, recuperacion, trazabilidad o continuidad separadas por comas.",
 		"nueva_app.ayuda.datos.sensibilidad":                   "Nivel o tipo de sensibilidad: publico, interno, personal, sanitario, financiero u otro.",
 		"nueva_app.ayuda.datos.retencion":                      "Regla general de retencion si no se detalla por tipo de dato.",
-		"nueva_app.ayuda.integraciones.0.tipo":                 "Opciones: API, webhook, correo, calendario, mapas, importacion de archivos, pagos, autenticacion, analitica, busqueda o notificaciones. Describe una capacidad, no un secreto ni proveedor forzado.",
+		"nueva_app.ayuda.integraciones.0.tipo":                 "Opciones: api, webhook, email, calendar, maps, file_import, file_export, messaging, llm, storage, payments, auth, analytics, search, notifications u other. Describe una capacidad, no un secreto ni proveedor forzado.",
 		"nueva_app.ayuda.integraciones.0.nombre":               "Nombre publico de la integracion o sistema externo.",
 		"nueva_app.ayuda.integraciones.0.proposito":            "Que debe hacer la integracion y por que es necesaria.",
 		"nueva_app.ayuda.integraciones.0.direccion":            "Direccion de flujo: entrada, salida o bidireccional.",

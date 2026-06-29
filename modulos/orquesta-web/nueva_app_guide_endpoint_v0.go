@@ -56,11 +56,14 @@ func nuevaAppGuideHTMLV0(markdown string) string {
 	    article h4{margin:16px 0 6px;font-size:15px}
 	    p{margin:0 0 16px;color:var(--muted)}
 	    article p{color:var(--text)}
-	    ul,ol{margin:0 0 16px 22px;padding:0}
-	    li{margin:4px 0}
-	    code{background:#edf4ec;border:1px solid #d8e2d8;border-radius:5px;padding:1px 4px}
-	    pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 16px;border:1px solid var(--line);background:#f8fbf6;border-radius:8px;padding:14px}
-	  </style>
+		    ul,ol{margin:0 0 16px 22px;padding:0}
+		    li{margin:4px 0}
+		    table{width:100%;border-collapse:collapse;margin:0 0 16px}
+		    th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+		    th{background:#edf4ec;color:var(--text)}
+		    code{background:#edf4ec;border:1px solid #d8e2d8;border-radius:5px;padding:1px 4px}
+		    pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:0 0 16px;border:1px solid var(--line);background:#f8fbf6;border-radius:8px;padding:14px}
+		  </style>
 	</head>
 	<body>
 <main>
@@ -80,10 +83,17 @@ func nuevaAppGuideMarkdownToHTMLV0(markdown string) template.HTML {
 	inUL := false
 	inOL := false
 	inCode := false
+	inTable := false
 	closeParagraph := func() {
 		if inParagraph {
 			builder.WriteString("</p>\n")
 			inParagraph = false
+		}
+	}
+	closeTable := func() {
+		if inTable {
+			builder.WriteString("</tbody>\n</table>\n")
+			inTable = false
 		}
 	}
 	closeLists := func() {
@@ -96,11 +106,13 @@ func nuevaAppGuideMarkdownToHTMLV0(markdown string) template.HTML {
 			inOL = false
 		}
 	}
-	for _, rawLine := range lines {
+	for index := 0; index < len(lines); index++ {
+		rawLine := lines[index]
 		line := strings.TrimSpace(rawLine)
 		if strings.HasPrefix(line, "```") {
 			closeParagraph()
 			closeLists()
+			closeTable()
 			if inCode {
 				builder.WriteString("</code></pre>\n")
 				inCode = false
@@ -118,7 +130,38 @@ func nuevaAppGuideMarkdownToHTMLV0(markdown string) template.HTML {
 		if line == "" {
 			closeParagraph()
 			closeLists()
+			closeTable()
 			continue
+		}
+		if headerCells := nuevaAppGuideTableCellsV0(line); len(headerCells) > 0 &&
+			index+1 < len(lines) &&
+			nuevaAppGuideTableSeparatorV0(strings.TrimSpace(lines[index+1])) {
+			closeParagraph()
+			closeLists()
+			closeTable()
+			builder.WriteString("<table>\n<thead><tr>")
+			for _, cell := range headerCells {
+				builder.WriteString("<th>")
+				builder.WriteString(nuevaAppGuideInlineHTMLV0(cell))
+				builder.WriteString("</th>")
+			}
+			builder.WriteString("</tr></thead>\n<tbody>\n")
+			inTable = true
+			index++
+			continue
+		}
+		if inTable {
+			if cells := nuevaAppGuideTableCellsV0(line); len(cells) > 0 {
+				builder.WriteString("<tr>")
+				for _, cell := range cells {
+					builder.WriteString("<td>")
+					builder.WriteString(nuevaAppGuideInlineHTMLV0(cell))
+					builder.WriteString("</td>")
+				}
+				builder.WriteString("</tr>\n")
+				continue
+			}
+			closeTable()
 		}
 		if strings.HasPrefix(line, "#") {
 			closeParagraph()
@@ -135,6 +178,7 @@ func nuevaAppGuideMarkdownToHTMLV0(markdown string) template.HTML {
 		}
 		if strings.HasPrefix(line, "- ") {
 			closeParagraph()
+			closeTable()
 			if inOL {
 				builder.WriteString("</ol>\n")
 				inOL = false
@@ -150,6 +194,7 @@ func nuevaAppGuideMarkdownToHTMLV0(markdown string) template.HTML {
 		}
 		if text, ok := nuevaAppGuideOrderedListTextV0(line); ok {
 			closeParagraph()
+			closeTable()
 			if inUL {
 				builder.WriteString("</ul>\n")
 				inUL = false
@@ -174,10 +219,48 @@ func nuevaAppGuideMarkdownToHTMLV0(markdown string) template.HTML {
 	}
 	closeParagraph()
 	closeLists()
+	closeTable()
 	if inCode {
 		builder.WriteString("</code></pre>\n")
 	}
 	return template.HTML(builder.String())
+}
+
+func nuevaAppGuideTableCellsV0(line string) []string {
+	line = strings.TrimSpace(line)
+	if !strings.Contains(line, "|") {
+		return nil
+	}
+	line = strings.TrimPrefix(line, "|")
+	line = strings.TrimSuffix(line, "|")
+	rawCells := strings.Split(line, "|")
+	if len(rawCells) < 2 {
+		return nil
+	}
+	cells := make([]string, 0, len(rawCells))
+	for _, rawCell := range rawCells {
+		cells = append(cells, strings.TrimSpace(rawCell))
+	}
+	return cells
+}
+
+func nuevaAppGuideTableSeparatorV0(line string) bool {
+	cells := nuevaAppGuideTableCellsV0(line)
+	if len(cells) < 2 {
+		return false
+	}
+	for _, cell := range cells {
+		cell = strings.TrimSpace(cell)
+		if !strings.Contains(cell, "-") {
+			return false
+		}
+		withoutDashes := strings.ReplaceAll(cell, "-", "")
+		withoutDashes = strings.ReplaceAll(withoutDashes, ":", "")
+		if strings.TrimSpace(withoutDashes) != "" {
+			return false
+		}
+	}
+	return true
 }
 
 func nuevaAppGuideHeadingV0(line string) (string, string) {

@@ -114,7 +114,7 @@ func normalizeGuidedTipoAppAnswerV0(answer string) string {
 	case guidedContainsAnyV0(normalized, "cli", "terminal", "consola"):
 		return "cli"
 	case guidedContainsAnyV0(normalized, "libreria", "library", "sdk"):
-		return "library"
+		return "plugin"
 	default:
 		return answer
 	}

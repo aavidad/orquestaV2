@@ -132,6 +132,43 @@ func TestNuevaAppHTMLHelpV0TodasLasClavesTienenTextoDedicado(t *testing.T) {
 	}
 }
 
+func TestNuevaAppHTMLHelpV0IntegracionesEnumeraCatalogoVisibleV0(t *testing.T) {
+	catalog := NewNuevaAppI18nCatalogV0()
+
+	for _, locale := range []string{NuevaAppI18nDefaultLocaleV0, NuevaAppI18nEnglishLocaleV0} {
+		help := nuevaAppHTMLHelpV0(locale, catalog)["integraciones.0.tipo"]
+		for _, integrationType := range nuevaAppHTMLIntegrationTypesV0() {
+			if !strings.Contains(help, integrationType) {
+				t.Fatalf("ayuda %s no enumera integracion %q: %s", locale, integrationType, help)
+			}
+		}
+	}
+}
+
+func TestNuevaAppGuideV0IntegracionesEnumeraCatalogoVisibleV0(t *testing.T) {
+	for _, integrationType := range nuevaAppHTMLIntegrationTypesV0() {
+		if !strings.Contains(nuevaAppGuideMarkdownV0, "`"+integrationType+"`") {
+			t.Fatalf("guia no documenta integracion %q", integrationType)
+		}
+	}
+}
+
+func TestNuevaAppGuideV0DocumentaProfundidadDeManualesV0(t *testing.T) {
+	for _, want := range []string{
+		"### `documentacion.profundidad`",
+		"`basica`",
+		"`normal`",
+		"`profunda`",
+		"manuales desglosados por rol",
+		"criterios de aceptacion",
+		"diagnostico",
+	} {
+		if !strings.Contains(nuevaAppGuideMarkdownV0, want) {
+			t.Fatalf("guia no documenta profundidad de manuales: falta %q", want)
+		}
+	}
+}
+
 func TestNuevaAppHTMLHelpKeysV0CubrenClavesUsadasEnPlantilla(t *testing.T) {
 	source, err := os.ReadFile("nueva_app_html_render_v0.go")
 	if err != nil {

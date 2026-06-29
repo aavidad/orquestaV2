@@ -1041,11 +1041,16 @@ Opciones actuales:
 - `calendar`
 - `maps`
 - `file_import`
+- `file_export`
+- `messaging`
+- `llm`
+- `storage`
 - `payments`
 - `auth`
 - `analytics`
 - `search`
 - `notifications`
+- `other`
 
 Que implica:
 
@@ -1060,11 +1065,16 @@ Cuando usar:
 - `calendar`: agenda, citas, eventos o disponibilidad.
 - `maps`: mapas, geocodificacion o rutas como capacidad.
 - `file_import`: entrada de ficheros externos.
+- `file_export`: salida de ficheros, informes, paquetes o exportaciones.
+- `messaging`: mensajeria, chat, colas de mensajes o canales asincronos.
+- `llm`: integracion con modelos de lenguaje como capacidad opcional.
+- `storage`: almacenamiento externo aportado por otro sistema.
 - `payments`: pagos como capacidad, sin credenciales ni proveedor impuesto.
 - `auth`: autenticacion externa o identidad federada.
 - `analytics`: medicion de uso o eventos de producto.
 - `search`: busqueda externa o indice especializado.
 - `notifications`: avisos push, SMS u otros canales no email.
+- `other`: integracion necesaria que no encaja en las categorias anteriores.
 
 Errores frecuentes:
 
@@ -1496,6 +1506,48 @@ Errores frecuentes:
 - elegir `deploy.target` sin documentar como se verifica el arranque.
 
 Tooltip: `nueva_app.ayuda.documentacion.sistemas`.
+
+### `documentacion.profundidad`
+
+Tipo UI: select.
+
+Opciones:
+
+- `basica`
+- `normal`
+- `profunda`
+
+Default:
+
+- `normal` si falta.
+
+Que implica:
+
+- `basica`: documentacion corta para operar la entrega minima, con alcance,
+  comandos esenciales y limitaciones conocidas.
+- `normal`: manual de usuario, guia de desarrollo y guia de sistemas con
+  estructura suficiente para mantenimiento ordinario.
+- `profunda`: manuales desglosados por rol, explicacion de opciones elegidas,
+  criterios de aceptacion, decisiones de arquitectura, contratos de datos,
+  integraciones, pruebas, operacion, diagnostico y siguientes pasos.
+
+Cuando usar `profunda`:
+
+- apps que nacen para produccion, administracion publica, salud, formacion,
+  finanzas, equipos no tecnicos, integraciones externas o continuidad por otros
+  agentes;
+- cuando el contrato de cierre exige que una persona pueda revisar la app sin
+  leer codigo fuente;
+- cuando se han seleccionado varias arquitecturas, tipos de datos, perfiles de
+  accesibilidad o integraciones y hay que justificar su uso.
+
+Errores frecuentes:
+
+- usar `profunda` para compensar un contrato incompleto;
+- pedir documentacion larga sin criterios de aceptacion ni comandos verificables;
+- incluir secretos, rutas privadas o datos reales en manuales publicables.
+
+Tooltip: `nueva_app.ayuda.documentacion.profundidad`.
 
 ### `documentacion.locales`
 

@@ -24,6 +24,9 @@ func TestNuevaAppGuideWebEndpointV0GETSirveGuiaEmbebida(t *testing.T) {
 		`Modo Experto`,
 		`clean_architecture`,
 		`calidad.accesibilidad`,
+		`<table>`,
+		`<th>Patron</th>`,
+		`<td><code>hexagonal</code></td>`,
 		`href="/nueva-app"`,
 	} {
 		if !strings.Contains(body, want) {
@@ -32,6 +35,27 @@ func TestNuevaAppGuideWebEndpointV0GETSirveGuiaEmbebida(t *testing.T) {
 	}
 	if strings.Contains(body, `<pre># Guia de opciones del wizard`) {
 		t.Fatalf("guia vuelve a servir markdown completo en pre\n%s", body)
+	}
+}
+
+func TestNuevaAppGuideMarkdownToHTMLV0RenderizaTablasV0(t *testing.T) {
+	html := string(nuevaAppGuideMarkdownToHTMLV0(`
+| Campo | Uso |
+| --- | --- |
+| ` + "`api`" + ` | Integracion |
+`))
+
+	for _, want := range []string{
+		`<table>`,
+		`<thead><tr><th>Campo</th><th>Uso</th></tr></thead>`,
+		`<tbody>`,
+		`<tr><td><code>api</code></td><td>Integracion</td></tr>`,
+		`</tbody>`,
+		`</table>`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("tabla markdown no renderizada como HTML semantico; falta %q en %s", want, html)
+		}
 	}
 }
 

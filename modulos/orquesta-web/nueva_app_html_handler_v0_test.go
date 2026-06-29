@@ -354,7 +354,7 @@ func TestNuevaAppHTMLHandlerV0GETLocalizaValidacionEnInglesV0(t *testing.T) {
 		`Expert data mode`,
 		`Data set 1`,
 		`Additional integrations`,
-		`Options: api, webhook, email, calendar, maps, file_import, payments, auth, analytics, search, or notifications.`,
+		`Options: api, webhook, email, calendar, maps, file_import, file_export, messaging, llm, storage, payments, auth, analytics, search, notifications, or other.`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("GET ingles no contiene %q\n%s", want, body)
