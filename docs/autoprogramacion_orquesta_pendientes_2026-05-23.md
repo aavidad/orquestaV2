@@ -205,15 +205,17 @@ tiene prueba HTTP integrada con backend goal fake que monta el handler real,
 lanza por `/api/v0/apps/director`, observa por
 `/api/v0/apps/director/goal/observe` y verifica cierre aceptado con run
 `cerrada`.
-Avance local adicional 2026-06-25: el backend real
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` ya observa goals terminales con
+Avance local adicional 2026-06-25: el backend real entonces disponible
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` ya observaba goals terminales con
 `thread/read includeTurns=true`, extrae el marcador
 `ORQUESTA_GOAL_RESULT_V0` de la respuesta final y fusiona `artifact_refs`,
 `required_test_results`, `domain_receipt_refs` y `evidence_refs` en
 `GoalWorkResultV0`. Si el marcador falta o no trae refs requeridas, Orquesta no
 inventa evidencias y el cierre queda bloqueado por el validador. Se anade smoke
 real opt-in `scripts/smoke_goal_first_app_server_real.sh` con runbook
-`docs/runbooks/smoke_goal_first_app_server_real_2026-06-25.md`.
+`docs/runbooks/smoke_goal_first_app_server_real_2026-06-25.md`. Nota posterior
+2026-06-29: `app_server_tmux` es el backend operativo normal; `app_server_proxy`
+queda como diagnostico opt-in y no como ruta principal.
 Avance local adicional 2026-06-26: se anade backend opt-in
 `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` para usar
 `codex app-server --listen unix://<socket>` dentro de una sesion `tmux` cuando
@@ -304,7 +306,8 @@ legacy de autoprogramacion transportan ya la marca explicita.
 Pendiente verificable:
 
 - `cmd/orquesta-server` ya cablea starter/observer opt-in con
-  `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_tmux`, usando
+  `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` como backend operativo normal.
+  `app_server_proxy` queda solo como diagnostico opt-in. El camino usa
   `codex app-server` como frontera real, hace preflight diagnosticable y ya
   transforma el resultado final estructurado en refs de cierre. Smoke real
   cerrado el 2026-06-26 con `app_server_tmux`: `goal_status=complete`,

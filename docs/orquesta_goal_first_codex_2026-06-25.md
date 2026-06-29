@@ -195,11 +195,12 @@ observacion, y finalmente llama a `POST /api/v0/apps/director/goal/observe`
 hasta cierre aceptado. Comando:
 `go test -count=1 ./cmd/orquesta-server -run TestServerNuevaAppHTMLGoalFirstPOSTRenderizaYObservaV0`.
 
-Los backends `app_server_proxy` y `app_server_tmux` observan
-`thread/goal/get`; cuando el goal queda terminal leen `thread/read` con
-`includeTurns=true` y extraen de la respuesta final un marcador estructurado o,
-si el hilo no aporta marcador legible, el archivo durable
-`orquesta_goal_result_v0.json` escrito bajo el write-set:
+El backend operativo normal `app_server_tmux` observa `thread/goal/get`; cuando
+el goal queda terminal lee `thread/read` con `includeTurns=true` y extrae de la
+respuesta final un marcador estructurado o, si el hilo no aporta marcador
+legible, el archivo durable `orquesta_goal_result_v0.json` escrito bajo el
+write-set. `app_server_proxy` conserva el mismo contrato solo como diagnostico
+opt-in:
 
 ```text
 ORQUESTA_GOAL_RESULT_V0 {"goal_ref":"...","summary":"...","artifact_refs":[],"required_test_results":[],"domain_receipt_refs":[],"evidence_refs":[]}
@@ -283,11 +284,12 @@ Goal.
    legacy.
 3. Cablear un launcher real de Codex Goal en `cmd/orquesta-server` solo cuando
    exista puerto seguro para crear/observar goals.
-   Estado 2026-06-26: `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o
-   `app_server_tmux` inyecta starter/observer por `codex app-server`, hace
-   preflight de `thread/loaded/list`, observa `thread/read` y traduce
-   `ORQUESTA_GOAL_RESULT_V0` o `orquesta_goal_result_v0.json` a refs de cierre;
-   smoke real local cerrado el 2026-06-26 con `app_server_tmux`.
+   Estado actualizado 2026-06-29: `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`
+   inyecta starter/observer por `codex app-server`, hace preflight de
+   `thread/loaded/list`, observa `thread/read` y traduce
+   `ORQUESTA_GOAL_RESULT_V0` o `orquesta_goal_result_v0.json` a refs de cierre.
+   `app_server_proxy` queda como diagnostico opt-in. Smoke real local cerrado el
+   2026-06-26 con `app_server_tmux`.
    Repeticion remota aislada 2026-06-29 cerrada con `app_server_tmux`:
    `goal_status=complete`, `run_status=cerrada`,
    `closure_status=accepted`, `closure_accepted=true`, `artifact_refs=2`,
