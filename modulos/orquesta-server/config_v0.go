@@ -234,7 +234,7 @@ func ValidateConfigV0(config ConfigV0) error {
 		if !config.ControlPlane.RemoteAccessOptIn {
 			return fmt.Errorf("orquesta_server: control_plane_remote_opt_in_required")
 		}
-		if config.ControlPlane.Token == "" {
+		if !controlPlaneRemoteTokenStrongEnoughV0(config.ControlPlane.Token) {
 			return fmt.Errorf("orquesta_server: control_plane_token_required")
 		}
 	}
@@ -249,6 +249,20 @@ func ValidateConfigV0(config ConfigV0) error {
 		return fmt.Errorf("orquesta_server: idle_self_improvement_project_work_dir invalido")
 	}
 	return nil
+}
+
+func controlPlaneRemoteTokenStrongEnoughV0(token string) bool {
+	token = strings.TrimSpace(token)
+	if len(token) < 32 {
+		return false
+	}
+	normalized := strings.ToLower(token)
+	for _, prefix := range []string{"change-me", "changeme", "replace-me", "replaceme", "example", "placeholder"} {
+		if strings.HasPrefix(normalized, prefix) {
+			return false
+		}
+	}
+	return true
 }
 
 func controlPlaneAddrIsLoopbackV0(addr string) bool {
