@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -166,6 +168,98 @@ func TestRuntimeGoalFirstResidenteCierraAppSinObserveManualV0(t *testing.T) {
 			serverState.GoalObserverIssues,
 			serverState.GoalObserverOperationalMessage,
 		)
+	}
+}
+
+func TestRuntimeExternalWorkGoalFirstResidenteCierraSinObserveManualV0(t *testing.T) {
+	requireLocalTCPForTestV0(t)
+	disableSelfProgrammingOnlyForGoalFirstHTTPTestV0(t)
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	runtimeDir := filepath.Join(t.TempDir(), "runtime")
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envServerStateDirV0, stateDir)
+	t.Setenv(envCodexRuntimeWorkDirV0, runtimeDir)
+	t.Setenv(envCodexCommandV0, filepath.Join(projectDir, "codex-bin"))
+	t.Setenv(envOPESProjectWorkDirV0, projectDir)
+	t.Setenv(envOPESBaseURLV0, "")
+	t.Setenv("OPES_BASE_URL", "")
+	t.Setenv(envDomainWorkFileEnabledV0, "1")
+	t.Setenv(envDomainWorkFileDirV0, filepath.Join(stateDir, "domain-work-jobs"))
+
+	backend := &goalFirstHTTPBackendForTestV0{projectDir: projectDir}
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	config.Addr = "127.0.0.1:0"
+	config.AuditDisabled = true
+	config.TickInterval = time.Hour
+	config.GoalObserverInterval = time.Hour
+	config.ResidentDirectorEnabled = false
+	config.ShutdownGracePeriod = 500 * time.Millisecond
+	supervisorWakeup := &serverSupervisorWakeupRelayV0{}
+	stack, err := buildStackFromEnvWithGoalBackendV0(config, serverCodexGoalBackendV0{
+		Starter:  backend,
+		Observer: backend,
+	}, supervisorWakeup)
+	if err != nil {
+		t.Fatalf("buildStackFromEnvWithGoalBackendV0: %v", err)
+	}
+	if stack.DomainWork == nil || !stack.DomainDelivery.Enabled || stack.DomainDelivery.Ledger == nil {
+		t.Fatalf("domain delivery aislado no cableado: domain=%T delivery=%+v", stack.DomainWork, stack.DomainDelivery)
+	}
+	appHandler, err := buildServerAppHandlerV0(stack)
+	if err != nil {
+		t.Fatalf("buildServerAppHandlerV0: %v", err)
+	}
+	supervisor := serverStackSupervisorV0{
+		stack:          &stack,
+		projectWorkDir: config.IdleSelfImprovementProjectWorkDir,
+		runtimeWorkDir: config.RuntimeWorkDir,
+		stateDir:       config.StateDir,
+	}
+	runtime, err := orquestaserver.NewRuntimeV0(config, orquestaserver.RuntimeDepsV0{
+		AppHandler:     appHandler,
+		Supervisor:     supervisor,
+		GoalStateStore: stack.Stores.AppGoalStateStore,
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	supervisorWakeup.bindRuntimeV0(runtime)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runtime.RunV0(ctx) }()
+
+	started := postExternalWorkGoalFirstRunURLForTestV0(t, "http://"+waitRuntimeAddrForGoalFirstHTTPTestV0(t, runtime))
+	if started.Estado != orquestamcp.MCPExternalWorkRunEstadoOKV0 ||
+		started.RoutePolicy != orquestamcp.MCPExternalWorkRunRoutePolicyGoalFirstV0 ||
+		started.DirectorExecutionMode != orquestamcp.MCPExternalWorkRunDirectorExecutionModeGoalFirstV0 ||
+		started.GoalRef == "" ||
+		!goalFirstHTTPStringInSetForTestV0(started.NextActions, orquestamcp.MCPExternalWorkRunNextActionObserveActiveGoalsV0) ||
+		goalFirstHTTPStringInSetForTestV0(started.NextActions, orquestamcp.MCPExternalWorkRunNextActionObserveGoalV0) {
+		t.Fatalf("external-work goal-first no arranco en modo residente: %+v", started)
+	}
+	serverState := waitGoalFirstObserverTerminalForTestV0(t, runtime)
+	state := waitGoalFirstClosedForTestV0(t, stack.Stores.AppGoalStateStore, started.RunRef)
+	run := waitExternalWorkRunClosedForTestV0(t, stack.Stores.RunStore, started.RunRef)
+	cancel()
+	if err := waitRuntimeDoneForGoalFirstHTTPTestV0(t, done); err != nil {
+		t.Fatalf("RunV0: %v", err)
+	}
+	if state.Status != orquestagoal.GoalStatusCompleteV0 ||
+		state.LastClosure == nil ||
+		!state.LastClosure.Accepted ||
+		run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		backend.observeCalls == 0 {
+		t.Fatalf("external-work no cerro autonomamente: state=%+v run=%+v backend=%+v", state, run, backend)
+	}
+	if serverState.GoalObserverTerminal == 0 {
+		t.Fatalf("goal observer residente no publico terminal external-work: %+v", serverState)
+	}
+	if !pathExistsForTestV0(filepath.Join(stateDir, "domain-work-jobs", "domain_work_artifacts_v0.json")) {
+		t.Fatalf("domain-work file aislado no recibio artifact submit")
 	}
 }
 
@@ -510,6 +604,55 @@ func postGoalFirstStartURLForTestV0(
 	return result
 }
 
+func postExternalWorkGoalFirstRunURLForTestV0(
+	t *testing.T,
+	baseURL string,
+) orquestamcp.MCPExternalWorkRunToolResultV0 {
+	t.Helper()
+	body := []byte(`{
+		"request_id":"req-http-external-work-goal-first-resident-001",
+		"correlation_id":"corr-http-external-work-goal-first-resident-001",
+		"director_execution_mode":"goal_first",
+		"app_change_request":{
+			"change_ref":"change-ref-http-external-work-goal-first-resident-001",
+			"app_ref":"opes",
+			"user_intent":"Resolver trabajo externo aislado de prueba.",
+			"allowed_write_set":["external/opes/draft_content_block/job-ref-http-resident-001"],
+			"acceptance_criteria":["artefacto domain-work aceptado por conector file aislado"],
+			"external_work":{
+				"project_ref":"opes",
+				"job_ref":"job-ref-http-resident-001",
+				"work_kind":"draft_content_block",
+				"input_fields":[{"name":"topic_id","value":"topic-ref-http-resident-001"}]
+			}
+		}
+	}`)
+	req, err := http.NewRequest(http.MethodPost, baseURL+orquestamcp.MCPExternalWorkRunHTTPPathV0, bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Correlation-ID", "corr-http-external-work-goal-first-resident-001")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("external-work run http: %v", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read external-work run body: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("external-work run status=%d body=%s", resp.StatusCode, string(data))
+	}
+	var result orquestamcp.MCPExternalWorkRunToolResultV0
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("decode external-work run: %v", err)
+	}
+	return result
+}
+
 func postGoalFirstObserveForTestV0(
 	t *testing.T,
 	handler http.Handler,
@@ -579,6 +722,28 @@ func waitGoalFirstClosedForTestV0(
 	}
 	t.Fatalf("goal no cerro autonomamente: last=%+v", last)
 	return orquestagoal.GoalWorkStateV0{}
+}
+
+func waitExternalWorkRunClosedForTestV0(
+	t *testing.T,
+	store orquestacionnucleoapp.RunStorePortV0,
+	runRef string,
+) orquestacoreworkflow.OrchestrationRunV0 {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var last orquestacoreworkflow.OrchestrationRunV0
+	for time.Now().Before(deadline) {
+		run, err := store.LoadRunV0(context.Background(), runRef)
+		if err == nil {
+			last = run
+			if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+				return run
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("external-work run no cerro autonomamente: last=%+v", last)
+	return orquestacoreworkflow.OrchestrationRunV0{}
 }
 
 func waitGoalFirstObserverTerminalForTestV0(
@@ -799,6 +964,7 @@ type goalFirstHTTPBackendForTestV0 struct {
 	packet       orquestaruntimecodexgoal.CodexGoalStartPacketV0
 	startCalls   int
 	observeCalls int
+	projectDir   string
 }
 
 func (backend *goalFirstHTTPBackendForTestV0) StartCodexGoalV0(
@@ -820,6 +986,9 @@ func (backend *goalFirstHTTPBackendForTestV0) ObserveCodexGoalV0(
 	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
 ) (orquestaruntimecodexgoal.CodexGoalObservationReceiptV0, error) {
 	backend.observeCalls++
+	if backend.packet.ClosurePolicy.RequireDomainReceipt && strings.TrimSpace(backend.projectDir) != "" {
+		writeGoalFirstHTTPDomainArtifactsForTestV0(backend.projectDir, backend.packet)
+	}
 	return orquestaruntimecodexgoal.CodexGoalObservationReceiptV0{
 		Status:          orquestagoal.GoalStatusCompleteV0,
 		GoalRef:         request.GoalRef,
@@ -835,6 +1004,31 @@ func (backend *goalFirstHTTPBackendForTestV0) ObserveCodexGoalV0(
 			backend.packet.ClosurePolicy.RequiredEvidenceRefs...,
 		),
 	}, nil
+}
+
+func writeGoalFirstHTTPDomainArtifactsForTestV0(
+	projectDir string,
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+) {
+	if len(packet.WriteSet) == 0 {
+		return
+	}
+	scopePath := filepath.ToSlash(strings.Trim(filepath.Clean(strings.TrimSpace(packet.WriteSet[0].Path)), "/"))
+	if scopePath == "" || scopePath == "." || strings.HasPrefix(scopePath, "../") {
+		return
+	}
+	dir := filepath.Join(projectDir, filepath.FromSlash(scopePath))
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return
+	}
+	for _, contract := range packet.ArtifactContracts {
+		artifactType := strings.TrimSpace(contract.ArtifactType)
+		if !contract.Required || artifactType == "" {
+			continue
+		}
+		body := `{"artifact_type":"` + artifactType + `","payload_json":{"body":"Contenido de prueba external-work goal-first residente.","topic_id":"topic-ref-http-resident-001"}}`
+		_ = os.WriteFile(filepath.Join(dir, artifactType+".json"), []byte(body), 0o600)
+	}
 }
 
 func goalFirstHTTPRequiredArtifactRefsForTestV0(
