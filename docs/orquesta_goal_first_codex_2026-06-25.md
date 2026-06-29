@@ -88,9 +88,10 @@ Orquesta decide si el resultado cierra:
 El adaptador no conoce HOME, modelo, proveedor, OAuth, token, command path ni
 filesystem productivo. El arranque real queda en composicion opt-in.
 
-El 2026-06-25 se cablea en `cmd/orquesta-server` un transporte real opt-in con
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`. El 2026-06-28 se fija
-`app_server_tmux` como backend local operativo: Orquesta asegura un
+Historicamente, el 2026-06-25 se cableo en `cmd/orquesta-server` un transporte
+real opt-in con `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`. Desde el
+2026-06-28 el backend local operativo normal es `app_server_tmux`: Orquesta
+asegura un
 `codex app-server --listen unix://<socket>` dentro de una sesion `tmux` opaca y
 habla con el por WebSocket sobre un Unix socket privado y corto bajo
 `RuntimeWorkDir`. El app-server usa un `CODEX_HOME` aislado bajo ese runtime con
@@ -153,7 +154,8 @@ La composicion hace un preflight rapido del backend app-server al arrancar el
 stack. Para `app_server_tmux`, primero asegura la sesion `tmux`, crea el socket
 privado bajo `RuntimeWorkDir` y valida `thread/loaded/list` por WebSocket UDS;
 no considera listo un tmux vivo sin respuesta de protocolo. Para
-`app_server_proxy`, valida el daemon/socket ya gestionado. Si falta el socket
+`app_server_proxy`, solo en diagnostico opt-in, valida el daemon/socket ya
+gestionado. Si falta el socket
 local, tmux no esta disponible, el path del socket excede limites del sistema,
 la instalacion standalone requerida por
 `codex app-server daemon` no existe o el backend no responde, se inyecta un

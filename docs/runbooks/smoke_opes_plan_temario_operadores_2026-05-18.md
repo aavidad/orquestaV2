@@ -18,14 +18,18 @@ externo y lo resuelve mediante Director/supervisor, agentes y `DomainWork`.
 
 ## Quien orquesta
 
-La ruta legacy vigente para este smoke no es un script paralelo ni stdin. Hasta
-que exista external-work Goal-first, este camino debe tratarse como
-compatibilidad `legacy_director_loop`:
+Estado vigente: OPES es consumidor por adaptador y la ruta normal para trabajo
+nuevo es Goal-first cuando la composicion expone backend Goal. La ruta
+`legacy_director_loop` de este runbook conserva la evidencia historica del
+smoke del 2026-05-18 y solo debe usarse como replay/compatibilidad explicita;
+no sustituye `external-work/run -> goal_first -> goal/observe`.
+
+Ruta historica de replay:
 
 ```text
 OPES plan_temario pending
   -> opes-drain-once / opes bridge loop
-  -> /api/v0/external-work/run con director_execution_mode=legacy_director_loop
+  -> /api/v0/external-work/run con director_execution_mode=legacy_director_loop explicito
   -> cola de runs de Orquesta
   -> supervisor residente con allow_legacy_drain desde opt-in o POST /api/v0/runs/supervise con director_execution_mode=legacy_director_loop
   -> ContinueAppDirectorV0 / DrainRunV0
@@ -37,8 +41,8 @@ OPES plan_temario pending
 
 Si `cmd/orquesta-server run` esta activo, el supervisor global del servidor ya
 empuja la cola en cada tick. `POST /api/v0/runs/supervise` queda como empuje
-manual/acotado para una run concreta, no como canal alternativo. En ambos
-casos legacy hacen falta las dos llaves: opt-in de composicion
+manual/acotado para una run concreta, no como canal alternativo. En los casos
+legacy hacen falta las dos llaves: opt-in de composicion
 (`ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1` para esta ruta OPES) y
 `director_execution_mode=legacy_director_loop`; el tick residente traduce ese
 opt-in a `allow_legacy_drain`.
@@ -132,8 +136,8 @@ Esta prueba valida:
   superiores, derivacion A1/A2 o A1 -> B/C1 -> C2/AP, asimilacion y criterios
   de calidad;
 - el bridge filtra `job_type=plan_temario` y puede acotar por `job_ref`;
-- `/api/v0/external-work/run` recibe el trabajo y declara
-  `route_policy=legacy_director_loop`;
+- `/api/v0/external-work/run` recibe el trabajo historico y, solo en replay
+  legacy explicito, declara `route_policy=legacy_director_loop`;
 - `/api/v0/runs/supervise` empuja la run legacy o la sustituye el supervisor
   residente;
 - el artefacto termina en `DomainWork.submit_artifact`;

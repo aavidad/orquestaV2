@@ -36,6 +36,30 @@ smoke_is_local_url() {
   esac
 }
 
+smoke_require_opes_temporal_destination() {
+  local url="$1"
+  local label="${2:-OPES_BASE_URL}"
+  if [[ "${ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM:-0}" == "1" ||
+    "${ORQUESTA_OPES_PRODUCTIVE_CONFIRM:-0}" == "1" ]]; then
+    echo "smoke OPES bloqueado: no ejecutar contra OPES productivo" >&2
+    exit 2
+  fi
+  if [[ "${ORQUESTA_OPES_TEMPORAL_CONFIRM:-0}" != "1" ]]; then
+    echo "smoke OPES bloqueado: confirma instancia temporal con ORQUESTA_OPES_TEMPORAL_CONFIRM=1" >&2
+    exit 2
+  fi
+  if [[ -z "$url" ]]; then
+    echo "smoke OPES bloqueado: define $label apuntando a OPES temporal" >&2
+    exit 2
+  fi
+  if ! smoke_is_local_url "$url" &&
+    [[ "${ORQUESTA_OPES_ALLOW_NONLOCAL_TEMPORAL:-0}" != "1" ]]; then
+    echo "smoke OPES bloqueado: $label no parece loopback: $(smoke_public_url_ref "$url")" >&2
+    echo "si es temporal no local, exporta ORQUESTA_OPES_ALLOW_NONLOCAL_TEMPORAL=1" >&2
+    exit 2
+  fi
+}
+
 smoke_public_url_ref() {
   printf '%s' "$1" |
     sed -E 's#(https?://)[^/@[:space:]]+@#\1[redacted]@#; s#\?.*$#?[redacted]#'

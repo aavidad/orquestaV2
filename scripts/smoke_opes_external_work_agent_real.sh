@@ -14,6 +14,7 @@ if [[ "${ORQUESTA_OPES_AGENT_SMOKE_CONFIRM:-0}" != "1" ]]; then
 fi
 
 OPES_BASE_URL="${OPES_BASE_URL:-http://127.0.0.1:18082}"
+smoke_require_opes_temporal_destination "$OPES_BASE_URL" "OPES_BASE_URL"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 smoke_root_source="generated"
 if [[ -n "${SMOKE_ROOT:-}" ]]; then
