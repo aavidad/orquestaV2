@@ -11,10 +11,16 @@ func TestSelfProgrammingDeployContractV0NoMontaProduccionNiExponePuertoPublicoV0
 	root := filepath.Join("..", "..")
 	compose := mustReadSelfProgrammingDeployFileForTestV0(t, root, "deploy", "self-programming", "docker-compose.yml")
 	envExample := mustReadSelfProgrammingDeployFileForTestV0(t, root, "deploy", "self-programming", "orquesta-self.env.example")
+	dockerfiles := []string{
+		mustReadSelfProgrammingDeployFileForTestV0(t, root, "Dockerfile"),
+		mustReadSelfProgrammingDeployFileForTestV0(t, root, "Dockerfile.dev"),
+		mustReadSelfProgrammingDeployFileForTestV0(t, root, "Dockerfile.self-programming"),
+	}
 
 	for _, forbidden := range []string{
 		"/home/berserk/deploy/opes",
 		"/var/run/docker.sock",
+		"/home/orquesta",
 		"uso-app",
 		"opes-api",
 		"0.0.0.0:19039:19039",
@@ -23,6 +29,11 @@ func TestSelfProgrammingDeployContractV0NoMontaProduccionNiExponePuertoPublicoV0
 	} {
 		if strings.Contains(compose, forbidden) || strings.Contains(envExample, forbidden) {
 			t.Fatalf("deploy self-programming contiene referencia prohibida %q", forbidden)
+		}
+	}
+	for _, dockerfile := range dockerfiles {
+		if strings.Contains(dockerfile, "/home/orquesta") {
+			t.Fatalf("Dockerfile activo contiene HOME no aislado en /workspace")
 		}
 	}
 	for _, required := range []string{
