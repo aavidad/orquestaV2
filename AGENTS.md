@@ -72,9 +72,11 @@ Tras los cortes del 2026-05-17, el estado real es:
   `close`, replay/idempotencia del ciclo probado y estado vivo posterior ya
   tienen evidencia offline/fake-runtime. `CODEX-REQTEST-REAL-E2E` cierra un caso
   Codex real acotado con un agente, `EXT-NO-OPES` cierra una app externa
-  temporal con `codex-fake`, `CODEX-WAVE-REAL` cierra ola/cohorte Codex amplia y
-  `CODEX-RECURSION-REAL` cierra recursion Codex real; sigue pendiente OPES
-  temporal real de derivados/cierre.
+  temporal con `codex-fake`, `CODEX-WAVE-REAL` cierra ola/cohorte Codex amplia,
+  `CODEX-RECURSION-REAL` cierra recursion Codex real y OPES derivados/cierre
+  quedo cerrado funcionalmente por goal-first temporal en
+  `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`;
+  quedan residuales de calidad editorial, coste y automatizacion larga.
 - El nuevo handoff de cierre es
   `docs/corte_cierre_generico_director_operativo_2026-05-17.md`: P1
   `WaitAgentRefs` no se reabre salvo regresion; el foco es cierre causal
@@ -90,9 +92,10 @@ Tras los cortes del 2026-05-17, el estado real es:
   es `orquesta.domain_work.v0` en `orquesta-mcp`; REST OPES es solo el
   adaptador inyectado hoy, y MCPO/servidor MCP real debe quedar como transporte
   opt-in. El smoke real acotado de `plan_temario` contra OPES temporal ya cerro
-  solo el plan y la creacion de derivados pendientes; sigue pendiente smoke real
-  completo de derivados/cierre OPES hasta `generate_html_site`, sin tocar OPES
-  productivo ni drenar colas amplias. El flujo vigente de temario completo esta
+  el plan y la creacion de derivados pendientes; el smoke goal-first temporal
+  del 2026-06-28 cerro derivados/cierre hasta `completed_syllabus_package`, sin
+  tocar OPES productivo ni drenar colas amplias. El flujo vigente de temario
+  completo esta
   en `docs/opes_flujo_temario_operativo_2026-06-02.md`: investigacion web de
   examenes relacionados, redaccion, infografias, banco de tests, revisiones,
   ensamblado, audios por tema/apartado, tutor/bots y HTML local USO/TCAE antes

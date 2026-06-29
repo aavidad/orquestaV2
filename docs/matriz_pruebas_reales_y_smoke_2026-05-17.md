@@ -218,8 +218,10 @@ regresion del caso acotado ya cerrado, usar
   `./scripts/smoke_codex_real_required_test_runner.sh` solo con confirmaciones,
 cuota y workdirs temporales validados. Ola/cohorte Codex amplia y recursion real
 ya estan cubiertas por `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL`; no son
-backlog abierto salvo regresion demostrada. Derivados OPES reales siguen sin
-cierre generico equivalente. La ruta no-OPES temporal con `codex-fake` esta
+backlog abierto salvo regresion demostrada. Derivados OPES reales quedaron
+cerrados funcionalmente por goal-first temporal en `OPES-DER-RESTO`; quedan
+residuales de calidad editorial, coste y automatizacion larga. La ruta no-OPES
+temporal con `codex-fake` esta
 cubierta por `EXT-NO-OPES`; repetirla con proveedor Codex real es smoke opcional
 de proveedor, no prerequisito del cierre no-OPES.
 
@@ -279,8 +281,10 @@ evidencia focal propia.
 
 ## Huecos pendientes
 
-- No hay cierre real completo para derivados OPES de revision, validacion y
-  ensamblado contra instancia OPES temporal.
+- Derivados OPES de revision, validacion, ensamblado y paquete final quedaron
+  cerrados funcionalmente contra instancia OPES temporal por goal-first en
+  `OPES-DER-RESTO`; no reejecutar contra OPES real/productivo para cerrar este
+  hueco salvo regresion y confirmaciones opt-in.
 - El smoke real no-OPES con servidor temporal ya cubre `create_job` por REST,
   idempotencia, snapshot file-based, `external-work/run`, ejecucion de
   `codex-fake` por runtime/servidor, artefacto, delivery durable sin OPES,

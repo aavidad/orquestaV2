@@ -87,8 +87,11 @@ revalidar este modulo junto al conector es:
 go test -count=1 ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector
 ```
 
-El smoke real de derivados/cierre sigue bloqueado hasta tener OPES temporal,
-Orquesta temporal, `ORQUESTA_OPES_TEMPORAL_CONFIRM=1`,
-`ORQUESTA_OPES_BASE_URL`, `ORQUESTA_BASE_URL`, limite bajo y confirmacion de
-efectos. Sin esas precondiciones, el resultado correcto es bloqueo verificable,
-no nuevo relanzamiento de implementacion.
+El smoke real de derivados/cierre quedo cerrado funcionalmente el 2026-06-28
+por goal-first contra OPES temporal hasta `completed_syllabus_package`; ver
+`docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md` y
+la fila `OPES-DER-RESTO` de la matriz vigente. Cualquier repeticion debe seguir
+exigiendo OPES temporal, Orquesta temporal, `ORQUESTA_OPES_TEMPORAL_CONFIRM=1`,
+`ORQUESTA_OPES_BASE_URL`, `ORQUESTA_BASE_URL`, limite bajo, scope duro y
+confirmacion de efectos. Sin esas precondiciones, el resultado correcto es
+bloqueo verificable, no nuevo relanzamiento de implementacion.

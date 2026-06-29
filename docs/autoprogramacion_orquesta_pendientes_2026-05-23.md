@@ -334,15 +334,13 @@ Pendiente verificable:
   genero la app temporal, corrigio tests tras `listen EPERM`, paso
   `npm run verify`, escribio `orquesta_goal_result_v0.json` con el `test_ref`
   literal y Orquesta acepto el cierre sin caer al loop legacy.
-- Revalidar OPES temporal con derivados/cierre cuando exista la ruta goal-first
-  real; no tocar OPES productivo ni drenar colas amplias.
-- Gate pendiente antes de declarar 100% global con OPES/external-work:
-  `OPES-GOAL-FIRST-E2E` sobre instancia temporal de un tema. Debe entrar por
-  `external-work`/`domain-work`, compilar `GoalWorkSpecV0` como ruta normal o
-  declarar legacy explicito con `director_execution_mode=legacy_director_loop`,
-  materializar contrato OPES 1+6 cuando aplique, producir resultado
-  durable, validar cierre por evidencias/validadores, lanzar rework goal si
-  falla el cierre y sobrevivir a restart/observe/stop sin HTTP colgado.
+- OPES temporal con derivados/cierre quedo revalidado funcionalmente por
+  goal-first el 2026-06-28 en
+  `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`:
+  24/24 jobs completados hasta `completed_syllabus_package`, loop legacy
+  desactivado y cierre por evidencias/receipts. No reabrir
+  `OPES-GOAL-FIRST-E2E` salvo regresion demostrada; los residuales son calidad
+  editorial, coste y automatizacion larga.
 - Mantener el loop `app-director-service`/`PlanState` solo como compatibilidad
   legacy hasta cerrar smokes equivalentes de OPES temporal, external-work,
   app-change y rutas residentes. No borrar codigo historico sin evidencia

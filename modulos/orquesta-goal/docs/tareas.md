@@ -12,8 +12,9 @@ Criterio:
 
 ## GOAL-002 composicion residente
 
-Estado: cerrado localmente para wiring opt-in; smoke real app-server stdio
-cerrado el 2026-06-26.
+Estado: cerrado localmente para wiring opt-in; smoke real app-server con
+`app_server_tmux` cerrado el 2026-06-26 y repetido en entorno remoto aislado el
+2026-06-29. `app_server_stdio` queda retirado y no es backend operativo.
 
 `cmd/orquesta-server` puede inyectar launcher/observer con
 `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_tmux`;
