@@ -149,12 +149,21 @@ func TestStoreV0AppDirectorGoalStateListaActivosTrasRecreate(t *testing.T) {
 		"goal-ref-state-file-complete-001",
 		orquestagoal.GoalStatusCompleteV0,
 	)
+	completeAccepted := appDirectorGoalStateWithRefsForTestV0(
+		"run-ref-state-file-complete-accepted-001",
+		"goal-ref-state-file-complete-accepted-001",
+		orquestagoal.GoalStatusCompleteV0,
+	)
+	completeAccepted.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:   orquestagoal.GoalStatusAcceptedV0,
+		Accepted: true,
+	}
 	blocked := appDirectorGoalStateWithRefsForTestV0(
 		"run-ref-state-file-blocked-001",
 		"goal-ref-state-file-blocked-001",
 		orquestagoal.GoalStatusBlockedV0,
 	)
-	for _, state := range []orquestagoal.GoalWorkStateV0{complete, running, blocked} {
+	for _, state := range []orquestagoal.GoalWorkStateV0{complete, completeAccepted, running, blocked} {
 		if err := store.SaveGoalWorkStateV0(context.Background(), state); err != nil {
 			t.Fatalf("SaveGoalWorkStateV0: %v", err)
 		}
@@ -169,7 +178,7 @@ func TestStoreV0AppDirectorGoalStateListaActivosTrasRecreate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListGoalWorkStatesV0 active: %v", err)
 	}
-	if len(active) != 1 || active[0].RunRef != running.RunRef {
+	if len(active) != 2 || active[0].RunRef != running.RunRef || active[1].RunRef != complete.RunRef {
 		t.Fatalf("active=%+v", active)
 	}
 	terminal, err := recovered.ListGoalWorkStatesV0(context.Background(), orquestagoal.GoalWorkStateListRequestV0{

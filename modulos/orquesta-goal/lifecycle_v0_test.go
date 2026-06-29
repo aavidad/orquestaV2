@@ -339,8 +339,12 @@ func TestGoalWorkStateMatchesListRequestV0FiltraActivos(t *testing.T) {
 		t.Fatalf("state running deberia coincidir: %+v", state)
 	}
 	state.Status = GoalStatusCompleteV0
+	if !GoalWorkStateMatchesListRequestV0(state, GoalWorkStateListRequestV0{ActiveOnly: true}) {
+		t.Fatalf("state complete sin cierre aceptado sigue pendiente de observacion: %+v", state)
+	}
+	state.LastClosure = &GoalClosureValidationV0{Status: GoalStatusAcceptedV0, Accepted: true}
 	if GoalWorkStateMatchesListRequestV0(state, GoalWorkStateListRequestV0{ActiveOnly: true}) {
-		t.Fatalf("state terminal no deberia coincidir: %+v", state)
+		t.Fatalf("state complete con cierre aceptado no deberia coincidir: %+v", state)
 	}
 	if !GoalWorkStateMatchesListRequestV0(state, GoalWorkStateListRequestV0{
 		RunRefs:  []string{" run-ref-goal-lifecycle-001 "},

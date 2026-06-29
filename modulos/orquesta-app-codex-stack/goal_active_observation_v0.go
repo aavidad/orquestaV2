@@ -30,6 +30,9 @@ func (stack *StackV0) ObserveActiveGoalWorksV0(
 	}
 	out := orquestagoal.GoalWorkObserveActiveResultV0{}
 	for _, state := range states {
+		if !orquestagoal.GoalWorkStatePendingObservationV0(state) {
+			continue
+		}
 		runRef := strings.TrimSpace(state.RunRef)
 		if runRef == "" {
 			out.Issues = append(out.Issues, orquestagoal.GoalWorkObserveActiveIssueV0{

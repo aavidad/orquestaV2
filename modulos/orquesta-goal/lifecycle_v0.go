@@ -336,7 +336,7 @@ func NormalizeGoalWorkStateListRequestV0(
 	request.RunRefs = compactGoalStringsV0(request.RunRefs)
 	request.Statuses = compactGoalStringsV0(request.Statuses)
 	if request.ActiveOnly && len(request.Statuses) == 0 {
-		request.Statuses = []string{GoalStatusRunningV0}
+		request.Statuses = []string{GoalStatusRunningV0, GoalStatusCompleteV0}
 	}
 	if request.MaxItems < 0 {
 		request.MaxItems = 0
@@ -353,6 +353,9 @@ func GoalWorkStateMatchesListRequestV0(
 		return false
 	}
 	if len(request.Statuses) > 0 && !goalStringInSetV0(request.Statuses, state.Status) {
+		return false
+	}
+	if request.ActiveOnly && !GoalWorkStatePendingObservationV0(state) {
 		return false
 	}
 	return strings.TrimSpace(state.RunRef) != "" && strings.TrimSpace(state.GoalRef) != ""

@@ -12,6 +12,7 @@ import (
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestaappgateway "orquesta/modulos/orquesta-app-gateway"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestahttpgateway "orquesta/modulos/orquesta-http-gateway"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
@@ -167,6 +168,7 @@ func buildStackFromEnvWithGoalBackendV0(
 	runControl := orquestaruncontrol.RunControlPortV0(runFileStore)
 	receiptStorePort := orquestaappcodexstack.CodexReceiptStorePortV0(receiptStore)
 	appChangeStore := orquestaappchange.AppChangeRecordStorePortV0(runFileStore)
+	var appGoalStateStore orquestagoal.GoalWorkStateStorePortV0 = stateStore
 	domainDeliveryLedger := domainDeliveryLedgerFromEnvV0(serverConfig)
 	if supervisorWakeup != nil {
 		runStore = serverWakeupRunStoreV0{inner: stateStore, wakeup: supervisorWakeup}
@@ -178,6 +180,10 @@ func buildStackFromEnvWithGoalBackendV0(
 		}
 		receiptStorePort = serverWakeupCodexReceiptStoreV0{
 			inner:  receiptStorePort,
+			wakeup: supervisorWakeup,
+		}
+		appGoalStateStore = serverWakeupGoalStateStoreV0{
+			inner:  stateStore,
 			wakeup: supervisorWakeup,
 		}
 		outboxLedgerPort = serverWakeupDirectorCycleOutboxLedgerV0{
@@ -208,7 +214,7 @@ func buildStackFromEnvWithGoalBackendV0(
 			ProcessRegistry:            stateStore,
 			RunControl:                 runControl,
 			RunQueue:                   runQueue,
-			AppGoalStateStore:          stateStore,
+			AppGoalStateStore:          appGoalStateStore,
 		},
 		RunQueue: orquestaappcodexstack.RunQueueConfigV0{
 			QueueRef:       "global",

@@ -10,6 +10,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
@@ -22,6 +23,7 @@ type serverSupervisorWakeupRelayV0 struct {
 	mu                      sync.RWMutex
 	request                 func(string) bool
 	requestResidentDirector func(string) bool
+	requestGoalObservation  func(string) bool
 }
 
 func (relay *serverSupervisorWakeupRelayV0) bindRuntimeV0(runtime *orquestaserver.RuntimeV0) {
@@ -33,10 +35,12 @@ func (relay *serverSupervisorWakeupRelayV0) bindRuntimeV0(runtime *orquestaserve
 	if runtime == nil {
 		relay.request = nil
 		relay.requestResidentDirector = nil
+		relay.requestGoalObservation = nil
 		return
 	}
 	relay.request = runtime.RequestSupervisorWakeupV0
 	relay.requestResidentDirector = runtime.RequestResidentDirectorWakeupV0
+	relay.requestGoalObservation = runtime.RequestGoalObservationWakeupV0
 }
 
 func (relay *serverSupervisorWakeupRelayV0) requestV0(cause string) bool {
@@ -58,6 +62,19 @@ func (relay *serverSupervisorWakeupRelayV0) requestResidentDirectorV0(cause stri
 	}
 	relay.mu.RLock()
 	request := relay.requestResidentDirector
+	relay.mu.RUnlock()
+	if request == nil {
+		return false
+	}
+	return request(cause)
+}
+
+func (relay *serverSupervisorWakeupRelayV0) requestGoalObservationV0(cause string) bool {
+	if relay == nil {
+		return false
+	}
+	relay.mu.RLock()
+	request := relay.requestGoalObservation
 	relay.mu.RUnlock()
 	if request == nil {
 		return false
@@ -311,6 +328,68 @@ func (store serverWakeupCodexReceiptStoreV0) RecordDirectorAgentDecisionFileCons
 	store.wakeup.requestV0("director_decision_sidecar_consumed")
 	store.wakeup.requestResidentDirectorV0("director_decision_sidecar_consumed")
 	return nil
+}
+
+type serverWakeupGoalStateStoreV0 struct {
+	inner  serverWakeupGoalStateStorePortV0
+	wakeup *serverSupervisorWakeupRelayV0
+}
+
+type serverWakeupGoalStateStorePortV0 interface {
+	orquestagoal.GoalWorkStateStorePortV0
+	orquestagoal.GoalWorkRunMarkerStorePortV0
+	orquestagoal.GoalWorkRunMarkerListPortV0
+	orquestagoal.GoalWorkStateListPortV0
+}
+
+func (store serverWakeupGoalStateStoreV0) SaveGoalWorkStateV0(
+	ctx context.Context,
+	state orquestagoal.GoalWorkStateV0,
+) error {
+	if err := store.inner.SaveGoalWorkStateV0(ctx, state); err != nil {
+		return err
+	}
+	store.wakeup.requestGoalObservationV0("goal_state_saved")
+	return nil
+}
+
+func (store serverWakeupGoalStateStoreV0) LoadGoalWorkStateV0(
+	ctx context.Context,
+	runRef string,
+) (orquestagoal.GoalWorkStateV0, error) {
+	return store.inner.LoadGoalWorkStateV0(ctx, runRef)
+}
+
+func (store serverWakeupGoalStateStoreV0) SaveGoalWorkRunMarkerV0(
+	ctx context.Context,
+	marker orquestagoal.GoalWorkRunMarkerV0,
+) error {
+	if err := store.inner.SaveGoalWorkRunMarkerV0(ctx, marker); err != nil {
+		return err
+	}
+	store.wakeup.requestGoalObservationV0("goal_run_marker_saved")
+	return nil
+}
+
+func (store serverWakeupGoalStateStoreV0) LoadGoalWorkRunMarkerV0(
+	ctx context.Context,
+	runRef string,
+) (orquestagoal.GoalWorkRunMarkerV0, error) {
+	return store.inner.LoadGoalWorkRunMarkerV0(ctx, runRef)
+}
+
+func (store serverWakeupGoalStateStoreV0) ListGoalWorkRunMarkersV0(
+	ctx context.Context,
+	request orquestagoal.GoalWorkRunMarkerListRequestV0,
+) ([]orquestagoal.GoalWorkRunMarkerV0, error) {
+	return store.inner.ListGoalWorkRunMarkersV0(ctx, request)
+}
+
+func (store serverWakeupGoalStateStoreV0) ListGoalWorkStatesV0(
+	ctx context.Context,
+	request orquestagoal.GoalWorkStateListRequestV0,
+) ([]orquestagoal.GoalWorkStateV0, error) {
+	return store.inner.ListGoalWorkStatesV0(ctx, request)
 }
 
 type serverWakeupDomainWorkArtifactSubmissionLedgerV0 struct {

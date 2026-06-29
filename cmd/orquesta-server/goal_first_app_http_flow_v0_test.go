@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
@@ -17,6 +18,7 @@ import (
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
+	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
 func TestServerAppHTTPGoalFirstLanzaObservaYCierraV0(t *testing.T) {
@@ -83,6 +85,87 @@ func TestServerAppHTTPGoalFirstLanzaObservaYCierraV0(t *testing.T) {
 		observed.ClosureStatus != orquestagoal.GoalStatusAcceptedV0 ||
 		!observed.ClosureAccepted {
 		t.Fatalf("observed=%+v", observed)
+	}
+}
+
+func TestRuntimeGoalFirstResidenteCierraAppSinObserveManualV0(t *testing.T) {
+	requireLocalTCPForTestV0(t)
+	disableSelfProgrammingOnlyForGoalFirstHTTPTestV0(t)
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	runtimeDir := filepath.Join(t.TempDir(), "runtime")
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envServerStateDirV0, stateDir)
+	t.Setenv(envCodexRuntimeWorkDirV0, runtimeDir)
+	t.Setenv(envCodexCommandV0, filepath.Join(projectDir, "codex-bin"))
+	t.Setenv(envOPESBaseURLV0, "")
+	t.Setenv("OPES_BASE_URL", "")
+
+	backend := &goalFirstHTTPBackendForTestV0{}
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	config.Addr = "127.0.0.1:0"
+	config.AuditDisabled = true
+	config.TickInterval = time.Hour
+	config.GoalObserverInterval = time.Hour
+	config.ResidentDirectorEnabled = false
+	config.ShutdownGracePeriod = 500 * time.Millisecond
+	supervisorWakeup := &serverSupervisorWakeupRelayV0{}
+	stack, err := buildStackFromEnvWithGoalBackendV0(config, serverCodexGoalBackendV0{
+		Starter:  backend,
+		Observer: backend,
+	}, supervisorWakeup)
+	if err != nil {
+		t.Fatalf("buildStackFromEnvWithGoalBackendV0: %v", err)
+	}
+	appHandler, err := buildServerAppHandlerV0(stack)
+	if err != nil {
+		t.Fatalf("buildServerAppHandlerV0: %v", err)
+	}
+	supervisor := serverStackSupervisorV0{
+		stack:          &stack,
+		projectWorkDir: config.IdleSelfImprovementProjectWorkDir,
+		runtimeWorkDir: config.RuntimeWorkDir,
+		stateDir:       config.StateDir,
+	}
+	runtime, err := orquestaserver.NewRuntimeV0(config, orquestaserver.RuntimeDepsV0{
+		AppHandler:     appHandler,
+		Supervisor:     supervisor,
+		GoalStateStore: stack.Stores.AppGoalStateStore,
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	supervisorWakeup.bindRuntimeV0(runtime)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- runtime.RunV0(ctx) }()
+
+	started := postGoalFirstStartURLForTestV0(t, "http://"+waitRuntimeAddrForGoalFirstHTTPTestV0(t, runtime))
+	serverState := waitGoalFirstObserverTerminalForTestV0(t, runtime)
+	state := waitGoalFirstClosedForTestV0(t, stack.Stores.AppGoalStateStore, started.RunRef)
+	cancel()
+	if err := waitRuntimeDoneForGoalFirstHTTPTestV0(t, done); err != nil {
+		t.Fatalf("RunV0: %v", err)
+	}
+	if state.Status != orquestagoal.GoalStatusCompleteV0 ||
+		state.LastClosure == nil ||
+		!state.LastClosure.Accepted ||
+		backend.observeCalls == 0 {
+		t.Fatalf("goal no cerro autonomamente: state=%+v backend=%+v", state, backend)
+	}
+	if serverState.GoalObserverTicks == 0 || serverState.GoalObserverTerminal == 0 {
+		t.Fatalf(
+			"goal observer residente no dejo evidencia terminal: status=%s ticks=%d observed=%d terminal=%d issues=%d message=%+v",
+			serverState.GoalObserverStatus,
+			serverState.GoalObserverTicks,
+			serverState.GoalObserverObserved,
+			serverState.GoalObserverTerminal,
+			serverState.GoalObserverIssues,
+			serverState.GoalObserverOperationalMessage,
+		)
 	}
 }
 
@@ -385,6 +468,48 @@ func postGoalFirstStartForTestV0(
 	return result
 }
 
+func postGoalFirstStartURLForTestV0(
+	t *testing.T,
+	baseURL string,
+) orquestamcp.MCPArrancarDirectorAppToolResultV0 {
+	t.Helper()
+	body := []byte(`{
+		"request_id":"req-http-goal-first-resident-001",
+		"correlation_id":"corr-http-goal-first-resident-001",
+		"app_spec_request":{
+			"schema_version":"app_spec_request.v0",
+			"request_id":"request-ref-http-goal-first-resident-001",
+			"source":"orquesta-web",
+			"locale":"es-ES",
+			"nombre":"Agenda",
+			"objetivo":"Gestionar contactos y citas desde una API y una web.",
+			"tipo_app":"mixed",
+			"preferencias_tecnicas":{"lenguaje":"go","arquitectura":"hexagonal"},
+			"calidad":{"pruebas":"media","accesibilidad":"basica","observabilidad":true}
+		}
+	}`)
+	req, err := http.NewRequest(http.MethodPost, baseURL+orquestamcp.MCPArrancarDirectorAppHTTPPathV0, bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Correlation-ID", "corr-http-goal-first-resident-001")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("start http: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("start status=%d", resp.StatusCode)
+	}
+	var result orquestamcp.MCPArrancarDirectorAppToolResultV0
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode start: %v", err)
+	}
+	return result
+}
+
 func postGoalFirstObserveForTestV0(
 	t *testing.T,
 	handler http.Handler,
@@ -413,6 +538,79 @@ func postGoalFirstObserveForTestV0(
 		t.Fatalf("decode observe: %v", err)
 	}
 	return result
+}
+
+func waitRuntimeAddrForGoalFirstHTTPTestV0(
+	t *testing.T,
+	runtime *orquestaserver.RuntimeV0,
+) string {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		state := runtime.StateV0()
+		if state.Status == "running" && state.Addr != "" {
+			return state.Addr
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("runtime no publico addr: %+v", runtime.StateV0())
+	return ""
+}
+
+func waitGoalFirstClosedForTestV0(
+	t *testing.T,
+	store orquestagoal.GoalWorkStateStorePortV0,
+	runRef string,
+) orquestagoal.GoalWorkStateV0 {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var last orquestagoal.GoalWorkStateV0
+	for time.Now().Before(deadline) {
+		state, err := store.LoadGoalWorkStateV0(context.Background(), runRef)
+		if err == nil {
+			last = state
+			if state.Status == orquestagoal.GoalStatusCompleteV0 &&
+				state.LastClosure != nil &&
+				state.LastClosure.Accepted {
+				return state
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("goal no cerro autonomamente: last=%+v", last)
+	return orquestagoal.GoalWorkStateV0{}
+}
+
+func waitGoalFirstObserverTerminalForTestV0(
+	t *testing.T,
+	runtime *orquestaserver.RuntimeV0,
+) orquestaserver.StateV0 {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var last orquestaserver.StateV0
+	for time.Now().Before(deadline) {
+		last = runtime.StateV0()
+		if last.GoalObserverTerminal > 0 && !last.GoalObserverTickActive {
+			return last
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("goal observer residente no publico terminal: %+v", last.GoalObserverOperationalMessage)
+	return orquestaserver.StateV0{}
+}
+
+func waitRuntimeDoneForGoalFirstHTTPTestV0(
+	t *testing.T,
+	done <-chan error,
+) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(2 * time.Second):
+		t.Fatalf("runtime no paro")
+		return nil
+	}
 }
 
 func postAutoprogrammingGoalFirstPrepareForTestV0(
