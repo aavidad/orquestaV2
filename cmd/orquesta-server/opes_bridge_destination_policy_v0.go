@@ -26,6 +26,9 @@ func opesDrainDestinationPolicyFromEnvV0(
 	orquestaBaseURL string,
 	dryRun bool,
 ) (opesDrainDestinationPolicyV0, error) {
+	if strings.TrimSpace(os.Getenv(envOPESBridgeProductiveConfirmV0)) == "1" {
+		return opesDrainDestinationPolicyV0{}, fmt.Errorf("opes_destination_productive_not_allowed")
+	}
 	opes, err := opesBridgeDestinationFromURLV0("opes", opesBaseURL, dryRun)
 	if err != nil {
 		return opesDrainDestinationPolicyV0{}, err
@@ -38,8 +41,8 @@ func opesDrainDestinationPolicyFromEnvV0(
 		return opesDrainDestinationPolicyV0{}, err
 	}
 	evidenceRef := strings.TrimSpace(os.Getenv(envOPESBridgeDestinationEvidenceV0))
-	if needsProductiveEvidenceV0(opes, orquesta) && !compactEvidenceRefV0(evidenceRef) {
-		return opesDrainDestinationPolicyV0{}, fmt.Errorf("opes_destination_evidence_ref_required")
+	if evidenceRef != "" && !compactEvidenceRefV0(evidenceRef) {
+		return opesDrainDestinationPolicyV0{}, fmt.Errorf("opes_destination_evidence_ref_invalid")
 	}
 	if evidenceRef == "" {
 		evidenceRef = opesBridgeDestinationEvidenceRefV0(opes.Category + "|" + orquesta.Category)
@@ -94,9 +97,6 @@ func opesBridgeDestinationCategoryV0(parsed *url.URL) (string, error) {
 	if opesBridgeHostIsLoopbackV0(host) {
 		return "loopback", nil
 	}
-	if strings.TrimSpace(os.Getenv(envOPESBridgeProductiveConfirmV0)) == "1" {
-		return "productive", nil
-	}
 	if strings.TrimSpace(os.Getenv(envOPESTemporalConfirmV0)) == "1" {
 		return "temporal", nil
 	}
@@ -115,20 +115,10 @@ func opesBridgeRequireRealOPESConfirmationV0(destination opesDrainDestinationV0,
 	if dryRun || destination.Category == "dry_run" {
 		return nil
 	}
-	if strings.TrimSpace(os.Getenv(envOPESBridgeProductiveConfirmV0)) == "1" ||
-		strings.TrimSpace(os.Getenv(envOPESTemporalConfirmV0)) == "1" {
+	if strings.TrimSpace(os.Getenv(envOPESTemporalConfirmV0)) == "1" {
 		return nil
 	}
 	return fmt.Errorf("opes_destination_confirmation_required")
-}
-
-func needsProductiveEvidenceV0(destinations ...opesDrainDestinationV0) bool {
-	for _, destination := range destinations {
-		if destination.Category == "productive" {
-			return true
-		}
-	}
-	return false
 }
 
 func compactEvidenceRefV0(value string) bool {

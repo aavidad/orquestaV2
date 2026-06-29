@@ -83,16 +83,16 @@ regresion.
 ## Matriz
 
 Nota T158 2026-05-26: los smokes OPES que usan `opes-drain-once` conservan OPES
-temporal o opt-in productivo explicito. La salida publica del bridge queda en
-refs/categorias de destino, filtro aplicado y contadores, sin URL completa,
-query sensible, host privado, payload OPES, tokens ni cuerpos HTTP; productivo
-exige evidence ref compacta de operador.
+temporal explicito; el opt-in productivo queda bloqueado en esta composicion.
+La salida publica del bridge queda en refs/categorias de destino, filtro
+aplicado y contadores, sin URL completa, query sensible, host privado, payload
+OPES, tokens ni cuerpos HTTP.
 Revalidacion OrquestaV2 2026-06-11:
 `agent-ref-task-autoprogramming-7c02f2568e45-g03` mantiene la politica T158
 como guard vigente para OPES: loopback no equivale a instancia temporal
-confirmada, todo efecto real requiere confirmacion explicita, productivo exige
-`ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM=1` y
-`ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF`, y
+confirmada, todo efecto real requiere confirmacion temporal explicita,
+`ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM=1` se rechaza como
+`opes_destination_productive_not_allowed`, y
 `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE` solo es aceptable con scope duro
 (`program_id`, `topic_id`, `correlation_id` o equivalente) y limite bajo. No se
 ejecuta smoke real ni se abre owner de `cmd/orquesta-server` fuera del

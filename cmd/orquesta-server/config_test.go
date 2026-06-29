@@ -1238,6 +1238,19 @@ func TestDomainWorkExecutorFromEnvV0ConectaOPESOptIn(t *testing.T) {
 	}
 }
 
+func TestDomainWorkExecutorFromEnvV0RechazaOPESProductivo(t *testing.T) {
+	t.Setenv("ORQUESTA_OPES_BASE_URL", "https://opes.example.com")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM", "1")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_DIR", "")
+
+	if _, err := domainWorkExecutorFromEnvV0(orquestaserver.ConfigV0{
+		StateDir: t.TempDir(),
+	}); err == nil || !strings.Contains(err.Error(), "productive_not_allowed") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestDomainWorkExecutorFromEnvV0SinOPESQuedaApagado(t *testing.T) {
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
 	t.Setenv("OPES_BASE_URL", "")

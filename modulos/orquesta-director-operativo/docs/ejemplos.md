@@ -104,6 +104,6 @@ documentadas en `docs/matriz_pruebas_reales_y_smoke_2026-05-17.md`,
 especialmente `DIRECTOR-TARDE-OFFLINE`, `DIRECTOR-GENERIC-CLOSURE-OFFLINE` y
 `DIRECTOR-PLAN-STATE-OFFLINE`.
 
-No relanzar `CODEX-WAVE-REAL` ni `CODEX-RECURSION-REAL` salvo regresion
-demostrada. El frente real abierto sigue siendo OPES temporal real de
-derivados/cierre.
+No relanzar `CODEX-WAVE-REAL`, `CODEX-RECURSION-REAL` ni OPES temporal real de
+derivados/cierre salvo regresion demostrada; OPES quedo cerrado funcionalmente
+por el runbook goal-first real del 2026-06-28.

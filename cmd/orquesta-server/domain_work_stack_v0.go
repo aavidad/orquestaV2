@@ -96,6 +96,9 @@ func domainWorkHTTPEgressPolicyFromEnvV0() (orquestadomainworkhttp.EgressPolicyV
 }
 
 func opesDomainWorkDestinationPolicyFromEnvV0(baseURL string) error {
+	if strings.TrimSpace(os.Getenv(envOPESBridgeProductiveConfirmV0)) == "1" {
+		return fmt.Errorf("opes_destination_productive_not_allowed")
+	}
 	destination, err := opesBridgeDestinationFromURLV0("opes", baseURL, false)
 	if err != nil {
 		return err
@@ -104,8 +107,8 @@ func opesDomainWorkDestinationPolicyFromEnvV0(baseURL string) error {
 		return err
 	}
 	evidenceRef := strings.TrimSpace(os.Getenv(envOPESBridgeDestinationEvidenceV0))
-	if needsProductiveEvidenceV0(destination) && !compactEvidenceRefV0(evidenceRef) {
-		return fmt.Errorf("opes_destination_evidence_ref_required")
+	if evidenceRef != "" && !compactEvidenceRefV0(evidenceRef) {
+		return fmt.Errorf("opes_destination_evidence_ref_invalid")
 	}
 	return nil
 }

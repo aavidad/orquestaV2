@@ -352,8 +352,9 @@ Estado de huecos restantes:
   regresion demostrada.
 - `EXT-NO-OPES` cierra la ruta temporal no-OPES con `codex-fake`, no una
   politica productiva de tests de dominio ni un proveedor Codex real.
-- OPES `plan_temario` real quedo cerrado para `document_plan` y creacion de
-  derivados pendientes; falta smoke real completo de derivados/cierre OPES.
+- OPES temporal real de derivados/cierre quedo cerrado funcionalmente en
+  `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`
+  hasta `completed_syllabus_package`, sin tocar OPES productivo.
 - El consejo residente ya llega offline/fake hasta `AcceptDecision` con votos
   estructurados y packet Codex especifico para propuesta, critica y voto. Falta
   fuente real de artefactos `architecture_vote.v0`.
@@ -471,7 +472,8 @@ Evidencia validada:
 
 Pendiente no cubierto por estos smokes:
 
-- OPES temporal real de derivados/cierre.
+- politica productiva de tests de dominio no-OPES y conectores productivos de
+  uso/cuota por proveedor.
 
 Prueba real de cambio a mitad de ejecucion:
 
