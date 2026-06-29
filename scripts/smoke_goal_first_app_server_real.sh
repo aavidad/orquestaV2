@@ -49,6 +49,7 @@ daemon_stderr="$smoke_root/codex-daemon.stderr.log"
 preflight_stdout="$smoke_root/codex-preflight.stdout.log"
 preflight_stderr="$smoke_root/codex-preflight.stderr.log"
 server_pid=""
+base_url=""
 
 keep_dir="${ORQUESTA_KEEP_SMOKE_DIR:-0}"
 request_timeout="${ORQUESTA_GOAL_FIRST_SMOKE_REQUEST_TIMEOUT_SECONDS:-90}"
@@ -57,19 +58,7 @@ sleep_seconds="${ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS:-5}"
 goal_backend="${ORQUESTA_CODEX_GOAL_BACKEND:-app_server_tmux}"
 
 cleanup() {
-  if [[ -n "$server_pid" ]] && kill -0 "$server_pid" >/dev/null 2>&1; then
-    kill -INT "$server_pid" >/dev/null 2>&1 || true
-    for _ in $(seq 1 25); do
-      if ! kill -0 "$server_pid" >/dev/null 2>&1; then
-        break
-      fi
-      sleep 0.2
-    done
-    if kill -0 "$server_pid" >/dev/null 2>&1; then
-      kill -TERM "$server_pid" >/dev/null 2>&1 || true
-    fi
-    wait "$server_pid" >/dev/null 2>&1 || true
-  fi
+  smoke_shutdown_orquesta_server "$server_pid" "$base_url"
   local tmux_owner="$runtime_dir/goal-srv/owner.json"
   if [[ -f "$tmux_owner" ]] && command -v python3 >/dev/null 2>&1 && command -v tmux >/dev/null 2>&1; then
     local tmux_session

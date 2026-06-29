@@ -129,6 +129,42 @@ smoke_wait_orquesta_readiness_from_state_file() {
   return 1
 }
 
+smoke_shutdown_orquesta_server() {
+  local server_pid="$1"
+  local base_url="${2:-}"
+  local shutdown_timeout="${3:-5}"
+  local grace_polls="${4:-25}"
+  if [[ -z "$server_pid" ]] || ! kill -0 "$server_pid" >/dev/null 2>&1; then
+    return 0
+  fi
+  if [[ -n "$base_url" ]] && command -v curl >/dev/null 2>&1; then
+    curl -sS -m "$shutdown_timeout" -X POST "$base_url/api/v0/server/shutdown" >/dev/null 2>&1 || true
+    local _
+    for _ in $(seq 1 "$grace_polls"); do
+      if ! kill -0 "$server_pid" >/dev/null 2>&1; then
+        wait "$server_pid" >/dev/null 2>&1 || true
+        return 0
+      fi
+      sleep 0.2
+    done
+  fi
+  if kill -0 "$server_pid" >/dev/null 2>&1; then
+    kill -INT "$server_pid" >/dev/null 2>&1 || true
+    local _
+    for _ in $(seq 1 "$grace_polls"); do
+      if ! kill -0 "$server_pid" >/dev/null 2>&1; then
+        wait "$server_pid" >/dev/null 2>&1 || true
+        return 0
+      fi
+      sleep 0.2
+    done
+  fi
+  if kill -0 "$server_pid" >/dev/null 2>&1; then
+    kill -TERM "$server_pid" >/dev/null 2>&1 || true
+  fi
+  wait "$server_pid" >/dev/null 2>&1 || true
+}
+
 smoke_temp_root_abs() {
   local path="$1"
   if command -v realpath >/dev/null 2>&1; then

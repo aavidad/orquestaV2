@@ -22,6 +22,7 @@ stats_payload="$work_root/director_stats_request.json"
 server_stdout="$work_root/server.stdout.log"
 server_stderr="$work_root/server.stderr.log"
 server_pid=""
+base_url=""
 
 polls="${ORQUESTA_SMOKE_STATS_POLLS:-3}"
 sleep_seconds="${ORQUESTA_SMOKE_STATS_SLEEP_SECONDS:-2}"
@@ -39,19 +40,7 @@ need_cmd() {
 }
 
 cleanup() {
-  if [[ -n "$server_pid" ]] && kill -0 "$server_pid" >/dev/null 2>&1; then
-    kill -INT "$server_pid" >/dev/null 2>&1 || true
-    for _ in $(seq 1 25); do
-      if ! kill -0 "$server_pid" >/dev/null 2>&1; then
-        break
-      fi
-      sleep 0.2
-    done
-    if kill -0 "$server_pid" >/dev/null 2>&1; then
-      kill -TERM "$server_pid" >/dev/null 2>&1 || true
-    fi
-    wait "$server_pid" >/dev/null 2>&1 || true
-  fi
+  smoke_shutdown_orquesta_server "$server_pid" "$base_url"
   smoke_temp_root_cleanup "$work_root" "$keep_dir"
 }
 
