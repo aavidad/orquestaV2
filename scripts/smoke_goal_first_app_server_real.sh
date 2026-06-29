@@ -4,6 +4,8 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/smoke_common.sh
 source "$repo_root/scripts/lib/smoke_common.sh"
+# shellcheck source=scripts/lib/go_tool.sh
+source "$repo_root/scripts/lib/go_tool.sh"
 
 smoke_root_source="generated"
 if [[ -n "${ORQUESTA_SMOKE_ROOT:-}" ]]; then
@@ -197,6 +199,7 @@ if [[ -n "${ORQUESTA_OPES_BASE_URL:-}" || -n "${OPES_BASE_URL:-}" ]]; then
   exit 2
 fi
 
+orquesta_go_tool_ensure_path
 need_cmd go
 need_cmd curl
 
