@@ -77,12 +77,13 @@ valida y ensambla los resultados segun sus reglas.
 
 Para derivados OPES, la integracion real debe mantenerse focal:
 
-- instancia temporal o entorno explicitamente opt-in;
+- instancia temporal o preproduccion aislada confirmada;
 - guarda de confirmacion para producir efectos;
 - scope por tipo de job o por `job_ref` exacto solo para no tocar jobs ajenos o
   productivos;
 - no drenar colas amplias por defecto;
-- no tocar OPES productivo sin una ruta de prueba acotada.
+- no tocar OPES productivo desde este entorno; cualquier promocion productiva
+  requiere runbook externo especifico.
 - hasta nueva orden, OPES no descarta textos o artefactos por no cumplir el uso
   previsto. Si una entrega falla validacion editorial, formato, alcance o
   objetivo, se revisa para ver si puede aprovecharse total o parcialmente como

@@ -309,8 +309,9 @@ evidencia focal propia.
   puerta `replan_or_close`, bloqueo por cierre insuficiente y replay focal. El
   caso real acotado con runner esta cubierto por `CODEX-REQTEST-REAL-E2E`, y
   Codex real amplio/recursivo por `CODEX-WAVE-REAL` y
-  `CODEX-RECURSION-REAL`. El frente abierto verificable sigue siendo OPES
-  temporal real de derivados/cierre.
+  `CODEX-RECURSION-REAL`. OPES temporal real de derivados/cierre quedo cerrado
+  en `OPES-DER-RESTO`; los abiertos son residuales editoriales, coste,
+  automatizacion larga o regresiones nuevas.
 - `DIRECTOR-WAVE-REVIEW-OFFLINE` queda cerrado offline para review positiva,
   observacion negativa durable y reentrada tardia a followups ya materializados.
 - `DIRECTOR-REQUIRED-TESTS-DURABLE-OFFLINE` queda cerrado como consumo de

@@ -139,7 +139,9 @@ review de aceptación por agente.
 
 - Seguridad operativa, multi-tenant, TLS/mTLS, RBAC, auditoría fuerte (antes de
   despliegue amplio).
-- OPES temporal real de derivados/cierre.
+- OPES temporal real de derivados/cierre quedo cerrado por el runbook real del
+  2026-06-28; conservar como frente abierto solo residuales editoriales, coste,
+  automatizacion larga o regresiones demostradas.
 - Condición sospechosa de yield de progreso a replan
   (`schedulerProgressCandidateCanYieldToReplanV0`, `scheduler_tick_progress_candidate_v0.go`):
   `started && !failed && stopped` parece contradictoria; revisar si la supervisión de

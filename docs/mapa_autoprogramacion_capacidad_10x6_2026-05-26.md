@@ -71,7 +71,7 @@ Cada padre debe elegir una seccion primaria y conservar cambios pequenos.
 | S6 | Servidor residente. | Readiness, status, auditoria publica o supervisor acotado. |
 | S7 | Stack Codex/composicion. | Wiring opt-in, ACK/evidencia, tests requeridos o smoke fake acotado. |
 | S8 | Web/MCP. | Proyeccion visible, acciones seguras y estados compactos sin acceso directo a stores. |
-| S9 | OPES/domain-work. | Solo conectores opt-in y refs opacas; pendiente principal: OPES temporal real derivados/cierre. |
+| S9 | OPES/domain-work. | Solo conectores opt-in y refs opacas; derivados/cierre OPES temporal cerrado funcionalmente, con residuales de calidad editorial, coste y automatizacion larga. |
 | S10 | Pruebas, rails y runbooks. | Foco de regresion, rail observado, o runbook de smoke reproducible. |
 
 ## Plan de secciones por padre

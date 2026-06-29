@@ -19,6 +19,9 @@ Politica de egress v0:
 - `smoke_local` solo permite loopback temporal para smokes acotados;
 - `allowlist` exige `ORQUESTA_DOMAIN_WORK_HTTP_ALLOWED_HOSTS` con hosts o
   `host:puerto` confirmados por la composicion;
+- si la composicion declara `ORQUESTA_DOMAIN_WORK_HTTP_DOMAIN_REF=opes`, el
+  servidor rechaza el backend HTTP neutral: OPES debe entrar por el conector
+  dedicado con guardas de destino temporal;
 - se rechazan credenciales, query y fragment en la base URL;
 - `create_job` y `submit_artifact` siguen siendo paths relativos sin query ni
   host override.

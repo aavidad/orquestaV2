@@ -46,6 +46,9 @@ func domainWorkExecutorFromEnvV0(
 		return orquestamcp.NewMCPDomainWorkToolExecutorV0(client, client), nil
 	}
 	if httpBaseURL != "" {
+		if err := domainWorkHTTPDestinationPolicyFromEnvV0(); err != nil {
+			return nil, err
+		}
 		egressPolicy, err := domainWorkHTTPEgressPolicyFromEnvV0()
 		if err != nil {
 			return nil, err
@@ -77,6 +80,13 @@ func domainWorkExecutorFromEnvV0(
 		return nil, err
 	}
 	return orquestamcp.NewMCPDomainWorkToolExecutorV0(creator, creator), nil
+}
+
+func domainWorkHTTPDestinationPolicyFromEnvV0() error {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv(envDomainWorkHTTPDomainRefV0)), "opes") {
+		return fmt.Errorf("opes_destination_productive_not_allowed")
+	}
+	return nil
 }
 
 func domainWorkHTTPEgressPolicyFromEnvV0() (orquestadomainworkhttp.EgressPolicyV0, error) {

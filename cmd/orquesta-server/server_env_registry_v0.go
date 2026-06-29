@@ -197,6 +197,7 @@ const (
 	envOPESTopicRegistryAgentIDV0               = "ORQUESTA_OPES_TOPIC_REGISTRY_AGENT_ID"
 	envOPESTopicRegistryForceV0                 = "ORQUESTA_OPES_TOPIC_REGISTRY_FORCE"
 	envDomainWorkHTTPBaseURLV0                  = "ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL"
+	envDomainWorkHTTPDomainRefV0                = "ORQUESTA_DOMAIN_WORK_HTTP_DOMAIN_REF"
 	envDomainWorkFileDirV0                      = "ORQUESTA_DOMAIN_WORK_FILE_DIR"
 	envDomainWorkFileEnabledV0                  = "ORQUESTA_DOMAIN_WORK_FILE_ENABLED"
 	envDomainWorkHTTPCreatePathV0               = "ORQUESTA_DOMAIN_WORK_HTTP_CREATE_PATH"
