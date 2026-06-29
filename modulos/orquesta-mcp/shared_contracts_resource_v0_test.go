@@ -84,6 +84,13 @@ func TestNewMCPSharedContractsResourceV0CompactoYSinDumps(t *testing.T) {
 	if byContract["SolicitarNuevaApp v0"].Owner != "orquesta-factory" {
 		t.Fatalf("solicitar_nueva_app: %+v", byContract["SolicitarNuevaApp v0"])
 	}
+	if byContract["SolicitarNuevaApp v0"].ResourceURI != MCPNuevaAppResourceURIV0 ||
+		byContract["SolicitarNuevaApp v0"].Input != "AppSpecRequestV0" ||
+		byContract["SolicitarNuevaApp v0"].Output != "AppSpecV0 + BacklogInicialPropuestoV0" ||
+		!containsSharedContractsTestStringV0(byContract["SolicitarNuevaApp v0"].PublicErrors, "idioma_invalido") ||
+		!containsSharedContractsTestStringV0(byContract["SolicitarNuevaApp v0"].Guardrails, "validacion_delegada_en_factory") {
+		t.Fatalf("solicitar_nueva_app snapshot: %+v", byContract["SolicitarNuevaApp v0"])
+	}
 	if byContract["RuntimeLaunchRequest v0"].MCPRole != "contract_reference" {
 		t.Fatalf("runtime role: %+v", byContract["RuntimeLaunchRequest v0"])
 	}
@@ -149,6 +156,7 @@ func TestMCPSharedContractResourceByNameV0NormalizaEntradas(t *testing.T) {
 		"orquesta://contracts/governance-catalog/v0": "orquesta://contracts/governance-catalog/v0",
 		"operational_status_query":                   "orquesta://contracts/operational-status-query/v0",
 		"solicitar-nueva-app":                        MCPNuevaAppResourceURIV0,
+		"orquesta://contracts/solicitar-nueva-app/v0": MCPNuevaAppResourceURIV0,
 	}
 
 	for input, wantURI := range cases {

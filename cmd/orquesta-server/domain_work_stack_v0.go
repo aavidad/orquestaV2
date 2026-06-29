@@ -46,6 +46,9 @@ func domainWorkExecutorFromEnvV0(
 		return orquestamcp.NewMCPDomainWorkToolExecutorV0(client, client), nil
 	}
 	if httpBaseURL != "" {
+		if err := domainWorkHTTPDestinationPolicyFromEnvV0(); err != nil {
+			return nil, err
+		}
 		egressPolicy, err := domainWorkHTTPEgressPolicyFromEnvV0()
 		if err != nil {
 			return nil, err
@@ -79,6 +82,13 @@ func domainWorkExecutorFromEnvV0(
 	return orquestamcp.NewMCPDomainWorkToolExecutorV0(creator, creator), nil
 }
 
+func domainWorkHTTPDestinationPolicyFromEnvV0() error {
+	if strings.EqualFold(strings.TrimSpace(os.Getenv(envDomainWorkHTTPDomainRefV0)), "opes") {
+		return fmt.Errorf("opes_destination_productive_not_allowed")
+	}
+	return nil
+}
+
 func domainWorkHTTPEgressPolicyFromEnvV0() (orquestadomainworkhttp.EgressPolicyV0, error) {
 	mode := strings.TrimSpace(os.Getenv(envDomainWorkHTTPEgressModeV0))
 	switch mode {
@@ -96,6 +106,9 @@ func domainWorkHTTPEgressPolicyFromEnvV0() (orquestadomainworkhttp.EgressPolicyV
 }
 
 func opesDomainWorkDestinationPolicyFromEnvV0(baseURL string) error {
+	if strings.TrimSpace(os.Getenv(envOPESBridgeProductiveConfirmV0)) == "1" {
+		return fmt.Errorf("opes_destination_productive_not_allowed")
+	}
 	destination, err := opesBridgeDestinationFromURLV0("opes", baseURL, false)
 	if err != nil {
 		return err
@@ -104,7 +117,10 @@ func opesDomainWorkDestinationPolicyFromEnvV0(baseURL string) error {
 		return err
 	}
 	evidenceRef := strings.TrimSpace(os.Getenv(envOPESBridgeDestinationEvidenceV0))
-	if needsProductiveEvidenceV0(destination) && !compactEvidenceRefV0(evidenceRef) {
+	if evidenceRef != "" && !compactEvidenceRefV0(evidenceRef) {
+		return fmt.Errorf("opes_destination_evidence_ref_invalid")
+	}
+	if destination.Category == "temporal" && evidenceRef == "" {
 		return fmt.Errorf("opes_destination_evidence_ref_required")
 	}
 	return nil

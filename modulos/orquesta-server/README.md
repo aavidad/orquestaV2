@@ -251,6 +251,8 @@ SRV-TASK-024 abierto hasta dispatch real o bloqueo causal publico probado.
 
 ```sh
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_ENABLED=1 \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
@@ -260,6 +262,8 @@ go run ./cmd/orquesta-server run
 
 La secuencia de tipos es composicion OPES, no contrato del runtime residente.
 Cada tick usa el loop generico y drena solo el primer tipo que siga pendiente.
+Este modo solo debe apuntar a OPES temporal o fake: loopback no equivale a
+temporalidad confirmada y el backend Goal operativo normal es `app_server_tmux`.
 
 ## Guardian de autoprogramacion
 

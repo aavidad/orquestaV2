@@ -97,7 +97,8 @@ ACK esperado del agente no controlado.
 
 Campos minimos:
 
-- `schema_version`: `codex_agent_ack.v0`
+- `schema_version`: `orquesta_agent_ack.v0`; `codex_agent_ack.v0` queda como
+  alias legacy aceptado por compatibilidad.
 - `request_id`
 - `correlation_id`
 - `ack_ref`
@@ -112,6 +113,8 @@ El ACK es evidencia de runtime, no sustituye `RegisterDelivery`, revision ni val
 `files`, `tests` y `notes` pueden llegar como listas de strings o como objetos
 estructurados; el conector los normaliza a resumen compacto para no romper la
 orquestacion por diferencias menores de formato.
+Los recibos de tests estructurados usan `orquesta_required_test_receipt.v0`;
+`codex_required_test_receipt.v0` se acepta como alias legacy.
 
 Receipt opt-in:
 

@@ -7,6 +7,15 @@ productivo ni mover reglas de dominio al nucleo.
 
 ## Estado actual
 
+Actualizacion 2026-06-29: este handoff queda historico como plan de ejecucion.
+La cadena real temporal goal-first quedo cerrada funcionalmente el 2026-06-28
+hasta `finalize_temario_package`/`completed_syllabus_package`; ver
+`docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`.
+Los pendientes vivos ya no son "ejecutar la cadena", sino reejecutar un smoke
+desde cero con el enriquecimiento posterior, automatizar continuaciones largas,
+medir coste/tiempo y revisar calidad editorial antes de cualquier promocion
+manual.
+
 Cerrado:
 
 - `plan_temario -> document_plan` por REST contra OPES temporal.
@@ -15,14 +24,16 @@ Cerrado:
   `finalize_temario_package`.
 - Contratos de artefactos para investigacion, contenido, visuales, test,
   revisiones, ensamblado, audio, tutor, HTML, manuales y paquete.
+- Smoke real temporal goal-first hasta `completed_syllabus_package`, con
+  `24/24` jobs OPES completados y receipts de dominio conservados.
 
-Pendiente real:
+Pendiente residual:
 
-- Ejecutar la cadena de derivados sobre OPES temporal con agentes reales.
-- Demostrar que cada job crea run, entrega artefacto valido y OPES acepta o
-  deduplica por `external_job_ref`.
-- Validar que el resultado local contiene HTML revisable con formato USO/TCAE,
-  audios, tests, visuales, tutor/bots, manuales y manifest de trazabilidad.
+- Reejecutar la cadena desde cero con el enriquecimiento posterior de artefactos
+  aceptados en `GoalWorkSpecV0`.
+- Automatizar continuaciones largas sin observacion manual entre tramos.
+- Revisar calidad editorial/visual/audio del material conservado antes de
+  cualquier promocion manual.
 
 ## Secuencia canonica
 
@@ -76,9 +87,11 @@ causales. No deben ralentizar todos los temarios como pasos fijos.
 - No declarar `ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED=1` ni
   `ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM=1` en este smoke.
 - Arrancar Orquesta temporal con Codex Goal
-  (`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` o `app_server_proxy`) o, si
-  ya esta levantada fuera del entorno del wrapper, confirmar
+  (`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`) o, si ya esta levantada fuera
+  del entorno del wrapper, confirmar
   `ORQUESTA_OPES_DERIVATIVES_ORQUESTA_GOAL_FIRST_CONFIRMED=1`.
+  `app_server_proxy` no es ruta normal para este smoke; solo debe usarse como
+  diagnostico aislado con confirmacion explicita del operador.
 - No mezclar el reconciliador independiente de paquetes finales:
   `ORQUESTA_OPES_REGISTRY_FINALPKG_ENABLED` debe quedar desactivado.
 - No mezclar `ORQUESTA_OPES_BRIDGE_JOB_TYPE` ni

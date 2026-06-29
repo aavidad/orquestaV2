@@ -46,8 +46,9 @@ Estado tras el primer corte:
 - waits por cohorte/ola/parent, ingesta acotada por `WaitAgentRefs`,
   review/rework/replan, tests requeridos durables, cierre causal y recursion
   Codex real ya tienen evidencia fuera de este modulo puro;
-- el pendiente real vigente no es ampliar este contrato con runtime: es cerrar
-  OPES temporal real de derivados/cierre por conectores de dominio.
+- este contrato puro no debe ampliarse con runtime: OPES temporal real de derivados/cierre
+  quedo cerrado funcionalmente por goal-first; los residuales son calidad
+  editorial, coste y automatizacion larga por conectores de dominio.
 
 ## Frontera vigente
 
@@ -59,7 +60,7 @@ Estado tras el primer corte:
 | Review, required tests, replan y cierre causal | `app-director-service` + `orquesta-orchestration-core` | Cerrado offline/fake-runtime y con smokes Codex/no-OPES acotados. |
 | Ola/cohorte Codex real amplia | `orquesta-app-codex-stack` | Cerrada por `CODEX-WAVE-REAL`; repetir solo ante regresion demostrada. |
 | Recursion Codex real | `orquesta-app-codex-stack` | Cerrada por `CODEX-RECURSION-REAL`; no convierte Codex en nucleo. |
-| OPES derivados hasta cierre | Conectores OPES opt-in | Pendiente real sobre instancia temporal, sin tocar OPES productivo. |
+| OPES derivados hasta cierre | Conectores OPES opt-in | Cerrado funcionalmente en instancia temporal por runbook goal-first real; repetir solo ante regresion demostrada. |
 
 ## Mapa conceptual
 

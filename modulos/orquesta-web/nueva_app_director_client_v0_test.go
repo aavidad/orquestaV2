@@ -118,17 +118,17 @@ func TestRESTPreviewDirectorAppClientV0EnviaPOSTJSONYProyectaGoalPreview(t *test
 			RequestID:             "req-director-preview-client-001",
 			RunRef:                "run-ref-director-preview-client-001",
 			DirectorExecutionMode: "goal_first",
-			GoalSpec: orquestagoal.GoalWorkSpecV0{
-				GoalRef:      "goal-ref-director-preview-client-001",
-				RunRef:       "run-ref-director-preview-client-001",
-				WorkKind:     "new_app",
-				DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
-				Objective:    "Construir Agenda",
-				WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "generated-apps/agenda"}},
-				RequiredTests: []orquestagoal.GoalRequiredTestV0{{
-					TestRef: "test-ref-agenda",
-					Command: "verificar app",
-				}},
+			GoalSpecSummary: WebGoalWorkSpecSummaryV0{
+				SchemaVersion:     "orquesta_goal_work_spec_summary.v0",
+				GoalRef:           "goal-ref-director-preview-client-001",
+				RunRef:            "run-ref-director-preview-client-001",
+				DirectorKind:      orquestagoal.GoalDirectorKindCodexGoalV0,
+				SpecHash:          "goal-spec-sha256-preview001",
+				ContextRefs:       []string{"ctx-app-spec"},
+				RequiredTestRefs:  []string{"test-ref-agenda"},
+				ArtifactTypes:     []string{"web_app"},
+				WriteSetCount:     1,
+				RequiredTestCount: 1,
 			},
 			Estimate: WebNuevaAppGoalPreviewEstimateV0{
 				TokenBudget: 12000,
@@ -151,7 +151,9 @@ func TestRESTPreviewDirectorAppClientV0EnviaPOSTJSONYProyectaGoalPreview(t *test
 	if vm.Estado != WebNuevaAppEstadoGoalPreview ||
 		vm.GoalPreview == nil ||
 		vm.GoalPreview.GoalRef != "goal-ref-director-preview-client-001" ||
-		len(vm.GoalPreview.WriteSet) != 1 ||
+		vm.GoalPreview.SpecHash != "goal-spec-sha256-preview001" ||
+		len(vm.GoalPreview.RequiredTestRefs) != 1 ||
+		vm.GoalPreview.SpecSummary.WriteSetCount != 1 ||
 		vm.GoalPreview.Estimate.CostTier != "low" {
 		t.Fatalf("vm=%+v", vm)
 	}

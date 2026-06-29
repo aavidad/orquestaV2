@@ -12,11 +12,14 @@ Criterio:
 
 ## GOAL-002 composicion residente
 
-Estado: cerrado localmente para wiring opt-in; smoke real app-server stdio
-cerrado el 2026-06-26.
+Estado: cerrado localmente para wiring opt-in; smoke real app-server con
+`app_server_tmux` cerrado el 2026-06-26 y repetido en entorno remoto aislado el
+2026-06-29. `app_server_stdio` queda retirado y no es backend operativo.
 
-`cmd/orquesta-server` puede inyectar launcher/observer con
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_tmux`;
+`cmd/orquesta-server` inyecta launcher/observer normal con
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`; `app_server_proxy` queda solo
+como nombre historico/diagnostico y no es backend operativo aceptado para
+self-programming;
 `orquesta-app-director-service` lanza `GoalWorkSpecV0` desde
 `/nueva-app`/`arrancar_director` cuando existe `AppGoalLauncher`, persiste
 estado y expone observacion por `/api/v0/apps/director/goal/observe`.
@@ -33,8 +36,9 @@ Evidencia 2026-06-26: `scripts/smoke_goal_first_app_server_real.sh` cerro una
 app temporal con `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`:
 `goal_status=complete`, `run_status=cerrada`, `closure_status=accepted`,
 `closure_accepted=true`, `artifact_refs=2` y `evidence_refs=9`.
-`app_server_proxy` queda como ruta opt-in condicionada a daemon/socket
-compatible; no bloquea el cierre local `app_server_tmux`.
+`app_server_proxy` queda como nombre historico/diagnostico; el servidor actual
+lo rechaza como `codex_goal_backend_proxy_diagnostic_not_operational` y no
+sustituye el cierre local `app_server_tmux`.
 
 ## GOAL-003 migracion del loop historico
 

@@ -86,6 +86,36 @@ func TestValidateAppI18nDocsPlanV0RejectsFallbackLocaleOutsideBundles(t *testing
 	}
 }
 
+func TestValidateAppI18nDocsPlanV0RejectsSkeletonLoaderShapeMismatch(t *testing.T) {
+	plan := validPlanV0(t)
+	plan.SkeletonLoaderShape.RequiredKeysHash = "sha256:desalineado"
+
+	issues := ValidateAppI18nDocsPlanV0(plan)
+	if !hasI18nDocsIssueCodeV0(issues, ErrSkeletonLoaderDesalineado) {
+		t.Fatalf("expected %s, got %+v", ErrSkeletonLoaderDesalineado, issues)
+	}
+}
+
+func TestValidateGeneratedDocV0RejectsMissingLocaleTitleSectionAndDuplicateOrder(t *testing.T) {
+	doc := GeneratedDocV0{
+		DocID:      "doc-1",
+		DocType:    "user_manual",
+		ContentKey: "docs.user.content",
+		Format:     "markdown",
+		Sections: []DocSectionV0{
+			{SectionID: "overview", TitleKey: "docs.user.overview.title", ContentKey: "docs.user.overview.content", Order: 1},
+			{SectionID: "details", ContentKey: "docs.user.details.content", Order: 1},
+		},
+	}
+
+	issues := ValidateGeneratedDocV0("docs_bundle.docs[0]", doc)
+	for _, code := range []string{ErrGeneratedDocInvalido, ErrGeneratedDocSeccionInvalida, ErrGeneratedDocOrdenDuplicado} {
+		if !hasI18nDocsIssueCodeV0(issues, code) {
+			t.Fatalf("expected %s, got %+v", code, issues)
+		}
+	}
+}
+
 func validPlanV0(t *testing.T) AppI18nDocsPlanV0 {
 	t.Helper()
 	raw := readFixtureBytesV0(t, "plan_minimo_valido.json")

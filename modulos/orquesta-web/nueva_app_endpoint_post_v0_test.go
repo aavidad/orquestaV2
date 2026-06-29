@@ -257,9 +257,23 @@ func TestNuevaAppWebEndpointV0POSTFormURLEncodedDelegaSinTemplates(t *testing.T)
 	values.Set("integraciones.0.tipo", "api")
 	values.Set("integraciones.0.nombre", "crm")
 	values.Set("integraciones.0.proposito", "sincronizar ensayos")
+	values.Set("integraciones.0.direccion", "bidireccional")
+	values.Set("integraciones.0.auth", "oauth")
+	values.Set("integraciones.0.data_scope", "ensayos")
+	values.Set("integraciones.0.criticidad", "alta")
 	values.Set("integraciones.0.requerido", "true")
 	values.Set("datos.db_required", "true")
 	values.Set("datos.necesidad_funcional", "guardar disponibilidad")
+	values.Set("datos.fuentes.0.nombre", "agenda externa")
+	values.Set("datos.fuentes.0.tipo", "api")
+	values.Set("datos.fuentes.0.proposito", "leer ensayos confirmados")
+	values.Set("datos.fuentes.0.owner", "cultura")
+	values.Set("datos.fuentes.0.frecuencia", "diaria")
+	values.Set("datos.operacion.criticidad", "alta")
+	values.Set("datos.operacion.disponibilidad", "horario laboral")
+	values.Set("datos.operacion.rpo", "24h")
+	values.Set("datos.operacion.rto", "4h")
+	values.Set("datos.operacion.auditoria", "true")
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/nueva-app", bytes.NewBufferString(values.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -285,7 +299,19 @@ func TestNuevaAppWebEndpointV0POSTFormURLEncodedDelegaSinTemplates(t *testing.T)
 		client.received.Integraciones[0].Tipo != "api" ||
 		client.received.Integraciones[0].Nombre != "crm" ||
 		client.received.Integraciones[0].Proposito != "sincronizar ensayos" ||
+		client.received.Integraciones[0].Direccion != "bidireccional" ||
+		client.received.Integraciones[0].Auth != "oauth" ||
+		client.received.Integraciones[0].DataScope != "ensayos" ||
+		client.received.Integraciones[0].Criticidad != "alta" ||
 		!client.received.Integraciones[0].Requerido {
 		t.Fatalf("integraciones=%+v", client.received.Integraciones)
+	}
+	if len(client.received.Datos.Fuentes) != 1 ||
+		client.received.Datos.Fuentes[0].Nombre != "agenda externa" ||
+		client.received.Datos.Fuentes[0].Owner != "cultura" ||
+		client.received.Datos.Operacion.Criticidad != "alta" ||
+		client.received.Datos.Operacion.RTO != "4h" ||
+		!client.received.Datos.Operacion.Auditoria {
+		t.Fatalf("datos fuentes/operacion=%+v", client.received.Datos)
 	}
 }

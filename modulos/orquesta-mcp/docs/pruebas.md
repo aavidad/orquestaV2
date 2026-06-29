@@ -175,8 +175,8 @@ Caso: MCP-CT-026 catalogo workflow con quality gate durable
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp
 Evidencia esperada: El resource incluye 32 comandos y 32 eventos sincronizados contra el core, `RecordQualityGate`, `QualityGateRecorded`, `RegisterPhaseArtifact`, `PhaseArtifactRegistered`, `quality_gates` y `phase_artifacts`; el tool puro registra el gate sin outbox y devuelve contador compacto.
-Ultima ejecucion: 2026-05-09; pasa.
-Riesgos: El servidor MCP real sigue pendiente; el resource y el tool son adaptadores puros sin persistencia productiva.
+Ultima ejecucion: 2026-06-29; pasa dentro de `go test -count=1 ./...`.
+Riesgos: El transporte MCP real existe como opt-in en `cmd/orquesta-server`; este resource/tool siguen siendo adaptadores puros sin persistencia productiva.
 ```
 
 ```text
@@ -208,8 +208,8 @@ Caso: MCP-CT-024 catalogo workflow con confirmacion de parada
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp
 Evidencia esperada: El resource incluye 30 comandos y 30 eventos sincronizados contra el core, `RegisterAgentStopConfirmed`, `AgentStopConfirmed` y la ref `confirmed_stopped_agents`.
-Ultima ejecucion: 2026-05-06; pasa.
-Riesgos: El servidor MCP real sigue pendiente; el resource es solo proyeccion contractual.
+Ultima ejecucion: 2026-06-29; pasa dentro de `go test -count=1 ./...`.
+Riesgos: El transporte MCP real existe como opt-in en `cmd/orquesta-server`; este resource sigue siendo solo proyeccion contractual.
 ```
 
 ```text
@@ -233,10 +233,10 @@ Riesgos: Nuevos tipos de error del core deben mapearse sin acoplar MCP a interna
 ```text
 Caso: MCP-CT-001 schema del tool orquesta.apps.solicitar_nueva.v0
 Tipo: contract
-Comando: pendiente; futuro test de contrato del adaptador MCP
-Evidencia esperada: El input MCP contiene app_spec_request compatible con AppSpecRequestV0 y respuesta opcional; rechaza campos de control no documentados.
-Ultima ejecucion: no ejecutada; solo documentada el 2026-05-04
-Riesgos: Falta schema canonico publicado de AppSpecRequestV0.
+Comando: go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPNuevaAppDescriptorV0Compacto|TestMCPTransportToolInputSchemaV0CubreToolsRegistrados'
+Evidencia esperada: El input MCP contiene `app_spec_request` compatible con AppSpecRequestV0 y envelope local compacto; el registro de transporte comprueba que el descriptor no anuncia campos stale.
+Ultima ejecucion: 2026-06-29; pasa.
+Riesgos: El detalle extenso del schema sigue viviendo en `orquesta-factory`; MCP solo publica el envelope y no duplica reglas de negocio.
 ```
 
 ```text
@@ -251,37 +251,37 @@ Riesgos: El slice sigue sin servidor MCP real; el adaptador local consume el pue
 ```text
 Caso: MCP-CT-003 serializacion de errores publicos
 Tipo: contract
-Comando: pendiente; futuro test parametrizado por error publico
+Comando: go test -count=1 ./modulos/orquesta-mcp -run TestNewMCPNuevaAppErrorResultV0SerializaErroresPublicosCanonicos
 Evidencia esperada: app_spec_invalida, opcion_incompatible, target_no_soportado, idioma_invalido y conector_requerido_no_disponible salen como output_error estable con code, message y field opcional.
-Ultima ejecucion: no ejecutada; solo documentada el 2026-05-04
-Riesgos: Puede cambiar el envelope si factory publica un formato de error canonico incompatible.
+Ultima ejecucion: 2026-06-29; pasa.
+Riesgos: Puede cambiar el envelope si factory publica un formato de error canonico incompatible; en ese caso debe actualizarse el DTO MCP junto al contrato owner.
 ```
 
 ```text
 Caso: MCP-CT-004 snapshot del resource contractual
 Tipo: contract
-Comando: pendiente; futuro snapshot de resource orquesta://contracts/solicitar-nueva-app/v0
+Comando: go test -count=1 ./modulos/orquesta-mcp -run 'TestNewMCPSharedContractsResourceV0CompactoYSinDumps|TestMCPTransportV0SirveResourceIndividualSolicitarNuevaApp'
 Evidencia esperada: Resource compacto con propietario, input/output, errores e invariantes; sin dumps de DB ni detalles internos.
-Ultima ejecucion: no ejecutada; solo documentada el 2026-05-04
-Riesgos: Falta ubicacion definitiva del detalle canonico de SolicitarNuevaApp v0.
+Ultima ejecucion: 2026-06-29; pasa.
+Riesgos: El resource individual sirve una proyeccion compacta; el detalle canonico sigue en `orquesta-factory`.
 ```
 
 ```text
 Caso: MCP-CT-005 snapshot del prompt minimo
 Tipo: contract
-Comando: pendiente; futuro snapshot de prompt orquesta.solicitar_nueva_app.v0
+Comando: go test -count=1 ./modulos/orquesta-mcp -run TestMCPNuevaAppPromptV0MinimoPideAclaracionesSinRuntime
 Evidencia esperada: Prompt orienta a pedir datos faltantes, respeta i18n y no sugiere CLI/DB/runtime.
-Ultima ejecucion: no ejecutada; solo documentada el 2026-05-04
-Riesgos: Preguntas minimas no pueden cerrarse hasta conocer campos obligatorios de AppSpecRequestV0.
+Ultima ejecucion: 2026-06-29; pasa.
+Riesgos: Prompt puro para clientes MCP; no ejecuta negocio ni sustituye la validacion owner.
 ```
 
 ```text
 Caso: MCP-SM-001 smoke MCP nueva app
 Tipo: smoke
-Comando: pendiente; futuro cliente MCP local invocando resource, prompt y tool
-Evidencia esperada: Una IA puede leer el contrato, preparar una solicitud y obtener respuesta del puerto sin usar CLI/DB.
-Ultima ejecucion: no ejecutada; solo documentada el 2026-05-04
-Riesgos: Requiere servidor MCP implementado en una tarea futura; esta tarea no lo implementa.
+Comando: go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPTransportV0SirveResourceIndividualSolicitarNuevaApp|TestMCPNuevaAppPromptV0MinimoPideAclaracionesSinRuntime|TestMCPNuevaAppToolExecutorV0ReturnsOKResultFromFactoryHTTPPort'
+Evidencia esperada: Una IA puede leer el contrato desde el transporte MCP opt-in, usar el prompt minimo y obtener respuesta del puerto HTTP local sin usar CLI/DB/runtime.
+Ultima ejecucion: 2026-06-29; pasa con transporte fake local y `httptest`.
+Riesgos: No cubre un servidor MCP de red real; ese transporte debe envolver este registro opt-in sin duplicar logica.
 ```
 
 ```text
@@ -316,8 +316,8 @@ Caso: MCP-CT-007 mapper input MCP a AppSpecRequestV0
 Tipo: unit
 Comando: go test -count=1 ./modulos/orquesta-mcp
 Evidencia esperada: Source se fija a orquesta-mcp; request_id/correlation_id se normalizan; campos clave se conservan sin reglas de negocio.
-Ultima ejecucion: 2026-05-04; pasa.
-Riesgos: La generacion de request_id si falta sigue pendiente de la capa de servidor o puerto posterior.
+Ultima ejecucion: 2026-06-29; pasa.
+Riesgos: Si el cliente no envia `request_id` ni `correlation_id`, el adaptador MCP genera `req-mcp-nueva-app-<hex>` antes de llamar al puerto factory; no genera idempotency-key ni cambia reglas de negocio.
 ```
 
 ```text
@@ -494,8 +494,9 @@ go test -count=1 ./modulos/orquesta-mcp \
 Evidencia esperada: el registro MCP publica `orquesta.external_work.run.v0`
 como tool opt-in. Sin executor productivo devuelve unbound por transporte; con
 executor inyectado el handler REST delega en el caso de uso y el descriptor/
-resultado declaran `route_policy=legacy_director_loop` mientras no exista
-external-work Goal-first.
+resultado declaran Goal-first como ruta normal para trabajo externo nuevo; la
+compatibilidad legacy queda limitada a composicion opt-in con
+`director_execution_mode=legacy_director_loop`.
 
 ## Prueba stats con run_ref obsoleto 2026-05-13
 
@@ -525,8 +526,8 @@ go test -count=1 ./modulos/orquesta-mcp \
 
 Evidencia esperada: el registro MCP publica
 `orquesta.autoprogramming.prepare_run.v0` como tool opt-in y salida opcional
-`goal_specs`; sin executor devuelve `mcp_transport_tool_unbound`, con executor
-inyectado invoca el puerto fake, y el bridge HTTP
+`goal_spec_summaries`; sin executor devuelve `mcp_transport_tool_unbound`, con
+executor inyectado invoca el puerto fake sin filtrar specs completas, y el bridge HTTP
 `POST /api/v0/autoprogramming/prepare-run` delega sin conocer Codex, OPES,
 runtime, DB ni filesystem productivo.
 
@@ -776,6 +777,6 @@ go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPAutoprogrammingSelfImprovem
 Evidencia esperada: automejora con `auto_prepare_run` conserva
 `supervise_prepared_run_by_run_ref` solo cuando `prepare-run` devuelve rama
 legacy con `run_ref`; si devuelve `goal`, recomienda
-`observe_autoprogramming_goal`; si devuelve `goal_specs[]`, recomienda
-`handoff_goal_specs_to_goal_backend`. No relanza supervisor legacy para
-goal-first.
+`observe_autoprogramming_goal`; si prepara specs internas, recomienda
+`handoff_goal_first_specs_to_internal_backend`. No relanza supervisor legacy
+para goal-first.

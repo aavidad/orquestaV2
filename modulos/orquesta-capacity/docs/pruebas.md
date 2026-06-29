@@ -54,27 +54,27 @@ Riesgos: Benchmarks reales siguen pendientes por adaptador/fuente viva.
 ```text
 Caso: CAP-CT-005 AgentHomeV0 separa agente logico, HOME, cuenta, runtime y credencial
 Tipo: contract
-Comando: pendiente; validar fixture con dos AgentHomeV0 para el mismo logical_agent_ref y provider_ref, con home_ref/account_ref/credential_ref distintos.
+Comando: go test -count=1 ./modulos/orquesta-capacity -run 'TestDecodeAgentHome'
 Evidencia esperada: La decision puede elegir HOME alternativo sin exponer email, token OAuth, ruta HOME real, nombre historico de agente ni proveedor canonico.
-Ultima ejecucion: No ejecutada; contrato documental v0.
+Ultima ejecucion: 2026-06-29; fixtures AgentHomeV0 validados por decoder Go estricto.
 Riesgos: RuntimeLaunchRequest v0 aun debe confirmar el binding final de referencias opacas.
 ```
 
 ```text
 Caso: CAP-CT-006 multi-HOME/OAuth respeta cuota y concurrencia por cuenta
 Tipo: contract
-Comando: pendiente; validar HOME premium/pro/local con quota fresh/stale/obsolete y max_concurrent_sessions agotado.
+Comando: go test -count=1 ./modulos/orquesta-capacity -run 'TestDecodeAgentHome'
 Evidencia esperada: HOME sin concurrencia o cuota agotada queda fuera; la decision usa alternativa viable, degrada o devuelve handoff preventivo sin inventar cuota real.
-Ultima ejecucion: No ejecutada; contrato documental v0.
+Ultima ejecucion: 2026-06-29; cubre multi-home OAuth, cuota fresh/obsolete, HOME local sin OAuth, concurrencia llena valida y reserved_sessions por encima de max como invalido.
 Riesgos: La fuente real de cuota y sesiones activas dependera de adaptadores runtime/observability.
 ```
 
 ```text
 Caso: CAP-CT-007 local/remoto no implica preferencia automatica
 Tipo: contract
-Comando: pendiente; validar modelos local y remoto con locality, execution_mode, supported_efforts, score y quota_scope distintos.
+Comando: go test -count=1 ./modulos/orquesta-capacity -run 'TestDecodeCapacityDecisionV0FixturesInvalidos|TestDecodeModelEscalationPolicyV0FixturesValidos'
 Evidencia esperada: Local solo es preferente con score probado, confianza suficiente y runtime disponible; remoto requiere cuota y HOME/credencial viable.
-Ultima ejecucion: No ejecutada; contrato documental v0.
+Ultima ejecucion: 2026-06-29; `decision_local_sin_score_invalida` rechaza local sin score probado y las fixtures de politica cubren reglas locality local/remota/hibrida con cuota requerida.
 Riesgos: Los umbrales numericos de score se definiran cuando existan benchmarks vivos.
 ```
 
@@ -83,28 +83,28 @@ Riesgos: Los umbrales numericos de score se definiran cuando existan benchmarks 
 ```text
 Caso: CAP-CT-008 escalado dinamico por fase y evidencia
 Tipo: contract
-Comando: pendiente; validar ModelEscalationPolicyV0 con fase arquitectura/revision/ejecucion y senales quality_signals/failure_signals frescas.
+Comando: go test -count=1 ./modulos/orquesta-capacity -run TestDecodeModelEscalationPolicyV0FixturesValidos
 Evidencia esperada: La base por fase no selecciona modelo fijo; sube de medium a high si hay riesgo alto, calidad critica, revision fallida o fallo de pruebas.
-Ultima ejecucion: No ejecutada; contrato documental v0.
-Riesgos: Necesita fixtures de fases cuando core consuma CapacityDecision v0.
+Ultima ejecucion: 2026-06-29; fixtures `politica_base_por_fase`, `politica_high_por_evidencia`, `politica_xhigh_gate` y `politica_degradacion_quota_home_modelo` cargan reglas por fase/evidencia sin tabla rol-modelo.
+Riesgos: El consumo por core sigue pendiente de wiring; el contrato local queda cubierto offline.
 ```
 
 ```text
 Caso: CAP-CT-009 xhigh exige gate explicito
 Tipo: contract
-Comando: pendiente; validar fase arquitectura o brainstorming con y sin evidencia critica fresca.
+Comando: go test -count=1 ./modulos/orquesta-capacity -run 'TestDecodeModelEscalationPolicyV0FixturesInvalidos|TestValidateModelEscalationPolicyV0XHighExigeEvidenciaFresca|TestDecodeCapacityDecisionV0FixturesInvalidos'
 Evidencia esperada: Sin gate devuelve `evidencia_insuficiente_para_xhigh` o degradacion; con riesgo critical mas evidencia justificada puede devolver xhigh y motivos auditables.
-Ultima ejecucion: No ejecutada; contrato documental v0.
+Ultima ejecucion: 2026-06-29; cubre politica xhigh sin gate invalida, gate con evidencia stale invalido y `decision_xhigh_sin_evidencia_invalida`.
 Riesgos: La aprobacion humana debe representarse como evidencia opaca, no transcript ni prompt.
 ```
 
 ```text
 Caso: CAP-CT-010 cuota, HOME o modelo bloquean escalado preferido
 Tipo: contract
-Comando: pendiente; validar nivel preferido high/xhigh con QuotaSnapshotV0 obsolete, HOME sin concurrencia o modelo sin supported_efforts.
+Comando: go test -count=1 ./modulos/orquesta-capacity -run 'TestValidateCapacityDecisionV0(CuotaObsoleta|VentanaInsuficiente|HighRequiereSupportedEffort)|TestDecodeAgentHome|TestDecodeModelEscalationPolicyV0FixturesValidos'
 Evidencia esperada: La politica degrada, cambia HOME/pool/modelo o pide handoff preventivo; no ignora ventana insuficiente ni score local bajo.
-Ultima ejecucion: No ejecutada; contrato documental v0.
-Riesgos: Necesita schema para verificar orden de degradacion sin acoplarse a proveedor.
+Ultima ejecucion: 2026-06-29; cubre cuota obsolete, ventana insuficiente, modelo high sin supported_efforts, AgentHome sin concurrencia disponible y orden de degradacion con `cambiar_home`/`cambiar_modelo`/handoff en fixture de politica.
+Riesgos: Las fuentes reales de cuota, sesiones vivas y benchmarks siguen siendo adaptadores de composicion.
 ```
 
 ## Criterios de validacion para CAP-004..CAP-006

@@ -11,10 +11,16 @@ func TestSelfProgrammingDeployContractV0NoMontaProduccionNiExponePuertoPublicoV0
 	root := filepath.Join("..", "..")
 	compose := mustReadSelfProgrammingDeployFileForTestV0(t, root, "deploy", "self-programming", "docker-compose.yml")
 	envExample := mustReadSelfProgrammingDeployFileForTestV0(t, root, "deploy", "self-programming", "orquesta-self.env.example")
+	dockerfiles := []string{
+		mustReadSelfProgrammingDeployFileForTestV0(t, root, "Dockerfile"),
+		mustReadSelfProgrammingDeployFileForTestV0(t, root, "Dockerfile.dev"),
+		mustReadSelfProgrammingDeployFileForTestV0(t, root, "Dockerfile.self-programming"),
+	}
 
 	for _, forbidden := range []string{
 		"/home/berserk/deploy/opes",
 		"/var/run/docker.sock",
+		"/home/orquesta",
 		"uso-app",
 		"opes-api",
 		"0.0.0.0:19039:19039",
@@ -25,12 +31,20 @@ func TestSelfProgrammingDeployContractV0NoMontaProduccionNiExponePuertoPublicoV0
 			t.Fatalf("deploy self-programming contiene referencia prohibida %q", forbidden)
 		}
 	}
+	for _, dockerfile := range dockerfiles {
+		if strings.Contains(dockerfile, "/home/orquesta") {
+			t.Fatalf("Dockerfile activo contiene HOME no aislado en /workspace")
+		}
+	}
 	for _, required := range []string{
 		"127.0.0.1:19039:19039",
 		"/srv/orquesta-self/state:/workspace/state",
 		"/srv/orquesta-self/runtime:/workspace/runtime",
 		"/srv/orquesta-self/worktrees/orquesta:/workspace/project",
-		"/srv/orquesta-self/codex-home:/home/orquesta/.codex",
+		"/srv/orquesta-self/home:/workspace/home",
+		"/srv/orquesta-self/codex-home:/workspace/codex-home",
+		"/srv/orquesta-self/cache/go:/workspace/cache/go",
+		"/srv/orquesta-self/cache/gomod:/workspace/go/pkg/mod",
 		"ORQUESTA_SERVER_SELF_PROGRAMMING_ONLY=true",
 		"ORQUESTA_SERVER_SELF_PROGRAMMING_ROOT=/workspace",
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",

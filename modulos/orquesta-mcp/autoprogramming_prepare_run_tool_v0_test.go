@@ -24,8 +24,9 @@ func TestMCPAutoprogrammingPrepareRunDescriptorV0EsAdaptadorOptIn(t *testing.T) 
 	if !strings.Contains(descriptor.InputSchema, "autoprogramming_request:AutoprogrammingRequestV0") {
 		t.Fatalf("descriptor debe publicar autoprogramming_request como objeto tipado, no string generico: %q", descriptor.InputSchema)
 	}
-	if !strings.Contains(descriptor.Output, "goal_specs?") {
-		t.Fatalf("descriptor debe publicar goal_specs opcional en prepare-run: %q", descriptor.Output)
+	if !strings.Contains(descriptor.Output, "goal_spec_summaries?") ||
+		strings.Contains(descriptor.Output, "goal_specs?") {
+		t.Fatalf("descriptor debe publicar solo resumenes de specs en prepare-run: %q", descriptor.Output)
 	}
 	if !strings.Contains(descriptor.Output, "goals?[]") ||
 		!strings.Contains(descriptor.Output, "external_goal_ref?") {
@@ -77,7 +78,7 @@ func TestMCPAutoprogrammingPrepareRunTransportV0BoundInvocaExecutor(t *testing.T
 				SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
 				GoalRef:       "goal-ref-prepare-run-bound-001",
 				RunRef:        "run-ref-prepare-run-bound-001",
-				Objective:     "validar transporte MCP de goal_specs",
+				Objective:     "validar transporte MCP de specs internas",
 				DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
 				WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-mcp"}},
 			}},
@@ -119,6 +120,13 @@ func TestMCPAutoprogrammingPrepareRunTransportV0BoundInvocaExecutor(t *testing.T
 		executor.input.CorrelationID != "corr-prepare-run-bound-001" {
 		t.Fatalf("executor no invocado correctamente: called=%d input=%+v", executor.called, executor.input)
 	}
+	if strings.Contains(string(output), `"goal_specs"`) ||
+		strings.Contains(string(output), `"objective"`) ||
+		strings.Contains(string(output), `"write_set"`) ||
+		strings.Contains(string(output), "validar transporte MCP de specs internas") ||
+		strings.Contains(string(output), "modulos/orquesta-mcp") {
+		t.Fatalf("payload MCP filtra GoalWorkSpec completo: %s", string(output))
+	}
 	var result MCPAutoprogrammingPrepareRunToolResultV0
 	if err := json.Unmarshal(output, &result); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -127,9 +135,10 @@ func TestMCPAutoprogrammingPrepareRunTransportV0BoundInvocaExecutor(t *testing.T
 		!result.Accepted ||
 		result.RunRef != "run-ref-prepare-run-bound-001" ||
 		len(result.WaitAgentRefs) != 1 ||
-		len(result.GoalSpecs) != 1 ||
-		result.GoalSpecs[0].RunRef != "run-ref-prepare-run-bound-001" ||
-		result.GoalSpecs[0].DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 {
+		len(result.GoalSpecSummaries) != 1 ||
+		result.GoalSpecSummaries[0].RunRef != "run-ref-prepare-run-bound-001" ||
+		result.GoalSpecSummaries[0].DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
+		result.GoalSpecSummaries[0].SpecHash == "" {
 		t.Fatalf("result=%+v", result)
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, output, 1400)

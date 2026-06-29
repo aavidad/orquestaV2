@@ -45,6 +45,42 @@ Pruebas de contrato:
 ```
 
 ```text
+Nombre: InMemoryPersistenceUnitOfWorkV0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-persistence
+Consumidores: pruebas de contrato locales de `orquesta-persistence`.
+Campos:
+  - `begin(contexto, opciones)` devuelve `TransaccionPersistenceV0` activa.
+  - `guardar_proyecto_borrador(contexto, transaccion, request)` guarda en el
+    buffer de la transaccion, no en el estado visible.
+  - `commit(contexto, transaccion)` confirma las escrituras pendientes.
+  - `rollback(contexto, transaccion)` descarta escrituras pendientes y es
+    idempotente para limpieza.
+  - `obtener_proyecto_borrador_por_idempotency_key(idempotency_key)` permite
+    observar solo estado confirmado en pruebas.
+Invariantes:
+  - Es un adaptador puro de pruebas; no es productivo.
+  - No usa almacenamiento operativo, migraciones, queries ejecutables, motores
+    reales, adaptadores de proveedor ni filesystem productivo.
+  - Toda escritura requiere `TransaccionPersistenceV0` activa.
+  - Commit hace visible la escritura; rollback no deja escritura visible.
+  - La idempotencia se comprueba contra pendientes y confirmados.
+  - Solo soporta aislamiento abstracto `default`.
+Errores publicos:
+  - `transaccion_requerida`
+  - `transaccion_no_activa`
+  - `transaccion_ya_cerrada`
+  - `aislamiento_no_soportado`
+  - `commit_fallido`
+  - `duplicado_idempotente_incompatible`
+Pruebas de contrato:
+  - `unit_of_work_memory_v0_test.go` valida commit, rollback, doble rollback,
+    commit despues de rollback, escritura sin transaccion activa y aislamiento
+    no soportado.
+```
+
+```text
 Nombre: PersistenceRepositoryV0
 Tipo: puerto_entrada
 Version: v0

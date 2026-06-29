@@ -88,9 +88,10 @@ Orquesta decide si el resultado cierra:
 El adaptador no conoce HOME, modelo, proveedor, OAuth, token, command path ni
 filesystem productivo. El arranque real queda en composicion opt-in.
 
-El 2026-06-25 se cablea en `cmd/orquesta-server` un transporte real opt-in con
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`. El 2026-06-28 se fija
-`app_server_tmux` como backend local operativo: Orquesta asegura un
+Historicamente, el 2026-06-25 se cableo en `cmd/orquesta-server` un transporte
+real opt-in con `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`. Desde el
+2026-06-28 el backend local operativo normal es `app_server_tmux`: Orquesta
+asegura un
 `codex app-server --listen unix://<socket>` dentro de una sesion `tmux` opaca y
 habla con el por WebSocket sobre un Unix socket privado y corto bajo
 `RuntimeWorkDir`. El app-server usa un `CODEX_HOME` aislado bajo ese runtime con
@@ -124,6 +125,19 @@ actividad y bloqueo semantico si el goal queda `invalid` o `blocked`. El
 statefile local puede contener spec/receipt/result/closure completos para
 restauracion, pero no es API publica.
 
+Evidencia 2026-06-29: `1f9eec3c` compacta el `Objective` de
+`idle_self_improvement` a 4000 runas maximo antes de llamar a app-server y
+conserva el contexto largo fuera del objetivo. Test focal:
+`go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0IdleSelfImprovementGoalFirst(CompactaObjectiveLargo|LanzaGoalWorkSpec|SinLauncherNoCaeALegacy)'`.
+Smoke real aislado con `app_server_tmux` en `/workspace/runtime/ig2` lanzo el
+goal residente con `objective_len=4000`, `objective_compacted=true`,
+`goal_ref=goal-ref-autoprogramming-backlog-t900-idle-goal-objective-compact-smoke-f5a428f1`,
+`external_goal_ref=019f1326-d189-70e2-83f2-84dcad3a0f88`,
+`idle_self_improvement_runs=1`, `idle_self_improvement_ok=1`,
+`prepare_failed_recent=0` y `goal_rpc_4000_errors=0`. Para smokes tmux reales
+en contenedores, usar raiz corta de runtime; una raiz larga puede fallar antes
+del goal con `path must be shorter than SUN_LEN`.
+
 `observePendingIdleSelfImprovementGoalV0` queda como puente de compatibilidad
 de automejora goal-first, no como loop director legacy. El observador generico
 de goals activos cierra apps y external-work desde `GoalWorkStateStore`, pero la
@@ -139,8 +153,10 @@ idle y actualice el tracker residente con cobertura equivalente. Evidencia:
 La composicion hace un preflight rapido del backend app-server al arrancar el
 stack. Para `app_server_tmux`, primero asegura la sesion `tmux`, crea el socket
 privado bajo `RuntimeWorkDir` y valida `thread/loaded/list` por WebSocket UDS;
-no considera listo un tmux vivo sin respuesta de protocolo. Para
-`app_server_proxy`, valida el daemon/socket ya gestionado. Si falta el socket
+no considera listo un tmux vivo sin respuesta de protocolo. `app_server_proxy`
+ya no se considera backend operativo; si aparece en la configuracion, el
+servidor responde con `codex_goal_backend_proxy_diagnostic_not_operational`. Si
+falta el socket
 local, tmux no esta disponible, el path del socket excede limites del sistema,
 la instalacion standalone requerida por
 `codex app-server daemon` no existe o el backend no responde, se inyecta un
@@ -182,11 +198,12 @@ observacion, y finalmente llama a `POST /api/v0/apps/director/goal/observe`
 hasta cierre aceptado. Comando:
 `go test -count=1 ./cmd/orquesta-server -run TestServerNuevaAppHTMLGoalFirstPOSTRenderizaYObservaV0`.
 
-Los backends `app_server_proxy` y `app_server_tmux` observan
-`thread/goal/get`; cuando el goal queda terminal leen `thread/read` con
-`includeTurns=true` y extraen de la respuesta final un marcador estructurado o,
-si el hilo no aporta marcador legible, el archivo durable
-`orquesta_goal_result_v0.json` escrito bajo el write-set:
+El backend operativo normal `app_server_tmux` observa `thread/goal/get`; cuando
+el goal queda terminal lee `thread/read` con `includeTurns=true` y extrae de la
+respuesta final un marcador estructurado o, si el hilo no aporta marcador
+legible, el archivo durable `orquesta_goal_result_v0.json` escrito bajo el
+write-set. El marcador historico de `app_server_proxy` sirve solo para leer
+evidencia antigua; ese backend no es ruta operativa aceptada:
 
 ```text
 ORQUESTA_GOAL_RESULT_V0 {"goal_ref":"...","summary":"...","artifact_refs":[],"required_test_results":[],"domain_receipt_refs":[],"evidence_refs":[]}
@@ -260,8 +277,9 @@ Goal.
    Estado 2026-06-26: `orquesta-autoprogramming` sigue siendo puro y compila
    `goal_specs[]` cuando `goal_migration=goal_ready`. En la composicion Codex
    stack, `POST /api/v0/autoprogramming/prepare-run` conserva dos rutas: si no
-   hay backend goal-first completo, devuelve `goal_specs[]` sin `run_ref` como
-   handoff; si estan inyectados `GoalLauncher`, `GoalObserver`,
+   hay backend goal-first completo, conserva specs completas como handoff interno
+   y publica `goal_spec_summaries[]` sin `run_ref`; si estan inyectados
+   `GoalLauncher`, `GoalObserver`,
    `GoalClosureValidator` y `GoalStateStore`, crea un run contenedor sin
    `WorkflowTaskV0` legacy, lanza el goal, persiste `GoalWorkStateV0`, devuelve
    `goal{run_ref,goal_ref,external_goal_ref,goal_status}` y no encola
@@ -270,11 +288,21 @@ Goal.
    legacy.
 3. Cablear un launcher real de Codex Goal en `cmd/orquesta-server` solo cuando
    exista puerto seguro para crear/observar goals.
-   Estado 2026-06-26: `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o
-   `app_server_tmux` inyecta starter/observer por `codex app-server`, hace
-   preflight de `thread/loaded/list`, observa `thread/read` y traduce
-   `ORQUESTA_GOAL_RESULT_V0` o `orquesta_goal_result_v0.json` a refs de cierre;
-   smoke real local cerrado el 2026-06-26 con `app_server_tmux`.
+   Estado actualizado 2026-06-29: `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`
+   inyecta starter/observer por `codex app-server`, hace preflight de
+   `thread/loaded/list`, observa `thread/read` y traduce
+   `ORQUESTA_GOAL_RESULT_V0` o `orquesta_goal_result_v0.json` a refs de cierre.
+   `app_server_proxy` queda bloqueado como backend operativo. Smoke real local
+   cerrado el 2026-06-26 con `app_server_tmux`.
+   Repeticion remota aislada 2026-06-29 cerrada con `app_server_tmux`:
+   `goal_status=complete`, `run_status=cerrada`,
+   `closure_status=accepted`, `closure_accepted=true`, `artifact_refs=2`,
+   `evidence_refs=9`, evidencia en
+   `/workspace/runtime/smokes/orquesta-goal-first-app-server.CD5sKB`. En ese
+   contenedor el sandbox `workspace-write` bloqueo escrituras del proyecto
+   temporal bajo `/workspace/runtime`; el smoke opt-in uso
+   `ORQUESTA_CODEX_SANDBOX=danger-full-access` con
+   `ORQUESTA_CODEX_APPROVAL_POLICY=never`.
 4. Ejecutar smoke no-OPES temporal con repo de prueba.
 5. Ejecutar smoke OPES temporal acotado de un derivado.
 6. Marcar rutas antiguas como legacy cuando tengan equivalencia goal-first

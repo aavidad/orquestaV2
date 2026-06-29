@@ -105,6 +105,7 @@ const (
 	envCodexDirectorDomainRefsV0                    = "ORQUESTA_CODEX_DIRECTOR_DOMAIN_REFS"
 	envCodexDirectorDomainContextFilesV0            = "ORQUESTA_CODEX_DIRECTOR_DOMAIN_CONTEXT_FILES"
 	envCodexGoalBackendV0                           = "ORQUESTA_CODEX_GOAL_BACKEND"
+	envAllowAppServerProxyDiagnosticV0              = "ORQUESTA_ALLOW_APP_SERVER_PROXY_DIAGNOSTIC"
 	envCodexGoalTimeoutMSV0                         = "ORQUESTA_CODEX_GOAL_TIMEOUT_MS"
 	envCodexGoalPreflightTimeoutMSV0                = "ORQUESTA_CODEX_GOAL_PREFLIGHT_TIMEOUT_MS"
 
@@ -196,6 +197,7 @@ const (
 	envOPESTopicRegistryAgentIDV0               = "ORQUESTA_OPES_TOPIC_REGISTRY_AGENT_ID"
 	envOPESTopicRegistryForceV0                 = "ORQUESTA_OPES_TOPIC_REGISTRY_FORCE"
 	envDomainWorkHTTPBaseURLV0                  = "ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL"
+	envDomainWorkHTTPDomainRefV0                = "ORQUESTA_DOMAIN_WORK_HTTP_DOMAIN_REF"
 	envDomainWorkFileDirV0                      = "ORQUESTA_DOMAIN_WORK_FILE_DIR"
 	envDomainWorkFileEnabledV0                  = "ORQUESTA_DOMAIN_WORK_FILE_ENABLED"
 	envDomainWorkHTTPCreatePathV0               = "ORQUESTA_DOMAIN_WORK_HTTP_CREATE_PATH"
@@ -219,7 +221,7 @@ const (
 	defaultCodexExecutionModeV0                = "parallel"
 	defaultCodexMaxBatchReadyV0                = 70
 	defaultCodexMaxConcurrencyV0               = 70
-	defaultCodexGoalTimeoutMSV0                = 30000
+	defaultCodexGoalTimeoutMSV0                = 90000
 	defaultCodexGoalPreflightTimeoutMSV0       = 3000
 	defaultCodexServerMaxRunsPerTickV0         = 70
 	defaultCodexServerQueueLimitV0             = 70
@@ -392,7 +394,12 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 	envCodexGoalBackendV0: {
 		Scope:       "codex_goal",
 		Label:       "Backend Codex Goal",
-		Description: "Backend opt-in para lanzar y observar Codex Goal desde la composicion: app_server_tmux recomendado; app_server_proxy solo con daemon/socket compatible.",
+		Description: "Backend opt-in para lanzar y observar Codex Goal desde la composicion: app_server_tmux es la ruta normal; app_server_proxy solo se permite como diagnostico breakglass explicito.",
+	},
+	envAllowAppServerProxyDiagnosticV0: {
+		Scope:       "codex_goal",
+		Label:       "Proxy diagnostico",
+		Description: "Breakglass diagnostico para permitir app_server_proxy; no es ruta normal de goal-first.",
 	},
 	envCodexGoalTimeoutMSV0: {
 		Scope:       "codex_goal",

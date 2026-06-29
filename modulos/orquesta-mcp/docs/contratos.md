@@ -91,16 +91,18 @@ Campos:
     estado: ok
     route_policy: goal_first
     director_execution_mode: goal_first
-    spec: GoalWorkSpecV0 con director_kind=codex_goal en composicion Codex
-    write_set, required_tests, est_model, est_tokens, est_cost_usd,
-    est_wall_clock, evidence_refs
+    spec_summary: schema_version, goal_ref, run_ref, director_kind, spec_hash,
+      context_refs, rule_refs, required_test_refs, artifact_types y contadores
+    est_model, est_tokens, est_cost_usd, est_wall_clock, evidence_refs
   output_error:
     estado: error
     errores_publicos: issues compactos
 Invariantes:
   - Compila el mismo contrato GoalWorkSpecV0 que external_work.run goal-first.
   - No lanza agentes, no crea run, no encola y no escribe en stores.
-  - Expone refs, write-set, pruebas y contratos sin copiar payloads de dominio.
+  - Expone un resumen compacto de refs, contadores, tipos y hash; no publica el
+    GoalWorkSpecV0 completo, comandos de tests, write-set detallado ni payloads
+    de dominio.
   - En el stack Codex aplica la misma guarda operativa que el lanzamiento.
 ```
 
@@ -136,15 +138,19 @@ Invariantes:
   - Sin backend Goal completo no degrada automaticamente a legacy.
   - Legacy requiere composicion opt-in y
     `director_execution_mode=legacy_director_loop`.
-  - No conoce OPES, DB, runtime, filesystem ni proveedor concreto.
-  - No crea GoalWorkStateV0 ni arranca Codex Goal.
-  - Crea run operativo y encola para el loop historico por puertos inyectados.
+  - Con backend Goal completo, la composicion puede crear `GoalWorkStateV0`,
+    lanzar Goal por adaptador opt-in y devolver `goal_ref`.
+  - En ausencia de backend Goal completo, devuelve error operativo
+    `external_work_goal_backend_required`; no cae al loop historico.
+  - La rama legacy explicita crea run operativo y encola para el loop historico
+    por puertos inyectados.
   - No conoce OPES, DB, runtime, filesystem, proveedor ni credenciales.
   - El bridge HTTP cancela el contexto del executor y devuelve `504` JSON con
     `external_work_run_timeout` si el puerto no responde dentro de la ventana
     publica; no deja al cliente esperando sin cuerpo.
 Pruebas de contrato:
-  - Descriptor y resultado declaran `route_policy=legacy_director_loop`.
+  - Descriptor declara Goal-first como ruta normal y legacy solo como opt-in.
+  - Resultado fake puede declarar `route_policy=goal_first` con `goal_ref`.
   - HTTP delega en executor fake y preserva errores publicos.
   - HTTP devuelve timeout JSON publico y cancela el executor si queda bloqueado.
   - Transporte MCP queda opt-in y devuelve unbound si falta puerto.
@@ -1448,10 +1454,11 @@ Campos:
     goals?: lista canonica de estados Goal-first por lote; cuando hay mas de
       un goal, `goal` se omite y `run_ref` superior identifica el primer
       `goals[i].run_ref` solo por compatibilidad, no un run agregado
-    goal_specs: contratos `GoalWorkSpecV0` opcionales cuando la composicion
-      clasifica el trabajo como `goal_ready`; sin backend preparan el handoff a
-      Goal sin materializar ni encolar un run legacy, y con backend quedan
-      devueltos con `run_ref` del run contenedor o de cada goal derivado
+    goal_spec_summaries?: resumenes publicos de contratos Goal-first cuando la
+      composicion clasifica el trabajo como `goal_ready`; incluyen refs, hash
+      estable y contadores, pero no publican objective, write-set, contexto ni
+      comandos de tests completos. El handoff interno de la composicion puede
+      conservar `GoalWorkSpecV0`.
     continue: request compacta opcional para supervision legacy posterior con
       `run_ref` explicito
   output_error:
@@ -1470,7 +1477,8 @@ Pruebas de contrato:
   - Descriptor compacto y saneado.
   - Registro MCP publica el tool.
   - Transporte bound invoca executor fake y devuelve resultado `ok`.
-  - Descriptor y transporte publican `goal_specs` como salida opcional.
+  - Descriptor y transporte publican `goal_spec_summaries` como salida opcional
+    y no filtran specs Goal completos.
   - Descriptor y HTTP publican `goals[]` tipado para batch goal-first.
   - Transporte sin executor devuelve `mcp_transport_tool_unbound`.
   - HTTP `POST /api/v0/autoprogramming/prepare-run` delega en executor fake.
@@ -1585,10 +1593,10 @@ Campos:
     diagnostics?: diagnostico publico de puertos/errores y consejo no bloqueante
       y issues de progreso del run, incluido
       `external_work_agent_requested_not_started` cuando hay agentes pedidos,
-      ninguno arrancado y ninguna senal viva; para compatibilidad con
-      consumidores existentes, las refs `opes...`/`app-spec-opes...` se tratan
-      como trabajo externo aunque no incluyan literalmente `external-work`, y
-      una aceptacion terminal sin agentes se conserva como
+      ninguno arrancado, ninguna senal viva y el run declara trabajo externo con
+      marcadores neutrales (`external-work`/`external_work`) en refs publicas; un
+      dominio consumidor como OPES no activa trato especial por nombre, y una
+      aceptacion terminal sin agentes se conserva como
       `external_work_accepted_no_agent_materialized`; candidatos de cola
       `ready`/`queued`/`pending` sin dispatch observado se publican como
       `queued_not_dispatched`

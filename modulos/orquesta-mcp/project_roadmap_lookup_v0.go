@@ -10,6 +10,11 @@ func MCPProjectRoadmapItemByKeyV0(value string) (MCPProjectRoadmapItemV0, bool) 
 			sameProjectRoadmapLookupMCPV0(value, item.ProgressKey) {
 			return item, true
 		}
+		for _, alias := range mcpProjectRoadmapLookupAliasesV0(item) {
+			if sameProjectRoadmapLookupMCPV0(value, alias) {
+				return item, true
+			}
+		}
 		for _, contract := range item.Contracts {
 			if sameProjectRoadmapLookupMCPV0(value, contract) {
 				return item, true
@@ -33,6 +38,15 @@ func MCPProjectDecisionByKeyV0(value string) (MCPProjectDecisionCompactV0, bool)
 		}
 	}
 	return MCPProjectDecisionCompactV0{}, false
+}
+
+func mcpProjectRoadmapLookupAliasesV0(item MCPProjectRoadmapItemV0) []string {
+	switch item.ID {
+	case "CORE-ROADMAP-005":
+		return []string{"domain_work_consumidores"}
+	default:
+		return nil
+	}
 }
 
 func normalizeProjectRoadmapLookupMCPV0(value string) string {

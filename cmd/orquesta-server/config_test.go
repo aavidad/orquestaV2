@@ -120,7 +120,7 @@ func TestServerConfigFromEnvV0ExponeAutomejoraGoalFirstOptInV0(t *testing.T) {
 func TestServerConfigFromEnvV0DerivaAutomejoraGoalFirstDeBackendCodexGoalV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "")
-	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0)
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
@@ -141,7 +141,7 @@ func TestServerConfigFromEnvV0DerivaAutomejoraGoalFirstDeBackendCodexGoalV0(t *t
 func TestServerConfigFromEnvV0GoalFirstExplicitoFalseGanaABackendCodexGoalV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "false")
-	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0)
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
@@ -1235,6 +1235,19 @@ func TestDomainWorkExecutorFromEnvV0ConectaOPESOptIn(t *testing.T) {
 	if received.JobType != "draft_content_block" ||
 		received.RequestedBy != "orquesta" {
 		t.Fatalf("received=%+v", received)
+	}
+}
+
+func TestDomainWorkExecutorFromEnvV0RechazaOPESProductivo(t *testing.T) {
+	t.Setenv("ORQUESTA_OPES_BASE_URL", "https://opes.example.com")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM", "1")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_DIR", "")
+
+	if _, err := domainWorkExecutorFromEnvV0(orquestaserver.ConfigV0{
+		StateDir: t.TempDir(),
+	}); err == nil || !strings.Contains(err.Error(), "productive_not_allowed") {
+		t.Fatalf("err=%v", err)
 	}
 }
 

@@ -309,6 +309,10 @@ Pendiente real antes de declarar este bloque cerrado:
 
 ## Bloque 7 — MCP y conectores avanzados
 
+Nota de vigencia 2026-06-29: este bloque es historico. `mcp_stdio` aqui no
+autoriza backend Goal stdio ni ruta normal de operacion; la ruta Goal-first
+vigente usa `app_server_tmux` y MCP/HTTP solo como adaptadores opt-in.
+
 ### Objetivo
 
 Servir contexto, reglas y operaciones de Orquesta mediante MCP y reforzar la abstraccion de runtimes.

@@ -235,8 +235,9 @@ Estado real del primer corte:
   `RequiredTestEvidenceV0`, runner por puerto, review negativa observada,
   replan causal de tests/cierre, `replan_or_close`, `close`, blockers durables y
   replay/idempotencia del ciclo probado. `CODEX-WAVE-REAL` y
-  `CODEX-RECURSION-REAL` ya aportan evidencia real opt-in para Codex; sigue
-  pendiente OPES temporal real de derivados/cierre.
+  `CODEX-RECURSION-REAL` ya aportan evidencia real opt-in para Codex; OPES
+  temporal real de derivados/cierre quedo cerrado funcionalmente por goal-first
+  con pendientes residuales de calidad editorial, coste y automatizacion larga.
 
 Checklist antes de extenderlo:
 
@@ -452,8 +453,9 @@ cohorte/ola, el mismo scope gobierna pending, wait e ingesta de observaciones:
 Esto cierra el scope de ingesta y separa la evidencia por frente. El ciclo
 funcional de ola esta probado offline/fake-runtime con review, tests durables,
 `replan_or_close`, `close` y plan state; tambien quedo reproducido con Codex
-real de ola/cohorte amplia y recursion real. Queda pendiente OPES temporal real
-de derivados/cierre. El handoff operativo de ese tramo es
+real de ola/cohorte amplia y recursion real. OPES temporal real de
+derivados/cierre queda cerrado funcionalmente por goal-first; el residual vivo
+es calidad editorial, coste y automatizacion larga. El handoff operativo de ese tramo es
 `docs/runbooks/handoff_opes_derivados_reales_hasta_local_html_site_2026-06-07.md`;
 el corte generico de cierre sigue en
 `corte_cierre_generico_director_operativo_2026-05-17.md`.

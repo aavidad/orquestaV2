@@ -269,9 +269,9 @@ Contrato: La home solo enlaza capacidades web/API ya publicadas; no lee stores,
 runtime, proveedor, filesystem ni decide negocio. El handler devuelve home solo
 para path exacto `/`.
 Validacion: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
-Bloqueos: No sustituye el futuro wizard conversacional ni vistas de dominio
-OPES; reduce friccion operativa y evita que el operador tenga que recordar
-rutas.
+Bloqueos: No sustituye las vistas de dominio OPES; reduce friccion operativa y
+evita que el operador tenga que recordar rutas. El wizard conversacional vive en
+`/nueva-app` y en el endpoint guiado de intake.
 Estado: completada.
 ```
 
@@ -335,8 +335,8 @@ Simbolo foco: WebAppChangeFormV0.external_work
 Contrato: `AppChangeRequestV0.external_work` consume project/interface/work
 refs compactas.
 Validacion: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack`.
-Bloqueos: El wizard conversacional futuro debe construir estos campos por
-puerto de intake/director, no por reglas de dominio en la web.
+Bloqueos: El wizard conversacional de `/nueva-app` debe construir estos campos
+por puerto de intake/director, no por reglas de dominio en la web.
 Estado: completada.
 ```
 
@@ -348,8 +348,13 @@ Simbolo foco: WebNuevaAppIntakeSessionV0
 Contrato: `IntakeSession v0` consume/produce `AppSpecRequestV0` parcial, expone
 preguntas i18n y delega el cierre en `orquesta.apps.arrancar_director.v0` cuando
 hay puerto configurado, con fallback documentado a `SolicitarNuevaApp v0`.
-Validacion: tests puros de sesion inicial desde nombre/idea, pregunta pendiente, decision capturada, AppSpec parcial y estado `requiere_datos`; no DB, runtime, filesystem productivo, LLM real ni MCP directo.
-Bloqueos: El arranque de agente de intake real y la vista HTML completa quedan como integracion posterior por API/MCP; este corte solo modela estado web y puerto local.
+Validacion: tests puros de sesion inicial desde nombre/idea, pregunta pendiente,
+decision capturada, AppSpec parcial, endpoint guiado, cliente HTML que reenvia
+la sesion resultante, puerto conversacional inyectable y fallback local; no DB,
+runtime, filesystem productivo, LLM real ni MCP directo.
+Bloqueos: El proveedor real de agente de intake queda como integracion de
+composicion/API/MCP sobre `WebNuevaAppIntakeAssistantPortV0`; el modulo web y
+`orquesta-app-gateway` ya exponen el puerto y conservan fallback local.
 Estado: completada como modelo puro de sesion web: crea borrador parcial,
 registra preguntas criticas con claves i18n, acepta respuestas del usuario,
 conserva decisiones, expone handoff compacto con refs opacas y no valida enums

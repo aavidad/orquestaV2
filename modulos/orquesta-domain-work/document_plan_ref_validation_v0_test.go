@@ -57,7 +57,7 @@ func TestCanonicalDomainDocumentPlanPayloadJSONV0DiagnosticaArraysRawInvalidos(t
 	payload := `{
 		"schema_version":"domain_document_plan.v0",
 		"plan_ref":"plan-ref-001",
-		"domain_ref":"opes",
+		"domain_ref":"domain-ref-learning",
 		"work_kind":"plan_tema",
 		"document_kind":"tema",
 		"language_code":"es",
@@ -81,7 +81,7 @@ func TestCanonicalDomainDocumentPlanPayloadJSONV0DerivaRefsUnicos(t *testing.T) 
 	payload := `{
 		"schema_version":"domain_document_plan.v0",
 		"plan_ref":"plan-ref-001",
-		"domain_ref":"opes",
+		"domain_ref":"domain-ref-learning",
 		"work_kind":"plan_tema",
 		"document_kind":"tema",
 		"language_code":"es",

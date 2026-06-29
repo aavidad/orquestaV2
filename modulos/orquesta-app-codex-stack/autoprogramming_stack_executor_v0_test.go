@@ -398,22 +398,17 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalRead
 		len(prepared.WaitAgentRefs) != 0 ||
 		prepared.Continue != nil ||
 		prepared.PhaseID != "" ||
-		len(prepared.GoalSpecs) != 1 {
+		len(prepared.GoalSpecs) != 0 ||
+		len(prepared.GoalSpecSummaries) != 1 {
 		t.Fatalf("prepared=%+v", prepared)
 	}
-	spec := prepared.GoalSpecs[0]
-	if issues := orquestagoal.ValidateGoalWorkSpecV0(spec); len(issues) > 0 {
-		t.Fatalf("goal spec invalido: %+v spec=%+v", issues, spec)
-	}
-	if spec.RunRef != "" ||
-		spec.RequestRef != request.RequestRef ||
-		spec.ProjectRef != request.ProjectRef ||
-		spec.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
-		spec.WorkKind != "autoprogramming" ||
-		len(spec.RequiredTests) != 1 ||
-		len(spec.WriteSet) != 1 ||
-		spec.WriteSet[0].Path != request.WriteSet[0] {
-		t.Fatalf("goal spec inesperado=%+v request=%+v", spec, request)
+	summary := prepared.GoalSpecSummaries[0]
+	if summary.RunRef != "" ||
+		summary.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
+		summary.SpecHash == "" ||
+		summary.WriteSetCount != 1 ||
+		summary.RequiredTestCount != 1 {
+		t.Fatalf("goal spec summary inesperado=%+v request=%+v", summary, request)
 	}
 	if run, err := stack.Ports.RunStore.LoadRunV0(context.Background(), request.RequestRef); err == nil {
 		t.Fatalf("run legacy materializada en goal_ready: %+v", run)

@@ -2,7 +2,6 @@ package orquestaweb
 
 import (
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
-	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
 
@@ -44,22 +43,22 @@ type WebAutoprogrammingPrepareRunCommandV0 struct {
 	MaxWriteSetEntries   int                                                           `json:"max_write_set_entries,omitempty"`
 }
 type WebAutoprogrammingPrepareRunViewModelV0 struct {
-	SchemaVersion    string                                      `json:"schema_version"`
-	Locale           string                                      `json:"locale,omitempty"`
-	Estado           string                                      `json:"estado"`
-	Accepted         bool                                        `json:"accepted"`
-	RunRef           string                                      `json:"run_ref,omitempty"`
-	ProjectRef       string                                      `json:"project_ref,omitempty"`
-	WorktreeRef      string                                      `json:"worktree_ref,omitempty"`
-	BranchRef        string                                      `json:"branch_ref,omitempty"`
-	PhaseID          string                                      `json:"phase_id,omitempty"`
-	WorkflowTaskRefs []string                                    `json:"workflow_task_refs,omitempty"`
-	WaitAgentRefs    []string                                    `json:"wait_agent_refs,omitempty"`
-	GoalSpecs        []orquestagoal.GoalWorkSpecV0               `json:"goal_specs,omitempty"`
-	Goal             *orquestamcp.MCPAutoprogrammingGoalRunV0    `json:"goal,omitempty"`
-	Goals            []orquestamcp.MCPAutoprogrammingGoalRunV0   `json:"goals,omitempty"`
-	Continue         *WebAutoprogrammingContinueRequestV0        `json:"continue,omitempty"`
-	ErroresPublicos  []WebAutoprogrammingPrepareRunPublicIssueV0 `json:"errores_publicos,omitempty"`
+	SchemaVersion     string                                      `json:"schema_version"`
+	Locale            string                                      `json:"locale,omitempty"`
+	Estado            string                                      `json:"estado"`
+	Accepted          bool                                        `json:"accepted"`
+	RunRef            string                                      `json:"run_ref,omitempty"`
+	ProjectRef        string                                      `json:"project_ref,omitempty"`
+	WorktreeRef       string                                      `json:"worktree_ref,omitempty"`
+	BranchRef         string                                      `json:"branch_ref,omitempty"`
+	PhaseID           string                                      `json:"phase_id,omitempty"`
+	WorkflowTaskRefs  []string                                    `json:"workflow_task_refs,omitempty"`
+	WaitAgentRefs     []string                                    `json:"wait_agent_refs,omitempty"`
+	GoalSpecSummaries []orquestamcp.MCPGoalWorkSpecSummaryV0      `json:"goal_spec_summaries,omitempty"`
+	Goal              *orquestamcp.MCPAutoprogrammingGoalRunV0    `json:"goal,omitempty"`
+	Goals             []orquestamcp.MCPAutoprogrammingGoalRunV0   `json:"goals,omitempty"`
+	Continue          *WebAutoprogrammingContinueRequestV0        `json:"continue,omitempty"`
+	ErroresPublicos   []WebAutoprogrammingPrepareRunPublicIssueV0 `json:"errores_publicos,omitempty"`
 }
 type WebAutoprogrammingContinueRequestV0 struct {
 	RunRef                     string   `json:"run_ref"`
@@ -83,21 +82,21 @@ type WebAutoprogrammingPrepareRunPublicIssueV0 struct {
 func NewWebAutoprogrammingPrepareRunViewModelV0(locale string, result orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0) WebAutoprogrammingPrepareRunViewModelV0 {
 	goal, goals := webAutoprogrammingPrepareRunGoalsV0(result)
 	vm := WebAutoprogrammingPrepareRunViewModelV0{
-		SchemaVersion:    "web_autoprogramming_prepare_run.v0",
-		Locale:           normalizeDirectorStatsLocaleV0(locale),
-		Estado:           webAutoprogrammingPrepareRunEstadoV0(result.Estado),
-		Accepted:         result.Accepted,
-		RunRef:           trimV0(result.RunRef),
-		ProjectRef:       trimV0(result.ProjectRef),
-		WorktreeRef:      trimV0(result.WorktreeRef),
-		BranchRef:        trimV0(result.BranchRef),
-		PhaseID:          trimV0(result.PhaseID),
-		WorkflowTaskRefs: compactStringsV0(result.WorkflowTaskRefs),
-		WaitAgentRefs:    compactStringsV0(result.WaitAgentRefs),
-		GoalSpecs:        append([]orquestagoal.GoalWorkSpecV0(nil), result.GoalSpecs...),
-		Goal:             goal,
-		Goals:            goals,
-		ErroresPublicos:  webAutoprogrammingPrepareRunIssuesV0(result.Errores),
+		SchemaVersion:     "web_autoprogramming_prepare_run.v0",
+		Locale:            normalizeDirectorStatsLocaleV0(locale),
+		Estado:            webAutoprogrammingPrepareRunEstadoV0(result.Estado),
+		Accepted:          result.Accepted,
+		RunRef:            trimV0(result.RunRef),
+		ProjectRef:        trimV0(result.ProjectRef),
+		WorktreeRef:       trimV0(result.WorktreeRef),
+		BranchRef:         trimV0(result.BranchRef),
+		PhaseID:           trimV0(result.PhaseID),
+		WorkflowTaskRefs:  compactStringsV0(result.WorkflowTaskRefs),
+		WaitAgentRefs:     compactStringsV0(result.WaitAgentRefs),
+		GoalSpecSummaries: append([]orquestamcp.MCPGoalWorkSpecSummaryV0(nil), result.GoalSpecSummaries...),
+		Goal:              goal,
+		Goals:             goals,
+		ErroresPublicos:   webAutoprogrammingPrepareRunIssuesV0(result.Errores),
 	}
 	if result.Continue != nil {
 		vm.Continue = webAutoprogrammingContinueRequestV0(*result.Continue)

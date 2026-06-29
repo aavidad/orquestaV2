@@ -13,6 +13,7 @@ import (
 )
 
 func TestServerNuevaAppHTMLGoalFirstPOSTRenderizaYObservaV0(t *testing.T) {
+	disableSelfProgrammingOnlyForGoalFirstHTTPTestV0(t)
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()
 	runtimeDir := filepath.Join(t.TempDir(), "runtime")

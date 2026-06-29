@@ -21,9 +21,7 @@ type MCPPreviewDirectorAppToolResultV0 struct {
 	AppSpec               MCPAppSpecCompactV0                                         `json:"app_spec,omitempty"`
 	RunRef                string                                                      `json:"run_ref,omitempty"`
 	DirectorExecutionMode string                                                      `json:"director_execution_mode,omitempty"`
-	GoalSpec              orquestagoal.GoalWorkSpecV0                                 `json:"goal_spec,omitempty"`
-	WriteSet              []string                                                    `json:"write_set,omitempty"`
-	RequiredTests         []string                                                    `json:"required_tests,omitempty"`
+	GoalSpecSummary       MCPGoalWorkSpecSummaryV0                                    `json:"goal_spec_summary,omitempty"`
 	Estimate              orquestaappdirectorservice.AppDirectorGoalPreviewEstimateV0 `json:"estimate,omitempty"`
 	GoalSpecIssues        []orquestagoal.GoalWorkIssueV0                              `json:"goal_spec_issues,omitempty"`
 	Errores               []MCPValidationIssueV0                                      `json:"errores_publicos,omitempty"`
@@ -51,9 +49,7 @@ func NewMCPPreviewDirectorAppResultV0(
 		AppSpec:               compactAppSpecV0(preview.AppSpec),
 		RunRef:                strings.TrimSpace(preview.Run.RunID),
 		DirectorExecutionMode: strings.TrimSpace(preview.DirectorExecutionMode),
-		GoalSpec:              preview.GoalSpec,
-		WriteSet:              compactStringsMCPV0(preview.WriteSet),
-		RequiredTests:         compactStringsMCPV0(preview.RequiredTests),
+		GoalSpecSummary:       mcpGoalWorkSpecSummaryV0(preview.GoalSpec),
 		Estimate:              preview.Estimate,
 		GoalSpecIssues:        append([]orquestagoal.GoalWorkIssueV0(nil), preview.GoalSpecIssues...),
 		EvidenceRefs:          compactStringsMCPV0(preview.EvidenceRefs),

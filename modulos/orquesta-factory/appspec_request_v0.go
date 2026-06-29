@@ -74,6 +74,10 @@ type ConnectorRequestV0 struct {
 	Tipo          string   `json:"tipo,omitempty"`
 	Nombre        string   `json:"nombre,omitempty"`
 	Proposito     string   `json:"proposito,omitempty"`
+	Direccion     string   `json:"direccion,omitempty"`
+	Auth          string   `json:"auth,omitempty"`
+	DataScope     string   `json:"data_scope,omitempty"`
+	Criticidad    string   `json:"criticidad,omitempty"`
 	Requerido     bool     `json:"requerido,omitempty"`
 	Restricciones []string `json:"restricciones,omitempty"`
 }
@@ -99,7 +103,9 @@ type DatosRequestV0 struct {
 	NecesidadFuncional string                 `json:"necesidad_funcional,omitempty"`
 	TiposDatos         []string               `json:"tipos_datos,omitempty"`
 	TiposDetallados    []DataTypeRequestV0    `json:"tipos_detallados,omitempty"`
+	Fuentes            []DataSourceRequestV0  `json:"fuentes,omitempty"`
 	Storage            []DataStorageRequestV0 `json:"storage,omitempty"`
+	Operacion          DataOperationRequestV0 `json:"operacion,omitempty"`
 	Sensibilidad       string                 `json:"sensibilidad,omitempty"`
 	Retencion          string                 `json:"retencion,omitempty"`
 }
@@ -120,6 +126,24 @@ type DataStorageRequestV0 struct {
 	Restricciones []string `json:"restricciones,omitempty"`
 }
 
+type DataSourceRequestV0 struct {
+	Nombre        string   `json:"nombre,omitempty"`
+	Tipo          string   `json:"tipo,omitempty"`
+	Proposito     string   `json:"proposito,omitempty"`
+	Owner         string   `json:"owner,omitempty"`
+	Frecuencia    string   `json:"frecuencia,omitempty"`
+	Restricciones []string `json:"restricciones,omitempty"`
+}
+
+type DataOperationRequestV0 struct {
+	Criticidad     string   `json:"criticidad,omitempty"`
+	Disponibilidad string   `json:"disponibilidad,omitempty"`
+	RPO            string   `json:"rpo,omitempty"`
+	RTO            string   `json:"rto,omitempty"`
+	Auditoria      bool     `json:"auditoria,omitempty"`
+	Restricciones  []string `json:"restricciones,omitempty"`
+}
+
 type DeployRequestV0 struct {
 	Target        string   `json:"target,omitempty"`
 	Restricciones []string `json:"restricciones,omitempty"`
@@ -134,10 +158,11 @@ type CalidadRequestV0 struct {
 }
 
 type DocumentacionV0 struct {
-	Usuario    *bool    `json:"usuario,omitempty"`
-	Desarrollo *bool    `json:"desarrollo,omitempty"`
-	Sistemas   *bool    `json:"sistemas,omitempty"`
-	Locales    []string `json:"locales,omitempty"`
+	Usuario     *bool    `json:"usuario,omitempty"`
+	Desarrollo  *bool    `json:"desarrollo,omitempty"`
+	Sistemas    *bool    `json:"sistemas,omitempty"`
+	Profundidad string   `json:"profundidad,omitempty"`
+	Locales     []string `json:"locales,omitempty"`
 }
 
 type I18NRequestV0 struct {

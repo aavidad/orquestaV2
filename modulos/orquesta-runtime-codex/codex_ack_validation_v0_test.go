@@ -20,6 +20,20 @@ func TestCodexAgentAckReceiptV0AceptaACKValido(t *testing.T) {
 	}
 }
 
+func TestCodexAgentAckReceiptV0AceptaACKNeutralOrquestaV0(t *testing.T) {
+	spec := codexSpecForTestV0()
+	ack := `{"schema_version":"orquesta_agent_ack.v0","request_id":"req-codex-001","correlation_id":"corr-codex-001","ack_ref":"ack-ref-001","target_module":"orquesta-generated-app","task_ref":"task-ref-001","status":"completed","files":["README.md"],"tests":["go test ./..."],"test_receipts":[{"schema_version":"orquesta_required_test_receipt.v0","command":"go test ./...","status":"passed","exit_code":0,"evidence_refs":["required-test-receipt-ref-001"],"occurred_at":"2026-05-24T10:00:00Z","sequence":1,"output_redacted":true}],"notes":["done"]}`
+
+	validated, issues := ValidateCodexAgentAckBytesForSpecV0([]byte(ack), spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues inesperadas: %+v", issues)
+	}
+	if !validated.ValidFor(spec.RequestID) {
+		t.Fatalf("ACK neutral no valida ValidFor: %+v", validated)
+	}
+}
+
 func TestCodexAgentAckReceiptV0AceptaACKProgramacionResiGRXConContextoRefOnly(t *testing.T) {
 	spec := codexSpecForTestV0()
 	requestID := "agent-ref-task-resigrx-rx000-bootstrap-vertical-mvp"

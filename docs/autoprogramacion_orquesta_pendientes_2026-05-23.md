@@ -205,21 +205,25 @@ tiene prueba HTTP integrada con backend goal fake que monta el handler real,
 lanza por `/api/v0/apps/director`, observa por
 `/api/v0/apps/director/goal/observe` y verifica cierre aceptado con run
 `cerrada`.
-Avance local adicional 2026-06-25: el backend real
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` ya observa goals terminales con
+Avance local adicional 2026-06-25: el backend real entonces disponible
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` ya observaba goals terminales con
 `thread/read includeTurns=true`, extrae el marcador
 `ORQUESTA_GOAL_RESULT_V0` de la respuesta final y fusiona `artifact_refs`,
 `required_test_results`, `domain_receipt_refs` y `evidence_refs` en
 `GoalWorkResultV0`. Si el marcador falta o no trae refs requeridas, Orquesta no
 inventa evidencias y el cierre queda bloqueado por el validador. Se anade smoke
 real opt-in `scripts/smoke_goal_first_app_server_real.sh` con runbook
-`docs/runbooks/smoke_goal_first_app_server_real_2026-06-25.md`.
+`docs/runbooks/smoke_goal_first_app_server_real_2026-06-25.md`. Nota posterior
+2026-06-29: `app_server_tmux` es el backend operativo normal; `app_server_proxy`
+queda como antecedente historico/no operativo para cierre: no cuenta como
+backend valido del smoke vigente aunque exista configuracion diagnostica.
 Avance local adicional 2026-06-26: se anade backend opt-in
 `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` para usar
 `codex app-server --listen unix://<socket>` dentro de una sesion `tmux` cuando
-`app_server_proxy` no responde al socket local. Orquesta valida el backend con
-`codex app-server proxy --sock <socket>` y `thread/loaded/list`; esto corrige el
-preflight y evita falsos `codex_app_server_unavailable` antes de crear el goal.
+`app_server_proxy` no responde al socket local. Orquesta valida el backend por
+WebSocket directo sobre el Unix socket privado y `thread/loaded/list`; esto
+corrige el preflight y evita falsos `codex_app_server_unavailable` antes de
+crear el goal.
 Avance local adicional 2026-06-26: el backend app-server tambien acepta el
 archivo durable `orquesta_goal_result_v0.json` bajo el write-set como fallback
 de cierre cuando el goal terminal no deja marcador textual legible en
@@ -304,7 +308,8 @@ legacy de autoprogramacion transportan ya la marca explicita.
 Pendiente verificable:
 
 - `cmd/orquesta-server` ya cablea starter/observer opt-in con
-  `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_tmux`, usando
+  `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` como backend operativo normal.
+  `app_server_proxy` queda solo como diagnostico opt-in. El camino usa
   `codex app-server` como frontera real, hace preflight diagnosticable y ya
   transforma el resultado final estructurado en refs de cierre. Smoke real
   cerrado el 2026-06-26 con `app_server_tmux`: `goal_status=complete`,
@@ -334,15 +339,13 @@ Pendiente verificable:
   genero la app temporal, corrigio tests tras `listen EPERM`, paso
   `npm run verify`, escribio `orquesta_goal_result_v0.json` con el `test_ref`
   literal y Orquesta acepto el cierre sin caer al loop legacy.
-- Revalidar OPES temporal con derivados/cierre cuando exista la ruta goal-first
-  real; no tocar OPES productivo ni drenar colas amplias.
-- Gate pendiente antes de declarar 100% global con OPES/external-work:
-  `OPES-GOAL-FIRST-E2E` sobre instancia temporal de un tema. Debe entrar por
-  `external-work`/`domain-work`, compilar `GoalWorkSpecV0` como ruta normal o
-  declarar legacy explicito con `director_execution_mode=legacy_director_loop`,
-  materializar contrato OPES 1+6 cuando aplique, producir resultado
-  durable, validar cierre por evidencias/validadores, lanzar rework goal si
-  falla el cierre y sobrevivir a restart/observe/stop sin HTTP colgado.
+- OPES temporal con derivados/cierre quedo revalidado funcionalmente por
+  goal-first el 2026-06-28 en
+  `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`:
+  24/24 jobs completados hasta `completed_syllabus_package`, loop legacy
+  desactivado y cierre por evidencias/receipts. No reabrir
+  `OPES-GOAL-FIRST-E2E` salvo regresion demostrada; los residuales son calidad
+  editorial, coste y automatizacion larga.
 - Mantener el loop `app-director-service`/`PlanState` solo como compatibilidad
   legacy hasta cerrar smokes equivalentes de OPES temporal, external-work,
   app-change y rutas residentes. No borrar codigo historico sin evidencia
@@ -558,11 +561,11 @@ Pendientes priorizados:
   supervisado del residente en
   `docs/smoke_director_residente_temporal_2026-06-08.md`: servidor temporal,
   `codex-fake`, OPES desactivado, 19 ticks y 20 acciones sin errores. Queda
-  pendiente separado: proveedor real, OPES temporal real y activar
-  consejo/votacion cuando haya varias opciones comparables.
-- Completar el smoke OPES temporal real de derivados/cierre hasta
-  `generate_html_site -> local_html_site`, sin tocar OPES productivo y
-  reutilizando el owner existente T12/T18 donde aplique.
+  pendiente separado: proveedor real y activar consejo/votacion cuando haya
+  varias opciones comparables.
+- El smoke OPES temporal real de derivados/cierre quedo cerrado funcionalmente
+  por `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`,
+  sin tocar OPES productivo.
 - Hacer el detalle runtime provider-agnostic: Codex, Gemini y Claude pueden
   compartir packet/prompt/ack, pero los logs y artefactos no deben quedar
   hardcodeados a nombres `codex_*`.
@@ -1282,9 +1285,9 @@ Alcance:
 Criterios:
 
 - Usar solo instancia temporal/confirmacion explicita y filtro por tipo de job.
-- Cubrir derivados/cierre hasta `generate_audio_asset -> audio_asset` cuando el
-  conector temporal lo permita; si falta entorno, dejar bloqueo verificable con
-  comando exacto.
+- Conservar la cobertura de derivados/cierre cerrada funcionalmente en
+  `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`;
+  si hay regresion, dejar bloqueo verificable con comando exacto.
 - No drenar colas amplias ni tocar OPES productivo.
 - Tests: `go test -count=1 ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector`.
 - Evidencia parcial 2026-05-26:
@@ -1879,8 +1882,9 @@ Evidencia de cierre:
   `freshness` con refs a foto vigente, backlog T25 y verificacion focal.
 - Los `progress_key` y estados ya no duplican `pendiente_*` de la foto antigua;
   lo historico queda como compatibilidad y lo abierto enlaza backlog/doc local.
-- OPES temporal de derivados/cierre queda visible como frente abierto separado
-  con owner, guardas y runbook; no reabre Codex wave/recursion ni WaitAgentRefs.
+- OPES temporal de derivados/cierre queda visible como frente cerrado
+  funcionalmente por runbook real; no reabre Codex wave/recursion ni
+  WaitAgentRefs.
 - Cierre verificado en `modulos/orquesta-mcp` con proyeccion estatica:
   `resource_freshness_v0.go`, `project_roadmap_*_v0.go`,
   `shared_contracts_*_v0.go` y docs locales MCP. La validacion focal de cierre
@@ -1972,9 +1976,9 @@ Criterios:
 - Actualizar las referencias a `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` para
   que no aparezcan a la vez como cerradas y pendientes en documentos de entrada
   obligatoria.
-- Mantener OPES temporal real de derivados/cierre como frente abierto separado,
-  sin reabrir `WaitAgentRefs`, ola/cohorte Codex ni recursion Codex salvo
-  regresion demostrada.
+- Mantener OPES temporal real de derivados/cierre como frente cerrado
+  funcionalmente, sin reabrir `WaitAgentRefs`, ola/cohorte Codex ni recursion
+  Codex salvo regresion demostrada.
 - Marcar documentos historicos con enlace a fuente vigente antes de usarlos como
   evidencia de planificacion.
 - Tests: `git diff --check` y prueba documental focal que busque contradicciones
@@ -1986,7 +1990,8 @@ Evidencia de cierre:
   matriz declaran un orden de autoridad documental.
 - `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` quedan cerrados por evidencia
   opt-in de la matriz; no son backlog abierto salvo regresion demostrada.
-- OPES temporal real de derivados/cierre queda como frente abierto separado.
+- OPES temporal real de derivados/cierre queda como frente cerrado
+  funcionalmente por runbook real.
 - Los documentos historicos quedan subordinados a fuentes vigentes antes de
   usarse como evidencia de planificacion.
 
@@ -5522,7 +5527,7 @@ Criterios:
 - Sustituir afirmaciones stale que declaran pendientes `wait` por cohorte/ola,
   review/rework/replan/cierre durable basico, ola Codex real amplia o recursion
   Codex real por el estado vigente: cerrados donde hay evidencia, pendientes
-  solo OPES temporal real de derivados/cierre y blockers nuevos demostrables.
+  solo blockers nuevos demostrables.
 - Mantener clara la frontera: `orquesta-director-operativo` sigue siendo
   contrato puro; materializacion, waits, plan-state, cierre y smokes reales
   viven en composiciones/puertos.
@@ -5539,8 +5544,9 @@ modulo como contrato puro, enlazan el mapa
 `OperationalDirectorPlanV0 -> OperationalDirectorWaveWorkV0 -> WorkflowTaskV0`
 y sustituyen contradicciones conocidas: `WaitAgentRefs`/wait por ola-cohorte,
 ciclo offline de review/tests/cierre, `CODEX-WAVE-REAL` y
-`CODEX-RECURSION-REAL` quedan cerrados salvo regresion demostrada. El pendiente
-real vigente queda acotado a OPES temporal real de derivados/cierre. Se anadio
+`CODEX-RECURSION-REAL` quedan cerrados salvo regresion demostrada. OPES
+temporal real de derivados/cierre quedo cerrado funcionalmente por el runbook
+goal-first real del 2026-06-28. Se anadio
 `TestDirectorOperativoLocalDocsAlineadosConFotoVigenteV0` como check focal.
 Revalidado con `go test -count=1 ./modulos/orquesta-director-operativo`.
 

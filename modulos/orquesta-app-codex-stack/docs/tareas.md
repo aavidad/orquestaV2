@@ -220,8 +220,11 @@ Validacion:
 
 Pendiente siguiente:
 
-- fuente real de `architecture_vote.v0` desde entregas/artefactos Codex;
-- smoke opt-in `Director residente + Codex real` con servidor temporal.
+- ejecutar `scripts/smoke_autoprogramming_supervised.sh` en modo Codex real con
+  `ORQUESTA_AUTOPROGRAMMING_SUPERVISED_REAL_CODEX=1`,
+  `ORQUESTA_AUTOPROGRAMMING_SUPERVISED_REAL_CODEX_CONFIRMED=1`,
+  `ORQUESTA_CODEX_COMMAND`, `ORQUESTA_CODEX_HOME` y
+  `ORQUESTA_CODEX_CODE_HOME` explicitos.
 
 ## APP-CODEX-STACK-041
 
@@ -252,8 +255,11 @@ Validacion:
 
 Pendiente siguiente:
 
-- fuente real de `architecture_vote.v0` desde entregas/artefactos Codex;
-- smoke opt-in `Director residente + Codex real` con servidor temporal.
+- fuente real offline de `architecture_vote.v0` desde ACK/artefactos Codex
+  cubierta por `ReceiptStore`; falta smoke con proveedor real si hay homes Codex
+  explicitos.
+- ejecutar `scripts/smoke_autoprogramming_supervised.sh` en modo Codex real con
+  homes Codex explicitos y confirmacion doble.
 
 ## APP-CODEX-STACK-040
 
@@ -279,8 +285,11 @@ Validacion:
 
 Pendiente siguiente:
 
-- fuente real de `architecture_vote.v0` desde entregas/artefactos Codex;
-- smoke opt-in `Director residente + Codex real`.
+- fuente real offline de `architecture_vote.v0` desde ACK/artefactos Codex
+  cubierta por `ReceiptStore`; falta smoke con proveedor real si hay homes Codex
+  explicitos.
+- ejecutar el modo Codex real de `scripts/smoke_autoprogramming_supervised.sh`;
+  el modo fake/residente ya queda cubierto por el script por defecto.
 
 ## APP-CODEX-STACK-001
 

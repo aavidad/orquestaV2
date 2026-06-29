@@ -86,7 +86,7 @@ func TestCanonicalDomainDocumentPlanPayloadJSONV0ConvierteAliasDeAgente(t *testi
 		"job_id":"job-ref-plan-001",
 		"topic_id":"topic-ref-080",
 		"topic_title":"Evaluacion diagnostica en psicologia",
-		"document_kind":"tema_oposicion",
+		"document_kind":"learning_topic",
 		"language_code":"es",
 		"target_pages":{"min":45,"max":50},
 		"sections":[{
@@ -119,9 +119,9 @@ func TestCanonicalDomainDocumentPlanPayloadJSONV0ConvierteAliasDeAgente(t *testi
 	canonical, ok := CanonicalDomainDocumentPlanPayloadJSONV0(
 		payload,
 		DomainDocumentPlanPayloadDefaultsV0{
-			DomainRef:    "opes",
+			DomainRef:    "domain-ref-learning",
 			Objective:    "Planificar tema completo.",
-			DocumentKind: "tema_oposicion",
+			DocumentKind: "learning_topic",
 		},
 	)
 	if !ok {
@@ -144,20 +144,20 @@ func TestCanonicalDomainDocumentPlanPayloadJSONV0ConvierteAliasDeAgente(t *testi
 func TestCanonicalDomainDocumentPlanPayloadJSONV0CompactaRefsConRutasDeAgente(t *testing.T) {
 	payload := `{
 		"schema_version":"domain_document_plan.v0",
-		"plan_ref":"document-plan:opes:plan-temario:job-001",
-		"domain_ref":"opes",
+		"plan_ref":"document-plan:learning:plan-syllabus:job-001",
+		"domain_ref":"domain-ref-learning",
 		"work_kind":"plan_temario",
-		"document_kind":"temario_oposicion",
-		"scope_ref":"program-operario-ap",
+		"document_kind":"syllabus",
+		"scope_ref":"program-learning-001",
 		"language_code":"es",
-		"title":"Temario completo Operario AP",
+		"title":"Temario completo de aprendizaje",
 		"objective":"Planificar todos los temas oficiales.",
 		"estimated_pages_min":120,
 		"estimated_pages_max":180,
-		"source_refs":["OPES/administracion-especial/Operario/Operario.txt"],
+		"source_refs":["domain-docs/programa-general/temario.txt"],
 		"evidence_refs":["BOE A 2026/001"],
 		"sections":[{
-			"section_ref":"section-operario-01",
+			"section_ref":"section-learning-01",
 			"order":1,
 			"title":"Tema 1",
 			"objective":"Desarrollar el primer epigrafe oficial.",
@@ -165,24 +165,24 @@ func TestCanonicalDomainDocumentPlanPayloadJSONV0CompactaRefsConRutasDeAgente(t 
 			"depends_on":[" Tema previo/intro "],
 			"target_words_min":1200,
 			"target_words_max":1800,
-			"source_refs":["OPES/administracion-especial/Operario/Operario.txt"]
+			"source_refs":["domain-docs/programa-general/temario.txt"]
 		}],
 		"visuals":[{
-			"visual_ref":"visual-operario-01",
+			"visual_ref":"visual-learning-01",
 			"visual_type":"diagrama",
-			"placement_ref":"section-operario-01",
+			"placement_ref":"section-learning-01",
 			"objective":"Esquema de apoyo al tema.",
 			"work_kind":"generate_visual_asset",
-			"source_refs":["OPES/administracion-especial/Operario/Operario.txt"]
+			"source_refs":["domain-docs/programa-general/temario.txt"]
 		}],
 		"review_steps":[{
-			"review_ref":"review-operario-legal",
+			"review_ref":"review-learning-legal",
 			"order":1,
 			"work_kind":"review_legal",
 			"objective":"Comprobar encaje normativo."
 		}],
 		"deliverables":[{
-			"deliverable_ref":"deliverable-operario-topic-package",
+			"deliverable_ref":"deliverable-learning-topic-package",
 			"artifact_type":"topic_expansion_package",
 			"title":"Paquete de desarrollo",
 			"required":true
@@ -199,7 +199,7 @@ func TestCanonicalDomainDocumentPlanPayloadJSONV0CompactaRefsConRutasDeAgente(t 
 	if issues := ValidateDomainDocumentPlanV0(plan); len(issues) != 0 {
 		t.Fatalf("issues=%+v canonical=%s", issues, canonical)
 	}
-	wantSource := "opes_administracion-especial_operario_operario.txt"
+	wantSource := "domain-docs_programa-general_temario.txt"
 	if plan.SourceRefs[0] != wantSource ||
 		plan.Sections[0].SourceRefs[0] != wantSource ||
 		plan.Visuals[0].SourceRefs[0] != wantSource {
@@ -211,28 +211,28 @@ func TestCanonicalDomainDocumentPlanPayloadJSONV0CompactaRefsConRutasDeAgente(t 
 	}
 }
 
-func TestCanonicalDomainDocumentPlanPayloadJSONV0AceptaAliasesDePlanOperario(t *testing.T) {
+func TestCanonicalDomainDocumentPlanPayloadJSONV0AceptaAliasesDePlanSyllabus(t *testing.T) {
 	payload := `{
 		"schema_version":"domain_document_plan_v0",
 		"artifact_type":"document_plan",
 		"job_id":"cc93fbb0a41c1b04b2a4a82bb7ac3ed2",
 		"program_id":"6e6cc9dd7275f6c32d4f9d044a12d98d",
-		"document_kind":"temario_oposicion",
+		"document_kind":"syllabus",
 		"language_code":"es",
-		"title":"Temario Operario AP completo",
+		"title":"Temario formativo completo",
 		"sections":[{
 			"section_id":"tema_01",
 			"ordinal":1,
-			"planned_title":"Tema 1 - Constitucion Espanola de 1978 y Administracion local",
-			"official_topic_ref":"OPES/administracion-especial/Operario/Operario.txt#tema-01",
+			"planned_title":"Tema 1 - Fundamentos del servicio publico local",
+			"official_topic_ref":"domain-docs/programa-general/temario.txt#tema-01",
 			"primary_source_refs":[
-				"opes-salidas/codex_directo/operario/AP/produccion_externa_2026-05-19/markdown_importable/tema_01_constitucion_administracion_local.md",
-				"OPES/administracion-especial/Materias-comunes-Grupo-AP/Materias-comunes-Grupo-AP.txt"
+				"domain-outputs/codex_directo/programa/produccion_externa_2026-05-19/markdown_importable/tema_01_fundamentos_servicio_publico.md",
+				"domain-docs/programa-general/materias-comunes.txt"
 			],
 			"production_action":"reuse_existing_common_topic_when_compatible",
 			"planned_work":[
-				"Validar correspondencia con el epigrafe oficial de Operario AP.",
-				"Ajustar solo referencias, nivel AP y controles de coherencia."
+				"Validar correspondencia con el epigrafe oficial.",
+				"Ajustar solo referencias, nivel y controles de coherencia."
 			]
 		}],
 		"review_steps":[{
@@ -249,10 +249,10 @@ func TestCanonicalDomainDocumentPlanPayloadJSONV0AceptaAliasesDePlanOperario(t *
 		payload,
 		DomainDocumentPlanPayloadDefaultsV0{
 			PlanRef:      "plan-cc93fbb0a41c1b04b2a4a82bb7ac3ed2",
-			DomainRef:    "opes",
+			DomainRef:    "domain-ref-learning",
 			WorkKind:     "plan_temario",
 			Objective:    "Planificar el temario completo sin redactarlo.",
-			DocumentKind: "temario_oposicion",
+			DocumentKind: "syllabus",
 		},
 	)
 	if !ok {
@@ -266,9 +266,9 @@ func TestCanonicalDomainDocumentPlanPayloadJSONV0AceptaAliasesDePlanOperario(t *
 		t.Fatalf("issues=%+v canonical=%s", issues, canonical)
 	}
 	if plan.SchemaVersion != DomainDocumentPlanSchemaV0 ||
-		plan.Sections[0].Title != "Tema 1 - Constitucion Espanola de 1978 y Administracion local" ||
+		plan.Sections[0].Title != "Tema 1 - Fundamentos del servicio publico local" ||
 		plan.Sections[0].Objective == "" ||
-		plan.Sections[0].SourceRefs[0] != "opes-salidas_codex_directo_operario_ap_produccion_externa_2026-05-19_markdown_importable_tema_01_constitucion_administracion_local.md" ||
+		plan.Sections[0].SourceRefs[0] != "domain-outputs_codex_directo_programa_produccion_externa_2026-05-19_markdown_importable_tema_01_fundamentos_servicio_publico.md" ||
 		plan.ReviewSteps[0].ReviewRef != "validate_topic_count" ||
 		plan.ReviewSteps[0].Objective == "" {
 		t.Fatalf("plan=%+v", plan)
@@ -278,7 +278,7 @@ func TestCanonicalDomainDocumentPlanPayloadJSONV0AceptaAliasesDePlanOperario(t *
 func validDomainDocumentPlanForTestV0() DomainDocumentPlanV0 {
 	return DomainDocumentPlanV0{
 		PlanRef:           " plan-tema-psicologia-001 ",
-		DomainRef:         " opes ",
+		DomainRef:         " domain-ref-learning ",
 		WorkKind:          " plan_tema ",
 		DocumentKind:      " topic ",
 		ScopeRef:          " topic-psicologia-001 ",

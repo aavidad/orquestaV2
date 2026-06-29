@@ -1,6 +1,8 @@
 package orquestamcp
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"strings"
 
 	orquestafactory "orquesta/modulos/orquesta-factory"
@@ -102,6 +104,9 @@ func ToAppSpecRequestV0(input MCPNuevaAppToolInputV0) (orquestafactory.AppSpecRe
 	req := input.AppSpecRequest
 	req.Source = MCPNuevaAppSourceV0
 	req.RequestID = firstNonEmptyMCPV0(req.RequestID, input.RequestID, input.CorrelationID)
+	if req.RequestID == "" {
+		req.RequestID = generatedMCPNuevaAppRequestIDV0()
+	}
 	return req, firstNonEmptyMCPV0(input.CorrelationID, req.RequestID)
 }
 
@@ -230,4 +235,12 @@ func compactStringsMCPV0(values []string) []string {
 		return []string{}
 	}
 	return out
+}
+
+func generatedMCPNuevaAppRequestIDV0() string {
+	var raw [8]byte
+	if _, err := rand.Read(raw[:]); err == nil {
+		return "req-mcp-nueva-app-" + hex.EncodeToString(raw[:])
+	}
+	return "req-mcp-nueva-app"
 }

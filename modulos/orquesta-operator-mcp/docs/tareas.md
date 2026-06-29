@@ -100,4 +100,6 @@ Contrato: `orquesta-mcp` expone resource y tools operativas usando `OperatorMCP*
 
 Validacion: 2026-05-06, ok, `go test -count=1 ./modulos/orquesta-operator-mcp ./modulos/orquesta-mcp`.
 
-Bloqueos: sigue pendiente un servidor/transporte MCP real; este modulo solo define contratos y puertos.
+Bloqueos: ninguno dentro de este modulo; el transporte MCP real vive como
+conector opt-in en `cmd/orquesta-server` y este modulo sigue definiendo solo
+contratos y puertos.

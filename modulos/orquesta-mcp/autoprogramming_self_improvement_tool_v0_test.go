@@ -121,7 +121,7 @@ func TestMCPAutoprogrammingSelfImprovementExecutorV0AutoPrepareRunGoalSpecsHaceH
 	if result.Estado != MCPAutoprogrammingSelfImprovementEstadoOKV0 ||
 		result.PreparedRun == nil ||
 		len(result.PreparedRun.GoalSpecs) != 1 ||
-		!stringsSliceContainsMCPHumanWorkV0(result.NextActions, "handoff_goal_specs_to_goal_backend") ||
+		!stringsSliceContainsMCPHumanWorkV0(result.NextActions, "handoff_goal_first_specs_to_internal_backend") ||
 		stringsSliceContainsMCPHumanWorkV0(result.NextActions, "supervise_prepared_run_by_run_ref") {
 		t.Fatalf("result=%+v", result)
 	}

@@ -70,11 +70,16 @@
   jobs devueltos respetan ese scope y ejecuta una consulta negativa para
   detectar instancias que ignoren filtros antes de declarar
   `ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1`.
+- Guardas de arquitectura en los adaptadores OPES: `orquesta-opes-bridge`,
+  `orquesta-opes-connector`, `orquesta-opes-director` y
+  `orquesta-opes-topic-registry` no importan servidor, MCP, web, runtime Codex,
+  stack Codex, DB ni rutas de control; el registry mantiene `os/exec` solo como
+  adaptador CLI con runner inyectado y pruebas fake.
 
 Comando:
 
 ```sh
-go test -count=1 ./modulos/orquesta-opes-bridge
+go test -count=1 ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector ./modulos/orquesta-opes-director ./modulos/orquesta-opes-topic-registry
 ```
 
 ## Reconciliacion T12 2026-05-27
@@ -87,8 +92,11 @@ revalidar este modulo junto al conector es:
 go test -count=1 ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector
 ```
 
-El smoke real de derivados/cierre sigue bloqueado hasta tener OPES temporal,
-Orquesta temporal, `ORQUESTA_OPES_TEMPORAL_CONFIRM=1`,
-`ORQUESTA_OPES_BASE_URL`, `ORQUESTA_BASE_URL`, limite bajo y confirmacion de
-efectos. Sin esas precondiciones, el resultado correcto es bloqueo verificable,
-no nuevo relanzamiento de implementacion.
+El smoke real de derivados/cierre quedo cerrado funcionalmente el 2026-06-28
+por goal-first contra OPES temporal hasta `completed_syllabus_package`; ver
+`docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md` y
+la fila `OPES-DER-RESTO` de la matriz vigente. Cualquier repeticion debe seguir
+exigiendo OPES temporal, Orquesta temporal, `ORQUESTA_OPES_TEMPORAL_CONFIRM=1`,
+`ORQUESTA_OPES_BASE_URL`, `ORQUESTA_BASE_URL`, limite bajo, scope duro y
+confirmacion de efectos. Sin esas precondiciones, el resultado correcto es
+bloqueo verificable, no nuevo relanzamiento de implementacion.

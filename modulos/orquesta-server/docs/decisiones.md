@@ -221,8 +221,10 @@ acotado que lo demuestre.
 
 ## SRV-015: app-server goal-first es composicion
 
-`cmd/orquesta-server` puede usar `codex app-server proxy` o
-`codex app-server --listen unix://<socket>` bajo `tmux` como backend goal-first opt-in. Ese codigo queda en
+`cmd/orquesta-server` usa `codex app-server --listen unix://<socket>` bajo
+`tmux` como backend goal-first normal opt-in. `codex app-server proxy` queda
+solo como compatibilidad diagnostica explicita con daemon/socket compatible, no
+como ruta de self-programming ni goal-first normal. Ese codigo queda en
 composition root: arranca threads, configura goals, inicia turns, observa
 `thread/goal/get` y lee `thread/read` para extraer
 `ORQUESTA_GOAL_RESULT_V0` o usa el archivo durable

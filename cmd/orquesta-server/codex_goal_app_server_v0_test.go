@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -164,6 +166,48 @@ func TestServerCodexAppServerGoalBackendV0LanzaThreadGoalYTurnV0(t *testing.T) {
 		protocol.turnParams.ClientMessageID != "goal-ref-codex-app-server-001" ||
 		protocol.turnParams.Effort != "medium" {
 		t.Fatalf("turn params=%+v", protocol.turnParams)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0CompactaObjetivoLargoParaAppServerV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-long-objective"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-goal-long-objective", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-goal-long-objective", Status: "inProgress"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol}
+	longObjective := "cerrar automejora goal-first: " + strings.Repeat("contexto operativo ", 260)
+	fullPrompt := "prompt conserva el objetivo completo:\n" + longObjective
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		SchemaVersion: orquestaruntimecodexgoal.CodexGoalStartPacketSchemaV0,
+		GoalRef:       "goal-ref-codex-app-server-long-objective",
+		Objective:     longObjective,
+		Prompt:        fullPrompt,
+	})
+
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if got := len([]rune(protocol.setParams.Objective)); got > codexAppServerGoalObjectiveMaxRunesV0 {
+		t.Fatalf("objective len=%d max=%d", got, codexAppServerGoalObjectiveMaxRunesV0)
+	}
+	for _, want := range []string{
+		"cerrar automejora goal-first",
+		"objective_compacted",
+		"original_sha256=",
+		"prompt_contains_full_objective",
+	} {
+		if !strings.Contains(protocol.setParams.Objective, want) {
+			t.Fatalf("objective compactado no contiene %q:\n%s", want, protocol.setParams.Objective)
+		}
+	}
+	if protocol.turnParams.InputText != fullPrompt ||
+		!strings.Contains(protocol.turnParams.InputText, longObjective) {
+		t.Fatalf("prompt no conserva objetivo completo")
 	}
 }
 
@@ -871,7 +915,7 @@ func TestServerCodexAppServerUnavailableBackendV0BloqueaConIssueCodeV0(t *testin
 	}
 }
 
-func TestServerCodexGoalBackendFromEnvV0PreflightDegradadoV0(t *testing.T) {
+func TestServerCodexGoalBackendFromEnvV0ProxyDiagnosticoNoCreaBackendOperativoV0(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "codex-fake")
 	if err := os.WriteFile(script, []byte("#!/bin/sh\necho 'Error: failed to connect to socket at /tmp/app-server-control.sock' >&2\nexit 1\n"), 0o700); err != nil {
 		t.Fatalf("write fake codex: %v", err)
@@ -879,29 +923,20 @@ func TestServerCodexGoalBackendFromEnvV0PreflightDegradadoV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envCodexCommandV0, script)
 	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envAllowAppServerProxyDiagnosticV0, "1")
 	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "1000")
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	backend, err := serverCodexGoalBackendFromEnvV0(config)
-	if err != nil {
-		t.Fatalf("serverCodexGoalBackendFromEnvV0: %v", err)
-	}
-	if backend.Starter == nil || backend.Observer == nil {
-		t.Fatalf("backend degradado debe conservar puertos: %+v", backend)
-	}
-	receipt, err := backend.Starter.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
-		GoalRef: "goal-ref-preflight-001",
-	})
-	if err == nil ||
-		receipt.IssueCode != "codex_app_server_control_socket_missing" {
-		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	_, err = serverCodexGoalBackendFromEnvV0(config)
+	if err == nil || !strings.Contains(err.Error(), "codex_goal_backend_proxy_diagnostic_not_operational") {
+		t.Fatalf("err=%v", err)
 	}
 }
 
-func TestServerCodexGoalBackendFromEnvV0PreflightOKConservaBackendRealV0(t *testing.T) {
+func TestServerCodexGoalBackendFromEnvV0ProxyDiagnosticoPreflightOKNoCreaBackendRealV0(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "codex-fake-ok")
 	if err := os.WriteFile(script, []byte(fakeCodexAppServerPreflightScriptV0("")), 0o700); err != nil {
 		t.Fatalf("write fake codex: %v", err)
@@ -909,24 +944,16 @@ func TestServerCodexGoalBackendFromEnvV0PreflightOKConservaBackendRealV0(t *test
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envCodexCommandV0, script)
 	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envAllowAppServerProxyDiagnosticV0, "1")
 	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "1000")
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	backend, err := serverCodexGoalBackendFromEnvV0(config)
-	if err != nil {
-		t.Fatalf("serverCodexGoalBackendFromEnvV0: %v", err)
-	}
-	if _, degraded := backend.Starter.(serverCodexUnavailableGoalBackendV0); degraded {
-		t.Fatalf("backend no debe quedar degradado tras preflight OK: %+v", backend)
-	}
-	if _, real := backend.Starter.(serverCodexAppServerGoalBackendV0); !real {
-		t.Fatalf("starter real=%T", backend.Starter)
-	}
-	if _, real := backend.Observer.(serverCodexAppServerGoalBackendV0); !real {
-		t.Fatalf("observer real=%T", backend.Observer)
+	_, err = serverCodexGoalBackendFromEnvV0(config)
+	if err == nil || !strings.Contains(err.Error(), "codex_goal_backend_proxy_diagnostic_not_operational") {
+		t.Fatalf("err=%v", err)
 	}
 }
 
@@ -944,7 +971,52 @@ func TestServerCodexGoalBackendFromEnvV0StdioNoEsBackendOperativoV0(t *testing.T
 	}
 }
 
-func TestServerCodexGoalBackendsFromEnvV0SeparaWorkdirAppEIdleV0(t *testing.T) {
+func TestServerCodexGoalBackendFromEnvV0ProxyRequiereOptInDiagnosticoV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	_, err = serverCodexGoalBackendFromEnvV0(config)
+	if err == nil || !strings.Contains(err.Error(), "codex_goal_backend_proxy_diagnostic_opt_in_required") {
+		t.Fatalf("err=%v", err)
+	}
+	if config.IdleSelfImprovementGoalFirst {
+		t.Fatalf("proxy sin opt-in no debe derivar goal-first operativo: %+v", config)
+	}
+}
+
+func TestCodexGoalBackendOperationalFromEnvV0SoloTmuxV0(t *testing.T) {
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envAllowAppServerProxyDiagnosticV0, "1")
+	if codexGoalBackendOperationalFromEnvV0() {
+		t.Fatalf("app_server_proxy diagnostico no debe contar como backend operativo")
+	}
+
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0)
+	if !codexGoalBackendOperationalFromEnvV0() {
+		t.Fatalf("app_server_tmux debe contar como backend operativo")
+	}
+}
+
+func TestServerConfigFromEnvV0ProxyDiagnosticoNoDerivaGoalFirstIdleV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envAllowAppServerProxyDiagnosticV0, "1")
+	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.IdleSelfImprovementGoalFirst {
+		t.Fatalf("proxy diagnostico no debe derivar goal-first idle: %+v", config)
+	}
+}
+
+func TestServerCodexGoalBackendsFromEnvV0ProxyDiagnosticoNoCableaAppNiIdleV0(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "codex-fake-ok")
 	if err := os.WriteFile(script, []byte(fakeCodexAppServerPreflightScriptV0("")), 0o700); err != nil {
 		t.Fatalf("write fake codex: %v", err)
@@ -956,29 +1028,16 @@ func TestServerCodexGoalBackendsFromEnvV0SeparaWorkdirAppEIdleV0(t *testing.T) {
 	t.Setenv(envServerIdleSelfImprovementProjectWorkDirV0, idleDir)
 	t.Setenv(envCodexCommandV0, script)
 	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envAllowAppServerProxyDiagnosticV0, "1")
 	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "1000")
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	backends, err := serverCodexGoalBackendsFromEnvV0(config)
-	if err != nil {
-		t.Fatalf("serverCodexGoalBackendsFromEnvV0: %v", err)
-	}
-	appStarter, ok := backends.AppGoal.Starter.(serverCodexAppServerGoalBackendV0)
-	if !ok {
-		t.Fatalf("app starter=%T", backends.AppGoal.Starter)
-	}
-	idleStarter, ok := backends.IdleGoal.Starter.(serverCodexAppServerGoalBackendV0)
-	if !ok {
-		t.Fatalf("idle starter=%T", backends.IdleGoal.Starter)
-	}
-	if appStarter.CWD != filepath.Clean(appDir) {
-		t.Fatalf("app CWD=%q want %q", appStarter.CWD, filepath.Clean(appDir))
-	}
-	if idleStarter.CWD != filepath.Clean(idleDir) {
-		t.Fatalf("idle CWD=%q want %q", idleStarter.CWD, filepath.Clean(idleDir))
+	_, err = serverCodexGoalBackendsFromEnvV0(config)
+	if err == nil || !strings.Contains(err.Error(), "codex_goal_backend_proxy_diagnostic_not_operational") {
+		t.Fatalf("err=%v", err)
 	}
 }
 
@@ -1029,12 +1088,42 @@ func TestCodexAppServerRPCPayloadYDecodeV0(t *testing.T) {
 		threadResponse.Thread.Turns[0].Items[0].Phase != "final_answer" {
 		t.Fatalf("thread response=%+v", threadResponse)
 	}
+
+	stdout = []byte(`{"id":2,"error":{"code":-32602,"message":"params invalidos"}}` + "\n")
+	err = decodeCodexAppServerRPCResponseV0(stdout, 2, &threadResponse)
+	var callErr codexAppServerCallErrorV0
+	if !errors.As(err, &callErr) || callErr.Code != "codex_app_server_rpc_invalid_params" {
+		t.Fatalf("rpc error no estructurado: err=%v callErr=%+v", err, callErr)
+	}
+}
+
+func TestCodexAppServerCommandProtocolV0RechazaArgsVaciosV0(t *testing.T) {
+	protocol := serverCodexAppServerCommandProtocolV0{
+		CommandPath: os.Args[0],
+		Timeout:     time.Second,
+	}
+	err := protocol.ProbeV0(context.Background())
+	var callErr codexAppServerCallErrorV0
+	if !errors.As(err, &callErr) || callErr.Code != "codex_app_server_command_args_required" {
+		t.Fatalf("err=%v callErr=%+v", err, callErr)
+	}
+}
+
+func TestCodexAppServerWebSocketReadResponseV0EstructuraErroresRPCV0(t *testing.T) {
+	frame := codexAppServerWebSocketFrameForTestV0(
+		[]byte(`{"id":2,"error":{"code":-32601,"message":"method missing"}}`),
+	)
+	err := codexAppServerWebSocketReadResponseV0(bufio.NewReader(bytes.NewReader(frame)), 2, nil)
+	var callErr codexAppServerCallErrorV0
+	if !errors.As(err, &callErr) || callErr.Code != "codex_app_server_rpc_method_not_found" {
+		t.Fatalf("websocket rpc error no estructurado: err=%v callErr=%+v", err, callErr)
+	}
 }
 
 func TestServerEffectiveConfigV0ExponeGoalFirstYBackendV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "true")
-	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0)
 	t.Setenv(envCodexGoalTimeoutMSV0, "12000")
 
 	config, err := serverConfigFromEnvV0()
@@ -1045,7 +1134,7 @@ func TestServerEffectiveConfigV0ExponeGoalFirstYBackendV0(t *testing.T) {
 	if got := effectiveSettingValueForTestV0(settings, envServerIdleSelfImprovementGoalFirstV0); got != "true" {
 		t.Fatalf("goal-first setting=%q", got)
 	}
-	if got := effectiveSettingValueForTestV0(settings, envCodexGoalBackendV0); got != codexGoalBackendAppServerProxyV0 {
+	if got := effectiveSettingValueForTestV0(settings, envCodexGoalBackendV0); got != codexGoalBackendAppServerTmuxV0 {
 		t.Fatalf("goal backend=%q", got)
 	}
 	if got := effectiveSettingValueForTestV0(settings, envCodexGoalTimeoutMSV0); got != "12000" {
@@ -1059,6 +1148,19 @@ func TestServerEffectiveConfigV0ExponeGoalFirstYBackendV0(t *testing.T) {
 func fakeCodexAppServerPreflightScriptV0(mode string) string {
 	argsCheck := ""
 	return "#!/bin/sh\n" + argsCheck + "while IFS= read -r line; do\n  case \"$line\" in\n    *'\"id\":1'*) printf '{\"id\":1,\"result\":{}}\\n' ;;\n    *'\"id\":2'*) printf '{\"id\":2,\"result\":{\"data\":[]}}\\n'; exit 0 ;;\n  esac\ndone\nexit 1\n"
+}
+
+func codexAppServerWebSocketFrameForTestV0(payload []byte) []byte {
+	frame := []byte{0x81}
+	switch size := len(payload); {
+	case size < 126:
+		frame = append(frame, byte(size))
+	case size <= 65535:
+		frame = append(frame, 126, byte(size>>8), byte(size))
+	default:
+		panic("test websocket frame too large")
+	}
+	return append(frame, payload...)
 }
 
 type fakeCodexAppServerProtocolV0 struct {

@@ -39,6 +39,14 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`data-guided-action="data_management"`,
 		`data-guided-action="architecture_event" data-help="Elige orientada a eventos`,
 		`data-guided-action="quality_public" data-help="Eleva pruebas y accesibilidad`,
+		`id="guided-active-question"`,
+		`id="guided-answer"`,
+		`data-guided-answer`,
+		`answer_field:answerField,answer:answer`,
+		`function submitGuidedAnswer()`,
+		`function guidedActiveQuestionField()`,
+		`function updateGuidedQuestion()`,
+		`data-help="Aplica una respuesta libre`,
 		`data-help="Lee la necesidad libre`,
 		`data-help="Salta a la revision final`,
 		`data-help="Compila una vista previa del GoalWorkSpec`,
@@ -59,6 +67,9 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`data-preset="webapp"`,
 		`.help-text`,
 		`function initAccessibleHelp()`,
+		`let guidedSession=null`,
+		`if(guidedSession)body.session=guidedSession`,
+		`if(out&&out.session){guidedSession=out.session;updateGuidedQuestion();}`,
 		`aria-describedby`,
 		`matchMedia('(prefers-reduced-motion: reduce)')`,
 		`[data-help]::after`,
@@ -67,6 +78,7 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`data-help="Opciones: crear app completa`,
 		`data-help="Interfaz web para navegador."`,
 		`data-help="Opciones: sin elegir`,
+		`data-help="Perfiles de usuarios separados por comas.`,
 		`Alcance de validacion`,
 		`Compatibilidad historica`,
 		`Forzar loop historico del Director`,
@@ -82,6 +94,8 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`name="locale"`,
 		`name="nombre"`,
 		`name="objetivo"`,
+		`name="usuarios_objetivo"`,
+		`name="restricciones"`,
 		`name="tipo_app"`,
 		`name="project_source.kind"`,
 		`name="project_source.git_url"`,
@@ -90,6 +104,7 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`name="project_source.project_ref"`,
 		`name="plataformas"`,
 		`name="preferencias_tecnicas.arquitectura"`,
+		`name="preferencias_tecnicas.restricciones"`,
 		`<option value="">Sin preferencia</option>`,
 		`<option value="clean_architecture">Arquitectura limpia</option>`,
 		`<option value="true">Si</option>`,
@@ -103,6 +118,13 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`name="datos.tipos_detallados.3.nombre"`,
 		`Dato 3`,
 		`Dato 4`,
+		`name="datos.fuentes.0.nombre"`,
+		`name="datos.fuentes.0.frecuencia"`,
+		`name="datos.fuentes.1.nombre"`,
+		`name="datos.fuentes.2.nombre"`,
+		`name="datos.fuentes.3.nombre"`,
+		`name="datos.operacion.criticidad"`,
+		`name="datos.operacion.auditoria"`,
 		`name="datos.storage.0.tipo"`,
 		`name="datos.storage.3.tipo"`,
 		`Almacenamiento 3`,
@@ -116,18 +138,41 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`name="deploy.target"`,
 		`name="calidad.pruebas"`,
 		`name="calidad.accesibilidad_opciones"`,
+		`type="checkbox" name="calidad.accesibilidad_opciones" value="wcag_aa"`,
+		`function fieldList(el)`,
+		`Array.prototype.forEach.call(el,item=>`,
+		`item.checked=values.includes(item.value)`,
+		`value="lectores_pantalla"`,
+		`value="movimiento_reducido"`,
 		`value="normal"`,
 		`name="documentacion.usuario"`,
 		`name="documentacion.desarrollo"`,
 		`name="documentacion.sistemas"`,
+		`name="documentacion.profundidad"`,
+		`value="profunda"`,
+		`data-help="Basica pide minimos`,
 		`name="documentacion.locales"`,
 		`data-help="Marca Si si la app debe entregar manual de usuario`,
 		`name="agentes.autonomia"`,
 		`name="integraciones.0.tipo"`,
+		`name="integraciones.0.direccion"`,
+		`name="integraciones.0.auth"`,
+		`name="integraciones.0.data_scope"`,
+		`name="integraciones.0.criticidad"`,
 		`name="integraciones.1.tipo"`,
 		`name="integraciones.3.tipo"`,
 		`Integracion 4`,
 		`value="maps"`,
+		`value="file_export"`,
+		`value="messaging"`,
+		`value="llm"`,
+		`value="storage"`,
+		`value="other"`,
+		`data-summary-integrations="Integraciones"`,
+		`data-summary-sensitivity="Sensibilidad"`,
+		`data-summary-accessibility="Accesibilidad"`,
+		`data-summary-documentation="Documentacion"`,
+		`data-summary-deploy="Despliegue"`,
 		`.help-open::after`,
 		`closeHelpBubbles`,
 		`event.pointerType`,
@@ -163,6 +208,11 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		!strings.Contains(body, `applyServerGuided`) ||
 		!strings.Contains(body, `function configureRentalData()`) {
 		t.Fatalf("GET HTML conserva validacion nativa del navegador\n%s", body)
+	}
+	if strings.Contains(body, `data-help=""`) ||
+		strings.Contains(body, `data-help="Texto no disponible.`) ||
+		strings.Contains(body, `data-help="Text unavailable.`) {
+		t.Fatalf("GET HTML contiene tooltip vacio o generico\n%s", body)
 	}
 }
 
@@ -390,7 +440,7 @@ func TestNuevaAppHTMLHandlerV0POSTInvalidoRenderizaErrorPublico(t *testing.T) {
 	if client.calls != 1 {
 		t.Fatalf("calls=%d", client.calls)
 	}
-	for _, want := range []string{"Necesita correcciones", "app_spec_invalida", "La solicitud de app no es valida."} {
+	for _, want := range []string{"Necesita correcciones", "app_spec_invalida", "nombre", "campo obligatorio"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("POST invalido no contiene %q\n%s", want, body)
 		}

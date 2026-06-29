@@ -15,6 +15,8 @@ declara `/api/mcp` ni rutas legacy como superficie vigente. La superficie MCP
 actual es el adaptador `modulos/orquesta-mcp`; el transporte real del servidor,
 cuando la composicion lo habilita, es opt-in en `cmd/orquesta-server` y usa
 `/mcp` con tools/resources registrados por puerto.
+Las menciones historicas a `--mcp-stdio` no autorizan backend Goal stdio ni
+operacion normal por stdio; Goal-first vigente usa `app_server_tmux`.
 
 OpenClaw, Claude Desktop, LangGraph u otros gestores externos solo pueden entrar
 como clientes/adaptadores de composicion con refs opacas, write-set, identidad,

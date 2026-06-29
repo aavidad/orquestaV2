@@ -38,13 +38,13 @@ arranca Codex Goal ni autorizan a meter un backend local en este modulo.
 Puerto de composicion que crea el goal real. El adaptador no implementa llamadas
 directas a herramientas internas; solo define la frontera.
 
-La composicion `cmd/orquesta-server` aporta implementaciones opt-in con
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_tmux`: usan
-`codex app-server`, no `codex exec`, y mantienen el transporte fuera de este
-modulo. `app_server_proxy` habla con un daemon/socket local ya disponible;
-`app_server_tmux` lanza `codex app-server --listen unix://<socket>` dentro de
-una sesion `tmux` opaca y habla WebSocket sobre el Unix socket privado. Para no
-competir con las sqlite de la sesion Codex principal, la composicion proyecta
+La composicion `cmd/orquesta-server` aporta implementacion opt-in normal con
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`: usa `codex app-server`, no
+`codex exec`, y mantiene el transporte fuera de este modulo. `app_server_tmux`
+lanza `codex app-server --listen unix://<socket>` dentro de una sesion `tmux`
+opaca y habla WebSocket sobre el Unix socket privado. `app_server_proxy` queda
+solo como diagnostico breakglass explicito, no como ruta de self-programming.
+Para no competir con las sqlite de la sesion Codex principal, la composicion proyecta
 `auth.json` y `config.toml` a un `CODEX_HOME` aislado bajo el runtime del
 app-server. Si el transporte no esta disponible, la
 composicion puede devolver `IssueCode` compacto; el launcher neutral lo conserva

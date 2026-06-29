@@ -188,7 +188,7 @@ Evidencia esperada: `RESTAutoprogrammingPrepareRunClientV0` envia
 `POST /api/v0/autoprogramming/prepare-run`, correlation header,
 `worktree_isolated=true`, `worktree_ref`, `branch_ref`, write-set y tests
 obligatorios; `priority_score` cruza como dato de cola opcional; la respuesta
-proyecta run, workflow tasks, agentes de espera, `goal_specs` opcional,
+proyecta run, workflow tasks, agentes de espera, `goal_spec_summaries` opcional,
 continue y errores publicos sin leer runtime/stores.
 Ultima ejecucion: 2026-05-23; pasa.
 Riesgos: El executor real de prepare-run se inyecta fuera de web; este corte
@@ -280,12 +280,14 @@ de validacion de enums de factory. `TestWebNuevaAppIntakeGuided*` valida que
 una necesidad libre de app movil para alquileres cercanos produce decisiones de
 plataforma, datos, storage, mapas, arquitectura y accesibilidad compatibles con
 factory. `TestNuevaAppIntakeGuidedHTTPHandler*` valida el endpoint JSON
-`POST /api/v0/apps/intake/guided-turn`, acciones de seguimiento y errores HTTP,
-sin DB, runtime, filesystem productivo, LLM real ni MCP directo.
-Ultima ejecucion: 2026-06-25; pasa con `GOCACHE=/tmp/orquesta-go-cache`.
-Riesgos: No arranca agente de intake real; el endpoint es calculo puro de
-wizard y el handoff solo declara contrato compacto. La disponibilidad de la
-ruta depende de la composicion/gateway.
+`POST /api/v0/apps/intake/guided-turn`, acciones de seguimiento, errores HTTP,
+cliente HTML que reenvia la sesion resultante, puerto conversacional inyectable
+y fallback local si el asistente falla, sin DB, runtime, filesystem productivo,
+LLM real ni MCP directo.
+Ultima ejecucion: 2026-06-29; pasa con `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway -run 'NuevaAppIntakeGuided|NuevaAppHTMLHandler'`.
+Riesgos: El agente de intake real depende de adaptador/composicion que implemente
+`WebNuevaAppIntakeAssistantPortV0`; el gateway ya acepta esa inyeccion y el
+fallback local sigue siendo determinista.
 ```
 
 ## Validaciones realizadas en este arranque

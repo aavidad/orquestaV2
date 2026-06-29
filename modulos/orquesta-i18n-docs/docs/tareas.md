@@ -45,7 +45,7 @@ Objetivo: Definir contrato local del puerto de entrada para generar catalogos i1
 Write-set: docs/contratos.md
 Simbolo foco: GenerarI18nDocsIniciales
 Contrato: puerto_entrada v0
-Validacion: Contrato promovido en `../../CONTRATOS.md`; prueba ejecutable pendiente `contract:generar-i18n-docs-iniciales-v0` hasta existir harness local.
+Validacion: Contrato promovido en `../../CONTRATOS.md`; `go test -count=1 ./modulos/orquesta-i18n-docs` cubre el builder local desde `PlanSeedV0`.
 Bloqueos: Ninguno. Direccion promovio `GenerarI18nDocsIniciales v0` a contrato compartido factory -> i18n-docs.
 Estado: completada/promovida
 ```
@@ -56,9 +56,9 @@ Objetivo: Definir DTO de salida unico para el plan serializable de i18n/docs sin
 Write-set: docs/contratos.md
 Simbolo foco: AppI18nDocsPlanV0
 Contrato: dto v0
-Validacion: Prueba de contrato pendiente `contract:app-i18n-docs-plan-v0`.
+Validacion: `go test -count=1 ./modulos/orquesta-i18n-docs` con `contract:app-i18n-docs-plan-v0-relacional`.
 Bloqueos: Ninguno.
-Estado: documentada
+Estado: completada
 ```
 
 ```text
@@ -67,9 +67,9 @@ Objetivo: Definir estructura unica de bundle i18n para web y factory.
 Write-set: docs/contratos.md, docs/decisiones.md
 Simbolo foco: I18nBundleV0
 Contrato: dto v0
-Validacion: Prueba de contrato pendiente `contract:i18n-bundle-v0`.
+Validacion: Schema local y `go test -count=1 ./modulos/orquesta-i18n-docs` validan estructura, claves y paridad de catalogos.
 Bloqueos: Ninguno.
-Estado: documentada
+Estado: completada
 ```
 
 ```text
@@ -78,9 +78,9 @@ Objetivo: Definir catalogo localizable con claves estables y mensajes testeables
 Write-set: docs/contratos.md
 Simbolo foco: I18nCatalogV0
 Contrato: dto v0
-Validacion: Prueba de contrato pendiente `contract:i18n-catalog-v0`.
+Validacion: `go test -count=1 ./modulos/orquesta-i18n-docs` cubre `clave_requerida_faltante`, `locale_sin_catalogo` y `locale_no_coincide`.
 Bloqueos: Ninguno.
-Estado: documentada
+Estado: completada
 ```
 
 ```text
@@ -89,9 +89,9 @@ Objetivo: Definir huella comun para garantizar que skeleton y loader comparten e
 Write-set: docs/contratos.md, docs/decisiones.md
 Simbolo foco: I18nSkeletonLoaderShapeV0
 Contrato: dto v0
-Validacion: Prueba de contrato pendiente `contract:i18n-skeleton-loader-shape-v0`.
+Validacion: `go test -count=1 ./modulos/orquesta-i18n-docs` con comparador `ValidateI18nSkeletonLoaderShapeV0`.
 Bloqueos: Ninguno.
-Estado: documentada
+Estado: completada
 ```
 
 ```text
@@ -100,9 +100,9 @@ Objetivo: Definir bundle de documentacion generada con idioma declarado por docu
 Write-set: docs/contratos.md, docs/decisiones.md
 Simbolo foco: DocsBundleV0
 Contrato: dto v0
-Validacion: Prueba de contrato pendiente `contract:docs-bundle-v0`.
+Validacion: `go test -count=1 ./modulos/orquesta-i18n-docs` valida cobertura de tipos documentales por locale.
 Bloqueos: Ninguno.
-Estado: documentada
+Estado: completada
 ```
 
 ```text
@@ -111,9 +111,9 @@ Objetivo: Definir documento generado inicial para manual de usuario, desarrollad
 Write-set: docs/contratos.md
 Simbolo foco: GeneratedDocV0
 Contrato: dto v0, DocSectionV0
-Validacion: Prueba de contrato pendiente `contract:generated-doc-v0`.
+Validacion: `go test -count=1 ./modulos/orquesta-i18n-docs` con `ValidateGeneratedDocV0`.
 Bloqueos: Ninguno.
-Estado: documentada
+Estado: completada
 ```
 
 ```text
@@ -122,9 +122,9 @@ Objetivo: Registrar pruebas previstas de contrato, integracion simulada y smoke 
 Write-set: docs/pruebas.md
 Simbolo foco: pruebas i18n-docs v0
 Contrato: GenerarI18nDocsIniciales v0, I18nBundleV0, DocsBundleV0
-Validacion: docs/pruebas.md contiene casos unit, contract, integration y smoke.
-Bloqueos: Comandos reales pendientes hasta que exista implementacion.
-Estado: documentada
+Validacion: docs/pruebas.md contiene comandos reales unit, contract, integration local y smoke.
+Bloqueos: Ninguno para el contrato puro; la integracion AppSpecV0 real pertenece a un adaptador futuro.
+Estado: completada
 ```
 
 ```text

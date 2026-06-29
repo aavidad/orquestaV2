@@ -1,5 +1,12 @@
 # Smoke OPES External Work Con Agente Real
 
+## Vigencia
+
+Runbook historico de 2026-05-13. No describe la ruta normal vigente. Para
+reejecucion con efectos, usar OPES temporal confirmado, Orquesta goal-first con
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`, observacion por goal y sin loop
+legacy salvo opt-in historico explicito.
+
 Objetivo: validar el recorrido productivo minimo OPES -> Orquesta -> agente
 real -> artefacto OPES sin usar DB, ficheros internos ni subagentes manuales.
 
@@ -10,12 +17,11 @@ Este smoke no sustituye al smoke directo `domain-work`. Prueba otra frontera:
 1. OPES crea `topic` y `chapter` reales.
 2. OPES crea un job externo `draft_content_block`.
 3. Orquesta recibe el trabajo por `/api/v0/external-work/run`.
-4. Orquesta crea un run operativo, abre `programacion` y lo encola.
-5. La fuente determinista de app-change materializa una tarea
-   `ApplyExternalDomainWorkV0` sin arrancar director LLM inicial.
-6. Orquesta arranca un Codex real para esa tarea.
-7. El ACK del agente se transforma en `submit_artifact`.
-8. OPES recibe un artefacto y materializa bloque si el dominio lo permite.
+4. En la ruta vigente, Orquesta crea un contenedor goal-first y lanza Codex Goal
+   por `app_server_tmux`.
+5. La observacion por goal transforma evidencias/artefactos causales en
+   `submit_artifact`.
+6. OPES recibe un artefacto y materializa bloque si el dominio lo permite.
 
 ## Ejecucion
 
@@ -23,6 +29,8 @@ OPES debe estar levantado y exponer su API publica:
 
 ```bash
 ORQUESTA_OPES_AGENT_SMOKE_CONFIRM=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \
 OPES_BASE_URL=http://127.0.0.1:18082 \
 ORQUESTA_CODEX_COMMAND="$(command -v codex)" \
 ORQUESTA_CODEX_HOME="$HOME" \

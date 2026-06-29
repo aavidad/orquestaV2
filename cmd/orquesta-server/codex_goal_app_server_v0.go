@@ -18,13 +18,15 @@ import (
 )
 
 const (
-	codexGoalBackendAppServerProxyV0 = "app_server_proxy"
-	codexGoalBackendAppServerTmuxV0  = "app_server_tmux"
+	codexGoalBackendAppServerProxyV0      = "app_server_proxy"
+	codexGoalBackendAppServerTmuxV0       = "app_server_tmux"
+	codexAppServerGoalObjectiveMaxRunesV0 = 4000
 )
 
 type serverCodexGoalBackendV0 struct {
-	Starter  orquestaruntimecodexgoal.CodexGoalStarterPortV0
-	Observer orquestaruntimecodexgoal.CodexGoalObserverPortV0
+	Starter      orquestaruntimecodexgoal.CodexGoalStarterPortV0
+	Observer     orquestaruntimecodexgoal.CodexGoalObserverPortV0
+	ShutdownHook orquestaserver.RuntimeShutdownHookPortV0
 }
 
 type serverGoalSupervisorV0 struct {
@@ -202,7 +204,7 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	}
 	if _, err := backend.Protocol.SetGoalV0(ctx, serverCodexAppServerThreadGoalSetParamsV0{
 		ThreadID:    threadID,
-		Objective:   strings.TrimSpace(packet.Objective),
+		Objective:   codexAppServerGoalObjectiveV0(packet.Objective),
 		Status:      "active",
 		TokenBudget: tokenBudget,
 	}); err != nil {
@@ -338,6 +340,24 @@ func codexAppServerGoalFingerprintHashV0(goal serverCodexAppServerThreadGoalV0) 
 		fmt.Sprintf("%d", tokenBudget),
 	}, "\x00")))
 	return fmt.Sprintf("%x", sum[:])
+}
+
+func codexAppServerGoalObjectiveV0(objective string) string {
+	objective = strings.TrimSpace(objective)
+	if len([]rune(objective)) <= codexAppServerGoalObjectiveMaxRunesV0 {
+		return objective
+	}
+	sum := sha256.Sum256([]byte(objective))
+	suffix := fmt.Sprintf(
+		"\n\n[objective_compacted original_sha256=%x original_bytes=%d prompt_contains_full_objective]",
+		sum[:],
+		len([]byte(objective)),
+	)
+	limit := codexAppServerGoalObjectiveMaxRunesV0 - len([]rune(suffix))
+	if limit < 1 {
+		return strings.TrimSpace(string([]rune(suffix)[:codexAppServerGoalObjectiveMaxRunesV0]))
+	}
+	return strings.TrimSpace(string([]rune(objective)[:limit])) + suffix
 }
 
 func (backend serverCodexAppServerGoalBackendV0) threadStartParamsV0() serverCodexAppServerThreadStartParamsV0 {
@@ -629,7 +649,7 @@ func decodeCodexAppServerRPCResponseScannerV0(scanner *bufio.Scanner, responseID
 			continue
 		}
 		if response.Error != nil {
-			return fmt.Errorf("codex_app_server_rpc_error:%s", response.Error.Message)
+			return codexAppServerRPCErrorV0(response.Error.Code, response.Error.Message)
 		}
 		if out == nil {
 			return nil
@@ -652,6 +672,31 @@ type serverCodexAppServerRPCResponseV0 struct {
 	ID     int             `json:"id,omitempty"`
 	Result json.RawMessage `json:"result,omitempty"`
 	Error  *struct {
+		Code    int    `json:"code,omitempty"`
 		Message string `json:"message"`
 	} `json:"error,omitempty"`
+}
+
+func codexAppServerRPCErrorV0(code int, message string) error {
+	return codexAppServerCallErrorV0{
+		Code: codexAppServerRPCIssueCodeV0(code),
+		Err:  fmt.Errorf("codex_app_server_rpc_error: code=%d message=%s", code, strings.TrimSpace(message)),
+	}
+}
+
+func codexAppServerRPCIssueCodeV0(code int) string {
+	switch code {
+	case -32700:
+		return "codex_app_server_rpc_parse_error"
+	case -32600:
+		return "codex_app_server_rpc_invalid_request"
+	case -32601:
+		return "codex_app_server_rpc_method_not_found"
+	case -32602:
+		return "codex_app_server_rpc_invalid_params"
+	case -32603:
+		return "codex_app_server_rpc_internal_error"
+	default:
+		return "codex_app_server_rpc_error"
+	}
 }

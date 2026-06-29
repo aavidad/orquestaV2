@@ -1,6 +1,7 @@
 package orquestaweb
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -21,6 +22,8 @@ type WebNuevaAppIntakeGuidedRequestV0 struct {
 	Need          string                      `json:"need,omitempty"`
 	ActionID      string                      `json:"action_id,omitempty"`
 	ActionIDs     []string                    `json:"action_ids,omitempty"`
+	AnswerField   string                      `json:"answer_field,omitempty"`
+	Answer        string                      `json:"answer,omitempty"`
 	Session       *WebNuevaAppIntakeSessionV0 `json:"session,omitempty"`
 }
 
@@ -30,10 +33,26 @@ type WebNuevaAppIntakeGuidedResponseV0 struct {
 	Session       WebNuevaAppIntakeSessionV0    `json:"session"`
 }
 
-type NuevaAppIntakeGuidedHTTPHandlerV0 struct{}
+type WebNuevaAppIntakeAssistantPortV0 interface {
+	BuildNuevaAppIntakeGuidedTurnV0(
+		context.Context,
+		WebNuevaAppIntakeGuidedRequestV0,
+		WebNuevaAppIntakeSessionV0,
+	) (WebNuevaAppIntakeGuidedTurnV0, error)
+}
+
+type NuevaAppIntakeGuidedHTTPHandlerV0 struct {
+	Assistant WebNuevaAppIntakeAssistantPortV0
+}
 
 func NewNuevaAppIntakeGuidedHTTPHandlerV0() NuevaAppIntakeGuidedHTTPHandlerV0 {
 	return NuevaAppIntakeGuidedHTTPHandlerV0{}
+}
+
+func NewNuevaAppIntakeGuidedHTTPHandlerWithAssistantV0(
+	assistant WebNuevaAppIntakeAssistantPortV0,
+) NuevaAppIntakeGuidedHTTPHandlerV0 {
+	return NuevaAppIntakeGuidedHTTPHandlerV0{Assistant: assistant}
 }
 
 func (handler NuevaAppIntakeGuidedHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -62,10 +81,17 @@ func (handler NuevaAppIntakeGuidedHTTPHandlerV0) handlePost(w http.ResponseWrite
 		writeNuevaAppIntakeGuidedErrorV0(w, http.StatusBadRequest)
 		return
 	}
-	writeNuevaAppIntakeGuidedJSONV0(w, http.StatusOK, NewWebNuevaAppIntakeGuidedResponseV0(request))
+	writeNuevaAppIntakeGuidedJSONV0(w, http.StatusOK, handler.NewResponseV0(r.Context(), request))
 }
 
 func NewWebNuevaAppIntakeGuidedResponseV0(
+	request WebNuevaAppIntakeGuidedRequestV0,
+) WebNuevaAppIntakeGuidedResponseV0 {
+	return NuevaAppIntakeGuidedHTTPHandlerV0{}.NewResponseV0(context.Background(), request)
+}
+
+func (handler NuevaAppIntakeGuidedHTTPHandlerV0) NewResponseV0(
+	ctx context.Context,
 	request WebNuevaAppIntakeGuidedRequestV0,
 ) WebNuevaAppIntakeGuidedResponseV0 {
 	session := webNuevaAppIntakeGuidedSessionV0(request)
@@ -74,10 +100,18 @@ func NewWebNuevaAppIntakeGuidedResponseV0(
 		Followups:     guidedFollowupActionsV0(),
 		Messages:      []string{},
 	}
-	if need := strings.TrimSpace(request.Need); need != "" {
+	if assistant := handler.Assistant; assistant != nil {
+		if assistedTurn, err := assistant.BuildNuevaAppIntakeGuidedTurnV0(ctx, request, session); err == nil {
+			turn = normalizeWebNuevaAppIntakeGuidedTurnV0(assistedTurn, request.Need)
+		}
+	}
+	if need := strings.TrimSpace(request.Need); need != "" && len(turn.Decisions) == 0 {
 		turn = NewWebNuevaAppIntakeGuidedTurnV0(need)
+	}
+	if len(turn.Decisions) > 0 {
 		session = ApplyWebNuevaAppIntakeGuidedTurnV0(session, turn)
 	}
+	session = ApplyWebNuevaAppIntakeGuidedAnswerV0(session, request.AnswerField, request.Answer)
 	for _, actionID := range append([]string{request.ActionID}, request.ActionIDs...) {
 		session = ApplyWebNuevaAppIntakeGuidedActionV0(session, actionID)
 	}
@@ -86,6 +120,26 @@ func NewWebNuevaAppIntakeGuidedResponseV0(
 		Turn:          turn,
 		Session:       session,
 	}
+}
+
+func normalizeWebNuevaAppIntakeGuidedTurnV0(
+	turn WebNuevaAppIntakeGuidedTurnV0,
+	fallbackNeed string,
+) WebNuevaAppIntakeGuidedTurnV0 {
+	turn.SchemaVersion = WebNuevaAppIntakeGuidedTurnSchemaV0
+	if strings.TrimSpace(turn.Need) == "" {
+		turn.Need = strings.TrimSpace(fallbackNeed)
+	}
+	if turn.Decisions == nil {
+		turn.Decisions = []WebNuevaAppIntakeDecisionV0{}
+	}
+	if len(turn.Followups) == 0 {
+		turn.Followups = guidedFollowupActionsV0()
+	}
+	if turn.Messages == nil {
+		turn.Messages = []string{}
+	}
+	return turn
 }
 
 func webNuevaAppIntakeGuidedSessionV0(request WebNuevaAppIntakeGuidedRequestV0) WebNuevaAppIntakeSessionV0 {

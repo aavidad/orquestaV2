@@ -141,14 +141,19 @@ definido sin arrancar el flujo de nueva app ni un director LLM inicial.
 Alternativas: reutilizar `/api/v0/apps/director`; llamar a `request_change`
 despues de crear el run manualmente; crear un endpoint OPES especifico. Se
 descartan porque mezclan responsabilidades o acoplan Orquesta a una app.
-Impacto: MCP delega en `orquesta-external-work-run`, queda opt-in por executor
-inyectado y publica `POST /api/v0/external-work/run`. Desde el corte
-Goal-first, el resultado declara `route_policy=legacy_director_loop` y
-`director_execution_mode=legacy_director_loop`: no crea `GoalWorkStateV0` ni
-arranca Codex Goal hasta que exista el camino external-work Goal-first.
+Impacto historico: MCP delega en `orquesta-external-work-run`, queda opt-in por
+executor inyectado y publica `POST /api/v0/external-work/run`.
+
+Actualizacion 2026-06-29: la parte que declaraba
+`route_policy=legacy_director_loop` como salida normal queda supersedida. El
+contrato vigente es Goal-first para trabajo externo nuevo: con backend Goal
+completo puede crear `GoalWorkStateV0`, lanzar Goal por adaptador opt-in y
+devolver `goal_ref`; sin backend Goal completo devuelve error operativo y no
+degrada a legacy. El loop historico solo queda como compatibilidad explicita
+con `director_execution_mode=legacy_director_loop` y composicion opt-in.
 Contratos afectados: mcp.tool.orquesta.external_work.run.v0;
 rest.bridge.orquesta.external_work.run.v0; StartExternalWorkRunV0.
-Estado: aceptada localmente
+Estado: aceptada localmente; salida normal supersedida por corte Goal-first
 ```
 
 ```text
@@ -544,13 +549,13 @@ Estado: aceptada localmente.
 Fecha: 2026-06-27
 Decision: La automejora de autoprogramacion ramifica sus `next_actions` segun
 la salida real de `prepare-run`.
-Motivo: si `prepare-run` devuelve `goal`/`goals` o `goal_specs[]`, recomendar
-`supervise_prepared_run_by_run_ref` reintroduce el loop legacy que Codex Goal
-debe sustituir.
+Motivo: si `prepare-run` devuelve `goal`/`goals` o un handoff interno de specs,
+recomendar `supervise_prepared_run_by_run_ref` reintroduce el loop legacy que
+Codex Goal debe sustituir.
 Impacto: con `goal` o `goals` recomienda `observe_autoprogramming_goal`; con
-`goal_specs[]` sin run lanzada recomienda `handoff_goal_specs_to_goal_backend`;
-solo mantiene `supervise_prepared_run_by_run_ref` para la rama legacy con
-`run_ref`.
+specs internas sin run lanzada recomienda
+`handoff_goal_first_specs_to_internal_backend`; solo mantiene
+`supervise_prepared_run_by_run_ref` para la rama legacy con `run_ref`.
 Contratos afectados: `orquesta.autoprogramming.self_improvement.propose.v0`,
 `orquesta.autoprogramming.prepare_run.v0`.
 Estado: aceptada localmente.
@@ -652,7 +657,8 @@ acoplaria el contrato generico a una composicion concreta.
 Impacto: MCP solo define DTO, descriptor, HTTP handler y puerto inyectado. La
 composicion Codex implementa el executor real y la supervision posterior debe
 usar `run_ref` explicito en la rama legacy. Actualizacion 2026-06-25: la rama
-Goal-first puede devolver `goal_specs[]` sin `run_ref` legacy ni `continue`.
+Goal-first conserva specs completas solo como handoff interno y publica
+`goal_spec_summaries[]` sin `run_ref` legacy ni `continue`.
 Contratos afectados: mcp.tool.orquesta.autoprogramming.prepare_run.v0;
 rest.bridge.orquesta.autoprogramming.prepare_run.v0.
 Estado: aceptada localmente.
@@ -664,11 +670,13 @@ Decision: `orquesta.autoprogramming.prepare_run.v0` acepta salida Goal-first sin
 `run_ref` legacy.
 Motivo: cuando la composicion clasifica el trabajo como `goal_ready`,
 materializar una `run` y encolarla duplica el loop que ya debe llevar Codex
-Goal. `prepare-run` debe entregar `goal_specs[]` y dejar que la composicion Goal
-lance/observe, sin activar `runs/supervise`.
+Goal. `prepare-run` debe preparar specs internas y publicar
+`goal_spec_summaries[]` para que la composicion Goal lance/observe, sin activar
+`runs/supervise`.
 Impacto: `run_ref`, `workflow_task_refs`, `wait_agent_refs`, `phase_id` y
 `continue` son campos de la rama legacy. La rama Goal-first devuelve
-`goal_specs[]` validos y no arranca runtime por si misma.
+resumenes publicos de specs validos y no arranca runtime por si misma. Las
+salidas MCP/HTTP no publican objective, write-set, contexto ni tests completos.
 Contratos afectados: mcp.tool.orquesta.autoprogramming.prepare_run.v0;
 rest.bridge.orquesta.autoprogramming.prepare_run.v0.
 Estado: aceptada localmente.

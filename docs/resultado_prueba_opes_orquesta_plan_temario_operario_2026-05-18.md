@@ -10,8 +10,10 @@ OPES temporal -> job externo plan_temario -> Orquesta bridge REST
 -> artifact document_plan -> OPES valida, completa job y crea derivados
 ```
 
-No se uso MCP/MCPO. REST queda operativo como adaptador valido mientras el
-servidor MCP real sigue pendiente.
+No se uso MCP/MCPO. REST queda operativo como adaptador valido para este
+smoke historico. Nota posterior 2026-06-29: el transporte MCP real existe como
+opt-in de composicion en `cmd/orquesta-server`; este resultado no lo ejercito
+y no debe leerse como estado vigente del frente MCP.
 
 ## Entorno
 

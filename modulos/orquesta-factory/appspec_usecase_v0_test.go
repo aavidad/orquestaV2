@@ -30,7 +30,7 @@ func TestSolicitarNuevaAppV0AppliesDefaults(t *testing.T) {
 	if !spec.I18N.Enabled || spec.I18N.DefaultLocale != "es-ES" {
 		t.Fatalf("i18n=%+v", spec.I18N)
 	}
-	if !spec.Docs.User || !spec.Docs.Development || !spec.Docs.Systems {
+	if !spec.Docs.User || !spec.Docs.Development || !spec.Docs.Systems || spec.Docs.Depth != "profunda" {
 		t.Fatalf("docs defaults not applied: %+v", spec.Docs)
 	}
 	if spec.Deploy.Target != "sin_preferencia" {
@@ -87,6 +87,7 @@ func TestSolicitarNuevaAppV0HonorsExplicitOptions(t *testing.T) {
 	}
 	req.Calidad.Observabilidad = &no
 	req.Documentacion.Usuario = &no
+	req.Documentacion.Profundidad = "normal"
 	req.Agentes.RevisionHumana = &no
 	req.Agentes.Autonomia = "alta"
 	req.RequestKind = RequestKindDocumentarAppV0
@@ -112,6 +113,9 @@ func TestSolicitarNuevaAppV0HonorsExplicitOptions(t *testing.T) {
 	}
 	if spec.Docs.User {
 		t.Fatalf("docs user should honor explicit false")
+	}
+	if spec.Docs.Depth != "normal" {
+		t.Fatalf("docs depth should honor explicit value: %+v", spec.Docs)
 	}
 	if spec.AgentPreferences.HumanReview {
 		t.Fatalf("human review should honor explicit false")
@@ -161,7 +165,34 @@ func TestSolicitarNuevaAppV0PreservaDatosExpertosArquitecturaYAccesibilidadV0(t 
 				Requerido: false,
 			},
 		},
+		Fuentes: []DataSourceRequestV0{
+			{
+				Nombre:     "Catastro publico",
+				Tipo:       "api",
+				Proposito:  "Cruzar ubicacion y referencia catastral",
+				Owner:      "administracion externa",
+				Frecuencia: "diaria",
+			},
+		},
+		Operacion: DataOperationRequestV0{
+			Criticidad:     "alta",
+			Disponibilidad: "horario laboral",
+			RPO:            "24h",
+			RTO:            "4h",
+			Auditoria:      true,
+			Restricciones:  []string{"trazabilidad de cambios"},
+		},
 	}
+	req.Integraciones = []ConnectorRequestV0{{
+		Tipo:       "api",
+		Nombre:     "crm",
+		Proposito:  "Sincronizar oportunidades",
+		Direccion:  "bidireccional",
+		Auth:       "oauth",
+		DataScope:  "contactos y favoritos",
+		Criticidad: "alta",
+		Requerido:  true,
+	}}
 	req.Calidad.Accesibilidad = "normal"
 	req.Calidad.AccesibilidadOpciones = []string{"normal", "wcag_aa"}
 
@@ -185,8 +216,17 @@ func TestSolicitarNuevaAppV0PreservaDatosExpertosArquitecturaYAccesibilidadV0(t 
 	}
 	if !factoryStringInSetV0(spec.Data.Needs, "Mostrar pisos cercanos en alquiler") ||
 		!factoryStringInSetV0(spec.Data.Needs, "Busqueda semantica de preferencias") ||
+		!factoryStringInSetV0(spec.Data.Needs, "Cruzar ubicacion y referencia catastral") ||
 		spec.Data.Sensitivity != "publica, personal" {
 		t.Fatalf("data needs/sensitivity=%+v", spec.Data)
+	}
+	if len(spec.Data.Sources) != 1 ||
+		spec.Data.Sources[0].Nombre != "Catastro publico" ||
+		spec.Data.Sources[0].Frecuencia != "diaria" ||
+		spec.Data.Operation.Criticidad != "alta" ||
+		spec.Data.Operation.RTO != "4h" ||
+		!spec.Data.Operation.Auditoria {
+		t.Fatalf("data sources/operation=%+v", spec.Data)
 	}
 	if spec.Quality.Accessibility != "normal" ||
 		len(spec.Quality.AccessibilityOptions) != 2 ||
@@ -196,6 +236,14 @@ func TestSolicitarNuevaAppV0PreservaDatosExpertosArquitecturaYAccesibilidadV0(t 
 	if !factoryConnectorNamedV0(spec.Connectors.Required, "storage-relacional") ||
 		!factoryConnectorNamedV0(spec.Connectors.Optional, "storage-vectorial") {
 		t.Fatalf("connectors=%+v", spec.Connectors)
+	}
+	crm := factoryConnectorByNameV0(spec.Connectors.Required, "crm")
+	if crm.Tipo != "api" ||
+		crm.Direccion != "bidireccional" ||
+		crm.Auth != "oauth" ||
+		crm.DataScope != "contactos y favoritos" ||
+		crm.Criticidad != "alta" {
+		t.Fatalf("connector experto=%+v", crm)
 	}
 }
 
@@ -271,7 +319,7 @@ func TestDecodeAppSpecRequestV0AcceptsSpanishJSONTags(t *testing.T) {
 		"objetivo":"Gestionar reservas.",
 		"tipo_app":"web",
 		"calidad":{"accesibilidad":"wcag_aa","observabilidad":false},
-		"documentacion":{"usuario":false,"desarrollo":true,"sistemas":true},
+		"documentacion":{"usuario":false,"desarrollo":true,"sistemas":true,"profundidad":"profunda"},
 		"agentes":{"revision_humana":false,"autonomia":"alta","preferencias":["review externo"]}
 	}`)
 	req, issues := DecodeAppSpecRequestV0(raw)
@@ -280,6 +328,9 @@ func TestDecodeAppSpecRequestV0AcceptsSpanishJSONTags(t *testing.T) {
 	}
 	if req.Documentacion.Usuario == nil || *req.Documentacion.Usuario {
 		t.Fatalf("documentacion.usuario not decoded: %+v", req.Documentacion)
+	}
+	if req.Documentacion.Profundidad != "profunda" {
+		t.Fatalf("documentacion.profundidad not decoded: %+v", req.Documentacion)
 	}
 	if req.Agentes.RevisionHumana == nil || *req.Agentes.RevisionHumana {
 		t.Fatalf("agentes.revision_humana not decoded: %+v", req.Agentes)
@@ -413,4 +464,13 @@ func factoryConnectorNamedV0(values []ConnectorSpecV0, name string) bool {
 		}
 	}
 	return false
+}
+
+func factoryConnectorByNameV0(values []ConnectorSpecV0, name string) ConnectorSpecV0 {
+	for _, value := range values {
+		if value.Nombre == name {
+			return value
+		}
+	}
+	return ConnectorSpecV0{}
 }

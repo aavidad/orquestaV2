@@ -79,7 +79,7 @@ func MCPTransportResourcesV0() []MCPTransportResourceEnvelopeV0 {
 	bootstrap := MCPBootstrapDescriptorV0()
 	workflow := MCPCoreWorkflowContractsDescriptorV0()
 	operatorOps := MCPOperatorOperationsDescriptorV0()
-	return []MCPTransportResourceEnvelopeV0{
+	resources := []MCPTransportResourceEnvelopeV0{
 		mcpTransportResourceEnvelopeV0(shared.Name, shared.Version, shared.URI, shared.ContentType, shared.SummaryKey, func() any { return NewMCPSharedContractsResourceV0() }),
 		mcpTransportResourceEnvelopeV0(roadmap.Name, roadmap.Version, roadmap.URI, roadmap.ContentType, roadmap.SummaryKey, func() any { return NewMCPProjectRoadmapResourceV0() }),
 		mcpTransportResourceEnvelopeV0(operational.Name, operational.Version, operational.URI, operational.ContentType, operational.SummaryKey, func() any { return NewMCPOperationalStatusResourceV0() }),
@@ -89,6 +89,24 @@ func MCPTransportResourcesV0() []MCPTransportResourceEnvelopeV0 {
 		mcpTransportResourceEnvelopeV0(workflow.Name, workflow.Version, workflow.URI, workflow.ContentType, workflow.SummaryKey, func() any { return NewMCPCoreWorkflowContractsResourceV0() }),
 		mcpTransportResourceEnvelopeV0(operatorOps.Name, operatorOps.Version, operatorOps.URI, operatorOps.ContentType, operatorOps.SummaryKey, func() any { return NewMCPOperatorOperationsResourceV0() }),
 	}
+	for _, descriptor := range MCPSharedContractResourceDescriptorsV0()[1:] {
+		item := descriptor
+		resources = append(resources, mcpTransportResourceEnvelopeV0(
+			item.Name,
+			item.Version,
+			item.URI,
+			item.ContentType,
+			item.SummaryKey,
+			func() any {
+				contract, ok := MCPSharedContractResourceByNameV0(item.URI)
+				if !ok {
+					return MCPSharedContractCompactV0{}
+				}
+				return contract
+			},
+		))
+	}
+	return resources
 }
 
 func mcpTransportResourceEnvelopeV0(

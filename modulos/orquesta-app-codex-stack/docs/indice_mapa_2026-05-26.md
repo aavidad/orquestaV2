@@ -70,8 +70,6 @@ Cerrado para este stack salvo regresion demostrada:
 
 Pendiente verificable, no hecho:
 
-- OPES temporal real de derivados/cierre hasta
-  `generate_audio_asset -> audio_asset`.
 - Politica productiva de tests de dominio no-OPES mas alla del smoke temporal.
 - Conectores productivos de uso/cuota por proveedor.
 - Cualquier nuevo blocker real de autoprogramacion que no este cubierto por las

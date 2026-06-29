@@ -21,6 +21,7 @@ pruebas. No despliega OPES, no monta `uso-app`, no monta temarios, no monta
 sudo install -d -o 10001 -g 10001 /srv/orquesta-self/state
 sudo install -d -o 10001 -g 10001 /srv/orquesta-self/runtime
 sudo install -d -o 10001 -g 10001 /srv/orquesta-self/worktrees
+sudo install -d -o 10001 -g 10001 /srv/orquesta-self/home
 sudo install -d -o 10001 -g 10001 /srv/orquesta-self/cache/go
 sudo install -d -o 10001 -g 10001 /srv/orquesta-self/cache/gomod
 sudo install -d -o 10001 -g 10001 /srv/orquesta-self/codex-home
@@ -32,8 +33,9 @@ existentes.
 
 Copiar `orquesta-self.env.example` a `orquesta-self.env` y cambiar solo el
 token de control. El `CODEX_HOME` del contenedor debe recibir credenciales
-Codex aisladas en `/srv/orquesta-self/codex-home`; no se copian credenciales de
-produccion ni de otros servicios.
+Codex aisladas en `/srv/orquesta-self/codex-home`, montadas como
+`/workspace/codex-home`; `HOME`, cache Go y mod cache quedan tambien bajo
+`/workspace`. No se copian credenciales de produccion ni de otros servicios.
 
 ## Arranque
 

@@ -16,11 +16,13 @@ Estado vigente:
 
 - `orquesta.autoprogramming.prepare_run.v0` prepara, por executor inyectado, una
   salida legacy con `run_ref` continuable o un handoff goal-first con
-  `goal_specs[]` sin run legacy. Goal-first es la ruta preferente cuando el
-  executor devuelve `goal` o `goal_specs`; `continue` queda como compatibilidad
-  legacy. Preparar una salida legacy requiere opt-in de composicion y
-  `director_execution_mode=legacy_director_loop`. No arranca agentes por si
-  mismo; la supervision con `run_ref` aplica solo a la rama legacy.
+  `goal_spec_summaries[]` sin run legacy. Goal-first es la ruta preferente
+  cuando el executor devuelve `goal` o resumenes de specs; `continue` queda como
+  compatibilidad legacy. Preparar una salida legacy requiere opt-in de
+  composicion y `director_execution_mode=legacy_director_loop`. No arranca
+  agentes por si mismo; la supervision con `run_ref` aplica solo a la rama
+  legacy. La composicion puede conservar `GoalWorkSpecV0` como handoff interno,
+  pero MCP/HTTP no publican objective, write-set, contexto ni tests completos.
 - `orquesta.autoprogramming.self_improvement.propose.v0` convierte fallos
   observados en requests de automejora de segundo plano con prioridad baja; no
   sustituye la ruta goal-first ni el estado operativo.

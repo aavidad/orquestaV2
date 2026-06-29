@@ -108,7 +108,7 @@ func normalizeCodexRequiredTestReceiptsV0(
 }
 
 func codexRequiredTestReceiptIssueV0(receipt CodexRequiredTestReceiptV0) string {
-	if !codexSchemaVersionCompatibleV0(receipt.SchemaVersion, CodexRequiredTestReceiptSchemaVersionV0) {
+	if !codexRequiredTestReceiptSchemaVersionCompatibleV0(receipt.SchemaVersion) {
 		return "required_test_receipt_schema_invalid"
 	}
 	if receipt.Command == "" {

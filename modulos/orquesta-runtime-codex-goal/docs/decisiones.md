@@ -15,10 +15,11 @@ aceptacion final queda fuera del runtime.
 El paquete no arranca Codex por si mismo. La composicion debe inyectar un puerto
 real cuando el entorno soporte Codex Goal.
 
-El wiring local disponible vive en `cmd/orquesta-server` y solo se activa con
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_tmux`. Usa
+El wiring local disponible vive en `cmd/orquesta-server` y se activa para la
+ruta normal con `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`. Usa
 `codex app-server` como frontera de composicion; no convierte `codex exec` en
-sustituto de Goal.
+sustituto de Goal. `app_server_proxy` queda solo como compatibilidad
+diagnostica condicionada a daemon/socket compatible.
 
 ## D-004 observacion por puerto
 

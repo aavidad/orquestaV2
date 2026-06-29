@@ -1,7 +1,9 @@
 package orquestacore
 
 import (
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -99,6 +101,38 @@ func TestRegistrarProyectoDesdeAppSpecV0IdempotenciaDeterminista(t *testing.T) {
 	}
 	if first.ProyectoPlanBorrador.ProyectoIDPropuesto != second.ProyectoPlanBorrador.ProyectoIDPropuesto {
 		t.Fatalf("proyecto_id mismatch: %q != %q", first.ProyectoPlanBorrador.ProyectoIDPropuesto, second.ProyectoPlanBorrador.ProyectoIDPropuesto)
+	}
+}
+
+func TestRegistrarProyectoDesdeAppSpecV0SalidaSinDetallesAdaptador(t *testing.T) {
+	cmd := validRegistrarProyectoCommandV0(t)
+
+	result, err := RegistrarProyectoDesdeAppSpecV0(cmd)
+	if err != nil {
+		t.Fatalf("registrar proyecto: %v", err)
+	}
+	payload, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("marshal result: %v", err)
+	}
+
+	serialized := strings.ToLower(string(payload))
+	for _, forbidden := range []string{
+		"dsn",
+		"postgres",
+		"table",
+		"tmux",
+		"docker",
+		"token",
+		"oauth",
+		"/home/",
+		"mcp",
+		"http://",
+		"https://",
+	} {
+		if strings.Contains(serialized, forbidden) {
+			t.Fatalf("serialized project registration contains adapter detail %q: %s", forbidden, string(payload))
+		}
 	}
 }
 

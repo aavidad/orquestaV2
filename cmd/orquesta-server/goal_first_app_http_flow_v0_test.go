@@ -20,6 +20,7 @@ import (
 )
 
 func TestServerAppHTTPGoalFirstLanzaObservaYCierraV0(t *testing.T) {
+	disableSelfProgrammingOnlyForGoalFirstHTTPTestV0(t)
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()
 	runtimeDir := filepath.Join(t.TempDir(), "runtime")
@@ -86,6 +87,7 @@ func TestServerAppHTTPGoalFirstLanzaObservaYCierraV0(t *testing.T) {
 }
 
 func TestServerAutoprogrammingHTTPGoalFirstPreparaSupervisaObservaYCierraV0(t *testing.T) {
+	disableSelfProgrammingOnlyForGoalFirstHTTPTestV0(t)
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()
 	runtimeDir := filepath.Join(t.TempDir(), "runtime")
@@ -120,7 +122,9 @@ func TestServerAutoprogrammingHTTPGoalFirstPreparaSupervisaObservaYCierraV0(t *t
 		prepared.Goal == nil ||
 		prepared.Goal.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
 		prepared.Goal.ExternalGoalRef != "thread-ref-http-goal-first-001" ||
-		len(prepared.GoalSpecs) != 1 ||
+		len(prepared.GoalSpecs) != 0 ||
+		len(prepared.GoalSpecSummaries) != 1 ||
+		prepared.GoalSpecSummaries[0].SpecHash == "" ||
 		len(prepared.WorkflowTaskRefs) != 0 ||
 		len(prepared.WaitAgentRefs) != 0 ||
 		prepared.Continue != nil {
@@ -161,6 +165,7 @@ func TestServerAutoprogrammingHTTPGoalFirstPreparaSupervisaObservaYCierraV0(t *t
 }
 
 func TestServerAppHTTPGoalFirstReanudaTrasRestartSinLegacyV0(t *testing.T) {
+	disableSelfProgrammingOnlyForGoalFirstHTTPTestV0(t)
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()
 	runtimeDir := filepath.Join(t.TempDir(), "runtime")
@@ -255,6 +260,7 @@ func TestServerAppHTTPGoalFirstReanudaTrasRestartSinLegacyV0(t *testing.T) {
 }
 
 func TestServerAppHTTPGoalFirstRestartMarkerSinStateNoDrenaLegacyV0(t *testing.T) {
+	disableSelfProgrammingOnlyForGoalFirstHTTPTestV0(t)
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()
 	runtimeDir := filepath.Join(t.TempDir(), "runtime")
@@ -334,6 +340,13 @@ func TestServerAppHTTPGoalFirstRestartMarkerSinStateNoDrenaLegacyV0(t *testing.T
 		len(persistedRun.StartedAgents) != 0 {
 		t.Fatalf("loop legacy activado con marker sin state: run=%+v", persistedRun)
 	}
+}
+
+func disableSelfProgrammingOnlyForGoalFirstHTTPTestV0(t *testing.T) {
+	t.Helper()
+	t.Setenv(envServerSelfProgrammingOnlyV0, "false")
+	t.Setenv(envServerSelfProgrammingRootV0, "")
+	t.Setenv(envServerGoalObserverEnabledV0, "")
 }
 
 func postGoalFirstStartForTestV0(

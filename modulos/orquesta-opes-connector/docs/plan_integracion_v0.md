@@ -37,8 +37,10 @@ sin acoplar OPES al nucleo de Orquesta.
 
 ## Riesgos abiertos
 
-- REST queda elegido como ruta productiva actual; MCP especifico de OPES queda
-  pendiente solo si hace falta frente al tool generico `orquesta.domain_work.v0`.
+- REST queda como ruta funcional opt-in actual; en este repo solo se usa contra
+  instancia temporal o confirmada, y OPES productivo queda bloqueado por
+  composicion. MCP especifico de OPES queda pendiente solo si hace falta frente
+  al tool generico `orquesta.domain_work.v0`.
 - La URL y timeout REST se configuran por composicion con
   `ORQUESTA_OPES_BASE_URL`, `ORQUESTA_OPES_TIMEOUT_SECONDS` y
   `ORQUESTA_OPES_DEFAULT_MAX_ATTEMPTS`.

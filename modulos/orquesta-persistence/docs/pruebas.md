@@ -18,55 +18,55 @@ Riesgos:
 ```text
 Caso: Contrato documental de repositorio de borradores
 Tipo: contract
-Comando: pendiente; futuro `go test ./...` o runner equivalente del modulo cuando exista codigo.
-Evidencia esperada: Fixtures de `ProyectoPlanBorradorV0` minimo se guardan y recuperan sin perdida de payload versionado.
-Ultima ejecucion: no ejecutada; no existe implementacion ni harness de pruebas.
-Riesgos: El contrato de core sigue marcado como borrador y puede cambiar antes de conectar persistence.
+Comando: go test -count=1 ./modulos/orquesta-persistence -run 'TestDecodeGuardarProyectoBorradorMaterialV0FixtureValido|TestInMemoryPersistenceRepositoryContractAdapterV0GuardaBorrador'
+Evidencia esperada: Fixture de `ProyectoPlanBorradorV0` minimo decodifica sin issues y el adaptador en memoria devuelve `proyecto_id`, `idempotency_key` y timestamps tecnicos sin perdida de payload versionado.
+Ultima ejecucion: 2026-06-29; pasa con DTOs Go y adaptador en memoria de contrato.
+Riesgos: El adaptador en memoria no es productivo ni modela transacciones reales.
 ```
 
 ```text
 Caso: Idempotencia de guardado de `ProyectoPlanBorradorV0`
 Tipo: contract
-Comando: pendiente; futuro test de contrato sobre `RepositorioProyectoPlanBorradorV0`.
+Comando: go test -count=1 ./modulos/orquesta-persistence -run 'TestInMemoryPersistenceRepositoryContractAdapterV0EsIdempotenteConPayloadEquivalente|TestInMemoryPersistenceRepositoryContractAdapterV0DetectaConflictoIdempotencia'
 Evidencia esperada: Misma `idempotency_key` con payload equivalente devuelve el mismo `proyecto_id`; payload incompatible falla con `duplicado_idempotente_incompatible`.
-Ultima ejecucion: no ejecutada; solo documentada.
-Riesgos: Falta definir alcance global de la idempotencia: por tenant, workspace, usuario o sistema.
+Ultima ejecucion: 2026-06-29; pasa en adaptador en memoria puro.
+Riesgos: El alcance global de la idempotencia en un conector productivo sigue dependiendo de la composicion aprobada.
 ```
 
 ```text
 Caso: Transaccion commit/rollback
-Tipo: integration
-Comando: pendiente; futuro test con conector de persistencia aprobado mediante harness del modulo.
-Evidencia esperada: Commit confirma escritura; rollback no deja escritura visible; doble rollback permite limpieza.
-Ultima ejecucion: no ejecutada; no hay almacenamiento operativo ni migraciones.
-Riesgos: El mapeo de aislamiento y errores depende del conector elegido.
+Tipo: contract
+Comando: go test -count=1 ./modulos/orquesta-persistence -run 'TestInMemoryPersistenceUnitOfWorkV0(CommitHaceVisibleEscritura|RollbackDescartaEscritura|RollbackEsIdempotente|CommitDespuesDeRollbackFalla|RechazaAislamientoNoSoportado)'
+Evidencia esperada: Commit confirma escritura en el adaptador transaccional de contrato; rollback no deja escritura visible; doble rollback permite limpieza; commit tras rollback falla con `transaccion_ya_cerrada`.
+Ultima ejecucion: 2026-06-29; pasa con `InMemoryPersistenceUnitOfWorkV0`.
+Riesgos: Es contrato puro en memoria; el mapeo de aislamiento y errores de un motor real depende del conector elegido.
 ```
 
 ```text
 Caso: Rechazo de escritura sin transaccion activa
 Tipo: contract
-Comando: pendiente; futuro test unitario con fake repository o adaptador en memoria tecnico.
+Comando: go test -count=1 ./modulos/orquesta-persistence -run 'TestInMemoryPersistenceUnitOfWorkV0RechazaEscrituraSinTransaccionActiva'
 Evidencia esperada: `guardar_borrador` falla con `transaccion_requerida` o `transaccion_no_activa`.
-Ultima ejecucion: no ejecutada; solo documentada.
-Riesgos: Si el puerto global permite auto-commit, esta invariante debera revisarse con el director.
+Ultima ejecucion: 2026-06-29; pasa con `InMemoryPersistenceUnitOfWorkV0`.
+Riesgos: Si un conector futuro permite auto-commit, debera hacerlo como modo opt-in versionado y no cambiar este contrato por defecto.
 ```
 
 ```text
 Caso: Conector de persistencia externo aprobado
 Tipo: integration
-Comando: pendiente; futuro test de contrato para cualquier conector externo aprobado por el director.
+Comando: bloqueo externo de producto/conector; futuro test de contrato para cualquier conector externo aprobado por el director.
 Evidencia esperada: Preparacion tecnica, idempotencia y transacciones pasan sin exponer motor, adaptador de proveedor, credenciales ni tablas al contrato publico.
 Ultima ejecucion: no ejecutada; no hay conector externo aprobado.
-Riesgos: Riesgo de tratar un motor concreto como universal; debe bloquearse cualquier dependencia operativa no aprobada.
+Riesgos: Riesgo de tratar un motor concreto como universal; debe bloquearse cualquier dependencia operativa no aprobada. Accion operador: aprobar conector externo y alcance de persistencia productiva.
 ```
 
 ```text
 Caso: Sin reglas de negocio en queries
 Tipo: contract
-Comando: pendiente; futura revision estatica o tests sobre repositorios.
+Comando: go test -count=1 ./modulos/orquesta-persistence -run 'TestDecodeGuardarProyectoBorradorMaterialV0RechazaQueryEnContratoMaterial|TestDecodeGuardarProyectoBorradorRequestV0RechazaConectorYQuery'
 Evidencia esperada: Queries filtran por campos tecnicos documentados y no por fases, autonomia, modelos, capacidad, runtime ni handoff.
-Ultima ejecucion: no ejecutada; no hay queries.
-Riesgos: Las optimizaciones futuras pueden introducir filtros semanticos que pertenecen a core.
+Ultima ejecucion: 2026-06-29; las requests/materiales con `query` o conector directo fallan por contrato.
+Riesgos: Las optimizaciones futuras pueden introducir filtros semanticos que pertenecen a core; todo conector nuevo debe mantener esta prueba.
 ```
 
 ```text

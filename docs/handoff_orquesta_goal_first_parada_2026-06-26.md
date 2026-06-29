@@ -83,9 +83,10 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
   degradado: si `GoalLauncher` falla, `StartAppDirectorV0` propaga el error y
   no ejecuta el loop legacy ni genera eventos `AgentRequested`/`AgentStarted`.
 - 2026-06-26: `orquesta-mcp` demota explicitamente la supervision legacy frente
-  a goal-first en descriptores/README: `prepare_run` prefiere `goal`/`goal_specs`,
-  `supervise` queda como compatibilidad legacy/resident y las runs goal-first se
-  observan por `orquesta.autoprogramming.observe_goal.v0`.
+  a goal-first en descriptores/README: `prepare_run` prefiere `goal` o
+  `goal_spec_summaries` publicos, `supervise` queda como compatibilidad
+  legacy/resident y las runs goal-first se observan por
+  `orquesta.autoprogramming.observe_goal.v0`.
 - 2026-06-26: `director.stats` diagnostica
   `external_work_agent_requested_not_started` si hay agentes solicitados,
   ninguno arrancado y nada en vuelo; `autoprogramming/status` propaga ese issue

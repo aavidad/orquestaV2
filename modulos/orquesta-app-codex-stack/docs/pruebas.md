@@ -128,6 +128,12 @@ Cobertura Go actual:
 - `TestCodexStackResidentCouncilV0NoProponeAceptarSinVoteSourceV0` valida que
   el residente no emite una accion de aceptacion que no puede aplicar por falta
   de fuente estructurada de votos.
+- `TestCodexStackReceiptDecisionCouncilVoteSourceV0LeeArchitectureVoteDesdeAckV0`
+  valida la fuente real por `ReceiptStore`: lee el ACK Codex, abre solo
+  ficheros declarados bajo `ProjectWorkDir` y normaliza un
+  `architecture_vote.v0` a `CouncilVoteV0`.
+- `TestBuildStackV0CableaVoteSourceRealSiHayReceiptStoreV0` valida que
+  `BuildStackV0` cablea esa fuente por defecto cuando existe `ReceiptStore`.
 - `TestCodexStackResidentCouncilHydrateVotesV0NormalizaMetadataDurableV0`
   valida que `TaskRef` une voto y tarea, `VoteRef` puede ser independiente y
   `agent_ref`/`family_ref` durables mandan sobre valores devueltos por el
@@ -248,9 +254,9 @@ Cobertura Go actual:
   `done`.
 - `TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalReady`
   valida que `POST /api/v0/autoprogramming/prepare-run` expone
-  `goal_specs[]` validos y sin `run_ref` legacy cuando la request declara
-  `goal_migration:goal-first` y capacidades de Goal completas; el endpoint
-  sigue sin lanzar runtime, Goal ni supervisor legacy por si mismo.
+  `goal_spec_summaries[]` validos y sin `run_ref` legacy cuando la request
+  declara `goal_migration:goal-first` y capacidades de Goal completas; el
+  endpoint sigue sin lanzar runtime, Goal ni supervisor legacy por si mismo.
 - `TestObserveAppDirectorGoalV0SincronizaColaClosedConCandidatoPrevio` valida
   que la composicion observa un goal-first completo, cierra el run por el
   servicio neutral, proyecta la cola como `closed`, conserva metadatos del
@@ -352,18 +358,24 @@ Estado de huecos restantes:
   regresion demostrada.
 - `EXT-NO-OPES` cierra la ruta temporal no-OPES con `codex-fake`, no una
   politica productiva de tests de dominio ni un proveedor Codex real.
-- OPES `plan_temario` real quedo cerrado para `document_plan` y creacion de
-  derivados pendientes; falta smoke real completo de derivados/cierre OPES.
+- OPES temporal real de derivados/cierre quedo cerrado funcionalmente en
+  `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`
+  hasta `completed_syllabus_package`, sin tocar OPES productivo.
 - El consejo residente ya llega offline/fake hasta `AcceptDecision` con votos
-  estructurados y packet Codex especifico para propuesta, critica y voto. Falta
-  fuente real de artefactos `architecture_vote.v0`.
-- Falta un smoke canonico opt-in de `Director residente + Codex real`. Los
-  smokes reales vigentes cubren ola/recursion Codex, pero el smoke residente
-  actual usa `codex-fake`; no debe marcarse como evidencia de proveedor real
-  hasta crear script o flag dedicado.
-- Gemini/Claude aun heredan contratos de ACK/receipt con nombres `codex_*`.
-  Pendiente neutralizar a `orquesta_agent_ack.v0` y mantener `codex_*` solo
-  como alias legacy del adaptador Codex.
+  estructurados, packet Codex especifico para propuesta/critica/voto y fuente
+  real offline por `ReceiptStore` para artefactos `architecture_vote.v0`.
+- `scripts/smoke_autoprogramming_supervised.sh` cubre el Director residente con
+  servidor temporal. Por defecto usa `codex-fake`; el modo proveedor real exige
+  `ORQUESTA_AUTOPROGRAMMING_SUPERVISED_REAL_CODEX=1`,
+  `ORQUESTA_AUTOPROGRAMMING_SUPERVISED_REAL_CODEX_CONFIRMED=1`,
+  `ORQUESTA_CODEX_COMMAND`, `ORQUESTA_CODEX_HOME` y
+  `ORQUESTA_CODEX_CODE_HOME` explicitos. Revalidacion local 2026-06-29: modo
+  fake/residente verde; la ejecucion real queda bloqueada en esta sesion por
+  falta de `ORQUESTA_CODEX_HOME`/`ORQUESTA_CODEX_CODE_HOME` explicitos.
+- Codex/Gemini/Claude ya piden ACK/receipt neutrales
+  `orquesta_agent_ack.v0` / `orquesta_required_test_receipt.v0` en sus prompts;
+  `codex_agent_ack.v0` queda documentado solo como alias legacy aceptado por
+  compatibilidad de observacion.
 
 Guardas esperadas para pruebas futuras:
 
@@ -471,7 +483,8 @@ Evidencia validada:
 
 Pendiente no cubierto por estos smokes:
 
-- OPES temporal real de derivados/cierre.
+- politica productiva de tests de dominio no-OPES y conectores productivos de
+  uso/cuota por proveedor.
 
 Prueba real de cambio a mitad de ejecucion:
 
@@ -1474,8 +1487,9 @@ Cobertura:
   fija que `goal_migration:legacy-required` conserva el loop historico aunque
   exista backend Goal completo.
 - `TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalReady`
-  conserva el fallback sin backend Goal: `goal_ready` devuelve `goal_specs[]`
-  sin `run_ref`, sin tareas, sin wait y sin cola legacy.
+  conserva el fallback sin backend Goal: `goal_ready` devuelve
+  `goal_spec_summaries[]` sin `run_ref`, sin tareas, sin wait y sin cola legacy,
+  manteniendo specs completas solo como handoff interno.
 - `TestPrepareAutoprogrammingRunV0GoalReadyConBackendParcialNoLanzaNiCaeALegacy`
   fija que un backend goal-first parcial publica
   `autoprogramming_goal_backend_incomplete`, no lanza Goal, no persiste run y

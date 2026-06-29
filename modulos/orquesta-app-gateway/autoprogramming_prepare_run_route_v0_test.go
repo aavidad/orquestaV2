@@ -35,16 +35,22 @@ func TestAutoprogrammingPrepareRunAPIRouteV0(t *testing.T) {
 	if executor.Input.RequestID != "request-prepare-run-route-001" {
 		t.Fatalf("input=%+v", executor.Input)
 	}
+	raw := rec.Body.String()
+	if strings.Contains(raw, `"goal_specs"`) || strings.Contains(raw, `"write_set"`) {
+		t.Fatalf("respuesta publica filtra specs completos: %s", raw)
+	}
 	var result orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(strings.NewReader(raw)).Decode(&result); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if result.Estado != orquestamcp.MCPAutoprogrammingPrepareRunEstadoOKV0 ||
 		!result.Accepted ||
 		result.RunRef != "run-prepare-route-001" ||
-		len(result.GoalSpecs) != 1 ||
-		result.GoalSpecs[0].RunRef != "run-prepare-route-001" ||
-		result.GoalSpecs[0].DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 {
+		len(result.GoalSpecs) != 0 ||
+		len(result.GoalSpecSummaries) != 1 ||
+		result.GoalSpecSummaries[0].RunRef != "run-prepare-route-001" ||
+		result.GoalSpecSummaries[0].DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
+		result.GoalSpecSummaries[0].SpecHash == "" {
 		t.Fatalf("result=%+v", result)
 	}
 }
@@ -100,7 +106,7 @@ func (executor *recordingAutoprogrammingPrepareRunExecutorV0) Execute(
 			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
 			GoalRef:       "goal-ref-prepare-route-001",
 			RunRef:        "run-prepare-route-001",
-			Objective:     "validar passthrough app gateway de goal_specs",
+			Objective:     "validar passthrough app gateway de specs internas",
 			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
 			WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-app-gateway"}},
 		}},

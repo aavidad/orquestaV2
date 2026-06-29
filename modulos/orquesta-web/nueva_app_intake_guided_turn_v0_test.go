@@ -83,6 +83,56 @@ func TestWebNuevaAppIntakeGuidedActionV0IgnoraAccionDesconocida(t *testing.T) {
 	}
 }
 
+func TestApplyWebNuevaAppIntakeGuidedAnswerV0NormalizaTipoAppLibreV0(t *testing.T) {
+	session := NewWebNuevaAppIntakeSessionV0("session-guided-free-type", "es", "Portal", "Publicar viviendas")
+
+	session = ApplyWebNuevaAppIntakeGuidedAnswerV0(session, "tipo_app", "aplicación web con API")
+
+	if session.Form.TipoApp != "web" || session.Estado != WebNuevaAppIntakeEstadoLista {
+		t.Fatalf("respuesta libre tipo_app no normalizada: %+v", session.Form)
+	}
+	req := session.Form.ToAppSpecRequestV0()
+	if issues := orquestafactory.ValidateAppSpecRequestV0(req); len(issues) != 0 {
+		t.Fatalf("request debe ser valida tras alias recuperable: %+v", issues)
+	}
+}
+
+func TestApplyWebNuevaAppIntakeGuidedAnswerV0SplitLibrePlataformasV0(t *testing.T) {
+	session := NewWebNuevaAppIntakeSessionV0("session-guided-free-platforms", "es", "Portal", "Publicar viviendas")
+
+	session = ApplyWebNuevaAppIntakeGuidedAnswerV0(session, "plataformas", "web y móvil, API")
+
+	if !stringSliceHasV0(session.Form.Plataformas, "web") ||
+		!stringSliceHasV0(session.Form.Plataformas, "mobile") ||
+		!stringSliceHasV0(session.Form.Plataformas, "api") {
+		t.Fatalf("plataformas no normalizadas: %+v", session.Form.Plataformas)
+	}
+}
+
+func TestWebNuevaAppIntakeGuidedTurnV0ReconoceIntegracionesFrecuentes(t *testing.T) {
+	turn := NewWebNuevaAppIntakeGuidedTurnV0("portal con calendario, pagos, login, permisos y notificaciones")
+	session := NewWebNuevaAppIntakeSessionV0("session-guided-integraciones", "es", "", "")
+
+	session = ApplyWebNuevaAppIntakeGuidedTurnV0(session, turn)
+
+	if len(session.Form.Integraciones) != 4 {
+		t.Fatalf("integraciones=%+v", session.Form.Integraciones)
+	}
+	want := []string{"calendar", "payments", "auth", "notifications"}
+	for index, kind := range want {
+		if session.Form.Integraciones[index].Tipo != kind ||
+			session.Form.Integraciones[index].Nombre == "" ||
+			session.Form.Integraciones[index].Proposito == "" ||
+			session.Form.Integraciones[index].Auth == "" {
+			t.Fatalf("integracion %d=%+v want kind=%s", index, session.Form.Integraciones[index], kind)
+		}
+	}
+	req := session.Form.ToAppSpecRequestV0()
+	if issues := orquestafactory.ValidateAppSpecRequestV0(req); len(issues) != 0 {
+		t.Fatalf("request guiada debe ser valida para factory: %+v", issues)
+	}
+}
+
 func stringSliceHasV0(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {

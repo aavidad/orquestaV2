@@ -2354,9 +2354,9 @@ Prioridad media:
 Estado 2026-05-26: T158 queda cerrado para el bridge OPES. La configuracion
 `ORQUESTA_OPES_BASE_URL`/`OPES_BASE_URL` y `ORQUESTA_BASE_URL` pasa por politica
 de destino con esquema permitido, sin credenciales/query, confirmacion
-loopback/temporal/productiva y evidence ref compacta para productivo; el summary
-publico de `opes-drain-once` expone refs opacas, categorias, filtro aplicado,
-estado y contadores sin URL completa ni payload crudo. Revalidacion OrquestaV2
+loopback o temporal y productivo bloqueado por composicion; el summary publico
+de `opes-drain-once` expone refs opacas, categorias, filtro aplicado, estado y
+contadores sin URL completa ni payload crudo. Revalidacion OrquestaV2
 `agent-ref-task-autoprogramming-453f91b133d4-g01`: no abre owner vecino y
 resuelve `required ref_only` mediante lectura local/evidencia explicita en ACK.
 Retry OrquestaV2 2026-05-26

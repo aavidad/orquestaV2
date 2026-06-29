@@ -96,13 +96,14 @@ func TestRESTAutoprogrammingPrepareRunClientV0PreservaWorktreeAisladaYRamaOpaca(
 		!vm.Accepted ||
 		vm.WorktreeRef != "worktree-ref-opaque-001" ||
 		vm.BranchRef != "branch-ref-opaque-001" ||
-		len(vm.GoalSpecs) != 1 ||
-		vm.GoalSpecs[0].RunRef != "run-autoprog-web-001" ||
+		len(vm.GoalSpecSummaries) != 1 ||
+		vm.GoalSpecSummaries[0].RunRef != "run-autoprog-web-001" ||
 		vm.Goal == nil ||
 		vm.Goal.RunRef != "run-autoprog-web-001" ||
 		len(vm.Goals) != 1 ||
 		vm.Goals[0].RunRef != "run-autoprog-web-001" ||
-		vm.GoalSpecs[0].DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
+		vm.GoalSpecSummaries[0].DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
+		vm.GoalSpecSummaries[0].SpecHash == "" ||
 		vm.Continue == nil ||
 		vm.Continue.OperationalDirectorPlanRef != "operational-director-plan-web-001" ||
 		len(vm.Continue.WaitAgentRefs) != 1 {

@@ -51,5 +51,12 @@ func forbiddenOPESConnectorImportsV0() []string {
 		"os/exec",
 		"orquesta/cmd",
 		"orquesta/db",
+		"orquesta/modulos/orquesta-app-codex-stack",
+		"orquesta/modulos/orquesta-app-director-service",
+		"orquesta/modulos/orquesta-mcp",
+		"orquesta/modulos/orquesta-runtime-codex",
+		"orquesta/modulos/orquesta-runtime-codex-goal",
+		"orquesta/modulos/orquesta-server",
+		"orquesta/modulos/orquesta-web",
 	}
 }

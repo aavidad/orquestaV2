@@ -194,14 +194,12 @@ Cerrado para fake/offline:
   `ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1`;
 - guardas de preflight para temporal, scope, audio y goal-first.
 
-Pendiente real:
+Cierre posterior:
 
-- Ejecutar la misma secuencia contra una instancia OPES temporal real con
-  `ORQUESTA_OPES_TEMPORAL_CONFIRM=1`, scope duro confirmado y backend Codex
-  Goal real.
-- Demostrar receipts OPES reales por cada job, dedupe por `external_job_ref`,
-  HTML local revisable, audios, tutor, juegos, manuales y paquete final.
-
-No se ha ejecutado contra OPES real en este corte porque no habia una instancia
-OPES temporal y scope real confirmados para Orquesta. No debe usarse OPES
-productivo ni una cola amplia para completar ese pendiente.
+- La misma secuencia quedo revalidada contra OPES temporal local real en
+  `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`
+  con `ORQUESTA_OPES_TEMPORAL_CONFIRM=1`, scope duro confirmado y backend
+  `app_server_tmux`.
+- Ese smoke real temporal demostro receipts OPES por cada job, dedupe por
+  `external_job_ref` y cierre hasta `completed_syllabus_package` sin tocar OPES
+  productivo ni una cola amplia.

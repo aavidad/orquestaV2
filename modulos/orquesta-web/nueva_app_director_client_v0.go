@@ -229,7 +229,7 @@ func decodePreviewDirectorAppResponseV0(
 	}
 	switch strings.TrimSpace(result.Estado) {
 	case ArrancarDirectorAppEstadoOKV0:
-		if strings.TrimSpace(result.GoalSpec.GoalRef) == "" {
+		if strings.TrimSpace(result.GoalSpecSummary.GoalRef) == "" {
 			return WebNuevaAppViewModelV0{}, webNuevaAppClientErrorV0(WebNuevaAppErrRespuestaInvalidaV0, resp.StatusCode)
 		}
 		return NewWebNuevaAppGoalPreviewViewModelV0(form, result), nil
@@ -291,9 +291,7 @@ type WebPreviewDirectorAppResultV0 struct {
 	CorrelationID         string                           `json:"correlation_id,omitempty"`
 	RunRef                string                           `json:"run_ref,omitempty"`
 	DirectorExecutionMode string                           `json:"director_execution_mode,omitempty"`
-	GoalSpec              orquestagoal.GoalWorkSpecV0      `json:"goal_spec,omitempty"`
-	WriteSet              []string                         `json:"write_set,omitempty"`
-	RequiredTests         []string                         `json:"required_tests,omitempty"`
+	GoalSpecSummary       WebGoalWorkSpecSummaryV0         `json:"goal_spec_summary,omitempty"`
 	Estimate              WebNuevaAppGoalPreviewEstimateV0 `json:"estimate,omitempty"`
 	GoalSpecIssues        []orquestagoal.GoalWorkIssueV0   `json:"goal_spec_issues,omitempty"`
 	Errores               []WebNuevaAppIssueV0             `json:"errores_publicos,omitempty"`

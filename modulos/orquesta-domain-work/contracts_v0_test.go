@@ -8,8 +8,8 @@ import (
 func TestDomainWorkJobRequestV0NormalizaContratoExterno(t *testing.T) {
 	request := NormalizeDomainWorkJobRequestV0(DomainWorkJobRequestV0{
 		RequestID:     " req-domain-work-001 ",
-		DomainRef:     " opes ",
-		InterfaceRefs: []string{" mcp-contract-ref-opes-v0 ", "mcp-contract-ref-opes-v0"},
+		DomainRef:     " domain-ref-learning ",
+		InterfaceRefs: []string{" mcp-contract-ref-learning-v0 ", "mcp-contract-ref-learning-v0"},
 		WorkKind:      " draft_content_block ",
 		Objective:     " Crear bloque editorial verificable. ",
 		InputFields: []DomainWorkFieldV0{
@@ -26,7 +26,7 @@ func TestDomainWorkJobRequestV0NormalizaContratoExterno(t *testing.T) {
 
 	if request.SchemaVersion != DomainWorkJobRequestSchemaV0 ||
 		request.RequestedBy != DomainWorkDefaultRequestedByV0 ||
-		request.DomainRef != "opes" ||
+		request.DomainRef != "domain-ref-learning" ||
 		request.WorkKind != "draft_content_block" ||
 		request.CorrelationID != "req-domain-work-001" ||
 		request.IdempotencyKey != "req-domain-work-001" ||
@@ -71,8 +71,8 @@ func TestDomainWorkJobRequestV0RechazaJSONInvalido(t *testing.T) {
 
 func TestDomainWorkJobRequestV0TransportaTestsRequeridosDeDominio(t *testing.T) {
 	request := NormalizeDomainWorkJobRequestV0(DomainWorkJobRequestV0{
-		RequestID:          " req-domain-non-opes-001 ",
-		DomainRef:          " domain-ref-non-opes ",
+		RequestID:          " req-domain-external-001 ",
+		DomainRef:          " domain-ref-external ",
 		WorkKind:           " compose_external_summary ",
 		Objective:          " Crear resumen validable por app externa. ",
 		AcceptanceCriteria: []string{" Incluye resumen ejecutivo. ", "Incluye resumen ejecutivo."},
@@ -91,7 +91,7 @@ func TestDomainWorkJobRequestV0TransportaTestsRequeridosDeDominio(t *testing.T) 
 		},
 	})
 
-	if request.DomainRef != "domain-ref-non-opes" ||
+	if request.DomainRef != "domain-ref-external" ||
 		request.RequiredTests[0].TestRef != "domain-test:summary-contract#v1" ||
 		len(request.AcceptanceCriteria) != 1 ||
 		len(request.RequiredTests[0].AcceptanceCriteriaRefs) != 1 ||
@@ -178,8 +178,8 @@ func TestDomainWorkRequiredTestPolicyV0DevuelvePlanPorPuertoDeDominio(t *testing
 	plan, err := policy.BuildDomainWorkRequiredTestPlanV0(
 		context.Background(),
 		NormalizeDomainWorkJobRequestV0(DomainWorkJobRequestV0{
-			RequestID: "req-domain-non-opes-policy-001",
-			DomainRef: "domain-ref-non-opes",
+			RequestID: "req-domain-external-policy-001",
+			DomainRef: "domain-ref-external",
 			WorkKind:  "compose_external_summary",
 			Objective: "Crear resumen validable.",
 		}),
@@ -190,7 +190,7 @@ func TestDomainWorkRequiredTestPolicyV0DevuelvePlanPorPuertoDeDominio(t *testing
 	plan = NormalizeDomainWorkRequiredTestPlanV0(plan)
 
 	if plan.SchemaVersion != DomainWorkRequiredTestPlanSchemaV0 ||
-		plan.DomainRef != "domain-ref-non-opes" ||
+		plan.DomainRef != "domain-ref-external" ||
 		plan.WorkKind != "compose_external_summary" ||
 		plan.RequiredTests[0].TestRef != "domain-test-ref-001" ||
 		plan.AcceptanceCriteria[0] != "Criterio de aceptacion del dominio propietario." {
@@ -204,8 +204,8 @@ func TestDomainWorkRequiredTestPolicyV0DevuelvePlanPorPuertoDeDominio(t *testing
 func validDomainWorkJobRequestForTestV0() DomainWorkJobRequestV0 {
 	return NormalizeDomainWorkJobRequestV0(DomainWorkJobRequestV0{
 		RequestID:     "req-domain-work-001",
-		DomainRef:     "opes",
-		InterfaceRefs: []string{"mcp-contract-ref-opes-v0"},
+		DomainRef:     "domain-ref-learning",
+		InterfaceRefs: []string{"mcp-contract-ref-learning-v0"},
 		WorkKind:      "draft_content_block",
 		WorkRefs:      []string{"topic-ref-001", "chapter-ref-001"},
 		Objective:     "Crear bloque editorial verificable.",
@@ -224,7 +224,7 @@ func validDomainWorkJobRequestForTestV0() DomainWorkJobRequestV0 {
 func validDomainWorkArtifactSubmissionForTestV0() DomainWorkArtifactSubmissionV0 {
 	return NormalizeDomainWorkArtifactSubmissionV0(DomainWorkArtifactSubmissionV0{
 		RequestID:    "req-domain-artifact-001",
-		DomainRef:    "opes",
+		DomainRef:    "domain-ref-learning",
 		JobRef:       "job-ref-001",
 		ArtifactRef:  "artifact-ref-001",
 		ArtifactType: "content_block",

@@ -15,7 +15,7 @@ func TestBuildCodexAgentPromptV0PideRecibosEstructuradosDeTestsV0(t *testing.T) 
 		"test_receipts",
 		"exit_code 0",
 		"output_redacted=true",
-		"codex_required_test_receipt.v0",
+		"orquesta_required_test_receipt.v0",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt no contiene %q:\n%s", want, prompt)
@@ -56,7 +56,7 @@ func TestBuildCodexAgentPromptV0ACKEsperadoIncluyeReceiptPorCadaTestObligatorioV
 	for index, command := range packet.Task.RequiredTests {
 		receipt := expectedACK.TestReceipts[index]
 		if receipt.Command != command ||
-			receipt.SchemaVersion != CodexRequiredTestReceiptSchemaVersionV0 ||
+			receipt.SchemaVersion != OrquestaRequiredTestReceiptSchemaVersionV0 ||
 			receipt.Status != "passed" ||
 			receipt.ExitCode != 0 ||
 			receipt.Sequence != index+1 ||

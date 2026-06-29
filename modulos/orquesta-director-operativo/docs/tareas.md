@@ -51,8 +51,9 @@ aceptada, `RequestRework`, `RecordReplanDecision`, `split_task`, runner por
 puerto de tests requeridos, cierre causal y replay `state-file` ya tienen corte
 offline. `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` cierran tambien el frente
 Codex real opt-in. Lo pendiente de este frente no es mas contrato puro ni otro
-smoke Codex generico, sino OPES temporal real de derivados/cierre por conectores
-de dominio o blockers nuevos con evidencia propia.
+smoke Codex generico; OPES temporal real de derivados/cierre quedo cerrado
+funcionalmente por goal-first. Quedan residuales de calidad editorial, coste,
+automatizacion larga o blockers nuevos con evidencia propia.
 
 ## DIR-OP-005: recursion gobernada real
 
@@ -81,4 +82,4 @@ foto vigente:
 | Materializacion de `launch_subagents` | Cerrada fuera del modulo puro; el resto del ciclo no pertenece a este contrato. |
 | Waits por ola/cohorte/parent e ingesta acotada | Cerrado para stack Codex; `WaitAgentRefs` vacio conserva compatibilidad legacy. |
 | Review, tests requeridos, replan y cierre causal | Cerrado offline/fake-runtime; Codex real amplio y recursivo ya tienen evidencia opt-in. |
-| OPES temporal real de derivados/cierre | Pendiente real verificable fuera de este modulo. |
+| OPES temporal real de derivados/cierre | Cerrado funcionalmente fuera de este modulo por goal-first; residuales editoriales/coste/automatizacion larga. |

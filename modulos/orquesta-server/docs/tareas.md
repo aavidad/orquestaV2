@@ -969,7 +969,7 @@ Criterio de cierre:
 
 ## SRV-TASK-027: automejora idle no debe arrancar durante sesiones OPES sin opt-in
 
-Estado: abierto 2026-06-22.
+Estado: cerrado localmente 2026-06-29.
 
 Origen:
 `docs/incidencia_opes_autonomia_tractorista_ack_idle_stop_2026-06-22.md`.
@@ -1008,6 +1008,24 @@ Criterio de cierre:
 - `director/stats` o `autoprogramming/status` muestra
   `idle_self_improvement_suppressed_by_domain_session` sin rutas locales;
 - smoke OPES temporal demuestra cero procesos extra tras cierre de la run.
+
+Evidencia de cierre:
+
+- `cmd/orquesta-server/config.go` desactiva `IdleSelfImprovement` cuando el
+  servidor detecta contexto OPES y no hay
+  `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_WORKDIR` separado.
+- `modulos/orquesta-server/supervisor_idle_domain_session_v0.go` publica el
+  bloqueo `idle_self_improvement_suppressed_by_domain_session` con evidencia
+  durable y accion de recuperacion.
+- `cmd/orquesta-server/startup_check_candidates.go` marca candidatos de
+  automejora como `stopped` con evidencia cuando arranca en una sesion de
+  dominio/OPES suprimida.
+- Tests: `TestServerConfigFromEnvV0DesactivaAutomejoraIdleEnOPESSinWorkdirSeparadoV0`,
+  `TestServerConfigFromEnvV0DetectaOPESPorProjectWorkdirCodexV0`,
+  `TestServerConfigFromEnvV0DesactivaAutomejoraIdleSiWorkdirExplicitoEsOPESV0`,
+  `TestIdleSelfImprovementDomainSessionConfiguredV0BloqueaEstadosBridgeActivosV0`,
+  `TestRuntimeV0IdleSelfImprovementBlockerImpidePrepareRunV0` y
+  `TestStartupCheckV0SuprimeAutoprogrammingReadyEnSesionDominioV0`.
 
 ## SRV-TASK-028: stop de run debe confirmar parada real de procesos Codex
 

@@ -117,7 +117,7 @@ func TestMCPDomainWorkExecutorV0PropagaReceiptInvalidoSinPuertoCaido(t *testing.
 			JobRef:        "job-domain-001",
 			ArtifactRef:   "artifact-domain-001",
 			Issues: []orquestadomainwork.DomainWorkIssueV0{{
-				Code:  "opes_http_status_400",
+				Code:  "domain_http_status_400",
 				Field: "artifact_submitter",
 			}},
 		},
@@ -144,7 +144,7 @@ func TestMCPDomainWorkExecutorV0PropagaReceiptInvalidoSinPuertoCaido(t *testing.
 		result.Receipt == nil ||
 		result.Receipt.Status != orquestadomainwork.DomainWorkStatusInvalidV0 ||
 		len(result.Errores) != 1 ||
-		result.Errores[0].Code != "opes_http_status_400" ||
+		result.Errores[0].Code != "domain_http_status_400" ||
 		result.Errores[0].Code == MCPDomainWorkPortUnavailableV0 {
 		t.Fatalf("result=%+v", result)
 	}
@@ -152,7 +152,7 @@ func TestMCPDomainWorkExecutorV0PropagaReceiptInvalidoSinPuertoCaido(t *testing.
 
 func TestMCPDomainWorkExecutorV0PropagaCodigoPublicoDeSubmitter(t *testing.T) {
 	submitter := &fakeMCPDomainWorkSubmitterV0{
-		err: fakeMCPDomainWorkPublicCodeErrorV0{code: "opes_http_timeout"},
+		err: fakeMCPDomainWorkPublicCodeErrorV0{code: "domain_http_timeout"},
 	}
 	executor := MCPDomainWorkToolExecutorV0{ArtifactSubmitter: submitter}
 
@@ -174,7 +174,7 @@ func TestMCPDomainWorkExecutorV0PropagaCodigoPublicoDeSubmitter(t *testing.T) {
 
 	if result.Estado != MCPDomainWorkEstadoErrorV0 ||
 		len(result.Errores) != 1 ||
-		result.Errores[0].Code != "opes_http_timeout" {
+		result.Errores[0].Code != "domain_http_timeout" {
 		t.Fatalf("result=%+v", result)
 	}
 }

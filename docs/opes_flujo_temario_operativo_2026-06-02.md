@@ -330,13 +330,24 @@ La via operativa para continuar un temario hasta cierre es:
 ```bash
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
 ORQUESTA_BASE_URL=http://127.0.0.1:<puerto-orquesta> \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=3 \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id> \
+ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1 \
+ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF=<scope-probe-evidence-ref> \
 ORQUESTA_OPES_BRIDGE_CORRELATION_ID=<correlation_id> \
 ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH=<ledger-temario>.json \
 go run ./cmd/orquesta-server opes-temario-cycle
 ```
+
+`127.0.0.1` no prueba por si solo que OPES sea temporal: el operador debe
+confirmar instancia aislada con `ORQUESTA_OPES_TEMPORAL_CONFIRM=1` y scope
+acotado por `correlation_id`, `topic_id`, cola temporal dedicada o
+`program_id` probado con evidencia. Si la instancia OPES no es loopback, debe
+existir ademas una evidencia de destino temporal/no productivo antes de ejecutar
+efectos.
 
 Si `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE` no esta definido, el comando usa
 `OPESFullTemarioJobTypeSequenceV0()`, que empieza en `plan_temario` e incluye

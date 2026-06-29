@@ -109,10 +109,11 @@ func requiredTestEnvFromEnvV0(
 	if _, ok := allowed["go"]; ok {
 		goEnv := map[string]string{
 			"GOCACHE":    filepath.Join(outputDir, "go-build-cache"),
+			"GOTMPDIR":   filepath.Join(outputDir, "go-tmp"),
 			"GOPATH":     filepath.Join(outputDir, "go-path"),
 			"GOMODCACHE": filepath.Join(outputDir, "go-mod-cache"),
 		}
-		for _, key := range []string{"GOCACHE", "GOPATH", "GOMODCACHE"} {
+		for _, key := range []string{"GOCACHE", "GOTMPDIR", "GOPATH", "GOMODCACHE"} {
 			if provided[key] {
 				continue
 			}

@@ -107,19 +107,40 @@ type WebNuevaAppDirectorTaskV0 struct {
 }
 
 type WebNuevaAppGoalPreviewV0 struct {
-	RunRef                string                                `json:"run_ref,omitempty"`
-	GoalRef               string                                `json:"goal_ref,omitempty"`
-	DirectorExecutionMode string                                `json:"director_execution_mode,omitempty"`
-	WorkKind              string                                `json:"work_kind,omitempty"`
-	WorkProfileKind       string                                `json:"work_profile_kind,omitempty"`
-	DirectorKind          string                                `json:"director_kind,omitempty"`
-	Objective             string                                `json:"objective,omitempty"`
-	WriteSet              []orquestagoal.GoalWriteScopeV0       `json:"write_set,omitempty"`
-	RequiredTests         []orquestagoal.GoalRequiredTestV0     `json:"required_tests,omitempty"`
-	AcceptanceCriteria    []string                              `json:"acceptance_criteria,omitempty"`
-	ArtifactContracts     []orquestagoal.GoalArtifactContractV0 `json:"artifact_contracts,omitempty"`
-	Estimate              WebNuevaAppGoalPreviewEstimateV0      `json:"estimate,omitempty"`
-	EvidenceRefs          []string                              `json:"evidence_refs,omitempty"`
+	RunRef                string                           `json:"run_ref,omitempty"`
+	GoalRef               string                           `json:"goal_ref,omitempty"`
+	DirectorExecutionMode string                           `json:"director_execution_mode,omitempty"`
+	WorkKind              string                           `json:"work_kind,omitempty"`
+	WorkProfileKind       string                           `json:"work_profile_kind,omitempty"`
+	DirectorKind          string                           `json:"director_kind,omitempty"`
+	SpecHash              string                           `json:"spec_hash,omitempty"`
+	ContextRefs           []string                         `json:"context_refs,omitempty"`
+	RuleRefs              []string                         `json:"rule_refs,omitempty"`
+	RequiredTestRefs      []string                         `json:"required_test_refs,omitempty"`
+	ArtifactTypes         []string                         `json:"artifact_types,omitempty"`
+	SpecSummary           WebGoalWorkSpecSummaryV0         `json:"goal_spec_summary,omitempty"`
+	Estimate              WebNuevaAppGoalPreviewEstimateV0 `json:"estimate,omitempty"`
+	EvidenceRefs          []string                         `json:"evidence_refs,omitempty"`
+}
+
+type WebGoalWorkSpecSummaryV0 struct {
+	SchemaVersion            string   `json:"schema_version"`
+	GoalRef                  string   `json:"goal_ref,omitempty"`
+	RunRef                   string   `json:"run_ref,omitempty"`
+	DirectorKind             string   `json:"director_kind,omitempty"`
+	SpecHash                 string   `json:"spec_hash,omitempty"`
+	ContextRefs              []string `json:"context_refs,omitempty"`
+	RuleRefs                 []string `json:"rule_refs,omitempty"`
+	RequiredTestRefs         []string `json:"required_test_refs,omitempty"`
+	ArtifactTypes            []string `json:"artifact_types,omitempty"`
+	ContextRefCount          int      `json:"context_ref_count,omitempty"`
+	RuleRefCount             int      `json:"rule_ref_count,omitempty"`
+	WriteSetCount            int      `json:"write_set_count,omitempty"`
+	RequiredTestCount        int      `json:"required_test_count,omitempty"`
+	AcceptanceCriteriaCount  int      `json:"acceptance_criteria_count,omitempty"`
+	ArtifactContractCount    int      `json:"artifact_contract_count,omitempty"`
+	ClosureRequiresTests     bool     `json:"closure_requires_tests,omitempty"`
+	ClosureRequiresArtifacts bool     `json:"closure_requires_artifacts,omitempty"`
 }
 
 type WebNuevaAppGoalPreviewEstimateV0 struct {

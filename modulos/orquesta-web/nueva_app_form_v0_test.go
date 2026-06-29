@@ -61,6 +61,10 @@ func TestWebNuevaAppFormV0ToAppSpecRequestV0PreservaCamposRicos(t *testing.T) {
 			Tipo:          "api",
 			Nombre:        "crm",
 			Proposito:     "sincronizar clientes",
+			Direccion:     "bidireccional",
+			Auth:          "oauth",
+			DataScope:     "clientes",
+			Criticidad:    "alta",
 			Requerido:     true,
 			Restricciones: []string{"oauth"},
 		}},
@@ -87,6 +91,21 @@ func TestWebNuevaAppFormV0ToAppSpecRequestV0PreservaCamposRicos(t *testing.T) {
 				Proposito: "consultas transaccionales",
 				Requerido: true,
 			}},
+			Fuentes: []WebNuevaAppDataSourceFormV0{{
+				Nombre:     "CMS legado",
+				Tipo:       "api",
+				Proposito:  "importar contenidos existentes",
+				Owner:      "comunicacion",
+				Frecuencia: "diaria",
+			}},
+			Operacion: WebNuevaAppDataOperationFormV0{
+				Criticidad:     "alta",
+				Disponibilidad: "horario laboral",
+				RPO:            "24h",
+				RTO:            "4h",
+				Auditoria:      true,
+				Restricciones:  []string{"traza de cambios"},
+			},
 			Sensibilidad: "media",
 			Retencion:    "12 meses",
 		},
@@ -102,10 +121,11 @@ func TestWebNuevaAppFormV0ToAppSpecRequestV0PreservaCamposRicos(t *testing.T) {
 			Observabilidad:        &no,
 		},
 		Documentacion: WebNuevaAppDocumentacionFormV0{
-			Usuario:    &yes,
-			Desarrollo: &yes,
-			Sistemas:   &no,
-			Locales:    []string{"es", "en"},
+			Usuario:     &yes,
+			Desarrollo:  &yes,
+			Sistemas:    &no,
+			Profundidad: "profunda",
+			Locales:     []string{"es", "en"},
 		},
 		I18N: WebNuevaAppI18NFormV0{
 			Enabled:       &yes,
@@ -122,7 +142,13 @@ func TestWebNuevaAppFormV0ToAppSpecRequestV0PreservaCamposRicos(t *testing.T) {
 
 	req := form.ToAppSpecRequestV0()
 
-	if len(req.Integraciones) != 1 || req.Integraciones[0].Nombre != "crm" || !req.Integraciones[0].Requerido {
+	if len(req.Integraciones) != 1 ||
+		req.Integraciones[0].Nombre != "crm" ||
+		req.Integraciones[0].Direccion != "bidireccional" ||
+		req.Integraciones[0].Auth != "oauth" ||
+		req.Integraciones[0].DataScope != "clientes" ||
+		req.Integraciones[0].Criticidad != "alta" ||
+		!req.Integraciones[0].Requerido {
 		t.Fatalf("integraciones no preservadas: %+v", req.Integraciones)
 	}
 	if !req.Datos.DBRequired || req.Datos.NecesidadFuncional != "guardar borradores" || req.Datos.TiposDatos[1] != "usuarios" {
@@ -135,13 +161,21 @@ func TestWebNuevaAppFormV0ToAppSpecRequestV0PreservaCamposRicos(t *testing.T) {
 		!req.Datos.Storage[0].Requerido {
 		t.Fatalf("datos expertos no preservados: %+v", req.Datos)
 	}
+	if len(req.Datos.Fuentes) != 1 ||
+		req.Datos.Fuentes[0].Nombre != "CMS legado" ||
+		req.Datos.Fuentes[0].Owner != "comunicacion" ||
+		req.Datos.Operacion.Criticidad != "alta" ||
+		req.Datos.Operacion.RTO != "4h" ||
+		!req.Datos.Operacion.Auditoria {
+		t.Fatalf("datos fuentes/operacion no preservados: %+v", req.Datos)
+	}
 	if req.Deploy.Target != "contenedor" || req.Calidad.Observabilidad == nil || *req.Calidad.Observabilidad {
 		t.Fatalf("deploy/calidad no preservados: deploy=%+v calidad=%+v", req.Deploy, req.Calidad)
 	}
 	if len(req.Calidad.AccesibilidadOpciones) != 2 || req.Calidad.AccesibilidadOpciones[0] != "normal" {
 		t.Fatalf("opciones de accesibilidad no preservadas: %+v", req.Calidad)
 	}
-	if req.Documentacion.Sistemas == nil || *req.Documentacion.Sistemas {
+	if req.Documentacion.Sistemas == nil || *req.Documentacion.Sistemas || req.Documentacion.Profundidad != "profunda" {
 		t.Fatalf("documentacion no preservada: %+v", req.Documentacion)
 	}
 	if req.RequestKind != "documentar_app" || req.ExecutionMode != "debug" {

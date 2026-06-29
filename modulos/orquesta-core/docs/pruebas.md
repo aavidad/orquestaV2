@@ -103,9 +103,9 @@ Riesgos: Sin persistencia real, este corte solo valida presencia de clave opaca;
 ```text
 Caso: no_filtrar_detalles_de_adaptadores
 Tipo: contract
-Comando: pendiente; inspeccion de salida serializada
+Comando: go test -count=1 ./modulos/orquesta-core
 Evidencia esperada: RegistroProyectoAceptadoV0 y ProyectoPlanBorradorV0 no contienen DSN, tablas, rutas locales, comandos runtime, proveedor LLM ni detalles HTTP/CLI/MCP.
-Ultima ejecucion: no ejecutada; documentacion inicial 2026-05-04
+Ultima ejecucion: 2026-06-29, OK con `TestRegistrarProyectoDesdeAppSpecV0SalidaSinDetallesAdaptador`.
 Riesgos: Puede requerir lista negativa mantenida cuando aparezcan nuevos adaptadores.
 ```
 
@@ -183,87 +183,87 @@ Ultima ejecucion: 2026-05-04, OK con `gofmt`, `go test -count=1 ./modulos/orques
 Riesgos: Split mecanico; cualquier cambio semantico posterior debe tener tarea propia.
 ```
 
-## Pruebas previstas para FunctionContract v0
+## Pruebas ejecutables para FunctionContract v0
 
 ```text
 Caso: function_contract_minimo_activo
 Tipo: contract
-Comando: pendiente; futuro validador de contratos de orquesta-core
+Comando: go test -count=1 ./modulos/orquesta-core
 Evidencia esperada: Dado un FunctionContractV0 con titulo, objetivo, archivo_objetivo, simbolo_objetivo, write_set, tests_obligatorios, formato_entrega y criterio_cierre, la validacion lo acepta como estado activa.
-Ultima ejecucion: no ejecutada; documentacion CORE-005 2026-05-04
-Riesgos: Existe DTO Go publico, pero no hay aun runner ni schema ejecutable para validar invariantes completos de FunctionContractV0.
+Ultima ejecucion: 2026-06-29, OK con `TestValidateFunctionContractV0AceptaMinimoActivo`.
+Riesgos: El validador es dominio puro; no arranca runtime ni consulta governance.
 ```
 
 ```text
 Caso: function_contract_rechaza_write_set_vacio
 Tipo: contract
-Comando: pendiente; futuro validador de contratos de orquesta-core
+Comando: go test -count=1 ./modulos/orquesta-core
 Evidencia esperada: Dado write_set vacio, devuelve error publico write_set_vacio o function_contract_incompleto y no habilita ejecucion runtime.
-Ultima ejecucion: no ejecutada; documentacion CORE-005 2026-05-04
+Ultima ejecucion: 2026-06-29, OK con `TestValidateFunctionContractV0RechazaWriteSetVacio`.
 Riesgos: Debe coordinarse con governance si el catalogo permite borradores incompletos.
 ```
 
 ```text
 Caso: function_contract_rechaza_archivo_fuera_de_write_set
 Tipo: contract
-Comando: pendiente; futuro validador de contratos de orquesta-core
+Comando: go test -count=1 ./modulos/orquesta-core
 Evidencia esperada: Dado archivo_objetivo no incluido en write_set, devuelve archivo_objetivo_fuera_de_write_set salvo excepcion documental explicita.
-Ultima ejecucion: no ejecutada; documentacion CORE-005 2026-05-04
+Ultima ejecucion: 2026-06-29, OK con `TestValidateFunctionContractV0RechazaArchivoFueraDeWriteSet`.
 Riesgos: Las excepciones documentales deben quedar codificadas para no abrir permisos implicitos.
 ```
 
 ```text
 Caso: function_contract_rechaza_dependencia_prohibida
 Tipo: contract
-Comando: pendiente; futuro validador de contratos de orquesta-core
-Evidencia esperada: Dado uso o declaracion de una dependencia prohibida, devuelve dependencia_prohibida; si aparece tambien como permitida, prevalece la prohibicion.
-Ultima ejecucion: no ejecutada; documentacion CORE-005 2026-05-04
-Riesgos: Requiere definir como se extraen dependencias reales desde codigo o entrega documental.
+Comando: go test -count=1 ./modulos/orquesta-core
+Evidencia esperada: Dado un contrato que declara la misma dependencia como permitida y prohibida, devuelve dependencia_prohibida y prevalece la prohibicion.
+Ultima ejecucion: 2026-06-29, OK con `TestValidateFunctionContractV0RechazaDependenciaProhibida`.
+Riesgos: Core no extrae dependencias reales desde codigo; esa inspeccion pertenece a un adaptador o verificador especifico.
 ```
 
 ```text
 Caso: function_contract_rechaza_formato_entrega_desconocido
 Tipo: contract
-Comando: pendiente; futuro validador de contratos de orquesta-core
+Comando: go test -count=1 ./modulos/orquesta-core
 Evidencia esperada: Dado formato_entrega distinto de patch+evidencia, patch_unificado o ficheros+evidencia, devuelve formato_entrega_no_soportado.
-Ultima ejecucion: no ejecutada; documentacion CORE-005 2026-05-04
+Ultima ejecucion: 2026-06-29, OK con `TestValidateFunctionContractV0RechazaFormatoEntregaDesconocido`.
 Riesgos: Si runtime necesita otro formato, debe versionarse o elevar consulta.
 ```
 
 ```text
 Caso: validar_entrega_respeta_write_set
 Tipo: contract
-Comando: pendiente; futuro validador de entrega de orquesta-core
+Comando: go test -count=1 ./modulos/orquesta-core
 Evidencia esperada: Dado FunctionContractV0 y lista de ficheros cambiados, acepta solo si todos los paths estan dentro de write_set; en caso contrario devuelve cambio_fuera_de_write_set con evidencia compacta.
-Ultima ejecucion: no ejecutada; documentacion CORE-005 2026-05-04
+Ultima ejecucion: 2026-06-29, OK con `TestValidateFunctionContractDeliveryV0RespetaWriteSet` y `TestValidateFunctionContractDeliveryV0RechazaCambioFueraWriteSet`.
 Riesgos: Debe ignorar cambios generados fuera del control de la entrega solo si estan formalmente excluidos por el entorno.
 ```
 
-## Pruebas previstas para consulta CLI FunctionContract v0
+## Pruebas ejecutables para consulta read-only FunctionContract v0
 
 ```text
 Caso: listar_function_contracts_solo_lectura
 Tipo: contract
-Comando: pendiente; futuro harness de consulta FunctionContractV0. Validacion documental de este corte: git diff --check -- .
-Evidencia esperada: Dado un catalogo aprobado de FunctionContractV0, listar devuelve resumenes serializables, filtros acotados y cursor opaco sin mutar estado, sin crear OrchestrationRun, sin invocar CommandHandler y sin escribir Outbox.
-Ultima ejecucion: no ejecutada; documentacion CORE-008 2026-05-04
-Riesgos: No existe aun fuente contractual ni adaptador CLI; la operacion sigue candidata local no promovida.
+Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./cmd/orquesta-server -run 'FunctionContract'
+Evidencia esperada: Dado un indice `FunctionContractReadIndexPortV0`, list devuelve resumenes serializables por rutas HTTP/MCP read-only y delega en el puerto sin crear OrchestrationRun, sin invocar CommandHandler y sin escribir Outbox.
+Ultima ejecucion: 2026-06-29, OK con `TestMCPFunctionContractListHTTPHandlerV0DelegatesReadOnlyPort`, `TestFunctionContractAPIDelegaEnIndiceReadOnlyV0` y `TestWithFunctionContractRoutesV0ExponeIndiceReadOnly`.
+Riesgos: La fuente contractual aprobada sigue siendo inyectada por composicion; core no almacena catalogos ni implementa CLI.
 ```
 
 ```text
 Caso: ver_function_contract_solo_lectura
 Tipo: contract
-Comando: pendiente; futuro harness de consulta FunctionContractV0. Validacion documental de este corte: git diff --check -- .
-Evidencia esperada: Dado un function_contract_ref opaco existente, ver devuelve FunctionContractV0 serializable sin secretos, rutas HOME, transcripts, queries, ids historicos canonicos ni detalles de adaptador; no muta estado ni produce eventos de workflow.
-Ultima ejecucion: no ejecutada; documentacion CORE-008 2026-05-04
-Riesgos: Requiere definir fuente aprobada antes de conectar CLI/MCP.
+Comando: go test -count=1 ./modulos/orquesta-mcp -run 'FunctionContract'
+Evidencia esperada: Dado un function_contract_ref opaco, view delega en `FunctionContractReadIndexPortV0`, devuelve errores publicos del puerto y no muta estado ni produce eventos de workflow.
+Ultima ejecucion: 2026-06-29, OK con `TestMCPFunctionContractViewHTTPHandlerV0DevuelveErrorPublico`.
+Riesgos: La prueba cubre frontera HTTP/MCP y errores publicos; la ausencia de secretos en payloads concretos debe validarla la fuente inyectada.
 ```
 
 ```text
-Caso: registrar_function_contract_bloqueado
+Caso: registrar_function_contract_no_promovido
 Tipo: contract
-Comando: pendiente; futuro harness de borde CLI. Validacion documental de este corte: git diff --check -- .
-Evidencia esperada: Cualquier intento de registrar FunctionContractV0 desde CLI responde registrar_function_contract_bloqueado u operacion_no_promovida hasta cerrar OrchestrationRun, CommandHandler y Outbox.
-Ultima ejecucion: no ejecutada; documentacion CORE-008 2026-05-04
-Riesgos: Registrar no puede desbloquearse como atajo documental porque implica mutacion, idempotencia, auditoria y eventos.
+Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./cmd/orquesta-server -run 'FunctionContract'
+Evidencia esperada: La superficie promovida solo registra handlers list/view read-only; no existe endpoint de registro FunctionContract ni CLI mutante en core.
+Ultima ejecucion: 2026-06-29, OK por cobertura de rutas read-only y ausencia de ruta de registro en `function_contract_http_v0.go`, `handler_v0.go` y `function_contract_routes_v0.go`.
+Riesgos: Si se promueve registro futuro, debe entrar como mutacion con idempotencia, auditoria y eventos propios; no como atajo documental.
 ```

@@ -117,35 +117,29 @@ func mcpProjectRoadmapSourcesV0() []mcpProjectRoadmapItemSourceV0 {
 		},
 		{
 			ID:          "CORE-ROADMAP-005",
-			Area:        "domain_work_consumidores",
-			Status:      "abierto_opes_derivados_cierre",
+			Area:        "domain_work_consumidores_externos",
+			Status:      "vigente_puerto_neutral_conectores_opt_in",
 			Owner:       "orquesta-domain-work",
-			Focus:       "OPES consume Orquesta por DomainWork; plan/temario esta cubierto y falta smoke temporal real de derivados/cierre.",
+			Focus:       "Las apps externas consumen Orquesta por DomainWork, refs opacas y conectores de composicion opt-in; las evidencias de cada dominio viven fuera del contrato generico.",
 			SummaryKey:  "mcp.project.roadmap.core.domain_work_consumidores.summary.v0",
-			ProgressKey: "mcp.project.roadmap.core.domain_work_consumidores.opes_derivados_abierto.v0",
+			ProgressKey: "mcp.project.roadmap.core.domain_work_consumidores.puerto_neutral_vigente.v0",
 			Contracts: []string{
 				"DomainWorkJobRequestV0",
 				"DomainWorkArtifactSubmissionV0",
 				"DomainDocumentPlanV0",
 			},
 			Guardrails: []string{
-				"opes_es_consumidor_no_producto_base",
-				"instancia_temporal_obligatoria",
-				"filtro_job_type_o_job_ref",
-				"sin_compartir_db_filesystem_app",
+				"dominio_externo_por_refs_opacas",
+				"conectores_por_composicion_opt_in",
+				"scope_por_job_type_o_job_ref",
+				"sin_compartir_db_filesystem_app_externa",
 			},
 			CanonicalRefs: []string{
 				"modulos/orquesta-domain-work/docs/contratos.md",
 				"modulos/orquesta-document-plan-expander/docs/contratos.md",
-				"docs/corte_opes_como_consumidor_orquesta_2026-05-18.md",
-				"docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md",
 			},
-			BacklogRefs: mcpRoadmapBacklogRefsV0(
-				"docs/autoprogramacion_orquesta_pendientes_2026-05-23.md#T18-opes-operational-closure-source",
-			),
-			Verification: mcpMCPResourceVerificationV0(
-				"docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md",
-			),
+			BacklogRefs:  mcpRoadmapBacklogRefsV0(),
+			Verification: mcpMCPResourceVerificationV0(),
 		},
 	}, mcpProjectRoadmapDeploymentSourcesV0()...)
 }

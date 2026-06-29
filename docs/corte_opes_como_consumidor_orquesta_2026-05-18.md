@@ -77,12 +77,13 @@ valida y ensambla los resultados segun sus reglas.
 
 Para derivados OPES, la integracion real debe mantenerse focal:
 
-- instancia temporal o entorno explicitamente opt-in;
+- instancia temporal o preproduccion aislada confirmada;
 - guarda de confirmacion para producir efectos;
 - scope por tipo de job o por `job_ref` exacto solo para no tocar jobs ajenos o
   productivos;
 - no drenar colas amplias por defecto;
-- no tocar OPES productivo sin una ruta de prueba acotada.
+- no tocar OPES productivo desde este entorno; cualquier promocion productiva
+  requiere runbook externo especifico.
 - hasta nueva orden, OPES no descarta textos o artefactos por no cumplir el uso
   previsto. Si una entrega falla validacion editorial, formato, alcance o
   objetivo, se revisa para ver si puede aprovecharse total o parcialmente como
@@ -159,11 +160,14 @@ Estado documentado:
 - La supervision generica puede aplicarse a runs OPES solo mediante refs y
   eventos neutrales de Orquesta.
 
-Pendiente verificable:
+Pendientes residuales:
 
-- cablear los derivados OPES al ciclo real del Director/conectores sin mover
-  reglas OPES al core;
-- cerrar smokes focales de derivados con guardas opt-in y filtro por job type;
+- derivados/cierre OPES quedaron cerrados funcionalmente por goal-first temporal
+  el 2026-06-28 hasta `completed_syllabus_package`; ver
+  `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`
+  y la fila `OPES-DER-RESTO` de la matriz vigente;
+- quedan residuales de calidad editorial, coste y automatizacion larga; no
+  reabrir el cierre funcional salvo regresion demostrada;
 - documentar cualquier fuente real de cierre o evidencia OPES como conector de
   composicion, no como dependencia del nucleo.
 
@@ -249,8 +253,9 @@ Nota historica: este smoke del 2026-05-18 no cubrio audio, tests, tutor/bots ni
 HTML local. La secuencia vigente posterior anade investigacion de examenes,
 `generate_question_bank -> question_bank`, `generate_audio_asset ->
 audio_asset`, `generate_tutor_assets -> tutor_bot_package` y
-`generate_html_site -> local_html_site`; su smoke real completo debe ejecutarse
-contra OPES temporal igual que el resto de derivados.
+`generate_html_site -> local_html_site`; el smoke goal-first temporal del
+2026-06-28 cubrio la secuencia funcional completa hasta paquete final. Cualquier
+repeticion debe ejecutarse contra OPES temporal igual que el resto de derivados.
 
 Handoff vigente de ese tramo:
 `docs/runbooks/handoff_opes_derivados_reales_hasta_local_html_site_2026-06-07.md`.

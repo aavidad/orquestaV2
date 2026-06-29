@@ -19,6 +19,8 @@ materializa como bloque `visual_asset`.
 
 - No ejecutar sobre una instancia OPES que este creando un temario real.
 - El script exige `ORQUESTA_OPES_VISUAL_SMOKE_CONFIRM=1`.
+- El operador debe declarar `ORQUESTA_OPES_TEMPORAL_CONFIRM=1`; loopback no
+  basta como prueba de temporalidad.
 - Usar una instancia OPES actualizada. Una instancia antigua puede responder
   `invalid document job` ante `generate_visual_asset`.
 - Orquesta debe estar arrancada con `ORQUESTA_OPES_BASE_URL` apuntando a esa
@@ -30,6 +32,7 @@ materializa como bloque `visual_asset`.
 
 ```bash
 ORQUESTA_OPES_VISUAL_SMOKE_CONFIRM=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_BASE_URL=http://127.0.0.1:18787 \
 OPES_BASE_URL=http://127.0.0.1:18082 \
 SMOKE_ID=opes-visual-001 \

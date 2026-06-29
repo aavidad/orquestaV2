@@ -305,10 +305,10 @@ El primer corte ya no esta solo en documentos:
   si `goal_migration.status=goal_ready` y la composicion tiene
   `GoalLauncher` + `GoalStateStore`, crea un run contenedor sin tareas legacy,
   lanza/persiste `GoalWorkStateV0`, publica `goal{...}` y no encola `ready`;
-  sin backend conserva el handoff `goal_specs[]` sin `run_ref`. El supervisor
-  residente del servidor o `POST /api/v0/runs/supervise` solo deben arrancar la
-  rama legacy; esto sigue siendo politica de composicion Codex, no contrato del
-  nucleo ni de MCP/gateway.
+  sin backend conserva specs completas solo como handoff interno y publica
+  `goal_spec_summaries[]` sin `run_ref`. El supervisor residente del servidor o
+  `POST /api/v0/runs/supervise` solo deben arrancar la rama legacy; esto sigue
+  siendo politica de composicion Codex, no contrato del nucleo ni de MCP/gateway.
 - Desde el 2026-06-08, `cmd/orquesta-server` puede inyectar por opt-in un
   Director residente real sobre el stack Codex mediante `ResidentDirectorPortV0`
   (`8944ca9f`, afinado en `f619e899`): ranking/cola neutral,

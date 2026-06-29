@@ -9,11 +9,13 @@ import (
 )
 
 type nuevaAppHTMLDataV0 struct {
-	Page         NuevaAppWebPageV0
-	Labels       map[string]string
-	Help         map[string]string
-	HTML         map[string]string
-	StorageTypes []string
+	Page                 NuevaAppWebPageV0
+	Labels               map[string]string
+	Help                 map[string]string
+	HTML                 map[string]string
+	StorageTypes         []string
+	IntegrationTypes     []string
+	AccessibilityOptions []string
 }
 
 func writeNuevaAppHTMLPageV0(w http.ResponseWriter, status int, page NuevaAppWebPageV0) WebHTMLWriteResultV0 {
@@ -31,11 +33,46 @@ func writeNuevaAppHTMLPageWithTemplateV0(
 
 func nuevaAppHTMLDataFromPageV0(page NuevaAppWebPageV0) nuevaAppHTMLDataV0 {
 	return nuevaAppHTMLDataV0{
-		Page:         page,
-		Labels:       nuevaAppHTMLLabelsV0(page.Formulario.Campos),
-		Help:         nuevaAppHTMLHelpV0(page.Locale, NewNuevaAppI18nCatalogV0()),
-		HTML:         nuevaAppHTMLTextosV0(page.Locale, NewNuevaAppI18nCatalogV0()),
-		StorageTypes: orquestafactory.SupportedDataStorageTypesV0(),
+		Page:                 page,
+		Labels:               nuevaAppHTMLLabelsV0(page.Formulario.Campos),
+		Help:                 nuevaAppHTMLHelpV0(page.Locale, NewNuevaAppI18nCatalogV0()),
+		HTML:                 nuevaAppHTMLTextosV0(page.Locale, NewNuevaAppI18nCatalogV0()),
+		StorageTypes:         orquestafactory.SupportedDataStorageTypesV0(),
+		IntegrationTypes:     nuevaAppHTMLIntegrationTypesV0(),
+		AccessibilityOptions: nuevaAppHTMLAccessibilityOptionsV0(),
+	}
+}
+
+func nuevaAppHTMLIntegrationTypesV0() []string {
+	return []string{
+		"api",
+		"webhook",
+		"email",
+		"calendar",
+		"maps",
+		"file_import",
+		"file_export",
+		"messaging",
+		"llm",
+		"storage",
+		"payments",
+		"auth",
+		"analytics",
+		"search",
+		"notifications",
+		"other",
+	}
+}
+
+func nuevaAppHTMLAccessibilityOptionsV0() []string {
+	return []string{
+		"normal",
+		"wcag_aa",
+		"teclado",
+		"lectores_pantalla",
+		"contraste_alto",
+		"movimiento_reducido",
+		"subtitulos_transcripciones",
 	}
 }
 
@@ -72,6 +109,9 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.goal.error",
 		"nueva_app.goal_preview.titulo",
 		"nueva_app.goal_preview.objective",
+		"nueva_app.goal_preview.spec_hash",
+		"nueva_app.goal_preview.spec_counts",
+		"nueva_app.goal_preview.context_refs",
 		"nueva_app.goal_preview.write_set",
 		"nueva_app.goal_preview.required_tests",
 		"nueva_app.goal_preview.acceptance",
@@ -97,6 +137,9 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.guided_need",
 		"nueva_app.wizard.guided_analyze",
 		"nueva_app.wizard.guided_followups",
+		"nueva_app.wizard.guided_answer",
+		"nueva_app.wizard.guided_answer_placeholder",
+		"nueva_app.wizard.guided_answer_send",
 		"nueva_app.wizard.guided_mobile_both",
 		"nueva_app.wizard.guided_mobile_ios",
 		"nueva_app.wizard.guided_mobile_android",
@@ -116,6 +159,7 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.guided_msg_architecture",
 		"nueva_app.wizard.guided_msg_quality",
 		"nueva_app.wizard.guided_msg_review",
+		"nueva_app.wizard.guided_msg_answer",
 		"nueva_app.wizard.presets",
 		"nueva_app.wizard.preset.webapp",
 		"nueva_app.wizard.preset.api",
@@ -152,7 +196,12 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.summary.platforms",
 		"nueva_app.wizard.summary.architecture",
 		"nueva_app.wizard.summary.data",
+		"nueva_app.wizard.summary.integrations",
+		"nueva_app.wizard.summary.sensitivity",
 		"nueva_app.wizard.summary.quality",
+		"nueva_app.wizard.summary.accessibility",
+		"nueva_app.wizard.summary.documentation",
+		"nueva_app.wizard.summary.deploy",
 		"nueva_app.wizard.summary.autonomy",
 		"nueva_app.wizard.summary.no_name",
 		"nueva_app.wizard.summary.pending",
@@ -194,6 +243,7 @@ var nuevaAppHTMLHelpKeysV0 = []string{
 	"step.revisar",
 	"guided.analyze",
 	"guided.review",
+	"guided.answer",
 	"guided.mobile_both",
 	"guided.mobile_ios",
 	"guided.mobile_android",
@@ -216,6 +266,7 @@ var nuevaAppHTMLHelpKeysV0 = []string{
 	"tipo_app",
 	"objetivo",
 	"descripcion",
+	"usuarios_objetivo",
 	"request_id",
 	"locale",
 	"request_kind",
@@ -234,6 +285,7 @@ var nuevaAppHTMLHelpKeysV0 = []string{
 	"preferencias_tecnicas.lenguaje",
 	"preferencias_tecnicas.framework",
 	"preferencias_tecnicas.preferencias",
+	"preferencias_tecnicas.restricciones",
 	"i18n.enabled",
 	"i18n.default_locale",
 	"i18n.locales",
@@ -247,15 +299,31 @@ var nuevaAppHTMLHelpKeysV0 = []string{
 	"datos.tipos_detallados.retencion",
 	"datos.tipos_detallados.volumen",
 	"datos.tipos_detallados.restricciones",
+	"datos.fuentes.nombre",
+	"datos.fuentes.tipo",
+	"datos.fuentes.proposito",
+	"datos.fuentes.owner",
+	"datos.fuentes.frecuencia",
+	"datos.fuentes.restricciones",
 	"datos.storage.tipo",
 	"datos.storage.proposito",
 	"datos.storage.requerido",
 	"datos.storage.restricciones",
+	"datos.operacion.criticidad",
+	"datos.operacion.disponibilidad",
+	"datos.operacion.rpo",
+	"datos.operacion.rto",
+	"datos.operacion.auditoria",
+	"datos.operacion.restricciones",
 	"datos.sensibilidad",
 	"datos.retencion",
 	"integraciones.0.tipo",
 	"integraciones.0.nombre",
 	"integraciones.0.proposito",
+	"integraciones.0.direccion",
+	"integraciones.0.auth",
+	"integraciones.0.data_scope",
+	"integraciones.0.criticidad",
 	"integraciones.0.requerido",
 	"integraciones.0.restricciones",
 	"calidad.pruebas",
@@ -268,6 +336,7 @@ var nuevaAppHTMLHelpKeysV0 = []string{
 	"documentacion.usuario",
 	"documentacion.desarrollo",
 	"documentacion.sistemas",
+	"documentacion.profundidad",
 	"documentacion.locales",
 	"agentes.revision_humana",
 	"agentes.autonomia",
@@ -378,15 +447,26 @@ var nuevaAppHTMLOptionLabelsESV0 = map[string]string{
 	"calendar":                   "Calendario",
 	"maps":                       "Mapas",
 	"file_import":                "Importacion de archivos",
+	"file_export":                "Exportacion de archivos",
+	"messaging":                  "Mensajeria",
+	"llm":                        "LLM/IA",
+	"storage":                    "Almacenamiento externo",
 	"payments":                   "Pagos",
 	"auth":                       "Autenticacion",
 	"analytics":                  "Analitica",
 	"search":                     "Busqueda",
 	"notifications":              "Notificaciones",
+	"other":                      "Otra integracion",
 	"basica":                     "Basica",
 	"media":                      "Media",
 	"alta":                       "Alta",
+	"profunda":                   "Profunda",
 	"wcag_aa":                    "WCAG AA",
+	"teclado":                    "Navegacion por teclado",
+	"lectores_pantalla":          "Lectores de pantalla",
+	"contraste_alto":             "Contraste alto",
+	"movimiento_reducido":        "Movimiento reducido",
+	"subtitulos_transcripciones": "Subtitulos/transcripciones",
 	"no_aplica":                  "No aplica",
 	"local":                      "Local",
 	"contenedor":                 "Contenedor",
@@ -459,15 +539,26 @@ var nuevaAppHTMLOptionLabelsENV0 = map[string]string{
 	"calendar":                   "Calendar",
 	"maps":                       "Maps",
 	"file_import":                "File import",
+	"file_export":                "File export",
+	"messaging":                  "Messaging",
+	"llm":                        "LLM/AI",
+	"storage":                    "External storage",
 	"payments":                   "Payments",
 	"auth":                       "Authentication",
 	"analytics":                  "Analytics",
 	"search":                     "Search",
 	"notifications":              "Notifications",
+	"other":                      "Other integration",
 	"basica":                     "Basic",
 	"media":                      "Medium",
 	"alta":                       "High",
+	"profunda":                   "Deep",
 	"wcag_aa":                    "WCAG AA",
+	"teclado":                    "Keyboard navigation",
+	"lectores_pantalla":          "Screen readers",
+	"contraste_alto":             "High contrast",
+	"movimiento_reducido":        "Reduced motion",
+	"subtitulos_transcripciones": "Captions/transcripts",
 	"no_aplica":                  "Not applicable",
 	"local":                      "Local",
 	"contenedor":                 "Container",
@@ -578,7 +669,12 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       data-summary-platforms="{{index .HTML "nueva_app.wizard.summary.platforms"}}"
       data-summary-architecture="{{index .HTML "nueva_app.wizard.summary.architecture"}}"
       data-summary-data="{{index .HTML "nueva_app.wizard.summary.data"}}"
+      data-summary-integrations="{{index .HTML "nueva_app.wizard.summary.integrations"}}"
+      data-summary-sensitivity="{{index .HTML "nueva_app.wizard.summary.sensitivity"}}"
       data-summary-quality="{{index .HTML "nueva_app.wizard.summary.quality"}}"
+      data-summary-accessibility="{{index .HTML "nueva_app.wizard.summary.accessibility"}}"
+      data-summary-documentation="{{index .HTML "nueva_app.wizard.summary.documentation"}}"
+      data-summary-deploy="{{index .HTML "nueva_app.wizard.summary.deploy"}}"
       data-summary-autonomy="{{index .HTML "nueva_app.wizard.summary.autonomy"}}"
       data-summary-no-name="{{index .HTML "nueva_app.wizard.summary.no_name"}}"
       data-summary-pending="{{index .HTML "nueva_app.wizard.summary.pending"}}"
@@ -593,7 +689,8 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       data-guided-msg-maps="{{index .HTML "nueva_app.wizard.guided_msg_maps"}}"
       data-guided-msg-architecture="{{index .HTML "nueva_app.wizard.guided_msg_architecture"}}"
       data-guided-msg-quality="{{index .HTML "nueva_app.wizard.guided_msg_quality"}}"
-      data-guided-msg-review="{{index .HTML "nueva_app.wizard.guided_msg_review"}}">
+      data-guided-msg-review="{{index .HTML "nueva_app.wizard.guided_msg_review"}}"
+      data-guided-msg-answer="{{index .HTML "nueva_app.wizard.guided_msg_answer"}}">
       <div class="steps" role="tablist" aria-label="{{index .HTML "nueva_app.wizard.steps_label"}}">
         <button class="step-tab active" type="button" role="tab" id="nueva-app-step-tab-0" aria-controls="nueva-app-step-panel-0" aria-selected="true" data-goto-step="0" data-help="{{index .Help "step.idea"}}">{{index .HTML "nueva_app.wizard.step.idea"}}</button>
         <button class="step-tab" type="button" role="tab" id="nueva-app-step-tab-1" aria-controls="nueva-app-step-panel-1" aria-selected="false" data-goto-step="1" data-help="{{index .Help "step.tipo"}}">{{index .HTML "nueva_app.wizard.step.tipo"}}</button>
@@ -612,6 +709,8 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
             <div class="guided-thread" id="guided-thread" aria-live="polite"></div>
             <div id="guided-followups" hidden>
               <p class="expert-row-title">{{index .HTML "nueva_app.wizard.guided_followups"}}</p>
+              <label data-help="{{index .Help "guided.answer"}}"><span id="guided-active-question">{{index .HTML "nueva_app.wizard.guided_answer"}}</span><textarea id="guided-answer" placeholder="{{index .HTML "nueva_app.wizard.guided_answer_placeholder"}}"></textarea></label>
+              <div class="guided-actions"><button class="primary" type="button" data-guided-answer>{{index .HTML "nueva_app.wizard.guided_answer_send"}}</button></div>
               <div class="guided-actions">
                 <button type="button" data-guided-action="mobile_both" data-help="{{index .Help "guided.mobile_both"}}">{{index .HTML "nueva_app.wizard.guided_mobile_both"}}</button>
                 <button type="button" data-guided-action="mobile_ios" data-help="{{index .Help "guided.mobile_ios"}}">{{index .HTML "nueva_app.wizard.guided_mobile_ios"}}</button>
@@ -638,6 +737,8 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
           </div>
           <label data-help="{{index .Help "objetivo"}}">{{index .Labels "objetivo"}}<textarea name="objetivo" data-required="true" aria-required="true" data-label="{{index .Labels "objetivo"}}" placeholder="{{index .HTML "nueva_app.wizard.placeholder.objetivo"}}"></textarea></label>
           <label data-help="{{index .Help "descripcion"}}">{{index .Labels "descripcion"}}<textarea name="descripcion" placeholder="{{index .HTML "nueva_app.wizard.placeholder.descripcion"}}"></textarea></label>
+          <label data-help="{{index .Help "usuarios_objetivo"}}">{{index .Labels "usuarios_objetivo"}}<input name="usuarios_objetivo"></label>
+          <label data-help="{{index .Help "restricciones"}}">{{index .Labels "restricciones"}}<input name="restricciones"></label>
           <details><summary>{{index .HTML "nueva_app.wizard.identidad_avanzada"}}</summary><div class="grid">
             <label data-help="{{index .Help "request_id"}}">{{index .Labels "request_id"}}<input name="request_id" autocomplete="off"></label>
             <label data-help="{{index .Help "locale"}}">{{index .Labels "locale"}}<select name="locale">{{range .Page.Opciones.Locales}}<option value="{{.Valor}}">{{.Label}}</option>{{end}}</select></label>
@@ -670,6 +771,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
           <label data-help="{{index .Help "preferencias_tecnicas.lenguaje"}}">{{index .Labels "preferencias_tecnicas.lenguaje"}}<input name="preferencias_tecnicas.lenguaje" placeholder="go, typescript..."></label>
           <label data-help="{{index .Help "preferencias_tecnicas.framework"}}">{{index .Labels "preferencias_tecnicas.framework"}}<input name="preferencias_tecnicas.framework"></label>
           <label data-help="{{index .Help "preferencias_tecnicas.preferencias"}}">{{index .Labels "preferencias_tecnicas.preferencias"}}<input name="preferencias_tecnicas.preferencias"></label>
+          <label data-help="{{index .Help "preferencias_tecnicas.restricciones"}}">{{index .Labels "preferencias_tecnicas.restricciones"}}<input name="preferencias_tecnicas.restricciones"></label>
         </div></fieldset>
         <fieldset><legend>{{index .Labels "i18n"}}</legend><div class="grid">
 	          <label data-help="{{index .Help "i18n.enabled"}}"><span>{{index .Labels "i18n.enabled"}}</span><select name="i18n.enabled"><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option></select></label>
@@ -719,6 +821,46 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
             <label data-help="{{index .Help "datos.tipos_detallados.volumen"}}">{{index .Labels "datos.tipos_detallados.0.volumen"}}<input name="datos.tipos_detallados.3.volumen"></label>
             <label data-help="{{index .Help "datos.tipos_detallados.restricciones"}}">{{index .Labels "datos.tipos_detallados.0.restricciones"}}<input name="datos.tipos_detallados.3.restricciones"></label>
           </div></div>
+          <div class="expert-row"><p class="expert-row-title">{{index .Labels "datos.fuentes"}}</p><div class="grid">
+            <label data-help="{{index .Help "datos.fuentes.nombre"}}">{{index .Labels "datos.fuentes.0.nombre"}}<input name="datos.fuentes.0.nombre"></label>
+            <label data-help="{{index .Help "datos.fuentes.tipo"}}">{{index .Labels "datos.fuentes.0.tipo"}}<input name="datos.fuentes.0.tipo"></label>
+            <label data-help="{{index .Help "datos.fuentes.proposito"}}">{{index .Labels "datos.fuentes.0.proposito"}}<input name="datos.fuentes.0.proposito"></label>
+            <label data-help="{{index .Help "datos.fuentes.owner"}}">{{index .Labels "datos.fuentes.0.owner"}}<input name="datos.fuentes.0.owner"></label>
+            <label data-help="{{index .Help "datos.fuentes.frecuencia"}}">{{index .Labels "datos.fuentes.0.frecuencia"}}<input name="datos.fuentes.0.frecuencia"></label>
+            <label data-help="{{index .Help "datos.fuentes.restricciones"}}">{{index .Labels "datos.fuentes.0.restricciones"}}<input name="datos.fuentes.0.restricciones"></label>
+          </div></div>
+          <div class="expert-row"><p class="expert-row-title">{{index .Labels "datos.fuentes"}} 2</p><div class="grid">
+            <label data-help="{{index .Help "datos.fuentes.nombre"}}">{{index .Labels "datos.fuentes.0.nombre"}}<input name="datos.fuentes.1.nombre"></label>
+            <label data-help="{{index .Help "datos.fuentes.tipo"}}">{{index .Labels "datos.fuentes.0.tipo"}}<input name="datos.fuentes.1.tipo"></label>
+            <label data-help="{{index .Help "datos.fuentes.proposito"}}">{{index .Labels "datos.fuentes.0.proposito"}}<input name="datos.fuentes.1.proposito"></label>
+            <label data-help="{{index .Help "datos.fuentes.owner"}}">{{index .Labels "datos.fuentes.0.owner"}}<input name="datos.fuentes.1.owner"></label>
+            <label data-help="{{index .Help "datos.fuentes.frecuencia"}}">{{index .Labels "datos.fuentes.0.frecuencia"}}<input name="datos.fuentes.1.frecuencia"></label>
+            <label data-help="{{index .Help "datos.fuentes.restricciones"}}">{{index .Labels "datos.fuentes.0.restricciones"}}<input name="datos.fuentes.1.restricciones"></label>
+          </div></div>
+          <div class="expert-row"><p class="expert-row-title">{{index .Labels "datos.fuentes"}} 3</p><div class="grid">
+            <label data-help="{{index .Help "datos.fuentes.nombre"}}">{{index .Labels "datos.fuentes.0.nombre"}}<input name="datos.fuentes.2.nombre"></label>
+            <label data-help="{{index .Help "datos.fuentes.tipo"}}">{{index .Labels "datos.fuentes.0.tipo"}}<input name="datos.fuentes.2.tipo"></label>
+            <label data-help="{{index .Help "datos.fuentes.proposito"}}">{{index .Labels "datos.fuentes.0.proposito"}}<input name="datos.fuentes.2.proposito"></label>
+            <label data-help="{{index .Help "datos.fuentes.owner"}}">{{index .Labels "datos.fuentes.0.owner"}}<input name="datos.fuentes.2.owner"></label>
+            <label data-help="{{index .Help "datos.fuentes.frecuencia"}}">{{index .Labels "datos.fuentes.0.frecuencia"}}<input name="datos.fuentes.2.frecuencia"></label>
+            <label data-help="{{index .Help "datos.fuentes.restricciones"}}">{{index .Labels "datos.fuentes.0.restricciones"}}<input name="datos.fuentes.2.restricciones"></label>
+          </div></div>
+          <div class="expert-row"><p class="expert-row-title">{{index .Labels "datos.fuentes"}} 4</p><div class="grid">
+            <label data-help="{{index .Help "datos.fuentes.nombre"}}">{{index .Labels "datos.fuentes.0.nombre"}}<input name="datos.fuentes.3.nombre"></label>
+            <label data-help="{{index .Help "datos.fuentes.tipo"}}">{{index .Labels "datos.fuentes.0.tipo"}}<input name="datos.fuentes.3.tipo"></label>
+            <label data-help="{{index .Help "datos.fuentes.proposito"}}">{{index .Labels "datos.fuentes.0.proposito"}}<input name="datos.fuentes.3.proposito"></label>
+            <label data-help="{{index .Help "datos.fuentes.owner"}}">{{index .Labels "datos.fuentes.0.owner"}}<input name="datos.fuentes.3.owner"></label>
+            <label data-help="{{index .Help "datos.fuentes.frecuencia"}}">{{index .Labels "datos.fuentes.0.frecuencia"}}<input name="datos.fuentes.3.frecuencia"></label>
+            <label data-help="{{index .Help "datos.fuentes.restricciones"}}">{{index .Labels "datos.fuentes.0.restricciones"}}<input name="datos.fuentes.3.restricciones"></label>
+          </div></div>
+          <div class="expert-row"><p class="expert-row-title">{{index .Labels "datos.operacion"}}</p><div class="grid">
+            <label data-help="{{index .Help "datos.operacion.criticidad"}}">{{index .Labels "datos.operacion.criticidad"}}<input name="datos.operacion.criticidad"></label>
+            <label data-help="{{index .Help "datos.operacion.disponibilidad"}}">{{index .Labels "datos.operacion.disponibilidad"}}<input name="datos.operacion.disponibilidad"></label>
+            <label data-help="{{index .Help "datos.operacion.rpo"}}">{{index .Labels "datos.operacion.rpo"}}<input name="datos.operacion.rpo"></label>
+            <label data-help="{{index .Help "datos.operacion.rto"}}">{{index .Labels "datos.operacion.rto"}}<input name="datos.operacion.rto"></label>
+            <label data-help="{{index .Help "datos.operacion.auditoria"}}"><span>{{index .Labels "datos.operacion.auditoria"}}</span><select name="datos.operacion.auditoria"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
+            <label data-help="{{index .Help "datos.operacion.restricciones"}}">{{index .Labels "datos.operacion.restricciones"}}<input name="datos.operacion.restricciones"></label>
+          </div></div>
           <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.almacenamiento_1"}}</p><div class="grid">
 	            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.0.tipo"><option value="">{{optionLabel $.Page.Locale "storage" ""}}</option>{{range .StorageTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "storage" .}}</option>{{end}}</select></label>
             <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.0.proposito"></label>
@@ -746,31 +888,47 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
         </div></details></fieldset>
         <fieldset><legend>{{index .Labels "integraciones"}}</legend><div class="expert-block">
           <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_1"}}</p><div class="grid">
-	            <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.0.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option><option value="api">{{optionLabel $.Page.Locale "integration" "api"}}</option><option value="webhook">{{optionLabel $.Page.Locale "integration" "webhook"}}</option><option value="email">{{optionLabel $.Page.Locale "integration" "email"}}</option><option value="calendar">{{optionLabel $.Page.Locale "integration" "calendar"}}</option><option value="maps">{{optionLabel $.Page.Locale "integration" "maps"}}</option><option value="file_import">{{optionLabel $.Page.Locale "integration" "file_import"}}</option><option value="payments">{{optionLabel $.Page.Locale "integration" "payments"}}</option><option value="auth">{{optionLabel $.Page.Locale "integration" "auth"}}</option><option value="analytics">{{optionLabel $.Page.Locale "integration" "analytics"}}</option><option value="search">{{optionLabel $.Page.Locale "integration" "search"}}</option><option value="notifications">{{optionLabel $.Page.Locale "integration" "notifications"}}</option></select></label>
+            <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.0.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
             <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.0.nombre"></label>
             <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.0.proposito"></label>
+            <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.0.direccion"></label>
+            <label data-help="{{index .Help "integraciones.0.auth"}}">{{index .Labels "integraciones.0.auth"}}<input name="integraciones.0.auth"></label>
+            <label data-help="{{index .Help "integraciones.0.data_scope"}}">{{index .Labels "integraciones.0.data_scope"}}<input name="integraciones.0.data_scope"></label>
+            <label data-help="{{index .Help "integraciones.0.criticidad"}}">{{index .Labels "integraciones.0.criticidad"}}<input name="integraciones.0.criticidad"></label>
 	            <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.0.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
             <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.0.restricciones"></label>
           </div></div>
           <details><summary>{{index .HTML "nueva_app.wizard.integraciones_adicionales"}}</summary><div class="expert-block">
             <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_2"}}</p><div class="grid">
-	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.1.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option><option value="api">{{optionLabel $.Page.Locale "integration" "api"}}</option><option value="webhook">{{optionLabel $.Page.Locale "integration" "webhook"}}</option><option value="email">{{optionLabel $.Page.Locale "integration" "email"}}</option><option value="calendar">{{optionLabel $.Page.Locale "integration" "calendar"}}</option><option value="maps">{{optionLabel $.Page.Locale "integration" "maps"}}</option><option value="file_import">{{optionLabel $.Page.Locale "integration" "file_import"}}</option><option value="payments">{{optionLabel $.Page.Locale "integration" "payments"}}</option><option value="auth">{{optionLabel $.Page.Locale "integration" "auth"}}</option><option value="analytics">{{optionLabel $.Page.Locale "integration" "analytics"}}</option><option value="search">{{optionLabel $.Page.Locale "integration" "search"}}</option><option value="notifications">{{optionLabel $.Page.Locale "integration" "notifications"}}</option></select></label>
+	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.1.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.1.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.1.proposito"></label>
+              <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.1.direccion"></label>
+              <label data-help="{{index .Help "integraciones.0.auth"}}">{{index .Labels "integraciones.0.auth"}}<input name="integraciones.1.auth"></label>
+              <label data-help="{{index .Help "integraciones.0.data_scope"}}">{{index .Labels "integraciones.0.data_scope"}}<input name="integraciones.1.data_scope"></label>
+              <label data-help="{{index .Help "integraciones.0.criticidad"}}">{{index .Labels "integraciones.0.criticidad"}}<input name="integraciones.1.criticidad"></label>
 	              <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.1.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
               <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.1.restricciones"></label>
             </div></div>
             <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_3"}}</p><div class="grid">
-	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.2.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option><option value="api">{{optionLabel $.Page.Locale "integration" "api"}}</option><option value="webhook">{{optionLabel $.Page.Locale "integration" "webhook"}}</option><option value="email">{{optionLabel $.Page.Locale "integration" "email"}}</option><option value="calendar">{{optionLabel $.Page.Locale "integration" "calendar"}}</option><option value="maps">{{optionLabel $.Page.Locale "integration" "maps"}}</option><option value="file_import">{{optionLabel $.Page.Locale "integration" "file_import"}}</option><option value="payments">{{optionLabel $.Page.Locale "integration" "payments"}}</option><option value="auth">{{optionLabel $.Page.Locale "integration" "auth"}}</option><option value="analytics">{{optionLabel $.Page.Locale "integration" "analytics"}}</option><option value="search">{{optionLabel $.Page.Locale "integration" "search"}}</option><option value="notifications">{{optionLabel $.Page.Locale "integration" "notifications"}}</option></select></label>
+	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.2.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.2.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.2.proposito"></label>
+              <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.2.direccion"></label>
+              <label data-help="{{index .Help "integraciones.0.auth"}}">{{index .Labels "integraciones.0.auth"}}<input name="integraciones.2.auth"></label>
+              <label data-help="{{index .Help "integraciones.0.data_scope"}}">{{index .Labels "integraciones.0.data_scope"}}<input name="integraciones.2.data_scope"></label>
+              <label data-help="{{index .Help "integraciones.0.criticidad"}}">{{index .Labels "integraciones.0.criticidad"}}<input name="integraciones.2.criticidad"></label>
 	              <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.2.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
               <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.2.restricciones"></label>
             </div></div>
             <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_4"}}</p><div class="grid">
-	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.3.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option><option value="api">{{optionLabel $.Page.Locale "integration" "api"}}</option><option value="webhook">{{optionLabel $.Page.Locale "integration" "webhook"}}</option><option value="email">{{optionLabel $.Page.Locale "integration" "email"}}</option><option value="calendar">{{optionLabel $.Page.Locale "integration" "calendar"}}</option><option value="maps">{{optionLabel $.Page.Locale "integration" "maps"}}</option><option value="file_import">{{optionLabel $.Page.Locale "integration" "file_import"}}</option><option value="payments">{{optionLabel $.Page.Locale "integration" "payments"}}</option><option value="auth">{{optionLabel $.Page.Locale "integration" "auth"}}</option><option value="analytics">{{optionLabel $.Page.Locale "integration" "analytics"}}</option><option value="search">{{optionLabel $.Page.Locale "integration" "search"}}</option><option value="notifications">{{optionLabel $.Page.Locale "integration" "notifications"}}</option></select></label>
+	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.3.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.3.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.3.proposito"></label>
+              <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.3.direccion"></label>
+              <label data-help="{{index .Help "integraciones.0.auth"}}">{{index .Labels "integraciones.0.auth"}}<input name="integraciones.3.auth"></label>
+              <label data-help="{{index .Help "integraciones.0.data_scope"}}">{{index .Labels "integraciones.0.data_scope"}}<input name="integraciones.3.data_scope"></label>
+              <label data-help="{{index .Help "integraciones.0.criticidad"}}">{{index .Labels "integraciones.0.criticidad"}}<input name="integraciones.3.criticidad"></label>
 	              <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.3.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
               <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.3.restricciones"></label>
             </div></div>
@@ -781,7 +939,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
         <fieldset><legend>{{index .Labels "calidad"}}</legend><div class="grid">
 	          <label data-help="{{index .Help "calidad.pruebas"}}">{{index .Labels "calidad.pruebas"}}<select name="calidad.pruebas"><option value="basica">{{optionLabel $.Page.Locale "quality.tests" "basica"}}</option><option value="media">{{optionLabel $.Page.Locale "quality.tests" "media"}}</option><option value="alta">{{optionLabel $.Page.Locale "quality.tests" "alta"}}</option></select></label>
 	          <label data-help="{{index .Help "calidad.accesibilidad"}}">{{index .Labels "calidad.accesibilidad"}}<select name="calidad.accesibilidad"><option value="basica">{{optionLabel $.Page.Locale "accessibility" "basica"}}</option><option value="normal">{{optionLabel $.Page.Locale "accessibility" "normal"}}</option><option value="wcag_aa">{{optionLabel $.Page.Locale "accessibility" "wcag_aa"}}</option><option value="no_aplica">{{optionLabel $.Page.Locale "accessibility" "no_aplica"}}</option></select></label>
-          <label data-help="{{index .Help "calidad.accesibilidad_opciones"}}">{{index .Labels "calidad.accesibilidad_opciones"}}<input name="calidad.accesibilidad_opciones" placeholder="normal,wcag_aa"></label>
+          <div data-help="{{index .Help "calidad.accesibilidad_opciones"}}"><p class="expert-row-title">{{index .Labels "calidad.accesibilidad_opciones"}}</p><div class="checks">{{range .AccessibilityOptions}}<label><input type="checkbox" name="calidad.accesibilidad_opciones" value="{{.}}">{{optionLabel $.Page.Locale "accessibility" .}}</label>{{end}}</div></div>
 	          <label data-help="{{index .Help "calidad.observabilidad"}}"><span>{{index .Labels "calidad.observabilidad"}}</span><select name="calidad.observabilidad"><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option></select></label>
           <label data-help="{{index .Help "calidad.compliance"}}">{{index .Labels "calidad.compliance"}}<input name="calidad.compliance"></label>
         </div></fieldset>
@@ -793,6 +951,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
 	          <label data-help="{{index .Help "documentacion.usuario"}}"><span>{{index .Labels "documentacion.usuario"}}</span><select name="documentacion.usuario"><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option></select></label>
 	          <label data-help="{{index .Help "documentacion.desarrollo"}}"><span>{{index .Labels "documentacion.desarrollo"}}</span><select name="documentacion.desarrollo"><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option></select></label>
 	          <label data-help="{{index .Help "documentacion.sistemas"}}"><span>{{index .Labels "documentacion.sistemas"}}</span><select name="documentacion.sistemas"><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option></select></label>
+	          <label data-help="{{index .Help "documentacion.profundidad"}}">{{index .Labels "documentacion.profundidad"}}<select name="documentacion.profundidad"><option value="profunda">{{optionLabel $.Page.Locale "docs.depth" "profunda"}}</option><option value="normal">{{optionLabel $.Page.Locale "docs.depth" "normal"}}</option><option value="basica">{{optionLabel $.Page.Locale "docs.depth" "basica"}}</option></select></label>
           <label data-help="{{index .Help "documentacion.locales"}}">{{index .Labels "documentacion.locales"}}<input name="documentacion.locales" placeholder="es-ES,en-US"></label>
         </div></fieldset>
       </div>
@@ -833,15 +992,15 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
           {{if .RunRef}}<div><strong>{{index $.HTML "nueva_app.goal.run_ref"}}:</strong> <code>{{.RunRef}}</code></div>{{end}}
           {{if .GoalRef}}<div><strong>{{index $.HTML "nueva_app.goal.goal_ref"}}:</strong> <code>{{.GoalRef}}</code></div>{{end}}
           {{if .DirectorExecutionMode}}<div><strong>{{index $.HTML "nueva_app.goal.director_execution_mode"}}:</strong> <code>{{.DirectorExecutionMode}}</code></div>{{end}}
-          {{if .Objective}}<div><strong>{{index $.HTML "nueva_app.goal_preview.objective"}}:</strong> {{.Objective}}</div>{{end}}
+          {{if .SpecHash}}<div><strong>{{index $.HTML "nueva_app.goal_preview.spec_hash"}}:</strong> <code>{{.SpecHash}}</code></div>{{end}}
           <div><strong>{{index $.HTML "nueva_app.goal_preview.estimate"}}:</strong> {{.Estimate.TokenBudget}} {{index $.HTML "nueva_app.goal_preview.tokens"}} · {{.Estimate.MaxSubgoals}} {{index $.HTML "nueva_app.goal_preview.subgoals"}} · {{index $.HTML "nueva_app.goal_preview.cost_tier"}} <code>{{.Estimate.CostTier}}</code></div>
+          <div><strong>{{index $.HTML "nueva_app.goal_preview.spec_counts"}}:</strong> {{.SpecSummary.WriteSetCount}} {{index $.HTML "nueva_app.goal_preview.write_set"}} · {{.SpecSummary.RequiredTestCount}} {{index $.HTML "nueva_app.goal_preview.required_tests"}} · {{.SpecSummary.ArtifactContractCount}} {{index $.HTML "nueva_app.goal_preview.artifacts"}}</div>
         </div>
-        {{if .WriteSet}}<h3>{{index $.HTML "nueva_app.goal_preview.write_set"}}</h3><ul>{{range .WriteSet}}<li><code>{{.Path}}</code>{{if .Purpose}} · {{.Purpose}}{{end}}</li>{{end}}</ul>{{end}}
-        {{if .RequiredTests}}<h3>{{index $.HTML "nueva_app.goal_preview.required_tests"}}</h3><ul>{{range .RequiredTests}}<li>{{if .TestRef}}<code>{{.TestRef}}</code>{{end}} {{.Command}}</li>{{end}}</ul>{{end}}
-        {{if .AcceptanceCriteria}}<h3>{{index $.HTML "nueva_app.goal_preview.acceptance"}}</h3><ul>{{range .AcceptanceCriteria}}<li>{{.}}</li>{{end}}</ul>{{end}}
-        {{if .ArtifactContracts}}<h3>{{index $.HTML "nueva_app.goal_preview.artifacts"}}</h3><ul>{{range .ArtifactContracts}}<li><code>{{.ArtifactRef}}</code> {{.ArtifactType}}</li>{{end}}</ul>{{end}}
+        {{if .ContextRefs}}<h3>{{index $.HTML "nueva_app.goal_preview.context_refs"}}</h3><ul>{{range .ContextRefs}}<li><code>{{.}}</code></li>{{end}}</ul>{{end}}
+        {{if .RequiredTestRefs}}<h3>{{index $.HTML "nueva_app.goal_preview.required_tests"}}</h3><ul>{{range .RequiredTestRefs}}<li><code>{{.}}</code></li>{{end}}</ul>{{end}}
+        {{if .ArtifactTypes}}<h3>{{index $.HTML "nueva_app.goal_preview.artifacts"}}</h3><ul>{{range .ArtifactTypes}}<li><code>{{.}}</code></li>{{end}}</ul>{{end}}
       </section>{{end}}
-      {{if .Page.ViewModel.ErroresPublicos}}<section class="panel issue"><h2>{{index .HTML "nueva_app.html.errores_publicos"}}</h2><ul>{{range .Page.ViewModel.ErroresPublicos}}<li><code>{{.Code}}</code> {{index $.Page.Textos.ErroresPublicos .Code}}</li>{{end}}</ul></section>{{end}}
+      {{if .Page.ViewModel.ErroresPublicos}}<section class="panel issue"><h2>{{index .HTML "nueva_app.html.errores_publicos"}}</h2><ul>{{range .Page.ViewModel.ErroresPublicos}}<li><code>{{.Code}}</code>{{if .Field}} <span>{{.Field}}</span>{{end}} {{if .Message}}{{.Message}}{{else}}{{index $.Page.Textos.ErroresPublicos .Code}}{{end}}</li>{{end}}</ul></section>{{end}}
       {{if .Page.ViewModel.ResumenApp.Nombre}}<section class="panel"><h2>{{index .HTML "nueva_app.html.resumen"}}</h2><p>{{.Page.ViewModel.ResumenApp.Nombre}} · {{.Page.ViewModel.ResumenApp.TipoApp}}</p><p>{{.Page.ViewModel.ResumenApp.Objetivo}}</p></section>{{end}}
       <section class="panel"><h2>{{.Page.Textos.BacklogPreview.Titulo}}</h2>{{if .Page.ViewModel.BacklogPreview.TotalMicrotareas}}<ol>{{range .Page.ViewModel.BacklogPreview.Microtareas}}<li><strong>{{.Key}}</strong> {{.Titulo}} <code>{{.ModuloFrontera}}</code></li>{{end}}</ol>{{else}}<p>{{index .HTML "nueva_app.html.backlog_vacio"}}</p>{{end}}</section>
     </aside>
@@ -854,14 +1013,24 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     if(!form||!wizard)return;
     document.documentElement.classList.add('wizard-ready');
     let step=0;
+    let guidedSession=null;
     const steps=[...wizard.querySelectorAll('[data-step]')];
     const tabs=[...wizard.querySelectorAll('[data-goto-step]')];
     const prev=wizard.querySelector('[data-prev-step]');
     const next=wizard.querySelector('[data-next-step]');
     const errors=document.getElementById('wizard-errors');
     function field(name){return form.elements[name];}
+    function fieldList(el){return el&&typeof el.length==='number'&&!el.tagName;}
     function val(name){const el=field(name);return el?String(el.value||'').trim():'';}
     function checked(name){return [...form.querySelectorAll('input[name="'+name+'"]:checked')].map(el=>el.value).join(', ');}
+    function selectedIntegrationTypes(){
+      const out=[];
+      for(let index=0;index<4;index++){
+        const value=val('integraciones.'+index+'.tipo');
+        if(value)out.push(value);
+      }
+      return out.join(', ');
+    }
     function renderSummary(){
       const copy=wizard.dataset;
       const items=[
@@ -871,7 +1040,12 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
         [copy.summaryPlatforms,checked('plataformas')||'-'],
         [copy.summaryArchitecture,val('preferencias_tecnicas.arquitectura')||'hexagonal'],
         [copy.summaryData,val('datos.db_required')==='true'?copy.summaryDbRequired:copy.summaryNoDbRequired],
+        [copy.summaryIntegrations,selectedIntegrationTypes()||'-'],
+        [copy.summarySensitivity,val('datos.sensibilidad')||'-'],
         [copy.summaryQuality,val('calidad.pruebas')||'-'],
+        [copy.summaryAccessibility,(val('calidad.accesibilidad')||'-')+' / '+(checked('calidad.accesibilidad_opciones')||'-')],
+        [copy.summaryDocumentation,val('documentacion.profundidad')||'-'],
+        [copy.summaryDeploy,val('deploy.target')||'-'],
         [copy.summaryAutonomy,val('agentes.autonomia')||'-']
       ];
       const html=items.map(i=>'<div><strong>'+escapeHTML(i[0])+':</strong> '+escapeHTML(i[1])+'</div>').join('');
@@ -1077,7 +1251,23 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       return true;
     }
     function dispatchField(el){if(!el)return;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}
-    function setValue(name,value){const el=field(name);if(el){el.value=value;clearFieldError(el);dispatchField(el);}}
+    function setValue(name,value){
+      const el=field(name);
+      if(!el)return;
+      if(fieldList(el)){
+        const values=String(value||'').split(',').map(v=>v.trim()).filter(Boolean);
+        Array.prototype.forEach.call(el,item=>{
+          if(item.type==='checkbox'||item.type==='radio'){item.checked=values.includes(item.value);}
+          else{item.value=String(value||'');}
+          clearFieldError(item);
+          dispatchField(item);
+        });
+        return;
+      }
+      el.value=value;
+      clearFieldError(el);
+      dispatchField(el);
+    }
     function addCSV(name,values){
       const current=val(name).split(',').map(v=>v.trim()).filter(Boolean);
       values.forEach(value=>{if(value&&!current.includes(value)){current.push(value);}});
@@ -1091,6 +1281,28 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       node.className='guided-message';
       node.textContent=message;
       thread.appendChild(node);
+    }
+    function guidedActiveQuestionField(){
+      if(guidedSession&&Array.isArray(guidedSession.pending_questions)&&guidedSession.pending_questions.length){
+        return String(guidedSession.pending_questions[0]||'');
+      }
+      return '';
+    }
+    function labelForField(name){
+      const el=field(name);
+      if(el&&el.dataset&&el.dataset.label)return el.dataset.label;
+      if(fieldList(el)){
+        for(let index=0;index<el.length;index++){
+          if(el[index]&&el[index].dataset&&el[index].dataset.label)return el[index].dataset.label;
+        }
+      }
+      return name;
+    }
+    function updateGuidedQuestion(){
+      const target=document.getElementById('guided-active-question');
+      if(!target)return;
+      const active=guidedActiveQuestionField();
+      target.textContent=active?labelForField(active):(wizard.dataset.guidedMsgReview||target.textContent);
     }
     function hasOwn(obj,key){return Object.prototype.hasOwnProperty.call(obj||{},key);}
     function setMaybe(name,value){
@@ -1134,8 +1346,16 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       setMaybe('datos.sensibilidad',datos.sensibilidad);
       setMaybe('datos.retencion',datos.retencion);
       applyIndexed('datos.tipos_detallados',datos.tipos_detallados,['nombre','proposito','sensibilidad','retencion','volumen','restricciones']);
+      applyIndexed('datos.fuentes',datos.fuentes,['nombre','tipo','proposito','owner','frecuencia','restricciones']);
       applyIndexed('datos.storage',datos.storage,['tipo','proposito','requerido','restricciones']);
-      applyIndexed('integraciones',guidedForm.integraciones,['tipo','nombre','proposito','requerido','restricciones']);
+      const operacion=datos.operacion||{};
+      setMaybe('datos.operacion.criticidad',operacion.criticidad);
+      setMaybe('datos.operacion.disponibilidad',operacion.disponibilidad);
+      setMaybe('datos.operacion.rpo',operacion.rpo);
+      setMaybe('datos.operacion.rto',operacion.rto);
+      if(hasOwn(operacion,'auditoria'))setMaybe('datos.operacion.auditoria',operacion.auditoria);
+      setCSV('datos.operacion.restricciones',operacion.restricciones);
+      applyIndexed('integraciones',guidedForm.integraciones,['tipo','nombre','proposito','direccion','auth','data_scope','criticidad','requerido','restricciones']);
       const calidad=guidedForm.calidad||{};
       setMaybe('calidad.pruebas',calidad.pruebas);
       setMaybe('calidad.accesibilidad',calidad.accesibilidad);
@@ -1145,9 +1365,13 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     }
     async function requestGuided(payload){
       try{
-        const response=await fetch('/api/v0/apps/intake/guided-turn',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload||{})});
+        const body=Object.assign({},payload||{});
+        if(guidedSession)body.session=guidedSession;
+        const response=await fetch('/api/v0/apps/intake/guided-turn',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body)});
         if(!response.ok)return null;
-        return await response.json();
+        const out=await response.json();
+        if(out&&out.session){guidedSession=out.session;updateGuidedQuestion();}
+        return out;
       }catch(_){return null;}
     }
     async function applyServerGuided(payload,message){
@@ -1158,6 +1382,18 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       guidedLog(message);
       renderSummary();
       return true;
+    }
+    async function submitGuidedAnswer(){
+      const input=document.getElementById('guided-answer');
+      const answer=input?String(input.value||'').trim():'';
+      if(!answer)return;
+      const answerField=guidedActiveQuestionField();
+      if(await applyServerGuided({answer_field:answerField,answer:answer},wizard.dataset.guidedMsgAnswer)){
+        input.value='';
+        updateGuidedQuestion();
+        return;
+      }
+      if(answerField){setValue(answerField,answer);guidedLog(wizard.dataset.guidedMsgAnswer);input.value='';renderSummary();}
     }
     function titleFromNeed(text){
       const lower=text.toLowerCase();
@@ -1195,6 +1431,18 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       }
       guidedLog(wizard.dataset.guidedMsgMaps);
     }
+    function firstEmptyIntegrationIndex(){
+      for(let index=0;index<4;index++){if(!val('integraciones.'+index+'.tipo'))return index;}
+      return -1;
+    }
+    function configureIntegration(type,name,proposito,auth){
+      const index=firstEmptyIntegrationIndex();
+      if(index<0)return;
+      setValue('integraciones.'+index+'.tipo',type);
+      setValue('integraciones.'+index+'.nombre',name);
+      setValue('integraciones.'+index+'.proposito',proposito);
+      if(auth)setValue('integraciones.'+index+'.auth',auth);
+    }
     async function applyGuidedNeed(){
       const input=document.getElementById('guided-need');
       const text=input?String(input.value||'').trim():'';
@@ -1205,11 +1453,16 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       if(!val('nombre'))setValue('nombre',titleFromNeed(text));
       const lower=text.toLowerCase();
       if(/m[oó]vil|mobile|android|ios|iphone|apple/.test(lower)){setValue('tipo_app','mobile');setChecked('mobile',true);}
-      if(/api|backend|servicio/.test(lower)){setChecked('api',true);}
-      if(/web|panel|gestion|gesti[oó]n/.test(lower)){setChecked('web',true);}
+      if(/api|backend|servicio/.test(lower)){if(!val('tipo_app'))setValue('tipo_app','api');setChecked('api',true);}
+      if(/web|panel|portal|gestion|gesti[oó]n/.test(lower)){if(!val('tipo_app'))setValue('tipo_app','web');setChecked('web',true);}
       if(/piso|pisos|alquiler|vivienda|rent/.test(lower)){configureRentalData();}
       if(/map|mapa|cerca|cercan|ubicaci[oó]n|geo|openstreet/.test(lower)){configureMaps(/openstreet/.test(lower));}
+      if(/calendario|calendar|agenda|cita|citas/.test(lower)){configureIntegration('calendar','calendario','Sincronizar eventos, citas o agenda con adaptador autorizado.','oauth gestionado');}
+      if(/pago|pagos|payment|payments|cobro|stripe/.test(lower)){configureIntegration('payments','pagos','Procesar pagos mediante un adaptador externo autorizado.','proveedor gestionado');}
+      if(/login|auth|autenticaci[oó]n|permisos|roles|sso/.test(lower)){configureIntegration('auth','autenticacion','Gestionar acceso, permisos, roles o SSO sin acoplar secretos al nucleo.','sso u oauth gestionado');}
+      if(/notificaci[oó]n|notificaciones|notification|notifications|alerta|alertas/.test(lower)){configureIntegration('notifications','notificaciones','Enviar avisos o alertas por canales autorizados.','proveedor gestionado');}
       document.getElementById('guided-followups').hidden=false;
+      updateGuidedQuestion();
       guidedLog(wizard.dataset.guidedMsgAnalyzed);
       renderSummary();
     }
@@ -1250,6 +1503,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     if(errors){errors.addEventListener('click',event=>{const target=event.target.closest('[data-error-target]');if(!target)return;const el=field(target.dataset.errorTarget);if(el)focusField(el);});}
     const guided=document.getElementById('guided-assistant');
     if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-guided-action]');if(target)guidedAction(target.dataset.guidedAction);});}
+    if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-guided-answer]');if(target)submitGuidedAnswer();});}
     wizard.querySelectorAll('[data-preset]').forEach(node=>node.addEventListener('click',()=>preset(node.dataset.preset)));
     const goalButton=document.querySelector('[data-goal-observe]');
     if(goalButton)goalButton.addEventListener('click',()=>observeGoal(goalButton));

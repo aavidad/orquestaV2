@@ -9,6 +9,16 @@ func codexSchemaVersionCompatibleV0(value string, current string) bool {
 	return CodexSchemaVersionCompatibleV0(value, current)
 }
 
+func codexAgentAckSchemaVersionCompatibleV0(value string) bool {
+	return codexSchemaVersionCompatibleV0(value, CodexAgentAckSchemaVersionV0) ||
+		codexSchemaVersionCompatibleV0(value, OrquestaAgentAckSchemaVersionV0)
+}
+
+func codexRequiredTestReceiptSchemaVersionCompatibleV0(value string) bool {
+	return codexSchemaVersionCompatibleV0(value, CodexRequiredTestReceiptSchemaVersionV0) ||
+		codexSchemaVersionCompatibleV0(value, OrquestaRequiredTestReceiptSchemaVersionV0)
+}
+
 func CodexSchemaVersionCompatibleV0(value string, current string) bool {
 	value = strings.TrimSpace(value)
 	current = strings.TrimSpace(current)

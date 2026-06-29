@@ -573,11 +573,13 @@ Motivo: los agentes pueden redactar resúmenes con alias o nombres cercanos; el
 stack no debe convertir texto libre en un rail fragil para decidir una
 arquitectura. La votacion live necesita payload causal (`architecture_vote.v0`)
 o una fuente equivalente por puerto.
-Impacto: `ConfigV0.DecisionCouncil` inyecta `VoteSource`; cuando las tareas
-`task-council-v-*` ya estan entregadas y existe fuente de voto, el residente
-propone `accept_decision_council_result`. El handler une votos por `TaskRef`,
-conserva `VoteRef` independiente, fuerza `VoterRef` desde `agent_ref` y
-`FamilyRef` desde `family_ref` en tareas/plan durables, evalua
+Impacto: `ConfigV0.DecisionCouncil` inyecta `VoteSource`; si hay
+`ReceiptStore`, `BuildStackV0` cablea por defecto una fuente real que lee ACKs
+Codex y artefactos `architecture_vote.v0` bajo `ProjectWorkDir`. Cuando las
+tareas `task-council-v-*` ya estan entregadas y existe fuente de voto, el
+residente propone `accept_decision_council_result`. El handler une votos por
+`TaskRef`, conserva `VoteRef` independiente, fuerza `VoterRef` desde
+`agent_ref` y `FamilyRef` desde `family_ref` en tareas/plan durables, evalua
 quorum/evidencia con `orquesta-decision-council` y aplica `AcceptDecision` por
 `HandleStoredWorkflowCommandV0`. Si faltan votos completos o evidencia, queda
 pendiente con evidencia; no parsea logs, summary ni palabras sueltas.
@@ -1959,9 +1961,10 @@ Motivo: un backend parcial con launcher sin observer, cierre o state store crea
 runs contenedoras imposibles de observar/cerrar y obliga a reabrir supervision
 legacy. El modelo vigente es que Codex Goal hace el loop y Orquesta compila,
 observa y valida por evidencias.
-Impacto: `PrepareAutoprogrammingRunV0` conserva el handoff `goal_specs[]` si no
-hay backend Goal. Si detecta backend parcial (`GoalLauncher` u `GoalObserver`
-presente sin bundle completo), devuelve issue
+Impacto: `PrepareAutoprogrammingRunV0` conserva specs completas solo como
+handoff interno si no hay backend Goal, y la superficie MCP/HTTP publica
+`goal_spec_summaries[]`. Si detecta backend parcial (`GoalLauncher` u
+`GoalObserver` presente sin bundle completo), devuelve issue
 `autoprogramming_goal_backend_incomplete` y no persiste run, no lanza goal y no
 materializa loop legacy. El lanzamiento real requiere `GoalLauncher`,
 `GoalObserver`, `GoalClosureValidator` y `GoalStateStore`.

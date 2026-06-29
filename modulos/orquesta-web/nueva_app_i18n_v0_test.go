@@ -2,6 +2,9 @@ package orquestaweb
 
 import (
 	"errors"
+	"os"
+	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -111,6 +114,40 @@ func TestNuevaAppI18nCatalogV0GoalBackendUnavailableTieneTextoDedicado(t *testin
 		}
 		if text == "" || text == "Texto no disponible." || text == "Text unavailable." {
 			t.Fatalf("texto goal backend generico para %s: %q", locale, text)
+		}
+	}
+}
+
+func TestNuevaAppHTMLHelpV0TodasLasClavesTienenTextoDedicado(t *testing.T) {
+	catalog := NewNuevaAppI18nCatalogV0()
+
+	for _, locale := range []string{NuevaAppI18nDefaultLocaleV0, NuevaAppI18nEnglishLocaleV0} {
+		help := nuevaAppHTMLHelpV0(locale, catalog)
+		for _, key := range nuevaAppHTMLHelpKeysV0 {
+			text := strings.TrimSpace(help[key])
+			if text == "" || text == "Texto no disponible." || text == "Text unavailable." {
+				t.Fatalf("ayuda HTML generica o vacia para %s/%s: %q", locale, key, text)
+			}
+		}
+	}
+}
+
+func TestNuevaAppHTMLHelpKeysV0CubrenClavesUsadasEnPlantilla(t *testing.T) {
+	source, err := os.ReadFile("nueva_app_html_render_v0.go")
+	if err != nil {
+		t.Fatalf("leer render HTML: %v", err)
+	}
+	matches := regexp.MustCompile(`index \.Help "([^"]+)"`).FindAllStringSubmatch(string(source), -1)
+	if len(matches) == 0 {
+		t.Fatalf("no se encontraron usos de .Help en la plantilla")
+	}
+	declared := map[string]bool{}
+	for _, key := range nuevaAppHTMLHelpKeysV0 {
+		declared[key] = true
+	}
+	for _, match := range matches {
+		if !declared[match[1]] {
+			t.Fatalf("clave .Help usada en plantilla sin declarar: %s", match[1])
 		}
 	}
 }

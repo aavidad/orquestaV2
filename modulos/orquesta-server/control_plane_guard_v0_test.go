@@ -23,7 +23,7 @@ func TestValidateConfigV0AceptaBindRemotoSoloConTokenV0(t *testing.T) {
 		StateDir: t.TempDir(),
 		ControlPlane: ControlPlaneConfigV0{
 			RemoteAccessOptIn: true,
-			Token:             "token-ref-control-plane-test",
+			Token:             "token-ref-control-plane-test-0123456789",
 			Principal:         "principal-ref-operator",
 			PermissionRef:     "permission-ref-control-plane",
 			PublicReason:      "remote_control_plane_opt_in",
@@ -35,13 +35,34 @@ func TestValidateConfigV0AceptaBindRemotoSoloConTokenV0(t *testing.T) {
 	}
 }
 
+func TestValidateConfigV0RechazaTokenPlaceholderEnBindRemotoV0(t *testing.T) {
+	for _, token := range []string{
+		"change-me-local-ssh-tunnel-only",
+		"replace-me-with-openssl-rand-hex",
+		"short-token",
+	} {
+		config := NormalizeConfigV0(ConfigV0{
+			Addr:     "0.0.0.0:8787",
+			StateDir: t.TempDir(),
+			ControlPlane: ControlPlaneConfigV0{
+				RemoteAccessOptIn: true,
+				Token:             token,
+			},
+		})
+
+		if err := ValidateConfigV0(config); err == nil {
+			t.Fatalf("ValidateConfigV0 remoto debe rechazar token %q", token)
+		}
+	}
+}
+
 func TestControlPlaneGuardV0BloqueaMutacionRemotaSinTokenV0(t *testing.T) {
 	runtime := newControlPlaneRuntimeForTestV0(t, ConfigV0{
 		Addr:     "0.0.0.0:8787",
 		StateDir: t.TempDir(),
 		ControlPlane: ControlPlaneConfigV0{
 			RemoteAccessOptIn: true,
-			Token:             "secret-control-plane-token",
+			Token:             "secret-control-plane-token-0123456789",
 		},
 	})
 
@@ -63,7 +84,7 @@ func TestControlPlaneGuardV0PermiteIntakeGuiadoRemotoSinTokenV0(t *testing.T) {
 		StateDir: t.TempDir(),
 		ControlPlane: ControlPlaneConfigV0{
 			RemoteAccessOptIn: true,
-			Token:             "secret-control-plane-token",
+			Token:             "secret-control-plane-token-0123456789",
 		},
 	})
 
@@ -82,7 +103,7 @@ func TestControlPlaneGuardV0MantieneAppsChangeRemotoComoMutacionV0(t *testing.T)
 		StateDir: t.TempDir(),
 		ControlPlane: ControlPlaneConfigV0{
 			RemoteAccessOptIn: true,
-			Token:             "secret-control-plane-token",
+			Token:             "secret-control-plane-token-0123456789",
 		},
 	})
 
@@ -101,7 +122,7 @@ func TestControlPlaneGuardV0PermiteMutacionRemotaConTokenYPrincipalV0(t *testing
 		StateDir: t.TempDir(),
 		ControlPlane: ControlPlaneConfigV0{
 			RemoteAccessOptIn: true,
-			Token:             "secret-control-plane-token",
+			Token:             "secret-control-plane-token-0123456789",
 			Principal:         "principal-ref-default",
 			PermissionRef:     "permission-ref-control-plane",
 			PublicReason:      "remote_control_plane_opt_in",
@@ -110,7 +131,7 @@ func TestControlPlaneGuardV0PermiteMutacionRemotaConTokenYPrincipalV0(t *testing
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v0/runs/control", nil)
-	req.Header.Set("Authorization", "Bearer secret-control-plane-token")
+	req.Header.Set("Authorization", "Bearer secret-control-plane-token-0123456789")
 	req.Header.Set("X-Orquesta-Principal", "principal-ref-operator")
 	runtime.HandlerV0().ServeHTTP(rec, req)
 
@@ -125,7 +146,7 @@ func TestControlPlaneGuardV0MantieneStatusLecturaSinTokenV0(t *testing.T) {
 		StateDir: t.TempDir(),
 		ControlPlane: ControlPlaneConfigV0{
 			RemoteAccessOptIn: true,
-			Token:             "secret-control-plane-token",
+			Token:             "secret-control-plane-token-0123456789",
 		},
 	})
 

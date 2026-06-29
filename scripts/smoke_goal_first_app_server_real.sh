@@ -4,12 +4,33 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/smoke_common.sh
 source "$repo_root/scripts/lib/smoke_common.sh"
+# shellcheck source=scripts/lib/go_tool.sh
+source "$repo_root/scripts/lib/go_tool.sh"
 
 smoke_root_source="generated"
 if [[ -n "${ORQUESTA_SMOKE_ROOT:-}" ]]; then
   smoke_root_source="env:ORQUESTA_SMOKE_ROOT"
 fi
-smoke_root="${ORQUESTA_SMOKE_ROOT:-$(mktemp -d "${TMPDIR:-/tmp}/orquesta-goal-first-app-server.XXXXXX")}"
+if [[ -n "${ORQUESTA_SMOKE_ROOT:-}" ]]; then
+  smoke_root="$ORQUESTA_SMOKE_ROOT"
+else
+  if [[ -n "${ORQUESTA_SMOKE_PARENT:-}" ]]; then
+    smoke_parent="$ORQUESTA_SMOKE_PARENT"
+  elif [[ -n "${ORQUESTA_CODEX_RUNTIME_WORKDIR:-}" ]]; then
+    smoke_parent="${ORQUESTA_CODEX_RUNTIME_WORKDIR%/}/smokes"
+  else
+    smoke_parent="/workspace/runtime/smokes"
+  fi
+  if ! mkdir -p "$smoke_parent" 2>/dev/null; then
+    smoke_parent="/workspace/orquesta-smokes"
+  fi
+  if ! mkdir -p "$smoke_parent" 2>/dev/null; then
+    smoke_parent="${TMPDIR:-/tmp}"
+  fi
+  ORQUESTA_SMOKE_ALLOWED_ROOT_PREFIXES="$smoke_parent${ORQUESTA_SMOKE_ALLOWED_ROOT_PREFIXES:+:$ORQUESTA_SMOKE_ALLOWED_ROOT_PREFIXES}"
+  export ORQUESTA_SMOKE_ALLOWED_ROOT_PREFIXES
+  smoke_root="$(mktemp -d "$smoke_parent/orquesta-goal-first-app-server.XXXXXX")"
+fi
 smoke_temp_root_prepare "$smoke_root" "$smoke_root_source"
 
 state_dir="$smoke_root/state"
@@ -28,6 +49,7 @@ daemon_stderr="$smoke_root/codex-daemon.stderr.log"
 preflight_stdout="$smoke_root/codex-preflight.stdout.log"
 preflight_stderr="$smoke_root/codex-preflight.stderr.log"
 server_pid=""
+base_url=""
 
 keep_dir="${ORQUESTA_KEEP_SMOKE_DIR:-0}"
 request_timeout="${ORQUESTA_GOAL_FIRST_SMOKE_REQUEST_TIMEOUT_SECONDS:-90}"
@@ -36,18 +58,23 @@ sleep_seconds="${ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS:-5}"
 goal_backend="${ORQUESTA_CODEX_GOAL_BACKEND:-app_server_tmux}"
 
 cleanup() {
-  if [[ -n "$server_pid" ]] && kill -0 "$server_pid" >/dev/null 2>&1; then
-    kill -INT "$server_pid" >/dev/null 2>&1 || true
-    for _ in $(seq 1 25); do
-      if ! kill -0 "$server_pid" >/dev/null 2>&1; then
-        break
-      fi
-      sleep 0.2
-    done
-    if kill -0 "$server_pid" >/dev/null 2>&1; then
-      kill -TERM "$server_pid" >/dev/null 2>&1 || true
+  smoke_shutdown_orquesta_server "$server_pid" "$base_url"
+  local tmux_owner="$runtime_dir/goal-srv/owner.json"
+  if [[ -f "$tmux_owner" ]] && command -v python3 >/dev/null 2>&1 && command -v tmux >/dev/null 2>&1; then
+    local tmux_session
+    tmux_session="$(python3 - "$tmux_owner" <<'PY' 2>/dev/null || true
+import json, sys
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+session = str(data.get("session_name", "")).strip()
+owner = str(data.get("owner_ref", "")).strip()
+if owner == "orquesta-codex-goal-app-server-tmux-v0" and session.startswith("orquesta-goal-"):
+    print(session)
+PY
+)"
+    if [[ -n "$tmux_session" ]]; then
+      tmux kill-session -t "$tmux_session" >/dev/null 2>&1 || true
     fi
-    wait "$server_pid" >/dev/null 2>&1 || true
   fi
   smoke_temp_root_cleanup "$smoke_root" "$keep_dir"
 }
@@ -159,7 +186,11 @@ if [[ ! -x "$codex_command" ]]; then
 fi
 
 case "$goal_backend" in
-  app_server_tmux|app_server_proxy) ;;
+  app_server_tmux) ;;
+  app_server_proxy)
+    echo "ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy no es backend operativo para este smoke; usa app_server_tmux" >&2
+    exit 2
+    ;;
   *)
     echo "ORQUESTA_CODEX_GOAL_BACKEND no soportado para este smoke: $goal_backend" >&2
     exit 2
@@ -197,6 +228,7 @@ if [[ -n "${ORQUESTA_OPES_BASE_URL:-}" || -n "${OPES_BASE_URL:-}" ]]; then
   exit 2
 fi
 
+orquesta_go_tool_ensure_path
 need_cmd go
 need_cmd curl
 

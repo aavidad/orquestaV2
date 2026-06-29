@@ -152,7 +152,7 @@ Superficie publica de app:
 POST /api/v0/autoprogramming/prepare-run
   input: autoprogramming_request, occurred_at?, requested_by?, limites?
   output: estado, accepted, run_ref?, workflow_task_refs?, wait_agent_refs?,
-          goal_specs?, goal?, goals[]?, continue?
+          goal_spec_summaries?, goal?, goals[]?, continue?
 
 POST /api/v0/autoprogramming/goal/observe
   input: run_ref, occurred_at?, requested_by?
@@ -175,7 +175,8 @@ salvo que la request declare `goal_migration:legacy-required` o
 goal-first las requests que ya llegan clasificadas por
 `orquesta-autoprogramming`. Cuando `orquesta-autoprogramming` clasifica la
 request como `goal_ready`, el resultado depende de los puertos inyectados. Si no
-hay backend Goal disponible, incluye `goal_specs[]` normalizados sin
+hay backend Goal disponible, conserva `GoalWorkSpecV0` como handoff interno y
+la API publica solo `goal_spec_summaries[]` con hash/refs/cuentas, sin
 materializar ni encolar un run legacy; `run_ref`, `workflow_task_refs`,
 `wait_agent_refs` y `continue` quedan vacios para que otra composicion haga
 handoff. Si existen `GoalLauncher` y

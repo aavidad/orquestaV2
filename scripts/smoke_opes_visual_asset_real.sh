@@ -10,6 +10,7 @@ smoke_require_confirm ORQUESTA_OPES_VISUAL_SMOKE_CONFIRM 1 \
 
 ORQUESTA_BASE_URL="${ORQUESTA_BASE_URL:-http://127.0.0.1:18787}"
 OPES_BASE_URL="${OPES_BASE_URL:-http://127.0.0.1:18082}"
+smoke_require_opes_temporal_destination "$OPES_BASE_URL" "OPES_BASE_URL"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 SMOKE_OUT_DIR="${SMOKE_OUT_DIR:-/tmp/orquesta-opes-visual-smoke/$SMOKE_ID/out}"
 
@@ -167,6 +168,20 @@ assert_visual_block() {
   fi
 }
 
+url_ref() {
+  local value="${1%/}"
+  local digest=""
+  if command -v sha256sum >/dev/null 2>&1; then
+    digest="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    digest="$(printf '%s' "$value" | shasum -a 256 | awk '{print $1}')"
+  else
+    echo "url-ref-unavailable"
+    return 0
+  fi
+  echo "url-ref-${digest}"
+}
+
 write_summary() {
   local topic_id="$1"
   local chapter_id="$2"
@@ -176,8 +191,8 @@ write_summary() {
   local blocks_count="$6"
   cat >"$SMOKE_OUT_DIR/summary.txt" <<EOF
 smoke_id=$SMOKE_ID
-orquesta_base_url=$ORQUESTA_BASE_URL
-opes_base_url=$OPES_BASE_URL
+orquesta_base_url_ref=$(url_ref "$ORQUESTA_BASE_URL")
+opes_base_url_ref=$(url_ref "$OPES_BASE_URL")
 topic_id=$topic_id
 chapter_id=$chapter_id
 job_ref=$job_ref

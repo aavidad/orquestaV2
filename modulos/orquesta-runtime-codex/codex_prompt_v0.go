@@ -76,7 +76,7 @@ func BuildCodexAgentPromptWithControlFilesV0(packet orquestaruntime.AgentStartPa
 		"No imprimas diffs ni pegues artefactos completos; valida en compacto, escribe agent_ack.json y termina con la linea ACK.\n",
 	)
 	writeShutdownProtocolV0(&b, shutdownRequestPath, shutdownAckPath)
-	writeStringsV0(&b, "Al terminar, escribe ", ackPath, " con schema codex_agent_ack.v0.\n\n")
+	writeStringsV0(&b, "Al terminar, escribe ", ackPath, " con schema orquesta_agent_ack.v0; el alias legacy codex_agent_ack.v0 sigue aceptado solo por compatibilidad.\n\n")
 	writeAckWriteProtocolV0(&b, ackPath)
 	if decisionPath != "" {
 		writeStringsV0(&b,
@@ -99,7 +99,7 @@ func BuildCodexAgentPromptWithControlFilesV0(packet orquestaruntime.AgentStartPa
 		"No incluyas HOME real, tokens, secretos, prompts, completions ni transcripts completos.\n",
 		"files y tests deben ser arrays de strings; no metas stdout/stderr crudo en test_receipts ni notes.\n\n",
 		"ACK esperado:\n",
-		"{\"schema_version\":\"codex_agent_ack.v0\",\"request_id\":\"", packet.RequestID,
+		"{\"schema_version\":\"orquesta_agent_ack.v0\",\"request_id\":\"", packet.RequestID,
 		"\",\"correlation_id\":\"", packet.CorrelationID,
 		"\",\"ack_ref\":\"", packet.DeliveryRefs.AckRef,
 		"\",\"target_module\":\"", packet.TargetModule,

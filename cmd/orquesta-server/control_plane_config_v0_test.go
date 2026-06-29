@@ -17,7 +17,7 @@ func TestServerConfigFromEnvV0AceptaBindRemotoConTokenOptInV0(t *testing.T) {
 	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
 	t.Setenv("ORQUESTA_SERVER_ADDR", "0.0.0.0:8787")
 	t.Setenv("ORQUESTA_SERVER_REMOTE_CONTROL_PLANE_CONFIRM", "1")
-	t.Setenv("ORQUESTA_SERVER_CONTROL_TOKEN", "secret-control-plane-token")
+	t.Setenv("ORQUESTA_SERVER_CONTROL_TOKEN", "secret-control-plane-token-0123456789")
 	t.Setenv("ORQUESTA_SERVER_CONTROL_PRINCIPAL", "principal-ref-operator")
 	t.Setenv("ORQUESTA_SERVER_CONTROL_PERMISSION_REF", "permission-ref-control-plane")
 	t.Setenv("ORQUESTA_SERVER_CONTROL_PUBLIC_REASON", "remote_control_plane_opt_in")

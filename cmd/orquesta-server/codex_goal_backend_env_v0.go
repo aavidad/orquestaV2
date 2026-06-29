@@ -56,6 +56,12 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		backend != codexGoalBackendAppServerTmuxV0 {
 		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_no_soportado:%s", backend)
 	}
+	if backend == codexGoalBackendAppServerProxyV0 && !codexGoalBackendProxyDiagnosticAllowedV0() {
+		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_proxy_diagnostic_opt_in_required:%s", envAllowAppServerProxyDiagnosticV0)
+	}
+	if backend == codexGoalBackendAppServerProxyV0 {
+		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_proxy_diagnostic_not_operational")
+	}
 	runtimeConfig := codexRuntimeEnvConfigFromEnvV0()
 	commandProtocol := serverCodexAppServerCommandProtocolV0{
 		CommandPath: runtimeConfig.CommandPath,
@@ -67,6 +73,7 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	commandPreflightProtocol := commandProtocol
 	commandPreflightProtocol.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
 	var preflightProtocol serverCodexAppServerProbePortV0 = commandPreflightProtocol
+	var shutdownHook orquestaserver.RuntimeShutdownHookPortV0
 	if backend == codexGoalBackendAppServerTmuxV0 {
 		socketPath, err := codexAppServerTmuxSocketPathV0(config)
 		if err != nil {
@@ -107,6 +114,9 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 			}
 			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 		}
+		shutdownTmuxBackend := tmuxBackend
+		shutdownTmuxBackend.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
+		shutdownHook = shutdownTmuxBackend
 	}
 	if err := preflightProtocol.ProbeV0(context.Background()); err != nil {
 		degraded := serverCodexUnavailableGoalBackendV0{
@@ -124,11 +134,19 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		Timeout:         time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
 		Runtime:         &serverCodexAppServerGoalRuntimeV0{},
 	}
-	return serverCodexGoalBackendV0{Starter: client, Observer: client}, nil
+	return serverCodexGoalBackendV0{Starter: client, Observer: client, ShutdownHook: shutdownHook}, nil
 }
 
 func codexGoalBackendFromEnvV0() string {
 	return strings.TrimSpace(os.Getenv(envCodexGoalBackendV0))
+}
+
+func codexGoalBackendOperationalFromEnvV0() bool {
+	return codexGoalBackendFromEnvV0() == codexGoalBackendAppServerTmuxV0
+}
+
+func codexGoalBackendProxyDiagnosticAllowedV0() bool {
+	return boolEnvOrDefaultV0(envAllowAppServerProxyDiagnosticV0, false)
 }
 
 func codexGoalBackendArgsV0(backend string) []string {
