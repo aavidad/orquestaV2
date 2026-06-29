@@ -67,6 +67,7 @@ func (runtime *RuntimeV0) shutdownRuntimeV0(
 		})
 		return fmt.Errorf("orquesta_server: async_work_timeout")
 	}
+	runtime.runShutdownHooksV0(shutdownCtx)
 	runtime.withAsyncReceiptContextV0(func(receiptCtx context.Context) {
 		runtime.persistStateTransitionV0(
 			receiptCtx,
@@ -114,6 +115,7 @@ func (runtime *RuntimeV0) stopRuntimeAfterServeClosedV0(cancelRun context.Cancel
 		})
 		return fmt.Errorf("orquesta_server: async_work_timeout")
 	}
+	runtime.runShutdownHooksV0(shutdownCtx)
 	runtime.withAsyncReceiptContextV0(func(receiptCtx context.Context) {
 		runtime.persistStateTransitionV0(
 			receiptCtx,
@@ -139,4 +141,17 @@ func (runtime *RuntimeV0) withAsyncReceiptContextV0(fn func(context.Context)) {
 	ctx, cancel := runtime.shutdownContextV0()
 	defer cancel()
 	fn(ctx)
+}
+
+func (runtime *RuntimeV0) runShutdownHooksV0(ctx context.Context) {
+	for _, hook := range runtime.shutdownHooks {
+		if hook == nil {
+			continue
+		}
+		if err := hook.ShutdownV0(ctx); err != nil {
+			runtime.auditEventV0(ctx, "runtime_shutdown_hook", "failed", "", map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+	}
 }

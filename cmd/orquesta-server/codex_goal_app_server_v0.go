@@ -24,8 +24,9 @@ const (
 )
 
 type serverCodexGoalBackendV0 struct {
-	Starter  orquestaruntimecodexgoal.CodexGoalStarterPortV0
-	Observer orquestaruntimecodexgoal.CodexGoalObserverPortV0
+	Starter      orquestaruntimecodexgoal.CodexGoalStarterPortV0
+	Observer     orquestaruntimecodexgoal.CodexGoalObserverPortV0
+	ShutdownHook orquestaserver.RuntimeShutdownHookPortV0
 }
 
 type serverGoalSupervisorV0 struct {

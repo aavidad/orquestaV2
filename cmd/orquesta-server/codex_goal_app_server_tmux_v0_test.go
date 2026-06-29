@@ -230,6 +230,49 @@ exit 2
 	}
 }
 
+func TestCodexAppServerTmuxBackendV0ShutdownMataSesionPropiaV0(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	tmuxLog := filepath.Join(root, "tmux.log")
+	fakeTmux := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte(fakeCodexAppServerTmuxCommandForTestV0()), 0o700); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	socketPath := filepath.Join(root, "runtime", codexAppServerTmuxDirV0, "g-shutdown.sock")
+	backend := serverCodexAppServerTmuxBackendV0{
+		PathEnv:     binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		SocketPath:  socketPath,
+		SessionName: "orquesta-goal-shutdown",
+		Timeout:     time.Second,
+	}
+	t.Setenv("ORQUESTA_TEST_TMUX_LOG", tmuxLog)
+	if err := backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{}); err != nil {
+		t.Fatalf("EnsureV0: %v", err)
+	}
+	if err := backend.ShutdownV0(context.Background()); err != nil {
+		t.Fatalf("ShutdownV0: %v", err)
+	}
+	logRaw, err := os.ReadFile(tmuxLog)
+	if err != nil {
+		t.Fatalf("read tmux log: %v", err)
+	}
+	if !strings.Contains(string(logRaw), "kill-session") {
+		t.Fatalf("tmux shutdown no mato sesion: %s", string(logRaw))
+	}
+	if _, err := os.Stat(socketPath); !os.IsNotExist(err) {
+		t.Fatalf("socket no eliminado err=%v", err)
+	}
+	if _, err := os.Stat(backend.tmuxOwnerMarkerPathV0()); !os.IsNotExist(err) {
+		t.Fatalf("owner marker no eliminado err=%v", err)
+	}
+	if _, err := os.Stat(tmuxLog + ".session"); !os.IsNotExist(err) {
+		t.Fatalf("session fake no eliminada err=%v", err)
+	}
+}
+
 func TestCodexAppServerTmuxSocketPathV0SeMantieneCortoV0(t *testing.T) {
 	config := orquestaserver.NormalizeConfigV0(orquestaserver.ConfigV0{
 		RuntimeWorkDir: "/home/alberto/Trabajo/orquesta/.orquesta-runtime-selfrepair-19038",

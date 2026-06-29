@@ -47,6 +47,17 @@ func TestOPESDrainConfigV0RequiereConfirmacionParaDestinoNoLocal(t *testing.T) {
 	}
 }
 
+func TestOPESDrainConfigV0BridgeConfirmNoSustituyeTemporalConfirm(t *testing.T) {
+	t.Setenv("ORQUESTA_BASE_URL", "http://127.0.0.1:8787")
+	t.Setenv("ORQUESTA_OPES_BASE_URL", "https://opes.example.test")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_CONFIRM", "1")
+
+	if _, err := opesDrainConfigFromEnvV0(); err == nil ||
+		!strings.Contains(err.Error(), "confirmation_required") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestOPESDrainConfigV0RechazaConfirmacionProductiva(t *testing.T) {
 	t.Setenv("ORQUESTA_BASE_URL", "http://127.0.0.1:8787")
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "https://opes.example.com")

@@ -61,6 +61,7 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 		ResidentDirector: residentDirector,
 		GoalStateStore:   stack.Stores.AppGoalStateStore,
 		GoalFingerprint:  serverGoalObservationFingerprintFromBackendV0(goalBackends.AppGoal, serverGoalObserverFingerprintEnabledFromEnvV0()),
+		ShutdownHooks:    []orquestaserver.RuntimeShutdownHookPortV0{goalBackends.AppGoal.ShutdownHook},
 		StartupCheck:     startupCheckFromEnvV0(stack, serverConfig),
 		SelfWatchdog: orquestaserver.NewProcessSelfWatchdogObserverV0(
 			orquestaserver.NewProcSelfCPUSamplerV0(),

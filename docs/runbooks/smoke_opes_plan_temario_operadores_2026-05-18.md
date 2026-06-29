@@ -70,10 +70,10 @@ Guardas de destino y scope 2026-06-11:
 
 - Loopback (`127.0.0.1`, `localhost`) solo demuestra destino local. No cuenta
   como OPES temporal confirmado ni autoriza efectos reales sin
-  `ORQUESTA_OPES_BRIDGE_CONFIRM=1` y confirmacion de instancia temporal o
-  productiva segun corresponda.
-- Productivo requiere confirmacion explicita de operador y evidence ref
-  compacta; no se usa para smokes de temario ni derivados.
+  `ORQUESTA_OPES_BRIDGE_CONFIRM=1` y `ORQUESTA_OPES_TEMPORAL_CONFIRM=1`.
+- `ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM=1` esta bloqueado por esta
+  composicion (`opes_destination_productive_not_allowed`); no se usa para
+  smokes de temario ni derivados.
 - `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE` ordena fases, pero no acota por si
   sola. En modo real debe combinarse con `ORQUESTA_OPES_BRIDGE_PROGRAM_ID`,
   `ORQUESTA_OPES_BRIDGE_TOPIC_ID`, `ORQUESTA_OPES_BRIDGE_CORRELATION_ID` o

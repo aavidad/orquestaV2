@@ -70,6 +70,7 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	commandPreflightProtocol := commandProtocol
 	commandPreflightProtocol.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
 	var preflightProtocol serverCodexAppServerProbePortV0 = commandPreflightProtocol
+	var shutdownHook orquestaserver.RuntimeShutdownHookPortV0
 	if backend == codexGoalBackendAppServerTmuxV0 {
 		socketPath, err := codexAppServerTmuxSocketPathV0(config)
 		if err != nil {
@@ -110,6 +111,9 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 			}
 			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 		}
+		shutdownTmuxBackend := tmuxBackend
+		shutdownTmuxBackend.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
+		shutdownHook = shutdownTmuxBackend
 	}
 	if err := preflightProtocol.ProbeV0(context.Background()); err != nil {
 		degraded := serverCodexUnavailableGoalBackendV0{
@@ -127,7 +131,7 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		Timeout:         time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
 		Runtime:         &serverCodexAppServerGoalRuntimeV0{},
 	}
-	return serverCodexGoalBackendV0{Starter: client, Observer: client}, nil
+	return serverCodexGoalBackendV0{Starter: client, Observer: client, ShutdownHook: shutdownHook}, nil
 }
 
 func codexGoalBackendFromEnvV0() string {

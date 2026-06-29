@@ -124,6 +124,35 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxKillSessionV0(
 	return nil
 }
 
+func (backend serverCodexAppServerTmuxBackendV0) ShutdownV0(ctx context.Context) error {
+	timeout := backend.Timeout
+	if timeout <= 0 {
+		timeout = codexAppServerTmuxDefaultTimeoutV0
+	}
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	if !backend.tmuxOwnerMarkerExistsV0() {
+		return nil
+	}
+	tmuxPath, err := codexAppServerTmuxCommandPathV0(backend.PathEnv)
+	if err != nil {
+		return err
+	}
+	hasSession, err := backend.tmuxHasSessionV0(runCtx, tmuxPath)
+	if err != nil {
+		return err
+	}
+	if hasSession {
+		if err := backend.tmuxKillSessionV0(runCtx, tmuxPath); err != nil {
+			return err
+		}
+	}
+	_ = os.Remove(strings.TrimSpace(backend.SocketPath))
+	_ = os.Remove(backend.tmuxOwnerMarkerPathV0())
+	return nil
+}
+
 func (backend serverCodexAppServerTmuxBackendV0) tmuxStartSessionV0(
 	ctx context.Context,
 	tmuxPath string,
