@@ -124,6 +124,19 @@ actividad y bloqueo semantico si el goal queda `invalid` o `blocked`. El
 statefile local puede contener spec/receipt/result/closure completos para
 restauracion, pero no es API publica.
 
+Evidencia 2026-06-29: `1f9eec3c` compacta el `Objective` de
+`idle_self_improvement` a 4000 runas maximo antes de llamar a app-server y
+conserva el contexto largo fuera del objetivo. Test focal:
+`go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0IdleSelfImprovementGoalFirst(CompactaObjectiveLargo|LanzaGoalWorkSpec|SinLauncherNoCaeALegacy)'`.
+Smoke real aislado con `app_server_tmux` en `/workspace/runtime/ig2` lanzo el
+goal residente con `objective_len=4000`, `objective_compacted=true`,
+`goal_ref=goal-ref-autoprogramming-backlog-t900-idle-goal-objective-compact-smoke-f5a428f1`,
+`external_goal_ref=019f1326-d189-70e2-83f2-84dcad3a0f88`,
+`idle_self_improvement_runs=1`, `idle_self_improvement_ok=1`,
+`prepare_failed_recent=0` y `goal_rpc_4000_errors=0`. Para smokes tmux reales
+en contenedores, usar raiz corta de runtime; una raiz larga puede fallar antes
+del goal con `path must be shorter than SUN_LEN`.
+
 `observePendingIdleSelfImprovementGoalV0` queda como puente de compatibilidad
 de automejora goal-first, no como loop director legacy. El observador generico
 de goals activos cierra apps y external-work desde `GoalWorkStateStore`, pero la

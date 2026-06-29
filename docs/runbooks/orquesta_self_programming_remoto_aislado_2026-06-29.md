@@ -88,6 +88,57 @@ El Goal residente no debe descubrir el proyecto desde cero. Debe recibir
    ligado a `127.0.0.1`.
 4. `/api/v0/server/status` muestra goal-first y no muestra OPES activo.
 
+## Evidencia 2026-06-29: Objective compacto en idle Goal
+
+Incidencia cerrada: la automejora residente llego a preparar un
+`GoalWorkSpecV0` con `Objective` mayor de 4000 caracteres y Codex app-server lo
+rechazo como `codex_app_server_rpc_error: goal objective must be at most 4000
+characters`. El commit `1f9eec3c` compacta el objetivo de
+`idle_self_improvement` a 4000 runas maximo y conserva el contexto completo en
+refs, criterios, evidencias y marcador `objective_compacted`.
+
+Verificacion focal ejecutada en el contenedor:
+
+```bash
+PATH=/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin \
+GOTMPDIR=/workspace/runtime/go-test-tmp \
+GOCACHE=/workspace/runtime/go-cache \
+go test -count=1 ./modulos/orquesta-server \
+  -run 'TestRuntimeV0IdleSelfImprovementGoalFirst(CompactaObjectiveLargo|LanzaGoalWorkSpec|SinLauncherNoCaeALegacy)'
+```
+
+Resultado: `ok`.
+
+Smoke real aislado por `app_server_tmux`: servidor temporal bajo
+`/workspace/runtime/ig2`, OPES vacio, sin Docker, `approval-policy=never`,
+`ORQUESTA_CODEX_SANDBOX=danger-full-access` por la misma restriccion de
+`workspace-write` observada en el smoke de `/nueva-app`. Se indujo un criterio
+base largo para forzar el caso que antes superaba 4000 caracteres.
+
+Estado durable preservado en
+`/workspace/runtime/ig2/s/orquesta_server_state_v0.json`:
+
+```text
+idle_self_improvement_reason=goal_running;goal_ref=goal-ref-autoprogramming-backlog-t900-idle-goal-objective-compact-smoke-f5a428f1;external_goal_ref=019f1326-d189-70e2-83f2-84dcad3a0f88;status=running
+idle_self_improvement_runs=1
+idle_self_improvement_ok=1
+idle_self_improvement_goal_receipt.status=running
+idle_self_improvement_goal_result.status=running
+objective_len=4000
+objective_compacted=true
+objective_too_long=false
+goal_rpc_4000_errors=0
+prepare_failed_recent=0
+recent_errors=0
+```
+
+El primer intento manual uso una ruta mas larga
+`/workspace/runtime/smokes/orquesta-idle-goal-objective-20260629T113040Z` y
+fallo antes de lanzar el goal con `path must be shorter than SUN_LEN`; esa
+evidencia no reabre la incidencia de `Objective`, solo fija que los smokes
+`app_server_tmux` deben usar una raiz corta para no exceder el limite de socket
+Unix.
+
 ## Acceso
 
 ```bash
