@@ -290,14 +290,79 @@ func TestCodexAppServerTmuxSocketPathV0SeMantieneCortoV0(t *testing.T) {
 	}
 }
 
-func TestCodexAppServerTmuxSocketPathV0RechazaRutaDemasiadoLargaV0(t *testing.T) {
+func TestCodexAppServerTmuxSocketPathV0UsaFallbackCortoSiRuntimeEsLargoV0(t *testing.T) {
 	config := orquestaserver.NormalizeConfigV0(orquestaserver.ConfigV0{
 		RuntimeWorkDir: "/" + strings.Repeat("runtime-largo-", 12),
 		ProjectWorkDir: "/workspace/project",
 	})
 	socketPath, err := codexAppServerTmuxSocketPathV0(config)
-	if err == nil || !strings.Contains(err.Error(), "codex_app_server_tmux_socket_path_too_long") {
-		t.Fatalf("socketPath=%q err=%v", socketPath, err)
+	if err != nil {
+		t.Fatalf("socket path: %v", err)
+	}
+	if len(socketPath) > codexAppServerTmuxMaxSocketPathV0 {
+		t.Fatalf("socket fallback demasiado largo: len=%d path=%s", len(socketPath), socketPath)
+	}
+	wantPrefix := filepath.Join(os.TempDir(), "oq-gsrv-")
+	if !strings.HasPrefix(socketPath, wantPrefix) || !strings.HasSuffix(socketPath, string(os.PathSeparator)+"s.sock") {
+		t.Fatalf("socket fallback inesperado: %s", socketPath)
+	}
+}
+
+func TestCodexAppServerTmuxRuntimeDirV0RechazaSymlinkV0(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "target")
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	link := filepath.Join(root, "runtime-link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink no disponible: %v", err)
+	}
+	err := ensureCodexAppServerTmuxRuntimeDirV0(filepath.Join(link, "s.sock"))
+	if err == nil || !strings.Contains(err.Error(), "codex_app_server_tmux_runtime_dir") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestCodexAppServerTmuxSocketPathV0FallbackEsDeterministaYAisladoV0(t *testing.T) {
+	baseRuntime := "/" + strings.Repeat("runtime-largo-", 12)
+	config := orquestaserver.NormalizeConfigV0(orquestaserver.ConfigV0{
+		RuntimeWorkDir: baseRuntime,
+		ProjectWorkDir: "/workspace/project-a",
+	})
+	sameConfig := orquestaserver.NormalizeConfigV0(orquestaserver.ConfigV0{
+		RuntimeWorkDir: baseRuntime,
+		ProjectWorkDir: "/workspace/project-a",
+	})
+	otherProject := orquestaserver.NormalizeConfigV0(orquestaserver.ConfigV0{
+		RuntimeWorkDir: baseRuntime,
+		ProjectWorkDir: "/workspace/project-b",
+	})
+	otherRuntime := orquestaserver.NormalizeConfigV0(orquestaserver.ConfigV0{
+		RuntimeWorkDir: "/" + strings.Repeat("runtime-distinto-", 12),
+		ProjectWorkDir: "/workspace/project-a",
+	})
+	first, err := codexAppServerTmuxSocketPathV0(config)
+	if err != nil {
+		t.Fatalf("first socket path: %v", err)
+	}
+	second, err := codexAppServerTmuxSocketPathV0(sameConfig)
+	if err != nil {
+		t.Fatalf("second socket path: %v", err)
+	}
+	projectSocket, err := codexAppServerTmuxSocketPathV0(otherProject)
+	if err != nil {
+		t.Fatalf("project socket path: %v", err)
+	}
+	runtimeSocket, err := codexAppServerTmuxSocketPathV0(otherRuntime)
+	if err != nil {
+		t.Fatalf("runtime socket path: %v", err)
+	}
+	if first != second {
+		t.Fatalf("fallback no determinista: first=%s second=%s", first, second)
+	}
+	if first == projectSocket || first == runtimeSocket {
+		t.Fatalf("fallback no aisla runtime/project: first=%s project=%s runtime=%s", first, projectSocket, runtimeSocket)
 	}
 }
 

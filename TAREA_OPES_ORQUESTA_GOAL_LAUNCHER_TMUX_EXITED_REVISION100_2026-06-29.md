@@ -165,3 +165,81 @@ Pendiente para cerrar la incidencia al 100%:
    `codex_app_server_tmux_session_exited`.
 4. Si vuelve a fallar, conservar el log tmux/app-server como evidencia y
    devolver un código accionable distinto de un readiness genérico.
+
+## Reintento 2026-06-29 post-fix
+
+Estado: incidencia de lanzamiento cerrada para el caso `operario`; quedan
+evidencias aisladas y un hallazgo residual de shutdown.
+
+Entorno usado:
+
+- Repo Orquesta: `trabajo/plataforma-agentes`.
+- Orquesta aislado: `127.0.0.1:19041`.
+- Raíz de evidencia:
+  `/home/alberto/Trabajo/OPES/opes-salidas/coordinacion_temarios/revision_100_psicologo_asg_operario_2026-06-29/orquesta_goal_retest_20260629`.
+- Backend: `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`.
+- Legacy loop desactivado:
+  `ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=0` y
+  `ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=0`.
+- Bridge/producción OPES desactivados:
+  `ORQUESTA_OPES_BRIDGE_ENABLED=false`, `ORQUESTA_OPES_BASE_URL=` y
+  `OPES_BASE_URL=`.
+
+Secuencia:
+
+1. Primer reintento con runtime largo:
+   - `dry-run`: HTTP 200.
+   - `run`: HTTP 400.
+   - Nuevo diagnóstico accionable:
+     `codex_app_server_tmux_socket_path_too_long`.
+   - Causa: `RuntimeWorkDir` profundo entraba completo en el socket Unix.
+2. Fix aplicado:
+   - `cmd/orquesta-server/codex_goal_app_server_tmux_v0.go` mantiene el socket en
+     `RuntimeWorkDir/goal-srv` si cabe; si no, usa fallback corto privado y
+     determinista en `/tmp/oq-gsrv-<uid>-<hash>/s.sock`.
+   - `ensureCodexAppServerTmuxRuntimeDirV0` rechaza directorios symlink y fuerza
+     permisos `0700`; socket/marker quedan privados.
+   - Tests focales añadidos para fallback corto, determinismo/aislamiento y
+     rechazo de symlink.
+3. Segundo reintento:
+   - `dry-run`: HTTP 200.
+   - `run`: HTTP 504 `external_work_run_timeout`.
+   - Causa: `/api/v0/external-work/run` tenía ventana HTTP interna de 2s y
+     cancelaba el lanzamiento antes de persistir el estado goal.
+4. Fix aplicado:
+   - `modulos/orquesta-mcp/external_work_run_http_v0.go` sube el default de
+     respuesta acotada a 30s.
+   - `modulos/orquesta-app-gateway/handler_v0.go` conecta `config.Timeout` a
+     `ExternalWorkRun`, conservando tests de timeout explícito.
+5. Reintento final:
+   - `operario_http30_dry_run.json`: HTTP 200, `route_policy=goal_first`.
+   - `operario_http30_run.json`: HTTP 200, `estado=ok`,
+     `director_execution_mode=goal_first`, `next_actions=[observe_active_goals]`.
+   - `external_goal_ref=019f14b3-1fa2-7b10-9d25-d061e269be33`.
+   - `operario_http30_observe_goal.json`: HTTP 200, `goal_status=running`,
+     resumen `codex_app_server_goal_status_active`.
+   - Audit:
+     `state_http30/audit/audit_http30_19041.jsonl` registra
+     `evidence-ref-codex-app-server-thread-started`,
+     `evidence-ref-codex-app-server-goal-set`,
+     `evidence-ref-codex-app-server-turn-started` y
+     `evidence-ref-codex-app-server-goal-observed`.
+
+Resultado:
+
+- Ya no se reproduce `codex_app_server_tmux_session_exited`.
+- Ya no se reproduce `codex_app_server_tmux_socket_path_too_long` con runtime
+  largo.
+- Ya no se reproduce `external_work_run_timeout` en el lanzamiento normal del
+  payload OPES probado.
+- El goal queda persistido en
+  `state_http30/orchestration-state/app_director_goal_states/`.
+
+Hallazgo residual:
+
+- `POST /api/v0/server/shutdown` devolvió `shutdown_ready=true` en una prueba sin
+  agentes, pero el proceso no salió por sí mismo; en otra prueba con goal activo
+  la llamada HTTP agotó el timeout del cliente. Para no dejar trabajo OPES
+  aislado ejecutándose, se pararon manualmente el servidor de prueba, la sesión
+  tmux propia y el app-server Codex. Esto debe tratarse como mejora separada de
+  shutdown operativo, no como regresión del launcher goal-first.

@@ -117,7 +117,7 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 		GovernanceCatalogQuery:            orquestagovernance.GovernanceCatalogQueryHTTPHandlerV0(config.GovernanceCatalog),
 		DomainWork:                        orquestamcp.NewMCPDomainWorkHTTPHandlerV0(config.DomainWork),
 		ExternalWorkDryRun:                newExternalWorkDryRunHTTPHandlerV0(config),
-		ExternalWorkRun:                   orquestamcp.NewMCPExternalWorkRunHTTPHandlerV0(config.ExternalWorkRun),
+		ExternalWorkRun:                   orquestamcp.NewMCPExternalWorkRunHTTPHandlerWithResponseTimeoutV0(config.ExternalWorkRun, config.Timeout),
 	}
 }
 

@@ -270,6 +270,13 @@ func ensureCodexAppServerTmuxRuntimeDirV0(socketPath string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_runtime_dir_unavailable", Err: err}
 	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_runtime_dir_unavailable", Err: err}
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_runtime_dir_unavailable", Err: errors.New("codex_app_server_tmux_runtime_dir_symlink")}
+	}
 	if err := os.Chmod(dir, 0o700); err != nil {
 		return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_runtime_dir_unavailable", Err: err}
 	}
@@ -454,13 +461,26 @@ func codexAppServerTmuxSocketPathV0(config orquestaserver.ConfigV0) (string, err
 		return "", codexAppServerCallErrorV0{Code: "codex_app_server_tmux_runtime_workdir_required", Err: errors.New("codex_app_server_tmux_runtime_workdir_required")}
 	}
 	socketPath := filepath.Join(runtimeDir, codexAppServerTmuxDirV0, codexAppServerTmuxSocketFileNameV0(config))
-	if len(socketPath) > codexAppServerTmuxMaxSocketPathV0 {
+	if len(socketPath) <= codexAppServerTmuxMaxSocketPathV0 {
+		return socketPath, nil
+	}
+	shortPath := codexAppServerTmuxShortSocketPathV0(config)
+	if len(shortPath) > codexAppServerTmuxMaxSocketPathV0 {
 		return "", codexAppServerCallErrorV0{
 			Code: "codex_app_server_tmux_socket_path_too_long",
-			Err:  fmt.Errorf("codex_app_server_tmux_socket_path_too_long:%d", len(socketPath)),
+			Err:  fmt.Errorf("codex_app_server_tmux_socket_path_too_long:%d", len(shortPath)),
 		}
 	}
-	return socketPath, nil
+	return shortPath, nil
+}
+
+func codexAppServerTmuxShortSocketPathV0(config orquestaserver.ConfigV0) string {
+	tempDir := strings.TrimSpace(os.TempDir())
+	if tempDir == "" {
+		tempDir = "/tmp"
+	}
+	hashPart := codexAppServerTmuxSocketHashPartV0(config)
+	return filepath.Join(tempDir, fmt.Sprintf("oq-gsrv-%d-%s", os.Getuid(), hashPart), "s.sock")
 }
 
 func codexAppServerTmuxCodeHomePathV0(config orquestaserver.ConfigV0) (string, error) {
@@ -479,13 +499,17 @@ func codexAppServerTmuxSessionNameV0(config orquestaserver.ConfigV0) string {
 }
 
 func codexAppServerTmuxSocketFileNameV0(config orquestaserver.ConfigV0) string {
+	return "g-" + codexAppServerTmuxSocketHashPartV0(config) + ".sock"
+}
+
+func codexAppServerTmuxSocketHashPartV0(config orquestaserver.ConfigV0) string {
 	sessionName := codexAppServerTmuxSessionNameV0(config)
 	hashPart := strings.TrimPrefix(sessionName, "orquesta-goal-")
 	if hashPart == "" || hashPart == sessionName {
 		sum := sha256.Sum256([]byte(sessionName))
 		hashPart = fmt.Sprintf("%x", sum[:8])
 	}
-	return "g-" + hashPart + ".sock"
+	return hashPart
 }
 
 func codexAppServerTmuxStartupTimeoutV0(preflightTimeout time.Duration) time.Duration {

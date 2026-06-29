@@ -19,14 +19,27 @@ const (
 	MCPExternalWorkRunHTTPUnsupportedMethodCodeV0 = MCPPublicErrMethodNotAllowedV0
 )
 
-const defaultMCPExternalWorkRunHTTPResponseTimeoutV0 = 2 * time.Second
+const defaultMCPExternalWorkRunHTTPResponseTimeoutV0 = 30 * time.Second
 
 func NewMCPExternalWorkRunHTTPHandlerV0(
 	executor MCPTransportExternalWorkRunExecutorV0,
 ) http.Handler {
-	return newMCPExternalWorkRunHTTPHandlerWithTimeoutV0(
+	return NewMCPExternalWorkRunHTTPHandlerWithResponseTimeoutV0(
 		executor,
 		defaultMCPExternalWorkRunHTTPResponseTimeoutV0,
+	)
+}
+
+func NewMCPExternalWorkRunHTTPHandlerWithResponseTimeoutV0(
+	executor MCPTransportExternalWorkRunExecutorV0,
+	responseTimeout time.Duration,
+) http.Handler {
+	if responseTimeout <= 0 {
+		responseTimeout = defaultMCPExternalWorkRunHTTPResponseTimeoutV0
+	}
+	return newMCPExternalWorkRunHTTPHandlerWithTimeoutV0(
+		executor,
+		responseTimeout,
 	)
 }
 
