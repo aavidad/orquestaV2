@@ -6,6 +6,7 @@ import (
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaappgateway "orquesta/modulos/orquesta-app-gateway"
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -44,6 +45,9 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 	if err := validateConfigV0(config); err != nil {
 		return StackV0{}, err
 	}
+	if config.DomainDelivery.JobRecords == nil {
+		config.DomainDelivery.JobRecords = domainWorkJobRecordSourceFromExecutorV0(config.DomainWork)
+	}
 	config.DomainDelivery = normalizeDomainWorkDeliveryBridgeConfigV0(config.DomainDelivery)
 	decisionCouncil := codexStackDecisionCouncilConfigWithDefaultsV0(config)
 	ports := buildDirectorPortsV0(config)
@@ -73,6 +77,13 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 	stack.MCPTransportBindings = buildStackMCPTransportBindingsV0(config, ports, queueConfig, &stack)
 	stack.Handler = buildStackHTTPHandlerV0(config, stack.MCPTransportBindings)
 	return stack, nil
+}
+
+func domainWorkJobRecordSourceFromExecutorV0(
+	executor orquestamcp.MCPDomainWorkExecutorPortV0,
+) orquestadomainwork.DomainWorkJobRecordSourcePortV0 {
+	source, _ := executor.(orquestadomainwork.DomainWorkJobRecordSourcePortV0)
+	return source
 }
 
 func buildStackMCPTransportBindingsV0(

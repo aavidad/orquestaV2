@@ -263,7 +263,7 @@ func (stack StackV0) completeQueuedRunControlIfStopHasNoPendingAgentsV0(
 	if len(stackDrainOpenTaskRefsV0(run)) > 0 {
 		return false, nil
 	}
-	if pending, err := stack.domainWorkRunHasPendingSubmissionWithoutAcceptedReceiptV0(ctx, run); err != nil || pending {
+	if pending, _, err := stack.domainWorkRunHasPendingCompletionV0(ctx, run); err != nil || pending {
 		return false, err
 	}
 	if live, err := stack.runControlHasLiveRegisteredProcessesV0(ctx, run.RunID); err != nil || live {

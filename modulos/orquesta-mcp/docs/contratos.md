@@ -186,6 +186,9 @@ Invariantes:
   - `create_job` delega solo en `DomainWorkJobCreatorPortV0` inyectado.
   - `submit_artifact` delega solo en `DomainWorkArtifactSubmitterPortV0`
     inyectado.
+  - Si el `job_creator` inyectado implementa
+    `DomainWorkJobRecordSourcePortV0`, el executor MCP expone esa misma lectura
+    para reconciliacion de composiciones superiores; no crea storage propio.
   - No importa OPES, conector REST, DB, runtime, filesystem ni proveedor.
   - El registro en transporte central es opt-in: si no se inyecta executor, el
     tool devuelve `mcp_transport_tool_unbound`.

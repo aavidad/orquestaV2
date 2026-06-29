@@ -22,6 +22,13 @@ func (stack StackV0) stackDrainQueueStatusAndEvidenceForCoordinatorV0(
 ) (string, []string, error) {
 	result = stack.stackDrainQueueStatusResultWithLatestRunV0(ctx, result)
 	status := stackDrainQueueStatusV0(result)
+	if status == orquestarunqueue.RunStatusDeliveredV0 ||
+		status == orquestarunqueue.RunStatusStoppedV0 {
+		pending, refs, err := stack.domainWorkRunHasAcceptedJobWithoutAcceptedReceiptV0(ctx, result.Final.Run)
+		if err != nil || pending {
+			return "", refs, err
+		}
+	}
 	if status == orquestarunqueue.RunStatusClosedV0 {
 		complete, refs, err := stack.maybePromoteClosedAutoprogrammingRunV0(ctx, result.Final.Run)
 		if err != nil || !complete {

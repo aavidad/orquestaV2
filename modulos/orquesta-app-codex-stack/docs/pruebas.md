@@ -1228,6 +1228,8 @@ Casos cubiertos:
 - `TestDomainWorkRecoveryDirectSubmitEligibleV0RechazaAgenteAssessment`;
 - `TestDomainWorkRecoveryAckFailureDetectaSandboxEnStderr`;
 - `TestCodexStackV0RunGlobalTickRecuperaDomainWorkParadoAntesFiltroControl`.
+- `TestCodexStackV0DrainQueueStatusNoParaDomainWorkJobAceptadoSinReceiptV0`.
+- `TestCodexStackV0RecoverNoTerminalizaStopConDomainWorkJobAceptadoSinReceiptV0`.
 
 Evidencia:
 
@@ -1238,6 +1240,8 @@ Evidencia:
 - un agente parado/terminal puede entregar por `direct submit` si el artefacto
   es valido y el ACK fallo por sandbox;
 - los agentes de assessment no pueden usar esta ruta de entrega directa.
+- un job DomainWork aceptado con `run_ref` causal no permite proyectar la run
+  como `stopped` ni completar `RunControl` hasta que exista receipt aceptado.
 
 Smoke real OPES 2026-05-14:
 

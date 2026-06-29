@@ -10,16 +10,29 @@ import (
 type MCPDomainWorkToolExecutorV0 struct {
 	JobCreator        orquestadomainwork.DomainWorkJobCreatorPortV0
 	ArtifactSubmitter orquestadomainwork.DomainWorkArtifactSubmitterPortV0
+	JobRecordSource   orquestadomainwork.DomainWorkJobRecordSourcePortV0
 }
 
 func NewMCPDomainWorkToolExecutorV0(
 	jobCreator orquestadomainwork.DomainWorkJobCreatorPortV0,
 	artifactSubmitter orquestadomainwork.DomainWorkArtifactSubmitterPortV0,
 ) MCPDomainWorkToolExecutorV0 {
+	source, _ := jobCreator.(orquestadomainwork.DomainWorkJobRecordSourcePortV0)
 	return MCPDomainWorkToolExecutorV0{
 		JobCreator:        jobCreator,
 		ArtifactSubmitter: artifactSubmitter,
+		JobRecordSource:   source,
 	}
+}
+
+func (executor MCPDomainWorkToolExecutorV0) ListDomainWorkJobRecordsV0(
+	ctx context.Context,
+	filter orquestadomainwork.DomainWorkJobRecordFilterV0,
+) ([]orquestadomainwork.DomainWorkJobRecordV0, error) {
+	if executor.JobRecordSource == nil {
+		return nil, nil
+	}
+	return executor.JobRecordSource.ListDomainWorkJobRecordsV0(ctx, filter)
 }
 
 func (executor MCPDomainWorkToolExecutorV0) Execute(

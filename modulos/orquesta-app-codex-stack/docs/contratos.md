@@ -219,6 +219,12 @@ Cuando `RunGlobalTickV0` drena una run y el loop del nucleo devuelve la run
 cerrada, el stack informa `queue_status=closed` al coordinador. La cola global
 persiste ese estado mediante su puerto y deja de rankear esa run en ticks
 posteriores.
+Si la composicion tiene `DomainWorkDeliveryBridgeConfigV0.JobRecords`
+inyectado, una run quiescent no se proyecta como `stopped` ni `delivered`
+mientras exista un `DomainWorkJobRecordV0` aceptado con `external_ref
+run_ref=<run>` y no exista un receipt aceptado correlado en el ledger de
+submissions. Esa guarda es causal y opt-in: no convierte cualquier cola vacia
+en trabajo vivo, solo jobs DomainWork aceptados sin consolidacion de artefacto.
 
 Para goal-first, `QueuedArrancarDirectorExecutorV0` no encola la run al
 arrancar si el resultado `ok` trae `run_ref` y `goal_ref`: Codex Goal ocupa el

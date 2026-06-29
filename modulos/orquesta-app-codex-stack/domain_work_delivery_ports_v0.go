@@ -23,9 +23,10 @@ const (
 )
 
 type DomainWorkDeliveryBridgeConfigV0 struct {
-	Enabled bool
-	Builder DomainWorkArtifactSubmissionBuilderPortV0
-	Ledger  DomainWorkArtifactSubmissionLedgerPortV0
+	Enabled    bool
+	Builder    DomainWorkArtifactSubmissionBuilderPortV0
+	Ledger     DomainWorkArtifactSubmissionLedgerPortV0
+	JobRecords orquestadomainwork.DomainWorkJobRecordSourcePortV0
 }
 
 type DomainWorkArtifactSubmissionBuilderPortV0 interface {
