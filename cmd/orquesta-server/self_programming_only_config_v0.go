@@ -50,6 +50,12 @@ func validateServerSelfProgrammingOnlyConfigV0(config orquestaserver.ConfigV0) e
 			return fmt.Errorf("orquesta_server: self_programming_only_env_must_be_false:%s", key)
 		}
 	}
+	if boolEnvOrDefaultV0(envServerAutoprogrammingPromotionEnabledV0, false) {
+		archiveDir := strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionArchiveDirV0))
+		if archiveDir != "" && !pathInsideSelfProgrammingRootV0(archiveDir, root) {
+			return fmt.Errorf("orquesta_server: self_programming_only_promotion_archive_dir_outside_root")
+		}
+	}
 	if !boolEnvOrDefaultV0(envOPESBridgeDryRunV0, true) {
 		return fmt.Errorf("orquesta_server: self_programming_only_opes_bridge_dry_run_required")
 	}
@@ -102,7 +108,6 @@ func selfProgrammingOnlyMustBeEmptyEnvV0() []string {
 		envOPESProjectWorkDirV0,
 		envDomainWorkHTTPBaseURLV0,
 		envDomainDeliveryLedgerPathV0,
-		envServerAutoprogrammingPromotionArchiveDirV0,
 	}
 }
 
@@ -110,7 +115,6 @@ func selfProgrammingOnlyMustBeFalseEnvV0() []string {
 	return []string{
 		envAutoprogrammingLegacyDirectorLoopV0,
 		envExternalWorkLegacyDirectorLoopV0,
-		envServerAutoprogrammingPromotionEnabledV0,
 		envOPESBridgeEnabledV0,
 		envOPESBridgeConfirmV0,
 		envOPESBridgeAllowUnfilteredV0,

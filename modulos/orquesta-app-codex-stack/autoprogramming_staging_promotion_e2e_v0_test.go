@@ -10,6 +10,8 @@ import (
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
@@ -54,6 +56,134 @@ func TestCodexStackAutoprogrammingPromotionV0E2ERepoTemporalReplayV0(t *testing.
 		port.lastPromotion.BranchRef != "branch-ref-autoprogramming-promotion-001" ||
 		strings.Join(port.lastPromotionResult.ChangedPaths, ",") != "feature.md" {
 		t.Fatalf("promotion refs/result=%+v %+v", port.lastPromotion, port.lastPromotionResult)
+	}
+
+	status, err = stack.stackDrainQueueStatusForCoordinatorV0(ctx, promotionE2ELoopResultV0(run))
+	if err != nil {
+		t.Fatalf("queue status replay: %v", err)
+	}
+	if status != orquestarunqueue.RunStatusClosedV0 {
+		t.Fatalf("queue_status replay=%q", status)
+	}
+	if got := gitCommitCountForPromotionE2EV0(t, repo); got != baseCommits+1 {
+		t.Fatalf("commits replay=%d want %d", got, baseCommits+1)
+	}
+	if files := archiveManifestCountForPromotionE2EV0(t, port.archiveDir); files != 1 {
+		t.Fatalf("archive files=%d", files)
+	}
+}
+
+func TestCodexStackAutoprogrammingPromotionV0GoalFirstE2ERepoTemporalReplayV0(t *testing.T) {
+	ctx := context.Background()
+	repo := initAutoprogrammingPromotionE2ERepoV0(t)
+	baseCommits := gitCommitCountForPromotionE2EV0(t, repo)
+
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	stack = withAutoprogrammingPromotionStoresForTestV0(stack)
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	observer := &goalFirstQueueObserverForTestV0{}
+	stack.Ports.GoalLauncher = launcher
+	stack.Ports.GoalObserver = observer
+	stack.Ports.GoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	stack.Ports.GoalStateStore = goalStates
+	stack.Stores.AppGoalStateStore = goalStates
+	port := &gitBackedAutoprogrammingPromotionPortForTestV0{
+		projectWorkDir: repo,
+		archiveDir:     filepath.Join(t.TempDir(), "archive"),
+	}
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{Enabled: true, Port: port}
+
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-goal-first-promotion-e2e-001"
+	request.ProjectRef = "project-ref-autoprogramming-goal-first-promotion-e2e-001"
+	request.WorktreeRef = "worktree-ref-autoprogramming-goal-first-promotion-e2e-001"
+	request.BranchRef = "branch-ref-autoprogramming-goal-first-promotion-e2e-001"
+	request.WriteSet = []string{"feature.md"}
+	request.RequiredTests = []string{"go test ./modulos/orquesta-app-codex-stack"}
+	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-first-promotion-e2e-001"
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+
+	prepared, err := NewCodexStackAutoprogrammingPrepareRunExecutorV0(
+		&stack,
+		"2026-06-30T08:00:00Z",
+		"orquesta-stack-promotion-test",
+		stack.Stores.RunQueue,
+		stack.RunQueue,
+		stack.Clock,
+		stack.Codex.RuntimeWorkDir,
+	).Execute(ctx, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-goal-first-promotion-e2e-001",
+		CorrelationID:          "corr-autoprogramming-goal-first-promotion-e2e-001",
+		OccurredAt:             "2026-06-30T08:00:00Z",
+		RequestedBy:            "orquesta-stack-promotion-test",
+		AutoprogrammingRequest: request,
+	})
+	if err != nil {
+		t.Fatalf("prepare.Execute: %v", err)
+	}
+	if !prepared.Accepted || prepared.Goal == nil || len(prepared.WorkflowTaskRefs) != 0 || runtime.launchCountV0() != 0 {
+		t.Fatalf("prepared=%+v runtime_launches=%d", prepared, runtime.launchCountV0())
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(ctx, prepared.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "feature.md"), []byte("v2\n"), 0o600); err != nil {
+		t.Fatalf("write feature: %v", err)
+	}
+	observer.result = orquestagoal.GoalWorkResultV0{
+		SchemaVersion:       orquestagoal.GoalWorkResultSchemaV0,
+		Status:              orquestagoal.GoalStatusCompleteV0,
+		GoalRef:             state.GoalRef,
+		ExternalGoalRef:     state.ExternalGoalRef,
+		Summary:             "autoprogramming goal-first promocionable",
+		RequiredTestResults: autoprogrammingGoalRequiredTestResultsForTestV0(state.Spec, "evidence-ref-autoprogramming-goal-first-promotion-test-passed"),
+		EvidenceRefs:        state.Spec.ClosurePolicy.RequiredEvidenceRefs,
+	}
+	observed, err := NewCodexStackAutoprogrammingObserveGoalExecutorV0(&stack).Execute(ctx, orquestamcp.MCPAutoprogrammingObserveGoalToolInputV0{
+		RequestID:     "request-autoprogramming-goal-first-promotion-observe-e2e-001",
+		CorrelationID: "corr-autoprogramming-goal-first-promotion-e2e-001",
+		RunRef:        prepared.RunRef,
+	})
+	if err != nil {
+		t.Fatalf("observe.Execute: %v", err)
+	}
+	if observed.Estado != orquestamcp.MCPAutoprogrammingObserveGoalEstadoOKV0 ||
+		!observed.ClosureAccepted ||
+		observed.RunStatus != string(orquestacoreworkflow.OrchestrationRunStatusClosedV0) {
+		t.Fatalf("observed=%+v", observed)
+	}
+	run := mustLoadCodexStackRunForTestV0(t, stack, prepared.RunRef)
+	if len(run.Tasks) != 0 || len(run.ClosedTasks) != 0 {
+		t.Fatalf("goal-first run materializo tareas legacy: %+v", run)
+	}
+
+	status, err := stack.stackDrainQueueStatusForCoordinatorV0(ctx, promotionE2ELoopResultV0(run))
+	if err != nil {
+		t.Fatalf("queue status: %v", err)
+	}
+	if status != orquestarunqueue.RunStatusClosedV0 {
+		t.Fatalf("queue_status=%q", status)
+	}
+	if port.promotions != 1 || port.archives != 1 {
+		t.Fatalf("port=%+v", port)
+	}
+	if got := gitCommitCountForPromotionE2EV0(t, repo); got != baseCommits+1 {
+		t.Fatalf("commits=%d want %d", got, baseCommits+1)
+	}
+	if paths := gitLastCommitPathsForPromotionE2EV0(t, repo); strings.Join(paths, ",") != "feature.md" {
+		t.Fatalf("commit paths=%v", paths)
+	}
+	if port.lastPromotion.WorktreeRef != request.WorktreeRef ||
+		port.lastPromotion.BranchRef != request.BranchRef {
+		t.Fatalf("promotion refs=%+v", port.lastPromotion)
 	}
 
 	status, err = stack.stackDrainQueueStatusForCoordinatorV0(ctx, promotionE2ELoopResultV0(run))

@@ -72,6 +72,33 @@ func TestSelfProgrammingOnlyConfigV0RechazaDomainWorkHTTPV0(t *testing.T) {
 	}
 }
 
+func TestSelfProgrammingOnlyConfigV0PermitePromotionAisladaDentroRootV0(t *testing.T) {
+	root := t.TempDir()
+	setSelfProgrammingOnlyBaseEnvForTestV0(t, root)
+	t.Setenv(envServerAutoprogrammingPromotionEnabledV0, "true")
+	t.Setenv(envServerAutoprogrammingPromotionArchiveDirV0, filepath.Join(root, "archive"))
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerSelfProgrammingOnlyV0); got != "true" {
+		t.Fatalf("self programming effective=%q", got)
+	}
+}
+
+func TestSelfProgrammingOnlyConfigV0RechazaPromotionArchiveFueraDeRootV0(t *testing.T) {
+	root := t.TempDir()
+	setSelfProgrammingOnlyBaseEnvForTestV0(t, root)
+	t.Setenv(envServerAutoprogrammingPromotionEnabledV0, "true")
+	t.Setenv(envServerAutoprogrammingPromotionArchiveDirV0, filepath.Join(t.TempDir(), "archive"))
+
+	_, err := serverConfigFromEnvV0()
+	if err == nil || !strings.Contains(err.Error(), "self_programming_only_promotion_archive_dir_outside_root") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func setSelfProgrammingOnlyBaseEnvForTestV0(t *testing.T, root string) {
 	t.Helper()
 	for _, key := range selfProgrammingOnlyMustBeEmptyEnvV0() {

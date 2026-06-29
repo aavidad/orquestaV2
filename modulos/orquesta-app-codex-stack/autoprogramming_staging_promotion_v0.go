@@ -7,6 +7,7 @@ import (
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
@@ -64,7 +65,7 @@ func (stack StackV0) autoprogrammingPromotionRequestV0(
 		return orquestaautoprogramming.AutoprogrammingStagingPromotionRequestV0{}, false, err
 	}
 	if len(tasks) == 0 {
-		return orquestaautoprogramming.AutoprogrammingStagingPromotionRequestV0{}, false, nil
+		return stack.autoprogrammingPromotionGoalStateRequestV0(ctx, run)
 	}
 	evidence, err := stack.autoprogrammingPromotionRequiredTestEvidenceV0(ctx, run)
 	if err != nil {
@@ -91,6 +92,9 @@ func (stack StackV0) autoprogrammingPromotionTasksV0(
 	ctx context.Context,
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) ([]orquestacoreworkflow.WorkflowTaskV0, error) {
+	if len(compactStringsV0(run.Tasks)) == 0 {
+		return nil, nil
+	}
 	if stack.Stores.TaskStore == nil {
 		return nil, fmt.Errorf("autoprogramming_promotion_task_store_required")
 	}
@@ -114,6 +118,150 @@ func autoprogrammingPromotionTaskV0(task orquestacoreworkflow.WorkflowTaskV0) bo
 		}
 	}
 	return false
+}
+
+func (stack StackV0) autoprogrammingPromotionGoalStateRequestV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) (orquestaautoprogramming.AutoprogrammingStagingPromotionRequestV0, bool, error) {
+	state, ok, err := stack.autoprogrammingPromotionGoalStateV0(ctx, run)
+	if err != nil || !ok {
+		return orquestaautoprogramming.AutoprogrammingStagingPromotionRequestV0{}, false, err
+	}
+	return orquestaautoprogramming.AutoprogrammingStagingPromotionRequestV0{
+		RequestRef:           firstNonEmptyQueuedSourceV0(state.Spec.RequestRef, run.AppSpecRef),
+		RunRef:               run.RunID,
+		ProjectRef:           firstNonEmptyQueuedSourceV0(state.Spec.ProjectRef, run.ProjectRef),
+		WorktreeRef:          autoprogrammingPromotionGoalContextRefV0(state.Spec.ContextRefs, "worktree", "worktree_ref:"),
+		BranchRef:            autoprogrammingPromotionGoalContextRefV0(state.Spec.ContextRefs, "branch", "branch_ref:"),
+		RunClosed:            run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0,
+		WriteSet:             autoprogrammingPromotionGoalWriteSetV0(state.Spec.WriteSet),
+		RequiredTests:        autoprogrammingPromotionGoalRequiredTestsV0(state.Spec.RequiredTests),
+		ClosedTaskRefs:       autoprogrammingPromotionGoalClosedRefsV0(state),
+		AcceptedReviewRefs:   autoprogrammingPromotionGoalAcceptedReviewRefsV0(state),
+		RequiredTestEvidence: autoprogrammingPromotionGoalRequiredTestEvidenceV0(state),
+		LiveWorks:            stack.autoprogrammingPromotionLiveWorksV0(ctx, run.RunID),
+		EvidenceRefs: compactStringsV0(append(
+			[]string{"evidence-ref-codex-stack-autoprogramming-goal-first-promotion"},
+			state.EvidenceRefs...,
+		)),
+	}, true, nil
+}
+
+func (stack StackV0) autoprogrammingPromotionGoalStateV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) (orquestagoal.GoalWorkStateV0, bool, error) {
+	store := stack.Ports.GoalStateStore
+	if store == nil {
+		store = stack.Stores.AppGoalStateStore
+	}
+	if store == nil {
+		return orquestagoal.GoalWorkStateV0{}, false, nil
+	}
+	state, err := store.LoadGoalWorkStateV0(ctx, run.RunID)
+	if err != nil {
+		return orquestagoal.GoalWorkStateV0{}, false, nil
+	}
+	state, err = orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		return orquestagoal.GoalWorkStateV0{}, false, err
+	}
+	if strings.TrimSpace(state.Spec.WorkKind) != orquestaautoprogramming.AutoprogrammingGoalWorkKindV0 {
+		return orquestagoal.GoalWorkStateV0{}, false, nil
+	}
+	return state, true, nil
+}
+
+func autoprogrammingPromotionGoalContextRefV0(
+	refs []orquestagoal.GoalContextRefV0,
+	kind string,
+	legacyPrefix string,
+) string {
+	for _, ref := range refs {
+		if strings.TrimSpace(ref.Kind) == kind && strings.TrimSpace(ref.Ref) != "" {
+			return strings.TrimSpace(ref.Ref)
+		}
+	}
+	for _, ref := range refs {
+		if value, ok := strings.CutPrefix(strings.TrimSpace(ref.Ref), legacyPrefix); ok {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func autoprogrammingPromotionGoalWriteSetV0(scopes []orquestagoal.GoalWriteScopeV0) []string {
+	out := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		out = append(out, scope.Path)
+	}
+	return compactStringsV0(out)
+}
+
+func autoprogrammingPromotionGoalRequiredTestsV0(tests []orquestagoal.GoalRequiredTestV0) []string {
+	out := make([]string, 0, len(tests))
+	for _, test := range tests {
+		out = append(out, autoprogrammingPromotionGoalRequiredTestCommandV0(test))
+	}
+	return compactStringsV0(out)
+}
+
+func autoprogrammingPromotionGoalRequiredTestCommandV0(test orquestagoal.GoalRequiredTestV0) string {
+	for _, value := range []string{test.Command, test.CommandRef, test.TestRef} {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func autoprogrammingPromotionGoalClosedRefsV0(state orquestagoal.GoalWorkStateV0) []string {
+	if state.LastClosure == nil {
+		return nil
+	}
+	return compactStringsV0([]string{state.GoalRef})
+}
+
+func autoprogrammingPromotionGoalAcceptedReviewRefsV0(state orquestagoal.GoalWorkStateV0) []string {
+	if state.LastClosure == nil || !state.LastClosure.Accepted {
+		return nil
+	}
+	return compactStringsV0(append(
+		[]string{"goal-closure-ref-" + state.GoalRef},
+		state.LastClosure.EvidenceRefs...,
+	))
+}
+
+func autoprogrammingPromotionGoalRequiredTestEvidenceV0(
+	state orquestagoal.GoalWorkStateV0,
+) []orquestaautoprogramming.AutoprogrammingRequiredTestEvidenceV0 {
+	if state.LastResult == nil {
+		return nil
+	}
+	commandsByRef := make(map[string]string, len(state.Spec.RequiredTests))
+	for _, test := range state.Spec.RequiredTests {
+		commandsByRef[strings.TrimSpace(test.TestRef)] = autoprogrammingPromotionGoalRequiredTestCommandV0(test)
+	}
+	var out []orquestaautoprogramming.AutoprogrammingRequiredTestEvidenceV0
+	for _, result := range state.LastResult.RequiredTestResults {
+		command := strings.TrimSpace(commandsByRef[strings.TrimSpace(result.TestRef)])
+		if command == "" {
+			command = strings.TrimSpace(result.TestRef)
+		}
+		for _, evidenceRef := range result.EvidenceRefs {
+			if strings.TrimSpace(evidenceRef) == "" {
+				continue
+			}
+			out = append(out, orquestaautoprogramming.AutoprogrammingRequiredTestEvidenceV0{
+				EvidenceRef: strings.TrimSpace(evidenceRef),
+				TaskRef:     state.GoalRef,
+				TestCommand: command,
+				Status:      result.Status,
+			})
+		}
+	}
+	return out
 }
 
 func (stack StackV0) autoprogrammingPromotionRequiredTestEvidenceV0(

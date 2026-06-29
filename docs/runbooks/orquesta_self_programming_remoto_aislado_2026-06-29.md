@@ -29,6 +29,8 @@ El contenedor usa:
 - `ORQUESTA_SERVER_SELF_PROGRAMMING_ONLY=true`
 - `ORQUESTA_SERVER_SELF_PROGRAMMING_ROOT=/workspace`
 - `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`
+- `ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_ENABLED=false`
+- `ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_ARCHIVE_DIR=/workspace/state/autoprogramming-promotion-archive`
 - `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false`
 - `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS=1`
 - `ORQUESTA_SERVER_MAX_RUNS_PER_TICK=1`
@@ -36,6 +38,10 @@ El contenedor usa:
 
 Las variables OPES y DomainWork HTTP quedan vacias o desactivadas. Si alguien
 las activa en modo self-programming, el servidor debe rechazar el arranque.
+La promocion de autoprogramacion puede activarse solo dentro del root aislado:
+si `ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_ENABLED=true`, el archive dir
+debe estar bajo `ORQUESTA_SERVER_SELF_PROGRAMMING_ROOT`. No se promociona nada a
+produccion desde este perfil.
 
 El contexto del Codex/Goal residente debe incluir
 `deploy/self-programming/goal_context.md`. Ese documento fija que `stdio` no se
