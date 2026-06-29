@@ -81,7 +81,7 @@ func BuildGeminiAgentPromptWithControlFilesV0(
 	writeGeminiShutdownProtocolV0(&b, shutdownRequestPath, shutdownAckPath)
 	b.WriteString("Al terminar, escribe ")
 	b.WriteString(ackPath)
-	b.WriteString(" con schema codex_agent_ack.v0.\n\n")
+	b.WriteString(" con schema orquesta_agent_ack.v0. Alias legacy aceptado por compatibilidad: codex_agent_ack.v0.\n\n")
 	writeGeminiAckWriteProtocolV0(&b, ackPath)
 	if decisionPath != "" {
 		b.WriteString("decision_path: ")
@@ -102,7 +102,7 @@ func BuildGeminiAgentPromptWithControlFilesV0(
 	b.WriteString("No incluyas HOME real, tokens, secretos, prompts, completions ni transcripts completos.\n")
 	b.WriteString("files y tests deben ser arrays de strings; no metas stdout/stderr crudo en test_receipts ni notes.\n\n")
 	b.WriteString("ACK esperado:\n")
-	b.WriteString("{\"schema_version\":\"codex_agent_ack.v0\",\"request_id\":\"")
+	b.WriteString("{\"schema_version\":\"orquesta_agent_ack.v0\",\"request_id\":\"")
 	b.WriteString(packet.RequestID)
 	b.WriteString("\",\"correlation_id\":\"")
 	b.WriteString(packet.CorrelationID)
@@ -287,7 +287,7 @@ func geminiPromptACKTestReceiptsJSONV0(commands []string) string {
 	receipts := make([]promptReceiptV0, 0, len(compact))
 	for index, command := range compact {
 		receipts = append(receipts, promptReceiptV0{
-			SchemaVersion:  "codex_required_test_receipt.v0",
+			SchemaVersion:  "orquesta_required_test_receipt.v0",
 			Command:        command,
 			Status:         "passed",
 			ExitCode:       0,
