@@ -94,6 +94,16 @@ func TestValidateCapacityDecisionV0VentanaInsuficienteExigeHandoff(t *testing.T)
 	requireCapacityDecisionIssueCodeV0(t, issues, ErrHandoffRequeridoV0)
 }
 
+func TestValidateCapacityDecisionV0HighRequiereSupportedEffort(t *testing.T) {
+	decision := decodeValidCapacityDecisionFixtureV0(t, "decision_minima_valida.json")
+	decision.Response.NivelCapacidad = "high"
+	decision.Response.ReasoningEffort = "high"
+	decision.Response.Modelo.SupportedEfforts = nil
+
+	issues := ValidateCapacityDecisionV0(decision)
+	requireCapacityDecisionIssueCodeV0(t, issues, ErrModeloNoHabilitadoV0)
+}
+
 func TestCapacityDecisionV0JSONRoundTripMantieneContrato(t *testing.T) {
 	decision := decodeValidCapacityDecisionFixtureV0(t, "decision_minima_valida.json")
 
