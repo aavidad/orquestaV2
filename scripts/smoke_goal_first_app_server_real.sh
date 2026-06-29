@@ -11,7 +11,26 @@ smoke_root_source="generated"
 if [[ -n "${ORQUESTA_SMOKE_ROOT:-}" ]]; then
   smoke_root_source="env:ORQUESTA_SMOKE_ROOT"
 fi
-smoke_root="${ORQUESTA_SMOKE_ROOT:-$(mktemp -d "${TMPDIR:-/tmp}/orquesta-goal-first-app-server.XXXXXX")}"
+if [[ -n "${ORQUESTA_SMOKE_ROOT:-}" ]]; then
+  smoke_root="$ORQUESTA_SMOKE_ROOT"
+else
+  if [[ -n "${ORQUESTA_SMOKE_PARENT:-}" ]]; then
+    smoke_parent="$ORQUESTA_SMOKE_PARENT"
+  elif [[ -n "${ORQUESTA_CODEX_RUNTIME_WORKDIR:-}" ]]; then
+    smoke_parent="${ORQUESTA_CODEX_RUNTIME_WORKDIR%/}/smokes"
+  else
+    smoke_parent="/workspace/runtime/smokes"
+  fi
+  if ! mkdir -p "$smoke_parent" 2>/dev/null; then
+    smoke_parent="/workspace/orquesta-smokes"
+  fi
+  if ! mkdir -p "$smoke_parent" 2>/dev/null; then
+    smoke_parent="${TMPDIR:-/tmp}"
+  fi
+  ORQUESTA_SMOKE_ALLOWED_ROOT_PREFIXES="$smoke_parent${ORQUESTA_SMOKE_ALLOWED_ROOT_PREFIXES:+:$ORQUESTA_SMOKE_ALLOWED_ROOT_PREFIXES}"
+  export ORQUESTA_SMOKE_ALLOWED_ROOT_PREFIXES
+  smoke_root="$(mktemp -d "$smoke_parent/orquesta-goal-first-app-server.XXXXXX")"
+fi
 smoke_temp_root_prepare "$smoke_root" "$smoke_root_source"
 
 state_dir="$smoke_root/state"
