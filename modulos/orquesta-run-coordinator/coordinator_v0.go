@@ -197,8 +197,8 @@ func rotateExecutedRunV0(
 	if updater == nil || command.OccurredAt.IsZero() {
 		return nil
 	}
-	refs := append([]string(nil), candidate.EvidenceRefs...)
-	refs = append(refs, "evidence-ref-run-coordinator-executed")
+	refs := compactRunCoordinatorStringsV0(append(append([]string(nil), candidate.EvidenceRefs...), result.EvidenceRefs...))
+	refs = compactRunCoordinatorStringsV0(append(refs, "evidence-ref-run-coordinator-executed"))
 	queueStatus := effectiveExecutedRunQueueStatusV0(candidate, result)
 	_, err := updater.SetRunPriorityV0(ctx, runQueuePriorityCommandFromRankedCandidateV0(
 		candidate,
@@ -209,6 +209,23 @@ func rotateExecutedRunV0(
 		refs,
 	))
 	return err
+}
+
+func compactRunCoordinatorStringsV0(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func runQueuePriorityCommandFromRankedCandidateV0(

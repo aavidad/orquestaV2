@@ -42,6 +42,7 @@ payload_file="$smoke_root/start_request.json"
 start_response="$smoke_root/start_response.json"
 observe_payload="$smoke_root/observe_request.json"
 observe_response="$smoke_root/observe_response.json"
+shutdown_response="$smoke_root/shutdown_response.json"
 server_stdout="$smoke_root/server.stdout.log"
 server_stderr="$smoke_root/server.stderr.log"
 daemon_stdout="$smoke_root/codex-daemon.stdout.log"
@@ -172,6 +173,141 @@ elif value is None:
 else:
     print(value)
 PY
+}
+
+find_tmux_owner_file() {
+  local owner
+  owner="$(find "$runtime_dir" -path '*/owner.json' -type f -print -quit 2>/dev/null || true)"
+  if [[ -n "$owner" ]]; then
+    printf '%s' "$owner"
+    return 0
+  fi
+  owner="$(find "${TMPDIR:-/tmp}" -maxdepth 2 -path "${TMPDIR:-/tmp}/oq-gsrv-$(id -u)-*/owner.json" -type f -print -quit 2>/dev/null || true)"
+  if [[ -n "$owner" ]]; then
+    printf '%s' "$owner"
+    return 0
+  fi
+  return 1
+}
+
+json_owner_get() {
+  json_get "$1" "$2"
+}
+
+tmux_pane_pid_for_session() {
+  local session="$1"
+  tmux display-message -p -t "$session" "#{pane_pid}" 2>/dev/null | head -n 1
+}
+
+find_tmux_socket_for_owner() {
+  local owner_file="$1"
+  find "$(dirname "$owner_file")" -maxdepth 1 -type s -print -quit 2>/dev/null || true
+}
+
+app_server_process_count_for_socket() {
+  local socket_path="$1"
+  if [[ -z "$socket_path" ]]; then
+    echo 0
+    return 0
+  fi
+  ps -eo pid=,args= | python3 -c '
+import sys
+socket = sys.argv[1]
+count = 0
+for line in sys.stdin:
+    if "codex" in line and "app-server" in line and socket in line:
+        count += 1
+print(count)
+' "$socket_path"
+}
+
+assert_app_server_tmux_shutdown_ready() {
+  if [[ "$goal_backend" != "app_server_tmux" ]]; then
+    return 0
+  fi
+  local owner_file session_name pane_pid socket_path shutdown_status shutdown_ready app_processes_alive
+  owner_file="$(find_tmux_owner_file)" || {
+    echo "no se encontro owner.json de app_server_tmux antes del shutdown" >&2
+    exit 1
+  }
+  session_name="$(json_owner_get "$owner_file" "session_name")"
+  if [[ -z "$session_name" ]]; then
+    echo "owner.json sin session_name: $owner_file" >&2
+    exit 1
+  fi
+  if ! tmux has-session -t "$session_name" >/dev/null 2>&1; then
+    echo "tmux session no existe antes del shutdown: $session_name" >&2
+    exit 1
+  fi
+  pane_pid="$(tmux_pane_pid_for_session "$session_name")"
+  if [[ -z "$pane_pid" ]] || ! kill -0 "$pane_pid" >/dev/null 2>&1; then
+    echo "pane_pid invalido antes del shutdown: session=$session_name pane_pid=$pane_pid" >&2
+    exit 1
+  fi
+  socket_path="$(find_tmux_socket_for_owner "$owner_file")"
+  if [[ -z "$socket_path" || ! -S "$socket_path" ]]; then
+    echo "socket tmux no encontrado antes del shutdown: owner=$owner_file socket=$socket_path" >&2
+    exit 1
+  fi
+  echo "app_server_tmux_owner_json=$owner_file"
+  echo "app_server_tmux_session_name=$session_name"
+  echo "app_server_tmux_pane_pid=$pane_pid"
+  echo "app_server_tmux_socket=$socket_path"
+
+  shutdown_status="$(
+    curl -sS -m "$request_timeout" -o "$shutdown_response" -w "%{http_code}" \
+      -X POST "$base_url/api/v0/server/shutdown" \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json" \
+      -H "X-Correlation-ID: $request_id-shutdown" \
+      --data-binary "{\"request_id\":\"$request_id-shutdown\",\"correlation_id\":\"$request_id-shutdown\",\"reason\":\"smoke_goal_first_app_server_real\"}"
+  )"
+  echo "POST /api/v0/server/shutdown -> HTTP $shutdown_status"
+  if [[ "$shutdown_status" -lt 200 || "$shutdown_status" -gt 299 ]]; then
+    smoke_print_file_excerpt "$shutdown_response"
+    exit 1
+  fi
+  shutdown_ready="$(json_get "$shutdown_response" "shutdown_ready")"
+  if [[ "$shutdown_ready" != "true" ]]; then
+    echo "shutdown_ready no fue true; respuesta:" >&2
+    smoke_print_file_excerpt "$shutdown_response"
+    exit 1
+  fi
+  for _ in $(seq 1 80); do
+    if ! kill -0 "$server_pid" >/dev/null 2>&1; then
+      wait "$server_pid" >/dev/null 2>&1 || true
+      server_pid=""
+      break
+    fi
+    sleep 0.25
+  done
+  if [[ -n "$server_pid" ]] && kill -0 "$server_pid" >/dev/null 2>&1; then
+    echo "el servidor siguio vivo tras shutdown_ready=true" >&2
+    exit 1
+  fi
+  if tmux has-session -t "$session_name" >/dev/null 2>&1; then
+    echo "tmux session sigue viva tras shutdown hook: $session_name" >&2
+    exit 1
+  fi
+  if [[ -e "$owner_file" ]]; then
+    echo "owner.json sigue existiendo tras shutdown hook: $owner_file" >&2
+    exit 1
+  fi
+  if [[ -e "$socket_path" ]]; then
+    echo "socket sigue existiendo tras shutdown hook: $socket_path" >&2
+    exit 1
+  fi
+  if kill -0 "$pane_pid" >/dev/null 2>&1; then
+    echo "pane_pid sigue vivo tras shutdown hook: $pane_pid" >&2
+    exit 1
+  fi
+  app_processes_alive="$(app_server_process_count_for_socket "$socket_path")"
+  if [[ "$app_processes_alive" != "0" ]]; then
+    echo "quedan procesos codex app-server para socket $socket_path: $app_processes_alive" >&2
+    exit 1
+  fi
+  echo "app_server_tmux_shutdown_ready=true"
+  echo "app_server_tmux_processes_alive=0"
 }
 
 need_cmd python3
@@ -489,4 +625,5 @@ fi
 echo "smoke_goal_first_app_server_real=ok"
 echo "artifact_refs=$artifact_count"
 echo "evidence_refs=$evidence_count"
+assert_app_server_tmux_shutdown_ready
 echo "smoke_root=$smoke_root"

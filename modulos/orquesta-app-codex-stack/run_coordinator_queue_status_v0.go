@@ -12,28 +12,36 @@ func (stack StackV0) stackDrainQueueStatusForCoordinatorV0(
 	ctx context.Context,
 	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
 ) (string, error) {
+	status, _, err := stack.stackDrainQueueStatusAndEvidenceForCoordinatorV0(ctx, result)
+	return status, err
+}
+
+func (stack StackV0) stackDrainQueueStatusAndEvidenceForCoordinatorV0(
+	ctx context.Context,
+	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
+) (string, []string, error) {
 	result = stack.stackDrainQueueStatusResultWithLatestRunV0(ctx, result)
 	status := stackDrainQueueStatusV0(result)
 	if status == orquestarunqueue.RunStatusClosedV0 {
-		complete, _, err := stack.maybePromoteClosedAutoprogrammingRunV0(ctx, result.Final.Run)
+		complete, refs, err := stack.maybePromoteClosedAutoprogrammingRunV0(ctx, result.Final.Run)
 		if err != nil || !complete {
-			return "", err
+			return "", refs, err
 		}
-		return status, nil
+		return status, refs, nil
 	}
 	if status != orquestarunqueue.RunStatusDeliveredV0 {
-		return status, nil
+		return status, nil, nil
 	}
 	run := result.Final.Run
 	hold, err := RunHasOpenOperationalDirectorTasksV0(ctx, stack.Stores.TaskStore, run)
 	if err != nil || hold {
-		return "", err
+		return "", nil, err
 	}
 	hold, err = RunHasOpenProgrammingOrAutonomyTasksV0(ctx, stack.Stores.TaskStore, run)
 	if err != nil || hold {
-		return "", err
+		return "", nil, err
 	}
-	return status, nil
+	return status, nil, nil
 }
 
 func (stack StackV0) stackDrainQueueStatusResultWithLatestRunV0(

@@ -593,6 +593,96 @@ func TestRuntimeV0IdleSelfImprovementGoalFirstCompleteValidaCierreConSpecPersist
 	}
 }
 
+func TestRuntimeV0SelfAuditBacklogGoalFirstResidenteCierraYEncadenaSiguienteV0(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 6, 29, 10, 0, 0, 0, time.UTC)
+	clock := &mutableClockForGoalFirstChainTestV0{now: now}
+	store := &memoryStateStoreV0{}
+	goalStates := newMemoryGoalStateStoreV0()
+	first := idleSelfImprovementRequestForGoalFirstChainTestV0("001", "modulos/orquesta-server")
+	second := idleSelfImprovementRequestForGoalFirstChainTestV0("002", "modulos/orquesta-app-codex-stack")
+	supervisor := &goalFirstChainSupervisorForTestV0{
+		planBatches: [][]IdleSelfImprovementRequestV0{{first}, {second}},
+		started:     make(chan struct{}, 2),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                         t.TempDir(),
+		TickInterval:                     time.Hour,
+		IdleSelfImprovementAfter:         time.Minute,
+		IdleSelfImprovementMaxRequests:   1,
+		IdleSelfImprovementGoalFirst:     true,
+		IdleSelfImprovementProjectRef:    "project-ref-self-audit-chain",
+		IdleSelfImprovementRequiredTests: []string{"go test -count=1 ./modulos/orquesta-server"},
+		AuditDisabled:                    true,
+	}, RuntimeDepsV0{
+		Supervisor:     supervisor,
+		GoalStateStore: goalStates,
+		StateStore:     store,
+		Clock:          clock,
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	markNoExecutionSinceForTestV0(runtime, now)
+
+	runtime.runSupervisorTickV0(ctx)
+	waitGoalFirstChainLaunchForTestV0(t, supervisor)
+	waitRuntimeAsyncWorkForTestV0(t, runtime)
+	firstSpec := supervisor.launchedSpecs[0]
+	if supervisor.planCalls != 1 ||
+		supervisor.launchCalls != 1 ||
+		supervisor.selfCalls != 0 ||
+		firstSpec.WorkKind != "idle_self_improvement" ||
+		firstSpec.RequestRef != first.RequestRef ||
+		firstSpec.RunRef != firstSpec.RequestRef ||
+		firstSpec.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
+		store.last.IdleSelfImprovementOperationalMessage == nil ||
+		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != "prepared" {
+		t.Fatalf("primer tick inesperado: plan=%d launch=%d self=%d spec=%+v state=%+v",
+			supervisor.planCalls, supervisor.launchCalls, supervisor.selfCalls, firstSpec, store.last)
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(ctx, firstSpec.RunRef)
+	if err != nil || state.Status != orquestagoal.GoalStatusRunningV0 {
+		t.Fatalf("goal state primero err=%v state=%+v", err, state)
+	}
+
+	clock.now = now.Add(2 * time.Minute)
+	runtime.runSupervisorTickV0(ctx)
+	if supervisor.observeCalls != 1 ||
+		supervisor.launchCalls != 1 ||
+		store.last.IdleSelfImprovementOperationalMessage == nil ||
+		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalClosureAcceptedReasonV0 ||
+		store.last.IdleSelfImprovementGoalClosure == nil ||
+		!store.last.IdleSelfImprovementGoalClosure.Accepted ||
+		store.last.IdleSelfImprovementGoalResult == nil ||
+		store.last.IdleSelfImprovementGoalResult.Status != orquestagoal.GoalStatusCompleteV0 ||
+		store.last.IdleSelfImprovementFlight ||
+		!containsStringForTestV0(store.last.IdleSelfImprovementOperationalMessage.EvidenceRefs, "evidence-ref-required-test-001") {
+		t.Fatalf("segundo tick cierre inesperado: observe=%d launch=%d state=%+v",
+			supervisor.observeCalls, supervisor.launchCalls, store.last)
+	}
+
+	clock.now = now.Add(4 * time.Minute)
+	runtime.runSupervisorTickV0(ctx)
+	waitGoalFirstChainLaunchForTestV0(t, supervisor)
+	waitRuntimeAsyncWorkForTestV0(t, runtime)
+	secondSpec := supervisor.launchedSpecs[1]
+	if supervisor.planCalls != 2 ||
+		supervisor.launchCalls != 2 ||
+		supervisor.selfCalls != 0 ||
+		secondSpec.RequestRef != second.RequestRef ||
+		secondSpec.GoalRef == firstSpec.GoalRef ||
+		store.last.IdleSelfImprovementOperationalMessage == nil ||
+		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != "prepared" {
+		t.Fatalf("tercer tick no encadeno segundo goal: plan=%d launch=%d self=%d first=%+v second=%+v state=%+v",
+			supervisor.planCalls, supervisor.launchCalls, supervisor.selfCalls, firstSpec, secondSpec, store.last)
+	}
+	state, err = goalStates.LoadGoalWorkStateV0(ctx, secondSpec.RunRef)
+	if err != nil || state.Status != orquestagoal.GoalStatusRunningV0 {
+		t.Fatalf("goal state segundo err=%v state=%+v", err, state)
+	}
+}
+
 func supervisorResultWithUnhandledOutboxForTestV0(runRef string) orquestarunsupervisor.RunSupervisorResultV0 {
 	return orquestarunsupervisor.RunSupervisorResultV0{
 		StopReason:      orquestarunsupervisor.RunSupervisorStopMaxExecutionsV0,
@@ -878,5 +968,152 @@ func supervisorResultWithLaunchFailedForTestV0(runRef string) orquestarunsupervi
 				}},
 			},
 		}},
+	}
+}
+
+type mutableClockForGoalFirstChainTestV0 struct {
+	now time.Time
+}
+
+func (clock *mutableClockForGoalFirstChainTestV0) Now() time.Time {
+	return clock.now
+}
+
+type goalFirstChainSupervisorForTestV0 struct {
+	planBatches   [][]IdleSelfImprovementRequestV0
+	planCalls     int
+	launchCalls   int
+	observeCalls  int
+	selfCalls     int
+	launchedSpecs []orquestagoal.GoalWorkSpecV0
+	started       chan struct{}
+}
+
+func (fake *goalFirstChainSupervisorForTestV0) RunGlobalSupervisorV0(
+	context.Context,
+	orquestarunsupervisor.RunSupervisorCommandV0,
+) (orquestarunsupervisor.RunSupervisorResultV0, error) {
+	return orquestarunsupervisor.RunSupervisorResultV0{
+		StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
+	}, nil
+}
+
+func (fake *goalFirstChainSupervisorForTestV0) PlanIdleSelfImprovementV0(
+	_ context.Context,
+	request IdleSelfImprovementPlanRequestV0,
+) (IdleSelfImprovementPlanResultV0, error) {
+	fake.planCalls++
+	index := fake.planCalls - 1
+	if index < len(fake.planBatches) {
+		return IdleSelfImprovementPlanResultV0{
+			Requests: append([]IdleSelfImprovementRequestV0(nil), fake.planBatches[index]...),
+		}, nil
+	}
+	return IdleSelfImprovementPlanResultV0{Requests: []IdleSelfImprovementRequestV0{request.BaseRequest}}, nil
+}
+
+func (fake *goalFirstChainSupervisorForTestV0) FilterIdleSelfImprovementRequestsV0(
+	_ context.Context,
+	request IdleSelfImprovementRequestFilterRequestV0,
+) (IdleSelfImprovementRequestFilterResultV0, error) {
+	return IdleSelfImprovementRequestFilterResultV0{Requests: append([]IdleSelfImprovementRequestV0(nil), request.Requests...)}, nil
+}
+
+func (fake *goalFirstChainSupervisorForTestV0) IdleSelfImprovementBlockersV0(
+	context.Context,
+	IdleSelfImprovementBlockerRequestV0,
+) (IdleSelfImprovementBlockerResultV0, error) {
+	return IdleSelfImprovementBlockerResultV0{}, nil
+}
+
+func (fake *goalFirstChainSupervisorForTestV0) RetryableIdleSelfImprovementRunRefsV0(
+	context.Context,
+	IdleSelfImprovementRunFreshnessRequestV0,
+) (IdleSelfImprovementRunFreshnessResultV0, error) {
+	return IdleSelfImprovementRunFreshnessResultV0{}, nil
+}
+
+func (fake *goalFirstChainSupervisorForTestV0) PrepareIdleSelfImprovementV0(
+	context.Context,
+	IdleSelfImprovementRequestV0,
+) (IdleSelfImprovementResultV0, error) {
+	fake.selfCalls++
+	return IdleSelfImprovementResultV0{}, nil
+}
+
+func (fake *goalFirstChainSupervisorForTestV0) LaunchGoalWorkV0(
+	_ context.Context,
+	spec orquestagoal.GoalWorkSpecV0,
+) (orquestagoal.GoalLaunchReceiptV0, error) {
+	fake.launchCalls++
+	fake.launchedSpecs = append(fake.launchedSpecs, copyGoalWorkSpecForServerStateV0(spec))
+	if fake.started != nil {
+		fake.started <- struct{}{}
+	}
+	return orquestagoal.GoalLaunchReceiptV0{
+		SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+		Status:          orquestagoal.GoalStatusAcceptedV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: "external-" + spec.GoalRef,
+		EvidenceRefs:    []string{"evidence-ref-goal-first-chain-launch"},
+	}, nil
+}
+
+func (fake *goalFirstChainSupervisorForTestV0) ObserveGoalWorkV0(
+	_ context.Context,
+	request orquestagoal.GoalObservationRequestV0,
+) (orquestagoal.GoalWorkResultV0, error) {
+	fake.observeCalls++
+	var spec orquestagoal.GoalWorkSpecV0
+	for _, candidate := range fake.launchedSpecs {
+		if candidate.GoalRef == request.GoalRef {
+			spec = candidate
+			break
+		}
+	}
+	result := orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusCompleteV0,
+		GoalRef:         request.GoalRef,
+		ExternalGoalRef: request.ExternalGoalRef,
+		Summary:         "goal-first self-audit completo",
+		ArtifactRefs:    []string{"artifact-ref-" + request.GoalRef},
+		EvidenceRefs:    []string{"evidence-ref-required-test-001"},
+	}
+	for _, test := range spec.RequiredTests {
+		result.RequiredTestResults = append(result.RequiredTestResults, orquestagoal.GoalRequiredTestResultV0{
+			TestRef:      test.TestRef,
+			Status:       "passed",
+			EvidenceRefs: []string{"evidence-ref-required-test-001"},
+		})
+	}
+	return result, nil
+}
+
+func idleSelfImprovementRequestForGoalFirstChainTestV0(
+	suffix string,
+	writeSet string,
+) IdleSelfImprovementRequestV0 {
+	return IdleSelfImprovementRequestV0{
+		RequestRef:         "request-ref-self-audit-backlog-" + suffix,
+		ProjectRef:         "project-ref-self-audit-chain",
+		FailureSummary:     "hallazgo self-audit backlog " + suffix,
+		WriteSet:           []string{writeSet},
+		RequiredTests:      []string{"go test -count=1 ./" + writeSet},
+		AcceptanceCriteria: []string{"cierre aceptado con evidencia durable " + suffix},
+		ContextRefs:        []string{"context-ref-self-audit-backlog-" + suffix},
+		EvidenceRefs:       []string{"evidence-ref-self-audit-backlog-" + suffix},
+	}
+}
+
+func waitGoalFirstChainLaunchForTestV0(
+	t *testing.T,
+	supervisor *goalFirstChainSupervisorForTestV0,
+) {
+	t.Helper()
+	select {
+	case <-supervisor.started:
+	case <-time.After(time.Second):
+		t.Fatalf("goal-first chain launch no observado")
 	}
 }

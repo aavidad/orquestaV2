@@ -135,11 +135,13 @@ func (drainer stackRunDrainerV0) DrainRunV0(
 		}
 		return stackDrainCoordinatorResultV0(request, result, "error", "", err.Error()), err
 	}
-	queueStatus, err := stack.stackDrainQueueStatusForCoordinatorV0(ctx, result)
+	queueStatus, evidenceRefs, err := stack.stackDrainQueueStatusAndEvidenceForCoordinatorV0(ctx, result)
 	if err != nil {
 		return stackDrainCoordinatorResultV0(request, result, "error", "", err.Error()), err
 	}
-	return stackDrainCoordinatorResultV0(request, result, stackDrainOutcomeV0(result), queueStatus, ""), nil
+	drainResult := stackDrainCoordinatorResultV0(request, result, stackDrainOutcomeV0(result), queueStatus, "")
+	drainResult.EvidenceRefs = compactStringsV0(append(drainResult.EvidenceRefs, evidenceRefs...))
+	return drainResult, nil
 }
 
 func (stack StackV0) legacyDrainAllowedForRunV0(ctx context.Context, runRef string) bool {

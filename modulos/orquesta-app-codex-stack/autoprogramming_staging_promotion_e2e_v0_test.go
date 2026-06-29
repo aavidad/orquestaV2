@@ -11,6 +11,7 @@ import (
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 )
@@ -103,6 +104,38 @@ func TestCodexStackAutoprogrammingPromotionV0NoCierraColaConEfectoIncompletoV0(t
 				t.Fatalf("queue_status=%q want pending retry", status)
 			}
 		})
+	}
+}
+
+func TestCodexStackAutoprogrammingPromotionV0PropagaEvidenceRefsAResultadoDeDrainV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	stack = withAutoprogrammingPromotionStoresForTestV0(stack)
+	stack.AllowLegacyAutoprogrammingRun = true
+	port := &fakeAutoprogrammingPromotionPortV0{}
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{Enabled: true, Port: port}
+	runRef := "run-autoprogramming-promotion-drain-evidence-001"
+	seedAutoprogrammingPromotionRunV0(t, ctx, stack, runRef, []string{"feature.md"})
+
+	result, err := stackRunDrainerV0{stack: stack}.DrainRunV0(ctx, orquestaruncoordinator.RunDrainRequestV0{
+		RunRef:           runRef,
+		AppRef:           "app-ref-autoprogramming-promotion-drain-evidence",
+		AllowLegacyDrain: true,
+	})
+	if err != nil {
+		t.Fatalf("DrainRunV0: %v", err)
+	}
+	if result.QueueStatus != orquestarunqueue.RunStatusClosedV0 {
+		t.Fatalf("queue_status=%q result=%+v", result.QueueStatus, result)
+	}
+	for _, want := range []string{
+		"evidence-ref-codex-stack-autoprogramming-promotion",
+		"evidence-ref-fake-promotion",
+		"evidence-ref-fake-archive",
+	} {
+		if !codexStackStringInSetForTestV0(result.EvidenceRefs, want) {
+			t.Fatalf("evidence_refs=%v missing %s", result.EvidenceRefs, want)
+		}
 	}
 }
 

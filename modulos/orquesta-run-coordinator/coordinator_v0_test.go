@@ -149,6 +149,53 @@ func TestCoordinateRunsTickPreservaMetadataCausalAlRotarColaV0(t *testing.T) {
 	}
 }
 
+func TestCoordinateRunsTickRotaColaConEvidenceRefsDelDrainerV0(t *testing.T) {
+	now := time.Date(2026, 6, 29, 10, 0, 0, 0, time.UTC)
+	candidate := candidateWithUpdatedAtV0("run-evidence-refs", "app", 9, now.Add(-time.Minute))
+	candidate.EvidenceRefs = []string{"evidence-ref-candidate", "evidence-ref-promotion"}
+	queue := &fakeQueueStoreV0{candidates: []orquestarunqueue.RunSchedulingCandidateV0{candidate}}
+	drainer := &fakeDrainerV0{results: map[string]RunDrainResultV0{
+		"run-evidence-refs": {
+			RunRef:       "run-evidence-refs",
+			AppRef:       "app",
+			Outcome:      "quiescent",
+			QueueStatus:  orquestarunqueue.RunStatusClosedV0,
+			EvidenceRefs: []string{"evidence-ref-promotion", "evidence-ref-archive"},
+		},
+	}}
+	command := tickCommandV0(1)
+	command.QueueRef = "queue-evidence-refs"
+	command.OccurredAt = now
+
+	result, err := CoordinateRunsTickV0(context.Background(), RunCoordinatorDepsV0{
+		QueueReader:   queue,
+		QueueUpdater:  queue,
+		ControlReader: &fakeControlReaderV0{states: map[string]orquestaruncontrol.RunControlStateV0{}, missing: map[string]bool{}},
+		Drainer:       drainer,
+	}, command)
+	if err != nil {
+		t.Fatalf("CoordinateRunsTickV0: %v", err)
+	}
+	if len(result.Executions) != 1 ||
+		!containsStringV0(result.Executions[0].EvidenceRefs, "evidence-ref-archive") {
+		t.Fatalf("execution evidence_refs=%+v", result.Executions)
+	}
+	updated := queue.candidates[0]
+	for _, want := range []string{
+		"evidence-ref-candidate",
+		"evidence-ref-promotion",
+		"evidence-ref-archive",
+		"evidence-ref-run-coordinator-executed",
+	} {
+		if !containsStringV0(updated.EvidenceRefs, want) {
+			t.Fatalf("updated evidence_refs=%v missing %s", updated.EvidenceRefs, want)
+		}
+	}
+	if got := countStringV0(updated.EvidenceRefs, "evidence-ref-promotion"); got != 1 {
+		t.Fatalf("promotion ref duplicated %d times: %v", got, updated.EvidenceRefs)
+	}
+}
+
 func TestCoordinateRunsTickSkipsPausedV0(t *testing.T) {
 	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
 		candidateV0("run-paused", "app", 9),
@@ -850,4 +897,14 @@ func containsStringV0(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func countStringV0(values []string, want string) int {
+	count := 0
+	for _, value := range values {
+		if value == want {
+			count++
+		}
+	}
+	return count
 }

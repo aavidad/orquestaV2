@@ -128,7 +128,7 @@ func (lifecycle CodexSupervisorStackLifecycleV0) syncDirectDrainQueueStatusV0(
 		return nil
 	}
 	result = lifecycle.Stack.stackDrainQueueStatusResultWithLatestRunV0(ctx, result)
-	queueStatus, err := lifecycle.Stack.stackDrainQueueStatusForCoordinatorV0(ctx, result)
+	queueStatus, evidenceRefs, err := lifecycle.Stack.stackDrainQueueStatusAndEvidenceForCoordinatorV0(ctx, result)
 	if err != nil {
 		return err
 	}
@@ -173,7 +173,7 @@ func (lifecycle CodexSupervisorStackLifecycleV0) syncDirectDrainQueueStatusV0(
 			Reason:           "supervise directo sincronizo estado de cola",
 			IdempotencyKey:   "codex-supervisor-direct-drain-queue:" + runRef + ":" + queueStatus,
 			EvidenceRefs: compactStringsV0(append(
-				candidate.EvidenceRefs,
+				append(candidate.EvidenceRefs, evidenceRefs...),
 				"evidence-ref-codex-supervisor-direct-drain-queue-sync",
 			)),
 			WorksetClaims: candidate.WorksetClaims,
