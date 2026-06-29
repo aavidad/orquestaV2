@@ -56,6 +56,9 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		backend != codexGoalBackendAppServerTmuxV0 {
 		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_no_soportado:%s", backend)
 	}
+	if backend == codexGoalBackendAppServerProxyV0 && !codexGoalBackendProxyDiagnosticAllowedV0() {
+		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_proxy_diagnostic_opt_in_required:%s", envAllowAppServerProxyDiagnosticV0)
+	}
 	runtimeConfig := codexRuntimeEnvConfigFromEnvV0()
 	commandProtocol := serverCodexAppServerCommandProtocolV0{
 		CommandPath: runtimeConfig.CommandPath,
@@ -129,6 +132,18 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 
 func codexGoalBackendFromEnvV0() string {
 	return strings.TrimSpace(os.Getenv(envCodexGoalBackendV0))
+}
+
+func codexGoalBackendOperationalFromEnvV0() bool {
+	backend := codexGoalBackendFromEnvV0()
+	if backend == codexGoalBackendAppServerTmuxV0 {
+		return true
+	}
+	return backend == codexGoalBackendAppServerProxyV0 && codexGoalBackendProxyDiagnosticAllowedV0()
+}
+
+func codexGoalBackendProxyDiagnosticAllowedV0() bool {
+	return boolEnvOrDefaultV0(envAllowAppServerProxyDiagnosticV0, false)
 }
 
 func codexGoalBackendArgsV0(backend string) []string {

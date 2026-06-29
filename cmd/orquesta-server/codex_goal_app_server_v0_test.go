@@ -861,6 +861,7 @@ func TestServerCodexGoalBackendFromEnvV0PreflightDegradadoV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envCodexCommandV0, script)
 	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envAllowAppServerProxyDiagnosticV0, "1")
 	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "1000")
 
 	config, err := serverConfigFromEnvV0()
@@ -891,6 +892,7 @@ func TestServerCodexGoalBackendFromEnvV0PreflightOKConservaBackendRealV0(t *test
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envCodexCommandV0, script)
 	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envAllowAppServerProxyDiagnosticV0, "1")
 	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "1000")
 
 	config, err := serverConfigFromEnvV0()
@@ -926,6 +928,23 @@ func TestServerCodexGoalBackendFromEnvV0StdioNoEsBackendOperativoV0(t *testing.T
 	}
 }
 
+func TestServerCodexGoalBackendFromEnvV0ProxyRequiereOptInDiagnosticoV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	_, err = serverCodexGoalBackendFromEnvV0(config)
+	if err == nil || !strings.Contains(err.Error(), "codex_goal_backend_proxy_diagnostic_opt_in_required") {
+		t.Fatalf("err=%v", err)
+	}
+	if config.IdleSelfImprovementGoalFirst {
+		t.Fatalf("proxy sin opt-in no debe derivar goal-first operativo: %+v", config)
+	}
+}
+
 func TestServerCodexGoalBackendsFromEnvV0SeparaWorkdirAppEIdleV0(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "codex-fake-ok")
 	if err := os.WriteFile(script, []byte(fakeCodexAppServerPreflightScriptV0("")), 0o700); err != nil {
@@ -938,6 +957,7 @@ func TestServerCodexGoalBackendsFromEnvV0SeparaWorkdirAppEIdleV0(t *testing.T) {
 	t.Setenv(envServerIdleSelfImprovementProjectWorkDirV0, idleDir)
 	t.Setenv(envCodexCommandV0, script)
 	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envAllowAppServerProxyDiagnosticV0, "1")
 	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "1000")
 
 	config, err := serverConfigFromEnvV0()
@@ -1034,7 +1054,7 @@ func TestCodexAppServerWebSocketReadResponseV0EstructuraErroresRPCV0(t *testing.
 func TestServerEffectiveConfigV0ExponeGoalFirstYBackendV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "true")
-	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0)
 	t.Setenv(envCodexGoalTimeoutMSV0, "12000")
 
 	config, err := serverConfigFromEnvV0()
@@ -1045,7 +1065,7 @@ func TestServerEffectiveConfigV0ExponeGoalFirstYBackendV0(t *testing.T) {
 	if got := effectiveSettingValueForTestV0(settings, envServerIdleSelfImprovementGoalFirstV0); got != "true" {
 		t.Fatalf("goal-first setting=%q", got)
 	}
-	if got := effectiveSettingValueForTestV0(settings, envCodexGoalBackendV0); got != codexGoalBackendAppServerProxyV0 {
+	if got := effectiveSettingValueForTestV0(settings, envCodexGoalBackendV0); got != codexGoalBackendAppServerTmuxV0 {
 		t.Fatalf("goal backend=%q", got)
 	}
 	if got := effectiveSettingValueForTestV0(settings, envCodexGoalTimeoutMSV0); got != "12000" {

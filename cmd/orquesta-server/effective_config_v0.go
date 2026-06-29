@@ -169,7 +169,7 @@ func serverIdleSelfImprovementGoalFirstSettingV0(config orquestaserver.ConfigV0)
 		strconv.FormatBool(config.IdleSelfImprovementGoalFirst),
 	)
 	if strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementGoalFirstV0)) == "" &&
-		strings.TrimSpace(codexGoalBackendFromEnvV0()) != "" {
+		codexGoalBackendOperationalFromEnvV0() {
 		setting.Source = "derived_from_codex_goal_backend"
 	}
 	return setting
@@ -177,7 +177,7 @@ func serverIdleSelfImprovementGoalFirstSettingV0(config orquestaserver.ConfigV0)
 
 func serverEffectiveConfigDiagnosticsFromEnvV0() []orquestaserver.ServerDiagnosticV0 {
 	diagnostics := []orquestaserver.ServerDiagnosticV0{}
-	if strings.TrimSpace(codexGoalBackendFromEnvV0()) == "" &&
+	if !codexGoalBackendOperationalFromEnvV0() &&
 		!boolEnvOrDefaultV0(envExternalWorkLegacyDirectorLoopV0, false) {
 		diagnostics = append(diagnostics, orquestaserver.ServerDiagnosticV0{
 			Code:    orquestamcp.MCPExternalWorkRunGoalBackendRequiredV0,
@@ -189,7 +189,7 @@ func serverEffectiveConfigDiagnosticsFromEnvV0() []orquestaserver.ServerDiagnost
 		})
 	}
 	if strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementGoalFirstV0)) == "" &&
-		strings.TrimSpace(codexGoalBackendFromEnvV0()) != "" {
+		codexGoalBackendOperationalFromEnvV0() {
 		diagnostics = append(diagnostics, orquestaserver.ServerDiagnosticV0{
 			Code:         "idle_self_improvement_goal_first_derived",
 			Scope:        "autoprogramming",

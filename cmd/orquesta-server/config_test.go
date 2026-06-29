@@ -120,7 +120,7 @@ func TestServerConfigFromEnvV0ExponeAutomejoraGoalFirstOptInV0(t *testing.T) {
 func TestServerConfigFromEnvV0DerivaAutomejoraGoalFirstDeBackendCodexGoalV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "")
-	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0)
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
@@ -141,7 +141,7 @@ func TestServerConfigFromEnvV0DerivaAutomejoraGoalFirstDeBackendCodexGoalV0(t *t
 func TestServerConfigFromEnvV0GoalFirstExplicitoFalseGanaABackendCodexGoalV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "false")
-	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0)
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {

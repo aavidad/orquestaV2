@@ -70,6 +70,23 @@ cleanup() {
     fi
     wait "$server_pid" >/dev/null 2>&1 || true
   fi
+  local tmux_owner="$runtime_dir/goal-srv/owner.json"
+  if [[ -f "$tmux_owner" ]] && command -v python3 >/dev/null 2>&1 && command -v tmux >/dev/null 2>&1; then
+    local tmux_session
+    tmux_session="$(python3 - "$tmux_owner" <<'PY' 2>/dev/null || true
+import json, sys
+with open(sys.argv[1], "r", encoding="utf-8") as fh:
+    data = json.load(fh)
+session = str(data.get("session_name", "")).strip()
+owner = str(data.get("owner_ref", "")).strip()
+if owner == "orquesta-codex-goal-app-server-tmux-v0" and session.startswith("orquesta-goal-"):
+    print(session)
+PY
+)"
+    if [[ -n "$tmux_session" ]]; then
+      tmux kill-session -t "$tmux_session" >/dev/null 2>&1 || true
+    fi
+  fi
   smoke_temp_root_cleanup "$smoke_root" "$keep_dir"
 }
 
