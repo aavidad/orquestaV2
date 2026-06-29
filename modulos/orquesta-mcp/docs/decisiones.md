@@ -141,14 +141,19 @@ definido sin arrancar el flujo de nueva app ni un director LLM inicial.
 Alternativas: reutilizar `/api/v0/apps/director`; llamar a `request_change`
 despues de crear el run manualmente; crear un endpoint OPES especifico. Se
 descartan porque mezclan responsabilidades o acoplan Orquesta a una app.
-Impacto: MCP delega en `orquesta-external-work-run`, queda opt-in por executor
-inyectado y publica `POST /api/v0/external-work/run`. Desde el corte
-Goal-first, el resultado declara `route_policy=legacy_director_loop` y
-`director_execution_mode=legacy_director_loop`: no crea `GoalWorkStateV0` ni
-arranca Codex Goal hasta que exista el camino external-work Goal-first.
+Impacto historico: MCP delega en `orquesta-external-work-run`, queda opt-in por
+executor inyectado y publica `POST /api/v0/external-work/run`.
+
+Actualizacion 2026-06-29: la parte que declaraba
+`route_policy=legacy_director_loop` como salida normal queda supersedida. El
+contrato vigente es Goal-first para trabajo externo nuevo: con backend Goal
+completo puede crear `GoalWorkStateV0`, lanzar Goal por adaptador opt-in y
+devolver `goal_ref`; sin backend Goal completo devuelve error operativo y no
+degrada a legacy. El loop historico solo queda como compatibilidad explicita
+con `director_execution_mode=legacy_director_loop` y composicion opt-in.
 Contratos afectados: mcp.tool.orquesta.external_work.run.v0;
 rest.bridge.orquesta.external_work.run.v0; StartExternalWorkRunV0.
-Estado: aceptada localmente
+Estado: aceptada localmente; salida normal supersedida por corte Goal-first
 ```
 
 ```text

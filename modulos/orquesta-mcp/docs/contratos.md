@@ -136,15 +136,19 @@ Invariantes:
   - Sin backend Goal completo no degrada automaticamente a legacy.
   - Legacy requiere composicion opt-in y
     `director_execution_mode=legacy_director_loop`.
-  - No conoce OPES, DB, runtime, filesystem ni proveedor concreto.
-  - No crea GoalWorkStateV0 ni arranca Codex Goal.
-  - Crea run operativo y encola para el loop historico por puertos inyectados.
+  - Con backend Goal completo, la composicion puede crear `GoalWorkStateV0`,
+    lanzar Goal por adaptador opt-in y devolver `goal_ref`.
+  - En ausencia de backend Goal completo, devuelve error operativo
+    `external_work_goal_backend_required`; no cae al loop historico.
+  - La rama legacy explicita crea run operativo y encola para el loop historico
+    por puertos inyectados.
   - No conoce OPES, DB, runtime, filesystem, proveedor ni credenciales.
   - El bridge HTTP cancela el contexto del executor y devuelve `504` JSON con
     `external_work_run_timeout` si el puerto no responde dentro de la ventana
     publica; no deja al cliente esperando sin cuerpo.
 Pruebas de contrato:
-  - Descriptor y resultado declaran `route_policy=legacy_director_loop`.
+  - Descriptor declara Goal-first como ruta normal y legacy solo como opt-in.
+  - Resultado fake puede declarar `route_policy=goal_first` con `goal_ref`.
   - HTTP delega en executor fake y preserva errores publicos.
   - HTTP devuelve timeout JSON publico y cancela el executor si queda bloqueado.
   - Transporte MCP queda opt-in y devuelve unbound si falta puerto.
