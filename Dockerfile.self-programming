@@ -14,13 +14,15 @@ RUN apt-get update \
     && npm install -g "@openai/codex@${CODEX_NPM_VERSION}" \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 orquesta \
-    && useradd --system --uid 10001 --gid 10001 --home-dir /home/orquesta --create-home --shell /bin/bash orquesta \
-    && install -d -o 10001 -g 10001 /home/orquesta/.codex \
+    && useradd --system --uid 10001 --gid 10001 --home-dir /workspace/home --create-home --shell /bin/bash orquesta \
+    && install -d -o 10001 -g 10001 /workspace/home /workspace/codex-home /workspace/cache/go /workspace/go/pkg/mod \
     && git config --system --add safe.directory /workspace/project
 COPY --from=golang:1.25-bookworm /usr/local/go /usr/local/go
 COPY --from=builder /out/orquesta-server /usr/local/bin/orquesta-server
-ENV HOME=/home/orquesta \
-    CODEX_HOME=/home/orquesta/.codex \
+ENV HOME=/workspace/home \
+    CODEX_HOME=/workspace/codex-home \
+    GOCACHE=/workspace/cache/go \
+    GOMODCACHE=/workspace/go/pkg/mod \
     PATH=/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/orquesta-server"]
