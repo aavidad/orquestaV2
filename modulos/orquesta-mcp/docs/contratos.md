@@ -1454,10 +1454,11 @@ Campos:
     goals?: lista canonica de estados Goal-first por lote; cuando hay mas de
       un goal, `goal` se omite y `run_ref` superior identifica el primer
       `goals[i].run_ref` solo por compatibilidad, no un run agregado
-    goal_specs: contratos `GoalWorkSpecV0` opcionales cuando la composicion
-      clasifica el trabajo como `goal_ready`; sin backend preparan el handoff a
-      Goal sin materializar ni encolar un run legacy, y con backend quedan
-      devueltos con `run_ref` del run contenedor o de cada goal derivado
+    goal_spec_summaries?: resumenes publicos de contratos Goal-first cuando la
+      composicion clasifica el trabajo como `goal_ready`; incluyen refs, hash
+      estable y contadores, pero no publican objective, write-set, contexto ni
+      comandos de tests completos. El handoff interno de la composicion puede
+      conservar `GoalWorkSpecV0`.
     continue: request compacta opcional para supervision legacy posterior con
       `run_ref` explicito
   output_error:
@@ -1476,7 +1477,8 @@ Pruebas de contrato:
   - Descriptor compacto y saneado.
   - Registro MCP publica el tool.
   - Transporte bound invoca executor fake y devuelve resultado `ok`.
-  - Descriptor y transporte publican `goal_specs` como salida opcional.
+  - Descriptor y transporte publican `goal_spec_summaries` como salida opcional
+    y no filtran specs Goal completos.
   - Descriptor y HTTP publican `goals[]` tipado para batch goal-first.
   - Transporte sin executor devuelve `mcp_transport_tool_unbound`.
   - HTTP `POST /api/v0/autoprogramming/prepare-run` delega en executor fake.

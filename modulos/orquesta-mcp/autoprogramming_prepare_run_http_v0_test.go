@@ -49,14 +49,23 @@ func TestMCPAutoprogrammingPrepareRunHTTPHandlerV0DelegaEnExecutor(t *testing.T)
 	if executor.input.RequestID != "request-autoprogramming-001" {
 		t.Fatalf("input=%+v", executor.input)
 	}
+	raw := rec.Body.String()
+	if strings.Contains(raw, `"goal_specs"`) ||
+		strings.Contains(raw, `"objective"`) ||
+		strings.Contains(raw, `"write_set"`) ||
+		strings.Contains(raw, "Preparar goal desde prepare-run.") ||
+		strings.Contains(raw, "modulos/orquesta-mcp") {
+		t.Fatalf("respuesta publica filtra GoalWorkSpec completo: %s", raw)
+	}
 	var result MCPAutoprogrammingPrepareRunToolResultV0
-	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(strings.NewReader(raw)).Decode(&result); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if result.RunRef != "run-autoprogramming-001" ||
 		len(result.WaitAgentRefs) != 1 ||
-		len(result.GoalSpecs) != 1 ||
-		result.GoalSpecs[0].RunRef != "run-autoprogramming-001" {
+		len(result.GoalSpecSummaries) != 1 ||
+		result.GoalSpecSummaries[0].RunRef != "run-autoprogramming-001" ||
+		result.GoalSpecSummaries[0].SpecHash == "" {
 		t.Fatalf("result=%+v", result)
 	}
 }

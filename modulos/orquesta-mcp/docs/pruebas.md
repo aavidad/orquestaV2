@@ -526,8 +526,8 @@ go test -count=1 ./modulos/orquesta-mcp \
 
 Evidencia esperada: el registro MCP publica
 `orquesta.autoprogramming.prepare_run.v0` como tool opt-in y salida opcional
-`goal_specs`; sin executor devuelve `mcp_transport_tool_unbound`, con executor
-inyectado invoca el puerto fake, y el bridge HTTP
+`goal_spec_summaries`; sin executor devuelve `mcp_transport_tool_unbound`, con
+executor inyectado invoca el puerto fake sin filtrar specs completas, y el bridge HTTP
 `POST /api/v0/autoprogramming/prepare-run` delega sin conocer Codex, OPES,
 runtime, DB ni filesystem productivo.
 
@@ -777,6 +777,6 @@ go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPAutoprogrammingSelfImprovem
 Evidencia esperada: automejora con `auto_prepare_run` conserva
 `supervise_prepared_run_by_run_ref` solo cuando `prepare-run` devuelve rama
 legacy con `run_ref`; si devuelve `goal`, recomienda
-`observe_autoprogramming_goal`; si devuelve `goal_specs[]`, recomienda
-`handoff_goal_specs_to_goal_backend`. No relanza supervisor legacy para
-goal-first.
+`observe_autoprogramming_goal`; si prepara specs internas, recomienda
+`handoff_goal_first_specs_to_internal_backend`. No relanza supervisor legacy
+para goal-first.

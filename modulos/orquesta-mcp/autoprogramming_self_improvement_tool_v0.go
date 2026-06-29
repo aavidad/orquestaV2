@@ -172,7 +172,7 @@ func selfImprovementPreparedRunNextActionsMCPV0(
 		return []string{"observe_autoprogramming_goal"}
 	}
 	if len(prepared.GoalSpecs) > 0 {
-		return []string{"handoff_goal_specs_to_goal_backend"}
+		return []string{"handoff_goal_first_specs_to_internal_backend"}
 	}
 	if strings.TrimSpace(prepared.RunRef) != "" {
 		return []string{"supervise_prepared_run_by_run_ref"}
