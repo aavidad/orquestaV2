@@ -17,7 +17,7 @@ func promptACKTestReceiptsJSONV0(commands []string) string {
 	receipts := make([]promptReceiptV0, 0, len(compact))
 	for index, command := range compact {
 		receipts = append(receipts, promptReceiptV0{
-			SchemaVersion:  CodexRequiredTestReceiptSchemaVersionV0,
+			SchemaVersion:  OrquestaRequiredTestReceiptSchemaVersionV0,
 			Command:        command,
 			Status:         "passed",
 			ExitCode:       0,

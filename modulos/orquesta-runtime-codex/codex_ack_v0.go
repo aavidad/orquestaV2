@@ -6,7 +6,9 @@ import (
 )
 
 const CodexAgentAckSchemaVersionV0 = "codex_agent_ack.v0"
+const OrquestaAgentAckSchemaVersionV0 = "orquesta_agent_ack.v0"
 const CodexRequiredTestReceiptSchemaVersionV0 = "codex_required_test_receipt.v0"
+const OrquestaRequiredTestReceiptSchemaVersionV0 = "orquesta_required_test_receipt.v0"
 
 type CodexAgentAckV0 struct {
 	SchemaVersion string                       `json:"schema_version"`
@@ -79,7 +81,7 @@ func ReadCodexAgentAckFileV0(path string) (CodexAgentAckV0, error) {
 }
 
 func (ack CodexAgentAckV0) ValidFor(requestID string) bool {
-	return ack.SchemaVersion == CodexAgentAckSchemaVersionV0 &&
+	return codexAgentAckSchemaVersionCompatibleV0(ack.SchemaVersion) &&
 		ack.RequestID == requestID &&
 		ack.CorrelationID != "" &&
 		ack.AckRef != "" &&

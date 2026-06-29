@@ -130,7 +130,7 @@ type codexAckValidatorV0 struct {
 }
 
 func (v *codexAckValidatorV0) validateShape(ack CodexAgentAckV0) {
-	if !codexSchemaVersionCompatibleV0(ack.SchemaVersion, CodexAgentAckSchemaVersionV0) {
+	if !codexAgentAckSchemaVersionCompatibleV0(ack.SchemaVersion) {
 		v.add(CodexConnectorAckInvalidV0, "schema_version", "schema_version_invalid")
 	}
 	for field, value := range map[string]string{
