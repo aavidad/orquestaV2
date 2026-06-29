@@ -75,6 +75,39 @@ func TestNuevaAppIntakeGuidedHTTPHandlerV0POSTAplicaAccionSobreSesion(t *testing
 	}
 }
 
+func TestNuevaAppIntakeGuidedHTTPHandlerV0POSTAplicaRespuestaLibreAPreguntaPendiente(t *testing.T) {
+	session := NewWebNuevaAppIntakeSessionV0("session-http-answer", "es", "Portal", "Publicar viviendas")
+	if len(session.PendingQuestions) != 1 || session.PendingQuestions[0] != "tipo_app" {
+		t.Fatalf("sesion inicial pending=%+v", session.PendingQuestions)
+	}
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(WebNuevaAppIntakeGuidedRequestV0{
+		Session: &session,
+		Answer:  "web",
+	}); err != nil {
+		t.Fatalf("encode request: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/apps/intake/guided-turn", &body)
+	req.Header.Set("Content-Type", "application/json")
+
+	NewNuevaAppIntakeGuidedHTTPHandlerV0().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var out WebNuevaAppIntakeGuidedResponseV0
+	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Session.Form.TipoApp != "web" ||
+		len(out.Session.PendingQuestions) != 0 ||
+		out.Session.Estado != WebNuevaAppIntakeEstadoLista {
+		t.Fatalf("respuesta libre no aplicada: %+v", out.Session)
+	}
+}
+
 func TestNuevaAppIntakeGuidedHTTPHandlerV0UsaAsistenteInyectadoV0(t *testing.T) {
 	assistant := fakeNuevaAppIntakeAssistantV0{
 		turn: WebNuevaAppIntakeGuidedTurnV0{

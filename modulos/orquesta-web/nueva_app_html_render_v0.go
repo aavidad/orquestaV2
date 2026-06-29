@@ -134,6 +134,9 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.guided_need",
 		"nueva_app.wizard.guided_analyze",
 		"nueva_app.wizard.guided_followups",
+		"nueva_app.wizard.guided_answer",
+		"nueva_app.wizard.guided_answer_placeholder",
+		"nueva_app.wizard.guided_answer_send",
 		"nueva_app.wizard.guided_mobile_both",
 		"nueva_app.wizard.guided_mobile_ios",
 		"nueva_app.wizard.guided_mobile_android",
@@ -153,6 +156,7 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.guided_msg_architecture",
 		"nueva_app.wizard.guided_msg_quality",
 		"nueva_app.wizard.guided_msg_review",
+		"nueva_app.wizard.guided_msg_answer",
 		"nueva_app.wizard.presets",
 		"nueva_app.wizard.preset.webapp",
 		"nueva_app.wizard.preset.api",
@@ -236,6 +240,7 @@ var nuevaAppHTMLHelpKeysV0 = []string{
 	"step.revisar",
 	"guided.analyze",
 	"guided.review",
+	"guided.answer",
 	"guided.mobile_both",
 	"guided.mobile_ios",
 	"guided.mobile_android",
@@ -681,7 +686,8 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       data-guided-msg-maps="{{index .HTML "nueva_app.wizard.guided_msg_maps"}}"
       data-guided-msg-architecture="{{index .HTML "nueva_app.wizard.guided_msg_architecture"}}"
       data-guided-msg-quality="{{index .HTML "nueva_app.wizard.guided_msg_quality"}}"
-      data-guided-msg-review="{{index .HTML "nueva_app.wizard.guided_msg_review"}}">
+      data-guided-msg-review="{{index .HTML "nueva_app.wizard.guided_msg_review"}}"
+      data-guided-msg-answer="{{index .HTML "nueva_app.wizard.guided_msg_answer"}}">
       <div class="steps" role="tablist" aria-label="{{index .HTML "nueva_app.wizard.steps_label"}}">
         <button class="step-tab active" type="button" role="tab" id="nueva-app-step-tab-0" aria-controls="nueva-app-step-panel-0" aria-selected="true" data-goto-step="0" data-help="{{index .Help "step.idea"}}">{{index .HTML "nueva_app.wizard.step.idea"}}</button>
         <button class="step-tab" type="button" role="tab" id="nueva-app-step-tab-1" aria-controls="nueva-app-step-panel-1" aria-selected="false" data-goto-step="1" data-help="{{index .Help "step.tipo"}}">{{index .HTML "nueva_app.wizard.step.tipo"}}</button>
@@ -700,6 +706,8 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
             <div class="guided-thread" id="guided-thread" aria-live="polite"></div>
             <div id="guided-followups" hidden>
               <p class="expert-row-title">{{index .HTML "nueva_app.wizard.guided_followups"}}</p>
+              <label data-help="{{index .Help "guided.answer"}}"><span id="guided-active-question">{{index .HTML "nueva_app.wizard.guided_answer"}}</span><textarea id="guided-answer" placeholder="{{index .HTML "nueva_app.wizard.guided_answer_placeholder"}}"></textarea></label>
+              <div class="guided-actions"><button class="primary" type="button" data-guided-answer>{{index .HTML "nueva_app.wizard.guided_answer_send"}}</button></div>
               <div class="guided-actions">
                 <button type="button" data-guided-action="mobile_both" data-help="{{index .Help "guided.mobile_both"}}">{{index .HTML "nueva_app.wizard.guided_mobile_both"}}</button>
                 <button type="button" data-guided-action="mobile_ios" data-help="{{index .Help "guided.mobile_ios"}}">{{index .HTML "nueva_app.wizard.guided_mobile_ios"}}</button>
@@ -1271,6 +1279,28 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       node.textContent=message;
       thread.appendChild(node);
     }
+    function guidedActiveQuestionField(){
+      if(guidedSession&&Array.isArray(guidedSession.pending_questions)&&guidedSession.pending_questions.length){
+        return String(guidedSession.pending_questions[0]||'');
+      }
+      return '';
+    }
+    function labelForField(name){
+      const el=field(name);
+      if(el&&el.dataset&&el.dataset.label)return el.dataset.label;
+      if(fieldList(el)){
+        for(let index=0;index<el.length;index++){
+          if(el[index]&&el[index].dataset&&el[index].dataset.label)return el[index].dataset.label;
+        }
+      }
+      return name;
+    }
+    function updateGuidedQuestion(){
+      const target=document.getElementById('guided-active-question');
+      if(!target)return;
+      const active=guidedActiveQuestionField();
+      target.textContent=active?labelForField(active):(wizard.dataset.guidedMsgReview||target.textContent);
+    }
     function hasOwn(obj,key){return Object.prototype.hasOwnProperty.call(obj||{},key);}
     function setMaybe(name,value){
       if(value===undefined||value===null)return;
@@ -1337,7 +1367,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
         const response=await fetch('/api/v0/apps/intake/guided-turn',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body)});
         if(!response.ok)return null;
         const out=await response.json();
-        if(out&&out.session)guidedSession=out.session;
+        if(out&&out.session){guidedSession=out.session;updateGuidedQuestion();}
         return out;
       }catch(_){return null;}
     }
@@ -1349,6 +1379,18 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       guidedLog(message);
       renderSummary();
       return true;
+    }
+    async function submitGuidedAnswer(){
+      const input=document.getElementById('guided-answer');
+      const answer=input?String(input.value||'').trim():'';
+      if(!answer)return;
+      const answerField=guidedActiveQuestionField();
+      if(await applyServerGuided({answer_field:answerField,answer:answer},wizard.dataset.guidedMsgAnswer)){
+        input.value='';
+        updateGuidedQuestion();
+        return;
+      }
+      if(answerField){setValue(answerField,answer);guidedLog(wizard.dataset.guidedMsgAnswer);input.value='';renderSummary();}
     }
     function titleFromNeed(text){
       const lower=text.toLowerCase();
@@ -1417,6 +1459,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       if(/login|auth|autenticaci[oó]n|permisos|roles|sso/.test(lower)){configureIntegration('auth','autenticacion','Gestionar acceso, permisos, roles o SSO sin acoplar secretos al nucleo.','sso u oauth gestionado');}
       if(/notificaci[oó]n|notificaciones|notification|notifications|alerta|alertas/.test(lower)){configureIntegration('notifications','notificaciones','Enviar avisos o alertas por canales autorizados.','proveedor gestionado');}
       document.getElementById('guided-followups').hidden=false;
+      updateGuidedQuestion();
       guidedLog(wizard.dataset.guidedMsgAnalyzed);
       renderSummary();
     }
@@ -1457,6 +1500,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     if(errors){errors.addEventListener('click',event=>{const target=event.target.closest('[data-error-target]');if(!target)return;const el=field(target.dataset.errorTarget);if(el)focusField(el);});}
     const guided=document.getElementById('guided-assistant');
     if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-guided-action]');if(target)guidedAction(target.dataset.guidedAction);});}
+    if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-guided-answer]');if(target)submitGuidedAnswer();});}
     wizard.querySelectorAll('[data-preset]').forEach(node=>node.addEventListener('click',()=>preset(node.dataset.preset)));
     const goalButton=document.querySelector('[data-goal-observe]');
     if(goalButton)goalButton.addEventListener('click',()=>observeGoal(goalButton));

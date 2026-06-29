@@ -22,6 +22,8 @@ type WebNuevaAppIntakeGuidedRequestV0 struct {
 	Need          string                      `json:"need,omitempty"`
 	ActionID      string                      `json:"action_id,omitempty"`
 	ActionIDs     []string                    `json:"action_ids,omitempty"`
+	AnswerField   string                      `json:"answer_field,omitempty"`
+	Answer        string                      `json:"answer,omitempty"`
 	Session       *WebNuevaAppIntakeSessionV0 `json:"session,omitempty"`
 }
 
@@ -109,6 +111,7 @@ func (handler NuevaAppIntakeGuidedHTTPHandlerV0) NewResponseV0(
 	if len(turn.Decisions) > 0 {
 		session = ApplyWebNuevaAppIntakeGuidedTurnV0(session, turn)
 	}
+	session = ApplyWebNuevaAppIntakeGuidedAnswerV0(session, request.AnswerField, request.Answer)
 	for _, actionID := range append([]string{request.ActionID}, request.ActionIDs...) {
 		session = ApplyWebNuevaAppIntakeGuidedActionV0(session, actionID)
 	}

@@ -59,6 +59,53 @@ func ApplyWebNuevaAppIntakeGuidedActionV0(
 	return session
 }
 
+func ApplyWebNuevaAppIntakeGuidedAnswerV0(
+	session WebNuevaAppIntakeSessionV0,
+	field string,
+	answer string,
+) WebNuevaAppIntakeSessionV0 {
+	answer = trimV0(answer)
+	if answer == "" {
+		return session
+	}
+	field = trimV0(field)
+	if field == "" && len(session.PendingQuestions) > 0 {
+		field = session.PendingQuestions[0]
+	}
+	if field == "" {
+		return session
+	}
+	return session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{
+		Field:  field,
+		Value:  answer,
+		Values: splitGuidedAnswerValuesV0(field, answer),
+	})
+}
+
+func splitGuidedAnswerValuesV0(field string, answer string) []string {
+	switch field {
+	case "usuarios_objetivo", "plataformas", "restricciones":
+		return splitCSVTextV0(answer)
+	default:
+		return nil
+	}
+}
+
+func splitCSVTextV0(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		value := trimV0(part)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	if out == nil {
+		return []string{}
+	}
+	return out
+}
+
 func guidedInitialDecisionsV0(need string) []WebNuevaAppIntakeDecisionV0 {
 	if trimV0(need) == "" {
 		return []WebNuevaAppIntakeDecisionV0{}
