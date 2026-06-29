@@ -426,7 +426,7 @@ func TestNuevaAppHTMLHandlerV0POSTInvalidoRenderizaErrorPublico(t *testing.T) {
 	if client.calls != 1 {
 		t.Fatalf("calls=%d", client.calls)
 	}
-	for _, want := range []string{"Necesita correcciones", "app_spec_invalida", "La solicitud de app no es valida."} {
+	for _, want := range []string{"Necesita correcciones", "app_spec_invalida", "nombre", "campo obligatorio"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("POST invalido no contiene %q\n%s", want, body)
 		}

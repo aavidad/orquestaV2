@@ -987,7 +987,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
         {{if .AcceptanceCriteria}}<h3>{{index $.HTML "nueva_app.goal_preview.acceptance"}}</h3><ul>{{range .AcceptanceCriteria}}<li>{{.}}</li>{{end}}</ul>{{end}}
         {{if .ArtifactContracts}}<h3>{{index $.HTML "nueva_app.goal_preview.artifacts"}}</h3><ul>{{range .ArtifactContracts}}<li><code>{{.ArtifactRef}}</code> {{.ArtifactType}}</li>{{end}}</ul>{{end}}
       </section>{{end}}
-      {{if .Page.ViewModel.ErroresPublicos}}<section class="panel issue"><h2>{{index .HTML "nueva_app.html.errores_publicos"}}</h2><ul>{{range .Page.ViewModel.ErroresPublicos}}<li><code>{{.Code}}</code> {{index $.Page.Textos.ErroresPublicos .Code}}</li>{{end}}</ul></section>{{end}}
+      {{if .Page.ViewModel.ErroresPublicos}}<section class="panel issue"><h2>{{index .HTML "nueva_app.html.errores_publicos"}}</h2><ul>{{range .Page.ViewModel.ErroresPublicos}}<li><code>{{.Code}}</code>{{if .Field}} <span>{{.Field}}</span>{{end}} {{if .Message}}{{.Message}}{{else}}{{index $.Page.Textos.ErroresPublicos .Code}}{{end}}</li>{{end}}</ul></section>{{end}}
       {{if .Page.ViewModel.ResumenApp.Nombre}}<section class="panel"><h2>{{index .HTML "nueva_app.html.resumen"}}</h2><p>{{.Page.ViewModel.ResumenApp.Nombre}} · {{.Page.ViewModel.ResumenApp.TipoApp}}</p><p>{{.Page.ViewModel.ResumenApp.Objetivo}}</p></section>{{end}}
       <section class="panel"><h2>{{.Page.Textos.BacklogPreview.Titulo}}</h2>{{if .Page.ViewModel.BacklogPreview.TotalMicrotareas}}<ol>{{range .Page.ViewModel.BacklogPreview.Microtareas}}<li><strong>{{.Key}}</strong> {{.Titulo}} <code>{{.ModuloFrontera}}</code></li>{{end}}</ol>{{else}}<p>{{index .HTML "nueva_app.html.backlog_vacio"}}</p>{{end}}</section>
     </aside>
