@@ -12,7 +12,11 @@ import (
 )
 
 func TestServerCodexGoalBackendFromEnvV0TmuxPreflightOKV0(t *testing.T) {
-	root := t.TempDir()
+	root, err := os.MkdirTemp("/tmp", "og")
+	if err != nil {
+		t.Fatalf("mkdir temp root: %v", err)
+	}
+	defer os.RemoveAll(root)
 	binDir := filepath.Join(root, "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil {
 		t.Fatalf("mkdir bin: %v", err)
@@ -163,6 +167,69 @@ exit 2
 	}
 }
 
+func TestCodexAppServerTmuxBackendV0ReparaSocketExistenteAntesDeReusarSesionV0(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	fakeTmux := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte(`#!/bin/sh
+case "${1:-}" in
+  has-session)
+    exit 0
+    ;;
+  kill-session|new-session)
+    echo "no debe reiniciar sesion" >&2
+    exit 2
+    ;;
+esac
+exit 2
+`), 0o700); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	socketDir := filepath.Join(root, "runtime", codexAppServerTmuxDirV0)
+	socketPath := filepath.Join(socketDir, "g-existing.sock")
+	if err := os.MkdirAll(socketDir, 0o777); err != nil {
+		t.Fatalf("mkdir socket dir: %v", err)
+	}
+	if err := os.WriteFile(socketPath, []byte("fake socket"), 0o666); err != nil {
+		t.Fatalf("write socket: %v", err)
+	}
+	if err := os.Chmod(socketPath, 0o666); err != nil {
+		t.Fatalf("chmod socket: %v", err)
+	}
+	backend := serverCodexAppServerTmuxBackendV0{
+		PathEnv:     binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		SocketPath:  socketPath,
+		SessionName: "orquesta-goal-existing",
+		Timeout:     time.Second,
+	}
+	if err := backend.writeTmuxOwnerMarkerV0(); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	if err := os.Chmod(socketDir, 0o777); err != nil {
+		t.Fatalf("chmod socket dir: %v", err)
+	}
+	if err := backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{}); err != nil {
+		t.Fatalf("EnsureV0: %v", err)
+	}
+	socketInfo, err := os.Stat(socketPath)
+	if err != nil {
+		t.Fatalf("stat socket: %v", err)
+	}
+	if got := socketInfo.Mode().Perm(); got != 0o600 {
+		t.Fatalf("socket mode=%#o", got)
+	}
+	dirInfo, err := os.Stat(socketDir)
+	if err != nil {
+		t.Fatalf("stat socket dir: %v", err)
+	}
+	if got := dirInfo.Mode().Perm(); got != 0o700 {
+		t.Fatalf("socket dir mode=%#o", got)
+	}
+}
+
 func TestCodexAppServerTmuxSocketPathV0SeMantieneCortoV0(t *testing.T) {
 	config := orquestaserver.NormalizeConfigV0(orquestaserver.ConfigV0{
 		RuntimeWorkDir: "/home/alberto/Trabajo/orquesta/.orquesta-runtime-selfrepair-19038",
@@ -177,6 +244,17 @@ func TestCodexAppServerTmuxSocketPathV0SeMantieneCortoV0(t *testing.T) {
 	}
 	if !strings.Contains(socketPath, string(os.PathSeparator)+codexAppServerTmuxDirV0+string(os.PathSeparator)+"g-") {
 		t.Fatalf("socket path inesperado: %s", socketPath)
+	}
+}
+
+func TestCodexAppServerTmuxSocketPathV0RechazaRutaDemasiadoLargaV0(t *testing.T) {
+	config := orquestaserver.NormalizeConfigV0(orquestaserver.ConfigV0{
+		RuntimeWorkDir: "/" + strings.Repeat("runtime-largo-", 12),
+		ProjectWorkDir: "/workspace/project",
+	})
+	socketPath, err := codexAppServerTmuxSocketPathV0(config)
+	if err == nil || !strings.Contains(err.Error(), "codex_app_server_tmux_socket_path_too_long") {
+		t.Fatalf("socketPath=%q err=%v", socketPath, err)
 	}
 }
 
