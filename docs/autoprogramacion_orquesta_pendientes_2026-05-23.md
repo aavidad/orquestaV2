@@ -215,7 +215,8 @@ inventa evidencias y el cierre queda bloqueado por el validador. Se anade smoke
 real opt-in `scripts/smoke_goal_first_app_server_real.sh` con runbook
 `docs/runbooks/smoke_goal_first_app_server_real_2026-06-25.md`. Nota posterior
 2026-06-29: `app_server_tmux` es el backend operativo normal; `app_server_proxy`
-queda como diagnostico opt-in y no como ruta principal.
+queda como antecedente historico/no operativo para cierre: no cuenta como
+backend valido del smoke vigente aunque exista configuracion diagnostica.
 Avance local adicional 2026-06-26: se anade backend opt-in
 `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` para usar
 `codex app-server --listen unix://<socket>` dentro de una sesion `tmux` cuando

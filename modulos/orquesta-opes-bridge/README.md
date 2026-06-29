@@ -43,6 +43,7 @@ Dry-run:
 
 ```sh
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_DRY_RUN=1 \
 ORQUESTA_OPES_BRIDGE_JOB_TYPE=plan_temario \
 go run ./cmd/orquesta-server opes-drain-once
@@ -53,11 +54,18 @@ Ejecucion real:
 ```sh
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
 ORQUESTA_BASE_URL=http://127.0.0.1:<puerto-orquesta> \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_JOB_TYPE=plan_temario \
 go run ./cmd/orquesta-server opes-drain-once
 ```
+
+La ejecucion con efectos exige OPES temporal confirmado y Orquesta temporal en
+goal-first con backend `app_server_tmux`. Loopback no demuestra por si solo que
+la instancia sea temporal; en destinos no locales anade evidencia/scope de
+aislamiento antes de confirmar.
 
 Para abrir o continuar un temario distinto sin que trabajos anteriores ocupen
 la cola, acota por programa/correlacion ademas del tipo o secuencia:
@@ -75,6 +83,8 @@ Modo residente por pases:
 
 ```sh
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_ENABLED=1 \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
@@ -94,6 +104,8 @@ Modo autonomo acotado para cerrar temario:
 ```sh
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
 ORQUESTA_BASE_URL=http://127.0.0.1:<puerto-orquesta> \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=3 \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id> \
