@@ -138,8 +138,8 @@ Configuracion externa relacionada:
   WebSocket UDS y `CODEX_HOME` aislado con `auth.json`/`config.toml`
   proyectados desde el CODEX_HOME fuente. No usa `codex exec` como sustituto, no
   arranca backend si no esta configurado y no mete Codex en el modulo servidor.
-  `app_server_proxy` queda como compatibilidad diagnostica no recomendada para
-  el camino goal-first normal.
+  `app_server_proxy` queda solo como diagnostico breakglass explicito y no es
+  camino goal-first normal.
   En observaciones terminales lee `thread/read` y fusiona el marcador
   `ORQUESTA_GOAL_RESULT_V0` o el archivo durable
   `orquesta_goal_result_v0.json` como refs opacas de artefactos, tests,

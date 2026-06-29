@@ -394,7 +394,7 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 	envCodexGoalBackendV0: {
 		Scope:       "codex_goal",
 		Label:       "Backend Codex Goal",
-		Description: "Backend opt-in para lanzar y observar Codex Goal desde la composicion: app_server_tmux es la ruta normal; app_server_proxy queda como compatibilidad diagnostica con daemon/socket compatible.",
+		Description: "Backend opt-in para lanzar y observar Codex Goal desde la composicion: app_server_tmux es la ruta normal; app_server_proxy solo se permite como diagnostico breakglass explicito.",
 	},
 	envAllowAppServerProxyDiagnosticV0: {
 		Scope:       "codex_goal",

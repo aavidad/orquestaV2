@@ -43,8 +43,8 @@ La composicion `cmd/orquesta-server` aporta implementacion opt-in normal con
 `codex exec`, y mantiene el transporte fuera de este modulo. `app_server_tmux`
 lanza `codex app-server --listen unix://<socket>` dentro de una sesion `tmux`
 opaca y habla WebSocket sobre el Unix socket privado. `app_server_proxy` queda
-como compatibilidad diagnostica no recomendada para self-programming. Para no
-competir con las sqlite de la sesion Codex principal, la composicion proyecta
+solo como diagnostico breakglass explicito, no como ruta de self-programming.
+Para no competir con las sqlite de la sesion Codex principal, la composicion proyecta
 `auth.json` y `config.toml` a un `CODEX_HOME` aislado bajo el runtime del
 app-server. Si el transporte no esta disponible, la
 composicion puede devolver `IssueCode` compacto; el launcher neutral lo conserva
