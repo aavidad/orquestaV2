@@ -42,7 +42,7 @@ El script compila `cmd/orquesta-server`, arranca un servidor temporal, llama a
 `ORQUESTA_LEGACY_DIRECTOR_LOOP_SMOKE_CONFIRM=1`, espera cierre causal, ejecuta
 `go test -count=1 ./...` en la app resultante y arranca Bolsa para validar
 `/healthz` y `/api/portal`. No cubre la rama `goal_ready`, donde `prepare-run`
-debe devolver `goal_specs[]` sin `run_ref` legacy.
+debe devolver `goal_spec_summaries[]` sin `run_ref` legacy.
 
 ## Variables utiles
 

@@ -44,9 +44,9 @@ nucleo ni en runtime local:
    progreso compacto, diagnosticos y acciones seguras desde
    `orquesta.autoprogramming.status.v0`.
 4. `autoprogramacion preparar` crea una run continuable solo en la rama legacy;
-   para trabajo `goal_ready` debe mostrar `goal_specs[]` sin `run_ref` legacy.
-   En ambos casos conserva `worktree_ref` y `branch_ref` opacas, write-set y
-   tests requeridos.
+   para trabajo `goal_ready` debe mostrar `goal_spec_summaries[]` sin `run_ref`
+   legacy. En ambos casos conserva `worktree_ref` y `branch_ref` opacas; los
+   write-set y tests completos no se publican como payload CLI/MCP.
 5. Si preparar devuelve goal/run_ref goal-first, el siguiente paso no es
    supervisar: es observar goal por `POST /api/v0/autoprogramming/goal/observe`.
    Si la CLI aun no tiene comando dedicado, documentarlo como hueco de cliente y

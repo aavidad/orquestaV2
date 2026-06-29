@@ -1961,9 +1961,10 @@ Motivo: un backend parcial con launcher sin observer, cierre o state store crea
 runs contenedoras imposibles de observar/cerrar y obliga a reabrir supervision
 legacy. El modelo vigente es que Codex Goal hace el loop y Orquesta compila,
 observa y valida por evidencias.
-Impacto: `PrepareAutoprogrammingRunV0` conserva el handoff `goal_specs[]` si no
-hay backend Goal. Si detecta backend parcial (`GoalLauncher` u `GoalObserver`
-presente sin bundle completo), devuelve issue
+Impacto: `PrepareAutoprogrammingRunV0` conserva specs completas solo como
+handoff interno si no hay backend Goal, y la superficie MCP/HTTP publica
+`goal_spec_summaries[]`. Si detecta backend parcial (`GoalLauncher` u
+`GoalObserver` presente sin bundle completo), devuelve issue
 `autoprogramming_goal_backend_incomplete` y no persiste run, no lanza goal y no
 materializa loop legacy. El lanzamiento real requiere `GoalLauncher`,
 `GoalObserver`, `GoalClosureValidator` y `GoalStateStore`.

@@ -86,7 +86,8 @@ El payload `prepare-local-auth-probe.json` debe declarar:
 
 - `prepare-run` devuelve `run_ref`, `workflow_task_refs` y, si aplica,
   `wait_agent_refs` sin exponer detalles privados en la rama legacy. En la rama
-  Goal-first devuelve `goal_specs[]` sin `run_ref` legacy ni `continue`.
+  Goal-first devuelve `goal_spec_summaries[]` sin `run_ref` legacy ni
+  `continue`; los specs completos quedan como handoff interno de composicion.
 - El pulso de `supervise` intenta arrancar o continuar solo la run acotada.
 - El estado publico muestra agente pendiente, entregado o bloqueado con razon
   reparable.

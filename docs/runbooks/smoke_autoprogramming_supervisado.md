@@ -97,8 +97,8 @@ el test focal legacy asociado.
   exige `run_ref`, `wait_agent_refs` y `continue`, y despues espera a que el
   supervisor residente del servidor tome la cola global y arranque al menos un
   agente Codex fake para ese `run_ref`. Si la request se marca `goal_ready`, el
-  smoke debe esperar `goal_specs[]` sin `run_ref` y no invocar supervisor
-  legacy.
+  smoke debe esperar `goal_spec_summaries[]` sin `run_ref` y no invocar
+  supervisor legacy.
 - Vuelve a llamar a `POST /api/v0/autoprogramming/prepare-run` con el mismo
   payload despues del arranque residente; exige respuesta aceptada,
   `run_ref` estable, `wait_agent_refs` no vacio y `continue`, para cubrir

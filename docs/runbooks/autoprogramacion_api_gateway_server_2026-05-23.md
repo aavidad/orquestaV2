@@ -144,7 +144,7 @@ El borde servidor queda alineado con los clientes revisados:
 - `prepare-run` crea runs de autoprogramacion continuables y encolables solo en
   la rama legacy con opt-in explicito
   `ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1`; cuando el trabajo es
-  `goal_ready`, devuelve `goal_specs[]` sin `run_ref` legacy ni cola.
+  `goal_ready`, devuelve `goal_spec_summaries[]` sin `run_ref` legacy ni cola.
 - `status` agrega cola, run, agentes, diagnosticos y acciones seguras para web
   y CLI sin exponer stores, runtime, proveedor, prompts ni filesystem.
 - `apps/director/goal/observe` y `autoprogramming/goal/observe` son las rutas

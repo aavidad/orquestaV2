@@ -198,9 +198,9 @@ func autoprogrammingBridgeGoalFirstLaunchIssueV0(
 	switch len(work.GoalSpecs) {
 	case 0:
 		return orquestaautoprogramming.AutoprogrammingRequestIssueV0{
-			Code:    "autoprogramming_goal_specs_missing",
-			Field:   "goal_specs",
-			Message: "goal_specs requerido para lanzamiento goal-first",
+			Code:    "autoprogramming_goal_internal_specs_missing",
+			Field:   "goal_internal_specs",
+			Message: "specs internas requeridas para lanzamiento goal-first",
 		}
 	default:
 		return orquestaautoprogramming.AutoprogrammingRequestIssueV0{}

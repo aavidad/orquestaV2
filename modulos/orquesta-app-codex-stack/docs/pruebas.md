@@ -254,9 +254,9 @@ Cobertura Go actual:
   `done`.
 - `TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalReady`
   valida que `POST /api/v0/autoprogramming/prepare-run` expone
-  `goal_specs[]` validos y sin `run_ref` legacy cuando la request declara
-  `goal_migration:goal-first` y capacidades de Goal completas; el endpoint
-  sigue sin lanzar runtime, Goal ni supervisor legacy por si mismo.
+  `goal_spec_summaries[]` validos y sin `run_ref` legacy cuando la request
+  declara `goal_migration:goal-first` y capacidades de Goal completas; el
+  endpoint sigue sin lanzar runtime, Goal ni supervisor legacy por si mismo.
 - `TestObserveAppDirectorGoalV0SincronizaColaClosedConCandidatoPrevio` valida
   que la composicion observa un goal-first completo, cierra el run por el
   servicio neutral, proyecta la cola como `closed`, conserva metadatos del
@@ -1487,8 +1487,9 @@ Cobertura:
   fija que `goal_migration:legacy-required` conserva el loop historico aunque
   exista backend Goal completo.
 - `TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalReady`
-  conserva el fallback sin backend Goal: `goal_ready` devuelve `goal_specs[]`
-  sin `run_ref`, sin tareas, sin wait y sin cola legacy.
+  conserva el fallback sin backend Goal: `goal_ready` devuelve
+  `goal_spec_summaries[]` sin `run_ref`, sin tareas, sin wait y sin cola legacy,
+  manteniendo specs completas solo como handoff interno.
 - `TestPrepareAutoprogrammingRunV0GoalReadyConBackendParcialNoLanzaNiCaeALegacy`
   fija que un backend goal-first parcial publica
   `autoprogramming_goal_backend_incomplete`, no lanza Goal, no persiste run y

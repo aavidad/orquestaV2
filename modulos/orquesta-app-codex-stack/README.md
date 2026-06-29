@@ -38,8 +38,9 @@ runs de autoprogramacion por stores del stack solo para modo legacy y devuelve
 `run_ref`/`wait_agent_refs` para supervision posterior solo con opt-in de
 composicion y `director_execution_mode=legacy_director_loop`. Cuando el backend Goal
 esta completo, el stack marca la request como goal-first salvo que declare
-`legacy-required` o `covered`; entonces devuelve o lanza `goal_specs[]` sin
-tasks legacy ni `continue` de loop historico.
+`legacy-required` o `covered`; entonces devuelve `goal_spec_summaries[]` por
+API/MCP o lanza specs completas por handoff interno, sin tasks legacy ni
+`continue` de loop historico.
 El mapa local vigente para navegar contratos, owners y huecos verificables esta
 en `docs/indice_mapa_2026-05-26.md`.
 

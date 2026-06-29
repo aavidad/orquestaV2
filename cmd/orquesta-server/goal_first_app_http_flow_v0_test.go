@@ -122,7 +122,9 @@ func TestServerAutoprogrammingHTTPGoalFirstPreparaSupervisaObservaYCierraV0(t *t
 		prepared.Goal == nil ||
 		prepared.Goal.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
 		prepared.Goal.ExternalGoalRef != "thread-ref-http-goal-first-001" ||
-		len(prepared.GoalSpecs) != 1 ||
+		len(prepared.GoalSpecs) != 0 ||
+		len(prepared.GoalSpecSummaries) != 1 ||
+		prepared.GoalSpecSummaries[0].SpecHash == "" ||
 		len(prepared.WorkflowTaskRefs) != 0 ||
 		len(prepared.WaitAgentRefs) != 0 ||
 		prepared.Continue != nil {
