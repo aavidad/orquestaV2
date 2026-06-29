@@ -1585,10 +1585,10 @@ Campos:
     diagnostics?: diagnostico publico de puertos/errores y consejo no bloqueante
       y issues de progreso del run, incluido
       `external_work_agent_requested_not_started` cuando hay agentes pedidos,
-      ninguno arrancado y ninguna senal viva; para compatibilidad con
-      consumidores existentes, las refs `opes...`/`app-spec-opes...` se tratan
-      como trabajo externo aunque no incluyan literalmente `external-work`, y
-      una aceptacion terminal sin agentes se conserva como
+      ninguno arrancado, ninguna senal viva y el run declara trabajo externo con
+      marcadores neutrales (`external-work`/`external_work`) en refs publicas; un
+      dominio consumidor como OPES no activa trato especial por nombre, y una
+      aceptacion terminal sin agentes se conserva como
       `external_work_accepted_no_agent_materialized`; candidatos de cola
       `ready`/`queued`/`pending` sin dispatch observado se publican como
       `queued_not_dispatched`

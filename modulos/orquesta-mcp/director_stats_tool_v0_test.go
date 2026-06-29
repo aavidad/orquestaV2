@@ -382,7 +382,7 @@ func TestMCPDirectorStatsToolExecutorV0DiagnosticaExternalWorkAgenteSolicitadoNo
 	}
 }
 
-func TestMCPDirectorStatsToolExecutorV0DiagnosticaOPESDirectoAgenteSolicitadoNoArrancado(t *testing.T) {
+func TestMCPDirectorStatsToolExecutorV0NoClasificaOPESDirectoComoExternalWorkV0(t *testing.T) {
 	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-opes-direct-agent-not-started-001")
 	run.ProjectRef = "opes-revision-tcae"
 	run.AppSpecRef = "app-spec-opes-qa-visual"
@@ -407,6 +407,10 @@ func TestMCPDirectorStatsToolExecutorV0DiagnosticaOPESDirectoAgenteSolicitadoNoA
 	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
 		result.Stats == nil ||
 		!mcpDirectorStatsProgressIssueExistsV0(
+			result.Stats.Progress.Issues,
+			mcpDirectorStatsAgentRequestedNotStartedV0,
+		) ||
+		mcpDirectorStatsProgressIssueExistsV0(
 			result.Stats.Progress.Issues,
 			mcpDirectorStatsExternalWorkAgentRequestedNotStartedV0,
 		) {
