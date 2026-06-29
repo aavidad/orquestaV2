@@ -10,7 +10,6 @@ import (
 	"time"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
-	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
 
 func TestRESTArrancarDirectorAppClientV0EnviaPOSTJSONYProyectaDirector(t *testing.T) {
@@ -119,7 +118,7 @@ func TestRESTPreviewDirectorAppClientV0EnviaPOSTJSONYProyectaGoalPreview(t *test
 			RequestID:             "req-director-preview-client-001",
 			RunRef:                "run-ref-director-preview-client-001",
 			DirectorExecutionMode: "goal_first",
-			GoalSpecSummary: orquestamcp.MCPGoalWorkSpecSummaryV0{
+			GoalSpecSummary: WebGoalWorkSpecSummaryV0{
 				SchemaVersion:     "orquesta_goal_work_spec_summary.v0",
 				GoalRef:           "goal-ref-director-preview-client-001",
 				RunRef:            "run-ref-director-preview-client-001",

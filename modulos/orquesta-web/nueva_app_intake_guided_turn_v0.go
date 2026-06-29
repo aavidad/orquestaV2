@@ -75,20 +75,92 @@ func ApplyWebNuevaAppIntakeGuidedAnswerV0(
 	if field == "" {
 		return session
 	}
-	return session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{
-		Field:  field,
-		Value:  answer,
-		Values: splitGuidedAnswerValuesV0(field, answer),
-	})
+	return session.ApplyDecisionV0(guidedAnswerDecisionV0(field, answer))
+}
+
+func guidedAnswerDecisionV0(field string, answer string) WebNuevaAppIntakeDecisionV0 {
+	field = trimV0(field)
+	answer = trimV0(answer)
+	switch field {
+	case "tipo_app":
+		return WebNuevaAppIntakeDecisionV0{
+			Field: field,
+			Value: normalizeGuidedTipoAppAnswerV0(answer),
+		}
+	case "usuarios_objetivo", "plataformas", "restricciones":
+		return WebNuevaAppIntakeDecisionV0{
+			Field:  field,
+			Value:  answer,
+			Values: splitGuidedAnswerValuesV0(field, answer),
+		}
+	default:
+		return WebNuevaAppIntakeDecisionV0{
+			Field:  field,
+			Value:  answer,
+			Values: splitGuidedAnswerValuesV0(field, answer),
+		}
+	}
+}
+
+func normalizeGuidedTipoAppAnswerV0(answer string) string {
+	normalized := normalizeGuidedNeedV0(answer)
+	switch {
+	case guidedContainsAnyV0(normalized, "web", "portal", "panel", "frontend", "aplicacion web", "aplicación web"):
+		return "web"
+	case guidedContainsAnyV0(normalized, "api", "rest", "backend", "servicio"):
+		return "api"
+	case guidedContainsAnyV0(normalized, "movil", "mobile", "android", "ios", "iphone", "móvil"):
+		return "mobile"
+	case guidedContainsAnyV0(normalized, "cli", "terminal", "consola"):
+		return "cli"
+	case guidedContainsAnyV0(normalized, "libreria", "library", "sdk"):
+		return "library"
+	default:
+		return answer
+	}
 }
 
 func splitGuidedAnswerValuesV0(field string, answer string) []string {
 	switch field {
 	case "usuarios_objetivo", "plataformas", "restricciones":
-		return splitCSVTextV0(answer)
+		return normalizeGuidedAnswerValuesV0(field, splitFreeListTextV0(answer))
 	default:
 		return nil
 	}
+}
+
+func normalizeGuidedAnswerValuesV0(field string, values []string) []string {
+	if field != "plataformas" {
+		return values
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		normalized := normalizeGuidedNeedV0(value)
+		switch {
+		case guidedContainsAnyV0(normalized, "web", "portal", "panel", "frontend"):
+			out = append(out, "web")
+		case guidedContainsAnyV0(normalized, "api", "rest", "backend", "servicio"):
+			out = append(out, "api")
+		case guidedContainsAnyV0(normalized, "movil", "mobile", "android", "ios", "iphone"):
+			out = append(out, "mobile")
+		default:
+			out = append(out, value)
+		}
+	}
+	return compactStringsV0(out)
+}
+
+func splitFreeListTextV0(raw string) []string {
+	normalized := strings.NewReplacer(
+		"\n", ",",
+		";", ",",
+		" y ", ",",
+		" e ", ",",
+		" and ", ",",
+		" & ", ",",
+		" + ", ",",
+	).Replace(raw)
+	return splitCSVTextV0(normalized)
 }
 
 func splitCSVTextV0(raw string) []string {

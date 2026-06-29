@@ -81,6 +81,8 @@ func nuevaAppForbiddenImportV0(path string) bool {
 		"orquesta/runtime/",
 		"orquesta/runtimeagente",
 		"orquesta/runtimeagente/",
+		"orquesta/modulos/orquesta-mcp",
+		"orquesta/modulos/orquesta-mcp/",
 		"orquesta/cmd",
 		"orquesta/cmd/",
 		"orquesta/fabricaapp",

@@ -11,7 +11,6 @@ import (
 
 	orquestafactory "orquesta/modulos/orquesta-factory"
 	orquestagoal "orquesta/modulos/orquesta-goal"
-	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
 
 const (
@@ -287,14 +286,14 @@ type arrancarDirectorAppRequestEnvelopeV0 struct {
 }
 
 type WebPreviewDirectorAppResultV0 struct {
-	Estado                string                               `json:"estado"`
-	RequestID             string                               `json:"request_id,omitempty"`
-	CorrelationID         string                               `json:"correlation_id,omitempty"`
-	RunRef                string                               `json:"run_ref,omitempty"`
-	DirectorExecutionMode string                               `json:"director_execution_mode,omitempty"`
-	GoalSpecSummary       orquestamcp.MCPGoalWorkSpecSummaryV0 `json:"goal_spec_summary,omitempty"`
-	Estimate              WebNuevaAppGoalPreviewEstimateV0     `json:"estimate,omitempty"`
-	GoalSpecIssues        []orquestagoal.GoalWorkIssueV0       `json:"goal_spec_issues,omitempty"`
-	Errores               []WebNuevaAppIssueV0                 `json:"errores_publicos,omitempty"`
-	EvidenceRefs          []string                             `json:"evidence_refs,omitempty"`
+	Estado                string                           `json:"estado"`
+	RequestID             string                           `json:"request_id,omitempty"`
+	CorrelationID         string                           `json:"correlation_id,omitempty"`
+	RunRef                string                           `json:"run_ref,omitempty"`
+	DirectorExecutionMode string                           `json:"director_execution_mode,omitempty"`
+	GoalSpecSummary       WebGoalWorkSpecSummaryV0         `json:"goal_spec_summary,omitempty"`
+	Estimate              WebNuevaAppGoalPreviewEstimateV0 `json:"estimate,omitempty"`
+	GoalSpecIssues        []orquestagoal.GoalWorkIssueV0   `json:"goal_spec_issues,omitempty"`
+	Errores               []WebNuevaAppIssueV0             `json:"errores_publicos,omitempty"`
+	EvidenceRefs          []string                         `json:"evidence_refs,omitempty"`
 }

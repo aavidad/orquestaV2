@@ -83,6 +83,32 @@ func TestWebNuevaAppIntakeGuidedActionV0IgnoraAccionDesconocida(t *testing.T) {
 	}
 }
 
+func TestApplyWebNuevaAppIntakeGuidedAnswerV0NormalizaTipoAppLibreV0(t *testing.T) {
+	session := NewWebNuevaAppIntakeSessionV0("session-guided-free-type", "es", "Portal", "Publicar viviendas")
+
+	session = ApplyWebNuevaAppIntakeGuidedAnswerV0(session, "tipo_app", "aplicación web con API")
+
+	if session.Form.TipoApp != "web" || session.Estado != WebNuevaAppIntakeEstadoLista {
+		t.Fatalf("respuesta libre tipo_app no normalizada: %+v", session.Form)
+	}
+	req := session.Form.ToAppSpecRequestV0()
+	if issues := orquestafactory.ValidateAppSpecRequestV0(req); len(issues) != 0 {
+		t.Fatalf("request debe ser valida tras alias recuperable: %+v", issues)
+	}
+}
+
+func TestApplyWebNuevaAppIntakeGuidedAnswerV0SplitLibrePlataformasV0(t *testing.T) {
+	session := NewWebNuevaAppIntakeSessionV0("session-guided-free-platforms", "es", "Portal", "Publicar viviendas")
+
+	session = ApplyWebNuevaAppIntakeGuidedAnswerV0(session, "plataformas", "web y móvil, API")
+
+	if !stringSliceHasV0(session.Form.Plataformas, "web") ||
+		!stringSliceHasV0(session.Form.Plataformas, "mobile") ||
+		!stringSliceHasV0(session.Form.Plataformas, "api") {
+		t.Fatalf("plataformas no normalizadas: %+v", session.Form.Plataformas)
+	}
+}
+
 func TestWebNuevaAppIntakeGuidedTurnV0ReconoceIntegracionesFrecuentes(t *testing.T) {
 	turn := NewWebNuevaAppIntakeGuidedTurnV0("portal con calendario, pagos, login, permisos y notificaciones")
 	session := NewWebNuevaAppIntakeSessionV0("session-guided-integraciones", "es", "", "")
