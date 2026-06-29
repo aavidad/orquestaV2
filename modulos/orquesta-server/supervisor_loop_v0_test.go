@@ -358,6 +358,52 @@ func TestRuntimeV0IdleSelfImprovementGoalFirstLanzaGoalSpecV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0IdleSelfImprovementGoalFirstCompactaObjectiveLargoV0(t *testing.T) {
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                      t.TempDir(),
+		IdleSelfImprovementProjectRef: "project-ref-orquesta",
+		AuditDisabled:                 true,
+	}, RuntimeDepsV0{
+		Supervisor:     &goalFirstSupervisorForTestV0{},
+		GoalStateStore: newMemoryGoalStateStoreV0(),
+		StateStore:     &memoryStateStoreV0{},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	longSummary := "Corregir automejora goal-first. " + strings.Repeat("contexto operativo amplio ", 240)
+	spec := runtime.idleSelfImprovementGoalWorkSpecV0(IdleSelfImprovementRequestV0{
+		RequestRef:     "request-ref-idle-objective-largo",
+		ProjectRef:     "project-ref-orquesta",
+		FailureSummary: longSummary,
+		ContextRefs:    []string{"doc-ref-contexto-completo"},
+		AcceptanceCriteria: []string{
+			"mantener evidencia durable",
+			strings.Repeat("criterio extenso ", 220),
+		},
+		EvidenceRefs: []string{"evidence-ref-objective-largo"},
+	})
+
+	if got := len([]rune(spec.Objective)); got > idleSelfImprovementGoalObjectiveMaxRunesV0 {
+		t.Fatalf("objective len=%d max=%d", got, idleSelfImprovementGoalObjectiveMaxRunesV0)
+	}
+	for _, want := range []string{
+		"Corregir automejora goal-first",
+		"objective_compacted",
+		"original_sha256=",
+		"full_context_in_goal_spec_refs",
+	} {
+		if !strings.Contains(spec.Objective, want) {
+			t.Fatalf("objective compactado no contiene %q:\n%s", want, spec.Objective)
+		}
+	}
+	if !containsGoalContextRefForTestV0(spec.ContextRefs, "doc-ref-contexto-completo") ||
+		!containsStringForTestV0(spec.AcceptanceCriteria, "mantener evidencia durable") ||
+		!containsStringForTestV0(spec.EvidenceRefs, "evidence-ref-objective-largo") {
+		t.Fatalf("spec perdio refs/criterios fuera del objective: %+v", spec)
+	}
+}
+
 func TestRuntimeV0IdleSelfImprovementGoalFirstSinLauncherNoCaeALegacyV0(t *testing.T) {
 	now := time.Date(2026, 6, 25, 12, 30, 0, 0, time.UTC)
 	store := &memoryStateStoreV0{}

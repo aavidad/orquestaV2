@@ -2,10 +2,14 @@ package orquestaserver
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"strings"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
+
+const idleSelfImprovementGoalObjectiveMaxRunesV0 = 4000
 
 func (runtime *RuntimeV0) launchIdleSelfImprovementGoalsV0(
 	ctx context.Context,
@@ -126,7 +130,25 @@ func idleSelfImprovementGoalObjectiveV0(request IdleSelfImprovementRequestV0) st
 		b.WriteString("\nCriterio: ")
 		b.WriteString(criterion)
 	}
-	return b.String()
+	return compactIdleSelfImprovementGoalObjectiveV0(b.String())
+}
+
+func compactIdleSelfImprovementGoalObjectiveV0(objective string) string {
+	objective = strings.TrimSpace(objective)
+	if len([]rune(objective)) <= idleSelfImprovementGoalObjectiveMaxRunesV0 {
+		return objective
+	}
+	sum := sha256.Sum256([]byte(objective))
+	suffix := fmt.Sprintf(
+		"\n\n[objective_compacted original_sha256=%x original_bytes=%d full_context_in_goal_spec_refs]",
+		sum[:],
+		len([]byte(objective)),
+	)
+	limit := idleSelfImprovementGoalObjectiveMaxRunesV0 - len([]rune(suffix))
+	if limit < 1 {
+		return strings.TrimSpace(string([]rune(suffix)[:idleSelfImprovementGoalObjectiveMaxRunesV0]))
+	}
+	return strings.TrimSpace(string([]rune(objective)[:limit])) + suffix
 }
 
 func idleSelfImprovementGoalLaunchResultV0(
