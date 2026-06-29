@@ -281,13 +281,13 @@ una necesidad libre de app movil para alquileres cercanos produce decisiones de
 plataforma, datos, storage, mapas, arquitectura y accesibilidad compatibles con
 factory. `TestNuevaAppIntakeGuidedHTTPHandler*` valida el endpoint JSON
 `POST /api/v0/apps/intake/guided-turn`, acciones de seguimiento, errores HTTP,
-puerto conversacional inyectable y fallback local si el asistente falla, sin DB,
-runtime, filesystem productivo, LLM real ni MCP directo.
-Ultima ejecucion: 2026-06-25; pasa con `GOCACHE=/tmp/orquesta-go-cache`.
+cliente HTML que reenvia la sesion resultante, puerto conversacional inyectable
+y fallback local si el asistente falla, sin DB, runtime, filesystem productivo,
+LLM real ni MCP directo.
+Ultima ejecucion: 2026-06-29; pasa con `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway -run 'NuevaAppIntakeGuided|NuevaAppHTMLHandler'`.
 Riesgos: El agente de intake real depende de adaptador/composicion que implemente
-`WebNuevaAppIntakeAssistantPortV0`; el fallback local sigue siendo determinista
-y el handoff solo declara contrato compacto. La disponibilidad de la ruta
-depende de la composicion/gateway.
+`WebNuevaAppIntakeAssistantPortV0`; el gateway ya acepta esa inyeccion y el
+fallback local sigue siendo determinista.
 ```
 
 ## Validaciones realizadas en este arranque

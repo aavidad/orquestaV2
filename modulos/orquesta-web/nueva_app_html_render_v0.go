@@ -973,6 +973,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     if(!form||!wizard)return;
     document.documentElement.classList.add('wizard-ready');
     let step=0;
+    let guidedSession=null;
     const steps=[...wizard.querySelectorAll('[data-step]')];
     const tabs=[...wizard.querySelectorAll('[data-goto-step]')];
     const prev=wizard.querySelector('[data-prev-step]');
@@ -1285,9 +1286,13 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     }
     async function requestGuided(payload){
       try{
-        const response=await fetch('/api/v0/apps/intake/guided-turn',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload||{})});
+        const body=Object.assign({},payload||{});
+        if(guidedSession)body.session=guidedSession;
+        const response=await fetch('/api/v0/apps/intake/guided-turn',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body)});
         if(!response.ok)return null;
-        return await response.json();
+        const out=await response.json();
+        if(out&&out.session)guidedSession=out.session;
+        return out;
       }catch(_){return null;}
     }
     async function applyServerGuided(payload,message){

@@ -93,7 +93,7 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 		AppDirector:                       orquestamcp.NewMCPArrancarDirectorAppHTTPHandlerV0(config.ArrancarDirector),
 		AppDirectorPreview:                orquestamcp.NewMCPPreviewDirectorAppHTTPHandlerV0(config.PreviewDirector),
 		AppDirectorGoalObserve:            orquestamcp.NewMCPObserveAppDirectorGoalHTTPHandlerV0(config.ObserveDirectorGoal),
-		AppIntakeGuidedTurn:               orquestaweb.NewNuevaAppIntakeGuidedHTTPHandlerV0(),
+		AppIntakeGuidedTurn:               orquestaweb.NewNuevaAppIntakeGuidedHTTPHandlerWithAssistantV0(config.AppIntakeAssistant),
 		AppChange:                         orquestamcp.NewMCPRequestAppChangeHTTPHandlerV0(config.RequestAppChange),
 		DirectorStats:                     orquestamcp.NewMCPDirectorStatsHTTPHandlerV0(config.DirectorStats),
 		RunControl:                        orquestamcp.NewMCPRunControlHTTPHandlerV0(config.RunControl),

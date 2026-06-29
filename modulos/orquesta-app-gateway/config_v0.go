@@ -29,6 +29,7 @@ type ConfigV0 struct {
 	DirectorStats                               orquestamcp.MCPTransportDirectorStatsExecutorV0
 	RunControl                                  orquestamcp.MCPTransportRunControlExecutorV0
 	RuntimeModels                               orquestaruntime.RuntimeModelManagerPortV0
+	AppIntakeAssistant                          orquestaweb.WebNuevaAppIntakeAssistantPortV0
 	RunQueuePriority                            orquestamcp.MCPTransportRunQueuePriorityExecutorV0
 	RunSupervisor                               orquestamcp.MCPTransportRunSupervisorExecutorV0
 	OpsAgentRuntimeDetail                       http.Handler

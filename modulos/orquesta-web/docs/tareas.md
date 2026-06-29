@@ -349,12 +349,12 @@ Contrato: `IntakeSession v0` consume/produce `AppSpecRequestV0` parcial, expone
 preguntas i18n y delega el cierre en `orquesta.apps.arrancar_director.v0` cuando
 hay puerto configurado, con fallback documentado a `SolicitarNuevaApp v0`.
 Validacion: tests puros de sesion inicial desde nombre/idea, pregunta pendiente,
-decision capturada, AppSpec parcial, endpoint guiado, puerto conversacional
-inyectable y fallback local; no DB, runtime, filesystem productivo, LLM real ni
-MCP directo.
-Bloqueos: El adaptador real de agente de intake queda como integracion de
-composicion/API/MCP sobre `WebNuevaAppIntakeAssistantPortV0`; el modulo web ya
-expone el puerto y conserva fallback local.
+decision capturada, AppSpec parcial, endpoint guiado, cliente HTML que reenvia
+la sesion resultante, puerto conversacional inyectable y fallback local; no DB,
+runtime, filesystem productivo, LLM real ni MCP directo.
+Bloqueos: El proveedor real de agente de intake queda como integracion de
+composicion/API/MCP sobre `WebNuevaAppIntakeAssistantPortV0`; el modulo web y
+`orquesta-app-gateway` ya exponen el puerto y conservan fallback local.
 Estado: completada como modelo puro de sesion web: crea borrador parcial,
 registra preguntas criticas con claves i18n, acepta respuestas del usuario,
 conserva decisiones, expone handoff compacto con refs opacas y no valida enums

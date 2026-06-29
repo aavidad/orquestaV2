@@ -390,6 +390,8 @@ Invariantes:
   conversacional por contrato y conserva fallback local. La web no elige
   proveedor, no llama LLM/MCP directamente, no persiste sesion, no arranca
   Director, no abre filesystem y no toca runtime.
+- El cliente HTML debe reenviar la `session` devuelta por cada turno para que
+  una conversacion de navegador no se reduzca a acciones sueltas.
 - El handler acepta solo JSON y mantiene limites de body/control plane comunes.
 - Las respuestas devuelven formulario parcial editable; factory y Director
   siguen cerrando validacion/ejecucion.

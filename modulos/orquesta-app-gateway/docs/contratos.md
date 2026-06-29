@@ -18,7 +18,8 @@ Rutas montadas:
   goal-first ya lanzado por `run_ref`.
 - `/api/v0/apps/intake/guided-turn`: endpoint JSON puro de intake guiado de
   nueva app; calcula decisiones/followups de wizard y sesion parcial sin
-  persistir estado ni arrancar trabajo.
+  persistir estado ni arrancar trabajo. Si `ConfigV0.AppIntakeAssistant` esta
+  configurado, el gateway lo inyecta como puerto conversacional opcional.
 - `/api/v0/apps/vcs`: overlay REST de MCP para AppVCS; se monta como ruta
   exacta antes del fallback `/api/v0/apps/{app_ref}/changes`.
 - `/api/v0/apps/{app_ref}/changes`: bridge REST de MCP para cambios de app.

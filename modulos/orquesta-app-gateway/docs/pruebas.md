@@ -21,7 +21,9 @@ git diff --check -- modulos/orquesta-app-gateway
 - `/api/v0/apps/director/goal/observe` delega en
   `ObserveDirectorGoal` inyectado y conserva `run_ref` sin interpretar cierre.
 - `/api/v0/apps/intake/guided-turn` devuelve una sesion guiada de nueva app con
-  datos/mapas desde una necesidad libre, sin stores ni runtime.
+  datos/mapas desde una necesidad libre, sin stores ni runtime; si la
+  composicion inyecta `AppIntakeAssistant`, delega en ese puerto y conserva
+  fallback local.
 - `/api/v0/apps/vcs` precede al prefijo `/api/v0/apps/` y delega en AppVCS, no
   en el catch-all de app-change.
 - `/api/v0/runs/control` y `/api/v0/runs/queue/priority` delegan en executors
