@@ -43,9 +43,8 @@ Reglas operativas:
   temporal opt-in con razon local y no cuentan como evidencia terminal.
 - desde el cierre T158 del 2026-05-26, `opes-drain-once` debe aplicar politica
   de destino OPES antes de drenar: URLs sin credenciales ni query, destino
-  loopback/temporal/productivo confirmado, evidence ref compacta para productivo
-  y summary publico solo con refs opacas, categorias, filtros, estado y
-  contadores.
+  loopback o temporal confirmado, productivo bloqueado por la composicion y
+  summary publico solo con refs opacas, categorias, filtros, estado y contadores.
 
 Fuentes revisadas:
 
