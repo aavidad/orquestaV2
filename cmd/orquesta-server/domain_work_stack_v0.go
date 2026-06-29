@@ -120,6 +120,9 @@ func opesDomainWorkDestinationPolicyFromEnvV0(baseURL string) error {
 	if evidenceRef != "" && !compactEvidenceRefV0(evidenceRef) {
 		return fmt.Errorf("opes_destination_evidence_ref_invalid")
 	}
+	if destination.Category == "temporal" && evidenceRef == "" {
+		return fmt.Errorf("opes_destination_evidence_ref_required")
+	}
 	return nil
 }
 

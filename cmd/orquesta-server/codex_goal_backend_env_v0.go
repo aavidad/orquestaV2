@@ -59,6 +59,9 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	if backend == codexGoalBackendAppServerProxyV0 && !codexGoalBackendProxyDiagnosticAllowedV0() {
 		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_proxy_diagnostic_opt_in_required:%s", envAllowAppServerProxyDiagnosticV0)
 	}
+	if backend == codexGoalBackendAppServerProxyV0 {
+		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_proxy_diagnostic_not_operational")
+	}
 	runtimeConfig := codexRuntimeEnvConfigFromEnvV0()
 	commandProtocol := serverCodexAppServerCommandProtocolV0{
 		CommandPath: runtimeConfig.CommandPath,

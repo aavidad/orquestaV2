@@ -44,6 +44,9 @@ func opesDrainDestinationPolicyFromEnvV0(
 	if evidenceRef != "" && !compactEvidenceRefV0(evidenceRef) {
 		return opesDrainDestinationPolicyV0{}, fmt.Errorf("opes_destination_evidence_ref_invalid")
 	}
+	if opes.Category == "temporal" && evidenceRef == "" {
+		return opesDrainDestinationPolicyV0{}, fmt.Errorf("opes_destination_evidence_ref_required")
+	}
 	if evidenceRef == "" {
 		evidenceRef = opesBridgeDestinationEvidenceRefV0(opes.Category + "|" + orquesta.Category)
 	}

@@ -219,9 +219,10 @@ queda como diagnostico opt-in y no como ruta principal.
 Avance local adicional 2026-06-26: se anade backend opt-in
 `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` para usar
 `codex app-server --listen unix://<socket>` dentro de una sesion `tmux` cuando
-`app_server_proxy` no responde al socket local. Orquesta valida el backend con
-`codex app-server proxy --sock <socket>` y `thread/loaded/list`; esto corrige el
-preflight y evita falsos `codex_app_server_unavailable` antes de crear el goal.
+`app_server_proxy` no responde al socket local. Orquesta valida el backend por
+WebSocket directo sobre el Unix socket privado y `thread/loaded/list`; esto
+corrige el preflight y evita falsos `codex_app_server_unavailable` antes de
+crear el goal.
 Avance local adicional 2026-06-26: el backend app-server tambien acepta el
 archivo durable `orquesta_goal_result_v0.json` bajo el write-set como fallback
 de cierre cuando el goal terminal no deja marcador textual legible en

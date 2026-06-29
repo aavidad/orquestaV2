@@ -30,6 +30,12 @@ func TestOPESDrainConfigV0RequiereConfirmacionParaDestinoNoLocal(t *testing.T) {
 	}
 
 	t.Setenv("ORQUESTA_OPES_TEMPORAL_CONFIRM", "1")
+	if _, err := opesDrainConfigFromEnvV0(); err == nil ||
+		!strings.Contains(err.Error(), "evidence_ref_required") {
+		t.Fatalf("err=%v", err)
+	}
+
+	t.Setenv("ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF", "evidence-ref-opes-temporal-001")
 	config, err := opesDrainConfigFromEnvV0()
 	if err != nil {
 		t.Fatalf("config: %v", err)

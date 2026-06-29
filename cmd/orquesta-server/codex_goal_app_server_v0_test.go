@@ -853,7 +853,7 @@ func TestServerCodexAppServerUnavailableBackendV0BloqueaConIssueCodeV0(t *testin
 	}
 }
 
-func TestServerCodexGoalBackendFromEnvV0PreflightDegradadoV0(t *testing.T) {
+func TestServerCodexGoalBackendFromEnvV0ProxyDiagnosticoNoCreaBackendOperativoV0(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "codex-fake")
 	if err := os.WriteFile(script, []byte("#!/bin/sh\necho 'Error: failed to connect to socket at /tmp/app-server-control.sock' >&2\nexit 1\n"), 0o700); err != nil {
 		t.Fatalf("write fake codex: %v", err)
@@ -868,23 +868,13 @@ func TestServerCodexGoalBackendFromEnvV0PreflightDegradadoV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	backend, err := serverCodexGoalBackendFromEnvV0(config)
-	if err != nil {
-		t.Fatalf("serverCodexGoalBackendFromEnvV0: %v", err)
-	}
-	if backend.Starter == nil || backend.Observer == nil {
-		t.Fatalf("backend degradado debe conservar puertos: %+v", backend)
-	}
-	receipt, err := backend.Starter.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
-		GoalRef: "goal-ref-preflight-001",
-	})
-	if err == nil ||
-		receipt.IssueCode != "codex_app_server_control_socket_missing" {
-		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	_, err = serverCodexGoalBackendFromEnvV0(config)
+	if err == nil || !strings.Contains(err.Error(), "codex_goal_backend_proxy_diagnostic_not_operational") {
+		t.Fatalf("err=%v", err)
 	}
 }
 
-func TestServerCodexGoalBackendFromEnvV0PreflightOKConservaBackendRealV0(t *testing.T) {
+func TestServerCodexGoalBackendFromEnvV0ProxyDiagnosticoPreflightOKNoCreaBackendRealV0(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "codex-fake-ok")
 	if err := os.WriteFile(script, []byte(fakeCodexAppServerPreflightScriptV0("")), 0o700); err != nil {
 		t.Fatalf("write fake codex: %v", err)
@@ -899,18 +889,9 @@ func TestServerCodexGoalBackendFromEnvV0PreflightOKConservaBackendRealV0(t *test
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	backend, err := serverCodexGoalBackendFromEnvV0(config)
-	if err != nil {
-		t.Fatalf("serverCodexGoalBackendFromEnvV0: %v", err)
-	}
-	if _, degraded := backend.Starter.(serverCodexUnavailableGoalBackendV0); degraded {
-		t.Fatalf("backend no debe quedar degradado tras preflight OK: %+v", backend)
-	}
-	if _, real := backend.Starter.(serverCodexAppServerGoalBackendV0); !real {
-		t.Fatalf("starter real=%T", backend.Starter)
-	}
-	if _, real := backend.Observer.(serverCodexAppServerGoalBackendV0); !real {
-		t.Fatalf("observer real=%T", backend.Observer)
+	_, err = serverCodexGoalBackendFromEnvV0(config)
+	if err == nil || !strings.Contains(err.Error(), "codex_goal_backend_proxy_diagnostic_not_operational") {
+		t.Fatalf("err=%v", err)
 	}
 }
 
@@ -973,7 +954,7 @@ func TestServerConfigFromEnvV0ProxyDiagnosticoNoDerivaGoalFirstIdleV0(t *testing
 	}
 }
 
-func TestServerCodexGoalBackendsFromEnvV0SeparaWorkdirAppEIdleV0(t *testing.T) {
+func TestServerCodexGoalBackendsFromEnvV0ProxyDiagnosticoNoCableaAppNiIdleV0(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "codex-fake-ok")
 	if err := os.WriteFile(script, []byte(fakeCodexAppServerPreflightScriptV0("")), 0o700); err != nil {
 		t.Fatalf("write fake codex: %v", err)
@@ -992,23 +973,9 @@ func TestServerCodexGoalBackendsFromEnvV0SeparaWorkdirAppEIdleV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	backends, err := serverCodexGoalBackendsFromEnvV0(config)
-	if err != nil {
-		t.Fatalf("serverCodexGoalBackendsFromEnvV0: %v", err)
-	}
-	appStarter, ok := backends.AppGoal.Starter.(serverCodexAppServerGoalBackendV0)
-	if !ok {
-		t.Fatalf("app starter=%T", backends.AppGoal.Starter)
-	}
-	idleStarter, ok := backends.IdleGoal.Starter.(serverCodexAppServerGoalBackendV0)
-	if !ok {
-		t.Fatalf("idle starter=%T", backends.IdleGoal.Starter)
-	}
-	if appStarter.CWD != filepath.Clean(appDir) {
-		t.Fatalf("app CWD=%q want %q", appStarter.CWD, filepath.Clean(appDir))
-	}
-	if idleStarter.CWD != filepath.Clean(idleDir) {
-		t.Fatalf("idle CWD=%q want %q", idleStarter.CWD, filepath.Clean(idleDir))
+	_, err = serverCodexGoalBackendsFromEnvV0(config)
+	if err == nil || !strings.Contains(err.Error(), "codex_goal_backend_proxy_diagnostic_not_operational") {
+		t.Fatalf("err=%v", err)
 	}
 }
 
