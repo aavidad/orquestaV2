@@ -54,6 +54,7 @@ func TestRequiredTestRunnerFromEnvV0GoCommandInyectaEntornoGoAcotado(t *testing.
 
 	expected := map[string]string{
 		"GOCACHE":    filepath.Join(outputDir, "go-build-cache"),
+		"GOTMPDIR":   filepath.Join(outputDir, "go-tmp"),
 		"GOPATH":     filepath.Join(outputDir, "go-path"),
 		"GOMODCACHE": filepath.Join(outputDir, "go-mod-cache"),
 	}
@@ -79,6 +80,7 @@ func TestRequiredTestRunnerFromEnvV0PreservaEntornoGoExplicito(t *testing.T) {
 	outputDir := filepath.Join(t.TempDir(), "required-test-output")
 	explicit := map[string]string{
 		"GOCACHE":    filepath.Join(t.TempDir(), "custom-gocache"),
+		"GOTMPDIR":   filepath.Join(t.TempDir(), "custom-gotmpdir"),
 		"GOPATH":     filepath.Join(t.TempDir(), "custom-gopath"),
 		"GOMODCACHE": filepath.Join(t.TempDir(), "custom-gomodcache"),
 	}
@@ -87,6 +89,7 @@ func TestRequiredTestRunnerFromEnvV0PreservaEntornoGoExplicito(t *testing.T) {
 	t.Setenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR", outputDir)
 	t.Setenv("ORQUESTA_REQUIRED_TEST_ENV",
 		"GOCACHE="+explicit["GOCACHE"]+","+
+			"GOTMPDIR="+explicit["GOTMPDIR"]+","+
 			"GOPATH="+explicit["GOPATH"]+","+
 			"GOMODCACHE="+explicit["GOMODCACHE"],
 	)

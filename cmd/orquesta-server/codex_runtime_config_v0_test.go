@@ -2,6 +2,8 @@ package main
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -9,10 +11,41 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if os.Getenv(envCodexSandboxV0) == "" {
-		_ = os.Setenv(envCodexSandboxV0, "danger-full-access")
+	cleanup := configureServerPackageTestEnvV0()
+	code := m.Run()
+	cleanup()
+	os.Exit(code)
+}
+
+func configureServerPackageTestEnvV0() func() {
+	tmpParent := "."
+	for _, candidate := range []string{"/workspace/runtime", "/var/tmp"} {
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			tmpParent = candidate
+			break
+		}
 	}
-	os.Exit(m.Run())
+	tmpDir, err := os.MkdirTemp(tmpParent, "orquesta-server-test-tmp-")
+	if err == nil {
+		if abs, absErr := filepath.Abs(tmpDir); absErr == nil {
+			_ = os.Setenv("TMPDIR", abs)
+			_ = os.Setenv("GOTMPDIR", abs)
+			_ = os.Setenv("GOCACHE", filepath.Join(abs, "go-cache"))
+			_ = os.Setenv("GOPATH", filepath.Join(abs, "go"))
+		}
+	}
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		if strings.HasPrefix(key, "ORQUESTA_") || strings.HasPrefix(key, "OPES_") {
+			_ = os.Unsetenv(key)
+		}
+	}
+	_ = os.Setenv(envCodexSandboxV0, "danger-full-access")
+	return func() {
+		if tmpDir != "" {
+			_ = os.RemoveAll(tmpDir)
+		}
+	}
 }
 
 func TestCodexRuntimeConfigV0UsaSandboxWorkspaceWritePorDefecto(t *testing.T) {
