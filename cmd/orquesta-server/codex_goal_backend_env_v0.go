@@ -139,11 +139,7 @@ func codexGoalBackendFromEnvV0() string {
 }
 
 func codexGoalBackendOperationalFromEnvV0() bool {
-	backend := codexGoalBackendFromEnvV0()
-	if backend == codexGoalBackendAppServerTmuxV0 {
-		return true
-	}
-	return backend == codexGoalBackendAppServerProxyV0 && codexGoalBackendProxyDiagnosticAllowedV0()
+	return codexGoalBackendFromEnvV0() == codexGoalBackendAppServerTmuxV0
 }
 
 func codexGoalBackendProxyDiagnosticAllowedV0() bool {

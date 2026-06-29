@@ -95,7 +95,10 @@ func (protocol serverCodexAppServerCommandProtocolV0) callV0(
 	defer cancel()
 	args := append([]string(nil), protocol.Args...)
 	if len(args) == 0 {
-		args = []string{"app-server", "proxy"}
+		return codexAppServerCallErrorV0{
+			Code: "codex_app_server_command_args_required",
+			Err:  errors.New("codex_app_server_command_args_required"),
+		}
 	}
 	cmd := exec.CommandContext(callCtx, commandPath, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

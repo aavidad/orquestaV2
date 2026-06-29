@@ -945,6 +945,34 @@ func TestServerCodexGoalBackendFromEnvV0ProxyRequiereOptInDiagnosticoV0(t *testi
 	}
 }
 
+func TestCodexGoalBackendOperationalFromEnvV0SoloTmuxV0(t *testing.T) {
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envAllowAppServerProxyDiagnosticV0, "1")
+	if codexGoalBackendOperationalFromEnvV0() {
+		t.Fatalf("app_server_proxy diagnostico no debe contar como backend operativo")
+	}
+
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0)
+	if !codexGoalBackendOperationalFromEnvV0() {
+		t.Fatalf("app_server_tmux debe contar como backend operativo")
+	}
+}
+
+func TestServerConfigFromEnvV0ProxyDiagnosticoNoDerivaGoalFirstIdleV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+	t.Setenv(envAllowAppServerProxyDiagnosticV0, "1")
+	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.IdleSelfImprovementGoalFirst {
+		t.Fatalf("proxy diagnostico no debe derivar goal-first idle: %+v", config)
+	}
+}
+
 func TestServerCodexGoalBackendsFromEnvV0SeparaWorkdirAppEIdleV0(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "codex-fake-ok")
 	if err := os.WriteFile(script, []byte(fakeCodexAppServerPreflightScriptV0("")), 0o700); err != nil {
@@ -1037,6 +1065,18 @@ func TestCodexAppServerRPCPayloadYDecodeV0(t *testing.T) {
 	var callErr codexAppServerCallErrorV0
 	if !errors.As(err, &callErr) || callErr.Code != "codex_app_server_rpc_invalid_params" {
 		t.Fatalf("rpc error no estructurado: err=%v callErr=%+v", err, callErr)
+	}
+}
+
+func TestCodexAppServerCommandProtocolV0RechazaArgsVaciosV0(t *testing.T) {
+	protocol := serverCodexAppServerCommandProtocolV0{
+		CommandPath: os.Args[0],
+		Timeout:     time.Second,
+	}
+	err := protocol.ProbeV0(context.Background())
+	var callErr codexAppServerCallErrorV0
+	if !errors.As(err, &callErr) || callErr.Code != "codex_app_server_command_args_required" {
+		t.Fatalf("err=%v callErr=%+v", err, callErr)
 	}
 }
 
