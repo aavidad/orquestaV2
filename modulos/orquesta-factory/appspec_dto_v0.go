@@ -64,7 +64,9 @@ type DataSpecV0 struct {
 	PersistenceRequired bool                `json:"persistence_required"`
 	Needs               []string            `json:"needs"`
 	Types               []DataTypeSpecV0    `json:"types,omitempty"`
+	Sources             []DataSourceSpecV0  `json:"sources,omitempty"`
 	Storage             []DataStorageSpecV0 `json:"storage,omitempty"`
+	Operation           DataOperationSpecV0 `json:"operation,omitempty"`
 	Sensitivity         string              `json:"sensitivity,omitempty"`
 	Connector           string              `json:"connector,omitempty"`
 	Retention           string              `json:"retention,omitempty"`
@@ -86,15 +88,38 @@ type DataStorageSpecV0 struct {
 	Restricciones []string `json:"restricciones,omitempty"`
 }
 
+type DataSourceSpecV0 struct {
+	Nombre        string   `json:"nombre"`
+	Tipo          string   `json:"tipo,omitempty"`
+	Proposito     string   `json:"proposito,omitempty"`
+	Owner         string   `json:"owner,omitempty"`
+	Frecuencia    string   `json:"frecuencia,omitempty"`
+	Restricciones []string `json:"restricciones,omitempty"`
+}
+
+type DataOperationSpecV0 struct {
+	Criticidad     string   `json:"criticidad,omitempty"`
+	Disponibilidad string   `json:"disponibilidad,omitempty"`
+	RPO            string   `json:"rpo,omitempty"`
+	RTO            string   `json:"rto,omitempty"`
+	Auditoria      bool     `json:"auditoria,omitempty"`
+	Restricciones  []string `json:"restricciones,omitempty"`
+}
+
 type ConnectorsSpecV0 struct {
 	Required []ConnectorSpecV0 `json:"required"`
 	Optional []ConnectorSpecV0 `json:"optional"`
 }
 
 type ConnectorSpecV0 struct {
-	Nombre    string `json:"nombre"`
-	Proposito string `json:"proposito"`
-	Contrato  string `json:"contrato,omitempty"`
+	Nombre     string `json:"nombre"`
+	Proposito  string `json:"proposito"`
+	Contrato   string `json:"contrato,omitempty"`
+	Tipo       string `json:"tipo,omitempty"`
+	Direccion  string `json:"direccion,omitempty"`
+	Auth       string `json:"auth,omitempty"`
+	DataScope  string `json:"data_scope,omitempty"`
+	Criticidad string `json:"criticidad,omitempty"`
 }
 
 type DeploySpecV0 struct {

@@ -87,9 +87,18 @@ func nuevaAppFormFromValuesV0(values map[string][]string) WebNuevaAppFormV0 {
 			NecesidadFuncional: formValueV0(values, "datos.necesidad_funcional"),
 			TiposDatos:         formValuesV0(values, "datos.tipos_datos"),
 			TiposDetallados:    formDataTypesV0(values, 4),
+			Fuentes:            formDataSourcesV0(values, 4),
 			Storage:            formDataStorageV0(values, 4),
-			Sensibilidad:       formValueV0(values, "datos.sensibilidad"),
-			Retencion:          formValueV0(values, "datos.retencion"),
+			Operacion: WebNuevaAppDataOperationFormV0{
+				Criticidad:     formValueV0(values, "datos.operacion.criticidad"),
+				Disponibilidad: formValueV0(values, "datos.operacion.disponibilidad"),
+				RPO:            formValueV0(values, "datos.operacion.rpo"),
+				RTO:            formValueV0(values, "datos.operacion.rto"),
+				Auditoria:      formBoolValueV0(values, "datos.operacion.auditoria"),
+				Restricciones:  formValuesV0(values, "datos.operacion.restricciones"),
+			},
+			Sensibilidad: formValueV0(values, "datos.sensibilidad"),
+			Retencion:    formValueV0(values, "datos.retencion"),
 		},
 		Deploy: WebNuevaAppDeployFormV0{
 			Target:        formValueV0(values, "deploy.target"),
@@ -168,6 +177,28 @@ func formDataStorageV0(values map[string][]string, maxRows int) []WebNuevaAppDat
 	return out
 }
 
+func formDataSourcesV0(values map[string][]string, maxRows int) []WebNuevaAppDataSourceFormV0 {
+	out := make([]WebNuevaAppDataSourceFormV0, 0, maxRows)
+	for index := 0; index < maxRows; index++ {
+		prefix := "datos.fuentes." + strconv.Itoa(index) + "."
+		row := WebNuevaAppDataSourceFormV0{
+			Nombre:        formValueV0(values, prefix+"nombre"),
+			Tipo:          formValueV0(values, prefix+"tipo"),
+			Proposito:     formValueV0(values, prefix+"proposito"),
+			Owner:         formValueV0(values, prefix+"owner"),
+			Frecuencia:    formValueV0(values, prefix+"frecuencia"),
+			Restricciones: formValuesV0(values, prefix+"restricciones"),
+		}
+		if row.Nombre != "" || row.Tipo != "" || row.Proposito != "" || row.Owner != "" || row.Frecuencia != "" || len(row.Restricciones) > 0 {
+			out = append(out, row)
+		}
+	}
+	if out == nil {
+		return []WebNuevaAppDataSourceFormV0{}
+	}
+	return out
+}
+
 func formConnectorsV0(values map[string][]string, maxRows int) []WebNuevaAppConnectorFormV0 {
 	out := make([]WebNuevaAppConnectorFormV0, 0, maxRows)
 	for index := 0; index < maxRows; index++ {
@@ -176,10 +207,14 @@ func formConnectorsV0(values map[string][]string, maxRows int) []WebNuevaAppConn
 			Tipo:          formValueV0(values, prefix+"tipo"),
 			Nombre:        formValueV0(values, prefix+"nombre"),
 			Proposito:     formValueV0(values, prefix+"proposito"),
+			Direccion:     formValueV0(values, prefix+"direccion"),
+			Auth:          formValueV0(values, prefix+"auth"),
+			DataScope:     formValueV0(values, prefix+"data_scope"),
+			Criticidad:    formValueV0(values, prefix+"criticidad"),
 			Requerido:     formBoolValueV0(values, prefix+"requerido"),
 			Restricciones: formValuesV0(values, prefix+"restricciones"),
 		}
-		if row.Tipo != "" || row.Nombre != "" || row.Proposito != "" || len(row.Restricciones) > 0 || row.Requerido {
+		if row.Tipo != "" || row.Nombre != "" || row.Proposito != "" || row.Direccion != "" || row.Auth != "" || row.DataScope != "" || row.Criticidad != "" || len(row.Restricciones) > 0 || row.Requerido {
 			out = append(out, row)
 		}
 	}

@@ -289,15 +289,31 @@ var nuevaAppHTMLHelpKeysV0 = []string{
 	"datos.tipos_detallados.retencion",
 	"datos.tipos_detallados.volumen",
 	"datos.tipos_detallados.restricciones",
+	"datos.fuentes.nombre",
+	"datos.fuentes.tipo",
+	"datos.fuentes.proposito",
+	"datos.fuentes.owner",
+	"datos.fuentes.frecuencia",
+	"datos.fuentes.restricciones",
 	"datos.storage.tipo",
 	"datos.storage.proposito",
 	"datos.storage.requerido",
 	"datos.storage.restricciones",
+	"datos.operacion.criticidad",
+	"datos.operacion.disponibilidad",
+	"datos.operacion.rpo",
+	"datos.operacion.rto",
+	"datos.operacion.auditoria",
+	"datos.operacion.restricciones",
 	"datos.sensibilidad",
 	"datos.retencion",
 	"integraciones.0.tipo",
 	"integraciones.0.nombre",
 	"integraciones.0.proposito",
+	"integraciones.0.direccion",
+	"integraciones.0.auth",
+	"integraciones.0.data_scope",
+	"integraciones.0.criticidad",
 	"integraciones.0.requerido",
 	"integraciones.0.restricciones",
 	"calidad.pruebas",
@@ -789,6 +805,22 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
             <label data-help="{{index .Help "datos.tipos_detallados.volumen"}}">{{index .Labels "datos.tipos_detallados.0.volumen"}}<input name="datos.tipos_detallados.3.volumen"></label>
             <label data-help="{{index .Help "datos.tipos_detallados.restricciones"}}">{{index .Labels "datos.tipos_detallados.0.restricciones"}}<input name="datos.tipos_detallados.3.restricciones"></label>
           </div></div>
+          <div class="expert-row"><p class="expert-row-title">{{index .Labels "datos.fuentes"}}</p><div class="grid">
+            <label data-help="{{index .Help "datos.fuentes.nombre"}}">{{index .Labels "datos.fuentes.0.nombre"}}<input name="datos.fuentes.0.nombre"></label>
+            <label data-help="{{index .Help "datos.fuentes.tipo"}}">{{index .Labels "datos.fuentes.0.tipo"}}<input name="datos.fuentes.0.tipo"></label>
+            <label data-help="{{index .Help "datos.fuentes.proposito"}}">{{index .Labels "datos.fuentes.0.proposito"}}<input name="datos.fuentes.0.proposito"></label>
+            <label data-help="{{index .Help "datos.fuentes.owner"}}">{{index .Labels "datos.fuentes.0.owner"}}<input name="datos.fuentes.0.owner"></label>
+            <label data-help="{{index .Help "datos.fuentes.frecuencia"}}">{{index .Labels "datos.fuentes.0.frecuencia"}}<input name="datos.fuentes.0.frecuencia"></label>
+            <label data-help="{{index .Help "datos.fuentes.restricciones"}}">{{index .Labels "datos.fuentes.0.restricciones"}}<input name="datos.fuentes.0.restricciones"></label>
+          </div></div>
+          <div class="expert-row"><p class="expert-row-title">{{index .Labels "datos.operacion"}}</p><div class="grid">
+            <label data-help="{{index .Help "datos.operacion.criticidad"}}">{{index .Labels "datos.operacion.criticidad"}}<input name="datos.operacion.criticidad"></label>
+            <label data-help="{{index .Help "datos.operacion.disponibilidad"}}">{{index .Labels "datos.operacion.disponibilidad"}}<input name="datos.operacion.disponibilidad"></label>
+            <label data-help="{{index .Help "datos.operacion.rpo"}}">{{index .Labels "datos.operacion.rpo"}}<input name="datos.operacion.rpo"></label>
+            <label data-help="{{index .Help "datos.operacion.rto"}}">{{index .Labels "datos.operacion.rto"}}<input name="datos.operacion.rto"></label>
+            <label data-help="{{index .Help "datos.operacion.auditoria"}}"><span>{{index .Labels "datos.operacion.auditoria"}}</span><select name="datos.operacion.auditoria"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
+            <label data-help="{{index .Help "datos.operacion.restricciones"}}">{{index .Labels "datos.operacion.restricciones"}}<input name="datos.operacion.restricciones"></label>
+          </div></div>
           <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.almacenamiento_1"}}</p><div class="grid">
 	            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.0.tipo"><option value="">{{optionLabel $.Page.Locale "storage" ""}}</option>{{range .StorageTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "storage" .}}</option>{{end}}</select></label>
             <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.0.proposito"></label>
@@ -816,9 +848,13 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
         </div></details></fieldset>
         <fieldset><legend>{{index .Labels "integraciones"}}</legend><div class="expert-block">
           <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_1"}}</p><div class="grid">
-	            <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.0.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
+            <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.0.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
             <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.0.nombre"></label>
             <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.0.proposito"></label>
+            <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.0.direccion"></label>
+            <label data-help="{{index .Help "integraciones.0.auth"}}">{{index .Labels "integraciones.0.auth"}}<input name="integraciones.0.auth"></label>
+            <label data-help="{{index .Help "integraciones.0.data_scope"}}">{{index .Labels "integraciones.0.data_scope"}}<input name="integraciones.0.data_scope"></label>
+            <label data-help="{{index .Help "integraciones.0.criticidad"}}">{{index .Labels "integraciones.0.criticidad"}}<input name="integraciones.0.criticidad"></label>
 	            <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.0.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
             <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.0.restricciones"></label>
           </div></div>
@@ -827,6 +863,10 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
 	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.1.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.1.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.1.proposito"></label>
+              <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.1.direccion"></label>
+              <label data-help="{{index .Help "integraciones.0.auth"}}">{{index .Labels "integraciones.0.auth"}}<input name="integraciones.1.auth"></label>
+              <label data-help="{{index .Help "integraciones.0.data_scope"}}">{{index .Labels "integraciones.0.data_scope"}}<input name="integraciones.1.data_scope"></label>
+              <label data-help="{{index .Help "integraciones.0.criticidad"}}">{{index .Labels "integraciones.0.criticidad"}}<input name="integraciones.1.criticidad"></label>
 	              <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.1.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
               <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.1.restricciones"></label>
             </div></div>
@@ -834,6 +874,10 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
 	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.2.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.2.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.2.proposito"></label>
+              <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.2.direccion"></label>
+              <label data-help="{{index .Help "integraciones.0.auth"}}">{{index .Labels "integraciones.0.auth"}}<input name="integraciones.2.auth"></label>
+              <label data-help="{{index .Help "integraciones.0.data_scope"}}">{{index .Labels "integraciones.0.data_scope"}}<input name="integraciones.2.data_scope"></label>
+              <label data-help="{{index .Help "integraciones.0.criticidad"}}">{{index .Labels "integraciones.0.criticidad"}}<input name="integraciones.2.criticidad"></label>
 	              <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.2.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
               <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.2.restricciones"></label>
             </div></div>
@@ -841,6 +885,10 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
 	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.3.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.3.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.3.proposito"></label>
+              <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.3.direccion"></label>
+              <label data-help="{{index .Help "integraciones.0.auth"}}">{{index .Labels "integraciones.0.auth"}}<input name="integraciones.3.auth"></label>
+              <label data-help="{{index .Help "integraciones.0.data_scope"}}">{{index .Labels "integraciones.0.data_scope"}}<input name="integraciones.3.data_scope"></label>
+              <label data-help="{{index .Help "integraciones.0.criticidad"}}">{{index .Labels "integraciones.0.criticidad"}}<input name="integraciones.3.criticidad"></label>
 	              <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.3.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
               <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.3.restricciones"></label>
             </div></div>
@@ -1218,8 +1266,16 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       setMaybe('datos.sensibilidad',datos.sensibilidad);
       setMaybe('datos.retencion',datos.retencion);
       applyIndexed('datos.tipos_detallados',datos.tipos_detallados,['nombre','proposito','sensibilidad','retencion','volumen','restricciones']);
+      applyIndexed('datos.fuentes',datos.fuentes,['nombre','tipo','proposito','owner','frecuencia','restricciones']);
       applyIndexed('datos.storage',datos.storage,['tipo','proposito','requerido','restricciones']);
-      applyIndexed('integraciones',guidedForm.integraciones,['tipo','nombre','proposito','requerido','restricciones']);
+      const operacion=datos.operacion||{};
+      setMaybe('datos.operacion.criticidad',operacion.criticidad);
+      setMaybe('datos.operacion.disponibilidad',operacion.disponibilidad);
+      setMaybe('datos.operacion.rpo',operacion.rpo);
+      setMaybe('datos.operacion.rto',operacion.rto);
+      if(hasOwn(operacion,'auditoria'))setMaybe('datos.operacion.auditoria',operacion.auditoria);
+      setCSV('datos.operacion.restricciones',operacion.restricciones);
+      applyIndexed('integraciones',guidedForm.integraciones,['tipo','nombre','proposito','direccion','auth','data_scope','criticidad','requerido','restricciones']);
       const calidad=guidedForm.calidad||{};
       setMaybe('calidad.pruebas',calidad.pruebas);
       setMaybe('calidad.accesibilidad',calidad.accesibilidad);

@@ -26,6 +26,14 @@ func applyWebNuevaAppIntakeDecisionToFormV0(
 			form.Integraciones[index].Nombre = decision.Value
 		case "proposito":
 			form.Integraciones[index].Proposito = decision.Value
+		case "direccion":
+			form.Integraciones[index].Direccion = decision.Value
+		case "auth":
+			form.Integraciones[index].Auth = decision.Value
+		case "data_scope":
+			form.Integraciones[index].DataScope = decision.Value
+		case "criticidad":
+			form.Integraciones[index].Criticidad = decision.Value
 		case "requerido":
 			form.Integraciones[index].Requerido = decision.Value == "true"
 		case "restricciones":
@@ -48,6 +56,24 @@ func applyWebNuevaAppIntakeDecisionToFormV0(
 			form.Datos.TiposDetallados[index].Volumen = decision.Value
 		case "restricciones":
 			form.Datos.TiposDetallados[index].Restricciones = decision.Values
+		}
+		return form
+	}
+	if index, suffix, ok := indexedNuevaAppDecisionFieldV0(decision.Field, "datos.fuentes"); ok {
+		form.Datos.Fuentes = ensureNuevaAppDataSourceSlotV0(form.Datos.Fuentes, index)
+		switch suffix {
+		case "nombre":
+			form.Datos.Fuentes[index].Nombre = decision.Value
+		case "tipo":
+			form.Datos.Fuentes[index].Tipo = decision.Value
+		case "proposito":
+			form.Datos.Fuentes[index].Proposito = decision.Value
+		case "owner":
+			form.Datos.Fuentes[index].Owner = decision.Value
+		case "frecuencia":
+			form.Datos.Fuentes[index].Frecuencia = decision.Value
+		case "restricciones":
+			form.Datos.Fuentes[index].Restricciones = decision.Values
 		}
 		return form
 	}
@@ -112,6 +138,18 @@ func applyWebNuevaAppIntakeDecisionToFormV0(
 		form.Datos.Sensibilidad = decision.Value
 	case "datos.retencion":
 		form.Datos.Retencion = decision.Value
+	case "datos.operacion.criticidad":
+		form.Datos.Operacion.Criticidad = decision.Value
+	case "datos.operacion.disponibilidad":
+		form.Datos.Operacion.Disponibilidad = decision.Value
+	case "datos.operacion.rpo":
+		form.Datos.Operacion.RPO = decision.Value
+	case "datos.operacion.rto":
+		form.Datos.Operacion.RTO = decision.Value
+	case "datos.operacion.auditoria":
+		form.Datos.Operacion.Auditoria = decision.Value == "true"
+	case "datos.operacion.restricciones":
+		form.Datos.Operacion.Restricciones = decision.Values
 	case "calidad.pruebas":
 		form.Calidad.Pruebas = decision.Value
 	case "calidad.accesibilidad":
@@ -163,6 +201,13 @@ func ensureNuevaAppDataTypeSlotV0(values []WebNuevaAppDataTypeFormV0, index int)
 func ensureNuevaAppDataStorageSlotV0(values []WebNuevaAppDataStorageFormV0, index int) []WebNuevaAppDataStorageFormV0 {
 	for len(values) <= index {
 		values = append(values, WebNuevaAppDataStorageFormV0{})
+	}
+	return values
+}
+
+func ensureNuevaAppDataSourceSlotV0(values []WebNuevaAppDataSourceFormV0, index int) []WebNuevaAppDataSourceFormV0 {
+	for len(values) <= index {
+		values = append(values, WebNuevaAppDataSourceFormV0{})
 	}
 	return values
 }

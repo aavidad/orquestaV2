@@ -109,12 +109,15 @@ func (n appSpecNormalizerV0) i18n() I18NSpecV0 {
 
 func (n appSpecNormalizerV0) data() DataSpecV0 {
 	dataTypes := normalizeDataTypesV0(n.req.Datos)
+	sources := normalizeDataSourcesV0(n.req.Datos.Fuentes)
 	storage := normalizeDataStorageV0(n.req.Datos.Storage)
 	data := DataSpecV0{
 		PersistenceRequired: n.req.Datos.DBRequired,
-		Needs:               emptyStringsV0(dataNeedsV0(n.req.Datos, dataTypes, storage)),
+		Needs:               emptyStringsV0(dataNeedsV0(n.req.Datos, dataTypes, sources, storage)),
 		Types:               dataTypes,
+		Sources:             sources,
 		Storage:             storage,
+		Operation:           normalizeDataOperationV0(n.req.Datos.Operacion),
 		Sensitivity:         dataSensitivityV0(n.req.Datos, dataTypes),
 		Retention:           strings.TrimSpace(n.req.Datos.Retencion),
 	}
@@ -144,6 +147,7 @@ func (n appSpecNormalizerV0) connectors() ConnectorsSpecV0 {
 			Nombre:    "storage-" + tipo,
 			Proposito: strings.TrimSpace(storage.Proposito),
 			Contrato:  "PersistenceRepository v0",
+			Tipo:      tipo,
 		}
 		if storage.Requerido {
 			required = append(required, spec)
@@ -153,8 +157,13 @@ func (n appSpecNormalizerV0) connectors() ConnectorsSpecV0 {
 	}
 	for _, connector := range n.req.Integraciones {
 		spec := ConnectorSpecV0{
-			Nombre:    strings.TrimSpace(connector.Nombre),
-			Proposito: strings.TrimSpace(connector.Proposito),
+			Nombre:     strings.TrimSpace(connector.Nombre),
+			Proposito:  strings.TrimSpace(connector.Proposito),
+			Tipo:       strings.TrimSpace(connector.Tipo),
+			Direccion:  strings.TrimSpace(connector.Direccion),
+			Auth:       strings.TrimSpace(connector.Auth),
+			DataScope:  strings.TrimSpace(connector.DataScope),
+			Criticidad: strings.TrimSpace(connector.Criticidad),
 		}
 		if spec.Nombre == "" || spec.Proposito == "" {
 			continue
@@ -241,9 +250,53 @@ func normalizeDataStorageV0(values []DataStorageRequestV0) []DataStorageSpecV0 {
 	return out
 }
 
-func dataNeedsV0(datos DatosRequestV0, dataTypes []DataTypeSpecV0, storage []DataStorageSpecV0) []string {
+func normalizeDataSourcesV0(values []DataSourceRequestV0) []DataSourceSpecV0 {
+	out := make([]DataSourceSpecV0, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		spec := DataSourceSpecV0{
+			Nombre:        strings.TrimSpace(value.Nombre),
+			Tipo:          strings.TrimSpace(value.Tipo),
+			Proposito:     strings.TrimSpace(value.Proposito),
+			Owner:         strings.TrimSpace(value.Owner),
+			Frecuencia:    strings.TrimSpace(value.Frecuencia),
+			Restricciones: emptyStringsV0(compactUniqueV0(value.Restricciones)),
+		}
+		if spec.Nombre == "" && spec.Tipo == "" && spec.Proposito == "" && spec.Owner == "" && spec.Frecuencia == "" && len(spec.Restricciones) == 0 {
+			continue
+		}
+		key := strings.ToLower(firstNonEmptyV0(spec.Nombre, spec.Proposito, spec.Tipo))
+		if key != "" && seen[key] {
+			continue
+		}
+		if key != "" {
+			seen[key] = true
+		}
+		out = append(out, spec)
+	}
+	if out == nil {
+		return []DataSourceSpecV0{}
+	}
+	return out
+}
+
+func normalizeDataOperationV0(value DataOperationRequestV0) DataOperationSpecV0 {
+	return DataOperationSpecV0{
+		Criticidad:     strings.TrimSpace(value.Criticidad),
+		Disponibilidad: strings.TrimSpace(value.Disponibilidad),
+		RPO:            strings.TrimSpace(value.RPO),
+		RTO:            strings.TrimSpace(value.RTO),
+		Auditoria:      value.Auditoria,
+		Restricciones:  emptyStringsV0(compactUniqueV0(value.Restricciones)),
+	}
+}
+
+func dataNeedsV0(datos DatosRequestV0, dataTypes []DataTypeSpecV0, sources []DataSourceSpecV0, storage []DataStorageSpecV0) []string {
 	values := []string{datos.NecesidadFuncional}
 	for _, value := range dataTypes {
+		values = append(values, value.Proposito)
+	}
+	for _, value := range sources {
 		values = append(values, value.Proposito)
 	}
 	for _, value := range storage {
@@ -261,7 +314,7 @@ func dataSensitivityV0(datos DatosRequestV0, dataTypes []DataTypeSpecV0) string 
 }
 
 func firstDataNeedV0(datos DatosRequestV0) string {
-	for _, value := range dataNeedsV0(datos, normalizeDataTypesV0(datos), normalizeDataStorageV0(datos.Storage)) {
+	for _, value := range dataNeedsV0(datos, normalizeDataTypesV0(datos), normalizeDataSourcesV0(datos.Fuentes), normalizeDataStorageV0(datos.Storage)) {
 		if strings.TrimSpace(value) != "" {
 			return value
 		}

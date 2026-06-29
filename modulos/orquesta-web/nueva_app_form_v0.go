@@ -48,6 +48,10 @@ type WebNuevaAppConnectorFormV0 struct {
 	Tipo          string   `json:"tipo,omitempty"`
 	Nombre        string   `json:"nombre,omitempty"`
 	Proposito     string   `json:"proposito,omitempty"`
+	Direccion     string   `json:"direccion,omitempty"`
+	Auth          string   `json:"auth,omitempty"`
+	DataScope     string   `json:"data_scope,omitempty"`
+	Criticidad    string   `json:"criticidad,omitempty"`
 	Requerido     bool     `json:"requerido,omitempty"`
 	Restricciones []string `json:"restricciones,omitempty"`
 }
@@ -65,7 +69,9 @@ type WebNuevaAppDatosFormV0 struct {
 	NecesidadFuncional string                         `json:"necesidad_funcional,omitempty"`
 	TiposDatos         []string                       `json:"tipos_datos,omitempty"`
 	TiposDetallados    []WebNuevaAppDataTypeFormV0    `json:"tipos_detallados,omitempty"`
+	Fuentes            []WebNuevaAppDataSourceFormV0  `json:"fuentes,omitempty"`
 	Storage            []WebNuevaAppDataStorageFormV0 `json:"storage,omitempty"`
+	Operacion          WebNuevaAppDataOperationFormV0 `json:"operacion,omitempty"`
 	Sensibilidad       string                         `json:"sensibilidad,omitempty"`
 	Retencion          string                         `json:"retencion,omitempty"`
 }
@@ -84,6 +90,24 @@ type WebNuevaAppDataStorageFormV0 struct {
 	Proposito     string   `json:"proposito,omitempty"`
 	Requerido     bool     `json:"requerido,omitempty"`
 	Restricciones []string `json:"restricciones,omitempty"`
+}
+
+type WebNuevaAppDataSourceFormV0 struct {
+	Nombre        string   `json:"nombre,omitempty"`
+	Tipo          string   `json:"tipo,omitempty"`
+	Proposito     string   `json:"proposito,omitempty"`
+	Owner         string   `json:"owner,omitempty"`
+	Frecuencia    string   `json:"frecuencia,omitempty"`
+	Restricciones []string `json:"restricciones,omitempty"`
+}
+
+type WebNuevaAppDataOperationFormV0 struct {
+	Criticidad     string   `json:"criticidad,omitempty"`
+	Disponibilidad string   `json:"disponibilidad,omitempty"`
+	RPO            string   `json:"rpo,omitempty"`
+	RTO            string   `json:"rto,omitempty"`
+	Auditoria      bool     `json:"auditoria,omitempty"`
+	Restricciones  []string `json:"restricciones,omitempty"`
 }
 
 type WebNuevaAppDeployFormV0 struct {
@@ -154,6 +178,10 @@ func mapConnectorFormsV0(values []WebNuevaAppConnectorFormV0) []orquestafactory.
 			Tipo:          trimV0(value.Tipo),
 			Nombre:        trimV0(value.Nombre),
 			Proposito:     trimV0(value.Proposito),
+			Direccion:     trimV0(value.Direccion),
+			Auth:          trimV0(value.Auth),
+			DataScope:     trimV0(value.DataScope),
+			Criticidad:    trimV0(value.Criticidad),
 			Requerido:     value.Requerido,
 			Restricciones: compactStringsV0(value.Restricciones),
 		})
@@ -184,7 +212,9 @@ func mapDatosFormV0(value WebNuevaAppDatosFormV0) orquestafactory.DatosRequestV0
 		NecesidadFuncional: trimV0(value.NecesidadFuncional),
 		TiposDatos:         compactStringsV0(value.TiposDatos),
 		TiposDetallados:    mapDataTypeFormsV0(value.TiposDetallados),
+		Fuentes:            mapDataSourceFormsV0(value.Fuentes),
 		Storage:            mapDataStorageFormsV0(value.Storage),
+		Operacion:          mapDataOperationFormV0(value.Operacion),
 		Sensibilidad:       trimV0(value.Sensibilidad),
 		Retencion:          trimV0(value.Retencion),
 	}
@@ -222,6 +252,35 @@ func mapDataStorageFormsV0(values []WebNuevaAppDataStorageFormV0) []orquestafact
 		return []orquestafactory.DataStorageRequestV0{}
 	}
 	return out
+}
+
+func mapDataSourceFormsV0(values []WebNuevaAppDataSourceFormV0) []orquestafactory.DataSourceRequestV0 {
+	out := make([]orquestafactory.DataSourceRequestV0, 0, len(values))
+	for _, value := range values {
+		out = append(out, orquestafactory.DataSourceRequestV0{
+			Nombre:        trimV0(value.Nombre),
+			Tipo:          trimV0(value.Tipo),
+			Proposito:     trimV0(value.Proposito),
+			Owner:         trimV0(value.Owner),
+			Frecuencia:    trimV0(value.Frecuencia),
+			Restricciones: compactStringsV0(value.Restricciones),
+		})
+	}
+	if out == nil {
+		return []orquestafactory.DataSourceRequestV0{}
+	}
+	return out
+}
+
+func mapDataOperationFormV0(value WebNuevaAppDataOperationFormV0) orquestafactory.DataOperationRequestV0 {
+	return orquestafactory.DataOperationRequestV0{
+		Criticidad:     trimV0(value.Criticidad),
+		Disponibilidad: trimV0(value.Disponibilidad),
+		RPO:            trimV0(value.RPO),
+		RTO:            trimV0(value.RTO),
+		Auditoria:      value.Auditoria,
+		Restricciones:  compactStringsV0(value.Restricciones),
+	}
 }
 
 func mapDeployFormV0(value WebNuevaAppDeployFormV0) orquestafactory.DeployRequestV0 {
