@@ -175,8 +175,8 @@ Caso: MCP-CT-026 catalogo workflow con quality gate durable
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp
 Evidencia esperada: El resource incluye 32 comandos y 32 eventos sincronizados contra el core, `RecordQualityGate`, `QualityGateRecorded`, `RegisterPhaseArtifact`, `PhaseArtifactRegistered`, `quality_gates` y `phase_artifacts`; el tool puro registra el gate sin outbox y devuelve contador compacto.
-Ultima ejecucion: 2026-05-09; pasa.
-Riesgos: El servidor MCP real sigue pendiente; el resource y el tool son adaptadores puros sin persistencia productiva.
+Ultima ejecucion: 2026-06-29; pasa dentro de `go test -count=1 ./...`.
+Riesgos: El transporte MCP real existe como opt-in en `cmd/orquesta-server`; este resource/tool siguen siendo adaptadores puros sin persistencia productiva.
 ```
 
 ```text
@@ -208,8 +208,8 @@ Caso: MCP-CT-024 catalogo workflow con confirmacion de parada
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp
 Evidencia esperada: El resource incluye 30 comandos y 30 eventos sincronizados contra el core, `RegisterAgentStopConfirmed`, `AgentStopConfirmed` y la ref `confirmed_stopped_agents`.
-Ultima ejecucion: 2026-05-06; pasa.
-Riesgos: El servidor MCP real sigue pendiente; el resource es solo proyeccion contractual.
+Ultima ejecucion: 2026-06-29; pasa dentro de `go test -count=1 ./...`.
+Riesgos: El transporte MCP real existe como opt-in en `cmd/orquesta-server`; este resource sigue siendo solo proyeccion contractual.
 ```
 
 ```text

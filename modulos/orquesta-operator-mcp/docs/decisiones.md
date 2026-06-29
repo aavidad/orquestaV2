@@ -28,7 +28,8 @@
 ## adaptador MCP puro v0
 
 - `orquesta-mcp` puede exponer las operaciones del operador como resource/tools puros.
-- El servidor/transporte MCP real sigue fuera del modulo y debe entrar como conector opt-in.
+- El servidor/transporte MCP real vive fuera del modulo como conector opt-in de
+  composicion en `cmd/orquesta-server`.
 - La falta de puerto se informa como error publico; no hay fallback a DB, runtime, filesystem ni scheduler interno.
 - Este cierre no cambia el nucleo: solo documenta la frontera entre contratos operativos y adaptador MCP.
 
