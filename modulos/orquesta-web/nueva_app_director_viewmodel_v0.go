@@ -82,7 +82,7 @@ func NewWebNuevaAppGoalPreviewViewModelV0(
 	result WebPreviewDirectorAppResultV0,
 ) WebNuevaAppViewModelV0 {
 	request := form.ToAppSpecRequestV0()
-	goalSpec := result.GoalSpec
+	summary := result.GoalSpecSummary
 	return WebNuevaAppViewModelV0{
 		RequestID:         firstNuevaAppValueV0(result.RequestID, request.RequestID),
 		Locale:            request.Locale,
@@ -93,17 +93,16 @@ func NewWebNuevaAppGoalPreviewViewModelV0(
 		Fases:             []WebNuevaAppFaseV0{},
 		Microtareas:       []WebNuevaAppMicrotareaV0{},
 		GoalPreview: &WebNuevaAppGoalPreviewV0{
-			RunRef:                trimV0(firstNuevaAppValueV0(result.RunRef, goalSpec.RunRef)),
-			GoalRef:               trimV0(goalSpec.GoalRef),
+			RunRef:                trimV0(firstNuevaAppValueV0(result.RunRef, summary.RunRef)),
+			GoalRef:               trimV0(summary.GoalRef),
 			DirectorExecutionMode: trimV0(result.DirectorExecutionMode),
-			WorkKind:              trimV0(goalSpec.WorkKind),
-			WorkProfileKind:       trimV0(goalSpec.WorkProfileKind),
-			DirectorKind:          trimV0(goalSpec.DirectorKind),
-			Objective:             trimV0(goalSpec.Objective),
-			WriteSet:              append([]orquestagoal.GoalWriteScopeV0(nil), goalSpec.WriteSet...),
-			RequiredTests:         append([]orquestagoal.GoalRequiredTestV0(nil), goalSpec.RequiredTests...),
-			AcceptanceCriteria:    compactStringsV0(goalSpec.AcceptanceCriteria),
-			ArtifactContracts:     append([]orquestagoal.GoalArtifactContractV0(nil), goalSpec.ArtifactContracts...),
+			DirectorKind:          trimV0(summary.DirectorKind),
+			SpecHash:              trimV0(summary.SpecHash),
+			ContextRefs:           compactStringsV0(summary.ContextRefs),
+			RuleRefs:              compactStringsV0(summary.RuleRefs),
+			RequiredTestRefs:      compactStringsV0(summary.RequiredTestRefs),
+			ArtifactTypes:         compactStringsV0(summary.ArtifactTypes),
+			SpecSummary:           summary,
 			Estimate:              result.Estimate,
 			EvidenceRefs:          compactStringsV0(result.EvidenceRefs),
 		},

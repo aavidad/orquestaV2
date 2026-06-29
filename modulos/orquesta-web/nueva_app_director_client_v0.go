@@ -11,6 +11,7 @@ import (
 
 	orquestafactory "orquesta/modulos/orquesta-factory"
 	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
 
 const (
@@ -229,7 +230,7 @@ func decodePreviewDirectorAppResponseV0(
 	}
 	switch strings.TrimSpace(result.Estado) {
 	case ArrancarDirectorAppEstadoOKV0:
-		if strings.TrimSpace(result.GoalSpec.GoalRef) == "" {
+		if strings.TrimSpace(result.GoalSpecSummary.GoalRef) == "" {
 			return WebNuevaAppViewModelV0{}, webNuevaAppClientErrorV0(WebNuevaAppErrRespuestaInvalidaV0, resp.StatusCode)
 		}
 		return NewWebNuevaAppGoalPreviewViewModelV0(form, result), nil
@@ -286,16 +287,14 @@ type arrancarDirectorAppRequestEnvelopeV0 struct {
 }
 
 type WebPreviewDirectorAppResultV0 struct {
-	Estado                string                           `json:"estado"`
-	RequestID             string                           `json:"request_id,omitempty"`
-	CorrelationID         string                           `json:"correlation_id,omitempty"`
-	RunRef                string                           `json:"run_ref,omitempty"`
-	DirectorExecutionMode string                           `json:"director_execution_mode,omitempty"`
-	GoalSpec              orquestagoal.GoalWorkSpecV0      `json:"goal_spec,omitempty"`
-	WriteSet              []string                         `json:"write_set,omitempty"`
-	RequiredTests         []string                         `json:"required_tests,omitempty"`
-	Estimate              WebNuevaAppGoalPreviewEstimateV0 `json:"estimate,omitempty"`
-	GoalSpecIssues        []orquestagoal.GoalWorkIssueV0   `json:"goal_spec_issues,omitempty"`
-	Errores               []WebNuevaAppIssueV0             `json:"errores_publicos,omitempty"`
-	EvidenceRefs          []string                         `json:"evidence_refs,omitempty"`
+	Estado                string                               `json:"estado"`
+	RequestID             string                               `json:"request_id,omitempty"`
+	CorrelationID         string                               `json:"correlation_id,omitempty"`
+	RunRef                string                               `json:"run_ref,omitempty"`
+	DirectorExecutionMode string                               `json:"director_execution_mode,omitempty"`
+	GoalSpecSummary       orquestamcp.MCPGoalWorkSpecSummaryV0 `json:"goal_spec_summary,omitempty"`
+	Estimate              WebNuevaAppGoalPreviewEstimateV0     `json:"estimate,omitempty"`
+	GoalSpecIssues        []orquestagoal.GoalWorkIssueV0       `json:"goal_spec_issues,omitempty"`
+	Errores               []WebNuevaAppIssueV0                 `json:"errores_publicos,omitempty"`
+	EvidenceRefs          []string                             `json:"evidence_refs,omitempty"`
 }

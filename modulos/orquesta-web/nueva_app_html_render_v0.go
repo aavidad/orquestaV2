@@ -109,6 +109,9 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.goal.error",
 		"nueva_app.goal_preview.titulo",
 		"nueva_app.goal_preview.objective",
+		"nueva_app.goal_preview.spec_hash",
+		"nueva_app.goal_preview.spec_counts",
+		"nueva_app.goal_preview.context_refs",
 		"nueva_app.goal_preview.write_set",
 		"nueva_app.goal_preview.required_tests",
 		"nueva_app.goal_preview.acceptance",
@@ -989,13 +992,13 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
           {{if .RunRef}}<div><strong>{{index $.HTML "nueva_app.goal.run_ref"}}:</strong> <code>{{.RunRef}}</code></div>{{end}}
           {{if .GoalRef}}<div><strong>{{index $.HTML "nueva_app.goal.goal_ref"}}:</strong> <code>{{.GoalRef}}</code></div>{{end}}
           {{if .DirectorExecutionMode}}<div><strong>{{index $.HTML "nueva_app.goal.director_execution_mode"}}:</strong> <code>{{.DirectorExecutionMode}}</code></div>{{end}}
-          {{if .Objective}}<div><strong>{{index $.HTML "nueva_app.goal_preview.objective"}}:</strong> {{.Objective}}</div>{{end}}
+          {{if .SpecHash}}<div><strong>{{index $.HTML "nueva_app.goal_preview.spec_hash"}}:</strong> <code>{{.SpecHash}}</code></div>{{end}}
           <div><strong>{{index $.HTML "nueva_app.goal_preview.estimate"}}:</strong> {{.Estimate.TokenBudget}} {{index $.HTML "nueva_app.goal_preview.tokens"}} · {{.Estimate.MaxSubgoals}} {{index $.HTML "nueva_app.goal_preview.subgoals"}} · {{index $.HTML "nueva_app.goal_preview.cost_tier"}} <code>{{.Estimate.CostTier}}</code></div>
+          <div><strong>{{index $.HTML "nueva_app.goal_preview.spec_counts"}}:</strong> {{.SpecSummary.WriteSetCount}} {{index $.HTML "nueva_app.goal_preview.write_set"}} · {{.SpecSummary.RequiredTestCount}} {{index $.HTML "nueva_app.goal_preview.required_tests"}} · {{.SpecSummary.ArtifactContractCount}} {{index $.HTML "nueva_app.goal_preview.artifacts"}}</div>
         </div>
-        {{if .WriteSet}}<h3>{{index $.HTML "nueva_app.goal_preview.write_set"}}</h3><ul>{{range .WriteSet}}<li><code>{{.Path}}</code>{{if .Purpose}} · {{.Purpose}}{{end}}</li>{{end}}</ul>{{end}}
-        {{if .RequiredTests}}<h3>{{index $.HTML "nueva_app.goal_preview.required_tests"}}</h3><ul>{{range .RequiredTests}}<li>{{if .TestRef}}<code>{{.TestRef}}</code>{{end}} {{.Command}}</li>{{end}}</ul>{{end}}
-        {{if .AcceptanceCriteria}}<h3>{{index $.HTML "nueva_app.goal_preview.acceptance"}}</h3><ul>{{range .AcceptanceCriteria}}<li>{{.}}</li>{{end}}</ul>{{end}}
-        {{if .ArtifactContracts}}<h3>{{index $.HTML "nueva_app.goal_preview.artifacts"}}</h3><ul>{{range .ArtifactContracts}}<li><code>{{.ArtifactRef}}</code> {{.ArtifactType}}</li>{{end}}</ul>{{end}}
+        {{if .ContextRefs}}<h3>{{index $.HTML "nueva_app.goal_preview.context_refs"}}</h3><ul>{{range .ContextRefs}}<li><code>{{.}}</code></li>{{end}}</ul>{{end}}
+        {{if .RequiredTestRefs}}<h3>{{index $.HTML "nueva_app.goal_preview.required_tests"}}</h3><ul>{{range .RequiredTestRefs}}<li><code>{{.}}</code></li>{{end}}</ul>{{end}}
+        {{if .ArtifactTypes}}<h3>{{index $.HTML "nueva_app.goal_preview.artifacts"}}</h3><ul>{{range .ArtifactTypes}}<li><code>{{.}}</code></li>{{end}}</ul>{{end}}
       </section>{{end}}
       {{if .Page.ViewModel.ErroresPublicos}}<section class="panel issue"><h2>{{index .HTML "nueva_app.html.errores_publicos"}}</h2><ul>{{range .Page.ViewModel.ErroresPublicos}}<li><code>{{.Code}}</code>{{if .Field}} <span>{{.Field}}</span>{{end}} {{if .Message}}{{.Message}}{{else}}{{index $.Page.Textos.ErroresPublicos .Code}}{{end}}</li>{{end}}</ul></section>{{end}}
       {{if .Page.ViewModel.ResumenApp.Nombre}}<section class="panel"><h2>{{index .HTML "nueva_app.html.resumen"}}</h2><p>{{.Page.ViewModel.ResumenApp.Nombre}} · {{.Page.ViewModel.ResumenApp.TipoApp}}</p><p>{{.Page.ViewModel.ResumenApp.Objetivo}}</p></section>{{end}}
