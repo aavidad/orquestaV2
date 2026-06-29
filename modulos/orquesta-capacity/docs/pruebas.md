@@ -54,18 +54,18 @@ Riesgos: Benchmarks reales siguen pendientes por adaptador/fuente viva.
 ```text
 Caso: CAP-CT-005 AgentHomeV0 separa agente logico, HOME, cuenta, runtime y credencial
 Tipo: contract
-Comando: pendiente; validar fixture con dos AgentHomeV0 para el mismo logical_agent_ref y provider_ref, con home_ref/account_ref/credential_ref distintos.
+Comando: go test -count=1 ./modulos/orquesta-capacity -run 'TestDecodeAgentHome'
 Evidencia esperada: La decision puede elegir HOME alternativo sin exponer email, token OAuth, ruta HOME real, nombre historico de agente ni proveedor canonico.
-Ultima ejecucion: No ejecutada; contrato documental v0.
+Ultima ejecucion: 2026-06-29; fixtures AgentHomeV0 validados por decoder Go estricto.
 Riesgos: RuntimeLaunchRequest v0 aun debe confirmar el binding final de referencias opacas.
 ```
 
 ```text
 Caso: CAP-CT-006 multi-HOME/OAuth respeta cuota y concurrencia por cuenta
 Tipo: contract
-Comando: pendiente; validar HOME premium/pro/local con quota fresh/stale/obsolete y max_concurrent_sessions agotado.
+Comando: go test -count=1 ./modulos/orquesta-capacity -run 'TestDecodeAgentHome'
 Evidencia esperada: HOME sin concurrencia o cuota agotada queda fuera; la decision usa alternativa viable, degrada o devuelve handoff preventivo sin inventar cuota real.
-Ultima ejecucion: No ejecutada; contrato documental v0.
+Ultima ejecucion: 2026-06-29; cubre multi-home OAuth, cuota fresh/obsolete, HOME local sin OAuth, concurrencia llena valida y reserved_sessions por encima de max como invalido.
 Riesgos: La fuente real de cuota y sesiones activas dependera de adaptadores runtime/observability.
 ```
 
