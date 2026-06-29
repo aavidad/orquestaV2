@@ -45,6 +45,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		return StackV0{}, err
 	}
 	config.DomainDelivery = normalizeDomainWorkDeliveryBridgeConfigV0(config.DomainDelivery)
+	decisionCouncil := codexStackDecisionCouncilConfigWithDefaultsV0(config)
 	ports := buildDirectorPortsV0(config)
 	queueConfig := normalizeRunQueueConfigV0(config.RunQueue)
 	supervisorConfig := normalizeRunSupervisorConfigV0(config.RunSupervisor)
@@ -58,7 +59,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		AutoprogrammingPromotion:              config.AutoprogrammingPromotion,
 		DomainWork:                            config.DomainWork,
 		RuntimeModels:                         config.RuntimeModels,
-		DecisionCouncil:                       config.DecisionCouncil,
+		DecisionCouncil:                       decisionCouncil,
 		DomainDelivery:                        config.DomainDelivery,
 		ProviderRuntimes:                      CanonicalRuntimeProviderConfigsV0(config),
 		EgressSanitizer:                       NormalizeEgressSanitizerConfigV0(config.EgressSanitizer),

@@ -220,7 +220,6 @@ Validacion:
 
 Pendiente siguiente:
 
-- fuente real de `architecture_vote.v0` desde entregas/artefactos Codex;
 - ejecutar `scripts/smoke_autoprogramming_supervised.sh` en modo Codex real con
   `ORQUESTA_AUTOPROGRAMMING_SUPERVISED_REAL_CODEX=1`,
   `ORQUESTA_AUTOPROGRAMMING_SUPERVISED_REAL_CODEX_CONFIRMED=1`,
@@ -256,7 +255,9 @@ Validacion:
 
 Pendiente siguiente:
 
-- fuente real de `architecture_vote.v0` desde entregas/artefactos Codex;
+- fuente real offline de `architecture_vote.v0` desde ACK/artefactos Codex
+  cubierta por `ReceiptStore`; falta smoke con proveedor real si hay homes Codex
+  explicitos.
 - ejecutar `scripts/smoke_autoprogramming_supervised.sh` en modo Codex real con
   homes Codex explicitos y confirmacion doble.
 
@@ -284,7 +285,9 @@ Validacion:
 
 Pendiente siguiente:
 
-- fuente real de `architecture_vote.v0` desde entregas/artefactos Codex;
+- fuente real offline de `architecture_vote.v0` desde ACK/artefactos Codex
+  cubierta por `ReceiptStore`; falta smoke con proveedor real si hay homes Codex
+  explicitos.
 - ejecutar el modo Codex real de `scripts/smoke_autoprogramming_supervised.sh`;
   el modo fake/residente ya queda cubierto por el script por defecto.
 

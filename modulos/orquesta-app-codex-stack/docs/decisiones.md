@@ -573,11 +573,13 @@ Motivo: los agentes pueden redactar resúmenes con alias o nombres cercanos; el
 stack no debe convertir texto libre en un rail fragil para decidir una
 arquitectura. La votacion live necesita payload causal (`architecture_vote.v0`)
 o una fuente equivalente por puerto.
-Impacto: `ConfigV0.DecisionCouncil` inyecta `VoteSource`; cuando las tareas
-`task-council-v-*` ya estan entregadas y existe fuente de voto, el residente
-propone `accept_decision_council_result`. El handler une votos por `TaskRef`,
-conserva `VoteRef` independiente, fuerza `VoterRef` desde `agent_ref` y
-`FamilyRef` desde `family_ref` en tareas/plan durables, evalua
+Impacto: `ConfigV0.DecisionCouncil` inyecta `VoteSource`; si hay
+`ReceiptStore`, `BuildStackV0` cablea por defecto una fuente real que lee ACKs
+Codex y artefactos `architecture_vote.v0` bajo `ProjectWorkDir`. Cuando las
+tareas `task-council-v-*` ya estan entregadas y existe fuente de voto, el
+residente propone `accept_decision_council_result`. El handler une votos por
+`TaskRef`, conserva `VoteRef` independiente, fuerza `VoterRef` desde
+`agent_ref` y `FamilyRef` desde `family_ref` en tareas/plan durables, evalua
 quorum/evidencia con `orquesta-decision-council` y aplica `AcceptDecision` por
 `HandleStoredWorkflowCommandV0`. Si faltan votos completos o evidencia, queda
 pendiente con evidencia; no parsea logs, summary ni palabras sueltas.

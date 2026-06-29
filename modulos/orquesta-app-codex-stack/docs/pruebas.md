@@ -128,6 +128,12 @@ Cobertura Go actual:
 - `TestCodexStackResidentCouncilV0NoProponeAceptarSinVoteSourceV0` valida que
   el residente no emite una accion de aceptacion que no puede aplicar por falta
   de fuente estructurada de votos.
+- `TestCodexStackReceiptDecisionCouncilVoteSourceV0LeeArchitectureVoteDesdeAckV0`
+  valida la fuente real por `ReceiptStore`: lee el ACK Codex, abre solo
+  ficheros declarados bajo `ProjectWorkDir` y normaliza un
+  `architecture_vote.v0` a `CouncilVoteV0`.
+- `TestBuildStackV0CableaVoteSourceRealSiHayReceiptStoreV0` valida que
+  `BuildStackV0` cablea esa fuente por defecto cuando existe `ReceiptStore`.
 - `TestCodexStackResidentCouncilHydrateVotesV0NormalizaMetadataDurableV0`
   valida que `TaskRef` une voto y tarea, `VoteRef` puede ser independiente y
   `agent_ref`/`family_ref` durables mandan sobre valores devueltos por el
@@ -356,8 +362,8 @@ Estado de huecos restantes:
   `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`
   hasta `completed_syllabus_package`, sin tocar OPES productivo.
 - El consejo residente ya llega offline/fake hasta `AcceptDecision` con votos
-  estructurados y packet Codex especifico para propuesta, critica y voto. Falta
-  fuente real de artefactos `architecture_vote.v0`.
+  estructurados, packet Codex especifico para propuesta/critica/voto y fuente
+  real offline por `ReceiptStore` para artefactos `architecture_vote.v0`.
 - `scripts/smoke_autoprogramming_supervised.sh` cubre el Director residente con
   servidor temporal. Por defecto usa `codex-fake`; el modo proveedor real exige
   `ORQUESTA_AUTOPROGRAMMING_SUPERVISED_REAL_CODEX=1`,
