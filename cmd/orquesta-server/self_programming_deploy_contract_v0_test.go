@@ -18,6 +18,8 @@ func TestSelfProgrammingDeployContractV0NoMontaProduccionNiExponePuertoPublicoV0
 		"uso-app",
 		"opes-api",
 		"0.0.0.0:19039:19039",
+		"ORQUESTA_OPES_BRIDGE_DRY_RUN=",
+		"ORQUESTA_OPES_REGISTRY_FINALPKG_DRY_RUN=",
 	} {
 		if strings.Contains(compose, forbidden) || strings.Contains(envExample, forbidden) {
 			t.Fatalf("deploy self-programming contiene referencia prohibida %q", forbidden)
