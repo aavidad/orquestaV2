@@ -196,6 +196,10 @@ El nucleo debe ser agnostico al modelo. La integracion se hace mediante conector
 
 Transportes previstos:
 
+Nota de vigencia 2026-06-29: esta lista es historica. `mcp_stdio` aqui no
+autoriza backend Goal stdio ni operacion normal actual; goal-first vigente usa
+`app_server_tmux`, y MCP/HTTP son adaptadores opt-in.
+
 - `cli`
 - `mcp_stdio`
 - `mcp_http`

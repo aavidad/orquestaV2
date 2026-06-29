@@ -34,6 +34,7 @@ ORQUESTA_SERVER_STATE_DIR=/tmp/orquesta-opes-smoke-server \
 ORQUESTA_CODEX_PROJECT_WORKDIR=/home/alberto/Trabajo/orquesta \
 ORQUESTA_CODEX_RUNTIME_WORKDIR=/home/alberto/Trabajo/orquesta/.orquesta-smoke-work \
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18082 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_CODEX_MODEL=gpt-5.5 \
 ORQUESTA_CODEX_REASONING_EFFORT=xhigh \
 go run ./cmd/orquesta-server run
@@ -54,12 +55,16 @@ Uso:
 
 ```bash
 ORQUESTA_OPES_DOMAIN_SMOKE_CONFIRM=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_BASE_URL=http://127.0.0.1:18787 \
 OPES_BASE_URL=http://127.0.0.1:18082 \
 SMOKE_ID=opes-real-001 \
 SMOKE_OUT_DIR=/tmp/orquesta-opes-smoke-results/opes-real-001 \
 scripts/smoke_opes_domain_work_real.sh
 ```
+
+`127.0.0.1` no sustituye la confirmacion temporal: no ejecutar contra OPES
+productivo ni contra una instancia con temarios reales en curso.
 
 El script:
 
