@@ -217,14 +217,28 @@ require_plan_temario_guard() {
   fi
 }
 
+url_ref() {
+  local value="${1%/}"
+  local digest=""
+  if command -v sha256sum >/dev/null 2>&1; then
+    digest="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    digest="$(printf '%s' "$value" | shasum -a 256 | awk '{print $1}')"
+  else
+    echo "url-ref-unavailable"
+    return 0
+  fi
+  echo "url-ref-${digest}"
+}
+
 write_metadata() {
   mkdir -p "$SMOKE_OUT_DIR"
   {
     echo "smoke_id=$SMOKE_ID"
     echo "mode=$MODE"
     echo "fake_server=$FAKE_SERVER"
-    echo "opes_base_url=$OPES_BASE_URL_EFFECTIVE"
-    echo "orquesta_base_url=$ORQUESTA_BASE_URL_EFFECTIVE"
+    echo "opes_base_url_ref=$(url_ref "$OPES_BASE_URL_EFFECTIVE")"
+    echo "orquesta_base_url_ref=$(url_ref "$ORQUESTA_BASE_URL_EFFECTIVE")"
     echo "job_type=plan_temario"
     echo "job_ref=$JOB_REF"
     echo "limit=$LIMIT"

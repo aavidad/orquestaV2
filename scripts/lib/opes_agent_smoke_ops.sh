@@ -197,6 +197,20 @@ smoke_assert_final_stats() {
   fi
 }
 
+smoke_url_ref() {
+  local value="${1%/}"
+  local digest=""
+  if command -v sha256sum >/dev/null 2>&1; then
+    digest="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    digest="$(printf '%s' "$value" | shasum -a 256 | awk '{print $1}')"
+  else
+    echo "url-ref-unavailable"
+    return 0
+  fi
+  echo "url-ref-${digest}"
+}
+
 smoke_write_summary() {
   local run_ref="$1"
   local topic_id="$2"
@@ -208,8 +222,8 @@ smoke_write_summary() {
   blocks_count="$(smoke_json_count "$SMOKE_OUT_DIR/opes_blocks_final.json")"
   cat >"$SMOKE_OUT_DIR/summary.txt" <<EOF
 smoke_id=$SMOKE_ID
-orquesta_base_url=$base_url
-opes_base_url=$OPES_BASE_URL
+orquesta_base_url_ref=$(smoke_url_ref "$base_url")
+opes_base_url_ref=$(smoke_url_ref "$OPES_BASE_URL")
 run_ref=$run_ref
 topic_id=$topic_id
 chapter_id=$chapter_id

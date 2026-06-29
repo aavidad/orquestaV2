@@ -118,6 +118,20 @@ domain_work_artifact_payload() {
     }'
 }
 
+url_ref() {
+  local value="${1%/}"
+  local digest=""
+  if command -v sha256sum >/dev/null 2>&1; then
+    digest="$(printf '%s' "$value" | sha256sum | awk '{print $1}')"
+  elif command -v shasum >/dev/null 2>&1; then
+    digest="$(printf '%s' "$value" | shasum -a 256 | awk '{print $1}')"
+  else
+    echo "url-ref-unavailable"
+    return 0
+  fi
+  echo "url-ref-${digest}"
+}
+
 write_summary() {
   local topic_id="$1"
   local chapter_id="$2"
@@ -127,8 +141,8 @@ write_summary() {
   local block_count="$6"
   cat >"$SMOKE_OUT_DIR/summary.txt" <<EOF
 smoke_id=$SMOKE_ID
-orquesta_base_url=$ORQUESTA_BASE_URL
-opes_base_url=$OPES_BASE_URL
+orquesta_base_url_ref=$(url_ref "$ORQUESTA_BASE_URL")
+opes_base_url_ref=$(url_ref "$OPES_BASE_URL")
 topic_id=$topic_id
 chapter_id=$chapter_id
 job_ref=$job_ref
