@@ -247,7 +247,7 @@ func codexAppServerWebSocketReadResponseV0(reader *bufio.Reader, responseID int,
 			continue
 		}
 		if response.Error != nil {
-			return fmt.Errorf("codex_app_server_rpc_error:%s", response.Error.Message)
+			return codexAppServerRPCErrorV0(response.Error.Code, response.Error.Message)
 		}
 		if out == nil {
 			return nil

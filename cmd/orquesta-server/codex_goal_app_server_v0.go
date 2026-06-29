@@ -642,7 +642,7 @@ func decodeCodexAppServerRPCResponseScannerV0(scanner *bufio.Scanner, responseID
 			continue
 		}
 		if response.Error != nil {
-			return fmt.Errorf("codex_app_server_rpc_error:%s", response.Error.Message)
+			return codexAppServerRPCErrorV0(response.Error.Code, response.Error.Message)
 		}
 		if out == nil {
 			return nil
@@ -665,6 +665,31 @@ type serverCodexAppServerRPCResponseV0 struct {
 	ID     int             `json:"id,omitempty"`
 	Result json.RawMessage `json:"result,omitempty"`
 	Error  *struct {
+		Code    int    `json:"code,omitempty"`
 		Message string `json:"message"`
 	} `json:"error,omitempty"`
+}
+
+func codexAppServerRPCErrorV0(code int, message string) error {
+	return codexAppServerCallErrorV0{
+		Code: codexAppServerRPCIssueCodeV0(code),
+		Err:  fmt.Errorf("codex_app_server_rpc_error: code=%d message=%s", code, strings.TrimSpace(message)),
+	}
+}
+
+func codexAppServerRPCIssueCodeV0(code int) string {
+	switch code {
+	case -32700:
+		return "codex_app_server_rpc_parse_error"
+	case -32600:
+		return "codex_app_server_rpc_invalid_request"
+	case -32601:
+		return "codex_app_server_rpc_method_not_found"
+	case -32602:
+		return "codex_app_server_rpc_invalid_params"
+	case -32603:
+		return "codex_app_server_rpc_internal_error"
+	default:
+		return "codex_app_server_rpc_error"
+	}
 }

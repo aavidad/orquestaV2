@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1009,6 +1011,24 @@ func TestCodexAppServerRPCPayloadYDecodeV0(t *testing.T) {
 		threadResponse.Thread.Turns[0].Items[0].Phase != "final_answer" {
 		t.Fatalf("thread response=%+v", threadResponse)
 	}
+
+	stdout = []byte(`{"id":2,"error":{"code":-32602,"message":"params invalidos"}}` + "\n")
+	err = decodeCodexAppServerRPCResponseV0(stdout, 2, &threadResponse)
+	var callErr codexAppServerCallErrorV0
+	if !errors.As(err, &callErr) || callErr.Code != "codex_app_server_rpc_invalid_params" {
+		t.Fatalf("rpc error no estructurado: err=%v callErr=%+v", err, callErr)
+	}
+}
+
+func TestCodexAppServerWebSocketReadResponseV0EstructuraErroresRPCV0(t *testing.T) {
+	frame := codexAppServerWebSocketFrameForTestV0(
+		[]byte(`{"id":2,"error":{"code":-32601,"message":"method missing"}}`),
+	)
+	err := codexAppServerWebSocketReadResponseV0(bufio.NewReader(bytes.NewReader(frame)), 2, nil)
+	var callErr codexAppServerCallErrorV0
+	if !errors.As(err, &callErr) || callErr.Code != "codex_app_server_rpc_method_not_found" {
+		t.Fatalf("websocket rpc error no estructurado: err=%v callErr=%+v", err, callErr)
+	}
 }
 
 func TestServerEffectiveConfigV0ExponeGoalFirstYBackendV0(t *testing.T) {
@@ -1039,6 +1059,19 @@ func TestServerEffectiveConfigV0ExponeGoalFirstYBackendV0(t *testing.T) {
 func fakeCodexAppServerPreflightScriptV0(mode string) string {
 	argsCheck := ""
 	return "#!/bin/sh\n" + argsCheck + "while IFS= read -r line; do\n  case \"$line\" in\n    *'\"id\":1'*) printf '{\"id\":1,\"result\":{}}\\n' ;;\n    *'\"id\":2'*) printf '{\"id\":2,\"result\":{\"data\":[]}}\\n'; exit 0 ;;\n  esac\ndone\nexit 1\n"
+}
+
+func codexAppServerWebSocketFrameForTestV0(payload []byte) []byte {
+	frame := []byte{0x81}
+	switch size := len(payload); {
+	case size < 126:
+		frame = append(frame, byte(size))
+	case size <= 65535:
+		frame = append(frame, 126, byte(size>>8), byte(size))
+	default:
+		panic("test websocket frame too large")
+	}
+	return append(frame, payload...)
 }
 
 type fakeCodexAppServerProtocolV0 struct {
