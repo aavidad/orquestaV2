@@ -358,10 +358,14 @@ Estado de huecos restantes:
 - El consejo residente ya llega offline/fake hasta `AcceptDecision` con votos
   estructurados y packet Codex especifico para propuesta, critica y voto. Falta
   fuente real de artefactos `architecture_vote.v0`.
-- Falta un smoke canonico opt-in de `Director residente + Codex real`. Los
-  smokes reales vigentes cubren ola/recursion Codex, pero el smoke residente
-  actual usa `codex-fake`; no debe marcarse como evidencia de proveedor real
-  hasta crear script o flag dedicado.
+- `scripts/smoke_autoprogramming_supervised.sh` cubre el Director residente con
+  servidor temporal. Por defecto usa `codex-fake`; el modo proveedor real exige
+  `ORQUESTA_AUTOPROGRAMMING_SUPERVISED_REAL_CODEX=1`,
+  `ORQUESTA_AUTOPROGRAMMING_SUPERVISED_REAL_CODEX_CONFIRMED=1`,
+  `ORQUESTA_CODEX_COMMAND`, `ORQUESTA_CODEX_HOME` y
+  `ORQUESTA_CODEX_CODE_HOME` explicitos. Revalidacion local 2026-06-29: modo
+  fake/residente verde; la ejecucion real queda bloqueada en esta sesion por
+  falta de `ORQUESTA_CODEX_HOME`/`ORQUESTA_CODEX_CODE_HOME` explicitos.
 - Gemini/Claude aun heredan contratos de ACK/receipt con nombres `codex_*`.
   Pendiente neutralizar a `orquesta_agent_ack.v0` y mantener `codex_*` solo
   como alias legacy del adaptador Codex.

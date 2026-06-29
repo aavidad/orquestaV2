@@ -16,6 +16,7 @@ project_dir="$smoke_root/project"
 runtime_dir="$smoke_root/runtime"
 codex_home="$smoke_root/codex-home"
 bin_dir="$smoke_root/bin"
+fake_codex="$bin_dir/codex-fake"
 tmp_go_dir="$smoke_root/harness"
 payload_dir="$smoke_root/payloads"
 result_dir="$smoke_root/results"
@@ -28,6 +29,10 @@ request_timeout="${ORQUESTA_SMOKE_REQUEST_TIMEOUT_SECONDS:-15}"
 resident_polls="${ORQUESTA_SMOKE_RESIDENT_POLLS:-40}"
 resident_sleep="${ORQUESTA_SMOKE_RESIDENT_SLEEP_SECONDS:-0.25}"
 legacy_external_fallback="${ORQUESTA_AUTOPROGRAMMING_LEGACY_EXTERNAL_FALLBACK:-0}"
+real_codex="${ORQUESTA_AUTOPROGRAMMING_SUPERVISED_REAL_CODEX:-0}"
+codex_command_effective=""
+codex_home_effective="$codex_home/.codex"
+codex_code_home_effective="$codex_home/.codex"
 
 if [[ "$legacy_external_fallback" == "1" ]]; then
   smoke_require_confirm \
@@ -41,6 +46,18 @@ need_cmd() {
     echo "falta comando requerido: $1" >&2
     exit 127
   fi
+}
+
+resolve_command() {
+  local raw="$1"
+  if [[ -z "$raw" ]]; then
+    return 1
+  fi
+  if [[ "$raw" == /* ]]; then
+    printf '%s' "$raw"
+    return 0
+  fi
+  command -v "$raw"
 }
 
 cleanup() {
@@ -78,16 +95,38 @@ smoke_require_confirm \
   1 \
   "smoke legacy autoprogramacion desactivado: exporta ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1 para probar prepare-run historico"
 
+if [[ "$real_codex" == "1" ]]; then
+  smoke_require_confirm \
+    ORQUESTA_AUTOPROGRAMMING_SUPERVISED_REAL_CODEX_CONFIRMED \
+    1 \
+    "modo Codex real requiere ORQUESTA_AUTOPROGRAMMING_SUPERVISED_REAL_CODEX_CONFIRMED=1"
+  codex_command_effective="$(resolve_command "${ORQUESTA_CODEX_COMMAND:-}")" || {
+    echo "modo Codex real requiere ORQUESTA_CODEX_COMMAND con ruta/comando ejecutable" >&2
+    exit 2
+  }
+  if [[ ! -x "$codex_command_effective" ]]; then
+    echo "ORQUESTA_CODEX_COMMAND no es ejecutable: $codex_command_effective" >&2
+    exit 2
+  fi
+  if [[ -z "${ORQUESTA_CODEX_HOME:-}" || -z "${ORQUESTA_CODEX_CODE_HOME:-}" ]]; then
+    echo "modo Codex real requiere ORQUESTA_CODEX_HOME y ORQUESTA_CODEX_CODE_HOME explicitos" >&2
+    exit 2
+  fi
+  codex_home_effective="$ORQUESTA_CODEX_HOME"
+  codex_code_home_effective="$ORQUESTA_CODEX_CODE_HOME"
+else
+  codex_command_effective="$fake_codex"
+fi
+
 need_cmd curl
 need_cmd go
 need_cmd python3
 
 mkdir -p "$state_dir" "$project_dir" "$runtime_dir" "$codex_home/.codex" "$bin_dir" "$tmp_go_dir" "$payload_dir" "$result_dir"
-printf '{"ok":true}\n' >"$codex_home/.codex/auth.json"
-printf 'model = "fake"\n' >"$codex_home/.codex/config.toml"
-
-fake_codex="$bin_dir/codex-fake"
-cat >"$fake_codex" <<'SH'
+if [[ "$real_codex" != "1" ]]; then
+  printf '{"ok":true}\n' >"$codex_home/.codex/auth.json"
+  printf 'model = "fake"\n' >"$codex_home/.codex/config.toml"
+  cat >"$fake_codex" <<'SH'
 #!/usr/bin/env sh
 out=""
 while [ "$#" -gt 0 ]; do
@@ -102,7 +141,8 @@ if [ -n "$out" ]; then
 fi
 printf 'fake codex stdout: smoke sin Codex real\n'
 SH
-chmod 700 "$fake_codex"
+  chmod 700 "$fake_codex"
+fi
 
 write_autoprogramming_payload() {
   local output="$1"
@@ -264,13 +304,17 @@ start_server() {
   ORQUESTA_SERVER_STATE_DIR="$state_dir" \
   ORQUESTA_CODEX_PROJECT_WORKDIR="$project_dir" \
   ORQUESTA_CODEX_RUNTIME_WORKDIR="$runtime_dir" \
-  ORQUESTA_CODEX_HOME="$codex_home/.codex" \
-  ORQUESTA_CODEX_CODE_HOME="$codex_home/.codex" \
-  ORQUESTA_CODEX_COMMAND="$fake_codex" \
-  ORQUESTA_CODEX_PATH="$PATH" \
-  ORQUESTA_CODEX_APPROVAL_POLICY="never" \
-  ORQUESTA_CODEX_SANDBOX="workspace-write" \
+  ORQUESTA_CODEX_HOME="$codex_home_effective" \
+  ORQUESTA_CODEX_CODE_HOME="$codex_code_home_effective" \
+  ORQUESTA_CODEX_COMMAND="$codex_command_effective" \
+  ORQUESTA_CODEX_PATH="${ORQUESTA_CODEX_PATH:-$PATH}" \
+  ORQUESTA_CODEX_APPROVAL_POLICY="${ORQUESTA_CODEX_APPROVAL_POLICY:-never}" \
+  ORQUESTA_CODEX_SANDBOX="${ORQUESTA_CODEX_SANDBOX:-workspace-write}" \
+  ORQUESTA_CODEX_MODEL="${ORQUESTA_CODEX_MODEL:-gpt-5.5}" \
+  ORQUESTA_CODEX_REASONING_EFFORT="${ORQUESTA_CODEX_REASONING_EFFORT:-medium}" \
+  ORQUESTA_CODEX_GOAL_BACKEND="${ORQUESTA_CODEX_GOAL_BACKEND:-app_server_tmux}" \
   ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP="${ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP:-0}" \
+  ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED="${ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED:-true}" \
   ORQUESTA_SERVER_TICK_INTERVAL_MS="${ORQUESTA_SERVER_TICK_INTERVAL_MS:-250}" \
   ORQUESTA_OPES_BASE_URL="" \
   OPES_BASE_URL="" \
@@ -681,7 +725,12 @@ PY
     'TestContinueAppDirectorV0CierraCicloReviewRunnerYReplanOrClose|TestMaybeCloseOperationalDirectorV0CierraPlanStateTrasCierreOperativoExitoso' \
     "director_service_closure"
 
-  echo "codex_real_executed=false"
+  if [[ "$real_codex" == "1" ]]; then
+    echo "codex_real_executed=true"
+    echo "codex_command=$codex_command_effective"
+  else
+    echo "codex_real_executed=false"
+  fi
   echo "opes_touched=false"
   echo "summary_dir=$result_dir"
 }

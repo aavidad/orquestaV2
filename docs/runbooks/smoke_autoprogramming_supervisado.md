@@ -1,7 +1,8 @@
-# Smoke autoprogramming supervisado sin Codex real
+# Smoke autoprogramming supervisado
 
 Objetivo: validar el camino opt-in minimo para autoprogramacion desatendida sin
-ejecutar Codex real ni tocar OPES:
+tocar OPES. Por defecto ejecuta `codex-fake`; opcionalmente puede lanzar Codex
+real con confirmacion doble y homes explicitos:
 
 ```text
 request valida
@@ -10,14 +11,15 @@ request valida
   -> ruta REST de validacion si existe
   -> POST /api/v0/autoprogramming/prepare-run
   -> cola global del stack Codex
-  -> supervisor residente del servidor con Codex fake
+  -> Director residente del servidor con Codex fake o Codex real opt-in
   -> POST /api/v0/autoprogramming/prepare-run con el mismo payload para replay
   -> external-work/run + supervisor solo con fallback legacy explicito
   -> pruebas focales de stack fake y cierre offline segun disponibilidad
 ```
 
-Este smoke no modifica el repo. Crea harnesses, servidor, state, runtime y HOME
-Codex falsos bajo `/tmp` o bajo `ORQUESTA_SMOKE_ROOT`.
+Este smoke no modifica el repo. Crea harnesses, servidor, state y runtime bajo
+`/tmp` o bajo `ORQUESTA_SMOKE_ROOT`. Si se usa `ORQUESTA_SMOKE_ROOT` fuera de
+`/tmp`, declara el prefijo permitido en `ORQUESTA_SMOKE_ALLOWED_ROOT_PREFIXES`.
 
 ## Comando
 
@@ -26,6 +28,19 @@ Desde la raiz del repo:
 ```bash
 ORQUESTA_AUTOPROGRAMMING_SUPERVISED_SMOKE_CONFIRM=1 \
 ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1 \
+  ./scripts/smoke_autoprogramming_supervised.sh
+```
+
+Modo Codex real legacy/residente:
+
+```bash
+ORQUESTA_AUTOPROGRAMMING_SUPERVISED_SMOKE_CONFIRM=1 \
+ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=1 \
+ORQUESTA_AUTOPROGRAMMING_SUPERVISED_REAL_CODEX=1 \
+ORQUESTA_AUTOPROGRAMMING_SUPERVISED_REAL_CODEX_CONFIRMED=1 \
+ORQUESTA_CODEX_COMMAND=/ruta/a/codex \
+ORQUESTA_CODEX_HOME=/workspace/runtime/codex-home-real \
+ORQUESTA_CODEX_CODE_HOME=/workspace/runtime/codex-home-real/.codex \
   ./scripts/smoke_autoprogramming_supervised.sh
 ```
 
@@ -72,6 +87,9 @@ el test focal legacy asociado.
   usando runtime fake.
 - Compila y arranca `cmd/orquesta-server` con `state_dir`, `runtime_dir`,
   `project_dir`, `CODEX_HOME` y comando Codex fake temporales.
+- Configura `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` para que el servidor
+  temporal quede sano en modo goal-first aunque este smoke pruebe
+  `prepare-run` legacy explicito. No usa `stdio` como backend normal.
 - Llama a `POST /api/v0/autoprogramming/validate-request` si la ruta esta
   expuesta y exige `accepted=true`.
 - Llama a `POST /api/v0/autoprogramming/prepare-run` en modo legacy explicito
@@ -111,6 +129,14 @@ La salida debe incluir:
 - `codex_real_executed=false`;
 - `opes_touched=false`.
 
+En modo real debe incluir `codex_real_executed=true` y `codex_command=...`.
+Revalidacion local 2026-06-29: el modo fake/residente paso en
+`/workspace/runtime/smokes`; el modo real quedo bloqueado antes de lanzar
+agentes porque faltaban `ORQUESTA_CODEX_HOME` y `ORQUESTA_CODEX_CODE_HOME`
+explicitos. Accion del operador: proporcionar homes Codex aislados y
+autenticados bajo `/workspace` o `/srv/orquesta-self` y repetir el comando de
+modo real.
+
 Los mensajes `skip:` son aceptables cuando una ruta o prueba focal todavia no
 existe en la composicion actual. No deben ocultar fallos de contrato puro,
 payload invalido, servidor que no arranca o tests focales existentes que fallen.
@@ -142,6 +168,6 @@ es el launcher de autoprogramacion.
 ## Alcance
 
 Este smoke prepara evidencia operacional no invasiva para autoprogramacion
-desatendida, pero no cierra el smoke largo con agentes Codex reales. Tampoco
-prueba recursion completa, replan generico de todos los blockers ni calidad
-semantica de una entrega real.
+desatendida. El modo real cubre el arranque residente con proveedor Codex, pero
+no sustituye los smokes largos de ola/recursion, replan generico de todos los
+blockers ni calidad semantica de una entrega real.
