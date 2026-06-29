@@ -372,7 +372,7 @@ Estado de huecos restantes:
   `ORQUESTA_CODEX_CODE_HOME` explicitos. Revalidacion local 2026-06-29: modo
   fake/residente verde; la ejecucion real queda bloqueada en esta sesion por
   falta de `ORQUESTA_CODEX_HOME`/`ORQUESTA_CODEX_CODE_HOME` explicitos.
-- Gemini/Claude ya piden ACK/receipt neutrales
+- Codex/Gemini/Claude ya piden ACK/receipt neutrales
   `orquesta_agent_ack.v0` / `orquesta_required_test_receipt.v0` en sus prompts;
   `codex_agent_ack.v0` queda documentado solo como alias legacy aceptado por
   compatibilidad de observacion.
