@@ -62,6 +62,7 @@ var nuevaAppI18nRequiredKeysV0 = []string{
 	"nueva_app.campo.documentacion.usuario",
 	"nueva_app.campo.documentacion.desarrollo",
 	"nueva_app.campo.documentacion.sistemas",
+	"nueva_app.campo.documentacion.profundidad",
 	"nueva_app.campo.documentacion.locales",
 	"nueva_app.campo.i18n",
 	"nueva_app.campo.i18n.enabled",

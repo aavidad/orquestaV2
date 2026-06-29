@@ -33,6 +33,16 @@ func TestBuildStartAppDirectorGoalWorkPreviewV0CompilaGoalSinPuertos(t *testing.
 	if issues := orquestagoal.ValidateGoalWorkSpecV0(preview.GoalSpec); len(issues) > 0 {
 		t.Fatalf("goal spec invalido: %+v", issues)
 	}
+	hasDeepManualCriterion := false
+	for _, criterion := range preview.GoalSpec.AcceptanceCriteria {
+		if criterion == "Documentacion: usuario=true; desarrollo=true; sistemas=true; profundidad=profunda. Si profundidad=profunda, entregar manuales de usuario, desarrollo y sistemas con flujos, comandos, criterios de aceptacion y operacion." {
+			hasDeepManualCriterion = true
+			break
+		}
+	}
+	if !hasDeepManualCriterion {
+		t.Fatalf("goal spec no transporta manual profundo: %+v", preview.GoalSpec.AcceptanceCriteria)
+	}
 }
 
 func TestBuildStartAppDirectorGoalWorkPreviewV0CoincideConSpecLanzada(t *testing.T) {

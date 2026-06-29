@@ -102,10 +102,11 @@ func TestWebNuevaAppFormV0ToAppSpecRequestV0PreservaCamposRicos(t *testing.T) {
 			Observabilidad:        &no,
 		},
 		Documentacion: WebNuevaAppDocumentacionFormV0{
-			Usuario:    &yes,
-			Desarrollo: &yes,
-			Sistemas:   &no,
-			Locales:    []string{"es", "en"},
+			Usuario:     &yes,
+			Desarrollo:  &yes,
+			Sistemas:    &no,
+			Profundidad: "profunda",
+			Locales:     []string{"es", "en"},
 		},
 		I18N: WebNuevaAppI18NFormV0{
 			Enabled:       &yes,
@@ -141,7 +142,7 @@ func TestWebNuevaAppFormV0ToAppSpecRequestV0PreservaCamposRicos(t *testing.T) {
 	if len(req.Calidad.AccesibilidadOpciones) != 2 || req.Calidad.AccesibilidadOpciones[0] != "normal" {
 		t.Fatalf("opciones de accesibilidad no preservadas: %+v", req.Calidad)
 	}
-	if req.Documentacion.Sistemas == nil || *req.Documentacion.Sistemas {
+	if req.Documentacion.Sistemas == nil || *req.Documentacion.Sistemas || req.Documentacion.Profundidad != "profunda" {
 		t.Fatalf("documentacion no preservada: %+v", req.Documentacion)
 	}
 	if req.RequestKind != "documentar_app" || req.ExecutionMode != "debug" {

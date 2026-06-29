@@ -523,6 +523,7 @@
         "user",
         "development",
         "systems",
+        "depth",
         "locales"
       ],
       "properties": {
@@ -534,6 +535,14 @@
         },
         "systems": {
           "type": "boolean"
+        },
+        "depth": {
+          "type": "string",
+          "enum": [
+            "basica",
+            "normal",
+            "profunda"
+          ]
         },
         "locales": {
           "type": "array",

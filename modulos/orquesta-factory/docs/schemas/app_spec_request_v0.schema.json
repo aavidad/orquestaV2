@@ -376,6 +376,15 @@
           "type": "boolean",
           "default": true
         },
+        "profundidad": {
+          "type": "string",
+          "enum": [
+            "basica",
+            "normal",
+            "profunda"
+          ],
+          "default": "profunda"
+        },
         "locales": {
           "type": "array",
           "items": {

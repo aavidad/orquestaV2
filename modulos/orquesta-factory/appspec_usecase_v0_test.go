@@ -30,7 +30,7 @@ func TestSolicitarNuevaAppV0AppliesDefaults(t *testing.T) {
 	if !spec.I18N.Enabled || spec.I18N.DefaultLocale != "es-ES" {
 		t.Fatalf("i18n=%+v", spec.I18N)
 	}
-	if !spec.Docs.User || !spec.Docs.Development || !spec.Docs.Systems {
+	if !spec.Docs.User || !spec.Docs.Development || !spec.Docs.Systems || spec.Docs.Depth != "profunda" {
 		t.Fatalf("docs defaults not applied: %+v", spec.Docs)
 	}
 	if spec.Deploy.Target != "sin_preferencia" {
@@ -87,6 +87,7 @@ func TestSolicitarNuevaAppV0HonorsExplicitOptions(t *testing.T) {
 	}
 	req.Calidad.Observabilidad = &no
 	req.Documentacion.Usuario = &no
+	req.Documentacion.Profundidad = "normal"
 	req.Agentes.RevisionHumana = &no
 	req.Agentes.Autonomia = "alta"
 	req.RequestKind = RequestKindDocumentarAppV0
@@ -112,6 +113,9 @@ func TestSolicitarNuevaAppV0HonorsExplicitOptions(t *testing.T) {
 	}
 	if spec.Docs.User {
 		t.Fatalf("docs user should honor explicit false")
+	}
+	if spec.Docs.Depth != "normal" {
+		t.Fatalf("docs depth should honor explicit value: %+v", spec.Docs)
 	}
 	if spec.AgentPreferences.HumanReview {
 		t.Fatalf("human review should honor explicit false")
@@ -271,7 +275,7 @@ func TestDecodeAppSpecRequestV0AcceptsSpanishJSONTags(t *testing.T) {
 		"objetivo":"Gestionar reservas.",
 		"tipo_app":"web",
 		"calidad":{"accesibilidad":"wcag_aa","observabilidad":false},
-		"documentacion":{"usuario":false,"desarrollo":true,"sistemas":true},
+		"documentacion":{"usuario":false,"desarrollo":true,"sistemas":true,"profundidad":"profunda"},
 		"agentes":{"revision_humana":false,"autonomia":"alta","preferencias":["review externo"]}
 	}`)
 	req, issues := DecodeAppSpecRequestV0(raw)
@@ -280,6 +284,9 @@ func TestDecodeAppSpecRequestV0AcceptsSpanishJSONTags(t *testing.T) {
 	}
 	if req.Documentacion.Usuario == nil || *req.Documentacion.Usuario {
 		t.Fatalf("documentacion.usuario not decoded: %+v", req.Documentacion)
+	}
+	if req.Documentacion.Profundidad != "profunda" {
+		t.Fatalf("documentacion.profundidad not decoded: %+v", req.Documentacion)
 	}
 	if req.Agentes.RevisionHumana == nil || *req.Agentes.RevisionHumana {
 		t.Fatalf("agentes.revision_humana not decoded: %+v", req.Agentes)

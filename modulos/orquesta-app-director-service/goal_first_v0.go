@@ -775,7 +775,7 @@ func startAppDirectorGoalAcceptanceCriteriaV0(
 		"Integraciones requeridas: " + startAppDirectorGoalConnectorsSummaryV0(spec.Connectors.Required) + ". Integraciones opcionales: " + startAppDirectorGoalConnectorsSummaryV0(spec.Connectors.Optional) + ".",
 		"Calidad: pruebas=" + spec.Quality.Tests + "; accesibilidad=" + spec.Quality.Accessibility + "; opciones_accesibilidad=" + startAppDirectorGoalJoinV0(spec.Quality.AccessibilityOptions) + "; observabilidad=" + startAppDirectorGoalBoolV0(spec.Quality.Observability) + ".",
 		"I18n: enabled=" + startAppDirectorGoalBoolV0(spec.I18N.Enabled) + "; default_locale=" + spec.I18N.DefaultLocale + "; locales=" + startAppDirectorGoalJoinV0(spec.I18N.Locales) + ".",
-		"Documentacion: usuario=" + startAppDirectorGoalBoolV0(spec.Docs.User) + "; desarrollo=" + startAppDirectorGoalBoolV0(spec.Docs.Development) + "; sistemas=" + startAppDirectorGoalBoolV0(spec.Docs.Systems) + ".",
+		"Documentacion: usuario=" + startAppDirectorGoalBoolV0(spec.Docs.User) + "; desarrollo=" + startAppDirectorGoalBoolV0(spec.Docs.Development) + "; sistemas=" + startAppDirectorGoalBoolV0(spec.Docs.Systems) + "; profundidad=" + spec.Docs.Depth + ". Si profundidad=profunda, entregar manuales de usuario, desarrollo y sistemas con flujos, comandos, criterios de aceptacion y operacion.",
 		"Project source: kind=" + spec.ProjectSource.Kind + "; project_ref=" + spec.ProjectSource.ProjectRef + "; branch=" + spec.ProjectSource.Branch + ". No publicar rutas locales ni credenciales.",
 		"Entregar resumen final con artefactos, pruebas ejecutadas o justificadas, decisiones pendientes y bloqueos si existen.",
 	})

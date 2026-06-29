@@ -301,7 +301,21 @@ func (n appSpecNormalizerV0) docs() DocsSpecV0 {
 		User:        boolDefaultV0(n.req.Documentacion.Usuario, true),
 		Development: boolDefaultV0(n.req.Documentacion.Desarrollo, true),
 		Systems:     boolDefaultV0(n.req.Documentacion.Sistemas, true),
+		Depth:       normalizeDocsDepthV0(n.req.Documentacion.Profundidad),
 		Locales:     docsLocalesV0(n.req, n.i18n().Locales),
+	}
+}
+
+func normalizeDocsDepthV0(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "basica", "basic":
+		return "basica"
+	case "normal", "media", "standard":
+		return "normal"
+	case "profunda", "deep", "completa":
+		return "profunda"
+	default:
+		return "profunda"
 	}
 }
 

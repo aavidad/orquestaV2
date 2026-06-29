@@ -134,10 +134,11 @@ type CalidadRequestV0 struct {
 }
 
 type DocumentacionV0 struct {
-	Usuario    *bool    `json:"usuario,omitempty"`
-	Desarrollo *bool    `json:"desarrollo,omitempty"`
-	Sistemas   *bool    `json:"sistemas,omitempty"`
-	Locales    []string `json:"locales,omitempty"`
+	Usuario     *bool    `json:"usuario,omitempty"`
+	Desarrollo  *bool    `json:"desarrollo,omitempty"`
+	Sistemas    *bool    `json:"sistemas,omitempty"`
+	Profundidad string   `json:"profundidad,omitempty"`
+	Locales     []string `json:"locales,omitempty"`
 }
 
 type I18NRequestV0 struct {

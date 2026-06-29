@@ -115,6 +115,7 @@ type DocsSpecV0 struct {
 	User        bool     `json:"user"`
 	Development bool     `json:"development"`
 	Systems     bool     `json:"systems"`
+	Depth       string   `json:"depth"`
 	Locales     []string `json:"locales"`
 }
 

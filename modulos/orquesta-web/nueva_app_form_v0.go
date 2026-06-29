@@ -100,10 +100,11 @@ type WebNuevaAppCalidadFormV0 struct {
 }
 
 type WebNuevaAppDocumentacionFormV0 struct {
-	Usuario    *bool    `json:"usuario,omitempty"`
-	Desarrollo *bool    `json:"desarrollo,omitempty"`
-	Sistemas   *bool    `json:"sistemas,omitempty"`
-	Locales    []string `json:"locales,omitempty"`
+	Usuario     *bool    `json:"usuario,omitempty"`
+	Desarrollo  *bool    `json:"desarrollo,omitempty"`
+	Sistemas    *bool    `json:"sistemas,omitempty"`
+	Profundidad string   `json:"profundidad,omitempty"`
+	Locales     []string `json:"locales,omitempty"`
 }
 
 type WebNuevaAppI18NFormV0 struct {
@@ -242,10 +243,11 @@ func mapCalidadFormV0(value WebNuevaAppCalidadFormV0) orquestafactory.CalidadReq
 
 func mapDocumentacionFormV0(value WebNuevaAppDocumentacionFormV0) orquestafactory.DocumentacionV0 {
 	return orquestafactory.DocumentacionV0{
-		Usuario:    value.Usuario,
-		Desarrollo: value.Desarrollo,
-		Sistemas:   value.Sistemas,
-		Locales:    compactStringsV0(value.Locales),
+		Usuario:     value.Usuario,
+		Desarrollo:  value.Desarrollo,
+		Sistemas:    value.Sistemas,
+		Profundidad: trimV0(value.Profundidad),
+		Locales:     compactStringsV0(value.Locales),
 	}
 }
 

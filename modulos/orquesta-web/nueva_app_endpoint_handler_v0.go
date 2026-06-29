@@ -103,10 +103,11 @@ func nuevaAppFormFromValuesV0(values map[string][]string) WebNuevaAppFormV0 {
 			Observabilidad:        formOptionalBoolValueV0(values, "calidad.observabilidad"),
 		},
 		Documentacion: WebNuevaAppDocumentacionFormV0{
-			Usuario:    formOptionalBoolValueV0(values, "documentacion.usuario"),
-			Desarrollo: formOptionalBoolValueV0(values, "documentacion.desarrollo"),
-			Sistemas:   formOptionalBoolValueV0(values, "documentacion.sistemas"),
-			Locales:    formValuesV0(values, "documentacion.locales"),
+			Usuario:     formOptionalBoolValueV0(values, "documentacion.usuario"),
+			Desarrollo:  formOptionalBoolValueV0(values, "documentacion.desarrollo"),
+			Sistemas:    formOptionalBoolValueV0(values, "documentacion.sistemas"),
+			Profundidad: formValueV0(values, "documentacion.profundidad"),
+			Locales:     formValuesV0(values, "documentacion.locales"),
 		},
 		I18N: WebNuevaAppI18NFormV0{
 			Enabled:       formOptionalBoolValueV0(values, "i18n.enabled"),

@@ -268,6 +268,7 @@ var nuevaAppHTMLHelpKeysV0 = []string{
 	"documentacion.usuario",
 	"documentacion.desarrollo",
 	"documentacion.sistemas",
+	"documentacion.profundidad",
 	"documentacion.locales",
 	"agentes.revision_humana",
 	"agentes.autonomia",
@@ -386,6 +387,7 @@ var nuevaAppHTMLOptionLabelsESV0 = map[string]string{
 	"basica":                     "Basica",
 	"media":                      "Media",
 	"alta":                       "Alta",
+	"profunda":                   "Profunda",
 	"wcag_aa":                    "WCAG AA",
 	"no_aplica":                  "No aplica",
 	"local":                      "Local",
@@ -467,6 +469,7 @@ var nuevaAppHTMLOptionLabelsENV0 = map[string]string{
 	"basica":                     "Basic",
 	"media":                      "Medium",
 	"alta":                       "High",
+	"profunda":                   "Deep",
 	"wcag_aa":                    "WCAG AA",
 	"no_aplica":                  "Not applicable",
 	"local":                      "Local",
@@ -793,6 +796,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
 	          <label data-help="{{index .Help "documentacion.usuario"}}"><span>{{index .Labels "documentacion.usuario"}}</span><select name="documentacion.usuario"><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option></select></label>
 	          <label data-help="{{index .Help "documentacion.desarrollo"}}"><span>{{index .Labels "documentacion.desarrollo"}}</span><select name="documentacion.desarrollo"><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option></select></label>
 	          <label data-help="{{index .Help "documentacion.sistemas"}}"><span>{{index .Labels "documentacion.sistemas"}}</span><select name="documentacion.sistemas"><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option></select></label>
+	          <label data-help="{{index .Help "documentacion.profundidad"}}">{{index .Labels "documentacion.profundidad"}}<select name="documentacion.profundidad"><option value="profunda">{{optionLabel $.Page.Locale "docs.depth" "profunda"}}</option><option value="normal">{{optionLabel $.Page.Locale "docs.depth" "normal"}}</option><option value="basica">{{optionLabel $.Page.Locale "docs.depth" "basica"}}</option></select></label>
           <label data-help="{{index .Help "documentacion.locales"}}">{{index .Labels "documentacion.locales"}}<input name="documentacion.locales" placeholder="es-ES,en-US"></label>
         </div></fieldset>
       </div>
