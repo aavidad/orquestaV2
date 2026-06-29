@@ -93,16 +93,13 @@ En esta maquina `command -v codex` resuelve
 `/home/alberto/.nvm/versions/node/v20.19.2/bin/codex` y el CLI expone
 `codex app-server`. Comprobacion vigente: `app_server_tmux` arranca
 `codex app-server --listen unix://<socket>` en una sesion tmux y valida
-`thread/loaded/list` mediante `codex app-server proxy --sock <socket>`.
+`thread/loaded/list` por WebSocket directo sobre el Unix socket privado.
 El socket manual creado con
 `codex app-server --listen unix://$HOME/.codex/app-server-control/app-server-control.sock`
 no respondio a `codex app-server proxy` en esta instalacion, aunque
 `daemon version` lo liste como `running`; por eso el smoke real local usa
-`app_server_tmux`. El backend proxy queda solo como diagnostico opt-in: el
-script lo rechaza salvo que el operador exporte
-`ORQUESTA_ALLOW_APP_SERVER_PROXY_DIAGNOSTIC=1` junto a
-`ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy`; no es ruta normal de
-self-programming ni de goal-first.
+`app_server_tmux`. El backend proxy queda fuera del smoke vigente y no es ruta
+normal de self-programming ni de goal-first.
 
 Ejecucion real 2026-06-26 con `app_server_tmux`:
 `smoke_goal_first_app_server_real=ok`, `goal_status=complete`,

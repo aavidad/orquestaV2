@@ -29,6 +29,10 @@ Reglas operativas:
   (`ORQUESTA_OPES_BRIDGE_JOB_REF`) y limites bajos
   (`ORQUESTA_OPES_BRIDGE_LIMIT`);
 - no ejecutar drenados amplios de OPES para "ver que pasa";
+- si `ORQUESTA_OPES_BASE_URL` no es loopback, ademas de
+  `ORQUESTA_OPES_TEMPORAL_CONFIRM=1` se exige
+  `ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF` con una ref compacta que
+  demuestre instancia temporal/preproduccion aislada;
 - usar `ORQUESTA_*_CONFIRM=1` solo cuando el operador haya validado instancia,
   cuota, workdirs y estado aislado;
 - conservar evidencias bajo `/tmp` o bajo el directorio de run indicado por el
