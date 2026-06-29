@@ -448,8 +448,10 @@ derivados/cierre quedo cerrado funcionalmente por goal-first.
    state, eventos y plan state, no desde agentes vivos globales ni stats.
 5. `OperationalClosureSource` por composicion:
    el stack Codex ya tiene fuente para Director Operativo y `EXT-NO-OPES` cubre
-   una composicion externa temporal por refs opacas. OPES sigue pendiente de
-   fuente/validacion real acotada contra instancia temporal.
+   una composicion externa temporal por refs opacas. Actualizacion 2026-06-28:
+   OPES temporal real quedo cerrado funcionalmente por goal-first en
+   `OPES-DER-RESTO` hasta `completed_syllabus_package`; cualquier reejecucion
+   debe seguir siendo temporal, acotada y con refs causales.
 
 ## Criterio de done de huecos restantes
 

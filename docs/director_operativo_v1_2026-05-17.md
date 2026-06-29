@@ -164,14 +164,16 @@ Implementado:
   externa temporal HTTP/file con submitter real opt-in, `codex-fake`, review,
   tests requeridos y cierre por refs opacas.
 
-Pendiente:
+Pendiente historico del corte 2026-05-17:
 
 - conectar review/rework/replan del Director Operativo con casos reales amplios
   de `domain_work`/OPES hasta cierre de derivados;
 - conectar el expander neutral `DomainDocumentPlanV0 -> DomainWorkJobRequestV0[]`
   con el ciclo real de OPES derivados/cierre. Ya existe conector durable
-  file-based de referencia para `DomainWorkJobCreatorPortV0`, pero el cierre
-  OPES real hasta `generate_html_site -> local_html_site` sigue pendiente;
+  file-based de referencia para `DomainWorkJobCreatorPortV0`. Actualizacion
+  2026-06-28: OPES temporal real quedo cerrado funcionalmente por goal-first en
+  `OPES-DER-RESTO` hasta `completed_syllabus_package`; quedan residuales de
+  calidad editorial, coste y automatizacion larga, no el cierre funcional;
 - mantener todos esos smokes reales opt-in, sobre instancias temporales y sin
   colas amplias.
 
@@ -385,8 +387,9 @@ Estado del 2026-05-17: el contrato del Director Operativo, la proyeccion a olas,
 el materializador inicial de `launch_subagents`, la derivacion de
 `WaitAgentRefs` por metadata de tasks y el `TaskWriter` para
 review/replan-split ya existen. El P0 de materializacion + espera durable ya
-esta cerrado. El corte completo sigue pendiente hasta que review, replan y
-cierre queden como estados durables reentrables.
+esta cerrado. Actualizacion posterior: review, replan y cierre durables tienen
+evidencia offline/fake-runtime y los smokes reales OPES/Codex se documentan en
+la matriz vigente; este bloque conserva la ruta historica de trabajo.
 
 1. Entrada compacta del run:
    objetivo actual, tipo de trabajo, dominio, restricciones, contexto opaco,
