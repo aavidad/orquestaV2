@@ -180,7 +180,13 @@ if [[ ! -x "$codex_command" ]]; then
 fi
 
 case "$goal_backend" in
-  app_server_tmux|app_server_proxy) ;;
+  app_server_tmux) ;;
+  app_server_proxy)
+    if [[ "${ORQUESTA_ALLOW_APP_SERVER_PROXY_DIAGNOSTIC:-0}" != "1" ]]; then
+      echo "ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy solo se permite como diagnostico explicito; usa app_server_tmux o exporta ORQUESTA_ALLOW_APP_SERVER_PROXY_DIAGNOSTIC=1" >&2
+      exit 2
+    fi
+    ;;
   *)
     echo "ORQUESTA_CODEX_GOAL_BACKEND no soportado para este smoke: $goal_backend" >&2
     exit 2
