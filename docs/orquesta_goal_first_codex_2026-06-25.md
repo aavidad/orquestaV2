@@ -275,6 +275,15 @@ Goal.
    preflight de `thread/loaded/list`, observa `thread/read` y traduce
    `ORQUESTA_GOAL_RESULT_V0` o `orquesta_goal_result_v0.json` a refs de cierre;
    smoke real local cerrado el 2026-06-26 con `app_server_tmux`.
+   Repeticion remota aislada 2026-06-29 cerrada con `app_server_tmux`:
+   `goal_status=complete`, `run_status=cerrada`,
+   `closure_status=accepted`, `closure_accepted=true`, `artifact_refs=2`,
+   `evidence_refs=9`, evidencia en
+   `/workspace/runtime/smokes/orquesta-goal-first-app-server.CD5sKB`. En ese
+   contenedor el sandbox `workspace-write` bloqueo escrituras del proyecto
+   temporal bajo `/workspace/runtime`; el smoke opt-in uso
+   `ORQUESTA_CODEX_SANDBOX=danger-full-access` con
+   `ORQUESTA_CODEX_APPROVAL_POLICY=never`.
 4. Ejecutar smoke no-OPES temporal con repo de prueba.
 5. Ejecutar smoke OPES temporal acotado de un derivado.
 6. Marcar rutas antiguas como legacy cuando tengan equivalencia goal-first

@@ -68,6 +68,12 @@ Variables utiles:
 - `ORQUESTA_CODEX_GOAL_TIMEOUT_MS`: por defecto `90000`.
 - `ORQUESTA_CODEX_GOAL_PREFLIGHT_TIMEOUT_MS`: preflight rapido del backend; por
   defecto `3000`.
+- `ORQUESTA_CODEX_SANDBOX`: por defecto `workspace-write`. En contenedores
+  remotos aislados donde Codex app-server no reconozca como escribible el
+  `ORQUESTA_CODEX_PROJECT_WORKDIR` temporal bajo `/workspace/runtime`, se puede
+  usar `danger-full-access` solo para este smoke opt-in, con
+  `ORQUESTA_CODEX_APPROVAL_POLICY=never`, OPES vacio y artefactos bajo
+  `/workspace/runtime`.
 - `ORQUESTA_KEEP_SMOKE_DIR=1`: conserva el temporal para revisar salida.
 - `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_WORKDIR`: el script la fija a
   un directorio temporal separado para demostrar que `/nueva-app` usa
@@ -120,6 +126,27 @@ El goal genero una app temporal, corrigio una prueba HTTP que no podia abrir
 socket local por `listen EPERM`, ejecuto `npm run verify` con resultado passed
 y escribio `docs/orquesta_goal_result_v0.json` con el `test_ref` literal del
 `GoalWorkSpecV0`.
+
+## Estado contenedor remoto 2026-06-29
+
+En el contenedor aislado `/workspace/project`, sin Docker ni `docker.sock`, el
+smoke usa `go` desde `/usr/local/go/bin/go` y cache temporal bajo
+`/workspace/runtime`. El primer intento con `workspace-write` lanzo
+`app_server_tmux` correctamente, pero Codex app-server bloqueo escrituras dentro
+del proyecto temporal aunque el usuario del contenedor podia escribir por
+permisos POSIX; se conservo como evidencia causal en
+`/workspace/runtime/smokes/orquesta-goal-first-app-server.ezHMFR`.
+
+Repeticion real 2026-06-29 con `app_server_tmux`,
+`ORQUESTA_CODEX_SANDBOX=danger-full-access`,
+`ORQUESTA_CODEX_APPROVAL_POLICY=never` y runtime acotado a `/workspace/runtime`:
+`smoke_goal_first_app_server_real=ok`, `goal_status=complete`,
+`run_status=cerrada`, `closure_status=accepted`, `closure_accepted=true`,
+`artifact_refs=2`, `evidence_refs=9`,
+`smoke_root=/workspace/runtime/smokes/orquesta-goal-first-app-server.CD5sKB`.
+Refs principales: `run_ref=run-spec-smoke-goal-first-req-smoke-goal-first-617c6ba0738874be15af06aee294d3e9`,
+`goal_ref=goal-ref-app-director-run-spec-smoke-goal-first-req-smoke-goal-first-617c6ba0738874be15af06aee294d3e9`,
+`external_goal_ref=019f131c-b884-7410-8f36-2344d0c37da3`.
 
 ## Exito
 

@@ -14,8 +14,9 @@ El modulo convierte `GoalObservationRequestV0` en
 
 ## CODEX-GOAL-002 composition root
 
-Estado: cerrado localmente para wiring opt-in; smoke real app-server stdio
-cerrado el 2026-06-26.
+Estado: cerrado localmente para wiring opt-in; smoke real app-server por
+`app_server_tmux` cerrado el 2026-06-26 y repetido en contenedor aislado el
+2026-06-29.
 
 `cmd/orquesta-server` puede inyectar starter y observer reales con
 `ORQUESTA_CODEX_GOAL_BACKEND=app_server_proxy` o `app_server_tmux`. Esos
@@ -49,3 +50,12 @@ con `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`: Codex ejecuto el goal,
 escribio resultado durable, Orquesta observo `goal_status=complete` y cerro la
 run como `cerrada` con `closure_status=accepted`, `closure_accepted=true`,
 `artifact_refs=2` y `evidence_refs=9`.
+Repeticion 2026-06-29 en contenedor remoto aislado, sin Docker ni socket Docker:
+`app_server_tmux` cerro con `goal_status=complete`, `run_status=cerrada`,
+`closure_status=accepted`, `closure_accepted=true`, `artifact_refs=2` y
+`evidence_refs=9`; evidencia conservada en
+`/workspace/runtime/smokes/orquesta-goal-first-app-server.CD5sKB`. En ese
+entorno `workspace-write` no permitio escribir en el proyecto temporal bajo
+`/workspace/runtime`; la repeticion uso
+`ORQUESTA_CODEX_SANDBOX=danger-full-access` como opt-in de smoke aislado con
+`approval-policy=never`.
