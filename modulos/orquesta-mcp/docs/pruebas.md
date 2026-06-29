@@ -316,8 +316,8 @@ Caso: MCP-CT-007 mapper input MCP a AppSpecRequestV0
 Tipo: unit
 Comando: go test -count=1 ./modulos/orquesta-mcp
 Evidencia esperada: Source se fija a orquesta-mcp; request_id/correlation_id se normalizan; campos clave se conservan sin reglas de negocio.
-Ultima ejecucion: 2026-05-04; pasa.
-Riesgos: La generacion de request_id si falta sigue pendiente de la capa de servidor o puerto posterior.
+Ultima ejecucion: 2026-06-29; pasa.
+Riesgos: Si el cliente no envia `request_id` ni `correlation_id`, el adaptador MCP genera `req-mcp-nueva-app-<hex>` antes de llamar al puerto factory; no genera idempotency-key ni cambia reglas de negocio.
 ```
 
 ```text

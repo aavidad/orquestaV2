@@ -87,6 +87,45 @@ func TestToAppSpecRequestV0PoneSourceYConservaCamposClave(t *testing.T) {
 	}
 }
 
+func TestToAppSpecRequestV0GeneraRequestIDSiFalta(t *testing.T) {
+	req, correlationID := ToAppSpecRequestV0(MCPNuevaAppToolInputV0{
+		AppSpecRequest: orquestafactory.AppSpecRequestV0{
+			SchemaVersion: testAppSpecRequestSchemaV0,
+			Locale:        "es",
+			Nombre:        "Agenda",
+			Objetivo:      "Coordinar ensayos",
+			TipoApp:       "web",
+		},
+	})
+
+	if !strings.HasPrefix(req.RequestID, "req-mcp-nueva-app-") {
+		t.Fatalf("request_id generado inesperado: %q", req.RequestID)
+	}
+	if correlationID != req.RequestID {
+		t.Fatalf("correlation debe derivar del request generado: request=%q correlation=%q", req.RequestID, correlationID)
+	}
+	if req.Source != MCPNuevaAppSourceV0 {
+		t.Fatalf("source=%q", req.Source)
+	}
+}
+
+func TestToAppSpecRequestV0UsaCorrelationComoRequestIDSiFaltaRequest(t *testing.T) {
+	req, correlationID := ToAppSpecRequestV0(MCPNuevaAppToolInputV0{
+		CorrelationID: " corr-mcp-nueva-app ",
+		AppSpecRequest: orquestafactory.AppSpecRequestV0{
+			SchemaVersion: testAppSpecRequestSchemaV0,
+			Locale:        "es",
+			Nombre:        "Agenda",
+			Objetivo:      "Coordinar ensayos",
+			TipoApp:       "web",
+		},
+	})
+
+	if req.RequestID != "corr-mcp-nueva-app" || correlationID != "corr-mcp-nueva-app" {
+		t.Fatalf("ids desde correlation: request=%q correlation=%q", req.RequestID, correlationID)
+	}
+}
+
 func TestNewMCPNuevaAppOKResultV0ContieneSpecYBacklogCompactos(t *testing.T) {
 	spec := validMCPAppSpecV0()
 	backlog := validMCPBacklogV0()
@@ -265,6 +304,34 @@ func TestMCPNuevaAppToolExecutorV0ReturnsOKResultFromFactoryHTTPPort(t *testing.
 	}
 	if result.Backlog.SchemaVersion == "" || result.Backlog.Microtareas == 0 || result.Backlog.Fases == 0 {
 		t.Fatalf("backlog invalido: %+v", result.Backlog)
+	}
+}
+
+func TestMCPNuevaAppToolExecutorV0GeneraRequestIDAntesDelPuertoFactory(t *testing.T) {
+	handler := orquestafactoryhttp.NewAppSpecHTTPHandlerV0(func() time.Time {
+		return time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
+	})
+	executor, err := newLocalMCPNuevaAppToolExecutorV0(handler)
+	if err != nil {
+		t.Fatalf("new executor: %v", err)
+	}
+
+	result, err := executor.Execute(context.Background(), MCPNuevaAppToolInputV0{
+		AppSpecRequest: orquestafactory.AppSpecRequestV0{
+			SchemaVersion: orquestafactory.AppSpecRequestSchemaV0,
+			Locale:        "es",
+			Nombre:        "Agenda",
+			Objetivo:      "Coordinar ensayos",
+			TipoApp:       "web",
+		},
+	})
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.Estado != MCPNuevaAppEstadoOKV0 ||
+		!strings.HasPrefix(result.RequestID, "req-mcp-nueva-app-") ||
+		result.CorrelationID != result.RequestID {
+		t.Fatalf("result con request generado: %+v", result)
 	}
 }
 
