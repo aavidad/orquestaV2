@@ -22,6 +22,7 @@ const (
 	codexAppServerTmuxEvidenceOwnedV0   = "orquesta-codex-goal-app-server-tmux-v0"
 	codexAppServerTmuxDefaultTimeoutV0  = 3 * time.Second
 	codexAppServerTmuxMinStartupV0      = 60 * time.Second
+	codexAppServerTmuxMaxSocketPathV0   = 107
 	codexAppServerTmuxSocketPollEveryV0 = 50 * time.Millisecond
 )
 
@@ -59,8 +60,8 @@ func (backend serverCodexAppServerTmuxBackendV0) EnsureV0(
 	if socketPath == "" || sessionName == "" {
 		return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_config_missing", Err: errors.New("codex_app_server_tmux_config_missing")}
 	}
-	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
-		return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_runtime_dir_unavailable", Err: err}
+	if err := ensureCodexAppServerTmuxRuntimeDirV0(socketPath); err != nil {
+		return err
 	}
 	tmuxPath, err := codexAppServerTmuxCommandPathV0(backend.PathEnv)
 	if err != nil {
@@ -77,7 +78,7 @@ func (backend serverCodexAppServerTmuxBackendV0) EnsureV0(
 				Err:  errors.New("codex_app_server_tmux_session_unowned"),
 			}
 		}
-		if preflight.ProbeV0(runCtx) == nil {
+		if backend.ensureTmuxSocketPrivateV0() == nil && preflight.ProbeV0(runCtx) == nil {
 			return nil
 		}
 		if err := backend.tmuxKillSessionV0(runCtx, tmuxPath); err != nil {
@@ -203,7 +204,9 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 	socketPath := strings.TrimSpace(backend.SocketPath)
 	nextSessionCheck := time.Now()
 	for {
-		if _, err := os.Stat(socketPath); err == nil && preflight.ProbeV0(ctx) == nil {
+		if _, err := os.Stat(socketPath); err == nil &&
+			backend.ensureTmuxSocketPrivateV0() == nil &&
+			preflight.ProbeV0(ctx) == nil {
 			return nil
 		}
 		if !nextSessionCheck.After(time.Now()) {
@@ -225,6 +228,34 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 		case <-time.After(codexAppServerTmuxSocketPollEveryV0):
 		}
 	}
+}
+
+func ensureCodexAppServerTmuxRuntimeDirV0(socketPath string) error {
+	dir := filepath.Dir(strings.TrimSpace(socketPath))
+	if dir == "." || dir == "" {
+		return codexAppServerCallErrorV0{
+			Code: "codex_app_server_tmux_runtime_dir_unavailable",
+			Err:  errors.New("codex_app_server_tmux_runtime_dir_unavailable"),
+		}
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_runtime_dir_unavailable", Err: err}
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_runtime_dir_unavailable", Err: err}
+	}
+	return nil
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) ensureTmuxSocketPrivateV0() error {
+	socketPath := strings.TrimSpace(backend.SocketPath)
+	if socketPath == "" {
+		return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_config_missing", Err: errors.New("codex_app_server_tmux_config_missing")}
+	}
+	if err := os.Chmod(socketPath, 0o600); err != nil {
+		return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_socket_permissions_unavailable", Err: err}
+	}
+	return nil
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) tmuxOwnerMarkerPathV0() string {
@@ -393,7 +424,14 @@ func codexAppServerTmuxSocketPathV0(config orquestaserver.ConfigV0) (string, err
 	if runtimeDir == "" {
 		return "", codexAppServerCallErrorV0{Code: "codex_app_server_tmux_runtime_workdir_required", Err: errors.New("codex_app_server_tmux_runtime_workdir_required")}
 	}
-	return filepath.Join(runtimeDir, codexAppServerTmuxDirV0, codexAppServerTmuxSocketFileNameV0(config)), nil
+	socketPath := filepath.Join(runtimeDir, codexAppServerTmuxDirV0, codexAppServerTmuxSocketFileNameV0(config))
+	if len(socketPath) > codexAppServerTmuxMaxSocketPathV0 {
+		return "", codexAppServerCallErrorV0{
+			Code: "codex_app_server_tmux_socket_path_too_long",
+			Err:  fmt.Errorf("codex_app_server_tmux_socket_path_too_long:%d", len(socketPath)),
+		}
+	}
+	return socketPath, nil
 }
 
 func codexAppServerTmuxCodeHomePathV0(config orquestaserver.ConfigV0) (string, error) {
