@@ -18,6 +18,10 @@ const (
 	ErrClaveRequeridaFaltante       = "clave_requerida_faltante"
 	ErrTipoDocumentoFaltante        = "tipo_documento_faltante"
 	ErrFallbackLocaleInvalido       = "fallback_locale_invalido"
+	ErrSkeletonLoaderDesalineado    = "skeleton_loader_desalineado"
+	ErrGeneratedDocInvalido         = "generated_doc_invalido"
+	ErrGeneratedDocSeccionInvalida  = "generated_doc_seccion_invalida"
+	ErrGeneratedDocOrdenDuplicado   = "generated_doc_orden_duplicado"
 )
 
 type AppI18nDocsPlanV0 struct {
@@ -116,6 +120,78 @@ func ValidateAppI18nDocsPlanV0(plan AppI18nDocsPlanV0) []I18nDocsValidationIssue
 	issues = append(issues, validateI18nBundleV0("factory_bundle", plan.FactoryBundle)...)
 	issues = append(issues, validateDocsBundleV0("docs_bundle", plan.DocsBundle)...)
 	issues = append(issues, validateFallbackLocaleV0(plan)...)
+	issues = append(issues, ValidateI18nSkeletonLoaderShapeV0(
+		"skeleton_loader_shape",
+		plan.SkeletonLoaderShape,
+		plan.WebBundle,
+		plan.FactoryBundle,
+	)...)
+	return issues
+}
+
+func ValidateI18nSkeletonLoaderShapeV0(path string, shape I18nSkeletonLoaderShapeV0, bundles ...*I18nBundleV0) []I18nDocsValidationIssueV0 {
+	var expectedNamespaces []string
+	var expectedKeys []string
+	var expectedStructureVersion string
+	for _, bundle := range bundles {
+		if bundle == nil {
+			continue
+		}
+		if expectedStructureVersion == "" {
+			expectedStructureVersion = bundle.StructureVersion
+		}
+		expectedNamespaces = append(expectedNamespaces, bundle.Namespace)
+		expectedKeys = append(expectedKeys, bundle.RequiredKeys...)
+	}
+	var issues []I18nDocsValidationIssueV0
+	if strings.TrimSpace(shape.StructureVersion) != expectedStructureVersion {
+		issues = append(issues, i18nDocsIssueV0(ErrSkeletonLoaderDesalineado, path+".structure_version", "structure_version debe coincidir con bundles i18n"))
+	}
+	if strings.TrimSpace(shape.CatalogPathPattern) == "" || strings.HasPrefix(strings.TrimSpace(shape.CatalogPathPattern), "/") {
+		issues = append(issues, i18nDocsIssueV0(ErrSkeletonLoaderDesalineado, path+".catalog_path_pattern", "catalog_path_pattern debe ser relativo y no vacio"))
+	}
+	if !sameStringSetV0(shape.RequiredNamespaces, expectedNamespaces) {
+		issues = append(issues, i18nDocsIssueV0(ErrSkeletonLoaderDesalineado, path+".required_namespaces", "required_namespaces debe coincidir con namespaces de bundles"))
+	}
+	if strings.TrimSpace(shape.RequiredKeysHash) != requiredKeysHashV0(expectedKeys) {
+		issues = append(issues, i18nDocsIssueV0(ErrSkeletonLoaderDesalineado, path+".required_keys_hash", "required_keys_hash debe derivarse de required_keys"))
+	}
+	return issues
+}
+
+func ValidateGeneratedDocV0(path string, doc GeneratedDocV0) []I18nDocsValidationIssueV0 {
+	var issues []I18nDocsValidationIssueV0
+	if strings.TrimSpace(doc.DocID) == "" {
+		issues = append(issues, i18nDocsIssueV0(ErrGeneratedDocInvalido, path+".doc_id", "doc_id requerido"))
+	}
+	if strings.TrimSpace(doc.DocType) == "" {
+		issues = append(issues, i18nDocsIssueV0(ErrGeneratedDocInvalido, path+".doc_type", "doc_type requerido"))
+	}
+	if strings.TrimSpace(doc.Locale) == "" {
+		issues = append(issues, i18nDocsIssueV0(ErrGeneratedDocInvalido, path+".locale", "locale requerido"))
+	}
+	if strings.TrimSpace(doc.TitleKey) == "" {
+		issues = append(issues, i18nDocsIssueV0(ErrGeneratedDocInvalido, path+".title_key", "title_key requerido"))
+	}
+	if strings.TrimSpace(doc.ContentKey) == "" {
+		issues = append(issues, i18nDocsIssueV0(ErrGeneratedDocInvalido, path+".content_key", "content_key requerido"))
+	}
+	if len(doc.Sections) == 0 {
+		issues = append(issues, i18nDocsIssueV0(ErrGeneratedDocSeccionInvalida, path+".sections", "sections requerido"))
+	}
+	seenOrders := map[int]struct{}{}
+	for index, section := range doc.Sections {
+		sectionPath := fmt.Sprintf("%s.sections[%d]", path, index)
+		if strings.TrimSpace(section.SectionID) == "" ||
+			strings.TrimSpace(section.TitleKey) == "" ||
+			strings.TrimSpace(section.ContentKey) == "" {
+			issues = append(issues, i18nDocsIssueV0(ErrGeneratedDocSeccionInvalida, sectionPath, "section_id, title_key y content_key requeridos"))
+		}
+		if _, ok := seenOrders[section.Order]; ok {
+			issues = append(issues, i18nDocsIssueV0(ErrGeneratedDocOrdenDuplicado, sectionPath+".order", "order duplicado"))
+		}
+		seenOrders[section.Order] = struct{}{}
+	}
 	return issues
 }
 
@@ -171,6 +247,7 @@ func validateDocsBundleV0(path string, bundle *DocsBundleV0) []I18nDocsValidatio
 		covered[locale] = make(map[string]bool, len(bundle.RequiredDocTypes))
 	}
 	for _, doc := range bundle.Docs {
+		issues = append(issues, ValidateGeneratedDocV0(path+".docs", doc)...)
 		if _, ok := covered[doc.Locale]; ok {
 			covered[doc.Locale][doc.DocType] = true
 		}
@@ -208,6 +285,20 @@ func stringSetV0(values []string) map[string]bool {
 		set[value] = true
 	}
 	return set
+}
+
+func sameStringSetV0(left []string, right []string) bool {
+	leftSet := stringSetV0(left)
+	rightSet := stringSetV0(right)
+	if len(leftSet) != len(rightSet) {
+		return false
+	}
+	for value := range leftSet {
+		if !rightSet[value] {
+			return false
+		}
+	}
+	return true
 }
 
 func i18nDocsIssueV0(code, field, message string) I18nDocsValidationIssueV0 {

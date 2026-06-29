@@ -20,7 +20,7 @@ Caso: contract:active-i18n-docs-owner-v0
 Tipo: contract
 Comando: `go test -count=1 ./modulos/orquesta-i18n-docs ./modulos/orquesta-factory ./modulos/orquesta-web ./modulos/orquesta-mcp`
 Evidencia esperada: `ActiveI18nDocsCompositionOwnerV0` declara `orquesta-i18n-docs` como owner, expone fallback locale, required keys hash, required doc types y verification; factory/web/MCP consumen esa proyeccion en pruebas focales.
-Ultima ejecucion: 2026-05-25; pendiente de reejecucion por agente de T75 en este corte.
+Ultima ejecucion: 2026-06-29, OK.
 Riesgos: Web mantiene catalogo local de adaptador para su UI; debe seguir validado contra owner y no convertirse en owner paralelo de docs generadas.
 ```
 
@@ -54,9 +54,9 @@ Riesgos: El harness no valida mezcla semantica de idiomas ni calidad de traducci
 ```text
 Caso: contract:i18n-skeleton-loader-shape-v0
 Tipo: contract
-Comando: pendiente hasta existir comparador; objetivo `npm test -- contract:i18n-skeleton-loader-shape-v0` o equivalente del modulo.
+Comando: `go test -count=1 ./modulos/orquesta-i18n-docs`
 Evidencia esperada: Skeleton y loader producen el mismo `structure_version`, `catalog_path_pattern`, namespaces y `required_keys_hash`; cualquier divergencia falla con `skeleton_loader_desalineado`.
-Ultima ejecucion: no ejecutada; no hay implementacion ni harness en este slice.
+Ultima ejecucion: 2026-06-29, OK con `TestValidateAppI18nDocsPlanV0RejectsSkeletonLoaderShapeMismatch` y builder shape en `TestBuildAppI18nDocsPlanV0DefaultSeedProducesValidPlan`.
 Riesgos: Adaptadores de skeleton podrian acoplarse a detalles de framework si el shape no se mantiene portable.
 ```
 
@@ -81,18 +81,18 @@ Riesgos: No ejecuta generador, no escribe filesystem productivo y no invoca LLM;
 ```text
 Caso: unit:generated-doc-v0
 Tipo: unit
-Comando: pendiente hasta existir implementacion; objetivo `npm test -- unit:generated-doc-v0` o equivalente del modulo.
+Comando: `go test -count=1 ./modulos/orquesta-i18n-docs`
 Evidencia esperada: Documento sin `locale`, sin `title_key`, con seccion sin clave o con orden duplicado falla con error estable.
-Ultima ejecucion: no ejecutada; no hay codigo en este slice documental.
+Ultima ejecucion: 2026-06-29, OK con `TestValidateGeneratedDocV0RejectsMissingLocaleTitleSectionAndDuplicateOrder`.
 Riesgos: Markdown generado podria incluir texto visible fuera de claves i18n si no se valida por seccion.
 ```
 
 ```text
 Caso: integration:app-spec-v0-to-plan-v0
 Tipo: integration
-Comando: pendiente hasta existir conector de prueba; corte actual cubierto por `go test -count=1 ./modulos/orquesta-i18n-docs`.
+Comando: `go test -count=1 ./modulos/orquesta-i18n-docs`
 Evidencia esperada: Un adaptador futuro traduce AppSpecV0 publico a PlanSeedV0 y obtiene plan serializable sin filesystem, DB, runtime, LLM ni proveedor concreto.
-Ultima ejecucion: 2026-05-04; builder local desde PlanSeedV0 ejecutado, integracion AppSpecV0 real pendiente.
+Ultima ejecucion: 2026-06-29, OK con builder local desde `PlanSeedV0`; integracion AppSpecV0 real sigue fuera de este modulo y debe entrar por adaptador.
 Riesgos: Puede requerir fixtures canonicos de factory; no deben copiarse internals ni schemas privados.
 ```
 
