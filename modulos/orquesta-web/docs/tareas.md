@@ -269,9 +269,9 @@ Contrato: La home solo enlaza capacidades web/API ya publicadas; no lee stores,
 runtime, proveedor, filesystem ni decide negocio. El handler devuelve home solo
 para path exacto `/`.
 Validacion: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`.
-Bloqueos: No sustituye el futuro wizard conversacional ni vistas de dominio
-OPES; reduce friccion operativa y evita que el operador tenga que recordar
-rutas.
+Bloqueos: No sustituye las vistas de dominio OPES; reduce friccion operativa y
+evita que el operador tenga que recordar rutas. El wizard conversacional vive en
+`/nueva-app` y en el endpoint guiado de intake.
 Estado: completada.
 ```
 
@@ -335,8 +335,8 @@ Simbolo foco: WebAppChangeFormV0.external_work
 Contrato: `AppChangeRequestV0.external_work` consume project/interface/work
 refs compactas.
 Validacion: `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack`.
-Bloqueos: El wizard conversacional futuro debe construir estos campos por
-puerto de intake/director, no por reglas de dominio en la web.
+Bloqueos: El wizard conversacional de `/nueva-app` debe construir estos campos
+por puerto de intake/director, no por reglas de dominio en la web.
 Estado: completada.
 ```
 
