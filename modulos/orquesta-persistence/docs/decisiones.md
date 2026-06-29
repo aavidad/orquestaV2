@@ -31,7 +31,7 @@ Fecha: 2026-05-04
 Decision: Implementar `PersistenceRepositoryV0.guardar_proyecto_borrador` solo como DTOs y validacion pura Go.
 Motivo: Core ya tiene un puerto local y el contrato global esta promovido, pero este modulo aun no debe introducir almacenamiento operativo, migraciones, consultas ejecutables, adaptadores de proveedor ni motores concretos.
 Alternativas: Crear adaptador de motor concreto; exponer un repositorio en memoria; importar structs de `orquesta-core`; mantener solo fixtures JSON.
-Impacto: `orquesta-persistence` valida forma minima, `idempotency_key`, `payload_version = ProyectoPlanBorradorV0` y ausencia de detalles concretos de persistencia o `query` sin depender de otros modulos. La unidad de trabajo activa y el envelope global quedan como construccion del adaptador futuro.
+Impacto: `orquesta-persistence` valida forma minima, `idempotency_key`, `payload_version = ProyectoPlanBorradorV0` y ausencia de detalles concretos de persistencia o `query` sin depender de otros modulos. La unidad de trabajo de contrato existe en memoria; el envelope global y el conector operativo quedan como construccion del adaptador futuro.
 Contratos afectados: `PersistenceRepositoryV0`, `ProyectoPlanBorradorV0`.
 Estado: aceptada_local
 ```
@@ -53,6 +53,16 @@ Motivo: PER-008 necesita ejercitar idempotencia y respuesta tecnica sin adelanta
 Alternativas: Crear repositorio productivo en memoria; introducir un motor concreto para pruebas; mantener solo validacion de DTOs.
 Impacto: Las pruebas locales pueden validar guardado en RAM, replay idempotente y conflicto por payload distinto. El adaptador no usa almacenamiento operativo, migraciones, consultas ejecutables, motores reales, adaptadores de proveedor ni filesystem productivo.
 Contratos afectados: `InMemoryPersistenceRepositoryContractAdapterV0`, `PersistenceRepositoryV0`.
+Estado: aceptada_local
+```
+
+```text
+Fecha: 2026-06-29
+Decision: Anadir `InMemoryPersistenceUnitOfWorkV0` como unidad de trabajo en memoria solo para pruebas de contrato.
+Motivo: El contrato local ya exige transacciones explicitas; hacia falta evidencia ejecutable de commit, rollback, rechazo de escritura sin transaccion activa y aislamiento abstracto sin aprobar un motor concreto.
+Alternativas: Esperar a un conector productivo; activar auto-commit; introducir un motor real de prueba; mantener la transaccion solo como documento.
+Impacto: Las pruebas locales validan el ciclo begin/commit/rollback y visibilidad de escrituras en memoria. No se introducen almacenamiento operativo, migraciones, queries ejecutables, motores reales, adaptadores de proveedor ni filesystem productivo.
+Contratos afectados: `InMemoryPersistenceUnitOfWorkV0`, `PersistenceUnitOfWorkV0`, `TransaccionPersistenceV0`, `ProyectoPlanBorradorPersistidoV0`.
 Estado: aceptada_local
 ```
 

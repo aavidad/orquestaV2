@@ -35,20 +35,20 @@ Riesgos: El alcance global de la idempotencia en un conector productivo sigue de
 
 ```text
 Caso: Transaccion commit/rollback
-Tipo: integration
-Comando: bloqueo externo de producto/conector; no hay conector de persistencia productivo aprobado.
-Evidencia esperada: Commit confirma escritura; rollback no deja escritura visible; doble rollback permite limpieza.
-Ultima ejecucion: no ejecutada por ausencia de conector aprobado; el adaptador en memoria de contrato declara explicitamente que no modela transacciones reales.
-Riesgos: El mapeo de aislamiento y errores depende del conector elegido. Accion operador: aprobar conector/version y perfil opaco para implementar harness de commit/rollback sin exponer motor al contrato publico.
+Tipo: contract
+Comando: go test -count=1 ./modulos/orquesta-persistence -run 'TestInMemoryPersistenceUnitOfWorkV0(CommitHaceVisibleEscritura|RollbackDescartaEscritura|RollbackEsIdempotente|CommitDespuesDeRollbackFalla|RechazaAislamientoNoSoportado)'
+Evidencia esperada: Commit confirma escritura en el adaptador transaccional de contrato; rollback no deja escritura visible; doble rollback permite limpieza; commit tras rollback falla con `transaccion_ya_cerrada`.
+Ultima ejecucion: 2026-06-29; pasa con `InMemoryPersistenceUnitOfWorkV0`.
+Riesgos: Es contrato puro en memoria; el mapeo de aislamiento y errores de un motor real depende del conector elegido.
 ```
 
 ```text
 Caso: Rechazo de escritura sin transaccion activa
 Tipo: contract
-Comando: bloqueo de contrato; `InMemoryPersistenceRepositoryContractAdapterV0` no modela unidad de trabajo y `PersistenceUnitOfWorkV0` sigue sin implementacion aprobada.
+Comando: go test -count=1 ./modulos/orquesta-persistence -run 'TestInMemoryPersistenceUnitOfWorkV0RechazaEscrituraSinTransaccionActiva'
 Evidencia esperada: `guardar_borrador` falla con `transaccion_requerida` o `transaccion_no_activa`.
-Ultima ejecucion: no ejecutada; queda acotado a la futura implementacion de `PersistenceUnitOfWorkV0`.
-Riesgos: Si el puerto global permite auto-commit, esta invariante debera revisarse con el director antes de programarla.
+Ultima ejecucion: 2026-06-29; pasa con `InMemoryPersistenceUnitOfWorkV0`.
+Riesgos: Si un conector futuro permite auto-commit, debera hacerlo como modo opt-in versionado y no cambiar este contrato por defecto.
 ```
 
 ```text

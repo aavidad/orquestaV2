@@ -74,12 +74,12 @@ Estado: completada
 
 ```text
 ID: PER-004
-Objetivo: Registrar pruebas previstas para repositorios, transacciones y conectores de persistencia sin crear implementacion.
+Objetivo: Registrar pruebas de contrato para repositorios, transacciones y conectores de persistencia sin crear implementacion productiva.
 Write-set: docs/pruebas.md
 Simbolo foco: pruebas_persistence_v0
 Contrato: `RepositorioProyectoPlanBorradorV0`, `TransaccionPersistenceV0`
-Validacion: Casos documentados con tipo, comando futuro, evidencia esperada y riesgos.
-Bloqueos: No existen paquetes, harness de almacenamiento operativo ni migraciones.
+Validacion: Casos documentados con comando ejecutable para DTOs, memoria de contrato y unidad de trabajo en memoria; conector externo queda como bloqueo explicito.
+Bloqueos: No existe conector externo/productivo aprobado, almacenamiento operativo ni migraciones.
 Estado: completada
 ```
 
@@ -112,7 +112,7 @@ Write-set: persistence_repository_v0.go; persistence_repository_v0_test.go; docs
 Simbolo foco: GuardarProyectoBorradorRequestV0
 Contrato: `PersistenceRepositoryV0`, `ProyectoPlanBorradorV0`
 Validacion: `go test -count=1 ./modulos/orquesta-persistence`; `git diff --check -- modulos/orquesta-persistence`.
-Bloqueos: Ninguno en este microcorte. La unidad de trabajo activa, el envelope global, almacenamiento operativo, migraciones, consultas ejecutables y motor operativo quedan para conectores futuros.
+Bloqueos: Ninguno en este microcorte. El envelope global, almacenamiento operativo, migraciones, consultas ejecutables y motor operativo quedan para conectores futuros.
 Estado: completada
 ```
 
@@ -124,6 +124,17 @@ Simbolo foco: InMemoryPersistenceRepositoryContractAdapterV0
 Contrato: `PersistenceRepositoryV0`, `GuardarProyectoBorradorRequestV0`
 Validacion: `go test -count=1 ./modulos/orquesta-persistence`; `git diff --check -- modulos/orquesta-persistence`.
 Bloqueos: No es adaptador productivo, no modela transacciones reales y no introduce almacenamiento operativo, migraciones, consultas ejecutables, motores reales ni filesystem productivo.
+Estado: completada
+```
+
+```text
+ID: PER-014
+Objetivo: Crear unidad de trabajo en memoria para pruebas de contrato de transacciones, sin motor productivo.
+Write-set: unit_of_work_memory_v0.go; unit_of_work_memory_v0_test.go; docs/contratos.md; docs/tareas.md; docs/pruebas.md; docs/decisiones.md
+Simbolo foco: InMemoryPersistenceUnitOfWorkV0
+Contrato: `PersistenceUnitOfWorkV0`, `TransaccionPersistenceV0`, `ProyectoPlanBorradorPersistidoV0`
+Validacion: `go test -count=1 ./modulos/orquesta-persistence`; `git diff --check -- modulos/orquesta-persistence`.
+Bloqueos: No es conector externo/productivo, no selecciona motor, no introduce almacenamiento operativo, migraciones, queries ejecutables ni filesystem productivo.
 Estado: completada
 ```
 
