@@ -250,9 +250,6 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 	if strings.TrimSpace(goal.ThreadID) != "" {
 		receipt.ExternalGoalRef = strings.TrimSpace(goal.ThreadID)
 	}
-	if promoted, promotedReceipt := backend.promoteCodexAppServerActiveGoalResultFileV0(request, receipt, status); promoted {
-		return promotedReceipt, nil
-	}
 	if timedOut, timeoutReceipt := backend.codexAppServerActiveGoalTimeoutV0(request, goal, status, receipt); timedOut {
 		return timeoutReceipt, nil
 	}
@@ -421,6 +418,7 @@ func codexGoalWorkStatusIsTerminalV0(status string) bool {
 
 type codexAppServerGoalResultMarkerV0 struct {
 	GoalRef             string                                  `json:"goal_ref,omitempty"`
+	ExternalGoalRef     string                                  `json:"external_goal_ref,omitempty"`
 	Summary             string                                  `json:"summary,omitempty"`
 	ArtifactRefs        []string                                `json:"artifact_refs,omitempty"`
 	RequiredTestResults []orquestagoal.GoalRequiredTestResultV0 `json:"required_test_results,omitempty"`
@@ -524,6 +522,14 @@ func codexAppServerGoalResultMarkerGoalRefMismatchV0(
 ) bool {
 	markedGoalRef := strings.TrimSpace(marked.GoalRef)
 	return markedGoalRef != "" && markedGoalRef != strings.TrimSpace(goalRef)
+}
+
+func codexAppServerGoalResultMarkerExternalGoalRefMismatchV0(
+	marked codexAppServerGoalResultMarkerV0,
+	externalGoalRef string,
+) bool {
+	markedExternalGoalRef := strings.TrimSpace(marked.ExternalGoalRef)
+	return markedExternalGoalRef != "" && markedExternalGoalRef != strings.TrimSpace(externalGoalRef)
 }
 
 func mergeCodexAppServerGoalResultV0(

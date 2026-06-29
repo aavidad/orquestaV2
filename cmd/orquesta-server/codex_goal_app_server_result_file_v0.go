@@ -9,47 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 )
 
 const codexAppServerGoalResultFileMaxBytesV0 = 128 * 1024
 
 var errCodexAppServerGoalResultWalkDoneV0 = errors.New("codex_app_server_goal_result_walk_done")
-
-func (backend serverCodexAppServerGoalBackendV0) promoteCodexAppServerActiveGoalResultFileV0(
-	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
-	receipt orquestaruntimecodexgoal.CodexGoalObservationReceiptV0,
-	status string,
-) (bool, orquestaruntimecodexgoal.CodexGoalObservationReceiptV0) {
-	if !codexAppServerGoalStatusAllowsDurableResultPromotionV0(status) {
-		return false, receipt
-	}
-	fileMarked, fileFound, err := codexAppServerGoalResultFromWorkspaceV0(backend.CWD, request.GoalRef)
-	if err != nil {
-		receipt.IssueCode = "codex_app_server_goal_result_file_invalid"
-		return true, receipt
-	}
-	if !fileFound {
-		return false, receipt
-	}
-	receipt.Status = orquestagoal.GoalStatusCompleteV0
-	mergeCodexAppServerGoalResultV0(
-		&receipt,
-		fileMarked,
-		"evidence-ref-codex-app-server-goal-result-file",
-	)
-	return true, receipt
-}
-
-func codexAppServerGoalStatusAllowsDurableResultPromotionV0(status string) bool {
-	switch strings.TrimSpace(status) {
-	case orquestagoal.GoalStatusRunningV0, orquestagoal.GoalStatusBlockedV0:
-		return true
-	default:
-		return false
-	}
-}
 
 func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerTerminalGoalResultV0(
 	ctx context.Context,
@@ -67,13 +32,15 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerTerminalGo
 		} else if found {
 			if codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, request.GoalRef) {
 				markerIssue = "codex_app_server_goal_result_marker_goal_ref_mismatch"
+			} else if codexAppServerGoalResultMarkerExternalGoalRefMismatchV0(marked, request.ExternalGoalRef) {
+				markerIssue = "codex_app_server_goal_result_marker_external_goal_ref_mismatch"
 			} else {
 				marker = marked
 				markerFound = true
 			}
 		}
 	}
-	fileMarked, fileFound, err := codexAppServerGoalResultFromWorkspaceV0(backend.CWD, request.GoalRef)
+	fileMarked, fileFound, err := codexAppServerGoalResultFromWorkspaceV0(backend.CWD, request.GoalRef, request.ExternalGoalRef)
 	if err != nil && !markerFound {
 		receipt.IssueCode = "codex_app_server_goal_result_file_invalid"
 		return receipt, nil
@@ -108,6 +75,7 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerTerminalGo
 func codexAppServerGoalResultFromWorkspaceV0(
 	root string,
 	goalRef string,
+	externalGoalRef string,
 ) (codexAppServerGoalResultMarkerV0, bool, error) {
 	root = strings.TrimSpace(root)
 	goalRef = strings.TrimSpace(goalRef)
@@ -137,7 +105,7 @@ func codexAppServerGoalResultFromWorkspaceV0(
 			entry.Name() != orquestaruntimecodexgoal.CodexGoalResultFileNameV0 {
 			return nil
 		}
-		marked, ok, err := codexAppServerGoalResultFromFileV0(path, goalRef)
+		marked, ok, err := codexAppServerGoalResultFromFileV0(path, goalRef, externalGoalRef)
 		if err != nil {
 			return nil
 		}
@@ -169,6 +137,7 @@ func codexAppServerGoalResultSkipDirV0(name string) bool {
 func codexAppServerGoalResultFromFileV0(
 	path string,
 	goalRef string,
+	externalGoalRef string,
 ) (codexAppServerGoalResultMarkerV0, bool, error) {
 	info, err := os.Stat(path)
 	if err != nil || info.IsDir() || info.Size() <= 0 || info.Size() > codexAppServerGoalResultFileMaxBytesV0 {
@@ -186,6 +155,9 @@ func codexAppServerGoalResultFromFileV0(
 	if marked.GoalRef != strings.TrimSpace(goalRef) {
 		return codexAppServerGoalResultMarkerV0{}, false, nil
 	}
+	if codexAppServerGoalResultMarkerExternalGoalRefMismatchV0(marked, externalGoalRef) {
+		return codexAppServerGoalResultMarkerV0{}, false, nil
+	}
 	return marked, true, nil
 }
 
@@ -193,6 +165,7 @@ func normalizeCodexAppServerGoalResultMarkerV0(
 	marked codexAppServerGoalResultMarkerV0,
 ) codexAppServerGoalResultMarkerV0 {
 	marked.GoalRef = strings.TrimSpace(marked.GoalRef)
+	marked.ExternalGoalRef = strings.TrimSpace(marked.ExternalGoalRef)
 	marked.Summary = strings.TrimSpace(marked.Summary)
 	marked.ArtifactRefs = compactServerStackStringsV0(marked.ArtifactRefs)
 	marked.DomainReceiptRefs = compactServerStackStringsV0(marked.DomainReceiptRefs)
