@@ -153,9 +153,10 @@ idle y actualice el tracker residente con cobertura equivalente. Evidencia:
 La composicion hace un preflight rapido del backend app-server al arrancar el
 stack. Para `app_server_tmux`, primero asegura la sesion `tmux`, crea el socket
 privado bajo `RuntimeWorkDir` y valida `thread/loaded/list` por WebSocket UDS;
-no considera listo un tmux vivo sin respuesta de protocolo. Para
-`app_server_proxy`, solo en diagnostico opt-in, valida el daemon/socket ya
-gestionado. Si falta el socket
+no considera listo un tmux vivo sin respuesta de protocolo. `app_server_proxy`
+ya no se considera backend operativo; si aparece en la configuracion, el
+servidor responde con `codex_goal_backend_proxy_diagnostic_not_operational`. Si
+falta el socket
 local, tmux no esta disponible, el path del socket excede limites del sistema,
 la instalacion standalone requerida por
 `codex app-server daemon` no existe o el backend no responde, se inyecta un
@@ -201,8 +202,8 @@ El backend operativo normal `app_server_tmux` observa `thread/goal/get`; cuando
 el goal queda terminal lee `thread/read` con `includeTurns=true` y extrae de la
 respuesta final un marcador estructurado o, si el hilo no aporta marcador
 legible, el archivo durable `orquesta_goal_result_v0.json` escrito bajo el
-write-set. `app_server_proxy` conserva el mismo contrato solo como diagnostico
-opt-in:
+write-set. El marcador historico de `app_server_proxy` sirve solo para leer
+evidencia antigua; ese backend no es ruta operativa aceptada:
 
 ```text
 ORQUESTA_GOAL_RESULT_V0 {"goal_ref":"...","summary":"...","artifact_refs":[],"required_test_results":[],"domain_receipt_refs":[],"evidence_refs":[]}
@@ -291,8 +292,8 @@ Goal.
    inyecta starter/observer por `codex app-server`, hace preflight de
    `thread/loaded/list`, observa `thread/read` y traduce
    `ORQUESTA_GOAL_RESULT_V0` o `orquesta_goal_result_v0.json` a refs de cierre.
-   `app_server_proxy` queda como diagnostico opt-in. Smoke real local cerrado el
-   2026-06-26 con `app_server_tmux`.
+   `app_server_proxy` queda bloqueado como backend operativo. Smoke real local
+   cerrado el 2026-06-26 con `app_server_tmux`.
    Repeticion remota aislada 2026-06-29 cerrada con `app_server_tmux`:
    `goal_status=complete`, `run_status=cerrada`,
    `closure_status=accepted`, `closure_accepted=true`, `artifact_refs=2`,
