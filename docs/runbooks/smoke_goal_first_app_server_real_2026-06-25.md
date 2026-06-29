@@ -25,10 +25,12 @@ ORQUESTA_CODEX_COMMAND="$(command -v codex)" \
 ./scripts/smoke_goal_first_app_server_real.sh
 ```
 
-Debe devolver `smoke_goal_first_app_server_preflight=ok` si `app_server_tmux`
-responde a `thread/loaded/list`. No necesita daemon externo. `app_server_proxy`
-queda como compatibilidad diagnostica para investigaciones de socket ya
-existente, no como smoke vigente ni ruta normal.
+Debe devolver `smoke_goal_first_app_server_preflight=ok` solo si estan
+disponibles `tmux` y la CLI `codex app-server`; no arranca servidor, no crea
+socket y no valida `thread/loaded/list`. Esa validacion ocurre en el smoke real
+con `ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1`. No necesita daemon
+externo. `app_server_proxy` queda como compatibilidad diagnostica para
+investigaciones de socket ya existente, no como smoke vigente ni ruta normal.
 
 Smoke real, con ejecucion de Codex:
 
