@@ -60,6 +60,9 @@ func (tracker *StatusTrackerV0) MarkGoalObserverV0(
 		)
 		state.LastError = ""
 		state.LastErrorOperationalMessage = nil
+		if observed, ok := goalObserverIdleSelfImprovementObservationV0(*state, result); ok {
+			tracker.applyIdleSelfImprovementGoalObservedV0(state, observed, nil, now)
+		}
 	})
 }
 
@@ -152,4 +155,61 @@ func goalObserverGoalRefsV0(result orquestagoal.GoalWorkObserveActiveResultV0) [
 		out[i] = strings.TrimSpace(out[i])
 	}
 	return compactConfigStringsV0(out)
+}
+
+func goalObserverIdleSelfImprovementObservationV0(
+	state StateV0,
+	result orquestagoal.GoalWorkObserveActiveResultV0,
+) (orquestagoal.GoalWorkResultV0, bool) {
+	expected := map[string]struct{}{}
+	if message := state.IdleSelfImprovementOperationalMessage; message != nil {
+		for _, ref := range compactConfigStringsV0(message.GoalRefs) {
+			expected[ref] = struct{}{}
+		}
+	}
+	if state.IdleSelfImprovementGoalSpec != nil {
+		spec := orquestagoal.NormalizeGoalWorkSpecV0(*state.IdleSelfImprovementGoalSpec)
+		if strings.TrimSpace(spec.GoalRef) != "" {
+			expected[strings.TrimSpace(spec.GoalRef)] = struct{}{}
+		}
+	}
+	if state.IdleSelfImprovementGoalReceipt != nil {
+		receipt := copyGoalLaunchReceiptForServerStateV0(*state.IdleSelfImprovementGoalReceipt)
+		for _, ref := range []string{receipt.GoalRef, receipt.ExternalGoalRef} {
+			ref = strings.TrimSpace(ref)
+			if ref != "" {
+				expected[ref] = struct{}{}
+			}
+		}
+	}
+	if len(expected) == 0 {
+		return orquestagoal.GoalWorkResultV0{}, false
+	}
+	for _, observation := range result.Observations {
+		observed := orquestagoal.NormalizeGoalWorkResultV0(observation.Result)
+		for _, ref := range goalObserverObservationRefsV0(observation, observed) {
+			if _, ok := expected[ref]; ok {
+				if strings.TrimSpace(observed.GoalRef) == "" {
+					observed.GoalRef = strings.TrimSpace(observation.State.GoalRef)
+				}
+				if strings.TrimSpace(observed.ExternalGoalRef) == "" {
+					observed.ExternalGoalRef = strings.TrimSpace(observation.State.ExternalGoalRef)
+				}
+				return observed, true
+			}
+		}
+	}
+	return orquestagoal.GoalWorkResultV0{}, false
+}
+
+func goalObserverObservationRefsV0(
+	observation orquestagoal.GoalWorkObserveResultV0,
+	result orquestagoal.GoalWorkResultV0,
+) []string {
+	return compactConfigStringsV0([]string{
+		observation.State.GoalRef,
+		observation.State.ExternalGoalRef,
+		result.GoalRef,
+		result.ExternalGoalRef,
+	})
 }

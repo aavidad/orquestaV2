@@ -67,6 +67,93 @@ func TestRuntimeV0GoalObservationTickCorreSinDirectorResidenteV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0GoalObservationTickActualizaIdleSelfImprovementV0(t *testing.T) {
+	now := time.Date(2026, 6, 27, 10, 30, 0, 0, time.UTC)
+	store := &memoryStateStoreV0{}
+	const goalRef = "goal-ref-idle-generic-observer-001"
+	const externalGoalRef = "external-goal-ref-idle-generic-observer-001"
+	supervisor := &fakeSupervisorV0{
+		goalObservationResult: []orquestagoal.GoalWorkObserveActiveResultV0{{
+			Observations: []orquestagoal.GoalWorkObserveResultV0{{
+				State: orquestagoal.GoalWorkStateV0{
+					RunRef:          "run-ref-idle-generic-observer-001",
+					GoalRef:         goalRef,
+					ExternalGoalRef: externalGoalRef,
+					Status:          orquestagoal.GoalStatusCompleteV0,
+				},
+				Result: orquestagoal.GoalWorkResultV0{
+					Status:          orquestagoal.GoalStatusCompleteV0,
+					GoalRef:         goalRef,
+					ExternalGoalRef: externalGoalRef,
+					Summary:         "automejora cerrada por observer generico",
+					EvidenceRefs:    []string{"evidence-ref-idle-generic-required-001"},
+				},
+				Terminal:     true,
+				Accepted:     true,
+				EvidenceRefs: []string{"evidence-ref-idle-generic-required-001"},
+			}},
+			EvidenceRefs: []string{"evidence-ref-idle-generic-required-001"},
+		}},
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                      t.TempDir(),
+		TickInterval:                  time.Hour,
+		GoalObserverEnabledConfigured: true,
+		GoalObserverEnabled:           true,
+		GoalObserverMaxItems:          5,
+		ResidentDirectorEnabled:       false,
+		AuditDisabled:                 true,
+	}, RuntimeDepsV0{
+		Supervisor:     supervisor,
+		GoalStateStore: newMemoryGoalStateStoreV0(),
+		StateStore:     store,
+		Clock:          fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	runtime.tracker.MarkIdleSelfImprovementPreparedV0(IdleSelfImprovementResultV0{
+		Accepted:        true,
+		Status:          orquestagoal.GoalStatusAcceptedV0,
+		Message:         "goal_first_launched",
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		GoalSpec: orquestagoal.GoalWorkSpecV0{
+			GoalRef:       goalRef,
+			Objective:     "cerrar automejora desde observer generico",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-server"}},
+			ClosurePolicy: orquestagoal.GoalClosurePolicyV0{RequiredEvidenceRefs: []string{"evidence-ref-idle-generic-required-001"}},
+		},
+		GoalReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+		},
+	}, now.Add(-time.Minute))
+
+	runtime.runGoalObservationTickV0(context.Background())
+
+	if supervisor.goalObservationCalls != 1 {
+		t.Fatalf("goal observer calls=%d", supervisor.goalObservationCalls)
+	}
+	if store.last.GoalObserverStatus != "ok" ||
+		store.last.GoalObserverTicks != 1 ||
+		store.last.GoalObserverTerminal != 1 {
+		t.Fatalf("goal observer state=%+v", store.last)
+	}
+	if store.last.IdleSelfImprovementOperationalMessage == nil ||
+		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalClosureAcceptedReasonV0 ||
+		store.last.IdleSelfImprovementGoalResult == nil ||
+		store.last.IdleSelfImprovementGoalResult.GoalRef != goalRef ||
+		store.last.IdleSelfImprovementGoalClosure == nil ||
+		!store.last.IdleSelfImprovementGoalClosure.Accepted ||
+		store.last.IdleSelfImprovementFlight ||
+		store.last.LastError != "" {
+		t.Fatalf("idle state no actualizado por observer generico: %+v", store.last)
+	}
+}
+
 func TestRuntimeV0GoalObservationLoopCierraGoalActivoSinDirectorResidenteV0(t *testing.T) {
 	ctx := context.Background()
 	goalStore := newMemoryGoalStateStoreV0()

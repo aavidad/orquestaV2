@@ -491,6 +491,40 @@ func TestRuntimeV0IdleSelfImprovementGoalFirstObservaGoalPendienteV0(t *testing.
 	}
 }
 
+func TestRuntimeV0IdleSelfImprovementGoalFirstUsaObserverGenericoSiDisponibleV0(t *testing.T) {
+	now := time.Date(2026, 6, 25, 13, 10, 0, 0, time.UTC)
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                      t.TempDir(),
+		TickInterval:                  time.Hour,
+		IdleSelfImprovementAfter:      time.Minute,
+		IdleSelfImprovementGoalFirst:  true,
+		GoalObserverEnabledConfigured: true,
+		GoalObserverEnabled:           true,
+		AuditDisabled:                 true,
+	}, RuntimeDepsV0{
+		Supervisor:     &fakeSupervisorV0{},
+		GoalStateStore: newMemoryGoalStateStoreV0(),
+		StateStore:     &memoryStateStoreV0{},
+		Clock:          fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	runtime.tracker.MarkIdleSelfImprovementPreparedV0(IdleSelfImprovementResultV0{
+		Accepted:        true,
+		RunRef:          "external-goal-ref-observe-generico-001",
+		RequestRef:      "request-ref-observe-generico-001",
+		Status:          orquestagoal.GoalStatusAcceptedV0,
+		Message:         "goal_first_launched",
+		GoalRef:         "goal-ref-autoprogramming-observe-generico-001",
+		ExternalGoalRef: "external-goal-ref-observe-generico-001",
+	}, now.Add(-time.Minute))
+
+	if runtime.observePendingIdleSelfImprovementGoalV0(context.Background(), now) {
+		t.Fatalf("helper idle especifico no debe observar si el observer generico esta disponible")
+	}
+}
+
 func TestRuntimeV0IdleSelfImprovementGoalFirstCompleteNoCierraSinValidacionV0(t *testing.T) {
 	now := time.Date(2026, 6, 25, 13, 30, 0, 0, time.UTC)
 	store := &memoryStateStoreV0{}

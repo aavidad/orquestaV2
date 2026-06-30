@@ -138,14 +138,16 @@ goal residente con `objective_len=4000`, `objective_compacted=true`,
 en contenedores, usar raiz corta de runtime; una raiz larga puede fallar antes
 del goal con `path must be shorter than SUN_LEN`.
 
-`observePendingIdleSelfImprovementGoalV0` queda como puente de compatibilidad
-de automejora goal-first, no como loop director legacy. El observador generico
-de goals activos cierra apps y external-work desde `GoalWorkStateStore`, pero la
-automejora residente tambien necesita actualizar `IdleSelfImprovementOperationalMessage`,
+`observePendingIdleSelfImprovementGoalV0` queda como fallback de compatibilidad
+de automejora goal-first, no como loop director legacy. Si el observador
+generico de goals activos esta disponible, el tick idle no observa por su cuenta:
+el observador generico cierra apps/external-work desde `GoalWorkStateStore` y
+tambien proyecta los goals `idle_self_improvement` al tracker residente,
+actualizando `IdleSelfImprovementOperationalMessage`,
 `IdleSelfImprovementGoalResult` y `IdleSelfImprovementGoalClosure` para liberar
-el gating de intentos posteriores. No se debe retirar ese helper hasta que el
-observador generico enrute goals `idle_self_improvement` por el backend/workdir
-idle y actualice el tracker residente con cobertura equivalente. Evidencia:
+el gating de intentos posteriores. Evidencia:
+`TestRuntimeV0GoalObservationTickActualizaIdleSelfImprovementV0`,
+`TestRuntimeV0IdleSelfImprovementGoalFirstUsaObserverGenericoSiDisponibleV0`,
 `TestRuntimeV0IdleSelfImprovementGoalFirstObservaGoalPendienteV0`,
 `TestRuntimeV0IdleSelfImprovementGoalFirstCompleteNoCierraSinValidacionV0` y
 `TestRuntimeV0IdleSelfImprovementGoalFirstCompleteValidaCierreConSpecPersistidoV0`.

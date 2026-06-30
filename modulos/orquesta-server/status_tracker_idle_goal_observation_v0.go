@@ -13,69 +13,79 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementGoalObservedV0(
 	now time.Time,
 ) StateV0 {
 	result = orquestagoal.NormalizeGoalWorkResultV0(result)
+	return tracker.updateV0(func(state *StateV0) {
+		tracker.applyIdleSelfImprovementGoalObservedV0(state, result, observeErr, now)
+	})
+}
+
+func (tracker *StatusTrackerV0) applyIdleSelfImprovementGoalObservedV0(
+	state *StateV0,
+	result orquestagoal.GoalWorkResultV0,
+	observeErr error,
+	now time.Time,
+) {
+	result = orquestagoal.NormalizeGoalWorkResultV0(result)
 	reasonCode := idleSelfImprovementGoalObservationReasonCodeV0(result, observeErr)
 	message := firstNonEmptyConfigStringV0(result.Summary, reasonCode)
 	if observeErr != nil {
 		message = observeErr.Error()
 	}
-	return tracker.updateV0(func(state *StateV0) {
-		state.LastHeartbeatAt = formatTimeV0(now)
-		state.IdleSelfImprovementCheck = formatTimeV0(now)
-		resultForReason := result
-		state.IdleSelfImprovementGoalResult = nil
-		if strings.TrimSpace(result.GoalRef) != "" {
-			goalResult := copyGoalWorkResultForServerStateV0(result)
-			state.IdleSelfImprovementGoalResult = &goalResult
+	state.LastHeartbeatAt = formatTimeV0(now)
+	state.IdleSelfImprovementCheck = formatTimeV0(now)
+	resultForReason := result
+	state.IdleSelfImprovementGoalResult = nil
+	if strings.TrimSpace(result.GoalRef) != "" {
+		goalResult := copyGoalWorkResultForServerStateV0(result)
+		state.IdleSelfImprovementGoalResult = &goalResult
+	}
+	state.IdleSelfImprovementGoalClosure = nil
+	if observeErr == nil && result.Status == orquestagoal.GoalStatusCompleteV0 && state.IdleSelfImprovementGoalSpec != nil {
+		closure := orquestagoal.ValidateGoalWorkClosureV0(*state.IdleSelfImprovementGoalSpec, result)
+		goalClosure := copyGoalClosureValidationForServerStateV0(closure)
+		state.IdleSelfImprovementGoalClosure = &goalClosure
+		if closure.Accepted {
+			reasonCode = idleSelfImprovementGoalClosureAcceptedReasonV0
+			resultForReason.Status = orquestagoal.GoalStatusAcceptedV0
+			resultForReason.EvidenceRefs = compactConfigStringsV0(append(resultForReason.EvidenceRefs, closure.EvidenceRefs...))
+			message = firstNonEmptyConfigStringV0(result.Summary, reasonCode)
 		}
-		state.IdleSelfImprovementGoalClosure = nil
-		if observeErr == nil && result.Status == orquestagoal.GoalStatusCompleteV0 && state.IdleSelfImprovementGoalSpec != nil {
-			closure := orquestagoal.ValidateGoalWorkClosureV0(*state.IdleSelfImprovementGoalSpec, result)
-			goalClosure := copyGoalClosureValidationForServerStateV0(closure)
-			state.IdleSelfImprovementGoalClosure = &goalClosure
-			if closure.Accepted {
-				reasonCode = idleSelfImprovementGoalClosureAcceptedReasonV0
-				resultForReason.Status = orquestagoal.GoalStatusAcceptedV0
-				resultForReason.EvidenceRefs = compactConfigStringsV0(append(resultForReason.EvidenceRefs, closure.EvidenceRefs...))
-				message = firstNonEmptyConfigStringV0(result.Summary, reasonCode)
-			}
-		}
-		counters := map[string]int{
-			"attempts":  tracker.idleSelfImprovementAttempts,
-			"accepted":  tracker.idleSelfImprovementPrepared,
-			"artifacts": len(result.ArtifactRefs),
-			"tests":     len(result.RequiredTestResults),
-			"receipts":  len(result.DomainReceiptRefs),
-		}
-		if state.IdleSelfImprovementGoalClosure != nil {
-			counters["closure_issues"] = len(state.IdleSelfImprovementGoalClosure.Issues)
-		}
-		state.IdleSelfImprovementReason = idleSelfImprovementGoalObservedReasonV0(reasonCode, resultForReason, message)
-		state.IdleSelfImprovementOperationalMessage = projectServerOperationalMessageRecordV0(
-			serverOperationalMessageInputV0{
-				Scope:        "idle_self_improvement",
-				ReasonCode:   reasonCode,
-				Status:       resultForReason.Status,
-				Message:      message,
-				GoalRefs:     []string{result.GoalRef, result.ExternalGoalRef},
-				EvidenceRefs: resultForReason.EvidenceRefs,
-				Counters:     counters,
-			},
-		)
-		tracker.lastIdleSelfImprovementAt = now.UTC()
-		tracker.idleSelfImprovementInFlight = false
-		tracker.idleSelfImprovementAccepted = idleSelfImprovementGoalObservationKeepsAttemptV0(reasonCode, result, observeErr)
-		state.IdleSelfImprovementFlight = false
-		state.IdleSelfImprovementRuns = tracker.idleSelfImprovementAttempts
-		state.IdleSelfImprovementOK = tracker.idleSelfImprovementPrepared
-		if observeErr != nil || result.Status == orquestagoal.GoalStatusInvalidV0 {
-			state.LastError = projectServerOperationalMessageV0("idle_self_improvement", message)
-			state.LastErrorOperationalMessage = copyServerOperationalMessageV0(state.IdleSelfImprovementOperationalMessage)
-			appendRecentServerErrorV0(state, now, "idle_self_improvement_goal_observation", "idle_self_improvement", message, result.EvidenceRefs)
-			return
-		}
-		state.LastError = ""
-		state.LastErrorOperationalMessage = nil
-	})
+	}
+	counters := map[string]int{
+		"attempts":  tracker.idleSelfImprovementAttempts,
+		"accepted":  tracker.idleSelfImprovementPrepared,
+		"artifacts": len(result.ArtifactRefs),
+		"tests":     len(result.RequiredTestResults),
+		"receipts":  len(result.DomainReceiptRefs),
+	}
+	if state.IdleSelfImprovementGoalClosure != nil {
+		counters["closure_issues"] = len(state.IdleSelfImprovementGoalClosure.Issues)
+	}
+	state.IdleSelfImprovementReason = idleSelfImprovementGoalObservedReasonV0(reasonCode, resultForReason, message)
+	state.IdleSelfImprovementOperationalMessage = projectServerOperationalMessageRecordV0(
+		serverOperationalMessageInputV0{
+			Scope:        "idle_self_improvement",
+			ReasonCode:   reasonCode,
+			Status:       resultForReason.Status,
+			Message:      message,
+			GoalRefs:     []string{result.GoalRef, result.ExternalGoalRef},
+			EvidenceRefs: resultForReason.EvidenceRefs,
+			Counters:     counters,
+		},
+	)
+	tracker.lastIdleSelfImprovementAt = now.UTC()
+	tracker.idleSelfImprovementInFlight = false
+	tracker.idleSelfImprovementAccepted = idleSelfImprovementGoalObservationKeepsAttemptV0(reasonCode, result, observeErr)
+	state.IdleSelfImprovementFlight = false
+	state.IdleSelfImprovementRuns = tracker.idleSelfImprovementAttempts
+	state.IdleSelfImprovementOK = tracker.idleSelfImprovementPrepared
+	if observeErr != nil || result.Status == orquestagoal.GoalStatusInvalidV0 {
+		state.LastError = projectServerOperationalMessageV0("idle_self_improvement", message)
+		state.LastErrorOperationalMessage = copyServerOperationalMessageV0(state.IdleSelfImprovementOperationalMessage)
+		appendRecentServerErrorV0(state, now, "idle_self_improvement_goal_observation", "idle_self_improvement", message, result.EvidenceRefs)
+		return
+	}
+	state.LastError = ""
+	state.LastErrorOperationalMessage = nil
 }
 
 func idleSelfImprovementGoalObservationReasonCodeV0(

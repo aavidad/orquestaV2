@@ -20,10 +20,13 @@ const (
 )
 
 func (runtime *RuntimeV0) observePendingIdleSelfImprovementGoalV0(ctx context.Context, now time.Time) bool {
-	// Compatibility bridge for idle_self_improvement goal-first. The generic
-	// active-goal observer closes app/external-work goals, but this helper still
-	// updates the idle tracker and gates later self-improvement attempts.
+	// Compatibility fallback for idle_self_improvement goal-first. When the
+	// generic active-goal observer is available, it owns observation and tracker
+	// projection; this path only keeps older/self-contained compositions working.
 	if runtime == nil || !runtime.config.IdleSelfImprovementGoalFirst || runtime.tracker == nil {
+		return false
+	}
+	if runtime.goalObservationAvailableV0() {
 		return false
 	}
 	request, ok := idleSelfImprovementGoalObservationRequestFromStateV0(runtime.tracker.SnapshotV0())
