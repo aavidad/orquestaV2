@@ -1558,3 +1558,104 @@ func TestDomainWorkDeliveryContentTypeV0VisualHTML(t *testing.T) {
 		t.Fatalf("content_type=%q", got)
 	}
 }
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0DerivaManifestCierreOPESFinal(t *testing.T) {
+	projectDir := t.TempDir()
+	fileRef := "external/opes/finalize_temario_package/completed_syllabus_package.json"
+	bodyPath := filepath.Join(projectDir, filepath.FromSlash(fileRef))
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	payload := `{
+		"artifact_type":"completed_syllabus_package",
+		"payload_json":{
+			"package_ref":"package-ref-final-001",
+			"manifest_cierre":{
+				"schema_version":"opes_final_package_evidence_manifest.v0",
+				"package_ref":"package-ref-final-001",
+				"manifest_ref":"manifest-cierre-ref-001",
+				"checksum_refs":["checksum-ref-001"],
+				"validation_report_ref":"validation-report-ref-001",
+				"review_matrix_ref":"review-matrix-ref-001",
+				"required_evidence_refs":{
+					"html":"opes-final-evidence:html:001",
+					"rag":"opes-final-evidence:rag:001",
+					"audio":"opes-final-evidence:audio:001",
+					"tests":"opes-final-evidence:tests:001",
+					"visual":"opes-final-evidence:visual:001",
+					"qa":"opes-final-evidence:qa:001"
+				}
+			}
+		}
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run: orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-final-package-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{
+					TaskID: "task-ref-final-package-001",
+					Title:  "Cerrar paquete final OPES",
+				},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-final-package-001",
+						ChangeRef:     "change-ref-final-package-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-final-package-001",
+							WorkKind:   "finalize_temario_package",
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-final-package-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{fileRef},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef:  "ack-ref-final-package-001",
+					AgentRef:     "agent-ref-final-package-001",
+					Summary:      "Paquete final OPES validado.",
+					EvidenceRefs: []string{"ack-ref-final-package-001"},
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if submission.ArtifactType != orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "package_ref", "package-ref-final-001") ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "manifest_cierre") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "validation_report_ref", "validation-report-ref-001") ||
+		!domainWorkFieldValueForTestV0(submission.PayloadFields, "review_matrix_ref", "review-matrix-ref-001") ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "required_evidence_refs") {
+		t.Fatalf("submission=%+v", submission)
+	}
+	for _, want := range []string{
+		"manifest-cierre-ref-001",
+		"checksum-ref-001",
+		"validation-report-ref-001",
+		"review-matrix-ref-001",
+		"opes-final-evidence:html:001",
+		"opes-final-evidence:rag:001",
+		"opes-final-evidence:audio:001",
+		"opes-final-evidence:tests:001",
+		"opes-final-evidence:visual:001",
+		"opes-final-evidence:qa:001",
+	} {
+		if !codexStackStringInSetV0(submission.EvidenceRefs, want) {
+			t.Fatalf("evidence_refs=%+v falta %s", submission.EvidenceRefs, want)
+		}
+	}
+	if issues := orquestadomainwork.ValidateDomainWorkArtifactSubmissionV0(submission); len(issues) != 0 {
+		t.Fatalf("submission invalida: %+v", issues)
+	}
+}

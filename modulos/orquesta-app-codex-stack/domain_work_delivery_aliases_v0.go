@@ -236,6 +236,37 @@ func domainWorkDeliveryCanonicalPayloadFieldNameV0(artifactType string, name str
 		case "source_refs", "sources", "fuentes", "source_ids", "source_references":
 			return "source_refs"
 		}
+	case "completed_syllabus_package", "final_domain_package":
+		switch key {
+		case "package_ref", "paquete_ref", "final_package_ref":
+			return "package_ref"
+		case "manifest_cierre", "manifest_cierre_json", "closure_manifest", "final_manifest",
+			"manifest_ref", "ref_manifest", "manifest":
+			return "manifest_cierre"
+		case "checksum_refs", "checksums", "checksum_manifest_ref", "package_checksum_ref":
+			return "checksum_refs"
+		case "validation_report_ref", "validation_ref", "qa_validation_report_ref":
+			return "validation_report_ref"
+		case "review_matrix_ref", "director_review_matrix", "matriz_revision_ref",
+			"matriz_revisiones_ref":
+			return "review_matrix_ref"
+		case "required_evidence_refs", "required_evidences", "evidencias_requeridas":
+			return "required_evidence_refs"
+		case "evidence_refs", "evidencias", "evidencias_refs":
+			return "evidence_refs"
+		case "html_ref", "html_evidence_ref", "local_html_site_ref":
+			return "html_evidence_ref"
+		case "rag_ref", "rag_evidence_ref", "rag_manifest_ref", "tutor_rag_manifest":
+			return "rag_evidence_ref"
+		case "audio_ref", "audio_evidence_ref", "audio_manifest_ref":
+			return "audio_evidence_ref"
+		case "tests_ref", "tests_evidence_ref", "question_bank_ref":
+			return "tests_evidence_ref"
+		case "visual_ref", "visual_evidence_ref", "visual_validation_report_ref":
+			return "visual_evidence_ref"
+		case "qa_ref", "qa_evidence_ref", "qa_final_ref":
+			return "qa_evidence_ref"
+		}
 	default:
 		switch key {
 		case "topic_id", "topicid", "tema_id", "id_tema", "idtema":

@@ -35,6 +35,10 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 	payloadBody = canonicalDomainWorkDeliveryPayloadBodyV0(artifactType, payloadBody, input)
 	fields = domainWorkDeliveryPayloadFieldsV0(fields, artifactType, input.Task.Title, payloadBody)
 	fields = appendDomainWorkFieldIfMissingV0(fields, "file_ref", intake.FileRef)
+	evidenceRefs := compactStringsV0(append(
+		append([]string{input.Descriptor.DescriptorRef}, input.Observation.EvidenceRefs...),
+		domainWorkDeliveryPayloadEvidenceRefsV0(artifactType, fields)...,
+	))
 	completeJob := true
 	if domainWorkDeliveryHasEmptyValidationScanV0(artifactType, fields) {
 		fields = domainWorkDeliveryMarkEmptyValidationScanInvalidV0(fields)
@@ -58,7 +62,7 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 			Summary:        input.Observation.Summary,
 			PayloadFields:  fields,
 			ExternalRefs:   domainWorkArtifactExternalRefsV0(input),
-			EvidenceRefs:   append([]string{input.Descriptor.DescriptorRef}, input.Observation.EvidenceRefs...),
+			EvidenceRefs:   evidenceRefs,
 			CompleteJob:    completeJob,
 		},
 	), true, nil
@@ -152,9 +156,19 @@ func domainWorkDeliveryDerivedPayloadFieldsV0(
 	artifactType string,
 	fields []orquestadomainwork.DomainWorkFieldV0,
 ) []orquestadomainwork.DomainWorkFieldV0 {
-	if domainWorkDeliveryCanonicalArtifactTypeV0(artifactType) != "audio_asset" {
+	switch domainWorkDeliveryCanonicalArtifactTypeV0(artifactType) {
+	case "audio_asset":
+		return domainWorkDeliveryDerivedAudioPayloadFieldsV0(fields)
+	case "completed_syllabus_package", "final_domain_package":
+		return domainWorkDeliveryDerivedFinalPackagePayloadFieldsV0(fields)
+	default:
 		return nil
 	}
+}
+
+func domainWorkDeliveryDerivedAudioPayloadFieldsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []orquestadomainwork.DomainWorkFieldV0 {
 	var manifest map[string]json.RawMessage
 	for _, field := range fields {
 		if strings.TrimSpace(field.Name) != "audio_manifest" || len(field.ValueJSON) == 0 {
@@ -182,6 +196,77 @@ func domainWorkDeliveryDerivedPayloadFieldsV0(
 		}
 	}
 	return derived
+}
+
+func domainWorkDeliveryDerivedFinalPackagePayloadFieldsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	manifest := domainWorkDeliveryFinalPackageManifestV0(fields)
+	if len(manifest) == 0 {
+		return nil
+	}
+	derived := make([]orquestadomainwork.DomainWorkFieldV0, 0, 8)
+	for _, name := range []string{
+		"package_ref",
+		"validation_report_ref",
+		"review_matrix_ref",
+	} {
+		derived = appendFinalPackageManifestStringFieldIfMissingV0(derived, fields, manifest, name, name)
+	}
+	derived = appendFinalPackageManifestStringFieldIfMissingV0(derived, fields, manifest, "manifest_cierre", "manifest_ref")
+	for _, name := range []string{"checksum_refs", "required_evidence_refs", "evidence_refs"} {
+		derived = appendFinalPackageManifestRawFieldIfMissingV0(derived, fields, manifest, name, name)
+	}
+	return derived
+}
+
+func domainWorkDeliveryFinalPackageManifestV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) map[string]json.RawMessage {
+	for _, field := range fields {
+		if strings.TrimSpace(field.Name) != "manifest_cierre" || len(field.ValueJSON) == 0 {
+			continue
+		}
+		var manifest map[string]json.RawMessage
+		if err := json.Unmarshal(field.ValueJSON, &manifest); err == nil {
+			return manifest
+		}
+	}
+	return nil
+}
+
+func appendFinalPackageManifestStringFieldIfMissingV0(
+	out []orquestadomainwork.DomainWorkFieldV0,
+	existing []orquestadomainwork.DomainWorkFieldV0,
+	manifest map[string]json.RawMessage,
+	fieldName string,
+	manifestName string,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if domainWorkFieldHasNameV0(existing, fieldName) {
+		return out
+	}
+	value := audioManifestStringV0(manifest, manifestName)
+	if value == "" {
+		return out
+	}
+	return append(out, orquestadomainwork.DomainWorkFieldV0{Name: fieldName, Value: value})
+}
+
+func appendFinalPackageManifestRawFieldIfMissingV0(
+	out []orquestadomainwork.DomainWorkFieldV0,
+	existing []orquestadomainwork.DomainWorkFieldV0,
+	manifest map[string]json.RawMessage,
+	fieldName string,
+	manifestName string,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if domainWorkFieldHasNameV0(existing, fieldName) {
+		return out
+	}
+	raw := manifest[manifestName]
+	if len(raw) == 0 || !json.Valid(raw) {
+		return out
+	}
+	return append(out, orquestadomainwork.DomainWorkFieldV0{Name: fieldName, ValueJSON: append([]byte(nil), raw...)})
 }
 
 func appendAudioManifestStringFieldIfMissingV0(
@@ -417,6 +502,116 @@ func domainWorkDeliveryHasEmptyValidationScanV0(
 	}
 	filesScanned, ok := domainWorkFieldIntValueV0(fields, "files_scanned")
 	return ok && filesScanned == 0
+}
+
+func domainWorkDeliveryPayloadEvidenceRefsV0(
+	artifactType string,
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []string {
+	switch domainWorkDeliveryCanonicalArtifactTypeV0(artifactType) {
+	case "completed_syllabus_package", "final_domain_package":
+		return domainWorkDeliveryFinalPackageEvidenceRefsV0(fields)
+	default:
+		return nil
+	}
+}
+
+func domainWorkDeliveryFinalPackageEvidenceRefsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []string {
+	refs := []string{}
+	for _, field := range fields {
+		name := strings.TrimSpace(field.Name)
+		switch name {
+		case "evidence_refs", "required_evidence_refs", "checksum_refs":
+			refs = append(refs, domainWorkDeliveryFieldRefsV0(field)...)
+		case "manifest_cierre":
+			refs = append(refs, domainWorkDeliveryFinalPackageManifestEvidenceRefsV0(field)...)
+			refs = append(refs, domainWorkDeliveryFieldRefsV0(field)...)
+		case "package_ref", "validation_report_ref", "review_matrix_ref",
+			"html_evidence_ref", "rag_evidence_ref", "audio_evidence_ref",
+			"tests_evidence_ref", "visual_evidence_ref", "qa_evidence_ref":
+			refs = append(refs, domainWorkDeliveryFieldRefsV0(field)...)
+		}
+	}
+	return compactStringsV0(refs)
+}
+
+func domainWorkDeliveryFinalPackageManifestEvidenceRefsV0(
+	field orquestadomainwork.DomainWorkFieldV0,
+) []string {
+	if len(field.ValueJSON) == 0 || !json.Valid(field.ValueJSON) {
+		return nil
+	}
+	var manifest map[string]json.RawMessage
+	if err := json.Unmarshal(field.ValueJSON, &manifest); err != nil {
+		return nil
+	}
+	refs := []string{}
+	for _, name := range []string{
+		"package_ref",
+		"manifest_ref",
+		"checksum_refs",
+		"validation_report_ref",
+		"review_matrix_ref",
+		"evidence_refs",
+		"required_evidence_refs",
+	} {
+		refs = append(refs, domainWorkDeliveryRawRefsV0(manifest[name])...)
+	}
+	return refs
+}
+
+func domainWorkDeliveryFieldRefsV0(
+	field orquestadomainwork.DomainWorkFieldV0,
+) []string {
+	refs := []string{}
+	if strings.TrimSpace(field.Value) != "" {
+		refs = append(refs, field.Value)
+	}
+	refs = append(refs, field.Values...)
+	refs = append(refs, domainWorkDeliveryRawRefsV0(field.ValueJSON)...)
+	return refs
+}
+
+func domainWorkDeliveryRawRefsV0(raw json.RawMessage) []string {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return nil
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return []string{text}
+	}
+	var texts []string
+	if err := json.Unmarshal(raw, &texts); err == nil {
+		return texts
+	}
+	var refs map[string]string
+	if err := json.Unmarshal(raw, &refs); err == nil {
+		out := make([]string, 0, len(refs))
+		for _, ref := range refs {
+			out = append(out, ref)
+		}
+		return out
+	}
+	var anyMap map[string]any
+	if err := json.Unmarshal(raw, &anyMap); err == nil {
+		out := []string{}
+		for _, value := range anyMap {
+			switch typed := value.(type) {
+			case string:
+				out = append(out, typed)
+			case []any:
+				for _, item := range typed {
+					if text, ok := item.(string); ok {
+						out = append(out, text)
+					}
+				}
+			}
+		}
+		return out
+	}
+	return nil
 }
 
 func domainWorkDeliveryMarkEmptyValidationScanInvalidV0(
