@@ -194,6 +194,14 @@ func operationalHealthMCPAutoprogrammingEfficiencyV0(
 	if summary.ClosureBlocked && summary.AgentsInFlight == 0 {
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
 	}
+	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, "autoprogramming_goal_first_blocked") {
+		health = minIntMCPAutoprogrammingEfficiencyV0(health, 40)
+		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, "goal_first_blocked")
+	}
+	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, "autoprogramming_goal_first_state_missing") {
+		health = minIntMCPAutoprogrammingEfficiencyV0(health, 60)
+		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, "goal_first_state_missing")
+	}
 	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, "supervisor_replan_amplification_blocked") {
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 30)
 		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, "supervisor_replan_amplification_blocked")
@@ -233,6 +241,9 @@ func stateMCPAutoprogrammingEfficiencyV0(
 		return "unavailable"
 	case strings.EqualFold(summary.ClosureStatus, "closed"):
 		return "closed"
+	case hasReasonMCPAutoprogrammingEfficiencyV0(summary, "goal_first_blocked") ||
+		hasReasonMCPAutoprogrammingEfficiencyV0(summary, "goal_first_state_missing"):
+		return "attention_required"
 	case hasRunReplanAmplificationMCPAutoprogrammingEfficiencyV0(run):
 		return "hung"
 	case summary.StuckPercentage >= 50 || (summary.AgentsStuck > 0 && summary.AlivePercentage == 0):
@@ -254,6 +265,22 @@ func stateMCPAutoprogrammingEfficiencyV0(
 	default:
 		return "unknown"
 	}
+}
+
+func hasReasonMCPAutoprogrammingEfficiencyV0(
+	summary *MCPAutoprogrammingEfficiencySummaryV0,
+	reason string,
+) bool {
+	if summary == nil {
+		return false
+	}
+	reason = strings.TrimSpace(reason)
+	for _, candidate := range summary.Reasons {
+		if strings.TrimSpace(candidate) == reason {
+			return true
+		}
+	}
+	return false
 }
 
 func confidenceMCPAutoprogrammingEfficiencyV0(
