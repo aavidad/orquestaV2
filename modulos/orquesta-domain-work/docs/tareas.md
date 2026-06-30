@@ -15,7 +15,8 @@
   entregables.
 - Definir frontera neutral de capacidades externas para jobs de dominio:
   `audio_asset` exige `speech_synthesis`, la composicion declara disponibilidad
-  por puerto y el contrato bloquea con razon operativa si falta.
+  por puerto y el contrato bloquea con razon operativa si falta red, tool path,
+  cuota, heartbeat/progreso o timeout de proveedor.
 - Documentar frontera con OPES/programacion/otras apps.
 - Crear primer conector REST OPES de jobs/artefactos en
   `orquesta-opes-connector`.

@@ -246,6 +246,9 @@ const (
 	envOPESBridgeSpeechSynthesisToolWorkDirV0                 = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_TOOL_WORKDIR"
 	envOPESBridgeSpeechSynthesisToolCommandV0                 = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_TOOL_COMMAND"
 	envOPESBridgeSpeechSynthesisToolPreflightTimeoutSecondsV0 = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_TOOL_PREFLIGHT_TIMEOUT_SECONDS"
+	envOPESBridgeSpeechSynthesisProgressHeartbeatReadyV0      = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROGRESS_HEARTBEAT_READY"
+	envOPESBridgeSpeechSynthesisProviderTimeoutReadyV0        = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROVIDER_TIMEOUT_READY"
+	envOPESBridgeSpeechSynthesisNoProgressTimeoutSecondsV0    = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_NO_PROGRESS_TIMEOUT_SECONDS"
 )
 
 type serverEnvSettingMetadataV0 struct {
@@ -476,6 +479,21 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "opes_bridge",
 		Label:       "Speech synthesis cuota",
 		Description: "Subcheck opt-in para declarar si el proveedor TTS tiene cuota/capacidad disponible.",
+	},
+	envOPESBridgeSpeechSynthesisProgressHeartbeatReadyV0: {
+		Scope:       "opes_bridge",
+		Label:       "Speech synthesis progreso",
+		Description: "Subcheck opt-in para declarar si el proveedor TTS publica heartbeat/progreso granular observable.",
+	},
+	envOPESBridgeSpeechSynthesisProviderTimeoutReadyV0: {
+		Scope:       "opes_bridge",
+		Label:       "Speech synthesis provider timeout",
+		Description: "Subcheck opt-in para declarar si el proveedor TTS corta sin avance y publica provider_timeout recuperable.",
+	},
+	envOPESBridgeSpeechSynthesisNoProgressTimeoutSecondsV0: {
+		Scope:       "opes_bridge",
+		Label:       "Speech synthesis no-avance",
+		Description: "Ventana maxima sin progreso en segundos para cortar proveedor TTS antes de bloquear una ola OPES.",
 	},
 	envOPESBridgeSpeechSynthesisToolWorkDirV0: {
 		Scope:       "opes_bridge",

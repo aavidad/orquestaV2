@@ -364,6 +364,16 @@ Avance 2026-06-28:
   `ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS` cuando se declara TTS
   disponible, para que el smoke temporal no se cierre con una capacidad
   meramente nominal;
+- avance 2026-06-30: `speech_synthesis` para `audio_asset` exige ademas
+  heartbeat/progreso granular y corte `provider_timeout` por falta de avance.
+  El bridge solo postea `generate_audio_asset` si la composicion declara
+  `ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROGRESS_HEARTBEAT_READY=true`,
+  `ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROVIDER_TIMEOUT_READY=true` y una
+  ventana `ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_NO_PROGRESS_TIMEOUT_SECONDS`
+  compatible. Evidencia:
+  `TestDomainWorkExternalCapabilityEvaluationV0BloqueaAudioSinHeartbeatProveedor`,
+  `TestDomainWorkExternalCapabilityEvaluationV0BloqueaAudioSinProviderTimeout`
+  y `TestRunOPESDrainOnceV0AudioSinHeartbeatProveedorNoPosteaOrquestaV0`;
 - el smoke fake de derivados declara `speech_synthesis` y sigue cubriendo la
   cadena hasta `generate_audio_asset`/finalizacion. Evidencia:
   `TestRunOPESDrainOnceV0AudioSinSpeechSynthesisNoPosteaOrquestaV0`,

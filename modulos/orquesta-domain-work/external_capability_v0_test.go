@@ -31,6 +31,9 @@ func TestDomainWorkExternalCapabilityRequirementsV0AudioRequiereSpeechSynthesis(
 		!requirement.ToolPathRequired ||
 		!requirement.ProviderQuotaSensitive ||
 		requirement.CommandTimeoutSeconds != 1800 ||
+		!requirement.ProgressHeartbeatRequired ||
+		!requirement.ProviderTimeoutRequired ||
+		requirement.ProviderNoProgressTimeoutSeconds != 300 ||
 		requirement.WorkKind != "tts_topic" ||
 		requirement.ArtifactType != DomainWorkArtifactTypeAudioAssetV0 ||
 		len(requirement.ExternalRefs) != 1 ||
@@ -63,13 +66,16 @@ func TestDomainWorkExternalCapabilityEvaluationV0AceptaDeclaracionTTSAlias(t *te
 		request,
 		[]DomainWorkExternalCapabilityV0{
 			{
-				CapabilityRef:         " cap-tts-001 ",
-				Kind:                  " tts ",
-				Available:             true,
-				NetworkReady:          true,
-				ToolPathReady:         true,
-				ProviderQuotaReady:    true,
-				CommandTimeoutSeconds: 1800,
+				CapabilityRef:                    " cap-tts-001 ",
+				Kind:                             " tts ",
+				Available:                        true,
+				NetworkReady:                     true,
+				ToolPathReady:                    true,
+				ProviderQuotaReady:               true,
+				CommandTimeoutSeconds:            1800,
+				ProgressHeartbeatReady:           true,
+				ProviderTimeoutReady:             true,
+				ProviderNoProgressTimeoutSeconds: 300,
 				ExternalRefs: []DomainWorkExternalRefV0{{
 					Kind: "edge_host_ref",
 					Ref:  "edge-host-ref-001",
@@ -86,6 +92,82 @@ func TestDomainWorkExternalCapabilityEvaluationV0AceptaDeclaracionTTSAlias(t *te
 		evaluation.MatchedCapabilities[0].Kind != DomainWorkExternalCapabilityKindSpeechSynthesisV0 ||
 		evaluation.MatchedCapabilities[0].CapabilityRef != "cap-tts-001" ||
 		len(evaluation.MatchedCapabilities[0].EvidenceRefs) != 1 {
+		t.Fatalf("evaluation=%+v", evaluation)
+	}
+}
+
+func TestDomainWorkExternalCapabilityEvaluationV0BloqueaAudioSinHeartbeatProveedor(t *testing.T) {
+	request := validDomainWorkJobRequestForTestV0()
+	request.WorkKind = "generate_audio_asset"
+
+	evaluation := EvaluateDomainWorkExternalCapabilitiesV0(
+		request,
+		[]DomainWorkExternalCapabilityV0{{
+			CapabilityRef:         "tts-edge-ready-without-heartbeat",
+			Kind:                  "tts",
+			Available:             true,
+			NetworkReady:          true,
+			ToolPathReady:         true,
+			ProviderQuotaReady:    true,
+			CommandTimeoutSeconds: 1800,
+		}},
+	)
+
+	if evaluation.Ready ||
+		evaluation.OperationalReason != "external_capability_missing:speech_synthesis:progress_heartbeat_ready" ||
+		len(evaluation.MissingRequirements) != 1 {
+		t.Fatalf("evaluation=%+v", evaluation)
+	}
+}
+
+func TestDomainWorkExternalCapabilityEvaluationV0BloqueaAudioSinProviderTimeout(t *testing.T) {
+	request := validDomainWorkJobRequestForTestV0()
+	request.WorkKind = "generate_audio_asset"
+
+	evaluation := EvaluateDomainWorkExternalCapabilitiesV0(
+		request,
+		[]DomainWorkExternalCapabilityV0{{
+			CapabilityRef:          "tts-edge-ready-without-timeout",
+			Kind:                   "tts",
+			Available:              true,
+			NetworkReady:           true,
+			ToolPathReady:          true,
+			ProviderQuotaReady:     true,
+			CommandTimeoutSeconds:  1800,
+			ProgressHeartbeatReady: true,
+		}},
+	)
+
+	if evaluation.Ready ||
+		evaluation.OperationalReason != "external_capability_missing:speech_synthesis:provider_timeout_ready" ||
+		len(evaluation.MissingRequirements) != 1 {
+		t.Fatalf("evaluation=%+v", evaluation)
+	}
+}
+
+func TestDomainWorkExternalCapabilityEvaluationV0BloqueaAudioConVentanaNoAvanceDemasiadoLarga(t *testing.T) {
+	request := validDomainWorkJobRequestForTestV0()
+	request.WorkKind = "generate_audio_asset"
+
+	evaluation := EvaluateDomainWorkExternalCapabilitiesV0(
+		request,
+		[]DomainWorkExternalCapabilityV0{{
+			CapabilityRef:                    "tts-edge-ready-slow-timeout",
+			Kind:                             "tts",
+			Available:                        true,
+			NetworkReady:                     true,
+			ToolPathReady:                    true,
+			ProviderQuotaReady:               true,
+			CommandTimeoutSeconds:            1800,
+			ProgressHeartbeatReady:           true,
+			ProviderTimeoutReady:             true,
+			ProviderNoProgressTimeoutSeconds: 900,
+		}},
+	)
+
+	if evaluation.Ready ||
+		evaluation.OperationalReason != "external_capability_missing:speech_synthesis:provider_no_progress_timeout_seconds" ||
+		len(evaluation.MissingRequirements) != 1 {
 		t.Fatalf("evaluation=%+v", evaluation)
 	}
 }
@@ -288,13 +370,16 @@ func (fakeDomainWorkExternalCapabilitySourceV0) ListDomainWorkExternalCapabiliti
 ) ([]DomainWorkExternalCapabilityV0, error) {
 	return []DomainWorkExternalCapabilityV0{NormalizeDomainWorkExternalCapabilityV0(
 		DomainWorkExternalCapabilityV0{
-			CapabilityRef:         "capability-speech-synthesis",
-			Kind:                  "speech_synthesis",
-			Available:             true,
-			NetworkReady:          true,
-			ToolPathReady:         true,
-			ProviderQuotaReady:    true,
-			CommandTimeoutSeconds: 1800,
+			CapabilityRef:                    "capability-speech-synthesis",
+			Kind:                             "speech_synthesis",
+			Available:                        true,
+			NetworkReady:                     true,
+			ToolPathReady:                    true,
+			ProviderQuotaReady:               true,
+			CommandTimeoutSeconds:            1800,
+			ProgressHeartbeatReady:           true,
+			ProviderTimeoutReady:             true,
+			ProviderNoProgressTimeoutSeconds: 300,
 		},
 	)}, nil
 }

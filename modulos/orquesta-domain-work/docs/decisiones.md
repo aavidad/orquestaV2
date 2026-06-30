@@ -18,6 +18,20 @@ Estado: aceptada_local
 ```
 
 ```text
+Fecha: 2026-06-30
+Decision: Ampliar `speech_synthesis` con heartbeat/progreso y timeout de
+proveedor antes de aceptar trabajos `audio_asset`.
+Motivo: un conector externo puede dejar una ola en estado `running` sin avance
+si el proveedor TTS queda colgado y Orquesta solo observa el proceso global.
+Alternativas: confiar en logs del adaptador; aceptar el job y reparar despues;
+meter un proveedor TTS concreto en el contrato neutral.
+Impacto: el contrato puro exige flags declarativos de progreso observable,
+timeout recuperable y ventana maxima sin avance. El proveedor, el sidecar de
+heartbeat y la reparacion concreta siguen fuera de `orquesta-domain-work`.
+Estado: aceptada_local
+```
+
+```text
 Fecha: 2026-05-17
 Decision: Reconocer `orquesta-domain-work-sql` como adaptador SQL externo de
 `DomainWorkJobRecordStorePortV0`.

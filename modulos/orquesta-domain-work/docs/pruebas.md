@@ -25,7 +25,8 @@ Cobertura:
   `speech_synthesis`, ausencia de capacidad bloquea con
   `domain_work_external_capability_missing`, y aliases `tts`/`text_to_speech`
   se normalizan sin acoplar proveedor ni runner; el perfil de preflight marca
-  red, tool path, cuota sensible y timeout;
+  red, tool path, cuota sensible, heartbeat/progreso observable, timeout de
+  proveedor y ventana maxima sin avance;
 - revision remota deriva requisito `remote_qa_provider` desde artefactos
   neutrales `agent_review_report`, `agent_pair_review_report` o
   `director_review_matrix`, con red, auth state, cuota sensible y timeout, y

@@ -198,6 +198,26 @@ func opesBridgeExternalCapabilitiesFromEnvV0() []orquestadomainwork.DomainWorkEx
 			capability.Kind,
 			"provider_quota_ready",
 		)
+		capability.ProgressHeartbeatReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+			envOPESBridgeSpeechSynthesisProgressHeartbeatReadyV0,
+			false,
+			capability.OperationalReason,
+			capability.Kind,
+			"progress_heartbeat_ready",
+		)
+		capability.ProviderTimeoutReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+			envOPESBridgeSpeechSynthesisProviderTimeoutReadyV0,
+			false,
+			capability.OperationalReason,
+			capability.Kind,
+			"provider_timeout_ready",
+		)
+		if capability.ProviderTimeoutReady {
+			capability.ProviderNoProgressTimeoutSeconds = intEnvOrDefaultV0(
+				envOPESBridgeSpeechSynthesisNoProgressTimeoutSecondsV0,
+				300,
+			)
+		}
 		capability.CommandTimeoutSeconds = 1800
 		capability = opesBridgeSpeechSynthesisToolPreflightFromEnvV0(capability)
 		out = append(out, orquestadomainwork.NormalizeDomainWorkExternalCapabilityV0(capability))

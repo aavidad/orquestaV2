@@ -192,13 +192,16 @@ func TestMCPDomainWorkExecutorV0EvaluaCapabilitiesDeclaradas(t *testing.T) {
 			WorkKind:  "generate_audio_asset",
 		},
 		ExternalCapabilities: []orquestadomainwork.DomainWorkExternalCapabilityV0{{
-			CapabilityRef:         "tts-edge-ready",
-			Kind:                  "tts",
-			Available:             true,
-			NetworkReady:          true,
-			ToolPathReady:         true,
-			ProviderQuotaReady:    true,
-			CommandTimeoutSeconds: 1800,
+			CapabilityRef:                    "tts-edge-ready",
+			Kind:                             "tts",
+			Available:                        true,
+			NetworkReady:                     true,
+			ToolPathReady:                    true,
+			ProviderQuotaReady:               true,
+			CommandTimeoutSeconds:            1800,
+			ProgressHeartbeatReady:           true,
+			ProviderTimeoutReady:             true,
+			ProviderNoProgressTimeoutSeconds: 300,
 		}},
 	})
 	if err != nil {

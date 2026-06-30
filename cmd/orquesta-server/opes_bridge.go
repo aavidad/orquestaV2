@@ -516,6 +516,8 @@ func opesBridgeExternalCapabilityNextActionsV0(
 		if requirement.Kind == orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0 {
 			return []string{
 				"declare_speech_synthesis_capability",
+				"declare_speech_synthesis_progress_heartbeat",
+				"declare_speech_synthesis_provider_timeout",
 				"configure_or_skip_audio_asset_generation",
 			}
 		}

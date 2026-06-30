@@ -2284,10 +2284,73 @@ func TestRunOPESDrainOnceV0AudioConSpeechSynthesisPosteaOrquestaV0(t *testing.T)
 	}
 }
 
+func TestRunOPESDrainOnceV0AudioSinHeartbeatProveedorNoPosteaOrquestaV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-audio-no-heartbeat-001",
+			"type":           "generate_audio_asset",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   opesDerivedPayloadForDrainTestV0("generate_audio_asset"),
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	posts := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		posts++
+		t.Fatalf("no debe postear a Orquesta sin heartbeat/progreso de proveedor: %s %s", r.Method, r.URL.Path)
+	}))
+	defer orquestaServer.Close()
+
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:     opesServer.URL,
+		OrquestaBaseURL: orquestaServer.URL,
+		Limit:           1,
+		JobType:         "generate_audio_asset",
+		HTTPTimeout:     time.Second,
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+		ExternalCapabilities: []orquestadomainwork.DomainWorkExternalCapabilityV0{{
+			Kind:                  orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0,
+			Available:             true,
+			NetworkReady:          true,
+			ToolPathReady:         true,
+			ProviderQuotaReady:    true,
+			CommandTimeoutSeconds: 1800,
+		}},
+	})
+
+	if err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if posts != 0 ||
+		summary.Submitted != 0 ||
+		summary.Skipped != 1 ||
+		len(summary.Results) != 1 ||
+		summary.Results[0].Status != "external_capability_missing" ||
+		summary.Results[0].OperationalReason != "external_capability_missing:speech_synthesis:progress_heartbeat_ready" ||
+		len(summary.Errors) != 1 ||
+		summary.Errors[0].Reason != "external_capability_missing:speech_synthesis:progress_heartbeat_ready" ||
+		!containsStringForTestV0(summary.Results[0].NextActions, "declare_speech_synthesis_progress_heartbeat") {
+		t.Fatalf("posts=%d summary=%+v", posts, summary)
+	}
+}
+
 func TestOPESBridgeExternalCapabilitiesFromEnvV0DeclaraSpeechSynthesis(t *testing.T) {
 	t.Setenv(envOPESBridgeSpeechSynthesisCapabilityV0, "available")
 	t.Setenv(envOPESBridgeSpeechSynthesisCapabilityRefV0, "speech-synthesis-temporal")
 	t.Setenv(envOPESBridgeSpeechSynthesisEvidenceRefsV0, "evidence-ref-tts-1,evidence-ref-tts-2")
+	t.Setenv(envOPESBridgeSpeechSynthesisProgressHeartbeatReadyV0, "true")
+	t.Setenv(envOPESBridgeSpeechSynthesisProviderTimeoutReadyV0, "true")
+	t.Setenv(envOPESBridgeSpeechSynthesisNoProgressTimeoutSecondsV0, "180")
 
 	capabilities := opesBridgeExternalCapabilitiesFromEnvV0()
 
@@ -2299,6 +2362,9 @@ func TestOPESBridgeExternalCapabilitiesFromEnvV0DeclaraSpeechSynthesis(t *testin
 		!capabilities[0].ToolPathReady ||
 		!capabilities[0].ProviderQuotaReady ||
 		capabilities[0].CommandTimeoutSeconds != 1800 ||
+		!capabilities[0].ProgressHeartbeatReady ||
+		!capabilities[0].ProviderTimeoutReady ||
+		capabilities[0].ProviderNoProgressTimeoutSeconds != 180 ||
 		strings.Join(capabilities[0].EvidenceRefs, ",") != "evidence-ref-tts-1,evidence-ref-tts-2" {
 		t.Fatalf("capabilities=%+v", capabilities)
 	}
@@ -2329,6 +2395,8 @@ func TestOPESBridgeExternalCapabilitiesFromEnvV0PreflightTTSOKV0(t *testing.T) {
 	t.Setenv(envOPESBridgeSpeechSynthesisCapabilityV0, "available")
 	t.Setenv(envOPESBridgeSpeechSynthesisEvidenceRefsV0, "evidence-ref-tts-declared")
 	t.Setenv(envOPESBridgeSpeechSynthesisToolWorkDirV0, workdir)
+	t.Setenv(envOPESBridgeSpeechSynthesisProgressHeartbeatReadyV0, "true")
+	t.Setenv(envOPESBridgeSpeechSynthesisProviderTimeoutReadyV0, "true")
 
 	capabilities := opesBridgeExternalCapabilitiesFromEnvV0()
 
@@ -2422,12 +2490,15 @@ func opesBridgeSpeechSynthesisCapabilityForDrainTestV0() []orquestadomainwork.Do
 	return []orquestadomainwork.DomainWorkExternalCapabilityV0{
 		orquestadomainwork.NormalizeDomainWorkExternalCapabilityV0(
 			orquestadomainwork.DomainWorkExternalCapabilityV0{
-				Kind:                  orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0,
-				Available:             true,
-				NetworkReady:          true,
-				ToolPathReady:         true,
-				ProviderQuotaReady:    true,
-				CommandTimeoutSeconds: 1800,
+				Kind:                             orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0,
+				Available:                        true,
+				NetworkReady:                     true,
+				ToolPathReady:                    true,
+				ProviderQuotaReady:               true,
+				CommandTimeoutSeconds:            1800,
+				ProgressHeartbeatReady:           true,
+				ProviderTimeoutReady:             true,
+				ProviderNoProgressTimeoutSeconds: 300,
 			},
 		),
 	}
@@ -3200,16 +3271,14 @@ func TestSmokeOPESDerivativesRESTWrapperScopeProbeBloqueaSinScopeV0(t *testing.T
 }
 
 func TestSmokeOPESDerivativesRESTWrapperPreflightRealAceptaScopeYGoalFirstV0(t *testing.T) {
-	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t, appendSpeechSynthesisReadyPreflightEnvForTestV0(
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF=evidence-ref-scope-probe-preflight",
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
-	)
+	)...)
 	if err != nil {
 		t.Fatalf("preflight err=%v stdout=%s stderr=%s", err, stdout, stderr)
 	}
@@ -3232,16 +3301,14 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealAceptaScopeProbeJSONV0(t *t
 	); err != nil {
 		t.Fatalf("write probe: %v", err)
 	}
-	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t, appendSpeechSynthesisReadyPreflightEnvForTestV0(
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT="+probeFile,
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
-	)
+	)...)
 	if err != nil {
 		t.Fatalf("preflight err=%v stdout=%s stderr=%s", err, stdout, stderr)
 	}
@@ -3278,16 +3345,14 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeProbeJSONFakeV0
 	); err != nil {
 		t.Fatalf("write probe: %v", err)
 	}
-	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t, appendSpeechSynthesisReadyPreflightEnvForTestV0(
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT="+probeFile,
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
-	)
+	)...)
 	if err == nil ||
 		!strings.Contains(stderr, "SCOPE_FILTER_CONFIRMED=1 requiere") {
 		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
@@ -3306,16 +3371,14 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeProbeJSONDeOtro
 	); err != nil {
 		t.Fatalf("write probe: %v", err)
 	}
-	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t, appendSpeechSynthesisReadyPreflightEnvForTestV0(
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT="+probeFile,
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
-	)
+	)...)
 	if err == nil ||
 		!strings.Contains(stderr, "SCOPE_FILTER_CONFIRMED=1 requiere") {
 		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
@@ -3334,16 +3397,14 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeProbeJSONNomina
 }`), 0o600); err != nil {
 		t.Fatalf("write probe: %v", err)
 	}
-	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t, appendSpeechSynthesisReadyPreflightEnvForTestV0(
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_PROBE_OUTPUT="+probeFile,
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
-	)
+	)...)
 	if err == nil ||
 		!strings.Contains(stderr, "SCOPE_FILTER_CONFIRMED=1 requiere") {
 		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
@@ -3403,15 +3464,59 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSpeechSynthesisSinEv
 	}
 }
 
-func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinRemoteQAProviderV0(t *testing.T) {
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSpeechSynthesisSinHeartbeatV0(t *testing.T) {
 	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
-		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF=evidence-ref-scope-probe-preflight",
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
 	)
+	if err == nil ||
+		!strings.Contains(stderr, "SPEECH_SYNTHESIS_PROGRESS_HEARTBEAT_READY") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSpeechSynthesisSinProviderTimeoutV0(t *testing.T) {
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
+		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROGRESS_HEARTBEAT_READY=true",
+	)
+	if err == nil ||
+		!strings.Contains(stderr, "SPEECH_SYNTHESIS_PROVIDER_TIMEOUT_READY") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSpeechSynthesisNoProgressInvalidoV0(t *testing.T) {
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
+		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROGRESS_HEARTBEAT_READY=true",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROVIDER_TIMEOUT_READY=true",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_NO_PROGRESS_TIMEOUT_SECONDS=900",
+	)
+	if err == nil ||
+		!strings.Contains(stderr, "SPEECH_SYNTHESIS_NO_PROGRESS_TIMEOUT_SECONDS") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinRemoteQAProviderV0(t *testing.T) {
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t, appendSpeechSynthesisReadyPreflightEnvForTestV0(
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF=evidence-ref-scope-probe-preflight",
+		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
+	)...)
 	if err == nil ||
 		!strings.Contains(stderr, "revisiones remotas requieren ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available") {
 		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
@@ -3419,15 +3524,13 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinRemoteQAProviderV
 }
 
 func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaRemoteQASinEvidenciaV0(t *testing.T) {
-	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t, appendSpeechSynthesisReadyPreflightEnvForTestV0(
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF=evidence-ref-scope-probe-preflight",
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
-	)
+	)...)
 	if err == nil ||
 		!strings.Contains(stderr, "REMOTE_QA_EVIDENCE_REFS") {
 		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
@@ -3435,15 +3538,13 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaRemoteQASinEvidencia
 }
 
 func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeConfirmadoSinEvidenciaV0(t *testing.T) {
-	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t, appendSpeechSynthesisReadyPreflightEnvForTestV0(
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
-	)
+	)...)
 	if err == nil ||
 		!strings.Contains(stderr, "SCOPE_FILTER_CONFIRMED=1 requiere") {
 		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
@@ -3451,14 +3552,12 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeConfirmadoSinEv
 }
 
 func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaProgramIDSinFiltroConfirmadoV0(t *testing.T) {
-	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t, appendSpeechSynthesisReadyPreflightEnvForTestV0(
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
-	)
+	)...)
 	if err == nil ||
 		!strings.Contains(stderr, "program_id documental no basta") {
 		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
@@ -3466,14 +3565,12 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaProgramIDSinFiltroCo
 }
 
 func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaProductivoV0(t *testing.T) {
-	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t, appendSpeechSynthesisReadyPreflightEnvForTestV0(
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
 		"ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM=1",
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
-	)
+	)...)
 	if err == nil ||
 		!strings.Contains(stderr, "no ejecutar esta cadena contra OPES productivo") {
 		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
@@ -3481,16 +3578,14 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaProductivoV0(t *test
 }
 
 func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinGoalFirstV0(t *testing.T) {
-	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t, appendSpeechSynthesisReadyPreflightEnvForTestV0(
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
 		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF=evidence-ref-scope-probe-preflight",
 		"ORQUESTA_CODEX_GOAL_BACKEND=",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
-	)
+	)...)
 	if err == nil ||
 		!strings.Contains(stderr, "falta Orquesta temporal goal-first") {
 		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
@@ -3498,13 +3593,11 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinGoalFirstV0(t *te
 }
 
 func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinOrquestaBaseURLV0(t *testing.T) {
-	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t, appendSpeechSynthesisReadyPreflightEnvForTestV0(
 		"ORQUESTA_BASE_URL=",
 		"ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE=1",
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
-		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
-	)
+	)...)
 	if err == nil ||
 		!strings.Contains(stderr, "falta ORQUESTA_BASE_URL explicito") {
 		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
@@ -3608,6 +3701,16 @@ func runSmokeOPESDerivativesPreflightForTestV0(
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	return stdout.String(), stderr.String(), err
+}
+
+func appendSpeechSynthesisReadyPreflightEnvForTestV0(extraEnv ...string) []string {
+	return append(extraEnv,
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROGRESS_HEARTBEAT_READY=true",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROVIDER_TIMEOUT_READY=true",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_NO_PROGRESS_TIMEOUT_SECONDS=300",
+	)
 }
 
 func cleanOPESSmokeEnvForDrainTestV0(env []string) []string {

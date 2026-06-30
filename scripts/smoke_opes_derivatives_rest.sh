@@ -471,6 +471,9 @@ PY
       export ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY:-available}"
       export ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY_REF="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY_REF:-speech-synthesis-fake-opes-derivatives}"
       export ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS:-evidence-ref-opes-derivatives-fake-speech-synthesis}"
+      export ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROGRESS_HEARTBEAT_READY="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROGRESS_HEARTBEAT_READY:-true}"
+      export ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROVIDER_TIMEOUT_READY="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROVIDER_TIMEOUT_READY:-true}"
+      export ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_NO_PROGRESS_TIMEOUT_SECONDS="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_NO_PROGRESS_TIMEOUT_SECONDS:-300}"
       export ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY="${ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY:-available}"
       export ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY_REF="${ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY_REF:-remote-qa-fake-opes-derivatives}"
       export ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS="${ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS:-evidence-ref-opes-derivatives-fake-remote-qa}"
@@ -579,6 +582,32 @@ speech_synthesis_evidence_refs_present() {
   return 1
 }
 
+speech_synthesis_progress_heartbeat_ready() {
+  local value="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROGRESS_HEARTBEAT_READY:-}"
+  case "${value,,}" in
+    1 | true | yes | y | si | available | enabled | ready | ok)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+speech_synthesis_provider_timeout_ready() {
+  local value="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROVIDER_TIMEOUT_READY:-}"
+  case "${value,,}" in
+    1 | true | yes | y | si | available | enabled | ready | ok)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+speech_synthesis_no_progress_timeout_valid() {
+  local value="${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_NO_PROGRESS_TIMEOUT_SECONDS:-}"
+  [[ "$value" =~ ^[0-9]+$ ]] || return 1
+  [[ "$value" -gt 0 && "$value" -le 300 ]]
+}
+
 remote_qa_capability_available() {
   local capability="${ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY:-}"
   case "${capability,,}" in
@@ -614,6 +643,14 @@ sequence_requires_remote_qa_provider() {
     sequence_has_job_type "review_agent_pair" ||
     sequence_has_job_type "review_peer_pair" ||
     sequence_has_job_type "review_pair"
+}
+
+target_mode_requires_audio_guards() {
+  local target_mode="$1"
+  [[ "$target_mode" == "run-until-finalize" ||
+    "$target_mode" == "run-until-final" ||
+    "$target_mode" == "drain-once" ]] &&
+    sequence_has_job_type "generate_audio_asset"
 }
 
 compact_evidence_ref_present() {
@@ -717,20 +754,29 @@ require_derivatives_real_preflight() {
     echo "smoke derivados real bloqueado: falta ORQUESTA_BASE_URL explicito para crear runs goal-first en Orquesta temporal" >&2
     exit 2
   fi
-  if [[ "$target_mode" == "run-until-finalize" ||
-    "$target_mode" == "run-until-final" ||
-    "$target_mode" == "drain-once" ]] &&
-    sequence_has_job_type "generate_audio_asset" &&
+  if target_mode_requires_audio_guards "$target_mode" &&
     ! speech_synthesis_capability_available; then
     echo "smoke derivados real bloqueado: generate_audio_asset requiere ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available en la composicion temporal" >&2
     exit 2
   fi
-  if [[ "$target_mode" == "run-until-finalize" ||
-    "$target_mode" == "run-until-final" ||
-    "$target_mode" == "drain-once" ]] &&
-    sequence_has_job_type "generate_audio_asset" &&
+  if target_mode_requires_audio_guards "$target_mode" &&
     ! speech_synthesis_evidence_refs_present; then
     echo "smoke derivados real bloqueado: speech_synthesis disponible requiere ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS con refs de capacidad/runner temporal" >&2
+    exit 2
+  fi
+  if target_mode_requires_audio_guards "$target_mode" &&
+    ! speech_synthesis_progress_heartbeat_ready; then
+    echo "smoke derivados real bloqueado: speech_synthesis requiere ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROGRESS_HEARTBEAT_READY=true para observar avance granular" >&2
+    exit 2
+  fi
+  if target_mode_requires_audio_guards "$target_mode" &&
+    ! speech_synthesis_provider_timeout_ready; then
+    echo "smoke derivados real bloqueado: speech_synthesis requiere ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROVIDER_TIMEOUT_READY=true para cortar proveedor sin avance" >&2
+    exit 2
+  fi
+  if target_mode_requires_audio_guards "$target_mode" &&
+    ! speech_synthesis_no_progress_timeout_valid; then
+    echo "smoke derivados real bloqueado: speech_synthesis requiere ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_NO_PROGRESS_TIMEOUT_SECONDS entero entre 1 y 300" >&2
     exit 2
   fi
   if [[ "$target_mode" == "run-until-finalize" ||
@@ -836,6 +882,9 @@ write_metadata() {
     echo "scope_probe_output=$SCOPE_PROBE_OUTPUT"
     echo "dedicated_temporal_queue=${ORQUESTA_OPES_BRIDGE_DEDICATED_TEMPORAL_QUEUE:-0}"
     echo "speech_synthesis_capability=${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY:-}"
+    echo "speech_synthesis_progress_heartbeat_ready=${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROGRESS_HEARTBEAT_READY:-}"
+    echo "speech_synthesis_provider_timeout_ready=${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROVIDER_TIMEOUT_READY:-}"
+    echo "speech_synthesis_no_progress_timeout_seconds=${ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_NO_PROGRESS_TIMEOUT_SECONDS:-}"
     echo "goal_backend=${ORQUESTA_CODEX_GOAL_BACKEND:-}"
     echo "goal_first_confirmed=${ORQUESTA_OPES_DERIVATIVES_ORQUESTA_GOAL_FIRST_CONFIRMED:-0}"
     echo "output_dir=$SMOKE_OUT_DIR"

@@ -152,7 +152,8 @@ Reglas:
   contrato neutral del job, sin leer runtime ni proveedor concreto;
 - un job cuyo `work_kind` produce `audio_asset` requiere la capacidad externa
   `speech_synthesis` con perfil preflight: red requerida, tool path requerido,
-  cuota sensible de proveedor y timeout recomendado;
+  cuota sensible de proveedor, timeout recomendado, heartbeat/progreso
+  observable y una ventana maxima sin avance del proveedor;
 - un job de revision remota cuyo contrato neutral produce
   `agent_review_report` o `agent_pair_review_report` requiere
   `remote_qa_provider` con red, estado de autenticacion, cuota de proveedor y
@@ -163,7 +164,8 @@ Reglas:
 - aliases recuperables como `tts` o `text_to_speech` se normalizan a
   `speech_synthesis`;
 - `EvaluateDomainWorkExternalCapabilitiesV0` no ejecuta TTS ni selecciona
-  proveedor: solo marca `ready=true` si hay una capacidad declarada disponible;
+  proveedor: solo marca `ready=true` si hay una capacidad declarada disponible
+  y satisface el perfil requerido;
 - si falta la capacidad requerida, devuelve issue
   `domain_work_external_capability_missing`, `missing_requirements` y
   `operational_reason` para que la composicion bloquee de forma explicita;
@@ -179,8 +181,9 @@ Contrato minimo para una fuente de capacidades:
   `available`, `operational_reason`, `external_refs` y `evidence_refs`;
 - no abre red, no ejecuta runners, no resuelve credenciales y no fija modelo,
   host ni proveedor dentro del contrato puro;
-- cualquier mapeo a TTS real, edge host, cola de audio o API de voz pertenece a
-  un adaptador opt-in fuera de `orquesta-domain-work`.
+- cualquier mapeo a TTS real, edge host, cola de audio, heartbeat del proveedor
+  o API de voz pertenece a un adaptador opt-in fuera de
+  `orquesta-domain-work`.
 
 Referencia ejecutable:
 

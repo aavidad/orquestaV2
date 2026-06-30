@@ -252,9 +252,17 @@ se crea una derivacion localizada. Antes de TTS tambien se revisan numeros
 romanos para que se lean como numeros. Despues se debe escuchar o validar con
 transcripcion automatica cuando el adaptador lo soporte. Si el tema tiene
 apartados, el artefacto no queda cerrado con un unico MP3: debe entregar
-`segments` con una entrada por
-apartado/seccion narrable (`section_ref`, `audio_ref`, duracion, hash/ref de
-texto y estado de reutilizacion o generacion).
+`segments` con una entrada por apartado/bloque narrable (`section_ref`,
+`audio_ref`, duracion, hash/ref de texto, refs de manifest y estado de
+reutilizacion o generacion). Para lanzar audio desde el bridge OPES,
+`speech_synthesis` no basta con red, herramienta y cuota: la composicion debe
+declarar `ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROGRESS_HEARTBEAT_READY=true`,
+`ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROVIDER_TIMEOUT_READY=true` y una
+ventana `ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_NO_PROGRESS_TIMEOUT_SECONDS`
+igual o menor que 300 segundos. Si falta cualquiera de esas garantias, Orquesta
+marca `external_capability_missing:speech_synthesis:*` y no postea
+`generate_audio_asset`; el adaptador OPES debe conservar parciales, sidecars y
+manifest de fallos para reintento seguro.
 
 Regla de audio por apartado: cada `section_ref` debe apuntar a un unico MP3
 final del apartado, no a varios audios visibles ni a capas superpuestas. Ese MP3

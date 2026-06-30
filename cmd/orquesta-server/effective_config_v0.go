@@ -128,6 +128,18 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 			envOPESBridgeSpeechSynthesisQuotaReadyV0,
 			strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisQuotaReadyV0)),
 		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeSpeechSynthesisProgressHeartbeatReadyV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisProgressHeartbeatReadyV0)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeSpeechSynthesisProviderTimeoutReadyV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisProviderTimeoutReadyV0)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeSpeechSynthesisNoProgressTimeoutSecondsV0,
+			strconv.Itoa(intEnvOrDefaultV0(envOPESBridgeSpeechSynthesisNoProgressTimeoutSecondsV0, 300)),
+		),
 		serverSensitiveConfigSettingFromRegistryV0(
 			envOPESBridgeSpeechSynthesisToolWorkDirV0,
 			configuredEnvValueV0(envOPESBridgeSpeechSynthesisToolWorkDirV0, "opes-speech-synthesis-tool-workdir-configured"),
