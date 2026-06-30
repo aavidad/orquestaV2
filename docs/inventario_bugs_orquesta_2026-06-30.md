@@ -16,6 +16,10 @@ Regla operativa:
   fallo del nucleo Orquesta.
 - No abrir nuevos frentes de programacion solo por existir una fila: primero
   decidir si bloquea el cierre actual o queda como backlog agrupado.
+- Cada tanda de cierre debe revisar el conjunto: si varios bugs comparten eje,
+  fuente de verdad duplicada, contrato implicito o workaround repetido, abrir o
+  actualizar una fila arquitectonica. No cerrar el bloque como "bugs sueltos"
+  hasta dejar escrita esa lectura.
 
 ## Ejes de arquitectura a vigilar
 
@@ -38,7 +42,7 @@ Regla operativa:
 | BUG-ORQ-20260630-003 | cerrado | Self-programming remoto | bridge externo `disabled` seguia suprimiendo automejora | estado persistido de dominio interpretaba componente historico como sesion activa | commit remoto/local `e91fe0ebe` reportado por agente | Mantener test de `external_bridge_status=disabled` |
 | BUG-ORQ-20260630-004 | cerrado | Readiness | backend Goal tmux degradado no bloqueaba readiness de forma publica | readiness no agregaba diagnosticos de backend goal como gate operativo | commit `00ef13ac` | Mantener readiness bloqueante sin filtrar rutas/tokens |
 | BUG-ORQ-20260630-005 | cerrado | Autoprogramacion | fallo de launch Goal dejaba run huerfano o sin state bloqueado | launch y persistencia de `GoalWorkState` no eran transaccionales desde el punto de vista operacional | commit `97e134fd` | Persistir state invalid/reparable con reason accionable |
-| BUG-ORQ-20260630-006 | abierto | Supervision/autoprogramacion | `/autoprogramming/status` marcaba `running_stale` aunque habia procesos vivos | observadores de procesos, goals y runs no comparten modelo unico de estado vivo | incidencia OPES `TAREA_OPES_ORQUESTA_EXTERNAL_WORK_VALIDACION_Y_STREAM_2026-06-26.md` | Revisar como conjunto con estados/ACK/procesos |
+| BUG-ORQ-20260630-006 | cerrado | Supervision/autoprogramacion | `/autoprogramming/status` marcaba `running_stale` aunque habia procesos vivos | observadores de procesos, goals y runs no comparten modelo unico de estado vivo | incidencia OPES `TAREA_OPES_ORQUESTA_EXTERNAL_WORK_VALIDACION_Y_STREAM_2026-06-26.md`; test `TestMCPAutoprogrammingStatusExecutorV0NoMarcaStaleConDirectorStatsSnapshotRunningV0` | Cierre: el status usa `RunStore + ProcessRegistry + ProcessSnapshot`; proceso `running` proyecta `running_live=1`, `agents_live=1` y no publica `running_stale` |
 | BUG-ORQ-20260630-007 | cerrado | Supervision HTTP | `/autoprogramming/supervise` despachaba agentes pero el cliente HTTP quedaba colgado | endpoints de control mezclaban accion larga, streaming/ack y respuesta sin contrato temporal claro | `modulos/orquesta-mcp/run_supervisor_http_v0.go`, `modulos/orquesta-mcp/autoprogramming_supervise_http_v0.go`, `cmd/orquesta-server/autoprogramming_supervise_http_flow_v0_test.go` | Cierre: ambos bridges devuelven `202 accepted_background`, `operation_ref`, dedupe de operacion activa y acciones de polling; tests de cliente real cubren cuerpo sin colgar |
 | BUG-ORQ-20260630-008 | abierto | Subagentes/OPES | padres OPES no materializaban 6 subagentes reales aunque declaraban subroles | contrato causal de hijos no se valida en cierre padre/write-set | `docs/incidencia_opes_external_work_no_materializa_6_subagentes_por_padre_2026-06-23.md`, `AGENTS.md` regla subroles | Mantener bloqueo si faltan `child_task_refs`/ACK/delivery |
 | BUG-ORQ-20260630-009 | abierto | Write-set/agentes | `agent_packet` estrecha write-set e impide consolidar Markdown canonico | permisos de escritura no distinguen borrador, evidencia y canon consolidado | reportes OPES 2026-06-26/27 | Revisar contrato de write-set por rol y fase |
@@ -50,6 +54,7 @@ Regla operativa:
 | BUG-ORQ-20260630-015 | cerrado | MCP/external-work | faltaba cobertura explicita de que `goal_first` o modo no-legacy no activa legacy | migracion goal-first dependia de tests indirectos | patch remoto `orquesta-external-work-goal-first-explicit-a7940f5e-2026-06-30.patch` | Integrar/verificar commit remoto `a7940f5e` |
 | BUG-ORQ-20260630-016 | cerrado | Operacion remota | agente remoto trabajaba sobre bundle stale y sin GitHub directo | protocolo de sync remoto no era canonico ni visible para agentes | bundle `orquesta-trabajo-plataforma-agentes-9180e70f.bundle`, nota `REMOTE_SYNC_AFTER_9180E70F_2026-06-30.md` | Usar bundles versionados y worktree fresco antes de editar |
 | BUG-ORQ-20260630-017 | cerrado | Operacion remota | clone fresco no tenia identidad Git para commitear | bootstrap remoto no normalizaba config local de Git | observado en ciclo remoto `a7940f5e` | Config local `Orquesta Codex <orquesta-codex@local>` en clones frescos |
+| BUG-ORQ-20260630-018 | cerrado | Supervision/runs | `/runs/supervise` podia devolver `runtime_error`/`failed` aunque el snapshot incluia procesos vivos | error del supervisor/outbox e idempotencia se confundia con fallo terminal del trabajo ejecutandose | incidencia OPES `TAREA_OPES_ORQUESTA_EXTERNAL_WORK_VALIDACION_Y_STREAM_2026-06-26.md`; `codexStackRunSupervisorLiveErrorDiagnosticsMCPV0`; test `TestCodexStackRunSupervisorErrorResultMCPV0DistingueErrorConAgenteVivo` | Cierre: publica diagnostico `supervisor_transition_error_but_agents_live` y acciones `wait_agents`, `retry_supervise`, `do_not_relaunch_same_run_ref_while_process_live` |
 
 ## Lectura de conjunto inicial
 
