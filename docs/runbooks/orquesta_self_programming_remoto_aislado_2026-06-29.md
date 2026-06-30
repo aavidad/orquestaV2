@@ -44,9 +44,9 @@ debe estar bajo `ORQUESTA_SERVER_SELF_PROGRAMMING_ROOT`. No se promociona nada a
 produccion desde este perfil.
 
 El contexto del Codex/Goal residente debe incluir
-`deploy/self-programming/goal_context.md`. Ese documento fija que `stdio` no se
-usa nunca, que `app_server_tmux` es obligatorio y que cualquier prueba de OPES,
-web o conectores se hace solo con fakes/temporales aislados.
+`deploy/self-programming/goal_context.md`. Ese documento fija que no se usa
+`stdio` nunca. `app_server_tmux` es obligatorio y cualquier prueba de OPES, web
+o conectores se hace solo con fakes/temporales aislados.
 
 ## Direccion operativa
 
@@ -70,8 +70,7 @@ El Goal residente no debe descubrir el proyecto desde cero. Debe recibir
 
 1. Perfil remoto aislado arrancado y verificado: puerto solo loopback, binds
    solo `/srv/orquesta-self`, estado por API y cero OPES/DomainWork productivo.
-2. Goal por `app_server_tmux` probado con una tarea real acotada; `stdio` y
-   `app_server_proxy` fuera del camino goal-first.
+2. Goal por `app_server_tmux` probado con una tarea real acotada; no se usa backend `stdio` ni `app_server_proxy` en el camino goal-first.
 3. Autoprogramacion autosuficiente: incidencias abiertas a `GoalWorkSpec`,
    pruebas focales, evidencia y commit local.
 4. Reparacion automatica: fallos de pruebas/smokes convertidos en tareas

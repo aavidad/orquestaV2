@@ -42,6 +42,21 @@ func TestGoalOperationalDocsGuardV0(t *testing.T) {
 			t.Fatalf("%s presenta app_server_proxy como diagnostico operativo vigente", rel)
 		}
 	}
+	for _, rel := range []string{
+		"docs/orquesta_goal_first_codex_2026-06-25.md",
+		"docs/runbooks/smoke_goal_first_app_server_real_2026-06-25.md",
+		"docs/runbooks/orquesta_self_programming_remoto_aislado_2026-06-29.md",
+		"deploy/self-programming/README.md",
+		"deploy/self-programming/goal_context.md",
+		"deploy/self-programming/manual_codex_context.md",
+		"modulos/orquesta-runtime-codex-goal/README.md",
+		"modulos/orquesta-runtime-codex-goal/docs/contratos.md",
+	} {
+		text := readOperationalDocGuardV0(t, root, rel)
+		if bad := goalOperationalDocStdioBackendClaimsV0(text); len(bad) > 0 {
+			t.Fatalf("%s presenta stdio como backend Goal operativo: %v", rel, bad)
+		}
+	}
 }
 
 func readOperationalDocGuardV0(t *testing.T, root string, rel string) string {
@@ -84,4 +99,55 @@ func isEffectfulOPESCommandBlockV0(block string) bool {
 	return strings.Contains(block, "ORQUESTA_OPES_BRIDGE_CONFIRM=1") ||
 		strings.Contains(block, "ORQUESTA_OPES_BRIDGE_ENABLED=1") ||
 		strings.Contains(block, "opes-temario-cycle")
+}
+
+func goalOperationalDocStdioBackendClaimsV0(text string) []string {
+	var bad []string
+	for _, line := range strings.Split(text, "\n") {
+		if !goalOperationalDocLineMentionsStdioV0(line) ||
+			goalOperationalDocLineRejectsStdioV0(line) {
+			continue
+		}
+		bad = append(bad, strings.TrimSpace(line))
+	}
+	return bad
+}
+
+func goalOperationalDocLineMentionsStdioV0(line string) bool {
+	line = strings.ToLower(line)
+	return strings.Contains(line, "app_server_stdio") ||
+		strings.Contains(line, "--stdio") ||
+		strings.Contains(line, "mcp_stdio") ||
+		strings.Contains(line, "`stdio`") ||
+		strings.Contains(line, " stdio")
+}
+
+func goalOperationalDocLineRejectsStdioV0(line string) bool {
+	line = strings.ToLower(line)
+	for _, marker := range []string{
+		"no usa",
+		"no uses",
+		"no debe",
+		"no se usa",
+		"no se usan",
+		"no se permite",
+		"no aceptar",
+		"sin stdio",
+		"queda retirado",
+		"retirado",
+		"retirada",
+		"bloquear",
+		"no caer",
+		"nunca",
+		"historico",
+		"historica",
+		"no autorizado",
+		"no operativo",
+		"regresion",
+	} {
+		if strings.Contains(line, marker) {
+			return true
+		}
+	}
+	return false
 }
