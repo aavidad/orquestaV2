@@ -16,6 +16,8 @@ mismo formato `## Txx`, conservando fichero, linea y hash por seccion.
 - Shard matriz de duplicaciones/rails pendientes: `docs/duplicaciones_railes_pendientes_2026-05-24.md`.
 - Mapa operativo no programable para ola complementaria 10x6:
   `docs/autoprogramacion_ola_complementaria_10x6_2026-05-25.md`.
+- Plan operativo de frentes de cierre goal-first/conectores/web/OPES:
+  `docs/plan_frentes_cierre_orquesta_2026-06-30.md`.
 - Backlog canonico compacto de incidencias OPES/Orquesta:
   `docs/incidencias/opes_orquesta_backlog_operativo_2026-06-28.md`.
 
