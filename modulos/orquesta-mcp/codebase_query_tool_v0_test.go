@@ -12,7 +12,7 @@ func TestMCPCodebaseQueryTransportV0RegistradoYDelegado(t *testing.T) {
 	transport := newFakeMCPTransportV0()
 	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{
 		CodebaseQuery: MCPCodebaseQueryToolExecutorV0{
-			Broker: fakeMCPCodeContextBrokerV0{},
+			Broker: &fakeMCPCodeContextBrokerV0{},
 		},
 	}); err != nil {
 		t.Fatalf("register: %v", err)
@@ -52,12 +52,28 @@ func TestMCPCodebaseQueryInputSchemaV0ExponeCamposYEnum(t *testing.T) {
 	}
 }
 
-type fakeMCPCodeContextBrokerV0 struct{}
+func TestMCPCodebaseQueryToolExecutorV0RellenaRequestedByPorDefecto(t *testing.T) {
+	broker := &fakeMCPCodeContextBrokerV0{}
+	input := validMCPCodebaseQueryInputTestV0()
+	input.RequestedBy = ""
 
-func (fakeMCPCodeContextBrokerV0) QueryCodeContextV0(
+	if _, err := (MCPCodebaseQueryToolExecutorV0{Broker: broker}).Execute(context.Background(), input); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if broker.last.RequestedBy != "orquesta-mcp-codebase-query" {
+		t.Fatalf("requested_by=%q", broker.last.RequestedBy)
+	}
+}
+
+type fakeMCPCodeContextBrokerV0 struct {
+	last orquestacontext.CodeContextQueryV0
+}
+
+func (fake *fakeMCPCodeContextBrokerV0) QueryCodeContextV0(
 	_ context.Context,
 	query orquestacontext.CodeContextQueryV0,
 ) (orquestacontext.CodeContextResultV0, error) {
+	fake.last = query
 	return orquestacontext.CodeContextResultV0{
 		SchemaVersion: orquestacontext.CodeContextResultSchemaVersionV0,
 		Estado:        orquestacontext.CodeContextEstadoOKV0,

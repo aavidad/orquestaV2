@@ -79,6 +79,8 @@ const (
 	envCodebaseBrokerTimeoutMSV0                     = "ORQUESTA_CODEBASE_BROKER_TIMEOUT_MS"
 	envCodebaseBrokerStateDirV0                      = "ORQUESTA_CODEBASE_BROKER_STATE_DIR"
 	envCodebaseBrokerWatchdogEnabledV0               = "ORQUESTA_CODEBASE_BROKER_WATCHDOG_ENABLED"
+	envCodebaseBrokerCommandV0                       = "ORQUESTA_CODEBASE_BROKER_COMMAND"
+	envCodebaseBrokerProjectNameV0                   = "ORQUESTA_CODEBASE_BROKER_PROJECT_NAME"
 
 	envCodexProjectWorkDirV0                        = "ORQUESTA_CODEX_PROJECT_WORKDIR"
 	envCodexRuntimeWorkDirV0                        = "ORQUESTA_CODEX_RUNTIME_WORKDIR"
@@ -413,6 +415,16 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "codebase_broker",
 		Label:       "Watchdog contexto",
 		Description: "Habilita watchdog opt-in de leases codebase-memory-mcp con parada cooperativa por owner marker.",
+	},
+	envCodebaseBrokerCommandV0: {
+		Scope:       "codebase_broker",
+		Label:       "Comando Codebase",
+		Description: "Comando opt-in usado por el broker central para invocar codebase-memory-mcp cli; por defecto codebase-memory-mcp.",
+	},
+	envCodebaseBrokerProjectNameV0: {
+		Scope:       "codebase_broker",
+		Label:       "Proyecto Codebase",
+		Description: "Nombre de proyecto indexado en codebase-memory-mcp; si falta se deriva del project workdir.",
 	},
 	envSecurityModeV0: {Scope: "rails", Label: "Modo seguridad", Description: "Modo historico de seguridad; no reactiva rails offline hasta nueva orden."},
 	envRailsModeV0:    {Scope: "rails", Label: "Modo rails", Description: "offline fijo hasta nueva orden; no reactiva politicas de bloqueo."},

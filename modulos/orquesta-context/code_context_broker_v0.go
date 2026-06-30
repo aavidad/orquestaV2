@@ -566,7 +566,7 @@ func (broker *CodeContextBrokerV0) beginToolLeaseV0(
 		QueryHash:       CodeContextCacheKeyV0(query),
 		ToolRef:         broker.config.ProviderRef,
 		ProviderKind:    broker.config.ProviderKind,
-		OwnerRef:        query.RequestedBy,
+		OwnerRef:        CodeContextToolOwnerRefV0(query),
 		StartedAt:       now.Format(time.RFC3339),
 		LeaseTTLSeconds: int(broker.config.ToolLeaseTTL.Seconds()),
 		EvidenceRefs:    []string{query.RequestRef},
@@ -600,6 +600,17 @@ func (broker *CodeContextBrokerV0) finishToolLeaseV0(
 
 func codeContextIssueV0(code string, field string, message string) CodeContextIssueV0 {
 	return CodeContextIssueV0{Code: strings.TrimSpace(code), Field: strings.TrimSpace(field), Message: strings.TrimSpace(message)}
+}
+
+func CodeContextToolOwnerRefV0(query CodeContextQueryV0) string {
+	hash := CodeContextCacheKeyV0(query)
+	if len(hash) > 24 {
+		hash = hash[:24]
+	}
+	if hash == "" {
+		hash = "unknown"
+	}
+	return "owner-ref-code-context-" + hash
 }
 
 func codeContextDiagnosticV0(code string, field string, message string) CodeContextDiagnosticV0 {

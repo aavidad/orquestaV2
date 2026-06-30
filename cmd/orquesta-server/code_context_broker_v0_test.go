@@ -11,6 +11,7 @@ import (
 	"time"
 
 	orquestacontext "orquesta/modulos/orquesta-context"
+	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
 func TestServerRGCodeContextProviderV0DevuelveCoincidenciasCompactas(t *testing.T) {
@@ -47,6 +48,160 @@ func TestServerRGCodeContextProviderV0DevuelveCoincidenciasCompactas(t *testing.
 	if result.Results[0].Path != "modulos/demo/service.go" ||
 		result.Results[0].Line != 3 {
 		t.Fatalf("hit=%+v", result.Results[0])
+	}
+}
+
+func TestServerCodebaseMemoryCLIProviderV0ParseaSearchGraphYEscribeOwnerMarker(t *testing.T) {
+	stateDir := t.TempDir()
+	command := writeCodebaseMemoryFakeCLIForTestV0(t, `#!/bin/sh
+echo 'level=info msg=mem.init budget_mb=1'
+echo '{"total":1,"results":[{"name":"BrokerCentral","qualified_name":"repo.pkg.BrokerCentral","label":"Function","file_path":"modulos/demo/service.go","start_line":7,"rank":0.75}]}'
+`)
+	query := orquestacontext.CodeContextQueryV0{
+		SchemaVersion:        orquestacontext.CodeContextQuerySchemaVersionV0,
+		RequestRef:           "request-ref-codebase-cli",
+		RepositoryRef:        "repo-ref-orquesta",
+		QueryKind:            orquestacontext.CodeContextQueryKindSearchV0,
+		Query:                "BrokerCentral",
+		MaxResults:           3,
+		MaxBytes:             3000,
+		AllowExternalIndexer: true,
+	}
+	provider := serverCodebaseMemoryCLIProviderV0{
+		RootDir:     t.TempDir(),
+		ProjectName: "project-ref-orquesta-index",
+		Command:     command,
+		Registry:    newServerFileCodeContextToolOwnerRegistryV0(stateDir),
+		Clock:       func() time.Time { return time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC) },
+	}
+
+	result, err := provider.QueryCodeContextV0(context.Background(), query)
+	if err != nil {
+		t.Fatalf("QueryCodeContextV0: %v", err)
+	}
+	if result.ProviderKind != orquestacontext.CodeContextProviderKindCodebaseMCPV0 ||
+		len(result.Results) != 1 ||
+		result.Results[0].Path != "modulos/demo/service.go" ||
+		result.Results[0].Symbol != "BrokerCentral" {
+		t.Fatalf("result=%+v", result)
+	}
+	marker, err := provider.Registry.ReadCodeContextToolOwnerMarkerV0(orquestacontext.CodeContextToolOwnerRefV0(query))
+	if err != nil {
+		t.Fatalf("Read owner marker: %v", err)
+	}
+	if marker.ProviderKind != orquestacontext.CodeContextProviderKindCodebaseMCPV0 ||
+		marker.PID <= 0 ||
+		marker.ActiveRequests != 1 {
+		t.Fatalf("marker=%+v", marker)
+	}
+}
+
+func TestCodeContextBrokerWiringFromEnvV0ConfiguraCodebaseMemoryCLIConOptInV0(t *testing.T) {
+	stateDir := t.TempDir()
+	root := t.TempDir()
+	command := writeCodebaseMemoryFakeCLIForTestV0(t, `#!/bin/sh
+echo '{"total":1,"results":[{"name":"CodebaseBroker","qualified_name":"repo.pkg.CodebaseBroker","label":"Function","file_path":"cmd/orquesta-server/code_context_broker_v0.go","start_line":21,"rank":1}]}'
+`)
+	t.Setenv(envCodebaseBrokerProviderKindV0, orquestacontext.CodeContextProviderKindCodebaseMCPV0)
+	t.Setenv(envCodebaseBrokerExternalIndexerEnabledV0, "true")
+	t.Setenv(envCodebaseBrokerStateDirV0, stateDir)
+	t.Setenv(envCodebaseBrokerCommandV0, command)
+	t.Setenv(envCodebaseBrokerProjectNameV0, "project-ref-orquesta-index")
+	wiring := codeContextBrokerWiringFromEnvV0(orquestaserver.ConfigV0{ProjectWorkDir: root})
+	query := orquestacontext.CodeContextQueryV0{
+		SchemaVersion:        orquestacontext.CodeContextQuerySchemaVersionV0,
+		RequestRef:           "request-ref-codebase-wiring",
+		RepositoryRef:        "repo-ref-orquesta",
+		QueryKind:            orquestacontext.CodeContextQueryKindSearchV0,
+		Query:                "CodebaseBroker",
+		MaxResults:           2,
+		MaxBytes:             3000,
+		AllowExternalIndexer: true,
+	}
+
+	result, err := wiring.Query.QueryCodeContextV0(context.Background(), query)
+	if err != nil {
+		t.Fatalf("QueryCodeContextV0: %v", err)
+	}
+	if result.Estado != orquestacontext.CodeContextEstadoOKV0 ||
+		result.ProviderKind != orquestacontext.CodeContextProviderKindCodebaseMCPV0 ||
+		len(result.Results) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	completed, err := wiring.ToolLeases.ListCodeContextToolLeasesV0(context.Background(), orquestacontext.CodeContextToolLeaseListFilterV0{
+		Status: orquestacontext.CodeContextToolLeaseStatusCompletedV0,
+	})
+	if err != nil {
+		t.Fatalf("List leases: %v", err)
+	}
+	if len(completed) != 1 || completed[0].OwnerRef != orquestacontext.CodeContextToolOwnerRefV0(query) {
+		t.Fatalf("completed=%+v", completed)
+	}
+}
+
+func TestServerCodebaseMemoryCLIProviderV0RealSmokeOptIn(t *testing.T) {
+	if os.Getenv("ORQUESTA_CODEBASE_MEMORY_REAL_SMOKE") != "1" {
+		t.Skip("smoke real opt-in")
+	}
+	command, err := exec.LookPath("codebase-memory-mcp")
+	if err != nil {
+		t.Skip("codebase-memory-mcp no disponible")
+	}
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatalf("abs root: %v", err)
+	}
+	stateDir := t.TempDir()
+	leases := newServerFileCodeContextToolLeaseStoreV0(filepath.Join(stateDir, serverCodeContextLeasesFileV0))
+	query := orquestacontext.CodeContextQueryV0{
+		SchemaVersion:        orquestacontext.CodeContextQuerySchemaVersionV0,
+		RequestRef:           "request-ref-codebase-real-smoke",
+		RepositoryRef:        "repo-ref-orquesta",
+		QueryKind:            orquestacontext.CodeContextQueryKindSearchV0,
+		Query:                "CodeContextBrokerV0",
+		MaxResults:           2,
+		MaxBytes:             4000,
+		AllowExternalIndexer: true,
+	}
+	broker := orquestacontext.NewCodeContextBrokerV0(orquestacontext.CodeContextBrokerConfigV0{
+		Provider: serverCodebaseMemoryCLIProviderV0{
+			RootDir:     root,
+			ProjectName: serverCodebaseMemoryProjectNameV0(root, ""),
+			Command:     command,
+			Registry:    newServerFileCodeContextToolOwnerRegistryV0(stateDir),
+		},
+		ProviderRef:            "provider-ref-orquesta-code-context-central",
+		ProviderKind:           orquestacontext.CodeContextProviderKindCodebaseMCPV0,
+		ExternalIndexerEnabled: true,
+		ToolLeasePort:          leases,
+		Timeout:                10 * time.Second,
+	})
+
+	result, err := broker.QueryCodeContextV0(context.Background(), query)
+	if err != nil {
+		t.Fatalf("QueryCodeContextV0: %v", err)
+	}
+	if result.Estado != orquestacontext.CodeContextEstadoOKV0 ||
+		result.ProviderKind != orquestacontext.CodeContextProviderKindCodebaseMCPV0 ||
+		len(result.Results) == 0 {
+		t.Fatalf("result=%+v", result)
+	}
+	completed, err := leases.ListCodeContextToolLeasesV0(context.Background(), orquestacontext.CodeContextToolLeaseListFilterV0{
+		Status: orquestacontext.CodeContextToolLeaseStatusCompletedV0,
+	})
+	if err != nil {
+		t.Fatalf("List leases: %v", err)
+	}
+	if len(completed) != 1 {
+		t.Fatalf("completed=%+v", completed)
+	}
+	registry := newServerFileCodeContextToolOwnerRegistryV0(stateDir)
+	marker, err := registry.ReadCodeContextToolOwnerMarkerV0(orquestacontext.CodeContextToolOwnerRefV0(query))
+	if err != nil {
+		t.Fatalf("Read marker: %v", err)
+	}
+	if marker.PID <= 0 || processAliveV0(marker.PID) {
+		t.Fatalf("marker pid vivo o invalido: %+v", marker)
 	}
 }
 
@@ -455,6 +610,15 @@ func codeContextEvidenceContainsForTestV0(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func writeCodebaseMemoryFakeCLIForTestV0(t *testing.T, script string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "codebase-memory-mcp-fake")
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake cli: %v", err)
+	}
+	return path
 }
 
 type fakeCodeContextToolOwnerStopperV0 struct {

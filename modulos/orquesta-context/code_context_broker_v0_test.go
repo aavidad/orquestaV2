@@ -96,6 +96,9 @@ func TestCodeContextBrokerV0PermiteCodebaseMCPConOptInCentralYConsulta(t *testin
 	if len(completed) != 1 || completed[0].ProviderKind != CodeContextProviderKindCodebaseMCPV0 {
 		t.Fatalf("leases=%+v", completed)
 	}
+	if completed[0].OwnerRef != CodeContextToolOwnerRefV0(query) || completed[0].OwnerRef == query.RequestedBy {
+		t.Fatalf("owner_ref=%q requested_by=%q", completed[0].OwnerRef, query.RequestedBy)
+	}
 }
 
 func TestCodeContextBrokerV0LimitaResultadosYSnippets(t *testing.T) {

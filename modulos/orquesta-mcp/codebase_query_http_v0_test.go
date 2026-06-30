@@ -19,7 +19,7 @@ func TestMCPCodebaseQueryHTTPHandlerV0PostDelega(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	NewMCPCodebaseQueryHTTPHandlerV0(MCPCodebaseQueryToolExecutorV0{
-		Broker: fakeMCPCodeContextBrokerV0{},
+		Broker: &fakeMCPCodeContextBrokerV0{},
 	}).ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {

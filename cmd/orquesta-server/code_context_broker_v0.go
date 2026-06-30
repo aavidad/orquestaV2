@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os/exec"
 	"path/filepath"
@@ -47,6 +48,12 @@ func codeContextBrokerWiringFromEnvV0(config orquestaserver.ConfigV0) codeContex
 		cache = newServerFileCodeContextCacheV0(filepath.Join(stateDir, serverCodeContextCacheFileV0))
 		if providerKind == orquestacontext.CodeContextProviderKindCodebaseMCPV0 {
 			leasePort = fileLeaseStore
+			provider = serverCodebaseMemoryCLIProviderV0{
+				RootDir:     strings.TrimSpace(config.ProjectWorkDir),
+				ProjectName: serverCodebaseMemoryProjectNameV0(config.ProjectWorkDir, envOrDefaultV0(envCodebaseBrokerProjectNameV0, "")),
+				Command:     envOrDefaultV0(envCodebaseBrokerCommandV0, "codebase-memory-mcp"),
+				Registry:    newServerFileCodeContextToolOwnerRegistryV0(stateDir),
+			}
 		}
 	}
 	return codeContextBrokerWiringV0{
@@ -62,6 +69,228 @@ func codeContextBrokerWiringFromEnvV0(config orquestaserver.ConfigV0) codeContex
 		}),
 		ToolLeases: leaseStore,
 	}
+}
+
+type serverCodebaseMemoryCLIProviderV0 struct {
+	RootDir     string
+	ProjectName string
+	Command     string
+	Registry    serverFileCodeContextToolOwnerRegistryV0
+	Clock       func() time.Time
+}
+
+func (provider serverCodebaseMemoryCLIProviderV0) QueryCodeContextV0(
+	ctx context.Context,
+	query orquestacontext.CodeContextQueryV0,
+) (orquestacontext.CodeContextResultV0, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	projectName := strings.TrimSpace(provider.ProjectName)
+	if projectName == "" {
+		return orquestacontext.CodeContextResultV0{}, errors.New("codebase_memory_project_required")
+	}
+	toolName, payload, err := serverCodebaseMemoryCLIToolPayloadV0(projectName, query)
+	if err != nil {
+		return orquestacontext.CodeContextResultV0{}, err
+	}
+	payloadData, err := json.Marshal(payload)
+	if err != nil {
+		return orquestacontext.CodeContextResultV0{}, err
+	}
+	command := strings.TrimSpace(provider.Command)
+	if command == "" {
+		command = "codebase-memory-mcp"
+	}
+	cmd := exec.CommandContext(ctx, command, "cli", toolName, string(payloadData))
+	if root := strings.TrimSpace(provider.RootDir); root != "" {
+		cmd.Dir = root
+	}
+	configureDetachedProcessV0(cmd)
+	outputLimit := serverRGCodeContextOutputLimitV0(query)
+	stdout := serverLimitedBufferV0{maxBytes: outputLimit}
+	stderr := serverLimitedBufferV0{maxBytes: outputLimit}
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return orquestacontext.CodeContextResultV0{}, err
+	}
+	if err := provider.writeOwnerMarkerV0(query, cmd.Process.Pid); err != nil {
+		_ = signalProcessGroupKillV0(cmd.Process.Pid)
+		_ = cmd.Wait()
+		return orquestacontext.CodeContextResultV0{}, err
+	}
+	err = cmd.Wait()
+	rawJSON, ok := serverCodebaseMemoryJSONLineV0(stdout.String(), stderr.String())
+	if err != nil && !ok {
+		return orquestacontext.CodeContextResultV0{}, err
+	}
+	if !ok {
+		return orquestacontext.CodeContextResultV0{}, errors.New("codebase_memory_cli_json_missing")
+	}
+	result, parseErr := serverCodebaseMemoryCLIResultV0(query, toolName, rawJSON)
+	if parseErr != nil {
+		return orquestacontext.CodeContextResultV0{}, parseErr
+	}
+	return result, nil
+}
+
+func (provider serverCodebaseMemoryCLIProviderV0) writeOwnerMarkerV0(
+	query orquestacontext.CodeContextQueryV0,
+	pid int,
+) error {
+	if strings.TrimSpace(provider.Registry.dir) == "" || pid <= 0 {
+		return nil
+	}
+	now := time.Now().UTC()
+	if provider.Clock != nil {
+		now = provider.Clock().UTC()
+	}
+	return provider.Registry.WriteCodeContextToolOwnerMarkerV0(serverCodeContextToolOwnerMarkerV0{
+		OwnerRef:        orquestacontext.CodeContextToolOwnerRefV0(query),
+		ToolRef:         "provider-ref-orquesta-code-context-central",
+		ProviderKind:    orquestacontext.CodeContextProviderKindCodebaseMCPV0,
+		PID:             pid,
+		StartedAt:       now.Format(time.RFC3339),
+		LastHeartbeatAt: now.Format(time.RFC3339),
+		ActiveRequests:  1,
+		EvidenceRefs:    []string{"evidence-ref-codebase-memory-cli-owner"},
+	})
+}
+
+func serverCodebaseMemoryCLIToolPayloadV0(
+	projectName string,
+	query orquestacontext.CodeContextQueryV0,
+) (string, map[string]any, error) {
+	switch query.QueryKind {
+	case orquestacontext.CodeContextQueryKindArchitectureV0:
+		return "get_architecture", map[string]any{"project": projectName}, nil
+	case orquestacontext.CodeContextQueryKindSearchV0, orquestacontext.CodeContextQueryKindSymbolV0, "":
+		limit := query.MaxResults
+		if limit <= 0 {
+			limit = 8
+		}
+		return "search_graph", map[string]any{
+			"project": projectName,
+			"query":   query.Query,
+			"limit":   limit,
+		}, nil
+	default:
+		return "", nil, errors.New("codebase_memory_query_kind_unsupported")
+	}
+}
+
+func serverCodebaseMemoryCLIResultV0(
+	query orquestacontext.CodeContextQueryV0,
+	toolName string,
+	rawJSON string,
+) (orquestacontext.CodeContextResultV0, error) {
+	switch toolName {
+	case "search_graph":
+		return serverCodebaseMemorySearchGraphResultV0(query, rawJSON)
+	case "get_architecture":
+		return serverCodebaseMemoryArchitectureResultV0(query, rawJSON)
+	default:
+		return orquestacontext.CodeContextResultV0{}, errors.New("codebase_memory_tool_unsupported")
+	}
+}
+
+func serverCodebaseMemorySearchGraphResultV0(
+	query orquestacontext.CodeContextQueryV0,
+	rawJSON string,
+) (orquestacontext.CodeContextResultV0, error) {
+	var payload struct {
+		Results []struct {
+			Name          string  `json:"name"`
+			QualifiedName string  `json:"qualified_name"`
+			Label         string  `json:"label"`
+			FilePath      string  `json:"file_path"`
+			StartLine     int     `json:"start_line"`
+			Rank          float64 `json:"rank"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(rawJSON), &payload); err != nil {
+		return orquestacontext.CodeContextResultV0{}, err
+	}
+	hits := make([]orquestacontext.CodeContextHitV0, 0, len(payload.Results))
+	for idx, item := range payload.Results {
+		hits = append(hits, orquestacontext.CodeContextHitV0{
+			HitRef:  "code-context-codebase-hit-" + strconv.Itoa(idx+1),
+			Kind:    strings.TrimSpace(item.Label),
+			Path:    strings.TrimSpace(item.FilePath),
+			Line:    item.StartLine,
+			Symbol:  strings.TrimSpace(item.Name),
+			Summary: strings.TrimSpace(item.QualifiedName),
+			Score:   item.Rank,
+		})
+	}
+	return serverCodebaseMemoryResultV0(query, hits, []string{"evidence-ref-codebase-memory-cli-search-graph"}), nil
+}
+
+func serverCodebaseMemoryArchitectureResultV0(
+	query orquestacontext.CodeContextQueryV0,
+	rawJSON string,
+) (orquestacontext.CodeContextResultV0, error) {
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(rawJSON), &payload); err != nil {
+		return orquestacontext.CodeContextResultV0{}, err
+	}
+	snippet := strings.TrimSpace(rawJSON)
+	return serverCodebaseMemoryResultV0(query, []orquestacontext.CodeContextHitV0{{
+		HitRef:  "code-context-codebase-architecture-1",
+		Kind:    "architecture",
+		Summary: "resumen de arquitectura servido por codebase-memory-mcp cli",
+		Snippet: snippet,
+	}}, []string{"evidence-ref-codebase-memory-cli-architecture"}), nil
+}
+
+func serverCodebaseMemoryResultV0(
+	query orquestacontext.CodeContextQueryV0,
+	hits []orquestacontext.CodeContextHitV0,
+	evidence []string,
+) orquestacontext.CodeContextResultV0 {
+	return orquestacontext.CodeContextResultV0{
+		SchemaVersion: orquestacontext.CodeContextResultSchemaVersionV0,
+		Estado:        orquestacontext.CodeContextEstadoOKV0,
+		RequestRef:    query.RequestRef,
+		CorrelationID: query.CorrelationID,
+		RepositoryRef: query.RepositoryRef,
+		WorktreeRef:   query.WorktreeRef,
+		CommitRef:     query.CommitRef,
+		QueryKind:     query.QueryKind,
+		ProviderRef:   "provider-ref-orquesta-code-context-central",
+		ProviderKind:  orquestacontext.CodeContextProviderKindCodebaseMCPV0,
+		IndexerPolicy: orquestacontext.CodeContextProviderPolicyCentralOnlyV0,
+		Results:       hits,
+		EvidenceRefs:  evidence,
+	}
+}
+
+func serverCodebaseMemoryJSONLineV0(outputs ...string) (string, bool) {
+	for idx := len(outputs) - 1; idx >= 0; idx-- {
+		lines := strings.Split(outputs[idx], "\n")
+		for lineIdx := len(lines) - 1; lineIdx >= 0; lineIdx-- {
+			line := strings.TrimSpace(lines[lineIdx])
+			if line == "" || !strings.HasPrefix(line, "{") || !json.Valid([]byte(line)) {
+				continue
+			}
+			return line, true
+		}
+	}
+	return "", false
+}
+
+func serverCodebaseMemoryProjectNameV0(root string, override string) string {
+	if value := strings.TrimSpace(override); value != "" {
+		return value
+	}
+	cleaned := filepath.Clean(strings.TrimSpace(root))
+	cleaned = strings.Trim(cleaned, `/\`)
+	if cleaned == "." || cleaned == "" {
+		return ""
+	}
+	replacer := strings.NewReplacer("/", "-", `\`, "-")
+	return strings.Trim(replacer.Replace(cleaned), "-")
 }
 
 type serverRGCodeContextProviderV0 struct {

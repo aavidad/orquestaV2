@@ -457,6 +457,8 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 	t.Setenv(envCodebaseBrokerExternalIndexerEnabledV0, "false")
 	t.Setenv(envCodebaseBrokerMaxConcurrentV0, "3")
 	t.Setenv(envCodebaseBrokerTimeoutMSV0, "1500")
+	t.Setenv(envCodebaseBrokerCommandV0, "codebase-memory-mcp-test")
+	t.Setenv(envCodebaseBrokerProjectNameV0, "orquesta-test-index")
 	t.Setenv(envOPESBridgeWaitResidentSecondsV0, "15")
 	t.Setenv(envOPESBridgeWaitResidentIntervalMSV0, "250")
 	t.Setenv("ORQUESTA_HERMES_ENABLED", "1")
@@ -494,6 +496,8 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 		envCodebaseBrokerExternalIndexerEnabledV0:            "false",
 		envCodebaseBrokerMaxConcurrentV0:                     "3",
 		envCodebaseBrokerTimeoutMSV0:                         "1500",
+		envCodebaseBrokerCommandV0:                           "codebase-memory-mcp-test",
+		envCodebaseBrokerProjectNameV0:                       "orquesta-test-index",
 		envOPESBridgeWaitResidentSecondsV0:                   "15",
 		envOPESBridgeWaitResidentIntervalMSV0:                "250",
 		"ORQUESTA_HERMES_ENABLED":                            "true",

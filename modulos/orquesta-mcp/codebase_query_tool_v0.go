@@ -56,6 +56,7 @@ func (executor MCPCodebaseQueryToolExecutorV0) Execute(
 	ctx context.Context,
 	input MCPCodebaseQueryToolInputV0,
 ) (MCPCodebaseQueryToolResultV0, error) {
+	input.RequestedBy = firstNonEmptyMCPV0(input.RequestedBy, "orquesta-mcp-codebase-query")
 	if executor.Broker == nil {
 		return orquestacontext.CodeContextResultV0{
 			SchemaVersion: orquestacontext.CodeContextResultSchemaVersionV0,
