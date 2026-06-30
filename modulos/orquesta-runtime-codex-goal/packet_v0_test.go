@@ -112,6 +112,53 @@ func TestBuildCodexGoalPromptV0DomainWorkDelegaReceiptEnAdaptadorV0(t *testing.T
 	}
 }
 
+func TestBuildCodexGoalPromptV0NoTrataMarkdownWriteSetComoDirectorioV0(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.WriteSet = []orquestagoal.GoalWriteScopeV0{{Path: "external/opes/INCIDENCIA_TEST.md"}}
+
+	packet, issues := BuildCodexGoalStartPacketV0(spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	for _, forbidden := range []string{
+		"external/opes/INCIDENCIA_TEST.md/docs/" + CodexGoalResultFileNameV0,
+		"Materializa primero el directorio del write-set",
+	} {
+		if strings.Contains(packet.Prompt, forbidden) {
+			t.Fatalf("prompt contiene ruta/instruccion prohibida %q:\n%s", forbidden, packet.Prompt)
+		}
+	}
+	for _, want := range []string{
+		"external/opes/INCIDENCIA_TEST.md es un archivo Markdown final",
+		"no crees un directorio con ese nombre",
+	} {
+		if !strings.Contains(packet.Prompt, want) {
+			t.Fatalf("prompt no contiene %q:\n%s", want, packet.Prompt)
+		}
+	}
+}
+
+func TestBuildCodexGoalPromptV0UsaSiguienteWriteSetDirectorioParaResultadoDurableV0(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.WriteSet = []orquestagoal.GoalWriteScopeV0{
+		{Path: "external/opes/INCIDENCIA_TEST.md"},
+		{Path: "external/opes/control_audio"},
+	}
+
+	packet, issues := BuildCodexGoalStartPacketV0(spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if strings.Contains(packet.Prompt, "external/opes/INCIDENCIA_TEST.md/docs/"+CodexGoalResultFileNameV0) {
+		t.Fatalf("prompt cuelga resultado bajo markdown:\n%s", packet.Prompt)
+	}
+	if !strings.Contains(packet.Prompt, "external/opes/control_audio/docs/"+CodexGoalResultFileNameV0) {
+		t.Fatalf("prompt no usa write-set directorio para resultado durable:\n%s", packet.Prompt)
+	}
+}
+
 func TestBuildCodexGoalStartPacketV0RechazaPromptDemasiadoGrande(t *testing.T) {
 	spec := validCodexGoalSpecV0()
 	spec.Objective = strings.Repeat("x", CodexGoalMaxPromptBytesV0)

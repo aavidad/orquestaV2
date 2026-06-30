@@ -265,6 +265,16 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 		b.WriteString("- Materializa cada artefacto requerido dentro de un write-set autorizado. Para artefactos DomainWork, Orquesta detecta ")
 		b.WriteString("<artifact_type>.json, <artifact_type>.md, artifact.json o artifact.md directamente bajo el write-set; usa el artifact_type declarado y contenido verificable.\n")
 	}
+	if len(spec.WriteSet) > 0 {
+		for _, scope := range spec.WriteSet {
+			path := strings.Trim(strings.TrimSpace(scope.Path), "/")
+			if codexGoalWriteScopeIsMarkdownFileV0(path) {
+				b.WriteString("- El write-set ")
+				b.WriteString(path)
+				b.WriteString(" es un archivo Markdown final: crea o actualiza ese fichero, no crees un directorio con ese nombre.\n")
+			}
+		}
+	}
 	b.WriteString("\nCierre:\n")
 	b.WriteString("- Devuelve complete solo con evidencias verificables.\n")
 	if spec.ClosurePolicy.RequireRequiredTests {
@@ -336,9 +346,17 @@ func codexGoalResultFilePathV0(spec orquestagoal.GoalWorkSpecV0) string {
 		if path == "" {
 			continue
 		}
+		if codexGoalWriteScopeIsMarkdownFileV0(path) {
+			continue
+		}
 		return path + "/docs/" + CodexGoalResultFileNameV0
 	}
 	return ""
+}
+
+func codexGoalWriteScopeIsMarkdownFileV0(path string) bool {
+	lower := strings.ToLower(strings.TrimSpace(path))
+	return strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".markdown")
 }
 
 func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec orquestagoal.GoalWorkSpecV0) (orquestagoal.GoalLaunchReceiptV0, error) {
