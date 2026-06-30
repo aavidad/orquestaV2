@@ -115,6 +115,51 @@ func TestCodexAppServerGoalBackendFingerprintDetectaCambioDeEstadoV0(t *testing.
 	}
 }
 
+func TestCodexAppServerGoalBackendFingerprintLeeThreadSiGoalGetNoExisteV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		getGoalErr: codexAppServerCallErrorV0{Code: "codex_app_server_rpc_method_not_found"},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-fingerprint-read-001",
+			Status: serverCodexAppServerThreadStatusV0("idle"),
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol}
+	state := orquestagoal.GoalWorkStateV0{
+		SchemaVersion:   orquestagoal.GoalWorkStateSchemaV0,
+		RunRef:          "run-ref-fingerprint-read-001",
+		GoalRef:         "goal-ref-fingerprint-read-001",
+		ExternalGoalRef: "thread-ref-fingerprint-read-001",
+		Status:          orquestagoal.GoalStatusRunningV0,
+	}
+
+	fingerprint, ok, err := backend.FingerprintGoalObservationV0(context.Background(), state)
+
+	if err != nil || !ok {
+		t.Fatalf("FingerprintGoalObservationV0 ok=%v err=%v", ok, err)
+	}
+	if fingerprint.LastStatus != orquestagoal.GoalStatusRunningV0 ||
+		fingerprint.EvidenceHash == "" ||
+		!reflect.DeepEqual(protocol.calls, []string{"thread/goal/get", "thread/read"}) ||
+		protocol.readIncludeTurns {
+		t.Fatalf("fingerprint=%+v calls=%v include=%v", fingerprint, protocol.calls, protocol.readIncludeTurns)
+	}
+}
+
+func TestCodexAppServerThreadReadStatusV0AceptaObjetoV0(t *testing.T) {
+	var response serverCodexAppServerThreadReadResponseV0
+	raw := []byte(`{"thread":{"id":"thread-ref-status-object","status":{"type":"systemError"}}}`)
+
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if response.Thread.Status != serverCodexAppServerThreadStatusV0("systemError") {
+		t.Fatalf("status=%q", response.Thread.Status)
+	}
+	if got := codexAppServerThreadStatusToGoalWorkStatusV0(response.Thread.Status); got != orquestagoal.GoalStatusBlockedV0 {
+		t.Fatalf("mapped status=%q", got)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0LanzaThreadGoalYTurnV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-001"},
@@ -166,6 +211,79 @@ func TestServerCodexAppServerGoalBackendV0LanzaThreadGoalYTurnV0(t *testing.T) {
 		protocol.turnParams.ClientMessageID != "goal-ref-codex-app-server-001" ||
 		protocol.turnParams.Effort != "medium" {
 		t.Fatalf("turn params=%+v", protocol.turnParams)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0LanzaTurnSiGoalSetNoExisteV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread:     serverCodexAppServerThreadV0{ID: "thread-ref-goal-no-set-001"},
+		turn:       serverCodexAppServerTurnV0{ID: "turn-ref-goal-no-set-001", Status: "inProgress"},
+		setGoalErr: codexAppServerCallErrorV0{Code: "codex_app_server_rpc_invalid_request"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		SchemaVersion: orquestaruntimecodexgoal.CodexGoalStartPacketSchemaV0,
+		GoalRef:       "goal-ref-codex-app-server-no-set-001",
+		Objective:     "programar una mejora acotada",
+		Prompt:        "prompt compacto",
+	})
+
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0 fallback: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		receipt.ExternalGoalRef != "thread-ref-goal-no-set-001" ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-set-unsupported") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-turn-started") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if want := []string{"thread/start", "thread/goal/set", "turn/start"}; !reflect.DeepEqual(protocol.calls, want) {
+		t.Fatalf("calls=%v want=%v", protocol.calls, want)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0ObservaPorThreadReadSiGoalGetNoExisteV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		getGoalErr: codexAppServerCallErrorV0{Code: "codex_app_server_rpc_method_not_found"},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-read-001",
+			Status: serverCodexAppServerThreadStatusV0("idle"),
+			Turns: []serverCodexAppServerReadTurnV0{{
+				ID:     "turn-ref-goal-read-001",
+				Status: "completed",
+				Items: []serverCodexAppServerReadItemV0{{
+					ID:    "item-ref-goal-read-001",
+					Type:  "agentMessage",
+					Phase: "final_answer",
+					Text: orquestaruntimecodexgoal.CodexGoalResultMarkerV0 +
+						` {"summary":"ok","artifact_refs":["artifact-ref-read"],"evidence_refs":["evidence-ref-read"]}`,
+				}},
+			}},
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         "goal-ref-codex-app-server-read-001",
+		ExternalGoalRef: "thread-ref-goal-read-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0 fallback: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusCompleteV0 ||
+		receipt.Summary != "ok" ||
+		!containsStringForTestV0(receipt.ArtifactRefs, "artifact-ref-read") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-rpc-unsupported") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-marker") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if want := []string{"thread/goal/get", "thread/read"}; !reflect.DeepEqual(protocol.calls, want) {
+		t.Fatalf("calls=%v want=%v", protocol.calls, want)
+	}
+	if protocol.readThreadID != "thread-ref-goal-read-001" || !protocol.readIncludeTurns {
+		t.Fatalf("read thread id=%q include=%v", protocol.readThreadID, protocol.readIncludeTurns)
 	}
 }
 
@@ -1173,6 +1291,8 @@ type fakeCodexAppServerProtocolV0 struct {
 	thread           serverCodexAppServerThreadV0
 	goal             serverCodexAppServerThreadGoalV0
 	turn             serverCodexAppServerTurnV0
+	setGoalErr       error
+	getGoalErr       error
 	observedGoal     *serverCodexAppServerThreadGoalV0
 	readThread       serverCodexAppServerThreadReadV0
 	readThreadErr    error
@@ -1195,6 +1315,9 @@ func (fake *fakeCodexAppServerProtocolV0) SetGoalV0(
 ) (serverCodexAppServerThreadGoalV0, error) {
 	fake.calls = append(fake.calls, "thread/goal/set")
 	fake.setParams = params
+	if fake.setGoalErr != nil {
+		return serverCodexAppServerThreadGoalV0{}, fake.setGoalErr
+	}
 	return fake.goal, nil
 }
 
@@ -1213,6 +1336,9 @@ func (fake *fakeCodexAppServerProtocolV0) GetGoalV0(
 ) (*serverCodexAppServerThreadGoalV0, error) {
 	fake.calls = append(fake.calls, "thread/goal/get")
 	fake.getThreadID = threadID
+	if fake.getGoalErr != nil {
+		return nil, fake.getGoalErr
+	}
 	return fake.observedGoal, nil
 }
 

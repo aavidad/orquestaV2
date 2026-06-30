@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"encoding/json"
+	"strings"
+)
 
 type serverCodexAppServerThreadStartParamsV0 struct {
 	CWD            string
@@ -110,9 +113,27 @@ type serverCodexAppServerThreadReadResponseV0 struct {
 }
 
 type serverCodexAppServerThreadReadV0 struct {
-	ID     string                           `json:"id"`
-	Status string                           `json:"status,omitempty"`
-	Turns  []serverCodexAppServerReadTurnV0 `json:"turns,omitempty"`
+	ID     string                             `json:"id"`
+	Status serverCodexAppServerThreadStatusV0 `json:"status,omitempty"`
+	Turns  []serverCodexAppServerReadTurnV0   `json:"turns,omitempty"`
+}
+
+type serverCodexAppServerThreadStatusV0 string
+
+func (status *serverCodexAppServerThreadStatusV0) UnmarshalJSON(raw []byte) error {
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		*status = serverCodexAppServerThreadStatusV0(strings.TrimSpace(text))
+		return nil
+	}
+	var object struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return err
+	}
+	*status = serverCodexAppServerThreadStatusV0(strings.TrimSpace(object.Type))
+	return nil
 }
 
 type serverCodexAppServerReadTurnV0 struct {

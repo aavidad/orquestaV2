@@ -202,14 +202,19 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	if packet.Budget.TokenBudget > 0 {
 		tokenBudget = packet.Budget.TokenBudget
 	}
+	goalSetEvidence := "evidence-ref-codex-app-server-goal-set"
 	if _, err := backend.Protocol.SetGoalV0(ctx, serverCodexAppServerThreadGoalSetParamsV0{
 		ThreadID:    threadID,
 		Objective:   codexAppServerGoalObjectiveV0(packet.Objective),
 		Status:      "active",
 		TokenBudget: tokenBudget,
 	}); err != nil {
-		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_goal_set_failed")
-		return codexAppServerStartReceiptV0(packet, threadID, code), err
+		if codexAppServerGoalRPCUnsupportedV0(err) {
+			goalSetEvidence = "evidence-ref-codex-app-server-goal-set-unsupported"
+		} else {
+			code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_goal_set_failed")
+			return codexAppServerStartReceiptV0(packet, threadID, code), err
+		}
 	}
 	if _, err := backend.Protocol.StartTurnV0(ctx, backend.turnStartParamsV0(threadID, packet)); err != nil {
 		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_turn_start_failed")
@@ -222,7 +227,7 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 		ExternalGoalRef: threadID,
 		EvidenceRefs: []string{
 			"evidence-ref-codex-app-server-thread-started",
-			"evidence-ref-codex-app-server-goal-set",
+			goalSetEvidence,
 			"evidence-ref-codex-app-server-turn-started",
 		},
 	}, nil
@@ -241,6 +246,9 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 	}
 	goal, err := backend.Protocol.GetGoalV0(ctx, threadID)
 	if err != nil {
+		if codexAppServerGoalRPCUnsupportedV0(err) {
+			return backend.observeCodexAppServerWithoutGoalRPCV0(ctx, request)
+		}
 		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_goal_get_failed")
 		return codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusInvalidV0, code), err
 	}
@@ -313,6 +321,9 @@ func (backend serverCodexAppServerGoalBackendV0) FingerprintGoalObservationV0(
 	}
 	goal, err := backend.Protocol.GetGoalV0(ctx, threadID)
 	if err != nil {
+		if codexAppServerGoalRPCUnsupportedV0(err) {
+			return backend.fingerprintCodexAppServerThreadReadV0(ctx, state, threadID)
+		}
 		return orquestagoal.GoalObservationFingerprintV0{}, true, err
 	}
 	if goal == nil {
@@ -325,6 +336,108 @@ func (backend serverCodexAppServerGoalBackendV0) FingerprintGoalObservationV0(
 		LastStatus:   status,
 		EvidenceHash: codexAppServerGoalFingerprintHashV0(*goal),
 	}), true, nil
+}
+
+func codexAppServerGoalRPCUnsupportedV0(err error) bool {
+	var callErr codexAppServerCallErrorV0
+	if !errors.As(err, &callErr) {
+		return false
+	}
+	switch strings.TrimSpace(callErr.Code) {
+	case "codex_app_server_rpc_method_not_found", "codex_app_server_rpc_invalid_request":
+		return true
+	default:
+		return false
+	}
+}
+
+func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoalRPCV0(
+	ctx context.Context,
+	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
+) (orquestaruntimecodexgoal.CodexGoalObservationReceiptV0, error) {
+	thread, err := backend.Protocol.ReadThreadV0(ctx, request.ExternalGoalRef, true)
+	if err != nil {
+		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_thread_read_failed")
+		return codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusInvalidV0, code), err
+	}
+	status := codexAppServerThreadStatusToGoalWorkStatusV0(thread.Status)
+	receipt := codexAppServerObservationReceiptV0(
+		request,
+		status,
+		"codex_app_server_thread_status_"+strings.TrimSpace(string(thread.Status)),
+	)
+	receipt.EvidenceRefs = compactServerStackStringsV0(append(
+		receipt.EvidenceRefs,
+		"evidence-ref-codex-app-server-goal-rpc-unsupported",
+	))
+	marked, found, markerErr := codexAppServerGoalResultFromThreadV0(thread)
+	if markerErr != nil {
+		receipt.IssueCode = "codex_app_server_goal_result_marker_invalid"
+		return receipt, nil
+	}
+	if found &&
+		!codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, request.GoalRef) &&
+		!codexAppServerGoalResultMarkerExternalGoalRefMismatchV0(marked, request.ExternalGoalRef) {
+		receipt.Status = orquestagoal.GoalStatusCompleteV0
+		receipt.Summary = "codex_app_server_goal_result_marker"
+		mergeCodexAppServerGoalResultV0(
+			&receipt,
+			marked,
+			"evidence-ref-codex-app-server-goal-result-marker",
+		)
+		return receipt, nil
+	}
+	fileMarked, fileFound, fileErr := codexAppServerGoalResultFromWorkspaceV0(
+		backend.CWD,
+		request.GoalRef,
+		request.ExternalGoalRef,
+	)
+	if fileErr != nil {
+		receipt.IssueCode = "codex_app_server_goal_result_file_invalid"
+		return receipt, nil
+	}
+	if fileFound {
+		receipt.Status = orquestagoal.GoalStatusCompleteV0
+		receipt.Summary = "codex_app_server_goal_result_file"
+		mergeCodexAppServerGoalResultV0(
+			&receipt,
+			fileMarked,
+			"evidence-ref-codex-app-server-goal-result-file",
+		)
+		return receipt, nil
+	}
+	return receipt, nil
+}
+
+func (backend serverCodexAppServerGoalBackendV0) fingerprintCodexAppServerThreadReadV0(
+	ctx context.Context,
+	state orquestagoal.GoalWorkStateV0,
+	threadID string,
+) (orquestagoal.GoalObservationFingerprintV0, bool, error) {
+	thread, err := backend.Protocol.ReadThreadV0(ctx, threadID, false)
+	if err != nil {
+		return orquestagoal.GoalObservationFingerprintV0{}, true, err
+	}
+	status := codexAppServerThreadStatusToGoalWorkStatusV0(thread.Status)
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		strings.TrimSpace(thread.ID),
+		strings.TrimSpace(string(thread.Status)),
+	}, "\x00")))
+	return orquestagoal.NormalizeGoalObservationFingerprintV0(orquestagoal.GoalObservationFingerprintV0{
+		RunRef:       state.RunRef,
+		GoalRef:      state.GoalRef,
+		LastStatus:   status,
+		EvidenceHash: fmt.Sprintf("%x", sum[:]),
+	}), true, nil
+}
+
+func codexAppServerThreadStatusToGoalWorkStatusV0(status serverCodexAppServerThreadStatusV0) string {
+	switch strings.TrimSpace(string(status)) {
+	case "systemError":
+		return orquestagoal.GoalStatusBlockedV0
+	default:
+		return orquestagoal.GoalStatusRunningV0
+	}
 }
 
 func codexAppServerGoalFingerprintHashV0(goal serverCodexAppServerThreadGoalV0) string {
