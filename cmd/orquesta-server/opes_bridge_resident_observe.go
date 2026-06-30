@@ -144,15 +144,25 @@ func loadOPESExternalWorkRunStatsResponseV0(
 type opesBridgeDirectorStatsResponseV0 struct {
 	Estado string `json:"estado"`
 	Goal   struct {
-		DirectorExecutionMode string   `json:"director_execution_mode"`
-		GoalRef               string   `json:"goal_ref"`
-		ExternalGoalRef       string   `json:"external_goal_ref"`
-		Status                string   `json:"status"`
-		ClosureStatus         string   `json:"closure_status"`
-		ClosureAccepted       bool     `json:"closure_accepted"`
-		ClosureNeedsRework    bool     `json:"closure_needs_rework"`
-		EvidenceRefs          []string `json:"evidence_refs"`
+		DirectorExecutionMode string         `json:"director_execution_mode"`
+		GoalRef               string         `json:"goal_ref"`
+		ExternalGoalRef       string         `json:"external_goal_ref"`
+		Status                string         `json:"status"`
+		ClosureStatus         string         `json:"closure_status"`
+		ClosureAccepted       bool           `json:"closure_accepted"`
+		ClosureNeedsRework    bool           `json:"closure_needs_rework"`
+		CurrentPhase          string         `json:"current_phase"`
+		RetryFromPhase        string         `json:"retry_from_phase"`
+		OperationalReason     string         `json:"operational_reason"`
+		DomainCounters        map[string]int `json:"domain_counters"`
+		EvidenceRefs          []string       `json:"evidence_refs"`
 	} `json:"goal"`
+	ExternalJob struct {
+		CurrentPhase      string         `json:"current_phase"`
+		RetryFromPhase    string         `json:"retry_from_phase"`
+		OperationalReason string         `json:"operational_reason"`
+		DomainCounters    map[string]int `json:"domain_counters"`
+	} `json:"external_job"`
 	Stats struct {
 		Status string `json:"status"`
 		Counts struct {
@@ -203,13 +213,16 @@ func opesBridgeSupervisionFromDirectorStatsV0(
 	if metadata, ok := opesBridgeGoalMetadataFromDirectorStatsV0(decoded); ok {
 		return opesExternalWorkRunSupervisionV0{
 			Status:                opesBridgeGoalStatsSupervisionStatusV0(decoded),
-			StopReason:            firstNonEmptyEnvlessV0(decoded.Goal.ClosureStatus, decoded.Goal.Status, "goal_first_observe_required"),
+			StopReason:            firstNonEmptyEnvlessV0(metadata.OperationalReason, decoded.Goal.ClosureStatus, decoded.Goal.Status, "goal_first_observe_required"),
 			EvidenceRef:           firstNonEmptyEnvlessV0(decoded.Goal.EvidenceRefs...),
 			RoutePolicy:           metadata.RoutePolicy,
 			DirectorExecutionMode: metadata.DirectorExecutionMode,
 			GoalRef:               metadata.GoalRef,
 			ExternalGoalRef:       metadata.ExternalGoalRef,
 			NextActions:           compactStringsV0(metadata.NextActions),
+			CurrentPhase:          metadata.CurrentPhase,
+			OperationalReason:     metadata.OperationalReason,
+			AudioCounters:         copyStringIntMapV0(metadata.DomainCounters),
 		}
 	}
 	stats := decoded.Stats

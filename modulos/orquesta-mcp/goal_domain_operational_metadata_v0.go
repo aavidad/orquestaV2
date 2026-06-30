@@ -8,13 +8,22 @@ import (
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
-type mcpGoalDomainOperationalMetadataV0 struct {
+type MCPGoalDomainOperationalMetadataV0 struct {
 	CurrentPhase                    string
 	RetryFromPhase                  string
+	OperationalReason               string
 	DomainCounters                  map[string]int
 	CloseSupersededByLocalEvidence  bool
 	SupersededByLocalEvidenceFlag   bool
 	CloseSupersededEvidenceObserved bool
+}
+
+type mcpGoalDomainOperationalMetadataV0 = MCPGoalDomainOperationalMetadataV0
+
+func GoalWorkStateDomainOperationalMetadataV0(
+	state orquestagoal.GoalWorkStateV0,
+) MCPGoalDomainOperationalMetadataV0 {
+	return mcpGoalWorkStateDomainOperationalMetadataV0(state)
 }
 
 func mcpGoalWorkStateDomainOperationalMetadataV0(
@@ -121,10 +130,13 @@ func mcpGoalDomainOperationalMetadataApplyPairV0(
 		metadata.CurrentPhase = firstNonEmptyMCPV0(metadata.CurrentPhase, raw)
 	case "retry_from_phase", "recommended_retry_phase":
 		metadata.RetryFromPhase = firstNonEmptyMCPV0(metadata.RetryFromPhase, raw)
+	case "operational_reason", "provider_reason", "provider_status", "stop_reason":
+		metadata.OperationalReason = firstNonEmptyMCPV0(metadata.OperationalReason, raw)
 	case "provider_timeout", "running_no_recent_progress":
 		if mcpGoalDomainOperationalTruthyV0(raw) {
 			metadata.CurrentPhase = firstNonEmptyMCPV0(metadata.CurrentPhase, "tts")
 			metadata.RetryFromPhase = firstNonEmptyMCPV0(metadata.RetryFromPhase, "tts")
+			metadata.OperationalReason = firstNonEmptyMCPV0(metadata.OperationalReason, key)
 		}
 	case "superseded_by_local_evidence":
 		metadata.SupersededByLocalEvidenceFlag = mcpGoalDomainOperationalTruthyV0(raw)

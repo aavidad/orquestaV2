@@ -212,6 +212,11 @@ func (source CodexStackExternalJobStatsSourceV0) markExternalJobGoalFirstV0(
 	stats.ExternalGoalRef = strings.TrimSpace(state.ExternalGoalRef)
 	stats.GoalStatus = strings.TrimSpace(state.Status)
 	stats.Status, stats.StatusReason = externalJobGoalFirstStatusV0(state)
+	metadata := orquestamcp.GoalWorkStateDomainOperationalMetadataV0(state)
+	stats.CurrentPhase = strings.TrimSpace(metadata.CurrentPhase)
+	stats.RetryFromPhase = strings.TrimSpace(metadata.RetryFromPhase)
+	stats.OperationalReason = strings.TrimSpace(metadata.OperationalReason)
+	stats.DomainCounters = copyCodexStackStringIntMapV0(metadata.DomainCounters)
 	stats.EvidenceRefs = compactCodexStackStringsV0(append(
 		stats.EvidenceRefs,
 		externalJobGoalFirstEvidenceRefsV0(state)...,
@@ -239,6 +244,24 @@ func (source CodexStackExternalJobStatsSourceV0) markExternalJobGoalFirstV0(
 		Message:      externalJobGoalFirstDiagnosticMessageV0(stats.Status, stats.StatusReason),
 		EvidenceRefs: compactCodexStackStringsV0([]string{state.RunRef, state.GoalRef}),
 	})
+}
+
+func copyCodexStackStringIntMapV0(values map[string]int) map[string]int {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]int, len(values))
+	for key, value := range values {
+		key = strings.TrimSpace(key)
+		if key == "" || value == 0 {
+			continue
+		}
+		out[key] = value
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (source CodexStackExternalJobStatsSourceV0) markExternalJobGoalFirstStateMissingV0(

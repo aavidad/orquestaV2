@@ -175,6 +175,38 @@ func TestMCPDirectorStatsToolExecutorV0ExponeGoalFirstSiExisteEstado(t *testing.
 	assertTransportPayloadSaneadoMCPTestV0(t, result, 13000)
 }
 
+func TestMCPDirectorStatsToolExecutorV0GoalFirstProyectaMetadataOperacionalV0(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-goal-provider-timeout-001")
+	state := mcpDirectorGoalStateForTestV0(run.RunID)
+	state.Spec.ContextRefs = append(state.Spec.ContextRefs,
+		orquestagoal.GoalContextRefV0{Ref: "provider_timeout=true", Purpose: "timeout proveedor"},
+		orquestagoal.GoalContextRefV0{Ref: "domain_counters={\"segments_pending\":7}", Purpose: "contadores audio"},
+	)
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		GoalStateSource: mcpDirectorGoalStateSourceForTestV0{State: state},
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{
+		RequestID:     "request-ref-mcp-director-stats-goal-provider-timeout-001",
+		CorrelationID: "corr-mcp-director-stats-goal-provider-timeout-001",
+		RunRef:        run.RunID,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.Goal == nil ||
+		result.Goal.CurrentPhase != "tts" ||
+		result.Goal.RetryFromPhase != "tts" ||
+		result.Goal.OperationalReason != "provider_timeout" ||
+		result.Goal.DomainCounters["segments_pending"] != 7 ||
+		result.Stats == nil ||
+		result.Stats.Status != orquestagoal.GoalStatusBlockedV0 ||
+		!containsStringMCPTestV0(result.Stats.Closure.BlockedBy, "provider_timeout") {
+		t.Fatalf("goal=%+v stats=%+v", result.Goal, result.Stats)
+	}
+}
+
 func TestMCPDirectorStatsToolExecutorV0GoalFirstMarkerSinStatePublicaRepairGoalState(t *testing.T) {
 	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-goal-marker-missing-state-001")
 	markers := newMCPGoalRunMarkerStoreForStatusTestV0()

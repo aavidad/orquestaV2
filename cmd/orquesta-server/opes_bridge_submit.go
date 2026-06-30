@@ -202,6 +202,9 @@ type opesExternalWorkRunSupervisionV0 struct {
 	GoalRef               string
 	ExternalGoalRef       string
 	NextActions           []string
+	CurrentPhase          string
+	OperationalReason     string
+	AudioCounters         map[string]int
 }
 
 func superviseOPESExternalWorkRunV0(

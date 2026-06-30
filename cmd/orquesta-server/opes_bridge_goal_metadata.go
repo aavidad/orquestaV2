@@ -95,6 +95,20 @@ func opesBridgeGoalMetadataFromDirectorStatsV0(
 		DirectorExecutionMode: firstNonEmptyEnvlessV0(goal.DirectorExecutionMode, opesBridgeDirectorExecutionModeGoalFirstV0),
 		GoalRef:               strings.TrimSpace(goal.GoalRef),
 		ExternalGoalRef:       strings.TrimSpace(goal.ExternalGoalRef),
-		NextActions:           []string{opesBridgeNextActionObserveGoalV0},
+		NextActions: compactStringsV0(append(
+			[]string{opesBridgeNextActionObserveGoalV0},
+			opesBridgeRetryActionFromPhaseV0(firstNonEmptyEnvlessV0(decoded.ExternalJob.RetryFromPhase, decoded.Goal.RetryFromPhase)),
+		)),
+		CurrentPhase:      strings.TrimSpace(firstNonEmptyEnvlessV0(decoded.ExternalJob.CurrentPhase, decoded.Goal.CurrentPhase)),
+		OperationalReason: strings.TrimSpace(firstNonEmptyEnvlessV0(decoded.ExternalJob.OperationalReason, decoded.Goal.OperationalReason)),
+		DomainCounters:    copyStringIntMapV0(firstNonEmptyStringIntMapV0(decoded.ExternalJob.DomainCounters, decoded.Goal.DomainCounters)),
 	}, true
+}
+
+func opesBridgeRetryActionFromPhaseV0(phase string) string {
+	phase = strings.TrimSpace(phase)
+	if phase == "" {
+		return ""
+	}
+	return "retry_from_phase=" + phase
 }

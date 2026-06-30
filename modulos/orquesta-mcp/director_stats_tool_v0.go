@@ -61,15 +61,19 @@ type MCPDirectorExternalJobStatsRequestV0 struct {
 }
 
 type MCPDirectorGoalStatsV0 struct {
-	DirectorExecutionMode string   `json:"director_execution_mode,omitempty"`
-	RunRef                string   `json:"run_ref,omitempty"`
-	GoalRef               string   `json:"goal_ref"`
-	ExternalGoalRef       string   `json:"external_goal_ref,omitempty"`
-	Status                string   `json:"status,omitempty"`
-	ClosureStatus         string   `json:"closure_status,omitempty"`
-	ClosureAccepted       bool     `json:"closure_accepted,omitempty"`
-	ClosureNeedsRework    bool     `json:"closure_needs_rework,omitempty"`
-	EvidenceRefs          []string `json:"evidence_refs,omitempty"`
+	DirectorExecutionMode string         `json:"director_execution_mode,omitempty"`
+	RunRef                string         `json:"run_ref,omitempty"`
+	GoalRef               string         `json:"goal_ref"`
+	ExternalGoalRef       string         `json:"external_goal_ref,omitempty"`
+	Status                string         `json:"status,omitempty"`
+	ClosureStatus         string         `json:"closure_status,omitempty"`
+	ClosureAccepted       bool           `json:"closure_accepted,omitempty"`
+	ClosureNeedsRework    bool           `json:"closure_needs_rework,omitempty"`
+	CurrentPhase          string         `json:"current_phase,omitempty"`
+	RetryFromPhase        string         `json:"retry_from_phase,omitempty"`
+	OperationalReason     string         `json:"operational_reason,omitempty"`
+	DomainCounters        map[string]int `json:"domain_counters,omitempty"`
+	EvidenceRefs          []string       `json:"evidence_refs,omitempty"`
 }
 
 type MCPDirectorExternalJobStatsV0 struct {
@@ -89,6 +93,10 @@ type MCPDirectorExternalJobStatsV0 struct {
 	ClosureNeedsRework    bool                                 `json:"closure_needs_rework,omitempty"`
 	Status                string                               `json:"status,omitempty"`
 	StatusReason          string                               `json:"status_reason,omitempty"`
+	CurrentPhase          string                               `json:"current_phase,omitempty"`
+	RetryFromPhase        string                               `json:"retry_from_phase,omitempty"`
+	OperationalReason     string                               `json:"operational_reason,omitempty"`
+	DomainCounters        map[string]int                       `json:"domain_counters,omitempty"`
 	DeliveryRefs          []string                             `json:"delivery_refs,omitempty"`
 	IssueRefs             []string                             `json:"issue_refs,omitempty"`
 	EvidenceRefs          []string                             `json:"evidence_refs,omitempty"`
@@ -267,12 +275,17 @@ func (executor MCPDirectorStatsToolExecutorV0) resolveGoalStatsV0(
 func mcpDirectorGoalStatsFromStateV0(
 	state orquestagoal.GoalWorkStateV0,
 ) *MCPDirectorGoalStatsV0 {
+	metadata := mcpGoalWorkStateDomainOperationalMetadataV0(state)
 	goal := MCPDirectorGoalStatsV0{
 		DirectorExecutionMode: "goal_first",
 		RunRef:                strings.TrimSpace(state.RunRef),
 		GoalRef:               strings.TrimSpace(state.GoalRef),
 		ExternalGoalRef:       strings.TrimSpace(state.ExternalGoalRef),
 		Status:                strings.TrimSpace(state.Status),
+		CurrentPhase:          strings.TrimSpace(metadata.CurrentPhase),
+		RetryFromPhase:        strings.TrimSpace(metadata.RetryFromPhase),
+		OperationalReason:     strings.TrimSpace(metadata.OperationalReason),
+		DomainCounters:        mergeMCPDomainOperationalCountersV0(metadata.DomainCounters),
 		EvidenceRefs:          compactStringsMCPV0(state.EvidenceRefs),
 	}
 	if state.LastClosure != nil {
@@ -341,6 +354,14 @@ func applyMCPDirectorGoalRunProjectionV0(
 			Status: orquestacionnucleoapp.DirectorClosureStatusClosedV0,
 			Closed: true,
 		}
+	case mcpDirectorGoalOperationalReasonBlocksV0(goal.OperationalReason):
+		stats.Status = orquestagoal.GoalStatusBlockedV0
+		stats.Closure = orquestacionnucleoapp.DirectorClosureStatsV0{
+			Status:      orquestacionnucleoapp.DirectorClosureStatusBlockedV0,
+			Blocked:     true,
+			BlockedBy:   []string{strings.TrimSpace(goal.OperationalReason)},
+			BlockerRefs: compactStringsMCPV0(goal.EvidenceRefs),
+		}
 	case goal.ClosureNeedsRework ||
 		closureStatus == orquestagoal.GoalStatusBlockedV0 ||
 		status == orquestagoal.GoalStatusBlockedV0 ||
@@ -377,6 +398,15 @@ func applyMCPDirectorGoalRunProjectionV0(
 			BlockedBy:   []string{"goal_first_running"},
 			BlockerRefs: compactStringsMCPV0(goal.EvidenceRefs),
 		}
+	}
+}
+
+func mcpDirectorGoalOperationalReasonBlocksV0(reason string) bool {
+	switch strings.ToLower(strings.TrimSpace(reason)) {
+	case "provider_timeout", "running_no_recent_progress":
+		return true
+	default:
+		return false
 	}
 }
 

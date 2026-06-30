@@ -1081,6 +1081,34 @@ func TestOPESBridgeSupervisionFromDirectorStatsV0DetectaDeliverySinProcesoVivo(t
 	}
 }
 
+func TestOPESBridgeSupervisionFromDirectorStatsV0GoalFirstProyectaMetadataAudioV0(t *testing.T) {
+	decoded := decodeOPESBridgeDirectorStatsForTestV0(t, `{
+		"estado": "ok",
+		"goal": {
+			"director_execution_mode": "goal_first",
+			"goal_ref": "goal-ref-audio-001",
+			"external_goal_ref": "thread-ref-audio-001",
+			"status": "blocked",
+			"current_phase": "tts",
+			"retry_from_phase": "prepare",
+			"operational_reason": "provider_timeout",
+			"domain_counters": {"segments_pending": 7},
+			"evidence_refs": ["evidence-ref-audio-001"]
+		}
+	}`)
+
+	supervision := opesBridgeSupervisionFromDirectorStatsV0(decoded)
+
+	if supervision.Status != "blocked" ||
+		supervision.StopReason != "provider_timeout" ||
+		supervision.CurrentPhase != "tts" ||
+		supervision.OperationalReason != "provider_timeout" ||
+		supervision.AudioCounters["segments_pending"] != 7 ||
+		!containsStringForTestV0(supervision.NextActions, "retry_from_phase=prepare") {
+		t.Fatalf("supervision=%+v", supervision)
+	}
+}
+
 func decodeOPESBridgeDirectorStatsForTestV0(
 	t *testing.T,
 	raw string,

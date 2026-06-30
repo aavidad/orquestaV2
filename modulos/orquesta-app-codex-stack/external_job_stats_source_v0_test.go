@@ -169,6 +169,39 @@ func TestCodexStackExternalJobStatsSourceV0GoalFirstRunningNoQuedaRegistered(t *
 	}
 }
 
+func TestCodexStackExternalJobStatsSourceV0GoalFirstProyectaMetadataOPESAudioV0(t *testing.T) {
+	fixture := newCodexStackExternalJobGoalFirstStatsFixtureV0(t, orquestagoal.GoalStatusBlockedV0, false)
+	state, err := fixture.source.GoalStateStore.LoadGoalWorkStateV0(context.Background(), fixture.runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	state.Spec.ContextRefs = append(state.Spec.ContextRefs,
+		orquestagoal.GoalContextRefV0{Ref: "current_phase=tts", Purpose: "fase actual OPES"},
+		orquestagoal.GoalContextRefV0{Ref: "provider_timeout=true", Purpose: "timeout proveedor audio"},
+		orquestagoal.GoalContextRefV0{Ref: "domain_counters={\"segments_pending\":7}", Purpose: "contadores audio"},
+	)
+	if err := fixture.source.GoalStateStore.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	stats, ok, err := fixture.source.ResolveDirectorExternalJobStatsV0(
+		context.Background(),
+		fixture.request,
+	)
+
+	if err != nil {
+		t.Fatalf("ResolveDirectorExternalJobStatsV0: %v", err)
+	}
+	if !ok ||
+		stats.Status != "blocked" ||
+		stats.CurrentPhase != "tts" ||
+		stats.RetryFromPhase != "tts" ||
+		stats.OperationalReason != "provider_timeout" ||
+		stats.DomainCounters["segments_pending"] != 7 {
+		t.Fatalf("stats=%+v", stats)
+	}
+}
+
 func TestCodexStackExternalJobStatsSourceV0GoalFirstAceptadoCompletaJob(t *testing.T) {
 	fixture := newCodexStackExternalJobGoalFirstStatsFixtureV0(t, orquestagoal.GoalStatusCompleteV0, true)
 

@@ -387,6 +387,9 @@ func opesBridgeApplySupervisionGoalFirstMetadataV0(
 			[]string{opesBridgeNextActionObserveGoalV0},
 			supervision.NextActions...,
 		)),
+		CurrentPhase:      strings.TrimSpace(supervision.CurrentPhase),
+		OperationalReason: strings.TrimSpace(supervision.OperationalReason),
+		DomainCounters:    copyStringIntMapV0(supervision.AudioCounters),
 	})
 }
 
