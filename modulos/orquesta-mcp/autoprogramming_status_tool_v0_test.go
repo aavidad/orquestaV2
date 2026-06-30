@@ -640,6 +640,39 @@ func TestMCPAutoprogrammingStatusExecutorV0NoMarcaStaleSinStatsV0(t *testing.T) 
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0DiagnosticaMuestraRunningLimitadaV0(t *testing.T) {
+	ranked := make([]MCPRunQueueRankedCandidateCompactV0, 0, mcpAutoprogrammingRunningStatsMaxV0+2)
+	for index := 0; index < mcpAutoprogrammingRunningStatsMaxV0+2; index++ {
+		ranked = append(ranked, MCPRunQueueRankedCandidateCompactV0{
+			Rank:          index + 1,
+			RunRef:        "run-ref-running-sample-" + string(rune('a'+index)),
+			AppRef:        "app-ref-running-sample",
+			Status:        "running",
+			PriorityScore: 100 - index,
+		})
+	}
+	stats := &fakeMCPAutoprogrammingRunStatusV0{}
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{ranked: ranked},
+		Stats: stats,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(stats.inputs) != mcpAutoprogrammingRunningStatsMaxV0 {
+		t.Fatalf("stats inputs=%d want=%d inputs=%+v", len(stats.inputs), mcpAutoprogrammingRunningStatsMaxV0, stats.inputs)
+	}
+	if !hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "running_stats_sample_limited") {
+		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.QueueRuns != len(ranked) ||
+		result.QueueHealth.ObservedRuns == 0 {
+		t.Fatalf("queue_health=%+v", result.QueueHealth)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0ObservaRunningConProcesoVivoV0(t *testing.T) {
 	stats := &fakeMCPAutoprogrammingRunStatusV0{
 		statsByRun: map[string]*orquestacionnucleoapp.DirectorRunStatsV0{

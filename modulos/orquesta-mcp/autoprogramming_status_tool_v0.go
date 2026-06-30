@@ -140,6 +140,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	}
 	observedRuns, observedDiagnostics := executor.executeQueueRunningStatsV0(ctx, input, result.Queue, result.Run)
 	result.Diagnostics = append(result.Diagnostics, observedDiagnostics...)
+	result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingRunningStatsSampleLimitedDiagnosticsV0(result.Queue, executor.Stats != nil, result.Run, observedRuns...)...)
 	for _, observed := range observedRuns {
 		if observed == nil {
 			continue
@@ -576,6 +577,35 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) executeQueueRunningStatsV
 		}
 	}
 	return out, diagnostics
+}
+
+func mcpAutoprogrammingRunningStatsSampleLimitedDiagnosticsV0(
+	queue *MCPRunQueuePriorityToolResultV0,
+	statsConfigured bool,
+	run *MCPDirectorStatsToolResultV0,
+	observedRuns ...*MCPDirectorStatsToolResultV0,
+) []MCPAutoprogrammingDiagnosticV0 {
+	if !statsConfigured || queue == nil || queue.Estado != MCPRunQueuePriorityEstadoOKV0 {
+		return nil
+	}
+	runningTotal := 0
+	for _, candidate := range queue.Ranked {
+		if strings.ToLower(strings.TrimSpace(candidate.Status)) == "running" {
+			runningTotal++
+		}
+	}
+	if runningTotal <= mcpAutoprogrammingRunningStatsMaxV0 {
+		return nil
+	}
+	observed := mcpAutoprogrammingObservedRunsByRefV0(run, observedRuns...)
+	if len(observed) >= runningTotal {
+		return nil
+	}
+	return []MCPAutoprogrammingDiagnosticV0{mcpAutoprogrammingDiagnosticV0(
+		"running_stats_sample_limited",
+		"queue",
+		"status observo una muestra acotada de runs running; usar run_ref o queue_global_status para inspeccion completa",
+	)}
 }
 
 func (executor MCPAutoprogrammingStatusToolExecutorV0) executeAutoprogrammingInternalLiveStatsV0(
