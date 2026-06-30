@@ -27,6 +27,7 @@ type StartupCheckResultV0 struct {
 	Message         string                   `json:"message,omitempty"`
 	EvidenceRefs    []string                 `json:"evidence_refs,omitempty"`
 	StartupRevision StartupRevisionSummaryV0 `json:"startup_revision,omitempty"`
+	Blockers        []StartupBlockerV0       `json:"blockers,omitempty"`
 }
 
 type StartupRevisionSummaryV0 struct {
@@ -39,6 +40,19 @@ type StartupRevisionSummaryV0 struct {
 	Artifacts       int    `json:"artifacts,omitempty"`
 	RetentionDays   int    `json:"retention_days,omitempty"`
 	MaxBytes        int64  `json:"max_bytes,omitempty"`
+}
+
+type StartupBlockerV0 struct {
+	RunRef       string   `json:"run_ref,omitempty"`
+	AppRef       string   `json:"app_ref,omitempty"`
+	QueueStatus  string   `json:"queue_status,omitempty"`
+	UpdatedAt    string   `json:"updated_at,omitempty"`
+	AgeSeconds   int64    `json:"age_seconds,omitempty"`
+	Active       bool     `json:"active,omitempty"`
+	QueueDirty   bool     `json:"queue_dirty,omitempty"`
+	ProcessState string   `json:"process_state,omitempty"`
+	Action       string   `json:"action,omitempty"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }
 
 type StartupNotReadyErrorV0 struct {
@@ -140,6 +154,11 @@ func startupCheckResultAuditSummaryV0(result StartupCheckResultV0) map[string]in
 	if revision := normalizeStartupRevisionSummaryV0(result.StartupRevision); revision.RevisionRef != "" {
 		summary["startup_revision"] = revision
 	}
+	blockers := normalizeStartupBlockersV0(result.Blockers)
+	if len(blockers) > 0 {
+		summary["blockers_count"] = len(blockers)
+		summary["blockers"] = blockers
+	}
 	return summary
 }
 
@@ -148,6 +167,7 @@ func normalizeStartupCheckResultV0(result StartupCheckResultV0) StartupCheckResu
 	result.Message = strings.TrimSpace(result.Message)
 	result.EvidenceRefs = compactServerStringsV0(result.EvidenceRefs)
 	result.StartupRevision = normalizeStartupRevisionSummaryV0(result.StartupRevision)
+	result.Blockers = normalizeStartupBlockersV0(result.Blockers)
 	if result.Ready && result.Status == "" {
 		result.Status = StartupCheckStatusReadyV0
 	}
@@ -158,6 +178,38 @@ func normalizeStartupCheckResultV0(result StartupCheckResultV0) StartupCheckResu
 		result.Message = "orquesta_startup_ready"
 	}
 	return result
+}
+
+func normalizeStartupBlockersV0(blockers []StartupBlockerV0) []StartupBlockerV0 {
+	out := make([]StartupBlockerV0, 0, len(blockers))
+	seen := map[string]struct{}{}
+	for _, blocker := range blockers {
+		blocker.RunRef = strings.TrimSpace(blocker.RunRef)
+		blocker.AppRef = strings.TrimSpace(blocker.AppRef)
+		blocker.QueueStatus = strings.TrimSpace(blocker.QueueStatus)
+		blocker.UpdatedAt = strings.TrimSpace(blocker.UpdatedAt)
+		blocker.ProcessState = strings.TrimSpace(blocker.ProcessState)
+		blocker.Action = strings.TrimSpace(blocker.Action)
+		blocker.EvidenceRefs = compactServerStringsV0(blocker.EvidenceRefs)
+		if blocker.AgeSeconds < 0 {
+			blocker.AgeSeconds = 0
+		}
+		if blocker.RunRef == "" && blocker.AppRef == "" && blocker.Action == "" {
+			continue
+		}
+		key := strings.Join([]string{
+			blocker.RunRef,
+			blocker.AppRef,
+			blocker.QueueStatus,
+			blocker.Action,
+		}, "\x00")
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, blocker)
+	}
+	return out
 }
 
 func normalizeStartupRevisionSummaryV0(summary StartupRevisionSummaryV0) StartupRevisionSummaryV0 {

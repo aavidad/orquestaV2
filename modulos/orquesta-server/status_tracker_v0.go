@@ -45,6 +45,7 @@ func (tracker *StatusTrackerV0) MarkStartupCheckingV0(now time.Time) StateV0 {
 		state.StartupMessage = ""
 		state.StartupOperationalMessage = nil
 		state.StartupRevision = StartupRevisionSummaryV0{}
+		state.StartupBlockers = nil
 		state.StartupEvidenceRefs = nil
 		state.LastError = ""
 	})
@@ -71,6 +72,7 @@ func (tracker *StatusTrackerV0) MarkStartupReadyV0(
 			},
 		)
 		state.StartupRevision = result.StartupRevision
+		state.StartupBlockers = nil
 		state.StartupEvidenceRefs = append([]string(nil), result.EvidenceRefs...)
 		state.LastError = ""
 		state.LastErrorOperationalMessage = nil
@@ -114,6 +116,7 @@ func (tracker *StatusTrackerV0) MarkStartupBlockedV0(
 			},
 		)
 		state.StartupRevision = result.StartupRevision
+		state.StartupBlockers = append([]StartupBlockerV0(nil), result.Blockers...)
 		state.StartupEvidenceRefs = append([]string(nil), result.EvidenceRefs...)
 		state.LastError = projectServerOperationalMessageV0("startup", result.Message)
 		state.LastErrorOperationalMessage = copyServerOperationalMessageV0(state.StartupOperationalMessage)

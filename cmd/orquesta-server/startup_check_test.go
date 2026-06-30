@@ -216,6 +216,64 @@ func TestStartupDiagnoseV0AdoptaProcesosVivosRegistradosV0(t *testing.T) {
 	}
 }
 
+func TestStartupCleanupBlockersV0ExponeAccionYAntiguedadSinPathsV0(t *testing.T) {
+	now := time.Date(2026, 6, 30, 17, 0, 0, 0, time.UTC)
+	got := startupCleanupBlockersV0([]startupCandidateCleanupV0{
+		{
+			Candidate: orquestarunqueue.RunSchedulingCandidateV0{
+				RunRef:       "run-startup-live-001",
+				AppRef:       "app-opes-temporal",
+				Status:       orquestarunqueue.RunStatusRunningV0,
+				UpdatedAt:    now.Add(-10 * time.Minute),
+				EvidenceRefs: []string{"evidence-live"},
+			},
+			Active: true,
+		},
+		{
+			Candidate: orquestarunqueue.RunSchedulingCandidateV0{
+				RunRef:    "run-startup-queue-dirty-001",
+				AppRef:    "app-opes-temporal",
+				Status:    orquestarunqueue.RunStatusReadyV0,
+				UpdatedAt: now.Add(-2 * time.Hour),
+			},
+			QueueDirty:  true,
+			QueueStatus: orquestarunqueue.RunStatusStoppedV0,
+		},
+	}, orquestaserver.StartupCheckCommandV0{OccurredAt: now})
+
+	if len(got) != 2 {
+		t.Fatalf("blockers=%+v", got)
+	}
+	if got[0].RunRef != "run-startup-live-001" ||
+		got[0].AgeSeconds != 600 ||
+		got[0].ProcessState != "active_or_in_flight" ||
+		got[0].Action != "inspect_live_run_or_force_stop_explicit" ||
+		!containsStringForTestV0(got[0].EvidenceRefs, "evidence-ref-orquesta-startup-dirty-runs") {
+		t.Fatalf("live blocker=%+v", got[0])
+	}
+	if got[1].RunRef != "run-startup-queue-dirty-001" ||
+		got[1].AgeSeconds != 7200 ||
+		got[1].QueueStatus != orquestarunqueue.RunStatusStoppedV0 ||
+		got[1].ProcessState != "no_live_process_required" ||
+		got[1].Action != "reconcile_queue_terminal" {
+		t.Fatalf("queue blocker=%+v", got[1])
+	}
+	for _, blocker := range got {
+		joined := strings.Join([]string{
+			blocker.RunRef,
+			blocker.AppRef,
+			blocker.QueueStatus,
+			blocker.UpdatedAt,
+			blocker.ProcessState,
+			blocker.Action,
+			strings.Join(blocker.EvidenceRefs, " "),
+		}, " ")
+		if strings.Contains(joined, "/") || strings.Contains(strings.ToLower(joined), "home") {
+			t.Fatalf("blocker filtra path local: %+v", blocker)
+		}
+	}
+}
+
 func TestStartupCandidateCanBeCompletedByStartupV0AceptaStopSolicitadoSinACKV0(t *testing.T) {
 	ctx := context.Background()
 	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(orquestacoreworkflow.OrchestrationRunV0{

@@ -22,6 +22,7 @@ type StateV0 struct {
 	StartupMessage                        string                                `json:"startup_message,omitempty"`
 	StartupOperationalMessage             *ServerOperationalMessageV0           `json:"startup_operational_message,omitempty"`
 	StartupRevision                       StartupRevisionSummaryV0              `json:"startup_revision,omitempty"`
+	StartupBlockers                       []StartupBlockerV0                    `json:"startup_blockers,omitempty"`
 	EffectiveConfig                       ServerEffectiveConfigV0               `json:"effective_config,omitempty"`
 	LastStartupCheckAt                    string                                `json:"last_startup_check_at,omitempty"`
 	LastSupervisorAt                      string                                `json:"last_supervisor_at,omitempty"`

@@ -19,6 +19,7 @@ type ServerReadinessV0 struct {
 	StartupStatus                          string                   `json:"startup_status,omitempty"`
 	StartupMessage                         string                   `json:"startup_message,omitempty"`
 	StartupRevision                        StartupRevisionSummaryV0 `json:"startup_revision,omitempty"`
+	StartupBlockers                        []StartupBlockerV0       `json:"startup_blockers,omitempty"`
 	LastHeartbeatAt                        string                   `json:"last_heartbeat_at,omitempty"`
 	LastStartupCheckAt                     string                   `json:"last_startup_check_at,omitempty"`
 	ExternalBridgeStatus                   string                   `json:"external_bridge_status,omitempty"`
@@ -71,6 +72,7 @@ func NewServerReadinessV0(state StateV0) ServerReadinessV0 {
 		StartupStatus:                          startupStatus,
 		StartupMessage:                         startupMessage,
 		StartupRevision:                        normalizeStartupRevisionSummaryV0(state.StartupRevision),
+		StartupBlockers:                        normalizeStartupBlockersV0(state.StartupBlockers),
 		LastHeartbeatAt:                        strings.TrimSpace(state.LastHeartbeatAt),
 		LastStartupCheckAt:                     strings.TrimSpace(state.LastStartupCheckAt),
 		ExternalBridgeStatus:                   strings.TrimSpace(state.ExternalBridgeStatus),

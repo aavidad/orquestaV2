@@ -103,6 +103,51 @@ func TestHandlerV0ReadinessNoExponePathsNiRuntimeDirsV0(t *testing.T) {
 	}
 }
 
+func TestHandlerV0ReadinessExponeStartupBlockersV0(t *testing.T) {
+	tracker := NewStatusTrackerV0(ConfigV0{Addr: "127.0.0.1:8787"}, time.Now().UTC())
+	tracker.MarkStartupBlockedV0(StartupCheckResultV0{
+		Status: "startup_dirty_runs_detected",
+		Ready:  false,
+		Blockers: []StartupBlockerV0{{
+			RunRef:       "run-startup-blocker-001",
+			AppRef:       "app-temporal",
+			QueueStatus:  "ready",
+			UpdatedAt:    "2026-06-30T16:50:00Z",
+			AgeSeconds:   600,
+			Active:       true,
+			ProcessState: "active_or_in_flight",
+			Action:       "inspect_live_run_or_force_stop_explicit",
+			EvidenceRefs: []string{"evidence-ref-orquesta-startup-dirty-runs"},
+		}},
+	}, time.Date(2026, 6, 30, 17, 0, 0, 0, time.UTC))
+	handler := NewHandlerV0(HandlerConfigV0{Tracker: tracker})
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, ServerReadinessEndpointV0, nil))
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var readiness ServerReadinessV0
+	if err := json.Unmarshal(rec.Body.Bytes(), &readiness); err != nil {
+		t.Fatalf("json=%v body=%s", err, rec.Body.String())
+	}
+	if readiness.Ready ||
+		readiness.StartupReady ||
+		readiness.StartupStatus != "startup_dirty_runs_detected" ||
+		len(readiness.StartupBlockers) != 1 {
+		t.Fatalf("readiness=%+v", readiness)
+	}
+	blocker := readiness.StartupBlockers[0]
+	if blocker.RunRef != "run-startup-blocker-001" ||
+		blocker.AgeSeconds != 600 ||
+		blocker.ProcessState != "active_or_in_flight" ||
+		blocker.Action != "inspect_live_run_or_force_stop_explicit" ||
+		!containsServerStringForTestV0(blocker.EvidenceRefs, "evidence-ref-orquesta-startup-dirty-runs") {
+		t.Fatalf("blocker=%+v", blocker)
+	}
+}
+
 func TestHandlerV0ReadinessBloqueaExternalWorkGoalFirstSinBackendV0(t *testing.T) {
 	tracker := NewStatusTrackerV0(ConfigV0{
 		Addr: "127.0.0.1:8787",

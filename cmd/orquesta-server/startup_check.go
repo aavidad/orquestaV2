@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
@@ -139,7 +140,73 @@ func (check serverStartupCheckV0) diagnoseStartupV0(
 		Ready:        false,
 		Message:      fmt.Sprintf("runs transitorios activos=%d cola_desincronizada=%d; usar %s=forced_stop para purga logica", active, queueDirty, envStartupCleanupModeV0),
 		EvidenceRefs: []string{"evidence-ref-orquesta-startup-dirty-runs"},
+		Blockers:     startupCleanupBlockersV0(cleanup, command),
 	}, nil
+}
+
+func startupCleanupBlockersV0(
+	candidates []startupCandidateCleanupV0,
+	command orquestaserver.StartupCheckCommandV0,
+) []orquestaserver.StartupBlockerV0 {
+	out := make([]orquestaserver.StartupBlockerV0, 0, len(candidates))
+	for _, entry := range candidates {
+		candidate := entry.Candidate
+		blocker := orquestaserver.StartupBlockerV0{
+			RunRef:       strings.TrimSpace(candidate.RunRef),
+			AppRef:       strings.TrimSpace(candidate.AppRef),
+			QueueStatus:  strings.TrimSpace(firstNonEmptyStartupStringV0(entry.QueueStatus, candidate.Status)),
+			UpdatedAt:    startupPublicTimeV0(candidate.UpdatedAt),
+			AgeSeconds:   startupCandidateAgeSecondsV0(candidate.UpdatedAt, command.OccurredAt),
+			Active:       entry.Active,
+			QueueDirty:   entry.QueueDirty,
+			ProcessState: startupCleanupProcessStateV0(entry),
+			Action:       startupCleanupActionV0(entry),
+			EvidenceRefs: appendStartupEvidenceRefV0(candidate.EvidenceRefs, "evidence-ref-orquesta-startup-dirty-runs"),
+		}
+		out = append(out, blocker)
+	}
+	return out
+}
+
+func startupCleanupProcessStateV0(entry startupCandidateCleanupV0) string {
+	if entry.Active {
+		return "active_or_in_flight"
+	}
+	if entry.QueueDirty {
+		return "no_live_process_required"
+	}
+	return "unknown"
+}
+
+func startupCleanupActionV0(entry startupCandidateCleanupV0) string {
+	if entry.QueueDirty && !entry.Active {
+		if entry.CompleteControlPending {
+			return "complete_pending_control_and_reconcile_queue"
+		}
+		return "reconcile_queue_terminal"
+	}
+	if entry.Active {
+		return "inspect_live_run_or_force_stop_explicit"
+	}
+	return "inspect_startup_state"
+}
+
+func startupPublicTimeV0(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
+}
+
+func startupCandidateAgeSecondsV0(updatedAt time.Time, now time.Time) int64 {
+	if updatedAt.IsZero() || now.IsZero() {
+		return 0
+	}
+	age := now.Sub(updatedAt)
+	if age < 0 {
+		return 0
+	}
+	return int64(age.Seconds())
 }
 
 func startupCleanupHasDomainSessionSuppressionV0(candidates []startupCandidateCleanupV0) bool {
