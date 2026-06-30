@@ -56,15 +56,20 @@ else
   smoke_root="$(mktemp -d "$smoke_parent/orquesta-selfprogramming-composite.XXXXXX")"
 fi
 smoke_temp_root_prepare "$smoke_root" "self-programming-composite"
+trap 'smoke_temp_root_cleanup "$smoke_root" "${ORQUESTA_KEEP_SMOKE_DIR:-0}"' EXIT
 
 summary="$smoke_root/self_programming_composite_summary.txt"
 gotmp="$smoke_root/go-tmp"
 gocache="$smoke_root/go-cache"
+gomodcache="$smoke_root/go-mod-cache"
+gopath="$smoke_root/go-path"
 archive_dir="$smoke_root/autoprogramming-promotion-archive"
-mkdir -p "$gotmp" "$gocache" "$archive_dir"
+mkdir -p "$gotmp" "$gocache" "$gomodcache" "$gopath" "$archive_dir"
 
 export GOTMPDIR="$gotmp"
 export GOCACHE="$gocache"
+export GOMODCACHE="$gomodcache"
+export GOPATH="$gopath"
 export ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux
 export ORQUESTA_SERVER_SELF_PROGRAMMING_ONLY=true
 export ORQUESTA_SERVER_SELF_PROGRAMMING_ROOT="$smoke_root"

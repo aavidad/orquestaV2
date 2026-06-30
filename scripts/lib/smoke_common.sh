@@ -334,5 +334,8 @@ smoke_temp_root_cleanup() {
     echo "smoke_temp_root_preserved reason=rm-unavailable root_ref=$(smoke_temp_root_public_ref "$root")" >&2
     return 0
   fi
+  if command -v chmod >/dev/null 2>&1; then
+    chmod -R u+w -- "$root" 2>/dev/null || true
+  fi
   "$rm_bin" -rf -- "$root"
 }
