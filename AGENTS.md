@@ -184,11 +184,16 @@ activas y documentadas las herramientas auxiliares canonicas. No son preferencia
 de una sesion: forman parte del contrato operativo del agente y deben revisarse
 cuando cambien versiones, runtimes o skills.
 
-- `codebase-memory-mcp`: obligatorio cuando este disponible para navegacion de
-  codigo. Antes de leer paquetes grandes, usa `search_graph`,
-  `trace_path`, `get_code_snippet` y `get_architecture`; `rg` queda para strings
-  exactos, Markdown, configs, incidencias y casos donde el grafo no baste. Si el
-  repo no esta indexado, indexa el worktree aislado antes de una auditoria larga.
+- `codebase-memory-mcp`: herramienta opt-in, no obligatoria. Usala solo cuando
+  aporte valor claro para relaciones de simbolos, callers/callees, hotspots o
+  arquitectura; para strings exactos, Markdown, configs, incidencias y lectura
+  local acotada usa `rg`/`sed` primero. No la uses por defecto en subagentes:
+  cuando delegues, indica expresamente `no usar codebase-memory-mcp` salvo que
+  un subagente tenga asignada una consulta de grafo concreta. No indexes el repo
+  ni arranques varias instancias en paralelo sin orden explicita del operador;
+  antes/despues de usarla comprueba que no quedan `codebase-memory-mcp` vivos
+  consumiendo CPU. Si quedan, documentalo como incidencia operativa y cierralos
+  cooperativamente si no estan atendiendo una consulta activa.
 - Ahorro de contexto: lanzar agentes y subagentes con comunicacion compacta tipo
   `caveman` si la skill existe; si no existe, pedir salida compacta equivalente:
   hecho, tests, riesgos/bloqueos y siguiente accion. No cargar contexto bruto
@@ -314,7 +319,9 @@ cuando cambien versiones, runtimes o skills.
   limite duro, documentalo como frontera externa temporal, no como politica del
   nucleo. La composicion Codex debe arrancar con 70 padres/ejecuciones por tick
   como default operativo amplio, no con 10 como cuello de botella silencioso.
-  Conserva refs/parentesco, write-set, presupuesto y evidencia en el ACK.
+  Conserva refs/parentesco, write-set, presupuesto y evidencia en el ACK. Para
+  evitar tormentas de CPU, los subagentes no deben usar `codebase-memory-mcp` ni
+  indexadores salvo autorizacion explicita y acotada a una sola consulta/frente.
 - Cuando una tarea ya trae `child_task_refs`, esos hijos no son una sugerencia
   de ayuda: son contrato causal del plan. El padre no debe cerrar como completo
   sin ACK, entrega, bloqueo o rework documentado por cada hijo. En OPES, si el
