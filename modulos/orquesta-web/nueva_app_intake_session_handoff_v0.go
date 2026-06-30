@@ -7,17 +7,18 @@ const (
 )
 
 type WebNuevaAppIntakeHandoffV0 struct {
-	SchemaVersion    string                       `json:"schema_version"`
-	Ready            bool                         `json:"ready"`
-	TargetTool       string                       `json:"target_tool"`
-	TargetPath       string                       `json:"target_path,omitempty"`
-	FallbackTool     string                       `json:"fallback_tool,omitempty"`
-	SessionRef       string                       `json:"session_ref,omitempty"`
-	RequestRef       string                       `json:"request_ref,omitempty"`
-	CorrelationRef   string                       `json:"correlation_ref,omitempty"`
-	PendingQuestions []string                     `json:"pending_questions"`
-	ContextRefs      []string                     `json:"context_refs"`
-	ContextSummary   []WebNuevaAppIntakeContextV0 `json:"context_summary"`
+	SchemaVersion        string                       `json:"schema_version"`
+	Ready                bool                         `json:"ready"`
+	TargetTool           string                       `json:"target_tool"`
+	TargetPath           string                       `json:"target_path,omitempty"`
+	FallbackTool         string                       `json:"fallback_tool,omitempty"`
+	SessionRef           string                       `json:"session_ref,omitempty"`
+	RequestRef           string                       `json:"request_ref,omitempty"`
+	CorrelationRef       string                       `json:"correlation_ref,omitempty"`
+	PendingQuestions     []string                     `json:"pending_questions"`
+	RecommendedQuestions []string                     `json:"recommended_questions,omitempty"`
+	ContextRefs          []string                     `json:"context_refs"`
+	ContextSummary       []WebNuevaAppIntakeContextV0 `json:"context_summary"`
 }
 
 type WebNuevaAppIntakeContextV0 struct {
@@ -29,17 +30,18 @@ func webNuevaAppIntakeHandoffV0(session WebNuevaAppIntakeSessionV0) WebNuevaAppI
 	request := session.AppSpecPartial
 	requestRef := firstNuevaAppValueV0(request.RequestID, session.SessionRef, session.SessionID)
 	return WebNuevaAppIntakeHandoffV0{
-		SchemaVersion:    WebNuevaAppIntakeHandoffSchemaV0,
-		Ready:            len(session.PendingQuestions) == 0,
-		TargetTool:       WebNuevaAppDirectorTargetToolV0,
-		TargetPath:       ArrancarDirectorAppEndpointV0,
-		FallbackTool:     WebNuevaAppFallbackTargetToolV0,
-		SessionRef:       session.SessionRef,
-		RequestRef:       requestRef,
-		CorrelationRef:   requestRef,
-		PendingQuestions: append([]string(nil), session.PendingQuestions...),
-		ContextRefs:      webNuevaAppIntakeContextRefsV0(session.SessionRef, requestRef),
-		ContextSummary:   webNuevaAppIntakeContextSummaryV0(session),
+		SchemaVersion:        WebNuevaAppIntakeHandoffSchemaV0,
+		Ready:                len(session.PendingQuestions) == 0,
+		TargetTool:           WebNuevaAppDirectorTargetToolV0,
+		TargetPath:           ArrancarDirectorAppEndpointV0,
+		FallbackTool:         WebNuevaAppFallbackTargetToolV0,
+		SessionRef:           session.SessionRef,
+		RequestRef:           requestRef,
+		CorrelationRef:       requestRef,
+		PendingQuestions:     append([]string(nil), session.PendingQuestions...),
+		RecommendedQuestions: append([]string(nil), session.RecommendedQuestions...),
+		ContextRefs:          webNuevaAppIntakeContextRefsV0(session.SessionRef, requestRef),
+		ContextSummary:       webNuevaAppIntakeContextSummaryV0(session),
 	}
 }
 

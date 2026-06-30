@@ -12,19 +12,20 @@ const (
 )
 
 type WebNuevaAppIntakeSessionV0 struct {
-	SchemaVersion    string                           `json:"schema_version"`
-	SessionID        string                           `json:"session_id"`
-	SessionRef       string                           `json:"session_ref,omitempty"`
-	Locale           string                           `json:"locale,omitempty"`
-	Estado           WebNuevaAppIntakeEstadoV0        `json:"estado"`
-	Form             WebNuevaAppFormV0                `json:"form"`
-	Sections         []WebNuevaAppIntakeSectionV0     `json:"sections"`
-	FieldIndex       []WebNuevaAppIntakeFieldIndexV0  `json:"field_index"`
-	Questions        []WebNuevaAppIntakeQuestionV0    `json:"questions"`
-	PendingQuestions []string                         `json:"pending_questions"`
-	Decisions        []WebNuevaAppIntakeDecisionV0    `json:"decisions"`
-	AppSpecPartial   orquestafactory.AppSpecRequestV0 `json:"app_spec_partial"`
-	Handoff          WebNuevaAppIntakeHandoffV0       `json:"handoff"`
+	SchemaVersion        string                           `json:"schema_version"`
+	SessionID            string                           `json:"session_id"`
+	SessionRef           string                           `json:"session_ref,omitempty"`
+	Locale               string                           `json:"locale,omitempty"`
+	Estado               WebNuevaAppIntakeEstadoV0        `json:"estado"`
+	Form                 WebNuevaAppFormV0                `json:"form"`
+	Sections             []WebNuevaAppIntakeSectionV0     `json:"sections"`
+	FieldIndex           []WebNuevaAppIntakeFieldIndexV0  `json:"field_index"`
+	Questions            []WebNuevaAppIntakeQuestionV0    `json:"questions"`
+	PendingQuestions     []string                         `json:"pending_questions"`
+	RecommendedQuestions []string                         `json:"recommended_questions,omitempty"`
+	Decisions            []WebNuevaAppIntakeDecisionV0    `json:"decisions"`
+	AppSpecPartial       orquestafactory.AppSpecRequestV0 `json:"app_spec_partial"`
+	Handoff              WebNuevaAppIntakeHandoffV0       `json:"handoff"`
 }
 
 type WebNuevaAppIntakeSectionV0 struct {
@@ -83,7 +84,11 @@ func refreshWebNuevaAppIntakeSessionV0(session WebNuevaAppIntakeSessionV0) WebNu
 	session.Form.RequestID = firstNuevaAppValueV0(session.Form.RequestID, session.SessionID)
 	session.Form.Locale = firstNuevaAppValueV0(session.Form.Locale, session.Locale)
 	session.PendingQuestions = webNuevaAppIntakePendingFieldsV0(session.Form)
-	session.Questions = webNuevaAppIntakeQuestionsV0(session.PendingQuestions)
+	session.RecommendedQuestions = webNuevaAppIntakeRecommendedFieldsV0(session.Form, session.PendingQuestions)
+	session.Questions = webNuevaAppIntakeQuestionsV0(append(
+		append([]string{}, session.PendingQuestions...),
+		session.RecommendedQuestions...,
+	))
 	session.Sections = webNuevaAppIntakeSectionsV0(session.Form)
 	session.FieldIndex = webNuevaAppIntakeFieldIndexV0()
 	session.AppSpecPartial = session.Form.ToAppSpecRequestV0()
@@ -114,6 +119,35 @@ func webNuevaAppIntakePendingFieldsV0(form WebNuevaAppFormV0) []string {
 		if trimV0(item.value) == "" {
 			out = append(out, item.field)
 		}
+	}
+	if out == nil {
+		return []string{}
+	}
+	return out
+}
+
+func webNuevaAppIntakeRecommendedFieldsV0(form WebNuevaAppFormV0, pendingRequired []string) []string {
+	pending := map[string]bool{}
+	for _, field := range compactStringsV0(pendingRequired) {
+		pending[field] = true
+	}
+	important := []string{
+		"plataformas",
+		"integraciones",
+		"datos",
+		"deploy",
+		"calidad",
+		"documentacion",
+		"i18n",
+		"agentes",
+		"project_source",
+	}
+	out := make([]string, 0, len(important))
+	for _, field := range important {
+		if pending[field] || webNuevaAppIntakeFieldCapturedV0(form, field) {
+			continue
+		}
+		out = append(out, field)
 	}
 	if out == nil {
 		return []string{}

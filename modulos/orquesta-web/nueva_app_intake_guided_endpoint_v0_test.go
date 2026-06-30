@@ -103,7 +103,10 @@ func TestNuevaAppIntakeGuidedHTTPHandlerV0POSTAplicaRespuestaLibreAPreguntaPendi
 	}
 	if out.Session.Form.TipoApp != "web" ||
 		len(out.Session.PendingQuestions) != 0 ||
-		out.Session.Estado != WebNuevaAppIntakeEstadoLista {
+		out.Session.Estado != WebNuevaAppIntakeEstadoLista ||
+		!out.Session.Handoff.Ready ||
+		len(out.Session.RecommendedQuestions) == 0 ||
+		len(out.Session.Handoff.RecommendedQuestions) == 0 {
 		t.Fatalf("respuesta libre no aplicada: %+v", out.Session)
 	}
 }

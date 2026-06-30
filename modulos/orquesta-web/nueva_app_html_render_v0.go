@@ -1310,6 +1310,10 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       if(guidedSession&&Array.isArray(guidedSession.pending_questions)&&guidedSession.pending_questions.length){
         return String(guidedSession.pending_questions[0]||'');
       }
+      if(guidedSession&&Array.isArray(guidedSession.questions)&&guidedSession.questions.length){
+        const item=guidedSession.questions.find(q=>q&&q.required===false&&q.field);
+        if(item)return String(item.field||'');
+      }
       return '';
     }
     function labelForField(name){

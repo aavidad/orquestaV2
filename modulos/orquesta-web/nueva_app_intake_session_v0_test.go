@@ -28,10 +28,15 @@ func TestWebNuevaAppIntakeSessionV0CreaSesionDesdeIdeaYPideCamposCriticos(t *tes
 	if len(session.PendingQuestions) != 1 || session.PendingQuestions[0] != "tipo_app" {
 		t.Fatalf("preguntas=%+v", session.PendingQuestions)
 	}
-	if len(session.Questions) != 1 ||
+	if len(session.Questions) <= len(session.PendingQuestions) ||
 		session.Questions[0].LabelKey != "nueva_app.campo.tipo_app" ||
 		!session.Questions[0].Required {
 		t.Fatalf("questions i18n=%+v", session.Questions)
+	}
+	if len(session.RecommendedQuestions) == 0 ||
+		!stringSliceHasV0(session.RecommendedQuestions, "plataformas") ||
+		!stringSliceHasV0(session.RecommendedQuestions, "datos") {
+		t.Fatalf("preguntas recomendadas=%+v", session.RecommendedQuestions)
 	}
 	if session.AppSpecPartial.ExecutionMode != orquestafactory.ExecutionModeNormalV0 {
 		t.Fatalf("execution_mode=%q", session.AppSpecPartial.ExecutionMode)
@@ -55,6 +60,11 @@ func TestApplyWebNuevaAppIntakeAnswerV0RegistraDecisionYDejaDraftListo(t *testin
 	if len(session.PendingQuestions) != 0 {
 		t.Fatalf("preguntas=%+v", session.PendingQuestions)
 	}
+	if len(session.RecommendedQuestions) == 0 ||
+		!stringSliceHasV0(session.RecommendedQuestions, "plataformas") ||
+		session.Questions[0].Required {
+		t.Fatalf("preguntas recomendadas/lista=%+v questions=%+v", session.RecommendedQuestions, session.Questions)
+	}
 	if len(session.Decisions) != 1 || session.Decisions[0].Field != "tipo_app" || session.Decisions[0].Value != "web" {
 		t.Fatalf("decisiones=%+v", session.Decisions)
 	}
@@ -69,7 +79,9 @@ func TestApplyWebNuevaAppIntakeAnswerV0RegistraDecisionYDejaDraftListo(t *testin
 	}
 	if session.Handoff.RequestRef != "session-1" ||
 		len(session.Handoff.ContextRefs) != 2 ||
-		!hasIntakeContextValueV0(session.Handoff.ContextSummary, "tipo_app", "web") {
+		!hasIntakeContextValueV0(session.Handoff.ContextSummary, "tipo_app", "web") ||
+		len(session.Handoff.PendingQuestions) != 0 ||
+		len(session.Handoff.RecommendedQuestions) == 0 {
 		t.Fatalf("handoff refs/context=%+v", session.Handoff)
 	}
 }
