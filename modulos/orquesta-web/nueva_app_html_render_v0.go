@@ -103,6 +103,10 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.goal.goal_status",
 		"nueva_app.goal.run_status",
 		"nueva_app.goal.closure_status",
+		"nueva_app.goal.artifacts",
+		"nueva_app.goal.domain_receipts",
+		"nueva_app.goal.evidence_refs",
+		"nueva_app.goal.closure_issues",
 		"nueva_app.goal.update",
 		"nueva_app.goal.updating",
 		"nueva_app.goal.updated",
@@ -1146,6 +1150,10 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
           <div data-goal-closure-status-row hidden><strong>{{index $.HTML "nueva_app.goal.closure_status"}}:</strong> <code data-goal-closure-status></code></div>
         </div>
         {{if and .RunRef .GoalRef}}<div class="goal-actions"><button class="secondary" type="button" data-goal-observe>{{index $.HTML "nueva_app.goal.update"}}</button><span class="goal-feedback" data-goal-feedback aria-live="polite"></span></div>{{end}}
+        <div data-goal-artifacts-section hidden><h3>{{index $.HTML "nueva_app.goal.artifacts"}}</h3><ul data-goal-artifacts-list></ul></div>
+        <div data-goal-domain-receipts-section hidden><h3>{{index $.HTML "nueva_app.goal.domain_receipts"}}</h3><ul data-goal-domain-receipts-list></ul></div>
+        {{if .EvidenceRefs}}<div data-goal-evidence-section><h3>{{index $.HTML "nueva_app.goal.evidence_refs"}}</h3><ul data-goal-evidence-list>{{range .EvidenceRefs}}<li><code>{{.}}</code></li>{{end}}</ul></div>{{else}}<div data-goal-evidence-section hidden><h3>{{index $.HTML "nueva_app.goal.evidence_refs"}}</h3><ul data-goal-evidence-list></ul></div>{{end}}
+        <div data-goal-closure-issues-section hidden><h3>{{index $.HTML "nueva_app.goal.closure_issues"}}</h3><ul data-goal-closure-issues-list></ul></div>
       </section>{{end}}
       {{with .Page.ViewModel.GoalPreview}}<section class="panel goal-preview-panel">
         <h2>{{index $.HTML "nueva_app.goal_preview.titulo"}}</h2>
@@ -1283,6 +1291,10 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
         setGoalText(panel,'[data-goal-status]',result.goal_status);
         setGoalRow(panel,'[data-goal-run-status-row]','[data-goal-run-status]',result.run_status);
         setGoalRow(panel,'[data-goal-closure-status-row]','[data-goal-closure-status]',result.closure_status);
+        renderGoalList(panel,'[data-goal-artifacts-section]','[data-goal-artifacts-list]',result.artifact_refs);
+        renderGoalList(panel,'[data-goal-domain-receipts-section]','[data-goal-domain-receipts-list]',result.domain_receipt_refs);
+        renderGoalList(panel,'[data-goal-evidence-section]','[data-goal-evidence-list]',result.evidence_refs);
+        renderGoalIssues(panel,result.closure_issues);
         panel.dataset.goalLastStatus=result.goal_status||'';
         panel.dataset.runLastStatus=result.run_status||'';
         panel.dataset.closureAccepted=result.closure_accepted?'true':'false';
@@ -1305,6 +1317,28 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       if(!row||!node||!value)return;
       node.textContent=value;
       row.hidden=false;
+    }
+    function renderGoalList(panel,sectionSelector,listSelector,values){
+      const section=panel.querySelector(sectionSelector);
+      const list=panel.querySelector(listSelector);
+      const items=Array.isArray(values)?values.filter(v=>String(v||'').trim()):[];
+      if(!section||!list||!items.length)return;
+      list.innerHTML=items.map(v=>'<li><code>'+escapeHTML(String(v).trim())+'</code></li>').join('');
+      section.hidden=false;
+    }
+    function renderGoalIssues(panel,issues){
+      const section=panel.querySelector('[data-goal-closure-issues-section]');
+      const list=panel.querySelector('[data-goal-closure-issues-list]');
+      const items=Array.isArray(issues)?issues.filter(i=>i&&(i.code||i.field||i.message)):[];
+      if(!section||!list||!items.length)return;
+      list.innerHTML=items.map(issue=>{
+        const code=String(issue.code||'').trim();
+        const field=String(issue.field||'').trim();
+        const message=String(issue.message||'').trim();
+        const details=[field,message].filter(Boolean).join(' ');
+        return '<li><code>'+escapeHTML(code||'closure_issue')+'</code>'+(details?' '+escapeHTML(details):'')+'</li>';
+      }).join('');
+      section.hidden=false;
     }
     function goalObservationTerminal(panel,result){
       const runStatus=String((result&&result.run_status)||panel.dataset.runLastStatus||'').trim();
