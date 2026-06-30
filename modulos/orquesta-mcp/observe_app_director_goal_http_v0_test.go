@@ -11,6 +11,7 @@ import (
 	"time"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
@@ -88,6 +89,59 @@ func TestMCPObserveAppDirectorGoalHTTPHandlerV0TimeoutDevuelveJSONPublico(t *tes
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != MCPObserveAppDirectorGoalHTTPTimeoutCodeV0 ||
 		result.Errores[0].Field != "executor" {
+		t.Fatalf("result=%+v", result)
+	}
+	select {
+	case <-executor.done:
+	case <-time.After(time.Second):
+		t.Fatalf("executor no recibio cancelacion tras timeout HTTP")
+	}
+}
+
+func TestMCPObserveAppDirectorGoalHTTPHandlerV0TimeoutIncluyeSnapshotParcialV0(t *testing.T) {
+	executor := &blockingSnapshotMCPObserveAppDirectorGoalHTTPExecutorV0{
+		done: make(chan struct{}),
+		snapshot: MCPObserveAppDirectorGoalToolResultV0{
+			Estado:                MCPObserveAppDirectorGoalEstadoOKV0,
+			Partial:               true,
+			RunRef:                "run-ref-goal-http-timeout-snapshot-001",
+			DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0,
+			GoalRef:               "goal-ref-http-timeout-snapshot-001",
+			ExternalGoalRef:       "thread-ref-http-timeout-snapshot-001",
+			GoalStatus:            orquestagoal.GoalStatusRunningV0,
+			RecommendedAction:     "observe_later",
+			EvidenceRefs:          []string{"evidence-ref-http-timeout-snapshot-001"},
+		},
+	}
+	body := &bytes.Buffer{}
+	if err := json.NewEncoder(body).Encode(MCPObserveAppDirectorGoalToolInputV0{
+		RequestID: "req-goal-http-timeout-snapshot-001",
+		RunRef:    "run-ref-goal-http-timeout-snapshot-001",
+	}); err != nil {
+		t.Fatalf("encode input: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, MCPObserveAppDirectorGoalHTTPPathV0, body)
+	req.Header.Set("X-Correlation-ID", "corr-goal-http-timeout-snapshot-001")
+	rec := httptest.NewRecorder()
+
+	newMCPObserveAppDirectorGoalHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusGatewayTimeout {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPObserveAppDirectorGoalToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.Estado != MCPObserveAppDirectorGoalEstadoErrorV0 ||
+		!result.Partial ||
+		result.GoalRef != "goal-ref-http-timeout-snapshot-001" ||
+		result.ExternalGoalRef != "thread-ref-http-timeout-snapshot-001" ||
+		result.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
+		result.RecommendedAction != "observe_later" ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != MCPObserveAppDirectorGoalHTTPTimeoutCodeV0 ||
+		!stringInSliceForMCPObserveGoalHTTPTestV0(result.EvidenceRefs, "evidence-ref-http-timeout-snapshot-001") {
 		t.Fatalf("result=%+v", result)
 	}
 	select {
@@ -188,6 +242,116 @@ func TestMCPObserveAppDirectorGoalToolExecutorV0RunRefRequerido(t *testing.T) {
 	}
 }
 
+func TestMCPObserveAppDirectorGoalToolExecutorV0TimeoutSnapshotLeeGoalStateV0(t *testing.T) {
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: "run-ref-goal-snapshot-store-001",
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       "goal-ref-snapshot-store-001",
+			RunRef:        "run-ref-goal-snapshot-store-001",
+			Objective:     "Observar estado parcial del goal sin relanzar el ejecutor.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{
+				Path: "docs/resultado_snapshot.md",
+			}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         "goal-ref-snapshot-store-001",
+			ExternalGoalRef: "thread-ref-snapshot-store-001",
+			EvidenceRefs:    []string{"evidence-ref-snapshot-launch-001"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		GoalRef:         "goal-ref-snapshot-store-001",
+		ExternalGoalRef: "thread-ref-snapshot-store-001",
+		Summary:         "Goal en ejecucion con resultado parcial persistido.",
+		ArtifactRefs:    []string{"artifact-ref-snapshot-001"},
+		EvidenceRefs:    []string{"evidence-ref-goal-result-snapshot-001"},
+	}
+	store := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := store.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	result, err := NewMCPObserveAppDirectorGoalToolExecutorV0(orquestaappdirectorservice.StartAppDirectorPortsV0{
+		GoalStateStore: store,
+		EventReader: mcpObserveGoalEventReaderForTestV0{events: []orquestacoreworkflow.OrchestrationEventV0{{
+			EventID:    "event-ref-goal-snapshot-store-001",
+			RunID:      "run-ref-goal-snapshot-store-001",
+			Sequence:   1,
+			OccurredAt: "2026-06-30T18:00:00Z",
+		}, {
+			EventID:    "event-ref-goal-snapshot-store-002",
+			RunID:      "run-ref-goal-snapshot-store-001",
+			Sequence:   2,
+			OccurredAt: "2026-06-30T18:05:00Z",
+		}}},
+		RunStore: mcpObserveGoalRunStoreForTestV0{run: orquestacoreworkflow.OrchestrationRunV0{
+			RunID:        "run-ref-goal-snapshot-store-001",
+			Status:       orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+			CurrentPhase: orquestacoreworkflow.OrchestrationPhaseRevisionV0,
+		}},
+	}).ObserveAppDirectorGoalTimeoutSnapshotV0(
+		context.Background(),
+		MCPObserveAppDirectorGoalToolInputV0{
+			RequestID: "req-goal-snapshot-store-001",
+			RunRef:    "run-ref-goal-snapshot-store-001",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalTimeoutSnapshotV0: %v", err)
+	}
+	if !result.Partial ||
+		result.Estado != MCPObserveAppDirectorGoalEstadoOKV0 ||
+		result.DirectorExecutionMode != orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0 ||
+		result.GoalRef != "goal-ref-snapshot-store-001" ||
+		result.ExternalGoalRef != "thread-ref-snapshot-store-001" ||
+		result.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
+		result.RunStatus != string(orquestacoreworkflow.OrchestrationRunStatusActiveV0) ||
+		result.CurrentPhase != string(orquestacoreworkflow.OrchestrationPhaseRevisionV0) ||
+		result.LastEventAt != "2026-06-30T18:05:00Z" ||
+		result.ResultRef != "evidence-ref-goal-result-snapshot-001" ||
+		result.RecommendedAction != "observe_later" ||
+		!stringInSliceForMCPObserveGoalHTTPTestV0(result.ArtifactRefs, "artifact-ref-snapshot-001") ||
+		!stringInSliceForMCPObserveGoalHTTPTestV0(result.EvidenceRefs, "evidence-ref-snapshot-launch-001") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+type mcpObserveGoalEventReaderForTestV0 struct {
+	events []orquestacoreworkflow.OrchestrationEventV0
+}
+
+func (reader mcpObserveGoalEventReaderForTestV0) LoadRunEventsV0(
+	_ context.Context,
+	_ string,
+) ([]orquestacoreworkflow.OrchestrationEventV0, error) {
+	return reader.events, nil
+}
+
+type mcpObserveGoalRunStoreForTestV0 struct {
+	run orquestacoreworkflow.OrchestrationRunV0
+}
+
+func (store mcpObserveGoalRunStoreForTestV0) LoadRunV0(
+	_ context.Context,
+	_ string,
+) (orquestacoreworkflow.OrchestrationRunV0, error) {
+	return store.run, nil
+}
+
+func (store mcpObserveGoalRunStoreForTestV0) SaveRunV0(
+	_ context.Context,
+	_ orquestacoreworkflow.OrchestrationRunV0,
+) error {
+	return nil
+}
+
 type fakeMCPObserveAppDirectorGoalHTTPExecutorV0 struct {
 	input  MCPObserveAppDirectorGoalToolInputV0
 	called int
@@ -223,4 +387,37 @@ func (executor *blockingMCPObserveAppDirectorGoalHTTPExecutorV0) Execute(
 		Estado: MCPObserveAppDirectorGoalEstadoOKV0,
 		RunRef: input.RunRef,
 	}, nil
+}
+
+type blockingSnapshotMCPObserveAppDirectorGoalHTTPExecutorV0 struct {
+	done     chan struct{}
+	snapshot MCPObserveAppDirectorGoalToolResultV0
+}
+
+func (executor *blockingSnapshotMCPObserveAppDirectorGoalHTTPExecutorV0) Execute(
+	ctx context.Context,
+	input MCPObserveAppDirectorGoalToolInputV0,
+) (MCPObserveAppDirectorGoalToolResultV0, error) {
+	<-ctx.Done()
+	close(executor.done)
+	return MCPObserveAppDirectorGoalToolResultV0{
+		Estado: MCPObserveAppDirectorGoalEstadoOKV0,
+		RunRef: input.RunRef,
+	}, nil
+}
+
+func (executor *blockingSnapshotMCPObserveAppDirectorGoalHTTPExecutorV0) ObserveAppDirectorGoalTimeoutSnapshotV0(
+	_ context.Context,
+	_ MCPObserveAppDirectorGoalToolInputV0,
+) (MCPObserveAppDirectorGoalToolResultV0, error) {
+	return executor.snapshot, nil
+}
+
+func stringInSliceForMCPObserveGoalHTTPTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

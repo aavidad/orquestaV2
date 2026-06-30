@@ -13,7 +13,10 @@ const (
 	MCPObserveAppDirectorGoalHTTPTimeoutCodeV0 = "observe_app_director_goal_timeout"
 )
 
-const defaultMCPObserveAppDirectorGoalHTTPResponseTimeoutV0 = 2 * time.Second
+const (
+	defaultMCPObserveAppDirectorGoalHTTPResponseTimeoutV0 = 2 * time.Second
+	defaultMCPObserveAppDirectorGoalHTTPSnapshotTimeoutV0 = 75 * time.Millisecond
+)
 
 func NewMCPObserveAppDirectorGoalHTTPHandlerV0(
 	executor MCPTransportObserveAppDirectorGoalExecutorV0,
@@ -139,7 +142,35 @@ func (handler mcpObserveAppDirectorGoalHTTPHandlerV0) executeObserveAppDirectorG
 	case execution := <-done:
 		return execution.result, execution.err, false
 	case <-timer.C:
-		return newMCPObserveAppDirectorGoalHTTPTimeoutResultV0(r, input), nil, true
+		return handler.newMCPObserveAppDirectorGoalHTTPTimeoutResultV0(r, input), nil, true
+	}
+}
+
+func (handler mcpObserveAppDirectorGoalHTTPHandlerV0) newMCPObserveAppDirectorGoalHTTPTimeoutResultV0(
+	r *http.Request,
+	input MCPObserveAppDirectorGoalToolInputV0,
+) MCPObserveAppDirectorGoalToolResultV0 {
+	timeoutResult := newMCPObserveAppDirectorGoalHTTPTimeoutResultV0(r, input)
+	snapshotter, ok := handler.executor.(MCPTransportObserveAppDirectorGoalTimeoutSnapshotExecutorV0)
+	if !ok || snapshotter == nil {
+		return timeoutResult
+	}
+	snapshotCtx, cancel := context.WithTimeout(r.Context(), defaultMCPObserveAppDirectorGoalHTTPSnapshotTimeoutV0)
+	defer cancel()
+	done := make(chan mcpObserveAppDirectorGoalHTTPExecutionV0, 1)
+	go func() {
+		result, err := snapshotter.ObserveAppDirectorGoalTimeoutSnapshotV0(snapshotCtx, input)
+		done <- mcpObserveAppDirectorGoalHTTPExecutionV0{result: result, err: err}
+	}()
+	select {
+	case execution := <-done:
+		if execution.err != nil {
+			return timeoutResult
+		}
+		execution.result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), execution.result.CorrelationID, input.CorrelationID, input.RequestID)
+		return NewMCPObserveAppDirectorGoalTimeoutResultWithPartialV0(timeoutResult, execution.result)
+	case <-snapshotCtx.Done():
+		return timeoutResult
 	}
 }
 

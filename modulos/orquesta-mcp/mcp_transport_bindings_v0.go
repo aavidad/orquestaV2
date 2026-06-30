@@ -58,6 +58,10 @@ type MCPTransportObserveAppDirectorGoalExecutorV0 interface {
 	Execute(context.Context, MCPObserveAppDirectorGoalToolInputV0) (MCPObserveAppDirectorGoalToolResultV0, error)
 }
 
+type MCPTransportObserveAppDirectorGoalTimeoutSnapshotExecutorV0 interface {
+	ObserveAppDirectorGoalTimeoutSnapshotV0(context.Context, MCPObserveAppDirectorGoalToolInputV0) (MCPObserveAppDirectorGoalToolResultV0, error)
+}
+
 type MCPTransportRequestAppChangeExecutorV0 interface {
 	Execute(context.Context, MCPRequestAppChangeToolInputV0) (MCPRequestAppChangeToolResultV0, error)
 }

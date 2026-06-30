@@ -38,12 +38,18 @@ type MCPObserveAppDirectorGoalToolResultV0 struct {
 	Estado                string                 `json:"estado"`
 	RequestID             string                 `json:"request_id,omitempty"`
 	CorrelationID         string                 `json:"correlation_id,omitempty"`
+	Partial               bool                   `json:"partial,omitempty"`
 	RunRef                string                 `json:"run_ref,omitempty"`
 	RunStatus             string                 `json:"run_status,omitempty"`
 	DirectorExecutionMode string                 `json:"director_execution_mode,omitempty"`
 	GoalRef               string                 `json:"goal_ref,omitempty"`
 	ExternalGoalRef       string                 `json:"external_goal_ref,omitempty"`
 	GoalStatus            string                 `json:"goal_status,omitempty"`
+	ResultRef             string                 `json:"result_ref,omitempty"`
+	LastEventAt           string                 `json:"last_event_at,omitempty"`
+	CurrentPhase          string                 `json:"current_phase,omitempty"`
+	ProcessRefs           []string               `json:"process_refs,omitempty"`
+	RecommendedAction     string                 `json:"recommended_action,omitempty"`
 	ClosureStatus         string                 `json:"closure_status,omitempty"`
 	ClosureAccepted       bool                   `json:"closure_accepted,omitempty"`
 	ClosureNeedsRework    bool                   `json:"closure_needs_rework,omitempty"`
@@ -93,7 +99,8 @@ func NewMCPObserveAppDirectorGoalResultV0(
 	result orquestaappdirectorservice.ObserveAppDirectorGoalResultV0,
 ) MCPObserveAppDirectorGoalToolResultV0 {
 	goalResult := result.GoalResult
-	return MCPObserveAppDirectorGoalToolResultV0{
+	closureStatus := strings.TrimSpace(result.Closure.Status)
+	toolResult := MCPObserveAppDirectorGoalToolResultV0{
 		Estado:                MCPObserveAppDirectorGoalEstadoOKV0,
 		RequestID:             strings.TrimSpace(input.RequestID),
 		CorrelationID:         firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
@@ -103,7 +110,9 @@ func NewMCPObserveAppDirectorGoalResultV0(
 		GoalRef:               strings.TrimSpace(result.GoalRef),
 		ExternalGoalRef:       strings.TrimSpace(result.ExternalGoalRef),
 		GoalStatus:            strings.TrimSpace(result.Status),
-		ClosureStatus:         strings.TrimSpace(result.Closure.Status),
+		ResultRef:             mcpObserveAppDirectorGoalResultRefV0(goalResult),
+		CurrentPhase:          strings.TrimSpace(string(result.Run.CurrentPhase)),
+		ClosureStatus:         closureStatus,
 		ClosureAccepted:       result.Closure.Accepted,
 		ClosureNeedsRework:    result.Closure.NeedsRework,
 		Summary:               strings.TrimSpace(goalResult.Summary),
@@ -113,6 +122,116 @@ func NewMCPObserveAppDirectorGoalResultV0(
 		ClosureIssues:         goalWorkIssuesMCPV0(result.Closure.Issues),
 		Errores:               []MCPValidationIssueV0{},
 	}
+	toolResult.RecommendedAction = mcpObserveAppDirectorGoalRecommendedActionV0(toolResult)
+	return toolResult
+}
+
+func NewMCPObserveAppDirectorGoalPartialResultFromStateV0(
+	input MCPObserveAppDirectorGoalToolInputV0,
+	state orquestagoal.GoalWorkStateV0,
+) (MCPObserveAppDirectorGoalToolResultV0, error) {
+	normalized, err := orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		return MCPObserveAppDirectorGoalToolResultV0{}, err
+	}
+	toolResult := MCPObserveAppDirectorGoalToolResultV0{
+		Estado:                MCPObserveAppDirectorGoalEstadoOKV0,
+		RequestID:             strings.TrimSpace(input.RequestID),
+		CorrelationID:         firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
+		Partial:               true,
+		RunRef:                firstNonEmptyMCPV0(normalized.RunRef, input.RunRef),
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0,
+		GoalRef:               strings.TrimSpace(normalized.GoalRef),
+		ExternalGoalRef:       strings.TrimSpace(normalized.ExternalGoalRef),
+		GoalStatus:            strings.TrimSpace(normalized.Status),
+		EvidenceRefs:          compactStringsMCPV0(normalized.EvidenceRefs),
+		Errores:               []MCPValidationIssueV0{},
+	}
+	if normalized.LastResult != nil {
+		toolResult.ResultRef = mcpObserveAppDirectorGoalResultRefV0(*normalized.LastResult)
+		toolResult.Summary = strings.TrimSpace(normalized.LastResult.Summary)
+		toolResult.ArtifactRefs = compactStringsMCPV0(normalized.LastResult.ArtifactRefs)
+		toolResult.DomainReceiptRefs = compactStringsMCPV0(normalized.LastResult.DomainReceiptRefs)
+		toolResult.EvidenceRefs = compactStringsMCPV0(append(toolResult.EvidenceRefs, normalized.LastResult.EvidenceRefs...))
+	}
+	if normalized.LastClosure != nil {
+		toolResult.ClosureStatus = strings.TrimSpace(normalized.LastClosure.Status)
+		toolResult.ClosureAccepted = normalized.LastClosure.Accepted
+		toolResult.ClosureNeedsRework = normalized.LastClosure.NeedsRework
+		toolResult.ClosureIssues = goalWorkIssuesMCPV0(normalized.LastClosure.Issues)
+		toolResult.EvidenceRefs = compactStringsMCPV0(append(toolResult.EvidenceRefs, normalized.LastClosure.EvidenceRefs...))
+	}
+	toolResult.RecommendedAction = mcpObserveAppDirectorGoalRecommendedActionV0(toolResult)
+	return toolResult, nil
+}
+
+func mcpObserveAppDirectorGoalResultRefV0(result orquestagoal.GoalWorkResultV0) string {
+	for _, ref := range compactStringsMCPV0(result.EvidenceRefs) {
+		if strings.Contains(strings.ToLower(ref), "result") {
+			return ref
+		}
+	}
+	return ""
+}
+
+func mcpObserveAppDirectorGoalRecommendedActionV0(
+	result MCPObserveAppDirectorGoalToolResultV0,
+) string {
+	status := strings.TrimSpace(result.GoalStatus)
+	closureStatus := strings.TrimSpace(result.ClosureStatus)
+	switch {
+	case result.ClosureAccepted || closureStatus == orquestagoal.GoalStatusAcceptedV0:
+		return "no_action_closed"
+	case result.ClosureNeedsRework || closureStatus == orquestagoal.GoalStatusBlockedV0:
+		return "replan"
+	}
+	switch status {
+	case orquestagoal.GoalStatusRunningV0, orquestagoal.GoalStatusAcceptedV0:
+		return "observe_later"
+	case orquestagoal.GoalStatusCompleteV0:
+		return "observe_later"
+	case orquestagoal.GoalStatusBlockedV0, orquestagoal.GoalStatusInvalidV0:
+		return "blocked"
+	default:
+		return "observe_later"
+	}
+}
+
+func mergeMCPObserveAppDirectorGoalPartialIntoTimeoutV0(
+	timeout MCPObserveAppDirectorGoalToolResultV0,
+	partial MCPObserveAppDirectorGoalToolResultV0,
+) MCPObserveAppDirectorGoalToolResultV0 {
+	if partial.RunRef == "" && partial.GoalRef == "" && partial.GoalStatus == "" {
+		return timeout
+	}
+	timeout.Partial = true
+	timeout.RunRef = firstNonEmptyMCPV0(partial.RunRef, timeout.RunRef)
+	timeout.RunStatus = firstNonEmptyMCPV0(partial.RunStatus, timeout.RunStatus)
+	timeout.DirectorExecutionMode = firstNonEmptyMCPV0(partial.DirectorExecutionMode, timeout.DirectorExecutionMode)
+	timeout.GoalRef = firstNonEmptyMCPV0(partial.GoalRef, timeout.GoalRef)
+	timeout.ExternalGoalRef = firstNonEmptyMCPV0(partial.ExternalGoalRef, timeout.ExternalGoalRef)
+	timeout.GoalStatus = firstNonEmptyMCPV0(partial.GoalStatus, timeout.GoalStatus)
+	timeout.ResultRef = firstNonEmptyMCPV0(partial.ResultRef, timeout.ResultRef)
+	timeout.LastEventAt = firstNonEmptyMCPV0(partial.LastEventAt, timeout.LastEventAt)
+	timeout.CurrentPhase = firstNonEmptyMCPV0(partial.CurrentPhase, timeout.CurrentPhase)
+	timeout.ProcessRefs = compactStringsMCPV0(append(timeout.ProcessRefs, partial.ProcessRefs...))
+	timeout.RecommendedAction = firstNonEmptyMCPV0(partial.RecommendedAction, timeout.RecommendedAction)
+	timeout.ClosureStatus = firstNonEmptyMCPV0(partial.ClosureStatus, timeout.ClosureStatus)
+	timeout.ClosureAccepted = timeout.ClosureAccepted || partial.ClosureAccepted
+	timeout.ClosureNeedsRework = timeout.ClosureNeedsRework || partial.ClosureNeedsRework
+	timeout.Summary = firstNonEmptyMCPV0(partial.Summary, timeout.Summary)
+	timeout.ArtifactRefs = compactStringsMCPV0(append(timeout.ArtifactRefs, partial.ArtifactRefs...))
+	timeout.DomainReceiptRefs = compactStringsMCPV0(append(timeout.DomainReceiptRefs, partial.DomainReceiptRefs...))
+	timeout.EvidenceRefs = compactStringsMCPV0(append(timeout.EvidenceRefs, partial.EvidenceRefs...))
+	timeout.ClosureIssues = append(timeout.ClosureIssues, partial.ClosureIssues...)
+	return timeout
+}
+
+func NewMCPObserveAppDirectorGoalTimeoutResultWithPartialV0(
+	timeout MCPObserveAppDirectorGoalToolResultV0,
+	partial MCPObserveAppDirectorGoalToolResultV0,
+) MCPObserveAppDirectorGoalToolResultV0 {
+	return mergeMCPObserveAppDirectorGoalPartialIntoTimeoutV0(timeout, partial)
 }
 
 func NewMCPObserveAppDirectorGoalErrorResultV0(

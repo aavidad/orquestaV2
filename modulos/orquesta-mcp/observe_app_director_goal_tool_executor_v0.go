@@ -42,3 +42,39 @@ func (executor MCPObserveAppDirectorGoalToolExecutorV0) Execute(
 	}
 	return NewMCPObserveAppDirectorGoalResultV0(input, result), nil
 }
+
+func (executor MCPObserveAppDirectorGoalToolExecutorV0) ObserveAppDirectorGoalTimeoutSnapshotV0(
+	ctx context.Context,
+	input MCPObserveAppDirectorGoalToolInputV0,
+) (MCPObserveAppDirectorGoalToolResultV0, error) {
+	if strings.TrimSpace(input.RunRef) == "" {
+		return MCPObserveAppDirectorGoalToolResultV0{}, orquestaappdirectorservice.AppDirectorServiceIssueV0{Field: "run_ref"}
+	}
+	if executor.Ports.GoalStateStore == nil {
+		return MCPObserveAppDirectorGoalToolResultV0{}, orquestaappdirectorservice.AppDirectorServiceIssueV0{Field: "ports.goal_state_store"}
+	}
+	state, err := executor.Ports.GoalStateStore.LoadGoalWorkStateV0(ctx, strings.TrimSpace(input.RunRef))
+	if err != nil {
+		return MCPObserveAppDirectorGoalToolResultV0{}, err
+	}
+	result, err := NewMCPObserveAppDirectorGoalPartialResultFromStateV0(input, state)
+	if err != nil {
+		return MCPObserveAppDirectorGoalToolResultV0{}, err
+	}
+	if executor.Ports.RunStore != nil {
+		if run, loadErr := executor.Ports.RunStore.LoadRunV0(ctx, strings.TrimSpace(input.RunRef)); loadErr == nil {
+			result.RunStatus = strings.TrimSpace(string(run.Status))
+			result.CurrentPhase = strings.TrimSpace(string(run.CurrentPhase))
+		}
+	}
+	if executor.Ports.EventReader != nil {
+		if events, loadErr := executor.Ports.EventReader.LoadRunEventsV0(ctx, strings.TrimSpace(input.RunRef)); loadErr == nil {
+			for _, event := range events {
+				if occurredAt := strings.TrimSpace(event.OccurredAt); occurredAt != "" {
+					result.LastEventAt = occurredAt
+				}
+			}
+		}
+	}
+	return result, nil
+}
