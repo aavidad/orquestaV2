@@ -16,6 +16,8 @@ import (
 const (
 	serverCodeContextToolOwnerMarkerSchemaVersionV0 = "server_code_context_tool_owner_marker.v0"
 	serverCodeContextToolOwnerMarkerDirV0           = "code-context-tool-owners"
+	defaultCodeContextToolOwnerTermGraceV0          = 2 * time.Second
+	defaultCodeContextToolOwnerKillGraceV0          = time.Second
 )
 
 type serverCodeContextToolOwnerMarkerV0 struct {
@@ -106,7 +108,7 @@ func (observer serverFileCodeContextToolOwnerObserverV0) ObserveCodeContextToolO
 		return orquestacontext.CodeContextToolLeaseObservationV0{}, err
 	}
 	evidence := append([]string{}, marker.EvidenceRefs...)
-	if marker.PID > 0 && !serverProcessAliveByPIDV0(marker.PID) {
+	if marker.PID > 0 && !processAliveV0(marker.PID) {
 		evidence = append(evidence, "evidence-ref-code-context-owner-process-not-alive")
 	}
 	if marker.LastHeartbeatAt != "" {
@@ -127,6 +129,9 @@ func (observer serverFileCodeContextToolOwnerObserverV0) ObserveCodeContextToolO
 type serverFileCodeContextToolOwnerStopperV0 struct {
 	Registry serverFileCodeContextToolOwnerRegistryV0
 	Signal   func(int, syscall.Signal) error
+	Alive    func(int) bool
+	TermWait time.Duration
+	KillWait time.Duration
 }
 
 func (stopper serverFileCodeContextToolOwnerStopperV0) StopCodeContextToolOwnerV0(
@@ -149,17 +154,40 @@ func (stopper serverFileCodeContextToolOwnerStopperV0) StopCodeContextToolOwnerV
 	if marker.PID <= 0 {
 		return []string{"evidence-ref-code-context-owner-no-pid"}, nil
 	}
-	if !serverProcessAliveByPIDV0(marker.PID) {
+	alive := stopper.Alive
+	if alive == nil {
+		alive = processAliveV0
+	}
+	if !alive(marker.PID) {
 		return []string{"evidence-ref-code-context-owner-already-stopped"}, nil
 	}
 	signal := stopper.Signal
 	if signal == nil {
-		signal = serverSignalProcessV0
+		signal = serverSignalCodeContextToolOwnerV0
 	}
 	if err := signal(marker.PID, syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
 		return nil, err
 	}
-	return []string{"evidence-ref-code-context-owner-stop-signal-sent"}, nil
+	evidence := []string{"evidence-ref-code-context-owner-stop-signal-sent"}
+	termWait := stopper.TermWait
+	if termWait <= 0 {
+		termWait = defaultCodeContextToolOwnerTermGraceV0
+	}
+	if waitServerCodeContextToolOwnerDownV0(ctx, marker.PID, termWait, alive) {
+		return append(evidence, "evidence-ref-code-context-owner-stopped-after-term"), nil
+	}
+	if err := signal(marker.PID, syscall.SIGKILL); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		return evidence, err
+	}
+	evidence = append(evidence, "evidence-ref-code-context-owner-kill-signal-sent")
+	killWait := stopper.KillWait
+	if killWait <= 0 {
+		killWait = defaultCodeContextToolOwnerKillGraceV0
+	}
+	if !waitServerCodeContextToolOwnerDownV0(ctx, marker.PID, killWait, alive) {
+		return evidence, errors.New("code_context_owner_stop_timeout")
+	}
+	return append(evidence, "evidence-ref-code-context-owner-stopped-after-kill"), nil
 }
 
 func normalizeServerCodeContextToolOwnerMarkerV0(
@@ -230,14 +258,47 @@ func serverSignalProcessV0(pid int, signal syscall.Signal) error {
 	return process.Signal(signal)
 }
 
-func serverProcessAliveByPIDV0(pid int) bool {
-	if pid <= 0 {
-		return false
+func serverSignalCodeContextToolOwnerV0(pid int, signal syscall.Signal) error {
+	if signal == syscall.SIGTERM {
+		return signalProcessGroupV0(pid)
 	}
-	if err := syscall.Kill(pid, 0); err != nil {
-		return false
+	if signal == syscall.SIGKILL {
+		return signalProcessGroupKillV0(pid)
 	}
-	return true
+	return serverSignalProcessV0(pid, signal)
+}
+
+func waitServerCodeContextToolOwnerDownV0(
+	ctx context.Context,
+	pid int,
+	timeout time.Duration,
+	alive func(int) bool,
+) bool {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if alive == nil {
+		alive = processAliveV0
+	}
+	if pid <= 0 || !alive(pid) {
+		return true
+	}
+	if timeout <= 0 {
+		timeout = 100 * time.Millisecond
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		if !alive(pid) {
+			return true
+		}
+		if err := ctx.Err(); err != nil {
+			return false
+		}
+		if !time.Now().Before(deadline) {
+			return !alive(pid)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func nonNegativeEnvlessIntV0(value int) int {

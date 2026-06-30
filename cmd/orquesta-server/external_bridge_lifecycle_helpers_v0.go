@@ -28,6 +28,8 @@ func externalBridgeResultCountersV0(result any) map[string]int {
 			"errors":                len(value.Errors),
 			"completed_nonterminal": value.CompletedNonTerminal,
 		}
+	case serverCodeContextToolWatchdogResultV0:
+		return serverCodeContextToolWatchdogResultCountersV0(value)
 	default:
 		return nil
 	}
@@ -41,6 +43,8 @@ func externalBridgeResultEvidenceRefsV0(result any) []string {
 			refs = append(refs, drift.RunRef)
 		}
 		return compactExternalBridgeStringsV0(refs)
+	case serverCodeContextToolWatchdogResultV0:
+		return serverCodeContextToolWatchdogResultEvidenceRefsV0(value)
 	default:
 		return nil
 	}

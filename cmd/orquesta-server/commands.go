@@ -82,12 +82,20 @@ func runServerCommandV0(_ io.Writer, stderr io.Writer) int {
 	} else {
 		registryFinalPkgConfig.Loop.Observer = externalBridgeRuntimeObserverV0(runtime)
 	}
+	codeContextWatchdogConfig, err := serverCodeContextToolWatchdogLoopConfigFromEnvV0()
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "orquesta-server code-context-watchdog blocked: %v\n", err)
+	} else {
+		codeContextWatchdogConfig.Loop.Observer = externalBridgeRuntimeObserverV0(runtime)
+	}
 	bridgeDone := runOPESBridgeLoopAsyncV0(ctx, bridgeConfig, stderr, runOPESDrainOnceV0)
 	registryFinalPkgDone := runOPESRegistryFinalPkgLoopAsyncV0(ctx, registryFinalPkgConfig, stderr, runOPESRegistryFinalPkgOnceV0)
+	codeContextWatchdogDone := runServerCodeContextToolWatchdogLoopAsyncV0(ctx, codeContextWatchdogConfig, stderr)
 	runErr := runtime.RunWithShutdownCauseV0(ctx, signalController.shutdownCauseV0)
 	signalController.stopNotificationsV0()
 	bridgeOK := waitOPESBridgeLoopDoneV0(context.Background(), bridgeConfig, bridgeDone)
 	registryFinalPkgOK := waitOPESRegistryFinalPkgLoopDoneV0(context.Background(), registryFinalPkgConfig, registryFinalPkgDone)
+	codeContextWatchdogOK := waitServerCodeContextToolWatchdogLoopDoneV0(context.Background(), codeContextWatchdogConfig, codeContextWatchdogDone)
 	if runErr != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server: %v\n", runErr)
 		return 1
@@ -98,6 +106,10 @@ func runServerCommandV0(_ io.Writer, stderr io.Writer) int {
 	}
 	if !registryFinalPkgOK {
 		_, _ = fmt.Fprintln(stderr, "orquesta-server opes-registry-finalpkg: shutdown_timeout")
+		return 1
+	}
+	if !codeContextWatchdogOK {
+		_, _ = fmt.Fprintln(stderr, "orquesta-server code-context-watchdog: shutdown_timeout")
 		return 1
 	}
 	return 0

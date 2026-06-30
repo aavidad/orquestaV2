@@ -279,6 +279,7 @@ type serverCodeContextToolWatchdogV0 struct {
 type serverCodeContextToolWatchdogResultV0 struct {
 	Observed int
 	Stopped  int
+	Errors   int
 	Evidence []string
 }
 
@@ -305,7 +306,23 @@ func (watchdog serverCodeContextToolWatchdogV0) RunOnceV0(ctx context.Context) (
 		if watchdog.Observer != nil {
 			observed, observeErr := watchdog.Observer.ObserveCodeContextToolOwnerV0(ctx, lease, now)
 			if observeErr != nil {
-				return result, observeErr
+				if err := ctx.Err(); err != nil {
+					return result, err
+				}
+				evidence := []string{"evidence-ref-code-context-owner-marker-unavailable"}
+				if err := watchdog.Finisher.FinishCodeContextToolLeaseV0(ctx, orquestacontext.CodeContextToolLeaseCompletionV0{
+					LeaseRef:     lease.LeaseRef,
+					ToolRef:      lease.ToolRef,
+					CompletedAt:  now.Format(time.RFC3339),
+					Status:       orquestacontext.CodeContextToolLeaseCompletionStoppedV0,
+					EvidenceRefs: evidence,
+				}); err != nil {
+					return result, err
+				}
+				result.Errors++
+				result.Stopped++
+				result.Evidence = append(result.Evidence, evidence...)
+				continue
 			}
 			if observed.Lease.LeaseRef != "" {
 				observation = observed
@@ -317,7 +334,12 @@ func (watchdog serverCodeContextToolWatchdogV0) RunOnceV0(ctx context.Context) (
 		}
 		evidence, stopErr := watchdog.Stopper.StopCodeContextToolOwnerV0(ctx, lease.OwnerRef)
 		if stopErr != nil {
-			return result, stopErr
+			if err := ctx.Err(); err != nil {
+				return result, err
+			}
+			result.Errors++
+			result.Evidence = append(result.Evidence, "evidence-ref-code-context-owner-stop-error-"+compactExternalBridgeErrorCodeV0(stopErr))
+			continue
 		}
 		if err := watchdog.Finisher.FinishCodeContextToolLeaseV0(ctx, orquestacontext.CodeContextToolLeaseCompletionV0{
 			LeaseRef:     lease.LeaseRef,
