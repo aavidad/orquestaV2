@@ -188,10 +188,12 @@ func TestNuevaAppIntakeGuidedHTTPHandlerV0FallbackSiAsistenteFallaV0(t *testing.
 		out.AssistantStatus != WebNuevaAppIntakeAssistantStatusFallbackLocalV0 ||
 		len(out.Warnings) != 1 ||
 		out.Warnings[0].Code != WebNuevaAppIntakeWarningAssistantFallbackLocalV0 ||
-		out.Warnings[0].Status != WebNuevaAppIntakeAssistantStatusFallbackLocalV0 {
+		out.Warnings[0].Status != WebNuevaAppIntakeAssistantStatusFallbackLocalV0 ||
+		out.Warnings[0].Message != "El asistente guiado no esta disponible; se ha aplicado el asistente local." {
 		t.Fatalf("fallback local no aplicado: %+v", out)
 	}
-	if strings.Contains(rec.Body.String(), "assistant unavailable") {
+	if strings.Contains(rec.Body.String(), "assistant unavailable") ||
+		strings.Contains(rec.Body.String(), "local guided intake fallback applied") {
 		t.Fatalf("fallback filtra error interno: %s", rec.Body.String())
 	}
 }

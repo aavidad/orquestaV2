@@ -379,6 +379,7 @@ func nuevaAppI18nSpanishV0() map[string]string {
 		"nueva_app.error.error_transporte":                     "No se pudo completar la comunicacion.",
 		"nueva_app.error.respuesta_invalida":                   "La respuesta recibida no cumple el contrato.",
 		"nueva_app.error.transporte_no_configurado":            "El conector de solicitud no esta configurado.",
+		"nueva_app.intake.warning.assistant_fallback_local":    "El asistente guiado no esta disponible; se ha aplicado el asistente local.",
 		nuevaAppErrKeyGoalBackendUnavailableV0:                 "Codex Goal no esta disponible en esta composicion. No se ha reactivado el loop legacy; configura el backend Goal o fuerza compatibilidad historica de forma explicita.",
 		nuevaAppErrKeyRunRefRequiredV0:                         "El Director respondio sin run_ref; el Goal no se puede observar. No se ha reactivado el loop legacy.",
 		nuevaAppErrKeyCodexAppServerUnavailableV0:              "Codex Goal no arranco. El backend app-server esta degradado. Revisa el daemon de Codex y reinicia orquesta-server.",

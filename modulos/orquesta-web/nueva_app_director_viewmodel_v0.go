@@ -68,7 +68,7 @@ func NewWebNuevaAppDirectorErrorViewModelV0(
 		Estado:              WebNuevaAppEstadoInvalida,
 		ResumenApp:          resumenFromAppSpecRequestV0(request),
 		BacklogPreview:      emptyBacklogPreviewV0(),
-		ErroresPublicos:     compactNuevaAppIssuesV0(result.Errores),
+		ErroresPublicos:     compactNuevaAppIssuesV0(result.Errores, request.Locale),
 		PreguntasAbiertas:   []string{},
 		Fases:               []WebNuevaAppFaseV0{},
 		Microtareas:         []WebNuevaAppMicrotareaV0{},
@@ -120,7 +120,7 @@ func NewWebNuevaAppGoalPreviewErrorViewModelV0(
 		Estado:              WebNuevaAppEstadoInvalida,
 		ResumenApp:          resumenFromAppSpecRequestV0(request),
 		BacklogPreview:      emptyBacklogPreviewV0(),
-		ErroresPublicos:     compactNuevaAppIssuesV0(append(result.Errores, goalIssuesToNuevaAppIssuesV0(result.GoalSpecIssues)...)),
+		ErroresPublicos:     compactNuevaAppIssuesV0(append(result.Errores, goalIssuesToNuevaAppIssuesV0(result.GoalSpecIssues)...), request.Locale),
 		PreguntasAbiertas:   []string{},
 		Fases:               []WebNuevaAppFaseV0{},
 		Microtareas:         []WebNuevaAppMicrotareaV0{},
@@ -191,21 +191,17 @@ func normalizeDirectorTaskV0(value WebNuevaAppDirectorTaskV0) WebNuevaAppDirecto
 	}
 }
 
-func compactNuevaAppIssuesV0(values []WebNuevaAppIssueV0) []WebNuevaAppIssueV0 {
+func compactNuevaAppIssuesV0(values []WebNuevaAppIssueV0, locale string) []WebNuevaAppIssueV0 {
 	out := make([]WebNuevaAppIssueV0, 0, len(values))
 	for _, value := range values {
 		code := trimV0(value.Code)
 		if code == "" {
 			continue
 		}
-		message := trimV0(value.Message)
-		if message == "" {
-			message = code
-		}
 		out = append(out, WebNuevaAppIssueV0{
 			Code:    code,
 			Field:   trimV0(value.Field),
-			Message: message,
+			Message: nuevaAppPublicIssueMessageV0(locale, code, value.Message),
 		})
 	}
 	if out == nil {

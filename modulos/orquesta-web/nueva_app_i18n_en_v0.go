@@ -379,6 +379,7 @@ func nuevaAppI18nEnglishV0() map[string]string {
 		"nueva_app.error.error_transporte":                     "The communication could not be completed.",
 		"nueva_app.error.respuesta_invalida":                   "The received response does not match the contract.",
 		"nueva_app.error.transporte_no_configurado":            "The request connector is not configured.",
+		"nueva_app.intake.warning.assistant_fallback_local":    "The guided assistant is unavailable; the local assistant was applied.",
 		nuevaAppErrKeyGoalBackendUnavailableV0:                 "Codex Goal is not available in this composition. The legacy loop was not reactivated; configure the Goal backend or force historical compatibility explicitly.",
 		nuevaAppErrKeyRunRefRequiredV0:                         "The Director responded without run_ref, so the Goal cannot be observed. The legacy loop was not reactivated.",
 		nuevaAppErrKeyCodexAppServerUnavailableV0:              "Codex Goal did not start. The app-server backend is degraded. Check the Codex daemon and restart orquesta-server.",

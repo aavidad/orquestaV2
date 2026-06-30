@@ -192,6 +192,10 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`id="wizard-final-summary"`,
 		`.wizard-ready .hidden-final`,
 		`Vista previa del backlog`,
+		`Dato 5`,
+		`Dato 6`,
+		`Almacenamiento 5`,
+		`Almacenamiento 6`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("GET HTML no contiene %q\n%s", want, body)

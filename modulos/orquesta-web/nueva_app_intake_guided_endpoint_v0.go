@@ -122,7 +122,7 @@ func (handler NuevaAppIntakeGuidedHTTPHandlerV0) NewResponseV0(
 			assistantStatus = WebNuevaAppIntakeAssistantStatusOKV0
 		} else {
 			assistantStatus = WebNuevaAppIntakeAssistantStatusFallbackLocalV0
-			warnings = append(warnings, webNuevaAppIntakeAssistantUnavailableWarningV0())
+			warnings = append(warnings, webNuevaAppIntakeAssistantUnavailableWarningV0(request.Locale))
 		}
 	}
 	if need := strings.TrimSpace(request.Need); need != "" && len(turn.Decisions) == 0 {
@@ -144,12 +144,12 @@ func (handler NuevaAppIntakeGuidedHTTPHandlerV0) NewResponseV0(
 	}
 }
 
-func webNuevaAppIntakeAssistantUnavailableWarningV0() WebNuevaAppIntakeWarningV0 {
+func webNuevaAppIntakeAssistantUnavailableWarningV0(locale string) WebNuevaAppIntakeWarningV0 {
 	return WebNuevaAppIntakeWarningV0{
 		Code:    WebNuevaAppIntakeWarningAssistantFallbackLocalV0,
 		Scope:   "nueva_app_intake_assistant",
 		Status:  WebNuevaAppIntakeAssistantStatusFallbackLocalV0,
-		Message: "local guided intake fallback applied",
+		Message: nuevaAppWebLookupV0(NewNuevaAppI18nCatalogV0(), locale, "nueva_app.intake.warning.assistant_fallback_local"),
 	}
 }
 

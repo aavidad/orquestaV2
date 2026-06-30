@@ -250,6 +250,7 @@ var nuevaAppI18nRequiredKeysV0 = []string{
 	"nueva_app.error.error_transporte",
 	"nueva_app.error.respuesta_invalida",
 	"nueva_app.error.transporte_no_configurado",
+	"nueva_app.intake.warning.assistant_fallback_local",
 	nuevaAppErrKeyGoalBackendUnavailableV0,
 	nuevaAppErrKeyRunRefRequiredV0,
 	nuevaAppErrKeyCodexAppServerUnavailableV0,
