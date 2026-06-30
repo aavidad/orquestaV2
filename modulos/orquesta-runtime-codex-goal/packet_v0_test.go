@@ -31,6 +31,7 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"Evidencia requerida: evidence-ref-required",
 		CodexGoalResultMarkerV0,
 		CodexGoalResultFileNameV0,
+		"Materializa primero el directorio del write-set",
 		"goal_ref",
 		"usa literalmente los test_ref",
 		"usa literalmente los artifact_ref",

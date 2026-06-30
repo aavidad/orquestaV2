@@ -140,7 +140,7 @@ Configuracion externa relacionada:
   arranca backend si no esta configurado y no mete Codex en el modulo servidor.
   `app_server_proxy` queda solo como diagnostico breakglass explicito y no es
   camino goal-first normal.
-  En observaciones terminales lee `thread/read` y fusiona el marcador
+  En observaciones activas o terminales lee `thread/read` y fusiona el marcador
   `ORQUESTA_GOAL_RESULT_V0` o el archivo durable
   `orquesta_goal_result_v0.json` como refs opacas de artefactos, tests,
   receipts y evidencias; el cierre aceptado sigue dependiendo del validador

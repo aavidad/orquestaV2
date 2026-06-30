@@ -323,6 +323,7 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 		b.WriteString(" incluyendo \"goal_ref\":\"")
 		b.WriteString(spec.GoalRef)
 		b.WriteString("\" para que Orquesta pueda cerrar aunque no haya respuesta final textual.\n")
+		b.WriteString("- Materializa primero el directorio del write-set y este archivo durable de resultado; si luego corriges artefactos o tests, actualiza el JSON antes de cerrar.\n")
 	}
 	b.WriteString("- Incluye en evidence_refs las evidencias requeridas solo si han sido verificadas; no inventes refs para forzar el cierre.\n")
 	b.WriteString("- Incluye en artifact_refs solo artefactos producidos o verificados que cumplan el contrato.\n")

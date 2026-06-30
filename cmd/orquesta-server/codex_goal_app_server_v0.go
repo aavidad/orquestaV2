@@ -260,6 +260,9 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 	if strings.TrimSpace(goal.ThreadID) != "" {
 		receipt.ExternalGoalRef = strings.TrimSpace(goal.ThreadID)
 	}
+	if activeResult, found := backend.observeCodexAppServerActiveGoalResultV0(ctx, request, receipt); found {
+		return activeResult, nil
+	}
 	if timedOut, timeoutReceipt := backend.codexAppServerActiveGoalTimeoutV0(request, goal, status, receipt); timedOut {
 		return timeoutReceipt, nil
 	}

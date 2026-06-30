@@ -543,7 +543,7 @@ func TestServerCodexAppServerGoalBackendV0ObservaResultadoDurableSinMarcadorV0(t
 	}
 }
 
-func TestServerCodexAppServerGoalBackendV0NoPromueveResultadoDurableMientrasGoalSigueActivoV0(t *testing.T) {
+func TestServerCodexAppServerGoalBackendV0PromueveResultadoDurableAunqueGoalSigaActivoV0(t *testing.T) {
 	projectDir := t.TempDir()
 	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")
 	if err := os.MkdirAll(resultDir, 0o755); err != nil {
@@ -578,15 +578,17 @@ func TestServerCodexAppServerGoalBackendV0NoPromueveResultadoDurableMientrasGoal
 	if err != nil {
 		t.Fatalf("ObserveCodexGoalV0: %v", err)
 	}
-	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
-		receipt.Summary != "codex_app_server_goal_status_active" ||
-		len(receipt.ArtifactRefs) != 0 ||
-		len(receipt.DomainReceiptRefs) != 0 ||
-		containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-file") ||
-		len(receipt.RequiredTestResults) != 0 {
+	if receipt.Status != orquestagoal.GoalStatusCompleteV0 ||
+		receipt.Summary != "resultado durable antes de cierre backend" ||
+		!containsStringForTestV0(receipt.ArtifactRefs, "artifact-ref-goal-active") ||
+		!containsStringForTestV0(receipt.DomainReceiptRefs, "domain-receipt-ref-active") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-file") ||
+		len(receipt.RequiredTestResults) != 1 ||
+		receipt.RequiredTestResults[0].TestRef != "test-ref-goal-active" ||
+		receipt.RequiredTestResults[0].Status != "passed" {
 		t.Fatalf("receipt=%+v", receipt)
 	}
-	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get"}) {
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get", "thread/read"}) {
 		t.Fatalf("calls=%v", protocol.calls)
 	}
 }
@@ -668,7 +670,7 @@ func TestServerCodexAppServerGoalBackendV0BloqueaGoalActivoPorTimeoutV0(t *testi
 		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-active-timeout") {
 		t.Fatalf("receipt=%+v", receipt)
 	}
-	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get"}) {
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get", "thread/read"}) {
 		t.Fatalf("calls=%v", protocol.calls)
 	}
 }

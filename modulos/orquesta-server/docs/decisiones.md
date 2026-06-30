@@ -226,7 +226,7 @@ acotado que lo demuestre.
 solo como compatibilidad diagnostica explicita con daemon/socket compatible, no
 como ruta de self-programming ni goal-first normal. Ese codigo queda en
 composition root: arranca threads, configura goals, inicia turns, observa
-`thread/goal/get` y lee `thread/read` para extraer
+`thread/goal/get` y lee `thread/read` incluso mientras el goal sigue activo para extraer
 `ORQUESTA_GOAL_RESULT_V0` o usa el archivo durable
 `orquesta_goal_result_v0.json` con `goal_ref` coincidente. El modulo servidor y
 el nucleo neutral siguen viendo solo puertos y refs opacas; un `complete` de

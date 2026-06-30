@@ -72,6 +72,51 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerTerminalGo
 	return receipt, nil
 }
 
+func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoalResultV0(
+	ctx context.Context,
+	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
+	receipt orquestaruntimecodexgoal.CodexGoalObservationReceiptV0,
+) (orquestaruntimecodexgoal.CodexGoalObservationReceiptV0, bool) {
+	if strings.TrimSpace(receipt.Status) != "running" {
+		return receipt, false
+	}
+	observed := receipt
+	if threadID := strings.TrimSpace(observed.ExternalGoalRef); threadID != "" && backend.Protocol != nil {
+		if thread, err := backend.Protocol.ReadThreadV0(ctx, threadID, true); err == nil {
+			marked, found, markerErr := codexAppServerGoalResultFromThreadV0(thread)
+			if markerErr == nil &&
+				found &&
+				!codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, request.GoalRef) &&
+				!codexAppServerGoalResultMarkerExternalGoalRefMismatchV0(marked, request.ExternalGoalRef) {
+				observed.Status = "complete"
+				observed.Summary = "codex_app_server_goal_result_marker"
+				mergeCodexAppServerGoalResultV0(
+					&observed,
+					marked,
+					"evidence-ref-codex-app-server-goal-result-marker",
+				)
+				return observed, true
+			}
+		}
+	}
+	fileMarked, fileFound, fileErr := codexAppServerGoalResultFromWorkspaceV0(
+		backend.CWD,
+		request.GoalRef,
+		request.ExternalGoalRef,
+	)
+	if fileErr == nil && fileFound {
+		observed.Status = "complete"
+		observed.Summary = "codex_app_server_goal_result_file"
+		mergeCodexAppServerGoalResultV0(
+			&observed,
+			fileMarked,
+			"evidence-ref-codex-app-server-goal-result-file",
+		)
+		return observed, true
+	}
+	return receipt, false
+}
+
 func codexAppServerGoalResultFromWorkspaceV0(
 	root string,
 	goalRef string,
