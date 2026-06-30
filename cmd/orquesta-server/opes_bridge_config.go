@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -10,7 +13,15 @@ import (
 	orquestaopesbridge "orquesta/modulos/orquesta-opes-bridge"
 )
 
-const defaultOPESBridgeResidentDispatchIntervalV0 = 500 * time.Millisecond
+const (
+	defaultOPESBridgeResidentDispatchIntervalV0            = 500 * time.Millisecond
+	defaultOPESBridgeSpeechSynthesisToolPreflightTimeoutV0 = 5 * time.Second
+	opesBridgeSpeechSynthesisToolPreflightEvidenceRefV0    = "evidence-ref-opes-audio-tool-preflight-ok"
+	opesBridgeSpeechSynthesisToolMissingReasonV0           = "opes_audio_tool_missing"
+	opesBridgeSpeechSynthesisToolPreflightTimeoutReasonV0  = "opes_audio_tool_preflight_timeout"
+	opesBridgeSpeechSynthesisDefaultToolScriptRelV0        = "scripts/opes_audio_app.py"
+	opesBridgeSpeechSynthesisDefaultToolPreflightCommandV0 = "python3 scripts/opes_audio_app.py --help"
+)
 
 type opesDrainConfigV0 struct {
 	OPESBaseURL                  string
@@ -188,6 +199,7 @@ func opesBridgeExternalCapabilitiesFromEnvV0() []orquestadomainwork.DomainWorkEx
 			"provider_quota_ready",
 		)
 		capability.CommandTimeoutSeconds = 1800
+		capability = opesBridgeSpeechSynthesisToolPreflightFromEnvV0(capability)
 		out = append(out, orquestadomainwork.NormalizeDomainWorkExternalCapabilityV0(capability))
 	}
 	if capability, ok := opesBridgeExternalCapabilityFromEnvV0(
@@ -225,6 +237,118 @@ func opesBridgeExternalCapabilitiesFromEnvV0() []orquestadomainwork.DomainWorkEx
 		return []orquestadomainwork.DomainWorkExternalCapabilityV0{}
 	}
 	return out
+}
+
+func opesBridgeSpeechSynthesisToolPreflightFromEnvV0(
+	capability orquestadomainwork.DomainWorkExternalCapabilityV0,
+) orquestadomainwork.DomainWorkExternalCapabilityV0 {
+	workdir := strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisToolWorkDirV0))
+	commandRaw := strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisToolCommandV0))
+	if workdir == "" && commandRaw == "" {
+		return capability
+	}
+	if !capability.Available {
+		return capability
+	}
+	if !capability.ToolPathReady &&
+		strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisToolPathReadyV0)) != "" {
+		return capability
+	}
+	args := opesBridgeSpeechSynthesisToolPreflightCommandV0(commandRaw)
+	resolvedWorkdir, err := opesBridgeSpeechSynthesisToolPreflightWorkdirV0(workdir)
+	if err != nil {
+		return opesBridgeSpeechSynthesisToolPreflightFailedV0(capability, opesBridgeSpeechSynthesisToolMissingReasonV0)
+	}
+	if opesBridgeSpeechSynthesisToolPreflightChecksDefaultScriptV0(commandRaw, args) {
+		scriptPath := filepath.Join(resolvedWorkdir, opesBridgeSpeechSynthesisDefaultToolScriptRelV0)
+		if stat, err := os.Stat(scriptPath); err != nil || stat.IsDir() {
+			return opesBridgeSpeechSynthesisToolPreflightFailedV0(capability, opesBridgeSpeechSynthesisToolMissingReasonV0)
+		}
+	}
+	timeout := time.Duration(
+		intEnvOrDefaultV0(
+			envOPESBridgeSpeechSynthesisToolPreflightTimeoutSecondsV0,
+			int(defaultOPESBridgeSpeechSynthesisToolPreflightTimeoutV0/time.Second),
+		),
+	) * time.Second
+	if timeout <= 0 {
+		timeout = defaultOPESBridgeSpeechSynthesisToolPreflightTimeoutV0
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := opesBridgeRunSpeechSynthesisToolPreflightV0(ctx, resolvedWorkdir, args); err != nil {
+		reason := opesBridgeSpeechSynthesisToolMissingReasonV0
+		if ctx.Err() == context.DeadlineExceeded {
+			reason = opesBridgeSpeechSynthesisToolPreflightTimeoutReasonV0
+		}
+		return opesBridgeSpeechSynthesisToolPreflightFailedV0(capability, reason)
+	}
+	capability.ToolPathReady = true
+	capability.EvidenceRefs = append(capability.EvidenceRefs, opesBridgeSpeechSynthesisToolPreflightEvidenceRefV0)
+	return capability
+}
+
+func opesBridgeSpeechSynthesisToolPreflightCommandV0(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		raw = opesBridgeSpeechSynthesisDefaultToolPreflightCommandV0
+	}
+	return strings.Fields(raw)
+}
+
+func opesBridgeSpeechSynthesisToolPreflightWorkdirV0(raw string) (string, error) {
+	workdir := strings.TrimSpace(raw)
+	if workdir == "" {
+		return "", nil
+	}
+	abs, err := filepath.Abs(workdir)
+	if err != nil {
+		return "", err
+	}
+	stat, err := os.Stat(abs)
+	if err != nil {
+		return "", err
+	}
+	if !stat.IsDir() {
+		return "", fmt.Errorf("opes speech synthesis workdir no es directorio")
+	}
+	return abs, nil
+}
+
+func opesBridgeSpeechSynthesisToolPreflightChecksDefaultScriptV0(commandRaw string, args []string) bool {
+	if strings.TrimSpace(commandRaw) == "" {
+		return true
+	}
+	for _, arg := range args {
+		if filepath.Clean(strings.TrimSpace(arg)) == opesBridgeSpeechSynthesisDefaultToolScriptRelV0 {
+			return true
+		}
+	}
+	return false
+}
+
+func opesBridgeRunSpeechSynthesisToolPreflightV0(ctx context.Context, workdir string, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("opes speech synthesis preflight command vacio")
+	}
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	if strings.TrimSpace(workdir) != "" {
+		cmd.Dir = strings.TrimSpace(workdir)
+	}
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("opes speech synthesis preflight fallo: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+func opesBridgeSpeechSynthesisToolPreflightFailedV0(
+	capability orquestadomainwork.DomainWorkExternalCapabilityV0,
+	reason string,
+) orquestadomainwork.DomainWorkExternalCapabilityV0 {
+	capability.ToolPathReady = false
+	capability.OperationalReason = strings.TrimSpace(reason)
+	return capability
 }
 
 func opesBridgeExternalCapabilityFromEnvV0(

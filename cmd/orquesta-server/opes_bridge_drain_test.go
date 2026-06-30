@@ -2171,6 +2171,62 @@ func TestRunOPESDrainOnceV0AudioSinSpeechSynthesisNoPosteaOrquestaV0(t *testing.
 	}
 }
 
+func TestRunOPESDrainOnceV0AudioPreflightToolAusenteNoPosteaOrquestaV0(t *testing.T) {
+	t.Setenv(envOPESBridgeSpeechSynthesisCapabilityV0, "available")
+	t.Setenv(envOPESBridgeSpeechSynthesisEvidenceRefsV0, "evidence-ref-tts-declared")
+	t.Setenv(envOPESBridgeSpeechSynthesisToolWorkDirV0, t.TempDir())
+
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-audio-tool-missing-001",
+			"type":           "generate_audio_asset",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   opesDerivedPayloadForDrainTestV0("generate_audio_asset"),
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	posts := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		posts++
+		t.Fatalf("no debe postear a Orquesta con tool-path TTS ausente: %s %s", r.Method, r.URL.Path)
+	}))
+	defer orquestaServer.Close()
+
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:          opesServer.URL,
+		OrquestaBaseURL:      orquestaServer.URL,
+		Limit:                1,
+		JobType:              "generate_audio_asset",
+		HTTPTimeout:          time.Second,
+		ExternalCapabilities: opesBridgeExternalCapabilitiesFromEnvV0(),
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if posts != 0 ||
+		summary.Submitted != 0 ||
+		summary.Skipped != 1 ||
+		len(summary.Results) != 1 ||
+		summary.Results[0].Status != "external_capability_missing" ||
+		summary.Results[0].OperationalReason != opesBridgeSpeechSynthesisToolMissingReasonV0 ||
+		len(summary.Errors) != 1 ||
+		summary.Errors[0].Reason != opesBridgeSpeechSynthesisToolMissingReasonV0 {
+		t.Fatalf("posts=%d summary=%+v", posts, summary)
+	}
+}
+
 func TestRunOPESDrainOnceV0AudioConSpeechSynthesisPosteaOrquestaV0(t *testing.T) {
 	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
@@ -2264,6 +2320,45 @@ func TestOPESBridgeExternalCapabilitiesFromEnvV0ExponeSubcheckTTSNoDisponible(t 
 	}
 }
 
+func TestOPESBridgeExternalCapabilitiesFromEnvV0PreflightTTSOKV0(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 no disponible")
+	}
+	workdir := t.TempDir()
+	writeOPESAudioToolForPreflightTestV0(t, workdir)
+	t.Setenv(envOPESBridgeSpeechSynthesisCapabilityV0, "available")
+	t.Setenv(envOPESBridgeSpeechSynthesisEvidenceRefsV0, "evidence-ref-tts-declared")
+	t.Setenv(envOPESBridgeSpeechSynthesisToolWorkDirV0, workdir)
+
+	capabilities := opesBridgeExternalCapabilitiesFromEnvV0()
+
+	if len(capabilities) != 1 ||
+		!capabilities[0].Available ||
+		!capabilities[0].ToolPathReady ||
+		capabilities[0].OperationalReason != "" ||
+		!containsStringForTestV0(capabilities[0].EvidenceRefs, "evidence-ref-tts-declared") ||
+		!containsStringForTestV0(capabilities[0].EvidenceRefs, opesBridgeSpeechSynthesisToolPreflightEvidenceRefV0) {
+		t.Fatalf("capabilities=%+v", capabilities)
+	}
+}
+
+func TestOPESBridgeExternalCapabilitiesFromEnvV0PreflightTTSToolAusenteBloqueaV0(t *testing.T) {
+	t.Setenv(envOPESBridgeSpeechSynthesisCapabilityV0, "available")
+	t.Setenv(envOPESBridgeSpeechSynthesisEvidenceRefsV0, "evidence-ref-tts-declared")
+	t.Setenv(envOPESBridgeSpeechSynthesisToolWorkDirV0, t.TempDir())
+
+	capabilities := opesBridgeExternalCapabilitiesFromEnvV0()
+
+	if len(capabilities) != 1 ||
+		!capabilities[0].Available ||
+		!capabilities[0].NetworkReady ||
+		capabilities[0].ToolPathReady ||
+		!capabilities[0].ProviderQuotaReady ||
+		capabilities[0].OperationalReason != opesBridgeSpeechSynthesisToolMissingReasonV0 {
+		t.Fatalf("capabilities=%+v", capabilities)
+	}
+}
+
 func TestOPESBridgeExternalCapabilitiesFromEnvV0DeclaraRemoteQA(t *testing.T) {
 	t.Setenv(envOPESBridgeRemoteQACapabilityV0, "available")
 	t.Setenv(envOPESBridgeRemoteQACapabilityRefV0, "remote-qa-temporal")
@@ -2297,6 +2392,22 @@ func TestOPESBridgeExternalCapabilitiesFromEnvV0ExponeSubcheckRemoteQANoDisponib
 		!capabilities[0].ProviderQuotaReady ||
 		capabilities[0].OperationalReason != "external_capability_missing:remote_qa_provider:auth_state_ready" {
 		t.Fatalf("capabilities=%+v", capabilities)
+	}
+}
+
+func writeOPESAudioToolForPreflightTestV0(t *testing.T, workdir string) {
+	t.Helper()
+	scriptDir := filepath.Join(workdir, "scripts")
+	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
+		t.Fatalf("mkdir script dir: %v", err)
+	}
+	scriptPath := filepath.Join(scriptDir, "opes_audio_app.py")
+	if err := os.WriteFile(
+		scriptPath,
+		[]byte("import sys\nprint('opes audio app help')\nsys.exit(0)\n"),
+		0o755,
+	); err != nil {
+		t.Fatalf("write audio script: %v", err)
 	}
 }
 

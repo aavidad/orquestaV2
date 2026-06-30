@@ -651,6 +651,47 @@ func TestServerConfigFromEnvV0PublicaEgressSanitizerCanonicoRedactadoV0(t *testi
 	}
 }
 
+func TestServerConfigFromEnvV0PublicaOPESSpeechSynthesisPreflightRedactadoV0(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
+	rawWorkdir := "/home/alberto/Trabajo/USO/web"
+	rawCommand := "/home/alberto/bin/opes_audio_private --token secreto --help"
+	t.Setenv(envOPESBridgeSpeechSynthesisToolWorkDirV0, rawWorkdir)
+	t.Setenv(envOPESBridgeSpeechSynthesisToolCommandV0, rawCommand)
+	t.Setenv(envOPESBridgeSpeechSynthesisToolPreflightTimeoutSecondsV0, "7")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	settings := config.EffectiveConfig.Settings
+	if got := effectiveSettingValueForTestV0(settings, envOPESBridgeSpeechSynthesisToolWorkDirV0); got != "opes-speech-synthesis-tool-workdir-configured" {
+		t.Fatalf("tool workdir=%q settings=%+v", got, settings)
+	}
+	if got := effectiveSettingValueForTestV0(settings, envOPESBridgeSpeechSynthesisToolCommandV0); got != "opes-speech-synthesis-tool-command-configured" {
+		t.Fatalf("tool command=%q settings=%+v", got, settings)
+	}
+	if got := effectiveSettingValueForTestV0(settings, envOPESBridgeSpeechSynthesisToolPreflightTimeoutSecondsV0); got != "7" {
+		t.Fatalf("tool preflight timeout=%q settings=%+v", got, settings)
+	}
+	for _, key := range []string{
+		envOPESBridgeSpeechSynthesisToolWorkDirV0,
+		envOPESBridgeSpeechSynthesisToolCommandV0,
+	} {
+		if setting := effectiveSettingForTestV0(settings, key); !setting.Sensitive {
+			t.Fatalf("%s debe quedar marcado como sensible: %+v", key, setting)
+		}
+	}
+	rawEffectiveConfig, err := json.Marshal(config.EffectiveConfig)
+	if err != nil {
+		t.Fatalf("marshal effective config: %v", err)
+	}
+	for _, forbidden := range []string{rawWorkdir, rawCommand} {
+		if strings.Contains(string(rawEffectiveConfig), forbidden) {
+			t.Fatalf("effective_config filtra valor crudo %q: %s", forbidden, string(rawEffectiveConfig))
+		}
+	}
+}
+
 func TestBuildStackFromEnvV0CableaEgressSanitizerCanonicoV0(t *testing.T) {
 	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
 	t.Setenv("ORQUESTA_SERVER_STATE_DIR", t.TempDir())

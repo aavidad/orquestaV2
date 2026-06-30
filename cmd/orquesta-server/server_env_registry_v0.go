@@ -242,6 +242,12 @@ const (
 	defaultCodexDirectorRecursiveAgentBudgetV0 = 70
 )
 
+const (
+	envOPESBridgeSpeechSynthesisToolWorkDirV0                 = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_TOOL_WORKDIR"
+	envOPESBridgeSpeechSynthesisToolCommandV0                 = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_TOOL_COMMAND"
+	envOPESBridgeSpeechSynthesisToolPreflightTimeoutSecondsV0 = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_TOOL_PREFLIGHT_TIMEOUT_SECONDS"
+)
+
 type serverEnvSettingMetadataV0 struct {
 	Scope       string
 	Label       string
@@ -470,6 +476,21 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "opes_bridge",
 		Label:       "Speech synthesis cuota",
 		Description: "Subcheck opt-in para declarar si el proveedor TTS tiene cuota/capacidad disponible.",
+	},
+	envOPESBridgeSpeechSynthesisToolWorkDirV0: {
+		Scope:       "opes_bridge",
+		Label:       "Speech synthesis workdir",
+		Description: "Directorio local opt-in donde Orquesta ejecuta el preflight de scripts/opes_audio_app.py antes de lanzar audio OPES.",
+	},
+	envOPESBridgeSpeechSynthesisToolCommandV0: {
+		Scope:       "opes_bridge",
+		Label:       "Speech synthesis preflight",
+		Description: "Comando local opt-in de preflight TTS/audio OPES; por defecto python3 scripts/opes_audio_app.py --help.",
+	},
+	envOPESBridgeSpeechSynthesisToolPreflightTimeoutSecondsV0: {
+		Scope:       "opes_bridge",
+		Label:       "Speech synthesis timeout",
+		Description: "Timeout en segundos para el preflight local de la herramienta TTS/audio OPES.",
 	},
 	envOPESBridgeRemoteQACapabilityV0: {
 		Scope:       "opes_bridge",
