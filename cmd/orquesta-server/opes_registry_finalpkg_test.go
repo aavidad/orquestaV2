@@ -349,6 +349,101 @@ func TestOPESRegistryFinalPkgPackageCompleteRejectsEvidenceRefsFallbackV0(t *tes
 	}
 }
 
+func TestOPESRegistryFinalPkgPackageCompleteRejectsLooseRAGCorpusV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	fixture.writeCompletePackage("002")
+	base := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final")
+	if err := os.RemoveAll(filepath.Join(base, "rag", "corpus")); err != nil {
+		t.Fatalf("remove corpus: %v", err)
+	}
+	for _, relative := range []string{"rag/chunks.jsonl", "rag/summary.json"} {
+		path := filepath.Join(base, relative)
+		if err := os.WriteFile(path, []byte("legacy\n"), 0o644); err != nil {
+			t.Fatalf("write loose rag: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(base, "rag", "manifest.json"), []byte(`{"chunks_ref":"rag/chunks.jsonl","summary_ref":"rag/summary.json"}`), 0o644); err != nil {
+		t.Fatalf("write rag manifest: %v", err)
+	}
+
+	validation := validateOPESRegistryFinalPkgPackageV0(base)
+
+	for _, want := range []string{
+		"rag_corpus_canonical_missing:rag/corpus/chunks.jsonl",
+		"rag_corpus_canonical_missing:rag/corpus/summary.json",
+		"rag_corpus_loose_legacy_present:rag/chunks.jsonl",
+		"rag_manifest_missing_ref:rag/corpus/chunks.jsonl",
+	} {
+		if validation.Complete || !containsStringForTestV0(validation.Issues, want) {
+			t.Fatalf("want %s validation=%+v", want, validation)
+		}
+	}
+}
+
+func TestOPESRegistryFinalPkgPackageCompleteRequiresCanonicalRAGManifestRefsV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	fixture.writeCompletePackage("002")
+	base := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final")
+	if err := os.WriteFile(filepath.Join(base, "rag", "manifest.json"), []byte(`{"chunks_ref":"artifact-ref-rag-chunks","summary_ref":"artifact-ref-rag-summary"}`), 0o644); err != nil {
+		t.Fatalf("write rag manifest: %v", err)
+	}
+
+	validation := validateOPESRegistryFinalPkgPackageV0(base)
+
+	if validation.Complete ||
+		!containsStringForTestV0(validation.Issues, "rag_manifest_missing_ref:rag/corpus/chunks.jsonl") ||
+		!containsStringForTestV0(validation.Issues, "rag_manifest_missing_ref:rag/corpus/summary.json") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
+func TestOPESRegistryFinalPkgPackageCompleteCountsOnlyTopicHTMLAudioManifestsV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	fixture.writeCompletePackage("002")
+	base := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final")
+	writeOPESRegistryFinalPkgTestFileV0(t, base, "html_final/index.html", "<html>indice</html>")
+	writeOPESRegistryFinalPkgTestFileV0(t, base, "html_final/portada.html", "<html>portada</html>")
+	writeOPESRegistryFinalPkgTestFileV0(t, base, "html_final/tema_002.html", "<html>tema</html>")
+	writeOPESRegistryFinalPkgTestFileV0(t, base, "audio/manifests/index.json", `{"material_path":"html_final/index.html"}`)
+
+	validation := validateOPESRegistryFinalPkgPackageV0(base)
+
+	if validation.Complete ||
+		!containsStringForTestV0(validation.Issues, "audio_manifest_missing:html_final/tema_002.html") ||
+		containsStringForTestV0(validation.Issues, "audio_manifest_missing:html_final/index.html") ||
+		containsStringForTestV0(validation.Issues, "audio_manifest_missing:html_final/portada.html") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
+func TestOPESRegistryFinalPkgPackageCompleteAcceptsCanonicalRAGAndTopicAudioV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	fixture.writeCompletePackage("002")
+	base := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final")
+	writeOPESRegistryFinalPkgTestFileV0(t, base, "html_final/index.html", "<html>indice</html>")
+	writeOPESRegistryFinalPkgTestFileV0(t, base, "html_final/tema_002.html", "<html>tema final</html>")
+	writeOPESRegistryFinalPkgTestFileV0(t, base, "html_ampliado/tema_002.html", "<html>tema ampliado</html>")
+	writeOPESRegistryFinalPkgTestFileV0(t, base, "audio/manifests/final.json", `{"material_path":"html_final/tema_002.html"}`)
+	writeOPESRegistryFinalPkgTestFileV0(t, base, "audio/manifests/ampliado.json", `{"material_path":"html_ampliado/tema_002.html"}`)
+
+	validation := validateOPESRegistryFinalPkgPackageV0(base)
+
+	if !validation.Complete {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
+func writeOPESRegistryFinalPkgTestFileV0(t *testing.T, root string, relative string, content string) {
+	t.Helper()
+	path := filepath.Join(root, relative)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", relative, err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", relative, err)
+	}
+}
+
 func TestOPESRegistryFinalPkgReviewAcceptedDoesNotCompleteEmptyQuestionBankV0(t *testing.T) {
 	fixture := newOPESRegistryFinalPkgFixtureV0(t)
 	fixture.writeRegistry(map[string]any{

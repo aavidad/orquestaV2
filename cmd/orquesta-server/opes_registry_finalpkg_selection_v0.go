@@ -116,10 +116,140 @@ func validateOPESRegistryFinalPkgPackageV0(packageDir string) opesRegistryFinalP
 	issues = append(issues, opesRegistryFinalPkgEvidenceManifestIssuesV0(
 		filepath.Join(packageDir, "manifest_cierre.json"),
 	)...)
+	issues = append(issues, opesRegistryFinalPkgRAGCorpusIssuesV0(packageDir)...)
+	issues = append(issues, opesRegistryFinalPkgAudioManifestIssuesV0(packageDir)...)
 	return opesRegistryFinalPkgPackageValidationV0{
 		Complete: len(issues) == 0,
 		Issues:   compactOPESRegistryFinalPkgStringsV0(issues),
 	}
+}
+
+func opesRegistryFinalPkgRAGCorpusIssuesV0(packageDir string) []string {
+	canonical := []string{"rag/corpus/chunks.jsonl", "rag/corpus/summary.json"}
+	issues := []string{}
+	for _, relative := range canonical {
+		if !opesRegistryFinalPkgRegularNonEmptyFileV0(packageDir, relative) {
+			issues = append(issues, "rag_corpus_canonical_missing:"+relative)
+		}
+	}
+	for _, relative := range []string{"rag/chunks.jsonl", "rag/summary.json"} {
+		if opesRegistryFinalPkgPathExistsV0(packageDir, relative) {
+			issues = append(issues, "rag_corpus_loose_legacy_present:"+relative)
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(packageDir, "rag", "manifest.json"))
+	if err != nil {
+		return issues
+	}
+	if !json.Valid(data) {
+		return append(issues, "rag_manifest_json_invalid")
+	}
+	var decoded any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return append(issues, "rag_manifest_json_invalid")
+	}
+	for _, relative := range canonical {
+		if !opesRegistryFinalPkgJSONContainsStringV0(decoded, relative) {
+			issues = append(issues, "rag_manifest_missing_ref:"+relative)
+		}
+	}
+	return issues
+}
+
+func opesRegistryFinalPkgAudioManifestIssuesV0(packageDir string) []string {
+	topicHTML := opesRegistryFinalPkgTopicHTMLRefsV0(packageDir)
+	if len(topicHTML) == 0 {
+		return nil
+	}
+	materialRefs, invalidRefs := opesRegistryFinalPkgAudioManifestMaterialRefsV0(packageDir)
+	issues := make([]string, 0, len(invalidRefs))
+	for _, relative := range invalidRefs {
+		issues = append(issues, "audio_manifest_json_invalid:"+relative)
+	}
+	for _, relative := range topicHTML {
+		if !materialRefs[relative] {
+			issues = append(issues, "audio_manifest_missing:"+relative)
+		}
+	}
+	return issues
+}
+
+func opesRegistryFinalPkgTopicHTMLRefsV0(packageDir string) []string {
+	refs := []string{}
+	for _, root := range []string{"html_final", "html_ampliado"} {
+		matches, err := filepath.Glob(filepath.Join(packageDir, root, "*.html"))
+		if err != nil {
+			continue
+		}
+		for _, path := range matches {
+			name := strings.ToLower(filepath.Base(path))
+			if strings.HasPrefix(name, "tema_") {
+				refs = append(refs, filepath.ToSlash(filepath.Join(root, filepath.Base(path))))
+			}
+		}
+	}
+	sort.Strings(refs)
+	return compactOPESRegistryFinalPkgStringsV0(refs)
+}
+
+func opesRegistryFinalPkgAudioManifestMaterialRefsV0(packageDir string) (map[string]bool, []string) {
+	refs := map[string]bool{}
+	invalid := []string{}
+	matches, err := filepath.Glob(filepath.Join(packageDir, "audio", "manifests", "*.json"))
+	if err != nil {
+		return refs, invalid
+	}
+	for _, path := range matches {
+		relative := filepath.ToSlash(strings.TrimPrefix(path, packageDir+string(os.PathSeparator)))
+		data, err := os.ReadFile(path)
+		if err != nil || !json.Valid(data) {
+			invalid = append(invalid, relative)
+			continue
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(data, &decoded); err != nil {
+			invalid = append(invalid, relative)
+			continue
+		}
+		materialPath, _ := decoded["material_path"].(string)
+		materialPath = filepath.ToSlash(strings.TrimSpace(materialPath))
+		if materialPath != "" {
+			refs[materialPath] = true
+		}
+	}
+	sort.Strings(invalid)
+	return refs, compactOPESRegistryFinalPkgStringsV0(invalid)
+}
+
+func opesRegistryFinalPkgRegularNonEmptyFileV0(root string, relative string) bool {
+	info, err := os.Stat(filepath.Join(root, relative))
+	return err == nil && !info.IsDir() && info.Size() > 0
+}
+
+func opesRegistryFinalPkgPathExistsV0(root string, relative string) bool {
+	_, err := os.Stat(filepath.Join(root, relative))
+	return err == nil
+}
+
+func opesRegistryFinalPkgJSONContainsStringV0(value any, want string) bool {
+	want = filepath.ToSlash(strings.TrimSpace(want))
+	switch typed := value.(type) {
+	case string:
+		return filepath.ToSlash(strings.TrimSpace(typed)) == want
+	case []any:
+		for _, item := range typed {
+			if opesRegistryFinalPkgJSONContainsStringV0(item, want) {
+				return true
+			}
+		}
+	case map[string]any:
+		for _, item := range typed {
+			if opesRegistryFinalPkgJSONContainsStringV0(item, want) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 type opesRegistryFinalPkgEvidenceManifestV0 struct {

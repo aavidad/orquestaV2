@@ -114,11 +114,23 @@ func (fixture opesRegistryFinalPkgFixtureV0) writeCompletePackage(topicID string
 		if relative == "manifest_cierre.json" {
 			content = []byte(`{"schema_version":"opes_final_package_evidence_manifest.v0","package_ref":"package-ref-finalpkg-` + topicID + `","manifest_ref":"manifest-cierre-ref-finalpkg-` + topicID + `","checksum_refs":["checksum-ref-finalpkg-` + topicID + `"],"validation_report_ref":"validation-report-ref-finalpkg-` + topicID + `","review_matrix_ref":"review-matrix-ref-finalpkg-` + topicID + `","required_evidence_refs":{"html":["opes-final-evidence:html:` + topicID + `"],"rag":["opes-final-evidence:rag:` + topicID + `"],"audio":["opes-final-evidence:audio:` + topicID + `"],"tests":["opes-final-evidence:tests:` + topicID + `"],"visual":["opes-final-evidence:visual:` + topicID + `"],"qa":["opes-final-evidence:qa:` + topicID + `"]}}`)
 		}
+		if relative == "rag/manifest.json" {
+			content = []byte(`{"schema_version":"opes_rag_manifest.v1","chunks_ref":"rag/corpus/chunks.jsonl","summary_ref":"rag/corpus/summary.json"}`)
+		}
 		if relative == "tests.json" {
 			content = []byte(`{"questions":[{"id":"q1","prompt":"pregunta verificable","options":["a","b"],"answer":"a"}]}`)
 		}
 		if err := os.WriteFile(path, content, 0o644); err != nil {
 			fixture.t.Fatalf("write package: %v", err)
+		}
+	}
+	for _, relative := range []string{"rag/corpus/chunks.jsonl", "rag/corpus/summary.json"} {
+		path := filepath.Join(base, relative)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			fixture.t.Fatalf("mkdir rag corpus: %v", err)
+		}
+		if err := os.WriteFile(path, []byte("ok\n"), 0o644); err != nil {
+			fixture.t.Fatalf("write rag corpus: %v", err)
 		}
 	}
 }
