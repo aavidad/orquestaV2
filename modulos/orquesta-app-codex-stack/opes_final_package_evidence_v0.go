@@ -58,82 +58,101 @@ func codexStackOPESFinalPackageEvidenceCompleteV0(
 	payloadRefs []string,
 	externalRefs []orquestadomainwork.DomainWorkExternalRefV0,
 ) bool {
-	if !codexStackOPESFinalPackageHasManifestV0(fields, evidenceRefs, payloadRefs, externalRefs) {
+	manifest, ok := codexStackOPESFinalPackageStructuredManifestV0(fields)
+	if !ok {
 		return false
 	}
-	tokens := codexStackOPESFinalPackageEvidenceTokensV0(fields, evidenceRefs, payloadRefs, externalRefs)
-	required := map[string][]string{
-		"html":  {"opes-final-evidence:html", "html_evidence_ref", "local_html_site", "html/index.html"},
-		"rag":   {"opes-final-evidence:rag", "rag_evidence_ref", "rag/manifest.json", "tutor_rag_manifest"},
-		"audio": {"opes-final-evidence:audio", "audio_evidence_ref", "audio/guion_audio.md", "audio_manifest"},
-		"tests": {"opes-final-evidence:tests", "tests_evidence_ref", "question_bank", "tests.json"},
-		"visual": {
-			"opes-final-evidence:visual",
-			"visual_evidence_ref",
-			"visuales_plan.md",
-			"visual_validation_report_ref",
-		},
-		"qa": {"opes-final-evidence:qa", "qa_evidence_ref", "qa_final.md", "review_matrix_ref", "director_review_matrix"},
-	}
-	for _, needles := range required {
-		if !codexStackOperationalClosureEvidenceContainsAnyV0(tokens, needles...) {
+	for _, category := range codexStackOPESFinalPackageRequiredEvidenceCategoriesV0() {
+		if len(manifest.RequiredEvidenceRefs[category]) == 0 {
 			return false
 		}
 	}
 	return true
 }
 
-func codexStackOPESFinalPackageHasManifestV0(
+type codexStackOPESFinalPackageManifestV0 struct {
+	PackageRef           string
+	ManifestRef          string
+	ChecksumRefs         []string
+	ValidationReportRef  string
+	ReviewMatrixRef      string
+	RequiredEvidenceRefs map[string][]string
+}
+
+func codexStackOPESFinalPackageRequiredEvidenceCategoriesV0() []string {
+	return []string{"html", "rag", "audio", "tests", "visual", "qa"}
+}
+
+func codexStackOPESFinalPackageStructuredManifestV0(
 	fields []orquestadomainwork.DomainWorkFieldV0,
-	evidenceRefs []string,
-	payloadRefs []string,
-	externalRefs []orquestadomainwork.DomainWorkExternalRefV0,
-) bool {
+) (codexStackOPESFinalPackageManifestV0, bool) {
 	for _, field := range fields {
 		if domainWorkDeliveryCanonicalPayloadFieldNameV0(orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0, field.Name) != "manifest_cierre" {
 			continue
 		}
-		if strings.TrimSpace(field.Value) != "" || len(compactCodexStackStringsV0(field.Values)) > 0 {
-			return true
-		}
-		if len(field.ValueJSON) > 0 && json.Valid(field.ValueJSON) {
-			return true
+		manifest, ok := codexStackOPESFinalPackageManifestFromJSONV0(field.ValueJSON)
+		if ok {
+			return manifest, true
 		}
 	}
-	tokens := codexStackOPESFinalPackageEvidenceTokensV0(nil, evidenceRefs, payloadRefs, externalRefs)
-	return codexStackOperationalClosureEvidenceContainsAnyV0(tokens,
-		"manifest_cierre",
-		"manifest_cierre.json",
-		"completed_syllabus_package_manifest",
-		"opes-expected-evidence-manifest-cierre",
-		"opes-rule-final-package-manifest",
-	)
+	return codexStackOPESFinalPackageManifestV0{}, false
 }
 
-func codexStackOPESFinalPackageEvidenceTokensV0(
-	fields []orquestadomainwork.DomainWorkFieldV0,
-	evidenceRefs []string,
-	payloadRefs []string,
-	externalRefs []orquestadomainwork.DomainWorkExternalRefV0,
-) []string {
-	tokens := append([]string(nil), evidenceRefs...)
-	tokens = append(tokens, payloadRefs...)
-	for _, field := range fields {
-		name := strings.TrimSpace(field.Name)
-		if strings.TrimSpace(field.Value) != "" {
-			tokens = append(tokens, name, name+":"+field.Value, field.Value)
-		}
-		for _, value := range field.Values {
-			if strings.TrimSpace(value) != "" {
-				tokens = append(tokens, name, name+":"+value, value)
-			}
-		}
-		if len(field.ValueJSON) > 0 {
-			tokens = append(tokens, name, string(field.ValueJSON))
-		}
+func codexStackOPESFinalPackageManifestFromJSONV0(
+	raw json.RawMessage,
+) (codexStackOPESFinalPackageManifestV0, bool) {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return codexStackOPESFinalPackageManifestV0{}, false
 	}
-	for _, ref := range externalRefs {
-		tokens = append(tokens, ref.Kind, ref.Ref, strings.TrimSpace(ref.Kind)+":"+strings.TrimSpace(ref.Ref))
+	var values map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return codexStackOPESFinalPackageManifestV0{}, false
 	}
-	return compactCodexStackStringsV0(tokens)
+	if codexStackJSONRawStringV0(values["schema_version"]) != "opes_final_package_evidence_manifest.v0" {
+		return codexStackOPESFinalPackageManifestV0{}, false
+	}
+	manifest := codexStackOPESFinalPackageManifestV0{
+		PackageRef:           codexStackJSONRawStringV0(values["package_ref"]),
+		ManifestRef:          codexStackJSONRawStringV0(values["manifest_ref"]),
+		ChecksumRefs:         domainWorkDeliveryRawRefsV0(values["checksum_refs"]),
+		ValidationReportRef:  codexStackJSONRawStringV0(values["validation_report_ref"]),
+		ReviewMatrixRef:      codexStackJSONRawStringV0(values["review_matrix_ref"]),
+		RequiredEvidenceRefs: codexStackOPESFinalPackageRequiredEvidenceRefsV0(values["required_evidence_refs"]),
+	}
+	if manifest.PackageRef == "" ||
+		manifest.ManifestRef == "" ||
+		len(manifest.ChecksumRefs) == 0 ||
+		manifest.ValidationReportRef == "" ||
+		manifest.ReviewMatrixRef == "" {
+		return codexStackOPESFinalPackageManifestV0{}, false
+	}
+	return manifest, true
+}
+
+func codexStackOPESFinalPackageRequiredEvidenceRefsV0(
+	raw json.RawMessage,
+) map[string][]string {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return nil
+	}
+	var byCategory map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &byCategory); err != nil {
+		return nil
+	}
+	out := map[string][]string{}
+	for _, category := range codexStackOPESFinalPackageRequiredEvidenceCategoriesV0() {
+		out[category] = compactCodexStackStringsV0(domainWorkDeliveryRawRefsV0(byCategory[category]))
+	}
+	return out
+}
+
+func codexStackJSONRawStringV0(raw json.RawMessage) string {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return ""
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(text)
 }

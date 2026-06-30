@@ -2,6 +2,8 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"encoding/json"
+	"strconv"
 	"strings"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
@@ -455,24 +457,77 @@ func goalDomainReceiptRequiresOPESSubrolesV0(
 func goalDomainReceiptHasOPESSubrolesRequiredFieldV0(
 	spec orquestagoal.GoalWorkSpecV0,
 ) bool {
-	hasField := false
-	hasValue := false
 	for _, ref := range spec.ContextRefs {
 		kind := strings.TrimSpace(ref.Kind)
 		switch kind {
 		case "input_field":
 			if strings.TrimSpace(ref.Ref) == "input-field-subroles_required" {
-				hasField = true
+				continue
 			}
 		case "input_field_value":
-			purpose := strings.TrimSpace(ref.Purpose)
-			if strings.Contains(purpose, `"name":"subroles_required"`) &&
-				strings.Contains(purpose, `"value":"6"`) {
-				hasValue = true
+			if goalDomainReceiptInputFieldRequiresOPESSubrolesV0(ref.Purpose) {
+				return true
 			}
 		}
 	}
-	return hasField && hasValue
+	return false
+}
+
+func goalDomainReceiptInputFieldRequiresOPESSubrolesV0(
+	purpose string,
+) bool {
+	purpose = strings.TrimSpace(purpose)
+	start := strings.Index(purpose, "{")
+	if start < 0 {
+		return strings.Contains(purpose, `"name":"subroles_required"`) &&
+			(strings.Contains(purpose, `"value":"6"`) ||
+				strings.Contains(purpose, `"value_json":6`) ||
+				strings.Contains(purpose, `"value_json":true`))
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(purpose[start:]), &payload); err != nil {
+		return false
+	}
+	if normalizedExternalWorkFieldNameV0(goalDomainReceiptStringValueV0(payload["name"])) != "subroles_required" {
+		return false
+	}
+	for _, key := range []string{"value", "value_json", "values"} {
+		if goalDomainReceiptOPESSubrolesRequiredCountValueV0(payload[key]) >= goalDomainReceiptOPESSubrolesRequiredCountV0 {
+			return true
+		}
+	}
+	return false
+}
+
+func goalDomainReceiptStringValueV0(value any) string {
+	if text, ok := value.(string); ok {
+		return strings.TrimSpace(text)
+	}
+	return ""
+}
+
+func goalDomainReceiptOPESSubrolesRequiredCountValueV0(value any) int {
+	switch typed := value.(type) {
+	case string:
+		text := strings.TrimSpace(typed)
+		if count, err := strconv.Atoi(text); err == nil {
+			return count
+		}
+		if strings.EqualFold(text, "true") {
+			return goalDomainReceiptOPESSubrolesRequiredCountV0
+		}
+	case float64:
+		return int(typed)
+	case bool:
+		if typed {
+			return goalDomainReceiptOPESSubrolesRequiredCountV0
+		}
+	case []any:
+		return len(typed)
+	case []string:
+		return len(compactStringsV0(typed))
+	}
+	return 0
 }
 
 func goalDomainReceiptOPESSubroleEvidenceCountV0(

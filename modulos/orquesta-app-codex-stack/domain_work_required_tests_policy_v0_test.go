@@ -214,6 +214,47 @@ func TestDomainWorkRequiredTestRunnerV0DistingueLatenciaRechazoYAceptacion(t *te
 	if err != nil || len(result.FailedEvidenceRefs) != 1 || len(result.PassedEvidenceRefs) != 0 {
 		t.Fatalf("paquete final OPES sin manifest debe fallar required tests: result=%+v err=%v", result, err)
 	}
+
+	finalNominal := codexStackDomainWorkRequiredTestRequestForTestV0(finalRecord, "final-package-nominal")
+	if err := finalLedger.RecordDomainWorkArtifactSubmissionV0(ctx, DomainWorkArtifactSubmissionRecordV0{
+		IdempotencyKey: "idem-final-package-nominal",
+		Status:         DomainWorkArtifactSubmissionStatusAcceptedV0,
+		RunRef:         finalNominal.RunRef,
+		TaskRef:        finalNominal.TaskRef,
+		DeliveryRef:    finalNominal.DeliveryRef,
+		DomainRef:      "opes",
+		ArtifactType:   orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0,
+		CompleteJob:    true,
+		ReceiptRef:     "receipt-ref-final-package-nominal",
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "source_work_kind", Value: "finalize_temario_package"},
+			{Name: "package_ref", Value: "package-ref-final-nominal-001"},
+			{Name: "manifest_cierre", ValueJSON: []byte(`{
+				"package_ref":"package-ref-final-nominal-001",
+				"html":"html listo",
+				"rag":"rag listo",
+				"audio":"audio listo",
+				"tests":"tests listos",
+				"visual":"visual listo",
+				"qa":"qa listo"
+			}`)},
+		},
+		EvidenceRefs: []string{
+			"manifest_cierre.json",
+			"opes-final-evidence:html",
+			"opes-final-evidence:rag",
+			"opes-final-evidence:audio",
+			"opes-final-evidence:tests",
+			"opes-final-evidence:visual",
+			"opes-final-evidence:qa",
+		},
+	}); err != nil {
+		t.Fatalf("record final nominal: %v", err)
+	}
+	result, err = finalRunner.RunRequiredTestsV0(ctx, finalNominal)
+	if err != nil || len(result.FailedEvidenceRefs) != 1 || len(result.PassedEvidenceRefs) != 0 {
+		t.Fatalf("paquete final OPES con manifest nominal debe fallar required tests: result=%+v err=%v", result, err)
+	}
 }
 
 func codexStackDomainWorkPolicyMicrotaskDecisionForTestV0(

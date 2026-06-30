@@ -1129,6 +1129,53 @@ func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESSubrolesSinSeisEvidenciasV
 	}
 }
 
+func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESSubrolesJSONSinSeisEvidenciasV0(t *testing.T) {
+	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	change := opesSubrolesExternalWorkChangeForTestV0()
+	change.ChangeRef = "opes-job-goal-first-subroles-json-001"
+	change.ExternalWork.InterfaceRefs = []string{"opes-rest-v0"}
+	change.ExternalWork.InputFields = []orquestadomainwork.DomainWorkFieldV0{
+		{Name: "topic_id", Value: "tema-022"},
+		{Name: "subroles_required", ValueJSON: []byte(`6`)},
+	}
+	started := postExternalWorkRunStackWithChangeV0(t, stack, change)
+	spec := launcher.specs[0]
+	if strings.Contains(codexStackGoalContextRefsTextForTestV0(spec.ContextRefs), "opes.padre-tema-6-subroles.v1") {
+		t.Fatalf("test debe depender de input_field subroles_required, no de domain_interface: refs=%v", spec.ContextRefs)
+	}
+	receiptRef := "receipt-ref-goal-first-opes-subroles-json-incomplete-001"
+	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		record,
+	); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-opes-subroles-json-missing-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework ||
+		!goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptOPESSubrolesEvidenceMissingIssueV0) {
+		t.Fatalf("receipt OPES subroles_required JSON sin seis evidencias cerro goal-first: result=%+v", result)
+	}
+}
+
 func TestCodexStackV0ExternalWorkGoalFirstCierraOPESSubrolesConSeisEvidenciasV0(t *testing.T) {
 	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
 	started := postExternalWorkRunStackWithChangeV0(t, stack, opesSubrolesExternalWorkChangeForTestV0())

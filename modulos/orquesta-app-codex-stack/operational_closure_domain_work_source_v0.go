@@ -172,66 +172,7 @@ func codexStackOperationalClosureOPESFinalPackageReadyV0(
 		"common_reuse_matrix_ref",
 		"master_derivation_matrix_ref",
 		"common_topics_not_applicable",
-	) && codexStackOperationalClosureOPESFinalPackageEvidenceCompleteV0(tokens)
-}
-
-func codexStackOperationalClosureOPESFinalPackageEvidenceCompleteV0(
-	tokens []string,
-) bool {
-	if !codexStackOperationalClosureEvidenceContainsAnyV0(tokens,
-		"manifest_cierre",
-		"manifest_cierre.json",
-		"completed_syllabus_package_manifest",
-		"opes-expected-evidence-manifest-cierre",
-		"opes-rule-final-package-manifest",
-	) {
-		return false
-	}
-	required := map[string][]string{
-		"html": {
-			"opes-final-evidence:html",
-			"html_evidence_ref",
-			"local_html_site",
-			"html/index.html",
-		},
-		"rag": {
-			"opes-final-evidence:rag",
-			"rag_evidence_ref",
-			"rag/manifest.json",
-			"tutor_rag_manifest",
-		},
-		"audio": {
-			"opes-final-evidence:audio",
-			"audio_evidence_ref",
-			"audio/guion_audio.md",
-			"audio_manifest",
-		},
-		"tests": {
-			"opes-final-evidence:tests",
-			"tests_evidence_ref",
-			"question_bank",
-			"tests.json",
-		},
-		"visual": {
-			"opes-final-evidence:visual",
-			"visual_evidence_ref",
-			"visuales_plan.md",
-			"visual_validation_report_ref",
-		},
-		"qa": {
-			"opes-final-evidence:qa",
-			"qa_evidence_ref",
-			"qa_final.md",
-			"review_matrix_ref",
-			"director_review_matrix",
-		},
-	}
-	for _, needles := range required {
-		if !codexStackOperationalClosureEvidenceContainsAnyV0(tokens, needles...) {
-			return false
-		}
-	}
-	return true
+	) && codexStackOPESFinalPackageSubmissionEvidenceCompleteV0(submission)
 }
 
 func codexStackOperationalClosureOPESFinalPackageV0(

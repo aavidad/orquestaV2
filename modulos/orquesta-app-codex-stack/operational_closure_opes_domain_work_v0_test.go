@@ -8,6 +8,7 @@ import (
 	orquestaappchangedirectorsource "orquesta/modulos/orquesta-app-change-director-source"
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
@@ -252,16 +253,35 @@ func TestOperationalClosureSourceV0CierraOPESFinalConMinimosComunesYManifest(t *
 	fixture.Source.AppChangeStore = orquestaappchange.NewInMemoryAppChangeStoreV0(record)
 	submission := opesAcceptedSubmissionRecordForFixtureV0(fixture, "final-con-minimos")
 	submission.ArtifactType = "final_domain_package"
+	submission.PayloadFields = append(submission.PayloadFields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "source_work_kind", Value: "finalize_temario_package"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "manifest_cierre", ValueJSON: []byte(`{
+			"schema_version":"opes_final_package_evidence_manifest.v0",
+			"package_ref":"package-ref-closure-final-001",
+			"manifest_ref":"manifest-cierre-ref-closure-final-001",
+			"checksum_refs":["checksum-ref-closure-final-001"],
+			"validation_report_ref":"validation-report-ref-closure-final-001",
+			"review_matrix_ref":"review-matrix-ref-closure-final-001",
+			"required_evidence_refs":{
+				"html":"evidence-ref-closure-final-html-001",
+				"rag":"evidence-ref-closure-final-rag-001",
+				"audio":"evidence-ref-closure-final-audio-001",
+				"tests":"evidence-ref-closure-final-tests-001",
+				"visual":"evidence-ref-closure-final-visual-001",
+				"qa":"evidence-ref-closure-final-qa-001"
+			}
+		}`)},
+	)
 	submission.EvidenceRefs = append(submission.EvidenceRefs,
 		"opes-extension-minima-passed",
 		"opes-common-master-not-applicable",
-		"manifest_cierre.json",
-		"opes-final-evidence:html",
-		"opes-final-evidence:rag",
-		"opes-final-evidence:audio",
-		"opes-final-evidence:tests",
-		"opes-final-evidence:visual",
-		"opes-final-evidence:qa",
+		"manifest-cierre-ref-closure-final-001",
+		"evidence-ref-closure-final-html-001",
+		"evidence-ref-closure-final-rag-001",
+		"evidence-ref-closure-final-audio-001",
+		"evidence-ref-closure-final-tests-001",
+		"evidence-ref-closure-final-visual-001",
+		"evidence-ref-closure-final-qa-001",
 	)
 	if err := fixture.Ledger.RecordDomainWorkArtifactSubmissionV0(ctx, submission); err != nil {
 		t.Fatalf("record receipt: %v", err)
@@ -276,8 +296,8 @@ func TestOperationalClosureSourceV0CierraOPESFinalConMinimosComunesYManifest(t *
 	}
 	if !codexStackOperationalClosureContainsV0(got.EvidenceRefs, "opes-extension-minima-passed") ||
 		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "opes-common-master-not-applicable") ||
-		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "manifest_cierre.json") ||
-		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "opes-final-evidence:qa") {
+		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "manifest-cierre-ref-closure-final-001") ||
+		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "evidence-ref-closure-final-qa-001") {
 		t.Fatalf("cierre final OPES sin evidencias propagadas: %+v", got)
 	}
 }
