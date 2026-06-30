@@ -13,6 +13,7 @@ func TestOPESOperationalDocsGuardV0(t *testing.T) {
 		"modulos/orquesta-opes-bridge/README.md",
 		"modulos/orquesta-server/README.md",
 		"docs/opes_flujo_temario_operativo_2026-06-02.md",
+		"docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md",
 	} {
 		text := readOperationalDocGuardV0(t, root, rel)
 		blocks := shellBlocksWithNeedleV0(text, "ORQUESTA_OPES_BASE_URL=")

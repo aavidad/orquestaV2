@@ -228,6 +228,7 @@ smoke; si no se conoce, eliminar esa variable y conservar
 
 ```bash
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_DRY_RUN=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id> \
@@ -244,6 +245,8 @@ global empezara a empujar la run por la cola:
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
 ORQUESTA_BASE_URL=http://127.0.0.1:<puerto-orquesta> \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_JOB_TYPE=plan_temario \
 ORQUESTA_OPES_BRIDGE_JOB_REF=job-ref-plan-temario-operario-001 \
@@ -370,6 +373,8 @@ Arranque autonomo acotado hasta cierre:
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
 ORQUESTA_BASE_URL=http://127.0.0.1:<puerto-orquesta> \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \
 ORQUESTA_OPES_BRIDGE_LIMIT=3 \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id> \
 ORQUESTA_OPES_BRIDGE_CORRELATION_ID=<correlation_id> \
@@ -386,6 +391,7 @@ aislado y la cuota Codex este confirmada:
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
 ORQUESTA_OPES_BRIDGE_ENABLED=1 \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
+ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=10 \
 ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=update_topic_registry,research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,generate_html_site,generate_help_manual_assets,finalize_temario_package \
 ORQUESTA_OPES_BRIDGE_INITIAL_DELAY_SECONDS=5 \
@@ -398,6 +404,7 @@ ORQUESTA_CODEX_PROJECT_WORKDIR=/tmp/opes-salidas/operario-20260518/project \
 ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/opes-salidas/operario-20260518/runtime \
 ORQUESTA_CODEX_MODEL=gpt-5.5 \
 ORQUESTA_CODEX_REASONING_EFFORT=xhigh \
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \
 go run ./cmd/orquesta-server run
 ```
 
