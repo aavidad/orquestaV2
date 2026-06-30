@@ -496,6 +496,77 @@ func TestPrepareAutoprogrammingRunV0GoalReadyMultiGoalStateStoreFallaSinRelanzar
 	}
 }
 
+func TestPrepareAutoprogrammingRunV0GoalReadyLaunchFailedPersisteStateBloqueadoV0(t *testing.T) {
+	ctx := context.Background()
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
+	launcher := &goalFirstQueueLauncherForTestV0{
+		receipt: orquestagoal.GoalLaunchReceiptV0{
+			SchemaVersion: orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+			Status:        orquestagoal.GoalStatusInvalidV0,
+			EvidenceRefs:  []string{"evidence-ref-goal-launch-socket-missing"},
+			Issues: []orquestagoal.GoalWorkIssueV0{{
+				Code: "codex_app_server_control_socket_missing",
+			}},
+		},
+		err: errors.New("failed to connect to socket at /home/user/.codex/app-server-control/app-server-control.sock"),
+	}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-goal-launch-fails-001"
+	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-launch-fails-001"
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+	ports := orquestaappdirectorservice.StartAppDirectorPortsV0{
+		RunStore:             runStore,
+		DirectorTaskStore:    taskStore,
+		GoalLauncher:         launcher,
+		GoalObserver:         &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:       goalStates,
+	}
+
+	bridged, err := PrepareAutoprogrammingRunV0(ctx, AutoprogrammingBridgeRequestV0{
+		Request: request,
+	}, ports)
+	if err != nil {
+		t.Fatalf("PrepareAutoprogrammingRunV0: %v", err)
+	}
+	if bridged.Accepted ||
+		bridged.Run.RunID != request.RequestRef ||
+		len(bridged.Issues) != 1 ||
+		bridged.Issues[0].Code != "autoprogramming_goal_launch_failed" ||
+		bridged.Issues[0].Field != "goal_launcher" ||
+		!strings.Contains(bridged.Issues[0].Message, "codex_app_server_control_socket_missing") ||
+		strings.Contains(bridged.Issues[0].Message, "/home/user") ||
+		len(bridged.GoalStates) != 1 ||
+		len(launcher.specs) != 1 {
+		t.Fatalf("bridged=%+v specs=%+v", bridged, launcher.specs)
+	}
+	run, err := runStore.LoadRunV0(ctx, request.RequestRef)
+	if err != nil {
+		t.Fatalf("LoadRunV0: %v", err)
+	}
+	if len(run.Tasks) != 0 || len(run.FunctionContracts) != 0 {
+		t.Fatalf("launch failed no debe materializar legacy: %+v", run)
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(ctx, request.RequestRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if state.Status != orquestagoal.GoalStatusInvalidV0 ||
+		state.RunRef != request.RequestRef ||
+		state.LaunchReceipt.Issues[0].Code != "codex_app_server_control_socket_missing" ||
+		!autoprogrammingBridgeStringInSetForTestV0(state.EvidenceRefs, "evidence-ref-autoprogramming-goal-first-launch-failed-state-v0") ||
+		!autoprogrammingBridgeStringInSetForTestV0(state.EvidenceRefs, "evidence-ref-goal-launch-socket-missing") {
+		t.Fatalf("state reparable inesperado=%+v", state)
+	}
+}
+
 func TestPrepareAutoprogrammingRunV0GoalReadyRunExistenteConSpecDistintoNoReutiliza(t *testing.T) {
 	ctx := context.Background()
 	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
