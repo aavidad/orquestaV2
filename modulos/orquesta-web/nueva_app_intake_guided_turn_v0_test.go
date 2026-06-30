@@ -75,6 +75,38 @@ func TestWebNuevaAppIntakeGuidedActionV0AplicaDudasSinCambiarContratoFinal(t *te
 	}
 }
 
+func TestWebNuevaAppIntakeDecisionV0ConservaPreferenciasTecnicasEnHandoff(t *testing.T) {
+	session := NewWebNuevaAppIntakeSessionV0("session-guided-tech", "es", "Portal", "Publicar viviendas")
+	decisions := []WebNuevaAppIntakeDecisionV0{
+		{Field: "tipo_app", Value: "web"},
+		{Field: "preferencias_tecnicas.lenguaje", Value: "Go"},
+		{Field: "preferencias_tecnicas.framework", Value: "HTMX"},
+		{Field: "preferencias_tecnicas.restricciones", Value: "sin SPA pesada, sin ORM"},
+		{Field: "preferencias_tecnicas.preferencias", Value: "render server-side, colas internas"},
+	}
+	for _, decision := range decisions {
+		session = session.ApplyDecisionV0(decision)
+	}
+
+	if session.Form.PreferenciasTecnicas.Lenguaje != "Go" ||
+		session.Form.PreferenciasTecnicas.Framework != "HTMX" ||
+		!stringSliceHasV0(session.Form.PreferenciasTecnicas.Restricciones, "sin SPA pesada") ||
+		!stringSliceHasV0(session.Form.PreferenciasTecnicas.Preferencias, "colas internas") {
+		t.Fatalf("preferencias tecnicas no aplicadas al formulario: %+v", session.Form.PreferenciasTecnicas)
+	}
+	req := session.Form.ToAppSpecRequestV0()
+	if req.PreferenciasTecnicas.Lenguaje != "Go" ||
+		req.PreferenciasTecnicas.Framework != "HTMX" ||
+		!stringSliceHasV0(req.PreferenciasTecnicas.Restricciones, "sin ORM") ||
+		!stringSliceHasV0(req.PreferenciasTecnicas.Preferencias, "render server-side") {
+		t.Fatalf("preferencias tecnicas no conservadas en handoff: %+v", req.PreferenciasTecnicas)
+	}
+	if session.AppSpecPartial.PreferenciasTecnicas.Lenguaje != "Go" ||
+		session.AppSpecPartial.PreferenciasTecnicas.Framework != "HTMX" {
+		t.Fatalf("app spec parcial no refrescada: %+v", session.AppSpecPartial.PreferenciasTecnicas)
+	}
+}
+
 func TestWebNuevaAppIntakeGuidedActionV0IgnoraAccionDesconocida(t *testing.T) {
 	session := NewWebNuevaAppIntakeSessionV0("session-guided-3", "es", "Portal", "Publicar viviendas")
 	before := session.Form

@@ -114,8 +114,14 @@ func applyWebNuevaAppIntakeDecisionToFormV0(
 		form.Restricciones = decision.Values
 	case "preferencias_tecnicas.arquitectura":
 		form.PreferenciasTecnicas.Arquitectura = decision.Value
+	case "preferencias_tecnicas.lenguaje":
+		form.PreferenciasTecnicas.Lenguaje = decision.Value
+	case "preferencias_tecnicas.framework":
+		form.PreferenciasTecnicas.Framework = decision.Value
+	case "preferencias_tecnicas.restricciones":
+		form.PreferenciasTecnicas.Restricciones = nuevaAppDecisionValuesOrScalarV0(decision)
 	case "preferencias_tecnicas.preferencias":
-		form.PreferenciasTecnicas.Preferencias = decision.Values
+		form.PreferenciasTecnicas.Preferencias = nuevaAppDecisionValuesOrScalarV0(decision)
 	case "project_source.kind":
 		form.ProjectSource.Kind = decision.Value
 	case "project_source.git_url":
