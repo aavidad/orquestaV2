@@ -163,13 +163,15 @@ type GoalWorkStateV0 struct {
 }
 
 type GoalWorkRunMarkerV0 struct {
-	SchemaVersion   string   `json:"schema_version"`
-	RunRef          string   `json:"run_ref"`
-	GoalRef         string   `json:"goal_ref,omitempty"`
-	ExternalGoalRef string   `json:"external_goal_ref,omitempty"`
-	DirectorKind    string   `json:"director_kind,omitempty"`
-	Status          string   `json:"status,omitempty"`
-	EvidenceRefs    []string `json:"evidence_refs,omitempty"`
+	SchemaVersion   string               `json:"schema_version"`
+	RunRef          string               `json:"run_ref"`
+	GoalRef         string               `json:"goal_ref,omitempty"`
+	ExternalGoalRef string               `json:"external_goal_ref,omitempty"`
+	DirectorKind    string               `json:"director_kind,omitempty"`
+	Status          string               `json:"status,omitempty"`
+	Spec            *GoalWorkSpecV0      `json:"spec,omitempty"`
+	LaunchReceipt   *GoalLaunchReceiptV0 `json:"launch_receipt,omitempty"`
+	EvidenceRefs    []string             `json:"evidence_refs,omitempty"`
 }
 
 type GoalWorkStateListRequestV0 struct {

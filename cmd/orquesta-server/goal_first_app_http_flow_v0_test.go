@@ -493,17 +493,27 @@ func TestServerAppHTTPGoalFirstRestartMarkerSinStateNoDrenaLegacyV0(t *testing.T
 	if continued.Status != orquestaappdirectorservice.StartAppDirectorStatusPendingV0 ||
 		continued.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
 		len(continued.StartedAgents) != 0 ||
-		!goalFirstHTTPClosureIssuesContainCodeForTestV0(continued.OperationalClosureIssues, "app_director_goal_first_state_missing") {
+		!goalFirstHTTPClosureIssuesContainCodeForTestV0(continued.OperationalClosureIssues, "app_director_goal_first_observe_required") ||
+		!goalFirstHTTPStringInSetForTestV0(continued.EvidenceRefs, "evidence-ref-app-director-goal-state-repaired-from-marker-v0") {
 		t.Fatalf("continued=%+v", continued)
+	}
+	repairedState, err := restartedStack.Ports.GoalStateStore.LoadGoalWorkStateV0(context.Background(), started.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0 repaired: %v", err)
+	}
+	if repairedState.GoalRef != started.GoalRef ||
+		repairedState.ExternalGoalRef == "" ||
+		!goalFirstHTTPStringInSetForTestV0(repairedState.EvidenceRefs, "evidence-ref-app-director-goal-state-repaired-from-marker-v0") {
+		t.Fatalf("repairedState=%+v started=%+v", repairedState, started)
 	}
 	restartHandler, err := buildServerAppHandlerV0(restartedStack)
 	if err != nil {
 		t.Fatalf("buildServerAppHandlerV0 restart: %v", err)
 	}
 	supervisor := postRunSupervisorGoalFirstForTestV0(t, restartHandler, started.RunRef)
-	if supervisor.StopReason != "goal_first_state_missing" ||
-		!goalFirstHTTPStringInSetForTestV0(supervisor.NextActions, "repair_goal_state_from_launcher_receipt_or_mark_blocked") ||
-		!goalFirstHTTPDiagnosticsContainCodeForTestV0(supervisor.Diagnostics, "run_supervisor_goal_first_state_missing") ||
+	if supervisor.StopReason != "goal_first_observe_required" ||
+		!goalFirstHTTPStringInSetForTestV0(supervisor.NextActions, "observe_goal") ||
+		!goalFirstHTTPDiagnosticsContainCodeForTestV0(supervisor.Diagnostics, "run_supervisor_goal_first_not_legacy") ||
 		restartBackend.startCalls != 0 ||
 		restartBackend.observeCalls != 0 {
 		t.Fatalf("supervisor=%+v restartBackend=%+v", supervisor, restartBackend)

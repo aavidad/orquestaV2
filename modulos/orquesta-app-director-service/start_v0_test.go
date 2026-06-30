@@ -949,12 +949,94 @@ func TestContinueAppDirectorV0GoalFirstMarkerSinStateNoEjecutaLoopLegacyV0(t *te
 		result.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
 		result.Run.RunID != started.Run.RunID ||
 		len(result.StartedAgents) != 0 ||
+		!serviceStringInSetV0(result.EvidenceRefs, "evidence-ref-app-director-goal-state-repaired-from-marker-v0") {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(result.OperationalClosureIssues) != 1 ||
+		result.OperationalClosureIssues[0].Code != continueAppDirectorGoalFirstObserveCodeV0 {
+		t.Fatalf("operational_closure_issues=%+v", result.OperationalClosureIssues)
+	}
+	repaired, err := missingGoalStateStore.LoadGoalWorkStateV0(context.Background(), started.Run.RunID)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0 repaired: %v", err)
+	}
+	if repaired.GoalRef != started.GoalRef ||
+		repaired.ExternalGoalRef != "thread-ref-service-goal-001" ||
+		repaired.Spec.GoalRef != started.GoalRef ||
+		!serviceStringInSetV0(repaired.EvidenceRefs, "evidence-ref-app-director-goal-state-repaired-from-marker-v0") {
+		t.Fatalf("repaired=%+v started=%+v", repaired, started)
+	}
+}
+
+func TestContinueAppDirectorV0GoalFirstMarkerLegacySinStateNoReparaNiEjecutaLoopLegacyV0(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	launcher := &serviceGoalLauncherForTestV0{}
+	goalStates := newServiceGoalStateStoreForTestV0()
+	markers := newServiceGoalFirstRunMarkerStoreForTestV0()
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = AppDirectorExecutionModeGoalFirstV0
+
+	started, err := StartAppDirectorV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{
+			RunStore:                store,
+			EventSink:               sink,
+			OutboxLedger:            ledger,
+			GoalLauncher:            launcher,
+			GoalObserver:            serviceGoalObserverForTestV0{},
+			GoalClosureValidator:    orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+			GoalStateStore:          goalStates,
+			GoalFirstRunMarkerStore: markers,
+		},
+	)
+	if err != nil {
+		t.Fatalf("StartAppDirectorV0: %v", err)
+	}
+	if err := markers.SaveGoalWorkRunMarkerV0(context.Background(), AppDirectorGoalFirstRunMarkerV0{
+		SchemaVersion:   AppDirectorGoalFirstRunMarkerSchemaV0,
+		RunRef:          started.Run.RunID,
+		GoalRef:         started.GoalRef,
+		ExternalGoalRef: "thread-ref-service-goal-001",
+		DirectorKind:    orquestagoal.GoalDirectorKindCodexGoalV0,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		EvidenceRefs:    []string{"evidence-ref-legacy-marker"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkRunMarkerV0 legacy: %v", err)
+	}
+	missingGoalStateStore := newServiceGoalStateStoreForTestV0()
+
+	result, err := ContinueAppDirectorV0(
+		context.Background(),
+		ContinueAppDirectorRequestV0{
+			RunRef:        started.Run.RunID,
+			OccurredAt:    "2026-05-09T22:33:00Z",
+			CorrelationID: "corr-service-goal-first-legacy-marker-missing-state",
+		},
+		StartAppDirectorPortsV0{
+			RunStore:                store,
+			GoalStateStore:          missingGoalStateStore,
+			GoalFirstRunMarkerStore: markers,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ContinueAppDirectorV0: %v", err)
+	}
+	if result.Status != ContinueAppDirectorStatusPendingV0 ||
+		result.LoopStatus != orquestacionnucleoapp.ProgressiveLoopStatusWaitExternalV0 ||
+		result.Run.RunID != started.Run.RunID ||
+		len(result.StartedAgents) != 0 ||
 		!serviceStringInSetV0(result.EvidenceRefs, continueAppDirectorGoalFirstStateMissingEvidenceV0) {
 		t.Fatalf("result=%+v", result)
 	}
 	if len(result.OperationalClosureIssues) != 1 ||
 		result.OperationalClosureIssues[0].Code != continueAppDirectorGoalFirstStateMissingCodeV0 {
 		t.Fatalf("operational_closure_issues=%+v", result.OperationalClosureIssues)
+	}
+	if _, err := missingGoalStateStore.LoadGoalWorkStateV0(context.Background(), started.Run.RunID); err == nil {
+		t.Fatalf("marker legacy no debe reparar GoalWorkStateV0")
 	}
 }
 

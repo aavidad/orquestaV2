@@ -401,6 +401,14 @@ func NormalizeGoalWorkRunMarkerV0(marker GoalWorkRunMarkerV0) GoalWorkRunMarkerV
 		marker.DirectorKind = GoalDirectorKindRuntimeGoalV0
 	}
 	marker.Status = strings.TrimSpace(marker.Status)
+	if marker.Spec != nil {
+		normalized := NormalizeGoalWorkSpecV0(*marker.Spec)
+		marker.Spec = &normalized
+	}
+	if marker.LaunchReceipt != nil {
+		normalized := NormalizeGoalLaunchReceiptV0(*marker.LaunchReceipt)
+		marker.LaunchReceipt = &normalized
+	}
 	for i := range marker.EvidenceRefs {
 		marker.EvidenceRefs[i] = strings.TrimSpace(marker.EvidenceRefs[i])
 	}
@@ -418,6 +426,21 @@ func NewGoalWorkRunMarkerV0(marker GoalWorkRunMarkerV0) (GoalWorkRunMarkerV0, er
 	}
 	if marker.Status != "" && !validGoalWorkResultStatusV0(marker.Status) {
 		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalStatusInvalidV0, Field: "status"})
+	}
+	if marker.Spec != nil {
+		if marker.Spec.RunRef != "" && marker.Spec.RunRef != marker.RunRef {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalClosureInvalidV0, Field: "spec.run_ref"})
+		}
+		if marker.GoalRef != "" && marker.Spec.GoalRef != "" && marker.Spec.GoalRef != marker.GoalRef {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalClosureInvalidV0, Field: "spec.goal_ref"})
+		}
+		issues = append(issues, ValidateGoalWorkSpecV0(*marker.Spec)...)
+	}
+	if marker.LaunchReceipt != nil {
+		if marker.GoalRef != "" && marker.LaunchReceipt.GoalRef != "" && marker.LaunchReceipt.GoalRef != marker.GoalRef {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalClosureInvalidV0, Field: "launch_receipt.goal_ref"})
+		}
+		issues = append(issues, ValidateGoalLaunchReceiptV0(*marker.LaunchReceipt)...)
 	}
 	for _, evidenceRef := range marker.EvidenceRefs {
 		validateRequiredGoalRefV0(&issues, "evidence_refs", evidenceRef)

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
@@ -71,6 +72,27 @@ func continueAppDirectorGoalFirstMarkerResultV0(
 	if err != nil {
 		return ContinueAppDirectorResultV0{}, true, err
 	}
+	if repaired, ok, err := continueAppDirectorRepairGoalStateFromMarkerV0(ctx, request, ports, normalized); err != nil {
+		return ContinueAppDirectorResultV0{}, true, err
+	} else if ok {
+		result, err := continueAppDirectorGoalFirstPendingResultV0(
+			ctx,
+			request,
+			ports,
+			continueAppDirectorGoalFirstObserveCodeV0,
+			"goal_state",
+			"run goal-first: GoalWorkStateV0 reconstruido desde marker; observar con ObserveAppDirectorGoalV0",
+			compactStartAppDirectorStringsV0(append(
+				[]string{
+					continueAppDirectorGoalFirstContainerEvidenceV0,
+					continueAppDirectorGoalFirstObserveEvidenceV0,
+					"evidence-ref-app-director-goal-state-repaired-from-marker-v0",
+				},
+				repaired.EvidenceRefs...,
+			)),
+		)
+		return result, true, err
+	}
 	result, err := continueAppDirectorGoalFirstPendingResultV0(
 		ctx,
 		request,
@@ -87,6 +109,33 @@ func continueAppDirectorGoalFirstMarkerResultV0(
 		)),
 	)
 	return result, true, err
+}
+
+func continueAppDirectorRepairGoalStateFromMarkerV0(
+	ctx context.Context,
+	request ContinueAppDirectorRequestV0,
+	ports StartAppDirectorPortsV0,
+	marker AppDirectorGoalFirstRunMarkerV0,
+) (AppDirectorGoalStateV0, bool, error) {
+	if ports.GoalStateStore == nil || marker.Spec == nil || marker.LaunchReceipt == nil {
+		return AppDirectorGoalStateV0{}, false, nil
+	}
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef:        request.RunRef,
+		Spec:          *marker.Spec,
+		LaunchReceipt: *marker.LaunchReceipt,
+		EvidenceRefs: compactStartAppDirectorStringsV0(append(
+			[]string{"evidence-ref-app-director-goal-state-repaired-from-marker-v0"},
+			marker.EvidenceRefs...,
+		)),
+	})
+	if err != nil {
+		return AppDirectorGoalStateV0{}, false, err
+	}
+	if err := ports.GoalStateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
+		return AppDirectorGoalStateV0{}, false, err
+	}
+	return state, true, nil
 }
 
 func continueAppDirectorGoalFirstPendingResultV0(

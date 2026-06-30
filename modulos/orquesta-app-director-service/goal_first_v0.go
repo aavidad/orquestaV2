@@ -62,6 +62,7 @@ func startAppDirectorGoalFirstV0(
 			ctx,
 			appDirectorGoalFirstRunMarkerFromLaunchV0(
 				prepared.Run.RunID,
+				goalSpec,
 				goalStarted.Receipt,
 				prepared.EvidenceRefs,
 			),
@@ -93,8 +94,10 @@ func saveAppDirectorGoalFirstLaunchFailedMarkerV0(
 				receipt.ExternalGoalRef,
 				spec.GoalRef,
 			),
-			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
-			Status:       orquestagoal.GoalStatusBlockedV0,
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			Status:        orquestagoal.GoalStatusBlockedV0,
+			Spec:          &spec,
+			LaunchReceipt: startAppDirectorGoalLaunchReceiptIfPresentV0(receipt),
 			EvidenceRefs: compactStartAppDirectorStringsV0(append(
 				[]string{
 					"evidence-ref-app-director-goal-first-launch-failed-v0",
@@ -104,6 +107,16 @@ func saveAppDirectorGoalFirstLaunchFailedMarkerV0(
 			)),
 		},
 	)
+}
+
+func startAppDirectorGoalLaunchReceiptIfPresentV0(
+	receipt orquestagoal.GoalLaunchReceiptV0,
+) *orquestagoal.GoalLaunchReceiptV0 {
+	normalized := orquestagoal.NormalizeGoalLaunchReceiptV0(receipt)
+	if strings.TrimSpace(normalized.GoalRef) == "" && strings.TrimSpace(normalized.ExternalGoalRef) == "" {
+		return nil
+	}
+	return &normalized
 }
 
 func ObserveAppDirectorGoalV0(
@@ -229,6 +242,7 @@ func launchAppDirectorGoalReworkIfAllowedV0(
 				ctx,
 				appDirectorGoalFirstRunMarkerFromLaunchV0(
 					state.RunRef,
+					spec,
 					goalStarted.Receipt,
 					goalStarted.EvidenceRefs,
 				),
@@ -243,6 +257,7 @@ func launchAppDirectorGoalReworkIfAllowedV0(
 			ctx,
 			appDirectorGoalFirstRunMarkerFromLaunchV0(
 				state.RunRef,
+				spec,
 				goalStarted.Receipt,
 				goalStarted.EvidenceRefs,
 			),
