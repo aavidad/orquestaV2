@@ -32,6 +32,7 @@ func configureServerPackageTestEnvV0() func() {
 			_ = os.Setenv("GOTMPDIR", abs)
 			_ = os.Setenv("GOCACHE", filepath.Join(abs, "go-cache"))
 			_ = os.Setenv("GOPATH", filepath.Join(abs, "go"))
+			_ = os.Setenv("GOMODCACHE", filepath.Join(abs, "go", "pkg", "mod"))
 		}
 	}
 	for _, entry := range os.Environ() {
@@ -43,8 +44,44 @@ func configureServerPackageTestEnvV0() func() {
 	_ = os.Setenv(envCodexSandboxV0, "danger-full-access")
 	return func() {
 		if tmpDir != "" {
-			_ = os.RemoveAll(tmpDir)
+			cleanupServerPackageTestTempDirV0(tmpDir)
 		}
+	}
+}
+
+func cleanupServerPackageTestTempDirV0(path string) {
+	_ = filepath.WalkDir(path, func(current string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		mode := os.FileMode(0o700)
+		if entry != nil && !entry.IsDir() {
+			mode = 0o600
+		}
+		_ = os.Chmod(current, mode)
+		return nil
+	})
+	_ = os.RemoveAll(path)
+}
+
+func TestCleanupServerPackageTestTempDirV0EliminaModuloGoReadOnly(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "orquesta-server-test-tmp")
+	moduleDir := filepath.Join(root, "go", "pkg", "mod", "golang.org", "x", "text@v0.38.0")
+	if err := os.MkdirAll(moduleDir, 0o755); err != nil {
+		t.Fatalf("mkdir module: %v", err)
+	}
+	filePath := filepath.Join(moduleDir, "go.mod")
+	if err := os.WriteFile(filePath, []byte("module golang.org/x/text\n"), 0o400); err != nil {
+		t.Fatalf("write module file: %v", err)
+	}
+	if err := os.Chmod(moduleDir, 0o500); err != nil {
+		t.Fatalf("chmod module dir: %v", err)
+	}
+
+	cleanupServerPackageTestTempDirV0(root)
+
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatalf("root no eliminado, err=%v", err)
 	}
 }
 
