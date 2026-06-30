@@ -66,7 +66,10 @@ Salida:
   parsear esos refs desde strings de razon cuando exista el campo dedicado.
   Los consumidores que necesiten asegurar version de runtime deben comparar
   `runtime_identity.binary_sha256`, `build_ref` o `commit_ref` antes de enviar
-  trabajo externo; no basta con que el puerto responda.
+  trabajo externo; no basta con que el puerto responda. El bridge OPES puede
+  convertir esa comparacion en preflight opt-in con
+  `ORQUESTA_OPES_BRIDGE_REQUIRE_RUNTIME_COMPATIBILITY=1` y/o SHA/build/commit
+  requeridos antes de postear `/api/v0/external-work/run`.
 - `GET /api/v0/server/resources`: recursos publicos de la instancia y
   `route_manifest` versionado. El manifest enumera rutas montadas, patron,
   metodos, propietario y `security_profile`; los clientes de dominio deben

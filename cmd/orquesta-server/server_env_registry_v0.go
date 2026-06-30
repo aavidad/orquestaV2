@@ -174,6 +174,10 @@ const (
 	envOPESBridgeSuperviseSubmittedV0           = "ORQUESTA_OPES_BRIDGE_SUPERVISE_SUBMITTED"
 	envOPESBridgeWaitResidentSecondsV0          = "ORQUESTA_OPES_BRIDGE_WAIT_RESIDENT_SECONDS"
 	envOPESBridgeWaitResidentIntervalMSV0       = "ORQUESTA_OPES_BRIDGE_WAIT_RESIDENT_INTERVAL_MS"
+	envOPESBridgeRequireRuntimeCompatibilityV0  = "ORQUESTA_OPES_BRIDGE_REQUIRE_RUNTIME_COMPATIBILITY"
+	envOPESBridgeRequiredRuntimeBinarySHA256V0  = "ORQUESTA_OPES_BRIDGE_REQUIRED_RUNTIME_BINARY_SHA256"
+	envOPESBridgeRequiredRuntimeBuildRefV0      = "ORQUESTA_OPES_BRIDGE_REQUIRED_RUNTIME_BUILD_REF"
+	envOPESBridgeRequiredRuntimeCommitRefV0     = "ORQUESTA_OPES_BRIDGE_REQUIRED_RUNTIME_COMMIT_REF"
 	envOPESBridgeSpeechSynthesisCapabilityV0    = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY"
 	envOPESBridgeSpeechSynthesisCapabilityRefV0 = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY_REF"
 	envOPESBridgeSpeechSynthesisEvidenceRefsV0  = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS"
@@ -481,6 +485,26 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "opes_bridge",
 		Label:       "Intervalo espera OPES",
 		Description: "Intervalo en milisegundos entre lecturas pasivas de director/stats durante la espera residente OPES.",
+	},
+	envOPESBridgeRequireRuntimeCompatibilityV0: {
+		Scope:       "opes_bridge",
+		Label:       "Runtime compatible OPES",
+		Description: "Opt-in para exigir readiness e identidad runtime compatible antes de postear external-work desde OPES bridge.",
+	},
+	envOPESBridgeRequiredRuntimeBinarySHA256V0: {
+		Scope:       "opes_bridge",
+		Label:       "Runtime SHA OPES",
+		Description: "SHA256 de binario Orquesta requerido por OPES bridge cuando la compatibilidad runtime esta habilitada.",
+	},
+	envOPESBridgeRequiredRuntimeBuildRefV0: {
+		Scope:       "opes_bridge",
+		Label:       "Runtime build OPES",
+		Description: "Build ref Orquesta requerido por OPES bridge cuando la compatibilidad runtime esta habilitada.",
+	},
+	envOPESBridgeRequiredRuntimeCommitRefV0: {
+		Scope:       "opes_bridge",
+		Label:       "Runtime commit OPES",
+		Description: "Commit ref Orquesta requerido por OPES bridge cuando la compatibilidad runtime esta habilitada.",
 	},
 	envOPESBridgeSpeechSynthesisCapabilityV0: {
 		Scope:       "opes_bridge",

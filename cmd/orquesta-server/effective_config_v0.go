@@ -133,6 +133,22 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 			strconv.Itoa(intEnvOrDefaultV0(envOPESBridgeWaitResidentIntervalMSV0, int(defaultOPESBridgeResidentDispatchIntervalV0/time.Millisecond))),
 		),
 		serverConfigSettingFromRegistryV0(
+			envOPESBridgeRequireRuntimeCompatibilityV0,
+			strconv.FormatBool(boolEnvOrDefaultV0(envOPESBridgeRequireRuntimeCompatibilityV0, false)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeRequiredRuntimeBinarySHA256V0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeRequiredRuntimeBinarySHA256V0)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeRequiredRuntimeBuildRefV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeRequiredRuntimeBuildRefV0)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeRequiredRuntimeCommitRefV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeRequiredRuntimeCommitRefV0)),
+		),
+		serverConfigSettingFromRegistryV0(
 			envOPESBridgeSpeechSynthesisCapabilityV0,
 			strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisCapabilityV0)),
 		),

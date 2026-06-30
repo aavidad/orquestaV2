@@ -103,6 +103,9 @@
   (`selective_project` + `ORQUESTA_STARTUP_CLEANUP_SCOPE_REFS`) cierra cola y
   control de un proyecto/app sin `forced_stop` global, y que no limpia runs
   fuera del scope ni con agentes vivos pendientes.
+- `cmd/orquesta-server` prueba que el bridge OPES bloquea antes de
+  `/external-work/run` cuando se exige compatibilidad runtime opt-in y la
+  readiness no publica el SHA/build/commit requerido.
 - `modulos/orquesta-server` prueba que `goal_launcher_unavailable` sin
   `goal_ref` ni spec/receipt/result/closure no se publica como goal activo en
   status ni readiness.

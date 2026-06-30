@@ -273,6 +273,25 @@ func runOPESDrainSingleOnceV0(
 			summary.Results = append(summary.Results, result)
 			continue
 		}
+		if err := checkOPESBridgeRuntimeCompatibilityV0(
+			ctx,
+			&orquestaHTTPClient,
+			config.OrquestaBaseURL,
+			config.RuntimeCompatibility,
+		); err != nil {
+			errorCode := err.Error()
+			summary.Skipped++
+			result.Status = "runtime_compatibility_blocked"
+			result.OperationalReason = errorCode
+			result.NextActions = []string{"check_orquesta_readiness_runtime_identity", "use_approved_orquesta_binary"}
+			summary.Results = append(summary.Results, result)
+			summary.Errors = append(summary.Errors, opesDrainPublicErrorV0{
+				JobRef: job.ID,
+				Code:   errorCode,
+				Reason: errorCode,
+			})
+			continue
+		}
 		request, claimedSkip := opesBridgeClaimRunRequestV0(
 			ctx,
 			config.InputLedger,

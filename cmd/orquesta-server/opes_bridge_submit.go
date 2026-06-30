@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
 func submitOPESExternalWorkRunV0(
@@ -89,6 +91,70 @@ func submitOPESExternalWorkRunResultV0(
 		ExternalGoalRef:       strings.TrimSpace(decoded.ExternalGoalRef),
 		NextActions:           compactStringsV0(decoded.NextActions),
 	}, nil
+}
+
+func checkOPESBridgeRuntimeCompatibilityV0(
+	ctx context.Context,
+	client *http.Client,
+	baseURL string,
+	policy opesBridgeRuntimeCompatibilityPolicyV0,
+) error {
+	if !policy.Required {
+		return nil
+	}
+	if client == nil {
+		return fmt.Errorf("orquesta_runtime_compatibility_client_missing")
+	}
+	target, err := commandRESTEndpointURLV0(baseURL, orquestaserver.ServerReadinessEndpointV0)
+	if err != nil {
+		return fmt.Errorf("orquesta_runtime_compatibility_request_build_error")
+	}
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return fmt.Errorf("orquesta_runtime_compatibility_request_build_error")
+	}
+	response, err := client.Do(httpRequest)
+	if err != nil {
+		return fmt.Errorf("orquesta_runtime_compatibility_readiness_unavailable")
+	}
+	defer response.Body.Close()
+	body, err := readOPESExternalWorkRunSubmitResponseBodyV0(response)
+	if err != nil {
+		return fmt.Errorf("orquesta_runtime_compatibility_readiness_invalid")
+	}
+	var decoded struct {
+		Ready           bool `json:"ready"`
+		RuntimeIdentity struct {
+			BinarySHA256 string `json:"binary_sha256"`
+			BuildRef     string `json:"build_ref"`
+			CommitRef    string `json:"commit_ref"`
+		} `json:"runtime_identity"`
+	}
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		return fmt.Errorf("orquesta_runtime_compatibility_readiness_invalid")
+	}
+	if !decoded.Ready {
+		return fmt.Errorf("orquesta_runtime_compatibility_not_ready")
+	}
+	if policy.RequiredBinarySHA256 != "" &&
+		!strings.EqualFold(strings.TrimSpace(decoded.RuntimeIdentity.BinarySHA256), strings.TrimSpace(policy.RequiredBinarySHA256)) {
+		return fmt.Errorf("orquesta_runtime_compatibility_binary_sha_mismatch")
+	}
+	if policy.RequiredBuildRef != "" &&
+		strings.TrimSpace(decoded.RuntimeIdentity.BuildRef) != strings.TrimSpace(policy.RequiredBuildRef) {
+		return fmt.Errorf("orquesta_runtime_compatibility_build_ref_mismatch")
+	}
+	if policy.RequiredCommitRef != "" &&
+		strings.TrimSpace(decoded.RuntimeIdentity.CommitRef) != strings.TrimSpace(policy.RequiredCommitRef) {
+		return fmt.Errorf("orquesta_runtime_compatibility_commit_ref_mismatch")
+	}
+	if policy.RequiredBinarySHA256 == "" && policy.RequiredBuildRef == "" && policy.RequiredCommitRef == "" &&
+		strings.TrimSpace(decoded.RuntimeIdentity.BinarySHA256) == "" &&
+		strings.TrimSpace(decoded.RuntimeIdentity.BuildRef) == "" &&
+		strings.TrimSpace(decoded.RuntimeIdentity.CommitRef) == "" {
+		return fmt.Errorf("orquesta_runtime_compatibility_identity_missing")
+	}
+	return nil
 }
 
 func readOPESExternalWorkRunSubmitResponseBodyV0(response *http.Response) ([]byte, error) {

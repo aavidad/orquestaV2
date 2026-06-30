@@ -42,6 +42,14 @@ type opesDrainConfigV0 struct {
 	InputLedger                  externalBridgeInputLedgerV0
 	Destination                  opesDrainDestinationPolicyV0
 	ExternalCapabilities         []orquestadomainwork.DomainWorkExternalCapabilityV0
+	RuntimeCompatibility         opesBridgeRuntimeCompatibilityPolicyV0
+}
+
+type opesBridgeRuntimeCompatibilityPolicyV0 struct {
+	Required             bool
+	RequiredBinarySHA256 string
+	RequiredBuildRef     string
+	RequiredCommitRef    string
 }
 
 func opesDrainConfigFromEnvV0() (opesDrainConfigV0, error) {
@@ -109,7 +117,21 @@ func opesDrainConfigFromEnvWithBaseURLV0(
 		InputLedger:          inputLedger,
 		Destination:          destination,
 		ExternalCapabilities: opesBridgeExternalCapabilitiesFromEnvV0(),
+		RuntimeCompatibility: opesBridgeRuntimeCompatibilityPolicyFromEnvV0(),
 	}, nil
+}
+
+func opesBridgeRuntimeCompatibilityPolicyFromEnvV0() opesBridgeRuntimeCompatibilityPolicyV0 {
+	policy := opesBridgeRuntimeCompatibilityPolicyV0{
+		Required:             strings.TrimSpace(os.Getenv(envOPESBridgeRequireRuntimeCompatibilityV0)) == "1",
+		RequiredBinarySHA256: strings.TrimSpace(os.Getenv(envOPESBridgeRequiredRuntimeBinarySHA256V0)),
+		RequiredBuildRef:     strings.TrimSpace(os.Getenv(envOPESBridgeRequiredRuntimeBuildRefV0)),
+		RequiredCommitRef:    strings.TrimSpace(os.Getenv(envOPESBridgeRequiredRuntimeCommitRefV0)),
+	}
+	if policy.RequiredBinarySHA256 != "" || policy.RequiredBuildRef != "" || policy.RequiredCommitRef != "" {
+		policy.Required = true
+	}
+	return policy
 }
 
 func orquestaBaseURLFromEnvOrStateOrFallbackV0(

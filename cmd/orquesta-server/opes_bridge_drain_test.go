@@ -2588,6 +2588,76 @@ func TestRunOPESDrainOnceV0AudioAlreadySubmittedProviderHeartbeatTimeoutProyecta
 	}
 }
 
+func TestRunOPESDrainOnceV0BloqueaSinRuntimeIdentityCompatibleV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-runtime-compat-001",
+			"type":           "draft_content_block",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   `{"topic_id":"topic-ref-001","title":"Bloque"}`,
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	posts := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/v0/server/readiness" && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"ready": true,
+				"runtime_identity": map[string]any{
+					"binary_sha256": strings.Repeat("b", 64),
+					"build_ref":     "build-ref-live",
+					"commit_ref":    "commit-ref-live",
+				},
+			})
+		case r.URL.Path == "/api/v0/external-work/run" && r.Method == http.MethodPost:
+			posts++
+			t.Fatalf("no debe postear external-work con runtime incompatible")
+		default:
+			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer orquestaServer.Close()
+
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:     opesServer.URL,
+		OrquestaBaseURL: orquestaServer.URL,
+		Limit:           1,
+		JobType:         "draft_content_block",
+		HTTPTimeout:     time.Second,
+		RuntimeCompatibility: opesBridgeRuntimeCompatibilityPolicyV0{
+			Required:             true,
+			RequiredBinarySHA256: strings.Repeat("a", 64),
+		},
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+		ExternalCapabilities: opesBridgeRemoteQACapabilityForDrainTestV0(),
+	})
+	if err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if posts != 0 ||
+		summary.Submitted != 0 ||
+		summary.Skipped != 1 ||
+		len(summary.Results) != 1 ||
+		summary.Results[0].Status != "runtime_compatibility_blocked" ||
+		summary.Results[0].OperationalReason != "orquesta_runtime_compatibility_binary_sha_mismatch" ||
+		len(summary.Errors) != 1 ||
+		summary.Errors[0].Code != "orquesta_runtime_compatibility_binary_sha_mismatch" {
+		t.Fatalf("posts=%d summary=%+v", posts, summary)
+	}
+}
+
 func TestRunOPESDrainOnceV0AudioSinHeartbeatProveedorNoPosteaOrquestaV0(t *testing.T) {
 	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
