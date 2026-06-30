@@ -468,14 +468,14 @@ func mergeMCPQueueGlobalStatusCountersV0(left map[string]int, right map[string]i
 	out := map[string]int{}
 	for key, value := range left {
 		key = strings.TrimSpace(key)
-		if key == "" || value == 0 {
+		if key == "" || value < 0 {
 			continue
 		}
 		out[key] += value
 	}
 	for key, value := range right {
 		key = strings.TrimSpace(key)
-		if key == "" || value == 0 {
+		if key == "" || value < 0 {
 			continue
 		}
 		out[key] += value

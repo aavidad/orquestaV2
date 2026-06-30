@@ -77,7 +77,7 @@ func copyStringIntMapV0(values map[string]int) map[string]int {
 	}
 	out := make(map[string]int, len(values))
 	for key, value := range values {
-		if strings.TrimSpace(key) == "" || value == 0 {
+		if strings.TrimSpace(key) == "" || value < 0 {
 			continue
 		}
 		out[strings.TrimSpace(key)] = value

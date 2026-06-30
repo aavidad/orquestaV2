@@ -30,6 +30,7 @@ FAKE_CLOSURE_STATUS="${ORQUESTA_OPES_DERIVATIVES_FAKE_CLOSURE_STATUS-accepted}"
 FAKE_CLOSURE_ACCEPTED="${ORQUESTA_OPES_DERIVATIVES_FAKE_CLOSURE_ACCEPTED-1}"
 FAKE_OBSERVE_TIMEOUTS_BEFORE_SUCCESS="${ORQUESTA_OPES_DERIVATIVES_FAKE_OBSERVE_TIMEOUTS_BEFORE_SUCCESS:-0}"
 FAKE_JOBS_PER_TYPE="${ORQUESTA_OPES_DERIVATIVES_FAKE_JOBS_PER_TYPE:-1}"
+FAKE_AUDIO_PROVIDER_STATUS="${ORQUESTA_OPES_DERIVATIVES_FAKE_AUDIO_PROVIDER_STATUS:-}"
 FAKE_DIR=""
 FAKE_PID=""
 
@@ -103,6 +104,7 @@ try:
     jobs_per_type = max(int(sys.argv[11]), 1)
 except Exception:
     jobs_per_type = 1
+audio_provider_status = sys.argv[12].strip()
 active_index = sequence.index(pending_type) if mode == "dry-run-once" else 0
 expected_scan_limit = str(min(max(max(int(limit), 1) * 100, 100), 500))
 runs = {}
@@ -199,11 +201,18 @@ payload_by_type = {
         "topic_id": "topic-ref-fake-operario-001",
         "assembled_topic_artifact_id": "artifact-assembled-topic-fake-001",
         "audio_profile_ref": "audio-profile-accessible-es-001",
+        "current_phase": "tts",
         "text_public_status": "pass",
         "audio_regeneration_mode": "selective_by_sidecar",
         "audio_manifest_ref": "audio-manifest-fake-001",
         "source_content_ref": "assembled-topic-fake-final-text-001",
         "language_code": "es",
+        "audio_counters": {
+            "audio_manifest_refs": 1,
+            "text_hash_refs": 1,
+            "generated_blocks": 1,
+            "pending_blocks": 1
+        },
     },
     "generate_tutor_assets": {
         "program_id": "program-ref-fake-operario-001",
@@ -251,6 +260,42 @@ def payload_for(job_type):
         "scope": "tema completo fake",
     })
 
+def job_for(job_type, job_number, refresh=False):
+    suffix = f"{job_number:03d}"
+    payload = dict(payload_for(job_type))
+    job = {
+        "id": "job-ref-fake-" + job_type.replace("_", "-") + "-" + suffix,
+        "type": job_type,
+        "status": "pending",
+        "execution_mode": "external",
+        "payload_json": json.dumps(payload),
+        "correlation_id": "corr-ref-fake-" + job_type.replace("_", "-") + "-001",
+        "idempotency_key": "idem-ref-fake-" + job_type.replace("_", "-") + "-" + suffix,
+        "requested_by": "opes-fake"
+    }
+    if refresh and job_type == "generate_audio_asset" and audio_provider_status:
+        if audio_provider_status not in {"provider_timeout", "running_no_recent_progress"}:
+            job["provider_reason"] = "provider_status_invalid"
+            return job
+        payload[audio_provider_status] = True
+        payload["provider_status"] = audio_provider_status
+        payload["provider_reason"] = audio_provider_status
+        payload["current_phase"] = "tts"
+        job["status"] = "running"
+        job["payload_json"] = json.dumps(payload)
+        job["provider_status"] = audio_provider_status
+        job["provider_reason"] = audio_provider_status
+        job[audio_provider_status] = True
+    return job
+
+def job_by_ref(job_ref, refresh=False):
+    for job_type in sequence:
+        for job_number in range(1, jobs_per_type + 1):
+            job = job_for(job_type, job_number, refresh=refresh)
+            if job.get("id") == job_ref:
+                return job
+    return None
+
 def send_json(handler, status, body):
     raw = json.dumps(body).encode("utf-8")
     handler.send_response(status)
@@ -267,6 +312,14 @@ class Handler(BaseHTTPRequestHandler):
         global active_index
         parsed = urlparse(self.path)
         query = parse_qs(parsed.query)
+        if parsed.path.startswith("/api/jobs/"):
+            job_ref = parsed.path.rsplit("/", 1)[-1]
+            job = job_by_ref(job_ref, refresh=True)
+            if not job:
+                send_json(self, 404, {"error": "job_not_found", "job_ref": job_ref})
+                return
+            send_json(self, 200, job)
+            return
         if parsed.path != "/api/jobs":
             send_json(self, 404, {"error": "unexpected_path", "path": parsed.path})
             return
@@ -303,17 +356,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         jobs = []
         for job_number in range(1, jobs_per_type + 1):
-            suffix = f"{job_number:03d}"
-            jobs.append({
-                "id": "job-ref-fake-" + job_type.replace("_", "-") + "-" + suffix,
-                "type": job_type,
-                "status": "pending",
-                "execution_mode": "external",
-                "payload_json": json.dumps(payload),
-                "correlation_id": correlation_id,
-                "idempotency_key": "idem-ref-fake-" + job_type.replace("_", "-") + "-" + suffix,
-                "requested_by": "opes-fake"
-            })
+            jobs.append(job_for(job_type, job_number))
         send_json(self, 200, jobs)
 
     def do_POST(self):
@@ -459,7 +502,7 @@ with open(url_file, "w", encoding="utf-8") as fh:
     fh.write(f"http://127.0.0.1:{server.server_port}\n")
 server.serve_forever()
 PY
-  python3 "$server_py" "$url_file" "$SEQUENCE" "$LIMIT" "$FAKE_PENDING_TYPE" "$MODE" "$FAKE_GOAL_FIRST" "$FAKE_OBSERVE_STATUS" "$FAKE_CLOSURE_STATUS" "$FAKE_CLOSURE_ACCEPTED" "$FAKE_OBSERVE_TIMEOUTS_BEFORE_SUCCESS" "$FAKE_JOBS_PER_TYPE" &
+python3 "$server_py" "$url_file" "$SEQUENCE" "$LIMIT" "$FAKE_PENDING_TYPE" "$MODE" "$FAKE_GOAL_FIRST" "$FAKE_OBSERVE_STATUS" "$FAKE_CLOSURE_STATUS" "$FAKE_CLOSURE_ACCEPTED" "$FAKE_OBSERVE_TIMEOUTS_BEFORE_SUCCESS" "$FAKE_JOBS_PER_TYPE" "$FAKE_AUDIO_PROVIDER_STATUS" &
   FAKE_PID="$!"
   for _ in $(seq 1 50); do
     if [[ -s "$url_file" ]]; then
@@ -870,6 +913,7 @@ write_metadata() {
     echo "fake_pending_type=$FAKE_PENDING_TYPE"
     echo "fake_goal_first=$FAKE_GOAL_FIRST"
     echo "fake_jobs_per_type=$FAKE_JOBS_PER_TYPE"
+    echo "fake_audio_provider_status=$FAKE_AUDIO_PROVIDER_STATUS"
     echo "opes_base_url_ref=$(url_ref "$OPES_BASE_URL_EFFECTIVE")"
     echo "orquesta_base_url_ref=$(url_ref "$ORQUESTA_BASE_URL_EFFECTIVE")"
     echo "sequence=$SEQUENCE"

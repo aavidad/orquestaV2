@@ -207,8 +207,21 @@ desde el stack Codex; el bridge OPES residente lee esos campos desde `goal` o
 `TestMCPDirectorStatsToolExecutorV0GoalFirstProyectaMetadataOperacionalV0`,
 `TestCodexStackExternalJobStatsSourceV0GoalFirstProyectaMetadataOPESAudioV0` y
 `TestOPESBridgeSupervisionFromDirectorStatsV0GoalFirstProyectaMetadataAudioV0`.
-Siguen `parcial` por faltar smoke OPES temporal/runner real y cierre
-`superseded_by_local_evidence` aportado por dominio con evidencia suficiente.
+Revision adicional 2026-06-30 sobre BUG-030/037: queda cerrado el hueco de
+contrato HTTP temporal entre OPES y Orquesta sin tocar OPES productivo. OPES
+expone `POST /api/jobs/{id}/operational-metadata` solo con opt-in explicito
+`OPES_OPERATIONAL_METADATA_API_ENABLED=true`; el caso de uso rechaza jobs que no
+sean `generate_audio_asset` externos no terminales. Orquesta refresca
+`GET /api/jobs/{id}` en `already_submitted`, da prioridad a `external_refs`
+vivas sobre el payload inicial y conserva contadores a cero como
+`pending_blocks=0`. Smoke temporal aislado:
+`/tmp/orquesta-opes-audio-smoke.F7ZAV8/second_after_fix.json`, con OPES sqlite
+loopback, Orquesta fake loopback, `provider_timeout`, `current_phase=tts`,
+`generated_blocks=1`, `pending_blocks=0`, `submitted=0` y
+`already_submitted=1`.
+Siguen `parcial` porque falta productor/runner real de `edge-tts` o equivalente
+que emita heartbeat/progreso largo y tambien evidencia para
+`running_no_recent_progress` y transiciones completas de fase.
 
 ## Pendientes de analisis agrupado
 

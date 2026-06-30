@@ -2624,8 +2624,12 @@ func TestRunOPESDrainOnceV0AudioAlreadySubmittedProviderHeartbeatTimeoutProyecta
 				"type":           "generate_audio_asset",
 				"status":         "running",
 				"execution_mode": "external",
-				"payload_json":   opesDerivedPayloadForDrainTestV0("generate_audio_asset"),
+				"payload_json":   opesAudioPayloadWithCountersForDrainTestV0(),
 				"requested_by":   "opes",
+				"external_refs": map[string]string{
+					"audio_counter_generated_blocks": "2",
+					"audio_counter_pending_blocks":   "0",
+				},
 			}
 			if jobRefreshes >= 1 {
 				response["provider_timeout"] = true
@@ -2680,12 +2684,17 @@ func TestRunOPESDrainOnceV0AudioAlreadySubmittedProviderHeartbeatTimeoutProyecta
 		t.Fatalf("second drain: %v", err)
 	}
 
+	pendingBlocks, hasPendingBlocks := second.Results[0].AudioCounters["pending_blocks"]
 	if posts != 1 ||
 		first.Submitted != 1 ||
 		second.AlreadySubmitted != 1 ||
 		second.Results[0].Status != "already_submitted" ||
 		second.Results[0].SupervisionStatus != "blocked" ||
 		second.Results[0].SupervisionStopReason != "provider_timeout" ||
+		second.Results[0].CurrentPhase != "tts" ||
+		second.Results[0].AudioCounters["generated_blocks"] != 2 ||
+		!hasPendingBlocks ||
+		pendingBlocks != 0 ||
 		!containsStringForTestV0(second.Results[0].NextActions, "retry_from_phase=tts") {
 		t.Fatalf("posts=%d first=%+v second=%+v refreshes=%d", posts, first, second, jobRefreshes)
 	}
@@ -3117,6 +3126,23 @@ func opesAudioPayloadSupersededByLocalEvidenceForDrainTestV0() string {
 	payload["superseded_by_local_evidence"] = "true"
 	payload["local_evidence_ref"] = "evidence-ref-opes-local-audio-manifest-current"
 	payload["local_artifact_ref"] = "artifact-ref-opes-local-audio-current"
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return string(raw)
+}
+
+func opesAudioPayloadWithCountersForDrainTestV0() string {
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(opesAudioPayloadForDrainTestV0("pass", "selective_by_sidecar")), &payload); err != nil {
+		panic(err)
+	}
+	payload["current_phase"] = "tts"
+	payload["audio_counters"] = map[string]int{
+		"generated_blocks": 2,
+		"pending_blocks":   0,
+	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		panic(err)

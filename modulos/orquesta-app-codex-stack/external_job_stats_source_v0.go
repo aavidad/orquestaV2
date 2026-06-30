@@ -253,7 +253,7 @@ func copyCodexStackStringIntMapV0(values map[string]int) map[string]int {
 	out := make(map[string]int, len(values))
 	for key, value := range values {
 		key = strings.TrimSpace(key)
-		if key == "" || value == 0 {
+		if key == "" || value < 0 {
 			continue
 		}
 		out[key] = value

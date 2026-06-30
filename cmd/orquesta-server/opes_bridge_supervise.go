@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 
 	orquestaopesconnector "orquesta/modulos/orquesta-opes-connector"
@@ -234,8 +235,16 @@ func opesBridgeAudioProviderHeartbeatBlockV0(
 	}
 	result.SupervisionStatus = "blocked"
 	result.SupervisionStopReason = reason
-	result.CurrentPhase = "tts"
+	result.CurrentPhase = firstNonEmptyEnvlessV0(
+		jobs[0].ExternalRefs["current_phase"],
+		opesBridgeAudioProviderPayloadStringV0(jobs[0].PayloadJSON, "current_phase"),
+		"tts",
+	)
 	result.OperationalReason = reason
+	result.AudioCounters = copyStringIntMapV0(firstNonEmptyStringIntMapV0(
+		opesBridgeAudioProviderCountersV0(jobs[0]),
+		result.AudioCounters,
+	))
 	result.NextActions = compactStringsV0(append(result.NextActions, "retry_from_phase=tts", "inspect_audio_provider_heartbeat"))
 	return true
 }
@@ -317,6 +326,88 @@ func opesBridgeAudioProviderPayloadMapV0(raw string) map[string]any {
 		return nil
 	}
 	return values
+}
+
+func opesBridgeAudioProviderCountersV0(job orquestaopesconnector.ExternalJobV0) map[string]int {
+	counters := map[string]int{}
+	if payload := opesBridgeAudioProviderPayloadMapV0(job.PayloadJSON); len(payload) > 0 {
+		if raw, ok := payload["audio_counters"]; ok {
+			counters = opesBridgeAudioProviderCountersFromAnyV0(counters, raw)
+		}
+		for key, raw := range payload {
+			key = strings.TrimSpace(key)
+			if !strings.HasPrefix(key, "audio_counter_") {
+				continue
+			}
+			counters = opesBridgeAudioProviderCounterSetV0(counters, strings.TrimPrefix(key, "audio_counter_"), raw)
+		}
+	}
+	counters = opesBridgeAudioProviderCountersFromJSONV0(counters, job.ExternalRefs["audio_counters"])
+	for key, raw := range job.ExternalRefs {
+		key = strings.TrimSpace(key)
+		if !strings.HasPrefix(key, "audio_counter_") {
+			continue
+		}
+		counters = opesBridgeAudioProviderCounterSetV0(counters, strings.TrimPrefix(key, "audio_counter_"), raw)
+	}
+	if len(counters) == 0 {
+		return nil
+	}
+	return counters
+}
+
+func opesBridgeAudioProviderCountersFromJSONV0(counters map[string]int, raw string) map[string]int {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return counters
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
+		return counters
+	}
+	return opesBridgeAudioProviderCountersFromAnyV0(counters, decoded)
+}
+
+func opesBridgeAudioProviderCountersFromAnyV0(counters map[string]int, raw any) map[string]int {
+	values, ok := raw.(map[string]any)
+	if !ok {
+		return counters
+	}
+	for key, value := range values {
+		counters = opesBridgeAudioProviderCounterSetV0(counters, key, value)
+	}
+	return counters
+}
+
+func opesBridgeAudioProviderCounterSetV0(counters map[string]int, key string, raw any) map[string]int {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return counters
+	}
+	value := 0
+	ok := false
+	switch typed := raw.(type) {
+	case int:
+		value = typed
+		ok = true
+	case float64:
+		value = int(typed)
+		ok = true
+	case string:
+		parsed, err := strconv.Atoi(strings.TrimSpace(typed))
+		if err == nil {
+			value = parsed
+			ok = true
+		}
+	}
+	if !ok || value < 0 {
+		return counters
+	}
+	if counters == nil {
+		counters = map[string]int{}
+	}
+	counters[key] = value
+	return counters
 }
 
 func opesBridgeGoalObservationStopReasonV0(err error) string {

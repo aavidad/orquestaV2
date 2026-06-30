@@ -230,18 +230,22 @@ func mcpGoalDomainCounterSetV0(counters map[string]int, key string, raw any) map
 		return counters
 	}
 	value := 0
+	ok := false
 	switch typed := raw.(type) {
 	case int:
 		value = typed
+		ok = true
 	case float64:
 		value = int(typed)
+		ok = true
 	case string:
 		parsed, err := strconv.Atoi(strings.TrimSpace(typed))
 		if err == nil {
 			value = parsed
+			ok = true
 		}
 	}
-	if value == 0 {
+	if !ok || value < 0 {
 		return counters
 	}
 	if counters == nil {
@@ -256,7 +260,7 @@ func mergeMCPDomainOperationalCountersV0(values ...map[string]int) map[string]in
 	for _, counters := range values {
 		for key, value := range counters {
 			key = strings.TrimSpace(key)
-			if key == "" || value == 0 {
+			if key == "" || value < 0 {
 				continue
 			}
 			out[key] = value
