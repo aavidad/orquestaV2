@@ -185,6 +185,22 @@ func TestApplyWebNuevaAppIntakeAnswerV0AplicaCamposExpertosDelWizardV0(t *testin
 		session.Form.Integraciones[5].Nombre != "documentos" {
 		t.Fatalf("sexta integracion no aplicada: %+v", session.Form.Integraciones)
 	}
+	for _, want := range []WebNuevaAppIntakeContextV0{
+		{Key: "arquitectura", Value: "hexagonal"},
+		{Key: "plataformas", Value: "web"},
+		{Key: "datos", Value: "db_required"},
+		{Key: "deploy", Value: "docker"},
+		{Key: "pruebas", Value: "alta"},
+		{Key: "observabilidad", Value: "true"},
+		{Key: "documentacion", Value: "usuario:true,desarrollo:true,sistemas:false,profunda,es-ES,en-US"},
+		{Key: "i18n", Value: "enabled:true,es-ES,en-US"},
+		{Key: "revision_humana", Value: "true"},
+		{Key: "integraciones", Value: "storage"},
+	} {
+		if !hasIntakeContextValueV0(session.Handoff.ContextSummary, want.Key, want.Value) {
+			t.Fatalf("handoff no conserva %s=%q: %+v", want.Key, want.Value, session.Handoff.ContextSummary)
+		}
+	}
 	if sectionStatusV0(session.Sections, "datos_calidad") != "complete" {
 		t.Fatalf("sections=%+v", session.Sections)
 	}

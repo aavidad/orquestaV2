@@ -54,11 +54,28 @@ func webNuevaAppIntakeContextRefsV0(sessionRef, requestRef string) []string {
 
 func webNuevaAppIntakeContextSummaryV0(session WebNuevaAppIntakeSessionV0) []WebNuevaAppIntakeContextV0 {
 	request := session.AppSpecPartial
+	form := session.Form
 	values := []WebNuevaAppIntakeContextV0{
 		{Key: "locale", Value: request.Locale},
 		{Key: "nombre", Value: request.Nombre},
 		{Key: "objetivo", Value: request.Objetivo},
 		{Key: "tipo_app", Value: request.TipoApp},
+		{Key: "plataformas", Value: stringsFromNuevaAppValuesV0(form.Plataformas)},
+		{Key: "arquitectura", Value: form.PreferenciasTecnicas.Arquitectura},
+		{Key: "lenguaje", Value: form.PreferenciasTecnicas.Lenguaje},
+		{Key: "framework", Value: form.PreferenciasTecnicas.Framework},
+		{Key: "integraciones", Value: webNuevaAppIntakeIntegrationSummaryV0(form.Integraciones)},
+		{Key: "datos", Value: webNuevaAppIntakeDataSummaryV0(form.Datos)},
+		{Key: "storage", Value: webNuevaAppIntakeStorageSummaryV0(form.Datos.Storage)},
+		{Key: "deploy", Value: form.Deploy.Target},
+		{Key: "pruebas", Value: form.Calidad.Pruebas},
+		{Key: "accesibilidad", Value: form.Calidad.Accesibilidad},
+		{Key: "observabilidad", Value: webNuevaAppIntakeBoolSummaryV0(form.Calidad.Observabilidad)},
+		{Key: "documentacion", Value: webNuevaAppIntakeDocumentationSummaryV0(form.Documentacion)},
+		{Key: "i18n", Value: webNuevaAppIntakeI18NSummaryV0(form.I18N)},
+		{Key: "autonomia_agentes", Value: form.Agentes.Autonomia},
+		{Key: "revision_humana", Value: webNuevaAppIntakeBoolSummaryV0(form.Agentes.RevisionHumana)},
+		{Key: "project_source", Value: webNuevaAppIntakeProjectSourceSummaryV0(form.ProjectSource)},
 	}
 	out := make([]WebNuevaAppIntakeContextV0, 0, len(values))
 	for _, value := range values {
@@ -71,4 +88,89 @@ func webNuevaAppIntakeContextSummaryV0(session WebNuevaAppIntakeSessionV0) []Web
 		return []WebNuevaAppIntakeContextV0{}
 	}
 	return out
+}
+
+func webNuevaAppIntakeIntegrationSummaryV0(values []WebNuevaAppConnectorFormV0) string {
+	types := make([]string, 0, len(values))
+	for _, value := range values {
+		if value.Tipo != "" {
+			types = append(types, value.Tipo)
+		}
+	}
+	return stringsFromNuevaAppValuesV0(types)
+}
+
+func webNuevaAppIntakeDataSummaryV0(value WebNuevaAppDatosFormV0) string {
+	parts := []string{}
+	if value.DBRequired {
+		parts = append(parts, "db_required")
+	}
+	if value.NecesidadFuncional != "" {
+		parts = append(parts, value.NecesidadFuncional)
+	}
+	parts = append(parts, value.TiposDatos...)
+	for _, item := range value.TiposDetallados {
+		if item.Nombre != "" {
+			parts = append(parts, item.Nombre)
+		}
+	}
+	return stringsFromNuevaAppValuesV0(parts)
+}
+
+func webNuevaAppIntakeStorageSummaryV0(values []WebNuevaAppDataStorageFormV0) string {
+	types := make([]string, 0, len(values))
+	for _, value := range values {
+		if value.Tipo != "" {
+			types = append(types, value.Tipo)
+		}
+	}
+	return stringsFromNuevaAppValuesV0(types)
+}
+
+func webNuevaAppIntakeDocumentationSummaryV0(value WebNuevaAppDocumentacionFormV0) string {
+	parts := []string{}
+	if value.Usuario != nil {
+		parts = append(parts, "usuario:"+webNuevaAppIntakeBoolSummaryV0(value.Usuario))
+	}
+	if value.Desarrollo != nil {
+		parts = append(parts, "desarrollo:"+webNuevaAppIntakeBoolSummaryV0(value.Desarrollo))
+	}
+	if value.Sistemas != nil {
+		parts = append(parts, "sistemas:"+webNuevaAppIntakeBoolSummaryV0(value.Sistemas))
+	}
+	if value.Profundidad != "" {
+		parts = append(parts, value.Profundidad)
+	}
+	parts = append(parts, value.Locales...)
+	return stringsFromNuevaAppValuesV0(parts)
+}
+
+func webNuevaAppIntakeI18NSummaryV0(value WebNuevaAppI18NFormV0) string {
+	parts := []string{}
+	if value.Enabled != nil {
+		parts = append(parts, "enabled:"+webNuevaAppIntakeBoolSummaryV0(value.Enabled))
+	}
+	if value.DefaultLocale != "" {
+		parts = append(parts, "default:"+value.DefaultLocale)
+	}
+	parts = append(parts, value.Locales...)
+	return stringsFromNuevaAppValuesV0(parts)
+}
+
+func webNuevaAppIntakeProjectSourceSummaryV0(value WebNuevaAppProjectSourceFormV0) string {
+	return stringsFromNuevaAppValuesV0([]string{
+		value.Kind,
+		value.ProjectRef,
+		value.Branch,
+	})
+}
+
+func webNuevaAppIntakeBoolSummaryV0(value *bool) string {
+	if value == nil {
+		return ""
+	}
+	if *value {
+		return "true"
+	}
+	return "false"
 }
