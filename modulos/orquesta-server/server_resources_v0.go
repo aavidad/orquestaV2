@@ -8,8 +8,10 @@ import (
 )
 
 const (
-	ServerResourcesEndpointV0      = "/api/v0/server/resources"
-	ServerResourcesSchemaVersionV0 = "orquesta_server_resources.v0"
+	ServerResourcesEndpointV0            = "/api/v0/server/resources"
+	ServerResourcesSchemaVersionV0       = "orquesta_server_resources.v0"
+	ServerRouteManifestSchemaVersionV0   = "orquesta_route_manifest.v0"
+	ServerRouteManifestStatusAvailableV0 = "available"
 )
 
 type ServerResourcesV0 struct {
@@ -19,7 +21,26 @@ type ServerResourcesV0 struct {
 	PID           int                     `json:"pid"`
 	Process       ServerProcessV0         `json:"process"`
 	Disks         []ServerDiskResourceV0  `json:"disks"`
+	RouteManifest ServerRouteManifestV0   `json:"route_manifest"`
 	Issues        []ServerResourceIssueV0 `json:"issues,omitempty"`
+}
+
+type ServerRouteManifestV0 struct {
+	SchemaVersion string                  `json:"schema_version"`
+	Status        string                  `json:"status"`
+	Routes        []ServerRouteResourceV0 `json:"routes"`
+	EvidenceRefs  []string                `json:"evidence_refs,omitempty"`
+}
+
+type ServerRouteResourceV0 struct {
+	Ref               string   `json:"ref"`
+	Pattern           string   `json:"pattern"`
+	Kind              string   `json:"kind"`
+	Owner             string   `json:"owner"`
+	Methods           []string `json:"methods"`
+	SecurityProfile   string   `json:"security_profile"`
+	Mounted           bool     `json:"mounted"`
+	ShadowsPrefixRefs []string `json:"shadows_prefix_refs,omitempty"`
 }
 
 type ServerProcessV0 struct {
@@ -51,6 +72,10 @@ type ServerResourceIssueV0 struct {
 }
 
 func NewServerResourcesV0(state StateV0, now time.Time) ServerResourcesV0 {
+	return NewServerResourcesWithRoutesV0(state, now, nil)
+}
+
+func NewServerResourcesWithRoutesV0(state StateV0, now time.Time, routes []ServerRouteResourceV0) ServerResourcesV0 {
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
 	disks, issues := serverResourceDisksV0(serverResourcePathsV0(state))
@@ -77,7 +102,13 @@ func NewServerResourcesV0(state StateV0, now time.Time) ServerResourcesV0 {
 			NumGoroutine:      runtime.NumGoroutine(),
 			RSSBytes:          rss,
 		},
-		Disks:  disks,
+		Disks: disks,
+		RouteManifest: ServerRouteManifestV0{
+			SchemaVersion: ServerRouteManifestSchemaVersionV0,
+			Status:        ServerRouteManifestStatusAvailableV0,
+			Routes:        compactServerRouteResourcesV0(routes),
+			EvidenceRefs:  serverRouteResourceEvidenceRefsV0(routes),
+		},
 		Issues: compactServerResourceIssuesV0(issues),
 	}
 }
@@ -121,6 +152,51 @@ func compactServerResourceIssuesV0(values []ServerResourceIssueV0) []ServerResou
 		return []ServerResourceIssueV0{}
 	}
 	return out
+}
+
+func compactServerRouteResourcesV0(values []ServerRouteResourceV0) []ServerRouteResourceV0 {
+	seen := map[string]bool{}
+	out := make([]ServerRouteResourceV0, 0, len(values))
+	for _, value := range values {
+		value.Ref = strings.TrimSpace(value.Ref)
+		value.Pattern = strings.TrimSpace(value.Pattern)
+		value.Kind = strings.TrimSpace(value.Kind)
+		value.Owner = strings.TrimSpace(value.Owner)
+		value.SecurityProfile = strings.TrimSpace(value.SecurityProfile)
+		value.Methods = compactServerResourceStringsV0(value.Methods)
+		value.ShadowsPrefixRefs = compactServerResourceStringsV0(value.ShadowsPrefixRefs)
+		key := value.Ref + "\x00" + value.Pattern
+		if value.Ref == "" || value.Pattern == "" || len(value.Methods) == 0 || seen[key] {
+			continue
+		}
+		if value.Kind == "" {
+			value.Kind = "exact"
+		}
+		if value.Owner == "" {
+			value.Owner = "unknown"
+		}
+		if value.SecurityProfile == "" {
+			value.SecurityProfile = "unknown"
+		}
+		seen[key] = true
+		out = append(out, value)
+	}
+	if out == nil {
+		return []ServerRouteResourceV0{}
+	}
+	return out
+}
+
+func serverRouteResourceEvidenceRefsV0(values []ServerRouteResourceV0) []string {
+	routes := compactServerRouteResourcesV0(values)
+	refs := make([]string, 0, len(routes))
+	for _, route := range routes {
+		refs = append(refs, route.Ref+"-mounted-"+route.Owner)
+	}
+	if refs == nil {
+		return []string{}
+	}
+	return refs
 }
 
 func firstNonZeroIntV0(values ...int) int {

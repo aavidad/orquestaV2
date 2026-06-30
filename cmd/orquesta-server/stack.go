@@ -61,6 +61,7 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 		AppHandler:       appHandler,
 		Supervisor:       supervisor,
 		ResidentDirector: residentDirector,
+		RouteManifest:    serverRouteManifestResourcesV0(),
 		GoalStateStore:   stack.Stores.AppGoalStateStore,
 		GoalFingerprint:  serverGoalObservationFingerprintFromBackendV0(goalBackends.AppGoal, serverGoalObserverFingerprintEnabledFromEnvV0()),
 		ShutdownHooks:    serverGoalShutdownHooksFromBackendsV0(goalBackends.AppGoal, goalBackends.IdleGoal),

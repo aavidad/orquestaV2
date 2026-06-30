@@ -55,6 +55,12 @@ Salida:
   Los mensajes operativos pueden transportar `run_refs`, `goal_refs`,
   `request_refs` y `evidence_refs` estructurados; clientes nuevos no deben
   parsear esos refs desde strings de razon cuando exista el campo dedicado.
+- `GET /api/v0/server/resources`: recursos publicos de la instancia y
+  `route_manifest` versionado. El manifest enumera rutas montadas, patron,
+  metodos, propietario y `security_profile`; los clientes de dominio deben
+  usarlo junto con readiness para distinguir servidor correcto, composicion sin
+  API, puerto equivocado o ruta protegida. No sustituye a readiness y no
+  publica paths locales, tokens ni secretos.
 - `POST /api/v0/resident-director/control`: control runtime del Director
   residente con `action=pause|resume|status`. Pausado no ejecuta ticks ni
   acepta wakeups; `status` devuelve `paused`, `tick_active`, `tick_pending` y si

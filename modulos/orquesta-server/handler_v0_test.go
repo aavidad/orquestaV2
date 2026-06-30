@@ -36,6 +36,15 @@ func TestHandlerV0ExponeHealthStatusYDelegaV0(t *testing.T) {
 	}, time.Now().UTC())
 	handler := NewHandlerV0(HandlerConfigV0{
 		Tracker: tracker,
+		RouteManifest: []ServerRouteResourceV0{{
+			Ref:             "route-ref-test-domain-work-v0",
+			Pattern:         "/api/v0/domain-work",
+			Kind:            "exact",
+			Owner:           "test",
+			Methods:         []string{http.MethodPost},
+			SecurityProfile: "control_plane_mutation",
+			Mounted:         true,
+		}},
 		AppHandler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte("app"))
 		}),
@@ -50,6 +59,9 @@ func TestHandlerV0ExponeHealthStatusYDelegaV0(t *testing.T) {
 	assertServerPathV0(t, handler, ServerStatusEndpointV0, `"effective_config"`)
 	assertLegacyServerStatusAliasV0(t, handler)
 	assertServerPathV0(t, handler, ServerResourcesEndpointV0, ServerResourcesSchemaVersionV0)
+	assertServerPathV0(t, handler, ServerResourcesEndpointV0, ServerRouteManifestSchemaVersionV0)
+	assertServerPathV0(t, handler, ServerResourcesEndpointV0, `"/api/v0/domain-work"`)
+	assertServerPathV0(t, handler, ServerResourcesEndpointV0, `"security_profile":"control_plane_mutation"`)
 	assertServerPathV0(t, handler, "/nueva-app", "app")
 }
 

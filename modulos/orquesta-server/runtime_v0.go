@@ -14,6 +14,7 @@ type RuntimeDepsV0 struct {
 	AppHandler       http.Handler
 	Supervisor       SupervisorPortV0
 	ResidentDirector ResidentDirectorPortV0
+	RouteManifest    []ServerRouteResourceV0
 	GoalStateStore   orquestagoal.GoalWorkStateStorePortV0
 	GoalFingerprint  GoalObservationFingerprintPortV0
 	ShutdownHooks    []RuntimeShutdownHookPortV0
@@ -29,6 +30,7 @@ type RuntimeV0 struct {
 	appHandler                  http.Handler
 	supervisor                  SupervisorPortV0
 	residentDirector            ResidentDirectorPortV0
+	routeManifest               []ServerRouteResourceV0
 	goalStateStore              orquestagoal.GoalWorkStateStorePortV0
 	goalFingerprint             GoalObservationFingerprintPortV0
 	goalObservationFingerprints map[string]orquestagoal.GoalObservationFingerprintV0
@@ -88,6 +90,7 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		appHandler:                  deps.AppHandler,
 		supervisor:                  deps.Supervisor,
 		residentDirector:            deps.ResidentDirector,
+		routeManifest:               compactServerRouteResourcesV0(deps.RouteManifest),
 		goalStateStore:              deps.GoalStateStore,
 		goalFingerprint:             deps.GoalFingerprint,
 		goalObservationFingerprints: map[string]orquestagoal.GoalObservationFingerprintV0{},
@@ -111,8 +114,9 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 
 func (runtime *RuntimeV0) HandlerV0() http.Handler {
 	handler := NewHandlerV0(HandlerConfigV0{
-		AppHandler: runtime.serverLifecycleHTTPHandlerV0(runtime.appHandler),
-		Tracker:    runtime.tracker,
+		AppHandler:    runtime.serverLifecycleHTTPHandlerV0(runtime.appHandler),
+		Tracker:       runtime.tracker,
+		RouteManifest: runtime.routeManifest,
 	})
 	return runtime.auditHTTPHandlerV0(runtime.controlPlaneGuardHTTPHandlerV0(handler))
 }

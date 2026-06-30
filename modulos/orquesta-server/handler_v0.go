@@ -12,6 +12,7 @@ type HandlerConfigV0 struct {
 	AppHandler              http.Handler
 	Tracker                 *StatusTrackerV0
 	OperationalStatusSource orquestaobservability.OperationalStatusQuerySourceV0
+	RouteManifest           []ServerRouteResourceV0
 }
 
 func NewHandlerV0(config HandlerConfigV0) http.Handler {
@@ -40,7 +41,11 @@ func (handler handlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/api/v0/operational-status/query":
 		handler.serveOperationalStatusV0(w, r)
 	case ServerResourcesEndpointV0:
-		handler.writeJSONV0(w, http.StatusOK, NewServerResourcesV0(handler.statusV0(), time.Now().UTC()))
+		handler.writeJSONV0(
+			w,
+			http.StatusOK,
+			NewServerResourcesWithRoutesV0(handler.statusV0(), time.Now().UTC(), handler.config.RouteManifest),
+		)
 	default:
 		if handler.config.AppHandler != nil {
 			handler.config.AppHandler.ServeHTTP(w, r)

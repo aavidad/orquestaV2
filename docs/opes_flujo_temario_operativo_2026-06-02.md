@@ -355,6 +355,14 @@ Para OPES, `/healthz` es solo liveness del proceso. Antes de lanzar
 `external_work_goal_backend_required`, la accion unica es reiniciar Orquesta con
 `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`; OPES debe marcar
 `orquesta_degraded_not_ready` y no lanzar jobs ni hacer fallback silencioso.
+Despues de readiness, OPES debe consultar `GET /api/v0/server/resources` y
+validar `route_manifest.routes` con `mounted=true` para, como minimo,
+`/api/v0/domain-work`, `/api/v0/external-work/run`,
+`/api/v0/runs/supervise` y `/api/v0/autoprogramming/status`. Si falta alguna
+ruta o el endpoint de recursos no expone `orquesta_route_manifest.v0`, el
+estado correcto es `orquesta_unavailable` o `orquesta_composition_missing_api`;
+no se debe inferir disponibilidad desde `/healthz`, `/health` ni un puerto
+vivo.
 
 Si `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE` no esta definido, el comando usa
 `OPESFullTemarioJobTypeSequenceV0()`, que empieza en `plan_temario` e incluye
