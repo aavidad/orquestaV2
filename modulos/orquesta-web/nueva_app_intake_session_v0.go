@@ -220,7 +220,11 @@ func webNuevaAppIntakeFieldCapturedV0(form WebNuevaAppFormV0, field string) bool
 			len(compactStringsV0(form.Calidad.AccesibilidadOpciones)) > 0 ||
 			len(compactStringsV0(form.Calidad.Compliance)) > 0
 	case "documentacion":
-		return form.Documentacion.Usuario != nil || form.Documentacion.Desarrollo != nil || form.Documentacion.Sistemas != nil || len(compactStringsV0(form.Documentacion.Locales)) > 0
+		return form.Documentacion.Usuario != nil ||
+			form.Documentacion.Desarrollo != nil ||
+			form.Documentacion.Sistemas != nil ||
+			trimV0(form.Documentacion.Profundidad) != "" ||
+			len(compactStringsV0(form.Documentacion.Locales)) > 0
 	case "i18n":
 		return form.I18N.Enabled != nil || trimV0(form.I18N.DefaultLocale) != "" || len(compactStringsV0(form.I18N.Locales)) > 0
 	case "agentes":

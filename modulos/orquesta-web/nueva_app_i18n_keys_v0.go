@@ -201,6 +201,8 @@ var nuevaAppI18nRequiredKeysV0 = []string{
 	"nueva_app.wizard.integracion_2",
 	"nueva_app.wizard.integracion_3",
 	"nueva_app.wizard.integracion_4",
+	"nueva_app.wizard.integracion_5",
+	"nueva_app.wizard.integracion_6",
 	"nueva_app.wizard.integraciones_adicionales",
 	"nueva_app.wizard.revision_final",
 	"nueva_app.wizard.resumen_vivo",

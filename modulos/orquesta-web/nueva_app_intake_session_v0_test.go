@@ -90,6 +90,66 @@ func TestApplyWebNuevaAppIntakeAnswerV0NoValidaEnumsDeFactory(t *testing.T) {
 	}
 }
 
+func TestApplyWebNuevaAppIntakeAnswerV0AplicaCamposExpertosDelWizardV0(t *testing.T) {
+	session := NewWebNuevaAppIntakeSessionV0("session-expert", "es", "Agenda", "Coordinar ensayos")
+	decisions := []WebNuevaAppIntakeDecisionV0{
+		{Field: "tipo_app", Value: "web"},
+		{Field: "calidad.compliance", Value: "rgpd, ens"},
+		{Field: "calidad.observabilidad", Value: "true"},
+		{Field: "documentacion.usuario", Value: "si"},
+		{Field: "documentacion.desarrollo", Value: "true"},
+		{Field: "documentacion.sistemas", Value: "false"},
+		{Field: "documentacion.profundidad", Value: "profunda"},
+		{Field: "documentacion.locales", Values: []string{"es-ES", "en-US"}},
+		{Field: "agentes.revision_humana", Value: "yes"},
+		{Field: "i18n.enabled", Value: "true"},
+		{Field: "i18n.locales", Value: "es-ES,en-US"},
+		{Field: "i18n.justificacion", Value: "servicio bilingue"},
+		{Field: "integraciones.5.tipo", Value: "storage"},
+		{Field: "integraciones.5.nombre", Value: "documentos"},
+	}
+	for _, decision := range decisions {
+		session = session.ApplyDecisionV0(decision)
+	}
+
+	if session.Estado != WebNuevaAppIntakeEstadoLista {
+		t.Fatalf("estado=%q pending=%+v", session.Estado, session.PendingQuestions)
+	}
+	if len(session.Form.Calidad.Compliance) != 2 ||
+		session.Form.Calidad.Compliance[0] != "rgpd" ||
+		session.Form.Calidad.Observabilidad == nil ||
+		!*session.Form.Calidad.Observabilidad {
+		t.Fatalf("calidad experta no aplicada: %+v", session.Form.Calidad)
+	}
+	if session.Form.Documentacion.Usuario == nil ||
+		!*session.Form.Documentacion.Usuario ||
+		session.Form.Documentacion.Desarrollo == nil ||
+		!*session.Form.Documentacion.Desarrollo ||
+		session.Form.Documentacion.Sistemas == nil ||
+		*session.Form.Documentacion.Sistemas ||
+		session.Form.Documentacion.Profundidad != "profunda" ||
+		len(session.Form.Documentacion.Locales) != 2 {
+		t.Fatalf("documentacion no aplicada: %+v", session.Form.Documentacion)
+	}
+	if session.Form.Agentes.RevisionHumana == nil || !*session.Form.Agentes.RevisionHumana {
+		t.Fatalf("revision humana no aplicada: %+v", session.Form.Agentes)
+	}
+	if session.Form.I18N.Enabled == nil ||
+		!*session.Form.I18N.Enabled ||
+		len(session.Form.I18N.Locales) != 2 ||
+		session.Form.I18N.Justificacion != "servicio bilingue" {
+		t.Fatalf("i18n no aplicado: %+v", session.Form.I18N)
+	}
+	if len(session.Form.Integraciones) != 6 ||
+		session.Form.Integraciones[5].Tipo != "storage" ||
+		session.Form.Integraciones[5].Nombre != "documentos" {
+		t.Fatalf("sexta integracion no aplicada: %+v", session.Form.Integraciones)
+	}
+	if sectionStatusV0(session.Sections, "datos_calidad") != "complete" {
+		t.Fatalf("sections=%+v", session.Sections)
+	}
+}
+
 func TestWebNuevaAppIntakeSessionV0SnapshotCompactoSinDumpsInternos(t *testing.T) {
 	session := NewWebNuevaAppIntakeSessionV0("session-1", "es", "Agenda", "Coordinar ensayos")
 	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{

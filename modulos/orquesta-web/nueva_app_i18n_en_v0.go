@@ -202,6 +202,8 @@ func nuevaAppI18nEnglishV0() map[string]string {
 		"nueva_app.wizard.integracion_2":                       "Integration 2",
 		"nueva_app.wizard.integracion_3":                       "Integration 3",
 		"nueva_app.wizard.integracion_4":                       "Integration 4",
+		"nueva_app.wizard.integracion_5":                       "Integration 5",
+		"nueva_app.wizard.integracion_6":                       "Integration 6",
 		"nueva_app.wizard.integraciones_adicionales":           "Additional integrations",
 		"nueva_app.wizard.revision_final":                      "Final review",
 		"nueva_app.wizard.resumen_vivo":                        "Live summary",

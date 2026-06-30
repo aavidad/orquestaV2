@@ -262,6 +262,9 @@ func TestNuevaAppWebEndpointV0POSTFormURLEncodedDelegaSinTemplates(t *testing.T)
 	values.Set("integraciones.0.data_scope", "ensayos")
 	values.Set("integraciones.0.criticidad", "alta")
 	values.Set("integraciones.0.requerido", "true")
+	values.Set("integraciones.5.tipo", "storage")
+	values.Set("integraciones.5.nombre", "documentos")
+	values.Set("integraciones.5.proposito", "guardar adjuntos firmados")
 	values.Set("datos.db_required", "true")
 	values.Set("datos.necesidad_funcional", "guardar disponibilidad")
 	values.Set("datos.fuentes.0.nombre", "agenda externa")
@@ -295,7 +298,7 @@ func TestNuevaAppWebEndpointV0POSTFormURLEncodedDelegaSinTemplates(t *testing.T)
 		client.received.ProjectSource.ProjectRef != "project-ref-agenda" {
 		t.Fatalf("project_source=%+v", client.received.ProjectSource)
 	}
-	if len(client.received.Integraciones) != 1 ||
+	if len(client.received.Integraciones) != 2 ||
 		client.received.Integraciones[0].Tipo != "api" ||
 		client.received.Integraciones[0].Nombre != "crm" ||
 		client.received.Integraciones[0].Proposito != "sincronizar ensayos" ||
@@ -303,7 +306,10 @@ func TestNuevaAppWebEndpointV0POSTFormURLEncodedDelegaSinTemplates(t *testing.T)
 		client.received.Integraciones[0].Auth != "oauth" ||
 		client.received.Integraciones[0].DataScope != "ensayos" ||
 		client.received.Integraciones[0].Criticidad != "alta" ||
-		!client.received.Integraciones[0].Requerido {
+		!client.received.Integraciones[0].Requerido ||
+		client.received.Integraciones[1].Tipo != "storage" ||
+		client.received.Integraciones[1].Nombre != "documentos" ||
+		client.received.Integraciones[1].Proposito != "guardar adjuntos firmados" {
 		t.Fatalf("integraciones=%+v", client.received.Integraciones)
 	}
 	if len(client.received.Datos.Fuentes) != 1 ||

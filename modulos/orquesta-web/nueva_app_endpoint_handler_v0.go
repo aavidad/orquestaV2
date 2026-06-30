@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const nuevaAppMaxIntegrationRowsV0 = 6
+
 func (endpoint NuevaAppWebEndpointV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	catalog := endpoint.catalog()
 	if err := validateWebPublicQueryV0(r); err != nil {
@@ -131,7 +133,7 @@ func nuevaAppFormFromValuesV0(values map[string][]string) WebNuevaAppFormV0 {
 		},
 		Restricciones: formValuesV0(values, "restricciones"),
 	}
-	form.Integraciones = formConnectorsV0(values, 4)
+	form.Integraciones = formConnectorsV0(values, nuevaAppMaxIntegrationRowsV0)
 	return form
 }
 

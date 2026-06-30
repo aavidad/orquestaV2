@@ -183,6 +183,8 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.integracion_2",
 		"nueva_app.wizard.integracion_3",
 		"nueva_app.wizard.integracion_4",
+		"nueva_app.wizard.integracion_5",
+		"nueva_app.wizard.integracion_6",
 		"nueva_app.wizard.integraciones_adicionales",
 		"nueva_app.wizard.revision_final",
 		"nueva_app.wizard.resumen_vivo",
@@ -932,6 +934,28 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
 	              <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.3.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
               <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.3.restricciones"></label>
             </div></div>
+            <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_5"}}</p><div class="grid">
+	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.4.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
+              <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.4.nombre"></label>
+              <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.4.proposito"></label>
+              <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.4.direccion"></label>
+              <label data-help="{{index .Help "integraciones.0.auth"}}">{{index .Labels "integraciones.0.auth"}}<input name="integraciones.4.auth"></label>
+              <label data-help="{{index .Help "integraciones.0.data_scope"}}">{{index .Labels "integraciones.0.data_scope"}}<input name="integraciones.4.data_scope"></label>
+              <label data-help="{{index .Help "integraciones.0.criticidad"}}">{{index .Labels "integraciones.0.criticidad"}}<input name="integraciones.4.criticidad"></label>
+	              <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.4.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
+              <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.4.restricciones"></label>
+            </div></div>
+            <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_6"}}</p><div class="grid">
+	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.5.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
+              <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.5.nombre"></label>
+              <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.5.proposito"></label>
+              <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.5.direccion"></label>
+              <label data-help="{{index .Help "integraciones.0.auth"}}">{{index .Labels "integraciones.0.auth"}}<input name="integraciones.5.auth"></label>
+              <label data-help="{{index .Help "integraciones.0.data_scope"}}">{{index .Labels "integraciones.0.data_scope"}}<input name="integraciones.5.data_scope"></label>
+              <label data-help="{{index .Help "integraciones.0.criticidad"}}">{{index .Labels "integraciones.0.criticidad"}}<input name="integraciones.5.criticidad"></label>
+	              <label data-help="{{index .Help "integraciones.0.requerido"}}"><span>{{index .Labels "integraciones.0.requerido"}}</span><select name="integraciones.5.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
+              <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.5.restricciones"></label>
+            </div></div>
           </div></details>
         </div></fieldset>
       </div>
@@ -1025,7 +1049,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     function checked(name){return [...form.querySelectorAll('input[name="'+name+'"]:checked')].map(el=>el.value).join(', ');}
     function selectedIntegrationTypes(){
       const out=[];
-      for(let index=0;index<4;index++){
+      for(let index=0;index<6;index++){
         const value=val('integraciones.'+index+'.tipo');
         if(value)out.push(value);
       }
@@ -1318,7 +1342,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     function applyIndexed(prefix,rows,fields){
       if(!Array.isArray(rows))return;
       rows.forEach((row,index)=>{
-        if(!row||index>3)return;
+        if(!row||index>=6)return;
         fields.forEach(name=>{
           if(hasOwn(row,name)){setMaybe(prefix+'.'+index+'.'+name,row[name]);}
         });
@@ -1432,7 +1456,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       guidedLog(wizard.dataset.guidedMsgMaps);
     }
     function firstEmptyIntegrationIndex(){
-      for(let index=0;index<4;index++){if(!val('integraciones.'+index+'.tipo'))return index;}
+      for(let index=0;index<6;index++){if(!val('integraciones.'+index+'.tipo'))return index;}
       return -1;
     }
     function configureIntegration(type,name,proposito,auth){

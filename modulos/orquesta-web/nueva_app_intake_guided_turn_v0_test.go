@@ -147,6 +147,25 @@ func TestWebNuevaAppIntakeGuidedTurnV0ReconoceIntegracionesFrecuentes(t *testing
 	}
 }
 
+func TestGuidedCapabilityIntegrationDecisionsV0PermiteSeisFilasV0(t *testing.T) {
+	session := NewWebNuevaAppIntakeSessionV0("session-guided-six", "es", "Portal", "Publicar viviendas")
+	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "tipo_app", Value: "web"})
+	for _, decision := range guidedCapabilityIntegrationDecisionsV0(5, "storage", "documentos", "guardar adjuntos", "signed-url") {
+		session = session.ApplyDecisionV0(decision)
+	}
+	for _, decision := range guidedCapabilityIntegrationDecisionsV0(6, "llm", "asistente", "redactar borradores", "oauth") {
+		session = session.ApplyDecisionV0(decision)
+	}
+
+	if len(session.Form.Integraciones) != 6 ||
+		session.Form.Integraciones[5].Tipo != "storage" ||
+		session.Form.Integraciones[5].Nombre != "documentos" ||
+		session.Form.Integraciones[5].Proposito != "guardar adjuntos" ||
+		session.Form.Integraciones[5].Auth != "signed-url" {
+		t.Fatalf("sexta integracion guiada no aplicada: %+v", session.Form.Integraciones)
+	}
+}
+
 func stringSliceHasV0(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {

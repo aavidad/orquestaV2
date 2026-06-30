@@ -1,6 +1,9 @@
 package orquestaweb
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 const WebNuevaAppIntakeGuidedTurnSchemaV0 = "web_nueva_app_intake_guided_turn.v0"
 
@@ -387,10 +390,10 @@ func guidedCapabilityIntegrationDecisionsV0(
 	purpose string,
 	auth string,
 ) []WebNuevaAppIntakeDecisionV0 {
-	if index < 0 || index > 3 {
+	if index < 0 || index >= nuevaAppMaxIntegrationRowsV0 {
 		return nil
 	}
-	prefix := "integraciones." + string(rune('0'+index)) + "."
+	prefix := "integraciones." + strconv.Itoa(index) + "."
 	return []WebNuevaAppIntakeDecisionV0{
 		{Field: prefix + "tipo", Value: kind},
 		{Field: prefix + "nombre", Value: name},

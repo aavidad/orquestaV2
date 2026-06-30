@@ -156,16 +156,61 @@ func applyWebNuevaAppIntakeDecisionToFormV0(
 		form.Calidad.Accesibilidad = decision.Value
 	case "calidad.accesibilidad_opciones":
 		form.Calidad.AccesibilidadOpciones = decision.Values
+	case "calidad.compliance":
+		form.Calidad.Compliance = nuevaAppDecisionValuesOrScalarV0(decision)
+	case "calidad.observabilidad":
+		form.Calidad.Observabilidad = nuevaAppDecisionOptionalBoolV0(decision)
+	case "documentacion.usuario":
+		form.Documentacion.Usuario = nuevaAppDecisionOptionalBoolV0(decision)
+	case "documentacion.desarrollo":
+		form.Documentacion.Desarrollo = nuevaAppDecisionOptionalBoolV0(decision)
+	case "documentacion.sistemas":
+		form.Documentacion.Sistemas = nuevaAppDecisionOptionalBoolV0(decision)
+	case "documentacion.profundidad":
+		form.Documentacion.Profundidad = decision.Value
+	case "documentacion.locales":
+		form.Documentacion.Locales = nuevaAppDecisionValuesOrScalarV0(decision)
+	case "agentes.revision_humana":
+		form.Agentes.RevisionHumana = nuevaAppDecisionOptionalBoolV0(decision)
 	case "agentes.autonomia":
 		form.Agentes.Autonomia = decision.Value
 	case "agentes.preferencias":
 		form.Agentes.Preferencias = decision.Values
+	case "i18n.enabled":
+		form.I18N.Enabled = nuevaAppDecisionOptionalBoolV0(decision)
 	case "i18n.default_locale":
 		form.I18N.DefaultLocale = decision.Value
+	case "i18n.locales":
+		form.I18N.Locales = nuevaAppDecisionValuesOrScalarV0(decision)
+	case "i18n.justificacion":
+		form.I18N.Justificacion = decision.Value
 	case "project_source.project_ref":
 		form.ProjectSource.ProjectRef = decision.Value
 	}
 	return form
+}
+
+func nuevaAppDecisionValuesOrScalarV0(decision WebNuevaAppIntakeDecisionV0) []string {
+	if len(decision.Values) > 0 {
+		return decision.Values
+	}
+	if trimV0(decision.Value) == "" {
+		return []string{}
+	}
+	return compactStringsV0(strings.Split(decision.Value, ","))
+}
+
+func nuevaAppDecisionOptionalBoolV0(decision WebNuevaAppIntakeDecisionV0) *bool {
+	switch strings.ToLower(trimV0(decision.Value)) {
+	case "true", "si", "s\u00ed", "yes", "1":
+		value := true
+		return &value
+	case "false", "no", "0":
+		value := false
+		return &value
+	default:
+		return nil
+	}
 }
 
 func indexedNuevaAppDecisionFieldV0(field, prefix string) (int, string, bool) {
