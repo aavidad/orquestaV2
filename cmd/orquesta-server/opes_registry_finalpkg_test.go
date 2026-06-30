@@ -294,7 +294,7 @@ func TestOPESRegistryFinalPkgPackageCompleteRequiresManifestEvidenceKeysV0(t *te
 	fixture := newOPESRegistryFinalPkgFixtureV0(t)
 	fixture.writeCompletePackage("002")
 	path := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final", "manifest_cierre.json")
-	if err := os.WriteFile(path, []byte(`{"schema_version":"opes_final_package_evidence_manifest.v0","required_evidence_refs":{"html":"opes-final-evidence:html:002","rag":"opes-final-evidence:rag:002","audio":"opes-final-evidence:audio:002","tests":"opes-final-evidence:tests:002","visual":"opes-final-evidence:visual:002"}}`), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(`{"schema_version":"opes_final_package_evidence_manifest.v0","package_ref":"package-ref-finalpkg-002","manifest_ref":"manifest-cierre-ref-finalpkg-002","checksum_refs":["checksum-ref-finalpkg-002"],"validation_report_ref":"validation-report-ref-finalpkg-002","review_matrix_ref":"review-matrix-ref-finalpkg-002","required_evidence_refs":{"html":["opes-final-evidence:html:002"],"rag":["opes-final-evidence:rag:002"],"audio":["opes-final-evidence:audio:002"],"tests":["opes-final-evidence:tests:002"],"visual":["opes-final-evidence:visual:002"]}}`), 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
 	}
 
@@ -303,6 +303,47 @@ func TestOPESRegistryFinalPkgPackageCompleteRequiresManifestEvidenceKeysV0(t *te
 	)
 
 	if validation.Complete ||
+		!containsStringForTestV0(validation.Issues, "manifest_cierre_required_evidence_missing:qa") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
+func TestOPESRegistryFinalPkgPackageCompleteRequiresStructuredClosureRefsV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	fixture.writeCompletePackage("002")
+	path := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final", "manifest_cierre.json")
+	if err := os.WriteFile(path, []byte(`{"schema_version":"opes_final_package_evidence_manifest.v0","required_evidence_refs":{"html":["opes-final-evidence:html:002"],"rag":["opes-final-evidence:rag:002"],"audio":["opes-final-evidence:audio:002"],"tests":["opes-final-evidence:tests:002"],"visual":["opes-final-evidence:visual:002"],"qa":["opes-final-evidence:qa:002"]}}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	validation := validateOPESRegistryFinalPkgPackageV0(
+		filepath.Join(fixture.courseRoot, "tema_002", "paquete_final"),
+	)
+
+	if validation.Complete ||
+		!containsStringForTestV0(validation.Issues, "manifest_cierre_package_ref_missing") ||
+		!containsStringForTestV0(validation.Issues, "manifest_cierre_manifest_ref_missing") ||
+		!containsStringForTestV0(validation.Issues, "manifest_cierre_checksum_refs_missing") ||
+		!containsStringForTestV0(validation.Issues, "manifest_cierre_validation_report_ref_missing") ||
+		!containsStringForTestV0(validation.Issues, "manifest_cierre_review_matrix_ref_missing") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
+func TestOPESRegistryFinalPkgPackageCompleteRejectsEvidenceRefsFallbackV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	fixture.writeCompletePackage("002")
+	path := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final", "manifest_cierre.json")
+	if err := os.WriteFile(path, []byte(`{"schema_version":"opes_final_package_evidence_manifest.v0","package_ref":"package-ref-finalpkg-002","manifest_ref":"manifest-cierre-ref-finalpkg-002","checksum_refs":["checksum-ref-finalpkg-002"],"validation_report_ref":"validation-report-ref-finalpkg-002","review_matrix_ref":"review-matrix-ref-finalpkg-002","evidence_refs":["opes-final-evidence:html:002","opes-final-evidence:rag:002","opes-final-evidence:audio:002","opes-final-evidence:tests:002","opes-final-evidence:visual:002","opes-final-evidence:qa:002"]}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	validation := validateOPESRegistryFinalPkgPackageV0(
+		filepath.Join(fixture.courseRoot, "tema_002", "paquete_final"),
+	)
+
+	if validation.Complete ||
+		!containsStringForTestV0(validation.Issues, "manifest_cierre_required_evidence_missing:html") ||
 		!containsStringForTestV0(validation.Issues, "manifest_cierre_required_evidence_missing:qa") {
 		t.Fatalf("validation=%+v", validation)
 	}

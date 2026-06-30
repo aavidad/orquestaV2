@@ -123,9 +123,13 @@ func validateOPESRegistryFinalPkgPackageV0(packageDir string) opesRegistryFinalP
 }
 
 type opesRegistryFinalPkgEvidenceManifestV0 struct {
-	SchemaVersion        string            `json:"schema_version"`
-	EvidenceRefs         []string          `json:"evidence_refs"`
-	RequiredEvidenceRefs map[string]string `json:"required_evidence_refs"`
+	SchemaVersion        string                     `json:"schema_version"`
+	PackageRef           string                     `json:"package_ref"`
+	ManifestRef          string                     `json:"manifest_ref"`
+	ChecksumRefs         json.RawMessage            `json:"checksum_refs"`
+	ValidationReportRef  string                     `json:"validation_report_ref"`
+	ReviewMatrixRef      string                     `json:"review_matrix_ref"`
+	RequiredEvidenceRefs map[string]json.RawMessage `json:"required_evidence_refs"`
 }
 
 func opesRegistryFinalPkgEvidenceManifestIssuesV0(path string) []string {
@@ -141,6 +145,21 @@ func opesRegistryFinalPkgEvidenceManifestIssuesV0(path string) []string {
 	if strings.TrimSpace(manifest.SchemaVersion) != "opes_final_package_evidence_manifest.v0" {
 		issues = append(issues, "manifest_cierre_schema_invalid")
 	}
+	if strings.TrimSpace(manifest.PackageRef) == "" {
+		issues = append(issues, "manifest_cierre_package_ref_missing")
+	}
+	if strings.TrimSpace(manifest.ManifestRef) == "" {
+		issues = append(issues, "manifest_cierre_manifest_ref_missing")
+	}
+	if len(opesRegistryFinalPkgRawStringRefsV0(manifest.ChecksumRefs)) == 0 {
+		issues = append(issues, "manifest_cierre_checksum_refs_missing")
+	}
+	if strings.TrimSpace(manifest.ValidationReportRef) == "" {
+		issues = append(issues, "manifest_cierre_validation_report_ref_missing")
+	}
+	if strings.TrimSpace(manifest.ReviewMatrixRef) == "" {
+		issues = append(issues, "manifest_cierre_review_matrix_ref_missing")
+	}
 	required := opesRegistryFinalPkgManifestEvidenceSetV0(manifest)
 	for _, key := range []string{"html", "rag", "audio", "tests", "visual", "qa"} {
 		if !required[key] {
@@ -154,21 +173,24 @@ func opesRegistryFinalPkgManifestEvidenceSetV0(
 	manifest opesRegistryFinalPkgEvidenceManifestV0,
 ) map[string]bool {
 	out := map[string]bool{}
-	for key, ref := range manifest.RequiredEvidenceRefs {
+	for key, raw := range manifest.RequiredEvidenceRefs {
 		key = strings.ToLower(strings.TrimSpace(key))
-		if key != "" && strings.TrimSpace(ref) != "" {
+		if key != "" && len(opesRegistryFinalPkgRawStringRefsV0(raw)) > 0 {
 			out[key] = true
 		}
 	}
-	for _, ref := range manifest.EvidenceRefs {
-		ref = strings.ToLower(strings.TrimSpace(ref))
-		for _, key := range []string{"html", "rag", "audio", "tests", "visual", "qa"} {
-			if strings.Contains(ref, "opes-final-evidence:"+key) {
-				out[key] = true
-			}
-		}
-	}
 	return out
+}
+
+func opesRegistryFinalPkgRawStringRefsV0(raw json.RawMessage) []string {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return nil
+	}
+	var refs []string
+	if err := json.Unmarshal(raw, &refs); err != nil {
+		return nil
+	}
+	return compactOPESRegistryFinalPkgStringsV0(refs)
 }
 
 func opesRegistryFinalPkgTestsJSONHasPublishableQuestionsV0(data []byte) bool {

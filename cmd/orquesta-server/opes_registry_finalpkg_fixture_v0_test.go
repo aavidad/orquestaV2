@@ -112,7 +112,7 @@ func (fixture opesRegistryFinalPkgFixtureV0) writeCompletePackage(topicID string
 		}
 		content := []byte("ok")
 		if relative == "manifest_cierre.json" {
-			content = []byte(`{"schema_version":"opes_final_package_evidence_manifest.v0","required_evidence_refs":{"html":"opes-final-evidence:html:` + topicID + `","rag":"opes-final-evidence:rag:` + topicID + `","audio":"opes-final-evidence:audio:` + topicID + `","tests":"opes-final-evidence:tests:` + topicID + `","visual":"opes-final-evidence:visual:` + topicID + `","qa":"opes-final-evidence:qa:` + topicID + `"}}`)
+			content = []byte(`{"schema_version":"opes_final_package_evidence_manifest.v0","package_ref":"package-ref-finalpkg-` + topicID + `","manifest_ref":"manifest-cierre-ref-finalpkg-` + topicID + `","checksum_refs":["checksum-ref-finalpkg-` + topicID + `"],"validation_report_ref":"validation-report-ref-finalpkg-` + topicID + `","review_matrix_ref":"review-matrix-ref-finalpkg-` + topicID + `","required_evidence_refs":{"html":["opes-final-evidence:html:` + topicID + `"],"rag":["opes-final-evidence:rag:` + topicID + `"],"audio":["opes-final-evidence:audio:` + topicID + `"],"tests":["opes-final-evidence:tests:` + topicID + `"],"visual":["opes-final-evidence:visual:` + topicID + `"],"qa":["opes-final-evidence:qa:` + topicID + `"]}}`)
 		}
 		if relative == "tests.json" {
 			content = []byte(`{"questions":[{"id":"q1","prompt":"pregunta verificable","options":["a","b"],"answer":"a"}]}`)
