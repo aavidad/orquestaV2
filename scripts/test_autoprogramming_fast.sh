@@ -20,6 +20,10 @@ orquesta_parallel_test_start stack_prepare_queue \
   go test -count=1 ./modulos/orquesta-app-codex-stack \
     -run 'Test(CodexStackAutoprogrammingPrepareRunAPIV0|AutoprogrammingDirectorDecisionSourceV0|StackDrainQueueStatus)'
 
+orquesta_parallel_test_start promotion_archive_replay \
+  go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-worktree \
+    -run 'Test(CodexStackAutoprogrammingPromotionV0(GoalFirst)?E2ERepoTemporalReplayV0|GitStagingPromotionConnectorV0PromocionaYArchivaSinBorrarV0)'
+
 orquesta_parallel_test_start director_plan_state \
   go test -count=1 ./modulos/orquesta-app-director-service \
     -run 'Test(EnsureContinueOperationalDirectorPlanStateFromWorkflowTasksV0AceptaMarkerEnContextRefsV0|ContinueAppDirectorV0DecisionPlanStateEjecutaRunnerYCierra)'

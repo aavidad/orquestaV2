@@ -103,3 +103,31 @@ func TestSmokeGoalFirstAppServerRealProjectsCodeHomeFromCodexHomeV0(t *testing.T
 		}
 	}
 }
+
+func TestSmokeSelfProgrammingCompositeGoalFirstGuardsV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_self_programming_composite_goal_first.sh")
+
+	for _, want := range []string{
+		"ORQUESTA_SELF_PROGRAMMING_COMPOSITE_SMOKE_CONFIRM",
+		"app_server_tmux",
+		"stdio|app_server_proxy",
+		`"$(id -u)" == "0"`,
+		"ORQUESTA_SERVER_SELF_PROGRAMMING_ONLY=true",
+		"ORQUESTA_SERVER_SELF_PROGRAMMING_ROOT",
+		"ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_ENABLED=true",
+		"ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_ARCHIVE_DIR",
+		"ORQUESTA_OPES_BASE_URL",
+		"OPES_BASE_URL",
+		"ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL",
+		"smoke_goal_first_app_server_real.sh",
+		"ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1",
+		"TestCodexStackAutoprogrammingPromotionV0GoalFirstE2ERepoTemporalReplayV0",
+		"TestGitStagingPromotionConnectorV0PromocionaYArchivaSinBorrarV0",
+		"smoke_self_programming_composite_goal_first=ok",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("smoke self-programming compuesto sin guarda/evidencia requerida: falta %q", want)
+		}
+	}
+}
