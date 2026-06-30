@@ -163,7 +163,8 @@ func TestMCPDirectorStatsToolExecutorV0ExponeGoalFirstSiExisteEstado(t *testing.
 		result.Goal.GoalRef != "goal-ref-mcp-director-stats-001" ||
 		result.Goal.ExternalGoalRef != "thread-ref-mcp-director-stats-001" ||
 		result.Goal.Status != "running" ||
-		len(result.Goal.EvidenceRefs) != 1 ||
+		!containsStringMCPTestV0(result.Goal.EvidenceRefs, "evidence-ref-mcp-director-stats-goal-state") ||
+		!containsStringMCPTestV0(result.Goal.EvidenceRefs, "evidence-ref-mcp-director-stats-goal-launch") ||
 		result.Stats == nil ||
 		result.Stats.Status != orquestagoal.GoalStatusRunningV0 ||
 		result.Stats.Closure.Status != orquestacionnucleoapp.DirectorClosureStatusBlockedV0 ||
@@ -288,6 +289,97 @@ func TestMCPDirectorStatsToolExecutorV0GoalFirstAceptadoCierraStats(t *testing.T
 		!result.Stats.Closure.Closed ||
 		result.Stats.Closure.Ready ||
 		result.Stats.Closure.Blocked {
+		t.Fatalf("goal=%+v stats=%+v", result.Goal, result.Stats)
+	}
+}
+
+func TestMCPDirectorStatsToolExecutorV0GoalFirstBloqueadoSinTareasNoDaCienV0(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-goal-timeout-no-artifacts-001")
+	run.Tasks = nil
+	run.ClosedTasks = nil
+	run.DeliveredTasks = nil
+	run.Deliveries = nil
+	run.Agents = nil
+	run.StartedAgents = nil
+	state := mcpDirectorGoalStateForTestV0(run.RunID)
+	state.Status = orquestagoal.GoalStatusBlockedV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+		Status:        orquestagoal.GoalStatusBlockedV0,
+		GoalRef:       state.GoalRef,
+		Summary:       "codex_app_server_goal_active_timeout",
+		EvidenceRefs:  []string{"evidence-ref-codex-app-server-goal-active-timeout"},
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:      orquestagoal.GoalStatusBlockedV0,
+		NeedsRework: true,
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		GoalStateSource: mcpDirectorGoalStateSourceForTestV0{State: state},
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{RunRef: run.RunID})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.Stats == nil ||
+		result.Stats.Progress.TasksTotal != 0 ||
+		result.Stats.Progress.PercentComplete != 0 ||
+		result.Stats.Counts.Deliveries != 0 ||
+		!containsStringMCPTestV0(result.Stats.Closure.BlockedBy, "blocked_no_artifacts_timeout") ||
+		!mcpDirectorStatsProgressIssueExistsV0(
+			result.Stats.Progress.Issues,
+			"goal_first_blocked_no_artifacts",
+		) {
+		t.Fatalf("goal=%+v stats=%+v", result.Goal, result.Stats)
+	}
+}
+
+func TestMCPDirectorStatsToolExecutorV0GoalFirstBloqueadoConReceiptParcialNoPierdeEntregaV0(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-goal-timeout-partial-delivery-001")
+	run.Tasks = nil
+	run.ClosedTasks = nil
+	run.DeliveredTasks = nil
+	run.Deliveries = nil
+	run.Agents = nil
+	run.StartedAgents = nil
+	state := mcpDirectorGoalStateForTestV0(run.RunID)
+	state.Status = orquestagoal.GoalStatusBlockedV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion:     orquestagoal.GoalWorkResultSchemaV0,
+		Status:            orquestagoal.GoalStatusBlockedV0,
+		GoalRef:           state.GoalRef,
+		Summary:           "codex_app_server_goal_active_timeout",
+		ArtifactRefs:      []string{"artifact-ref-work-delivery-json-001"},
+		DomainReceiptRefs: []string{"domain-receipt-ref-work-delivery-001"},
+		EvidenceRefs:      []string{"evidence-ref-work-delivery-detected"},
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:      orquestagoal.GoalStatusBlockedV0,
+		NeedsRework: true,
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		GoalStateSource: mcpDirectorGoalStateSourceForTestV0{State: state},
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{RunRef: run.RunID})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.Goal == nil ||
+		len(result.Goal.DomainReceiptRefs) != 1 ||
+		result.Stats == nil ||
+		result.Stats.Progress.TasksTotal != 0 ||
+		result.Stats.Progress.PercentComplete != 0 ||
+		result.Stats.Counts.Deliveries != 2 ||
+		!containsStringMCPTestV0(result.Stats.Refs.Deliveries, "domain-receipt-ref-work-delivery-001") ||
+		!containsStringMCPTestV0(result.Stats.Closure.BlockedBy, "blocked_with_partial_delivery") ||
+		!mcpDirectorStatsProgressIssueExistsV0(
+			result.Stats.Progress.Issues,
+			"goal_first_blocked_with_partial_delivery",
+		) {
 		t.Fatalf("goal=%+v stats=%+v", result.Goal, result.Stats)
 	}
 }

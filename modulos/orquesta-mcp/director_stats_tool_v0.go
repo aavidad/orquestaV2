@@ -73,6 +73,9 @@ type MCPDirectorGoalStatsV0 struct {
 	RetryFromPhase        string         `json:"retry_from_phase,omitempty"`
 	OperationalReason     string         `json:"operational_reason,omitempty"`
 	DomainCounters        map[string]int `json:"domain_counters,omitempty"`
+	ArtifactRefs          []string       `json:"artifact_refs,omitempty"`
+	DomainReceiptRefs     []string       `json:"domain_receipt_refs,omitempty"`
+	IssueCodes            []string       `json:"issue_codes,omitempty"`
 	EvidenceRefs          []string       `json:"evidence_refs,omitempty"`
 }
 
@@ -286,8 +289,13 @@ func mcpDirectorGoalStatsFromStateV0(
 		RetryFromPhase:        strings.TrimSpace(metadata.RetryFromPhase),
 		OperationalReason:     strings.TrimSpace(metadata.OperationalReason),
 		DomainCounters:        mergeMCPDomainOperationalCountersV0(metadata.DomainCounters),
-		EvidenceRefs:          compactStringsMCPV0(state.EvidenceRefs),
+		EvidenceRefs:          mcpDirectorGoalEvidenceRefsFromStateV0(state),
 	}
+	if state.LastResult != nil {
+		goal.ArtifactRefs = compactStringsMCPV0(state.LastResult.ArtifactRefs)
+		goal.DomainReceiptRefs = compactStringsMCPV0(state.LastResult.DomainReceiptRefs)
+	}
+	goal.IssueCodes = mcpDirectorGoalIssueCodesFromStateV0(state)
 	if state.LastClosure != nil {
 		goal.ClosureStatus = strings.TrimSpace(state.LastClosure.Status)
 		goal.ClosureAccepted = state.LastClosure.Accepted
@@ -399,6 +407,95 @@ func applyMCPDirectorGoalRunProjectionV0(
 			BlockerRefs: compactStringsMCPV0(goal.EvidenceRefs),
 		}
 	}
+	applyMCPDirectorGoalProgressProjectionV0(goal, stats)
+}
+
+func applyMCPDirectorGoalProgressProjectionV0(
+	goal *MCPDirectorGoalStatsV0,
+	stats *orquestacionnucleoapp.DirectorRunStatsV0,
+) {
+	if goal == nil || stats == nil {
+		return
+	}
+	derivedDeliveries := compactStringsMCPV0(append(
+		append([]string{}, goal.DomainReceiptRefs...),
+		goal.ArtifactRefs...,
+	))
+	if len(derivedDeliveries) > 0 {
+		stats.Refs.Deliveries = compactStringsMCPV0(append(stats.Refs.Deliveries, derivedDeliveries...))
+		stats.Counts.Deliveries = len(stats.Refs.Deliveries)
+	}
+	if !stats.Closure.Blocked || stats.Progress.TasksTotal > 0 {
+		return
+	}
+	stats.Progress.PercentComplete = 0
+	if len(derivedDeliveries) > 0 {
+		stats.Closure.BlockedBy = compactStringsMCPV0(append(stats.Closure.BlockedBy, "blocked_with_partial_delivery"))
+		stats.Progress.Issues = append(stats.Progress.Issues, orquestacionnucleoapp.DirectorProgressIssueV0{
+			Code:    "goal_first_blocked_with_partial_delivery",
+			Field:   "goal_first",
+			Message: "goal_first blocked with artifact/domain receipt refs but no observed workflow tasks; requires QA/replan before closure",
+		})
+		return
+	}
+	blockedCode := "goal_first_blocked_no_artifacts"
+	if containsStringMCPV0(goal.IssueCodes, "codex_app_server_goal_active_timeout") ||
+		containsStringMCPV0(goal.EvidenceRefs, "codex_app_server_goal_active_timeout") {
+		stats.Closure.BlockedBy = compactStringsMCPV0(append(stats.Closure.BlockedBy, "blocked_no_artifacts_timeout"))
+	} else {
+		stats.Closure.BlockedBy = compactStringsMCPV0(append(stats.Closure.BlockedBy, "blocked_no_artifacts"))
+	}
+	stats.Progress.Issues = append(stats.Progress.Issues, orquestacionnucleoapp.DirectorProgressIssueV0{
+		Code:    blockedCode,
+		Field:   "goal_first",
+		Message: "goal_first blocked with zero observed workflow tasks and no artifact/domain receipt refs; do not report 100 percent complete",
+	})
+}
+
+func mcpDirectorGoalEvidenceRefsFromStateV0(state orquestagoal.GoalWorkStateV0) []string {
+	refs := append([]string{}, state.EvidenceRefs...)
+	refs = append(refs, state.LaunchReceipt.EvidenceRefs...)
+	if state.LastResult != nil {
+		refs = append(refs, state.LastResult.EvidenceRefs...)
+	}
+	if state.LastClosure != nil {
+		refs = append(refs, state.LastClosure.EvidenceRefs...)
+	}
+	return compactStringsMCPV0(refs)
+}
+
+func mcpDirectorGoalIssueCodesFromStateV0(state orquestagoal.GoalWorkStateV0) []string {
+	var codes []string
+	for _, issue := range state.LaunchReceipt.Issues {
+		codes = append(codes, issue.Code)
+	}
+	if state.LastResult != nil {
+		if summary := strings.TrimSpace(state.LastResult.Summary); summary != "" {
+			codes = append(codes, summary)
+		}
+		for _, issue := range state.LastResult.Issues {
+			codes = append(codes, issue.Code)
+		}
+	}
+	if state.LastClosure != nil {
+		for _, issue := range state.LastClosure.Issues {
+			codes = append(codes, issue.Code)
+		}
+	}
+	return compactStringsMCPV0(codes)
+}
+
+func containsStringMCPV0(values []string, needle string) bool {
+	needle = strings.TrimSpace(needle)
+	if needle == "" {
+		return false
+	}
+	for _, value := range values {
+		if strings.Contains(strings.TrimSpace(value), needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func mcpDirectorGoalOperationalReasonBlocksV0(reason string) bool {
