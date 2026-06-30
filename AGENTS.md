@@ -274,6 +274,12 @@ Documentos de entrada obligatorios para cambios transversales:
   controladores enormes ni mezclar wiring, dominio, validacion y UI en la misma
   pieza. Si una implementacion crece, separa helpers/puertos/adaptadores/tests
   siguiendo el patron local antes de seguir añadiendo codigo.
+- Inventario de bugs: cualquier bug, falso verde, cuelgue, regresion,
+  incidencia de agente, desviacion de contrato o fallo operativo observado debe
+  registrarse en `docs/inventario_bugs_orquesta_2026-06-30.md` o en una
+  incidencia enlazada desde ese inventario. No lo trates como caso aislado hasta
+  clasificar area, evidencia, estado e hipotesis arquitectonica; si se arregla
+  con codigo, conserva la fila y anade commit/prueba de cierre.
 - Delegacion operativa: si un agente necesita ayuda y el runtime/composicion lo
   permite, debe activar subagentes para paralelizar analisis, implementacion,
   pruebas o revision. Cada Codex padre puede usar hasta 6 subagentes. No hay
