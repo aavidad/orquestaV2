@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -262,6 +264,9 @@ func TestCodexAppServerTmuxBackendV0ShutdownMataSesionPropiaV0(t *testing.T) {
 	if !strings.Contains(string(logRaw), "kill-session") {
 		t.Fatalf("tmux shutdown no mato sesion: %s", string(logRaw))
 	}
+	if !strings.Contains(string(logRaw), "display-message") {
+		t.Fatalf("tmux shutdown no consulto pane pid: %s", string(logRaw))
+	}
 	if _, err := os.Stat(socketPath); !os.IsNotExist(err) {
 		t.Fatalf("socket no eliminado err=%v", err)
 	}
@@ -270,6 +275,30 @@ func TestCodexAppServerTmuxBackendV0ShutdownMataSesionPropiaV0(t *testing.T) {
 	}
 	if _, err := os.Stat(tmuxLog + ".session"); !os.IsNotExist(err) {
 		t.Fatalf("session fake no eliminada err=%v", err)
+	}
+}
+
+func TestCodexAppServerTmuxBackendV0EsperaPanePIDAntesDeReadyV0(t *testing.T) {
+	command := exec.Command("sleep", "30")
+	if err := command.Start(); err != nil {
+		t.Fatalf("start sleep: %v", err)
+	}
+	done := make(chan struct{})
+	defer func() {
+		_ = command.Process.Kill()
+		<-done
+	}()
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		_ = command.Process.Kill()
+		_, _ = command.Process.Wait()
+		close(done)
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	backend := serverCodexAppServerTmuxBackendV0{}
+	if err := backend.waitTmuxPaneExitedV0(ctx, strconv.Itoa(command.Process.Pid)); err != nil {
+		t.Fatalf("waitTmuxPaneExitedV0: %v", err)
 	}
 }
 
@@ -418,6 +447,9 @@ case "${1:-}" in
     if [ -n "${ORQUESTA_TEST_TMUX_LOG:-}" ]; then
       rm -f "${ORQUESTA_TEST_TMUX_LOG}.session"
     fi
+    exit 0
+    ;;
+  display-message)
     exit 0
     ;;
   new-session)

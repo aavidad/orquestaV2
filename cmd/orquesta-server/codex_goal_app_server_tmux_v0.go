@@ -10,7 +10,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	orquestaserver "orquesta/modulos/orquesta-server"
@@ -124,6 +126,50 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxKillSessionV0(
 	return nil
 }
 
+func (backend serverCodexAppServerTmuxBackendV0) tmuxPanePIDV0(
+	ctx context.Context,
+	tmuxPath string,
+) string {
+	output, err := backend.runTmuxCommandV0(
+		ctx,
+		tmuxPath,
+		"display-message",
+		"-p",
+		"-t",
+		strings.TrimSpace(backend.SessionName),
+		"#{pane_pid}",
+	)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(output)
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) waitTmuxPaneExitedV0(
+	ctx context.Context,
+	panePID string,
+) error {
+	pid, err := strconv.Atoi(strings.TrimSpace(panePID))
+	if err != nil || pid <= 0 {
+		return nil
+	}
+	ticker := time.NewTicker(codexAppServerTmuxSocketPollEveryV0)
+	defer ticker.Stop()
+	for {
+		if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return codexAppServerCallErrorV0{
+				Code: "codex_app_server_tmux_pane_exit_timeout",
+				Err:  ctx.Err(),
+			}
+		case <-ticker.C:
+		}
+	}
+}
+
 func (backend serverCodexAppServerTmuxBackendV0) ShutdownV0(ctx context.Context) error {
 	timeout := backend.Timeout
 	if timeout <= 0 {
@@ -143,8 +189,13 @@ func (backend serverCodexAppServerTmuxBackendV0) ShutdownV0(ctx context.Context)
 	if err != nil {
 		return err
 	}
+	panePID := ""
 	if hasSession {
+		panePID = backend.tmuxPanePIDV0(runCtx, tmuxPath)
 		if err := backend.tmuxKillSessionV0(runCtx, tmuxPath); err != nil {
+			return err
+		}
+		if err := backend.waitTmuxPaneExitedV0(runCtx, panePID); err != nil {
 			return err
 		}
 	}

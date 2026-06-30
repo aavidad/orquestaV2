@@ -48,6 +48,13 @@ El contexto del Codex/Goal residente debe incluir
 `stdio` nunca. `app_server_tmux` es obligatorio y cualquier prueba de OPES, web
 o conectores se hace solo con fakes/temporales aislados.
 
+El entorno de agente tambien debe ejecutar
+`scripts/bootstrap_agent_tooling.sh --repo /workspace --index` o equivalente al
+preparar el contenedor/worktree. Deben quedar activos `codebase-memory-mcp` para
+navegacion de codigo, comunicacion compacta tipo `caveman` si existe y la norma
+persistente en `~/.codex/AGENTS.md`. Ver
+`docs/runbooks/herramientas_agentes_orquesta_2026-06-30.md`.
+
 ## Direccion operativa
 
 En remoto manda Orquesta. `orquesta-server` recibe el trabajo por web/API o lo

@@ -177,6 +177,32 @@ Documentos de entrada obligatorios para cambios transversales:
 - `docs/matriz_pruebas_reales_y_smoke_2026-05-17.md` si cambias smokes,
   runtime, OPES, shutdown o pruebas reales.
 
+## Herramientas persistentes de agentes
+
+La instalacion/bootstrap de cualquier entorno Orquesta para agentes debe dejar
+activas y documentadas las herramientas auxiliares canonicas. No son preferencias
+de una sesion: forman parte del contrato operativo del agente y deben revisarse
+cuando cambien versiones, runtimes o skills.
+
+- `codebase-memory-mcp`: obligatorio cuando este disponible para navegacion de
+  codigo. Antes de leer paquetes grandes, usa `search_graph`,
+  `trace_path`, `get_code_snippet` y `get_architecture`; `rg` queda para strings
+  exactos, Markdown, configs, incidencias y casos donde el grafo no baste. Si el
+  repo no esta indexado, indexa el worktree aislado antes de una auditoria larga.
+- Ahorro de contexto: lanzar agentes y subagentes con comunicacion compacta tipo
+  `caveman` si la skill existe; si no existe, pedir salida compacta equivalente:
+  hecho, tests, riesgos/bloqueos y siguiente accion. No cargar contexto bruto
+  completo si una busqueda, indice, RAG o resumen acotado basta.
+- Registro de herramientas: el bootstrap debe ejecutar
+  `scripts/bootstrap_agent_tooling.sh` o una preparacion equivalente para
+  instalar/actualizar MCPs/skills, escribir la norma en `~/.codex/AGENTS.md`,
+  desactivar UI/puertos externos por defecto y dejar evidencia de version.
+- OPES/temarios: no uses `codebase-memory-mcp` como indice principal de contenido
+  pedagogico. Para temarios usa el RAG canonico OPES (`rag/corpus/chunks.jsonl`,
+  `rag/corpus/summary.json`, `rag/manifest.json`) o un conector documental con
+  refs compactas. `codebase-memory-mcp` sirve para codigo OPES/Orquesta,
+  scripts, validadores y relaciones, no para leer todos los temas.
+
 ## Capas
 
 - Core puro: `modulos/orquesta-core-workflow`.
