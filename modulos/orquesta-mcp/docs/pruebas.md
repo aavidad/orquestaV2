@@ -661,7 +661,9 @@ publica queda `review_replan_goal_first` tanto si llega desde
 fija que las acciones especificas `review_replan_goal_first`,
 `retry_from_phase` y `close_superseded_by_local_evidence` se preservan para que
 los dominios puedan aportar fase/evidencia sin perder semantica en
-`queue/global-status`.
+`queue/global-status`. `TestMCPQueueGlobalStatusHTTPHandlerV0PropagaFaseYCountersOPESRetryFromPhase`
+fija que `current_phase` y `domain_counters` aportados por dominio viajan hasta
+el item publico junto a `retry_from_phase`.
 `TestMCPQueueGlobalStatusHTTPHandlerV0CadaRunVisibleTieneAccionORazon` fija el
 contrato publico item por item: cada run visible publica una accion recomendada
 si requiere operador o `no_action_reason` si puede esperar/cerrar sin accion.

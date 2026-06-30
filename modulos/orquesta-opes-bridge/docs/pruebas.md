@@ -56,7 +56,10 @@
 - Preflight ejecutable de audio OPES en el drain del servidor: `generate_audio_asset`
   no postea a Orquesta sin `text_public_status=pass`, sin refs de preparacion
   (`audio_manifest_ref`/sidecar mas `source_content_ref` o hash) o con
-  regeneracion global `all`; con esas precondiciones y `speech_synthesis`
+  regeneracion global `all`, ni cuando OPES declara prepare/audio manifest
+  stale/invalidado o hashes de texto actual/preparado divergentes. El bloqueo
+  publica `current_phase=prepare`, contadores `audio_counters` y
+  `retry_from_phase=prepare`; con esas precondiciones y `speech_synthesis`
   completo, el submit sigue permitido.
 - Routing de proveedores en Orquesta:
   `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server -run 'TestClaude|TestProviderLaunchSpecResolverV0RuteaReview|TestProviderAwareAckPathResolverV0UsaRuntimeClaude|TestGeminiRuntimeConfig|TestClaudeRuntimeConfig'`.

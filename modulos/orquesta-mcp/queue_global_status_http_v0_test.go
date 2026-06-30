@@ -495,6 +495,50 @@ func TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFir
 	}
 }
 
+func TestMCPQueueGlobalStatusHTTPHandlerV0PropagaFaseYCountersOPESRetryFromPhase(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				Blocked: 1,
+			},
+			StaleRunning: []MCPAutoprogrammingActionableRunV0{{
+				Code:              mcpAutoprogrammingActionGoalFirstBlockedV0,
+				RunRef:            "run-ref-global-status-opes-audio-prepare-001",
+				RecommendedAction: mcpQueueGlobalStatusActionRetryFromPhaseV0,
+				CurrentPhase:      "prepare",
+				DomainCounters: map[string]int{
+					"audio_manifest_refs": 1,
+					"text_hash_refs":      2,
+				},
+				EvidenceRefs: []string{"evidence-ref-opes-audio-prepare-stale"},
+			}},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	NewMCPQueueGlobalStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	item := mcpQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-opes-audio-prepare-001")
+	if item.Status != mcpAutoprogrammingActionGoalFirstBlockedV0 ||
+		!item.NeedsAction ||
+		item.RecommendedAction != mcpQueueGlobalStatusActionRetryFromPhaseV0 ||
+		item.CurrentPhase != "prepare" ||
+		item.DomainCounters["audio_manifest_refs"] != 1 ||
+		item.DomainCounters["text_hash_refs"] != 2 {
+		t.Fatalf("item=%+v result=%+v", item, result)
+	}
+}
+
 func TestMCPQueueGlobalStatusHTTPHandlerV0AcceptedNoRequiereAccion(t *testing.T) {
 	executor := &fakeMCPQueueGlobalStatusExecutorV0{
 		result: MCPAutoprogrammingStatusToolResultV0{

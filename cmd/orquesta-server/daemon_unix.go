@@ -32,6 +32,27 @@ func signalProcessGroupV0(pid int) error {
 	return nil
 }
 
+func signalProcessGroupKillV0(pid int) error {
+	if pid <= 0 {
+		return os.ErrProcessDone
+	}
+	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil {
+		process, findErr := os.FindProcess(pid)
+		if findErr != nil {
+			return findErr
+		}
+		return process.Kill()
+	}
+	return nil
+}
+
+func processGroupAliveV0(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	return syscall.Kill(-pid, syscall.Signal(0)) == nil
+}
+
 func processAliveV0(pid int) bool {
 	if pid <= 0 {
 		return false

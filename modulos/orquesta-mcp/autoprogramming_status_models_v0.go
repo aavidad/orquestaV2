@@ -31,19 +31,21 @@ type MCPAutoprogrammingQueueHealthV0 struct {
 }
 
 type MCPAutoprogrammingActionableRunV0 struct {
-	Code              string   `json:"code"`
-	Severity          string   `json:"severity,omitempty"`
-	RunRef            string   `json:"run_ref,omitempty"`
-	AppRef            string   `json:"app_ref,omitempty"`
-	Status            string   `json:"status,omitempty"`
-	Reason            string   `json:"reason,omitempty"`
-	RecommendedAction string   `json:"recommended_action,omitempty"`
-	ProcessAliveCount int      `json:"process_alive_count,omitempty"`
-	AckDetected       bool     `json:"ack_detected,omitempty"`
-	LastAckAt         string   `json:"last_ack_at,omitempty"`
-	LastOutputAt      string   `json:"last_output_at,omitempty"`
-	LastArtifactAt    string   `json:"last_artifact_at,omitempty"`
-	EvidenceRefs      []string `json:"evidence_refs,omitempty"`
+	Code              string         `json:"code"`
+	Severity          string         `json:"severity,omitempty"`
+	RunRef            string         `json:"run_ref,omitempty"`
+	AppRef            string         `json:"app_ref,omitempty"`
+	Status            string         `json:"status,omitempty"`
+	Reason            string         `json:"reason,omitempty"`
+	RecommendedAction string         `json:"recommended_action,omitempty"`
+	CurrentPhase      string         `json:"current_phase,omitempty"`
+	DomainCounters    map[string]int `json:"domain_counters,omitempty"`
+	ProcessAliveCount int            `json:"process_alive_count,omitempty"`
+	AckDetected       bool           `json:"ack_detected,omitempty"`
+	LastAckAt         string         `json:"last_ack_at,omitempty"`
+	LastOutputAt      string         `json:"last_output_at,omitempty"`
+	LastArtifactAt    string         `json:"last_artifact_at,omitempty"`
+	EvidenceRefs      []string       `json:"evidence_refs,omitempty"`
 }
 
 type MCPAutoprogrammingTaskV0 struct {

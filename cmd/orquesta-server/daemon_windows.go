@@ -21,6 +21,18 @@ func signalProcessGroupV0(pid int) error {
 	return signalProcessV0(pid)
 }
 
+func signalProcessGroupKillV0(pid int) error {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+	return process.Kill()
+}
+
+func processGroupAliveV0(pid int) bool {
+	return processAliveV0(pid)
+}
+
 func processAliveV0(pid int) bool {
 	if pid <= 0 {
 		return false

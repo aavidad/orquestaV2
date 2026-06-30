@@ -12,21 +12,25 @@ const (
 
 	OPESAudioWorkflowTextPublicPassRequiredReasonV0 = "phase_precondition_missing:opes_audio:text_public_pass"
 	OPESAudioWorkflowPrepareRefsRequiredReasonV0    = "phase_precondition_missing:opes_audio:prepare_refs_required"
+	OPESAudioWorkflowPrepareStaleRequiredReasonV0   = "phase_precondition_missing:opes_audio:prepare_stale"
 	OPESAudioWorkflowSelectiveRegenRequiredReasonV0 = "phase_precondition_missing:opes_audio:selective_regeneration_required"
 )
 
 type OPESAudioWorkflowPreconditionEvaluationV0 struct {
-	Applies               bool     `json:"applies"`
-	Ready                 bool     `json:"ready"`
-	OperationalReason     string   `json:"operational_reason,omitempty"`
-	MissingPreconditions  []string `json:"missing_preconditions,omitempty"`
-	NextActions           []string `json:"next_actions,omitempty"`
-	RecommendedRetryPhase string   `json:"recommended_retry_phase,omitempty"`
+	Applies               bool           `json:"applies"`
+	Ready                 bool           `json:"ready"`
+	CurrentPhase          string         `json:"current_phase,omitempty"`
+	OperationalReason     string         `json:"operational_reason,omitempty"`
+	MissingPreconditions  []string       `json:"missing_preconditions,omitempty"`
+	NextActions           []string       `json:"next_actions,omitempty"`
+	RecommendedRetryPhase string         `json:"recommended_retry_phase,omitempty"`
+	AudioCounters         map[string]int `json:"audio_counters,omitempty"`
 }
 
 func EvaluateOPESAudioWorkflowPreconditionsV0(
 	request orquestadomainwork.DomainWorkJobRequestV0,
 ) OPESAudioWorkflowPreconditionEvaluationV0 {
+	counters := opesAudioWorkflowCountersV0(request.InputFields)
 	if !opesAudioWorkflowPreconditionAppliesV0(request) {
 		return OPESAudioWorkflowPreconditionEvaluationV0{Ready: true}
 	}
@@ -34,35 +38,55 @@ func EvaluateOPESAudioWorkflowPreconditionsV0(
 		return OPESAudioWorkflowPreconditionEvaluationV0{
 			Applies:               true,
 			Ready:                 false,
+			CurrentPhase:          "text_qa",
 			OperationalReason:     OPESAudioWorkflowTextPublicPassRequiredReasonV0,
 			MissingPreconditions:  []string{"text_public_pass"},
 			NextActions:           []string{"run_text_qa", "declare_text_public_pass", "retry_from_phase=text_qa"},
 			RecommendedRetryPhase: "text_qa",
+			AudioCounters:         counters,
 		}
 	}
 	if !opesAudioWorkflowPrepareRefsReadyV0(request.InputFields) {
 		return OPESAudioWorkflowPreconditionEvaluationV0{
 			Applies:               true,
 			Ready:                 false,
+			CurrentPhase:          "prepare",
 			OperationalReason:     OPESAudioWorkflowPrepareRefsRequiredReasonV0,
 			MissingPreconditions:  []string{"audio_prepare_refs"},
 			NextActions:           []string{"prepare_audio_sidecars", "declare_audio_manifest_ref", "declare_source_content_or_text_hash_ref", "retry_from_phase=prepare"},
 			RecommendedRetryPhase: "prepare",
+			AudioCounters:         counters,
+		}
+	}
+	if !opesAudioWorkflowPrepareCurrentV0(request.InputFields) {
+		return OPESAudioWorkflowPreconditionEvaluationV0{
+			Applies:               true,
+			Ready:                 false,
+			CurrentPhase:          "prepare",
+			OperationalReason:     OPESAudioWorkflowPrepareStaleRequiredReasonV0,
+			MissingPreconditions:  []string{"audio_prepare_current"},
+			NextActions:           []string{"invalidate_audio_sidecars", "prepare_audio_sidecars", "retry_from_phase=prepare"},
+			RecommendedRetryPhase: "prepare",
+			AudioCounters:         counters,
 		}
 	}
 	if !opesAudioWorkflowSelectiveRegenerationV0(request.InputFields) {
 		return OPESAudioWorkflowPreconditionEvaluationV0{
 			Applies:               true,
 			Ready:                 false,
+			CurrentPhase:          "prepare",
 			OperationalReason:     OPESAudioWorkflowSelectiveRegenRequiredReasonV0,
 			MissingPreconditions:  []string{"selective_audio_regeneration"},
 			NextActions:           []string{"prepare_audio_sidecars", "declare_audio_regeneration_mode_selective", "retry_from_phase=prepare"},
 			RecommendedRetryPhase: "prepare",
+			AudioCounters:         counters,
 		}
 	}
 	return OPESAudioWorkflowPreconditionEvaluationV0{
-		Applies: true,
-		Ready:   true,
+		Applies:       true,
+		Ready:         true,
+		CurrentPhase:  "tts",
+		AudioCounters: counters,
 	}
 }
 
@@ -135,12 +159,76 @@ func opesAudioWorkflowSelectiveRegenerationV0(
 	return false
 }
 
+func opesAudioWorkflowPrepareCurrentV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) bool {
+	for _, value := range opesAudioWorkflowFieldValuesByNamesV0(fields,
+		"audio_prepare_status",
+		"audio_prepare_phase_status",
+		"audio_manifest_status",
+		"audio_sidecar_status",
+		"prepare_status",
+	) {
+		if opesAudioWorkflowStaleValueV0(value) {
+			return false
+		}
+	}
+	if opesAudioWorkflowAnyPairMismatchV0(
+		opesAudioWorkflowFieldValuesByNamesV0(fields,
+			"current_text_hash_ref",
+			"current_text_hash",
+			"current_html_text_hash_ref",
+			"current_html_text_hash",
+			"current_source_content_hash_ref",
+			"current_source_content_hash",
+			"html_text_hash_current",
+		),
+		opesAudioWorkflowFieldValuesByNamesV0(fields,
+			"prepared_text_hash_ref",
+			"prepared_text_hash",
+			"audio_prepared_text_hash_ref",
+			"audio_prepared_text_hash",
+			"audio_sidecar_text_hash_ref",
+			"audio_manifest_text_hash_ref",
+			"prepared_source_content_hash_ref",
+			"prepared_source_content_hash",
+		),
+	) {
+		return false
+	}
+	if opesAudioWorkflowAnyPairMismatchV0(
+		opesAudioWorkflowFieldValuesByNamesV0(fields,
+			"current_source_content_ref",
+			"current_html_content_ref",
+		),
+		opesAudioWorkflowFieldValuesByNamesV0(fields,
+			"prepared_source_content_ref",
+			"audio_prepared_source_content_ref",
+			"audio_sidecar_source_content_ref",
+		),
+	) {
+		return false
+	}
+	return true
+}
+
 func opesAudioWorkflowPassValueV0(value string) bool {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "true", "yes", "y", "si", "sí", "1",
 		"pass", "passed", "ok", "ready", "listo",
 		"approved", "aprobado", "validated", "validado",
 		"closed", "cerrado", "final", "publicable", "final_publicable":
+		return true
+	default:
+		return false
+	}
+}
+
+func opesAudioWorkflowStaleValueV0(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "stale", "obsolete", "obsoleto", "outdated", "dirty",
+		"invalid", "invalidated", "invalidado", "superseded",
+		"desactualizado", "changed", "text_changed", "html_changed":
 		return true
 	default:
 		return false
@@ -158,6 +246,59 @@ func opesAudioWorkflowSelectiveRegenValueV0(value string) bool {
 	default:
 		return false
 	}
+}
+
+func opesAudioWorkflowAnyPairMismatchV0(current []string, prepared []string) bool {
+	current = compactStringsV0(current)
+	prepared = compactStringsV0(prepared)
+	if len(current) == 0 || len(prepared) == 0 {
+		return false
+	}
+	for _, left := range current {
+		for _, right := range prepared {
+			if strings.TrimSpace(left) == strings.TrimSpace(right) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func opesAudioWorkflowCountersV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) map[string]int {
+	counters := map[string]int{
+		"audio_manifest_refs": len(opesAudioWorkflowFieldValuesByNamesV0(fields,
+			"audio_manifest_ref",
+			"audio_manifest_refs",
+		)),
+		"audio_sidecar_refs": len(opesAudioWorkflowFieldValuesByNamesV0(fields,
+			"audio_sidecar_ref",
+			"audio_sidecar_refs",
+		)),
+		"source_content_refs": len(opesAudioWorkflowFieldValuesByNamesV0(fields,
+			"source_content_ref",
+			"current_source_content_ref",
+			"prepared_source_content_ref",
+		)),
+		"text_hash_refs": len(opesAudioWorkflowFieldValuesByNamesV0(fields,
+			"text_hash_ref",
+			"source_text_hash_ref",
+			"html_text_hash_ref",
+			"current_text_hash_ref",
+			"prepared_text_hash_ref",
+			"audio_sidecar_text_hash_ref",
+		)),
+	}
+	for key, value := range counters {
+		if value == 0 {
+			delete(counters, key)
+		}
+	}
+	if len(counters) == 0 {
+		return nil
+	}
+	return counters
 }
 
 func opesAudioWorkflowFieldValuesByNamesV0(

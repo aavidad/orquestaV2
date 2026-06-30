@@ -39,34 +39,53 @@ type opesDrainSummaryV0 struct {
 }
 
 type opesDrainJobResultV0 struct {
-	JobRef                 string   `json:"job_ref"`
-	WorkKind               string   `json:"work_kind"`
-	TransportJobType       string   `json:"transport_job_type,omitempty"`
-	ContextBlocks          int      `json:"context_blocks,omitempty"`
-	RunRef                 string   `json:"run_ref,omitempty"`
-	ChangeRef              string   `json:"change_ref,omitempty"`
-	RoutePolicy            string   `json:"route_policy,omitempty"`
-	DirectorExecutionMode  string   `json:"director_execution_mode,omitempty"`
-	GoalRef                string   `json:"goal_ref,omitempty"`
-	ExternalGoalRef        string   `json:"external_goal_ref,omitempty"`
-	NextActions            []string `json:"next_actions,omitempty"`
-	OperationalReason      string   `json:"operational_reason,omitempty"`
-	Status                 string   `json:"status"`
-	SupervisionStatus      string   `json:"supervision_status,omitempty"`
-	SupervisionStopReason  string   `json:"supervision_stop_reason,omitempty"`
-	SupervisionProcessRef  string   `json:"supervision_process_ref,omitempty"`
-	SupervisionEvidenceRef string   `json:"supervision_evidence_ref,omitempty"`
-	GoalArtifactRefs       []string `json:"goal_artifact_refs,omitempty"`
-	GoalDomainReceiptRefs  []string `json:"goal_domain_receipt_refs,omitempty"`
-	GoalEvidenceRefs       []string `json:"goal_evidence_refs,omitempty"`
-	RunRecoveryStatus      string   `json:"run_recovery_status,omitempty"`
-	RunRecoveryEvidenceRef string   `json:"run_recovery_evidence_ref,omitempty"`
+	JobRef                 string         `json:"job_ref"`
+	WorkKind               string         `json:"work_kind"`
+	TransportJobType       string         `json:"transport_job_type,omitempty"`
+	ContextBlocks          int            `json:"context_blocks,omitempty"`
+	RunRef                 string         `json:"run_ref,omitempty"`
+	ChangeRef              string         `json:"change_ref,omitempty"`
+	RoutePolicy            string         `json:"route_policy,omitempty"`
+	DirectorExecutionMode  string         `json:"director_execution_mode,omitempty"`
+	GoalRef                string         `json:"goal_ref,omitempty"`
+	ExternalGoalRef        string         `json:"external_goal_ref,omitempty"`
+	NextActions            []string       `json:"next_actions,omitempty"`
+	CurrentPhase           string         `json:"current_phase,omitempty"`
+	OperationalReason      string         `json:"operational_reason,omitempty"`
+	AudioCounters          map[string]int `json:"audio_counters,omitempty"`
+	Status                 string         `json:"status"`
+	SupervisionStatus      string         `json:"supervision_status,omitempty"`
+	SupervisionStopReason  string         `json:"supervision_stop_reason,omitempty"`
+	SupervisionProcessRef  string         `json:"supervision_process_ref,omitempty"`
+	SupervisionEvidenceRef string         `json:"supervision_evidence_ref,omitempty"`
+	GoalArtifactRefs       []string       `json:"goal_artifact_refs,omitempty"`
+	GoalDomainReceiptRefs  []string       `json:"goal_domain_receipt_refs,omitempty"`
+	GoalEvidenceRefs       []string       `json:"goal_evidence_refs,omitempty"`
+	RunRecoveryStatus      string         `json:"run_recovery_status,omitempty"`
+	RunRecoveryEvidenceRef string         `json:"run_recovery_evidence_ref,omitempty"`
 }
 
 type opesDrainPublicErrorV0 struct {
 	JobRef string `json:"job_ref,omitempty"`
 	Code   string `json:"code"`
 	Reason string `json:"reason,omitempty"`
+}
+
+func copyStringIntMapV0(values map[string]int) map[string]int {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]int, len(values))
+	for key, value := range values {
+		if strings.TrimSpace(key) == "" || value == 0 {
+			continue
+		}
+		out[strings.TrimSpace(key)] = value
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func opesDrainOnceCommandV0(stdout io.Writer, stderr io.Writer) int {
@@ -221,8 +240,10 @@ func runOPESDrainSingleOnceV0(
 		if evaluation, blocked := opesBridgeDomainWorkflowPreconditionBlockedV0(request.AppChangeRequest); blocked {
 			summary.Skipped++
 			result.Status = "phase_precondition_missing"
+			result.CurrentPhase = evaluation.CurrentPhase
 			result.OperationalReason = evaluation.OperationalReason
 			result.NextActions = append([]string(nil), evaluation.NextActions...)
+			result.AudioCounters = copyStringIntMapV0(evaluation.AudioCounters)
 			summary.Results = append(summary.Results, result)
 			summary.Errors = append(summary.Errors, opesDrainPublicErrorV0{
 				JobRef: job.ID,

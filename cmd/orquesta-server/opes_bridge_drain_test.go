@@ -2331,6 +2331,62 @@ func TestRunOPESDrainOnceV0AudioSinPrepareRefsNoPosteaOrquestaV0(t *testing.T) {
 	}
 }
 
+func TestRunOPESDrainOnceV0AudioConPrepareStaleNoPosteaOrquestaV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-audio-prepare-stale-001",
+			"type":           "generate_audio_asset",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   opesAudioPayloadWithStalePrepareForDrainTestV0(),
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	posts := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		posts++
+		t.Fatalf("no debe postear a Orquesta con prepare stale: %s %s", r.Method, r.URL.Path)
+	}))
+	defer orquestaServer.Close()
+
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:          opesServer.URL,
+		OrquestaBaseURL:      orquestaServer.URL,
+		Limit:                1,
+		JobType:              "generate_audio_asset",
+		HTTPTimeout:          time.Second,
+		ExternalCapabilities: opesBridgeSpeechSynthesisCapabilityForDrainTestV0(),
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if posts != 0 ||
+		summary.Submitted != 0 ||
+		summary.Skipped != 1 ||
+		len(summary.Results) != 1 ||
+		summary.Results[0].Status != "phase_precondition_missing" ||
+		summary.Results[0].CurrentPhase != "prepare" ||
+		summary.Results[0].OperationalReason != orquestaopesbridge.OPESAudioWorkflowPrepareStaleRequiredReasonV0 ||
+		summary.Results[0].AudioCounters["audio_manifest_refs"] != 1 ||
+		summary.Results[0].AudioCounters["text_hash_refs"] != 2 ||
+		len(summary.Errors) != 1 ||
+		summary.Errors[0].Reason != orquestaopesbridge.OPESAudioWorkflowPrepareStaleRequiredReasonV0 ||
+		!containsStringForTestV0(summary.Results[0].NextActions, "retry_from_phase=prepare") {
+		t.Fatalf("posts=%d summary=%+v", posts, summary)
+	}
+}
+
 func TestRunOPESDrainOnceV0AudioPreflightToolAusenteNoPosteaOrquestaV0(t *testing.T) {
 	t.Setenv(envOPESBridgeSpeechSynthesisCapabilityV0, "available")
 	t.Setenv(envOPESBridgeSpeechSynthesisEvidenceRefsV0, "evidence-ref-tts-declared")
@@ -2794,6 +2850,10 @@ func opesAudioPayloadForDrainTestV0(textStatus string, regenerationMode string) 
 
 func opesAudioPayloadWithoutPrepareRefsForDrainTestV0() string {
 	return `{"program_id":"program-ref-operadores-001","topic_id":"topic-ref-operadores-001","document_plan_artifact_id":"artifact-plan-operadores-001","scope":"tema completo","text_public_status":"pass","audio_regeneration_mode":"selective_by_sidecar"}`
+}
+
+func opesAudioPayloadWithStalePrepareForDrainTestV0() string {
+	return `{"program_id":"program-ref-operadores-001","topic_id":"topic-ref-operadores-001","document_plan_artifact_id":"artifact-plan-operadores-001","scope":"tema completo","text_public_status":"pass","audio_regeneration_mode":"selective_by_sidecar","audio_manifest_ref":"audio-manifest-ref-operadores-001","source_content_ref":"assembled-topic-ref-operadores-001","current_text_hash_ref":"hash-ref-html-final-v2","prepared_text_hash_ref":"hash-ref-html-final-v1"}`
 }
 
 func TestOPESJobContextV0GenerateQuestionBankUsaPayloadFuenteSinConsultarBloquesV0(t *testing.T) {

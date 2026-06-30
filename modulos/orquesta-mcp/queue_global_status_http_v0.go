@@ -63,13 +63,15 @@ type MCPQueueGlobalStatusSummaryV0 struct {
 }
 
 type MCPQueueGlobalStatusItemV0 struct {
-	RunRef            string   `json:"run_ref,omitempty"`
-	AppRef            string   `json:"app_ref,omitempty"`
-	Status            string   `json:"status"`
-	NeedsAction       bool     `json:"needs_action,omitempty"`
-	RecommendedAction string   `json:"recommended_action,omitempty"`
-	NoActionReason    string   `json:"no_action_reason,omitempty"`
-	EvidenceRefs      []string `json:"evidence_refs,omitempty"`
+	RunRef            string         `json:"run_ref,omitempty"`
+	AppRef            string         `json:"app_ref,omitempty"`
+	Status            string         `json:"status"`
+	NeedsAction       bool           `json:"needs_action,omitempty"`
+	RecommendedAction string         `json:"recommended_action,omitempty"`
+	CurrentPhase      string         `json:"current_phase,omitempty"`
+	DomainCounters    map[string]int `json:"domain_counters,omitempty"`
+	NoActionReason    string         `json:"no_action_reason,omitempty"`
+	EvidenceRefs      []string       `json:"evidence_refs,omitempty"`
 }
 
 func NewMCPQueueGlobalStatusHTTPHandlerV0(
@@ -382,6 +384,8 @@ func mcpQueueGlobalStatusItemsV0(
 			stale.RecommendedAction,
 			"cancel_stale",
 		)
+		item.CurrentPhase = firstNonEmptyMCPV0(item.CurrentPhase, stale.CurrentPhase)
+		item.DomainCounters = mergeMCPQueueGlobalStatusCountersV0(item.DomainCounters, stale.DomainCounters)
 		item.EvidenceRefs = compactStringsMCPV0(append(item.EvidenceRefs, stale.EvidenceRefs...))
 	}
 	for _, action := range safeActions {
@@ -455,6 +459,31 @@ func mcpQueueGlobalStatusFinalizeItemV0(item *MCPQueueGlobalStatusItemV0) {
 		return
 	}
 	item.NoActionReason = mcpQueueGlobalStatusNoActionReasonV0(item.Status)
+}
+
+func mergeMCPQueueGlobalStatusCountersV0(left map[string]int, right map[string]int) map[string]int {
+	if len(left) == 0 && len(right) == 0 {
+		return nil
+	}
+	out := map[string]int{}
+	for key, value := range left {
+		key = strings.TrimSpace(key)
+		if key == "" || value == 0 {
+			continue
+		}
+		out[key] += value
+	}
+	for key, value := range right {
+		key = strings.TrimSpace(key)
+		if key == "" || value == 0 {
+			continue
+		}
+		out[key] += value
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func mcpQueueGlobalStatusShouldPromoteSafeActionStatusV0(

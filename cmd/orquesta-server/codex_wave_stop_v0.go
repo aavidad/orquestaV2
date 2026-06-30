@@ -103,8 +103,43 @@ func codexWaveStopOneAgentV0(
 		})
 		return
 	}
+	if !waitUntilProcessGroupDownV0(agent.PID, 750*time.Millisecond) {
+		if err := signalProcessGroupKillV0(agent.PID); err != nil {
+			summary.Errors = append(summary.Errors, codexWavePublicErrorV0{
+				AgentRef: agent.AgentRef,
+				Code:     "stop_failed",
+			})
+			return
+		}
+		if !waitUntilProcessGroupDownV0(agent.PID, 2*time.Second) {
+			summary.Errors = append(summary.Errors, codexWavePublicErrorV0{
+				AgentRef: agent.AgentRef,
+				Code:     "stop_timeout",
+			})
+			return
+		}
+	}
 	agent.StopRequestedAt = now.UTC().Format(time.RFC3339)
 	agent.Status = "stop_requested"
+}
+
+func waitUntilProcessGroupDownV0(pid int, timeout time.Duration) bool {
+	if pid <= 0 {
+		return true
+	}
+	if timeout <= 0 {
+		timeout = time.Second
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		if !processGroupAliveV0(pid) && !processAliveV0(pid) {
+			return true
+		}
+		if !time.Now().Before(deadline) {
+			return !processGroupAliveV0(pid) && !processAliveV0(pid)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 func codexWaveRequestCooperativeStopV0(
