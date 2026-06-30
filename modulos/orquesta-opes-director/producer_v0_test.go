@@ -315,19 +315,19 @@ func TestProduceOPESCausalJobsV0PaqueteFinalCompleteSinEvidenciaNoLiberaRegistro
 	if !ok ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "registry_action", "update") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "pendiente_validacion_paquete_final") ||
-		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "final-package-deterministic-validation-required") {
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "final-package-manifest-closure-evidence-required") {
 		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
 	}
 }
 
-func TestProduceOPESCausalJobsV0PaqueteFinalCompleteConEvidenciaLiberaRegistro(t *testing.T) {
+func TestProduceOPESCausalJobsV0PaqueteFinalCompleteConEvidenciaAntiguaNoLiberaRegistro(t *testing.T) {
 	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
 		Status:       "accepted",
 		DomainRef:    "opes",
-		JobRef:       "job-final-evidence-001",
-		ArtifactRef:  "artifact-final-evidence-001",
+		JobRef:       "job-final-old-evidence-001",
+		ArtifactRef:  "artifact-final-old-evidence-001",
 		ArtifactType: orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0,
-		ReceiptRef:   "receipt-final-evidence-001",
+		ReceiptRef:   "receipt-final-old-evidence-001",
 		CompleteJob:  true,
 		EvidenceRefs: []string{"evidence-ref-opes-finalpkg-deterministic-package-contract"},
 		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
@@ -343,9 +343,47 @@ func TestProduceOPESCausalJobsV0PaqueteFinalCompleteConEvidenciaLiberaRegistro(t
 	}
 	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
 	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "registry_action", "update") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "pendiente_validacion_paquete_final") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "final-package-manifest-closure-evidence-required") {
+		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
+	}
+}
+
+func TestProduceOPESCausalJobsV0PaqueteFinalCompleteConManifestYEvidenciasLiberaRegistro(t *testing.T) {
+	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
+		Status:       "accepted",
+		DomainRef:    "opes",
+		JobRef:       "job-final-evidence-001",
+		ArtifactRef:  "artifact-final-evidence-001",
+		ArtifactType: orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0,
+		ReceiptRef:   "receipt-final-evidence-001",
+		CompleteJob:  true,
+		EvidenceRefs: []string{
+			"manifest_cierre.json",
+			"opes-final-evidence:html:001",
+			"opes-final-evidence:rag:001",
+			"opes-final-evidence:audio:001",
+			"opes-final-evidence:tests:001",
+			"opes-final-evidence:visual:001",
+			"opes-final-evidence:qa:001",
+		},
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "course_id", Value: "curso-final"},
+			{Name: "topic_id", Value: "tema-004"},
+		},
+	}}}
+	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+	result, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{},
+		OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator})
+	if err != nil {
+		t.Fatalf("ProduceOPESCausalJobsV0: %v", err)
+	}
+	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
+	if !ok ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "registry_action", "release") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "paquete_final_local_verificable") ||
-		domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "final-package-deterministic-validation-required") {
+		domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "final-package-manifest-closure-evidence-required") {
 		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
 	}
 }

@@ -14,7 +14,9 @@ Responsabilidad:
   puerto no disponible) en trabajos de correccion antes de que pueda reintentarse
   el envio original;
 - evitar cierres falsos de paquetes OPES con `pendiente_continuar`;
-- liberar un paquete final solo si `CompleteJob=true` y no quedan pendientes;
+- liberar un paquete final solo si `CompleteJob=true`, no quedan pendientes y
+  viajan evidencias del `manifest_cierre.json` completo: HTML, RAG, audio,
+  tests, visual y QA;
 - preservar estados estructurados de avance parcial del registro OPES, por
   ejemplo `texto_minimo_B_ok_pendiente_assets_html_tests_rag_audio_qa`, cuando
   vienen en el artefacto causal;

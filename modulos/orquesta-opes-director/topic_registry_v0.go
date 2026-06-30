@@ -78,7 +78,7 @@ func topicRegistryActionForRecordV0(record OPESCausalArtifactRecordV0) string {
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
 		record.CompleteJob &&
 		len(topicRegistryPendingRefsForRecordV0(record)) == 0 &&
-		topicRegistryFinalPackageHasDeterministicEvidenceV0(record) {
+		topicRegistryFinalPackageHasClosureEvidenceV0(record) {
 		return "release"
 	}
 	return "update"
@@ -101,7 +101,7 @@ func topicRegistryStatusForRecordV0(record OPESCausalArtifactRecordV0) string {
 		return "pendiente_continuar"
 	}
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
-		!topicRegistryFinalPackageHasDeterministicEvidenceV0(record) {
+		!topicRegistryFinalPackageHasClosureEvidenceV0(record) {
 		return "pendiente_validacion_paquete_final"
 	}
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 {
@@ -115,30 +115,47 @@ func topicRegistryPendingRefsForRecordV0(record OPESCausalArtifactRecordV0) []st
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
 		record.CompleteJob &&
 		len(refs) == 0 &&
-		!topicRegistryFinalPackageHasDeterministicEvidenceV0(record) {
-		refs = append(refs, "final-package-deterministic-validation-required")
+		!topicRegistryFinalPackageHasClosureEvidenceV0(record) {
+		refs = append(refs, "final-package-manifest-closure-evidence-required")
 	}
 	return compactStringsV0(refs)
 }
 
-func topicRegistryFinalPackageHasDeterministicEvidenceV0(record OPESCausalArtifactRecordV0) bool {
+func topicRegistryFinalPackageHasClosureEvidenceV0(record OPESCausalArtifactRecordV0) bool {
 	refs := append([]string(nil), record.EvidenceRefs...)
 	refs = append(refs, fieldStringsV0(record.PayloadFields, "evidence_refs", "validation_refs", "required_test_evidence_refs")...)
 	refs = append(refs, record.PayloadRefs...)
-	return topicRegistryHasAnyEvidenceRefV0(refs,
-		"evidence-ref-opes-finalpkg-deterministic-package-contract",
-		"evidence-ref-opes-finalpkg-question-bank-present",
-		"opes-required-question-bank-publicable",
-		"opes-question-bank-publicable",
-		"opes-final-package-validated",
-		"opes_validate_topic_package_v1:passed",
-	)
+	if !topicRegistryEvidenceContainsAnyV0(refs,
+		"manifest_cierre",
+		"manifest_cierre.json",
+		"completed_syllabus_package_manifest",
+		"opes-expected-evidence-manifest-cierre",
+		"opes-rule-final-package-manifest",
+	) {
+		return false
+	}
+	required := [][]string{
+		{"opes-final-evidence:html", "html_evidence_ref", "local_html_site", "html/index.html"},
+		{"opes-final-evidence:rag", "rag_evidence_ref", "rag/manifest.json", "tutor_rag_manifest"},
+		{"opes-final-evidence:audio", "audio_evidence_ref", "audio/guion_audio.md", "audio_manifest"},
+		{"opes-final-evidence:tests", "tests_evidence_ref", "question_bank", "tests.json"},
+		{"opes-final-evidence:visual", "visual_evidence_ref", "visuales_plan.md", "visual_validation_report_ref"},
+		{"opes-final-evidence:qa", "qa_evidence_ref", "qa_final.md", "review_matrix_ref", "director_review_matrix"},
+	}
+	for _, options := range required {
+		if !topicRegistryEvidenceContainsAnyV0(refs, options...) {
+			return false
+		}
+	}
+	return true
 }
 
-func topicRegistryHasAnyEvidenceRefV0(refs []string, accepted ...string) bool {
+func topicRegistryEvidenceContainsAnyV0(refs []string, accepted ...string) bool {
 	for _, ref := range refs {
+		normalizedRef := strings.TrimSpace(ref)
 		for _, want := range accepted {
-			if strings.TrimSpace(ref) == strings.TrimSpace(want) {
+			normalizedWant := strings.TrimSpace(want)
+			if normalizedWant != "" && strings.Contains(normalizedRef, normalizedWant) {
 				return true
 			}
 		}
