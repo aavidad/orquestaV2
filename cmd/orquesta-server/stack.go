@@ -257,6 +257,7 @@ func buildStackFromEnvWithGoalBackendV0(
 		CodeContext:                           codeContextWiring.Query,
 		CodeContextToolLeases:                 codeContextWiring.ToolLeases,
 		ExternalWorkRunGuard:                  externalWorkRunProjectWorkDirGuardConfigFromEnvV0(serverConfig),
+		ExternalWorkRunRuntimeGuard:           externalWorkRunRuntimeCompatibilityGuardConfigFromServerV0(serverConfig),
 		GoalObserverResidentEnabled:           serverConfig.GoalObserverEnabled,
 		PromoteMaterializedArtifactWithoutAck: codexPromoteMaterializedArtifactWithoutAckFromEnvV0(),
 		AllowLegacyAutoprogrammingRun: boolEnvOrDefaultV0(

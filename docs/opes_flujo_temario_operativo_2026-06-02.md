@@ -404,6 +404,14 @@ En `external-work/run`, `metadata_refs`, `current_state_refs`,
 pertenecen a `allowed_write_set` cuando son destino de escritura o a
 `external_work.input_fields` cuando son contexto del agente.
 
+Si OPES necesita garantizar que trabaja contra un binario Orquesta aprobado,
+debe activar el preflight opt-in de runtime en `external_work.input_fields`:
+`orquesta_runtime_binary_sha256`, `orquesta_runtime_build_ref`,
+`orquesta_runtime_commit_ref` y, cuando quiera fallo fuerte si falta identidad
+esperada, `orquesta_runtime_compatibility_required=true`. Orquesta compara esos
+valores antes de despachar `external-work/run` y devuelve error publico si el
+runtime vivo no coincide.
+
 El incidente Auxiliar Administrativo C2 de 2026-06-04 ya cerro este caso: una
 ola de 20 temas fallo inicialmente con `app_change_metadata_ref_invalid` /
 `app_change_external_work_ref_invalid` por rutas recuperables en refs. Orquesta

@@ -1662,6 +1662,14 @@ Cobertura:
   `local_path_ref`/`basename`, sin exponer `/home/alberto/Trabajo/OPES`; los
   payloads quedan durables en AppChange/DomainWork y el spec publica
   `input_fields_summary` para auditar inlineados/omitidos.
+- `TestExternalWorkRunRuntimeCompatibilityGuardBloqueaSHADistintoV0`,
+  `TestExternalWorkRunRuntimeCompatibilityGuardPermiteSinOptInV0`,
+  `TestExternalWorkRunRuntimeCompatibilityGuardPermiteIdentidadCoincidenteV0`
+  y
+  `TestExternalWorkRunRuntimeCompatibilityGuardRequiereIdentidadEsperadaSiOptInEstrictoV0`
+  fijan que `/external-work/run` puede bloquear antes de legacy/Goal cuando el
+  consumidor declara una identidad de runtime esperada en `input_fields`, sin
+  convertirlo en bloqueo global para consumidores que no optan al contrato.
 - `TestCodexStackV0ExternalWorkGoalFirstCierraSecuenciaOPESDerivadosConReceiptsLedgerV0`
   recorre los 23 derivados OPES posteriores a `plan_temario`, desde
   `update_topic_registry` hasta `finalize_temario_package`, usando el bridge

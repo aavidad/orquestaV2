@@ -292,6 +292,23 @@ Estado: aceptada.
 ```
 
 ```text
+Fecha: 2026-06-30
+Decision: `/external-work/run` puede exigir compatibilidad de runtime Orquesta
+por consumidor antes de despachar legacy o Goal.
+Motivo: OPES detecto trabajos enviados a un servidor Orquesta obsoleto aunque
+existia un binario mas reciente aprobado. La identidad publica de readiness no
+bastaba si el consumidor no podia convertirla en preflight operativo.
+Impacto: el stack Codex envuelve `external-work/run` con una guarda opt-in de
+composicion. Si `external_work.input_fields` declara
+`orquesta_runtime_binary_sha256`, `orquesta_runtime_build_ref`,
+`orquesta_runtime_commit_ref` o `orquesta_runtime_compatibility_required`, la
+guarda compara contra la identidad viva cableada desde `cmd/orquesta-server` y
+bloquea con `external_work_runtime_compatibility_mismatch` antes de encolar
+legacy o lanzar Goal. Sin opt-in conserva compatibilidad.
+Estado: aceptada.
+```
+
+```text
 Fecha: 2026-06-28
 Decision: La recuperacion DomainWork sin ACK no depende de frases en logs.
 Motivo: exigir textos concretos en `last_message` o `stderr` convertia una

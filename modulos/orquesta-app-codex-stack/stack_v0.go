@@ -174,6 +174,7 @@ func externalWorkRunGuardedExecutorV0(
 	executor := orquestamcp.MCPTransportExternalWorkRunExecutorV0(
 		externalWorkRunExecutorV0(config, queueConfig),
 	)
+	executor = NewExternalWorkRunRuntimeCompatibilityGuardExecutorV0(executor, config.ExternalWorkRunRuntimeGuard)
 	guard := config.ExternalWorkRunGuard
 	if len(guard.Rules) == 0 {
 		return executor

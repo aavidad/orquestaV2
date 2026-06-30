@@ -55,6 +55,7 @@ type ConfigV0 struct {
 	DecisionCouncil               DecisionCouncilConfigV0
 	DomainDelivery                DomainWorkDeliveryBridgeConfigV0
 	ExternalWorkRunGuard          ExternalWorkRunProjectWorkDirGuardConfigV0
+	ExternalWorkRunRuntimeGuard   ExternalWorkRunRuntimeCompatibilityGuardConfigV0
 	GoalObserverResidentEnabled   bool
 	AllowLegacyExternalWorkRun    bool
 	AllowLegacyAutoprogrammingRun bool
