@@ -213,6 +213,8 @@ def package_is_complete(package_dir: Path) -> bool:
         read_json(package_dir / "tests.json")
     except (OSError, json.JSONDecodeError):
         return False
+    if not rag_manifest_is_canonical(package_dir):
+        return False
     final_html = topic_html_refs(package_dir, "html_final")
     expanded_html = topic_html_refs(package_dir, "html_ampliado")
     if not final_html or not expanded_html:
@@ -220,7 +222,24 @@ def package_is_complete(package_dir: Path) -> bool:
     material_refs = audio_manifest_material_refs(package_dir)
     if material_refs is None:
         return False
-    return all(ref in material_refs for ref in [*final_html, *expanded_html])
+    topic_refs = [*final_html, *expanded_html]
+    if not all(ref in material_refs for ref in topic_refs):
+        return False
+    return legacy_audio_manifest_is_compatible(package_dir, topic_refs)
+
+
+def rag_manifest_is_canonical(package_dir: Path) -> bool:
+    for relative in ("rag/chunks.jsonl", "rag/summary.json"):
+        if (package_dir / relative).exists():
+            return False
+    try:
+        manifest = read_json(package_dir / "rag" / "manifest.json")
+    except (OSError, json.JSONDecodeError):
+        return False
+    return json_contains_string(manifest, "rag/corpus/chunks.jsonl") and json_contains_string(
+        manifest,
+        "rag/corpus/summary.json",
+    )
 
 
 def topic_html_refs(package_dir: Path, root: str) -> list[str]:
@@ -248,6 +267,79 @@ def audio_manifest_material_refs(package_dir: Path) -> set[str] | None:
         if material_path:
             refs.add(material_path)
     return refs
+
+
+def legacy_audio_manifest_is_compatible(package_dir: Path, topic_html_refs: list[str]) -> bool:
+    path = package_dir / "audio" / "manifest.json"
+    if not path.exists():
+        return True
+    try:
+        manifest = read_json(path)
+    except (OSError, json.JSONDecodeError):
+        return False
+    if json_contains_path_base(manifest, "index.html"):
+        return False
+    count = json_declared_count(manifest)
+    all_refs = all_html_refs(package_dir)
+    if (
+        count is not None
+        and topic_html_refs
+        and len(all_refs) > len(topic_html_refs)
+        and count == len(all_refs)
+        and count != len(topic_html_refs)
+    ):
+        return False
+    return True
+
+
+def all_html_refs(package_dir: Path) -> list[str]:
+    refs: list[str] = []
+    for root in ("html_final", "html_ampliado"):
+        html_root = package_dir / root
+        if not html_root.is_dir():
+            continue
+        for path in html_root.glob("*.html"):
+            if path.is_file() and path.stat().st_size > 0:
+                refs.append(f"{root}/{path.name}")
+    return sorted(set(refs))
+
+
+def json_contains_string(value: Any, wanted: str) -> bool:
+    if isinstance(value, str):
+        return value.strip().replace("\\", "/") == wanted
+    if isinstance(value, list):
+        return any(json_contains_string(item, wanted) for item in value)
+    if isinstance(value, dict):
+        return any(json_contains_string(item, wanted) for item in value.values())
+    return False
+
+
+def json_contains_path_base(value: Any, base: str) -> bool:
+    base = base.strip().lower()
+    if isinstance(value, str):
+        return Path(value.strip().replace("\\", "/")).name.lower() == base
+    if isinstance(value, list):
+        return any(json_contains_path_base(item, base) for item in value)
+    if isinstance(value, dict):
+        return any(json_contains_path_base(item, base) for item in value.values())
+    return False
+
+
+def json_declared_count(value: Any) -> int | None:
+    if not isinstance(value, dict):
+        return None
+    for key in (
+        "expected_count",
+        "topic_count",
+        "topics_count",
+        "html_topic_count",
+        "audio_topic_count",
+        "source_html_count",
+    ):
+        raw = value.get(key)
+        if isinstance(raw, int) and raw >= 0:
+            return raw
+    return None
 
 
 def build_external_work_payload(

@@ -419,6 +419,36 @@ func TestOPESRegistryFinalPkgPackageCompleteCountsOnlyTopicHTMLAudioManifestsV0(
 	}
 }
 
+func TestOPESRegistryFinalPkgPackageCompleteRejectsLegacyAudioManifestIndexHTMLV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	fixture.writeCompletePackage("002")
+	base := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final")
+	writeOPESRegistryFinalPkgTestFileV0(t, base, "audio/manifest.json", `{"expected_count":3,"items":[{"source_html":"html_final/index.html"},{"source_html":"html_final/tema_002.html"},{"source_html":"html_ampliado/tema_002.html"}]}`)
+
+	validation := validateOPESRegistryFinalPkgPackageV0(base)
+
+	if validation.Complete ||
+		!containsStringForTestV0(validation.Issues, "audio_legacy_manifest_references_index_html") ||
+		!containsStringForTestV0(validation.Issues, "audio_legacy_manifest_count_includes_non_topic_html") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
+func TestOPESRegistryFinalPkgPackageCompleteAcceptsNeutralLegacyAudioManifestV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	fixture.writeCompletePackage("002")
+	base := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final")
+	writeOPESRegistryFinalPkgTestFileV0(t, base, "audio/manifest.json", `{"expected_count":2,"items":[{"source_html":"html_final/tema_002.html"},{"source_html":"html_ampliado/tema_002.html"}]}`)
+
+	validation := validateOPESRegistryFinalPkgPackageV0(base)
+
+	if !validation.Complete ||
+		containsStringForTestV0(validation.Issues, "audio_legacy_manifest_references_index_html") ||
+		containsStringForTestV0(validation.Issues, "audio_legacy_manifest_count_includes_non_topic_html") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
 func TestOPESRegistryFinalPkgPackageCompleteRejectsLegacyOnlyPackageV0(t *testing.T) {
 	fixture := newOPESRegistryFinalPkgFixtureV0(t)
 	base := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final")

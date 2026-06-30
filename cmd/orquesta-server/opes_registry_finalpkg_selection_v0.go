@@ -170,10 +170,10 @@ func opesRegistryFinalPkgTopicHTMLIssuesV0(packageDir string) []string {
 func opesRegistryFinalPkgAudioManifestIssuesV0(packageDir string) []string {
 	topicHTML := opesRegistryFinalPkgTopicHTMLRefsV0(packageDir)
 	if len(topicHTML) == 0 {
-		return nil
+		return opesRegistryFinalPkgLegacyAudioManifestIssuesV0(packageDir, nil)
 	}
 	materialRefs, invalidRefs := opesRegistryFinalPkgAudioManifestMaterialRefsV0(packageDir)
-	issues := make([]string, 0, len(invalidRefs))
+	issues := opesRegistryFinalPkgLegacyAudioManifestIssuesV0(packageDir, topicHTML)
 	for _, relative := range invalidRefs {
 		issues = append(issues, "audio_manifest_json_invalid:"+relative)
 	}
@@ -183,6 +183,37 @@ func opesRegistryFinalPkgAudioManifestIssuesV0(packageDir string) []string {
 		}
 	}
 	return issues
+}
+
+func opesRegistryFinalPkgLegacyAudioManifestIssuesV0(packageDir string, topicHTML []string) []string {
+	data, err := os.ReadFile(filepath.Join(packageDir, "audio", "manifest.json"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return []string{"audio_legacy_manifest_unreadable:audio/manifest.json"}
+	}
+	if !json.Valid(data) {
+		return []string{"audio_legacy_manifest_json_invalid:audio/manifest.json"}
+	}
+	var decoded any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return []string{"audio_legacy_manifest_json_invalid:audio/manifest.json"}
+	}
+	issues := []string{}
+	if opesRegistryFinalPkgJSONContainsPathBaseV0(decoded, "index.html") {
+		issues = append(issues, "audio_legacy_manifest_references_index_html")
+	}
+	if count, ok := opesRegistryFinalPkgJSONDeclaredCountV0(decoded); ok {
+		if len(topicHTML) == 0 {
+			topicHTML = opesRegistryFinalPkgTopicHTMLRefsV0(packageDir)
+		}
+		allHTML := opesRegistryFinalPkgAllHTMLRefsV0(packageDir)
+		if len(topicHTML) > 0 && len(allHTML) > len(topicHTML) && count == len(allHTML) && count != len(topicHTML) {
+			issues = append(issues, "audio_legacy_manifest_count_includes_non_topic_html")
+		}
+	}
+	return compactOPESRegistryFinalPkgStringsV0(issues)
 }
 
 func opesRegistryFinalPkgTopicHTMLRefsV0(packageDir string) []string {
@@ -205,6 +236,24 @@ func opesRegistryFinalPkgTopicHTMLRefsInRootV0(packageDir string, root string) [
 		relative := filepath.ToSlash(filepath.Join(root, filepath.Base(path)))
 		if strings.HasPrefix(name, "tema_") && opesRegistryFinalPkgRegularNonEmptyFileV0(packageDir, relative) {
 			refs = append(refs, relative)
+		}
+	}
+	sort.Strings(refs)
+	return compactOPESRegistryFinalPkgStringsV0(refs)
+}
+
+func opesRegistryFinalPkgAllHTMLRefsV0(packageDir string) []string {
+	refs := []string{}
+	for _, root := range []string{"html_final", "html_ampliado"} {
+		matches, err := filepath.Glob(filepath.Join(packageDir, root, "*.html"))
+		if err != nil {
+			continue
+		}
+		for _, path := range matches {
+			relative := filepath.ToSlash(filepath.Join(root, filepath.Base(path)))
+			if opesRegistryFinalPkgRegularNonEmptyFileV0(packageDir, relative) {
+				refs = append(refs, relative)
+			}
 		}
 	}
 	sort.Strings(refs)
@@ -278,6 +327,56 @@ func opesRegistryFinalPkgJSONContainsStringV0(value any, want string) bool {
 		}
 	}
 	return false
+}
+
+func opesRegistryFinalPkgJSONContainsPathBaseV0(value any, base string) bool {
+	base = strings.ToLower(strings.TrimSpace(base))
+	switch typed := value.(type) {
+	case string:
+		normalized := filepath.ToSlash(strings.TrimSpace(typed))
+		return strings.ToLower(filepath.Base(normalized)) == base
+	case []any:
+		for _, item := range typed {
+			if opesRegistryFinalPkgJSONContainsPathBaseV0(item, base) {
+				return true
+			}
+		}
+	case map[string]any:
+		for _, item := range typed {
+			if opesRegistryFinalPkgJSONContainsPathBaseV0(item, base) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func opesRegistryFinalPkgJSONDeclaredCountV0(value any) (int, bool) {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return 0, false
+	}
+	for _, key := range []string{
+		"expected_count",
+		"topic_count",
+		"topics_count",
+		"html_topic_count",
+		"audio_topic_count",
+		"source_html_count",
+	} {
+		if count, ok := opesRegistryFinalPkgJSONNumberAsIntV0(object[key]); ok {
+			return count, true
+		}
+	}
+	return 0, false
+}
+
+func opesRegistryFinalPkgJSONNumberAsIntV0(value any) (int, bool) {
+	number, ok := value.(float64)
+	if !ok || number < 0 || float64(int(number)) != number {
+		return 0, false
+	}
+	return int(number), true
 }
 
 type opesRegistryFinalPkgEvidenceManifestV0 struct {
