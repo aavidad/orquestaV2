@@ -47,13 +47,15 @@ progreso sobreviva a cualquier corte de sesión.
 - **Recomendación:** dividir por subdominios en subpaquetes con superficie pública mínima
   (p. ej. `.../workflow/state`, `.../workflow/transitions`), reduciendo la API exportada que el
   resto del repo puede tocar. Es la deuda estructural más rentable de atacar.
+- **Cierre 2026-07-01:** no se hace refactor masivo en caliente. Queda gobernado por
+  `docs/runbooks/plan_troceo_hubs_orquesta_2026-07-01.md`; la frontera neutral vigente ya cubre
+  `orquesta-core-workflow` y `orquesta-orchestration-core`.
 
 ### H4 — Frontera neutral verificada (fortaleza confirmada) · severidad: info
 - `architecture_boundaries_test.go` **pasa hoy** (`ok 0.157s`). El núcleo neutral no importa
   adaptadores de producto, `net/http` ni `os/exec`. Disciplina real y barata de mantener.
-- Matiz: la lista de paquetes "neutrales" cubiertos por el test es corta (core, core-workflow,
-  domain-work). Conviene revisar si `orquesta-orchestration-core` (segundo hub) debería estar
-  también bajo la misma frontera.
+- Matiz actualizado 2026-07-01: `orquesta-orchestration-core` ya esta cubierto por la frontera
+  neutral en `architecture_boundaries_test.go`.
 
 ### H5 — Ficheros monolíticos (hotspots de complejidad) · severidad: media
 - Top: `orquesta-web/nueva_app_html_render_v0.go` **1262 líneas**, `goal_first_v0.go` 909,
@@ -63,6 +65,9 @@ progreso sobreviva a cualquier corte de sesión.
   el de render HTML probablemente mezcla presentación y lógica.
 - **Recomendación:** trocear los >700 líneas por responsabilidad; priorizar el render HTML y
   los `run_supervisor_*`/`run_coordinator_*` de app-codex-stack.
+- **Cierre 2026-07-01:** plan incremental en
+  `docs/runbooks/plan_troceo_hubs_orquesta_2026-07-01.md`; no se reescribe Nueva App ni el stack
+  Codex sin bug/feature y test focal.
 
 ### Nota — duplicación entre `runtime*`: NO confirmada
 - `orquesta-runtime` (40), `runtime-codex` (25), `runtime-codex-delivery` (37) **no comparten
