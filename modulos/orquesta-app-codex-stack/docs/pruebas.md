@@ -1518,6 +1518,14 @@ Cobertura:
   fija que un receipt DomainWork aceptado pero con `complete_job=false` no
   satisface `ClosurePolicy.RequireDomainReceipt`: la run queda bloqueada,
   `NeedsRework=true` y aparece `domain_work_receipt_artifact_incomplete`.
+- `TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESHTMLReadySinVisualesComunesV0`
+  fija que OPES no puede cerrar un HTML `ready/html_validado` con
+  `visual_count=0` si hay assets visuales comunes/reutilizables pendientes de
+  importar, copiar o insertar; bloquea con
+  `domain_work_opes_visual_reuse_missing`.
+- `TestCodexStackV0ExternalWorkGoalFirstCierraOPESHTMLSinVisualesJustificadosV0`
+  fija la ruta positiva: `visual_count=0` solo puede cerrar si OPES declara una
+  justificacion explicita de que no aplican visuales.
 - `TestCodexStackV0ExternalWorkGoalFirstDerivaReceiptDesdeLedgerSiGoalNoLoDeclaraV0`
   cubre un goal que termina con artefacto materializado y tests pasados, pero
   sin `DomainReceiptRefs`: el wrapper sube el artefacto por DomainWork, registra

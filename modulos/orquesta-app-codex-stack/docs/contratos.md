@@ -257,6 +257,12 @@ ledger si cubren los contratos requeridos y el record asociado declara
 `complete_job=true`. Un receipt aceptado pero incompleto bloquea el cierre con
 `domain_work_receipt_artifact_incomplete` y rework; no puede cerrar un trabajo
 goal-first por error.
+Para OPES, el wrapper aplica gates editoriales de cierre sobre receipts
+aceptados: un `visual_asset` SVG no cierra como arte visual profesional final, y
+una entrega HTML/final/ready con `visual_count=0` no cierra si declara assets
+visuales comunes/reutilizables pendientes de importar, copiar o insertar. La
+ausencia de visuales solo se acepta con justificacion explicita de no
+aplicabilidad o evidencia equivalente.
 
 ## Bridge de entregas a dominio externo
 

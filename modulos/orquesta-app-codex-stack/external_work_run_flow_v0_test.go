@@ -1172,6 +1172,116 @@ func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESVisualFinalSVG(t *testing.
 	}
 }
 
+func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESHTMLReadySinVisualesComunesV0(t *testing.T) {
+	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	change := defaultExternalWorkRunChangeForTestV0()
+	change.ChangeRef = "opes-job-html-visual-reuse-missing-goal-001"
+	change.ExternalWork.ProjectRef = "opes"
+	change.ExternalWork.JobRef = "job-html-visual-reuse-missing-goal-001"
+	change.ExternalWork.WorkKind = "generate_html_site"
+	change.ExternalWork.InputFields = []orquestadomainwork.DomainWorkFieldV0{
+		{Name: "expected_artifact_type", Value: "html_site"},
+	}
+	started := postExternalWorkRunStackWithChangeV0(t, stack, change)
+	spec := launcher.specs[0]
+	receiptRef := "receipt-ref-goal-first-opes-html-visual-reuse-missing-001"
+	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
+	record.DomainRef = "opes"
+	record.JobRef = "job-html-visual-reuse-missing-goal-001"
+	record.ArtifactType = "html_site"
+	record.PayloadFields = append(record.PayloadFields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "source_work_kind", Value: "generate_html_site"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "html_status", Value: "html_validado"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "visual_count", ValueJSON: []byte(`0`)},
+		orquestadomainwork.DomainWorkFieldV0{Name: "common_visual_count", ValueJSON: []byte(`2`)},
+		orquestadomainwork.DomainWorkFieldV0{Name: "visual_assets_import_status", Value: "not_imported"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "common_visual_asset_refs", Values: []string{"visual-ref-comun-001", "visual-ref-comun-002"}},
+	)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		record,
+	); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-opes-html-visual-reuse-missing-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework ||
+		!goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptOPESVisualReuseIssueCodeV0) {
+		t.Fatalf("HTML OPES ready sin visuales comunes importados cerro goal-first: result=%+v", result)
+	}
+}
+
+func TestCodexStackV0ExternalWorkGoalFirstCierraOPESHTMLSinVisualesJustificadosV0(t *testing.T) {
+	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	change := defaultExternalWorkRunChangeForTestV0()
+	change.ChangeRef = "opes-job-html-no-visuals-justified-goal-001"
+	change.ExternalWork.ProjectRef = "opes"
+	change.ExternalWork.JobRef = "job-html-no-visuals-justified-goal-001"
+	change.ExternalWork.WorkKind = "generate_html_site"
+	change.ExternalWork.InputFields = []orquestadomainwork.DomainWorkFieldV0{
+		{Name: "expected_artifact_type", Value: "html_site"},
+	}
+	started := postExternalWorkRunStackWithChangeV0(t, stack, change)
+	spec := launcher.specs[0]
+	receiptRef := "receipt-ref-goal-first-opes-html-no-visuals-justified-001"
+	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
+	record.DomainRef = "opes"
+	record.JobRef = "job-html-no-visuals-justified-goal-001"
+	record.ArtifactType = "html_site"
+	record.PayloadFields = append(record.PayloadFields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "source_work_kind", Value: "generate_html_site"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "html_status", Value: "html_validado"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "visual_count", ValueJSON: []byte(`0`)},
+		orquestadomainwork.DomainWorkFieldV0{Name: "visual_requirement_status", Value: "not_applicable"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "visual_zero_justification_ref", Value: "evidence-ref-no-visual-required-001"},
+	)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		record,
+	); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-opes-html-no-visuals-justified-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status == orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		!result.Closure.Accepted ||
+		goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptOPESVisualReuseIssueCodeV0) {
+		t.Fatalf("HTML OPES con visual_count=0 justificado no cerro goal-first: result=%+v", result)
+	}
+}
+
 func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESSupuestosParcialesV0(t *testing.T) {
 	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
 	change := defaultExternalWorkRunChangeForTestV0()

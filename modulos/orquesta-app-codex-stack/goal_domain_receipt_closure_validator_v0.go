@@ -23,6 +23,7 @@ const (
 	goalDomainReceiptOPESSubrolesEvidenceMissingIssueV0  = "domain_work_opes_subroles_evidence_missing"
 	goalDomainReceiptOPESFinalPackageEvidenceIssueCodeV0 = codexStackOPESFinalPackageEvidenceIncompleteIssueV0
 	goalDomainReceiptOPESVisualFinalIssueCodeV0          = "domain_work_opes_visual_final_not_professional"
+	goalDomainReceiptOPESVisualReuseIssueCodeV0          = "domain_work_opes_visual_reuse_missing"
 	goalDomainReceiptOPESPracticalCasesIssueCodeV0       = "domain_work_opes_practical_cases_contract_incomplete"
 	goalDomainReceiptLedgerRequiredArtifactFieldV0       = "domain_receipt_refs.artifact_contracts"
 	goalDomainReceiptStructuredArtifactFieldV0           = "domain_receipt_refs.artifact_payload"
@@ -31,6 +32,7 @@ const (
 	goalDomainReceiptLedgerRequiredRunRefFieldV0         = "domain_receipt_refs.run_ref"
 	goalDomainReceiptLedgerRequiredReceiptFieldV0        = "domain_receipt_refs.receipt_ref"
 	goalDomainReceiptOPESVisualFinalFieldV0              = "domain_receipt_refs.opes_visual_final"
+	goalDomainReceiptOPESVisualReuseFieldV0              = "domain_receipt_refs.opes_visual_reuse"
 	goalDomainReceiptOPESPracticalCasesFieldV0           = "domain_receipt_refs.opes_practical_cases"
 	goalDomainReceiptOPESSubrolesEvidenceFieldV0         = "domain_receipt_refs.opes_subroles"
 	goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0   = "evidence-ref-goal-domain-receipt-opes-subroles-accepted"
@@ -234,6 +236,9 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) validateAcceptedDomainR
 	if issue := goalDomainReceiptOPESVisualFinalIssueV0(spec, matching); issue.Code != "" {
 		return nil, issue
 	}
+	if issue := goalDomainReceiptOPESVisualReuseIssueV0(spec, matching); issue.Code != "" {
+		return nil, issue
+	}
 	completeMatching := goalDomainReceiptCompleteRecordsV0(spec, matching)
 	if !goalDomainReceiptAllContractsCoveredV0(required, completeMatching) {
 		return nil, orquestagoal.GoalWorkIssueV0{
@@ -351,7 +356,8 @@ func goalDomainReceiptCompleteRecordsV0(
 			domainWorkStructuredNonTerminalArtifactIssueRefV0(record.PayloadFields) == "" &&
 			!goalDomainReceiptOPESFinalPackageEvidenceMissingV0(spec, record) &&
 			!goalDomainReceiptOPESPracticalCasesInvalidV0(spec, record) &&
-			!goalDomainReceiptOPESVisualFinalInvalidV0(spec, record) {
+			!goalDomainReceiptOPESVisualFinalInvalidV0(spec, record) &&
+			!goalDomainReceiptOPESVisualReuseMissingV0(spec, record) {
 			out = append(out, record)
 		}
 	}
@@ -397,6 +403,21 @@ func goalDomainReceiptOPESVisualFinalIssueV0(
 			return orquestagoal.GoalWorkIssueV0{
 				Code:  goalDomainReceiptOPESVisualFinalIssueCodeV0,
 				Field: goalDomainReceiptOPESVisualFinalFieldV0,
+			}
+		}
+	}
+	return orquestagoal.GoalWorkIssueV0{}
+}
+
+func goalDomainReceiptOPESVisualReuseIssueV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	records []DomainWorkArtifactSubmissionRecordV0,
+) orquestagoal.GoalWorkIssueV0 {
+	for _, record := range records {
+		if goalDomainReceiptOPESVisualReuseMissingV0(spec, record) {
+			return orquestagoal.GoalWorkIssueV0{
+				Code:  goalDomainReceiptOPESVisualReuseIssueCodeV0,
+				Field: goalDomainReceiptOPESVisualReuseFieldV0,
 			}
 		}
 	}
@@ -575,6 +596,157 @@ func goalDomainReceiptOPESVisualFinalInvalidV0(
 		return false
 	}
 	return goalDomainReceiptVisualPayloadIsSVGV0(record)
+}
+
+func goalDomainReceiptOPESVisualReuseMissingV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	record DomainWorkArtifactSubmissionRecordV0,
+) bool {
+	record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+	domainRef := firstNonEmptyQueuedSourceV0(record.DomainRef, spec.DomainRef, spec.ProjectRef)
+	if !codexStackOperationalClosureRefIsOPESV0(domainRef) ||
+		!goalDomainReceiptOPESVisualReuseGateAppliesV0(spec, record) ||
+		goalDomainReceiptOPESVisualZeroJustifiedV0(record) {
+		return false
+	}
+	visualCount, ok := domainWorkFieldIntValueV0(record.PayloadFields, "visual_count")
+	if !ok || visualCount != 0 {
+		return false
+	}
+	return goalDomainReceiptOPESVisualReuseRequiredV0(record) ||
+		goalDomainReceiptOPESVisualReadyWithoutAssetsV0(record)
+}
+
+func goalDomainReceiptOPESVisualReuseGateAppliesV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	record DomainWorkArtifactSubmissionRecordV0,
+) bool {
+	artifactType := domainWorkDeliveryCanonicalArtifactTypeV0(record.ArtifactType)
+	workKind := normalizeDomainWorkDeliveryAliasV0(firstNonEmptyQueuedSourceV0(
+		domainWorkFieldStringValueV0(record.PayloadFields, "source_work_kind"),
+		spec.WorkKind,
+	))
+	switch artifactType {
+	case "completed_syllabus_package", "html_site", "html_package", "html_export", "assembled_topic":
+		return true
+	}
+	switch workKind {
+	case "generate_html_site",
+		"assemble_topic",
+		"finalize_topic_package",
+		"finalize_temario_package",
+		"close_temario_package",
+		"finalize_syllabus_package",
+		"close_syllabus_package":
+		return true
+	default:
+		return false
+	}
+}
+
+func goalDomainReceiptOPESVisualReuseRequiredV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+) bool {
+	if goalDomainReceiptAnyPositiveIntFieldV0(record,
+		"reusable_visual_count",
+		"common_visual_count",
+		"common_visual_asset_count",
+		"visual_reuse_expected_count",
+		"visual_assets_to_import_count",
+		"visual_assets_to_copy_count",
+		"visual_assets_to_insert_count",
+		"missing_visual_asset_count",
+		"pending_visual_asset_count",
+	) {
+		return true
+	}
+	if goalDomainReceiptAnyFieldValueInSetV0(record, []string{
+		"visual_reuse_status",
+		"common_visual_assets_status",
+		"visual_assets_import_status",
+		"visual_assets_copy_status",
+		"visual_assets_insert_status",
+		"visual_professional_status",
+	}, map[string]bool{
+		"pending":        true,
+		"missing":        true,
+		"not_imported":   true,
+		"not_copied":     true,
+		"not_inserted":   true,
+		"needs_rework":   true,
+		"requires_asset": true,
+	}) {
+		return true
+	}
+	return goalDomainReceiptFieldHasAnyValueV0(record,
+		"common_visual_asset_refs",
+		"reusable_visual_asset_refs",
+		"visual_assets_to_import",
+		"visual_assets_to_copy",
+		"visual_assets_to_insert",
+		"missing_visual_asset_refs",
+		"pending_professional_visual_refs",
+	)
+}
+
+func goalDomainReceiptOPESVisualReadyWithoutAssetsV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+) bool {
+	return goalDomainReceiptAnyFieldValueInSetV0(record, []string{
+		"html_status",
+		"ready_status",
+		"publication_status",
+		"delivery_status",
+		"validation_status",
+		"status",
+	}, map[string]bool{
+		"ready":                       true,
+		"html_validado":               true,
+		"ready_profesional":           true,
+		"ready_candidate_html":        true,
+		"apto_para_subida":            true,
+		"apto_para_subida_controlada": true,
+		"validated":                   true,
+		"validado":                    true,
+	})
+}
+
+func goalDomainReceiptOPESVisualZeroJustifiedV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+) bool {
+	if goalDomainReceiptAnyFieldValueInSetV0(record, []string{
+		"visual_reuse_status",
+		"common_visual_assets_status",
+		"visual_policy",
+		"visual_requirement_status",
+	}, map[string]bool{
+		"not_applicable":      true,
+		"no_aplica":           true,
+		"not_required":        true,
+		"no_visual_required":  true,
+		"no_visuals_required": true,
+	}) {
+		return true
+	}
+	return goalDomainReceiptFieldHasAnyValueV0(record,
+		"visual_zero_justification_ref",
+		"visual_absence_reason",
+		"visual_not_required_reason",
+		"no_visuals_reason",
+	)
+}
+
+func goalDomainReceiptAnyPositiveIntFieldV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+	names ...string,
+) bool {
+	for _, name := range names {
+		value, ok := domainWorkFieldIntValueV0(record.PayloadFields, name)
+		if ok && value > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func goalDomainReceiptVisualPayloadIsSVGV0(record DomainWorkArtifactSubmissionRecordV0) bool {
