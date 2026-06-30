@@ -29,6 +29,7 @@ type ConfigV0 struct {
 	Clock                         orquestafactoryhttp.AppSpecHTTPClockV0
 	Timeout                       time.Duration
 	DirectorLimits                orquestaweb.WebArrancarDirectorAppLimitsV0
+	AppIntakeAssistant            orquestaweb.WebNuevaAppIntakeAssistantPortV0
 	DirectorDecisionBudget        orquestadirectoragentworkflow.DirectorAgentDecisionBatchBudgetV0
 	Stores                        StoresV0
 	RunQueue                      RunQueueConfigV0

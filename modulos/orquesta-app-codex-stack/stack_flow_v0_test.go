@@ -9,7 +9,9 @@ import (
 	"testing"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+	orquestahttpgateway "orquesta/modulos/orquesta-http-gateway"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestaweb "orquesta/modulos/orquesta-web"
 )
 
 func TestBuildStackV0RequiresOptInAndExplicitPorts(t *testing.T) {
@@ -81,6 +83,51 @@ func TestBuildStackV0CableaDomainWorkOptIn(t *testing.T) {
 	if domainWork.called != 1 || domainWork.input.JobRequest.WorkKind != "draft_content_block" {
 		t.Fatalf("domain work no delegado=%+v", domainWork)
 	}
+}
+
+func TestBuildStackHTTPHandlerV0WiresNuevaAppIntakeAssistant(t *testing.T) {
+	config := codexStackBaseConfigForTestV0(t, newFakeCodexStackRuntimeV0(), nil, nil)
+	config.AppIntakeAssistant = fakeCodexStackNuevaAppIntakeAssistantV0{}
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+	body := `{"session_id":"session-codex-stack-guided-assistant","locale":"es","need":"Necesito coordinar avisos clinicos"}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, orquestahttpgateway.RouteAppIntakeGuidedTurnV0, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	stack.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var out orquestaweb.WebNuevaAppIntakeGuidedResponseV0
+	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.Session.Form.Nombre != "Turnos clinicos stack" ||
+		out.Session.Form.TipoApp != "web" ||
+		len(out.Session.Form.Integraciones) == 0 ||
+		out.Session.Form.Integraciones[0].Tipo != "messaging" {
+		t.Fatalf("assistant no cableado en stack: %+v", out.Session.Form)
+	}
+}
+
+type fakeCodexStackNuevaAppIntakeAssistantV0 struct{}
+
+func (fakeCodexStackNuevaAppIntakeAssistantV0) BuildNuevaAppIntakeGuidedTurnV0(
+	context.Context,
+	orquestaweb.WebNuevaAppIntakeGuidedRequestV0,
+	orquestaweb.WebNuevaAppIntakeSessionV0,
+) (orquestaweb.WebNuevaAppIntakeGuidedTurnV0, error) {
+	return orquestaweb.WebNuevaAppIntakeGuidedTurnV0{
+		Decisions: []orquestaweb.WebNuevaAppIntakeDecisionV0{
+			{Field: "nombre", Value: "Turnos clinicos stack"},
+			{Field: "tipo_app", Value: "web"},
+			{Field: "integraciones.0.tipo", Value: "messaging"},
+		},
+	}, nil
 }
 
 type fakeCodexStackDomainWorkExecutorV0 struct {

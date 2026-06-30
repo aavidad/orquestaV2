@@ -177,6 +177,7 @@ func buildStackHTTPHandlerV0(
 ) http.Handler {
 	handler := orquestaappgateway.NewHTTPHandlerV0(orquestaappgateway.ConfigV0{
 		Clock:                             config.Clock,
+		AppIntakeAssistant:                config.AppIntakeAssistant,
 		ArrancarDirector:                  bindings.ArrancarDirector,
 		PreviewDirector:                   bindings.PreviewDirector,
 		ObserveDirectorGoal:               bindings.ObserveDirectorGoal,

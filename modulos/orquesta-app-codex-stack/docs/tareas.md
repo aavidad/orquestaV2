@@ -1,5 +1,24 @@
 # Tareas: orquesta-app-codex-stack
 
+## APP-CODEX-STACK-050
+
+Objetivo: que Nueva App pueda recibir un assistant de intake real desde la
+composicion Codex stack, sin acoplar web/gateway a un proveedor concreto.
+
+Estado: hecho local.
+
+Write-set aplicado:
+
+- `ConfigV0` expone `AppIntakeAssistant` como
+  `WebNuevaAppIntakeAssistantPortV0`;
+- `buildStackHTTPHandlerV0` pasa el puerto al `orquesta-app-gateway`;
+- la prueba HTTP del stack valida que `/api/v0/apps/intake/guided-turn` usa el
+  assistant inyectado y no cae al fallback local cuando existe puerto.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestBuildStackHTTPHandlerV0WiresNuevaAppIntakeAssistant'`
+
 ## APP-CODEX-STACK-049
 
 Objetivo: que el bridge residente OPES no proyecte como trabajo vivo una entrega

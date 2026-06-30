@@ -18,6 +18,10 @@ Cobertura Go actual:
 - `POST /nueva-app` usa el cliente REST interno; sus pruebas legacy declaran
   `director_execution_mode=legacy_director_loop` y arrancan otra cohorte
   independiente;
+- `TestBuildStackHTTPHandlerV0WiresNuevaAppIntakeAssistant` valida que la
+  composicion del stack pasa `WebNuevaAppIntakeAssistantPortV0` al gateway para
+  `/api/v0/apps/intake/guided-turn`; el proveedor real del puerto sigue siendo
+  adaptador opt-in externo;
 - `POST /api/v0/domain-work` delega en el executor `DomainWork` inyectado sin
   que el stack importe OPES ni conectores reales;
 - `TestCodexStackV0OPESExternalWorkRESTCreaMicrotareaSinWriteSetLocal` valida
