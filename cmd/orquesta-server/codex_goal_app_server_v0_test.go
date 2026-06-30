@@ -326,6 +326,93 @@ func TestServerCodexAppServerGoalBackendV0BloqueaThreadReadSinResultadoTrasTimeo
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0NoBloqueaThreadReadConTurnoActivoTrasTimeoutV0(t *testing.T) {
+	now := time.Date(2026, 6, 30, 3, 21, 0, 0, time.UTC)
+	runtime := &serverCodexAppServerGoalRuntimeV0{}
+	runtime.recordStartedAtV0("thread-ref-goal-read-active-001", now.Add(-3*time.Second))
+	protocol := &fakeCodexAppServerProtocolV0{
+		getGoalErr: codexAppServerCallErrorV0{Code: "codex_app_server_rpc_method_not_found"},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-read-active-001",
+			Status: serverCodexAppServerThreadStatusV0("idle"),
+			Turns: []serverCodexAppServerReadTurnV0{{
+				ID:     "turn-ref-goal-read-active-001",
+				Status: "inProgress",
+			}},
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		CWD:      t.TempDir(),
+		Runtime:  runtime,
+		Timeout:  2 * time.Second,
+		Now:      func() time.Time { return now },
+	}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         "goal-ref-codex-app-server-read-active-001",
+		ExternalGoalRef: "thread-ref-goal-read-active-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0 fallback: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		receipt.IssueCode == "codex_app_server_goal_result_missing_after_timeout" ||
+		containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-missing-after-timeout") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get", "thread/read"}) {
+		t.Fatalf("calls=%v", protocol.calls)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0NoPromueveThreadReadResultadoPendienteV0(t *testing.T) {
+	projectDir := t.TempDir()
+	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")
+	if err := os.MkdirAll(resultDir, 0o755); err != nil {
+		t.Fatalf("mkdir result dir: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0),
+		[]byte(`{"goal_ref":"goal-ref-codex-app-server-read-pending-001","summary":"resultado inicial","required_test_results":[{"test_ref":"test-ref-pending","status":"pending"}]}`),
+		0o644,
+	); err != nil {
+		t.Fatalf("write result file: %v", err)
+	}
+	protocol := &fakeCodexAppServerProtocolV0{
+		getGoalErr: codexAppServerCallErrorV0{Code: "codex_app_server_rpc_method_not_found"},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-read-pending-001",
+			Status: serverCodexAppServerThreadStatusV0("idle"),
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		CWD:      projectDir,
+		Runtime:  &serverCodexAppServerGoalRuntimeV0{},
+		Timeout:  2 * time.Second,
+		Now:      func() time.Time { return time.Date(2026, 6, 30, 3, 22, 0, 0, time.UTC) },
+	}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         "goal-ref-codex-app-server-read-pending-001",
+		ExternalGoalRef: "thread-ref-goal-read-pending-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0 fallback: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		receipt.Summary == "resultado inicial" ||
+		containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-file") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get", "thread/read"}) {
+		t.Fatalf("calls=%v", protocol.calls)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0DiagnosticaThreadSystemErrorSinResultadoDurableV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		getGoalErr: codexAppServerCallErrorV0{Code: "codex_app_server_rpc_method_not_found"},
@@ -586,6 +673,50 @@ func TestServerCodexAppServerGoalBackendV0PromueveResultadoDurableAunqueGoalSiga
 		len(receipt.RequiredTestResults) != 1 ||
 		receipt.RequiredTestResults[0].TestRef != "test-ref-goal-active" ||
 		receipt.RequiredTestResults[0].Status != "passed" {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get", "thread/read"}) {
+		t.Fatalf("calls=%v", protocol.calls)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0NoPromueveResultadoDurableActivoConTestsPendientesV0(t *testing.T) {
+	projectDir := t.TempDir()
+	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")
+	if err := os.MkdirAll(resultDir, 0o755); err != nil {
+		t.Fatalf("mkdir result dir: %v", err)
+	}
+	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0)
+	payload := `{
+		"goal_ref":"goal-ref-codex-app-server-file-active-pending-001",
+		"summary":"resultado inicial materializado; pendiente de completar artefactos y verificacion",
+		"artifact_refs":[],
+		"required_test_results":[{"test_ref":"test-ref-goal-active-pending","status":"pending","evidence_refs":[]}],
+		"evidence_refs":[]
+	}`
+	if err := os.WriteFile(resultPath, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write result file: %v", err)
+	}
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID: "thread-ref-goal-file-active-pending-001",
+			Status:   "active",
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: projectDir}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-codex-app-server-file-active-pending-001",
+		ExternalGoalRef: "thread-ref-goal-file-active-pending-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		receipt.Summary == "resultado inicial materializado; pendiente de completar artefactos y verificacion" ||
+		containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-file") {
 		t.Fatalf("receipt=%+v", receipt)
 	}
 	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get", "thread/read"}) {

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 )
 
@@ -87,7 +88,8 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 			if markerErr == nil &&
 				found &&
 				!codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, request.GoalRef) &&
-				!codexAppServerGoalResultMarkerExternalGoalRefMismatchV0(marked, request.ExternalGoalRef) {
+				!codexAppServerGoalResultMarkerExternalGoalRefMismatchV0(marked, request.ExternalGoalRef) &&
+				codexAppServerGoalResultReadyForActiveCompletionV0(marked) {
 				observed.Status = "complete"
 				observed.Summary = "codex_app_server_goal_result_marker"
 				mergeCodexAppServerGoalResultV0(
@@ -104,7 +106,7 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 		request.GoalRef,
 		request.ExternalGoalRef,
 	)
-	if fileErr == nil && fileFound {
+	if fileErr == nil && fileFound && codexAppServerGoalResultReadyForActiveCompletionV0(fileMarked) {
 		observed.Status = "complete"
 		observed.Summary = "codex_app_server_goal_result_file"
 		mergeCodexAppServerGoalResultV0(
@@ -115,6 +117,18 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 		return observed, true
 	}
 	return receipt, false
+}
+
+func codexAppServerGoalResultReadyForActiveCompletionV0(marked codexAppServerGoalResultMarkerV0) bool {
+	for _, result := range marked.RequiredTestResults {
+		switch strings.TrimSpace(result.Status) {
+		case "passed", orquestagoal.GoalStatusAcceptedV0:
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func codexAppServerGoalResultFromWorkspaceV0(

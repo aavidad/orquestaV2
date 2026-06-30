@@ -149,6 +149,18 @@ fuente cuando no hay `ORQUESTA_CODEX_CODE_HOME` explicita. Tras el ajuste,
 observado en esa tanda fue `codex_app_server_goal_result_missing_after_timeout`,
 ya separado del problema de autenticacion.
 
+Revalidacion remota posterior sobre `4ba6c1e1`:
+`app_server_tmux` quedo aceptado con OPES vacio, `danger-full-access`,
+`approval=never`, `ORQUESTA_CODEX_GOAL_TIMEOUT_MS=180000`,
+`ORQUESTA_GOAL_FIRST_SMOKE_POLLS=70` y `ORQUESTA_KEEP_SMOKE_DIR=1`. La primera
+tanda demostro que Orquesta no debe cortar por edad del thread si `thread/read`
+expone un turno activo; la segunda demostro que un
+`orquesta_goal_result_v0.json` inicial con tests `pending` es progreso durable,
+pero no cierre. Con ambos ajustes, el smoke final cerro en el poll 51 con
+`goal_status=complete`, `run_status=cerrada`, `closure_status=accepted`,
+`closure_accepted=true`, `artifact_refs=2` y `evidence_refs=10`. Temporal
+conservado: `/srv/orquesta-self/runtime/smokes/orquesta-goal-first-app-server.tSgRfu`.
+
 ## Exito
 
 La salida debe incluir:

@@ -380,7 +380,8 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 	}
 	if found &&
 		!codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, request.GoalRef) &&
-		!codexAppServerGoalResultMarkerExternalGoalRefMismatchV0(marked, request.ExternalGoalRef) {
+		!codexAppServerGoalResultMarkerExternalGoalRefMismatchV0(marked, request.ExternalGoalRef) &&
+		(status != orquestagoal.GoalStatusRunningV0 || codexAppServerGoalResultReadyForActiveCompletionV0(marked)) {
 		receipt.Status = orquestagoal.GoalStatusCompleteV0
 		receipt.Summary = "codex_app_server_goal_result_marker"
 		mergeCodexAppServerGoalResultV0(
@@ -399,7 +400,8 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 		receipt.IssueCode = "codex_app_server_goal_result_file_invalid"
 		return receipt, nil
 	}
-	if fileFound {
+	if fileFound &&
+		(status != orquestagoal.GoalStatusRunningV0 || codexAppServerGoalResultReadyForActiveCompletionV0(fileMarked)) {
 		receipt.Status = orquestagoal.GoalStatusCompleteV0
 		receipt.Summary = "codex_app_server_goal_result_file"
 		mergeCodexAppServerGoalResultV0(
@@ -417,7 +419,7 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 		))
 		return receipt, nil
 	}
-	if timedOut, timeoutReceipt := backend.codexAppServerThreadReadGoalResultTimeoutV0(request, status, receipt); timedOut {
+	if timedOut, timeoutReceipt := backend.codexAppServerThreadReadGoalResultTimeoutV0(request, status, thread, receipt); timedOut {
 		return timeoutReceipt, nil
 	}
 	return receipt, nil
@@ -426,9 +428,13 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 func (backend serverCodexAppServerGoalBackendV0) codexAppServerThreadReadGoalResultTimeoutV0(
 	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
 	status string,
+	thread serverCodexAppServerThreadReadV0,
 	receipt orquestaruntimecodexgoal.CodexGoalObservationReceiptV0,
 ) (bool, orquestaruntimecodexgoal.CodexGoalObservationReceiptV0) {
 	if status != orquestagoal.GoalStatusRunningV0 {
+		return false, receipt
+	}
+	if codexAppServerThreadReadHasActiveTurnV0(thread) {
 		return false, receipt
 	}
 	timeout := backend.Timeout
@@ -453,6 +459,16 @@ func (backend serverCodexAppServerGoalBackendV0) codexAppServerThreadReadGoalRes
 	receipt.GoalRef = strings.TrimSpace(firstNonEmptyServerStackV0(receipt.GoalRef, request.GoalRef))
 	receipt.ExternalGoalRef = threadID
 	return true, receipt
+}
+
+func codexAppServerThreadReadHasActiveTurnV0(thread serverCodexAppServerThreadReadV0) bool {
+	for _, turn := range thread.Turns {
+		switch strings.TrimSpace(turn.Status) {
+		case "active", "inProgress", "in_progress", "pending", "queued", "running":
+			return true
+		}
+	}
+	return false
 }
 
 func (backend serverCodexAppServerGoalBackendV0) fingerprintCodexAppServerThreadReadV0(
