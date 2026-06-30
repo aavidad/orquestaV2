@@ -169,6 +169,74 @@ exit 2
 	}
 }
 
+func TestCodexAppServerTmuxBackendV0LimpiaSesionSiSocketNoLlegaV0(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	tmuxLog := filepath.Join(root, "tmux.log")
+	fakeTmux := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte(`#!/bin/sh
+set -eu
+log="${ORQUESTA_TEST_TMUX_LOG:-}"
+if [ -n "$log" ]; then
+  printf '%s\n' "$*" >> "$log"
+fi
+case "${1:-}" in
+  has-session)
+    [ -n "$log" ] && [ -e "${log}.session" ] && exit 0
+    exit 1
+    ;;
+  new-session)
+    [ -n "$log" ] && : > "${log}.session"
+    exit 0
+    ;;
+  kill-session)
+    [ -n "$log" ] && rm -f "${log}.session"
+    exit 0
+    ;;
+  display-message)
+    exit 0
+    ;;
+esac
+exit 2
+`), 0o700); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	t.Setenv("ORQUESTA_TEST_TMUX_LOG", tmuxLog)
+	socketPath := filepath.Join(root, "runtime", codexAppServerTmuxDirV0, "g-timeout.sock")
+	backend := serverCodexAppServerTmuxBackendV0{
+		PathEnv:     binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		SocketPath:  socketPath,
+		SessionName: "orquesta-goal-socket-timeout",
+		Timeout:     80 * time.Millisecond,
+	}
+
+	err := backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{})
+
+	if err == nil || !strings.Contains(err.Error(), "codex_app_server_tmux_socket_timeout") {
+		t.Fatalf("err=%v", err)
+	}
+	logRaw, readErr := os.ReadFile(tmuxLog)
+	if readErr != nil {
+		t.Fatalf("read tmux log: %v", readErr)
+	}
+	if !strings.Contains(string(logRaw), "new-session") ||
+		!strings.Contains(string(logRaw), "kill-session") {
+		t.Fatalf("tmux log sin cleanup: %s", string(logRaw))
+	}
+	if _, statErr := os.Stat(tmuxLog + ".session"); !os.IsNotExist(statErr) {
+		t.Fatalf("session fake no eliminada err=%v", statErr)
+	}
+	if _, statErr := os.Stat(backend.tmuxOwnerMarkerPathV0()); !os.IsNotExist(statErr) {
+		t.Fatalf("owner marker no eliminado err=%v", statErr)
+	}
+	if _, statErr := os.Stat(socketPath); !os.IsNotExist(statErr) {
+		t.Fatalf("socket no eliminado err=%v", statErr)
+	}
+}
+
 func TestCodexAppServerTmuxBackendV0ReparaSocketExistenteAntesDeReusarSesionV0(t *testing.T) {
 	root := t.TempDir()
 	binDir := filepath.Join(root, "bin")

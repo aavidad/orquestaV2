@@ -92,12 +92,18 @@ func (backend serverCodexAppServerTmuxBackendV0) EnsureV0(
 		return err
 	}
 	if err := backend.tmuxStartSessionV0(runCtx, tmuxPath); err != nil {
+		backend.cleanupTmuxSessionAfterStartupFailureV0(tmuxPath)
 		return err
 	}
 	if err := backend.writeTmuxOwnerMarkerV0(); err != nil {
+		backend.cleanupTmuxSessionAfterStartupFailureV0(tmuxPath)
 		return err
 	}
-	return backend.waitForTmuxSocketV0(runCtx, tmuxPath, preflight)
+	if err := backend.waitForTmuxSocketV0(runCtx, tmuxPath, preflight); err != nil {
+		backend.cleanupTmuxSessionAfterStartupFailureV0(tmuxPath)
+		return err
+	}
+	return nil
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) tmuxHasSessionV0(
@@ -202,6 +208,19 @@ func (backend serverCodexAppServerTmuxBackendV0) ShutdownV0(ctx context.Context)
 	_ = os.Remove(strings.TrimSpace(backend.SocketPath))
 	_ = os.Remove(backend.tmuxOwnerMarkerPathV0())
 	return nil
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) cleanupTmuxSessionAfterStartupFailureV0(
+	tmuxPath string,
+) {
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), codexAppServerTmuxDefaultTimeoutV0)
+	defer cancel()
+
+	if hasSession, err := backend.tmuxHasSessionV0(cleanupCtx, tmuxPath); err == nil && hasSession {
+		_ = backend.tmuxKillSessionV0(cleanupCtx, tmuxPath)
+	}
+	_ = os.Remove(strings.TrimSpace(backend.SocketPath))
+	_ = os.Remove(backend.tmuxOwnerMarkerPathV0())
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) tmuxStartSessionV0(

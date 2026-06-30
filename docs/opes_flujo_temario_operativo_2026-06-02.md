@@ -349,6 +349,13 @@ acotado por `correlation_id`, `topic_id`, cola temporal dedicada o
 existir ademas una evidencia de destino temporal/no productivo antes de ejecutar
 efectos.
 
+Para OPES, `/healthz` es solo liveness del proceso. Antes de lanzar
+`domain-work`, `external-work/run` o un ciclo de temario hay que comprobar
+`GET /api/v0/server/readiness` y exigir `ready=true`. Si readiness devuelve
+`external_work_goal_backend_required`, la accion unica es reiniciar Orquesta con
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`; OPES debe marcar
+`orquesta_degraded_not_ready` y no lanzar jobs ni hacer fallback silencioso.
+
 Si `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE` no esta definido, el comando usa
 `OPESFullTemarioJobTypeSequenceV0()`, que empieza en `plan_temario` e incluye
 revisiones Codex/Gemini/Claude, revisiones por pares, consolidacion del
