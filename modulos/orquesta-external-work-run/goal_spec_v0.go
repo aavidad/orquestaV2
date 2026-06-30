@@ -250,7 +250,9 @@ func externalWorkGoalInputFieldPriorityV0(name string) int {
 		"product_write_set_status", "product_write_set_rework_action",
 		"current_phase", "opes_current_phase", "audio_current_phase",
 		"retry_from_phase", "recommended_retry_phase", "audio_counters", "domain_counters",
-		"provider_status", "provider_reason", "provider_timeout", "running_no_recent_progress":
+		"provider_status", "provider_reason", "provider_timeout", "running_no_recent_progress",
+		"superseded_by_local_evidence", "superseded_by_local_evidence_ref",
+		"local_evidence_ref", "local_artifact_ref":
 		return 10
 	case "document_plan_artifact_id", "assembled_topic_artifact_id", "audio_profile_ref":
 		return 20

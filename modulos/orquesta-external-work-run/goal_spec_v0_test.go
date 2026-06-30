@@ -275,6 +275,54 @@ func TestBuildExternalWorkGoalWorkSpecV0PriorizaSubroleTaskRefsOPESV0(t *testing
 	}
 }
 
+func TestBuildExternalWorkGoalWorkSpecV0PriorizaSupersededByLocalEvidenceOPESV0(t *testing.T) {
+	request := validExternalWorkRunRequestForTestV0()
+	fields := []orquestadomainwork.DomainWorkFieldV0{}
+	for index := 0; index < externalWorkGoalInputFieldMaxInlineFieldsV0+6; index++ {
+		fields = append(fields, orquestadomainwork.DomainWorkFieldV0{
+			Name:  "campo_secundario_" + string(rune('a'+index)),
+			Value: "valor-secundario",
+		})
+	}
+	fields = append(fields,
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:  "superseded_by_local_evidence",
+			Value: "true",
+		},
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:  "local_evidence_ref",
+			Value: "evidence-ref-opes-local-audio-manifest-current",
+		},
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:  "local_artifact_ref",
+			Value: "artifact-ref-opes-local-audio-current",
+		},
+	)
+	request.AppChangeRequest.ExternalWork.InputFields = fields
+
+	spec, issues := BuildExternalWorkGoalWorkSpecV0(
+		request,
+		StartExternalWorkRunConfigV0{OccurredAt: "2026-05-10T10:00:00Z"},
+	)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	context := externalWorkRunTestContextTextV0(spec.ContextRefs)
+	for _, want := range []string{
+		"input_fields.superseded_by_local_evidence",
+		`"value":"true"`,
+		"input_fields.local_evidence_ref",
+		"evidence-ref-opes-local-audio-manifest-current",
+		"input_fields.local_artifact_ref",
+		"artifact-ref-opes-local-audio-current",
+		"Contrato DomainWork trae 25 input_fields",
+	} {
+		if !strings.Contains(context, want) {
+			t.Fatalf("context no contiene %q:\n%s", want, context)
+		}
+	}
+}
+
 func TestBuildExternalWorkGoalWorkSpecV0LimitaPayloadRefsDeInputFields(t *testing.T) {
 	request := validExternalWorkRunRequestForTestV0()
 	largeValue := strings.Repeat("contrato extenso ", 90)

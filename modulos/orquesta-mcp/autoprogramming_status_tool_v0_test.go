@@ -620,6 +620,58 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalFirstBloqueadoCierraSupersededPor
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0GoalFirstCierraSupersededDesdeContextRefsV0(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-superseded-context-001"
+	goalRef := "goal-ref-autop-status-goal-superseded-context-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusBlockedV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			RunRef:        runRef,
+			GoalRef:       goalRef,
+			DomainRef:     "opes",
+			WorkKind:      "generate_audio_asset",
+			Objective:     "Cerrar bloqueo reemplazado por evidencia local durable.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			ContextRefs: []orquestagoal.GoalContextRefV0{
+				{
+					Kind:    "input_field_value",
+					Ref:     "input-field-superseded-by-local-evidence-value-test",
+					Purpose: `Campo input_fields.superseded_by_local_evidence inlineado de forma acotada: {"name":"superseded_by_local_evidence","value":"true"}`,
+				},
+				{
+					Kind:    "input_field_value",
+					Ref:     "input-field-local-evidence-ref-value-test",
+					Purpose: `Campo input_fields.local_evidence_ref inlineado de forma acotada: {"name":"local_evidence_ref","value":"evidence-ref-opes-local-audio-manifest-current"}`,
+				},
+			},
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{Path: "external/opes/audio"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef: goalRef,
+			Status:  orquestagoal.GoalStatusBlockedV0,
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-blocked-superseded-context-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 ||
+		result.StaleRunning[0].RecommendedAction != "close_superseded_by_local_evidence" {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0GoalFirstSupersededSinEvidenciaLocalNoCierraV0(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-superseded-sin-evidencia-001"
 	goalRef := "goal-ref-autop-status-goal-superseded-sin-evidencia-001"

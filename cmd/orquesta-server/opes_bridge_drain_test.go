@@ -2528,6 +2528,81 @@ func TestRunOPESDrainOnceV0AudioConSpeechSynthesisPosteaOrquestaV0(t *testing.T)
 	}
 }
 
+func TestRunOPESDrainOnceV0AudioSupersededByLocalEvidencePosteaContratoGoalFirstV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-audio-superseded-001",
+			"type":           "generate_audio_asset",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   opesAudioPayloadSupersededByLocalEvidenceForDrainTestV0(),
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	var submitted map[string]any
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v0/external-work/run" || r.Method != http.MethodPost {
+			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&submitted); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"estado":                  "ok",
+			"route_policy":            "goal_first",
+			"director_execution_mode": "goal_first",
+			"run_ref":                 "run-ref-audio-superseded-001",
+			"goal_ref":                "goal-ref-audio-superseded-001",
+			"next_actions":            []string{"observe_goal"},
+		})
+	}))
+	defer orquestaServer.Close()
+
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:     opesServer.URL,
+		OrquestaBaseURL: orquestaServer.URL,
+		Limit:           1,
+		JobType:         "generate_audio_asset",
+		HTTPTimeout:     time.Second,
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+		ExternalCapabilities: opesBridgeSpeechSynthesisCapabilityForDrainTestV0(),
+	})
+
+	if err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if summary.Submitted != 1 ||
+		summary.Skipped != 0 ||
+		len(summary.Results) != 1 ||
+		summary.Results[0].Status != "submitted" ||
+		summary.Results[0].RoutePolicy != "goal_first" {
+		t.Fatalf("summary=%+v", summary)
+	}
+	work, ok := nestedMapForDrainTestV0(
+		submitted,
+		"external_work_run_request",
+		"app_change_request",
+		"external_work",
+	)
+	if !ok ||
+		work["work_kind"] != "generate_audio_asset" ||
+		!inputFieldValueForDrainTestV0(work, "superseded_by_local_evidence", "true") ||
+		!inputFieldValueForDrainTestV0(work, "local_evidence_ref", "evidence-ref-opes-local-audio-manifest-current") ||
+		!inputFieldValueForDrainTestV0(work, "local_artifact_ref", "artifact-ref-opes-local-audio-current") {
+		t.Fatalf("submitted=%+v", submitted)
+	}
+}
+
 func TestRunOPESDrainOnceV0AudioAlreadySubmittedProviderHeartbeatTimeoutProyectaSinReenviarV0(t *testing.T) {
 	jobRefreshes := 0
 	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -3027,6 +3102,21 @@ func opesAudioPayloadForDrainTestV0(textStatus string, regenerationMode string) 
 		"audio_manifest_ref":        "audio-manifest-ref-operadores-001",
 		"source_content_ref":        "assembled-topic-ref-operadores-001",
 	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return string(raw)
+}
+
+func opesAudioPayloadSupersededByLocalEvidenceForDrainTestV0() string {
+	payload := map[string]string{}
+	if err := json.Unmarshal([]byte(opesAudioPayloadForDrainTestV0("pass", "selective_by_sidecar")), &payload); err != nil {
+		panic(err)
+	}
+	payload["superseded_by_local_evidence"] = "true"
+	payload["local_evidence_ref"] = "evidence-ref-opes-local-audio-manifest-current"
+	payload["local_artifact_ref"] = "artifact-ref-opes-local-audio-current"
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		panic(err)
