@@ -32,23 +32,26 @@ type externalBridgeInputLedgerV0 interface {
 }
 
 type externalBridgeInputLedgerEntryV0 struct {
-	Key                   string    `json:"key"`
-	ExternalSystem        string    `json:"external_system"`
-	ExternalJobRef        string    `json:"external_job_ref"`
-	Status                string    `json:"status"`
-	ClaimRef              string    `json:"claim_ref,omitempty"`
-	CorrelationID         string    `json:"correlation_id,omitempty"`
-	IdempotencyKey        string    `json:"idempotency_key,omitempty"`
-	RunRef                string    `json:"run_ref,omitempty"`
-	ChangeRef             string    `json:"change_ref,omitempty"`
-	RoutePolicy           string    `json:"route_policy,omitempty"`
-	DirectorExecutionMode string    `json:"director_execution_mode,omitempty"`
-	GoalRef               string    `json:"goal_ref,omitempty"`
-	ExternalGoalRef       string    `json:"external_goal_ref,omitempty"`
-	NextActions           []string  `json:"next_actions,omitempty"`
-	LastError             string    `json:"last_error,omitempty"`
-	Attempts              int       `json:"attempts,omitempty"`
-	UpdatedAt             time.Time `json:"updated_at"`
+	Key                   string         `json:"key"`
+	ExternalSystem        string         `json:"external_system"`
+	ExternalJobRef        string         `json:"external_job_ref"`
+	Status                string         `json:"status"`
+	ClaimRef              string         `json:"claim_ref,omitempty"`
+	CorrelationID         string         `json:"correlation_id,omitempty"`
+	IdempotencyKey        string         `json:"idempotency_key,omitempty"`
+	RunRef                string         `json:"run_ref,omitempty"`
+	ChangeRef             string         `json:"change_ref,omitempty"`
+	RoutePolicy           string         `json:"route_policy,omitempty"`
+	DirectorExecutionMode string         `json:"director_execution_mode,omitempty"`
+	GoalRef               string         `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string         `json:"external_goal_ref,omitempty"`
+	NextActions           []string       `json:"next_actions,omitempty"`
+	CurrentPhase          string         `json:"current_phase,omitempty"`
+	OperationalReason     string         `json:"operational_reason,omitempty"`
+	DomainCounters        map[string]int `json:"domain_counters,omitempty"`
+	LastError             string         `json:"last_error,omitempty"`
+	Attempts              int            `json:"attempts,omitempty"`
+	UpdatedAt             time.Time      `json:"updated_at"`
 }
 
 type externalBridgeInputRunMetadataV0 struct {
@@ -57,6 +60,9 @@ type externalBridgeInputRunMetadataV0 struct {
 	GoalRef               string
 	ExternalGoalRef       string
 	NextActions           []string
+	CurrentPhase          string
+	OperationalReason     string
+	DomainCounters        map[string]int
 }
 
 const (
@@ -147,6 +153,9 @@ func externalBridgeRecordSubmittedInputV0(
 		GoalRef:               runMetadata.GoalRef,
 		ExternalGoalRef:       runMetadata.ExternalGoalRef,
 		NextActions:           runMetadata.NextActions,
+		CurrentPhase:          runMetadata.CurrentPhase,
+		OperationalReason:     runMetadata.OperationalReason,
+		DomainCounters:        copyStringIntMapV0(runMetadata.DomainCounters),
 	})
 }
 
@@ -163,6 +172,9 @@ func externalBridgeFirstInputRunMetadataV0(
 		GoalRef:               strings.TrimSpace(value.GoalRef),
 		ExternalGoalRef:       strings.TrimSpace(value.ExternalGoalRef),
 		NextActions:           compactStringsV0(value.NextActions),
+		CurrentPhase:          strings.TrimSpace(value.CurrentPhase),
+		OperationalReason:     strings.TrimSpace(value.OperationalReason),
+		DomainCounters:        copyStringIntMapV0(value.DomainCounters),
 	}
 }
 
@@ -175,6 +187,9 @@ func externalBridgeInputRunMetadataFromEntryV0(
 		GoalRef:               strings.TrimSpace(entry.GoalRef),
 		ExternalGoalRef:       strings.TrimSpace(entry.ExternalGoalRef),
 		NextActions:           compactStringsV0(entry.NextActions),
+		CurrentPhase:          strings.TrimSpace(entry.CurrentPhase),
+		OperationalReason:     strings.TrimSpace(entry.OperationalReason),
+		DomainCounters:        copyStringIntMapV0(entry.DomainCounters),
 	}
 }
 

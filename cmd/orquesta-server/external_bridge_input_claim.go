@@ -118,6 +118,9 @@ func normalizeExternalBridgeClaimEntryV0(
 	entry.GoalRef = strings.TrimSpace(entry.GoalRef)
 	entry.ExternalGoalRef = strings.TrimSpace(entry.ExternalGoalRef)
 	entry.NextActions = compactStringsV0(entry.NextActions)
+	entry.CurrentPhase = strings.TrimSpace(entry.CurrentPhase)
+	entry.OperationalReason = strings.TrimSpace(entry.OperationalReason)
+	entry.DomainCounters = copyStringIntMapV0(entry.DomainCounters)
 	entry.LastError = strings.TrimSpace(entry.LastError)
 	return entry
 }
@@ -157,6 +160,11 @@ func mergeExternalBridgeInputMetadataV0(
 	next.DirectorExecutionMode = firstExternalBridgeInputValueV0(next.DirectorExecutionMode, previous.DirectorExecutionMode)
 	next.GoalRef = firstExternalBridgeInputValueV0(next.GoalRef, previous.GoalRef)
 	next.ExternalGoalRef = firstExternalBridgeInputValueV0(next.ExternalGoalRef, previous.ExternalGoalRef)
+	next.CurrentPhase = firstExternalBridgeInputValueV0(next.CurrentPhase, previous.CurrentPhase)
+	next.OperationalReason = firstExternalBridgeInputValueV0(next.OperationalReason, previous.OperationalReason)
+	if len(next.DomainCounters) == 0 {
+		next.DomainCounters = copyStringIntMapV0(previous.DomainCounters)
+	}
 	if len(next.NextActions) == 0 {
 		next.NextActions = compactStringsV0(previous.NextActions)
 	}

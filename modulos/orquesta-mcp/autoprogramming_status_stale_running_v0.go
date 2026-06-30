@@ -60,13 +60,23 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 			mcpAutoprogrammingGoalStateObserveRequiredV0(state) {
 			continue
 		}
+		metadata := mcpGoalWorkStateDomainOperationalMetadataV0(state)
+		recommendedAction := "review_replan_goal_first"
+		if metadata.RetryFromPhase != "" {
+			recommendedAction = "retry_from_phase"
+		}
+		if metadata.CloseSupersededByLocalEvidence {
+			recommendedAction = "close_superseded_by_local_evidence"
+		}
 		out = append(out, MCPAutoprogrammingActionableRunV0{
 			Code:              mcpAutoprogrammingActionGoalFirstBlockedV0,
 			Severity:          "blocked",
 			RunRef:            strings.TrimSpace(state.RunRef),
 			Status:            strings.TrimSpace(state.Status),
 			Reason:            "goal-first state persisted as blocked or invalid",
-			RecommendedAction: "review_replan_goal_first",
+			RecommendedAction: recommendedAction,
+			CurrentPhase:      metadata.CurrentPhase,
+			DomainCounters:    metadata.DomainCounters,
 			EvidenceRefs: compactStringsMCPV0(append(
 				[]string{mcpAutoprogrammingEvidenceGoalFirstBlockedV0},
 				state.EvidenceRefs...,

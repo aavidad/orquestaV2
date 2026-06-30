@@ -29,6 +29,7 @@ func opesBridgeSuperviseSubmittedRunV0(
 	status := strings.TrimSpace(result.Status)
 	if (status == "already_submitted" || status == "recovery_required") &&
 		opesBridgeAudioProviderHeartbeatBlockV0(ctx, config, result) {
+		opesBridgePersistSubmittedGoalFirstMetadataV0(ctx, config, result)
 		return
 	}
 	if opesBridgeResultUsesGoalFirstV0(*result) {
@@ -233,6 +234,8 @@ func opesBridgeAudioProviderHeartbeatBlockV0(
 	}
 	result.SupervisionStatus = "blocked"
 	result.SupervisionStopReason = reason
+	result.CurrentPhase = "tts"
+	result.OperationalReason = reason
 	result.NextActions = compactStringsV0(append(result.NextActions, "retry_from_phase=tts", "inspect_audio_provider_heartbeat"))
 	return true
 }

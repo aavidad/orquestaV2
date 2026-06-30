@@ -62,6 +62,66 @@ func TestExternalBridgeInputLedgerSubmittedEntryIsScopedBySystemV0(t *testing.T)
 	assertCommandDurableFilePolicyV0(t, dir, name)
 }
 
+func TestExternalBridgeInputLedgerPersisteMetadataOperacionalV0(t *testing.T) {
+	ctx := context.Background()
+	ledger, err := newFileExternalBridgeInputLedgerV0(
+		filepath.Join(t.TempDir(), "external-bridge-input-ledger.json"),
+	)
+	if err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+
+	if err := externalBridgeRecordSubmittedInputV0(
+		ctx,
+		ledger,
+		"opes",
+		"job-ref-audio-ledger-001",
+		"run-ref-audio-ledger-001",
+		"change-ref-audio-ledger-001",
+		externalBridgeInputRunMetadataV0{
+			RoutePolicy:           opesBridgeRoutePolicyGoalFirstV0,
+			DirectorExecutionMode: opesBridgeDirectorExecutionModeGoalFirstV0,
+			NextActions:           []string{"observe_goal", "retry_from_phase=tts"},
+			CurrentPhase:          "tts",
+			OperationalReason:     "provider_timeout",
+			DomainCounters:        map[string]int{"segments_pending": 7},
+		},
+	); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+
+	if err := externalBridgeRecordSubmittedInputV0(
+		ctx,
+		ledger,
+		"opes",
+		"job-ref-audio-ledger-001",
+		"run-ref-audio-ledger-001",
+		"change-ref-audio-ledger-001",
+		externalBridgeInputRunMetadataV0{
+			GoalRef: "goal-ref-audio-ledger-001",
+		},
+	); err != nil {
+		t.Fatalf("record merge: %v", err)
+	}
+
+	entry, found, err := externalBridgeSubmittedInputLedgerEntryV0(
+		ctx,
+		ledger,
+		"opes",
+		"job-ref-audio-ledger-001",
+	)
+	if err != nil || !found {
+		t.Fatalf("entry=%+v found=%v err=%v", entry, found, err)
+	}
+	if entry.GoalRef != "goal-ref-audio-ledger-001" ||
+		entry.CurrentPhase != "tts" ||
+		entry.OperationalReason != "provider_timeout" ||
+		entry.DomainCounters["segments_pending"] != 7 ||
+		!containsStringForTestV0(entry.NextActions, "retry_from_phase=tts") {
+		t.Fatalf("entry=%+v", entry)
+	}
+}
+
 func TestExternalBridgeInputLedgerRejectsEmptySystemOrJobRefV0(t *testing.T) {
 	ctx := context.Background()
 	ledger, err := newFileExternalBridgeInputLedgerV0(

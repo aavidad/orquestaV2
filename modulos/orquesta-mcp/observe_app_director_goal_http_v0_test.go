@@ -323,6 +323,67 @@ func TestMCPObserveAppDirectorGoalToolExecutorV0TimeoutSnapshotLeeGoalStateV0(t 
 	}
 }
 
+func TestMCPObserveAppDirectorGoalToolExecutorV0TimeoutSnapshotProyectaMetadataOPESAudioV0(t *testing.T) {
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: "run-ref-goal-snapshot-opes-audio-001",
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       "goal-ref-snapshot-opes-audio-001",
+			RunRef:        "run-ref-goal-snapshot-opes-audio-001",
+			DomainRef:     "opes",
+			WorkKind:      "generate_audio_asset",
+			Objective:     "Observar metadata OPES audio durable.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			ContextRefs: []orquestagoal.GoalContextRefV0{{
+				Kind:    "input_field_value",
+				Ref:     "input-field-audio-current-phase-value-test",
+				Purpose: `Campo input_fields.audio_current_phase inlineado de forma acotada: {"name":"audio_current_phase","value":"tts"}`,
+			}, {
+				Kind:    "input_field_value",
+				Ref:     "input-field-provider-timeout-value-test",
+				Purpose: `Campo input_fields.provider_timeout inlineado de forma acotada: {"name":"provider_timeout","value":"true"}`,
+			}, {
+				Kind:    "input_field_value",
+				Ref:     "input-field-audio-counters-value-test",
+				Purpose: `Campo input_fields.audio_counters inlineado de forma acotada: {"name":"audio_counters","value_json":{"segments_pending":7,"segments_done":3}}`,
+			}},
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{Path: "external/opes/audio"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:  orquestagoal.GoalStatusBlockedV0,
+			GoalRef: "goal-ref-snapshot-opes-audio-001",
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	store := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := store.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := NewMCPObserveAppDirectorGoalToolExecutorV0(orquestaappdirectorservice.StartAppDirectorPortsV0{
+		GoalStateStore: store,
+	}).ObserveAppDirectorGoalTimeoutSnapshotV0(
+		context.Background(),
+		MCPObserveAppDirectorGoalToolInputV0{
+			RequestID: "req-goal-snapshot-opes-audio-001",
+			RunRef:    "run-ref-goal-snapshot-opes-audio-001",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalTimeoutSnapshotV0: %v", err)
+	}
+	if !result.Partial ||
+		result.CurrentPhase != "tts" ||
+		result.RetryFromPhase != "tts" ||
+		result.DomainCounters["segments_pending"] != 7 ||
+		result.DomainCounters["segments_done"] != 3 ||
+		result.RecommendedAction != "blocked" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 type mcpObserveGoalEventReaderForTestV0 struct {
 	events []orquestacoreworkflow.OrchestrationEventV0
 }

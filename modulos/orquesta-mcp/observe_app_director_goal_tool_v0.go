@@ -48,6 +48,8 @@ type MCPObserveAppDirectorGoalToolResultV0 struct {
 	ResultRef             string                 `json:"result_ref,omitempty"`
 	LastEventAt           string                 `json:"last_event_at,omitempty"`
 	CurrentPhase          string                 `json:"current_phase,omitempty"`
+	RetryFromPhase        string                 `json:"retry_from_phase,omitempty"`
+	DomainCounters        map[string]int         `json:"domain_counters,omitempty"`
 	ProcessRefs           []string               `json:"process_refs,omitempty"`
 	RecommendedAction     string                 `json:"recommended_action,omitempty"`
 	ClosureStatus         string                 `json:"closure_status,omitempty"`
@@ -161,8 +163,23 @@ func NewMCPObserveAppDirectorGoalPartialResultFromStateV0(
 		toolResult.ClosureIssues = goalWorkIssuesMCPV0(normalized.LastClosure.Issues)
 		toolResult.EvidenceRefs = compactStringsMCPV0(append(toolResult.EvidenceRefs, normalized.LastClosure.EvidenceRefs...))
 	}
+	toolResult = applyMCPObserveAppDirectorGoalDomainMetadataV0(toolResult, normalized)
 	toolResult.RecommendedAction = mcpObserveAppDirectorGoalRecommendedActionV0(toolResult)
 	return toolResult, nil
+}
+
+func applyMCPObserveAppDirectorGoalDomainMetadataV0(
+	result MCPObserveAppDirectorGoalToolResultV0,
+	state orquestagoal.GoalWorkStateV0,
+) MCPObserveAppDirectorGoalToolResultV0 {
+	metadata := mcpGoalWorkStateDomainOperationalMetadataV0(state)
+	result.CurrentPhase = firstNonEmptyMCPV0(result.CurrentPhase, metadata.CurrentPhase)
+	result.RetryFromPhase = firstNonEmptyMCPV0(result.RetryFromPhase, metadata.RetryFromPhase)
+	result.DomainCounters = mergeMCPDomainOperationalCountersV0(result.DomainCounters, metadata.DomainCounters)
+	if metadata.CloseSupersededByLocalEvidence {
+		result.RecommendedAction = firstNonEmptyMCPV0(result.RecommendedAction, "close_superseded_by_local_evidence")
+	}
+	return result
 }
 
 func mcpObserveAppDirectorGoalResultRefV0(result orquestagoal.GoalWorkResultV0) string {
@@ -214,6 +231,8 @@ func mergeMCPObserveAppDirectorGoalPartialIntoTimeoutV0(
 	timeout.ResultRef = firstNonEmptyMCPV0(partial.ResultRef, timeout.ResultRef)
 	timeout.LastEventAt = firstNonEmptyMCPV0(partial.LastEventAt, timeout.LastEventAt)
 	timeout.CurrentPhase = firstNonEmptyMCPV0(partial.CurrentPhase, timeout.CurrentPhase)
+	timeout.RetryFromPhase = firstNonEmptyMCPV0(partial.RetryFromPhase, timeout.RetryFromPhase)
+	timeout.DomainCounters = mergeMCPDomainOperationalCountersV0(timeout.DomainCounters, partial.DomainCounters)
 	timeout.ProcessRefs = compactStringsMCPV0(append(timeout.ProcessRefs, partial.ProcessRefs...))
 	timeout.RecommendedAction = firstNonEmptyMCPV0(partial.RecommendedAction, timeout.RecommendedAction)
 	timeout.ClosureStatus = firstNonEmptyMCPV0(partial.ClosureStatus, timeout.ClosureStatus)

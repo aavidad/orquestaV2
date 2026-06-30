@@ -159,9 +159,31 @@ marker valido. Evidencia:
 `TestServerFileCodeContextToolOwnerStopperV0UsaMarkerSeguro` y
 `TestServerFileCodeContextToolOwnerRegistryV0RechazaOwnerInseguro`. Nueva
 observacion local: PIDs `2681690` y `2681994`, hijos del Codex local, quedaron
-consumiendo CPU tras uso MCP y se pararon con `SIGTERM`. El bug sigue `parcial`
-porque aun faltan el adaptador real `codebase-memory-mcp`, el loop residente
-opt-in y el smoke opt-in con repo real acotado.
+consumiendo CPU tras uso MCP y se pararon con `SIGTERM`. Nueva observacion:
+PIDs `2747740` y `2748020`, hijos de otro Codex local, quedaron vivos tras uso
+MCP y se pararon con `SIGTERM`. El bug sigue `parcial` porque aun faltan el
+adaptador real `codebase-memory-mcp`, el loop residente opt-in y el smoke
+opt-in con repo real acotado.
+
+Revision adicional 2026-06-30 sobre BUG-030/037/040: se integra el tramo
+remoto de metadata operacional OPES para goal-first. El ledger externo conserva
+`current_phase`, `operational_reason` y `domain_counters`; el bloqueo de
+heartbeat audio `already_submitted` persiste `current_phase=tts`,
+`operational_reason=provider_timeout|running_no_recent_progress` y
+`retry_from_phase=tts`; `GoalWorkSpec` prioriza input fields de fase/audio/
+proveedor para que entren como `ContextRefs`; `autoprogramming/status` y
+observe goal-first parcial proyectan `current_phase`, `retry_from_phase` y
+`domain_counters` desde metadata durable. `close_superseded_by_local_evidence`
+solo se recomienda si existe flag explicito y evidencia local/current durable,
+no por una palabra suelta. Evidencia:
+`TestExternalBridgeInputLedgerPersisteMetadataOperacionalV0`,
+`TestMCPAutoprogrammingStatusExecutorV0GoalFirstBloqueadoProyectaMetadataOPESAudioV0`,
+`TestMCPAutoprogrammingStatusExecutorV0GoalFirstBloqueadoCierraSupersededPorEvidenciaLocalV0`,
+`TestMCPAutoprogrammingStatusExecutorV0GoalFirstSupersededSinEvidenciaLocalNoCierraV0`
+y `TestMCPObserveAppDirectorGoalToolExecutorV0TimeoutSnapshotProyectaMetadataOPESAudioV0`.
+Siguen `parcial` hasta cerrar smoke OPES temporal aislado, productor real de esa
+metadata en run existente, heartbeat/progreso residente de proveedores largos y
+sin tocar OPES productivo.
 
 ## Pendientes de analisis agrupado
 

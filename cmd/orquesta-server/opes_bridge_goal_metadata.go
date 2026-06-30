@@ -30,11 +30,14 @@ func opesBridgeApplyRunMetadataV0(
 	if result == nil {
 		return
 	}
-	result.RoutePolicy = strings.TrimSpace(metadata.RoutePolicy)
-	result.DirectorExecutionMode = strings.TrimSpace(metadata.DirectorExecutionMode)
-	result.GoalRef = strings.TrimSpace(metadata.GoalRef)
-	result.ExternalGoalRef = strings.TrimSpace(metadata.ExternalGoalRef)
-	result.NextActions = compactStringsV0(metadata.NextActions)
+	result.RoutePolicy = firstNonEmptyEnvlessV0(metadata.RoutePolicy, result.RoutePolicy)
+	result.DirectorExecutionMode = firstNonEmptyEnvlessV0(metadata.DirectorExecutionMode, result.DirectorExecutionMode)
+	result.GoalRef = firstNonEmptyEnvlessV0(metadata.GoalRef, result.GoalRef)
+	result.ExternalGoalRef = firstNonEmptyEnvlessV0(metadata.ExternalGoalRef, result.ExternalGoalRef)
+	result.NextActions = compactStringsV0(append(result.NextActions, metadata.NextActions...))
+	result.CurrentPhase = firstNonEmptyEnvlessV0(metadata.CurrentPhase, result.CurrentPhase)
+	result.OperationalReason = firstNonEmptyEnvlessV0(metadata.OperationalReason, result.OperationalReason)
+	result.AudioCounters = copyStringIntMapV0(firstNonEmptyStringIntMapV0(metadata.DomainCounters, result.AudioCounters))
 }
 
 func opesBridgeRunMetadataFromDrainResultV0(
@@ -46,7 +49,19 @@ func opesBridgeRunMetadataFromDrainResultV0(
 		GoalRef:               strings.TrimSpace(result.GoalRef),
 		ExternalGoalRef:       strings.TrimSpace(result.ExternalGoalRef),
 		NextActions:           compactStringsV0(result.NextActions),
+		CurrentPhase:          strings.TrimSpace(result.CurrentPhase),
+		OperationalReason:     strings.TrimSpace(result.OperationalReason),
+		DomainCounters:        copyStringIntMapV0(result.AudioCounters),
 	}
+}
+
+func firstNonEmptyStringIntMapV0(values ...map[string]int) map[string]int {
+	for _, value := range values {
+		if len(value) > 0 {
+			return value
+		}
+	}
+	return nil
 }
 
 func opesBridgeResultUsesGoalFirstV0(

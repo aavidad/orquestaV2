@@ -506,6 +506,161 @@ func TestMCPAutoprogrammingStatusExecutorV0NoDaCienConColaVaciaYGoalBloqueado(t 
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0GoalFirstBloqueadoProyectaMetadataOPESAudioV0(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-blocked-opes-audio-001"
+	goalRef := "goal-ref-autop-status-goal-blocked-opes-audio-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusBlockedV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			RunRef:        runRef,
+			GoalRef:       goalRef,
+			DomainRef:     "opes",
+			WorkKind:      "generate_audio_asset",
+			Objective:     "Continuar audio OPES bloqueado con metadata durable.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			ContextRefs: []orquestagoal.GoalContextRefV0{
+				{
+					Kind:    "input_field_value",
+					Ref:     "input-field-current-phase-value-test",
+					Purpose: `Campo input_fields.current_phase inlineado de forma acotada: {"name":"current_phase","value":"prepare"}`,
+				},
+				{
+					Kind:    "input_field_value",
+					Ref:     "input-field-retry-from-phase-value-test",
+					Purpose: `Campo input_fields.retry_from_phase inlineado de forma acotada: {"name":"retry_from_phase","value":"prepare"}`,
+				},
+				{
+					Kind:    "input_field_value",
+					Ref:     "input-field-audio-counters-value-test",
+					Purpose: `Campo input_fields.audio_counters inlineado de forma acotada: {"name":"audio_counters","value_json":{"audio_manifest_refs":1,"text_hash_refs":2}}`,
+				},
+			},
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{Path: "external/opes/audio"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef: goalRef,
+			Status:  orquestagoal.GoalStatusBlockedV0,
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-blocked-opes-audio-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != mcpAutoprogrammingActionGoalFirstBlockedV0 ||
+		action.RecommendedAction != "retry_from_phase" ||
+		action.CurrentPhase != "prepare" ||
+		action.DomainCounters["audio_manifest_refs"] != 1 ||
+		action.DomainCounters["text_hash_refs"] != 2 {
+		t.Fatalf("action=%+v", action)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0GoalFirstBloqueadoCierraSupersededPorEvidenciaLocalV0(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-superseded-001"
+	goalRef := "goal-ref-autop-status-goal-superseded-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusBlockedV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			RunRef:        runRef,
+			GoalRef:       goalRef,
+			DomainRef:     "opes",
+			WorkKind:      "generate_audio_asset",
+			Objective:     "Cerrar bloqueo reemplazado por evidencia local durable.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			EvidenceRefs: []string{
+				"superseded_by_local_evidence=true",
+				"evidence-ref-opes-local-audio-manifest-current",
+			},
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{Path: "external/opes/audio"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef: goalRef,
+			Status:  orquestagoal.GoalStatusBlockedV0,
+		},
+		LastResult: &orquestagoal.GoalWorkResultV0{
+			SchemaVersion:     orquestagoal.GoalWorkResultSchemaV0,
+			Status:            orquestagoal.GoalStatusBlockedV0,
+			GoalRef:           goalRef,
+			DomainReceiptRefs: []string{"domain-receipt-ref-opes-local-evidence-current"},
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-blocked-superseded-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 ||
+		result.StaleRunning[0].RecommendedAction != "close_superseded_by_local_evidence" {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0GoalFirstSupersededSinEvidenciaLocalNoCierraV0(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-superseded-sin-evidencia-001"
+	goalRef := "goal-ref-autop-status-goal-superseded-sin-evidencia-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusBlockedV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			RunRef:        runRef,
+			GoalRef:       goalRef,
+			DomainRef:     "opes",
+			WorkKind:      "generate_audio_asset",
+			Objective:     "No cerrar sin evidencia local durable.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			EvidenceRefs:  []string{"superseded_by_local_evidence=true"},
+			WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "external/opes/audio"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef: goalRef,
+			Status:  orquestagoal.GoalStatusBlockedV0,
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-blocked-superseded-sin-local-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 ||
+		result.StaleRunning[0].RecommendedAction == "close_superseded_by_local_evidence" {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0ListaGoalMarkerSinStateAunqueColaNoVisible(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-marker-listed-001"
 	goalRef := "goal-ref-autop-status-goal-marker-listed-001"
