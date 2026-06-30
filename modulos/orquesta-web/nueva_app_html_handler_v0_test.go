@@ -466,7 +466,40 @@ func TestNuevaAppHTMLHandlerV0POSTInvalidoRenderizaErrorPublico(t *testing.T) {
 	if client.calls != 1 {
 		t.Fatalf("calls=%d", client.calls)
 	}
-	for _, want := range []string{"Necesita correcciones", "app_spec_invalida", "nombre", "campo obligatorio"} {
+	for _, want := range []string{"Necesita correcciones", "app_spec_invalida", "nombre", "Completa este campo."} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("POST invalido no contiene %q\n%s", want, body)
+		}
+	}
+}
+
+func TestNuevaAppHTMLHandlerV0POSTInvalidoNoFiltraMensajeTecnico(t *testing.T) {
+	client := &fakeNuevaAppClientV0{
+		vm: NewWebNuevaAppErrorViewModelV0("req-invalid", "es", []orquestafactory.ValidationIssue{{
+			Code:    orquestafactory.ErrAppSpecInvalida,
+			Field:   "nombre",
+			Message: "required field at /home/alberto/.config/token",
+		}}),
+	}
+	handler := NewNuevaAppHTMLHandlerV0(client)
+	values := nuevaAppHTMLValidFormValuesV0()
+	values.Set("request_id", "req-invalid")
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/nueva-app", bytes.NewBufferString(values.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	handler.ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, body)
+	}
+	for _, forbidden := range []string{"required field", "/home/alberto", ".config", ".config/token"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("POST invalido filtra mensaje tecnico %q\n%s", forbidden, body)
+		}
+	}
+	for _, want := range []string{"Necesita correcciones", "app_spec_invalida", "nombre", "Completa este campo."} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("POST invalido no contiene %q\n%s", want, body)
 		}

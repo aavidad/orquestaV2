@@ -73,19 +73,44 @@ func stringifyDefaultV0(value any) string {
 	}
 }
 
-func issuesFromFactoryV0(values []orquestafactory.ValidationIssue) []WebNuevaAppIssueV0 {
+func issuesFromFactoryV0(values []orquestafactory.ValidationIssue, locale string) []WebNuevaAppIssueV0 {
 	out := make([]WebNuevaAppIssueV0, 0, len(values))
 	for _, value := range values {
+		code := trimV0(value.Code)
+		if code == "" {
+			code = orquestafactory.ErrAppSpecInvalida
+		}
 		out = append(out, WebNuevaAppIssueV0{
-			Code:    value.Code,
-			Field:   value.Field,
-			Message: value.Message,
+			Code:    code,
+			Field:   trimV0(value.Field),
+			Message: nuevaAppPublicIssueMessageV0(locale, code, value.Message),
 		})
 	}
 	if out == nil {
 		return []WebNuevaAppIssueV0{}
 	}
 	return out
+}
+
+func nuevaAppPublicIssueMessageV0(locale, code, rawMessage string) string {
+	catalog := NewNuevaAppI18nCatalogV0()
+	if nuevaAppIssueLooksRequiredV0(rawMessage) {
+		return nuevaAppWebLookupV0(catalog, locale, "nueva_app.validation.required")
+	}
+	if code != "" {
+		if text, err := catalog.Lookup(locale, "nueva_app.error."+code); err == nil {
+			return text
+		}
+	}
+	return nuevaAppWebLookupV0(catalog, locale, "nueva_app.error."+orquestafactory.ErrAppSpecInvalida)
+}
+
+func nuevaAppIssueLooksRequiredV0(message string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	return normalized == "campo obligatorio" ||
+		strings.Contains(normalized, "required field") ||
+		strings.Contains(normalized, "complete this field") ||
+		strings.Contains(normalized, "please fill")
 }
 
 func fasesFromBacklogV0(values []orquestafactory.FaseInicialV0) []WebNuevaAppFaseV0 {

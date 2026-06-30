@@ -161,8 +161,34 @@ func TestWebNuevaAppViewModelV0RepresentaErroresPublicos(t *testing.T) {
 	if len(vm.ErroresPublicos) != 1 || vm.ErroresPublicos[0].Code != orquestafactory.ErrAppSpecInvalida {
 		t.Fatalf("errores_publicos=%+v", vm.ErroresPublicos)
 	}
+	if vm.ErroresPublicos[0].Message != "Completa este campo." {
+		t.Fatalf("mensaje publico no localizado: %+v", vm.ErroresPublicos[0])
+	}
 	if len(vm.Fases) != 0 || len(vm.Microtareas) != 0 {
 		t.Fatalf("un error publico no debe inventar backlog: fases=%+v microtareas=%+v", vm.Fases, vm.Microtareas)
+	}
+}
+
+func TestWebNuevaAppErrorViewModelV0NoExponeMensajeTecnico(t *testing.T) {
+	issues := []orquestafactory.ValidationIssue{{
+		Code:    orquestafactory.ErrAppSpecInvalida,
+		Field:   "nombre",
+		Message: "required field at /home/alberto/.config/token",
+	}}
+
+	vm := NewWebNuevaAppErrorViewModelV0("req-err", "es", issues)
+
+	if len(vm.ErroresPublicos) != 1 {
+		t.Fatalf("errores_publicos=%+v", vm.ErroresPublicos)
+	}
+	err := vm.ErroresPublicos[0]
+	if err.Code != orquestafactory.ErrAppSpecInvalida || err.Field != "nombre" || err.Message != "Completa este campo." {
+		t.Fatalf("error publico inesperado: %+v", err)
+	}
+	for _, forbidden := range []string{"required field", "/home/alberto", ".config/token"} {
+		if strings.Contains(err.Message, forbidden) {
+			t.Fatalf("mensaje tecnico filtrado %q en %+v", forbidden, err)
+		}
 	}
 }
 

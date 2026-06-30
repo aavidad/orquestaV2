@@ -184,7 +184,7 @@ func TestRESTSolicitarNuevaAppClientV0Respuesta400GeneraViewModelInvalido(t *tes
 			"errores": []orquestafactory.ValidationIssue{{
 				Code:    orquestafactory.ErrIdiomaInvalido,
 				Field:   "locale",
-				Message: "locale BCP 47 invalido",
+				Message: "locale BCP 47 invalid at /home/alberto/.config/token",
 			}},
 		})
 	}))
@@ -200,6 +200,11 @@ func TestRESTSolicitarNuevaAppClientV0Respuesta400GeneraViewModelInvalido(t *tes
 	}
 	if len(vm.ErroresPublicos) != 1 || vm.ErroresPublicos[0].Code != orquestafactory.ErrIdiomaInvalido {
 		t.Fatalf("errores_publicos=%+v", vm.ErroresPublicos)
+	}
+	if vm.ErroresPublicos[0].Message != "El idioma elegido no esta soportado." ||
+		strings.Contains(vm.ErroresPublicos[0].Message, "/home/alberto") ||
+		strings.Contains(vm.ErroresPublicos[0].Message, "BCP 47 invalid") {
+		t.Fatalf("mensaje publico no localizado: %+v", vm.ErroresPublicos[0])
 	}
 	if len(vm.Fases) != 0 || len(vm.Microtareas) != 0 {
 		t.Fatalf("400 no debe inventar backlog: fases=%+v microtareas=%+v", vm.Fases, vm.Microtareas)
