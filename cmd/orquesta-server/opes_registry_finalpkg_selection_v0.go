@@ -113,10 +113,62 @@ func validateOPESRegistryFinalPkgPackageV0(packageDir string) opesRegistryFinalP
 	} else if !opesRegistryFinalPkgTestsJSONHasPublishableQuestionsV0(data) {
 		issues = append(issues, "tests_json_without_questions")
 	}
+	issues = append(issues, opesRegistryFinalPkgEvidenceManifestIssuesV0(
+		filepath.Join(packageDir, "manifest_cierre.json"),
+	)...)
 	return opesRegistryFinalPkgPackageValidationV0{
 		Complete: len(issues) == 0,
 		Issues:   compactOPESRegistryFinalPkgStringsV0(issues),
 	}
+}
+
+type opesRegistryFinalPkgEvidenceManifestV0 struct {
+	SchemaVersion        string            `json:"schema_version"`
+	EvidenceRefs         []string          `json:"evidence_refs"`
+	RequiredEvidenceRefs map[string]string `json:"required_evidence_refs"`
+}
+
+func opesRegistryFinalPkgEvidenceManifestIssuesV0(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return []string{"manifest_cierre_missing"}
+	}
+	var manifest opesRegistryFinalPkgEvidenceManifestV0
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return []string{"manifest_cierre_json_invalid"}
+	}
+	issues := []string{}
+	if strings.TrimSpace(manifest.SchemaVersion) != "opes_final_package_evidence_manifest.v0" {
+		issues = append(issues, "manifest_cierre_schema_invalid")
+	}
+	required := opesRegistryFinalPkgManifestEvidenceSetV0(manifest)
+	for _, key := range []string{"html", "rag", "audio", "tests", "visual", "qa"} {
+		if !required[key] {
+			issues = append(issues, "manifest_cierre_required_evidence_missing:"+key)
+		}
+	}
+	return compactOPESRegistryFinalPkgStringsV0(issues)
+}
+
+func opesRegistryFinalPkgManifestEvidenceSetV0(
+	manifest opesRegistryFinalPkgEvidenceManifestV0,
+) map[string]bool {
+	out := map[string]bool{}
+	for key, ref := range manifest.RequiredEvidenceRefs {
+		key = strings.ToLower(strings.TrimSpace(key))
+		if key != "" && strings.TrimSpace(ref) != "" {
+			out[key] = true
+		}
+	}
+	for _, ref := range manifest.EvidenceRefs {
+		ref = strings.ToLower(strings.TrimSpace(ref))
+		for _, key := range []string{"html", "rag", "audio", "tests", "visual", "qa"} {
+			if strings.Contains(ref, "opes-final-evidence:"+key) {
+				out[key] = true
+			}
+		}
+	}
+	return out
 }
 
 func opesRegistryFinalPkgTestsJSONHasPublishableQuestionsV0(data []byte) bool {

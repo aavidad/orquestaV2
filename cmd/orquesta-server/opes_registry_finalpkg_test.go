@@ -271,6 +271,43 @@ func TestOPESRegistryFinalPkgPackageCompleteRejectsQuestionArrayWithoutShapeV0(t
 	}
 }
 
+func TestOPESRegistryFinalPkgPackageCompleteRequiresEvidenceManifestV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	fixture.writeCompletePackage("002")
+	path := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final", "manifest_cierre.json")
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("remove manifest: %v", err)
+	}
+
+	validation := validateOPESRegistryFinalPkgPackageV0(
+		filepath.Join(fixture.courseRoot, "tema_002", "paquete_final"),
+	)
+
+	if validation.Complete ||
+		!containsStringForTestV0(validation.Issues, "missing_or_empty:manifest_cierre.json") ||
+		!containsStringForTestV0(validation.Issues, "manifest_cierre_missing") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
+func TestOPESRegistryFinalPkgPackageCompleteRequiresManifestEvidenceKeysV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	fixture.writeCompletePackage("002")
+	path := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final", "manifest_cierre.json")
+	if err := os.WriteFile(path, []byte(`{"schema_version":"opes_final_package_evidence_manifest.v0","required_evidence_refs":{"html":"opes-final-evidence:html:002","rag":"opes-final-evidence:rag:002","audio":"opes-final-evidence:audio:002","tests":"opes-final-evidence:tests:002","visual":"opes-final-evidence:visual:002"}}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	validation := validateOPESRegistryFinalPkgPackageV0(
+		filepath.Join(fixture.courseRoot, "tema_002", "paquete_final"),
+	)
+
+	if validation.Complete ||
+		!containsStringForTestV0(validation.Issues, "manifest_cierre_required_evidence_missing:qa") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
 func TestOPESRegistryFinalPkgReviewAcceptedDoesNotCompleteEmptyQuestionBankV0(t *testing.T) {
 	fixture := newOPESRegistryFinalPkgFixtureV0(t)
 	fixture.writeRegistry(map[string]any{

@@ -9,6 +9,7 @@ import (
 )
 
 var requiredOPESRegistryFinalPkgFilesV0 = []string{
+	"manifest_cierre.json",
 	"tema_final.md",
 	"tests.json",
 	"visuales_plan.md",
