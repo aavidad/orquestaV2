@@ -116,6 +116,7 @@ func validateOPESRegistryFinalPkgPackageV0(packageDir string) opesRegistryFinalP
 	issues = append(issues, opesRegistryFinalPkgEvidenceManifestIssuesV0(
 		filepath.Join(packageDir, "manifest_cierre.json"),
 	)...)
+	issues = append(issues, opesRegistryFinalPkgTopicHTMLIssuesV0(packageDir)...)
 	issues = append(issues, opesRegistryFinalPkgRAGCorpusIssuesV0(packageDir)...)
 	issues = append(issues, opesRegistryFinalPkgAudioManifestIssuesV0(packageDir)...)
 	return opesRegistryFinalPkgPackageValidationV0{
@@ -156,6 +157,16 @@ func opesRegistryFinalPkgRAGCorpusIssuesV0(packageDir string) []string {
 	return issues
 }
 
+func opesRegistryFinalPkgTopicHTMLIssuesV0(packageDir string) []string {
+	issues := []string{}
+	for _, root := range []string{"html_final", "html_ampliado"} {
+		if len(opesRegistryFinalPkgTopicHTMLRefsInRootV0(packageDir, root)) == 0 {
+			issues = append(issues, "html_topic_missing:"+root+"/tema_*.html")
+		}
+	}
+	return issues
+}
+
 func opesRegistryFinalPkgAudioManifestIssuesV0(packageDir string) []string {
 	topicHTML := opesRegistryFinalPkgTopicHTMLRefsV0(packageDir)
 	if len(topicHTML) == 0 {
@@ -177,15 +188,23 @@ func opesRegistryFinalPkgAudioManifestIssuesV0(packageDir string) []string {
 func opesRegistryFinalPkgTopicHTMLRefsV0(packageDir string) []string {
 	refs := []string{}
 	for _, root := range []string{"html_final", "html_ampliado"} {
-		matches, err := filepath.Glob(filepath.Join(packageDir, root, "*.html"))
-		if err != nil {
-			continue
-		}
-		for _, path := range matches {
-			name := strings.ToLower(filepath.Base(path))
-			if strings.HasPrefix(name, "tema_") {
-				refs = append(refs, filepath.ToSlash(filepath.Join(root, filepath.Base(path))))
-			}
+		refs = append(refs, opesRegistryFinalPkgTopicHTMLRefsInRootV0(packageDir, root)...)
+	}
+	sort.Strings(refs)
+	return compactOPESRegistryFinalPkgStringsV0(refs)
+}
+
+func opesRegistryFinalPkgTopicHTMLRefsInRootV0(packageDir string, root string) []string {
+	refs := []string{}
+	matches, err := filepath.Glob(filepath.Join(packageDir, root, "*.html"))
+	if err != nil {
+		return refs
+	}
+	for _, path := range matches {
+		name := strings.ToLower(filepath.Base(path))
+		relative := filepath.ToSlash(filepath.Join(root, filepath.Base(path)))
+		if strings.HasPrefix(name, "tema_") && opesRegistryFinalPkgRegularNonEmptyFileV0(packageDir, relative) {
+			refs = append(refs, relative)
 		}
 	}
 	sort.Strings(refs)
@@ -195,28 +214,37 @@ func opesRegistryFinalPkgTopicHTMLRefsV0(packageDir string) []string {
 func opesRegistryFinalPkgAudioManifestMaterialRefsV0(packageDir string) (map[string]bool, []string) {
 	refs := map[string]bool{}
 	invalid := []string{}
-	matches, err := filepath.Glob(filepath.Join(packageDir, "audio", "manifests", "*.json"))
-	if err != nil {
+	manifestRoot := filepath.Join(packageDir, "audio", "manifests")
+	info, err := os.Stat(manifestRoot)
+	if err != nil || !info.IsDir() {
 		return refs, invalid
 	}
-	for _, path := range matches {
-		relative := filepath.ToSlash(strings.TrimPrefix(path, packageDir+string(os.PathSeparator)))
+	_ = filepath.WalkDir(manifestRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil || entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
+			return nil
+		}
+		relative, err := filepath.Rel(packageDir, path)
+		if err != nil {
+			relative = strings.TrimPrefix(path, packageDir+string(os.PathSeparator))
+		}
+		relative = filepath.ToSlash(relative)
 		data, err := os.ReadFile(path)
 		if err != nil || !json.Valid(data) {
 			invalid = append(invalid, relative)
-			continue
+			return nil
 		}
 		var decoded map[string]any
 		if err := json.Unmarshal(data, &decoded); err != nil {
 			invalid = append(invalid, relative)
-			continue
+			return nil
 		}
 		materialPath, _ := decoded["material_path"].(string)
 		materialPath = filepath.ToSlash(strings.TrimSpace(materialPath))
 		if materialPath != "" {
 			refs[materialPath] = true
 		}
-	}
+		return nil
+	})
 	sort.Strings(invalid)
 	return refs, compactOPESRegistryFinalPkgStringsV0(invalid)
 }

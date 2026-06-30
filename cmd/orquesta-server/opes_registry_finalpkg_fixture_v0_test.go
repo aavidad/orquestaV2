@@ -124,13 +124,22 @@ func (fixture opesRegistryFinalPkgFixtureV0) writeCompletePackage(topicID string
 			fixture.t.Fatalf("write package: %v", err)
 		}
 	}
-	for _, relative := range []string{"rag/corpus/chunks.jsonl", "rag/corpus/summary.json"} {
+	extraFiles := map[string]string{
+		"rag/corpus/chunks.jsonl":                                      "ok\n",
+		"rag/corpus/summary.json":                                      "ok\n",
+		"html_final/index.html":                                        "<html>indice</html>",
+		"html_final/tema_" + topicID + ".html":                         "<html>tema final</html>",
+		"html_ampliado/tema_" + topicID + ".html":                      "<html>tema ampliado</html>",
+		"audio/manifests/html_final/tema_" + topicID + ".html.json":    `{"material_path":"html_final/tema_` + topicID + `.html"}`,
+		"audio/manifests/html_ampliado/tema_" + topicID + ".html.json": `{"material_path":"html_ampliado/tema_` + topicID + `.html"}`,
+	}
+	for relative, content := range extraFiles {
 		path := filepath.Join(base, relative)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			fixture.t.Fatalf("mkdir rag corpus: %v", err)
+			fixture.t.Fatalf("mkdir package extra: %v", err)
 		}
-		if err := os.WriteFile(path, []byte("ok\n"), 0o644); err != nil {
-			fixture.t.Fatalf("write rag corpus: %v", err)
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			fixture.t.Fatalf("write package extra: %v", err)
 		}
 	}
 }

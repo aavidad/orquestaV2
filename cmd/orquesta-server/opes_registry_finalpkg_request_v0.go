@@ -27,9 +27,11 @@ func buildOPESRegistryFinalPkgRequestV0(
 	appChange.RunRef = runRef
 	appChange.UserIntent = "Finalizar paquete local verificable del tema " + topicID + " de Informatica A1 reutilizando material existente, checkpoint y fuente; no crear checkpoint nuevo."
 	appChange.AcceptanceCriteria = compactOPESRegistryFinalPkgStringsV0(append([]string{
-		"paquete_final contiene manifest_cierre.json, tema_final.md, tests.json, visuales_plan.md, html/index.html, rag/manifest.json, audio/guion_audio.md, tutor/tutor_prompt.md y qa_final.md",
+		"paquete_final contiene manifest_cierre.json, index.html, tests.json, visuales_plan.md, rag/manifest.json, tutor/tutor_prompt.md, qa_final.md, html_final/tema_*.html y html_ampliado/tema_*.html",
 		"manifest_cierre.json declara evidencias de html, rag, audio, tests, visual y qa",
-		"tests.json es JSON valido",
+		"rag/manifest.json referencia rag/corpus/chunks.jsonl y rag/corpus/summary.json canonicos",
+		"audio/manifests contiene un JSON por cada html_final/tema_*.html y html_ampliado/tema_*.html con material_path a la pagina tematica; index.html, portadas y listados no cuentan",
+		"tests.json es JSON valido y contiene preguntas publicables con enunciado, opciones y respuesta",
 		"REGISTRO_TRABAJO_TEMAS_OPES.json usa courses[course_id].topics como diccionario por topic_id; usa claim/update/release de la herramienta y no lo trates como lista",
 		"al liberar el registro, preferir status paquete_final_local_verificable si el paquete cumple; si usa alias equivalente, explicar en summary/pending",
 		"no subir a produccion; paquete local verificable",

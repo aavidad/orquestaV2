@@ -22,12 +22,13 @@ from typing import Any
 
 
 REQUIRED_PACKAGE_FILES = (
-    "tema_final.md",
+    "manifest_cierre.json",
+    "index.html",
     "tests.json",
     "visuales_plan.md",
-    "html/index.html",
     "rag/manifest.json",
-    "audio/guion_audio.md",
+    "rag/corpus/chunks.jsonl",
+    "rag/corpus/summary.json",
     "tutor/tutor_prompt.md",
     "qa_final.md",
 )
@@ -212,7 +213,41 @@ def package_is_complete(package_dir: Path) -> bool:
         read_json(package_dir / "tests.json")
     except (OSError, json.JSONDecodeError):
         return False
-    return True
+    final_html = topic_html_refs(package_dir, "html_final")
+    expanded_html = topic_html_refs(package_dir, "html_ampliado")
+    if not final_html or not expanded_html:
+        return False
+    material_refs = audio_manifest_material_refs(package_dir)
+    if material_refs is None:
+        return False
+    return all(ref in material_refs for ref in [*final_html, *expanded_html])
+
+
+def topic_html_refs(package_dir: Path, root: str) -> list[str]:
+    html_root = package_dir / root
+    if not html_root.is_dir():
+        return []
+    refs: list[str] = []
+    for path in html_root.glob("*.html"):
+        if path.name.lower().startswith("tema_") and path.is_file() and path.stat().st_size > 0:
+            refs.append(f"{root}/{path.name}")
+    return sorted(set(refs))
+
+
+def audio_manifest_material_refs(package_dir: Path) -> set[str] | None:
+    manifest_root = package_dir / "audio" / "manifests"
+    if not manifest_root.is_dir():
+        return set()
+    refs: set[str] = set()
+    for path in manifest_root.rglob("*.json"):
+        try:
+            data = read_json(path)
+        except (OSError, json.JSONDecodeError):
+            return None
+        material_path = str(data.get("material_path") or "").strip().replace("\\", "/")
+        if material_path:
+            refs.add(material_path)
+    return refs
 
 
 def build_external_work_payload(
@@ -227,8 +262,10 @@ def build_external_work_payload(
     )
     criteria = list(app_change.get("acceptance_criteria") or [])
     app_change["acceptance_criteria"] = compact_list([
-        "paquete_final contiene tema_final.md, tests.json, visuales_plan.md, html/index.html, rag/manifest.json, audio/guion_audio.md, tutor/tutor_prompt.md y qa_final.md",
-        "tests.json es JSON valido",
+        "paquete_final contiene manifest_cierre.json, index.html, tests.json, visuales_plan.md, rag/manifest.json, tutor/tutor_prompt.md, qa_final.md, html_final/tema_*.html y html_ampliado/tema_*.html",
+        "rag/manifest.json referencia rag/corpus/chunks.jsonl y rag/corpus/summary.json canonicos",
+        "audio/manifests contiene un JSON por cada html_final/tema_*.html y html_ampliado/tema_*.html con material_path a la pagina tematica; index.html, portadas y listados no cuentan",
+        "tests.json es JSON valido y contiene preguntas publicables con enunciado, opciones y respuesta",
         "REGISTRO_TRABAJO_TEMAS_OPES.json usa courses[course_id].topics como diccionario por topic_id; usa claim/update/release de la herramienta y no lo trates como lista",
         "al liberar el registro, preferir status paquete_final_local_verificable si el paquete cumple; si usa alias equivalente, explicar en summary/pending",
         "no subir a produccion; paquete local verificable",

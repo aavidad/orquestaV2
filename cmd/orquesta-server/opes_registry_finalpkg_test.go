@@ -401,6 +401,9 @@ func TestOPESRegistryFinalPkgPackageCompleteCountsOnlyTopicHTMLAudioManifestsV0(
 	fixture := newOPESRegistryFinalPkgFixtureV0(t)
 	fixture.writeCompletePackage("002")
 	base := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final")
+	if err := os.RemoveAll(filepath.Join(base, "audio", "manifests")); err != nil {
+		t.Fatalf("remove audio manifests: %v", err)
+	}
 	writeOPESRegistryFinalPkgTestFileV0(t, base, "html_final/index.html", "<html>indice</html>")
 	writeOPESRegistryFinalPkgTestFileV0(t, base, "html_final/portada.html", "<html>portada</html>")
 	writeOPESRegistryFinalPkgTestFileV0(t, base, "html_final/tema_002.html", "<html>tema</html>")
@@ -416,20 +419,77 @@ func TestOPESRegistryFinalPkgPackageCompleteCountsOnlyTopicHTMLAudioManifestsV0(
 	}
 }
 
+func TestOPESRegistryFinalPkgPackageCompleteRejectsLegacyOnlyPackageV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	base := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final")
+	writeOPESRegistryFinalPkgLegacyPackageV0(t, base, "002")
+
+	validation := validateOPESRegistryFinalPkgPackageV0(base)
+
+	if validation.Complete ||
+		!containsStringForTestV0(validation.Issues, "missing_or_empty:index.html") ||
+		!containsStringForTestV0(validation.Issues, "html_topic_missing:html_final/tema_*.html") ||
+		!containsStringForTestV0(validation.Issues, "html_topic_missing:html_ampliado/tema_*.html") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
+func TestOPESRegistryFinalPkgPackageCompleteRequiresFinalAndExpandedTopicHTMLV0(t *testing.T) {
+	fixture := newOPESRegistryFinalPkgFixtureV0(t)
+	fixture.writeCompletePackage("002")
+	base := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final")
+	if err := os.RemoveAll(filepath.Join(base, "html_ampliado")); err != nil {
+		t.Fatalf("remove html ampliado: %v", err)
+	}
+
+	validation := validateOPESRegistryFinalPkgPackageV0(base)
+
+	if validation.Complete ||
+		!containsStringForTestV0(validation.Issues, "html_topic_missing:html_ampliado/tema_*.html") ||
+		containsStringForTestV0(validation.Issues, "html_topic_missing:html_final/tema_*.html") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
 func TestOPESRegistryFinalPkgPackageCompleteAcceptsCanonicalRAGAndTopicAudioV0(t *testing.T) {
 	fixture := newOPESRegistryFinalPkgFixtureV0(t)
 	fixture.writeCompletePackage("002")
 	base := filepath.Join(fixture.courseRoot, "tema_002", "paquete_final")
-	writeOPESRegistryFinalPkgTestFileV0(t, base, "html_final/index.html", "<html>indice</html>")
-	writeOPESRegistryFinalPkgTestFileV0(t, base, "html_final/tema_002.html", "<html>tema final</html>")
-	writeOPESRegistryFinalPkgTestFileV0(t, base, "html_ampliado/tema_002.html", "<html>tema ampliado</html>")
-	writeOPESRegistryFinalPkgTestFileV0(t, base, "audio/manifests/final.json", `{"material_path":"html_final/tema_002.html"}`)
-	writeOPESRegistryFinalPkgTestFileV0(t, base, "audio/manifests/ampliado.json", `{"material_path":"html_ampliado/tema_002.html"}`)
+	writeOPESRegistryFinalPkgTestFileV0(t, base, "audio/manifests/html_final/tema_002.html.json", `{"material_path":"html_final/tema_002.html"}`)
+	writeOPESRegistryFinalPkgTestFileV0(t, base, "audio/manifests/html_ampliado/tema_002.html.json", `{"material_path":"html_ampliado/tema_002.html"}`)
 
 	validation := validateOPESRegistryFinalPkgPackageV0(base)
 
 	if !validation.Complete {
 		t.Fatalf("validation=%+v", validation)
+	}
+}
+
+func writeOPESRegistryFinalPkgLegacyPackageV0(t *testing.T, root string, topicID string) {
+	t.Helper()
+	for _, relative := range []string{
+		"manifest_cierre.json",
+		"tema_final.md",
+		"tests.json",
+		"visuales_plan.md",
+		"html/index.html",
+		"rag/manifest.json",
+		"rag/corpus/chunks.jsonl",
+		"rag/corpus/summary.json",
+		"audio/guion_audio.md",
+		"tutor/tutor_prompt.md",
+		"qa_final.md",
+	} {
+		content := "ok"
+		switch relative {
+		case "manifest_cierre.json":
+			content = `{"schema_version":"opes_final_package_evidence_manifest.v0","package_ref":"package-ref-finalpkg-` + topicID + `","manifest_ref":"manifest-cierre-ref-finalpkg-` + topicID + `","checksum_refs":["checksum-ref-finalpkg-` + topicID + `"],"validation_report_ref":"validation-report-ref-finalpkg-` + topicID + `","review_matrix_ref":"review-matrix-ref-finalpkg-` + topicID + `","required_evidence_refs":{"html":["opes-final-evidence:html:` + topicID + `"],"rag":["opes-final-evidence:rag:` + topicID + `"],"audio":["opes-final-evidence:audio:` + topicID + `"],"tests":["opes-final-evidence:tests:` + topicID + `"],"visual":["opes-final-evidence:visual:` + topicID + `"],"qa":["opes-final-evidence:qa:` + topicID + `"]}}`
+		case "rag/manifest.json":
+			content = `{"schema_version":"opes_rag_manifest.v1","chunks_ref":"rag/corpus/chunks.jsonl","summary_ref":"rag/corpus/summary.json"}`
+		case "tests.json":
+			content = `{"questions":[{"id":"q1","prompt":"pregunta verificable","options":["a","b"],"answer":"a"}]}`
+		}
+		writeOPESRegistryFinalPkgTestFileV0(t, root, relative, content)
 	}
 }
 
