@@ -28,6 +28,7 @@ func startServerCommandV0(stdout io.Writer, stderr io.Writer) int {
 	}
 	state, err := waitForStateHealthyV0(config, 15*time.Second)
 	if err != nil {
+		cleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0(config, pid)
 		_, _ = fmt.Fprintf(stderr, "orquesta-server start pid=%d: %v\n", pid, err)
 		return 1
 	}
@@ -60,6 +61,11 @@ func startDetachedRunV0(config orquestaserver.ConfigV0) (int, error) {
 	return cmd.Process.Pid, cmd.Process.Release()
 }
 
+var (
+	serverReadinessPollEveryV0   = 200 * time.Millisecond
+	serverReadinessStableDelayV0 = 250 * time.Millisecond
+)
+
 func waitForStateHealthyV0(
 	config orquestaserver.ConfigV0,
 	timeout time.Duration,
@@ -71,15 +77,69 @@ func waitForStateHealthyV0(
 		if err == nil {
 			last = state
 			if serverReadinessOKV0(state.Addr) {
-				return state, nil
+				stableState, ok := waitForStableReadinessV0(config, state, deadline)
+				if stableState.Addr != "" {
+					last = stableState
+				}
+				if ok {
+					return stableState, nil
+				}
 			}
 		}
-		time.Sleep(200 * time.Millisecond)
+		sleepUntilDeadlineV0(serverReadinessPollEveryV0, deadline)
 	}
 	if last.Addr != "" {
 		return last, fmt.Errorf("readiness_timeout")
 	}
 	return last, fmt.Errorf("statefile_timeout")
+}
+
+func waitForStableReadinessV0(
+	config orquestaserver.ConfigV0,
+	readyState orquestaserver.StateV0,
+	deadline time.Time,
+) (orquestaserver.StateV0, bool) {
+	if !sleepUntilDeadlineV0(serverReadinessStableDelayV0, deadline) {
+		return readyState, false
+	}
+	stableState, err := loadStateV0(config)
+	if err != nil {
+		return readyState, false
+	}
+	if !sameStartupDaemonIdentityV0(readyState, stableState) {
+		return stableState, false
+	}
+	if !serverReadinessOKV0(stableState.Addr) {
+		return stableState, false
+	}
+	return stableState, true
+}
+
+func sleepUntilDeadlineV0(delay time.Duration, deadline time.Time) bool {
+	remaining := time.Until(deadline)
+	if remaining <= 0 {
+		return false
+	}
+	if delay <= 0 {
+		return true
+	}
+	if delay > remaining {
+		delay = remaining
+	}
+	time.Sleep(delay)
+	return true
+}
+
+func sameStartupDaemonIdentityV0(a orquestaserver.StateV0, b orquestaserver.StateV0) bool {
+	return a.Addr == b.Addr &&
+		a.PID == b.PID &&
+		a.ProcessRef == b.ProcessRef &&
+		a.DaemonEpochRef == b.DaemonEpochRef &&
+		a.StartedAt == b.StartedAt &&
+		a.RuntimeIdentity.BinarySHA256 == b.RuntimeIdentity.BinarySHA256 &&
+		a.RuntimeIdentity.BuildRef == b.RuntimeIdentity.BuildRef &&
+		a.RuntimeIdentity.CommitRef == b.RuntimeIdentity.CommitRef &&
+		a.RuntimeIdentity.StartedAt == b.RuntimeIdentity.StartedAt
 }
 
 func serverReadinessOKV0(addr string) bool {
