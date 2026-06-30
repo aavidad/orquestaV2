@@ -352,7 +352,7 @@ func nuevaAppI18nEnglishV0() map[string]string {
 		"nueva_app.ayuda.integraciones.0.restricciones":        "Comma-separated integration restrictions, without tokens or connection strings.",
 		"nueva_app.ayuda.calidad.pruebas":                      "Options: basica, media, or alta. Alta asks for more coverage and smokes before closure.",
 		"nueva_app.ayuda.calidad.accesibilidad":                "Default level: no_aplica, basica, normal, or wcag_aa. Use wcag_aa for public or critical interfaces.",
-		"nueva_app.ayuda.calidad.accesibilidad_opciones":       "Runtime/adapter accepted levels, comma-separated: normal,wcag_aa.",
+		"nueva_app.ayuda.calidad.accesibilidad_opciones":       "Additional runtime/adapter accessibility criteria: normal, wcag_aa, teclado, lectores_pantalla, contraste_alto, movimiento_reducido, or subtitulos_transcripciones.",
 		"nueva_app.ayuda.calidad.observabilidad":               "True when logs, metrics, or operational status should exist from the first cut.",
 		"nueva_app.ayuda.calidad.compliance":                   "Compliance standards or requirements separated by commas.",
 		"nueva_app.ayuda.deploy.target":                        "Options: sin_preferencia, local, contenedor, paas, serverless, kubernetes, desktop, or mobile_store.",

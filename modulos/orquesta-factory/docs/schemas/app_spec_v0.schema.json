@@ -500,7 +500,12 @@
               "no_aplica",
               "basica",
               "normal",
-              "wcag_aa"
+              "wcag_aa",
+              "teclado",
+              "lectores_pantalla",
+              "contraste_alto",
+              "movimiento_reducido",
+              "subtitulos_transcripciones"
             ]
           },
           "uniqueItems": true

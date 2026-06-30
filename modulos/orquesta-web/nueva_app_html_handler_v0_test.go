@@ -428,7 +428,8 @@ func TestNuevaAppHTMLHandlerV0POSTValidoDelegaYRenderizaResultado(t *testing.T) 
 		len(client.received.Datos.Storage) != 1 ||
 		client.received.Datos.Storage[0].Tipo != "relacional" ||
 		client.received.Deploy.Target != "contenedor" ||
-		len(client.received.Calidad.AccesibilidadOpciones) != 2 ||
+		len(client.received.Calidad.AccesibilidadOpciones) != 3 ||
+		client.received.Calidad.AccesibilidadOpciones[2] != "teclado" ||
 		client.received.Agentes.Autonomia != "media" ||
 		len(client.received.Integraciones) != 2 ||
 		client.received.Integraciones[0].Tipo != "api" ||
@@ -555,7 +556,7 @@ func nuevaAppHTMLValidFormValuesV0() url.Values {
 	values.Set("deploy.target", "contenedor")
 	values.Set("calidad.pruebas", "alta")
 	values.Set("calidad.accesibilidad", "normal")
-	values.Set("calidad.accesibilidad_opciones", "normal,wcag_aa")
+	values.Set("calidad.accesibilidad_opciones", "normal,wcag_aa,teclado")
 	values.Set("calidad.observabilidad", "true")
 	values.Set("agentes.revision_humana", "true")
 	values.Set("agentes.autonomia", "media")

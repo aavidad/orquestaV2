@@ -256,8 +256,8 @@ func validateEnumsV0(req AppSpecRequestV0) []ValidationIssue {
 		issues = append(issues, issue(ErrAppSpecInvalida, "calidad.accesibilidad", "nivel de accesibilidad no soportado"))
 	}
 	for index, accesibilidad := range req.Calidad.AccesibilidadOpciones {
-		if strings.TrimSpace(accesibilidad) != "" && !AccessibilityLevelSupportedV0(accesibilidad) {
-			issues = append(issues, issue(ErrAppSpecInvalida, fmt.Sprintf("calidad.accesibilidad_opciones.%d", index), "nivel de accesibilidad no soportado"))
+		if strings.TrimSpace(accesibilidad) != "" && !AccessibilityOptionSupportedV0(accesibilidad) {
+			issues = append(issues, issue(ErrAppSpecInvalida, fmt.Sprintf("calidad.accesibilidad_opciones.%d", index), "opcion de accesibilidad no soportada"))
 		}
 	}
 	if autonomia := req.Agentes.Autonomia; autonomia != "" && !containsV0(autonomia, "baja", "media", "alta") {

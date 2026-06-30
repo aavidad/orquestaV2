@@ -352,7 +352,7 @@ func nuevaAppI18nSpanishV0() map[string]string {
 		"nueva_app.ayuda.integraciones.0.restricciones":        "Restricciones de la integracion separadas por comas, sin tokens ni cadenas de conexion.",
 		"nueva_app.ayuda.calidad.pruebas":                      "Opciones: basica, media o alta. Alta pide mas cobertura y smokes antes de cerrar.",
 		"nueva_app.ayuda.calidad.accesibilidad":                "Nivel por defecto: no_aplica, basica, normal o wcag_aa. Usa wcag_aa para interfaces publicas o criticas.",
-		"nueva_app.ayuda.calidad.accesibilidad_opciones":       "Niveles aceptados en ejecucion/adaptador, separados por comas: normal,wcag_aa.",
+		"nueva_app.ayuda.calidad.accesibilidad_opciones":       "Criterios adicionales aceptados por ejecucion/adaptador: normal, wcag_aa, teclado, lectores_pantalla, contraste_alto, movimiento_reducido o subtitulos_transcripciones.",
 		"nueva_app.ayuda.calidad.observabilidad":               "True si deben existir logs, metricas o estado operativo desde el primer corte.",
 		"nueva_app.ayuda.calidad.compliance":                   "Normas o requisitos de cumplimiento separados por comas.",
 		"nueva_app.ayuda.deploy.target":                        "Opciones: sin preferencia, local, contenedor, PaaS, serverless, Kubernetes, escritorio o tienda movil.",

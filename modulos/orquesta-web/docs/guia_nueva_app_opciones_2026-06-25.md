@@ -1294,6 +1294,50 @@ Errores frecuentes:
 
 Tooltip: `nueva_app.ayuda.calidad.accesibilidad`.
 
+### `calidad.accesibilidad_opciones`
+
+Tipo UI: checkboxes multiples.
+
+Opciones visibles actuales:
+
+- `normal`
+- `wcag_aa`
+- `teclado`
+- `lectores_pantalla`
+- `contraste_alto`
+- `movimiento_reducido`
+- `subtitulos_transcripciones`
+- `no_aplica`
+
+Contrato:
+
+- `normal` y `wcag_aa` siguen siendo niveles aceptados por runtime/adaptador.
+- `teclado`, `lectores_pantalla`, `contraste_alto`,
+  `movimiento_reducido` y `subtitulos_transcripciones` son criterios
+  adicionales de cierre y pruebas.
+- el nivel base elegido en `calidad.accesibilidad` se conserva como primera
+  opcion normalizada si no esta duplicado.
+
+Cuando usar:
+
+- `teclado`: toda accion debe poder completarse con teclado y foco visible.
+- `lectores_pantalla`: etiquetas, landmarks, nombres accesibles y orden
+  semantico deben ser verificables.
+- `contraste_alto`: textos, controles, estados y graficos requieren contraste
+  reforzado.
+- `movimiento_reducido`: animaciones, transiciones o autoplay deben poder
+  desactivarse o reducirse.
+- `subtitulos_transcripciones`: audio, video o contenido multimedia requiere
+  subtitulos o transcripcion.
+
+Errores frecuentes:
+
+- marcar criterios adicionales en un trabajo sin UI humana;
+- confundir estos criterios con un proveedor de auditoria concreto;
+- elegir `no_aplica` junto a requisitos de interfaz web o movil.
+
+Tooltip: `nueva_app.ayuda.calidad.accesibilidad_opciones`.
+
 ### `calidad.observabilidad`
 
 Tipo UI: select booleano.
@@ -1762,6 +1806,9 @@ Claves recomendadas para el bloque experto:
 - `calidad.accesibilidad` vacio se interpreta como `basica` en factory v0.
 - `calidad.accesibilidad=normal` es un nivel canonico soportado entre `basica`
   y `wcag_aa`.
+- `calidad.accesibilidad_opciones` acepta niveles (`normal`, `wcag_aa`) y
+  criterios adicionales (`teclado`, `lectores_pantalla`, `contraste_alto`,
+  `movimiento_reducido`, `subtitulos_transcripciones`).
 - `calidad.observabilidad` vacio se interpreta como `true`.
 - `agentes.revision_humana` vacio se interpreta como `true`.
 - `agentes.autonomia` vacio se interpreta como `media`.

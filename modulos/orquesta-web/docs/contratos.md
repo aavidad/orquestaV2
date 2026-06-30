@@ -519,8 +519,10 @@ Implementacion actual:
   "no elegir todavia" y no crea storage al enviar.
 - `calidad.accesibilidad` transporta el nivel de accesibilidad elegido por el
   operador. El HTML expone `basica`, `normal`, `wcag_aa` y `no_aplica`;
-  `calidad.accesibilidad_opciones` permite declarar niveles aceptados por
-  runtime/adaptador, por ejemplo `normal,wcag_aa`, sin imponer proveedor.
+  `calidad.accesibilidad_opciones` permite declarar criterios adicionales
+  aceptados por runtime/adaptador, por ejemplo `normal`, `wcag_aa`, `teclado`,
+  `lectores_pantalla`, `contraste_alto`, `movimiento_reducido` o
+  `subtitulos_transcripciones`, sin imponer proveedor.
 ```
 
 ```text

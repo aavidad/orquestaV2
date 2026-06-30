@@ -194,7 +194,7 @@ func TestSolicitarNuevaAppV0PreservaDatosExpertosArquitecturaYAccesibilidadV0(t 
 		Requerido:  true,
 	}}
 	req.Calidad.Accesibilidad = "normal"
-	req.Calidad.AccesibilidadOpciones = []string{"normal", "wcag_aa"}
+	req.Calidad.AccesibilidadOpciones = []string{"normal", "wcag_aa", "teclado", "lectores_pantalla", "contraste_alto", "movimiento_reducido", "subtitulos_transcripciones"}
 
 	spec, issues := SolicitarNuevaAppV0(req, time.Date(2026, 6, 25, 11, 0, 0, 0, time.UTC))
 	if len(issues) > 0 {
@@ -229,8 +229,10 @@ func TestSolicitarNuevaAppV0PreservaDatosExpertosArquitecturaYAccesibilidadV0(t 
 		t.Fatalf("data sources/operation=%+v", spec.Data)
 	}
 	if spec.Quality.Accessibility != "normal" ||
-		len(spec.Quality.AccessibilityOptions) != 2 ||
-		spec.Quality.AccessibilityOptions[1] != "wcag_aa" {
+		len(spec.Quality.AccessibilityOptions) != 7 ||
+		spec.Quality.AccessibilityOptions[1] != "wcag_aa" ||
+		spec.Quality.AccessibilityOptions[2] != "teclado" ||
+		spec.Quality.AccessibilityOptions[6] != "subtitulos_transcripciones" {
 		t.Fatalf("quality=%+v", spec.Quality)
 	}
 	if !factoryConnectorNamedV0(spec.Connectors.Required, "storage-relacional") ||
@@ -244,6 +246,43 @@ func TestSolicitarNuevaAppV0PreservaDatosExpertosArquitecturaYAccesibilidadV0(t 
 		crm.DataScope != "contactos y favoritos" ||
 		crm.Criticidad != "alta" {
 		t.Fatalf("connector experto=%+v", crm)
+	}
+}
+
+func TestSolicitarNuevaAppV0NormalizaAliasAccesibilidadExpertaV0(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.Calidad.Accesibilidad = "wcag"
+	req.Calidad.AccesibilidadOpciones = []string{
+		"keyboard",
+		"screen readers",
+		"high contrast",
+		"reduced motion",
+		"captions",
+	}
+
+	spec, issues := SolicitarNuevaAppV0(req, time.Date(2026, 6, 30, 11, 0, 0, 0, time.UTC))
+	if len(issues) > 0 {
+		t.Fatalf("unexpected issues: %+v", issues)
+	}
+	want := []string{"wcag_aa", "teclado", "lectores_pantalla", "contraste_alto", "movimiento_reducido", "subtitulos_transcripciones"}
+	if len(spec.Quality.AccessibilityOptions) != len(want) {
+		t.Fatalf("accessibility options=%+v", spec.Quality.AccessibilityOptions)
+	}
+	for index, value := range want {
+		if spec.Quality.AccessibilityOptions[index] != value {
+			t.Fatalf("option %d=%q want %q in %+v", index, spec.Quality.AccessibilityOptions[index], value, spec.Quality.AccessibilityOptions)
+		}
+	}
+}
+
+func TestValidateAppSpecRequestV0RechazaAccesibilidadExpertaDesconocidaV0(t *testing.T) {
+	req := validMinimalRequestV0()
+	req.Calidad.AccesibilidadOpciones = []string{"normal", "proveedor_auditoria_x"}
+
+	issues := ValidateAppSpecRequestV0(req)
+
+	if !hasIssueFieldV0(issues, "calidad.accesibilidad_opciones.1") {
+		t.Fatalf("expected accessibility option issue, got %+v", issues)
 	}
 }
 
