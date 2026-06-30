@@ -48,6 +48,40 @@ Pruebas de contrato:
 ```
 
 ```text
+Nombre: mcp.tool.orquesta.codebase.status.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: agentes, gateway HTTP, stack Codex y operadores automatizados
+Campos:
+  descriptor:
+    name: orquesta.codebase.status.v0
+    resource_uri: orquesta://contracts/codebase-status/v0
+  rest:
+    method: POST
+    path: /api/v0/codebase/status
+  input:
+    request_ref, correlation_id, repository_ref, tool_ref, observed_at,
+    include_terminal
+  output_ok:
+    estado: ok|attention_required
+    result: CodeContextToolingStatusV0
+  output_error:
+    estado: error
+    errores_publicos compactos
+Invariantes:
+  - El transporte lista leases conocidos por Orquesta; no arranca indexadores.
+  - No mata procesos desde MCP; la parada real pertenece al watchdog del
+    servidor/composicion con owner marker.
+  - No publica PID, HOME, tokens, command line ni rutas privadas de runtime.
+  - `request_stop` es accion recomendada sobre lease expirado, no cierre
+    automatico del proceso.
+Pruebas de contrato:
+  - `TestMCPCodebaseStatusTransportV0RegistradoYDelegado`
+  - `TestMCPCodebaseStatusHTTPHandlerV0PostDelega`
+```
+
+```text
 Nombre: mcp.tool.orquesta.runs.supervisor.v0
 Tipo: puerto_entrada
 Version: v0

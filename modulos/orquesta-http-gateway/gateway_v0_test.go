@@ -211,6 +211,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 				CodebaseQuery: markerHandler("codebase-query"),
 			},
 		},
+		{
+			name:  "codebase status",
+			route: RouteCodebaseStatusV0,
+			handlers: RouteHandlersV0{
+				CodebaseStatus: markerHandler("codebase-status"),
+			},
+		},
 	}
 
 	for _, tc := range cases {

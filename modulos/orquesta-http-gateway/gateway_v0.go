@@ -42,6 +42,7 @@ const (
 	RouteExternalWorkDryRunV0                = "/api/v0/external-work/dry-run"
 	RouteExternalWorkRunV0                   = "/api/v0/external-work/run"
 	RouteCodebaseQueryV0                     = "/api/v0/codebase/query"
+	RouteCodebaseStatusV0                    = "/api/v0/codebase/status"
 )
 
 type RouteHandlersV0 struct {
@@ -84,6 +85,7 @@ type RouteHandlersV0 struct {
 	ExternalWorkDryRun                http.Handler
 	ExternalWorkRun                   http.Handler
 	CodebaseQuery                     http.Handler
+	CodebaseStatus                    http.Handler
 }
 
 func NewAppGatewayMuxV0(handlers RouteHandlersV0) http.Handler {
@@ -157,5 +159,6 @@ func gatewayRouteRegistrationsV0(handlers RouteHandlersV0) []gatewayRouteRegistr
 		{ref: RouteRefExternalWorkDryRunV0, route: RouteExternalWorkDryRunV0, handler: handlers.ExternalWorkDryRun},
 		{ref: RouteRefExternalWorkRunV0, route: RouteExternalWorkRunV0, handler: handlers.ExternalWorkRun},
 		{ref: RouteRefCodebaseQueryV0, route: RouteCodebaseQueryV0, handler: handlers.CodebaseQuery},
+		{ref: RouteRefCodebaseStatusV0, route: RouteCodebaseStatusV0, handler: handlers.CodebaseStatus},
 	}
 }

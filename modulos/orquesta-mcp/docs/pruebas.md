@@ -15,6 +15,18 @@ Riesgos: el adaptador real Codebase queda pendiente; el tool solo fija el
 contrato y transporte.
 ```
 
+```text
+Caso: MCP-CT-042 codebase status publico
+Tipo: contract
+Comando: go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPCodebaseStatus'
+Evidencia esperada: `orquesta.codebase.status.v0` queda registrado, delega en
+`CodeContextToolLeaseListPortV0`, expone HTTP `POST /api/v0/codebase/status` y
+publica `request_stop` para leases expirados sin arrancar ni detener procesos.
+No filtra PID, HOME, tokens ni command line.
+Ultima ejecucion: 2026-06-30, ok en bateria local del tool.
+Riesgos: la parada cooperativa real queda pendiente en servidor/composicion.
+```
+
 ## Plantilla
 
 ```text

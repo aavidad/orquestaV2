@@ -3,6 +3,7 @@ package orquestaappcodexstack
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaappgateway "orquesta/modulos/orquesta-app-gateway"
@@ -29,6 +30,7 @@ type StackV0 struct {
 	AutoprogrammingPromotion              AutoprogrammingPromotionConfigV0
 	DomainWork                            orquestamcp.MCPDomainWorkExecutorPortV0
 	CodeContext                           orquestacontext.CodeContextQueryPortV0
+	CodeContextToolLeases                 orquestacontext.CodeContextToolLeaseListPortV0
 	RuntimeModels                         orquestaruntime.RuntimeModelManagerPortV0
 	DecisionCouncil                       DecisionCouncilConfigV0
 	DomainDelivery                        DomainWorkDeliveryBridgeConfigV0
@@ -65,6 +67,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		AutoprogrammingPromotion:              config.AutoprogrammingPromotion,
 		DomainWork:                            config.DomainWork,
 		CodeContext:                           config.CodeContext,
+		CodeContextToolLeases:                 config.CodeContextToolLeases,
 		RuntimeModels:                         config.RuntimeModels,
 		DecisionCouncil:                       decisionCouncil,
 		DomainDelivery:                        config.DomainDelivery,
@@ -153,8 +156,14 @@ func buildStackMCPTransportBindingsV0(
 		ServerShutdown:                              serverShutdownExecutorV0(config, stack),
 		DomainWork:                                  config.DomainWork,
 		CodebaseQuery:                               orquestamcp.MCPCodebaseQueryToolExecutorV0{Broker: config.CodeContext},
-		ExternalWorkDryRun:                          externalWorkDryRunExecutorV0(config, queueConfig),
-		ExternalWorkRun:                             externalWorkRunGuardedExecutorV0(config, queueConfig),
+		CodebaseStatus: orquestamcp.MCPCodebaseStatusToolExecutorV0{
+			Leases: config.CodeContextToolLeases,
+			Clock: func() time.Time {
+				return stackNowV0(config.Clock)
+			},
+		},
+		ExternalWorkDryRun: externalWorkDryRunExecutorV0(config, queueConfig),
+		ExternalWorkRun:    externalWorkRunGuardedExecutorV0(config, queueConfig),
 	}
 }
 
@@ -203,6 +212,7 @@ func buildStackHTTPHandlerV0(
 		ExternalWorkDryRunConfig: externalWorkRunStartConfigV0(config, normalizeRunQueueConfigV0(config.RunQueue)),
 		ExternalWorkRun:          bindings.ExternalWorkRun,
 		CodebaseQuery:            bindings.CodebaseQuery,
+		CodebaseStatus:           bindings.CodebaseStatus,
 		OpsAgentRuntimeDetail: NewCodexStackAgentRuntimeDetailHTTPHandlerV0(CodexStackAgentRuntimeDetailConfigV0{
 			ReceiptStore:   config.Stores.ReceiptStore,
 			RuntimeWorkDir: config.Codex.RuntimeWorkDir,

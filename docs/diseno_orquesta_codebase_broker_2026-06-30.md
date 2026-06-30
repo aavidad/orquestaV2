@@ -78,6 +78,10 @@ real y la publicacion en status pertenecen al servidor/composicion.
   `modulos/orquesta-context`.
 - Tool MCP `orquesta.codebase.query.v0` y HTTP `POST /api/v0/codebase/query`
   en `modulos/orquesta-mcp`.
+- Proyeccion publica `code_context_tooling_status.v0`, tool MCP
+  `orquesta.codebase.status.v0` y HTTP `POST /api/v0/codebase/status` para
+  listar leases activos/terminales, decisiones `request_stop`, CPU observado,
+  acciones recomendadas y evidencias compactas sin PID, HOME ni command line.
 - Ruta publicada por gateway, stack Codex y toolbelt de agentes.
 - Proveedor `rg` central en `cmd/orquesta-server`.
 - Cache en memoria, limite de concurrencia, dedupe in-flight y bloqueo de
@@ -92,14 +96,13 @@ real y la publicacion en status pertenecen al servidor/composicion.
   ledger opt-in y añade guarda en `AGENTS.md`.
 - Tests offline de cache hit, dedupe concurrente, fingerprint de worktree,
   bloqueo de Codebase MCP sin opt-in, lease requerido, evaluador TTL/CPU,
-  tool/HTTP, gateway, proveedor `rg` con salida acotada y proteccion de
-  `CODEX_HOME`.
+  status publico de leases, tool/HTTP, gateway, proveedor `rg` con salida
+  acotada y proteccion de `CODEX_HOME`.
 
 ## Pendientes
 
 - Adaptador real `codebase-memory-mcp` detras del puerto neutral.
 - Persistir leases/cache por repo y commit.
-- Publicar estado compacto en supervisor/status.
 - Cablear watchdog/TTL de herramientas auxiliares al servidor con parada
   cooperativa real y evidencia publica.
 - Smoke opt-in con repo real acotado antes de habilitarlo en sesiones de agentes.

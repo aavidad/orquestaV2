@@ -26,6 +26,7 @@ func TestCodexToolbeltSourceV0DerivaHTTPDeContratosMCPGateway(t *testing.T) {
 		orquestamcp.MCPExternalWorkDryRunHTTPPathV0,
 		orquestamcp.MCPExternalWorkRunHTTPPathV0,
 		orquestamcp.MCPCodebaseQueryHTTPPathV0,
+		orquestamcp.MCPCodebaseStatusHTTPPathV0,
 	} {
 		if !paths[want] {
 			t.Fatalf("toolbelt HTTP no contiene ruta registrada %q", want)

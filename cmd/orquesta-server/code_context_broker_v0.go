@@ -14,7 +14,16 @@ import (
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
+type codeContextBrokerWiringV0 struct {
+	Query      orquestacontext.CodeContextQueryPortV0
+	ToolLeases orquestacontext.CodeContextToolLeaseListPortV0
+}
+
 func codeContextBrokerFromEnvV0(config orquestaserver.ConfigV0) orquestacontext.CodeContextQueryPortV0 {
+	return codeContextBrokerWiringFromEnvV0(config).Query
+}
+
+func codeContextBrokerWiringFromEnvV0(config orquestaserver.ConfigV0) codeContextBrokerWiringV0 {
 	providerKind := envOrDefaultV0(envCodebaseBrokerProviderKindV0, orquestacontext.CodeContextProviderKindFallbackRGV0)
 	var provider orquestacontext.CodeContextProviderPortV0
 	if providerKind == orquestacontext.CodeContextProviderKindFallbackRGV0 &&
@@ -24,15 +33,24 @@ func codeContextBrokerFromEnvV0(config orquestaserver.ConfigV0) orquestacontext.
 			Command: "rg",
 		}
 	}
-	return orquestacontext.NewCodeContextBrokerV0(orquestacontext.CodeContextBrokerConfigV0{
-		Provider:               provider,
-		Cache:                  orquestacontext.NewInMemoryCodeContextCacheV0(),
-		ProviderRef:            "provider-ref-orquesta-code-context-central",
-		ProviderKind:           providerKind,
-		ExternalIndexerEnabled: boolEnvOrDefaultV0(envCodebaseBrokerExternalIndexerEnabledV0, false),
-		MaxConcurrent:          intEnvOrDefaultV0(envCodebaseBrokerMaxConcurrentV0, 4),
-		Timeout:                time.Duration(intEnvOrDefaultV0(envCodebaseBrokerTimeoutMSV0, 3000)) * time.Millisecond,
-	})
+	leaseStore := orquestacontext.NewInMemoryCodeContextToolLeaseStoreV0()
+	var leasePort orquestacontext.CodeContextToolLeasePortV0
+	if providerKind == orquestacontext.CodeContextProviderKindCodebaseMCPV0 {
+		leasePort = leaseStore
+	}
+	return codeContextBrokerWiringV0{
+		Query: orquestacontext.NewCodeContextBrokerV0(orquestacontext.CodeContextBrokerConfigV0{
+			Provider:               provider,
+			Cache:                  orquestacontext.NewInMemoryCodeContextCacheV0(),
+			ProviderRef:            "provider-ref-orquesta-code-context-central",
+			ProviderKind:           providerKind,
+			ExternalIndexerEnabled: boolEnvOrDefaultV0(envCodebaseBrokerExternalIndexerEnabledV0, false),
+			MaxConcurrent:          intEnvOrDefaultV0(envCodebaseBrokerMaxConcurrentV0, 4),
+			Timeout:                time.Duration(intEnvOrDefaultV0(envCodebaseBrokerTimeoutMSV0, 3000)) * time.Millisecond,
+			ToolLeasePort:          leasePort,
+		}),
+		ToolLeases: leaseStore,
+	}
 }
 
 type serverRGCodeContextProviderV0 struct {

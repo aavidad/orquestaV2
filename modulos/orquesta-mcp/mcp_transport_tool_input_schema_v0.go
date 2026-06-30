@@ -90,6 +90,8 @@ func mcpTransportToolInputDTOByNameV0(name string) (any, bool) {
 		return MCPExternalWorkRunToolInputV0{}, true
 	case MCPCodebaseQueryToolNameV0:
 		return MCPCodebaseQueryToolInputV0{}, true
+	case MCPCodebaseStatusToolNameV0:
+		return MCPCodebaseStatusToolInputV0{}, true
 	case MCPAppVCSToolNameV0:
 		return MCPAppVCSToolInputV0{}, true
 	case operator.OperatorMCPStatusToolNameV0:

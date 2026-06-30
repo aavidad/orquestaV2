@@ -54,6 +54,7 @@ const (
 	RouteRefExternalWorkDryRunV0                = "route-ref-external-work-dry-run-v0"
 	RouteRefExternalWorkRunV0                   = "route-ref-external-work-run-v0"
 	RouteRefCodebaseQueryV0                     = "route-ref-codebase-query-v0"
+	RouteRefCodebaseStatusV0                    = "route-ref-codebase-status-v0"
 	RouteRefMCPJSONRPCV0                        = "route-ref-mcp-jsonrpc-v0"
 	RouteRefWorkspaceTimelineV0                 = "route-ref-workspace-timeline-v0"
 )

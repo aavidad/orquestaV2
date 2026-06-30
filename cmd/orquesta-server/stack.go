@@ -197,6 +197,7 @@ func buildStackFromEnvWithGoalBackendV0(
 			wakeup: supervisorWakeup,
 		}
 	}
+	codeContextWiring := codeContextBrokerWiringFromEnvV0(serverConfig)
 	stack, err := orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
 		Timeout:        30 * time.Second,
@@ -253,7 +254,8 @@ func buildStackFromEnvWithGoalBackendV0(
 		DomainTests:                           domainWorkRequiredTestConfigFromEnvV0(),
 		AutoprogrammingPromotion:              autoprogrammingPromotionConfigFromEnvV0(serverConfig),
 		DomainWork:                            domainWorkExecutor,
-		CodeContext:                           codeContextBrokerFromEnvV0(serverConfig),
+		CodeContext:                           codeContextWiring.Query,
+		CodeContextToolLeases:                 codeContextWiring.ToolLeases,
 		ExternalWorkRunGuard:                  externalWorkRunProjectWorkDirGuardConfigFromEnvV0(serverConfig),
 		GoalObserverResidentEnabled:           serverConfig.GoalObserverEnabled,
 		PromoteMaterializedArtifactWithoutAck: codexPromoteMaterializedArtifactWithoutAckFromEnvV0(),
