@@ -50,6 +50,30 @@ func TestEvaluateOPESAudioWorkflowPreconditionsV0BloqueaPrepareStalePorStatus(t 
 	}
 }
 
+func TestEvaluateOPESAudioWorkflowPreconditionsV0BloqueaMojibakeAntesDeTTS(t *testing.T) {
+	evaluation := EvaluateOPESAudioWorkflowPreconditionsV0(orquestadomainwork.DomainWorkJobRequestV0{
+		WorkKind: "generate_audio_asset",
+		InputFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "text_public_status", Value: "pass"},
+			{Name: "audio_manifest_ref", Value: "audio-manifest-ref-001"},
+			{Name: "source_content_ref", Value: "assembled-topic-ref-001"},
+			{Name: "audio_regeneration_mode", Value: "selective_by_sidecar"},
+			{Name: "public_markdown", Value: "La AdministraciÃ³n local garantiza derechos."},
+			{Name: "html_final", ValueJSON: []byte(`{"body":"<p>Texto Â corrupto</p>"}`)},
+		},
+	})
+
+	if evaluation.Ready ||
+		evaluation.CurrentPhase != "text_qa" ||
+		evaluation.OperationalReason != OPESAudioWorkflowTextEncodingCorruptReasonV0 ||
+		evaluation.RecommendedRetryPhase != "text_qa" ||
+		!containsAudioWorkflowTestStringV0(evaluation.MissingPreconditions, "text_encoding_clean") ||
+		!containsAudioWorkflowTestStringV0(evaluation.NextActions, "repair_public_text_encoding") ||
+		!containsAudioWorkflowTestStringV0(evaluation.NextActions, "regenerate_audio_prepare_artifacts") {
+		t.Fatalf("evaluation=%+v", evaluation)
+	}
+}
+
 func containsAudioWorkflowTestStringV0(values []string, expected string) bool {
 	for _, value := range values {
 		if value == expected {

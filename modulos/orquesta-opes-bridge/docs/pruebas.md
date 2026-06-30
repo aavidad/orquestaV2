@@ -57,10 +57,11 @@
   no postea a Orquesta sin `text_public_status=pass`, sin refs de preparacion
   (`audio_manifest_ref`/sidecar mas `source_content_ref` o hash) o con
   regeneracion global `all`, ni cuando OPES declara prepare/audio manifest
-  stale/invalidado o hashes de texto actual/preparado divergentes. El bloqueo
-  publica `current_phase=prepare`, contadores `audio_counters` y
-  `retry_from_phase=prepare`; con esas precondiciones y `speech_synthesis`
-  completo, el submit sigue permitido.
+  stale/invalidado, hashes de texto actual/preparado divergentes o mojibake
+  explicito en texto publicable/HTML/RAG/manifiestos. El bloqueo publica fase
+  causal (`text_qa` para corrupcion textual, `prepare` para refs/stale),
+  contadores `audio_counters` cuando aplican y `retry_from_phase`; con esas
+  precondiciones y `speech_synthesis` completo, el submit sigue permitido.
 - Routing de proveedores en Orquesta:
   `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server -run 'TestClaude|TestProviderLaunchSpecResolverV0RuteaReview|TestProviderAwareAckPathResolverV0UsaRuntimeClaude|TestGeminiRuntimeConfig|TestClaudeRuntimeConfig'`.
   Debe demostrar que `review_gemini` se materializa por Gemini cuando esta

@@ -2359,6 +2359,61 @@ func TestRunOPESDrainOnceV0AudioSinPrepareRefsNoPosteaOrquestaV0(t *testing.T) {
 	}
 }
 
+func TestRunOPESDrainOnceV0AudioConMojibakeNoPosteaOrquestaV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-audio-mojibake-001",
+			"type":           "generate_audio_asset",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   opesAudioPayloadWithMojibakeForDrainTestV0(),
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	posts := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		posts++
+		t.Fatalf("no debe postear a Orquesta con mojibake en texto publicable: %s %s", r.Method, r.URL.Path)
+	}))
+	defer orquestaServer.Close()
+
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:          opesServer.URL,
+		OrquestaBaseURL:      orquestaServer.URL,
+		Limit:                1,
+		JobType:              "generate_audio_asset",
+		HTTPTimeout:          time.Second,
+		ExternalCapabilities: opesBridgeSpeechSynthesisCapabilityForDrainTestV0(),
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if posts != 0 ||
+		summary.Submitted != 0 ||
+		summary.Skipped != 1 ||
+		len(summary.Results) != 1 ||
+		summary.Results[0].Status != "phase_precondition_missing" ||
+		summary.Results[0].CurrentPhase != "text_qa" ||
+		summary.Results[0].OperationalReason != orquestaopesbridge.OPESAudioWorkflowTextEncodingCorruptReasonV0 ||
+		len(summary.Errors) != 1 ||
+		summary.Errors[0].Reason != orquestaopesbridge.OPESAudioWorkflowTextEncodingCorruptReasonV0 ||
+		!containsStringForTestV0(summary.Results[0].NextActions, "repair_public_text_encoding") ||
+		!containsStringForTestV0(summary.Results[0].NextActions, "regenerate_audio_prepare_artifacts") {
+		t.Fatalf("posts=%d summary=%+v", posts, summary)
+	}
+}
+
 func TestRunOPESDrainOnceV0AudioConPrepareStaleNoPosteaOrquestaV0(t *testing.T) {
 	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
@@ -3208,6 +3263,20 @@ func opesAudioPayloadForDrainTestV0(textStatus string, regenerationMode string) 
 		"audio_manifest_ref":        "audio-manifest-ref-operadores-001",
 		"source_content_ref":        "assembled-topic-ref-operadores-001",
 	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return string(raw)
+}
+
+func opesAudioPayloadWithMojibakeForDrainTestV0() string {
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(opesAudioPayloadForDrainTestV0("pass", "selective_by_sidecar")), &payload); err != nil {
+		panic(err)
+	}
+	payload["public_markdown"] = "La AdministraciÃ³n local garantiza derechos."
+	payload["html_final"] = map[string]string{"body": "<p>Texto â€œpublicableâ€ corrupto</p>"}
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		panic(err)

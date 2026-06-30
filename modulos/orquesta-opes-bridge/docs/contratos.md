@@ -89,6 +89,8 @@ Reglas:
   de rework textual: primero se corrigen HTML final/local, bancos de tests y
   tutor fuente, y el RAG se reconstruye despues desde esas fuentes limpias. El
   bridge no postea audio si faltan `text_public_status=pass` o equivalente,
+  si el texto publicable/HTML/RAG/manifiestos declarados por OPES contienen
+  mojibake explicito (`mÃ`, `Ã`, `Â`, `�`, `â€`),
   refs vigentes de preparacion (`audio_manifest_ref`/sidecar mas
   `source_content_ref` o hash de texto) y modo de regeneracion selectivo; un
   modo global `all`/`--all` bloquea con `phase_precondition_missing`;

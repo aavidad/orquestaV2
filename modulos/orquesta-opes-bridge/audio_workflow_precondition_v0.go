@@ -11,6 +11,7 @@ const (
 	OPESAudioWorkflowPreconditionMissingErrorV0 = "opes_audio_workflow_precondition_missing"
 
 	OPESAudioWorkflowTextPublicPassRequiredReasonV0 = "phase_precondition_missing:opes_audio:text_public_pass"
+	OPESAudioWorkflowTextEncodingCorruptReasonV0    = "phase_precondition_missing:opes_audio:text_encoding_corrupted"
 	OPESAudioWorkflowPrepareRefsRequiredReasonV0    = "phase_precondition_missing:opes_audio:prepare_refs_required"
 	OPESAudioWorkflowPrepareStaleRequiredReasonV0   = "phase_precondition_missing:opes_audio:prepare_stale"
 	OPESAudioWorkflowSelectiveRegenRequiredReasonV0 = "phase_precondition_missing:opes_audio:selective_regeneration_required"
@@ -42,6 +43,18 @@ func EvaluateOPESAudioWorkflowPreconditionsV0(
 			OperationalReason:     OPESAudioWorkflowTextPublicPassRequiredReasonV0,
 			MissingPreconditions:  []string{"text_public_pass"},
 			NextActions:           []string{"run_text_qa", "declare_text_public_pass", "retry_from_phase=text_qa"},
+			RecommendedRetryPhase: "text_qa",
+			AudioCounters:         counters,
+		}
+	}
+	if opesAudioWorkflowHasMojibakeV0(request.InputFields) {
+		return OPESAudioWorkflowPreconditionEvaluationV0{
+			Applies:               true,
+			Ready:                 false,
+			CurrentPhase:          "text_qa",
+			OperationalReason:     OPESAudioWorkflowTextEncodingCorruptReasonV0,
+			MissingPreconditions:  []string{"text_encoding_clean"},
+			NextActions:           []string{"run_text_encoding_qa", "repair_public_text_encoding", "regenerate_audio_prepare_artifacts", "retry_from_phase=text_qa"},
 			RecommendedRetryPhase: "text_qa",
 			AudioCounters:         counters,
 		}
@@ -117,6 +130,59 @@ func opesAudioWorkflowTextPublicPassV0(
 		"editorial_status",
 	) {
 		if opesAudioWorkflowPassValueV0(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func opesAudioWorkflowHasMojibakeV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) bool {
+	for _, field := range fields {
+		if !opesAudioWorkflowPotentialTextFieldV0(field.Name) {
+			continue
+		}
+		for _, value := range opesAudioWorkflowFieldValuesV0(field) {
+			if opesAudioWorkflowTextContainsMojibakeV0(value) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func opesAudioWorkflowPotentialTextFieldV0(name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == "" {
+		return false
+	}
+	for _, marker := range []string{
+		"text",
+		"markdown",
+		"md",
+		"html",
+		"rag",
+		"manifest",
+		"content",
+		"body",
+		"title",
+		"summary",
+		"resumen",
+		"ampliado",
+		"public",
+		"source",
+	} {
+		if name == marker || strings.Contains(name, marker+"_") || strings.Contains(name, "_"+marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func opesAudioWorkflowTextContainsMojibakeV0(value string) bool {
+	for _, marker := range []string{"mÃ", "Ã", "Â", "�", "â€"} {
+		if strings.Contains(value, marker) {
 			return true
 		}
 	}
@@ -325,10 +391,15 @@ func opesAudioWorkflowFieldValuesByNameV0(
 		if strings.TrimSpace(field.Name) != name {
 			continue
 		}
-		out = append(out, field.Value)
-		out = append(out, field.Values...)
-		out = append(out, opesAudioWorkflowJSONValuesV0(field.ValueJSON)...)
+		out = append(out, opesAudioWorkflowFieldValuesV0(field)...)
 	}
+	return compactStringsV0(out)
+}
+
+func opesAudioWorkflowFieldValuesV0(field orquestadomainwork.DomainWorkFieldV0) []string {
+	out := []string{field.Value}
+	out = append(out, field.Values...)
+	out = append(out, opesAudioWorkflowJSONValuesV0(field.ValueJSON)...)
 	return compactStringsV0(out)
 }
 
@@ -351,5 +422,30 @@ func opesAudioWorkflowJSONValuesV0(raw json.RawMessage) []string {
 		}
 		return []string{"false"}
 	}
+	var value any
+	if json.Unmarshal(raw, &value) == nil {
+		return opesAudioWorkflowJSONScalarValuesV0(value)
+	}
 	return []string{}
+}
+
+func opesAudioWorkflowJSONScalarValuesV0(value any) []string {
+	switch typed := value.(type) {
+	case string:
+		return []string{typed}
+	case []any:
+		out := []string{}
+		for _, item := range typed {
+			out = append(out, opesAudioWorkflowJSONScalarValuesV0(item)...)
+		}
+		return out
+	case map[string]any:
+		out := []string{}
+		for _, item := range typed {
+			out = append(out, opesAudioWorkflowJSONScalarValuesV0(item)...)
+		}
+		return out
+	default:
+		return []string{}
+	}
 }
