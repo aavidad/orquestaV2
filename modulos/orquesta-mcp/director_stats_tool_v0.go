@@ -128,16 +128,31 @@ type MCPDirectorGoalRunMarkerSourcePortV0 interface {
 	LoadGoalWorkRunMarkerV0(context.Context, string) (orquestagoal.GoalWorkRunMarkerV0, error)
 }
 
+type MCPDirectorGoalMaterializedRefsSourcePortV0 interface {
+	ResolveDirectorGoalMaterializedRefsV0(
+		context.Context,
+		orquestagoal.GoalWorkStateV0,
+	) (MCPDirectorGoalMaterializedRefsV0, bool, error)
+}
+
+type MCPDirectorGoalMaterializedRefsV0 struct {
+	ArtifactRefs      []string `json:"artifact_refs,omitempty"`
+	DomainReceiptRefs []string `json:"domain_receipt_refs,omitempty"`
+	EvidenceRefs      []string `json:"evidence_refs,omitempty"`
+	IssueCodes        []string `json:"issue_codes,omitempty"`
+}
+
 type MCPDirectorStatsToolExecutorV0 struct {
-	RunStore          orquestacionnucleoapp.RunStorePortV0
-	RunControl        orquestaruncontrol.RunControlReaderPortV0
-	ProcessRegistry   orquestacionnucleoapp.AgentProcessRegistryPortV0
-	ProcessSnapshot   orquestacionnucleoapp.ProcessRuntimeIdentitySnapshotPortV0
-	ProgressSource    orquestacionnucleoapp.AgentProgressObservationProviderPortV0
-	AgentUsageSource  orquestacionnucleoapp.AgentUsageStatsProviderPortV0
-	ExternalJobSource MCPDirectorExternalJobStatsSourcePortV0
-	GoalStateSource   MCPDirectorGoalStateSourcePortV0
-	GoalMarkerSource  MCPDirectorGoalRunMarkerSourcePortV0
+	RunStore                   orquestacionnucleoapp.RunStorePortV0
+	RunControl                 orquestaruncontrol.RunControlReaderPortV0
+	ProcessRegistry            orquestacionnucleoapp.AgentProcessRegistryPortV0
+	ProcessSnapshot            orquestacionnucleoapp.ProcessRuntimeIdentitySnapshotPortV0
+	ProgressSource             orquestacionnucleoapp.AgentProgressObservationProviderPortV0
+	AgentUsageSource           orquestacionnucleoapp.AgentUsageStatsProviderPortV0
+	ExternalJobSource          MCPDirectorExternalJobStatsSourcePortV0
+	GoalStateSource            MCPDirectorGoalStateSourcePortV0
+	GoalMarkerSource           MCPDirectorGoalRunMarkerSourcePortV0
+	GoalMaterializedRefsSource MCPDirectorGoalMaterializedRefsSourcePortV0
 }
 
 func MCPDirectorStatsDescriptorV0() MCPDirectorStatsToolDescriptorV0 {
@@ -268,11 +283,35 @@ func (executor MCPDirectorStatsToolExecutorV0) resolveGoalStatsV0(
 		if err == nil {
 			state, err = orquestagoal.NewGoalWorkStateV0(state)
 			if err == nil {
-				return mcpDirectorGoalStatsFromStateV0(state)
+				goal := mcpDirectorGoalStatsFromStateV0(state)
+				executor.applyGoalMaterializedRefsV0(ctx, state, goal)
+				return goal
 			}
 		}
 	}
 	return executor.resolveGoalMarkerStatsV0(ctx, runRef)
+}
+
+func (executor MCPDirectorStatsToolExecutorV0) applyGoalMaterializedRefsV0(
+	ctx context.Context,
+	state orquestagoal.GoalWorkStateV0,
+	goal *MCPDirectorGoalStatsV0,
+) {
+	if executor.GoalMaterializedRefsSource == nil || goal == nil {
+		return
+	}
+	resolved, ok, err := executor.GoalMaterializedRefsSource.ResolveDirectorGoalMaterializedRefsV0(ctx, state)
+	if err != nil {
+		goal.IssueCodes = compactStringsMCPV0(append(goal.IssueCodes, "goal_materialized_refs_unavailable"))
+		return
+	}
+	if !ok {
+		return
+	}
+	goal.ArtifactRefs = compactStringsMCPV0(append(goal.ArtifactRefs, resolved.ArtifactRefs...))
+	goal.DomainReceiptRefs = compactStringsMCPV0(append(goal.DomainReceiptRefs, resolved.DomainReceiptRefs...))
+	goal.EvidenceRefs = compactStringsMCPV0(append(goal.EvidenceRefs, resolved.EvidenceRefs...))
+	goal.IssueCodes = compactStringsMCPV0(append(goal.IssueCodes, resolved.IssueCodes...))
 }
 
 func mcpDirectorGoalStatsFromStateV0(

@@ -123,6 +123,9 @@ func buildStackMCPTransportBindingsV0(
 			ExternalJobSource: externalJobStatsSourceV0(config),
 			GoalStateSource:   config.Stores.AppGoalStateStore,
 			GoalMarkerSource:  appGoalFirstRunMarkerStoreV0(config),
+			GoalMaterializedRefsSource: stackGoalMaterializedRefsSourceV0{
+				Config: config,
+			},
 		},
 		RunControl: orquestamcp.MCPRunControlToolExecutorV0{
 			Port:              config.Stores.RunControl,

@@ -384,6 +384,51 @@ func TestMCPDirectorStatsToolExecutorV0GoalFirstBloqueadoConReceiptParcialNoPier
 	}
 }
 
+func TestMCPDirectorStatsToolExecutorV0GoalFirstReconcilaWorkDeliveryMaterializadoV0(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-goal-timeout-materialized-delivery-001")
+	run.Tasks = nil
+	run.ClosedTasks = nil
+	run.DeliveredTasks = nil
+	run.Deliveries = nil
+	run.Agents = nil
+	run.StartedAgents = nil
+	state := mcpDirectorGoalStateForTestV0(run.RunID)
+	state.Status = orquestagoal.GoalStatusBlockedV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+		Status:        orquestagoal.GoalStatusBlockedV0,
+		GoalRef:       state.GoalRef,
+		Summary:       "codex_app_server_goal_active_timeout",
+		EvidenceRefs:  []string{"evidence-ref-codex-app-server-goal-active-timeout"},
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:      orquestagoal.GoalStatusBlockedV0,
+		NeedsRework: true,
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:                   orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		GoalStateSource:            mcpDirectorGoalStateSourceForTestV0{State: state},
+		GoalMaterializedRefsSource: mcpDirectorMaterializedRefsSourceForTestV0{},
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{RunRef: run.RunID})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.Goal == nil ||
+		!containsStringMCPTestV0(result.Goal.DomainReceiptRefs, "domain-receipt-ref-materialized-work-delivery-001") ||
+		!containsStringMCPTestV0(result.Goal.EvidenceRefs, "evidence-ref-goal-materialized-work-delivery-detected") ||
+		result.Stats == nil ||
+		result.Stats.Progress.PercentComplete != 0 ||
+		result.Stats.Counts.Deliveries != 1 ||
+		!containsStringMCPTestV0(result.Stats.Refs.Deliveries, "domain-receipt-ref-materialized-work-delivery-001") ||
+		!containsStringMCPTestV0(result.Stats.Closure.BlockedBy, "blocked_with_partial_delivery") ||
+		mcpDirectorStatsProgressIssueExistsV0(result.Stats.Progress.Issues, "goal_first_blocked_no_artifacts") ||
+		!mcpDirectorStatsProgressIssueExistsV0(result.Stats.Progress.Issues, "goal_first_blocked_with_partial_delivery") {
+		t.Fatalf("goal=%+v stats=%+v", result.Goal, result.Stats)
+	}
+}
+
 func TestMCPDirectorStatsToolExecutorV0CalculaControlSinExponerProcessRefs(t *testing.T) {
 	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-control-redacted-001")
 	registry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
@@ -825,6 +870,19 @@ func TestMCPDirectorStatsToolExecutorV0DecisionContextCompletoParaDirector(t *te
 
 type mcpDirectorStatsSnapshotSourceForTestV0 struct {
 	snapshots map[string]orquestaruntime.ProcessRuntimeSnapshotV0
+}
+
+type mcpDirectorMaterializedRefsSourceForTestV0 struct{}
+
+func (mcpDirectorMaterializedRefsSourceForTestV0) ResolveDirectorGoalMaterializedRefsV0(
+	context.Context,
+	orquestagoal.GoalWorkStateV0,
+) (MCPDirectorGoalMaterializedRefsV0, bool, error) {
+	return MCPDirectorGoalMaterializedRefsV0{
+		DomainReceiptRefs: []string{"domain-receipt-ref-materialized-work-delivery-001"},
+		EvidenceRefs:      []string{"evidence-ref-goal-materialized-work-delivery-detected"},
+		IssueCodes:        []string{"goal_first_materialized_work_delivery_detected"},
+	}, true, nil
 }
 
 func (source mcpDirectorStatsSnapshotSourceForTestV0) SnapshotV0(
