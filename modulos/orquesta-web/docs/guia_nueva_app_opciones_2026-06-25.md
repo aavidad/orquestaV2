@@ -1163,7 +1163,7 @@ No usar para:
 ### Modo Experto: Varias Integraciones
 
 El DTO `WebNuevaAppFormV0` ya modela `integraciones[]`; el HTML muestra una
-integracion principal y tres filas expertas adicionales, hasta cuatro
+integracion principal y cinco filas expertas adicionales, hasta seis
 integraciones visibles en total sin crear dependencias directas.
 
 Campos recomendados por integracion:
