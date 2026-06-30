@@ -205,8 +205,12 @@ Configuracion externa relacionada:
   ambiguos de `domain_work`.
 - `ORQUESTA_OPES_BRIDGE_ENABLED=1` activa el loop residente OPES desde
   `cmd/orquesta-server`. Requiere `ORQUESTA_OPES_BRIDGE_CONFIRM=1` y un filtro
-  seguro: `ORQUESTA_OPES_BRIDGE_JOB_TYPE`, `ORQUESTA_OPES_BRIDGE_JOB_REF` o
-  `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE`.
+  seguro de efectos: `ORQUESTA_OPES_BRIDGE_JOB_REF`,
+  `ORQUESTA_OPES_BRIDGE_PROGRAM_ID`, `ORQUESTA_OPES_BRIDGE_TOPIC_ID`,
+  `ORQUESTA_OPES_BRIDGE_CORRELATION_ID` o
+  `ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED=1` con evidencia compacta de destino.
+  `ORQUESTA_OPES_BRIDGE_JOB_TYPE` y `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE`
+  ordenan o seleccionan fases, pero no acotan efectos reales por si solos.
 - `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE` automatiza pases por tipo de job. El
   loop consulta la secuencia en orden y drena solo el primer tipo con trabajos
   `pending`; el ledger evita relanzar inputs ya enviados y bloquea fases

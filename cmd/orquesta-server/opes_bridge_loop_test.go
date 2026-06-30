@@ -29,6 +29,7 @@ func TestOPESBridgeLoopConfigUsesServerFallbackV0(t *testing.T) {
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "http://127.0.0.1:18082")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_LIMIT", "7")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_JOB_TYPE", "plan_temario")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_JOB_REF", "job-ref-plan-temario-001")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_INTERVAL_SECONDS", "3")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_INITIAL_DELAY_SECONDS", "1")
 	t.Setenv("ORQUESTA_OPES_BRIDGE_MAX_TICKS", "2")
@@ -43,6 +44,7 @@ func TestOPESBridgeLoopConfigUsesServerFallbackV0(t *testing.T) {
 		config.DrainConfig.OrquestaBaseURL != "http://127.0.0.1:18100" ||
 		config.DrainConfig.Limit != 7 ||
 		config.DrainConfig.JobType != "plan_temario" ||
+		config.DrainConfig.JobRef != "job-ref-plan-temario-001" ||
 		config.Loop.Interval != 3*time.Second ||
 		config.Loop.InitialDelay != time.Second ||
 		config.Loop.MaxTicks != 2 {
@@ -156,7 +158,24 @@ func TestOPESBridgeLoopConfigRequiereFiltroSeguroV0(t *testing.T) {
 	config, err := opesBridgeLoopConfigFromEnvV0("http://127.0.0.1:18100")
 
 	if err == nil ||
-		!strings.Contains(err.Error(), "ORQUESTA_OPES_BRIDGE_JOB_TYPE") ||
+		!strings.Contains(err.Error(), "ORQUESTA_OPES_BRIDGE_JOB_REF") ||
+		config.Loop.Enabled {
+		t.Fatalf("config=%+v err=%v", config, err)
+	}
+}
+
+func TestOPESBridgeLoopConfigRechazaJobTypeSoloComoFiltroSeguroV0(t *testing.T) {
+	t.Setenv("ORQUESTA_BASE_URL", "")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_ENABLED", "1")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_CONFIRM", "1")
+	t.Setenv("ORQUESTA_OPES_TEMPORAL_CONFIRM", "1")
+	t.Setenv("ORQUESTA_OPES_BASE_URL", "http://127.0.0.1:18082")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_JOB_TYPE", "plan_temario")
+
+	config, err := opesBridgeLoopConfigFromEnvV0("http://127.0.0.1:18100")
+
+	if err == nil ||
+		!strings.Contains(err.Error(), "ORQUESTA_OPES_BRIDGE_JOB_REF") ||
 		config.Loop.Enabled {
 		t.Fatalf("config=%+v err=%v", config, err)
 	}

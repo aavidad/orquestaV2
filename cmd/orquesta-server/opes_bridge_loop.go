@@ -30,7 +30,7 @@ func opesBridgeLoopConfigFromEnvV0(
 		return opesBridgeLoopConfigV0{}, err
 	}
 	if !opesBridgeHasSafeFilterV0(drainConfig) {
-		return opesBridgeLoopConfigV0{}, fmt.Errorf("ORQUESTA_OPES_BRIDGE_JOB_TYPE, ORQUESTA_OPES_BRIDGE_JOB_REF u ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE requerido para opes bridge loop")
+		return opesBridgeLoopConfigV0{}, fmt.Errorf("ORQUESTA_OPES_BRIDGE_JOB_REF, ORQUESTA_OPES_BRIDGE_PROGRAM_ID, ORQUESTA_OPES_BRIDGE_TOPIC_ID, ORQUESTA_OPES_BRIDGE_CORRELATION_ID u ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED con evidencia requerido para opes bridge loop")
 	}
 	drainConfig.DryRun = false
 	component := "opes_bridge_loop"
@@ -124,8 +124,7 @@ func opesBridgeHasSafeFilterV0(config opesDrainConfigV0) bool {
 	if len(config.JobTypeSequence) > 0 {
 		return hasHardScope
 	}
-	return strings.TrimSpace(config.JobType) != "" ||
-		hasHardScope
+	return hasHardScope
 }
 
 func opesBridgeFilterSummaryV0(config opesDrainConfigV0) []string {

@@ -80,7 +80,7 @@ func opesDrainOnceCommandV0(stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 	if !config.DryRun && !opesBridgeHasSafeFilterV0(config) {
-		_, _ = fmt.Fprintln(stderr, "opes-drain-once: exporta ORQUESTA_OPES_BRIDGE_JOB_TYPE, ORQUESTA_OPES_BRIDGE_JOB_REF u ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE para crear runs")
+		_, _ = fmt.Fprintln(stderr, "opes-drain-once: exporta ORQUESTA_OPES_BRIDGE_JOB_REF, ORQUESTA_OPES_BRIDGE_PROGRAM_ID, ORQUESTA_OPES_BRIDGE_TOPIC_ID, ORQUESTA_OPES_BRIDGE_CORRELATION_ID u ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED con evidencia para crear runs")
 		return 2
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), config.HTTPTimeout)
