@@ -318,6 +318,12 @@ func TestProduceOPESCausalJobsV0PaqueteFinalCompleteSinEvidenciaNoLiberaRegistro
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "final-package-manifest-closure-evidence-required") {
 		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
 	}
+	followup, ok := requestedWorkKindForTestV0(result.RequestedJobs, "finalize_temario_package")
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "followup_ref", "final-package-manifest-closure-evidence-required") ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "expected_artifact_type", orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0) {
+		t.Fatalf("followup=%+v ok=%v result=%+v", followup, ok, result)
+	}
 }
 
 func TestProduceOPESCausalJobsV0PaqueteFinalCompleteConEvidenciaAntiguaNoLiberaRegistro(t *testing.T) {
@@ -347,6 +353,12 @@ func TestProduceOPESCausalJobsV0PaqueteFinalCompleteConEvidenciaAntiguaNoLiberaR
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "pendiente_validacion_paquete_final") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "final-package-manifest-closure-evidence-required") {
 		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
+	}
+	followup, ok := requestedWorkKindForTestV0(result.RequestedJobs, "finalize_temario_package")
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "followup_ref", "final-package-manifest-closure-evidence-required") ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "expected_artifact_type", orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0) {
+		t.Fatalf("followup=%+v ok=%v result=%+v", followup, ok, result)
 	}
 }
 

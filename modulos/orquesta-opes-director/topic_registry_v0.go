@@ -94,15 +94,15 @@ func topicRegistryStatusForRecordV0(record OPESCausalArtifactRecordV0) string {
 		return strings.TrimSpace(status)
 	}
 	normalized := strings.ToLower(strings.TrimSpace(status))
-	if len(followupRefsForRecordV0(record)) > 0 || strings.Contains(normalized, "pendiente") {
-		return "pendiente_continuar"
-	}
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 && !record.CompleteJob {
 		return "pendiente_continuar"
 	}
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
 		!topicRegistryFinalPackageHasClosureEvidenceV0(record) {
 		return "pendiente_validacion_paquete_final"
+	}
+	if len(followupRefsForRecordV0(record)) > 0 || strings.Contains(normalized, "pendiente") {
+		return "pendiente_continuar"
 	}
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 {
 		return "paquete_final_local_verificable"

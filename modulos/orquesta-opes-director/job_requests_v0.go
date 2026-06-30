@@ -129,6 +129,11 @@ func followupWorkKindV0(record OPESCausalArtifactRecordV0) string {
 			return workKind
 		}
 	}
+	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+		record.CompleteJob &&
+		!topicRegistryFinalPackageHasClosureEvidenceV0(record) {
+		return "finalize_temario_package"
+	}
 	return "review_director_consolidation"
 }
 
@@ -175,6 +180,12 @@ func followupRefsForRecordV0(record OPESCausalArtifactRecordV0) []string {
 		strings.Contains(status, "pendiente") &&
 		len(refs) == 0 {
 		refs = append(refs, "final-package-pendiente-continuar")
+	}
+	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+		record.CompleteJob &&
+		len(refs) == 0 &&
+		!topicRegistryFinalPackageHasClosureEvidenceV0(record) {
+		refs = append(refs, "final-package-manifest-closure-evidence-required")
 	}
 	return compactStringsV0(refs)
 }

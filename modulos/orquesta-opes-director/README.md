@@ -17,6 +17,8 @@ Responsabilidad:
 - liberar un paquete final solo si `CompleteJob=true`, no quedan pendientes y
   viajan evidencias del `manifest_cierre.json` completo: HTML, RAG, audio,
   tests, visual y QA;
+- crear rework causal `finalize_temario_package` cuando un paquete final llega
+  con `CompleteJob=true` pero sin evidencias completas de manifest de cierre;
 - preservar estados estructurados de avance parcial del registro OPES, por
   ejemplo `texto_minimo_B_ok_pendiente_assets_html_tests_rag_audio_qa`, cuando
   vienen en el artefacto causal;
