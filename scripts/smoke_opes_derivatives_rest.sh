@@ -579,6 +579,43 @@ speech_synthesis_evidence_refs_present() {
   return 1
 }
 
+remote_qa_capability_available() {
+  local capability="${ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY:-}"
+  case "${capability,,}" in
+    1 | true | yes | y | si | available | enabled | ready | ok)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+remote_qa_evidence_refs_present() {
+  local refs="${ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS:-}"
+  refs="${refs//,/ }"
+  refs="${refs//;/ }"
+  local ref
+  for ref in $refs; do
+    if [[ "$ref" == evidence-ref-* || "$ref" == receipt-ref-* || "$ref" == artifact-ref-* ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+sequence_requires_remote_qa_provider() {
+  sequence_has_job_type "review_codex" ||
+    sequence_has_job_type "review_gemini" ||
+    sequence_has_job_type "review_claude" ||
+    sequence_has_job_type "review_agent_independent" ||
+    sequence_has_job_type "review_independent_agent" ||
+    sequence_has_job_type "review_pair_codex_gemini" ||
+    sequence_has_job_type "review_pair_codex_claude" ||
+    sequence_has_job_type "review_pair_gemini_claude" ||
+    sequence_has_job_type "review_agent_pair" ||
+    sequence_has_job_type "review_peer_pair" ||
+    sequence_has_job_type "review_pair"
+}
+
 compact_evidence_ref_present() {
   local refs="$1"
   refs="${refs//,/ }"
@@ -694,6 +731,22 @@ require_derivatives_real_preflight() {
     sequence_has_job_type "generate_audio_asset" &&
     ! speech_synthesis_evidence_refs_present; then
     echo "smoke derivados real bloqueado: speech_synthesis disponible requiere ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS con refs de capacidad/runner temporal" >&2
+    exit 2
+  fi
+  if [[ "$target_mode" == "run-until-finalize" ||
+    "$target_mode" == "run-until-final" ||
+    "$target_mode" == "drain-once" ]] &&
+    sequence_requires_remote_qa_provider &&
+    ! remote_qa_capability_available; then
+    echo "smoke derivados real bloqueado: revisiones remotas requieren ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available en la composicion temporal" >&2
+    exit 2
+  fi
+  if [[ "$target_mode" == "run-until-finalize" ||
+    "$target_mode" == "run-until-final" ||
+    "$target_mode" == "drain-once" ]] &&
+    sequence_requires_remote_qa_provider &&
+    ! remote_qa_evidence_refs_present; then
+    echo "smoke derivados real bloqueado: remote_qa_provider disponible requiere ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS con refs de capacidad/auth/cuota temporal" >&2
     exit 2
   fi
   if [[ -n "${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-}" &&

@@ -3096,6 +3096,8 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealAceptaScopeYGoalFirstV0(t *
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
 	)
 	if err != nil {
 		t.Fatalf("preflight err=%v stdout=%s stderr=%s", err, stdout, stderr)
@@ -3126,6 +3128,24 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealAceptaScopeProbeJSONV0(t *t
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
+	)
+	if err != nil {
+		t.Fatalf("preflight err=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "preflight_status=ok") {
+		t.Fatalf("stdout=%s stderr=%s", stdout, stderr)
+	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealNoExigeRemoteQASinRevisionRemotaV0(t *testing.T) {
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+		"ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=update_topic_registry,review_director_consolidation,assemble_topic",
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF=evidence-ref-scope-probe-preflight",
+		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
 	)
 	if err != nil {
 		t.Fatalf("preflight err=%v stdout=%s stderr=%s", err, stdout, stderr)
@@ -3154,6 +3174,8 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeProbeJSONFakeV0
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
 	)
 	if err == nil ||
 		!strings.Contains(stderr, "SCOPE_FILTER_CONFIRMED=1 requiere") {
@@ -3180,6 +3202,8 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeProbeJSONDeOtro
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
 	)
 	if err == nil ||
 		!strings.Contains(stderr, "SCOPE_FILTER_CONFIRMED=1 requiere") {
@@ -3206,6 +3230,8 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeProbeJSONNomina
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
 	)
 	if err == nil ||
 		!strings.Contains(stderr, "SCOPE_FILTER_CONFIRMED=1 requiere") {
@@ -3266,6 +3292,37 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSpeechSynthesisSinEv
 	}
 }
 
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinRemoteQAProviderV0(t *testing.T) {
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF=evidence-ref-scope-probe-preflight",
+		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+	)
+	if err == nil ||
+		!strings.Contains(stderr, "revisiones remotas requieren ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
+}
+
+func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaRemoteQASinEvidenciaV0(t *testing.T) {
+	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
+		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_CONFIRMED=1",
+		"ORQUESTA_OPES_BRIDGE_SCOPE_FILTER_EVIDENCE_REF=evidence-ref-scope-probe-preflight",
+		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
+	)
+	if err == nil ||
+		!strings.Contains(stderr, "REMOTE_QA_EVIDENCE_REFS") {
+		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
+	}
+}
+
 func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeConfirmadoSinEvidenciaV0(t *testing.T) {
 	stdout, stderr, err := runSmokeOPESDerivativesPreflightForTestV0(t,
 		"ORQUESTA_OPES_BRIDGE_PROGRAM_ID=program-ref-operadores-preflight",
@@ -3273,6 +3330,8 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaScopeConfirmadoSinEv
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
 	)
 	if err == nil ||
 		!strings.Contains(stderr, "SCOPE_FILTER_CONFIRMED=1 requiere") {
@@ -3286,6 +3345,8 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaProgramIDSinFiltroCo
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
 	)
 	if err == nil ||
 		!strings.Contains(stderr, "program_id documental no basta") {
@@ -3316,6 +3377,8 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinGoalFirstV0(t *te
 		"ORQUESTA_CODEX_GOAL_BACKEND=",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY=available",
 		"ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS=evidence-ref-tts-preflight",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY=available",
+		"ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS=evidence-ref-remote-qa-preflight",
 	)
 	if err == nil ||
 		!strings.Contains(stderr, "falta Orquesta temporal goal-first") {
