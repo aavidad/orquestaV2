@@ -1,10 +1,16 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
 func TestSelfProgrammingOnlyConfigV0AceptaPerfilAisladoV0(t *testing.T) {
@@ -26,6 +32,51 @@ func TestSelfProgrammingOnlyConfigV0AceptaPerfilAisladoV0(t *testing.T) {
 	}
 	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envCodexGoalBackendV0); got != codexGoalBackendAppServerTmuxV0 {
 		t.Fatalf("backend=%q", got)
+	}
+}
+
+func TestSelfProgrammingOnlyStatusV0ExponePerfilAisladoSinFiltrarRootV0(t *testing.T) {
+	root := t.TempDir()
+	setSelfProgrammingOnlyBaseEnvForTestV0(t, root)
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	tracker := orquestaserver.NewStatusTrackerV0(config, time.Unix(0, 0).UTC())
+	tracker.MarkServingV0("127.0.0.1:19039", time.Unix(1, 0).UTC())
+	handler := orquestaserver.NewHandlerV0(orquestaserver.HandlerConfigV0{Tracker: tracker})
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, orquestaserver.ServerStatusEndpointV0, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, root) {
+		t.Fatalf("status filtra self-programming root %q: %s", root, body)
+	}
+	var status orquestaserver.ServerPublicStatusV0
+	if err := json.Unmarshal(rec.Body.Bytes(), &status); err != nil {
+		t.Fatalf("decode status: %v body=%s", err, body)
+	}
+	settings := status.EffectiveConfig.Settings
+	if got := effectiveSettingValueForTestV0(settings, envServerSelfProgrammingOnlyV0); got != "true" {
+		t.Fatalf("self programming status setting=%q", got)
+	}
+	rootSetting := effectiveSettingForTestV0(settings, envServerSelfProgrammingRootV0)
+	if rootSetting.Value != orquestaserver.ServerStatusConfigHiddenValueV0 || !rootSetting.Sensitive {
+		t.Fatalf("self root no redactado: %+v", rootSetting)
+	}
+	if got := effectiveSettingValueForTestV0(settings, envCodexGoalBackendV0); got != codexGoalBackendAppServerTmuxV0 {
+		t.Fatalf("goal backend status=%q", got)
+	}
+	if status.ConfigVisibility != orquestaserver.ServerStatusConfigVisibilityPublicRedactedV0 ||
+		!containsStringV0(status.HiddenConfigFields, "effective_config."+envServerSelfProgrammingRootV0) ||
+		status.ProjectWorkDirRef == "" ||
+		status.RuntimeWorkDirRef == "" ||
+		status.ResidentDirectorStatus != "disabled" {
+		t.Fatalf("status publico insuficiente: %+v", status)
 	}
 }
 

@@ -91,7 +91,9 @@ El Goal residente no debe descubrir el proyecto desde cero. Debe recibir
 3. `docker inspect` confirma usuario `10001:10001`, `CapDrop=["ALL"]`,
    `no-new-privileges:true`, binds solo bajo `/srv/orquesta-self` y puerto
    ligado a `127.0.0.1`.
-4. `/api/v0/server/status` muestra goal-first y no muestra OPES activo.
+4. `/api/v0/server/status` muestra `ORQUESTA_SERVER_SELF_PROGRAMMING_ONLY=true`,
+   `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`, redacta
+   `ORQUESTA_SERVER_SELF_PROGRAMMING_ROOT` y no muestra OPES activo.
 
 ## Evidencia 2026-06-29: Objective compacto en idle Goal
 
