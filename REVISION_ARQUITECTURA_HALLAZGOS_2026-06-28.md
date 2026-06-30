@@ -79,8 +79,9 @@ progreso sobreviva a cualquier corte de sesión.
   `orquesta-domain-work-memory` (3, tests), `orquesta-domain-work/contracttest` (3, tests).
   Son dobles de test / backends alternativos por inyección. Sanos.
 - **ÚNICO candidato real a código muerto:** `orquesta-state-file/outbox` → **0 importadores,
-  ni siquiera en tests**. Verificar si lo usa algún `main` por wiring dinámico o build tag; si no,
-  es eliminable. **NO tocar desde esta revisión** — queda para el programador.
+  ni siquiera en tests**. Verificacion posterior 2026-07-01: sin build tags ni wiring dinamico
+  detectado; retirado en el cierre `ARCH-ORQ-20260630-004`. El ledger file-based vivo queda en
+  `orquesta-persistence`.
 - **Conclusión:** el repo está sorprendentemente limpio de código muerto a nivel de paquete.
 
 ### H7 — Higiene de árbol de trabajo: 17 GB de datos de runtime (no es código) · severidad: media (operativa)

@@ -3840,8 +3840,9 @@ Backlog: `T64 director-cycle-source-of-truth-sync`.
 ```text
 ID: RAIL-CAND-DIRECTOR-CYCLE-RESIDENT-001
 Origen: scanner backlog 2026-05-24 decimonovena pasada.
-Casos: existen pruebas locales de cycle, scheduler, runner, state-file/outbox y
-dispatch, pero falta smoke de composicion residente que demuestre
+Casos: existen pruebas locales de cycle, scheduler, runner, state-file/outbox
+(referencia historica retirada despues por `ARCH-ORQ-20260630-004`) y dispatch,
+pero falta smoke de composicion residente que demuestre
 `DirectorCycleStepV0` con `FileOutboxLedgerV0`, ACK parcial, reinicio y reentrada
 sin duplicar comandos ni cerrar con outbox pendiente.
 Decision 2026-05-25: anadido smoke focal de servidor temporal en

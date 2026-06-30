@@ -92,7 +92,7 @@ Regla operativa:
 | ARCH-ORQ-20260630-001 | en investigacion | Core workflow | `orquesta-core-workflow` concentra muchos ficheros y es hub de imports | cambios pequenos tienen blast radius alto y hacen dificil aislar invariantes | `REVISION_ARQUITECTURA_HALLAZGOS_2026-06-28.md` H3; frontera neutral sigue verde por `architecture_boundaries_test.go` | No refactor masivo ahora; abrir plan de troceo por subdominios solo con pruebas de frontera y migracion incremental |
 | ARCH-ORQ-20260630-002 | en investigacion | Hotspots UI/stack/server | ficheros monoliticos grandes, especialmente render HTML Nueva App y stack Codex | mezcla de presentacion, wiring y logica aumenta regresiones y coste de review | `REVISION_ARQUITECTURA_HALLAZGOS_2026-06-28.md` H5 | Trocear solo al tocar esas zonas por bug/feature, con tests focales antes/despues |
 | ARCH-ORQ-20260630-003 | en investigacion | Operacion local | `.orquesta-runtime` ocupa aprox. 17 GB y purgas antiguas cientos de MB | busquedas/herramientas de auditoria lentas y presion de IO/disco | `du -sh .orquesta-runtime .orquesta-purged-*` local | Definir retencion/limpieza opt-in; no borrar artefactos sin orden porque pueden ser evidencia |
-| ARCH-ORQ-20260630-004 | en investigacion | Codigo muerto | `orquesta-state-file/outbox` parece sin importadores actuales salvo referencia historica | superficie legacy puede confundir arquitectura de persistencia/outbox | `REVISION_ARQUITECTURA_HALLAZGOS_2026-06-28.md` H6; `rg` solo encuentra referencia historica en incidencia | Verificar build tags/wiring antes de borrar; si no hay uso, retirar en commit separado con `go test ./...` |
+| ARCH-ORQ-20260630-004 | cerrado | Codigo muerto | `orquesta-state-file/outbox` no tenia importadores externos y duplicaba mentalmente el outbox file-based vivo | superficie legacy podia confundir arquitectura de persistencia/outbox | `rg` sin importadores Go externos; `go list` solo listaba el propio paquete; sin build tags `//go:build` ni `// +build`; referencias restantes eran docs historicos | Cierre: paquete retirado en commit separado; el ledger file-based vivo queda en `orquesta-persistence`; mantener `go test ./...` como evidencia de no regresion |
 
 ## Lectura de conjunto inicial
 
@@ -185,7 +185,11 @@ Cierre: el adaptador real usa `codebase-memory-mcp cli` detras del broker centra
 Revision operativa posterior 2026-06-30: PIDs `3345397`, `3345721`,
 `3346067`, `3346458`, `3346742` y `3347165`, hijos de un Codex antiguo y a
 0% CPU, quedaron como instancias duplicadas de `codebase-memory-mcp`; se pararon
-con `SIGTERM` y no quedaron procesos vivos.
+con `SIGTERM` y no quedaron procesos vivos. Nueva observacion local
+2026-07-01: un intento directo de `codebase-memory-mcp/search_code` devolvio
+`Transport closed` y dejo PIDs `74610` y `74987`; ambos se pararon con
+`SIGTERM`. La conclusion no cambia: fuera del broker central opt-in, Codebase
+puede dejar procesos vivos y no debe usarse por defecto en subagentes.
 
 Revision adicional 2026-06-30 sobre BUG-030/037/040: se integra el tramo
 remoto de metadata operacional OPES para goal-first. El ledger externo conserva

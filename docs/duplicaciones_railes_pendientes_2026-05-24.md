@@ -2183,7 +2183,8 @@ Prioridad media:
   `max_records`, corrupcion recuperable y error publico redactado.
 - Estado local 2026-05-26: T148 queda cerrado para el write-set asignado.
   Bridge externo, ledger `domain_work`, `domain-work-file`, `run-file`,
-  `state-file/outbox` y stores Codex delivery leen snapshots con limite de
+  `state-file/outbox` (referencia historica retirada despues por
+  `ARCH-ORQ-20260630-004`) y stores Codex delivery leen snapshots con limite de
   bytes, `max_records` y errores compactos; no asumen estado vacio ante
   sobrelimite, corrupcion o schema invalido. T98/T101/T104 no se reabren.
 

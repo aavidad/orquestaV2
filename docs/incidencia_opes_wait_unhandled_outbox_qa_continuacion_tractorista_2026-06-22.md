@@ -66,7 +66,10 @@ Commit pendiente en la rama `trabajo/plataforma-agentes`:
 
 - `go test -count=1 ./modulos/orquesta-app-codex-stack`.
 - `go test -count=1 ./modulos/orquesta-mcp`.
-- `go test -count=1 ./modulos/orquesta-persistence ./modulos/orquesta-state-file/outbox ./modulos/orquesta-orchestration-core`.
+- `go test -count=1 ./modulos/orquesta-persistence ./modulos/orquesta-orchestration-core`.
+  Nota 2026-07-01: el paquete historico `./modulos/orquesta-state-file/outbox`
+  fue retirado por `ARCH-ORQ-20260630-004`; el ledger file-based vivo queda en
+  `orquesta-persistence`.
 
 Casos nuevos:
 

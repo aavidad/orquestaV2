@@ -9102,7 +9102,8 @@ workflow durable: deben viajar por refs de artefacto/evidencia.
 Cierre T148 2026-05-26: los lectores file-based del alcance asignado declaran
 limite de bytes y `max_records` por tipo antes de reconstruir estado. Bridge
 externo, ledger de entrega `domain_work`, `domain-work-file`, `run-file`,
-`state-file/outbox` y stores Codex delivery devuelven errores compactos de
+`state-file/outbox` (historico; retirado despues por `ARCH-ORQ-20260630-004`
+al no tener importadores vivos) y stores Codex delivery devuelven errores compactos de
 sobrelimite/corrupcion/schema sin paths ni cuerpos crudos, y no degradan un
 ledger ilegible a estado vacio. T104, T98 y T101 conservan ownership de
 escritura durable, claim/recovery e idempotencia causal.

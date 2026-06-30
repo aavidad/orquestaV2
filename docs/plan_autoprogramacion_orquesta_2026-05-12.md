@@ -66,8 +66,10 @@ Postgres ni otro backend.
 1. `state-file core`: cerrado en version inicial. Conector durable para
    `RunStore`, `EventSink`, `WorkflowTaskStore/Writer` y
    `AgentProcessRegistry`.
-2. `state-file outbox`: cerrado en version inicial. Conector durable para
-   pending, claim y ack del outbox.
+2. `state-file outbox`: historico. Fue cerrado en version inicial como conector
+   durable para pending, claim y ack del outbox, pero se retiro despues por
+   `ARCH-ORQ-20260630-004` al no tener importadores vivos; el ledger file-based
+   actual queda en `orquesta-persistence`.
 3. `state-file control`: cerrado en version inicial. Conector durable para
    `RunControl`, `RunQueue` y `AppChangeRecordStore`.
 4. `mcp/autoprogramacion`: version inicial disponible para validar requests de
