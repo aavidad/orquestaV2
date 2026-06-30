@@ -211,11 +211,16 @@ app_server_process_count_for_socket() {
     return 0
   fi
   ps -eo pid=,args= | python3 -c '
+import os
 import sys
 socket = sys.argv[1]
+current_pid = str(os.getpid())
 count = 0
 for line in sys.stdin:
-    if "codex" in line and "app-server" in line and socket in line:
+    parts = line.strip().split(None, 1)
+    if len(parts) != 2 or parts[0] == current_pid:
+        continue
+    if "codex" in parts[1] and "app-server" in parts[1] and socket in parts[1]:
         count += 1
 print(count)
 ' "$socket_path"
@@ -308,6 +313,15 @@ assert_app_server_tmux_shutdown_ready() {
   fi
   echo "app_server_tmux_shutdown_ready=true"
   echo "app_server_tmux_processes_alive=0"
+}
+
+fail_after_app_server_tmux_shutdown_ready() {
+  local status="${1:-1}"
+  if [[ "$goal_backend" == "app_server_tmux" && -n "$base_url" ]]; then
+    echo "goal-first no cerro aceptado; comprobando shutdown app_server_tmux antes de fallar" >&2
+    assert_app_server_tmux_shutdown_ready
+  fi
+  exit "$status"
 }
 
 need_cmd python3
@@ -572,7 +586,7 @@ JSON
   if [[ "$observe_status" -lt 200 || "$observe_status" -gt 299 ]]; then
     echo "observe HTTP $observe_status" >&2
     smoke_print_file_excerpt "$observe_response"
-    exit 1
+    fail_after_app_server_tmux_shutdown_ready 1
   fi
   goal_status="$(json_get "$observe_response" "goal_status")"
   run_status="$(json_get "$observe_response" "run_status")"
@@ -587,7 +601,7 @@ JSON
   if [[ "$goal_status" == "blocked" || "$goal_status" == "invalid" || "$run_status" == "bloqueada" || "$closure_status" == "blocked" ]]; then
     echo "goal-first termino bloqueado; respuesta final:" >&2
     smoke_print_file_excerpt "$observe_response"
-    exit 1
+    fail_after_app_server_tmux_shutdown_ready 1
   fi
   sleep "$sleep_seconds"
 done
@@ -595,7 +609,7 @@ done
 if [[ "$terminal" != "1" ]]; then
   echo "timeout esperando cierre aceptado goal-first; ultimo observe:" >&2
   smoke_print_file_excerpt "$observe_response"
-  exit 1
+  fail_after_app_server_tmux_shutdown_ready 1
 fi
 
 artifact_count="$(python3 - "$observe_response" <<'PY'

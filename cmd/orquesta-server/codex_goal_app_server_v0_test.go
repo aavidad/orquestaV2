@@ -287,6 +287,45 @@ func TestServerCodexAppServerGoalBackendV0ObservaPorThreadReadSiGoalGetNoExisteV
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0BloqueaThreadReadSinResultadoTrasTimeoutV0(t *testing.T) {
+	now := time.Date(2026, 6, 30, 3, 20, 0, 0, time.UTC)
+	runtime := &serverCodexAppServerGoalRuntimeV0{}
+	runtime.recordStartedAtV0("thread-ref-goal-read-timeout-001", now.Add(-3*time.Second))
+	protocol := &fakeCodexAppServerProtocolV0{
+		getGoalErr: codexAppServerCallErrorV0{Code: "codex_app_server_rpc_method_not_found"},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-read-timeout-001",
+			Status: serverCodexAppServerThreadStatusV0("idle"),
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		CWD:      t.TempDir(),
+		Runtime:  runtime,
+		Timeout:  2 * time.Second,
+		Now:      func() time.Time { return now },
+	}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         "goal-ref-codex-app-server-read-timeout-001",
+		ExternalGoalRef: "thread-ref-goal-read-timeout-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0 fallback: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusBlockedV0 ||
+		receipt.IssueCode != "codex_app_server_goal_result_missing_after_timeout" ||
+		receipt.Summary != "codex_app_server_goal_result_missing_after_timeout" ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-rpc-unsupported") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-missing-after-timeout") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get", "thread/read"}) {
+		t.Fatalf("calls=%v", protocol.calls)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0CompactaObjetivoLargoParaAppServerV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-long-objective"},

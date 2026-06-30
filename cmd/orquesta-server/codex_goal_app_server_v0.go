@@ -406,7 +406,42 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 		)
 		return receipt, nil
 	}
+	if timedOut, timeoutReceipt := backend.codexAppServerThreadReadGoalResultTimeoutV0(request, status, receipt); timedOut {
+		return timeoutReceipt, nil
+	}
 	return receipt, nil
+}
+
+func (backend serverCodexAppServerGoalBackendV0) codexAppServerThreadReadGoalResultTimeoutV0(
+	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
+	status string,
+	receipt orquestaruntimecodexgoal.CodexGoalObservationReceiptV0,
+) (bool, orquestaruntimecodexgoal.CodexGoalObservationReceiptV0) {
+	if status != orquestagoal.GoalStatusRunningV0 {
+		return false, receipt
+	}
+	timeout := backend.Timeout
+	if timeout <= 0 {
+		timeout = time.Duration(defaultCodexGoalTimeoutMSV0) * time.Millisecond
+	}
+	threadID := strings.TrimSpace(firstNonEmptyServerStackV0(receipt.ExternalGoalRef, request.ExternalGoalRef))
+	if timeout <= 0 || threadID == "" || backend.Runtime == nil {
+		return false, receipt
+	}
+	startedAt := backend.Runtime.ensureStartedAtV0(threadID, backend.nowCodexAppServerGoalV0())
+	if startedAt.IsZero() || backend.nowCodexAppServerGoalV0().Sub(startedAt) < timeout {
+		return false, receipt
+	}
+	receipt.Status = orquestagoal.GoalStatusBlockedV0
+	receipt.Summary = "codex_app_server_goal_result_missing_after_timeout"
+	receipt.IssueCode = "codex_app_server_goal_result_missing_after_timeout"
+	receipt.EvidenceRefs = compactServerStackStringsV0(append(
+		receipt.EvidenceRefs,
+		"evidence-ref-codex-app-server-goal-result-missing-after-timeout",
+	))
+	receipt.GoalRef = strings.TrimSpace(firstNonEmptyServerStackV0(receipt.GoalRef, request.GoalRef))
+	receipt.ExternalGoalRef = threadID
+	return true, receipt
 }
 
 func (backend serverCodexAppServerGoalBackendV0) fingerprintCodexAppServerThreadReadV0(
