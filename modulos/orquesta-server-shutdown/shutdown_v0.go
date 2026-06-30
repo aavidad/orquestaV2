@@ -24,6 +24,9 @@ func ShutdownServerV0(
 	if result, ok := missingRequiredServerShutdownDepsV0(deps); ok {
 		return result, nil
 	}
+	if result, ok, err := blockingActiveShutdownWorkV0(ctx, deps, command); err != nil || ok {
+		return result, err
+	}
 	candidates, err := deps.QueueReader.ListRunSchedulingCandidatesV0(
 		ctx,
 		queueReadRequestV0(command),

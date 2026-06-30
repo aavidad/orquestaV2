@@ -70,6 +70,8 @@ func (handler mcpServerShutdownHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r
 	status := http.StatusOK
 	if result.Estado == MCPServerShutdownEstadoErrorV0 {
 		status = http.StatusBadRequest
+	} else if result.Status == "active_goals_present" {
+		status = http.StatusConflict
 	}
 	writeMCPServerShutdownHTTPV0(w, status, result)
 }

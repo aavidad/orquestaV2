@@ -19,6 +19,7 @@ const (
 	ServerShutdownStatusNoRunControlReaderV0 = "run_control_reader_required"
 	ServerShutdownStatusNoRunControlWriterV0 = "run_control_writer_required"
 	ServerShutdownStatusRequesterDeniedV0    = "requester_not_authorized"
+	ServerShutdownStatusActiveGoalsPresentV0 = "active_goals_present"
 )
 
 type ServerShutdownCommandV0 struct {
@@ -48,6 +49,7 @@ type ServerShutdownDepsV0 struct {
 	CheckpointPreparer  PrepareAgentShutdownPortV0
 	Supervisor          RunSupervisorPortV0
 	StatsReader         RunStatsReaderPortV0
+	ActiveWorkReader    ActiveShutdownWorkReaderPortV0
 }
 
 type RunSupervisorPortV0 interface {
@@ -69,6 +71,35 @@ type PrepareAgentShutdownPortV0 interface {
 		context.Context,
 		PrepareAgentShutdownCommandV0,
 	) (PrepareAgentShutdownResultV0, error)
+}
+
+type ActiveShutdownWorkReaderPortV0 interface {
+	ReadActiveShutdownWorkV0(
+		context.Context,
+		ActiveShutdownWorkRequestV0,
+	) (ActiveShutdownWorkResultV0, error)
+}
+
+type ActiveShutdownWorkRequestV0 struct {
+	QueueRef      string   `json:"queue_ref,omitempty"`
+	AppRefs       []string `json:"app_refs,omitempty"`
+	CorrelationID string   `json:"correlation_id,omitempty"`
+	EvidenceRefs  []string `json:"evidence_refs,omitempty"`
+	MaxItems      int      `json:"max_items,omitempty"`
+}
+
+type ActiveShutdownWorkResultV0 struct {
+	ActiveWorks  []ActiveShutdownWorkV0 `json:"active_works,omitempty"`
+	EvidenceRefs []string               `json:"evidence_refs,omitempty"`
+}
+
+type ActiveShutdownWorkV0 struct {
+	Kind            string   `json:"kind,omitempty"`
+	RunRef          string   `json:"run_ref,omitempty"`
+	WorkRef         string   `json:"work_ref,omitempty"`
+	ExternalWorkRef string   `json:"external_work_ref,omitempty"`
+	Status          string   `json:"status,omitempty"`
+	EvidenceRefs    []string `json:"evidence_refs,omitempty"`
 }
 
 type PrepareAgentShutdownCommandV0 struct {
@@ -121,6 +152,8 @@ type ServerShutdownResultV0 struct {
 	CheckpointsPending         int                                          `json:"checkpoints_pending"`
 	CheckpointAgentsPending    int                                          `json:"checkpoint_agents_pending,omitempty"`
 	CheckpointDeadlinesExpired int                                          `json:"checkpoint_deadlines_expired,omitempty"`
+	ActiveWorkCount            int                                          `json:"active_work_count,omitempty"`
+	ActiveWorks                []ActiveShutdownWorkV0                       `json:"active_works,omitempty"`
 	Runs                       []ServerShutdownRunResultV0                  `json:"runs,omitempty"`
 	Supervisor                 *orquestarunsupervisor.RunSupervisorResultV0 `json:"supervisor,omitempty"`
 	EvidenceRefs               []string                                     `json:"evidence_refs,omitempty"`

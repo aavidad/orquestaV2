@@ -44,20 +44,31 @@ type MCPServerShutdownToolInputV0 struct {
 }
 
 type MCPServerShutdownToolResultV0 struct {
-	Estado                     string                   `json:"estado"`
-	RequestID                  string                   `json:"request_id,omitempty"`
-	CorrelationID              string                   `json:"correlation_id,omitempty"`
-	Status                     string                   `json:"status,omitempty"`
-	ShutdownReady              bool                     `json:"shutdown_ready"`
-	RunsRequested              int                      `json:"runs_requested"`
-	RunsStopped                int                      `json:"runs_stopped"`
-	AgentsInFlight             int                      `json:"agents_in_flight"`
-	CheckpointsPending         int                      `json:"checkpoints_pending"`
-	CheckpointAgentsPending    int                      `json:"checkpoint_agents_pending,omitempty"`
-	CheckpointDeadlinesExpired int                      `json:"checkpoint_deadlines_expired,omitempty"`
-	Runs                       []MCPServerShutdownRunV0 `json:"runs,omitempty"`
-	EvidenceRefs               []string                 `json:"evidence_refs,omitempty"`
-	Errores                    []MCPValidationIssueV0   `json:"errores_publicos,omitempty"`
+	Estado                     string                    `json:"estado"`
+	RequestID                  string                    `json:"request_id,omitempty"`
+	CorrelationID              string                    `json:"correlation_id,omitempty"`
+	Status                     string                    `json:"status,omitempty"`
+	ShutdownReady              bool                      `json:"shutdown_ready"`
+	RunsRequested              int                       `json:"runs_requested"`
+	RunsStopped                int                       `json:"runs_stopped"`
+	AgentsInFlight             int                       `json:"agents_in_flight"`
+	CheckpointsPending         int                       `json:"checkpoints_pending"`
+	CheckpointAgentsPending    int                       `json:"checkpoint_agents_pending,omitempty"`
+	CheckpointDeadlinesExpired int                       `json:"checkpoint_deadlines_expired,omitempty"`
+	ActiveWorkCount            int                       `json:"active_work_count,omitempty"`
+	ActiveWorks                []MCPServerShutdownWorkV0 `json:"active_works,omitempty"`
+	Runs                       []MCPServerShutdownRunV0  `json:"runs,omitempty"`
+	EvidenceRefs               []string                  `json:"evidence_refs,omitempty"`
+	Errores                    []MCPValidationIssueV0    `json:"errores_publicos,omitempty"`
+}
+
+type MCPServerShutdownWorkV0 struct {
+	Kind            string   `json:"kind,omitempty"`
+	RunRef          string   `json:"run_ref,omitempty"`
+	WorkRef         string   `json:"work_ref,omitempty"`
+	ExternalWorkRef string   `json:"external_work_ref,omitempty"`
+	Status          string   `json:"status,omitempty"`
+	EvidenceRefs    []string `json:"evidence_refs,omitempty"`
 }
 
 type MCPServerShutdownRunV0 struct {
@@ -83,7 +94,7 @@ func MCPServerShutdownDescriptorV0() MCPServerShutdownToolDescriptorV0 {
 		Name:        MCPServerShutdownToolNameV0,
 		Version:     MCPServerShutdownToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,queue_ref?,app_refs?,forced?,checkpoint_deadline_at?,max_ticks?,max_runs_per_tick?,max_executions?,requested_by?,reason?,idempotency_key?,evidence_refs?}",
-		Output:      "ok:{status,shutdown_ready,runs_requested,runs_stopped,agents_in_flight,checkpoint_agents_pending,checkpoint_deadlines_expired,runs?}|error:{errores_publicos}",
+		Output:      "ok:{status,shutdown_ready,runs_requested,runs_stopped,agents_in_flight,checkpoint_agents_pending,checkpoint_deadlines_expired,active_work_count,active_works?,runs?}|error:{errores_publicos}",
 		ResourceURI: MCPServerShutdownResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -91,6 +102,7 @@ func MCPServerShutdownDescriptorV0() MCPServerShutdownToolDescriptorV0 {
 			"solo el Director puede solicitar shutdown; los agentes solo preparan checkpoint/ACK",
 			"no para procesos ni toca runtime directamente",
 			"usa RunControl RunQueue Supervisor y stats por puertos",
+			"si hay trabajo goal-first activo, el apagado no forzado devuelve active_goals_present",
 		},
 	}
 }
@@ -134,6 +146,8 @@ func newMCPServerShutdownResultV0(
 		CheckpointsPending:         result.CheckpointsPending,
 		CheckpointAgentsPending:    result.CheckpointAgentsPending,
 		CheckpointDeadlinesExpired: result.CheckpointDeadlinesExpired,
+		ActiveWorkCount:            result.ActiveWorkCount,
+		ActiveWorks:                mcpServerShutdownActiveWorksV0(result.ActiveWorks),
 		Runs:                       mcpServerShutdownRunsV0(result.Runs),
 		EvidenceRefs:               compactStringsMCPV0(result.EvidenceRefs),
 		Errores:                    serverShutdownErrorsV0(result.Status),
@@ -206,6 +220,26 @@ func mcpServerShutdownRunsV0(
 	}
 	if out == nil {
 		return []MCPServerShutdownRunV0{}
+	}
+	return out
+}
+
+func mcpServerShutdownActiveWorksV0(
+	works []orquestaservershutdown.ActiveShutdownWorkV0,
+) []MCPServerShutdownWorkV0 {
+	out := make([]MCPServerShutdownWorkV0, 0, len(works))
+	for _, work := range works {
+		out = append(out, MCPServerShutdownWorkV0{
+			Kind:            strings.TrimSpace(work.Kind),
+			RunRef:          strings.TrimSpace(work.RunRef),
+			WorkRef:         strings.TrimSpace(work.WorkRef),
+			ExternalWorkRef: strings.TrimSpace(work.ExternalWorkRef),
+			Status:          strings.TrimSpace(work.Status),
+			EvidenceRefs:    compactStringsMCPV0(work.EvidenceRefs),
+		})
+	}
+	if out == nil {
+		return []MCPServerShutdownWorkV0{}
 	}
 	return out
 }

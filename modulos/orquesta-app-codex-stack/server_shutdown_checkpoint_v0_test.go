@@ -10,6 +10,7 @@ import (
 
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
@@ -134,6 +135,56 @@ func TestStackShutdownStatsV0ExponeLivenessDeAgentesObsoletos(t *testing.T) {
 		stats.AgentsRunningStale != 1 ||
 		stats.AgentsLost != 0 {
 		t.Fatalf("stats=%+v", stats)
+	}
+}
+
+func TestStackShutdownActiveWorkReaderV0ListaGoalFirstActivo(t *testing.T) {
+	fixture := newStackShutdownCheckpointFixtureV0(t)
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	fixture.preparer.Config.Stores.AppGoalStateStore = goalStates
+	runRef := "run-ref-shutdown-goal-active-001"
+	goalRef := "goal-ref-shutdown-active-001"
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			GoalRef:   goalRef,
+			RunRef:    runRef,
+			Objective: "probar bloqueo de shutdown con goal activo",
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{
+				Path:    "docs/shutdown_active_goal.md",
+				Purpose: "test",
+			}},
+			EvidenceRefs: []string{"goal-state-ref-shutdown-active"},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: "external-goal-ref-shutdown-active-001",
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := stackShutdownActiveWorkReaderV0{
+		Config: fixture.preparer.Config,
+	}.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{
+		MaxItems: 10,
+	})
+	if err != nil {
+		t.Fatalf("ReadActiveShutdownWorkV0: %v", err)
+	}
+	if len(result.ActiveWorks) != 1 ||
+		result.ActiveWorks[0].Kind != "goal_first" ||
+		result.ActiveWorks[0].RunRef != runRef ||
+		result.ActiveWorks[0].WorkRef != goalRef ||
+		result.ActiveWorks[0].ExternalWorkRef != "external-goal-ref-shutdown-active-001" ||
+		result.ActiveWorks[0].Status != orquestagoal.GoalStatusRunningV0 ||
+		!hasStackShutdownEvidenceForTestV0(result.EvidenceRefs, "goal-state-ref-shutdown-active") {
+		t.Fatalf("result=%+v", result)
 	}
 }
 

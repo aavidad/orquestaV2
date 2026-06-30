@@ -132,6 +132,46 @@ func TestMCPServerShutdownToolExecutorV0RechazaAgente(t *testing.T) {
 	}
 }
 
+func TestMCPServerShutdownToolExecutorV0ExponeGoalsActivos(t *testing.T) {
+	control := &fakeMCPServerShutdownControlV0{
+		states: map[string]orquestaruncontrol.RunControlStateV0{},
+	}
+	executor := NewMCPServerShutdownToolExecutorV0(orquestaservershutdown.ServerShutdownDepsV0{
+		QueueReader:      fakeMCPServerShutdownQueueV0{},
+		RunControlReader: control,
+		RunControlWriter: control,
+		ActiveWorkReader: fakeMCPServerShutdownActiveWorkV0{
+			works: []orquestaservershutdown.ActiveShutdownWorkV0{{
+				Kind:            "goal_first",
+				RunRef:          "run-ref-goal-active-001",
+				WorkRef:         "goal-ref-active-001",
+				ExternalWorkRef: "external-goal-ref-active-001",
+				Status:          "running",
+				EvidenceRefs:    []string{"goal-state-ref-active-001"},
+			}},
+		},
+	})
+
+	result, err := executor.Execute(context.Background(), MCPServerShutdownToolInputV0{
+		RequestID:   "req-active-goals-shutdown",
+		RequestedBy: "orquesta-director",
+		Reason:      "apagado no forzado",
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPServerShutdownEstadoOKV0 ||
+		result.ShutdownReady ||
+		result.Status != orquestaservershutdown.ServerShutdownStatusActiveGoalsPresentV0 ||
+		result.ActiveWorkCount != 1 ||
+		len(result.ActiveWorks) != 1 ||
+		result.ActiveWorks[0].RunRef != "run-ref-goal-active-001" ||
+		result.ActiveWorks[0].ExternalWorkRef != "external-goal-ref-active-001" ||
+		control.stop.RunRef != "" {
+		t.Fatalf("result=%+v stop=%+v", result, control.stop)
+	}
+}
+
 func TestMCPServerShutdownRunsV0ExponeCheckpointPendientePorAgente(t *testing.T) {
 	runs := mcpServerShutdownRunsV0([]orquestaservershutdown.ServerShutdownRunResultV0{{
 		RunRef:                        "run-ref-shutdown-pending-001",
@@ -247,4 +287,17 @@ func (fake fakeMCPServerShutdownStatsV0) ReadRunShutdownStatsV0(
 	request orquestaservershutdown.RunShutdownStatsRequestV0,
 ) (orquestaservershutdown.RunShutdownStatsV0, error) {
 	return fake.stats[request.RunRef], nil
+}
+
+type fakeMCPServerShutdownActiveWorkV0 struct {
+	works []orquestaservershutdown.ActiveShutdownWorkV0
+}
+
+func (fake fakeMCPServerShutdownActiveWorkV0) ReadActiveShutdownWorkV0(
+	context.Context,
+	orquestaservershutdown.ActiveShutdownWorkRequestV0,
+) (orquestaservershutdown.ActiveShutdownWorkResultV0, error) {
+	return orquestaservershutdown.ActiveShutdownWorkResultV0{
+		ActiveWorks: append([]orquestaservershutdown.ActiveShutdownWorkV0(nil), fake.works...),
+	}, nil
 }

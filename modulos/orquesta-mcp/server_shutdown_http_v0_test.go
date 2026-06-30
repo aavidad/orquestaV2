@@ -63,6 +63,49 @@ func TestMCPServerShutdownHTTPHandlerV0MetodoYExecutorNil(t *testing.T) {
 	}
 }
 
+func TestMCPServerShutdownHTTPHandlerV0ActiveGoalsDevuelveConflict(t *testing.T) {
+	executor := &fakeMCPServerShutdownHTTPExecutorV0{
+		result: MCPServerShutdownToolResultV0{
+			Estado:          MCPServerShutdownEstadoOKV0,
+			CorrelationID:   "corr-active-goals-http",
+			Status:          "active_goals_present",
+			ShutdownReady:   false,
+			ActiveWorkCount: 1,
+			ActiveWorks: []MCPServerShutdownWorkV0{{
+				Kind:    "goal_first",
+				RunRef:  "run-active-goal-http",
+				WorkRef: "goal-active-http",
+				Status:  "running",
+			}},
+		},
+	}
+	body := bytes.NewBuffer(nil)
+	_ = json.NewEncoder(body).Encode(MCPServerShutdownToolInputV0{
+		RequestID:   "req-active-goals-http",
+		RequestedBy: "orquesta-director",
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, MCPServerShutdownHTTPPathV0, body)
+
+	NewMCPServerShutdownHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict ||
+		rec.Header().Get("X-Correlation-ID") != "corr-active-goals-http" {
+		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	var result MCPServerShutdownToolResultV0
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.ShutdownReady ||
+		result.Status != "active_goals_present" ||
+		result.ActiveWorkCount != 1 ||
+		len(result.ActiveWorks) != 1 ||
+		result.ActiveWorks[0].RunRef != "run-active-goal-http" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPServerShutdownHTTPHandlerV0NoPropagaErrorNoCatalogado(t *testing.T) {
 	executor := &fakeMCPServerShutdownHTTPExecutorV0{
 		err: errors.New("payload_invalido: payload en /home/alberto/Trabajo/orquesta/secreto bearer sk-123456789"),

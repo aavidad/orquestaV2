@@ -14,6 +14,7 @@ type serverShutdownDepsForTestV0 struct {
 	checkpoint *fakeShutdownCheckpointPreparerV0
 	supervisor *fakeShutdownSupervisorV0
 	stats      *fakeShutdownStatsV0
+	active     *fakeShutdownActiveWorkV0
 	events     *[]string
 }
 
@@ -33,6 +34,7 @@ func newServerShutdownDepsForTestV0(
 		},
 		supervisor: &fakeShutdownSupervisorV0{},
 		stats:      &fakeShutdownStatsV0{stats: map[string]RunShutdownStatsV0{}},
+		active:     &fakeShutdownActiveWorkV0{},
 		events:     &events,
 	}
 	deps.control.events = deps.events
@@ -49,6 +51,7 @@ func (deps serverShutdownDepsForTestV0) deps() ServerShutdownDepsV0 {
 		CheckpointPreparer:  deps.checkpoint,
 		Supervisor:          deps.supervisor,
 		StatsReader:         deps.stats,
+		ActiveWorkReader:    deps.active,
 	}
 }
 
@@ -207,4 +210,23 @@ func (fake *fakeShutdownStatsV0) ReadRunShutdownStatsV0(
 	request RunShutdownStatsRequestV0,
 ) (RunShutdownStatsV0, error) {
 	return fake.stats[request.RunRef], nil
+}
+
+type fakeShutdownActiveWorkV0 struct {
+	works       []ActiveShutdownWorkV0
+	evidence    []string
+	calls       int
+	lastRequest ActiveShutdownWorkRequestV0
+}
+
+func (fake *fakeShutdownActiveWorkV0) ReadActiveShutdownWorkV0(
+	_ context.Context,
+	request ActiveShutdownWorkRequestV0,
+) (ActiveShutdownWorkResultV0, error) {
+	fake.calls++
+	fake.lastRequest = request
+	return ActiveShutdownWorkResultV0{
+		ActiveWorks:  append([]ActiveShutdownWorkV0(nil), fake.works...),
+		EvidenceRefs: append([]string(nil), fake.evidence...),
+	}, nil
 }

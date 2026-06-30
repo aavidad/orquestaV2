@@ -2,7 +2,9 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"strings"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
@@ -22,6 +24,7 @@ func serverShutdownExecutorV0(
 			CheckpointPreparer:  stackShutdownCheckpointPreparerV0{Config: config},
 			Supervisor:          stackShutdownSupervisorV0{Stack: stack},
 			StatsReader:         stackShutdownStatsReaderV0{Config: config},
+			ActiveWorkReader:    stackShutdownActiveWorkReaderV0{Config: config},
 		},
 	)
 }
@@ -42,6 +45,46 @@ func (supervisor stackShutdownSupervisorV0) RunGlobalSupervisorV0(
 
 type stackShutdownStatsReaderV0 struct {
 	Config ConfigV0
+}
+
+type stackShutdownActiveWorkReaderV0 struct {
+	Config ConfigV0
+}
+
+func (reader stackShutdownActiveWorkReaderV0) ReadActiveShutdownWorkV0(
+	ctx context.Context,
+	request orquestaservershutdown.ActiveShutdownWorkRequestV0,
+) (orquestaservershutdown.ActiveShutdownWorkResultV0, error) {
+	if reader.Config.Stores.AppGoalStateStore == nil {
+		return orquestaservershutdown.ActiveShutdownWorkResultV0{}, nil
+	}
+	lister, ok := reader.Config.Stores.AppGoalStateStore.(orquestagoal.GoalWorkStateListPortV0)
+	if !ok {
+		return orquestaservershutdown.ActiveShutdownWorkResultV0{}, nil
+	}
+	states, err := lister.ListGoalWorkStatesV0(ctx, orquestagoal.GoalWorkStateListRequestV0{
+		ActiveOnly: true,
+		MaxItems:   request.MaxItems,
+	})
+	if err != nil {
+		return orquestaservershutdown.ActiveShutdownWorkResultV0{}, err
+	}
+	out := orquestaservershutdown.ActiveShutdownWorkResultV0{}
+	for _, state := range states {
+		if !orquestagoal.GoalWorkStatePendingObservationV0(state) {
+			continue
+		}
+		out.ActiveWorks = append(out.ActiveWorks, orquestaservershutdown.ActiveShutdownWorkV0{
+			Kind:            "goal_first",
+			RunRef:          strings.TrimSpace(state.RunRef),
+			WorkRef:         strings.TrimSpace(state.GoalRef),
+			ExternalWorkRef: strings.TrimSpace(state.ExternalGoalRef),
+			Status:          strings.TrimSpace(state.Status),
+			EvidenceRefs:    compactStringsV0(state.EvidenceRefs),
+		})
+		out.EvidenceRefs = compactStringsV0(append(out.EvidenceRefs, state.EvidenceRefs...))
+	}
+	return out, nil
 }
 
 func (reader stackShutdownStatsReaderV0) ReadRunShutdownStatsV0(

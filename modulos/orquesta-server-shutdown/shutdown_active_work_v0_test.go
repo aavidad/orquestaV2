@@ -1,0 +1,75 @@
+package orquestaservershutdown
+
+import (
+	"context"
+	"reflect"
+	"testing"
+
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
+)
+
+func TestShutdownServerV0NoForzadoBloqueaConGoalActivo(t *testing.T) {
+	deps := newServerShutdownDepsForTestV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		{RunRef: "run-goal-active", AppRef: "app-a", Status: "ready"},
+	})
+	deps.active.works = []ActiveShutdownWorkV0{{
+		Kind:            "goal_first",
+		RunRef:          "run-goal-active",
+		WorkRef:         "goal-ref-001",
+		ExternalWorkRef: "external-goal-ref-001",
+		Status:          "running",
+		EvidenceRefs:    []string{"goal-state-ref-run-goal-active"},
+	}}
+	deps.active.evidence = []string{"goal-active-list-ref"}
+
+	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
+		RequestedBy:   "orquesta-director",
+		Reason:        "apagado no forzado con goal activo",
+		CorrelationID: "corr-active-goal-shutdown",
+		EvidenceRefs:  []string{"operator-shutdown-request"},
+	})
+	if err != nil {
+		t.Fatalf("ShutdownServerV0: %v", err)
+	}
+	if result.ShutdownReady ||
+		result.Status != ServerShutdownStatusActiveGoalsPresentV0 ||
+		result.ActiveWorkCount != 1 ||
+		len(result.ActiveWorks) != 1 ||
+		result.ActiveWorks[0].RunRef != "run-goal-active" ||
+		result.ActiveWorks[0].WorkRef != "goal-ref-001" ||
+		len(deps.control.stopped) != 0 ||
+		deps.supervisor.calls != 0 {
+		t.Fatalf("result=%+v stopped=%v supervisor=%+v", result, deps.control.stopped, deps.supervisor)
+	}
+	if !serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-active-goals-present") {
+		t.Fatalf("evidence_refs no incluye bloqueo active goals: %+v", result.EvidenceRefs)
+	}
+}
+
+func TestShutdownServerV0ForzadoNoBloqueaConGoalActivo(t *testing.T) {
+	deps := newServerShutdownDepsForTestV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		{RunRef: "run-goal-active-force", AppRef: "app-a", Status: "ready"},
+	})
+	deps.active.works = []ActiveShutdownWorkV0{{
+		Kind:    "goal_first",
+		RunRef:  "run-goal-active-force",
+		WorkRef: "goal-ref-force",
+		Status:  "running",
+	}}
+	deps.stats.stats["run-goal-active-force"] = RunShutdownStatsV0{RunRef: "run-goal-active-force"}
+
+	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
+		Forced:      true,
+		RequestedBy: "orquesta-director",
+		Reason:      "apagado forzado con goal activo",
+	})
+	if err != nil {
+		t.Fatalf("ShutdownServerV0: %v", err)
+	}
+	if !result.ShutdownReady ||
+		result.Status != ServerShutdownStatusReadyV0 ||
+		!reflect.DeepEqual(deps.control.stopped, []string{"run-goal-active-force"}) ||
+		deps.active.calls != 0 {
+		t.Fatalf("result=%+v stopped=%v active_calls=%d", result, deps.control.stopped, deps.active.calls)
+	}
+}
