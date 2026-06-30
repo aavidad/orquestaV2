@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -79,13 +80,55 @@ func TestNewHTTPHandlerV0InyectaNuevaAppIntakeAssistantV0(t *testing.T) {
 	}
 }
 
-type appGatewayNuevaAppIntakeAssistantFakeV0 struct{}
+func TestNewHTTPHandlerV0PropagaFallbackPublicoSiNuevaAppIntakeAssistantFallaV0(t *testing.T) {
+	handler := NewHTTPHandlerV0(ConfigV0{
+		Timeout: time.Second,
+		AppIntakeAssistant: appGatewayNuevaAppIntakeAssistantFakeV0{
+			err: errors.New("assistant unavailable"),
+		},
+	})
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(orquestaweb.WebNuevaAppIntakeGuidedRequestV0{
+		SessionID: "session-app-gateway-guided-assistant-fallback",
+		Locale:    "es",
+		Need:      "Quiero una app web con mapas",
+	}); err != nil {
+		t.Fatalf("encode request: %v", err)
+	}
 
-func (appGatewayNuevaAppIntakeAssistantFakeV0) BuildNuevaAppIntakeGuidedTurnV0(
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, orquestahttpgateway.RouteAppIntakeGuidedTurnV0, &body)
+	req.Header.Set("Content-Type", "application/json")
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var out orquestaweb.WebNuevaAppIntakeGuidedResponseV0
+	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.AssistantStatus != orquestaweb.WebNuevaAppIntakeAssistantStatusFallbackLocalV0 ||
+		len(out.Warnings) != 1 ||
+		out.Warnings[0].Code != orquestaweb.WebNuevaAppIntakeWarningAssistantFallbackLocalV0 ||
+		out.Session.Form.Integraciones[0].Tipo != "maps" {
+		t.Fatalf("fallback no propagado: %+v", out)
+	}
+}
+
+type appGatewayNuevaAppIntakeAssistantFakeV0 struct {
+	err error
+}
+
+func (fake appGatewayNuevaAppIntakeAssistantFakeV0) BuildNuevaAppIntakeGuidedTurnV0(
 	_ context.Context,
 	_ orquestaweb.WebNuevaAppIntakeGuidedRequestV0,
 	_ orquestaweb.WebNuevaAppIntakeSessionV0,
 ) (orquestaweb.WebNuevaAppIntakeGuidedTurnV0, error) {
+	if fake.err != nil {
+		return orquestaweb.WebNuevaAppIntakeGuidedTurnV0{}, fake.err
+	}
 	return orquestaweb.WebNuevaAppIntakeGuidedTurnV0{
 		Decisions: []orquestaweb.WebNuevaAppIntakeDecisionV0{
 			{Field: "nombre", Value: "Avisos clinicos"},

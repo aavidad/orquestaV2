@@ -11,6 +11,11 @@ const (
 	NuevaAppIntakeGuidedEndpointSchemaV0    = "nueva_app_intake_guided_endpoint.v0"
 	WebNuevaAppIntakeGuidedRequestSchemaV0  = "web_nueva_app_intake_guided_request.v0"
 	WebNuevaAppIntakeGuidedResponseSchemaV0 = "web_nueva_app_intake_guided_response.v0"
+
+	WebNuevaAppIntakeAssistantStatusOKV0            = "ok"
+	WebNuevaAppIntakeAssistantStatusFallbackLocalV0 = "fallback_local"
+
+	WebNuevaAppIntakeWarningAssistantFallbackLocalV0 = "nueva_app_intake_assistant_unavailable_fallback_local"
 )
 
 type WebNuevaAppIntakeGuidedRequestV0 struct {
@@ -28,9 +33,18 @@ type WebNuevaAppIntakeGuidedRequestV0 struct {
 }
 
 type WebNuevaAppIntakeGuidedResponseV0 struct {
-	SchemaVersion string                        `json:"schema_version"`
-	Turn          WebNuevaAppIntakeGuidedTurnV0 `json:"turn"`
-	Session       WebNuevaAppIntakeSessionV0    `json:"session"`
+	SchemaVersion   string                        `json:"schema_version"`
+	AssistantStatus string                        `json:"assistant_status,omitempty"`
+	Warnings        []WebNuevaAppIntakeWarningV0  `json:"warnings,omitempty"`
+	Turn            WebNuevaAppIntakeGuidedTurnV0 `json:"turn"`
+	Session         WebNuevaAppIntakeSessionV0    `json:"session"`
+}
+
+type WebNuevaAppIntakeWarningV0 struct {
+	Code    string `json:"code"`
+	Scope   string `json:"scope,omitempty"`
+	Status  string `json:"status,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type WebNuevaAppIntakeAssistantPortV0 interface {
@@ -100,9 +114,15 @@ func (handler NuevaAppIntakeGuidedHTTPHandlerV0) NewResponseV0(
 		Followups:     guidedFollowupActionsV0(),
 		Messages:      []string{},
 	}
+	assistantStatus := ""
+	warnings := []WebNuevaAppIntakeWarningV0(nil)
 	if assistant := handler.Assistant; assistant != nil {
 		if assistedTurn, err := assistant.BuildNuevaAppIntakeGuidedTurnV0(ctx, request, session); err == nil {
 			turn = normalizeWebNuevaAppIntakeGuidedTurnV0(assistedTurn, request.Need)
+			assistantStatus = WebNuevaAppIntakeAssistantStatusOKV0
+		} else {
+			assistantStatus = WebNuevaAppIntakeAssistantStatusFallbackLocalV0
+			warnings = append(warnings, webNuevaAppIntakeAssistantUnavailableWarningV0())
 		}
 	}
 	if need := strings.TrimSpace(request.Need); need != "" && len(turn.Decisions) == 0 {
@@ -116,9 +136,20 @@ func (handler NuevaAppIntakeGuidedHTTPHandlerV0) NewResponseV0(
 		session = ApplyWebNuevaAppIntakeGuidedActionV0(session, actionID)
 	}
 	return WebNuevaAppIntakeGuidedResponseV0{
-		SchemaVersion: WebNuevaAppIntakeGuidedResponseSchemaV0,
-		Turn:          turn,
-		Session:       session,
+		SchemaVersion:   WebNuevaAppIntakeGuidedResponseSchemaV0,
+		AssistantStatus: assistantStatus,
+		Warnings:        warnings,
+		Turn:            turn,
+		Session:         session,
+	}
+}
+
+func webNuevaAppIntakeAssistantUnavailableWarningV0() WebNuevaAppIntakeWarningV0 {
+	return WebNuevaAppIntakeWarningV0{
+		Code:    WebNuevaAppIntakeWarningAssistantFallbackLocalV0,
+		Scope:   "nueva_app_intake_assistant",
+		Status:  WebNuevaAppIntakeAssistantStatusFallbackLocalV0,
+		Message: "local guided intake fallback applied",
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -42,8 +43,10 @@ func TestNuevaAppIntakeGuidedHTTPHandlerV0POSTGeneraSesionGuiada(t *testing.T) {
 		!stringSliceHasV0(out.Session.Form.Plataformas, "mobile") ||
 		len(out.Session.Form.Datos.TiposDetallados) == 0 ||
 		len(out.Session.Form.Datos.Storage) == 0 ||
-		len(out.Session.Form.Integraciones) == 0 {
-		t.Fatalf("sesion guiada incompleta: %+v", out.Session.Form)
+		len(out.Session.Form.Integraciones) == 0 ||
+		out.AssistantStatus != "" ||
+		len(out.Warnings) != 0 {
+		t.Fatalf("sesion guiada incompleta: %+v", out)
 	}
 }
 
@@ -146,6 +149,8 @@ func TestNuevaAppIntakeGuidedHTTPHandlerV0UsaAsistenteInyectadoV0(t *testing.T) 
 		out.Session.Form.TipoApp != "web" ||
 		len(out.Session.Form.Integraciones) == 0 ||
 		out.Session.Form.Integraciones[0].Tipo != "messaging" ||
+		out.AssistantStatus != WebNuevaAppIntakeAssistantStatusOKV0 ||
+		len(out.Warnings) != 0 ||
 		out.Turn.Need != "Necesito coordinar avisos entre equipos clinicos" ||
 		len(out.Turn.Followups) == 0 {
 		t.Fatalf("respuesta asistida inesperada: %+v", out)
@@ -179,8 +184,15 @@ func TestNuevaAppIntakeGuidedHTTPHandlerV0FallbackSiAsistenteFallaV0(t *testing.
 	}
 	if !stringSliceHasV0(out.Session.Form.Plataformas, "web") ||
 		len(out.Session.Form.Integraciones) == 0 ||
-		out.Session.Form.Integraciones[0].Tipo != "maps" {
-		t.Fatalf("fallback local no aplicado: %+v", out.Session.Form)
+		out.Session.Form.Integraciones[0].Tipo != "maps" ||
+		out.AssistantStatus != WebNuevaAppIntakeAssistantStatusFallbackLocalV0 ||
+		len(out.Warnings) != 1 ||
+		out.Warnings[0].Code != WebNuevaAppIntakeWarningAssistantFallbackLocalV0 ||
+		out.Warnings[0].Status != WebNuevaAppIntakeAssistantStatusFallbackLocalV0 {
+		t.Fatalf("fallback local no aplicado: %+v", out)
+	}
+	if strings.Contains(rec.Body.String(), "assistant unavailable") {
+		t.Fatalf("fallback filtra error interno: %s", rec.Body.String())
 	}
 }
 

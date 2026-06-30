@@ -282,8 +282,10 @@ plataforma, datos, storage, mapas, arquitectura y accesibilidad compatibles con
 factory. `TestNuevaAppIntakeGuidedHTTPHandler*` valida el endpoint JSON
 `POST /api/v0/apps/intake/guided-turn`, acciones de seguimiento, errores HTTP,
 cliente HTML que reenvia la sesion resultante, puerto conversacional inyectable
-y fallback local si el asistente falla, sin DB, runtime, filesystem productivo,
-LLM real ni MCP directo.
+y fallback local si el asistente falla. Desde 2026-06-30 el fallback por fallo
+del assistant conserva HTTP 200 pero expone `assistant_status=fallback_local` y
+warning publico estable sin filtrar el error interno, sin DB, runtime,
+filesystem productivo, LLM real ni MCP directo.
 Ultima ejecucion: 2026-06-29; pasa con `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-gateway -run 'NuevaAppIntakeGuided|NuevaAppHTMLHandler'`.
 Riesgos: El agente de intake real depende de adaptador/composicion que implemente
 `WebNuevaAppIntakeAssistantPortV0`; el gateway ya acepta esa inyeccion y el

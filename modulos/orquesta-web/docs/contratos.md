@@ -384,14 +384,22 @@ Request:
 - session: `WebNuevaAppIntakeSessionV0` opcional para continuar una sesion.
 Response:
 - schema_version: `web_nueva_app_intake_guided_response.v0`.
+- assistant_status: vacio si no hay assistant configurado; `ok` si el puerto
+  inyectado respondio; `fallback_local` si el puerto fallo y se uso la guia
+  local.
+- warnings: avisos publicos no sensibles; si el assistant falla incluye
+  `nueva_app_intake_assistant_unavailable_fallback_local` sin el error interno.
 - turn: `WebNuevaAppIntakeGuidedTurnV0`.
 - session: `WebNuevaAppIntakeSessionV0` resultante.
 Invariantes:
 - Es calculo puro de intake cuando no hay puerto inyectado; si la composicion
   aporta `WebNuevaAppIntakeAssistantPortV0`, el handler delega el turno
-  conversacional por contrato y conserva fallback local. La web no elige
-  proveedor, no llama LLM/MCP directamente, no persiste sesion, no arranca
-  Director, no abre filesystem y no toca runtime.
+  conversacional por contrato y conserva fallback local con HTTP 200. Si el
+  assistant falla, la respuesta debe exponer degradacion publica por
+  `assistant_status`/`warnings` sin incluir mensaje de error, proveedor, modelo,
+  endpoint, HOME, runtime ni stack. La web no elige proveedor, no llama LLM/MCP
+  directamente, no persiste sesion, no arranca Director, no abre filesystem y
+  no toca runtime.
 - El cliente HTML debe reenviar la `session` devuelta por cada turno para que
   una conversacion de navegador no se reduzca a acciones sueltas.
 - El handler acepta solo JSON y mantiene limites de body/control plane comunes.
@@ -403,6 +411,9 @@ Pruebas de contrato:
 - POST JSON con necesidad de app movil de alquileres cercanos devuelve sesion
   con datos, storage e integracion de mapas.
 - POST JSON con accion aplica la decision sobre una sesion existente.
+- Assistant inyectado correcto devuelve `assistant_status=ok`; assistant
+  inyectado que falla conserva fallback local, `assistant_status=fallback_local`
+  y warning publico estable.
 - Metodo no soportado y content-type no JSON producen errores HTTP publicos.
 ```
 
