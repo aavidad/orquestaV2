@@ -29,7 +29,10 @@ func buildMCPAutoprogrammingQueueHealthV0(
 	run *MCPDirectorStatsToolResultV0,
 	observedRuns ...*MCPDirectorStatsToolResultV0,
 ) *MCPAutoprogrammingQueueHealthV0 {
-	if queue == nil && (run == nil || run.Stats == nil) {
+	if queue == nil &&
+		(run == nil || run.Stats == nil) &&
+		len(goalStatesByRunRef) == 0 &&
+		len(goalRunMarkersByRunRef) == 0 {
 		return nil
 	}
 	health := MCPAutoprogrammingQueueHealthV0{}
@@ -113,6 +116,22 @@ func buildMCPAutoprogrammingQueueHealthV0(
 		),
 		append([]*MCPDirectorStatsToolResultV0{run}, observedRuns...)...,
 	)
+	for runRef, state := range goalStatesByRunRef {
+		runRef = strings.TrimSpace(runRef)
+		if runRef == "" || seen[runRef] {
+			continue
+		}
+		seen[runRef] = true
+		applyMCPAutoprogrammingGoalHealthV0(&health, state)
+	}
+	for runRef, marker := range goalRunMarkersByRunRef {
+		runRef = strings.TrimSpace(runRef)
+		if runRef == "" || seen[runRef] {
+			continue
+		}
+		seen[runRef] = true
+		applyMCPAutoprogrammingGoalMarkerHealthV0(&health, marker)
+	}
 	health.StatsRuns = countMCPAutoprogrammingSeenRunsV0(statsSeen)
 	health.ObservedRuns = countMCPAutoprogrammingSeenRunsV0(seen)
 	return &health

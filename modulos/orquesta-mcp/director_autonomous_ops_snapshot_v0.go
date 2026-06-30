@@ -162,8 +162,21 @@ func directorOpsDecisionFromAutoprogrammingSafeActionsMCPV0(
 	staleRunning []MCPAutoprogrammingActionableRunV0,
 ) orquestaobservability.DirectorAutonomousOpsDecisionV0 {
 	for _, action := range staleRunning {
-		if strings.TrimSpace(action.Code) != mcpAutoprogrammingActionGoalFirstStateMissingV0 {
+		code := strings.TrimSpace(action.Code)
+		if code != mcpAutoprogrammingActionGoalFirstStateMissingV0 &&
+			code != mcpAutoprogrammingActionGoalFirstBlockedV0 {
 			continue
+		}
+		if code == mcpAutoprogrammingActionGoalFirstBlockedV0 {
+			return orquestaobservability.DirectorAutonomousOpsDecisionV0{
+				Action:       orquestaobservability.DirectorAutonomousOpsActionReviewReplanV0,
+				Scope:        "run",
+				RunRef:       strings.TrimSpace(action.RunRef),
+				Attention:    true,
+				ReasonCode:   "goal_first_blocked",
+				SummaryKey:   "director.ops.decision.review_replan",
+				EvidenceRefs: compactStringsMCPV0(action.EvidenceRefs),
+			}
 		}
 		return orquestaobservability.DirectorAutonomousOpsDecisionV0{
 			Action:       orquestaobservability.DirectorAutonomousOpsActionRepairGoalStateV0,

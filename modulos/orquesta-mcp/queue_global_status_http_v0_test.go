@@ -396,6 +396,53 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstStateMissingRecomiendaReparar
 	}
 }
 
+func TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstBlockedRecomiendaRepararRuntime(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				Blocked: 1,
+			},
+			StaleRunning: []MCPAutoprogrammingActionableRunV0{{
+				Code:              mcpAutoprogrammingActionGoalFirstBlockedV0,
+				RunRef:            "run-ref-global-status-goal-blocked-001",
+				RecommendedAction: "review_replan_goal_first",
+				EvidenceRefs:      []string{"evidence-ref-goal-blocked-global-status"},
+			}},
+			Diagnostics: []MCPAutoprogrammingDiagnosticV0{{
+				Code:         "autoprogramming_goal_first_blocked",
+				Scope:        "run:run-ref-global-status-goal-blocked-001",
+				EvidenceRefs: []string{"evidence-ref-goal-blocked-diagnostic"},
+			}},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	NewMCPQueueGlobalStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !result.Summary.NeedsAttention ||
+		!result.Summary.NeedsAction ||
+		result.Summary.WillFinishAlone ||
+		!hasMCPQueueGlobalStatusItemForTestV0(
+			result.Items,
+			"run-ref-global-status-goal-blocked-001",
+			mcpAutoprogrammingActionGoalFirstBlockedV0,
+			true,
+			"repair_runtime",
+		) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPQueueGlobalStatusHTTPHandlerV0AcceptedNoRequiereAccion(t *testing.T) {
 	executor := &fakeMCPQueueGlobalStatusExecutorV0{
 		result: MCPAutoprogrammingStatusToolResultV0{

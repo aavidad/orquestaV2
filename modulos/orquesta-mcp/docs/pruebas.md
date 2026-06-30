@@ -597,6 +597,12 @@ goal-first y `supervise run` para el candidato legacy concreto.
 valida que un `GoalWorkStateListPortV0` con un goal `running` basta para que
 `autoprogramming/status` quede `ok` y recomiende `observe_goal` aunque no haya
 cola visible.
+`TestMCPAutoprogrammingStatusExecutorV0ListaGoalBloqueadoAunqueColaNoVisible`
+valida que un `GoalWorkStateV0` persistido como `invalid` no desaparece cuando
+la cola no lo expone: `queue_health.blocked=1`, diagnostico
+`autoprogramming_goal_first_blocked`, accion
+`stale_running[].code=goal_first_blocked`, sin `observe_goal` ni supervisor
+legacy, y `ops_snapshot.decision=review_replan`.
 Revalidacion adicional 2026-06-27: el mismo camino alinea
 `ops_snapshot.decision` con la accion segura goal-first. Si hay `observe_goal`,
 el snapshot publica `decision.action=observe_goal` y `reason_code=

@@ -1624,12 +1624,18 @@ Invariantes:
     goal-first, recomienda observar el goal por
     `/api/v0/autoprogramming/goal/observe` en vez de empujar supervision legacy
     de esa run. Si el store implementa tambien `GoalWorkStateListPortV0`, puede
-    detectar goals activos aunque no aparezcan en la cola visible. Cuando la
+    detectar goals activos o terminales bloqueados aunque no aparezcan en la cola visible. Cuando la
     consulta es de cola y hay candidatos goal-first, no recomienda
     `supervise queue`; emite `observe_goal` por run goal-first y `supervise run`
     acotado para candidatos legacy visibles. Si hay mas de un goal activo,
     publica tambien `observe_active_goals` contra
     `/api/v0/autoprogramming/goals/observe-active`.
+  - Un `GoalWorkStateV0` persistido como `blocked` o `invalid`, o con cierre
+    `needs_rework`/`blocked`, no queda oculto por cola vacia: se publica como
+    `autoprogramming_goal_first_blocked`, incrementa `queue_health.blocked`,
+    aparece en `stale_running[].code=goal_first_blocked` con accion
+    `review_replan_goal_first`, suprime acciones legacy de esa run y no emite
+    `observe_goal`, porque ya no es un goal vivo pendiente de observacion.
   - Si la composicion inyecta `GoalWorkRunMarkerStorePortV0`, o el
     `GoalWorkStateStore` lo implementa, una run con marcador goal-first pero
     sin `GoalWorkStateV0` se clasifica como

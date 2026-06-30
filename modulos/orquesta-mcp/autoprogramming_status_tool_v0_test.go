@@ -392,6 +392,73 @@ func TestMCPAutoprogrammingStatusExecutorV0ListaGoalActivoAunqueColaNoVisible(t 
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0ListaGoalBloqueadoAunqueColaNoVisible(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-blocked-listed-001"
+	goalRef := "goal-ref-autop-status-goal-blocked-listed-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusInvalidV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Reparar un fallo durable goal-first sin ocultarlo por cola vacia.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:      goalRef,
+			Status:       orquestagoal.GoalStatusInvalidV0,
+			EvidenceRefs: []string{"evidence-ref-goal-blocked-listed-status-test"},
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-blocked-listed-status-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		GoalStateStore:               goalStates,
+		AllowLegacySupervisorActions: true,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.Estado != MCPAutoprogrammingStatusEstadoOKV0 ||
+		len(result.Errores) != 0 ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_goal_first_blocked") ||
+		hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_goal_first_observe_required") {
+		t.Fatalf("result=%+v diagnostics=%+v", result, result.Diagnostics)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.Blocked != 1 ||
+		result.QueueHealth.ObservedRuns != 1 ||
+		result.QueueHealth.RunningLive != 0 ||
+		result.QueueHealth.GoalClosurePending != 0 {
+		t.Fatalf("queue_health=%+v", result.QueueHealth)
+	}
+	if len(result.StaleRunning) != 1 ||
+		result.StaleRunning[0].Code != mcpAutoprogrammingActionGoalFirstBlockedV0 ||
+		result.StaleRunning[0].RunRef != runRef ||
+		result.StaleRunning[0].RecommendedAction != "review_replan_goal_first" {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	if result.Operator == nil ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "observe_goal", "run", runRef) ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "run", runRef) ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "queue", "") {
+		t.Fatalf("operator=%+v", result.Operator)
+	}
+	if result.OpsSnapshot == nil ||
+		result.OpsSnapshot.Decision.Action != orquestaobservability.DirectorAutonomousOpsActionReviewReplanV0 ||
+		result.OpsSnapshot.Decision.RunRef != runRef ||
+		result.OpsSnapshot.Decision.ReasonCode != "goal_first_blocked" ||
+		!result.OpsSnapshot.Decision.Attention {
+		t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0ListaGoalMarkerSinStateAunqueColaNoVisible(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-marker-listed-001"
 	goalRef := "goal-ref-autop-status-goal-marker-listed-001"

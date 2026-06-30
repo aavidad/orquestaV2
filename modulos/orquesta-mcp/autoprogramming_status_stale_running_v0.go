@@ -17,12 +17,14 @@ const (
 	mcpAutoprogrammingActionExternalWorkStoppedNoDeliveryV0   = "external_work_accepted_stopped_without_delivery"
 	mcpAutoprogrammingActionExternalWorkNoAgentMaterializedV0 = "external_work_accepted_no_agent_materialized"
 	mcpAutoprogrammingActionGoalFirstStateMissingV0           = "goal_first_state_missing"
+	mcpAutoprogrammingActionGoalFirstBlockedV0                = "goal_first_blocked"
 	mcpAutoprogrammingEvidenceRunningStaleReconciledV0        = "evidence-ref-run-queue-running-stale-no-live-process-reconciled"
 	mcpAutoprogrammingEvidenceProviderUsageLimitRetryV0       = "evidence-ref-provider-usage-limit-retry-after"
 	mcpAutoprogrammingEvidenceExternalWorkRunStartedV0        = "evidence-ref-external-work-run-started"
 	mcpAutoprogrammingEvidenceExternalWorkRunQueuedV0         = "evidence-ref-external-work-run-queued"
 	mcpAutoprogrammingEvidenceRunCoordinatorExecutedV0        = "evidence-ref-run-coordinator-executed"
 	mcpAutoprogrammingEvidenceGoalFirstStateMissingV0         = "evidence-ref-autoprogramming-status-goal-first-state-missing"
+	mcpAutoprogrammingEvidenceGoalFirstBlockedV0              = "evidence-ref-autoprogramming-status-goal-first-blocked"
 )
 
 func buildMCPAutoprogrammingStaleRunningV0(
@@ -45,6 +47,31 @@ func buildMCPAutoprogrammingStaleRunningV0(
 		if ok {
 			out = append(out, action)
 		}
+	}
+	return out
+}
+
+func mcpAutoprogrammingGoalFirstBlockedActionsV0(
+	states []orquestagoal.GoalWorkStateV0,
+) []MCPAutoprogrammingActionableRunV0 {
+	out := make([]MCPAutoprogrammingActionableRunV0, 0)
+	for _, state := range states {
+		if !mcpAutoprogrammingGoalStateNeedsAttentionV0(state) ||
+			mcpAutoprogrammingGoalStateObserveRequiredV0(state) {
+			continue
+		}
+		out = append(out, MCPAutoprogrammingActionableRunV0{
+			Code:              mcpAutoprogrammingActionGoalFirstBlockedV0,
+			Severity:          "blocked",
+			RunRef:            strings.TrimSpace(state.RunRef),
+			Status:            strings.TrimSpace(state.Status),
+			Reason:            "goal-first state persisted as blocked or invalid",
+			RecommendedAction: "review_replan_goal_first",
+			EvidenceRefs: compactStringsMCPV0(append(
+				[]string{mcpAutoprogrammingEvidenceGoalFirstBlockedV0},
+				state.EvidenceRefs...,
+			)),
+		})
 	}
 	return out
 }

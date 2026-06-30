@@ -476,6 +476,8 @@ func mcpQueueGlobalStatusRecommendedActionForStatusV0(status string) string {
 	switch strings.TrimSpace(status) {
 	case mcpAutoprogrammingActionGoalFirstStateMissingV0:
 		return "repair_goal_state"
+	case mcpAutoprogrammingActionGoalFirstBlockedV0:
+		return "repair_runtime"
 	case "queued_not_dispatched":
 		return "reencolar"
 	case mcpAutoprogrammingHealthRunningStaleV0,
@@ -555,6 +557,8 @@ func mcpQueueGlobalStatusStatusFromDiagnosticV0(diagnostic MCPAutoprogrammingDia
 	switch strings.TrimSpace(diagnostic.Code) {
 	case "autoprogramming_goal_first_state_missing":
 		return mcpAutoprogrammingActionGoalFirstStateMissingV0
+	case "autoprogramming_goal_first_blocked":
+		return mcpAutoprogrammingActionGoalFirstBlockedV0
 	default:
 		return strings.TrimSpace(diagnostic.Code)
 	}
@@ -605,6 +609,8 @@ func mcpQueueGlobalStatusRecommendedActionFromDiagnosticV0(diagnostic MCPAutopro
 		return "reencolar"
 	case mcpAutoprogrammingActionGoalFirstStateMissingV0, "autoprogramming_goal_first_state_missing":
 		return "repair_goal_state"
+	case mcpAutoprogrammingActionGoalFirstBlockedV0, "autoprogramming_goal_first_blocked":
+		return "repair_runtime"
 	default:
 		return "repair_runtime"
 	}
@@ -615,6 +621,8 @@ func mcpQueueGlobalStatusNormalizeRecommendedActionV0(action string, fallback st
 	switch action {
 	case "retry", "reencolar", "cancel_stale", "restart_observer", "repair_runtime", "repair_goal_state", "inspect_liveness":
 		return action
+	case "review_replan_goal_first":
+		return "repair_runtime"
 	}
 	if strings.Contains(action, "goal_state") ||
 		strings.Contains(action, "repair_goal") ||
