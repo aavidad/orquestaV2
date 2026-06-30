@@ -2,8 +2,13 @@
 
 Este shard consolida incidencias OPES/Orquesta observadas en los ficheros
 `TAREA_OPES_*` sin convertir esos ficheros en cola directa. Los `TAREA_OPES_*`
-siguen siendo entradas de diagnostico e historia; este documento es la lista
-canonica compacta para programar reparaciones en Orquesta.
+siguen siendo entradas de diagnostico e historia.
+
+Nota 2026-07-01: este shard queda como historico reconciliado. La lista
+canonica viva para programar reparaciones es
+`docs/inventario_bugs_orquesta_2026-06-30.md`, que cierra 47/47 bugs y 4/4
+riesgos arquitectonicos. Si aparece una regresion nueva, se registra primero en
+ese inventario antes de reabrir una entrada antigua de este shard.
 
 Reglas de uso:
 
@@ -56,17 +61,21 @@ Evidencia:
 `TestMCPDirectorStatsToolExecutorV0GoalFirstMarkerSinStatePublicaRepairGoalState`,
 `TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstStateMissingRecomiendaRepararState`
 y `TestOpsDashboardWebEndpointV0GoalFirstUsaObserveGoalEnAvance`.
-Sigue vivo el cierre de contrato unico exhaustivo "accion segura o razon de no
-accion" para todos los tipos de run visible.
+En ese momento seguia vivo el cierre de contrato unico exhaustivo "accion
+segura o razon de no accion" para todos los tipos de run visible; queda
+reconciliado por los cierres posteriores de `BUG-ORQ-20260630-006`,
+`BUG-ORQ-20260630-007`, `BUG-ORQ-20260630-038`, `BUG-ORQ-20260630-040` y
+`BUG-ORQ-20260630-047`.
 
 Avance 2026-06-28 tarde: `/queue/global-status` empieza a cumplir ese contrato
 item por item: cada run visible publica `recommended_action` si requiere
 operador o `no_action_reason` si puede esperar/cerrar sin accion; candidatos
 `terminal` y estados `accepted` quedan como terminales sin accion. `/ops`
 consume tambien `ops_snapshot.decision` por run y elimina el fallback global a
-`runs/supervise` cuando no hay `safe_action` de cola publicada. Sigue pendiente
-validarlo contra un servidor temporal con combinacion real de estados y no solo
-unit/html contract.
+`runs/supervise` cuando no hay `safe_action` de cola publicada. En ese corte
+faltaba validarlo contra un servidor temporal con combinacion real de estados;
+queda superado por el smoke temporal `final3` y por los endpoints/status
+cerrados en el inventario vivo.
 
 Avance 2026-06-28 noche 3: `/ops` prioriza la decision
 `run.ops_snapshot.decision` del run seleccionado antes que un snapshot global sin
@@ -298,8 +307,9 @@ caso exacto, no la ruta goal-first de derivados ya cerrada.
 
 ## ORQ-OPES-003 external_work_no_agent_no_delivery
 
-Estado: parcial; legacy 1+6 y guard de cierre goal-first cubiertos, pendiente
-smoke OPES temporal real.
+Estado: cerrado en inventario vivo por `BUG-ORQ-20260630-008` y
+`BUG-ORQ-20260630-009`. El smoke OPES temporal real queda como medicion opt-in o
+regresion futura, no como pendiente funcional abierto.
 
 Problema: algunas tareas de external work aparecen preparadas o listas pero no
 materializan agente real ni entrega observable. El sistema debe distinguir
@@ -323,12 +333,16 @@ subrol `domain-work-opes-subrole-*` en el resultado o en el receipt aceptado, o
 bloquea con `domain_work_opes_subroles_evidence_missing`. Evidencia:
 `TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESSubrolesSinSeisEvidenciasV0`
 y `TestCodexStackV0ExternalWorkGoalFirstCierraOPESSubrolesConSeisEvidenciasV0`.
-Sigue pendiente prueba real temporal con agentes/subagentes y cola OPES acotada.
+La prueba real temporal con agentes/subagentes y cola OPES acotada queda como
+smoke opt-in posterior; no reabre el cierre de contrato 1+6 sin una regresion
+nueva.
 
 ## ORQ-OPES-004 capability_externa_tts_edge_host_runner
 
-Estado: parcial; contrato neutral y bridge OPES cubiertos, pendiente smoke OPES
-temporal real de derivados/cierre.
+Estado: cerrado en inventario vivo por `BUG-ORQ-20260630-022`,
+`BUG-ORQ-20260630-025`, `BUG-ORQ-20260630-030` y
+`BUG-ORQ-20260630-037`. El smoke OPES temporal real de audio queda como
+validacion opt-in de entorno/capacidad, no como pendiente funcional abierto.
 
 Problema: la generacion de audio/TTS para OPES necesita frontera de capacidad
 externa clara. Orquesta no debe asumir runner local, modelo, credenciales ni
@@ -382,13 +396,15 @@ Avance 2026-06-28:
   `TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinSpeechSynthesisV0`
   y
   `TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilFinalizeV0`;
-- sigue pendiente smoke OPES temporal real que use esa capacidad y registre
-  receipt/evidencia de audio real o fake controlado.
+- queda como smoke opt-in posterior usar una capacidad temporal y registrar
+  receipt/evidencia de audio real o fake controlado; no reabre el cierre de
+  contrato ni el preflight de capacidad.
 
 ## ORQ-OPES-005 robustez_api_supervision_stream_fd_timeout
 
-Estado: parcial; respuesta finita de supervise cubierta para
-`autoprogramming/supervise` y `/runs/supervise`.
+Estado: cerrado en inventario vivo por `BUG-ORQ-20260630-007` y
+`BUG-ORQ-20260630-047`. La respuesta finita de supervise, acciones de polling y
+fachada estable DomainWork quedan cubiertas.
 
 Problema: `/autoprogramming/supervise` y rutas de supervision pueden despachar
 trabajo pero dejar al cliente HTTP esperando indefinidamente. La API debe
@@ -442,8 +458,8 @@ correlacion y cancelan el contexto del executor. Evidencia:
 `TestMCPExternalWorkRunHTTPHandlerV0TimeoutDevuelveJSONPublico`,
 `TestServerRunControlHTTPClienteRealRecibeTimeoutJSONV0` y
 `TestServerExternalWorkRunHTTPClienteRealRecibeTimeoutJSONV0`.
-Sigue vivo el cierre de observacion posterior sobre colas OPES reales
-temporales.
+La observacion posterior sobre colas OPES reales temporales queda como smoke
+opt-in de regresion/coste, no como pendiente funcional abierto.
 Avance 2026-06-28 noche 6: `/ops` ya consume
 `/api/v0/queue/global-status` en paralelo a `autoprogramming/status`, fusiona
 `recommended_action`, `no_action_reason` y `needs_action` por `run_ref`, muestra
@@ -456,8 +472,9 @@ ejecuta `recommended_action` como endpoint arbitrario. Evidencia:
 
 ## ORQ-OPES-006 idempotencia_reconciliacion_agente_vivo
 
-Estado: cerrado offline para stack Codex; pendiente validar en Orquesta OPES
-residente actualizado sin cortar agentes vivos.
+Estado: cerrado offline para stack Codex y reconciliado con el inventario vivo.
+Validar en Orquesta OPES residente actualizado queda como smoke opt-in si se
+levanta una instancia temporal; no es pendiente funcional abierto.
 
 Problema: un supervisor residente puede repetir `AgentWorkAssessed` desde
 `live-agent-reconciliation` con el mismo `ReportID` pero payload enriquecido
@@ -482,8 +499,8 @@ Evidencia:
 ## ORQ-OPES-007 contrato_rest_opes_derivados_canonicos
 
 Estado: cerrado para creacion/listado REST desde Orquesta y para smoke real
-effectful goal-first hasta paquete final; pendiente solo revalidar
-optimizaciones posteriores de contexto/coste.
+effectful goal-first hasta paquete final. Revalidar optimizaciones posteriores
+de contexto/coste queda como medicion opt-in, no como pendiente funcional.
 
 Problema: Orquesta ya ejecutaba en fake/offline la secuencia canonica de 23
 `work_kind` de OPES hasta `finalize_temario_package`, pero la API publica OPES
