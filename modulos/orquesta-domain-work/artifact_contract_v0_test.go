@@ -74,3 +74,74 @@ func TestExpectedDomainWorkArtifactTypeForWorkKindV0(t *testing.T) {
 		}
 	}
 }
+
+func TestExpectedDomainWorkArtifactContractForWorkKindV0ClasificaCanonicoDerivadoYEvidencia(t *testing.T) {
+	cases := []struct {
+		name                  string
+		workKind              string
+		artifactType          string
+		sourceKind            string
+		canonicality          string
+		stage                 string
+		materializationTarget string
+	}{
+		{
+			name:                  "html canonico",
+			workKind:              "generate_html_site",
+			artifactType:          DomainWorkArtifactTypeLocalHTMLSiteV0,
+			sourceKind:            DomainWorkArtifactSourceKindCanonicalSourceV0,
+			canonicality:          DomainWorkArtifactCanonicalityCanonicalV0,
+			stage:                 DomainWorkArtifactStageSourceV0,
+			materializationTarget: DomainWorkArtifactMaterializationTargetDomainV0,
+		},
+		{
+			name:                  "tests canonicos",
+			workKind:              "generate_question_bank",
+			artifactType:          DomainWorkArtifactTypeQuestionBankV0,
+			sourceKind:            DomainWorkArtifactSourceKindCanonicalSourceV0,
+			canonicality:          DomainWorkArtifactCanonicalityCanonicalV0,
+			stage:                 DomainWorkArtifactStageSourceV0,
+			materializationTarget: DomainWorkArtifactMaterializationTargetDomainV0,
+		},
+		{
+			name:                  "audio derivado regenerable",
+			workKind:              "generate_audio_asset",
+			artifactType:          DomainWorkArtifactTypeAudioAssetV0,
+			sourceKind:            DomainWorkArtifactSourceKindDerivedRegenerableV0,
+			canonicality:          DomainWorkArtifactCanonicalityDerivedRegenerableV0,
+			stage:                 DomainWorkArtifactStageDerivedV0,
+			materializationTarget: DomainWorkArtifactMaterializationTargetRegenerateV0,
+		},
+		{
+			name:                  "tutor rag derivado regenerable",
+			workKind:              "generate_rag_assets",
+			artifactType:          DomainWorkArtifactTypeTutorBotPackageV0,
+			sourceKind:            DomainWorkArtifactSourceKindDerivedRegenerableV0,
+			canonicality:          DomainWorkArtifactCanonicalityDerivedRegenerableV0,
+			stage:                 DomainWorkArtifactStageDerivedV0,
+			materializationTarget: DomainWorkArtifactMaterializationTargetRegenerateV0,
+		},
+		{
+			name:                  "qa evidencia",
+			workKind:              "review_agent_independent",
+			artifactType:          DomainWorkArtifactTypeAgentReviewReportV0,
+			sourceKind:            DomainWorkArtifactSourceKindEvidenceOnlyV0,
+			canonicality:          DomainWorkArtifactCanonicalityEvidenceOnlyV0,
+			stage:                 DomainWorkArtifactStageReviewV0,
+			materializationTarget: DomainWorkArtifactMaterializationTargetEvidenceV0,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ExpectedDomainWorkArtifactContractForWorkKindV0(tc.workKind)
+			if got.ArtifactType != tc.artifactType ||
+				got.SourceKind != tc.sourceKind ||
+				got.Canonicality != tc.canonicality ||
+				got.Stage != tc.stage ||
+				got.MaterializationTarget != tc.materializationTarget {
+				t.Fatalf("contract=%+v", got)
+			}
+		})
+	}
+}

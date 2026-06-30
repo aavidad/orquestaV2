@@ -12,6 +12,8 @@ Cobertura:
 
 - bloquea si falta opt-in;
 - bloquea si faltan command path, project workdir o runtime workdir;
+- materializa prompt con advertencias si el contexto requerido llega truncado o
+  `ref_only` por materializacion faltante;
 - materializa packet, prompt y wrapper;
 - el prompt exige `$caveman` o `compact` si esta disponible y salida minima;
 - la plantilla de ACK generada incluye rutas concretas de archivos para
@@ -59,7 +61,9 @@ Cobertura:
   de control aunque la ampliacion este justificada;
 - acepta ACK con artifacts concretos que encajan en write-set con glob cerrado;
 - rechaza ACK `completed` que copia globs del write-set en `files`;
-- advierte en el prompt cuando hay contexto requerido truncado;
+- conserva avisos de prompt para contexto requerido truncado/ref_only por
+  materializacion faltante; no bloquea antes del runtime porque el agente puede
+  resolver por lectura local, Director o ACK con evidencia;
 - rechaza ACK `completed` con contexto requerido truncado si no justifica
   `contexto_truncado_resuelto`;
 - conserva marcadores dudosos de HOME/token/OAuth/prompt como rail pendiente

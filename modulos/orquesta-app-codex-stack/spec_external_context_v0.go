@@ -251,6 +251,10 @@ func externalWorkFieldIsCriticalContextV0(name string) bool {
 		"package_path",
 		"manifest_path",
 		"document_plan",
+		"opes_editorial_workflow",
+		"opes_level_derivation_policy",
+		"opes_assimilation_method",
+		"opes_quality_requirements",
 		"target_words_min",
 		"target_words_max",
 		"audio_roman_numeral_policy":

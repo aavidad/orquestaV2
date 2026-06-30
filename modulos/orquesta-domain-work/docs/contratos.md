@@ -63,6 +63,32 @@ Campos principales:
 - `payload_refs`: referencias a payloads/materializaciones externas;
 - `complete_job`: senal opcional para indicar cierre del job externo.
 
+## DomainWorkArtifactContractV0
+
+Contrato neutral para describir como debe tratarse un artefacto antes de que un
+adaptador de dominio lo materialice o lo revise.
+
+Campos:
+
+- `artifact_type`: tipo esperado por el trabajo;
+- `source_kind`: `canonical_source`, `derived_regenerable`, `evidence_only` o
+  `materializable_domain_artifact`;
+- `canonicality`: `canonical`, `derived_regenerable` o `evidence_only`;
+- `stage`: `source`, `draft`, `review`, `derived` o `final`;
+- `materialization_target`: `domain_artifact`, `evidence`,
+  `regenerate_from_canonical_sources` o `none`.
+
+Uso:
+
+- HTML local, bancos de tests y textos ensamblados se clasifican como fuentes
+  canonicas;
+- audio, tutor/RAG, visuales, juegos y ayudas se tratan como derivados
+  regenerables cuando la composicion los pueda reconstruir desde fuentes
+  canonicas;
+- revisiones, matrices y votos son evidencia, no fuente primaria de rework;
+- el contrato es generico: OPES u otra app externa pueden proyectarlo a
+  `input_fields`, pero la semantica productiva concreta vive en su adaptador.
+
 ## Puertos
 
 - `DomainWorkJobCreatorPortV0`
@@ -125,7 +151,13 @@ Reglas:
 - `BuildDomainWorkExternalCapabilityQueryV0` deriva los requisitos desde el
   contrato neutral del job, sin leer runtime ni proveedor concreto;
 - un job cuyo `work_kind` produce `audio_asset` requiere la capacidad externa
-  `speech_synthesis`;
+  `speech_synthesis` con perfil preflight: red requerida, tool path requerido,
+  cuota sensible de proveedor y timeout recomendado;
+- un job de revision remota cuyo contrato neutral produce
+  `agent_review_report`, `agent_pair_review_report` o
+  `director_review_matrix` requiere
+  `remote_qa_provider` con red, estado de autenticacion, cuota de proveedor y
+  timeout recomendado;
 - aliases recuperables como `tts` o `text_to_speech` se normalizan a
   `speech_synthesis`;
 - `EvaluateDomainWorkExternalCapabilitiesV0` no ejecuta TTS ni selecciona

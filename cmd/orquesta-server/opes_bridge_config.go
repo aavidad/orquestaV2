@@ -158,37 +158,73 @@ func parseOPESBridgeJobTypeSequenceV0(raw string) []string {
 }
 
 func opesBridgeExternalCapabilitiesFromEnvV0() []orquestadomainwork.DomainWorkExternalCapabilityV0 {
-	raw := strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisCapabilityV0))
-	if raw == "" {
+	out := []orquestadomainwork.DomainWorkExternalCapabilityV0{}
+	if capability, ok := opesBridgeExternalCapabilityFromEnvV0(
+		orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0,
+		envOPESBridgeSpeechSynthesisCapabilityV0,
+		envOPESBridgeSpeechSynthesisCapabilityRefV0,
+		envOPESBridgeSpeechSynthesisEvidenceRefsV0,
+		envOPESBridgeSpeechSynthesisReasonV0,
+	); ok {
+		capability.NetworkReady = capability.Available
+		capability.ToolPathReady = capability.Available
+		capability.ProviderQuotaReady = capability.Available
+		capability.CommandTimeoutSeconds = 1800
+		out = append(out, orquestadomainwork.NormalizeDomainWorkExternalCapabilityV0(capability))
+	}
+	if capability, ok := opesBridgeExternalCapabilityFromEnvV0(
+		orquestadomainwork.DomainWorkExternalCapabilityKindRemoteQAProviderV0,
+		envOPESBridgeRemoteQACapabilityV0,
+		envOPESBridgeRemoteQACapabilityRefV0,
+		envOPESBridgeRemoteQAEvidenceRefsV0,
+		envOPESBridgeRemoteQAReasonV0,
+	); ok {
+		capability.NetworkReady = capability.Available
+		capability.AuthStateReady = capability.Available
+		capability.ProviderQuotaReady = capability.Available
+		capability.CommandTimeoutSeconds = 1200
+		out = append(out, orquestadomainwork.NormalizeDomainWorkExternalCapabilityV0(capability))
+	}
+	if out == nil {
 		return []orquestadomainwork.DomainWorkExternalCapabilityV0{}
 	}
-	available, reason := opesBridgeCapabilityAvailabilityFromEnvV0(raw)
-	reason = firstNonEmptyV0(strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisReasonV0)), reason)
-	capabilityRef := strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisCapabilityRefV0))
-	if capabilityRef == "" {
-		capabilityRef = orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0
-	}
-	return []orquestadomainwork.DomainWorkExternalCapabilityV0{
-		orquestadomainwork.NormalizeDomainWorkExternalCapabilityV0(
-			orquestadomainwork.DomainWorkExternalCapabilityV0{
-				CapabilityRef:     capabilityRef,
-				Kind:              orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0,
-				Available:         available,
-				OperationalReason: reason,
-				EvidenceRefs:      parseOPESBridgeJobTypeSequenceV0(os.Getenv(envOPESBridgeSpeechSynthesisEvidenceRefsV0)),
-			},
-		),
-	}
+	return out
 }
 
-func opesBridgeCapabilityAvailabilityFromEnvV0(raw string) (bool, string) {
+func opesBridgeExternalCapabilityFromEnvV0(
+	kind string,
+	capabilityEnv string,
+	refEnv string,
+	evidenceEnv string,
+	reasonEnv string,
+) (orquestadomainwork.DomainWorkExternalCapabilityV0, bool) {
+	raw := strings.TrimSpace(os.Getenv(capabilityEnv))
+	if raw == "" {
+		return orquestadomainwork.DomainWorkExternalCapabilityV0{}, false
+	}
+	available, reason := opesBridgeCapabilityAvailabilityFromEnvV0(raw, kind)
+	reason = firstNonEmptyV0(strings.TrimSpace(os.Getenv(reasonEnv)), reason)
+	capabilityRef := strings.TrimSpace(os.Getenv(refEnv))
+	if capabilityRef == "" {
+		capabilityRef = kind
+	}
+	return orquestadomainwork.DomainWorkExternalCapabilityV0{
+		CapabilityRef:     capabilityRef,
+		Kind:              kind,
+		Available:         available,
+		OperationalReason: reason,
+		EvidenceRefs:      parseOPESBridgeJobTypeSequenceV0(os.Getenv(evidenceEnv)),
+	}, true
+}
+
+func opesBridgeCapabilityAvailabilityFromEnvV0(raw string, kind string) (bool, string) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "1", "true", "yes", "y", "si", "available", "enabled", "ready", "ok":
 		return true, ""
 	case "0", "false", "no", "n", "unavailable", "disabled", "missing", "blocked":
 		return false, orquestadomainwork.DomainWorkExternalCapabilityReasonMissingV0 +
-			":" + orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0
+			":" + strings.TrimSpace(kind)
 	default:
-		return false, "speech_synthesis_capability_invalid"
+		return false, strings.TrimSpace(kind) + "_capability_invalid"
 	}
 }

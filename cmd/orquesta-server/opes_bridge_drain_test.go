@@ -69,7 +69,8 @@ func TestRunOPESDrainOnceV0LedgerEvitaReenviarJobPendienteV0(t *testing.T) {
 			PriorityScore: 70,
 			RequestedBy:   "test",
 		},
-		InputLedger: ledger,
+		InputLedger:          ledger,
+		ExternalCapabilities: opesBridgeRemoteQACapabilityForDrainTestV0(),
 	}
 
 	first, err := runOPESDrainOnceV0(context.Background(), config)
@@ -146,7 +147,8 @@ func TestRunOPESDrainOnceV0GoalFirstPropagaMetadataYLedgerV0(t *testing.T) {
 			PriorityScore: 70,
 			RequestedBy:   "test",
 		},
-		InputLedger: ledger,
+		InputLedger:          ledger,
+		ExternalCapabilities: opesBridgeExternalCapabilitiesForDrainTestV0(),
 	}
 
 	first, err := runOPESDrainOnceV0(context.Background(), config)
@@ -243,7 +245,8 @@ func TestRunOPESDrainOnceV0ConsultaTransporteYConservaWorkKindCanonicoV0(t *test
 			PriorityScore: 70,
 			RequestedBy:   "test",
 		},
-		InputLedger: ledger,
+		InputLedger:          ledger,
+		ExternalCapabilities: opesBridgeRemoteQACapabilityForDrainTestV0(),
 	}
 
 	summary, err := runOPESDrainOnceV0(context.Background(), config)
@@ -2072,7 +2075,8 @@ func TestRunOPESDrainOnceV0SecuenciaDerivadosOPESHastaAssembleTopicV0(t *testing
 			PriorityScore: 70,
 			RequestedBy:   "test",
 		},
-		InputLedger: ledger,
+		InputLedger:          ledger,
+		ExternalCapabilities: opesBridgeExternalCapabilitiesForDrainTestV0(),
 	}
 
 	for index, jobType := range sequence {
@@ -2208,14 +2212,7 @@ func TestRunOPESDrainOnceV0AudioConSpeechSynthesisPosteaOrquestaV0(t *testing.T)
 			PriorityScore: 70,
 			RequestedBy:   "test",
 		},
-		ExternalCapabilities: []orquestadomainwork.DomainWorkExternalCapabilityV0{
-			orquestadomainwork.NormalizeDomainWorkExternalCapabilityV0(
-				orquestadomainwork.DomainWorkExternalCapabilityV0{
-					Kind:      orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0,
-					Available: true,
-				},
-			),
-		},
+		ExternalCapabilities: opesBridgeSpeechSynthesisCapabilityForDrainTestV0(),
 	})
 
 	if err != nil {
@@ -2242,8 +2239,69 @@ func TestOPESBridgeExternalCapabilitiesFromEnvV0DeclaraSpeechSynthesis(t *testin
 		!capabilities[0].Available ||
 		capabilities[0].Kind != orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0 ||
 		capabilities[0].CapabilityRef != "speech-synthesis-temporal" ||
+		!capabilities[0].NetworkReady ||
+		!capabilities[0].ToolPathReady ||
+		!capabilities[0].ProviderQuotaReady ||
+		capabilities[0].CommandTimeoutSeconds != 1800 ||
 		strings.Join(capabilities[0].EvidenceRefs, ",") != "evidence-ref-tts-1,evidence-ref-tts-2" {
 		t.Fatalf("capabilities=%+v", capabilities)
+	}
+}
+
+func TestOPESBridgeExternalCapabilitiesFromEnvV0DeclaraRemoteQA(t *testing.T) {
+	t.Setenv(envOPESBridgeRemoteQACapabilityV0, "available")
+	t.Setenv(envOPESBridgeRemoteQACapabilityRefV0, "remote-qa-temporal")
+	t.Setenv(envOPESBridgeRemoteQAEvidenceRefsV0, "evidence-ref-qa-1,evidence-ref-qa-2")
+
+	capabilities := opesBridgeExternalCapabilitiesFromEnvV0()
+
+	if len(capabilities) != 1 ||
+		!capabilities[0].Available ||
+		capabilities[0].Kind != orquestadomainwork.DomainWorkExternalCapabilityKindRemoteQAProviderV0 ||
+		capabilities[0].CapabilityRef != "remote-qa-temporal" ||
+		!capabilities[0].NetworkReady ||
+		!capabilities[0].AuthStateReady ||
+		!capabilities[0].ProviderQuotaReady ||
+		capabilities[0].CommandTimeoutSeconds != 1200 ||
+		strings.Join(capabilities[0].EvidenceRefs, ",") != "evidence-ref-qa-1,evidence-ref-qa-2" {
+		t.Fatalf("capabilities=%+v", capabilities)
+	}
+}
+
+func opesBridgeExternalCapabilitiesForDrainTestV0() []orquestadomainwork.DomainWorkExternalCapabilityV0 {
+	return append(
+		opesBridgeSpeechSynthesisCapabilityForDrainTestV0(),
+		opesBridgeRemoteQACapabilityForDrainTestV0()...,
+	)
+}
+
+func opesBridgeSpeechSynthesisCapabilityForDrainTestV0() []orquestadomainwork.DomainWorkExternalCapabilityV0 {
+	return []orquestadomainwork.DomainWorkExternalCapabilityV0{
+		orquestadomainwork.NormalizeDomainWorkExternalCapabilityV0(
+			orquestadomainwork.DomainWorkExternalCapabilityV0{
+				Kind:                  orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0,
+				Available:             true,
+				NetworkReady:          true,
+				ToolPathReady:         true,
+				ProviderQuotaReady:    true,
+				CommandTimeoutSeconds: 1800,
+			},
+		),
+	}
+}
+
+func opesBridgeRemoteQACapabilityForDrainTestV0() []orquestadomainwork.DomainWorkExternalCapabilityV0 {
+	return []orquestadomainwork.DomainWorkExternalCapabilityV0{
+		orquestadomainwork.NormalizeDomainWorkExternalCapabilityV0(
+			orquestadomainwork.DomainWorkExternalCapabilityV0{
+				Kind:                  orquestadomainwork.DomainWorkExternalCapabilityKindRemoteQAProviderV0,
+				Available:             true,
+				NetworkReady:          true,
+				AuthStateReady:        true,
+				ProviderQuotaReady:    true,
+				CommandTimeoutSeconds: 1200,
+			},
+		),
 	}
 }
 

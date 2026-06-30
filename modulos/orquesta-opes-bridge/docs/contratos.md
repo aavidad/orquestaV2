@@ -28,6 +28,11 @@ Reglas:
   `generate_help_manual_assets` sin perder el `work_kind` canonico;
 - `input_fields` copia el `payload_json` y solo normaliza metadatos de contrato
   necesarios para routing, evidencias y compatibilidad de transporte;
+- el bridge proyecta el contrato neutral de artefacto como
+  `artifact_source_kind`, `artifact_canonicality`, `artifact_stage` y
+  `artifact_materialization_target`, para que correctores, QA y generadores
+  distingan fuentes canonicas, derivados regenerables, evidencia y artefactos
+  materializables sin meter semantica OPES en `orquesta-domain-work`;
 - para `summarize_topic`, el bridge hidrata `topic_blocks` desde
   `GET /api/topics/{topic_id}/blocks`; si no puede obtenerlos, no crea el run
   para evitar resumenes pobres;
@@ -174,6 +179,15 @@ Reglas:
   `expected_artifact_type=document_plan`, `expected_schema=domain_document_plan.v0`
   y partes minimas del plan: `sections`, `deliverables`, `quality_criteria`,
   `review_steps` y visuales cuando aporten valor;
+- si un payload declara `subroles_required=6`, el bridge no permite cerrar el
+  contrato como producto consolidado sin write-set de producto seguro. Sin
+  `topic_dir`, `product_write_set` o `allowed_write_set` relativo y seguro,
+  transporta `opes_subroles_materialization_status=blocked_missing_product_write_set`;
+  con write-set seguro transporta
+  `opes_subroles_materialization_status=contract_ready_pending_workflow_tasks`,
+  seis roles, task refs y write-sets hijos deterministas. Ese estado no es
+  materializacion real: el materializado real en `WorkflowTaskStore`/wait/review
+  pertenece a la composicion y sigue pendiente hasta que exista wiring causal;
 - esos trabajos documentales tambien reciben la metodologia editorial OPES como
   campos de dominio: `opes_editorial_workflow`,
   `opes_level_derivation_policy`, `opes_assimilation_method` y

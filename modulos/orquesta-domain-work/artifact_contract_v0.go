@@ -28,7 +28,88 @@ const (
 	DomainWorkArtifactTypeTopicRegistryUpdateV0   = "topic_registry_update"
 	DomainWorkArtifactTypeFinalDomainPackageV0    = "final_domain_package"
 	DomainWorkArtifactTypeGenericWorkDeliveryV0   = "work_delivery"
+
+	DomainWorkArtifactSourceKindCanonicalSourceV0       = "canonical_source"
+	DomainWorkArtifactSourceKindDerivedRegenerableV0    = "derived_regenerable"
+	DomainWorkArtifactSourceKindEvidenceOnlyV0          = "evidence_only"
+	DomainWorkArtifactSourceKindMaterializableDomainV0  = "materializable_domain_artifact"
+	DomainWorkArtifactCanonicalityCanonicalV0           = "canonical"
+	DomainWorkArtifactCanonicalityDerivedRegenerableV0  = "derived_regenerable"
+	DomainWorkArtifactCanonicalityEvidenceOnlyV0        = "evidence_only"
+	DomainWorkArtifactStageSourceV0                     = "source"
+	DomainWorkArtifactStageDraftV0                      = "draft"
+	DomainWorkArtifactStageReviewV0                     = "review"
+	DomainWorkArtifactStageFinalV0                      = "final"
+	DomainWorkArtifactStageDerivedV0                    = "derived"
+	DomainWorkArtifactMaterializationTargetDomainV0     = "domain_artifact"
+	DomainWorkArtifactMaterializationTargetEvidenceV0   = "evidence"
+	DomainWorkArtifactMaterializationTargetRegenerateV0 = "regenerate_from_canonical_sources"
+	DomainWorkArtifactMaterializationTargetNoneV0       = "none"
 )
+
+type DomainWorkArtifactContractV0 struct {
+	ArtifactType          string `json:"artifact_type"`
+	SourceKind            string `json:"source_kind"`
+	Canonicality          string `json:"canonicality"`
+	Stage                 string `json:"stage"`
+	MaterializationTarget string `json:"materialization_target"`
+}
+
+func ExpectedDomainWorkArtifactContractForWorkKindV0(workKind string) DomainWorkArtifactContractV0 {
+	return ExpectedDomainWorkArtifactContractForArtifactTypeV0(
+		ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind),
+	)
+}
+
+func ExpectedDomainWorkArtifactContractForArtifactTypeV0(artifactType string) DomainWorkArtifactContractV0 {
+	artifactType = strings.TrimSpace(artifactType)
+	contract := DomainWorkArtifactContractV0{
+		ArtifactType:          artifactType,
+		SourceKind:            DomainWorkArtifactSourceKindMaterializableDomainV0,
+		Canonicality:          DomainWorkArtifactCanonicalityCanonicalV0,
+		Stage:                 DomainWorkArtifactStageDraftV0,
+		MaterializationTarget: DomainWorkArtifactMaterializationTargetDomainV0,
+	}
+	switch artifactType {
+	case DomainWorkArtifactTypeSourceV0, DomainWorkArtifactTypeTopicStructureV0,
+		DomainWorkArtifactTypeTopicOutlineV0, DomainWorkArtifactTypeTopicSummaryV0,
+		DomainWorkArtifactTypeTopicExpansionPackageV0, DomainWorkArtifactTypeAssembledTopicV0,
+		DomainWorkArtifactTypeContentBlockV0, DomainWorkArtifactTypeQuestionBankV0,
+		DomainWorkArtifactTypeLocalHTMLSiteV0:
+		contract.SourceKind = DomainWorkArtifactSourceKindCanonicalSourceV0
+		contract.Canonicality = DomainWorkArtifactCanonicalityCanonicalV0
+		contract.Stage = DomainWorkArtifactStageSourceV0
+	case DomainWorkArtifactTypeVisualAssetV0, DomainWorkArtifactTypeAudioAssetV0,
+		DomainWorkArtifactTypeTutorBotPackageV0, DomainWorkArtifactTypeInteractivePracticeV0,
+		DomainWorkArtifactTypeHelpPackageV0:
+		contract.SourceKind = DomainWorkArtifactSourceKindDerivedRegenerableV0
+		contract.Canonicality = DomainWorkArtifactCanonicalityDerivedRegenerableV0
+		contract.Stage = DomainWorkArtifactStageDerivedV0
+		contract.MaterializationTarget = DomainWorkArtifactMaterializationTargetRegenerateV0
+	case DomainWorkArtifactTypeBlockRevisionV0, DomainWorkArtifactTypeExamResearchReportV0,
+		DomainWorkArtifactTypeAgentReviewReportV0, DomainWorkArtifactTypeAgentPairReviewReportV0,
+		DomainWorkArtifactTypeAgentCandidateVoteV0, DomainWorkArtifactTypeAgentCandidateSelectV0,
+		DomainWorkArtifactTypeDirectorReviewMatrixV0:
+		contract.SourceKind = DomainWorkArtifactSourceKindEvidenceOnlyV0
+		contract.Canonicality = DomainWorkArtifactCanonicalityEvidenceOnlyV0
+		contract.Stage = DomainWorkArtifactStageReviewV0
+		contract.MaterializationTarget = DomainWorkArtifactMaterializationTargetEvidenceV0
+	case DomainWorkArtifactTypeFinalDomainPackageV0:
+		contract.Stage = DomainWorkArtifactStageFinalV0
+	case DomainDocumentPlanArtifactTypeV0:
+		contract.SourceKind = DomainWorkArtifactSourceKindEvidenceOnlyV0
+		contract.Canonicality = DomainWorkArtifactCanonicalityEvidenceOnlyV0
+		contract.Stage = DomainWorkArtifactStageDraftV0
+		contract.MaterializationTarget = DomainWorkArtifactMaterializationTargetEvidenceV0
+	case DomainWorkArtifactTypeGenericWorkDeliveryV0, "":
+		contract.ArtifactType = DomainWorkArtifactTypeGenericWorkDeliveryV0
+		contract.SourceKind = DomainWorkArtifactSourceKindEvidenceOnlyV0
+		contract.Canonicality = DomainWorkArtifactCanonicalityEvidenceOnlyV0
+		contract.Stage = DomainWorkArtifactStageDraftV0
+		contract.MaterializationTarget = DomainWorkArtifactMaterializationTargetEvidenceV0
+	}
+	return contract
+}
 
 func ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind string) string {
 	switch strings.TrimSpace(workKind) {

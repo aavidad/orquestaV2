@@ -41,6 +41,11 @@
   `10_tutor_rag/corpus/` no es fuente primaria de rework textual por defecto;
   se corrigen HTML final/local, bancos de tests y tutor fuente, se reconstruye
   RAG al final y se valida contra el temario final aprobado.
+- Proyeccion de `DomainWorkArtifactContractV0` a `input_fields` OPES:
+  `artifact_source_kind`, `artifact_canonicality`, `artifact_stage` y
+  `artifact_materialization_target`; y contrato de seis subroles OPES con
+  bloqueo explicito sin write-set seguro o seis refs/write-sets deterministas
+  cuando existe `topic_dir`/`product_write_set`/`allowed_write_set`.
 - Alcance blando de busqueda OPES: `plan_temario` transporta en
   `opes_temario_agent_rules_2026_06_04` la regla de empezar por
   curso/tema/programa/canon/material reutilizable y excluir por defecto backups,

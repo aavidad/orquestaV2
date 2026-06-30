@@ -116,6 +116,22 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 			envOPESBridgeSpeechSynthesisReasonV0,
 			strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisReasonV0)),
 		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeRemoteQACapabilityV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQACapabilityV0)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeRemoteQACapabilityRefV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQACapabilityRefV0)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeRemoteQAEvidenceRefsV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQAEvidenceRefsV0)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeRemoteQAReasonV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQAReasonV0)),
+		),
 		serverConfigSettingFromRegistryV0(envCapacityReasoningEffortV0, string(stackCapacity.ReasoningEffort)),
 		serverConfigSettingFromRegistryV0(envCapacityPolicyRefV0, stackCapacity.PolicyRef),
 		serverConfigSettingFromRegistryV0(envCapacityPoolRefV0, stackCapacity.PoolRef),

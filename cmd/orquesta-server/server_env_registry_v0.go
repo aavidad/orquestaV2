@@ -171,6 +171,10 @@ const (
 	envOPESBridgeSpeechSynthesisCapabilityRefV0 = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY_REF"
 	envOPESBridgeSpeechSynthesisEvidenceRefsV0  = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS"
 	envOPESBridgeSpeechSynthesisReasonV0        = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_REASON"
+	envOPESBridgeRemoteQACapabilityV0           = "ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY"
+	envOPESBridgeRemoteQACapabilityRefV0        = "ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY_REF"
+	envOPESBridgeRemoteQAEvidenceRefsV0         = "ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS"
+	envOPESBridgeRemoteQAReasonV0               = "ORQUESTA_OPES_BRIDGE_REMOTE_QA_REASON"
 	envOPESBridgeAllowUnfilteredV0              = "ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED"
 	envOPESBridgeInputLedgerDisabledV0          = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_DISABLED"
 	envOPESBridgeInputLedgerPathV0              = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH"
@@ -445,6 +449,26 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "opes_bridge",
 		Label:       "Speech synthesis razon",
 		Description: "Razon operativa cuando speech_synthesis no esta disponible o se declara de forma invalida.",
+	},
+	envOPESBridgeRemoteQACapabilityV0: {
+		Scope:       "opes_bridge",
+		Label:       "Remote QA OPES",
+		Description: "Declaracion opt-in de capacidad remote_qa_provider para revisiones OPES que requieren agente externo.",
+	},
+	envOPESBridgeRemoteQACapabilityRefV0: {
+		Scope:       "opes_bridge",
+		Label:       "Remote QA ref",
+		Description: "Ref opaca de la capacidad remote_qa_provider declarada por la composicion OPES bridge.",
+	},
+	envOPESBridgeRemoteQAEvidenceRefsV0: {
+		Scope:       "opes_bridge",
+		Label:       "Remote QA evidencias",
+		Description: "Refs de evidencia asociadas a la capacidad remote_qa_provider declarada por la composicion OPES bridge.",
+	},
+	envOPESBridgeRemoteQAReasonV0: {
+		Scope:       "opes_bridge",
+		Label:       "Remote QA razon",
+		Description: "Razon operativa cuando remote_qa_provider no esta disponible o se declara de forma invalida.",
 	},
 	envCapacityReasoningEffortV0: {
 		Scope:       "capacity",

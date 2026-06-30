@@ -27,6 +27,10 @@ func TestDomainWorkExternalCapabilityRequirementsV0AudioRequiereSpeechSynthesis(
 		requirement.CapabilityRef != DomainWorkExternalCapabilityKindSpeechSynthesisV0 ||
 		requirement.Reason != DomainWorkExternalCapabilityReasonArtifactRequiresCapabilityV0 ||
 		!requirement.Required ||
+		!requirement.NetworkRequired ||
+		!requirement.ToolPathRequired ||
+		!requirement.ProviderQuotaSensitive ||
+		requirement.CommandTimeoutSeconds != 1800 ||
 		requirement.WorkKind != "tts_topic" ||
 		requirement.ArtifactType != DomainWorkArtifactTypeAudioAssetV0 ||
 		len(requirement.ExternalRefs) != 1 ||
@@ -59,9 +63,13 @@ func TestDomainWorkExternalCapabilityEvaluationV0AceptaDeclaracionTTSAlias(t *te
 		request,
 		[]DomainWorkExternalCapabilityV0{
 			{
-				CapabilityRef: " cap-tts-001 ",
-				Kind:          " tts ",
-				Available:     true,
+				CapabilityRef:         " cap-tts-001 ",
+				Kind:                  " tts ",
+				Available:             true,
+				NetworkReady:          true,
+				ToolPathReady:         true,
+				ProviderQuotaReady:    true,
+				CommandTimeoutSeconds: 1800,
 				ExternalRefs: []DomainWorkExternalRefV0{{
 					Kind: "edge_host_ref",
 					Ref:  "edge-host-ref-001",
@@ -105,6 +113,54 @@ func TestDomainWorkExternalCapabilityEvaluationV0ConservaRazonOperativaDeTTSNoDi
 	}
 }
 
+func TestDomainWorkExternalCapabilityRequirementsV0RevisionRemotaRequierePerfilProveedor(t *testing.T) {
+	request := validDomainWorkJobRequestForTestV0()
+	request.WorkKind = "review_agent_independent"
+
+	query := BuildDomainWorkExternalCapabilityQueryV0(request)
+
+	if query.ArtifactType != DomainWorkArtifactTypeAgentReviewReportV0 ||
+		len(query.Requirements) != 1 {
+		t.Fatalf("query=%+v", query)
+	}
+	requirement := query.Requirements[0]
+	if requirement.Kind != DomainWorkExternalCapabilityKindRemoteQAProviderV0 ||
+		requirement.Reason != DomainWorkExternalCapabilityReasonWorkKindRequiresCapabilityV0 ||
+		!requirement.Required ||
+		!requirement.NetworkRequired ||
+		!requirement.AuthStateRequired ||
+		!requirement.ProviderQuotaSensitive ||
+		requirement.ToolPathRequired ||
+		requirement.CommandTimeoutSeconds != 1200 {
+		t.Fatalf("requirement=%+v", requirement)
+	}
+}
+
+func TestDomainWorkExternalCapabilityEvaluationV0BloqueaQASiAuthOCuotaNoEstanListas(t *testing.T) {
+	request := validDomainWorkJobRequestForTestV0()
+	request.WorkKind = "review_agent_independent"
+
+	evaluation := EvaluateDomainWorkExternalCapabilitiesV0(
+		request,
+		[]DomainWorkExternalCapabilityV0{{
+			CapabilityRef:         "qa-provider-ref-001",
+			Kind:                  "qa_provider",
+			Available:             true,
+			NetworkReady:          true,
+			AuthStateReady:        false,
+			ProviderQuotaReady:    true,
+			CommandTimeoutSeconds: 1200,
+			OperationalReason:     "auth_state_expired",
+		}},
+	)
+
+	if evaluation.Ready ||
+		len(evaluation.MissingRequirements) != 1 ||
+		evaluation.OperationalReason != "auth_state_expired" {
+		t.Fatalf("evaluation=%+v", evaluation)
+	}
+}
+
 func TestDomainWorkExternalCapabilitySourcePortV0EsHexagonal(t *testing.T) {
 	var source DomainWorkExternalCapabilitySourcePortV0 = fakeDomainWorkExternalCapabilitySourceV0{}
 
@@ -131,9 +187,13 @@ func (fakeDomainWorkExternalCapabilitySourceV0) ListDomainWorkExternalCapabiliti
 ) ([]DomainWorkExternalCapabilityV0, error) {
 	return []DomainWorkExternalCapabilityV0{NormalizeDomainWorkExternalCapabilityV0(
 		DomainWorkExternalCapabilityV0{
-			CapabilityRef: "capability-speech-synthesis",
-			Kind:          "speech_synthesis",
-			Available:     true,
+			CapabilityRef:         "capability-speech-synthesis",
+			Kind:                  "speech_synthesis",
+			Available:             true,
+			NetworkReady:          true,
+			ToolPathReady:         true,
+			ProviderQuotaReady:    true,
+			CommandTimeoutSeconds: 1800,
 		},
 	)}, nil
 }

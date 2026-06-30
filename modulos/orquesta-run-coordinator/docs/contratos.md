@@ -39,3 +39,30 @@ inyecten. `QueueReader` y `RunDrainerPortV0` son obligatorios.
 Si el `RunDrainerPortV0` devuelve `QueueStatus`, el coordinador lo propaga al
 `QueueUpdater` en la rotacion posterior a la ejecucion. El coordinador no decide
 ese estado: solo lo transporta desde la composicion hacia el puerto de cola.
+
+## Reconciliacion ExternalWork/DomainWork
+
+`ReconcileExternalWorkPublicStatusV0` es un primer corte puro e idempotente
+para que una composicion no publique estados falsos de runs externas.
+
+Fuentes causales modeladas:
+
+- proyeccion de run;
+- `WorkflowTaskStore`;
+- outbox ledger;
+- process registry;
+- `agent_ack`/checkpoint;
+- artefacto local;
+- estado del job del dominio externo.
+
+Reglas:
+
+- un ACK completado observado gana a un estado `running/stale` y exige
+  `ingest_completed_ack`;
+- `projection=done` con `tasks=0` no se publica como `completed` si el job de
+  dominio sigue `pending`; queda `blocked` con accion de followup/bloqueo
+  causal;
+- `running` solo se justifica por proceso vivo, tarea abierta, outbox pendiente
+  o liveness verificable;
+- si faltan fuentes causales, el estado publico queda `unknown` con
+  `observe_causal_sources`.

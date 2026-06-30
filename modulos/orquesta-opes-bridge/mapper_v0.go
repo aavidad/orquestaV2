@@ -69,12 +69,15 @@ func BuildExternalWorkRunRequestWithContextV0(
 	if !opaqueOK {
 		return orquestaexternalworkrun.StartExternalWorkRunRequestV0{}, false
 	}
-	fields = appendFieldIfMissingV0(fields, "expected_artifact_type", expectedArtifactTypeV0(workKind))
+	expectedArtifactType := expectedArtifactTypeV0(workKind)
+	fields = appendFieldIfMissingV0(fields, "expected_artifact_type", expectedArtifactType)
+	fields = appendArtifactContractFieldsV0(fields, expectedArtifactType)
 	fields = appendFieldIfMissingV0(fields, "context_budget_profile", contextProfileForJobTypeV0(workKind))
 	fields = appendExpansionDocumentContractFieldsV0(fields, workKind)
 	fields = appendDocumentPlanContractFieldsV0(fields, workKind)
 	productWriteSet := productWriteSetFromPayloadFieldsV0(fields)
 	fields = appendProductWriteSetContractFieldsV0(fields, productWriteSet)
+	fields = appendOPESSubroleMaterializationFieldsV0(fields, productWriteSet, safeJob)
 	workRefs := workRefsForPayloadV0(job, fields)
 	acceptanceCriteria := appendProductWriteSetAcceptanceCriteriaV0(
 		acceptanceCriteriaForJobV0(workKind),
@@ -117,6 +120,30 @@ func BuildExternalWorkRunRequestWithContextV0(
 		RequestedBy:      config.RequestedBy,
 		AppChangeRequest: change,
 	}, true
+}
+
+func appendArtifactContractFieldsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	artifactType string,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	contract := orquestadomainwork.ExpectedDomainWorkArtifactContractForArtifactTypeV0(artifactType)
+	switch strings.TrimSpace(artifactType) {
+	case opesArtifactTypeCompletedSyllabusPackageV0:
+		contract.SourceKind = orquestadomainwork.DomainWorkArtifactSourceKindMaterializableDomainV0
+		contract.Canonicality = orquestadomainwork.DomainWorkArtifactCanonicalityCanonicalV0
+		contract.Stage = orquestadomainwork.DomainWorkArtifactStageFinalV0
+		contract.MaterializationTarget = orquestadomainwork.DomainWorkArtifactMaterializationTargetDomainV0
+	case opesArtifactTypeLearningGamesPackageV0, opesArtifactTypeHelpManualPackageV0:
+		contract.SourceKind = orquestadomainwork.DomainWorkArtifactSourceKindDerivedRegenerableV0
+		contract.Canonicality = orquestadomainwork.DomainWorkArtifactCanonicalityDerivedRegenerableV0
+		contract.Stage = orquestadomainwork.DomainWorkArtifactStageDerivedV0
+		contract.MaterializationTarget = orquestadomainwork.DomainWorkArtifactMaterializationTargetRegenerateV0
+	}
+	fields = appendFieldIfMissingV0(fields, "artifact_source_kind", contract.SourceKind)
+	fields = appendFieldIfMissingV0(fields, "artifact_canonicality", contract.Canonicality)
+	fields = appendFieldIfMissingV0(fields, "artifact_stage", contract.Stage)
+	fields = appendFieldIfMissingV0(fields, "artifact_materialization_target", contract.MaterializationTarget)
+	return fields
 }
 
 func EffectiveWorkKindForExternalJobV0(job orquestaopesconnector.ExternalJobV0) string {
@@ -325,6 +352,64 @@ func appendProductWriteSetContractFieldsV0(
 		"request_safe_topic_dir_or_product_write_set",
 	)
 	return fields
+}
+
+func appendOPESSubroleMaterializationFieldsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	productWriteSet []string,
+	safeJob string,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if !fieldDeclaresSixSubrolesV0(fields) {
+		return fields
+	}
+	if len(productWriteSet) == 0 {
+		fields = appendFieldIfMissingV0(fields, "opes_subroles_materialization_status", "blocked_missing_product_write_set")
+		fields = appendFieldIfMissingV0(fields, "opes_subroles_blocking_reason", "safe_product_write_set_required_for_real_child_tasks")
+		return fields
+	}
+	fields = appendFieldIfMissingV0(fields, "opes_subroles_materialization_status", "contract_ready_pending_workflow_tasks")
+	fields = appendValuesFieldIfMissingV0(fields, "opes_subrole_task_refs", opesSubroleTaskRefsV0(safeJob))
+	fields = appendValuesFieldIfMissingV0(fields, "opes_subrole_write_sets", opesSubroleWriteSetsV0(productWriteSet[0]))
+	fields = appendValuesFieldIfMissingV0(fields, "opes_subrole_roles", opesSubroleRolesV0())
+	return fields
+}
+
+func opesSubroleRolesV0() []string {
+	return []string{"redaccion", "tests", "visuales", "audio", "tutor_rag", "qa"}
+}
+
+func opesSubroleTaskRefsV0(safeJob string) []string {
+	roles := opesSubroleRolesV0()
+	refs := make([]string, 0, len(roles))
+	for _, role := range roles {
+		refs = append(refs, "task-opes-subrole-"+strings.TrimSpace(safeJob)+"-"+role)
+	}
+	return refs
+}
+
+func opesSubroleWriteSetsV0(productWriteSet string) []string {
+	root := strings.Trim(strings.TrimSpace(productWriteSet), "/")
+	roles := opesSubroleRolesV0()
+	sets := make([]string, 0, len(roles))
+	for _, role := range roles {
+		sets = append(sets, root+"/subroles/"+role)
+	}
+	return sets
+}
+
+func appendValuesFieldIfMissingV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	name string,
+	values []string,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if fieldHasNameV0(fields, name) {
+		return fields
+	}
+	values = compactStringsV0(values)
+	if len(values) == 0 {
+		return fields
+	}
+	return append(fields, orquestadomainwork.DomainWorkFieldV0{Name: name, Values: values})
 }
 
 func appendProductWriteSetAcceptanceCriteriaV0(

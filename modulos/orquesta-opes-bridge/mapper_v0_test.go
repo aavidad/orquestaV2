@@ -178,10 +178,51 @@ func TestBuildExternalWorkRunRequestV0MarcaContratoSeisSubrolesOPES(t *testing.T
 		!containsStringForTestV0(work.InterfaceRefs, "opes.product-write-set-required.v1") ||
 		!fieldValueForTestV0(work.InputFields, "product_write_set_status", "missing_for_canonical_consolidation") ||
 		!fieldValueForTestV0(work.InputFields, "product_write_set_rework_action", "request_safe_topic_dir_or_product_write_set") ||
+		!fieldValueForTestV0(work.InputFields, "opes_subroles_materialization_status", "blocked_missing_product_write_set") ||
+		!fieldValueForTestV0(work.InputFields, "opes_subroles_blocking_reason", "safe_product_write_set_required_for_real_child_tasks") ||
 		!containsStringForTestV0(
 			req.AppChangeRequest.AcceptanceCriteria,
 			"si subroles_required exige seis subroles y falta topic_dir/product_write_set/allowed_write_set seguro, no cerrar como producto canonico consolidado; devolver pendiente_continuar o rework solicitando write-set de producto",
 		) {
+		t.Fatalf("external_work=%+v", work)
+	}
+}
+
+func TestBuildExternalWorkRunRequestV0MaterializaContratoSeisSubrolesConWriteSetProducto(t *testing.T) {
+	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
+		ID:   "job-tema-subroles-producto-001",
+		Type: "draft_content_block",
+		PayloadJSON: `{
+			"topic_id":"tema-subroles-001",
+			"subroles_required":6,
+			"topic_dir":"temas/tema_subroles_001"
+		}`,
+	}, JobRunConfigV0{})
+
+	if !ok {
+		t.Fatalf("BuildExternalWorkRunRequestV0 ok=false")
+	}
+	work := req.AppChangeRequest.ExternalWork
+	if work == nil ||
+		!fieldValueForTestV0(work.InputFields, "opes_subroles_materialization_status", "contract_ready_pending_workflow_tasks") ||
+		!fieldValuesForTestV0(work.InputFields, "opes_subrole_roles", []string{"redaccion", "tests", "visuales", "audio", "tutor_rag", "qa"}) ||
+		!fieldValuesForTestV0(work.InputFields, "opes_subrole_task_refs", []string{
+			"task-opes-subrole-job-tema-subroles-producto-001-redaccion",
+			"task-opes-subrole-job-tema-subroles-producto-001-tests",
+			"task-opes-subrole-job-tema-subroles-producto-001-visuales",
+			"task-opes-subrole-job-tema-subroles-producto-001-audio",
+			"task-opes-subrole-job-tema-subroles-producto-001-tutor_rag",
+			"task-opes-subrole-job-tema-subroles-producto-001-qa",
+		}) ||
+		!fieldValuesForTestV0(work.InputFields, "opes_subrole_write_sets", []string{
+			"temas/tema_subroles_001/subroles/redaccion",
+			"temas/tema_subroles_001/subroles/tests",
+			"temas/tema_subroles_001/subroles/visuales",
+			"temas/tema_subroles_001/subroles/audio",
+			"temas/tema_subroles_001/subroles/tutor_rag",
+			"temas/tema_subroles_001/subroles/qa",
+		}) ||
+		fieldValueForTestV0(work.InputFields, "product_write_set_status", "missing_for_canonical_consolidation") {
 		t.Fatalf("external_work=%+v", work)
 	}
 }

@@ -31,6 +31,20 @@ Invariantes:
   para que Codex pueda escribir ACK/logs/control sin exponer esos ficheros al
   contexto normal del proyecto.
 - `ProcessRuntimeLaunchRequestV0` solo expone el wrapper y el workdir del proyecto; no expone argumentos, entorno, HOME, OAuth ni modelo.
+
+## Contexto requerido recuperable
+
+El resolver Codex no bloquea el lanzamiento por entradas `required=true`
+truncadas o `mode=ref_only` con `materialization_missing`. Ese contexto puede
+ser recuperable por lectura local, consulta al Director o evidencia en ACK, asi
+que el prompt conserva la advertencia y pide resolucion explicita:
+`contexto_truncado_resuelto:*` o `contexto_ref_only_resuelto:*` en `notes`
+cuando el agente cierre como `completed`.
+
+La composicion solo debe cortar fuerte por seguridad, causalidad, refs
+imposibles, datos sensibles o efectos externos no autorizados. Si el contexto
+no se puede resolver, el agente debe devolver bloqueo/rework causal, no quedar
+sin lanzar.
 - El agente externo debe escribir `agent_ack.json` en la ruta absoluta indicada en el prompt.
 - Si `agent_ack.json` esta fuera de `project_work_dir`, el prompt exige
   escribirlo desde `runtime_work_dir` por shell, no mediante `apply_patch` de

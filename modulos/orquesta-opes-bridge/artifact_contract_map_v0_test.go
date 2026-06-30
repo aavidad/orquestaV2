@@ -64,6 +64,14 @@ func TestOPESBridgeArtifactContractMapConsumeOwnerNeutralV0(t *testing.T) {
 			) {
 				t.Fatalf("input_fields=%+v", req.AppChangeRequest.ExternalWork.InputFields)
 			}
+			expectedContract := expectedOPESArtifactContractForBridgeMapTestV0(expectedArtifact)
+			fields := req.AppChangeRequest.ExternalWork.InputFields
+			if !fieldValueForTestV0(fields, "artifact_source_kind", expectedContract.SourceKind) ||
+				!fieldValueForTestV0(fields, "artifact_canonicality", expectedContract.Canonicality) ||
+				!fieldValueForTestV0(fields, "artifact_stage", expectedContract.Stage) ||
+				!fieldValueForTestV0(fields, "artifact_materialization_target", expectedContract.MaterializationTarget) {
+				t.Fatalf("artifact contract fields=%+v expected=%+v", fields, expectedContract)
+			}
 		})
 	}
 }
@@ -89,4 +97,23 @@ func expectedOPESArtifactForBridgeMapTestV0(workKind string) string {
 	default:
 		return orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind)
 	}
+}
+
+func expectedOPESArtifactContractForBridgeMapTestV0(
+	artifactType string,
+) orquestadomainwork.DomainWorkArtifactContractV0 {
+	contract := orquestadomainwork.ExpectedDomainWorkArtifactContractForArtifactTypeV0(artifactType)
+	switch artifactType {
+	case opesArtifactTypeCompletedSyllabusPackageV0:
+		contract.SourceKind = orquestadomainwork.DomainWorkArtifactSourceKindMaterializableDomainV0
+		contract.Canonicality = orquestadomainwork.DomainWorkArtifactCanonicalityCanonicalV0
+		contract.Stage = orquestadomainwork.DomainWorkArtifactStageFinalV0
+		contract.MaterializationTarget = orquestadomainwork.DomainWorkArtifactMaterializationTargetDomainV0
+	case opesArtifactTypeLearningGamesPackageV0, opesArtifactTypeHelpManualPackageV0:
+		contract.SourceKind = orquestadomainwork.DomainWorkArtifactSourceKindDerivedRegenerableV0
+		contract.Canonicality = orquestadomainwork.DomainWorkArtifactCanonicalityDerivedRegenerableV0
+		contract.Stage = orquestadomainwork.DomainWorkArtifactStageDerivedV0
+		contract.MaterializationTarget = orquestadomainwork.DomainWorkArtifactMaterializationTargetRegenerateV0
+	}
+	return contract
 }

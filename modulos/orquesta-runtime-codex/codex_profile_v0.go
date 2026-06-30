@@ -36,6 +36,7 @@ const (
 	CodexConnectorAckCorrelationV0 CodexConnectorIssueCodeV0 = "codex_agent_ack_correlacion_invalida"
 	CodexConnectorAckArtifactV0    CodexConnectorIssueCodeV0 = "codex_agent_ack_artifact_invalido"
 	CodexConnectorAckForbiddenV0   CodexConnectorIssueCodeV0 = "codex_agent_ack_detalle_prohibido"
+	CodexConnectorContextMissingV0 CodexConnectorIssueCodeV0 = "codex_agent_contexto_requerido_no_materializado"
 )
 
 const (

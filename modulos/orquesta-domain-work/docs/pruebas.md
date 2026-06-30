@@ -24,7 +24,12 @@ Cobertura:
 - capacidades externas de dominio: jobs de audio derivan requisito
   `speech_synthesis`, ausencia de capacidad bloquea con
   `domain_work_external_capability_missing`, y aliases `tts`/`text_to_speech`
-  se normalizan sin acoplar proveedor ni runner;
+  se normalizan sin acoplar proveedor ni runner; el perfil de preflight marca
+  red, tool path, cuota sensible y timeout;
+- revision remota deriva requisito `remote_qa_provider` desde artefactos
+  neutrales `agent_review_report`, `agent_pair_review_report` o
+  `director_review_matrix`, con red, auth state, cuota sensible y timeout, y
+  bloquea si la capacidad declarada no satisface esas precondiciones;
 - identidad canonica de jobs con fingerprint `sha256`, `request_id` excluido,
   `required_tests` incluido y base de `job_ref` compartida por adaptadores;
 - suite reusable `contracttest` para stores `DomainWorkJobRecordStorePortV0`;

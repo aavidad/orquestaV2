@@ -2,6 +2,7 @@ package orquestadomainwork
 
 import (
 	"context"
+	"strconv"
 	"strings"
 )
 
@@ -9,32 +10,44 @@ const (
 	DomainWorkExternalCapabilityQuerySchemaV0      = "domain_work_external_capability_query.v0"
 	DomainWorkExternalCapabilityEvaluationSchemaV0 = "domain_work_external_capability_evaluation.v0"
 
-	DomainWorkExternalCapabilityKindSpeechSynthesisV0 = "speech_synthesis"
+	DomainWorkExternalCapabilityKindSpeechSynthesisV0  = "speech_synthesis"
+	DomainWorkExternalCapabilityKindRemoteQAProviderV0 = "remote_qa_provider"
 
 	DomainWorkExternalCapabilityReasonArtifactRequiresCapabilityV0 = "artifact_type_requires_external_capability"
+	DomainWorkExternalCapabilityReasonWorkKindRequiresCapabilityV0 = "work_kind_requires_external_capability"
 	DomainWorkExternalCapabilityReasonMissingV0                    = "external_capability_missing"
 
 	ErrDomainWorkExternalCapabilityMissingV0 = "domain_work_external_capability_missing"
 )
 
 type DomainWorkExternalCapabilityRequirementV0 struct {
-	CapabilityRef string                    `json:"capability_ref"`
-	Kind          string                    `json:"kind"`
-	WorkKind      string                    `json:"work_kind,omitempty"`
-	ArtifactType  string                    `json:"artifact_type,omitempty"`
-	Reason        string                    `json:"reason,omitempty"`
-	Required      bool                      `json:"required,omitempty"`
-	ExternalRefs  []DomainWorkExternalRefV0 `json:"external_refs,omitempty"`
-	EvidenceRefs  []string                  `json:"evidence_refs,omitempty"`
+	CapabilityRef          string                    `json:"capability_ref"`
+	Kind                   string                    `json:"kind"`
+	WorkKind               string                    `json:"work_kind,omitempty"`
+	ArtifactType           string                    `json:"artifact_type,omitempty"`
+	Reason                 string                    `json:"reason,omitempty"`
+	Required               bool                      `json:"required,omitempty"`
+	NetworkRequired        bool                      `json:"network_required,omitempty"`
+	AuthStateRequired      bool                      `json:"auth_state_required,omitempty"`
+	ToolPathRequired       bool                      `json:"tool_path_required,omitempty"`
+	ProviderQuotaSensitive bool                      `json:"provider_quota_sensitive,omitempty"`
+	CommandTimeoutSeconds  int                       `json:"command_timeout_seconds,omitempty"`
+	ExternalRefs           []DomainWorkExternalRefV0 `json:"external_refs,omitempty"`
+	EvidenceRefs           []string                  `json:"evidence_refs,omitempty"`
 }
 
 type DomainWorkExternalCapabilityV0 struct {
-	CapabilityRef     string                    `json:"capability_ref"`
-	Kind              string                    `json:"kind"`
-	Available         bool                      `json:"available"`
-	OperationalReason string                    `json:"operational_reason,omitempty"`
-	ExternalRefs      []DomainWorkExternalRefV0 `json:"external_refs,omitempty"`
-	EvidenceRefs      []string                  `json:"evidence_refs,omitempty"`
+	CapabilityRef         string                    `json:"capability_ref"`
+	Kind                  string                    `json:"kind"`
+	Available             bool                      `json:"available"`
+	OperationalReason     string                    `json:"operational_reason,omitempty"`
+	NetworkReady          bool                      `json:"network_ready,omitempty"`
+	AuthStateReady        bool                      `json:"auth_state_ready,omitempty"`
+	ToolPathReady         bool                      `json:"tool_path_ready,omitempty"`
+	ProviderQuotaReady    bool                      `json:"provider_quota_ready,omitempty"`
+	CommandTimeoutSeconds int                       `json:"command_timeout_seconds,omitempty"`
+	ExternalRefs          []DomainWorkExternalRefV0 `json:"external_refs,omitempty"`
+	EvidenceRefs          []string                  `json:"evidence_refs,omitempty"`
 }
 
 type DomainWorkExternalCapabilityQueryV0 struct {
@@ -90,23 +103,47 @@ func RequiredDomainWorkExternalCapabilitiesForJobV0(
 ) []DomainWorkExternalCapabilityRequirementV0 {
 	request = NormalizeDomainWorkJobRequestV0(request)
 	artifactType := ExpectedDomainWorkArtifactTypeForWorkKindV0(request.WorkKind)
-	if artifactType != DomainWorkArtifactTypeAudioAssetV0 {
+	requirements := []DomainWorkExternalCapabilityRequirementV0{}
+	if artifactType == DomainWorkArtifactTypeAudioAssetV0 {
+		requirements = append(requirements, NormalizeDomainWorkExternalCapabilityRequirementV0(
+			DomainWorkExternalCapabilityRequirementV0{
+				CapabilityRef:          DomainWorkExternalCapabilityKindSpeechSynthesisV0,
+				Kind:                   DomainWorkExternalCapabilityKindSpeechSynthesisV0,
+				WorkKind:               request.WorkKind,
+				ArtifactType:           artifactType,
+				Reason:                 DomainWorkExternalCapabilityReasonArtifactRequiresCapabilityV0,
+				Required:               true,
+				NetworkRequired:        true,
+				ToolPathRequired:       true,
+				ProviderQuotaSensitive: true,
+				CommandTimeoutSeconds:  1800,
+				ExternalRefs:           append([]DomainWorkExternalRefV0(nil), request.ExternalRefs...),
+				EvidenceRefs:           append([]string(nil), request.EvidenceRefs...),
+			},
+		))
+	}
+	if domainWorkRequiresRemoteQAProviderV0(request.WorkKind, artifactType) {
+		requirements = append(requirements, NormalizeDomainWorkExternalCapabilityRequirementV0(
+			DomainWorkExternalCapabilityRequirementV0{
+				CapabilityRef:          DomainWorkExternalCapabilityKindRemoteQAProviderV0,
+				Kind:                   DomainWorkExternalCapabilityKindRemoteQAProviderV0,
+				WorkKind:               request.WorkKind,
+				ArtifactType:           artifactType,
+				Reason:                 DomainWorkExternalCapabilityReasonWorkKindRequiresCapabilityV0,
+				Required:               true,
+				NetworkRequired:        true,
+				AuthStateRequired:      true,
+				ProviderQuotaSensitive: true,
+				CommandTimeoutSeconds:  1200,
+				ExternalRefs:           append([]DomainWorkExternalRefV0(nil), request.ExternalRefs...),
+				EvidenceRefs:           append([]string(nil), request.EvidenceRefs...),
+			},
+		))
+	}
+	if requirements == nil {
 		return []DomainWorkExternalCapabilityRequirementV0{}
 	}
-	return []DomainWorkExternalCapabilityRequirementV0{
-		NormalizeDomainWorkExternalCapabilityRequirementV0(
-			DomainWorkExternalCapabilityRequirementV0{
-				CapabilityRef: DomainWorkExternalCapabilityKindSpeechSynthesisV0,
-				Kind:          DomainWorkExternalCapabilityKindSpeechSynthesisV0,
-				WorkKind:      request.WorkKind,
-				ArtifactType:  artifactType,
-				Reason:        DomainWorkExternalCapabilityReasonArtifactRequiresCapabilityV0,
-				Required:      true,
-				ExternalRefs:  append([]DomainWorkExternalRefV0(nil), request.ExternalRefs...),
-				EvidenceRefs:  append([]string(nil), request.EvidenceRefs...),
-			},
-		),
-	}
+	return requirements
 }
 
 func EvaluateDomainWorkExternalCapabilitiesV0(
@@ -178,6 +215,9 @@ func NormalizeDomainWorkExternalCapabilityRequirementV0(
 	requirement.WorkKind = strings.TrimSpace(requirement.WorkKind)
 	requirement.ArtifactType = strings.TrimSpace(requirement.ArtifactType)
 	requirement.Reason = strings.TrimSpace(requirement.Reason)
+	if requirement.CommandTimeoutSeconds < 0 {
+		requirement.CommandTimeoutSeconds = 0
+	}
 	requirement.ExternalRefs = compactDomainWorkExternalRefsV0(requirement.ExternalRefs)
 	requirement.EvidenceRefs = compactDomainWorkStringsV0(requirement.EvidenceRefs)
 	return requirement
@@ -192,6 +232,9 @@ func NormalizeDomainWorkExternalCapabilityV0(
 		capability.CapabilityRef = capability.Kind
 	}
 	capability.OperationalReason = strings.TrimSpace(capability.OperationalReason)
+	if capability.CommandTimeoutSeconds < 0 {
+		capability.CommandTimeoutSeconds = 0
+	}
 	capability.ExternalRefs = compactDomainWorkExternalRefsV0(capability.ExternalRefs)
 	capability.EvidenceRefs = compactDomainWorkStringsV0(capability.EvidenceRefs)
 	return capability
@@ -213,6 +256,11 @@ func compactDomainWorkExternalCapabilityRequirementsV0(
 			requirement.ArtifactType + "\x00" +
 			requirement.Reason + "\x00" +
 			boolDomainWorkExternalCapabilityKeyV0(requirement.Required) + "\x00" +
+			boolDomainWorkExternalCapabilityKeyV0(requirement.NetworkRequired) + "\x00" +
+			boolDomainWorkExternalCapabilityKeyV0(requirement.AuthStateRequired) + "\x00" +
+			boolDomainWorkExternalCapabilityKeyV0(requirement.ToolPathRequired) + "\x00" +
+			boolDomainWorkExternalCapabilityKeyV0(requirement.ProviderQuotaSensitive) + "\x00" +
+			itoaDomainWorkExternalCapabilityV0(requirement.CommandTimeoutSeconds) + "\x00" +
 			joinDomainWorkExternalRefsV0(requirement.ExternalRefs) + "\x00" +
 			strings.Join(requirement.EvidenceRefs, "\x00")
 		if _, ok := seen[key]; ok {
@@ -241,6 +289,11 @@ func compactDomainWorkExternalCapabilitiesV0(
 			capability.Kind + "\x00" +
 			boolDomainWorkExternalCapabilityKeyV0(capability.Available) + "\x00" +
 			capability.OperationalReason + "\x00" +
+			boolDomainWorkExternalCapabilityKeyV0(capability.NetworkReady) + "\x00" +
+			boolDomainWorkExternalCapabilityKeyV0(capability.AuthStateReady) + "\x00" +
+			boolDomainWorkExternalCapabilityKeyV0(capability.ToolPathReady) + "\x00" +
+			boolDomainWorkExternalCapabilityKeyV0(capability.ProviderQuotaReady) + "\x00" +
+			itoaDomainWorkExternalCapabilityV0(capability.CommandTimeoutSeconds) + "\x00" +
 			joinDomainWorkExternalRefsV0(capability.ExternalRefs) + "\x00" +
 			strings.Join(capability.EvidenceRefs, "\x00")
 		if _, ok := seen[key]; ok {
@@ -263,8 +316,9 @@ func matchDomainWorkExternalCapabilityV0(
 		if !capability.Available {
 			continue
 		}
-		if capability.Kind == requirement.Kind ||
-			capability.CapabilityRef == requirement.CapabilityRef {
+		if (capability.Kind == requirement.Kind ||
+			capability.CapabilityRef == requirement.CapabilityRef) &&
+			domainWorkCapabilitySatisfiesProfileV0(requirement, capability) {
 			return capability, true
 		}
 	}
@@ -294,9 +348,55 @@ func normalizeDomainWorkExternalCapabilityKindV0(value string) string {
 	switch strings.TrimSpace(value) {
 	case "tts", "text_to_speech", "text-to-speech":
 		return DomainWorkExternalCapabilityKindSpeechSynthesisV0
+	case "qa", "qa_provider", "remote-review", "remote_review_provider":
+		return DomainWorkExternalCapabilityKindRemoteQAProviderV0
 	default:
 		return strings.TrimSpace(value)
 	}
+}
+
+func domainWorkRequiresRemoteQAProviderV0(workKind string, artifactType string) bool {
+	switch artifactType {
+	case DomainWorkArtifactTypeAgentReviewReportV0, DomainWorkArtifactTypeAgentPairReviewReportV0,
+		DomainWorkArtifactTypeDirectorReviewMatrixV0:
+		return true
+	}
+	switch strings.TrimSpace(workKind) {
+	case "review_agent_independent", "review_independent_agent",
+		"review_agent_pair", "review_peer_pair", "review_pair",
+		"review_director_consolidation", "review_consensus_director", "review_director_final":
+		return true
+	default:
+		return false
+	}
+}
+
+func domainWorkCapabilitySatisfiesProfileV0(
+	requirement DomainWorkExternalCapabilityRequirementV0,
+	capability DomainWorkExternalCapabilityV0,
+) bool {
+	if requirement.NetworkRequired && !capability.NetworkReady {
+		return false
+	}
+	if requirement.AuthStateRequired && !capability.AuthStateReady {
+		return false
+	}
+	if requirement.ToolPathRequired && !capability.ToolPathReady {
+		return false
+	}
+	if requirement.ProviderQuotaSensitive && !capability.ProviderQuotaReady {
+		return false
+	}
+	if requirement.CommandTimeoutSeconds > 0 &&
+		capability.CommandTimeoutSeconds > 0 &&
+		capability.CommandTimeoutSeconds < requirement.CommandTimeoutSeconds {
+		return false
+	}
+	return true
+}
+
+func itoaDomainWorkExternalCapabilityV0(value int) string {
+	return strconv.Itoa(value)
 }
 
 func boolDomainWorkExternalCapabilityKeyV0(value bool) string {
