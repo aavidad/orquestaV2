@@ -132,6 +132,7 @@ func opesFinalPackageRequiredTestsV0(
 			TestRef: "opes-final-package-manifest-" + safeJob,
 			AcceptanceCriteria: []string{
 				"Existe manifest_cierre.json del completed_syllabus_package con schema opes_final_package_evidence_manifest.v0.",
+				"El manifest identifica package_ref, manifest_ref, checksum_refs, validation_report_ref y review_matrix_ref del paquete final.",
 				"El manifest declara evidencias requeridas para HTML, RAG, audio, tests, visual y QA final.",
 				"Si falta una evidencia obligatoria, el estado es pendiente_continuar con followup_refs causales y no listo_para_revision_operador.",
 			},

@@ -2,6 +2,7 @@ package orquestaopesbridge
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -93,6 +94,23 @@ func TestOPESRequiredTestPolicyV0FinalTemarioExigeMinimosYComunes(t *testing.T) 
 		!stringInRequiredTestRefsForTestV0(finalManifest.EvidenceRefs, "opes-expected-evidence-manifest-cierre") ||
 		!stringInRequiredTestRefsForTestV0(finalManifest.EvidenceRefs, "opes-final-evidence:qa") {
 		t.Fatalf("final_manifest_required_test=%+v", finalManifest)
+	}
+	criteria := strings.Join(finalManifest.AcceptanceCriteria, "\n")
+	for _, want := range []string{
+		"manifest_cierre.json",
+		"checksum_refs",
+		"validation_report_ref",
+		"review_matrix_ref",
+		"HTML",
+		"RAG",
+		"audio",
+		"tests",
+		"visual",
+		"QA",
+	} {
+		if !strings.Contains(criteria, want) {
+			t.Fatalf("final_manifest_criteria=%q falta %s", criteria, want)
+		}
 	}
 }
 
