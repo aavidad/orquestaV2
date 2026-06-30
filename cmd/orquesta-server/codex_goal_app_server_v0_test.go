@@ -1333,6 +1333,54 @@ func TestCodexGoalBackendArgsV0NoUsaProxyParaTmuxV0(t *testing.T) {
 	}
 }
 
+func TestServerConfigWithCodexGoalBackendDiagnosticsV0BloqueaReadinessV0(t *testing.T) {
+	unavailable := serverCodexUnavailableGoalBackendV0{
+		IssueCode: "codex_app_server_tmux_session_exited",
+	}
+	config := serverConfigWithCodexGoalBackendDiagnosticsV0(orquestaserver.ConfigV0{
+		EffectiveConfig: orquestaserver.ServerEffectiveConfigV0{
+			SchemaVersion: orquestaserver.ServerEffectiveConfigSchemaVersionV0,
+		},
+	}, serverCodexGoalBackendsV0{
+		AppGoal: serverCodexGoalBackendV0{
+			Starter:  unavailable,
+			Observer: unavailable,
+		},
+	})
+	if !effectiveConfigHasDiagnosticForTestV0(
+		config.EffectiveConfig,
+		serverCodexGoalBackendDegradedDiagnosticCodeV0,
+		"codex_app_server_tmux_session_exited",
+	) {
+		t.Fatalf("diagnostico backend degradado ausente: %+v", config.EffectiveConfig.Diagnostics)
+	}
+
+	readiness := orquestaserver.NewServerReadinessV0(orquestaserver.StateV0{
+		Status:          "running",
+		StartupReady:    true,
+		StartupStatus:   "startup_ready",
+		EffectiveConfig: config.EffectiveConfig,
+	})
+	if readiness.Ready ||
+		!readiness.StartupReady ||
+		readiness.StartupStatus != "startup_degraded_"+serverCodexGoalBackendDegradedDiagnosticCodeV0 ||
+		len(readiness.Diagnostics) != 1 ||
+		readiness.Diagnostics[0].Code != serverCodexGoalBackendDegradedDiagnosticCodeV0 ||
+		readiness.Diagnostics[0].Scope != "app_goal" ||
+		!containsStringForTestV0(readiness.EvidenceRefs, "evidence-ref-server-codex-goal-backend-degraded-app_goal") {
+		t.Fatalf("readiness=%+v", readiness)
+	}
+	body, err := json.Marshal(readiness)
+	if err != nil {
+		t.Fatalf("marshal readiness: %v", err)
+	}
+	for _, forbidden := range []string{"/home/", ".codex", "token", "socket_path"} {
+		if strings.Contains(string(body), forbidden) {
+			t.Fatalf("readiness filtra %q: %s", forbidden, string(body))
+		}
+	}
+}
+
 func TestServerGoalShutdownHooksFromBackendsV0IncluyeAppEIdleV0(t *testing.T) {
 	appHook := &fakeServerGoalShutdownHookV0{id: "app"}
 	idleHook := &fakeServerGoalShutdownHookV0{id: "idle"}

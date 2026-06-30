@@ -7,6 +7,7 @@ const (
 	ServerReadinessSchemaVersionV0 = "orquesta_server_readiness.v0"
 
 	serverReadinessExternalWorkGoalBackendRequiredCodeV0 = "external_work_goal_backend_required"
+	serverReadinessCodexGoalBackendDegradedCodeV0        = "codex_goal_backend_degraded"
 )
 
 type ServerReadinessV0 struct {
@@ -93,7 +94,8 @@ func serverReadinessBlockingDiagnosticsV0(diagnostics []ServerDiagnosticV0) []Se
 	out := make([]ServerDiagnosticV0, 0, len(normalized))
 	for _, diagnostic := range normalized {
 		switch diagnostic.Code {
-		case serverReadinessExternalWorkGoalBackendRequiredCodeV0:
+		case serverReadinessExternalWorkGoalBackendRequiredCodeV0,
+			serverReadinessCodexGoalBackendDegradedCodeV0:
 			out = append(out, diagnostic)
 		}
 	}

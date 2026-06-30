@@ -15,6 +15,8 @@ type serverCodexGoalBackendsV0 struct {
 	IdleGoal serverCodexGoalBackendV0
 }
 
+const serverCodexGoalBackendDegradedDiagnosticCodeV0 = "codex_goal_backend_degraded"
+
 func serverCodexGoalBackendFromEnvV0(
 	config orquestaserver.ConfigV0,
 ) (serverCodexGoalBackendV0, error) {
@@ -143,6 +145,50 @@ func codexGoalBackendFromEnvV0() string {
 
 func codexGoalBackendOperationalFromEnvV0() bool {
 	return codexGoalBackendFromEnvV0() == codexGoalBackendAppServerTmuxV0
+}
+
+func serverConfigWithCodexGoalBackendDiagnosticsV0(
+	config orquestaserver.ConfigV0,
+	backends serverCodexGoalBackendsV0,
+) orquestaserver.ConfigV0 {
+	diagnostics := append([]orquestaserver.ServerDiagnosticV0(nil), config.EffectiveConfig.Diagnostics...)
+	diagnostics = append(diagnostics, serverCodexGoalBackendDiagnosticV0("app_goal", backends.AppGoal)...)
+	diagnostics = append(diagnostics, serverCodexGoalBackendDiagnosticV0("idle_goal", backends.IdleGoal)...)
+	config.EffectiveConfig.Diagnostics = diagnostics
+	config.EffectiveConfig = orquestaserver.NormalizeServerEffectiveConfigV0(config.EffectiveConfig)
+	return config
+}
+
+func serverCodexGoalBackendDiagnosticV0(
+	scope string,
+	backend serverCodexGoalBackendV0,
+) []orquestaserver.ServerDiagnosticV0 {
+	issueCode := serverCodexGoalBackendUnavailableIssueCodeV0(backend)
+	if issueCode == "" {
+		return nil
+	}
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		scope = "codex_goal"
+	}
+	return []orquestaserver.ServerDiagnosticV0{{
+		Code:    serverCodexGoalBackendDegradedDiagnosticCodeV0,
+		Scope:   scope,
+		Message: "codex goal backend degradado: " + issueCode,
+		EvidenceRefs: []string{
+			"evidence-ref-server-codex-goal-backend-degraded-" + scope,
+		},
+	}}
+}
+
+func serverCodexGoalBackendUnavailableIssueCodeV0(backend serverCodexGoalBackendV0) string {
+	if unavailable, ok := backend.Starter.(serverCodexUnavailableGoalBackendV0); ok {
+		return strings.TrimSpace(unavailable.IssueCode)
+	}
+	if unavailable, ok := backend.Observer.(serverCodexUnavailableGoalBackendV0); ok {
+		return strings.TrimSpace(unavailable.IssueCode)
+	}
+	return ""
 }
 
 func codexGoalBackendProxyDiagnosticAllowedV0() bool {

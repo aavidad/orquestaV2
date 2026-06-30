@@ -39,6 +39,7 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 	if err != nil {
 		return nil, err
 	}
+	serverConfig = serverConfigWithCodexGoalBackendDiagnosticsV0(serverConfig, goalBackends)
 	stack, err := buildStackFromEnvWithGoalBackendV0(serverConfig, goalBackends.AppGoal, supervisorWakeup)
 	if err != nil {
 		return nil, err
