@@ -310,7 +310,7 @@ func (stack StackV0) autoprogrammingPromotionLiveWorksV0(
 	ctx context.Context,
 	currentRunRef string,
 ) []orquestaautoprogramming.AutoprogrammingLiveWorkV0 {
-	if stack.Stores.RunQueue == nil || stack.Stores.RunStore == nil || stack.Stores.TaskStore == nil {
+	if stack.Stores.RunQueue == nil || stack.Stores.RunStore == nil {
 		return nil
 	}
 	candidates, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
@@ -341,11 +341,19 @@ func (stack StackV0) autoprogrammingPromotionLiveWorkV0(
 	if err != nil {
 		return orquestaautoprogramming.AutoprogrammingLiveWorkV0{}, false
 	}
-	tasks, err := stack.Stores.TaskStore.LoadWorkflowTasksV0(ctx, run.RunID, run.Tasks)
-	if err != nil {
-		return orquestaautoprogramming.AutoprogrammingLiveWorkV0{}, false
+	var writeSet []string
+	if len(compactStringsV0(run.Tasks)) > 0 && stack.Stores.TaskStore != nil {
+		tasks, err := stack.Stores.TaskStore.LoadWorkflowTasksV0(ctx, run.RunID, run.Tasks)
+		if err != nil {
+			return orquestaautoprogramming.AutoprogrammingLiveWorkV0{}, false
+		}
+		writeSet = autoprogrammingPromotionTaskWriteSetV0(tasks)
 	}
-	writeSet := autoprogrammingPromotionTaskWriteSetV0(tasks)
+	if len(writeSet) == 0 {
+		if state, ok, err := stack.autoprogrammingPromotionGoalStateV0(ctx, run); err == nil && ok {
+			writeSet = autoprogrammingPromotionGoalWriteSetV0(state.Spec.WriteSet)
+		}
+	}
 	if len(writeSet) == 0 {
 		return orquestaautoprogramming.AutoprogrammingLiveWorkV0{}, false
 	}

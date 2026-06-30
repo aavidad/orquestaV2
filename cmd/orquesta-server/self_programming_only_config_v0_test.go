@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -92,6 +93,23 @@ func TestSelfProgrammingOnlyConfigV0RechazaPromotionArchiveFueraDeRootV0(t *test
 	setSelfProgrammingOnlyBaseEnvForTestV0(t, root)
 	t.Setenv(envServerAutoprogrammingPromotionEnabledV0, "true")
 	t.Setenv(envServerAutoprogrammingPromotionArchiveDirV0, filepath.Join(t.TempDir(), "archive"))
+
+	_, err := serverConfigFromEnvV0()
+	if err == nil || !strings.Contains(err.Error(), "self_programming_only_promotion_archive_dir_outside_root") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestSelfProgrammingOnlyConfigV0RechazaPromotionArchivePorSymlinkFueraDeRootV0(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	link := filepath.Join(root, "archive-link")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+	setSelfProgrammingOnlyBaseEnvForTestV0(t, root)
+	t.Setenv(envServerAutoprogrammingPromotionEnabledV0, "true")
+	t.Setenv(envServerAutoprogrammingPromotionArchiveDirV0, filepath.Join(link, "archive"))
 
 	_, err := serverConfigFromEnvV0()
 	if err == nil || !strings.Contains(err.Error(), "self_programming_only_promotion_archive_dir_outside_root") {

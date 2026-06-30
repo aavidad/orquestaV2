@@ -52,8 +52,14 @@ func validateServerSelfProgrammingOnlyConfigV0(config orquestaserver.ConfigV0) e
 	}
 	if boolEnvOrDefaultV0(envServerAutoprogrammingPromotionEnabledV0, false) {
 		archiveDir := strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionArchiveDirV0))
-		if archiveDir != "" && !pathInsideSelfProgrammingRootV0(archiveDir, root) {
-			return fmt.Errorf("orquesta_server: self_programming_only_promotion_archive_dir_outside_root")
+		if archiveDir != "" {
+			inside, err := ensureSelfProgrammingArchiveDirInsideRootV0(archiveDir, root)
+			if err != nil {
+				return err
+			}
+			if !inside {
+				return fmt.Errorf("orquesta_server: self_programming_only_promotion_archive_dir_outside_root")
+			}
 		}
 	}
 	if !boolEnvOrDefaultV0(envOPESBridgeDryRunV0, true) {
@@ -83,11 +89,57 @@ func pathInsideSelfProgrammingRootV0(path string, root string) bool {
 	if cleanPath == "" || cleanRoot == "" || !filepath.IsAbs(cleanPath) || !filepath.IsAbs(cleanRoot) {
 		return false
 	}
-	rel, err := filepath.Rel(cleanRoot, cleanPath)
+	realRoot, err := filepath.EvalSymlinks(cleanRoot)
+	if err != nil {
+		return false
+	}
+	realPath, err := realSelfProgrammingPathForContainmentV0(cleanPath)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(filepath.Clean(realRoot), filepath.Clean(realPath))
 	if err != nil {
 		return false
 	}
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
+func ensureSelfProgrammingArchiveDirInsideRootV0(path string, root string) (bool, error) {
+	cleanPath := filepath.Clean(strings.TrimSpace(path))
+	if cleanPath == "" || !filepath.IsAbs(cleanPath) {
+		return false, nil
+	}
+	if !pathInsideSelfProgrammingRootV0(filepath.Dir(cleanPath), root) {
+		return false, nil
+	}
+	if err := os.MkdirAll(cleanPath, 0o700); err != nil {
+		return false, fmt.Errorf("orquesta_server: self_programming_only_promotion_archive_dir_unavailable")
+	}
+	return pathInsideSelfProgrammingRootV0(cleanPath, root), nil
+}
+
+func realSelfProgrammingPathForContainmentV0(path string) (string, error) {
+	cleanPath := filepath.Clean(strings.TrimSpace(path))
+	if cleanPath == "" || !filepath.IsAbs(cleanPath) {
+		return "", fmt.Errorf("path_invalid")
+	}
+	if realPath, err := filepath.EvalSymlinks(cleanPath); err == nil {
+		return realPath, nil
+	}
+	current := cleanPath
+	var suffix []string
+	for {
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", fmt.Errorf("path_root_unavailable")
+		}
+		suffix = append([]string{filepath.Base(current)}, suffix...)
+		current = parent
+		if realParent, err := filepath.EvalSymlinks(current); err == nil {
+			parts := append([]string{realParent}, suffix...)
+			return filepath.Join(parts...), nil
+		}
+	}
 }
 
 func selfProgrammingOnlyMustBeEmptyEnvV0() []string {

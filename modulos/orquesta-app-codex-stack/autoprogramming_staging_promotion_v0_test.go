@@ -7,6 +7,7 @@ import (
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoroperativo "orquesta/modulos/orquesta-director-operativo"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
@@ -61,6 +62,28 @@ func TestCodexStackAutoprogrammingPromotionV0QuedaPendientePorSolapeVivoV0(t *te
 	}
 }
 
+func TestCodexStackAutoprogrammingPromotionV0QuedaPendientePorSolapeGoalFirstVivoV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	stack = withAutoprogrammingPromotionStoresForTestV0(stack)
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack.Ports.GoalStateStore = goalStates
+	stack.Stores.AppGoalStateStore = goalStates
+	port := &fakeAutoprogrammingPromotionPortV0{}
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{Enabled: true, Port: port}
+	seedAutoprogrammingPromotionRunV0(t, ctx, stack, "run-autoprogramming-promotion-goal-overlap-001", []string{"feature.md"})
+	seedAutoprogrammingPromotionLiveGoalFirstRunV0(t, ctx, stack, goalStates, "run-autoprogramming-live-goal-overlap-001", []string{"feature.md"})
+
+	run := mustLoadCodexStackRunForTestV0(t, stack, "run-autoprogramming-promotion-goal-overlap-001")
+	complete, refs, err := stack.maybePromoteClosedAutoprogrammingRunV0(ctx, run)
+	if err != nil {
+		t.Fatalf("maybePromoteClosedAutoprogrammingRunV0: %v", err)
+	}
+	if complete || port.promotions != 0 || port.archives != 0 || len(refs) == 0 {
+		t.Fatalf("complete=%v refs=%v port=%+v", complete, refs, port)
+	}
+}
+
 func TestCodexStackAutoprogrammingPromotionV0BloqueaRefsStagingInconsistentesV0(t *testing.T) {
 	ctx := context.Background()
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
@@ -79,6 +102,72 @@ func TestCodexStackAutoprogrammingPromotionV0BloqueaRefsStagingInconsistentesV0(
 	if complete || port.promotions != 0 || port.archives != 0 || len(refs) == 0 {
 		t.Fatalf("complete=%v refs=%v port=%+v", complete, refs, port)
 	}
+}
+
+func seedAutoprogrammingPromotionLiveGoalFirstRunV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	goalStates orquestagoal.GoalWorkStateStorePortV0,
+	runRef string,
+	writeSet []string,
+) {
+	t.Helper()
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:         runRef,
+		ProjectRef:    "project-ref-" + runRef,
+		AppSpecRef:    "app-spec-ref-" + runRef,
+		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0 goal-first live: %v", err)
+	}
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			GoalRef:      "goal-ref-" + runRef,
+			RunRef:       runRef,
+			RequestRef:   runRef,
+			ProjectRef:   "project-ref-" + runRef,
+			WorkKind:     orquestaautoprogramming.AutoprogrammingGoalWorkKindV0,
+			Objective:    "Autoprogramacion viva con write-set solapado",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			ContextRefs: []orquestagoal.GoalContextRefV0{
+				{Kind: "worktree", Ref: "worktree-ref-" + runRef, Required: true},
+				{Kind: "branch", Ref: "branch-ref-" + runRef, Required: true},
+			},
+			WriteSet: autoprogrammingPromotionGoalWriteScopesForTestV0(writeSet),
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:  orquestagoal.GoalStatusRunningV0,
+			GoalRef: "goal-ref-" + runRef,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	if err := goalStates.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	_, err = stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef:        runRef,
+		QueueRef:      normalizeRunQueueConfigV0(stack.RunQueue).QueueRef,
+		Status:        orquestarunqueue.RunStatusRunningV0,
+		PriorityScore: 50,
+	})
+	if err != nil {
+		t.Fatalf("SetRunPriorityV0 goal-first live: %v", err)
+	}
+}
+
+func autoprogrammingPromotionGoalWriteScopesForTestV0(paths []string) []orquestagoal.GoalWriteScopeV0 {
+	out := make([]orquestagoal.GoalWriteScopeV0, 0, len(paths))
+	for _, path := range paths {
+		out = append(out, orquestagoal.GoalWriteScopeV0{Path: path})
+	}
+	return out
 }
 
 func seedAutoprogrammingPromotionRunV0(
