@@ -272,6 +272,14 @@ func TestNuevaAppWebEndpointV0POSTFormURLEncodedDelegaSinTemplates(t *testing.T)
 	values.Set("datos.fuentes.0.proposito", "leer ensayos confirmados")
 	values.Set("datos.fuentes.0.owner", "cultura")
 	values.Set("datos.fuentes.0.frecuencia", "diaria")
+	values.Set("datos.fuentes.5.nombre", "catastro")
+	values.Set("datos.fuentes.5.tipo", "open_data")
+	values.Set("datos.fuentes.5.owner", "datos")
+	values.Set("datos.tipos_detallados.5.nombre", "contratos")
+	values.Set("datos.tipos_detallados.5.sensibilidad", "confidencial")
+	values.Set("datos.storage.5.tipo", "vectorial")
+	values.Set("datos.storage.5.proposito", "busqueda semantica")
+	values.Set("datos.storage.5.requerido", "true")
 	values.Set("datos.operacion.criticidad", "alta")
 	values.Set("datos.operacion.disponibilidad", "horario laboral")
 	values.Set("datos.operacion.rpo", "24h")
@@ -312,9 +320,17 @@ func TestNuevaAppWebEndpointV0POSTFormURLEncodedDelegaSinTemplates(t *testing.T)
 		client.received.Integraciones[1].Proposito != "guardar adjuntos firmados" {
 		t.Fatalf("integraciones=%+v", client.received.Integraciones)
 	}
-	if len(client.received.Datos.Fuentes) != 1 ||
+	if len(client.received.Datos.Fuentes) != 2 ||
 		client.received.Datos.Fuentes[0].Nombre != "agenda externa" ||
 		client.received.Datos.Fuentes[0].Owner != "cultura" ||
+		client.received.Datos.Fuentes[1].Nombre != "catastro" ||
+		client.received.Datos.Fuentes[1].Owner != "datos" ||
+		len(client.received.Datos.TiposDetallados) != 1 ||
+		client.received.Datos.TiposDetallados[0].Nombre != "contratos" ||
+		client.received.Datos.TiposDetallados[0].Sensibilidad != "confidencial" ||
+		len(client.received.Datos.Storage) != 1 ||
+		client.received.Datos.Storage[0].Tipo != "vectorial" ||
+		!client.received.Datos.Storage[0].Requerido ||
 		client.received.Datos.Operacion.Criticidad != "alta" ||
 		client.received.Datos.Operacion.RTO != "4h" ||
 		!client.received.Datos.Operacion.Auditoria {

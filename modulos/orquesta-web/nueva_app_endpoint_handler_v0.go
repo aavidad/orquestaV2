@@ -7,7 +7,10 @@ import (
 	"strings"
 )
 
-const nuevaAppMaxIntegrationRowsV0 = 6
+const (
+	nuevaAppMaxExpertDataRowsV0  = 6
+	nuevaAppMaxIntegrationRowsV0 = 6
+)
 
 func (endpoint NuevaAppWebEndpointV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	catalog := endpoint.catalog()
@@ -88,9 +91,9 @@ func nuevaAppFormFromValuesV0(values map[string][]string) WebNuevaAppFormV0 {
 			DBRequired:         formBoolValueV0(values, "datos.db_required"),
 			NecesidadFuncional: formValueV0(values, "datos.necesidad_funcional"),
 			TiposDatos:         formValuesV0(values, "datos.tipos_datos"),
-			TiposDetallados:    formDataTypesV0(values, 4),
-			Fuentes:            formDataSourcesV0(values, 4),
-			Storage:            formDataStorageV0(values, 4),
+			TiposDetallados:    formDataTypesV0(values, nuevaAppMaxExpertDataRowsV0),
+			Fuentes:            formDataSourcesV0(values, nuevaAppMaxExpertDataRowsV0),
+			Storage:            formDataStorageV0(values, nuevaAppMaxExpertDataRowsV0),
 			Operacion: WebNuevaAppDataOperationFormV0{
 				Criticidad:     formValueV0(values, "datos.operacion.criticidad"),
 				Disponibilidad: formValueV0(values, "datos.operacion.disponibilidad"),
