@@ -124,6 +124,41 @@ func TestAppDirectorPreviewAPIDelegaEnExecutorRESTV0(t *testing.T) {
 	}
 }
 
+func TestExternalWorkRunAPIUsaTimeoutDeConfigV0(t *testing.T) {
+	executor := &blockingExternalWorkRunGatewayExecutorV0{done: make(chan struct{})}
+	handler := NewHTTPHandlerV0(ConfigV0{
+		ExternalWorkRun: executor,
+		Timeout:         time.Millisecond,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		orquestamcp.MCPExternalWorkRunHTTPPathV0,
+		strings.NewReader(`{"request_id":"req-external-work-gateway-timeout-001","correlation_id":"corr-external-work-gateway-timeout-001","director_execution_mode":"goal_first"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusGatewayTimeout {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPExternalWorkRunToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPExternalWorkRunEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != orquestamcp.MCPExternalWorkRunHTTPTimeoutCodeV0 {
+		t.Fatalf("result=%+v", result)
+	}
+	select {
+	case <-executor.done:
+	case <-time.After(time.Second):
+		t.Fatalf("executor no recibio cancelacion por timeout del gateway")
+	}
+}
+
 func TestDirectorStatsPageDelegaEnDirectorStatsRESTSinCmdDBRuntimeV0(t *testing.T) {
 	run := orquestacoreworkflow.OrchestrationRunV0{
 		RunID:         "run-app-gateway-stats-001",
@@ -432,6 +467,22 @@ func (executor *recordingRunQueuePriorityExecutorV0) Execute(
 
 type recordingRunSupervisorExecutorV0 struct {
 	Input orquestamcp.MCPRunSupervisorToolInputV0
+}
+
+type blockingExternalWorkRunGatewayExecutorV0 struct {
+	done chan struct{}
+}
+
+func (executor *blockingExternalWorkRunGatewayExecutorV0) Execute(
+	ctx context.Context,
+	input orquestamcp.MCPExternalWorkRunToolInputV0,
+) (orquestamcp.MCPExternalWorkRunToolResultV0, error) {
+	<-ctx.Done()
+	close(executor.done)
+	return orquestamcp.MCPExternalWorkRunToolResultV0{
+		Estado:                orquestamcp.MCPExternalWorkRunEstadoOKV0,
+		DirectorExecutionMode: input.DirectorExecutionMode,
+	}, nil
 }
 
 func (executor *recordingRunSupervisorExecutorV0) Execute(
