@@ -264,10 +264,15 @@ type serverCodeContextToolOwnerStopperV0 interface {
 	StopCodeContextToolOwnerV0(context.Context, string) ([]string, error)
 }
 
+type serverCodeContextToolOwnerObserverV0 interface {
+	ObserveCodeContextToolOwnerV0(context.Context, orquestacontext.CodeContextToolLeaseV0, time.Time) (orquestacontext.CodeContextToolLeaseObservationV0, error)
+}
+
 type serverCodeContextToolWatchdogV0 struct {
 	Leases   orquestacontext.CodeContextToolLeaseListPortV0
 	Finisher orquestacontext.CodeContextToolLeasePortV0
 	Stopper  serverCodeContextToolOwnerStopperV0
+	Observer serverCodeContextToolOwnerObserverV0
 	Now      func() time.Time
 }
 
@@ -296,12 +301,17 @@ func (watchdog serverCodeContextToolWatchdogV0) RunOnceV0(ctx context.Context) (
 	}
 	result := serverCodeContextToolWatchdogResultV0{Observed: len(leases)}
 	for _, lease := range leases {
-		assessment, assessErr := orquestacontext.EvaluateCodeContextToolLeaseV0(orquestacontext.CodeContextToolLeaseObservationV0{
-			ObservedAt:     now.Format(time.RFC3339),
-			Lease:          lease,
-			CPUPercent:     100,
-			CPUHighPercent: 75,
-		})
+		observation := serverCodeContextToolLeaseObservationV0(lease, now)
+		if watchdog.Observer != nil {
+			observed, observeErr := watchdog.Observer.ObserveCodeContextToolOwnerV0(ctx, lease, now)
+			if observeErr != nil {
+				return result, observeErr
+			}
+			if observed.Lease.LeaseRef != "" {
+				observation = observed
+			}
+		}
+		assessment, assessErr := orquestacontext.EvaluateCodeContextToolLeaseV0(observation)
 		if assessErr != nil || !assessment.ShouldRequestStop || strings.TrimSpace(lease.OwnerRef) == "" {
 			continue
 		}
@@ -322,6 +332,18 @@ func (watchdog serverCodeContextToolWatchdogV0) RunOnceV0(ctx context.Context) (
 		result.Evidence = append(result.Evidence, evidence...)
 	}
 	return result, nil
+}
+
+func serverCodeContextToolLeaseObservationV0(
+	lease orquestacontext.CodeContextToolLeaseV0,
+	now time.Time,
+) orquestacontext.CodeContextToolLeaseObservationV0 {
+	return orquestacontext.CodeContextToolLeaseObservationV0{
+		ObservedAt:     now.UTC().Format(time.RFC3339),
+		Lease:          lease,
+		CPUPercent:     100,
+		CPUHighPercent: 75,
+	}
 }
 
 func writeServerCodeContextJSONFileV0(path string, value any) error {

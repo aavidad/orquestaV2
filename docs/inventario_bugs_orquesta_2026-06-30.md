@@ -149,6 +149,20 @@ sin `questions`, `development_task` o mero `process_status=stopped` sin
 `delivery_status`/validacion de entrega completa. Queda como mejora posterior
 materializar automaticamente la ola de rework por faltantes concretos.
 
+Revision adicional 2026-06-30 sobre BUG-032: queda implementado el tramo de
+owner marker file-based, observador PID/CPU/heartbeat/peticiones activas y
+stopper concreto seguro para `codebase-memory-mcp`. El watchdog ya no depende
+solo de CPU sintetica: puede no parar un lease expirado si el marker declara
+peticiones activas, y el stopper solo envia SIGTERM al PID declarado por un
+marker valido. Evidencia:
+`TestServerCodeContextToolWatchdogV0UsaOwnerMarkerConPeticionesActivas`,
+`TestServerFileCodeContextToolOwnerStopperV0UsaMarkerSeguro` y
+`TestServerFileCodeContextToolOwnerRegistryV0RechazaOwnerInseguro`. Nueva
+observacion local: PIDs `2681690` y `2681994`, hijos del Codex local, quedaron
+consumiendo CPU tras uso MCP y se pararon con `SIGTERM`. El bug sigue `parcial`
+porque aun faltan el adaptador real `codebase-memory-mcp`, el loop residente
+opt-in y el smoke opt-in con repo real acotado.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

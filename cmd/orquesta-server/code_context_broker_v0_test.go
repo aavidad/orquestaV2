@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -133,6 +134,120 @@ func TestServerCodeContextToolWatchdogV0ParaLeaseExpiradoPorOwner(t *testing.T) 
 	if len(stopped) != 1 || stopped[0].LeaseRef != lease.LeaseRef {
 		t.Fatalf("stopped=%+v", stopped)
 	}
+}
+
+func TestServerCodeContextToolWatchdogV0UsaOwnerMarkerConPeticionesActivas(t *testing.T) {
+	started := time.Date(2026, 6, 30, 10, 0, 0, 0, time.UTC)
+	stateDir := t.TempDir()
+	store := newServerFileCodeContextToolLeaseStoreV0(filepath.Join(stateDir, serverCodeContextLeasesFileV0))
+	lease, err := store.BeginCodeContextToolLeaseV0(context.Background(), orquestacontext.CodeContextToolLeaseRequestV0{
+		RepositoryRef:   "repo-ref-orquesta",
+		QueryHash:       "query-hash-active-owner",
+		ToolRef:         "tool-ref-codebase-central",
+		ProviderKind:    orquestacontext.CodeContextProviderKindCodebaseMCPV0,
+		OwnerRef:        "owner-ref-codebase-active",
+		StartedAt:       started.Format(time.RFC3339),
+		LeaseTTLSeconds: 1,
+	})
+	if err != nil {
+		t.Fatalf("BeginCodeContextToolLeaseV0: %v", err)
+	}
+	registry := newServerFileCodeContextToolOwnerRegistryV0(stateDir)
+	if err := registry.WriteCodeContextToolOwnerMarkerV0(serverCodeContextToolOwnerMarkerV0{
+		OwnerRef:        lease.OwnerRef,
+		ToolRef:         lease.ToolRef,
+		ProviderKind:    orquestacontext.CodeContextProviderKindCodebaseMCPV0,
+		PID:             os.Getpid(),
+		StartedAt:       started.Format(time.RFC3339),
+		LastHeartbeatAt: started.Add(time.Second).Format(time.RFC3339),
+		CPUPercent:      95,
+		ActiveRequests:  1,
+		EvidenceRefs:    []string{"evidence-ref-codebase-owner-marker"},
+	}); err != nil {
+		t.Fatalf("WriteCodeContextToolOwnerMarkerV0: %v", err)
+	}
+	stopper := &fakeCodeContextToolOwnerStopperV0{}
+	watchdog := serverCodeContextToolWatchdogV0{
+		Leases:   store,
+		Finisher: store,
+		Stopper:  stopper,
+		Observer: serverFileCodeContextToolOwnerObserverV0{Registry: registry},
+		Now:      func() time.Time { return started.Add(2 * time.Second) },
+	}
+	result, err := watchdog.RunOnceV0(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnceV0: %v", err)
+	}
+	if result.Observed != 1 || result.Stopped != 0 || len(stopper.owners) != 0 {
+		t.Fatalf("result=%+v owners=%+v", result, stopper.owners)
+	}
+	active, err := store.ListCodeContextToolLeasesV0(context.Background(), orquestacontext.CodeContextToolLeaseListFilterV0{
+		Status: orquestacontext.CodeContextToolLeaseStatusActiveV0,
+	})
+	if err != nil {
+		t.Fatalf("List active: %v", err)
+	}
+	if len(active) != 1 || active[0].LeaseRef != lease.LeaseRef {
+		t.Fatalf("active=%+v", active)
+	}
+}
+
+func TestServerFileCodeContextToolOwnerStopperV0UsaMarkerSeguro(t *testing.T) {
+	stateDir := t.TempDir()
+	started := time.Date(2026, 6, 30, 10, 0, 0, 0, time.UTC)
+	registry := newServerFileCodeContextToolOwnerRegistryV0(stateDir)
+	if err := registry.WriteCodeContextToolOwnerMarkerV0(serverCodeContextToolOwnerMarkerV0{
+		OwnerRef:     "owner-ref-codebase-stop",
+		ToolRef:      "tool-ref-codebase-central",
+		ProviderKind: orquestacontext.CodeContextProviderKindCodebaseMCPV0,
+		PID:          os.Getpid(),
+		StartedAt:    started.Format(time.RFC3339),
+		CPUPercent:   88,
+		EvidenceRefs: []string{"evidence-ref-codebase-owner-marker"},
+	}); err != nil {
+		t.Fatalf("WriteCodeContextToolOwnerMarkerV0: %v", err)
+	}
+	var gotPID int
+	var gotSignal syscall.Signal
+	stopper := serverFileCodeContextToolOwnerStopperV0{
+		Registry: registry,
+		Signal: func(pid int, signal syscall.Signal) error {
+			gotPID = pid
+			gotSignal = signal
+			return nil
+		},
+	}
+	evidence, err := stopper.StopCodeContextToolOwnerV0(context.Background(), "owner-ref-codebase-stop")
+	if err != nil {
+		t.Fatalf("StopCodeContextToolOwnerV0: %v", err)
+	}
+	if gotPID != os.Getpid() || gotSignal != syscall.SIGTERM {
+		t.Fatalf("pid=%d signal=%v", gotPID, gotSignal)
+	}
+	if !codeContextEvidenceContainsForTestV0(evidence, "evidence-ref-code-context-owner-stop-signal-sent") {
+		t.Fatalf("evidence=%+v", evidence)
+	}
+}
+
+func TestServerFileCodeContextToolOwnerRegistryV0RechazaOwnerInseguro(t *testing.T) {
+	registry := newServerFileCodeContextToolOwnerRegistryV0(t.TempDir())
+	err := registry.WriteCodeContextToolOwnerMarkerV0(serverCodeContextToolOwnerMarkerV0{
+		OwnerRef:     "../owner-ref-codebase-bad",
+		ToolRef:      "tool-ref-codebase-central",
+		ProviderKind: orquestacontext.CodeContextProviderKindCodebaseMCPV0,
+	})
+	if err == nil {
+		t.Fatalf("WriteCodeContextToolOwnerMarkerV0 acepto owner_ref inseguro")
+	}
+}
+
+func codeContextEvidenceContainsForTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 type fakeCodeContextToolOwnerStopperV0 struct {

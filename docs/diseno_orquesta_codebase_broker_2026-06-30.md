@@ -1,12 +1,13 @@
 # Diseno Orquesta Codebase Broker - 2026-06-30
 
-Estado: tercer corte parcial implementado. Orquesta expone un broker central
+Estado: cuarto corte parcial implementado. Orquesta expone un broker central
 por contrato neutral, tool MCP y endpoint HTTP; el proveedor activo por defecto
 es `rg` central y `codebase-memory-mcp` queda reservado para adaptador opt-in
 con lease central. La composicion del servidor ya puede persistir cache/leases
 en un directorio opt-in y dispone de un watchdog invocable por puerto de parada
-cooperativa; no arranca ni mata procesos reales sin adaptador/owner marker
-inyectado.
+cooperativa. El watchdog ya puede observar owner markers file-based y solicitar
+SIGTERM solo al PID declarado por un marker valido de `codebase-memory-mcp`;
+todavia no arranca el adaptador MCP real ni el loop residente opt-in.
 
 ## Decision
 
@@ -105,14 +106,16 @@ real y la publicacion en status pertenecen al servidor/composicion.
   mediante `ORQUESTA_CODEBASE_BROKER_STATE_DIR`.
 - Watchdog invocable en composicion: observa leases activos, evalua TTL/CPU sin
   peticiones activas, llama a un puerto de parada cooperativa por `owner_ref` y
-  marca el lease como `stopped` con evidencia. La prueba usa stopper fake; no
-  mata procesos reales.
+  marca el lease como `stopped` con evidencia.
+- Owner marker file-based para herramientas de contexto: `owner_ref`, PID,
+  heartbeat, CPU observado, peticiones activas y evidencias. El watchdog puede
+  usar esa observacion para no parar un indexador con peticiones activas y el
+  stopper concreto envia SIGTERM solo al PID de un marker valido de
+  `codebase-memory-mcp`.
 
 ## Pendientes
 
 - Adaptador real `codebase-memory-mcp` detras del puerto neutral.
-- Owner marker real de proceso/indexador, observador de PID/CPU/heartbeat y
-  stopper concreto seguro para `codebase-memory-mcp`.
 - Cablear watchdog/TTL de herramientas auxiliares a un loop residente opt-in con
   evidencia publica de parada ejecutada/fallida.
 - Smoke opt-in con repo real acotado antes de habilitarlo en sesiones de agentes.
