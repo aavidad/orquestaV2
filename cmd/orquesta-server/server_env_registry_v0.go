@@ -171,10 +171,16 @@ const (
 	envOPESBridgeSpeechSynthesisCapabilityRefV0 = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_CAPABILITY_REF"
 	envOPESBridgeSpeechSynthesisEvidenceRefsV0  = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_EVIDENCE_REFS"
 	envOPESBridgeSpeechSynthesisReasonV0        = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_REASON"
+	envOPESBridgeSpeechSynthesisNetworkReadyV0  = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_NETWORK_READY"
+	envOPESBridgeSpeechSynthesisToolPathReadyV0 = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_TOOL_PATH_READY"
+	envOPESBridgeSpeechSynthesisQuotaReadyV0    = "ORQUESTA_OPES_BRIDGE_SPEECH_SYNTHESIS_PROVIDER_QUOTA_READY"
 	envOPESBridgeRemoteQACapabilityV0           = "ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY"
 	envOPESBridgeRemoteQACapabilityRefV0        = "ORQUESTA_OPES_BRIDGE_REMOTE_QA_CAPABILITY_REF"
 	envOPESBridgeRemoteQAEvidenceRefsV0         = "ORQUESTA_OPES_BRIDGE_REMOTE_QA_EVIDENCE_REFS"
 	envOPESBridgeRemoteQAReasonV0               = "ORQUESTA_OPES_BRIDGE_REMOTE_QA_REASON"
+	envOPESBridgeRemoteQANetworkReadyV0         = "ORQUESTA_OPES_BRIDGE_REMOTE_QA_NETWORK_READY"
+	envOPESBridgeRemoteQAAuthStateReadyV0       = "ORQUESTA_OPES_BRIDGE_REMOTE_QA_AUTH_STATE_READY"
+	envOPESBridgeRemoteQAQuotaReadyV0           = "ORQUESTA_OPES_BRIDGE_REMOTE_QA_PROVIDER_QUOTA_READY"
 	envOPESBridgeAllowUnfilteredV0              = "ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED"
 	envOPESBridgeInputLedgerDisabledV0          = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_DISABLED"
 	envOPESBridgeInputLedgerPathV0              = "ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH"
@@ -450,6 +456,21 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Label:       "Speech synthesis razon",
 		Description: "Razon operativa cuando speech_synthesis no esta disponible o se declara de forma invalida.",
 	},
+	envOPESBridgeSpeechSynthesisNetworkReadyV0: {
+		Scope:       "opes_bridge",
+		Label:       "Speech synthesis red",
+		Description: "Subcheck opt-in para declarar si speech_synthesis tiene red disponible.",
+	},
+	envOPESBridgeSpeechSynthesisToolPathReadyV0: {
+		Scope:       "opes_bridge",
+		Label:       "Speech synthesis herramienta",
+		Description: "Subcheck opt-in para declarar si la herramienta TTS/audio esta disponible en la composicion.",
+	},
+	envOPESBridgeSpeechSynthesisQuotaReadyV0: {
+		Scope:       "opes_bridge",
+		Label:       "Speech synthesis cuota",
+		Description: "Subcheck opt-in para declarar si el proveedor TTS tiene cuota/capacidad disponible.",
+	},
 	envOPESBridgeRemoteQACapabilityV0: {
 		Scope:       "opes_bridge",
 		Label:       "Remote QA OPES",
@@ -469,6 +490,21 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "opes_bridge",
 		Label:       "Remote QA razon",
 		Description: "Razon operativa cuando remote_qa_provider no esta disponible o se declara de forma invalida.",
+	},
+	envOPESBridgeRemoteQANetworkReadyV0: {
+		Scope:       "opes_bridge",
+		Label:       "Remote QA red",
+		Description: "Subcheck opt-in para declarar si remote_qa_provider tiene red disponible.",
+	},
+	envOPESBridgeRemoteQAAuthStateReadyV0: {
+		Scope:       "opes_bridge",
+		Label:       "Remote QA auth",
+		Description: "Subcheck opt-in para declarar si remote_qa_provider tiene sesion/auth vigente.",
+	},
+	envOPESBridgeRemoteQAQuotaReadyV0: {
+		Scope:       "opes_bridge",
+		Label:       "Remote QA cuota",
+		Description: "Subcheck opt-in para declarar si remote_qa_provider tiene cuota/capacidad disponible.",
 	},
 	envCapacityReasoningEffortV0: {
 		Scope:       "capacity",

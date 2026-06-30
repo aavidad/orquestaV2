@@ -117,6 +117,18 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 			strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisReasonV0)),
 		),
 		serverConfigSettingFromRegistryV0(
+			envOPESBridgeSpeechSynthesisNetworkReadyV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisNetworkReadyV0)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeSpeechSynthesisToolPathReadyV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisToolPathReadyV0)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeSpeechSynthesisQuotaReadyV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisQuotaReadyV0)),
+		),
+		serverConfigSettingFromRegistryV0(
 			envOPESBridgeRemoteQACapabilityV0,
 			strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQACapabilityV0)),
 		),
@@ -131,6 +143,18 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverConfigSettingFromRegistryV0(
 			envOPESBridgeRemoteQAReasonV0,
 			strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQAReasonV0)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeRemoteQANetworkReadyV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQANetworkReadyV0)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeRemoteQAAuthStateReadyV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQAAuthStateReadyV0)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envOPESBridgeRemoteQAQuotaReadyV0,
+			strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQAQuotaReadyV0)),
 		),
 		serverConfigSettingFromRegistryV0(envCapacityReasoningEffortV0, string(stackCapacity.ReasoningEffort)),
 		serverConfigSettingFromRegistryV0(envCapacityPolicyRefV0, stackCapacity.PolicyRef),

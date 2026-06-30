@@ -2248,6 +2248,22 @@ func TestOPESBridgeExternalCapabilitiesFromEnvV0DeclaraSpeechSynthesis(t *testin
 	}
 }
 
+func TestOPESBridgeExternalCapabilitiesFromEnvV0ExponeSubcheckTTSNoDisponible(t *testing.T) {
+	t.Setenv(envOPESBridgeSpeechSynthesisCapabilityV0, "available")
+	t.Setenv(envOPESBridgeSpeechSynthesisToolPathReadyV0, "false")
+
+	capabilities := opesBridgeExternalCapabilitiesFromEnvV0()
+
+	if len(capabilities) != 1 ||
+		!capabilities[0].Available ||
+		!capabilities[0].NetworkReady ||
+		capabilities[0].ToolPathReady ||
+		!capabilities[0].ProviderQuotaReady ||
+		capabilities[0].OperationalReason != "external_capability_missing:speech_synthesis:tool_path_ready" {
+		t.Fatalf("capabilities=%+v", capabilities)
+	}
+}
+
 func TestOPESBridgeExternalCapabilitiesFromEnvV0DeclaraRemoteQA(t *testing.T) {
 	t.Setenv(envOPESBridgeRemoteQACapabilityV0, "available")
 	t.Setenv(envOPESBridgeRemoteQACapabilityRefV0, "remote-qa-temporal")
@@ -2264,6 +2280,22 @@ func TestOPESBridgeExternalCapabilitiesFromEnvV0DeclaraRemoteQA(t *testing.T) {
 		!capabilities[0].ProviderQuotaReady ||
 		capabilities[0].CommandTimeoutSeconds != 1200 ||
 		strings.Join(capabilities[0].EvidenceRefs, ",") != "evidence-ref-qa-1,evidence-ref-qa-2" {
+		t.Fatalf("capabilities=%+v", capabilities)
+	}
+}
+
+func TestOPESBridgeExternalCapabilitiesFromEnvV0ExponeSubcheckRemoteQANoDisponible(t *testing.T) {
+	t.Setenv(envOPESBridgeRemoteQACapabilityV0, "available")
+	t.Setenv(envOPESBridgeRemoteQAAuthStateReadyV0, "false")
+
+	capabilities := opesBridgeExternalCapabilitiesFromEnvV0()
+
+	if len(capabilities) != 1 ||
+		!capabilities[0].Available ||
+		!capabilities[0].NetworkReady ||
+		capabilities[0].AuthStateReady ||
+		!capabilities[0].ProviderQuotaReady ||
+		capabilities[0].OperationalReason != "external_capability_missing:remote_qa_provider:auth_state_ready" {
 		t.Fatalf("capabilities=%+v", capabilities)
 	}
 }

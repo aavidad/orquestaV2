@@ -166,9 +166,27 @@ func opesBridgeExternalCapabilitiesFromEnvV0() []orquestadomainwork.DomainWorkEx
 		envOPESBridgeSpeechSynthesisEvidenceRefsV0,
 		envOPESBridgeSpeechSynthesisReasonV0,
 	); ok {
-		capability.NetworkReady = capability.Available
-		capability.ToolPathReady = capability.Available
-		capability.ProviderQuotaReady = capability.Available
+		capability.NetworkReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+			envOPESBridgeSpeechSynthesisNetworkReadyV0,
+			capability.Available,
+			capability.OperationalReason,
+			capability.Kind,
+			"network_ready",
+		)
+		capability.ToolPathReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+			envOPESBridgeSpeechSynthesisToolPathReadyV0,
+			capability.Available,
+			capability.OperationalReason,
+			capability.Kind,
+			"tool_path_ready",
+		)
+		capability.ProviderQuotaReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+			envOPESBridgeSpeechSynthesisQuotaReadyV0,
+			capability.Available,
+			capability.OperationalReason,
+			capability.Kind,
+			"provider_quota_ready",
+		)
 		capability.CommandTimeoutSeconds = 1800
 		out = append(out, orquestadomainwork.NormalizeDomainWorkExternalCapabilityV0(capability))
 	}
@@ -179,9 +197,27 @@ func opesBridgeExternalCapabilitiesFromEnvV0() []orquestadomainwork.DomainWorkEx
 		envOPESBridgeRemoteQAEvidenceRefsV0,
 		envOPESBridgeRemoteQAReasonV0,
 	); ok {
-		capability.NetworkReady = capability.Available
-		capability.AuthStateReady = capability.Available
-		capability.ProviderQuotaReady = capability.Available
+		capability.NetworkReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+			envOPESBridgeRemoteQANetworkReadyV0,
+			capability.Available,
+			capability.OperationalReason,
+			capability.Kind,
+			"network_ready",
+		)
+		capability.AuthStateReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+			envOPESBridgeRemoteQAAuthStateReadyV0,
+			capability.Available,
+			capability.OperationalReason,
+			capability.Kind,
+			"auth_state_ready",
+		)
+		capability.ProviderQuotaReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+			envOPESBridgeRemoteQAQuotaReadyV0,
+			capability.Available,
+			capability.OperationalReason,
+			capability.Kind,
+			"provider_quota_ready",
+		)
 		capability.CommandTimeoutSeconds = 1200
 		out = append(out, orquestadomainwork.NormalizeDomainWorkExternalCapabilityV0(capability))
 	}
@@ -227,4 +263,30 @@ func opesBridgeCapabilityAvailabilityFromEnvV0(raw string, kind string) (bool, s
 	default:
 		return false, strings.TrimSpace(kind) + "_capability_invalid"
 	}
+}
+
+func opesBridgeCapabilityReadinessFromEnvV0(
+	envName string,
+	defaultReady bool,
+	currentReason string,
+	kind string,
+	check string,
+) (bool, string) {
+	raw := strings.TrimSpace(os.Getenv(envName))
+	if raw == "" {
+		return defaultReady, strings.TrimSpace(currentReason)
+	}
+	ready, reason := opesBridgeCapabilityAvailabilityFromEnvV0(raw, kind)
+	if ready {
+		return true, strings.TrimSpace(currentReason)
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" || reason == orquestadomainwork.DomainWorkExternalCapabilityReasonMissingV0+":"+strings.TrimSpace(kind) {
+		reason = orquestadomainwork.DomainWorkExternalCapabilityReasonMissingV0 + ":" +
+			strings.TrimSpace(kind) + ":" + strings.TrimSpace(check)
+	}
+	if strings.TrimSpace(currentReason) != "" {
+		return false, strings.TrimSpace(currentReason)
+	}
+	return false, reason
 }
