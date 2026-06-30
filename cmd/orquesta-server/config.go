@@ -71,6 +71,7 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 			PermissionRef:     envOrDefaultV0(envServerControlPermissionRefV0, "permission-ref-loopback-control-plane"),
 			PublicReason:      envOrDefaultV0(envServerControlPublicReasonV0, "loopback_control_plane"),
 		},
+		RuntimeIdentity:                   serverRuntimeIdentityFromExecutableV0(),
 		ProjectWorkDir:                    projectDir,
 		RuntimeWorkDir:                    runtimeDir,
 		IdleSelfImprovementProjectWorkDir: idleSelfImprovementProjectDir,

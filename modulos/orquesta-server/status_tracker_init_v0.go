@@ -8,6 +8,10 @@ import (
 func NewStatusTrackerV0(config ConfigV0, now time.Time) *StatusTrackerV0 {
 	config = NormalizeConfigV0(config)
 	identity := NewDaemonIdentityV0(os.Getpid(), now)
+	runtimeIdentity := NormalizeServerRuntimeIdentityV0(config.RuntimeIdentity)
+	if !identityEmptyV0(runtimeIdentity) && runtimeIdentity.StartedAt == "" {
+		runtimeIdentity.StartedAt = formatTimeV0(now)
+	}
 	return &StatusTrackerV0{state: StateV0{
 		SchemaVersion:             StateSchemaVersionV0,
 		Status:                    "starting",
@@ -17,6 +21,7 @@ func NewStatusTrackerV0(config ConfigV0, now time.Time) *StatusTrackerV0 {
 		DaemonEpochRef:            identity.DaemonEpochRef,
 		ProjectWorkDir:            config.ProjectWorkDir,
 		RuntimeWorkDir:            config.RuntimeWorkDir,
+		RuntimeIdentity:           NormalizeServerRuntimeIdentityV0(runtimeIdentity),
 		DaemonLogPolicy:           config.DaemonLogPolicy,
 		ShutdownSignalPolicy:      config.ShutdownSignalPolicy,
 		EffectiveConfig:           config.EffectiveConfig,

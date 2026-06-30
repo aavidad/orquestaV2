@@ -37,7 +37,10 @@ Salida:
   bloqueantes (`idle_self_improvement_goal_*`) con ref, estado, reason code y
   cierre aceptado; un goal en curso no cambia `ready` por si solo. Una
   capacidad faltante como `goal_launcher_unavailable` sin `goal_ref` no se
-  publica como goal activo.
+  publica como goal activo. Cuando la composicion aporta identidad de runtime,
+  expone `runtime_identity` con `binary_path_ref`, `binary_name`,
+  `binary_sha256`, `build_ref`, `commit_ref` y `started_at`; no expone la ruta
+  local cruda del binario.
 - `GET /api/v0/server/status`: estado/diagnostico publico canonico.
   Incluye la proyeccion compacta `state_persist_*` para distinguir estado vivo
   en memoria de persistencia durable confirmada o degradada, sin detalles del
@@ -55,6 +58,9 @@ Salida:
   Los mensajes operativos pueden transportar `run_refs`, `goal_refs`,
   `request_refs` y `evidence_refs` estructurados; clientes nuevos no deben
   parsear esos refs desde strings de razon cuando exista el campo dedicado.
+  Los consumidores que necesiten asegurar version de runtime deben comparar
+  `runtime_identity.binary_sha256`, `build_ref` o `commit_ref` antes de enviar
+  trabajo externo; no basta con que el puerto responda.
 - `GET /api/v0/server/resources`: recursos publicos de la instancia y
   `route_manifest` versionado. El manifest enumera rutas montadas, patron,
   metodos, propietario y `security_profile`; los clientes de dominio deben

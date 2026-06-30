@@ -24,6 +24,7 @@ type ServerPublicStatusV0 struct {
 	StartupMessage                        string                                      `json:"startup_message,omitempty"`
 	StartupOperationalMessage             *ServerOperationalMessageV0                 `json:"startup_operational_message,omitempty"`
 	StartupRevision                       StartupRevisionSummaryV0                    `json:"startup_revision,omitempty"`
+	RuntimeIdentity                       ServerPublicRuntimeIdentityV0               `json:"runtime_identity,omitempty"`
 	DaemonLogPolicy                       DaemonLogPolicyV0                           `json:"daemon_log_policy,omitempty"`
 	ShutdownSignalPolicy                  ShutdownSignalPolicyV0                      `json:"shutdown_signal_policy,omitempty"`
 	EffectiveConfig                       ServerEffectiveConfigV0                     `json:"effective_config,omitempty"`
@@ -174,6 +175,7 @@ func NewServerPublicStatusV0(state StateV0) ServerPublicStatusV0 {
 		StartupMessage:                        state.StartupMessage,
 		StartupOperationalMessage:             copyServerOperationalMessageV0(state.StartupOperationalMessage),
 		StartupRevision:                       normalizeStartupRevisionSummaryV0(state.StartupRevision),
+		RuntimeIdentity:                       NewServerPublicRuntimeIdentityV0(state),
 		DaemonLogPolicy:                       NormalizeDaemonLogPolicyV0(state.DaemonLogPolicy),
 		ShutdownSignalPolicy:                  NormalizeShutdownSignalPolicyV0(state.ShutdownSignalPolicy),
 		EffectiveConfig:                       config,

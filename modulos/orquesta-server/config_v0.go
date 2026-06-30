@@ -62,6 +62,7 @@ type ConfigV0 struct {
 	HTTPResourceLimits                HTTPResourceLimitsV0
 	ControlPlane                      ControlPlaneConfigV0
 	EffectiveConfig                   ServerEffectiveConfigV0
+	RuntimeIdentity                   ServerRuntimeIdentityV0
 	ProjectWorkDir                    string
 	RuntimeWorkDir                    string
 	IdleSelfImprovementProjectWorkDir string
@@ -134,6 +135,7 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 		config.ControlPlane.PublicReason = "loopback_control_plane"
 	}
 	config.EffectiveConfig = NormalizeServerEffectiveConfigV0(config.EffectiveConfig)
+	config.RuntimeIdentity = NormalizeServerRuntimeIdentityV0(config.RuntimeIdentity)
 	config.ProjectWorkDir = strings.TrimSpace(config.ProjectWorkDir)
 	config.RuntimeWorkDir = strings.TrimSpace(config.RuntimeWorkDir)
 	config.IdleSelfImprovementProjectWorkDir = strings.TrimSpace(config.IdleSelfImprovementProjectWorkDir)
@@ -243,6 +245,10 @@ func ValidateConfigV0(config ConfigV0) error {
 	}
 	if strings.TrimSpace(config.RuntimeWorkDir) != "" && !filepath.IsAbs(config.RuntimeWorkDir) {
 		return fmt.Errorf("orquesta_server: runtime_work_dir invalido")
+	}
+	if strings.TrimSpace(config.RuntimeIdentity.BinaryPath) != "" &&
+		!filepath.IsAbs(config.RuntimeIdentity.BinaryPath) {
+		return fmt.Errorf("orquesta_server: runtime_identity_binary_path invalido")
 	}
 	if strings.TrimSpace(config.IdleSelfImprovementProjectWorkDir) != "" &&
 		!filepath.IsAbs(config.IdleSelfImprovementProjectWorkDir) {

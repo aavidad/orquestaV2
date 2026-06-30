@@ -11,27 +11,28 @@ const (
 )
 
 type ServerReadinessV0 struct {
-	SchemaVersion                          string                   `json:"schema_version"`
-	Ready                                  bool                     `json:"ready"`
-	Status                                 string                   `json:"status"`
-	LivenessStatus                         string                   `json:"liveness_status"`
-	StartupReady                           bool                     `json:"startup_ready"`
-	StartupStatus                          string                   `json:"startup_status,omitempty"`
-	StartupMessage                         string                   `json:"startup_message,omitempty"`
-	StartupRevision                        StartupRevisionSummaryV0 `json:"startup_revision,omitempty"`
-	StartupBlockers                        []StartupBlockerV0       `json:"startup_blockers,omitempty"`
-	LastHeartbeatAt                        string                   `json:"last_heartbeat_at,omitempty"`
-	LastStartupCheckAt                     string                   `json:"last_startup_check_at,omitempty"`
-	ExternalBridgeStatus                   string                   `json:"external_bridge_status,omitempty"`
-	ExternalBridgeReady                    bool                     `json:"external_bridge_ready,omitempty"`
-	ExternalBridgeLastError                string                   `json:"external_bridge_last_error_code,omitempty"`
-	IdleSelfImprovementGoalActive          bool                     `json:"idle_self_improvement_goal_active,omitempty"`
-	IdleSelfImprovementGoalRef             string                   `json:"idle_self_improvement_goal_ref,omitempty"`
-	IdleSelfImprovementGoalStatus          string                   `json:"idle_self_improvement_goal_status,omitempty"`
-	IdleSelfImprovementGoalReasonCode      string                   `json:"idle_self_improvement_goal_reason_code,omitempty"`
-	IdleSelfImprovementGoalClosureAccepted bool                     `json:"idle_self_improvement_goal_closure_accepted,omitempty"`
-	Diagnostics                            []ServerDiagnosticV0     `json:"diagnostics,omitempty"`
-	EvidenceRefs                           []string                 `json:"evidence_refs,omitempty"`
+	SchemaVersion                          string                        `json:"schema_version"`
+	Ready                                  bool                          `json:"ready"`
+	Status                                 string                        `json:"status"`
+	LivenessStatus                         string                        `json:"liveness_status"`
+	StartupReady                           bool                          `json:"startup_ready"`
+	StartupStatus                          string                        `json:"startup_status,omitempty"`
+	StartupMessage                         string                        `json:"startup_message,omitempty"`
+	StartupRevision                        StartupRevisionSummaryV0      `json:"startup_revision,omitempty"`
+	RuntimeIdentity                        ServerPublicRuntimeIdentityV0 `json:"runtime_identity,omitempty"`
+	StartupBlockers                        []StartupBlockerV0            `json:"startup_blockers,omitempty"`
+	LastHeartbeatAt                        string                        `json:"last_heartbeat_at,omitempty"`
+	LastStartupCheckAt                     string                        `json:"last_startup_check_at,omitempty"`
+	ExternalBridgeStatus                   string                        `json:"external_bridge_status,omitempty"`
+	ExternalBridgeReady                    bool                          `json:"external_bridge_ready,omitempty"`
+	ExternalBridgeLastError                string                        `json:"external_bridge_last_error_code,omitempty"`
+	IdleSelfImprovementGoalActive          bool                          `json:"idle_self_improvement_goal_active,omitempty"`
+	IdleSelfImprovementGoalRef             string                        `json:"idle_self_improvement_goal_ref,omitempty"`
+	IdleSelfImprovementGoalStatus          string                        `json:"idle_self_improvement_goal_status,omitempty"`
+	IdleSelfImprovementGoalReasonCode      string                        `json:"idle_self_improvement_goal_reason_code,omitempty"`
+	IdleSelfImprovementGoalClosureAccepted bool                          `json:"idle_self_improvement_goal_closure_accepted,omitempty"`
+	Diagnostics                            []ServerDiagnosticV0          `json:"diagnostics,omitempty"`
+	EvidenceRefs                           []string                      `json:"evidence_refs,omitempty"`
 }
 
 func NewServerReadinessV0(state StateV0) ServerReadinessV0 {
@@ -72,6 +73,7 @@ func NewServerReadinessV0(state StateV0) ServerReadinessV0 {
 		StartupStatus:                          startupStatus,
 		StartupMessage:                         startupMessage,
 		StartupRevision:                        normalizeStartupRevisionSummaryV0(state.StartupRevision),
+		RuntimeIdentity:                        NewServerPublicRuntimeIdentityV0(state),
 		StartupBlockers:                        normalizeStartupBlockersV0(state.StartupBlockers),
 		LastHeartbeatAt:                        strings.TrimSpace(state.LastHeartbeatAt),
 		LastStartupCheckAt:                     strings.TrimSpace(state.LastStartupCheckAt),

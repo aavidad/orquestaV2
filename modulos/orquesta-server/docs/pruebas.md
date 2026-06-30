@@ -92,6 +92,13 @@
 - `modulos/orquesta-server` prueba que `/api/v0/server/readiness` expone campos
   informativos de goal-first sin cambiar `ready` por un goal en curso y sin
   filtrar objetivo ni paths.
+- `modulos/orquesta-server` prueba que status/readiness proyectan
+  `runtime_identity` con SHA/build/commit y `binary_path_ref` sin filtrar la
+  ruta local cruda, y que al restaurar statefile se reemplaza la identidad vieja
+  por la del binario vivo.
+- `cmd/orquesta-server` prueba que la composition root calcula SHA/build ref del
+  ejecutable y que la verificacion de daemon detecta
+  `daemon_runtime_identity_mismatch` sin filtrar rutas ni hashes esperados.
 - `modulos/orquesta-server` prueba que `goal_launcher_unavailable` sin
   `goal_ref` ni spec/receipt/result/closure no se publica como goal activo en
   status ni readiness.

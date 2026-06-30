@@ -37,6 +37,7 @@ func NewStatusTrackerFromDurableStateV0(config ConfigV0, durable StateV0, now ti
 	restored.DaemonEpochRef = fresh.DaemonEpochRef
 	restored.ProjectWorkDir = fresh.ProjectWorkDir
 	restored.RuntimeWorkDir = fresh.RuntimeWorkDir
+	restored.RuntimeIdentity = fresh.RuntimeIdentity
 	restored.DaemonLogPolicy = fresh.DaemonLogPolicy
 	restored.ShutdownSignalPolicy = fresh.ShutdownSignalPolicy
 	restored.EffectiveConfig = fresh.EffectiveConfig
