@@ -181,6 +181,14 @@ no coincide exactamente, el comun queda como candidato y se crea una derivacion
 localizada; no se rehace desde cero por alias, orden, titulo o metadatos
 reparables.
 
+El bridge aplica este contrato como preflight ejecutable. Un job
+`generate_audio_asset` no se envia a Orquesta si el payload no declara texto
+publicable cerrado (`text_public_status=pass` o alias equivalente), refs de
+preparacion vigentes (`audio_manifest_ref`/sidecar y `source_content_ref` o hash
+de texto) y regeneracion selectiva (`audio_regeneration_mode=selective_by_sidecar`,
+`missing_or_stale_only` o equivalente). `audio_regeneration_mode=all` y modos
+globales equivalentes quedan bloqueados antes de TTS.
+
 ## HTML local USO
 
 `generate_html_site` no debe entregar un visor single-file con estilo propio si

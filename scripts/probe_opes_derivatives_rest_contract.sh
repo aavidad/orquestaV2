@@ -169,6 +169,10 @@ def input_for(index, job_type):
     if job_type == "generate_audio_asset":
         payload["audio_profile_ref"] = "accessible-es"
         payload["assembled_topic_artifact_id"] = "artifact-ref-contract-probe-assembled-topic"
+        payload["text_public_status"] = "pass"
+        payload["audio_regeneration_mode"] = "selective_by_sidecar"
+        payload["audio_manifest_ref"] = "audio-manifest-ref-contract-probe"
+        payload["source_content_ref"] = "assembled-topic-final-text-ref-contract-probe"
     if job_type == "generate_visual_asset":
         payload["visual_ref"] = "visual-ref-contract-probe"
         payload["asset_type"] = "diagram"

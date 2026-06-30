@@ -1,0 +1,214 @@
+package orquestaopesbridge
+
+import (
+	"encoding/json"
+	"strings"
+
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+)
+
+const (
+	OPESAudioWorkflowPreconditionMissingErrorV0 = "opes_audio_workflow_precondition_missing"
+
+	OPESAudioWorkflowTextPublicPassRequiredReasonV0 = "phase_precondition_missing:opes_audio:text_public_pass"
+	OPESAudioWorkflowPrepareRefsRequiredReasonV0    = "phase_precondition_missing:opes_audio:prepare_refs_required"
+	OPESAudioWorkflowSelectiveRegenRequiredReasonV0 = "phase_precondition_missing:opes_audio:selective_regeneration_required"
+)
+
+type OPESAudioWorkflowPreconditionEvaluationV0 struct {
+	Applies               bool     `json:"applies"`
+	Ready                 bool     `json:"ready"`
+	OperationalReason     string   `json:"operational_reason,omitempty"`
+	MissingPreconditions  []string `json:"missing_preconditions,omitempty"`
+	NextActions           []string `json:"next_actions,omitempty"`
+	RecommendedRetryPhase string   `json:"recommended_retry_phase,omitempty"`
+}
+
+func EvaluateOPESAudioWorkflowPreconditionsV0(
+	request orquestadomainwork.DomainWorkJobRequestV0,
+) OPESAudioWorkflowPreconditionEvaluationV0 {
+	if !opesAudioWorkflowPreconditionAppliesV0(request) {
+		return OPESAudioWorkflowPreconditionEvaluationV0{Ready: true}
+	}
+	if !opesAudioWorkflowTextPublicPassV0(request.InputFields) {
+		return OPESAudioWorkflowPreconditionEvaluationV0{
+			Applies:               true,
+			Ready:                 false,
+			OperationalReason:     OPESAudioWorkflowTextPublicPassRequiredReasonV0,
+			MissingPreconditions:  []string{"text_public_pass"},
+			NextActions:           []string{"run_text_qa", "declare_text_public_pass", "retry_from_phase=text_qa"},
+			RecommendedRetryPhase: "text_qa",
+		}
+	}
+	if !opesAudioWorkflowPrepareRefsReadyV0(request.InputFields) {
+		return OPESAudioWorkflowPreconditionEvaluationV0{
+			Applies:               true,
+			Ready:                 false,
+			OperationalReason:     OPESAudioWorkflowPrepareRefsRequiredReasonV0,
+			MissingPreconditions:  []string{"audio_prepare_refs"},
+			NextActions:           []string{"prepare_audio_sidecars", "declare_audio_manifest_ref", "declare_source_content_or_text_hash_ref", "retry_from_phase=prepare"},
+			RecommendedRetryPhase: "prepare",
+		}
+	}
+	if !opesAudioWorkflowSelectiveRegenerationV0(request.InputFields) {
+		return OPESAudioWorkflowPreconditionEvaluationV0{
+			Applies:               true,
+			Ready:                 false,
+			OperationalReason:     OPESAudioWorkflowSelectiveRegenRequiredReasonV0,
+			MissingPreconditions:  []string{"selective_audio_regeneration"},
+			NextActions:           []string{"prepare_audio_sidecars", "declare_audio_regeneration_mode_selective", "retry_from_phase=prepare"},
+			RecommendedRetryPhase: "prepare",
+		}
+	}
+	return OPESAudioWorkflowPreconditionEvaluationV0{
+		Applies: true,
+		Ready:   true,
+	}
+}
+
+func opesAudioWorkflowPreconditionAppliesV0(
+	request orquestadomainwork.DomainWorkJobRequestV0,
+) bool {
+	if orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(request.WorkKind) == orquestadomainwork.DomainWorkArtifactTypeAudioAssetV0 {
+		return true
+	}
+	for _, value := range opesAudioWorkflowFieldValuesByNameV0(request.InputFields, "expected_artifact_type") {
+		if strings.TrimSpace(value) == orquestadomainwork.DomainWorkArtifactTypeAudioAssetV0 {
+			return true
+		}
+	}
+	return false
+}
+
+func opesAudioWorkflowTextPublicPassV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) bool {
+	for _, value := range opesAudioWorkflowFieldValuesByNamesV0(fields,
+		"text_public_pass",
+		"text_public_status",
+		"public_text_status",
+		"text_qa_status",
+		"textual_gate_status",
+		"validated_text_status",
+		"editorial_status",
+	) {
+		if opesAudioWorkflowPassValueV0(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func opesAudioWorkflowPrepareRefsReadyV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) bool {
+	hasManifestOrSidecar := len(opesAudioWorkflowFieldValuesByNamesV0(fields,
+		"audio_manifest_ref",
+		"audio_manifest_refs",
+		"audio_sidecar_ref",
+		"audio_sidecar_refs",
+	)) > 0
+	hasSourceOrHash := len(opesAudioWorkflowFieldValuesByNamesV0(fields,
+		"source_content_ref",
+		"text_hash_ref",
+		"source_text_hash_ref",
+		"html_text_hash_ref",
+	)) > 0
+	return hasManifestOrSidecar && hasSourceOrHash
+}
+
+func opesAudioWorkflowSelectiveRegenerationV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) bool {
+	for _, value := range opesAudioWorkflowFieldValuesByNamesV0(fields,
+		"audio_regeneration_mode",
+		"audio_generation_mode",
+		"tts_regeneration_mode",
+		"tts_mode",
+		"regeneration_mode",
+		"generate_audio_mode",
+	) {
+		if opesAudioWorkflowSelectiveRegenValueV0(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func opesAudioWorkflowPassValueV0(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true", "yes", "y", "si", "sí", "1",
+		"pass", "passed", "ok", "ready", "listo",
+		"approved", "aprobado", "validated", "validado",
+		"closed", "cerrado", "final", "publicable", "final_publicable":
+		return true
+	default:
+		return false
+	}
+}
+
+func opesAudioWorkflowSelectiveRegenValueV0(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "selective", "selectivo",
+		"selective_by_sidecar", "selective_by_hash",
+		"missing_or_stale_only", "missing_or_obsolete_only",
+		"missing_only", "stale_only", "obsolete_only", "changed_only",
+		"incremental", "reuse_existing", "reuse_and_regenerate_stale":
+		return true
+	default:
+		return false
+	}
+}
+
+func opesAudioWorkflowFieldValuesByNamesV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	names ...string,
+) []string {
+	out := []string{}
+	for _, name := range names {
+		out = append(out, opesAudioWorkflowFieldValuesByNameV0(fields, name)...)
+	}
+	return compactStringsV0(out)
+}
+
+func opesAudioWorkflowFieldValuesByNameV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	name string,
+) []string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return []string{}
+	}
+	out := []string{}
+	for _, field := range fields {
+		if strings.TrimSpace(field.Name) != name {
+			continue
+		}
+		out = append(out, field.Value)
+		out = append(out, field.Values...)
+		out = append(out, opesAudioWorkflowJSONValuesV0(field.ValueJSON)...)
+	}
+	return compactStringsV0(out)
+}
+
+func opesAudioWorkflowJSONValuesV0(raw json.RawMessage) []string {
+	if len(raw) == 0 {
+		return []string{}
+	}
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return []string{text}
+	}
+	var texts []string
+	if json.Unmarshal(raw, &texts) == nil {
+		return texts
+	}
+	var flag bool
+	if json.Unmarshal(raw, &flag) == nil {
+		if flag {
+			return []string{"true"}
+		}
+		return []string{"false"}
+	}
+	return []string{}
+}

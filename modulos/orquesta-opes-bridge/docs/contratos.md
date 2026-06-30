@@ -87,7 +87,11 @@ Reglas:
   el contrato publico. En pasadas finas de preparacion de audio no debe usar
   `10_tutor_rag/corpus/` ni otros corpus RAG regenerables como fuente primaria
   de rework textual: primero se corrigen HTML final/local, bancos de tests y
-  tutor fuente, y el RAG se reconstruye despues desde esas fuentes limpias;
+  tutor fuente, y el RAG se reconstruye despues desde esas fuentes limpias. El
+  bridge no postea audio si faltan `text_public_status=pass` o equivalente,
+  refs vigentes de preparacion (`audio_manifest_ref`/sidecar mas
+  `source_content_ref` o hash de texto) y modo de regeneracion selectivo; un
+  modo global `all`/`--all` bloquea con `phase_precondition_missing`;
 - para `research_exam_precedents`, el bridge exige
   `expected_artifact_type=exam_research_report` y el job debe buscar por
   internet examenes, convocatorias, temarios y pruebas de administraciones

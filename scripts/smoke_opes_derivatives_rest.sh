@@ -199,6 +199,10 @@ payload_by_type = {
         "topic_id": "topic-ref-fake-operario-001",
         "assembled_topic_artifact_id": "artifact-assembled-topic-fake-001",
         "audio_profile_ref": "audio-profile-accessible-es-001",
+        "text_public_status": "pass",
+        "audio_regeneration_mode": "selective_by_sidecar",
+        "audio_manifest_ref": "audio-manifest-fake-001",
+        "source_content_ref": "assembled-topic-fake-final-text-001",
         "language_code": "es",
     },
     "generate_tutor_assets": {

@@ -218,6 +218,19 @@ func runOPESDrainSingleOnceV0(
 			continue
 		}
 		result.ChangeRef = request.AppChangeRequest.ChangeRef
+		if evaluation, blocked := opesBridgeDomainWorkflowPreconditionBlockedV0(request.AppChangeRequest); blocked {
+			summary.Skipped++
+			result.Status = "phase_precondition_missing"
+			result.OperationalReason = evaluation.OperationalReason
+			result.NextActions = append([]string(nil), evaluation.NextActions...)
+			summary.Results = append(summary.Results, result)
+			summary.Errors = append(summary.Errors, opesDrainPublicErrorV0{
+				JobRef: job.ID,
+				Code:   orquestaopesbridge.OPESAudioWorkflowPreconditionMissingErrorV0,
+				Reason: evaluation.OperationalReason,
+			})
+			continue
+		}
 		if evaluation, blocked := opesBridgeExternalCapabilityBlockedV0(
 			request.AppChangeRequest,
 			config.ExternalCapabilities,
@@ -498,6 +511,17 @@ func opesBridgeExternalCapabilityBlockedV0(
 		capabilities,
 	)
 	return evaluation, !evaluation.Ready && len(evaluation.MissingRequirements) > 0
+}
+
+func opesBridgeDomainWorkflowPreconditionBlockedV0(
+	request orquestaappchange.AppChangeRequestV0,
+) (orquestaopesbridge.OPESAudioWorkflowPreconditionEvaluationV0, bool) {
+	domainRequest, ok := orquestaappchange.DomainWorkJobRequestFromAppChangeV0(request)
+	if !ok {
+		return orquestaopesbridge.OPESAudioWorkflowPreconditionEvaluationV0{}, false
+	}
+	evaluation := orquestaopesbridge.EvaluateOPESAudioWorkflowPreconditionsV0(domainRequest)
+	return evaluation, evaluation.Applies && !evaluation.Ready
 }
 
 func opesBridgeExternalCapabilityErrorCodeV0(

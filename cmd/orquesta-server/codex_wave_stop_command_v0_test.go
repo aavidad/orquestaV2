@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCodexWaveStopCommandV0SolicitaParadaDesdeFicheroDedicado(t *testing.T) {
@@ -110,14 +111,24 @@ wait "$!"
 
 func mustReadCodexWavePIDForTestV0(t *testing.T, path string) int {
 	t.Helper()
-	waitForCodexWaveTestFileV0(t, path)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("leer pid %s: %v", path, err)
+	deadline := time.Now().Add(2 * time.Second)
+	var lastData []byte
+	var lastErr error
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			lastErr = err
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		lastData = data
+		pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+		if err == nil && pid > 0 {
+			return pid
+		}
+		lastErr = err
+		time.Sleep(10 * time.Millisecond)
 	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	if err != nil || pid <= 0 {
-		t.Fatalf("pid invalido %q err=%v", string(data), err)
-	}
-	return pid
+	t.Fatalf("pid invalido %q err=%v", string(lastData), lastErr)
+	return 0
 }

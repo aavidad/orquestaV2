@@ -264,6 +264,15 @@ marca `external_capability_missing:speech_synthesis:*` y no postea
 `generate_audio_asset`; el adaptador OPES debe conservar parciales, sidecars y
 manifest de fallos para reintento seguro.
 
+Ademas, `generate_audio_asset` queda bloqueado antes de llegar a TTS si el
+payload no declara las precondiciones de fase: texto publicable cerrado
+(`text_public_status=pass` o equivalente), preparacion de audio con
+`audio_manifest_ref`/sidecar y `source_content_ref` o hash vigente del texto, y
+modo de regeneracion selectivo (`audio_regeneration_mode=selective_by_sidecar`,
+`missing_or_stale_only` o equivalente). Un modo global tipo `all`/`--all` no es
+contrato valido del bridge; si cambia el HTML/texto tras la preparacion, OPES
+debe invalidar esos refs y reintentar desde `prepare`, no continuar TTS.
+
 Regla de audio por apartado: cada `section_ref` debe apuntar a un unico MP3
 final del apartado, no a varios audios visibles ni a capas superpuestas. Ese MP3
 se genera desde el contenido final real que vera el alumnado, preferiblemente

@@ -53,6 +53,11 @@
   `research_exam_precedents` incluye los mismos criterios en sus acceptance
   criteria. Los hallazgos fuera de alcance se conservan como evidencia blanda,
   no como veto automatico.
+- Preflight ejecutable de audio OPES en el drain del servidor: `generate_audio_asset`
+  no postea a Orquesta sin `text_public_status=pass`, sin refs de preparacion
+  (`audio_manifest_ref`/sidecar mas `source_content_ref` o hash) o con
+  regeneracion global `all`; con esas precondiciones y `speech_synthesis`
+  completo, el submit sigue permitido.
 - Routing de proveedores en Orquesta:
   `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server -run 'TestClaude|TestProviderLaunchSpecResolverV0RuteaReview|TestProviderAwareAckPathResolverV0UsaRuntimeClaude|TestGeminiRuntimeConfig|TestClaudeRuntimeConfig'`.
   Debe demostrar que `review_gemini` se materializa por Gemini cuando esta
