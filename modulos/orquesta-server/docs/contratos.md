@@ -41,6 +41,12 @@ Salida:
   expone `runtime_identity` con `binary_path_ref`, `binary_name`,
   `binary_sha256`, `build_ref`, `commit_ref` y `started_at`; no expone la ruta
   local cruda del binario.
+  La composicion de servidor puede ejecutar limpieza de arranque selectiva con
+  `ORQUESTA_STARTUP_CLEANUP_MODE=selective_project` y
+  `ORQUESTA_STARTUP_CLEANUP_SCOPE_REFS`: solo reconcilia cola/control de refs
+  de proyecto/app/run declaradas y solo pone en cuarentena runs sin agentes
+  vivos pendientes. No sustituye al `forced_stop` global, que sigue siendo
+  opt-in explicito.
 - `GET /api/v0/server/status`: estado/diagnostico publico canonico.
   Incluye la proyeccion compacta `state_persist_*` para distinguir estado vivo
   en memoria de persistencia durable confirmada o degradada, sin detalles del

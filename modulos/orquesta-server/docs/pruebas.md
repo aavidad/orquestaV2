@@ -99,6 +99,10 @@
 - `cmd/orquesta-server` prueba que la composition root calcula SHA/build ref del
   ejecutable y que la verificacion de daemon detecta
   `daemon_runtime_identity_mismatch` sin filtrar rutas ni hashes esperados.
+- `cmd/orquesta-server` prueba que el startup cleanup selectivo por scope
+  (`selective_project` + `ORQUESTA_STARTUP_CLEANUP_SCOPE_REFS`) cierra cola y
+  control de un proyecto/app sin `forced_stop` global, y que no limpia runs
+  fuera del scope ni con agentes vivos pendientes.
 - `modulos/orquesta-server` prueba que `goal_launcher_unavailable` sin
   `goal_ref` ni spec/receipt/result/closure no se publica como goal activo en
   status ni readiness.

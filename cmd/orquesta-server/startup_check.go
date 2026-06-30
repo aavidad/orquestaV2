@@ -16,6 +16,7 @@ import (
 const (
 	startupCleanupModeOffV0        = "off"
 	startupCleanupModeDiagnoseV0   = "diagnose"
+	startupCleanupModeSelectiveV0  = "selective_project"
 	startupCleanupModeForcedStopV0 = "forced_stop"
 )
 
@@ -24,6 +25,7 @@ type serverStartupCheckV0 struct {
 	ServerConfig orquestaserver.ConfigV0
 	Mode         string
 	QueueLimit   int
+	ScopeRefs    []string
 }
 
 func startupCheckFromEnvV0(
@@ -43,6 +45,7 @@ func startupCheckFromEnvV0(
 		ServerConfig: serverConfig,
 		Mode:         mode,
 		QueueLimit:   intEnvOrDefaultV0(envStartupQueueLimitV0, 0),
+		ScopeRefs:    csvEnvOrDefaultV0(envStartupCleanupScopeRefsV0, nil),
 	}
 }
 
@@ -57,6 +60,8 @@ func (check serverStartupCheckV0) PrepareStartupV0(
 	switch mode {
 	case startupCleanupModeDiagnoseV0:
 		return check.diagnoseStartupV0(ctx, command)
+	case startupCleanupModeSelectiveV0, "selective", "project", "quarantine_project":
+		return check.selectiveStartupCleanupV0(ctx, command)
 	case startupCleanupModeForcedStopV0, "purge", "purge_forced":
 		return check.forceStopStartupStateV0(ctx, command)
 	default:

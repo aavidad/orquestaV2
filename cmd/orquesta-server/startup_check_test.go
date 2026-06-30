@@ -274,6 +274,129 @@ func TestStartupCleanupBlockersV0ExponeAccionYAntiguedadSinPathsV0(t *testing.T)
 	}
 }
 
+func TestStartupSelectiveCleanupV0CierraScopeSinForcedStopGlobalV0(t *testing.T) {
+	ctx := context.Background()
+	store := orquestarunmemory.NewRunMemoryStoreV0()
+	runRef := "run-opes-stale-safe"
+	if _, err := store.UpsertRunSchedulingCandidateV0(ctx, "queue-main", orquestarunqueue.RunSchedulingCandidateV0{
+		RunRef: runRef,
+		AppRef: "opes",
+		Status: orquestarunqueue.RunStatusReadyV0,
+	}); err != nil {
+		t.Fatalf("UpsertRunSchedulingCandidateV0: %v", err)
+	}
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(orquestacoreworkflow.OrchestrationRunV0{
+		RunID:  runRef,
+		Status: orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+	})
+	check := serverStartupCheckV0{
+		Stack: orquestaappcodexstack.StackV0{
+			Stores: orquestaappcodexstack.StoresV0{
+				RunQueue:   store,
+				RunControl: store,
+				RunStore:   runStore,
+			},
+			RunQueue: orquestaappcodexstack.RunQueueConfigV0{QueueRef: "queue-main"},
+		},
+		Mode:      startupCleanupModeSelectiveV0,
+		ScopeRefs: []string{"opes"},
+	}
+
+	result, err := check.PrepareStartupV0(ctx, orquestaserver.StartupCheckCommandV0{
+		OccurredAt: time.Date(2026, 6, 30, 18, 40, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("PrepareStartupV0: %v", err)
+	}
+	if !result.Ready ||
+		result.Status != orquestaserver.StartupCheckStatusReadyV0 ||
+		!resultStartupEvidenceContainsV0(result.EvidenceRefs, startupSelectiveCleanupEvidenceV0) {
+		t.Fatalf("result=%+v", result)
+	}
+	control, err := store.ReadRunControlStateV0(ctx, orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef})
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if control.Status != orquestaruncontrol.RunControlStatusStoppedV0 || control.Forced {
+		t.Fatalf("control debe quedar parado sin forced_stop: %+v", control)
+	}
+	all, err := store.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{
+		QueueRef:             "queue-main",
+		IncludeNonExecutable: true,
+	})
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(all) != 1 ||
+		all[0].Status != orquestarunqueue.RunStatusStoppedV0 ||
+		!containsStringForTestV0(all[0].EvidenceRefs, startupSelectiveCleanupEvidenceV0) {
+		t.Fatalf("candidate=%+v", all)
+	}
+}
+
+func TestStartupSelectiveCleanupV0NoLimpiaFueraDeScopeV0(t *testing.T) {
+	ctx := context.Background()
+	store := orquestarunmemory.NewRunMemoryStoreV0()
+	scopedRunRef := "run-opes-stale-safe"
+	otherRunRef := "run-other-live"
+	for _, candidate := range []orquestarunqueue.RunSchedulingCandidateV0{
+		{RunRef: scopedRunRef, AppRef: "opes", Status: orquestarunqueue.RunStatusReadyV0},
+		{RunRef: otherRunRef, AppRef: "other-app", Status: orquestarunqueue.RunStatusReadyV0},
+	} {
+		if _, err := store.UpsertRunSchedulingCandidateV0(ctx, "queue-main", candidate); err != nil {
+			t.Fatalf("UpsertRunSchedulingCandidateV0: %v", err)
+		}
+	}
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(
+		orquestacoreworkflow.OrchestrationRunV0{RunID: scopedRunRef, Status: orquestacoreworkflow.OrchestrationRunStatusActiveV0},
+		orquestacoreworkflow.OrchestrationRunV0{
+			RunID:         otherRunRef,
+			Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+			StartedAgents: []string{"agent-other-live"},
+		},
+	)
+	check := serverStartupCheckV0{
+		Stack: orquestaappcodexstack.StackV0{
+			Stores: orquestaappcodexstack.StoresV0{
+				RunQueue:   store,
+				RunControl: store,
+				RunStore:   runStore,
+			},
+			RunQueue: orquestaappcodexstack.RunQueueConfigV0{QueueRef: "queue-main"},
+		},
+		Mode:      startupCleanupModeSelectiveV0,
+		ScopeRefs: []string{"opes"},
+	}
+
+	result, err := check.PrepareStartupV0(ctx, orquestaserver.StartupCheckCommandV0{
+		OccurredAt: time.Date(2026, 6, 30, 18, 45, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("PrepareStartupV0: %v", err)
+	}
+	if result.Ready ||
+		result.Status != "startup_dirty_runs_detected" ||
+		len(result.Blockers) != 1 ||
+		result.Blockers[0].RunRef != otherRunRef {
+		t.Fatalf("result=%+v", result)
+	}
+	all, err := store.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{
+		QueueRef:             "queue-main",
+		IncludeNonExecutable: true,
+	})
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	statusByRun := map[string]string{}
+	for _, candidate := range all {
+		statusByRun[candidate.RunRef] = candidate.Status
+	}
+	if statusByRun[scopedRunRef] != orquestarunqueue.RunStatusStoppedV0 ||
+		statusByRun[otherRunRef] != orquestarunqueue.RunStatusReadyV0 {
+		t.Fatalf("statusByRun=%+v", statusByRun)
+	}
+}
+
 func TestStartupCandidateCanBeCompletedByStartupV0AceptaStopSolicitadoSinACKV0(t *testing.T) {
 	ctx := context.Background()
 	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0(orquestacoreworkflow.OrchestrationRunV0{

@@ -61,6 +61,7 @@ const (
 	envServerAutoprogrammingPromotionAppRefV0        = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_APP_REF"
 	envServerAutoprogrammingPromotionCommitMessageV0 = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_COMMIT_MESSAGE"
 	envStartupCleanupModeV0                          = "ORQUESTA_STARTUP_CLEANUP_MODE"
+	envStartupCleanupScopeRefsV0                     = "ORQUESTA_STARTUP_CLEANUP_SCOPE_REFS"
 	envStartupQueueLimitV0                           = "ORQUESTA_STARTUP_QUEUE_LIMIT"
 	envAutoprogrammingLegacyDirectorLoopV0           = "ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP"
 	envExternalWorkLegacyDirectorLoopV0              = "ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP"

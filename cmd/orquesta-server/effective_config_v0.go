@@ -96,6 +96,14 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 			strconv.FormatBool(boolEnvOrDefaultV0(envExternalWorkLegacyDirectorLoopV0, false)),
 		),
 		serverConfigSettingFromRegistryV0(
+			envStartupCleanupModeV0,
+			startupCleanupModeEffectiveValueV0(),
+		),
+		serverConfigSettingFromRegistryV0(
+			envStartupCleanupScopeRefsV0,
+			strings.Join(csvEnvOrDefaultV0(envStartupCleanupScopeRefsV0, nil), ","),
+		),
+		serverConfigSettingFromRegistryV0(
 			envCodebaseBrokerProviderKindV0,
 			envOrDefaultV0(envCodebaseBrokerProviderKindV0, "fallback_rg"),
 		),
