@@ -432,6 +432,16 @@ func goalDomainReceiptOPESSubrolesIssueV0(
 		record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
 		evidenceRefs = append(evidenceRefs, record.EvidenceRefs...)
 	}
+	expectedTaskRefs := goalDomainReceiptOPESSubroleExpectedTaskRefsV0(spec)
+	if len(expectedTaskRefs) >= goalDomainReceiptOPESSubrolesRequiredCountV0 {
+		if goalDomainReceiptOPESSubroleExpectedEvidenceCountV0(evidenceRefs, expectedTaskRefs) >= len(expectedTaskRefs) {
+			return orquestagoal.GoalWorkIssueV0{}
+		}
+		return orquestagoal.GoalWorkIssueV0{
+			Code:  goalDomainReceiptOPESSubrolesEvidenceMissingIssueV0,
+			Field: goalDomainReceiptOPESSubrolesEvidenceFieldV0,
+		}
+	}
 	if goalDomainReceiptOPESSubroleEvidenceCountV0(evidenceRefs) >= goalDomainReceiptOPESSubrolesRequiredCountV0 {
 		return orquestagoal.GoalWorkIssueV0{}
 	}
@@ -499,6 +509,68 @@ func goalDomainReceiptInputFieldRequiresOPESSubrolesV0(
 	return false
 }
 
+func goalDomainReceiptOPESSubroleExpectedTaskRefsV0(
+	spec orquestagoal.GoalWorkSpecV0,
+) []string {
+	spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
+	out := []string{}
+	for _, ref := range spec.ContextRefs {
+		switch strings.TrimSpace(ref.Kind) {
+		case "opes_subrole_task_ref":
+			out = append(out, ref.Ref)
+			continue
+		case "input_field_value":
+		default:
+			continue
+		}
+		values := goalDomainReceiptInputFieldStringValuesV0(ref.Purpose, "opes_subrole_task_refs")
+		out = append(out, values...)
+	}
+	return compactStringsV0(out)
+}
+
+func goalDomainReceiptInputFieldStringValuesV0(
+	purpose string,
+	name string,
+) []string {
+	purpose = strings.TrimSpace(purpose)
+	start := strings.Index(purpose, "{")
+	if start < 0 {
+		return nil
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(purpose[start:]), &payload); err != nil {
+		return nil
+	}
+	if normalizedExternalWorkFieldNameV0(goalDomainReceiptStringValueV0(payload["name"])) != normalizedExternalWorkFieldNameV0(name) {
+		return nil
+	}
+	values := []string{}
+	if value := goalDomainReceiptStringValueV0(payload["value"]); value != "" {
+		values = append(values, value)
+	}
+	values = append(values, goalDomainReceiptStringValuesV0(payload["values"])...)
+	values = append(values, goalDomainReceiptStringValuesV0(payload["value_json"])...)
+	return compactStringsV0(values)
+}
+
+func goalDomainReceiptStringValuesV0(value any) []string {
+	switch typed := value.(type) {
+	case string:
+		return []string{strings.TrimSpace(typed)}
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, goalDomainReceiptStringValuesV0(item)...)
+		}
+		return compactStringsV0(out)
+	case []string:
+		return compactStringsV0(typed)
+	default:
+		return nil
+	}
+}
+
 func goalDomainReceiptStringValueV0(value any) string {
 	if text, ok := value.(string); ok {
 		return strings.TrimSpace(text)
@@ -528,6 +600,32 @@ func goalDomainReceiptOPESSubrolesRequiredCountValueV0(value any) int {
 		return len(compactStringsV0(typed))
 	}
 	return 0
+}
+
+func goalDomainReceiptOPESSubroleExpectedEvidenceCountV0(
+	refs []string,
+	expectedTaskRefs []string,
+) int {
+	seen := map[string]struct{}{}
+	expected := map[string]struct{}{}
+	for _, taskRef := range expectedTaskRefs {
+		taskRef = strings.TrimSpace(taskRef)
+		if taskRef == "" {
+			continue
+		}
+		expected[taskRef] = struct{}{}
+	}
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if !strings.HasPrefix(ref, goalDomainReceiptOPESSubrolesEvidencePrefixV0) {
+			continue
+		}
+		suffix := strings.TrimPrefix(ref, goalDomainReceiptOPESSubrolesEvidencePrefixV0)
+		if _, ok := expected[suffix]; ok {
+			seen[suffix] = struct{}{}
+		}
+	}
+	return len(seen)
 }
 
 func goalDomainReceiptOPESSubroleEvidenceCountV0(

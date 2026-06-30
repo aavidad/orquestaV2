@@ -223,6 +223,58 @@ func TestBuildExternalWorkGoalWorkSpecV0NoInlineaInputFieldsMasivos(t *testing.T
 	}
 }
 
+func TestBuildExternalWorkGoalWorkSpecV0PriorizaSubroleTaskRefsOPESV0(t *testing.T) {
+	request := validExternalWorkRunRequestForTestV0()
+	fields := []orquestadomainwork.DomainWorkFieldV0{}
+	for index := 0; index < externalWorkGoalInputFieldMaxInlineFieldsV0+4; index++ {
+		fields = append(fields, orquestadomainwork.DomainWorkFieldV0{
+			Name:  "campo_secundario_" + string(rune('a'+index)),
+			Value: "valor-secundario",
+		})
+	}
+	fields = append(fields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "subroles_required", Value: "6"},
+		orquestadomainwork.DomainWorkFieldV0{
+			Name: "opes_subrole_task_refs",
+			Values: []string{
+				"task-opes-subrole-job-001-redaccion",
+				"task-opes-subrole-job-001-tests",
+				"task-opes-subrole-job-001-visuales",
+				"task-opes-subrole-job-001-audio",
+				"task-opes-subrole-job-001-tutor_rag",
+				"task-opes-subrole-job-001-qa",
+			},
+		},
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:   "opes_subrole_roles",
+			Values: []string{"redaccion", "tests", "visuales", "audio", "tutor_rag", "qa"},
+		},
+	)
+	request.AppChangeRequest.ExternalWork.InputFields = fields
+
+	spec, issues := BuildExternalWorkGoalWorkSpecV0(
+		request,
+		StartExternalWorkRunConfigV0{OccurredAt: "2026-05-10T10:00:00Z"},
+	)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	context := externalWorkRunTestContextTextV0(spec.ContextRefs)
+	for _, want := range []string{
+		"input_fields.opes_subrole_task_refs",
+		"task-opes-subrole-job-001-redaccion",
+		"task-opes-subrole-job-001-qa",
+		"input_fields.opes_subrole_roles",
+		"redaccion",
+		"tutor_rag",
+		"Contrato DomainWork trae 23 input_fields",
+	} {
+		if !strings.Contains(context, want) {
+			t.Fatalf("context no contiene %q:\n%s", want, context)
+		}
+	}
+}
+
 func TestBuildExternalWorkGoalWorkSpecV0LimitaPayloadRefsDeInputFields(t *testing.T) {
 	request := validExternalWorkRunRequestForTestV0()
 	largeValue := strings.Repeat("contrato extenso ", 90)

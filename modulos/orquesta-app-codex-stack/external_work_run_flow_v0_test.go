@@ -1176,11 +1176,16 @@ func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESSubrolesJSONSinSeisEvidenc
 	}
 }
 
-func TestCodexStackV0ExternalWorkGoalFirstCierraOPESSubrolesConSeisEvidenciasV0(t *testing.T) {
+func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESSubrolesConSeisEvidenciasNominalesSiHayTaskRefsV0(t *testing.T) {
 	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
-	started := postExternalWorkRunStackWithChangeV0(t, stack, opesSubrolesExternalWorkChangeForTestV0())
+	change := opesSubrolesExternalWorkChangeForTestV0()
+	change.ExternalWork.InputFields = append(change.ExternalWork.InputFields, goalDomainReceiptOPESSubroleTaskRefsFieldForTestV0())
+	started := postExternalWorkRunStackWithChangeV0(t, stack, change)
 	spec := launcher.specs[0]
-	receiptRef := "receipt-ref-goal-first-opes-subroles-complete-001"
+	if got := goalDomainReceiptOPESSubroleExpectedTaskRefsV0(spec); len(got) != goalDomainReceiptOPESSubrolesRequiredCountV0 {
+		t.Fatalf("spec no conserva task refs OPES esperadas: got=%v refs=%s", got, codexStackGoalContextRefsTextForTestV0(spec.ContextRefs))
+	}
+	receiptRef := "receipt-ref-goal-first-opes-subroles-nominal-001"
 	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
 	record.EvidenceRefs = append(record.EvidenceRefs, goalDomainReceiptOPESSubroleEvidenceRefsForTestV0()...)
 	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
@@ -1199,7 +1204,45 @@ func TestCodexStackV0ExternalWorkGoalFirstCierraOPESSubrolesConSeisEvidenciasV0(
 		context.Background(),
 		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
 			RunRef:        started.RunRef,
-			CorrelationID: "corr-external-work-goal-first-opes-subroles-complete-001",
+			CorrelationID: "corr-external-work-goal-first-opes-subroles-nominal-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework ||
+		!goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptOPESSubrolesEvidenceMissingIssueV0) {
+		t.Fatalf("receipt OPES 1+6 con seis evidencias nominales cerro goal-first sin task refs causales: result=%+v", result)
+	}
+}
+
+func TestCodexStackV0ExternalWorkGoalFirstCierraOPESSubrolesLegacyConSeisEvidenciasSinTaskRefsV0(t *testing.T) {
+	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	started := postExternalWorkRunStackWithChangeV0(t, stack, opesSubrolesExternalWorkChangeForTestV0())
+	spec := launcher.specs[0]
+	receiptRef := "receipt-ref-goal-first-opes-subroles-legacy-complete-001"
+	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
+	record.EvidenceRefs = append(record.EvidenceRefs, goalDomainReceiptOPESSubroleEvidenceRefsForTestV0()...)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		record,
+	); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-opes-subroles-legacy-complete-001",
 			RequestedBy:   "orquesta-app-codex-stack-test",
 		},
 	)
@@ -1209,7 +1252,46 @@ func TestCodexStackV0ExternalWorkGoalFirstCierraOPESSubrolesConSeisEvidenciasV0(
 	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
 		!result.Closure.Accepted ||
 		!codexStackStringInSetForTestV0(result.Closure.EvidenceRefs, goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0) {
-		t.Fatalf("receipt OPES 1+6 con seis evidencias no cerro goal-first: result=%+v", result)
+		t.Fatalf("receipt OPES 1+6 legacy con seis evidencias no cerro goal-first: result=%+v", result)
+	}
+}
+
+func TestCodexStackV0ExternalWorkGoalFirstCierraOPESSubrolesConEvidenciasDeTaskRefsV0(t *testing.T) {
+	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	change := opesSubrolesExternalWorkChangeForTestV0()
+	change.ExternalWork.InputFields = append(change.ExternalWork.InputFields, goalDomainReceiptOPESSubroleTaskRefsFieldForTestV0())
+	started := postExternalWorkRunStackWithChangeV0(t, stack, change)
+	spec := launcher.specs[0]
+	receiptRef := "receipt-ref-goal-first-opes-subroles-taskrefs-complete-001"
+	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
+	record.EvidenceRefs = append(record.EvidenceRefs, goalDomainReceiptOPESSubroleTaskRefEvidenceRefsForTestV0()...)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		record,
+	); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-opes-subroles-taskrefs-complete-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		!result.Closure.Accepted ||
+		!codexStackStringInSetForTestV0(result.Closure.EvidenceRefs, goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0) {
+		t.Fatalf("receipt OPES 1+6 con evidencias de task refs no cerro goal-first: result=%+v", result)
 	}
 }
 
@@ -2038,6 +2120,33 @@ func goalDomainReceiptOPESSubroleEvidenceRefsForTestV0() []string {
 		"domain-work-opes-subrole-tests-tutor",
 		"domain-work-opes-subrole-html-rag-audio-qa",
 	}
+}
+
+func goalDomainReceiptOPESSubroleTaskRefsForTestV0() []string {
+	return []string{
+		"task-opes-subrole-job-ref-goal-first-opes-subroles-001-redaccion",
+		"task-opes-subrole-job-ref-goal-first-opes-subroles-001-tests",
+		"task-opes-subrole-job-ref-goal-first-opes-subroles-001-visuales",
+		"task-opes-subrole-job-ref-goal-first-opes-subroles-001-audio",
+		"task-opes-subrole-job-ref-goal-first-opes-subroles-001-tutor_rag",
+		"task-opes-subrole-job-ref-goal-first-opes-subroles-001-qa",
+	}
+}
+
+func goalDomainReceiptOPESSubroleTaskRefsFieldForTestV0() orquestadomainwork.DomainWorkFieldV0 {
+	return orquestadomainwork.DomainWorkFieldV0{
+		Name:   "opes_subrole_task_refs",
+		Values: goalDomainReceiptOPESSubroleTaskRefsForTestV0(),
+	}
+}
+
+func goalDomainReceiptOPESSubroleTaskRefEvidenceRefsForTestV0() []string {
+	taskRefs := goalDomainReceiptOPESSubroleTaskRefsForTestV0()
+	refs := make([]string, 0, len(taskRefs))
+	for _, taskRef := range taskRefs {
+		refs = append(refs, goalDomainReceiptOPESSubrolesEvidencePrefixV0+taskRef)
+	}
+	return refs
 }
 
 func codexStackGoalContextRefsTextForTestV0(refs []orquestagoal.GoalContextRefV0) string {

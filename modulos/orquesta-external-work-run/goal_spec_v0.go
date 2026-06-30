@@ -200,6 +200,11 @@ func externalWorkGoalInputFieldContextRefsV0(
 		if name == "" {
 			continue
 		}
+		if strings.EqualFold(strings.TrimSpace(name), "opes_subrole_task_refs") {
+			for _, taskRef := range externalWorkGoalSanitizeInputValuesV0(name, field.Values) {
+				appendRef("opes_subrole_task_ref", taskRef, "Task ref causal esperada para contrato OPES 1+6.")
+			}
+		}
 		fieldRef := "input-field-" + externalWorkGoalSafeInputFieldRefPartV0(name)
 		payloadRef, payloadOK := externalWorkGoalInputFieldPayloadRefV0(request, name)
 		if purpose, ok := externalWorkGoalInputFieldPurposeV0(field, payloadRef, &inputBudget); ok {
@@ -239,7 +244,10 @@ func externalWorkGoalPrioritizedInputFieldsV0(
 func externalWorkGoalInputFieldPriorityV0(name string) int {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "course_id", "program_id", "topic_id", "work_kind", "transport_job_type",
-		"expected_artifact_type", "official_order", "probe_ref":
+		"expected_artifact_type", "official_order", "probe_ref",
+		"opes_subroles_materialization_status", "opes_subroles_blocking_reason",
+		"opes_subrole_task_refs", "opes_subrole_roles", "opes_subrole_write_sets",
+		"product_write_set_status", "product_write_set_rework_action":
 		return 10
 	case "document_plan_artifact_id", "assembled_topic_artifact_id", "audio_profile_ref":
 		return 20
@@ -508,7 +516,8 @@ func externalWorkGoalSanitizeInputValueV0(name string, value string) string {
 	if value == "" {
 		return ""
 	}
-	if externalWorkGoalFieldNameSensitiveV0(name) || externalWorkGoalValueLooksSensitiveV0(value) {
+	if externalWorkGoalFieldNameSensitiveV0(name) ||
+		(!externalWorkGoalFieldAllowsOpaqueRefsV0(name) && externalWorkGoalValueLooksSensitiveV0(value)) {
 		return "redacted-sensitive-value"
 	}
 	if externalWorkGoalFieldAllowsOperationalPathV0(name) {
@@ -566,6 +575,15 @@ func externalWorkGoalPathBaseV0(value string) string {
 		return ""
 	}
 	return compactExternalWorkRunRefV0(parts[len(parts)-1])
+}
+
+func externalWorkGoalFieldAllowsOpaqueRefsV0(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "opes_subrole_task_refs", "opes_subrole_roles", "opes_subrole_write_sets":
+		return true
+	default:
+		return false
+	}
 }
 
 func externalWorkGoalFieldAllowsOperationalPathV0(name string) bool {
