@@ -158,10 +158,25 @@ func webNuevaAppIntakeGuidedSessionV0(request WebNuevaAppIntakeGuidedRequestV0) 
 }
 
 func writeNuevaAppIntakeGuidedErrorV0(w http.ResponseWriter, status int) {
+	code, message := nuevaAppIntakeGuidedErrorMessageV0(status)
 	writeNuevaAppIntakeGuidedJSONV0(w, status, map[string]string{
 		"schema_version": NuevaAppIntakeGuidedEndpointSchemaV0,
-		"error":          http.StatusText(status),
+		"code":           code,
+		"error":          message,
 	})
+}
+
+func nuevaAppIntakeGuidedErrorMessageV0(status int) (string, string) {
+	switch status {
+	case http.StatusBadRequest:
+		return "solicitud_invalida", "La solicitud no es valida."
+	case http.StatusMethodNotAllowed:
+		return "metodo_no_permitido", "Metodo no permitido."
+	case http.StatusUnsupportedMediaType:
+		return "tipo_contenido_no_soportado", "El contenido debe enviarse como JSON."
+	default:
+		return "error_http", "No se pudo procesar la solicitud."
+	}
 }
 
 func writeNuevaAppIntakeGuidedJSONV0(w http.ResponseWriter, status int, value any) {

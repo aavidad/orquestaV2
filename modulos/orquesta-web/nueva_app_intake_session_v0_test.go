@@ -25,7 +25,13 @@ func TestWebNuevaAppIntakeSessionV0CreaSesionDesdeIdeaYPideCamposCriticos(t *tes
 		session.AppSpecPartial.TipoApp != "" {
 		t.Fatalf("app spec parcial inesperado: %+v", session.AppSpecPartial)
 	}
-	if len(session.PendingQuestions) != 1 || session.PendingQuestions[0] != "tipo_app" {
+	if len(session.PendingQuestions) != 6 ||
+		session.PendingQuestions[0] != "tipo_app" ||
+		!stringSliceHasV0(session.PendingQuestions, "preferencias_tecnicas") ||
+		!stringSliceHasV0(session.PendingQuestions, "plataformas") ||
+		!stringSliceHasV0(session.PendingQuestions, "datos") ||
+		!stringSliceHasV0(session.PendingQuestions, "deploy") ||
+		!stringSliceHasV0(session.PendingQuestions, "calidad") {
 		t.Fatalf("preguntas=%+v", session.PendingQuestions)
 	}
 	if len(session.Questions) <= len(session.PendingQuestions) ||
@@ -34,8 +40,8 @@ func TestWebNuevaAppIntakeSessionV0CreaSesionDesdeIdeaYPideCamposCriticos(t *tes
 		t.Fatalf("questions i18n=%+v", session.Questions)
 	}
 	if len(session.RecommendedQuestions) == 0 ||
-		!stringSliceHasV0(session.RecommendedQuestions, "plataformas") ||
-		!stringSliceHasV0(session.RecommendedQuestions, "datos") {
+		!stringSliceHasV0(session.RecommendedQuestions, "integraciones") ||
+		!stringSliceHasV0(session.RecommendedQuestions, "documentacion") {
 		t.Fatalf("preguntas recomendadas=%+v", session.RecommendedQuestions)
 	}
 	if session.AppSpecPartial.ExecutionMode != orquestafactory.ExecutionModeNormalV0 {
@@ -43,7 +49,7 @@ func TestWebNuevaAppIntakeSessionV0CreaSesionDesdeIdeaYPideCamposCriticos(t *tes
 	}
 }
 
-func TestApplyWebNuevaAppIntakeAnswerV0RegistraDecisionYDejaDraftListo(t *testing.T) {
+func TestApplyWebNuevaAppIntakeAnswerV0RegistraDecisionYExigeContratoMinimo(t *testing.T) {
 	session := NewWebNuevaAppIntakeSessionV0("session-1", "es", "Agenda", "Coordinar ensayos")
 
 	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{
@@ -51,19 +57,22 @@ func TestApplyWebNuevaAppIntakeAnswerV0RegistraDecisionYDejaDraftListo(t *testin
 		Value: " web ",
 	})
 
-	if session.Estado != WebNuevaAppIntakeEstadoLista {
+	if session.Estado != WebNuevaAppIntakeEstadoRequiereDatos {
 		t.Fatalf("estado=%q", session.Estado)
 	}
 	if session.AppSpecPartial.TipoApp != "web" {
 		t.Fatalf("tipo_app=%q", session.AppSpecPartial.TipoApp)
 	}
-	if len(session.PendingQuestions) != 0 {
+	if len(session.PendingQuestions) == 0 ||
+		!stringSliceHasV0(session.PendingQuestions, "preferencias_tecnicas") ||
+		!stringSliceHasV0(session.PendingQuestions, "plataformas") ||
+		!stringSliceHasV0(session.PendingQuestions, "datos") ||
+		!stringSliceHasV0(session.PendingQuestions, "deploy") ||
+		!stringSliceHasV0(session.PendingQuestions, "calidad") {
 		t.Fatalf("preguntas=%+v", session.PendingQuestions)
 	}
-	if len(session.RecommendedQuestions) == 0 ||
-		!stringSliceHasV0(session.RecommendedQuestions, "plataformas") ||
-		session.Questions[0].Required {
-		t.Fatalf("preguntas recomendadas/lista=%+v questions=%+v", session.RecommendedQuestions, session.Questions)
+	if session.Questions[0].Required != true {
+		t.Fatalf("questions=%+v", session.Questions)
 	}
 	if len(session.Decisions) != 1 || session.Decisions[0].Field != "tipo_app" || session.Decisions[0].Value != "web" {
 		t.Fatalf("decisiones=%+v", session.Decisions)
@@ -71,7 +80,7 @@ func TestApplyWebNuevaAppIntakeAnswerV0RegistraDecisionYDejaDraftListo(t *testin
 	if sectionStatusV0(session.Sections, "identidad") != "complete" {
 		t.Fatalf("sections=%+v", session.Sections)
 	}
-	if !session.Handoff.Ready ||
+	if session.Handoff.Ready ||
 		session.Handoff.TargetTool != WebNuevaAppDirectorTargetToolV0 ||
 		session.Handoff.TargetPath != ArrancarDirectorAppEndpointV0 ||
 		session.Handoff.FallbackTool != WebNuevaAppFallbackTargetToolV0 {
@@ -80,9 +89,23 @@ func TestApplyWebNuevaAppIntakeAnswerV0RegistraDecisionYDejaDraftListo(t *testin
 	if session.Handoff.RequestRef != "session-1" ||
 		len(session.Handoff.ContextRefs) != 2 ||
 		!hasIntakeContextValueV0(session.Handoff.ContextSummary, "tipo_app", "web") ||
-		len(session.Handoff.PendingQuestions) != 0 ||
-		len(session.Handoff.RecommendedQuestions) == 0 {
+		len(session.Handoff.PendingQuestions) == 0 {
 		t.Fatalf("handoff refs/context=%+v", session.Handoff)
+	}
+
+	for _, decision := range []WebNuevaAppIntakeDecisionV0{
+		{Field: "preferencias_tecnicas.arquitectura", Value: "hexagonal"},
+		{Field: "plataformas", Values: []string{"web"}},
+		{Field: "datos.db_required", Value: "true"},
+		{Field: "deploy.target", Value: "docker"},
+		{Field: "calidad.pruebas", Value: "alta"},
+	} {
+		session = session.ApplyDecisionV0(decision)
+	}
+	if session.Estado != WebNuevaAppIntakeEstadoLista ||
+		len(session.PendingQuestions) != 0 ||
+		!session.Handoff.Ready {
+		t.Fatalf("contrato minimo no dejo handoff listo: estado=%q pending=%+v handoff=%+v", session.Estado, session.PendingQuestions, session.Handoff)
 	}
 }
 
@@ -94,8 +117,8 @@ func TestApplyWebNuevaAppIntakeAnswerV0NoValidaEnumsDeFactory(t *testing.T) {
 		Value: "mainframe",
 	})
 
-	if session.Estado != WebNuevaAppIntakeEstadoLista {
-		t.Fatalf("la sesion solo debe quedar lista para validar: %q", session.Estado)
+	if session.Estado != WebNuevaAppIntakeEstadoRequiereDatos {
+		t.Fatalf("la sesion aun debe pedir contrato minimo: %q", session.Estado)
 	}
 	if session.AppSpecPartial.TipoApp != "mainframe" {
 		t.Fatalf("la web no debe corregir reglas de factory: %+v", session.AppSpecPartial)
@@ -106,6 +129,11 @@ func TestApplyWebNuevaAppIntakeAnswerV0AplicaCamposExpertosDelWizardV0(t *testin
 	session := NewWebNuevaAppIntakeSessionV0("session-expert", "es", "Agenda", "Coordinar ensayos")
 	decisions := []WebNuevaAppIntakeDecisionV0{
 		{Field: "tipo_app", Value: "web"},
+		{Field: "preferencias_tecnicas.arquitectura", Value: "hexagonal"},
+		{Field: "plataformas", Values: []string{"web"}},
+		{Field: "datos.db_required", Value: "true"},
+		{Field: "deploy.target", Value: "docker"},
+		{Field: "calidad.pruebas", Value: "alta"},
 		{Field: "calidad.compliance", Value: "rgpd, ens"},
 		{Field: "calidad.observabilidad", Value: "true"},
 		{Field: "documentacion.usuario", Value: "si"},

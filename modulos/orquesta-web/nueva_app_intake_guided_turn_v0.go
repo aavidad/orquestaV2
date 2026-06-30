@@ -90,6 +90,26 @@ func guidedAnswerDecisionV0(field string, answer string) WebNuevaAppIntakeDecisi
 			Field: field,
 			Value: normalizeGuidedTipoAppAnswerV0(answer),
 		}
+	case "preferencias_tecnicas":
+		return WebNuevaAppIntakeDecisionV0{
+			Field: "preferencias_tecnicas.arquitectura",
+			Value: normalizeGuidedArchitectureAnswerV0(answer),
+		}
+	case "datos":
+		return WebNuevaAppIntakeDecisionV0{
+			Field: "datos.necesidad_funcional",
+			Value: answer,
+		}
+	case "deploy":
+		return WebNuevaAppIntakeDecisionV0{
+			Field: "deploy.target",
+			Value: normalizeGuidedDeployAnswerV0(answer),
+		}
+	case "calidad":
+		return WebNuevaAppIntakeDecisionV0{
+			Field: "calidad.pruebas",
+			Value: normalizeGuidedQualityAnswerV0(answer),
+		}
 	case "usuarios_objetivo", "plataformas", "restricciones":
 		return WebNuevaAppIntakeDecisionV0{
 			Field:  field,
@@ -102,6 +122,50 @@ func guidedAnswerDecisionV0(field string, answer string) WebNuevaAppIntakeDecisi
 			Value:  answer,
 			Values: splitGuidedAnswerValuesV0(field, answer),
 		}
+	}
+}
+
+func normalizeGuidedArchitectureAnswerV0(answer string) string {
+	normalized := normalizeGuidedNeedV0(answer)
+	switch {
+	case guidedContainsAnyV0(normalized, "evento", "event", "cola", "asincrono", "asíncrono"):
+		return "event_driven"
+	case guidedContainsAnyV0(normalized, "modular", "monolito"):
+		return "modular_monolith"
+	case guidedContainsAnyV0(normalized, "clean"):
+		return "clean_architecture"
+	case guidedContainsAnyV0(normalized, "capas", "layer"):
+		return "layered"
+	default:
+		return "hexagonal"
+	}
+}
+
+func normalizeGuidedDeployAnswerV0(answer string) string {
+	normalized := normalizeGuidedNeedV0(answer)
+	switch {
+	case guidedContainsAnyV0(normalized, "docker", "contenedor"):
+		return "docker"
+	case guidedContainsAnyV0(normalized, "kubernetes", "k8s"):
+		return "kubernetes"
+	case guidedContainsAnyV0(normalized, "serverless", "lambda"):
+		return "serverless"
+	case guidedContainsAnyV0(normalized, "local"):
+		return "local"
+	default:
+		return answer
+	}
+}
+
+func normalizeGuidedQualityAnswerV0(answer string) string {
+	normalized := normalizeGuidedNeedV0(answer)
+	switch {
+	case guidedContainsAnyV0(normalized, "alta", "exhaustiva", "critica", "crítica"):
+		return "alta"
+	case guidedContainsAnyV0(normalized, "basica", "básica", "minima", "mínima"):
+		return "basica"
+	default:
+		return "media"
 	}
 }
 

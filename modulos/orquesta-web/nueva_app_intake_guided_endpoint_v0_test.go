@@ -77,7 +77,7 @@ func TestNuevaAppIntakeGuidedHTTPHandlerV0POSTAplicaAccionSobreSesion(t *testing
 
 func TestNuevaAppIntakeGuidedHTTPHandlerV0POSTAplicaRespuestaLibreAPreguntaPendiente(t *testing.T) {
 	session := NewWebNuevaAppIntakeSessionV0("session-http-answer", "es", "Portal", "Publicar viviendas")
-	if len(session.PendingQuestions) != 1 || session.PendingQuestions[0] != "tipo_app" {
+	if len(session.PendingQuestions) != 6 || session.PendingQuestions[0] != "tipo_app" {
 		t.Fatalf("sesion inicial pending=%+v", session.PendingQuestions)
 	}
 	var body bytes.Buffer
@@ -102,11 +102,9 @@ func TestNuevaAppIntakeGuidedHTTPHandlerV0POSTAplicaRespuestaLibreAPreguntaPendi
 		t.Fatalf("decode response: %v", err)
 	}
 	if out.Session.Form.TipoApp != "web" ||
-		len(out.Session.PendingQuestions) != 0 ||
-		out.Session.Estado != WebNuevaAppIntakeEstadoLista ||
-		!out.Session.Handoff.Ready ||
-		len(out.Session.RecommendedQuestions) == 0 ||
-		len(out.Session.Handoff.RecommendedQuestions) == 0 {
+		len(out.Session.PendingQuestions) == 0 ||
+		out.Session.Estado != WebNuevaAppIntakeEstadoRequiereDatos ||
+		out.Session.Handoff.Ready {
 		t.Fatalf("respuesta libre no aplicada: %+v", out.Session)
 	}
 }
@@ -194,6 +192,12 @@ func TestNuevaAppIntakeGuidedHTTPHandlerV0RechazaMetodoYContentType(t *testing.T
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET status=%d", rec.Code)
 	}
+	var methodError map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&methodError); err != nil ||
+		methodError["error"] != "Metodo no permitido." ||
+		methodError["error"] == http.StatusText(http.StatusMethodNotAllowed) {
+		t.Fatalf("GET error no localizado: body=%+v err=%v", methodError, err)
+	}
 
 	rec = httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/v0/apps/intake/guided-turn", bytes.NewBufferString("need=x"))
@@ -201,6 +205,12 @@ func TestNuevaAppIntakeGuidedHTTPHandlerV0RechazaMetodoYContentType(t *testing.T
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("form status=%d", rec.Code)
+	}
+	var contentTypeError map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&contentTypeError); err != nil ||
+		contentTypeError["error"] != "El contenido debe enviarse como JSON." ||
+		contentTypeError["error"] == http.StatusText(http.StatusUnsupportedMediaType) {
+		t.Fatalf("content-type error no localizado: body=%+v err=%v", contentTypeError, err)
 	}
 }
 

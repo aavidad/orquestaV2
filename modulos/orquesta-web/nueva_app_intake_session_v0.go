@@ -1,6 +1,10 @@
 package orquestaweb
 
-import orquestafactory "orquesta/modulos/orquesta-factory"
+import (
+	"strings"
+
+	orquestafactory "orquesta/modulos/orquesta-factory"
+)
 
 const WebNuevaAppIntakeSessionSchemaV0 = "web_nueva_app_intake_session.v0"
 
@@ -113,6 +117,11 @@ func webNuevaAppIntakePendingFieldsV0(form WebNuevaAppFormV0) []string {
 		{field: "nombre", value: form.Nombre},
 		{field: "objetivo", value: form.Objetivo},
 		{field: "tipo_app", value: form.TipoApp},
+		{field: "preferencias_tecnicas", value: form.PreferenciasTecnicas.Arquitectura},
+		{field: "plataformas", value: stringsFromNuevaAppValuesV0(form.Plataformas)},
+		{field: "datos", value: webNuevaAppIntakeAggregateValueV0(webNuevaAppIntakeFieldCapturedV0(form, "datos"))},
+		{field: "deploy", value: form.Deploy.Target},
+		{field: "calidad", value: webNuevaAppIntakeAggregateValueV0(webNuevaAppIntakeFieldCapturedV0(form, "calidad"))},
 	}
 	out := make([]string, 0, len(required))
 	for _, item := range required {
@@ -159,7 +168,7 @@ func webNuevaAppIntakeSectionsV0(form WebNuevaAppFormV0) []WebNuevaAppIntakeSect
 	return []WebNuevaAppIntakeSectionV0{
 		webNuevaAppIntakeSectionV0("identidad", []string{"locale", "nombre", "objetivo", "tipo_app"}, form),
 		webNuevaAppIntakeSectionV0("politica", []string{"request_kind", "execution_mode"}, form),
-		webNuevaAppIntakeSectionV0("alcance", []string{"descripcion", "usuarios_objetivo", "restricciones"}, form),
+		webNuevaAppIntakeSectionV0("alcance", []string{"descripcion", "usuarios_objetivo", "preferencias_tecnicas", "restricciones"}, form),
 		webNuevaAppIntakeSectionV0("interfaces", []string{"plataformas", "integraciones"}, form),
 		webNuevaAppIntakeSectionV0("datos_calidad", []string{"datos", "deploy", "calidad", "documentacion", "i18n"}, form),
 		webNuevaAppIntakeSectionV0("gobierno", []string{"agentes", "project_source"}, form),
@@ -209,7 +218,7 @@ func webNuevaAppIntakeRequiredFieldsV0(fields []string) []string {
 
 func webNuevaAppIntakeFieldRequiredV0(field string) bool {
 	switch field {
-	case "locale", "nombre", "objetivo", "tipo_app":
+	case "locale", "nombre", "objetivo", "tipo_app", "preferencias_tecnicas", "plataformas", "datos", "deploy", "calidad":
 		return true
 	default:
 		return false
@@ -236,6 +245,12 @@ func webNuevaAppIntakeFieldCapturedV0(form WebNuevaAppFormV0, field string) bool
 		return len(compactStringsV0(form.UsuariosObjetivo)) > 0
 	case "restricciones":
 		return len(compactStringsV0(form.Restricciones)) > 0
+	case "preferencias_tecnicas":
+		return trimV0(form.PreferenciasTecnicas.Arquitectura) != "" ||
+			trimV0(form.PreferenciasTecnicas.Lenguaje) != "" ||
+			trimV0(form.PreferenciasTecnicas.Framework) != "" ||
+			len(compactStringsV0(form.PreferenciasTecnicas.Preferencias)) > 0 ||
+			len(compactStringsV0(form.PreferenciasTecnicas.Restricciones)) > 0
 	case "plataformas":
 		return len(compactStringsV0(form.Plataformas)) > 0
 	case "integraciones":
@@ -278,7 +293,7 @@ func webNuevaAppIntakeFieldIndexV0() []WebNuevaAppIntakeFieldIndexV0 {
 	sections := map[string][]string{
 		"identidad":     {"locale", "nombre", "objetivo", "tipo_app"},
 		"politica":      {"request_kind", "execution_mode"},
-		"alcance":       {"descripcion", "usuarios_objetivo", "restricciones"},
+		"alcance":       {"descripcion", "usuarios_objetivo", "preferencias_tecnicas", "restricciones"},
 		"interfaces":    {"plataformas", "integraciones"},
 		"datos_calidad": {"datos", "deploy", "calidad", "documentacion", "i18n"},
 		"gobierno":      {"agentes", "project_source"},
@@ -291,4 +306,15 @@ func webNuevaAppIntakeFieldIndexV0() []WebNuevaAppIntakeFieldIndexV0 {
 		}
 	}
 	return out
+}
+
+func webNuevaAppIntakeAggregateValueV0(captured bool) string {
+	if captured {
+		return "capturado"
+	}
+	return ""
+}
+
+func stringsFromNuevaAppValuesV0(values []string) string {
+	return strings.Join(compactStringsV0(values), ",")
 }

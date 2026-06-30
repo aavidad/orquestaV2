@@ -15,7 +15,10 @@ func TestWebNuevaAppIntakeGuidedTurnV0RellenaAppMovilAlquileresConMapas(t *testi
 	if turn.SchemaVersion != WebNuevaAppIntakeGuidedTurnSchemaV0 || len(turn.Followups) == 0 {
 		t.Fatalf("turn incompleto: %+v", turn)
 	}
-	if session.Estado != WebNuevaAppIntakeEstadoLista {
+	if session.Estado != WebNuevaAppIntakeEstadoRequiereDatos ||
+		!stringSliceHasV0(session.PendingQuestions, "preferencias_tecnicas") ||
+		!stringSliceHasV0(session.PendingQuestions, "deploy") ||
+		!stringSliceHasV0(session.PendingQuestions, "calidad") {
 		t.Fatalf("estado=%q pending=%+v", session.Estado, session.PendingQuestions)
 	}
 	if session.Form.Nombre != "Alquileres cercanos" ||
@@ -88,7 +91,7 @@ func TestApplyWebNuevaAppIntakeGuidedAnswerV0NormalizaTipoAppLibreV0(t *testing.
 
 	session = ApplyWebNuevaAppIntakeGuidedAnswerV0(session, "tipo_app", "aplicación web con API")
 
-	if session.Form.TipoApp != "web" || session.Estado != WebNuevaAppIntakeEstadoLista {
+	if session.Form.TipoApp != "web" || session.Estado != WebNuevaAppIntakeEstadoRequiereDatos {
 		t.Fatalf("respuesta libre tipo_app no normalizada: %+v", session.Form)
 	}
 	req := session.Form.ToAppSpecRequestV0()
@@ -102,7 +105,7 @@ func TestApplyWebNuevaAppIntakeGuidedAnswerV0NormalizaSDKComoPluginVisibleV0(t *
 
 	session = ApplyWebNuevaAppIntakeGuidedAnswerV0(session, "tipo_app", "library sdk reutilizable")
 
-	if session.Form.TipoApp != "plugin" || session.Estado != WebNuevaAppIntakeEstadoLista {
+	if session.Form.TipoApp != "plugin" || session.Estado != WebNuevaAppIntakeEstadoRequiereDatos {
 		t.Fatalf("sdk/library debe normalizarse a opcion visible plugin: %+v", session.Form)
 	}
 	req := session.Form.ToAppSpecRequestV0()
