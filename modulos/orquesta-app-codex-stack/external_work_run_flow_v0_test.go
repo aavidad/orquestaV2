@@ -127,6 +127,38 @@ func TestCodexStackV0ExternalWorkRunSinBackendGoalNoDegradaLegacyPorDefecto(t *t
 	}
 }
 
+func TestCodexStackV0ExternalWorkRunModoNoLegacyNoActivaLegacyAunqueOptInDisponible(t *testing.T) {
+	config := codexStackBaseConfigForTestV0(t, newFakeCodexStackRuntimeV0(), nil, nil)
+	config.AllowLegacyExternalWorkRun = true
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+
+	result := postExternalWorkRunStackRawWithModeV0(
+		t,
+		stack,
+		http.StatusBadRequest,
+		defaultExternalWorkRunChangeForTestV0(),
+		"goal_first",
+	)
+	if result.Estado != orquestamcp.MCPExternalWorkRunEstadoErrorV0 ||
+		result.RoutePolicy != orquestamcp.MCPExternalWorkRunRoutePolicyGoalFirstV0 ||
+		result.DirectorExecutionMode != orquestamcp.MCPExternalWorkRunDirectorExecutionModeGoalFirstV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != orquestamcp.MCPExternalWorkRunLegacyDirectorModeRequiredV0 ||
+		!codexStackStringInSetForTestV0(result.NextActions, orquestamcp.MCPExternalWorkRunNextActionDoNotFallbackLegacyV0) {
+		t.Fatalf("result=%+v", result)
+	}
+	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   "rank",
+		QueueRef: DefaultRunQueueRefV0,
+	})
+	if len(ranking.Ranked) != 0 {
+		t.Fatalf("modo no legacy no debe encolar legacy: ranking=%+v", ranking)
+	}
+}
+
 func TestCodexStackV0ExternalWorkRunConBackendGoalArrancaGoalFirstSinColaLegacy(t *testing.T) {
 	launcher := &goalFirstQueueLauncherForTestV0{}
 	goalStates := newGoalFirstQueueStateStoreForTestV0()
@@ -203,6 +235,41 @@ func TestCodexStackV0ExternalWorkRunConBackendGoalArrancaGoalFirstSinColaLegacy(
 		jobStats.Goal == nil ||
 		jobStats.Goal.GoalRef != result.GoalRef {
 		t.Fatalf("jobStats goal-first inesperado=%+v result=%+v", jobStats, result)
+	}
+}
+
+func TestCodexStackV0ExternalWorkRunGoalFirstExplicitoArrancaGoalSinLegacyV0(t *testing.T) {
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack := mustBuildCodexStackWithGoalBackendForTestV0(
+		t,
+		newFakeCodexStackRuntimeV0(),
+		launcher,
+		&goalFirstQueueObserverForTestV0{},
+		goalStates,
+	)
+
+	result := postExternalWorkRunStackRawWithModeV0(
+		t,
+		stack,
+		http.StatusOK,
+		defaultExternalWorkRunChangeForTestV0(),
+		orquestamcp.MCPExternalWorkRunDirectorExecutionModeGoalFirstV0,
+	)
+
+	if result.RoutePolicy != orquestamcp.MCPExternalWorkRunRoutePolicyGoalFirstV0 ||
+		result.DirectorExecutionMode != orquestamcp.MCPExternalWorkRunDirectorExecutionModeGoalFirstV0 ||
+		result.GoalRef == "" ||
+		result.DirectorQuestionRef != "" ||
+		len(launcher.specs) != 1 {
+		t.Fatalf("result=%+v specs=%+v", result, launcher.specs)
+	}
+	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		Action:   "rank",
+		QueueRef: DefaultRunQueueRefV0,
+	})
+	if len(ranking.Ranked) != 0 {
+		t.Fatalf("goal_first explicito no debe encolar legacy: ranking=%+v", ranking)
 	}
 }
 
