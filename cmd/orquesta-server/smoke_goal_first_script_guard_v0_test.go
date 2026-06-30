@@ -85,3 +85,21 @@ func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T
 		}
 	}
 }
+
+func TestSmokeGoalFirstAppServerRealProjectsCodeHomeFromCodexHomeV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+
+	for _, want := range []string{
+		"configure_smoke_codex_code_home_source",
+		`-f "$CODEX_HOME/auth.json"`,
+		`-f "$CODEX_HOME/config.toml"`,
+		`export ORQUESTA_CODEX_CODE_HOME="$CODEX_HOME"`,
+		"codex_app_server_auth_source=CODEX_HOME",
+		"codex_app_server_auth_source=ORQUESTA_CODEX_CODE_HOME",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("smoke no proyecta CODEX_HOME autenticado al app-server tmux: falta %q", want)
+		}
+	}
+}

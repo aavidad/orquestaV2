@@ -151,6 +151,22 @@ codex_app_server_ready() {
   "$command_path" app-server daemon version >"$daemon_stdout" 2>"$daemon_stderr"
 }
 
+configure_smoke_codex_code_home_source() {
+  if [[ -n "${ORQUESTA_CODEX_CODE_HOME:-}" ]]; then
+    echo "codex_app_server_auth_source=ORQUESTA_CODEX_CODE_HOME"
+    return 0
+  fi
+  if [[ -n "${CODEX_HOME:-}" &&
+    -f "$CODEX_HOME/auth.json" &&
+    -f "$CODEX_HOME/config.toml" ]]; then
+    export ORQUESTA_CODEX_CODE_HOME="$CODEX_HOME"
+    echo "codex_app_server_auth_source=CODEX_HOME"
+    return 0
+  fi
+  echo "codex_app_server_auth_source=default"
+  return 0
+}
+
 json_get() {
   local file="$1"
   local expr="$2"
@@ -533,6 +549,7 @@ export ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED=false
 export ORQUESTA_CODEX_RUNTIME_WORKDIR="$runtime_dir"
 export ORQUESTA_CODEX_COMMAND="$codex_command"
 export ORQUESTA_CODEX_PATH="${ORQUESTA_CODEX_PATH:-$PATH}"
+configure_smoke_codex_code_home_source
 export ORQUESTA_CODEX_GOAL_BACKEND="$goal_backend"
 export ORQUESTA_CODEX_GOAL_TIMEOUT_MS="${ORQUESTA_CODEX_GOAL_TIMEOUT_MS:-90000}"
 export ORQUESTA_CODEX_APPROVAL_POLICY="${ORQUESTA_CODEX_APPROVAL_POLICY:-never}"

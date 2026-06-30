@@ -44,6 +44,11 @@ Variables utiles:
 
 - `ORQUESTA_CODEX_COMMAND`: ruta de `codex`; por defecto resuelve `codex`.
 - `ORQUESTA_CODEX_GOAL_BACKEND`: `app_server_tmux` por defecto y ruta vigente.
+- `ORQUESTA_CODEX_CODE_HOME`: fuente de credenciales/configuracion para el
+  `CODEX_HOME` aislado que crea `app_server_tmux`. Debe contener `auth.json` y
+  `config.toml` si se quiere ejecutar Codex real. Si no esta definida y el
+  `CODEX_HOME` de la sesion ya contiene ambos ficheros, el smoke lo proyecta
+  como fuente sin imprimir secretos.
 - `ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY=1`: comprueba el backend app-server
   sin arrancar Orquesta ni ejecutar una generacion.
 - `ORQUESTA_CODEX_MODEL`: por defecto `gpt-5.5`.
@@ -130,6 +135,19 @@ Repeticion real 2026-06-29 con `app_server_tmux`,
 Refs principales: `run_ref=run-spec-smoke-goal-first-req-smoke-goal-first-617c6ba0738874be15af06aee294d3e9`,
 `goal_ref=goal-ref-app-director-run-spec-smoke-goal-first-req-smoke-goal-first-617c6ba0738874be15af06aee294d3e9`,
 `external_goal_ref=019f131c-b884-7410-8f36-2344d0c37da3`.
+
+## Estado remoto 2026-06-30
+
+En el servidor aislado se detecto una configuracion incompleta: la sesion
+manual tenia `CODEX_HOME=/srv/orquesta-self/codex-home` con `auth.json` y
+`config.toml`, pero `ORQUESTA_CODEX_CODE_HOME` no estaba definida y el backend
+acababa creando un `CODEX_HOME` aislado sin credenciales. La evidencia previa
+era `401 Unauthorized: Missing bearer or basic authentication` en
+`logs_2.sqlite`. El smoke ahora proyecta ese `CODEX_HOME` autenticado como
+fuente cuando no hay `ORQUESTA_CODEX_CODE_HOME` explicita. Tras el ajuste,
+`app_server_tmux` arranca y observa el thread sin 401; el bloqueo residual
+observado en esa tanda fue `codex_app_server_goal_result_missing_after_timeout`,
+ya separado del problema de autenticacion.
 
 ## Exito
 
