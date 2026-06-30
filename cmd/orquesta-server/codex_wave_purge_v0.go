@@ -145,6 +145,8 @@ func codexWaveAddPurgeBlockersV0(report *codexWavePurgeReportV0, path string, en
 		report.BlockedBy = append(report.BlockedBy, "agent_ack_unreconciled")
 	case "director_decisions.json":
 		report.BlockedBy = append(report.BlockedBy, "director_decisions_pending")
+	case "plan.json", "artifacts_manifest.json", "artifact_manifest.json":
+		report.BlockedBy = append(report.BlockedBy, "durable_plan_or_artifact_manifest")
 	case "orquesta_shutdown_request.json":
 		if _, err := os.Stat(filepath.Join(dir, "agent_shutdown_checkpoint_ack.json")); errors.Is(err, os.ErrNotExist) {
 			report.BlockedBy = append(report.BlockedBy, "checkpoint_pending")
@@ -153,6 +155,9 @@ func codexWaveAddPurgeBlockersV0(report *codexWavePurgeReportV0, path string, en
 		low := strings.ToLower(name)
 		if strings.Contains(low, "outbox") || strings.Contains(low, "plan_state") {
 			report.BlockedBy = append(report.BlockedBy, "open_state_or_outbox_pending")
+		}
+		if strings.Contains(low, "artifact") && strings.Contains(low, "manifest") {
+			report.BlockedBy = append(report.BlockedBy, "durable_plan_or_artifact_manifest")
 		}
 	}
 }

@@ -152,6 +152,9 @@ func validateStagingPromotionRequestV0(request StagingPromotionRequestV0, archiv
 			issues = append(issues, worktreeIssueV0(WorktreeIssueInvalidRequestV0, "archive_dir"))
 		}
 	}
+	if request.AllowPush && (request.RemoteName == "" || request.RemoteBranch == "") {
+		issues = append(issues, worktreeIssueV0(WorktreeIssueInvalidRequestV0, "remote_name_remote_branch"))
+	}
 	if len(request.WriteSet) == 0 {
 		issues = append(issues, worktreeIssueV0(WorktreeIssueInvalidRequestV0, "write_set"))
 	}

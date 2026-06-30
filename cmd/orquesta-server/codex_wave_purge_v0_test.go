@@ -92,6 +92,33 @@ func TestCodexWavePurgeRuntimeBlocksLiveWorkEvidenceV0(t *testing.T) {
 	}
 }
 
+func TestCodexWavePurgeRuntimeBlocksDurablePlansAndArtifactManifestsV0(t *testing.T) {
+	config := testCodexWavePurgeConfigV0(t, "durable-plan")
+	config.PurgeRuntime = true
+	config.PurgeConfirm = config.WaveRef
+	if err := os.MkdirAll(config.RuntimeWorkDir, 0o700); err != nil {
+		t.Fatalf("crear runtime: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(config.RuntimeWorkDir, "plan.json"), []byte(`{"schema_version":"orquesta_plan.v0"}`), 0o644); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(config.RuntimeWorkDir, "artifacts_manifest.json"), []byte(`{"artifacts":[]}`), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	summary, err := runCodexLaunchWaveV0(context.Background(), config)
+
+	if err == nil || summary.PurgeReport == nil || summary.PurgeReport.Status != "blocked" {
+		t.Fatalf("purga no bloqueada: summary=%+v err=%v", summary.PurgeReport, err)
+	}
+	if !containsCodexWavePurgeStringV0(summary.PurgeReport.BlockedBy, "durable_plan_or_artifact_manifest") {
+		t.Fatalf("bloqueo de plan/manifiesto ausente: %+v", summary.PurgeReport)
+	}
+	if _, statErr := os.Stat(config.RuntimeWorkDir); statErr != nil {
+		t.Fatalf("runtime durable borrado: %v", statErr)
+	}
+}
+
 func TestCodexWavePurgeRuntimeBlocksRunningRegistryV0(t *testing.T) {
 	config := testCodexWavePurgeConfigV0(t, "running-registry")
 	config.PurgeRuntime = true

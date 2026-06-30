@@ -26,6 +26,8 @@ func TestGitAppVCSConnectorV0CommitLocalYPushPendienteReintentable(t *testing.T)
 			ProjectWorkDir: repo,
 			CommitMessage:  "test: checkpoint local",
 			AllowPush:      true,
+			RemoteName:     "origin",
+			RemoteBranch:   "main",
 		},
 	)
 
@@ -50,6 +52,39 @@ func TestGitAppVCSConnectorV0CommitLocalYPushPendienteReintentable(t *testing.T)
 	}
 	if strings.TrimSpace(runAppVCSGitV0(t, repo, "status", "--porcelain")) != "" {
 		t.Fatalf("repo debe quedar limpio tras commit local")
+	}
+}
+
+func TestGitAppVCSConnectorV0BloqueaPushImplicitoSinDestinoExplicitoV0(t *testing.T) {
+	repo := initAppVCSTestRepoV0(t)
+	writeAppVCSFileV0(t, repo, "README.md", "v2\n")
+
+	result, issues := (GitAppVCSConnectorV0{CommandTimeout: 2 * time.Second}).ExecuteAppVCSV0(
+		context.Background(),
+		AppVCSRequestV0{
+			Action:         AppVCSActionCommitV0,
+			AppRef:         "app-ref-vcs-test",
+			RepoRef:        "repo-ref-vcs-test",
+			WorktreeRef:    "worktree-ref-vcs-test",
+			BranchRef:      "branch-ref-vcs-test",
+			ProjectWorkDir: repo,
+			CommitMessage:  "test: checkpoint local",
+			AllowPush:      true,
+		},
+	)
+
+	if result.Status != AppVCSStatusFailedV0 {
+		t.Fatalf("result=%+v issues=%+v", result, issues)
+	}
+	if len(issues) != 1 || issues[0].Code != AppVCSIssueInvalidRequestV0 ||
+		issues[0].Field != "remote_name_remote_branch" {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if strings.TrimSpace(runAppVCSGitV0(t, repo, "log", "--oneline", "--all")) == "" {
+		t.Fatalf("repo inicial inesperadamente sin commits")
+	}
+	if got := strings.TrimSpace(runAppVCSGitV0(t, repo, "log", "--oneline", "--all", "--grep", "checkpoint local")); got != "" {
+		t.Fatalf("commit no debio ejecutarse con push implicito bloqueado: %s", got)
 	}
 }
 

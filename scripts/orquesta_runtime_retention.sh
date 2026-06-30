@@ -142,6 +142,9 @@ candidate_blockers() {
       director_decisions.json)
         blockers+=("director_decisions_pending")
         ;;
+      plan.json|artifacts_manifest.json|artifact_manifest.json)
+        blockers+=("durable_plan_or_artifact_manifest")
+        ;;
       orquesta_shutdown_request.json)
         if [ ! -e "$dir/agent_shutdown_checkpoint_ack.json" ]; then
           blockers+=("checkpoint_pending")
@@ -153,15 +156,23 @@ candidate_blockers() {
           *outbox*|*plan_state*)
             blockers+=("open_state_or_outbox_pending")
             ;;
+          *artifact*manifest*|*artifacts*manifest*)
+            blockers+=("durable_plan_or_artifact_manifest")
+            ;;
         esac
         ;;
     esac
   done < <(find "$candidate" -xdev -type f \( \
     -name 'agent_ack.json' -o \
     -name 'director_decisions.json' -o \
+    -name 'plan.json' -o \
+    -name 'artifacts_manifest.json' -o \
+    -name 'artifact_manifest.json' -o \
     -name 'orquesta_shutdown_request.json' -o \
     -iname '*outbox*' -o \
-    -iname '*plan_state*' \
+    -iname '*plan_state*' -o \
+    -iname '*artifact*manifest*' -o \
+    -iname '*artifacts*manifest*' \
   \) -print0 2>/dev/null)
   while IFS= read -r -d '' registry; do
     if grep -Eq '"status"[[:space:]]*:[[:space:]]*"(running|stop_requested)"' "$registry" 2>/dev/null; then

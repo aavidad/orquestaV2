@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -103,4 +104,36 @@ func TestGitStagingPromotionConnectorV0BloqueaBorradoOCambioFueraDeWriteSetV0(t 
 	}
 	requireWorktreeIssueFieldV0(t, issues, "README.md")
 	requireWorktreeIssueFieldV0(t, issues, "docs/extra.md")
+}
+
+func TestGitStagingPromotionConnectorV0BloqueaPushImplicitoSinDestinoExplicitoV0(t *testing.T) {
+	repo := initAppVCSTestRepoV0(t)
+	writeAppVCSFileV0(t, repo, "README.md", "v2\n")
+
+	result, issues := (GitStagingPromotionConnectorV0{}).PromoteStagingWorktreeV0(
+		context.Background(),
+		StagingPromotionRequestV0{
+			PromotionRef:   "promotion-ref-autoprogramming-push",
+			RunRef:         "run-ref-autoprogramming-push",
+			ProjectRef:     "project-ref-autoprogramming-push",
+			RepoRef:        "repo-ref-autoprogramming-push",
+			WorktreeRef:    "worktree-ref-autoprogramming-push",
+			BranchRef:      "branch-ref-autoprogramming-push",
+			ProjectWorkDir: repo,
+			CommitMessage:  "test: promote with explicit push required",
+			WriteSet:       []string{"README.md"},
+			AllowPush:      true,
+		},
+	)
+
+	if result.Status != StagingPromotionStatusBlockedV0 {
+		t.Fatalf("result=%+v issues=%+v", result, issues)
+	}
+	if len(issues) != 1 || issues[0].Code != WorktreeIssueInvalidRequestV0 ||
+		issues[0].Field != "remote_name_remote_branch" {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if got := runAppVCSGitV0(t, repo, "log", "--oneline", "--all", "--grep", "explicit push required"); strings.TrimSpace(got) != "" {
+		t.Fatalf("commit no debio ejecutarse con push implicito bloqueado: %s", got)
+	}
 }

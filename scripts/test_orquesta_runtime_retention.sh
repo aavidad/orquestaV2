@@ -11,6 +11,7 @@ mkdir -p \
   "$workdir/.orquesta-runtime/old-run" \
   "$workdir/.orquesta-runtime/new-run" \
   "$workdir/.orquesta-runtime/old-blocked" \
+  "$workdir/.orquesta-runtime/old-plan" \
   "$workdir/.orquesta-runtime/old-registry-running" \
   "$workdir/.orquesta-runtime/codex-waves/old-wave" \
   "$workdir/.orquesta-runtime/codex-waves/domain-container" \
@@ -36,6 +37,12 @@ touch -d '1 day ago' \
 touch "$workdir/.orquesta-runtime/old-blocked/agent_ack.json"
 touch -d '20 days ago' "$workdir/.orquesta-runtime/old-blocked/agent_ack.json"
 touch -d '20 days ago' "$workdir/.orquesta-runtime/old-blocked"
+printf '{"schema_version":"orquesta_plan.v0"}\n' >"$workdir/.orquesta-runtime/old-plan/plan.json"
+printf '{"artifacts":[]}\n' >"$workdir/.orquesta-runtime/old-plan/artifacts_manifest.json"
+touch -d '20 days ago' \
+  "$workdir/.orquesta-runtime/old-plan/plan.json" \
+  "$workdir/.orquesta-runtime/old-plan/artifacts_manifest.json" \
+  "$workdir/.orquesta-runtime/old-plan"
 cat >"$workdir/.orquesta-runtime/old-registry-running/codex_wave_registry_v0.json" <<'JSON'
 {"agents":[{"pid":999999,"status":"running"}]}
 JSON
@@ -59,6 +66,8 @@ grep -q 'old-run' <<<"$dry_run_output"
 grep -q 'old-blocked' <<<"$dry_run_output"
 grep -q 'action=blocked' <<<"$dry_run_output"
 grep -q 'agent_ack_unreconciled' <<<"$dry_run_output"
+grep -q 'old-plan' <<<"$dry_run_output"
+grep -q 'durable_plan_or_artifact_manifest' <<<"$dry_run_output"
 grep -q 'old-registry-running' <<<"$dry_run_output"
 grep -q 'agent_live' <<<"$dry_run_output"
 grep -q 'old-wave' <<<"$dry_run_output"
@@ -75,6 +84,7 @@ for path in \
   "$workdir/.orquesta-runtime/old-run" \
   "$workdir/.orquesta-runtime/codex-waves/old-wave" \
   "$workdir/.orquesta-runtime/old-blocked" \
+  "$workdir/.orquesta-runtime/old-plan" \
   "$workdir/.orquesta-runtime/old-registry-running" \
   "$workdir/.orquesta-runtime/codex-waves/domain-container" \
   "$workdir/.orquesta-purged-old"; do
@@ -107,6 +117,7 @@ for kept in \
   "$workdir/.orquesta-runtime/codex-waves" \
   "$workdir/.orquesta-runtime/waves" \
   "$workdir/.orquesta-runtime/old-blocked" \
+  "$workdir/.orquesta-runtime/old-plan" \
   "$workdir/.orquesta-runtime/old-registry-running" \
   "$workdir/.orquesta-runtime/codex-waves/domain-container" \
   "$workdir/.orquesta-runtime/codex-waves/domain-container/old-nested-wave" \

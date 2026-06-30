@@ -45,6 +45,9 @@ func validateAppVCSRequestV0(request AppVCSRequestV0) []AppVCSIssueV0 {
 	if request.Action == AppVCSActionPushV0 && !request.AllowPush {
 		issues = append(issues, appVCSIssueV0(AppVCSIssueInvalidRequestV0, "allow_push"))
 	}
+	if request.AllowPush && (request.RemoteName == "" || request.RemoteBranch == "") {
+		issues = append(issues, appVCSIssueV0(AppVCSIssueInvalidRequestV0, "remote_name_remote_branch"))
+	}
 	return issues
 }
 

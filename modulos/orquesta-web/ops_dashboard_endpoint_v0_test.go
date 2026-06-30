@@ -460,3 +460,44 @@ func TestOpsDashboardWebEndpointV0SoloGET(t *testing.T) {
 		t.Fatalf("allow=%q", rec.Header().Get("Allow"))
 	}
 }
+
+func TestOpsDashboardWebEndpointV0LocalizaTextosPrincipalesEnIngles(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, WebOpsDashboardPageEndpointV0+"?lang=en", nil)
+
+	NewOpsDashboardWebEndpointV0().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Language"); got != "en" {
+		t.Fatalf("content-language=%q", got)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		"Live operations panel for server",
+		"Projects / runs",
+		"Filter by task, run, or project",
+		"Compared phases",
+		"Compared usage",
+		"Safe action",
+		"Process memory",
+		"Worst disk use",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("texto ingles %q ausente", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"Panel operativo live",
+		"Proyectos / runs",
+		"Filtrar por tarea, run o proyecto",
+		"Fases comparadas",
+		"Uso comparado",
+		"Acción segura",
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("texto sin localizar %q presente", forbidden)
+		}
+	}
+}
