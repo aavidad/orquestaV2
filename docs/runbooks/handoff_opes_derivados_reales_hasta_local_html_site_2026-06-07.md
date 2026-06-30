@@ -90,8 +90,9 @@ causales. No deben ralentizar todos los temarios como pasos fijos.
   (`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`) o, si ya esta levantada fuera
   del entorno del wrapper, confirmar
   `ORQUESTA_OPES_DERIVATIVES_ORQUESTA_GOAL_FIRST_CONFIRMED=1`.
-  `app_server_proxy` no es ruta normal para este smoke; solo debe usarse como
-  diagnostico aislado con confirmacion explicita del operador.
+  `app_server_proxy` no es ruta normal ni backend alternativo para este smoke:
+  si aparece, debe devolver diagnostico no operacional y bloquearse con
+  evidencia en vez de sustituir a `app_server_tmux`.
 - No mezclar el reconciliador independiente de paquetes finales:
   `ORQUESTA_OPES_REGISTRY_FINALPKG_ENABLED` debe quedar desactivado.
 - No mezclar `ORQUESTA_OPES_BRIDGE_JOB_TYPE` ni

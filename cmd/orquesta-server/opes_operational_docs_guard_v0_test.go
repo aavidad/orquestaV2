@@ -34,12 +34,19 @@ func TestOPESOperationalDocsGuardV0(t *testing.T) {
 func TestGoalOperationalDocsGuardV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	for _, rel := range []string{
+		"cmd/orquesta-server/server_env_registry_v0.go",
 		"docs/matriz_pruebas_reales_y_smoke_2026-05-17.md",
 		"docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+		"docs/runbooks/handoff_opes_derivados_reales_hasta_local_html_site_2026-06-07.md",
+		"modulos/orquesta-server/docs/contratos.md",
 	} {
 		text := readOperationalDocGuardV0(t, root, rel)
 		if strings.Contains(text, "app_server_proxy` solo diagnostico opt-in") ||
-			strings.Contains(text, "app_server_proxy` queda como diagnostico opt-in") {
+			strings.Contains(text, "app_server_proxy` queda como diagnostico opt-in") ||
+			strings.Contains(text, "app_server_proxy solo se permite como diagnostico breakglass") ||
+			strings.Contains(text, "app_server_proxy` queda solo como diagnostico breakglass") ||
+			strings.Contains(text, "app_server_proxy` queda solo como diagnostico opt-in") ||
+			strings.Contains(text, "solo debe usarse como diagnostico aislado") {
 			t.Fatalf("%s presenta app_server_proxy como diagnostico operativo vigente", rel)
 		}
 	}

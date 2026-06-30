@@ -309,8 +309,9 @@ Pendiente verificable:
 
 - `cmd/orquesta-server` ya cablea starter/observer opt-in con
   `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` como backend operativo normal.
-  `app_server_proxy` queda solo como diagnostico opt-in. El camino usa
-  `codex app-server` como frontera real, hace preflight diagnosticable y ya
+  `app_server_proxy` no crea backend operativo: aunque se habilite el diagnostico,
+  devuelve `codex_goal_backend_proxy_diagnostic_not_operational`. El camino usa
+  `codex app-server` por `tmux` como frontera real, hace preflight diagnosticable y ya
   transforma el resultado final estructurado en refs de cierre. Smoke real
   cerrado el 2026-06-26 con `app_server_tmux`: `goal_status=complete`,
   `run_status=cerrada`, `closure_status=accepted`, `closure_accepted=true`,
