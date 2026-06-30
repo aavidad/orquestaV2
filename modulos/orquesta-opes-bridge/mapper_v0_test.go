@@ -188,7 +188,7 @@ func TestBuildExternalWorkRunRequestV0MarcaContratoSeisSubrolesOPES(t *testing.T
 	}
 }
 
-func TestBuildExternalWorkRunRequestV0MaterializaContratoSeisSubrolesConWriteSetProducto(t *testing.T) {
+func TestBuildExternalWorkRunRequestV0BloqueaContratoSeisSubrolesHastaWorkflowTasks(t *testing.T) {
 	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
 		ID:   "job-tema-subroles-producto-001",
 		Type: "draft_content_block",
@@ -204,7 +204,8 @@ func TestBuildExternalWorkRunRequestV0MaterializaContratoSeisSubrolesConWriteSet
 	}
 	work := req.AppChangeRequest.ExternalWork
 	if work == nil ||
-		!fieldValueForTestV0(work.InputFields, "opes_subroles_materialization_status", "contract_ready_pending_workflow_tasks") ||
+		!fieldValueForTestV0(work.InputFields, "opes_subroles_materialization_status", "blocked_workflow_task_store_materialization_required") ||
+		!fieldValueForTestV0(work.InputFields, "opes_subroles_blocking_reason", "workflow_task_store_children_required_for_real_subroles") ||
 		!fieldValuesForTestV0(work.InputFields, "opes_subrole_roles", []string{"redaccion", "tests", "visuales", "audio", "tutor_rag", "qa"}) ||
 		!fieldValuesForTestV0(work.InputFields, "opes_subrole_task_refs", []string{
 			"task-opes-subrole-job-tema-subroles-producto-001-redaccion",

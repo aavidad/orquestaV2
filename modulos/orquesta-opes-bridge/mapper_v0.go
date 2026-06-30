@@ -367,7 +367,8 @@ func appendOPESSubroleMaterializationFieldsV0(
 		fields = appendFieldIfMissingV0(fields, "opes_subroles_blocking_reason", "safe_product_write_set_required_for_real_child_tasks")
 		return fields
 	}
-	fields = appendFieldIfMissingV0(fields, "opes_subroles_materialization_status", "contract_ready_pending_workflow_tasks")
+	fields = appendFieldIfMissingV0(fields, "opes_subroles_materialization_status", "blocked_workflow_task_store_materialization_required")
+	fields = appendFieldIfMissingV0(fields, "opes_subroles_blocking_reason", "workflow_task_store_children_required_for_real_subroles")
 	fields = appendValuesFieldIfMissingV0(fields, "opes_subrole_task_refs", opesSubroleTaskRefsV0(safeJob))
 	fields = appendValuesFieldIfMissingV0(fields, "opes_subrole_write_sets", opesSubroleWriteSetsV0(productWriteSet[0]))
 	fields = appendValuesFieldIfMissingV0(fields, "opes_subrole_roles", opesSubroleRolesV0())

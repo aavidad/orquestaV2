@@ -67,10 +67,13 @@
   `allowed_write_set`, `product_write_set` o `topic_dir` con ruta relativa
   segura; rutas absolutas, con `..`, drive o separadores inseguros caen al
   fallback `external/opes/<work_kind>/<job_id>`.
-- Contrato goal-first para padres OPES con seis subroles sin write-set de
-  producto: el `GoalWorkSpec` conserva el fallback estrecho, transporta
+- Contrato goal-first para padres OPES con seis subroles: sin write-set de
+  producto, el `GoalWorkSpec` conserva el fallback estrecho, transporta
   `product_write_set_status=missing_for_canonical_consolidation` y exige rework
-  o `pendiente_continuar` en vez de cierre como Markdown canonico consolidado.
+  o `pendiente_continuar` en vez de cierre como Markdown canonico consolidado;
+  con write-set de producto seguro transporta roles, task refs y write-sets
+  hijos, pero conserva bloqueo operativo hasta que una composicion cree esos
+  hijos reales en `WorkflowTaskStore`.
 - Wrapper real de derivados OPES: `preflight-only` bloquea ejecuciones con
   OPES productivo, `ALLOW_UNFILTERED`, `LIMIT` amplio sin override, `program_id`
   sin filtro real confirmado o cola/scope alternativo, Orquesta sin Goal

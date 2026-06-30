@@ -189,11 +189,12 @@ Reglas:
   contrato como producto consolidado sin write-set de producto seguro. Sin
   `topic_dir`, `product_write_set` o `allowed_write_set` relativo y seguro,
   transporta `opes_subroles_materialization_status=blocked_missing_product_write_set`;
-  con write-set seguro transporta
-  `opes_subroles_materialization_status=contract_ready_pending_workflow_tasks`,
-  seis roles, task refs y write-sets hijos deterministas. Ese estado no es
-  materializacion real: el materializado real en `WorkflowTaskStore`/wait/review
-  pertenece a la composicion y sigue pendiente hasta que exista wiring causal;
+  con write-set seguro transporta seis roles, task refs y write-sets hijos
+  deterministas, pero mantiene
+  `opes_subroles_materialization_status=blocked_workflow_task_store_materialization_required`.
+  Ese estado no es materializacion real: el materializado real en
+  `WorkflowTaskStore`/wait/review pertenece a la composicion y sigue pendiente
+  hasta que exista wiring causal;
 - esos trabajos documentales tambien reciben la metodologia editorial OPES como
   campos de dominio: `opes_editorial_workflow`,
   `opes_level_derivation_policy`, `opes_assimilation_method` y
@@ -220,6 +221,10 @@ Reglas:
   esa situacion el goal puede producir borradores/subentregas, pero no debe
   cerrar como producto canonico consolidado hasta que OPES aporte un write-set
   de producto seguro;
+- cuando ese write-set de producto seguro existe, el bridge solo transporta el
+  contrato determinista de seis subroles; no marca `ready`. La composicion debe
+  crear seis `WorkflowTaskV0` hijos reales con parent refs, waits acotados y
+  review causal, o conservar bloqueo operativo explicito;
 - si OPES aporta `worktree_ref` o `branch_ref` en `external_refs`, el bridge los
   conserva como refs opacas en `input_fields`/`work_refs` y rechaza valores con
   forma de ruta; no los interpreta como paths, nombres Git ni write-set;
