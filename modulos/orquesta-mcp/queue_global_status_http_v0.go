@@ -18,6 +18,12 @@ const (
 
 const defaultMCPQueueGlobalStatusHTTPResponseTimeoutV0 = 2 * time.Second
 
+const (
+	mcpQueueGlobalStatusActionReviewReplanGoalFirstV0          = "review_replan_goal_first"
+	mcpQueueGlobalStatusActionRetryFromPhaseV0                 = "retry_from_phase"
+	mcpQueueGlobalStatusActionCloseSupersededByLocalEvidenceV0 = "close_superseded_by_local_evidence"
+)
+
 type MCPQueueGlobalStatusResultV0 struct {
 	SchemaVersion string                              `json:"schema_version"`
 	Estado        string                              `json:"estado"`
@@ -477,7 +483,7 @@ func mcpQueueGlobalStatusRecommendedActionForStatusV0(status string) string {
 	case mcpAutoprogrammingActionGoalFirstStateMissingV0:
 		return "repair_goal_state"
 	case mcpAutoprogrammingActionGoalFirstBlockedV0:
-		return "repair_runtime"
+		return mcpQueueGlobalStatusActionReviewReplanGoalFirstV0
 	case "queued_not_dispatched":
 		return "reencolar"
 	case mcpAutoprogrammingHealthRunningStaleV0,
@@ -498,7 +504,7 @@ func mcpQueueGlobalStatusRecommendedActionForStatusV0(status string) string {
 	case "retry_required":
 		return "retry"
 	case "review_required":
-		return "repair_runtime"
+		return mcpQueueGlobalStatusActionReviewReplanGoalFirstV0
 	case "waiting_outbox":
 		return "reencolar"
 	default:
@@ -595,7 +601,7 @@ func mcpQueueGlobalStatusRecommendedActionFromSafeActionV0(action MCPAutoprogram
 	case "retry":
 		return "retry"
 	case "review":
-		return "repair_runtime"
+		return mcpQueueGlobalStatusActionReviewReplanGoalFirstV0
 	case "supervise":
 		return "reencolar"
 	default:
@@ -610,7 +616,7 @@ func mcpQueueGlobalStatusRecommendedActionFromDiagnosticV0(diagnostic MCPAutopro
 	case mcpAutoprogrammingActionGoalFirstStateMissingV0, "autoprogramming_goal_first_state_missing":
 		return "repair_goal_state"
 	case mcpAutoprogrammingActionGoalFirstBlockedV0, "autoprogramming_goal_first_blocked":
-		return "repair_runtime"
+		return mcpQueueGlobalStatusActionReviewReplanGoalFirstV0
 	default:
 		return "repair_runtime"
 	}
@@ -619,10 +625,17 @@ func mcpQueueGlobalStatusRecommendedActionFromDiagnosticV0(diagnostic MCPAutopro
 func mcpQueueGlobalStatusNormalizeRecommendedActionV0(action string, fallback string) string {
 	action = strings.ToLower(strings.TrimSpace(action))
 	switch action {
-	case "retry", "reencolar", "cancel_stale", "restart_observer", "repair_runtime", "repair_goal_state", "inspect_liveness":
+	case "retry",
+		"reencolar",
+		"cancel_stale",
+		"restart_observer",
+		"repair_runtime",
+		"repair_goal_state",
+		"inspect_liveness",
+		mcpQueueGlobalStatusActionReviewReplanGoalFirstV0,
+		mcpQueueGlobalStatusActionRetryFromPhaseV0,
+		mcpQueueGlobalStatusActionCloseSupersededByLocalEvidenceV0:
 		return action
-	case "review_replan_goal_first":
-		return "repair_runtime"
 	}
 	if strings.Contains(action, "goal_state") ||
 		strings.Contains(action, "repair_goal") ||

@@ -1667,6 +1667,11 @@ Invariantes:
     aparece en `stale_running[].code=goal_first_blocked` con accion
     `review_replan_goal_first`, suprime acciones legacy de esa run y no emite
     `observe_goal`, porque ya no es un goal vivo pendiente de observacion.
+    `/api/v0/queue/global-status` debe preservar esa accion y no traducirla a
+    `repair_runtime`. Tambien debe conservar acciones goal-first mas concretas
+    aportadas por dominio, como `retry_from_phase` o
+    `close_superseded_by_local_evidence`, sin normalizarlas a acciones runtime
+    genericas.
   - Si la composicion inyecta `GoalWorkRunMarkerStorePortV0`, o el
     `GoalWorkStateStore` lo implementa, una run con marcador goal-first pero
     sin `GoalWorkStateV0` se clasifica como

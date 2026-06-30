@@ -641,6 +641,15 @@ sin `GoalWorkStateV0`, `stats.status=goal_first_state_missing`,
 fija que `/api/v0/queue/global-status` normaliza el item y la accion publica a
 `goal_first_state_missing`/`repair_goal_state`, no a cancelar stale ni reencolar
 legacy.
+`TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstBlockedConservaReviewReplan` y
+`TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstBlockedDesdeDiagnosticoNoReparaRuntime`
+fijan que un bloqueo goal-first no se degrada a `repair_runtime`: la accion
+publica queda `review_replan_goal_first` tanto si llega desde
+`stale_running` como si llega solo desde diagnostico. `TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFirstEspecificas`
+fija que las acciones especificas `review_replan_goal_first`,
+`retry_from_phase` y `close_superseded_by_local_evidence` se preservan para que
+los dominios puedan aportar fase/evidencia sin perder semantica en
+`queue/global-status`.
 `TestMCPQueueGlobalStatusHTTPHandlerV0CadaRunVisibleTieneAccionORazon` fija el
 contrato publico item por item: cada run visible publica una accion recomendada
 si requiere operador o `no_action_reason` si puede esperar/cerrar sin accion.

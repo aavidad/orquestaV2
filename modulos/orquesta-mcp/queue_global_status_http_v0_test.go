@@ -396,7 +396,7 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstStateMissingRecomiendaReparar
 	}
 }
 
-func TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstBlockedRecomiendaRepararRuntime(t *testing.T) {
+func TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstBlockedConservaReviewReplan(t *testing.T) {
 	executor := &fakeMCPQueueGlobalStatusExecutorV0{
 		result: MCPAutoprogrammingStatusToolResultV0{
 			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
@@ -437,9 +437,61 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstBlockedRecomiendaRepararRunti
 			"run-ref-global-status-goal-blocked-001",
 			mcpAutoprogrammingActionGoalFirstBlockedV0,
 			true,
-			"repair_runtime",
+			mcpQueueGlobalStatusActionReviewReplanGoalFirstV0,
 		) {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstBlockedDesdeDiagnosticoNoReparaRuntime(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				Blocked: 1,
+			},
+			Diagnostics: []MCPAutoprogrammingDiagnosticV0{{
+				Code:         "autoprogramming_goal_first_blocked",
+				Scope:        "run:run-ref-global-status-goal-blocked-diagnostic-001",
+				EvidenceRefs: []string{"evidence-ref-goal-blocked-diagnostic"},
+			}},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	NewMCPQueueGlobalStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !hasMCPQueueGlobalStatusItemForTestV0(
+		result.Items,
+		"run-ref-global-status-goal-blocked-diagnostic-001",
+		mcpAutoprogrammingActionGoalFirstBlockedV0,
+		true,
+		mcpQueueGlobalStatusActionReviewReplanGoalFirstV0,
+	) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFirstEspecificas(t *testing.T) {
+	for _, action := range []string{
+		mcpQueueGlobalStatusActionReviewReplanGoalFirstV0,
+		mcpQueueGlobalStatusActionRetryFromPhaseV0,
+		mcpQueueGlobalStatusActionCloseSupersededByLocalEvidenceV0,
+	} {
+		t.Run(action, func(t *testing.T) {
+			if got := mcpQueueGlobalStatusNormalizeRecommendedActionV0(action, "repair_runtime"); got != action {
+				t.Fatalf("action=%q, want %q", got, action)
+			}
+		})
 	}
 }
 
