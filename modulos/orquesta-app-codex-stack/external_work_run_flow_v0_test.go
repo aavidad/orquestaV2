@@ -1118,6 +1118,60 @@ func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESFinalSinManifestV0(t *test
 	}
 }
 
+func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESVisualFinalSVG(t *testing.T) {
+	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	change := defaultExternalWorkRunChangeForTestV0()
+	change.ChangeRef = "opes-job-visual-svg-goal-001"
+	change.ExternalWork.ProjectRef = "opes"
+	change.ExternalWork.JobRef = "job-visual-svg-goal-001"
+	change.ExternalWork.WorkKind = "generate_visual_asset"
+	change.ExternalWork.InputFields = []orquestadomainwork.DomainWorkFieldV0{
+		{Name: "expected_artifact_type", Value: "visual_asset"},
+	}
+	started := postExternalWorkRunStackWithChangeV0(t, stack, change)
+	spec := launcher.specs[0]
+	receiptRef := "receipt-ref-goal-first-opes-visual-svg-001"
+	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
+	record.DomainRef = "opes"
+	record.JobRef = "job-visual-svg-goal-001"
+	record.ArtifactType = "visual_asset"
+	record.PayloadFields = append(record.PayloadFields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "source_work_kind", Value: "generate_visual_asset"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "format", Value: "svg"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "content_type", Value: "image/svg+xml"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "svg", Value: `<svg xmlns="http://www.w3.org/2000/svg"></svg>`},
+	)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		record,
+	); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-opes-visual-svg-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework ||
+		!goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptOPESVisualFinalIssueCodeV0) {
+		t.Fatalf("visual final SVG OPES cerro goal-first: result=%+v", result)
+	}
+}
+
 func TestCodexStackV0ExternalWorkGoalFirstNoCierraReceiptConPayloadNoTerminalEnLedgerV0(t *testing.T) {
 	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
 	started := postExternalWorkRunStackV0(t, stack)

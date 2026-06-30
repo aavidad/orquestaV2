@@ -22,12 +22,14 @@ const (
 	goalDomainReceiptStructuredArtifactIssueCodeV0       = "domain_work_receipt_artifact_structured_non_terminal"
 	goalDomainReceiptOPESSubrolesEvidenceMissingIssueV0  = "domain_work_opes_subroles_evidence_missing"
 	goalDomainReceiptOPESFinalPackageEvidenceIssueCodeV0 = codexStackOPESFinalPackageEvidenceIncompleteIssueV0
+	goalDomainReceiptOPESVisualFinalIssueCodeV0          = "domain_work_opes_visual_final_not_professional"
 	goalDomainReceiptLedgerRequiredArtifactFieldV0       = "domain_receipt_refs.artifact_contracts"
 	goalDomainReceiptStructuredArtifactFieldV0           = "domain_receipt_refs.artifact_payload"
 	goalDomainReceiptLedgerUnavailableIssueFieldV0       = "domain_receipt_refs.ledger"
 	goalDomainReceiptLedgerMissingIssueFieldV0           = "domain_receipt_refs"
 	goalDomainReceiptLedgerRequiredRunRefFieldV0         = "domain_receipt_refs.run_ref"
 	goalDomainReceiptLedgerRequiredReceiptFieldV0        = "domain_receipt_refs.receipt_ref"
+	goalDomainReceiptOPESVisualFinalFieldV0              = "domain_receipt_refs.opes_visual_final"
 	goalDomainReceiptOPESSubrolesEvidenceFieldV0         = "domain_receipt_refs.opes_subroles"
 	goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0   = "evidence-ref-goal-domain-receipt-opes-subroles-accepted"
 	goalDomainReceiptOPESSubrolesEvidencePrefixV0        = "domain-work-opes-subrole-"
@@ -224,6 +226,9 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) validateAcceptedDomainR
 	if issue := goalDomainReceiptOPESFinalPackageEvidenceIssueV0(spec, matching); issue.Code != "" {
 		return nil, issue
 	}
+	if issue := goalDomainReceiptOPESVisualFinalIssueV0(spec, matching); issue.Code != "" {
+		return nil, issue
+	}
 	completeMatching := goalDomainReceiptCompleteRecordsV0(spec, matching)
 	if !goalDomainReceiptAllContractsCoveredV0(required, completeMatching) {
 		return nil, orquestagoal.GoalWorkIssueV0{
@@ -339,7 +344,8 @@ func goalDomainReceiptCompleteRecordsV0(
 		record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
 		if record.CompleteJob &&
 			domainWorkStructuredNonTerminalArtifactIssueRefV0(record.PayloadFields) == "" &&
-			!goalDomainReceiptOPESFinalPackageEvidenceMissingV0(spec, record) {
+			!goalDomainReceiptOPESFinalPackageEvidenceMissingV0(spec, record) &&
+			!goalDomainReceiptOPESVisualFinalInvalidV0(spec, record) {
 			out = append(out, record)
 		}
 	}
@@ -355,6 +361,21 @@ func goalDomainReceiptStructuredArtifactIssueV0(
 			return orquestagoal.GoalWorkIssueV0{
 				Code:  goalDomainReceiptStructuredArtifactIssueCodeV0,
 				Field: goalDomainReceiptStructuredArtifactFieldV0,
+			}
+		}
+	}
+	return orquestagoal.GoalWorkIssueV0{}
+}
+
+func goalDomainReceiptOPESVisualFinalIssueV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	records []DomainWorkArtifactSubmissionRecordV0,
+) orquestagoal.GoalWorkIssueV0 {
+	for _, record := range records {
+		if goalDomainReceiptOPESVisualFinalInvalidV0(spec, record) {
+			return orquestagoal.GoalWorkIssueV0{
+				Code:  goalDomainReceiptOPESVisualFinalIssueCodeV0,
+				Field: goalDomainReceiptOPESVisualFinalFieldV0,
 			}
 		}
 	}
@@ -387,6 +408,53 @@ func goalDomainReceiptOPESFinalPackageEvidenceMissingV0(
 		return false
 	}
 	return !codexStackOPESFinalPackageSubmissionEvidenceCompleteV0(record)
+}
+
+func goalDomainReceiptOPESVisualFinalInvalidV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	record DomainWorkArtifactSubmissionRecordV0,
+) bool {
+	record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+	domainRef := firstNonEmptyQueuedSourceV0(record.DomainRef, spec.DomainRef, spec.ProjectRef)
+	if !codexStackOperationalClosureRefIsOPESV0(domainRef) {
+		return false
+	}
+	artifactType := domainWorkDeliveryCanonicalArtifactTypeV0(record.ArtifactType)
+	workKind := normalizeDomainWorkDeliveryAliasV0(firstNonEmptyQueuedSourceV0(
+		domainWorkFieldStringValueV0(record.PayloadFields, "source_work_kind"),
+		spec.WorkKind,
+	))
+	if artifactType != "visual_asset" && workKind != "generate_visual_asset" {
+		return false
+	}
+	return goalDomainReceiptVisualPayloadIsSVGV0(record)
+}
+
+func goalDomainReceiptVisualPayloadIsSVGV0(record DomainWorkArtifactSubmissionRecordV0) bool {
+	for _, name := range []string{"format", "mime_type", "content_type", "asset_format"} {
+		value := strings.ToLower(strings.TrimSpace(domainWorkFieldStringValueV0(record.PayloadFields, name)))
+		if value == "svg" || value == "image/svg+xml" || strings.Contains(value, "svg_") || strings.Contains(value, "_svg") {
+			return true
+		}
+	}
+	if strings.TrimSpace(domainWorkFieldStringValueV0(record.PayloadFields, "svg")) != "" {
+		return true
+	}
+	body := strings.ToLower(strings.TrimSpace(domainWorkFieldStringValueV0(record.PayloadFields, "body")))
+	if strings.Contains(body, "<svg") {
+		return true
+	}
+	for _, ref := range append(append([]string(nil), record.PayloadRefs...), record.EvidenceRefs...) {
+		if strings.HasSuffix(strings.ToLower(strings.TrimSpace(ref)), ".svg") {
+			return true
+		}
+	}
+	for _, ref := range record.ExternalRefs {
+		if strings.HasSuffix(strings.ToLower(strings.TrimSpace(ref.Ref)), ".svg") {
+			return true
+		}
+	}
+	return false
 }
 
 func goalDomainReceiptRequiredTestPassedV0(
