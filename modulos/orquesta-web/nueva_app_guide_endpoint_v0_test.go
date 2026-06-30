@@ -27,10 +27,19 @@ func TestNuevaAppGuideWebEndpointV0GETSirveGuiaEmbebida(t *testing.T) {
 		`<table>`,
 		`<th>Patron</th>`,
 		`<td><code>hexagonal</code></td>`,
+		`Campos Contractuales Visibles Que No Deben Perderse`,
 		`href="/nueva-app"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("guia no contiene %q\n%s", want, body)
+		}
+	}
+	for _, stale := range []string{
+		`Campo contractual no visible en HTML actual.`,
+		`Campos Contractuales No Visibles En HTML Basico`,
+	} {
+		if strings.Contains(body, stale) {
+			t.Fatalf("guia conserva texto stale %q\n%s", stale, body)
 		}
 	}
 	if strings.Contains(body, `<pre># Guia de opciones del wizard`) {

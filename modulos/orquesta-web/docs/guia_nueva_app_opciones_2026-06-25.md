@@ -686,9 +686,9 @@ Tooltip: `nueva_app.ayuda.preferencias_tecnicas.preferencias`.
 
 ### `preferencias_tecnicas.restricciones`
 
-Campo contractual no visible en HTML actual.
+Tipo UI: input de lista por comas en preferencias tecnicas.
 
-Usalo por JSON/API cuando:
+Usalo cuando:
 
 - una tecnologia esta prohibida;
 - hay licencias, version minima, SO o entorno restringido.
@@ -880,9 +880,9 @@ Tooltip: `nueva_app.ayuda.datos.sensibilidad`.
 
 ### Modo Basico: `datos.retencion`
 
-Campo contractual no visible en HTML actual.
+Tipo UI: input de texto en datos.
 
-Usalo por JSON/API o futuro modo experto para:
+Usalo para:
 
 - tiempo de conservacion;
 - borrado, archivado, anonimizado o exportacion;
@@ -1679,18 +1679,19 @@ Errores frecuentes:
 
 Tooltip: `nueva_app.ayuda.restricciones`.
 
-## Campos Contractuales No Visibles En HTML Basico
+## Campos Contractuales Visibles Que No Deben Perderse
 
-El DTO local tiene campos que no aparecen como controles dedicados en el HTML
-basico actual. No deben olvidarse al ampliar la UI:
+El DTO local y el HTML basico ya comparten estos controles dedicados. No deben
+perderse al ampliar la UI o reorganizar el wizard:
 
 - `usuarios_objetivo`: perfiles de usuario.
 - `preferencias_tecnicas.restricciones`: restricciones tecnicas separadas.
+- `datos.retencion`: regla general de retencion del dato.
 
 Recomendacion:
 
 - mantenerlos en modo experto o en una seccion avanzada;
-- cada campo visible nuevo necesita label i18n y tooltip;
+- cada campo visible necesita label i18n y tooltip;
 - no duplicar el mismo dato bajo nombres distintos.
 
 ## Tooltips
