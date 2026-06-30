@@ -76,6 +76,7 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 		AutoprogrammingSupervise:          apiHandlers.AutoprogrammingSupervise,
 		GovernanceCatalogQuery:            apiHandlers.GovernanceCatalogQuery,
 		DomainWork:                        apiHandlers.DomainWork,
+		DomainWorkStatus:                  apiHandlers.DomainWorkStatus,
 		ExternalWorkDryRun:                apiHandlers.ExternalWorkDryRun,
 		ExternalWorkRun:                   apiHandlers.ExternalWorkRun,
 		CodebaseQuery:                     apiHandlers.CodebaseQuery,
@@ -118,11 +119,22 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 		AutoprogrammingSupervise:          orquestamcp.NewMCPAutoprogrammingSuperviseHTTPHandlerV0(config.RunSupervisor),
 		GovernanceCatalogQuery:            orquestagovernance.GovernanceCatalogQueryHTTPHandlerV0(config.GovernanceCatalog),
 		DomainWork:                        orquestamcp.NewMCPDomainWorkHTTPHandlerV0(config.DomainWork),
+		DomainWorkStatus:                  orquestamcp.NewMCPDomainWorkStatusHTTPHandlerV0(firstNonNilAutoprogrammingStatusExecutorV0(config.DomainWorkStatus, autoprogrammingStatus)),
 		ExternalWorkDryRun:                newExternalWorkDryRunHTTPHandlerV0(config),
 		ExternalWorkRun:                   orquestamcp.NewMCPExternalWorkRunHTTPHandlerWithResponseTimeoutV0(config.ExternalWorkRun, config.Timeout),
 		CodebaseQuery:                     orquestamcp.NewMCPCodebaseQueryHTTPHandlerV0(config.CodebaseQuery),
 		CodebaseStatus:                    orquestamcp.NewMCPCodebaseStatusHTTPHandlerV0(config.CodebaseStatus),
 	}
+}
+
+func firstNonNilAutoprogrammingStatusExecutorV0(
+	primary orquestamcp.MCPTransportAutoprogrammingStatusExecutorV0,
+	fallback orquestamcp.MCPTransportAutoprogrammingStatusExecutorV0,
+) orquestamcp.MCPTransportAutoprogrammingStatusExecutorV0 {
+	if primary != nil {
+		return primary
+	}
+	return fallback
 }
 
 func newExternalWorkDryRunHTTPHandlerV0(config ConfigV0) http.Handler {

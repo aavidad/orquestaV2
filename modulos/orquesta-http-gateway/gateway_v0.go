@@ -39,6 +39,7 @@ const (
 	RouteAutoprogrammingSuperviseV0          = "/api/v0/autoprogramming/supervise"
 	RouteGovernanceCatalogQueryV0            = "/api/v0/governance/catalog/query"
 	RouteDomainWorkV0                        = "/api/v0/domain-work"
+	RouteDomainWorkStatusV0                  = "/api/v0/domain-work/status"
 	RouteExternalWorkDryRunV0                = "/api/v0/external-work/dry-run"
 	RouteExternalWorkRunV0                   = "/api/v0/external-work/run"
 	RouteCodebaseQueryV0                     = "/api/v0/codebase/query"
@@ -82,6 +83,7 @@ type RouteHandlersV0 struct {
 	AutoprogrammingSupervise          http.Handler
 	GovernanceCatalogQuery            http.Handler
 	DomainWork                        http.Handler
+	DomainWorkStatus                  http.Handler
 	ExternalWorkDryRun                http.Handler
 	ExternalWorkRun                   http.Handler
 	CodebaseQuery                     http.Handler
@@ -155,6 +157,7 @@ func gatewayRouteRegistrationsV0(handlers RouteHandlersV0) []gatewayRouteRegistr
 		{ref: RouteRefAutoprogrammingStatusV0, route: RouteAutoprogrammingStatusV0, handler: handlers.AutoprogrammingStatus},
 		{ref: RouteRefAutoprogrammingSuperviseV0, route: RouteAutoprogrammingSuperviseV0, handler: handlers.AutoprogrammingSupervise},
 		{ref: RouteRefGovernanceCatalogQueryV0, route: RouteGovernanceCatalogQueryV0, handler: handlers.GovernanceCatalogQuery},
+		{ref: RouteRefDomainWorkStatusV0, route: RouteDomainWorkStatusV0, handler: handlers.DomainWorkStatus},
 		{ref: RouteRefDomainWorkV0, route: RouteDomainWorkV0, handler: handlers.DomainWork},
 		{ref: RouteRefExternalWorkDryRunV0, route: RouteExternalWorkDryRunV0, handler: handlers.ExternalWorkDryRun},
 		{ref: RouteRefExternalWorkRunV0, route: RouteExternalWorkRunV0, handler: handlers.ExternalWorkRun},

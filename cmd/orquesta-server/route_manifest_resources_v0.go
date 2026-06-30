@@ -10,6 +10,15 @@ import (
 func serverRouteManifestResourcesV0() []orquestaserver.ServerRouteResourceV0 {
 	routes := []orquestaserver.ServerRouteResourceV0{
 		{
+			Ref:             "route-ref-health-v0",
+			Pattern:         "/health",
+			Kind:            orquestahttpgateway.RouteManifestKindExactV0,
+			Owner:           "orquesta-server",
+			Methods:         []string{http.MethodGet},
+			SecurityProfile: orquestahttpgateway.RouteSecurityControlPlaneReadV0,
+			Mounted:         true,
+		},
+		{
 			Ref:             "route-ref-healthz-v0",
 			Pattern:         "/healthz",
 			Kind:            orquestahttpgateway.RouteManifestKindExactV0,

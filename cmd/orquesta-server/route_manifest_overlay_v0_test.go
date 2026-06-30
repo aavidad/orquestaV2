@@ -47,7 +47,10 @@ func TestServerResourcesRouteManifestIncluyeDiscoveryOPESV0(t *testing.T) {
 	for _, path := range []string{
 		orquestaserver.ServerReadinessEndpointV0,
 		orquestaserver.ServerResourcesEndpointV0,
+		"/health",
+		"/healthz",
 		orquestahttpgateway.RouteDomainWorkV0,
+		orquestahttpgateway.RouteDomainWorkStatusV0,
 		orquestahttpgateway.RouteExternalWorkRunV0,
 		orquestahttpgateway.RouteRunSupervisorV0,
 		orquestahttpgateway.RouteAutoprogrammingStatusV0,
@@ -61,7 +64,9 @@ func TestServerResourcesRouteManifestIncluyeDiscoveryOPESV0(t *testing.T) {
 		}
 	}
 	if !serverRouteHasMethodForTestV0(byPattern[orquestahttpgateway.RouteDomainWorkV0], http.MethodPost) ||
+		!serverRouteHasMethodForTestV0(byPattern[orquestahttpgateway.RouteDomainWorkStatusV0], http.MethodGet) ||
 		!serverRouteHasMethodForTestV0(byPattern[orquestahttpgateway.RouteExternalWorkRunV0], http.MethodPost) ||
+		!serverRouteHasMethodForTestV0(byPattern["/health"], http.MethodGet) ||
 		!serverRouteHasMethodForTestV0(byPattern[orquestaserver.ServerReadinessEndpointV0], http.MethodGet) {
 		t.Fatalf("metodos discovery invalidos: %+v", byPattern)
 	}

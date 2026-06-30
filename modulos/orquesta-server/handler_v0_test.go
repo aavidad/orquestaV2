@@ -50,6 +50,7 @@ func TestHandlerV0ExponeHealthStatusYDelegaV0(t *testing.T) {
 		}),
 	})
 
+	assertServerPathV0(t, handler, "/health", `"ok"`)
 	assertServerPathV0(t, handler, "/healthz", `"ok"`)
 	assertServerPathV0(t, handler, ServerReadinessEndpointV0, `"ready":true`)
 	assertServerPathV0(t, handler, ServerReadinessEndpointV0, `"revision_ref":"revision-ref-orquesta-startup-20260526t120000z"`)

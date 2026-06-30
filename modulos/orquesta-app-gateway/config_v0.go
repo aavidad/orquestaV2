@@ -44,6 +44,7 @@ type ConfigV0 struct {
 	OperatorQuery                               operator.OperatorMCPDirectedQueryPortV0
 	ServerShutdown                              orquestamcp.MCPTransportServerShutdownExecutorV0
 	DomainWork                                  orquestamcp.MCPDomainWorkExecutorPortV0
+	DomainWorkStatus                            orquestamcp.MCPTransportAutoprogrammingStatusExecutorV0
 	ExternalWorkDryRun                          orquestamcp.MCPTransportExternalWorkDryRunExecutorV0
 	ExternalWorkDryRunConfig                    orquestaexternalworkrun.StartExternalWorkRunConfigV0
 	ExternalWorkRun                             orquestamcp.MCPTransportExternalWorkRunExecutorV0

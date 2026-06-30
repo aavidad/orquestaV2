@@ -25,7 +25,7 @@ type handlerV0 struct {
 
 func (handler handlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
-	case "/healthz":
+	case "/health", "/healthz":
 		handler.writeJSONV0(w, http.StatusOK, map[string]string{"status": "ok"})
 	case ServerReadinessEndpointV0:
 		readiness := NewServerReadinessV0(handler.statusV0())

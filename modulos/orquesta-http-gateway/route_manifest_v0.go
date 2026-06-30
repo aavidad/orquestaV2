@@ -51,6 +51,7 @@ const (
 	RouteRefAutoprogrammingSuperviseV0          = "route-ref-autoprogramming-supervise-v0"
 	RouteRefGovernanceCatalogQueryV0            = "route-ref-governance-catalog-query-v0"
 	RouteRefDomainWorkV0                        = "route-ref-domain-work-v0"
+	RouteRefDomainWorkStatusV0                  = "route-ref-domain-work-status-v0"
 	RouteRefExternalWorkDryRunV0                = "route-ref-external-work-dry-run-v0"
 	RouteRefExternalWorkRunV0                   = "route-ref-external-work-run-v0"
 	RouteRefCodebaseQueryV0                     = "route-ref-codebase-query-v0"
