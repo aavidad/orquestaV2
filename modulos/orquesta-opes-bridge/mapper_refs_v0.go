@@ -11,6 +11,7 @@ import (
 const (
 	opesArtifactTypeLearningGamesPackageV0     = "learning_games_package"
 	opesArtifactTypeHelpManualPackageV0        = "help_manual_package"
+	opesArtifactTypeVisualReuseManifestV0      = "visual_reuse_manifest"
 	opesArtifactTypeCompletedSyllabusPackageV0 = "completed_syllabus_package"
 )
 
@@ -84,6 +85,8 @@ func expectedArtifactTypeV0(jobType string) string {
 		return opesArtifactTypeLearningGamesPackageV0
 	case "generate_help_manual_assets", "generate_help_manuals", "create_help_manuals":
 		return opesArtifactTypeHelpManualPackageV0
+	case "visual_asset_reuse", "reuse_visual_assets", "import_common_visual_assets":
+		return opesArtifactTypeVisualReuseManifestV0
 	case "finalize_topic_package":
 		return orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0
 	case "finalize_temario_package", "close_temario_package":
@@ -127,6 +130,7 @@ func contextProfileForJobTypeV0(jobType string) string {
 		"generate_topic_audio",
 		"generate_tutor_assets",
 		"generate_learning_games",
+		"visual_asset_reuse",
 		"generate_help_manual_assets",
 		"update_topic_registry",
 		"finalize_topic_package",
@@ -163,6 +167,8 @@ func acceptanceCriteriaForJobV0(jobType string) []string {
 		criteria = append(criteria, examResearchAcceptanceCriteriaV0()...)
 	case "generate_visual_asset":
 		criteria = append(criteria, visualAssetAcceptanceCriteriaV0()...)
+	case "visual_asset_reuse", "reuse_visual_assets", "import_common_visual_assets":
+		criteria = append(criteria, visualAssetReuseAcceptanceCriteriaV0()...)
 	case "generate_question_bank", "generate_topic_tests", "create_topic_tests":
 		criteria = append(criteria, questionBankAcceptanceCriteriaV0()...)
 	case "generate_agent_candidate_codex", "generate_agent_candidate_gemini",
@@ -245,6 +251,19 @@ func visualAssetAcceptanceCriteriaV0() []string {
 		"cubrir los temas o apartados marcados por el document_plan, incluidos los criticos cuando proceda, sin limitarse solo a ellos",
 		"devolver assets o prompts trazables con placement_ref, texto alternativo y objetivo didactico",
 		"si se usa Gemini, Claude, Codex u otro proveedor, Orquesta lo decide por rol; OPES solo recibe visual_asset",
+	}
+}
+
+func visualAssetReuseAcceptanceCriteriaV0() []string {
+	return []string{
+		"inventariar visuales comunes/reutilizables compatibles por course_id, topic_id, section_ref y placement_ref antes de generar o cerrar HTML",
+		"copiar o registrar como reutilizados solo assets validos y revisables; conservar los rechazados como evidencia interna con motivo de rechazo",
+		"devolver visual_reuse_manifest con reusable_visual_count, reused_visual_count, copied_visual_count, inserted_visual_count y skipped_visual_count",
+		"devolver common_visual_asset_refs, reused_visual_asset_refs, copied_visual_asset_refs y rejected_visual_asset_refs cuando existan",
+		"insertar o declarar placement_refs/anclas de cada visual reutilizado para que generate_html_site pueda ubicarlo junto al apartado correspondiente",
+		"si no aplican visuales reutilizables, aportar visual_requirement_status=not_applicable o visual_zero_justification_ref",
+		"no marcar HTML ready ni html_validado si visual_count=0 y existen visuales comunes pendientes de importar, copiar o insertar",
+		"no mostrar al alumnado trazabilidad de reutilizacion, refs internas ni rutas locales; esa informacion queda en metadata o manifest interno",
 	}
 }
 
@@ -403,6 +422,7 @@ func finalizedTemarioPackageAcceptanceCriteriaV0() []string {
 		"incluir evidencia opes-extension-minima-passed u opes-editorial-minimums-passed solo si todos los temas alcanzan el minimo de su nivel",
 		"incluir matriz_reutilizacion_comunes o evidencia opes-common-master-not-applicable; si hay comunes, deben derivar desde maestro comun A1/A1-A2 o superior validado",
 		"incorporar solo artefactos aceptados por Director o marcados como recuperables en ubicacion interna; no mostrar trazabilidad tecnica al alumnado",
+		"incluir visual_reuse_manifest o justificacion explicita de no aplicabilidad cuando el curso reutilice temas comunes o assets visuales comunes",
 		"comprobar fases completas por tema: inventario, fuentes, redaccion, expansion, revision, tests, visuales, HTML, RAG, audio, QA, paquete y matriz de rework",
 		"convertir pendientes causales del ACK o matriz de revision en estado pendiente_continuar con followup_refs; no cerrar ready si queda rework abierto",
 		"verificar HTML local, responsive, enlaces, assets comprimidos, audio/manifests, locales/i18n, watermark USO cuando proceda y ausencia de rutas internas",

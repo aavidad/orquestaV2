@@ -155,6 +155,27 @@ func opesFinalPackageRequiredTestsV0(
 				"opes-final-evidence:qa",
 			},
 		},
+		{
+			TestRef: "opes-visual-reuse-manifest-" + safeJob,
+			AcceptanceCriteria: []string{
+				"Existe visual_reuse_manifest o evidencia explicita de no aplicabilidad para cursos con comunes/assets visuales reutilizables.",
+				"Si reusable_visual_count o common_visual_count es mayor que cero, copied_visual_count/inserted_visual_count reflejan assets importados y ubicados.",
+				"Si visual_count=0, el manifest declara visual_requirement_status=not_applicable o visual_zero_justification_ref; no se acepta ready/html_validado sin esa evidencia.",
+				"Los assets reutilizados conservan refs opacas, placement_ref/ancla, alt_text y motivo editorial; los rechazados conservan motivo de rechazo.",
+			},
+			AcceptanceCriteriaRefs: []string{"opes-required-visual-reuse-manifest"},
+			InputRefs:              inputRefs,
+			ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
+				{Kind: "domain_ref", Ref: "opes"},
+				{Kind: "job_ref", Ref: safeJob},
+				{Kind: "required_evidence", Ref: "visual_reuse_manifest"},
+			},
+			EvidenceRefs: []string{
+				"opes-rule-visual-reuse-common-assets",
+				"opes-expected-evidence-visual-reuse-manifest",
+				"opes-final-evidence:visual_reuse",
+			},
+		},
 	}
 }
 

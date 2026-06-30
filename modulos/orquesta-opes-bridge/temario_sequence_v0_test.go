@@ -22,6 +22,7 @@ func TestOPESFullTemarioJobTypeSequenceV0IncluyeCierreCompletoV0(t *testing.T) {
 		"generate_audio_asset",
 		"generate_tutor_assets",
 		"generate_learning_games",
+		"visual_asset_reuse",
 		"generate_html_site",
 		"generate_help_manual_assets",
 		"finalize_temario_package",
@@ -59,6 +60,12 @@ func TestOPESFullTemarioJobTypeSequenceV0IncluyeCierreCompletoV0(t *testing.T) {
 	if indexOfOPESSequenceForTestV0(sequence, "generate_html_site") <
 		indexOfOPESSequenceForTestV0(sequence, "generate_learning_games") {
 		t.Fatalf("html debe ir despues de tutor para integrar bots y juegos: %v", sequence)
+	}
+	if indexOfOPESSequenceForTestV0(sequence, "visual_asset_reuse") <
+		indexOfOPESSequenceForTestV0(sequence, "generate_visual_asset") ||
+		indexOfOPESSequenceForTestV0(sequence, "generate_html_site") <
+			indexOfOPESSequenceForTestV0(sequence, "visual_asset_reuse") {
+		t.Fatalf("reutilizacion visual debe ir tras visuales base y antes del HTML: %v", sequence)
 	}
 }
 

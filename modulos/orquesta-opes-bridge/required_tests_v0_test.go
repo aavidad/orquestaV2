@@ -78,6 +78,7 @@ func TestOPESRequiredTestPolicyV0FinalTemarioExigeMinimosYComunes(t *testing.T) 
 		"opes-derivacion-comunes-maestro-job-ref-policy-opes-final",
 		"opes-question-bank-publicable-job-ref-policy-opes-final",
 		"opes-final-package-manifest-job-ref-policy-opes-final",
+		"opes-visual-reuse-manifest-job-ref-policy-opes-final",
 	} {
 		if !stringInRequiredTestRefsForTestV0(got, want) {
 			t.Fatalf("required_tests=%v falta %s", got, want)
@@ -94,6 +95,16 @@ func TestOPESRequiredTestPolicyV0FinalTemarioExigeMinimosYComunes(t *testing.T) 
 		!stringInRequiredTestRefsForTestV0(finalManifest.EvidenceRefs, "opes-expected-evidence-manifest-cierre") ||
 		!stringInRequiredTestRefsForTestV0(finalManifest.EvidenceRefs, "opes-final-evidence:qa") {
 		t.Fatalf("final_manifest_required_test=%+v", finalManifest)
+	}
+	visualReuse := requiredTestByRefForTestV0(
+		plan.RequiredTests,
+		"opes-visual-reuse-manifest-job-ref-policy-opes-final",
+	)
+	if visualReuse.TestRef == "" ||
+		!requiredTestHasExternalRefForTestV0(visualReuse, "required_evidence", "visual_reuse_manifest") ||
+		!stringInRequiredTestRefsForTestV0(visualReuse.AcceptanceCriteriaRefs, "opes-required-visual-reuse-manifest") ||
+		!stringInRequiredTestRefsForTestV0(visualReuse.EvidenceRefs, "opes-final-evidence:visual_reuse") {
+		t.Fatalf("visual_reuse_required_test=%+v", visualReuse)
 	}
 	criteria := strings.Join(finalManifest.AcceptanceCriteria, "\n")
 	for _, want := range []string{

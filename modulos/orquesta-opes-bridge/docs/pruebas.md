@@ -62,6 +62,12 @@
   causal (`text_qa` para corrupcion textual, `prepare` para refs/stale),
   contadores `audio_counters` cuando aplican y `retry_from_phase`; con esas
   precondiciones y `speech_synthesis` completo, el submit sigue permitido.
+- Reutilizacion visual OPES: la secuencia incluye `visual_asset_reuse` antes de
+  `generate_html_site`; el bridge mapea ese trabajo a `visual_reuse_manifest`
+  con criterios de matriz/copia/insercion/justificacion; el cierre final exige
+  `opes-visual-reuse-manifest-*`; y el stack goal-first bloquea HTML/final
+  `ready` o `html_validado` con `visual_count=0` si declara visuales comunes
+  pendientes sin importarlos.
 - Routing de proveedores en Orquesta:
   `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server -run 'TestClaude|TestProviderLaunchSpecResolverV0RuteaReview|TestProviderAwareAckPathResolverV0UsaRuntimeClaude|TestGeminiRuntimeConfig|TestClaudeRuntimeConfig'`.
   Debe demostrar que `review_gemini` se materializa por Gemini cuando esta

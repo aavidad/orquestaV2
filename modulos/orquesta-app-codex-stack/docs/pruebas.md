@@ -1679,7 +1679,7 @@ Cobertura:
   consumidor declara una identidad de runtime esperada en `input_fields`, sin
   convertirlo en bloqueo global para consumidores que no optan al contrato.
 - `TestCodexStackV0ExternalWorkGoalFirstCierraSecuenciaOPESDerivadosConReceiptsLedgerV0`
-  recorre los 23 derivados OPES posteriores a `plan_temario`, desde
+  recorre los 24 derivados OPES posteriores a `plan_temario`, desde
   `update_topic_registry` hasta `finalize_temario_package`, usando el bridge
   OPES fake/offline: cada run `goal_first` sube el artefacto por `DomainWork`,
   registra receipt aceptado en el ledger y cierra la run por evidencia causal

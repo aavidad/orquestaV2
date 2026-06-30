@@ -52,6 +52,9 @@ Trabajo aplicado:
 - el cierre final tambien exige `opes-final-package-manifest-*` con
   `manifest_cierre.json` y evidencias obligatorias de HTML, RAG, audio, tests,
   visual y QA final;
+- la secuencia OPES incorpora `visual_asset_reuse` antes de `generate_html_site`
+  y el cierre final exige `opes-visual-reuse-manifest-*` para no perder assets
+  visuales comunes/reutilizables;
 - la política editorial inyectada al agente incluye mínimos por nivel:
   A1 20.250, A2 14.400, B 10.800, C1 7.200, C2 4.500 y AP 3.150 palabras en
   ampliado publicable;
@@ -61,3 +64,4 @@ Trabajo aplicado:
 Validacion:
 
 - `go test -count=1 ./modulos/orquesta-opes-bridge -run 'TestOPESRequiredTestPolicyV0FinalTemarioExigeMinimosYComunes'`.
+- `go test -count=1 ./modulos/orquesta-opes-bridge -run 'TestOPESFullTemarioJobTypeSequenceV0IncluyeCierreCompletoV0|TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados'`.

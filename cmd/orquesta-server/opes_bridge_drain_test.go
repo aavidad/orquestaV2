@@ -3482,6 +3482,7 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilFinalizeV0(t *testing.
 		!strings.Contains(output, `"selected_job_type":"generate_audio_asset"`) ||
 		!strings.Contains(output, `"selected_job_type":"generate_tutor_assets"`) ||
 		!strings.Contains(output, `"selected_job_type":"generate_learning_games"`) ||
+		!strings.Contains(output, `"selected_job_type":"visual_asset_reuse"`) ||
 		!strings.Contains(output, `"selected_job_type":"generate_html_site"`) ||
 		!strings.Contains(output, `"selected_job_type":"generate_help_manual_assets"`) ||
 		!strings.Contains(output, `"selected_job_type":"finalize_temario_package"`) ||
@@ -3494,10 +3495,10 @@ func TestSmokeOPESDerivativesRESTWrapperFakeServerRunUntilFinalizeV0(t *testing.
 		!strings.Contains(output, `"closure_accepted": true`) ||
 		!strings.Contains(output, `"artifact_refs": ["artifact-ref-fake-finalize_temario_package"]`) ||
 		!strings.Contains(output, `goal_receipts_manifest_status=ok`) ||
-		!strings.Contains(output, `goal_receipts_manifest_expected=23`) ||
-		!strings.Contains(output, `goal_receipts_manifest_covered=23`) ||
+		!strings.Contains(output, `goal_receipts_manifest_expected=24`) ||
+		!strings.Contains(output, `goal_receipts_manifest_covered=24`) ||
 		!strings.Contains(output, `goal_receipts_manifest_final_work_kind=finalize_temario_package`) ||
-		!strings.Contains(output, `goal_receipts_manifest_entries=23`) ||
+		!strings.Contains(output, `goal_receipts_manifest_entries=24`) ||
 		!strings.Contains(output, `run_until_status=completed`) ||
 		!strings.Contains(output, `run_until_mode=run-until-finalize`) ||
 		!strings.Contains(output, `final_job_type=finalize_temario_package`) ||
@@ -3725,7 +3726,7 @@ func TestProbeOPESDerivativesRESTContractTransportCompatCompletoV0(t *testing.T)
 	output := stdout.String()
 	if !strings.Contains(output, `contract_probe_status=ok`) ||
 		!strings.Contains(output, `transport_compat=true`) ||
-		!strings.Contains(output, `accepted_count=23`) ||
+		!strings.Contains(output, `accepted_count=24`) ||
 		!strings.Contains(output, `rejected_count=0`) ||
 		!strings.Contains(output, `review_textual`) ||
 		!strings.Contains(output, `generate_help_manual_assets`) ||
@@ -3746,7 +3747,7 @@ func TestProbeOPESDerivativesRESTContractTransportCompatCompletoV0(t *testing.T)
 	}
 	summary := string(summaryRaw)
 	if !strings.Contains(summary, `"status": "ok"`) ||
-		!strings.Contains(summary, `"accepted_count": 23`) ||
+		!strings.Contains(summary, `"accepted_count": 24`) ||
 		!strings.Contains(summary, `"rejected_count": 0`) ||
 		!strings.Contains(summary, `"transport_compat": true`) {
 		t.Fatalf("summary=%s", summary)

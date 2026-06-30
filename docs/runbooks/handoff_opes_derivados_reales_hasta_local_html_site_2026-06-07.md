@@ -24,8 +24,10 @@ Cerrado:
   `finalize_temario_package`.
 - Contratos de artefactos para investigacion, contenido, visuales, test,
   revisiones, ensamblado, audio, tutor, HTML, manuales y paquete.
-- Smoke real temporal goal-first hasta `completed_syllabus_package`, con
-  `24/24` jobs OPES completados y receipts de dominio conservados.
+- Smoke real temporal goal-first historico hasta `completed_syllabus_package`,
+  con `24/24` jobs OPES completados en la secuencia vigente entonces. La cadena
+  actual anade `visual_asset_reuse`, cubierta offline, y eleva el recorrido
+  completo a 25 jobs contando `plan_temario`.
 
 Pendiente residual:
 
@@ -61,6 +63,7 @@ assemble_topic
 generate_audio_asset
 generate_tutor_assets
 generate_learning_games
+visual_asset_reuse
 generate_html_site
 generate_help_manual_assets
 finalize_temario_package
@@ -252,7 +255,7 @@ Si solo se quiere parar al HTML local para revision humana, sobrescribir la
 secuencia:
 
 ```bash
-ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=update_topic_registry,research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,generate_html_site
+ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=update_topic_registry,research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,visual_asset_reuse,generate_html_site
 ```
 
 ## Evidencia exigida
@@ -282,6 +285,8 @@ El smoke real queda cerrado cuando OPES temporal demuestra:
 - `generate_audio_asset` entrega `audio_asset` segmentado por apartado;
 - `generate_tutor_assets` entrega `tutor_bot_package`;
 - `generate_learning_games` entrega `learning_games_package`;
+- `visual_asset_reuse` entrega `visual_reuse_manifest` con refs opacas,
+  placement/anclas y justificacion si no aplican visuales reutilizables;
 - `generate_html_site` entrega `local_html_site` revisable con formato USO/TCAE;
 - si se llega al final completo, `finalize_temario_package` entrega
   `completed_syllabus_package`.

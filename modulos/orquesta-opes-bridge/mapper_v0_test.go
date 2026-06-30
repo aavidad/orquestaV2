@@ -460,6 +460,7 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 		{workKind: "generate_topic_audio", artifactType: "audio_asset", context: "large"},
 		{workKind: "generate_tutor_assets", artifactType: "tutor_bot_package", context: "large"},
 		{workKind: "generate_learning_games", artifactType: "learning_games_package", context: "large"},
+		{workKind: "visual_asset_reuse", artifactType: "visual_reuse_manifest", context: "large"},
 		{workKind: "generate_html_site", artifactType: "local_html_site", context: "large"},
 		{workKind: "generate_help_manual_assets", artifactType: "help_manual_package", context: "large"},
 		{workKind: "finalize_topic_package", artifactType: "final_domain_package", context: "large"},
@@ -592,6 +593,7 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
 				if !strings.Contains(criteriaText, "temario terminado al 100%") ||
 					!strings.Contains(criteriaText, "convertir pendientes causales") ||
+					!strings.Contains(criteriaText, "visual_reuse_manifest") ||
 					!strings.Contains(criteriaText, "RAG/corpus") ||
 					!strings.Contains(criteriaText, "reconstruir el RAG al final") ||
 					!strings.Contains(criteriaText, "rechazar verdes falsos de RAG") ||
@@ -600,6 +602,15 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 					!strings.Contains(criteriaText, "no exigir audio para index.html") ||
 					!strings.Contains(criteriaText, "triple visto bueno") ||
 					!strings.Contains(criteriaText, "listo_para_revision_operador") {
+					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
+				}
+			}
+			if tc.workKind == "visual_asset_reuse" {
+				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
+				if !strings.Contains(criteriaText, "visual_reuse_manifest") ||
+					!strings.Contains(criteriaText, "common_visual_asset_refs") ||
+					!strings.Contains(criteriaText, "placement_refs") ||
+					!strings.Contains(criteriaText, "visual_zero_justification_ref") {
 					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
 				}
 			}

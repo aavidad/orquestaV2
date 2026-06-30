@@ -71,6 +71,7 @@ assemble_topic
 generate_audio_asset
 generate_tutor_assets
 generate_learning_games
+visual_asset_reuse
 generate_html_site
 generate_help_manual_assets
 finalize_temario_package
@@ -147,6 +148,14 @@ fuera del paquete. El comando canonico vive en OPES:
 `/home/alberto/Trabajo/OPES/opes-salidas/coordinacion_temarios/tools/compress_course_images.py`.
 Esto es normalizacion de artefactos, no una razon para descartar trabajos
 recuperables.
+
+`visual_asset_reuse`: inventaria visuales comunes/reutilizables compatibles,
+copia o registra los validos, conserva rechazados con motivo y devuelve
+`visual_reuse_manifest` con contadores, refs opacas y `placement_ref`/anclas
+para el HTML. Si no aplican visuales reutilizables, debe aportar
+`visual_requirement_status=not_applicable` o `visual_zero_justification_ref`.
+No se puede marcar HTML `ready`/`html_validado` con `visual_count=0` si quedan
+visuales comunes pendientes de importar, copiar o insertar.
 
 El flujo debe distinguir `brief_visual`, `maqueta_visual` y
 `arte_final_visual`. Un SVG rapido, una figura humana pobre, cajas con texto o
@@ -319,7 +328,9 @@ capa protegida de la web TCAE/afiliados: marca de agua diagonal USO visible
 `#uso-material-watermark`, fondo de agua coherente, sin tapar contenido ni
 infografias. Antes de empaquetar, ejecutar la compresion de imagenes del curso y
 verificar que `html_final/img` no contiene PNG/JPEG brutos enormes ni carpetas de
-revision internas. Debe funcionar en local antes de produccion.
+revision internas. Debe consumir `visual_reuse_manifest` cuando exista y ubicar
+cada asset visual reutilizado junto a su ancla. Debe funcionar en local antes de
+produccion.
 
 `generate_help_manual_assets`: crea los manuales graficos de ayuda para USO
 cuando ya existe HTML local revisable. La guia operativa es

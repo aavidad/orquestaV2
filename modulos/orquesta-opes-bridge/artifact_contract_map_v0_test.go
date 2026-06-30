@@ -34,6 +34,7 @@ func TestOPESBridgeArtifactContractMapConsumeOwnerNeutralV0(t *testing.T) {
 		"validate_topic",
 		"expand_topic_from_summary",
 		"assemble_topic",
+		"visual_asset_reuse",
 		"generate_html_site",
 		"generate_audio_asset",
 		"generate_topic_audio",
@@ -90,6 +91,8 @@ func expectedOPESArtifactForBridgeMapTestV0(workKind string) string {
 		return opesArtifactTypeLearningGamesPackageV0
 	case "generate_help_manual_assets":
 		return opesArtifactTypeHelpManualPackageV0
+	case "visual_asset_reuse":
+		return opesArtifactTypeVisualReuseManifestV0
 	case "review_director_consolidation":
 		return orquestadomainwork.DomainWorkArtifactTypeDirectorReviewMatrixV0
 	case "finalize_temario_package":
@@ -109,7 +112,8 @@ func expectedOPESArtifactContractForBridgeMapTestV0(
 		contract.Canonicality = orquestadomainwork.DomainWorkArtifactCanonicalityCanonicalV0
 		contract.Stage = orquestadomainwork.DomainWorkArtifactStageFinalV0
 		contract.MaterializationTarget = orquestadomainwork.DomainWorkArtifactMaterializationTargetDomainV0
-	case opesArtifactTypeLearningGamesPackageV0, opesArtifactTypeHelpManualPackageV0:
+	case opesArtifactTypeLearningGamesPackageV0, opesArtifactTypeHelpManualPackageV0,
+		opesArtifactTypeVisualReuseManifestV0:
 		contract.SourceKind = orquestadomainwork.DomainWorkArtifactSourceKindDerivedRegenerableV0
 		contract.Canonicality = orquestadomainwork.DomainWorkArtifactCanonicalityDerivedRegenerableV0
 		contract.Stage = orquestadomainwork.DomainWorkArtifactStageDerivedV0

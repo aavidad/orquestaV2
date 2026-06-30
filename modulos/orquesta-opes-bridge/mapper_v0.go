@@ -133,7 +133,8 @@ func appendArtifactContractFieldsV0(
 		contract.Canonicality = orquestadomainwork.DomainWorkArtifactCanonicalityCanonicalV0
 		contract.Stage = orquestadomainwork.DomainWorkArtifactStageFinalV0
 		contract.MaterializationTarget = orquestadomainwork.DomainWorkArtifactMaterializationTargetDomainV0
-	case opesArtifactTypeLearningGamesPackageV0, opesArtifactTypeHelpManualPackageV0:
+	case opesArtifactTypeLearningGamesPackageV0, opesArtifactTypeHelpManualPackageV0,
+		opesArtifactTypeVisualReuseManifestV0:
 		contract.SourceKind = orquestadomainwork.DomainWorkArtifactSourceKindDerivedRegenerableV0
 		contract.Canonicality = orquestadomainwork.DomainWorkArtifactCanonicalityDerivedRegenerableV0
 		contract.Stage = orquestadomainwork.DomainWorkArtifactStageDerivedV0

@@ -37,6 +37,7 @@ func TestOPESDrainArtifactContractMapConsumeOwnerNeutralV0(t *testing.T) {
 		"generate_audio_asset",
 		"generate_tutor_assets",
 		"generate_learning_games",
+		"visual_asset_reuse",
 		"generate_html_site",
 		"generate_help_manual_assets",
 		"finalize_topic_package",
@@ -76,6 +77,8 @@ func expectedOPESArtifactForServerMapTestV0(workKind string) string {
 		return "learning_games_package"
 	case "generate_help_manual_assets":
 		return "help_manual_package"
+	case "visual_asset_reuse":
+		return "visual_reuse_manifest"
 	case "review_director_consolidation":
 		return orquestadomainwork.DomainWorkArtifactTypeDirectorReviewMatrixV0
 	case "finalize_temario_package":

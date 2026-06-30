@@ -169,6 +169,11 @@ Reglas:
   `expected_artifact_type=agent_candidate_selection_matrix`. El Director elige
   ganador, fusiona partes aprovechables o pide rework acotado; los candidatos no
   ganadores se conservan como borrador/evidencia;
+- para `visual_asset_reuse`, el bridge exige
+  `expected_artifact_type=visual_reuse_manifest`. Debe inventariar assets
+  visuales comunes/reutilizables, copiar o registrar los validos, conservar los
+  rechazados con motivo, declarar `placement_ref`/anclas para el HTML y aportar
+  justificacion explicita cuando no apliquen visuales reutilizables;
 - para `review_director_consolidation`, el bridge exige
   `expected_artifact_type=director_review_matrix` y debe consolidar revisiones
   independientes y por pares, aceptar artefactos, pedir rework localizado,
@@ -187,6 +192,13 @@ Reglas:
   HTML, RAG, audio, tests, visual y QA final. Si falta una evidencia, el estado
   debe ser `pendiente_continuar` con `followup_refs` causales, no
   `listo_para_revision_operador`;
+- el cierre final tambien declara `opes-visual-reuse-manifest-*`: si hay
+  comunes o assets visuales reutilizables, debe existir `visual_reuse_manifest`
+  con contadores de reutilizados/copied/inserted, refs opacas y placement; si
+  `visual_count=0`, exige `visual_requirement_status=not_applicable` o
+  `visual_zero_justification_ref`. El cierre goal-first bloquea HTML/final
+  `ready`/`html_validado` con `domain_work_opes_visual_reuse_missing` cuando
+  declara visuales pendientes sin importarlos;
 - la asignacion a Codex, Gemini o Claude no pertenece a OPES ni al bridge. La
   composicion Orquesta puede enrutar `review_gemini` y
   `review_pair_codex_gemini` al adaptador Gemini CLI opt-in, y

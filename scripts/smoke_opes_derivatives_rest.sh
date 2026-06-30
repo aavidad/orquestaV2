@@ -5,7 +5,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=scripts/lib/smoke_common.sh
 source "$repo_root/scripts/lib/smoke_common.sh"
 
-DEFAULT_SEQUENCE="update_topic_registry,research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,generate_html_site,generate_help_manual_assets,finalize_temario_package"
+DEFAULT_SEQUENCE="update_topic_registry,research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,visual_asset_reuse,generate_html_site,generate_help_manual_assets,finalize_temario_package"
 MODE="${ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE:-dry-run-once}"
 PREFLIGHT_TARGET_MODE="${ORQUESTA_OPES_DERIVATIVES_PREFLIGHT_TARGET_MODE:-run-until-finalize}"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
@@ -227,6 +227,14 @@ payload_by_type = {
         "question_bank_artifact_id": "artifact-question-bank-fake-001",
         "tutor_package_artifact_id": "artifact-tutor-fake-001",
     },
+    "visual_asset_reuse": {
+        "program_id": "program-ref-fake-operario-001",
+        "topic_id": "topic-ref-fake-operario-001",
+        "assembled_topic_artifact_id": "artifact-assembled-topic-fake-001",
+        "common_visual_count": 1,
+        "common_visual_asset_refs": ["visual-ref-common-fake-001"],
+        "visual_assets_import_status": "pending",
+    },
     "generate_html_site": {
         "program_id": "program-ref-fake-operario-001",
         "topic_id": "topic-ref-fake-operario-001",
@@ -234,6 +242,7 @@ payload_by_type = {
         "audio_manifest_artifact_id": "artifact-audio-fake-001",
         "tutor_package_artifact_id": "artifact-tutor-fake-001",
         "learning_games_package_artifact_id": "artifact-learning-games-fake-001",
+        "visual_reuse_manifest_ref": "visual-reuse-manifest-ref-fake-001",
     },
     "generate_help_manual_assets": {
         "program_id": "program-ref-fake-operario-001",

@@ -88,6 +88,7 @@ def expected_artifact_type(job_type):
         "generate_audio_asset": "audio_asset",
         "generate_tutor_assets": "tutor_bot_package",
         "generate_learning_games": "learning_games_package",
+        "visual_asset_reuse": "visual_reuse_manifest",
         "generate_html_site": "local_html_site",
         "generate_help_manual_assets": "help_manual_package",
         "finalize_temario_package": "completed_syllabus_package",
@@ -176,12 +177,18 @@ def input_for(index, job_type):
     if job_type == "generate_visual_asset":
         payload["visual_ref"] = "visual-ref-contract-probe"
         payload["asset_type"] = "diagram"
+    if job_type == "visual_asset_reuse":
+        payload["common_visual_count"] = 1
+        payload["common_visual_asset_refs"] = ["visual-ref-common-contract-probe"]
+        payload["visual_assets_import_status"] = "pending"
+        payload["assembled_topic_artifact_id"] = "artifact-ref-contract-probe-assembled-topic"
     if job_type == "generate_question_bank":
         payload["minimum_questions"] = 50
     if job_type == "assemble_topic":
         payload["document_plan_artifact_id"] = "artifact-ref-contract-probe-document-plan"
     if job_type == "generate_html_site":
         payload["assembled_topic_artifact_id"] = "artifact-ref-contract-probe-assembled-topic"
+        payload["visual_reuse_manifest_ref"] = "visual-reuse-manifest-ref-contract-probe"
     if transport_compat:
         transport_type = transport_job_type(job_type)
         if transport_type != job_type:

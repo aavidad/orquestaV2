@@ -21,12 +21,12 @@ import (
 func TestCodexStackV0ExternalWorkGoalFirstCierraSecuenciaOPESDerivadosConReceiptsLedgerV0(t *testing.T) {
 	stack, observer, launcher, domainWork := buildExternalWorkGoalFirstDomainDeliveryStackWithExecutorForTestV0(t)
 	sequence := orquestaopesbridge.OPESFullTemarioJobTypeSequenceV0()
-	if len(sequence) != 24 || sequence[0] != "plan_temario" {
+	if len(sequence) != 25 || sequence[0] != "plan_temario" {
 		t.Fatalf("secuencia OPES inesperada=%+v", sequence)
 	}
 
 	derivatives := sequence[1:]
-	if len(derivatives) != 23 || derivatives[len(derivatives)-1] != "finalize_temario_package" {
+	if len(derivatives) != 24 || derivatives[len(derivatives)-1] != "finalize_temario_package" {
 		t.Fatalf("derivados OPES inesperados=%+v", derivatives)
 	}
 

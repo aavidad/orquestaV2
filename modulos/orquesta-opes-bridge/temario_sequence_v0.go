@@ -23,6 +23,7 @@ func OPESFullTemarioJobTypeSequenceV0() []string {
 		"generate_audio_asset",
 		"generate_tutor_assets",
 		"generate_learning_games",
+		"visual_asset_reuse",
 		"generate_html_site",
 		"generate_help_manual_assets",
 		"finalize_temario_package",
