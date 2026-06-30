@@ -75,6 +75,49 @@ func TestWebNuevaAppIntakeGuidedActionV0AplicaDudasSinCambiarContratoFinal(t *te
 	}
 }
 
+func TestWebNuevaAppIntakeGuidedActionV0CubreOpcionesExpertasV0(t *testing.T) {
+	architectures := map[string]string{
+		"architecture_clean":         "clean_architecture",
+		"architecture_layered":       "layered",
+		"architecture_microservices": "microservices",
+		"architecture_serverless":    "serverless",
+		"architecture_plugin":        "plugin_based",
+		"architecture_data_pipeline": "data_pipeline",
+	}
+	for action, want := range architectures {
+		session := NewWebNuevaAppIntakeSessionV0("session-guided-architecture-"+action, "es", "Portal", "Publicar viviendas")
+		session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "tipo_app", Value: "web"})
+		session = ApplyWebNuevaAppIntakeGuidedActionV0(session, action)
+		if session.Form.PreferenciasTecnicas.Arquitectura != want {
+			t.Fatalf("action=%s arquitectura=%+v want %s", action, session.Form.PreferenciasTecnicas, want)
+		}
+		req := session.Form.ToAppSpecRequestV0()
+		if issues := orquestafactory.ValidateAppSpecRequestV0(req); len(issues) != 0 {
+			t.Fatalf("action=%s request invalida: %+v", action, issues)
+		}
+	}
+
+	session := NewWebNuevaAppIntakeSessionV0("session-guided-quality-expert", "es", "Servicio", "Procesar datos internos")
+	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "tipo_app", Value: "api"})
+	session = ApplyWebNuevaAppIntakeGuidedActionV0(session, "quality_regulated")
+	if session.Form.Calidad.Pruebas != "alta" ||
+		session.Form.Calidad.Observabilidad == nil ||
+		!*session.Form.Calidad.Observabilidad ||
+		!session.Form.Datos.Operacion.Auditoria ||
+		!stringSliceHasV0(session.Form.Calidad.Compliance, "proteccion_datos") {
+		t.Fatalf("quality_regulated=%+v datos=%+v", session.Form.Calidad, session.Form.Datos)
+	}
+	session = ApplyWebNuevaAppIntakeGuidedActionV0(session, "accessibility_none")
+	if session.Form.Calidad.Accesibilidad != "no_aplica" ||
+		!stringSliceHasV0(session.Form.Calidad.AccesibilidadOpciones, "no_aplica") {
+		t.Fatalf("accessibility_none=%+v", session.Form.Calidad)
+	}
+	req := session.Form.ToAppSpecRequestV0()
+	if issues := orquestafactory.ValidateAppSpecRequestV0(req); len(issues) != 0 {
+		t.Fatalf("request de calidad experta invalida: %+v", issues)
+	}
+}
+
 func TestWebNuevaAppIntakeDecisionV0ConservaPreferenciasTecnicasEnHandoff(t *testing.T) {
 	session := NewWebNuevaAppIntakeSessionV0("session-guided-tech", "es", "Portal", "Publicar viviendas")
 	decisions := []WebNuevaAppIntakeDecisionV0{
@@ -129,6 +172,23 @@ func TestApplyWebNuevaAppIntakeGuidedAnswerV0NormalizaTipoAppLibreV0(t *testing.
 	req := session.Form.ToAppSpecRequestV0()
 	if issues := orquestafactory.ValidateAppSpecRequestV0(req); len(issues) != 0 {
 		t.Fatalf("request debe ser valida tras alias recuperable: %+v", issues)
+	}
+}
+
+func TestApplyWebNuevaAppIntakeGuidedAnswerV0NormalizaArquitecturasExpertasV0(t *testing.T) {
+	cases := map[string]string{
+		"microservicios con despliegues independientes": "microservices",
+		"serverless por eventos":                        "serverless",
+		"plugins instalables":                           "plugin_based",
+		"pipeline de ingesta ETL":                       "data_pipeline",
+		"arquitectura onion":                            "onion",
+	}
+	for answer, want := range cases {
+		session := NewWebNuevaAppIntakeSessionV0("session-guided-free-architecture", "es", "Portal", "Publicar viviendas")
+		session = ApplyWebNuevaAppIntakeGuidedAnswerV0(session, "preferencias_tecnicas", answer)
+		if session.Form.PreferenciasTecnicas.Arquitectura != want {
+			t.Fatalf("answer=%q arquitectura=%q want %q", answer, session.Form.PreferenciasTecnicas.Arquitectura, want)
+		}
 	}
 }
 

@@ -128,12 +128,22 @@ func guidedAnswerDecisionV0(field string, answer string) WebNuevaAppIntakeDecisi
 func normalizeGuidedArchitectureAnswerV0(answer string) string {
 	normalized := normalizeGuidedNeedV0(answer)
 	switch {
+	case guidedContainsAnyV0(normalized, "microservicio", "microservicios", "microservice"):
+		return "microservices"
+	case guidedContainsAnyV0(normalized, "serverless", "lambda"):
+		return "serverless"
+	case guidedContainsAnyV0(normalized, "plugin", "plugins", "extension", "extensiones"):
+		return "plugin_based"
+	case guidedContainsAnyV0(normalized, "pipeline", "ingesta", "etl", "analitica", "analítica"):
+		return "data_pipeline"
 	case guidedContainsAnyV0(normalized, "evento", "event", "cola", "asincrono", "asíncrono"):
 		return "event_driven"
 	case guidedContainsAnyV0(normalized, "modular", "monolito"):
 		return "modular_monolith"
 	case guidedContainsAnyV0(normalized, "clean"):
 		return "clean_architecture"
+	case guidedContainsAnyV0(normalized, "onion", "cebolla"):
+		return "onion"
 	case guidedContainsAnyV0(normalized, "capas", "layer"):
 		return "layered"
 	default:
@@ -389,6 +399,16 @@ func guidedFollowupActionsV0() []WebNuevaAppIntakeGuidedActionV0 {
 			Decides:  []WebNuevaAppIntakeDecisionV0{{Field: "preferencias_tecnicas.arquitectura", Value: "hexagonal"}},
 		},
 		{
+			ID:       "architecture_clean",
+			LabelKey: "nueva_app.wizard.guided_architecture_clean",
+			Decides:  []WebNuevaAppIntakeDecisionV0{{Field: "preferencias_tecnicas.arquitectura", Value: "clean_architecture"}},
+		},
+		{
+			ID:       "architecture_layered",
+			LabelKey: "nueva_app.wizard.guided_architecture_layered",
+			Decides:  []WebNuevaAppIntakeDecisionV0{{Field: "preferencias_tecnicas.arquitectura", Value: "layered"}},
+		},
+		{
 			ID:       "architecture_event",
 			LabelKey: "nueva_app.wizard.guided_architecture_event",
 			Decides:  []WebNuevaAppIntakeDecisionV0{{Field: "preferencias_tecnicas.arquitectura", Value: "event_driven"}},
@@ -399,12 +419,68 @@ func guidedFollowupActionsV0() []WebNuevaAppIntakeGuidedActionV0 {
 			Decides:  []WebNuevaAppIntakeDecisionV0{{Field: "preferencias_tecnicas.arquitectura", Value: "modular_monolith"}},
 		},
 		{
+			ID:       "architecture_microservices",
+			LabelKey: "nueva_app.wizard.guided_architecture_microservices",
+			Decides:  []WebNuevaAppIntakeDecisionV0{{Field: "preferencias_tecnicas.arquitectura", Value: "microservices"}},
+		},
+		{
+			ID:       "architecture_serverless",
+			LabelKey: "nueva_app.wizard.guided_architecture_serverless",
+			Decides:  []WebNuevaAppIntakeDecisionV0{{Field: "preferencias_tecnicas.arquitectura", Value: "serverless"}},
+		},
+		{
+			ID:       "architecture_plugin",
+			LabelKey: "nueva_app.wizard.guided_architecture_plugin",
+			Decides:  []WebNuevaAppIntakeDecisionV0{{Field: "preferencias_tecnicas.arquitectura", Value: "plugin_based"}},
+		},
+		{
+			ID:       "architecture_data_pipeline",
+			LabelKey: "nueva_app.wizard.guided_architecture_data_pipeline",
+			Decides:  []WebNuevaAppIntakeDecisionV0{{Field: "preferencias_tecnicas.arquitectura", Value: "data_pipeline"}},
+		},
+		{
 			ID:       "quality_public",
 			LabelKey: "nueva_app.wizard.guided_quality_public",
 			Decides: []WebNuevaAppIntakeDecisionV0{
 				{Field: "calidad.pruebas", Value: "alta"},
 				{Field: "calidad.accesibilidad", Value: "wcag_aa"},
 				{Field: "calidad.accesibilidad_opciones", Values: []string{"normal", "wcag_aa"}},
+			},
+		},
+		{
+			ID:       "quality_internal",
+			LabelKey: "nueva_app.wizard.guided_quality_internal",
+			Decides: []WebNuevaAppIntakeDecisionV0{
+				{Field: "calidad.pruebas", Value: "alta"},
+				{Field: "calidad.accesibilidad", Value: "normal"},
+				{Field: "calidad.accesibilidad_opciones", Values: []string{"normal"}},
+				{Field: "calidad.observabilidad", Value: "true"},
+			},
+		},
+		{
+			ID:       "quality_regulated",
+			LabelKey: "nueva_app.wizard.guided_quality_regulated",
+			Decides: []WebNuevaAppIntakeDecisionV0{
+				{Field: "calidad.pruebas", Value: "alta"},
+				{Field: "calidad.compliance", Values: []string{"auditoria", "trazabilidad", "proteccion_datos"}},
+				{Field: "calidad.observabilidad", Value: "true"},
+				{Field: "datos.operacion.auditoria", Value: "true"},
+			},
+		},
+		{
+			ID:       "quality_observable",
+			LabelKey: "nueva_app.wizard.guided_quality_observable",
+			Decides: []WebNuevaAppIntakeDecisionV0{
+				{Field: "calidad.observabilidad", Value: "true"},
+				{Field: "calidad.pruebas", Value: "alta"},
+			},
+		},
+		{
+			ID:       "accessibility_none",
+			LabelKey: "nueva_app.wizard.guided_accessibility_none",
+			Decides: []WebNuevaAppIntakeDecisionV0{
+				{Field: "calidad.accesibilidad", Value: "no_aplica"},
+				{Field: "calidad.accesibilidad_opciones", Values: []string{"no_aplica"}},
 			},
 		},
 	}

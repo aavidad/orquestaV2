@@ -152,9 +152,19 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.guided_maps_generic",
 		"nueva_app.wizard.guided_maps_osm",
 		"nueva_app.wizard.guided_architecture_default",
+		"nueva_app.wizard.guided_architecture_clean",
+		"nueva_app.wizard.guided_architecture_layered",
 		"nueva_app.wizard.guided_architecture_event",
 		"nueva_app.wizard.guided_architecture_modular",
+		"nueva_app.wizard.guided_architecture_microservices",
+		"nueva_app.wizard.guided_architecture_serverless",
+		"nueva_app.wizard.guided_architecture_plugin",
+		"nueva_app.wizard.guided_architecture_data_pipeline",
 		"nueva_app.wizard.guided_quality_public",
+		"nueva_app.wizard.guided_quality_internal",
+		"nueva_app.wizard.guided_quality_regulated",
+		"nueva_app.wizard.guided_quality_observable",
+		"nueva_app.wizard.guided_accessibility_none",
 		"nueva_app.wizard.guided_review",
 		"nueva_app.wizard.guided_msg_analyzed",
 		"nueva_app.wizard.guided_msg_mobile",
@@ -258,9 +268,19 @@ var nuevaAppHTMLHelpKeysV0 = []string{
 	"guided.maps_generic",
 	"guided.maps_osm",
 	"guided.architecture_default",
+	"guided.architecture_clean",
+	"guided.architecture_layered",
 	"guided.architecture_event",
 	"guided.architecture_modular",
+	"guided.architecture_microservices",
+	"guided.architecture_serverless",
+	"guided.architecture_plugin",
+	"guided.architecture_data_pipeline",
 	"guided.quality_public",
+	"guided.quality_internal",
+	"guided.quality_regulated",
+	"guided.quality_observable",
+	"guided.accessibility_none",
 	"preset.webapp",
 	"preset.api",
 	"preset.ops",
@@ -863,9 +883,19 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
                 <button type="button" data-guided-action="maps_generic" data-help="{{index .Help "guided.maps_generic"}}">{{index .HTML "nueva_app.wizard.guided_maps_generic"}}</button>
                 <button type="button" data-guided-action="maps_osm" data-help="{{index .Help "guided.maps_osm"}}">{{index .HTML "nueva_app.wizard.guided_maps_osm"}}</button>
                 <button type="button" data-guided-action="architecture_default" data-help="{{index .Help "guided.architecture_default"}}">{{index .HTML "nueva_app.wizard.guided_architecture_default"}}</button>
+                <button type="button" data-guided-action="architecture_clean" data-help="{{index .Help "guided.architecture_clean"}}">{{index .HTML "nueva_app.wizard.guided_architecture_clean"}}</button>
+                <button type="button" data-guided-action="architecture_layered" data-help="{{index .Help "guided.architecture_layered"}}">{{index .HTML "nueva_app.wizard.guided_architecture_layered"}}</button>
                 <button type="button" data-guided-action="architecture_event" data-help="{{index .Help "guided.architecture_event"}}">{{index .HTML "nueva_app.wizard.guided_architecture_event"}}</button>
                 <button type="button" data-guided-action="architecture_modular" data-help="{{index .Help "guided.architecture_modular"}}">{{index .HTML "nueva_app.wizard.guided_architecture_modular"}}</button>
+                <button type="button" data-guided-action="architecture_microservices" data-help="{{index .Help "guided.architecture_microservices"}}">{{index .HTML "nueva_app.wizard.guided_architecture_microservices"}}</button>
+                <button type="button" data-guided-action="architecture_serverless" data-help="{{index .Help "guided.architecture_serverless"}}">{{index .HTML "nueva_app.wizard.guided_architecture_serverless"}}</button>
+                <button type="button" data-guided-action="architecture_plugin" data-help="{{index .Help "guided.architecture_plugin"}}">{{index .HTML "nueva_app.wizard.guided_architecture_plugin"}}</button>
+                <button type="button" data-guided-action="architecture_data_pipeline" data-help="{{index .Help "guided.architecture_data_pipeline"}}">{{index .HTML "nueva_app.wizard.guided_architecture_data_pipeline"}}</button>
                 <button type="button" data-guided-action="quality_public" data-help="{{index .Help "guided.quality_public"}}">{{index .HTML "nueva_app.wizard.guided_quality_public"}}</button>
+                <button type="button" data-guided-action="quality_internal" data-help="{{index .Help "guided.quality_internal"}}">{{index .HTML "nueva_app.wizard.guided_quality_internal"}}</button>
+                <button type="button" data-guided-action="quality_regulated" data-help="{{index .Help "guided.quality_regulated"}}">{{index .HTML "nueva_app.wizard.guided_quality_regulated"}}</button>
+                <button type="button" data-guided-action="quality_observable" data-help="{{index .Help "guided.quality_observable"}}">{{index .HTML "nueva_app.wizard.guided_quality_observable"}}</button>
+                <button type="button" data-guided-action="accessibility_none" data-help="{{index .Help "guided.accessibility_none"}}">{{index .HTML "nueva_app.wizard.guided_accessibility_none"}}</button>
               </div>
             </div>
           </div>
@@ -1712,7 +1742,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     async function guidedAction(action){
       if(action==='analyze'){applyGuidedNeed();return;}
       if(action==='review'){guidedLog(wizard.dataset.guidedMsgReview);show(5,true);return;}
-      const actionMessages={mobile_both:wizard.dataset.guidedMsgMobile,mobile_ios:wizard.dataset.guidedMsgMobile,mobile_android:wizard.dataset.guidedMsgMobile,data_external:wizard.dataset.guidedMsgData,data_management:wizard.dataset.guidedMsgData,maps_generic:wizard.dataset.guidedMsgMaps,maps_osm:wizard.dataset.guidedMsgMaps,architecture_default:wizard.dataset.guidedMsgArchitecture,architecture_event:wizard.dataset.guidedMsgArchitecture,architecture_modular:wizard.dataset.guidedMsgArchitecture,quality_public:wizard.dataset.guidedMsgQuality};
+      const actionMessages={mobile_both:wizard.dataset.guidedMsgMobile,mobile_ios:wizard.dataset.guidedMsgMobile,mobile_android:wizard.dataset.guidedMsgMobile,data_external:wizard.dataset.guidedMsgData,data_management:wizard.dataset.guidedMsgData,maps_generic:wizard.dataset.guidedMsgMaps,maps_osm:wizard.dataset.guidedMsgMaps,architecture_default:wizard.dataset.guidedMsgArchitecture,architecture_clean:wizard.dataset.guidedMsgArchitecture,architecture_layered:wizard.dataset.guidedMsgArchitecture,architecture_event:wizard.dataset.guidedMsgArchitecture,architecture_modular:wizard.dataset.guidedMsgArchitecture,architecture_microservices:wizard.dataset.guidedMsgArchitecture,architecture_serverless:wizard.dataset.guidedMsgArchitecture,architecture_plugin:wizard.dataset.guidedMsgArchitecture,architecture_data_pipeline:wizard.dataset.guidedMsgArchitecture,quality_public:wizard.dataset.guidedMsgQuality,quality_internal:wizard.dataset.guidedMsgQuality,quality_regulated:wizard.dataset.guidedMsgQuality,quality_observable:wizard.dataset.guidedMsgQuality,accessibility_none:wizard.dataset.guidedMsgQuality};
       if(await applyServerGuided({action_id:action},actionMessages[action])){return;}
       if(action==='mobile_both'){setValue('tipo_app','mobile');setChecked('mobile',true);addCSV('preferencias_tecnicas.preferencias',['plataformas moviles: iOS y Android']);guidedLog(wizard.dataset.guidedMsgMobile);}
       if(action==='mobile_ios'){setValue('tipo_app','mobile');setChecked('mobile',true);addCSV('preferencias_tecnicas.preferencias',['plataforma movil: iOS']);guidedLog(wizard.dataset.guidedMsgMobile);}
@@ -1722,9 +1752,19 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       if(action==='maps_generic'){configureMaps(false);}
       if(action==='maps_osm'){configureMaps(true);}
       if(action==='architecture_default'){setValue('preferencias_tecnicas.arquitectura','hexagonal');guidedLog(wizard.dataset.guidedMsgArchitecture);}
+      if(action==='architecture_clean'){setValue('preferencias_tecnicas.arquitectura','clean_architecture');guidedLog(wizard.dataset.guidedMsgArchitecture);}
+      if(action==='architecture_layered'){setValue('preferencias_tecnicas.arquitectura','layered');guidedLog(wizard.dataset.guidedMsgArchitecture);}
       if(action==='architecture_event'){setValue('preferencias_tecnicas.arquitectura','event_driven');guidedLog(wizard.dataset.guidedMsgArchitecture);}
       if(action==='architecture_modular'){setValue('preferencias_tecnicas.arquitectura','modular_monolith');guidedLog(wizard.dataset.guidedMsgArchitecture);}
+      if(action==='architecture_microservices'){setValue('preferencias_tecnicas.arquitectura','microservices');guidedLog(wizard.dataset.guidedMsgArchitecture);}
+      if(action==='architecture_serverless'){setValue('preferencias_tecnicas.arquitectura','serverless');guidedLog(wizard.dataset.guidedMsgArchitecture);}
+      if(action==='architecture_plugin'){setValue('preferencias_tecnicas.arquitectura','plugin_based');guidedLog(wizard.dataset.guidedMsgArchitecture);}
+      if(action==='architecture_data_pipeline'){setValue('preferencias_tecnicas.arquitectura','data_pipeline');guidedLog(wizard.dataset.guidedMsgArchitecture);}
       if(action==='quality_public'){setValue('calidad.pruebas','alta');setValue('calidad.accesibilidad','wcag_aa');setValue('calidad.accesibilidad_opciones','normal,wcag_aa');guidedLog(wizard.dataset.guidedMsgQuality);}
+      if(action==='quality_internal'){setValue('calidad.pruebas','alta');setValue('calidad.accesibilidad','normal');setValue('calidad.accesibilidad_opciones','normal');setValue('calidad.observabilidad','true');guidedLog(wizard.dataset.guidedMsgQuality);}
+      if(action==='quality_regulated'){setValue('calidad.pruebas','alta');setValue('calidad.compliance','auditoria,trazabilidad,proteccion_datos');setValue('calidad.observabilidad','true');setValue('datos.operacion.auditoria','true');guidedLog(wizard.dataset.guidedMsgQuality);}
+      if(action==='quality_observable'){setValue('calidad.observabilidad','true');setValue('calidad.pruebas','alta');guidedLog(wizard.dataset.guidedMsgQuality);}
+      if(action==='accessibility_none'){setValue('calidad.accesibilidad','no_aplica');setValue('calidad.accesibilidad_opciones','no_aplica');guidedLog(wizard.dataset.guidedMsgQuality);}
       renderSummary();
     }
     function preset(kind){
