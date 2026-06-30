@@ -2,8 +2,11 @@
 
 ## T12 smoke OPES real opt-in
 
-Estado: bloqueado verificable 2026-05-27 para ejecucion real contra OPES
-temporal.
+Estado: cerrado funcionalmente 2026-06-28 por smoke temporal goal-first contra
+OPES hasta `completed_syllabus_package`; ver
+`docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`.
+Quedan residuales de revalidacion larga, coste y automatizacion, no un bloqueo
+funcional T12.
 
 Evidencia ya cerrada:
 
@@ -22,7 +25,7 @@ Evidencia ya cerrada:
   revisiones independientes y por pares hasta `review_director_consolidation`
   y cierre `finalize_temario_package -> completed_syllabus_package`.
 
-Bloqueo real:
+Pendiente residual de revalidacion:
 
 - falta OPES temporal vivo;
 - falta servidor Orquesta temporal;
@@ -30,9 +33,9 @@ Bloqueo real:
   `ORQUESTA_OPES_TEMPORAL_CONFIRM=1` y confirmacion de efectos;
 - falta cuota/modelo confirmado para ejecucion con agente real.
 
-No relanzar otra implementacion padre para T12 sin esas precondiciones. La
-reapertura debe ejecutar el runbook con limite bajo, secuencia de derivados y
-sin `JOB_TYPE`/`JOB_REF` manual en la ruta de derivados.
+No relanzar otra implementacion padre para T12 como gap funcional. Una
+revalidacion futura debe ejecutar el runbook con limite bajo, secuencia de
+derivados y sin `JOB_TYPE`/`JOB_REF` manual en la ruta de derivados.
 
 ## T13 mínimos editoriales OPES como required tests
 

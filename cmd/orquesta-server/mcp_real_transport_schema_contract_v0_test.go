@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
-	operator "orquesta/modulos/orquesta-operator-mcp"
 )
 
 func TestMCPRealTransportV0InputSchemaSaleDeDTOCanonico(t *testing.T) {
@@ -17,13 +16,11 @@ func TestMCPRealTransportV0InputSchemaSaleDeDTOCanonico(t *testing.T) {
 
 	var tools mcpToolListResultV0
 	callMCPJSONRPCTestV0(t, server.URL+mcpRealHTTPPathV0, "tools/list", map[string]any{}, &tools)
-	for _, name := range []string{
-		orquestamcp.MCPDomainWorkToolNameV0,
-		orquestamcp.MCPAppVCSToolNameV0,
-		operator.OperatorMCPBurstToolNameV0,
-		orquestamcp.MCPOperatorFriendlyStatusToolNameV0,
-	} {
-		assertMCPRealToolSchemaFromDTOV0(t, tools, name)
+	if len(tools.Tools) == 0 {
+		t.Fatalf("tools/list no devolvio herramientas")
+	}
+	for _, tool := range tools.Tools {
+		assertMCPRealToolSchemaFromDTOV0(t, tools, tool.Name)
 	}
 }
 

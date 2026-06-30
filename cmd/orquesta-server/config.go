@@ -20,6 +20,9 @@ const (
 
 func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 	opesAutomationContext := serverOPESAutomationContextFromEnvV0()
+	if err := validateServerSelfProgrammingOnlyPathEnvBeforeMkdirV0(); err != nil {
+		return orquestaserver.ConfigV0{}, err
+	}
 	projectDir, err := projectDirFromEnvV0()
 	if err != nil {
 		return orquestaserver.ConfigV0{}, err

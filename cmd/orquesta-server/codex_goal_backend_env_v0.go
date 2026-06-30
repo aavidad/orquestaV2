@@ -151,8 +151,12 @@ func codexGoalBackendProxyDiagnosticAllowedV0() bool {
 
 func codexGoalBackendArgsV0(backend string) []string {
 	switch strings.TrimSpace(backend) {
-	default:
+	case codexGoalBackendAppServerTmuxV0:
+		return nil
+	case codexGoalBackendAppServerProxyV0:
 		return []string{"app-server", "proxy"}
+	default:
+		return nil
 	}
 }
 

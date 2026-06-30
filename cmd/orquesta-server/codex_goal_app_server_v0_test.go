@@ -1324,6 +1324,15 @@ func TestCodexGoalBackendOperationalFromEnvV0SoloTmuxV0(t *testing.T) {
 	}
 }
 
+func TestCodexGoalBackendArgsV0NoUsaProxyParaTmuxV0(t *testing.T) {
+	if args := codexGoalBackendArgsV0(codexGoalBackendAppServerTmuxV0); len(args) != 0 {
+		t.Fatalf("app_server_tmux no debe heredar args de proxy: %v", args)
+	}
+	if args := codexGoalBackendArgsV0(codexGoalBackendAppServerProxyV0); !reflect.DeepEqual(args, []string{"app-server", "proxy"}) {
+		t.Fatalf("app_server_proxy conserva args diagnosticos: %v", args)
+	}
+}
+
 func TestServerConfigFromEnvV0ProxyDiagnosticoNoDerivaGoalFirstIdleV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)

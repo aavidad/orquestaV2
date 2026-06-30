@@ -43,11 +43,54 @@ func TestSelfProgrammingOnlyConfigV0RechazaOPESBaseURLV0(t *testing.T) {
 func TestSelfProgrammingOnlyConfigV0RechazaProyectoFueraDeRootV0(t *testing.T) {
 	root := t.TempDir()
 	setSelfProgrammingOnlyBaseEnvForTestV0(t, root)
-	t.Setenv(envCodexProjectWorkDirV0, filepath.Join(t.TempDir(), "orquesta"))
+	outside := filepath.Join(t.TempDir(), "orquesta")
+	t.Setenv(envCodexProjectWorkDirV0, outside)
 
 	_, err := serverConfigFromEnvV0()
 	if err == nil || !strings.Contains(err.Error(), "self_programming_only_project_work_dir_outside_root") {
 		t.Fatalf("err=%v", err)
+	}
+	if _, statErr := os.Stat(outside); !os.IsNotExist(statErr) {
+		t.Fatalf("project_work_dir fuera de root no debe crearse: stat=%v", statErr)
+	}
+}
+
+func TestSelfProgrammingOnlyConfigV0RechazaDirsFueraDeRootSinCrearlosV0(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		key  string
+		code string
+	}{
+		{
+			name: "runtime",
+			key:  envCodexRuntimeWorkDirV0,
+			code: "self_programming_only_runtime_work_dir_outside_root",
+		},
+		{
+			name: "state",
+			key:  envServerStateDirV0,
+			code: "self_programming_only_state_dir_outside_root",
+		},
+		{
+			name: "idle",
+			key:  envServerIdleSelfImprovementProjectWorkDirV0,
+			code: "self_programming_only_idle_self_improvement_project_work_dir_outside_root",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			setSelfProgrammingOnlyBaseEnvForTestV0(t, root)
+			outside := filepath.Join(t.TempDir(), tc.name)
+			t.Setenv(tc.key, outside)
+
+			_, err := serverConfigFromEnvV0()
+			if err == nil || !strings.Contains(err.Error(), tc.code) {
+				t.Fatalf("err=%v", err)
+			}
+			if _, statErr := os.Stat(outside); !os.IsNotExist(statErr) {
+				t.Fatalf("%s fuera de root no debe crearse: stat=%v", tc.key, statErr)
+			}
+		})
 	}
 }
 

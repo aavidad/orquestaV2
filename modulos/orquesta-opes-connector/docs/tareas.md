@@ -2,8 +2,11 @@
 
 ## T12 smoke OPES real opt-in
 
-Estado: bloqueado verificable 2026-05-27 para ejecucion real contra OPES
-temporal.
+Estado: cerrado funcionalmente 2026-06-28 por smoke temporal goal-first contra
+OPES hasta `completed_syllabus_package`; ver
+`docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`.
+Quedan residuales de revalidacion larga, coste y automatizacion, no un bloqueo
+funcional T12.
 
 El conector REST ya cubre la frontera publica necesaria para T12: listar jobs,
 crear jobs y enviar artefactos con receipts validados. Los intentos cerrados
@@ -14,7 +17,7 @@ investigacion externa, `generate_question_bank -> question_bank`,
 tutor_bot_package` y `generate_html_site -> local_html_site` para cerrar el
 temario operativo local.
 
-Pendiente real:
+Pendiente residual de revalidacion:
 
 - OPES temporal vivo;
 - Orquesta temporal viva;
@@ -23,4 +26,5 @@ Pendiente real:
 - cuota/modelo confirmados para agente real.
 
 Sin esas precondiciones, no crear nueva implementacion padre ni drenar colas
-OPES. Registrar bloqueo verificable y conservar el comando del runbook.
+OPES. Registrar bloqueo externo de revalidacion y conservar el comando del
+runbook.

@@ -13,6 +13,38 @@ func serverSelfProgrammingOnlyFromEnvV0() bool {
 	return boolEnvOrDefaultV0(envServerSelfProgrammingOnlyV0, false)
 }
 
+func validateServerSelfProgrammingOnlyPathEnvBeforeMkdirV0() error {
+	if !serverSelfProgrammingOnlyFromEnvV0() {
+		return nil
+	}
+	root, err := serverSelfProgrammingRootFromEnvV0()
+	if err != nil {
+		return err
+	}
+	projectDir, err := projectDirFromEnvNoMkdirV0()
+	if err != nil {
+		return err
+	}
+	for _, scopedPath := range []struct {
+		label string
+		path  string
+	}{
+		{label: "project_work_dir", path: projectDir},
+		{label: "runtime_work_dir", path: strings.TrimSpace(os.Getenv(envCodexRuntimeWorkDirV0))},
+		{label: "state_dir", path: strings.TrimSpace(os.Getenv(envServerStateDirV0))},
+		{label: "idle_self_improvement_project_work_dir", path: strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementProjectWorkDirV0))},
+	} {
+		if strings.TrimSpace(scopedPath.path) == "" {
+			continue
+		}
+		abs, err := filepath.Abs(scopedPath.path)
+		if err != nil || !pathInsideSelfProgrammingRootV0(abs, root) {
+			return fmt.Errorf("orquesta_server: self_programming_only_%s_outside_root", scopedPath.label)
+		}
+	}
+	return nil
+}
+
 func validateServerSelfProgrammingOnlyConfigV0(config orquestaserver.ConfigV0) error {
 	if !serverSelfProgrammingOnlyFromEnvV0() {
 		return nil
@@ -69,6 +101,22 @@ func validateServerSelfProgrammingOnlyConfigV0(config orquestaserver.ConfigV0) e
 		return fmt.Errorf("orquesta_server: self_programming_only_opes_finalpkg_dry_run_required")
 	}
 	return nil
+}
+
+func projectDirFromEnvNoMkdirV0() (string, error) {
+	value := strings.TrimSpace(os.Getenv(envCodexProjectWorkDirV0))
+	if value == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("project_work_dir_unavailable")
+		}
+		value = cwd
+	}
+	abs, err := filepath.Abs(value)
+	if err != nil {
+		return "", fmt.Errorf("project_work_dir_invalid")
+	}
+	return abs, nil
 }
 
 func serverSelfProgrammingRootFromEnvV0() (string, error) {

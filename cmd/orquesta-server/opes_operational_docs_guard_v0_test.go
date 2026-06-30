@@ -31,6 +31,23 @@ func TestOPESOperationalDocsGuardV0(t *testing.T) {
 	}
 }
 
+func TestOPESLocalTaskDocsGuardV0NoReabrenT12CerradoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	for _, rel := range []string{
+		"modulos/orquesta-opes-bridge/docs/tareas.md",
+		"modulos/orquesta-opes-connector/docs/tareas.md",
+	} {
+		text := readOperationalDocGuardV0(t, root, rel)
+		if strings.Contains(text, "bloqueado verificable 2026-05-27") {
+			t.Fatalf("%s reabre T12 stale como bloqueado 2026-05-27", rel)
+		}
+		if !strings.Contains(text, "resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md") ||
+			!strings.Contains(text, "completed_syllabus_package") {
+			t.Fatalf("%s no apunta al cierre funcional OPES goal-first 2026-06-28", rel)
+		}
+	}
+}
+
 func TestGoalOperationalDocsGuardV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	for _, rel := range []string{
