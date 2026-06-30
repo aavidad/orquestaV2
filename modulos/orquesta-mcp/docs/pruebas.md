@@ -34,9 +34,11 @@ Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp -run TestMCPDomainWork
 Evidencia esperada: `orquesta.domain_work.v0` publica descriptor compacto,
 ejecuta `create_job` solo por `DomainWorkJobCreatorPortV0`, ejecuta
-`submit_artifact` solo por `DomainWorkArtifactSubmitterPortV0`, queda opt-in en
-el transporte si falta puerto, expone `POST /api/v0/domain-work` como bridge
-fino y reexporta `DomainWorkJobRecordSourcePortV0` cuando el backend lo soporta.
+`submit_artifact` solo por `DomainWorkArtifactSubmitterPortV0`, evalua
+`evaluate_external_capabilities` sin efectos de dominio con capabilities
+declaradas o source opt-in, queda opt-in en el transporte si falta puerto,
+expone `POST /api/v0/domain-work` como bridge fino y reexporta
+`DomainWorkJobRecordSourcePortV0` cuando el backend lo soporta.
 El test de arquitectura confirma que los ficheros `domain_work_*_v0.go` no
 importan OPES ni conector REST.
 Ultima ejecucion: 2026-05-13; pasa con bateria focal.

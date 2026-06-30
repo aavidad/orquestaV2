@@ -204,12 +204,14 @@ conocer OPES, REST, DB, runtime ni conectores concretos.
 Alternativas: importar el conector OPES desde MCP; registrar directamente un
 cliente REST; esperar al servidor MCP real sin contrato local.
 Impacto: el tool acepta `create_job` y `submit_artifact`, delega solo en
-`DomainWorkJobCreatorPortV0` y `DomainWorkArtifactSubmitterPortV0`, y publica
-handler MCP opt-in mas bridge HTTP local. El transporte central lo registra
-como tool opt-in y devuelve `mcp_transport_tool_unbound` si falta executor.
+`DomainWorkJobCreatorPortV0` y `DomainWorkArtifactSubmitterPortV0`, acepta
+`evaluate_external_capabilities` para evaluar requirements externos sin ejecutar
+efectos de dominio, y publica handler MCP opt-in mas bridge HTTP local. El
+transporte central lo registra como tool opt-in y devuelve
+`mcp_transport_tool_unbound` si falta executor.
 Contratos afectados: mcp.tool.orquesta.domain_work.v0;
 rest.bridge.orquesta.domain_work.v0; DomainWorkJobRequestV0;
-DomainWorkArtifactSubmissionV0.
+DomainWorkArtifactSubmissionV0; DomainWorkExternalCapabilityEvaluationV0.
 Estado: aceptada localmente
 ```
 

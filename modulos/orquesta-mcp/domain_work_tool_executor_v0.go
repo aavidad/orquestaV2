@@ -11,6 +11,7 @@ type MCPDomainWorkToolExecutorV0 struct {
 	JobCreator        orquestadomainwork.DomainWorkJobCreatorPortV0
 	ArtifactSubmitter orquestadomainwork.DomainWorkArtifactSubmitterPortV0
 	JobRecordSource   orquestadomainwork.DomainWorkJobRecordSourcePortV0
+	CapabilitySource  orquestadomainwork.DomainWorkExternalCapabilitySourcePortV0
 }
 
 func NewMCPDomainWorkToolExecutorV0(
@@ -18,10 +19,15 @@ func NewMCPDomainWorkToolExecutorV0(
 	artifactSubmitter orquestadomainwork.DomainWorkArtifactSubmitterPortV0,
 ) MCPDomainWorkToolExecutorV0 {
 	source, _ := jobCreator.(orquestadomainwork.DomainWorkJobRecordSourcePortV0)
+	capabilitySource, _ := jobCreator.(orquestadomainwork.DomainWorkExternalCapabilitySourcePortV0)
+	if capabilitySource == nil {
+		capabilitySource, _ = artifactSubmitter.(orquestadomainwork.DomainWorkExternalCapabilitySourcePortV0)
+	}
 	return MCPDomainWorkToolExecutorV0{
 		JobCreator:        jobCreator,
 		ArtifactSubmitter: artifactSubmitter,
 		JobRecordSource:   source,
+		CapabilitySource:  capabilitySource,
 	}
 }
 
@@ -47,12 +53,14 @@ func (executor MCPDomainWorkToolExecutorV0) Execute(
 		return executor.executeCreateJobV0(ctx, input)
 	case MCPDomainWorkActionSubmitArtifactV0:
 		return executor.executeSubmitArtifactV0(ctx, input)
+	case MCPDomainWorkActionEvaluateCapabilitiesV0:
+		return executor.executeEvaluateExternalCapabilitiesV0(ctx, input)
 	default:
 		return newMCPDomainWorkErrorV0(
 			input,
 			MCPDomainWorkActionUnsupportedV0,
 			"action",
-			"action debe ser create_job o submit_artifact",
+			"action debe ser create_job, submit_artifact o evaluate_external_capabilities",
 		), nil
 	}
 }
@@ -109,6 +117,31 @@ func (executor MCPDomainWorkToolExecutorV0) executeSubmitArtifactV0(
 		), nil
 	}
 	return newMCPDomainWorkReceiptResultV0(input, receipt), nil
+}
+
+func (executor MCPDomainWorkToolExecutorV0) executeEvaluateExternalCapabilitiesV0(
+	ctx context.Context,
+	input MCPDomainWorkToolInputV0,
+) (MCPDomainWorkToolResultV0, error) {
+	request := domainWorkJobRequestFromMCPV0(input)
+	capabilities := append([]orquestadomainwork.DomainWorkExternalCapabilityV0(nil), input.ExternalCapabilities...)
+	if executor.CapabilitySource != nil {
+		sourceCapabilities, err := executor.CapabilitySource.ListDomainWorkExternalCapabilitiesV0(
+			ctx,
+			orquestadomainwork.BuildDomainWorkExternalCapabilityQueryV0(request),
+		)
+		if err != nil {
+			return newMCPDomainWorkErrorV0(
+				input,
+				publicMCPDomainWorkPortErrorCodeV0(err, MCPDomainWorkPortUnavailableV0),
+				"external_capabilities",
+				"domain work external capability source no disponible",
+			), nil
+		}
+		capabilities = append(capabilities, sourceCapabilities...)
+	}
+	evaluation := orquestadomainwork.EvaluateDomainWorkExternalCapabilitiesV0(request, capabilities)
+	return newMCPDomainWorkExternalCapabilityResultV0(input, evaluation), nil
 }
 
 type mcpPublicCodeErrorV0 interface {

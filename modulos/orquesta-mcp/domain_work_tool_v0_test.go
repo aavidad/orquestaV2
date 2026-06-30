@@ -14,6 +14,7 @@ func TestMCPDomainWorkDescriptorV0EsAdaptadorFino(t *testing.T) {
 		descriptor.ResourceURI != MCPDomainWorkResourceURIV0 ||
 		!strings.Contains(descriptor.InputSchema, MCPDomainWorkActionCreateJobV0) ||
 		!strings.Contains(descriptor.InputSchema, MCPDomainWorkActionSubmitArtifactV0) ||
+		!strings.Contains(descriptor.InputSchema, MCPDomainWorkActionEvaluateCapabilitiesV0) ||
 		len(descriptor.Invariantes) == 0 {
 		t.Fatalf("descriptor=%+v", descriptor)
 	}
@@ -179,6 +180,100 @@ func TestMCPDomainWorkExecutorV0PropagaCodigoPublicoDeSubmitter(t *testing.T) {
 	}
 }
 
+func TestMCPDomainWorkExecutorV0EvaluaCapabilitiesDeclaradas(t *testing.T) {
+	executor := MCPDomainWorkToolExecutorV0{}
+
+	result, err := executor.Execute(context.Background(), MCPDomainWorkToolInputV0{
+		RequestID:     "req-domain-capabilities-001",
+		CorrelationID: "corr-domain-capabilities-001",
+		Action:        MCPDomainWorkActionEvaluateCapabilitiesV0,
+		JobRequest: orquestadomainwork.DomainWorkJobRequestV0{
+			DomainRef: "opes",
+			WorkKind:  "generate_audio_asset",
+		},
+		ExternalCapabilities: []orquestadomainwork.DomainWorkExternalCapabilityV0{{
+			CapabilityRef:         "tts-edge-ready",
+			Kind:                  "tts",
+			Available:             true,
+			NetworkReady:          true,
+			ToolPathReady:         true,
+			ProviderQuotaReady:    true,
+			CommandTimeoutSeconds: 1800,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if result.Estado != MCPDomainWorkEstadoOKV0 ||
+		result.Action != MCPDomainWorkActionEvaluateCapabilitiesV0 ||
+		result.ExternalCapabilityEvaluation == nil ||
+		!result.ExternalCapabilityEvaluation.Ready ||
+		len(result.ExternalCapabilityEvaluation.MatchedCapabilities) != 1 ||
+		result.ExternalCapabilityEvaluation.MatchedCapabilities[0].Kind != orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0 ||
+		len(result.Errores) != 0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPDomainWorkExecutorV0ExponeCapabilitiesFaltantesSinEjecutarDominio(t *testing.T) {
+	result, err := MCPDomainWorkToolExecutorV0{}.Execute(context.Background(), MCPDomainWorkToolInputV0{
+		RequestID: "req-domain-capabilities-missing-001",
+		Action:    MCPDomainWorkActionEvaluateCapabilitiesV0,
+		JobRequest: orquestadomainwork.DomainWorkJobRequestV0{
+			DomainRef: "opes",
+			WorkKind:  "review_agent_independent",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if result.Estado != MCPDomainWorkEstadoErrorV0 ||
+		result.ExternalCapabilityEvaluation == nil ||
+		result.ExternalCapabilityEvaluation.Ready ||
+		result.ExternalCapabilityEvaluation.OperationalReason != "external_capability_missing:remote_qa_provider" ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != orquestadomainwork.ErrDomainWorkExternalCapabilityMissingV0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPDomainWorkExecutorV0ConsultaCapabilitySourceOptIn(t *testing.T) {
+	source := &fakeMCPDomainWorkCapabilitySourceV0{
+		capabilities: []orquestadomainwork.DomainWorkExternalCapabilityV0{{
+			CapabilityRef:         "qa-remote-ready",
+			Kind:                  "qa_provider",
+			Available:             true,
+			NetworkReady:          true,
+			AuthStateReady:        true,
+			ProviderQuotaReady:    true,
+			CommandTimeoutSeconds: 1200,
+		}},
+	}
+	executor := MCPDomainWorkToolExecutorV0{CapabilitySource: source}
+
+	result, err := executor.Execute(context.Background(), MCPDomainWorkToolInputV0{
+		RequestID: "req-domain-capabilities-source-001",
+		Action:    MCPDomainWorkActionEvaluateCapabilitiesV0,
+		JobRequest: orquestadomainwork.DomainWorkJobRequestV0{
+			DomainRef: "opes",
+			WorkKind:  "review_agent_pair",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if source.called != 1 ||
+		source.query.WorkKind != "review_agent_pair" ||
+		result.Estado != MCPDomainWorkEstadoOKV0 ||
+		result.ExternalCapabilityEvaluation == nil ||
+		!result.ExternalCapabilityEvaluation.Ready {
+		t.Fatalf("source=%+v result=%+v", source, result)
+	}
+}
+
 func TestMCPDomainWorkExecutorV0ValidaActionYPuertos(t *testing.T) {
 	result, err := MCPDomainWorkToolExecutorV0{}.Execute(
 		context.Background(),
@@ -247,6 +342,25 @@ type fakeMCPDomainWorkSubmitterV0 struct {
 	submission orquestadomainwork.DomainWorkArtifactSubmissionV0
 	receipt    orquestadomainwork.DomainWorkArtifactReceiptV0
 	err        error
+}
+
+type fakeMCPDomainWorkCapabilitySourceV0 struct {
+	called       int
+	query        orquestadomainwork.DomainWorkExternalCapabilityQueryV0
+	capabilities []orquestadomainwork.DomainWorkExternalCapabilityV0
+	err          error
+}
+
+func (fake *fakeMCPDomainWorkCapabilitySourceV0) ListDomainWorkExternalCapabilitiesV0(
+	_ context.Context,
+	query orquestadomainwork.DomainWorkExternalCapabilityQueryV0,
+) ([]orquestadomainwork.DomainWorkExternalCapabilityV0, error) {
+	fake.called++
+	fake.query = query
+	if fake.err != nil {
+		return nil, fake.err
+	}
+	return append([]orquestadomainwork.DomainWorkExternalCapabilityV0(nil), fake.capabilities...), nil
 }
 
 func (fake *fakeMCPDomainWorkSubmitterV0) SubmitDomainWorkArtifactV0(

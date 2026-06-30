@@ -8,25 +8,26 @@ import (
 )
 
 const (
-	MCPDomainWorkToolNameV0                  = "orquesta.domain_work.v0"
-	MCPDomainWorkToolVersionV0               = "v0"
-	MCPDomainWorkResourceURIV0               = "orquesta://contracts/domain-work/v0"
-	MCPDomainWorkEstadoOKV0                  = "ok"
-	MCPDomainWorkEstadoErrorV0               = "error"
-	MCPDomainWorkActionCreateJobV0           = "create_job"
-	MCPDomainWorkActionSubmitArtifactV0      = "submit_artifact"
-	MCPDomainWorkDefaultErrorMessageV0       = "domain_work_error"
-	MCPDomainWorkCreatorUnavailableV0        = "domain_work_creator_no_disponible"
-	MCPDomainWorkSubmitterUnavailableV0      = "domain_work_submitter_no_disponible"
-	MCPDomainWorkActionUnsupportedV0         = "domain_work_action_no_soportada"
-	MCPDomainWorkPortUnavailableV0           = "domain_work_port_no_disponible"
-	MCPDomainWorkHTTPPathV0                  = "/api/v0/domain-work"
-	MCPDomainWorkHTTPErrorCodeV0             = "domain_work_http_error"
-	MCPDomainWorkHTTPNotConfiguredCodeV0     = "domain_work_no_configurado"
-	MCPDomainWorkHTTPExecutorErrorCodeV0     = "domain_work_error"
-	MCPDomainWorkHTTPInvalidBodyCodeV0       = MCPPublicErrBodyInvalidV0
-	MCPDomainWorkHTTPUnsupportedPathCodeV0   = MCPPublicErrPathUnsupportedV0
-	MCPDomainWorkHTTPUnsupportedMethodCodeV0 = MCPPublicErrMethodNotAllowedV0
+	MCPDomainWorkToolNameV0                   = "orquesta.domain_work.v0"
+	MCPDomainWorkToolVersionV0                = "v0"
+	MCPDomainWorkResourceURIV0                = "orquesta://contracts/domain-work/v0"
+	MCPDomainWorkEstadoOKV0                   = "ok"
+	MCPDomainWorkEstadoErrorV0                = "error"
+	MCPDomainWorkActionCreateJobV0            = "create_job"
+	MCPDomainWorkActionSubmitArtifactV0       = "submit_artifact"
+	MCPDomainWorkActionEvaluateCapabilitiesV0 = "evaluate_external_capabilities"
+	MCPDomainWorkDefaultErrorMessageV0        = "domain_work_error"
+	MCPDomainWorkCreatorUnavailableV0         = "domain_work_creator_no_disponible"
+	MCPDomainWorkSubmitterUnavailableV0       = "domain_work_submitter_no_disponible"
+	MCPDomainWorkActionUnsupportedV0          = "domain_work_action_no_soportada"
+	MCPDomainWorkPortUnavailableV0            = "domain_work_port_no_disponible"
+	MCPDomainWorkHTTPPathV0                   = "/api/v0/domain-work"
+	MCPDomainWorkHTTPErrorCodeV0              = "domain_work_http_error"
+	MCPDomainWorkHTTPNotConfiguredCodeV0      = "domain_work_no_configurado"
+	MCPDomainWorkHTTPExecutorErrorCodeV0      = "domain_work_error"
+	MCPDomainWorkHTTPInvalidBodyCodeV0        = MCPPublicErrBodyInvalidV0
+	MCPDomainWorkHTTPUnsupportedPathCodeV0    = MCPPublicErrPathUnsupportedV0
+	MCPDomainWorkHTTPUnsupportedMethodCodeV0  = MCPPublicErrMethodNotAllowedV0
 )
 
 type MCPDomainWorkToolDescriptorV0 struct {
@@ -39,21 +40,23 @@ type MCPDomainWorkToolDescriptorV0 struct {
 }
 
 type MCPDomainWorkToolInputV0 struct {
-	RequestID          string                                            `json:"request_id,omitempty"`
-	CorrelationID      string                                            `json:"correlation_id,omitempty"`
-	Action             string                                            `json:"action"`
-	JobRequest         orquestadomainwork.DomainWorkJobRequestV0         `json:"job_request,omitempty"`
-	ArtifactSubmission orquestadomainwork.DomainWorkArtifactSubmissionV0 `json:"artifact_submission,omitempty"`
+	RequestID            string                                              `json:"request_id,omitempty"`
+	CorrelationID        string                                              `json:"correlation_id,omitempty"`
+	Action               string                                              `json:"action"`
+	JobRequest           orquestadomainwork.DomainWorkJobRequestV0           `json:"job_request,omitempty"`
+	ArtifactSubmission   orquestadomainwork.DomainWorkArtifactSubmissionV0   `json:"artifact_submission,omitempty"`
+	ExternalCapabilities []orquestadomainwork.DomainWorkExternalCapabilityV0 `json:"external_capabilities,omitempty"`
 }
 
 type MCPDomainWorkToolResultV0 struct {
-	Estado        string                                          `json:"estado"`
-	RequestID     string                                          `json:"request_id,omitempty"`
-	CorrelationID string                                          `json:"correlation_id,omitempty"`
-	Action        string                                          `json:"action,omitempty"`
-	Job           *orquestadomainwork.DomainWorkJobV0             `json:"job,omitempty"`
-	Receipt       *orquestadomainwork.DomainWorkArtifactReceiptV0 `json:"receipt,omitempty"`
-	Errores       []MCPValidationIssueV0                          `json:"errores_publicos,omitempty"`
+	Estado                       string                                                       `json:"estado"`
+	RequestID                    string                                                       `json:"request_id,omitempty"`
+	CorrelationID                string                                                       `json:"correlation_id,omitempty"`
+	Action                       string                                                       `json:"action,omitempty"`
+	Job                          *orquestadomainwork.DomainWorkJobV0                          `json:"job,omitempty"`
+	Receipt                      *orquestadomainwork.DomainWorkArtifactReceiptV0              `json:"receipt,omitempty"`
+	ExternalCapabilityEvaluation *orquestadomainwork.DomainWorkExternalCapabilityEvaluationV0 `json:"external_capability_evaluation,omitempty"`
+	Errores                      []MCPValidationIssueV0                                       `json:"errores_publicos,omitempty"`
 }
 
 type MCPDomainWorkExecutorPortV0 interface {
@@ -64,13 +67,14 @@ func MCPDomainWorkDescriptorV0() MCPDomainWorkToolDescriptorV0 {
 	return MCPDomainWorkToolDescriptorV0{
 		Name:        MCPDomainWorkToolNameV0,
 		Version:     MCPDomainWorkToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,action:create_job|submit_artifact,job_request?:DomainWorkJobRequestV0,artifact_submission?:DomainWorkArtifactSubmissionV0}",
-		Output:      "ok:{action,job?|receipt?}|error:{errores_publicos}",
+		InputSchema: "envelope:{request_id?,correlation_id?,action:create_job|submit_artifact|evaluate_external_capabilities,job_request?:DomainWorkJobRequestV0,artifact_submission?:DomainWorkArtifactSubmissionV0,external_capabilities?:DomainWorkExternalCapabilityV0[]}",
+		Output:      "ok:{action,job?|receipt?|external_capability_evaluation?}|error:{errores_publicos,external_capability_evaluation?}",
 		ResourceURI: MCPDomainWorkResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
 			"create_job delega solo en DomainWorkJobCreatorPortV0 inyectado",
 			"submit_artifact delega solo en DomainWorkArtifactSubmitterPortV0 inyectado",
+			"evaluate_external_capabilities evalua contrato neutral sin ejecutar efectos de dominio",
 			"sin OPES, conector REST, DB, runtime, filesystem ni proveedor",
 		},
 	}
@@ -135,6 +139,24 @@ func newMCPDomainWorkReceiptResultV0(
 		Action:        MCPDomainWorkActionSubmitArtifactV0,
 		Receipt:       &receipt,
 		Errores:       domainWorkIssuesMCPV0(receipt.Issues),
+	}
+}
+
+func newMCPDomainWorkExternalCapabilityResultV0(
+	input MCPDomainWorkToolInputV0,
+	evaluation orquestadomainwork.DomainWorkExternalCapabilityEvaluationV0,
+) MCPDomainWorkToolResultV0 {
+	estado := MCPDomainWorkEstadoOKV0
+	if !evaluation.Ready {
+		estado = MCPDomainWorkEstadoErrorV0
+	}
+	return MCPDomainWorkToolResultV0{
+		Estado:                       estado,
+		RequestID:                    strings.TrimSpace(input.RequestID),
+		CorrelationID:                firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
+		Action:                       MCPDomainWorkActionEvaluateCapabilitiesV0,
+		ExternalCapabilityEvaluation: &evaluation,
+		Errores:                      domainWorkIssuesMCPV0(evaluation.Issues),
 	}
 }
 

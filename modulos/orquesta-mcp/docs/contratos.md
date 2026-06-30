@@ -169,23 +169,30 @@ Campos:
     resource_uri: orquesta://contracts/domain-work/v0
   input:
     request_id, correlation_id: refs externas opcionales
-    action: create_job | submit_artifact
+    action: create_job | submit_artifact | evaluate_external_capabilities
     job_request: DomainWorkJobRequestV0 cuando action=create_job
     artifact_submission: DomainWorkArtifactSubmissionV0 cuando
       action=submit_artifact
+    external_capabilities: DomainWorkExternalCapabilityV0[] opcional para
+      evaluar capabilities declaradas sin ejecutar efectos de dominio
   output_ok:
     estado: ok
     action
     job: DomainWorkJobV0 para create_job
     receipt: DomainWorkArtifactReceiptV0 para submit_artifact
+    external_capability_evaluation: DomainWorkExternalCapabilityEvaluationV0
+      para evaluate_external_capabilities
   output_error:
     estado: error
     errores_publicos
+    external_capability_evaluation: presente si faltan capabilities requeridas
 Invariantes:
   - Adaptador inbound fino.
   - `create_job` delega solo en `DomainWorkJobCreatorPortV0` inyectado.
   - `submit_artifact` delega solo en `DomainWorkArtifactSubmitterPortV0`
     inyectado.
+  - `evaluate_external_capabilities` no lanza trabajos, no consulta OPES por si
+    mismo y solo usa capabilities declaradas o un puerto opt-in inyectado.
   - Si el `job_creator` inyectado implementa
     `DomainWorkJobRecordSourcePortV0`, el executor MCP expone esa misma lectura
     para reconciliacion de composiciones superiores; no crea storage propio.
@@ -198,6 +205,8 @@ Pruebas de contrato:
   - Descriptor compacto del tool.
   - Executor delega `create_job` al creator.
   - Executor delega `submit_artifact` al submitter.
+  - Executor evalua capabilities declaradas o desde source opt-in sin efectos de
+    dominio.
   - Transporte queda opt-in/unbound si falta puerto.
   - `RegisterMCPTransportV0` registra el tool en el catalogo global.
   - HTTP bridge `POST /api/v0/domain-work` delega y propaga correlacion.

@@ -29,7 +29,8 @@ Estado vigente:
 - `orquesta.director.human_work.review_plan.v0` convierte ordenes humanas
   amplias en planes revisables y, si procede, en una request para prepare-run.
 - `orquesta.domain_work.v0` es el tool generico para que una IA cree trabajos de
-  dominio y entregue artefactos sin conocer OPES, DB ni runtime.
+  dominio, entregue artefactos y evalue capabilities externas requeridas sin
+  conocer OPES, DB ni runtime.
 - `/api/v0/autoprogramming/prepare-run` es el bridge HTTP local del executor de
   preparacion cuando una composicion lo inyecta.
 - `/api/v0/autoprogramming/status` y `/api/v0/autoprogramming/supervise`
