@@ -1333,6 +1333,72 @@ func TestCodexGoalBackendArgsV0NoUsaProxyParaTmuxV0(t *testing.T) {
 	}
 }
 
+func TestServerGoalShutdownHooksFromBackendsV0IncluyeAppEIdleV0(t *testing.T) {
+	appHook := &fakeServerGoalShutdownHookV0{id: "app"}
+	idleHook := &fakeServerGoalShutdownHookV0{id: "idle"}
+
+	hooks := serverGoalShutdownHooksFromBackendsV0(
+		serverCodexGoalBackendV0{ShutdownHook: appHook},
+		serverCodexGoalBackendV0{ShutdownHook: idleHook},
+	)
+
+	if len(hooks) != 2 || hooks[0] != appHook || hooks[1] != idleHook {
+		t.Fatalf("hooks=%+v", hooks)
+	}
+}
+
+func TestServerGoalShutdownHooksFromBackendsV0ConservaIdleSiAppNoTieneHookV0(t *testing.T) {
+	idleHook := &fakeServerGoalShutdownHookV0{id: "idle"}
+
+	hooks := serverGoalShutdownHooksFromBackendsV0(
+		serverCodexGoalBackendV0{},
+		serverCodexGoalBackendV0{ShutdownHook: idleHook},
+	)
+
+	if len(hooks) != 1 || hooks[0] != idleHook {
+		t.Fatalf("hooks=%+v", hooks)
+	}
+}
+
+func TestServerGoalShutdownHooksFromBackendsV0DeduplicaMismoHookV0(t *testing.T) {
+	hook := &fakeServerGoalShutdownHookV0{id: "shared"}
+
+	hooks := serverGoalShutdownHooksFromBackendsV0(
+		serverCodexGoalBackendV0{ShutdownHook: hook},
+		serverCodexGoalBackendV0{ShutdownHook: hook},
+	)
+
+	if len(hooks) != 1 || hooks[0] != hook {
+		t.Fatalf("hooks=%+v", hooks)
+	}
+}
+
+func TestServerGoalShutdownHooksFromBackendsV0DeduplicaTmuxEquivalenteV0(t *testing.T) {
+	hook := serverCodexAppServerTmuxBackendV0{
+		CommandPath: "codex",
+		SocketPath:  "/tmp/orquesta-goal.sock",
+		SessionName: "orquesta-goal-session",
+		Timeout:     time.Second,
+	}
+
+	hooks := serverGoalShutdownHooksFromBackendsV0(
+		serverCodexGoalBackendV0{ShutdownHook: hook},
+		serverCodexGoalBackendV0{ShutdownHook: hook},
+	)
+
+	if len(hooks) != 1 || hooks[0] != hook {
+		t.Fatalf("hooks=%+v", hooks)
+	}
+}
+
+type fakeServerGoalShutdownHookV0 struct {
+	id string
+}
+
+func (hook *fakeServerGoalShutdownHookV0) ShutdownV0(context.Context) error {
+	return nil
+}
+
 func TestServerConfigFromEnvV0ProxyDiagnosticoNoDerivaGoalFirstIdleV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
