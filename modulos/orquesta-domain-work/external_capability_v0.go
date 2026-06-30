@@ -375,14 +375,14 @@ func normalizeDomainWorkExternalCapabilityKindV0(value string) string {
 
 func domainWorkRequiresRemoteQAProviderV0(workKind string, artifactType string) bool {
 	switch artifactType {
-	case DomainWorkArtifactTypeAgentReviewReportV0, DomainWorkArtifactTypeAgentPairReviewReportV0,
-		DomainWorkArtifactTypeDirectorReviewMatrixV0:
+	case DomainWorkArtifactTypeAgentReviewReportV0, DomainWorkArtifactTypeAgentPairReviewReportV0:
 		return true
 	}
 	switch strings.TrimSpace(workKind) {
 	case "review_agent_independent", "review_independent_agent",
 		"review_agent_pair", "review_peer_pair", "review_pair",
-		"review_director_consolidation", "review_consensus_director", "review_director_final":
+		"review_codex", "review_gemini", "review_claude",
+		"review_pair_codex_gemini", "review_pair_codex_claude", "review_pair_gemini_claude":
 		return true
 	default:
 		return false

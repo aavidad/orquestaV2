@@ -371,6 +371,30 @@ func nuevaAppHTMLOptionLabelV0(locale, group, value string) string {
 	return nuevaAppHTMLPrettyOptionValueV0(normalizedValue)
 }
 
+func nuevaAppHTMLOptionHelpV0(locale, group, value string) string {
+	normalizedLocale := strings.ToLower(strings.TrimSpace(locale))
+	normalizedGroup := strings.TrimSpace(group)
+	normalizedValue := strings.TrimSpace(value)
+	helps := nuevaAppHTMLOptionHelpsESV0
+	if strings.HasPrefix(normalizedLocale, "en") {
+		helps = nuevaAppHTMLOptionHelpsENV0
+	}
+	if help, ok := helps[normalizedGroup+":"+normalizedValue]; ok {
+		return help
+	}
+	if normalizedValue == "" {
+		if strings.HasPrefix(normalizedLocale, "en") {
+			return "Leaves this option unset so Orquesta can choose the safest default from the contract."
+		}
+		return "Deja esta opcion sin fijar para que Orquesta elija el default mas seguro del contrato."
+	}
+	label := nuevaAppHTMLOptionLabelV0(locale, normalizedGroup, normalizedValue)
+	if strings.HasPrefix(normalizedLocale, "en") {
+		return label + ": selectable value for this field."
+	}
+	return label + ": valor seleccionable para este campo."
+}
+
 func nuevaAppHTMLPrettyOptionValueV0(value string) string {
 	value = strings.ReplaceAll(strings.TrimSpace(value), "_", " ")
 	if value == "" {
@@ -570,8 +594,121 @@ var nuevaAppHTMLOptionLabelsENV0 = map[string]string{
 	"baja":                       "Low",
 }
 
+var nuevaAppHTMLOptionHelpsESV0 = map[string]string{
+	"architecture:":                            "Sin preferencia visible. Orquesta usara hexagonal como fallback si no rompe el contrato.",
+	"architecture:hexagonal":                   "Separa dominio, casos de uso, puertos y adaptadores. Buen default para cambiar UI, DB o proveedores sin tocar reglas.",
+	"architecture:clean_architecture":          "Organiza entidades, casos de uso e interfaces con dependencias hacia el dominio. Util cuando hay reglas claras y larga vida.",
+	"architecture:onion":                       "Variante concentrica centrada en dominio. Encaja cuando quieres blindar reglas internas frente a frameworks y persistencia.",
+	"architecture:modular_monolith":            "Un despliegue unico con modulos internos fuertes. Suele ser practico antes de saltar a microservicios.",
+	"architecture:layered":                     "Capas clasicas de presentacion, aplicacion, dominio e infraestructura. Simple para CRUD y apps pequenas.",
+	"architecture:event_driven":                "Comunica cambios por eventos. Conviene con integraciones, auditoria, colas, sincronizacion o procesos asincronos.",
+	"architecture:microservices":               "Servicios separados por contexto. Solo conviene con limites claros, operacion madura y necesidad real de despliegue independiente.",
+	"architecture:serverless":                  "Funciones o servicios gestionados. Buena opcion para cargas variables, tareas puntuales o coste bajo de operacion.",
+	"architecture:plugin_based":                "Nucleo con extensiones por plugins. Util si terceros o modulos opcionales deben ampliar la app sin tocar el core.",
+	"architecture:data_pipeline":               "Flujo por etapas para ingesta, transformacion, validacion y publicacion de datos.",
+	"storage:":                                 "Sin elegir almacenamiento concreto para esta fila.",
+	"storage:sin_preferencia":                  "Deja que el contrato elija almacenamiento despues, segun datos, volumen y restricciones.",
+	"storage:sin_persistencia":                 "No crea almacenamiento durable para este bloque. Sirve para calculos, vistas o datos transitorios.",
+	"storage:relacional":                       "Tablas, relaciones y transacciones. Bueno para datos consistentes, consultas estructuradas y reglas de integridad.",
+	"storage:documental":                       "Documentos JSON o similares. Encaja con esquemas flexibles y agregados que se leen juntos.",
+	"storage:vectorial":                        "Embeddings y busqueda semantica. Util para RAG, similitud, recomendaciones o recuperacion por significado.",
+	"storage:objetos":                          "Objetos gestionados por adaptador. Util para dominios con entidades agregadas y persistencia encapsulada.",
+	"storage:objetos_blob":                     "Archivos, binarios, imagenes, audios o paquetes grandes gestionados como objetos/blob.",
+	"storage:clave_valor":                      "Lecturas rapidas por clave. Encaja con preferencias, sesiones, contadores o configuracion simple.",
+	"storage:clave_valor_cache":                "Cache volatil o semiduradera para acelerar lecturas sin ser fuente principal de verdad.",
+	"storage:series_temporales":                "Mediciones por tiempo: metricas, sensores, logs funcionales o historicos de estado.",
+	"storage:grafo":                            "Relaciones complejas entre entidades: dependencias, redes, permisos, recomendaciones o rutas.",
+	"storage:cache":                            "Capa de cache general para rendimiento; no debe guardar datos que no puedan reconstruirse.",
+	"storage:busqueda":                         "Indice de busqueda textual/facetada para filtros, ranking y consultas rapidas de usuario.",
+	"storage:eventos_auditoria":                "Registro append-only de acciones, cambios y evidencias para trazabilidad o compliance.",
+	"storage:mixta":                            "Combina varios almacenes cuando un unico modelo no cubre transacciones, busqueda, blobs o analitica.",
+	"integration:":                             "Sin integracion concreta para esta fila.",
+	"integration:api":                          "API HTTP o similar para consultar o exponer datos mediante contrato estable.",
+	"integration:webhook":                      "Recepcion o envio de eventos por callback cuando otro sistema avisa cambios.",
+	"integration:email":                        "Correo entrante o saliente: notificaciones, bandejas, adjuntos o flujos de aprobacion.",
+	"integration:calendar":                     "Calendarios, reservas, citas, disponibilidad o sincronizacion de eventos.",
+	"integration:maps":                         "Mapas, geocodificacion, rutas o proximidad. El proveedor concreto queda como adaptador.",
+	"integration:file_import":                  "Importacion de CSV, Excel, JSON, XML u otros ficheros externos.",
+	"integration:file_export":                  "Exportacion de informes, paquetes, hojas de calculo, JSON o archivos para terceros.",
+	"integration:messaging":                    "Mensajeria o chat: colas, canales, bots, SMS o plataformas colaborativas.",
+	"integration:llm":                          "Capacidad IA/LLM por adaptador opt-in para generar, resumir, clasificar o asistir.",
+	"integration:storage":                      "Repositorio externo de documentos, blobs, adjuntos o backups.",
+	"integration:payments":                     "Pagos, facturacion, suscripciones o cobros. Requiere frontera fuerte y pruebas.",
+	"integration:auth":                         "Identidad, SSO, OAuth, LDAP o permisos delegados.",
+	"integration:analytics":                    "Analitica de uso, eventos, metricas de producto o reporting.",
+	"integration:search":                       "Buscador externo o motor especializado de indices y relevancia.",
+	"integration:notifications":                "Notificaciones push, email, SMS o avisos in-app con preferencias de usuario.",
+	"integration:other":                        "Otro tipo de integracion. Describe proveedor, datos, direccion y criticidad.",
+	"accessibility:basica":                     "Accesibilidad minima razonable para uso interno o prototipo no publico.",
+	"accessibility:normal":                     "Buenas practicas habituales: etiquetas, foco visible, contraste suficiente y navegacion clara.",
+	"accessibility:wcag_aa":                    "Objetivo WCAG AA para interfaces publicas o de uso amplio; exige pruebas y criterios explicitos.",
+	"accessibility:no_aplica":                  "Usalo solo si no hay interfaz humana directa o la accesibilidad se valida fuera de esta app.",
+	"accessibility:teclado":                    "Toda accion debe poder completarse con teclado y foco visible.",
+	"accessibility:lectores_pantalla":          "Semantica, etiquetas, roles y estados compatibles con lectores de pantalla.",
+	"accessibility:contraste_alto":             "Contraste reforzado para textos, controles, estados y graficos relevantes.",
+	"accessibility:movimiento_reducido":        "Evita animaciones obligatorias y respeta preferencias de movimiento reducido.",
+	"accessibility:subtitulos_transcripciones": "Subtitulos, transcripciones o alternativa textual para audio y video.",
+}
+
+var nuevaAppHTMLOptionHelpsENV0 = map[string]string{
+	"architecture:":                            "No visible preference. Orquesta will use hexagonal as fallback when it does not break the contract.",
+	"architecture:hexagonal":                   "Separates domain, use cases, ports, and adapters. Good default when UI, DB, or providers may change.",
+	"architecture:clean_architecture":          "Organizes entities, use cases, and interfaces with dependencies pointing inward. Useful for clear long-lived rules.",
+	"architecture:onion":                       "Domain-centered concentric variant. Fits when internal rules must stay isolated from frameworks and persistence.",
+	"architecture:modular_monolith":            "Single deployment with strong internal modules. Practical before moving to services.",
+	"architecture:layered":                     "Classic presentation, application, domain, and infrastructure layers. Simple for CRUD and small apps.",
+	"architecture:event_driven":                "Communicates changes through events. Fits integrations, audit, queues, sync, or asynchronous processes.",
+	"architecture:microservices":               "Separate services by context. Use only with clear boundaries, mature operations, and real independent deployment needs.",
+	"architecture:serverless":                  "Managed functions or services. Fits variable workloads, small tasks, or low operational overhead.",
+	"architecture:plugin_based":                "Core extended by plugins. Useful when optional modules or third parties must extend the app safely.",
+	"architecture:data_pipeline":               "Stage-based flow for ingesting, transforming, validating, and publishing data.",
+	"storage:":                                 "No concrete storage selected for this row.",
+	"storage:sin_preferencia":                  "Lets the contract choose storage later from data, volume, and constraints.",
+	"storage:sin_persistencia":                 "No durable storage for this block. Fits calculations, views, or transient data.",
+	"storage:relacional":                       "Tables, relationships, and transactions. Good for consistent data, structured queries, and integrity rules.",
+	"storage:documental":                       "JSON-like documents. Fits flexible schemas and aggregates read together.",
+	"storage:vectorial":                        "Embeddings and semantic search. Useful for RAG, similarity, recommendations, or meaning-based retrieval.",
+	"storage:objetos":                          "Objects managed behind an adapter. Useful for domains with aggregates and encapsulated persistence.",
+	"storage:objetos_blob":                     "Files, binaries, images, audio, or large packages managed as object/blob storage.",
+	"storage:clave_valor":                      "Fast reads by key. Fits preferences, sessions, counters, or simple configuration.",
+	"storage:clave_valor_cache":                "Volatile or semi-durable cache for faster reads without being the source of truth.",
+	"storage:series_temporales":                "Time-based measurements: metrics, sensors, functional logs, or state history.",
+	"storage:grafo":                            "Complex entity relationships: dependencies, networks, permissions, recommendations, or routes.",
+	"storage:cache":                            "General cache layer for performance; should not store data that cannot be rebuilt.",
+	"storage:busqueda":                         "Text or faceted search index for filters, ranking, and fast user queries.",
+	"storage:eventos_auditoria":                "Append-only action, change, and evidence log for traceability or compliance.",
+	"storage:mixta":                            "Combines stores when one model cannot cover transactions, search, blobs, or analytics.",
+	"integration:":                             "No concrete integration selected for this row.",
+	"integration:api":                          "HTTP or similar API to read or expose data through a stable contract.",
+	"integration:webhook":                      "Receives or sends callback events when another system reports changes.",
+	"integration:email":                        "Inbound or outbound email: notifications, inboxes, attachments, or approval flows.",
+	"integration:calendar":                     "Calendars, bookings, appointments, availability, or event synchronization.",
+	"integration:maps":                         "Maps, geocoding, routes, or proximity. The concrete provider stays behind an adapter.",
+	"integration:file_import":                  "Imports CSV, Excel, JSON, XML, or other external files.",
+	"integration:file_export":                  "Exports reports, packages, spreadsheets, JSON, or files for third parties.",
+	"integration:messaging":                    "Messaging or chat: queues, channels, bots, SMS, or collaboration platforms.",
+	"integration:llm":                          "AI/LLM capability behind an opt-in adapter for generation, summarization, classification, or assistance.",
+	"integration:storage":                      "External repository for documents, blobs, attachments, or backups.",
+	"integration:payments":                     "Payments, billing, subscriptions, or collections. Requires strong boundary and tests.",
+	"integration:auth":                         "Identity, SSO, OAuth, LDAP, or delegated permissions.",
+	"integration:analytics":                    "Usage analytics, events, product metrics, or reporting.",
+	"integration:search":                       "External search engine or specialized index and relevance service.",
+	"integration:notifications":                "Push, email, SMS, or in-app notifications with user preferences.",
+	"integration:other":                        "Other integration type. Describe provider, data, direction, and criticality.",
+	"accessibility:basica":                     "Reasonable minimum accessibility for internal use or a non-public prototype.",
+	"accessibility:normal":                     "Common good practices: labels, visible focus, sufficient contrast, and clear navigation.",
+	"accessibility:wcag_aa":                    "WCAG AA target for public or broad-use interfaces; requires explicit tests and criteria.",
+	"accessibility:no_aplica":                  "Use only when there is no direct human UI or accessibility is validated outside this app.",
+	"accessibility:teclado":                    "Every action must be possible with keyboard and visible focus.",
+	"accessibility:lectores_pantalla":          "Semantics, labels, roles, and states compatible with screen readers.",
+	"accessibility:contraste_alto":             "Stronger contrast for text, controls, states, and relevant charts.",
+	"accessibility:movimiento_reducido":        "Avoids mandatory animations and respects reduced-motion preferences.",
+	"accessibility:subtitulos_transcripciones": "Captions, transcripts, or text alternatives for audio and video.",
+}
+
 var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Funcs(template.FuncMap{
 	"optionLabel": nuevaAppHTMLOptionLabelV0,
+	"optionHelp":  nuevaAppHTMLOptionHelpV0,
 }).Parse(`<!doctype html>
 <html lang="{{.Page.Locale}}">
 <head>
@@ -769,7 +906,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       </div>
       <div class="step" data-step="2" role="tabpanel" id="nueva-app-step-panel-2" aria-labelledby="nueva-app-step-tab-2" tabindex="-1">
         <fieldset><legend>{{index .Labels "preferencias_tecnicas"}}</legend><div class="grid">
-	          <label data-help="{{index .Help "preferencias_tecnicas.arquitectura"}}">{{index .Labels "preferencias_tecnicas.arquitectura"}}<select name="preferencias_tecnicas.arquitectura"><option value="">{{optionLabel $.Page.Locale "architecture" ""}}</option><option value="hexagonal">{{optionLabel $.Page.Locale "architecture" "hexagonal"}}</option><option value="clean_architecture">{{optionLabel $.Page.Locale "architecture" "clean_architecture"}}</option><option value="onion">{{optionLabel $.Page.Locale "architecture" "onion"}}</option><option value="modular_monolith">{{optionLabel $.Page.Locale "architecture" "modular_monolith"}}</option><option value="layered">{{optionLabel $.Page.Locale "architecture" "layered"}}</option><option value="event_driven">{{optionLabel $.Page.Locale "architecture" "event_driven"}}</option><option value="microservices">{{optionLabel $.Page.Locale "architecture" "microservices"}}</option><option value="serverless">{{optionLabel $.Page.Locale "architecture" "serverless"}}</option><option value="plugin_based">{{optionLabel $.Page.Locale "architecture" "plugin_based"}}</option><option value="data_pipeline">{{optionLabel $.Page.Locale "architecture" "data_pipeline"}}</option></select></label>
+	          <label data-help="{{index .Help "preferencias_tecnicas.arquitectura"}}">{{index .Labels "preferencias_tecnicas.arquitectura"}}<select name="preferencias_tecnicas.arquitectura"><option value="" title="{{optionHelp $.Page.Locale "architecture" ""}}">{{optionLabel $.Page.Locale "architecture" ""}}</option><option value="hexagonal" title="{{optionHelp $.Page.Locale "architecture" "hexagonal"}}">{{optionLabel $.Page.Locale "architecture" "hexagonal"}}</option><option value="clean_architecture" title="{{optionHelp $.Page.Locale "architecture" "clean_architecture"}}">{{optionLabel $.Page.Locale "architecture" "clean_architecture"}}</option><option value="onion" title="{{optionHelp $.Page.Locale "architecture" "onion"}}">{{optionLabel $.Page.Locale "architecture" "onion"}}</option><option value="modular_monolith" title="{{optionHelp $.Page.Locale "architecture" "modular_monolith"}}">{{optionLabel $.Page.Locale "architecture" "modular_monolith"}}</option><option value="layered" title="{{optionHelp $.Page.Locale "architecture" "layered"}}">{{optionLabel $.Page.Locale "architecture" "layered"}}</option><option value="event_driven" title="{{optionHelp $.Page.Locale "architecture" "event_driven"}}">{{optionLabel $.Page.Locale "architecture" "event_driven"}}</option><option value="microservices" title="{{optionHelp $.Page.Locale "architecture" "microservices"}}">{{optionLabel $.Page.Locale "architecture" "microservices"}}</option><option value="serverless" title="{{optionHelp $.Page.Locale "architecture" "serverless"}}">{{optionLabel $.Page.Locale "architecture" "serverless"}}</option><option value="plugin_based" title="{{optionHelp $.Page.Locale "architecture" "plugin_based"}}">{{optionLabel $.Page.Locale "architecture" "plugin_based"}}</option><option value="data_pipeline" title="{{optionHelp $.Page.Locale "architecture" "data_pipeline"}}">{{optionLabel $.Page.Locale "architecture" "data_pipeline"}}</option></select></label>
           <label data-help="{{index .Help "preferencias_tecnicas.lenguaje"}}">{{index .Labels "preferencias_tecnicas.lenguaje"}}<input name="preferencias_tecnicas.lenguaje" placeholder="go, typescript..."></label>
           <label data-help="{{index .Help "preferencias_tecnicas.framework"}}">{{index .Labels "preferencias_tecnicas.framework"}}<input name="preferencias_tecnicas.framework"></label>
           <label data-help="{{index .Help "preferencias_tecnicas.preferencias"}}">{{index .Labels "preferencias_tecnicas.preferencias"}}<input name="preferencias_tecnicas.preferencias"></label>
@@ -864,25 +1001,25 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
             <label data-help="{{index .Help "datos.operacion.restricciones"}}">{{index .Labels "datos.operacion.restricciones"}}<input name="datos.operacion.restricciones"></label>
           </div></div>
           <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.almacenamiento_1"}}</p><div class="grid">
-	            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.0.tipo"><option value="">{{optionLabel $.Page.Locale "storage" ""}}</option>{{range .StorageTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "storage" .}}</option>{{end}}</select></label>
+	            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.0.tipo"><option value="" title="{{optionHelp $.Page.Locale "storage" ""}}">{{optionLabel $.Page.Locale "storage" ""}}</option>{{range .StorageTypes}}<option value="{{.}}" title="{{optionHelp $.Page.Locale "storage" .}}">{{optionLabel $.Page.Locale "storage" .}}</option>{{end}}</select></label>
             <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.0.proposito"></label>
 	            <label data-help="{{index .Help "datos.storage.requerido"}}"><span>{{index .Labels "datos.storage.0.requerido"}}</span><select name="datos.storage.0.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
             <label data-help="{{index .Help "datos.storage.restricciones"}}">{{index .Labels "datos.storage.0.restricciones"}}<input name="datos.storage.0.restricciones"></label>
           </div></div>
           <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.almacenamiento_2"}}</p><div class="grid">
-	            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.1.tipo"><option value="">{{optionLabel $.Page.Locale "storage" ""}}</option>{{range .StorageTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "storage" .}}</option>{{end}}</select></label>
+	            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.1.tipo"><option value="" title="{{optionHelp $.Page.Locale "storage" ""}}">{{optionLabel $.Page.Locale "storage" ""}}</option>{{range .StorageTypes}}<option value="{{.}}" title="{{optionHelp $.Page.Locale "storage" .}}">{{optionLabel $.Page.Locale "storage" .}}</option>{{end}}</select></label>
             <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.1.proposito"></label>
 	            <label data-help="{{index .Help "datos.storage.requerido"}}"><span>{{index .Labels "datos.storage.0.requerido"}}</span><select name="datos.storage.1.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
             <label data-help="{{index .Help "datos.storage.restricciones"}}">{{index .Labels "datos.storage.0.restricciones"}}<input name="datos.storage.1.restricciones"></label>
           </div></div>
           <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.almacenamiento_3"}}</p><div class="grid">
-	            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.2.tipo"><option value="">{{optionLabel $.Page.Locale "storage" ""}}</option>{{range .StorageTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "storage" .}}</option>{{end}}</select></label>
+	            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.2.tipo"><option value="" title="{{optionHelp $.Page.Locale "storage" ""}}">{{optionLabel $.Page.Locale "storage" ""}}</option>{{range .StorageTypes}}<option value="{{.}}" title="{{optionHelp $.Page.Locale "storage" .}}">{{optionLabel $.Page.Locale "storage" .}}</option>{{end}}</select></label>
             <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.2.proposito"></label>
 	            <label data-help="{{index .Help "datos.storage.requerido"}}"><span>{{index .Labels "datos.storage.0.requerido"}}</span><select name="datos.storage.2.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
             <label data-help="{{index .Help "datos.storage.restricciones"}}">{{index .Labels "datos.storage.0.restricciones"}}<input name="datos.storage.2.restricciones"></label>
           </div></div>
           <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.almacenamiento_4"}}</p><div class="grid">
-	            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.3.tipo"><option value="">{{optionLabel $.Page.Locale "storage" ""}}</option>{{range .StorageTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "storage" .}}</option>{{end}}</select></label>
+	            <label data-help="{{index .Help "datos.storage.tipo"}}">{{index .Labels "datos.storage.0.tipo"}}<select name="datos.storage.3.tipo"><option value="" title="{{optionHelp $.Page.Locale "storage" ""}}">{{optionLabel $.Page.Locale "storage" ""}}</option>{{range .StorageTypes}}<option value="{{.}}" title="{{optionHelp $.Page.Locale "storage" .}}">{{optionLabel $.Page.Locale "storage" .}}</option>{{end}}</select></label>
             <label data-help="{{index .Help "datos.storage.proposito"}}">{{index .Labels "datos.storage.0.proposito"}}<input name="datos.storage.3.proposito"></label>
 	            <label data-help="{{index .Help "datos.storage.requerido"}}"><span>{{index .Labels "datos.storage.0.requerido"}}</span><select name="datos.storage.3.requerido"><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option></select></label>
             <label data-help="{{index .Help "datos.storage.restricciones"}}">{{index .Labels "datos.storage.0.restricciones"}}<input name="datos.storage.3.restricciones"></label>
@@ -890,7 +1027,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
         </div></details></fieldset>
         <fieldset><legend>{{index .Labels "integraciones"}}</legend><div class="expert-block">
           <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_1"}}</p><div class="grid">
-            <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.0.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
+            <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.0.tipo"><option value="" title="{{optionHelp $.Page.Locale "integration" ""}}">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}" title="{{optionHelp $.Page.Locale "integration" .}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
             <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.0.nombre"></label>
             <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.0.proposito"></label>
             <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.0.direccion"></label>
@@ -902,7 +1039,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
           </div></div>
           <details><summary>{{index .HTML "nueva_app.wizard.integraciones_adicionales"}}</summary><div class="expert-block">
             <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_2"}}</p><div class="grid">
-	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.1.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
+	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.1.tipo"><option value="" title="{{optionHelp $.Page.Locale "integration" ""}}">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}" title="{{optionHelp $.Page.Locale "integration" .}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.1.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.1.proposito"></label>
               <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.1.direccion"></label>
@@ -913,7 +1050,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
               <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.1.restricciones"></label>
             </div></div>
             <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_3"}}</p><div class="grid">
-	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.2.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
+	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.2.tipo"><option value="" title="{{optionHelp $.Page.Locale "integration" ""}}">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}" title="{{optionHelp $.Page.Locale "integration" .}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.2.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.2.proposito"></label>
               <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.2.direccion"></label>
@@ -924,7 +1061,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
               <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.2.restricciones"></label>
             </div></div>
             <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_4"}}</p><div class="grid">
-	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.3.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
+	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.3.tipo"><option value="" title="{{optionHelp $.Page.Locale "integration" ""}}">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}" title="{{optionHelp $.Page.Locale "integration" .}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.3.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.3.proposito"></label>
               <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.3.direccion"></label>
@@ -935,7 +1072,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
               <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.3.restricciones"></label>
             </div></div>
             <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_5"}}</p><div class="grid">
-	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.4.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
+	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.4.tipo"><option value="" title="{{optionHelp $.Page.Locale "integration" ""}}">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}" title="{{optionHelp $.Page.Locale "integration" .}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.4.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.4.proposito"></label>
               <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.4.direccion"></label>
@@ -946,7 +1083,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
               <label data-help="{{index .Help "integraciones.0.restricciones"}}">{{index .Labels "integraciones.0.restricciones"}}<input name="integraciones.4.restricciones"></label>
             </div></div>
             <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_6"}}</p><div class="grid">
-	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.5.tipo"><option value="">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
+	              <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.5.tipo"><option value="" title="{{optionHelp $.Page.Locale "integration" ""}}">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}" title="{{optionHelp $.Page.Locale "integration" .}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
               <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.5.nombre"></label>
               <label data-help="{{index .Help "integraciones.0.proposito"}}">{{index .Labels "integraciones.0.proposito"}}<input name="integraciones.5.proposito"></label>
               <label data-help="{{index .Help "integraciones.0.direccion"}}">{{index .Labels "integraciones.0.direccion"}}<input name="integraciones.5.direccion"></label>
@@ -962,8 +1099,8 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       <div class="step" data-step="4" role="tabpanel" id="nueva-app-step-panel-4" aria-labelledby="nueva-app-step-tab-4" tabindex="-1">
         <fieldset><legend>{{index .Labels "calidad"}}</legend><div class="grid">
 	          <label data-help="{{index .Help "calidad.pruebas"}}">{{index .Labels "calidad.pruebas"}}<select name="calidad.pruebas"><option value="basica">{{optionLabel $.Page.Locale "quality.tests" "basica"}}</option><option value="media">{{optionLabel $.Page.Locale "quality.tests" "media"}}</option><option value="alta">{{optionLabel $.Page.Locale "quality.tests" "alta"}}</option></select></label>
-	          <label data-help="{{index .Help "calidad.accesibilidad"}}">{{index .Labels "calidad.accesibilidad"}}<select name="calidad.accesibilidad"><option value="basica">{{optionLabel $.Page.Locale "accessibility" "basica"}}</option><option value="normal">{{optionLabel $.Page.Locale "accessibility" "normal"}}</option><option value="wcag_aa">{{optionLabel $.Page.Locale "accessibility" "wcag_aa"}}</option><option value="no_aplica">{{optionLabel $.Page.Locale "accessibility" "no_aplica"}}</option></select></label>
-          <div data-help="{{index .Help "calidad.accesibilidad_opciones"}}"><p class="expert-row-title">{{index .Labels "calidad.accesibilidad_opciones"}}</p><div class="checks">{{range .AccessibilityOptions}}<label><input type="checkbox" name="calidad.accesibilidad_opciones" value="{{.}}">{{optionLabel $.Page.Locale "accessibility" .}}</label>{{end}}</div></div>
+	          <label data-help="{{index .Help "calidad.accesibilidad"}}">{{index .Labels "calidad.accesibilidad"}}<select name="calidad.accesibilidad"><option value="basica" title="{{optionHelp $.Page.Locale "accessibility" "basica"}}">{{optionLabel $.Page.Locale "accessibility" "basica"}}</option><option value="normal" title="{{optionHelp $.Page.Locale "accessibility" "normal"}}">{{optionLabel $.Page.Locale "accessibility" "normal"}}</option><option value="wcag_aa" title="{{optionHelp $.Page.Locale "accessibility" "wcag_aa"}}">{{optionLabel $.Page.Locale "accessibility" "wcag_aa"}}</option><option value="no_aplica" title="{{optionHelp $.Page.Locale "accessibility" "no_aplica"}}">{{optionLabel $.Page.Locale "accessibility" "no_aplica"}}</option></select></label>
+          <div data-help="{{index .Help "calidad.accesibilidad_opciones"}}"><p class="expert-row-title">{{index .Labels "calidad.accesibilidad_opciones"}}</p><div class="checks">{{range .AccessibilityOptions}}<label data-help="{{optionHelp $.Page.Locale "accessibility" .}}"><input type="checkbox" name="calidad.accesibilidad_opciones" value="{{.}}">{{optionLabel $.Page.Locale "accessibility" .}}</label>{{end}}</div></div>
 	          <label data-help="{{index .Help "calidad.observabilidad"}}"><span>{{index .Labels "calidad.observabilidad"}}</span><select name="calidad.observabilidad"><option value="true">{{optionLabel $.Page.Locale "boolean" "true"}}</option><option value="false">{{optionLabel $.Page.Locale "boolean" "false"}}</option></select></label>
           <label data-help="{{index .Help "calidad.compliance"}}">{{index .Labels "calidad.compliance"}}<input name="calidad.compliance"></label>
         </div></fieldset>

@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	orquestafactory "orquesta/modulos/orquesta-factory"
 )
 
 func TestNuevaAppI18nCatalogV0CatalogosCubrenClavesRequeridas(t *testing.T) {
@@ -140,6 +142,45 @@ func TestNuevaAppHTMLHelpV0IntegracionesEnumeraCatalogoVisibleV0(t *testing.T) {
 		for _, integrationType := range nuevaAppHTMLIntegrationTypesV0() {
 			if !strings.Contains(help, integrationType) {
 				t.Fatalf("ayuda %s no enumera integracion %q: %s", locale, integrationType, help)
+			}
+		}
+	}
+}
+
+func TestNuevaAppHTMLOptionHelpV0CubreCatalogosAmpliosV0(t *testing.T) {
+	groups := map[string][]string{
+		"architecture": {
+			"",
+			"hexagonal",
+			"clean_architecture",
+			"onion",
+			"modular_monolith",
+			"layered",
+			"event_driven",
+			"microservices",
+			"serverless",
+			"plugin_based",
+			"data_pipeline",
+		},
+		"storage":       append([]string{""}, orquestafactory.SupportedDataStorageTypesV0()...),
+		"integration":   append([]string{""}, nuevaAppHTMLIntegrationTypesV0()...),
+		"accessibility": append([]string{"basica", "no_aplica"}, nuevaAppHTMLAccessibilityOptionsV0()...),
+	}
+
+	for _, locale := range []string{NuevaAppI18nDefaultLocaleV0, NuevaAppI18nEnglishLocaleV0} {
+		for group, values := range groups {
+			seen := map[string]bool{}
+			for _, value := range values {
+				if seen[value] {
+					continue
+				}
+				seen[value] = true
+				help := strings.TrimSpace(nuevaAppHTMLOptionHelpV0(locale, group, value))
+				if help == "" ||
+					strings.Contains(help, "valor seleccionable para este campo") ||
+					strings.Contains(help, "selectable value for this field") {
+					t.Fatalf("ayuda generica para %s/%s/%s: %q", locale, group, value, help)
+				}
 			}
 		}
 	}

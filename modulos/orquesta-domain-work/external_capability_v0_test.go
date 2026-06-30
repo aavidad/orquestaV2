@@ -189,6 +189,79 @@ func TestDomainWorkExternalCapabilityEvaluationV0BloqueaQASiAuthOCuotaNoEstanLis
 	}
 }
 
+func TestDomainWorkExternalCapabilityRequirementsV0MatrizDirectorNoRequiereProveedorRemoto(t *testing.T) {
+	for _, workKind := range []string{
+		"review_director_consolidation",
+		"review_consensus_director",
+	} {
+		t.Run(workKind, func(t *testing.T) {
+			request := validDomainWorkJobRequestForTestV0()
+			request.WorkKind = workKind
+
+			query := BuildDomainWorkExternalCapabilityQueryV0(request)
+			evaluation := EvaluateDomainWorkExternalCapabilitiesV0(request, nil)
+
+			if query.ArtifactType != DomainWorkArtifactTypeDirectorReviewMatrixV0 ||
+				len(query.Requirements) != 0 {
+				t.Fatalf("query=%+v", query)
+			}
+			if !evaluation.Ready ||
+				len(evaluation.MissingRequirements) != 0 ||
+				len(evaluation.Issues) != 0 ||
+				evaluation.OperationalReason != "" {
+				t.Fatalf("evaluation=%+v", evaluation)
+			}
+		})
+	}
+}
+
+func TestDomainWorkExternalCapabilityRequirementsV0RevisionFinalDirectorNoRequiereProveedorRemoto(t *testing.T) {
+	request := validDomainWorkJobRequestForTestV0()
+	request.WorkKind = "review_director_final"
+
+	query := BuildDomainWorkExternalCapabilityQueryV0(request)
+	evaluation := EvaluateDomainWorkExternalCapabilitiesV0(request, nil)
+
+	if len(query.Requirements) != 0 {
+		t.Fatalf("query=%+v", query)
+	}
+	if !evaluation.Ready ||
+		len(evaluation.MissingRequirements) != 0 ||
+		len(evaluation.Issues) != 0 ||
+		evaluation.OperationalReason != "" {
+		t.Fatalf("evaluation=%+v", evaluation)
+	}
+}
+
+func TestDomainWorkExternalCapabilityRequirementsV0RevisionesRemotasSiguenRequiriendoProveedor(t *testing.T) {
+	for _, workKind := range []string{
+		"review_codex",
+		"review_gemini",
+		"review_claude",
+		"review_pair_codex_gemini",
+		"review_pair_codex_claude",
+		"review_pair_gemini_claude",
+	} {
+		t.Run(workKind, func(t *testing.T) {
+			request := validDomainWorkJobRequestForTestV0()
+			request.WorkKind = workKind
+
+			query := BuildDomainWorkExternalCapabilityQueryV0(request)
+			evaluation := EvaluateDomainWorkExternalCapabilitiesV0(request, nil)
+
+			if len(query.Requirements) != 1 ||
+				query.Requirements[0].Kind != DomainWorkExternalCapabilityKindRemoteQAProviderV0 {
+				t.Fatalf("query=%+v", query)
+			}
+			if evaluation.Ready ||
+				evaluation.OperationalReason != "external_capability_missing:remote_qa_provider" ||
+				len(evaluation.MissingRequirements) != 1 {
+				t.Fatalf("evaluation=%+v", evaluation)
+			}
+		})
+	}
+}
+
 func TestDomainWorkExternalCapabilitySourcePortV0EsHexagonal(t *testing.T) {
 	var source DomainWorkExternalCapabilitySourcePortV0 = fakeDomainWorkExternalCapabilitySourceV0{}
 

@@ -154,10 +154,12 @@ Reglas:
   `speech_synthesis` con perfil preflight: red requerida, tool path requerido,
   cuota sensible de proveedor y timeout recomendado;
 - un job de revision remota cuyo contrato neutral produce
-  `agent_review_report`, `agent_pair_review_report` o
-  `director_review_matrix` requiere
+  `agent_review_report` o `agent_pair_review_report` requiere
   `remote_qa_provider` con red, estado de autenticacion, cuota de proveedor y
   timeout recomendado;
+- `director_review_matrix` representa la consolidacion del Director sobre
+  revisiones/evidencias ya materializadas; no exige por si mismo un proveedor QA
+  remoto adicional;
 - aliases recuperables como `tts` o `text_to_speech` se normalizan a
   `speech_synthesis`;
 - `EvaluateDomainWorkExternalCapabilitiesV0` no ejecuta TTS ni selecciona
