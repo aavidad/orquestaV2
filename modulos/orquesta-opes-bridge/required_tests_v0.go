@@ -128,6 +128,32 @@ func opesFinalPackageRequiredTestsV0(
 				"opes-expected-evidence-question-bank",
 			},
 		},
+		{
+			TestRef: "opes-final-package-manifest-" + safeJob,
+			AcceptanceCriteria: []string{
+				"Existe manifest_cierre.json del completed_syllabus_package con schema opes_final_package_evidence_manifest.v0.",
+				"El manifest declara evidencias requeridas para HTML, RAG, audio, tests, visual y QA final.",
+				"Si falta una evidencia obligatoria, el estado es pendiente_continuar con followup_refs causales y no listo_para_revision_operador.",
+			},
+			AcceptanceCriteriaRefs: []string{"opes-required-final-package-manifest"},
+			InputRefs:              inputRefs,
+			ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
+				{Kind: "domain_ref", Ref: "opes"},
+				{Kind: "job_ref", Ref: safeJob},
+				{Kind: "artifact_type", Ref: opesArtifactTypeCompletedSyllabusPackageV0},
+				{Kind: "required_evidence", Ref: "manifest_cierre"},
+			},
+			EvidenceRefs: []string{
+				"opes-rule-final-package-manifest",
+				"opes-expected-evidence-manifest-cierre",
+				"opes-final-evidence:html",
+				"opes-final-evidence:rag",
+				"opes-final-evidence:audio",
+				"opes-final-evidence:tests",
+				"opes-final-evidence:visual",
+				"opes-final-evidence:qa",
+			},
+		},
 	}
 }
 

@@ -46,6 +46,9 @@ Trabajo aplicado:
 - `OPESRequiredTestPolicyV0` añade required tests específicos para paquetes
   finales: `opes-extension-minima-nivel-*` y
   `opes-derivacion-comunes-maestro-*`;
+- el cierre final tambien exige `opes-final-package-manifest-*` con
+  `manifest_cierre.json` y evidencias obligatorias de HTML, RAG, audio, tests,
+  visual y QA final;
 - la política editorial inyectada al agente incluye mínimos por nivel:
   A1 20.250, A2 14.400, B 10.800, C1 7.200, C2 4.500 y AP 3.150 palabras en
   ampliado publicable;

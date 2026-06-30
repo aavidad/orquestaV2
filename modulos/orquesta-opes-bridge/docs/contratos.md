@@ -168,6 +168,12 @@ Reglas:
   validacion visual. El cierre reconstruye RAG/corpus desde HTML/tests/tutor
   limpios y valida el RAG reconstruido contra el temario final aprobado. Sin
   este artefacto el curso no se marca `ready`;
+- el cierre `completed_syllabus_package` declara el required test
+  `opes-final-package-manifest-*`: debe existir `manifest_cierre.json` con
+  schema `opes_final_package_evidence_manifest.v0` y evidencias obligatorias de
+  HTML, RAG, audio, tests, visual y QA final. Si falta una evidencia, el estado
+  debe ser `pendiente_continuar` con `followup_refs` causales, no
+  `listo_para_revision_operador`;
 - la asignacion a Codex, Gemini o Claude no pertenece a OPES ni al bridge. La
   composicion Orquesta puede enrutar `review_gemini` y
   `review_pair_codex_gemini` al adaptador Gemini CLI opt-in, y

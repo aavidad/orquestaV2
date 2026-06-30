@@ -76,10 +76,23 @@ func TestOPESRequiredTestPolicyV0FinalTemarioExigeMinimosYComunes(t *testing.T) 
 		"opes-extension-minima-nivel-job-ref-policy-opes-final",
 		"opes-derivacion-comunes-maestro-job-ref-policy-opes-final",
 		"opes-question-bank-publicable-job-ref-policy-opes-final",
+		"opes-final-package-manifest-job-ref-policy-opes-final",
 	} {
 		if !stringInRequiredTestRefsForTestV0(got, want) {
 			t.Fatalf("required_tests=%v falta %s", got, want)
 		}
+	}
+	finalManifest := requiredTestByRefForTestV0(
+		plan.RequiredTests,
+		"opes-final-package-manifest-job-ref-policy-opes-final",
+	)
+	if finalManifest.TestRef == "" ||
+		!requiredTestHasExternalRefForTestV0(finalManifest, "artifact_type", "completed_syllabus_package") ||
+		!requiredTestHasExternalRefForTestV0(finalManifest, "required_evidence", "manifest_cierre") ||
+		!stringInRequiredTestRefsForTestV0(finalManifest.AcceptanceCriteriaRefs, "opes-required-final-package-manifest") ||
+		!stringInRequiredTestRefsForTestV0(finalManifest.EvidenceRefs, "opes-expected-evidence-manifest-cierre") ||
+		!stringInRequiredTestRefsForTestV0(finalManifest.EvidenceRefs, "opes-final-evidence:qa") {
+		t.Fatalf("final_manifest_required_test=%+v", finalManifest)
 	}
 }
 
@@ -96,6 +109,31 @@ func requiredTestRefsForTestV0(
 func stringInRequiredTestRefsForTestV0(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func requiredTestByRefForTestV0(
+	tests []orquestadomainwork.DomainWorkRequiredTestV0,
+	ref string,
+) orquestadomainwork.DomainWorkRequiredTestV0 {
+	for _, test := range tests {
+		if test.TestRef == ref {
+			return test
+		}
+	}
+	return orquestadomainwork.DomainWorkRequiredTestV0{}
+}
+
+func requiredTestHasExternalRefForTestV0(
+	test orquestadomainwork.DomainWorkRequiredTestV0,
+	kind string,
+	ref string,
+) bool {
+	for _, externalRef := range test.ExternalRefs {
+		if externalRef.Kind == kind && externalRef.Ref == ref {
 			return true
 		}
 	}
