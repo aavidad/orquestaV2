@@ -442,9 +442,6 @@ func goalDomainReceiptOPESSubrolesIssueV0(
 			Field: goalDomainReceiptOPESSubrolesEvidenceFieldV0,
 		}
 	}
-	if goalDomainReceiptOPESSubroleEvidenceCountV0(evidenceRefs) >= goalDomainReceiptOPESSubrolesRequiredCountV0 {
-		return orquestagoal.GoalWorkIssueV0{}
-	}
 	return orquestagoal.GoalWorkIssueV0{
 		Code:  goalDomainReceiptOPESSubrolesEvidenceMissingIssueV0,
 		Field: goalDomainReceiptOPESSubrolesEvidenceFieldV0,
@@ -624,24 +621,6 @@ func goalDomainReceiptOPESSubroleExpectedEvidenceCountV0(
 		if _, ok := expected[suffix]; ok {
 			seen[suffix] = struct{}{}
 		}
-	}
-	return len(seen)
-}
-
-func goalDomainReceiptOPESSubroleEvidenceCountV0(
-	refs []string,
-) int {
-	seen := map[string]struct{}{}
-	for _, ref := range refs {
-		ref = strings.TrimSpace(ref)
-		if !strings.HasPrefix(ref, goalDomainReceiptOPESSubrolesEvidencePrefixV0) {
-			continue
-		}
-		suffix := strings.TrimPrefix(ref, goalDomainReceiptOPESSubrolesEvidencePrefixV0)
-		if suffix == "" {
-			continue
-		}
-		seen[suffix] = struct{}{}
 	}
 	return len(seen)
 }

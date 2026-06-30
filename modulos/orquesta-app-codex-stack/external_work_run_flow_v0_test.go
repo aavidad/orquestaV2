@@ -1219,11 +1219,11 @@ func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESSubrolesConSeisEvidenciasN
 	}
 }
 
-func TestCodexStackV0ExternalWorkGoalFirstCierraOPESSubrolesLegacyConSeisEvidenciasSinTaskRefsV0(t *testing.T) {
+func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESSubrolesSinTaskRefsCausalesV0(t *testing.T) {
 	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
 	started := postExternalWorkRunStackWithChangeV0(t, stack, opesSubrolesExternalWorkChangeForTestV0())
 	spec := launcher.specs[0]
-	receiptRef := "receipt-ref-goal-first-opes-subroles-legacy-complete-001"
+	receiptRef := "receipt-ref-goal-first-opes-subroles-without-task-refs-001"
 	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
 	record.EvidenceRefs = append(record.EvidenceRefs, goalDomainReceiptOPESSubroleEvidenceRefsForTestV0()...)
 	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
@@ -1242,17 +1242,18 @@ func TestCodexStackV0ExternalWorkGoalFirstCierraOPESSubrolesLegacyConSeisEvidenc
 		context.Background(),
 		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
 			RunRef:        started.RunRef,
-			CorrelationID: "corr-external-work-goal-first-opes-subroles-legacy-complete-001",
+			CorrelationID: "corr-external-work-goal-first-opes-subroles-without-task-refs-001",
 			RequestedBy:   "orquesta-app-codex-stack-test",
 		},
 	)
 	if err != nil {
 		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
 	}
-	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
-		!result.Closure.Accepted ||
-		!codexStackStringInSetForTestV0(result.Closure.EvidenceRefs, goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0) {
-		t.Fatalf("receipt OPES 1+6 legacy con seis evidencias no cerro goal-first: result=%+v", result)
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework ||
+		!goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptOPESSubrolesEvidenceMissingIssueV0) {
+		t.Fatalf("receipt OPES 1+6 con seis evidencias nominales cerro sin refs causales: result=%+v", result)
 	}
 }
 
