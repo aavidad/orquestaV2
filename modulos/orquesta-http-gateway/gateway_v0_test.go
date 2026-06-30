@@ -204,6 +204,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 				ExternalWorkRun: markerHandler("external-work-run"),
 			},
 		},
+		{
+			name:  "codebase query",
+			route: RouteCodebaseQueryV0,
+			handlers: RouteHandlersV0{
+				CodebaseQuery: markerHandler("codebase-query"),
+			},
+		},
 	}
 
 	for _, tc := range cases {

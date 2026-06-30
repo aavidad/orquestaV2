@@ -453,6 +453,10 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 	t.Setenv("ORQUESTA_CODEX_MAX_CONCURRENCY", "10")
 	t.Setenv("ORQUESTA_CODEX_REASONING_EFFORT", "high")
 	t.Setenv("ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT", "6")
+	t.Setenv(envCodebaseBrokerProviderKindV0, "fallback_rg")
+	t.Setenv(envCodebaseBrokerExternalIndexerEnabledV0, "false")
+	t.Setenv(envCodebaseBrokerMaxConcurrentV0, "3")
+	t.Setenv(envCodebaseBrokerTimeoutMSV0, "1500")
 	t.Setenv(envOPESBridgeWaitResidentSecondsV0, "15")
 	t.Setenv(envOPESBridgeWaitResidentIntervalMSV0, "250")
 	t.Setenv("ORQUESTA_HERMES_ENABLED", "1")
@@ -486,6 +490,10 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 		"ORQUESTA_CODEX_REASONING_EFFORT":                    "high",
 		envCodexPromoteMaterializedArtifactWithoutAckV0:      "true",
 		"ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT":    "6",
+		envCodebaseBrokerProviderKindV0:                      "fallback_rg",
+		envCodebaseBrokerExternalIndexerEnabledV0:            "false",
+		envCodebaseBrokerMaxConcurrentV0:                     "3",
+		envCodebaseBrokerTimeoutMSV0:                         "1500",
 		envOPESBridgeWaitResidentSecondsV0:                   "15",
 		envOPESBridgeWaitResidentIntervalMSV0:                "250",
 		"ORQUESTA_HERMES_ENABLED":                            "true",

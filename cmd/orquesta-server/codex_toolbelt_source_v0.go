@@ -51,6 +51,7 @@ func codexToolbeltHTTPEntriesV0() []codexToolbeltHTTPEntryV0 {
 		{Method: "POST", Path: orquestamcp.MCPDomainWorkHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
 		{Method: "POST", Path: orquestamcp.MCPExternalWorkDryRunHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
 		{Method: "POST", Path: orquestamcp.MCPExternalWorkRunHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
+		{Method: "POST", Path: orquestamcp.MCPCodebaseQueryHTTPPathV0, Status: codexToolbeltStatusServerLiveV0},
 	}
 }
 
@@ -70,6 +71,7 @@ func codexToolbeltMCPEntriesV0() []codexToolbeltMCPEntryV0 {
 		orquestamcp.MCPDomainWorkToolNameV0,
 		orquestamcp.MCPExternalWorkDryRunToolNameV0,
 		orquestamcp.MCPExternalWorkRunToolNameV0,
+		orquestamcp.MCPCodebaseQueryToolNameV0,
 		operator.OperatorMCPDirectedQueryToolV0,
 	}
 	out := make([]codexToolbeltMCPEntryV0, 0, len(names)+1)
@@ -102,7 +104,8 @@ func codexToolbeltStatusForMCPToolV0(name string, registered map[string]struct{}
 		name == orquestamcp.MCPAutoprogrammingStatusToolNameV0 ||
 		name == orquestamcp.MCPAutoprogrammingSuperviseToolNameV0 ||
 		name == orquestamcp.MCPDomainWorkToolNameV0 ||
-		name == orquestamcp.MCPExternalWorkRunToolNameV0 {
+		name == orquestamcp.MCPExternalWorkRunToolNameV0 ||
+		name == orquestamcp.MCPCodebaseQueryToolNameV0 {
 		return codexToolbeltStatusConnectorOptInV0
 	}
 	return codexToolbeltStatusToolRegisteredV0

@@ -6,6 +6,7 @@ import (
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaappgateway "orquesta/modulos/orquesta-app-gateway"
+	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestagoal "orquesta/modulos/orquesta-goal"
@@ -27,6 +28,7 @@ type StackV0 struct {
 	Clock                                 orquestafactoryhttp.AppSpecHTTPClockV0
 	AutoprogrammingPromotion              AutoprogrammingPromotionConfigV0
 	DomainWork                            orquestamcp.MCPDomainWorkExecutorPortV0
+	CodeContext                           orquestacontext.CodeContextQueryPortV0
 	RuntimeModels                         orquestaruntime.RuntimeModelManagerPortV0
 	DecisionCouncil                       DecisionCouncilConfigV0
 	DomainDelivery                        DomainWorkDeliveryBridgeConfigV0
@@ -62,6 +64,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		Clock:                                 config.Clock,
 		AutoprogrammingPromotion:              config.AutoprogrammingPromotion,
 		DomainWork:                            config.DomainWork,
+		CodeContext:                           config.CodeContext,
 		RuntimeModels:                         config.RuntimeModels,
 		DecisionCouncil:                       decisionCouncil,
 		DomainDelivery:                        config.DomainDelivery,
@@ -149,6 +152,7 @@ func buildStackMCPTransportBindingsV0(
 		AllowLegacyAutoprogrammingSupervisorActions: config.AllowLegacyAutoprogrammingRun,
 		ServerShutdown:                              serverShutdownExecutorV0(config, stack),
 		DomainWork:                                  config.DomainWork,
+		CodebaseQuery:                               orquestamcp.MCPCodebaseQueryToolExecutorV0{Broker: config.CodeContext},
 		ExternalWorkDryRun:                          externalWorkDryRunExecutorV0(config, queueConfig),
 		ExternalWorkRun:                             externalWorkRunGuardedExecutorV0(config, queueConfig),
 	}
@@ -198,6 +202,7 @@ func buildStackHTTPHandlerV0(
 		ExternalWorkDryRun:       bindings.ExternalWorkDryRun,
 		ExternalWorkDryRunConfig: externalWorkRunStartConfigV0(config, normalizeRunQueueConfigV0(config.RunQueue)),
 		ExternalWorkRun:          bindings.ExternalWorkRun,
+		CodebaseQuery:            bindings.CodebaseQuery,
 		OpsAgentRuntimeDetail: NewCodexStackAgentRuntimeDetailHTTPHandlerV0(CodexStackAgentRuntimeDetailConfigV0{
 			ReceiptStore:   config.Stores.ReceiptStore,
 			RuntimeWorkDir: config.Codex.RuntimeWorkDir,

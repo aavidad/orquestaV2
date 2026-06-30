@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 
+	orquestacontext "orquesta/modulos/orquesta-context"
 	operator "orquesta/modulos/orquesta-operator-mcp"
 )
 
@@ -87,6 +88,8 @@ func mcpTransportToolInputDTOByNameV0(name string) (any, bool) {
 		return MCPExternalWorkDryRunToolInputV0{}, true
 	case MCPExternalWorkRunToolNameV0:
 		return MCPExternalWorkRunToolInputV0{}, true
+	case MCPCodebaseQueryToolNameV0:
+		return MCPCodebaseQueryToolInputV0{}, true
 	case MCPAppVCSToolNameV0:
 		return MCPAppVCSToolInputV0{}, true
 	case operator.OperatorMCPStatusToolNameV0:
@@ -162,6 +165,8 @@ func mcpTransportToolRequiredFieldsV0(name string) map[string]bool {
 		return map[string]bool{"run_ref": true}
 	case MCPAppVCSToolNameV0:
 		return map[string]bool{"action": true, "app_ref": true, "repo_ref": true}
+	case MCPCodebaseQueryToolNameV0:
+		return map[string]bool{"repository_ref": true, "query": true}
 	case MCPDirectorSupervisorBriefingToolNameV0:
 		return map[string]bool{"briefing_input": true}
 	case operator.OperatorMCPStatusToolNameV0:
@@ -198,6 +203,12 @@ func mcpTransportToolEnumsV0(name string) map[string][]string {
 		return map[string][]string{"director_execution_mode": []string{"goal_first"}}
 	case MCPAppVCSToolNameV0:
 		return map[string][]string{"action": []string{"prepare_repo", "review_repo", "commit", "push"}}
+	case MCPCodebaseQueryToolNameV0:
+		return map[string][]string{"query_kind": []string{
+			orquestacontext.CodeContextQueryKindSearchV0,
+			orquestacontext.CodeContextQueryKindSymbolV0,
+			orquestacontext.CodeContextQueryKindArchitectureV0,
+		}}
 	default:
 		return map[string][]string{}
 	}

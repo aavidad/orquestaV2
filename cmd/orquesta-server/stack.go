@@ -253,6 +253,7 @@ func buildStackFromEnvWithGoalBackendV0(
 		DomainTests:                           domainWorkRequiredTestConfigFromEnvV0(),
 		AutoprogrammingPromotion:              autoprogrammingPromotionConfigFromEnvV0(serverConfig),
 		DomainWork:                            domainWorkExecutor,
+		CodeContext:                           codeContextBrokerFromEnvV0(serverConfig),
 		ExternalWorkRunGuard:                  externalWorkRunProjectWorkDirGuardConfigFromEnvV0(serverConfig),
 		GoalObserverResidentEnabled:           serverConfig.GoalObserverEnabled,
 		PromoteMaterializedArtifactWithoutAck: codexPromoteMaterializedArtifactWithoutAckFromEnvV0(),

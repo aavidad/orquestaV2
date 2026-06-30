@@ -95,6 +95,22 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 			envExternalWorkLegacyDirectorLoopV0,
 			strconv.FormatBool(boolEnvOrDefaultV0(envExternalWorkLegacyDirectorLoopV0, false)),
 		),
+		serverConfigSettingFromRegistryV0(
+			envCodebaseBrokerProviderKindV0,
+			envOrDefaultV0(envCodebaseBrokerProviderKindV0, "fallback_rg"),
+		),
+		serverConfigSettingFromRegistryV0(
+			envCodebaseBrokerExternalIndexerEnabledV0,
+			strconv.FormatBool(boolEnvOrDefaultV0(envCodebaseBrokerExternalIndexerEnabledV0, false)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envCodebaseBrokerMaxConcurrentV0,
+			strconv.Itoa(intEnvOrDefaultV0(envCodebaseBrokerMaxConcurrentV0, 4)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envCodebaseBrokerTimeoutMSV0,
+			strconv.Itoa(intEnvOrDefaultV0(envCodebaseBrokerTimeoutMSV0, 3000)),
+		),
 		serverConfigSettingFromRegistryV0(envOPESBridgeWaitResidentSecondsV0, strconv.Itoa(intEnvOrDefaultV0(envOPESBridgeWaitResidentSecondsV0, 0))),
 		serverConfigSettingFromRegistryV0(
 			envOPESBridgeWaitResidentIntervalMSV0,

@@ -72,6 +72,10 @@ const (
 	envDirectorMaxCommandsV0                         = "ORQUESTA_DIRECTOR_MAX_COMMANDS"
 	envDirectorMaxOutboxV0                           = "ORQUESTA_DIRECTOR_MAX_OUTBOX"
 	envDirectorMaxExternalWaitsV0                    = "ORQUESTA_DIRECTOR_MAX_EXTERNAL_WAITS"
+	envCodebaseBrokerProviderKindV0                  = "ORQUESTA_CODEBASE_BROKER_PROVIDER_KIND"
+	envCodebaseBrokerExternalIndexerEnabledV0        = "ORQUESTA_CODEBASE_BROKER_EXTERNAL_INDEXER_ENABLED"
+	envCodebaseBrokerMaxConcurrentV0                 = "ORQUESTA_CODEBASE_BROKER_MAX_CONCURRENT"
+	envCodebaseBrokerTimeoutMSV0                     = "ORQUESTA_CODEBASE_BROKER_TIMEOUT_MS"
 
 	envCodexProjectWorkDirV0                        = "ORQUESTA_CODEX_PROJECT_WORKDIR"
 	envCodexRuntimeWorkDirV0                        = "ORQUESTA_CODEX_RUNTIME_WORKDIR"
@@ -372,6 +376,26 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "external_work",
 		Label:       "External work legacy",
 		Description: "Breakglass opt-in para permitir que external_work.run use el loop historico si no hay backend Goal; por defecto false.",
+	},
+	envCodebaseBrokerProviderKindV0: {
+		Scope:       "codebase_broker",
+		Label:       "Proveedor Codebase",
+		Description: "Proveedor central de contexto de codigo; por defecto fallback_rg. codebase_memory_mcp queda reservado a opt-in central.",
+	},
+	envCodebaseBrokerExternalIndexerEnabledV0: {
+		Scope:       "codebase_broker",
+		Label:       "Indexador externo",
+		Description: "Permite al broker central usar indexador externo opt-in; no habilita MCPs libres por agente.",
+	},
+	envCodebaseBrokerMaxConcurrentV0: {
+		Scope:       "codebase_broker",
+		Label:       "Consultas contexto",
+		Description: "Maximo de consultas concurrentes del broker central de contexto de codigo.",
+	},
+	envCodebaseBrokerTimeoutMSV0: {
+		Scope:       "codebase_broker",
+		Label:       "Timeout contexto ms",
+		Description: "Timeout por consulta del broker central de contexto de codigo.",
 	},
 	envSecurityModeV0: {Scope: "rails", Label: "Modo seguridad", Description: "Modo historico de seguridad; no reactiva rails offline hasta nueva orden."},
 	envRailsModeV0:    {Scope: "rails", Label: "Modo rails", Description: "offline fijo hasta nueva orden; no reactiva politicas de bloqueo."},

@@ -33,6 +33,7 @@ type MCPTransportBindingsV0 struct {
 	DomainWork                                  MCPDomainWorkExecutorPortV0
 	ExternalWorkDryRun                          MCPTransportExternalWorkDryRunExecutorV0
 	ExternalWorkRun                             MCPTransportExternalWorkRunExecutorV0
+	CodebaseQuery                               MCPTransportCodebaseQueryExecutorV0
 	AppVCS                                      MCPAppVCSExecutorPortV0
 	OperatorConnector                           operator.OperatorMCPConnectorV0
 	OperatorStatus                              operator.OperatorMCPStatusPortV0
@@ -107,6 +108,10 @@ type MCPTransportExternalWorkRunExecutorV0 interface {
 
 type MCPTransportExternalWorkDryRunExecutorV0 interface {
 	Execute(context.Context, MCPExternalWorkDryRunToolInputV0) (MCPExternalWorkDryRunToolResultV0, error)
+}
+
+type MCPTransportCodebaseQueryExecutorV0 interface {
+	Execute(context.Context, MCPCodebaseQueryToolInputV0) (MCPCodebaseQueryToolResultV0, error)
 }
 
 type MCPTransportToolErrorV0 struct {

@@ -49,6 +49,7 @@ type ConfigV0 struct {
 	AppChange                     orquestaappchange.AppChangePortsV0
 	AutoprogrammingPromotion      AutoprogrammingPromotionConfigV0
 	DomainWork                    orquestamcp.MCPDomainWorkExecutorPortV0
+	CodeContext                   orquestacontext.CodeContextQueryPortV0
 	RuntimeModels                 orquestaruntime.RuntimeModelManagerPortV0
 	DecisionCouncil               DecisionCouncilConfigV0
 	DomainDelivery                DomainWorkDeliveryBridgeConfigV0

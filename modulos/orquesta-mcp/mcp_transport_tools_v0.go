@@ -33,6 +33,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 		mcpTransportToolEnvelopeV0(descriptors.domainWork.Name, descriptors.domainWork.Version, descriptors.domainWork.ResourceURI, descriptors.domainWork.InputSchema, descriptors.domainWork.Output, mcpDomainWorkTransportHandlerV0(bindings.DomainWork)),
 		mcpTransportToolEnvelopeV0(descriptors.externalWorkDryRun.Name, descriptors.externalWorkDryRun.Version, descriptors.externalWorkDryRun.ResourceURI, descriptors.externalWorkDryRun.InputSchema, descriptors.externalWorkDryRun.Output, mcpExternalWorkDryRunTransportHandlerV0(bindings.ExternalWorkDryRun)),
 		mcpTransportToolEnvelopeV0(descriptors.externalWorkRun.Name, descriptors.externalWorkRun.Version, descriptors.externalWorkRun.ResourceURI, descriptors.externalWorkRun.InputSchema, descriptors.externalWorkRun.Output, mcpExternalWorkRunTransportHandlerV0(bindings.ExternalWorkRun)),
+		mcpTransportToolEnvelopeV0(descriptors.codebaseQuery.Name, descriptors.codebaseQuery.Version, descriptors.codebaseQuery.ResourceURI, descriptors.codebaseQuery.InputSchema, descriptors.codebaseQuery.Output, mcpCodebaseQueryTransportHandlerV0(bindings.CodebaseQuery)),
 		mcpTransportToolEnvelopeV0(descriptors.appVCS.Name, descriptors.appVCS.Version, descriptors.appVCS.ResourceURI, descriptors.appVCS.InputSchema, descriptors.appVCS.Output, mcpAppVCSTransportHandlerV0(bindings.AppVCS)),
 		mcpOperatorTransportToolV0(operator.OperatorMCPStatusToolNameV0, mcpOperatorStatusBindingV0(bindings)),
 		mcpOperatorTransportToolV0(operator.OperatorMCPBurstToolNameV0, mcpOperatorBurstBindingV0(bindings)),
@@ -59,6 +60,7 @@ func applyMCPTransportExecutionProfilesV0(
 			MCPExternalWorkRunToolNameV0:
 			profile = MCPTransportExecutionProfileAutoprogrammingLongV0
 		case MCPWorkspaceTimelineToolNameV0,
+			MCPCodebaseQueryToolNameV0,
 			MCPDirectorStatsToolNameV0,
 			MCPDirectorSupervisorBriefingToolNameV0,
 			MCPAutoprogrammingStatusToolNameV0:

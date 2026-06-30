@@ -78,6 +78,7 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 		DomainWork:                        apiHandlers.DomainWork,
 		ExternalWorkDryRun:                apiHandlers.ExternalWorkDryRun,
 		ExternalWorkRun:                   apiHandlers.ExternalWorkRun,
+		CodebaseQuery:                     apiHandlers.CodebaseQuery,
 	}
 }
 
@@ -118,6 +119,7 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 		DomainWork:                        orquestamcp.NewMCPDomainWorkHTTPHandlerV0(config.DomainWork),
 		ExternalWorkDryRun:                newExternalWorkDryRunHTTPHandlerV0(config),
 		ExternalWorkRun:                   orquestamcp.NewMCPExternalWorkRunHTTPHandlerWithResponseTimeoutV0(config.ExternalWorkRun, config.Timeout),
+		CodebaseQuery:                     orquestamcp.NewMCPCodebaseQueryHTTPHandlerV0(config.CodebaseQuery),
 	}
 }
 

@@ -47,6 +47,7 @@ type ConfigV0 struct {
 	ExternalWorkDryRun                          orquestamcp.MCPTransportExternalWorkDryRunExecutorV0
 	ExternalWorkDryRunConfig                    orquestaexternalworkrun.StartExternalWorkRunConfigV0
 	ExternalWorkRun                             orquestamcp.MCPTransportExternalWorkRunExecutorV0
+	CodebaseQuery                               orquestamcp.MCPTransportCodebaseQueryExecutorV0
 	AppVCS                                      orquestamcp.MCPAppVCSExecutorPortV0
 	WebHTMLRenderObserver                       orquestaobservability.WebHTMLRenderObserverV0
 	BrowserMutationIntent                       orquestahttpgateway.BrowserMutationIntentGuardConfigV0
