@@ -23,6 +23,7 @@ func TestMCPPublicErrorCatalogV0CubreCodigosCompartidosYHTTPV0(t *testing.T) {
 		"director_stats_executor_error",
 		"server_shutdown_executor_error",
 		"run_supervisor_execute_error",
+		"domain_work_completed_review_failed",
 		"run_supervisor_error",
 		"workspace_timeline_http_error",
 		"workspace_timeline_no_configurada",

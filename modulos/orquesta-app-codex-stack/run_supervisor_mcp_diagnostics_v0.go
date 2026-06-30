@@ -22,6 +22,7 @@ const (
 	codexStackCodexRuntimeStreamFDWarningDiagnosticV0          = "codex_runtime_stream_fd_warning"
 	codexStackCodexProviderQuotaExhaustedDiagnosticV0          = "codex_provider_quota_exhausted"
 	codexStackCodexProviderCapacityLimitedDiagnosticV0         = "codex_provider_capacity_limited"
+	codexStackDomainWorkCompletedReviewFailedDiagnosticV0      = "domain_work_completed_review_failed"
 )
 
 func codexStackRunSupervisorErrorResultMCPV0(
@@ -46,11 +47,15 @@ func codexStackRunSupervisorErrorResultMCPV0(
 		result.NextActions = compactStringsV0([]string{drainErr.NextActionV0()})
 		return result
 	}
+	publicCode := "run_supervisor_execute_error"
+	if codexStackRunSupervisorReviewFailedAfterDomainCompletionV0(partial.Last, err) {
+		publicCode = codexStackDomainWorkCompletedReviewFailedDiagnosticV0
+	}
 	result := orquestamcp.NewMCPRunSupervisorErrorResultV0(
 		input,
-		"run_supervisor_execute_error",
+		publicCode,
 		"executor",
-		"run_supervisor_execute_error",
+		publicCode,
 	)
 	result.RunRef = firstNonEmptyQueuedSourceV0(partial.Last.SessionRef, input.RunRef)
 	result.StopReason = string(partial.StopReason)
@@ -311,12 +316,56 @@ func codexStackRunSupervisorReviewResultErrorDiagnosticsMCPV0(
 		"field=" + codexStackRunSupervisorPublicDiagnosticErrorV0(reviewErr.Field),
 		"action=retry_review_with_compact_payload",
 	}), " ")
-	return []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+	base := orquestamcp.MCPAutoprogrammingDiagnosticV0{
 		Code:         "review_result_payload_invalid_after_delivery",
 		Scope:        codexStackRunSupervisorReviewResultErrorScopeMCPV0(runRef, snapshot),
 		Message:      message,
 		EvidenceRefs: compactStringsV0(append(snapshot.EvidenceRefs, "evidence-ref-review-result-payload-invalid")),
-	}}
+	}
+	if !codexStackRunSupervisorSnapshotHasDomainCompletionEvidenceV0(snapshot) {
+		return []orquestamcp.MCPAutoprogrammingDiagnosticV0{base}
+	}
+	domainCompleted := orquestamcp.MCPAutoprogrammingDiagnosticV0{
+		Code:  codexStackDomainWorkCompletedReviewFailedDiagnosticV0,
+		Scope: codexStackRunSupervisorReviewResultErrorScopeMCPV0(runRef, snapshot),
+		Message: strings.Join(compactStringsV0([]string{
+			"domain_work_completed=true",
+			"review_failed=payload_invalid",
+			"action=preserve_delivery_evidence_retry_review_or_close_from_ack",
+		}), " "),
+		EvidenceRefs: compactStringsV0(append(snapshot.EvidenceRefs, "evidence-ref-domain-work-completed-review-failed")),
+	}
+	return []orquestamcp.MCPAutoprogrammingDiagnosticV0{base, domainCompleted}
+}
+
+func codexStackRunSupervisorReviewFailedAfterDomainCompletionV0(
+	snapshot CodexSupervisorRuntimeSnapshotV0,
+	err error,
+) bool {
+	var reviewErr orquestacoreworkflow.ReviewResultErrorV0
+	if !errors.As(err, &reviewErr) {
+		return false
+	}
+	return codexStackRunSupervisorSnapshotHasDomainCompletionEvidenceV0(snapshot)
+}
+
+func codexStackRunSupervisorSnapshotHasDomainCompletionEvidenceV0(
+	snapshot CodexSupervisorRuntimeSnapshotV0,
+) bool {
+	for _, ref := range snapshot.EvidenceRefs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		if strings.HasPrefix(ref, "delivery-ref-") ||
+			strings.HasPrefix(ref, "ack-ref-") ||
+			strings.Contains(ref, "agent_ack") ||
+			ref == "evidence-ref-agent-ack-completed" ||
+			ref == "evidence-ref-domain-work-completed" {
+			return true
+		}
+	}
+	return false
 }
 
 func codexStackRunSupervisorReviewResultErrorScopeMCPV0(

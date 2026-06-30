@@ -210,17 +210,61 @@ func TestCodexStackRunSupervisorErrorResultMCPV0ExponeReviewPayloadInvalidoTrasE
 
 	if result.Estado != orquestamcp.MCPRunSupervisorEstadoErrorV0 ||
 		result.RunRef != "run-ref-review-payload-invalid-001" ||
-		len(result.Diagnostics) != 1 ||
-		result.Diagnostics[0].Code != "review_result_payload_invalid_after_delivery" ||
-		!strings.Contains(result.Diagnostics[0].Message, "retry_review_with_compact_payload") ||
-		!codexStackStringInSetForTestV0(result.Diagnostics[0].EvidenceRefs, "delivery-ref-review-payload-invalid-001") ||
-		!codexStackStringInSetForTestV0(result.Diagnostics[0].EvidenceRefs, "evidence-ref-review-result-payload-invalid") {
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != codexStackDomainWorkCompletedReviewFailedDiagnosticV0 ||
+		result.Errores[0].Message != codexStackDomainWorkCompletedReviewFailedDiagnosticV0 ||
+		!codexStackDiagnosticsContainCodeForTestV0(result.Diagnostics, "review_result_payload_invalid_after_delivery") ||
+		!codexStackDiagnosticsContainCodeForTestV0(result.Diagnostics, codexStackDomainWorkCompletedReviewFailedDiagnosticV0) {
 		t.Fatalf("result=%+v", result)
+	}
+	payloadDiagnostic := codexStackDiagnosticByCodeForTestV0(result.Diagnostics, "review_result_payload_invalid_after_delivery")
+	if !strings.Contains(payloadDiagnostic.Message, "retry_review_with_compact_payload") ||
+		!codexStackStringInSetForTestV0(payloadDiagnostic.EvidenceRefs, "delivery-ref-review-payload-invalid-001") ||
+		!codexStackStringInSetForTestV0(payloadDiagnostic.EvidenceRefs, "evidence-ref-review-result-payload-invalid") {
+		t.Fatalf("payloadDiagnostic=%+v", payloadDiagnostic)
+	}
+	completedDiagnostic := codexStackDiagnosticByCodeForTestV0(result.Diagnostics, codexStackDomainWorkCompletedReviewFailedDiagnosticV0)
+	if !strings.Contains(completedDiagnostic.Message, "preserve_delivery_evidence_retry_review_or_close_from_ack") ||
+		!codexStackStringInSetForTestV0(completedDiagnostic.EvidenceRefs, "delivery-ref-review-payload-invalid-001") ||
+		!codexStackStringInSetForTestV0(completedDiagnostic.EvidenceRefs, "evidence-ref-domain-work-completed-review-failed") {
+		t.Fatalf("completedDiagnostic=%+v", completedDiagnostic)
 	}
 	if !codexStackStringInSetForTestV0(result.NextActions, "preserve_delivery_evidence") ||
 		!codexStackStringInSetForTestV0(result.NextActions, "retry_review_with_compact_payload") ||
 		!codexStackStringInSetForTestV0(result.NextActions, "do_not_relaunch_agent_for_review_payload_error") {
 		t.Fatalf("next_actions=%+v", result.NextActions)
+	}
+}
+
+func TestCodexStackRunSupervisorErrorResultMCPV0NoMarcaDominioCompletoSinEntrega(t *testing.T) {
+	partial := CodexSupervisorResultV0{
+		StopReason: CodexSupervisorStopRuntimeErrorV0,
+		Ticks:      1,
+		Last: CodexSupervisorRuntimeSnapshotV0{
+			Status:     CodexSupervisorRuntimeFailedV0,
+			SessionRef: "run-ref-review-payload-invalid-no-delivery-001",
+			AgentRef:   "agent-ref-review-payload-invalid-no-delivery-001",
+			EvidenceRefs: []string{
+				"evidence-ref-review-gate-payload-compacted",
+			},
+		},
+	}
+
+	result := codexStackRunSupervisorErrorResultMCPV0(
+		orquestamcp.MCPRunSupervisorToolInputV0{RunRef: "run-ref-review-payload-invalid-no-delivery-001"},
+		partial,
+		orquestacoreworkflow.ReviewResultErrorV0{
+			Code:  orquestacoreworkflow.ErrReviewResultPayloadInvalidoV0,
+			Field: "review_result_ref",
+		},
+	)
+
+	if result.Estado != orquestamcp.MCPRunSupervisorEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "run_supervisor_execute_error" ||
+		!codexStackDiagnosticsContainCodeForTestV0(result.Diagnostics, "review_result_payload_invalid_after_delivery") ||
+		codexStackDiagnosticsContainCodeForTestV0(result.Diagnostics, codexStackDomainWorkCompletedReviewFailedDiagnosticV0) {
+		t.Fatalf("result=%+v", result)
 	}
 }
 
