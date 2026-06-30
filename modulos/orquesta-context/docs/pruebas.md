@@ -1,5 +1,26 @@
 # Pruebas locales: orquesta-context
 
+## CTX-P005 broker de codigo central y leases de herramienta
+
+Tipo: unit_contract
+
+Comando: `go test -count=1 ./modulos/orquesta-context`
+
+Evidencia esperada:
+
+- consultas repetidas usan cache central;
+- consultas concurrentes iguales se deduplican con un solo proveedor real;
+- la cache distingue `worktree_fingerprint` y `dirty_worktree`;
+- `codebase-memory-mcp` queda bloqueado sin opt-in y sin lease central;
+- con lease central, el broker registra inicio y cierre;
+- un lease expirado sin peticiones activas recomienda parada cooperativa;
+- leases terminales o con peticiones activas no piden parada.
+
+Ultima ejecucion: 2026-06-30, ok.
+
+Riesgos: el test no arranca `codebase-memory-mcp` real ni mata procesos; eso
+queda para adaptador opt-in y smoke de servidor.
+
 ## CTX-P004 contexto required ref_only en T15
 
 Tipo: contract | regression

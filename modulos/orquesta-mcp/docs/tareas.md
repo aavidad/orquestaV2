@@ -2,6 +2,19 @@
 
 Cada tarea debe ser pequena y cerrada.
 
+```text
+ID: MCP-041
+Objetivo: Exponer consulta de codigo centralizada para agentes sin que cada
+subagente arranque `codebase-memory-mcp`.
+Write-set: codebase_query_*_v0.go, docs locales.
+Simbolo foco: orquesta.codebase.query.v0
+Contrato: CodeContextQueryPortV0.
+Validacion: go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPCodebaseQuery'
+Bloqueos: No implementa adaptador real codebase-memory; el executor se inyecta
+desde servidor/composicion y puede usar `rg` central.
+Estado: completada 2026-06-30
+```
+
 ## Plantilla
 
 ```text

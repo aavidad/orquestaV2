@@ -1,5 +1,27 @@
 # Decisiones locales: orquesta-context
 
+## CTX-D005 - Codebase centralizado con lease
+
+Fecha: 2026-06-30
+
+Decision: las consultas Codebase para agentes pasan por un broker central de
+Orquesta con cache, dedupe in-flight y lease de herramienta auxiliar.
+
+Motivo: varias sesiones/subagentes pueden arrancar `codebase-memory-mcp` y dejar
+procesos vivos consumiendo CPU si la herramienta queda distribuida en cada
+agente. Orquesta debe gobernar el indice por repo y no delegar ese lifecycle a
+prompts.
+
+Alternativas:
+
+- permitir `codebase-memory-mcp` en cada `CODEX_HOME`;
+- prohibirlo por completo;
+- usar solo `rg`.
+
+Consecuencia: `codebase-memory-mcp` queda opt-in y exige lease central. `rg`
+central sigue siendo fallback para strings, docs y config. La parada real de
+procesos vive en servidor/composicion, no en este modulo neutral.
+
 ## CTX-D004 - T15 cerrado no reabre contexto
 
 Fecha: 2026-05-27

@@ -135,3 +135,60 @@ Reglas:
   bundle con categorias y contador, nunca con el secreto original.
 - Si el sanitizador duda, la entrada requerida se degrada a `ref_only`, se marca
   `truncated=true` y se propaga `CONSULTA_AL_DIRECTOR`.
+
+## CodeContextQueryPortV0
+
+Propietario: `orquesta-context`.
+
+Tipo: puerto neutral de consulta compacta de codigo.
+
+Entrada:
+
+- `CodeContextQueryV0` con `repository_ref`, `worktree_ref` o `commit_ref`,
+  `worktree_fingerprint` opcional, `dirty_worktree`, `query_kind`, `query`,
+  `scope`, `max_results`, `max_bytes`, `cache_only`,
+  `allow_external_indexer` y `requested_by`.
+
+Salida:
+
+- `CodeContextResultV0` con resultados compactos, proveedor usado, cache,
+  `query_hash`, diagnostics, issues y refs de evidencia.
+
+Reglas:
+
+- El broker central sirve la consulta; los agentes no arrancan
+  `codebase-memory-mcp` por su cuenta.
+- `codebase-memory-mcp` solo puede ejecutarse con opt-in central y lease de
+  herramienta auxiliar.
+- Consultas concurrentes iguales se deduplican por in-flight; las siguientes
+  esperan el resultado de la primera.
+- La cache incluye fingerprint/dirty-worktree para no ocultar cambios locales
+  sin commit limpio.
+- Los resultados son snippets compactos; no transportan contexto bruto ni
+  secretos.
+
+## CodeContextToolLeaseV0
+
+Propietario: `orquesta-context`.
+
+Tipo: DTO/puerto neutral para gobernar herramientas auxiliares de contexto.
+
+Entrada:
+
+- `CodeContextToolLeaseRequestV0`: repo, query hash, tool ref, provider kind,
+  owner ref, started_at y TTL.
+- `CodeContextToolLeaseObservationV0`: lease, observed_at, CPU, peticiones
+  activas y evidencia.
+
+Salida:
+
+- `CodeContextToolLeaseV0`: lease activo/terminal con `lease_until`.
+- `CodeContextToolLeaseAssessmentV0`: decision `continue` o `request_stop`,
+  reason code y evidencia.
+
+Reglas:
+
+- No contiene PID, HOME, proveedor real, token ni kill.
+- El reloj llega como dato; el evaluador es puro.
+- Un lease expirado sin peticiones activas pide parada cooperativa; si hay
+  peticiones activas o el lease ya es terminal, no pide parada.

@@ -60,3 +60,24 @@ func TestServerRGCodeContextScopesV0RechazaRutasAbsolutasYPadres(t *testing.T) {
 		t.Fatalf("scopes=%+v", got)
 	}
 }
+
+func TestServerLimitedBufferV0DescartaExcesoSinBloquearWriter(t *testing.T) {
+	buffer := &serverLimitedBufferV0{maxBytes: 8}
+	written, err := buffer.Write([]byte("1234567890"))
+	if err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if written != 10 {
+		t.Fatalf("written=%d", written)
+	}
+	if buffer.Len() != 8 || buffer.String() != "12345678" || !buffer.overflow {
+		t.Fatalf("buffer len=%d value=%q overflow=%v", buffer.Len(), buffer.String(), buffer.overflow)
+	}
+	written, err = buffer.Write([]byte("abcdef"))
+	if err != nil {
+		t.Fatalf("write2: %v", err)
+	}
+	if written != 6 || buffer.Len() != 8 {
+		t.Fatalf("written=%d len=%d", written, buffer.Len())
+	}
+}

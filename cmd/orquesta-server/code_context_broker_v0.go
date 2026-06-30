@@ -40,6 +40,11 @@ type serverRGCodeContextProviderV0 struct {
 	Command string
 }
 
+const (
+	defaultServerRGCodeContextOutputMaxBytesV0 = 262144
+	minServerRGCodeContextOutputMaxBytesV0     = 65536
+)
+
 func (provider serverRGCodeContextProviderV0) QueryCodeContextV0(
 	ctx context.Context,
 	query orquestacontext.CodeContextQueryV0,
@@ -55,7 +60,7 @@ func (provider serverRGCodeContextProviderV0) QueryCodeContextV0(
 	args := serverRGCodeContextArgsV0(query)
 	cmd := exec.CommandContext(ctx, command, args...)
 	cmd.Dir = root
-	var stdout bytes.Buffer
+	stdout := serverLimitedBufferV0{maxBytes: serverRGCodeContextOutputLimitV0(query)}
 	cmd.Stdout = &stdout
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -67,6 +72,20 @@ func (provider serverRGCodeContextProviderV0) QueryCodeContextV0(
 		return orquestacontext.CodeContextResultV0{}, err
 	}
 	return serverRGCodeContextResultV0(query, serverRGCodeContextHitsV0(stdout.String(), query)), nil
+}
+
+func serverRGCodeContextOutputLimitV0(query orquestacontext.CodeContextQueryV0) int {
+	if query.MaxBytes <= 0 {
+		return defaultServerRGCodeContextOutputMaxBytesV0
+	}
+	limit := query.MaxBytes * 4
+	if limit < minServerRGCodeContextOutputMaxBytesV0 {
+		return minServerRGCodeContextOutputMaxBytesV0
+	}
+	if limit > defaultServerRGCodeContextOutputMaxBytesV0 {
+		return defaultServerRGCodeContextOutputMaxBytesV0
+	}
+	return limit
 }
 
 func serverRGCodeContextArgsV0(query orquestacontext.CodeContextQueryV0) []string {
@@ -167,4 +186,42 @@ func serverRGCodeContextResultV0(
 		Results:       hits,
 		EvidenceRefs:  []string{"evidence-ref-code-context-rg-central-v0"},
 	}
+}
+
+type serverLimitedBufferV0 struct {
+	buffer   bytes.Buffer
+	maxBytes int
+	overflow bool
+}
+
+func (buffer *serverLimitedBufferV0) Write(chunk []byte) (int, error) {
+	if buffer.maxBytes <= 0 {
+		buffer.maxBytes = defaultServerRGCodeContextOutputMaxBytesV0
+	}
+	remaining := buffer.maxBytes - buffer.buffer.Len()
+	if remaining > 0 {
+		if len(chunk) <= remaining {
+			_, _ = buffer.buffer.Write(chunk)
+		} else {
+			_, _ = buffer.buffer.Write(chunk[:remaining])
+			buffer.overflow = true
+		}
+	} else if len(chunk) > 0 {
+		buffer.overflow = true
+	}
+	return len(chunk), nil
+}
+
+func (buffer *serverLimitedBufferV0) Len() int {
+	if buffer == nil {
+		return 0
+	}
+	return buffer.buffer.Len()
+}
+
+func (buffer *serverLimitedBufferV0) String() string {
+	if buffer == nil {
+		return ""
+	}
+	return buffer.buffer.String()
 }

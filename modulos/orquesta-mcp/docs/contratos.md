@@ -17,6 +17,37 @@ Pruebas de contrato:
 ```
 
 ```text
+Nombre: mcp.tool.orquesta.codebase.query.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: agentes, gateway HTTP, stack Codex y operadores automatizados
+Campos:
+  descriptor:
+    name: orquesta.codebase.query.v0
+    resource_uri: orquesta://contracts/codebase-query/v0
+  rest:
+    method: POST
+    path: /api/v0/codebase/query
+  input:
+    code_context_query: CodeContextQueryV0
+  output_ok:
+    estado: ok
+    result: CodeContextResultV0
+  output_error:
+    estado: error
+    errores_publicos compactos
+Invariantes:
+  - El transporte delega en `CodeContextQueryPortV0`; no arranca indexadores.
+  - Los agentes no llaman directamente a `codebase-memory-mcp`.
+  - `codebase-memory-mcp` real queda detras de broker central opt-in con lease.
+  - Fallback `rg` central y resultados compactos son validos para strings/docs.
+Pruebas de contrato:
+  - `TestMCPCodebaseQueryTransportV0RegistradoYDelegado`
+  - `TestMCPCodebaseQueryHTTPHandlerV0Delegado`
+```
+
+```text
 Nombre: mcp.tool.orquesta.runs.supervisor.v0
 Tipo: puerto_entrada
 Version: v0

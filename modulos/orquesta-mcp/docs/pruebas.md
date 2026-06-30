@@ -2,6 +2,19 @@
 
 Registra pruebas obligatorias del modulo.
 
+```text
+Caso: MCP-CT-041 codebase query delegado
+Tipo: contract
+Comando: go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPCodebaseQuery'
+Evidencia esperada: `orquesta.codebase.query.v0` queda registrado, delega en
+`CodeContextQueryPortV0`, expone HTTP `POST /api/v0/codebase/query` y devuelve
+errores publicos si falta binding. No arranca `codebase-memory-mcp` ni lee repo
+directamente desde MCP.
+Ultima ejecucion: 2026-06-30, ok en bateria local del tool.
+Riesgos: el adaptador real Codebase queda pendiente; el tool solo fija el
+contrato y transporte.
+```
+
 ## Plantilla
 
 ```text

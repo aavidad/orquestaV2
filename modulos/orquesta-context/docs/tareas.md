@@ -2,6 +2,38 @@
 
 Cada tarea debe ser pequena y cerrada.
 
+## CTX-007
+
+Estado: completada 2026-06-30.
+
+Objetivo: centralizar consultas de codigo para agentes y cerrar el riesgo de
+`codebase-memory-mcp` duplicado o sin TTL.
+
+Write-set:
+
+- `code_context_broker_v0.go`
+- `code_context_tool_lease_v0.go`
+- tests y docs locales.
+
+Contrato: `CodeContextQueryPortV0`, `CodeContextToolLeaseV0`.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-context`
+
+Resultado:
+
+- cache central con fingerprint/dirty-worktree;
+- dedupe in-flight de consultas concurrentes;
+- `codebase-memory-mcp` exige opt-in y lease central;
+- evaluador puro de lease TTL/CPU para que servidor/composicion pueda parar o
+  alertar sin que los agentes arranquen indexadores propios.
+
+Bloqueos:
+
+- adaptador real `codebase-memory-mcp`, persistencia de leases/cache y parada
+  cooperativa de proceso real quedan en servidor/composicion.
+
 ## CTX-006
 
 Estado: pendiente futuro.

@@ -2,7 +2,9 @@ package orquestacontext
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestCodeContextBrokerV0UsaCacheCentralSinReinvocarProveedor(t *testing.T) {
@@ -46,14 +48,33 @@ func TestCodeContextBrokerV0BloqueaCodebaseMCPHastaOptInCentral(t *testing.T) {
 	requireCodeContextIssueTestV0(t, result, ErrCodeContextProveedorNoConfiguradoV0)
 }
 
+func TestCodeContextBrokerV0ExigeLeaseCentralParaCodebaseMCP(t *testing.T) {
+	query := validCodeContextQueryTestV0()
+	query.AllowExternalIndexer = true
+	broker := NewCodeContextBrokerV0(CodeContextBrokerConfigV0{
+		Provider:               &fakeCodeContextProviderV0{},
+		ProviderKind:           CodeContextProviderKindCodebaseMCPV0,
+		ExternalIndexerEnabled: true,
+	})
+
+	result, err := broker.QueryCodeContextV0(context.Background(), query)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	requireCodeContextIssueTestV0(t, result, ErrCodeContextLeaseRequeridoV0)
+}
+
 func TestCodeContextBrokerV0PermiteCodebaseMCPConOptInCentralYConsulta(t *testing.T) {
 	query := validCodeContextQueryTestV0()
 	query.AllowExternalIndexer = true
+	leases := NewInMemoryCodeContextToolLeaseStoreV0()
 	broker := NewCodeContextBrokerV0(CodeContextBrokerConfigV0{
 		Provider:               &fakeCodeContextProviderV0{},
 		ProviderRef:            "provider-ref-codebase-central",
 		ProviderKind:           CodeContextProviderKindCodebaseMCPV0,
 		ExternalIndexerEnabled: true,
+		ToolLeasePort:          leases,
+		Clock:                  fixedCodeContextClockTestV0(time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC)),
 	})
 
 	result, err := broker.QueryCodeContextV0(context.Background(), query)
@@ -65,6 +86,15 @@ func TestCodeContextBrokerV0PermiteCodebaseMCPConOptInCentralYConsulta(t *testin
 	}
 	if result.ProviderKind != CodeContextProviderKindCodebaseMCPV0 {
 		t.Fatalf("provider kind=%q", result.ProviderKind)
+	}
+	completed, err := leases.ListCodeContextToolLeasesV0(context.Background(), CodeContextToolLeaseListFilterV0{
+		Status: CodeContextToolLeaseStatusCompletedV0,
+	})
+	if err != nil {
+		t.Fatalf("list leases: %v", err)
+	}
+	if len(completed) != 1 || completed[0].ProviderKind != CodeContextProviderKindCodebaseMCPV0 {
+		t.Fatalf("leases=%+v", completed)
 	}
 }
 
@@ -93,6 +123,71 @@ func TestCodeContextBrokerV0LimitaResultadosYSnippets(t *testing.T) {
 	}
 }
 
+func TestCodeContextBrokerV0DeduplicaConsultasConcurrentesIguales(t *testing.T) {
+	provider := &fakeCodeContextProviderV0{delay: 50 * time.Millisecond}
+	broker := NewCodeContextBrokerV0(CodeContextBrokerConfigV0{
+		Provider:      provider,
+		ProviderKind:  CodeContextProviderKindFallbackRGV0,
+		MaxConcurrent: 4,
+		Timeout:       time.Second,
+	})
+	query := validCodeContextQueryTestV0()
+
+	var wg sync.WaitGroup
+	results := make(chan CodeContextResultV0, 2)
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := broker.QueryCodeContextV0(context.Background(), query)
+			if err != nil {
+				t.Errorf("query: %v", err)
+				return
+			}
+			results <- result
+		}()
+	}
+	wg.Wait()
+	close(results)
+	if provider.callCountV0() != 1 {
+		t.Fatalf("provider calls=%d, want 1", provider.callCountV0())
+	}
+	var joined bool
+	for result := range results {
+		for _, diagnostic := range result.Diagnostics {
+			if diagnostic.Code == "code_context_inflight_joined" {
+				joined = true
+			}
+		}
+	}
+	if !joined {
+		t.Fatalf("ninguna consulta concurrente reutilizo inflight")
+	}
+}
+
+func TestCodeContextBrokerV0CacheDistingueFingerprintYWorktreeSucio(t *testing.T) {
+	provider := &fakeCodeContextProviderV0{}
+	broker := NewCodeContextBrokerV0(CodeContextBrokerConfigV0{
+		Provider: provider,
+		Cache:    NewInMemoryCodeContextCacheV0(),
+	})
+	first := validCodeContextQueryTestV0()
+	first.WorktreeFingerprint = "fingerprint-ref-clean"
+	second := first
+	second.WorktreeFingerprint = "fingerprint-ref-dirty"
+	second.DirtyWorktree = true
+
+	if _, err := broker.QueryCodeContextV0(context.Background(), first); err != nil {
+		t.Fatalf("first query: %v", err)
+	}
+	if _, err := broker.QueryCodeContextV0(context.Background(), second); err != nil {
+		t.Fatalf("second query: %v", err)
+	}
+	if provider.callCountV0() != 2 {
+		t.Fatalf("provider calls=%d, want 2 por fingerprint distinto", provider.callCountV0())
+	}
+}
+
 func validCodeContextQueryTestV0() CodeContextQueryV0 {
 	return CodeContextQueryV0{
 		SchemaVersion: CodeContextQuerySchemaVersionV0,
@@ -109,15 +204,26 @@ func validCodeContextQueryTestV0() CodeContextQueryV0 {
 }
 
 type fakeCodeContextProviderV0 struct {
+	mu    sync.Mutex
 	calls int
 	hits  []CodeContextHitV0
+	delay time.Duration
 }
 
 func (provider *fakeCodeContextProviderV0) QueryCodeContextV0(
-	_ context.Context,
+	ctx context.Context,
 	query CodeContextQueryV0,
 ) (CodeContextResultV0, error) {
+	if provider.delay > 0 {
+		select {
+		case <-time.After(provider.delay):
+		case <-ctx.Done():
+			return CodeContextResultV0{}, ctx.Err()
+		}
+	}
+	provider.mu.Lock()
 	provider.calls++
+	provider.mu.Unlock()
 	hits := provider.hits
 	if len(hits) == 0 {
 		hits = []CodeContextHitV0{{
@@ -137,6 +243,12 @@ func (provider *fakeCodeContextProviderV0) QueryCodeContextV0(
 	}, nil
 }
 
+func (provider *fakeCodeContextProviderV0) callCountV0() int {
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	return provider.calls
+}
+
 func requireCodeContextIssueTestV0(t *testing.T, result CodeContextResultV0, code string) {
 	t.Helper()
 	for _, issue := range result.Issues {
@@ -153,4 +265,8 @@ func longTextContextTestV0(n int) string {
 		out[i] = 'x'
 	}
 	return string(out)
+}
+
+func fixedCodeContextClockTestV0(now time.Time) func() time.Time {
+	return func() time.Time { return now }
 }

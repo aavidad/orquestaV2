@@ -38,6 +38,8 @@ const (
 	ErrCodeContextProveedorTimeoutV0       = "code_context_proveedor_timeout"
 	ErrCodeContextProveedorErrorV0         = "code_context_proveedor_error"
 	ErrCodeContextConcurrenciaV0           = "code_context_concurrencia_agotada"
+	ErrCodeContextLeaseRequeridoV0         = "code_context_lease_requerido"
+	ErrCodeContextLeaseErrorV0             = "code_context_lease_error"
 )
 
 const (
@@ -46,6 +48,7 @@ const (
 	defaultCodeContextSnippetBytesV0  = 700
 	defaultCodeContextTimeoutV0       = 3 * time.Second
 	defaultCodeContextMaxConcurrentV0 = 4
+	defaultCodeContextToolLeaseTTLV0  = 2 * defaultCodeContextTimeoutV0
 )
 
 type CodeContextQueryPortV0 interface {
@@ -54,6 +57,11 @@ type CodeContextQueryPortV0 interface {
 
 type CodeContextProviderPortV0 interface {
 	QueryCodeContextV0(context.Context, CodeContextQueryV0) (CodeContextResultV0, error)
+}
+
+type CodeContextToolLeasePortV0 interface {
+	BeginCodeContextToolLeaseV0(context.Context, CodeContextToolLeaseRequestV0) (CodeContextToolLeaseV0, error)
+	FinishCodeContextToolLeaseV0(context.Context, CodeContextToolLeaseCompletionV0) error
 }
 
 type CodeContextProviderDescriptorV0 struct {
@@ -76,12 +84,16 @@ type CodeContextBrokerConfigV0 struct {
 	DefaultMaxResults      int
 	DefaultMaxBytes        int
 	Timeout                time.Duration
+	ToolLeaseTTL           time.Duration
+	ToolLeasePort          CodeContextToolLeasePortV0
 	Clock                  func() time.Time
 }
 
 type CodeContextBrokerV0 struct {
-	config CodeContextBrokerConfigV0
-	sem    chan struct{}
+	config   CodeContextBrokerConfigV0
+	sem      chan struct{}
+	mu       sync.Mutex
+	inflight map[string]*codeContextBrokerInflightV0
 }
 
 type CodeContextQueryV0 struct {
@@ -91,6 +103,8 @@ type CodeContextQueryV0 struct {
 	RepositoryRef        string   `json:"repository_ref"`
 	WorktreeRef          string   `json:"worktree_ref,omitempty"`
 	CommitRef            string   `json:"commit_ref,omitempty"`
+	WorktreeFingerprint  string   `json:"worktree_fingerprint,omitempty"`
+	DirtyWorktree        bool     `json:"dirty_worktree,omitempty"`
 	QueryKind            string   `json:"query_kind,omitempty"`
 	Query                string   `json:"query"`
 	Scope                []string `json:"scope,omitempty"`
@@ -102,23 +116,25 @@ type CodeContextQueryV0 struct {
 }
 
 type CodeContextResultV0 struct {
-	SchemaVersion string                    `json:"schema_version"`
-	Estado        string                    `json:"estado"`
-	RequestRef    string                    `json:"request_ref,omitempty"`
-	CorrelationID string                    `json:"correlation_id,omitempty"`
-	RepositoryRef string                    `json:"repository_ref,omitempty"`
-	WorktreeRef   string                    `json:"worktree_ref,omitempty"`
-	CommitRef     string                    `json:"commit_ref,omitempty"`
-	QueryKind     string                    `json:"query_kind,omitempty"`
-	QueryHash     string                    `json:"query_hash,omitempty"`
-	CacheStatus   string                    `json:"cache_status,omitempty"`
-	ProviderRef   string                    `json:"provider_ref,omitempty"`
-	ProviderKind  string                    `json:"provider_kind,omitempty"`
-	IndexerPolicy string                    `json:"indexer_policy,omitempty"`
-	Results       []CodeContextHitV0        `json:"results,omitempty"`
-	Diagnostics   []CodeContextDiagnosticV0 `json:"diagnostics,omitempty"`
-	Issues        []CodeContextIssueV0      `json:"issues,omitempty"`
-	EvidenceRefs  []string                  `json:"evidence_refs,omitempty"`
+	SchemaVersion       string                    `json:"schema_version"`
+	Estado              string                    `json:"estado"`
+	RequestRef          string                    `json:"request_ref,omitempty"`
+	CorrelationID       string                    `json:"correlation_id,omitempty"`
+	RepositoryRef       string                    `json:"repository_ref,omitempty"`
+	WorktreeRef         string                    `json:"worktree_ref,omitempty"`
+	CommitRef           string                    `json:"commit_ref,omitempty"`
+	WorktreeFingerprint string                    `json:"worktree_fingerprint,omitempty"`
+	DirtyWorktree       bool                      `json:"dirty_worktree,omitempty"`
+	QueryKind           string                    `json:"query_kind,omitempty"`
+	QueryHash           string                    `json:"query_hash,omitempty"`
+	CacheStatus         string                    `json:"cache_status,omitempty"`
+	ProviderRef         string                    `json:"provider_ref,omitempty"`
+	ProviderKind        string                    `json:"provider_kind,omitempty"`
+	IndexerPolicy       string                    `json:"indexer_policy,omitempty"`
+	Results             []CodeContextHitV0        `json:"results,omitempty"`
+	Diagnostics         []CodeContextDiagnosticV0 `json:"diagnostics,omitempty"`
+	Issues              []CodeContextIssueV0      `json:"issues,omitempty"`
+	EvidenceRefs        []string                  `json:"evidence_refs,omitempty"`
 }
 
 type CodeContextHitV0 struct {
@@ -195,12 +211,53 @@ func (broker *CodeContextBrokerV0) QueryCodeContextV0(
 			),
 		}), nil
 	}
-	if ok := broker.acquireV0(ctx); !ok {
+	if broker.config.ProviderKind == CodeContextProviderKindCodebaseMCPV0 &&
+		broker.config.ToolLeasePort == nil {
 		return newCodeContextErrorResultV0(query, []CodeContextIssueV0{
-			codeContextIssueV0(ErrCodeContextConcurrenciaV0, "concurrency", "broker de contexto ocupado"),
+			codeContextIssueV0(
+				ErrCodeContextLeaseRequeridoV0,
+				"tool_lease",
+				"codebase-memory-mcp requiere lease central de Orquesta antes de ejecutar el proveedor",
+			),
 		}), nil
 	}
+	if call, leader := broker.beginInflightV0(key); !leader {
+		select {
+		case <-call.done:
+			result := call.result
+			result.Diagnostics = append(result.Diagnostics, codeContextDiagnosticV0(
+				"code_context_inflight_joined",
+				"query_hash",
+				"consulta concurrente reutilizada por el broker central",
+			))
+			return result, call.err
+		case <-ctx.Done():
+			return newCodeContextErrorResultV0(query, []CodeContextIssueV0{
+				codeContextIssueV0(ErrCodeContextProveedorTimeoutV0, "inflight", "consulta concurrente no termino antes del contexto"),
+			}), nil
+		}
+	} else {
+		defer func() {
+			broker.finishInflightV0(key, call)
+		}()
+	}
+	if ok := broker.acquireV0(ctx); !ok {
+		result := newCodeContextErrorResultV0(query, []CodeContextIssueV0{
+			codeContextIssueV0(ErrCodeContextConcurrenciaV0, "concurrency", "broker de contexto ocupado"),
+		})
+		broker.storeInflightResultV0(key, result, nil)
+		return result, nil
+	}
 	defer broker.releaseV0()
+
+	lease, leaseBegun, leaseErr := broker.beginToolLeaseV0(ctx, query)
+	if leaseErr != nil {
+		result := newCodeContextErrorResultV0(query, []CodeContextIssueV0{
+			codeContextIssueV0(ErrCodeContextLeaseErrorV0, "tool_lease", "no se pudo registrar lease central para proveedor de contexto"),
+		})
+		broker.storeInflightResultV0(key, result, nil)
+		return result, nil
+	}
 
 	runCtx := ctx
 	cancel := func() {}
@@ -210,19 +267,24 @@ func (broker *CodeContextBrokerV0) QueryCodeContextV0(
 	defer cancel()
 	result, err := broker.config.Provider.QueryCodeContextV0(runCtx, query)
 	if err != nil {
+		broker.finishToolLeaseV0(ctx, lease, leaseBegun, CodeContextToolLeaseCompletionFailedV0)
 		code := ErrCodeContextProveedorErrorV0
 		if runCtx.Err() == context.DeadlineExceeded {
 			code = ErrCodeContextProveedorTimeoutV0
 		}
-		return newCodeContextErrorResultV0(query, []CodeContextIssueV0{
+		result := newCodeContextErrorResultV0(query, []CodeContextIssueV0{
 			codeContextIssueV0(code, "provider", "proveedor central no devolvio contexto util"),
-		}), nil
+		})
+		broker.storeInflightResultV0(key, result, nil)
+		return result, nil
 	}
+	broker.finishToolLeaseV0(ctx, lease, leaseBegun, CodeContextToolLeaseCompletionCompletedV0)
 	result = normalizeCodeContextResultV0(result, query, broker.config)
 	result.CacheStatus = CodeContextCacheStoreV0
 	if broker.config.Cache != nil && result.Estado == CodeContextEstadoOKV0 {
 		broker.config.Cache.SaveCodeContextResultV0(key, result)
 	}
+	broker.storeInflightResultV0(key, result, nil)
 	return result, nil
 }
 
@@ -262,6 +324,8 @@ func CodeContextCacheKeyV0(query CodeContextQueryV0) string {
 		query.RepositoryRef,
 		query.WorktreeRef,
 		query.CommitRef,
+		query.WorktreeFingerprint,
+		strconv.FormatBool(query.DirtyWorktree),
 		query.QueryKind,
 		query.Query,
 		strings.Join(query.Scope, "\x00"),
@@ -293,6 +357,9 @@ func normalizeCodeContextBrokerConfigV0(config CodeContextBrokerConfigV0) CodeCo
 	if config.Timeout <= 0 {
 		config.Timeout = defaultCodeContextTimeoutV0
 	}
+	if config.ToolLeaseTTL <= 0 {
+		config.ToolLeaseTTL = defaultCodeContextToolLeaseTTLV0
+	}
 	if config.Clock == nil {
 		config.Clock = time.Now
 	}
@@ -312,6 +379,7 @@ func normalizeCodeContextQueryV0(
 	query.RepositoryRef = trimContextV0(query.RepositoryRef)
 	query.WorktreeRef = trimContextV0(query.WorktreeRef)
 	query.CommitRef = trimContextV0(query.CommitRef)
+	query.WorktreeFingerprint = trimContextV0(query.WorktreeFingerprint)
 	query.QueryKind = trimContextV0(query.QueryKind)
 	if query.QueryKind == "" {
 		query.QueryKind = CodeContextQueryKindSearchV0
@@ -349,6 +417,8 @@ func normalizeCodeContextResultV0(
 	result.RepositoryRef = firstNonEmptyContextV0(result.RepositoryRef, query.RepositoryRef)
 	result.WorktreeRef = firstNonEmptyContextV0(result.WorktreeRef, query.WorktreeRef)
 	result.CommitRef = firstNonEmptyContextV0(result.CommitRef, query.CommitRef)
+	result.WorktreeFingerprint = firstNonEmptyContextV0(result.WorktreeFingerprint, query.WorktreeFingerprint)
+	result.DirtyWorktree = result.DirtyWorktree || query.DirtyWorktree
 	result.QueryKind = firstNonEmptyContextV0(result.QueryKind, query.QueryKind)
 	result.QueryHash = firstNonEmptyContextV0(result.QueryHash, CodeContextCacheKeyV0(query))
 	result.ProviderRef = firstNonEmptyContextV0(result.ProviderRef, config.ProviderRef)
@@ -409,17 +479,19 @@ func trimCodeContextSnippetV0(value string, maxBytes int) string {
 func newCodeContextErrorResultV0(query CodeContextQueryV0, issues []CodeContextIssueV0) CodeContextResultV0 {
 	query = normalizeCodeContextQueryV0(query, CodeContextBrokerConfigV0{})
 	return CodeContextResultV0{
-		SchemaVersion: CodeContextResultSchemaVersionV0,
-		Estado:        CodeContextEstadoErrorV0,
-		RequestRef:    query.RequestRef,
-		CorrelationID: query.CorrelationID,
-		RepositoryRef: query.RepositoryRef,
-		WorktreeRef:   query.WorktreeRef,
-		CommitRef:     query.CommitRef,
-		QueryKind:     query.QueryKind,
-		QueryHash:     CodeContextCacheKeyV0(query),
-		IndexerPolicy: CodeContextProviderPolicyCentralOnlyV0,
-		Issues:        issues,
+		SchemaVersion:       CodeContextResultSchemaVersionV0,
+		Estado:              CodeContextEstadoErrorV0,
+		RequestRef:          query.RequestRef,
+		CorrelationID:       query.CorrelationID,
+		RepositoryRef:       query.RepositoryRef,
+		WorktreeRef:         query.WorktreeRef,
+		CommitRef:           query.CommitRef,
+		WorktreeFingerprint: query.WorktreeFingerprint,
+		DirtyWorktree:       query.DirtyWorktree,
+		QueryKind:           query.QueryKind,
+		QueryHash:           CodeContextCacheKeyV0(query),
+		IndexerPolicy:       CodeContextProviderPolicyCentralOnlyV0,
+		Issues:              issues,
 	}
 }
 
@@ -437,6 +509,93 @@ func (broker *CodeContextBrokerV0) releaseV0() {
 	case <-broker.sem:
 	default:
 	}
+}
+
+type codeContextBrokerInflightV0 struct {
+	done   chan struct{}
+	result CodeContextResultV0
+	err    error
+}
+
+func (broker *CodeContextBrokerV0) beginInflightV0(key string) (*codeContextBrokerInflightV0, bool) {
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
+	if broker.inflight == nil {
+		broker.inflight = map[string]*codeContextBrokerInflightV0{}
+	}
+	if call, ok := broker.inflight[key]; ok {
+		return call, false
+	}
+	call := &codeContextBrokerInflightV0{done: make(chan struct{})}
+	broker.inflight[key] = call
+	return call, true
+}
+
+func (broker *CodeContextBrokerV0) storeInflightResultV0(key string, result CodeContextResultV0, err error) {
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
+	if call, ok := broker.inflight[key]; ok {
+		call.result = result
+		call.err = err
+	}
+}
+
+func (broker *CodeContextBrokerV0) finishInflightV0(key string, call *codeContextBrokerInflightV0) {
+	broker.mu.Lock()
+	defer broker.mu.Unlock()
+	if current, ok := broker.inflight[key]; ok && current == call {
+		close(call.done)
+		delete(broker.inflight, key)
+	}
+}
+
+func (broker *CodeContextBrokerV0) beginToolLeaseV0(
+	ctx context.Context,
+	query CodeContextQueryV0,
+) (CodeContextToolLeaseV0, bool, error) {
+	if broker.config.ToolLeasePort == nil {
+		return CodeContextToolLeaseV0{}, false, nil
+	}
+	now := broker.config.Clock().UTC()
+	request := CodeContextToolLeaseRequestV0{
+		RequestRef:      query.RequestRef,
+		CorrelationID:   query.CorrelationID,
+		RepositoryRef:   query.RepositoryRef,
+		WorktreeRef:     query.WorktreeRef,
+		CommitRef:       query.CommitRef,
+		QueryHash:       CodeContextCacheKeyV0(query),
+		ToolRef:         broker.config.ProviderRef,
+		ProviderKind:    broker.config.ProviderKind,
+		OwnerRef:        query.RequestedBy,
+		StartedAt:       now.Format(time.RFC3339),
+		LeaseTTLSeconds: int(broker.config.ToolLeaseTTL.Seconds()),
+		EvidenceRefs:    []string{query.RequestRef},
+	}
+	lease, err := broker.config.ToolLeasePort.BeginCodeContextToolLeaseV0(ctx, request)
+	if err != nil {
+		return CodeContextToolLeaseV0{}, false, err
+	}
+	return lease, true, nil
+}
+
+func (broker *CodeContextBrokerV0) finishToolLeaseV0(
+	ctx context.Context,
+	lease CodeContextToolLeaseV0,
+	leaseBegun bool,
+	status string,
+) {
+	if broker.config.ToolLeasePort == nil || !leaseBegun {
+		return
+	}
+	_ = broker.config.ToolLeasePort.FinishCodeContextToolLeaseV0(ctx, CodeContextToolLeaseCompletionV0{
+		LeaseRef:    lease.LeaseRef,
+		ToolRef:     lease.ToolRef,
+		CompletedAt: broker.config.Clock().UTC().Format(time.RFC3339),
+		Status:      status,
+		EvidenceRefs: []string{
+			lease.LeaseRef,
+		},
+	})
 }
 
 func codeContextIssueV0(code string, field string, message string) CodeContextIssueV0 {
