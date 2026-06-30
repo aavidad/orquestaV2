@@ -20,6 +20,8 @@ type serverCodexAppServerCommandProtocolV0 struct {
 	Timeout     time.Duration
 }
 
+const codexAppServerDiagnosticLogMaxBytesV0 = 8192
+
 func (protocol serverCodexAppServerCommandProtocolV0) ProbeV0(ctx context.Context) error {
 	var response serverCodexAppServerThreadLoadedListResponseV0
 	return protocol.callV0(ctx, "thread/loaded/list", map[string]interface{}{}, &response)
@@ -278,6 +280,21 @@ func codexAppServerIssueCodeFromCommandFailureV0(stderr string, err error) strin
 	return "codex_app_server_call_failed"
 }
 
+func codexAppServerIssueCodeFromLogFileV0(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	if len(raw) > codexAppServerDiagnosticLogMaxBytesV0 {
+		raw = raw[len(raw)-codexAppServerDiagnosticLogMaxBytesV0:]
+	}
+	return codexAppServerIssueCodeFromMessageV0(string(raw))
+}
+
 func codexAppServerIssueCodeFromStderrV0(message string, fallback string) string {
 	if code := codexAppServerIssueCodeFromMessageV0(message); code != "" {
 		return code
@@ -292,6 +309,9 @@ func codexAppServerIssueCodeFromStderrV0(message string, fallback string) string
 func codexAppServerIssueCodeFromMessageV0(message string) string {
 	normalized := strings.ToLower(strings.TrimSpace(message))
 	switch {
+	case strings.Contains(normalized, "resetstdio") ||
+		strings.Contains(normalized, "node.cc:751"):
+		return "codex_app_server_wrapper_stdio_failed"
 	case strings.Contains(normalized, "managed standalone codex install not found"):
 		return "codex_app_server_standalone_missing"
 	case strings.Contains(normalized, "failed to connect to socket") ||

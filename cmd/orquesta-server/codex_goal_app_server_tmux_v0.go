@@ -314,19 +314,33 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 				return err
 			}
 			if !hasSession {
-				return codexAppServerCallErrorV0{
-					Code: "codex_app_server_tmux_session_exited",
-					Err:  errors.New("codex_app_server_tmux_session_exited"),
-				}
+				return backend.tmuxStartupFailureV0(
+					"codex_app_server_tmux_session_exited",
+					errors.New("codex_app_server_tmux_session_exited"),
+				)
 			}
 			nextSessionCheck = time.Now().Add(250 * time.Millisecond)
 		}
 		select {
 		case <-ctx.Done():
-			return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_socket_timeout", Err: ctx.Err()}
+			return backend.tmuxStartupFailureV0("codex_app_server_tmux_socket_timeout", ctx.Err())
 		case <-time.After(codexAppServerTmuxSocketPollEveryV0):
 		}
 	}
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) tmuxStartupFailureV0(
+	fallback string,
+	err error,
+) error {
+	if code := codexAppServerIssueCodeFromLogFileV0(backend.tmuxLogPathV0()); code != "" {
+		return codexAppServerCallErrorV0{Code: code, Err: err}
+	}
+	code := strings.TrimSpace(fallback)
+	if code == "" {
+		code = "codex_app_server_tmux_failed"
+	}
+	return codexAppServerCallErrorV0{Code: code, Err: err}
 }
 
 func ensureCodexAppServerTmuxRuntimeDirV0(socketPath string) error {

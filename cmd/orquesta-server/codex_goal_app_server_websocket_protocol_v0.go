@@ -23,8 +23,9 @@ type serverCodexAppServerProbePortV0 interface {
 }
 
 type serverCodexAppServerWebSocketProtocolV0 struct {
-	SocketPath string
-	Timeout    time.Duration
+	SocketPath        string
+	Timeout           time.Duration
+	DiagnosticLogPath string
 }
 
 func (protocol serverCodexAppServerWebSocketProtocolV0) ProbeV0(ctx context.Context) error {
@@ -103,7 +104,9 @@ func (protocol serverCodexAppServerWebSocketProtocolV0) callV0(
 	dialer := net.Dialer{}
 	conn, err := dialer.DialContext(callCtx, "unix", socketPath)
 	if err != nil {
-		return codexAppServerCallErrorV0{Code: codexAppServerIssueCodeFromCommandFailureV0(err.Error(), err), Err: err}
+		return protocol.wrapWebSocketErrorV0(
+			codexAppServerCallErrorV0{Code: codexAppServerIssueCodeFromCommandFailureV0(err.Error(), err), Err: err},
+		)
 	}
 	defer conn.Close()
 	if deadline, ok := callCtx.Deadline(); ok {
@@ -111,23 +114,33 @@ func (protocol serverCodexAppServerWebSocketProtocolV0) callV0(
 	}
 	reader := bufio.NewReader(conn)
 	if err := codexAppServerWebSocketHandshakeV0(conn, reader); err != nil {
-		return err
+		return protocol.wrapWebSocketErrorV0(err)
 	}
 	if err := codexAppServerWebSocketWriteJSONV0(conn, codexAppServerWebSocketInitializeRequestV0()); err != nil {
-		return err
+		return protocol.wrapWebSocketErrorV0(err)
 	}
 	var initResponse map[string]interface{}
 	if err := codexAppServerWebSocketReadResponseV0(reader, 1, &initResponse); err != nil {
-		return err
+		return protocol.wrapWebSocketErrorV0(err)
 	}
 	if err := codexAppServerWebSocketWriteJSONV0(conn, map[string]interface{}{
 		"id":     2,
 		"method": method,
 		"params": params,
 	}); err != nil {
-		return err
+		return protocol.wrapWebSocketErrorV0(err)
 	}
-	return codexAppServerWebSocketReadResponseV0(reader, 2, out)
+	return protocol.wrapWebSocketErrorV0(codexAppServerWebSocketReadResponseV0(reader, 2, out))
+}
+
+func (protocol serverCodexAppServerWebSocketProtocolV0) wrapWebSocketErrorV0(err error) error {
+	if err == nil {
+		return nil
+	}
+	if code := codexAppServerIssueCodeFromLogFileV0(protocol.DiagnosticLogPath); code != "" {
+		return codexAppServerCallErrorV0{Code: code, Err: err}
+	}
+	return err
 }
 
 func codexAppServerWebSocketInitializeRequestV0() map[string]interface{} {

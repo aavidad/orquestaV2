@@ -572,6 +572,8 @@ func externalWorkGoalFirstKnownLaunchFailureReasonV0(message string) string {
 		return "codex_app_server_standalone_missing"
 	case strings.Contains(normalized, "codex_app_server_command_missing"):
 		return "codex_app_server_command_missing"
+	case strings.Contains(normalized, "codex_app_server_wrapper_stdio_failed"):
+		return "codex_app_server_wrapper_stdio_failed"
 	case strings.Contains(normalized, "codex_app_server_permission_denied"):
 		return "codex_app_server_permission_denied"
 	case strings.Contains(normalized, "codex_app_server_timeout"):

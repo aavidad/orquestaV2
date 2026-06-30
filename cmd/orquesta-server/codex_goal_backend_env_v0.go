@@ -91,15 +91,6 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 			}
 			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 		}
-		websocketProtocol := serverCodexAppServerWebSocketProtocolV0{
-			SocketPath: socketPath,
-			Timeout:    time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
-		}
-		runtimeProtocol = websocketProtocol
-		preflightProtocol = serverCodexAppServerWebSocketProtocolV0{
-			SocketPath: socketPath,
-			Timeout:    time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond,
-		}
 		tmuxBackend := serverCodexAppServerTmuxBackendV0{
 			CommandPath:       runtimeConfig.CommandPath,
 			PathEnv:           runtimeConfig.PathEnv,
@@ -109,6 +100,17 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 			CodeHomeDir:       tmuxCodeHomePath,
 			SourceCodeHomeDir: runtimeConfig.CodeHomeDir,
 			Timeout:           codexAppServerTmuxStartupTimeoutV0(time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond),
+		}
+		websocketProtocol := serverCodexAppServerWebSocketProtocolV0{
+			SocketPath:        socketPath,
+			Timeout:           time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
+			DiagnosticLogPath: tmuxBackend.tmuxLogPathV0(),
+		}
+		runtimeProtocol = websocketProtocol
+		preflightProtocol = serverCodexAppServerWebSocketProtocolV0{
+			SocketPath:        socketPath,
+			Timeout:           time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond,
+			DiagnosticLogPath: tmuxBackend.tmuxLogPathV0(),
 		}
 		if err := tmuxBackend.EnsureV0(context.Background(), preflightProtocol); err != nil {
 			degraded := serverCodexUnavailableGoalBackendV0{
@@ -174,7 +176,7 @@ func serverCodexGoalBackendDiagnosticV0(
 	return []orquestaserver.ServerDiagnosticV0{{
 		Code:    serverCodexGoalBackendDegradedDiagnosticCodeV0,
 		Scope:   scope,
-		Message: "codex goal backend degradado: " + issueCode,
+		Message: serverCodexGoalBackendDiagnosticMessageV0(issueCode),
 		EvidenceRefs: []string{
 			"evidence-ref-server-codex-goal-backend-degraded-" + scope,
 		},
@@ -189,6 +191,17 @@ func serverCodexGoalBackendUnavailableIssueCodeV0(backend serverCodexGoalBackend
 		return strings.TrimSpace(unavailable.IssueCode)
 	}
 	return ""
+}
+
+func serverCodexGoalBackendDiagnosticMessageV0(issueCode string) string {
+	issueCode = strings.TrimSpace(issueCode)
+	if issueCode == "codex_app_server_wrapper_stdio_failed" {
+		return "codex goal backend degradado: codex_app_server_wrapper_stdio_failed; accion: configura ORQUESTA_CODEX_COMMAND con el binario nativo de Codex y reinicia"
+	}
+	if issueCode == "" {
+		issueCode = "codex_app_server_unavailable"
+	}
+	return "codex goal backend degradado: " + issueCode
 }
 
 func codexGoalBackendProxyDiagnosticAllowedV0() bool {
