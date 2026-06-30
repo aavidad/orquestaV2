@@ -34,6 +34,9 @@ func (stack StackV0) maybePromoteClosedAutoprogrammingRunV0(
 		return false, nil, err
 	}
 	if !ok {
+		if refs, missing := stack.autoprogrammingPromotionMissingGoalStateEvidenceRefsV0(ctx, run); missing {
+			return false, refs, nil
+		}
 		return true, nil, nil
 	}
 	decision := orquestaautoprogramming.EvaluateAutoprogrammingStagingPromotionV0(request)
@@ -171,6 +174,38 @@ func (stack StackV0) autoprogrammingPromotionGoalStateV0(
 		return orquestagoal.GoalWorkStateV0{}, false, nil
 	}
 	return state, true, nil
+}
+
+func (stack StackV0) autoprogrammingPromotionMissingGoalStateEvidenceRefsV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) ([]string, bool) {
+	if strings.TrimSpace(run.RunID) == "" {
+		return nil, false
+	}
+	if !autoprogrammingPromotionGoalFirstContainerWithoutStateV0(run) {
+		return nil, false
+	}
+	refs := []string{
+		"evidence-ref-codex-stack-autoprogramming-goal-first-state-missing",
+		"evidence-ref-codex-stack-autoprogramming-goal-first-container",
+		run.AppSpecRef,
+	}
+	if marker, ok := stack.goalFirstRunMarkerWithoutStateV0(ctx, run.RunID); ok {
+		return compactStringsV0(append(
+			append(refs, "evidence-ref-codex-stack-autoprogramming-goal-first-marker"),
+			marker.EvidenceRefs...,
+		)), true
+	}
+	return compactStringsV0(refs), true
+}
+
+func autoprogrammingPromotionGoalFirstContainerWithoutStateV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	return strings.HasPrefix(strings.TrimSpace(run.AppSpecRef), "app-spec-ref-autoprogramming-") &&
+		len(compactStringsV0(run.Tasks)) == 0 &&
+		len(compactStringsV0(run.FunctionContracts)) == 0
 }
 
 func autoprogrammingPromotionGoalContextRefV0(

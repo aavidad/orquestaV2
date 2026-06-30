@@ -84,6 +84,51 @@ func TestCodexStackAutoprogrammingPromotionV0QuedaPendientePorSolapeGoalFirstViv
 	}
 }
 
+func TestCodexStackAutoprogrammingPromotionV0NoCierraGoalFirstSinEstadoDurableV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	stack = withAutoprogrammingPromotionStoresForTestV0(stack)
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack.Ports.GoalStateStore = goalStates
+	stack.Ports.GoalFirstRunMarkerStore = goalStates
+	stack.Stores.AppGoalStateStore = goalStates
+	port := &fakeAutoprogrammingPromotionPortV0{}
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{Enabled: true, Port: port}
+	runRef := "run-autoprogramming-goal-first-missing-state-001"
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:         runRef,
+		ProjectRef:    "project-ref-" + runRef,
+		AppSpecRef:    "app-spec-ref-autoprogramming-missing-state",
+		Status:        orquestacoreworkflow.OrchestrationRunStatusClosedV0,
+		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseCierreV0,
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	saveCodexStackGoalFirstRunMarkerForTestV0(t, ctx, goalStates, runRef)
+
+	status, refs, err := stack.stackDrainQueueStatusAndEvidenceForCoordinatorV0(ctx, promotionE2ELoopResultV0(run))
+	if err != nil {
+		t.Fatalf("stackDrainQueueStatusAndEvidenceForCoordinatorV0: %v", err)
+	}
+	if status != "" {
+		t.Fatalf("queue_status=%q want pending por GoalWorkState ausente", status)
+	}
+	if port.promotions != 0 || port.archives != 0 {
+		t.Fatalf("port=%+v", port)
+	}
+	for _, want := range []string{
+		"evidence-ref-codex-stack-autoprogramming-goal-first-state-missing",
+		"evidence-ref-codex-stack-autoprogramming-goal-first-marker",
+		"evidence-ref-goal-first-marker-" + runRef,
+	} {
+		if !codexStackStringInSetForTestV0(refs, want) {
+			t.Fatalf("evidence_refs=%v missing %s", refs, want)
+		}
+	}
+}
+
 func TestCodexStackAutoprogrammingPromotionV0BloqueaRefsStagingInconsistentesV0(t *testing.T) {
 	ctx := context.Background()
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
