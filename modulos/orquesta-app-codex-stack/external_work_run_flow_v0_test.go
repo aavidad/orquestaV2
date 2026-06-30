@@ -1172,6 +1172,122 @@ func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESVisualFinalSVG(t *testing.
 	}
 }
 
+func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESSupuestosParcialesV0(t *testing.T) {
+	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	change := defaultExternalWorkRunChangeForTestV0()
+	change.ChangeRef = "opes-job-supuestos-partial-goal-001"
+	change.ExternalWork.ProjectRef = "opes"
+	change.ExternalWork.JobRef = "job-supuestos-partial-goal-001"
+	change.ExternalWork.WorkKind = "generate_practical_cases"
+	change.ExternalWork.InputFields = []orquestadomainwork.DomainWorkFieldV0{
+		{Name: "expected_artifact_type", Value: "practical_cases"},
+	}
+	started := postExternalWorkRunStackWithChangeV0(t, stack, change)
+	spec := launcher.specs[0]
+	receiptRef := "receipt-ref-goal-first-opes-supuestos-partial-001"
+	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
+	record.DomainRef = "opes"
+	record.JobRef = "job-supuestos-partial-goal-001"
+	record.ArtifactType = "practical_cases"
+	record.PayloadFields = append(record.PayloadFields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "source_work_kind", Value: "generate_practical_cases"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "schema_version", Value: "opes_practical_cases_validation.v1"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "process_status", Value: "stopped"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "delivery_status", Value: "partial"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "schema_status", Value: "schema_repairable"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "expected_artifacts", ValueJSON: []byte(`24`)},
+		orquestadomainwork.DomainWorkFieldV0{Name: "delivered_artifacts", ValueJSON: []byte(`18`)},
+		orquestadomainwork.DomainWorkFieldV0{Name: "missing_artifacts", Values: []string{"lote-19", "lote-20", "lote-21", "lote-22", "lote-23", "lote-24"}},
+		orquestadomainwork.DomainWorkFieldV0{Name: "tasks", ValueJSON: []byte(`[{"task_id":"legacy-task","kind":"development_task"}]`)},
+	)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		record,
+	); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-opes-supuestos-partial-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework ||
+		!goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptOPESPracticalCasesIssueCodeV0) {
+		t.Fatalf("supuestos OPES parciales cerraron goal-first: result=%+v", result)
+	}
+}
+
+func TestCodexStackV0ExternalWorkGoalFirstCierraOPESSupuestosCompletosValidosV0(t *testing.T) {
+	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	change := defaultExternalWorkRunChangeForTestV0()
+	change.ChangeRef = "opes-job-supuestos-complete-goal-001"
+	change.ExternalWork.ProjectRef = "opes"
+	change.ExternalWork.JobRef = "job-supuestos-complete-goal-001"
+	change.ExternalWork.WorkKind = "generate_practical_cases"
+	change.ExternalWork.InputFields = []orquestadomainwork.DomainWorkFieldV0{
+		{Name: "expected_artifact_type", Value: "practical_cases"},
+	}
+	started := postExternalWorkRunStackWithChangeV0(t, stack, change)
+	spec := launcher.specs[0]
+	receiptRef := "receipt-ref-goal-first-opes-supuestos-complete-001"
+	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
+	record.DomainRef = "opes"
+	record.JobRef = "job-supuestos-complete-goal-001"
+	record.ArtifactType = "practical_cases"
+	record.PayloadFields = append(record.PayloadFields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "source_work_kind", Value: "generate_practical_cases"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "schema_version", Value: "opes_practical_cases_validation.v1"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "process_status", Value: "stopped"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "delivery_status", Value: "complete"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "schema_status", Value: "valid"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "expected_artifacts", ValueJSON: []byte(`24`)},
+		orquestadomainwork.DomainWorkFieldV0{Name: "delivered_artifacts", ValueJSON: []byte(`24`)},
+		orquestadomainwork.DomainWorkFieldV0{Name: "questions", ValueJSON: []byte(`[{"kind":"open_response","topic_evidence":["tema-01"]}]`)},
+	)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		record,
+	); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-opes-supuestos-complete-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 ||
+		!result.Closure.Accepted ||
+		!codexStackStringInSetForTestV0(result.Closure.EvidenceRefs, goalDomainReceiptLedgerAcceptedEvidenceRefV0) {
+		t.Fatalf("supuestos OPES completos no cerraron goal-first: result=%+v", result)
+	}
+}
+
 func TestCodexStackV0ExternalWorkGoalFirstNoCierraReceiptConPayloadNoTerminalEnLedgerV0(t *testing.T) {
 	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
 	started := postExternalWorkRunStackV0(t, stack)

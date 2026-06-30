@@ -23,6 +23,7 @@ const (
 	goalDomainReceiptOPESSubrolesEvidenceMissingIssueV0  = "domain_work_opes_subroles_evidence_missing"
 	goalDomainReceiptOPESFinalPackageEvidenceIssueCodeV0 = codexStackOPESFinalPackageEvidenceIncompleteIssueV0
 	goalDomainReceiptOPESVisualFinalIssueCodeV0          = "domain_work_opes_visual_final_not_professional"
+	goalDomainReceiptOPESPracticalCasesIssueCodeV0       = "domain_work_opes_practical_cases_contract_incomplete"
 	goalDomainReceiptLedgerRequiredArtifactFieldV0       = "domain_receipt_refs.artifact_contracts"
 	goalDomainReceiptStructuredArtifactFieldV0           = "domain_receipt_refs.artifact_payload"
 	goalDomainReceiptLedgerUnavailableIssueFieldV0       = "domain_receipt_refs.ledger"
@@ -30,6 +31,7 @@ const (
 	goalDomainReceiptLedgerRequiredRunRefFieldV0         = "domain_receipt_refs.run_ref"
 	goalDomainReceiptLedgerRequiredReceiptFieldV0        = "domain_receipt_refs.receipt_ref"
 	goalDomainReceiptOPESVisualFinalFieldV0              = "domain_receipt_refs.opes_visual_final"
+	goalDomainReceiptOPESPracticalCasesFieldV0           = "domain_receipt_refs.opes_practical_cases"
 	goalDomainReceiptOPESSubrolesEvidenceFieldV0         = "domain_receipt_refs.opes_subroles"
 	goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0   = "evidence-ref-goal-domain-receipt-opes-subroles-accepted"
 	goalDomainReceiptOPESSubrolesEvidencePrefixV0        = "domain-work-opes-subrole-"
@@ -226,6 +228,9 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) validateAcceptedDomainR
 	if issue := goalDomainReceiptOPESFinalPackageEvidenceIssueV0(spec, matching); issue.Code != "" {
 		return nil, issue
 	}
+	if issue := goalDomainReceiptOPESPracticalCasesIssueV0(spec, matching); issue.Code != "" {
+		return nil, issue
+	}
 	if issue := goalDomainReceiptOPESVisualFinalIssueV0(spec, matching); issue.Code != "" {
 		return nil, issue
 	}
@@ -345,6 +350,7 @@ func goalDomainReceiptCompleteRecordsV0(
 		if record.CompleteJob &&
 			domainWorkStructuredNonTerminalArtifactIssueRefV0(record.PayloadFields) == "" &&
 			!goalDomainReceiptOPESFinalPackageEvidenceMissingV0(spec, record) &&
+			!goalDomainReceiptOPESPracticalCasesInvalidV0(spec, record) &&
 			!goalDomainReceiptOPESVisualFinalInvalidV0(spec, record) {
 			out = append(out, record)
 		}
@@ -361,6 +367,21 @@ func goalDomainReceiptStructuredArtifactIssueV0(
 			return orquestagoal.GoalWorkIssueV0{
 				Code:  goalDomainReceiptStructuredArtifactIssueCodeV0,
 				Field: goalDomainReceiptStructuredArtifactFieldV0,
+			}
+		}
+	}
+	return orquestagoal.GoalWorkIssueV0{}
+}
+
+func goalDomainReceiptOPESPracticalCasesIssueV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	records []DomainWorkArtifactSubmissionRecordV0,
+) orquestagoal.GoalWorkIssueV0 {
+	for _, record := range records {
+		if goalDomainReceiptOPESPracticalCasesInvalidV0(spec, record) {
+			return orquestagoal.GoalWorkIssueV0{
+				Code:  goalDomainReceiptOPESPracticalCasesIssueCodeV0,
+				Field: goalDomainReceiptOPESPracticalCasesFieldV0,
 			}
 		}
 	}
@@ -410,6 +431,132 @@ func goalDomainReceiptOPESFinalPackageEvidenceMissingV0(
 	return !codexStackOPESFinalPackageSubmissionEvidenceCompleteV0(record)
 }
 
+func goalDomainReceiptOPESPracticalCasesInvalidV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	record DomainWorkArtifactSubmissionRecordV0,
+) bool {
+	record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+	if !goalDomainReceiptIsOPESPracticalCasesV0(spec, record) {
+		return false
+	}
+	if goalDomainReceiptPracticalCasesHasBadStatusV0(record) {
+		return true
+	}
+	if goalDomainReceiptFieldHasAnyValueV0(record, "missing_artifacts", "missing_files", "missing_folders", "missing_topics", "faltantes", "schema_errors", "validation_errors") {
+		return true
+	}
+	if goalDomainReceiptDeliveredLessThanExpectedV0(record, "expected_artifacts", "delivered_artifacts") ||
+		goalDomainReceiptDeliveredLessThanExpectedV0(record, "expected_folders", "delivered_folders") ||
+		goalDomainReceiptDeliveredLessThanExpectedV0(record, "expected_topics", "delivered_topics") ||
+		goalDomainReceiptDeliveredLessThanExpectedV0(record, "expected_topics", "covered_topics_count") {
+		return true
+	}
+	if goalDomainReceiptFieldHasAnyValueV0(record, "tasks") &&
+		!goalDomainReceiptFieldHasAnyValueV0(record, "questions") {
+		return true
+	}
+	for _, value := range goalDomainReceiptFieldStringValuesV0(record, "kind", "question_kind", "question_kinds", "kinds") {
+		if strings.EqualFold(strings.TrimSpace(value), "development_task") {
+			return true
+		}
+	}
+	if goalDomainReceiptFieldValueJSONContainsV0(record, "questions", `"kind":"development_task"`) ||
+		goalDomainReceiptFieldValueJSONContainsV0(record, "body", `"kind":"development_task"`) {
+		return true
+	}
+	return false
+}
+
+func goalDomainReceiptIsOPESPracticalCasesV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	record DomainWorkArtifactSubmissionRecordV0,
+) bool {
+	domainRef := firstNonEmptyQueuedSourceV0(record.DomainRef, spec.DomainRef, spec.ProjectRef)
+	if !codexStackOperationalClosureRefIsOPESV0(domainRef) {
+		return false
+	}
+	values := []string{
+		record.ArtifactType,
+		spec.WorkKind,
+		domainWorkFieldStringValueV0(record.PayloadFields, "source_work_kind"),
+		domainWorkFieldStringValueV0(record.PayloadFields, "expected_artifact_type"),
+		domainWorkFieldStringValueV0(record.PayloadFields, "schema_version"),
+	}
+	for _, value := range values {
+		if goalDomainReceiptLooksLikePracticalCasesV0(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func goalDomainReceiptLooksLikePracticalCasesV0(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = strings.ReplaceAll(value, "-", "_")
+	for _, marker := range []string{
+		"supuesto",
+		"practical_case",
+		"practical_cases",
+		"case_bank",
+		"opes_practical_case",
+	} {
+		if strings.Contains(value, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func goalDomainReceiptPracticalCasesHasBadStatusV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+) bool {
+	if goalDomainReceiptAnyFieldValueInSetV0(record, []string{
+		"delivery_status",
+		"coverage_status",
+		"schema_status",
+		"validation_status",
+		"status",
+		"editorial_decision",
+	}, map[string]bool{
+		"partial":           true,
+		"incomplete":        true,
+		"missing":           true,
+		"schema_invalid":    true,
+		"schema_repairable": true,
+		"invalid":           true,
+		"no_apto":           true,
+		"needs_rework":      true,
+	}) {
+		return true
+	}
+	if goalDomainReceiptAnyFieldValueInSetV0(record, []string{"process_status"}, map[string]bool{
+		"stopped":  true,
+		"stop":     true,
+		"finished": true,
+	}) && !goalDomainReceiptPracticalCasesDeliveryCompleteV0(record) {
+		return true
+	}
+	return false
+}
+
+func goalDomainReceiptPracticalCasesDeliveryCompleteV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+) bool {
+	return goalDomainReceiptAnyFieldValueInSetV0(record, []string{
+		"delivery_status",
+		"validation_status",
+		"status",
+	}, map[string]bool{
+		"complete":               true,
+		"completed":              true,
+		"valid":                  true,
+		"validated":              true,
+		"apto":                   true,
+		"apto_importacion_local": true,
+		"ok":                     true,
+	})
+}
+
 func goalDomainReceiptOPESVisualFinalInvalidV0(
 	spec orquestagoal.GoalWorkSpecV0,
 	record DomainWorkArtifactSubmissionRecordV0,
@@ -451,6 +598,128 @@ func goalDomainReceiptVisualPayloadIsSVGV0(record DomainWorkArtifactSubmissionRe
 	}
 	for _, ref := range record.ExternalRefs {
 		if strings.HasSuffix(strings.ToLower(strings.TrimSpace(ref.Ref)), ".svg") {
+			return true
+		}
+	}
+	return false
+}
+
+func goalDomainReceiptAnyFieldValueInSetV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+	names []string,
+	accepted map[string]bool,
+) bool {
+	for _, value := range goalDomainReceiptFieldStringValuesV0(record, names...) {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if accepted[value] {
+			return true
+		}
+	}
+	return false
+}
+
+func goalDomainReceiptDeliveredLessThanExpectedV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+	expectedName string,
+	deliveredName string,
+) bool {
+	expected, okExpected := domainWorkFieldIntValueV0(record.PayloadFields, expectedName)
+	delivered, okDelivered := domainWorkFieldIntValueV0(record.PayloadFields, deliveredName)
+	return okExpected && okDelivered && expected > 0 && delivered >= 0 && delivered < expected
+}
+
+func goalDomainReceiptFieldStringValuesV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+	names ...string,
+) []string {
+	out := []string{}
+	for _, field := range record.PayloadFields {
+		if !goalDomainReceiptFieldNameInSetV0(field.Name, names...) {
+			continue
+		}
+		if strings.TrimSpace(field.Value) != "" {
+			out = append(out, field.Value)
+		}
+		out = append(out, field.Values...)
+		if len(field.ValueJSON) > 0 {
+			out = append(out, goalDomainReceiptStringValuesFromJSONV0(field.ValueJSON)...)
+		}
+	}
+	return compactStringsV0(out)
+}
+
+func goalDomainReceiptStringValuesFromJSONV0(raw json.RawMessage) []string {
+	var decoded any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil
+	}
+	return goalDomainReceiptStringValuesV0(decoded)
+}
+
+func goalDomainReceiptFieldHasAnyValueV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+	names ...string,
+) bool {
+	for _, field := range record.PayloadFields {
+		if !goalDomainReceiptFieldNameInSetV0(field.Name, names...) {
+			continue
+		}
+		if strings.TrimSpace(field.Value) != "" || len(compactStringsV0(field.Values)) > 0 {
+			return true
+		}
+		if len(field.ValueJSON) > 0 && goalDomainReceiptJSONHasAnyValueV0(field.ValueJSON) {
+			return true
+		}
+	}
+	return false
+}
+
+func goalDomainReceiptJSONHasAnyValueV0(raw json.RawMessage) bool {
+	var decoded any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return len(strings.TrimSpace(string(raw))) > 0
+	}
+	switch typed := decoded.(type) {
+	case nil:
+		return false
+	case string:
+		return strings.TrimSpace(typed) != ""
+	case []any:
+		return len(typed) > 0
+	case map[string]any:
+		return len(typed) > 0
+	default:
+		return true
+	}
+}
+
+func goalDomainReceiptFieldValueJSONContainsV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+	name string,
+	fragment string,
+) bool {
+	fragment = strings.TrimSpace(fragment)
+	if fragment == "" {
+		return false
+	}
+	for _, field := range record.PayloadFields {
+		if !goalDomainReceiptFieldNameInSetV0(field.Name, name) || len(field.ValueJSON) == 0 {
+			continue
+		}
+		compact := strings.ReplaceAll(string(field.ValueJSON), " ", "")
+		compact = strings.ReplaceAll(compact, "\n", "")
+		compact = strings.ReplaceAll(compact, "\t", "")
+		if strings.Contains(compact, fragment) {
+			return true
+		}
+	}
+	return false
+}
+
+func goalDomainReceiptFieldNameInSetV0(fieldName string, names ...string) bool {
+	fieldName = normalizedExternalWorkFieldNameV0(fieldName)
+	for _, name := range names {
+		if fieldName == normalizedExternalWorkFieldNameV0(name) {
 			return true
 		}
 	}
