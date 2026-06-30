@@ -1228,6 +1228,63 @@ func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESHTMLReadySinVisualesComune
 	}
 }
 
+func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESHTMLCarcasaTCAEIncompletaV0(t *testing.T) {
+	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	change := defaultExternalWorkRunChangeForTestV0()
+	change.ChangeRef = "opes-job-html-shell-incomplete-goal-001"
+	change.ExternalWork.ProjectRef = "opes"
+	change.ExternalWork.JobRef = "job-html-shell-incomplete-goal-001"
+	change.ExternalWork.WorkKind = "generate_html_site"
+	change.ExternalWork.InputFields = []orquestadomainwork.DomainWorkFieldV0{
+		{Name: "expected_artifact_type", Value: "html_site"},
+	}
+	started := postExternalWorkRunStackWithChangeV0(t, stack, change)
+	spec := launcher.specs[0]
+	receiptRef := "receipt-ref-goal-first-opes-html-shell-incomplete-001"
+	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
+	record.DomainRef = "opes"
+	record.JobRef = "job-html-shell-incomplete-goal-001"
+	record.ArtifactType = "html_site"
+	record.PayloadFields = append(record.PayloadFields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "source_work_kind", Value: "generate_html_site"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "html_status", Value: "html_validado"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "tcae_shell_status", Value: "legacy"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "topnav_present", Value: "true"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "missing_required_indexes", Values: []string{"html_final/index.html", "tests/index.html"}},
+		orquestadomainwork.DomainWorkFieldV0{Name: "local_links_status", Value: "broken"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "ui_label_documentacion_oficial_present", Value: "true"},
+	)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		record,
+	); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-opes-html-shell-incomplete-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework ||
+		!goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptOPESHTMLShellIssueCodeV0) {
+		t.Fatalf("HTML OPES con carcasa TCAE incompleta cerro goal-first: result=%+v", result)
+	}
+}
+
 func TestCodexStackV0ExternalWorkGoalFirstCierraOPESHTMLSinVisualesJustificadosV0(t *testing.T) {
 	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
 	change := defaultExternalWorkRunChangeForTestV0()
@@ -1279,6 +1336,63 @@ func TestCodexStackV0ExternalWorkGoalFirstCierraOPESHTMLSinVisualesJustificadosV
 		!result.Closure.Accepted ||
 		goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptOPESVisualReuseIssueCodeV0) {
 		t.Fatalf("HTML OPES con visual_count=0 justificado no cerro goal-first: result=%+v", result)
+	}
+}
+
+func TestCodexStackV0ExternalWorkGoalFirstCierraOPESHTMLCarcasaTCAEValidaV0(t *testing.T) {
+	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	change := defaultExternalWorkRunChangeForTestV0()
+	change.ChangeRef = "opes-job-html-shell-valid-goal-001"
+	change.ExternalWork.ProjectRef = "opes"
+	change.ExternalWork.JobRef = "job-html-shell-valid-goal-001"
+	change.ExternalWork.WorkKind = "generate_html_site"
+	change.ExternalWork.InputFields = []orquestadomainwork.DomainWorkFieldV0{
+		{Name: "expected_artifact_type", Value: "html_site"},
+	}
+	started := postExternalWorkRunStackWithChangeV0(t, stack, change)
+	spec := launcher.specs[0]
+	receiptRef := "receipt-ref-goal-first-opes-html-shell-valid-001"
+	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
+	record.DomainRef = "opes"
+	record.JobRef = "job-html-shell-valid-goal-001"
+	record.ArtifactType = "html_site"
+	record.PayloadFields = append(record.PayloadFields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "source_work_kind", Value: "generate_html_site"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "html_status", Value: "html_validado"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "tcae_shell_status", Value: "valid"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "topnav_present", Value: "false"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "required_indexes_status", Value: "valid"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "local_links_status", Value: "valid"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "visual_requirement_status", Value: "not_applicable"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "visual_zero_justification_ref", Value: "evidence-ref-no-visual-required-shell-valid-001"},
+	)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		record,
+	); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-opes-html-shell-valid-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status == orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		!result.Closure.Accepted ||
+		goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptOPESHTMLShellIssueCodeV0) {
+		t.Fatalf("HTML OPES con carcasa TCAE valida no cerro goal-first: result=%+v", result)
 	}
 }
 

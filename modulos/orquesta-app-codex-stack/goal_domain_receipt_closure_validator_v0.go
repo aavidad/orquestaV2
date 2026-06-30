@@ -24,6 +24,7 @@ const (
 	goalDomainReceiptOPESFinalPackageEvidenceIssueCodeV0 = codexStackOPESFinalPackageEvidenceIncompleteIssueV0
 	goalDomainReceiptOPESVisualFinalIssueCodeV0          = "domain_work_opes_visual_final_not_professional"
 	goalDomainReceiptOPESVisualReuseIssueCodeV0          = "domain_work_opes_visual_reuse_missing"
+	goalDomainReceiptOPESHTMLShellIssueCodeV0            = "domain_work_opes_html_shell_incomplete"
 	goalDomainReceiptOPESPracticalCasesIssueCodeV0       = "domain_work_opes_practical_cases_contract_incomplete"
 	goalDomainReceiptLedgerRequiredArtifactFieldV0       = "domain_receipt_refs.artifact_contracts"
 	goalDomainReceiptStructuredArtifactFieldV0           = "domain_receipt_refs.artifact_payload"
@@ -33,6 +34,7 @@ const (
 	goalDomainReceiptLedgerRequiredReceiptFieldV0        = "domain_receipt_refs.receipt_ref"
 	goalDomainReceiptOPESVisualFinalFieldV0              = "domain_receipt_refs.opes_visual_final"
 	goalDomainReceiptOPESVisualReuseFieldV0              = "domain_receipt_refs.opes_visual_reuse"
+	goalDomainReceiptOPESHTMLShellFieldV0                = "domain_receipt_refs.opes_html_shell"
 	goalDomainReceiptOPESPracticalCasesFieldV0           = "domain_receipt_refs.opes_practical_cases"
 	goalDomainReceiptOPESSubrolesEvidenceFieldV0         = "domain_receipt_refs.opes_subroles"
 	goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0   = "evidence-ref-goal-domain-receipt-opes-subroles-accepted"
@@ -239,6 +241,9 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) validateAcceptedDomainR
 	if issue := goalDomainReceiptOPESVisualReuseIssueV0(spec, matching); issue.Code != "" {
 		return nil, issue
 	}
+	if issue := goalDomainReceiptOPESHTMLShellIssueV0(spec, matching); issue.Code != "" {
+		return nil, issue
+	}
 	completeMatching := goalDomainReceiptCompleteRecordsV0(spec, matching)
 	if !goalDomainReceiptAllContractsCoveredV0(required, completeMatching) {
 		return nil, orquestagoal.GoalWorkIssueV0{
@@ -357,7 +362,8 @@ func goalDomainReceiptCompleteRecordsV0(
 			!goalDomainReceiptOPESFinalPackageEvidenceMissingV0(spec, record) &&
 			!goalDomainReceiptOPESPracticalCasesInvalidV0(spec, record) &&
 			!goalDomainReceiptOPESVisualFinalInvalidV0(spec, record) &&
-			!goalDomainReceiptOPESVisualReuseMissingV0(spec, record) {
+			!goalDomainReceiptOPESVisualReuseMissingV0(spec, record) &&
+			!goalDomainReceiptOPESHTMLShellIncompleteV0(spec, record) {
 			out = append(out, record)
 		}
 	}
@@ -418,6 +424,21 @@ func goalDomainReceiptOPESVisualReuseIssueV0(
 			return orquestagoal.GoalWorkIssueV0{
 				Code:  goalDomainReceiptOPESVisualReuseIssueCodeV0,
 				Field: goalDomainReceiptOPESVisualReuseFieldV0,
+			}
+		}
+	}
+	return orquestagoal.GoalWorkIssueV0{}
+}
+
+func goalDomainReceiptOPESHTMLShellIssueV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	records []DomainWorkArtifactSubmissionRecordV0,
+) orquestagoal.GoalWorkIssueV0 {
+	for _, record := range records {
+		if goalDomainReceiptOPESHTMLShellIncompleteV0(spec, record) {
+			return orquestagoal.GoalWorkIssueV0{
+				Code:  goalDomainReceiptOPESHTMLShellIssueCodeV0,
+				Field: goalDomainReceiptOPESHTMLShellFieldV0,
 			}
 		}
 	}
@@ -644,6 +665,66 @@ func goalDomainReceiptOPESVisualReuseGateAppliesV0(
 	}
 }
 
+func goalDomainReceiptOPESHTMLShellIncompleteV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	record DomainWorkArtifactSubmissionRecordV0,
+) bool {
+	record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+	domainRef := firstNonEmptyQueuedSourceV0(record.DomainRef, spec.DomainRef, spec.ProjectRef)
+	if !codexStackOperationalClosureRefIsOPESV0(domainRef) ||
+		!goalDomainReceiptOPESVisualReuseGateAppliesV0(spec, record) ||
+		!goalDomainReceiptOPESVisualReadyWithoutAssetsV0(record) {
+		return false
+	}
+	if goalDomainReceiptAnyTruthyFieldV0(record,
+		"topnav_present",
+		"html_topnav_present",
+		"legacy_topnav_present",
+		"old_shell_present",
+		"ui_label_documentacion_oficial_present",
+		"public_label_documentacion_oficial_present",
+		"broken_local_links",
+		"local_links_broken",
+	) {
+		return true
+	}
+	if goalDomainReceiptAnyPositiveIntFieldV0(record,
+		"topnav_count",
+		"legacy_topnav_count",
+		"missing_required_index_count",
+		"missing_variant_index_count",
+		"broken_local_link_count",
+	) {
+		return true
+	}
+	if goalDomainReceiptAnyFieldValueInSetV0(record, []string{
+		"tcae_shell_status",
+		"html_shell_status",
+		"course_shell_status",
+		"required_indexes_status",
+		"variant_indexes_status",
+		"local_links_status",
+	}, map[string]bool{
+		"missing":       true,
+		"incomplete":    true,
+		"legacy":        true,
+		"old":           true,
+		"broken":        true,
+		"invalid":       true,
+		"needs_rework":  true,
+		"not_generated": true,
+	}) {
+		return true
+	}
+	return goalDomainReceiptFieldHasAnyValueV0(record,
+		"missing_required_indexes",
+		"missing_variant_indexes",
+		"missing_index_refs",
+		"broken_local_link_refs",
+		"html_shell_issue_refs",
+	)
+}
+
 func goalDomainReceiptOPESVisualReuseRequiredV0(
 	record DomainWorkArtifactSubmissionRecordV0,
 ) bool {
@@ -740,6 +821,26 @@ func goalDomainReceiptAnyPositiveIntFieldV0(
 	record DomainWorkArtifactSubmissionRecordV0,
 	names ...string,
 ) bool {
+	for _, name := range names {
+		value, ok := domainWorkFieldIntValueV0(record.PayloadFields, name)
+		if ok && value > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func goalDomainReceiptAnyTruthyFieldV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+	names ...string,
+) bool {
+	for _, value := range goalDomainReceiptFieldStringValuesV0(record, names...) {
+		value = strings.ToLower(strings.TrimSpace(value))
+		switch value {
+		case "1", "true", "yes", "si", "sí", "present", "presentes", "detected", "found":
+			return true
+		}
+	}
 	for _, name := range names {
 		value, ok := domainWorkFieldIntValueV0(record.PayloadFields, name)
 		if ok && value > 0 {
