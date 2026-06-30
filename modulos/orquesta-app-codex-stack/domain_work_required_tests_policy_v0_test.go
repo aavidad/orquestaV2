@@ -177,6 +177,43 @@ func TestDomainWorkRequiredTestRunnerV0DistingueLatenciaRechazoYAceptacion(t *te
 	if err != nil || len(result.PassedEvidenceRefs) != 1 {
 		t.Fatalf("aceptacion debe generar passed evidence: result=%+v err=%v", result, err)
 	}
+
+	finalRecord := codexStackDomainWorkPolicyRecordForTestV0("final-package")
+	finalRecord.Request.ExternalWork.ProjectRef = "opes"
+	finalRecord.Request.ExternalWork.WorkKind = "finalize_temario_package"
+	finalRecord.Request.ExternalWork.RequiredTests = record.Request.ExternalWork.RequiredTests
+	finalStore := orquestaappchange.NewInMemoryAppChangeStoreV0(finalRecord)
+	finalLedger := NewInMemoryDomainWorkArtifactSubmissionLedgerV0()
+	finalEvidence := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
+	finalRunner := DomainWorkRequiredTestRunnerV0{
+		Policy:           orquestadomainwork.DeclaredDomainWorkRequiredTestPolicyV0{},
+		AppChangeStore:   finalStore,
+		SubmissionLedger: finalLedger,
+		EvidenceWriter:   finalEvidence,
+	}
+	finalRequest := codexStackDomainWorkRequiredTestRequestForTestV0(finalRecord, "final-package")
+	if err := finalLedger.RecordDomainWorkArtifactSubmissionV0(ctx, DomainWorkArtifactSubmissionRecordV0{
+		IdempotencyKey: "idem-final-package-incomplete",
+		Status:         DomainWorkArtifactSubmissionStatusAcceptedV0,
+		RunRef:         finalRequest.RunRef,
+		TaskRef:        finalRequest.TaskRef,
+		DeliveryRef:    finalRequest.DeliveryRef,
+		DomainRef:      "opes",
+		ArtifactType:   orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0,
+		CompleteJob:    true,
+		ReceiptRef:     "receipt-ref-final-package-incomplete",
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "source_work_kind", Value: "finalize_temario_package"},
+			{Name: "package_ref", Value: "package-ref-final-incomplete-001"},
+		},
+		EvidenceRefs: []string{"artifact-ref-final-package-incomplete"},
+	}); err != nil {
+		t.Fatalf("record final package: %v", err)
+	}
+	result, err = finalRunner.RunRequiredTestsV0(ctx, finalRequest)
+	if err != nil || len(result.FailedEvidenceRefs) != 1 || len(result.PassedEvidenceRefs) != 0 {
+		t.Fatalf("paquete final OPES sin manifest debe fallar required tests: result=%+v err=%v", result, err)
+	}
 }
 
 func codexStackDomainWorkPolicyMicrotaskDecisionForTestV0(

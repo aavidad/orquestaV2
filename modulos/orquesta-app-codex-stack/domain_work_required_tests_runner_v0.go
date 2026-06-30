@@ -154,6 +154,13 @@ func domainWorkSubmissionRecordFailsRequiredTestsV0(
 	if record.Status == DomainWorkArtifactSubmissionStatusRejectedV0 {
 		return true
 	}
+	if codexStackDomainWorkIsOPESFinalPackageV0(
+		record.DomainRef,
+		domainWorkFieldStringValueV0(record.PayloadFields, "source_work_kind"),
+		record.ArtifactType,
+	) && !codexStackOPESFinalPackageSubmissionEvidenceCompleteV0(record) {
+		return true
+	}
 	if record.CompleteJob {
 		return false
 	}

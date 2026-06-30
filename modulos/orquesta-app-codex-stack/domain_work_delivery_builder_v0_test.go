@@ -1659,3 +1659,66 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0DerivaManifestCierreOPESFin
 		t.Fatalf("submission invalida: %+v", issues)
 	}
 }
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0NoCompletaOPESFinalSinManifest(t *testing.T) {
+	projectDir := t.TempDir()
+	fileRef := "external/opes/finalize_temario_package/completed_syllabus_package.json"
+	bodyPath := filepath.Join(projectDir, filepath.FromSlash(fileRef))
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	payload := `{
+		"artifact_type":"completed_syllabus_package",
+		"payload_json":{
+			"package_ref":"package-ref-final-incomplete-001"
+		}
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run: orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-final-package-incomplete-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{
+					TaskID: "task-ref-final-package-incomplete-001",
+					Title:  "Cerrar paquete final OPES",
+				},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-final-package-incomplete-001",
+						ChangeRef:     "change-ref-final-package-incomplete-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-final-package-incomplete-001",
+							WorkKind:   "finalize_temario_package",
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-final-package-incomplete-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{fileRef},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef:  "ack-ref-final-package-incomplete-001",
+					AgentRef:     "agent-ref-final-package-incomplete-001",
+					Summary:      "Paquete final OPES incompleto.",
+					EvidenceRefs: []string{"ack-ref-final-package-incomplete-001"},
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if submission.CompleteJob ||
+		!domainWorkFieldValuesForTestV0(submission.PayloadFields, "validation_issue_refs", []string{codexStackOPESFinalPackageEvidenceIncompleteIssueV0}) ||
+		!codexStackStringInSetV0(submission.EvidenceRefs, codexStackOPESFinalPackageEvidenceIncompleteIssueV0) {
+		t.Fatalf("submission final incompleta debe quedar no terminal: %+v", submission)
+	}
+}

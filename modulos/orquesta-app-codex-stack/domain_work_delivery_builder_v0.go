@@ -48,6 +48,15 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 		fields = domainWorkDeliveryMarkStructuredNonTerminalInvalidV0(fields, issueRef)
 		completeJob = false
 	}
+	if codexStackDomainWorkIsOPESFinalPackageV0(work.ProjectRef, work.WorkKind, artifactType) &&
+		!codexStackOPESFinalPackageEvidenceCompleteV0(fields, evidenceRefs, nil, nil) {
+		fields = domainWorkDeliveryMarkStructuredNonTerminalInvalidV0(
+			fields,
+			codexStackOPESFinalPackageEvidenceIncompleteIssueV0,
+		)
+		evidenceRefs = compactStringsV0(append(evidenceRefs, codexStackOPESFinalPackageEvidenceIncompleteIssueV0))
+		completeJob = false
+	}
 	fields = redactDomainWorkDeliveryPayloadFieldsV0(fields)
 	return orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(
 		orquestadomainwork.DomainWorkArtifactSubmissionV0{

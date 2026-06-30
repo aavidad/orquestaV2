@@ -8,27 +8,28 @@ import (
 )
 
 const (
-	goalDomainReceiptLedgerAcceptedEvidenceRefV0        = "evidence-ref-goal-domain-receipt-ledger-accepted"
-	goalDomainReceiptLedgerMissingEvidenceRefV0         = "evidence-ref-goal-domain-receipt-ledger-missing"
-	goalDomainReceiptLedgerUnavailableIssueV0           = "domain_work_receipt_ledger_unavailable"
-	goalDomainReceiptLedgerAcceptedMissingIssueV0       = "domain_work_receipt_not_accepted"
-	goalDomainReceiptLedgerIncompleteArtifactV0         = "domain_work_receipt_artifact_incomplete"
-	goalDomainReceiptLedgerRequiredRunRefIssueV0        = "domain_work_receipt_run_ref_required"
-	goalDomainReceiptLedgerRequiredReceiptIssueV0       = "domain_work_receipt_ref_required"
-	goalDomainReceiptLedgerRequiredContractIssueV0      = "domain_work_receipt_contract_required"
-	goalDomainReceiptLedgerRequiredArtifactIssueV0      = "domain_work_receipt_artifact_required"
-	goalDomainReceiptStructuredArtifactIssueCodeV0      = "domain_work_receipt_artifact_structured_non_terminal"
-	goalDomainReceiptOPESSubrolesEvidenceMissingIssueV0 = "domain_work_opes_subroles_evidence_missing"
-	goalDomainReceiptLedgerRequiredArtifactFieldV0      = "domain_receipt_refs.artifact_contracts"
-	goalDomainReceiptStructuredArtifactFieldV0          = "domain_receipt_refs.artifact_payload"
-	goalDomainReceiptLedgerUnavailableIssueFieldV0      = "domain_receipt_refs.ledger"
-	goalDomainReceiptLedgerMissingIssueFieldV0          = "domain_receipt_refs"
-	goalDomainReceiptLedgerRequiredRunRefFieldV0        = "domain_receipt_refs.run_ref"
-	goalDomainReceiptLedgerRequiredReceiptFieldV0       = "domain_receipt_refs.receipt_ref"
-	goalDomainReceiptOPESSubrolesEvidenceFieldV0        = "domain_receipt_refs.opes_subroles"
-	goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0  = "evidence-ref-goal-domain-receipt-opes-subroles-accepted"
-	goalDomainReceiptOPESSubrolesEvidencePrefixV0       = "domain-work-opes-subrole-"
-	goalDomainReceiptOPESSubrolesRequiredCountV0        = 6
+	goalDomainReceiptLedgerAcceptedEvidenceRefV0         = "evidence-ref-goal-domain-receipt-ledger-accepted"
+	goalDomainReceiptLedgerMissingEvidenceRefV0          = "evidence-ref-goal-domain-receipt-ledger-missing"
+	goalDomainReceiptLedgerUnavailableIssueV0            = "domain_work_receipt_ledger_unavailable"
+	goalDomainReceiptLedgerAcceptedMissingIssueV0        = "domain_work_receipt_not_accepted"
+	goalDomainReceiptLedgerIncompleteArtifactV0          = "domain_work_receipt_artifact_incomplete"
+	goalDomainReceiptLedgerRequiredRunRefIssueV0         = "domain_work_receipt_run_ref_required"
+	goalDomainReceiptLedgerRequiredReceiptIssueV0        = "domain_work_receipt_ref_required"
+	goalDomainReceiptLedgerRequiredContractIssueV0       = "domain_work_receipt_contract_required"
+	goalDomainReceiptLedgerRequiredArtifactIssueV0       = "domain_work_receipt_artifact_required"
+	goalDomainReceiptStructuredArtifactIssueCodeV0       = "domain_work_receipt_artifact_structured_non_terminal"
+	goalDomainReceiptOPESSubrolesEvidenceMissingIssueV0  = "domain_work_opes_subroles_evidence_missing"
+	goalDomainReceiptOPESFinalPackageEvidenceIssueCodeV0 = codexStackOPESFinalPackageEvidenceIncompleteIssueV0
+	goalDomainReceiptLedgerRequiredArtifactFieldV0       = "domain_receipt_refs.artifact_contracts"
+	goalDomainReceiptStructuredArtifactFieldV0           = "domain_receipt_refs.artifact_payload"
+	goalDomainReceiptLedgerUnavailableIssueFieldV0       = "domain_receipt_refs.ledger"
+	goalDomainReceiptLedgerMissingIssueFieldV0           = "domain_receipt_refs"
+	goalDomainReceiptLedgerRequiredRunRefFieldV0         = "domain_receipt_refs.run_ref"
+	goalDomainReceiptLedgerRequiredReceiptFieldV0        = "domain_receipt_refs.receipt_ref"
+	goalDomainReceiptOPESSubrolesEvidenceFieldV0         = "domain_receipt_refs.opes_subroles"
+	goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0   = "evidence-ref-goal-domain-receipt-opes-subroles-accepted"
+	goalDomainReceiptOPESSubrolesEvidencePrefixV0        = "domain-work-opes-subrole-"
+	goalDomainReceiptOPESSubrolesRequiredCountV0         = 6
 )
 
 type domainWorkGoalReceiptClosureValidatorV0 struct {
@@ -87,7 +88,7 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) goalResultWithAcceptedD
 	if err != nil {
 		return result
 	}
-	complete := goalDomainReceiptCompleteRecordsV0(records)
+	complete := goalDomainReceiptCompleteRecordsV0(spec, records)
 	if !goalDomainReceiptAllContractsCoveredV0(required, complete) {
 		return result
 	}
@@ -134,7 +135,7 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) goalResultWithAcceptedD
 	if err != nil {
 		return result
 	}
-	complete := goalDomainReceiptCompleteRecordsV0(records)
+	complete := goalDomainReceiptCompleteRecordsV0(spec, records)
 	if !goalDomainReceiptAllContractsCoveredV0(required, complete) {
 		return result
 	}
@@ -218,7 +219,10 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) validateAcceptedDomainR
 	if issue := goalDomainReceiptStructuredArtifactIssueV0(matching); issue.Code != "" {
 		return nil, issue
 	}
-	completeMatching := goalDomainReceiptCompleteRecordsV0(matching)
+	if issue := goalDomainReceiptOPESFinalPackageEvidenceIssueV0(spec, matching); issue.Code != "" {
+		return nil, issue
+	}
+	completeMatching := goalDomainReceiptCompleteRecordsV0(spec, matching)
 	if !goalDomainReceiptAllContractsCoveredV0(required, completeMatching) {
 		return nil, orquestagoal.GoalWorkIssueV0{
 			Code:  goalDomainReceiptLedgerIncompleteArtifactV0,
@@ -325,12 +329,15 @@ func goalDomainReceiptAllContractsCoveredV0(
 }
 
 func goalDomainReceiptCompleteRecordsV0(
+	spec orquestagoal.GoalWorkSpecV0,
 	records []DomainWorkArtifactSubmissionRecordV0,
 ) []DomainWorkArtifactSubmissionRecordV0 {
 	out := make([]DomainWorkArtifactSubmissionRecordV0, 0, len(records))
 	for _, record := range records {
 		record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
-		if record.CompleteJob && domainWorkStructuredNonTerminalArtifactIssueRefV0(record.PayloadFields) == "" {
+		if record.CompleteJob &&
+			domainWorkStructuredNonTerminalArtifactIssueRefV0(record.PayloadFields) == "" &&
+			!goalDomainReceiptOPESFinalPackageEvidenceMissingV0(spec, record) {
 			out = append(out, record)
 		}
 	}
@@ -350,6 +357,34 @@ func goalDomainReceiptStructuredArtifactIssueV0(
 		}
 	}
 	return orquestagoal.GoalWorkIssueV0{}
+}
+
+func goalDomainReceiptOPESFinalPackageEvidenceIssueV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	records []DomainWorkArtifactSubmissionRecordV0,
+) orquestagoal.GoalWorkIssueV0 {
+	for _, record := range records {
+		if goalDomainReceiptOPESFinalPackageEvidenceMissingV0(spec, record) {
+			return orquestagoal.GoalWorkIssueV0{
+				Code:  goalDomainReceiptOPESFinalPackageEvidenceIssueCodeV0,
+				Field: goalDomainReceiptOPESFinalPackageEvidenceFieldV0,
+			}
+		}
+	}
+	return orquestagoal.GoalWorkIssueV0{}
+}
+
+func goalDomainReceiptOPESFinalPackageEvidenceMissingV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	record DomainWorkArtifactSubmissionRecordV0,
+) bool {
+	record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+	domainRef := firstNonEmptyQueuedSourceV0(record.DomainRef, spec.DomainRef, spec.ProjectRef)
+	workKind := firstNonEmptyQueuedSourceV0(domainWorkFieldStringValueV0(record.PayloadFields, "source_work_kind"), spec.WorkKind)
+	if !codexStackDomainWorkIsOPESFinalPackageV0(domainRef, workKind, record.ArtifactType) {
+		return false
+	}
+	return !codexStackOPESFinalPackageSubmissionEvidenceCompleteV0(record)
 }
 
 func goalDomainReceiptRequiredTestPassedV0(

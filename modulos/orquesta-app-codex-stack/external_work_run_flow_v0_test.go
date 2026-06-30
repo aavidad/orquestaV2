@@ -999,6 +999,58 @@ func TestCodexStackV0ExternalWorkGoalFirstNoCierraReceiptDomainWorkIncompleteV0(
 	}
 }
 
+func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESFinalSinManifestV0(t *testing.T) {
+	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
+	change := defaultExternalWorkRunChangeForTestV0()
+	change.ChangeRef = "opes-job-final-goal-001"
+	change.ExternalWork.ProjectRef = "opes"
+	change.ExternalWork.JobRef = "job-final-goal-001"
+	change.ExternalWork.WorkKind = "finalize_temario_package"
+	change.ExternalWork.InputFields = []orquestadomainwork.DomainWorkFieldV0{
+		{Name: "expected_artifact_type", Value: "completed_syllabus_package"},
+	}
+	started := postExternalWorkRunStackWithChangeV0(t, stack, change)
+	spec := launcher.specs[0]
+	receiptRef := "receipt-ref-goal-first-opes-final-incomplete-001"
+	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
+	record.DomainRef = "opes"
+	record.JobRef = "job-final-goal-001"
+	record.ArtifactType = orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0
+	record.PayloadFields = append(record.PayloadFields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "source_work_kind", Value: "finalize_temario_package"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "package_ref", Value: "package-ref-final-incomplete-001"},
+	)
+	if err := stack.DomainDelivery.Ledger.RecordDomainWorkArtifactSubmissionV0(
+		context.Background(),
+		record,
+	); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	observer.result = externalWorkGoalFirstCompleteResultForTestV0(
+		spec,
+		started.ExternalGoalRef,
+		receiptRef,
+	)
+
+	result, err := stack.ObserveAppDirectorGoalV0(
+		context.Background(),
+		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
+			RunRef:        started.RunRef,
+			CorrelationID: "corr-external-work-goal-first-opes-final-incomplete-001",
+			RequestedBy:   "orquesta-app-codex-stack-test",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		result.Closure.Accepted ||
+		!result.Closure.NeedsRework ||
+		!goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptOPESFinalPackageEvidenceIssueCodeV0) {
+		t.Fatalf("paquete final OPES sin manifest cerro goal-first: result=%+v", result)
+	}
+}
+
 func TestCodexStackV0ExternalWorkGoalFirstNoCierraReceiptConPayloadNoTerminalEnLedgerV0(t *testing.T) {
 	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
 	started := postExternalWorkRunStackV0(t, stack)
@@ -1794,6 +1846,30 @@ func writeGoalFirstDomainWorkArtifactForTestV0(
 		t.Fatalf("MkdirAll: %v", err)
 	}
 	body := `{"artifact_type":"` + artifactType + `","payload_json":{"body":"Contenido OPES aceptable para cierre goal-first.","topic_id":"tema-001"}}`
+	if codexStackDomainWorkFinalPackageArtifactTypeV0(artifactType) {
+		body = `{
+			"artifact_type":"` + artifactType + `",
+			"payload_json":{
+				"package_ref":"package-ref-goal-first-final-001",
+				"manifest_cierre":{
+					"schema_version":"opes_final_package_evidence_manifest.v0",
+					"package_ref":"package-ref-goal-first-final-001",
+					"manifest_ref":"manifest-cierre-ref-goal-first-final-001",
+					"checksum_refs":["checksum-ref-goal-first-final-001"],
+					"validation_report_ref":"validation-report-ref-goal-first-final-001",
+					"review_matrix_ref":"review-matrix-ref-goal-first-final-001",
+					"required_evidence_refs":{
+						"html":"opes-final-evidence:html:goal-first",
+						"rag":"opes-final-evidence:rag:goal-first",
+						"audio":"opes-final-evidence:audio:goal-first",
+						"tests":"opes-final-evidence:tests:goal-first",
+						"visual":"opes-final-evidence:visual:goal-first",
+						"qa":"opes-final-evidence:qa:goal-first"
+					}
+				}
+			}
+		}`
+	}
 	if err := os.WriteFile(filepath.Join(dir, artifactType+".json"), []byte(body), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
