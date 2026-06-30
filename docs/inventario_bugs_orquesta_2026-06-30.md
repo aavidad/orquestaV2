@@ -176,6 +176,10 @@ Evidencia nueva:
 `TestServerFileCodeContextToolOwnerStopperV0EscalaSiProcesoSigueVivo` y
 `TestRunServerCodeContextToolWatchdogLoopAsyncV0ParaLeaseExpiradoSinPIDV0`, `TestServerCodebaseMemoryCLIProviderV0ParseaSearchGraphYEscribeOwnerMarker`, `TestCodeContextBrokerWiringFromEnvV0ConfiguraCodebaseMemoryCLIConOptInV0`, `TestServerCodebaseMemoryCLIProviderV0RealSmokeOptIn`.
 Cierre: el adaptador real usa `codebase-memory-mcp cli` detras del broker central, con lease file-based, owner marker y smoke real opt-in `ORQUESTA_CODEBASE_MEMORY_REAL_SMOKE=1`. Residual operativo: procesos nacidos fuera de Orquesta por sesiones Codex antiguas no se pueden reconciliar si no tienen lease/marker; se vigilan como incidencia operativa, no como pendiente de codigo de BUG-032.
+Revision operativa posterior 2026-06-30: PIDs `3345397`, `3345721`,
+`3346067`, `3346458`, `3346742` y `3347165`, hijos de un Codex antiguo y a
+0% CPU, quedaron como instancias duplicadas de `codebase-memory-mcp`; se pararon
+con `SIGTERM` y no quedaron procesos vivos.
 
 Revision adicional 2026-06-30 sobre BUG-030/037/040: se integra el tramo
 remoto de metadata operacional OPES para goal-first. El ledger externo conserva
