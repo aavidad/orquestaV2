@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
+
+	orquestaopesconnector "orquesta/modulos/orquesta-opes-connector"
 )
 
 func opesBridgeSuperviseSubmittedRunV0(
@@ -21,6 +24,11 @@ func opesBridgeSuperviseSubmittedRunV0(
 		(strings.TrimSpace(result.Status) != "submitted" &&
 			strings.TrimSpace(result.Status) != "already_submitted" &&
 			strings.TrimSpace(result.Status) != "recovery_required") {
+		return
+	}
+	status := strings.TrimSpace(result.Status)
+	if (status == "already_submitted" || status == "recovery_required") &&
+		opesBridgeAudioProviderHeartbeatBlockV0(ctx, config, result) {
 		return
 	}
 	if opesBridgeResultUsesGoalFirstV0(*result) {
@@ -195,6 +203,117 @@ func opesBridgeObserveSubmittedGoalV0(
 	result.GoalArtifactRefs = compactStringsV0(supervision.ArtifactRefs)
 	result.GoalDomainReceiptRefs = compactStringsV0(supervision.DomainReceiptRefs)
 	result.GoalEvidenceRefs = compactStringsV0(supervision.EvidenceRefs)
+}
+
+func opesBridgeAudioProviderHeartbeatBlockV0(
+	ctx context.Context,
+	config opesDrainConfigV0,
+	result *opesDrainJobResultV0,
+) bool {
+	if result == nil ||
+		strings.TrimSpace(result.JobRef) == "" ||
+		strings.TrimSpace(result.WorkKind) != "generate_audio_asset" ||
+		strings.TrimSpace(config.OPESBaseURL) == "" {
+		return false
+	}
+	httpClient := commandOPESTemporalHTTPClientV0(config.HTTPTimeout)
+	opesClient := orquestaopesconnector.NewRESTClientV0(orquestaopesconnector.RESTClientConfigV0{
+		BaseURL:    config.OPESBaseURL,
+		HTTPClient: httpClient,
+	})
+	jobs, err := opesClient.ListExternalJobsV0(ctx, orquestaopesconnector.ExternalJobQueryV0{
+		JobRef: result.JobRef,
+	})
+	if err != nil || len(jobs) == 0 {
+		return false
+	}
+	reason := opesBridgeAudioProviderHeartbeatReasonV0(jobs[0])
+	if reason == "" {
+		return false
+	}
+	result.SupervisionStatus = "blocked"
+	result.SupervisionStopReason = reason
+	result.NextActions = compactStringsV0(append(result.NextActions, "retry_from_phase=tts", "inspect_audio_provider_heartbeat"))
+	return true
+}
+
+func opesBridgeAudioProviderHeartbeatReasonV0(job orquestaopesconnector.ExternalJobV0) string {
+	if job.ProviderTimeout {
+		return "provider_timeout"
+	}
+	if job.RunningNoRecentProgress {
+		return "running_no_recent_progress"
+	}
+	if strings.TrimSpace(job.ExternalRefs["provider_timeout"]) == "true" {
+		return "provider_timeout"
+	}
+	if strings.TrimSpace(job.ExternalRefs["running_no_recent_progress"]) == "true" {
+		return "running_no_recent_progress"
+	}
+	for _, value := range []string{
+		job.ProviderReason,
+		job.ProviderStatus,
+		job.LastError,
+		job.ExternalRefs["provider_status"],
+		job.ExternalRefs["provider_reason"],
+		job.ExternalRefs["provider_timeout"],
+		job.ExternalRefs["running_no_recent_progress"],
+		opesBridgeAudioProviderPayloadStringV0(job.PayloadJSON, "provider_status"),
+		opesBridgeAudioProviderPayloadStringV0(job.PayloadJSON, "provider_reason"),
+		opesBridgeAudioProviderPayloadStringV0(job.PayloadJSON, "provider_timeout"),
+		opesBridgeAudioProviderPayloadStringV0(job.PayloadJSON, "running_no_recent_progress"),
+	} {
+		switch strings.TrimSpace(value) {
+		case "provider_timeout":
+			return "provider_timeout"
+		case "running_no_recent_progress":
+			return "running_no_recent_progress"
+		}
+	}
+	if opesBridgeAudioProviderPayloadBoolV0(job.PayloadJSON, "provider_timeout") {
+		return "provider_timeout"
+	}
+	if opesBridgeAudioProviderPayloadBoolV0(job.PayloadJSON, "running_no_recent_progress") {
+		return "running_no_recent_progress"
+	}
+	return ""
+}
+
+func opesBridgeAudioProviderPayloadStringV0(raw string, key string) string {
+	values := opesBridgeAudioProviderPayloadMapV0(raw)
+	if len(values) == 0 {
+		return ""
+	}
+	switch value := values[strings.TrimSpace(key)].(type) {
+	case string:
+		return strings.TrimSpace(value)
+	case bool:
+		if value {
+			return "true"
+		}
+	}
+	return ""
+}
+
+func opesBridgeAudioProviderPayloadBoolV0(raw string, key string) bool {
+	values := opesBridgeAudioProviderPayloadMapV0(raw)
+	if len(values) == 0 {
+		return false
+	}
+	value, ok := values[strings.TrimSpace(key)].(bool)
+	return ok && value
+}
+
+func opesBridgeAudioProviderPayloadMapV0(raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var values map[string]any
+	if err := json.Unmarshal([]byte(raw), &values); err != nil {
+		return nil
+	}
+	return values
 }
 
 func opesBridgeGoalObservationStopReasonV0(err error) string {

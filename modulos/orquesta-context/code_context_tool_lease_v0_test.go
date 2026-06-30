@@ -45,6 +45,40 @@ func TestCodeContextToolLeaseV0StoreCompletaLease(t *testing.T) {
 	}
 }
 
+func TestCodeContextToolLeaseV0StoreMarcaLeaseStopped(t *testing.T) {
+	store := NewInMemoryCodeContextToolLeaseStoreV0()
+	started := time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC)
+	lease, err := store.BeginCodeContextToolLeaseV0(context.Background(), CodeContextToolLeaseRequestV0{
+		RequestRef:      "request-ref-codebase-lease",
+		RepositoryRef:   "repo-ref-orquesta",
+		QueryHash:       "query-hash-test",
+		ToolRef:         "tool-ref-codebase-central",
+		ProviderKind:    CodeContextProviderKindCodebaseMCPV0,
+		StartedAt:       started.Format(time.RFC3339),
+		LeaseTTLSeconds: 10,
+	})
+	if err != nil {
+		t.Fatalf("BeginCodeContextToolLeaseV0: %v", err)
+	}
+	if err := store.FinishCodeContextToolLeaseV0(context.Background(), CodeContextToolLeaseCompletionV0{
+		LeaseRef:    lease.LeaseRef,
+		ToolRef:     lease.ToolRef,
+		CompletedAt: started.Add(2 * time.Second).Format(time.RFC3339),
+		Status:      CodeContextToolLeaseCompletionStoppedV0,
+	}); err != nil {
+		t.Fatalf("FinishCodeContextToolLeaseV0 stopped: %v", err)
+	}
+	stopped, err := store.ListCodeContextToolLeasesV0(context.Background(), CodeContextToolLeaseListFilterV0{
+		Status: CodeContextToolLeaseStatusStoppedV0,
+	})
+	if err != nil {
+		t.Fatalf("ListCodeContextToolLeasesV0 stopped: %v", err)
+	}
+	if len(stopped) != 1 || stopped[0].LeaseRef != lease.LeaseRef {
+		t.Fatalf("stopped=%+v", stopped)
+	}
+}
+
 func TestEvaluateCodeContextToolLeaseV0PideParadaSiLeaseExpiraSinPeticiones(t *testing.T) {
 	started := time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC)
 	lease := validCodeContextToolLeaseTestV0(started, 10)

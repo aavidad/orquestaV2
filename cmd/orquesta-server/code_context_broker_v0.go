@@ -33,15 +33,26 @@ func codeContextBrokerWiringFromEnvV0(config orquestaserver.ConfigV0) codeContex
 			Command: "rg",
 		}
 	}
-	leaseStore := orquestacontext.NewInMemoryCodeContextToolLeaseStoreV0()
+	memoryLeaseStore := orquestacontext.NewInMemoryCodeContextToolLeaseStoreV0()
+	var leaseStore orquestacontext.CodeContextToolLeaseListPortV0 = memoryLeaseStore
 	var leasePort orquestacontext.CodeContextToolLeasePortV0
 	if providerKind == orquestacontext.CodeContextProviderKindCodebaseMCPV0 {
-		leasePort = leaseStore
+		leasePort = memoryLeaseStore
+	}
+	cache := orquestacontext.CodeContextCachePortV0(orquestacontext.NewInMemoryCodeContextCacheV0())
+	stateDir := strings.TrimSpace(envOrDefaultV0(envCodebaseBrokerStateDirV0, ""))
+	if stateDir != "" {
+		fileLeaseStore := newServerFileCodeContextToolLeaseStoreV0(filepath.Join(stateDir, serverCodeContextLeasesFileV0))
+		leaseStore = fileLeaseStore
+		cache = newServerFileCodeContextCacheV0(filepath.Join(stateDir, serverCodeContextCacheFileV0))
+		if providerKind == orquestacontext.CodeContextProviderKindCodebaseMCPV0 {
+			leasePort = fileLeaseStore
+		}
 	}
 	return codeContextBrokerWiringV0{
 		Query: orquestacontext.NewCodeContextBrokerV0(orquestacontext.CodeContextBrokerConfigV0{
 			Provider:               provider,
-			Cache:                  orquestacontext.NewInMemoryCodeContextCacheV0(),
+			Cache:                  cache,
 			ProviderRef:            "provider-ref-orquesta-code-context-central",
 			ProviderKind:           providerKind,
 			ExternalIndexerEnabled: boolEnvOrDefaultV0(envCodebaseBrokerExternalIndexerEnabledV0, false),

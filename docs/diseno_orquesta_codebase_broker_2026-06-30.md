@@ -1,9 +1,12 @@
 # Diseno Orquesta Codebase Broker - 2026-06-30
 
-Estado: segundo corte parcial implementado. Orquesta expone un broker central
+Estado: tercer corte parcial implementado. Orquesta expone un broker central
 por contrato neutral, tool MCP y endpoint HTTP; el proveedor activo por defecto
 es `rg` central y `codebase-memory-mcp` queda reservado para adaptador opt-in
-con lease central.
+con lease central. La composicion del servidor ya puede persistir cache/leases
+en un directorio opt-in y dispone de un watchdog invocable por puerto de parada
+cooperativa; no arranca ni mata procesos reales sin adaptador/owner marker
+inyectado.
 
 ## Decision
 
@@ -98,11 +101,18 @@ real y la publicacion en status pertenecen al servidor/composicion.
   bloqueo de Codebase MCP sin opt-in, lease requerido, evaluador TTL/CPU,
   status publico de leases, tool/HTTP, gateway, proveedor `rg` con salida
   acotada y proteccion de `CODEX_HOME`.
+- Persistencia file-based opt-in en `cmd/orquesta-server` para cache y leases
+  mediante `ORQUESTA_CODEBASE_BROKER_STATE_DIR`.
+- Watchdog invocable en composicion: observa leases activos, evalua TTL/CPU sin
+  peticiones activas, llama a un puerto de parada cooperativa por `owner_ref` y
+  marca el lease como `stopped` con evidencia. La prueba usa stopper fake; no
+  mata procesos reales.
 
 ## Pendientes
 
 - Adaptador real `codebase-memory-mcp` detras del puerto neutral.
-- Persistir leases/cache por repo y commit.
-- Cablear watchdog/TTL de herramientas auxiliares al servidor con parada
-  cooperativa real y evidencia publica.
+- Owner marker real de proceso/indexador, observador de PID/CPU/heartbeat y
+  stopper concreto seguro para `codebase-memory-mcp`.
+- Cablear watchdog/TTL de herramientas auxiliares a un loop residente opt-in con
+  evidencia publica de parada ejecutada/fallida.
 - Smoke opt-in con repo real acotado antes de habilitarlo en sesiones de agentes.

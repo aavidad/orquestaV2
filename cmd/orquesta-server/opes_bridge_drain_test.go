@@ -2500,6 +2500,94 @@ func TestRunOPESDrainOnceV0AudioConSpeechSynthesisPosteaOrquestaV0(t *testing.T)
 	}
 }
 
+func TestRunOPESDrainOnceV0AudioAlreadySubmittedProviderHeartbeatTimeoutProyectaSinReenviarV0(t *testing.T) {
+	jobRefreshes := 0
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/jobs" && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode([]map[string]any{{
+				"id":             "job-ref-audio-provider-timeout-001",
+				"type":           "generate_audio_asset",
+				"status":         "pending",
+				"execution_mode": "external",
+				"payload_json":   opesDerivedPayloadForDrainTestV0("generate_audio_asset"),
+				"requested_by":   "opes",
+			}})
+		case r.URL.Path == "/api/jobs/job-ref-audio-provider-timeout-001" && r.Method == http.MethodGet:
+			jobRefreshes++
+			response := map[string]any{
+				"id":             "job-ref-audio-provider-timeout-001",
+				"type":           "generate_audio_asset",
+				"status":         "running",
+				"execution_mode": "external",
+				"payload_json":   opesDerivedPayloadForDrainTestV0("generate_audio_asset"),
+				"requested_by":   "opes",
+			}
+			if jobRefreshes >= 1 {
+				response["provider_timeout"] = true
+				response["provider_reason"] = "provider_timeout"
+			}
+			_ = json.NewEncoder(w).Encode(response)
+		default:
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer opesServer.Close()
+
+	posts := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v0/external-work/run" || r.Method != http.MethodPost {
+			t.Fatalf("orquesta request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		posts++
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"run_ref": "run-ref-audio-provider-timeout-001",
+			"estado":  "accepted",
+		})
+	}))
+	defer orquestaServer.Close()
+
+	ledger, err := newFileExternalBridgeInputLedgerV0(
+		filepath.Join(t.TempDir(), "external-bridge-input-ledger.json"),
+	)
+	if err != nil {
+		t.Fatalf("ledger: %v", err)
+	}
+	config := opesDrainConfigV0{
+		OPESBaseURL:          opesServer.URL,
+		OrquestaBaseURL:      orquestaServer.URL,
+		Limit:                1,
+		JobType:              "generate_audio_asset",
+		HTTPTimeout:          time.Second,
+		InputLedger:          ledger,
+		ExternalCapabilities: opesBridgeSpeechSynthesisCapabilityForDrainTestV0(),
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+	}
+	first, err := runOPESDrainOnceV0(context.Background(), config)
+	if err != nil {
+		t.Fatalf("first drain: %v", err)
+	}
+	second, err := runOPESDrainOnceV0(context.Background(), config)
+	if err != nil {
+		t.Fatalf("second drain: %v", err)
+	}
+
+	if posts != 1 ||
+		first.Submitted != 1 ||
+		second.AlreadySubmitted != 1 ||
+		second.Results[0].Status != "already_submitted" ||
+		second.Results[0].SupervisionStatus != "blocked" ||
+		second.Results[0].SupervisionStopReason != "provider_timeout" ||
+		!containsStringForTestV0(second.Results[0].NextActions, "retry_from_phase=tts") {
+		t.Fatalf("posts=%d first=%+v second=%+v refreshes=%d", posts, first, second, jobRefreshes)
+	}
+}
+
 func TestRunOPESDrainOnceV0AudioSinHeartbeatProveedorNoPosteaOrquestaV0(t *testing.T) {
 	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {

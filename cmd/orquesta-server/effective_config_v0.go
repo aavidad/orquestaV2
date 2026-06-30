@@ -111,6 +111,14 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 			envCodebaseBrokerTimeoutMSV0,
 			strconv.Itoa(intEnvOrDefaultV0(envCodebaseBrokerTimeoutMSV0, 3000)),
 		),
+		serverConfigSettingFromRegistryV0(
+			envCodebaseBrokerStateDirV0,
+			envOrDefaultV0(envCodebaseBrokerStateDirV0, ""),
+		),
+		serverConfigSettingFromRegistryV0(
+			envCodebaseBrokerWatchdogEnabledV0,
+			strconv.FormatBool(boolEnvOrDefaultV0(envCodebaseBrokerWatchdogEnabledV0, false)),
+		),
 		serverConfigSettingFromRegistryV0(envOPESBridgeWaitResidentSecondsV0, strconv.Itoa(intEnvOrDefaultV0(envOPESBridgeWaitResidentSecondsV0, 0))),
 		serverConfigSettingFromRegistryV0(
 			envOPESBridgeWaitResidentIntervalMSV0,

@@ -14,7 +14,8 @@ Evidencia esperada:
 - `codebase-memory-mcp` queda bloqueado sin opt-in y sin lease central;
 - con lease central, el broker registra inicio y cierre;
 - un lease expirado sin peticiones activas recomienda parada cooperativa;
-- leases terminales o con peticiones activas no piden parada.
+- leases terminales o con peticiones activas no piden parada;
+- completion `stopped` queda aceptado para watchdogs de composicion.
 
 Ultima ejecucion: 2026-06-30, ok.
 

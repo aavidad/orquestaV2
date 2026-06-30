@@ -185,6 +185,11 @@ OPES confirma que:
 - OPES debe publicar `generate_audio_asset` y aceptar `audio_asset` como
   artefacto accesible derivado de `assembled_topic` o refs opacas del paquete
   final;
+- para jobs largos de audio ya lanzados, OPES puede publicar senales publicas de
+  proveedor en el job (`provider_timeout`,
+  `running_no_recent_progress`, `provider_status`, `provider_reason`) o en
+  `external_refs`/`payload_json`; el conector solo las transporta y el bridge
+  las proyecta como estado operativo sin conocer `edge-tts` ni workers internos;
 - OPES debe publicar `generate_tutor_assets` y aceptar `tutor_bot_package` para
   tutor y bots del temario;
 - OPES debe publicar `generate_html_site` y aceptar `local_html_site` para el

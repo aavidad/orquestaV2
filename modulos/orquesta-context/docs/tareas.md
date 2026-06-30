@@ -28,11 +28,13 @@ Resultado:
 - `codebase-memory-mcp` exige opt-in y lease central;
 - evaluador puro de lease TTL/CPU para que servidor/composicion pueda parar o
   alertar sin que los agentes arranquen indexadores propios.
+- contrato de completion `stopped` para que un watchdog de composicion pueda
+  dejar evidencia durable de parada cooperativa.
 
 Bloqueos:
 
-- adaptador real `codebase-memory-mcp`, persistencia de leases/cache y parada
-  cooperativa de proceso real quedan en servidor/composicion.
+- adaptador real `codebase-memory-mcp`, owner marker de proceso real, observador
+  PID/CPU y smoke opt-in quedan en servidor/composicion.
 
 ## CTX-006
 

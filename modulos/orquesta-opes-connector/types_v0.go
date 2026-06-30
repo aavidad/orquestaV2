@@ -40,20 +40,24 @@ type ExternalJobQueryV0 struct {
 }
 
 type ExternalJobV0 struct {
-	ID             string            `json:"id"`
-	Type           string            `json:"type"`
-	Status         string            `json:"status"`
-	ExecutionMode  string            `json:"execution_mode"`
-	PayloadJSON    string            `json:"payload_json"`
-	CorrelationID  string            `json:"correlation_id,omitempty"`
-	IdempotencyKey string            `json:"idempotency_key,omitempty"`
-	RequestedBy    string            `json:"requested_by,omitempty"`
-	Attempts       int               `json:"attempts,omitempty"`
-	MaxAttempts    int               `json:"max_attempts,omitempty"`
-	LastError      string            `json:"last_error,omitempty"`
-	LockedBy       string            `json:"locked_by,omitempty"`
-	ExternalRefs   map[string]string `json:"external_refs,omitempty"`
-	CreatedAt      string            `json:"created_at,omitempty"`
+	ID                      string            `json:"id"`
+	Type                    string            `json:"type"`
+	Status                  string            `json:"status"`
+	ExecutionMode           string            `json:"execution_mode"`
+	PayloadJSON             string            `json:"payload_json"`
+	CorrelationID           string            `json:"correlation_id,omitempty"`
+	IdempotencyKey          string            `json:"idempotency_key,omitempty"`
+	RequestedBy             string            `json:"requested_by,omitempty"`
+	Attempts                int               `json:"attempts,omitempty"`
+	MaxAttempts             int               `json:"max_attempts,omitempty"`
+	LastError               string            `json:"last_error,omitempty"`
+	ProviderStatus          string            `json:"provider_status,omitempty"`
+	ProviderReason          string            `json:"provider_reason,omitempty"`
+	ProviderTimeout         bool              `json:"provider_timeout,omitempty"`
+	RunningNoRecentProgress bool              `json:"running_no_recent_progress,omitempty"`
+	LockedBy                string            `json:"locked_by,omitempty"`
+	ExternalRefs            map[string]string `json:"external_refs,omitempty"`
+	CreatedAt               string            `json:"created_at,omitempty"`
 }
 
 type TopicBlockV0 struct {

@@ -24,5 +24,9 @@ Evidencia reconciliada 2026-05-27:
   `generate_audio_asset -> audio_asset`,
   `generate_tutor_assets -> tutor_bot_package` y
   `generate_html_site -> local_html_site`;
+- el DTO de job transporta senales publicas opcionales de proveedor audio
+  (`provider_timeout`, `running_no_recent_progress`, `provider_status`,
+  `provider_reason`) para que el bridge proyecte bloqueos de jobs ya lanzados
+  sin leer internals de OPES;
 - el smoke real OPES sigue bloqueado sin OPES temporal, Orquesta temporal,
   confirmacion de efectos y cuota/modelo confirmados.

@@ -21,6 +21,7 @@ const (
 
 	CodeContextToolLeaseCompletionCompletedV0 = "completed"
 	CodeContextToolLeaseCompletionFailedV0    = "failed"
+	CodeContextToolLeaseCompletionStoppedV0   = "stopped"
 
 	CodeContextToolLeaseDecisionContinueV0    = "continue"
 	CodeContextToolLeaseDecisionObserveV0     = "observe"
@@ -188,6 +189,8 @@ func (store *InMemoryCodeContextToolLeaseStoreV0) FinishCodeContextToolLeaseV0(
 		lease.Status = CodeContextToolLeaseStatusCompletedV0
 	case CodeContextToolLeaseCompletionFailedV0:
 		lease.Status = CodeContextToolLeaseStatusFailedV0
+	case CodeContextToolLeaseCompletionStoppedV0:
+		lease.Status = CodeContextToolLeaseStatusStoppedV0
 	default:
 		return errors.New(ErrCodeContextToolLeaseInvalidV0)
 	}
@@ -332,7 +335,7 @@ func validateCodeContextToolLeaseCompletionV0(completion CodeContextToolLeaseCom
 		return errors.New(ErrCodeContextToolLeaseInvalidV0)
 	}
 	switch completion.Status {
-	case CodeContextToolLeaseCompletionCompletedV0, CodeContextToolLeaseCompletionFailedV0:
+	case CodeContextToolLeaseCompletionCompletedV0, CodeContextToolLeaseCompletionFailedV0, CodeContextToolLeaseCompletionStoppedV0:
 	default:
 		return errors.New(ErrCodeContextToolLeaseInvalidV0)
 	}
