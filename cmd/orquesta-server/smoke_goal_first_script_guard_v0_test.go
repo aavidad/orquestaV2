@@ -35,3 +35,34 @@ func TestSmokeGoalFirstAppServerRealProcessCounterDoesNotCountItselfV0(t *testin
 		}
 	}
 }
+
+func TestSmokeGoalFirstAppServerRealDisablesResidentGoalObserverV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+
+	for _, want := range []string{
+		"export ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false",
+		"export ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED=false",
+		"/api/v0/apps/director/goal/observe",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("smoke manual puede competir con observador residente: falta %q", want)
+		}
+	}
+}
+
+func TestSmokeGoalFirstAppServerRealRetriesTransientObservationRejectedV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+
+	for _, want := range []string{
+		`grep -q "codex_goal_observation_rejected" "$observe_response"`,
+		"goal_status=transient_observation_rejected",
+		`continue`,
+		"timeout esperando cierre aceptado goal-first",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("smoke no reintenta observe transient rechazado: falta %q", want)
+		}
+	}
+}

@@ -493,6 +493,7 @@ export ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_WORKDIR="$idle_project_dir"
 export ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS=0
 export ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER=0
 export ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false
+export ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED=false
 export ORQUESTA_CODEX_RUNTIME_WORKDIR="$runtime_dir"
 export ORQUESTA_CODEX_COMMAND="$codex_command"
 export ORQUESTA_CODEX_PATH="${ORQUESTA_CODEX_PATH:-$PATH}"
@@ -586,6 +587,11 @@ JSON
   if [[ "$observe_status" -lt 200 || "$observe_status" -gt 299 ]]; then
     echo "observe HTTP $observe_status" >&2
     smoke_print_file_excerpt "$observe_response"
+    if grep -q "codex_goal_observation_rejected" "$observe_response" 2>/dev/null; then
+      echo "poll=$i observe_status=$observe_status goal_status=transient_observation_rejected"
+      sleep "$sleep_seconds"
+      continue
+    fi
     fail_after_app_server_tmux_shutdown_ready 1
   fi
   goal_status="$(json_get "$observe_response" "goal_status")"
