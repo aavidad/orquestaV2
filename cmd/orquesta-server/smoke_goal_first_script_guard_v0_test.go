@@ -66,3 +66,22 @@ func TestSmokeGoalFirstAppServerRealRetriesTransientObservationRejectedV0(t *tes
 		}
 	}
 }
+
+func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+
+	for _, want := range []string{
+		"print_app_server_failure_diagnostics",
+		`find "$project_dir/generated-apps" -mindepth 1 -print -quit 2>/dev/null || true`,
+		"generated_apps_present=0",
+		"Missing bearer or basic authentication",
+		"401 Unauthorized",
+		"codex_app_server_failure_reason=codex_app_server_auth_missing",
+		"codex_app_server_auth_missing=true",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("smoke no diagnostica auth ausente del app-server: falta %q", want)
+		}
+	}
+}

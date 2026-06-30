@@ -226,6 +226,41 @@ print(count)
 ' "$socket_path"
 }
 
+print_app_server_failure_diagnostics() {
+  local generated_apps_count logs_db auth_missing
+  generated_apps_count="$( (find "$project_dir/generated-apps" -mindepth 1 -print -quit 2>/dev/null || true) | wc -l | tr -d ' ')"
+  if [[ "$generated_apps_count" == "0" ]]; then
+    echo "generated_apps_present=0" >&2
+  else
+    echo "generated_apps_present=1" >&2
+  fi
+  logs_db="$(find "$runtime_dir" -path '*/codex-home/logs_2.sqlite' -type f -print -quit 2>/dev/null || true)"
+  if [[ -z "$logs_db" ]]; then
+    return 0
+  fi
+  auth_missing="$(python3 - "$logs_db" <<'PY' 2>/dev/null || true
+import sqlite3, sys
+db = sys.argv[1]
+needle = "%Missing bearer or basic authentication%"
+fallback = "%401 Unauthorized%"
+try:
+    con = sqlite3.connect(db)
+    row = con.execute(
+        "select 1 from logs where cast(feedback_log_body as text) like ? "
+        "or cast(feedback_log_body as text) like ? limit 1",
+        (needle, fallback),
+    ).fetchone()
+except sqlite3.Error:
+    row = None
+print("1" if row else "0")
+PY
+)"
+  if [[ "$auth_missing" == "1" ]]; then
+    echo "codex_app_server_failure_reason=codex_app_server_auth_missing" >&2
+    echo "codex_app_server_auth_missing=true" >&2
+  fi
+}
+
 assert_app_server_tmux_shutdown_ready() {
   if [[ "$goal_backend" != "app_server_tmux" ]]; then
     return 0
@@ -317,6 +352,7 @@ assert_app_server_tmux_shutdown_ready() {
 
 fail_after_app_server_tmux_shutdown_ready() {
   local status="${1:-1}"
+  print_app_server_failure_diagnostics
   if [[ "$goal_backend" == "app_server_tmux" && -n "$base_url" ]]; then
     echo "goal-first no cerro aceptado; comprobando shutdown app_server_tmux antes de fallar" >&2
     assert_app_server_tmux_shutdown_ready

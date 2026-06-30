@@ -406,6 +406,14 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 		)
 		return receipt, nil
 	}
+	if issueCode := codexAppServerThreadStatusIssueCodeV0(thread.Status); issueCode != "" {
+		receipt.IssueCode = issueCode
+		receipt.EvidenceRefs = compactServerStackStringsV0(append(
+			receipt.EvidenceRefs,
+			"evidence-ref-codex-app-server-thread-system-error",
+		))
+		return receipt, nil
+	}
 	if timedOut, timeoutReceipt := backend.codexAppServerThreadReadGoalResultTimeoutV0(request, status, receipt); timedOut {
 		return timeoutReceipt, nil
 	}
@@ -472,6 +480,15 @@ func codexAppServerThreadStatusToGoalWorkStatusV0(status serverCodexAppServerThr
 		return orquestagoal.GoalStatusBlockedV0
 	default:
 		return orquestagoal.GoalStatusRunningV0
+	}
+}
+
+func codexAppServerThreadStatusIssueCodeV0(status serverCodexAppServerThreadStatusV0) string {
+	switch strings.TrimSpace(string(status)) {
+	case "systemError":
+		return "codex_app_server_thread_system_error"
+	default:
+		return ""
 	}
 }
 

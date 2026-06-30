@@ -326,6 +326,39 @@ func TestServerCodexAppServerGoalBackendV0BloqueaThreadReadSinResultadoTrasTimeo
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0DiagnosticaThreadSystemErrorSinResultadoDurableV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		getGoalErr: codexAppServerCallErrorV0{Code: "codex_app_server_rpc_method_not_found"},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-read-system-error-001",
+			Status: serverCodexAppServerThreadStatusV0("systemError"),
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		CWD:      t.TempDir(),
+	}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         "goal-ref-codex-app-server-read-system-error-001",
+		ExternalGoalRef: "thread-ref-goal-read-system-error-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0 fallback: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusBlockedV0 ||
+		receipt.IssueCode != "codex_app_server_thread_system_error" ||
+		receipt.Summary != "codex_app_server_thread_status_systemError" ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-rpc-unsupported") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-thread-system-error") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get", "thread/read"}) {
+		t.Fatalf("calls=%v", protocol.calls)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0CompactaObjetivoLargoParaAppServerV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-long-objective"},
