@@ -232,6 +232,7 @@ func regenerableRAGCorpusAcceptanceCriteriaV0() []string {
 		"para correctores, QA textual y preparacion de audio, tratar corpus RAG regenerables como derivados, no como fuente primaria de rework textual",
 		"corregir primero fuentes canonicas: HTML final/local, bancos de tests y tutor fuente; excluir por defecto 10_tutor_rag/corpus/ y otros corpus regenerables de pasadas finas de ortografia, QA y audio",
 		"reconstruir el RAG al final desde HTML/tests/tutor limpios y validar el RAG reconstruido contra el temario final aprobado",
+		"aceptar solo RAG canonico en rag/corpus/chunks.jsonl y rag/corpus/summary.json con rag/manifest.json apuntando a esas rutas; no aceptar rag/chunks.jsonl ni rag/summary.json sueltos como cierre",
 		"solo tocar corpus RAG directamente si una tarea explicita declara rework de RAG/corpus y no hay fuente canonica disponible",
 	}
 }
@@ -270,6 +271,7 @@ func localHTMLSiteAcceptanceCriteriaV0() []string {
 		"crear HTML local operativo del temario completo antes de produccion",
 		"usar el formato real de curso USO/TCAE aportado por el adaptador OPES/USO; no entregar visores single-file ni maquetas con estructura visual propia si existe plantilla web de curso",
 		"materializar estructura de curso revisable: index.html, html_final por tema, assets locales, audio/manifests por tema y locales/i18n para controles visibles",
+		"validar audio/manifests contra paginas tematicas html_final/tema_*.html y html_ampliado/tema_*.html; index.html, portadas y listados no cuentan como manifiestos de tema salvo decision explicita",
 		"incluir la capa protegida tipo USO/TCAE cuando el curso sea material de estudio: #uso-material-watermark, marca diagonal visible y comportamiento coherente con la web de afiliados",
 		"integrar temas, infografias, tests visibles permitidos, tutor, audios por apartado y navegacion local",
 		"ubicar cada infografia junto al apartado o parrafo que explica; no agrupar varias infografias al inicio del tema salvo que sean mapa inicial justificado",
@@ -405,7 +407,9 @@ func finalizedTemarioPackageAcceptanceCriteriaV0() []string {
 		"convertir pendientes causales del ACK o matriz de revision en estado pendiente_continuar con followup_refs; no cerrar ready si queda rework abierto",
 		"verificar HTML local, responsive, enlaces, assets comprimidos, audio/manifests, locales/i18n, watermark USO cuando proceda y ausencia de rutas internas",
 		"verificar RAG/corpus y tutor contra el temario final aprobado, con anclas citables por tema/apartado",
+		"rechazar verdes falsos de RAG si existen rag/chunks.jsonl o rag/summary.json sueltos sin actualizar rag/corpus y manifest coherente",
 		"verificar audio con manifest y QA/Whisper cuando el curso exija audios; si falta audio, estado pendiente_continuar",
+		"calcular manifiestos de audio esperados desde html_final/tema_*.html y html_ampliado/tema_*.html; no exigir audio para index.html, portadas o paginas auxiliares",
 		"exigir triple visto bueno y revisiones por pares cerradas; si falta una revision obligatoria, estado pendiente_continuar, no ready",
 		"devolver completed_syllabus_package con package_ref, manifest_ref, checksum_refs, validation_report_ref, review_matrix_ref y estado listo_para_revision_operador",
 	}, regenerableRAGCorpusAcceptanceCriteriaV0()...)

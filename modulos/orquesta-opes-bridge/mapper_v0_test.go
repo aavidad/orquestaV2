@@ -501,7 +501,9 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 				criteriaText := strings.Join(req.AppChangeRequest.AcceptanceCriteria, "\n")
 				if !strings.Contains(criteriaText, "HTML final/local, bancos de tests y tutor fuente limpios") ||
 					!strings.Contains(criteriaText, "10_tutor_rag/corpus/") ||
-					!strings.Contains(criteriaText, "validar el RAG reconstruido contra el temario final aprobado") {
+					!strings.Contains(criteriaText, "validar el RAG reconstruido contra el temario final aprobado") ||
+					!strings.Contains(criteriaText, "rag/corpus/chunks.jsonl") ||
+					!strings.Contains(criteriaText, "no aceptar rag/chunks.jsonl") {
 					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)
 				}
 			}
@@ -510,6 +512,8 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 				if !strings.Contains(criteriaText, "formato real de curso USO/TCAE") ||
 					!strings.Contains(criteriaText, "audio/manifests") ||
 					!strings.Contains(criteriaText, "locales/i18n") ||
+					!strings.Contains(criteriaText, "html_final/tema_*.html") ||
+					!strings.Contains(criteriaText, "index.html, portadas y listados no cuentan") ||
 					!strings.Contains(criteriaText, "#uso-material-watermark") ||
 					!strings.Contains(criteriaText, "ubicar cada infografia junto al apartado") ||
 					!strings.Contains(criteriaText, "no mostrar al alumnado notas de generacion") ||
@@ -590,7 +594,10 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 					!strings.Contains(criteriaText, "convertir pendientes causales") ||
 					!strings.Contains(criteriaText, "RAG/corpus") ||
 					!strings.Contains(criteriaText, "reconstruir el RAG al final") ||
+					!strings.Contains(criteriaText, "rechazar verdes falsos de RAG") ||
+					!strings.Contains(criteriaText, "rag/chunks.jsonl") ||
 					!strings.Contains(criteriaText, "10_tutor_rag/corpus/") ||
+					!strings.Contains(criteriaText, "no exigir audio para index.html") ||
 					!strings.Contains(criteriaText, "triple visto bueno") ||
 					!strings.Contains(criteriaText, "listo_para_revision_operador") {
 					t.Fatalf("criteria=%+v", req.AppChangeRequest.AcceptanceCriteria)

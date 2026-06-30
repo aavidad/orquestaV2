@@ -112,13 +112,20 @@ Reglas:
   regenerable: se construye desde HTML final/local, bancos de tests y tutor
   fuente limpios, se valida contra el temario final aprobado y solo se toca
   directamente si una tarea explicita declara rework de RAG/corpus y no existe
-  fuente canonica disponible;
+  fuente canonica disponible. El cierre solo acepta la ruta canonica
+  `rag/corpus/chunks.jsonl` y `rag/corpus/summary.json` con `rag/manifest.json`
+  apuntando a esas rutas; `rag/chunks.jsonl` o `rag/summary.json` sueltos son
+  salidas incompatibles con cierre;
 - para `generate_html_site`, el bridge exige
   `expected_artifact_type=local_html_site` y debe producir un HTML local
   operativo con logos USO y formato real de curso USO/TCAE promocion interna:
   `index.html`, `html_final/` por tema, assets locales, `audio/manifests/`,
   locales/i18n, audios, infografias, tests permitidos y tutor/bots; no debe
-  entregar como salida final una maqueta single-file con estilo propio;
+  entregar como salida final una maqueta single-file con estilo propio. Los
+  manifiestos de audio esperados se calculan por paginas tematicas
+  `html_final/tema_*.html` y `html_ampliado/tema_*.html`; `index.html`,
+  portadas y listados no cuentan como manifiestos de tema salvo decision
+  explicita de producir audio de indice;
 - para `generate_help_manual_assets`, el bridge exige
   `expected_artifact_type=help_manual_package` y debe producir manuales
   graficos de ayuda USO derivados del HTML local: YAML de escenario, capturas
