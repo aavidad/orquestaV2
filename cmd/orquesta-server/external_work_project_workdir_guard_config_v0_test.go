@@ -23,6 +23,10 @@ func TestExternalWorkRunProjectWorkDirGuardConfigV0UsaOPESPorDefecto(t *testing.
 		if rule.RequiredProjectWorkDir != defaultOPESProjectWorkDirV0 {
 			t.Fatalf("rule=%+v", rule)
 		}
+		if len(rule.AllowedLocalWriteSetPrefixes) != 1 ||
+			rule.AllowedLocalWriteSetPrefixes[0] != opesLocalExternalWriteSetPrefixV0 {
+			t.Fatalf("local prefixes=%+v", rule)
+		}
 	}
 }
 

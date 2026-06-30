@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -19,9 +20,10 @@ type ExternalWorkRunProjectWorkDirGuardConfigV0 struct {
 }
 
 type ExternalWorkRunProjectWorkDirGuardRuleV0 struct {
-	ProjectRef             string
-	RequiredProjectWorkDir string
-	EvidenceRef            string
+	ProjectRef                   string
+	RequiredProjectWorkDir       string
+	EvidenceRef                  string
+	AllowedLocalWriteSetPrefixes []string
 }
 
 type ExternalWorkRunProjectWorkDirGuardExecutorV0 struct {
@@ -71,13 +73,18 @@ func (executor ExternalWorkRunProjectWorkDirGuardExecutorV0) blockingIssueV0(
 		if sameExternalWorkRunGuardPathV0(executor.Config.ProjectWorkDir, rule.RequiredProjectWorkDir) {
 			return orquestamcp.MCPExternalWorkRunIssueV0{}, false
 		}
+		if externalWorkRunGuardAllowsLocalWriteSetV0(rule, input) {
+			return orquestamcp.MCPExternalWorkRunIssueV0{}, false
+		}
 		field := "project_work_dir"
 		if strings.TrimSpace(rule.EvidenceRef) != "" {
 			field = field + ":" + strings.TrimSpace(rule.EvidenceRef)
 		}
+		field = field + ":action_restart_with_required_project_workdir_or_use_local_external_opes_write_set"
 		return orquestamcp.MCPExternalWorkRunIssueV0{
-			Code:  ExternalWorkRunProjectWorkDirMismatchV0,
-			Field: field,
+			Code:    ExternalWorkRunProjectWorkDirMismatchV0,
+			Field:   field,
+			Message: "external_work OPES requiere runtime con project_work_dir OPES o un allowed_write_set local acotado a external/opes/",
 		}, true
 	}
 	return orquestamcp.MCPExternalWorkRunIssueV0{}, false
@@ -85,10 +92,7 @@ func (executor ExternalWorkRunProjectWorkDirGuardExecutorV0) blockingIssueV0(
 
 func externalWorkRunGuardProjectRefsV0(input orquestamcp.MCPExternalWorkRunToolInputV0) []string {
 	request := input.ExternalWorkRunRequest
-	appChange := request.AppChangeRequest
-	if !externalWorkRunGuardHasAppChangeV0(appChange) && externalWorkRunGuardHasAppChangeV0(input.AppChangeRequest) {
-		appChange = input.AppChangeRequest
-	}
+	appChange := externalWorkRunGuardAppChangeV0(input)
 	refs := []string{
 		request.ProjectRef,
 		appChange.AppRef,
@@ -97,6 +101,16 @@ func externalWorkRunGuardProjectRefsV0(input orquestamcp.MCPExternalWorkRunToolI
 		refs = append(refs, appChange.ExternalWork.ProjectRef)
 	}
 	return compactExternalWorkRunGuardStringsV0(refs)
+}
+
+func externalWorkRunGuardAppChangeV0(
+	input orquestamcp.MCPExternalWorkRunToolInputV0,
+) orquestaappchange.AppChangeRequestV0 {
+	appChange := input.ExternalWorkRunRequest.AppChangeRequest
+	if !externalWorkRunGuardHasAppChangeV0(appChange) && externalWorkRunGuardHasAppChangeV0(input.AppChangeRequest) {
+		appChange = input.AppChangeRequest
+	}
+	return appChange
 }
 
 func externalWorkRunGuardHasAppChangeV0(request orquestaappchange.AppChangeRequestV0) bool {
@@ -116,6 +130,43 @@ func externalWorkRunGuardRuleMatchesV0(
 	}
 	for _, ref := range refs {
 		if strings.EqualFold(strings.TrimSpace(ref), projectRef) {
+			return true
+		}
+	}
+	return false
+}
+
+func externalWorkRunGuardAllowsLocalWriteSetV0(
+	rule ExternalWorkRunProjectWorkDirGuardRuleV0,
+	input orquestamcp.MCPExternalWorkRunToolInputV0,
+) bool {
+	prefixes := compactExternalWorkRunGuardStringsV0(rule.AllowedLocalWriteSetPrefixes)
+	if len(prefixes) == 0 {
+		return false
+	}
+	writeSet := compactExternalWorkRunGuardStringsV0(externalWorkRunGuardAppChangeV0(input).AllowedWriteSet)
+	if len(writeSet) == 0 {
+		return false
+	}
+	for _, entry := range writeSet {
+		if !externalWorkRunGuardPathUnderAnyPrefixV0(entry, prefixes) {
+			return false
+		}
+	}
+	return true
+}
+
+func externalWorkRunGuardPathUnderAnyPrefixV0(entry string, prefixes []string) bool {
+	entry = filepath.Clean(strings.TrimSpace(entry))
+	if entry == "." || filepath.IsAbs(entry) || strings.HasPrefix(entry, "..") {
+		return false
+	}
+	for _, prefix := range prefixes {
+		prefix = filepath.Clean(strings.TrimSpace(prefix))
+		if prefix == "." || filepath.IsAbs(prefix) || strings.HasPrefix(prefix, "..") {
+			continue
+		}
+		if entry != prefix && strings.HasPrefix(entry, prefix+string(os.PathSeparator)) {
 			return true
 		}
 	}

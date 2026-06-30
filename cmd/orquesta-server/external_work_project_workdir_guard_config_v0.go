@@ -13,6 +13,7 @@ const (
 	envOPESProjectWorkDirV0           = "ORQUESTA_OPES_PROJECT_WORKDIR"
 	defaultOPESProjectWorkDirV0       = "/home/alberto/Trabajo/OPES"
 	opesProjectWorkDirGuardEvidenceV0 = "evidence-ref-opes-project-workdir-required"
+	opesLocalExternalWriteSetPrefixV0 = "external/opes"
 )
 
 func externalWorkRunProjectWorkDirGuardConfigFromEnvV0(
@@ -27,14 +28,16 @@ func externalWorkRunProjectWorkDirGuardConfigFromEnvV0(
 		ProjectWorkDir: filepath.Clean(strings.TrimSpace(serverConfig.ProjectWorkDir)),
 		Rules: []orquestaappcodexstack.ExternalWorkRunProjectWorkDirGuardRuleV0{
 			{
-				ProjectRef:             "opes",
-				RequiredProjectWorkDir: requiredOPESProjectDir,
-				EvidenceRef:            opesProjectWorkDirGuardEvidenceV0,
+				ProjectRef:                   "opes",
+				RequiredProjectWorkDir:       requiredOPESProjectDir,
+				EvidenceRef:                  opesProjectWorkDirGuardEvidenceV0,
+				AllowedLocalWriteSetPrefixes: []string{opesLocalExternalWriteSetPrefixV0},
 			},
 			{
-				ProjectRef:             "project-ref-opes",
-				RequiredProjectWorkDir: requiredOPESProjectDir,
-				EvidenceRef:            opesProjectWorkDirGuardEvidenceV0,
+				ProjectRef:                   "project-ref-opes",
+				RequiredProjectWorkDir:       requiredOPESProjectDir,
+				EvidenceRef:                  opesProjectWorkDirGuardEvidenceV0,
+				AllowedLocalWriteSetPrefixes: []string{opesLocalExternalWriteSetPrefixV0},
 			},
 		},
 	}

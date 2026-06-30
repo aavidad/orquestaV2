@@ -67,6 +67,7 @@ Regla operativa:
 | BUG-ORQ-20260630-028 | abierto | OPES/API discovery | OPES encontro `/health` vivo en `8095`, pero `domain-work`, `external-work`, `runs/supervise` y autoprogramacion devolvian `404` | OPES no tiene contrato unico de descubrimiento/readiness para distinguir Orquesta correcta, composicion sin API, otro servicio en el puerto o endpoint con autenticacion/prefijo distinto | `/home/alberto/Trabajo/OPES/opes-salidas/coordinacion_temarios/INCIDENCIA_ORQUESTA_API_DOMAIN_WORK_NO_EXPUESTA_2026-06-30.md`; `external/opes/INCIDENCIA_OPES_ORQUESTA_API_Y_TTS_TIMEOUT_2026-06-30.md` | Pendiente: healthcheck/manifest estable de Orquesta OPES con rutas montadas, readiness `ready=true`, auth/prefijo documentado y error `orquesta_degraded_not_ready`/`orquesta_unavailable`; no inferir disponibilidad por `/health` |
 | BUG-ORQ-20260630-029 | abierto | Runtime/startup | arranque desacoplado con `nohup` no dejo servidor escuchando pero si dejo `codex app-server`/tmux vivo | lifecycle de startup no es atomico: `EnsureV0` del backend Goal puede crear recursos antes de que el servidor publique puerto/readiness, y el launcher no limpia huerfanos si el proceso cae | `external/opes/INCIDENCIA_OPES_ORQUESTA_API_Y_TTS_TIMEOUT_2026-06-30.md` hallazgo 4 | Pendiente: launcher/daemon debe publicar `startup_failed_after_goal_backend_start` con log/session y limpiar o reutilizar tmux/app-server huerfano antes de reintentar |
 | BUG-ORQ-20260630-030 | abierto | OPES/audio provider | `edge-tts` puede quedar esperando en bloques largos y detener una ola sin avance visible | trabajos externos largos no exponen heartbeat/progreso granular ni corte `provider_timeout` por proveedor/hijo; Orquesta ve running pero no progreso de lote | `external/opes/INCIDENCIA_OPES_ORQUESTA_API_Y_TTS_TIMEOUT_2026-06-30.md` hallazgo 2; mitigacion OPES `OPES_EDGE_TTS_TIMEOUT_SECONDS`/`OPES_EDGE_TTS_MAX_ATTEMPTS` | Pendiente: contrato de progreso para audio externo con lote actual, pendientes, generados, fallo y causa; si no hay avance en ventana configurada, marcar `provider_timeout` y continuar cola segura |
+| BUG-ORQ-20260630-031 | cerrado | External-work/OPES guard | `external-work/run` rechazaba un trabajo OPES de control que solo escribia informe local en `external/opes/...` porque el runtime no tenia `project_work_dir` OPES | la guarda mezclaba dos casos: ejecucion OPES real, que debe exigir workspace OPES, y control/evidencia local de Orquesta, que puede vivir en `external/opes` sin tocar el dominio | `external/opes/INCIDENCIA_OPES_ORQUESTA_API_Y_TTS_TIMEOUT_2026-06-30.md` hallazgo 5; artefactos `external/opes/control_audio_psicologo_orquesta_20260630/external_work_audio_control_{request,response}.json`; tests `TestExternalWorkRunProjectWorkDirGuardPermiteOPESControlLocalExternalV0`, `TestExternalWorkRunProjectWorkDirGuardNoPermiteOPESLocalFueraDeExternalV0` | Cierre: la guarda mantiene bloqueo si el runtime no apunta a OPES, pero permite trabajos OPES cuyo `allowed_write_set` no vacio queda integramente bajo `external/opes/`; el error restante incluye accion para reiniciar con project workdir requerido o usar write-set local acotado |
 
 ## Riesgos arquitectonicos no funcionales
 
@@ -116,6 +117,11 @@ preflight real opt-in antes del launch. Lo que no queda cerrado se separa para
 evitar falso verde: `028` cubre descubrimiento/readiness de instancia OPES,
 `029` lifecycle atomico de arranque con backend Goal y `030` heartbeat/timeout
 de proveedores largos como Edge TTS.
+
+Revision adicional 2026-06-30 sobre Hallazgo 5 OPES: no se elimina la guarda
+`project_work_dir` porque sigue protegiendo ejecucion OPES real desde el repo
+equivocado. Se cierra solo el caso control/evidencia local: write-set relativo
+integramente bajo `external/opes/`, sin escritura en OPES productivo.
 
 ## Pendientes de analisis agrupado
 
