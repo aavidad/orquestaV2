@@ -90,8 +90,10 @@ progreso sobreviva a cualquier corte de sesión.
 - No rompen `go test ./...` (el go tool ignora dirs que empiezan por `.`), pero **sí ralentizan**
   cualquier `find`/grep/herramienta que recorra el árbol y ocupan disco que puede contribuir a
   presión de memoria/IO en la máquina (relacionado con los cortes de sesión por recursos).
-- **Recomendación:** política de retención/limpieza periódica de `.orquesta-runtime` y purga de los
-  `.orquesta-purged-*` antiguos. Mantenerlos fuera del cwd de trabajo si es posible.
+- **Cierre 2026-07-01:** `scripts/orquesta_runtime_retention.sh` inventaria candidatos con
+  `dry-run` por defecto y solo borra con confirmacion literal; el runbook vivo es
+  `docs/runbooks/limpieza_runtime_local_orquesta_2026-07-01.md`. Mantener runtimes fuera del cwd de
+  trabajo sigue siendo recomendable para despliegues largos.
 
 ---
 
