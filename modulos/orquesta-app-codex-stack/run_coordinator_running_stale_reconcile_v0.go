@@ -78,10 +78,18 @@ func (stack StackV0) reconcileQueuedRunningStaleCandidateV0(
 	if err != nil || !liveness.Verifiable || liveness.Live {
 		return err
 	}
+	publicDecision := queuedRunningStalePublicStatusDecisionV0(candidate, liveness)
+	if publicDecision.PublicStatus == orquestaruncoordinator.ExternalWorkPublicStatusRunningV0 {
+		return nil
+	}
 	cause, err := stack.queuedRunningStaleCauseV0(ctx, run)
 	if err != nil {
 		return err
 	}
+	cause.EvidenceRefs = compactStringsV0(append(
+		cause.EvidenceRefs,
+		queuedRunningStalePublicStatusDecisionEvidenceRefsV0(publicDecision)...,
+	))
 	if !queuedRunningStaleRunCanReconcileV0(run, liveness, cause) {
 		return nil
 	}
@@ -181,6 +189,45 @@ type queuedRunningStaleCauseV0 struct {
 	Reason                  string
 	RuntimeEvidenceObserved bool
 	EvidenceRefs            []string
+}
+
+func queuedRunningStalePublicStatusDecisionV0(
+	candidate orquestarunqueue.RunSchedulingCandidateV0,
+	liveness queuedRunningStaleProcessLivenessV0,
+) orquestaruncoordinator.ExternalWorkReconciliationDecisionV0 {
+	classification := orquestaruncoordinator.RunLivenessClassificationV0{
+		Class:                  orquestaruncoordinator.RunLivenessClassRunningStaleNoProcessV0,
+		Reason:                 "running_stale_no_live_process_detected",
+		RecommendedAction:      "reconcile_if_no_live_process_or_wait_for_late_ack",
+		QueueStatusSuggestion:  orquestarunqueue.RunStatusStoppedV0,
+		ConfirmedNoLiveProcess: liveness.Verifiable && !liveness.Live,
+		Running:                true,
+		Stale:                  true,
+		Verifiable:             liveness.Verifiable,
+		SafeToReconcile:        liveness.Verifiable && !liveness.Live,
+	}
+	return orquestaruncoordinator.ReconcileExternalWorkPublicStatusV0(
+		orquestaruncoordinator.ExternalWorkReconciliationInputV0{
+			RunRef:                 strings.TrimSpace(candidate.RunRef),
+			ProjectionStatus:       strings.TrimSpace(candidate.Status),
+			ProcessRegistryChecked: liveness.Verifiable,
+			ProcessAlive:           liveness.Live,
+			Liveness:               classification,
+			EvidenceRefs: []string{
+				"evidence-ref-external-work-public-status-reconciler",
+			},
+		},
+	)
+}
+
+func queuedRunningStalePublicStatusDecisionEvidenceRefsV0(
+	decision orquestaruncoordinator.ExternalWorkReconciliationDecisionV0,
+) []string {
+	refs := append([]string{}, decision.EvidenceRefs...)
+	if decision.PublicStatus != orquestaruncoordinator.ExternalWorkPublicStatusRunningV0 {
+		refs = append(refs, "evidence-ref-external-work-public-status-not-running-stale-no-process")
+	}
+	return compactStringsV0(refs)
 }
 
 func (stack StackV0) queuedRunningStaleCauseV0(

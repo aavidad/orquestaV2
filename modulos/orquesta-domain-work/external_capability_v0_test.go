@@ -90,6 +90,34 @@ func TestDomainWorkExternalCapabilityEvaluationV0AceptaDeclaracionTTSAlias(t *te
 	}
 }
 
+func TestDomainWorkExternalCapabilityEvaluationV0NoAceptaRefConKindIncorrecto(t *testing.T) {
+	request := validDomainWorkJobRequestForTestV0()
+	request.WorkKind = "review_agent_independent"
+
+	evaluation := EvaluateDomainWorkExternalCapabilitiesV0(
+		request,
+		[]DomainWorkExternalCapabilityV0{
+			{
+				CapabilityRef:         DomainWorkExternalCapabilityKindRemoteQAProviderV0,
+				Kind:                  DomainWorkExternalCapabilityKindSpeechSynthesisV0,
+				Available:             true,
+				NetworkReady:          true,
+				AuthStateReady:        true,
+				ProviderQuotaReady:    true,
+				CommandTimeoutSeconds: 1200,
+				OperationalReason:     "wrong_kind_should_not_explain_remote_qa",
+			},
+		},
+	)
+
+	if evaluation.Ready ||
+		evaluation.OperationalReason != "external_capability_missing:remote_qa_provider" ||
+		len(evaluation.MissingRequirements) != 1 ||
+		len(evaluation.MatchedCapabilities) != 0 {
+		t.Fatalf("evaluation=%+v", evaluation)
+	}
+}
+
 func TestDomainWorkExternalCapabilityEvaluationV0ConservaRazonOperativaDeTTSNoDisponible(t *testing.T) {
 	request := validDomainWorkJobRequestForTestV0()
 	request.WorkKind = "synthesize_topic_audio"

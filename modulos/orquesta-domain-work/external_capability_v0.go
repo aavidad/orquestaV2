@@ -316,8 +316,7 @@ func matchDomainWorkExternalCapabilityV0(
 		if !capability.Available {
 			continue
 		}
-		if (capability.Kind == requirement.Kind ||
-			capability.CapabilityRef == requirement.CapabilityRef) &&
+		if domainWorkCapabilityMatchesRequirementV0(requirement, capability) &&
 			domainWorkCapabilitySatisfiesProfileV0(requirement, capability) {
 			return capability, true
 		}
@@ -330,8 +329,7 @@ func missingDomainWorkExternalCapabilityReasonV0(
 	capabilities []DomainWorkExternalCapabilityV0,
 ) string {
 	for _, capability := range capabilities {
-		if capability.Kind != requirement.Kind &&
-			capability.CapabilityRef != requirement.CapabilityRef {
+		if !domainWorkCapabilityMatchesRequirementV0(requirement, capability) {
 			continue
 		}
 		if capability.OperationalReason != "" {
@@ -342,6 +340,26 @@ func missingDomainWorkExternalCapabilityReasonV0(
 		return DomainWorkExternalCapabilityReasonMissingV0
 	}
 	return DomainWorkExternalCapabilityReasonMissingV0 + ":" + requirement.Kind
+}
+
+func domainWorkCapabilityMatchesRequirementV0(
+	requirement DomainWorkExternalCapabilityRequirementV0,
+	capability DomainWorkExternalCapabilityV0,
+) bool {
+	if capability.Kind != requirement.Kind {
+		return false
+	}
+	return domainWorkCapabilityMatchesRequirementIdentityV0(requirement, capability)
+}
+
+func domainWorkCapabilityMatchesRequirementIdentityV0(
+	requirement DomainWorkExternalCapabilityRequirementV0,
+	capability DomainWorkExternalCapabilityV0,
+) bool {
+	if requirement.CapabilityRef == "" || requirement.CapabilityRef == requirement.Kind {
+		return true
+	}
+	return capability.CapabilityRef == requirement.CapabilityRef
 }
 
 func normalizeDomainWorkExternalCapabilityKindV0(value string) string {

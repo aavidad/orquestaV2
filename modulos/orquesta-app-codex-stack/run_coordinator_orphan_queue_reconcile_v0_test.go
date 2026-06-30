@@ -145,7 +145,8 @@ func TestCodexStackV0RunGlobalTickReconciliaRunningStaleAntesDeReadyV0(t *testin
 	}
 	staleCandidate := mustQueueCandidateForTestV0(t, stack, staleRunRef)
 	if staleCandidate.Status != orquestarunqueue.RunStatusStoppedV0 ||
-		!codexStackStringInSetV0(staleCandidate.EvidenceRefs, "evidence-ref-run-queue-running-stale-no-live-process-reconciled") {
+		!codexStackStringInSetV0(staleCandidate.EvidenceRefs, "evidence-ref-run-queue-running-stale-no-live-process-reconciled") ||
+		!codexStackStringInSetV0(staleCandidate.EvidenceRefs, "evidence-ref-external-work-public-status-not-running-stale-no-process") {
 		t.Fatalf("staleCandidate=%+v", staleCandidate)
 	}
 	state, err := stack.Stores.RunControl.ReadRunControlStateV0(
@@ -156,7 +157,8 @@ func TestCodexStackV0RunGlobalTickReconciliaRunningStaleAntesDeReadyV0(t *testin
 		t.Fatalf("ReadRunControlStateV0 stale: %v", err)
 	}
 	if state.Status != orquestaruncontrol.RunControlStatusStoppedV0 ||
-		!codexStackStringInSetV0(state.EvidenceRefs, "evidence-ref-run-control-running-stale-no-live-process") {
+		!codexStackStringInSetV0(state.EvidenceRefs, "evidence-ref-run-control-running-stale-no-live-process") ||
+		!codexStackStringInSetV0(state.EvidenceRefs, "evidence-ref-external-work-public-status-not-running-stale-no-process") {
 		t.Fatalf("state=%+v", state)
 	}
 	latest := mustLoadCodexStackRunForTestV0(t, stack, staleRunRef)
