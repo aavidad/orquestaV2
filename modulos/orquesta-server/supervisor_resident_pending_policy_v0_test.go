@@ -170,7 +170,7 @@ func TestRuntimeV0SupervisorNoBloqueaAutomejoraPorResidentPendingConProcesoVivoV
 		TickInterval:                   time.Hour,
 		IdleSelfImprovementAfter:       time.Minute,
 		IdleSelfImprovementMaxRequests: 3,
-		IdleSelfImprovementTargetQueue: 2,
+		IdleSelfImprovementTargetQueue: 3,
 		AuditDisabled:                  true,
 	}, RuntimeDepsV0{
 		Supervisor: supervisor,

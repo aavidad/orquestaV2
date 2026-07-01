@@ -25,7 +25,7 @@ func TestBuildStackFromEnvV0RequiredTestRunnerEjecutaGoTestYPersisteEvidencia(t 
 	outputDir := filepath.Join(t.TempDir(), "required-test-output")
 	runRef := "run-server-required-test-runner-001"
 	planRef := "plan-server-required-test-runner-001"
-	taskRef := "task-server-required-test-runner-001"
+	taskRef := "task-ref-autoprogramming-server-required-test-runner-001"
 	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
 	deliveryRef := "delivery-server-required-test-runner-001"
 	reviewRequestRef := "review-request-server-required-test-runner-001"
@@ -105,12 +105,22 @@ func TestBuildStackFromEnvV0RequiredTestRunnerEjecutaGoTestYPersisteEvidencia(t 
 	if err != nil {
 		t.Fatalf("ContinueAppDirectorV0: %v", err)
 	}
-	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
-		t.Fatalf("run no cerrado: status=%s closed=%v validations=%v closures=%v", result.Run.Status, result.Run.ClosedTasks, result.Run.Validations, result.Run.Closures)
-	}
 	state, err := stack.Stores.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, runRef, planRef)
 	if err != nil {
 		t.Fatalf("LoadOperationalDirectorPlanStateV0: %v", err)
+	}
+	if result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		t.Fatalf("run no cerrado: status=%s loop=%s closure_issues=%+v state_status=%s active_step=%s steps=%+v closed=%v validations=%v closures=%v",
+			result.Run.Status,
+			result.LoopStatus,
+			result.OperationalClosureIssues,
+			state.Status,
+			state.ActiveStepID,
+			state.Steps,
+			result.Run.ClosedTasks,
+			result.Run.Validations,
+			result.Run.Closures,
+		)
 	}
 	replanStep := serverRequiredTestPlanStepV0(t, state, "step-replan-or-close")
 	if state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 ||

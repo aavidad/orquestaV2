@@ -1,6 +1,10 @@
 package orquestaautoprogramming
 
-import "testing"
+import (
+	"testing"
+
+	orquestagoal "orquesta/modulos/orquesta-goal"
+)
 
 func TestAutoprogrammingIdleSelfImprovementAPG005(t *testing.T) {
 	defaultConfig := ResolveAutoprogrammingIdleSelfImprovementConfigV0(nil)
@@ -72,10 +76,14 @@ func TestAutoprogrammingIdleSelfImprovementAPG005(t *testing.T) {
 			VisibleQueue: []AutoprogrammingVisibleQueueItemV0{{
 				TaskRef: "task-ref-backlog-visible",
 			}},
-			CreateScanner: true,
+			CreateScanner:  true,
+			BacklogScanRef: "scan-ref-backlog-368a95054517",
 			BacklogScan: AutoprogrammingBacklogScanV0{
-				Epoch:           "backlog-scan-epoch-8dc06f56b7fc",
-				ReservationRefs: []string{"reservation-ref-backlog-scan-doc-merge-9e9c403aac4f"},
+				Epoch: "backlog-scan-epoch-8dc06f56b7fc",
+				ReservationRefs: []string{
+					"reservation-ref-backlog-scan-doc-merge-9e9c403aac4f",
+					"reservation-ref-backlog-task-id-911abe614485",
+				},
 				Documents: []AutoprogrammingBacklogDocumentV0{{
 					Path:       "modulos/orquesta-autoprogramming/docs/tareas.md",
 					StartLine:  42,
@@ -93,7 +101,10 @@ func TestAutoprogrammingIdleSelfImprovementAPG005(t *testing.T) {
 		t.Fatalf("planner_skipped=%+v", planner.Skipped)
 	}
 	if planner.Scanner == nil ||
+		!stringsSliceContainsForAutoprogrammingTestV0(planner.Scanner.ContextRefs, "backlog_scan_ref:scan-ref-backlog-368a95054517") ||
 		!stringsSliceContainsForAutoprogrammingTestV0(planner.Scanner.ContextRefs, "backlog_scan_epoch:backlog-scan-epoch-8dc06f56b7fc") ||
+		!stringsSliceContainsForAutoprogrammingTestV0(planner.Scanner.ContextRefs, "backlog_scan_reservation_ref:reservation-ref-backlog-scan-doc-merge-9e9c403aac4f") ||
+		!stringsSliceContainsForAutoprogrammingTestV0(planner.Scanner.ContextRefs, "backlog_scan_reservation_ref:reservation-ref-backlog-task-id-911abe614485") ||
 		!stringsSliceContainsForAutoprogrammingTestV0(planner.Scanner.ContextRefs, "backlog_scan_doc:modulos/orquesta-autoprogramming/docs/tareas.md:line:42:sha256:55c7ad4bcc6cd71d41ec12ebdbdc6e19e54c3c0e47cfd2d3947f302398bc3582") {
 		t.Fatalf("scanner=%+v", planner.Scanner)
 	}
@@ -117,6 +128,74 @@ func TestAutoprogrammingIdleSelfImprovementAPG005(t *testing.T) {
 		}),
 		AutoprogrammingExternalProjectionExternalProcessVerifiedV0,
 	)
+}
+
+func TestAutoprogrammingGoalFirstSpecsAPG005(t *testing.T) {
+	result := BuildAutoprogrammingProgrammableWorkV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.RequestRef = "request-ref-autoprogramming-backlog-apg-005-0a062281"
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{{
+			TaskRef:   "task-id-ref-backlog-48cf16dc7592",
+			Area:      "apg-005",
+			Title:     "APG-005 clasificacion y specs goal-first",
+			Objective: "Compilar GoalWorkSpecV0 neutral para autoprogramacion goal-first.",
+			ContextRefs: []string{
+				"goal_migration:goal-first",
+				"goal_capability:starter",
+				"goal_capability:observer",
+				"goal_capability:closure-validator",
+				"backlog_scan_ref:scan-ref-backlog-368a95054517",
+				"backlog_scan_epoch:backlog-scan-epoch-8dc06f56b7fc",
+				"backlog_scan_doc:modulos/orquesta-autoprogramming/docs/tareas.md:line:42:sha256:55c7ad4bcc6cd71d41ec12ebdbdc6e19e54c3c0e47cfd2d3947f302398bc3582",
+				"backlog_task_id_range:T263",
+			},
+			AcceptanceCriteria: []string{
+				"legacy_loop_compatible, goal_ready, blocked_by_goal_capability, covered_by_goal_first y legacy_loop_required distinguibles",
+				"goal_ready compila GoalWorkSpecV0 con write-set, tests y refs opacas",
+			},
+		}}
+		request.WriteSet = []string{"modulos/orquesta-autoprogramming"}
+		request.RequiredTests = []string{"go test -count=1 ./modulos/orquesta-autoprogramming"}
+		request.BacklogScan = AutoprogrammingBacklogScanV0{
+			Epoch: "backlog-scan-epoch-8dc06f56b7fc",
+			ReservationRefs: []string{
+				"reservation-ref-backlog-scan-doc-merge-9e9c403aac4f",
+				"reservation-ref-backlog-task-id-911abe614485",
+			},
+			Documents: []AutoprogrammingBacklogDocumentV0{{
+				Path:       "modulos/orquesta-autoprogramming/docs/tareas.md",
+				StartLine:  42,
+				SHA256:     "55c7ad4bcc6cd71d41ec12ebdbdc6e19e54c3c0e47cfd2d3947f302398bc3582",
+				SectionRef: "apg-005",
+			}},
+		}
+	}))
+
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
+	}
+	if result.Work.GoalMigration.Status != AutoprogrammingGoalMigrationGoalReadyV0 ||
+		result.Work.GoalMigration.RecommendedAction != AutoprogrammingGoalMigrationActionLaunchGoalV0 ||
+		len(result.Work.GoalSpecs) != 1 ||
+		len(result.Work.Tasks) != 0 {
+		t.Fatalf("work=%+v", result.Work)
+	}
+	spec := result.Work.GoalSpecs[0]
+	if spec.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
+		spec.WorkKind != AutoprogrammingGoalWorkKindV0 ||
+		len(spec.WriteSet) != 1 ||
+		spec.WriteSet[0].Path != "modulos/orquesta-autoprogramming" ||
+		len(spec.RequiredTests) != 1 ||
+		spec.RequiredTests[0].Command != "go test -count=1 ./modulos/orquesta-autoprogramming" ||
+		!spec.ClosurePolicy.RequireRequiredTests {
+		t.Fatalf("spec=%+v", spec)
+	}
+	if !hasGoalContextRefForAutoprogrammingTestV0(
+		spec.ContextRefs,
+		"workflow_task_context",
+		"backlog_scan_ref:scan-ref-backlog-368a95054517",
+	) {
+		t.Fatalf("context_refs=%+v", spec.ContextRefs)
+	}
 }
 
 func hasAutoprogrammingPlannerSkipV0(

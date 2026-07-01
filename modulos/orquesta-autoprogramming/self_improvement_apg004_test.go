@@ -72,4 +72,32 @@ func TestBuildAutoprogrammingSelfImprovementRequestV0ReconciliacionAPG004T208(t 
 	if !stringsSliceContainsForAutoprogrammingTestV0(task.RequiredTests, "go test -count=1 ./modulos/orquesta-autoprogramming") {
 		t.Fatalf("required_tests=%v", task.RequiredTests)
 	}
+
+	planner := PlanAutoprogrammingBacklogSelfImprovementV0(AutoprogrammingBacklogPlannerInputV0{
+		Entries: []AutoprogrammingBacklogPlannerEntryV0{{
+			TaskRef:    "task-ref-apg004-visible",
+			SectionRef: "apg-004",
+			Area:       "apg-004",
+			Title:      "APG-004 visible en cola",
+		}},
+		VisibleQueue: []AutoprogrammingVisibleQueueItemV0{{
+			SectionRef: "apg-004",
+		}},
+		CreateScanner:  true,
+		ScannerTaskRef: "task-ref-backlog-scanner",
+		BacklogScanRef: "scan-ref-backlog-2e2bfd30581c",
+		BacklogScan:    proposal.BacklogScan,
+	})
+	if len(planner.Tasks) != 0 ||
+		!hasAutoprogrammingPlannerSkipV0(planner.Skipped, "task-ref-apg004-visible", AutoprogrammingBacklogPlannerSkipVisibleInQueueV0) {
+		t.Fatalf("planner=%+v", planner)
+	}
+	if planner.Scanner == nil || planner.Scanner.Title != "Escaneo backlog nuevos" {
+		t.Fatalf("scanner=%+v", planner.Scanner)
+	}
+	assertAutoprogrammingScannerContextRefV0(t, planner.Scanner.ContextRefs, "backlog_scan_ref:scan-ref-backlog-2e2bfd30581c")
+	assertAutoprogrammingScannerContextRefV0(t, planner.Scanner.ContextRefs, "backlog_scan_epoch:backlog-scan-epoch-7d58c5b5552a")
+	assertAutoprogrammingScannerContextRefV0(t, planner.Scanner.ContextRefs, "backlog_scan_reservation_ref:reservation-ref-backlog-scan-doc-merge-540fce675096")
+	assertAutoprogrammingScannerContextRefV0(t, planner.Scanner.ContextRefs, "backlog_scan_reservation_ref:reservation-ref-backlog-task-id-02081ab71912")
+	assertAutoprogrammingScannerContextRefV0(t, planner.Scanner.ContextRefs, "backlog_scan_doc:modulos/orquesta-autoprogramming/docs/tareas.md:line:38:sha256:55c7ad4bcc6cd71d41ec12ebdbdc6e19e54c3c0e47cfd2d3947f302398bc3582")
 }
