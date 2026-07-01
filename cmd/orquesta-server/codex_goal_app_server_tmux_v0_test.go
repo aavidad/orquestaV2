@@ -11,6 +11,7 @@ import (
 	"time"
 
 	orquestaserver "orquesta/modulos/orquesta-server"
+	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
 
 func TestServerCodexGoalBackendFromEnvV0TmuxPreflightOKV0(t *testing.T) {
@@ -664,6 +665,96 @@ func TestCodexAppServerTmuxBackendV0ShutdownNormalNoMataSesionSinOwnerMarkerV0(t
 	}
 	if _, err := os.Stat(socketPath); err != nil {
 		t.Fatalf("socket no debe eliminarse sin owner marker: %v", err)
+	}
+}
+
+func TestCodexAppServerTmuxBackendV0ReadActiveShutdownWorkDetectaRestosPropiosV0(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	fakeTmux := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte(`#!/bin/sh
+case "${1:-}" in
+  has-session)
+    exit 0
+    ;;
+  display-message)
+    printf '%s\n' "${ORQUESTA_TEST_PANE_PID:-}"
+    exit 0
+    ;;
+esac
+exit 2
+`), 0o700); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	sleep := exec.Command("sleep", "30")
+	if err := sleep.Start(); err != nil {
+		t.Fatalf("start sleep: %v", err)
+	}
+	defer func() {
+		_ = sleep.Process.Kill()
+		_, _ = sleep.Process.Wait()
+	}()
+	socketPath := filepath.Join(root, "runtime", codexAppServerTmuxDirV0, "g-residue.sock")
+	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
+		t.Fatalf("mkdir socket dir: %v", err)
+	}
+	if err := os.WriteFile(socketPath, []byte("fake socket"), 0o600); err != nil {
+		t.Fatalf("write socket: %v", err)
+	}
+	backend := serverCodexAppServerTmuxBackendV0{
+		PathEnv:     binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		SocketPath:  socketPath,
+		SessionName: "orquesta-goal-residue-1234567890",
+		Timeout:     time.Second,
+	}
+	if err := backend.writeTmuxOwnerMarkerV0(); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	t.Setenv("ORQUESTA_TEST_PANE_PID", strconv.Itoa(sleep.Process.Pid))
+
+	result, err := backend.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{
+		EvidenceRefs: []string{"evidence-ref-shutdown-request"},
+	})
+	if err != nil {
+		t.Fatalf("ReadActiveShutdownWorkV0: %v", err)
+	}
+	if len(result.ActiveWorks) != 1 ||
+		result.ActiveWorks[0].Kind != "goal_backend" ||
+		result.ActiveWorks[0].WorkRef != backend.SessionName ||
+		result.ActiveWorks[0].Status != orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0 ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-residue") ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-owner-marker") ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-socket") ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-session") ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestCodexAppServerTmuxBackendV0ReadActiveShutdownWorkIgnoraSocketNoPropioV0(t *testing.T) {
+	root := t.TempDir()
+	socketPath := filepath.Join(root, "runtime", "external.sock")
+	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
+		t.Fatalf("mkdir socket dir: %v", err)
+	}
+	if err := os.WriteFile(socketPath, []byte("external socket"), 0o600); err != nil {
+		t.Fatalf("write socket: %v", err)
+	}
+	backend := serverCodexAppServerTmuxBackendV0{
+		SocketPath:  socketPath,
+		SessionName: "external-session",
+		Timeout:     time.Second,
+	}
+
+	result, err := backend.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{})
+	if err != nil {
+		t.Fatalf("ReadActiveShutdownWorkV0: %v", err)
+	}
+	if len(result.ActiveWorks) != 0 || len(result.EvidenceRefs) != 0 {
+		t.Fatalf("socket no propio no debe bloquear: %+v", result)
 	}
 }
 

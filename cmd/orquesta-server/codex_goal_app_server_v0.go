@@ -59,9 +59,16 @@ func serverGoalWorkLauncherFromBackendV0(
 	if backend.Starter == nil {
 		return nil
 	}
-	return orquestaruntimecodexgoal.CodexGoalLauncherV0{
+	launcher := orquestaruntimecodexgoal.CodexGoalLauncherV0{
 		Starter: backend.Starter,
 	}
+	if active := serverGoalActiveShutdownWorkReaderFromBackendV0(backend); active != nil {
+		return serverGoalWorkLauncherWithActiveShutdownWorkV0{
+			Inner:      launcher,
+			ActiveWork: active,
+		}
+	}
+	return launcher
 }
 
 func serverGoalWorkObserverFromBackendV0(
@@ -70,9 +77,16 @@ func serverGoalWorkObserverFromBackendV0(
 	if backend.Observer == nil {
 		return nil
 	}
-	return orquestaruntimecodexgoal.CodexGoalObserverV0{
+	observer := orquestaruntimecodexgoal.CodexGoalObserverV0{
 		Observer: backend.Observer,
 	}
+	if active := serverGoalActiveShutdownWorkReaderFromBackendV0(backend); active != nil {
+		return serverGoalWorkObserverWithActiveShutdownWorkV0{
+			Inner:      observer,
+			ActiveWork: active,
+		}
+	}
+	return observer
 }
 
 func serverGoalObservationFingerprintFromBackendV0(

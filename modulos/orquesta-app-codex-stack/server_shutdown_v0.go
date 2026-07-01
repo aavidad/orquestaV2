@@ -55,12 +55,20 @@ func (reader stackShutdownActiveWorkReaderV0) ReadActiveShutdownWorkV0(
 	ctx context.Context,
 	request orquestaservershutdown.ActiveShutdownWorkRequestV0,
 ) (orquestaservershutdown.ActiveShutdownWorkResultV0, error) {
+	out := orquestaservershutdown.ActiveShutdownWorkResultV0{}
+	for _, activeReader := range stackShutdownActiveWorkReadersFromGoalBackendV0(reader.Config) {
+		active, err := activeReader.ReadActiveShutdownWorkV0(ctx, request)
+		if err != nil {
+			return orquestaservershutdown.ActiveShutdownWorkResultV0{}, err
+		}
+		out = stackShutdownMergeActiveWorkResultV0(out, active)
+	}
 	if reader.Config.Stores.AppGoalStateStore == nil {
-		return orquestaservershutdown.ActiveShutdownWorkResultV0{}, nil
+		return out, nil
 	}
 	lister, ok := reader.Config.Stores.AppGoalStateStore.(orquestagoal.GoalWorkStateListPortV0)
 	if !ok {
-		return orquestaservershutdown.ActiveShutdownWorkResultV0{}, nil
+		return out, nil
 	}
 	states, err := lister.ListGoalWorkStatesV0(ctx, orquestagoal.GoalWorkStateListRequestV0{
 		Statuses: []string{
@@ -74,7 +82,6 @@ func (reader stackShutdownActiveWorkReaderV0) ReadActiveShutdownWorkV0(
 	if err != nil {
 		return orquestaservershutdown.ActiveShutdownWorkResultV0{}, err
 	}
-	out := orquestaservershutdown.ActiveShutdownWorkResultV0{}
 	for _, state := range states {
 		if stackShutdownGoalBackendStillRunningV0(state) {
 			evidenceRefs := stackShutdownGoalBackendEvidenceRefsV0(state)
@@ -103,6 +110,61 @@ func (reader stackShutdownActiveWorkReaderV0) ReadActiveShutdownWorkV0(
 		out.EvidenceRefs = compactStringsV0(append(out.EvidenceRefs, state.EvidenceRefs...))
 	}
 	return out, nil
+}
+
+func stackShutdownActiveWorkReadersFromGoalBackendV0(
+	config ConfigV0,
+) []orquestaservershutdown.ActiveShutdownWorkReaderPortV0 {
+	out := []orquestaservershutdown.ActiveShutdownWorkReaderPortV0{}
+	for _, candidate := range []interface{}{
+		config.AppGoalObserver,
+		config.AppGoalLauncher,
+		config.AppGoalReworkLauncher,
+	} {
+		activeReader, ok := candidate.(orquestaservershutdown.ActiveShutdownWorkReaderPortV0)
+		if !ok || activeReader == nil {
+			continue
+		}
+		out = append(out, activeReader)
+	}
+	return out
+}
+
+func stackShutdownMergeActiveWorkResultV0(
+	left orquestaservershutdown.ActiveShutdownWorkResultV0,
+	right orquestaservershutdown.ActiveShutdownWorkResultV0,
+) orquestaservershutdown.ActiveShutdownWorkResultV0 {
+	left.ActiveWorks = stackShutdownCompactActiveWorksV0(append(left.ActiveWorks, right.ActiveWorks...))
+	left.EvidenceRefs = compactStringsV0(append(left.EvidenceRefs, right.EvidenceRefs...))
+	return left
+}
+
+func stackShutdownCompactActiveWorksV0(
+	works []orquestaservershutdown.ActiveShutdownWorkV0,
+) []orquestaservershutdown.ActiveShutdownWorkV0 {
+	out := make([]orquestaservershutdown.ActiveShutdownWorkV0, 0, len(works))
+	seen := map[string]struct{}{}
+	for _, work := range works {
+		work.Kind = strings.TrimSpace(work.Kind)
+		work.RunRef = strings.TrimSpace(work.RunRef)
+		work.WorkRef = strings.TrimSpace(work.WorkRef)
+		work.ExternalWorkRef = strings.TrimSpace(work.ExternalWorkRef)
+		work.Status = strings.TrimSpace(work.Status)
+		work.EvidenceRefs = compactStringsV0(work.EvidenceRefs)
+		if work.Kind == "" && work.RunRef == "" && work.WorkRef == "" && work.ExternalWorkRef == "" {
+			continue
+		}
+		key := strings.Join([]string{work.Kind, work.RunRef, work.WorkRef, work.ExternalWorkRef, work.Status}, "\x00")
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, work)
+	}
+	if out == nil {
+		return []orquestaservershutdown.ActiveShutdownWorkV0{}
+	}
+	return out
 }
 
 func stackShutdownGoalBackendStillRunningV0(state orquestagoal.GoalWorkStateV0) bool {

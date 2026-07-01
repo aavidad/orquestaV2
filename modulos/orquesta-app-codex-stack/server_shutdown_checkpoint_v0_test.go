@@ -190,6 +190,38 @@ func TestStackShutdownActiveWorkReaderV0BloqueaBackendRunningSinTimeoutLocal(t *
 	}
 }
 
+func TestStackShutdownActiveWorkReaderV0BloqueaRestosBackendAunqueStateStoreNoRunningV0(t *testing.T) {
+	fixture := newStackShutdownCheckpointFixtureV0(t)
+	fixture.preparer.Config.AppGoalObserver = stackShutdownActiveGoalObserverForTestV0{
+		result: orquestaservershutdown.ActiveShutdownWorkResultV0{
+			ActiveWorks: []orquestaservershutdown.ActiveShutdownWorkV0{{
+				Kind:            "goal_backend",
+				WorkRef:         "orquesta-goal-residue-1234567890",
+				ExternalWorkRef: "codex-goal-app-server-tmux",
+				Status:          orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0,
+				EvidenceRefs:    []string{"evidence-ref-codex-app-server-tmux-residue"},
+			}},
+			EvidenceRefs: []string{"evidence-ref-codex-app-server-tmux-residue"},
+		},
+	}
+	fixture.preparer.Config.Stores.AppGoalStateStore = newGoalFirstQueueStateStoreForTestV0()
+
+	result, err := stackShutdownActiveWorkReaderV0{
+		Config: fixture.preparer.Config,
+	}.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{
+		MaxItems: 10,
+	})
+	if err != nil {
+		t.Fatalf("ReadActiveShutdownWorkV0: %v", err)
+	}
+	if len(result.ActiveWorks) != 1 ||
+		result.ActiveWorks[0].Kind != "goal_backend" ||
+		result.ActiveWorks[0].Status != orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0 ||
+		!hasStackShutdownEvidenceForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-residue") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestStackShutdownActiveWorkReaderV0ListaGoalFirstCompletoPendienteObservacion(t *testing.T) {
 	fixture := newStackShutdownCheckpointFixtureV0(t)
 	goalStates := newGoalFirstQueueStateStoreForTestV0()
@@ -397,6 +429,24 @@ func recordStackShutdownProcessForTestV0(
 
 type stackShutdownSnapshotSourceForTestV0 struct {
 	snapshots map[string]orquestaruntime.ProcessRuntimeSnapshotV0
+}
+
+type stackShutdownActiveGoalObserverForTestV0 struct {
+	result orquestaservershutdown.ActiveShutdownWorkResultV0
+}
+
+func (observer stackShutdownActiveGoalObserverForTestV0) ObserveGoalWorkV0(
+	context.Context,
+	orquestagoal.GoalObservationRequestV0,
+) (orquestagoal.GoalWorkResultV0, error) {
+	return orquestagoal.GoalWorkResultV0{}, nil
+}
+
+func (observer stackShutdownActiveGoalObserverForTestV0) ReadActiveShutdownWorkV0(
+	context.Context,
+	orquestaservershutdown.ActiveShutdownWorkRequestV0,
+) (orquestaservershutdown.ActiveShutdownWorkResultV0, error) {
+	return observer.result, nil
 }
 
 func (source stackShutdownSnapshotSourceForTestV0) SnapshotV0(

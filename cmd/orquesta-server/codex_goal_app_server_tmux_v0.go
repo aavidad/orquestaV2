@@ -16,11 +16,13 @@ import (
 	"time"
 
 	orquestaserver "orquesta/modulos/orquesta-server"
+	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
 
 const (
 	codexAppServerTmuxDirV0             = "goal-srv"
 	codexAppServerTmuxMarkerFileV0      = "owner.json"
+	codexAppServerTmuxOwnerSchemaV0     = "orquesta_codex_app_server_tmux_owner.v0"
 	codexAppServerTmuxEvidenceOwnedV0   = "orquesta-codex-goal-app-server-tmux-v0"
 	codexAppServerTmuxDefaultTimeoutV0  = 3 * time.Second
 	codexAppServerTmuxMinStartupV0      = 60 * time.Second
@@ -183,6 +185,109 @@ func (backend serverCodexAppServerTmuxBackendV0) ShutdownV0(ctx context.Context)
 
 func (backend serverCodexAppServerTmuxBackendV0) ShutdownConfiguredSessionAfterStartupFailureV0(ctx context.Context) error {
 	return backend.shutdownTmuxSessionV0(ctx, true)
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) ReadActiveShutdownWorkV0(
+	ctx context.Context,
+	request orquestaservershutdown.ActiveShutdownWorkRequestV0,
+) (orquestaservershutdown.ActiveShutdownWorkResultV0, error) {
+	residue := backend.detectTmuxResidueV0(ctx)
+	if !residue.Active {
+		return orquestaservershutdown.ActiveShutdownWorkResultV0{}, nil
+	}
+	evidenceRefs := compactStringsV0(append(request.EvidenceRefs, residue.EvidenceRefs...))
+	workRef := strings.TrimSpace(backend.SessionName)
+	if workRef == "" {
+		workRef = "codex-goal-app-server-tmux"
+	}
+	return orquestaservershutdown.ActiveShutdownWorkResultV0{
+		ActiveWorks: []orquestaservershutdown.ActiveShutdownWorkV0{{
+			Kind:            "goal_backend",
+			WorkRef:         workRef,
+			ExternalWorkRef: "codex-goal-app-server-tmux",
+			Status:          orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0,
+			EvidenceRefs:    evidenceRefs,
+		}},
+		EvidenceRefs: evidenceRefs,
+	}, nil
+}
+
+type codexAppServerTmuxResidueV0 struct {
+	Active       bool
+	EvidenceRefs []string
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) detectTmuxResidueV0(ctx context.Context) codexAppServerTmuxResidueV0 {
+	if !backend.tmuxResidueConfigLooksOwnV0() {
+		return codexAppServerTmuxResidueV0{}
+	}
+	residue := codexAppServerTmuxResidueV0{}
+	if backend.tmuxOwnerMarkerExistsV0() {
+		residue.Active = true
+		residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-owner-marker")
+	}
+	if codexAppServerTmuxSocketPresentV0(backend.SocketPath) {
+		residue.Active = true
+		residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-socket")
+	}
+	if session, process := backend.detectTmuxSessionResidueV0(ctx); session {
+		residue.Active = true
+		residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-session")
+		if process {
+			residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process")
+		}
+	}
+	if residue.Active {
+		residue.EvidenceRefs = compactStringsV0(append(
+			[]string{"evidence-ref-codex-app-server-tmux-residue"},
+			residue.EvidenceRefs...,
+		))
+	}
+	return residue
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) tmuxResidueConfigLooksOwnV0() bool {
+	return backend.tmuxOwnerMarkerExistsV0() || backend.tmuxConfiguredOrphanCleanupAllowedV0()
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) detectTmuxSessionResidueV0(ctx context.Context) (bool, bool) {
+	tmuxPath, err := codexAppServerTmuxCommandPathV0(backend.PathEnv)
+	if err != nil {
+		return false, false
+	}
+	timeout := backend.Timeout
+	if timeout <= 0 {
+		timeout = codexAppServerTmuxDefaultTimeoutV0
+	}
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	hasSession, err := backend.tmuxHasSessionV0(runCtx, tmuxPath)
+	if err != nil || !hasSession {
+		return false, false
+	}
+	return true, codexAppServerTmuxPIDAliveV0(backend.tmuxPanePIDV0(runCtx, tmuxPath))
+}
+
+func codexAppServerTmuxSocketPresentV0(socketPath string) bool {
+	socketPath = strings.TrimSpace(socketPath)
+	if socketPath == "" {
+		return false
+	}
+	info, err := os.Lstat(socketPath)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir() && info.Mode()&os.ModeSymlink == 0
+}
+
+func codexAppServerTmuxPIDAliveV0(panePID string) bool {
+	pid, err := strconv.Atoi(strings.TrimSpace(panePID))
+	if err != nil || pid <= 0 {
+		return false
+	}
+	err = syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionV0(ctx context.Context, allowConfiguredOrphan bool) error {
@@ -618,20 +723,29 @@ func ensureExistingPathHasNoSymlinkCodexAppServerTmuxV0(path string) error {
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) tmuxOwnerMarkerExistsV0() bool {
+	_, ok := backend.readTmuxOwnerMarkerV0()
+	return ok
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) readTmuxOwnerMarkerV0() (codexAppServerTmuxOwnerMarkerV0, bool) {
 	path := backend.tmuxOwnerMarkerPathV0()
 	if path == "" {
-		return false
+		return codexAppServerTmuxOwnerMarkerV0{}, false
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return false
+		return codexAppServerTmuxOwnerMarkerV0{}, false
 	}
 	var marker codexAppServerTmuxOwnerMarkerV0
 	if err := json.Unmarshal(raw, &marker); err != nil {
-		return false
+		return codexAppServerTmuxOwnerMarkerV0{}, false
 	}
-	return strings.TrimSpace(marker.OwnerRef) == codexAppServerTmuxEvidenceOwnedV0 &&
-		strings.TrimSpace(marker.SessionName) == strings.TrimSpace(backend.SessionName)
+	if strings.TrimSpace(marker.SchemaVersion) != codexAppServerTmuxOwnerSchemaV0 ||
+		strings.TrimSpace(marker.OwnerRef) != codexAppServerTmuxEvidenceOwnedV0 ||
+		strings.TrimSpace(marker.SessionName) != strings.TrimSpace(backend.SessionName) {
+		return codexAppServerTmuxOwnerMarkerV0{}, false
+	}
+	return marker, true
 }
 
 func shellQuoteCodexAppServerTmuxV0(value string) string {
@@ -644,7 +758,7 @@ func (backend serverCodexAppServerTmuxBackendV0) writeTmuxOwnerMarkerV0() error 
 		return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_config_missing", Err: errors.New("codex_app_server_tmux_config_missing")}
 	}
 	marker := codexAppServerTmuxOwnerMarkerV0{
-		SchemaVersion: "orquesta_codex_app_server_tmux_owner.v0",
+		SchemaVersion: codexAppServerTmuxOwnerSchemaV0,
 		OwnerRef:      codexAppServerTmuxEvidenceOwnedV0,
 		SessionName:   strings.TrimSpace(backend.SessionName),
 		SocketRef:     "socket-ref-codex-goal-app-server-tmux",

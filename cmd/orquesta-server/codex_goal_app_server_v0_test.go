@@ -16,6 +16,7 @@ import (
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 	orquestaserver "orquesta/modulos/orquesta-server"
+	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
 
 func TestServerSupervisorWithCodexGoalBackendV0ExponePuertosSoloConBackendV0(t *testing.T) {
@@ -1802,12 +1803,66 @@ func TestServerGoalShutdownHooksFromBackendsV0DeduplicaTmuxEquivalenteV0(t *test
 	}
 }
 
+func TestServerGoalWorkPortsFromBackendV0PropaganActiveShutdownWorkV0(t *testing.T) {
+	activeHook := fakeServerGoalActiveShutdownHookV0{
+		result: orquestaservershutdown.ActiveShutdownWorkResultV0{
+			ActiveWorks: []orquestaservershutdown.ActiveShutdownWorkV0{{
+				Kind:   "goal_backend",
+				Status: orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0,
+			}},
+			EvidenceRefs: []string{"evidence-ref-active-hook"},
+		},
+	}
+	protocol := &fakeCodexAppServerProtocolV0{}
+	backend := serverCodexGoalBackendV0{
+		Starter:      serverCodexAppServerGoalBackendV0{Protocol: protocol},
+		Observer:     serverCodexAppServerGoalBackendV0{Protocol: protocol},
+		ShutdownHook: activeHook,
+	}
+
+	launcher, ok := serverGoalWorkLauncherFromBackendV0(backend).(orquestaservershutdown.ActiveShutdownWorkReaderPortV0)
+	if !ok {
+		t.Fatalf("launcher no expone ActiveShutdownWorkReader")
+	}
+	observer, ok := serverGoalWorkObserverFromBackendV0(backend).(orquestaservershutdown.ActiveShutdownWorkReaderPortV0)
+	if !ok {
+		t.Fatalf("observer no expone ActiveShutdownWorkReader")
+	}
+	for name, reader := range map[string]orquestaservershutdown.ActiveShutdownWorkReaderPortV0{
+		"launcher": launcher,
+		"observer": observer,
+	} {
+		result, err := reader.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{})
+		if err != nil {
+			t.Fatalf("%s ReadActiveShutdownWorkV0: %v", name, err)
+		}
+		if len(result.ActiveWorks) != 1 || !containsStringForTestV0(result.EvidenceRefs, "evidence-ref-active-hook") {
+			t.Fatalf("%s result=%+v", name, result)
+		}
+	}
+}
+
 type fakeServerGoalShutdownHookV0 struct {
 	id string
 }
 
 func (hook *fakeServerGoalShutdownHookV0) ShutdownV0(context.Context) error {
 	return nil
+}
+
+type fakeServerGoalActiveShutdownHookV0 struct {
+	result orquestaservershutdown.ActiveShutdownWorkResultV0
+}
+
+func (hook fakeServerGoalActiveShutdownHookV0) ShutdownV0(context.Context) error {
+	return nil
+}
+
+func (hook fakeServerGoalActiveShutdownHookV0) ReadActiveShutdownWorkV0(
+	context.Context,
+	orquestaservershutdown.ActiveShutdownWorkRequestV0,
+) (orquestaservershutdown.ActiveShutdownWorkResultV0, error) {
+	return hook.result, nil
 }
 
 func TestServerConfigFromEnvV0ProxyDiagnosticoNoDerivaGoalFirstIdleV0(t *testing.T) {
