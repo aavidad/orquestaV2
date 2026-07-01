@@ -187,6 +187,54 @@ func TestObserveActiveGoalWorksV0UsaWrapperYSincronizaCola(t *testing.T) {
 	}
 }
 
+func TestObserveActiveGoalWorksV0PublicaSnapshotTerminalSinReobservar(t *testing.T) {
+	ctx := context.Background()
+	stack, observer, _, started := startGoalFirstQueueSyncStackForTestV0(t)
+	runRef := started.Run.RunID
+	state, err := stack.Ports.GoalStateStore.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	state.Status = orquestagoal.GoalStatusBlockedV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		GoalRef:         state.GoalRef,
+		ExternalGoalRef: state.ExternalGoalRef,
+		Summary:         "codex_app_server_goal_status_usageLimited",
+		EvidenceRefs:    []string{"evidence-ref-goal-first-provider-limited"},
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code: "codex_app_server_goal_provider_limited",
+		}},
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:      orquestagoal.GoalStatusBlockedV0,
+		NeedsRework: true,
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  orquestagoal.ErrGoalClosureInvalidV0,
+			Field: "status",
+		}},
+	}
+	if err := stack.Ports.GoalStateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := stack.ObserveActiveGoalWorksV0(ctx, orquestagoal.GoalWorkObserveActiveRequestV0{})
+
+	if err != nil {
+		t.Fatalf("ObserveActiveGoalWorksV0: %v", err)
+	}
+	if len(result.Observations) != 1 ||
+		len(observer.requests) != 0 ||
+		result.Observations[0].State.RunRef != runRef ||
+		!result.Observations[0].Terminal ||
+		!result.Observations[0].NeedsRework ||
+		result.Observations[0].Result.Summary != "codex_app_server_goal_status_usageLimited" ||
+		!codexStackStringInSetV0(result.EvidenceRefs, "evidence-ref-goal-first-provider-limited") {
+		t.Fatalf("result=%+v requests=%+v", result, observer.requests)
+	}
+}
+
 func TestObserveAppDirectorGoalV0SincronizaColaStoppedSinCandidatoPrevio(t *testing.T) {
 	ctx := context.Background()
 	stack, observer, launcher, started := startGoalFirstQueueSyncStackForTestV0(t)
@@ -557,13 +605,15 @@ func (launcher *goalFirstQueueLauncherForTestV0) LaunchGoalWorkV0(
 }
 
 type goalFirstQueueObserverForTestV0 struct {
-	result orquestagoal.GoalWorkResultV0
+	result   orquestagoal.GoalWorkResultV0
+	requests []orquestagoal.GoalObservationRequestV0
 }
 
 func (observer *goalFirstQueueObserverForTestV0) ObserveGoalWorkV0(
 	_ context.Context,
 	request orquestagoal.GoalObservationRequestV0,
 ) (orquestagoal.GoalWorkResultV0, error) {
+	observer.requests = append(observer.requests, request)
 	if observer.result.GoalRef == "" {
 		return orquestagoal.GoalWorkResultV0{}, fmt.Errorf("goal result no configurado: %s", request.GoalRef)
 	}

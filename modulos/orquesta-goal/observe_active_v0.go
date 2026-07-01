@@ -49,6 +49,22 @@ func ObserveActiveGoalWorksV0(
 	out := GoalWorkObserveActiveResultV0{}
 	for _, state := range states {
 		if !GoalWorkStatePendingObservationV0(state) {
+			if !GoalWorkStateShouldReturnActiveSnapshotV0(state, listRequest) {
+				continue
+			}
+			observed, err := GoalWorkObservationSnapshotFromStateV0(state)
+			if err != nil {
+				out.Issues = append(out.Issues, GoalWorkObserveActiveIssueV0{
+					RunRef:  strings.TrimSpace(state.RunRef),
+					GoalRef: strings.TrimSpace(state.GoalRef),
+					Code:    "goal_state_snapshot_invalid",
+					Field:   "goal_state",
+					Message: err.Error(),
+				})
+				continue
+			}
+			out.Observations = append(out.Observations, observed)
+			out.EvidenceRefs = compactGoalStringsV0(append(out.EvidenceRefs, observed.EvidenceRefs...))
 			continue
 		}
 		runRef := strings.TrimSpace(state.RunRef)
@@ -83,7 +99,97 @@ func defaultActiveGoalWorkStateListRequestV0(
 	request = NormalizeGoalWorkStateListRequestV0(request)
 	if len(request.Statuses) == 0 {
 		request.ActiveOnly = false
-		request.Statuses = []string{GoalStatusRunningV0, GoalStatusCompleteV0}
+		request.Statuses = []string{
+			GoalStatusRunningV0,
+			GoalStatusCompleteV0,
+			GoalStatusBlockedV0,
+			GoalStatusInvalidV0,
+		}
 	}
 	return NormalizeGoalWorkStateListRequestV0(request)
+}
+
+func GoalWorkObservationSnapshotFromStateV0(
+	state GoalWorkStateV0,
+) (GoalWorkObserveResultV0, error) {
+	state, err := NewGoalWorkStateV0(state)
+	if err != nil {
+		return GoalWorkObserveResultV0{}, err
+	}
+	result := NormalizeGoalWorkResultV0(GoalWorkResultV0{
+		Status:          state.Status,
+		GoalRef:         state.GoalRef,
+		ExternalGoalRef: state.ExternalGoalRef,
+		EvidenceRefs:    append([]string(nil), state.EvidenceRefs...),
+	})
+	if state.LastResult != nil {
+		result = NormalizeGoalWorkResultV0(*state.LastResult)
+		if strings.TrimSpace(result.Status) == "" {
+			result.Status = strings.TrimSpace(state.Status)
+		}
+		if strings.TrimSpace(result.GoalRef) == "" {
+			result.GoalRef = strings.TrimSpace(state.GoalRef)
+		}
+		if strings.TrimSpace(result.ExternalGoalRef) == "" {
+			result.ExternalGoalRef = strings.TrimSpace(state.ExternalGoalRef)
+		}
+	}
+	closure := GoalClosureValidationV0{}
+	closureEvaluated := false
+	if state.LastClosure != nil {
+		closure = normalizeGoalClosureSnapshotV0(*state.LastClosure)
+		closureEvaluated = true
+	}
+	terminal := GoalWorkResultTerminalV0(result.Status)
+	return GoalWorkObserveResultV0{
+		State:            state,
+		Result:           result,
+		Closure:          closure,
+		Terminal:         terminal,
+		ClosureEvaluated: closureEvaluated,
+		Accepted:         closure.Accepted,
+		NeedsRework:      closure.NeedsRework,
+		EvidenceRefs: compactGoalStringsV0(append(
+			append(append([]string(nil), state.EvidenceRefs...), result.EvidenceRefs...),
+			closure.EvidenceRefs...,
+		)),
+	}, nil
+}
+
+func GoalWorkStateShouldReturnActiveSnapshotV0(
+	state GoalWorkStateV0,
+	request GoalWorkStateListRequestV0,
+) bool {
+	if GoalWorkStatePendingObservationV0(state) {
+		return false
+	}
+	if len(request.RunRefs) > 0 {
+		return true
+	}
+	switch strings.TrimSpace(state.Status) {
+	case GoalStatusBlockedV0, GoalStatusInvalidV0:
+		return true
+	}
+	if state.LastClosure != nil {
+		closureStatus := strings.TrimSpace(state.LastClosure.Status)
+		if state.LastClosure.NeedsRework || closureStatus == GoalStatusBlockedV0 {
+			return true
+		}
+	}
+	return state.LastResult != nil && len(state.LastResult.Issues) > 0
+}
+
+func normalizeGoalClosureSnapshotV0(
+	closure GoalClosureValidationV0,
+) GoalClosureValidationV0 {
+	closure.Status = strings.TrimSpace(closure.Status)
+	for i := range closure.EvidenceRefs {
+		closure.EvidenceRefs[i] = strings.TrimSpace(closure.EvidenceRefs[i])
+	}
+	for i := range closure.Issues {
+		closure.Issues[i].Code = strings.TrimSpace(closure.Issues[i].Code)
+		closure.Issues[i].Field = strings.TrimSpace(closure.Issues[i].Field)
+	}
+	closure.EvidenceRefs = compactGoalStringsV0(closure.EvidenceRefs)
+	return closure
 }

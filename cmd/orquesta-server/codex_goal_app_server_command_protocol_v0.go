@@ -312,6 +312,21 @@ func codexAppServerIssueCodeFromMessageV0(message string) string {
 	case strings.Contains(normalized, "resetstdio") ||
 		strings.Contains(normalized, "node.cc:751"):
 		return "codex_app_server_wrapper_stdio_failed"
+	case strings.Contains(normalized, "budgetlimited") ||
+		strings.Contains(normalized, "budget limited") ||
+		strings.Contains(normalized, "budget limit"):
+		return "codex_app_server_goal_budget_limited"
+	case strings.Contains(normalized, "policylimited") ||
+		strings.Contains(normalized, "policy limited") ||
+		strings.Contains(normalized, "policy limit"):
+		return "codex_app_server_goal_policy_limited"
+	case strings.Contains(normalized, "usagelimited") ||
+		strings.Contains(normalized, "usage limited") ||
+		strings.Contains(normalized, "usage limit") ||
+		strings.Contains(normalized, "quota limited") ||
+		strings.Contains(normalized, "quota exhausted") ||
+		strings.Contains(normalized, "provider limited"):
+		return "codex_app_server_goal_provider_limited"
 	case strings.Contains(normalized, "managed standalone codex install not found"):
 		return "codex_app_server_standalone_missing"
 	case strings.Contains(normalized, "failed to connect to socket") ||

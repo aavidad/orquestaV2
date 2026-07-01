@@ -83,6 +83,62 @@ func TestMCPAutoprogrammingObserveActiveGoalsToolExecutorV0ListaYObservaActivos(
 	}
 }
 
+func TestMCPAutoprogrammingObserveActiveGoalsToolExecutorV0PublicaSnapshotUsageLimited(t *testing.T) {
+	store := newMCPAutoprogrammingObserveActiveGoalsStoreForTestV0(t,
+		"run-ref-observe-active-goals-usage-limited-001",
+		"goal-ref-observe-active-goals-usage-limited-001",
+		orquestagoal.GoalStatusBlockedV0,
+	)
+	state, err := store.LoadGoalWorkStateV0(context.Background(), "run-ref-observe-active-goals-usage-limited-001")
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		Status:       orquestagoal.GoalStatusBlockedV0,
+		GoalRef:      state.GoalRef,
+		Summary:      "codex_app_server_goal_status_usageLimited",
+		EvidenceRefs: []string{"evidence-ref-goal-provider-limited"},
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code: "codex_app_server_goal_provider_limited",
+		}},
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:      orquestagoal.GoalStatusBlockedV0,
+		NeedsRework: true,
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  orquestagoal.ErrGoalClosureInvalidV0,
+			Field: "status",
+		}},
+	}
+	if err := store.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	observer := &fakeMCPAutoprogrammingObserveActiveGoalsExecutorForTestV0{}
+
+	result, err := NewMCPAutoprogrammingObserveActiveGoalsToolExecutorV0(store, observer).Execute(
+		context.Background(),
+		MCPAutoprogrammingObserveActiveGoalsToolInputV0{
+			RequestID: "request-ref-observe-active-goals-usage-limited-001",
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if len(result.Observations) != 1 ||
+		len(observer.inputs) != 0 ||
+		!result.Observations[0].Partial ||
+		result.Observations[0].GoalStatus != orquestagoal.GoalStatusBlockedV0 ||
+		result.Observations[0].RecommendedAction != "inspect_goal_backend_limits" ||
+		!hasMCPAutoprogrammingObserveActiveGoalsIssueCodeForTestV0(result.Issues, "codex_app_server_goal_provider_limited") ||
+		!hasMCPAutoprogrammingObserveActiveGoalsIssueCodeForTestV0(result.Issues, "autoprogramming_goal_backend_limited") ||
+		!hasStringMCPAutoprogrammingObserveActiveGoalsTestV0(result.NextActions, "inspect_goal_backend_limits") ||
+		!hasStringMCPAutoprogrammingObserveActiveGoalsTestV0(result.NextActions, "wait_for_goal_backend_capacity") ||
+		!hasStringMCPAutoprogrammingObserveActiveGoalsTestV0(result.EvidenceRefs, "evidence-ref-goal-provider-limited") {
+		t.Fatalf("result=%+v inputs=%+v", result, observer.inputs)
+	}
+}
+
 func TestMCPAutoprogrammingObserveActiveGoalsToolExecutorV0ConservaIncidenciaYContinua(t *testing.T) {
 	store := newMCPAutoprogrammingObserveActiveGoalsStoreForTestV0(t,
 		"run-ref-observe-active-goals-001",
@@ -410,6 +466,18 @@ func hasInputRunMCPAutoprogrammingObserveActiveGoalsTestV0(
 ) bool {
 	for _, input := range inputs {
 		if input.RunRef == want {
+			return true
+		}
+	}
+	return false
+}
+
+func hasMCPAutoprogrammingObserveActiveGoalsIssueCodeForTestV0(
+	issues []MCPValidationIssueV0,
+	want string,
+) bool {
+	for _, issue := range issues {
+		if issue.Code == want {
 			return true
 		}
 	}

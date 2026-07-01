@@ -98,12 +98,37 @@ func (executor MCPAutoprogrammingObserveActiveGoalsToolExecutorV0) Execute(
 	if !ok {
 		return mcpAutoprogrammingObserveActiveGoalsErrorV0(input, "autoprogramming_goal_state_lister_unbound", "goal_state_store", "goal_state_store no lista goals activos"), nil
 	}
-	states, err := lister.ListGoalWorkStatesV0(ctx, mcpAutoprogrammingObserveActiveGoalsListRequestV0(input))
+	listRequest := mcpAutoprogrammingObserveActiveGoalsListRequestV0(input)
+	states, err := lister.ListGoalWorkStatesV0(ctx, listRequest)
 	if err != nil {
 		return mcpAutoprogrammingObserveActiveGoalsErrorV0(input, "autoprogramming_goal_state_list_failed", "goal_state_store", publicMCPExecutorErrorMessageFromErrorV0("autoprogramming_goal_state_list_failed", err)), nil
 	}
 	for _, state := range states {
 		if !orquestagoal.GoalWorkStatePendingObservationV0(state) {
+			if !orquestagoal.GoalWorkStateShouldReturnActiveSnapshotV0(state, listRequest) {
+				continue
+			}
+			runRef := strings.TrimSpace(state.RunRef)
+			observed, err := NewMCPObserveAppDirectorGoalPartialResultFromStateV0(
+				MCPObserveAppDirectorGoalToolInputV0{
+					RequestID:     strings.TrimSpace(input.RequestID),
+					CorrelationID: strings.TrimSpace(input.CorrelationID),
+					RunRef:        runRef,
+					OccurredAt:    strings.TrimSpace(input.OccurredAt),
+					RequestedBy:   firstNonEmptyMCPV0(input.RequestedBy, "orquesta-mcp-observe-active-goals"),
+				},
+				state,
+			)
+			if err != nil {
+				result.Issues = append(result.Issues, MCPValidationIssueV0{
+					Code:    "autoprogramming_goal_state_snapshot_invalid",
+					Field:   firstNonEmptyMCPV0(runRef, strings.TrimSpace(state.GoalRef), "goal_state"),
+					Message: publicMCPExecutorErrorMessageFromErrorV0("autoprogramming_goal_state_snapshot_invalid", err),
+				})
+				continue
+			}
+			result.Observations = append(result.Observations, observed)
+			mcpAutoprogrammingObserveActiveGoalsRecordObservationV0(&result, observed)
 			continue
 		}
 		runRef := strings.TrimSpace(state.RunRef)
@@ -131,7 +156,7 @@ func (executor MCPAutoprogrammingObserveActiveGoalsToolExecutorV0) Execute(
 			continue
 		}
 		result.Observations = append(result.Observations, observed)
-		result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, observed.EvidenceRefs...))
+		mcpAutoprogrammingObserveActiveGoalsRecordObservationV0(&result, observed)
 		if strings.TrimSpace(observed.Estado) != MCPAutoprogrammingObserveGoalEstadoOKV0 {
 			result.Issues = append(result.Issues, MCPValidationIssueV0{
 				Code:    "autoprogramming_observe_goal_non_ok",
@@ -163,9 +188,55 @@ func mcpAutoprogrammingObserveActiveGoalsListRequestV0(
 		request.Statuses = []string{
 			orquestagoal.GoalStatusRunningV0,
 			orquestagoal.GoalStatusCompleteV0,
+			orquestagoal.GoalStatusBlockedV0,
+			orquestagoal.GoalStatusInvalidV0,
 		}
 	}
 	return orquestagoal.NormalizeGoalWorkStateListRequestV0(request)
+}
+
+func mcpAutoprogrammingObserveActiveGoalsRecordObservationV0(
+	result *MCPAutoprogrammingObserveActiveGoalsToolResultV0,
+	observed MCPAutoprogrammingObserveGoalToolResultV0,
+) {
+	if result == nil {
+		return
+	}
+	runRef := strings.TrimSpace(observed.RunRef)
+	result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, observed.EvidenceRefs...))
+	for _, issue := range observed.ClosureIssues {
+		code := strings.TrimSpace(issue.Code)
+		if code == "" {
+			continue
+		}
+		result.Issues = append(result.Issues, MCPValidationIssueV0{
+			Code:    code,
+			Field:   firstNonEmptyMCPV0(runRef, strings.TrimSpace(issue.Field), "goal"),
+			Message: firstNonEmptyMCPV0(issue.Message, code),
+		})
+	}
+	if mcpObserveAppDirectorGoalLooksUsageLimitedV0(observed) {
+		result.Issues = append(result.Issues, MCPValidationIssueV0{
+			Code:    "autoprogramming_goal_backend_limited",
+			Field:   firstNonEmptyMCPV0(runRef, "goal_backend"),
+			Message: "goal_backend_limited",
+		})
+		result.NextActions = compactStringsMCPV0(append(
+			result.NextActions,
+			"inspect_goal_backend_limits",
+			"wait_for_goal_backend_capacity",
+			"do_not_relaunch_until_limit_clears",
+		))
+		return
+	}
+	switch strings.TrimSpace(observed.GoalStatus) {
+	case orquestagoal.GoalStatusBlockedV0, orquestagoal.GoalStatusInvalidV0:
+		result.NextActions = compactStringsMCPV0(append(
+			result.NextActions,
+			"inspect_goal_snapshot",
+			"reconcile_partial_artifacts",
+		))
+	}
 }
 
 func newMCPAutoprogrammingObserveActiveGoalsBaseV0(

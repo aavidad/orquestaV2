@@ -207,8 +207,11 @@ func TestCodexGoalLauncherV0LlamaStarterInyectado(t *testing.T) {
 
 func TestCodexGoalLauncherV0PreservaIssueCodeDeBackendV0(t *testing.T) {
 	starter := &recordingCodexGoalStarterV0{
-		receipt: CodexGoalStartReceiptV0{IssueCode: "codex_app_server_control_socket_missing"},
-		err:     errors.New("backend unavailable"),
+		receipt: CodexGoalStartReceiptV0{
+			IssueCode:    "codex_app_server_control_socket_missing",
+			EvidenceRefs: []string{"evidence-ref-codex-app-server-control-socket-missing"},
+		},
+		err: errors.New("backend unavailable"),
 	}
 	launcher := CodexGoalLauncherV0{Starter: starter}
 
@@ -216,7 +219,8 @@ func TestCodexGoalLauncherV0PreservaIssueCodeDeBackendV0(t *testing.T) {
 
 	if err == nil ||
 		receipt.Status != orquestagoal.GoalStatusInvalidV0 ||
-		!hasGoalIssueCodeForTestV0(receipt.Issues, "codex_app_server_control_socket_missing") {
+		!hasGoalIssueCodeForTestV0(receipt.Issues, "codex_app_server_control_socket_missing") ||
+		!hasGoalStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-control-socket-missing") {
 		t.Fatalf("receipt=%+v err=%v", receipt, err)
 	}
 }
@@ -427,6 +431,15 @@ func TestCodexGoalObserverV0PreservaIssueCodeDeBackendV0(t *testing.T) {
 func hasGoalIssueCodeForTestV0(issues []orquestagoal.GoalWorkIssueV0, code string) bool {
 	for _, issue := range issues {
 		if issue.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func hasGoalStringForTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
 			return true
 		}
 	}

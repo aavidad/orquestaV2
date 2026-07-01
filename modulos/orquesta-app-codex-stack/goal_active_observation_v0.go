@@ -31,6 +31,22 @@ func (stack *StackV0) ObserveActiveGoalWorksV0(
 	out := orquestagoal.GoalWorkObserveActiveResultV0{}
 	for _, state := range states {
 		if !orquestagoal.GoalWorkStatePendingObservationV0(state) {
+			if !orquestagoal.GoalWorkStateShouldReturnActiveSnapshotV0(state, listRequest) {
+				continue
+			}
+			observed, err := orquestagoal.GoalWorkObservationSnapshotFromStateV0(state)
+			if err != nil {
+				out.Issues = append(out.Issues, orquestagoal.GoalWorkObserveActiveIssueV0{
+					RunRef:  strings.TrimSpace(state.RunRef),
+					GoalRef: strings.TrimSpace(state.GoalRef),
+					Code:    "goal_state_snapshot_invalid",
+					Field:   "goal_state",
+					Message: err.Error(),
+				})
+				continue
+			}
+			out.Observations = append(out.Observations, observed)
+			out.EvidenceRefs = compactStringsV0(append(out.EvidenceRefs, observed.EvidenceRefs...))
 			continue
 		}
 		runRef := strings.TrimSpace(state.RunRef)
@@ -82,7 +98,13 @@ func stackActiveGoalWorkStateListRequestV0(
 ) orquestagoal.GoalWorkStateListRequestV0 {
 	request = orquestagoal.NormalizeGoalWorkStateListRequestV0(request)
 	if len(request.Statuses) == 0 {
-		request.ActiveOnly = true
+		request.ActiveOnly = false
+		request.Statuses = []string{
+			orquestagoal.GoalStatusRunningV0,
+			orquestagoal.GoalStatusCompleteV0,
+			orquestagoal.GoalStatusBlockedV0,
+			orquestagoal.GoalStatusInvalidV0,
+		}
 	}
 	return orquestagoal.NormalizeGoalWorkStateListRequestV0(request)
 }

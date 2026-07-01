@@ -220,6 +220,9 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_turn_start_failed")
 		return codexAppServerStartReceiptV0(packet, threadID, code), err
 	}
+	if receipt, limited := backend.codexAppServerStartImmediateLimitedReceiptV0(ctx, packet, threadID, goalSetEvidence); limited {
+		return receipt, errors.New(receipt.IssueCode)
+	}
 	backend.recordCodexAppServerGoalStartedAtV0(threadID, backend.nowCodexAppServerGoalV0())
 	return orquestaruntimecodexgoal.CodexGoalStartReceiptV0{
 		Status:          orquestagoal.GoalStatusRunningV0,
@@ -257,6 +260,7 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 	}
 	status := codexAppServerGoalStatusToGoalWorkStatusV0(goal.Status)
 	receipt := codexAppServerObservationReceiptV0(request, status, "codex_app_server_goal_status_"+strings.TrimSpace(goal.Status))
+	receipt = codexAppServerObservationReceiptWithGoalStatusCauseV0(receipt, goal.Status)
 	if strings.TrimSpace(goal.ThreadID) != "" {
 		receipt.ExternalGoalRef = strings.TrimSpace(goal.ThreadID)
 	}
@@ -601,19 +605,6 @@ func codexAppServerObservationReceiptV0(
 		ExternalGoalRef: strings.TrimSpace(request.ExternalGoalRef),
 		Summary:         summary,
 		EvidenceRefs:    []string{"evidence-ref-codex-app-server-goal-observed"},
-	}
-}
-
-func codexAppServerGoalStatusToGoalWorkStatusV0(status string) string {
-	switch strings.TrimSpace(status) {
-	case "complete":
-		return orquestagoal.GoalStatusCompleteV0
-	case "blocked", "usageLimited", "budgetLimited":
-		return orquestagoal.GoalStatusBlockedV0
-	case "active", "paused":
-		return orquestagoal.GoalStatusRunningV0
-	default:
-		return orquestagoal.GoalStatusInvalidV0
 	}
 }
 
