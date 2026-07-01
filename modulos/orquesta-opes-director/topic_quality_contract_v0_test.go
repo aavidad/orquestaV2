@@ -54,7 +54,7 @@ func TestValidateOPESTopicQualityContractV0CompletaConMinimosYVisualDidacticoV0(
 	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
 		TopicRef:              "tema-010",
 		Level:                 OPESTopicQualityLevelBV0,
-		WordCount:             11000,
+		CanonicalWordCount:    11000,
 		Text:                  "Contenido didactico publico sin notas internas.",
 		RequireDidacticVisual: true,
 		Visuals: []OPESTopicQualityVisualEvidenceV0{{
@@ -71,6 +71,54 @@ func TestValidateOPESTopicQualityContractV0CompletaConMinimosYVisualDidacticoV0(
 		result.WordCount != 11000 ||
 		len(result.Visuals) != 1 ||
 		result.Visuals[0].AnchorRef == "" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestValidateOPESTopicQualityContractV0PriorizaContadorCanonicoSobreWCV0(t *testing.T) {
+	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
+		TopicRef:           "tema-038",
+		Level:              OPESTopicQualityLevelBV0,
+		WordCount:          10800,
+		WordCountSource:    "wc -w",
+		CanonicalWordCount: 10336,
+	})
+
+	if result.Status != OPESTopicQualityStatusNeedsReworkV0 ||
+		result.WordCount != 10336 ||
+		result.WordCountSource != "canonical" ||
+		!opesTopicQualityIssueCodeInSetV0(result.Issues, ErrOPESTopicQualityMinWordsNotMetV0) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestValidateOPESTopicQualityContractV0NoAceptaWCSinCanonicoV0(t *testing.T) {
+	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
+		TopicRef:        "tema-041",
+		Level:           OPESTopicQualityLevelBV0,
+		WordCount:       10983,
+		WordCountSource: "wc",
+	})
+
+	if result.Status != OPESTopicQualityStatusNeedsReworkV0 ||
+		result.WordCount != 10983 ||
+		!opesTopicQualityIssueCodeInSetV0(result.Issues, ErrOPESTopicQualityCanonicalWordsRequiredV0) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestValidateOPESTopicQualityContractV0DetectaInformeContradictorioV0(t *testing.T) {
+	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
+		TopicRef:           "tema-041",
+		Level:              OPESTopicQualityLevelBV0,
+		CanonicalWordCount: 10531,
+		ReportStatus:       "fail",
+		ReportText:         "El informe indica que supera 10.800 palabras por conteo interno.",
+	})
+
+	if result.Status != OPESTopicQualityStatusNeedsReworkV0 ||
+		!opesTopicQualityIssueCodeInSetV0(result.Issues, ErrOPESTopicQualityInvalidReportContractV0) ||
+		!opesTopicQualityIssueCodeInSetV0(result.Issues, ErrOPESTopicQualityMinWordsNotMetV0) {
 		t.Fatalf("result=%+v", result)
 	}
 }
