@@ -212,6 +212,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 		result.Diagnostics,
 		executor.AllowLegacySupervisorActions,
 	)
+	result.Operator = mcpAutoprogrammingOperatorWithGoalFirstActiveRunsV0(result.Operator, goalStates, goalRunMarkers)
 	if !executor.AllowLegacySupervisorActions &&
 		mcpAutoprogrammingLegacySupervisorActionCandidateV0(result.Operator, result.Run, goalFirstRunRefs) {
 		result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingDiagnosticV0(

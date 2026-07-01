@@ -138,7 +138,7 @@ func TestStackShutdownStatsV0ExponeLivenessDeAgentesObsoletos(t *testing.T) {
 	}
 }
 
-func TestStackShutdownActiveWorkReaderV0ListaGoalFirstActivo(t *testing.T) {
+func TestStackShutdownActiveWorkReaderV0BloqueaBackendRunningSinTimeoutLocal(t *testing.T) {
 	fixture := newStackShutdownCheckpointFixtureV0(t)
 	goalStates := newGoalFirstQueueStateStoreForTestV0()
 	fixture.preparer.Config.Stores.AppGoalStateStore = goalStates
@@ -178,12 +178,65 @@ func TestStackShutdownActiveWorkReaderV0ListaGoalFirstActivo(t *testing.T) {
 		t.Fatalf("ReadActiveShutdownWorkV0: %v", err)
 	}
 	if len(result.ActiveWorks) != 1 ||
-		result.ActiveWorks[0].Kind != "goal_first" ||
+		result.ActiveWorks[0].Kind != "goal_backend" ||
 		result.ActiveWorks[0].RunRef != runRef ||
 		result.ActiveWorks[0].WorkRef != goalRef ||
 		result.ActiveWorks[0].ExternalWorkRef != "external-goal-ref-shutdown-active-001" ||
-		result.ActiveWorks[0].Status != orquestagoal.GoalStatusRunningV0 ||
-		!hasStackShutdownEvidenceForTestV0(result.EvidenceRefs, "goal-state-ref-shutdown-active") {
+		result.ActiveWorks[0].Status != orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0 ||
+		!hasStackShutdownEvidenceForTestV0(result.EvidenceRefs, "goal-state-ref-shutdown-active") ||
+		!hasStackShutdownEvidenceForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-goal-backend-running-state") ||
+		hasStackShutdownEvidenceForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-goal-backend-active-timeout") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestStackShutdownActiveWorkReaderV0ListaGoalFirstCompletoPendienteObservacion(t *testing.T) {
+	fixture := newStackShutdownCheckpointFixtureV0(t)
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	fixture.preparer.Config.Stores.AppGoalStateStore = goalStates
+	runRef := "run-ref-shutdown-goal-complete-pending-001"
+	goalRef := "goal-ref-shutdown-complete-pending-001"
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			GoalRef:   goalRef,
+			RunRef:    runRef,
+			Objective: "probar goal complete pendiente de cierre",
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{
+				Path:    "docs/shutdown_complete_pending_goal.md",
+				Purpose: "test",
+			}},
+			EvidenceRefs: []string{"goal-state-ref-shutdown-complete-pending"},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: "external-goal-ref-shutdown-complete-pending-001",
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	state.Status = orquestagoal.GoalStatusCompleteV0
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := stackShutdownActiveWorkReaderV0{
+		Config: fixture.preparer.Config,
+	}.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{
+		MaxItems: 10,
+	})
+	if err != nil {
+		t.Fatalf("ReadActiveShutdownWorkV0: %v", err)
+	}
+	if len(result.ActiveWorks) != 1 ||
+		result.ActiveWorks[0].Kind != "goal_first" ||
+		result.ActiveWorks[0].RunRef != runRef ||
+		result.ActiveWorks[0].WorkRef != goalRef ||
+		result.ActiveWorks[0].ExternalWorkRef != "external-goal-ref-shutdown-complete-pending-001" ||
+		result.ActiveWorks[0].Status != orquestagoal.GoalStatusCompleteV0 ||
+		!hasStackShutdownEvidenceForTestV0(result.EvidenceRefs, "goal-state-ref-shutdown-complete-pending") {
 		t.Fatalf("result=%+v", result)
 	}
 }

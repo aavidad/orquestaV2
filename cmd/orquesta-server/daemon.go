@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	orquestaserver "orquesta/modulos/orquesta-server"
@@ -72,21 +73,31 @@ func waitForStateHealthyV0(
 ) (orquestaserver.StateV0, error) {
 	deadline := time.Now().Add(timeout)
 	var last orquestaserver.StateV0
+	serverExitedAfterReadiness := false
 	for time.Now().Before(deadline) {
 		state, err := loadStateV0(config)
 		if err == nil {
+			loadedState := state
+			if reconciled, ok := reconcileStatefileSnapshotLivenessV0(config, state); ok {
+				state = reconciled
+				serverExitedAfterReadiness = serverExitedAfterReadiness || serverStateWasStartupReadyV0(loadedState)
+			}
 			last = state
-			if serverReadinessOKV0(state.Addr) {
-				stableState, ok := waitForStableReadinessV0(config, state, deadline)
+			if serverStateSnapshotReadyForReadinessV0(state) && serverReadinessOKV0(state.Addr) {
+				stableState, stableReconciled, ok := waitForStableReadinessV0(config, state, deadline)
 				if stableState.Addr != "" {
 					last = stableState
 				}
+				serverExitedAfterReadiness = serverExitedAfterReadiness || stableReconciled
 				if ok {
 					return stableState, nil
 				}
 			}
 		}
 		sleepUntilDeadlineV0(serverReadinessPollEveryV0, deadline)
+	}
+	if serverExitedAfterReadiness && serverStateIsProcessStaleV0(last) {
+		return last, fmt.Errorf("server_exited_after_readiness")
 	}
 	if last.Addr != "" {
 		return last, fmt.Errorf("readiness_timeout")
@@ -98,21 +109,28 @@ func waitForStableReadinessV0(
 	config orquestaserver.ConfigV0,
 	readyState orquestaserver.StateV0,
 	deadline time.Time,
-) (orquestaserver.StateV0, bool) {
+) (orquestaserver.StateV0, bool, bool) {
 	if !sleepUntilDeadlineV0(serverReadinessStableDelayV0, deadline) {
-		return readyState, false
+		return readyState, false, false
 	}
 	stableState, err := loadStateV0(config)
 	if err != nil {
-		return readyState, false
+		return readyState, false, false
+	}
+	loadedState := stableState
+	if reconciled, ok := reconcileStatefileSnapshotLivenessV0(config, stableState); ok {
+		return reconciled, serverStateWasStartupReadyV0(loadedState), false
+	}
+	if !serverStateSnapshotReadyForReadinessV0(stableState) {
+		return stableState, false, false
 	}
 	if !sameStartupDaemonIdentityV0(readyState, stableState) {
-		return stableState, false
+		return stableState, false, false
 	}
 	if !serverReadinessOKV0(stableState.Addr) {
-		return stableState, false
+		return stableState, false, false
 	}
-	return stableState, true
+	return stableState, false, true
 }
 
 func sleepUntilDeadlineV0(delay time.Duration, deadline time.Time) bool {
@@ -140,6 +158,20 @@ func sameStartupDaemonIdentityV0(a orquestaserver.StateV0, b orquestaserver.Stat
 		a.RuntimeIdentity.BuildRef == b.RuntimeIdentity.BuildRef &&
 		a.RuntimeIdentity.CommitRef == b.RuntimeIdentity.CommitRef &&
 		a.RuntimeIdentity.StartedAt == b.RuntimeIdentity.StartedAt
+}
+
+func serverStateWasStartupReadyV0(state orquestaserver.StateV0) bool {
+	return state.StartupReady ||
+		strings.TrimSpace(state.StartupStatus) == orquestaserver.StartupCheckStatusReadyV0
+}
+
+func serverStateSnapshotReadyForReadinessV0(state orquestaserver.StateV0) bool {
+	return strings.TrimSpace(state.Status) == "running" && serverStateWasStartupReadyV0(state)
+}
+
+func serverStateIsProcessStaleV0(state orquestaserver.StateV0) bool {
+	return strings.TrimSpace(state.Status) == "stale" &&
+		strings.TrimSpace(state.StartupStatus) == orquestaserver.ServerProcessStaleReasonCodeV0
 }
 
 func serverReadinessOKV0(addr string) bool {

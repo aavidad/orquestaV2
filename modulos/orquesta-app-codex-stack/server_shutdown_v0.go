@@ -77,19 +77,16 @@ func (reader stackShutdownActiveWorkReaderV0) ReadActiveShutdownWorkV0(
 	out := orquestaservershutdown.ActiveShutdownWorkResultV0{}
 	for _, state := range states {
 		if stackShutdownGoalBackendStillRunningV0(state) {
+			evidenceRefs := stackShutdownGoalBackendEvidenceRefsV0(state)
 			out.ActiveWorks = append(out.ActiveWorks, orquestaservershutdown.ActiveShutdownWorkV0{
 				Kind:            "goal_backend",
 				RunRef:          strings.TrimSpace(state.RunRef),
 				WorkRef:         strings.TrimSpace(state.GoalRef),
 				ExternalWorkRef: strings.TrimSpace(state.ExternalGoalRef),
 				Status:          orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0,
-				EvidenceRefs: compactStringsV0(append(
-					state.EvidenceRefs,
-					"evidence-ref-shutdown-goal-backend-active-timeout",
-				)),
+				EvidenceRefs:    evidenceRefs,
 			})
-			out.EvidenceRefs = compactStringsV0(append(out.EvidenceRefs, state.EvidenceRefs...))
-			out.EvidenceRefs = compactStringsV0(append(out.EvidenceRefs, "evidence-ref-shutdown-goal-backend-active-timeout"))
+			out.EvidenceRefs = compactStringsV0(append(out.EvidenceRefs, evidenceRefs...))
 			continue
 		}
 		if !orquestagoal.GoalWorkStatePendingObservationV0(state) {
@@ -109,6 +106,17 @@ func (reader stackShutdownActiveWorkReaderV0) ReadActiveShutdownWorkV0(
 }
 
 func stackShutdownGoalBackendStillRunningV0(state orquestagoal.GoalWorkStateV0) bool {
+	if stackShutdownGoalBackendRunningStateV0(state) {
+		return true
+	}
+	return stackShutdownGoalBackendActiveTimeoutV0(state)
+}
+
+func stackShutdownGoalBackendRunningStateV0(state orquestagoal.GoalWorkStateV0) bool {
+	return strings.TrimSpace(state.Status) == orquestagoal.GoalStatusRunningV0
+}
+
+func stackShutdownGoalBackendActiveTimeoutV0(state orquestagoal.GoalWorkStateV0) bool {
 	status := strings.TrimSpace(state.Status)
 	if status != orquestagoal.GoalStatusBlockedV0 && status != orquestagoal.GoalStatusInvalidV0 {
 		return false
@@ -134,6 +142,17 @@ func stackShutdownGoalBackendStillRunningV0(state orquestagoal.GoalWorkStateV0) 
 		}
 	}
 	return false
+}
+
+func stackShutdownGoalBackendEvidenceRefsV0(state orquestagoal.GoalWorkStateV0) []string {
+	refs := append([]string(nil), state.EvidenceRefs...)
+	if stackShutdownGoalBackendRunningStateV0(state) {
+		refs = append(refs, "evidence-ref-shutdown-goal-backend-running-state")
+	}
+	if stackShutdownGoalBackendActiveTimeoutV0(state) {
+		refs = append(refs, "evidence-ref-shutdown-goal-backend-active-timeout")
+	}
+	return compactStringsV0(refs)
 }
 
 func stackShutdownEvidenceLooksGoalActiveTimeoutV0(ref string) bool {

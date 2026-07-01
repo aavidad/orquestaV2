@@ -2524,6 +2524,15 @@ func TestMCPAutoprogrammingStatusExecutorV0EfficiencyNoDeclaraIdleConGoalVivoYCo
 	if result.EfficiencySummary.RecommendedAction != "observe_goal:run:"+runRef {
 		t.Fatalf("recommended_action=%q operator=%+v", result.EfficiencySummary.RecommendedAction, result.Operator)
 	}
+	if result.Operator == nil ||
+		len(result.Operator.ActiveRuns) != 1 ||
+		result.Operator.ActiveRuns[0].RunRef != runRef ||
+		result.Operator.ActiveRuns[0].Status != orquestagoal.GoalStatusRunningV0 ||
+		!hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "observe_goal", "run", runRef) ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "run", runRef) ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "supervise", "queue", "") {
+		t.Fatalf("operator=%+v", result.Operator)
+	}
 }
 
 func TestMCPAutoprogrammingStatusExecutorV0GoalsCompletosNoOcultanRunningPorMaxItems(t *testing.T) {
