@@ -344,6 +344,13 @@ func TestRuntimeV0GoalObservationFingerprintSaltaRunSinCambiosV0(t *testing.T) {
 		store.last.GoalObserverObserved != 1 {
 		t.Fatalf("state=%+v", store.last)
 	}
+	if store.last.GoalObserverOperationalMessage == nil ||
+		store.last.GoalObserverOperationalMessage.Counters["observed"] != 1 ||
+		store.last.GoalObserverOperationalMessage.Counters["terminal"] != 0 ||
+		!containsStringForTestV0(store.last.GoalObserverOperationalMessage.RunRefs, state.RunRef) ||
+		!containsStringForTestV0(store.last.GoalObserverOperationalMessage.GoalRefs, state.GoalRef) {
+		t.Fatalf("active goal snapshot lost after fingerprint skip: %+v", store.last.GoalObserverOperationalMessage)
+	}
 }
 
 func TestRuntimeV0GoalObservationDisabledNoArrancaV0(t *testing.T) {

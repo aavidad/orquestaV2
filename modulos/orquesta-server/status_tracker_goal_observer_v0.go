@@ -111,6 +111,9 @@ func (tracker *StatusTrackerV0) MarkGoalObserverSkippedV0(
 		state.GoalObserverStatus = "skipped"
 		state.GoalObserverTickActive = false
 		state.GoalObserverLastTickAt = formatTimeV0(now)
+		if reason == "unchanged_fingerprint" && supervisorGoalBackendSnapshotActiveV0(supervisorGoalBackendActiveSnapshotFromStateV0(*state)) {
+			return
+		}
 		state.GoalObserverOperationalMessage = projectServerOperationalMessageRecordV0(
 			serverOperationalMessageInputV0{
 				Scope:      "goal_observer",

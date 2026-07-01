@@ -105,3 +105,21 @@ func supervisorResultAuditSummaryV0(
 		"error_run_refs_count": len(result.ErrorRunRefs),
 	}
 }
+
+func supervisorResultAuditSummaryWithStateV0(
+	result orquestarunsupervisor.RunSupervisorResultV0,
+	state StateV0,
+) map[string]interface{} {
+	summary := supervisorResultAuditSummaryV0(result)
+	metrics := collectSupervisorResultMetricsV0(result)
+	projection := supervisorPublicProjectionV0(result, metrics)
+	projection, snapshot := supervisorProjectionWithGoalBackendV0(projection, metrics, state)
+	summary["public_stop_reason"] = strings.TrimSpace(projection.StopPublic)
+	summary["stop_category"] = strings.TrimSpace(projection.StopCategory)
+	if supervisorGoalBackendSnapshotActiveV0(snapshot) {
+		summary["goal_backend_active"] = snapshot.Active
+		summary["goal_backend_run_refs_count"] = len(snapshot.RunRefs)
+		summary["goal_backend_goal_refs_count"] = len(snapshot.GoalRefs)
+	}
+	return summary
+}

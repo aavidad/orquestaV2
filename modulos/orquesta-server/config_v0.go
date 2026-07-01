@@ -52,6 +52,12 @@ const (
 	SupervisorPublicCategoryExternalProcessV0 = "external_process"
 )
 
+const (
+	SupervisorPublicStatusQueueIdleGoalBackendActiveV0  = "queue_idle_goal_backend_active"
+	SupervisorPublicStopQueueIdleButGoalBackendActiveV0 = "queue_idle_but_goal_backend_active"
+	SupervisorPublicCategoryGoalBackendV0               = "goal_backend"
+)
+
 type ConfigV0 struct {
 	Addr                              string
 	StateDir                          string

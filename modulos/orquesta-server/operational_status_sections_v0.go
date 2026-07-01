@@ -154,6 +154,7 @@ func residentOperationalReferencesV0(
 			Rel: "related", TargetType: "system", TargetRef: strings.TrimSpace(state.LastSupervisorQueueRef),
 		})
 	}
+	refs = append(refs, residentOperationalGoalBackendReferencesV0(state)...)
 	refs = append(refs, residentOperationalGoalReferencesV0(state)...)
 	return refs
 }
