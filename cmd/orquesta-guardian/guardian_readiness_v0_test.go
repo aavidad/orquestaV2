@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -13,6 +15,7 @@ import (
 )
 
 func TestGuardianV0HealthcheckExigeReadinessOperativa(t *testing.T) {
+	withGuardianFakeReadinessHTTPClientV0(t, "not_ready")
 	dir := t.TempDir()
 	current := filepath.Join(dir, "bin", "orquesta-server-latest")
 	mustWriteGuardianTestFileV0(t, current, "old")
@@ -22,6 +25,7 @@ func TestGuardianV0HealthcheckExigeReadinessOperativa(t *testing.T) {
 		StateDir:       filepath.Join(dir, "guardian"),
 		CurrentBin:     current,
 		CandidateBin:   candidate,
+		CandidateAddr:  "127.0.0.1:1",
 		BuildCommand:   "true",
 		Promote:        true,
 		SkipHealth:     false,
@@ -46,6 +50,7 @@ func TestGuardianV0HealthcheckExigeReadinessOperativa(t *testing.T) {
 }
 
 func TestGuardianV0HealthcheckReadinessListaPermitePromocion(t *testing.T) {
+	withGuardianFakeReadinessHTTPClientV0(t, "ready")
 	dir := t.TempDir()
 	current := filepath.Join(dir, "bin", "orquesta-server-latest")
 	mustWriteGuardianTestFileV0(t, current, "old")
@@ -55,6 +60,7 @@ func TestGuardianV0HealthcheckReadinessListaPermitePromocion(t *testing.T) {
 		StateDir:       filepath.Join(dir, "guardian"),
 		CurrentBin:     current,
 		CandidateBin:   candidate,
+		CandidateAddr:  "127.0.0.1:1",
 		BuildCommand:   "true",
 		Promote:        false,
 		SkipHealth:     false,
@@ -97,6 +103,10 @@ func TestGuardianFakeCandidateProcessV0(t *testing.T) {
 	if mode == "" {
 		return
 	}
+	if strings.TrimSpace(os.Getenv("ORQUESTA_GUARDIAN_FAKE_CANDIDATE_NO_LISTEN")) == "1" {
+		writeGuardianFakeCandidateStateV0(t, "guardian-test-candidate")
+		select {}
+	}
 	addr := strings.TrimSpace(os.Getenv("ORQUESTA_SERVER_ADDR"))
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -129,9 +139,54 @@ func writeGuardianFakeCandidateScriptV0(t *testing.T, dir string, mode string) s
 	t.Helper()
 	path := filepath.Join(dir, "candidate.sh")
 	body := "#!/bin/sh\nORQUESTA_GUARDIAN_FAKE_CANDIDATE_MODE=" + shellQuoteV0(mode) +
-		" exec " + shellQuoteV0(os.Args[0]) + " -test.run TestGuardianFakeCandidateProcessV0 -- \"$@\"\n"
+		" ORQUESTA_GUARDIAN_FAKE_CANDIDATE_NO_LISTEN=1" +
+		" exec " + shellQuoteV0(os.Args[0]) + " -test.run TestGuardianFakeCandidateProcessV0\n"
 	mustWriteGuardianTestFileV0(t, path, body)
 	return path
+}
+
+func withGuardianFakeReadinessHTTPClientV0(t *testing.T, mode string) {
+	t.Helper()
+	previous := newGuardianCandidateReadinessHTTPClientV0
+	newGuardianCandidateReadinessHTTPClientV0 = func() http.Client {
+		return http.Client{Transport: guardianFakeReadinessRoundTripperV0{mode: mode}}
+	}
+	t.Cleanup(func() {
+		newGuardianCandidateReadinessHTTPClientV0 = previous
+	})
+}
+
+type guardianFakeReadinessRoundTripperV0 struct {
+	mode string
+}
+
+func (transport guardianFakeReadinessRoundTripperV0) RoundTrip(request *http.Request) (*http.Response, error) {
+	status := http.StatusOK
+	body := map[string]any{"status": "ok"}
+	if request.URL.Path == "/api/v0/server/readiness" {
+		ready := transport.mode == "ready"
+		if !ready {
+			status = http.StatusServiceUnavailable
+		}
+		body = map[string]any{
+			"schema_version": "orquesta_server_readiness.v0",
+			"ready":          ready,
+			"status":         "running",
+			"startup_ready":  ready,
+			"startup_status": map[bool]string{true: "startup_ready", false: "startup_blocked"}[ready],
+			"evidence_refs":  []string{"evidence-ref-fake-candidate-readiness"},
+		}
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	return &http.Response{
+		StatusCode: status,
+		Body:       io.NopCloser(bytes.NewReader(raw)),
+		Header:     make(http.Header),
+		Request:    request,
+	}, nil
 }
 
 func writeGuardianFakeCandidateStateV0(t *testing.T, addr string) {

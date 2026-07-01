@@ -168,7 +168,7 @@ func requestGuardianServerShutdownV0(config guardianConfigV0) (guardianShutdownR
 	if err := json.NewEncoder(body).Encode(payload); err != nil {
 		return guardianShutdownResultV0{}, err
 	}
-	client := http.Client{Timeout: 30 * time.Second}
+	client := newGuardianShutdownHTTPClientV0()
 	response, err := client.Post(
 		"http://"+strings.TrimSpace(config.ServerAddr)+"/api/v0/server/shutdown",
 		"application/json",
@@ -186,6 +186,10 @@ func requestGuardianServerShutdownV0(config guardianConfigV0) (guardianShutdownR
 		return result, fmt.Errorf("shutdown_http_%d_%s", response.StatusCode, result.Status)
 	}
 	return result, nil
+}
+
+var newGuardianShutdownHTTPClientV0 = func() http.Client {
+	return http.Client{Timeout: 30 * time.Second}
 }
 
 func guardianShutdownReasonV0(config guardianConfigV0) string {

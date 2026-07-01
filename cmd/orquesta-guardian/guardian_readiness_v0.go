@@ -43,7 +43,7 @@ func waitGuardianCandidateReadinessV0(
 	timeout time.Duration,
 ) (guardianCandidateReadinessV0, error) {
 	deadline := time.Now().Add(timeout)
-	client := http.Client{Timeout: 500 * time.Millisecond}
+	client := newGuardianCandidateReadinessHTTPClientV0()
 	var last error
 	for time.Now().Before(deadline) {
 		if err := ctx.Err(); err != nil {
@@ -65,6 +65,10 @@ func waitGuardianCandidateReadinessV0(
 		return guardianCandidateReadinessV0{}, last
 	}
 	return guardianCandidateReadinessV0{}, guardianCandidateReadinessErrorV0{code: guardianCandidateReadinessNotReadyV0, text: "timeout"}
+}
+
+var newGuardianCandidateReadinessHTTPClientV0 = func() http.Client {
+	return http.Client{Timeout: 500 * time.Millisecond}
 }
 
 func requestGuardianCandidateLivenessV0(client http.Client, baseURL string) error {

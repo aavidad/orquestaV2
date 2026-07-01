@@ -1,12 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -18,7 +19,7 @@ func TestGuardianV0ShutdownServerUsaCooperativoPorDefecto(t *testing.T) {
 		RequestedBy string `json:"requested_by"`
 		QueueLimit  int    `json:"queue_limit"`
 	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	withGuardianFakeShutdownHTTPClientV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v0/server/shutdown" {
 			t.Fatalf("path=%s", r.URL.Path)
 		}
@@ -31,11 +32,10 @@ func TestGuardianV0ShutdownServerUsaCooperativoPorDefecto(t *testing.T) {
 			ShutdownReady: true,
 		})
 	}))
-	defer server.Close()
 	config := mustGuardianConfigForTestV0(t, guardianConfigV0{
 		ProjectDir:         dir,
 		StateDir:           filepath.Join(dir, "guardian"),
-		ServerAddr:         strings.TrimPrefix(server.URL, "http://"),
+		ServerAddr:         "guardian-test",
 		ShutdownTimeout:    time.Second,
 		ShutdownQueueLimit: 123,
 		OccurredAt:         time.Date(2026, 5, 24, 12, 4, 0, 0, time.UTC),
@@ -55,7 +55,7 @@ func TestGuardianV0ShutdownServerUsaCooperativoPorDefecto(t *testing.T) {
 func TestGuardianV0ShutdownServerFuerzaTrasTimeoutCooperativo(t *testing.T) {
 	dir := t.TempDir()
 	var forcedValues []bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	withGuardianFakeShutdownHTTPClientV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var received struct {
 			Forced bool `json:"forced"`
 		}
@@ -77,11 +77,10 @@ func TestGuardianV0ShutdownServerFuerzaTrasTimeoutCooperativo(t *testing.T) {
 			ShutdownReady: false,
 		})
 	}))
-	defer server.Close()
 	config := mustGuardianConfigForTestV0(t, guardianConfigV0{
 		ProjectDir:                    dir,
 		StateDir:                      filepath.Join(dir, "guardian"),
-		ServerAddr:                    strings.TrimPrefix(server.URL, "http://"),
+		ServerAddr:                    "guardian-test",
 		ShutdownTimeout:               time.Millisecond,
 		ForceAfterTimeout:             true,
 		ShutdownEscalationEvidenceRef: "evidence-ref-director-break-glass-shutdown",
@@ -106,7 +105,7 @@ func TestGuardianV0ShutdownServerFuerzaTrasTimeoutCooperativo(t *testing.T) {
 func TestGuardianV0ShutdownServerNoEscalaPorDefectoTrasTimeout(t *testing.T) {
 	dir := t.TempDir()
 	var forcedValues []bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	withGuardianFakeShutdownHTTPClientV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var received struct {
 			Forced bool `json:"forced"`
 		}
@@ -121,11 +120,10 @@ func TestGuardianV0ShutdownServerNoEscalaPorDefectoTrasTimeout(t *testing.T) {
 			CheckpointsPending: 1,
 		})
 	}))
-	defer server.Close()
 	config := mustGuardianConfigForTestV0(t, guardianConfigV0{
 		ProjectDir:      dir,
 		StateDir:        filepath.Join(dir, "guardian"),
-		ServerAddr:      strings.TrimPrefix(server.URL, "http://"),
+		ServerAddr:      "guardian-test",
 		ShutdownTimeout: time.Millisecond,
 		OccurredAt:      time.Date(2026, 5, 24, 12, 6, 0, 0, time.UTC),
 	}, false)
@@ -146,7 +144,7 @@ func TestGuardianV0ShutdownServerNoEscalaPorDefectoTrasTimeout(t *testing.T) {
 func TestGuardianV0ShutdownServerBloqueaEscaladaSinEvidenceRef(t *testing.T) {
 	dir := t.TempDir()
 	var forcedValues []bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	withGuardianFakeShutdownHTTPClientV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var received struct {
 			Forced bool `json:"forced"`
 		}
@@ -161,11 +159,10 @@ func TestGuardianV0ShutdownServerBloqueaEscaladaSinEvidenceRef(t *testing.T) {
 			AgentsInFlight: 1,
 		})
 	}))
-	defer server.Close()
 	config := mustGuardianConfigForTestV0(t, guardianConfigV0{
 		ProjectDir:        dir,
 		StateDir:          filepath.Join(dir, "guardian"),
-		ServerAddr:        strings.TrimPrefix(server.URL, "http://"),
+		ServerAddr:        "guardian-test",
 		ShutdownTimeout:   time.Millisecond,
 		ForceAfterTimeout: true,
 		OccurredAt:        time.Date(2026, 5, 24, 12, 7, 0, 0, time.UTC),
@@ -183,4 +180,29 @@ func TestGuardianV0ShutdownServerBloqueaEscaladaSinEvidenceRef(t *testing.T) {
 			t.Fatalf("forcedValues=%+v", forcedValues)
 		}
 	}
+}
+
+func withGuardianFakeShutdownHTTPClientV0(t *testing.T, handler http.Handler) {
+	t.Helper()
+	previous := newGuardianShutdownHTTPClientV0
+	newGuardianShutdownHTTPClientV0 = func() http.Client {
+		return http.Client{Transport: guardianFakeShutdownRoundTripperV0{handler: handler}}
+	}
+	t.Cleanup(func() {
+		newGuardianShutdownHTTPClientV0 = previous
+	})
+}
+
+type guardianFakeShutdownRoundTripperV0 struct {
+	handler http.Handler
+}
+
+func (transport guardianFakeShutdownRoundTripperV0) RoundTrip(request *http.Request) (*http.Response, error) {
+	recorder := httptest.NewRecorder()
+	transport.handler.ServeHTTP(recorder, request)
+	result := recorder.Result()
+	if result.Body == nil {
+		result.Body = io.NopCloser(bytes.NewReader(nil))
+	}
+	return result, nil
 }
