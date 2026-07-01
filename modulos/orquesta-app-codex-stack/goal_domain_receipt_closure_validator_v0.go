@@ -26,6 +26,7 @@ const (
 	goalDomainReceiptOPESVisualReuseIssueCodeV0          = "domain_work_opes_visual_reuse_missing"
 	goalDomainReceiptOPESHTMLShellIssueCodeV0            = "domain_work_opes_html_shell_incomplete"
 	goalDomainReceiptOPESPracticalCasesIssueCodeV0       = "domain_work_opes_practical_cases_contract_incomplete"
+	goalDomainReceiptRequiredTestEvidenceMissingIssueV0  = "domain_work_required_test_evidence_missing"
 	goalDomainReceiptLedgerRequiredArtifactFieldV0       = "domain_receipt_refs.artifact_contracts"
 	goalDomainReceiptStructuredArtifactFieldV0           = "domain_receipt_refs.artifact_payload"
 	goalDomainReceiptLedgerUnavailableIssueFieldV0       = "domain_receipt_refs.ledger"
@@ -36,6 +37,7 @@ const (
 	goalDomainReceiptOPESVisualReuseFieldV0              = "domain_receipt_refs.opes_visual_reuse"
 	goalDomainReceiptOPESHTMLShellFieldV0                = "domain_receipt_refs.opes_html_shell"
 	goalDomainReceiptOPESPracticalCasesFieldV0           = "domain_receipt_refs.opes_practical_cases"
+	goalDomainReceiptRequiredTestEvidenceMissingFieldV0  = "required_test_results.evidence_refs"
 	goalDomainReceiptOPESSubrolesEvidenceFieldV0         = "domain_receipt_refs.opes_subroles"
 	goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0   = "evidence-ref-goal-domain-receipt-opes-subroles-accepted"
 	goalDomainReceiptOPESSubrolesEvidencePrefixV0        = "domain-work-opes-subrole-"
@@ -150,6 +152,19 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) goalResultWithAcceptedD
 		return result
 	}
 	evidenceRefs := goalDomainReceiptEvidenceRefsV0(complete)
+	for i := range result.RequiredTestResults {
+		testRef := strings.TrimSpace(result.RequiredTestResults[i].TestRef)
+		status := strings.TrimSpace(result.RequiredTestResults[i].Status)
+		if testRef == "" ||
+			(status != "passed" && status != orquestagoal.GoalStatusAcceptedV0) ||
+			len(compactStringsV0(result.RequiredTestResults[i].EvidenceRefs)) > 0 {
+			continue
+		}
+		if !goalDomainReceiptDomainOnlyRequiredTestRefInSpecV0(spec.RequiredTests, testRef) {
+			continue
+		}
+		result.RequiredTestResults[i].EvidenceRefs = compactStringsV0(append(append([]string(nil), evidenceRefs...), goalDomainReceiptRequiredTestEvidenceRefsV0(spec.RequiredTests, testRef)...))
+	}
 	for _, test := range spec.RequiredTests {
 		testRef := strings.TrimSpace(test.TestRef)
 		if testRef == "" ||
@@ -165,6 +180,37 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) goalResultWithAcceptedD
 		})
 	}
 	return orquestagoal.NormalizeGoalWorkResultV0(result)
+}
+
+func goalDomainReceiptDomainOnlyRequiredTestRefInSpecV0(
+	required []orquestagoal.GoalRequiredTestV0,
+	testRef string,
+) bool {
+	testRef = strings.TrimSpace(testRef)
+	if testRef == "" {
+		return false
+	}
+	for _, test := range required {
+		if strings.TrimSpace(test.TestRef) == testRef &&
+			strings.TrimSpace(test.Command) == "" &&
+			strings.TrimSpace(test.CommandRef) == "" {
+			return true
+		}
+	}
+	return false
+}
+
+func goalDomainReceiptRequiredTestEvidenceRefsV0(
+	required []orquestagoal.GoalRequiredTestV0,
+	testRef string,
+) []string {
+	testRef = strings.TrimSpace(testRef)
+	for _, test := range required {
+		if strings.TrimSpace(test.TestRef) == testRef {
+			return compactStringsV0(test.EvidenceRefs)
+		}
+	}
+	return nil
 }
 
 func (validator domainWorkGoalReceiptClosureValidatorV0) validateAcceptedDomainReceiptsV0(
@@ -244,6 +290,9 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) validateAcceptedDomainR
 	if issue := goalDomainReceiptOPESHTMLShellIssueV0(spec, matching); issue.Code != "" {
 		return nil, issue
 	}
+	if issue := goalDomainReceiptRequiredTestEvidenceIssueV0(spec, result); issue.Code != "" {
+		return nil, issue
+	}
 	completeMatching := goalDomainReceiptCompleteRecordsV0(spec, matching)
 	if !goalDomainReceiptAllContractsCoveredV0(required, completeMatching) {
 		return nil, orquestagoal.GoalWorkIssueV0{
@@ -259,6 +308,37 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) validateAcceptedDomainR
 		evidenceRefs = append(evidenceRefs, goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0)
 	}
 	return evidenceRefs, orquestagoal.GoalWorkIssueV0{}
+}
+
+func goalDomainReceiptRequiredTestEvidenceIssueV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	result orquestagoal.GoalWorkResultV0,
+) orquestagoal.GoalWorkIssueV0 {
+	spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
+	result = orquestagoal.NormalizeGoalWorkResultV0(result)
+	if !spec.ClosurePolicy.RequireRequiredTests {
+		return orquestagoal.GoalWorkIssueV0{}
+	}
+	for _, test := range spec.RequiredTests {
+		testRef := strings.TrimSpace(test.TestRef)
+		if testRef == "" {
+			continue
+		}
+		for _, observed := range result.RequiredTestResults {
+			if strings.TrimSpace(observed.TestRef) != testRef {
+				continue
+			}
+			status := strings.TrimSpace(observed.Status)
+			if (status == orquestagoal.GoalStatusAcceptedV0 || status == "passed") &&
+				len(compactStringsV0(observed.EvidenceRefs)) == 0 {
+				return orquestagoal.GoalWorkIssueV0{
+					Code:  goalDomainReceiptRequiredTestEvidenceMissingIssueV0,
+					Field: goalDomainReceiptRequiredTestEvidenceMissingFieldV0,
+				}
+			}
+		}
+	}
+	return orquestagoal.GoalWorkIssueV0{}
 }
 
 func goalDomainReceiptBlockedClosureV0(
@@ -1012,7 +1092,8 @@ func goalDomainReceiptRequiredTestPassedV0(
 			continue
 		}
 		status := strings.TrimSpace(result.Status)
-		if status == orquestagoal.GoalStatusAcceptedV0 || status == "passed" {
+		if (status == orquestagoal.GoalStatusAcceptedV0 || status == "passed") &&
+			len(compactStringsV0(result.EvidenceRefs)) > 0 {
 			return true
 		}
 	}
