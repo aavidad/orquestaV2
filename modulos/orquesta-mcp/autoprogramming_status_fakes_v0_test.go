@@ -61,6 +61,9 @@ type fakeMCPAutoprogrammingRunStatusV0 struct {
 	stats         *orquestacionnucleoapp.DirectorRunStatsV0
 	statsByRun    map[string]*orquestacionnucleoapp.DirectorRunStatsV0
 	statsForInput func(MCPDirectorStatsToolInputV0) *orquestacionnucleoapp.DirectorRunStatsV0
+	goal          *MCPDirectorGoalStatsV0
+	goalsByRun    map[string]*MCPDirectorGoalStatsV0
+	goalForInput  func(MCPDirectorStatsToolInputV0) *MCPDirectorGoalStatsV0
 }
 
 func (fake *fakeMCPAutoprogrammingRunStatusV0) Execute(
@@ -79,10 +82,18 @@ func (fake *fakeMCPAutoprogrammingRunStatusV0) Execute(
 	if stats == nil {
 		stats = defaultFakeMCPAutoprogrammingStatsV0(input.RunRef)
 	}
+	goal := fake.goal
+	if fake.goalForInput != nil {
+		goal = fake.goalForInput(input)
+	}
+	if fake.goalsByRun != nil && fake.goalsByRun[input.RunRef] != nil {
+		goal = fake.goalsByRun[input.RunRef]
+	}
 	return MCPDirectorStatsToolResultV0{
 		Estado:        MCPDirectorStatsEstadoOKV0,
 		CorrelationID: input.CorrelationID,
 		RunRef:        input.RunRef,
+		Goal:          goal,
 		Stats:         stats,
 		Errores:       []MCPValidationIssueV0{},
 	}, nil

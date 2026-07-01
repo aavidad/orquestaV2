@@ -54,13 +54,15 @@ func buildMCPAutoprogrammingStaleRunningV0(
 func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 	states []orquestagoal.GoalWorkStateV0,
 	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
-) []MCPAutoprogrammingActionableRunV0 {
-	out := make([]MCPAutoprogrammingActionableRunV0, 0)
+) ([]MCPAutoprogrammingActionableRunV0, []MCPAutoprogrammingActionableRunV0) {
+	blocked := make([]MCPAutoprogrammingActionableRunV0, 0)
+	resolved := make([]MCPAutoprogrammingActionableRunV0, 0)
 	for _, state := range states {
 		if !mcpAutoprogrammingGoalStateNeedsAttentionV0(state) ||
 			mcpAutoprogrammingGoalStateObserveRequiredV0(state) {
 			continue
 		}
+		observed := observedByRunRef[strings.TrimSpace(state.RunRef)]
 		metadata := mcpGoalWorkStateDomainOperationalMetadataV0(state)
 		recommendedAction := "review_replan_goal_first"
 		if metadata.RetryFromPhase != "" {
@@ -72,6 +74,12 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 		reason := "goal_backend_state_unreconciled: local goal-first state blocked or invalid without reconciled backend snapshot"
 		if state.LastClosure != nil && state.LastClosure.Accepted {
 			reason = "goal_terminal_result_requires_state_reconcile"
+			recommendedAction = "reconcile_goal_terminal"
+		}
+		if mcpAutoprogrammingGoalResultTerminalV0(state) &&
+			!mcpAutoprogrammingObservedGoalTerminalV0(observed) &&
+			!(state.LastClosure != nil && state.LastClosure.Accepted) {
+			reason = "goal_terminal_reconcile_pending: durable terminal result present but backend/local closure is not reconciled"
 			recommendedAction = "reconcile_goal_terminal"
 		}
 		action := MCPAutoprogrammingActionableRunV0{
@@ -95,11 +103,20 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 		action = mcpAutoprogrammingActionableRunWithGoalStateSnapshotV0(action, state)
 		action = mcpAutoprogrammingActionableRunWithObservedStatsV0(
 			action,
-			observedByRunRef[strings.TrimSpace(state.RunRef)],
+			observed,
 		)
-		out = append(out, action)
+		action = mcpAutoprogrammingActionableRunWithObservedGoalV0(action, observed)
+		if mcpAutoprogrammingObservedGoalTerminalV0(observed) {
+			action.Code = "goal_first_terminal_reconciled"
+			action.Severity = "info"
+			action.Reason = "goal_backend_terminal_reconciled: backend goal is terminal while local queue/state was blocked"
+			action.RecommendedAction = "reconcile_goal_terminal"
+			resolved = append(resolved, action)
+			continue
+		}
+		blocked = append(blocked, action)
 	}
-	return out
+	return blocked, resolved
 }
 
 func mcpAutoprogrammingStaleRunningActionForCandidateV0(
@@ -364,6 +381,52 @@ func mcpAutoprogrammingActionableRunWithGoalStateSnapshotV0(
 		action.ExternalGoalRef = strings.TrimSpace(state.LaunchReceipt.ExternalGoalRef)
 	}
 	return action
+}
+
+func mcpAutoprogrammingActionableRunWithObservedGoalV0(
+	action MCPAutoprogrammingActionableRunV0,
+	observed *MCPDirectorStatsToolResultV0,
+) MCPAutoprogrammingActionableRunV0 {
+	if observed == nil || observed.Goal == nil {
+		return action
+	}
+	goal := observed.Goal
+	action.GoalRef = firstNonEmptyMCPV0(action.GoalRef, goal.GoalRef)
+	action.ExternalGoalRef = firstNonEmptyMCPV0(action.ExternalGoalRef, goal.ExternalGoalRef)
+	action.GoalStatus = firstNonEmptyMCPV0(strings.TrimSpace(goal.Status), action.GoalStatus)
+	action.ClosureStatus = firstNonEmptyMCPV0(action.ClosureStatus, goal.ClosureStatus)
+	action.ClosureAccepted = action.ClosureAccepted || goal.ClosureAccepted
+	action.ClosureNeedsRework = action.ClosureNeedsRework || goal.ClosureNeedsRework
+	action.ArtifactRefs = compactStringsMCPV0(append(action.ArtifactRefs, goal.ArtifactRefs...))
+	action.DomainReceiptRefs = compactStringsMCPV0(append(action.DomainReceiptRefs, goal.DomainReceiptRefs...))
+	action.EvidenceRefs = compactStringsMCPV0(append(action.EvidenceRefs, goal.EvidenceRefs...))
+	return action
+}
+
+func mcpAutoprogrammingObservedGoalTerminalV0(
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	if observed == nil || observed.Goal == nil {
+		return false
+	}
+	return mcpAutoprogrammingGoalStatusTerminalV0(observed.Goal.Status) ||
+		observed.Goal.ClosureAccepted ||
+		mcpAutoprogrammingGoalStatusTerminalV0(observed.Goal.ClosureStatus)
+}
+
+func mcpAutoprogrammingGoalResultTerminalV0(
+	state orquestagoal.GoalWorkStateV0,
+) bool {
+	return state.LastResult != nil && mcpAutoprogrammingGoalStatusTerminalV0(state.LastResult.Status)
+}
+
+func mcpAutoprogrammingGoalStatusTerminalV0(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case orquestagoal.GoalStatusCompleteV0, orquestagoal.GoalStatusAcceptedV0:
+		return true
+	default:
+		return false
+	}
 }
 
 func mcpAutoprogrammingObservedRunStatusV0(

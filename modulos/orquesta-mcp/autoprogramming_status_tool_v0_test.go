@@ -567,6 +567,175 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalBloqueadoConBackendActivoPublicaS
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0GoalBloqueadoConBackendCompleteSaleDeStaleRunning(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-backend-complete-001"
+	goalRef := "goal-ref-autop-status-goal-backend-complete-001"
+	externalGoalRef := "thread-ref-autop-status-goal-backend-complete-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Reconciliar goal Codex complete aunque la cola local quedara stopped.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+		LastResult: &orquestagoal.GoalWorkResultV0{
+			Status:            orquestagoal.GoalStatusCompleteV0,
+			GoalRef:           goalRef,
+			ExternalGoalRef:   externalGoalRef,
+			ArtifactRefs:      []string{"artifact-ref-backend-complete-001"},
+			DomainReceiptRefs: []string{"receipt-ref-backend-complete-001"},
+			EvidenceRefs:      []string{"result-ref-backend-complete-001"},
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-backend-complete-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: runRef,
+			Status: "stopped",
+			UsageSummary: &orquestacionnucleoapp.DirectorRunUsageStatsV0{
+				TotalTokens: 9876,
+			},
+		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:            runRef,
+			GoalRef:           goalRef,
+			ExternalGoalRef:   externalGoalRef,
+			Status:            orquestagoal.GoalStatusCompleteV0,
+			ArtifactRefs:      []string{"artifact-ref-backend-complete-001"},
+			DomainReceiptRefs: []string{"receipt-ref-backend-complete-001"},
+			EvidenceRefs:      []string{"evidence-ref-backend-complete-observed"},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			empty: true,
+			terminal: []MCPRunQueueRankedCandidateCompactV0{{
+				RunRef: runRef,
+				AppRef: "opes",
+				Status: "stopped",
+			}},
+		},
+		Stats:          stats,
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(stats.inputs) != 1 || stats.inputs[0].RunRef != runRef {
+		t.Fatalf("stats inputs=%+v", stats.inputs)
+	}
+	if len(result.StaleRunning) != 0 {
+		t.Fatalf("stale_running no debe mantener blocked con backend complete: %+v", result.StaleRunning)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.Blocked != 0 ||
+		result.QueueHealth.Completed != 1 ||
+		result.QueueHealth.ObservedRuns != 1 {
+		t.Fatalf("queue_health=%+v", result.QueueHealth)
+	}
+	if len(result.ResolvedRuns) != 1 {
+		t.Fatalf("resolved_runs=%+v", result.ResolvedRuns)
+	}
+	action := result.ResolvedRuns[0]
+	if action.Code != "goal_first_terminal_reconciled" ||
+		action.GoalStatus != orquestagoal.GoalStatusCompleteV0 ||
+		action.RunStatus != "stopped" ||
+		action.RecommendedAction != "reconcile_goal_terminal" ||
+		!strings.Contains(action.Reason, "goal_backend_terminal_reconciled") ||
+		action.TokensUsed != 9876 {
+		t.Fatalf("action=%+v", action)
+	}
+	if !hasStringMCPAutoprogrammingStatusTestV0(action.ArtifactRefs, "artifact-ref-backend-complete-001") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.DomainReceiptRefs, "receipt-ref-backend-complete-001") {
+		t.Fatalf("action refs=%+v", action)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0ResultadoDurableTerminalConBackendActivoNoQuedaOpaco(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-terminal-pending-001"
+	goalRef := "goal-ref-autop-status-goal-terminal-pending-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusBlockedV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Resultado durable terminal no debe quedar como backend unreconciled opaco.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef: goalRef,
+			Status:  orquestagoal.GoalStatusRunningV0,
+		},
+		LastResult: &orquestagoal.GoalWorkResultV0{
+			Status:       orquestagoal.GoalStatusCompleteV0,
+			GoalRef:      goalRef,
+			ArtifactRefs: []string{"artifact-ref-terminal-pending-001"},
+			EvidenceRefs: []string{"result-ref-terminal-pending-001"},
+		},
+		EvidenceRefs: []string{"evidence-ref-terminal-pending-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: runRef,
+			Status: "stopped",
+		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:  runRef,
+			GoalRef: goalRef,
+			Status:  "active",
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			empty: true,
+			terminal: []MCPRunQueueRankedCandidateCompactV0{{
+				RunRef: runRef,
+				AppRef: "opes",
+				Status: "stopped",
+			}},
+		},
+		Stats:          stats,
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.ResolvedRuns) != 0 ||
+		len(result.StaleRunning) != 1 {
+		t.Fatalf("resolved=%+v stale=%+v", result.ResolvedRuns, result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.GoalStatus != "active" ||
+		action.RecommendedAction != "reconcile_goal_terminal" ||
+		!strings.Contains(action.Reason, "goal_terminal_reconcile_pending") ||
+		strings.Contains(action.Reason, "goal_backend_state_unreconciled") {
+		t.Fatalf("action=%+v", action)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0NoDaCienConColaVaciaYGoalBloqueado(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-blocked-empty-queue-001"
 	goalRef := "goal-ref-autop-status-goal-blocked-empty-queue-001"

@@ -54,6 +54,7 @@ type MCPAutoprogrammingStatusToolResultV0 struct {
 	Run               *MCPDirectorStatsToolResultV0                          `json:"run,omitempty"`
 	QueueHealth       *MCPAutoprogrammingQueueHealthV0                       `json:"queue_health,omitempty"`
 	StaleRunning      []MCPAutoprogrammingActionableRunV0                    `json:"stale_running,omitempty"`
+	ResolvedRuns      []MCPAutoprogrammingActionableRunV0                    `json:"resolved_runs,omitempty"`
 	Projects          []MCPAutoprogrammingProjectV0                          `json:"projects,omitempty"`
 	Tasks             []MCPAutoprogrammingTaskV0                             `json:"tasks,omitempty"`
 	Agents            []MCPAutoprogrammingAgentV0                            `json:"agents,omitempty"`
@@ -138,7 +139,21 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 			"supervision no recomendada: replan/stop repetidos sin entregas, reviews ni cierres",
 		))
 	}
-	observedRuns, observedDiagnostics := executor.executeQueueRunningStatsV0(ctx, input, result.Queue, result.Run)
+	goalStates := executor.goalStatesForAutoprogrammingStatusV0(ctx, result, input)
+	if len(goalStates) > 0 {
+		okCount++
+	}
+	goalStatesByRunRef := mcpAutoprogrammingGoalStatesByRunRefV0(goalStates)
+	goalRunMarkers := executor.goalRunMarkersForAutoprogrammingStatusV0(ctx, result, input, goalStatesByRunRef)
+	if len(goalRunMarkers) > 0 {
+		okCount++
+	}
+	goalRunMarkersByRunRef := mcpAutoprogrammingGoalRunMarkersByRunRefV0(goalRunMarkers)
+	goalFirstRunRefs := mcpAutoprogrammingMergeGoalFirstRunRefSetsV0(
+		mcpAutoprogrammingGoalFirstRunRefSetFromStatesV0(goalStates),
+		mcpAutoprogrammingGoalFirstRunRefSetFromMarkersV0(goalRunMarkers),
+	)
+	observedRuns, observedDiagnostics := executor.executeQueueRunningStatsV0(ctx, input, result.Queue, result.Run, goalStatesByRunRef)
 	result.Diagnostics = append(result.Diagnostics, observedDiagnostics...)
 	result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingRunningStatsSampleLimitedDiagnosticsV0(result.Queue, executor.Stats != nil, result.Run, observedRuns...)...)
 	for _, observed := range observedRuns {
@@ -163,20 +178,6 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 		))
 	}
 	healthRun, healthObservedRuns := mcpAutoprogrammingPreferredRunStatsForQueueHealthV0(result.Run, observedRuns...)
-	goalStates := executor.goalStatesForAutoprogrammingStatusV0(ctx, result, input)
-	if len(goalStates) > 0 {
-		okCount++
-	}
-	goalStatesByRunRef := mcpAutoprogrammingGoalStatesByRunRefV0(goalStates)
-	goalRunMarkers := executor.goalRunMarkersForAutoprogrammingStatusV0(ctx, result, input, goalStatesByRunRef)
-	if len(goalRunMarkers) > 0 {
-		okCount++
-	}
-	goalRunMarkersByRunRef := mcpAutoprogrammingGoalRunMarkersByRunRefV0(goalRunMarkers)
-	goalFirstRunRefs := mcpAutoprogrammingMergeGoalFirstRunRefSetsV0(
-		mcpAutoprogrammingGoalFirstRunRefSetFromStatesV0(goalStates),
-		mcpAutoprogrammingGoalFirstRunRefSetFromMarkersV0(goalRunMarkers),
-	)
 	result.Diagnostics = append(
 		result.Diagnostics,
 		diagnosticsFromQueuedNotDispatchedMCPAutoprogrammingV0(
@@ -199,7 +200,9 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	result.QueueHealth = buildMCPAutoprogrammingQueueHealthV0(result.Queue, goalStatesByRunRef, goalRunMarkersByRunRef, healthRun, healthObservedRuns...)
 	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, goalStatesByRunRef, goalRunMarkersByRunRef, healthRun, healthObservedRuns...)
 	observedByRunRef := mcpAutoprogrammingObservedRunsByRefV0(healthRun, healthObservedRuns...)
-	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingGoalFirstBlockedActionsV0(goalStates, observedByRunRef)...)
+	blockedGoalActions, resolvedGoalActions := mcpAutoprogrammingGoalFirstBlockedActionsV0(goalStates, observedByRunRef)
+	result.StaleRunning = append(result.StaleRunning, blockedGoalActions...)
+	result.ResolvedRuns = append(result.ResolvedRuns, resolvedGoalActions...)
 	result.Diagnostics = append(result.Diagnostics, diagnosticsFromStaleRunningMCPAutoprogrammingV0(result.StaleRunning)...)
 	result.Operator = newMCPAutoprogrammingOperatorV0(
 		result.Queue,
@@ -621,6 +624,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) executeQueueRunningStatsV
 	input MCPAutoprogrammingStatusToolInputV0,
 	queue *MCPRunQueuePriorityToolResultV0,
 	explicitRun *MCPDirectorStatsToolResultV0,
+	goalStatesByRunRef map[string]orquestagoal.GoalWorkStateV0,
 ) ([]*MCPDirectorStatsToolResultV0, []MCPAutoprogrammingDiagnosticV0) {
 	if executor.Stats == nil || queue == nil || queue.Estado != MCPRunQueuePriorityEstadoOKV0 {
 		return nil, nil
@@ -650,6 +654,24 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) executeQueueRunningStatsV
 		if runRef == "" ||
 			seen[runRef] ||
 			strings.ToLower(strings.TrimSpace(candidate.Status)) != "running" {
+			continue
+		}
+		seen[runRef] = true
+		stats, statsDiagnostics := executor.executeAutoprogrammingInternalLiveStatsV0(ctx, input, runRef)
+		diagnostics = append(diagnostics, statsDiagnostics...)
+		if stats != nil {
+			out = append(out, stats)
+		}
+	}
+	for _, candidate := range queue.Terminal {
+		if len(out) >= mcpAutoprogrammingRunningStatsMaxV0 {
+			break
+		}
+		runRef := strings.TrimSpace(candidate.RunRef)
+		if runRef == "" || seen[runRef] {
+			continue
+		}
+		if _, ok := goalStatesByRunRef[runRef]; !ok {
 			continue
 		}
 		seen[runRef] = true

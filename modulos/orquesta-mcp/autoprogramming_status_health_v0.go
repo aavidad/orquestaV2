@@ -38,13 +38,14 @@ func buildMCPAutoprogrammingQueueHealthV0(
 	health := MCPAutoprogrammingQueueHealthV0{}
 	seen := map[string]bool{}
 	statsSeen := map[string]bool{}
+	observedByRunRef := mcpAutoprogrammingObservedRunsByRefV0(run, observedRuns...)
 	if queue != nil {
 		health.QueueRuns = len(queue.Ranked)
 		for _, item := range queue.Ranked {
 			runRef := strings.TrimSpace(item.RunRef)
 			seen[runRef] = true
 			if state, ok := goalStatesByRunRef[runRef]; ok {
-				applyMCPAutoprogrammingGoalHealthV0(&health, state)
+				applyMCPAutoprogrammingGoalHealthV0(&health, state, observedByRunRef[runRef])
 				continue
 			}
 			if marker, ok := goalRunMarkersByRunRef[runRef]; ok {
@@ -72,7 +73,7 @@ func buildMCPAutoprogrammingQueueHealthV0(
 			)
 		}
 		if state, ok := goalStatesByRunRef[runRef]; ok {
-			applyMCPAutoprogrammingGoalHealthV0(&health, state)
+			applyMCPAutoprogrammingGoalHealthV0(&health, state, run)
 		} else if marker, ok := goalRunMarkersByRunRef[runRef]; ok {
 			applyMCPAutoprogrammingGoalMarkerHealthV0(&health, marker)
 		} else {
@@ -98,7 +99,7 @@ func buildMCPAutoprogrammingQueueHealthV0(
 			)
 		}
 		if state, ok := goalStatesByRunRef[runRef]; ok {
-			applyMCPAutoprogrammingGoalHealthV0(&health, state)
+			applyMCPAutoprogrammingGoalHealthV0(&health, state, observed)
 			continue
 		}
 		if marker, ok := goalRunMarkersByRunRef[runRef]; ok {
@@ -122,7 +123,7 @@ func buildMCPAutoprogrammingQueueHealthV0(
 			continue
 		}
 		seen[runRef] = true
-		applyMCPAutoprogrammingGoalHealthV0(&health, state)
+		applyMCPAutoprogrammingGoalHealthV0(&health, state, observedByRunRef[runRef])
 	}
 	for runRef, marker := range goalRunMarkersByRunRef {
 		runRef = strings.TrimSpace(runRef)
@@ -174,7 +175,16 @@ func classifyMCPAutoprogrammingQueueStatusV0(status string) string {
 func applyMCPAutoprogrammingGoalHealthV0(
 	health *MCPAutoprogrammingQueueHealthV0,
 	state orquestagoal.GoalWorkStateV0,
+	observed *MCPDirectorStatsToolResultV0,
 ) {
+	if mcpAutoprogrammingObservedGoalTerminalV0(observed) {
+		applyMCPAutoprogrammingHealthClassV0(
+			health,
+			mcpAutoprogrammingHealthCompletedV0,
+			1,
+		)
+		return
+	}
 	applyMCPAutoprogrammingHealthClassV0(
 		health,
 		classifyMCPAutoprogrammingGoalStateV0(state),
