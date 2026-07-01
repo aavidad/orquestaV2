@@ -94,7 +94,11 @@ func (runtime *RuntimeV0) runSupervisorTickV0(ctx context.Context) {
 		"result_summary":  supervisorResultAuditSummaryWithStateV0(result, runtime.tracker.SnapshotV0()),
 	})
 	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkSupervisorV0(command, result, now), "supervisor_tick")
-	if supervisorResultHasUnhandledOutboxWaitV0(result) && !supervisorResultHasLaunchFailedV0(result) && !supervisorResultHasUnverifiedRunningV0(result) {
+	residentPending := detectResidentPendingWithoutDispatchV0(result)
+	if supervisorResultHasUnhandledOutboxWaitV0(result) &&
+		!supervisorResultHasLaunchFailedV0(result) &&
+		!supervisorResultHasUnverifiedRunningV0(result) &&
+		!residentPending.Blocked {
 		runtime.markIdleSelfImprovementCheckedV0(ctx, SupervisorPublicStatusWaitingOutboxV0, now)
 		return
 	}
@@ -217,13 +221,14 @@ func supervisorResultHasRunningLiveV0(result orquestarunsupervisor.RunSupervisor
 
 func supervisorPublicCountersV0(result orquestarunsupervisor.RunSupervisorResultV0) map[string]int {
 	counters := map[string]int{
-		"registered":              0,
-		"waiting_outbox":          0,
-		"waiting_external":        0,
-		"running_live":            0,
-		"stalled":                 0,
-		"launch_failed":           0,
-		"external_work_empty_run": 0,
+		"registered":                        0,
+		"waiting_outbox":                    0,
+		"waiting_external":                  0,
+		"running_live":                      0,
+		"stalled":                           0,
+		"launch_failed":                     0,
+		"external_work_empty_run":           0,
+		"resident_pending_without_dispatch": 0,
 	}
 	for _, tick := range result.Ticks {
 		counters["registered"] += len(tick.Result.Ranked)
@@ -258,6 +263,12 @@ func supervisorPublicCountersV0(result orquestarunsupervisor.RunSupervisorResult
 	}
 	if counters["external_work_empty_run"] == 0 && supervisorResultHasExternalEmptyRunV0(result) {
 		counters["external_work_empty_run"] = 1
+	}
+	if residentPending := detectResidentPendingWithoutDispatchV0(result); residentPending.Blocked {
+		counters["resident_pending_without_dispatch"] = len(residentPending.RunRefs)
+		if counters["resident_pending_without_dispatch"] == 0 {
+			counters["resident_pending_without_dispatch"] = 1
+		}
 	}
 	return counters
 }
