@@ -133,6 +133,9 @@ func (runtime *RuntimeV0) RunWithShutdownCauseV0(
 		ctx = context.Background()
 	}
 	if err := runtime.prepareStartupV0(ctx); err != nil {
+		shutdownCtx, cancelShutdown := runtime.shutdownContextV0()
+		defer cancelShutdown()
+		runtime.runShutdownHooksV0(shutdownCtx)
 		return err
 	}
 	listener, err := net.Listen("tcp", runtime.config.Addr)

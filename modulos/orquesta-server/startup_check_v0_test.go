@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -50,6 +51,44 @@ func TestRuntimeV0PrepareStartupBloqueaSiNoEstaListaV0(t *testing.T) {
 		store.last.StartupStatus != "startup_waiting_cleanup" ||
 		store.last.LastError != "runs transitorios pendientes" {
 		t.Fatalf("state=%+v err=%v", store.last, err)
+	}
+}
+
+func TestRuntimeV0RunEjecutaShutdownHooksSiStartupBloqueaV0(t *testing.T) {
+	store := &memoryStateStoreV0{}
+	hook := &countingRuntimeShutdownHookV0{}
+	check := fakeStartupCheckV0{result: StartupCheckResultV0{
+		Status:       "startup_dirty_runs_detected",
+		Ready:        false,
+		Message:      "runs transitorios pendientes",
+		EvidenceRefs: []string{"evidence-ref-orquesta-startup-dirty-runs"},
+	}}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		Addr:         "127.0.0.1:0",
+		StateDir:     t.TempDir(),
+		TickInterval: time.Hour,
+	}, RuntimeDepsV0{
+		StartupCheck:  check,
+		StateStore:    store,
+		ShutdownHooks: []RuntimeShutdownHookPortV0{hook},
+		Clock:         fixedClockV0{now: time.Date(2026, 5, 18, 9, 0, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	err = runtime.RunV0(context.Background())
+
+	if err == nil || !strings.Contains(err.Error(), "startup_dirty_runs_detected") {
+		t.Fatalf("err=%v", err)
+	}
+	if got := atomic.LoadInt32(&hook.calls); got != 1 {
+		t.Fatalf("shutdown hook calls=%d", got)
+	}
+	if store.last.Status != "startup_blocked" ||
+		store.last.StartupReady ||
+		store.last.StartupStatus != "startup_dirty_runs_detected" {
+		t.Fatalf("state=%+v", store.last)
 	}
 }
 
