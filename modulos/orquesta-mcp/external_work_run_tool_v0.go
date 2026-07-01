@@ -65,6 +65,7 @@ type MCPExternalWorkRunToolResultV0 struct {
 	DirectorQuestionRef   string                      `json:"director_question_ref,omitempty"`
 	EvidenceRefs          []string                    `json:"evidence_refs,omitempty"`
 	NextActions           []string                    `json:"next_actions,omitempty"`
+	OperationEndpoints    map[string]string           `json:"operation_endpoints,omitempty"`
 	Errores               []MCPExternalWorkRunIssueV0 `json:"errores_publicos,omitempty"`
 }
 
@@ -79,7 +80,7 @@ func MCPExternalWorkRunDescriptorV0() MCPExternalWorkRunToolDescriptorV0 {
 		Name:        MCPExternalWorkRunToolNameV0,
 		Version:     MCPExternalWorkRunToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,director_execution_mode?:goal_first|legacy_director_loop,external_work_run_request?:StartExternalWorkRunRequestV0,app_change_request?:AppChangeRequestV0}",
-		Output:      "ok:{route_policy,director_execution_mode,run_ref,change_ref,goal_ref?,next_actions?}|error:{errores_publicos}",
+		Output:      "ok:{route_policy,director_execution_mode,run_ref,change_ref,goal_ref?,next_actions?,operation_endpoints?}|error:{errores_publicos}",
 		ResourceURI: MCPExternalWorkRunResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -158,6 +159,10 @@ func newMCPExternalWorkRunResultV0(
 	if result.Status != orquestaexternalworkrun.ExternalWorkRunStatusAcceptedV0 {
 		estado = MCPExternalWorkRunEstadoErrorV0
 	}
+	nextActions := compactStringsMCPV0([]string{
+		MCPExternalWorkRunNextActionSuperviseLegacyRunV0,
+		MCPExternalWorkRunNextActionMigrateGoalFirstV0,
+	})
 	return MCPExternalWorkRunToolResultV0{
 		Estado:                estado,
 		RoutePolicy:           MCPExternalWorkRunRoutePolicyLegacyDirectorLoopV0,
@@ -170,12 +175,26 @@ func newMCPExternalWorkRunResultV0(
 		ChangeRef:             strings.TrimSpace(result.ChangeRef),
 		DirectorQuestionRef:   strings.TrimSpace(result.DirectorQuestionRef),
 		EvidenceRefs:          compactStringsMCPV0(result.EvidenceRefs),
-		NextActions: compactStringsMCPV0([]string{
-			MCPExternalWorkRunNextActionSuperviseLegacyRunV0,
-			MCPExternalWorkRunNextActionMigrateGoalFirstV0,
-		}),
-		Errores: externalWorkRunIssuesMCPV0(result.Issues),
+		NextActions:           nextActions,
+		OperationEndpoints:    MCPExternalWorkRunOperationEndpointsV0(nextActions),
+		Errores:               externalWorkRunIssuesMCPV0(result.Issues),
 	}
+}
+
+func MCPExternalWorkRunOperationEndpointsV0(nextActions []string) map[string]string {
+	endpoints := map[string]string{}
+	for _, action := range compactStringsMCPV0(nextActions) {
+		switch action {
+		case MCPExternalWorkRunNextActionObserveGoalV0:
+			endpoints[action] = MCPObserveAppDirectorGoalHTTPPathV0
+		case MCPExternalWorkRunNextActionObserveActiveGoalsV0:
+			endpoints[action] = MCPAutoprogrammingObserveActiveGoalsHTTPPathV0
+		}
+	}
+	if len(endpoints) == 0 {
+		return nil
+	}
+	return endpoints
 }
 
 func externalWorkRunIssuesMCPV0(

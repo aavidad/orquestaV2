@@ -9,6 +9,7 @@ import (
 
 const (
 	ServerResourcesEndpointV0            = "/api/v0/server/resources"
+	ServerRoutesEndpointV0               = "/api/v0/routes"
 	ServerResourcesSchemaVersionV0       = "orquesta_server_resources.v0"
 	ServerRouteManifestSchemaVersionV0   = "orquesta_route_manifest.v0"
 	ServerRouteManifestStatusAvailableV0 = "available"

@@ -410,7 +410,8 @@ func (executor CodexStackExternalWorkGoalFirstExecutorV0) externalWorkGoalFirstR
 			evidenceRefs,
 			state.EvidenceRefs...,
 		)),
-		NextActions: nextActions,
+		NextActions:        nextActions,
+		OperationEndpoints: orquestamcp.MCPExternalWorkRunOperationEndpointsV0(nextActions),
 	}
 }
 
@@ -500,6 +501,7 @@ func externalWorkGoalFirstGoalLaunchFailedResultV0(
 		orquestamcp.MCPExternalWorkRunNextActionDoNotFallbackLegacyV0,
 		orquestamcp.MCPExternalWorkRunNextActionObserveGoalV0,
 	}
+	result.OperationEndpoints = orquestamcp.MCPExternalWorkRunOperationEndpointsV0(result.NextActions)
 	if len(result.Errores) > 0 {
 		result.Errores[0].Message = reason
 	}

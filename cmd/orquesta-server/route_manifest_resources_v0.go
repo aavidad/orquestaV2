@@ -63,6 +63,15 @@ func serverRouteManifestResourcesV0() []orquestaserver.ServerRouteResourceV0 {
 			SecurityProfile: orquestahttpgateway.RouteSecurityControlPlaneReadV0,
 			Mounted:         true,
 		},
+		{
+			Ref:             "route-ref-server-routes-v0",
+			Pattern:         orquestaserver.ServerRoutesEndpointV0,
+			Kind:            orquestahttpgateway.RouteManifestKindExactV0,
+			Owner:           "orquesta-server",
+			Methods:         []string{http.MethodGet},
+			SecurityProfile: orquestahttpgateway.RouteSecurityControlPlaneReadV0,
+			Mounted:         true,
+		},
 	}
 	for _, entry := range orquestahttpgateway.PublicRouteManifestV0() {
 		routes = append(routes, serverRouteResourceFromHTTPGatewayV0(entry))

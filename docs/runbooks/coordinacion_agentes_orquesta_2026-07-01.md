@@ -107,7 +107,7 @@ Estado de base tras `879c5125`:
   canonico antes de editar; como minimo debe incluir `879c5125`;
 - BUG-059, BUG-060, BUG-061, BUG-062 y BUG-063 estan cerrados;
 - BUG-064 cierra solo el contrato puro OPES de calidad de tema;
-- bugs abiertos principales: BUG-055, BUG-058, BUG-065, BUG-066 y BUG-067;
+- bugs abiertos principales: BUG-055, BUG-058, BUG-065, BUG-066 y BUG-069;
 - el fichero
   `TAREA_OPES_ORQUESTA_GRUPO_B_GOAL_FIRST_OBSERVE_Y_QA_MINIMOS_2026-07-01.md`
   pertenece a la sesion OPES/local que lo esta alimentando y no debe
@@ -124,8 +124,8 @@ integracion residual de BUG-058/BUG-067, no repetir BUG-064. Write-set inicial:
 - `docs/inventario_bugs_orquesta_2026-06-30.md` solo para actualizar estado.
 
 BUG-065 y BUG-066 quedan como frentes separados de lifecycle/observacion
-goal-first y shutdown; requieren write-set propio antes de tocar servidor, MCP o
-runtime.
+goal-first y shutdown; BUG-069 es estado operacional unico. Cada uno requiere
+write-set propio antes de tocar servidor, MCP, runtime o web.
 
 El local queda como supervisor/integrador: recoge incidencias de OPES, revisa
 patches/bundles del remoto, hace push canonico y no edita el write-set remoto

@@ -63,6 +63,8 @@ func TestHandlerV0ExponeHealthStatusYDelegaV0(t *testing.T) {
 	assertServerPathV0(t, handler, ServerResourcesEndpointV0, ServerRouteManifestSchemaVersionV0)
 	assertServerPathV0(t, handler, ServerResourcesEndpointV0, `"/api/v0/domain-work"`)
 	assertServerPathV0(t, handler, ServerResourcesEndpointV0, `"security_profile":"control_plane_mutation"`)
+	assertServerPathV0(t, handler, ServerRoutesEndpointV0, ServerRouteManifestSchemaVersionV0)
+	assertServerPathV0(t, handler, ServerRoutesEndpointV0, `"/api/v0/domain-work"`)
 	assertServerPathV0(t, handler, "/nueva-app", "app")
 }
 

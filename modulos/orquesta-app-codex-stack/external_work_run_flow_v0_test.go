@@ -178,6 +178,8 @@ func TestCodexStackV0ExternalWorkRunConBackendGoalArrancaGoalFirstSinColaLegacy(
 		!codexStackStringInSetForTestV0(result.NextActions, orquestamcp.MCPExternalWorkRunNextActionObserverRequiredV0) ||
 		!codexStackStringInSetForTestV0(result.NextActions, orquestamcp.MCPExternalWorkRunNextActionObserveGoalV0) ||
 		!codexStackStringInSetForTestV0(result.NextActions, orquestamcp.MCPExternalWorkRunNextActionObserveActiveGoalsV0) ||
+		result.OperationEndpoints[orquestamcp.MCPExternalWorkRunNextActionObserveGoalV0] != orquestamcp.MCPObserveAppDirectorGoalHTTPPathV0 ||
+		result.OperationEndpoints[orquestamcp.MCPExternalWorkRunNextActionObserveActiveGoalsV0] != orquestamcp.MCPAutoprogrammingObserveActiveGoalsHTTPPathV0 ||
 		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-external-work-goal-first-observer-required") {
 		t.Fatalf("result goal-first inesperado=%+v", result)
 	}

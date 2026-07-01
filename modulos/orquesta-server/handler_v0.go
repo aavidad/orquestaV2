@@ -46,6 +46,12 @@ func (handler handlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.StatusOK,
 			NewServerResourcesWithRoutesV0(handler.statusV0(), time.Now().UTC(), handler.config.RouteManifest),
 		)
+	case ServerRoutesEndpointV0:
+		handler.writeJSONV0(
+			w,
+			http.StatusOK,
+			NewServerResourcesWithRoutesV0(handler.statusV0(), time.Now().UTC(), handler.config.RouteManifest).RouteManifest,
+		)
 	default:
 		if handler.config.AppHandler != nil {
 			handler.config.AppHandler.ServeHTTP(w, r)

@@ -47,6 +47,7 @@ func TestServerResourcesRouteManifestIncluyeDiscoveryOPESV0(t *testing.T) {
 	for _, path := range []string{
 		orquestaserver.ServerReadinessEndpointV0,
 		orquestaserver.ServerResourcesEndpointV0,
+		orquestaserver.ServerRoutesEndpointV0,
 		"/health",
 		"/healthz",
 		orquestahttpgateway.RouteDomainWorkV0,
