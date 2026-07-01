@@ -313,14 +313,14 @@ func serverStackIdleSelfImprovementBacklogRequestAllowedV0(
 	if !serverStackIdleSelfImprovementBacklogRefAllowedV0(request.RequestRef) {
 		return false
 	}
-	if strings.EqualFold(strings.TrimSpace(request.SuggestedArea), "backlog-scan") {
-		return true
-	}
 	for _, contextRef := range request.ContextRefs {
 		sectionRef := serverStackIdleSelfImprovementBacklogSectionContextV0(contextRef)
 		if sectionRef != "" && !serverStackIdleSelfImprovementBacklogSectionAllowedV0(sectionRef) {
 			return false
 		}
+	}
+	if strings.EqualFold(strings.TrimSpace(request.SuggestedArea), "backlog-scan") {
+		return true
 	}
 	return true
 }

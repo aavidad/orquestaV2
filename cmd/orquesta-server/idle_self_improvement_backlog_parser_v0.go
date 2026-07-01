@@ -3,10 +3,13 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 )
+
+var idleSelfImprovementExecutableBacklogHeadingV0 = regexp.MustCompile(`^##\s+T[0-9]+(?:\s|:|$)`)
 
 type idleSelfImprovementBacklogSectionV0 struct {
 	Ref, Heading, Objective                         string
@@ -44,7 +47,7 @@ func parseIdleSelfImprovementBacklogSectionsFromDocumentV0(
 	sections := []idleSelfImprovementBacklogSectionV0{}
 	for index := 0; index < len(lines); index++ {
 		heading := strings.TrimSpace(lines[index])
-		if !strings.HasPrefix(heading, "## T") {
+		if !idleSelfImprovementExecutableBacklogHeadingV0.MatchString(heading) {
 			continue
 		}
 		next := len(lines)

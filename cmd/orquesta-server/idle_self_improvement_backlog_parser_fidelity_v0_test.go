@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	orquestaserver "orquesta/modulos/orquesta-server"
@@ -111,6 +112,41 @@ func TestIdleSelfImprovementBacklogPlannerV0ScannerDocumentalNoHeredaGoTestGloba
 		if !containsStringForTestV0(request.ContextRefs, want) {
 			t.Fatalf("missing %s in context_refs=%+v", want, request.ContextRefs)
 		}
+	}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0IgnoraSeccionesNarrativasTNoNumericasV0(t *testing.T) {
+	projectDir := t.TempDir()
+	mustWriteBacklogForParserFidelityTestV0(t, projectDir, `# Backlog
+
+## Tareas narrativas
+
+Este bloque resume contexto y no es una tarea ejecutable.
+
+## Trazas de auditoria
+
+Tampoco debe convertirse en run de automejora.
+
+## T41 ejecutable-real
+
+Objetivo: corregir una tarea real.
+
+Alcance:
+
+- cmd/orquesta-server
+`)
+
+	result := mustPlanParserFidelityTestV0(t, projectDir,
+		[]string{"go test -count=1 ./cmd/orquesta-server"},
+	)
+	if len(result.Requests) != 1 {
+		t.Fatalf("requests=%+v", result.Requests)
+	}
+	request := result.Requests[0]
+	if request.SuggestedArea != "t41-ejecutable-real" ||
+		strings.Contains(request.FailureSummary, "Tareas narrativas") ||
+		strings.Contains(request.FailureSummary, "Trazas de auditoria") {
+		t.Fatalf("request=%+v", request)
 	}
 }
 

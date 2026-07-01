@@ -6,6 +6,7 @@ import (
 
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
+	stopreason "orquesta/modulos/orquesta-run-supervisor/stopreason"
 )
 
 func TestSupervisorProjectionV0ExternalWorkEmptyRunNoEsOKV0(t *testing.T) {
@@ -24,6 +25,63 @@ func TestSupervisorProjectionV0ExternalWorkEmptyRunNoEsOKV0(t *testing.T) {
 	}
 	if got := state.LastSupervisorOperationalMessage.Counters["external_work_empty_run"]; got != 1 {
 		t.Fatalf("external_work_empty_run=%d counters=%v", got, state.LastSupervisorOperationalMessage.Counters)
+	}
+}
+
+func TestSupervisorProjectionV0DistingueOutboxExternalWaitYProcesoVerificadoV0(t *testing.T) {
+	cases := []struct {
+		name         string
+		result       orquestarunsupervisor.RunSupervisorResultV0
+		wantStatus   string
+		wantStop     string
+		wantCategory string
+	}{{
+		name: "outbox pendiente",
+		result: orquestarunsupervisor.RunSupervisorResultV0{
+			StopReason: "wait_unhandled_outbox",
+			StopProjection: stopreason.ProjectionV0{
+				PublicReason: "wait_unhandled_outbox",
+				Category:     "wait_outbox",
+			},
+		},
+		wantStatus:   SupervisorPublicStatusWaitingOutboxV0,
+		wantStop:     SupervisorPublicStopWaitingOutboxV0,
+		wantCategory: SupervisorPublicCategoryWaitOutboxV0,
+	}, {
+		name: "espera externa",
+		result: orquestarunsupervisor.RunSupervisorResultV0{
+			StopReason: "wait_external",
+			StopProjection: stopreason.ProjectionV0{
+				PublicReason: "wait_external",
+				Category:     "wait_external",
+			},
+		},
+		wantStatus:   SupervisorPublicStatusWaitingExternalV0,
+		wantStop:     SupervisorPublicStopWaitingExternalV0,
+		wantCategory: SupervisorPublicCategoryWaitExternalV0,
+	}, {
+		name: "proceso externo verificado",
+		result: orquestarunsupervisor.RunSupervisorResultV0{
+			StopReason: "running",
+			StopProjection: stopreason.ProjectionV0{
+				PublicReason: "running",
+				Category:     "external_process",
+				EvidenceRefs: []string{"process_live"},
+			},
+		},
+		wantStatus:   SupervisorPublicStatusRunningLiveV0,
+		wantStop:     SupervisorPublicStopRunningLiveV0,
+		wantCategory: SupervisorPublicCategoryExternalProcessV0,
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			projection := supervisorPublicProjectionV0(tc.result, collectSupervisorResultMetricsV0(tc.result))
+			if projection.Status != tc.wantStatus ||
+				projection.StopPublic != tc.wantStop ||
+				projection.StopCategory != tc.wantCategory {
+				t.Fatalf("projection=%+v", projection)
+			}
+		})
 	}
 }
 

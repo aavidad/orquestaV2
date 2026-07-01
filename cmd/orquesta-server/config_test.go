@@ -865,6 +865,10 @@ func TestServerStackIdleSelfImprovementFiltraSeccionesNoTxxV0(t *testing.T) {
 			SuggestedArea: "t260-contexto-narrativo",
 			ContextRefs:   []string{"backlog_section:tareas-futuras-tras-estabilizar-la-automejora"},
 		}, {
+			RequestRef:    "request-ref-autoprogramming-backlog-scanner-narrativo",
+			SuggestedArea: "backlog-scan",
+			ContextRefs:   []string{"backlog_section:tareas-futuras-tras-estabilizar-la-automejora"},
+		}, {
 			RequestRef: "request-ref-autoprogramming-backlog-scanner-abc123",
 		}},
 	})

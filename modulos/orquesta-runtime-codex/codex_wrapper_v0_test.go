@@ -86,6 +86,7 @@ func TestCodexWrapperV0SerializaArranqueCompartidoDeCodexHomeV0(t *testing.T) {
 
 func TestCodexWrapperV0RetiraStartupLockObsoletoVacio(t *testing.T) {
 	profile := codexProfileForTestV0(t)
+	profile.CodeHomeDir = filepath.Join(t.TempDir(), "codex-home")
 	if err := os.MkdirAll(profile.ProjectWorkDir, 0o700); err != nil {
 		t.Fatalf("mkdir project: %v", err)
 	}
@@ -125,6 +126,7 @@ func TestCodexWrapperV0RetiraStartupLockObsoletoVacio(t *testing.T) {
 
 func TestCodexWrapperV0StaleLockPorDefectoNoSuperaTimeout(t *testing.T) {
 	profile := codexProfileForTestV0(t)
+	profile.CodeHomeDir = filepath.Join(t.TempDir(), "codex-home")
 	if err := os.MkdirAll(profile.ProjectWorkDir, 0o700); err != nil {
 		t.Fatalf("mkdir project: %v", err)
 	}
