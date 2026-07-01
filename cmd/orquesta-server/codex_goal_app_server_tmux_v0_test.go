@@ -109,6 +109,40 @@ func TestServerCodexGoalBackendFromEnvV0TmuxPreflightOKV0(t *testing.T) {
 	}
 }
 
+func TestCodexAppServerTmuxBackendV0PreparaCodeHomeDesdeCODEXHOMEResueltoV0(t *testing.T) {
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "runtime")
+	codeHome := filepath.Join(runtimeDir, codexAppServerTmuxDirV0, "codex-home")
+	sourceCodeHome := filepath.Join(root, "codex-home")
+	if err := os.MkdirAll(sourceCodeHome, 0o700); err != nil {
+		t.Fatalf("mkdir source code home: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceCodeHome, "auth.json"), []byte(`{"auth_mode":"chatgpt","tokens":{"access_token":"redacted"}}`), 0o600); err != nil {
+		t.Fatalf("write auth: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceCodeHome, "config.toml"), []byte("model = \"test\"\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	t.Setenv("CODEX_HOME", sourceCodeHome)
+	t.Setenv(envCodexCodeHomeV0, "")
+	backend := serverCodexAppServerTmuxBackendV0{
+		CodeHomeDir:       codeHome,
+		RuntimeWorkDir:    runtimeDir,
+		SourceCodeHomeDir: codeHomeDirV0(),
+	}
+
+	if err := backend.prepareTmuxCodeHomeV0(); err != nil {
+		t.Fatalf("prepareTmuxCodeHomeV0: %v", err)
+	}
+	if raw, err := os.ReadFile(filepath.Join(codeHome, "auth.json")); err != nil ||
+		!strings.Contains(string(raw), `"auth_mode":"chatgpt"`) {
+		t.Fatalf("auth no proyectado desde CODEX_HOME raw=%q err=%v", string(raw), err)
+	}
+	if raw, err := os.ReadFile(filepath.Join(codeHome, "config.toml")); err != nil || string(raw) != "model = \"test\"\n" {
+		t.Fatalf("config no proyectada desde CODEX_HOME raw=%q err=%v", string(raw), err)
+	}
+}
+
 func TestServerCodexGoalBackendFromEnvV0TmuxSinAuthDegradaYConservaShutdownV0(t *testing.T) {
 	root, err := os.MkdirTemp("/tmp", "og")
 	if err != nil {

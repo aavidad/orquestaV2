@@ -98,6 +98,19 @@ func TestCodexRuntimeConfigV0UsaSandboxWorkspaceWritePorDefecto(t *testing.T) {
 	}
 }
 
+func TestCodeHomeDirV0UsaCODEXHOMEAntesDeHomeCodexV0(t *testing.T) {
+	root := t.TempDir()
+	codexHome := filepath.Join(root, "codex-home")
+	processHome := filepath.Join(root, "home")
+	t.Setenv(envCodexCodeHomeV0, "")
+	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv(envCodexHomeV0, processHome)
+
+	if got := codeHomeDirV0(); got != codexHome {
+		t.Fatalf("code_home=%q want %q", got, codexHome)
+	}
+}
+
 func TestCodexRuntimeConfigV0DangerFullAccessSoloOptInExplicito(t *testing.T) {
 	t.Setenv(envCodexSandboxV0, "danger-full-access")
 

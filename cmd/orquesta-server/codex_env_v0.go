@@ -28,6 +28,10 @@ func codeHomeDirV0() string {
 	if value != "" {
 		return value
 	}
+	value = strings.TrimSpace(os.Getenv("CODEX_HOME"))
+	if value != "" {
+		return value
+	}
 	return filepath.Join(homeDirV0(), ".codex")
 }
 
