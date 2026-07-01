@@ -64,6 +64,7 @@ func TestRuntimeV0ServerHandoffCongelaSinInvocarShutdownDeRunsV0(t *testing.T) {
 }
 
 func TestRuntimeV0ServerHandoffCierraSoloServidorV0(t *testing.T) {
+	requireLocalTCPForServerTestV0(t)
 	runtime, err := NewRuntimeV0(ConfigV0{
 		Addr:                "127.0.0.1:0",
 		StateDir:            t.TempDir(),

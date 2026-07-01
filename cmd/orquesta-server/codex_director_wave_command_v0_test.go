@@ -526,6 +526,9 @@ func TestCodexLaunchDirectorWaveCommandV0RecursiveFakeRuntimeEjecutableConLinaje
 	runtimeDir := filepath.Join(root, "runtime", "recursive-fake-runtime")
 	sourceCodeHome := filepath.Join(root, "source-codex-home")
 	fakeCodex := filepath.Join(root, "codex-fake")
+	t.Cleanup(func() {
+		_ = os.RemoveAll(runtimeDir)
+	})
 
 	if err := os.MkdirAll(projectDir, 0o700); err != nil {
 		t.Fatalf("crear project dir: %v", err)

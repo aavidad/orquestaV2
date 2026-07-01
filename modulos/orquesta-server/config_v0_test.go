@@ -56,6 +56,26 @@ func TestNormalizeConfigV0AutomejoraDefaultDiezPadresV0(t *testing.T) {
 	}
 }
 
+func TestNormalizeConfigV0AutomejoraIdleDefaultYDesactivacionV0(t *testing.T) {
+	config := NormalizeConfigV0(ConfigV0{})
+	if config.IdleSelfImprovementDisabled ||
+		config.IdleSelfImprovementAfter != DefaultIdleSelfImprovementAfterV0 {
+		t.Fatalf("idle self improvement default config=%+v", config)
+	}
+	if config.IdleSelfImprovementAfter != 60*time.Second {
+		t.Fatalf("idle self improvement default config=%+v", config)
+	}
+
+	disabled := NormalizeConfigV0(ConfigV0{
+		IdleSelfImprovementDisabled: true,
+		IdleSelfImprovementAfter:    37 * time.Second,
+	})
+	if !disabled.IdleSelfImprovementDisabled ||
+		disabled.IdleSelfImprovementAfter != 0 {
+		t.Fatalf("idle self improvement disabled config=%+v", disabled)
+	}
+}
+
 func TestNormalizeConfigV0ObservadorGoalFirstActivoPorDefectoV0(t *testing.T) {
 	config := NormalizeConfigV0(ConfigV0{})
 

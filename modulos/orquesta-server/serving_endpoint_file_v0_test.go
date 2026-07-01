@@ -11,6 +11,7 @@ import (
 )
 
 func TestRuntimeV0PublicaBaseURLFileEnRuntimeWorkDirV0(t *testing.T) {
+	requireLocalTCPForServerTestV0(t)
 	root := t.TempDir()
 	runtimeDir := filepath.Join(root, "runtime")
 	runtime, err := NewRuntimeV0(ConfigV0{

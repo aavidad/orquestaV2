@@ -133,6 +133,7 @@ func TestStatusTrackerSelfWatchdogV0ProyectaUnhealthyYReadiness(t *testing.T) {
 }
 
 func TestRuntimeSelfWatchdogV0ApagaServidorSinTrabajo(t *testing.T) {
+	requireLocalTCPForServerTestV0(t)
 	now := time.Date(2026, 6, 8, 12, 20, 0, 0, time.UTC)
 	store := &threadSafeStateStoreV0{}
 	observer := &fakeSelfWatchdogObserverV0{observation: SelfWatchdogObservationV0{

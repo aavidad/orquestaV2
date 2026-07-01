@@ -8,6 +8,7 @@ import (
 )
 
 func TestRuntimeV0ShutdownPorSenalPublicaStoppingYTimeoutV0(t *testing.T) {
+	requireLocalTCPForServerTestV0(t)
 	now := time.Date(2026, 5, 26, 11, 0, 0, 0, time.UTC)
 	store := &threadSafeStateStoreV0{}
 	supervisor := newBlockingIdlePrepareSupervisorV0()

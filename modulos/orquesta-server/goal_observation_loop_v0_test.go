@@ -155,6 +155,7 @@ func TestRuntimeV0GoalObservationTickActualizaIdleSelfImprovementV0(t *testing.T
 }
 
 func TestRuntimeV0GoalObservationLoopCierraGoalActivoSinDirectorResidenteV0(t *testing.T) {
+	requireLocalTCPForServerTestV0(t)
 	ctx := context.Background()
 	goalStore := newMemoryGoalStateStoreV0()
 	runRef := "run-ref-goal-observer-e2e-001"
@@ -250,6 +251,7 @@ func TestRuntimeV0GoalObservationLoopCierraGoalActivoSinDirectorResidenteV0(t *t
 }
 
 func TestRuntimeV0GoalObservationLoopUsaIntervaloPropioV0(t *testing.T) {
+	requireLocalTCPForServerTestV0(t)
 	supervisor := &fakeSupervisorV0{
 		goalStarted: make(chan struct{}, 3),
 	}

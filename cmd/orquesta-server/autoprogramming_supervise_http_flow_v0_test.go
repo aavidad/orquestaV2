@@ -88,7 +88,7 @@ func TestServerAutoprogrammingSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0(t 
 	if err != nil {
 		t.Fatalf("buildServerAppHandlerV0: %v", err)
 	}
-	server := httptest.NewServer(handler)
+	server := newLocalHTTPServerForTestV0(t, handler)
 	defer server.Close()
 
 	body := []byte(`{
@@ -154,7 +154,7 @@ func TestServerRunSuperviseHTTPClienteRealRecibeCuerpoSinColgarV0(t *testing.T) 
 	if err != nil {
 		t.Fatalf("buildServerAppHandlerV0: %v", err)
 	}
-	server := httptest.NewServer(handler)
+	server := newLocalHTTPServerForTestV0(t, handler)
 	defer server.Close()
 
 	body := []byte(`{
@@ -219,7 +219,7 @@ func TestServerQueueGlobalStatusHTTPClienteRealMontadoEnStackV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildServerAppHandlerV0: %v", err)
 	}
-	server := httptest.NewServer(handler)
+	server := newLocalHTTPServerForTestV0(t, handler)
 	defer server.Close()
 
 	client := &http.Client{Timeout: 3 * time.Second}
@@ -271,7 +271,7 @@ func TestServerRunQueuePriorityHTTPSetPriorityClienteRealRecibeTimeoutJSONV0(t *
 	if err != nil {
 		t.Fatalf("buildServerAppHandlerV0: %v", err)
 	}
-	server := httptest.NewServer(handler)
+	server := newLocalHTTPServerForTestV0(t, handler)
 	defer server.Close()
 
 	body := []byte(`{
@@ -339,7 +339,7 @@ func TestServerRunControlHTTPClienteRealRecibeTimeoutJSONV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildServerAppHandlerV0: %v", err)
 	}
-	server := httptest.NewServer(handler)
+	server := newLocalHTTPServerForTestV0(t, handler)
 	defer server.Close()
 
 	body := []byte(`{
@@ -406,7 +406,7 @@ func TestServerExternalWorkRunHTTPClienteRealRecibeTimeoutJSONV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildServerAppHandlerV0: %v", err)
 	}
-	server := httptest.NewServer(handler)
+	server := newLocalHTTPServerForTestV0(t, handler)
 	defer server.Close()
 
 	body := []byte(`{
@@ -469,7 +469,7 @@ func TestServerObserveAppDirectorGoalHTTPClienteRealRecibeTimeoutJSONV0(t *testi
 	if err != nil {
 		t.Fatalf("buildServerAppHandlerV0: %v", err)
 	}
-	server := httptest.NewServer(handler)
+	server := newLocalHTTPServerForTestV0(t, handler)
 	defer server.Close()
 
 	body := []byte(`{
@@ -535,7 +535,7 @@ func TestServerAutoprogrammingObserveGoalHTTPClienteRealRecibeTimeoutJSONV0(t *t
 	if err != nil {
 		t.Fatalf("buildServerAppHandlerV0: %v", err)
 	}
-	server := httptest.NewServer(handler)
+	server := newLocalHTTPServerForTestV0(t, handler)
 	defer server.Close()
 
 	body := []byte(`{

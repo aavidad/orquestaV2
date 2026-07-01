@@ -11,6 +11,7 @@ import (
 )
 
 func TestRuntimeV0ShutdownEsperaPreparacionIdleAntesDeStoppedV0(t *testing.T) {
+	requireLocalTCPForServerTestV0(t)
 	now := time.Date(2026, 5, 26, 10, 0, 0, 0, time.UTC)
 	store := &threadSafeStateStoreV0{}
 	supervisor := newBlockingIdlePrepareSupervisorV0()
@@ -60,6 +61,7 @@ func TestRuntimeV0ShutdownEsperaPreparacionIdleAntesDeStoppedV0(t *testing.T) {
 }
 
 func TestRuntimeV0ShutdownTimeoutPublicaStopTimeoutV0(t *testing.T) {
+	requireLocalTCPForServerTestV0(t)
 	now := time.Date(2026, 5, 26, 10, 5, 0, 0, time.UTC)
 	store := &threadSafeStateStoreV0{}
 	supervisor := newBlockingIdlePrepareSupervisorV0()

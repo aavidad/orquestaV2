@@ -259,6 +259,7 @@ func TestIdleSelfImprovementBacklogPlannerV0DeduplicaSelfAuditConKnownRefV0(t *t
 }
 
 func TestRuntimeV0SelfAuditBacklogGoalFirstLanzaSpecOperacionalV0(t *testing.T) {
+	requireLocalTCPForTestV0(t)
 	restore := replaceSelfAuditRunnerForTestV0(func(_ context.Context, _ string, command selfAuditCommandV0) selfAuditCommandResultV0 {
 		if command.ToolRef != "staticcheck" {
 			return selfAuditCommandResultV0{}

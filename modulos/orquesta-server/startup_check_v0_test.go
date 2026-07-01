@@ -55,6 +55,7 @@ func TestRuntimeV0PrepareStartupBloqueaSiNoEstaListaV0(t *testing.T) {
 }
 
 func TestRuntimeV0RunEjecutaShutdownHooksSiStartupBloqueaV0(t *testing.T) {
+	requireLocalTCPForServerTestV0(t)
 	store := &memoryStateStoreV0{}
 	hook := &countingRuntimeShutdownHookV0{}
 	check := fakeStartupCheckV0{result: StartupCheckResultV0{

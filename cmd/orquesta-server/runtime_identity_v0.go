@@ -40,6 +40,10 @@ func serverRuntimeIdentityFromExecutableV0() orquestaserver.ServerRuntimeIdentit
 }
 
 func serverRuntimeBinarySHA256V0(path string) string {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return ""
+	}
 	file, err := os.Open(path)
 	if err != nil {
 		return ""

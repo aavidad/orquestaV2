@@ -155,6 +155,7 @@ func TestRuntimeV0ServerShutdownReadyDescongelaSupervisorV0(t *testing.T) {
 }
 
 func TestRuntimeV0ServerShutdownReadyDetieneRuntimeHTTPV0(t *testing.T) {
+	requireLocalTCPForServerTestV0(t)
 	hook := newNotifyingRuntimeShutdownHookV0()
 	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != serverShutdownRoutePathV0 {
