@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,7 +73,7 @@ func TestStatusServerCommandV0FallbackStatefileNoPublicaEstadoCrudo(t *testing.T
 	}
 	if err := store.SaveServerStateV0(context.Background(), orquestaserver.StateV0{
 		Status:         "running",
-		PID:            45678,
+		PID:            os.Getpid(),
 		Addr:           "127.0.0.1:1",
 		ProjectWorkDir: projectDir,
 		RuntimeWorkDir: filepath.Join(projectDir, ".orquesta-runtime"),
@@ -95,6 +96,72 @@ func TestStatusServerCommandV0FallbackStatefileNoPublicaEstadoCrudo(t *testing.T
 		strings.Contains(stdout.String(), "45678") ||
 		strings.Contains(stdout.String(), "127.0.0.1:1") {
 		t.Fatalf("stdout filtra state crudo: %s", stdout.String())
+	}
+}
+
+func TestStatusServerCommandV0ReconciliaStatefileConPIDMuerto(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)
+	t.Setenv("ORQUESTA_SERVER_STATE_DIR", stateDir)
+	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", filepath.Join(t.TempDir(), "runtime"))
+
+	deadPID := 99999999
+	if processAliveV0(deadPID) {
+		t.Skip("pid de prueba vivo en este sistema")
+	}
+	store, err := orquestaserver.NewFileStateStoreV0(filepath.Join(stateDir, orquestaserver.DefaultStateFileV0))
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	if err := store.SaveServerStateV0(context.Background(), orquestaserver.StateV0{
+		Status:               "running",
+		PID:                  deadPID,
+		Addr:                 "127.0.0.1:1",
+		ProjectWorkDir:       projectDir,
+		RuntimeWorkDir:       filepath.Join(projectDir, ".orquesta-runtime"),
+		LastHeartbeatAt:      "2026-07-01T00:00:00Z",
+		StartupReady:         true,
+		StartupStatus:        "startup_ready",
+		LastSupervisorStatus: "ok",
+	}); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := statusServerCommandV0(&stdout, &stderr)
+	if exitCode != 1 {
+		t.Fatalf("exit=%d stderr=%s", exitCode, stderr.String())
+	}
+	var envelope commandPublicOutputV0
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("json publico invalido: %v\n%s", err, stdout.String())
+	}
+	if envelope.Status != "stale" ||
+		envelope.Freshness != commandPublicFreshnessSnapshotV0 ||
+		envelope.DiagnosticsMode != "statefile_snapshot_reconciled_process_not_alive" {
+		t.Fatalf("envelope no reconciliado: %+v", envelope)
+	}
+	reconciled, err := store.LoadServerStateV0(context.Background())
+	if err != nil {
+		t.Fatalf("load reconciled: %v", err)
+	}
+	if reconciled.Status != "stale" ||
+		reconciled.StartupReady ||
+		reconciled.StartupStatus != orquestaserver.ServerProcessStaleReasonCodeV0 ||
+		reconciled.LastHeartbeatAt != "2026-07-01T00:00:00Z" ||
+		reconciled.LastError != "server_process_not_alive" {
+		t.Fatalf("state no reconciliado: %+v", reconciled)
+	}
+	if len(reconciled.RecentErrors) == 0 ||
+		reconciled.RecentErrors[0].Code != orquestaserver.ServerProcessStaleReasonCodeV0 {
+		t.Fatalf("recent_errors sin stale: %+v", reconciled.RecentErrors)
+	}
+	if strings.Contains(stdout.String(), projectDir) ||
+		strings.Contains(stdout.String(), "127.0.0.1:1") ||
+		strings.Contains(stdout.String(), "99999999") {
+		t.Fatalf("stdout filtra detalle local: %s", stdout.String())
 	}
 }
 

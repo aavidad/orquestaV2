@@ -144,17 +144,51 @@ func statusServerCommandV0(stdout io.Writer, stderr io.Writer) int {
 		}
 		return 0
 	}
+	state, reconciled := reconcileStatefileSnapshotLivenessV0(config, state)
+	status := "degraded"
+	diagnosticsMode := "statefile_snapshot_public_projection"
+	if reconciled || strings.TrimSpace(state.Status) == "stale" {
+		status = "stale"
+		diagnosticsMode = "statefile_snapshot_reconciled_process_not_alive"
+	}
 	if err := writeCommandPublicOutputV0(
 		stdout,
 		"status",
-		"degraded",
+		status,
 		commandPublicFreshnessSnapshotV0,
-		"statefile_snapshot_public_projection",
+		diagnosticsMode,
 		commandPublicServerStatusPayloadV0(orquestaserver.NewServerPublicStatusV0(state)),
 	); err != nil {
 		return reportCommandStdioWriteFailureV0(stderr, "status", "stdout", "json_encode", err)
 	}
 	return 1
+}
+
+func reconcileStatefileSnapshotLivenessV0(
+	config orquestaserver.ConfigV0,
+	state orquestaserver.StateV0,
+) (orquestaserver.StateV0, bool) {
+	if !serverStateStatusNeedsProcessReconciliationV0(state.Status) {
+		return state, false
+	}
+	if state.PID > 0 && processAliveV0(state.PID) {
+		return state, false
+	}
+	reconciled := orquestaserver.MarkServerProcessStaleStateV0(state, time.Now().UTC())
+	store, err := orquestaserver.NewFileStateStoreV0(orquestaserver.StatePathV0(config))
+	if err == nil {
+		_ = store.SaveServerStateV0(context.Background(), reconciled)
+	}
+	return reconciled, true
+}
+
+func serverStateStatusNeedsProcessReconciliationV0(status string) bool {
+	switch strings.TrimSpace(status) {
+	case "running", "starting", "startup_blocked":
+		return true
+	default:
+		return false
+	}
 }
 
 func stopServerCommandV0(args []string, stdout io.Writer, stderr io.Writer) int {
