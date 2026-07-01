@@ -63,6 +63,13 @@ func TestServerRGCodeContextProviderV0UsaFallbackGoSiRGAusente(t *testing.T) {
 	); err != nil {
 		t.Fatalf("write: %v", err)
 	}
+	if err := os.WriteFile(
+		filepath.Join(root, "modulos", "demo", "other.go"),
+		[]byte("package demo\n\nfunc OtroBrokerCentralSinRG() {}\n"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write other: %v", err)
+	}
 	provider := serverRGCodeContextProviderV0{
 		RootDir: root,
 		Command: filepath.Join(t.TempDir(), "rg-no-existe"),
@@ -81,11 +88,11 @@ func TestServerRGCodeContextProviderV0UsaFallbackGoSiRGAusente(t *testing.T) {
 	}
 	if result.Estado != orquestacontext.CodeContextEstadoOKV0 ||
 		result.ProviderKind != orquestacontext.CodeContextProviderKindFallbackRGV0 ||
-		len(result.Results) != 1 {
+		len(result.Results) != 2 {
 		t.Fatalf("result=%+v", result)
 	}
-	if result.Results[0].Path != "modulos/demo/service.go" ||
-		result.Results[0].Line != 3 ||
+	if result.Results[0].HitRef != "code-context-go-hit-1" ||
+		result.Results[1].HitRef != "code-context-go-hit-2" ||
 		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-code-context-go-fallback-v0") {
 		t.Fatalf("result=%+v", result)
 	}

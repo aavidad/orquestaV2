@@ -470,7 +470,7 @@ func serverGoCodeContextHitsV0(root string, query orquestacontext.CodeContextQue
 			return nil, err
 		}
 	}
-	return hits, nil
+	return serverGoCodeContextNormalizeHitRefsV0(hits), nil
 }
 
 func serverGoCodeContextFileHitsV0(
@@ -520,6 +520,15 @@ func serverGoCodeContextFileHitsV0(
 		}
 	}
 	return hits, nil
+}
+
+func serverGoCodeContextNormalizeHitRefsV0(
+	hits []orquestacontext.CodeContextHitV0,
+) []orquestacontext.CodeContextHitV0 {
+	for idx := range hits {
+		hits[idx].HitRef = "code-context-go-hit-" + strconv.Itoa(idx+1)
+	}
+	return hits
 }
 
 func serverCodeContextSmartCaseMatchV0(line string, query string) bool {

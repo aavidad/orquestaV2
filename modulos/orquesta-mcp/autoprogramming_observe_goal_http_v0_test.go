@@ -71,10 +71,68 @@ func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0TimeoutDevuelveJSONPublico(t 
 		t.Fatalf("decode: %v", err)
 	}
 	if result.Estado != MCPAutoprogrammingObserveGoalEstadoErrorV0 ||
+		!result.Partial ||
 		result.RunRef != "run-ref-autoprogramming-goal-http-timeout-001" ||
+		result.RecommendedAction != "observe_later" ||
+		result.Summary == "" ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != MCPAutoprogrammingObserveGoalHTTPTimeoutCodeV0 ||
-		result.Errores[0].Field != "executor" {
+		result.Errores[0].Field != "executor" ||
+		!stringInSliceForMCPObserveGoalHTTPTestV0(result.EvidenceRefs, "evidence-ref-autoprogramming-observe-goal-timeout") {
+		t.Fatalf("result=%+v", result)
+	}
+	select {
+	case <-executor.done:
+	case <-time.After(time.Second):
+		t.Fatalf("executor no recibio cancelacion tras timeout HTTP")
+	}
+}
+
+func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0TimeoutIncluyeSnapshotParcialV0(t *testing.T) {
+	executor := &blockingSnapshotMCPAutoprogrammingObserveGoalHTTPExecutorV0{
+		done: make(chan struct{}),
+		snapshot: MCPObserveAppDirectorGoalToolResultV0{
+			Estado:            MCPObserveAppDirectorGoalEstadoOKV0,
+			Partial:           true,
+			RunRef:            "run-ref-autoprogramming-goal-http-timeout-snapshot-001",
+			GoalRef:           "goal-ref-autoprogramming-goal-http-timeout-snapshot-001",
+			ExternalGoalRef:   "thread-ref-autoprogramming-goal-http-timeout-snapshot-001",
+			GoalStatus:        "blocked",
+			RecommendedAction: "replan",
+			ArtifactRefs:      []string{"artifact-ref-checkpoint-timeout-snapshot-001"},
+			EvidenceRefs:      []string{"evidence-ref-autoprogramming-timeout-snapshot-001"},
+		},
+	}
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(MCPAutoprogrammingObserveGoalToolInputV0{
+		RequestID: "request-ref-autoprogramming-observe-goal-http-timeout-snapshot-001",
+		RunRef:    "run-ref-autoprogramming-goal-http-timeout-snapshot-001",
+	}); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingObserveGoalHTTPPathV0, body)
+	req.Header.Set("X-Correlation-ID", "corr-autoprogramming-observe-goal-http-timeout-snapshot-001")
+	rec := httptest.NewRecorder()
+
+	newMCPAutoprogrammingObserveGoalHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusGatewayTimeout {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPAutoprogrammingObserveGoalToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPAutoprogrammingObserveGoalEstadoErrorV0 ||
+		!result.Partial ||
+		result.GoalRef != "goal-ref-autoprogramming-goal-http-timeout-snapshot-001" ||
+		result.ExternalGoalRef != "thread-ref-autoprogramming-goal-http-timeout-snapshot-001" ||
+		result.GoalStatus != "blocked" ||
+		result.RecommendedAction != "replan" ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != MCPAutoprogrammingObserveGoalHTTPTimeoutCodeV0 ||
+		!stringInSliceForMCPObserveGoalHTTPTestV0(result.ArtifactRefs, "artifact-ref-checkpoint-timeout-snapshot-001") ||
+		!stringInSliceForMCPObserveGoalHTTPTestV0(result.EvidenceRefs, "evidence-ref-autoprogramming-timeout-snapshot-001") {
 		t.Fatalf("result=%+v", result)
 	}
 	select {
@@ -171,4 +229,28 @@ func (executor *blockingMCPAutoprogrammingObserveGoalHTTPExecutorV0) Execute(
 		Estado: MCPAutoprogrammingObserveGoalEstadoOKV0,
 		RunRef: input.RunRef,
 	}, nil
+}
+
+type blockingSnapshotMCPAutoprogrammingObserveGoalHTTPExecutorV0 struct {
+	done     chan struct{}
+	snapshot MCPObserveAppDirectorGoalToolResultV0
+}
+
+func (executor *blockingSnapshotMCPAutoprogrammingObserveGoalHTTPExecutorV0) Execute(
+	ctx context.Context,
+	input MCPAutoprogrammingObserveGoalToolInputV0,
+) (MCPAutoprogrammingObserveGoalToolResultV0, error) {
+	<-ctx.Done()
+	close(executor.done)
+	return MCPAutoprogrammingObserveGoalToolResultV0{
+		Estado: MCPAutoprogrammingObserveGoalEstadoOKV0,
+		RunRef: input.RunRef,
+	}, nil
+}
+
+func (executor *blockingSnapshotMCPAutoprogrammingObserveGoalHTTPExecutorV0) ObserveAppDirectorGoalTimeoutSnapshotV0(
+	_ context.Context,
+	_ MCPObserveAppDirectorGoalToolInputV0,
+) (MCPObserveAppDirectorGoalToolResultV0, error) {
+	return executor.snapshot, nil
 }

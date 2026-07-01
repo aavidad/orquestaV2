@@ -139,7 +139,42 @@ func (handler mcpAutoprogrammingObserveGoalHTTPHandlerV0) executeAutoprogramming
 	case execution := <-done:
 		return execution.result, execution.err, false
 	case <-timer.C:
-		return newMCPAutoprogrammingObserveGoalHTTPTimeoutResultV0(r, input), nil, true
+		cancel()
+		return handler.newMCPAutoprogrammingObserveGoalHTTPTimeoutResultV0(r, input), nil, true
+	}
+}
+
+func (handler mcpAutoprogrammingObserveGoalHTTPHandlerV0) newMCPAutoprogrammingObserveGoalHTTPTimeoutResultV0(
+	r *http.Request,
+	input MCPAutoprogrammingObserveGoalToolInputV0,
+) MCPAutoprogrammingObserveGoalToolResultV0 {
+	timeoutResult := newMCPAutoprogrammingObserveGoalHTTPTimeoutResultV0(r, input)
+	snapshotter, ok := handler.executor.(MCPTransportObserveAppDirectorGoalTimeoutSnapshotExecutorV0)
+	if !ok || snapshotter == nil {
+		return timeoutResult
+	}
+	snapshotCtx, cancel := context.WithTimeout(r.Context(), defaultMCPObserveAppDirectorGoalHTTPSnapshotTimeoutV0)
+	defer cancel()
+	done := make(chan mcpAutoprogrammingObserveGoalHTTPExecutionV0, 1)
+	go func() {
+		result, err := snapshotter.ObserveAppDirectorGoalTimeoutSnapshotV0(snapshotCtx, MCPObserveAppDirectorGoalToolInputV0{
+			RequestID:     strings.TrimSpace(input.RequestID),
+			CorrelationID: strings.TrimSpace(input.CorrelationID),
+			RunRef:        strings.TrimSpace(input.RunRef),
+			OccurredAt:    strings.TrimSpace(input.OccurredAt),
+			RequestedBy:   strings.TrimSpace(input.RequestedBy),
+		})
+		done <- mcpAutoprogrammingObserveGoalHTTPExecutionV0{result: result, err: err}
+	}()
+	select {
+	case execution := <-done:
+		if execution.err != nil {
+			return timeoutResult
+		}
+		execution.result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), execution.result.CorrelationID, input.CorrelationID, input.RequestID)
+		return NewMCPObserveAppDirectorGoalTimeoutResultWithPartialV0(timeoutResult, execution.result)
+	case <-snapshotCtx.Done():
+		return timeoutResult
 	}
 }
 
@@ -168,6 +203,13 @@ func newMCPAutoprogrammingObserveGoalHTTPTimeoutResultV0(
 		"autoprogramming observe_goal excedio la ventana HTTP acotada",
 	)
 	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), result.CorrelationID, input.CorrelationID, input.RequestID)
+	result.Partial = true
+	result.RecommendedAction = "observe_later"
+	result.Summary = "observacion de autoprogramacion incompleta por timeout HTTP; conservar run_ref y reintentar observe acotado antes de replanificar o relanzar"
+	result.EvidenceRefs = compactStringsMCPV0([]string{
+		"evidence-ref-autoprogramming-observe-goal-timeout",
+		strings.TrimSpace(input.RunRef),
+	})
 	return result
 }
 
