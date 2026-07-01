@@ -105,11 +105,23 @@ El tema 018 alcanzó 11.407 palabras, pero conserva metacomentarios visibles
 como `Para el nivel de este tema no se exige`, `Para este tema basta`,
 `Lo evaluable en este tema` y `En examen`.
 
+Otros ejemplos observados en la ola P0:
+
+- tema 006: `En examen se debe recordar`, `En examen hay que explicar`,
+  `debe estudiarse`;
+- tema 010: `Nota de test`, `En examen`;
+- tema 019: `En examen conviene`, `Para examen no se exige`.
+
+Los informes locales de texto limpio no los detectaron y declararon `pass`.
+
 Acción esperada:
 
 - El contrato OPES debe pasar una QA textual antes de aceptar un tema:
   metacomentarios de alcance, estudio, agente, autor, proceso o examen deben
   moverse a tutor/notas internas o reescribirse como contenido didáctico.
+- El validador de texto público debe ampliar patrones o permitir una política
+  OPES específica para detectar frases de estrategia de examen dentro del texto
+  publicable, aunque no contengan la cadena `Nota del autor`.
 
 ### 5. Visual raster pero no didáctico
 
