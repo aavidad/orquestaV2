@@ -51,6 +51,46 @@ func TestServerRGCodeContextProviderV0DevuelveCoincidenciasCompactas(t *testing.
 	}
 }
 
+func TestServerRGCodeContextProviderV0UsaFallbackGoSiRGAusente(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "modulos", "demo"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(root, "modulos", "demo", "service.go"),
+		[]byte("package demo\n\nfunc BrokerCentralSinRG() {}\n"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	provider := serverRGCodeContextProviderV0{
+		RootDir: root,
+		Command: filepath.Join(t.TempDir(), "rg-no-existe"),
+	}
+	result, err := provider.QueryCodeContextV0(context.Background(), orquestacontext.CodeContextQueryV0{
+		SchemaVersion: orquestacontext.CodeContextQuerySchemaVersionV0,
+		RepositoryRef: "repo-ref-test",
+		QueryKind:     orquestacontext.CodeContextQueryKindSearchV0,
+		Query:         "BrokerCentralSinRG",
+		Scope:         []string{"modulos"},
+		MaxResults:    5,
+		MaxBytes:      3000,
+	})
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if result.Estado != orquestacontext.CodeContextEstadoOKV0 ||
+		result.ProviderKind != orquestacontext.CodeContextProviderKindFallbackRGV0 ||
+		len(result.Results) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	if result.Results[0].Path != "modulos/demo/service.go" ||
+		result.Results[0].Line != 3 ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-code-context-go-fallback-v0") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestServerCodebaseMemoryCLIProviderV0ParseaSearchGraphYEscribeOwnerMarker(t *testing.T) {
 	stateDir := t.TempDir()
 	command := writeCodebaseMemoryFakeCLIForTestV0(t, `#!/bin/sh

@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -301,6 +304,7 @@ type serverRGCodeContextProviderV0 struct {
 const (
 	defaultServerRGCodeContextOutputMaxBytesV0 = 262144
 	minServerRGCodeContextOutputMaxBytesV0     = 65536
+	maxServerGoCodeContextSnippetBytesV0       = 700
 )
 
 func (provider serverRGCodeContextProviderV0) QueryCodeContextV0(
@@ -314,6 +318,17 @@ func (provider serverRGCodeContextProviderV0) QueryCodeContextV0(
 	command := strings.TrimSpace(provider.Command)
 	if command == "" {
 		command = "rg"
+	}
+	if _, err := exec.LookPath(command); err != nil {
+		hits, fallbackErr := serverGoCodeContextHitsV0(root, query)
+		if fallbackErr != nil {
+			return orquestacontext.CodeContextResultV0{}, fallbackErr
+		}
+		return serverRGCodeContextResultWithEvidenceV0(
+			query,
+			hits,
+			[]string{"evidence-ref-code-context-go-fallback-v0"},
+		), nil
 	}
 	args := serverRGCodeContextArgsV0(query)
 	cmd := exec.CommandContext(ctx, command, args...)
@@ -404,6 +419,145 @@ func serverRGCodeContextHitsV0(output string, query orquestacontext.CodeContextQ
 	return hits
 }
 
+func serverGoCodeContextHitsV0(root string, query orquestacontext.CodeContextQueryV0) ([]orquestacontext.CodeContextHitV0, error) {
+	root, err := filepath.Abs(filepath.Clean(root))
+	if err != nil {
+		return nil, err
+	}
+	maxResults := query.MaxResults
+	if maxResults <= 0 {
+		maxResults = 8
+	}
+	scopes := serverRGCodeContextScopesV0(query.Scope)
+	if len(scopes) == 0 {
+		scopes = []string{"cmd", "modulos", "docs", "scripts", "AGENTS.md"}
+	}
+	hits := make([]orquestacontext.CodeContextHitV0, 0, maxResults)
+	for _, scope := range scopes {
+		if len(hits) >= maxResults {
+			break
+		}
+		target := filepath.Join(root, filepath.Clean(scope))
+		if !serverCodeContextPathWithinRootV0(root, target) {
+			continue
+		}
+		if err := filepath.WalkDir(target, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil || entry == nil {
+				return nil
+			}
+			if len(hits) >= maxResults {
+				return filepath.SkipAll
+			}
+			if entry.IsDir() {
+				if serverGoCodeContextSkipDirV0(entry.Name()) && path != target {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if !serverCodeContextPathWithinRootV0(root, path) {
+				return nil
+			}
+			fileHits, err := serverGoCodeContextFileHitsV0(root, path, query, maxResults-len(hits))
+			if err != nil {
+				return nil
+			}
+			hits = append(hits, fileHits...)
+			if len(hits) >= maxResults {
+				return filepath.SkipAll
+			}
+			return nil
+		}); err != nil && !errors.Is(err, filepath.SkipAll) {
+			return nil, err
+		}
+	}
+	return hits, nil
+}
+
+func serverGoCodeContextFileHitsV0(
+	root string,
+	path string,
+	query orquestacontext.CodeContextQueryV0,
+	limit int,
+) ([]orquestacontext.CodeContextHitV0, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() || info.Size() > int64(serverRGCodeContextOutputLimitV0(query)) {
+		return nil, nil
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, nil
+	}
+	defer file.Close()
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		rel = filepath.Base(path)
+	}
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 0, 64*1024), 256*1024)
+	hits := make([]orquestacontext.CodeContextHitV0, 0, limit)
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := scanner.Text()
+		if !serverCodeContextSmartCaseMatchV0(line, query.Query) {
+			continue
+		}
+		hits = append(hits, orquestacontext.CodeContextHitV0{
+			HitRef:  "code-context-go-hit-" + strconv.Itoa(len(hits)+1),
+			Kind:    "text_match",
+			Path:    rel,
+			Line:    lineNo,
+			Summary: "coincidencia literal servida por fallback Go central",
+			Snippet: serverGoCodeContextSnippetV0(line),
+			Score:   1,
+		})
+		if len(hits) >= limit {
+			break
+		}
+	}
+	return hits, nil
+}
+
+func serverCodeContextSmartCaseMatchV0(line string, query string) bool {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return false
+	}
+	if query == strings.ToLower(query) {
+		return strings.Contains(strings.ToLower(line), query)
+	}
+	return strings.Contains(line, query)
+}
+
+func serverGoCodeContextSnippetV0(line string) string {
+	line = strings.TrimSpace(line)
+	if len(line) <= maxServerGoCodeContextSnippetBytesV0 {
+		return line
+	}
+	return strings.TrimSpace(line[:maxServerGoCodeContextSnippetBytesV0])
+}
+
+func serverGoCodeContextSkipDirV0(name string) bool {
+	switch name {
+	case ".git", ".orquesta-runtime", "node_modules", "runtime", "go-cache", "go-build":
+		return true
+	default:
+		return false
+	}
+}
+
+func serverCodeContextPathWithinRootV0(root string, path string) bool {
+	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
 func parseRGCodeContextLineV0(line string) (string, int, string, bool) {
 	line = strings.TrimSpace(line)
 	if line == "" {
@@ -429,6 +583,18 @@ func serverRGCodeContextResultV0(
 	query orquestacontext.CodeContextQueryV0,
 	hits []orquestacontext.CodeContextHitV0,
 ) orquestacontext.CodeContextResultV0 {
+	return serverRGCodeContextResultWithEvidenceV0(
+		query,
+		hits,
+		[]string{"evidence-ref-code-context-rg-central-v0"},
+	)
+}
+
+func serverRGCodeContextResultWithEvidenceV0(
+	query orquestacontext.CodeContextQueryV0,
+	hits []orquestacontext.CodeContextHitV0,
+	evidence []string,
+) orquestacontext.CodeContextResultV0 {
 	return orquestacontext.CodeContextResultV0{
 		SchemaVersion: orquestacontext.CodeContextResultSchemaVersionV0,
 		Estado:        orquestacontext.CodeContextEstadoOKV0,
@@ -442,7 +608,7 @@ func serverRGCodeContextResultV0(
 		ProviderKind:  orquestacontext.CodeContextProviderKindFallbackRGV0,
 		IndexerPolicy: orquestacontext.CodeContextProviderPolicyCentralOnlyV0,
 		Results:       hits,
-		EvidenceRefs:  []string{"evidence-ref-code-context-rg-central-v0"},
+		EvidenceRefs:  evidence,
 	}
 }
 
