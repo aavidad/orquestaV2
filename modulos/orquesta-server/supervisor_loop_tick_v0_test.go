@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 )
 
@@ -34,6 +35,64 @@ func TestRuntimeV0SupervisorPersisteTicksV0(t *testing.T) {
 		store.last.LastSupervisorStopCategory != "idle" ||
 		store.last.LastSupervisorQueueRef != "" {
 		t.Fatalf("state=%+v", store.last)
+	}
+}
+
+func TestRuntimeV0SupervisorDistingueColaIdleConGoalBackendActivoV0(t *testing.T) {
+	now := time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC)
+	store := &memoryStateStoreV0{}
+	supervisor := &fakeSupervisorV0{}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:      t.TempDir(),
+		TickInterval:  time.Hour,
+		AuditDisabled: false,
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: store,
+		Clock:      fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	runtime.tracker.MarkGoalObserverV0(
+		activeGoalObservationResultForSupervisorTestV0(
+			"run-ref-bug-069-goal-backend-active-001",
+			"goal-ref-bug-069-goal-backend-active-001",
+		),
+		now.Add(-time.Second),
+	)
+
+	runtime.runSupervisorTickV0(context.Background())
+
+	if store.last.LastSupervisorQueueSize != 0 ||
+		store.last.LastSupervisorStatus != SupervisorPublicStatusQueueIdleGoalBackendActiveV0 ||
+		store.last.LastSupervisorStopPublic != SupervisorPublicStopQueueIdleButGoalBackendActiveV0 ||
+		store.last.LastSupervisorStopCategory != SupervisorPublicCategoryGoalBackendV0 {
+		t.Fatalf("state=%+v", store.last)
+	}
+	message := store.last.LastSupervisorOperationalMessage
+	if message == nil ||
+		message.ReasonCode != SupervisorPublicStatusQueueIdleGoalBackendActiveV0 ||
+		message.Counters["goal_backend_active"] != 1 ||
+		!containsStringForTestV0(message.RunRefs, "run-ref-bug-069-goal-backend-active-001") ||
+		!containsStringForTestV0(message.GoalRefs, "goal-ref-bug-069-goal-backend-active-001") {
+		t.Fatalf("operational message=%+v", message)
+	}
+	if store.last.IdleSelfImprovementReason != SupervisorPublicStopQueueIdleButGoalBackendActiveV0 {
+		t.Fatalf("idle self-improvement reason=%q", store.last.IdleSelfImprovementReason)
+	}
+	events := readAuditEventsForTestV0(t, AuditPathV0(runtime.config))
+	if len(events) < 2 {
+		t.Fatalf("events=%+v", events)
+	}
+	summary, ok := events[1].Payload["result_summary"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("result_summary=%+v", events[1].Payload["result_summary"])
+	}
+	if summary["public_stop_reason"] != SupervisorPublicStopQueueIdleButGoalBackendActiveV0 ||
+		summary["stop_category"] != SupervisorPublicCategoryGoalBackendV0 ||
+		summary["goal_backend_active"] != float64(1) {
+		t.Fatalf("summary=%+v", summary)
 	}
 }
 
@@ -66,6 +125,32 @@ func TestRuntimeV0SupervisorRespetaComandoConfiguradoV0(t *testing.T) {
 		store.last.LastSupervisorSkips != 2 ||
 		store.last.LastSupervisorResultTicks != 1 {
 		t.Fatalf("state=%+v", store.last)
+	}
+}
+
+func activeGoalObservationResultForSupervisorTestV0(
+	runRef string,
+	goalRef string,
+) orquestagoal.GoalWorkObserveActiveResultV0 {
+	externalGoalRef := "external-" + goalRef
+	evidenceRef := "evidence-ref-" + goalRef
+	return orquestagoal.GoalWorkObserveActiveResultV0{
+		Observations: []orquestagoal.GoalWorkObserveResultV0{{
+			State: orquestagoal.GoalWorkStateV0{
+				RunRef:          runRef,
+				GoalRef:         goalRef,
+				ExternalGoalRef: externalGoalRef,
+				Status:          orquestagoal.GoalStatusRunningV0,
+			},
+			Result: orquestagoal.GoalWorkResultV0{
+				Status:          orquestagoal.GoalStatusRunningV0,
+				GoalRef:         goalRef,
+				ExternalGoalRef: externalGoalRef,
+				EvidenceRefs:    []string{evidenceRef},
+			},
+			EvidenceRefs: []string{evidenceRef},
+		}},
+		EvidenceRefs: []string{evidenceRef},
 	}
 }
 

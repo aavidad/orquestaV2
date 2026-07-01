@@ -349,6 +349,58 @@ func TestResidentOperationalStatusSourceV0MarcaGoalFirstBloqueadoV0(t *testing.T
 	}
 }
 
+func TestResidentOperationalStatusSourceV0ExponeGoalBackendActivoConColaVaciaV0(t *testing.T) {
+	now := time.Date(2026, 7, 1, 10, 10, 0, 0, time.UTC)
+	state := StateV0{
+		SchemaVersion:              StateSchemaVersionV0,
+		Status:                     "running",
+		LastHeartbeatAt:            now.Format(time.RFC3339),
+		LastSupervisorStatus:       SupervisorPublicStatusQueueIdleGoalBackendActiveV0,
+		LastSupervisorStopPublic:   SupervisorPublicStopQueueIdleButGoalBackendActiveV0,
+		LastSupervisorStopCategory: SupervisorPublicCategoryGoalBackendV0,
+		LastSupervisorQueueSize:    0,
+		GoalObserverStatus:         "ok",
+		GoalObserverLastSuccessAt:  now.Add(-time.Second).Format(time.RFC3339),
+		GoalObserverOperationalMessage: &ServerOperationalMessageV0{
+			SchemaVersion: serverOperationalMessageSchemaV0,
+			Scope:         "goal_observer",
+			ReasonCode:    "ok",
+			Status:        "ok",
+			RunRefs: []string{
+				"run-ref-bug-069-active-a",
+				"run-ref-bug-069-active-b",
+			},
+			GoalRefs: []string{
+				"goal-ref-bug-069-active-a",
+				"external-goal-ref-bug-069-active-a",
+				"goal-ref-bug-069-active-b",
+			},
+			Counters: map[string]int{
+				"observed": 2,
+				"terminal": 0,
+				"issues":   0,
+			},
+		},
+	}
+
+	diagnostic := buildResidentOperationalStatusDiagnosticV0(
+		residentOperationalStatusQueryV0("corr-ref-bug-069-goal-backend-active"),
+		state,
+		now,
+	)
+
+	if err := orquestaobservability.ValidateDiagnosticoCompactoV0(diagnostic); err != nil {
+		t.Fatalf("diagnostic invalid: %v", err)
+	}
+	assertOperationalCounterForTestV0(t, diagnostic, "queue_size", 0)
+	assertOperationalCounterForTestV0(t, diagnostic, "goal_backend_active", 2)
+	assertOperationalCounterForTestV0(t, diagnostic, "goal_backend_observed", 2)
+	if !diagnosticoContainsReferenceForTestV0(diagnostic, "run-ref-bug-069-active-a") ||
+		!diagnosticoContainsReferenceForTestV0(diagnostic, "goal-ref-bug-069-active-a") {
+		t.Fatalf("missing goal backend refs in %+v", diagnostic.Referencias)
+	}
+}
+
 func TestServerReadinessV0ExponeGoalFirstSinCambiarReadyV0(t *testing.T) {
 	state := StateV0{
 		Status:       "running",

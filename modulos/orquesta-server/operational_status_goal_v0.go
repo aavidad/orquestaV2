@@ -40,6 +40,32 @@ func residentOperationalGoalReferencesV0(state StateV0) []orquestaobservability.
 	return refs
 }
 
+func residentOperationalGoalBackendReferencesV0(state StateV0) []orquestaobservability.DiagnosticoReferenciaV0 {
+	snapshot := supervisorGoalBackendActiveSnapshotFromStateV0(state)
+	if !supervisorGoalBackendSnapshotActiveV0(snapshot) {
+		return nil
+	}
+	refs := []orquestaobservability.DiagnosticoReferenciaV0{}
+	appendRef := func(rel, targetType, targetRef string) {
+		targetRef = strings.TrimSpace(targetRef)
+		if targetRef == "" || !serverEvidenceRefPatternV0.MatchString(targetRef) {
+			return
+		}
+		refs = append(refs, orquestaobservability.DiagnosticoReferenciaV0{
+			Rel:        rel,
+			TargetType: targetType,
+			TargetRef:  targetRef,
+		})
+	}
+	for _, ref := range snapshot.GoalRefs {
+		appendRef("runtime", "runtime", ref)
+	}
+	for _, ref := range snapshot.RunRefs {
+		appendRef("related", "flow", ref)
+	}
+	return refs
+}
+
 func residentOperationalGoalHealthCheckV0(state StateV0) orquestaobservability.DiagnosticoSaludCheckV0 {
 	goal := residentOperationalGoalProjectionV0(state)
 	if goal == nil {

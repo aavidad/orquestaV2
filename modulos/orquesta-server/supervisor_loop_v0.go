@@ -91,11 +91,15 @@ func (runtime *RuntimeV0) runSupervisorTickV0(ctx context.Context) {
 	}
 	runtime.auditEventV0(ctx, "supervisor_tick_result", "ok", "", map[string]interface{}{
 		"command_summary": supervisorCommandAuditSummaryV0(command),
-		"result_summary":  supervisorResultAuditSummaryV0(result),
+		"result_summary":  supervisorResultAuditSummaryWithStateV0(result, runtime.tracker.SnapshotV0()),
 	})
 	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkSupervisorV0(command, result, now), "supervisor_tick")
 	if supervisorResultHasUnhandledOutboxWaitV0(result) && !supervisorResultHasLaunchFailedV0(result) && !supervisorResultHasUnverifiedRunningV0(result) {
 		runtime.markIdleSelfImprovementCheckedV0(ctx, SupervisorPublicStatusWaitingOutboxV0, now)
+		return
+	}
+	if supervisorResultQueueIdleButGoalBackendActiveForStateV0(result, runtime.tracker.SnapshotV0()) {
+		runtime.markIdleSelfImprovementCheckedV0(ctx, SupervisorPublicStopQueueIdleButGoalBackendActiveV0, now)
 		return
 	}
 	runtime.maybeScheduleIdleSelfImprovementCausalV0(ctx, result, now)

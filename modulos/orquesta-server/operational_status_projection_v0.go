@@ -81,13 +81,27 @@ func residentOperationalCountersV0(state StateV0) map[string]float64 {
 	}
 	goal := residentOperationalGoalProjectionV0(state)
 	if !residentOperationalGoalProjectionHasDurableStateV0(goal) {
-		return counters
+		return residentOperationalCountersWithActiveGoalBackendV0(counters, state)
 	}
 	counters["goal_spec_present"] = residentOperationalBoolCounterV0(goal.SpecPresent)
 	counters["goal_receipt_present"] = residentOperationalBoolCounterV0(goal.ReceiptPresent)
 	counters["goal_result_present"] = residentOperationalBoolCounterV0(goal.ResultPresent)
 	counters["goal_closure_present"] = residentOperationalBoolCounterV0(goal.ClosurePresent)
 	counters["goal_closure_accepted"] = residentOperationalBoolCounterV0(goal.ClosureAccepted)
+	return residentOperationalCountersWithActiveGoalBackendV0(counters, state)
+}
+
+func residentOperationalCountersWithActiveGoalBackendV0(
+	counters map[string]float64,
+	state StateV0,
+) map[string]float64 {
+	snapshot := supervisorGoalBackendActiveSnapshotFromStateV0(state)
+	if !supervisorGoalBackendSnapshotActiveV0(snapshot) {
+		return counters
+	}
+	counters["goal_backend_active"] = float64(snapshot.Active)
+	counters["goal_backend_observed"] = float64(snapshot.Observed)
+	counters["goal_backend_terminal"] = float64(snapshot.Terminal)
 	return counters
 }
 

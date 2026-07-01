@@ -126,8 +126,9 @@ func (tracker *StatusTrackerV0) MarkStartupBlockedV0(
 
 func (tracker *StatusTrackerV0) MarkSupervisorV0(command orquestarunsupervisor.RunSupervisorCommandV0, result orquestarunsupervisor.RunSupervisorResultV0, now time.Time) StateV0 {
 	metrics := collectSupervisorResultMetricsV0(result)
-	projection := supervisorPublicProjectionV0(result, metrics)
+	baseProjection := supervisorPublicProjectionV0(result, metrics)
 	return tracker.updateV0(func(state *StateV0) {
+		projection, goalSnapshot := supervisorProjectionWithGoalBackendV0(baseProjection, metrics, *state)
 		state.LastHeartbeatAt = formatTimeV0(now)
 		state.LastSupervisorAt = formatTimeV0(now)
 		state.LastSupervisorStatus = projection.Status
@@ -143,11 +144,17 @@ func (tracker *StatusTrackerV0) MarkSupervisorV0(command orquestarunsupervisor.R
 		state.LastSupervisorSkips = metrics.Skips
 		state.LastSupervisorOperationalMessage = projectServerOperationalMessageRecordV0(
 			serverOperationalMessageInputV0{
-				Scope:      "supervisor",
-				ReasonCode: projection.Status,
-				Status:     projection.Status,
-				Message:    "supervisor_projection",
-				Counters:   supervisorPublicCountersV0(result),
+				Scope:        "supervisor",
+				ReasonCode:   projection.Status,
+				Status:       projection.Status,
+				Message:      "supervisor_projection",
+				RunRefs:      goalSnapshot.RunRefs,
+				GoalRefs:     goalSnapshot.GoalRefs,
+				EvidenceRefs: goalSnapshot.EvidenceRefs,
+				Counters: supervisorCountersWithGoalBackendV0(
+					supervisorPublicCountersV0(result),
+					goalSnapshot,
+				),
 			},
 		)
 		tracker.markSupervisorIdleWindowV0(result, now)
