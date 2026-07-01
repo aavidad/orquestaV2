@@ -35,6 +35,9 @@ func detectResidentPendingWithoutDispatchV0(
 			if !residentPendingValueV0(skip.Reason, skip.Status) {
 				continue
 			}
+			if supervisorDiagnosticsHaveLiveProcessForRunV0(result.Diagnostics, skip.RunRef) {
+				continue
+			}
 			block.Blocked = true
 			block.RunRefs = append(block.RunRefs, skip.RunRef)
 		}

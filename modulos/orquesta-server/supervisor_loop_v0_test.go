@@ -92,6 +92,49 @@ func TestSupervisorProjectionV0WaitExternalNoEsRunningV0(t *testing.T) {
 	}
 }
 
+func TestServerPublicStatusV0DistingueOutboxWaitExternoYProcesoVerificadoV0(t *testing.T) {
+	cases := []struct {
+		name       string
+		stopPublic string
+		category   string
+	}{
+		{
+			name:       "outbox pendiente",
+			stopPublic: SupervisorPublicStopWaitingOutboxV0,
+			category:   SupervisorPublicCategoryWaitOutboxV0,
+		},
+		{
+			name:       "wait externo",
+			stopPublic: SupervisorPublicStopWaitingExternalV0,
+			category:   SupervisorPublicCategoryWaitExternalV0,
+		},
+		{
+			name:       "proceso externo verificado",
+			stopPublic: SupervisorPublicStopRunningLiveV0,
+			category:   SupervisorPublicCategoryExternalProcessV0,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			public := NewServerPublicStatusV0(StateV0{
+				Status:                     SupervisorPublicStatusOKV0,
+				LastSupervisorStatus:       SupervisorPublicStatusOKV0,
+				LastSupervisorStopPublic:   tc.stopPublic,
+				LastSupervisorStopCategory: tc.category,
+			})
+			if public.LastSupervisorStopPublic != tc.stopPublic ||
+				public.LastSupervisorStopCategory != tc.category {
+				t.Fatalf("public stop=%q category=%q want %q/%q",
+					public.LastSupervisorStopPublic,
+					public.LastSupervisorStopCategory,
+					tc.stopPublic,
+					tc.category,
+				)
+			}
+		})
+	}
+}
+
 func TestSupervisorProjectionV0ProcessRefSinProcesoVerificableEsStalledV0(t *testing.T) {
 	now := time.Date(2026, 6, 11, 10, 30, 0, 0, time.UTC)
 	state := (&StatusTrackerV0{}).MarkSupervisorV0(
@@ -198,6 +241,30 @@ func TestSupervisorProjectionV0SnapshotProcesoRunningConOutboxEsRunningLiveV0(t 
 		state.LastSupervisorStopPublic != SupervisorPublicStopRunningLiveV0 ||
 		state.LastSupervisorStopCategory != SupervisorPublicCategoryExternalProcessV0 {
 		t.Fatalf("state=%+v", state)
+	}
+}
+
+func TestSupervisorProjectionV0NoMezclaEvidenciaVivaDeOtroRunV0(t *testing.T) {
+	now := time.Date(2026, 6, 11, 11, 5, 0, 0, time.UTC)
+	state := (&StatusTrackerV0{}).MarkSupervisorV0(
+		orquestarunsupervisor.RunSupervisorCommandV0{QueueRef: "queue-ref-t260"},
+		supervisorResultWithCrossRunLiveProcessSnapshotForTestV0(
+			"run-ref-t260-process-unverified",
+			"run-ref-t260-other-live",
+		),
+		now,
+	)
+
+	if state.LastSupervisorStatus != SupervisorPublicStatusStalledV0 ||
+		state.LastSupervisorStopPublic != SupervisorPublicStopStalledV0 ||
+		state.LastSupervisorStopCategory != SupervisorPublicCategoryExternalProcessV0 {
+		t.Fatalf("state=%+v", state)
+	}
+	if got := state.LastSupervisorOperationalMessage.Counters["running_live"]; got != 0 {
+		t.Fatalf("running_live=%d counters=%v", got, state.LastSupervisorOperationalMessage.Counters)
+	}
+	if got := state.LastSupervisorOperationalMessage.Counters["stalled"]; got != 1 {
+		t.Fatalf("stalled=%d counters=%v", got, state.LastSupervisorOperationalMessage.Counters)
 	}
 }
 
@@ -920,6 +987,32 @@ func supervisorResultWithLiveProcessSnapshotForTestV0(runRef string) orquestarun
 						RunRef:             runRef,
 						PendingOutboxCount: 1,
 						PendingOutboxRefs:  []string{"outbox-ref-t260-live"},
+					}},
+				}},
+			},
+		}},
+	}
+}
+
+func supervisorResultWithCrossRunLiveProcessSnapshotForTestV0(
+	executionRunRef string,
+	liveDiagnosticRunRef string,
+) orquestarunsupervisor.RunSupervisorResultV0 {
+	return orquestarunsupervisor.RunSupervisorResultV0{
+		StopReason:      orquestarunsupervisor.RunSupervisorStopMaxExecutionsV0,
+		TotalExecutions: 1,
+		Ticks: []orquestarunsupervisor.RunSupervisorTickSummaryV0{{
+			TickNumber: 1,
+			Result: orquestaruncoordinator.RunCoordinatorTickResultV0{
+				Ranked: []orquestaruncoordinator.RankedRunSummaryV0{{RunRef: executionRunRef, Rank: 1}},
+				Executions: []orquestaruncoordinator.RunExecutionSummaryV0{{
+					RunRef:      executionRunRef,
+					Outcome:     "process_ref_registered",
+					QueueStatus: "running",
+					Diagnostics: []orquestaruncoordinator.RunDrainDiagnosticV0{{
+						Kind:   "process_runtime_snapshot",
+						Status: "running",
+						RunRef: liveDiagnosticRunRef,
 					}},
 				}},
 			},

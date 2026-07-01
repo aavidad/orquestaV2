@@ -179,10 +179,10 @@ func supervisorResultHasUnverifiedRunningV0(result orquestarunsupervisor.RunSupe
 			}
 			if supervisorRunningValueV0(execution.Outcome, execution.QueueStatus) &&
 				!supervisorLiveEvidenceV0(execution.Outcome, execution.QueueStatus, execution.EvidenceRefs) &&
-				!supervisorDiagnosticsHaveLiveProcessV0(execution.Diagnostics) {
+				!supervisorExecutionDiagnosticsHaveLiveProcessV0(execution) {
 				return true
 			}
-			if supervisorDiagnosticsHaveUnverifiedRunningV0(execution.Diagnostics) {
+			if supervisorExecutionDiagnosticsHaveUnverifiedRunningV0(execution) {
 				return true
 			}
 		}
@@ -207,7 +207,7 @@ func supervisorResultHasRunningLiveV0(result orquestarunsupervisor.RunSupervisor
 	for _, tick := range result.Ticks {
 		for _, execution := range tick.Result.Executions {
 			if supervisorLiveEvidenceV0(execution.Outcome, execution.QueueStatus, execution.EvidenceRefs) ||
-				supervisorDiagnosticsHaveLiveProcessV0(execution.Diagnostics) {
+				supervisorExecutionDiagnosticsHaveLiveProcessV0(execution) {
 				return true
 			}
 		}
@@ -228,7 +228,7 @@ func supervisorPublicCountersV0(result orquestarunsupervisor.RunSupervisorResult
 	for _, tick := range result.Ticks {
 		counters["registered"] += len(tick.Result.Ranked)
 		for _, execution := range tick.Result.Executions {
-			switch supervisorExecutionPublicStatusV0(execution.Outcome, execution.QueueStatus, execution.EvidenceRefs, execution.Diagnostics) {
+			switch supervisorExecutionPublicStatusV0(execution) {
 			case SupervisorPublicStatusExternalEmptyRunV0:
 				counters["external_work_empty_run"]++
 			case SupervisorPublicStatusLaunchFailedV0:
@@ -262,29 +262,34 @@ func supervisorPublicCountersV0(result orquestarunsupervisor.RunSupervisorResult
 	return counters
 }
 
-func supervisorExecutionPublicStatusV0(
-	outcome string,
-	queueStatus string,
-	evidenceRefs []string,
-	diagnostics []orquestaruncoordinator.RunDrainDiagnosticV0,
-) string {
-	if supervisorTerminalEmptyRunEvidenceV0(outcome, queueStatus, "", evidenceRefs, diagnostics) {
+func supervisorExecutionPublicStatusV0(execution orquestaruncoordinator.RunExecutionSummaryV0) string {
+	if supervisorTerminalEmptyRunEvidenceV0(
+		execution.Outcome,
+		execution.QueueStatus,
+		"",
+		execution.EvidenceRefs,
+		execution.Diagnostics,
+	) {
 		return SupervisorPublicStatusExternalEmptyRunV0
 	}
-	if supervisorLaunchFailedValueV0(outcome, queueStatus) || supervisorDiagnosticsHaveLaunchFailedV0(diagnostics) {
+	if supervisorLaunchFailedValueV0(execution.Outcome, execution.QueueStatus) ||
+		supervisorDiagnosticsHaveLaunchFailedV0(execution.Diagnostics) {
 		return SupervisorPublicStatusLaunchFailedV0
 	}
-	if supervisorLiveEvidenceV0(outcome, queueStatus, evidenceRefs) || supervisorDiagnosticsHaveLiveProcessV0(diagnostics) {
+	if supervisorLiveEvidenceV0(execution.Outcome, execution.QueueStatus, execution.EvidenceRefs) ||
+		supervisorExecutionDiagnosticsHaveLiveProcessV0(execution) {
 		return SupervisorPublicStatusRunningLiveV0
 	}
-	if supervisorExternalWaitValueV0(outcome, queueStatus) {
+	if supervisorExternalWaitValueV0(execution.Outcome, execution.QueueStatus) {
 		return SupervisorPublicStatusWaitingExternalV0
 	}
-	if supervisorWaitOutboxValueV0(outcome, queueStatus) ||
-		(supervisorDiagnosticsHavePendingOutboxV0(diagnostics) && !supervisorRunningValueV0(outcome)) {
+	if supervisorWaitOutboxValueV0(execution.Outcome, execution.QueueStatus) ||
+		(supervisorDiagnosticsHavePendingOutboxV0(execution.Diagnostics) &&
+			!supervisorRunningValueV0(execution.Outcome)) {
 		return SupervisorPublicStatusWaitingOutboxV0
 	}
-	if supervisorRunningValueV0(outcome, queueStatus) || supervisorDiagnosticsHaveUnverifiedRunningV0(diagnostics) {
+	if supervisorRunningValueV0(execution.Outcome, execution.QueueStatus) ||
+		supervisorExecutionDiagnosticsHaveUnverifiedRunningV0(execution) {
 		return SupervisorPublicStatusStalledV0
 	}
 	return SupervisorPublicStatusOKV0
@@ -296,6 +301,24 @@ func supervisorExecutionIsOnlyWaitingOutboxV0(execution orquestaruncoordinator.R
 	}
 	return supervisorDiagnosticsHavePendingOutboxV0(execution.Diagnostics) &&
 		!supervisorRunningValueV0(execution.Outcome)
+}
+
+func supervisorExecutionDiagnosticsHaveLiveProcessV0(
+	execution orquestaruncoordinator.RunExecutionSummaryV0,
+) bool {
+	if strings.TrimSpace(execution.RunRef) == "" {
+		return supervisorDiagnosticsHaveLiveProcessV0(execution.Diagnostics)
+	}
+	return supervisorDiagnosticsHaveLiveProcessForRunV0(execution.Diagnostics, execution.RunRef)
+}
+
+func supervisorExecutionDiagnosticsHaveUnverifiedRunningV0(
+	execution orquestaruncoordinator.RunExecutionSummaryV0,
+) bool {
+	if strings.TrimSpace(execution.RunRef) == "" {
+		return supervisorDiagnosticsHaveUnverifiedRunningV0(execution.Diagnostics)
+	}
+	return supervisorDiagnosticsHaveUnverifiedRunningForRunV0(execution.Diagnostics, execution.RunRef)
 }
 
 func supervisorWaitOutboxValueV0(values ...string) bool {
@@ -392,6 +415,23 @@ func supervisorDiagnosticsHaveLiveProcessV0(diagnostics []orquestaruncoordinator
 	return false
 }
 
+func supervisorDiagnosticsHaveLiveProcessForRunV0(
+	diagnostics []orquestaruncoordinator.RunDrainDiagnosticV0,
+	runRef string,
+) bool {
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" {
+		return false
+	}
+	for _, diagnostic := range diagnostics {
+		if strings.TrimSpace(diagnostic.RunRef) == runRef &&
+			supervisorDiagnosticHasLiveProcessV0(diagnostic) {
+			return true
+		}
+	}
+	return false
+}
+
 func supervisorDiagnosticsHavePendingOutboxV0(diagnostics []orquestaruncoordinator.RunDrainDiagnosticV0) bool {
 	for _, diagnostic := range diagnostics {
 		if supervisorDiagnosticHasPendingOutboxV0(diagnostic) {
@@ -416,6 +456,29 @@ func supervisorDiagnosticsHaveLaunchFailedV0(diagnostics []orquestaruncoordinato
 
 func supervisorDiagnosticsHaveUnverifiedRunningV0(diagnostics []orquestaruncoordinator.RunDrainDiagnosticV0) bool {
 	for _, diagnostic := range diagnostics {
+		if supervisorDiagnosticHasLiveProcessV0(diagnostic) {
+			continue
+		}
+		if supervisorRunningValueV0(diagnostic.Kind, diagnostic.Status) &&
+			!supervisorLiveEvidenceV0(diagnostic.Kind, diagnostic.Status, diagnostic.EvidenceRefs) {
+			return true
+		}
+	}
+	return false
+}
+
+func supervisorDiagnosticsHaveUnverifiedRunningForRunV0(
+	diagnostics []orquestaruncoordinator.RunDrainDiagnosticV0,
+	runRef string,
+) bool {
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" {
+		return false
+	}
+	for _, diagnostic := range diagnostics {
+		if strings.TrimSpace(diagnostic.RunRef) != runRef {
+			continue
+		}
 		if supervisorDiagnosticHasLiveProcessV0(diagnostic) {
 			continue
 		}
