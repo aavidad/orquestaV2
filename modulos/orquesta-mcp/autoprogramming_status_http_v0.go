@@ -154,7 +154,12 @@ func newMCPAutoprogrammingStatusTimeoutResultV0(
 	result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingDiagnosticV0(
 		"autoprogramming_status_timeout",
 		"executor",
-		"consulta de estado cancelada por timeout HTTP; reintentar lectura o consultar run_ref acotado",
+		"consulta de estado cancelada por timeout HTTP; no relanzar goal ni usar loop legacy sin diagnostico acotado",
+	))
+	result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingDiagnosticV0(
+		"autoprogramming_status_timeout_action",
+		"operator",
+		"acciones: poll_autoprogramming_status_with_run_ref, observe_active_goals_once_with_operation_ref, inspect_goal_backend_snapshot",
 	))
 	return result
 }

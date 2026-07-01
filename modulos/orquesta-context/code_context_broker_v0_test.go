@@ -101,6 +101,54 @@ func TestCodeContextBrokerV0PermiteCodebaseMCPConOptInCentralYConsulta(t *testin
 	}
 }
 
+func TestCodeContextBrokerV0NoArrancaCodebaseMCPConLeaseActivoDelRepo(t *testing.T) {
+	query := validCodeContextQueryTestV0()
+	query.AllowExternalIndexer = true
+	leases := NewInMemoryCodeContextToolLeaseStoreV0()
+	now := time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC)
+	if _, err := leases.BeginCodeContextToolLeaseV0(context.Background(), CodeContextToolLeaseRequestV0{
+		RequestRef:      "request-ref-code-context-existing-lease",
+		RepositoryRef:   query.RepositoryRef,
+		QueryHash:       "query-hash-existing",
+		ToolRef:         "provider-ref-codebase-central",
+		ProviderKind:    CodeContextProviderKindCodebaseMCPV0,
+		OwnerRef:        "owner-ref-existing",
+		StartedAt:       now.Format(time.RFC3339),
+		LeaseTTLSeconds: 60,
+	}); err != nil {
+		t.Fatalf("begin existing lease: %v", err)
+	}
+	provider := &fakeCodeContextProviderV0{}
+	broker := NewCodeContextBrokerV0(CodeContextBrokerConfigV0{
+		Provider:               provider,
+		ProviderRef:            "provider-ref-codebase-central",
+		ProviderKind:           CodeContextProviderKindCodebaseMCPV0,
+		ExternalIndexerEnabled: true,
+		ToolLeasePort:          leases,
+		Clock:                  fixedCodeContextClockTestV0(now),
+	})
+
+	result, err := broker.QueryCodeContextV0(context.Background(), query)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	requireCodeContextIssueTestV0(t, result, ErrCodeContextLeaseActivoV0)
+	if provider.callCountV0() != 0 {
+		t.Fatalf("provider calls=%d, want 0", provider.callCountV0())
+	}
+	active, err := leases.ListCodeContextToolLeasesV0(context.Background(), CodeContextToolLeaseListFilterV0{
+		RepositoryRef: query.RepositoryRef,
+		ToolRef:       "provider-ref-codebase-central",
+		Status:        CodeContextToolLeaseStatusActiveV0,
+	})
+	if err != nil {
+		t.Fatalf("list leases: %v", err)
+	}
+	if len(active) != 1 || active[0].OwnerRef != "owner-ref-existing" {
+		t.Fatalf("active leases=%+v", active)
+	}
+}
+
 func TestCodeContextBrokerV0LimitaResultadosYSnippets(t *testing.T) {
 	query := validCodeContextQueryTestV0()
 	query.MaxResults = 1

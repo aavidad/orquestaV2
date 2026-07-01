@@ -1,6 +1,7 @@
 package orquestamcp
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -152,9 +153,11 @@ func (handler mcpAutoprogrammingObserveActiveGoalsHTTPHandlerV0) executeObserveA
 		return newMCPAutoprogrammingObserveActiveGoalsAlreadyRunningV0(r, input), nil, true
 	}
 	done := make(chan mcpAutoprogrammingObserveActiveGoalsHTTPExecutionV0, 1)
+	ctx, cancel := context.WithCancel(runSupervisorExecutionContextV0(r))
 	go func() {
 		defer handler.operations.finishV0(operationRef)
-		result, err := handler.executor.Execute(runSupervisorExecutionContextV0(r), input)
+		defer cancel()
+		result, err := handler.executor.Execute(ctx, input)
 		done <- mcpAutoprogrammingObserveActiveGoalsHTTPExecutionV0{result: result, err: err}
 	}()
 	timer := time.NewTimer(timeout)
@@ -163,6 +166,7 @@ func (handler mcpAutoprogrammingObserveActiveGoalsHTTPHandlerV0) executeObserveA
 	case execution := <-done:
 		return execution.result, execution.err, false
 	case <-timer.C:
+		cancel()
 		return newMCPAutoprogrammingObserveActiveGoalsAcceptedBackgroundV0(r, input), nil, true
 	}
 }

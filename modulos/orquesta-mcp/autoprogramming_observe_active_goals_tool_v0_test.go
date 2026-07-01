@@ -228,6 +228,33 @@ func TestMCPAutoprogrammingObserveActiveGoalsHTTPHandlerV0AceptaBackgroundSiTard
 	}
 }
 
+func TestMCPAutoprogrammingObserveActiveGoalsHTTPHandlerV0CancelaExecutorAlAceptarBackground(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingObserveActiveGoalsHTTPExecutorForTestV0{
+		waitForCancel:  true,
+		cancelObserved: make(chan struct{}),
+		result: MCPAutoprogrammingObserveActiveGoalsToolResultV0{
+			Estado: MCPAutoprogrammingObserveActiveGoalsEstadoOKV0,
+		},
+	}
+	req := httptest.NewRequest(
+		http.MethodPost,
+		MCPAutoprogrammingObserveActiveGoalsHTTPPathV0,
+		bytes.NewBufferString(`{"request_id":"request-ref-observe-active-goals-cancel-001"}`),
+	)
+	rec := httptest.NewRecorder()
+
+	newMCPAutoprogrammingObserveActiveGoalsHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	select {
+	case <-executor.cancelObserved:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("executor no recibio cancelacion tras background accepted")
+	}
+}
+
 type errMCPAutoprogrammingObserveActiveGoalsForTestV0 string
 
 func (err errMCPAutoprogrammingObserveActiveGoalsForTestV0) Error() string {
@@ -258,16 +285,26 @@ func (executor *fakeMCPAutoprogrammingObserveActiveGoalsExecutorForTestV0) Execu
 }
 
 type fakeMCPAutoprogrammingObserveActiveGoalsHTTPExecutorForTestV0 struct {
-	input  MCPAutoprogrammingObserveActiveGoalsToolInputV0
-	result MCPAutoprogrammingObserveActiveGoalsToolResultV0
-	delay  time.Duration
+	input          MCPAutoprogrammingObserveActiveGoalsToolInputV0
+	result         MCPAutoprogrammingObserveActiveGoalsToolResultV0
+	delay          time.Duration
+	waitForCancel  bool
+	cancelObserved chan struct{}
 }
 
 func (executor *fakeMCPAutoprogrammingObserveActiveGoalsHTTPExecutorForTestV0) Execute(
-	_ context.Context,
+	ctx context.Context,
 	input MCPAutoprogrammingObserveActiveGoalsToolInputV0,
 ) (MCPAutoprogrammingObserveActiveGoalsToolResultV0, error) {
 	executor.input = input
+	if executor.waitForCancel {
+		if executor.cancelObserved == nil {
+			executor.cancelObserved = make(chan struct{})
+		}
+		<-ctx.Done()
+		close(executor.cancelObserved)
+		return executor.result, nil
+	}
 	if executor.delay > 0 {
 		time.Sleep(executor.delay)
 	}

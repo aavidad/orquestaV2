@@ -40,6 +40,7 @@ const (
 	ErrCodeContextConcurrenciaV0           = "code_context_concurrencia_agotada"
 	ErrCodeContextLeaseRequeridoV0         = "code_context_lease_requerido"
 	ErrCodeContextLeaseErrorV0             = "code_context_lease_error"
+	ErrCodeContextLeaseActivoV0            = "code_context_lease_activo"
 )
 
 const (
@@ -252,8 +253,14 @@ func (broker *CodeContextBrokerV0) QueryCodeContextV0(
 
 	lease, leaseBegun, leaseErr := broker.beginToolLeaseV0(ctx, query)
 	if leaseErr != nil {
+		code := ErrCodeContextLeaseErrorV0
+		message := "no se pudo registrar lease central para proveedor de contexto"
+		if leaseErr == errCodeContextLeaseActivoV0 {
+			code = ErrCodeContextLeaseActivoV0
+			message = "codebase-memory-mcp ya tiene un lease activo para este repositorio; no se arranca otra instancia"
+		}
 		result := newCodeContextErrorResultV0(query, []CodeContextIssueV0{
-			codeContextIssueV0(ErrCodeContextLeaseErrorV0, "tool_lease", "no se pudo registrar lease central para proveedor de contexto"),
+			codeContextIssueV0(code, "tool_lease", message),
 		})
 		broker.storeInflightResultV0(key, result, nil)
 		return result, nil
@@ -556,6 +563,21 @@ func (broker *CodeContextBrokerV0) beginToolLeaseV0(
 	if broker.config.ToolLeasePort == nil {
 		return CodeContextToolLeaseV0{}, false, nil
 	}
+	if broker.config.ProviderKind == CodeContextProviderKindCodebaseMCPV0 {
+		if listPort, ok := broker.config.ToolLeasePort.(CodeContextToolLeaseListPortV0); ok {
+			active, err := listPort.ListCodeContextToolLeasesV0(ctx, CodeContextToolLeaseListFilterV0{
+				RepositoryRef: query.RepositoryRef,
+				ToolRef:       broker.config.ProviderRef,
+				Status:        CodeContextToolLeaseStatusActiveV0,
+			})
+			if err != nil {
+				return CodeContextToolLeaseV0{}, false, err
+			}
+			if len(active) > 0 {
+				return CodeContextToolLeaseV0{}, false, errCodeContextLeaseActivoV0
+			}
+		}
+	}
 	now := broker.config.Clock().UTC()
 	request := CodeContextToolLeaseRequestV0{
 		RequestRef:      query.RequestRef,
@@ -577,6 +599,14 @@ func (broker *CodeContextBrokerV0) beginToolLeaseV0(
 	}
 	return lease, true, nil
 }
+
+type codeContextLeaseActiveErrorV0 struct{}
+
+func (codeContextLeaseActiveErrorV0) Error() string {
+	return ErrCodeContextLeaseActivoV0
+}
+
+var errCodeContextLeaseActivoV0 error = codeContextLeaseActiveErrorV0{}
 
 func (broker *CodeContextBrokerV0) finishToolLeaseV0(
 	ctx context.Context,

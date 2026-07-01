@@ -65,7 +65,8 @@ func TestMCPAutoprogrammingStatusHTTPHandlerV0TimeoutDevuelveJSONPublico(t *test
 	if result.Estado != MCPAutoprogrammingStatusEstadoErrorV0 ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "autoprogramming_status_timeout" ||
-		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_status_timeout") {
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_status_timeout") ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_status_timeout_action") {
 		t.Fatalf("result=%+v", result)
 	}
 }
