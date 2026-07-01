@@ -505,7 +505,9 @@ func TestServerObserveAppDirectorGoalHTTPClienteRealRecibeTimeoutJSONV0(t *testi
 		t.Fatalf("decode response: %v", err)
 	}
 	if result.Estado != orquestamcp.MCPObserveAppDirectorGoalEstadoErrorV0 ||
+		!result.Partial ||
 		result.RunRef != "run-ref-server-observe-goal-timeout-001" ||
+		result.RecommendedAction != "observe_later" ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != orquestamcp.MCPObserveAppDirectorGoalHTTPTimeoutCodeV0 ||
 		resp.Header.Get("X-Correlation-ID") != "corr-server-observe-goal-timeout-header-001" {

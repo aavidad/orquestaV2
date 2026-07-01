@@ -85,10 +85,14 @@ func TestMCPObserveAppDirectorGoalHTTPHandlerV0TimeoutDevuelveJSONPublico(t *tes
 		t.Fatalf("decode result: %v", err)
 	}
 	if result.Estado != MCPObserveAppDirectorGoalEstadoErrorV0 ||
+		!result.Partial ||
 		result.RunRef != "run-ref-goal-http-timeout-001" ||
+		result.RecommendedAction != "observe_later" ||
+		result.Summary == "" ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != MCPObserveAppDirectorGoalHTTPTimeoutCodeV0 ||
-		result.Errores[0].Field != "executor" {
+		result.Errores[0].Field != "executor" ||
+		!stringInSliceForMCPObserveGoalHTTPTestV0(result.EvidenceRefs, "evidence-ref-observe-app-director-goal-timeout") {
 		t.Fatalf("result=%+v", result)
 	}
 	select {
