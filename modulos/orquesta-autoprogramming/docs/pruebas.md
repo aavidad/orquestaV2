@@ -54,6 +54,14 @@ Cobertura actual:
 - reconciliacion T208 no requiere codigo en este modulo; la evidencia se valida
   con la bateria cruzada del paquete y con ACK que declara
   `contexto_ref_only_resuelto`.
+- automejora idle v0 resuelve defaults: 60 segundos por defecto, `0` desactiva
+  la automejora idle y `target_queue` permite preparar trabajo secundario cuando
+  hay capacidad libre y la cola visible esta por debajo del objetivo;
+- planner de backlog salta tareas ya visibles en cola, filtra secciones
+  narrativas y puede crear una tarea scanner `Escaneo backlog nuevos` con epoch,
+  reservas, lineas y hashes de documentos;
+- proyeccion publica de trabajo externo distingue `outbox_pending`,
+  `wait_external` y `external_process_verified`.
 
 ## Integracion focal
 

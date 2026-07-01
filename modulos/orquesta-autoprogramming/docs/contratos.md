@@ -204,6 +204,46 @@ Invariantes:
 - `complete` de un goal no se considera cierre por este modulo; la validacion
   de cierre queda en `orquesta-goal` y en la composicion.
 
+## Automejora idle v0
+
+`ResolveAutoprogrammingIdleSelfImprovementConfigV0` normaliza la configuracion
+que una composicion ya leyo desde su entorno. El modulo no llama a `os.Getenv`.
+
+Variables canonicas transportadas como contrato:
+
+- `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS`: por defecto 60; valor
+  `0` desactiva la automejora idle.
+- `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE`: por defecto 1; permite
+  rellenar cola secundaria cuando hay capacidad libre y la cola visible esta por
+  debajo del objetivo.
+
+`DecideAutoprogrammingIdleSelfImprovementV0` devuelve `prepare=true` si:
+
+- el servidor lleva al menos `after_seconds` sin ejecuciones; o
+- hay `free_capacity > 0` y `queue_size < target_queue`.
+
+`PlanAutoprogrammingBacklogSelfImprovementV0` opera solo con entradas ya
+proyectadas por la composicion:
+
+- salta tareas ya visibles en cola por `task_ref` o `section_ref`;
+- filtra secciones narrativas y las conserva como `skipped` con razon
+  `narrative_section`, sin convertirlas en runs;
+- puede emitir una tarea scanner `Escaneo backlog nuevos` para descubrir huecos
+  nuevos, preservando `backlog_scan_epoch`, reservas y `backlog_scan_doc` con
+  linea/hash.
+
+`ProjectAutoprogrammingExternalWorkV0` publica un estado compacto y distinguible
+para trabajo externo: `outbox_pending`, `wait_external`,
+`external_process_verified` o `no_external_work`. La verificacion de proceso
+externo requiere refs externas y bandera `external_process_verified=true`.
+
+Invariantes:
+
+- no importa servidor, HTTP, runtime, DB, VCS, shell ni filesystem;
+- no decide modelos, proveedores, puertos ni ejecucion real;
+- las refs del scanner son opacas y compactas para que el ACK cite epoch, ref,
+  lineas y hashes sin transportar documentos completos.
+
 ## AutoprogrammingRequestV1
 
 Versiona la solicitud `v0` para composiciones que ya tienen perfiles de trabajo

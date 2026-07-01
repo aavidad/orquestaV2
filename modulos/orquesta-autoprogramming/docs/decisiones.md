@@ -104,3 +104,22 @@ runtime/servidor.
 Consecuencia: este modulo solo mantiene validacion y politicas puras de
 autoprogramacion. Nuevos huecos del guardian deben documentarse como Txx
 focales con evidencia propia y write-set de su owner real.
+
+## 2026-07-01: contrato puro para automejora idle del servidor
+
+Decision: el modulo declara un contrato `v0` para decidir si una composicion
+de servidor debe preparar automejora idle, planificar entradas de backlog y
+proyectar estado externo, pero no lee entorno ni arranca trabajo.
+
+Motivo: los criterios de APG-004/T208 implican variables y estado de servidor
+(`ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS`,
+`ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE`, cola visible, outbox y
+proceso externo). Esa semantica debe ser verificable para composiciones sin
+meter servidor, runtime ni filesystem en `orquesta-autoprogramming`.
+
+Consecuencia: `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS` tiene
+default contractual 60 y `0` desactiva la automejora idle. El planner conserva
+tareas ya visibles en cola como skipped, filtra narrativas y puede emitir una
+tarea scanner con refs de scanner/hash. La proyeccion publica distingue
+`outbox_pending`, `wait_external` y `external_process_verified`; la composicion
+real sigue siendo responsable de observar outbox/procesos y ejecutar tests.

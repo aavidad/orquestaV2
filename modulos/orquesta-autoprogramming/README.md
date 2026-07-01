@@ -26,6 +26,11 @@ Incluye:
 - `BuildAutoprogrammingSelfImprovementRequestV0` para convertir fallos
   observados por director/agentes en automejoras secundarias de baja prioridad,
   con evidencia, write-set propio y sin bloquear el trabajo principal;
+- `ResolveAutoprogrammingIdleSelfImprovementConfigV0`,
+  `DecideAutoprogrammingIdleSelfImprovementV0`,
+  `PlanAutoprogrammingBacklogSelfImprovementV0` y
+  `ProjectAutoprogrammingExternalWorkV0` para modelar, como contrato puro, la
+  automejora idle del servidor sin leer entorno ni tocar runtime;
 - errores publicos tipados para issues de contrato.
 
 Nota T208 2026-05-27: este modulo solo aporta contratos puros para

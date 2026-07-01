@@ -168,8 +168,8 @@ func TestBuildAutoprogrammingProgrammableWorkV0NormalizaContextRefsNoCompactos(t
 	}
 	task := result.Work.Tasks[0]
 	assertAutoprogrammingContextRefV0(t, task.ContextRefs, "doc-ref:autoprog-t29")
-	assertAutoprogrammingContextRefPrefixV0(t, task.ContextRefs, "context_ref:backlog-input-")
-	assertAutoprogrammingContextRefPrefixV0(t, task.ContextRefs, "context_ref:backlog-output-")
+	assertAutoprogrammingContextRefPrefixV0(t, task.ContextRefs, "context_ref:backlog_input-")
+	assertAutoprogrammingContextRefPrefixV0(t, task.ContextRefs, "context_ref:backlog_output-")
 	for _, ref := range task.ContextRefs {
 		if strings.ContainsAny(ref, " /\\\t\r\n") {
 			t.Fatalf("context_ref no compacto: %q refs=%v", ref, task.ContextRefs)
@@ -296,7 +296,7 @@ func TestBuildAutoprogrammingProgrammableWorkV0CompactaBacklogScanParaWorkflowTa
 		t.Fatalf("payload demasiado grande: %d %s", len(payload), payload)
 	}
 	assertAutoprogrammingContextRefV0(t, task.ContextRefs, "backlog_scan_epoch:backlog-scan-epoch-5f7d86dffafa")
-	assertAutoprogrammingContextRefPrefixV0(t, task.ContextRefs, "context_ref:backlog-input-")
+	assertAutoprogrammingContextRefPrefixV0(t, task.ContextRefs, "context_ref:backlog_input-")
 }
 
 func TestEnsureAutoprogrammingWorkflowTaskAcceptedByCoreV0PreservaMarkerDirectorOperativoV0(t *testing.T) {

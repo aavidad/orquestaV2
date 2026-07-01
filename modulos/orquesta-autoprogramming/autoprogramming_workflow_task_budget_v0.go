@@ -74,6 +74,11 @@ func repairAutoprogrammingWorkflowTaskForCoreErrorV0(
 	if !errors.As(err, &taskErr) {
 		return task
 	}
+	if taskErr.Code == orquestacoreworkflow.ErrWorkflowTaskInvalidaV0 &&
+		strings.TrimSpace(taskErr.Field) == "context_refs" {
+		task.ContextRefs = compactAutoprogrammingWorkflowRefsV0("context_ref", task.ContextRefs)
+		return task
+	}
 	switch taskErr.Code {
 	case orquestacoreworkflow.ErrWorkflowTaskPayloadInvalidoV0:
 		return compactAutoprogrammingWorkflowTaskAggressivelyV0(task)

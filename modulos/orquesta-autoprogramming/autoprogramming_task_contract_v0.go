@@ -156,6 +156,7 @@ func autoprogrammingWorkflowContextRefPrefixV0(value string) string {
 		prefix = before
 	}
 	prefix = normalizeAutoprogrammingTaskAreaV0(prefix)
+	prefix = strings.ReplaceAll(prefix, "-", "_")
 	if prefix == "" {
 		return "context"
 	}
