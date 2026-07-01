@@ -70,6 +70,53 @@ func TestRuntimeV0SupervisorNoPreparaAutomejoraConWaitUnhandledOutboxV0(t *testi
 	}
 }
 
+func TestRuntimeV0IdleSelfImprovementAfterZeroDesactivaPlanificacionV0(t *testing.T) {
+	now := time.Date(2026, 7, 1, 23, 45, 0, 0, time.UTC)
+	store := &memoryStateStoreV0{}
+	supervisor := &fakeSupervisorV0{
+		results: []fakeSupervisorResultV0{{result: orquestarunsupervisor.RunSupervisorResultV0{
+			StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
+		}}},
+		planRequests: []IdleSelfImprovementRequestV0{{RequestRef: "request-ref-backlog-disabled"}},
+		selfStarted:  make(chan struct{}, 1),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                       t.TempDir(),
+		TickInterval:                   time.Hour,
+		IdleSelfImprovementDisabled:    true,
+		IdleSelfImprovementAfter:       0,
+		IdleSelfImprovementMaxRequests: 3,
+		IdleSelfImprovementTargetQueue: 4,
+		AuditDisabled:                  true,
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: store,
+		Clock:      fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	markNoExecutionSinceForTestV0(runtime, now.Add(-2*time.Minute))
+
+	runtime.runSupervisorTickV0(context.Background())
+
+	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
+		t.Fatalf("automejora apagada no debe planificar: plan_calls=%d self_calls=%d",
+			supervisor.planCalls,
+			supervisor.selfCalls,
+		)
+	}
+	select {
+	case <-supervisor.selfStarted:
+		t.Fatalf("automejora apagada preparo trabajo")
+	case <-time.After(50 * time.Millisecond):
+	}
+	if store.last.IdleSelfImprovementReason != "disabled" ||
+		store.last.IdleSelfImprovementFlight {
+		t.Fatalf("state=%+v", store.last)
+	}
+}
+
 func TestSupervisorProjectionV0WaitExternalNoEsRunningV0(t *testing.T) {
 	now := time.Date(2026, 6, 11, 10, 20, 0, 0, time.UTC)
 	state := (&StatusTrackerV0{}).MarkSupervisorV0(
