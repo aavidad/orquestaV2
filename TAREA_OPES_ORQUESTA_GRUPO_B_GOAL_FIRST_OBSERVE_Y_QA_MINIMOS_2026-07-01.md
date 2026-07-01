@@ -213,6 +213,89 @@ Acción esperada:
 - Si la cola fuerza `stopped` por timeout, no debe ocultar que el goal Codex
   continúa `active`.
 
+### 7. Goal sigue `active` tras entrega durable y texto estable
+
+En la misma ola P0-clean, el tema 011 quedó con artefactos de entrega escritos:
+
+- `trabajo/docs/orquesta_goal_result_v0.json`
+- `trabajo/opes_topic_rework_delivery.json`
+- `trabajo/opes_topic_rework_delivery.md`
+- `validacion/informe_extension_temario.json`
+- `validacion/informe_texto_publico_sin_meta_examen.json`
+- `validacion/informe_texto_publico_sin_meta_examen_publicables_tema_011.json`
+
+El texto publicable permaneció estable entre dos comprobaciones:
+
+- `tema_011_ampliado_limpio.md`: SHA256
+  `e97f5c63c91416b64f93e2ad2768f20599a533f0071f17c5320e29a26b88c38e`
+- `tema_011_resumen_limpio.md`: SHA256
+  `7017758d58385eab28d33cd10f85243ed985482cbd40e9750aea6f69df7e514b`
+- recuento ampliado: 11.507 palabras.
+- validadores de limpieza: `pass`, 0 hallazgos.
+
+Pese a ello, `goals_1.sqlite` seguía mostrando:
+
+`0f370215-fe7f-4745-bfff-c9ada2c0dd96|active|325523|1422|2026-07-01 08:12:57`
+
+Además, el goal siguió consumiendo tokens y reescribiendo informes ya existentes
+sin cambiar el texto.
+
+Acción esperada:
+
+- Si el texto está estable, las validaciones pasan y existe resultado durable,
+  Orquesta debe cerrar el goal o pedir un rework concreto.
+- Evitar bucles de cierre que solo reescriben informes equivalentes.
+- Exponer una razón de continuidad si el goal no puede cerrarse: campo faltante,
+  validador pendiente, contrato inválido o archivo rechazado.
+
+### 8. `orquesta_goal_result_v0.json` sin contrato mínimo
+
+En el tema 011, `trabajo/docs/orquesta_goal_result_v0.json` contiene resumen,
+artefactos y `required_test_results`, pero no incluye campos mínimos:
+
+- `schema_version`: `null`
+- `status`: `null`
+- `estado`: `null`
+
+Impacto: OPES no puede decidir de forma segura si el resultado es terminal,
+preliminar, inválido o solo un handoff textual.
+
+Acción esperada:
+
+- Todo `orquesta_goal_result_v0.json` debe incluir versión de esquema y estado
+  terminal explícito.
+- Si falta el estado, el validador de Orquesta debe rechazarlo y devolver error
+  actionable antes de seguir consumiendo tokens.
+
+### 9. API conserva `blocked/stale_running` después de goals `complete`
+
+Después de que los seis goals P0-clean pasaran a `complete` en
+`goals_1.sqlite`, `POST /api/v0/autoprogramming/status` seguía devolviendo:
+
+- `queue.count=0`
+- `queue_health={"blocked":6,"observed_runs":6}`
+- `stale_running=6`
+- los seis runs terminales como `status=stopped`
+
+La base durable de Codex mostraba en cambio:
+
+- tema 006: `complete`
+- tema 010: `complete`
+- tema 011: `complete`
+- tema 012: `complete`
+- tema 018: `complete`
+- tema 019: `complete`
+
+Impacto: el dashboard/API de Orquesta no refleja el cierre real del backend y
+mantiene incidencias stale aunque el trabajo haya terminado.
+
+Acción esperada:
+
+- Reconciliar `autoprogramming/status` con `goals_1.sqlite` cuando los goals
+  pasen a `complete`.
+- Limpiar `stale_running` o transformarlo en historial resuelto.
+- Exponer `goal_status=complete` en cada run terminal, no solo `stopped`.
+
 ## No se ha tocado código
 
 Esta incidencia solo documenta el problema para el agente de Orquesta. OPES no
