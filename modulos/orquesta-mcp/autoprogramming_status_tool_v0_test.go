@@ -101,6 +101,40 @@ func TestMCPAutoprogrammingStatusExecutorV0DelegaEnColaYRun(t *testing.T) {
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0PublicaDiagnosticosConfigurados(t *testing.T) {
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		StatusDiagnostics: []MCPAutoprogrammingDiagnosticV0{
+			{
+				Code:         " codex_goal_backend_degraded ",
+				Scope:        " app_goal ",
+				Message:      " codex goal backend degradado: codex_app_server_auth_missing ",
+				EvidenceRefs: []string{"", " evidence-ref-server-codex-goal-backend-degraded-app_goal "},
+			},
+			{Code: "   ", Scope: "ignored"},
+		},
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "codex_goal_backend_degraded") {
+		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+	var found MCPAutoprogrammingDiagnosticV0
+	for _, diagnostic := range result.Diagnostics {
+		if diagnostic.Code == "codex_goal_backend_degraded" {
+			found = diagnostic
+			break
+		}
+	}
+	if found.Scope != "app_goal" ||
+		!strings.Contains(found.Message, "codex_app_server_auth_missing") ||
+		len(found.EvidenceRefs) != 1 ||
+		found.EvidenceRefs[0] != "evidence-ref-server-codex-goal-backend-degraded-app_goal" {
+		t.Fatalf("diagnostico=%+v diagnostics=%+v", found, result.Diagnostics)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0RecomiendaObserveGoalParaRunGoalFirst(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-first-001"
 	goalRef := "goal-ref-autop-status-goal-first-001"

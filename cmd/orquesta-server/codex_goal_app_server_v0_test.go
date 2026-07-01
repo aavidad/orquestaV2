@@ -1616,6 +1616,37 @@ func TestServerConfigWithCodexGoalBackendDiagnosticsV0BloqueaReadinessV0(t *test
 	}
 }
 
+func TestServerAutoprogrammingStatusDiagnosticsFromEffectiveConfigV0PublicaBackendGoalV0(t *testing.T) {
+	unavailable := serverCodexUnavailableGoalBackendV0{
+		IssueCode: "codex_app_server_auth_missing",
+	}
+	config := serverConfigWithCodexGoalBackendDiagnosticsV0(orquestaserver.ConfigV0{
+		EffectiveConfig: orquestaserver.ServerEffectiveConfigV0{
+			SchemaVersion: orquestaserver.ServerEffectiveConfigSchemaVersionV0,
+			Diagnostics: []orquestaserver.ServerDiagnosticV0{{
+				Code:    "diagnostico_no_autoprogramacion",
+				Scope:   "server",
+				Message: "no debe propagarse al status de autoprogramacion",
+			}},
+		},
+	}, serverCodexGoalBackendsV0{
+		AppGoal: serverCodexGoalBackendV0{
+			Starter:  unavailable,
+			Observer: unavailable,
+		},
+	})
+
+	diagnostics := serverAutoprogrammingStatusDiagnosticsFromEffectiveConfigV0(config.EffectiveConfig)
+
+	if len(diagnostics) != 1 ||
+		diagnostics[0].Code != serverCodexGoalBackendDegradedDiagnosticCodeV0 ||
+		diagnostics[0].Scope != "app_goal" ||
+		!strings.Contains(diagnostics[0].Message, "codex_app_server_auth_missing") ||
+		!containsStringForTestV0(diagnostics[0].EvidenceRefs, "evidence-ref-server-codex-goal-backend-degraded-app_goal") {
+		t.Fatalf("diagnostics=%+v effective=%+v", diagnostics, config.EffectiveConfig.Diagnostics)
+	}
+}
+
 func TestServerGoalShutdownHooksFromBackendsV0IncluyeAppEIdleV0(t *testing.T) {
 	appHook := &fakeServerGoalShutdownHookV0{id: "app"}
 	idleHook := &fakeServerGoalShutdownHookV0{id: "idle"}

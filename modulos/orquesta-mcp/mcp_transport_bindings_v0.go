@@ -28,6 +28,7 @@ type MCPTransportBindingsV0 struct {
 	AutoprogrammingObserveGoal                  MCPTransportAutoprogrammingObserveGoalExecutorV0
 	AutoprogrammingObserveActiveGoals           MCPTransportAutoprogrammingObserveActiveGoalsExecutorV0
 	AutoprogrammingGoalStates                   orquestagoal.GoalWorkStateStorePortV0
+	AutoprogrammingStatusDiagnostics            []MCPAutoprogrammingDiagnosticV0
 	AllowLegacyAutoprogrammingSupervisorActions bool
 	ServerShutdown                              MCPTransportServerShutdownExecutorV0
 	DomainWork                                  MCPDomainWorkExecutorPortV0

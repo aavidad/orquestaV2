@@ -39,6 +39,47 @@ func TestAutoprogrammingStatusAPIRouteV0(t *testing.T) {
 	}
 }
 
+func TestAutoprogrammingStatusAPIRouteV0PublicaDiagnosticosDeComposicion(t *testing.T) {
+	handler := NewHTTPHandlerV0(ConfigV0{
+		Timeout:          time.Second,
+		RunQueuePriority: &recordingAutoprogrammingStatusQueueExecutorV0{},
+		AutoprogrammingStatusDiagnostics: []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+			Code:         "codex_goal_backend_degraded",
+			Scope:        "app_goal",
+			Message:      "codex goal backend degradado: codex_app_server_auth_missing",
+			EvidenceRefs: []string{"evidence-ref-server-codex-goal-backend-degraded-app_goal"},
+		}},
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/autoprogramming/status",
+		strings.NewReader(`{}`),
+	)
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPAutoprogrammingStatusToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v body=%s", err, rec.Body.String())
+	}
+	found := false
+	for _, diagnostic := range result.Diagnostics {
+		if diagnostic.Code == "codex_goal_backend_degraded" &&
+			diagnostic.Scope == "app_goal" &&
+			strings.Contains(diagnostic.Message, "codex_app_server_auth_missing") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+}
+
 func TestAutoprogrammingStatusAPIRouteV0DevuelveTimeoutJSONSinColgar(t *testing.T) {
 	queue := &blockingAutoprogrammingStatusQueueExecutorV0{}
 	handler := NewHTTPHandlerV0(ConfigV0{

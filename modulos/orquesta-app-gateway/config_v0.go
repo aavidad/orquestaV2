@@ -39,6 +39,7 @@ type ConfigV0 struct {
 	AutoprogrammingObserveGoal                  orquestamcp.MCPTransportAutoprogrammingObserveGoalExecutorV0
 	AutoprogrammingObserveActiveGoals           orquestamcp.MCPTransportAutoprogrammingObserveActiveGoalsExecutorV0
 	AutoprogrammingGoalStates                   orquestagoal.GoalWorkStateStorePortV0
+	AutoprogrammingStatusDiagnostics            []orquestamcp.MCPAutoprogrammingDiagnosticV0
 	AllowLegacyAutoprogrammingSupervisorActions bool
 	GovernanceCatalog                           orquestagovernance.GovernanceCatalogProviderV0
 	OperatorQuery                               operator.OperatorMCPDirectedQueryPortV0

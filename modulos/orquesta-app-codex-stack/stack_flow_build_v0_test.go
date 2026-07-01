@@ -177,6 +177,26 @@ func TestBuildStackV0ExponeBindingsMCPNativosV0(t *testing.T) {
 	}
 }
 
+func TestBuildStackV0PropagaDiagnosticosAutoprogramacionABindingsV0(t *testing.T) {
+	config := codexStackBaseConfigForTestV0(t, newFakeCodexStackRuntimeV0(), nil, nil)
+	config.AutoprogrammingStatusDiagnostics = []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+		Code:         "codex_goal_backend_degraded",
+		Scope:        "app_goal",
+		Message:      "codex goal backend degradado: codex_app_server_auth_missing",
+		EvidenceRefs: []string{"evidence-ref-server-codex-goal-backend-degraded-app_goal"},
+	}}
+
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+	if len(stack.MCPTransportBindings.AutoprogrammingStatusDiagnostics) != 1 ||
+		stack.MCPTransportBindings.AutoprogrammingStatusDiagnostics[0].Code != "codex_goal_backend_degraded" ||
+		stack.MCPTransportBindings.AutoprogrammingStatusDiagnostics[0].Scope != "app_goal" {
+		t.Fatalf("diagnostics=%+v", stack.MCPTransportBindings.AutoprogrammingStatusDiagnostics)
+	}
+}
+
 func TestBuildStackV0CableaVerificadorWorktreeSiHaySnapshotStoreV0(t *testing.T) {
 	store := orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0()
 	config := ConfigV0{

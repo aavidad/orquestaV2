@@ -70,6 +70,7 @@ type MCPAutoprogrammingStatusToolExecutorV0 struct {
 	Stats                        MCPTransportDirectorStatsExecutorV0
 	GoalStateStore               orquestagoal.GoalWorkStateStorePortV0
 	GoalRunMarkerStore           orquestagoal.GoalWorkRunMarkerStorePortV0
+	StatusDiagnostics            []MCPAutoprogrammingDiagnosticV0
 	AllowLegacySupervisorActions bool
 }
 
@@ -103,6 +104,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 		ctx = context.Background()
 	}
 	result := newMCPAutoprogrammingStatusBaseV0(input)
+	result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingStatusConfiguredDiagnosticsV0(executor.StatusDiagnostics)...)
 	okCount := 0
 	if executor.Queue != nil {
 		queue, err := executor.Queue.Execute(ctx, mcpAutoprogrammingQueueInputV0(input))
@@ -873,6 +875,28 @@ func mcpAutoprogrammingDiagnosticV0(
 		Scope:   strings.TrimSpace(scope),
 		Message: strings.TrimSpace(message),
 	}
+}
+
+func mcpAutoprogrammingStatusConfiguredDiagnosticsV0(
+	diagnostics []MCPAutoprogrammingDiagnosticV0,
+) []MCPAutoprogrammingDiagnosticV0 {
+	if len(diagnostics) == 0 {
+		return nil
+	}
+	out := make([]MCPAutoprogrammingDiagnosticV0, 0, len(diagnostics))
+	for _, diagnostic := range diagnostics {
+		clean := MCPAutoprogrammingDiagnosticV0{
+			Code:         strings.TrimSpace(diagnostic.Code),
+			Scope:        strings.TrimSpace(diagnostic.Scope),
+			Message:      strings.TrimSpace(diagnostic.Message),
+			EvidenceRefs: compactStringsMCPV0(diagnostic.EvidenceRefs),
+		}
+		if clean.Code == "" {
+			continue
+		}
+		out = append(out, clean)
+	}
+	return out
 }
 
 func diagnosticsFromSuppressedQueueMCPAutoprogrammingV0(

@@ -89,6 +89,7 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 		Queue:                        config.RunQueuePriority,
 		Stats:                        config.DirectorStats,
 		GoalStateStore:               config.AutoprogrammingGoalStates,
+		StatusDiagnostics:            config.AutoprogrammingStatusDiagnostics,
 		AllowLegacySupervisorActions: config.AllowLegacyAutoprogrammingSupervisorActions,
 	}
 	return orquestahttpgateway.RouteHandlersV0{

@@ -106,13 +106,16 @@ func mcpOperatorQueryBindingV0(bindings MCPTransportBindingsV0) operator.Operato
 func autoprogrammingStatusExecutorFromBindingsV0(
 	bindings MCPTransportBindingsV0,
 ) MCPTransportAutoprogrammingStatusExecutorV0 {
-	if bindings.RunQueuePriority == nil && bindings.DirectorStats == nil {
+	if bindings.RunQueuePriority == nil &&
+		bindings.DirectorStats == nil &&
+		len(bindings.AutoprogrammingStatusDiagnostics) == 0 {
 		return nil
 	}
 	return MCPAutoprogrammingStatusToolExecutorV0{
 		Queue:                        bindings.RunQueuePriority,
 		Stats:                        bindings.DirectorStats,
 		GoalStateStore:               bindings.AutoprogrammingGoalStates,
+		StatusDiagnostics:            bindings.AutoprogrammingStatusDiagnostics,
 		AllowLegacySupervisorActions: bindings.AllowLegacyAutoprogrammingSupervisorActions,
 	}
 }
