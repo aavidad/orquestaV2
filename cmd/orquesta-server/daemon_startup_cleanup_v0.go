@@ -38,6 +38,7 @@ func cleanupCodexAppServerTmuxAfterStartupFailureV0(config orquestaserver.Config
 		SessionName:       codexAppServerTmuxSessionNameV0(config),
 		HomeDir:           runtimeConfig.HomeDir,
 		CodeHomeDir:       codeHomePath,
+		RuntimeWorkDir:    config.RuntimeWorkDir,
 		SourceCodeHomeDir: runtimeConfig.CodeHomeDir,
 		Timeout:           timeout,
 	}

@@ -98,6 +98,7 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 			SessionName:       codexAppServerTmuxSessionNameV0(config),
 			HomeDir:           runtimeConfig.HomeDir,
 			CodeHomeDir:       tmuxCodeHomePath,
+			RuntimeWorkDir:    config.RuntimeWorkDir,
 			SourceCodeHomeDir: runtimeConfig.CodeHomeDir,
 			Timeout:           codexAppServerTmuxStartupTimeoutV0(time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond),
 		}

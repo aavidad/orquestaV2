@@ -35,6 +35,7 @@ type serverCodexAppServerTmuxBackendV0 struct {
 	SessionName       string
 	HomeDir           string
 	CodeHomeDir       string
+	RuntimeWorkDir    string
 	SourceCodeHomeDir string
 	Timeout           time.Duration
 }
@@ -403,51 +404,144 @@ func (backend serverCodexAppServerTmuxBackendV0) prepareTmuxCodeHomeV0() error {
 	if codeHomeDir == "" {
 		return nil
 	}
+	if err := ensureCodexAppServerTmuxCodeHomeTargetSafeV0(codeHomeDir, backend.RuntimeWorkDir); err != nil {
+		return err
+	}
+	allowedFiles, err := backend.readTmuxCodeHomeAllowedFilesV0(codeHomeDir)
+	if err != nil {
+		return err
+	}
+	if err := os.RemoveAll(codeHomeDir); err != nil {
+		return codexAppServerCallErrorV0{
+			Code: "codex_app_server_tmux_code_home_unavailable",
+			Err:  err,
+		}
+	}
 	if err := os.MkdirAll(codeHomeDir, 0o700); err != nil {
 		return codexAppServerCallErrorV0{
 			Code: "codex_app_server_tmux_code_home_unavailable",
 			Err:  err,
 		}
 	}
-	sourceDir := strings.TrimSpace(backend.SourceCodeHomeDir)
-	if sourceDir == "" {
-		return nil
-	}
-	for _, name := range []string{"auth.json", "config.toml"} {
-		if err := copyCodexAppServerTmuxCodeHomeFileV0(sourceDir, codeHomeDir, name); err != nil {
-			return err
+	for _, name := range codexAppServerTmuxCodeHomeAllowedFileNamesV0() {
+		raw, ok := allowedFiles[name]
+		if !ok {
+			continue
+		}
+		if err := os.WriteFile(filepath.Join(codeHomeDir, name), raw, 0o600); err != nil {
+			return codexAppServerCallErrorV0{
+				Code: "codex_app_server_tmux_code_home_unavailable",
+				Err:  err,
+			}
 		}
 	}
 	return nil
 }
 
-func copyCodexAppServerTmuxCodeHomeFileV0(sourceDir string, targetDir string, name string) error {
-	sourcePath := filepath.Join(sourceDir, name)
-	targetPath := filepath.Join(targetDir, name)
-	if samePathCodexAppServerTmuxV0(sourcePath, targetPath) {
-		return nil
+func (backend serverCodexAppServerTmuxBackendV0) readTmuxCodeHomeAllowedFilesV0(codeHomeDir string) (map[string][]byte, error) {
+	allowedFiles := map[string][]byte{}
+	sourceDir := strings.TrimSpace(backend.SourceCodeHomeDir)
+	for _, name := range codexAppServerTmuxCodeHomeAllowedFileNamesV0() {
+		if sourceDir != "" {
+			raw, found, err := readCodexAppServerTmuxCodeHomeAllowedFileV0(sourceDir, name)
+			if err != nil {
+				return nil, err
+			}
+			if found {
+				allowedFiles[name] = raw
+				continue
+			}
+		}
+		raw, found, err := readCodexAppServerTmuxCodeHomeAllowedFileV0(codeHomeDir, name)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			allowedFiles[name] = raw
+		}
 	}
-	info, err := os.Lstat(sourcePath)
+	return allowedFiles, nil
+}
+
+func codexAppServerTmuxCodeHomeAllowedFileNamesV0() []string {
+	return []string{"auth.json", "config.toml"}
+}
+
+func readCodexAppServerTmuxCodeHomeAllowedFileV0(dir string, name string) ([]byte, bool, error) {
+	path := filepath.Join(strings.TrimSpace(dir), name)
+	info, err := os.Lstat(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil
+			return nil, false, nil
 		}
-		return codexAppServerCallErrorV0{
+		return nil, false, codexAppServerCallErrorV0{
 			Code: "codex_app_server_tmux_code_home_source_unavailable",
 			Err:  err,
 		}
 	}
 	if info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return nil
+		return nil, false, nil
 	}
-	raw, err := os.ReadFile(sourcePath)
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		return codexAppServerCallErrorV0{
+		return nil, false, codexAppServerCallErrorV0{
 			Code: "codex_app_server_tmux_code_home_source_unavailable",
 			Err:  err,
 		}
 	}
-	if err := os.WriteFile(targetPath, raw, 0o600); err != nil {
+	return raw, true, nil
+}
+
+func ensureCodexAppServerTmuxCodeHomeTargetSafeV0(codeHomeDir string, runtimeWorkDir string) error {
+	cleanTarget, err := filepath.Abs(strings.TrimSpace(codeHomeDir))
+	if err != nil {
+		return codexAppServerCallErrorV0{
+			Code: "codex_app_server_tmux_code_home_unsafe",
+			Err:  err,
+		}
+	}
+	cleanTarget = filepath.Clean(cleanTarget)
+	if filepath.Base(cleanTarget) != "codex-home" || filepath.Base(filepath.Dir(cleanTarget)) != codexAppServerTmuxDirV0 {
+		return codexAppServerCallErrorV0{
+			Code: "codex_app_server_tmux_code_home_unsafe",
+			Err:  errors.New("codex_app_server_tmux_code_home_not_goal_srv_target"),
+		}
+	}
+	if strings.TrimSpace(runtimeWorkDir) != "" {
+		cleanRuntimeDir, err := filepath.Abs(strings.TrimSpace(runtimeWorkDir))
+		if err != nil {
+			return codexAppServerCallErrorV0{
+				Code: "codex_app_server_tmux_code_home_unsafe",
+				Err:  err,
+			}
+		}
+		expectedTarget := filepath.Join(filepath.Clean(cleanRuntimeDir), codexAppServerTmuxDirV0, "codex-home")
+		if filepath.Clean(expectedTarget) != cleanTarget {
+			return codexAppServerCallErrorV0{
+				Code: "codex_app_server_tmux_code_home_unsafe",
+				Err:  errors.New("codex_app_server_tmux_code_home_outside_runtime_workdir"),
+			}
+		}
+	}
+	if err := ensureExistingPathHasNoSymlinkCodexAppServerTmuxV0(cleanTarget); err != nil {
+		return err
+	}
+	parentDir := filepath.Dir(cleanTarget)
+	if err := os.MkdirAll(parentDir, 0o700); err != nil {
+		return codexAppServerCallErrorV0{
+			Code: "codex_app_server_tmux_code_home_unavailable",
+			Err:  err,
+		}
+	}
+	if err := ensureExistingPathHasNoSymlinkCodexAppServerTmuxV0(cleanTarget); err != nil {
+		return err
+	}
+	if info, err := os.Lstat(cleanTarget); err == nil && !info.IsDir() {
+		return codexAppServerCallErrorV0{
+			Code: "codex_app_server_tmux_code_home_unsafe",
+			Err:  errors.New("codex_app_server_tmux_code_home_not_directory"),
+		}
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return codexAppServerCallErrorV0{
 			Code: "codex_app_server_tmux_code_home_unavailable",
 			Err:  err,
@@ -456,13 +550,43 @@ func copyCodexAppServerTmuxCodeHomeFileV0(sourceDir string, targetDir string, na
 	return nil
 }
 
-func samePathCodexAppServerTmuxV0(left string, right string) bool {
-	leftAbs, leftErr := filepath.Abs(strings.TrimSpace(left))
-	rightAbs, rightErr := filepath.Abs(strings.TrimSpace(right))
-	if leftErr != nil || rightErr != nil {
-		return filepath.Clean(left) == filepath.Clean(right)
+func ensureExistingPathHasNoSymlinkCodexAppServerTmuxV0(path string) error {
+	cleanPath := filepath.Clean(path)
+	volumeName := filepath.VolumeName(cleanPath)
+	rest := strings.TrimPrefix(cleanPath, volumeName)
+	separator := string(os.PathSeparator)
+	current := volumeName
+	if strings.HasPrefix(rest, separator) {
+		current += separator
+		rest = strings.TrimPrefix(rest, separator)
 	}
-	return filepath.Clean(leftAbs) == filepath.Clean(rightAbs)
+	for _, elem := range strings.Split(rest, separator) {
+		if elem == "" || elem == "." {
+			continue
+		}
+		if current == "" || current == separator || strings.HasSuffix(current, separator) {
+			current = current + elem
+		} else {
+			current = filepath.Join(current, elem)
+		}
+		info, err := os.Lstat(current)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return codexAppServerCallErrorV0{
+				Code: "codex_app_server_tmux_code_home_unavailable",
+				Err:  err,
+			}
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return codexAppServerCallErrorV0{
+				Code: "codex_app_server_tmux_code_home_unsafe",
+				Err:  errors.New("codex_app_server_tmux_code_home_symlink"),
+			}
+		}
+	}
+	return nil
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) tmuxOwnerMarkerExistsV0() bool {

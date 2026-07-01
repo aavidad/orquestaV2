@@ -46,11 +46,12 @@ func TestCleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0SoloMataSiProce
 		t.Fatalf("code home path: %v", err)
 	}
 	backend := serverCodexAppServerTmuxBackendV0{
-		PathEnv:     pathEnv,
-		SocketPath:  socketPath,
-		SessionName: codexAppServerTmuxSessionNameV0(config),
-		CodeHomeDir: codeHomePath,
-		Timeout:     time.Second,
+		PathEnv:        pathEnv,
+		SocketPath:     socketPath,
+		SessionName:    codexAppServerTmuxSessionNameV0(config),
+		CodeHomeDir:    codeHomePath,
+		RuntimeWorkDir: runtimeDir,
+		Timeout:        time.Second,
 	}
 	if err := backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{}); err != nil {
 		t.Fatalf("EnsureV0: %v", err)

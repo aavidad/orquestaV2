@@ -74,6 +74,7 @@ func TestServerCodexGoalBackendFromEnvV0TmuxPreflightOKV0(t *testing.T) {
 		SessionName:       codexAppServerTmuxSessionNameV0(config),
 		HomeDir:           homeDir,
 		CodeHomeDir:       codeHomePath,
+		RuntimeWorkDir:    runtimeDir,
 		SourceCodeHomeDir: sourceCodeHome,
 		Timeout:           time.Second,
 	}
@@ -129,6 +130,185 @@ sleep 30
 	}
 	if elapsed := time.Since(started); elapsed > 2*time.Second {
 		t.Fatalf("timeout no acotado: %s", elapsed)
+	}
+}
+
+func TestCodexAppServerTmuxBackendV0PreparaCodeHomeLimpioV0(t *testing.T) {
+	root := t.TempDir()
+	sourceCodeHome := filepath.Join(root, "source-codex-home")
+	codeHome := filepath.Join(root, "runtime", codexAppServerTmuxDirV0, "codex-home")
+	if err := os.MkdirAll(sourceCodeHome, 0o700); err != nil {
+		t.Fatalf("mkdir source: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(codeHome, "skills", ".system"), 0o700); err != nil {
+		t.Fatalf("mkdir dirty skills: %v", err)
+	}
+	for _, path := range []string{
+		filepath.Join(codeHome, ".tmp", "plugins-1", "plugin.json"),
+		filepath.Join(codeHome, "cache", "codex_apps_1", "entry.json"),
+		filepath.Join(codeHome, "app-server-control", "app-server-startup.lock"),
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatalf("mkdir dirty path %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte("dirty"), 0o600); err != nil {
+			t.Fatalf("write dirty path %s: %v", path, err)
+		}
+	}
+	for _, path := range []string{
+		filepath.Join(codeHome, "skills", ".system", "SKILL.md"),
+		filepath.Join(codeHome, "state_5.sqlite"),
+		filepath.Join(codeHome, "goals_1.sqlite"),
+		filepath.Join(codeHome, "logs_2.sqlite"),
+		filepath.Join(codeHome, "models_cache.json"),
+	} {
+		if err := os.WriteFile(path, []byte("dirty"), 0o600); err != nil {
+			t.Fatalf("write dirty file %s: %v", path, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(sourceCodeHome, "auth.json"), []byte(`{"token":"ok"}`), 0o644); err != nil {
+		t.Fatalf("write auth source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceCodeHome, "config.toml"), []byte("model = \"test\"\n"), 0o644); err != nil {
+		t.Fatalf("write config source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceCodeHome, "models_cache.json"), []byte("source dirty"), 0o600); err != nil {
+		t.Fatalf("write source mutable: %v", err)
+	}
+	backend := serverCodexAppServerTmuxBackendV0{
+		CodeHomeDir:       codeHome,
+		RuntimeWorkDir:    filepath.Join(root, "runtime"),
+		SourceCodeHomeDir: sourceCodeHome,
+	}
+
+	if err := backend.prepareTmuxCodeHomeV0(); err != nil {
+		t.Fatalf("prepareTmuxCodeHomeV0: %v", err)
+	}
+
+	for _, path := range []string{
+		filepath.Join(codeHome, "skills"),
+		filepath.Join(codeHome, ".tmp"),
+		filepath.Join(codeHome, "cache"),
+		filepath.Join(codeHome, "app-server-control"),
+		filepath.Join(codeHome, "state_5.sqlite"),
+		filepath.Join(codeHome, "goals_1.sqlite"),
+		filepath.Join(codeHome, "logs_2.sqlite"),
+		filepath.Join(codeHome, "models_cache.json"),
+	} {
+		if _, err := os.Lstat(path); !os.IsNotExist(err) {
+			t.Fatalf("estado mutable no limpiado path=%s err=%v", path, err)
+		}
+	}
+	assertProjectedModeV0(t, filepath.Join(codeHome, "auth.json"), 0o600)
+	assertProjectedModeV0(t, filepath.Join(codeHome, "config.toml"), 0o600)
+	if raw, err := os.ReadFile(filepath.Join(codeHome, "auth.json")); err != nil || string(raw) != `{"token":"ok"}` {
+		t.Fatalf("auth proyectado raw=%q err=%v", string(raw), err)
+	}
+	if raw, err := os.ReadFile(filepath.Join(codeHome, "config.toml")); err != nil || string(raw) != "model = \"test\"\n" {
+		t.Fatalf("config proyectada raw=%q err=%v", string(raw), err)
+	}
+}
+
+func TestCodexAppServerTmuxBackendV0PreparaCodeHomeConservaCredencialesActualesSiNoHayFuenteV0(t *testing.T) {
+	root := t.TempDir()
+	codeHome := filepath.Join(root, "runtime", codexAppServerTmuxDirV0, "codex-home")
+	if err := os.MkdirAll(filepath.Join(codeHome, "cache"), 0o700); err != nil {
+		t.Fatalf("mkdir code home: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(codeHome, "auth.json"), []byte(`{"old":true}`), 0o600); err != nil {
+		t.Fatalf("write auth: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(codeHome, "config.toml"), []byte("approval_policy = \"never\"\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(codeHome, "cache", "old.json"), []byte("dirty"), 0o600); err != nil {
+		t.Fatalf("write cache: %v", err)
+	}
+	backend := serverCodexAppServerTmuxBackendV0{
+		CodeHomeDir:    codeHome,
+		RuntimeWorkDir: filepath.Join(root, "runtime"),
+	}
+
+	if err := backend.prepareTmuxCodeHomeV0(); err != nil {
+		t.Fatalf("prepareTmuxCodeHomeV0: %v", err)
+	}
+
+	if raw, err := os.ReadFile(filepath.Join(codeHome, "auth.json")); err != nil || string(raw) != `{"old":true}` {
+		t.Fatalf("auth actual no conservado raw=%q err=%v", string(raw), err)
+	}
+	if raw, err := os.ReadFile(filepath.Join(codeHome, "config.toml")); err != nil || string(raw) != "approval_policy = \"never\"\n" {
+		t.Fatalf("config actual no conservada raw=%q err=%v", string(raw), err)
+	}
+	if _, err := os.Lstat(filepath.Join(codeHome, "cache")); !os.IsNotExist(err) {
+		t.Fatalf("cache no limpiada err=%v", err)
+	}
+}
+
+func TestCodexAppServerTmuxBackendV0PreparaCodeHomeRechazaSymlinkV0(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "target")
+	if err := os.MkdirAll(target, 0o700); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	goalDir := filepath.Join(root, "runtime", codexAppServerTmuxDirV0)
+	if err := os.MkdirAll(goalDir, 0o700); err != nil {
+		t.Fatalf("mkdir goal dir: %v", err)
+	}
+	codeHome := filepath.Join(goalDir, "codex-home")
+	if err := os.Symlink(target, codeHome); err != nil {
+		t.Skipf("symlink no disponible: %v", err)
+	}
+	backend := serverCodexAppServerTmuxBackendV0{
+		CodeHomeDir:    codeHome,
+		RuntimeWorkDir: filepath.Join(root, "runtime"),
+	}
+
+	err := backend.prepareTmuxCodeHomeV0()
+
+	if err == nil || !strings.Contains(err.Error(), "codex_app_server_tmux_code_home_unsafe") {
+		t.Fatalf("err=%v", err)
+	}
+	if _, statErr := os.Lstat(codeHome); statErr != nil {
+		t.Fatalf("symlink destino fue eliminado: %v", statErr)
+	}
+	if _, statErr := os.Stat(target); statErr != nil {
+		t.Fatalf("target externo fue tocado: %v", statErr)
+	}
+}
+
+func TestCodexAppServerTmuxBackendV0PreparaCodeHomeRechazaRutaNoGoalSrvV0(t *testing.T) {
+	root := t.TempDir()
+	codeHome := filepath.Join(root, "runtime", "codex-home")
+	backend := serverCodexAppServerTmuxBackendV0{
+		CodeHomeDir:    codeHome,
+		RuntimeWorkDir: filepath.Join(root, "runtime"),
+	}
+
+	err := backend.prepareTmuxCodeHomeV0()
+
+	if err == nil || !strings.Contains(err.Error(), "codex_app_server_tmux_code_home_unsafe") {
+		t.Fatalf("err=%v", err)
+	}
+	if _, statErr := os.Lstat(codeHome); !os.IsNotExist(statErr) {
+		t.Fatalf("ruta insegura fue creada err=%v", statErr)
+	}
+}
+
+func TestCodexAppServerTmuxBackendV0PreparaCodeHomeRechazaDestinoFueraDeRuntimeV0(t *testing.T) {
+	root := t.TempDir()
+	codeHome := filepath.Join(root, "other-runtime", codexAppServerTmuxDirV0, "codex-home")
+	backend := serverCodexAppServerTmuxBackendV0{
+		CodeHomeDir:    codeHome,
+		RuntimeWorkDir: filepath.Join(root, "runtime"),
+	}
+
+	err := backend.prepareTmuxCodeHomeV0()
+
+	if err == nil || !strings.Contains(err.Error(), "codex_app_server_tmux_code_home_unsafe") {
+		t.Fatalf("err=%v", err)
+	}
+	if _, statErr := os.Lstat(codeHome); !os.IsNotExist(statErr) {
+		t.Fatalf("destino externo fue creado err=%v", statErr)
 	}
 }
 
@@ -207,10 +387,12 @@ exit 2
 	t.Setenv("ORQUESTA_TEST_TMUX_LOG", tmuxLog)
 	socketPath := filepath.Join(root, "runtime", codexAppServerTmuxDirV0, "g-timeout.sock")
 	backend := serverCodexAppServerTmuxBackendV0{
-		PathEnv:     binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
-		SocketPath:  socketPath,
-		SessionName: "orquesta-goal-socket-timeout",
-		Timeout:     80 * time.Millisecond,
+		PathEnv:        binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		SocketPath:     socketPath,
+		SessionName:    "orquesta-goal-socket-timeout",
+		CodeHomeDir:    filepath.Join(root, "runtime", codexAppServerTmuxDirV0, "codex-home"),
+		RuntimeWorkDir: filepath.Join(root, "runtime"),
+		Timeout:        80 * time.Millisecond,
 	}
 
 	err := backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{})
