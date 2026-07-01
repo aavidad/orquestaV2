@@ -162,16 +162,17 @@ func (backend serverCodexUnavailableGoalBackendV0) ObserveCodexGoalV0(
 }
 
 type serverCodexAppServerGoalBackendV0 struct {
-	Protocol        serverCodexAppServerProtocolPortV0
-	CWD             string
-	Model           string
-	ReasoningEffort string
-	Sandbox         string
-	ApprovalPolicy  string
-	ServiceTier     string
-	Timeout         time.Duration
-	Runtime         *serverCodexAppServerGoalRuntimeV0
-	Now             func() time.Time
+	Protocol          serverCodexAppServerProtocolPortV0
+	CWD               string
+	DiagnosticLogPath string
+	Model             string
+	ReasoningEffort   string
+	Sandbox           string
+	ApprovalPolicy    string
+	ServiceTier       string
+	Timeout           time.Duration
+	Runtime           *serverCodexAppServerGoalRuntimeV0
+	Now               func() time.Time
 }
 
 type serverCodexAppServerProtocolPortV0 interface {
@@ -421,12 +422,15 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 		)
 		return receipt, nil
 	}
-	if issueCode := codexAppServerThreadStatusIssueCodeV0(thread.Status); issueCode != "" {
+	if issueCode := backend.codexAppServerThreadStatusIssueCodeV0(thread.Status); issueCode != "" {
 		receipt.IssueCode = issueCode
 		receipt.EvidenceRefs = compactServerStackStringsV0(append(
 			receipt.EvidenceRefs,
 			"evidence-ref-codex-app-server-thread-system-error",
 		))
+		if issueEvidence := codexAppServerIssueEvidenceRefV0(issueCode); issueEvidence != "" {
+			receipt.EvidenceRefs = compactServerStackStringsV0(append(receipt.EvidenceRefs, issueEvidence))
+		}
 		return receipt, nil
 	}
 	if timedOut, timeoutReceipt := backend.codexAppServerThreadReadGoalResultTimeoutV0(request, status, thread, receipt); timedOut {
@@ -501,24 +505,6 @@ func (backend serverCodexAppServerGoalBackendV0) fingerprintCodexAppServerThread
 		LastStatus:   status,
 		EvidenceHash: fmt.Sprintf("%x", sum[:]),
 	}), true, nil
-}
-
-func codexAppServerThreadStatusToGoalWorkStatusV0(status serverCodexAppServerThreadStatusV0) string {
-	switch strings.TrimSpace(string(status)) {
-	case "systemError":
-		return orquestagoal.GoalStatusBlockedV0
-	default:
-		return orquestagoal.GoalStatusRunningV0
-	}
-}
-
-func codexAppServerThreadStatusIssueCodeV0(status serverCodexAppServerThreadStatusV0) string {
-	switch strings.TrimSpace(string(status)) {
-	case "systemError":
-		return "codex_app_server_thread_system_error"
-	default:
-		return ""
-	}
 }
 
 func codexAppServerGoalFingerprintHashV0(goal serverCodexAppServerThreadGoalV0) string {

@@ -312,6 +312,11 @@ func codexAppServerIssueCodeFromMessageV0(message string) string {
 	case strings.Contains(normalized, "resetstdio") ||
 		strings.Contains(normalized, "node.cc:751"):
 		return "codex_app_server_wrapper_stdio_failed"
+	case strings.Contains(normalized, "401 unauthorized") ||
+		(strings.Contains(normalized, "unauthorized") &&
+			(strings.Contains(normalized, "api.openai.com/v1/responses") ||
+				strings.Contains(normalized, "responses_websocket"))):
+		return "codex_app_server_provider_unauthorized"
 	case strings.Contains(normalized, "budgetlimited") ||
 		strings.Contains(normalized, "budget limited") ||
 		strings.Contains(normalized, "budget limit"):

@@ -130,16 +130,24 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 	}
 	client := serverCodexAppServerGoalBackendV0{
-		Protocol:        runtimeProtocol,
-		CWD:             firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir),
-		Model:           runtimeConfig.Model,
-		ReasoningEffort: runtimeConfig.ReasoningEffort,
-		Sandbox:         runtimeConfig.Sandbox,
-		ApprovalPolicy:  runtimeConfig.ApprovalPolicy,
-		Timeout:         time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
-		Runtime:         &serverCodexAppServerGoalRuntimeV0{},
+		Protocol:          runtimeProtocol,
+		CWD:               firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir),
+		DiagnosticLogPath: diagnosticLogPathForCodexAppServerProtocolV0(runtimeProtocol),
+		Model:             runtimeConfig.Model,
+		ReasoningEffort:   runtimeConfig.ReasoningEffort,
+		Sandbox:           runtimeConfig.Sandbox,
+		ApprovalPolicy:    runtimeConfig.ApprovalPolicy,
+		Timeout:           time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
+		Runtime:           &serverCodexAppServerGoalRuntimeV0{},
 	}
 	return serverCodexGoalBackendV0{Starter: client, Observer: client, ShutdownHook: shutdownHook}, nil
+}
+
+func diagnosticLogPathForCodexAppServerProtocolV0(protocol serverCodexAppServerProtocolPortV0) string {
+	if websocket, ok := protocol.(serverCodexAppServerWebSocketProtocolV0); ok {
+		return strings.TrimSpace(websocket.DiagnosticLogPath)
+	}
+	return ""
 }
 
 func codexGoalBackendFromEnvV0() string {
@@ -198,6 +206,9 @@ func serverCodexGoalBackendDiagnosticMessageV0(issueCode string) string {
 	issueCode = strings.TrimSpace(issueCode)
 	if issueCode == "codex_app_server_wrapper_stdio_failed" {
 		return "codex goal backend degradado: codex_app_server_wrapper_stdio_failed; accion: configura ORQUESTA_CODEX_COMMAND con el binario nativo de Codex y reinicia"
+	}
+	if issueCode == "codex_app_server_provider_unauthorized" {
+		return "codex goal backend degradado: codex_app_server_provider_unauthorized; accion: revisa autenticacion de Codex/OpenAI en el CODEX_HOME aislado y reinicia"
 	}
 	if issueCode == "" {
 		issueCode = "codex_app_server_unavailable"

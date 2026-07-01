@@ -31,6 +31,19 @@ func TestCodexAppServerIssueCodeFromLogFileV0ClasificaResetStdioV0(t *testing.T)
 	}
 }
 
+func TestCodexAppServerIssueCodeFromLogFileV0ClasificaUnauthorizedProviderV0(t *testing.T) {
+	root := t.TempDir()
+	logPath := filepath.Join(root, "orquesta-goal.log")
+	raw := "failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n"
+	if err := os.WriteFile(logPath, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+
+	if got := codexAppServerIssueCodeFromLogFileV0(logPath); got != "codex_app_server_provider_unauthorized" {
+		t.Fatalf("code=%q", got)
+	}
+}
+
 func TestCodexAppServerWebSocketProtocolV0UsaLogResetStdioV0(t *testing.T) {
 	root := t.TempDir()
 	logPath := filepath.Join(root, "orquesta-goal.log")
@@ -74,6 +87,15 @@ func TestServerCodexGoalBackendDiagnosticMessageV0RecomiendaBinarioNativo(t *tes
 
 	if !strings.Contains(message, "ORQUESTA_CODEX_COMMAND") ||
 		!strings.Contains(message, "binario nativo") {
+		t.Fatalf("message=%q", message)
+	}
+}
+
+func TestServerCodexGoalBackendDiagnosticMessageV0RecomiendaAuthAisladaV0(t *testing.T) {
+	message := serverCodexGoalBackendDiagnosticMessageV0("codex_app_server_provider_unauthorized")
+
+	if !strings.Contains(message, "CODEX_HOME") ||
+		!strings.Contains(message, "autenticacion") {
 		t.Fatalf("message=%q", message)
 	}
 }

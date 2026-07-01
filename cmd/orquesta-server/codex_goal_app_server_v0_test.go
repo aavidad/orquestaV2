@@ -516,6 +516,45 @@ func TestServerCodexAppServerGoalBackendV0DiagnosticaThreadSystemErrorSinResulta
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0DiagnosticaSystemErrorConUnauthorizedDelLogV0(t *testing.T) {
+	root := t.TempDir()
+	logPath := filepath.Join(root, "orquesta-goal.log")
+	if err := os.WriteFile(logPath, []byte("failed to connect to websocket: HTTP error: 401 Unauthorized, url: wss://api.openai.com/v1/responses\n"), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	protocol := &fakeCodexAppServerProtocolV0{
+		getGoalErr: codexAppServerCallErrorV0{Code: "codex_app_server_rpc_method_not_found"},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-read-system-error-auth-001",
+			Status: serverCodexAppServerThreadStatusV0("systemError"),
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol:          protocol,
+		CWD:               root,
+		DiagnosticLogPath: logPath,
+	}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         "goal-ref-codex-app-server-read-system-error-auth-001",
+		ExternalGoalRef: "thread-ref-goal-read-system-error-auth-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0 fallback: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusBlockedV0 ||
+		receipt.IssueCode != "codex_app_server_provider_unauthorized" ||
+		receipt.Summary != "codex_app_server_thread_status_systemError" ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-thread-system-error") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-provider-unauthorized") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get", "thread/read"}) {
+		t.Fatalf("calls=%v", protocol.calls)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0CompactaObjetivoLargoParaAppServerV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-long-objective"},
