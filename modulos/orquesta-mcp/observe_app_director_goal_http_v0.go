@@ -142,6 +142,7 @@ func (handler mcpObserveAppDirectorGoalHTTPHandlerV0) executeObserveAppDirectorG
 	case execution := <-done:
 		return execution.result, execution.err, false
 	case <-timer.C:
+		cancel()
 		return handler.newMCPObserveAppDirectorGoalHTTPTimeoutResultV0(r, input), nil, true
 	}
 }
@@ -199,6 +200,13 @@ func newMCPObserveAppDirectorGoalHTTPTimeoutResultV0(
 		"observe_app_director_goal excedio la ventana HTTP acotada",
 	)
 	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), result.CorrelationID, input.CorrelationID, input.RequestID)
+	result.Partial = true
+	result.RecommendedAction = "observe_later"
+	result.Summary = "observacion incompleta por timeout HTTP; conservar run_ref y reintentar observe acotado antes de replanificar o relanzar"
+	result.EvidenceRefs = compactStringsMCPV0([]string{
+		"evidence-ref-observe-app-director-goal-timeout",
+		strings.TrimSpace(input.RunRef),
+	})
 	return result
 }
 
