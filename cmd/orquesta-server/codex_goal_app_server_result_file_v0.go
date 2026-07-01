@@ -17,6 +17,14 @@ const codexAppServerGoalResultFileMaxBytesV0 = 128 * 1024
 
 var errCodexAppServerGoalResultWalkDoneV0 = errors.New("codex_app_server_goal_result_walk_done")
 
+type codexAppServerGoalResultContractErrorV0 struct {
+	Code string
+}
+
+func (err codexAppServerGoalResultContractErrorV0) Error() string {
+	return strings.TrimSpace(err.Code)
+}
+
 func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerTerminalGoalResultV0(
 	ctx context.Context,
 	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
@@ -29,7 +37,10 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerTerminalGo
 	if readErr == nil {
 		marked, found, err := codexAppServerGoalResultFromThreadV0(thread)
 		if err != nil {
-			markerIssue = "codex_app_server_goal_result_marker_invalid"
+			markerIssue = codexAppServerGoalResultErrorIssueCodeV0(
+				err,
+				"codex_app_server_goal_result_marker_invalid",
+			)
 		} else if found {
 			if codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, request.GoalRef) {
 				markerIssue = "codex_app_server_goal_result_marker_goal_ref_mismatch"
@@ -43,7 +54,10 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerTerminalGo
 	}
 	fileMarked, fileFound, err := codexAppServerGoalResultFromWorkspaceV0(backend.CWD, request.GoalRef, request.ExternalGoalRef)
 	if err != nil && !markerFound {
-		receipt.IssueCode = "codex_app_server_goal_result_file_invalid"
+		receipt.IssueCode = codexAppServerGoalResultErrorIssueCodeV0(
+			err,
+			"codex_app_server_goal_result_file_invalid",
+		)
 		return receipt, nil
 	}
 	resultFound := false
@@ -85,8 +99,14 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 	if threadID := strings.TrimSpace(observed.ExternalGoalRef); threadID != "" && backend.Protocol != nil {
 		if thread, err := backend.Protocol.ReadThreadV0(ctx, threadID, true); err == nil {
 			marked, found, markerErr := codexAppServerGoalResultFromThreadV0(thread)
-			if markerErr == nil &&
-				found &&
+			if markerErr != nil && found && !codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, request.GoalRef) {
+				observed.IssueCode = codexAppServerGoalResultErrorIssueCodeV0(
+					markerErr,
+					"codex_app_server_goal_result_marker_invalid",
+				)
+				return observed, true
+			}
+			if markerErr == nil && found &&
 				!codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, request.GoalRef) &&
 				!codexAppServerGoalResultMarkerExternalGoalRefMismatchV0(marked, request.ExternalGoalRef) &&
 				codexAppServerGoalResultReadyForActiveCompletionV0(marked) {
@@ -106,6 +126,13 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 		request.GoalRef,
 		request.ExternalGoalRef,
 	)
+	if fileErr != nil {
+		observed.IssueCode = codexAppServerGoalResultErrorIssueCodeV0(
+			fileErr,
+			"codex_app_server_goal_result_file_invalid",
+		)
+		return observed, true
+	}
 	if fileErr == nil && fileFound && codexAppServerGoalResultReadyForActiveCompletionV0(fileMarked) {
 		observed.Status = "complete"
 		observed.Summary = "codex_app_server_goal_result_file"
@@ -120,6 +147,9 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 }
 
 func codexAppServerGoalResultReadyForActiveCompletionV0(marked codexAppServerGoalResultMarkerV0) bool {
+	if !codexAppServerGoalResultStatusIsCompletionV0(codexAppServerGoalResultExplicitStatusV0(marked)) {
+		return false
+	}
 	for _, result := range marked.RequiredTestResults {
 		switch strings.TrimSpace(result.Status) {
 		case "passed", orquestagoal.GoalStatusAcceptedV0:
@@ -147,6 +177,7 @@ func codexAppServerGoalResultFromWorkspaceV0(
 	}
 	var found codexAppServerGoalResultMarkerV0
 	foundOK := false
+	var contractErr error
 	err = filepath.WalkDir(rootAbs, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return nil
@@ -166,6 +197,9 @@ func codexAppServerGoalResultFromWorkspaceV0(
 		}
 		marked, ok, err := codexAppServerGoalResultFromFileV0(path, goalRef, externalGoalRef)
 		if err != nil {
+			if codexAppServerGoalResultErrorIssueCodeV0(err, "") != "" {
+				contractErr = err
+			}
 			return nil
 		}
 		if !ok {
@@ -180,6 +214,9 @@ func codexAppServerGoalResultFromWorkspaceV0(
 	}
 	if err != nil {
 		return codexAppServerGoalResultMarkerV0{}, false, err
+	}
+	if contractErr != nil {
+		return codexAppServerGoalResultMarkerV0{}, false, contractErr
 	}
 	return found, foundOK, nil
 }
@@ -217,12 +254,18 @@ func codexAppServerGoalResultFromFileV0(
 	if codexAppServerGoalResultMarkerExternalGoalRefMismatchV0(marked, externalGoalRef) {
 		return codexAppServerGoalResultMarkerV0{}, false, nil
 	}
+	if issue := codexAppServerGoalResultContractIssueCodeV0(marked); issue != "" {
+		return marked, true, codexAppServerGoalResultContractErrorV0{Code: issue}
+	}
 	return marked, true, nil
 }
 
 func normalizeCodexAppServerGoalResultMarkerV0(
 	marked codexAppServerGoalResultMarkerV0,
 ) codexAppServerGoalResultMarkerV0 {
+	marked.SchemaVersion = strings.TrimSpace(marked.SchemaVersion)
+	marked.Status = strings.TrimSpace(marked.Status)
+	marked.Estado = strings.TrimSpace(marked.Estado)
 	marked.GoalRef = strings.TrimSpace(marked.GoalRef)
 	marked.ExternalGoalRef = strings.TrimSpace(marked.ExternalGoalRef)
 	marked.Summary = strings.TrimSpace(marked.Summary)
@@ -237,4 +280,43 @@ func normalizeCodexAppServerGoalResultMarkerV0(
 		)
 	}
 	return marked
+}
+
+func codexAppServerGoalResultContractIssueCodeV0(marked codexAppServerGoalResultMarkerV0) string {
+	if strings.TrimSpace(marked.SchemaVersion) == "" {
+		return "codex_app_server_goal_result_schema_version_required"
+	}
+	status := codexAppServerGoalResultExplicitStatusV0(marked)
+	if status == "" {
+		return "codex_app_server_goal_result_status_required"
+	}
+	if !codexAppServerGoalResultStatusIsTerminalV0(status) {
+		return "codex_app_server_goal_result_status_not_terminal"
+	}
+	return ""
+}
+
+func codexAppServerGoalResultExplicitStatusV0(marked codexAppServerGoalResultMarkerV0) string {
+	return strings.TrimSpace(firstNonEmptyServerStackV0(marked.Status, marked.Estado))
+}
+
+func codexAppServerGoalResultStatusIsTerminalV0(status string) bool {
+	switch strings.TrimSpace(status) {
+	case orquestagoal.GoalStatusCompleteV0, orquestagoal.GoalStatusBlockedV0, orquestagoal.GoalStatusInvalidV0:
+		return true
+	default:
+		return false
+	}
+}
+
+func codexAppServerGoalResultStatusIsCompletionV0(status string) bool {
+	return strings.TrimSpace(status) == orquestagoal.GoalStatusCompleteV0
+}
+
+func codexAppServerGoalResultErrorIssueCodeV0(err error, fallback string) string {
+	var contractErr codexAppServerGoalResultContractErrorV0
+	if errors.As(err, &contractErr) && strings.TrimSpace(contractErr.Code) != "" {
+		return strings.TrimSpace(contractErr.Code)
+	}
+	return strings.TrimSpace(fallback)
 }

@@ -375,7 +375,10 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 	))
 	marked, found, markerErr := codexAppServerGoalResultFromThreadV0(thread)
 	if markerErr != nil {
-		receipt.IssueCode = "codex_app_server_goal_result_marker_invalid"
+		receipt.IssueCode = codexAppServerGoalResultErrorIssueCodeV0(
+			markerErr,
+			"codex_app_server_goal_result_marker_invalid",
+		)
 		return receipt, nil
 	}
 	if found &&
@@ -397,7 +400,10 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 		request.ExternalGoalRef,
 	)
 	if fileErr != nil {
-		receipt.IssueCode = "codex_app_server_goal_result_file_invalid"
+		receipt.IssueCode = codexAppServerGoalResultErrorIssueCodeV0(
+			fileErr,
+			"codex_app_server_goal_result_file_invalid",
+		)
 		return receipt, nil
 	}
 	if fileFound &&
@@ -621,6 +627,9 @@ func codexGoalWorkStatusIsTerminalV0(status string) bool {
 }
 
 type codexAppServerGoalResultMarkerV0 struct {
+	SchemaVersion       string                                  `json:"schema_version,omitempty"`
+	Status              string                                  `json:"status,omitempty"`
+	Estado              string                                  `json:"estado,omitempty"`
 	GoalRef             string                                  `json:"goal_ref,omitempty"`
 	ExternalGoalRef     string                                  `json:"external_goal_ref,omitempty"`
 	Summary             string                                  `json:"summary,omitempty"`
@@ -674,7 +683,11 @@ func parseCodexAppServerGoalResultMarkerV0(text string) (codexAppServerGoalResul
 	if err := json.Unmarshal([]byte(payload), &marked); err != nil {
 		return codexAppServerGoalResultMarkerV0{}, true, err
 	}
-	return normalizeCodexAppServerGoalResultMarkerV0(marked), true, nil
+	marked = normalizeCodexAppServerGoalResultMarkerV0(marked)
+	if issue := codexAppServerGoalResultContractIssueCodeV0(marked); issue != "" {
+		return marked, true, codexAppServerGoalResultContractErrorV0{Code: issue}
+	}
+	return marked, true, nil
 }
 
 func codexAppServerGoalResultMarkerJSONV0(text string) (string, bool) {

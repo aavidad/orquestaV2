@@ -257,7 +257,7 @@ func TestServerCodexAppServerGoalBackendV0ObservaPorThreadReadSiGoalGetNoExisteV
 					Type:  "agentMessage",
 					Phase: "final_answer",
 					Text: orquestaruntimecodexgoal.CodexGoalResultMarkerV0 +
-						` {"summary":"ok","artifact_refs":["artifact-ref-read"],"evidence_refs":["evidence-ref-read"]}`,
+						` {"schema_version":"orquesta_goal_result.v0","status":"complete","summary":"ok","artifact_refs":["artifact-ref-read"],"evidence_refs":["evidence-ref-read"]}`,
 				}},
 			}},
 		},
@@ -375,7 +375,7 @@ func TestServerCodexAppServerGoalBackendV0NoPromueveThreadReadResultadoPendiente
 	}
 	if err := os.WriteFile(
 		filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0),
-		[]byte(`{"goal_ref":"goal-ref-codex-app-server-read-pending-001","summary":"resultado inicial","required_test_results":[{"test_ref":"test-ref-pending","status":"pending"}]}`),
+		[]byte(`{"schema_version":"orquesta_goal_result.v0","status":"complete","goal_ref":"goal-ref-codex-app-server-read-pending-001","summary":"resultado inicial","required_test_results":[{"test_ref":"test-ref-pending","status":"pending"}]}`),
 		0o644,
 	); err != nil {
 		t.Fatalf("write result file: %v", err)
@@ -528,7 +528,7 @@ func TestServerCodexAppServerGoalBackendV0ObservaGoalPorThreadIDV0(t *testing.T)
 }
 
 func TestServerCodexAppServerGoalBackendV0ObservaResultadoMarcadoV0(t *testing.T) {
-	marked := `ORQUESTA_GOAL_RESULT_V0 {"summary":"cierre con {llaves}","artifact_refs":["artifact-ref-goal-summary"],"required_test_results":[{"test_ref":"test-ref-goal","status":"passed","evidence_refs":["evidence-ref-test-pass"]}],"domain_receipt_refs":["domain-receipt-ref-001"],"evidence_refs":["evidence-ref-required"]}`
+	marked := `ORQUESTA_GOAL_RESULT_V0 {"schema_version":"orquesta_goal_result.v0","status":"complete","summary":"cierre con {llaves}","artifact_refs":["artifact-ref-goal-summary"],"required_test_results":[{"test_ref":"test-ref-goal","status":"passed","evidence_refs":["evidence-ref-test-pass"]}],"domain_receipt_refs":["domain-receipt-ref-001"],"evidence_refs":["evidence-ref-required"]}`
 	protocol := &fakeCodexAppServerProtocolV0{
 		observedGoal: &serverCodexAppServerThreadGoalV0{
 			ThreadID: "thread-ref-goal-003",
@@ -580,6 +580,8 @@ func TestServerCodexAppServerGoalBackendV0ObservaResultadoDurableSinMarcadorV0(t
 	}
 	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0)
 	payload := `{
+		"schema_version":"orquesta_goal_result.v0",
+		"status":"complete",
 		"goal_ref":"goal-ref-codex-app-server-file-001",
 		"summary":"resultado durable",
 		"artifact_refs":["artifact-ref-goal-source","artifact-ref-goal-handoff"],
@@ -638,6 +640,8 @@ func TestServerCodexAppServerGoalBackendV0PromueveResultadoDurableAunqueGoalSiga
 	}
 	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0)
 	payload := `{
+		"schema_version":"orquesta_goal_result.v0",
+		"status":"complete",
 		"goal_ref":"goal-ref-codex-app-server-file-active-001",
 		"summary":"resultado durable antes de cierre backend",
 		"artifact_refs":["artifact-ref-goal-active"],
@@ -680,6 +684,51 @@ func TestServerCodexAppServerGoalBackendV0PromueveResultadoDurableAunqueGoalSiga
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0NoPromueveResultadoDurableActivoSinContratoMinimoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")
+	if err := os.MkdirAll(resultDir, 0o755); err != nil {
+		t.Fatalf("mkdir result dir: %v", err)
+	}
+	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0)
+	payload := `{
+		"goal_ref":"goal-ref-codex-app-server-file-active-contract-001",
+		"summary":"resultado durable sin contrato minimo",
+		"artifact_refs":["artifact-ref-goal-active-contract"],
+		"required_test_results":[{"test_ref":"test-ref-goal-active-contract","status":"passed","evidence_refs":["evidence-ref-test-pass"]}],
+		"evidence_refs":["evidence-ref-required-active-contract"]
+	}`
+	if err := os.WriteFile(resultPath, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write result file: %v", err)
+	}
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID: "thread-ref-goal-file-active-contract-001",
+			Status:   "active",
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: projectDir}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-codex-app-server-file-active-contract-001",
+		ExternalGoalRef: "thread-ref-goal-file-active-contract-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		receipt.IssueCode != "codex_app_server_goal_result_schema_version_required" ||
+		receipt.Summary == "resultado durable sin contrato minimo" ||
+		containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-file") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get", "thread/read"}) {
+		t.Fatalf("calls=%v", protocol.calls)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0NoPromueveResultadoDurableActivoConTestsPendientesV0(t *testing.T) {
 	projectDir := t.TempDir()
 	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")
@@ -688,6 +737,8 @@ func TestServerCodexAppServerGoalBackendV0NoPromueveResultadoDurableActivoConTes
 	}
 	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0)
 	payload := `{
+		"schema_version":"orquesta_goal_result.v0",
+		"status":"complete",
 		"goal_ref":"goal-ref-codex-app-server-file-active-pending-001",
 		"summary":"resultado inicial materializado; pendiente de completar artefactos y verificacion",
 		"artifact_refs":[],
@@ -732,6 +783,8 @@ func TestServerCodexAppServerGoalBackendV0ConservaBloqueadoAlFusionarResultadoDu
 	}
 	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0)
 	payload := `{
+		"schema_version":"orquesta_goal_result.v0",
+		"status":"blocked",
 		"goal_ref":"goal-ref-codex-app-server-file-blocked-001",
 		"summary":"resultado durable con artefacto aunque el goal remoto quedo bloqueado",
 		"artifact_refs":["artifact-ref-goal-blocked"],
@@ -885,6 +938,8 @@ func TestServerCodexAppServerGoalBackendV0ObservaResultadoDurableSiThreadReadFal
 	}
 	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0)
 	payload := `{
+		"schema_version":"orquesta_goal_result.v0",
+		"status":"complete",
 		"goal_ref":"goal-ref-codex-app-server-file-002",
 		"summary":"resultado durable tras fallo de thread/read",
 		"artifact_refs":["artifact-ref-goal-source"],
@@ -934,6 +989,8 @@ func TestServerCodexAppServerGoalBackendV0PrefiereResultadoDurableSobreMarcadorV
 	}
 	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0)
 	payload := `{
+		"schema_version":"orquesta_goal_result.v0",
+		"status":"complete",
 		"goal_ref":"goal-ref-codex-app-server-file-003",
 		"summary":"resultado durable preferente",
 		"artifact_refs":["artifact-ref-goal-source"],
@@ -943,7 +1000,7 @@ func TestServerCodexAppServerGoalBackendV0PrefiereResultadoDurableSobreMarcadorV
 	if err := os.WriteFile(resultPath, []byte(payload), 0o644); err != nil {
 		t.Fatalf("write result file: %v", err)
 	}
-	marker := orquestaruntimecodexgoal.CodexGoalResultMarkerV0 + ` {"goal_ref":"goal-ref-codex-app-server-file-003","summary":"marcador incompleto","evidence_refs":["evidence-ref-marker"]}`
+	marker := orquestaruntimecodexgoal.CodexGoalResultMarkerV0 + ` {"schema_version":"orquesta_goal_result.v0","status":"complete","goal_ref":"goal-ref-codex-app-server-file-003","summary":"marcador incompleto","evidence_refs":["evidence-ref-marker"]}`
 	protocol := &fakeCodexAppServerProtocolV0{
 		observedGoal: &serverCodexAppServerThreadGoalV0{
 			ThreadID: "thread-ref-goal-file-003",
@@ -990,6 +1047,8 @@ func TestServerCodexAppServerGoalBackendV0UsaDurableSiMarcadorEsInvalidoV0(t *te
 	}
 	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0)
 	payload := `{
+		"schema_version":"orquesta_goal_result.v0",
+		"status":"complete",
 		"goal_ref":"goal-ref-codex-app-server-file-004",
 		"summary":"resultado durable con marcador invalido",
 		"artifact_refs":["artifact-ref-goal-source"],
@@ -1067,7 +1126,7 @@ func TestCodexAppServerGoalResultMarkerV0AceptaFallbackSinPhaseV0(t *testing.T) 
 			Items: []serverCodexAppServerReadItemV0{{
 				ID:   "item-ref-goal-004",
 				Type: "agentMessage",
-				Text: `texto ` + orquestaruntimecodexgoal.CodexGoalResultMarkerV0 + ` {"summary":"ok","evidence_refs":["evidence-ref-ok"]}`,
+				Text: `texto ` + orquestaruntimecodexgoal.CodexGoalResultMarkerV0 + ` {"schema_version":"orquesta_goal_result.v0","status":"complete","summary":"ok","evidence_refs":["evidence-ref-ok"]}`,
 			}},
 		}},
 	}
@@ -1099,7 +1158,7 @@ func TestCodexAppServerGoalResultFromWorkspaceV0IgnoraArchivoInvalidoAntesDelVal
 	}
 	if err := os.WriteFile(
 		filepath.Join(validDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0),
-		[]byte(`{"goal_ref":"goal-ref-codex-app-server-file-006","summary":"resultado valido","evidence_refs":["evidence-ref-required"]}`),
+		[]byte(`{"schema_version":"orquesta_goal_result.v0","status":"complete","goal_ref":"goal-ref-codex-app-server-file-006","summary":"resultado valido","evidence_refs":["evidence-ref-required"]}`),
 		0o644,
 	); err != nil {
 		t.Fatalf("write valid result: %v", err)
@@ -1113,6 +1172,34 @@ func TestCodexAppServerGoalResultFromWorkspaceV0IgnoraArchivoInvalidoAntesDelVal
 	}
 }
 
+func TestCodexAppServerGoalResultFromWorkspaceV0RechazaEstadoNoTerminalV0(t *testing.T) {
+	projectDir := t.TempDir()
+	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")
+	if err := os.MkdirAll(resultDir, 0o755); err != nil {
+		t.Fatalf("mkdir result dir: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0),
+		[]byte(`{"schema_version":"orquesta_goal_result.v0","status":"running","goal_ref":"goal-ref-codex-app-server-file-status-001","summary":"resultado no terminal"}`),
+		0o644,
+	); err != nil {
+		t.Fatalf("write result: %v", err)
+	}
+
+	marked, found, err := codexAppServerGoalResultFromWorkspaceV0(
+		projectDir,
+		"goal-ref-codex-app-server-file-status-001",
+		"",
+	)
+
+	if err == nil ||
+		codexAppServerGoalResultErrorIssueCodeV0(err, "") != "codex_app_server_goal_result_status_not_terminal" ||
+		found ||
+		marked.Summary != "" {
+		t.Fatalf("marked=%+v found=%v err=%v", marked, found, err)
+	}
+}
+
 func TestCodexAppServerGoalResultFromWorkspaceV0IgnoraArchivoDeOtroThreadV0(t *testing.T) {
 	projectDir := t.TempDir()
 	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")
@@ -1121,7 +1208,7 @@ func TestCodexAppServerGoalResultFromWorkspaceV0IgnoraArchivoDeOtroThreadV0(t *t
 	}
 	if err := os.WriteFile(
 		filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0),
-		[]byte(`{"goal_ref":"goal-ref-codex-app-server-file-thread-001","external_goal_ref":"thread-ref-other","summary":"resultado stale"}`),
+		[]byte(`{"schema_version":"orquesta_goal_result.v0","status":"complete","goal_ref":"goal-ref-codex-app-server-file-thread-001","external_goal_ref":"thread-ref-other","summary":"resultado stale"}`),
 		0o644,
 	); err != nil {
 		t.Fatalf("write result: %v", err)
@@ -1139,7 +1226,7 @@ func TestCodexAppServerGoalResultFromWorkspaceV0IgnoraArchivoDeOtroThreadV0(t *t
 }
 
 func TestServerCodexAppServerGoalBackendV0RechazaMarcadorDeOtroThreadV0(t *testing.T) {
-	marker := orquestaruntimecodexgoal.CodexGoalResultMarkerV0 + ` {"goal_ref":"goal-ref-marker-thread-001","external_goal_ref":"thread-ref-other","summary":"resultado ajeno"}`
+	marker := orquestaruntimecodexgoal.CodexGoalResultMarkerV0 + ` {"schema_version":"orquesta_goal_result.v0","status":"complete","goal_ref":"goal-ref-marker-thread-001","external_goal_ref":"thread-ref-other","summary":"resultado ajeno"}`
 	protocol := &fakeCodexAppServerProtocolV0{
 		observedGoal: &serverCodexAppServerThreadGoalV0{
 			ThreadID: "thread-ref-current",

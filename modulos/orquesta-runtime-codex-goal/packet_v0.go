@@ -12,6 +12,7 @@ import (
 const (
 	CodexGoalStartPacketSchemaV0        = "codex_goal_start_packet.v0"
 	CodexGoalObservationRequestSchemaV0 = "codex_goal_observation_request.v0"
+	CodexGoalResultSchemaV0             = "orquesta_goal_result.v0"
 	CodexGoalResultMarkerV0             = "ORQUESTA_GOAL_RESULT_V0"
 	CodexGoalResultFileNameV0           = "orquesta_goal_result_v0.json"
 	CodexGoalMaxPromptBytesV0           = 32 * 1024
@@ -317,7 +318,10 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	b.WriteString(" seguida de JSON compacto.\n")
 	b.WriteString("- El JSON debe usar esta forma: {\"goal_ref\":\"")
 	b.WriteString(spec.GoalRef)
-	b.WriteString("\",\"summary\":\"...\",\"artifact_refs\":[],\"required_test_results\":[{\"test_ref\":\"...\",\"status\":\"passed\",\"evidence_refs\":[]}],\"domain_receipt_refs\":[],\"evidence_refs\":[]}.\n")
+	b.WriteString("\",\"schema_version\":\"")
+	b.WriteString(CodexGoalResultSchemaV0)
+	b.WriteString("\",\"status\":\"complete\",\"summary\":\"...\",\"artifact_refs\":[],\"required_test_results\":[{\"test_ref\":\"...\",\"status\":\"passed\",\"evidence_refs\":[]}],\"domain_receipt_refs\":[],\"evidence_refs\":[]}.\n")
+	b.WriteString("- schema_version es obligatorio y status/estado debe ser terminal explicito: complete si entregas cierre verificable, blocked si hay bloqueo externo o invalid si el resultado no es usable.\n")
 	if spec.ClosurePolicy.RequireDomainReceipt && strings.TrimSpace(spec.WorkProfileKind) == "domain_work" {
 		b.WriteString("- En domain_work deja domain_receipt_refs vacio salvo que el contrato te haya dado un receipt real; Orquesta lo derivara del ledger despues de submit_artifact.\n")
 	}
@@ -332,7 +336,9 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 		b.WriteString(resultFilePath)
 		b.WriteString(" incluyendo \"goal_ref\":\"")
 		b.WriteString(spec.GoalRef)
-		b.WriteString("\" para que Orquesta pueda cerrar aunque no haya respuesta final textual.\n")
+		b.WriteString("\", \"schema_version\":\"")
+		b.WriteString(CodexGoalResultSchemaV0)
+		b.WriteString("\" y \"status\":\"complete\" para que Orquesta pueda cerrar aunque no haya respuesta final textual.\n")
 		b.WriteString("- Materializa primero el directorio del write-set y este archivo durable de resultado; si luego corriges artefactos o tests, actualiza el JSON antes de cerrar.\n")
 	}
 	b.WriteString("- Incluye en evidence_refs las evidencias requeridas solo si han sido verificadas; no inventes refs para forzar el cierre.\n")
