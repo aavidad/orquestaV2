@@ -162,6 +162,57 @@ Acción esperada:
 - Debe exigir función didáctica, anclaje a apartado y rechazo de visual
   decorativo.
 
+### 6. Desalineación cola `stopped/blocked` frente a goals Codex `active`
+
+En la ola correctiva P0-clean lanzada el 2026-07-01 a las 09:58 CEST, la API
+de estado devolvió `queue.count=0` y seis runs terminales `status=stopped`,
+pero a la vez `queue_health.blocked=6` y `stale_running[].code=goal_first_blocked`
+para:
+
+- `run-opes-grupo-b-info-p0-clean-t006-20260701`
+- `run-opes-grupo-b-info-p0-clean-t010-20260701`
+- `run-opes-grupo-b-info-p0-clean-t011-20260701`
+- `run-opes-grupo-b-info-p0-clean-t012-20260701`
+- `run-opes-grupo-b-info-p0-clean-t018-20260701`
+- `run-opes-grupo-b-info-p0-clean-t019-20260701`
+
+El motivo expuesto fue:
+
+`goal-first state persisted as blocked or invalid`
+
+Sin embargo, en paralelo, la base de goals de Codex seguía mostrando esos seis
+goals como `active`, con tokens y `updated_at` creciendo:
+
+- tema 006: `active`, 300.350 tokens, actualizado `2026-07-01 07:58:03Z`
+- tema 010: `active`, 144.885 tokens, actualizado `2026-07-01 07:57:56Z`
+- tema 011: `active`, 210.296 tokens, actualizado `2026-07-01 07:57:01Z`
+- tema 012: `active`, 248.541 tokens, actualizado `2026-07-01 07:57:53Z`
+- tema 018: `active`, 120.267 tokens, actualizado `2026-07-01 07:57:50Z`
+- tema 019: `active`, 129.012 tokens, actualizado `2026-07-01 07:57:19Z`
+
+Además, `POST /api/v0/autoprogramming/goals/observe-active` respondió `ok`,
+pero no reconcilió el estado ni devolvió un snapshot útil por goal.
+
+Impacto:
+
+- OPES no puede saber si debe esperar, relanzar, cortar o consolidar desde
+  artefactos.
+- La cola puede decir `stopped/blocked` mientras el backend de Codex sigue
+  trabajando y escribiendo ficheros.
+- Riesgo de lanzar una ola encima de goals vivos o de cerrar antes de que el
+  trabajo haya terminado realmente.
+
+Acción esperada:
+
+- Unificar el estado observable entre cola, `autoprogramming/status`,
+  `observe-active` y `goals_1.sqlite`.
+- Si un goal-first queda bloqueado, exponer por run: `goal_id`, estado del
+  backend, última actividad, tokens, proceso, artefactos recientes y acción
+  segura.
+- `observe-active` debe devolver snapshot por goal, no solo `estado=ok`.
+- Si la cola fuerza `stopped` por timeout, no debe ocultar que el goal Codex
+  continúa `active`.
+
 ## No se ha tocado código
 
 Esta incidencia solo documenta el problema para el agente de Orquesta. OPES no
