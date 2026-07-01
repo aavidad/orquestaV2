@@ -136,13 +136,7 @@ printf '/home/alberto/privado\n'
 			t.Fatalf("rule copiada agente %d: %v", i, err)
 		}
 		waitForCodexWaveTestFileV0(t, agent.LastMessagePath)
-		stdoutData, err := os.ReadFile(agent.StdoutPath)
-		if err != nil {
-			t.Fatalf("leer stdout agente %d: %v", i, err)
-		}
-		if !strings.Contains(string(stdoutData), "fake stdout") {
-			t.Fatalf("stdout agente %d inesperado: %s", i, string(stdoutData))
-		}
+		waitForCodexWaveTestFileContentV0(t, agent.StdoutPath, "fake stdout", "stdout agente "+string(rune('0'+i)))
 		seenPrompt, err := os.ReadFile(filepath.Join(agent.HomeDir, "prompt_seen.txt"))
 		if err != nil {
 			t.Fatalf("leer prompt visto agente %d: %v", i, err)
@@ -310,4 +304,28 @@ func waitForCodexWaveTestFileV0(t *testing.T, path string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("archivo no aparecio: %s", path)
+}
+
+func waitForCodexWaveTestFileContentV0(t *testing.T, path, expected, label string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var lastContent string
+	var lastErr error
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			lastErr = nil
+			lastContent = string(data)
+			if strings.Contains(lastContent, expected) {
+				return
+			}
+		} else {
+			lastErr = err
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if lastErr != nil {
+		t.Fatalf("%s no contiene %q; ultimo error: %v", label, expected, lastErr)
+	}
+	t.Fatalf("%s no contiene %q; ultimo contenido: %s", label, expected, lastContent)
 }
