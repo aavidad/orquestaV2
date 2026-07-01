@@ -54,10 +54,12 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerTerminalGo
 	}
 	fileMarked, fileFound, err := codexAppServerGoalResultFromWorkspaceV0(backend.CWD, request.GoalRef, request.ExternalGoalRef)
 	if err != nil && !markerFound {
-		receipt.IssueCode = codexAppServerGoalResultErrorIssueCodeV0(
-			err,
-			"codex_app_server_goal_result_file_invalid",
-		)
+		if strings.TrimSpace(receipt.IssueCode) == "" {
+			receipt.IssueCode = codexAppServerGoalResultErrorIssueCodeV0(
+				err,
+				"codex_app_server_goal_result_file_invalid",
+			)
+		}
 		return receipt, nil
 	}
 	resultFound := false
@@ -77,11 +79,15 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerTerminalGo
 		resultFound = true
 	}
 	if markerIssue != "" && !resultFound {
-		receipt.IssueCode = markerIssue
+		if strings.TrimSpace(receipt.IssueCode) == "" {
+			receipt.IssueCode = markerIssue
+		}
 		return receipt, nil
 	}
 	if readErr != nil && !resultFound {
-		receipt.IssueCode = "codex_app_server_thread_read_failed"
+		if strings.TrimSpace(receipt.IssueCode) == "" {
+			receipt.IssueCode = "codex_app_server_thread_read_failed"
+		}
 		return receipt, nil
 	}
 	return receipt, nil

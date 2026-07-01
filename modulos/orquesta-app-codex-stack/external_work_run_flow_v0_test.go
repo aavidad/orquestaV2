@@ -597,6 +597,15 @@ func TestCodexStackV0ExternalWorkRunGoalFirstLaunchFailedPublicaReasonCode(t *te
 	}
 }
 
+func TestExternalWorkGoalFirstKnownLaunchFailureReasonV0ClasificaUsageLimit(t *testing.T) {
+	got := externalWorkGoalFirstKnownLaunchFailureReasonV0(
+		"ERROR: You've hit your usage limit. Visit settings/usage to purchase more credits or try again later.",
+	)
+	if got != "codex_app_server_goal_provider_limited" {
+		t.Fatalf("reason=%q", got)
+	}
+}
+
 func TestCodexStackV0ExternalWorkGoalFirstBloqueaReceiptInventadoSinLedger(t *testing.T) {
 	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
 	started := postExternalWorkRunStackV0(t, stack)

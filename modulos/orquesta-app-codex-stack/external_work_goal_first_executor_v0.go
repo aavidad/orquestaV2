@@ -576,6 +576,21 @@ func externalWorkGoalFirstKnownLaunchFailureReasonV0(message string) string {
 		return "codex_app_server_command_missing"
 	case strings.Contains(normalized, "codex_app_server_wrapper_stdio_failed"):
 		return "codex_app_server_wrapper_stdio_failed"
+	case strings.Contains(normalized, "codex_app_server_goal_provider_limited") ||
+		strings.Contains(normalized, "usage limited") ||
+		strings.Contains(normalized, "usage limit") ||
+		strings.Contains(normalized, "quota exhausted") ||
+		strings.Contains(normalized, "quota limited") ||
+		strings.Contains(normalized, "provider limited"):
+		return "codex_app_server_goal_provider_limited"
+	case strings.Contains(normalized, "codex_app_server_goal_budget_limited") ||
+		strings.Contains(normalized, "budgetlimited") ||
+		strings.Contains(normalized, "budget limit"):
+		return "codex_app_server_goal_budget_limited"
+	case strings.Contains(normalized, "codex_app_server_goal_policy_limited") ||
+		strings.Contains(normalized, "policylimited") ||
+		strings.Contains(normalized, "policy limit"):
+		return "codex_app_server_goal_policy_limited"
 	case strings.Contains(normalized, "codex_app_server_permission_denied"):
 		return "codex_app_server_permission_denied"
 	case strings.Contains(normalized, "codex_app_server_timeout"):

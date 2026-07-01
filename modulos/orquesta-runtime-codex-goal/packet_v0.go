@@ -387,6 +387,7 @@ func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec o
 		if strings.TrimSpace(receipt.ExternalGoalRef) != "" {
 			result.ExternalGoalRef = strings.TrimSpace(receipt.ExternalGoalRef)
 		}
+		result.EvidenceRefs = append([]string(nil), receipt.EvidenceRefs...)
 		return result, err
 	}
 	status := receipt.Status

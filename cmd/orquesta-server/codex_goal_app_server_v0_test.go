@@ -191,7 +191,7 @@ func TestServerCodexAppServerGoalBackendV0LanzaThreadGoalYTurnV0(t *testing.T) {
 		receipt.ExternalGoalRef != "thread-ref-goal-001" {
 		t.Fatalf("receipt=%+v", receipt)
 	}
-	wantCalls := []string{"thread/start", "thread/goal/set", "turn/start"}
+	wantCalls := []string{"thread/start", "thread/goal/set", "turn/start", "thread/goal/get"}
 	if !reflect.DeepEqual(protocol.calls, wantCalls) {
 		t.Fatalf("calls=%v want=%v", protocol.calls, wantCalls)
 	}
@@ -238,7 +238,42 @@ func TestServerCodexAppServerGoalBackendV0LanzaTurnSiGoalSetNoExisteV0(t *testin
 		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-turn-started") {
 		t.Fatalf("receipt=%+v", receipt)
 	}
-	if want := []string{"thread/start", "thread/goal/set", "turn/start"}; !reflect.DeepEqual(protocol.calls, want) {
+	if want := []string{"thread/start", "thread/goal/set", "turn/start", "thread/goal/get"}; !reflect.DeepEqual(protocol.calls, want) {
+		t.Fatalf("calls=%v want=%v", protocol.calls, want)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0BloqueaLaunchSiGoalYaEstaUsageLimitedV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-usage-limited-001"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-goal-usage-limited-001", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-goal-usage-limited-001", Status: "completed"},
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID:        "thread-ref-goal-usage-limited-001",
+			Status:          "usageLimited",
+			TokensUsed:      0,
+			TimeUsedSeconds: 1,
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		SchemaVersion: orquestaruntimecodexgoal.CodexGoalStartPacketSchemaV0,
+		GoalRef:       "goal-ref-codex-app-server-usage-limited-001",
+		Objective:     "programar una mejora acotada",
+		Prompt:        "prompt compacto",
+	})
+
+	if err == nil {
+		t.Fatalf("StartCodexGoalV0 debio bloquear por usageLimited")
+	}
+	if receipt.Status != orquestagoal.GoalStatusBlockedV0 ||
+		receipt.IssueCode != "codex_app_server_goal_provider_limited" ||
+		receipt.ExternalGoalRef != "thread-ref-goal-usage-limited-001" ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-provider-limited") {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
+	if want := []string{"thread/start", "thread/goal/set", "turn/start", "thread/goal/get"}; !reflect.DeepEqual(protocol.calls, want) {
 		t.Fatalf("calls=%v want=%v", protocol.calls, want)
 	}
 }
@@ -284,6 +319,41 @@ func TestServerCodexAppServerGoalBackendV0ObservaPorThreadReadSiGoalGetNoExisteV
 	}
 	if protocol.readThreadID != "thread-ref-goal-read-001" || !protocol.readIncludeTurns {
 		t.Fatalf("read thread id=%q include=%v", protocol.readThreadID, protocol.readIncludeTurns)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0ObservaUsageLimitedConCausaOperableV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID:        "thread-ref-goal-observe-usage-limited-001",
+			Status:          "usageLimited",
+			TokensUsed:      0,
+			TimeUsedSeconds: 1,
+		},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-observe-usage-limited-001",
+			Status: serverCodexAppServerThreadStatusV0("idle"),
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-codex-app-server-observe-usage-limited-001",
+		ExternalGoalRef: "thread-ref-goal-observe-usage-limited-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusBlockedV0 ||
+		receipt.Summary != "codex_app_server_goal_status_usageLimited" ||
+		receipt.IssueCode != "codex_app_server_goal_provider_limited" ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-provider-limited") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if want := []string{"thread/goal/get", "thread/read"}; !reflect.DeepEqual(protocol.calls, want) {
+		t.Fatalf("calls=%v want=%v", protocol.calls, want)
 	}
 }
 
@@ -1288,6 +1358,16 @@ func TestCodexAppServerIssueCodeForErrorV0ClasificaDiagnosticosV0(t *testing.T) 
 			name:    "operation not permitted",
 			message: "Error: Operation not permitted (os error 1)",
 			want:    "codex_app_server_operation_not_permitted",
+		},
+		{
+			name:    "usage limited",
+			message: "ERROR: You've hit your usage limit. Visit settings/usage to purchase more credits or try again later.",
+			want:    "codex_app_server_goal_provider_limited",
+		},
+		{
+			name:    "budget limited",
+			message: "goal status budgetLimited",
+			want:    "codex_app_server_goal_budget_limited",
 		},
 	}
 	for _, tc := range cases {

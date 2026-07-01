@@ -121,7 +121,7 @@ func NewMCPObserveAppDirectorGoalResultV0(
 		ArtifactRefs:          compactStringsMCPV0(goalResult.ArtifactRefs),
 		DomainReceiptRefs:     compactStringsMCPV0(goalResult.DomainReceiptRefs),
 		EvidenceRefs:          compactStringsMCPV0(result.EvidenceRefs),
-		ClosureIssues:         goalWorkIssuesMCPV0(result.Closure.Issues),
+		ClosureIssues:         goalWorkIssuesMCPV0(append(goalResult.Issues, result.Closure.Issues...)),
 		Errores:               []MCPValidationIssueV0{},
 	}
 	toolResult.RecommendedAction = mcpObserveAppDirectorGoalRecommendedActionV0(toolResult)
@@ -155,12 +155,13 @@ func NewMCPObserveAppDirectorGoalPartialResultFromStateV0(
 		toolResult.ArtifactRefs = compactStringsMCPV0(normalized.LastResult.ArtifactRefs)
 		toolResult.DomainReceiptRefs = compactStringsMCPV0(normalized.LastResult.DomainReceiptRefs)
 		toolResult.EvidenceRefs = compactStringsMCPV0(append(toolResult.EvidenceRefs, normalized.LastResult.EvidenceRefs...))
+		toolResult.ClosureIssues = append(toolResult.ClosureIssues, goalWorkIssuesMCPV0(normalized.LastResult.Issues)...)
 	}
 	if normalized.LastClosure != nil {
 		toolResult.ClosureStatus = strings.TrimSpace(normalized.LastClosure.Status)
 		toolResult.ClosureAccepted = normalized.LastClosure.Accepted
 		toolResult.ClosureNeedsRework = normalized.LastClosure.NeedsRework
-		toolResult.ClosureIssues = goalWorkIssuesMCPV0(normalized.LastClosure.Issues)
+		toolResult.ClosureIssues = append(toolResult.ClosureIssues, goalWorkIssuesMCPV0(normalized.LastClosure.Issues)...)
 		toolResult.EvidenceRefs = compactStringsMCPV0(append(toolResult.EvidenceRefs, normalized.LastClosure.EvidenceRefs...))
 	}
 	toolResult = applyMCPObserveAppDirectorGoalDomainMetadataV0(toolResult, normalized)
@@ -194,6 +195,9 @@ func mcpObserveAppDirectorGoalResultRefV0(result orquestagoal.GoalWorkResultV0) 
 func mcpObserveAppDirectorGoalRecommendedActionV0(
 	result MCPObserveAppDirectorGoalToolResultV0,
 ) string {
+	if mcpObserveAppDirectorGoalLooksUsageLimitedV0(result) {
+		return "inspect_goal_backend_limits"
+	}
 	status := strings.TrimSpace(result.GoalStatus)
 	closureStatus := strings.TrimSpace(result.ClosureStatus)
 	switch {
@@ -212,6 +216,32 @@ func mcpObserveAppDirectorGoalRecommendedActionV0(
 	default:
 		return "observe_later"
 	}
+}
+
+func mcpObserveAppDirectorGoalLooksUsageLimitedV0(
+	result MCPObserveAppDirectorGoalToolResultV0,
+) bool {
+	if mcpIssueSetLooksUsageLimitedV0(result.ClosureIssues) {
+		return true
+	}
+	summary := strings.ToLower(strings.TrimSpace(result.Summary))
+	return strings.Contains(summary, "usagelimited") ||
+		strings.Contains(summary, "usage_limited") ||
+		strings.Contains(summary, "budgetlimited") ||
+		strings.Contains(summary, "budget_limited") ||
+		strings.Contains(summary, "provider_limited")
+}
+
+func mcpIssueSetLooksUsageLimitedV0(issues []MCPValidationIssueV0) bool {
+	for _, issue := range issues {
+		code := strings.ToLower(strings.TrimSpace(issue.Code))
+		if strings.Contains(code, "usage_limited") ||
+			strings.Contains(code, "provider_limited") ||
+			strings.Contains(code, "budget_limited") {
+			return true
+		}
+	}
+	return false
 }
 
 func mergeMCPObserveAppDirectorGoalPartialIntoTimeoutV0(

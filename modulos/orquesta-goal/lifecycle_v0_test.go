@@ -451,6 +451,54 @@ func TestObserveActiveGoalWorksV0ListaYObservaPendientesDeObservacion(t *testing
 	}
 }
 
+func TestObserveActiveGoalWorksV0DevuelveSnapshotTerminalAccionable(t *testing.T) {
+	store := newGoalLifecycleStoreForTestV0()
+	blocked := mustGoalLifecycleStateWithRefsForTestV0(
+		t,
+		"run-ref-goal-lifecycle-blocked-001",
+		"goal-ref-lifecycle-blocked-001",
+		GoalStatusBlockedV0,
+	)
+	blocked.LastResult = &GoalWorkResultV0{
+		Status:       GoalStatusBlockedV0,
+		GoalRef:      blocked.GoalRef,
+		Summary:      "codex_app_server_goal_status_usageLimited",
+		EvidenceRefs: []string{"evidence-ref-goal-usage-limited"},
+		Issues:       []GoalWorkIssueV0{{Code: "codex_app_server_goal_provider_limited"}},
+	}
+	blocked.LastClosure = &GoalClosureValidationV0{
+		Status:       GoalStatusBlockedV0,
+		NeedsRework:  true,
+		EvidenceRefs: []string{"evidence-ref-goal-closure-blocked"},
+		Issues:       []GoalWorkIssueV0{{Code: ErrGoalClosureInvalidV0, Field: "status"}},
+	}
+	if err := store.SaveGoalWorkStateV0(context.Background(), blocked); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 blocked: %v", err)
+	}
+	observer := &goalLifecycleObserverByGoalForTestV0{}
+
+	result, err := ObserveActiveGoalWorksV0(
+		context.Background(),
+		GoalWorkObserveActiveRequestV0{},
+		GoalWorkLifecyclePortsV0{
+			Observer:   observer,
+			StateStore: store,
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("ObserveActiveGoalWorksV0: %v", err)
+	}
+	if len(result.Observations) != 1 ||
+		len(observer.requests) != 0 ||
+		!result.Observations[0].Terminal ||
+		!result.Observations[0].NeedsRework ||
+		result.Observations[0].Result.Summary != "codex_app_server_goal_status_usageLimited" ||
+		!goalLifecycleStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-goal-usage-limited") {
+		t.Fatalf("result=%+v requests=%+v", result, observer.requests)
+	}
+}
+
 func TestObserveActiveGoalWorksV0ConservaIncidenciaPorGoalYContinua(t *testing.T) {
 	store := newGoalLifecycleStoreForTestV0()
 	first := mustGoalLifecycleStateWithRefsForTestV0(
