@@ -23,7 +23,9 @@ Invariantes:
   checkpoint/ACK por puerto;
 - `forced=false` prepara checkpoint por puerto y registra ACK durable antes de
   solicitar `StopRunV0`; si falta ACK, no pide stop ni ejecuta drainer;
-- `forced=true` permite drenar agentes sin checkpoint previo;
+- `forced=true` permite drenar agentes sin checkpoint previo, pero no puede
+  declarar `shutdown_ready` si el lector de trabajo activo informa un backend
+  Goal vivo (`backend_still_running`);
 - `checkpoint_deadline_at` permite declarar que la espera cooperativa ya vencio;
   si llega vencido junto a `occurred_at`, el caso de uso pide `StopRunV0`
   forzado y devuelve evidencia de deadline, sin ocultar que faltaba checkpoint;

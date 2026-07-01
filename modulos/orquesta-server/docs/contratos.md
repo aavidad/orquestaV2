@@ -107,6 +107,11 @@ Salida:
   `GoalWorkResultV0` y `GoalClosureValidationV0` completos para reenganche y
   restauracion del proceso residente. No es API publica: clientes externos
   deben leer readiness/status/operational-status, no parsear el statefile.
+- `base_url.txt` bajo `RuntimeWorkDir`: artefacto operativo local con la URL
+  HTTP loopback del servidor (`0600`). El runtime lo escribe de forma durable
+  antes de persistir estado `running` con `addr`; si no puede materializarlo,
+  no debe publicar serving como listo. No contiene token ni habilita acceso
+  externo.
 
 Configuracion externa relacionada:
 - `ORQUESTA_SERVER_AUTONOMY_ENABLED=true`: perfil explicito para arrancar la

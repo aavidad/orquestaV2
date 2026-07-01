@@ -12,7 +12,7 @@ func blockingActiveShutdownWorkV0(
 	deps ServerShutdownDepsV0,
 	command ServerShutdownCommandV0,
 ) (ServerShutdownResultV0, bool, error) {
-	if command.Forced || deps.ActiveWorkReader == nil {
+	if deps.ActiveWorkReader == nil {
 		return ServerShutdownResultV0{}, false, nil
 	}
 	active, err := deps.ActiveWorkReader.ReadActiveShutdownWorkV0(ctx, ActiveShutdownWorkRequestV0{
@@ -26,6 +26,9 @@ func blockingActiveShutdownWorkV0(
 		return ServerShutdownResultV0{}, false, err
 	}
 	works := compactActiveShutdownWorksV0(active.ActiveWorks)
+	if command.Forced {
+		works = forcedBlockingActiveShutdownWorksV0(works)
+	}
 	if len(works) == 0 {
 		return ServerShutdownResultV0{}, false, nil
 	}
@@ -48,12 +51,33 @@ func activeShutdownWorkBlockingStatusV0(
 	works []ActiveShutdownWorkV0,
 ) string {
 	for _, work := range works {
-		if strings.TrimSpace(work.Kind) == "goal_backend" ||
-			strings.TrimSpace(work.Status) == ServerShutdownStatusBackendStillRunningV0 {
+		if activeShutdownWorkIsBackendStillRunningV0(work) {
 			return ServerShutdownStatusBackendStillRunningV0
 		}
 	}
 	return ServerShutdownStatusActiveGoalsPresentV0
+}
+
+func forcedBlockingActiveShutdownWorksV0(
+	works []ActiveShutdownWorkV0,
+) []ActiveShutdownWorkV0 {
+	out := make([]ActiveShutdownWorkV0, 0, len(works))
+	for _, work := range works {
+		if activeShutdownWorkIsBackendStillRunningV0(work) {
+			out = append(out, work)
+		}
+	}
+	if out == nil {
+		return []ActiveShutdownWorkV0{}
+	}
+	return out
+}
+
+func activeShutdownWorkIsBackendStillRunningV0(
+	work ActiveShutdownWorkV0,
+) bool {
+	return strings.TrimSpace(work.Kind) == "goal_backend" ||
+		strings.TrimSpace(work.Status) == ServerShutdownStatusBackendStillRunningV0
 }
 
 func activeShutdownWorkBlockingEvidenceV0(status string) string {

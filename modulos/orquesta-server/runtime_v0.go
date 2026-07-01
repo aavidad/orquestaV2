@@ -141,6 +141,11 @@ func (runtime *RuntimeV0) RunWithShutdownCauseV0(
 	}
 	server := runtime.httpServerV0()
 	addr := listener.Addr().String()
+	if err := runtime.publishServingBaseURLV0(addr); err != nil {
+		_ = listener.Close()
+		runtime.persistStateTransitionV0(context.Background(), runtime.tracker.MarkErrorV0(err.Error(), runtime.clock.Now()), "serving_base_url_failed")
+		return err
+	}
 	if err := runtime.saveStateV0(ctx, runtime.tracker.MarkServingV0(addr, runtime.clock.Now())); err != nil {
 		_ = listener.Close()
 		return err

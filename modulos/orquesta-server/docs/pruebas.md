@@ -143,6 +143,9 @@
 - `modulos/orquesta-server` prueba que `/healthz` es liveness y
   `/api/v0/server/readiness` es readiness, responde 503 si startup no esta
   listo y no filtra paths ni runtime dirs.
+- `modulos/orquesta-server` prueba que `RuntimeV0` materializa `base_url.txt`
+  durable en `RuntimeWorkDir` con permiso `0600` antes de publicar el servidor
+  como consumible por clientes locales.
 - `modulos/orquesta-server` prueba que el guard remoto permite sin token la
   excepcion exacta de lectura `/api/v0/apps/intake/guided-turn`, y conserva el
   prefijo dinamico `/api/v0/apps/{app_ref}/changes` como mutacion protegida.
