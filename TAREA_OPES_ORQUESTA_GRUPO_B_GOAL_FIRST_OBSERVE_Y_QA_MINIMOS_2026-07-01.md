@@ -72,6 +72,32 @@ Acción esperada:
   `working`, `waiting`, `needs_rework`, `blocked`, `complete`.
 - Debe haber heartbeat o checkpoint durable aunque el goal siga activo.
 
+### 2.b. Resultado durable sin estado terminal
+
+Después aparecieron ficheros `trabajo/docs/orquesta_goal_result_v0.json` en
+temas 006, 012 y 018. Sin embargo, `goals_1.sqlite` solo mostraba `complete`
+para el tema 012; temas 006 y 018 seguían `active` pese a tener resultado
+durable.
+
+Acción esperada:
+
+- Si existe `orquesta_goal_result_v0.json` válido y el cierre externo lo acepta,
+  el estado durable del goal debe pasar a terminal o publicar una razón clara
+  por la que sigue `active`.
+- Si el resultado está incompleto, `observe` debe exponer qué falta, no seguir
+  consumiendo tokens sin explicación.
+
+### 2.c. Tests `passed` sin evidencias
+
+En `orquesta_goal_result_v0.json` de temas 012 y 018 hay
+`required_test_results` con `status=passed` y `evidence_refs=[]`.
+
+Acción esperada:
+
+- Un required test no debe marcar `passed` sin evidencia durable.
+- Si la evidencia vive en el filesystem, debe referenciarse con ruta relativa
+  clara dentro del write-set.
+
 ### 3. No se bloquea entrega por debajo del mínimo OPES
 
 La entrega nueva del tema 011 quedó primero en 6.051 palabras y después en
