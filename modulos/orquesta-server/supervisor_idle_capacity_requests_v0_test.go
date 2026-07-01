@@ -77,6 +77,59 @@ func TestRuntimeV0SupervisorPreparaAutomejoraConCapacidadLibreV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0SupervisorPreparaAutomejoraConColaVaciaBajoObjetivoV0(t *testing.T) {
+	now := time.Date(2026, 7, 1, 22, 31, 19, 0, time.UTC)
+	supervisor := &fakeSupervisorV0{
+		results: []fakeSupervisorResultV0{{result: orquestarunsupervisor.RunSupervisorResultV0{
+			StopReason:      orquestarunsupervisor.RunSupervisorStopMaxExecutionsV0,
+			TotalExecutions: 1,
+			Ticks: []orquestarunsupervisor.RunSupervisorTickSummaryV0{{
+				Result: orquestaruncoordinator.RunCoordinatorTickResultV0{},
+			}},
+		}}},
+		planRequests: []IdleSelfImprovementRequestV0{{
+			RequestRef: "request-ref-backlog-scanner",
+		}},
+		selfStarted: make(chan struct{}, 1),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                       t.TempDir(),
+		TickInterval:                   time.Hour,
+		IdleSelfImprovementAfter:       time.Minute,
+		IdleSelfImprovementMaxRequests: 3,
+		IdleSelfImprovementTargetQueue: 4,
+		AuditDisabled:                  true,
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: &memoryStateStoreV0{},
+		Clock:      fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.runSupervisorTickV0(context.Background())
+
+	select {
+	case <-supervisor.selfStarted:
+	case <-time.After(time.Second):
+		t.Fatalf("automejora no preparada con cola vacia: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
+	}
+	if supervisor.planCalls != 1 ||
+		supervisor.lastPlanRequest.Trigger != "capacity_free" ||
+		supervisor.lastPlanRequest.QueueSize != 0 ||
+		supervisor.lastPlanRequest.FreeCapacity != 4 ||
+		supervisor.lastPlanRequest.MaxRequests != 3 ||
+		supervisor.selfCalls != 1 ||
+		supervisor.lastSelfRequest.RequestRef != "request-ref-backlog-scanner" {
+		t.Fatalf("plan=%+v self_calls=%d last_self=%+v",
+			supervisor.lastPlanRequest,
+			supervisor.selfCalls,
+			supervisor.lastSelfRequest,
+		)
+	}
+}
+
 func TestRuntimeV0SupervisorFiltraRequestsDeAutomejoraPorPuertoV0(t *testing.T) {
 	now := time.Date(2026, 5, 27, 9, 0, 0, 0, time.UTC)
 	supervisor := &fakeSupervisorV0{

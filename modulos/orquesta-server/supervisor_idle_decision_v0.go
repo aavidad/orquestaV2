@@ -44,13 +44,6 @@ func (runtime *RuntimeV0) idleSelfImprovementCapacityDecisionV0(
 		decision.Reason = "capacity_attempt_in_flight"
 		return decision
 	}
-	if decision.QueueSize <= 0 &&
-		len(decision.RetryableRunRefs) == 0 &&
-		len(decision.RetryableRequestRefs) == 0 {
-		decision.AuditStatus = "skipped"
-		decision.Reason = "capacity_queue_unknown"
-		return decision
-	}
 	target := runtime.config.IdleSelfImprovementTargetQueue
 	if target <= 0 {
 		target = runtime.config.IdleSelfImprovementMaxRequests
