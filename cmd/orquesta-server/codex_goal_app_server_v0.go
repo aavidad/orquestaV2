@@ -165,6 +165,7 @@ type serverCodexAppServerGoalBackendV0 struct {
 	Protocol          serverCodexAppServerProtocolPortV0
 	CWD               string
 	DiagnosticLogPath string
+	AuthIssueCode     string
 	Model             string
 	ReasoningEffort   string
 	Sandbox           string

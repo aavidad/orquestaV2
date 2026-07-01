@@ -109,6 +109,68 @@ func TestServerCodexGoalBackendFromEnvV0TmuxPreflightOKV0(t *testing.T) {
 	}
 }
 
+func TestServerCodexGoalBackendFromEnvV0TmuxSinAuthDegradaYConservaShutdownV0(t *testing.T) {
+	root, err := os.MkdirTemp("/tmp", "og")
+	if err != nil {
+		t.Fatalf("mkdir temp root: %v", err)
+	}
+	defer os.RemoveAll(root)
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	tmuxLog := filepath.Join(root, "tmux.log")
+	fakeTmux := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte(fakeCodexAppServerTmuxCommandForTestV0()), 0o700); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	fakeCodex := filepath.Join(root, "codex-fake-tmux-ok")
+	if err := os.WriteFile(fakeCodex, []byte(fakeCodexAppServerTmuxCodexForTestV0()), 0o700); err != nil {
+		t.Fatalf("write fake codex: %v", err)
+	}
+	projectDir := filepath.Join(root, "project")
+	runtimeDir := filepath.Join(root, "runtime")
+	homeDir := filepath.Join(root, "home")
+	sourceCodeHome := filepath.Join(root, "source-codex-home")
+	if err := os.MkdirAll(sourceCodeHome, 0o700); err != nil {
+		t.Fatalf("mkdir source code home: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceCodeHome, "config.toml"), []byte("model = \"test\"\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	t.Setenv("ORQUESTA_TEST_TMUX_LOG", tmuxLog)
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envCodexRuntimeWorkDirV0, runtimeDir)
+	t.Setenv(envCodexHomeV0, homeDir)
+	t.Setenv(envCodexCodeHomeV0, sourceCodeHome)
+	t.Setenv(envCodexCommandV0, fakeCodex)
+	t.Setenv(envCodexPathV0, binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0)
+	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "1000")
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("CODEX_API_KEY", "")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	backend, err := serverCodexGoalBackendFromEnvForWorkDirV0(config, projectDir)
+	if err != nil {
+		t.Fatalf("serverCodexGoalBackendFromEnvForWorkDirV0: %v", err)
+	}
+
+	if got := serverCodexGoalBackendUnavailableIssueCodeV0(backend); got != "codex_app_server_auth_missing" {
+		t.Fatalf("issue=%q", got)
+	}
+	if backend.ShutdownHook == nil {
+		t.Fatalf("backend degradado debe conservar shutdown hook para limpiar app-server tmux")
+	}
+	isolatedCodeHome := filepath.Join(filepath.Clean(runtimeDir), codexAppServerTmuxDirV0, "codex-home")
+	if _, err := os.Stat(filepath.Join(isolatedCodeHome, "auth.json")); !os.IsNotExist(err) {
+		t.Fatalf("auth inesperado err=%v", err)
+	}
+}
+
 func TestCodexAppServerCommandProtocolV0RespetaTimeoutSiProxyNoRespondeV0(t *testing.T) {
 	root := t.TempDir()
 	script := filepath.Join(root, "codex-hang")

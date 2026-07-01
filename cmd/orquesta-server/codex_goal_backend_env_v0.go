@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -76,6 +77,8 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	commandPreflightProtocol.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
 	var preflightProtocol serverCodexAppServerProbePortV0 = commandPreflightProtocol
 	var shutdownHook orquestaserver.RuntimeShutdownHookPortV0
+	codeHomePath := ""
+	authIssueCode := ""
 	if backend == codexGoalBackendAppServerTmuxV0 {
 		socketPath, err := codexAppServerTmuxSocketPathV0(config)
 		if err != nil {
@@ -91,6 +94,7 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 			}
 			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 		}
+		codeHomePath = tmuxCodeHomePath
 		tmuxBackend := serverCodexAppServerTmuxBackendV0{
 			CommandPath:       runtimeConfig.CommandPath,
 			PathEnv:           runtimeConfig.PathEnv,
@@ -101,6 +105,14 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 			RuntimeWorkDir:    config.RuntimeWorkDir,
 			SourceCodeHomeDir: runtimeConfig.CodeHomeDir,
 			Timeout:           codexAppServerTmuxStartupTimeoutV0(time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond),
+		}
+		shutdownTmuxBackend := tmuxBackend
+		shutdownTmuxBackend.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
+		shutdownHook = shutdownTmuxBackend
+		authIssueCode = codexAppServerAuthIssueCodeFromDirsV0(runtimeConfig.CodeHomeDir, tmuxCodeHomePath)
+		if authIssueCode != "" {
+			degraded := serverCodexUnavailableGoalBackendV0{IssueCode: authIssueCode}
+			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded, ShutdownHook: shutdownHook}, nil
 		}
 		websocketProtocol := serverCodexAppServerWebSocketProtocolV0{
 			SocketPath:        socketPath,
@@ -119,9 +131,6 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 			}
 			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 		}
-		shutdownTmuxBackend := tmuxBackend
-		shutdownTmuxBackend.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
-		shutdownHook = shutdownTmuxBackend
 	}
 	if err := preflightProtocol.ProbeV0(context.Background()); err != nil {
 		degraded := serverCodexUnavailableGoalBackendV0{
@@ -129,10 +138,15 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		}
 		return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 	}
+	if authIssueCode = codexAppServerAuthIssueCodeV0(codeHomePath); authIssueCode != "" {
+		degraded := serverCodexUnavailableGoalBackendV0{IssueCode: authIssueCode}
+		return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded, ShutdownHook: shutdownHook}, nil
+	}
 	client := serverCodexAppServerGoalBackendV0{
 		Protocol:          runtimeProtocol,
 		CWD:               firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir),
 		DiagnosticLogPath: diagnosticLogPathForCodexAppServerProtocolV0(runtimeProtocol),
+		AuthIssueCode:     authIssueCode,
 		Model:             runtimeConfig.Model,
 		ReasoningEffort:   runtimeConfig.ReasoningEffort,
 		Sandbox:           runtimeConfig.Sandbox,
@@ -148,6 +162,41 @@ func diagnosticLogPathForCodexAppServerProtocolV0(protocol serverCodexAppServerP
 		return strings.TrimSpace(websocket.DiagnosticLogPath)
 	}
 	return ""
+}
+
+func codexAppServerAuthIssueCodeV0(codeHomeDir string) string {
+	return codexAppServerAuthIssueCodeFromDirsV0(codeHomeDir)
+}
+
+func codexAppServerAuthIssueCodeFromDirsV0(codeHomeDirs ...string) string {
+	if codexAppServerAuthEnvPresentV0() {
+		return ""
+	}
+	checked := false
+	for _, codeHomeDir := range codeHomeDirs {
+		codeHomeDir = strings.TrimSpace(codeHomeDir)
+		if codeHomeDir == "" {
+			continue
+		}
+		checked = true
+		info, err := os.Stat(filepath.Join(codeHomeDir, "auth.json"))
+		if err == nil && !info.IsDir() && info.Size() > 0 {
+			return ""
+		}
+	}
+	if !checked {
+		return ""
+	}
+	return "codex_app_server_auth_missing"
+}
+
+func codexAppServerAuthEnvPresentV0() bool {
+	for _, name := range []string{"OPENAI_API_KEY", "CODEX_API_KEY"} {
+		if strings.TrimSpace(os.Getenv(name)) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func codexGoalBackendFromEnvV0() string {
@@ -209,6 +258,9 @@ func serverCodexGoalBackendDiagnosticMessageV0(issueCode string) string {
 	}
 	if issueCode == "codex_app_server_provider_unauthorized" {
 		return "codex goal backend degradado: codex_app_server_provider_unauthorized; accion: revisa autenticacion de Codex/OpenAI en el CODEX_HOME aislado y reinicia"
+	}
+	if issueCode == "codex_app_server_auth_missing" {
+		return "codex goal backend degradado: codex_app_server_auth_missing; accion: ejecuta login de Codex o proyecta auth.json al CODEX_HOME aislado y reinicia"
 	}
 	if issueCode == "" {
 		issueCode = "codex_app_server_unavailable"

@@ -555,6 +555,35 @@ func TestServerCodexAppServerGoalBackendV0DiagnosticaSystemErrorConUnauthorizedD
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0DiagnosticaSystemErrorConAuthAusenteV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		getGoalErr: codexAppServerCallErrorV0{Code: "codex_app_server_rpc_method_not_found"},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-read-system-error-auth-missing-001",
+			Status: serverCodexAppServerThreadStatusV0("systemError"),
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol:      protocol,
+		CWD:           t.TempDir(),
+		AuthIssueCode: "codex_app_server_auth_missing",
+	}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         "goal-ref-codex-app-server-read-system-error-auth-missing-001",
+		ExternalGoalRef: "thread-ref-goal-read-system-error-auth-missing-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0 fallback: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusBlockedV0 ||
+		receipt.IssueCode != "codex_app_server_auth_missing" ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-auth-missing") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0CompactaObjetivoLargoParaAppServerV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-long-objective"},

@@ -44,6 +44,29 @@ func TestCodexAppServerIssueCodeFromLogFileV0ClasificaUnauthorizedProviderV0(t *
 	}
 }
 
+func TestCodexAppServerAuthIssueCodeV0DetectaAuthAusenteV0(t *testing.T) {
+	root := t.TempDir()
+
+	if got := codexAppServerAuthIssueCodeV0(root); got != "codex_app_server_auth_missing" {
+		t.Fatalf("issue=%q", got)
+	}
+}
+
+func TestCodexAppServerAuthIssueCodeV0AceptaAuthJSONOEnvV0(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "auth.json"), []byte(`{"ok":true}`), 0o600); err != nil {
+		t.Fatalf("write auth: %v", err)
+	}
+	if got := codexAppServerAuthIssueCodeV0(root); got != "" {
+		t.Fatalf("issue con auth.json=%q", got)
+	}
+	noFileRoot := t.TempDir()
+	t.Setenv("OPENAI_API_KEY", "test")
+	if got := codexAppServerAuthIssueCodeV0(noFileRoot); got != "" {
+		t.Fatalf("issue con env=%q", got)
+	}
+}
+
 func TestCodexAppServerWebSocketProtocolV0UsaLogResetStdioV0(t *testing.T) {
 	root := t.TempDir()
 	logPath := filepath.Join(root, "orquesta-goal.log")

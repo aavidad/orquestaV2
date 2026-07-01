@@ -21,6 +21,9 @@ func (backend serverCodexAppServerGoalBackendV0) codexAppServerThreadStatusIssue
 		if issueCode := codexAppServerIssueCodeFromLogFileV0(backend.DiagnosticLogPath); issueCode != "" {
 			return issueCode
 		}
+		if issueCode := strings.TrimSpace(backend.AuthIssueCode); issueCode != "" {
+			return issueCode
+		}
 		return "codex_app_server_thread_system_error"
 	default:
 		return ""
@@ -31,6 +34,8 @@ func codexAppServerIssueEvidenceRefV0(issueCode string) string {
 	switch strings.TrimSpace(issueCode) {
 	case "codex_app_server_provider_unauthorized":
 		return "evidence-ref-codex-app-server-provider-unauthorized"
+	case "codex_app_server_auth_missing":
+		return "evidence-ref-codex-app-server-auth-missing"
 	default:
 		return ""
 	}
