@@ -42,5 +42,5 @@ func cleanupCodexAppServerTmuxAfterStartupFailureV0(config orquestaserver.Config
 		SourceCodeHomeDir: runtimeConfig.CodeHomeDir,
 		Timeout:           timeout,
 	}
-	_ = backend.ShutdownV0(context.Background())
+	_ = backend.ShutdownConfiguredSessionAfterStartupFailureV0(context.Background())
 }

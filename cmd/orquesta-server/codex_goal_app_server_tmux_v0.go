@@ -178,6 +178,14 @@ func (backend serverCodexAppServerTmuxBackendV0) waitTmuxPaneExitedV0(
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) ShutdownV0(ctx context.Context) error {
+	return backend.shutdownTmuxSessionV0(ctx, false)
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) ShutdownConfiguredSessionAfterStartupFailureV0(ctx context.Context) error {
+	return backend.shutdownTmuxSessionV0(ctx, true)
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionV0(ctx context.Context, allowConfiguredOrphan bool) error {
 	timeout := backend.Timeout
 	if timeout <= 0 {
 		timeout = codexAppServerTmuxDefaultTimeoutV0
@@ -185,7 +193,11 @@ func (backend serverCodexAppServerTmuxBackendV0) ShutdownV0(ctx context.Context)
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	if !backend.tmuxOwnerMarkerExistsV0() {
+	owned := backend.tmuxOwnerMarkerExistsV0()
+	if !owned && !allowConfiguredOrphan {
+		return nil
+	}
+	if !owned && !backend.tmuxConfiguredOrphanCleanupAllowedV0() {
 		return nil
 	}
 	tmuxPath, err := codexAppServerTmuxCommandPathV0(backend.PathEnv)
@@ -209,6 +221,22 @@ func (backend serverCodexAppServerTmuxBackendV0) ShutdownV0(ctx context.Context)
 	_ = os.Remove(strings.TrimSpace(backend.SocketPath))
 	_ = os.Remove(backend.tmuxOwnerMarkerPathV0())
 	return nil
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) tmuxConfiguredOrphanCleanupAllowedV0() bool {
+	sessionName := strings.TrimSpace(backend.SessionName)
+	if !strings.HasPrefix(sessionName, "orquesta-goal-") ||
+		len(strings.TrimPrefix(sessionName, "orquesta-goal-")) < 16 {
+		return false
+	}
+	socketPath := strings.TrimSpace(backend.SocketPath)
+	if socketPath == "" || filepath.Base(socketPath) == "." || filepath.Dir(socketPath) == "." {
+		return false
+	}
+	if filepath.Ext(socketPath) != ".sock" && filepath.Base(socketPath) != "s.sock" {
+		return false
+	}
+	return true
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) cleanupTmuxSessionAfterStartupFailureV0(

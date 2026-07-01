@@ -528,6 +528,49 @@ func TestCodexAppServerTmuxBackendV0ShutdownMataSesionPropiaV0(t *testing.T) {
 	}
 }
 
+func TestCodexAppServerTmuxBackendV0ShutdownNormalNoMataSesionSinOwnerMarkerV0(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	tmuxLog := filepath.Join(root, "tmux.log")
+	fakeTmux := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte(fakeCodexAppServerTmuxCommandForTestV0()), 0o700); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	socketPath := filepath.Join(root, "runtime", codexAppServerTmuxDirV0, "g-unowned.sock")
+	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
+		t.Fatalf("mkdir socket dir: %v", err)
+	}
+	if err := os.WriteFile(socketPath, []byte("stale socket"), 0o600); err != nil {
+		t.Fatalf("write socket: %v", err)
+	}
+	if err := os.WriteFile(tmuxLog+".session", []byte("stale session"), 0o600); err != nil {
+		t.Fatalf("write fake session: %v", err)
+	}
+	backend := serverCodexAppServerTmuxBackendV0{
+		PathEnv:     binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		SocketPath:  socketPath,
+		SessionName: "orquesta-goal-unowned-normal",
+		Timeout:     time.Second,
+	}
+	t.Setenv("ORQUESTA_TEST_TMUX_LOG", tmuxLog)
+
+	if err := backend.ShutdownV0(context.Background()); err != nil {
+		t.Fatalf("ShutdownV0: %v", err)
+	}
+	if rawLog, err := os.ReadFile(tmuxLog); err == nil && strings.Contains(string(rawLog), "kill-session") {
+		t.Fatalf("shutdown normal mato sesion sin owner marker: %s", string(rawLog))
+	}
+	if _, err := os.Stat(tmuxLog + ".session"); err != nil {
+		t.Fatalf("session fake no debe eliminarse sin owner marker: %v", err)
+	}
+	if _, err := os.Stat(socketPath); err != nil {
+		t.Fatalf("socket no debe eliminarse sin owner marker: %v", err)
+	}
+}
+
 func TestCodexAppServerTmuxBackendV0EsperaPanePIDAntesDeReadyV0(t *testing.T) {
 	command := exec.Command("sleep", "30")
 	if err := command.Start(); err != nil {
