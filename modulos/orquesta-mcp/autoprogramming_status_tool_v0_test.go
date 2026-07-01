@@ -609,6 +609,109 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalBloqueadoConBackendActivoPublicaS
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0CheckpointOnlyHighConsumptionEsBloqueante(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-checkpoint-only-high-tokens-001"
+	goalRef := "goal-ref-autop-status-goal-checkpoint-only-high-tokens-001"
+	externalGoalRef := "thread-ref-autop-status-goal-checkpoint-only-high-tokens-001"
+	checkpointRef := "artifact-ref-checkpoint:run-ref-autop-status-goal-checkpoint-only-high-tokens-001:checkpoint-started-txt"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Detectar alto consumo con solo checkpoint.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+		LastResult: &orquestagoal.GoalWorkResultV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			ArtifactRefs:    []string{checkpointRef},
+			EvidenceRefs:    []string{"result-ref-checkpoint-only-high-tokens-001"},
+		},
+		LastClosure: &orquestagoal.GoalClosureValidationV0{
+			Status:      orquestagoal.GoalStatusBlockedV0,
+			NeedsRework: true,
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-checkpoint-only-high-tokens-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: runRef,
+			Status: "stopped",
+			UsageSummary: &orquestacionnucleoapp.DirectorRunUsageStatsV0{
+				TotalTokens: 150000,
+			},
+			Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{
+				AgentRequestID: "agent-ref-checkpoint-only-high-tokens-001",
+				Status:         orquestacionnucleoapp.DirectorAgentStatusRunningV0,
+				InFlight:       true,
+				LastProgress: &orquestacionnucleoapp.DirectorAgentProgressV0{
+					DirectorProgressTemporalV0: orquestacionnucleoapp.DirectorProgressTemporalV0{
+						LastActivityAt: "2026-07-01T18:10:00Z",
+					},
+				},
+				Process: &orquestacionnucleoapp.DirectorAgentProcessStatsV0{
+					ProcessRef: "process-ref-checkpoint-only-high-tokens-001",
+					Status:     orquestacionnucleoapp.DirectorAgentProcessStatusRunningV0,
+				},
+			}},
+		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:          runRef,
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          "active",
+			ArtifactRefs:    []string{checkpointRef},
+			EvidenceRefs:    []string{"evidence-ref-checkpoint-only-high-tokens-observed"},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			empty: true,
+			terminal: []MCPRunQueueRankedCandidateCompactV0{{
+				RunRef: runRef,
+				AppRef: "opes",
+				Status: "stopped",
+			}},
+		},
+		Stats:          stats,
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{RunRef: runRef})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0 ||
+		action.Severity != "blocked" ||
+		action.GoalStatus != "active" ||
+		action.TokensUsed != 150000 ||
+		action.RecommendedAction != "replan_narrow_context" ||
+		!strings.Contains(action.Reason, "checkpoint_only_high_consumption") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.ArtifactRefs, checkpointRef) ||
+		len(action.DomainReceiptRefs) != 0 ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0) {
+		t.Fatalf("action=%+v", action)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0BackendActivoConSoloTokensHistoricosSigueBloqueado(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-backend-active-historical-tokens-001"
 	goalRef := "goal-ref-autop-status-goal-backend-active-historical-tokens-001"
