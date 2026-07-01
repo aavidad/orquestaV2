@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
@@ -14,6 +17,9 @@ import (
 )
 
 const codexAppServerGoalResultFileMaxBytesV0 = 128 * 1024
+const codexAppServerGoalResultSummaryMaxBytesV0 = 8 * 1024
+const codexAppServerGoalResultRefMaxBytesV0 = 2 * 1024
+const codexAppServerGoalResultSanitizedEvidenceRefV0 = "evidence-ref-codex-app-server-goal-result-output-sanitized"
 
 var errCodexAppServerGoalResultWalkDoneV0 = errors.New("codex_app_server_goal_result_walk_done")
 
@@ -274,18 +280,103 @@ func normalizeCodexAppServerGoalResultMarkerV0(
 	marked.Estado = strings.TrimSpace(marked.Estado)
 	marked.GoalRef = strings.TrimSpace(marked.GoalRef)
 	marked.ExternalGoalRef = strings.TrimSpace(marked.ExternalGoalRef)
-	marked.Summary = strings.TrimSpace(marked.Summary)
-	marked.ArtifactRefs = compactServerStackStringsV0(marked.ArtifactRefs)
-	marked.DomainReceiptRefs = compactServerStackStringsV0(marked.DomainReceiptRefs)
-	marked.EvidenceRefs = compactServerStackStringsV0(marked.EvidenceRefs)
+	sanitized := false
+	if summary, ok := sanitizeCodexAppServerGoalResultSummaryV0(marked.Summary); ok {
+		marked.Summary = summary
+		sanitized = true
+	} else {
+		marked.Summary = strings.TrimSpace(marked.Summary)
+	}
+	if refs, ok := sanitizeCodexAppServerGoalResultRefsV0(marked.ArtifactRefs); ok {
+		marked.ArtifactRefs = refs
+		sanitized = true
+	} else {
+		marked.ArtifactRefs = refs
+	}
+	if refs, ok := sanitizeCodexAppServerGoalResultRefsV0(marked.DomainReceiptRefs); ok {
+		marked.DomainReceiptRefs = refs
+		sanitized = true
+	} else {
+		marked.DomainReceiptRefs = refs
+	}
+	if refs, ok := sanitizeCodexAppServerGoalResultRefsV0(marked.EvidenceRefs); ok {
+		marked.EvidenceRefs = refs
+		sanitized = true
+	} else {
+		marked.EvidenceRefs = refs
+	}
 	for index := range marked.RequiredTestResults {
-		marked.RequiredTestResults[index].TestRef = strings.TrimSpace(marked.RequiredTestResults[index].TestRef)
+		if testRef, ok := sanitizeCodexAppServerGoalResultRefV0(marked.RequiredTestResults[index].TestRef); ok {
+			marked.RequiredTestResults[index].TestRef = testRef
+			sanitized = true
+		} else {
+			marked.RequiredTestResults[index].TestRef = strings.TrimSpace(marked.RequiredTestResults[index].TestRef)
+		}
 		marked.RequiredTestResults[index].Status = strings.TrimSpace(marked.RequiredTestResults[index].Status)
-		marked.RequiredTestResults[index].EvidenceRefs = compactServerStackStringsV0(
-			marked.RequiredTestResults[index].EvidenceRefs,
-		)
+		if refs, ok := sanitizeCodexAppServerGoalResultRefsV0(marked.RequiredTestResults[index].EvidenceRefs); ok {
+			marked.RequiredTestResults[index].EvidenceRefs = refs
+			sanitized = true
+		} else {
+			marked.RequiredTestResults[index].EvidenceRefs = refs
+		}
+	}
+	if sanitized {
+		marked.EvidenceRefs = compactServerStackStringsV0(append(
+			marked.EvidenceRefs,
+			codexAppServerGoalResultSanitizedEvidenceRefV0,
+		))
 	}
 	return marked
+}
+
+func sanitizeCodexAppServerGoalResultSummaryV0(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if !codexAppServerGoalResultValueNeedsSanitizingV0(value, codexAppServerGoalResultSummaryMaxBytesV0) {
+		return value, false
+	}
+	return "codex_app_server_goal_result_sanitized " +
+		codexAppServerGoalResultSanitizedRefV0("goal-result-summary-ref", value), true
+}
+
+func sanitizeCodexAppServerGoalResultRefsV0(values []string) ([]string, bool) {
+	out := []string{}
+	sanitized := false
+	for _, value := range values {
+		ref, ok := sanitizeCodexAppServerGoalResultRefV0(value)
+		if ok {
+			sanitized = true
+		}
+		out = append(out, ref)
+	}
+	return compactServerStackStringsV0(out), sanitized
+}
+
+func sanitizeCodexAppServerGoalResultRefV0(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if !codexAppServerGoalResultValueNeedsSanitizingV0(value, codexAppServerGoalResultRefMaxBytesV0) {
+		return value, false
+	}
+	prefix := "large-goal-output-ref"
+	if codexAppServerGoalResultContainsBase64DataURIV0(value) {
+		prefix = "binary-data-ref"
+	}
+	return codexAppServerGoalResultSanitizedRefV0(prefix, value), true
+}
+
+func codexAppServerGoalResultValueNeedsSanitizingV0(value string, maxBytes int) bool {
+	value = strings.TrimSpace(value)
+	return value != "" && (len(value) > maxBytes || codexAppServerGoalResultContainsBase64DataURIV0(value))
+}
+
+func codexAppServerGoalResultContainsBase64DataURIV0(value string) bool {
+	lower := strings.ToLower(value)
+	index := strings.Index(lower, "data:")
+	return index >= 0 && strings.Contains(lower[index:], ";base64,")
+}
+
+func codexAppServerGoalResultSanitizedRefV0(prefix string, value string) string {
+	sum := sha256.Sum256([]byte(value))
+	return strings.TrimSpace(prefix) + "-" + hex.EncodeToString(sum[:])[:12] + "-bytes-" + strconv.Itoa(len(value))
 }
 
 func codexAppServerGoalResultContractIssueCodeV0(marked codexAppServerGoalResultMarkerV0) string {

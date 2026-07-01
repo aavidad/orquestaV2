@@ -641,12 +641,20 @@ func codexAppServerFinalMarkerTextV0(thread serverCodexAppServerThreadReadV0, fi
 				continue
 			}
 			text := strings.TrimSpace(item.Text)
-			if strings.Contains(text, orquestaruntimecodexgoal.CodexGoalResultMarkerV0) {
-				return text
+			if markerText := codexAppServerGoalResultMarkerWindowV0(text); markerText != "" {
+				return markerText
 			}
 		}
 	}
 	return ""
+}
+
+func codexAppServerGoalResultMarkerWindowV0(text string) string {
+	markerIndex := strings.LastIndex(text, orquestaruntimecodexgoal.CodexGoalResultMarkerV0)
+	if markerIndex < 0 {
+		return ""
+	}
+	return strings.TrimSpace(text[markerIndex:])
 }
 
 func parseCodexAppServerGoalResultMarkerV0(text string) (codexAppServerGoalResultMarkerV0, bool, error) {

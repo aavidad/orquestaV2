@@ -770,6 +770,77 @@ func TestServerCodexAppServerGoalBackendV0ObservaResultadoDurableSinMarcadorV0(t
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0SanitizaResultadoDurableConBase64V0(t *testing.T) {
+	projectDir := t.TempDir()
+	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")
+	if err := os.MkdirAll(resultDir, 0o755); err != nil {
+		t.Fatalf("mkdir result dir: %v", err)
+	}
+	binaryDataURI := "data:image/png;base64," + strings.Repeat("A", 9000)
+	payload, err := json.Marshal(map[string]interface{}{
+		"schema_version":        "orquesta_goal_result.v0",
+		"status":                "complete",
+		"goal_ref":              "goal-ref-codex-app-server-file-base64-001",
+		"summary":               "captura " + binaryDataURI,
+		"artifact_refs":         []string{binaryDataURI},
+		"domain_receipt_refs":   []string{binaryDataURI},
+		"evidence_refs":         []string{binaryDataURI},
+		"required_test_results": []map[string]interface{}{{"test_ref": "test-ref-goal-base64", "status": "passed", "evidence_refs": []string{binaryDataURI}}},
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0)
+	if err := os.WriteFile(resultPath, payload, 0o644); err != nil {
+		t.Fatalf("write result file: %v", err)
+	}
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID: "thread-ref-goal-file-base64-001",
+			Status:   "complete",
+		},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-file-base64-001",
+			Status: "closed",
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: projectDir}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-codex-app-server-file-base64-001",
+		ExternalGoalRef: "thread-ref-goal-file-base64-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if strings.Contains(receipt.Summary, "data:image") ||
+		!strings.HasPrefix(receipt.Summary, "codex_app_server_goal_result_sanitized goal-result-summary-ref-") ||
+		len(receipt.ArtifactRefs) != 1 ||
+		!strings.HasPrefix(receipt.ArtifactRefs[0], "binary-data-ref-") ||
+		len(receipt.DomainReceiptRefs) != 1 ||
+		!strings.HasPrefix(receipt.DomainReceiptRefs[0], "binary-data-ref-") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, codexAppServerGoalResultSanitizedEvidenceRefV0) ||
+		len(receipt.RequiredTestResults) != 1 ||
+		len(receipt.RequiredTestResults[0].EvidenceRefs) != 1 ||
+		!strings.HasPrefix(receipt.RequiredTestResults[0].EvidenceRefs[0], "binary-data-ref-") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	for _, values := range [][]string{
+		receipt.ArtifactRefs,
+		receipt.DomainReceiptRefs,
+		receipt.EvidenceRefs,
+		receipt.RequiredTestResults[0].EvidenceRefs,
+	} {
+		for _, value := range values {
+			if strings.Contains(value, "data:image") || strings.Contains(value, strings.Repeat("A", 128)) {
+				t.Fatalf("valor no saneado en receipt=%+v", receipt)
+			}
+		}
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0PromueveResultadoDurableAunqueGoalSigaActivoV0(t *testing.T) {
 	projectDir := t.TempDir()
 	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")
@@ -1274,6 +1345,32 @@ func TestCodexAppServerGoalResultMarkerV0AceptaFallbackSinPhaseV0(t *testing.T) 
 	if err != nil || !found || marked.Summary != "ok" ||
 		!containsStringForTestV0(marked.EvidenceRefs, "evidence-ref-ok") {
 		t.Fatalf("marked=%+v found=%v err=%v", marked, found, err)
+	}
+}
+
+func TestCodexAppServerFinalMarkerTextV0RecortaPrefijoGrandeV0(t *testing.T) {
+	largePrefix := "ruido-" + strings.Repeat("x", 9000)
+	thread := serverCodexAppServerThreadReadV0{
+		ID: "thread-ref-goal-marker-window-001",
+		Turns: []serverCodexAppServerReadTurnV0{{
+			ID: "turn-ref-goal-marker-window-001",
+			Items: []serverCodexAppServerReadItemV0{{
+				ID:    "item-ref-goal-marker-window-001",
+				Type:  "agentMessage",
+				Phase: "final_answer",
+				Text: largePrefix + "\n" +
+					orquestaruntimecodexgoal.CodexGoalResultMarkerV0 +
+					` {"schema_version":"orquesta_goal_result.v0","status":"complete","summary":"ok"}`,
+			}},
+		}},
+	}
+
+	text := codexAppServerFinalMarkerTextV0(thread, true)
+
+	if strings.Contains(text, largePrefix) ||
+		!strings.HasPrefix(text, orquestaruntimecodexgoal.CodexGoalResultMarkerV0) ||
+		len(text) > 256 {
+		t.Fatalf("marker text len=%d prefix=%q", len(text), text[:minIntForTestV0(len(text), 80)])
 	}
 }
 

@@ -15,6 +15,13 @@ func containsStringForTestV0(values []string, target string) bool {
 	return false
 }
 
+func minIntForTestV0(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func backlogRequestRefForTestV0(content string, index int) string {
 	sections := parseIdleSelfImprovementBacklogSectionsV0(content)
 	if index < 0 || index >= len(sections) {
