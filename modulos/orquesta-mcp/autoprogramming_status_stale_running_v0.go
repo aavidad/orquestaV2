@@ -53,6 +53,7 @@ func buildMCPAutoprogrammingStaleRunningV0(
 
 func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 	states []orquestagoal.GoalWorkStateV0,
+	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
 ) []MCPAutoprogrammingActionableRunV0 {
 	out := make([]MCPAutoprogrammingActionableRunV0, 0)
 	for _, state := range states {
@@ -68,12 +69,21 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 		if metadata.CloseSupersededByLocalEvidence {
 			recommendedAction = "close_superseded_by_local_evidence"
 		}
-		out = append(out, MCPAutoprogrammingActionableRunV0{
+		reason := "goal_backend_state_unreconciled: local goal-first state blocked or invalid without reconciled backend snapshot"
+		if state.LastClosure != nil && state.LastClosure.Accepted {
+			reason = "goal_terminal_result_requires_state_reconcile"
+			recommendedAction = "reconcile_goal_terminal"
+		}
+		action := MCPAutoprogrammingActionableRunV0{
 			Code:              mcpAutoprogrammingActionGoalFirstBlockedV0,
 			Severity:          "blocked",
 			RunRef:            strings.TrimSpace(state.RunRef),
 			Status:            strings.TrimSpace(state.Status),
-			Reason:            "goal-first state persisted as blocked or invalid",
+			RunStatus:         mcpAutoprogrammingObservedRunStatusV0(observedByRunRef, state.RunRef),
+			GoalRef:           strings.TrimSpace(state.GoalRef),
+			ExternalGoalRef:   strings.TrimSpace(state.ExternalGoalRef),
+			GoalStatus:        strings.TrimSpace(state.Status),
+			Reason:            reason,
 			RecommendedAction: recommendedAction,
 			CurrentPhase:      metadata.CurrentPhase,
 			DomainCounters:    metadata.DomainCounters,
@@ -81,7 +91,13 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 				[]string{mcpAutoprogrammingEvidenceGoalFirstBlockedV0},
 				state.EvidenceRefs...,
 			)),
-		})
+		}
+		action = mcpAutoprogrammingActionableRunWithGoalStateSnapshotV0(action, state)
+		action = mcpAutoprogrammingActionableRunWithObservedStatsV0(
+			action,
+			observedByRunRef[strings.TrimSpace(state.RunRef)],
+		)
+		out = append(out, action)
 	}
 	return out
 }
@@ -316,11 +332,62 @@ func mcpAutoprogrammingActionableRunWithObservedStatsV0(
 	}
 	stats := *observed.Stats
 	liveness := mcpAutoprogrammingRunLivenessV0(stats)
+	action.RunStatus = firstNonEmptyMCPV0(action.RunStatus, strings.TrimSpace(stats.Status))
 	action.ProcessAliveCount = liveness.AgentsLive
+	action.ProcessRefs = compactStringsMCPV0(append(action.ProcessRefs, mcpAutoprogrammingStatsProcessRefsV0(stats)...))
+	if stats.UsageSummary != nil && stats.UsageSummary.TotalTokens > 0 {
+		action.TokensUsed = stats.UsageSummary.TotalTokens
+	}
 	action.AckDetected, action.LastAckAt = mcpAutoprogrammingStatsAckSummaryV0(stats)
 	action.LastOutputAt = mcpAutoprogrammingStatsLastActivityAtV0(stats)
 	action.LastArtifactAt = mcpAutoprogrammingStatsLastArtifactAtV0(stats)
 	return action
+}
+
+func mcpAutoprogrammingActionableRunWithGoalStateSnapshotV0(
+	action MCPAutoprogrammingActionableRunV0,
+	state orquestagoal.GoalWorkStateV0,
+) MCPAutoprogrammingActionableRunV0 {
+	if state.LastResult != nil {
+		action.ResultRef = mcpObserveAppDirectorGoalResultRefV0(*state.LastResult)
+		action.ArtifactRefs = compactStringsMCPV0(append(action.ArtifactRefs, state.LastResult.ArtifactRefs...))
+		action.DomainReceiptRefs = compactStringsMCPV0(append(action.DomainReceiptRefs, state.LastResult.DomainReceiptRefs...))
+		action.EvidenceRefs = compactStringsMCPV0(append(action.EvidenceRefs, state.LastResult.EvidenceRefs...))
+	}
+	if state.LastClosure != nil {
+		action.ClosureStatus = strings.TrimSpace(state.LastClosure.Status)
+		action.ClosureAccepted = state.LastClosure.Accepted
+		action.ClosureNeedsRework = state.LastClosure.NeedsRework
+		action.EvidenceRefs = compactStringsMCPV0(append(action.EvidenceRefs, state.LastClosure.EvidenceRefs...))
+	}
+	if action.ExternalGoalRef == "" {
+		action.ExternalGoalRef = strings.TrimSpace(state.LaunchReceipt.ExternalGoalRef)
+	}
+	return action
+}
+
+func mcpAutoprogrammingObservedRunStatusV0(
+	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
+	runRef string,
+) string {
+	observed := observedByRunRef[strings.TrimSpace(runRef)]
+	if observed == nil || observed.Stats == nil {
+		return ""
+	}
+	return strings.TrimSpace(observed.Stats.Status)
+}
+
+func mcpAutoprogrammingStatsProcessRefsV0(
+	stats orquestacionnucleoapp.DirectorRunStatsV0,
+) []string {
+	out := make([]string, 0)
+	for _, agent := range stats.Agents {
+		if agent.Process == nil {
+			continue
+		}
+		out = append(out, agent.Process.ProcessRef, agent.Process.SessionRef, agent.Process.LaunchRef)
+	}
+	return compactStringsMCPV0(out)
 }
 
 func mcpAutoprogrammingStatsAckSummaryV0(
