@@ -716,7 +716,15 @@ func codexAppServerTmuxShortSocketPathV0(config orquestaserver.ConfigV0) string 
 		tempDir = "/tmp"
 	}
 	hashPart := codexAppServerTmuxSocketHashPartV0(config)
-	return filepath.Join(tempDir, fmt.Sprintf("oq-gsrv-%d-%s", os.Getuid(), hashPart), "s.sock")
+	shortPath := filepath.Join(tempDir, codexAppServerTmuxShortSocketDirNameV0(hashPart), "s.sock")
+	if len(shortPath) <= codexAppServerTmuxMaxSocketPathV0 {
+		return shortPath
+	}
+	return filepath.Join("/tmp", codexAppServerTmuxShortSocketDirNameV0(hashPart), "s.sock")
+}
+
+func codexAppServerTmuxShortSocketDirNameV0(hashPart string) string {
+	return fmt.Sprintf("oq-gsrv-%d-%s", os.Getuid(), hashPart)
 }
 
 func codexAppServerTmuxCodeHomePathV0(config orquestaserver.ConfigV0) (string, error) {

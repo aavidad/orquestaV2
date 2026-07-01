@@ -721,6 +721,9 @@ func TestCodexAppServerTmuxSocketPathV0UsaFallbackCortoSiRuntimeEsLargoV0(t *tes
 		t.Fatalf("socket fallback demasiado largo: len=%d path=%s", len(socketPath), socketPath)
 	}
 	wantPrefix := filepath.Join(os.TempDir(), "oq-gsrv-")
+	if len(filepath.Join(os.TempDir(), "oq-gsrv-0000000000000000000000000", "s.sock")) > codexAppServerTmuxMaxSocketPathV0 {
+		wantPrefix = filepath.Join("/tmp", "oq-gsrv-")
+	}
 	if !strings.HasPrefix(socketPath, wantPrefix) || !strings.HasSuffix(socketPath, string(os.PathSeparator)+"s.sock") {
 		t.Fatalf("socket fallback inesperado: %s", socketPath)
 	}

@@ -45,7 +45,7 @@ func BuildCodexWrapperScriptV0(profile CodexConnectorProfileV0) string {
 	b.WriteString("cd ")
 	b.WriteString(shellQuoteV0(profile.ProjectWorkDir))
 	b.WriteString("\n")
-	b.WriteString(codexSharedStartupLockShellV0())
+	b.WriteString(codexSharedStartupLockShellV0(codexStartupLockDefaultSecondsV0(profile)))
 	b.WriteString("set +e\n")
 	b.WriteString(command)
 	b.WriteString(" < ")
@@ -56,7 +56,7 @@ func BuildCodexWrapperScriptV0(profile CodexConnectorProfileV0) string {
 	b.WriteString(shellQuoteV0(profile.RuntimeWorkDir + "/" + CodexStderrFileNameV0))
 	b.WriteString(" &\n")
 	b.WriteString("orquesta_codex_child_v0=$!\n")
-	b.WriteString(codexSharedStartupLockReleaseAfterLaunchShellV0(codexStartupLockDefaultSecondsV0(profile)))
+	b.WriteString(codexSharedStartupLockReleaseAfterLaunchShellV0())
 	b.WriteString("trap 'kill \"$orquesta_codex_child_v0\" 2>/dev/null; orquesta_codex_release_startup_lock_v0; ")
 	b.WriteString("wait \"$orquesta_codex_child_v0\" 2>/dev/null; exit 143' INT TERM\n")
 	b.WriteString("wait \"$orquesta_codex_child_v0\"\n")
@@ -68,9 +68,14 @@ func BuildCodexWrapperScriptV0(profile CodexConnectorProfileV0) string {
 	return b.String()
 }
 
-func codexSharedStartupLockShellV0() string {
+func codexSharedStartupLockShellV0(defaultSeconds string) string {
+	if strings.TrimSpace(defaultSeconds) == "" {
+		defaultSeconds = "8"
+	}
 	return strings.Join([]string{
 		"orquesta_codex_startup_lock_dir_v0=\"\"",
+		"orquesta_codex_startup_lock_seconds_v0=\"${ORQUESTA_CODEX_STARTUP_LOCK_SECONDS:-" + defaultSeconds + "}\"",
+		"case \"$orquesta_codex_startup_lock_seconds_v0\" in ''|*[!0-9]*) orquesta_codex_startup_lock_seconds_v0=" + defaultSeconds + ";; esac",
 		"orquesta_codex_release_startup_lock_v0() {",
 		"  if [ -n \"$orquesta_codex_startup_lock_dir_v0\" ]; then",
 		"    rmdir \"$orquesta_codex_startup_lock_dir_v0\" 2>/dev/null || true",
@@ -97,6 +102,10 @@ func codexSharedStartupLockShellV0() string {
 		"  return 1",
 		"}",
 		"orquesta_codex_lock_root_v0=\"${CODEX_HOME:-${HOME:-}}\"",
+		"orquesta_codex_lock_explicit_v0=\"${ORQUESTA_CODEX_STARTUP_LOCK_SECONDS:-}${ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS:-}${ORQUESTA_CODEX_STARTUP_LOCK_STALE_SECONDS:-}\"",
+		"if [ \"$orquesta_codex_startup_lock_seconds_v0\" -le 0 ] && [ -z \"$orquesta_codex_lock_explicit_v0\" ]; then",
+		"  orquesta_codex_lock_root_v0=\"\"",
+		"fi",
 		"if [ -n \"$orquesta_codex_lock_root_v0\" ]; then",
 		"  orquesta_codex_startup_lock_dir_v0=\"$orquesta_codex_lock_root_v0/.orquesta-codex-startup.lock\"",
 		"  orquesta_codex_lock_timeout_v0=\"${ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS:-120}\"",
@@ -118,13 +127,8 @@ func codexSharedStartupLockShellV0() string {
 	}, "\n")
 }
 
-func codexSharedStartupLockReleaseAfterLaunchShellV0(defaultSeconds string) string {
-	if strings.TrimSpace(defaultSeconds) == "" {
-		defaultSeconds = "8"
-	}
+func codexSharedStartupLockReleaseAfterLaunchShellV0() string {
 	return strings.Join([]string{
-		"orquesta_codex_startup_lock_seconds_v0=\"${ORQUESTA_CODEX_STARTUP_LOCK_SECONDS:-" + defaultSeconds + "}\"",
-		"case \"$orquesta_codex_startup_lock_seconds_v0\" in ''|*[!0-9]*) orquesta_codex_startup_lock_seconds_v0=" + defaultSeconds + ";; esac",
 		"orquesta_codex_startup_waited_v0=0",
 		"while [ \"$orquesta_codex_startup_waited_v0\" -lt \"$orquesta_codex_startup_lock_seconds_v0\" ]; do",
 		"  if ! kill -0 \"$orquesta_codex_child_v0\" 2>/dev/null; then",
