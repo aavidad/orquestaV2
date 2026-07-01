@@ -252,6 +252,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 		result.Queue,
 		result.Run,
 		result.Operator,
+		result.QueueHealth,
 		result.Diagnostics,
 	)
 	result.OpsSnapshot = buildMCPAutoprogrammingOpsSnapshotV0(result.Queue, result.Run, result.Operator, result.StaleRunning, input.OccurredAt)

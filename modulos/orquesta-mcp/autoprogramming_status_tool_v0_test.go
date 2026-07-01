@@ -2474,6 +2474,57 @@ func TestMCPAutoprogrammingStatusExecutorV0NoDeclaraSuperviseSeguroConColaVacia(
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0EfficiencyNoDeclaraIdleConGoalVivoYColaVacia(t *testing.T) {
+	runRef := "run-ref-autop-status-live-goal-empty-queue-001"
+	goalRef := "goal-ref-autop-status-live-goal-empty-queue-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Mantener visible un goal vivo aunque la cola legacy este vacia.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef: goalRef,
+			Status:  orquestagoal.GoalStatusRunningV0,
+		},
+		EvidenceRefs: []string{"evidence-ref-live-goal-empty-queue"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue:          &fakeMCPAutoprogrammingQueueStatusV0{empty: true},
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.RunningLive != 1 ||
+		result.QueueHealth.ObservedRuns != 1 {
+		t.Fatalf("queue_health=%+v", result.QueueHealth)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "live" ||
+		result.EfficiencySummary.ActiveRuns != 1 ||
+		result.EfficiencySummary.AlivePercentage != 100 ||
+		result.EfficiencySummary.AliveStuckStatus != "observed" ||
+		result.EfficiencySummary.OverallPercentage >= 100 ||
+		!hasStringMCPAutoprogrammingStatusTestV0(result.EfficiencySummary.Reasons, "running_live=1") {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
+	if result.EfficiencySummary.RecommendedAction != "observe_goal:run:"+runRef {
+		t.Fatalf("recommended_action=%q operator=%+v", result.EfficiencySummary.RecommendedAction, result.Operator)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0NoRecomiendaSupervisarBucleDeReplan(t *testing.T) {
 	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
 		Queue: &fakeMCPAutoprogrammingQueueStatusV0{},

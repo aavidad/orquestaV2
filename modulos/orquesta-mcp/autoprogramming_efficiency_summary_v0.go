@@ -42,6 +42,7 @@ func buildMCPAutoprogrammingEfficiencySummaryV0(
 	queue *MCPRunQueuePriorityToolResultV0,
 	run *MCPDirectorStatsToolResultV0,
 	operator *MCPAutoprogrammingOperatorV0,
+	queueHealth *MCPAutoprogrammingQueueHealthV0,
 	diagnostics []MCPAutoprogrammingDiagnosticV0,
 ) *MCPAutoprogrammingEfficiencySummaryV0 {
 	summary := &MCPAutoprogrammingEfficiencySummaryV0{
@@ -73,6 +74,7 @@ func buildMCPAutoprogrammingEfficiencySummaryV0(
 	if runVisible {
 		fillRunMCPAutoprogrammingEfficiencySummaryV0(summary, run)
 	}
+	applyQueueHealthMCPAutoprogrammingEfficiencySummaryV0(summary, queueHealth)
 	summary.OperationalHealthPercentage = operationalHealthMCPAutoprogrammingEfficiencyV0(
 		summary,
 		queueVisible,
@@ -154,6 +156,26 @@ func fillRunMCPAutoprogrammingEfficiencySummaryV0(
 	}
 }
 
+func applyQueueHealthMCPAutoprogrammingEfficiencySummaryV0(
+	summary *MCPAutoprogrammingEfficiencySummaryV0,
+	health *MCPAutoprogrammingQueueHealthV0,
+) {
+	if summary == nil || health == nil || health.RunningLive <= 0 {
+		return
+	}
+	summary.ActiveRuns = maxIntMCPAutoprogrammingEfficiencyV0(summary.ActiveRuns, health.RunningLive)
+	if summary.AliveStuckSampleSize == 0 {
+		summary.AliveStuckSampleSize = health.RunningLive
+		summary.AliveStuckStatus = "observed"
+		summary.AlivePercentage = 100
+		summary.StuckPercentage = 0
+	}
+	summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(
+		summary.Reasons,
+		"running_live="+strconv.Itoa(health.RunningLive),
+	)
+}
+
 func operationalHealthMCPAutoprogrammingEfficiencyV0(
 	summary *MCPAutoprogrammingEfficiencySummaryV0,
 	queueVisible bool,
@@ -221,7 +243,13 @@ func overallPercentageMCPAutoprogrammingEfficiencyV0(
 		return 0
 	}
 	if !runVisible || summary.TasksTotal <= 0 {
-		return summary.OperationalHealthPercentage
+		overall := summary.OperationalHealthPercentage
+		if hasRunningLiveMCPAutoprogrammingEfficiencyV0(summary) &&
+			!strings.EqualFold(summary.ClosureStatus, "closed") &&
+			overall >= 100 {
+			return 99
+		}
+		return overall
 	}
 	overall := ((summary.CompletionPercentage * 70) + (summary.OperationalHealthPercentage * 30) + 50) / 100
 	if !strings.EqualFold(summary.ClosureStatus, "closed") && overall >= 100 {
@@ -252,6 +280,8 @@ func stateMCPAutoprogrammingEfficiencyV0(
 		return "attention_required"
 	case summary.AgentsInFlight > 0 || summary.AgentsProgressing > 0:
 		return "live"
+	case hasRunningLiveMCPAutoprogrammingEfficiencyV0(summary):
+		return "live"
 	case strings.EqualFold(summary.ClosureStatus, "ready"):
 		return "closing"
 	case summary.ClosureBlocked:
@@ -265,6 +295,20 @@ func stateMCPAutoprogrammingEfficiencyV0(
 	default:
 		return "unknown"
 	}
+}
+
+func hasRunningLiveMCPAutoprogrammingEfficiencyV0(
+	summary *MCPAutoprogrammingEfficiencySummaryV0,
+) bool {
+	if summary == nil {
+		return false
+	}
+	for _, reason := range summary.Reasons {
+		if strings.HasPrefix(strings.TrimSpace(reason), "running_live=") {
+			return true
+		}
+	}
+	return false
 }
 
 func hasReasonMCPAutoprogrammingEfficiencyV0(
