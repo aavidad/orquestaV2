@@ -101,13 +101,34 @@ incidencia si el patron se repite.
 
 ## Proximo frente tras este corte
 
-Estado tras `137e19fd`:
+Estado de base tras `879c5125`:
 
-- remoto y local sincronizados;
-- BUG-057 cerrado e integrado;
-- bugs abiertos principales: BUG-055, BUG-058, BUG-059 y BUG-060;
-- siguiente frente recomendado: BUG-060, por ser el mas estrecho
-  (`required_test_results` no debe pasar con `evidence_refs=[]`).
+- local, GitHub y remoto aislado deben quedar sincronizados en el `HEAD`
+  canonico antes de editar; como minimo debe incluir `879c5125`;
+- BUG-059, BUG-060, BUG-061, BUG-062 y BUG-063 estan cerrados;
+- BUG-064 cierra solo el contrato puro OPES de calidad de tema;
+- bugs abiertos principales: BUG-055, BUG-058, BUG-065, BUG-066 y BUG-067;
+- el fichero
+  `TAREA_OPES_ORQUESTA_GRUPO_B_GOAL_FIRST_OBSERVE_Y_QA_MINIMOS_2026-07-01.md`
+  pertenece a la sesion OPES/local que lo esta alimentando y no debe
+  reescribirse desde el remoto salvo handoff explicito.
 
-Propietario recomendado para BUG-060: remoto. El local debe limitarse a revisar,
-integrar y vigilar nuevas incidencias OPES mientras el remoto tenga ese write-set.
+Propietario recomendado para el siguiente tramo: remoto, pero solo despues de
+confirmar `HEAD` canonico y declarar write-set. Frente recomendado:
+integracion residual de BUG-058/BUG-067, no repetir BUG-064. Write-set inicial:
+
+- `modulos/orquesta-opes-director`;
+- wiring OPES/goal-first estrictamente necesario en `modulos/orquesta-app-codex-stack`
+  o `modulos/orquesta-opes-*`;
+- tests focales del modulo tocado;
+- `docs/inventario_bugs_orquesta_2026-06-30.md` solo para actualizar estado.
+
+BUG-065 y BUG-066 quedan como frentes separados de lifecycle/observacion
+goal-first y shutdown; requieren write-set propio antes de tocar servidor, MCP o
+runtime.
+
+El local queda como supervisor/integrador: recoge incidencias de OPES, revisa
+patches/bundles del remoto, hace push canonico y no edita el write-set remoto
+mientras ese frente este activo. BUG-055 queda separado para una segunda tarea
+con write-set propio de discovery/runtime; no mezclarlo con BUG-058 salvo que el
+analisis demuestre una misma causa arquitectonica.
