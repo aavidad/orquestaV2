@@ -106,6 +106,20 @@ func buildStackMCPTransportBindingsV0(
 		Source: "orquesta-app-codex-stack",
 		Reason: "run creado desde director app",
 	})
+	directorStats := orquestamcp.MCPDirectorStatsToolExecutorV0{
+		RunStore:          config.Stores.RunStore,
+		RunControl:        config.Stores.RunControl,
+		ProcessRegistry:   config.Stores.ProcessRegistry,
+		ProcessSnapshot:   config.Codex.SnapshotSource,
+		ProgressSource:    statsProgressSourceV0(config),
+		AgentUsageSource:  agentUsageSourceV0(config),
+		ExternalJobSource: externalJobStatsSourceV0(config),
+		GoalStateSource:   config.Stores.AppGoalStateStore,
+		GoalMarkerSource:  appGoalFirstRunMarkerStoreV0(config),
+		GoalMaterializedRefsSource: stackGoalMaterializedRefsSourceV0{
+			Config: config,
+		},
+	}
 	return orquestamcp.MCPTransportBindingsV0{
 		ArrancarDirector: arrancar,
 		PreviewDirector:  orquestamcp.NewMCPPreviewDirectorAppToolExecutorV0(),
@@ -113,23 +127,11 @@ func buildStackMCPTransportBindingsV0(
 			stack,
 		),
 		RequestAppChange: orquestamcp.NewMCPRequestAppChangeToolExecutorV0(appChangePortsV0(config)),
-		DirectorStats: orquestamcp.MCPDirectorStatsToolExecutorV0{
-			RunStore:          config.Stores.RunStore,
-			RunControl:        config.Stores.RunControl,
-			ProcessRegistry:   config.Stores.ProcessRegistry,
-			ProcessSnapshot:   config.Codex.SnapshotSource,
-			ProgressSource:    statsProgressSourceV0(config),
-			AgentUsageSource:  agentUsageSourceV0(config),
-			ExternalJobSource: externalJobStatsSourceV0(config),
-			GoalStateSource:   config.Stores.AppGoalStateStore,
-			GoalMarkerSource:  appGoalFirstRunMarkerStoreV0(config),
-			GoalMaterializedRefsSource: stackGoalMaterializedRefsSourceV0{
-				Config: config,
-			},
-		},
+		DirectorStats:    directorStats,
 		RunControl: orquestamcp.MCPRunControlToolExecutorV0{
 			Port:              config.Stores.RunControl,
 			ExternalJobSource: externalJobStatsSourceV0(config),
+			GoalBackendState:  directorStats,
 		},
 		RuntimeModels: config.RuntimeModels,
 		RunQueuePriority: orquestamcp.MCPRunQueuePriorityToolExecutorV0{

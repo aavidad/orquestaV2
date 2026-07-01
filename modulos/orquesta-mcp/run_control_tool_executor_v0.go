@@ -10,6 +10,7 @@ import (
 type MCPRunControlToolExecutorV0 struct {
 	Port              orquestaruncontrol.RunControlWriterPortV0
 	ExternalJobSource MCPDirectorExternalJobStatsSourcePortV0
+	GoalBackendState  MCPTransportDirectorStatsExecutorV0
 }
 
 func NewMCPRunControlToolExecutorV0(
@@ -43,11 +44,16 @@ func (executor MCPRunControlToolExecutorV0) Execute(
 	if !isMCPRunControlActionSupportedV0(input.Action) {
 		return newMCPRunControlErrorV0(resolved, "action_no_soportada", "action"), nil
 	}
+	beforeLocal := executor.readRunControlStateIfAvailableV0(ctx, resolved.RunRef)
+	beforeGoal := executor.observeRunControlGoalBackendV0(ctx, resolved)
 	state, err := executor.executeActionV0(ctx, resolved)
 	if err != nil {
 		return MCPRunControlToolResultV0{}, err
 	}
-	return newMCPRunControlResultV0(resolved, state), nil
+	afterGoal := executor.observeRunControlGoalBackendV0(ctx, resolved)
+	result := newMCPRunControlResultV0(resolved, state)
+	result = executor.enrichRunControlGoalBackendResultV0(result, resolved, beforeLocal, beforeGoal, afterGoal)
+	return result, nil
 }
 
 func (executor MCPRunControlToolExecutorV0) resolveRunControlInputV0(
@@ -78,6 +84,151 @@ func (executor MCPRunControlToolExecutorV0) resolveRunControlInputV0(
 	input.RunRef = strings.TrimSpace(stats.RunRef)
 	input.EvidenceRefs = compactStringsMCPV0(append(input.EvidenceRefs, stats.JobRef, stats.TaskRef, stats.AgentRef))
 	return input, true, nil
+}
+
+func (executor MCPRunControlToolExecutorV0) readRunControlStateIfAvailableV0(
+	ctx context.Context,
+	runRef string,
+) *orquestaruncontrol.RunControlStateV0 {
+	reader, ok := executor.Port.(orquestaruncontrol.RunControlReaderPortV0)
+	if !ok || reader == nil {
+		return nil
+	}
+	state, err := reader.ReadRunControlStateV0(
+		ctx,
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: strings.TrimSpace(runRef)},
+	)
+	if err != nil {
+		return nil
+	}
+	normalized := state
+	normalized.Status = orquestaruncontrol.NormalizeRunControlStatusV0(state.Status)
+	return &normalized
+}
+
+func (executor MCPRunControlToolExecutorV0) observeRunControlGoalBackendV0(
+	ctx context.Context,
+	input MCPRunControlToolInputV0,
+) *MCPDirectorStatsToolResultV0 {
+	if executor.GoalBackendState == nil || strings.TrimSpace(input.RunRef) == "" {
+		return nil
+	}
+	stats, err := executor.GoalBackendState.Execute(ctx, MCPDirectorStatsToolInputV0{
+		RequestID:            input.RequestID,
+		CorrelationID:        firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
+		RunRef:               strings.TrimSpace(input.RunRef),
+		AppRef:               strings.TrimSpace(input.AppRef),
+		OccurredAt:           "",
+		IncludeProcessRefs:   true,
+		IncludeAgentProgress: true,
+		IncludeAgentUsage:    true,
+	})
+	if err != nil || stats.Estado != MCPDirectorStatsEstadoOKV0 || stats.Goal == nil {
+		return nil
+	}
+	return &stats
+}
+
+func (executor MCPRunControlToolExecutorV0) enrichRunControlGoalBackendResultV0(
+	result MCPRunControlToolResultV0,
+	input MCPRunControlToolInputV0,
+	beforeLocal *orquestaruncontrol.RunControlStateV0,
+	beforeGoal *MCPDirectorStatsToolResultV0,
+	afterGoal *MCPDirectorStatsToolResultV0,
+) MCPRunControlToolResultV0 {
+	action := normalizeMCPRunControlActionV0(input.Action)
+	if action != "stop" && action != "cancel" {
+		return result
+	}
+	if beforeLocal != nil {
+		result.PreviousStatus = string(orquestaruncontrol.NormalizeRunControlStatusV0(beforeLocal.Status))
+	}
+	result.GoalStatusBefore = mcpRunControlGoalStatusFromStatsV0(beforeGoal)
+	result.GoalStatusAfter = mcpRunControlGoalStatusFromStatsV0(afterGoal)
+	result.GoalRef = firstNonEmptyMCPV0(
+		mcpRunControlGoalRefFromStatsV0(afterGoal),
+		mcpRunControlGoalRefFromStatsV0(beforeGoal),
+	)
+	result.ExternalGoalRef = firstNonEmptyMCPV0(
+		mcpRunControlExternalGoalRefFromStatsV0(afterGoal),
+		mcpRunControlExternalGoalRefFromStatsV0(beforeGoal),
+	)
+	result.GoalControlSignalConfirmed = mcpRunControlGoalBackendTerminalV0(afterGoal)
+	if !mcpRunControlGoalBackendActiveV0(afterGoal) {
+		return result
+	}
+	result.GoalControlSignalSent = false
+	result.GoalControlSignalConfirmed = false
+	result.RecommendedAction = "observe_goal_backend_before_declaring_stopped"
+	result.Diagnostics = append(result.Diagnostics, MCPRunControlDiagnosticV0{
+		Code:    "control_not_propagated_to_goal_backend",
+		Scope:   "run:" + strings.TrimSpace(result.RunRef),
+		Message: "run control local no confirma stop/cancel del backend goal-first; no publicar stopped como terminal",
+		EvidenceRefs: compactStringsMCPV0([]string{
+			"evidence-ref-run-control-goal-backend-active",
+			result.GoalRef,
+			result.ExternalGoalRef,
+		}),
+	})
+	result.Errores = append(result.Errores, MCPValidationIssueV0{
+		Code:    "control_not_propagated_to_goal_backend",
+		Field:   "goal_backend",
+		Message: "goal backend sigue activo tras control local",
+	})
+	result.Estado = MCPRunControlEstadoErrorV0
+	result.Status = mcpRunControlRequestedStatusForActionV0(action)
+	result.FinalStatus = result.Status
+	return result
+}
+
+func mcpRunControlGoalStatusFromStatsV0(stats *MCPDirectorStatsToolResultV0) string {
+	if stats == nil || stats.Goal == nil {
+		return ""
+	}
+	return strings.TrimSpace(stats.Goal.Status)
+}
+
+func mcpRunControlGoalRefFromStatsV0(stats *MCPDirectorStatsToolResultV0) string {
+	if stats == nil || stats.Goal == nil {
+		return ""
+	}
+	return strings.TrimSpace(stats.Goal.GoalRef)
+}
+
+func mcpRunControlExternalGoalRefFromStatsV0(stats *MCPDirectorStatsToolResultV0) string {
+	if stats == nil || stats.Goal == nil {
+		return ""
+	}
+	return strings.TrimSpace(stats.Goal.ExternalGoalRef)
+}
+
+func mcpRunControlGoalBackendActiveV0(stats *MCPDirectorStatsToolResultV0) bool {
+	status := strings.ToLower(mcpRunControlGoalStatusFromStatsV0(stats))
+	switch status {
+	case "active", "running":
+		return true
+	default:
+		return false
+	}
+}
+
+func mcpRunControlGoalBackendTerminalV0(stats *MCPDirectorStatsToolResultV0) bool {
+	status := strings.ToLower(mcpRunControlGoalStatusFromStatsV0(stats))
+	switch status {
+	case "complete", "completed", "accepted", "canceled", "cancelled", "stopped", "failed":
+		return true
+	default:
+		return false
+	}
+}
+
+func mcpRunControlRequestedStatusForActionV0(action string) string {
+	switch action {
+	case "cancel":
+		return string(orquestaruncontrol.RunControlStatusCancelRequestedV0)
+	default:
+		return string(orquestaruncontrol.RunControlStatusStopRequestedV0)
+	}
 }
 
 func (executor MCPRunControlToolExecutorV0) executeActionV0(

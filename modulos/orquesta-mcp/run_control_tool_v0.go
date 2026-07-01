@@ -38,16 +38,33 @@ type MCPRunControlToolInputV0 struct {
 }
 
 type MCPRunControlToolResultV0 struct {
-	Estado             string                 `json:"estado"`
-	RequestID          string                 `json:"request_id,omitempty"`
-	CorrelationID      string                 `json:"correlation_id,omitempty"`
-	Action             string                 `json:"action,omitempty"`
-	RunRef             string                 `json:"run_ref,omitempty"`
-	Status             string                 `json:"status,omitempty"`
-	CheckpointRecorded bool                   `json:"checkpoint_recorded,omitempty"`
-	Forced             bool                   `json:"forced,omitempty"`
-	EvidenceRefs       []string               `json:"evidence_refs,omitempty"`
-	Errores            []MCPValidationIssueV0 `json:"errores_publicos,omitempty"`
+	Estado                     string                      `json:"estado"`
+	RequestID                  string                      `json:"request_id,omitempty"`
+	CorrelationID              string                      `json:"correlation_id,omitempty"`
+	Action                     string                      `json:"action,omitempty"`
+	RunRef                     string                      `json:"run_ref,omitempty"`
+	Status                     string                      `json:"status,omitempty"`
+	PreviousStatus             string                      `json:"previous_status,omitempty"`
+	FinalStatus                string                      `json:"final_status,omitempty"`
+	GoalRef                    string                      `json:"goal_ref,omitempty"`
+	ExternalGoalRef            string                      `json:"external_goal_ref,omitempty"`
+	GoalStatusBefore           string                      `json:"goal_status_before,omitempty"`
+	GoalStatusAfter            string                      `json:"goal_status_after,omitempty"`
+	GoalControlSignalSent      bool                        `json:"goal_control_signal_sent,omitempty"`
+	GoalControlSignalConfirmed bool                        `json:"goal_control_signal_confirmed,omitempty"`
+	RecommendedAction          string                      `json:"recommended_action,omitempty"`
+	CheckpointRecorded         bool                        `json:"checkpoint_recorded,omitempty"`
+	Forced                     bool                        `json:"forced,omitempty"`
+	EvidenceRefs               []string                    `json:"evidence_refs,omitempty"`
+	Diagnostics                []MCPRunControlDiagnosticV0 `json:"diagnostics,omitempty"`
+	Errores                    []MCPValidationIssueV0      `json:"errores_publicos,omitempty"`
+}
+
+type MCPRunControlDiagnosticV0 struct {
+	Code         string   `json:"code"`
+	Scope        string   `json:"scope,omitempty"`
+	Message      string   `json:"message,omitempty"`
+	EvidenceRefs []string `json:"evidence_refs,omitempty"`
 }
 
 func MCPRunControlDescriptorV0() MCPRunControlToolDescriptorV0 {
@@ -97,6 +114,7 @@ func newMCPRunControlResultV0(
 		Action:             normalizeMCPRunControlActionV0(input.Action),
 		RunRef:             strings.TrimSpace(state.RunRef),
 		Status:             string(orquestaruncontrol.NormalizeRunControlStatusV0(state.Status)),
+		FinalStatus:        string(orquestaruncontrol.NormalizeRunControlStatusV0(state.Status)),
 		CheckpointRecorded: state.CheckpointRecorded,
 		Forced:             state.Forced,
 		EvidenceRefs:       compactStringsMCPV0(state.EvidenceRefs),
