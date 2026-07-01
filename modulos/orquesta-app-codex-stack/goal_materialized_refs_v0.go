@@ -15,6 +15,7 @@ import (
 const (
 	goalMaterializedRefsMaxFilesV0     = 64
 	goalMaterializedWorkDeliveryFileV0 = "work_delivery.json"
+	goalMaterializedCheckpointFileV0   = "checkpoint_started.txt"
 )
 
 var errGoalMaterializedRefsScanDoneV0 = errors.New("goal_materialized_refs_scan_done")
@@ -37,67 +38,83 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 	}
 	result := orquestamcp.MCPDirectorGoalMaterializedRefsV0{}
 	for _, scope := range state.Spec.WriteSet {
-		if len(result.DomainReceiptRefs) >= goalMaterializedRefsMaxFilesV0 {
+		if len(result.DomainReceiptRefs)+len(result.ArtifactRefs) >= goalMaterializedRefsMaxFilesV0 {
 			break
 		}
-		refs, err := source.scanGoalWriteScopeForWorkDeliveriesV0(projectRoot, state, scope)
+		refs, artifactRefs, err := source.scanGoalWriteScopeForMaterializedRefsV0(projectRoot, state, scope)
 		if err != nil {
 			return orquestamcp.MCPDirectorGoalMaterializedRefsV0{}, false, err
 		}
 		result.DomainReceiptRefs = compactStringsV0(append(result.DomainReceiptRefs, refs...))
+		result.ArtifactRefs = compactStringsV0(append(result.ArtifactRefs, artifactRefs...))
 	}
-	if len(result.DomainReceiptRefs) == 0 {
+	if len(result.DomainReceiptRefs) == 0 && len(result.ArtifactRefs) == 0 {
 		return orquestamcp.MCPDirectorGoalMaterializedRefsV0{}, false, nil
 	}
-	result.EvidenceRefs = []string{"evidence-ref-goal-materialized-work-delivery-detected"}
-	result.IssueCodes = []string{"goal_first_materialized_work_delivery_detected"}
+	if len(result.DomainReceiptRefs) > 0 {
+		result.EvidenceRefs = append(result.EvidenceRefs, "evidence-ref-goal-materialized-work-delivery-detected")
+		result.IssueCodes = append(result.IssueCodes, "goal_first_materialized_work_delivery_detected")
+	}
+	if len(result.ArtifactRefs) > 0 {
+		result.EvidenceRefs = append(result.EvidenceRefs, "evidence-ref-goal-materialized-checkpoint-detected")
+		result.IssueCodes = append(result.IssueCodes, "goal_first_materialized_checkpoint_detected")
+	}
 	return result, true, nil
 }
 
-func (source stackGoalMaterializedRefsSourceV0) scanGoalWriteScopeForWorkDeliveriesV0(
+func (source stackGoalMaterializedRefsSourceV0) scanGoalWriteScopeForMaterializedRefsV0(
 	projectRoot string,
 	state orquestagoal.GoalWorkStateV0,
 	scope orquestagoal.GoalWriteScopeV0,
-) ([]string, error) {
+) ([]string, []string, error) {
 	relScope := filepath.Clean(filepath.FromSlash(strings.TrimSpace(scope.Path)))
 	if relScope == "." || relScope == "" || filepath.IsAbs(relScope) || strings.HasPrefix(relScope, ".."+string(filepath.Separator)) || relScope == ".." {
-		return nil, nil
+		return nil, nil, nil
 	}
 	target := filepath.Join(projectRoot, relScope)
 	if !pathWithinRootV0(projectRoot, target) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	info, err := os.Stat(target)
 	if err != nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if !info.IsDir() {
 		if strings.EqualFold(filepath.Base(target), goalMaterializedWorkDeliveryFileV0) {
-			return []string{goalMaterializedWorkDeliveryRefV0(projectRoot, target, state.RunRef)}, nil
+			return []string{goalMaterializedWorkDeliveryRefV0(projectRoot, target, state.RunRef)}, nil, nil
 		}
-		return nil, nil
+		if strings.EqualFold(filepath.Base(target), goalMaterializedCheckpointFileV0) {
+			return nil, []string{goalMaterializedCheckpointRefV0(projectRoot, target, state.RunRef)}, nil
+		}
+		return nil, nil, nil
 	}
 	refs := []string{}
+	artifactRefs := []string{}
 	walkErr := filepath.WalkDir(target, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
-		if len(refs) >= goalMaterializedRefsMaxFilesV0 {
+		if len(refs)+len(artifactRefs) >= goalMaterializedRefsMaxFilesV0 {
 			return errGoalMaterializedRefsScanDoneV0
 		}
-		if entry == nil || entry.IsDir() || !strings.EqualFold(entry.Name(), goalMaterializedWorkDeliveryFileV0) {
+		if entry == nil || entry.IsDir() {
 			return nil
 		}
 		if !pathWithinRootV0(projectRoot, path) {
 			return nil
 		}
-		refs = append(refs, goalMaterializedWorkDeliveryRefV0(projectRoot, path, state.RunRef))
+		switch {
+		case strings.EqualFold(entry.Name(), goalMaterializedWorkDeliveryFileV0):
+			refs = append(refs, goalMaterializedWorkDeliveryRefV0(projectRoot, path, state.RunRef))
+		case strings.EqualFold(entry.Name(), goalMaterializedCheckpointFileV0):
+			artifactRefs = append(artifactRefs, goalMaterializedCheckpointRefV0(projectRoot, path, state.RunRef))
+		}
 		return nil
 	})
 	if errors.Is(walkErr, errGoalMaterializedRefsScanDoneV0) {
 		walkErr = nil
 	}
-	return refs, walkErr
+	return refs, artifactRefs, walkErr
 }
 
 func pathWithinRootV0(root string, path string) bool {
@@ -121,6 +138,19 @@ func goalMaterializedWorkDeliveryRefV0(
 	}
 	rel = filepath.ToSlash(filepath.Clean(rel))
 	return "domain-receipt-ref-work-delivery:" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(rel)
+}
+
+func goalMaterializedCheckpointRefV0(
+	projectRoot string,
+	path string,
+	runRef string,
+) string {
+	rel, err := filepath.Rel(filepath.Clean(projectRoot), filepath.Clean(path))
+	if err != nil {
+		rel = filepath.Base(path)
+	}
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	return "artifact-ref-checkpoint:" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(rel)
 }
 
 func safeGoalMaterializedRefPartV0(value string) string {

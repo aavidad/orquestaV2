@@ -19,6 +19,7 @@ const (
 	mcpAutoprogrammingActionExternalWorkNoAgentMaterializedV0 = "external_work_accepted_no_agent_materialized"
 	mcpAutoprogrammingActionGoalFirstStateMissingV0           = "goal_first_state_missing"
 	mcpAutoprogrammingActionGoalFirstBlockedV0                = "goal_first_blocked"
+	mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0  = "goal_active_timeout_backend_active"
 	mcpAutoprogrammingEvidenceRunningStaleReconciledV0        = "evidence-ref-run-queue-running-stale-no-live-process-reconciled"
 	mcpAutoprogrammingEvidenceProviderUsageLimitRetryV0       = "evidence-ref-provider-usage-limit-retry-after"
 	mcpAutoprogrammingEvidenceExternalWorkRunStartedV0        = "evidence-ref-external-work-run-started"
@@ -26,6 +27,7 @@ const (
 	mcpAutoprogrammingEvidenceRunCoordinatorExecutedV0        = "evidence-ref-run-coordinator-executed"
 	mcpAutoprogrammingEvidenceGoalFirstStateMissingV0         = "evidence-ref-autoprogramming-status-goal-first-state-missing"
 	mcpAutoprogrammingEvidenceGoalFirstBlockedV0              = "evidence-ref-autoprogramming-status-goal-first-blocked"
+	mcpAutoprogrammingEvidenceGoalActiveTimeoutBackendV0      = "evidence-ref-autoprogramming-goal-active-timeout-backend-active"
 )
 
 func buildMCPAutoprogrammingStaleRunningV0(
@@ -83,7 +85,14 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 			reason = "goal_terminal_reconcile_pending: durable terminal result present but backend/local closure is not reconciled"
 			recommendedAction = "reconcile_goal_terminal"
 		}
+		activeTimeoutBackendActive := mcpAutoprogrammingGoalStateActiveTimeoutV0(state) &&
+			mcpAutoprogrammingObservedGoalActiveV0(observed)
+		if activeTimeoutBackendActive {
+			reason = "goal_active_timeout_backend_active: local goal-first timed out while backend goal remains active; capture safe snapshot and replan before launching more parents"
+			recommendedAction = "replan_goal_after_active_timeout"
+		}
 		activeNoCheckpoint := !mcpAutoprogrammingGoalResultTerminalV0(state) &&
+			!activeTimeoutBackendActive &&
 			mcpAutoprogrammingObservedGoalActiveWithRecentActivityV0(observed)
 		if activeNoCheckpoint {
 			reason = "goal_backend_active_no_checkpoint_yet: backend goal is active with recent activity; wait for checkpoint/artifact before declaring stale"
@@ -116,6 +125,13 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 		if activeNoCheckpoint {
 			action.Code = mcpAutoprogrammingActionActiveNoCheckpointYetV0
 			action.Severity = "info"
+		}
+		if activeTimeoutBackendActive {
+			action.Code = mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0
+			action.EvidenceRefs = compactStringsMCPV0(append(
+				action.EvidenceRefs,
+				mcpAutoprogrammingEvidenceGoalActiveTimeoutBackendV0,
+			))
 		}
 		if mcpAutoprogrammingObservedGoalTerminalV0(observed) {
 			action.Code = "goal_first_terminal_reconciled"
@@ -414,6 +430,52 @@ func mcpAutoprogrammingActionableRunWithObservedGoalV0(
 	return action
 }
 
+func mcpAutoprogrammingGoalStateActiveTimeoutV0(
+	state orquestagoal.GoalWorkStateV0,
+) bool {
+	if state.LastResult != nil {
+		if strings.Contains(strings.TrimSpace(state.LastResult.Summary), "codex_app_server_goal_active_timeout") {
+			return true
+		}
+		for _, issue := range state.LastResult.Issues {
+			if strings.Contains(strings.TrimSpace(issue.Code), "codex_app_server_goal_active_timeout") {
+				return true
+			}
+		}
+		for _, ref := range state.LastResult.EvidenceRefs {
+			if mcpAutoprogrammingEvidenceLooksGoalActiveTimeoutV0(ref) {
+				return true
+			}
+		}
+	}
+	for _, ref := range state.EvidenceRefs {
+		if mcpAutoprogrammingEvidenceLooksGoalActiveTimeoutV0(ref) {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpAutoprogrammingEvidenceLooksGoalActiveTimeoutV0(ref string) bool {
+	ref = strings.TrimSpace(ref)
+	return strings.Contains(ref, "codex-app-server-goal-active-timeout") ||
+		strings.Contains(ref, "codex_app_server_goal_active_timeout")
+}
+
+func mcpAutoprogrammingObservedGoalActiveV0(
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	if observed == nil || observed.Goal == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(observed.Goal.Status)) {
+	case "active", orquestagoal.GoalStatusRunningV0, orquestagoal.GoalStatusAcceptedV0:
+		return true
+	default:
+		return false
+	}
+}
+
 func mcpAutoprogrammingObservedGoalTerminalV0(
 	observed *MCPDirectorStatsToolResultV0,
 ) bool {
@@ -428,12 +490,7 @@ func mcpAutoprogrammingObservedGoalTerminalV0(
 func mcpAutoprogrammingObservedGoalActiveWithRecentActivityV0(
 	observed *MCPDirectorStatsToolResultV0,
 ) bool {
-	if observed == nil || observed.Goal == nil {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(observed.Goal.Status)) {
-	case "active", orquestagoal.GoalStatusRunningV0, orquestagoal.GoalStatusAcceptedV0:
-	default:
+	if !mcpAutoprogrammingObservedGoalActiveV0(observed) {
 		return false
 	}
 	if observed.Stats == nil {

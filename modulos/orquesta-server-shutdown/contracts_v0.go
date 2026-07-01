@@ -12,14 +12,15 @@ import (
 const ServerShutdownSchemaVersionV0 = "server_shutdown.v0"
 
 const (
-	ServerShutdownStatusReadyV0              = "ready"
-	ServerShutdownStatusWaitingDrainV0       = "waiting_drain"
-	ServerShutdownStatusWaitingCheckpointV0  = "waiting_checkpoint"
-	ServerShutdownStatusNoQueueReaderV0      = "queue_reader_required"
-	ServerShutdownStatusNoRunControlReaderV0 = "run_control_reader_required"
-	ServerShutdownStatusNoRunControlWriterV0 = "run_control_writer_required"
-	ServerShutdownStatusRequesterDeniedV0    = "requester_not_authorized"
-	ServerShutdownStatusActiveGoalsPresentV0 = "active_goals_present"
+	ServerShutdownStatusReadyV0               = "ready"
+	ServerShutdownStatusWaitingDrainV0        = "waiting_drain"
+	ServerShutdownStatusWaitingCheckpointV0   = "waiting_checkpoint"
+	ServerShutdownStatusNoQueueReaderV0       = "queue_reader_required"
+	ServerShutdownStatusNoRunControlReaderV0  = "run_control_reader_required"
+	ServerShutdownStatusNoRunControlWriterV0  = "run_control_writer_required"
+	ServerShutdownStatusRequesterDeniedV0     = "requester_not_authorized"
+	ServerShutdownStatusActiveGoalsPresentV0  = "active_goals_present"
+	ServerShutdownStatusBackendStillRunningV0 = "backend_still_running"
 )
 
 type ServerShutdownCommandV0 struct {

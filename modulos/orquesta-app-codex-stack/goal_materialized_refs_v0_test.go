@@ -37,6 +37,33 @@ func TestStackGoalMaterializedRefsSourceV0DetectaWorkDeliveryEnWriteSet(t *testi
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0DetectaCheckpointEnWriteSet(t *testing.T) {
+	projectDir := t.TempDir()
+	topicDir := filepath.Join(projectDir, "temas", "tema_001", "coordinacion_wave10_phase1")
+	if err := os.MkdirAll(topicDir, 0o700); err != nil {
+		t.Fatalf("mkdir topic: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "checkpoint_started.txt"), []byte("started\n"), 0o600); err != nil {
+		t.Fatalf("write checkpoint: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-checkpoint-001", "temas/tema_001/coordinacion_wave10_phase1")
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		len(result.ArtifactRefs) != 1 ||
+		!strings.Contains(result.ArtifactRefs[0], "artifact-ref-checkpoint") ||
+		strings.Contains(result.ArtifactRefs[0], projectDir) ||
+		!containsStringV0(result.EvidenceRefs, "evidence-ref-goal-materialized-checkpoint-detected") ||
+		!containsStringV0(result.IssueCodes, "goal_first_materialized_checkpoint_detected") {
+		t.Fatalf("ok=%v result=%+v", ok, result)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0NoSaleDelProjectWorkDir(t *testing.T) {
 	projectDir := t.TempDir()
 	state := orquestagoal.GoalWorkStateV0{

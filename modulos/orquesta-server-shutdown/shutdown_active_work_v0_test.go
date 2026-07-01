@@ -73,3 +73,35 @@ func TestShutdownServerV0ForzadoNoBloqueaConGoalActivo(t *testing.T) {
 		t.Fatalf("result=%+v stopped=%v active_calls=%d", result, deps.control.stopped, deps.active.calls)
 	}
 }
+
+func TestShutdownServerV0NoForzadoBloqueaConBackendStillRunning(t *testing.T) {
+	deps := newServerShutdownDepsForTestV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		{RunRef: "run-goal-backend-active-timeout", AppRef: "app-a", Status: "ready"},
+	})
+	deps.active.works = []ActiveShutdownWorkV0{{
+		Kind:            "goal_backend",
+		RunRef:          "run-goal-backend-active-timeout",
+		WorkRef:         "goal-ref-timeout",
+		ExternalWorkRef: "external-goal-ref-timeout",
+		Status:          ServerShutdownStatusBackendStillRunningV0,
+		EvidenceRefs:    []string{"goal-timeout-ref"},
+	}}
+
+	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
+		RequestedBy:   "orquesta-director",
+		Reason:        "apagado no forzado con backend vivo",
+		CorrelationID: "corr-backend-still-running-shutdown",
+	})
+	if err != nil {
+		t.Fatalf("ShutdownServerV0: %v", err)
+	}
+	if result.ShutdownReady ||
+		result.Status != ServerShutdownStatusBackendStillRunningV0 ||
+		result.ActiveWorkCount != 1 ||
+		result.ActiveWorks[0].Kind != "goal_backend" ||
+		len(deps.control.stopped) != 0 ||
+		deps.supervisor.calls != 0 ||
+		!serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-backend-still-running") {
+		t.Fatalf("result=%+v stopped=%v supervisor=%+v", result, deps.control.stopped, deps.supervisor)
+	}
+}

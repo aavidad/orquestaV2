@@ -29,18 +29,38 @@ func blockingActiveShutdownWorkV0(
 	if len(works) == 0 {
 		return ServerShutdownResultV0{}, false, nil
 	}
+	status := activeShutdownWorkBlockingStatusV0(works)
 	result := ServerShutdownResultV0{
 		SchemaVersion:   ServerShutdownSchemaVersionV0,
-		Status:          ServerShutdownStatusActiveGoalsPresentV0,
+		Status:          status,
 		ShutdownReady:   false,
 		ActiveWorkCount: len(works),
 		ActiveWorks:     works,
 		EvidenceRefs: compactServerShutdownStringsV0(append(
 			append([]string(nil), command.EvidenceRefs...),
-			append(active.EvidenceRefs, "evidence-ref-shutdown-active-goals-present")...,
+			append(active.EvidenceRefs, activeShutdownWorkBlockingEvidenceV0(status))...,
 		)),
 	}
 	return result, true, nil
+}
+
+func activeShutdownWorkBlockingStatusV0(
+	works []ActiveShutdownWorkV0,
+) string {
+	for _, work := range works {
+		if strings.TrimSpace(work.Kind) == "goal_backend" ||
+			strings.TrimSpace(work.Status) == ServerShutdownStatusBackendStillRunningV0 {
+			return ServerShutdownStatusBackendStillRunningV0
+		}
+	}
+	return ServerShutdownStatusActiveGoalsPresentV0
+}
+
+func activeShutdownWorkBlockingEvidenceV0(status string) string {
+	if strings.TrimSpace(status) == ServerShutdownStatusBackendStillRunningV0 {
+		return "evidence-ref-shutdown-backend-still-running"
+	}
+	return "evidence-ref-shutdown-active-goals-present"
 }
 
 func activeShutdownWorkMaxItemsV0(limit int) int {

@@ -650,6 +650,94 @@ func TestMCPAutoprogrammingStatusExecutorV0BackendActivoConSoloTokensHistoricosS
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0GoalActiveTimeoutConBackendActivoEsReplanAccionable(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-active-timeout-backend-active-001"
+	goalRef := "goal-ref-autop-status-goal-active-timeout-backend-active-001"
+	externalGoalRef := "thread-ref-autop-status-goal-active-timeout-backend-active-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Goal local bloqueado por timeout pero backend sigue activo.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+		LastResult: &orquestagoal.GoalWorkResultV0{
+			SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+			Status:        orquestagoal.GoalStatusBlockedV0,
+			GoalRef:       goalRef,
+			Summary:       "codex_app_server_goal_active_timeout",
+			EvidenceRefs:  []string{"evidence-ref-codex-app-server-goal-active-timeout"},
+		},
+		LastClosure: &orquestagoal.GoalClosureValidationV0{
+			Status:      orquestagoal.GoalStatusBlockedV0,
+			NeedsRework: true,
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-timeout-backend-active-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: runRef,
+			Status: "stopped",
+			UsageSummary: &orquestacionnucleoapp.DirectorRunUsageStatsV0{
+				TotalTokens: 338171,
+			},
+		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:          runRef,
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          "active",
+			ArtifactRefs:    []string{"artifact-ref-checkpoint:run-ref-autop-status-goal-active-timeout-backend-active-001:tema-001-checkpoint-started-txt"},
+			EvidenceRefs:    []string{"evidence-ref-backend-active-timeout-observed"},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			empty: true,
+			terminal: []MCPRunQueueRankedCandidateCompactV0{{
+				RunRef: runRef,
+				AppRef: "opes",
+				Status: "stopped",
+			}},
+		},
+		Stats:          stats,
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{RunRef: runRef})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0 ||
+		action.Severity != "blocked" ||
+		action.GoalStatus != "active" ||
+		action.TokensUsed != 338171 ||
+		action.RecommendedAction != "replan_goal_after_active_timeout" ||
+		!strings.Contains(action.Reason, "goal_active_timeout_backend_active") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.ArtifactRefs, "artifact-ref-checkpoint:run-ref-autop-status-goal-active-timeout-backend-active-001:tema-001-checkpoint-started-txt") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceGoalActiveTimeoutBackendV0) ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-backend-active-timeout-observed") {
+		t.Fatalf("action=%+v", action)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0GoalBloqueadoConBackendCompleteSaleDeStaleRunning(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-backend-complete-001"
 	goalRef := "goal-ref-autop-status-goal-backend-complete-001"
