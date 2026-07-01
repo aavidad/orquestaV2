@@ -296,6 +296,83 @@ Acción esperada:
 - Limpiar `stale_running` o transformarlo en historial resuelto.
 - Exponer `goal_status=complete` en cada run terminal, no solo `stopped`.
 
+### 10. `stale_running` prematuro en ola 2 sin checkpoint de disco
+
+Tras arrancar un servidor limpio para la ola 2 (`binary_sha256`:
+`eb040f8622a21b792c1ab1cf62b6b1f07f9e9e5762d6b5c8fcc78470ae48d334`) y lanzar
+seis runs nuevos:
+
+- `run-opes-grupo-b-info-wave2-t021-20260701`
+- `run-opes-grupo-b-info-wave2-t022-20260701`
+- `run-opes-grupo-b-info-wave2-t023-20260701`
+- `run-opes-grupo-b-info-wave2-t024-20260701`
+- `run-opes-grupo-b-info-wave2-t028-20260701`
+- `run-opes-grupo-b-info-wave2-t036-20260701`
+
+la API pasó de `running_live=6, stale=0` a `blocked=6, stale_running=6` en
+pocos minutos, aunque `goals_1.sqlite` seguía mostrando los seis goals como
+`active`, con tokens crecientes:
+
+- tema 021: `active`, 243.831 tokens, actualizado `2026-07-01 08:25:22Z`
+- tema 022: `active`, 216.569 tokens, actualizado `2026-07-01 08:25:11Z`
+- tema 023: `active`, 242.589 tokens, actualizado `2026-07-01 08:24:55Z`
+- tema 024: `active`, 387.293 tokens, actualizado `2026-07-01 08:25:21Z`
+- tema 028: `active`, 151.884 tokens, actualizado `2026-07-01 08:24:26Z`
+- tema 036: `active`, 334.527 tokens, actualizado `2026-07-01 08:25:15Z`
+
+En ese momento no había ficheros nuevos en los write-set de los temas; solo los
+inventarios previos. `POST /api/v0/autoprogramming/goals/observe-active` volvió
+a responder únicamente `estado=ok`, sin snapshot por goal ni motivo de stale.
+
+Impacto:
+
+- El operador no puede distinguir si los agentes están leyendo/redactando, si
+  están en bucle interno o si el runner ha perdido la observación.
+- La cola declara stale antes de tener un checkpoint materializado que permita
+  valorar progreso o replanificación.
+
+Acción esperada:
+
+- No declarar stale/blocked solo por ausencia inicial de ficheros si el backend
+  muestra actividad reciente y tokens crecientes, o al menos exponerlo como
+  `active_no_checkpoint_yet` con ventana temporal configurable.
+- Exigir heartbeat materializado por goal (`trabajo/checkpoint_director.md` o
+  equivalente) cada N minutos en trabajos OPES largos.
+- `observe-active` debe devolver por cada goal: tokens, updated_at, edad del
+  último fichero escrito, estado de checkpoint y acción recomendada.
+
+### 11. `runs/control stop forced` no controla goals backend
+
+Al detectar ola 2 sin checkpoints ni ficheros nuevos, OPES intentó parar los
+seis runs por:
+
+`POST /api/v0/runs/control`
+
+con `action=stop` y `forced=true`.
+
+Resultado HTTP observado:
+
+- varias llamadas terminaron en `504`;
+- varias llamadas agotaron timeout de cliente sin cuerpo;
+- después, `autoprogramming/status` decía que los seis runs estaban
+  `terminal/stopped`;
+- pero `goals_1.sqlite` seguía mostrando los seis goals como `active`.
+
+Impacto:
+
+- El operador puede creer que los runs están parados mientras el backend Codex
+  sigue activo.
+- No hay confirmación causal de que `runs/control` haya detenido el goal-first.
+
+Acción esperada:
+
+- `runs/control stop/cancel` debe propagarse al backend goal-first o devolver
+  explícitamente `control_not_propagated_to_goal_backend`.
+- La respuesta debe incluir `run_ref`, `goal_id`, estado previo, estado final y
+  si el proceso/hilo Codex recibió la señal.
+- No se debe marcar `stopped` en la API pública si `goals_1.sqlite` continúa
+  `active`.
+
 ## No se ha tocado código
 
 Esta incidencia solo documenta el problema para el agente de Orquesta. OPES no
