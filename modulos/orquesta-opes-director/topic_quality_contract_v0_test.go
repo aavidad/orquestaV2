@@ -1,6 +1,9 @@
 package orquestaopesdirector
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateOPESTopicQualityContractV0BloqueaNivelBPorDebajoMinimoV0(t *testing.T) {
 	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
@@ -28,6 +31,25 @@ func TestValidateOPESTopicQualityContractV0DetectaMetacomentariosPublicosV0(t *t
 
 	if result.Status != OPESTopicQualityStatusNeedsReworkV0 ||
 		!opesTopicQualityIssueCodeInSetV0(result.Issues, ErrOPESTopicQualityPublicMetacommentV0) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestValidateOPESTopicQualityContractV0DetectaAndamiajeInternoConTildesYMayusculasV0(t *testing.T) {
+	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
+		TopicRef:           "tema-029",
+		Level:              OPESTopicQualityLevelBV0,
+		CanonicalWordCount: 11025,
+		Text: strings.Join([]string{
+			"Preguntas De Recuperaci\u00f3n",
+			"Repaso Espaciado",
+			"D\u00eda 0: reconstruye sin mirar el mapa mental.",
+			"Una respuesta fuerte empieza por delimitar el concepto.",
+		}, "\n"),
+	})
+
+	if result.Status != OPESTopicQualityStatusNeedsReworkV0 ||
+		!opesTopicQualityIssueCodeInSetV0(result.Issues, ErrOPESTopicQualityStudyScaffoldingV0) {
 		t.Fatalf("result=%+v", result)
 	}
 }

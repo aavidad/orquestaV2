@@ -21,6 +21,7 @@ const (
 	ErrOPESTopicQualityMinWordsNotMetV0         = "needs_expansion_min_words_B"
 	ErrOPESTopicQualityInvalidReportContractV0  = "invalid_report_contract"
 	ErrOPESTopicQualityPublicMetacommentV0      = "opes_public_text_metacomment"
+	ErrOPESTopicQualityStudyScaffoldingV0       = "opes_public_text_study_scaffolding"
 	ErrOPESTopicQualityDidacticVisualRequiredV0 = "opes_visual_didactic_function_required"
 )
 
@@ -126,6 +127,13 @@ func ValidateOPESTopicQualityContractV0(
 	for _, phrase := range opesTopicPublicMetacommentMatchesV0(request.Text) {
 		result.Issues = append(result.Issues, OPESTopicQualityIssueV0{
 			Code:    ErrOPESTopicQualityPublicMetacommentV0,
+			Field:   "text",
+			Message: phrase,
+		})
+	}
+	for _, phrase := range opesTopicPublicStudyScaffoldingMatchesV0(request.Text) {
+		result.Issues = append(result.Issues, OPESTopicQualityIssueV0{
+			Code:    ErrOPESTopicQualityStudyScaffoldingV0,
 			Field:   "text",
 			Message: phrase,
 		})
@@ -337,6 +345,70 @@ func opesTopicPublicMetacommentMatchesV0(text string) []string {
 		}
 	}
 	return compactStringsV0(matches)
+}
+
+func opesTopicPublicStudyScaffoldingMatchesV0(text string) []string {
+	normalized := opesTopicQualityNormalizePublicTextV0(text)
+	if normalized == "" {
+		return nil
+	}
+	patterns := []string{
+		"preguntas de recuperacion",
+		"repaso espaciado",
+		"dia 0",
+		"mapa mental",
+		"la respuesta debe empezar",
+		"una respuesta fuerte empieza",
+		"reconstruye sin mirar",
+		"calendario de estudio",
+		"trazabilidad b",
+		"derivaciones futuras",
+		"fuentes internas",
+		"bloque de canon",
+		"bloques de canon",
+		"bloque maestro",
+		"bloques de otros temas",
+		"referencias a svg",
+		"referencias a .md",
+	}
+	var matches []string
+	for _, pattern := range patterns {
+		if strings.Contains(normalized, pattern) {
+			matches = append(matches, pattern)
+		}
+	}
+	return compactStringsV0(matches)
+}
+
+func opesTopicQualityNormalizePublicTextV0(text string) string {
+	text = strings.ToLower(strings.TrimSpace(text))
+	if text == "" {
+		return ""
+	}
+	replacer := strings.NewReplacer(
+		"\u00e1", "a",
+		"\u00e0", "a",
+		"\u00e4", "a",
+		"\u00e2", "a",
+		"\u00e9", "e",
+		"\u00e8", "e",
+		"\u00eb", "e",
+		"\u00ea", "e",
+		"\u00ed", "i",
+		"\u00ec", "i",
+		"\u00ef", "i",
+		"\u00ee", "i",
+		"\u00f3", "o",
+		"\u00f2", "o",
+		"\u00f6", "o",
+		"\u00f4", "o",
+		"\u00fa", "u",
+		"\u00f9", "u",
+		"\u00fc", "u",
+		"\u00fb", "u",
+		"\u00f1", "n",
+	)
+	return replacer.Replace(text)
 }
 
 func opesTopicHasDidacticVisualV0(visuals []OPESTopicQualityVisualEvidenceV0) bool {
