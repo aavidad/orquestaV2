@@ -107,8 +107,9 @@ func requiredTestEnvFromEnvV0(
 		env = append(env, item)
 	}
 	if _, ok := allowed["go"]; ok {
+		goCacheDir := requiredTestGoCacheDirV0(outputDir)
 		goEnv := map[string]string{
-			"GOCACHE":    filepath.Join(outputDir, "go-build-cache"),
+			"GOCACHE":    goCacheDir,
 			"GOTMPDIR":   filepath.Join(outputDir, "go-tmp"),
 			"GOPATH":     filepath.Join(outputDir, "go-path"),
 			"GOMODCACHE": filepath.Join(outputDir, "go-mod-cache"),
@@ -125,4 +126,42 @@ func requiredTestEnvFromEnvV0(
 		}
 	}
 	return env, nil
+}
+
+func requiredTestGoCacheDirV0(outputDir string) string {
+	parent := strings.TrimSpace(os.Getenv("GOCACHE"))
+	if requiredTestReusableGoCacheDirV0(parent) {
+		return parent
+	}
+	return filepath.Join(outputDir, "go-build-cache")
+}
+
+func requiredTestReusableGoCacheDirV0(path string) bool {
+	if path == "" ||
+		!filepath.IsAbs(path) ||
+		strings.ContainsAny(path, "\n\r") ||
+		requiredTestPathHasCredentialMarkerV0(path) {
+		return false
+	}
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		return false
+	}
+	probe, err := os.CreateTemp(path, ".orquesta-required-test-gocache-probe-*")
+	if err != nil {
+		return false
+	}
+	name := probe.Name()
+	_ = probe.Close()
+	_ = os.Remove(name)
+	return true
+}
+
+func requiredTestPathHasCredentialMarkerV0(value string) bool {
+	low := strings.ToLower(strings.TrimSpace(value))
+	for _, marker := range []string{"$home", "${home}", "%userprofile%", "oauth", "token", "secret", "api_key", "credential", "password"} {
+		if strings.Contains(low, marker) {
+			return true
+		}
+	}
+	return false
 }

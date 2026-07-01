@@ -38,6 +38,7 @@ func TestRequiredTestRunnerFromEnvV0GoCommandInyectaEntornoGoAcotado(t *testing.
 	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", filepath.Join(projectDir, "go-bin"))
 	t.Setenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR", outputDir)
 	t.Setenv("ORQUESTA_REQUIRED_TEST_ENV", "")
+	t.Setenv("GOCACHE", "")
 	stateStore, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{RootDir: filepath.Join(stateDir, "state")})
 	if err != nil {
 		t.Fatalf("NewStoreV0: %v", err)
@@ -71,6 +72,67 @@ func TestRequiredTestRunnerFromEnvV0GoCommandInyectaEntornoGoAcotado(t *testing.
 	}
 	if _, ok := env["ORQUESTA_CODEX_HOME"]; ok {
 		t.Fatalf("ORQUESTA_CODEX_HOME no debe inyectarse: env=%v", env)
+	}
+}
+
+func TestRequiredTestRunnerFromEnvV0ReutilizaGoCachePadreExplicitoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	outputDir := filepath.Join(t.TempDir(), "required-test-output")
+	parentGoCache := filepath.Join(t.TempDir(), "parent-go-cache")
+	t.Setenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED", "1")
+	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", filepath.Join(projectDir, "go-bin"))
+	t.Setenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR", outputDir)
+	t.Setenv("ORQUESTA_REQUIRED_TEST_ENV", "")
+	t.Setenv("GOCACHE", parentGoCache)
+	stateStore, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{RootDir: filepath.Join(stateDir, "state")})
+	if err != nil {
+		t.Fatalf("NewStoreV0: %v", err)
+	}
+
+	runnerPort, err := requiredTestRunnerFromEnvV0(orquestaserver.ConfigV0{
+		StateDir:       stateDir,
+		ProjectWorkDir: projectDir,
+	}, stateStore)
+	if err != nil {
+		t.Fatalf("requiredTestRunnerFromEnvV0: %v", err)
+	}
+	env := requiredTestExecutorEnvByKeyV0(t, runnerPort)
+
+	if got := env["GOCACHE"]; got != parentGoCache {
+		t.Fatalf("GOCACHE=%q, want parent cache %q; env=%v", got, parentGoCache, env)
+	}
+	if _, err := os.Stat(parentGoCache); err != nil {
+		t.Fatalf("parent GOCACHE no disponible: %v", err)
+	}
+}
+
+func TestRequiredTestRunnerFromEnvV0NoReutilizaGoCachePadreInseguroV0(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	outputDir := filepath.Join(t.TempDir(), "required-test-output")
+	t.Setenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED", "1")
+	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", filepath.Join(projectDir, "go-bin"))
+	t.Setenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR", outputDir)
+	t.Setenv("ORQUESTA_REQUIRED_TEST_ENV", "")
+	t.Setenv("GOCACHE", filepath.Join(t.TempDir(), "token-cache"))
+	stateStore, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{RootDir: filepath.Join(stateDir, "state")})
+	if err != nil {
+		t.Fatalf("NewStoreV0: %v", err)
+	}
+
+	runnerPort, err := requiredTestRunnerFromEnvV0(orquestaserver.ConfigV0{
+		StateDir:       stateDir,
+		ProjectWorkDir: projectDir,
+	}, stateStore)
+	if err != nil {
+		t.Fatalf("requiredTestRunnerFromEnvV0: %v", err)
+	}
+	env := requiredTestExecutorEnvByKeyV0(t, runnerPort)
+
+	want := filepath.Join(outputDir, "go-build-cache")
+	if got := env["GOCACHE"]; got != want {
+		t.Fatalf("GOCACHE=%q, want fallback %q; env=%v", got, want, env)
 	}
 }
 

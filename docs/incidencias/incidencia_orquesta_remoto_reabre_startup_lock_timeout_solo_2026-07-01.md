@@ -40,3 +40,17 @@ de reiniciar el servidor remoto con una version nueva.
 La mejora pendiente es reforzar tests/contrato para que los agentes no puedan
 renombrar la prueba y cambiar el criterio sin dejar evidencia explicita de
 decision.
+
+## Reintento root-only observado
+
+En el worktree remoto `audit-a920a47b` aparecio despues otro diff sobre
+`codex_wrapper_v0.go` que no cambia el contrato de timeout explicito, pero si
+reemplaza la raiz del lock por una derivada del perfil (`CODEX_HOME` si
+`CodeHomeDir` esta configurado, `HOME` si `HomeDir` esta configurado, vacio si
+ninguno esta configurado).
+
+Ese cambio tambien queda en cuarentena por ahora: el wrapper no limpia el
+entorno heredado, asi que un perfil sin `HomeDir/CodeHomeDir` podria seguir
+ejecutando Codex con `HOME/CODEX_HOME` ambientales, pero sin lock compartido. Si
+se quiere cerrar esta mejora, debe hacerse junto con una politica explicita de
+entorno o tests que prueben que Codex no hereda home compartido sin lock.
