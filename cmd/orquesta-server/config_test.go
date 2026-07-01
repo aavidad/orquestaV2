@@ -104,6 +104,29 @@ func TestServerConfigFromEnvV0ExponeSupervisorDesatendidoV0(t *testing.T) {
 	}
 }
 
+func TestServerConfigFromEnvV0AutomejoraIdleDefaultYApagadoPorEnvV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0 default: %v", err)
+	}
+	if config.IdleSelfImprovementDisabled ||
+		config.IdleSelfImprovementAfter != 60*time.Second {
+		t.Fatalf("idle default disabled=%v after=%s", config.IdleSelfImprovementDisabled, config.IdleSelfImprovementAfter)
+	}
+
+	t.Setenv(envServerIdleSelfImprovementAfterV0, "0")
+	config, err = serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0 disabled: %v", err)
+	}
+	if !config.IdleSelfImprovementDisabled ||
+		config.IdleSelfImprovementAfter != 0 {
+		t.Fatalf("idle disabled config=%+v", config)
+	}
+}
+
 func TestServerConfigFromEnvV0ExponeAutomejoraGoalFirstOptInV0(t *testing.T) {
 	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
 	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "true")
@@ -837,6 +860,10 @@ func TestServerStackIdleSelfImprovementFiltraSeccionesNoTxxV0(t *testing.T) {
 			RequestRef: "request-ref-autoprogramming-backlog-t33-autoprogramming-backlog-ack-correlation-a1b2c3d4",
 		}, {
 			RequestRef: "request-ref-autoprogramming-backlog-t260-corregir-estados-falsos-running-en-agentes-externos-a1b2c3d4",
+		}, {
+			RequestRef:    "request-ref-autoprogramming-backlog-t260-contexto-narrativo-a1b2c3d4",
+			SuggestedArea: "t260-contexto-narrativo",
+			ContextRefs:   []string{"backlog_section:tareas-futuras-tras-estabilizar-la-automejora"},
 		}, {
 			RequestRef: "request-ref-autoprogramming-backlog-scanner-abc123",
 		}},

@@ -94,14 +94,15 @@ func (runtime *RuntimeV0) idleSelfImprovementScheduleDecisionV0(
 			freshness.RetryableRequestRefs,
 		)
 		if len(activePendingRefs) > 0 {
+			wakeup := runtime.residentPendingDirectorWakeupV0(ctx)
 			decision.Schedule = false
 			decision.AuditStatus = "blocked"
 			decision.Reason = idleSelfImprovementResidentPendingBlockedReasonV0
 			decision.BlockerRunRefs = activePendingRefs
-			decision.BlockerEvidence = compactConfigStringsV0(residentPending.EvidenceRefs)
-			decision.BlockerMessage = idleSelfImprovementResidentPendingBlockedReasonV0
-			decision.BlockerRecoveryAction = "resident_director_dispatch_or_causal_blocker_required"
-			decision.BlockerNextActions = []string{"wake_resident_director_or_reconcile_run"}
+			decision.BlockerEvidence = compactConfigStringsV0(append(residentPending.EvidenceRefs, wakeup.EvidenceRefs...))
+			decision.BlockerMessage = wakeup.Message
+			decision.BlockerRecoveryAction = wakeup.RecoveryAction
+			decision.BlockerNextActions = wakeup.NextActions
 			return decision
 		}
 	}
@@ -157,5 +158,35 @@ func (runtime *RuntimeV0) idleSelfImprovementProviderBlockerV0(
 		})
 		return IdleSelfImprovementBlockerResultV0{}
 	}
+	return result
+}
+
+func (runtime *RuntimeV0) residentPendingDirectorWakeupV0(
+	ctx context.Context,
+) IdleSelfImprovementBlockerResultV0 {
+	result := IdleSelfImprovementBlockerResultV0{
+		Message:        idleSelfImprovementResidentPendingBlockedReasonV0,
+		RecoveryAction: "resident_director_dispatch_or_causal_blocker_required",
+		NextActions:    []string{"wake_resident_director_or_reconcile_run"},
+	}
+	if runtime == nil || runtime.residentDirector == nil || !runtime.config.ResidentDirectorEnabled {
+		result.EvidenceRefs = []string{"evidence-ref-resident-director-wakeup-unavailable"}
+		result.NextActions = []string{"enable_resident_director_or_reconcile_run"}
+		return result
+	}
+	if runtime.RequestResidentDirectorWakeupV0(idleSelfImprovementResidentPendingBlockedReasonV0) {
+		result.Message = "resident_director_wakeup_requested"
+		result.EvidenceRefs = []string{"evidence-ref-resident-director-wakeup-requested"}
+		result.NextActions = []string{"observe_resident_director_dispatch"}
+		return result
+	}
+	result.EvidenceRefs = []string{"evidence-ref-resident-director-wakeup-pending_or_paused"}
+	result.NextActions = []string{"observe_or_resume_resident_director"}
+	if runtime.residentDirectorPausedV0() {
+		result.RecoveryAction = "resume_resident_director_or_reconcile_run"
+	}
+	runtime.auditEventV0(ctx, "resident_director_wakeup", "skipped", "", map[string]interface{}{
+		"reason": idleSelfImprovementResidentPendingBlockedReasonV0,
+	})
 	return result
 }

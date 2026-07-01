@@ -49,6 +49,63 @@ func TestRuntimeV0SupervisorNoPreparaAutomejoraConResidentPendingSinDispatchV0(t
 	if !strings.Contains(strings.Join(store.last.IdleSelfImprovementOperationalMessage.RunRefs, ","), "b305970086cb77343865513f32df7a66") {
 		t.Fatalf("run_refs=%v", store.last.IdleSelfImprovementOperationalMessage.RunRefs)
 	}
+	if !containsStringForTestV0(
+		store.last.IdleSelfImprovementOperationalMessage.EvidenceRefs,
+		"evidence-ref-resident-director-wakeup-unavailable",
+	) {
+		t.Fatalf("evidence_refs=%v", store.last.IdleSelfImprovementOperationalMessage.EvidenceRefs)
+	}
+}
+
+func TestRuntimeV0SupervisorDespiertaDirectorResidenteConResidentPendingSinDispatchV0(t *testing.T) {
+	now := time.Date(2026, 6, 25, 10, 5, 0, 0, time.UTC)
+	store := &memoryStateStoreV0{}
+	supervisor := &fakeSupervisorV0{
+		results: []fakeSupervisorResultV0{{result: supervisorResultWithResidentPendingForTestV0(
+			"run-external-work-opes-b305970086cb77343865513f32df7a66",
+		)}},
+		planRequests: []IdleSelfImprovementRequestV0{{RequestRef: "request-ref-backlog-no-debe-usarse"}},
+		selfStarted:  make(chan struct{}, 1),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                       t.TempDir(),
+		TickInterval:                   time.Hour,
+		IdleSelfImprovementAfter:       time.Minute,
+		IdleSelfImprovementMaxRequests: 3,
+		IdleSelfImprovementTargetQueue: 4,
+		ResidentDirectorEnabled:        true,
+		AuditDisabled:                  true,
+	}, RuntimeDepsV0{
+		Supervisor:       supervisor,
+		ResidentDirector: &fakeResidentDirectorV0{},
+		StateStore:       store,
+		Clock:            fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.runSupervisorTickV0(context.Background())
+
+	select {
+	case wakeup := <-runtime.residentDirectorWakeups:
+		if wakeup.Cause != idleSelfImprovementResidentPendingBlockedReasonV0 {
+			t.Fatalf("wakeup=%+v", wakeup)
+		}
+	default:
+		t.Fatalf("resident director wakeup no solicitado")
+	}
+	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
+		t.Fatalf("resident pending no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
+	}
+	if store.last.IdleSelfImprovementOperationalMessage == nil ||
+		store.last.IdleSelfImprovementOperationalMessage.Message != "resident_director_wakeup_requested" ||
+		!containsStringForTestV0(
+			store.last.IdleSelfImprovementOperationalMessage.EvidenceRefs,
+			"evidence-ref-resident-director-wakeup-requested",
+		) {
+		t.Fatalf("state=%+v", store.last)
+	}
 }
 
 func TestRuntimeV0SupervisorNoBloqueaAutomejoraPorResidentPendingRetryableV0(t *testing.T) {

@@ -27,6 +27,9 @@ func serverRuntimeIdentityFromExecutableV0() orquestaserver.ServerRuntimeIdentit
 		abs = resolved
 	}
 	binarySHA := serverRuntimeBinarySHA256V0(abs)
+	if binarySHA == "" {
+		binarySHA = serverRuntimeBinarySHA256V0("/proc/self/exe")
+	}
 	commitRef, modified := serverRuntimeBuildInfoCommitV0()
 	return orquestaserver.NormalizeServerRuntimeIdentityV0(orquestaserver.ServerRuntimeIdentityV0{
 		BinaryPath:    abs,
