@@ -36,11 +36,23 @@ func (executor MCPObserveAppDirectorGoalToolExecutorV0) Execute(
 	)
 	if err != nil {
 		if publicResult, ok := NewMCPObserveAppDirectorGoalErrorResultFromErrorV0(input, err); ok {
-			return publicResult, nil
+			return executor.withPartialSnapshotAfterObserveErrorV0(ctx, input, publicResult), nil
 		}
 		return MCPObserveAppDirectorGoalToolResultV0{}, err
 	}
 	return NewMCPObserveAppDirectorGoalResultV0(input, result), nil
+}
+
+func (executor MCPObserveAppDirectorGoalToolExecutorV0) withPartialSnapshotAfterObserveErrorV0(
+	ctx context.Context,
+	input MCPObserveAppDirectorGoalToolInputV0,
+	publicResult MCPObserveAppDirectorGoalToolResultV0,
+) MCPObserveAppDirectorGoalToolResultV0 {
+	snapshot, err := executor.ObserveAppDirectorGoalTimeoutSnapshotV0(ctx, input)
+	if err != nil {
+		return publicResult
+	}
+	return NewMCPObserveAppDirectorGoalTimeoutResultWithPartialV0(publicResult, snapshot)
 }
 
 func (executor MCPObserveAppDirectorGoalToolExecutorV0) ObserveAppDirectorGoalTimeoutSnapshotV0(

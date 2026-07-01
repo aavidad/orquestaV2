@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -246,6 +247,66 @@ func TestMCPObserveAppDirectorGoalToolExecutorV0RunRefRequerido(t *testing.T) {
 	}
 }
 
+func TestMCPObserveAppDirectorGoalToolExecutorV0ErrorPublicoIncluyeSnapshotParcialV0(t *testing.T) {
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: "run-ref-goal-observe-rejected-snapshot-001",
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       "goal-ref-observe-rejected-snapshot-001",
+			RunRef:        "run-ref-goal-observe-rejected-snapshot-001",
+			Objective:     "Conservar snapshot local si el backend rechaza observar el goal.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "docs/goal_result.md"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         "goal-ref-observe-rejected-snapshot-001",
+			ExternalGoalRef: "thread-ref-observe-rejected-snapshot-001",
+			EvidenceRefs:    []string{"evidence-ref-observe-rejected-launch-001"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	store := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := store.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := NewMCPObserveAppDirectorGoalToolExecutorV0(orquestaappdirectorservice.StartAppDirectorPortsV0{
+		GoalStateStore: store,
+		GoalObserver: mcpObserveGoalRejectedObserverForTestV0{result: orquestagoal.GoalWorkResultV0{
+			SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+			Status:          orquestagoal.GoalStatusInvalidV0,
+			GoalRef:         state.GoalRef,
+			ExternalGoalRef: state.ExternalGoalRef,
+			Issues: []orquestagoal.GoalWorkIssueV0{{
+				Code:  "codex_goal_observation_rejected",
+				Field: "codex_goal_backend",
+			}},
+		}},
+	}).Execute(context.Background(), MCPObserveAppDirectorGoalToolInputV0{
+		RequestID: "request-ref-observe-rejected-snapshot-001",
+		RunRef:    state.RunRef,
+	})
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPObserveAppDirectorGoalEstadoErrorV0 ||
+		!result.Partial ||
+		result.GoalRef != state.GoalRef ||
+		result.ExternalGoalRef != state.ExternalGoalRef ||
+		result.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
+		result.RecommendedAction != "observe_later" ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "codex_goal_observation_rejected" ||
+		result.Errores[0].Field != "codex_goal_backend" ||
+		!stringInSliceForMCPObserveGoalHTTPTestV0(result.EvidenceRefs, "evidence-ref-observe-rejected-launch-001") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPObserveAppDirectorGoalToolExecutorV0TimeoutSnapshotLeeGoalStateV0(t *testing.T) {
 	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
 		RunRef: "run-ref-goal-snapshot-store-001",
@@ -436,6 +497,17 @@ func (executor *fakeMCPObserveAppDirectorGoalHTTPExecutorV0) Execute(
 		}
 	}
 	return executor.result, nil
+}
+
+type mcpObserveGoalRejectedObserverForTestV0 struct {
+	result orquestagoal.GoalWorkResultV0
+}
+
+func (observer mcpObserveGoalRejectedObserverForTestV0) ObserveGoalWorkV0(
+	_ context.Context,
+	_ orquestagoal.GoalObservationRequestV0,
+) (orquestagoal.GoalWorkResultV0, error) {
+	return observer.result, errors.New("codex_goal_observation_rejected")
 }
 
 type blockingMCPObserveAppDirectorGoalHTTPExecutorV0 struct {

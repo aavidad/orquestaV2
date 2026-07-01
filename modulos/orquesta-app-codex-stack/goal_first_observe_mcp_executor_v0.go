@@ -34,11 +34,23 @@ func (executor CodexStackObserveAppDirectorGoalExecutorV0) Execute(
 	)
 	if err != nil {
 		if publicResult, ok := orquestamcp.NewMCPObserveAppDirectorGoalErrorResultFromErrorV0(input, err); ok {
-			return publicResult, nil
+			return executor.withPartialSnapshotAfterObserveErrorV0(ctx, input, publicResult), nil
 		}
 		return orquestamcp.MCPObserveAppDirectorGoalToolResultV0{}, err
 	}
 	return orquestamcp.NewMCPObserveAppDirectorGoalResultV0(input, result), nil
+}
+
+func (executor CodexStackObserveAppDirectorGoalExecutorV0) withPartialSnapshotAfterObserveErrorV0(
+	ctx context.Context,
+	input orquestamcp.MCPObserveAppDirectorGoalToolInputV0,
+	publicResult orquestamcp.MCPObserveAppDirectorGoalToolResultV0,
+) orquestamcp.MCPObserveAppDirectorGoalToolResultV0 {
+	snapshot, err := executor.ObserveAppDirectorGoalTimeoutSnapshotV0(ctx, input)
+	if err != nil {
+		return publicResult
+	}
+	return orquestamcp.NewMCPObserveAppDirectorGoalTimeoutResultWithPartialV0(publicResult, snapshot)
 }
 
 func (executor CodexStackObserveAppDirectorGoalExecutorV0) ObserveAppDirectorGoalTimeoutSnapshotV0(

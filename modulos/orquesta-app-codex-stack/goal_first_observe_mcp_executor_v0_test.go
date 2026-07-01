@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
@@ -74,4 +75,100 @@ func TestCodexStackObserveAppDirectorGoalExecutorV0TimeoutSnapshotIncluyeProcess
 		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-stack-observe-snapshot-process-001") {
 		t.Fatalf("result=%+v", result)
 	}
+}
+
+func TestCodexStackAutoprogrammingObserveGoalExecutorV0ErrorPublicoIncluyeSnapshotParcialV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-stack-autoprogramming-observe-rejected-001"
+	goalRef := "goal-ref-stack-autoprogramming-observe-rejected-001"
+	externalGoalRef := "thread-ref-stack-autoprogramming-observe-rejected-001"
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       goalRef,
+			RunRef:        runRef,
+			Objective:     "Autoprogramacion debe publicar snapshot local si Codex rechaza observar.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "docs/goal_result.md"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			EvidenceRefs:    []string{"evidence-ref-stack-autoprogramming-observe-rejected-launch-001"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	if err := goalStates.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	processRegistry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
+	if err := processRegistry.RecordAgentProcessV0(ctx, orquestaagentprocessregistrymemory.AgentProcessRecordV0{
+		RunID:          runRef,
+		AgentRequestID: "agent-ref-stack-autoprogramming-observe-rejected-001",
+		ProcessRef:     "process-ref-stack-autoprogramming-observe-rejected-001",
+		SessionRef:     "session-ref-stack-autoprogramming-observe-rejected-001",
+		LaunchRef:      "launch-ref-stack-autoprogramming-observe-rejected-001",
+		ReadinessRef:   "readiness-ref-stack-autoprogramming-observe-rejected-001",
+		EvidenceRefs:   []string{"evidence-ref-stack-autoprogramming-observe-rejected-process-001"},
+	}); err != nil {
+		t.Fatalf("RecordAgentProcessV0: %v", err)
+	}
+	stack := &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore: goalStates,
+			GoalObserver: codexStackObserveRejectedForTestV0{result: orquestagoal.GoalWorkResultV0{
+				SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+				Status:          orquestagoal.GoalStatusInvalidV0,
+				GoalRef:         goalRef,
+				ExternalGoalRef: externalGoalRef,
+				Issues: []orquestagoal.GoalWorkIssueV0{{
+					Code:  "codex_goal_observation_rejected",
+					Field: "codex_goal_backend",
+				}},
+			}},
+		},
+		Stores: StoresV0{
+			ProcessRegistry: processRegistry,
+		},
+	}
+
+	result, err := NewCodexStackAutoprogrammingObserveGoalExecutorV0(stack).Execute(
+		ctx,
+		orquestamcp.MCPAutoprogrammingObserveGoalToolInputV0{
+			RequestID: "request-ref-stack-autoprogramming-observe-rejected-001",
+			RunRef:    runRef,
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPAutoprogrammingObserveGoalEstadoErrorV0 ||
+		!result.Partial ||
+		result.GoalRef != goalRef ||
+		result.ExternalGoalRef != externalGoalRef ||
+		result.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
+		result.RecommendedAction != "observe_later" ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "codex_goal_observation_rejected" ||
+		!codexStackStringInSetForTestV0(result.ProcessRefs, "process-ref-stack-autoprogramming-observe-rejected-001") ||
+		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-stack-autoprogramming-observe-rejected-process-001") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+type codexStackObserveRejectedForTestV0 struct {
+	result orquestagoal.GoalWorkResultV0
+}
+
+func (observer codexStackObserveRejectedForTestV0) ObserveGoalWorkV0(
+	_ context.Context,
+	_ orquestagoal.GoalObservationRequestV0,
+) (orquestagoal.GoalWorkResultV0, error) {
+	return observer.result, errors.New("codex_goal_observation_rejected")
 }
