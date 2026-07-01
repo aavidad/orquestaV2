@@ -284,16 +284,25 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) goalStatesForAutoprogramm
 		out = append(out, state)
 	}
 	if lister, ok := executor.GoalStateStore.(orquestagoal.GoalWorkStateListPortV0); ok {
-		listed, err := lister.ListGoalWorkStatesV0(ctx, orquestagoal.GoalWorkStateListRequestV0{
-			Statuses: []string{
-				orquestagoal.GoalStatusRunningV0,
-				orquestagoal.GoalStatusCompleteV0,
-				orquestagoal.GoalStatusBlockedV0,
-				orquestagoal.GoalStatusInvalidV0,
+		listRequests := []orquestagoal.GoalWorkStateListRequestV0{
+			{
+				Statuses: []string{
+					orquestagoal.GoalStatusRunningV0,
+					orquestagoal.GoalStatusBlockedV0,
+					orquestagoal.GoalStatusInvalidV0,
+				},
+				MaxItems: mcpAutoprogrammingRunningStatsMaxV0,
 			},
-			MaxItems: mcpAutoprogrammingRunningStatsMaxV0,
-		})
-		if err == nil {
+			{
+				Statuses: []string{orquestagoal.GoalStatusCompleteV0},
+				MaxItems: mcpAutoprogrammingRunningStatsMaxV0,
+			},
+		}
+		for _, listRequest := range listRequests {
+			listed, err := lister.ListGoalWorkStatesV0(ctx, listRequest)
+			if err != nil {
+				continue
+			}
 			for _, state := range listed {
 				runRef := strings.TrimSpace(state.RunRef)
 				if runRef == "" ||

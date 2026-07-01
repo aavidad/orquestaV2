@@ -3,6 +3,7 @@ package orquestamcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -2522,6 +2523,82 @@ func TestMCPAutoprogrammingStatusExecutorV0EfficiencyNoDeclaraIdleConGoalVivoYCo
 	}
 	if result.EfficiencySummary.RecommendedAction != "observe_goal:run:"+runRef {
 		t.Fatalf("recommended_action=%q operator=%+v", result.EfficiencySummary.RecommendedAction, result.Operator)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0GoalsCompletosNoOcultanRunningPorMaxItems(t *testing.T) {
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	for index := 0; index < mcpAutoprogrammingRunningStatsMaxV0; index++ {
+		runRef := fmt.Sprintf("run-ref-autop-status-complete-%03d", index)
+		goalRef := fmt.Sprintf("goal-ref-autop-status-complete-%03d", index)
+		if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+			RunRef:  runRef,
+			GoalRef: goalRef,
+			Status:  orquestagoal.GoalStatusCompleteV0,
+			Spec: orquestagoal.GoalWorkSpecV0{
+				RunRef:       runRef,
+				GoalRef:      goalRef,
+				Objective:    "Goal complete pendiente de cierre.",
+				DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+				WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+			},
+			LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+				GoalRef: goalRef,
+				Status:  orquestagoal.GoalStatusRunningV0,
+			},
+			EvidenceRefs: []string{"evidence-ref-complete-goal-max-items"},
+		}); err != nil {
+			t.Fatalf("SaveGoalWorkStateV0 complete %d: %v", index, err)
+		}
+	}
+	liveRunRef := "run-ref-z-autop-status-running-no-starve-001"
+	liveGoalRef := "goal-ref-z-autop-status-running-no-starve-001"
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:  liveRunRef,
+		GoalRef: liveGoalRef,
+		Status:  orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       liveRunRef,
+			GoalRef:      liveGoalRef,
+			Objective:    "Goal running que no puede desaparecer por completados previos.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef: liveGoalRef,
+			Status:  orquestagoal.GoalStatusRunningV0,
+		},
+		LastResult: &orquestagoal.GoalWorkResultV0{
+			GoalRef: liveGoalRef,
+			Status:  orquestagoal.GoalStatusRunningV0,
+			Summary: "codex_app_server_thread_status_active",
+		},
+		EvidenceRefs: []string{"evidence-ref-running-goal-max-items"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 running: %v", err)
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue:          &fakeMCPAutoprogrammingQueueStatusV0{empty: true},
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.RunningLive != 1 ||
+		result.QueueHealth.ObservedRuns < 1 {
+		t.Fatalf("queue_health=%+v", result.QueueHealth)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "live" ||
+		!hasStringMCPAutoprogrammingStatusTestV0(result.EfficiencySummary.Reasons, "running_live=1") {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
+	if result.Operator == nil ||
+		!hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "observe_goal", "run", liveRunRef) {
+		t.Fatalf("operator=%+v", result.Operator)
 	}
 }
 
