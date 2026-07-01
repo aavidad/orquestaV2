@@ -58,6 +58,9 @@ Durante la ventana revisada solo aparecieron artefactos parciales:
 
 - `tema_011/trabajo/tema_011_ampliado_limpio.md`
 - `tema_018/trabajo/tema_018_ampliado_limpio.md`
+- `tema_010/trabajo/tema_010_ampliado_limpio.md`
+- `tema_012/trabajo/tema_012_ampliado_limpio.md`
+- `tema_019/trabajo/tema_019_ampliado_limpio.md`
 - `tema_010/visuales/tema_010_igualdad_genero_transversalidad.webp`
 
 No aparecieron informes de cierre por tema, matrices de reutilización,
@@ -75,12 +78,26 @@ La entrega nueva del tema 011 quedó primero en 6.051 palabras y después en
 10.206 palabras. Para nivel B el mínimo del ampliado publicable es 10.800
 palabras.
 
+Además:
+
+- tema 010: 10.795 palabras, por debajo del mínimo;
+- tema 012: 9.301 palabras, por debajo del mínimo;
+- tema 012 declara en `validacion/informe_calidad_tema.md`:
+  `El texto ampliado limpio alcanza 9301 palabras, supera el mínimo de nivel B de 10.800 palabras`.
+
+Esto es un falso verde crítico: 9.301 no supera 10.800. Parece un error de
+comparación o de interpretación del punto de millar en español.
+
 Acción esperada:
 
 - En trabajos OPES de temario, el contrato del runner debe ejecutar o exigir
   validación de extensión antes de aceptar un artefacto como candidato.
 - Si no alcanza mínimo, el estado debe ser `pendiente_continuar` o
   `needs_expansion_min_words_B`, nunca cierre aceptado.
+- Los mínimos deben compararse como enteros en palabras, no como números con
+  separador decimal/millar ambiguo.
+- Ningún informe generado por agente puede sustituir al validador canónico de
+  extensión.
 
 ### 4. No se bloquea texto visible con metacomentarios de alcance
 
