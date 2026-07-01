@@ -522,6 +522,12 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalBloqueadoConBackendActivoPublicaS
 				},
 			}},
 		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:          runRef,
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          "active",
+		},
 	}
 
 	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
@@ -544,16 +550,17 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalBloqueadoConBackendActivoPublicaS
 		t.Fatalf("stale_running=%+v", result.StaleRunning)
 	}
 	action := result.StaleRunning[0]
-	if action.Code != mcpAutoprogrammingActionGoalFirstBlockedV0 ||
+	if action.Code != mcpAutoprogrammingActionActiveNoCheckpointYetV0 ||
+		action.Severity != "info" ||
 		action.GoalRef != goalRef ||
 		action.ExternalGoalRef != externalGoalRef ||
-		action.GoalStatus != orquestagoal.GoalStatusBlockedV0 ||
+		action.GoalStatus != "active" ||
 		action.RunStatus != "stopped" ||
 		action.ResultRef != "result-ref-backend-active-001" ||
 		action.ClosureStatus != orquestagoal.GoalStatusBlockedV0 ||
 		!action.ClosureNeedsRework ||
-		action.RecommendedAction != "review_replan_goal_first" ||
-		!strings.Contains(action.Reason, "goal_backend_state_unreconciled") ||
+		action.RecommendedAction != "observe_goal_backend_wait_for_checkpoint" ||
+		!strings.Contains(action.Reason, "goal_backend_active_no_checkpoint_yet") ||
 		action.ProcessAliveCount != 1 ||
 		action.TokensUsed != 4321 ||
 		action.LastOutputAt != "2026-07-01T10:15:00Z" ||
@@ -564,6 +571,82 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalBloqueadoConBackendActivoPublicaS
 		!hasStringMCPAutoprogrammingStatusTestV0(action.ArtifactRefs, "artifact-ref-backend-active-001") ||
 		!hasStringMCPAutoprogrammingStatusTestV0(action.DomainReceiptRefs, "receipt-ref-backend-active-001") {
 		t.Fatalf("action refs=%+v", action)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0BackendActivoConSoloTokensHistoricosSigueBloqueado(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-backend-active-historical-tokens-001"
+	goalRef := "goal-ref-autop-status-goal-backend-active-historical-tokens-001"
+	externalGoalRef := "thread-ref-autop-status-goal-backend-active-historical-tokens-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Tokens acumulados sin actividad no deben ocultar stale real.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-backend-historical-tokens-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: runRef,
+			Status: "stopped",
+			UsageSummary: &orquestacionnucleoapp.DirectorRunUsageStatsV0{
+				TotalTokens: 9876,
+			},
+		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:          runRef,
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          "active",
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			empty: true,
+			terminal: []MCPRunQueueRankedCandidateCompactV0{{
+				RunRef: runRef,
+				AppRef: "opes",
+				Status: "stopped",
+			}},
+		},
+		Stats:          stats,
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{RunRef: runRef})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code == mcpAutoprogrammingActionActiveNoCheckpointYetV0 ||
+		action.Code != mcpAutoprogrammingActionGoalFirstBlockedV0 ||
+		action.Severity != "blocked" ||
+		action.GoalStatus != "active" ||
+		action.TokensUsed != 9876 ||
+		action.LastOutputAt != "" ||
+		action.LastArtifactAt != "" ||
+		action.ProcessAliveCount != 0 ||
+		action.RecommendedAction != "review_replan_goal_first" ||
+		!strings.Contains(action.Reason, "goal_backend_state_unreconciled") {
+		t.Fatalf("action=%+v", action)
 	}
 }
 

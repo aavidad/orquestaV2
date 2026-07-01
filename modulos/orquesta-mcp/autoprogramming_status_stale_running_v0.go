@@ -12,6 +12,7 @@ const (
 	mcpAutoprogrammingActionStaleRunningV0                    = "stale_running"
 	mcpAutoprogrammingActionRunningStaleNoProcessV0           = "running_stale_no_process"
 	mcpAutoprogrammingActionRunningWithoutRecentStatsV0       = "running_without_recent_stats"
+	mcpAutoprogrammingActionActiveNoCheckpointYetV0           = "active_no_checkpoint_yet"
 	mcpAutoprogrammingActionStaleRunningReconciledV0          = "stale_running_reconciled"
 	mcpAutoprogrammingActionProviderUsageLimitRetryV0         = "provider_usage_limit_retry_after"
 	mcpAutoprogrammingActionExternalWorkStoppedNoDeliveryV0   = "external_work_accepted_stopped_without_delivery"
@@ -82,6 +83,12 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 			reason = "goal_terminal_reconcile_pending: durable terminal result present but backend/local closure is not reconciled"
 			recommendedAction = "reconcile_goal_terminal"
 		}
+		activeNoCheckpoint := !mcpAutoprogrammingGoalResultTerminalV0(state) &&
+			mcpAutoprogrammingObservedGoalActiveWithRecentActivityV0(observed)
+		if activeNoCheckpoint {
+			reason = "goal_backend_active_no_checkpoint_yet: backend goal is active with recent activity; wait for checkpoint/artifact before declaring stale"
+			recommendedAction = "observe_goal_backend_wait_for_checkpoint"
+		}
 		action := MCPAutoprogrammingActionableRunV0{
 			Code:              mcpAutoprogrammingActionGoalFirstBlockedV0,
 			Severity:          "blocked",
@@ -106,6 +113,10 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 			observed,
 		)
 		action = mcpAutoprogrammingActionableRunWithObservedGoalV0(action, observed)
+		if activeNoCheckpoint {
+			action.Code = mcpAutoprogrammingActionActiveNoCheckpointYetV0
+			action.Severity = "info"
+		}
 		if mcpAutoprogrammingObservedGoalTerminalV0(observed) {
 			action.Code = "goal_first_terminal_reconciled"
 			action.Severity = "info"
@@ -412,6 +423,28 @@ func mcpAutoprogrammingObservedGoalTerminalV0(
 	return mcpAutoprogrammingGoalStatusTerminalV0(observed.Goal.Status) ||
 		observed.Goal.ClosureAccepted ||
 		mcpAutoprogrammingGoalStatusTerminalV0(observed.Goal.ClosureStatus)
+}
+
+func mcpAutoprogrammingObservedGoalActiveWithRecentActivityV0(
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	if observed == nil || observed.Goal == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(observed.Goal.Status)) {
+	case "active", orquestagoal.GoalStatusRunningV0, orquestagoal.GoalStatusAcceptedV0:
+	default:
+		return false
+	}
+	if observed.Stats == nil {
+		return false
+	}
+	stats := *observed.Stats
+	if mcpAutoprogrammingStatsLastActivityAtV0(stats) != "" ||
+		mcpAutoprogrammingStatsLastArtifactAtV0(stats) != "" {
+		return true
+	}
+	return mcpAutoprogrammingRunStatsHasLiveSignalV0(stats)
 }
 
 func mcpAutoprogrammingGoalResultTerminalV0(
