@@ -404,6 +404,11 @@ func guidedFollowupActionsV0() []WebNuevaAppIntakeGuidedActionV0 {
 			Decides:  []WebNuevaAppIntakeDecisionV0{{Field: "preferencias_tecnicas.arquitectura", Value: "clean_architecture"}},
 		},
 		{
+			ID:       "architecture_onion",
+			LabelKey: "nueva_app.wizard.guided_architecture_onion",
+			Decides:  []WebNuevaAppIntakeDecisionV0{{Field: "preferencias_tecnicas.arquitectura", Value: "onion"}},
+		},
+		{
 			ID:       "architecture_layered",
 			LabelKey: "nueva_app.wizard.guided_architecture_layered",
 			Decides:  []WebNuevaAppIntakeDecisionV0{{Field: "preferencias_tecnicas.arquitectura", Value: "layered"}},

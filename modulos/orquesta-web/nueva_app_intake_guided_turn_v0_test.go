@@ -78,6 +78,7 @@ func TestWebNuevaAppIntakeGuidedActionV0AplicaDudasSinCambiarContratoFinal(t *te
 func TestWebNuevaAppIntakeGuidedActionV0CubreOpcionesExpertasV0(t *testing.T) {
 	architectures := map[string]string{
 		"architecture_clean":         "clean_architecture",
+		"architecture_onion":         "onion",
 		"architecture_layered":       "layered",
 		"architecture_microservices": "microservices",
 		"architecture_serverless":    "serverless",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
@@ -52,6 +53,80 @@ func TestGoalDomainReceiptClosureValidatorV0BloqueaRequiredTestComandoPassedSinE
 		closure.Status != orquestagoal.GoalStatusBlockedV0 ||
 		!goalDomainReceiptClosureHasIssueForTestV0(closure, goalDomainReceiptRequiredTestEvidenceMissingIssueV0, goalDomainReceiptRequiredTestEvidenceMissingFieldV0) {
 		t.Fatalf("closure no bloqueo required_test_results sin evidence_refs: %+v", closure)
+	}
+}
+
+func TestGoalDomainReceiptClosureValidatorV0BloqueaOPESFinalConQAGenericoSinStrictEditorialV0(t *testing.T) {
+	ctx := context.Background()
+	ledger := NewInMemoryDomainWorkArtifactSubmissionLedgerV0()
+	spec := orquestagoal.NormalizeGoalWorkSpecV0(orquestagoal.GoalWorkSpecV0{
+		GoalRef:    "goal-ref-opes-final-strict-editorial-001",
+		RunRef:     "run-ref-opes-final-strict-editorial-001",
+		DomainRef:  "opes",
+		ProjectRef: "opes",
+		WorkKind:   "finalize_temario_package",
+		Objective:  "Cerrar paquete final OPES.",
+		WriteSet:   []orquestagoal.GoalWriteScopeV0{{Path: "external/opes/final"}},
+		ArtifactContracts: []orquestagoal.GoalArtifactContractV0{{
+			ArtifactRef:  "artifact-ref-opes-final-strict-editorial-001",
+			ArtifactType: orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0,
+			Required:     true,
+		}},
+		ClosurePolicy: orquestagoal.GoalClosurePolicyV0{
+			RequireArtifacts:     true,
+			RequireDomainReceipt: true,
+		},
+	})
+	record := DomainWorkArtifactSubmissionRecordV0{
+		IdempotencyKey: "idempotency-key-opes-final-strict-editorial-001",
+		Status:         DomainWorkArtifactSubmissionStatusAcceptedV0,
+		RunRef:         spec.RunRef,
+		DomainRef:      "opes",
+		JobRef:         "job-ref-opes-final-strict-editorial-001",
+		ArtifactRef:    spec.ArtifactContracts[0].ArtifactRef,
+		ArtifactType:   spec.ArtifactContracts[0].ArtifactType,
+		CompleteJob:    true,
+		ReceiptRef:     "receipt-ref-opes-final-strict-editorial-001",
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "source_work_kind", Value: "finalize_temario_package"},
+			{Name: "manifest_cierre", ValueJSON: []byte(`{
+				"schema_version":"opes_final_package_evidence_manifest.v0",
+				"package_ref":"package-ref-opes-final-strict-editorial-001",
+				"manifest_ref":"manifest-cierre-ref-opes-final-strict-editorial-001",
+				"checksum_refs":["checksum-ref-opes-final-strict-editorial-001"],
+				"validation_report_ref":"validation-report-ref-opes-final-strict-editorial-001",
+				"review_matrix_ref":"review-matrix-ref-opes-final-strict-editorial-001",
+				"required_evidence_refs":{
+					"html":"opes-final-evidence:html:strict-editorial",
+					"rag":"opes-final-evidence:rag:strict-editorial",
+					"audio":"opes-final-evidence:audio:strict-editorial",
+					"tests":"opes-final-evidence:tests:strict-editorial",
+					"visual":"opes-final-evidence:visual:strict-editorial",
+					"qa":"opes-final-evidence:qa:strict-editorial"
+				}
+			}`)},
+		},
+		EvidenceRefs: []string{"opes-final-evidence:qa:strict-editorial"},
+	}
+	if err := ledger.RecordDomainWorkArtifactSubmissionV0(ctx, record); err != nil {
+		t.Fatalf("RecordDomainWorkArtifactSubmissionV0: %v", err)
+	}
+	result := orquestagoal.NormalizeGoalWorkResultV0(orquestagoal.GoalWorkResultV0{
+		GoalRef:           spec.GoalRef,
+		Status:            orquestagoal.GoalStatusCompleteV0,
+		ArtifactRefs:      []string{spec.ArtifactContracts[0].ArtifactRef},
+		DomainReceiptRefs: []string{record.ReceiptRef},
+		EvidenceRefs:      []string{"evidence-ref-opes-final-strict-editorial-001"},
+	})
+
+	closure, err := (domainWorkGoalReceiptClosureValidatorV0{Ledger: ledger}).ValidateGoalWorkClosureV0(ctx, spec, result)
+	if err != nil {
+		t.Fatalf("ValidateGoalWorkClosureV0: %v", err)
+	}
+	if closure.Accepted ||
+		closure.Status != orquestagoal.GoalStatusBlockedV0 ||
+		!goalDomainReceiptClosureHasIssueForTestV0(closure, goalDomainReceiptOPESFinalPackageStrictEditorialIssueV0, goalDomainReceiptOPESFinalPackageQAPassesFieldV0) {
+		t.Fatalf("closure no bloqueo QA estricta ausente: %+v", closure)
 	}
 }
 

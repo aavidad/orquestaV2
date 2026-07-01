@@ -1577,6 +1577,19 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0DerivaManifestCierreOPESFin
 				"checksum_refs":["checksum-ref-001"],
 				"validation_report_ref":"validation-report-ref-001",
 				"review_matrix_ref":"review-matrix-ref-001",
+				"qa_passes":{
+					"extension_pass":true,
+					"official_text_qa_pass":true,
+					"strict_editorial_qa_pass":true
+				},
+				"qa_report_refs":{
+					"extension":"09_validacion/informe_extension_temario.json",
+					"official_text":[
+						"09_validacion/informe_texto_publico_sin_notas_autor.json",
+						"09_validacion/informe_texto_publico_sin_metacomentarios_examen.json"
+					],
+					"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json"
+				},
 				"required_evidence_refs":{
 					"html":"opes-final-evidence:html:001",
 					"rag":"opes-final-evidence:rag:001",
@@ -1636,6 +1649,7 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0DerivaManifestCierreOPESFin
 		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "manifest_cierre") ||
 		!domainWorkFieldValueForTestV0(submission.PayloadFields, "validation_report_ref", "validation-report-ref-001") ||
 		!domainWorkFieldValueForTestV0(submission.PayloadFields, "review_matrix_ref", "review-matrix-ref-001") ||
+		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "qa_report_refs") ||
 		!domainWorkFieldHasJSONForTestV0(submission.PayloadFields, "required_evidence_refs") {
 		t.Fatalf("submission=%+v", submission)
 	}
@@ -1650,6 +1664,10 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0DerivaManifestCierreOPESFin
 		"opes-final-evidence:tests:001",
 		"opes-final-evidence:visual:001",
 		"opes-final-evidence:qa:001",
+		"opes-final-qa-report-09_validacion-informe_extension_temario.json",
+		"opes-final-qa-report-09_validacion-informe_texto_publico_sin_notas_autor.json",
+		"opes-final-qa-report-09_validacion-informe_texto_publico_sin_metacomentarios_examen.json",
+		"opes-final-qa-report-09_validacion-informe_texto_publico_sin_andamiaje_interno.json",
 	} {
 		if !codexStackStringInSetV0(submission.EvidenceRefs, want) {
 			t.Fatalf("evidence_refs=%+v falta %s", submission.EvidenceRefs, want)
@@ -1720,5 +1738,89 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0NoCompletaOPESFinalSinManif
 		!domainWorkFieldValuesForTestV0(submission.PayloadFields, "validation_issue_refs", []string{codexStackOPESFinalPackageEvidenceIncompleteIssueV0}) ||
 		!codexStackStringInSetV0(submission.EvidenceRefs, codexStackOPESFinalPackageEvidenceIncompleteIssueV0) {
 		t.Fatalf("submission final incompleta debe quedar no terminal: %+v", submission)
+	}
+}
+
+func TestDefaultDomainWorkArtifactSubmissionBuilderV0NoCompletaOPESFinalSinQAReportRefs(t *testing.T) {
+	projectDir := t.TempDir()
+	fileRef := "external/opes/finalize_temario_package/completed_syllabus_package.json"
+	bodyPath := filepath.Join(projectDir, filepath.FromSlash(fileRef))
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	payload := `{
+		"artifact_type":"completed_syllabus_package",
+		"payload_json":{
+			"package_ref":"package-ref-final-no-qa-report-001",
+			"manifest_cierre":{
+				"schema_version":"opes_final_package_evidence_manifest.v0",
+				"package_ref":"package-ref-final-no-qa-report-001",
+				"manifest_ref":"manifest-cierre-ref-no-qa-report-001",
+				"checksum_refs":["checksum-ref-no-qa-report-001"],
+				"validation_report_ref":"validation-report-ref-no-qa-report-001",
+				"review_matrix_ref":"review-matrix-ref-no-qa-report-001",
+				"qa_passes":{
+					"extension_pass":true,
+					"official_text_qa_pass":true,
+					"strict_editorial_qa_pass":true
+				},
+				"required_evidence_refs":{
+					"html":"opes-final-evidence:html:no-qa-report",
+					"rag":"opes-final-evidence:rag:no-qa-report",
+					"audio":"opes-final-evidence:audio:no-qa-report",
+					"tests":"opes-final-evidence:tests:no-qa-report",
+					"visual":"opes-final-evidence:visual:no-qa-report",
+					"qa":"opes-final-evidence:qa:no-qa-report"
+				}
+			}
+		}
+	}`
+	if err := os.WriteFile(bodyPath, []byte(payload), 0o600); err != nil {
+		t.Fatalf("write body: %v", err)
+	}
+
+	submission, ok, err := (defaultDomainWorkArtifactSubmissionBuilderV0{}).
+		BuildDomainWorkArtifactSubmissionV0(
+			context.Background(),
+			DomainWorkArtifactSubmissionBuildInputV0{
+				Run: orquestacoreworkflow.OrchestrationRunV0{RunID: "run-ref-final-package-no-qa-report-001"},
+				Task: orquestacoreworkflow.WorkflowTaskV0{
+					TaskID: "task-ref-final-package-no-qa-report-001",
+					Title:  "Cerrar paquete final OPES",
+				},
+				Record: orquestaappchange.AppChangeRecordV0{
+					Request: orquestaappchange.AppChangeRequestV0{
+						CorrelationID: "corr-ref-final-package-no-qa-report-001",
+						ChangeRef:     "change-ref-final-package-no-qa-report-001",
+						ExternalWork: &orquestaappchange.AppChangeExternalWorkV0{
+							ProjectRef: "opes",
+							JobRef:     "job-ref-final-package-no-qa-report-001",
+							WorkKind:   "finalize_temario_package",
+						},
+					},
+				},
+				Descriptor: orquestaruntimecodexdelivery.CodexReceiptDescriptorV0{
+					DescriptorRef:  "descriptor-ref-final-package-no-qa-report-001",
+					ProjectWorkDir: projectDir,
+				},
+				Ack: orquestaruntimecodex.CodexAgentAckV0{
+					Files: []string{fileRef},
+				},
+				Observation: orquestacionnucleoapp.AgentDeliveryObservationV0{
+					DeliveryRef:  "ack-ref-final-package-no-qa-report-001",
+					AgentRef:     "agent-ref-final-package-no-qa-report-001",
+					Summary:      "Paquete final OPES sin informes QA.",
+					EvidenceRefs: []string{"ack-ref-final-package-no-qa-report-001"},
+				},
+			},
+		)
+
+	if err != nil || !ok {
+		t.Fatalf("BuildDomainWorkArtifactSubmissionV0 ok=%v err=%v", ok, err)
+	}
+	if submission.CompleteJob ||
+		!domainWorkFieldValuesForTestV0(submission.PayloadFields, "validation_issue_refs", []string{codexStackOPESFinalPackageStrictEditorialQAMissingIssueV0}) ||
+		!codexStackStringInSetV0(submission.EvidenceRefs, codexStackOPESFinalPackageStrictEditorialQAMissingIssueV0) {
+		t.Fatalf("submission final sin qa_report_refs debe quedar no terminal: %+v", submission)
 	}
 }

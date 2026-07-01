@@ -2460,6 +2460,19 @@ func writeGoalFirstDomainWorkArtifactForTestV0(
 					"checksum_refs":["checksum-ref-goal-first-final-001"],
 					"validation_report_ref":"validation-report-ref-goal-first-final-001",
 					"review_matrix_ref":"review-matrix-ref-goal-first-final-001",
+					"qa_passes":{
+						"extension_pass":true,
+						"official_text_qa_pass":true,
+						"strict_editorial_qa_pass":true
+					},
+					"qa_report_refs":{
+						"extension":"09_validacion/informe_extension_temario.json",
+						"official_text":[
+							"09_validacion/informe_texto_publico_sin_notas_autor.json",
+							"09_validacion/informe_texto_publico_sin_metacomentarios_examen.json"
+						],
+						"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json"
+					},
 					"required_evidence_refs":{
 						"html":"opes-final-evidence:html:goal-first",
 						"rag":"opes-final-evidence:rag:goal-first",

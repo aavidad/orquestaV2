@@ -10,38 +10,41 @@ import (
 )
 
 const (
-	goalDomainReceiptLedgerAcceptedEvidenceRefV0         = "evidence-ref-goal-domain-receipt-ledger-accepted"
-	goalDomainReceiptLedgerMissingEvidenceRefV0          = "evidence-ref-goal-domain-receipt-ledger-missing"
-	goalDomainReceiptLedgerUnavailableIssueV0            = "domain_work_receipt_ledger_unavailable"
-	goalDomainReceiptLedgerAcceptedMissingIssueV0        = "domain_work_receipt_not_accepted"
-	goalDomainReceiptLedgerIncompleteArtifactV0          = "domain_work_receipt_artifact_incomplete"
-	goalDomainReceiptLedgerRequiredRunRefIssueV0         = "domain_work_receipt_run_ref_required"
-	goalDomainReceiptLedgerRequiredReceiptIssueV0        = "domain_work_receipt_ref_required"
-	goalDomainReceiptLedgerRequiredContractIssueV0       = "domain_work_receipt_contract_required"
-	goalDomainReceiptLedgerRequiredArtifactIssueV0       = "domain_work_receipt_artifact_required"
-	goalDomainReceiptStructuredArtifactIssueCodeV0       = "domain_work_receipt_artifact_structured_non_terminal"
-	goalDomainReceiptOPESSubrolesEvidenceMissingIssueV0  = "domain_work_opes_subroles_evidence_missing"
-	goalDomainReceiptOPESFinalPackageEvidenceIssueCodeV0 = codexStackOPESFinalPackageEvidenceIncompleteIssueV0
-	goalDomainReceiptOPESVisualFinalIssueCodeV0          = "domain_work_opes_visual_final_not_professional"
-	goalDomainReceiptOPESVisualReuseIssueCodeV0          = "domain_work_opes_visual_reuse_missing"
-	goalDomainReceiptOPESHTMLShellIssueCodeV0            = "domain_work_opes_html_shell_incomplete"
-	goalDomainReceiptOPESPracticalCasesIssueCodeV0       = "domain_work_opes_practical_cases_contract_incomplete"
-	goalDomainReceiptRequiredTestEvidenceMissingIssueV0  = "domain_work_required_test_evidence_missing"
-	goalDomainReceiptLedgerRequiredArtifactFieldV0       = "domain_receipt_refs.artifact_contracts"
-	goalDomainReceiptStructuredArtifactFieldV0           = "domain_receipt_refs.artifact_payload"
-	goalDomainReceiptLedgerUnavailableIssueFieldV0       = "domain_receipt_refs.ledger"
-	goalDomainReceiptLedgerMissingIssueFieldV0           = "domain_receipt_refs"
-	goalDomainReceiptLedgerRequiredRunRefFieldV0         = "domain_receipt_refs.run_ref"
-	goalDomainReceiptLedgerRequiredReceiptFieldV0        = "domain_receipt_refs.receipt_ref"
-	goalDomainReceiptOPESVisualFinalFieldV0              = "domain_receipt_refs.opes_visual_final"
-	goalDomainReceiptOPESVisualReuseFieldV0              = "domain_receipt_refs.opes_visual_reuse"
-	goalDomainReceiptOPESHTMLShellFieldV0                = "domain_receipt_refs.opes_html_shell"
-	goalDomainReceiptOPESPracticalCasesFieldV0           = "domain_receipt_refs.opes_practical_cases"
-	goalDomainReceiptRequiredTestEvidenceMissingFieldV0  = "required_test_results.evidence_refs"
-	goalDomainReceiptOPESSubrolesEvidenceFieldV0         = "domain_receipt_refs.opes_subroles"
-	goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0   = "evidence-ref-goal-domain-receipt-opes-subroles-accepted"
-	goalDomainReceiptOPESSubrolesEvidencePrefixV0        = "domain-work-opes-subrole-"
-	goalDomainReceiptOPESSubrolesRequiredCountV0         = 6
+	goalDomainReceiptLedgerAcceptedEvidenceRefV0            = "evidence-ref-goal-domain-receipt-ledger-accepted"
+	goalDomainReceiptLedgerMissingEvidenceRefV0             = "evidence-ref-goal-domain-receipt-ledger-missing"
+	goalDomainReceiptLedgerUnavailableIssueV0               = "domain_work_receipt_ledger_unavailable"
+	goalDomainReceiptLedgerAcceptedMissingIssueV0           = "domain_work_receipt_not_accepted"
+	goalDomainReceiptLedgerIncompleteArtifactV0             = "domain_work_receipt_artifact_incomplete"
+	goalDomainReceiptLedgerRequiredRunRefIssueV0            = "domain_work_receipt_run_ref_required"
+	goalDomainReceiptLedgerRequiredReceiptIssueV0           = "domain_work_receipt_ref_required"
+	goalDomainReceiptLedgerRequiredContractIssueV0          = "domain_work_receipt_contract_required"
+	goalDomainReceiptLedgerRequiredArtifactIssueV0          = "domain_work_receipt_artifact_required"
+	goalDomainReceiptStructuredArtifactIssueCodeV0          = "domain_work_receipt_artifact_structured_non_terminal"
+	goalDomainReceiptOPESSubrolesEvidenceMissingIssueV0     = "domain_work_opes_subroles_evidence_missing"
+	goalDomainReceiptOPESFinalPackageEvidenceIssueCodeV0    = codexStackOPESFinalPackageEvidenceIncompleteIssueV0
+	goalDomainReceiptOPESFinalPackageExtensionQAIssueV0     = codexStackOPESFinalPackageExtensionQAMissingIssueV0
+	goalDomainReceiptOPESFinalPackageOfficialTextIssueV0    = codexStackOPESFinalPackageOfficialTextQAMissingIssueV0
+	goalDomainReceiptOPESFinalPackageStrictEditorialIssueV0 = codexStackOPESFinalPackageStrictEditorialQAMissingIssueV0
+	goalDomainReceiptOPESVisualFinalIssueCodeV0             = "domain_work_opes_visual_final_not_professional"
+	goalDomainReceiptOPESVisualReuseIssueCodeV0             = "domain_work_opes_visual_reuse_missing"
+	goalDomainReceiptOPESHTMLShellIssueCodeV0               = "domain_work_opes_html_shell_incomplete"
+	goalDomainReceiptOPESPracticalCasesIssueCodeV0          = "domain_work_opes_practical_cases_contract_incomplete"
+	goalDomainReceiptRequiredTestEvidenceMissingIssueV0     = "domain_work_required_test_evidence_missing"
+	goalDomainReceiptLedgerRequiredArtifactFieldV0          = "domain_receipt_refs.artifact_contracts"
+	goalDomainReceiptStructuredArtifactFieldV0              = "domain_receipt_refs.artifact_payload"
+	goalDomainReceiptLedgerUnavailableIssueFieldV0          = "domain_receipt_refs.ledger"
+	goalDomainReceiptLedgerMissingIssueFieldV0              = "domain_receipt_refs"
+	goalDomainReceiptLedgerRequiredRunRefFieldV0            = "domain_receipt_refs.run_ref"
+	goalDomainReceiptLedgerRequiredReceiptFieldV0           = "domain_receipt_refs.receipt_ref"
+	goalDomainReceiptOPESVisualFinalFieldV0                 = "domain_receipt_refs.opes_visual_final"
+	goalDomainReceiptOPESVisualReuseFieldV0                 = "domain_receipt_refs.opes_visual_reuse"
+	goalDomainReceiptOPESHTMLShellFieldV0                   = "domain_receipt_refs.opes_html_shell"
+	goalDomainReceiptOPESPracticalCasesFieldV0              = "domain_receipt_refs.opes_practical_cases"
+	goalDomainReceiptRequiredTestEvidenceMissingFieldV0     = "required_test_results.evidence_refs"
+	goalDomainReceiptOPESSubrolesEvidenceFieldV0            = "domain_receipt_refs.opes_subroles"
+	goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0      = "evidence-ref-goal-domain-receipt-opes-subroles-accepted"
+	goalDomainReceiptOPESSubrolesEvidencePrefixV0           = "domain-work-opes-subrole-"
+	goalDomainReceiptOPESSubrolesRequiredCountV0            = 6
 )
 
 type domainWorkGoalReceiptClosureValidatorV0 struct {
@@ -530,10 +533,17 @@ func goalDomainReceiptOPESFinalPackageEvidenceIssueV0(
 	records []DomainWorkArtifactSubmissionRecordV0,
 ) orquestagoal.GoalWorkIssueV0 {
 	for _, record := range records {
-		if goalDomainReceiptOPESFinalPackageEvidenceMissingV0(spec, record) {
+		if issueRef := goalDomainReceiptOPESFinalPackageEvidenceIssueRefV0(spec, record); issueRef != "" {
+			field := goalDomainReceiptOPESFinalPackageEvidenceFieldV0
+			switch issueRef {
+			case goalDomainReceiptOPESFinalPackageExtensionQAIssueV0,
+				goalDomainReceiptOPESFinalPackageOfficialTextIssueV0,
+				goalDomainReceiptOPESFinalPackageStrictEditorialIssueV0:
+				field = goalDomainReceiptOPESFinalPackageQAPassesFieldV0
+			}
 			return orquestagoal.GoalWorkIssueV0{
-				Code:  goalDomainReceiptOPESFinalPackageEvidenceIssueCodeV0,
-				Field: goalDomainReceiptOPESFinalPackageEvidenceFieldV0,
+				Code:  issueRef,
+				Field: field,
 			}
 		}
 	}
@@ -550,7 +560,30 @@ func goalDomainReceiptOPESFinalPackageEvidenceMissingV0(
 	if !codexStackDomainWorkIsOPESFinalPackageV0(domainRef, workKind, record.ArtifactType) {
 		return false
 	}
-	return !codexStackOPESFinalPackageSubmissionEvidenceCompleteV0(record)
+	return codexStackOPESFinalPackageEvidenceIssueRefV0(
+		record.PayloadFields,
+		record.EvidenceRefs,
+		record.PayloadRefs,
+		record.ExternalRefs,
+	) != ""
+}
+
+func goalDomainReceiptOPESFinalPackageEvidenceIssueRefV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	record DomainWorkArtifactSubmissionRecordV0,
+) string {
+	record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+	domainRef := firstNonEmptyQueuedSourceV0(record.DomainRef, spec.DomainRef, spec.ProjectRef)
+	workKind := firstNonEmptyQueuedSourceV0(domainWorkFieldStringValueV0(record.PayloadFields, "source_work_kind"), spec.WorkKind)
+	if !codexStackDomainWorkIsOPESFinalPackageV0(domainRef, workKind, record.ArtifactType) {
+		return ""
+	}
+	return codexStackOPESFinalPackageEvidenceIssueRefV0(
+		record.PayloadFields,
+		record.EvidenceRefs,
+		record.PayloadRefs,
+		record.ExternalRefs,
+	)
 }
 
 func goalDomainReceiptOPESPracticalCasesInvalidV0(

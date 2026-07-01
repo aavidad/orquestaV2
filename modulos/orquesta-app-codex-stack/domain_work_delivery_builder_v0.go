@@ -48,13 +48,12 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 		fields = domainWorkDeliveryMarkStructuredNonTerminalInvalidV0(fields, issueRef)
 		completeJob = false
 	}
-	if codexStackDomainWorkIsOPESFinalPackageV0(work.ProjectRef, work.WorkKind, artifactType) &&
-		!codexStackOPESFinalPackageEvidenceCompleteV0(fields, evidenceRefs, nil, nil) {
+	if issueRef := codexStackOPESFinalPackageDeliveryIssueRefV0(work.ProjectRef, work.WorkKind, artifactType, fields, evidenceRefs); issueRef != "" {
 		fields = domainWorkDeliveryMarkStructuredNonTerminalInvalidV0(
 			fields,
-			codexStackOPESFinalPackageEvidenceIncompleteIssueV0,
+			issueRef,
 		)
-		evidenceRefs = compactStringsV0(append(evidenceRefs, codexStackOPESFinalPackageEvidenceIncompleteIssueV0))
+		evidenceRefs = compactStringsV0(append(evidenceRefs, issueRef))
 		completeJob = false
 	}
 	fields = redactDomainWorkDeliveryPayloadFieldsV0(fields)
@@ -75,6 +74,19 @@ func (defaultDomainWorkArtifactSubmissionBuilderV0) BuildDomainWorkArtifactSubmi
 			CompleteJob:    completeJob,
 		},
 	), true, nil
+}
+
+func codexStackOPESFinalPackageDeliveryIssueRefV0(
+	projectRef string,
+	workKind string,
+	artifactType string,
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	evidenceRefs []string,
+) string {
+	if !codexStackDomainWorkIsOPESFinalPackageV0(projectRef, workKind, artifactType) {
+		return ""
+	}
+	return codexStackOPESFinalPackageEvidenceIssueRefV0(fields, evidenceRefs, nil, nil)
 }
 
 func domainWorkArtifactTypeForWorkKindV0(workKind string) string {
@@ -223,7 +235,7 @@ func domainWorkDeliveryDerivedFinalPackagePayloadFieldsV0(
 		derived = appendFinalPackageManifestStringFieldIfMissingV0(derived, fields, manifest, name, name)
 	}
 	derived = appendFinalPackageManifestStringFieldIfMissingV0(derived, fields, manifest, "manifest_cierre", "manifest_ref")
-	for _, name := range []string{"checksum_refs", "required_evidence_refs", "evidence_refs"} {
+	for _, name := range []string{"checksum_refs", "required_evidence_refs", "qa_report_refs", "evidence_refs"} {
 		derived = appendFinalPackageManifestRawFieldIfMissingV0(derived, fields, manifest, name, name)
 	}
 	return derived
@@ -568,7 +580,21 @@ func domainWorkDeliveryFinalPackageManifestEvidenceRefsV0(
 	} {
 		refs = append(refs, domainWorkDeliveryRawRefsV0(manifest[name])...)
 	}
+	refs = append(refs, domainWorkDeliveryFinalPackageQAReportEvidenceRefsV0(manifest["qa_report_refs"])...)
 	return refs
+}
+
+func domainWorkDeliveryFinalPackageQAReportEvidenceRefsV0(raw json.RawMessage) []string {
+	refs := domainWorkDeliveryRawRefsV0(raw)
+	out := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		out = append(out, "opes-final-qa-report-"+safeDomainWorkEvidenceRefV0(ref))
+	}
+	return out
 }
 
 func domainWorkDeliveryFieldRefsV0(

@@ -20,9 +20,12 @@ func TestNuevaAppGuideWebEndpointV0GETSirveGuiaEmbebida(t *testing.T) {
 	for _, want := range []string{
 		`Guia de opciones de nueva app`,
 		`Documento completo de uso y contrato visible para el wizard.`,
-		`<article><h2>Guia de opciones del wizard`,
+		`<article><h2 id="guia-de-opciones-del-wizard-nueva-app-2026-06-25">Guia de opciones del wizard`,
 		`Modo Experto`,
 		`clean_architecture`,
+		`id="preferencias-tecnicas-arquitectura"`,
+		`id="modo-basico-datos-db-required"`,
+		`id="deploy-target"`,
 		`calidad.accesibilidad`,
 		`<table>`,
 		`<th>Patron</th>`,

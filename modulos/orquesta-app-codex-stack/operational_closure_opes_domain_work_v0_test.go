@@ -262,6 +262,19 @@ func TestOperationalClosureSourceV0CierraOPESFinalConMinimosComunesYManifest(t *
 			"checksum_refs":["checksum-ref-closure-final-001"],
 			"validation_report_ref":"validation-report-ref-closure-final-001",
 			"review_matrix_ref":"review-matrix-ref-closure-final-001",
+			"qa_passes":{
+				"extension_pass":true,
+				"official_text_qa_pass":true,
+				"strict_editorial_qa_pass":true
+			},
+			"qa_report_refs":{
+				"extension":"09_validacion/informe_extension_temario.json",
+				"official_text":[
+					"09_validacion/informe_texto_publico_sin_notas_autor.json",
+					"09_validacion/informe_texto_publico_sin_metacomentarios_examen.json"
+				],
+				"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json"
+			},
 			"required_evidence_refs":{
 				"html":"evidence-ref-closure-final-html-001",
 				"rag":"evidence-ref-closure-final-rag-001",
@@ -282,6 +295,10 @@ func TestOperationalClosureSourceV0CierraOPESFinalConMinimosComunesYManifest(t *
 		"evidence-ref-closure-final-tests-001",
 		"evidence-ref-closure-final-visual-001",
 		"evidence-ref-closure-final-qa-001",
+		"opes-final-qa-report-09_validacion-informe_extension_temario.json",
+		"opes-final-qa-report-09_validacion-informe_texto_publico_sin_notas_autor.json",
+		"opes-final-qa-report-09_validacion-informe_texto_publico_sin_metacomentarios_examen.json",
+		"opes-final-qa-report-09_validacion-informe_texto_publico_sin_andamiaje_interno.json",
 	)
 	if err := fixture.Ledger.RecordDomainWorkArtifactSubmissionV0(ctx, submission); err != nil {
 		t.Fatalf("record receipt: %v", err)
@@ -297,8 +314,63 @@ func TestOperationalClosureSourceV0CierraOPESFinalConMinimosComunesYManifest(t *
 	if !codexStackOperationalClosureContainsV0(got.EvidenceRefs, "opes-extension-minima-passed") ||
 		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "opes-common-master-not-applicable") ||
 		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "manifest-cierre-ref-closure-final-001") ||
-		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "evidence-ref-closure-final-qa-001") {
+		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "evidence-ref-closure-final-qa-001") ||
+		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "opes-final-qa-report-09_validacion-informe_texto_publico_sin_andamiaje_interno.json") {
 		t.Fatalf("cierre final OPES sin evidencias propagadas: %+v", got)
+	}
+}
+
+func TestOperationalClosureSourceV0NoCierraOPESFinalConQAGenericoSinQAEstricta(t *testing.T) {
+	ctx := context.Background()
+	fixture := newOPESDomainWorkClosureFixtureForTestV0(t, "final-qa-generico")
+	record := opesDomainWorkAppChangeRecordForTestV0(fixture.Run.RunID, "opes-job-job-ref-closure-final-qa-generico")
+	record.Request.ExternalWork.WorkKind = "finalize_temario_package"
+	fixture.Source.AppChangeStore = orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	submission := opesAcceptedSubmissionRecordForFixtureV0(fixture, "final-qa-generico")
+	submission.ArtifactType = "final_domain_package"
+	submission.PayloadFields = append(submission.PayloadFields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "source_work_kind", Value: "finalize_temario_package"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "manifest_cierre", ValueJSON: []byte(`{
+			"schema_version":"opes_final_package_evidence_manifest.v0",
+			"package_ref":"package-ref-closure-final-qa-generico-001",
+			"manifest_ref":"manifest-cierre-ref-closure-final-qa-generico-001",
+			"checksum_refs":["checksum-ref-closure-final-qa-generico-001"],
+			"validation_report_ref":"validation-report-ref-closure-final-qa-generico-001",
+			"review_matrix_ref":"review-matrix-ref-closure-final-qa-generico-001",
+			"required_evidence_refs":{
+				"html":"evidence-ref-closure-final-html-qa-generico-001",
+				"rag":"evidence-ref-closure-final-rag-qa-generico-001",
+				"audio":"evidence-ref-closure-final-audio-qa-generico-001",
+				"tests":"evidence-ref-closure-final-tests-qa-generico-001",
+				"visual":"evidence-ref-closure-final-visual-qa-generico-001",
+				"qa":"evidence-ref-closure-final-qa-generico-001"
+			}
+		}`)},
+	)
+	submission.EvidenceRefs = append(submission.EvidenceRefs,
+		"opes-extension-minima-passed",
+		"opes-common-master-not-applicable",
+		"manifest-cierre-ref-closure-final-qa-generico-001",
+		"evidence-ref-closure-final-html-qa-generico-001",
+		"evidence-ref-closure-final-rag-qa-generico-001",
+		"evidence-ref-closure-final-audio-qa-generico-001",
+		"evidence-ref-closure-final-tests-qa-generico-001",
+		"evidence-ref-closure-final-visual-qa-generico-001",
+		"evidence-ref-closure-final-qa-generico-001",
+	)
+	if err := fixture.Ledger.RecordDomainWorkArtifactSubmissionV0(ctx, submission); err != nil {
+		t.Fatalf("record receipt: %v", err)
+	}
+
+	_, ok, err := fixture.Source.BuildOperationalDirectorClosureRequestV0(
+		ctx,
+		orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{Run: fixture.Run},
+	)
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0: %v", err)
+	}
+	if ok {
+		t.Fatalf("no debe cerrar OPES final con categoria qa generica sin qa_passes estrictos")
 	}
 }
 

@@ -153,6 +153,7 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.guided_maps_osm",
 		"nueva_app.wizard.guided_architecture_default",
 		"nueva_app.wizard.guided_architecture_clean",
+		"nueva_app.wizard.guided_architecture_onion",
 		"nueva_app.wizard.guided_architecture_layered",
 		"nueva_app.wizard.guided_architecture_event",
 		"nueva_app.wizard.guided_architecture_modular",
@@ -174,6 +175,10 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.guided_msg_quality",
 		"nueva_app.wizard.guided_msg_review",
 		"nueva_app.wizard.guided_msg_answer",
+		"nueva_app.wizard.guided_pending_intro",
+		"nueva_app.wizard.guided_ready_state",
+		"nueva_app.wizard.guided_incomplete_launch",
+		"nueva_app.wizard.guide_field_link",
 		"nueva_app.wizard.presets",
 		"nueva_app.wizard.preset.webapp",
 		"nueva_app.wizard.preset.api",
@@ -273,6 +278,7 @@ var nuevaAppHTMLHelpKeysV0 = []string{
 	"guided.maps_osm",
 	"guided.architecture_default",
 	"guided.architecture_clean",
+	"guided.architecture_onion",
 	"guided.architecture_layered",
 	"guided.architecture_event",
 	"guided.architecture_modular",
@@ -783,6 +789,9 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     .guided-assistant textarea{min-height:110px}
     .guided-thread{display:grid;gap:8px;min-height:38px}
     .guided-message{border-left:4px solid var(--brand);background:#fff;padding:9px 10px;border-radius:8px;color:#334137}
+    .guided-pending{margin:0 0 12px;padding-left:20px;color:#35473b}
+    .guided-status{margin:0 0 10px;color:var(--muted);font-weight:800}
+    .guided-status.ready{color:var(--brand)}
     .guided-actions{display:flex;gap:8px;flex-wrap:wrap}
     .guided-actions button{background:#e8efe8;color:var(--ink);border:1px solid var(--line)}
     .guided-actions button.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
@@ -816,6 +825,8 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     code{background:#eef5ed;padding:2px 4px;border-radius:4px}
     .wizard-ready .hidden-final{display:none}
     .wizard-ready .wizard-step-final .hidden-final{display:inline-flex}
+    .wizard-ready.guided-final-blocked .wizard-step-final .hidden-final{opacity:.48;cursor:not-allowed}
+    .guide-field-link{display:inline-flex;width:max-content;margin-top:4px;color:var(--brand);font-weight:800;text-decoration:underline}
     @media(max-width:920px){main{padding:14px}header,form{grid-template-columns:1fr;display:grid}.side{position:static}.steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
   </style>
 </head>
@@ -850,6 +861,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       data-validation-summary-title="{{index .HTML "nueva_app.validation.summary_title"}}"
       data-validation-summary-intro="{{index .HTML "nueva_app.validation.summary_intro"}}"
       data-validation-required="{{index .HTML "nueva_app.validation.required"}}"
+      data-guide-field-link="{{index .HTML "nueva_app.wizard.guide_field_link"}}"
       data-guided-msg-analyzed="{{index .HTML "nueva_app.wizard.guided_msg_analyzed"}}"
       data-guided-msg-mobile="{{index .HTML "nueva_app.wizard.guided_msg_mobile"}}"
       data-guided-msg-data="{{index .HTML "nueva_app.wizard.guided_msg_data"}}"
@@ -857,7 +869,10 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       data-guided-msg-architecture="{{index .HTML "nueva_app.wizard.guided_msg_architecture"}}"
       data-guided-msg-quality="{{index .HTML "nueva_app.wizard.guided_msg_quality"}}"
       data-guided-msg-review="{{index .HTML "nueva_app.wizard.guided_msg_review"}}"
-      data-guided-msg-answer="{{index .HTML "nueva_app.wizard.guided_msg_answer"}}">
+      data-guided-msg-answer="{{index .HTML "nueva_app.wizard.guided_msg_answer"}}"
+      data-guided-pending-intro="{{index .HTML "nueva_app.wizard.guided_pending_intro"}}"
+      data-guided-ready-state="{{index .HTML "nueva_app.wizard.guided_ready_state"}}"
+      data-guided-incomplete-launch="{{index .HTML "nueva_app.wizard.guided_incomplete_launch"}}">
       <div class="steps" role="tablist" aria-label="{{index .HTML "nueva_app.wizard.steps_label"}}">
         <button class="step-tab active" type="button" role="tab" id="nueva-app-step-tab-0" aria-controls="nueva-app-step-panel-0" aria-selected="true" data-goto-step="0" data-help="{{index .Help "step.idea"}}">{{index .HTML "nueva_app.wizard.step.idea"}}</button>
         <button class="step-tab" type="button" role="tab" id="nueva-app-step-tab-1" aria-controls="nueva-app-step-panel-1" aria-selected="false" data-goto-step="1" data-help="{{index .Help "step.tipo"}}">{{index .HTML "nueva_app.wizard.step.tipo"}}</button>
@@ -876,6 +891,8 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
             <div class="guided-thread" id="guided-thread" aria-live="polite"></div>
             <div id="guided-followups" hidden>
               <p class="expert-row-title">{{index .HTML "nueva_app.wizard.guided_followups"}}</p>
+              <p class="guided-status" id="guided-session-status" aria-live="polite"></p>
+              <ul class="guided-pending" id="guided-pending-list"></ul>
               <label data-help="{{index .Help "guided.answer"}}"><span id="guided-active-question">{{index .HTML "nueva_app.wizard.guided_answer"}}</span><textarea id="guided-answer" placeholder="{{index .HTML "nueva_app.wizard.guided_answer_placeholder"}}"></textarea></label>
               <div class="guided-actions"><button class="primary" type="button" data-guided-answer>{{index .HTML "nueva_app.wizard.guided_answer_send"}}</button></div>
               <div class="guided-actions">
@@ -888,6 +905,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
                 <button type="button" data-guided-action="maps_osm" data-help="{{index .Help "guided.maps_osm"}}">{{index .HTML "nueva_app.wizard.guided_maps_osm"}}</button>
                 <button type="button" data-guided-action="architecture_default" data-help="{{index .Help "guided.architecture_default"}}">{{index .HTML "nueva_app.wizard.guided_architecture_default"}}</button>
                 <button type="button" data-guided-action="architecture_clean" data-help="{{index .Help "guided.architecture_clean"}}">{{index .HTML "nueva_app.wizard.guided_architecture_clean"}}</button>
+                <button type="button" data-guided-action="architecture_onion" data-help="{{index .Help "guided.architecture_onion"}}">{{index .HTML "nueva_app.wizard.guided_architecture_onion"}}</button>
                 <button type="button" data-guided-action="architecture_layered" data-help="{{index .Help "guided.architecture_layered"}}">{{index .HTML "nueva_app.wizard.guided_architecture_layered"}}</button>
                 <button type="button" data-guided-action="architecture_event" data-help="{{index .Help "guided.architecture_event"}}">{{index .HTML "nueva_app.wizard.guided_architecture_event"}}</button>
                 <button type="button" data-guided-action="architecture_modular" data-help="{{index .Help "guided.architecture_modular"}}">{{index .HTML "nueva_app.wizard.guided_architecture_modular"}}</button>
@@ -1309,6 +1327,43 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       if(!described.includes(id)){described.push(id);}
       node.setAttribute('aria-describedby',described.join(' '));
     }
+    const guideAnchors={
+      nombre:'nombre',
+      tipo_app:'tipo-app',
+      objetivo:'objetivo',
+      descripcion:'descripcion',
+      usuarios_objetivo:'usuarios-objetivo',
+      plataformas:'plataformas',
+      preferencias_tecnicas:'preferencias-tecnicas-arquitectura',
+      'preferencias_tecnicas.arquitectura':'preferencias-tecnicas-arquitectura',
+      datos:'modo-basico-datos-db-required',
+      'datos.db_required':'modo-basico-datos-db-required',
+      integraciones:'modo-basico-integraciones-0-tipo',
+      deploy:'deploy-target',
+      'deploy.target':'deploy-target',
+      calidad:'calidad-pruebas',
+      'calidad.pruebas':'calidad-pruebas',
+      documentacion:'documentacion-usuario',
+      agentes:'agentes-revision-humana',
+      restricciones:'restricciones'
+    };
+    function addGuideLinks(){
+      const linkText=wizard.dataset.guideFieldLink||'';
+      if(!linkText)return;
+      wizard.querySelectorAll('label').forEach(label=>{
+        const control=label.querySelector('input[name],select[name],textarea[name]');
+        if(!control)return;
+        const anchor=guideAnchors[control.name];
+        if(!anchor||label.querySelector('.guide-field-link'))return;
+        const link=document.createElement('a');
+        link.className='guide-field-link';
+        link.href='/nueva-app/guia#'+anchor;
+        link.target='_blank';
+        link.rel='noopener';
+        link.textContent=linkText;
+        label.appendChild(link);
+      });
+    }
     function initAccessibleHelp(){
       const closeHelpBubbles=function(except){
         wizard.querySelectorAll('[data-help].help-open').forEach(node=>{
@@ -1565,6 +1620,10 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       }
       return '';
     }
+    function guidedRequiredPendingFields(){
+      if(!guidedSession||!Array.isArray(guidedSession.pending_questions))return [];
+      return guidedSession.pending_questions.map(field=>String(field||'').trim()).filter(Boolean);
+    }
     function labelForField(name){
       const el=field(name);
       if(el&&el.dataset&&el.dataset.label)return el.dataset.label;
@@ -1577,9 +1636,26 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     }
     function updateGuidedQuestion(){
       const target=document.getElementById('guided-active-question');
-      if(!target)return;
       const active=guidedActiveQuestionField();
-      target.textContent=active?labelForField(active):(wizard.dataset.guidedMsgReview||target.textContent);
+      if(target)target.textContent=active?labelForField(active):(wizard.dataset.guidedReadyState||wizard.dataset.guidedMsgReview||target.textContent);
+      const pending=guidedRequiredPendingFields();
+      const status=document.getElementById('guided-session-status');
+      if(status){
+        const state=String((guidedSession&&guidedSession.estado)||'').trim();
+        status.textContent=pending.length?((wizard.dataset.guidedPendingIntro||'')+' '+pending.map(labelForField).join(', ')):(state||wizard.dataset.guidedReadyState||'lista_para_solicitar');
+        status.classList.toggle('ready',pending.length===0);
+      }
+      const list=document.getElementById('guided-pending-list');
+      if(list){
+        list.innerHTML=pending.map(field=>'<li><strong>'+escapeHTML(labelForField(field))+'</strong> <code>'+escapeHTML(field)+'</code></li>').join('');
+        list.hidden=pending.length===0;
+      }
+      const blocked=!!guidedSession&&pending.length>0;
+      wizard.classList.toggle('guided-final-blocked',blocked);
+      wizard.querySelectorAll('.final-actions button').forEach(button=>{
+        button.disabled=blocked;
+        if(blocked){button.title=wizard.dataset.guidedIncompleteLaunch||'';}else{button.removeAttribute('title');}
+      });
     }
     function hasOwn(obj,key){return Object.prototype.hasOwnProperty.call(obj||{},key);}
     function setMaybe(name,value){
@@ -1746,7 +1822,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     async function guidedAction(action){
       if(action==='analyze'){applyGuidedNeed();return;}
       if(action==='review'){guidedLog(wizard.dataset.guidedMsgReview);show(5,true);return;}
-      const actionMessages={mobile_both:wizard.dataset.guidedMsgMobile,mobile_ios:wizard.dataset.guidedMsgMobile,mobile_android:wizard.dataset.guidedMsgMobile,data_external:wizard.dataset.guidedMsgData,data_management:wizard.dataset.guidedMsgData,maps_generic:wizard.dataset.guidedMsgMaps,maps_osm:wizard.dataset.guidedMsgMaps,architecture_default:wizard.dataset.guidedMsgArchitecture,architecture_clean:wizard.dataset.guidedMsgArchitecture,architecture_layered:wizard.dataset.guidedMsgArchitecture,architecture_event:wizard.dataset.guidedMsgArchitecture,architecture_modular:wizard.dataset.guidedMsgArchitecture,architecture_microservices:wizard.dataset.guidedMsgArchitecture,architecture_serverless:wizard.dataset.guidedMsgArchitecture,architecture_plugin:wizard.dataset.guidedMsgArchitecture,architecture_data_pipeline:wizard.dataset.guidedMsgArchitecture,quality_public:wizard.dataset.guidedMsgQuality,quality_internal:wizard.dataset.guidedMsgQuality,quality_regulated:wizard.dataset.guidedMsgQuality,quality_observable:wizard.dataset.guidedMsgQuality,accessibility_none:wizard.dataset.guidedMsgQuality};
+      const actionMessages={mobile_both:wizard.dataset.guidedMsgMobile,mobile_ios:wizard.dataset.guidedMsgMobile,mobile_android:wizard.dataset.guidedMsgMobile,data_external:wizard.dataset.guidedMsgData,data_management:wizard.dataset.guidedMsgData,maps_generic:wizard.dataset.guidedMsgMaps,maps_osm:wizard.dataset.guidedMsgMaps,architecture_default:wizard.dataset.guidedMsgArchitecture,architecture_clean:wizard.dataset.guidedMsgArchitecture,architecture_onion:wizard.dataset.guidedMsgArchitecture,architecture_layered:wizard.dataset.guidedMsgArchitecture,architecture_event:wizard.dataset.guidedMsgArchitecture,architecture_modular:wizard.dataset.guidedMsgArchitecture,architecture_microservices:wizard.dataset.guidedMsgArchitecture,architecture_serverless:wizard.dataset.guidedMsgArchitecture,architecture_plugin:wizard.dataset.guidedMsgArchitecture,architecture_data_pipeline:wizard.dataset.guidedMsgArchitecture,quality_public:wizard.dataset.guidedMsgQuality,quality_internal:wizard.dataset.guidedMsgQuality,quality_regulated:wizard.dataset.guidedMsgQuality,quality_observable:wizard.dataset.guidedMsgQuality,accessibility_none:wizard.dataset.guidedMsgQuality};
       if(await applyServerGuided({action_id:action},actionMessages[action])){return;}
       if(action==='mobile_both'){setValue('tipo_app','mobile');setChecked('mobile',true);addCSV('preferencias_tecnicas.preferencias',['plataformas moviles: iOS y Android']);guidedLog(wizard.dataset.guidedMsgMobile);}
       if(action==='mobile_ios'){setValue('tipo_app','mobile');setChecked('mobile',true);addCSV('preferencias_tecnicas.preferencias',['plataforma movil: iOS']);guidedLog(wizard.dataset.guidedMsgMobile);}
@@ -1757,6 +1833,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       if(action==='maps_osm'){configureMaps(true);}
       if(action==='architecture_default'){setValue('preferencias_tecnicas.arquitectura','hexagonal');guidedLog(wizard.dataset.guidedMsgArchitecture);}
       if(action==='architecture_clean'){setValue('preferencias_tecnicas.arquitectura','clean_architecture');guidedLog(wizard.dataset.guidedMsgArchitecture);}
+      if(action==='architecture_onion'){setValue('preferencias_tecnicas.arquitectura','onion');guidedLog(wizard.dataset.guidedMsgArchitecture);}
       if(action==='architecture_layered'){setValue('preferencias_tecnicas.arquitectura','layered');guidedLog(wizard.dataset.guidedMsgArchitecture);}
       if(action==='architecture_event'){setValue('preferencias_tecnicas.arquitectura','event_driven');guidedLog(wizard.dataset.guidedMsgArchitecture);}
       if(action==='architecture_modular'){setValue('preferencias_tecnicas.arquitectura','modular_monolith');guidedLog(wizard.dataset.guidedMsgArchitecture);}
@@ -1795,6 +1872,8 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     const goalButton=document.querySelector('[data-goal-observe]');
     if(goalButton)goalButton.addEventListener('click',()=>observeGoal(goalButton));
     initAccessibleHelp();
+    addGuideLinks();
+    updateGuidedQuestion();
     show(0,false);
     startGoalAutoPoll();
   }());

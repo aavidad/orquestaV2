@@ -72,22 +72,69 @@ func opesFinalPackageRequiredTestsV0(
 	inputRefs := compactStringsV0(append([]string{"opes-job-" + safeJob}, workRefs...))
 	return []orquestadomainwork.DomainWorkRequiredTestV0{
 		{
-			TestRef: "opes-extension-minima-nivel-" + safeJob,
+			TestRef: "opes-extension_pass-" + safeJob,
 			AcceptanceCriteria: []string{
-				"Existe informe_extension_temario.json y .md con conteo por tema.",
-				"Cada ampliado publicable alcanza el minimo de su nivel: A1 20.250, A2 14.400, B 10.800, C1 7.200, C2 4.500 o AP 3.150 palabras.",
+				"Existe informe_extension_temario.json y .md con conteo por tema y estado publico extension_pass.",
+				"Cada ampliado publicable alcanza el minimo de su nivel con texto propio del tema: A1 20.250, A2 14.400, B 10.800, C1 7.200, C2 4.500 o AP 3.150 palabras.",
+				"No se acepta extension conseguida por anexos ajenos, andamiaje de estudio, trazabilidad interna, contenido de otros temas o material no publicable.",
 				"Si algun tema no llega, el estado es pendiente_continuar con needs_expansion_min_words_<nivel>.",
 			},
-			AcceptanceCriteriaRefs: []string{"opes-required-extension-minima-nivel"},
+			AcceptanceCriteriaRefs: []string{"opes-required-extension_pass"},
 			InputRefs:              inputRefs,
 			ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
 				{Kind: "domain_ref", Ref: "opes"},
 				{Kind: "job_ref", Ref: safeJob},
+				{Kind: "required_test_name", Ref: "extension_pass"},
 				{Kind: "required_evidence", Ref: "informe_extension_temario"},
 			},
 			EvidenceRefs: []string{
 				"opes-rule-minimos-extension-temarios-2026-06-22",
 				"opes-expected-evidence-informe-extension-temario",
+				"opes-final-evidence:extension_pass",
+			},
+		},
+		{
+			TestRef: "opes-official_text_qa_pass-" + safeJob,
+			AcceptanceCriteria: []string{
+				"Existe informe oficial de texto publico con estado official_text_qa_pass por tema y por paquete.",
+				"El texto publicable no contiene metanotas de examen, notas de autor, mojibake, rutas internas, refs tecnicas visibles ni placeholders de revision.",
+				"Los validadores oficiales de texto publico OPES quedan verdes sobre el texto final que vera el alumnado, no sobre borradores auxiliares.",
+				"Si falla la QA oficial de texto, el estado es pendiente_continuar con followup_refs causales y no listo_para_revision_operador.",
+			},
+			AcceptanceCriteriaRefs: []string{"opes-required-official_text_qa_pass"},
+			InputRefs:              inputRefs,
+			ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
+				{Kind: "domain_ref", Ref: "opes"},
+				{Kind: "job_ref", Ref: safeJob},
+				{Kind: "required_test_name", Ref: "official_text_qa_pass"},
+				{Kind: "required_evidence", Ref: "official_text_qa_report"},
+			},
+			EvidenceRefs: []string{
+				"opes-rule-public-text-official-qa",
+				"opes-expected-evidence-official-text-qa-report",
+				"opes-final-evidence:official_text_qa_pass",
+			},
+		},
+		{
+			TestRef: "opes-strict_editorial_qa_pass-" + safeJob,
+			AcceptanceCriteria: []string{
+				"Existe informe estricto de QA editorial con estado strict_editorial_qa_pass por tema y por paquete.",
+				"La QA estricta comprueba ausencia de andamiaje interno de estudio, calendarios, trazabilidad editorial visible, referencias a ficheros internos, SVG/Markdown visibles, bloques de canon/maestro y contaminacion cruzada entre temas.",
+				"El informe usa una validacion equivalente a validate_public_text_no_study_scaffolding.py o una regla OPES publica versionada equivalente.",
+				"Si falla andamiaje interno o contaminacion cruzada, el estado es pendiente_rework_editorial o needs_remove_study_scaffolding_and_cross_topic_contamination, nunca ready.",
+			},
+			AcceptanceCriteriaRefs: []string{"opes-required-strict_editorial_qa_pass"},
+			InputRefs:              inputRefs,
+			ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
+				{Kind: "domain_ref", Ref: "opes"},
+				{Kind: "job_ref", Ref: safeJob},
+				{Kind: "required_test_name", Ref: "strict_editorial_qa_pass"},
+				{Kind: "required_evidence", Ref: "strict_editorial_qa_report"},
+			},
+			EvidenceRefs: []string{
+				"opes-rule-no-study-scaffolding-and-cross-topic-contamination",
+				"opes-expected-evidence-strict-editorial-qa-report",
+				"opes-final-evidence:strict_editorial_qa_pass",
 			},
 		},
 		{
@@ -133,7 +180,7 @@ func opesFinalPackageRequiredTestsV0(
 			AcceptanceCriteria: []string{
 				"Existe manifest_cierre.json del completed_syllabus_package con schema opes_final_package_evidence_manifest.v0.",
 				"El manifest identifica package_ref, manifest_ref, checksum_refs, validation_report_ref y review_matrix_ref del paquete final.",
-				"El manifest declara evidencias requeridas para HTML, RAG, audio, tests, visual y QA final.",
+				"El manifest declara evidencias requeridas para HTML, RAG, audio, tests, visual, qa_passes y qa_report_refs separados para extension_pass, official_text_qa_pass y strict_editorial_qa_pass.",
 				"Si falta una evidencia obligatoria, el estado es pendiente_continuar con followup_refs causales y no listo_para_revision_operador.",
 			},
 			AcceptanceCriteriaRefs: []string{"opes-required-final-package-manifest"},
@@ -152,7 +199,9 @@ func opesFinalPackageRequiredTestsV0(
 				"opes-final-evidence:audio",
 				"opes-final-evidence:tests",
 				"opes-final-evidence:visual",
-				"opes-final-evidence:qa",
+				"opes-final-evidence:extension_pass",
+				"opes-final-evidence:official_text_qa_pass",
+				"opes-final-evidence:strict_editorial_qa_pass",
 			},
 		},
 		{

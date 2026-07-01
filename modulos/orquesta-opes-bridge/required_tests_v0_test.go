@@ -74,7 +74,9 @@ func TestOPESRequiredTestPolicyV0FinalTemarioExigeMinimosYComunes(t *testing.T) 
 	got := requiredTestRefsForTestV0(plan.RequiredTests)
 	for _, want := range []string{
 		"opes-domain-test-finalize_temario_package-job-ref-policy-opes-final",
-		"opes-extension-minima-nivel-job-ref-policy-opes-final",
+		"opes-extension_pass-job-ref-policy-opes-final",
+		"opes-official_text_qa_pass-job-ref-policy-opes-final",
+		"opes-strict_editorial_qa_pass-job-ref-policy-opes-final",
 		"opes-derivacion-comunes-maestro-job-ref-policy-opes-final",
 		"opes-question-bank-publicable-job-ref-policy-opes-final",
 		"opes-final-package-manifest-job-ref-policy-opes-final",
@@ -93,8 +95,43 @@ func TestOPESRequiredTestPolicyV0FinalTemarioExigeMinimosYComunes(t *testing.T) 
 		!requiredTestHasExternalRefForTestV0(finalManifest, "required_evidence", "manifest_cierre") ||
 		!stringInRequiredTestRefsForTestV0(finalManifest.AcceptanceCriteriaRefs, "opes-required-final-package-manifest") ||
 		!stringInRequiredTestRefsForTestV0(finalManifest.EvidenceRefs, "opes-expected-evidence-manifest-cierre") ||
-		!stringInRequiredTestRefsForTestV0(finalManifest.EvidenceRefs, "opes-final-evidence:qa") {
+		!stringInRequiredTestRefsForTestV0(finalManifest.EvidenceRefs, "opes-final-evidence:extension_pass") ||
+		!stringInRequiredTestRefsForTestV0(finalManifest.EvidenceRefs, "opes-final-evidence:official_text_qa_pass") ||
+		!stringInRequiredTestRefsForTestV0(finalManifest.EvidenceRefs, "opes-final-evidence:strict_editorial_qa_pass") {
 		t.Fatalf("final_manifest_required_test=%+v", finalManifest)
+	}
+	extensionPass := requiredTestByRefForTestV0(
+		plan.RequiredTests,
+		"opes-extension_pass-job-ref-policy-opes-final",
+	)
+	if extensionPass.TestRef == "" ||
+		!requiredTestHasExternalRefForTestV0(extensionPass, "required_test_name", "extension_pass") ||
+		!requiredTestHasExternalRefForTestV0(extensionPass, "required_evidence", "informe_extension_temario") ||
+		!stringInRequiredTestRefsForTestV0(extensionPass.AcceptanceCriteriaRefs, "opes-required-extension_pass") ||
+		!stringInRequiredTestRefsForTestV0(extensionPass.EvidenceRefs, "opes-final-evidence:extension_pass") {
+		t.Fatalf("extension_pass_required_test=%+v", extensionPass)
+	}
+	officialTextQA := requiredTestByRefForTestV0(
+		plan.RequiredTests,
+		"opes-official_text_qa_pass-job-ref-policy-opes-final",
+	)
+	if officialTextQA.TestRef == "" ||
+		!requiredTestHasExternalRefForTestV0(officialTextQA, "required_test_name", "official_text_qa_pass") ||
+		!requiredTestHasExternalRefForTestV0(officialTextQA, "required_evidence", "official_text_qa_report") ||
+		!stringInRequiredTestRefsForTestV0(officialTextQA.AcceptanceCriteriaRefs, "opes-required-official_text_qa_pass") ||
+		!stringInRequiredTestRefsForTestV0(officialTextQA.EvidenceRefs, "opes-final-evidence:official_text_qa_pass") {
+		t.Fatalf("official_text_qa_pass_required_test=%+v", officialTextQA)
+	}
+	strictEditorialQA := requiredTestByRefForTestV0(
+		plan.RequiredTests,
+		"opes-strict_editorial_qa_pass-job-ref-policy-opes-final",
+	)
+	if strictEditorialQA.TestRef == "" ||
+		!requiredTestHasExternalRefForTestV0(strictEditorialQA, "required_test_name", "strict_editorial_qa_pass") ||
+		!requiredTestHasExternalRefForTestV0(strictEditorialQA, "required_evidence", "strict_editorial_qa_report") ||
+		!stringInRequiredTestRefsForTestV0(strictEditorialQA.AcceptanceCriteriaRefs, "opes-required-strict_editorial_qa_pass") ||
+		!stringInRequiredTestRefsForTestV0(strictEditorialQA.EvidenceRefs, "opes-final-evidence:strict_editorial_qa_pass") {
+		t.Fatalf("strict_editorial_qa_pass_required_test=%+v", strictEditorialQA)
 	}
 	visualReuse := requiredTestByRefForTestV0(
 		plan.RequiredTests,
@@ -117,10 +154,26 @@ func TestOPESRequiredTestPolicyV0FinalTemarioExigeMinimosYComunes(t *testing.T) 
 		"audio",
 		"tests",
 		"visual",
-		"QA",
+		"qa_passes",
+		"qa_report_refs",
+		"extension_pass",
+		"official_text_qa_pass",
+		"strict_editorial_qa_pass",
 	} {
 		if !strings.Contains(criteria, want) {
 			t.Fatalf("final_manifest_criteria=%q falta %s", criteria, want)
+		}
+	}
+	strictCriteria := strings.Join(strictEditorialQA.AcceptanceCriteria, "\n")
+	for _, want := range []string{
+		"andamiaje interno",
+		"contaminacion cruzada",
+		"pendiente_rework_editorial",
+		"needs_remove_study_scaffolding_and_cross_topic_contamination",
+		"nunca ready",
+	} {
+		if !strings.Contains(strictCriteria, want) {
+			t.Fatalf("strict_editorial_qa_criteria=%q falta %s", strictCriteria, want)
 		}
 	}
 }

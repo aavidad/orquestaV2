@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"net/http"
 	"strings"
+	"unicode"
 )
 
 const WebNuevaAppGuideEndpointV0 = "/nueva-app/guia"
@@ -169,6 +170,11 @@ func nuevaAppGuideMarkdownToHTMLV0(markdown string) template.HTML {
 			level, text := nuevaAppGuideHeadingV0(line)
 			builder.WriteString("<h")
 			builder.WriteString(level)
+			if id := nuevaAppGuideAnchorIDV0(text); id != "" {
+				builder.WriteString(` id="`)
+				builder.WriteString(template.HTMLEscapeString(id))
+				builder.WriteString(`"`)
+			}
 			builder.WriteString(">")
 			builder.WriteString(nuevaAppGuideInlineHTMLV0(text))
 			builder.WriteString("</h")
@@ -224,6 +230,24 @@ func nuevaAppGuideMarkdownToHTMLV0(markdown string) template.HTML {
 		builder.WriteString("</code></pre>\n")
 	}
 	return template.HTML(builder.String())
+}
+
+func nuevaAppGuideAnchorIDV0(text string) string {
+	text = strings.ToLower(strings.TrimSpace(strings.ReplaceAll(text, "`", "")))
+	var builder strings.Builder
+	lastDash := false
+	for _, r := range text {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			builder.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if builder.Len() > 0 && !lastDash {
+			builder.WriteByte('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(builder.String(), "-")
 }
 
 func nuevaAppGuideTableCellsV0(line string) []string {

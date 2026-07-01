@@ -8,8 +8,12 @@ import (
 )
 
 const (
-	codexStackOPESFinalPackageEvidenceIncompleteIssueV0 = "opes_final_package_manifest_evidence_incomplete"
-	goalDomainReceiptOPESFinalPackageEvidenceFieldV0    = "domain_receipt_refs.opes_final_package"
+	codexStackOPESFinalPackageEvidenceIncompleteIssueV0       = "opes_final_package_manifest_evidence_incomplete"
+	codexStackOPESFinalPackageExtensionQAMissingIssueV0       = "domain_work_opes_extension_qa_missing"
+	codexStackOPESFinalPackageOfficialTextQAMissingIssueV0    = "domain_work_opes_official_text_qa_missing"
+	codexStackOPESFinalPackageStrictEditorialQAMissingIssueV0 = "domain_work_opes_strict_editorial_qa_missing"
+	goalDomainReceiptOPESFinalPackageEvidenceFieldV0          = "domain_receipt_refs.opes_final_package"
+	goalDomainReceiptOPESFinalPackageQAPassesFieldV0          = "domain_receipt_refs.opes_final_package.qa_passes"
 )
 
 func codexStackDomainWorkIsOPESFinalPackageV0(domainRef string, workKind string, artifactType string) bool {
@@ -58,16 +62,43 @@ func codexStackOPESFinalPackageEvidenceCompleteV0(
 	payloadRefs []string,
 	externalRefs []orquestadomainwork.DomainWorkExternalRefV0,
 ) bool {
+	return codexStackOPESFinalPackageEvidenceIssueRefV0(fields, evidenceRefs, payloadRefs, externalRefs) == ""
+}
+
+func codexStackOPESFinalPackageEvidenceIssueRefV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	evidenceRefs []string,
+	payloadRefs []string,
+	externalRefs []orquestadomainwork.DomainWorkExternalRefV0,
+) string {
 	manifest, ok := codexStackOPESFinalPackageStructuredManifestV0(fields)
 	if !ok {
-		return false
+		return codexStackOPESFinalPackageEvidenceIncompleteIssueV0
 	}
 	for _, category := range codexStackOPESFinalPackageRequiredEvidenceCategoriesV0() {
 		if len(manifest.RequiredEvidenceRefs[category]) == 0 {
-			return false
+			return codexStackOPESFinalPackageEvidenceIncompleteIssueV0
 		}
 	}
-	return true
+	if !manifest.QAPasses.StrictEditorialQAPass {
+		return codexStackOPESFinalPackageStrictEditorialQAMissingIssueV0
+	}
+	if len(manifest.QAReportRefs["strict_editorial"]) == 0 {
+		return codexStackOPESFinalPackageStrictEditorialQAMissingIssueV0
+	}
+	if !manifest.QAPasses.OfficialTextQAPass {
+		return codexStackOPESFinalPackageOfficialTextQAMissingIssueV0
+	}
+	if len(manifest.QAReportRefs["official_text"]) == 0 {
+		return codexStackOPESFinalPackageOfficialTextQAMissingIssueV0
+	}
+	if !manifest.QAPasses.ExtensionPass {
+		return codexStackOPESFinalPackageExtensionQAMissingIssueV0
+	}
+	if len(manifest.QAReportRefs["extension"]) == 0 {
+		return codexStackOPESFinalPackageExtensionQAMissingIssueV0
+	}
+	return ""
 }
 
 type codexStackOPESFinalPackageManifestV0 struct {
@@ -77,6 +108,14 @@ type codexStackOPESFinalPackageManifestV0 struct {
 	ValidationReportRef  string
 	ReviewMatrixRef      string
 	RequiredEvidenceRefs map[string][]string
+	QAPasses             codexStackOPESFinalPackageQAPassesV0
+	QAReportRefs         map[string][]string
+}
+
+type codexStackOPESFinalPackageQAPassesV0 struct {
+	ExtensionPass         bool
+	OfficialTextQAPass    bool
+	StrictEditorialQAPass bool
 }
 
 func codexStackOPESFinalPackageRequiredEvidenceCategoriesV0() []string {
@@ -118,6 +157,8 @@ func codexStackOPESFinalPackageManifestFromJSONV0(
 		ValidationReportRef:  codexStackJSONRawStringV0(values["validation_report_ref"]),
 		ReviewMatrixRef:      codexStackJSONRawStringV0(values["review_matrix_ref"]),
 		RequiredEvidenceRefs: codexStackOPESFinalPackageRequiredEvidenceRefsV0(values["required_evidence_refs"]),
+		QAPasses:             codexStackOPESFinalPackageQAPassesFromJSONV0(values["qa_passes"]),
+		QAReportRefs:         codexStackOPESFinalPackageQAReportRefsV0(values["qa_report_refs"]),
 	}
 	if manifest.PackageRef == "" ||
 		manifest.ManifestRef == "" ||
@@ -127,6 +168,23 @@ func codexStackOPESFinalPackageManifestFromJSONV0(
 		return codexStackOPESFinalPackageManifestV0{}, false
 	}
 	return manifest, true
+}
+
+func codexStackOPESFinalPackageQAPassesFromJSONV0(
+	raw json.RawMessage,
+) codexStackOPESFinalPackageQAPassesV0 {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return codexStackOPESFinalPackageQAPassesV0{}
+	}
+	var values map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return codexStackOPESFinalPackageQAPassesV0{}
+	}
+	return codexStackOPESFinalPackageQAPassesV0{
+		ExtensionPass:         codexStackJSONRawBoolV0(values["extension_pass"]),
+		OfficialTextQAPass:    codexStackJSONRawBoolV0(values["official_text_qa_pass"]),
+		StrictEditorialQAPass: codexStackJSONRawBoolV0(values["strict_editorial_qa_pass"]),
+	}
 }
 
 func codexStackOPESFinalPackageRequiredEvidenceRefsV0(
@@ -146,6 +204,23 @@ func codexStackOPESFinalPackageRequiredEvidenceRefsV0(
 	return out
 }
 
+func codexStackOPESFinalPackageQAReportRefsV0(
+	raw json.RawMessage,
+) map[string][]string {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return nil
+	}
+	var byCategory map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &byCategory); err != nil {
+		return nil
+	}
+	out := map[string][]string{}
+	for _, category := range []string{"extension", "official_text", "strict_editorial"} {
+		out[category] = compactCodexStackStringsV0(domainWorkDeliveryRawRefsV0(byCategory[category]))
+	}
+	return out
+}
+
 func codexStackJSONRawStringV0(raw json.RawMessage) string {
 	if len(raw) == 0 || !json.Valid(raw) {
 		return ""
@@ -155,4 +230,19 @@ func codexStackJSONRawStringV0(raw json.RawMessage) string {
 		return ""
 	}
 	return strings.TrimSpace(text)
+}
+
+func codexStackJSONRawBoolV0(raw json.RawMessage) bool {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return false
+	}
+	var value bool
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return value
+	}
+	var text string
+	if err := json.Unmarshal(raw, &text); err != nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(text), "true")
 }
