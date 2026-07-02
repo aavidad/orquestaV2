@@ -625,6 +625,20 @@ escriba manualmente lifecycle/checkpoint en el artefacto de dominio. Evidencia:
 `TestCodexStackV0ExternalWorkGoalFirstCierraSecuenciaOPESDerivadosConReceiptsLedgerV0`
 y `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-opes-director ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-topic-registry`.
 
+Avance BUG-ORQ-20260701-058/066/075 2026-07-02 noche 2: OPES deja de depender
+de un required-test generico por submit_artifact en derivados. El bridge genera
+required tests especificos para toda la secuencia principal OPES por
+`work_kind/artifact_type` (texto publicable, visual didactico, HTML, juegos,
+manuales, revisiones, fuentes, supuestos, audio, tutor, tests y paquete final),
+y el director de OPES proyecta gates de evidencia minima al registro de tema:
+si falta evidencia estructurada, publica `pending_refs=required-evidence-*`,
+`settlement_status=not_settled` y rework causal. Incidencia:
+`docs/incidencias/incidencia_orquesta_opes_required_tests_y_settlement_por_work_kind_2026-07-02.md`.
+Evidencia: `TestOPESRequiredTestPolicyV0SecuenciaCompletaTieneValidadoresEspecificos`,
+`TestTopicRegistryRequiredEvidencePolicyV0CubreSecuenciaOPESCompletaV0`,
+`TestProduceOPESCausalJobsV0BloqueaDerivadoOPESSinEvidenciaMinimaV0` y
+`go test -count=1 ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-director ./modulos/orquesta-opes-topic-registry ./modulos/orquesta-app-codex-stack`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

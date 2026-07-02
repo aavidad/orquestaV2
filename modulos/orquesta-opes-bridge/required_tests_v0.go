@@ -59,6 +59,7 @@ func opesRequiredTestsForJobV0(
 			"opes-expected-artifact-" + artifactType,
 		},
 	}}
+	tests = append(tests, opesArtifactSpecificRequiredTestsV0(jobType, safeJob, workRefs)...)
 	if opesFinalPackageWorkKindV0(jobType) {
 		tests = append(tests, opesFinalPackageRequiredTestsV0(safeJob, workRefs)...)
 	}
@@ -72,6 +73,188 @@ func opesRequiredTestsForJobV0(
 		tests = append(tests, opesTutorAssetsQARequiredTestsV0(safeJob, workRefs)...)
 	}
 	return tests
+}
+
+func opesArtifactSpecificRequiredTestsV0(
+	jobType string,
+	safeJob string,
+	workRefs []string,
+) []orquestadomainwork.DomainWorkRequiredTestV0 {
+	switch expectedArtifactTypeV0(jobType) {
+	case orquestadomainwork.DomainDocumentPlanArtifactTypeV0:
+		return []orquestadomainwork.DomainWorkRequiredTestV0{opesNamedRequiredTestV0(
+			"document-plan-contract", safeJob, workRefs,
+			[]string{
+				"El plan documental declara plan_ref, domain_ref, work_kind, document_kind, title, objective y entregables requeridos.",
+				"Cada section, visual y review_step declara work_kind permitido, objetivo, criterios de aceptacion y refs trazables.",
+				"El plan incluye la secuencia OPES completa hasta finalize_temario_package y no omite HTML, audio, tests, tutor, visuales ni QA.",
+			},
+			[]string{"opes-required-document-plan-contract"},
+			[]string{"document_plan", "required_plan_parts"},
+			[]string{"opes-rule-document-plan-complete", "opes-final-evidence:document_plan_contract"},
+		)}
+	case orquestadomainwork.DomainWorkArtifactTypeContentBlockV0,
+		orquestadomainwork.DomainWorkArtifactTypeTopicSummaryV0,
+		orquestadomainwork.DomainWorkArtifactTypeTopicExpansionPackageV0,
+		orquestadomainwork.DomainWorkArtifactTypeAssembledTopicV0:
+		return []orquestadomainwork.DomainWorkRequiredTestV0{opesNamedRequiredTestV0(
+			"topic-text-publicable", safeJob, workRefs,
+			[]string{
+				"El texto publico pasa OPESTopicQualityContractV0 con contador canonico, minimo por nivel y evidencias de QA por tema.",
+				"No contiene anclas visibles {#...}, tablas colapsadas en encabezados, mojibake, metacomentarios de examen, notas internas ni trazabilidad editorial visible.",
+				"Si hay artefactos recuperables pero no publicables, el resultado declara invalid_artifact_paths, valid_artifact_paths y followup/rework causal.",
+			},
+			[]string{"opes-required-topic-text-publicable"},
+			[]string{"topic_quality_contract_result", "public_text_qa_report"},
+			[]string{"opes-rule-topic-quality-contract", "opes-final-evidence:topic_quality_contract_pass"},
+		)}
+	case orquestadomainwork.DomainWorkArtifactTypeVisualAssetV0:
+		return []orquestadomainwork.DomainWorkRequiredTestV0{opesNamedRequiredTestV0(
+			"didactic-visual-publicable", safeJob, workRefs,
+			[]string{
+				"El visual declara funcion didactica, anchor_ref o placement_ref, alt_text y relacion con una seccion publicable.",
+				"No se acepta raster decorativo, SVG/boceto heredado ni imagen sin funcion docente como visual final.",
+				"Si el visual es insumo o borrador, queda como recuperable con rework y no como final publicable.",
+			},
+			[]string{"opes-required-didactic-visual-publicable"},
+			[]string{"didactic_visual_report", "visual_anchor_manifest"},
+			[]string{"opes-rule-didactic-visual-required", "opes-final-evidence:visual_didactic_publicable"},
+		)}
+	case orquestadomainwork.DomainWorkArtifactTypeBlockRevisionV0,
+		orquestadomainwork.DomainWorkArtifactTypeAgentReviewReportV0,
+		orquestadomainwork.DomainWorkArtifactTypeAgentPairReviewReportV0,
+		orquestadomainwork.DomainWorkArtifactTypeDirectorReviewMatrixV0:
+		return []orquestadomainwork.DomainWorkRequiredTestV0{opesNamedRequiredTestV0(
+			"review-report-actionable", safeJob, workRefs,
+			[]string{
+				"La revision separa findings bloqueantes, recuperables y aceptados con refs de artefacto y tema.",
+				"No marca ready por narrativa libre: toda aceptacion o rework conserva issue_refs, evidence_refs y siguiente accion.",
+				"Las revisiones por modelo o pareja no sustituyen la consolidacion del Director cuando hay contradicciones.",
+			},
+			[]string{"opes-required-review-report-actionable"},
+			[]string{"review_report", "issue_refs", "evidence_refs"},
+			[]string{"opes-rule-review-actionable", "opes-final-evidence:review_report_actionable"},
+		)}
+	case orquestadomainwork.DomainWorkArtifactTypeExamResearchReportV0,
+		orquestadomainwork.DomainWorkArtifactTypeSourceV0:
+		return []orquestadomainwork.DomainWorkRequiredTestV0{opesNamedRequiredTestV0(
+			"source-research-traceable", safeJob, workRefs,
+			[]string{
+				"La investigacion declara fuentes, administracion, fecha, convocatoria o relacion con examen equivalente cuando aplique.",
+				"Las fuentes quedan como refs opacas verificables y no como URLs/rutas sueltas sin resumen de uso.",
+				"No se usa investigacion parcial como canon de temario sin revision de relevancia y cobertura.",
+			},
+			[]string{"opes-required-source-research-traceable"},
+			[]string{"source_research_report", "source_refs"},
+			[]string{"opes-rule-source-research-traceable", "opes-final-evidence:source_research_traceable"},
+		)}
+	case orquestadomainwork.DomainWorkArtifactTypePracticalCasesV0:
+		return []orquestadomainwork.DomainWorkRequiredTestV0{opesNamedRequiredTestV0(
+			"practical-cases-publicable", safeJob, workRefs,
+			[]string{
+				"Los supuestos practicos declaran schema importable, cobertura por tema, preguntas, solucion y criterios de correccion.",
+				"Los JSON/JSONL se validan estructuralmente y los casos parciales quedan en rework, no ready.",
+				"La consolidacion conserva conteos esperados, entregados, faltantes y refs de reparacion.",
+			},
+			[]string{"opes-required-practical-cases-publicable"},
+			[]string{"practical_cases_schema_report", "practical_cases_coverage_report"},
+			[]string{"opes-rule-practical-cases-schema", "opes-final-evidence:practical_cases_publicable"},
+		)}
+	case orquestadomainwork.DomainWorkArtifactTypeLocalHTMLSiteV0:
+		return []orquestadomainwork.DomainWorkRequiredTestV0{opesNamedRequiredTestV0(
+			"html-site-publicable", safeJob, workRefs,
+			[]string{
+				"El HTML local genera paginas tema_*.html revisables, indice, navegacion, assets enlazados y reporte de enlaces.",
+				"No se acepta index.html, portada o carcasa como manifest de tema ni como sustituto de paginas publicables.",
+				"El HTML incorpora tests, tutor, audio, visuales y RAG solo desde artefactos canonicos o evidencia explicita de no aplicabilidad.",
+			},
+			[]string{"opes-required-html-site-publicable"},
+			[]string{"html_validation_report", "html_topic_pages_manifest"},
+			[]string{"opes-rule-html-local-publicable", "opes-final-evidence:html_site_publicable"},
+		)}
+	case orquestadomainwork.DomainWorkArtifactTypeInteractivePracticeV0, opesArtifactTypeLearningGamesPackageV0:
+		return []orquestadomainwork.DomainWorkRequiredTestV0{opesNamedRequiredTestV0(
+			"interactive-practice-publicable", safeJob, workRefs,
+			[]string{
+				"Los juegos o practicas declaran reglas, dataset, accesibilidad, integracion HTML y trazabilidad a tema/apartado.",
+				"No se acepta demo visual sin contenido evaluable, sin fallback ni sin QA funcional.",
+				"El paquete conserva build/test local o evidencia de validacion manual estructurada.",
+			},
+			[]string{"opes-required-interactive-practice-publicable"},
+			[]string{"interactive_practice_manifest", "interactive_practice_qa_report"},
+			[]string{"opes-rule-interactive-practice-publicable", "opes-final-evidence:interactive_practice_publicable"},
+		)}
+	case orquestadomainwork.DomainWorkArtifactTypeHelpPackageV0, opesArtifactTypeHelpManualPackageV0:
+		return []orquestadomainwork.DomainWorkRequiredTestV0{opesNamedRequiredTestV0(
+			"help-manual-publicable", safeJob, workRefs,
+			[]string{
+				"Los manuales de ayuda declaran YAML, capturas o evidencias visuales, index.html, manual.md o manual.pdf segun contrato.",
+				"El manual se deriva del HTML local y no inventa opciones ni pantallas no existentes.",
+				"Si faltan capturas, indice o validacion de enlaces, queda pendiente_continuar con refs causales.",
+			},
+			[]string{"opes-required-help-manual-publicable"},
+			[]string{"help_manual_manifest", "help_manual_qa_report"},
+			[]string{"opes-rule-help-manual-publicable", "opes-final-evidence:help_manual_publicable"},
+		)}
+	case opesArtifactTypeVisualReuseManifestV0:
+		return []orquestadomainwork.DomainWorkRequiredTestV0{opesNamedRequiredTestV0(
+			"visual-reuse-manifest", safeJob, workRefs,
+			[]string{
+				"El manifest de reutilizacion visual lista reutilizables, copiados, insertados, rechazados y no aplicables con motivo.",
+				"Cada visual reutilizado mantiene ref opaca, placement_ref, alt_text y aparicion en html_final/html_ampliado.",
+				"No se acepta visual_count=0 sin justificacion de no aplicabilidad.",
+			},
+			[]string{"opes-required-visual-reuse-manifest"},
+			[]string{"visual_reuse_manifest"},
+			[]string{"opes-rule-visual-reuse-common-assets", "opes-final-evidence:visual_reuse"},
+		)}
+	case orquestadomainwork.DomainWorkArtifactTypeTopicRegistryUpdateV0:
+		return []orquestadomainwork.DomainWorkRequiredTestV0{opesNamedRequiredTestV0(
+			"topic-registry-update", safeJob, workRefs,
+			[]string{
+				"El registro de tema conserva course_id, topic_id, settlement_status, operational_status, pending_refs y done_refs.",
+				"Un tema goal-first no queda settled_text o settled_final sin checkpoint durable y refs de lifecycle.",
+				"Si faltan permisos o conector, el registro publica bloqueo operativo y no marca ready.",
+			},
+			[]string{"opes-required-topic-registry-update"},
+			[]string{"topic_registry_update", "settlement_status", "goal_first_checkpoint_refs"},
+			[]string{"opes-rule-topic-registry-causal", "opes-final-evidence:topic_registry_update"},
+		)}
+	}
+	return nil
+}
+
+func opesNamedRequiredTestV0(
+	name string,
+	safeJob string,
+	workRefs []string,
+	criteria []string,
+	criteriaRefs []string,
+	requiredEvidence []string,
+	evidenceRefs []string,
+) orquestadomainwork.DomainWorkRequiredTestV0 {
+	inputRefs := compactStringsV0(append([]string{"opes-job-" + safeJob}, workRefs...))
+	externalRefs := []orquestadomainwork.DomainWorkExternalRefV0{
+		{Kind: "domain_ref", Ref: "opes"},
+		{Kind: "job_ref", Ref: safeJob},
+		{Kind: "required_test_name", Ref: name},
+	}
+	for _, evidence := range requiredEvidence {
+		if evidence = strings.TrimSpace(evidence); evidence != "" {
+			externalRefs = append(externalRefs, orquestadomainwork.DomainWorkExternalRefV0{
+				Kind: "required_evidence",
+				Ref:  evidence,
+			})
+		}
+	}
+	return orquestadomainwork.DomainWorkRequiredTestV0{
+		TestRef:                "opes-" + compactOPESBridgeRefV0(name) + "-" + safeJob,
+		AcceptanceCriteria:     append([]string(nil), criteria...),
+		AcceptanceCriteriaRefs: compactStringsV0(criteriaRefs),
+		InputRefs:              inputRefs,
+		ExternalRefs:           externalRefs,
+		EvidenceRefs:           compactStringsV0(evidenceRefs),
+	}
 }
 
 func opesFinalPackageRequiredTestsV0(

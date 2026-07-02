@@ -18,9 +18,15 @@ func TestBuildExternalWorkRunRequestV0DeclaraRequiredTestsOPES(t *testing.T) {
 		t.Fatalf("request no construida")
 	}
 	tests := req.AppChangeRequest.ExternalWork.RequiredTests
-	if len(tests) != 1 ||
-		tests[0].TestRef != "opes-domain-test-assemble_topic-job-ref-assemble-001" ||
-		tests[0].ExternalRefs[2].Ref != "assembled_topic" {
+	if !stringInRequiredTestRefsForTestV0(
+		requiredTestRefsForTestV0(tests),
+		"opes-domain-test-assemble_topic-job-ref-assemble-001",
+	) ||
+		!stringInRequiredTestRefsForTestV0(
+			requiredTestRefsForTestV0(tests),
+			"opes-topic-text-publicable-job-ref-assemble-001",
+		) ||
+		requiredTestByRefForTestV0(tests, "opes-domain-test-assemble_topic-job-ref-assemble-001").ExternalRefs[2].Ref != "assembled_topic" {
 		t.Fatalf("required_tests=%+v", tests)
 	}
 	if issues := orquestadomainwork.ValidateDomainWorkJobRequestV0(orquestadomainwork.DomainWorkJobRequestV0{
@@ -49,9 +55,123 @@ func TestOPESRequiredTestPolicyV0SintetizaSiFaltanDeclarados(t *testing.T) {
 			Objective:      "validar policy OPES",
 		},
 	)
-	if err != nil || len(plan.RequiredTests) != 1 ||
-		plan.RequiredTests[0].TestRef != "opes-domain-test-draft_content_block-job-ref-policy-opes" {
+	if err != nil ||
+		!stringInRequiredTestRefsForTestV0(
+			requiredTestRefsForTestV0(plan.RequiredTests),
+			"opes-domain-test-draft_content_block-job-ref-policy-opes",
+		) ||
+		!stringInRequiredTestRefsForTestV0(
+			requiredTestRefsForTestV0(plan.RequiredTests),
+			"opes-topic-text-publicable-job-ref-policy-opes",
+		) {
 		t.Fatalf("plan=%+v err=%v", plan, err)
+	}
+}
+
+func TestOPESRequiredTestPolicyV0SecuenciaCompletaTieneValidadoresEspecificos(t *testing.T) {
+	expectedSpecific := map[string]string{
+		"plan_temario":                  "document-plan-contract",
+		"update_topic_registry":         "topic-registry-update",
+		"research_exam_precedents":      "source-research-traceable",
+		"draft_content_block":           "topic-text-publicable",
+		"generate_visual_asset":         "didactic-visual-publicable",
+		"generate_question_bank":        "question-bank-publicable",
+		"review_legal":                  "review-report-actionable",
+		"review_pedagogical":            "review-report-actionable",
+		"review_quality":                "review-report-actionable",
+		"review_codex":                  "review-report-actionable",
+		"review_gemini":                 "review-report-actionable",
+		"review_claude":                 "review-report-actionable",
+		"review_pair_codex_gemini":      "review-report-actionable",
+		"review_pair_codex_claude":      "review-report-actionable",
+		"review_pair_gemini_claude":     "review-report-actionable",
+		"review_director_consolidation": "review-report-actionable",
+		"validate_topic":                "review-report-actionable",
+		"assemble_topic":                "topic-text-publicable",
+		"generate_audio_asset":          "audio-tts-resumable",
+		"generate_tutor_assets":         "tutor-assets-publicable",
+		"generate_learning_games":       "interactive-practice-publicable",
+		"visual_asset_reuse":            "visual-reuse-manifest",
+		"generate_html_site":            "html-site-publicable",
+		"generate_help_manual_assets":   "help-manual-publicable",
+		"finalize_temario_package":      "final-package-manifest",
+	}
+	for _, workKind := range OPESFullTemarioJobTypeSequenceV0() {
+		t.Run(workKind, func(t *testing.T) {
+			jobRef := "job-ref-sequence-" + workKind
+			plan, err := (OPESRequiredTestPolicyV0{}).BuildDomainWorkRequiredTestPlanV0(
+				context.Background(),
+				orquestadomainwork.DomainWorkJobRequestV0{
+					CorrelationID:  "corr-policy-opes-sequence-" + workKind,
+					IdempotencyKey: "idem-policy-opes-sequence-" + workKind,
+					RequestedBy:    "orquesta",
+					DomainRef:      "opes",
+					WorkKind:       workKind,
+					WorkRefs:       []string{jobRef},
+					Objective:      "validar secuencia OPES completa",
+				},
+			)
+			if err != nil {
+				t.Fatalf("BuildDomainWorkRequiredTestPlanV0: %v", err)
+			}
+			safeJob := compactOPESBridgeRefV0(jobRef)
+			baseRef := "opes-domain-test-" + compactOPESBridgeRefV0(workKind) + "-" + safeJob
+			specificName, ok := expectedSpecific[workKind]
+			if !ok {
+				t.Fatalf("work_kind sin required-test especifico declarado: %s", workKind)
+			}
+			specificRef := "opes-" + compactOPESBridgeRefV0(specificName) + "-" + safeJob
+			refs := requiredTestRefsForTestV0(plan.RequiredTests)
+			if !stringInRequiredTestRefsForTestV0(refs, baseRef) ||
+				!stringInRequiredTestRefsForTestV0(refs, specificRef) {
+				t.Fatalf("work_kind=%s required_tests=%v falta base=%s specific=%s", workKind, refs, baseRef, specificRef)
+			}
+		})
+	}
+}
+
+func TestOPESRequiredTestPolicyV0TextoTemaExigeCalidadPublicableEInventarioParcial(t *testing.T) {
+	plan, err := (OPESRequiredTestPolicyV0{}).BuildDomainWorkRequiredTestPlanV0(
+		context.Background(),
+		orquestadomainwork.DomainWorkJobRequestV0{
+			CorrelationID:  "corr-policy-opes-topic-text",
+			IdempotencyKey: "idem-policy-opes-topic-text",
+			RequestedBy:    "orquesta",
+			DomainRef:      "opes",
+			WorkKind:       "assemble_topic",
+			WorkRefs:       []string{"job-ref-policy-opes-topic-text"},
+			Objective:      "ensamblar texto publicable OPES",
+		},
+	)
+	if err != nil {
+		t.Fatalf("BuildDomainWorkRequiredTestPlanV0: %v", err)
+	}
+	topicText := requiredTestByRefForTestV0(
+		plan.RequiredTests,
+		"opes-topic-text-publicable-job-ref-policy-opes-topic-text",
+	)
+	if topicText.TestRef == "" ||
+		!requiredTestHasExternalRefForTestV0(topicText, "required_test_name", "topic-text-publicable") ||
+		!requiredTestHasExternalRefForTestV0(topicText, "required_evidence", "topic_quality_contract_result") ||
+		!stringInRequiredTestRefsForTestV0(topicText.AcceptanceCriteriaRefs, "opes-required-topic-text-publicable") ||
+		!stringInRequiredTestRefsForTestV0(topicText.EvidenceRefs, "opes-final-evidence:topic_quality_contract_pass") {
+		t.Fatalf("topic_text_required_test=%+v", topicText)
+	}
+	criteria := strings.Join(topicText.AcceptanceCriteria, "\n")
+	for _, want := range []string{
+		"OPESTopicQualityContractV0",
+		"contador canonico",
+		"anclas visibles {#...}",
+		"tablas colapsadas",
+		"mojibake",
+		"metacomentarios",
+		"invalid_artifact_paths",
+		"valid_artifact_paths",
+		"followup/rework causal",
+	} {
+		if !strings.Contains(criteria, want) {
+			t.Fatalf("topic_text_criteria=%q falta %s", criteria, want)
+		}
 	}
 }
 
