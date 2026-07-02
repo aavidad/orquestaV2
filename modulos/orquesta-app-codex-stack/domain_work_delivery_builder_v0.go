@@ -235,7 +235,13 @@ func domainWorkDeliveryDerivedFinalPackagePayloadFieldsV0(
 		derived = appendFinalPackageManifestStringFieldIfMissingV0(derived, fields, manifest, name, name)
 	}
 	derived = appendFinalPackageManifestStringFieldIfMissingV0(derived, fields, manifest, "manifest_cierre", "manifest_ref")
-	for _, name := range []string{"checksum_refs", "required_evidence_refs", "qa_report_refs", "evidence_refs"} {
+	for _, name := range []string{
+		"checksum_refs",
+		"required_evidence_refs",
+		"qa_report_refs",
+		"topic_quality_contract_result_refs",
+		"evidence_refs",
+	} {
 		derived = appendFinalPackageManifestRawFieldIfMissingV0(derived, fields, manifest, name, name)
 	}
 	return derived
@@ -577,6 +583,8 @@ func domainWorkDeliveryFinalPackageManifestEvidenceRefsV0(
 		"review_matrix_ref",
 		"evidence_refs",
 		"required_evidence_refs",
+		"topic_quality_contract_result_refs",
+		"topic_quality_contract_results",
 	} {
 		refs = append(refs, domainWorkDeliveryRawRefsV0(manifest[name])...)
 	}

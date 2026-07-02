@@ -2475,6 +2475,9 @@ func writeGoalFirstDomainWorkArtifactForTestV0(
 						],
 						"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json"
 					},
+					"topic_quality_contract_result_refs":{
+						"tema_001":"topic-quality-contract-result-ref-goal-first-final-001"
+					},
 					"required_evidence_refs":{
 						"html":"opes-final-evidence:html:goal-first",
 						"rag":"opes-final-evidence:rag:goal-first",

@@ -589,6 +589,8 @@ func goalDomainReceiptOPESFinalPackageEvidenceIssueV0(
 				goalDomainReceiptOPESFinalPackageOfficialTextIssueV0,
 				goalDomainReceiptOPESFinalPackageStrictEditorialIssueV0:
 				field = goalDomainReceiptOPESFinalPackageQAPassesFieldV0
+			case codexStackOPESFinalPackageTopicQualityMissingIssueV0:
+				field = goalDomainReceiptOPESFinalPackageTopicQualityFieldV0
 			}
 			return orquestagoal.GoalWorkIssueV0{
 				Code:  issueRef,

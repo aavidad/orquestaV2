@@ -275,6 +275,9 @@ func TestOperationalClosureSourceV0CierraOPESFinalConMinimosComunesYManifest(t *
 				],
 				"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json"
 			},
+			"topic_quality_contract_result_refs":{
+				"tema_001":"topic-quality-contract-result-ref-closure-final-001"
+			},
 			"required_evidence_refs":{
 				"html":"evidence-ref-closure-final-html-001",
 				"rag":"evidence-ref-closure-final-rag-001",
@@ -299,6 +302,7 @@ func TestOperationalClosureSourceV0CierraOPESFinalConMinimosComunesYManifest(t *
 		"opes-final-qa-report-09_validacion-informe_texto_publico_sin_notas_autor.json",
 		"opes-final-qa-report-09_validacion-informe_texto_publico_sin_metacomentarios_examen.json",
 		"opes-final-qa-report-09_validacion-informe_texto_publico_sin_andamiaje_interno.json",
+		"topic-quality-contract-result-ref-closure-final-001",
 	)
 	if err := fixture.Ledger.RecordDomainWorkArtifactSubmissionV0(ctx, submission); err != nil {
 		t.Fatalf("record receipt: %v", err)
@@ -315,8 +319,76 @@ func TestOperationalClosureSourceV0CierraOPESFinalConMinimosComunesYManifest(t *
 		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "opes-common-master-not-applicable") ||
 		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "manifest-cierre-ref-closure-final-001") ||
 		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "evidence-ref-closure-final-qa-001") ||
-		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "opes-final-qa-report-09_validacion-informe_texto_publico_sin_andamiaje_interno.json") {
+		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "opes-final-qa-report-09_validacion-informe_texto_publico_sin_andamiaje_interno.json") ||
+		!codexStackOperationalClosureContainsV0(got.EvidenceRefs, "topic-quality-contract-result-ref-closure-final-001") {
 		t.Fatalf("cierre final OPES sin evidencias propagadas: %+v", got)
+	}
+}
+
+func TestOperationalClosureSourceV0NoCierraOPESFinalSinResultadosTopicQualityPorTema(t *testing.T) {
+	ctx := context.Background()
+	fixture := newOPESDomainWorkClosureFixtureForTestV0(t, "final-sin-topic-quality")
+	record := opesDomainWorkAppChangeRecordForTestV0(fixture.Run.RunID, "opes-job-job-ref-closure-final-sin-topic-quality")
+	record.Request.ExternalWork.WorkKind = "finalize_temario_package"
+	fixture.Source.AppChangeStore = orquestaappchange.NewInMemoryAppChangeStoreV0(record)
+	submission := opesAcceptedSubmissionRecordForFixtureV0(fixture, "final-sin-topic-quality")
+	submission.ArtifactType = "final_domain_package"
+	submission.PayloadFields = append(submission.PayloadFields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "source_work_kind", Value: "finalize_temario_package"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "manifest_cierre", ValueJSON: []byte(`{
+			"schema_version":"opes_final_package_evidence_manifest.v0",
+			"package_ref":"package-ref-closure-final-sin-topic-quality-001",
+			"manifest_ref":"manifest-cierre-ref-closure-final-sin-topic-quality-001",
+			"checksum_refs":["checksum-ref-closure-final-sin-topic-quality-001"],
+			"validation_report_ref":"validation-report-ref-closure-final-sin-topic-quality-001",
+			"review_matrix_ref":"review-matrix-ref-closure-final-sin-topic-quality-001",
+			"qa_passes":{
+				"extension_pass":true,
+				"official_text_qa_pass":true,
+				"strict_editorial_qa_pass":true
+			},
+			"qa_report_refs":{
+				"extension":"09_validacion/informe_extension_temario.json",
+				"official_text":"09_validacion/informe_texto_publico_sin_notas_autor.json",
+				"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json"
+			},
+			"required_evidence_refs":{
+				"html":"evidence-ref-closure-final-html-sin-topic-quality-001",
+				"rag":"evidence-ref-closure-final-rag-sin-topic-quality-001",
+				"audio":"evidence-ref-closure-final-audio-sin-topic-quality-001",
+				"tests":"evidence-ref-closure-final-tests-sin-topic-quality-001",
+				"visual":"evidence-ref-closure-final-visual-sin-topic-quality-001",
+				"qa":"evidence-ref-closure-final-qa-sin-topic-quality-001"
+			}
+		}`)},
+	)
+	submission.EvidenceRefs = append(submission.EvidenceRefs,
+		"opes-extension-minima-passed",
+		"opes-common-master-not-applicable",
+		"manifest-cierre-ref-closure-final-sin-topic-quality-001",
+		"evidence-ref-closure-final-html-sin-topic-quality-001",
+		"evidence-ref-closure-final-rag-sin-topic-quality-001",
+		"evidence-ref-closure-final-audio-sin-topic-quality-001",
+		"evidence-ref-closure-final-tests-sin-topic-quality-001",
+		"evidence-ref-closure-final-visual-sin-topic-quality-001",
+		"evidence-ref-closure-final-qa-sin-topic-quality-001",
+		"opes-final-qa-report-09_validacion-informe_extension_temario.json",
+		"opes-final-qa-report-09_validacion-informe_texto_publico_sin_notas_autor.json",
+		"opes-final-qa-report-09_validacion-informe_texto_publico_sin_andamiaje_interno.json",
+	)
+	if err := fixture.Ledger.RecordDomainWorkArtifactSubmissionV0(ctx, submission); err != nil {
+		t.Fatalf("record receipt: %v", err)
+	}
+
+	_, ok, err := fixture.Source.BuildOperationalDirectorClosureRequestV0(
+		ctx,
+		orquestaappdirectorservice.AppDirectorOperationalClosureRequestV0{Run: fixture.Run},
+	)
+	if err != nil {
+		t.Fatalf("BuildOperationalDirectorClosureRequestV0: %v", err)
+	}
+	if ok {
+		t.Fatalf("no debe cerrar OPES final sin resultados de OPESTopicQualityContract por tema")
 	}
 }
 

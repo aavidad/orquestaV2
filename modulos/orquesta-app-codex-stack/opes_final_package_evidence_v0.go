@@ -12,8 +12,10 @@ const (
 	codexStackOPESFinalPackageExtensionQAMissingIssueV0       = "domain_work_opes_extension_qa_missing"
 	codexStackOPESFinalPackageOfficialTextQAMissingIssueV0    = "domain_work_opes_official_text_qa_missing"
 	codexStackOPESFinalPackageStrictEditorialQAMissingIssueV0 = "domain_work_opes_strict_editorial_qa_missing"
+	codexStackOPESFinalPackageTopicQualityMissingIssueV0      = "domain_work_opes_topic_quality_contract_missing"
 	goalDomainReceiptOPESFinalPackageEvidenceFieldV0          = "domain_receipt_refs.opes_final_package"
 	goalDomainReceiptOPESFinalPackageQAPassesFieldV0          = "domain_receipt_refs.opes_final_package.qa_passes"
+	goalDomainReceiptOPESFinalPackageTopicQualityFieldV0      = "domain_receipt_refs.opes_final_package.topic_quality_contract_results"
 )
 
 func codexStackDomainWorkIsOPESFinalPackageV0(domainRef string, workKind string, artifactType string) bool {
@@ -98,18 +100,22 @@ func codexStackOPESFinalPackageEvidenceIssueRefV0(
 	if len(manifest.QAReportRefs["extension"]) == 0 {
 		return codexStackOPESFinalPackageExtensionQAMissingIssueV0
 	}
+	if len(manifest.TopicQualityContractResultRefs) == 0 {
+		return codexStackOPESFinalPackageTopicQualityMissingIssueV0
+	}
 	return ""
 }
 
 type codexStackOPESFinalPackageManifestV0 struct {
-	PackageRef           string
-	ManifestRef          string
-	ChecksumRefs         []string
-	ValidationReportRef  string
-	ReviewMatrixRef      string
-	RequiredEvidenceRefs map[string][]string
-	QAPasses             codexStackOPESFinalPackageQAPassesV0
-	QAReportRefs         map[string][]string
+	PackageRef                     string
+	ManifestRef                    string
+	ChecksumRefs                   []string
+	ValidationReportRef            string
+	ReviewMatrixRef                string
+	RequiredEvidenceRefs           map[string][]string
+	QAPasses                       codexStackOPESFinalPackageQAPassesV0
+	QAReportRefs                   map[string][]string
+	TopicQualityContractResultRefs []string
 }
 
 type codexStackOPESFinalPackageQAPassesV0 struct {
@@ -159,6 +165,10 @@ func codexStackOPESFinalPackageManifestFromJSONV0(
 		RequiredEvidenceRefs: codexStackOPESFinalPackageRequiredEvidenceRefsV0(values["required_evidence_refs"]),
 		QAPasses:             codexStackOPESFinalPackageQAPassesFromJSONV0(values["qa_passes"]),
 		QAReportRefs:         codexStackOPESFinalPackageQAReportRefsV0(values["qa_report_refs"]),
+		TopicQualityContractResultRefs: codexStackOPESFinalPackageTopicQualityContractRefsV0(
+			values["topic_quality_contract_result_refs"],
+			values["topic_quality_contract_results"],
+		),
 	}
 	if manifest.PackageRef == "" ||
 		manifest.ManifestRef == "" ||
@@ -168,6 +178,18 @@ func codexStackOPESFinalPackageManifestFromJSONV0(
 		return codexStackOPESFinalPackageManifestV0{}, false
 	}
 	return manifest, true
+}
+
+func codexStackOPESFinalPackageTopicQualityContractRefsV0(
+	rawValues ...json.RawMessage,
+) []string {
+	for _, raw := range rawValues {
+		refs := compactCodexStackStringsV0(domainWorkDeliveryRawRefsV0(raw))
+		if len(refs) > 0 {
+			return refs
+		}
+	}
+	return nil
 }
 
 func codexStackOPESFinalPackageQAPassesFromJSONV0(
