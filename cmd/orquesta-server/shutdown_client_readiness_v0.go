@@ -89,18 +89,22 @@ func shutdownRequestErrorAllowsSignalV0(
 		return true
 	}
 	if forced {
-		return !shutdownRequestErrorIsLiveWorkConflictV0(err)
+		return !shutdownRequestErrorIsLiveWorkConflictV0(err) &&
+			!shutdownPublicStatusHasBlockingWorkV0(status)
 	}
 	if strings.TrimSpace(err.Error()) != "shutdown_timeout" {
 		return false
 	}
-	return status.ShutdownInProgress &&
-		status.ShutdownAgentsInFlight == 0 &&
-		status.ShutdownCheckpointsPending == 0 &&
-		status.ShutdownCheckpointAgentsPending == 0 &&
-		status.ShutdownAsyncWorkActive == 0 &&
-		status.ShutdownActiveWorkCount == 0 &&
-		len(compactStringsV0(status.ShutdownActiveWorkRefs)) == 0
+	return status.ShutdownInProgress && !shutdownPublicStatusHasBlockingWorkV0(status)
+}
+
+func shutdownPublicStatusHasBlockingWorkV0(status orquestaserver.ServerPublicStatusV0) bool {
+	return status.ShutdownAgentsInFlight > 0 ||
+		status.ShutdownCheckpointsPending > 0 ||
+		status.ShutdownCheckpointAgentsPending > 0 ||
+		status.ShutdownAsyncWorkActive > 0 ||
+		status.ShutdownActiveWorkCount > 0 ||
+		len(compactStringsV0(status.ShutdownActiveWorkRefs)) > 0
 }
 
 func shutdownRequestErrorIsLiveWorkConflictV0(err error) bool {

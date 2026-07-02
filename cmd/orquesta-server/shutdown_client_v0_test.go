@@ -300,6 +300,13 @@ func TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado(t *testi
 	if !shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_request_failed"), status, true) {
 		t.Fatalf("force debe permitir signal tras error de transporte de shutdown")
 	}
+	status.ShutdownActiveWorkCount = 1
+	status.ShutdownActiveWorkRefs = []string{"shutdown-active-work-goal-backend-goal-ref-force"}
+	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_request_failed"), status, true) {
+		t.Fatalf("force con active_work persistido no debe permitir signal")
+	}
+	status.ShutdownActiveWorkCount = 0
+	status.ShutdownActiveWorkRefs = nil
 	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_http_409"), status, true) {
 		t.Fatalf("force no debe saltar conflicto HTTP de trabajo vivo")
 	}
