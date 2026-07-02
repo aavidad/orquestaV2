@@ -234,3 +234,14 @@ queda el servidor persistente aislado esperado `orquesta-server-latest`. BUG-122
 sigue abierto: falta un smoke real con `goal_status=complete`,
 `run_status=cerrada`, `closure_status=accepted` y refs de artefactos/evidencias
 no vacios, o documentar una frontera externa reproducible fuera de Orquesta.
+
+Avance aplicado: el backend `app_server_tmux` prepara antes del primer turno los
+directorios declarados en `write_set` cuando son rutas relativas seguras dentro
+del `CWD`, sin convertir write-sets Markdown en directorios y sin aceptar
+escapes ni `.git`. Esto evita que el agente dependa de `apply_patch` para crear
+el directorio raiz del artefacto.
+
+Evidencia focal:
+
+- `TestServerCodexAppServerGoalBackendV0PreparaDirectoriosWriteSetAntesDelTurnV0`
+- `TestServerCodexAppServerGoalBackendV0LanzaThreadGoalYTurnV0`

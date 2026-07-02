@@ -215,6 +215,54 @@ func TestServerCodexAppServerGoalBackendV0LanzaThreadGoalYTurnV0(t *testing.T) {
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0PreparaDirectoriosWriteSetAntesDelTurnV0(t *testing.T) {
+	projectDir := t.TempDir()
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-ws-001"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-goal-ws-001", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-goal-ws-001", Status: "inProgress"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		CWD:      projectDir,
+	}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		SchemaVersion: orquestaruntimecodexgoal.CodexGoalStartPacketSchemaV0,
+		GoalRef:       "goal-ref-codex-app-server-ws-001",
+		Objective:     "programar una app acotada",
+		Prompt:        "prompt compacto",
+		WriteSet: []orquestagoal.GoalWriteScopeV0{
+			{Path: "generated-apps/agenda"},
+			{Path: "docs/handoff.md"},
+			{Path: "../fuera"},
+			{Path: ".git/hooks"},
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if info, err := os.Stat(filepath.Join(projectDir, "generated-apps", "agenda")); err != nil || !info.IsDir() {
+		t.Fatalf("write-set directorio no preparado: info=%+v err=%v", info, err)
+	}
+	if _, err := os.Stat(filepath.Join(projectDir, "docs", "handoff.md")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("write-set markdown no debe convertirse en directorio: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(projectDir), "fuera")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("write-set fuera de CWD no debe crearse: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(projectDir, ".git")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("write-set .git no debe crearse: %v", err)
+	}
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/start", "thread/goal/set", "turn/start", "thread/goal/get"}) {
+		t.Fatalf("calls=%v", protocol.calls)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0LanzaTurnSiGoalSetNoExisteV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		thread:     serverCodexAppServerThreadV0{ID: "thread-ref-goal-no-set-001"},

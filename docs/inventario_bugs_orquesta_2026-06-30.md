@@ -174,6 +174,13 @@ no materializa app ni artefactos. BUG-122 sigue
 abierto hasta un smoke con cierre aceptado y refs no vacios, o hasta frontera
 externa reproducible/documentada fuera de Orquesta.
 
+Avance BUG-122 2026-07-02: `app_server_tmux` prepara directorios de `write_set`
+seguros antes de `turn/start` para que Nueva App no dependa de `apply_patch`
+al crear la raiz `generated-apps/...`; no crea rutas Markdown, escapes ni
+`.git`. Evidencia:
+`TestServerCodexAppServerGoalBackendV0PreparaDirectoriosWriteSetAntesDelTurnV0`
+y `TestServerCodexAppServerGoalBackendV0LanzaThreadGoalYTurnV0`.
+
 ## Riesgos arquitectonicos no funcionales
 
 | ID | Estado | Area | Hallazgo | Riesgo | Evidencia | Accion |

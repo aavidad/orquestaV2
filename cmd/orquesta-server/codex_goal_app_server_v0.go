@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -205,6 +207,10 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	if backend.Protocol == nil {
 		return codexAppServerStartReceiptV0(packet, "", "codex_app_server_protocol_missing"), errors.New("codex_app_server_protocol_missing")
 	}
+	if err := backend.prepareCodexGoalWriteSetV0(packet); err != nil {
+		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_write_set_prepare_failed")
+		return codexAppServerStartReceiptV0(packet, "", code), err
+	}
 	thread, err := backend.Protocol.StartThreadV0(ctx, backend.threadStartParamsV0())
 	if err != nil {
 		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_thread_start_failed")
@@ -250,6 +256,65 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 			"evidence-ref-codex-app-server-turn-started",
 		},
 	}, nil
+}
+
+func (backend serverCodexAppServerGoalBackendV0) prepareCodexGoalWriteSetV0(
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+) error {
+	cwd := strings.TrimSpace(backend.CWD)
+	if cwd == "" || len(packet.WriteSet) == 0 {
+		return nil
+	}
+	root, err := filepath.Abs(cwd)
+	if err != nil {
+		return fmt.Errorf("codex_app_server_write_set_prepare_failed: %w", err)
+	}
+	for _, scope := range packet.WriteSet {
+		rel, ok := codexAppServerWriteSetDirectoryRelV0(scope.Path)
+		if !ok {
+			continue
+		}
+		target := filepath.Join(root, filepath.FromSlash(rel))
+		if !codexAppServerPathInsideRootV0(root, target) {
+			continue
+		}
+		if err := os.MkdirAll(target, 0o700); err != nil {
+			return fmt.Errorf("codex_app_server_write_set_prepare_failed: %w", err)
+		}
+	}
+	return nil
+}
+
+func codexAppServerWriteSetDirectoryRelV0(path string) (string, bool) {
+	raw := strings.TrimSpace(path)
+	if raw == "" || filepath.IsAbs(raw) {
+		return "", false
+	}
+	trimmed := strings.Trim(raw, "/")
+	if trimmed == "" || strings.HasPrefix(trimmed, ".git/") || trimmed == ".git" {
+		return "", false
+	}
+	clean := filepath.ToSlash(filepath.Clean(trimmed))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || clean == ".git" || strings.HasPrefix(clean, ".git/") || filepath.IsAbs(clean) {
+		return "", false
+	}
+	if codexAppServerWriteSetLooksLikeFileV0(clean) {
+		return "", false
+	}
+	return clean, true
+}
+
+func codexAppServerWriteSetLooksLikeFileV0(path string) bool {
+	lower := strings.ToLower(strings.TrimSpace(path))
+	return strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".markdown")
+}
+
+func codexAppServerPathInsideRootV0(root string, target string) bool {
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != "" && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
