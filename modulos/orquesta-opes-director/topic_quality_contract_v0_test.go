@@ -35,6 +35,24 @@ func TestValidateOPESTopicQualityContractV0DetectaMetacomentariosPublicosV0(t *t
 	}
 }
 
+func TestValidateOPESTopicQualityContractV0DetectaMojibakePreAudioV0(t *testing.T) {
+	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
+		TopicRef:           "tema-integrador-social-001",
+		Level:              OPESTopicQualityLevelBV0,
+		CanonicalWordCount: 11200,
+		Text: strings.Join([]string{
+			"El alumnado debe comprender la designaci\u00c3\u00b3n del apoyo.",
+			"El apartado p\u00c3\u00bablico contiene m\u00c3\u00a1s ejemplos y una marca \u00c2 visible.",
+			"Un guion de audio no puede llegar a TTS con el caracter \ufffd ni con comillas \u00e2\u20ac.",
+		}, "\n"),
+	})
+
+	if result.Status != OPESTopicQualityStatusNeedsReworkV0 ||
+		!opesTopicQualityIssueCodeInSetV0(result.Issues, ErrOPESTopicQualityPublicMojibakeV0) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestValidateOPESTopicQualityContractV0DetectaAndamiajeInternoConTildesYMayusculasV0(t *testing.T) {
 	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
 		TopicRef:           "tema-029",

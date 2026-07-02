@@ -104,6 +104,7 @@ func topicRegistryQualityRefLooksExplicitV0(value string) bool {
 	}
 	for _, token := range []string{
 		"topic_quality",
+		"mojibake",
 		"strict_editorial",
 		"official_text_qa",
 		"extension_pass",

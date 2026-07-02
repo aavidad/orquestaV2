@@ -20,6 +20,7 @@ const (
 	ErrOPESTopicQualityCanonicalWordsRequiredV0  = "opes_canonical_word_count_required"
 	ErrOPESTopicQualityMinWordsNotMetV0          = "needs_expansion_min_words_B"
 	ErrOPESTopicQualityInvalidReportContractV0   = "invalid_report_contract"
+	ErrOPESTopicQualityPublicMojibakeV0          = "opes_public_text_mojibake"
 	ErrOPESTopicQualityPublicMetacommentV0       = "opes_public_text_metacomment"
 	ErrOPESTopicQualityStudyScaffoldingV0        = "opes_public_text_study_scaffolding"
 	ErrOPESTopicQualityStructuralContaminationV0 = "opes_public_text_structural_contamination"
@@ -125,6 +126,13 @@ func ValidateOPESTopicQualityContractV0(
 		))
 	}
 	result.Issues = append(result.Issues, opesTopicQualityReportIssuesV0(request, result)...)
+	for _, phrase := range opesTopicPublicMojibakeMatchesV0(request.Text) {
+		result.Issues = append(result.Issues, OPESTopicQualityIssueV0{
+			Code:    ErrOPESTopicQualityPublicMojibakeV0,
+			Field:   "text",
+			Message: phrase,
+		})
+	}
 	for _, phrase := range opesTopicPublicMetacommentMatchesV0(request.Text) {
 		result.Issues = append(result.Issues, OPESTopicQualityIssueV0{
 			Code:    ErrOPESTopicQualityPublicMetacommentV0,
@@ -330,6 +338,29 @@ func opesTopicQualityReportClaimsPassV0(text string) bool {
 		}
 	}
 	return false
+}
+
+func opesTopicPublicMojibakeMatchesV0(text string) []string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
+	patterns := []struct {
+		pattern string
+		label   string
+	}{
+		{pattern: "\u00c3", label: "mojibake:utf8_latin1_marker_c3"},
+		{pattern: "\u00c2", label: "mojibake:utf8_latin1_marker_c2"},
+		{pattern: "\ufffd", label: "mojibake:replacement_character"},
+		{pattern: "\u00e2\u20ac", label: "mojibake:windows_punctuation_marker"},
+	}
+	var matches []string
+	for _, pattern := range patterns {
+		if strings.Contains(text, pattern.pattern) {
+			matches = append(matches, pattern.label)
+		}
+	}
+	return compactStringsV0(matches)
 }
 
 func opesTopicPublicMetacommentMatchesV0(text string) []string {
