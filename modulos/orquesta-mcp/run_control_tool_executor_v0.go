@@ -236,7 +236,7 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 		Status:          orquestagoal.GoalStatusBlockedV0,
 		GoalRef:         goalRef,
 		ExternalGoalRef: externalGoalRef,
-		Summary:         "forced stop reconciled active goal into terminal rework state",
+		Summary:         "forced " + action + " reconciled active goal into terminal rework state",
 		ArtifactRefs:    compactStringsMCPV0(mcpRunControlGoalArtifactRefsV0(beforeGoal)),
 		EvidenceRefs:    evidenceRefs,
 		Issues: []orquestagoal.GoalWorkIssueV0{{
@@ -263,7 +263,7 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 	result.Diagnostics = append(result.Diagnostics, MCPRunControlDiagnosticV0{
 		Code:    "goal_state_terminal_reconciled_after_forced_stop",
 		Scope:   "run:" + runRef,
-		Message: "goal-first state marked blocked/rework after forced stop of high-consumption active backend",
+		Message: "goal-first state marked blocked/rework after forced " + action + " of high-consumption active backend",
 		EvidenceRefs: compactStringsMCPV0(append(
 			evidenceRefs,
 			goalRef,

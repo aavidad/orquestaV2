@@ -440,6 +440,9 @@ func TestMCPRunControlExecutorV0CancelForcedCompletaRunControlTrasReconciliarGoa
 		t.Fatalf("LoadGoalWorkStateV0: %v", err)
 	}
 	if state.Status != orquestagoal.GoalStatusBlockedV0 ||
+		state.LastResult == nil ||
+		!strings.Contains(state.LastResult.Summary, "forced cancel reconciled") ||
+		strings.Contains(state.LastResult.Summary, "forced stop reconciled") ||
 		state.LastClosure == nil ||
 		!state.LastClosure.NeedsRework ||
 		!containsStringMCPTestV0(state.EvidenceRefs, mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0) {
