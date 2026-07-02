@@ -209,3 +209,4 @@ Evidencia focal:
 - `TestCodexAppServerIssueCodeForErrorV0ClasificaDiagnosticosV0`
 - `TestCodexGoalObserverV0ClasificaQuotaFilesystemBackendSinIssueCodeV0`
 - `TestMCPObserveAppDirectorGoalErrorResultFromErrorV0PreservaQuotaFilesystemV0`
+- `TestExternalWorkGoalFirstKnownLaunchFailureReasonV0ClasificaQuotaFilesystem`
