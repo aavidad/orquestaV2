@@ -48,6 +48,9 @@ func TestBuildExternalWorkGoalWorkSpecV0CompilaContratoNeutral(t *testing.T) {
 	if !spec.ClosurePolicy.RequireRequiredTests ||
 		!spec.ClosurePolicy.RequireArtifacts ||
 		!spec.ClosurePolicy.RequireArtifactPaths ||
+		!spec.ClosurePolicy.RequireMaterializedArtifacts ||
+		!spec.ClosurePolicy.RequireChecklist ||
+		!spec.ClosurePolicy.RequireReworkPlanForPartialArtifacts ||
 		!spec.ClosurePolicy.RequireDomainReceipt {
 		t.Fatalf("closure_policy=%+v", spec.ClosurePolicy)
 	}

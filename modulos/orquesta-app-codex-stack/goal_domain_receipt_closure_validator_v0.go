@@ -115,7 +115,12 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) goalResultWithAcceptedD
 	result = orquestagoal.NormalizeGoalWorkResultV0(result)
 	hasReceiptRefs := len(compactStringsV0(result.DomainReceiptRefs)) > 0
 	hasArtifactPaths := len(compactStringsV0(result.ArtifactPaths)) > 0
-	if (hasReceiptRefs && (!spec.ClosurePolicy.RequireArtifactPaths || hasArtifactPaths)) ||
+	hasMaterializedArtifacts := len(result.MaterializedArtifacts) > 0
+	hasChecklist := len(compactStringsV0(result.Checklist.ExpectedRefs)) > 0
+	if (hasReceiptRefs &&
+		(!spec.ClosurePolicy.RequireArtifactPaths || hasArtifactPaths) &&
+		(!spec.ClosurePolicy.RequireMaterializedArtifacts || hasMaterializedArtifacts) &&
+		(!spec.ClosurePolicy.RequireChecklist || hasChecklist)) ||
 		strings.TrimSpace(spec.RunRef) == "" ||
 		validator.Ledger == nil {
 		return result
@@ -149,15 +154,111 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) goalResultWithAcceptedD
 					result.DomainReceiptRefs = append(result.DomainReceiptRefs, record.ReceiptRef)
 				}
 				result.ArtifactRefs = append(result.ArtifactRefs, contract.ArtifactRef)
+				derivedEvidenceRef := "domain-work-goal-receipt-derived-" + safeDomainWorkEvidenceRefV0(record.ReceiptRef)
 				if fileRef := goalDomainReceiptArtifactPathFromRecordV0(record); fileRef != "" {
 					result.ArtifactPaths = append(result.ArtifactPaths, fileRef)
+					result = goalDomainReceiptResultWithMaterializedArtifactV0(
+						result,
+						contract,
+						record,
+						fileRef,
+						derivedEvidenceRef,
+					)
 				}
-				result.EvidenceRefs = append(result.EvidenceRefs, "domain-work-goal-receipt-derived-"+safeDomainWorkEvidenceRefV0(record.ReceiptRef))
+				result = goalDomainReceiptResultWithChecklistV0(
+					result,
+					contract,
+					record,
+					derivedEvidenceRef,
+				)
+				result.EvidenceRefs = append(result.EvidenceRefs, derivedEvidenceRef)
 				break
 			}
 		}
 	}
 	return orquestagoal.NormalizeGoalWorkResultV0(result)
+}
+
+func goalDomainReceiptResultWithMaterializedArtifactV0(
+	result orquestagoal.GoalWorkResultV0,
+	contract orquestagoal.GoalArtifactContractV0,
+	record DomainWorkArtifactSubmissionRecordV0,
+	fileRef string,
+	derivedEvidenceRef string,
+) orquestagoal.GoalWorkResultV0 {
+	artifactRef := strings.TrimSpace(contract.ArtifactRef)
+	fileRef = filepath.ToSlash(filepath.Clean(strings.TrimSpace(fileRef)))
+	if artifactRef == "" || fileRef == "" ||
+		goalDomainReceiptHasMaterializedArtifactV0(result, artifactRef, fileRef) {
+		return result
+	}
+	result.MaterializedArtifacts = append(result.MaterializedArtifacts, orquestagoal.GoalMaterializedArtifactV0{
+		ArtifactRef:  artifactRef,
+		Path:         fileRef,
+		ArtifactType: firstNonEmptyQueuedSourceV0(record.ArtifactType, contract.ArtifactType),
+		Status:       orquestagoal.GoalMaterializedArtifactStatusValidV0,
+		EvidenceRefs: compactStringsV0(append(append([]string(nil), record.EvidenceRefs...), derivedEvidenceRef)),
+	})
+	return result
+}
+
+func goalDomainReceiptResultWithChecklistV0(
+	result orquestagoal.GoalWorkResultV0,
+	contract orquestagoal.GoalArtifactContractV0,
+	record DomainWorkArtifactSubmissionRecordV0,
+	derivedEvidenceRef string,
+) orquestagoal.GoalWorkResultV0 {
+	checkRef := goalDomainReceiptChecklistRefForContractV0(contract)
+	if checkRef == "" {
+		return result
+	}
+	if !goalDomainReceiptStringInSetV0(result.Checklist.ExpectedRefs, checkRef) {
+		result.Checklist.ExpectedRefs = append(result.Checklist.ExpectedRefs, checkRef)
+	}
+	if !goalDomainReceiptStringInSetV0(result.Checklist.CompletedRefs, checkRef) {
+		result.Checklist.CompletedRefs = append(result.Checklist.CompletedRefs, checkRef)
+	}
+	result.Checklist.EvidenceRefs = compactStringsV0(append(
+		append(result.Checklist.EvidenceRefs, record.EvidenceRefs...),
+		derivedEvidenceRef,
+	))
+	return result
+}
+
+func goalDomainReceiptChecklistRefForContractV0(
+	contract orquestagoal.GoalArtifactContractV0,
+) string {
+	ref := firstNonEmptyQueuedSourceV0(contract.ArtifactRef, contract.ArtifactType)
+	if strings.TrimSpace(ref) == "" {
+		return ""
+	}
+	return "check-ref-domain-artifact-" + safeDomainWorkEvidenceRefV0(ref)
+}
+
+func goalDomainReceiptHasMaterializedArtifactV0(
+	result orquestagoal.GoalWorkResultV0,
+	artifactRef string,
+	path string,
+) bool {
+	artifactRef = strings.TrimSpace(artifactRef)
+	path = filepath.ToSlash(filepath.Clean(strings.TrimSpace(path)))
+	for _, artifact := range result.MaterializedArtifacts {
+		if strings.TrimSpace(artifact.ArtifactRef) == artifactRef &&
+			filepath.ToSlash(filepath.Clean(strings.TrimSpace(artifact.Path))) == path {
+			return true
+		}
+	}
+	return false
+}
+
+func goalDomainReceiptStringInSetV0(values []string, value string) bool {
+	value = strings.TrimSpace(value)
+	for _, candidate := range values {
+		if strings.TrimSpace(candidate) == value {
+			return true
+		}
+	}
+	return false
 }
 
 func goalDomainReceiptArtifactPathFromRecordV0(

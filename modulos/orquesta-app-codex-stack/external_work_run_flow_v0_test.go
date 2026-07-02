@@ -1501,6 +1501,11 @@ func TestCodexStackV0ExternalWorkGoalFirstCierraOPESSupuestosCompletosValidosV0(
 	}
 	started := postExternalWorkRunStackWithChangeV0(t, stack, change)
 	spec := launcher.specs[0]
+	if !spec.ClosurePolicy.RequireMaterializedArtifacts ||
+		!spec.ClosurePolicy.RequireChecklist ||
+		!spec.ClosurePolicy.RequireReworkPlanForPartialArtifacts {
+		t.Fatalf("closure_policy external-work sin manifest/checklist/rework: %+v", spec.ClosurePolicy)
+	}
 	receiptRef := "receipt-ref-goal-first-opes-supuestos-complete-001"
 	record := externalWorkGoalFirstAcceptedReceiptRecordForTestV0(started.RunRef, spec, receiptRef)
 	record.DomainRef = "opes"
