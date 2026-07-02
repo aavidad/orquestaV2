@@ -35,11 +35,18 @@ El mismo cambio alinea `orquesta-opes-director` con el cierre estricto del
 stack: el manifest final OPES exige tambien evidencias y QA de banco de
 preguntas publicable y paquete tutor.
 
+Avance posterior: el stack goal-first OPES rellena esos campos al subir el
+artefacto a `DomainWorkArtifactSubmission.PayloadFields`. La entrega de dominio
+transporta `director_execution_mode=goal_first`, `goal_first_status`,
+`goal_ref`, `external_goal_ref`, `orquesta_goal_result_refs` y
+`goal_first_checkpoint_refs` cuando el resultado contiene checkpoint materializado.
+
 ## Evidencia
 
 - `TestProduceOPESCausalJobsV0GoalFirstTextoQAPassSinCheckpointNoAsientaTemaV0`
 - `TestProduceOPESCausalJobsV0GoalFirstTextoQAPassConCheckpointAsientaTemaV0`
 - `TestProduceOPESCausalJobsV0PaqueteFinalSinBancoYTutorNoLiberaRegistroV0`
+- `TestCodexStackV0ExternalWorkGoalFirstCierraSecuenciaOPESDerivadosConReceiptsLedgerV0`
 - `go test -count=1 ./modulos/orquesta-opes-director ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-topic-registry ./modulos/orquesta-app-codex-stack`
 
 ## Alcance

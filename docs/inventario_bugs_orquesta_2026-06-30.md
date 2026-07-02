@@ -615,6 +615,16 @@ BUG-058/066 siguen abiertos hasta enforcement runtime fuerte y smoke OPES
 temporal largo, pero ya no dependen de estado implicito para settlement por
 tema goal-first.
 
+Avance BUG-ORQ-20260701-058/066 2026-07-02 noche: el stack goal-first OPES ya
+inyecta en `DomainWorkArtifactSubmission.PayloadFields` las senales que consume
+el contrato anterior: `director_execution_mode=goal_first`,
+`goal_first_status`, `goal_ref`, `external_goal_ref`,
+`orquesta_goal_result_refs` y `goal_first_checkpoint_refs` cuando el resultado
+trae checkpoint materializado. Esto evita que OPES dependa de que el agente
+escriba manualmente lifecycle/checkpoint en el artefacto de dominio. Evidencia:
+`TestCodexStackV0ExternalWorkGoalFirstCierraSecuenciaOPESDerivadosConReceiptsLedgerV0`
+y `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-opes-director ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-topic-registry`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

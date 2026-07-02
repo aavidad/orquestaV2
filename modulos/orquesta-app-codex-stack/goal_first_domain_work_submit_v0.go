@@ -78,7 +78,7 @@ func (stack StackV0) submitDomainWorkArtifactAfterGoalObservationV0(
 	if err != nil || !ok {
 		return false, err
 	}
-	submission = orquestadomainwork.NormalizeDomainWorkArtifactSubmissionV0(submission)
+	submission = enrichGoalFirstDomainWorkSubmissionLifecycleV0(submission, result.GoalResult)
 	if submitted, err := stack.domainWorkSubmissionAlreadyRecordedV0(ctx, run, task, observation, submission); err != nil || submitted {
 		return submitted, err
 	}

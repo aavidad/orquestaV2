@@ -50,6 +50,7 @@ func TestCodexStackV0ExternalWorkGoalFirstCierraSecuenciaOPESDerivadosConReceipt
 				spec,
 				started.ExternalGoalRef,
 			)
+			observer.result.EvidenceRefs = append(observer.result.EvidenceRefs, "evidence-ref-goal-materialized-checkpoint-detected")
 
 			result, err := stack.ObserveAppDirectorGoalV0(
 				context.Background(),
@@ -76,6 +77,24 @@ func TestCodexStackV0ExternalWorkGoalFirstCierraSecuenciaOPESDerivadosConReceipt
 				submission.ArtifactType != expectedArtifactType ||
 				!submission.CompleteJob {
 				t.Fatalf("submit_artifact inesperado=%+v contract=%+v", submit, contract)
+			}
+			if !domainWorkFieldValueForTestV0(submission.PayloadFields, "director_execution_mode", "goal_first") ||
+				!domainWorkFieldValueForTestV0(submission.PayloadFields, "goal_first_status", "complete") ||
+				!domainWorkFieldValueForTestV0(submission.PayloadFields, "external_goal_ref", started.ExternalGoalRef) ||
+				!domainWorkFieldValuesForTestV0(submission.PayloadFields, "goal_first_checkpoint_refs", []string{"evidence-ref-goal-materialized-checkpoint-detected"}) ||
+				!domainWorkFieldContainsValuesForTestV0(
+					submission.PayloadFields,
+					"orquesta_goal_result_refs",
+					[]string{
+						spec.GoalRef,
+						started.ExternalGoalRef,
+						contract.ArtifactRef,
+						"evidence-ref-external-work-goal-first-required-test",
+						"evidence-ref-external-work-goal-spec-v0",
+						"evidence-ref-goal-materialized-checkpoint-detected",
+					},
+				) {
+				t.Fatalf("payload lifecycle goal-first ausente: fields=%+v", submission.PayloadFields)
 			}
 
 			records, err := stack.DomainDelivery.Ledger.(DomainWorkArtifactSubmissionRecordReaderPortV0).ListDomainWorkArtifactSubmissionsV0(
@@ -144,6 +163,38 @@ func buildOPESGoalFirstSequenceRunRequestForTestV0(
 		t.Fatalf("request OPES no construida para %s", workKind)
 	}
 	return request
+}
+
+func domainWorkFieldContainsValuesForTestV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	name string,
+	values []string,
+) bool {
+	for _, want := range values {
+		found := false
+		for _, field := range fields {
+			if field.Name != name {
+				continue
+			}
+			if field.Value == want {
+				found = true
+				break
+			}
+			for _, value := range field.Values {
+				if value == want {
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 func postExternalWorkRunRequestGoalFirstStackV0(
