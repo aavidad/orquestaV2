@@ -239,7 +239,10 @@ proyectadas por la composicion:
 
 - salta tareas ya visibles en cola por `task_ref` o `section_ref`;
 - filtra secciones narrativas y las conserva como `skipped` con razon
-  `narrative_section`, sin convertirlas en runs;
+  `narrative_section`, sin convertirlas en runs. El filtro no depende de
+  palabras: una entrada sin `task_ref` ni contrato ejecutable (`write_set`,
+  tests, criterios o refs de contexto) se trata como seccion documental aunque
+  el adaptador no haya marcado `narrative=true`;
 - puede emitir una tarea scanner `Escaneo backlog nuevos` para descubrir huecos
   nuevos, preservando `backlog_scan_epoch`, reservas y `backlog_scan_doc` con
   linea/hash;

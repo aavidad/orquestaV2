@@ -66,6 +66,10 @@ func TestAutoprogrammingIdleSelfImprovementAPG005(t *testing.T) {
 					Narrative:  true,
 				},
 				{
+					SectionRef: "estado-actual-impl",
+					Title:      "Estado actual implicito",
+				},
+				{
 					TaskRef:            "task-ref-backlog-new",
 					SectionRef:         "apg-new",
 					Area:               "apg-005",
@@ -97,7 +101,8 @@ func TestAutoprogrammingIdleSelfImprovementAPG005(t *testing.T) {
 		t.Fatalf("planner_tasks=%+v", planner.Tasks)
 	}
 	if !hasAutoprogrammingPlannerSkipV0(planner.Skipped, "task-ref-backlog-visible", AutoprogrammingBacklogPlannerSkipVisibleInQueueV0) ||
-		!hasAutoprogrammingPlannerSkipV0(planner.Skipped, "", AutoprogrammingBacklogPlannerSkipNarrativeSectionV0) {
+		!hasAutoprogrammingPlannerSkipV0(planner.Skipped, "", AutoprogrammingBacklogPlannerSkipNarrativeSectionV0) ||
+		!hasAutoprogrammingPlannerSkipSectionV0(planner.Skipped, "estado-actual-impl", AutoprogrammingBacklogPlannerSkipNarrativeSectionV0) {
 		t.Fatalf("planner_skipped=%+v", planner.Skipped)
 	}
 	if planner.Scanner == nil ||

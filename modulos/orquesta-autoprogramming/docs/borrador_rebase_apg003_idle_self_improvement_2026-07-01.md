@@ -14,8 +14,9 @@ Motivo: el goal recibio la foto:
 
 Durante este goal, la linea 34 de
 `modulos/orquesta-autoprogramming/docs/tareas.md` sigue apuntando a APG-003,
-pero el hash actual del documento completo es:
+pero los hashes actuales no coinciden con la foto recibida:
 
+- linea 34: `sha256:027b210bf82c8c45561f2fa1544cf44c01dd102a51c6ecbfe65ba893c61cc26d`
 - `sha256:dae39a299e09796432a2614212217f52784b8fc53070d980d56de3e3be39d3a3`
 
 Por tanto no se inserta `## T263` ni se consume el rango reservado. La propuesta
@@ -38,4 +39,5 @@ Artefactos implementados sin consumir `T263`:
 
 - `idle_self_improvement_v0.go`
 - `idle_self_improvement_v0_test.go`
+- `idle_self_improvement_apg003_test.go`
 - documentacion local de contratos, pruebas y decisiones.

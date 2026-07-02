@@ -87,6 +87,11 @@ func TestAutoprogrammingIdleSelfImprovementAPG003ContratoPuroYEvidencia(t *testi
 					Narrative:  true,
 				},
 				{
+					SectionRef: "apg-003-documented",
+					Area:       "apg-003",
+					Title:      "Seccion ya documentada sin tarea ejecutable",
+				},
+				{
 					TaskRef:    "task-ref-apg003-failure-general-cause",
 					SectionRef: "apg-003-new-gap",
 					Area:       "apg-003",
@@ -121,7 +126,8 @@ func TestAutoprogrammingIdleSelfImprovementAPG003ContratoPuroYEvidencia(t *testi
 		t.Fatalf("planner_tasks=%+v", planner.Tasks)
 	}
 	assertAutoprogrammingSkipV0(t, planner.Skipped, "task-ref-apg003-visible", AutoprogrammingBacklogPlannerSkipVisibleInQueueV0)
-	if !hasAutoprogrammingPlannerSkipV0(planner.Skipped, "", AutoprogrammingBacklogPlannerSkipNarrativeSectionV0) {
+	if !hasAutoprogrammingPlannerSkipV0(planner.Skipped, "", AutoprogrammingBacklogPlannerSkipNarrativeSectionV0) ||
+		!hasAutoprogrammingPlannerSkipSectionV0(planner.Skipped, "apg-003-documented", AutoprogrammingBacklogPlannerSkipNarrativeSectionV0) {
 		t.Fatalf("planner_skipped=%+v", planner.Skipped)
 	}
 	if planner.Scanner == nil || planner.Scanner.Title != "Escaneo backlog nuevos" {

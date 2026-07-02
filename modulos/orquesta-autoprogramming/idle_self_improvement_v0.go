@@ -174,7 +174,7 @@ func PlanAutoprogrammingBacklogSelfImprovementV0(
 		if entry.TaskRef == "" && entry.SectionRef == "" {
 			continue
 		}
-		if entry.Narrative {
+		if autoprogrammingBacklogPlannerEntryNarrativeV0(entry) {
 			result.Skipped = append(result.Skipped, AutoprogrammingBacklogPlannerSkippedV0{
 				TaskRef:    entry.TaskRef,
 				SectionRef: entry.SectionRef,
@@ -286,6 +286,19 @@ func autoprogrammingBacklogEntryVisibleInQueueV0(
 ) bool {
 	return (entry.TaskRef != "" && visible["task:"+entry.TaskRef]) ||
 		(entry.SectionRef != "" && visible["section:"+entry.SectionRef])
+}
+
+func autoprogrammingBacklogPlannerEntryNarrativeV0(
+	entry AutoprogrammingBacklogPlannerEntryV0,
+) bool {
+	if entry.Narrative {
+		return true
+	}
+	return entry.TaskRef == "" &&
+		len(entry.WriteSet) == 0 &&
+		len(entry.RequiredTests) == 0 &&
+		len(entry.AcceptanceCriteria) == 0 &&
+		len(entry.ContextRefs) == 0
 }
 
 func autoprogrammingScannerVisibleInQueueV0(

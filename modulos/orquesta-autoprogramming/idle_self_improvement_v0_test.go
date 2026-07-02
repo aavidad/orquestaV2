@@ -228,3 +228,16 @@ func assertAutoprogrammingSkipV0(
 	}
 	t.Fatalf("skip %s/%s no encontrado en %+v", taskRef, reason, skipped)
 }
+
+func hasAutoprogrammingPlannerSkipSectionV0(
+	skipped []AutoprogrammingBacklogPlannerSkippedV0,
+	sectionRef string,
+	reason string,
+) bool {
+	for _, skip := range skipped {
+		if skip.SectionRef == sectionRef && skip.Reason == reason {
+			return true
+		}
+	}
+	return false
+}

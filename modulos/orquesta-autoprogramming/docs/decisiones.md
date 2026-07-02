@@ -143,3 +143,19 @@ focales de `codex_wrapper` y criterios para enumerar las variables
 `ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS` y
 `ORQUESTA_CODEX_STARTUP_LOCK_STALE_SECONDS`. No se activan guards por
 subcadenas libres: solo por refs explicitas versionables.
+
+## 2026-07-02: secciones de backlog no ejecutables no crean runs
+
+Decision: el planner de automejora idle trata como narrativa una entrada de
+backlog que solo trae `section_ref`/titulo y no declara `task_ref`, `write_set`,
+tests, criterios ni refs de contexto.
+
+Motivo: la evidencia APG-003 mostro que depender solo del booleano
+`narrative=true` dejaba que una proyeccion documental incompleta se convirtiera
+en trabajo ejecutable. La correccion usa estructura del contrato, no palabras
+del titulo o del contenido.
+
+Consecuencia: las secciones documentales quedan en `skipped` con razon
+`narrative_section`; los huecos ejecutables siguen necesitando una tarea
+concreta o contrato suficiente, y el scanner `Escaneo backlog nuevos` sigue
+siendo la via para descubrir huecos nuevos.
