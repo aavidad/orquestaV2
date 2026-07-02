@@ -14,6 +14,10 @@ const (
 type ServerPublicStatusV0 struct {
 	SchemaVersion                         string                                      `json:"schema_version"`
 	Status                                string                                      `json:"status"`
+	AvailabilityStatus                    string                                      `json:"availability_status,omitempty"`
+	AvailabilityReason                    string                                      `json:"availability_reason,omitempty"`
+	AvailabilityNextActions               []string                                    `json:"availability_next_actions,omitempty"`
+	AvailabilityEvidenceRefs              []string                                    `json:"availability_evidence_refs,omitempty"`
 	Addr                                  string                                      `json:"addr,omitempty"`
 	ProcessRef                            string                                      `json:"process_ref,omitempty"`
 	DaemonEpochRef                        string                                      `json:"daemon_epoch_ref,omitempty"`
@@ -162,9 +166,14 @@ func NewServerPublicStatusV0(state StateV0) ServerPublicStatusV0 {
 		residentDirectorTickActive = false
 		residentDirectorOperationalMessage = serverPublicResidentDirectorDisabledOperationalMessageV0(state)
 	}
+	availability := NewServerAvailabilityV0(state)
 	return ServerPublicStatusV0{
 		SchemaVersion:                         StateSchemaVersionV0,
 		Status:                                strings.TrimSpace(state.Status),
+		AvailabilityStatus:                    availability.Status,
+		AvailabilityReason:                    availability.Reason,
+		AvailabilityNextActions:               append([]string(nil), availability.NextActions...),
+		AvailabilityEvidenceRefs:              append([]string(nil), availability.EvidenceRefs...),
 		Addr:                                  strings.TrimSpace(state.Addr),
 		ProcessRef:                            strings.TrimSpace(state.ProcessRef),
 		DaemonEpochRef:                        strings.TrimSpace(state.DaemonEpochRef),

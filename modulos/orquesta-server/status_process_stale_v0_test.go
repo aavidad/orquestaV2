@@ -71,13 +71,23 @@ func TestMarkServerProcessStaleStateV0ExponeCausaTrasReadinessV0(t *testing.T) {
 	if readiness.Ready ||
 		readiness.StartupReady ||
 		readiness.Status != "stale" ||
+		readiness.AvailabilityStatus != "crashed" ||
+		readiness.AvailabilityReason != "server_crashed_after_readiness" ||
 		readiness.StartupStatus != ServerProcessStaleReasonCodeV0 ||
 		readiness.StartupMessage != "server_process_not_alive" {
 		t.Fatalf("readiness no expone stale: %+v", readiness)
 	}
+	if !containsServerStringForTestV0(
+		readiness.AvailabilityNextActions,
+		"restart_orquesta_server_goal_first_app_server_tmux",
+	) {
+		t.Fatalf("readiness availability actions=%+v", readiness.AvailabilityNextActions)
+	}
 
 	public := NewServerPublicStatusV0(stale)
 	if public.Status != "stale" ||
+		public.AvailabilityStatus != "crashed" ||
+		public.AvailabilityReason != "server_crashed_after_readiness" ||
 		public.StartupReady ||
 		public.StartupStatus != ServerProcessStaleReasonCodeV0 ||
 		public.LastError != "server_process_not_alive" ||
@@ -88,5 +98,29 @@ func TestMarkServerProcessStaleStateV0ExponeCausaTrasReadinessV0(t *testing.T) {
 		len(public.RecentErrors) == 0 ||
 		public.RecentErrors[0].Code != ServerProcessStaleReasonCodeV0 {
 		t.Fatalf("status publico no expone stale: %+v", public)
+	}
+}
+
+func TestServerAvailabilityV0ExponeStoppedAccionableV0(t *testing.T) {
+	state := StateV0{
+		SchemaVersion: StateSchemaVersionV0,
+		Status:        "stopped",
+		StartupReady:  false,
+		StartupStatus: "stopped",
+	}
+
+	readiness := NewServerReadinessV0(state)
+	if readiness.Ready ||
+		readiness.AvailabilityStatus != "stopped" ||
+		readiness.AvailabilityReason != "server_stopped" ||
+		!containsServerStringForTestV0(readiness.AvailabilityNextActions, "start_orquesta_server_goal_first_app_server_tmux") {
+		t.Fatalf("readiness stopped=%+v", readiness)
+	}
+
+	public := NewServerPublicStatusV0(state)
+	if public.AvailabilityStatus != "stopped" ||
+		public.AvailabilityReason != "server_stopped" ||
+		!containsServerStringForTestV0(public.AvailabilityEvidenceRefs, "evidence-ref-server-state-stopped") {
+		t.Fatalf("public stopped=%+v", public)
 	}
 }

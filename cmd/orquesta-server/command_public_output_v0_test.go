@@ -143,6 +143,18 @@ func TestStatusServerCommandV0ReconciliaStatefileConPIDMuerto(t *testing.T) {
 		envelope.DiagnosticsMode != "statefile_snapshot_reconciled_process_not_alive" {
 		t.Fatalf("envelope no reconciliado: %+v", envelope)
 	}
+	var payload orquestaserver.ServerPublicStatusV0
+	rawPayload, err := json.Marshal(envelope.Payload)
+	if err != nil {
+		t.Fatalf("payload marshal: %v", err)
+	}
+	if err := json.Unmarshal(rawPayload, &payload); err != nil {
+		t.Fatalf("payload publico invalido: %v\n%+v", err, envelope.Payload)
+	}
+	if payload.AvailabilityStatus != "crashed" ||
+		payload.AvailabilityReason != "server_crashed_after_readiness" {
+		t.Fatalf("payload no expone disponibilidad accionable: %+v", payload)
+	}
 	reconciled, err := store.LoadServerStateV0(context.Background())
 	if err != nil {
 		t.Fatalf("load reconciled: %v", err)

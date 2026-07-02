@@ -14,6 +14,10 @@ type ServerReadinessV0 struct {
 	SchemaVersion                          string                        `json:"schema_version"`
 	Ready                                  bool                          `json:"ready"`
 	Status                                 string                        `json:"status"`
+	AvailabilityStatus                     string                        `json:"availability_status,omitempty"`
+	AvailabilityReason                     string                        `json:"availability_reason,omitempty"`
+	AvailabilityNextActions                []string                      `json:"availability_next_actions,omitempty"`
+	AvailabilityEvidenceRefs               []string                      `json:"availability_evidence_refs,omitempty"`
 	LivenessStatus                         string                        `json:"liveness_status"`
 	StartupReady                           bool                          `json:"startup_ready"`
 	StartupStatus                          string                        `json:"startup_status,omitempty"`
@@ -64,10 +68,15 @@ func NewServerReadinessV0(state StateV0) ServerReadinessV0 {
 		startupMessage = publicReadinessMessageV0(diagnostics[0].Message)
 	}
 	goal := NewServerPublicIdleSelfImprovementGoalStateV0(state)
+	availability := NewServerAvailabilityV0(state)
 	return ServerReadinessV0{
 		SchemaVersion:                          ServerReadinessSchemaVersionV0,
 		Ready:                                  ready,
 		Status:                                 status,
+		AvailabilityStatus:                     availability.Status,
+		AvailabilityReason:                     availability.Reason,
+		AvailabilityNextActions:                append([]string(nil), availability.NextActions...),
+		AvailabilityEvidenceRefs:               append([]string(nil), availability.EvidenceRefs...),
 		LivenessStatus:                         "ok",
 		StartupReady:                           state.StartupReady,
 		StartupStatus:                          startupStatus,
