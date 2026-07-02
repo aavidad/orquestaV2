@@ -107,6 +107,10 @@ func (backend serverCodexAppServerTmuxBackendV0) detectTmuxResidueV0(ctx context
 		residue.Active = true
 		residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-cmdline")
 	}
+	if backend.detectCodexAppServerRuntimeWorkdirProcessV0(ctx) {
+		residue.Active = true
+		residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-runtime-workdir")
+	}
 	if residue.Active {
 		residue.EvidenceRefs = compactStringsV0(append(
 			[]string{"evidence-ref-codex-app-server-tmux-residue"},
@@ -280,4 +284,48 @@ func codexAppServerTmuxCommandMatchesSocketV0(command string, socketPath string)
 		return false
 	}
 	return strings.Contains(command, "unix://"+socketPath) || strings.Contains(command, socketPath)
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) detectCodexAppServerRuntimeWorkdirProcessV0(ctx context.Context) bool {
+	runtimeDir := strings.TrimSpace(backend.RuntimeWorkDir)
+	if runtimeDir == "" || !backend.tmuxConfiguredOrphanCleanupAllowedV0() {
+		return false
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return false
+	}
+	output, err := exec.CommandContext(ctx, "ps", "-eo", "args=").Output()
+	if err != nil {
+		return false
+	}
+	return codexAppServerTmuxCommandsContainRuntimeWorkdirSocketV0(string(output), runtimeDir)
+}
+
+func codexAppServerTmuxCommandsContainRuntimeWorkdirSocketV0(raw string, runtimeDir string) bool {
+	runtimeDir = strings.TrimSpace(runtimeDir)
+	if runtimeDir == "" {
+		return false
+	}
+	socketRoot := filepath.ToSlash(filepath.Join(filepath.Clean(runtimeDir), codexAppServerTmuxDirV0))
+	for _, line := range strings.Split(raw, "\n") {
+		if codexAppServerTmuxCommandMatchesRuntimeWorkdirSocketV0(line, socketRoot) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexAppServerTmuxCommandMatchesRuntimeWorkdirSocketV0(command string, socketRoot string) bool {
+	command = filepath.ToSlash(strings.TrimSpace(command))
+	socketRoot = filepath.ToSlash(strings.TrimSpace(socketRoot))
+	if command == "" || socketRoot == "" {
+		return false
+	}
+	if !strings.Contains(command, "app-server") || !strings.Contains(command, "--listen") || !strings.Contains(command, "codex") {
+		return false
+	}
+	return strings.Contains(command, "unix://"+socketRoot+"/")
 }

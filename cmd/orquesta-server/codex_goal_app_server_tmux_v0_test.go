@@ -1031,6 +1031,64 @@ func TestCodexAppServerTmuxBackendV0ReadActiveShutdownWorkDetectaProcesoConSocke
 	}
 }
 
+func TestCodexAppServerTmuxBackendV0ReadActiveShutdownWorkDetectaProcesoEnRuntimeWorkdirSinSocketConfiguradoV0(t *testing.T) {
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "runtime")
+	socketPath := filepath.Join(runtimeDir, codexAppServerTmuxDirV0, "g-extra.sock")
+	command := exec.Command(
+		"bash",
+		"-c",
+		"exec -a codex sh -c 'sleep 30' app-server --listen unix://"+socketPath,
+	)
+	if err := command.Start(); err != nil {
+		t.Fatalf("start fake app-server cmdline: %v", err)
+	}
+	defer func() {
+		_ = command.Process.Kill()
+		_, _ = command.Process.Wait()
+	}()
+	backend := serverCodexAppServerTmuxBackendV0{
+		RuntimeWorkDir: runtimeDir,
+		SocketPath:     filepath.Join(runtimeDir, codexAppServerTmuxDirV0, "configured.sock"),
+		SessionName:    "orquesta-goal-runtime-process-1234567890",
+		Timeout:        50 * time.Millisecond,
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var result orquestaservershutdown.ActiveShutdownWorkResultV0
+	var err error
+	for time.Now().Before(deadline) {
+		result, err = backend.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{})
+		if err != nil {
+			t.Fatalf("ReadActiveShutdownWorkV0: %v", err)
+		}
+		if containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-runtime-workdir") {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if len(result.ActiveWorks) != 1 ||
+		result.ActiveWorks[0].WorkRef != backend.SessionName ||
+		result.ActiveWorks[0].Status != orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0 ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-runtime-workdir") {
+		t.Fatalf("result=%+v", result)
+	}
+	for _, ref := range result.EvidenceRefs {
+		if strings.Contains(ref, socketPath) || strings.Contains(ref, strconv.Itoa(command.Process.Pid)) {
+			t.Fatalf("evidence filtro ruta/pid: %+v", result.EvidenceRefs)
+		}
+	}
+}
+
+func TestCodexAppServerTmuxCommandsContainRuntimeWorkdirSocketV0IgnoraSocketExternoV0(t *testing.T) {
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "runtime")
+	raw := "codex app-server --listen unix://" + filepath.Join(root, "otro-runtime", codexAppServerTmuxDirV0, "g.sock")
+	if codexAppServerTmuxCommandsContainRuntimeWorkdirSocketV0(raw, runtimeDir) {
+		t.Fatalf("socket fuera de runtime propio no debe bloquear")
+	}
+}
+
 func TestCodexAppServerTmuxBackendV0EsperaPanePIDAntesDeReadyV0(t *testing.T) {
 	command := exec.Command("sleep", "30")
 	if err := command.Start(); err != nil {
