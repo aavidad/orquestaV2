@@ -204,7 +204,7 @@ func codexAppServerGoalResultFromWorkspaceV0(
 			return nil
 		}
 		if entry.Type()&fs.ModeSymlink != 0 ||
-			entry.Name() != orquestaruntimecodexgoal.CodexGoalResultFileNameV0 {
+			!orquestaruntimecodexgoal.CodexGoalResultFileNameLooksValidV0(entry.Name()) {
 			return nil
 		}
 		marked, ok, err := codexAppServerGoalResultFromFileV0(path, goalRef, externalGoalRef)

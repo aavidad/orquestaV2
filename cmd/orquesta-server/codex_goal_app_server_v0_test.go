@@ -772,6 +772,58 @@ func TestServerCodexAppServerGoalBackendV0ObservaResultadoDurableSinMarcadorV0(t
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0ObservaResultadoDurableUnicoPorGoalRefV0(t *testing.T) {
+	projectDir := t.TempDir()
+	resultDir := filepath.Join(projectDir, "modulos", "orquesta-server", "docs")
+	if err := os.MkdirAll(resultDir, 0o755); err != nil {
+		t.Fatalf("mkdir result dir: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameV0),
+		[]byte(`{"schema_version":"orquesta_goal_result.v0","status":"complete","goal_ref":"goal-ref-otro","summary":"stale"}`),
+		0o644,
+	); err != nil {
+		t.Fatalf("write stale result: %v", err)
+	}
+	goalRef := "goal-ref-autoprogramming-backlog-srv-task-022-a54b0a70"
+	resultPath := filepath.Join(resultDir, orquestaruntimecodexgoal.CodexGoalResultFileNameForGoalRefV0(goalRef))
+	payload := `{
+		"schema_version":"orquesta_goal_result.v0",
+		"status":"complete",
+		"goal_ref":"goal-ref-autoprogramming-backlog-srv-task-022-a54b0a70",
+		"summary":"resultado sidecar",
+		"artifact_refs":["artifact-ref-sidecar"],
+		"required_test_results":[{"test_ref":"test-ref-sidecar","status":"passed","evidence_refs":["evidence-ref-test-sidecar"]}],
+		"evidence_refs":["evidence-ref-sidecar"]
+	}`
+	if err := os.WriteFile(resultPath, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write result file: %v", err)
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: &fakeCodexAppServerProtocolV0{
+			observedGoal: &serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-sidecar", Status: "complete"},
+			readThread:   serverCodexAppServerThreadReadV0{ID: "thread-ref-sidecar", Status: "closed"},
+		},
+		CWD: projectDir,
+	}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         goalRef,
+		ExternalGoalRef: "thread-ref-sidecar",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Summary != "resultado sidecar" ||
+		!containsStringForTestV0(receipt.ArtifactRefs, "artifact-ref-sidecar") ||
+		!containsStringForTestV0(receipt.ArtifactPaths, "modulos/orquesta-server/docs/"+orquestaruntimecodexgoal.CodexGoalResultFileNameForGoalRefV0(goalRef)) ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-sidecar") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0SanitizaResultadoDurableConBase64V0(t *testing.T) {
 	projectDir := t.TempDir()
 	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")

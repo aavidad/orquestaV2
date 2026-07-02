@@ -120,6 +120,17 @@ func TestStackGoalMaterializedRefsSourceV0DetectaReceiptTerminalAusenteTrasQAPas
 	}
 }
 
+func TestGoalMaterializedFileLooksLikeArtifactV0NoCuentaResultadoGoalSidecarV0(t *testing.T) {
+	projectDir := t.TempDir()
+	base := "orquesta_goal_result_goal-ref-autoprogramming-backlog-srv-task-022-a54b0a70.json"
+	if goalMaterializedFileLooksLikeArtifactV0(projectDir, filepath.Join(projectDir, "docs", base), base) {
+		t.Fatalf("goal result sidecar contado como artefacto")
+	}
+	if !goalMaterializedFileIsGoalResultV0(base) {
+		t.Fatalf("goal result sidecar no reconocido")
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0ReparaReceiptTerminalConPuertosV0(t *testing.T) {
 	ctx := context.Background()
 	projectDir := t.TempDir()

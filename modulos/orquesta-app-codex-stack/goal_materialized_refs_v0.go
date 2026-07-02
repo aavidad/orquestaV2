@@ -11,6 +11,7 @@ import (
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 )
 
 const (
@@ -178,10 +179,13 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalMaterializedFileV0(
 	case goalMaterializedWorkDeliveryFileV0:
 		scan.Result.DomainReceiptRefs = []string{goalMaterializedWorkDeliveryRefV0(projectRoot, path, state.RunRef)}
 		scan.HasTerminalReceipt = true
-	case goalMaterializedOPESReworkDeliveryFileV0, goalMaterializedGoalResultFileV0:
+	case goalMaterializedOPESReworkDeliveryFileV0:
 		scan.HasTerminalReceipt = true
 	case goalMaterializedCheckpointFileV0:
 		scan.Result.ArtifactRefs = []string{goalMaterializedCheckpointRefV0(projectRoot, path, state.RunRef)}
+	}
+	if goalMaterializedFileIsGoalResultV0(base) {
+		scan.HasTerminalReceipt = true
 	}
 	if goalMaterializedFileLooksLikeArtifactV0(projectRoot, path, base) {
 		scan.HasArtifact = true
@@ -217,8 +221,10 @@ func goalMaterializedFileLooksLikeArtifactV0(
 ) bool {
 	switch strings.ToLower(strings.TrimSpace(base)) {
 	case goalMaterializedWorkDeliveryFileV0,
-		goalMaterializedOPESReworkDeliveryFileV0,
-		goalMaterializedGoalResultFileV0:
+		goalMaterializedOPESReworkDeliveryFileV0:
+		return false
+	}
+	if goalMaterializedFileIsGoalResultV0(base) {
 		return false
 	}
 	if goalMaterializedPathLooksLikeQAReportV0(projectRoot, path, base) {
@@ -230,6 +236,10 @@ func goalMaterializedFileLooksLikeArtifactV0(
 	default:
 		return false
 	}
+}
+
+func goalMaterializedFileIsGoalResultV0(base string) bool {
+	return orquestaruntimecodexgoal.CodexGoalResultFileNameLooksValidV0(base)
 }
 
 func goalMaterializedFileLooksLikeQAReportV0(

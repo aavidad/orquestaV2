@@ -15,6 +15,7 @@ const (
 	CodexGoalResultSchemaV0             = "orquesta_goal_result.v0"
 	CodexGoalResultMarkerV0             = "ORQUESTA_GOAL_RESULT_V0"
 	CodexGoalResultFileNameV0           = "orquesta_goal_result_v0.json"
+	CodexGoalResultFilePrefixV0         = "orquesta_goal_result_"
 	CodexGoalMaxPromptBytesV0           = 32 * 1024
 	CodexGoalMaxStartPacketBytesV0      = 64 * 1024
 
@@ -348,6 +349,7 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 }
 
 func codexGoalResultFilePathV0(spec orquestagoal.GoalWorkSpecV0) string {
+	resultFileName := CodexGoalResultFileNameForGoalRefV0(spec.GoalRef)
 	for _, scope := range spec.WriteSet {
 		path := strings.Trim(strings.TrimSpace(scope.Path), "/")
 		if path == "" {
@@ -356,9 +358,57 @@ func codexGoalResultFilePathV0(spec orquestagoal.GoalWorkSpecV0) string {
 		if codexGoalWriteScopeIsMarkdownFileV0(path) {
 			continue
 		}
-		return path + "/docs/" + CodexGoalResultFileNameV0
+		return path + "/docs/" + resultFileName
 	}
 	return ""
+}
+
+func CodexGoalResultFileNameForGoalRefV0(goalRef string) string {
+	part := codexGoalResultFileSafePartV0(goalRef)
+	if part == "" {
+		return CodexGoalResultFileNameV0
+	}
+	return CodexGoalResultFilePrefixV0 + part + ".json"
+}
+
+func CodexGoalResultFileNameLooksValidV0(name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	if name == CodexGoalResultFileNameV0 {
+		return true
+	}
+	return strings.HasPrefix(name, CodexGoalResultFilePrefixV0) &&
+		strings.HasSuffix(name, ".json") &&
+		len(strings.TrimSuffix(strings.TrimPrefix(name, CodexGoalResultFilePrefixV0), ".json")) > 0
+}
+
+func codexGoalResultFileSafePartV0(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var b strings.Builder
+	lastDash := false
+	for _, r := range value {
+		keep := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if keep {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if r == '-' || r == '_' {
+			if !lastDash && b.Len() > 0 {
+				b.WriteByte('-')
+				lastDash = true
+			}
+			continue
+		}
+		if !lastDash && b.Len() > 0 {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if len(out) > 80 {
+		out = strings.Trim(out[:80], "-")
+	}
+	return out
 }
 
 func codexGoalWriteScopeIsMarkdownFileV0(path string) bool {

@@ -31,7 +31,7 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"Evidencia requerida: evidence-ref-required",
 		CodexGoalResultMarkerV0,
 		CodexGoalResultSchemaV0,
-		CodexGoalResultFileNameV0,
+		CodexGoalResultFileNameForGoalRefV0("goal-ref-001"),
 		"Materializa primero el directorio del write-set",
 		"goal_ref",
 		"schema_version",
@@ -157,8 +157,34 @@ func TestBuildCodexGoalPromptV0UsaSiguienteWriteSetDirectorioParaResultadoDurabl
 	if strings.Contains(packet.Prompt, "external/opes/INCIDENCIA_TEST.md/docs/"+CodexGoalResultFileNameV0) {
 		t.Fatalf("prompt cuelga resultado bajo markdown:\n%s", packet.Prompt)
 	}
-	if !strings.Contains(packet.Prompt, "external/opes/control_audio/docs/"+CodexGoalResultFileNameV0) {
+	if !strings.Contains(packet.Prompt, "external/opes/control_audio/docs/"+CodexGoalResultFileNameForGoalRefV0(spec.GoalRef)) {
 		t.Fatalf("prompt no usa write-set directorio para resultado durable:\n%s", packet.Prompt)
+	}
+}
+
+func TestBuildCodexGoalPromptV0UsaResultadoDurableUnicoPorGoalRefV0(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.GoalRef = "goal-ref-autoprogramming-backlog-srv-task-022-a54b0a70"
+	spec.WriteSet = []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-server"}}
+
+	packet, issues := BuildCodexGoalStartPacketV0(spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	want := "modulos/orquesta-server/docs/" + CodexGoalResultFileNameForGoalRefV0(spec.GoalRef)
+	if !strings.Contains(packet.Prompt, want) ||
+		strings.Contains(packet.Prompt, "modulos/orquesta-server/docs/"+CodexGoalResultFileNameV0+" ") {
+		t.Fatalf("prompt=%s want=%s", packet.Prompt, want)
+	}
+}
+
+func TestCodexGoalResultFileNameForGoalRefV0NormalizaNombreV0(t *testing.T) {
+	got := CodexGoalResultFileNameForGoalRefV0(" Goal Ref/APG 005: cierre ")
+	if got != "orquesta_goal_result_goal-ref-apg-005-cierre.json" ||
+		!CodexGoalResultFileNameLooksValidV0(got) ||
+		!CodexGoalResultFileNameLooksValidV0(CodexGoalResultFileNameV0) {
+		t.Fatalf("got=%q", got)
 	}
 }
 
