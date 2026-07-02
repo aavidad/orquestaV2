@@ -738,6 +738,65 @@ func TestObserveAppDirectorGoalV0LanzaReworkGoalSiPolicyYPuertoDisponibles(t *te
 	}
 }
 
+func TestObserveAppDirectorGoalV0LanzaReworkGoalPorTimeoutActivoV0(t *testing.T) {
+	store, sink, goalStates, launcher, started := serviceStartGoalFirstForObserveTestV0(t)
+	spec := launcher.specs[0]
+	observer := serviceGoalObserverForTestV0{result: orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: started.ExternalGoalRef,
+		Summary:         "codex_app_server_goal_active_timeout",
+		EvidenceRefs:    []string{"evidence-ref-codex-app-server-goal-active-timeout"},
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  "codex_app_server_goal_active_timeout",
+			Field: "codex_goal_backend",
+		}},
+	}}
+
+	result, err := ObserveAppDirectorGoalV0(
+		context.Background(),
+		ObserveAppDirectorGoalRequestV0{RunRef: spec.RunRef},
+		StartAppDirectorPortsV0{
+			RunStore:             store,
+			EventSink:            sink,
+			GoalStateStore:       goalStates,
+			GoalReworkLauncher:   launcher,
+			GoalObserver:         observer,
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if launcher.calls != 2 || len(launcher.specs) != 2 {
+		t.Fatalf("launcher calls=%d specs=%d", launcher.calls, len(launcher.specs))
+	}
+	reworkSpec := launcher.specs[1]
+	if reworkSpec.GoalRef != spec.GoalRef+"-rework-1" ||
+		reworkSpec.RunRef != spec.RunRef ||
+		!serviceStringInSetV0(reworkSpec.EvidenceRefs, "evidence-ref-app-director-goal-rework-v0") ||
+		!serviceStringInSetV0(reworkSpec.EvidenceRefs, "evidence-ref-codex-app-server-goal-active-timeout") {
+		t.Fatalf("reworkSpec=%+v", reworkSpec)
+	}
+	if result.Status != orquestagoal.GoalStatusRunningV0 ||
+		result.GoalRef != reworkSpec.GoalRef ||
+		!result.Closure.NeedsRework ||
+		result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 {
+		t.Fatalf("result=%+v", result)
+	}
+	if serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventRunBlockedV0) {
+		t.Fatalf("timeout operativo con rework no debe bloquear run: %+v", sink.EventsV0())
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), spec.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if state.GoalRef != reworkSpec.GoalRef || state.LastResult != nil || state.Status != orquestagoal.GoalStatusRunningV0 {
+		t.Fatalf("state=%+v", state)
+	}
+}
+
 func TestObserveAppDirectorGoalV0BloqueaSiReworkGoalAgotaPresupuesto(t *testing.T) {
 	store, sink, goalStates, launcher, started := serviceStartGoalFirstForObserveTestV0(t)
 	spec := launcher.specs[0]

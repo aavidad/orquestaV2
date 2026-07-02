@@ -282,9 +282,11 @@ func appDirectorGoalShouldLaunchReworkV0(
 	if !closure.NeedsRework ||
 		!state.Spec.ReworkPolicy.PreferNewGoal ||
 		state.Spec.ClosurePolicy.RequireDomainReceipt ||
-		strings.TrimSpace(result.Status) != orquestagoal.GoalStatusCompleteV0 ||
 		ports.GoalReworkLauncher == nil ||
 		ports.GoalStateStore == nil {
+		return false
+	}
+	if !appDirectorGoalResultPermiteReworkV0(result, closure) {
 		return false
 	}
 	maxRework := appDirectorGoalMaxReworkGoalsV0(state.Spec)
@@ -292,6 +294,53 @@ func appDirectorGoalShouldLaunchReworkV0(
 		return false
 	}
 	return appDirectorGoalReworkIndexV0(state.Spec.GoalRef) < maxRework
+}
+
+func appDirectorGoalResultPermiteReworkV0(
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+) bool {
+	switch strings.TrimSpace(result.Status) {
+	case orquestagoal.GoalStatusCompleteV0:
+		return true
+	case orquestagoal.GoalStatusBlockedV0, orquestagoal.GoalStatusInvalidV0:
+		return appDirectorGoalOperationalReworkIssueV0(result, closure)
+	default:
+		return false
+	}
+}
+
+func appDirectorGoalOperationalReworkIssueV0(
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+) bool {
+	for _, code := range appDirectorGoalResultAndClosureIssueCodesV0(result, closure) {
+		switch strings.TrimSpace(code) {
+		case "codex_app_server_goal_active_timeout",
+			"goal_active_no_checkpoint_high_consumption",
+			"checkpoint_only_high_consumption",
+			"goal_active_timeout_backend_active":
+			return true
+		}
+	}
+	summary := strings.TrimSpace(result.Summary)
+	return strings.Contains(summary, "codex_app_server_goal_active_timeout") ||
+		strings.Contains(summary, "checkpoint_only_high_consumption") ||
+		strings.Contains(summary, "goal_active_no_checkpoint_high_consumption")
+}
+
+func appDirectorGoalResultAndClosureIssueCodesV0(
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+) []string {
+	codes := make([]string, 0, len(result.Issues)+len(closure.Issues))
+	for _, issue := range result.Issues {
+		codes = append(codes, issue.Code)
+	}
+	for _, issue := range closure.Issues {
+		codes = append(codes, issue.Code)
+	}
+	return compactStartAppDirectorStringsV0(codes)
 }
 
 func appDirectorGoalMaxReworkGoalsV0(spec orquestagoal.GoalWorkSpecV0) int {
