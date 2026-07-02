@@ -756,7 +756,1285 @@ Nota de dominio OPES:
 No se ha tocado código del núcleo de Orquesta. Esta sección queda para el
 agente que está corrigiendo Orquesta.
 
-### 19. Ola 8: tarea mínima con checkpoint escribe un fichero, pero queda `goal_first_blocked` y backend `active`
+#### Seguimiento 2026-07-02
+
+OPES terminó el cierre textual estricto de Grupo B Informática mediante fallback
+local documentado, sin editar núcleo de Orquesta. Se reconstruyeron los temas
+con contaminación estructural y se ampliaron los que no llegaban al mínimo B con
+scripts reproducibles:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/scripts/rebuild_remaining_structural_topics.py
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/scripts/expand_short_structural_topics.py
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/scripts/cleanup_remaining_text_qa.py
+```
+
+Resultado actual del informe estricto:
+
+```text
+extension_pass=50/50
+official_text_qa_pass=50/50
+strict_text_qa_pass=50/50
+strict_scaffolding_finding_count=0
+```
+
+Evidencia:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/09_validacion/informe_avance_estricto_grupo_b_informatica_2026-07-01.md
+```
+
+La incidencia no se cierra para Orquesta: confirma que el director autonomo debe
+detectar contaminacion estructural, replanificar expansion propia del titulo y
+no depender de limpieza manual externa.
+
+### 19. BUG-ORQ-20260702-095: QA OPES no detecta todas las variantes de andamiaje de estudio en texto publicable
+
+Fecha observada: 2026-07-02 00:50 Europe/Madrid.
+
+Contexto:
+
+- Durante el cierre directo de Grupo B Informática, tras el fallo operativo de
+  Orquesta ya documentado, se revisaron temas con extensión suficiente y QA
+  oficial limpia.
+- En los temas `029` y `030` aparecieron bloques visibles de estudio:
+  `Preguntas De Recuperacion`, `Preguntas de recuperacion`, `Repaso Espaciado`,
+  `Día 0`, `mapa mental`, `La respuesta debe empezar` y
+  `Una respuesta fuerte empieza`.
+- El informe estricto/global no bloqueaba todas las variantes, o solo marcaba
+  una parte, por diferencias de mayúsculas/minúsculas, tildes y formulación.
+
+Problema:
+
+- El contrato de cierre OPES puede producir falsos verdes si el texto
+  publicable conserva andamiaje de estudio, estrategias de respuesta o
+  calendarios.
+- Esto afecta a la calidad del tema aunque el conteo de palabras, metanotas y
+  notas de autor estén en `pass`.
+
+Evidencia local:
+
+```text
+OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_029/02_markdown/tema_ampliado.md
+OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_030/02_markdown/tema_ampliado.md
+OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_030/02_markdown/tema_resumen.md
+```
+
+Acción esperada:
+
+- Ampliar `validate_public_text_no_study_scaffolding.py` con normalización
+  `casefold` y sin tildes.
+- Bloquear encabezados y frases equivalentes a preguntas de recuperación,
+  repaso espaciado, mapas mentales, calendarios de estudio, plantillas de
+  respuesta y consejos de estrategia de examen.
+- Orquesta debe ejecutar este gate antes de `ready` y crear rework por tema si
+  falla.
+- No se ha tocado código del núcleo de Orquesta. Esta sección queda para el
+  agente que está corrigiendo Orquesta.
+
+### 34. BUG-ORQ-20260701-093: QA OPES acepta falsos verdes si solo mira extensión y metanotas, pero no andamiaje interno ni mezcla de temas
+
+Fecha observada: 2026-07-01.
+
+Nota de inventario: esta incidencia se consolida como
+`BUG-ORQ-20260701-093` en el inventario central de Orquesta.
+
+Contexto:
+
+- En el rework de Grupo B Informática, varios temas parecían válidos por
+  extensión y por los validadores existentes
+  `validate_public_text_no_exam_meta.py` y
+  `validate_public_text_no_author_notes.py`.
+- La lectura humana y tres subagentes detectaron que muchos textos seguían
+  conteniendo material no publicable: mapas mentales de estudio, calendarios
+  `Día 0`, frases `reconstruye sin mirar`, referencias a SVG/HTML, trazabilidad
+  B, derivaciones futuras, fuentes internas, bloques de canon/maestro y bloques
+  completos de otros temas.
+- Ejemplos:
+  - Tema 020: el título es ofimática, pero el texto arrancaba como software
+    libre/GNU y la ofimática real llegaba tarde.
+  - Temas 016/017: almacenamiento/SAN/NAS/RAID contaminados con HPC/grid,
+    visuales SVG y bloques de estudio.
+  - Temas 025-031: bases de datos/redes con anexos o duplicados de temas
+    vecinos.
+  - Temas 043/044/046/049/050: extensión conseguida por acumulación de bloques
+    de otros epígrafes.
+
+Evidencia local nueva:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/coordinacion_temarios/tools/validate_public_text_no_study_scaffolding.py
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/09_validacion/informe_texto_publico_sin_andamiaje_interno.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/09_validacion/informe_texto_publico_sin_andamiaje_interno.md
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/09_validacion/informe_avance_estricto_grupo_b_informatica_2026-07-01.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/09_validacion/informe_avance_estricto_grupo_b_informatica_2026-07-01.md
+```
+
+Resultado del informe estricto tras limpieza:
+
+- Total temas: 50.
+- Pasan mínimo B por extensión: 20.
+- Pasan extensión + validadores oficiales de texto: 18.
+- Pasan extensión + QA estricta sin andamiaje interno: 4.
+- Hallazgos de andamiaje interno: 215.
+
+Acción esperada en Orquesta/OPES:
+
+- El contrato final de tema no puede usar solo extensión + metanotas como verde
+  editorial.
+- Añadir fase QA obligatoria equivalente a
+  `validate_public_text_no_study_scaffolding.py` o integrar sus patrones en el
+  validador de calidad OPES.
+- Si falla, el estado debe ser `pendiente_rework_editorial` o
+  `needs_remove_study_scaffolding_and_cross_topic_contamination`, no `ready`.
+- `autoprogramming/status`, receipts y cierre de padre deben separar:
+  `extension_pass`, `official_text_qa_pass` y `strict_editorial_qa_pass`.
+- Orquesta debe detectar cuando la extensión se consigue por anexos ajenos y
+  pedir rework focal, no dar por cerrado el tema.
+
+No se ha tocado código del núcleo de Orquesta. Esta sección queda para el
+agente que está corrigiendo Orquesta.
+
+### 35. BUG-ORQ-20260701-091: con HEAD 393e7bfd readiness vuelve a quedar verde aunque el HTTP muere antes de `external-work/run`
+
+Fecha observada: 2026-07-01 20:34-20:36 Europe/Madrid.
+
+Nota de inventario: esta incidencia se consolida como
+`BUG-ORQ-20260701-091` en el inventario central de Orquesta.
+
+Contexto:
+
+- Se intentó relanzar Orquesta desde OPES para que dirigiera el rework textual
+  acotado del tema 026 de Grupo B Informática.
+- Se comprobó que la rama local de Orquesta ya no estaba en el mismo estado que
+  la prueba anterior: `git rev-parse --short HEAD` devolvió `393e7bfd`.
+- El árbol de Orquesta tenía cambios locales de otro agente/programador, por lo
+  que OPES no tocó código del núcleo.
+- Runtime usado:
+  `/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave18-t026-text-20260701T183443Z`.
+- Evidencia OPES:
+  `/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave18_t026_text/`.
+
+Evidencia positiva:
+
+- `GET /api/v0/server/readiness` devolvió `ready=true`, `status=running`,
+  `startup_status=startup_ready`, `startup_ready=true`.
+- La identidad runtime declaró:
+  - `commit_ref=393e7bfdca1bce515180539059a71a8d3245643e`;
+  - `build_ref=build-ref-orquesta-server-393e7bfdca1b-modified`;
+  - `external_bridge_status=disabled`;
+  - `external_bridge_ready=true`.
+- El wrapper OPES escribió `base_url.txt` con:
+  `http://127.0.0.1:39989`.
+
+Problema:
+
+- Justo al enviar `POST /api/v0/external-work/run` para el tema 026, `curl`
+  devolvió:
+
+```text
+curl: (7) Failed to connect to 127.0.0.1 port 39989 after 0 ms: Could not connect to server
+```
+
+- El PID del servidor `3592705` ya no existía, pero el state durable seguía
+  declarando:
+
+```json
+{
+  "status": "running",
+  "pid": 3592705,
+  "addr": "127.0.0.1:39989",
+  "startup_status": "startup_ready",
+  "startup_ready": true,
+  "startup_message": "director: orquesta preparada; autodiagnostico sin runs transitorios ni cola sucia"
+}
+```
+
+- Quedaron procesos residuales del backend Goal creados por ese arranque:
+
+```text
+3592720 tmux new-session ... orquesta-goal-40dedd8d2b4bfd86
+3592721 node ... codex app-server --listen unix:///tmp/oq-gsrv-1000-40dedd8d2b4bfd86/s.sock
+3592738 .../bin/codex app-server --listen unix:///tmp/oq-gsrv-1000-40dedd8d2b4bfd86/s.sock
+```
+
+Acción esperada:
+
+- Si el HTTP muere después de publicar readiness, el state durable debe pasar a
+  `crashed/stopped` o exponer causa pública tipo `server_exited_after_readiness`.
+- Readiness no debería declararse estable si el proceso muere antes de aceptar
+  el primer `external-work/run`.
+- Al morir el servidor debe limpiar o marcar claramente el backend Goal propio,
+  evitando `tmux`/`codex app-server` residuales.
+- `external_bridge_status=disabled` con `external_bridge_ready=true` necesita
+  semántica pública: para OPES resulta confuso si esa ruta es necesaria para
+  trabajos `external-work/run`.
+
+No se ha tocado código del núcleo de Orquesta. OPES documentó la incidencia y
+limpió manualmente los procesos residuales de esta prueba.
+
+### 32. Ola 17: startup publica `running/startup_ready`, pero HTTP muere y queda app-server vivo
+
+Fecha observada: 2026-07-01 19:43 Europe/Madrid.
+
+Contexto:
+
+- Se comprobó Orquesta en la rama `trabajo/plataforma-agentes`, con
+  `HEAD...@{u}=0 0`.
+- Commit usado para el binario:
+  `daa44d9e61925d2a4f4fc91e1fdcbeeb363473dc`.
+- Runtime:
+  `/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave17-t007-text-20260701T174254Z`.
+- Objetivo OPES: preparar `wave17_t007_text` para rework textual acotado del
+  tema 007, usando `/api/v0/external-work/run`.
+
+Evidencia positiva:
+
+- El servidor escribió `state/orquesta_server_state_v0.json` con:
+  - `status=running`;
+  - `pid=3443711`;
+  - `addr=127.0.0.1:36675`;
+  - `startup_status=startup_ready`;
+  - `startup_ready=true`;
+  - `startup_message=director: orquesta preparada...`.
+- `base_url.txt` quedó materializado con:
+  `http://127.0.0.1:36675`.
+
+Problema:
+
+- Segundos después, `curl /api/v0/server/readiness` contra ese `base_url`
+  devolvió conexión rechazada.
+- `ps` no mostraba ya el proceso `orquesta-server` `3443711`, pero seguían
+  vivos procesos del backend Goal creados por ese arranque:
+
+```text
+3443726 tmux new-session ... orquesta-goal-cd6f2a69a9b1f208
+3443727 node ... codex app-server --listen unix:///tmp/oq-gsrv-1000-cd6f2a69a9b1f208/s.sock
+3443740 .../bin/codex app-server --listen unix:///tmp/oq-gsrv-1000-cd6f2a69a9b1f208/s.sock
+```
+
+- El estado durable seguía diciendo `status=running` y
+  `startup_ready=true`, aunque el HTTP ya no estaba alcanzable.
+- No se llegó a enviar el payload `external-work/run` del tema 007, por lo que
+  el fallo ocurrió entre readiness inicial y uso inmediato del control-plane.
+
+Evidencia local:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave17_t007_text/base_url.txt
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave17_t007_text/orquesta_head.txt
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave17_t007_text/orquesta_runtime_root.txt
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave17_t007_text/server.pid
+/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave17-t007-text-20260701T174254Z/state/orquesta_server_state_v0.json
+```
+
+Acción esperada:
+
+- El arranque que publica `startup_ready=true` debe mantener el HTTP vivo o
+  actualizar estado durable a `stopped/crashed` si el proceso termina.
+- Si el proceso HTTP muere tras readiness, Orquesta debe ejecutar cleanup del
+  backend Goal propio y cerrar tmux/app-server/sockets asociados.
+- El wrapper/cliente no debería poder ver `running/startup_ready` con
+  conexión rechazada y backend Goal residual sin diagnóstico tipo
+  `server_exited_after_readiness`.
+- La espera de readiness debería exigir estabilidad mínima durante varios
+  polls o identidad estable del proceso antes de dar `READY`.
+
+No se ha tocado código del núcleo de Orquesta. OPES documentó el fallo y cerró
+manualmente los procesos residuales antes de seguir.
+
+### 33. Ola 17b: Orquesta actual mejora `status`, pero vuelve a `checkpoint_only_high_consumption`
+
+Fecha observada: 2026-07-01 19:47-19:52 Europe/Madrid.
+
+Contexto:
+
+- Se relanzó Orquesta con sesión persistente para evitar el fallo de la ola 17.
+- Commit usado:
+  `daa44d9e61925d2a4f4fc91e1fdcbeeb363473dc`.
+- Runtime:
+  `/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave17b-t007-text-20260701T174636Z`.
+- Run:
+  `run-opes-grupo-b-info-wave17b-t007-text-20260701`.
+- Objetivo OPES: rework textual acotado del tema 007, sin HTML/tests/RAG/
+  visuales/audio.
+
+Evidencia positiva:
+
+- El arranque fue estable durante tres comprobaciones de readiness.
+- Antes de lanzar el run, `autoprogramming/status` devolvió cola limpia.
+- Después del launch, `autoprogramming/status` mejoró respecto al falso verde
+  antiguo:
+  - `queue_health.running_live=1`;
+  - `efficiency_summary.state=live`;
+  - `overall_percentage=99`;
+  - acción recomendada `observe_goal`.
+- Tras el bloqueo posterior, `status` ya no declaró 100% ni idle:
+  - `queue_health.blocked=1`;
+  - `efficiency_summary.state=attention_required`;
+  - `overall_percentage=40`;
+  - diagnóstico `goal_first_blocked_with_partial_delivery`;
+  - evidencia `evidence-ref-goal-materialized-checkpoint-detected`.
+- `server/shutdown` normal y `forced=true` devolvieron
+  `backend_still_running`, `shutdown_ready=false`; esta parte evita el falso
+  verde de apagado que se vio en olas anteriores.
+
+Problema:
+
+- Orquesta volvió a crear solo el checkpoint:
+
+```text
+02_temas/tema_007/coordinacion_wave17b/checkpoint_started.txt
+```
+
+- No creó:
+  - `trabajo/tema_007_ampliado_limpio.md`;
+  - `trabajo/tema_007_resumen_limpio.md`;
+  - `validacion/informe_extension_temario.json`;
+  - `trabajo/docs/orquesta_goal_result_v0.json`.
+- `POST /api/v0/autoprogramming/goal/observe` devolvió HTTP 504 con:
+
+```json
+{
+  "estado": "error",
+  "partial": true,
+  "recommended_action": "observe_later",
+  "summary": "observacion de autoprogramacion incompleta por timeout HTTP"
+}
+```
+
+- Snapshot de SQLite antes de limpieza manual:
+
+```text
+thread_id=019f1ecb-01d9-77e2-8c22-b7a8cdeeb433
+status=active
+tokens_used=118258
+time_used_seconds=166
+```
+
+- Aunque `status` externo marcó el run como bloqueado, el backend Codex seguía
+  `active` y el apagado no pudo cerrar el backend, por lo que OPES tuvo que
+  cortar manualmente el servidor y los procesos:
+
+```text
+3453912 orquesta-server run
+3454107 tmux ... orquesta-goal-64717c0721ef7f5b
+3454108 node ... codex app-server
+3454121 .../bin/codex app-server
+```
+
+Evidencia local:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_payloads/wave17b_t007_text/external_work_wave17b_topic_007_text_only.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave17b_t007_text/response_t007_text_only.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave17b_t007_text/status_30s.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave17b_t007_text/observe_goal_1_http504_body.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave17b_t007_text/status_after_observe_504.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave17b_t007_text/shutdown_after_blocked.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave17b_t007_text/shutdown_forced_after_blocked.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave17b_t007_text/process_snapshot_before_manual_cleanup.txt
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave17b_t007_text/sqlite_snapshot_before_manual_cleanup.txt
+```
+
+Acción esperada:
+
+- Tras `checkpoint_started.txt`, si no aparece segundo artefacto dentro de un
+  umbral de tokens/tiempo, Orquesta debe cortar antes de quemar cuota y emitir
+  `checkpoint_only_high_consumption` con replan automático.
+- `goal_first_blocked_with_partial_delivery` debe distinguir checkpoint de
+  entrega parcial real: un checkpoint no basta para considerar que hay delivery
+  de dominio.
+- `observe_goal` no debe requerir una llamada HTTP larga para llegar al mismo
+  diagnóstico; el snapshot de `status` ya tiene suficientes señales para
+  devolver causa y acción.
+- `shutdown forced=true` debería poder cerrar el backend Goal propio o devolver
+  PIDs/acción concreta; ahora evita el falso `ready`, pero no detiene.
+
+No se ha tocado código del núcleo de Orquesta. OPES limpió manualmente los
+procesos tras guardar snapshot.
+
+### 22. Ola 11: shutdown forzado declara `ready` pero deja app-servers vivos
+
+Fecha observada: 2026-07-01 17:30 Europe/Madrid.
+
+Contexto:
+
+- Tras bloquearse `run-opes-grupo-b-info-wave11-t002-20260701`, se pidió
+  shutdown no forzado con idempotency key.
+- Resultado positivo parcial: ya no mintió con `shutdown_ready=true`; devolvió
+  `status=backend_still_running`, `shutdown_ready=false` y listó el backend
+  activo.
+- Después se pidió shutdown forzado con:
+  `idempotency_key=shutdown-wave11-t002-20260701-forced-1`.
+
+Problema:
+
+- El shutdown forzado devolvió:
+
+```json
+{"estado":"ok","status":"ready","shutdown_ready":true}
+```
+
+- Pero inmediatamente después seguían vivos procesos app-server:
+
+```text
+2779012 node ... codex app-server --listen unix:///tmp/oq-gsrv-1000-f5c5800ce032825e/s.sock
+2779026 .../bin/codex app-server --listen unix:///tmp/oq-gsrv-1000-f5c5800ce032825e/s.sock
+```
+
+- Además seguían restos del primer intento fallido de arranque de la misma ola:
+
+```text
+2775615 tmux new-session ... /tmp/oq-gsrv-1000-47e2d66de469a8e9/s.sock
+2775616 node ... codex app-server --listen unix:///tmp/oq-gsrv-1000-47e2d66de469a8e9/s.sock
+2775630 .../bin/codex app-server --listen unix:///tmp/oq-gsrv-1000-47e2d66de469a8e9/s.sock
+```
+
+Acción esperada:
+
+- `forced=true` no debe devolver `shutdown_ready=true` hasta comprobar que no
+  quedan procesos/sockets app-server asociados al runtime.
+- Si no puede cerrarlos, debe devolver `backend_still_running` con PIDs.
+- Los arranques fallidos de app-server deben quedar registrados como owned por
+  el runtime para que el shutdown posterior pueda recogerlos.
+
+No se ha tocado código del núcleo de Orquesta. OPES cerró manualmente los
+procesos residuales después de documentar la incidencia para poder seguir con el
+temario.
+
+### 23. Ola 12: startup `ready` sin `base_url.txt` y app-server residual si aborta el wrapper
+
+Fecha observada: 2026-07-01 17:27-17:32 Europe/Madrid.
+
+Contexto:
+
+- Se construyó Orquesta desde `433129df0415203d1fa219617451da319db38278`.
+- Runtime:
+  `/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave12-t002-rework-20260701T172740`.
+- El wrapper OPES esperaba `base_url.txt` igual que en la ola 11.
+
+Problema:
+
+- Orquesta escribió `state/orquesta_server_state_v0.json` con:
+  - `addr=127.0.0.1:46483`;
+  - `startup_ready=true`;
+  - `startup_message=director: orquesta preparada...`.
+- La auditoría local mostró ticks residentes `supervisor_tick_start/result`.
+- Pero no apareció `base_url.txt`.
+- Al no aparecer el endpoint canónico, el wrapper OPES salió con `NO_BASE_URL`;
+  después `curl http://127.0.0.1:46483` ya no conectaba y quedaron vivos
+  procesos app-server/tmux `f34a7f9d3c61522b`.
+
+Evidencia local:
+
+```text
+/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave12-t002-rework-20260701T172740/state/orquesta_server_state_v0.json
+/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave12-t002-rework-20260701T172740/state/audit/orquesta_server_audit_v0.jsonl
+tmux/app-server: orquesta-goal-f34a7f9d3c61522b
+```
+
+Acción esperada:
+
+- Startup debe materializar `base_url.txt` o un endpoint canónico equivalente
+  antes de publicar `startup_ready`.
+- Si el wrapper cancela por falta de endpoint, Orquesta debe apagar los
+  app-server/tmux arrancados durante bootstrap.
+- El estado persistido no debe quedar `running` si el HTTP residente ya no está
+  alcanzable.
+
+No se ha tocado código del núcleo de Orquesta. OPES reintentó con arranque más
+aislado para seguir el temario.
+
+### 24. Ola 12b: artefactos con QA pública `pass`, pero el goal no cierra ni emite recibo terminal
+
+Fecha observada: 2026-07-01 17:33-17:55 Europe/Madrid.
+
+Contexto:
+
+- Se ejecutó Orquesta desde `433129df0415203d1fa219617451da319db38278`.
+- Runtime:
+  `/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave12b-t002-rework-20260701T173100`.
+- Run:
+  `run-opes-grupo-b-info-wave12b-t002-rework-qa-20260701`.
+- Goal:
+  `019f1e4f-e799-7181-99a5-ae370619263f`.
+- El objetivo era rework focal del tema 002 de Grupo B Informática tras la ola
+  11: limpiar anclas visibles, corregir errores ortográficos introducidos por
+  cambios masivos, regenerar HTML/RAG/tests y dejar validación local.
+
+Evidencia positiva:
+
+- Orquesta materializó artefactos útiles y validables:
+  - `trabajo/tema_002_ampliado_limpio.md`;
+  - `trabajo/tema_002_resumen_limpio.md`;
+  - `html/html_final/tema_002_organos_constitucionales.html`;
+  - `html/html_ampliado/tema_002_organos_constitucionales.html`;
+  - `tests/tema_002_tests_rework.json`;
+  - `tutor_rag/rag/corpus/chunks.jsonl`;
+  - `tutor_rag/rag/corpus/summary.json`;
+  - `tutor_rag/rag/manifest.json`.
+- El informe público consolidado quedó en `pass`:
+  `validacion/informe_wave12b_qa_publica.json`.
+- Conteo estricto OPES:
+  `ampliado_words_WORD_RE=14090`, mínimo Grupo B `10800`.
+- Tests:
+  `question_count=24`, mínimo `20`, schema `pass`.
+- Validaciones incluidas en el consolidado:
+  conteo, anclas visibles, ortografía focal, HTML, RAG, tests, genericidad,
+  ausencia de notas de autor y ausencia de metatexto de examen.
+
+Problema:
+
+- No aparecieron los recibos terminales esperados:
+  - `trabajo/docs/orquesta_goal_result_v0.json`;
+  - `trabajo/opes_topic_rework_delivery.json`.
+- `POST /api/v0/autoprogramming/status` devolvió una combinación contradictoria:
+  - cola vacía;
+  - `running_live=1`;
+  - `active_runs=0`;
+  - `overall_percentage=100`;
+  - `recommended_action=observe_goal`;
+  - diagnóstico `goal_status=running`.
+- `POST /api/v0/autoprogramming/goal/observe` devolvió:
+
+```json
+{
+  "estado": "error",
+  "partial": true,
+  "recommended_action": "observe_later",
+  "summary": "observacion de autoprogramacion incompleta por timeout HTTP"
+}
+```
+
+Evidencia local:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_002/validacion/informe_wave12b_qa_publica.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_002/validacion/informe_wave12b_conteo_word_re.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_002/validacion/informe_wave12b_tests_schema.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave12b_t002_rework_qa/observe_goal_after_artifacts.json
+```
+
+Acción esperada:
+
+- Si el write-set tiene artefactos canónicos y validaciones `pass`, Orquesta
+  debe materializar un recibo terminal verificable sin depender de otro turno
+  largo del LLM, o devolver una causa precisa tipo
+  `missing_terminal_receipt_after_artifacts_pass`.
+- El estado público no debe mezclar `overall_percentage=100` con
+  `goal_status=running` sin acción terminal concreta.
+- La acción recomendada no debería ser solo `observe_goal` si ya hay evidencia
+  local suficiente: debe ser `repair_receipt`, `reconcile_goal_terminal` o
+  `shutdown_safe_after_artifacts_pass`, con lista de ficheros esperados y PIDs
+  asociados.
+- El cierre seguro debe distinguir claramente:
+  `artefactos publicables validados`, `faltan recibos`, `backend vivo` y
+  `riesgo de perder trabajo`.
+
+No se ha tocado código del núcleo de Orquesta. Esta sección queda para el
+agente que está corrigiendo Orquesta.
+
+### 25. Ola 13: alto consumo sin checkpoint temprano ni artefactos en write-set
+
+Fecha observada: 2026-07-01 18:04-18:10 Europe/Madrid.
+
+Contexto:
+
+- Orquesta usada: `0af9e345a45852f55ad76377f10845af8328e78c`
+  (`Diagnostica auth fallida en backend goal`).
+- Runtime:
+  `/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave13-t003-rework-20260701T180100`.
+- Run:
+  `run-opes-grupo-b-info-wave13-t003-rework-qa-20260701`.
+- Goal:
+  `019f1e6c-4dbe-7a02-ad2e-4e2d12d1eb70`.
+- Tema OPES afectado: Grupo B Informática, tema 003.
+- El payload ya pedía seis subroles, reutilización local, no audio, no tocar
+  Orquesta y recibos terminales.
+
+Problema:
+
+- Tras unos 309 segundos y `tokens_used=249435` en `goals_1.sqlite`, el goal
+  seguía `active`.
+- No se creó ningún fichero nuevo en:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_003/
+```
+
+- No apareció `checkpoint_started.txt`, matriz, borrador, delivery ni receipt.
+- El rollout sí mostraba actividad, pero era lectura/volcado de contexto antes
+  de materializar avance:
+  - `lynx -dump ... | sed -n '1,260p'`;
+  - `rg` de assets visuales con salida enorme y truncada;
+  - salida del `tail` de rollout de unas 76k tokens por acumulación de outputs.
+- `autoprogramming/status` seguía devolviendo una combinación no operable:
+  - cola vacía;
+  - `running_live=1`;
+  - `active_runs=0`;
+  - `overall_percentage=100`;
+  - `goal_status=running`;
+  - `recommended_action=observe_goal`.
+- `observe_goal` devolvió timeout parcial casi inmediato:
+
+```json
+{
+  "estado": "error",
+  "partial": true,
+  "recommended_action": "observe_later",
+  "errores_publicos": [
+    {
+      "code": "observe_app_director_goal_timeout"
+    }
+  ]
+}
+```
+
+- `POST /api/v0/server/shutdown` sin `forced` bloqueó correctamente con
+  `status=active_goals_present` y `shutdown_ready=false`.
+- `POST /api/v0/server/shutdown` con `forced=true` devolvió
+  `shutdown_ready=true` y cerró procesos/tmux/app-server, pero
+  `goals_1.sqlite` conservó:
+
+```text
+019f1e6c-4dbe-7a02-ad2e-4e2d12d1eb70|active|249435|309|2026-07-01 16:09:11
+```
+
+Evidencia local:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave13_t003_rework_qa/response_t003.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave13_t003_rework_qa/observe_goal_1.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave13_t003_rework_qa/status_180s.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave13_t003_rework_qa/shutdown_normal_after_bug079.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave13_t003_rework_qa/shutdown_forced_after_bug079.json
+/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave13-t003-rework-20260701T180100/codex-runtime/goal-srv/codex-home/sessions/2026/07/01/rollout-2026-07-01T18-04-02-019f1e6c-4dbe-7a02-ad2e-4e2d12d1eb70.jsonl
+```
+
+Acción esperada:
+
+- Orquesta debe exigir checkpoint temprano en el write-set del dominio antes de
+  permitir consumos altos. Ejemplo: `checkpoint_started.txt` o matriz mínima
+  antes de superar un umbral configurable de tokens/tiempo.
+- Las salidas de herramientas grandes no deben entrar completas al contexto del
+  agente. Deben resumirse, limitarse o guardarse como fichero con muestra
+  acotada.
+- El estado residente debe detectar:
+  `goal active + tokens crecientes + cero ficheros nuevos en write-set` y
+  publicar una causa accionable, por ejemplo
+  `goal_active_no_checkpoint_high_consumption`.
+- En ese estado, la acción recomendada no debe ser solo `observe_goal`; debe ser
+  `replan_narrow_context`, `stop_goal_safe` o `require_checkpoint_before_more`.
+- `overall_percentage=100` no debe convivir con `goal_status=running` y cero
+  artefactos del dominio.
+- Si el operador fuerza cierre sin artefactos, el estado durable debe quedar
+  reconciliado como terminal operativo (`stopped_no_artifacts_by_operator` o
+  equivalente), no como `active` indefinido en SQLite.
+
+No se ha tocado código del núcleo de Orquesta. Esta sección queda para el
+agente que está corrigiendo Orquesta.
+
+### 26. Ola 14: rutas exactas convertidas en refs saneadas y usadas como paths
+
+Fecha observada: 2026-07-01 18:15-18:20 Europe/Madrid.
+
+Contexto:
+
+- Orquesta usada: `0af9e345a45852f55ad76377f10845af8328e78c`
+  (`Diagnostica auth fallida en backend goal`).
+- Runtime:
+  `/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave14-t003-phase0-20260701T181330`.
+- Run:
+  `run-opes-grupo-b-info-wave14-t003-phase0-20260701`.
+- Goal:
+  `019f1e76-d25a-70d3-8567-38e179007220`.
+- Tema OPES afectado: Grupo B Informática, tema 003.
+- La ola era una fase 0 estrecha: solo inventario, matriz de fuentes y plan,
+  sin redacción completa ni revisión visual profunda.
+
+Problema:
+
+- El payload enviado por OPES contenía rutas reales con `/`, por ejemplo:
+
+```text
+opes-salidas/orquesta_real/grupo_b_informatica_2026-06-04/rework/package_grupo_b_final_local_2026-06-04/html_ampliado/tema_003_administracion_publica_y_organizacion_territorial_del_estado.html
+opes-salidas/codex_directo/informatica/grupo_B/revision_tutor_visual_2026-06-04/package_source_local_2026-06-04_1630_material_saneado/html_final/img/tema_003__opes_const_territorial_v2_00001_.webp
+```
+
+- En el rollout, el agente intentó ejecutar comandos sobre rutas deformadas:
+
+```text
+opes-salidas/orquesta_real/grupo_b_informatica_2026-06-04/rework-package_grupo_b_final_local_2026-06-04/...
+opes-salidas/codex_directo/informatica-grupo_B/...
+```
+
+- Los comandos `ls` y `wc` fallaron sobre fuentes que sí existían con la ruta
+  original.
+- La señal observada apunta a que el `spec summary` o la capa de contexto
+  convirtió rutas reales en `context_refs` saneadas, sustituyendo separadores
+  por guiones, y el agente las trató después como rutas de filesystem.
+- Esto puede hacer que Orquesta descarte fuentes válidas, diagnostique
+  falsamente `sin material`, o cree una matriz incorrecta desde rutas corruptas.
+
+Evidencia local:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_payloads/wave14_t003_phase0/external_work_wave14_topic_003_phase0.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave14_t003_phase0/dry_run_t003_phase0.json
+/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave14-t003-phase0-20260701T181330/codex-runtime/goal-srv/codex-home/sessions/2026/07/01/rollout-2026-07-01T18-15-31-019f1e76-d25a-70d3-8567-38e179007220.jsonl
+```
+
+Acción esperada:
+
+- Orquesta debe diferenciar explícitamente entre `context_ref` opaco y
+  `filesystem_path` ejecutable.
+- Si necesita refs saneadas, debe conservar también el valor original en campos
+  estructurados no destructivos, por ejemplo `filesystem_paths[]` o
+  `input_fields.filesystem_paths`.
+- Los prompts generados no deben presentar refs saneadas como si fueran rutas.
+- La validación de existencia de fuentes debe hacerse siempre sobre la ruta
+  original.
+
+No se ha tocado código del núcleo de Orquesta. Esta sección queda para el
+agente que está corrigiendo Orquesta.
+
+### 27. Ola 14: `view_image` inserta base64 masivo en el rollout
+
+Fecha observada: 2026-07-01 18:17-18:20 Europe/Madrid.
+
+Contexto:
+
+- Misma ola que el apartado 26:
+  `run-opes-grupo-b-info-wave14-t003-phase0-20260701`.
+- Goal:
+  `019f1e76-d25a-70d3-8567-38e179007220`.
+- La tarea pedía fase 0 documental. No hacía falta inspección visual profunda
+  ni incorporar binarios al historial operativo.
+
+Problema:
+
+- El agente usó `view_image` sobre:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/codex_directo/temas_comunes/constitucion_espanola/html/assets/13_organizacion_territorial.png
+```
+
+- La imagen pesaba unos 328K y el rollout incorporó un
+  `data:image/png;base64,...` enorme.
+- El `tail` del rollout superó 120k tokens y el goal quedó por encima de
+  `171225` tokens y `222` segundos sin entregar la matriz ni el plan de fase 0.
+- El problema no es revisar imágenes; el problema es que el transcript
+  operativo recibió el binario/base64 completo, que degrada coste, observación,
+  límites de contexto y cierre causal.
+
+Evidencia local:
+
+```text
+/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave14-t003-phase0-20260701T181330/codex-runtime/goal-srv/codex-home/sessions/2026/07/01/rollout-2026-07-01T18-15-31-019f1e76-d25a-70d3-8567-38e179007220.jsonl
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave14_t003_phase0/status_105s.json
+```
+
+Acción esperada:
+
+- Las herramientas visuales bajo Orquesta deben guardar referencia, hash,
+  dimensiones y resumen/miniatura segura, no base64 completo en el transcript.
+- Orquesta debe imponer presupuesto de salida por herramienta y cortar o
+  resumir outputs multimodales grandes.
+- Para QA visual, pedir capturas, hojas de contacto o informes como archivos
+  en el write-set, no como payload textual gigante dentro del historial del
+  goal.
+
+No se ha tocado código del núcleo de Orquesta. Esta sección queda para el
+agente que está corrigiendo Orquesta.
+
+### 28. Ola 14: escritura fuera de `allowed_write_set` y recibo que oculta artefactos extra
+
+Fecha observada: 2026-07-01 18:22-18:35 Europe/Madrid.
+
+Contexto:
+
+- Misma ola que los apartados 26 y 27:
+  `run-opes-grupo-b-info-wave14-t003-phase0-20260701`.
+- Goal:
+  `019f1e76-d25a-70d3-8567-38e179007220`.
+- El payload declaraba fase 0 estrecha: crear checkpoint, matriz, plan,
+  delivery y `trabajo/docs/orquesta_goal_result_v0.json`.
+- `allowed_write_set` estaba limitado a:
+
+```text
+opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_003/coordinacion_wave14
+opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_003/trabajo/docs
+```
+
+- Los criterios de aceptación incluían literalmente:
+  `No redactar tema ampliado ni generar HTML/RAG/tests en esta fase`.
+
+Problema:
+
+- El agente terminó con `thread_goals.status=complete`, pero escribió mucho más
+  que la fase 0:
+
+```text
+02_temas/tema_003/trabajo/tema_003_ampliado_limpio.md
+02_temas/tema_003/trabajo/tema_003_resumen_limpio.md
+02_temas/tema_003/html/
+02_temas/tema_003/tests/tema_003_tests_rework.json
+02_temas/tema_003/tutor_rag/rag/corpus/chunks.jsonl
+02_temas/tema_003/validacion/
+```
+
+- Esos artefactos son útiles tras QA y limpieza editorial focal, pero no estaban
+  autorizados por el write-set de esa ola.
+- El recibo terminal `trabajo/docs/orquesta_goal_result_v0.json` declara solo
+  fase 0 completa y sus evidencias son checkpoint/matriz/plan/delivery. No
+  declara los artefactos extra, no los marca como fuera de scope y no adjunta su
+  QA.
+- Resultado operativo: OPES puede recuperar trabajo útil, pero Orquesta no
+  dejó trazabilidad causal completa de lo que realmente hizo ni de por qué
+  consumió mucho más que una fase 0.
+
+Evidencia local:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_payloads/wave14_t003_phase0/external_work_wave14_topic_003_phase0.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_003/trabajo/docs/orquesta_goal_result_v0.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_003/trabajo/tema_003_ampliado_limpio.md
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_003/html/
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_003/tests/tema_003_tests_rework.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_003/tutor_rag/rag/corpus/chunks.jsonl
+```
+
+Acción esperada:
+
+- En goal-first, `allowed_write_set` debe ser vinculante o, como mínimo,
+  auditable en cierre.
+- Si un agente escribe fuera del write-set, Orquesta debe bloquear o marcar el
+  cierre como `out_of_scope_artifacts_written`, listar rutas y pedir replan o
+  aceptación explícita del director.
+- El recibo terminal debe incluir todos los artefactos creados. Si son extra,
+  deben figurar como `out_of_scope_artifacts`, con estado `reusable`, `invalid`
+  o `needs_qa`.
+- No debe publicarse `complete` como si solo se hubiese cumplido fase 0 cuando
+  el write-set real muestra redacción, HTML, tests, RAG y validaciones.
+
+No se ha tocado código del núcleo de Orquesta. Esta sección queda para el
+agente que está corrigiendo Orquesta.
+
+### 29. Ola 15: startup aborta por cola desincronizada pero deja app-server vivo
+
+Fecha observada: 2026-07-01 18:39 Europe/Madrid.
+
+Contexto:
+
+- Se intentó arrancar un runtime aislado para relanzar el tema 004.
+- Orquesta usada: `cf492f2b`.
+- Runtime:
+  `/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave15-t004-rework-20260701T183900`.
+- Composición: `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`,
+  `ORQUESTA_CODEX_PROJECT_WORKDIR=/home/alberto/Trabajo/OPES`,
+  `ORQUESTA_CODEX_RUNTIME_WORKDIR=.../codex-runtime`.
+
+Problema:
+
+- El servidor salió durante el arranque con:
+
+```text
+orquesta-server: orquesta_server: startup_dirty_runs_detected: runs transitorios activos=0 cola_desincronizada=8; usar ORQUESTA_STARTUP_CLEANUP_MODE=forced_stop para purga logica
+```
+
+- Antes de salir ya había creado una sesión Goal:
+
+```text
+orquesta-goal-901a77e254b3363c
+```
+
+- Quedaron vivos:
+
+```text
+node ... codex app-server --listen unix:///tmp/oq-gsrv-1000-901a77e254b3363c/s.sock
+.../bin/codex app-server --listen unix:///tmp/oq-gsrv-1000-901a77e254b3363c/s.sock
+```
+
+- OPES tuvo que ejecutar `tmux kill-session -t
+  orquesta-goal-901a77e254b3363c` y verificar que no quedaban procesos.
+
+Acción esperada:
+
+- La detección de dirty runs o la purga lógica debe ocurrir antes de levantar
+  el backend Goal.
+- Si el arranque aborta después de crear backend, el servidor debe invocar
+  cleanup cooperativo de cualquier tmux/app-server creado durante bootstrap.
+- La instrucción `usar ORQUESTA_STARTUP_CLEANUP_MODE=forced_stop` no debe dejar
+  procesos vivos que consuman recursos mientras el servidor ya no existe.
+
+No se ha tocado código del núcleo de Orquesta. Esta sección queda para el
+agente que está corrigiendo Orquesta.
+
+### 30. Ola 15: goal activo con alto consumo, solo checkpoint, status y shutdown sin respuesta
+
+Fecha observada: 2026-07-01 18:43-18:50 Europe/Madrid.
+
+Contexto:
+
+- Después del fallo del apartado 29 se reintentó el mismo runtime con
+  `ORQUESTA_STARTUP_CLEANUP_MODE=forced_stop`.
+- Orquesta usada: `cf492f2b`.
+- Runtime:
+  `/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave15-t004-rework-20260701T183900`.
+- Run:
+  `run-opes-grupo-b-info-wave15-t004-rework-20260701`.
+- Goal externo:
+  `019f1e91-2388-7830-96f0-02251d8664f5`.
+- Tema OPES afectado: Grupo B Informática, tema `004`.
+
+Evidencia positiva:
+
+- El servidor arrancó y readiness quedó `ready=true` tras la purga lógica.
+- `external-work/run` aceptó el trabajo.
+- El agente creó el checkpoint inicial:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_004/coordinacion_wave15/checkpoint_started.txt
+```
+
+Problema:
+
+- Pasados más de 200 segundos, el único artefacto del tema seguía siendo el
+  checkpoint inicial y los dos ficheros de entrada.
+- `goals_1.sqlite` seguía mostrando el goal como `active`, con
+  `tokens_used=139028` y `time_used_seconds=243`.
+- `POST /api/v0/autoprogramming/status` no devolvió snapshot útil de la run:
+  agotó la ventana HTTP y devolvió:
+
+```json
+{
+  "code": "autoprogramming_status_timeout",
+  "message": "consulta de estado excedio la ventana HTTP acotada"
+}
+```
+
+- `POST /api/v0/server/shutdown` normal expiró sin cuerpo y devolvió `000`.
+- `POST /api/v0/server/shutdown` forzado también expiró sin cuerpo y devolvió
+  `000`.
+- Tras los dos intentos por API quedaron vivos `orquesta-server` y los procesos
+  `codex app-server` del goal. OPES tuvo que guardar snapshot de procesos y
+  matar manualmente los PIDs de esa runtime con `kill -9`.
+
+Evidencia local:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_payloads/wave15_t004_rework/external_work_wave15_topic_004_rework.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave15_t004_rework/
+  dry_run_t004_rework.json
+  response_t004_rework.json
+  status_after_checkpoint.json
+  shutdown_normal_high_tokens_checkpoint_only.json
+  shutdown_forced_high_tokens_checkpoint_only.json
+  process_snapshot_before_manual_cleanup.txt
+  sqlite_snapshot_before_manual_cleanup.txt
+```
+
+Acción esperada:
+
+- Orquesta debe detectar `active + tokens crecientes + solo checkpoint` como
+  progreso insuficiente y devolver estado accionable antes de quemar cuota.
+- `autoprogramming/status` debe tener snapshot rápido por `run_ref`/goal aunque
+  el executor principal esté ocupado.
+- `server/shutdown` normal y forzado deben devolver JSON operativo incluso si
+  no pueden parar el backend; no deben colgar el HTTP hasta timeout sin cuerpo.
+- La parada forzada debe matar o reconciliar el `orquesta-server`, tmux y
+  `codex app-server` propios de esa runtime, o devolver PIDs y acción segura.
+- Tras limpieza manual, el estado durable no debe quedar como `active` sin
+  causa terminal recuperable (`operator_forced_stop_no_artifacts`,
+  `checkpoint_only_high_consumption` o equivalente).
+
+No se ha tocado código del núcleo de Orquesta. Esta sección queda para el
+agente que está corrigiendo Orquesta.
+
+### 31. Ola 16: `264ed9f3` mejora startup/status, pero persiste alto consumo con solo checkpoint y shutdown forzado deja app-server
+
+Fecha observada: 2026-07-01 18:58-19:05 Europe/Madrid.
+
+Contexto:
+
+- Se probó Orquesta actualizada a `264ed9f3` (`Limpia hooks si startup queda
+  bloqueado`), alineada con `origin/trabajo/plataforma-agentes`.
+- Runtime:
+  `/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave16-t004-text-20260701T185721`.
+- Run:
+  `run-opes-grupo-b-info-wave16-t004-text-20260701`.
+- Goal externo:
+  `019f1ea0-0f00-7c32-a510-1b07d9abf5bb`.
+- Tema OPES afectado: Grupo B Informática, tema `004`.
+- El payload se redujo a fase textual: checkpoint, ampliado, resumen y
+  validaciones textuales. Se prohibieron HTML, tests, RAG, visuales y audio.
+
+Evidencia positiva:
+
+- Startup ya no reprodujo el fallo del apartado 29:
+
+```text
+startup_message=director: orquesta preparada; no habia runs transitorios activos
+```
+
+- Readiness quedó `ready=true`.
+- `POST /api/v0/autoprogramming/status` respondió HTTP 200 y recomendó
+  `observe_goal`, en vez de colgar como en la ola 15.
+- `POST /api/v0/apps/director/goal/observe` devolvió HTTP 504, pero con
+  snapshot parcial útil: `partial=true`, `goal_status=running`,
+  `current_phase=programacion` y `recommended_action=observe_later`.
+- El agente creó `coordinacion_wave16/checkpoint_started.txt`.
+- `POST /api/v0/server/shutdown` normal devolvió HTTP 409 con
+  `status=active_goals_present` y listó el goal vivo, en vez de expirar sin
+  cuerpo.
+
+Problema:
+
+- A los 207 segundos el goal seguía `active`, con `tokens_used=166009`.
+- El único artefacto nuevo seguía siendo:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_004/coordinacion_wave16/checkpoint_started.txt
+```
+
+- No apareció `trabajo/tema_004_ampliado_limpio.md`, resumen ni validaciones.
+- `POST /api/v0/server/shutdown` forzado devolvió HTTP 200 con:
+
+```json
+{"status":"ready","shutdown_ready":true}
+```
+
+- Pero quedaron vivos los procesos `codex app-server` asociados al goal:
+
+```text
+node ... codex app-server --listen unix:///tmp/oq-gsrv-1000-37fad0bf84022972/s.sock
+.../bin/codex app-server --listen unix:///tmp/oq-gsrv-1000-37fad0bf84022972/s.sock
+```
+
+- OPES guardó snapshot posterior y tuvo que matar manualmente esos PIDs con
+  `kill -9`.
+
+Evidencia local:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_payloads/wave16_t004_text/external_work_wave16_topic_004_text_only.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave16_t004_text/
+  dry_run_t004_text_only.json
+  response_t004_text_only.json
+  observe_goal_30s.json
+  status_90s.json
+  status_before_shutdown_high_tokens_checkpoint_only.json
+  sqlite_snapshot_before_shutdown.txt
+  shutdown_normal_high_tokens_checkpoint_only.json
+  shutdown_forced_high_tokens_checkpoint_only.json
+  process_snapshot_before_shutdown.txt
+  process_snapshot_after_forced_shutdown_ready.txt
+  sqlite_snapshot_after_manual_cleanup.txt
+```
+
+Acción esperada:
+
+- Cerrar `BUG-088` no puede limitarse a startup ni a `status` accionable:
+  falta cortar o replanificar automáticamente `active + tokens altos + solo
+  checkpoint`.
+- El contrato de progreso debe exigir un segundo artefacto material en un
+  umbral razonable después del checkpoint, o devolver estado tipo
+  `checkpoint_only_high_consumption`.
+- `shutdown forced=true` no debe declarar `shutdown_ready=true` si quedan vivos
+  `codex app-server`/socket/PIDs asociados al goal. Si no puede cerrarlos, debe
+  devolver `backend_still_running` con PIDs.
+- Tras parada forzada o limpieza manual, el estado durable no debe quedar
+  simplemente `active` sin causa terminal recuperable.
+
+No se ha tocado código del núcleo de Orquesta. Esta sección queda para el
+agente que está corrigiendo Orquesta.
+
+### 21. Ola 11: artefactos recuperables, pero cierre bloqueado y QA no publicable
+
+Fecha observada: 2026-07-01 17:05-17:23 Europe/Madrid.
+
+Contexto:
+
+- Se probó Orquesta actualizada en commit `d40ad337de16bf05a30da308781a174dbbdc9268`.
+- Se lanzó un único tema para no abrir más paralelismo hasta verificar el
+  cierre: `run-opes-grupo-b-info-wave11-t002-20260701`, tema 002 de Grupo B
+  Informática.
+- Runtime local:
+  `/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-info-wave11b-20260701T170509`.
+- Work-set OPES:
+  `/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_002`.
+
+Evidencia positiva:
+
+- El agente sí escribió material útil:
+  - `trabajo/tema_002_ampliado_limpio.md` con unas 14.407 palabras.
+  - `trabajo/tema_002_resumen_limpio.md`.
+  - `tests/tema_002_tests_rework.json` con 24 preguntas.
+  - HTML reducido y ampliado.
+  - visual WebP profesional.
+  - RAG canónico en `tutor_rag/rag/corpus/chunks.jsonl` y
+    `tutor_rag/rag/corpus/summary.json`.
+- El RAG ya no quedó vacío tras el primer intento: `chunks.jsonl` tenía 52
+  líneas.
+- La telemetría inicial mantuvo acción segura `observe_goal` durante más tiempo
+  que la ola 10, por lo que parte de BUG-073 parece mitigada.
+
+Problema:
+
+- `POST /api/v0/autoprogramming/status` terminó con:
+  - `goal_first_blocked`
+  - `goal_backend_state_unreconciled`
+  - `closure_needs_rework=true`
+  - `goal_status=blocked`
+  - `recommended_action=review_replan_goal_first`
+- `POST /api/v0/apps/director/goal/observe` siguió devolviendo timeout parcial:
+  `observe_app_director_goal_timeout`.
+- El run no emitió un ACK final útil tipo `partial_artifacts_written` +
+  `qa_failed_public_text` + lista de artefactos válidos/no válidos + rework
+  focal.
+- Los artefactos quedaron recuperables, pero no publicables:
+  - anclas Markdown visibles `{#...}` en texto público;
+  - tablas colapsadas en encabezados;
+  - errores introducidos por corrección masiva, como `órgaños`, `confíanza`,
+    `instituciónal` y `propuestá`;
+  - el propio agente detectó esos problemas en el rollout, intentó corregirlos
+    y aun así el cierre quedó bloqueado/opaco.
+
+Evidencia local:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave11_single_t002_post_fix/
+  response_t002.json
+  status_early.json
+  status_30s.json
+  status_150s.json
+  status_330s.json
+  status_510s.json
+  observe_goal_t002_1.json
+  observe_goal_t002_2.json
+
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_002/
+  coordinacion_wave11/checkpoint_started.txt
+  trabajo/tema_002_ampliado_limpio.md
+  trabajo/tema_002_resumen_limpio.md
+  tests/tema_002_tests_rework.json
+  html/html_final/tema_002_organos_constitucionales.html
+  html/html_ampliado/tema_002_organos_constitucionales.html
+  tutor_rag/rag/corpus/chunks.jsonl
+  tutor_rag/rag/corpus/summary.json
+  visuales/final/tema_002_organos_constitucionales_equilibrio_profesional.webp
+```
+
+Acción esperada:
+
+- Si el goal escribe ficheros, Orquesta debe distinguir entre:
+  `no_artifacts`, `partial_artifacts_written`, `qa_failed_public_text`,
+  `qa_failed_tests_schema`, `ready_local_non_publishable` y `ready_candidate`.
+- El cierre goal-first debe devolver un contrato determinista con:
+  artefactos escritos, validadores ejecutados, fallos concretos y rework
+  automático propuesto.
+- Si el agente detecta artefactos no publicables, no debe dejar `ready_local` en
+  RAG/HTML sin matiz: el estado global debe quedar bloqueado por QA pública.
+- `observe_goal` no debe quedar en timeout genérico cuando ya existe suficiente
+  evidencia materializada para construir un snapshot de cierre/rework.
+
+No se ha tocado código del núcleo de Orquesta. Esta sección queda para el
+agente que está corrigiendo Orquesta.
+
+### 20. Ola 10: Orquesta actualizada escribe checkpoint, pero corta fase 1 por `goal_active_timeout`
+
+Fecha observada: 2026-07-01 16:37-16:42 Europe/Madrid.
+
+Contexto:
+
+- Se arrancó Orquesta con `HEAD=79f21136`, que incluye:
+  - `13e9e0bd fix(server): expose active goal backend on idle queue`;
+  - `f1f10c38 fix(goal-first): expose usage-limited goal snapshots`.
+- Runtime aislado:
+  `/home/alberto/Trabajo/orquesta/.orquesta-runtime/grupo-b-informatica-wave10-phase1-t001-20260701/state`.
+- `ORQUESTA_CODEX_PROJECT_WORKDIR=/home/alberto/Trabajo/OPES`.
+- `run_ref`:
+  `run-opes-grupo-b-info-wave10-phase1-t001-20260701`.
+- `external_goal_ref`:
+  `019f1e1d-fa61-7993-9823-80b0be5249cc`.
+- Objetivo OPES: tema 001, fase 1, crear solo:
+  - `checkpoint_started.txt`;
+  - `matriz_derivacion_b_desde_maestro.md`;
+  - `lagunas_y_contaminacion.md`;
+  - `decision_visuales_candidatos.md`;
+  - `docs/orquesta_goal_result_v0.json`.
+
+Mejora observada:
+
+- `GET /api/v0/routes` funciona y muestra `/api/v0/external-work/run`.
+- `POST /api/v0/autoprogramming/status` antes del run muestra cola viva.
+- `POST /api/v0/autoprogramming/goals/observe-active` ya no devuelve solo
+  `{"estado":"ok"}`: devuelve `operation_ref`,
+  `autoprogramming_observe_active_goals_background_accepted` y recomienda
+  consultar `autoprogramming/status`.
+- `autoprogramming/status` durante el run expone `running_live=1`,
+  `goal_status=running` y acción segura `observe_goal`.
+- El goal escribió el checkpoint temprano:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_001/coordinacion_wave10_phase1/checkpoint_started.txt
+```
+
+Fallo residual:
+
+- A los 75 segundos aproximados, sin crear los otros artefactos de fase 1,
+  `autoprogramming/status` pasó a:
+  - `queue.terminal.status=stopped`;
+  - `queue_health.blocked=1`;
+  - `goal_first_blocked`;
+  - `goal_backend_state_unreconciled`;
+  - `goal_first_blocked_no_artifacts`;
+  - `evidence-ref-codex-app-server-goal-active-timeout`.
+- El mensaje `goal_first_blocked_no_artifacts` vuelve a ser incorrecto porque
+  sí existía `checkpoint_started.txt`.
+- `POST /api/v0/autoprogramming/goal/observe` siguió agotando ventana HTTP con
+  `autoprogramming_observe_goal_timeout`.
+- `POST /api/v0/server/shutdown` devolvió `shutdown_ready=true`, pero dejó vivo
+  el `codex app-server` asociado al socket:
+
+```text
+/home/alberto/Trabajo/OPES/.orquesta-runtime/goal-srv/g-fe4c6324af0f5efc.sock
+```
+
+OPES cerró manualmente ese `codex app-server` para no dejar procesos activos.
+
+Evidencia local:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_payloads/wave10_phase1_t001/external_work_wave10_phase1_t001.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/orquesta_responses/wave10_phase1_t001/
+  response_t001.json
+  observe_active_initial.json
+  observe_goal_initial.json
+  status_after_observe_active.json
+  status_after_30s.json
+  status_after_75s.json
+  shutdown_after_blocked.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_001/coordinacion_wave10_phase1/checkpoint_started.txt
+```
+
+Acción esperada:
+
+- El timeout por goal OPES no debe cortar una fase de planificación tras unos
+  75 segundos si el backend acaba de escribir checkpoint y no hay evidencia de
+  bucle.
+- `goal_first_blocked_no_artifacts` debe contar como artefacto parcial el
+  checkpoint escrito dentro del write-set.
+- `observe_goal` debe devolver snapshot parcial rápido del goal bloqueado, no
+  timeout opaco.
+- `shutdown_ready=true` no debe emitirse si queda vivo el `codex app-server`
+  propio del goal.
+
+No se ha tocado código del núcleo de Orquesta. Esta sección queda para el
+agente que está corrigiendo Orquesta.
+
+### 19. Ola 8: tarea mínima con artefactos de fase 0, pero API la proyecta como `goal_first_blocked_no_artifacts`
 
 Fecha observada: 2026-07-01 13:03-13:09 Europe/Madrid.
 
@@ -777,17 +2055,26 @@ Contexto:
 - `external_goal_ref`:
   `019f1d59-24d0-7d30-88a1-da10e7a6ffb9`.
 
-Resultado positivo:
+Resultado positivo revisado:
 
-- Orquesta sí escribió el primer checkpoint temprano:
+- Orquesta sí escribió el checkpoint temprano y, tras revisar el disco, también
+  materializó los artefactos mínimos de fase 0:
 
 ```text
 /home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_001/coordinacion_wave8/checkpoint_started.txt
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_001/coordinacion_wave8/matriz_fuentes_reutilizacion.md
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_001/coordinacion_wave8/plan_rework_por_fases.md
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_001/coordinacion_wave8/docs/orquesta_goal_result_v0.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_001/coordinacion_wave8/orquesta_phase0_checkpoint_delivery.json
 ```
 
 Problema:
 
-- No se materializaron los otros tres artefactos mínimos.
+- La API pública siguió proyectando la tarea como bloqueada/sin artefactos
+  aunque existían cinco ficheros de fase 0 en el write-set.
+- `docs/orquesta_goal_result_v0.json` declara `status=complete`, pero sus
+  `required_test_results` siguen con `evidence_refs=[]`; por tanto sirve como
+  entrada de planificación OPES, no como cierre contractual pleno.
 - `POST /api/v0/autoprogramming/status` informó:
   - cola terminal con `status=stopped`;
   - `goal_first_blocked`;
@@ -832,6 +2119,11 @@ Evidencia local:
   autoprogramming_status_after_blocked.json
   observe_goal_after_blocked.json
   observe_active_after_blocked.json
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/02_temas/tema_001/coordinacion_wave8/
+  matriz_fuentes_reutilizacion.md
+  plan_rework_por_fases.md
+  orquesta_phase0_checkpoint_delivery.json
+  docs/orquesta_goal_result_v0.json
 ```
 
 Acción esperada:
@@ -924,6 +2216,55 @@ Acción esperada:
 - El estado `goal_first_blocked_no_artifacts` debe impedir relanzar más padres
   en paralelo hasta que el director replanifique; esto funcionó como señal, pero
   llegó después de un consumo alto de tokens.
+
+No se ha tocado código del núcleo de Orquesta. Esta sección queda para el
+agente que está corrigiendo Orquesta.
+
+### 19. OPES local BUG-096: QA estricta debe detectar contaminación estructural, no solo patrones de andamiaje
+
+Fecha observada: 2026-07-02.
+
+Nota de inventario: esta observación local queda relacionada con
+`BUG-ORQ-20260701-093` y `BUG-ORQ-20260702-095` en el inventario central.
+
+Contexto:
+
+- Se revisó Grupo B Informática en
+  `/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional`.
+- Se usaron seis subagentes de auditoría sobre temas 007, 013, 014, 015, 017 y
+  046, sin editar Orquesta core.
+- El informe global tras cerrar tema 007 queda en 18/50 temas verdes estrictos
+  y 142 hallazgos de andamiaje pendientes.
+
+Problema:
+
+- Los validadores existentes pueden dar `pass` de extensión, metacomentarios y
+  notas de autor aunque el tema esté inflado con bloques de otros temas.
+- Los temas 013, 014, 015, 017 y 046 requieren rework estructural: contienen
+  bloques pegados de arquitectura, cloud, administración electrónica, gestión
+  documental, ciberseguridad, temas ajenos, fuentes incorrectas y referencias
+  internas a canones o derivaciones.
+- El tema 007 solo pudo cerrarse tras cortar el bloque ajeno final y sustituirlo
+  por expansión propia de firma electrónica y servicios de confianza.
+
+Evidencia local:
+
+```text
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/00_control/scripts/cleanup_tema_007_firma_confianza.py
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/09_validacion/informe_avance_estricto_grupo_b_informatica_2026-07-01.md
+/home/alberto/Trabajo/OPES/opes-salidas/orquesta_real/grupo_b_informatica_2026-07-01/rework_profesional/09_validacion/informe_texto_publico_sin_andamiaje_interno.md
+```
+
+Acción esperada:
+
+- Añadir al cierre OPES/Orquesta un control `structural_topic_coherence_pass`.
+- Medir procedencia de bloques y similitud título-cuerpo antes de aceptar
+  extensión.
+- Si un tema supera palabras por injertos ajenos, marcar
+  `pendiente_rework_editorial_estructural`, conservar insumos útiles y lanzar
+  reexpansión propia del título.
+- No permitir RAG, tests, HTML ni audios desde textos con contaminación
+  estructural aunque pasen `no_exam_meta` y `no_author_notes`.
 
 No se ha tocado código del núcleo de Orquesta. Esta sección queda para el
 agente que está corrigiendo Orquesta.
