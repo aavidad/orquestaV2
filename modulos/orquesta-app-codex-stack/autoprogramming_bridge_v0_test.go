@@ -230,12 +230,13 @@ func TestPrepareAutoprogrammingRunV0BackendGoalCompletoActivaGoalFirstPorComposi
 	bridged, err := PrepareAutoprogrammingRunV0(context.Background(), AutoprogrammingBridgeRequestV0{
 		Request: request,
 	}, orquestaappdirectorservice.StartAppDirectorPortsV0{
-		RunStore:             runStore,
-		DirectorTaskStore:    taskStore,
-		GoalLauncher:         launcher,
-		GoalObserver:         &goalFirstQueueObserverForTestV0{},
-		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
-		GoalStateStore:       goalStates,
+		RunStore:                runStore,
+		DirectorTaskStore:       taskStore,
+		GoalLauncher:            launcher,
+		GoalObserver:            &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator:    orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:          goalStates,
+		GoalFirstRunMarkerStore: goalStates,
 	})
 	if err != nil {
 		t.Fatalf("PrepareAutoprogrammingRunV0: %v", err)
@@ -257,6 +258,16 @@ func TestPrepareAutoprogrammingRunV0BackendGoalCompletoActivaGoalFirstPorComposi
 	}
 	if len(run.Tasks) != 0 || len(run.FunctionContracts) != 0 {
 		t.Fatalf("run goal-first contiene loop legacy: %+v", run)
+	}
+	marker, err := goalStates.LoadGoalWorkRunMarkerV0(context.Background(), request.RequestRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkRunMarkerV0: %v", err)
+	}
+	if marker.RunRef != request.RequestRef ||
+		marker.GoalRef != bridged.GoalState.GoalRef ||
+		marker.Status != orquestagoal.GoalStatusRunningV0 ||
+		!autoprogrammingBridgeStringInSetForTestV0(marker.EvidenceRefs, "evidence-ref-autoprogramming-goal-first-run-marker-v0") {
+		t.Fatalf("marker=%+v state=%+v", marker, bridged.GoalState)
 	}
 }
 
@@ -359,12 +370,13 @@ func TestPrepareAutoprogrammingRunV0GoalReadyMultiGoalLanzaBatchSinLegacy(t *tes
 	bridged, err := PrepareAutoprogrammingRunV0(context.Background(), AutoprogrammingBridgeRequestV0{
 		Request: request,
 	}, orquestaappdirectorservice.StartAppDirectorPortsV0{
-		RunStore:             runStore,
-		DirectorTaskStore:    taskStore,
-		GoalLauncher:         launcher,
-		GoalObserver:         &goalFirstQueueObserverForTestV0{},
-		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
-		GoalStateStore:       goalStates,
+		RunStore:                runStore,
+		DirectorTaskStore:       taskStore,
+		GoalLauncher:            launcher,
+		GoalObserver:            &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator:    orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:          goalStates,
+		GoalFirstRunMarkerStore: goalStates,
 	})
 	if err != nil {
 		t.Fatalf("PrepareAutoprogrammingRunV0: %v", err)
@@ -401,12 +413,22 @@ func TestPrepareAutoprogrammingRunV0GoalReadyMultiGoalLanzaBatchSinLegacy(t *tes
 		if _, ok := goalStates.states[runRef]; !ok {
 			t.Fatalf("goal state %s no persistido: %+v", runRef, goalStates.states)
 		}
+		marker, err := goalStates.LoadGoalWorkRunMarkerV0(context.Background(), runRef)
+		if err != nil {
+			t.Fatalf("LoadGoalWorkRunMarkerV0 %s: %v", runRef, err)
+		}
+		if marker.RunRef != runRef ||
+			marker.GoalRef != bridged.GoalStates[i].GoalRef ||
+			marker.Status != orquestagoal.GoalStatusRunningV0 {
+			t.Fatalf("marker %d=%+v state=%+v", i, marker, bridged.GoalStates[i])
+		}
 	}
 	if len(launcher.specs) != 2 ||
 		launcher.specs[0].RunRef != wantRunRefs[0] ||
 		launcher.specs[1].RunRef != wantRunRefs[1] ||
-		len(goalStates.states) != 2 {
-		t.Fatalf("multi-goal no lanzo batch correcto: specs=%+v states=%+v", launcher.specs, goalStates.states)
+		len(goalStates.states) != 2 ||
+		len(goalStates.markers) != 2 {
+		t.Fatalf("multi-goal no lanzo batch correcto: specs=%+v states=%+v markers=%+v", launcher.specs, goalStates.states, goalStates.markers)
 	}
 	if _, err := runStore.LoadRunV0(context.Background(), request.RequestRef); !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
 		t.Fatalf("multi-goal no debe materializar run agregada legacy, err=%v", err)
@@ -522,12 +544,13 @@ func TestPrepareAutoprogrammingRunV0GoalReadyLaunchFailedPersisteStateBloqueadoV
 		"goal_capability:closure-validator",
 	}
 	ports := orquestaappdirectorservice.StartAppDirectorPortsV0{
-		RunStore:             runStore,
-		DirectorTaskStore:    taskStore,
-		GoalLauncher:         launcher,
-		GoalObserver:         &goalFirstQueueObserverForTestV0{},
-		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
-		GoalStateStore:       goalStates,
+		RunStore:                runStore,
+		DirectorTaskStore:       taskStore,
+		GoalLauncher:            launcher,
+		GoalObserver:            &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator:    orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:          goalStates,
+		GoalFirstRunMarkerStore: goalStates,
 	}
 
 	bridged, err := PrepareAutoprogrammingRunV0(ctx, AutoprogrammingBridgeRequestV0{
@@ -564,6 +587,16 @@ func TestPrepareAutoprogrammingRunV0GoalReadyLaunchFailedPersisteStateBloqueadoV
 		!autoprogrammingBridgeStringInSetForTestV0(state.EvidenceRefs, "evidence-ref-autoprogramming-goal-first-launch-failed-state-v0") ||
 		!autoprogrammingBridgeStringInSetForTestV0(state.EvidenceRefs, "evidence-ref-goal-launch-socket-missing") {
 		t.Fatalf("state reparable inesperado=%+v", state)
+	}
+	marker, err := goalStates.LoadGoalWorkRunMarkerV0(ctx, request.RequestRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkRunMarkerV0: %v", err)
+	}
+	if marker.Status != orquestagoal.GoalStatusInvalidV0 ||
+		marker.RunRef != request.RequestRef ||
+		!autoprogrammingBridgeStringInSetForTestV0(marker.EvidenceRefs, "evidence-ref-autoprogramming-goal-first-run-marker-v0") ||
+		!autoprogrammingBridgeStringInSetForTestV0(marker.EvidenceRefs, "evidence-ref-goal-launch-socket-missing") {
+		t.Fatalf("marker reparable inesperado=%+v", marker)
 	}
 }
 
@@ -681,6 +714,69 @@ func TestPrepareAutoprogrammingRunV0GoalReadyRunExistenteSinGoalStateNoRelanzaGo
 	}
 	if len(stored.Tasks) != 0 || len(stored.FunctionContracts) != 0 {
 		t.Fatalf("no debe materializar loop legacy: %+v", stored)
+	}
+}
+
+func TestPrepareAutoprogrammingRunV0GoalReadyRunExistenteConStateSinMarkerReparaMarkerSinRelanzarV0(t *testing.T) {
+	ctx := context.Background()
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	taskStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0()
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-goal-existing-state-no-marker-001"
+	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-existing-state-no-marker-001"
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+	basePorts := orquestaappdirectorservice.StartAppDirectorPortsV0{
+		RunStore:             runStore,
+		DirectorTaskStore:    taskStore,
+		GoalLauncher:         launcher,
+		GoalObserver:         &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:       goalStates,
+	}
+	first, err := PrepareAutoprogrammingRunV0(ctx, AutoprogrammingBridgeRequestV0{
+		Request: request,
+	}, basePorts)
+	if err != nil {
+		t.Fatalf("first PrepareAutoprogrammingRunV0: %v", err)
+	}
+	if !first.Accepted ||
+		len(first.GoalStates) != 1 ||
+		len(goalStates.states) != 1 ||
+		len(goalStates.markers) != 0 ||
+		len(launcher.specs) != 1 {
+		t.Fatalf("first=%+v states=%+v markers=%+v specs=%+v", first, goalStates.states, goalStates.markers, launcher.specs)
+	}
+
+	retryPorts := basePorts
+	retryPorts.GoalFirstRunMarkerStore = goalStates
+	retry, err := PrepareAutoprogrammingRunV0(ctx, AutoprogrammingBridgeRequestV0{
+		Request: request,
+	}, retryPorts)
+	if err != nil {
+		t.Fatalf("retry PrepareAutoprogrammingRunV0: %v", err)
+	}
+	if !retry.Accepted ||
+		len(retry.Issues) != 0 ||
+		len(retry.GoalStates) != 1 ||
+		len(launcher.specs) != 1 {
+		t.Fatalf("retry=%+v specs=%+v", retry, launcher.specs)
+	}
+	marker, err := goalStates.LoadGoalWorkRunMarkerV0(ctx, request.RequestRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkRunMarkerV0: %v", err)
+	}
+	if marker.RunRef != request.RequestRef ||
+		marker.GoalRef != first.GoalState.GoalRef ||
+		marker.Status != orquestagoal.GoalStatusRunningV0 ||
+		!autoprogrammingBridgeStringInSetForTestV0(marker.EvidenceRefs, "evidence-ref-autoprogramming-goal-first-run-marker-v0") {
+		t.Fatalf("marker=%+v state=%+v", marker, first.GoalState)
 	}
 }
 

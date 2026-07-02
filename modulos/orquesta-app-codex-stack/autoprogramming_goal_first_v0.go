@@ -149,6 +149,14 @@ func autoprogrammingBridgeStartSingleGoalFirstV0(
 				result.Issues = append(result.Issues, autoprogrammingBridgeExistingGoalSpecMismatchIssueV0(run.RunID))
 				return result, nil
 			}
+			if err := autoprogrammingBridgeSaveGoalRunMarkerV0(ctx, ports, state); err != nil {
+				if strings.TrimSpace(result.Run.RunID) == "" {
+					result.Run = existing
+				}
+				result.Accepted = false
+				result.Issues = append(result.Issues, autoprogrammingBridgeGoalMarkerSaveIssueV0(run.RunID))
+				return result, nil
+			}
 			result = autoprogrammingBridgeAppendGoalRunV0(result, existing, state)
 			return result, nil
 		}
@@ -163,6 +171,9 @@ func autoprogrammingBridgeStartSingleGoalFirstV0(
 		state, stateErr := autoprogrammingBridgeBlockedGoalStateV0(run.RunID, spec, receipt, err, result.Work)
 		if stateErr == nil {
 			stateErr = ports.GoalStateStore.SaveGoalWorkStateV0(ctx, state)
+		}
+		if stateErr == nil {
+			stateErr = autoprogrammingBridgeSaveGoalRunMarkerV0(ctx, ports, state)
 		}
 		if strings.TrimSpace(result.Run.RunID) == "" {
 			result.Run = run
@@ -188,6 +199,14 @@ func autoprogrammingBridgeStartSingleGoalFirstV0(
 		}
 		result.Accepted = false
 		result.Issues = append(result.Issues, autoprogrammingBridgeGoalStateSaveIssueV0(run.RunID))
+		return result, nil
+	}
+	if err := autoprogrammingBridgeSaveGoalRunMarkerV0(ctx, ports, state); err != nil {
+		if strings.TrimSpace(result.Run.RunID) == "" {
+			result.Run = run
+		}
+		result.Accepted = false
+		result.Issues = append(result.Issues, autoprogrammingBridgeGoalMarkerSaveIssueV0(run.RunID))
 		return result, nil
 	}
 	return autoprogrammingBridgeAppendGoalRunV0(result, run, state), nil
@@ -293,6 +312,16 @@ func autoprogrammingBridgeGoalStateSaveIssueV0(
 	}
 }
 
+func autoprogrammingBridgeGoalMarkerSaveIssueV0(
+	runRef string,
+) orquestaautoprogramming.AutoprogrammingRequestIssueV0 {
+	return orquestaautoprogramming.AutoprogrammingRequestIssueV0{
+		Code:    "autoprogramming_goal_marker_save_failed",
+		Field:   "goal_first_run_marker",
+		Message: "marker goal-first no pudo persistirse; no se declara aceptado ni se cae al loop legacy: " + strings.TrimSpace(runRef),
+	}
+}
+
 func autoprogrammingBridgeNewGoalStateV0(
 	runRef string,
 	spec orquestagoal.GoalWorkSpecV0,
@@ -308,6 +337,56 @@ func autoprogrammingBridgeNewGoalStateV0(
 			"evidence-ref-autoprogramming-goal-migration-" + strings.TrimSpace(work.GoalMigration.Status),
 		}),
 	})
+}
+
+func autoprogrammingBridgeSaveGoalRunMarkerV0(
+	ctx context.Context,
+	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
+	state orquestagoal.GoalWorkStateV0,
+) error {
+	if ports.GoalFirstRunMarkerStore == nil {
+		return nil
+	}
+	marker, err := autoprogrammingBridgeGoalRunMarkerFromStateV0(state)
+	if err != nil {
+		return err
+	}
+	return ports.GoalFirstRunMarkerStore.SaveGoalWorkRunMarkerV0(ctx, marker)
+}
+
+func autoprogrammingBridgeGoalRunMarkerFromStateV0(
+	state orquestagoal.GoalWorkStateV0,
+) (orquestagoal.GoalWorkRunMarkerV0, error) {
+	state, err := orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		return orquestagoal.GoalWorkRunMarkerV0{}, err
+	}
+	spec := orquestagoal.NormalizeGoalWorkSpecV0(state.Spec)
+	receipt := orquestagoal.NormalizeGoalLaunchReceiptV0(state.LaunchReceipt)
+	marker := orquestagoal.GoalWorkRunMarkerV0{
+		SchemaVersion:   orquestagoal.GoalWorkRunMarkerSchemaV0,
+		RunRef:          strings.TrimSpace(state.RunRef),
+		GoalRef:         autoprogrammingBridgeFirstGoalValueV0(receipt.GoalRef, state.GoalRef, spec.GoalRef),
+		ExternalGoalRef: strings.TrimSpace(receipt.ExternalGoalRef),
+		DirectorKind:    orquestagoal.GoalDirectorKindCodexGoalV0,
+		Status:          strings.TrimSpace(state.Status),
+		Spec:            &spec,
+		LaunchReceipt:   &receipt,
+		EvidenceRefs: compactStringsV0(append(
+			[]string{"evidence-ref-autoprogramming-goal-first-run-marker-v0"},
+			append(state.EvidenceRefs, receipt.EvidenceRefs...)...,
+		)),
+	}
+	return orquestagoal.NewGoalWorkRunMarkerV0(marker)
+}
+
+func autoprogrammingBridgeFirstGoalValueV0(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func autoprogrammingBridgeBlockedGoalStateV0(
