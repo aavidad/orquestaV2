@@ -741,6 +741,11 @@ func NewAppDirectorGoalStateV0(state AppDirectorGoalStateV0) (AppDirectorGoalSta
 	return orquestagoal.NewGoalWorkStateV0(state)
 }
 
+const (
+	startAppDirectorGoalNewAppPhasePolicyRefV0       = "new_app_phase_timeout_policy_v0:brainstorming_arquitectura_requires_early_artifact"
+	startAppDirectorGoalNewAppPhasePolicyCriterionV0 = "Politica de fase: brainstorming_arquitectura debe producir un artefacto, plan verificable o bloqueo terminal antes de ampliar contexto; no basta un receipt inicial invalido."
+)
+
 func buildStartAppDirectorGoalWorkSpecV0(
 	request StartAppDirectorRequestV0,
 	spec orquestafactory.AppSpecV0,
@@ -762,6 +767,7 @@ func buildStartAppDirectorGoalWorkSpecV0(
 			{Kind: "request", Ref: spec.RequestID, Purpose: "Solicitud publica normalizada", Required: true},
 			{Kind: "run", Ref: prepared.Run.RunID, Purpose: "Run persistida por Orquesta", Required: true},
 			{Kind: "app_spec", Ref: spec.SpecID, Purpose: "Contrato AppSpecV0 validado", Required: true},
+			{Kind: "phase_policy", Ref: startAppDirectorGoalNewAppPhasePolicyRefV0, Purpose: "Politica de progreso temprano para evitar timeout inicial sin artefactos.", Required: true},
 		},
 		RuleRefs: []orquestagoal.GoalRuleRefV0{
 			{Kind: "repo", Ref: "AGENTS.md", Enforcement: orquestagoal.GoalRuleEnforcementHardV0},
@@ -841,6 +847,7 @@ func startAppDirectorGoalAcceptanceCriteriaV0(
 		"I18n: enabled=" + startAppDirectorGoalBoolV0(spec.I18N.Enabled) + "; default_locale=" + spec.I18N.DefaultLocale + "; locales=" + startAppDirectorGoalJoinV0(spec.I18N.Locales) + ".",
 		"Documentacion: usuario=" + startAppDirectorGoalBoolV0(spec.Docs.User) + "; desarrollo=" + startAppDirectorGoalBoolV0(spec.Docs.Development) + "; sistemas=" + startAppDirectorGoalBoolV0(spec.Docs.Systems) + "; profundidad=" + spec.Docs.Depth + ". Si profundidad=profunda, entregar manuales de usuario, desarrollo y sistemas con flujos, comandos, criterios de aceptacion y operacion.",
 		"Project source: kind=" + spec.ProjectSource.Kind + "; project_ref=" + spec.ProjectSource.ProjectRef + "; branch=" + spec.ProjectSource.Branch + ". No publicar rutas locales ni credenciales.",
+		startAppDirectorGoalNewAppPhasePolicyCriterionV0,
 		"Entregar resumen final con artefactos, pruebas ejecutadas o justificadas, decisiones pendientes y bloqueos si existen.",
 	})
 }

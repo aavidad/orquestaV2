@@ -90,3 +90,14 @@ Evidencia focal:
 
 - `TestRunSupervisorGoalFirstResidentPreparaReworkPorTimeoutInicialSinArtefactosV0`
 - `TestRunSupervisorGoalFirstResidentNoRelanzaTimeoutConArtefactosV0`
+
+El `GoalWorkSpecV0` inicial de Nueva App incorpora ahora una politica de fase
+obligatoria para `brainstorming_arquitectura`: debe producir un artefacto, plan
+verificable o bloqueo terminal antes de ampliar contexto, y no basta con un
+receipt inicial invalido. La politica viaja como `ContextRef` `phase_policy` y
+como criterio de aceptacion del goal, de modo que el adaptador Goal-first recibe
+la frontera antes del primer intento.
+
+Evidencia focal:
+
+- `TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy`
