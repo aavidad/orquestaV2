@@ -193,6 +193,53 @@ func TestRunSupervisorGoalFirstResidentPreparaReworkPorArtefactosParcialesTermin
 	}
 }
 
+func TestRunSupervisorGoalFirstResidentPreparaReworkPorArtifactPathsOmitidosV0(t *testing.T) {
+	ctx := context.Background()
+	store := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	source := goalFirstResidentReworkSourceStateForTestV0(
+		"run-ref-goal-first-resident-artifact-paths-omitted-001",
+		orquestamcp.MCPGoalFirstArtifactPathsOmittedMaterializedV0,
+	)
+	source.LastResult.EvidenceRefs = []string{
+		"evidence-ref-goal-materialized-artifact-paths-omitted",
+		"evidence-ref-goal-materialized-artifact-paths-omitted:run:trabajo-extra",
+	}
+	source.LastClosure.Issues = []orquestagoal.GoalWorkIssueV0{{
+		Code:  orquestamcp.MCPGoalFirstArtifactPathsOmittedMaterializedV0,
+		Field: "goal_first.artifact_paths",
+	}}
+	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
+	}
+	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:     store,
+			GoalReworkLauncher: launcher,
+		},
+		Stores: StoresV0{AppGoalStateStore: store},
+	}}
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef:       source.RunRef,
+		ResidentMode: true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.StopReason != "goal_first_resident_rework_prepared" ||
+		len(result.RepairRunRefs) != 1 ||
+		launcher.calls != 1 ||
+		!hasGoalFirstResidentReworkContextForTestV0(
+			launcher.specs[0].ContextRefs,
+			"rework_reason",
+			orquestamcp.MCPGoalFirstArtifactPathsOmittedMaterializedV0,
+		) ||
+		!stringInSetV0(launcher.specs[0].EvidenceRefs, "evidence-ref-goal-materialized-artifact-paths-omitted") {
+		t.Fatalf("rework por artifact_paths omitidos no preparado: result=%+v calls=%d spec=%+v", result, launcher.calls, launcher.specs)
+	}
+}
+
 func TestRunSupervisorGoalFirstResidentPreparaReworkPorQAFallidaPublicaV0(t *testing.T) {
 	ctx := context.Background()
 	store := newGoalFirstQueueStateStoreForTestV0()
