@@ -13,6 +13,7 @@ const (
 	goalFirstResidentReworkExistingEvidencePrefixV0 = "evidence-ref-goal-first-resident-rework-goal:"
 	goalFirstResidentReworkReasonCheckpointOnlyV0   = "checkpoint_only_high_consumption"
 	goalFirstResidentReworkReasonNoCheckpointV0     = "goal_active_no_checkpoint_high_consumption"
+	goalFirstResidentReworkReasonActiveTimeoutV0    = "codex_app_server_goal_active_timeout"
 )
 
 func (executor CodexStackRunSupervisorExecutorV0) maybePrepareGoalFirstResidentReworkV0(
@@ -88,6 +89,9 @@ func goalFirstResidentReworkReasonV0(state orquestagoal.GoalWorkStateV0) (string
 	if goalFirstResidentHasIssueOrEvidenceV0(state, goalFirstResidentReworkReasonNoCheckpointV0) {
 		return goalFirstResidentReworkReasonNoCheckpointV0, evidenceRefs, true
 	}
+	if goalFirstResidentInitialTimeoutWithoutArtifactsV0(state) {
+		return goalFirstResidentReworkReasonActiveTimeoutV0, evidenceRefs, true
+	}
 	return "", nil, false
 }
 
@@ -122,7 +126,22 @@ func goalFirstResidentHasIssueOrEvidenceV0(state orquestagoal.GoalWorkStateV0, c
 			return true
 		}
 	}
+	if state.LastResult != nil && strings.Contains(strings.TrimSpace(state.LastResult.Summary), code) {
+		return true
+	}
 	return false
+}
+
+func goalFirstResidentInitialTimeoutWithoutArtifactsV0(state orquestagoal.GoalWorkStateV0) bool {
+	if !goalFirstResidentHasIssueOrEvidenceV0(state, goalFirstResidentReworkReasonActiveTimeoutV0) ||
+		state.LastResult == nil {
+		return false
+	}
+	if len(compactStringsV0(state.LastResult.DomainReceiptRefs)) > 0 {
+		return false
+	}
+	return len(compactStringsV0(state.LastResult.ArtifactRefs)) == 0 &&
+		len(compactStringsV0(state.LastResult.ArtifactPaths)) == 0
 }
 
 func goalFirstResidentIssueCodesV0(state orquestagoal.GoalWorkStateV0) []string {
@@ -161,7 +180,9 @@ func goalFirstResidentHighConsumptionEvidenceRefsV0(state orquestagoal.GoalWorkS
 		if strings.Contains(trimmed, "high-consumption") ||
 			strings.Contains(trimmed, "high_consumption") ||
 			strings.Contains(trimmed, "checkpoint-only") ||
-			strings.Contains(trimmed, "no-checkpoint") {
+			strings.Contains(trimmed, "no-checkpoint") ||
+			strings.Contains(trimmed, "active-timeout") ||
+			strings.Contains(trimmed, "goal-active-timeout") {
 			refs = append(refs, trimmed)
 		}
 	}
@@ -198,7 +219,7 @@ func goalFirstResidentReworkSpecV0(
 	spec.ContextRefs = append(spec.ContextRefs,
 		orquestagoal.GoalContextRefV0{Kind: "source_run", Ref: sourceRunRef, Purpose: "goal-first resident rework source", Required: true},
 		orquestagoal.GoalContextRefV0{Kind: "source_goal", Ref: sourceGoalRef, Purpose: "goal-first resident rework source", Required: true},
-		orquestagoal.GoalContextRefV0{Kind: "rework_reason", Ref: reason, Purpose: "high consumption terminal state", Required: true},
+		orquestagoal.GoalContextRefV0{Kind: "rework_reason", Ref: reason, Purpose: "goal-first terminal rework state", Required: true},
 	)
 	spec.AcceptanceCriteria = compactStringsV0(append(
 		spec.AcceptanceCriteria,
