@@ -32,8 +32,12 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		projectDir,
 	)
 	idleSelfImprovementAfterSeconds := idleSelfImprovementAfterSecondsFromEnvV0()
-	idleSelfImprovementDisabled := idleSelfImprovementAfterSeconds == 0 ||
-		serverIdleSelfImprovementDisabledForOPESContextV0(opesAutomationContext, projectDir, idleSelfImprovementProjectDir)
+	idleSelfImprovementIdleDisabled := idleSelfImprovementAfterSeconds == 0
+	idleSelfImprovementDisabled := serverIdleSelfImprovementDisabledForOPESContextV0(
+		opesAutomationContext,
+		projectDir,
+		idleSelfImprovementProjectDir,
+	)
 	stateDir := absDirEnvOrDefaultV0(envServerStateDirV0,
 		filepath.Join(defaultControlDirV0(projectDir), "state"))
 	runtimeDir := absDirEnvOrDefaultV0(envCodexRuntimeWorkDirV0,
@@ -83,6 +87,7 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		)) * time.Millisecond,
 		IdleSelfImprovementAfter:         time.Duration(idleSelfImprovementAfterSeconds) * time.Second,
 		IdleSelfImprovementDisabled:      idleSelfImprovementDisabled,
+		IdleSelfImprovementIdleDisabled:  idleSelfImprovementIdleDisabled,
 		IdleSelfImprovementProjectRef:    envOrDefaultV0(envServerIdleSelfImprovementProjectRefV0, orquestaserver.DefaultIdleSelfImprovementProjectRefV0),
 		IdleSelfImprovementWorktreeRef:   envOrDefaultV0(envServerIdleSelfImprovementWorktreeRefV0, orquestaserver.DefaultIdleSelfImprovementWorktreeRefV0),
 		IdleSelfImprovementBranchRef:     envOrDefaultV0(envServerIdleSelfImprovementBranchRefV0, orquestaserver.DefaultIdleSelfImprovementBranchRefV0),
@@ -147,7 +152,7 @@ func defaultIdleSelfImprovementWriteSetV0() []string {
 func defaultIdleSelfImprovementAcceptanceV0() []string {
 	return []string{
 		envServerIdleSelfImprovementAfterV0 + " por defecto dispara tras 60 segundos sin ejecuciones",
-		envServerIdleSelfImprovementAfterV0 + "=0 desactiva automejora idle",
+		envServerIdleSelfImprovementAfterV0 + "=0 desactiva el disparador por reloj idle",
 		"el servidor prepara automejora cuando hay idle o capacidad libre por debajo de " + envServerIdleSelfImprovementTargetQueueV0,
 		"el planner salta tareas ya visibles en cola y puede crear una tarea scanner para descubrir nuevos huecos",
 		"las secciones narrativas del backlog se filtran y no se convierten en runs de automejora",

@@ -128,19 +128,14 @@ func DecideAutoprogrammingIdleSelfImprovementV0(
 	input AutoprogrammingIdleSelfImprovementDecisionInputV0,
 ) AutoprogrammingIdleSelfImprovementDecisionV0 {
 	config := input.Config
-	if config.AfterSeconds == 0 {
-		return AutoprogrammingIdleSelfImprovementDecisionV0{
-			Reason:   "idle_self_improvement_disabled",
-			Disabled: true,
-		}
-	}
+	idleDisabled := config.AfterSeconds == 0
 	if config.AfterSeconds < 0 {
 		config.AfterSeconds = AutoprogrammingIdleSelfImprovementDefaultAfterSecondsV0
 	}
 	if config.TargetQueue < 0 {
 		config.TargetQueue = AutoprogrammingIdleSelfImprovementDefaultTargetQueueV0
 	}
-	idleTriggered := input.IdleForSeconds >= config.AfterSeconds
+	idleTriggered := !idleDisabled && input.IdleForSeconds >= config.AfterSeconds
 	queueTriggered := input.FreeCapacity > 0 &&
 		config.TargetQueue > 0 &&
 		input.QueueSize < config.TargetQueue
@@ -159,6 +154,12 @@ func DecideAutoprogrammingIdleSelfImprovementV0(
 			QueueTriggered: true,
 		}
 	default:
+		if idleDisabled {
+			return AutoprogrammingIdleSelfImprovementDecisionV0{
+				Reason:   "idle_self_improvement_disabled",
+				Disabled: true,
+			}
+		}
 		return AutoprogrammingIdleSelfImprovementDecisionV0{Reason: "primary_work_not_idle"}
 	}
 }

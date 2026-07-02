@@ -77,6 +77,7 @@ type ConfigV0 struct {
 	ShutdownGracePeriod               time.Duration
 	SupervisorCommand                 orquestarunsupervisor.RunSupervisorCommandV0
 	IdleSelfImprovementDisabled       bool
+	IdleSelfImprovementIdleDisabled   bool
 	IdleSelfImprovementAfter          time.Duration
 	IdleSelfImprovementProjectRef     string
 	IdleSelfImprovementWorktreeRef    string
@@ -165,9 +166,15 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 		config.SupervisorCommand.MaxTicks = DefaultSupervisorMaxTicksV0
 	}
 	if config.IdleSelfImprovementDisabled {
+		config.IdleSelfImprovementIdleDisabled = true
 		config.IdleSelfImprovementAfter = 0
 	}
-	if !config.IdleSelfImprovementDisabled && config.IdleSelfImprovementAfter <= 0 {
+	if config.IdleSelfImprovementIdleDisabled {
+		config.IdleSelfImprovementAfter = 0
+	}
+	if !config.IdleSelfImprovementDisabled &&
+		!config.IdleSelfImprovementIdleDisabled &&
+		config.IdleSelfImprovementAfter <= 0 {
 		config.IdleSelfImprovementAfter = DefaultIdleSelfImprovementAfterV0
 	}
 	config.IdleSelfImprovementProjectRef = strings.TrimSpace(config.IdleSelfImprovementProjectRef)

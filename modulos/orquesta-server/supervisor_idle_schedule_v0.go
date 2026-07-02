@@ -122,6 +122,9 @@ func (runtime *RuntimeV0) idleSelfImprovementScheduleDecisionV0(
 				decision.QueueSize = 0
 			}
 			if supervisorResultIsIdleForSelfImprovementV0(result) {
+				if runtime.config.IdleSelfImprovementIdleDisabled {
+					return runtime.idleSelfImprovementCapacityDecisionV0(decision, now)
+				}
 				return runtime.idleSelfImprovementIdleDecisionV0(decision, now)
 			}
 			return runtime.idleSelfImprovementCapacityDecisionV0(decision, now)
@@ -134,6 +137,9 @@ func (runtime *RuntimeV0) idleSelfImprovementScheduleDecisionV0(
 		return decision
 	}
 	if supervisorResultIsIdleForSelfImprovementV0(result) {
+		if runtime.config.IdleSelfImprovementIdleDisabled {
+			return runtime.idleSelfImprovementCapacityDecisionV0(decision, now)
+		}
 		return runtime.idleSelfImprovementIdleDecisionV0(decision, now)
 	}
 	return runtime.idleSelfImprovementCapacityDecisionV0(decision, now)

@@ -19,7 +19,7 @@ func (runtime *RuntimeV0) maybeScheduleIdleSelfImprovementCausalV0(
 		runtime.markIdleSelfImprovementCheckedV0(ctx, "shutdown_in_progress", now)
 		return
 	}
-	if runtime.config.IdleSelfImprovementAfter <= 0 {
+	if runtime.config.IdleSelfImprovementDisabled {
 		if runtime.blockIdleSelfImprovementDomainSessionV0(ctx, now) {
 			return
 		}

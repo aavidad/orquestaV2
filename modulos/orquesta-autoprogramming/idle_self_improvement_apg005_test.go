@@ -29,8 +29,8 @@ func TestAutoprogrammingIdleSelfImprovementAPG005(t *testing.T) {
 		AutoprogrammingIdleSelfImprovementDecisionInputV0{
 			Config:         disabledConfig.Config,
 			IdleForSeconds: 600,
-			QueueSize:      0,
-			FreeCapacity:   6,
+			QueueSize:      1,
+			FreeCapacity:   0,
 		},
 	)
 	if disabledDecision.Prepare || !disabledDecision.Disabled {

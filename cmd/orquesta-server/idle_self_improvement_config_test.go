@@ -31,8 +31,10 @@ func TestServerConfigFromEnvV0ConfiguraAutomejoraIdleV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0 disabled: %v", err)
 	}
-	if !config.IdleSelfImprovementDisabled || config.IdleSelfImprovementAfter != 0 {
-		t.Fatalf("idle disabled config=%+v", config)
+	if config.IdleSelfImprovementDisabled ||
+		!config.IdleSelfImprovementIdleDisabled ||
+		config.IdleSelfImprovementAfter != 0 {
+		t.Fatalf("idle trigger disabled config=%+v", config)
 	}
 }
 
@@ -45,8 +47,10 @@ func TestServerConfigFromEnvV0AceptaAliasLegacyDeAutomejoraIdleConDiagnosticoV0(
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	if !config.IdleSelfImprovementDisabled || config.IdleSelfImprovementAfter != 0 {
-		t.Fatalf("alias legacy no desactiva automejora idle: %+v", config)
+	if config.IdleSelfImprovementDisabled ||
+		!config.IdleSelfImprovementIdleDisabled ||
+		config.IdleSelfImprovementAfter != 0 {
+		t.Fatalf("alias legacy no desactiva trigger idle: %+v", config)
 	}
 	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerIdleSelfImprovementAfterV0)
 	if setting.Value != "0" || setting.Source != "legacy_alias" || !setting.Canonical {
@@ -89,7 +93,9 @@ func TestServerConfigFromEnvV0DesactivaAutomejoraIdleEnOPESSinWorkdirSeparadoV0(
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	if !config.IdleSelfImprovementDisabled || config.IdleSelfImprovementAfter != 0 {
+	if !config.IdleSelfImprovementDisabled ||
+		!config.IdleSelfImprovementIdleDisabled ||
+		config.IdleSelfImprovementAfter != 0 {
 		t.Fatalf("automejora idle debe quedar desactivada en OPES sin workdir separado: %+v", config)
 	}
 	if config.IdleSelfImprovementProjectWorkDir != opesDir {
@@ -107,7 +113,9 @@ func TestServerConfigFromEnvV0DetectaOPESPorProjectWorkdirCodexV0(t *testing.T) 
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	if !config.IdleSelfImprovementDisabled || config.IdleSelfImprovementAfter != 0 {
+	if !config.IdleSelfImprovementDisabled ||
+		!config.IdleSelfImprovementIdleDisabled ||
+		config.IdleSelfImprovementAfter != 0 {
 		t.Fatalf("automejora idle debe quedar desactivada si CODEX_PROJECT_WORKDIR apunta a salida OPES: %+v", config)
 	}
 }
@@ -125,7 +133,9 @@ func TestServerConfigFromEnvV0DesactivaAutomejoraIdleSiWorkdirExplicitoEsOPESV0(
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	if !config.IdleSelfImprovementDisabled || config.IdleSelfImprovementAfter != 0 {
+	if !config.IdleSelfImprovementDisabled ||
+		!config.IdleSelfImprovementIdleDisabled ||
+		config.IdleSelfImprovementAfter != 0 {
 		t.Fatalf("automejora idle debe quedar desactivada si apunta al workdir OPES: %+v", config)
 	}
 }

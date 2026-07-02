@@ -212,7 +212,8 @@ que una composicion ya leyo desde su entorno. El modulo no llama a `os.Getenv`.
 Variables canonicas transportadas como contrato:
 
 - `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS`: por defecto 60; valor
-  `0` desactiva la automejora idle.
+  `0` desactiva el disparo por reloj idle, sin apagar el relleno de cola por
+  capacidad libre.
 - `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE`: por defecto 1; permite
   rellenar cola secundaria cuando hay capacidad libre y la cola visible esta por
   debajo del objetivo.

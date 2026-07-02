@@ -30,20 +30,32 @@ func TestResolveAutoprogrammingIdleSelfImprovementConfigV0DefaultDisparaTras60Se
 	}
 }
 
-func TestResolveAutoprogrammingIdleSelfImprovementConfigV0CeroDesactivaIdle(t *testing.T) {
+func TestResolveAutoprogrammingIdleSelfImprovementConfigV0CeroDesactivaSoloRelojIdle(t *testing.T) {
 	config := ResolveAutoprogrammingIdleSelfImprovementConfigV0(map[string]string{
 		OrquestaServerIdleSelfImprovementAfterSecondsEnvV0: "0",
 	})
 
-	decision := DecideAutoprogrammingIdleSelfImprovementV0(AutoprogrammingIdleSelfImprovementDecisionInputV0{
+	withoutCapacity := DecideAutoprogrammingIdleSelfImprovementV0(AutoprogrammingIdleSelfImprovementDecisionInputV0{
+		Config:         config.Config,
+		IdleForSeconds: 999,
+		QueueSize:      1,
+		FreeCapacity:   0,
+	})
+
+	if withoutCapacity.Prepare || !withoutCapacity.Disabled || withoutCapacity.Reason != "idle_self_improvement_disabled" {
+		t.Fatalf("without_capacity=%+v", withoutCapacity)
+	}
+
+	withCapacity := DecideAutoprogrammingIdleSelfImprovementV0(AutoprogrammingIdleSelfImprovementDecisionInputV0{
 		Config:         config.Config,
 		IdleForSeconds: 999,
 		QueueSize:      0,
-		FreeCapacity:   10,
+		FreeCapacity:   1,
 	})
 
-	if decision.Prepare || !decision.Disabled || decision.Reason != "idle_self_improvement_disabled" {
-		t.Fatalf("decision=%+v", decision)
+	if !withCapacity.Prepare || withCapacity.Disabled || !withCapacity.QueueTriggered ||
+		withCapacity.IdleTriggered || withCapacity.Reason != "free_capacity_below_target_queue" {
+		t.Fatalf("with_capacity=%+v", withCapacity)
 	}
 }
 

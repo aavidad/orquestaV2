@@ -118,8 +118,9 @@ proceso externo). Esa semantica debe ser verificable para composiciones sin
 meter servidor, runtime ni filesystem en `orquesta-autoprogramming`.
 
 Consecuencia: `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS` tiene
-default contractual 60 y `0` desactiva la automejora idle. El planner conserva
-tareas ya visibles en cola como skipped, filtra narrativas y puede emitir una
-tarea scanner con refs de scanner/hash. La proyeccion publica distingue
+default contractual 60 y `0` desactiva solo el disparo por reloj idle, no el
+relleno por capacidad libre bajo `target_queue`. El planner conserva tareas ya
+visibles en cola como skipped, filtra narrativas y puede emitir una tarea
+scanner con refs de scanner/hash. La proyeccion publica distingue
 `outbox_pending`, `wait_external` y `external_process_verified`; la composicion
 real sigue siendo responsable de observar outbox/procesos y ejecutar tests.

@@ -243,7 +243,7 @@ func TestBuildAutoprogrammingProgrammableWorkV0CompactaBacklogScanParaWorkflowTa
 			},
 			AcceptanceCriteria: []string{
 				"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS por defecto dispara tras 60 segundos sin ejecuciones",
-				"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS=0 desactiva automejora idle",
+				"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS=0 desactiva el disparador por reloj idle",
 				"el servidor prepara automejora cuando hay idle o capacidad libre por debajo de ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE",
 				"el planner salta tareas ya visibles en cola y puede crear una tarea scanner para descubrir nuevos huecos",
 				"usar evidencia del fallo y corregir la causa general si es posible",

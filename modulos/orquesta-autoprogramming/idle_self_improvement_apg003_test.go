@@ -48,8 +48,8 @@ func TestAutoprogrammingIdleSelfImprovementAPG003ContratoPuroYEvidencia(t *testi
 		AutoprogrammingIdleSelfImprovementDecisionInputV0{
 			Config:         disabledConfig.Config,
 			IdleForSeconds: 600,
-			QueueSize:      0,
-			FreeCapacity:   10,
+			QueueSize:      1,
+			FreeCapacity:   0,
 		},
 	)
 	if disabledDecision.Prepare || !disabledDecision.Disabled {

@@ -121,9 +121,10 @@ func TestServerConfigFromEnvV0AutomejoraIdleDefaultYApagadoPorEnvV0(t *testing.T
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0 disabled: %v", err)
 	}
-	if !config.IdleSelfImprovementDisabled ||
+	if config.IdleSelfImprovementDisabled ||
+		!config.IdleSelfImprovementIdleDisabled ||
 		config.IdleSelfImprovementAfter != 0 {
-		t.Fatalf("idle disabled config=%+v", config)
+		t.Fatalf("idle trigger disabled config=%+v", config)
 	}
 }
 
