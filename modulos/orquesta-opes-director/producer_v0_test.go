@@ -695,6 +695,53 @@ func TestProduceOPESCausalJobsV0NoBloqueaRegistroConQATemaCompletaV0(t *testing.
 	}
 }
 
+func TestProduceOPESCausalJobsV0NoBloqueaRegistroConVisualDidacticoDeclaradoV0(t *testing.T) {
+	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
+		Status:       "accepted",
+		DomainRef:    "opes",
+		JobRef:       "job-topic-quality-visual-pass-001",
+		ArtifactRef:  "artifact-topic-quality-visual-pass-001",
+		ArtifactType: orquestadomainwork.DomainWorkArtifactTypeContentBlockV0,
+		ReceiptRef:   "receipt-topic-quality-visual-pass-001",
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "course_id", Value: "curso-grupo-b"},
+			{Name: "topic_id", Value: "tema-031"},
+			{Name: "source_work_kind", Value: "draft_content_block"},
+			{Name: "status", Value: "ready"},
+			{Name: "canonical_word_count", Value: "12000"},
+			{Name: "topic_quality_status", Value: "passed"},
+			{Name: "require_didactic_visual", Value: "true"},
+			{Name: "topic_text", Value: "Contenido publico del tema con desarrollo normativo y explicacion didactica sin instrucciones internas."},
+			{Name: "visuals", ValueJSON: json.RawMessage(`[
+				{
+					"visual_ref":"visual-ref-flujo-tramite",
+					"raster":true,
+					"anchor_ref":"apartado-ref-flujo",
+					"didactic_function":"diagrama de pasos, responsables y evidencias evaluables",
+					"evidence_refs":["evidence-ref-visual-reviewed"]
+				}
+			]`)},
+		},
+	}}}
+	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+	result, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{},
+		OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator})
+	if err != nil {
+		t.Fatalf("ProduceOPESCausalJobsV0: %v", err)
+	}
+	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "en_progreso_orquesta") ||
+		domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", topicRegistryQualityNeedsReworkRefV0) ||
+		domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_quality_issue_refs", ErrOPESTopicQualityDidacticVisualRequiredV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_quality_status", OPESTopicQualityStatusCompleteV0) {
+		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
+	}
+	if _, ok := requestedWorkKindForTestV0(result.RequestedJobs, "review_director_consolidation"); ok {
+		t.Fatalf("no debe crear followup de rework: result=%+v", result)
+	}
+}
+
 func TestProduceOPESCausalJobsV0NoRepiteRegistroDesdeRegistro(t *testing.T) {
 	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
 		Status:       "accepted",
