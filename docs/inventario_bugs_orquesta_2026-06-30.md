@@ -648,6 +648,15 @@ Evidencia: `TestOPESRequiredTestPolicyV0SecuenciaCompletaTieneValidadoresEspecif
 `TestProduceOPESCausalJobsV0BloqueaDerivadoOPESSinEvidenciaMinimaV0` y
 `go test -count=1 ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-director ./modulos/orquesta-opes-topic-registry ./modulos/orquesta-app-codex-stack`.
 
+Avance BUG-ORQ-20260701-058/075 2026-07-02 noche 3:
+`OPESTopicQualityContractV0` detecta anclas Markdown visibles `{#...}` en el
+texto publico como `opes_public_text_structural_contamination`. Esto cubre el
+fallo determinista observado en artefactos parciales OPES sin convertir texto
+libre recuperable en veto generico: solo una marca estructural de exportacion
+visible dispara rework editorial. Evidencia:
+`TestValidateOPESTopicQualityContractV0DetectaAnclasMarkdownPublicasV0` y
+`go test -count=1 ./modulos/orquesta-opes-director`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

@@ -116,6 +116,23 @@ func TestValidateOPESTopicQualityContractV0DetectaContaminacionEstructuralV0(t *
 	}
 }
 
+func TestValidateOPESTopicQualityContractV0DetectaAnclasMarkdownPublicasV0(t *testing.T) {
+	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
+		TopicRef:           "tema-002",
+		Level:              OPESTopicQualityLevelBV0,
+		CanonicalWordCount: 11200,
+		Text: strings.Join([]string{
+			"## Procedimiento administrativo comun {#procedimiento-administrativo-comun}",
+			"El texto publico debe quedar limpio para HTML, audio y paquete final.",
+		}, "\n"),
+	})
+
+	if result.Status != OPESTopicQualityStatusNeedsReworkV0 ||
+		!opesTopicQualityIssueCodeInSetV0(result.Issues, ErrOPESTopicQualityStructuralContaminationV0) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestValidateOPESTopicQualityContractV0NoAceptaRasterDecorativoComoDidacticoV0(t *testing.T) {
 	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
 		TopicRef:              "tema-010",

@@ -66,9 +66,10 @@ type OPESTopicQualityContractResultV0 struct {
 }
 
 var (
-	opesTopicQualityWordReV0       = regexp.MustCompile(`[\p{L}\p{N}]+([-'][\p{L}\p{N}]+)?`)
-	opesTopicQualityCodeFenceReV0  = regexp.MustCompile("(?s)```.*?```")
-	opesTopicQualityInlineCodeReV0 = regexp.MustCompile("`[^`]*`")
+	opesTopicQualityWordReV0           = regexp.MustCompile(`[\p{L}\p{N}]+([-'][\p{L}\p{N}]+)?`)
+	opesTopicQualityCodeFenceReV0      = regexp.MustCompile("(?s)```.*?```")
+	opesTopicQualityInlineCodeReV0     = regexp.MustCompile("`[^`]*`")
+	opesTopicQualityMarkdownAnchorReV0 = regexp.MustCompile(`\{#[A-Za-z0-9][A-Za-z0-9_-]*\}`)
 )
 
 type OPESTopicQualityVisualResultV0 struct {
@@ -459,6 +460,9 @@ func opesTopicPublicStructuralContaminationMatchesV0(text string) []string {
 		"tema_resumen.md",
 	}
 	var matches []string
+	if opesTopicQualityMarkdownAnchorReV0.MatchString(text) {
+		matches = append(matches, "markdown_anchor")
+	}
 	for _, pattern := range patterns {
 		if strings.Contains(normalized, pattern) {
 			matches = append(matches, pattern)
