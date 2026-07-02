@@ -140,6 +140,10 @@ Configuracion externa relacionada:
   pulso del supervisor residente. Por defecto se conserva acotado a `1`.
 - `ORQUESTA_SERVER_ALLOW_REPEATED_RUNS=true`: permite que un mismo pulso del
   supervisor repita run si la politica de la composicion lo necesita.
+- `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DISABLED=true`: opt-out explicito de
+  toda automejora residente, tanto por reloj idle como por capacidad libre. Usar
+  en smokes de conectores o servidores de dominio que deban aislar el trabajo
+  principal.
 - `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE`: tamano objetivo de cola
   de automejora. Si la cola visible queda por debajo y hay planner inyectado, el
   servidor puede pedir nuevas tareas aunque el supervisor no este idle.

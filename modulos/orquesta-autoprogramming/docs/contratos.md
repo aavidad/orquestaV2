@@ -222,6 +222,9 @@ que una composicion ya leyo desde su entorno. El modulo no llama a `os.Getenv`.
 
 Variables canonicas transportadas como contrato:
 
+- `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DISABLED`: opt-out de composicion para
+  no llamar al decisor ni preparar automejora residente. El modulo puro no lee
+  esta variable; la aplica el servidor antes de invocar el contrato.
 - `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS`: por defecto 60; valor
   `0` desactiva el disparo por reloj idle, sin apagar el relleno de cola por
   capacidad libre.

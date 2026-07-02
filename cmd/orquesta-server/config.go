@@ -33,11 +33,12 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 	)
 	idleSelfImprovementAfterSeconds := idleSelfImprovementAfterSecondsFromEnvV0()
 	idleSelfImprovementIdleDisabled := idleSelfImprovementAfterSeconds == 0
-	idleSelfImprovementDisabled := serverIdleSelfImprovementDisabledForOPESContextV0(
-		opesAutomationContext,
-		projectDir,
-		idleSelfImprovementProjectDir,
-	)
+	idleSelfImprovementDisabled := boolEnvOrDefaultV0(envServerIdleSelfImprovementDisabledV0, false) ||
+		serverIdleSelfImprovementDisabledForOPESContextV0(
+			opesAutomationContext,
+			projectDir,
+			idleSelfImprovementProjectDir,
+		)
 	stateDir := absDirEnvOrDefaultV0(envServerStateDirV0,
 		filepath.Join(defaultControlDirV0(projectDir), "state"))
 	runtimeDir := absDirEnvOrDefaultV0(envCodexRuntimeWorkDirV0,

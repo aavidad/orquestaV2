@@ -104,6 +104,22 @@ func TestSmokeGoalFirstAppServerRealProjectsCodeHomeFromCodexHomeV0(t *testing.T
 	}
 }
 
+func TestSmokeGoalFirstAppServerRealNoLanzaAutomejoraIdleV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+
+	for _, want := range []string{
+		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DISABLED=true",
+		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS=0",
+		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE=0",
+		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS=0",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("smoke Nueva App debe aislar automejora idle: falta %q", want)
+		}
+	}
+}
+
 func TestSmokeSelfProgrammingCompositeGoalFirstGuardsV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_self_programming_composite_goal_first.sh")

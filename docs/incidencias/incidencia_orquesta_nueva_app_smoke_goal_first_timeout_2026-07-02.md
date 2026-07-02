@@ -121,3 +121,36 @@ Evidencia focal:
 
 - `TestObserveAppDirectorGoalV0LanzaReworkGoalSiPolicyYPuertoDisponibles`
 - `TestObserveAppDirectorGoalV0LanzaReworkGoalPorTimeoutActivoV0`
+
+## Smoke posterior con proyeccion corregida
+
+Smoke real posterior con Orquesta `edc5a79e`, backend `app_server_tmux` y
+directorio temporal conservado en
+`/tmp/orquesta-smokes/orquesta-goal-first-app-server.UbU4HI`: la proyeccion ya
+no publica la closure bloqueada previa mientras el rework causal esta
+`running`. El flujo materializo una app real bajo
+`generated-apps/smoke-goal-first` con `README.md`, `pyproject.toml`, codigo
+hexagonal Python, tests `test_notes_service.py`/`test_http_api.py`, manuales y
+handoff; `observe` publico `artifact_refs` materializadas.
+
+El cierre sigue abierto: en el poll 112 el rework
+`goal-ref...-rework-1` quedo `goal_status=blocked`, `run_status=bloqueada`,
+`closure_status=blocked`, `current_phase=brainstorming_arquitectura`,
+`recommended_action=replan` y `summary=codex_app_server_goal_active_timeout`.
+El resultado durable seguia `status=invalid` con resumen `rework en progreso;
+cierre pendiente de documentacion profunda, pruebas y verificacion de
+artefactos`.
+
+Lectura: el bug ya no es solo materializacion. Orquesta consigue lanzar,
+observar, replanificar y detectar artefactos, pero no cierra de forma autonoma
+el contrato final cuando el rework materializa codigo y pruebas sin escribir un
+`orquesta_goal_result.v0` terminal aceptable. Hay que cerrar la regla de
+reconciliacion/cierre para "artefactos + tests presentes + receipt no terminal"
+sin volver al loop legacy ni aceptar falsos verdes.
+
+Hallazgo colateral documentado aparte: el servidor temporal lanzo un goal de
+autoprogramacion idle dentro del smoke aunque el escenario pretendia validar
+solo Nueva App aislada. Ver `BUG-ORQ-20260702-123`, cerrado haciendo que el
+servidor acepte `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DISABLED=true` como
+opt-out global y que el smoke lo exporte. Los ceros de `TARGET_QUEUE` y
+`MAX_REQUESTS` quedan solo como defensa adicional.

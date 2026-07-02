@@ -38,6 +38,26 @@ func TestServerConfigFromEnvV0ConfiguraAutomejoraIdleV0(t *testing.T) {
 	}
 }
 
+func TestServerConfigFromEnvV0DesactivaAutomejoraIdlePorEnvCanonicaV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envServerIdleSelfImprovementDisabledV0, "true")
+	t.Setenv(envServerIdleSelfImprovementAfterV0, "")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if !config.IdleSelfImprovementDisabled ||
+		!config.IdleSelfImprovementIdleDisabled ||
+		config.IdleSelfImprovementAfter != 0 {
+		t.Fatalf("automejora idle debe quedar desactivada por env canonica: %+v", config)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerIdleSelfImprovementDisabledV0)
+	if setting.Value != "true" || setting.Source != "explicit" || !setting.Canonical {
+		t.Fatalf("setting disabled=%+v", setting)
+	}
+}
+
 func TestServerConfigFromEnvV0AceptaAliasLegacyDeAutomejoraIdleConDiagnosticoV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerIdleSelfImprovementAfterV0, "")

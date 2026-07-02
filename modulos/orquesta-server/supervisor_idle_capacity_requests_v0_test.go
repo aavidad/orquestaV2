@@ -227,6 +227,45 @@ func TestRuntimeV0SupervisorPreparaCapacidadAunqueRelojIdleEsteDesactivadoV0(t *
 	}
 }
 
+func TestRuntimeV0SupervisorNoPreparaCapacidadConAutomejoraDesactivadaV0(t *testing.T) {
+	now := time.Date(2026, 7, 2, 12, 30, 0, 0, time.UTC)
+	supervisor := &fakeSupervisorV0{
+		results: []fakeSupervisorResultV0{{result: orquestarunsupervisor.RunSupervisorResultV0{
+			StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
+		}}},
+		selfStarted: make(chan struct{}, 1),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                        t.TempDir(),
+		TickInterval:                    time.Hour,
+		IdleSelfImprovementDisabled:     true,
+		IdleSelfImprovementAfter:        0,
+		IdleSelfImprovementIdleDisabled: true,
+		IdleSelfImprovementMaxRequests:  3,
+		IdleSelfImprovementTargetQueue:  4,
+		AuditDisabled:                   true,
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: &memoryStateStoreV0{},
+		Clock:      fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	markNoExecutionSinceForTestV0(runtime, now.Add(-2*time.Hour))
+
+	runtime.runSupervisorTickV0(context.Background())
+
+	select {
+	case <-supervisor.selfStarted:
+		t.Fatalf("no debe preparar automejora con automejora desactivada")
+	default:
+	}
+	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
+		t.Fatalf("plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
+	}
+}
+
 func TestRuntimeV0SupervisorFiltraRequestsDeAutomejoraPorPuertoV0(t *testing.T) {
 	now := time.Date(2026, 5, 27, 9, 0, 0, 0, time.UTC)
 	supervisor := &fakeSupervisorV0{
