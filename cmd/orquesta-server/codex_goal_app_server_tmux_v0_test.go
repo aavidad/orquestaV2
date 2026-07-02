@@ -826,6 +826,89 @@ func TestCodexAppServerTmuxBackendV0CleanupActiveWorkNoMataSesionSinOwnerNiConfi
 	}
 }
 
+func TestCodexAppServerTmuxBackendV0CleanupActiveWorkLimpiaOwnerMarkerRecuperableEscaneadoV0(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	tmuxLog := filepath.Join(root, "tmux.log")
+	fakeTmux := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte(fakeCodexAppServerTmuxCommandForTestV0()), 0o700); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	runtimeDir := filepath.Join(root, "runtime")
+	ownerDir := filepath.Join(runtimeDir, codexAppServerTmuxDirV0)
+	if err := os.MkdirAll(ownerDir, 0o700); err != nil {
+		t.Fatalf("mkdir owner dir: %v", err)
+	}
+	scannedSession := "orquesta-goal-scanned-cleanup-1234567890"
+	markerPath := filepath.Join(ownerDir, codexAppServerTmuxMarkerFileV0)
+	marker := `{
+  "schema_version": "orquesta_codex_app_server_tmux_owner.v0",
+  "owner_ref": "orquesta-codex-goal-app-server-tmux-v0",
+  "session_name": "` + scannedSession + `",
+  "socket_ref": "socket-ref-codex-goal-app-server-tmux"
+}
+`
+	if err := os.WriteFile(markerPath, []byte(marker), 0o600); err != nil {
+		t.Fatalf("write owner marker: %v", err)
+	}
+	scannedSocket := filepath.Join(ownerDir, "g-scanned.sock")
+	if err := os.WriteFile(scannedSocket, []byte("stale socket"), 0o600); err != nil {
+		t.Fatalf("write scanned socket: %v", err)
+	}
+	if err := os.WriteFile(tmuxLog+".session", []byte("stale session"), 0o600); err != nil {
+		t.Fatalf("write fake session: %v", err)
+	}
+	backend := serverCodexAppServerTmuxBackendV0{
+		PathEnv:        binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		SocketPath:     filepath.Join(root, "other", "s.sock"),
+		SessionName:    "external-session",
+		RuntimeWorkDir: runtimeDir,
+		Timeout:        time.Second,
+	}
+	t.Setenv("ORQUESTA_TEST_TMUX_LOG", tmuxLog)
+
+	before, err := backend.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{})
+	if err != nil {
+		t.Fatalf("ReadActiveShutdownWorkV0 before: %v", err)
+	}
+	if len(before.ActiveWorks) != 1 ||
+		before.ActiveWorks[0].WorkRef != scannedSession ||
+		!containsStringForTestV0(before.EvidenceRefs, "evidence-ref-codex-app-server-tmux-owner-scan") {
+		t.Fatalf("before=%+v", before)
+	}
+
+	result, err := backend.CleanupActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0{
+		CleanupGoalBackends: true,
+		ActiveWorks:         before.ActiveWorks,
+	})
+	if err != nil {
+		t.Fatalf("CleanupActiveShutdownWorkV0: %v", err)
+	}
+	if result.CleanedWorkCount != 1 ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-owner-cleaned") {
+		t.Fatalf("result=%+v", result)
+	}
+	if _, err := os.Stat(markerPath); !os.IsNotExist(err) {
+		t.Fatalf("owner marker escaneado no eliminado err=%v", err)
+	}
+	if _, err := os.Stat(scannedSocket); !os.IsNotExist(err) {
+		t.Fatalf("socket escaneado no eliminado err=%v", err)
+	}
+	if _, err := os.Stat(tmuxLog + ".session"); !os.IsNotExist(err) {
+		t.Fatalf("session fake escaneada no eliminada err=%v", err)
+	}
+	after, err := backend.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{})
+	if err != nil {
+		t.Fatalf("ReadActiveShutdownWorkV0 after: %v", err)
+	}
+	if len(after.ActiveWorks) != 0 {
+		t.Fatalf("after=%+v", after)
+	}
+}
+
 func TestCodexAppServerTmuxBackendV0ReadActiveShutdownWorkDetectaRestosPropiosV0(t *testing.T) {
 	root := t.TempDir()
 	binDir := filepath.Join(root, "bin")
