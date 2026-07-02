@@ -17,6 +17,11 @@ pruebas. No despliega OPES, no monta `uso-app`, no monta temarios, no monta
 
 ## Preparacion remota
 
+`sudo` se limita a preparar directorios aislados en el host bajo
+`/srv/orquesta-self` y a operar el contenedor `orquesta-self-programming` cuando
+sea imprescindible. Dentro del contenedor el usuario esperado es `10001:10001`;
+no se trabaja como root.
+
 ```bash
 sudo install -d -o 10001 -g 10001 /srv/orquesta-self/state
 sudo install -d -o 10001 -g 10001 /srv/orquesta-self/runtime
@@ -43,6 +48,20 @@ Codex aisladas en `/srv/orquesta-self/codex-home`, montadas como
 docker build -f Dockerfile.self-programming -t orquesta-self-programming:local .
 docker compose -f deploy/self-programming/docker-compose.yml up -d
 ```
+
+## Contrato verificable
+
+El contrato local de seguridad del perfil aislado se valida con:
+
+```bash
+go test -count=1 ./deploy/self-programming
+```
+
+La prueba debe fallar si el compose publica puertos fuera de
+`127.0.0.1:19039`, monta rutas fuera de `/srv/orquesta-self`, monta
+`/var/run/docker.sock`, pierde `no-new-privileges`, `cap_drop: ALL`,
+`read_only: true` o usuario `10001:10001`, o si el env de ejemplo activa
+produccion, OPES/DomainWork, promocion automatica o fallback `stdio`/proxy.
 
 ## Quien dirige
 
@@ -72,9 +91,11 @@ Despues abre `http://127.0.0.1:19039`.
 
 ```bash
 docker inspect orquesta-self-programming \
-  --format '{{json .HostConfig.Binds}} {{json .NetworkSettings.Ports}}'
+  --format '{{json .HostConfig.Binds}} {{json .NetworkSettings.Ports}} {{json .HostConfig.ReadonlyRootfs}} {{json .HostConfig.SecurityOpt}} {{json .HostConfig.CapDrop}}'
 ```
 
 Debe verse solo `/srv/orquesta-self/...` y el puerto publicado como
 `127.0.0.1:19039`. No debe aparecer `/home/berserk/deploy/opes`,
-`/var/run/docker.sock`, `uso-app` ni rutas de temarios.
+`/var/run/docker.sock`, `uso-app` ni rutas de temarios. `ReadonlyRootfs` debe
+ser `true`, `SecurityOpt` debe incluir `no-new-privileges:true` y `CapDrop`
+debe incluir `ALL`.
