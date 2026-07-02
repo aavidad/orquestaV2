@@ -138,3 +138,20 @@ Evidencia focal:
 
 - `TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy`
 - `TestObserveAppDirectorGoalV0BloqueaSiReworkGoalAgotaPresupuesto`
+
+Smoke real posterior con Orquesta `0906935bf8` y directorio temporal conservado
+en `/tmp/orquesta-goal-first-app-server.5dwqlc`: el segundo rework permitio que
+el agente actualizara el receipt a `status=complete`, con `artifact_refs`,
+`artifact_paths`, `required_test_results passed` y `evidence_refs`, pero
+`observe` siguio viendo el backend como `running` hasta timeout y finalmente
+bloqueo el run sin ingerir ese receipt terminal materializado.
+
+Avance aplicado: el scanner de materialized refs lee ahora
+`orquesta_goal_result*.json` completos, valida el cierre con el
+`GoalClosureValidator` y persiste `LastResult`/`LastClosure` aceptados aunque el
+backend todavia no haya devuelto el resultado por API.
+
+Evidencia focal:
+
+- `TestCodexStackObserveAppDirectorGoalExecutorV0IngiereReceiptTerminalMaterializadoV0`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack`
