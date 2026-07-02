@@ -20,6 +20,9 @@ const (
 	goalFirstResidentReworkReasonRequiredTestsV0    = orquestamcp.MCPGoalFirstRequiredTestEvidenceMissingV0
 	goalFirstResidentReworkReasonPhase0V0           = orquestamcp.MCPGoalFirstPhase0CompleteNonPublishableV0
 	goalFirstResidentReworkReasonPartialArtifactsV0 = orquestamcp.MCPGoalFirstPartialArtifactsWrittenV0
+	goalFirstResidentReworkReasonBackendMissingV0   = "goal_backend_missing_after_external_cleanup"
+	goalFirstResidentBackendMissingEvidenceRefV0    = "evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup"
+	goalFirstResidentBackendMissingReconciledV0     = "evidence-ref-goal-first-resident-backend-missing-reconciled"
 )
 
 func (executor CodexStackRunSupervisorExecutorV0) maybePrepareGoalFirstResidentReworkV0(
@@ -98,6 +101,7 @@ func goalFirstResidentReworkReasonV0(state orquestagoal.GoalWorkStateV0) (string
 		return goalFirstResidentReworkReasonActiveTimeoutV0, goalFirstResidentReworkEvidenceRefsV0(state), true
 	}
 	for _, reason := range []string{
+		goalFirstResidentReworkReasonBackendMissingV0,
 		goalFirstResidentReworkReasonQAFailedTextV0,
 		goalFirstResidentReworkReasonArtifactPathsV0,
 		goalFirstResidentReworkReasonMissingReceiptV0,
@@ -209,6 +213,155 @@ func goalFirstResidentReworkEvidenceRefsV0(state orquestagoal.GoalWorkStateV0) [
 		}
 	}
 	return compactStringsV0(refs)
+}
+
+func (executor CodexStackRunSupervisorExecutorV0) maybeReconcileGoalFirstResidentBackendMissingV0(
+	ctx context.Context,
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+	state orquestagoal.GoalWorkStateV0,
+	result orquestamcp.MCPRunSupervisorToolResultV0,
+) (orquestagoal.GoalWorkStateV0, orquestamcp.MCPRunSupervisorToolResultV0) {
+	if !input.ResidentMode ||
+		executor.Stack == nil ||
+		executor.Stack.Ports.GoalStateStore == nil ||
+		executor.Stack.MCPTransportBindings.DirectorStats == nil ||
+		strings.TrimSpace(state.ExternalGoalRef) == "" ||
+		!orquestagoal.GoalWorkStatePendingObservationV0(state) {
+		return state, result
+	}
+	observed, err := executor.Stack.MCPTransportBindings.DirectorStats.Execute(
+		ctx,
+		orquestamcp.MCPDirectorStatsToolInputV0{
+			RunRef: strings.TrimSpace(state.RunRef),
+		},
+	)
+	if err != nil ||
+		strings.TrimSpace(observed.Estado) != orquestamcp.MCPDirectorStatsEstadoOKV0 ||
+		goalFirstResidentObservedGoalActiveV0(observed) ||
+		goalFirstResidentObservedGoalTerminalV0(observed) {
+		return state, result
+	}
+	evidenceRefs := compactStringsV0(append(
+		[]string{
+			goalFirstResidentBackendMissingReconciledV0,
+			goalFirstResidentBackendMissingEvidenceRefV0,
+		},
+		goalFirstResidentObservedGoalEvidenceRefsV0(observed)...,
+	))
+	goalRef := firstNonEmptyQueuedSourceV0(state.GoalRef, goalFirstResidentObservedGoalRefV0(observed))
+	externalGoalRef := firstNonEmptyQueuedSourceV0(state.ExternalGoalRef, goalFirstResidentObservedExternalGoalRefV0(observed))
+	state.Status = orquestagoal.GoalStatusBlockedV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Summary:         "resident supervisor reconciled missing backend goal after external cleanup",
+		ArtifactRefs:    compactStringsV0(goalFirstResidentObservedArtifactRefsV0(observed)),
+		EvidenceRefs:    evidenceRefs,
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  goalFirstResidentReworkReasonBackendMissingV0,
+			Field: "goal_backend",
+		}},
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:       orquestagoal.GoalStatusBlockedV0,
+		NeedsRework:  true,
+		EvidenceRefs: evidenceRefs,
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  goalFirstResidentReworkReasonBackendMissingV0,
+			Field: "goal_backend",
+		}},
+	}
+	state.EvidenceRefs = compactStringsV0(append(state.EvidenceRefs, evidenceRefs...))
+	if err := executor.Stack.Ports.GoalStateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
+		result.Diagnostics = append(result.Diagnostics, orquestamcp.MCPAutoprogrammingDiagnosticV0{
+			Code:         "goal_first_resident_backend_missing_reconcile_failed",
+			Scope:        "run:" + strings.TrimSpace(state.RunRef),
+			Message:      err.Error(),
+			EvidenceRefs: evidenceRefs,
+		})
+		return state, result
+	}
+	result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, evidenceRefs...))
+	result.NextActions = compactStringsV0(append(result.NextActions, "goal_first_resident_rework_after_external_cleanup"))
+	result.Diagnostics = append(result.Diagnostics, orquestamcp.MCPAutoprogrammingDiagnosticV0{
+		Code:         "goal_first_resident_backend_missing_reconciled",
+		Scope:        "run:" + strings.TrimSpace(state.RunRef),
+		Message:      "resident supervisor marked running goal-first state blocked/rework after observing missing backend goal",
+		EvidenceRefs: evidenceRefs,
+	})
+	return state, result
+}
+
+func goalFirstResidentObservedGoalActiveV0(
+	observed orquestamcp.MCPDirectorStatsToolResultV0,
+) bool {
+	if observed.Goal == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(observed.Goal.Status)) {
+	case "active", orquestagoal.GoalStatusRunningV0, orquestagoal.GoalStatusAcceptedV0:
+		return true
+	default:
+		return false
+	}
+}
+
+func goalFirstResidentObservedGoalTerminalV0(
+	observed orquestamcp.MCPDirectorStatsToolResultV0,
+) bool {
+	if observed.Goal == nil {
+		return false
+	}
+	return goalFirstResidentObservedGoalStatusTerminalV0(observed.Goal.Status) ||
+		observed.Goal.ClosureAccepted ||
+		goalFirstResidentObservedGoalStatusTerminalV0(observed.Goal.ClosureStatus)
+}
+
+func goalFirstResidentObservedGoalStatusTerminalV0(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case orquestagoal.GoalStatusCompleteV0, orquestagoal.GoalStatusAcceptedV0:
+		return true
+	default:
+		return false
+	}
+}
+
+func goalFirstResidentObservedGoalEvidenceRefsV0(
+	observed orquestamcp.MCPDirectorStatsToolResultV0,
+) []string {
+	if observed.Goal == nil {
+		return []string{}
+	}
+	return compactStringsV0(observed.Goal.EvidenceRefs)
+}
+
+func goalFirstResidentObservedArtifactRefsV0(
+	observed orquestamcp.MCPDirectorStatsToolResultV0,
+) []string {
+	if observed.Goal == nil {
+		return []string{}
+	}
+	return compactStringsV0(observed.Goal.ArtifactRefs)
+}
+
+func goalFirstResidentObservedGoalRefV0(
+	observed orquestamcp.MCPDirectorStatsToolResultV0,
+) string {
+	if observed.Goal == nil {
+		return ""
+	}
+	return strings.TrimSpace(observed.Goal.GoalRef)
+}
+
+func goalFirstResidentObservedExternalGoalRefV0(
+	observed orquestamcp.MCPDirectorStatsToolResultV0,
+) string {
+	if observed.Goal == nil {
+		return ""
+	}
+	return strings.TrimSpace(observed.Goal.ExternalGoalRef)
 }
 
 func goalFirstResidentExistingReworkRunRefV0(state orquestagoal.GoalWorkStateV0) string {

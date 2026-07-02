@@ -97,6 +97,87 @@ func TestRunSupervisorGoalFirstResidentReworkEsIdempotenteV0(t *testing.T) {
 	}
 }
 
+func TestRunSupervisorGoalFirstResidentReconciliaBackendMissingTrasCleanupExternoV0(t *testing.T) {
+	ctx := context.Background()
+	store := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	runRef := "run-ref-goal-first-resident-backend-missing-001"
+	goalRef := "goal-ref-goal-first-resident-backend-missing-001"
+	externalGoalRef := "thread-ref-goal-first-resident-backend-missing-001"
+	source := orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			GoalRef:      goalRef,
+			RequestRef:   "request-ref-goal-first-resident-backend-missing-001",
+			RunRef:       runRef,
+			ProjectRef:   "project-ref-goal-first-resident-backend-missing",
+			Objective:    "Reconciliar cleanup externo sin operador.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{
+				Path:    "docs/goal-first-resident-backend-missing.md",
+				Purpose: "evidencia de test",
+			}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-first-resident-backend-missing-source"},
+	}
+	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
+	}
+	stats := &goalFirstResidentDirectorStatsForTestV0{
+		result: orquestamcp.MCPDirectorStatsToolResultV0{
+			Estado: orquestamcp.MCPDirectorStatsEstadoOKV0,
+			RunRef: runRef,
+		},
+	}
+	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:     store,
+			GoalReworkLauncher: launcher,
+		},
+		Stores: StoresV0{AppGoalStateStore: store},
+		MCPTransportBindings: orquestamcp.MCPTransportBindingsV0{
+			DirectorStats: stats,
+		},
+	}}
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef:       source.RunRef,
+		ResidentMode: true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if stats.calls != 1 ||
+		result.StopReason != "goal_first_resident_rework_prepared" ||
+		len(result.RepairRunRefs) != 1 ||
+		launcher.calls != 1 ||
+		!codexStackStringInSetForTestV0(result.EvidenceRefs, goalFirstResidentBackendMissingReconciledV0) {
+		t.Fatalf("resultado inesperado: result=%+v stats_calls=%d launcher_calls=%d", result, stats.calls, launcher.calls)
+	}
+	persistedSource, err := store.LoadGoalWorkStateV0(ctx, source.RunRef)
+	if err != nil {
+		t.Fatalf("Load source: %v", err)
+	}
+	if persistedSource.Status != orquestagoal.GoalStatusBlockedV0 ||
+		persistedSource.LastResult == nil ||
+		persistedSource.LastResult.Status != orquestagoal.GoalStatusBlockedV0 ||
+		persistedSource.LastClosure == nil ||
+		!persistedSource.LastClosure.NeedsRework ||
+		!goalFirstResidentHasIssueOrEvidenceV0(persistedSource, goalFirstResidentReworkReasonBackendMissingV0) ||
+		goalFirstResidentExistingReworkRunRefV0(persistedSource) != result.RepairRunRefs[0] {
+		t.Fatalf("source no reconciliado/rework: %+v", persistedSource)
+	}
+}
+
 func TestRunSupervisorGoalFirstResidentPreparaReworkPorTimeoutInicialSinArtefactosV0(t *testing.T) {
 	ctx := context.Background()
 	store := newGoalFirstQueueStateStoreForTestV0()
@@ -443,6 +524,19 @@ func goalFirstResidentReworkSourceStateForTestV0(runRef, reason string) orquesta
 type goalFirstResidentReworkLauncherForTestV0 struct {
 	calls int
 	specs []orquestagoal.GoalWorkSpecV0
+}
+
+type goalFirstResidentDirectorStatsForTestV0 struct {
+	calls  int
+	result orquestamcp.MCPDirectorStatsToolResultV0
+}
+
+func (fake *goalFirstResidentDirectorStatsForTestV0) Execute(
+	_ context.Context,
+	_ orquestamcp.MCPDirectorStatsToolInputV0,
+) (orquestamcp.MCPDirectorStatsToolResultV0, error) {
+	fake.calls++
+	return fake.result, nil
 }
 
 func hasGoalFirstResidentReworkContextForTestV0(
