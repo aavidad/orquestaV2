@@ -758,6 +758,74 @@ func TestCodexAppServerTmuxBackendV0ReadActiveShutdownWorkIgnoraSocketNoPropioV0
 	}
 }
 
+func TestCodexAppServerTmuxBackendV0ReadActiveShutdownWorkDetectaOwnerMarkerRecuperableFueraDeSesionConfiguradaV0(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	fakeTmux := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte(`#!/bin/sh
+case "${1:-}" in
+  has-session)
+    exit 0
+    ;;
+  display-message)
+    printf '%s\n' "${ORQUESTA_TEST_PANE_PID:-}"
+    exit 0
+    ;;
+esac
+exit 2
+`), 0o700); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	sleep := exec.Command("sleep", "30")
+	if err := sleep.Start(); err != nil {
+		t.Fatalf("start sleep: %v", err)
+	}
+	defer func() {
+		_ = sleep.Process.Kill()
+		_, _ = sleep.Process.Wait()
+	}()
+	runtimeDir := filepath.Join(root, "runtime")
+	ownerDir := filepath.Join(runtimeDir, codexAppServerTmuxDirV0)
+	if err := os.MkdirAll(ownerDir, 0o700); err != nil {
+		t.Fatalf("mkdir owner dir: %v", err)
+	}
+	extraSession := "orquesta-goal-extra-owner-1234567890"
+	marker := `{
+  "schema_version": "orquesta_codex_app_server_tmux_owner.v0",
+  "owner_ref": "orquesta-codex-goal-app-server-tmux-v0",
+  "session_name": "` + extraSession + `",
+  "socket_ref": "socket-ref-codex-goal-app-server-tmux"
+}
+`
+	if err := os.WriteFile(filepath.Join(ownerDir, codexAppServerTmuxMarkerFileV0), []byte(marker), 0o600); err != nil {
+		t.Fatalf("write owner marker: %v", err)
+	}
+	t.Setenv("ORQUESTA_TEST_PANE_PID", strconv.Itoa(sleep.Process.Pid))
+	backend := serverCodexAppServerTmuxBackendV0{
+		PathEnv:        binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		SocketPath:     filepath.Join(root, "other", "s.sock"),
+		SessionName:    "external-session",
+		RuntimeWorkDir: runtimeDir,
+		Timeout:        time.Second,
+	}
+
+	result, err := backend.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{})
+	if err != nil {
+		t.Fatalf("ReadActiveShutdownWorkV0: %v", err)
+	}
+	if len(result.ActiveWorks) != 1 ||
+		result.ActiveWorks[0].WorkRef != extraSession ||
+		result.ActiveWorks[0].Status != orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0 ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-owner-scan") ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-session") ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestCodexAppServerTmuxBackendV0EsperaPanePIDAntesDeReadyV0(t *testing.T) {
 	command := exec.Command("sleep", "30")
 	if err := command.Start(); err != nil {
