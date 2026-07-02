@@ -12,6 +12,7 @@ import (
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
@@ -138,7 +139,7 @@ func TestStackShutdownStatsV0ExponeLivenessDeAgentesObsoletos(t *testing.T) {
 	}
 }
 
-func TestStackShutdownActiveWorkReaderV0BloqueaBackendRunningSinTimeoutLocal(t *testing.T) {
+func TestStackShutdownActiveWorkReaderV0ListaGoalFirstRunningSinBloquearComoBackend(t *testing.T) {
 	fixture := newStackShutdownCheckpointFixtureV0(t)
 	goalStates := newGoalFirstQueueStateStoreForTestV0()
 	fixture.preparer.Config.Stores.AppGoalStateStore = goalStates
@@ -178,15 +179,72 @@ func TestStackShutdownActiveWorkReaderV0BloqueaBackendRunningSinTimeoutLocal(t *
 		t.Fatalf("ReadActiveShutdownWorkV0: %v", err)
 	}
 	if len(result.ActiveWorks) != 1 ||
-		result.ActiveWorks[0].Kind != "goal_backend" ||
+		result.ActiveWorks[0].Kind != "goal_first" ||
 		result.ActiveWorks[0].RunRef != runRef ||
 		result.ActiveWorks[0].WorkRef != goalRef ||
 		result.ActiveWorks[0].ExternalWorkRef != "external-goal-ref-shutdown-active-001" ||
-		result.ActiveWorks[0].Status != orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0 ||
+		result.ActiveWorks[0].Status != orquestagoal.GoalStatusRunningV0 ||
 		!hasStackShutdownEvidenceForTestV0(result.EvidenceRefs, "goal-state-ref-shutdown-active") ||
-		!hasStackShutdownEvidenceForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-goal-backend-running-state") ||
+		hasStackShutdownEvidenceForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-goal-backend-running-state") ||
 		hasStackShutdownEvidenceForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-goal-backend-active-timeout") {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestStackShutdownRunControlWriterV0ForcedStopMarcaGoalTerminalReplanificable(t *testing.T) {
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	runRef := "run-ref-shutdown-forced-terminal-001"
+	goalRef := "goal-ref-shutdown-forced-terminal-001"
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			GoalRef:   goalRef,
+			RunRef:    runRef,
+			Objective: "probar reconciliacion terminal tras forced stop",
+			WriteSet:  []orquestagoal.GoalWriteScopeV0{{Path: "docs/shutdown_forced_terminal.md"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: "external-goal-ref-shutdown-forced-terminal-001",
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+		EvidenceRefs: []string{"goal-state-ref-shutdown-forced-terminal"},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	writer := stackShutdownRunControlWriterV0{
+		Inner:          fakeStackShutdownRunControlWriterV0{},
+		GoalStateStore: goalStates,
+	}
+
+	controlState, err := writer.StopRunV0(context.Background(), orquestaruncontrol.StopRunCommandV0{
+		RunRef:       runRef,
+		Forced:       true,
+		EvidenceRefs: []string{"evidence-ref-operator-forced-stop"},
+	})
+	if err != nil {
+		t.Fatalf("StopRunV0: %v", err)
+	}
+	if controlState.Status != orquestaruncontrol.RunControlStatusStoppedV0 {
+		t.Fatalf("controlState=%+v", controlState)
+	}
+	reconciled, err := goalStates.LoadGoalWorkStateV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if reconciled.Status != orquestagoal.GoalStatusBlockedV0 ||
+		reconciled.LastResult == nil ||
+		reconciled.LastResult.Status != orquestagoal.GoalStatusBlockedV0 ||
+		len(reconciled.LastResult.Issues) != 1 ||
+		reconciled.LastResult.Issues[0].Code != "operator_forced_stop_no_artifacts" ||
+		reconciled.LastClosure == nil ||
+		!reconciled.LastClosure.NeedsRework ||
+		!hasStackShutdownEvidenceForTestV0(reconciled.EvidenceRefs, "evidence-ref-server-shutdown-goal-forced-terminal-reconciled") {
+		t.Fatalf("reconciled=%+v", reconciled)
 	}
 }
 
@@ -433,6 +491,44 @@ type stackShutdownSnapshotSourceForTestV0 struct {
 
 type stackShutdownActiveGoalObserverForTestV0 struct {
 	result orquestaservershutdown.ActiveShutdownWorkResultV0
+}
+
+type fakeStackShutdownRunControlWriterV0 struct{}
+
+func (fakeStackShutdownRunControlWriterV0) PauseRunV0(
+	context.Context,
+	orquestaruncontrol.PauseRunCommandV0,
+) (orquestaruncontrol.RunControlStateV0, error) {
+	return orquestaruncontrol.RunControlStateV0{}, nil
+}
+
+func (fakeStackShutdownRunControlWriterV0) ResumeRunV0(
+	context.Context,
+	orquestaruncontrol.ResumeRunCommandV0,
+) (orquestaruncontrol.RunControlStateV0, error) {
+	return orquestaruncontrol.RunControlStateV0{}, nil
+}
+
+func (fakeStackShutdownRunControlWriterV0) StopRunV0(
+	_ context.Context,
+	command orquestaruncontrol.StopRunCommandV0,
+) (orquestaruncontrol.RunControlStateV0, error) {
+	return orquestaruncontrol.RunControlStateV0{
+		RunRef: command.RunRef,
+		Status: orquestaruncontrol.RunControlStatusStoppedV0,
+		Forced: command.Forced,
+	}, nil
+}
+
+func (fakeStackShutdownRunControlWriterV0) CancelRunV0(
+	_ context.Context,
+	command orquestaruncontrol.CancelRunCommandV0,
+) (orquestaruncontrol.RunControlStateV0, error) {
+	return orquestaruncontrol.RunControlStateV0{
+		RunRef: command.RunRef,
+		Status: orquestaruncontrol.RunControlStatusCanceledV0,
+		Forced: command.Forced,
+	}, nil
 }
 
 func (observer stackShutdownActiveGoalObserverForTestV0) ObserveGoalWorkV0(

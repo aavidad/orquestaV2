@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 )
 
@@ -157,6 +159,83 @@ func TestMCPRunControlExecutorV0StopForcedPermiteTerminalSiGoalBackendYaComplete
 	}
 }
 
+func TestMCPRunControlExecutorV0StopForcedReconcilesGoalHighConsumptionCheckpointOnly(t *testing.T) {
+	runRef := "run-ref-run-control-goal-checkpoint-only-stop-001"
+	goalRef := "goal-ref-run-control-goal-checkpoint-only-stop-001"
+	checkpointRef := "artifact-ref-checkpoint:run-control:checkpoint-started-txt"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: "thread-ref-" + goalRef,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Cerrar forced stop checkpoint-only como replanificable.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: "thread-ref-" + goalRef,
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+		EvidenceRefs: []string{"evidence-ref-run-control-goal-state-seeded"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	port := &fakeMCPRunControlPortV0{
+		readState:  runControlStateForMCPTestV0(runRef, orquestaruncontrol.RunControlStatusRunningV0, false),
+		stopStatus: orquestaruncontrol.RunControlStatusStoppedV0,
+	}
+	goalBackend := &fakeMCPRunControlGoalBackendStateV0{
+		results: []MCPDirectorStatsToolResultV0{
+			mcpRunControlGoalBackendStatsWithUsageForTestV0(runRef, goalRef, "active", 150000, []string{checkpointRef}, nil),
+			{Estado: MCPDirectorStatsEstadoOKV0, RunRef: runRef},
+		},
+	}
+	executor := MCPRunControlToolExecutorV0{
+		Port:             port,
+		GoalBackendState: goalBackend,
+		GoalStateStore:   goalStates,
+	}
+
+	result, err := executor.Execute(context.Background(), MCPRunControlToolInputV0{
+		RequestID:   "req-run-control-goal-checkpoint-only-stop-001",
+		Action:      "stop",
+		RunRef:      runRef,
+		RequestedBy: "orquesta-director",
+		Reason:      "forced stop tras checkpoint_only_high_consumption",
+		Forced:      true,
+	})
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPRunControlEstadoOKV0 ||
+		result.Status != string(orquestaruncontrol.RunControlStatusStoppedV0) ||
+		result.RecommendedAction != "replan_narrow_context" ||
+		!containsMCPRunControlDiagnosticForTestV0(result.Diagnostics, "goal_state_terminal_reconciled_after_forced_stop") ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-run-control-goal-forced-terminal-reconciled") {
+		t.Fatalf("result=%+v", result)
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if state.Status != orquestagoal.GoalStatusBlockedV0 ||
+		state.LastResult == nil ||
+		state.LastResult.Status != orquestagoal.GoalStatusBlockedV0 ||
+		!containsStringMCPTestV0(state.LastResult.ArtifactRefs, checkpointRef) ||
+		state.LastClosure == nil ||
+		state.LastClosure.Status != orquestagoal.GoalStatusBlockedV0 ||
+		!state.LastClosure.NeedsRework ||
+		!containsStringMCPTestV0(state.EvidenceRefs, mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0) {
+		t.Fatalf("state=%+v", state)
+	}
+}
+
 func TestMCPRunControlExecutorV0ValidaAction(t *testing.T) {
 	result, err := NewMCPRunControlToolExecutorV0(&fakeMCPRunControlPortV0{}).Execute(
 		context.Background(),
@@ -303,6 +382,38 @@ func mcpRunControlGoalBackendStatsForTestV0(
 			EvidenceRefs:    []string{"evidence-ref-goal-backend-" + status},
 		},
 	}
+}
+
+func mcpRunControlGoalBackendStatsWithUsageForTestV0(
+	runRef string,
+	goalRef string,
+	status string,
+	tokens int64,
+	artifactRefs []string,
+	domainReceiptRefs []string,
+) MCPDirectorStatsToolResultV0 {
+	result := mcpRunControlGoalBackendStatsForTestV0(runRef, goalRef, status)
+	result.Goal.ArtifactRefs = compactStringsMCPV0(artifactRefs)
+	result.Goal.DomainReceiptRefs = compactStringsMCPV0(domainReceiptRefs)
+	result.Stats = &orquestacionnucleoapp.DirectorRunStatsV0{
+		RunRef: runRef,
+		UsageSummary: &orquestacionnucleoapp.DirectorRunUsageStatsV0{
+			TotalTokens: tokens,
+		},
+	}
+	return result
+}
+
+func containsMCPRunControlDiagnosticForTestV0(
+	diagnostics []MCPRunControlDiagnosticV0,
+	code string,
+) bool {
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Code == code {
+			return true
+		}
+	}
+	return false
 }
 
 func (fake *fakeMCPRunControlPortV0) RecordRunCheckpointV0(

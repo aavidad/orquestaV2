@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 )
 
@@ -11,6 +12,7 @@ type MCPRunControlToolExecutorV0 struct {
 	Port              orquestaruncontrol.RunControlWriterPortV0
 	ExternalJobSource MCPDirectorExternalJobStatsSourcePortV0
 	GoalBackendState  MCPTransportDirectorStatsExecutorV0
+	GoalStateStore    orquestagoal.GoalWorkStateStorePortV0
 }
 
 func NewMCPRunControlToolExecutorV0(
@@ -53,6 +55,7 @@ func (executor MCPRunControlToolExecutorV0) Execute(
 	afterGoal := executor.observeRunControlGoalBackendV0(ctx, resolved)
 	result := newMCPRunControlResultV0(resolved, state)
 	result = executor.enrichRunControlGoalBackendResultV0(result, resolved, beforeLocal, beforeGoal, afterGoal)
+	result = executor.reconcileGoalStateAfterForcedControlV0(ctx, result, resolved, beforeGoal, afterGoal)
 	return result, nil
 }
 
@@ -179,6 +182,137 @@ func (executor MCPRunControlToolExecutorV0) enrichRunControlGoalBackendResultV0(
 	result.Status = mcpRunControlRequestedStatusForActionV0(action)
 	result.FinalStatus = result.Status
 	return result
+}
+
+func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControlV0(
+	ctx context.Context,
+	result MCPRunControlToolResultV0,
+	input MCPRunControlToolInputV0,
+	beforeGoal *MCPDirectorStatsToolResultV0,
+	afterGoal *MCPDirectorStatsToolResultV0,
+) MCPRunControlToolResultV0 {
+	action := normalizeMCPRunControlActionV0(input.Action)
+	if executor.GoalStateStore == nil ||
+		result.Estado != MCPRunControlEstadoOKV0 ||
+		(action != "stop" && action != "cancel") ||
+		!input.Forced ||
+		!mcpRunControlGoalBackendActiveV0(beforeGoal) ||
+		mcpRunControlGoalBackendActiveV0(afterGoal) {
+		return result
+	}
+	reasonCode, evidenceRef, ok := mcpRunControlForcedTerminalReasonV0(beforeGoal)
+	if !ok {
+		return result
+	}
+	runRef := strings.TrimSpace(input.RunRef)
+	state, err := executor.GoalStateStore.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil {
+		return result
+	}
+	state, err = orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil || orquestagoal.GoalWorkResultTerminalV0(state.Status) {
+		return result
+	}
+	evidenceRefs := compactStringsMCPV0([]string{
+		"evidence-ref-run-control-goal-forced-terminal-reconciled",
+		evidenceRef,
+	})
+	goalRef := firstNonEmptyMCPV0(
+		state.GoalRef,
+		mcpRunControlGoalRefFromStatsV0(beforeGoal),
+		mcpRunControlGoalRefFromStatsV0(afterGoal),
+	)
+	externalGoalRef := firstNonEmptyMCPV0(
+		state.ExternalGoalRef,
+		mcpRunControlExternalGoalRefFromStatsV0(beforeGoal),
+		mcpRunControlExternalGoalRefFromStatsV0(afterGoal),
+	)
+	state.Status = orquestagoal.GoalStatusBlockedV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Summary:         "forced stop reconciled active goal into terminal rework state",
+		ArtifactRefs:    compactStringsMCPV0(mcpRunControlGoalArtifactRefsV0(beforeGoal)),
+		EvidenceRefs:    evidenceRefs,
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  reasonCode,
+			Field: "goal_backend",
+		}},
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:       orquestagoal.GoalStatusBlockedV0,
+		NeedsRework:  true,
+		EvidenceRefs: evidenceRefs,
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  reasonCode,
+			Field: "goal_backend",
+		}},
+	}
+	state.EvidenceRefs = compactStringsMCPV0(append(state.EvidenceRefs, evidenceRefs...))
+	if err := executor.GoalStateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
+		return result
+	}
+	result.RecommendedAction = "replan_narrow_context"
+	result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, evidenceRefs...))
+	result.Diagnostics = append(result.Diagnostics, MCPRunControlDiagnosticV0{
+		Code:    "goal_state_terminal_reconciled_after_forced_stop",
+		Scope:   "run:" + runRef,
+		Message: "goal-first state marked blocked/rework after forced stop of high-consumption active backend",
+		EvidenceRefs: compactStringsMCPV0(append(
+			evidenceRefs,
+			goalRef,
+			externalGoalRef,
+		)),
+	})
+	return result
+}
+
+func mcpRunControlForcedTerminalReasonV0(
+	stats *MCPDirectorStatsToolResultV0,
+) (string, string, bool) {
+	if stats == nil ||
+		!mcpRunControlGoalBackendActiveV0(stats) ||
+		mcpRunControlGoalTokensV0(stats) < mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensV0 ||
+		len(mcpRunControlGoalDomainReceiptRefsV0(stats)) > 0 {
+		return "", "", false
+	}
+	artifactRefs := mcpRunControlGoalArtifactRefsV0(stats)
+	if len(artifactRefs) == 0 {
+		return mcpAutoprogrammingActionNoCheckpointHighConsumptionV0,
+			mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0,
+			true
+	}
+	for _, ref := range artifactRefs {
+		if !mcpAutoprogrammingArtifactRefLooksCheckpointV0(ref) {
+			return "", "", false
+		}
+	}
+	return mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0,
+		mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0,
+		true
+}
+
+func mcpRunControlGoalTokensV0(stats *MCPDirectorStatsToolResultV0) int64 {
+	if stats == nil || stats.Stats == nil || stats.Stats.UsageSummary == nil {
+		return 0
+	}
+	return stats.Stats.UsageSummary.TotalTokens
+}
+
+func mcpRunControlGoalArtifactRefsV0(stats *MCPDirectorStatsToolResultV0) []string {
+	if stats == nil || stats.Goal == nil {
+		return []string{}
+	}
+	return compactStringsMCPV0(stats.Goal.ArtifactRefs)
+}
+
+func mcpRunControlGoalDomainReceiptRefsV0(stats *MCPDirectorStatsToolResultV0) []string {
+	if stats == nil || stats.Goal == nil {
+		return []string{}
+	}
+	return compactStringsMCPV0(stats.Goal.DomainReceiptRefs)
 }
 
 func mcpRunControlGoalStatusFromStatsV0(stats *MCPDirectorStatsToolResultV0) string {

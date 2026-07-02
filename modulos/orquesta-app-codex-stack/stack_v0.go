@@ -135,6 +135,7 @@ func buildStackMCPTransportBindingsV0(
 			Port:              config.Stores.RunControl,
 			ExternalJobSource: externalJobStatsSourceV0(config),
 			GoalBackendState:  directorStats,
+			GoalStateStore:    config.Stores.AppGoalStateStore,
 		},
 		RuntimeModels: config.RuntimeModels,
 		RunQueuePriority: orquestamcp.MCPRunQueuePriorityToolExecutorV0{
