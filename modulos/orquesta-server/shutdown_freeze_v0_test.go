@@ -349,6 +349,70 @@ func TestShutdownProjectionFromHTTPV0ConservaActiveWorkRefsV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0ServerShutdownSnapshotPrevioSobreviveRespuestaSinCuerpoV0(t *testing.T) {
+	stateDir := t.TempDir()
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != serverShutdownRoutePathV0 {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:     stateDir,
+		TickInterval: time.Hour,
+	}, RuntimeDepsV0{
+		AppHandler: app,
+		Clock:      fixedClockV0{now: time.Date(2026, 7, 2, 18, 0, 0, 0, time.UTC)},
+		ShutdownSnapshot: fakeShutdownSnapshotPortV0{
+			result: ShutdownSnapshotResultV0{
+				Status:          "backend_still_running",
+				ActiveWorkCount: 1,
+				ActiveWorks: []ShutdownSnapshotWorkV0{{
+					Kind:            "goal_backend",
+					RunRef:          "run-ref-shutdown-snapshot-001",
+					WorkRef:         "goal-ref-shutdown-snapshot-001",
+					ExternalWorkRef: "thread-ref-shutdown-snapshot-001",
+					Status:          "backend_still_running",
+				}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, serverShutdownRoutePathV0, nil)
+	rec := httptest.NewRecorder()
+	runtime.HandlerV0().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("shutdown status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	state := runtime.StateV0()
+	if !state.ShutdownInProgress ||
+		state.ShutdownReady ||
+		state.ShutdownStatus != "backend_still_running" ||
+		state.ShutdownActiveWorkCount != 1 ||
+		!hasShutdownProjectionRefForTestV0(state.ShutdownActiveWorkRefs, "shutdown-active-work-goal-backend-run-ref-shutdown-snapshot-001") ||
+		!hasShutdownProjectionRefForTestV0(state.ShutdownActiveWorkRefs, "shutdown-active-work-goal-backend-goal-ref-shutdown-snapshot-001") {
+		t.Fatalf("snapshot previo no sobrevivio: %+v", state)
+	}
+	store, err := NewFileStateStoreV0(StatePathV0(ConfigV0{StateDir: stateDir}))
+	if err != nil {
+		t.Fatalf("NewFileStateStoreV0: %v", err)
+	}
+	persisted, err := store.LoadServerStateV0(context.Background())
+	if err != nil {
+		t.Fatalf("LoadServerStateV0: %v", err)
+	}
+	if persisted.ShutdownStatus != state.ShutdownStatus ||
+		persisted.ShutdownActiveWorkCount != state.ShutdownActiveWorkCount ||
+		!hasShutdownProjectionRefForTestV0(persisted.ShutdownActiveWorkRefs, "shutdown-active-work-goal-backend-goal-ref-shutdown-snapshot-001") {
+		t.Fatalf("snapshot previo no persistido: state=%+v persisted=%+v", state, persisted)
+	}
+}
+
 type countingShutdownFreezeSupervisorV0 struct {
 	calls int
 }
@@ -386,6 +450,18 @@ func (hook *notifyingRuntimeShutdownHookV0) ShutdownV0(context.Context) error {
 		close(hook.called)
 	}
 	return nil
+}
+
+type fakeShutdownSnapshotPortV0 struct {
+	result ShutdownSnapshotResultV0
+	err    error
+}
+
+func (fake fakeShutdownSnapshotPortV0) SnapshotShutdownV0(
+	context.Context,
+	ShutdownSnapshotRequestV0,
+) (ShutdownSnapshotResultV0, error) {
+	return fake.result, fake.err
 }
 
 func waitRuntimeAddrV0(t *testing.T, runtime *RuntimeV0) string {

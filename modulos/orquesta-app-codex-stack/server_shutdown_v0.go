@@ -31,6 +31,12 @@ func serverShutdownExecutorV0(
 	)
 }
 
+func NewShutdownActiveWorkReaderV0(
+	config ConfigV0,
+) orquestaservershutdown.ActiveShutdownWorkReaderPortV0 {
+	return stackShutdownActiveWorkReaderV0{Config: config}
+}
+
 func stackShutdownRunControlWriterFromConfigV0(
 	config ConfigV0,
 ) orquestaruncontrol.RunControlWriterPortV0 {

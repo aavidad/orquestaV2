@@ -42,6 +42,7 @@ func (runtime *RuntimeV0) shutdownFreezeHTTPHandlerV0(next http.Handler) http.Ha
 			return
 		}
 		runtime.freezeSupervisorForShutdownV0(r.Context(), "server_shutdown_http_request")
+		runtime.snapshotShutdownActiveWorkForHTTPV0(r.Context())
 		capture := &shutdownFreezeResponseCaptureV0{ResponseWriter: w, statusCode: http.StatusOK}
 		next.ServeHTTP(capture, r)
 		runtime.recordShutdownHTTPResultV0(r.Context(), capture.statusCode, capture.body)
@@ -84,6 +85,7 @@ func (runtime *RuntimeV0) recordShutdownHTTPResultV0(ctx context.Context, status
 		return
 	}
 	projection, keepFrozen := shutdownProjectionFromHTTPV0(statusCode, body)
+	projection = runtime.shutdownProjectionWithPreviousSnapshotV0(projection, keepFrozen)
 	if !keepFrozen {
 		atomic.StoreInt32(&runtime.shutdownInProgress, 0)
 	}
@@ -95,6 +97,26 @@ func (runtime *RuntimeV0) recordShutdownHTTPResultV0(ctx context.Context, status
 	if projection.Ready && !keepFrozen {
 		runtime.requestShutdownReadyV0()
 	}
+}
+
+func (runtime *RuntimeV0) shutdownProjectionWithPreviousSnapshotV0(
+	projection ShutdownProjectionV0,
+	keepFrozen bool,
+) ShutdownProjectionV0 {
+	if runtime == nil || runtime.tracker == nil || !keepFrozen || projection.Ready ||
+		projection.ActiveWorkCount > 0 || len(projection.ActiveWorkRefs) > 0 {
+		return projection
+	}
+	state := runtime.tracker.SnapshotV0()
+	if state.ShutdownActiveWorkCount <= 0 && len(state.ShutdownActiveWorkRefs) == 0 {
+		return projection
+	}
+	projection.ActiveWorkCount = state.ShutdownActiveWorkCount
+	projection.ActiveWorkRefs = compactServerStringsV0(state.ShutdownActiveWorkRefs)
+	if strings.TrimSpace(projection.Status) == "http_status" {
+		projection.Status = firstNonEmptyShutdownFreezeV0(state.ShutdownStatus, projection.Status)
+	}
+	return projection
 }
 
 func (runtime *RuntimeV0) requestShutdownReadyV0() {
