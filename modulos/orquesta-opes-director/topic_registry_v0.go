@@ -40,6 +40,7 @@ func topicRegistryUpdateRequestV0(
 		orquestadomainwork.DomainWorkFieldV0{Name: "done_refs", Values: compactStringsV0([]string{record.ArtifactRef, record.ReceiptRef})},
 		orquestadomainwork.DomainWorkFieldV0{Name: "pending_refs", Values: pendingRefs},
 	)
+	fields = append(fields, topicRegistrySettlementFieldsForRecordV0(record)...)
 	fields = append(fields, topicRegistryQualityFieldsForRecordV0(record)...)
 	if sourceWorkKind := fieldStringV0(record.PayloadFields, "source_work_kind", "work_kind"); sourceWorkKind != "" {
 		fields = append(fields, orquestadomainwork.DomainWorkFieldV0{Name: "source_work_kind", Value: sourceWorkKind})

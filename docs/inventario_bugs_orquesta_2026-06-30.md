@@ -559,6 +559,24 @@ el state durable esta `stopped`, publica `availability_status=stopped`,
 `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`. Con este
 avance se cierra BUG-ORQ-20260702-120.
 
+Avance BUG-ORQ-20260701-058/066 2026-07-02: `update_topic_registry`
+publica ahora un contrato estructurado de settlement por tema/fase:
+`settlement_status`, `settlement_scope`, `settlement_reason`,
+`settlement_contract`, `settlement_refs`, `settled_refs` y
+`next_required_work_kinds`. Un texto con `OPESTopicQualityContractV0` completo
+queda `settled_text` y apunta a derivados siguientes; QA fallida queda
+`needs_rework` con rework director causal; paquete final con manifest completo
+queda `settled_final`. Esto ataca la raiz de BUG-066 (goals que siguen
+reescribiendo tras entrega suficiente) sin cambiar la herramienta OPES real ni
+marcar curso completo por una fase textual. Tests:
+`TestProduceOPESCausalJobsV0CreaActualizacionRegistroPorTema`,
+`TestProduceOPESCausalJobsV0BloqueaRegistroPorQATemaFallidaV0`,
+`TestProduceOPESCausalJobsV0NoBloqueaRegistroConQATemaCompletaV0` y
+`TestProduceOPESCausalJobsV0PaqueteFinalCompleteConManifestCompatibleYQATernaLiberaRegistro`.
+No cierra el bug padre: siguen pendientes heartbeat/checkpoint durable por tema,
+vista unica por `run_ref`, reconciliacion tras cortes externos/manuales y smoke
+real largo OPES.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

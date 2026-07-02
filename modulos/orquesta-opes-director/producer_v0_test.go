@@ -191,6 +191,9 @@ func TestProduceOPESCausalJobsV0CreaActualizacionRegistroPorTema(t *testing.T) {
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "en_progreso_orquesta") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status", "working") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status_contract", "working|waiting|needs_rework|blocked|complete") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_status", topicRegistrySettlementNotSettledV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_scope", "topic_text") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_reason", "topic_quality_contract_required") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "expected_artifact_type", orquestadomainwork.DomainWorkArtifactTypeTopicRegistryUpdateV0) {
 		t.Fatalf("request=%+v ok=%v", request, ok)
 	}
@@ -461,6 +464,9 @@ func TestProduceOPESCausalJobsV0PaqueteFinalCompleteConManifestCompatibleYQATern
 	if !ok ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "registry_action", "release") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "paquete_final_local_verificable") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_status", topicRegistrySettlementFinalV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_scope", "final_package") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_reason", "final_package_closure_evidence_complete") ||
 		domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "final-package-manifest-closure-evidence-required") {
 		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
 	}
@@ -600,6 +606,9 @@ func TestProduceOPESCausalJobsV0BloqueaRegistroPorQATemaFallidaV0(t *testing.T) 
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "topic-quality-"+safeRefV0(ErrOPESTopicQualityStudyScaffoldingV0)) ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_quality_status", OPESTopicQualityStatusNeedsReworkV0) ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_quality_issue_refs", ErrOPESTopicQualityStudyScaffoldingV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_status", topicRegistrySettlementNeedsReworkV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_reason", "topic_quality_contract_failed") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "next_required_work_kinds", "review_director_consolidation") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status", "needs_rework") {
 		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
 	}
@@ -719,7 +728,13 @@ func TestProduceOPESCausalJobsV0NoBloqueaRegistroConQATemaCompletaV0(t *testing.
 	if !ok ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "en_progreso_orquesta") ||
 		domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", topicRegistryQualityNeedsReworkRefV0) ||
-		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_quality_status", OPESTopicQualityStatusCompleteV0) {
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_quality_status", OPESTopicQualityStatusCompleteV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_status", topicRegistrySettlementTextV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_scope", "topic_text") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_reason", "topic_quality_contract_passed") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settled_refs", "artifact-topic-quality-pass-001") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "next_required_work_kinds", "generate_audio_asset") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "next_required_work_kinds", "finalize_temario_package") {
 		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
 	}
 	if _, ok := requestedWorkKindForTestV0(result.RequestedJobs, "review_director_consolidation"); ok {
