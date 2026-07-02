@@ -789,7 +789,7 @@ func TestCodexAppServerTmuxBackendV0CleanupActiveWorkMataProcesoSocketSinSesionV
 	if err := os.WriteFile(socketPath, []byte("stale socket"), 0o600); err != nil {
 		t.Fatalf("write socket: %v", err)
 	}
-	process := exec.Command("bash", "-c", "exec -a 'codex app-server --listen unix://"+socketPath+"' sleep 30")
+	process := exec.Command("bash", "-c", "trap '' TERM; exec -a 'codex app-server --listen unix://"+socketPath+"' sleep 30")
 	if err := process.Start(); err != nil {
 		t.Fatalf("start fake app-server process: %v", err)
 	}
@@ -817,7 +817,7 @@ func TestCodexAppServerTmuxBackendV0CleanupActiveWorkMataProcesoSocketSinSesionV
 		PathEnv:     binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
 		SocketPath:  socketPath,
 		SessionName: "orquesta-goal-cleanup-process-1234567890",
-		Timeout:     time.Second,
+		Timeout:     150 * time.Millisecond,
 	}
 	t.Setenv("ORQUESTA_TEST_TMUX_LOG", tmuxLog)
 

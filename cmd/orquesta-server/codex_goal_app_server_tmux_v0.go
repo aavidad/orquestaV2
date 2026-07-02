@@ -257,9 +257,12 @@ func (backend serverCodexAppServerTmuxBackendV0) stopCodexAppServerSocketProcess
 		_ = syscall.Kill(pid, syscall.SIGTERM)
 	}
 	backend.waitCodexAppServerSocketProcessesGoneV0(ctx, socketPath)
-	for _, pid := range codexAppServerTmuxSocketProcessPIDsV0(ctx, socketPath) {
+	killCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	for _, pid := range codexAppServerTmuxSocketProcessPIDsV0(killCtx, socketPath) {
 		_ = syscall.Kill(pid, syscall.SIGKILL)
 	}
+	backend.waitCodexAppServerSocketProcessesGoneV0(killCtx, socketPath)
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) waitCodexAppServerSocketProcessesGoneV0(ctx context.Context, socketPath string) {
