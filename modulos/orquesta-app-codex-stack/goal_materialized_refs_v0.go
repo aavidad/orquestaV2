@@ -11,6 +11,7 @@ import (
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 )
 
@@ -29,6 +30,7 @@ const (
 	goalMaterializedPartialArtifactsEvidence       = "evidence-ref-goal-materialized-partial-artifacts-written"
 	goalMaterializedPhase0NonPublishableEvidence   = "evidence-ref-goal-materialized-phase0-complete-non-publishable"
 	goalMaterializedRequiredTestEvidenceMissing    = "evidence-ref-goal-materialized-required-test-evidence-missing"
+	goalMaterializedRequiredTestEvidenceDetected   = "evidence-ref-goal-materialized-required-test-evidence-detected"
 )
 
 var errGoalMaterializedRefsScanDoneV0 = errors.New("goal_materialized_refs_scan_done")
@@ -47,10 +49,11 @@ type goalMaterializedRefsScanV0 struct {
 	HasQAPass          bool
 	HasQAFail          bool
 	HasTerminalReceipt bool
-	HasTestEvidenceGap bool
 	HasPhase0Delivery  bool
 	TerminalResult     *orquestagoal.GoalWorkResultV0
 	ArtifactPaths      []string
+	MissingTestKeys    []string
+	PassedTestKeys     []string
 }
 
 func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedRefsV0(
@@ -116,7 +119,7 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstPhase0CompleteNonPublishableV0)
 		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedPhase0NonPublishableEvidence)
 	}
-	if scan.HasTestEvidenceGap {
+	if len(goalMaterializedRequiredTestEvidenceMissingKeysV0(scan)) > 0 {
 		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstRequiredTestEvidenceMissingV0)
 		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedRequiredTestEvidenceMissing)
 	}
@@ -240,12 +243,25 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalMaterializedFileV0(
 			scan.TerminalResult = &result
 			scan.HasArtifact = scan.HasArtifact || len(result.ArtifactRefs) > 0 || len(result.ArtifactPaths) > 0
 			scan.HasQAPass = scan.HasQAPass || goalMaterializedGoalResultRequiredTestsPassedV0(result)
-			scan.HasTestEvidenceGap = scan.HasTestEvidenceGap || goalMaterializedGoalResultRequiredTestEvidenceMissingV0(result)
+			scan.MissingTestKeys = append(scan.MissingTestKeys, goalMaterializedGoalResultRequiredTestEvidenceMissingKeysFromResultV0(result)...)
 			scan.Result.ArtifactRefs = append(scan.Result.ArtifactRefs, result.ArtifactRefs...)
 			scan.Result.DomainReceiptRefs = append(scan.Result.DomainReceiptRefs, result.DomainReceiptRefs...)
 			scan.Result.EvidenceRefs = append(scan.Result.EvidenceRefs, result.EvidenceRefs...)
 			scan.ArtifactPaths = append(scan.ArtifactPaths, result.ArtifactPaths...)
 		}
+	}
+	if evidence, ok := goalMaterializedReadRequiredTestEvidenceV0(path, info, state); ok {
+		scan.Result.EvidenceRefs = append(
+			scan.Result.EvidenceRefs,
+			goalMaterializedRequiredTestEvidenceFileRefV0(projectRoot, path, state.RunRef),
+			evidence.EvidenceRef,
+			goalMaterializedRequiredTestEvidenceDetected,
+		)
+		scan.Result.EvidenceRefs = append(scan.Result.EvidenceRefs, evidence.EvidenceRefs...)
+		if evidence.Status == orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 {
+			scan.PassedTestKeys = append(scan.PassedTestKeys, goalMaterializedRequiredTestEvidenceKeysV0(state, evidence)...)
+		}
+		return scan
 	}
 	if goalMaterializedFileLooksLikeArtifactV0(projectRoot, path, base) {
 		scan.HasArtifact = true
@@ -281,8 +297,9 @@ func mergeGoalMaterializedRefsScanV0(
 	current.HasQAPass = current.HasQAPass || next.HasQAPass
 	current.HasQAFail = current.HasQAFail || next.HasQAFail
 	current.HasTerminalReceipt = current.HasTerminalReceipt || next.HasTerminalReceipt
-	current.HasTestEvidenceGap = current.HasTestEvidenceGap || next.HasTestEvidenceGap
 	current.HasPhase0Delivery = current.HasPhase0Delivery || next.HasPhase0Delivery
+	current.MissingTestKeys = compactStringsV0(append(current.MissingTestKeys, next.MissingTestKeys...))
+	current.PassedTestKeys = compactStringsV0(append(current.PassedTestKeys, next.PassedTestKeys...))
 	if next.TerminalResult != nil {
 		current.TerminalResult = next.TerminalResult
 	}
@@ -321,15 +338,109 @@ func goalMaterializedGoalResultRequiredTestsPassedV0(result orquestagoal.GoalWor
 	return true
 }
 
-func goalMaterializedGoalResultRequiredTestEvidenceMissingV0(result orquestagoal.GoalWorkResultV0) bool {
+func goalMaterializedGoalResultRequiredTestEvidenceMissingKeysFromResultV0(result orquestagoal.GoalWorkResultV0) []string {
+	keys := make([]string, 0, len(result.RequiredTestResults))
 	for _, test := range result.RequiredTestResults {
 		status := strings.ToLower(strings.TrimSpace(test.Status))
 		if (status == "passed" || status == "pass" || status == "ok" || status == "success") &&
 			len(compactStringsV0(test.EvidenceRefs)) == 0 {
+			keys = append(keys, goalMaterializedRequiredTestResultKeysV0(test)...)
+		}
+	}
+	return compactStringsV0(keys)
+}
+
+func goalMaterializedRequiredTestEvidenceMissingKeysV0(scan goalMaterializedRefsScanV0) []string {
+	missing := make([]string, 0, len(scan.MissingTestKeys))
+	for _, key := range scan.MissingTestKeys {
+		if strings.TrimSpace(key) == "" || goalFirstStringSliceContainsV0(scan.PassedTestKeys, key) {
+			continue
+		}
+		missing = append(missing, key)
+	}
+	return compactStringsV0(missing)
+}
+
+func goalMaterializedRequiredTestResultKeysV0(test orquestagoal.GoalRequiredTestResultV0) []string {
+	keys := make([]string, 0, 1)
+	if ref := strings.TrimSpace(test.TestRef); ref != "" {
+		keys = append(keys, "test-ref:"+ref)
+	} else {
+		keys = append(keys, "test-ref:missing")
+	}
+	return compactStringsV0(keys)
+}
+
+func goalMaterializedReadRequiredTestEvidenceV0(
+	path string,
+	info fs.FileInfo,
+	state orquestagoal.GoalWorkStateV0,
+) (orquestacionnucleoapp.RequiredTestEvidenceV0, bool) {
+	if info == nil || info.IsDir() || info.Size() <= 0 || info.Size() > goalMaterializedQAScanMaxBytesV0 {
+		return orquestacionnucleoapp.RequiredTestEvidenceV0{}, false
+	}
+	if !strings.EqualFold(filepath.Ext(path), ".json") {
+		return orquestacionnucleoapp.RequiredTestEvidenceV0{}, false
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return orquestacionnucleoapp.RequiredTestEvidenceV0{}, false
+	}
+	var evidence orquestacionnucleoapp.RequiredTestEvidenceV0
+	if json.Unmarshal(raw, &evidence) != nil {
+		return orquestacionnucleoapp.RequiredTestEvidenceV0{}, false
+	}
+	evidence, err = orquestacionnucleoapp.NewRequiredTestEvidenceV0(evidence)
+	if err != nil {
+		return orquestacionnucleoapp.RequiredTestEvidenceV0{}, false
+	}
+	if !goalMaterializedRequiredTestEvidenceBelongsToStateV0(state, evidence) {
+		return orquestacionnucleoapp.RequiredTestEvidenceV0{}, false
+	}
+	return evidence, true
+}
+
+func goalMaterializedRequiredTestEvidenceBelongsToStateV0(
+	state orquestagoal.GoalWorkStateV0,
+	evidence orquestacionnucleoapp.RequiredTestEvidenceV0,
+) bool {
+	evidenceRunRef := strings.TrimSpace(evidence.RunRef)
+	if evidenceRunRef == "" {
+		return false
+	}
+	for _, runRef := range []string{state.RunRef, state.Spec.RunRef} {
+		if strings.TrimSpace(runRef) != "" && strings.TrimSpace(runRef) == evidenceRunRef {
 			return true
 		}
 	}
 	return false
+}
+
+func goalMaterializedRequiredTestEvidenceKeysV0(
+	state orquestagoal.GoalWorkStateV0,
+	evidence orquestacionnucleoapp.RequiredTestEvidenceV0,
+) []string {
+	keys := make([]string, 0, 2)
+	if command := strings.TrimSpace(evidence.TestCommand); command != "" {
+		keys = append(keys, "test-command:"+command)
+	}
+	for _, test := range state.Spec.RequiredTests {
+		if strings.TrimSpace(test.Command) == strings.TrimSpace(evidence.TestCommand) &&
+			strings.TrimSpace(test.TestRef) != "" {
+			keys = append(keys, "test-ref:"+strings.TrimSpace(test.TestRef))
+		}
+	}
+	return compactStringsV0(keys)
+}
+
+func goalMaterializedRequiredTestEvidenceFileRefV0(projectRoot, path, runRef string) string {
+	rel := goalMaterializedRelPathV0(projectRoot, path)
+	if rel == "" {
+		rel = filepath.Base(path)
+	}
+	return "evidence-ref-materialized-required-test:" +
+		safeGoalMaterializedRefPartV0(runRef) + ":" +
+		safeGoalMaterializedRefPartV0(rel)
 }
 
 func goalMaterializedExpectedChecklistRefsV0(state orquestagoal.GoalWorkStateV0) []string {

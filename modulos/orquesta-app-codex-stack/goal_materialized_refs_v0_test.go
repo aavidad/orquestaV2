@@ -567,6 +567,63 @@ func TestStackGoalMaterializedRefsSourceV0DetectaRequiredTestEvidenceAusenteEnRe
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0UsaRequiredTestEvidenceMaterializadaFueraDeReceipt(t *testing.T) {
+	projectDir := t.TempDir()
+	topicDir := filepath.Join(projectDir, "temas", "tema_040")
+	if err := os.MkdirAll(topicDir, 0o700); err != nil {
+		t.Fatalf("mkdir topic: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "tema_ampliado.md"), []byte("# Tema\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(topicDir, "orquesta_goal_result_v0.json"),
+		[]byte(`{"status":"complete","artifact_paths":["temas/tema_040/tema_ampliado.md"],"required_test_results":[{"test_ref":"test-ref-tema-040-qa","status":"passed","evidence_refs":[]}]}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write receipt: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(topicDir, "required_test_evidence_qa.json"),
+		[]byte(`{
+			"schema_version":"required_test_evidence.v0",
+			"evidence_ref":"evidence-ref-required-test-file-040",
+			"run_ref":"run-goal-materialized-required-test-external-001",
+			"task_ref":"task-ref-tema-040",
+			"test_command":"validar tema 040",
+			"status":"passed",
+			"delivery_ref":"delivery-ref-tema-040",
+			"review_request_id":"review-request-tema-040",
+			"review_result_ref":"review-result-tema-040",
+			"accepted_review_ref":"accepted-review-tema-040",
+			"occurred_at":"2026-07-02T00:00:00Z",
+			"evidence_refs":["evidence-ref-required-test-log-040"]
+		}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write required test evidence: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-required-test-external-001", "temas/tema_040")
+	state.Spec.RequiredTests = []orquestagoal.GoalRequiredTestV0{{
+		TestRef: "test-ref-tema-040-qa",
+		Command: "validar tema 040",
+	}}
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		containsStringV0(result.IssueCodes, "required_test_evidence_missing") ||
+		!containsStringV0(result.EvidenceRefs, "evidence-ref-required-test-file-040") ||
+		!containsStringV0(result.EvidenceRefs, "evidence-ref-required-test-log-040") ||
+		!containsStringV0(result.EvidenceRefs, "evidence-ref-goal-materialized-required-test-evidence-detected") {
+		t.Fatalf("required test evidence materializada no usada: ok=%v result=%+v", ok, result)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0NoAceptaQAPassPorTextoLibre(t *testing.T) {
 	projectDir := t.TempDir()
 	topicDir := filepath.Join(projectDir, "temas", "tema_030")
