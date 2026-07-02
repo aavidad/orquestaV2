@@ -556,7 +556,10 @@ configure_smoke_codex_code_home_source
 export ORQUESTA_CODEX_GOAL_BACKEND="$goal_backend"
 export ORQUESTA_CODEX_GOAL_TIMEOUT_MS="${ORQUESTA_CODEX_GOAL_TIMEOUT_MS:-600000}"
 export ORQUESTA_CODEX_APPROVAL_POLICY="${ORQUESTA_CODEX_APPROVAL_POLICY:-never}"
-export ORQUESTA_CODEX_SANDBOX="${ORQUESTA_CODEX_SANDBOX:-workspace-write}"
+# Smoke aislado: el proyecto, runtime y CODEX_HOME son temporales bajo smoke_root.
+# workspace-write en app-server no materializa herramientas locales de forma
+# fiable en este entorno; el smoke valida cierre real y conserva override por env.
+export ORQUESTA_CODEX_SANDBOX="${ORQUESTA_CODEX_SANDBOX:-danger-full-access}"
 export ORQUESTA_CODEX_MODEL="${ORQUESTA_CODEX_MODEL:-gpt-5.5}"
 export ORQUESTA_CODEX_REASONING_EFFORT="${ORQUESTA_CODEX_REASONING_EFFORT:-medium}"
 export ORQUESTA_OPES_BASE_URL=""

@@ -313,3 +313,28 @@ con `goal_status=blocked`, `run_status=bloqueada`, `closure_status=blocked`,
 agente indica que no puede ejecutar comandos ni escribir archivos dentro del
 workspace autorizado. Esto se registra como `BUG-ORQ-20260702-129`, separado de
 BUG-128 porque el trust heredado de proyectos ajenos ya no esta presente.
+
+Actualizacion 2026-07-02, BUG-129 cerrado: con
+`ORQUESTA_CODEX_SANDBOX=danger-full-access` dentro del workspace temporal
+aislado, el app-server tmux si materializa comandos y ficheros. El smoke
+conservado en
+`/srv/orquesta-self/runtime/smokes-goal-first/orquesta-goal-first-app-server.qvtugC`
+dejo `thread_goals.status=complete` y 21 ficheros bajo
+`project/generated-apps/smoke-goal-first`. El script conserva override por
+entorno, pero por defecto usa ese sandbox efectivo solo para el smoke aislado
+porque `ProjectWorkDir`, runtime y `CODEX_HOME` son temporales bajo
+`smoke_root`.
+
+Actualizacion 2026-07-02, BUG-130 abierto: el smoke posterior conservado en
+`/srv/orquesta-self/runtime/smokes-goal-first/orquesta-goal-first-app-server.1VWYEr`
+materializo la app y escribio un receipt terminal
+`orquesta_goal_result_goal-ref-app-director-run-spec-smoke-goal-first-req-smoke-goal-first-5ae25ef16a8.json`
+con `status=complete`, `artifact_refs` contractuales,
+`required_test_results` pasados y `evidence-ref-app-director-goal-first-v0`.
+La observacion publica quedo, sin embargo, con `goal_status=complete`,
+`run_status=activa`, `closure_status=blocked`, `closure_needs_rework=true` y
+`closure_issues` por `goal_closure_invalid field artifact_refs` y
+`repair_receipt_requires_rework`. El estado persistido del rework conserva
+`artifact_paths` y refs materializadas, pero no las `artifact_refs`
+contractuales del receipt. Este bloqueo ya no es de ejecucion/escritura del
+app-server; falta preservar esas refs hasta la validacion de cierre.
