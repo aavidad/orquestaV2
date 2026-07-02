@@ -132,10 +132,11 @@ func buildStackMCPTransportBindingsV0(
 		RequestAppChange: orquestamcp.NewMCPRequestAppChangeToolExecutorV0(appChangePortsV0(config)),
 		DirectorStats:    directorStats,
 		RunControl: orquestamcp.MCPRunControlToolExecutorV0{
-			Port:              config.Stores.RunControl,
-			ExternalJobSource: externalJobStatsSourceV0(config),
-			GoalBackendState:  directorStats,
-			GoalStateStore:    config.Stores.AppGoalStateStore,
+			Port:               config.Stores.RunControl,
+			ExternalJobSource:  externalJobStatsSourceV0(config),
+			GoalBackendState:   directorStats,
+			GoalStateStore:     config.Stores.AppGoalStateStore,
+			GoalProgressPolicy: config.AutoprogrammingGoalProgressPolicy,
 		},
 		RuntimeModels: config.RuntimeModels,
 		RunQueuePriority: orquestamcp.MCPRunQueuePriorityToolExecutorV0{
@@ -162,6 +163,7 @@ func buildStackMCPTransportBindingsV0(
 		),
 		AutoprogrammingGoalStates:                   config.Stores.AppGoalStateStore,
 		AutoprogrammingStatusDiagnostics:            config.AutoprogrammingStatusDiagnostics,
+		AutoprogrammingGoalProgressPolicy:           config.AutoprogrammingGoalProgressPolicy,
 		AllowLegacyAutoprogrammingSupervisorActions: config.AllowLegacyAutoprogrammingRun,
 		ServerShutdown:                              serverShutdownExecutorV0(config, stack),
 		DomainWork:                                  config.DomainWork,

@@ -24,7 +24,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 		mcpTransportToolEnvelopeV0(descriptors.autoprogrammingSupervise.Name, descriptors.autoprogrammingSupervise.Version, descriptors.autoprogrammingSupervise.ResourceURI, descriptors.autoprogrammingSupervise.InputSchema, descriptors.autoprogrammingSupervise.Output, mcpAutoprogrammingSuperviseTransportHandlerV0(bindings.RunSupervisor)),
 		mcpTransportToolEnvelopeV0(descriptors.bootstrap.Name, descriptors.bootstrap.Version, descriptors.bootstrap.ResourceURI, descriptors.bootstrap.InputSchema, descriptors.bootstrap.Output, mcpBootstrapTransportHandlerV0),
 		mcpTransportToolEnvelopeV0(descriptors.workflow.Name, descriptors.workflow.Version, descriptors.workflow.ResourceURI, descriptors.workflow.InputSchema, descriptors.workflow.Output, mcpCoreWorkflowTransportHandlerV0),
-		mcpTransportToolEnvelopeV0(descriptors.runControl.Name, descriptors.runControl.Version, descriptors.runControl.ResourceURI, descriptors.runControl.InputSchema, descriptors.runControl.Output, mcpRunControlTransportHandlerV0(bindings.RunControl)),
+		mcpTransportToolEnvelopeV0(descriptors.runControl.Name, descriptors.runControl.Version, descriptors.runControl.ResourceURI, descriptors.runControl.InputSchema, descriptors.runControl.Output, mcpRunControlTransportHandlerV0(runControlExecutorFromBindingsV0(bindings))),
 		mcpTransportToolEnvelopeV0(descriptors.runtimeModels.Name, descriptors.runtimeModels.Version, descriptors.runtimeModels.ResourceURI, descriptors.runtimeModels.InputSchema, descriptors.runtimeModels.Output, mcpRuntimeModelsTransportHandlerV0(bindings.RuntimeModels)),
 		mcpTransportToolEnvelopeV0(descriptors.runQueue.Name, descriptors.runQueue.Version, descriptors.runQueue.ResourceURI, descriptors.runQueue.InputSchema, descriptors.runQueue.Output, mcpRunQueuePriorityTransportHandlerV0(bindings.RunQueuePriority)),
 		mcpTransportToolEnvelopeV0(descriptors.runSupervisor.Name, descriptors.runSupervisor.Version, descriptors.runSupervisor.ResourceURI, descriptors.runSupervisor.InputSchema, descriptors.runSupervisor.Output, mcpRunSupervisorTransportHandlerV0(bindings.RunSupervisor)),
@@ -116,6 +116,26 @@ func autoprogrammingStatusExecutorFromBindingsV0(
 		Stats:                        bindings.DirectorStats,
 		GoalStateStore:               bindings.AutoprogrammingGoalStates,
 		StatusDiagnostics:            bindings.AutoprogrammingStatusDiagnostics,
+		GoalProgressPolicy:           bindings.AutoprogrammingGoalProgressPolicy,
 		AllowLegacySupervisorActions: bindings.AllowLegacyAutoprogrammingSupervisorActions,
+	}
+}
+
+func runControlExecutorFromBindingsV0(
+	bindings MCPTransportBindingsV0,
+) MCPTransportRunControlExecutorV0 {
+	switch executor := bindings.RunControl.(type) {
+	case MCPRunControlToolExecutorV0:
+		executor.GoalProgressPolicy = bindings.AutoprogrammingGoalProgressPolicy
+		return executor
+	case *MCPRunControlToolExecutorV0:
+		if executor == nil {
+			return nil
+		}
+		clone := *executor
+		clone.GoalProgressPolicy = bindings.AutoprogrammingGoalProgressPolicy
+		return clone
+	default:
+		return executor
 	}
 }

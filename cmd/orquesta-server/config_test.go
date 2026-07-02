@@ -355,6 +355,24 @@ func TestServerConfigFromEnvV0PromocionMaterialSinACKOptOutVisibleV0(t *testing.
 	}
 }
 
+func TestServerConfigFromEnvV0PublicaUmbralCheckpointGoalConfigurableV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0, "42000")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	policy := serverAutoprogrammingGoalProgressPolicyFromEnvV0()
+	if policy.CheckpointOnlyHighConsumptionTokens != 42000 {
+		t.Fatalf("policy=%+v", policy)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0)
+	if setting.Value != "42000" || setting.Source != "explicit" {
+		t.Fatalf("setting checkpoint threshold=%+v", setting)
+	}
+}
+
 func TestBuildStackFromEnvV0CableaPromocionMaterialSinACKV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	config, err := serverConfigFromEnvV0()

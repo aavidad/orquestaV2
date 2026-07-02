@@ -18,6 +18,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 	egressSanitizer := egressSanitizerConfigFromEnvV0()
 	worktreeSnapshotBudget := codexServerWorktreeSnapshotReadBudgetFromEnvV0()
 	daemonEnvPolicy := serverDaemonStartEnvPolicyV0(os.Environ(), config)
+	goalProgressPolicy := serverAutoprogrammingGoalProgressPolicyFromEnvV0()
 	settings := []orquestaserver.ServerConfigSettingV0{
 		serverConfigSettingFromRegistryV0(envServerAuditFileV0, config.AuditFile),
 		serverConfigSettingFromRegistryV0(envServerAuditDisabledV0, strconv.FormatBool(config.AuditDisabled)),
@@ -90,6 +91,10 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverConfigSettingFromRegistryV0(
 			envAutoprogrammingLegacyDirectorLoopV0,
 			strconv.FormatBool(boolEnvOrDefaultV0(envAutoprogrammingLegacyDirectorLoopV0, false)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0,
+			strconv.FormatInt(goalProgressPolicy.CheckpointOnlyHighConsumptionTokens, 10),
 		),
 		serverConfigSettingFromRegistryV0(
 			envExternalWorkLegacyDirectorLoopV0,

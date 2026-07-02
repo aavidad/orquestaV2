@@ -9,38 +9,38 @@ import (
 )
 
 const (
-	mcpAutoprogrammingActionStaleRunningV0                    = "stale_running"
-	mcpAutoprogrammingActionRunningStaleNoProcessV0           = "running_stale_no_process"
-	mcpAutoprogrammingActionRunningWithoutRecentStatsV0       = "running_without_recent_stats"
-	mcpAutoprogrammingActionActiveNoCheckpointYetV0           = "active_no_checkpoint_yet"
-	mcpAutoprogrammingActionActiveTimeoutCheckpointRecentV0   = "active_timeout_checkpoint_recent"
-	mcpAutoprogrammingActionNoCheckpointHighConsumptionV0     = "goal_active_no_checkpoint_high_consumption"
-	mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0   = "checkpoint_only_high_consumption"
-	mcpAutoprogrammingActionStaleRunningReconciledV0          = "stale_running_reconciled"
-	mcpAutoprogrammingActionProviderUsageLimitRetryV0         = "provider_usage_limit_retry_after"
-	mcpAutoprogrammingActionExternalWorkStoppedNoDeliveryV0   = "external_work_accepted_stopped_without_delivery"
-	mcpAutoprogrammingActionExternalWorkNoAgentMaterializedV0 = "external_work_accepted_no_agent_materialized"
-	mcpAutoprogrammingActionGoalFirstStateMissingV0           = "goal_first_state_missing"
-	mcpAutoprogrammingActionGoalFirstBlockedV0                = "goal_first_blocked"
-	mcpAutoprogrammingActionMissingTerminalReceiptV0          = MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0
-	mcpAutoprogrammingActionArtifactPathsOmittedV0            = MCPGoalFirstArtifactPathsOmittedMaterializedV0
-	mcpAutoprogrammingActionQAFailedPublicTextV0              = MCPGoalFirstQAFailedPublicTextV0
-	mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0  = "goal_active_timeout_backend_active"
-	mcpAutoprogrammingEvidenceRunningStaleReconciledV0        = "evidence-ref-run-queue-running-stale-no-live-process-reconciled"
-	mcpAutoprogrammingEvidenceProviderUsageLimitRetryV0       = "evidence-ref-provider-usage-limit-retry-after"
-	mcpAutoprogrammingEvidenceExternalWorkRunStartedV0        = "evidence-ref-external-work-run-started"
-	mcpAutoprogrammingEvidenceExternalWorkRunQueuedV0         = "evidence-ref-external-work-run-queued"
-	mcpAutoprogrammingEvidenceRunCoordinatorExecutedV0        = "evidence-ref-run-coordinator-executed"
-	mcpAutoprogrammingEvidenceGoalFirstStateMissingV0         = "evidence-ref-autoprogramming-status-goal-first-state-missing"
-	mcpAutoprogrammingEvidenceGoalFirstBlockedV0              = "evidence-ref-autoprogramming-status-goal-first-blocked"
-	mcpAutoprogrammingEvidenceActiveTimeoutCheckpointRecentV0 = "evidence-ref-autoprogramming-active-timeout-checkpoint-recent"
-	mcpAutoprogrammingEvidenceMissingTerminalReceiptV0        = "evidence-ref-autoprogramming-status-missing-terminal-receipt-after-artifacts-pass"
-	mcpAutoprogrammingEvidenceArtifactPathsOmittedV0          = "evidence-ref-autoprogramming-status-artifact-paths-omitted-materialized"
-	mcpAutoprogrammingEvidenceQAFailedPublicTextV0            = "evidence-ref-autoprogramming-status-qa-failed-public-text"
-	mcpAutoprogrammingEvidenceGoalActiveTimeoutBackendV0      = "evidence-ref-autoprogramming-goal-active-timeout-backend-active"
-	mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0   = "evidence-ref-autoprogramming-no-checkpoint-high-consumption"
-	mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0 = "evidence-ref-autoprogramming-checkpoint-only-high-consumption"
-	mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensV0   = int64(100000)
+	mcpAutoprogrammingActionStaleRunningV0                         = "stale_running"
+	mcpAutoprogrammingActionRunningStaleNoProcessV0                = "running_stale_no_process"
+	mcpAutoprogrammingActionRunningWithoutRecentStatsV0            = "running_without_recent_stats"
+	mcpAutoprogrammingActionActiveNoCheckpointYetV0                = "active_no_checkpoint_yet"
+	mcpAutoprogrammingActionActiveTimeoutCheckpointRecentV0        = "active_timeout_checkpoint_recent"
+	mcpAutoprogrammingActionNoCheckpointHighConsumptionV0          = "goal_active_no_checkpoint_high_consumption"
+	mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0        = "checkpoint_only_high_consumption"
+	mcpAutoprogrammingActionStaleRunningReconciledV0               = "stale_running_reconciled"
+	mcpAutoprogrammingActionProviderUsageLimitRetryV0              = "provider_usage_limit_retry_after"
+	mcpAutoprogrammingActionExternalWorkStoppedNoDeliveryV0        = "external_work_accepted_stopped_without_delivery"
+	mcpAutoprogrammingActionExternalWorkNoAgentMaterializedV0      = "external_work_accepted_no_agent_materialized"
+	mcpAutoprogrammingActionGoalFirstStateMissingV0                = "goal_first_state_missing"
+	mcpAutoprogrammingActionGoalFirstBlockedV0                     = "goal_first_blocked"
+	mcpAutoprogrammingActionMissingTerminalReceiptV0               = MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0
+	mcpAutoprogrammingActionArtifactPathsOmittedV0                 = MCPGoalFirstArtifactPathsOmittedMaterializedV0
+	mcpAutoprogrammingActionQAFailedPublicTextV0                   = MCPGoalFirstQAFailedPublicTextV0
+	mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0       = "goal_active_timeout_backend_active"
+	mcpAutoprogrammingEvidenceRunningStaleReconciledV0             = "evidence-ref-run-queue-running-stale-no-live-process-reconciled"
+	mcpAutoprogrammingEvidenceProviderUsageLimitRetryV0            = "evidence-ref-provider-usage-limit-retry-after"
+	mcpAutoprogrammingEvidenceExternalWorkRunStartedV0             = "evidence-ref-external-work-run-started"
+	mcpAutoprogrammingEvidenceExternalWorkRunQueuedV0              = "evidence-ref-external-work-run-queued"
+	mcpAutoprogrammingEvidenceRunCoordinatorExecutedV0             = "evidence-ref-run-coordinator-executed"
+	mcpAutoprogrammingEvidenceGoalFirstStateMissingV0              = "evidence-ref-autoprogramming-status-goal-first-state-missing"
+	mcpAutoprogrammingEvidenceGoalFirstBlockedV0                   = "evidence-ref-autoprogramming-status-goal-first-blocked"
+	mcpAutoprogrammingEvidenceActiveTimeoutCheckpointRecentV0      = "evidence-ref-autoprogramming-active-timeout-checkpoint-recent"
+	mcpAutoprogrammingEvidenceMissingTerminalReceiptV0             = "evidence-ref-autoprogramming-status-missing-terminal-receipt-after-artifacts-pass"
+	mcpAutoprogrammingEvidenceArtifactPathsOmittedV0               = "evidence-ref-autoprogramming-status-artifact-paths-omitted-materialized"
+	mcpAutoprogrammingEvidenceQAFailedPublicTextV0                 = "evidence-ref-autoprogramming-status-qa-failed-public-text"
+	mcpAutoprogrammingEvidenceGoalActiveTimeoutBackendV0           = "evidence-ref-autoprogramming-goal-active-timeout-backend-active"
+	mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0        = "evidence-ref-autoprogramming-no-checkpoint-high-consumption"
+	mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0      = "evidence-ref-autoprogramming-checkpoint-only-high-consumption"
+	mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensDefaultV0 = int64(100000)
 )
 
 func buildMCPAutoprogrammingStaleRunningV0(
@@ -208,7 +208,9 @@ func mcpAutoprogrammingObservedQAFailedPublicTextV0(
 func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 	states []orquestagoal.GoalWorkStateV0,
 	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
+	policy MCPAutoprogrammingGoalProgressPolicyV0,
 ) ([]MCPAutoprogrammingActionableRunV0, []MCPAutoprogrammingActionableRunV0) {
+	policy = NormalizeMCPAutoprogrammingGoalProgressPolicyV0(policy)
 	blocked := make([]MCPAutoprogrammingActionableRunV0, 0)
 	resolved := make([]MCPAutoprogrammingActionableRunV0, 0)
 	for _, state := range states {
@@ -274,11 +276,10 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 		)
 		action = mcpAutoprogrammingActionableRunWithObservedGoalV0(action, observed)
 		activeTimeoutCheckpointRecent := activeTimeoutBackendActive &&
-			mcpAutoprogrammingActiveTimeoutCheckpointRecentV0(action, observed)
-		checkpointOnlyHighConsumption := (!activeTimeoutBackendActive || activeTimeoutCheckpointRecent) &&
-			mcpAutoprogrammingCheckpointOnlyHighConsumptionV0(action, observed)
+			mcpAutoprogrammingActiveTimeoutCheckpointRecentV0(action, observed, policy)
+		checkpointOnlyHighConsumption := mcpAutoprogrammingCheckpointOnlyHighConsumptionV0(action, observed, policy)
 		noCheckpointHighConsumption := !activeTimeoutBackendActive &&
-			mcpAutoprogrammingNoCheckpointHighConsumptionV0(action, observed)
+			mcpAutoprogrammingNoCheckpointHighConsumptionV0(action, observed, policy)
 		if activeNoCheckpoint {
 			action.Code = mcpAutoprogrammingActionActiveNoCheckpointYetV0
 			action.Severity = "info"
@@ -313,7 +314,7 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 				mcpAutoprogrammingEvidenceActiveTimeoutCheckpointRecentV0,
 			))
 		}
-		if activeTimeoutBackendActive && !activeTimeoutCheckpointRecent {
+		if activeTimeoutBackendActive && !activeTimeoutCheckpointRecent && !checkpointOnlyHighConsumption {
 			action.Code = mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0
 			action.EvidenceRefs = compactStringsMCPV0(append(
 				action.EvidenceRefs,
@@ -621,9 +622,11 @@ func mcpAutoprogrammingActionableRunWithObservedGoalV0(
 func mcpAutoprogrammingCheckpointOnlyHighConsumptionV0(
 	action MCPAutoprogrammingActionableRunV0,
 	observed *MCPDirectorStatsToolResultV0,
+	policy MCPAutoprogrammingGoalProgressPolicyV0,
 ) bool {
+	policy = NormalizeMCPAutoprogrammingGoalProgressPolicyV0(policy)
 	if !mcpAutoprogrammingObservedGoalActiveV0(observed) ||
-		action.TokensUsed < mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensV0 ||
+		action.TokensUsed < policy.CheckpointOnlyHighConsumptionTokens ||
 		len(action.DomainReceiptRefs) > 0 {
 		return false
 	}
@@ -642,9 +645,11 @@ func mcpAutoprogrammingCheckpointOnlyHighConsumptionV0(
 func mcpAutoprogrammingActiveTimeoutCheckpointRecentV0(
 	action MCPAutoprogrammingActionableRunV0,
 	observed *MCPDirectorStatsToolResultV0,
+	policy MCPAutoprogrammingGoalProgressPolicyV0,
 ) bool {
+	policy = NormalizeMCPAutoprogrammingGoalProgressPolicyV0(policy)
 	if !mcpAutoprogrammingObservedGoalActiveV0(observed) ||
-		action.TokensUsed >= mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensV0 ||
+		action.TokensUsed >= policy.CheckpointOnlyHighConsumptionTokens ||
 		len(action.DomainReceiptRefs) > 0 {
 		return false
 	}
@@ -663,9 +668,11 @@ func mcpAutoprogrammingActiveTimeoutCheckpointRecentV0(
 func mcpAutoprogrammingNoCheckpointHighConsumptionV0(
 	action MCPAutoprogrammingActionableRunV0,
 	observed *MCPDirectorStatsToolResultV0,
+	policy MCPAutoprogrammingGoalProgressPolicyV0,
 ) bool {
+	policy = NormalizeMCPAutoprogrammingGoalProgressPolicyV0(policy)
 	return mcpAutoprogrammingObservedGoalActiveV0(observed) &&
-		action.TokensUsed >= mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensV0 &&
+		action.TokensUsed >= policy.CheckpointOnlyHighConsumptionTokens &&
 		len(compactStringsMCPV0(action.ArtifactRefs)) == 0 &&
 		len(compactStringsMCPV0(action.DomainReceiptRefs)) == 0
 }

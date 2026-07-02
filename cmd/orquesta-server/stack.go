@@ -259,6 +259,7 @@ func buildStackFromEnvWithGoalBackendV0(
 		DomainTests:                           domainWorkRequiredTestConfigFromEnvV0(),
 		AutoprogrammingPromotion:              autoprogrammingPromotionConfigFromEnvV0(serverConfig),
 		AutoprogrammingStatusDiagnostics:      serverAutoprogrammingStatusDiagnosticsFromEffectiveConfigV0(serverConfig.EffectiveConfig),
+		AutoprogrammingGoalProgressPolicy:     serverAutoprogrammingGoalProgressPolicyFromEnvV0(),
 		DomainWork:                            domainWorkExecutor,
 		CodeContext:                           codeContextWiring.Query,
 		CodeContextToolLeases:                 codeContextWiring.ToolLeases,
