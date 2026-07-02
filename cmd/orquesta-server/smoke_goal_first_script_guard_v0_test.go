@@ -228,6 +228,38 @@ func TestScriptsQueArrancanServidorTemporalUsanShutdownComunV0(t *testing.T) {
 	}
 }
 
+func TestScriptsQueUsanShutdownComunPasanRuntimeDirV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	scriptsDir := filepath.Join(root, "scripts")
+	err := filepath.WalkDir(scriptsDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".sh" {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		text := readOperationalDocGuardV0(t, root, rel)
+		for _, line := range strings.Split(text, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if !strings.HasPrefix(trimmed, "smoke_shutdown_orquesta_server ") {
+				continue
+			}
+			if !strings.Contains(trimmed, `"$runtime_dir"`) &&
+				!strings.Contains(trimmed, `"$RUNTIME_DIR"`) {
+				t.Fatalf("%s invoca shutdown comun sin runtime_dir: %s", rel, trimmed)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk scripts: %v", err)
+	}
+}
+
 func TestInicioAgenteNoRecomiendaRuntimeManualV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/inicio_agente.sh")
