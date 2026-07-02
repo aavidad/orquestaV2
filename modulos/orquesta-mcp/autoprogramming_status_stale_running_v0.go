@@ -13,6 +13,7 @@ const (
 	mcpAutoprogrammingActionRunningStaleNoProcessV0           = "running_stale_no_process"
 	mcpAutoprogrammingActionRunningWithoutRecentStatsV0       = "running_without_recent_stats"
 	mcpAutoprogrammingActionActiveNoCheckpointYetV0           = "active_no_checkpoint_yet"
+	mcpAutoprogrammingActionNoCheckpointHighConsumptionV0     = "goal_active_no_checkpoint_high_consumption"
 	mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0   = "checkpoint_only_high_consumption"
 	mcpAutoprogrammingActionStaleRunningReconciledV0          = "stale_running_reconciled"
 	mcpAutoprogrammingActionProviderUsageLimitRetryV0         = "provider_usage_limit_retry_after"
@@ -31,6 +32,7 @@ const (
 	mcpAutoprogrammingEvidenceGoalFirstBlockedV0              = "evidence-ref-autoprogramming-status-goal-first-blocked"
 	mcpAutoprogrammingEvidenceMissingTerminalReceiptV0        = "evidence-ref-autoprogramming-status-missing-terminal-receipt-after-artifacts-pass"
 	mcpAutoprogrammingEvidenceGoalActiveTimeoutBackendV0      = "evidence-ref-autoprogramming-goal-active-timeout-backend-active"
+	mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0   = "evidence-ref-autoprogramming-no-checkpoint-high-consumption"
 	mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0 = "evidence-ref-autoprogramming-checkpoint-only-high-consumption"
 	mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensV0   = int64(100000)
 )
@@ -175,9 +177,21 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 		action = mcpAutoprogrammingActionableRunWithObservedGoalV0(action, observed)
 		checkpointOnlyHighConsumption := !activeTimeoutBackendActive &&
 			mcpAutoprogrammingCheckpointOnlyHighConsumptionV0(action, observed)
+		noCheckpointHighConsumption := !activeTimeoutBackendActive &&
+			mcpAutoprogrammingNoCheckpointHighConsumptionV0(action, observed)
 		if activeNoCheckpoint {
 			action.Code = mcpAutoprogrammingActionActiveNoCheckpointYetV0
 			action.Severity = "info"
+		}
+		if noCheckpointHighConsumption {
+			action.Code = mcpAutoprogrammingActionNoCheckpointHighConsumptionV0
+			action.Severity = "blocked"
+			action.Reason = "goal_active_no_checkpoint_high_consumption: backend goal remains active after high token usage without checkpoint, artifacts or domain receipt; stop safely or replan with narrower context before relaunch"
+			action.RecommendedAction = "replan_narrow_context"
+			action.EvidenceRefs = compactStringsMCPV0(append(
+				action.EvidenceRefs,
+				mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0,
+			))
 		}
 		if checkpointOnlyHighConsumption {
 			action.Code = mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0
@@ -513,6 +527,16 @@ func mcpAutoprogrammingCheckpointOnlyHighConsumptionV0(
 		}
 	}
 	return true
+}
+
+func mcpAutoprogrammingNoCheckpointHighConsumptionV0(
+	action MCPAutoprogrammingActionableRunV0,
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	return mcpAutoprogrammingObservedGoalActiveV0(observed) &&
+		action.TokensUsed >= mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensV0 &&
+		len(compactStringsMCPV0(action.ArtifactRefs)) == 0 &&
+		len(compactStringsMCPV0(action.DomainReceiptRefs)) == 0
 }
 
 func mcpAutoprogrammingArtifactRefLooksCheckpointV0(ref string) bool {
