@@ -162,7 +162,7 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalMaterializedFileV0(
 	if goalMaterializedFileLooksLikeArtifactV0(projectRoot, path, base) {
 		scan.HasArtifact = true
 	}
-	if goalMaterializedFileLooksLikeQAReportV0(projectRoot, path, base, info) {
+	if goalMaterializedFileLooksLikeQAReportV0(projectRoot, path, base, info, state) {
 		scan.HasQAPass = true
 		scan.Result.EvidenceRefs = append(scan.Result.EvidenceRefs, goalMaterializedQAPassRefV0(projectRoot, path, state.RunRef))
 	}
@@ -206,6 +206,7 @@ func goalMaterializedFileLooksLikeQAReportV0(
 	path string,
 	base string,
 	info fs.FileInfo,
+	state orquestagoal.GoalWorkStateV0,
 ) bool {
 	if info == nil || info.IsDir() || info.Size() <= 0 || info.Size() > goalMaterializedQAScanMaxBytesV0 {
 		return false
@@ -219,7 +220,8 @@ func goalMaterializedFileLooksLikeQAReportV0(
 	}
 	if strings.EqualFold(filepath.Ext(base), ".json") {
 		var payload any
-		if json.Unmarshal(raw, &payload) == nil && goalMaterializedJSONLooksLikeQAPassV0(payload) {
+		if json.Unmarshal(raw, &payload) == nil &&
+			goalMaterializedJSONLooksLikeQAPassForContextV0(projectRoot, path, base, state, payload) {
 			return true
 		}
 	}
@@ -277,6 +279,223 @@ func goalMaterializedJSONLooksLikeQAPassV0(value any) bool {
 		}
 	}
 	return false
+}
+
+func goalMaterializedJSONLooksLikeQAPassForContextV0(
+	projectRoot string,
+	path string,
+	base string,
+	state orquestagoal.GoalWorkStateV0,
+	value any,
+) bool {
+	if goalMaterializedStateOrReportLooksLikeOPESV0(projectRoot, path, base, state, value) {
+		return goalMaterializedJSONLooksLikeOPESQAPassV0(value)
+	}
+	return goalMaterializedJSONLooksLikeQAPassV0(value)
+}
+
+func goalMaterializedStateOrReportLooksLikeOPESV0(
+	projectRoot string,
+	path string,
+	base string,
+	state orquestagoal.GoalWorkStateV0,
+	value any,
+) bool {
+	if goalMaterializedTextLooksLikeOPESV0(base) || goalMaterializedTextLooksLikeOPESV0(path) {
+		return true
+	}
+	if rel, err := filepath.Rel(filepath.Clean(projectRoot), filepath.Clean(path)); err == nil &&
+		goalMaterializedTextLooksLikeOPESV0(rel) {
+		return true
+	}
+	if goalMaterializedStateLooksLikeOPESV0(state) {
+		return true
+	}
+	return goalMaterializedJSONLooksLikeOPESReportV0(value)
+}
+
+func goalMaterializedStateLooksLikeOPESV0(state orquestagoal.GoalWorkStateV0) bool {
+	values := []string{
+		state.RunRef,
+		state.GoalRef,
+		state.ExternalGoalRef,
+		state.Spec.GoalRef,
+		state.Spec.RequestRef,
+		state.Spec.RunRef,
+		state.Spec.ProjectRef,
+		state.Spec.DomainRef,
+		state.Spec.WorkKind,
+		state.Spec.WorkProfileKind,
+		state.Spec.Objective,
+	}
+	values = append(values, state.EvidenceRefs...)
+	values = append(values, state.LaunchReceipt.EvidenceRefs...)
+	values = append(values, state.Spec.SkillRefs...)
+	values = append(values, state.Spec.AcceptanceCriteria...)
+	values = append(values, state.Spec.EvidenceRefs...)
+	values = append(values, state.Spec.ClosurePolicy.RequiredEvidenceRefs...)
+	for _, ref := range state.Spec.ContextRefs {
+		values = append(values, ref.Kind, ref.Ref, ref.Purpose)
+	}
+	for _, ref := range state.Spec.RuleRefs {
+		values = append(values, ref.Kind, ref.Ref, ref.Enforcement)
+	}
+	for _, scope := range state.Spec.WriteSet {
+		values = append(values, scope.Path, scope.Purpose)
+	}
+	for _, test := range state.Spec.RequiredTests {
+		values = append(values, test.TestRef, test.CommandRef, test.Command)
+		values = append(values, test.AcceptanceCriteria...)
+		values = append(values, test.AcceptanceCriteriaRefs...)
+		values = append(values, test.EvidenceRefs...)
+	}
+	for _, contract := range state.Spec.ArtifactContracts {
+		values = append(values, contract.ArtifactRef, contract.ArtifactType)
+		values = append(values, contract.EvidenceRefs...)
+	}
+	if state.LastResult != nil {
+		values = append(values,
+			state.LastResult.ArtifactRefs...,
+		)
+		values = append(values, state.LastResult.ArtifactPaths...)
+		values = append(values, state.LastResult.DomainReceiptRefs...)
+		values = append(values, state.LastResult.EvidenceRefs...)
+	}
+	for _, value := range values {
+		if goalMaterializedTextLooksLikeOPESV0(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func goalMaterializedJSONLooksLikeOPESReportV0(value any) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, item := range typed {
+			if goalMaterializedTextLooksLikeOPESV0(key) {
+				return true
+			}
+			if text, ok := item.(string); ok && goalMaterializedTextLooksLikeOPESV0(text) {
+				return true
+			}
+			if goalMaterializedJSONLooksLikeOPESReportV0(item) {
+				return true
+			}
+		}
+	case []any:
+		for _, item := range typed {
+			if goalMaterializedJSONLooksLikeOPESReportV0(item) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func goalMaterializedTextLooksLikeOPESV0(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return false
+	}
+	normalized := goalMaterializedCanonicalQAKeyV0(value)
+	return normalized == "opes" ||
+		strings.HasPrefix(normalized, "opes_") ||
+		strings.HasSuffix(normalized, "_opes") ||
+		strings.Contains(normalized, "_opes_") ||
+		strings.Contains(normalized, "plan_temario")
+}
+
+type goalMaterializedOPESQAPassesV0 struct {
+	ExtensionPass         bool
+	OfficialTextQAPass    bool
+	StrictEditorialQAPass bool
+}
+
+func goalMaterializedJSONLooksLikeOPESQAPassV0(value any) bool {
+	passes := goalMaterializedOPESQAPassesV0{}
+	goalMaterializedCollectOPESQAPassesV0(value, &passes)
+	return passes.ExtensionPass && passes.OfficialTextQAPass && passes.StrictEditorialQAPass
+}
+
+func goalMaterializedCollectOPESQAPassesV0(value any, passes *goalMaterializedOPESQAPassesV0) {
+	if passes == nil || (passes.ExtensionPass && passes.OfficialTextQAPass && passes.StrictEditorialQAPass) {
+		return
+	}
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, item := range typed {
+			if passKind := goalMaterializedOPESQAPassKindForKeyV0(key); passKind != "" &&
+				(goalMaterializedQAPassValueTruthyV0(item) || goalMaterializedJSONLooksLikeQAPassV0(item)) {
+				goalMaterializedMarkOPESQAPassV0(passes, passKind)
+			}
+			goalMaterializedCollectOPESQAPassesV0(item, passes)
+		}
+	case []any:
+		for _, item := range typed {
+			goalMaterializedCollectOPESQAPassesV0(item, passes)
+		}
+	}
+}
+
+func goalMaterializedOPESQAPassKindForKeyV0(key string) string {
+	switch goalMaterializedCanonicalQAKeyV0(key) {
+	case "extension", "extension_pass", "extension_qa", "extension_qa_pass", "content_extension_pass":
+		return "extension"
+	case "official_text", "official_text_pass", "official_text_qa", "official_text_qa_pass",
+		"officialtextpass", "officialtextqapass", "texto_oficial_pass", "texto_oficial_qa_pass":
+		return "official_text"
+	case "strict_editorial", "strict_editorial_pass", "strict_editorial_qa", "strict_editorial_qa_pass",
+		"stricteditorialpass", "stricteditorialqapass", "editorial_estricta_pass", "editorial_estricta_qa_pass":
+		return "strict_editorial"
+	default:
+		return ""
+	}
+}
+
+func goalMaterializedMarkOPESQAPassV0(passes *goalMaterializedOPESQAPassesV0, passKind string) {
+	switch passKind {
+	case "extension":
+		passes.ExtensionPass = true
+	case "official_text":
+		passes.OfficialTextQAPass = true
+	case "strict_editorial":
+		passes.StrictEditorialQAPass = true
+	}
+}
+
+func goalMaterializedQAPassValueTruthyV0(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		text := strings.ToLower(strings.TrimSpace(typed))
+		return text == "true" || text == "pass" || text == "passed" || text == "ok" || text == "success"
+	case float64:
+		return typed == 1
+	default:
+		return false
+	}
+}
+
+func goalMaterializedCanonicalQAKeyV0(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var builder strings.Builder
+	lastSep := false
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= '0' && r <= '9':
+			builder.WriteRune(r)
+			lastSep = false
+		default:
+			if !lastSep {
+				builder.WriteByte('_')
+				lastSep = true
+			}
+		}
+	}
+	return strings.Trim(builder.String(), "_")
 }
 
 func goalMaterializedQAPassRefV0(
