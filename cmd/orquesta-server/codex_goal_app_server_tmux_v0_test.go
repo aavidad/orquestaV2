@@ -15,11 +15,7 @@ import (
 )
 
 func TestServerCodexGoalBackendFromEnvV0TmuxPreflightOKV0(t *testing.T) {
-	root, err := os.MkdirTemp("/tmp", "og")
-	if err != nil {
-		t.Fatalf("mkdir temp root: %v", err)
-	}
-	defer os.RemoveAll(root)
+	root := t.TempDir()
 	binDir := filepath.Join(root, "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil {
 		t.Fatalf("mkdir bin: %v", err)
@@ -76,14 +72,16 @@ func TestServerCodexGoalBackendFromEnvV0TmuxPreflightOKV0(t *testing.T) {
 		HomeDir:           homeDir,
 		CodeHomeDir:       codeHomePath,
 		RuntimeWorkDir:    runtimeDir,
+		ProjectWorkDir:    projectDir,
 		SourceCodeHomeDir: sourceCodeHome,
 		Timeout:           time.Second,
 	}
 	if err := backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{}); err != nil {
 		t.Fatalf("EnsureV0: %v", err)
 	}
-	if !strings.HasPrefix(socketPath, filepath.Join(filepath.Clean(runtimeDir), codexAppServerTmuxDirV0)+string(os.PathSeparator)) ||
-		!strings.HasSuffix(socketPath, ".sock") {
+	if !strings.HasSuffix(socketPath, ".sock") ||
+		(!strings.HasPrefix(socketPath, filepath.Join(filepath.Clean(runtimeDir), codexAppServerTmuxDirV0)+string(os.PathSeparator)) &&
+			socketPath != codexAppServerTmuxShortSocketPathV0(config)) {
 		t.Fatalf("socket path fuera de runtime: %q", socketPath)
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(socketPath), codexAppServerTmuxMarkerFileV0)); err != nil {
@@ -105,7 +103,9 @@ func TestServerCodexGoalBackendFromEnvV0TmuxPreflightOKV0(t *testing.T) {
 	if raw, err := os.ReadFile(filepath.Join(isolatedCodeHome, "auth.json")); err != nil || string(raw) != `{"ok":true}` {
 		t.Fatalf("auth proyectado raw=%q err=%v", string(raw), err)
 	}
-	if raw, err := os.ReadFile(filepath.Join(isolatedCodeHome, "config.toml")); err != nil || string(raw) != "model = \"test\"\n" {
+	if raw, err := os.ReadFile(filepath.Join(isolatedCodeHome, "config.toml")); err != nil ||
+		!strings.Contains(string(raw), "model = \"test\"") ||
+		!strings.Contains(string(raw), `[projects."`+projectDir+`"]`) {
 		t.Fatalf("config proyectada raw=%q err=%v", string(raw), err)
 	}
 }
@@ -129,6 +129,7 @@ func TestCodexAppServerTmuxBackendV0PreparaCodeHomeDesdeCODEXHOMEResueltoV0(t *t
 	backend := serverCodexAppServerTmuxBackendV0{
 		CodeHomeDir:       codeHome,
 		RuntimeWorkDir:    runtimeDir,
+		ProjectWorkDir:    filepath.Join(root, "project"),
 		SourceCodeHomeDir: codeHomeDirV0(),
 	}
 
@@ -139,8 +140,65 @@ func TestCodexAppServerTmuxBackendV0PreparaCodeHomeDesdeCODEXHOMEResueltoV0(t *t
 		!strings.Contains(string(raw), `"auth_mode":"chatgpt"`) {
 		t.Fatalf("auth no proyectado desde CODEX_HOME raw=%q err=%v", string(raw), err)
 	}
-	if raw, err := os.ReadFile(filepath.Join(codeHome, "config.toml")); err != nil || string(raw) != "model = \"test\"\n" {
+	if raw, err := os.ReadFile(filepath.Join(codeHome, "config.toml")); err != nil ||
+		!strings.Contains(string(raw), "model = \"test\"") ||
+		!strings.Contains(string(raw), `[projects."`+filepath.Join(root, "project")+`"]`) {
 		t.Fatalf("config no proyectada desde CODEX_HOME raw=%q err=%v", string(raw), err)
+	}
+}
+
+func TestCodexAppServerTmuxBackendV0FiltraProjectsAjenosDelConfigV0(t *testing.T) {
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "runtime")
+	projectDir := filepath.Join(root, "project")
+	codeHome := filepath.Join(runtimeDir, codexAppServerTmuxDirV0, "codex-home")
+	sourceCodeHome := filepath.Join(root, "source-codex-home")
+	if err := os.MkdirAll(sourceCodeHome, 0o700); err != nil {
+		t.Fatalf("mkdir source code home: %v", err)
+	}
+	sourceConfig := strings.Join([]string{
+		`model = "test"`,
+		``,
+		`[projects."/workspace/project"]`,
+		`trust_level = "trusted"`,
+		``,
+		`[projects."/srv/orquesta-self/worktrees/orquesta"]`,
+		`trust_level = "trusted"`,
+		``,
+		`[tui.model_availability_nux]`,
+		`"gpt-5.5" = 4`,
+		``,
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(sourceCodeHome, "auth.json"), []byte(`{"ok":true}`), 0o600); err != nil {
+		t.Fatalf("write auth: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceCodeHome, "config.toml"), []byte(sourceConfig), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	backend := serverCodexAppServerTmuxBackendV0{
+		CodeHomeDir:       codeHome,
+		RuntimeWorkDir:    runtimeDir,
+		ProjectWorkDir:    projectDir,
+		SourceCodeHomeDir: sourceCodeHome,
+	}
+
+	if err := backend.prepareTmuxCodeHomeV0(); err != nil {
+		t.Fatalf("prepareTmuxCodeHomeV0: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(codeHome, "config.toml"))
+	if err != nil {
+		t.Fatalf("read config proyectada: %v", err)
+	}
+	config := string(raw)
+	if strings.Contains(config, "/workspace/project") ||
+		strings.Contains(config, "/srv/orquesta-self/worktrees/orquesta") {
+		t.Fatalf("config conserva proyectos ajenos: %s", config)
+	}
+	if !strings.Contains(config, `model = "test"`) ||
+		!strings.Contains(config, `[tui.model_availability_nux]`) ||
+		!strings.Contains(config, `[projects."`+projectDir+`"]`) ||
+		!strings.Contains(config, `trust_level = "trusted"`) {
+		t.Fatalf("config no conserva globales o proyecto aislado: %s", config)
 	}
 }
 

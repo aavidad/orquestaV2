@@ -103,6 +103,7 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 			HomeDir:           runtimeConfig.HomeDir,
 			CodeHomeDir:       tmuxCodeHomePath,
 			RuntimeWorkDir:    config.RuntimeWorkDir,
+			ProjectWorkDir:    firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir),
 			SourceCodeHomeDir: runtimeConfig.CodeHomeDir,
 			Timeout:           codexAppServerTmuxStartupTimeoutV0(time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond),
 		}

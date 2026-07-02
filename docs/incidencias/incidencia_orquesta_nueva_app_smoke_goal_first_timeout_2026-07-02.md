@@ -280,3 +280,25 @@ Evidencia focal:
 
 - `TestServerCodexAppServerGoalBackendV0ActiveGoalRespetaBudgetMaxRuntimeMayorQueTimeoutGlobalV0`
 - `TestServerCodexAppServerGoalBackendV0ThreadReadRespetaBudgetMaxRuntimeMayorQueTimeoutGlobalV0`
+
+Smoke real posterior con Orquesta `d8393a2730`, directorio conservado en
+`/srv/orquesta-self/runtime/smokes-goal-first/orquesta-goal-first-app-server.1aHPIu`:
+el ajuste de timeout del smoke evita el corte de 90 segundos, pero el run
+termina bloqueado en poll 44 con `generated_apps_present=0`. El resultado del
+agente declara `Quota exceeded` al montar `.git` antes de ejecutar comandos y
+sin artefactos. La inspeccion del Codex home aislado muestra que
+`runtime/goal-srv/codex-home/config.toml` conserva entradas `[projects]`
+heredadas para workspaces ajenos (`/workspace/project` y el worktree real de
+Orquesta) aunque el CWD efectivo es el proyecto temporal del smoke.
+
+Avance aplicado: la preparacion de `app_server_tmux` filtra las secciones
+`[projects.*]` heredadas del `config.toml` fuente y reinyecta solo el
+`ProjectWorkDir` aislado del backend como trusted. Tambien se corrigio el test
+de preflight tmux para usar `t.TempDir` y no depender de `/tmp` cuando hay cuota
+local agotada.
+
+Evidencia focal:
+
+- `TestCodexAppServerTmuxBackendV0FiltraProjectsAjenosDelConfigV0`
+- `TestCodexAppServerTmuxBackendV0PreparaCodeHomeDesdeCODEXHOMEResueltoV0`
+- `TestServerCodexGoalBackendFromEnvV0TmuxPreflightOKV0`

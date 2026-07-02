@@ -37,6 +37,7 @@ type serverCodexAppServerTmuxBackendV0 struct {
 	HomeDir           string
 	CodeHomeDir       string
 	RuntimeWorkDir    string
+	ProjectWorkDir    string
 	SourceCodeHomeDir string
 	Timeout           time.Duration
 }
@@ -484,6 +485,9 @@ func (backend serverCodexAppServerTmuxBackendV0) prepareTmuxCodeHomeV0() error {
 		if !ok {
 			continue
 		}
+		if name == "config.toml" {
+			raw = codexAppServerTmuxProjectScopedConfigV0(raw, backend.ProjectWorkDir)
+		}
 		if err := os.WriteFile(filepath.Join(codeHomeDir, name), raw, 0o600); err != nil {
 			return codexAppServerCallErrorV0{
 				Code: "codex_app_server_tmux_code_home_unavailable",
@@ -517,6 +521,47 @@ func (backend serverCodexAppServerTmuxBackendV0) readTmuxCodeHomeAllowedFilesV0(
 		}
 	}
 	return allowedFiles, nil
+}
+
+func codexAppServerTmuxProjectScopedConfigV0(raw []byte, projectWorkDir string) []byte {
+	projectWorkDir = strings.TrimSpace(projectWorkDir)
+	if projectWorkDir == "" {
+		return raw
+	}
+	lines := strings.SplitAfter(string(raw), "\n")
+	out := make([]string, 0, len(lines)+4)
+	skipProjectSection := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			skipProjectSection = codexAppServerTmuxConfigSectionIsProjectV0(trimmed)
+			if skipProjectSection {
+				continue
+			}
+		}
+		if skipProjectSection {
+			continue
+		}
+		out = append(out, line)
+	}
+	config := strings.TrimRight(strings.Join(out, ""), "\n")
+	if config != "" {
+		config += "\n"
+	}
+	config += "\n[projects.\"" + codexAppServerTmuxTOMLStringPathV0(projectWorkDir) + "\"]\ntrust_level = \"trusted\"\n"
+	return []byte(config)
+}
+
+func codexAppServerTmuxConfigSectionIsProjectV0(section string) bool {
+	section = strings.TrimSpace(section)
+	return strings.HasPrefix(section, "[projects.") || strings.HasPrefix(section, "[[projects.")
+}
+
+func codexAppServerTmuxTOMLStringPathV0(path string) string {
+	path = strings.TrimSpace(path)
+	path = strings.ReplaceAll(path, "\\", "\\\\")
+	path = strings.ReplaceAll(path, "\"", "\\\"")
+	return path
 }
 
 func codexAppServerTmuxCodeHomeAllowedFileNamesV0() []string {
