@@ -16,6 +16,9 @@ Cobertura actual:
   `goal_ref` cruzado;
 - el launcher y observer preservan `IssueCode` de backend cuando el transporte
   real falla, para no degradar diagnosticos como socket o standalone ausente;
+- el launcher y observer infieren causa compacta cuando el backend falla sin
+  `IssueCode` en familias conocidas como `ResetStdio`, tmux salido o permisos
+  de `bwrap`;
 - el prompt separa direccion interna de Codex Goal y gobierno externo de
   Orquesta.
 - `cmd/orquesta-server` prueba el wiring de composicion opt-in con backends

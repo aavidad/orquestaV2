@@ -251,6 +251,47 @@ func TestCodexGoalLauncherV0PreservaIssueCodeDeBackendV0(t *testing.T) {
 	}
 }
 
+func TestCodexGoalLauncherV0ClasificaErrorBackendSinIssueCodeV0(t *testing.T) {
+	cases := []struct {
+		name    string
+		message string
+		want    string
+	}{
+		{
+			name: "reset stdio",
+			message: `Node.js[2796823]: void node::ResetStdio() at ../src/node.cc:751
+Assertion failed: !(err != 0) || (err == -1 && (*__errno_location ()) == 1)`,
+			want: "codex_app_server_wrapper_stdio_failed",
+		},
+		{
+			name:    "tmux exited",
+			message: "tmux session exited before app-server socket was ready",
+			want:    "codex_app_server_tmux_session_exited",
+		},
+		{
+			name:    "bwrap permission",
+			message: "bwrap: Can't mkdir parents for /tmp/orquesta-runtime: Permission denied",
+			want:    "codex_app_server_permission_denied",
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			starter := &recordingCodexGoalStarterV0{
+				err: errors.New(tt.message),
+			}
+			launcher := CodexGoalLauncherV0{Starter: starter}
+
+			receipt, err := launcher.LaunchGoalWorkV0(context.Background(), validCodexGoalSpecV0())
+
+			if err == nil ||
+				receipt.Status != orquestagoal.GoalStatusInvalidV0 ||
+				!hasGoalIssueCodeForTestV0(receipt.Issues, tt.want) {
+				t.Fatalf("receipt=%+v err=%v want_issue=%q", receipt, err, tt.want)
+			}
+		})
+	}
+}
+
 func TestBuildCodexGoalObservationRequestV0ValidaRefs(t *testing.T) {
 	packet, issues := BuildCodexGoalObservationRequestV0(orquestagoal.GoalObservationRequestV0{
 		GoalRef:         "goal-ref-001",
@@ -453,6 +494,23 @@ func TestCodexGoalObserverV0PreservaIssueCodeDeBackendV0(t *testing.T) {
 		result.Status != orquestagoal.GoalStatusInvalidV0 ||
 		result.ExternalGoalRef != "external-goal-ref-001" ||
 		!hasGoalIssueCodeForTestV0(result.Issues, "codex_app_server_control_socket_missing") {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+}
+
+func TestCodexGoalObserverV0ClasificaErrorBackendSinIssueCodeV0(t *testing.T) {
+	observer := CodexGoalObserverV0{Observer: &recordingCodexGoalObserverV0{
+		err: errors.New("codex app-server failed: Operation not permitted (os error 1)"),
+	}}
+
+	result, err := observer.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
+		GoalRef:         "goal-ref-001",
+		ExternalGoalRef: "external-goal-ref-001",
+	})
+
+	if err == nil ||
+		result.Status != orquestagoal.GoalStatusInvalidV0 ||
+		!hasGoalIssueCodeForTestV0(result.Issues, "codex_app_server_operation_not_permitted") {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 }

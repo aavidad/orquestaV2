@@ -432,8 +432,8 @@ func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec o
 	receipt, err := launcher.Starter.StartCodexGoalV0(ctx, packet)
 	if err != nil {
 		result := codexGoalLaunchInvalidReceiptV0(packet.GoalRef, ErrCodexGoalStartRejectedV0)
-		if strings.TrimSpace(receipt.IssueCode) != "" {
-			result.Issues = []orquestagoal.GoalWorkIssueV0{{Code: strings.TrimSpace(receipt.IssueCode)}}
+		if code := codexGoalBackendIssueCodeV0(receipt.IssueCode, err); code != "" {
+			result.Issues = []orquestagoal.GoalWorkIssueV0{{Code: code}}
 		}
 		if strings.TrimSpace(receipt.ExternalGoalRef) != "" {
 			result.ExternalGoalRef = strings.TrimSpace(receipt.ExternalGoalRef)
@@ -478,8 +478,8 @@ func (observer CodexGoalObserverV0) ObserveGoalWorkV0(
 	receipt, err := observer.Observer.ObserveCodexGoalV0(ctx, packet)
 	if err != nil {
 		result := codexGoalObservationInvalidResultV0(request, ErrCodexGoalObservationRejectedV0)
-		if strings.TrimSpace(receipt.IssueCode) != "" {
-			result.Issues = []orquestagoal.GoalWorkIssueV0{{Code: strings.TrimSpace(receipt.IssueCode)}}
+		if code := codexGoalBackendIssueCodeV0(receipt.IssueCode, err); code != "" {
+			result.Issues = []orquestagoal.GoalWorkIssueV0{{Code: code}}
 		}
 		if strings.TrimSpace(receipt.ExternalGoalRef) != "" {
 			result.ExternalGoalRef = strings.TrimSpace(receipt.ExternalGoalRef)
@@ -556,6 +556,79 @@ func firstNonEmptyCodexGoalStringV0(values ...string) string {
 		if trimmed := strings.TrimSpace(value); trimmed != "" {
 			return trimmed
 		}
+	}
+	return ""
+}
+
+func codexGoalBackendIssueCodeV0(explicit string, err error) string {
+	if code := strings.TrimSpace(explicit); code != "" {
+		return code
+	}
+	if err == nil {
+		return ""
+	}
+	return codexGoalBackendIssueCodeFromMessageV0(err.Error())
+}
+
+func codexGoalBackendIssueCodeFromMessageV0(message string) string {
+	normalized := strings.ToLower(strings.TrimSpace(message))
+	switch {
+	case normalized == "":
+		return ""
+	case strings.Contains(normalized, "codex_app_server_wrapper_stdio_failed") ||
+		strings.Contains(normalized, "resetstdio") ||
+		strings.Contains(normalized, "node.cc:751"):
+		return "codex_app_server_wrapper_stdio_failed"
+	case strings.Contains(normalized, "codex_app_server_tmux_session_exited") ||
+		(strings.Contains(normalized, "tmux") &&
+			(strings.Contains(normalized, "session exited") ||
+				strings.Contains(normalized, "server exited") ||
+				strings.Contains(normalized, "exited"))):
+		return "codex_app_server_tmux_session_exited"
+	case strings.Contains(normalized, "codex_app_server_provider_unauthorized") ||
+		strings.Contains(normalized, "401 unauthorized") ||
+		(strings.Contains(normalized, "unauthorized") &&
+			(strings.Contains(normalized, "api.openai.com/v1/responses") ||
+				strings.Contains(normalized, "responses_websocket"))):
+		return "codex_app_server_provider_unauthorized"
+	case strings.Contains(normalized, "codex_app_server_auth_missing"):
+		return "codex_app_server_auth_missing"
+	case strings.Contains(normalized, "codex_app_server_goal_provider_limited") ||
+		strings.Contains(normalized, "usagelimited") ||
+		strings.Contains(normalized, "usage limited") ||
+		strings.Contains(normalized, "usage limit") ||
+		strings.Contains(normalized, "quota exhausted") ||
+		strings.Contains(normalized, "quota limited") ||
+		strings.Contains(normalized, "provider limited") ||
+		strings.Contains(normalized, `"has_credits":false`) ||
+		strings.Contains(normalized, `"has_credits": false`):
+		return "codex_app_server_goal_provider_limited"
+	case strings.Contains(normalized, "codex_app_server_goal_budget_limited") ||
+		strings.Contains(normalized, "budgetlimited") ||
+		strings.Contains(normalized, "budget limited") ||
+		strings.Contains(normalized, "budget limit"):
+		return "codex_app_server_goal_budget_limited"
+	case strings.Contains(normalized, "codex_app_server_goal_policy_limited") ||
+		strings.Contains(normalized, "policylimited") ||
+		strings.Contains(normalized, "policy limited") ||
+		strings.Contains(normalized, "policy limit"):
+		return "codex_app_server_goal_policy_limited"
+	case strings.Contains(normalized, "codex_app_server_control_socket_missing") ||
+		strings.Contains(normalized, "failed to connect to socket") ||
+		strings.Contains(normalized, "app-server-control.sock"):
+		return "codex_app_server_control_socket_missing"
+	case strings.Contains(normalized, "codex_app_server_standalone_missing") ||
+		strings.Contains(normalized, "managed standalone codex install not found"):
+		return "codex_app_server_standalone_missing"
+	case strings.Contains(normalized, "codex_app_server_command_missing") ||
+		strings.Contains(normalized, "executable file not found"):
+		return "codex_app_server_command_missing"
+	case strings.Contains(normalized, "codex_app_server_permission_denied") ||
+		strings.Contains(normalized, "permission denied"):
+		return "codex_app_server_permission_denied"
+	case strings.Contains(normalized, "codex_app_server_operation_not_permitted") ||
+		strings.Contains(normalized, "operation not permitted"):
+		return "codex_app_server_operation_not_permitted"
 	}
 	return ""
 }

@@ -49,6 +49,10 @@ Para no competir con las sqlite de la sesion Codex principal, la composicion pro
 app-server. Si el transporte no esta disponible, la
 composicion puede devolver `IssueCode` compacto; el launcher neutral lo conserva
 en el `GoalLaunchReceiptV0` invalidado para que el operador vea la causa real.
+Si por un fallo de frontera el backend devuelve solo `error` y deja
+`IssueCode` vacio, el launcher infiere un codigo compacto para familias
+operativas conocidas (`ResetStdio`, tmux salido, permisos/bwrap, auth/cuota,
+socket o comando ausente) sin copiar rutas, HOME ni stderr completo al receipt.
 
 ## CodexGoalObservationRequestV0
 
@@ -79,6 +83,8 @@ aceptar cierre. El archivo durable tiene prioridad sobre un marcador textual
 incompleto o invalido.
 Si el backend falla al observar y devuelve `IssueCode`, el observer neutral lo
 conserva en el `GoalWorkResultV0` invalidado.
+Si falla sin `IssueCode`, aplica el mismo fallback de clasificacion compacta
+que el launcher.
 
 ## CodexGoalLauncherV0
 
