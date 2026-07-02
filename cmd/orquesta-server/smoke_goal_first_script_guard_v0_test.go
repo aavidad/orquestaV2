@@ -116,6 +116,29 @@ func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T
 	}
 }
 
+func TestSmokeGoalFirstAppServerRealPrintsPublicReadinessDiagnosticsOnStartupFailureV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+
+	for _, want := range []string{
+		"print_server_readiness_failure_diagnostics",
+		`curl -sS -m 2 -o "$response_file" -w "%{http_code}" "http://$addr/api/v0/server/readiness"`,
+		"readiness_http_status=",
+		`"startup_status",`,
+		`print(f"readiness_{key}={code}")`,
+		`print(f"readiness_diagnostic_{index}_code={code}")`,
+		`print(f"readiness_diagnostic_{index}_message={message}")`,
+		"codex_app_server_auth_missing",
+		`forbidden = (`,
+		`"token", "secret", "bearer", "authorization",`,
+		`print_server_readiness_failure_diagnostics "$server_addr"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("smoke no imprime diagnostico publico de readiness al fallar startup: falta %q", want)
+		}
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealProjectsCodeHomeFromCodexHomeV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")

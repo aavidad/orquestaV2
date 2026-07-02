@@ -77,8 +77,7 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 	result := scan.Result
 	if source.RepairMissingTerminalReceipt &&
 		source.GoalStateStore != nil &&
-		scan.TerminalResult != nil &&
-		!goalMaterializedMissingTerminalReceiptHandledV0(state) {
+		scan.TerminalResult != nil {
 		repaired, repairErr := repairGoalFirstReceiptFromMaterializedResultV0(
 			ctx,
 			state,

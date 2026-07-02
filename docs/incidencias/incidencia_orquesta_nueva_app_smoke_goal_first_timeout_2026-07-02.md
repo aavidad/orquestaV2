@@ -325,16 +325,52 @@ entorno, pero por defecto usa ese sandbox efectivo solo para el smoke aislado
 porque `ProjectWorkDir`, runtime y `CODEX_HOME` son temporales bajo
 `smoke_root`.
 
-Actualizacion 2026-07-02, BUG-130 abierto: el smoke posterior conservado en
-`/srv/orquesta-self/runtime/smokes-goal-first/orquesta-goal-first-app-server.1VWYEr`
-materializo la app y escribio un receipt terminal
-`orquesta_goal_result_goal-ref-app-director-run-spec-smoke-goal-first-req-smoke-goal-first-5ae25ef16a8.json`
-con `status=complete`, `artifact_refs` contractuales,
-`required_test_results` pasados y `evidence-ref-app-director-goal-first-v0`.
-La observacion publica quedo, sin embargo, con `goal_status=complete`,
-`run_status=activa`, `closure_status=blocked`, `closure_needs_rework=true` y
-`closure_issues` por `goal_closure_invalid field artifact_refs` y
-`repair_receipt_requires_rework`. El estado persistido del rework conserva
-`artifact_paths` y refs materializadas, pero no las `artifact_refs`
-contractuales del receipt. Este bloqueo ya no es de ejecucion/escritura del
-app-server; falta preservar esas refs hasta la validacion de cierre.
+Actualizacion 2026-07-02, BUG-130 cerrado en codigo: el smoke posterior
+conservado en
+`/srv/orquesta-self/runtime/smokes-goal-first/orquesta-goal-first-app-server.1VWYEr`,
+`ORQUESTA_CODEX_SANDBOX=danger-full-access`, OPES desactivado y proyecto
+temporal sin produccion: Codex materializo una app Node.js bajo
+`generated-apps/smoke-goal-first` con dominio, aplicacion, puertos,
+adaptadores HTTP/persistencia en memoria, bootstrap, HTML en castellano,
+manuales, handoff y source tree. La verificacion local paso:
+
+- `npm run verify`
+- 4 tests ejecutados.
+- 4 tests pasados.
+- 0 fallos.
+
+El receipt terminal quedo como `status=complete`, con `artifact_refs`,
+`artifact_paths`, `required_test_results[0].status=passed` y `evidence_refs`.
+Sin embargo `observe` proyecto:
+
+- `goal_status=complete`
+- `run_status=activa`
+- `closure_status=blocked`
+- `closure_needs_rework=true`
+- `closure_issues=[goal_closure_invalid/artifact_refs,
+  repair_receipt_requires_rework, goal_first_materialized_checkpoint_detected]`
+
+Lectura: el agente escribio primero un receipt terminal incompleto sin
+`artifact_refs`; Orquesta intento repararlo y persistio
+`repair_receipt_requires_rework`. Despues el agente corrigio el receipt, pero
+la fuente de refs materializadas no reintentaba la validacion porque la
+reparacion anterior ya estaba marcada como intentada. Esto se registra como
+`BUG-ORQ-20260702-130`.
+
+Avance aplicado: `stackGoalMaterializedRefsSourceV0` vuelve a validar un
+`orquesta_goal_result*.json` terminal aunque una reparacion previa hubiese
+fallado, siempre que el cierre no este ya aceptado. La guarda de intento previo
+se conserva para el caso sintetico de "artefactos + QA pass sin receipt
+terminal", evitando reintentos infinitos cuando el agente aun no ha escrito el
+receipt.
+
+Evidencia focal:
+
+- `TestStackGoalMaterializedRefsSourceV0ReintentaReceiptTerminalCorregidoTrasReworkV0`
+- `TestStackGoalMaterializedRefsSourceV0ReparaReceiptTerminalConPuertosV0`
+- `TestCodexStackObserveAppDirectorGoalExecutorV0IngiereReceiptTerminalMaterializadoV0`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestStackGoalMaterializedRefsSourceV0(ReintentaReceiptTerminalCorregidoTrasRework|ReparaReceiptTerminalConPuertos)|TestCodexStackObserveAppDirectorGoalExecutorV0IngiereReceiptTerminalMaterializadoV0'`
+
+Pendiente: reejecutar el smoke real con el binario que contiene este cambio y
+comprobar cierre `goal_status=complete`, `run_status=cerrada`,
+`closure_status=accepted` y `closure_accepted=true`.

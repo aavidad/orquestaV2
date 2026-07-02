@@ -90,8 +90,7 @@ func repairGoalFirstReceiptFromMaterializedResultV0(
 	}
 	out := goalFirstReceiptRepairResultV0{State: state}
 	if store == nil ||
-		goalFirstReceiptRepairAlreadyClosedV0(state) ||
-		goalFirstReceiptRepairAlreadyAttemptedV0(state) {
+		goalFirstReceiptRepairAlreadyClosedV0(state) {
 		return out, nil
 	}
 	result = orquestagoal.NormalizeGoalWorkResultV0(result)

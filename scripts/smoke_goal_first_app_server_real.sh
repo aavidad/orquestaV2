@@ -277,6 +277,102 @@ PY
   fi
 }
 
+print_server_readiness_failure_diagnostics() {
+  local addr="$1"
+  local response_file status
+  if [[ -z "$addr" ]]; then
+    echo "readiness_diagnostic=addr_unavailable" >&2
+    return 0
+  fi
+  response_file="$smoke_root/server_readiness_failure.json"
+  status="$(curl -sS -m 2 -o "$response_file" -w "%{http_code}" "http://$addr/api/v0/server/readiness" 2>/dev/null || true)"
+  if [[ -z "$status" || "$status" == "000" ]]; then
+    echo "readiness_diagnostic=endpoint_unavailable" >&2
+    return 0
+  fi
+  echo "readiness_http_status=$status" >&2
+  if [[ ! -s "$response_file" ]]; then
+    echo "readiness_diagnostic=body_empty" >&2
+    return 0
+  fi
+  python3 - "$response_file" <<'PY' >&2 || true
+import json
+import re
+import sys
+
+max_value_len = 180
+max_items = 3
+
+def compact_code(value):
+    value = str(value or "").strip()
+    value = re.sub(r"[^A-Za-z0-9_.:-]+", "-", value).strip("-")
+    return value[:max_value_len]
+
+def public_text(value):
+    value = str(value or "").strip()
+    if not value:
+        return ""
+    lower = value.lower()
+    forbidden = (
+        "/", "\\", "home", "token", "secret", "bearer", "authorization",
+        "password", "oauth", "apikey", "api_key", "prompt", "transcript",
+    )
+    if any(item in lower for item in forbidden):
+        return "[redacted]"
+    value = re.sub(r"https?://[^/@\s]+@", "http://[redacted]@", value)
+    value = re.sub(r"\b[A-Za-z_]*(token|secret|password|key)[A-Za-z_]*=([^\s,;]+)", r"\1=[redacted]", value, flags=re.I)
+    return value[:max_value_len]
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        payload = json.load(fh)
+except Exception:
+    print("readiness_diagnostic=body_unparseable")
+    sys.exit(0)
+
+for key in (
+    "ready",
+    "status",
+    "availability_status",
+    "availability_reason",
+    "liveness_status",
+    "startup_ready",
+    "startup_status",
+    "startup_message",
+    "external_bridge_status",
+    "external_bridge_last_error_code",
+    "idle_self_improvement_goal_status",
+    "idle_self_improvement_goal_reason_code",
+):
+    if key not in payload:
+        continue
+    value = payload.get(key)
+    if isinstance(value, bool):
+        print(f"readiness_{key}={str(value).lower()}")
+    elif key.endswith("_message"):
+        text = public_text(value)
+        if text:
+            print(f"readiness_{key}={text}")
+    else:
+        code = compact_code(value)
+        if code:
+            print(f"readiness_{key}={code}")
+
+for index, item in enumerate(payload.get("diagnostics") or []):
+    if index >= max_items or not isinstance(item, dict):
+        break
+    code = compact_code(item.get("code"))
+    scope = compact_code(item.get("scope"))
+    message = public_text(item.get("message"))
+    if code:
+        print(f"readiness_diagnostic_{index}_code={code}")
+    if scope:
+        print(f"readiness_diagnostic_{index}_scope={scope}")
+    if message:
+        print(f"readiness_diagnostic_{index}_message={message}")
+PY
+}
+
 assert_app_server_tmux_shutdown_ready() {
   if [[ "$goal_backend" != "app_server_tmux" ]]; then
     return 0
@@ -590,6 +686,7 @@ done
 
 if [[ "$server_ready" != "1" ]]; then
   echo "el servidor no llego a readiness; addr=$server_addr; stderr:" >&2
+  print_server_readiness_failure_diagnostics "$server_addr"
   tail -n 80 "$server_stderr" >&2 || true
   exit 1
 fi

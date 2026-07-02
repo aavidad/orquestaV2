@@ -182,6 +182,100 @@ func TestStackGoalMaterializedRefsSourceV0ReparaReceiptTerminalConPuertosV0(t *t
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0ReintentaReceiptTerminalCorregidoTrasReworkV0(t *testing.T) {
+	ctx := context.Background()
+	projectDir := t.TempDir()
+	appDir := filepath.Join(projectDir, "generated-apps", "smoke-goal-first")
+	docsDir := filepath.Join(appDir, "docs")
+	if err := os.MkdirAll(docsDir, 0o700); err != nil {
+		t.Fatalf("mkdir app docs: %v", err)
+	}
+	for _, item := range map[string]string{
+		"README.md":         "# App\n",
+		"handoff_report.md": "# Handoff\n",
+		"source_tree.md":    "# Tree\n",
+	} {
+		if err := os.WriteFile(filepath.Join(appDir, item), []byte(item), 0o600); err != nil {
+			t.Fatalf("write %s: %v", item, err)
+		}
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-retry-terminal-001", "generated-apps/smoke-goal-first")
+	sourceArtifactRef := "artifact-ref-" + state.RunRef + "-source"
+	handoffArtifactRef := "artifact-ref-" + state.RunRef + "-handoff"
+	testRef := "test-ref-" + state.RunRef + "-generated-app"
+	evidenceRef := "evidence-ref-app-director-goal-first-v0"
+	state.Spec.ArtifactContracts = []orquestagoal.GoalArtifactContractV0{
+		{ArtifactRef: sourceArtifactRef, ArtifactType: "source_tree", Required: true},
+		{ArtifactRef: handoffArtifactRef, ArtifactType: "handoff_report", Required: true},
+	}
+	state.Spec.RequiredTests = []orquestagoal.GoalRequiredTestV0{{TestRef: testRef}}
+	state.Spec.ClosurePolicy = orquestagoal.GoalClosurePolicyV0{
+		RequireArtifacts:     true,
+		RequireArtifactPaths: true,
+		RequireRequiredTests: true,
+		RequiredEvidenceRefs: []string{evidenceRef},
+	}
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+		Status:        orquestagoal.GoalStatusCompleteV0,
+		GoalRef:       state.GoalRef,
+		EvidenceRefs:  []string{goalFirstRepairReceiptAttemptedEvidenceRefV0},
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:      orquestagoal.GoalStatusBlockedV0,
+		NeedsRework: true,
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  orquestagoal.ErrGoalClosureInvalidV0,
+			Field: "artifact_refs",
+		}},
+	}
+	state, err := orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateV0 retry state: %v", err)
+	}
+	receipt := `{
+  "schema_version":"orquesta_goal_result.v0",
+  "goal_ref":"` + state.GoalRef + `",
+  "status":"complete",
+  "summary":"app generada y verificada",
+  "artifact_refs":["` + sourceArtifactRef + `","` + handoffArtifactRef + `"],
+  "artifact_paths":["generated-apps/smoke-goal-first/README.md","generated-apps/smoke-goal-first/handoff_report.md"],
+  "required_test_results":[{"test_ref":"` + testRef + `","status":"passed","evidence_refs":["` + evidenceRef + `"]}],
+  "evidence_refs":["` + evidenceRef + `"]
+}`
+	if err := os.WriteFile(filepath.Join(docsDir, "orquesta_goal_result_v0.json"), []byte(receipt), 0o600); err != nil {
+		t.Fatalf("write receipt: %v", err)
+	}
+	store := newGoalFirstQueueStateStoreForTestV0()
+	if err := store.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config:                       ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+		GoalStateStore:               store,
+		GoalClosureValidator:         orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		RepairMissingTerminalReceipt: true,
+	}).ResolveDirectorGoalMaterializedRefsV0(ctx, state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok || containsStringV0(result.IssueCodes, goalFirstRepairReceiptRequiresReworkIssueV0) {
+		t.Fatalf("ok=%v result=%+v", ok, result)
+	}
+	persisted, err := store.LoadGoalWorkStateV0(ctx, state.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if persisted.LastClosure == nil ||
+		!persisted.LastClosure.Accepted ||
+		persisted.LastResult == nil ||
+		!containsStringV0(persisted.LastResult.ArtifactRefs, sourceArtifactRef) ||
+		!containsStringV0(persisted.LastResult.ArtifactRefs, handoffArtifactRef) {
+		t.Fatalf("persisted=%+v", persisted)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0NoAceptaQAGenericaEnContextoOPES(t *testing.T) {
 	projectDir := t.TempDir()
 	topicDir := filepath.Join(projectDir, "temas", "tema_032")
