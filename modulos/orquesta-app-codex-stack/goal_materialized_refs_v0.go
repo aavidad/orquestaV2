@@ -19,6 +19,8 @@ const (
 	goalMaterializedRefsMaxFilesV0                 = 64
 	goalMaterializedQAScanMaxFilesV0               = 256
 	goalMaterializedQAScanMaxBytesV0               = 512 * 1024
+	goalMaterializedOPESOutOfScopeMaxFilesV0       = 128
+	goalMaterializedOPESOutOfScopeMaxRefsV0        = 16
 	goalMaterializedWorkDeliveryFileV0             = "work_delivery.json"
 	goalMaterializedOPESReworkDeliveryFileV0       = "opes_topic_rework_delivery.json"
 	goalMaterializedGoalResultFileV0               = "orquesta_goal_result_v0.json"
@@ -26,6 +28,7 @@ const (
 	goalMaterializedPhase0CheckpointDeliveryFileV0 = "orquesta_phase0_checkpoint_delivery.json"
 	goalMaterializedMissingTerminalReceiptEvidence = "evidence-ref-goal-materialized-missing-terminal-receipt-after-artifacts-pass"
 	goalMaterializedArtifactPathsOmittedEvidence   = "evidence-ref-goal-materialized-artifact-paths-omitted"
+	goalMaterializedOutOfScopeArtifactsEvidence    = "evidence-ref-goal-materialized-out-of-scope-artifacts"
 	goalMaterializedQAFailedPublicTextEvidence     = "evidence-ref-goal-materialized-qa-failed-public-text"
 	goalMaterializedPartialArtifactsEvidence       = "evidence-ref-goal-materialized-partial-artifacts-written"
 	goalMaterializedPhase0NonPublishableEvidence   = "evidence-ref-goal-materialized-phase0-complete-non-publishable"
@@ -132,6 +135,13 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedArtifactPathsOmittedEvidence)
 		for _, path := range omitted {
 			result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedArtifactPathOmittedRefV0(state.RunRef, path))
+		}
+	}
+	if outOfScope := goalMaterializedOPESOutOfScopeArtifactsV0(projectRoot, state); len(outOfScope) > 0 {
+		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstOutOfScopeMaterializedArtifactsV0)
+		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedOutOfScopeArtifactsEvidence)
+		for _, path := range outOfScope {
+			result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedOutOfScopeArtifactRefV0(state.RunRef, path))
 		}
 	}
 	for _, path := range scan.ValidArtifactPaths {
@@ -300,6 +310,143 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalMaterializedFileV0(
 		scan.Result.IssueCodes = append(scan.Result.IssueCodes, orquestamcp.MCPGoalFirstQAFailedPublicTextV0)
 	}
 	return scan
+}
+
+func goalMaterializedOPESOutOfScopeArtifactsV0(
+	projectRoot string,
+	state orquestagoal.GoalWorkStateV0,
+) []string {
+	state = orquestagoal.NormalizeGoalWorkStateV0(state)
+	if !goalMaterializedStateLooksLikeOPESV0(state) ||
+		state.LastResult == nil ||
+		strings.TrimSpace(state.LastResult.Status) != orquestagoal.GoalStatusCompleteV0 {
+		return nil
+	}
+	topicRoots := goalMaterializedOPESTopicRootsForStateV0(projectRoot, state)
+	if len(topicRoots) == 0 {
+		return nil
+	}
+	allowedRoots := goalMaterializedWriteSetAbsRootsV0(projectRoot, state)
+	out := make([]string, 0)
+	filesScanned := 0
+	for _, topicRoot := range topicRoots {
+		if len(out) >= goalMaterializedOPESOutOfScopeMaxRefsV0 ||
+			filesScanned >= goalMaterializedOPESOutOfScopeMaxFilesV0 {
+			break
+		}
+		walkErr := filepath.WalkDir(topicRoot, func(path string, entry fs.DirEntry, err error) error {
+			if err != nil || entry == nil {
+				return nil
+			}
+			if !pathWithinRootV0(projectRoot, path) {
+				return nil
+			}
+			if entry.IsDir() {
+				if filepath.Clean(path) != filepath.Clean(topicRoot) &&
+					goalMaterializedPathWithinAnyRootV0(allowedRoots, path) {
+					return fs.SkipDir
+				}
+				switch strings.ToLower(strings.TrimSpace(entry.Name())) {
+				case ".git", "node_modules", "vendor":
+					return fs.SkipDir
+				default:
+					return nil
+				}
+			}
+			filesScanned++
+			if filesScanned > goalMaterializedOPESOutOfScopeMaxFilesV0 {
+				return errGoalMaterializedRefsScanDoneV0
+			}
+			if goalMaterializedPathWithinAnyRootV0(allowedRoots, path) {
+				return nil
+			}
+			info, infoErr := entry.Info()
+			if infoErr != nil {
+				return nil
+			}
+			base := strings.ToLower(strings.TrimSpace(filepath.Base(path)))
+			if !goalMaterializedFileLooksLikeArtifactV0(projectRoot, path, base) &&
+				!goalMaterializedPathLooksLikeQAReportV0(projectRoot, path, base) &&
+				!goalMaterializedFileIsGoalResultV0(base) {
+				return nil
+			}
+			if info.Size() <= 0 {
+				return nil
+			}
+			if rel := goalMaterializedRelPathV0(projectRoot, path); rel != "" {
+				out = append(out, rel)
+			}
+			if len(out) >= goalMaterializedOPESOutOfScopeMaxRefsV0 {
+				return errGoalMaterializedRefsScanDoneV0
+			}
+			return nil
+		})
+		if walkErr != nil && !errors.Is(walkErr, errGoalMaterializedRefsScanDoneV0) {
+			continue
+		}
+	}
+	return compactStringsV0(out)
+}
+
+func goalMaterializedOPESTopicRootsForStateV0(
+	projectRoot string,
+	state orquestagoal.GoalWorkStateV0,
+) []string {
+	roots := make([]string, 0)
+	for _, scope := range state.Spec.WriteSet {
+		relScope := filepath.Clean(filepath.FromSlash(strings.TrimSpace(scope.Path)))
+		if relScope == "." || relScope == "" || filepath.IsAbs(relScope) ||
+			strings.HasPrefix(relScope, ".."+string(filepath.Separator)) || relScope == ".." {
+			continue
+		}
+		parts := strings.Split(relScope, string(filepath.Separator))
+		for i, part := range parts {
+			if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(part)), "tema_") {
+				continue
+			}
+			rootRel := filepath.Join(parts[:i+1]...)
+			if rootRel == relScope {
+				continue
+			}
+			root := filepath.Join(projectRoot, rootRel)
+			if !pathWithinRootV0(projectRoot, root) {
+				continue
+			}
+			if info, err := os.Stat(root); err == nil && info.IsDir() {
+				roots = append(roots, filepath.Clean(root))
+			}
+			break
+		}
+	}
+	return compactStringsV0(roots)
+}
+
+func goalMaterializedWriteSetAbsRootsV0(
+	projectRoot string,
+	state orquestagoal.GoalWorkStateV0,
+) []string {
+	roots := make([]string, 0, len(state.Spec.WriteSet))
+	for _, scope := range state.Spec.WriteSet {
+		relScope := filepath.Clean(filepath.FromSlash(strings.TrimSpace(scope.Path)))
+		if relScope == "." || relScope == "" || filepath.IsAbs(relScope) ||
+			strings.HasPrefix(relScope, ".."+string(filepath.Separator)) || relScope == ".." {
+			continue
+		}
+		root := filepath.Join(projectRoot, relScope)
+		if pathWithinRootV0(projectRoot, root) {
+			roots = append(roots, filepath.Clean(root))
+		}
+	}
+	return compactStringsV0(roots)
+}
+
+func goalMaterializedPathWithinAnyRootV0(roots []string, path string) bool {
+	for _, root := range roots {
+		if pathWithinRootV0(root, path) {
+			return true
+		}
+	}
+	return false
 }
 
 func mergeGoalMaterializedRefsScanV0(
@@ -1157,6 +1304,13 @@ func goalMaterializedArtifactPathOmittedRefV0(
 	path string,
 ) string {
 	return goalMaterializedArtifactPathsOmittedEvidence + ":" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(path)
+}
+
+func goalMaterializedOutOfScopeArtifactRefV0(
+	runRef string,
+	path string,
+) string {
+	return goalMaterializedOutOfScopeArtifactsEvidence + ":" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(path)
 }
 
 func goalMaterializedValidArtifactRefV0(

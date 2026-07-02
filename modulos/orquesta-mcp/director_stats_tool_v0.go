@@ -499,6 +499,20 @@ func applyMCPDirectorGoalProgressProjectionV0(
 		})
 		return
 	}
+	if containsStringMCPV0(goal.IssueCodes, MCPGoalFirstOutOfScopeMaterializedArtifactsV0) {
+		stats.Status = MCPGoalFirstOutOfScopeMaterializedArtifactsV0
+		stats.Closure.BlockedBy = compactStringsMCPV0(append(
+			stats.Closure.BlockedBy,
+			MCPGoalFirstOutOfScopeMaterializedArtifactsV0,
+		))
+		stats.Closure.BlockerRefs = compactStringsMCPV0(append(stats.Closure.BlockerRefs, goal.EvidenceRefs...))
+		stats.Progress.Issues = append(stats.Progress.Issues, orquestacionnucleoapp.DirectorProgressIssueV0{
+			Code:    MCPGoalFirstOutOfScopeMaterializedArtifactsV0,
+			Field:   "goal_first.write_set",
+			Message: "goal_first materialized OPES artifacts outside the declared write_set; preserve them as recoverable input and rework with corrected scope before closure",
+		})
+		return
+	}
 	if containsStringMCPV0(goal.IssueCodes, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
 		stats.Status = MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0
 		stats.Closure.BlockedBy = compactStringsMCPV0(append(

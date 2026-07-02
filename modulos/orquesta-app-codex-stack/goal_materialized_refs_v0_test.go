@@ -544,6 +544,60 @@ func TestStackGoalMaterializedRefsSourceV0DetectaArtifactPathsOmitidosEnReceiptT
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0DetectaArtefactosOPESFueraDeWriteSet(t *testing.T) {
+	projectDir := t.TempDir()
+	phaseDir := filepath.Join(projectDir, "temas", "tema_003", "coordinacion_wave14")
+	docsDir := filepath.Join(projectDir, "temas", "tema_003", "trabajo", "docs")
+	htmlDir := filepath.Join(projectDir, "temas", "tema_003", "html")
+	testsDir := filepath.Join(projectDir, "temas", "tema_003", "tests")
+	for _, dir := range []string{phaseDir, docsDir, htmlDir, testsDir} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(phaseDir, "checkpoint_started.txt"), []byte("started\n"), 0o600); err != nil {
+		t.Fatalf("write checkpoint: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(docsDir, "orquesta_goal_result_v0.json"), []byte(`{"status":"complete"}`), 0o600); err != nil {
+		t.Fatalf("write receipt: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(htmlDir, "index.html"), []byte("<main>tema fuera de scope</main>\n"), 0o600); err != nil {
+		t.Fatalf("write html: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(testsDir, "preguntas.json"), []byte(`{"questions":[]}`), 0o600); err != nil {
+		t.Fatalf("write tests: %v", err)
+	}
+	state := goalMaterializedRefsOPESStateForTestV0(t, "run-goal-materialized-opes-out-scope-001", "temas/tema_003/coordinacion_wave14")
+	state.Spec.WriteSet = append(state.Spec.WriteSet, orquestagoal.GoalWriteScopeV0{
+		Path:    "temas/tema_003/trabajo/docs",
+		Purpose: "receipt",
+	})
+	state.Spec.ClosurePolicy.RequireArtifactPaths = true
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+		Status:        orquestagoal.GoalStatusCompleteV0,
+		GoalRef:       state.GoalRef,
+		ArtifactPaths: []string{
+			"temas/tema_003/coordinacion_wave14/checkpoint_started.txt",
+			"temas/tema_003/trabajo/docs/orquesta_goal_result_v0.json",
+		},
+		ArtifactRefs: []string{"artifact-ref-phase0"},
+	}
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		!containsStringV0(result.IssueCodes, "out_of_scope_materialized_artifacts") ||
+		!containsStringPrefixForTestV0(result.EvidenceRefs, "evidence-ref-goal-materialized-out-of-scope-artifacts:") ||
+		!containsStringV0(result.EvidenceRefs, "evidence-ref-goal-materialized-out-of-scope-artifacts") {
+		t.Fatalf("out-of-scope OPES no detectado: ok=%v result=%+v", ok, result)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0DetectaRequiredTestEvidenceAusenteEnReceiptTerminal(t *testing.T) {
 	projectDir := t.TempDir()
 	topicDir := filepath.Join(projectDir, "temas", "tema_037")

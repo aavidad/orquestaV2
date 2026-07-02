@@ -52,6 +52,28 @@ func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0ArtifactPathsOmiti
 	}
 }
 
+func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0OutOfScopePideRework(t *testing.T) {
+	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
+		MCPObserveAppDirectorGoalToolResultV0{
+			GoalRef:    "goal-ref-observe-out-of-scope-001",
+			GoalStatus: "blocked",
+		},
+		MCPDirectorGoalMaterializedRefsV0{
+			ArtifactRefs: []string{"artifact-ref-materialized-out-of-scope-001"},
+			EvidenceRefs: []string{"evidence-ref-goal-materialized-out-of-scope-artifacts"},
+			IssueCodes:   []string{MCPGoalFirstOutOfScopeMaterializedArtifactsV0},
+		},
+	)
+
+	if result.RecommendedAction != MCPGoalFirstReworkWriteSetViolationActionV0 ||
+		len(result.ClosureIssues) != 1 ||
+		result.ClosureIssues[0].Code != MCPGoalFirstOutOfScopeMaterializedArtifactsV0 ||
+		result.ClosureIssues[0].Field != "goal_first.write_set" ||
+		!containsStringMCPV0(result.ArtifactRefs, "artifact-ref-materialized-out-of-scope-001") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0ArtefactosParcialesPideRevision(t *testing.T) {
 	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
 		MCPObserveAppDirectorGoalToolResultV0{

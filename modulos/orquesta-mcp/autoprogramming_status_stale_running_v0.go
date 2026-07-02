@@ -28,6 +28,7 @@ const (
 	mcpAutoprogrammingActionGoalFirstBlockedV0                         = "goal_first_blocked"
 	mcpAutoprogrammingActionMissingTerminalReceiptV0                   = MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0
 	mcpAutoprogrammingActionArtifactPathsOmittedV0                     = MCPGoalFirstArtifactPathsOmittedMaterializedV0
+	mcpAutoprogrammingActionOutOfScopeMaterializedArtifactsV0          = MCPGoalFirstOutOfScopeMaterializedArtifactsV0
 	mcpAutoprogrammingActionQAFailedPublicTextV0                       = MCPGoalFirstQAFailedPublicTextV0
 	mcpAutoprogrammingActionPartialArtifactsWrittenV0                  = MCPGoalFirstPartialArtifactsWrittenV0
 	mcpAutoprogrammingActionPhase0CompleteNonPublishableV0             = MCPGoalFirstPhase0CompleteNonPublishableV0
@@ -45,6 +46,7 @@ const (
 	mcpAutoprogrammingEvidenceCheckpointOnlyConsumptionWarningV0       = "evidence-ref-autoprogramming-checkpoint-only-consumption-warning"
 	mcpAutoprogrammingEvidenceMissingTerminalReceiptV0                 = "evidence-ref-autoprogramming-status-missing-terminal-receipt-after-artifacts-pass"
 	mcpAutoprogrammingEvidenceArtifactPathsOmittedV0                   = "evidence-ref-autoprogramming-status-artifact-paths-omitted-materialized"
+	mcpAutoprogrammingEvidenceOutOfScopeMaterializedArtifactsV0        = "evidence-ref-autoprogramming-status-out-of-scope-materialized-artifacts"
 	mcpAutoprogrammingEvidenceQAFailedPublicTextV0                     = "evidence-ref-autoprogramming-status-qa-failed-public-text"
 	mcpAutoprogrammingEvidencePartialArtifactsWrittenV0                = "evidence-ref-autoprogramming-status-partial-artifacts-written"
 	mcpAutoprogrammingEvidencePhase0CompleteNonPublishableV0           = "evidence-ref-autoprogramming-status-phase0-complete-non-publishable"
@@ -151,6 +153,32 @@ func mcpAutoprogrammingArtifactPathsOmittedActionsV0(
 			RecommendedAction: MCPGoalFirstRepairReceiptActionV0,
 			EvidenceRefs: []string{
 				mcpAutoprogrammingEvidenceArtifactPathsOmittedV0,
+			},
+		}
+		action = mcpAutoprogrammingActionableRunWithObservedStatsV0(action, observed)
+		action = mcpAutoprogrammingActionableRunWithObservedGoalV0(action, observed)
+		out = append(out, action)
+	}
+	return out
+}
+
+func mcpAutoprogrammingOutOfScopeMaterializedArtifactsActionsV0(
+	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
+) []MCPAutoprogrammingActionableRunV0 {
+	out := make([]MCPAutoprogrammingActionableRunV0, 0)
+	for runRef, observed := range observedByRunRef {
+		if !mcpAutoprogrammingObservedOutOfScopeMaterializedArtifactsV0(observed) {
+			continue
+		}
+		action := MCPAutoprogrammingActionableRunV0{
+			Code:              mcpAutoprogrammingActionOutOfScopeMaterializedArtifactsV0,
+			Severity:          "blocked",
+			RunRef:            strings.TrimSpace(runRef),
+			RunStatus:         mcpAutoprogrammingObservedRunStatusV0(observedByRunRef, runRef),
+			Reason:            "out_of_scope_materialized_artifacts: OPES artifacts were materialized outside the declared write_set",
+			RecommendedAction: MCPGoalFirstReworkWriteSetViolationActionV0,
+			EvidenceRefs: []string{
+				mcpAutoprogrammingEvidenceOutOfScopeMaterializedArtifactsV0,
 			},
 		}
 		action = mcpAutoprogrammingActionableRunWithObservedStatsV0(action, observed)
@@ -272,6 +300,26 @@ func mcpAutoprogrammingObservedArtifactPathsOmittedV0(
 	}
 	for _, issue := range observed.Stats.Progress.Issues {
 		if strings.TrimSpace(issue.Code) == MCPGoalFirstArtifactPathsOmittedMaterializedV0 {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpAutoprogrammingObservedOutOfScopeMaterializedArtifactsV0(
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	if observed == nil {
+		return false
+	}
+	if observed.Goal != nil && containsStringMCPV0(observed.Goal.IssueCodes, MCPGoalFirstOutOfScopeMaterializedArtifactsV0) {
+		return true
+	}
+	if observed.Stats == nil {
+		return false
+	}
+	for _, issue := range observed.Stats.Progress.Issues {
+		if strings.TrimSpace(issue.Code) == MCPGoalFirstOutOfScopeMaterializedArtifactsV0 {
 			return true
 		}
 	}
