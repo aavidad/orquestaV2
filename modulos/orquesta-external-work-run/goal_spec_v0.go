@@ -113,6 +113,7 @@ func externalWorkGoalWorkSpecFromRequestV0(
 		ClosurePolicy: orquestagoal.GoalClosurePolicyV0{
 			RequireRequiredTests: len(requiredTests) > 0,
 			RequireArtifacts:     true,
+			RequireArtifactPaths: true,
 			RequireDomainReceipt: true,
 			RequiredEvidenceRefs: []string{externalWorkGoalSpecEvidenceRefV0},
 		},

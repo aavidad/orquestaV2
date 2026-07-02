@@ -113,6 +113,7 @@ type GoalBudgetV0 struct {
 type GoalClosurePolicyV0 struct {
 	RequireRequiredTests bool     `json:"require_required_tests,omitempty"`
 	RequireArtifacts     bool     `json:"require_artifacts,omitempty"`
+	RequireArtifactPaths bool     `json:"require_artifact_paths,omitempty"`
 	RequireDomainReceipt bool     `json:"require_domain_receipt,omitempty"`
 	RequiredEvidenceRefs []string `json:"required_evidence_refs,omitempty"`
 }

@@ -261,10 +261,30 @@ func TestValidateGoalWorkClosureV0BloqueaArtifactPathsFueraDeWriteSet(t *testing
 	}
 }
 
+func TestValidateGoalWorkClosureV0ExigeArtifactPathsCuandoLaPoliticaLoPide(t *testing.T) {
+	spec := GoalWorkSpecV0{
+		GoalRef:       "goal-ref-001",
+		Objective:     "Objetivo",
+		WriteSet:      []GoalWriteScopeV0{{Path: "docs"}},
+		ClosurePolicy: GoalClosurePolicyV0{RequireArtifactPaths: true},
+	}
+	validation := ValidateGoalWorkClosureV0(spec, GoalWorkResultV0{
+		GoalRef: "goal-ref-001",
+		Status:  GoalStatusCompleteV0,
+	})
+
+	if validation.Accepted ||
+		!validation.NeedsRework ||
+		!hasGoalIssueFieldCodeV0(validation.Issues, "artifact_paths", ErrGoalClosureInvalidV0) {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
 func TestValidateGoalWorkClosureV0AceptaArtifactPathsDescendientesDeWriteSet(t *testing.T) {
 	spec := GoalWorkSpecV0{
-		GoalRef:   "goal-ref-001",
-		Objective: "Objetivo",
+		GoalRef:       "goal-ref-001",
+		Objective:     "Objetivo",
+		ClosurePolicy: GoalClosurePolicyV0{RequireArtifactPaths: true},
 		WriteSet: []GoalWriteScopeV0{
 			{Path: "docs"},
 			{Path: "trabajo/validacion"},

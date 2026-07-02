@@ -28,6 +28,7 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"artifact-ref-goal-summary",
 		"Materializa cada artefacto requerido dentro de un write-set autorizado",
 		"<artifact_type>.json",
+		"El recibo terminal debe declarar artifact_paths",
 		"Evidencia requerida: evidence-ref-required",
 		CodexGoalResultMarkerV0,
 		CodexGoalResultSchemaV0,
@@ -416,7 +417,7 @@ func validCodexGoalSpecV0() orquestagoal.GoalWorkSpecV0 {
 		ArtifactContracts:  []orquestagoal.GoalArtifactContractV0{{ArtifactRef: "artifact-ref-goal-summary", ArtifactType: "summary", Required: true}},
 		EvidenceRefs:       []string{"evidence-ref-input"},
 		Budget:             orquestagoal.GoalBudgetV0{MaxSubgoals: 2},
-		ClosurePolicy:      orquestagoal.GoalClosurePolicyV0{RequireRequiredTests: true, RequiredEvidenceRefs: []string{"evidence-ref-required"}},
+		ClosurePolicy:      orquestagoal.GoalClosurePolicyV0{RequireRequiredTests: true, RequireArtifactPaths: true, RequiredEvidenceRefs: []string{"evidence-ref-required"}},
 		ReworkPolicy:       orquestagoal.GoalReworkPolicyV0{PreferNewGoal: true, PreserveArtifacts: true},
 	}
 }

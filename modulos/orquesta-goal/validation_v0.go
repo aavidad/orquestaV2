@@ -255,6 +255,13 @@ func ValidateGoalWorkClosureV0(spec GoalWorkSpecV0, result GoalWorkResultV0) Goa
 			Issues:      []GoalWorkIssueV0{{Code: ErrGoalClosureInvalidV0, Field: "status"}},
 		}
 	}
+	if spec.ClosurePolicy.RequireArtifactPaths && len(result.ArtifactPaths) == 0 {
+		return GoalClosureValidationV0{
+			Status:      GoalStatusBlockedV0,
+			NeedsRework: true,
+			Issues:      []GoalWorkIssueV0{{Code: ErrGoalClosureInvalidV0, Field: "artifact_paths"}},
+		}
+	}
 	if outOfScope := goalArtifactPathsOutsideWriteSetV0(spec.WriteSet, result.ArtifactPaths); len(outOfScope) > 0 {
 		issues := make([]GoalWorkIssueV0, 0, len(outOfScope))
 		for range outOfScope {

@@ -74,6 +74,7 @@ type MCPGoalWorkSpecSummaryV0 struct {
 	ArtifactContractCount    int      `json:"artifact_contract_count,omitempty"`
 	ClosureRequiresTests     bool     `json:"closure_requires_tests,omitempty"`
 	ClosureRequiresArtifacts bool     `json:"closure_requires_artifacts,omitempty"`
+	ClosureRequiresPaths     bool     `json:"closure_requires_artifact_paths,omitempty"`
 }
 
 type MCPExternalWorkDryRunToolExecutorV0 struct {
@@ -177,6 +178,7 @@ func mcpGoalWorkSpecSummaryV0(spec orquestagoal.GoalWorkSpecV0) MCPGoalWorkSpecS
 		ArtifactContractCount:    len(spec.ArtifactContracts),
 		ClosureRequiresTests:     spec.ClosurePolicy.RequireRequiredTests,
 		ClosureRequiresArtifacts: spec.ClosurePolicy.RequireArtifacts,
+		ClosureRequiresPaths:     spec.ClosurePolicy.RequireArtifactPaths,
 	}
 }
 

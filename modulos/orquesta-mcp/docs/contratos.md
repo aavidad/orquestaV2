@@ -157,7 +157,8 @@ Campos:
     route_policy: goal_first
     director_execution_mode: goal_first
     spec_summary: schema_version, goal_ref, run_ref, director_kind, spec_hash,
-      context_refs, rule_refs, required_test_refs, artifact_types y contadores
+      context_refs, rule_refs, required_test_refs, artifact_types, contadores y
+      closure_requires_*
     est_model, est_tokens, est_cost_usd, est_wall_clock, evidence_refs
   output_error:
     estado: error

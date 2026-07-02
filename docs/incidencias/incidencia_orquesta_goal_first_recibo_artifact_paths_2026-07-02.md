@@ -24,13 +24,17 @@ aplicar el bloqueo ya existente para `artifact_paths` fuera del `write_set`.
   `blocked` con `summary=out_of_scope_artifacts`, no ocultarlo.
 - `orquesta-goal` ya bloquea cierre cuando `artifact_paths` declara rutas fuera
   del `write_set`; este avance conecta ese gate con el contrato del agente.
+- `GoalClosurePolicyV0` incorpora `require_artifact_paths`; cuando esta activo,
+  `ValidateGoalWorkClosureV0` no acepta `complete` con `artifact_paths` vacio.
+- `external-work` goal-first activa `require_artifact_paths=true` y el dry-run
+  lo expone en `spec_summary.closure_requires_artifact_paths`.
 
 ## Evidencia
 
 Tests:
 
 ```bash
-go test -count=1 ./modulos/orquesta-runtime-codex-goal ./modulos/orquesta-goal
+go test -count=1 ./modulos/orquesta-goal ./modulos/orquesta-runtime-codex-goal ./modulos/orquesta-external-work-run ./modulos/orquesta-mcp
 git diff --check
 ```
 

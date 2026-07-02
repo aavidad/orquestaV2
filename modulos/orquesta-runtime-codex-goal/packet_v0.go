@@ -286,6 +286,9 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	if spec.ClosurePolicy.RequireArtifacts {
 		b.WriteString("- Deben existir los artefactos requeridos.\n")
 	}
+	if spec.ClosurePolicy.RequireArtifactPaths {
+		b.WriteString("- El recibo terminal debe declarar artifact_paths con rutas relativas dentro del write-set.\n")
+	}
 	if spec.ClosurePolicy.RequireDomainReceipt {
 		if strings.TrimSpace(spec.WorkProfileKind) == "domain_work" {
 			b.WriteString("- El receipt de dominio lo obtiene Orquesta fuera del goal despues de observar tu artefacto; no bloquees por no tener conector REST/MCP de la app externa.\n")
