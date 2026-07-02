@@ -826,6 +826,53 @@ exit 2
 	}
 }
 
+func TestCodexAppServerTmuxBackendV0ReadActiveShutdownWorkDetectaProcesoConSocketConfiguradoSinMarkerV0(t *testing.T) {
+	root := t.TempDir()
+	socketPath := filepath.Join(root, "runtime", codexAppServerTmuxDirV0, "s.sock")
+	command := exec.Command(
+		"bash",
+		"-c",
+		"exec -a codex sh -c 'sleep 30' app-server --listen unix://"+socketPath,
+	)
+	if err := command.Start(); err != nil {
+		t.Fatalf("start fake app-server cmdline: %v", err)
+	}
+	defer func() {
+		_ = command.Process.Kill()
+		_, _ = command.Process.Wait()
+	}()
+	backend := serverCodexAppServerTmuxBackendV0{
+		SocketPath:  socketPath,
+		SessionName: "orquesta-goal-process-only-1234567890",
+		Timeout:     50 * time.Millisecond,
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var result orquestaservershutdown.ActiveShutdownWorkResultV0
+	var err error
+	for time.Now().Before(deadline) {
+		result, err = backend.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{})
+		if err != nil {
+			t.Fatalf("ReadActiveShutdownWorkV0: %v", err)
+		}
+		if containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-cmdline") {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if len(result.ActiveWorks) != 1 ||
+		result.ActiveWorks[0].WorkRef != backend.SessionName ||
+		result.ActiveWorks[0].Status != orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0 ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-cmdline") {
+		t.Fatalf("result=%+v", result)
+	}
+	for _, ref := range result.EvidenceRefs {
+		if strings.Contains(ref, socketPath) || strings.Contains(ref, strconv.Itoa(command.Process.Pid)) {
+			t.Fatalf("evidence filtro ruta/pid: %+v", result.EvidenceRefs)
+		}
+	}
+}
+
 func TestCodexAppServerTmuxBackendV0EsperaPanePIDAntesDeReadyV0(t *testing.T) {
 	command := exec.Command("sleep", "30")
 	if err := command.Start(); err != nil {

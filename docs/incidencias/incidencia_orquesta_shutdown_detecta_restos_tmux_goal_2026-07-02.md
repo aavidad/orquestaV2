@@ -19,6 +19,10 @@ se quedaba corta.
   en `RuntimeWorkDir/goal-srv` y, cuando el socket configurado usa fallback
   corto, en directorios `oq-gsrv-*`; no publica rutas, sockets ni PIDs, solo
   `work_ref` de sesion y evidence refs compactas.
+- Si falta marker/sesion pero queda un proceso `codex app-server --listen`
+  apuntando exactamente al socket configurado, lo proyecta como residuo propio
+  por `evidence-ref-codex-app-server-tmux-process-cmdline`; no bloquea por un
+  nombre de proceso suelto ni publica el socket/PID.
 - Si encuentra restos, publica `goal_backend/backend_still_running` con
   evidencias de marker, socket, sesion y PID de pane vivo cuando exista.
 - La composicion `orquesta-app-codex-stack` consulta lectores activos del
@@ -33,6 +37,7 @@ go test -count=1 ./cmd/orquesta-server -run 'TestCodexAppServerTmuxBackendV0Read
 go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestStackShutdownActiveWorkReaderV0(BloqueaRestosBackendAunqueStateStoreNoRunning|BloqueaBackendRunningSinTimeoutLocal)'
 go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-app-codex-stack
 go test -count=1 ./cmd/orquesta-server -run 'TestCodexAppServerTmuxBackendV0ReadActiveShutdownWork(DetectaRestosPropios|IgnoraSocketNoPropio|DetectaOwnerMarkerRecuperableFueraDeSesionConfigurada)V0|TestResidualGoFileBudgetT90V0'
+go test -count=1 ./cmd/orquesta-server -run 'TestCodexAppServerTmuxBackendV0ReadActiveShutdownWork(DetectaRestosPropios|IgnoraSocketNoPropio|DetectaOwnerMarkerRecuperableFueraDeSesionConfigurada|DetectaProcesoConSocketConfiguradoSinMarker)V0|TestResidualGoFileBudgetT90V0'
 go test -count=1 ./cmd/orquesta-server
 ```
 

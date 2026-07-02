@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -101,6 +102,10 @@ func (backend serverCodexAppServerTmuxBackendV0) detectTmuxResidueV0(ctx context
 		if process {
 			residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process")
 		}
+	}
+	if backend.detectCodexAppServerConfiguredSocketProcessV0(ctx) {
+		residue.Active = true
+		residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-cmdline")
 	}
 	if residue.Active {
 		residue.EvidenceRefs = compactStringsV0(append(
@@ -229,4 +234,50 @@ func (backend serverCodexAppServerTmuxBackendV0) detectTmuxSessionResidueByNameV
 		return false, false
 	}
 	return true, codexAppServerTmuxPIDAliveV0(probe.tmuxPanePIDV0(runCtx, tmuxPath))
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) detectCodexAppServerConfiguredSocketProcessV0(ctx context.Context) bool {
+	socketPath := strings.TrimSpace(backend.SocketPath)
+	if socketPath == "" || !backend.tmuxConfiguredOrphanCleanupAllowedV0() {
+		return false
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return false
+	}
+	output, err := exec.CommandContext(ctx, "ps", "-eo", "args=").Output()
+	if err != nil {
+		return false
+	}
+	return codexAppServerTmuxCommandsContainSocketV0(string(output), socketPath)
+}
+
+func codexAppServerTmuxCommandsContainSocketV0(raw string, socketPath string) bool {
+	socketPath = strings.TrimSpace(socketPath)
+	if socketPath == "" {
+		return false
+	}
+	for _, line := range strings.Split(raw, "\n") {
+		if codexAppServerTmuxCommandMatchesSocketV0(line, socketPath) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexAppServerTmuxCommandMatchesSocketV0(command string, socketPath string) bool {
+	command = strings.TrimSpace(command)
+	socketPath = strings.TrimSpace(socketPath)
+	if command == "" || socketPath == "" {
+		return false
+	}
+	if !strings.Contains(command, "app-server") || !strings.Contains(command, "--listen") {
+		return false
+	}
+	if !strings.Contains(command, "codex") {
+		return false
+	}
+	return strings.Contains(command, "unix://"+socketPath) || strings.Contains(command, socketPath)
 }
