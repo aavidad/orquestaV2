@@ -18,6 +18,23 @@ Estado: aceptada_local
 ```
 
 ```text
+Fecha: 2026-07-02
+Decision: Permitir que `speech_synthesis` cierre el perfil de audio mediante
+heartbeat/timeout de proveedor o mediante evidencia de reanudacion segura sin
+duplicar salidas validas.
+Motivo: un trabajo TTS puede reanudarse con MP3/outputs ya validados; exigir
+regeneracion o aceptar audio listo sin manifest de reanudacion creaba riesgo de
+duplicados y falsos verdes.
+Alternativas: codificar MP3/sidecars en el contrato neutral; dejarlo solo como
+required test OPES; aceptar cualquier cache de audio como lista.
+Impacto: `DomainWorkExternalCapabilityV0` conserva campos declarativos
+genericos (`resume_evidence_ready`, `no_duplicate_valid_outputs_ready`). El
+adaptador de dominio decide como demostrar manifests, sidecars, MP3 preservados
+y secciones; `orquesta-domain-work` sigue sin proveedor, filesystem ni OPES.
+Estado: aceptada_local
+```
+
+```text
 Fecha: 2026-06-30
 Decision: Ampliar `speech_synthesis` con heartbeat/progreso y timeout de
 proveedor antes de aceptar trabajos `audio_asset`.

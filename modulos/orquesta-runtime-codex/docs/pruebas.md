@@ -28,6 +28,12 @@ Cobertura:
   `ACK.files`;
 - con sandbox `workspace-write`, el wrapper autoriza `runtime_work_dir` con
   `--add-dir` para que el agente pueda escribir `agent_ack.json`;
+- el startup-lock compartido respeta como explicitas
+  `ORQUESTA_CODEX_STARTUP_LOCK_SECONDS`,
+  `ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS` y
+  `ORQUESTA_CODEX_STARTUP_LOCK_STALE_SECONDS` aunque el default calculado sea
+  `0`; `TIMEOUT` solo, `STALE` solo y `TIMEOUT+STALE` juntos son regresiones
+  focales obligatorias antes de tocar el wrapper por automejora;
 - `decision_path` aparece como archivo de control y se marca obligatorio solo
   si objetivo o criterios de cierre lo piden;
 - para target_module de director, el prompt exige `decision_path` antes de ACK
@@ -83,6 +89,12 @@ Riesgo residual:
 
 - No ejecuta Codex real por defecto.
 - La prueba real pertenece al mini-proyecto E2E no controlado.
+
+Foco startup-lock/automejora:
+
+```bash
+go test -count=1 ./modulos/orquesta-runtime-codex -run 'TestCodexWrapperV0(RespetaCadaVariableStartupLockExplicitaAunqueDefaultSeaCero|TimeoutSoloYTimeoutStaleExplicitosNoSeSustituyen|RespetaStartupLockTimeoutSoloAunqueDefaultSeaCero|RespetaStartupLockTimeoutExplicitoAunqueDefaultSeaCero)'
+```
 
 ## RTCODEX-T209
 

@@ -64,6 +64,35 @@ sin lanzar.
   coste ni tokens secretos; si solo hay uso y no cuota real, publica
   `quota.status=unknown`.
 
+## Startup Lock Compartido
+
+El wrapper serializa el arranque de Codex con
+`.orquesta-codex-startup.lock` bajo `CODEX_HOME` o `HOME` cuando el perfil lo
+requiere o cuando el operador declara cualquier variable de startup-lock.
+
+Variables contractuales:
+
+- `ORQUESTA_CODEX_STARTUP_LOCK_SECONDS`
+- `ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS`
+- `ORQUESTA_CODEX_STARTUP_LOCK_STALE_SECONDS`
+
+Invariantes:
+
+- La presencia de cualquiera de esas variables cuenta como configuracion
+  explicita aunque el default calculado del perfil sea `0`.
+- La presencia cuenta aunque el valor sea vacio; los valores vacios o invalidos
+  siguen cayendo a los defaults efectivos de cada variable, pero no desactivan
+  el lock por accidente.
+- `ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS` por si sola activa el lock y
+  puede cortar con `orquesta_codex_startup_lock_timeout`.
+- `ORQUESTA_CODEX_STARTUP_LOCK_STALE_SECONDS` por si sola activa el lock y
+  permite reaper un lock obsoleto.
+- `TIMEOUT+STALE` juntos no sustituyen las garantias individuales: ambos casos
+  deben pasar tambien por separado.
+- La automejora remota no debe modificar `codexSharedStartupLockShellV0` ni sus
+  tests si no ejecuta y conserva verde la bateria focal de startup-lock del
+  wrapper.
+
 ## CodexShutdownCheckpointAckV0
 
 Contrato local del conector para cierre cooperativo de un agente vivo.

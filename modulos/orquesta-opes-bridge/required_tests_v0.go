@@ -62,6 +62,9 @@ func opesRequiredTestsForJobV0(
 	if opesFinalPackageWorkKindV0(jobType) {
 		tests = append(tests, opesFinalPackageRequiredTestsV0(safeJob, workRefs)...)
 	}
+	if opesAudioWorkKindV0(jobType) {
+		tests = append(tests, opesAudioTTSResumableRequiredTestsV0(safeJob, workRefs)...)
+	}
 	return tests
 }
 
@@ -181,6 +184,7 @@ func opesFinalPackageRequiredTestsV0(
 				"Existe manifest_cierre.json del completed_syllabus_package con schema opes_final_package_evidence_manifest.v0.",
 				"El manifest identifica package_ref, manifest_ref, checksum_refs, validation_report_ref y review_matrix_ref del paquete final.",
 				"El manifest declara evidencias requeridas para HTML, RAG, audio, tests, visual, qa_passes y qa_report_refs separados para extension_pass, official_text_qa_pass y strict_editorial_qa_pass.",
+				"El RAG final usa rag/corpus/chunks.jsonl, rag/corpus/summary.json y rag/manifest.json, con metadata course_id y source_variant o equivalentes en chunks y summary antes de aceptar ready.",
 				"Si falta una evidencia obligatoria, el estado es pendiente_continuar con followup_refs causales y no listo_para_revision_operador.",
 			},
 			AcceptanceCriteriaRefs: []string{"opes-required-final-package-manifest"},
@@ -204,6 +208,7 @@ func opesFinalPackageRequiredTestsV0(
 				"opes-final-evidence:strict_editorial_qa_pass",
 			},
 		},
+		opesAudioTTSResumableRequiredTestsV0(safeJob, workRefs)[0],
 		{
 			TestRef: "opes-visual-reuse-manifest-" + safeJob,
 			AcceptanceCriteria: []string{
@@ -211,6 +216,7 @@ func opesFinalPackageRequiredTestsV0(
 				"Si reusable_visual_count o common_visual_count es mayor que cero, copied_visual_count/inserted_visual_count reflejan assets importados y ubicados.",
 				"Si visual_count=0, el manifest declara visual_requirement_status=not_applicable o visual_zero_justification_ref; no se acepta ready/html_validado sin esa evidencia.",
 				"Los assets reutilizados conservan refs opacas, placement_ref/ancla, alt_text y motivo editorial; los rechazados conservan motivo de rechazo.",
+				"Tras rebuild HTML, cada visual manifestado para html_final/html_ampliado sigue existiendo y esta referenciado desde las paginas tema_*.html correspondientes.",
 			},
 			AcceptanceCriteriaRefs: []string{"opes-required-visual-reuse-manifest"},
 			InputRefs:              inputRefs,
@@ -226,6 +232,43 @@ func opesFinalPackageRequiredTestsV0(
 			},
 		},
 	}
+}
+
+func opesAudioTTSResumableRequiredTestsV0(
+	safeJob string,
+	workRefs []string,
+) []orquestadomainwork.DomainWorkRequiredTestV0 {
+	inputRefs := compactStringsV0(append([]string{"opes-job-" + safeJob}, workRefs...))
+	return []orquestadomainwork.DomainWorkRequiredTestV0{{
+		TestRef: "opes-audio-tts-resumable-" + safeJob,
+		AcceptanceCriteria: []string{
+			"Antes de considerar audio listo, OPES declara supervision TTS con heartbeat de progreso y provider_timeout operativo o aporta evidencia de reanudacion segura.",
+			"La evidencia de reanudacion identifica sidecar/manifest de audio, MP3 validos preservados, MP3 faltantes u obsoletos regenerados y contadores de skipped_valid_mp3_refs/generated_mp3_refs.",
+			"No se duplican MP3 validos: cada section_ref narrable conserva un unico audio_ref final vigente, y los MP3 ya validos se reutilizan o se marcan como skipped_valid_mp3_refs.",
+			"Si faltan heartbeat/provider_timeout y tambien falta reanudacion sin duplicar validos, el estado es pendiente_continuar con retry_from_phase=tts, no ready ni listo_para_revision_operador.",
+		},
+		AcceptanceCriteriaRefs: []string{"opes-required-audio-tts-resumable"},
+		InputRefs:              inputRefs,
+		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
+			{Kind: "domain_ref", Ref: "opes"},
+			{Kind: "job_ref", Ref: safeJob},
+			{Kind: "required_test_name", Ref: "audio_tts_resumable"},
+			{Kind: "required_evidence", Ref: "audio_tts_operational_manifest"},
+			{Kind: "required_evidence", Ref: "progress_heartbeat"},
+			{Kind: "required_evidence", Ref: "provider_timeout"},
+			{Kind: "required_evidence", Ref: "resume_without_duplicate_valid_mp3"},
+		},
+		EvidenceRefs: []string{
+			"opes-rule-audio-tts-heartbeat-timeout-or-resume",
+			"opes-expected-evidence-audio-tts-operational-manifest",
+			"opes-expected-evidence-resume-without-duplicate-valid-mp3",
+			"opes-final-evidence:audio_tts_resumable",
+		},
+	}}
+}
+
+func opesAudioWorkKindV0(jobType string) bool {
+	return expectedArtifactTypeV0(jobType) == orquestadomainwork.DomainWorkArtifactTypeAudioAssetV0
 }
 
 func opesFinalPackageWorkKindV0(jobType string) bool {

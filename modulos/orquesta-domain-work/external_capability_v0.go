@@ -35,6 +35,8 @@ type DomainWorkExternalCapabilityRequirementV0 struct {
 	ProgressHeartbeatRequired        bool                      `json:"progress_heartbeat_required,omitempty"`
 	ProviderTimeoutRequired          bool                      `json:"provider_timeout_required,omitempty"`
 	ProviderNoProgressTimeoutSeconds int                       `json:"provider_no_progress_timeout_seconds,omitempty"`
+	ResumeEvidenceRequired           bool                      `json:"resume_evidence_required,omitempty"`
+	NoDuplicateValidOutputsRequired  bool                      `json:"no_duplicate_valid_outputs_required,omitempty"`
 	ExternalRefs                     []DomainWorkExternalRefV0 `json:"external_refs,omitempty"`
 	EvidenceRefs                     []string                  `json:"evidence_refs,omitempty"`
 }
@@ -52,6 +54,8 @@ type DomainWorkExternalCapabilityV0 struct {
 	ProgressHeartbeatReady           bool                      `json:"progress_heartbeat_ready,omitempty"`
 	ProviderTimeoutReady             bool                      `json:"provider_timeout_ready,omitempty"`
 	ProviderNoProgressTimeoutSeconds int                       `json:"provider_no_progress_timeout_seconds,omitempty"`
+	ResumeEvidenceReady              bool                      `json:"resume_evidence_ready,omitempty"`
+	NoDuplicateValidOutputsReady     bool                      `json:"no_duplicate_valid_outputs_ready,omitempty"`
 	ExternalRefs                     []DomainWorkExternalRefV0 `json:"external_refs,omitempty"`
 	EvidenceRefs                     []string                  `json:"evidence_refs,omitempty"`
 }
@@ -126,6 +130,8 @@ func RequiredDomainWorkExternalCapabilitiesForJobV0(
 				ProgressHeartbeatRequired:        true,
 				ProviderTimeoutRequired:          true,
 				ProviderNoProgressTimeoutSeconds: 300,
+				ResumeEvidenceRequired:           true,
+				NoDuplicateValidOutputsRequired:  true,
 				ExternalRefs:                     append([]DomainWorkExternalRefV0(nil), request.ExternalRefs...),
 				EvidenceRefs:                     append([]string(nil), request.EvidenceRefs...),
 			},
@@ -279,6 +285,8 @@ func compactDomainWorkExternalCapabilityRequirementsV0(
 			boolDomainWorkExternalCapabilityKeyV0(requirement.ProgressHeartbeatRequired) + "\x00" +
 			boolDomainWorkExternalCapabilityKeyV0(requirement.ProviderTimeoutRequired) + "\x00" +
 			itoaDomainWorkExternalCapabilityV0(requirement.ProviderNoProgressTimeoutSeconds) + "\x00" +
+			boolDomainWorkExternalCapabilityKeyV0(requirement.ResumeEvidenceRequired) + "\x00" +
+			boolDomainWorkExternalCapabilityKeyV0(requirement.NoDuplicateValidOutputsRequired) + "\x00" +
 			joinDomainWorkExternalRefsV0(requirement.ExternalRefs) + "\x00" +
 			strings.Join(requirement.EvidenceRefs, "\x00")
 		if _, ok := seen[key]; ok {
@@ -315,6 +323,8 @@ func compactDomainWorkExternalCapabilitiesV0(
 			boolDomainWorkExternalCapabilityKeyV0(capability.ProgressHeartbeatReady) + "\x00" +
 			boolDomainWorkExternalCapabilityKeyV0(capability.ProviderTimeoutReady) + "\x00" +
 			itoaDomainWorkExternalCapabilityV0(capability.ProviderNoProgressTimeoutSeconds) + "\x00" +
+			boolDomainWorkExternalCapabilityKeyV0(capability.ResumeEvidenceReady) + "\x00" +
+			boolDomainWorkExternalCapabilityKeyV0(capability.NoDuplicateValidOutputsReady) + "\x00" +
 			joinDomainWorkExternalRefsV0(capability.ExternalRefs) + "\x00" +
 			strings.Join(capability.EvidenceRefs, "\x00")
 		if _, ok := seen[key]; ok {
@@ -429,24 +439,13 @@ func domainWorkCapabilitySatisfiesProfileV0(
 	if requirement.ProviderQuotaSensitive && !capability.ProviderQuotaReady {
 		return false
 	}
-	if requirement.ProgressHeartbeatRequired && !capability.ProgressHeartbeatReady {
-		return false
-	}
-	if requirement.ProviderTimeoutRequired && !capability.ProviderTimeoutReady {
-		return false
-	}
 	if requirement.CommandTimeoutSeconds > 0 &&
 		capability.CommandTimeoutSeconds > 0 &&
 		capability.CommandTimeoutSeconds < requirement.CommandTimeoutSeconds {
 		return false
 	}
-	if requirement.ProviderNoProgressTimeoutSeconds > 0 {
-		if capability.ProviderNoProgressTimeoutSeconds <= 0 {
-			return false
-		}
-		if capability.ProviderNoProgressTimeoutSeconds > requirement.ProviderNoProgressTimeoutSeconds {
-			return false
-		}
+	if !domainWorkCapabilityOperationalEvidenceReadyV0(requirement, capability) {
+		return false
 	}
 	return true
 }
@@ -474,26 +473,116 @@ func domainWorkCapabilityProfileMissingReasonV0(
 	if requirement.ProviderQuotaSensitive && !capability.ProviderQuotaReady {
 		return reasonFor("provider_quota_ready")
 	}
-	if requirement.ProgressHeartbeatRequired && !capability.ProgressHeartbeatReady {
-		return reasonFor("progress_heartbeat_ready")
-	}
-	if requirement.ProviderTimeoutRequired && !capability.ProviderTimeoutReady {
-		return reasonFor("provider_timeout_ready")
-	}
 	if requirement.CommandTimeoutSeconds > 0 &&
 		capability.CommandTimeoutSeconds > 0 &&
 		capability.CommandTimeoutSeconds < requirement.CommandTimeoutSeconds {
 		return reasonFor("command_timeout_seconds")
 	}
-	if requirement.ProviderNoProgressTimeoutSeconds > 0 {
-		if capability.ProviderNoProgressTimeoutSeconds <= 0 {
-			return reasonFor("provider_no_progress_timeout_seconds")
+	if !domainWorkCapabilityOperationalEvidenceReadyV0(requirement, capability) {
+		if domainWorkCapabilityHasPartialResumeEvidenceV0(capability) {
+			if requirement.ResumeEvidenceRequired && !capability.ResumeEvidenceReady {
+				return reasonFor("resume_evidence_ready")
+			}
+			if requirement.NoDuplicateValidOutputsRequired && !capability.NoDuplicateValidOutputsReady {
+				return reasonFor("no_duplicate_valid_outputs_ready")
+			}
 		}
-		if capability.ProviderNoProgressTimeoutSeconds > requirement.ProviderNoProgressTimeoutSeconds {
-			return reasonFor("provider_no_progress_timeout_seconds")
+		if requirement.ProgressHeartbeatRequired && !capability.ProgressHeartbeatReady {
+			return reasonFor("progress_heartbeat_ready")
+		}
+		if requirement.ProviderTimeoutRequired && !capability.ProviderTimeoutReady {
+			return reasonFor("provider_timeout_ready")
+		}
+		if requirement.ProviderNoProgressTimeoutSeconds > 0 {
+			if capability.ProviderNoProgressTimeoutSeconds <= 0 {
+				return reasonFor("provider_no_progress_timeout_seconds")
+			}
+			if capability.ProviderNoProgressTimeoutSeconds > requirement.ProviderNoProgressTimeoutSeconds {
+				return reasonFor("provider_no_progress_timeout_seconds")
+			}
+		}
+		if requirement.ResumeEvidenceRequired && !capability.ResumeEvidenceReady {
+			return reasonFor("resume_evidence_ready")
+		}
+		if requirement.NoDuplicateValidOutputsRequired && !capability.NoDuplicateValidOutputsReady {
+			return reasonFor("no_duplicate_valid_outputs_ready")
 		}
 	}
 	return ""
+}
+
+func domainWorkCapabilityOperationalEvidenceReadyV0(
+	requirement DomainWorkExternalCapabilityRequirementV0,
+	capability DomainWorkExternalCapabilityV0,
+) bool {
+	providerRequired := domainWorkCapabilityProviderSupervisionRequiredV0(requirement)
+	resumeRequired := domainWorkCapabilityResumeEvidenceRequiredV0(requirement)
+	providerReady := providerRequired && domainWorkCapabilityProviderSupervisionReadyV0(requirement, capability)
+	resumeReady := resumeRequired && domainWorkCapabilityResumeEvidenceReadyV0(requirement, capability)
+	switch {
+	case providerRequired && resumeRequired:
+		return providerReady || resumeReady
+	case providerRequired:
+		return providerReady
+	case resumeRequired:
+		return resumeReady
+	default:
+		return true
+	}
+}
+
+func domainWorkCapabilityProviderSupervisionRequiredV0(
+	requirement DomainWorkExternalCapabilityRequirementV0,
+) bool {
+	return requirement.ProgressHeartbeatRequired ||
+		requirement.ProviderTimeoutRequired ||
+		requirement.ProviderNoProgressTimeoutSeconds > 0
+}
+
+func domainWorkCapabilityResumeEvidenceRequiredV0(
+	requirement DomainWorkExternalCapabilityRequirementV0,
+) bool {
+	return requirement.ResumeEvidenceRequired || requirement.NoDuplicateValidOutputsRequired
+}
+
+func domainWorkCapabilityProviderSupervisionReadyV0(
+	requirement DomainWorkExternalCapabilityRequirementV0,
+	capability DomainWorkExternalCapabilityV0,
+) bool {
+	if requirement.ProgressHeartbeatRequired && !capability.ProgressHeartbeatReady {
+		return false
+	}
+	if requirement.ProviderTimeoutRequired && !capability.ProviderTimeoutReady {
+		return false
+	}
+	if requirement.ProviderNoProgressTimeoutSeconds > 0 {
+		if capability.ProviderNoProgressTimeoutSeconds <= 0 {
+			return false
+		}
+		if capability.ProviderNoProgressTimeoutSeconds > requirement.ProviderNoProgressTimeoutSeconds {
+			return false
+		}
+	}
+	return true
+}
+
+func domainWorkCapabilityResumeEvidenceReadyV0(
+	requirement DomainWorkExternalCapabilityRequirementV0,
+	capability DomainWorkExternalCapabilityV0,
+) bool {
+	if requirement.ResumeEvidenceRequired && !capability.ResumeEvidenceReady {
+		return false
+	}
+	if requirement.NoDuplicateValidOutputsRequired && !capability.NoDuplicateValidOutputsReady {
+		return false
+	}
+	return requirement.ResumeEvidenceRequired || requirement.NoDuplicateValidOutputsRequired
+}
+
+func domainWorkCapabilityHasPartialResumeEvidenceV0(
+	capability DomainWorkExternalCapabilityV0,
+) bool {
+	return capability.ResumeEvidenceReady || capability.NoDuplicateValidOutputsReady
 }
 
 func itoaDomainWorkExternalCapabilityV0(value int) string {

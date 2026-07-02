@@ -190,9 +190,99 @@ func TestCodexWrapperV0CualquierVariableStartupLockCuentaComoExplicitaV0(t *test
 	profile.CodeHomeDir = filepath.Join(t.TempDir(), "codex-home")
 
 	wrapper := BuildCodexWrapperScriptV0(profile)
-	want := `orquesta_codex_lock_explicit_v0="${ORQUESTA_CODEX_STARTUP_LOCK_SECONDS:-}${ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS:-}${ORQUESTA_CODEX_STARTUP_LOCK_STALE_SECONDS:-}"`
-	if !strings.Contains(wrapper, want) {
-		t.Fatalf("wrapper debe tratar cualquier variable de startup-lock como explicita: falta %q\n%s", want, wrapper)
+	for _, want := range []string{
+		"${ORQUESTA_CODEX_STARTUP_LOCK_SECONDS+x}",
+		"${ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS+x}",
+		"${ORQUESTA_CODEX_STARTUP_LOCK_STALE_SECONDS+x}",
+	} {
+		if !strings.Contains(wrapper, want) {
+			t.Fatalf("wrapper debe tratar la presencia de cualquier variable de startup-lock como explicita: falta %q\n%s", want, wrapper)
+		}
+	}
+}
+
+func TestCodexWrapperV0RespetaCadaVariableStartupLockExplicitaAunqueDefaultSeaCeroV0(t *testing.T) {
+	t.Run("lock_seconds_solo", func(t *testing.T) {
+		profile, wrapperPath := prepareCodexStartupLockWrapperV0(t, writeFakeCodexStartupLockProbeCommandV0)
+
+		cmd := exec.Command(wrapperPath)
+		cmd.Env = append(os.Environ(), "ORQUESTA_CODEX_STARTUP_LOCK_SECONDS=1")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			stderr := readCodexWrapperTestFileV0(t, filepath.Join(profile.RuntimeWorkDir, CodexStderrFileNameV0))
+			t.Fatalf("wrapper debe activar lock por STARTUP_LOCK_SECONDS explicito, err=%v out=%s stderr=%s", err, out, stderr)
+		}
+		stderr := readCodexWrapperTestFileV0(t, filepath.Join(profile.RuntimeWorkDir, CodexStderrFileNameV0))
+		if !strings.Contains(stderr, "startup_lock_present") {
+			t.Fatalf("STARTUP_LOCK_SECONDS explicito debe crear lock aunque el default sea cero; stderr=%s out=%s", stderr, out)
+		}
+	})
+
+	t.Run("stale_solo", func(t *testing.T) {
+		profile, wrapperPath := prepareCodexStartupLockWrapperV0(t, writeFakeCodexNoUsageCommandV0)
+		lockPath := mkdirCodexStartupLockForTestV0(t, profile.CodeHomeDir)
+		touchCodexStartupLockForTestV0(t, lockPath, time.Unix(1, 0))
+
+		cmd := exec.Command(wrapperPath)
+		cmd.Env = append(os.Environ(), "ORQUESTA_CODEX_STARTUP_LOCK_STALE_SECONDS=1")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("wrapper debe respetar STARTUP_LOCK_STALE_SECONDS explicito, err=%v out=%s", err, out)
+		}
+		if !strings.Contains(string(out), "orquesta_codex_startup_lock_stale_reaped") {
+			t.Fatalf("STARTUP_LOCK_STALE_SECONDS explicito debe activar lock/reap aunque el default sea cero:\n%s", out)
+		}
+	})
+
+	t.Run("stale_solo_vacio_presente", func(t *testing.T) {
+		profile, wrapperPath := prepareCodexStartupLockWrapperV0(t, writeFakeCodexNoUsageCommandV0)
+		lockPath := mkdirCodexStartupLockForTestV0(t, profile.CodeHomeDir)
+		touchCodexStartupLockForTestV0(t, lockPath, time.Unix(1, 0))
+
+		cmd := exec.Command(wrapperPath)
+		cmd.Env = append(os.Environ(), "ORQUESTA_CODEX_STARTUP_LOCK_STALE_SECONDS=")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("wrapper debe respetar STARTUP_LOCK_STALE_SECONDS presente aunque este vacio, err=%v out=%s", err, out)
+		}
+		if !strings.Contains(string(out), "orquesta_codex_startup_lock_stale_reaped") {
+			t.Fatalf("STARTUP_LOCK_STALE_SECONDS presente debe activar lock/reap aunque el default sea cero:\n%s", out)
+		}
+	})
+}
+
+func TestCodexWrapperV0TimeoutSoloYTimeoutStaleExplicitosNoSeSustituyenV0(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		env  []string
+	}{
+		{
+			name: "timeout_solo",
+			env:  []string{"ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS=0"},
+		},
+		{
+			name: "timeout_mas_stale",
+			env: []string{
+				"ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS=0",
+				"ORQUESTA_CODEX_STARTUP_LOCK_STALE_SECONDS=0",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			profile, wrapperPath := prepareCodexStartupLockWrapperV0(t, writeFakeCodexNoUsageCommandV0)
+			mkdirCodexStartupLockForTestV0(t, profile.CodeHomeDir)
+
+			cmd := exec.Command(wrapperPath)
+			cmd.Env = append(os.Environ(), tc.env...)
+			out, err := cmd.CombinedOutput()
+			exitErr, ok := err.(*exec.ExitError)
+			if !ok || exitErr.ExitCode() != 75 {
+				t.Fatalf("wrapper debe cortar por timeout explicito %s aunque el default sea cero, err=%v out=%s", tc.name, err, out)
+			}
+			if !strings.Contains(string(out), "orquesta_codex_startup_lock_timeout") {
+				t.Fatalf("wrapper no publico timeout de lock explicito %s:\n%s", tc.name, out)
+			}
+		})
 	}
 }
 
@@ -431,6 +521,65 @@ func TestCodexProfileV0WorkspaceWriteRechazaRuntimeQueContieneProyecto(t *testin
 	requireCodexIssueV0(t, issues, CodexConnectorPathInvalidV0)
 }
 
+func prepareCodexStartupLockWrapperV0(
+	t *testing.T,
+	writeCommand func(*testing.T, string) string,
+) (CodexConnectorProfileV0, string) {
+	t.Helper()
+	profile := codexProfileForTestV0(t)
+	if err := os.MkdirAll(profile.ProjectWorkDir, 0o700); err != nil {
+		t.Fatalf("mkdir project: %v", err)
+	}
+	if err := os.MkdirAll(profile.RuntimeWorkDir, 0o700); err != nil {
+		t.Fatalf("mkdir runtime: %v", err)
+	}
+	if writeCommand == nil {
+		writeCommand = writeFakeCodexNoUsageCommandV0
+	}
+	profile.CommandPath = writeCommand(t, profile.RuntimeWorkDir)
+	profile.CodeHomeDir = filepath.Join(t.TempDir(), "codex-home")
+	if err := os.MkdirAll(profile.CodeHomeDir, 0o700); err != nil {
+		t.Fatalf("mkdir code home: %v", err)
+	}
+	wrapperPath := filepath.Join(profile.RuntimeWorkDir, CodexWrapperFileNameV0)
+	if err := os.WriteFile(
+		filepath.Join(profile.RuntimeWorkDir, CodexAgentPromptFileNameV0),
+		[]byte("prompt"),
+		0o600,
+	); err != nil {
+		t.Fatalf("write prompt: %v", err)
+	}
+	if err := os.WriteFile(wrapperPath, []byte(BuildCodexWrapperScriptV0(profile)), 0o700); err != nil {
+		t.Fatalf("write wrapper: %v", err)
+	}
+	return profile, wrapperPath
+}
+
+func mkdirCodexStartupLockForTestV0(t *testing.T, codeHomeDir string) string {
+	t.Helper()
+	lockPath := filepath.Join(codeHomeDir, ".orquesta-codex-startup.lock")
+	if err := os.MkdirAll(lockPath, 0o700); err != nil {
+		t.Fatalf("mkdir lock: %v", err)
+	}
+	return lockPath
+}
+
+func touchCodexStartupLockForTestV0(t *testing.T, lockPath string, at time.Time) {
+	t.Helper()
+	if err := os.Chtimes(lockPath, at, at); err != nil {
+		t.Fatalf("touch lock: %v", err)
+	}
+}
+
+func readCodexWrapperTestFileV0(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return string(data)
+}
+
 func writeFakeCodexUsageCommandV0(t *testing.T, dir string) string {
 	t.Helper()
 	path := filepath.Join(dir, "fake-codex.sh")
@@ -440,6 +589,23 @@ func writeFakeCodexUsageCommandV0(t *testing.T, dir string) string {
 		"echo 'output tokens: 45' >&2\n" +
 		"echo \"ERROR: You've hit your usage limit. Upgrade to Pro or try again at 1:57 PM.\" >&2\n" +
 		"exit 7\n"
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake codex: %v", err)
+	}
+	return path
+}
+
+func writeFakeCodexStartupLockProbeCommandV0(t *testing.T, dir string) string {
+	t.Helper()
+	path := filepath.Join(dir, "fake-codex-startup-lock-probe.sh")
+	script := "#!/bin/sh\n" +
+		"cat >/dev/null\n" +
+		"if [ -d \"${CODEX_HOME:-}/.orquesta-codex-startup.lock\" ]; then\n" +
+		"  echo 'startup_lock_present' >&2\n" +
+		"  exit 0\n" +
+		"fi\n" +
+		"echo 'startup_lock_missing' >&2\n" +
+		"exit 3\n"
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
 		t.Fatalf("write fake codex: %v", err)
 	}

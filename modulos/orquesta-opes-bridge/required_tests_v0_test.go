@@ -159,9 +159,21 @@ func TestOPESRequiredTestPolicyV0FinalTemarioExigeMinimosYComunes(t *testing.T) 
 		"extension_pass",
 		"official_text_qa_pass",
 		"strict_editorial_qa_pass",
+		"rag/corpus/chunks.jsonl",
+		"source_variant",
 	} {
 		if !strings.Contains(criteria, want) {
 			t.Fatalf("final_manifest_criteria=%q falta %s", criteria, want)
+		}
+	}
+	visualCriteria := strings.Join(visualReuse.AcceptanceCriteria, "\n")
+	for _, want := range []string{
+		"rebuild HTML",
+		"html_final/html_ampliado",
+		"tema_*.html",
+	} {
+		if !strings.Contains(visualCriteria, want) {
+			t.Fatalf("visual_reuse_criteria=%q falta %s", visualCriteria, want)
 		}
 	}
 	strictCriteria := strings.Join(strictEditorialQA.AcceptanceCriteria, "\n")

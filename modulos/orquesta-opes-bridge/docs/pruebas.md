@@ -68,6 +68,12 @@
   `opes-visual-reuse-manifest-*`; y el stack goal-first bloquea HTML/final
   `ready` o `html_validado` con `visual_count=0` si declara visuales comunes
   pendientes sin importarlos.
+- Validador mecanico de paquete final: `opes_validate_topic_package_v1.py`
+  acepta `--final-package-dir` y bloquea `completed_syllabus_package` si falta
+  `manifest_cierre.json`, si el RAG no usa `rag/corpus/{chunks,summary}` con
+  metadata `course_id`/`source_variant` o equivalente, o si un
+  `visuals_manifest.json`/`visual_reuse_manifest.json` declara assets que ya no
+  estan presentes y referenciados en `html_final`/`html_ampliado` tras rebuild.
 - Routing de proveedores en Orquesta:
   `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server -run 'TestClaude|TestProviderLaunchSpecResolverV0RuteaReview|TestProviderAwareAckPathResolverV0UsaRuntimeClaude|TestGeminiRuntimeConfig|TestClaudeRuntimeConfig'`.
   Debe demostrar que `review_gemini` se materializa por Gemini cuando esta

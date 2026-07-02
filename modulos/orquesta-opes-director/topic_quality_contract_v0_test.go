@@ -72,6 +72,32 @@ func TestValidateOPESTopicQualityContractV0DetectaAndamiajeInternoConTildesYMayu
 	}
 }
 
+func TestValidateOPESTopicQualityContractV0DetectaVariantesDeAndamiajeInternoV0(t *testing.T) {
+	cases := map[string]string{
+		"preguntas_recuperacion_descompuesta": "### PREGUNTAS DE RECUPERACIO\u0301N",
+		"repaso_espaciado_con_separador":      "## REPASO\u2014ESPACIADO",
+		"dia_cero_mayusculas":                 "D\u00cdA\t0: reconstruye el apartado sin mirar.",
+		"mapa_mental_salto_linea":             "Prepara un mapa\nmental antes del cierre.",
+		"plantilla_la_respuesta":              "LA RESPUESTA debe EMPEZAR con una definicion breve.",
+		"plantilla_respuesta_fuerte":          "UNA RESPUESTA FUERTE empieza por delimitar el concepto.",
+	}
+	for name, text := range cases {
+		t.Run(name, func(t *testing.T) {
+			result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
+				TopicRef:           "tema-030",
+				Level:              OPESTopicQualityLevelBV0,
+				CanonicalWordCount: 11100,
+				Text:               text,
+			})
+
+			if result.Status != OPESTopicQualityStatusNeedsReworkV0 ||
+				!opesTopicQualityIssueCodeInSetV0(result.Issues, ErrOPESTopicQualityStudyScaffoldingV0) {
+				t.Fatalf("text=%q result=%+v", text, result)
+			}
+		})
+	}
+}
+
 func TestValidateOPESTopicQualityContractV0DetectaContaminacionEstructuralV0(t *testing.T) {
 	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
 		TopicRef:           "tema-046",

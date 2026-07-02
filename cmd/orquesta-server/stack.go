@@ -92,6 +92,11 @@ func buildServerAppHandlerV0(stack orquestaappcodexstack.StackV0) (http.Handler,
 	mux.Handle(orquestamcp.MCPWorkspaceTimelineEndpointV0, newServerWorkspaceTimelineHTTPHandlerV0(
 		stack.MCPTransportBindings.WorkspaceTimeline,
 	))
+	if stack.MCPTransportBindings.CodebaseStatus != nil {
+		mux.Handle(orquestamcp.MCPCodebaseStatusHTTPPathV0, orquestamcp.NewMCPCodebaseStatusHTTPHandlerV0(
+			stack.MCPTransportBindings.CodebaseStatus,
+		))
+	}
 	observedWeb := orquestaappgateway.ObserveWebHTMLRenderErrorsV0(
 		stack.Handler,
 		serverWebHTMLRenderObserverV0(),
@@ -280,6 +285,12 @@ func buildStackFromEnvWithGoalBackendV0(
 	if operatorConnector != nil {
 		stack.MCPTransportBindings.OperatorConnector = operatorConnector
 	}
+	stack.MCPTransportBindings.CodebaseStatus = serverCodebaseStatusExecutorWithOwnerMarkersV0(
+		stack.MCPTransportBindings.CodebaseStatus,
+		codeContextWiring.ToolLeases,
+		codeContextWiring.ToolOwnerObserver,
+		nil,
+	)
 	stack.Handler = withFunctionContractRoutesV0(stack.Handler, stateStore)
 	return stack, nil
 }

@@ -19,8 +19,9 @@ import (
 )
 
 type codeContextBrokerWiringV0 struct {
-	Query      orquestacontext.CodeContextQueryPortV0
-	ToolLeases orquestacontext.CodeContextToolLeaseListPortV0
+	Query             orquestacontext.CodeContextQueryPortV0
+	ToolLeases        orquestacontext.CodeContextToolLeaseListPortV0
+	ToolOwnerObserver serverCodeContextToolOwnerObserverV0
 }
 
 func codeContextBrokerFromEnvV0(config orquestaserver.ConfigV0) orquestacontext.CodeContextQueryPortV0 {
@@ -44,18 +45,21 @@ func codeContextBrokerWiringFromEnvV0(config orquestaserver.ConfigV0) codeContex
 		leasePort = memoryLeaseStore
 	}
 	cache := orquestacontext.CodeContextCachePortV0(orquestacontext.NewInMemoryCodeContextCacheV0())
+	var ownerObserver serverCodeContextToolOwnerObserverV0
 	stateDir := strings.TrimSpace(envOrDefaultV0(envCodebaseBrokerStateDirV0, ""))
 	if stateDir != "" {
+		ownerRegistry := newServerFileCodeContextToolOwnerRegistryV0(stateDir)
 		fileLeaseStore := newServerFileCodeContextToolLeaseStoreV0(filepath.Join(stateDir, serverCodeContextLeasesFileV0))
 		leaseStore = fileLeaseStore
 		cache = newServerFileCodeContextCacheV0(filepath.Join(stateDir, serverCodeContextCacheFileV0))
+		ownerObserver = serverFileCodeContextToolOwnerObserverV0{Registry: ownerRegistry}
 		if providerKind == orquestacontext.CodeContextProviderKindCodebaseMCPV0 {
 			leasePort = fileLeaseStore
 			provider = serverCodebaseMemoryCLIProviderV0{
 				RootDir:     strings.TrimSpace(config.ProjectWorkDir),
 				ProjectName: serverCodebaseMemoryProjectNameV0(config.ProjectWorkDir, envOrDefaultV0(envCodebaseBrokerProjectNameV0, "")),
 				Command:     envOrDefaultV0(envCodebaseBrokerCommandV0, "codebase-memory-mcp"),
-				Registry:    newServerFileCodeContextToolOwnerRegistryV0(stateDir),
+				Registry:    ownerRegistry,
 			}
 		}
 	}
@@ -70,7 +74,8 @@ func codeContextBrokerWiringFromEnvV0(config orquestaserver.ConfigV0) codeContex
 			Timeout:                time.Duration(intEnvOrDefaultV0(envCodebaseBrokerTimeoutMSV0, 3000)) * time.Millisecond,
 			ToolLeasePort:          leasePort,
 		}),
-		ToolLeases: leaseStore,
+		ToolLeases:        leaseStore,
+		ToolOwnerObserver: ownerObserver,
 	}
 }
 

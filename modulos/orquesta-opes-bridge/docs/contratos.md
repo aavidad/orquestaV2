@@ -191,7 +191,11 @@ Reglas:
   schema `opes_final_package_evidence_manifest.v0` y evidencias obligatorias de
   HTML, RAG, audio, tests, visual y QA final. Si falta una evidencia, el estado
   debe ser `pendiente_continuar` con `followup_refs` causales, no
-  `listo_para_revision_operador`;
+  `listo_para_revision_operador`. El validador mecanico del bridge debe
+  comprobar tambien que el RAG final usa `rag/corpus/chunks.jsonl`,
+  `rag/corpus/summary.json` y `rag/manifest.json` con metadata
+  `course_id`/`source_variant` o equivalente, y que los visuales manifestados
+  siguen existiendo y referenciados en HTML tras rebuild;
 - el cierre final tambien declara `opes-visual-reuse-manifest-*`: si hay
   comunes o assets visuales reutilizables, debe existir `visual_reuse_manifest`
   con contadores de reutilizados/copied/inserted, refs opacas y placement; si

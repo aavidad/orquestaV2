@@ -387,7 +387,7 @@ func opesTopicPublicMetacommentMatchesV0(text string) []string {
 }
 
 func opesTopicPublicStudyScaffoldingMatchesV0(text string) []string {
-	normalized := opesTopicQualityNormalizePublicTextV0(text)
+	normalized := opesTopicQualityNormalizePublicPhraseTextV0(text)
 	if normalized == "" {
 		return nil
 	}
@@ -412,7 +412,7 @@ func opesTopicPublicStudyScaffoldingMatchesV0(text string) []string {
 	}
 	var matches []string
 	for _, pattern := range patterns {
-		if strings.Contains(normalized, pattern) {
+		if opesTopicQualityContainsPublicPhraseV0(normalized, pattern) {
 			matches = append(matches, pattern)
 		}
 	}
@@ -472,30 +472,62 @@ func opesTopicQualityNormalizePublicTextV0(text string) string {
 	if text == "" {
 		return ""
 	}
-	replacer := strings.NewReplacer(
-		"\u00e1", "a",
-		"\u00e0", "a",
-		"\u00e4", "a",
-		"\u00e2", "a",
-		"\u00e9", "e",
-		"\u00e8", "e",
-		"\u00eb", "e",
-		"\u00ea", "e",
-		"\u00ed", "i",
-		"\u00ec", "i",
-		"\u00ef", "i",
-		"\u00ee", "i",
-		"\u00f3", "o",
-		"\u00f2", "o",
-		"\u00f6", "o",
-		"\u00f4", "o",
-		"\u00fa", "u",
-		"\u00f9", "u",
-		"\u00fc", "u",
-		"\u00fb", "u",
-		"\u00f1", "n",
-	)
-	return replacer.Replace(text)
+	return opesTopicQualityStripPublicTextDiacriticsV0(text)
+}
+
+func opesTopicQualityNormalizePublicPhraseTextV0(text string) string {
+	text = opesTopicQualityNormalizePublicTextV0(text)
+	if text == "" {
+		return ""
+	}
+	var b strings.Builder
+	lastSpace := true
+	for _, r := range text {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+			lastSpace = false
+			continue
+		}
+		if !lastSpace {
+			b.WriteByte(' ')
+			lastSpace = true
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func opesTopicQualityStripPublicTextDiacriticsV0(text string) string {
+	var b strings.Builder
+	for _, r := range text {
+		if unicode.Is(unicode.Mn, r) {
+			continue
+		}
+		switch r {
+		case '\u00e1', '\u00e0', '\u00e4', '\u00e2':
+			b.WriteByte('a')
+		case '\u00e9', '\u00e8', '\u00eb', '\u00ea':
+			b.WriteByte('e')
+		case '\u00ed', '\u00ec', '\u00ef', '\u00ee':
+			b.WriteByte('i')
+		case '\u00f3', '\u00f2', '\u00f6', '\u00f4':
+			b.WriteByte('o')
+		case '\u00fa', '\u00f9', '\u00fc', '\u00fb':
+			b.WriteByte('u')
+		case '\u00f1':
+			b.WriteByte('n')
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func opesTopicQualityContainsPublicPhraseV0(normalizedText string, pattern string) bool {
+	normalizedPattern := opesTopicQualityNormalizePublicPhraseTextV0(pattern)
+	if normalizedPattern == "" {
+		return false
+	}
+	return strings.Contains(" "+normalizedText+" ", " "+normalizedPattern+" ")
 }
 
 func opesTopicHasDidacticVisualV0(visuals []OPESTopicQualityVisualEvidenceV0) bool {

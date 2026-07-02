@@ -153,7 +153,10 @@ Reglas:
 - un job cuyo `work_kind` produce `audio_asset` requiere la capacidad externa
   `speech_synthesis` con perfil preflight: red requerida, tool path requerido,
   cuota sensible de proveedor, timeout recomendado, heartbeat/progreso
-  observable y una ventana maxima sin avance del proveedor;
+  observable y una ventana maxima sin avance del proveedor; alternativamente,
+  para reanudaciones de audio ya materializado, la composicion debe aportar
+  evidencia de reanudacion que preserve salidas validas y no duplique outputs
+  ya aceptados;
 - un job de revision remota cuyo contrato neutral produce
   `agent_review_report` o `agent_pair_review_report` requiere
   `remote_qa_provider` con red, estado de autenticacion, cuota de proveedor y
@@ -173,6 +176,8 @@ Reglas:
   `DomainWorkExternalCapabilityV0`; la entrega real de audio sigue usando
   `DomainWorkArtifactSubmissionV0` con `artifact_type=audio_asset`,
   `payload_refs`, `evidence_refs` y `complete_job` cuando corresponda.
+  La evidencia de reanudacion tambien viaja por refs: este modulo no conoce MP3,
+  sidecars, manifests ni comandos de proveedor.
 
 Contrato minimo para una fuente de capacidades:
 
@@ -181,8 +186,9 @@ Contrato minimo para una fuente de capacidades:
   `available`, `operational_reason`, `external_refs` y `evidence_refs`;
 - no abre red, no ejecuta runners, no resuelve credenciales y no fija modelo,
   host ni proveedor dentro del contrato puro;
-- cualquier mapeo a TTS real, edge host, cola de audio, heartbeat del proveedor
-  o API de voz pertenece a un adaptador opt-in fuera de
+- cualquier mapeo a TTS real, edge host, cola de audio, heartbeat del proveedor,
+  manifest de reanudacion, deduplicacion de MP3 o API de voz pertenece a un
+  adaptador opt-in fuera de
   `orquesta-domain-work`.
 
 Referencia ejecutable:

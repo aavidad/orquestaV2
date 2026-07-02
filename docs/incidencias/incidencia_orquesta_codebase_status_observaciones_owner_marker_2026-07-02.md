@@ -44,6 +44,7 @@ Caso nuevo:
 
 ## Residual
 
-El wiring automatico desde owner markers file-based al status HTTP sigue en la
-composicion/servidor. Este cierre garantiza que el endpoint publico ya puede
-recibir esas observaciones sin inducir paradas falsas.
+Cerrado en composicion/servidor por
+`docs/incidencias/incidencia_orquesta_codebase_owner_marker_wiring_2026-07-02.md`.
+El status HTTP publico ya deriva observaciones desde owner markers file-based
+sin exigir que cada agente envie `observations[]`.

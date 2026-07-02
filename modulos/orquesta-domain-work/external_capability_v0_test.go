@@ -34,11 +34,97 @@ func TestDomainWorkExternalCapabilityRequirementsV0AudioRequiereSpeechSynthesis(
 		!requirement.ProgressHeartbeatRequired ||
 		!requirement.ProviderTimeoutRequired ||
 		requirement.ProviderNoProgressTimeoutSeconds != 300 ||
+		!requirement.ResumeEvidenceRequired ||
+		!requirement.NoDuplicateValidOutputsRequired ||
 		requirement.WorkKind != "tts_topic" ||
 		requirement.ArtifactType != DomainWorkArtifactTypeAudioAssetV0 ||
 		len(requirement.ExternalRefs) != 1 ||
 		len(requirement.EvidenceRefs) != 1 {
 		t.Fatalf("requirement=%+v", requirement)
+	}
+}
+
+func TestDomainWorkExternalCapabilityEvaluationV0AceptaAudioConReanudacionSinDuplicar(t *testing.T) {
+	request := validDomainWorkJobRequestForTestV0()
+	request.WorkKind = "generate_audio_asset"
+
+	evaluation := EvaluateDomainWorkExternalCapabilitiesV0(
+		request,
+		[]DomainWorkExternalCapabilityV0{{
+			CapabilityRef:                "tts-resume-safe-cache",
+			Kind:                         "speech_synthesis",
+			Available:                    true,
+			NetworkReady:                 true,
+			ToolPathReady:                true,
+			ProviderQuotaReady:           true,
+			CommandTimeoutSeconds:        1800,
+			ResumeEvidenceReady:          true,
+			NoDuplicateValidOutputsReady: true,
+			EvidenceRefs:                 []string{"audio-resume-manifest-ref-001", "audio-valid-output-ledger-ref-001"},
+			ExternalRefs: []DomainWorkExternalRefV0{{
+				Kind: "resume_manifest_ref",
+				Ref:  "audio-resume-manifest-ref-001",
+			}},
+		}},
+	)
+
+	if !evaluation.Ready ||
+		len(evaluation.Issues) != 0 ||
+		len(evaluation.MissingRequirements) != 0 ||
+		len(evaluation.MatchedCapabilities) != 1 ||
+		!evaluation.MatchedCapabilities[0].ResumeEvidenceReady ||
+		!evaluation.MatchedCapabilities[0].NoDuplicateValidOutputsReady ||
+		len(evaluation.MatchedCapabilities[0].EvidenceRefs) != 2 {
+		t.Fatalf("evaluation=%+v", evaluation)
+	}
+}
+
+func TestDomainWorkExternalCapabilityEvaluationV0BloqueaReanudacionSinNoDuplicacion(t *testing.T) {
+	request := validDomainWorkJobRequestForTestV0()
+	request.WorkKind = "generate_audio_asset"
+
+	evaluation := EvaluateDomainWorkExternalCapabilitiesV0(
+		request,
+		[]DomainWorkExternalCapabilityV0{{
+			CapabilityRef:         "tts-resume-without-dedupe",
+			Kind:                  "speech_synthesis",
+			Available:             true,
+			NetworkReady:          true,
+			ToolPathReady:         true,
+			ProviderQuotaReady:    true,
+			CommandTimeoutSeconds: 1800,
+			ResumeEvidenceReady:   true,
+		}},
+	)
+
+	if evaluation.Ready ||
+		evaluation.OperationalReason != "external_capability_missing:speech_synthesis:no_duplicate_valid_outputs_ready" ||
+		len(evaluation.MissingRequirements) != 1 {
+		t.Fatalf("evaluation=%+v", evaluation)
+	}
+}
+
+func TestDomainWorkExternalCapabilityProfileV0RespetaReanudacionAunqueNoExijaProveedor(t *testing.T) {
+	requirement := DomainWorkExternalCapabilityRequirementV0{
+		Kind:                            DomainWorkExternalCapabilityKindSpeechSynthesisV0,
+		ResumeEvidenceRequired:          true,
+		NoDuplicateValidOutputsRequired: true,
+	}
+	capability := DomainWorkExternalCapabilityV0{
+		Kind:                DomainWorkExternalCapabilityKindSpeechSynthesisV0,
+		ResumeEvidenceReady: true,
+	}
+
+	if domainWorkCapabilitySatisfiesProfileV0(requirement, capability) {
+		t.Fatalf("no debe aceptar reanudacion parcial sin deduplicacion")
+	}
+	if reason := domainWorkCapabilityProfileMissingReasonV0(requirement, capability); reason != "external_capability_missing:speech_synthesis:no_duplicate_valid_outputs_ready" {
+		t.Fatalf("reason=%q", reason)
+	}
+
+	capability.NoDuplicateValidOutputsReady = true
+	if !domainWorkCapabilitySatisfiesProfileV0(requirement, capability) {
+		t.Fatalf("debe aceptar evidencia completa de reanudacion sin exigir proveedor")
 	}
 }
 
