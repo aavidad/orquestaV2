@@ -374,3 +374,31 @@ Evidencia focal:
 Pendiente: reejecutar el smoke real con el binario que contiene este cambio y
 comprobar cierre `goal_status=complete`, `run_status=cerrada`,
 `closure_status=accepted` y `closure_accepted=true`.
+
+## Smoke aceptado con cierre funcional
+
+Smoke real posterior desde worktree limpio `a3d7d7df28` conservado en
+`/srv/orquesta-self/runtime/smokes-goal-first/orquesta-goal-first-app-server.m8rwBY`:
+
+- `goal_status=complete`
+- `run_status=cerrada`
+- `closure_status=accepted`
+- `closure_accepted=true`
+- `artifact_refs=10`
+- `evidence_refs=10`
+- `recommended_action=no_action_closed`
+
+La app generada queda bajo `generated-apps/smoke-goal-first` con API HTTP,
+pantalla HTML, documentacion y verificacion local aceptada por Orquesta. Este
+smoke cierra la parte funcional pendiente de `BUG-ORQ-20260702-122`: Nueva App
+ya puede generar una app completa por Goal-first y Orquesta puede aceptar el
+cierre por evidencias.
+
+Incidencia residual nueva: tras el cierre aceptado, el smoke fallo en shutdown
+con HTTP 409 `backend_still_running`, `shutdown_ready=false` y
+`active_work_count=3`, todos proyectados como residuos `goal_backend`
+`app_server_tmux`. Los procesos temporales del smoke se limpiaron manualmente
+por socket/sesion exactos y no se toco `orquesta-server-latest`. Esto se
+registra como `BUG-ORQ-20260702-131`: el lifecycle de shutdown del smoke debe
+ignorar/parar de forma cooperativa solo los backends propios ya cerrados, sin
+convertir un cierre aceptado en fallo final del script.
