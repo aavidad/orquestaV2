@@ -244,10 +244,11 @@ func TestWaitServerShutdownReadyV0NoEsperaEstadosNoRecuperables(t *testing.T) {
 
 func TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado(t *testing.T) {
 	status := orquestaserver.ServerPublicStatusV0{
-		ShutdownInProgress:         true,
-		ShutdownAgentsInFlight:     0,
-		ShutdownCheckpointsPending: 0,
-		ShutdownAsyncWorkActive:    0,
+		ShutdownInProgress:              true,
+		ShutdownAgentsInFlight:          0,
+		ShutdownCheckpointsPending:      0,
+		ShutdownCheckpointAgentsPending: 0,
+		ShutdownAsyncWorkActive:         0,
 	}
 
 	if !shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_timeout"), status, false) {
@@ -258,6 +259,11 @@ func TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado(t *testi
 		t.Fatalf("timeout con agentes en vuelo no debe permitir signal")
 	}
 	status.ShutdownAgentsInFlight = 0
+	status.ShutdownCheckpointAgentsPending = 1
+	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_timeout"), status, false) {
+		t.Fatalf("timeout con agentes checkpoint pendientes no debe permitir signal")
+	}
+	status.ShutdownCheckpointAgentsPending = 0
 	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_request_failed"), status, false) {
 		t.Fatalf("request_failed no debe permitir signal sin force")
 	}
@@ -277,13 +283,14 @@ func TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado(t *testi
 
 func TestShutdownClientReadyV0BloqueaActiveWorkPersistido(t *testing.T) {
 	status := orquestaserver.ServerPublicStatusV0{
-		ShutdownInProgress:      true,
-		ShutdownReady:           true,
-		ShutdownRunsRequested:   1,
-		ShutdownRunsStopped:     1,
-		ShutdownAsyncWorkActive: 0,
-		ShutdownActiveWorkCount: 1,
-		ShutdownActiveWorkRefs:  []string{"shutdown-active-work-goal-backend-goal-ref-test"},
+		ShutdownInProgress:              true,
+		ShutdownReady:                   true,
+		ShutdownRunsRequested:           1,
+		ShutdownRunsStopped:             1,
+		ShutdownAsyncWorkActive:         0,
+		ShutdownActiveWorkCount:         1,
+		ShutdownActiveWorkRefs:          []string{"shutdown-active-work-goal-backend-goal-ref-test"},
+		ShutdownCheckpointAgentsPending: 1,
 	}
 
 	if shutdownPublicStatusReadyForSignalV0(status) {
@@ -295,6 +302,7 @@ func TestShutdownClientReadyV0BloqueaActiveWorkPersistido(t *testing.T) {
 	result := serverShutdownClientResultFromStatusV0(status)
 	if shutdownClientResultReadyForSignalV0(result) ||
 		result.ActiveWorkCount != 1 ||
+		result.CheckpointAgentsPending != 1 ||
 		!shutdownClientStringRefsContainForTestV0(result.ActiveWorkRefs, "shutdown-active-work-goal-backend-goal-ref-test") {
 		t.Fatalf("result active_work no conservado/bloqueado: %+v", result)
 	}

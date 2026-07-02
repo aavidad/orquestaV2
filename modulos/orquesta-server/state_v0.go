@@ -55,6 +55,7 @@ type StateV0 struct {
 	ShutdownRunsStopped                   int                                   `json:"shutdown_runs_stopped,omitempty"`
 	ShutdownAgentsInFlight                int                                   `json:"shutdown_agents_in_flight,omitempty"`
 	ShutdownCheckpointsPending            int                                   `json:"shutdown_checkpoints_pending,omitempty"`
+	ShutdownCheckpointAgentsPending       int                                   `json:"shutdown_checkpoint_agents_pending,omitempty"`
 	ShutdownActiveWorkCount               int                                   `json:"shutdown_active_work_count,omitempty"`
 	ShutdownActiveWorkRefs                []string                              `json:"shutdown_active_work_refs,omitempty"`
 	ShutdownAsyncWorkActive               int                                   `json:"shutdown_async_work_active,omitempty"`

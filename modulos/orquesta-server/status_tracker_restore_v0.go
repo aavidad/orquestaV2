@@ -66,6 +66,7 @@ func NewStatusTrackerFromDurableStateV0(config ConfigV0, durable StateV0, now ti
 	restored.ShutdownRunsStopped = 0
 	restored.ShutdownAgentsInFlight = 0
 	restored.ShutdownCheckpointsPending = 0
+	restored.ShutdownCheckpointAgentsPending = 0
 	restored.ShutdownAsyncWorkActive = 0
 	restored.ShutdownStopTimeoutAt = ""
 	restored.IdleSelfImprovementAfter = fresh.IdleSelfImprovementAfter

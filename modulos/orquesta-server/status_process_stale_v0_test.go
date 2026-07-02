@@ -44,7 +44,14 @@ func TestMarkServerProcessStaleStateV0ExponeCausaTrasReadinessV0(t *testing.T) {
 		stale.ShutdownInProgress ||
 		stale.ShutdownStatus != "" ||
 		stale.ShutdownReady ||
-		stale.ShutdownHTTPStatus != 0 {
+		stale.ShutdownHTTPStatus != 0 ||
+		stale.ShutdownRunsRequested != 0 ||
+		stale.ShutdownRunsStopped != 0 ||
+		stale.ShutdownAgentsInFlight != 0 ||
+		stale.ShutdownCheckpointsPending != 0 ||
+		stale.ShutdownCheckpointAgentsPending != 0 ||
+		stale.ShutdownAsyncWorkActive != 0 ||
+		stale.ShutdownStopTimeoutAt != "" {
 		t.Fatalf("actividad viva no limpiada en stale: %+v", stale)
 	}
 	if stale.StartupOperationalMessage == nil ||

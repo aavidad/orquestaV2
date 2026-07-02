@@ -11,15 +11,16 @@ import (
 const serverShutdownRoutePathV0 = "/api/v0/server/shutdown"
 
 type serverShutdownHTTPProjectionV0 struct {
-	Estado             string                               `json:"estado,omitempty"`
-	Status             string                               `json:"status,omitempty"`
-	ShutdownReady      bool                                 `json:"shutdown_ready,omitempty"`
-	RunsRequested      int                                  `json:"runs_requested,omitempty"`
-	RunsStopped        int                                  `json:"runs_stopped,omitempty"`
-	AgentsInFlight     int                                  `json:"agents_in_flight,omitempty"`
-	CheckpointsPending int                                  `json:"checkpoints_pending,omitempty"`
-	ActiveWorkCount    int                                  `json:"active_work_count,omitempty"`
-	ActiveWorks        []serverShutdownHTTPWorkProjectionV0 `json:"active_works,omitempty"`
+	Estado                  string                               `json:"estado,omitempty"`
+	Status                  string                               `json:"status,omitempty"`
+	ShutdownReady           bool                                 `json:"shutdown_ready,omitempty"`
+	RunsRequested           int                                  `json:"runs_requested,omitempty"`
+	RunsStopped             int                                  `json:"runs_stopped,omitempty"`
+	AgentsInFlight          int                                  `json:"agents_in_flight,omitempty"`
+	CheckpointsPending      int                                  `json:"checkpoints_pending,omitempty"`
+	CheckpointAgentsPending int                                  `json:"checkpoint_agents_pending,omitempty"`
+	ActiveWorkCount         int                                  `json:"active_work_count,omitempty"`
+	ActiveWorks             []serverShutdownHTTPWorkProjectionV0 `json:"active_works,omitempty"`
 }
 
 type serverShutdownHTTPWorkProjectionV0 struct {
@@ -132,15 +133,16 @@ func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjecti
 	var payload serverShutdownHTTPProjectionV0
 	_ = json.Unmarshal(body, &payload)
 	projection := ShutdownProjectionV0{
-		Status:             firstNonEmptyShutdownFreezeV0(payload.Status, payload.Estado, "http_status"),
-		Ready:              payload.ShutdownReady,
-		HTTPStatus:         statusCode,
-		RunsRequested:      payload.RunsRequested,
-		RunsStopped:        payload.RunsStopped,
-		AgentsInFlight:     payload.AgentsInFlight,
-		CheckpointsPending: payload.CheckpointsPending,
-		ActiveWorkCount:    payload.ActiveWorkCount,
-		ActiveWorkRefs:     shutdownProjectionActiveWorkRefsV0(payload.ActiveWorks),
+		Status:                  firstNonEmptyShutdownFreezeV0(payload.Status, payload.Estado, "http_status"),
+		Ready:                   payload.ShutdownReady,
+		HTTPStatus:              statusCode,
+		RunsRequested:           payload.RunsRequested,
+		RunsStopped:             payload.RunsStopped,
+		AgentsInFlight:          payload.AgentsInFlight,
+		CheckpointsPending:      payload.CheckpointsPending,
+		CheckpointAgentsPending: payload.CheckpointAgentsPending,
+		ActiveWorkCount:         payload.ActiveWorkCount,
+		ActiveWorkRefs:          shutdownProjectionActiveWorkRefsV0(payload.ActiveWorks),
 	}
 	projection = normalizeShutdownStopConfirmationV0(projection)
 	if statusCode >= http.StatusBadRequest || shutdownFreezeResultIsRejectedV0(payload) {
@@ -204,6 +206,7 @@ func normalizeShutdownStopConfirmationV0(projection ShutdownProjectionV0) Shutdo
 	}
 	if projection.AgentsInFlight > 0 ||
 		projection.CheckpointsPending > 0 ||
+		projection.CheckpointAgentsPending > 0 ||
 		(projection.RunsRequested > 0 && projection.RunsStopped < projection.RunsRequested) {
 		projection.Ready = false
 		projection.Status = "stop_pending"

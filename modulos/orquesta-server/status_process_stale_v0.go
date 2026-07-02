@@ -29,6 +29,13 @@ func MarkServerProcessStaleStateV0(state StateV0, now time.Time) StateV0 {
 	state.ShutdownStatus = ""
 	state.ShutdownReady = false
 	state.ShutdownHTTPStatus = 0
+	state.ShutdownRunsRequested = 0
+	state.ShutdownRunsStopped = 0
+	state.ShutdownAgentsInFlight = 0
+	state.ShutdownCheckpointsPending = 0
+	state.ShutdownCheckpointAgentsPending = 0
+	state.ShutdownAsyncWorkActive = 0
+	state.ShutdownStopTimeoutAt = ""
 	state.LastError = "server_process_not_alive"
 	state.LastErrorOperationalMessage = projectServerOperationalMessageRecordV0(
 		serverOperationalMessageInputV0{

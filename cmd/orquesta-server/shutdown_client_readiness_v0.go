@@ -34,6 +34,7 @@ func shutdownPublicStatusReadyForSignalV0(status orquestaserver.ServerPublicStat
 		(status.ShutdownInProgress &&
 			status.ShutdownAgentsInFlight == 0 &&
 			status.ShutdownCheckpointsPending == 0 &&
+			status.ShutdownCheckpointAgentsPending == 0 &&
 			status.ShutdownAsyncWorkActive == 0 &&
 			noActiveWork &&
 			status.ShutdownRunsRequested <= status.ShutdownRunsStopped)
@@ -41,15 +42,16 @@ func shutdownPublicStatusReadyForSignalV0(status orquestaserver.ServerPublicStat
 
 func serverShutdownClientResultFromStatusV0(status orquestaserver.ServerPublicStatusV0) serverShutdownClientResultV0 {
 	return serverShutdownClientResultV0{
-		Estado:             "ok",
-		Status:             strings.TrimSpace(status.ShutdownStatus),
-		ShutdownReady:      status.ShutdownReady,
-		RunsRequested:      status.ShutdownRunsRequested,
-		RunsStopped:        status.ShutdownRunsStopped,
-		AgentsInFlight:     status.ShutdownAgentsInFlight,
-		CheckpointsPending: status.ShutdownCheckpointsPending,
-		ActiveWorkCount:    status.ShutdownActiveWorkCount,
-		ActiveWorkRefs:     compactStringsV0(status.ShutdownActiveWorkRefs),
+		Estado:                  "ok",
+		Status:                  strings.TrimSpace(status.ShutdownStatus),
+		ShutdownReady:           status.ShutdownReady,
+		RunsRequested:           status.ShutdownRunsRequested,
+		RunsStopped:             status.ShutdownRunsStopped,
+		AgentsInFlight:          status.ShutdownAgentsInFlight,
+		CheckpointsPending:      status.ShutdownCheckpointsPending,
+		CheckpointAgentsPending: status.ShutdownCheckpointAgentsPending,
+		ActiveWorkCount:         status.ShutdownActiveWorkCount,
+		ActiveWorkRefs:          compactStringsV0(status.ShutdownActiveWorkRefs),
 	}
 }
 
@@ -94,6 +96,7 @@ func shutdownRequestErrorAllowsSignalV0(
 	return status.ShutdownInProgress &&
 		status.ShutdownAgentsInFlight == 0 &&
 		status.ShutdownCheckpointsPending == 0 &&
+		status.ShutdownCheckpointAgentsPending == 0 &&
 		status.ShutdownAsyncWorkActive == 0 &&
 		status.ShutdownActiveWorkCount == 0 &&
 		len(compactStringsV0(status.ShutdownActiveWorkRefs)) == 0
