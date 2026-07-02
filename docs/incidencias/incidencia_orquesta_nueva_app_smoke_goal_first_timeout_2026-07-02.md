@@ -270,3 +270,13 @@ script observase hasta 120 polls de 5 segundos.
 Evidencia focal:
 
 - `TestSmokeGoalFirstAppServerRealRespetaPresupuestoNuevaAppV0`
+
+Avance aplicado: el backend `app_server_tmux` registra por `thread_id` el
+timeout efectivo derivado del `GoalWorkSpecV0`. Si el paquete declara
+`Budget.MaxRuntimeSeconds=600`, `observe` no bloquea el goal por el timeout
+global de 90 segundos mientras el presupuesto del contrato sigue vigente.
+
+Evidencia focal:
+
+- `TestServerCodexAppServerGoalBackendV0ActiveGoalRespetaBudgetMaxRuntimeMayorQueTimeoutGlobalV0`
+- `TestServerCodexAppServerGoalBackendV0ThreadReadRespetaBudgetMaxRuntimeMayorQueTimeoutGlobalV0`

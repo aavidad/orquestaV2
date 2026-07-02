@@ -570,6 +570,54 @@ func TestServerCodexAppServerGoalBackendV0NoBloqueaThreadReadConTurnoActivoTrasT
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0ThreadReadRespetaBudgetMaxRuntimeMayorQueTimeoutGlobalV0(t *testing.T) {
+	now := time.Date(2026, 7, 2, 18, 20, 0, 0, time.UTC)
+	protocol := &fakeCodexAppServerProtocolV0{
+		getGoalErr: codexAppServerCallErrorV0{Code: "codex_app_server_rpc_method_not_found"},
+		thread:     serverCodexAppServerThreadV0{ID: "thread-ref-goal-read-budget-001"},
+		turn:       serverCodexAppServerTurnV0{ID: "turn-ref-goal-read-budget-001"},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-read-budget-001",
+			Status: serverCodexAppServerThreadStatusV0("idle"),
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		CWD:      t.TempDir(),
+		Runtime:  &serverCodexAppServerGoalRuntimeV0{},
+		Timeout:  2 * time.Second,
+		Now:      func() time.Time { return now },
+	}
+	if _, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		SchemaVersion: orquestaruntimecodexgoal.CodexGoalStartPacketSchemaV0,
+		GoalRef:       "goal-ref-goal-read-budget-001",
+		Objective:     "probar timeout por presupuesto",
+		Prompt:        "haz una entrega compacta",
+		Budget:        orquestagoal.GoalBudgetV0{MaxRuntimeSeconds: 600},
+	}); err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	protocol.calls = nil
+	now = now.Add(3 * time.Second)
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         "goal-ref-goal-read-budget-001",
+		ExternalGoalRef: "thread-ref-goal-read-budget-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0 fallback: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		receipt.IssueCode == "codex_app_server_goal_result_missing_after_timeout" ||
+		containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-missing-after-timeout") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get", "thread/read"}) {
+		t.Fatalf("calls=%v", protocol.calls)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0NoPromueveThreadReadResultadoPendienteV0(t *testing.T) {
 	projectDir := t.TempDir()
 	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")
@@ -1403,6 +1451,67 @@ func TestServerCodexAppServerGoalBackendV0BloqueaGoalActivoPorRuntimeSiTimeUsedF
 	if receipt.Status != orquestagoal.GoalStatusBlockedV0 ||
 		receipt.IssueCode != "codex_app_server_goal_active_timeout" {
 		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0ActiveGoalRespetaBudgetMaxRuntimeMayorQueTimeoutGlobalV0(t *testing.T) {
+	now := time.Date(2026, 7, 2, 18, 30, 0, 0, time.UTC)
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-budget-timeout-001"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-goal-budget-timeout-001"},
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID:        "thread-ref-goal-budget-timeout-001",
+			Status:          "active",
+			TimeUsedSeconds: 3,
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		Timeout:  2 * time.Second,
+		Runtime:  &serverCodexAppServerGoalRuntimeV0{},
+		Now:      func() time.Time { return now },
+	}
+	if _, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		SchemaVersion: orquestaruntimecodexgoal.CodexGoalStartPacketSchemaV0,
+		GoalRef:       "goal-ref-budget-timeout-001",
+		Objective:     "probar timeout por presupuesto",
+		Prompt:        "haz una entrega compacta",
+		Budget:        orquestagoal.GoalBudgetV0{MaxRuntimeSeconds: 600},
+	}); err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	protocol.calls = nil
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-budget-timeout-001",
+		ExternalGoalRef: "thread-ref-goal-budget-timeout-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		receipt.IssueCode == "codex_app_server_goal_active_timeout" ||
+		containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-active-timeout") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if !reflect.DeepEqual(protocol.calls, []string{"thread/goal/get", "thread/read"}) {
+		t.Fatalf("calls=%v", protocol.calls)
+	}
+
+	protocol.observedGoal.TimeUsedSeconds = 601
+	receipt, err = backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-budget-timeout-001",
+		ExternalGoalRef: "thread-ref-goal-budget-timeout-001",
+	})
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0 second: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusBlockedV0 ||
+		receipt.IssueCode != "codex_app_server_goal_active_timeout" {
+		t.Fatalf("receipt second=%+v", receipt)
 	}
 }
 

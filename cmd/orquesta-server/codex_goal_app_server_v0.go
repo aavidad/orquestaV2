@@ -245,7 +245,11 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	if receipt, limited := backend.codexAppServerStartImmediateLimitedReceiptV0(ctx, packet, threadID, goalSetEvidence); limited {
 		return receipt, errors.New(receipt.IssueCode)
 	}
-	backend.recordCodexAppServerGoalStartedAtV0(threadID, backend.nowCodexAppServerGoalV0())
+	backend.recordCodexAppServerGoalRuntimeV0(
+		threadID,
+		backend.nowCodexAppServerGoalV0(),
+		backend.codexAppServerGoalTimeoutForPacketV0(packet),
+	)
 	return orquestaruntimecodexgoal.CodexGoalStartReceiptV0{
 		Status:          orquestagoal.GoalStatusRunningV0,
 		GoalRef:         packet.GoalRef,
@@ -367,10 +371,8 @@ func (backend serverCodexAppServerGoalBackendV0) codexAppServerActiveGoalTimeout
 	if goal == nil || status != orquestagoal.GoalStatusRunningV0 {
 		return false, receipt
 	}
-	timeout := backend.Timeout
-	if timeout <= 0 {
-		timeout = time.Duration(defaultCodexGoalTimeoutMSV0) * time.Millisecond
-	}
+	threadID := strings.TrimSpace(firstNonEmptyServerStackV0(goal.ThreadID, receipt.ExternalGoalRef, request.ExternalGoalRef))
+	timeout := backend.codexAppServerGoalTimeoutForThreadV0(threadID)
 	elapsed, ok := backend.codexAppServerActiveGoalElapsedV0(goal)
 	if timeout <= 0 || !ok {
 		return false, receipt
@@ -532,11 +534,8 @@ func (backend serverCodexAppServerGoalBackendV0) codexAppServerThreadReadGoalRes
 	if codexAppServerThreadReadHasActiveTurnV0(thread) {
 		return false, receipt
 	}
-	timeout := backend.Timeout
-	if timeout <= 0 {
-		timeout = time.Duration(defaultCodexGoalTimeoutMSV0) * time.Millisecond
-	}
 	threadID := strings.TrimSpace(firstNonEmptyServerStackV0(receipt.ExternalGoalRef, request.ExternalGoalRef))
+	timeout := backend.codexAppServerGoalTimeoutForThreadV0(threadID)
 	if timeout <= 0 || threadID == "" || backend.Runtime == nil {
 		return false, receipt
 	}
