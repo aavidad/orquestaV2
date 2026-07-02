@@ -2,6 +2,7 @@ package orquestaservershutdown
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -216,6 +217,41 @@ func TestShutdownServerV0CleanupGoalBackendsNoPublicaReadySiSigueVivoV0(t *testi
 		deps.active.calls != 2 ||
 		deps.cleaner.calls != 1 ||
 		!serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-goal-backend-cleanup-requested") ||
+		!serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-backend-still-running") {
+		t.Fatalf("result=%+v active_calls=%d cleaner=%+v", result, deps.active.calls, deps.cleaner)
+	}
+}
+
+func TestShutdownServerV0CleanupGoalBackendsErrorNoEscalaAHTTP500V0(t *testing.T) {
+	deps := newServerShutdownDepsForTestV0(nil)
+	backendWork := ActiveShutdownWorkV0{
+		Kind:            "goal_backend",
+		WorkRef:         "orquesta-goal-cleanup-error",
+		ExternalWorkRef: "codex-goal-app-server-tmux",
+		Status:          ServerShutdownStatusBackendStillRunningV0,
+		EvidenceRefs:    []string{"evidence-ref-backend-cleanup-error-before"},
+	}
+	deps.active.works = []ActiveShutdownWorkV0{backendWork}
+	deps.active.evidence = []string{"evidence-ref-active-work-read"}
+	deps.cleaner.err = errors.New("tmux cleanup failed")
+
+	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
+		RequestedBy:         "orquesta-director",
+		Reason:              "cleanup backend propio con error recuperable",
+		CorrelationID:       "corr-cleanup-backend-error",
+		CleanupGoalBackends: true,
+		EvidenceRefs:        []string{"operator-cleanup-request"},
+	})
+	if err != nil {
+		t.Fatalf("cleanup error no debe escapar como error HTTP: %v", err)
+	}
+	if result.ShutdownReady ||
+		result.Status != ServerShutdownStatusBackendStillRunningV0 ||
+		result.ActiveWorkCount != 1 ||
+		deps.active.calls != 1 ||
+		deps.cleaner.calls != 1 ||
+		!serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-goal-backend-cleanup-requested") ||
+		!serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-goal-backend-cleanup-error") ||
 		!serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-backend-still-running") {
 		t.Fatalf("result=%+v active_calls=%d cleaner=%+v", result, deps.active.calls, deps.cleaner)
 	}

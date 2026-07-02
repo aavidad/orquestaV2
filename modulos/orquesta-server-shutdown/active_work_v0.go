@@ -32,7 +32,7 @@ func blockingActiveShutdownWorkV0(
 		var cleanupRan bool
 		cleaned, cleanupRan, err = cleanupActiveGoalBackendsV0(ctx, deps, command, works)
 		if err != nil {
-			return ServerShutdownResultV0{}, false, nil, err
+			return activeShutdownWorkCleanupErrorResultV0(command, active, works), true, nil, nil
 		}
 		if cleanupRan {
 			cleanupEvidenceRefs = compactServerShutdownStringsV0(cleaned.EvidenceRefs)
@@ -147,6 +147,29 @@ func activeShutdownWorkIsBackendStillRunningV0(
 ) bool {
 	return strings.TrimSpace(work.Kind) == "goal_backend" ||
 		strings.TrimSpace(work.Status) == ServerShutdownStatusBackendStillRunningV0
+}
+
+func activeShutdownWorkCleanupErrorResultV0(
+	command ServerShutdownCommandV0,
+	active ActiveShutdownWorkResultV0,
+	works []ActiveShutdownWorkV0,
+) ServerShutdownResultV0 {
+	status := activeShutdownWorkBlockingStatusV0(works)
+	return ServerShutdownResultV0{
+		SchemaVersion:   ServerShutdownSchemaVersionV0,
+		Status:          status,
+		ShutdownReady:   false,
+		ActiveWorkCount: len(works),
+		ActiveWorks:     works,
+		EvidenceRefs: compactServerShutdownStringsV0(append(
+			append([]string(nil), command.EvidenceRefs...),
+			append(active.EvidenceRefs,
+				"evidence-ref-shutdown-goal-backend-cleanup-requested",
+				"evidence-ref-shutdown-goal-backend-cleanup-error",
+				activeShutdownWorkBlockingEvidenceV0(status),
+			)...,
+		)),
+	}
 }
 
 func activeShutdownWorkBlockingEvidenceV0(status string) string {
