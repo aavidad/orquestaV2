@@ -814,10 +814,11 @@ func TestCodexAppServerTmuxBackendV0CleanupActiveWorkMataProcesoSocketSinSesionV
 		}
 	}
 	backend := serverCodexAppServerTmuxBackendV0{
-		PathEnv:     binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
-		SocketPath:  socketPath,
-		SessionName: "orquesta-goal-cleanup-process-1234567890",
-		Timeout:     150 * time.Millisecond,
+		PathEnv:                binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		SocketPath:             socketPath,
+		SessionName:            "orquesta-goal-cleanup-process-1234567890",
+		Timeout:                50 * time.Millisecond,
+		ShutdownCleanupTimeout: 250 * time.Millisecond,
 	}
 	t.Setenv("ORQUESTA_TEST_TMUX_LOG", tmuxLog)
 

@@ -22,7 +22,7 @@ func (backend serverCodexAppServerTmuxBackendV0) CleanupActiveShutdownWorkV0(
 	))
 	cleaned := 0
 	if backend.detectTmuxResidueV0(ctx).Active {
-		if err := backend.shutdownTmuxSessionV0(ctx, true); err != nil {
+		if err := backend.shutdownTmuxSessionForCleanupV0(ctx); err != nil {
 			return orquestaservershutdown.ActiveShutdownWorkCleanupResultV0{}, err
 		}
 		if !backend.detectTmuxResidueV0(ctx).Active {
@@ -71,7 +71,7 @@ func (backend serverCodexAppServerTmuxBackendV0) cleanupTmuxOwnerMarkerPathV0(
 	if !candidate.tmuxConfiguredOrphanCleanupAllowedV0() {
 		return false
 	}
-	if err := candidate.shutdownTmuxSessionV0(ctx, true); err != nil {
+	if err := candidate.shutdownTmuxSessionForCleanupV0(ctx); err != nil {
 		return false
 	}
 	cleanupTmuxOwnedSocketsInDirV0(markerDir)

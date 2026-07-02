@@ -24,22 +24,24 @@ const (
 	codexAppServerTmuxOwnerSchemaV0     = "orquesta_codex_app_server_tmux_owner.v0"
 	codexAppServerTmuxEvidenceOwnedV0   = "orquesta-codex-goal-app-server-tmux-v0"
 	codexAppServerTmuxDefaultTimeoutV0  = 3 * time.Second
+	codexAppServerTmuxCleanupTimeoutV0  = 10 * time.Second
 	codexAppServerTmuxMinStartupV0      = 60 * time.Second
 	codexAppServerTmuxMaxSocketPathV0   = 107
 	codexAppServerTmuxSocketPollEveryV0 = 50 * time.Millisecond
 )
 
 type serverCodexAppServerTmuxBackendV0 struct {
-	CommandPath       string
-	PathEnv           string
-	SocketPath        string
-	SessionName       string
-	HomeDir           string
-	CodeHomeDir       string
-	RuntimeWorkDir    string
-	ProjectWorkDir    string
-	SourceCodeHomeDir string
-	Timeout           time.Duration
+	CommandPath            string
+	PathEnv                string
+	SocketPath             string
+	SessionName            string
+	HomeDir                string
+	CodeHomeDir            string
+	RuntimeWorkDir         string
+	ProjectWorkDir         string
+	SourceCodeHomeDir      string
+	Timeout                time.Duration
+	ShutdownCleanupTimeout time.Duration
 }
 
 type codexAppServerTmuxOwnerMarkerV0 struct {
@@ -245,6 +247,19 @@ func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionV0(ctx conte
 	_ = os.Remove(strings.TrimSpace(backend.SocketPath))
 	_ = os.Remove(backend.tmuxOwnerMarkerPathV0())
 	return nil
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) shutdownCleanupTimeoutV0() time.Duration {
+	if backend.ShutdownCleanupTimeout > 0 {
+		return backend.ShutdownCleanupTimeout
+	}
+	return codexAppServerTmuxCleanupTimeoutV0
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionForCleanupV0(ctx context.Context) error {
+	cleanup := backend
+	cleanup.Timeout = backend.shutdownCleanupTimeoutV0()
+	return cleanup.shutdownTmuxSessionV0(ctx, true)
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) stopCodexAppServerSocketProcessesV0(ctx context.Context) {
