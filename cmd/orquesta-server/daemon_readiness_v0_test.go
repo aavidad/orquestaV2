@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -165,6 +166,90 @@ func TestWaitForStateHealthyV0MarcaStaleSiServidorMuereTrasReadinessV0(t *testin
 	if got.Status != "stale" ||
 		got.StartupStatus != orquestaserver.ServerProcessStaleReasonCodeV0 {
 		t.Fatalf("proyeccion final no stale: %+v", got)
+	}
+}
+
+func TestWaitForStateHealthyV0LimpiaGoalBackendConfiguradoSiMuereTrasReadinessV0(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	fakeTmux := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte(fakeCodexAppServerTmuxCommandForTestV0()), 0o700); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	tmuxLog := filepath.Join(root, "tmux.log")
+	projectDir := filepath.Join(root, "project")
+	runtimeDir := filepath.Join(root, "runtime")
+	stateDir := filepath.Join(root, "state")
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatalf("mkdir project: %v", err)
+	}
+	pathEnv := binDir + string(os.PathListSeparator) + os.Getenv("PATH")
+	t.Setenv("ORQUESTA_TEST_TMUX_LOG", tmuxLog)
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envCodexRuntimeWorkDirV0, runtimeDir)
+	t.Setenv(envServerStateDirV0, stateDir)
+	t.Setenv(envCodexPathV0, pathEnv)
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0)
+	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "1000")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	socketPath, err := codexAppServerTmuxSocketPathV0(config)
+	if err != nil {
+		t.Fatalf("socket path: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
+		t.Fatalf("mkdir socket dir: %v", err)
+	}
+	if err := os.WriteFile(socketPath, []byte("stale socket"), 0o600); err != nil {
+		t.Fatalf("write socket: %v", err)
+	}
+	if err := os.WriteFile(tmuxLog+".session", []byte("stale session"), 0o600); err != nil {
+		t.Fatalf("write fake session: %v", err)
+	}
+
+	deadPID := daemonReadinessDeadPIDForTestV0(t)
+	var calls int32
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != orquestaserver.ServerReadinessEndpointV0 {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if atomic.AddInt32(&calls, 1) == 1 {
+			next := daemonReadinessStateForTestV0(r.Host, deadPID)
+			next.LastHeartbeatAt = "2026-07-01T00:00:00Z"
+			saveDaemonReadinessStateForTestV0(t, config, next)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	state := daemonReadinessStateForTestV0(strings.TrimPrefix(server.URL, "http://"), os.Getpid())
+	state.LastHeartbeatAt = "2026-07-01T00:00:00Z"
+	saveDaemonReadinessStateForTestV0(t, config, state)
+	restore := setDaemonReadinessTimingsForTestV0(5*time.Millisecond, 5*time.Millisecond)
+	defer restore()
+
+	got, err := waitForStateHealthyV0(config, 80*time.Millisecond)
+	if err == nil || !strings.Contains(err.Error(), "server_exited_after_readiness") {
+		t.Fatalf("servidor muerto tras readiness debe reportar server_exited_after_readiness, err=%v state=%+v", err, got)
+	}
+	rawLog, readErr := os.ReadFile(tmuxLog)
+	if readErr != nil {
+		t.Fatalf("read tmux log: %v", readErr)
+	}
+	if !strings.Contains(string(rawLog), "kill-session") {
+		t.Fatalf("tmux no recibio kill-session tras caida post-readiness: %s", string(rawLog))
+	}
+	if _, err := os.Stat(tmuxLog + ".session"); !os.IsNotExist(err) {
+		t.Fatalf("session fake no eliminada err=%v", err)
+	}
+	if _, err := os.Stat(socketPath); !os.IsNotExist(err) {
+		t.Fatalf("socket no eliminado err=%v", err)
 	}
 }
 

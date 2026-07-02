@@ -11,9 +11,9 @@ de arranque ya cubre el caso en `cmd/orquesta-server` con
 `server_exited_after_readiness`, pero faltaba una regresion focal en el modulo
 puro que fijase la proyeccion durable/publica de `server_process_stale`.
 
-## Cierre parcial
+## Cierre
 
-Sin tocar `cmd/orquesta-server`, se fija el contrato puro:
+Se fija el contrato puro y el cleanup acotado de la composicion `cmd`:
 
 - `MarkServerProcessStaleStateV0` convierte un snapshot `running` +
   `startup_ready` en `status=stale`, `startup_ready=false` y
@@ -23,12 +23,16 @@ Sin tocar `cmd/orquesta-server`, se fija el contrato puro:
   `recent_errors`.
 - `NewServerReadinessV0` y `NewServerPublicStatusV0` proyectan
   `server_process_stale`, sin dejar falso verde `running/startup_ready`.
+- `waitForStateHealthyV0` devuelve `server_exited_after_readiness` y ejecuta
+  cleanup del backend Goal `app_server_tmux` configurado cuando el PID del
+  daemon ya no vive.
+- La limpieza de sesiones sin owner marker queda limitada por la guarda ya
+  existente de nombre `orquesta-goal-*` y socket propio configurado.
 
-## Residual
+## Fuera de alcance
 
-Sigue fuera de este cierre la limpieza completa de backends Goal huerfanos si el
-HTTP desaparece y no hay owner recuperable suficiente. Ese tramo queda en el
-residual operativo de `BUG-ORQ-20260701-091`/shutdown Goal.
+No se convierte en regla del core puro la limpieza de procesos externos no
+configurados o sin ownership suficiente.
 
 ## Evidencia
 
@@ -37,4 +41,5 @@ Prueba focal:
 ```bash
 go test -count=1 ./modulos/orquesta-server -run TestMarkServerProcessStaleStateV0ExponeCausaTrasReadinessV0
 go test -count=1 ./modulos/orquesta-server
+go test -count=1 ./cmd/orquesta-server -run 'TestWaitForStateHealthyV0MarcaStaleSiServidorMuereTrasReadinessV0|TestWaitForStateHealthyV0LimpiaGoalBackendConfiguradoSiMuereTrasReadinessV0|TestCleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0'
 ```

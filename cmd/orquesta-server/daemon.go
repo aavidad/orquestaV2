@@ -97,6 +97,7 @@ func waitForStateHealthyV0(
 		sleepUntilDeadlineV0(serverReadinessPollEveryV0, deadline)
 	}
 	if serverExitedAfterReadiness && serverStateIsProcessStaleV0(last) {
+		cleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0(config, last.PID)
 		return last, fmt.Errorf("server_exited_after_readiness")
 	}
 	if last.Addr != "" {
