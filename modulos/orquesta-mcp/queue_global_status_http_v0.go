@@ -26,6 +26,8 @@ const (
 	mcpQueueGlobalStatusActionObserveGoalRequireCheckpointV0   = "observe_goal_backend_require_checkpoint"
 	mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0 = "observe_goal_backend_require_next_artifact"
 	mcpQueueGlobalStatusActionObserveGoalWaitForCheckpointV0   = "observe_goal_backend_wait_for_checkpoint"
+	mcpQueueGlobalStatusActionReplanNarrowContextV0            = "replan_narrow_context"
+	mcpQueueGlobalStatusActionReconcileGoalTerminalV0          = "reconcile_goal_terminal"
 )
 
 type MCPQueueGlobalStatusResultV0 struct {
@@ -672,6 +674,8 @@ func mcpQueueGlobalStatusNormalizeRecommendedActionV0(action string, fallback st
 		mcpQueueGlobalStatusActionObserveGoalRequireCheckpointV0,
 		mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0,
 		mcpQueueGlobalStatusActionObserveGoalWaitForCheckpointV0,
+		mcpQueueGlobalStatusActionReplanNarrowContextV0,
+		mcpQueueGlobalStatusActionReconcileGoalTerminalV0,
 		MCPGoalFirstRepairReceiptActionV0,
 		MCPGoalFirstReworkWriteSetViolationActionV0,
 		MCPGoalFirstReworkPublicTextActionV0,

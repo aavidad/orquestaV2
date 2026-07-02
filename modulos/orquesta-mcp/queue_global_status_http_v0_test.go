@@ -563,6 +563,46 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0ConservaObserveGoalBackendNextArtifact
 	}
 }
 
+func TestMCPQueueGlobalStatusHTTPHandlerV0ConservaReplanNarrowContext(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				Blocked: 1,
+			},
+			StaleRunning: []MCPAutoprogrammingActionableRunV0{{
+				Code:              mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0,
+				RunRef:            "run-ref-global-status-checkpoint-high-001",
+				AppRef:            "app-ref-global-status-checkpoint",
+				RecommendedAction: mcpQueueGlobalStatusActionReplanNarrowContextV0,
+				EvidenceRefs:      []string{"evidence-ref-checkpoint-high"},
+			}},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	NewMCPQueueGlobalStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !hasMCPQueueGlobalStatusItemForTestV0(
+		result.Items,
+		"run-ref-global-status-checkpoint-high-001",
+		mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0,
+		true,
+		mcpQueueGlobalStatusActionReplanNarrowContextV0,
+	) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFirstEspecificas(t *testing.T) {
 	for _, action := range []string{
 		mcpQueueGlobalStatusActionReviewReplanGoalFirstV0,
@@ -572,6 +612,8 @@ func TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFir
 		mcpQueueGlobalStatusActionObserveGoalRequireCheckpointV0,
 		mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0,
 		mcpQueueGlobalStatusActionObserveGoalWaitForCheckpointV0,
+		mcpQueueGlobalStatusActionReplanNarrowContextV0,
+		mcpQueueGlobalStatusActionReconcileGoalTerminalV0,
 		MCPGoalFirstRepairReceiptActionV0,
 		MCPGoalFirstReworkWriteSetViolationActionV0,
 		MCPGoalFirstReworkPublicTextActionV0,
