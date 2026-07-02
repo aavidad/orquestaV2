@@ -33,7 +33,9 @@ func TestNuevaAppHTMLBrowserSmokeOptInV0(t *testing.T) {
 	if !bytes.Contains(dom, []byte(`data-browser-smoke="ok"`)) ||
 		bytes.Contains(dom, []byte("Please fill out this field")) ||
 		bytes.Contains(dom, []byte(`data-browser-native-required="true"`)) ||
-		bytes.Contains(dom, []byte(`data-browser-horizontal-overflow="true"`)) {
+		bytes.Contains(dom, []byte(`data-browser-horizontal-overflow="true"`)) ||
+		bytes.Contains(dom, []byte(`data-browser-expert-storage-anchor="false"`)) ||
+		bytes.Contains(dom, []byte(`data-browser-expert-storage-help="false"`)) {
 		t.Fatalf("browser smoke fallo\n%s", string(dom))
 	}
 
@@ -101,9 +103,15 @@ window.addEventListener('load', function(){
       var nativeRequired = !!document.querySelector('[required]');
       var nativeEnglish = text.indexOf(['Please','fill','out','this','field'].join(' ')) !== -1;
       var horizontalOverflow = document.documentElement.scrollWidth > window.innerWidth + 4;
-      document.body.setAttribute('data-browser-smoke', hasSpanishError && !nativeRequired && !nativeEnglish && !horizontalOverflow ? 'ok' : 'failed');
+      var storageControl = document.querySelector('[name="datos.storage.5.tipo"]');
+      var storageLabel = storageControl ? storageControl.closest('label') : null;
+      var storageGuideLink = !!(storageLabel && storageLabel.querySelector('.guide-field-link[href="/nueva-app/guia#modo-experto-preferencia-de-persistencia"]'));
+      var storageHelp = !!(storageLabel && storageLabel.querySelector('.help-text'));
+      document.body.setAttribute('data-browser-smoke', hasSpanishError && !nativeRequired && !nativeEnglish && !horizontalOverflow && storageGuideLink && storageHelp ? 'ok' : 'failed');
       document.body.setAttribute('data-browser-native-required', String(nativeRequired));
       document.body.setAttribute('data-browser-horizontal-overflow', String(horizontalOverflow));
+      document.body.setAttribute('data-browser-expert-storage-anchor', String(storageGuideLink));
+      document.body.setAttribute('data-browser-expert-storage-help', String(storageHelp));
     }, 300);
   }, 300);
 });

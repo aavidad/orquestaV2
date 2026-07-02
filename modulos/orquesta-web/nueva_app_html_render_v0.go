@@ -1338,7 +1338,47 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       'preferencias_tecnicas.arquitectura':'preferencias-tecnicas-arquitectura',
       datos:'modo-basico-datos-db-required',
       'datos.db_required':'modo-basico-datos-db-required',
+      'datos.necesidad_funcional':'modo-basico-datos-necesidad-funcional',
+      'datos.tipos_datos':'modo-basico-datos-tipos-datos',
+      'datos.sensibilidad':'modo-basico-datos-sensibilidad',
+      'datos.retencion':'modo-basico-datos-retencion',
+      'datos.tipos_detallados.nombre':'modo-experto-tipos-de-datos-multiples',
+      'datos.tipos_detallados.proposito':'modo-experto-tipos-de-datos-multiples',
+      'datos.tipos_detallados.sensibilidad':'modo-experto-sensibilidad-por-tipo',
+      'datos.tipos_detallados.retencion':'modo-experto-tipos-de-datos-multiples',
+      'datos.tipos_detallados.volumen':'modo-experto-tipos-de-datos-multiples',
+      'datos.tipos_detallados.restricciones':'modo-experto-requisitos-de-datos-avanzados',
+      'datos.fuentes.nombre':'modo-experto-requisitos-de-datos-avanzados',
+      'datos.fuentes.tipo':'modo-experto-requisitos-de-datos-avanzados',
+      'datos.fuentes.proposito':'modo-experto-requisitos-de-datos-avanzados',
+      'datos.fuentes.owner':'modo-experto-requisitos-de-datos-avanzados',
+      'datos.fuentes.frecuencia':'modo-experto-requisitos-de-datos-avanzados',
+      'datos.fuentes.restricciones':'modo-experto-requisitos-de-datos-avanzados',
+      'datos.storage.tipo':'modo-experto-preferencia-de-persistencia',
+      'datos.storage.proposito':'modo-experto-preferencia-de-persistencia',
+      'datos.storage.requerido':'modo-experto-preferencia-de-persistencia',
+      'datos.storage.restricciones':'modo-experto-preferencia-de-persistencia',
+      'datos.operacion.criticidad':'modo-experto-requisitos-de-datos-avanzados',
+      'datos.operacion.disponibilidad':'modo-experto-requisitos-de-datos-avanzados',
+      'datos.operacion.rpo':'modo-experto-requisitos-de-datos-avanzados',
+      'datos.operacion.rto':'modo-experto-requisitos-de-datos-avanzados',
+      'datos.operacion.auditoria':'modo-experto-requisitos-de-datos-avanzados',
+      'datos.operacion.restricciones':'modo-experto-requisitos-de-datos-avanzados',
       integraciones:'modo-basico-integraciones-0-tipo',
+      'integraciones.tipo':'modo-basico-integraciones-0-tipo',
+      'integraciones.nombre':'modo-basico-integraciones-0-nombre',
+      'integraciones.proposito':'modo-basico-integraciones-0-proposito',
+      'integraciones.direccion':'modo-experto-varias-integraciones',
+      'integraciones.auth':'modo-experto-varias-integraciones',
+      'integraciones.data_scope':'modo-experto-varias-integraciones',
+      'integraciones.criticidad':'modo-experto-varias-integraciones',
+      'integraciones.requerido':'modo-basico-integraciones-0-requerido',
+      'integraciones.restricciones':'modo-basico-integraciones-0-restricciones',
+      'integraciones.0.tipo':'modo-basico-integraciones-0-tipo',
+      'integraciones.0.nombre':'modo-basico-integraciones-0-nombre',
+      'integraciones.0.proposito':'modo-basico-integraciones-0-proposito',
+      'integraciones.0.requerido':'modo-basico-integraciones-0-requerido',
+      'integraciones.0.restricciones':'modo-basico-integraciones-0-restricciones',
       deploy:'deploy-target',
       'deploy.target':'deploy-target',
       calidad:'calidad-pruebas',
@@ -1347,13 +1387,14 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       agentes:'agentes-revision-humana',
       restricciones:'restricciones'
     };
+    function canonicalGuideFieldName(name){return String(name||'').replace(/\.\d+\./g,'.');}
     function addGuideLinks(){
       const linkText=wizard.dataset.guideFieldLink||'';
       if(!linkText)return;
       wizard.querySelectorAll('label').forEach(label=>{
         const control=label.querySelector('input[name],select[name],textarea[name]');
         if(!control)return;
-        const anchor=guideAnchors[control.name];
+        const anchor=guideAnchors[control.name]||guideAnchors[canonicalGuideFieldName(control.name)];
         if(!anchor||label.querySelector('.guide-field-link'))return;
         const link=document.createElement('a');
         link.className='guide-field-link';

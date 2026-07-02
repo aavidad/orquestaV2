@@ -898,7 +898,7 @@ eventos de auditoria 5 anos; adjuntos 18 meses; borrado bajo solicitud
 
 El bloque experto debe permitir varias filas de tipo de dato. Cada fila debe
 describir dominio, sensibilidad y ciclo de vida sin obligar a modelar tablas.
-El HTML actual muestra cuatro filas, el mismo limite que parsea el endpoint v0.
+El HTML actual muestra seis filas, el mismo limite que parsea el endpoint v0.
 
 Campos recomendados:
 
@@ -960,7 +960,7 @@ Reglas:
 
 La preferencia de persistencia describe forma de almacenamiento o consulta. No
 es proveedor ni decision cerrada de adaptador.
-El HTML actual muestra cuatro preferencias de almacenamiento, el mismo limite
+El HTML actual muestra seis preferencias de almacenamiento, el mismo limite
 que parsea el endpoint v0.
 
 Opciones recomendadas:
@@ -1762,9 +1762,13 @@ Claves actuales por seccion:
 - origen: `plataformas.*`, `project_source.*`;
 - tecnologia: `preferencias_tecnicas.*`, `i18n.*`;
 - datos: `datos.db_required`, `datos.necesidad_funcional`,
-  `datos.tipos_datos`, `datos.sensibilidad`;
+  `datos.tipos_datos`, `datos.sensibilidad`, `datos.retencion`;
+- datos expertos: `datos.tipos_detallados.*`, `datos.fuentes.*`,
+  `datos.storage.*` y `datos.operacion.*`;
 - integraciones: `integraciones.0.tipo`, `integraciones.0.nombre`,
-  `integraciones.0.proposito`, `integraciones.0.requerido`;
+  `integraciones.0.proposito`, `integraciones.0.requerido`,
+  `integraciones.0.restricciones` y campos expertos indexados
+  `integraciones.N.*`;
 - calidad/deploy/agentes: `calidad.*`, `deploy.*`, `agentes.*`,
   `restricciones`.
 

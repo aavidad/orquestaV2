@@ -67,6 +67,11 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		`href='/nueva-app/guia#'+anchor`,
 		`data-guide-field-link="Ver guia larga"`,
 		`guideAnchors`,
+		`function canonicalGuideFieldName(name)`,
+		`guideAnchors[control.name]||guideAnchors[canonicalGuideFieldName(control.name)]`,
+		`'datos.tipos_detallados.nombre':'modo-experto-tipos-de-datos-multiples'`,
+		`'datos.storage.tipo':'modo-experto-preferencia-de-persistencia'`,
+		`'integraciones.tipo':'modo-basico-integraciones-0-tipo'`,
 		`data-help="Vuelve al paso anterior`,
 		`data-help="Avanza al siguiente paso`,
 		`/api/v0/apps/intake/guided-turn`,
@@ -241,6 +246,29 @@ func TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar(t *testing.T)
 		strings.Contains(body, `data-help="Texto no disponible.`) ||
 		strings.Contains(body, `data-help="Text unavailable.`) {
 		t.Fatalf("GET HTML contiene tooltip vacio o generico\n%s", body)
+	}
+}
+
+func TestNuevaAppHTMLHandlerV0AnchorsCubrenCamposExpertosIndexados(t *testing.T) {
+	handler := NewNuevaAppHTMLHandlerV0(&fakeNuevaAppClientV0{})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/nueva-app?locale=es", nil)
+
+	handler.ServeHTTP(rec, req)
+
+	body := rec.Body.String()
+	for _, want := range []string{
+		`name="datos.tipos_detallados.5.nombre"`,
+		`name="datos.storage.5.tipo"`,
+		`name="integraciones.5.tipo"`,
+		`function canonicalGuideFieldName(name){return String(name||'').replace(/\.\d+\./g,'.');}`,
+		`'datos.storage.tipo':'modo-experto-preferencia-de-persistencia'`,
+		`'datos.tipos_detallados.nombre':'modo-experto-tipos-de-datos-multiples'`,
+		`'integraciones.tipo':'modo-basico-integraciones-0-tipo'`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("HTML sin anchor/help experto esperado %q\n%s", want, body)
+		}
 	}
 }
 
