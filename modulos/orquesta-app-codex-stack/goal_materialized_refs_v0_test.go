@@ -90,6 +90,40 @@ func TestStackGoalMaterializedRefsSourceV0DetectaArtefactosParcialesSinReceiptTe
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0PublicaChecklistEsperadoDesdeSpec(t *testing.T) {
+	projectDir := t.TempDir()
+	topicDir := filepath.Join(projectDir, "temas", "tema_038")
+	if err := os.MkdirAll(topicDir, 0o700); err != nil {
+		t.Fatalf("mkdir topic: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "borrador_reutilizable.md"), []byte("# Borrador\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-checklist-001", "temas/tema_038")
+	state.Spec.ArtifactContracts = []orquestagoal.GoalArtifactContractV0{{
+		ArtifactRef:  "artifact-ref-tema-038-ampliado",
+		ArtifactType: "topic_text",
+		Required:     true,
+	}}
+	state.Spec.RequiredTests = []orquestagoal.GoalRequiredTestV0{{
+		TestRef: "test-ref-tema-038-qa",
+	}}
+	state.Spec.ClosurePolicy.RequiredEvidenceRefs = []string{"evidence-ref-tema-038-qa"}
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		!containsStringV0(result.ExpectedReceiptRefs, "expected-artifact-ref:artifact-ref-tema-038-ampliado") ||
+		!containsStringV0(result.ExpectedReceiptRefs, "expected-required-test-ref:test-ref-tema-038-qa") ||
+		!containsStringV0(result.ExpectedReceiptRefs, "expected-evidence-ref:evidence-ref-tema-038-qa") {
+		t.Fatalf("checklist esperado no proyectado: ok=%v result=%+v", ok, result)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0NoSaleDelProjectWorkDir(t *testing.T) {
 	projectDir := t.TempDir()
 	state := orquestagoal.GoalWorkStateV0{

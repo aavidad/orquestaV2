@@ -149,6 +149,7 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 		result.EvidenceRefs = append(result.EvidenceRefs, "evidence-ref-goal-materialized-checkpoint-detected")
 		result.IssueCodes = append(result.IssueCodes, "goal_first_materialized_checkpoint_detected")
 	}
+	result.ExpectedReceiptRefs = append(result.ExpectedReceiptRefs, goalMaterializedExpectedChecklistRefsV0(state)...)
 	result.ExpectedReceiptRefs = compactStringsV0(result.ExpectedReceiptRefs)
 	result.EvidenceRefs = compactStringsV0(result.EvidenceRefs)
 	result.IssueCodes = compactStringsV0(result.IssueCodes)
@@ -318,6 +319,26 @@ func goalMaterializedGoalResultRequiredTestEvidenceMissingV0(result orquestagoal
 		}
 	}
 	return false
+}
+
+func goalMaterializedExpectedChecklistRefsV0(state orquestagoal.GoalWorkStateV0) []string {
+	refs := make([]string, 0, len(state.Spec.ArtifactContracts)+len(state.Spec.RequiredTests)+len(state.Spec.ClosurePolicy.RequiredEvidenceRefs))
+	for _, contract := range state.Spec.ArtifactContracts {
+		if ref := strings.TrimSpace(contract.ArtifactRef); ref != "" {
+			refs = append(refs, "expected-artifact-ref:"+safeGoalMaterializedRefPartV0(ref))
+		}
+	}
+	for _, test := range state.Spec.RequiredTests {
+		if ref := strings.TrimSpace(test.TestRef); ref != "" {
+			refs = append(refs, "expected-required-test-ref:"+safeGoalMaterializedRefPartV0(ref))
+		}
+	}
+	for _, ref := range state.Spec.ClosurePolicy.RequiredEvidenceRefs {
+		if ref = strings.TrimSpace(ref); ref != "" {
+			refs = append(refs, "expected-evidence-ref:"+safeGoalMaterializedRefPartV0(ref))
+		}
+	}
+	return compactStringsV0(refs)
 }
 
 func goalMaterializedFileLooksLikeArtifactV0(
