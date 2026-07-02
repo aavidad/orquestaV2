@@ -285,6 +285,7 @@ func (executor CodexStackRunSupervisorExecutorV0) goalFirstRunSupervisorResultV0
 		Message:      "run_ref pertenece a goal-first; usar orquesta.apps.observe_director_goal.v0 o /api/v0/apps/director/goal/observe",
 		EvidenceRefs: evidenceRefs,
 	}}
+	result = executor.maybePrepareGoalFirstResidentReworkV0(ctx, input, state, result)
 	return result, true
 }
 

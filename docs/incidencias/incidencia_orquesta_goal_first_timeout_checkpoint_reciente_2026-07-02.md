@@ -33,6 +33,13 @@ publica `ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS` en
 `effective_config`, lo normaliza como politica de progreso y lo inyecta en
 `autoprogramming/status` y `runs/control`. El default conserva `100000` tokens.
 
+Cuando `runs/control` u otra observacion deja el `GoalWorkStateV0` en estado
+terminal replanificable por `checkpoint_only_high_consumption` o
+`goal_active_no_checkpoint_high_consumption`, `runs.supervisor` en
+`resident_mode` ya no se queda solo en `observe_goal`: prepara un rework goal
+acotado por `GoalReworkLauncher`, devuelve `repair_run_refs` y marca el estado
+fuente con la ref del follow-up para no relanzarlo en ejecuciones repetidas.
+
 ## Pruebas
 
 - `TestMCPAutoprogrammingStatusExecutorV0GoalActiveTimeoutConCheckpointRecienteNoReplanificaAun`
@@ -40,4 +47,7 @@ publica `ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS` en
 - `TestMCPRunControlExecutorV0StopForcedRespetaUmbralConfiguradoV0`
 - `TestBuildStackV0PropagaDiagnosticosAutoprogramacionABindingsV0`
 - `TestServerConfigFromEnvV0PublicaUmbralCheckpointGoalConfigurableV0`
+- `TestRunSupervisorGoalFirstResidentPreparaReworkPorCheckpointHighConsumptionV0`
+- `TestRunSupervisorGoalFirstResidentReworkEsIdempotenteV0`
+- `TestRunSupervisorGoalFirstNoResidentNoLanzaReworkV0`
 - `go test -count=1 ./modulos/orquesta-mcp`

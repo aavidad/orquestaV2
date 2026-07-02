@@ -31,6 +31,10 @@ de replan/corte.
 - `runs/control stop forced=true` reconcilia el estado Goal durable a
   `blocked` replanificable si el backend activo de alto consumo deja de estar
   vivo tras el control, tanto sin checkpoint como con solo checkpoint.
+- `runs.supervisor` en `resident_mode` detecta esos estados terminales
+  replanificables, lanza un follow-up por `GoalReworkLauncher`, devuelve
+  `repair_run_refs` y guarda una marca en el goal fuente para que la accion sea
+  idempotente.
 
 ## Evidencia
 
@@ -39,6 +43,7 @@ Tests:
 ```bash
 go test -count=1 ./cmd/orquesta-server -run 'TestServerCodexAppServerGoalBackendV0(ExponeAltoConsumoActivo|BloqueaGoalActivoPorTimeout|ObservaUsageLimitedConCausaOperable)'
 go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPAutoprogrammingStatusExecutorV0(CheckpointOnlyHighConsumptionEsBloqueante|SinCheckpointHighConsumptionEsBloqueante)|TestMCPRunControlExecutorV0StopForcedReconcilesGoalHighConsumption(CheckpointOnly|SinCheckpoint)'
+go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestRunSupervisorGoalFirst(ResidentPreparaReworkPorCheckpointHighConsumption|ResidentReworkEsIdempotente|NoResidentNoLanzaRework)V0'
 git diff --check
 ```
 
