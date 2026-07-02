@@ -31,6 +31,8 @@ const (
 	goalMaterializedPhase0NonPublishableEvidence   = "evidence-ref-goal-materialized-phase0-complete-non-publishable"
 	goalMaterializedRequiredTestEvidenceMissing    = "evidence-ref-goal-materialized-required-test-evidence-missing"
 	goalMaterializedRequiredTestEvidenceDetected   = "evidence-ref-goal-materialized-required-test-evidence-detected"
+	goalMaterializedValidArtifactListEvidence      = "evidence-ref-goal-materialized-valid-artifact-list"
+	goalMaterializedInvalidArtifactListEvidence    = "evidence-ref-goal-materialized-invalid-artifact-list"
 )
 
 var errGoalMaterializedRefsScanDoneV0 = errors.New("goal_materialized_refs_scan_done")
@@ -43,17 +45,19 @@ type stackGoalMaterializedRefsSourceV0 struct {
 }
 
 type goalMaterializedRefsScanV0 struct {
-	Result             orquestamcp.MCPDirectorGoalMaterializedRefsV0
-	FilesScanned       int
-	HasArtifact        bool
-	HasQAPass          bool
-	HasQAFail          bool
-	HasTerminalReceipt bool
-	HasPhase0Delivery  bool
-	TerminalResult     *orquestagoal.GoalWorkResultV0
-	ArtifactPaths      []string
-	MissingTestKeys    []string
-	PassedTestKeys     []string
+	Result               orquestamcp.MCPDirectorGoalMaterializedRefsV0
+	FilesScanned         int
+	HasArtifact          bool
+	HasQAPass            bool
+	HasQAFail            bool
+	HasTerminalReceipt   bool
+	HasPhase0Delivery    bool
+	TerminalResult       *orquestagoal.GoalWorkResultV0
+	ArtifactPaths        []string
+	ValidArtifactPaths   []string
+	InvalidArtifactPaths []string
+	MissingTestKeys      []string
+	PassedTestKeys       []string
 }
 
 func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedRefsV0(
@@ -129,6 +133,18 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 		for _, path := range omitted {
 			result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedArtifactPathOmittedRefV0(state.RunRef, path))
 		}
+	}
+	for _, path := range scan.ValidArtifactPaths {
+		result.ArtifactRefs = append(result.ArtifactRefs, goalMaterializedValidArtifactRefV0(state.RunRef, path))
+	}
+	if len(scan.ValidArtifactPaths) > 0 {
+		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedValidArtifactListEvidence)
+	}
+	for _, path := range scan.InvalidArtifactPaths {
+		result.ArtifactRefs = append(result.ArtifactRefs, goalMaterializedInvalidArtifactRefV0(state.RunRef, path))
+	}
+	if len(scan.InvalidArtifactPaths) > 0 {
+		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedInvalidArtifactListEvidence)
 	}
 	if source.RepairMissingTerminalReceipt &&
 		source.GoalStateStore != nil &&
@@ -274,6 +290,10 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalMaterializedFileV0(
 		scan.HasQAPass = true
 		scan.Result.EvidenceRefs = append(scan.Result.EvidenceRefs, goalMaterializedQAPassRefV0(projectRoot, path, state.RunRef))
 	}
+	if validPaths, invalidPaths, ok := goalMaterializedReadQAArtifactPathListsV0(projectRoot, path, base, info, state); ok {
+		scan.ValidArtifactPaths = append(scan.ValidArtifactPaths, validPaths...)
+		scan.InvalidArtifactPaths = append(scan.InvalidArtifactPaths, invalidPaths...)
+	}
 	if goalMaterializedFileLooksLikeQAFailReportV0(projectRoot, path, base, info, state) {
 		scan.HasQAFail = true
 		scan.Result.EvidenceRefs = append(scan.Result.EvidenceRefs, goalMaterializedQAFailRefV0(projectRoot, path, state.RunRef))
@@ -292,6 +312,8 @@ func mergeGoalMaterializedRefsScanV0(
 	current.Result.EvidenceRefs = compactStringsV0(append(current.Result.EvidenceRefs, next.Result.EvidenceRefs...))
 	current.Result.IssueCodes = compactStringsV0(append(current.Result.IssueCodes, next.Result.IssueCodes...))
 	current.ArtifactPaths = compactStringsV0(append(current.ArtifactPaths, next.ArtifactPaths...))
+	current.ValidArtifactPaths = compactStringsV0(append(current.ValidArtifactPaths, next.ValidArtifactPaths...))
+	current.InvalidArtifactPaths = compactStringsV0(append(current.InvalidArtifactPaths, next.InvalidArtifactPaths...))
 	current.FilesScanned += next.FilesScanned
 	current.HasArtifact = current.HasArtifact || next.HasArtifact
 	current.HasQAPass = current.HasQAPass || next.HasQAPass
@@ -543,6 +565,155 @@ func goalMaterializedFileLooksLikeQAFailReportV0(
 		return false
 	}
 	return goalMaterializedJSONLooksLikeQAFailForContextV0(projectRoot, path, base, state, payload)
+}
+
+func goalMaterializedReadQAArtifactPathListsV0(
+	projectRoot string,
+	path string,
+	base string,
+	info fs.FileInfo,
+	state orquestagoal.GoalWorkStateV0,
+) ([]string, []string, bool) {
+	if info == nil || info.IsDir() || info.Size() <= 0 || info.Size() > goalMaterializedQAScanMaxBytesV0 {
+		return nil, nil, false
+	}
+	if !goalMaterializedPathLooksLikeQAReportV0(projectRoot, path, base) ||
+		!strings.EqualFold(filepath.Ext(base), ".json") {
+		return nil, nil, false
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, nil, false
+	}
+	var payload any
+	if json.Unmarshal(raw, &payload) != nil {
+		return nil, nil, false
+	}
+	if !goalMaterializedStateOrReportLooksLikeOPESV0(projectRoot, path, base, state, payload) &&
+		!goalMaterializedJSONLooksLikeQAPassV0(payload) &&
+		!goalMaterializedJSONLooksLikeQAFailV0(payload) {
+		return nil, nil, false
+	}
+	valid, invalid := goalMaterializedCollectQAArtifactPathListsV0(payload)
+	valid = goalMaterializedNormalizeQAArtifactPathsV0(valid)
+	invalid = goalMaterializedNormalizeQAArtifactPathsV0(invalid)
+	return valid, invalid, len(valid)+len(invalid) > 0
+}
+
+func goalMaterializedCollectQAArtifactPathListsV0(value any) ([]string, []string) {
+	valid := []string{}
+	invalid := []string{}
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, item := range typed {
+			key = goalMaterializedCanonicalQAKeyV0(key)
+			switch {
+			case goalMaterializedQAArtifactListKeyV0(key, true):
+				valid = append(valid, goalMaterializedStringsFromQAArtifactValueV0(item)...)
+			case goalMaterializedQAArtifactListKeyV0(key, false):
+				invalid = append(invalid, goalMaterializedStringsFromQAArtifactValueV0(item)...)
+			default:
+				if path := goalMaterializedPathFromQAArtifactObjectV0(typed); path != "" {
+					if goalMaterializedQAArtifactObjectValidV0(typed) {
+						valid = append(valid, path)
+					} else if goalMaterializedQAArtifactObjectInvalidV0(typed) {
+						invalid = append(invalid, path)
+					}
+				}
+			}
+			nestedValid, nestedInvalid := goalMaterializedCollectQAArtifactPathListsV0(item)
+			valid = append(valid, nestedValid...)
+			invalid = append(invalid, nestedInvalid...)
+		}
+	case []any:
+		for _, item := range typed {
+			nestedValid, nestedInvalid := goalMaterializedCollectQAArtifactPathListsV0(item)
+			valid = append(valid, nestedValid...)
+			invalid = append(invalid, nestedInvalid...)
+		}
+	}
+	return compactStringsV0(valid), compactStringsV0(invalid)
+}
+
+func goalMaterializedQAArtifactListKeyV0(key string, valid bool) bool {
+	validKeys := map[string]bool{
+		"valid_artifact_paths": true, "valid_artifacts": true, "valid_files": true,
+		"artifact_paths_valid": true, "artifact_refs_valid": true,
+		"artefactos_validos": true, "archivos_validos": true, "ficheros_validos": true,
+	}
+	invalidKeys := map[string]bool{
+		"invalid_artifact_paths": true, "invalid_artifacts": true, "invalid_files": true,
+		"artifact_paths_invalid": true, "artifact_refs_invalid": true,
+		"rejected_artifact_paths": true, "rejected_artifacts": true,
+		"artefactos_invalidos": true, "archivos_invalidos": true, "ficheros_invalidos": true,
+		"artefactos_rechazados": true, "archivos_rechazados": true,
+	}
+	if valid {
+		return validKeys[key]
+	}
+	return invalidKeys[key]
+}
+
+func goalMaterializedStringsFromQAArtifactValueV0(value any) []string {
+	out := []string{}
+	switch typed := value.(type) {
+	case string:
+		out = append(out, typed)
+	case []any:
+		for _, item := range typed {
+			out = append(out, goalMaterializedStringsFromQAArtifactValueV0(item)...)
+		}
+	case map[string]any:
+		if path := goalMaterializedPathFromQAArtifactObjectV0(typed); path != "" {
+			out = append(out, path)
+		}
+	}
+	return compactStringsV0(out)
+}
+
+func goalMaterializedPathFromQAArtifactObjectV0(value map[string]any) string {
+	for _, key := range []string{"path", "artifact_path", "file", "file_path", "rel_path", "relative_path", "ruta", "fichero"} {
+		if text, ok := value[key].(string); ok && strings.TrimSpace(text) != "" {
+			return text
+		}
+	}
+	return ""
+}
+
+func goalMaterializedQAArtifactObjectValidV0(value map[string]any) bool {
+	for _, key := range []string{"valid", "passed", "ok"} {
+		if item, ok := value[key]; ok && goalMaterializedQAPassValueTruthyV0(item) {
+			return true
+		}
+	}
+	if status, ok := value["status"]; ok && goalMaterializedQAPassValueTruthyV0(status) {
+		return true
+	}
+	return false
+}
+
+func goalMaterializedQAArtifactObjectInvalidV0(value map[string]any) bool {
+	for _, key := range []string{"valid", "passed", "ok"} {
+		if item, ok := value[key]; ok && goalMaterializedQAPassValueFalseyV0(item) {
+			return true
+		}
+	}
+	if status, ok := value["status"]; ok && goalMaterializedQAPassValueFalseyV0(status) {
+		return true
+	}
+	return false
+}
+
+func goalMaterializedNormalizeQAArtifactPathsV0(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, path := range paths {
+		path = filepath.ToSlash(filepath.Clean(strings.TrimSpace(path)))
+		if path == "" || path == "." || strings.HasPrefix(path, "../") || filepath.IsAbs(path) {
+			continue
+		}
+		out = append(out, path)
+	}
+	return compactStringsV0(out)
 }
 
 func goalMaterializedPathLooksLikeQAReportV0(
@@ -986,6 +1157,20 @@ func goalMaterializedArtifactPathOmittedRefV0(
 	path string,
 ) string {
 	return goalMaterializedArtifactPathsOmittedEvidence + ":" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(path)
+}
+
+func goalMaterializedValidArtifactRefV0(
+	runRef string,
+	path string,
+) string {
+	return "artifact-ref-materialized-valid:" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(path)
+}
+
+func goalMaterializedInvalidArtifactRefV0(
+	runRef string,
+	path string,
+) string {
+	return "artifact-ref-materialized-invalid:" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(path)
 }
 
 func goalMaterializedQAFailRefV0(

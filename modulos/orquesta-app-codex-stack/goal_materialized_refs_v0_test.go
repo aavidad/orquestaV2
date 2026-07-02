@@ -473,7 +473,7 @@ func TestStackGoalMaterializedRefsSourceV0DetectaQAFailedPublicTextEnContextoOPE
 	}
 	if err := os.WriteFile(
 		filepath.Join(validationDir, "informe_qa.json"),
-		[]byte(`{"qa_passes":{"extension_pass":true,"official_text_qa_pass":false,"strict_editorial_qa_pass":false},"findings":["texto publico no apto"]}`),
+		[]byte(`{"qa_passes":{"extension_pass":true,"official_text_qa_pass":false,"strict_editorial_qa_pass":false},"valid_artifact_paths":["temas/tema_034/fuentes.md"],"invalid_artifact_paths":["temas/tema_034/tema_ampliado.md"],"findings":["texto publico no apto"]}`),
 		0o600,
 	); err != nil {
 		t.Fatalf("write qa: %v", err)
@@ -490,7 +490,11 @@ func TestStackGoalMaterializedRefsSourceV0DetectaQAFailedPublicTextEnContextoOPE
 		!containsStringV0(result.IssueCodes, "qa_failed_public_text") ||
 		containsStringV0(result.IssueCodes, "missing_terminal_receipt_after_artifacts_pass") ||
 		!containsStringPrefixForTestV0(result.ArtifactRefs, "artifact-ref-materialized:") ||
-		!containsStringPrefixForTestV0(result.EvidenceRefs, "evidence-ref-goal-materialized-qa-failed-public-text:") {
+		!containsStringPrefixForTestV0(result.ArtifactRefs, "artifact-ref-materialized-valid:") ||
+		!containsStringPrefixForTestV0(result.ArtifactRefs, "artifact-ref-materialized-invalid:") ||
+		!containsStringPrefixForTestV0(result.EvidenceRefs, "evidence-ref-goal-materialized-qa-failed-public-text:") ||
+		!containsStringV0(result.EvidenceRefs, "evidence-ref-goal-materialized-valid-artifact-list") ||
+		!containsStringV0(result.EvidenceRefs, "evidence-ref-goal-materialized-invalid-artifact-list") {
 		t.Fatalf("QA fail OPES debe conservar artefacto y pedir rework: ok=%v result=%+v", ok, result)
 	}
 }
