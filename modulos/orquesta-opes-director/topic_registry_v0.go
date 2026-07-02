@@ -132,7 +132,14 @@ func topicRegistryOperationalStatusForRecordV0(record OPESCausalArtifactRecordV0
 	if refs := topicRegistryQualityPendingRefsForRecordV0(record); len(refs) > 0 {
 		return "needs_rework"
 	}
-	if explicit, ok := topicRegistryExplicitOperationalStatusV0(status); ok {
+	explicit, hasExplicit := topicRegistryExplicitOperationalStatusV0(status)
+	if hasExplicit && (explicit == "blocked" || explicit == "needs_rework") {
+		return explicit
+	}
+	if refs := topicRegistryLifecyclePendingRefsForRecordV0(record); len(refs) > 0 {
+		return "waiting"
+	}
+	if hasExplicit {
 		return explicit
 	}
 	normalized := strings.ToLower(strings.TrimSpace(status))

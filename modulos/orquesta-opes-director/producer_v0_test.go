@@ -572,6 +572,7 @@ func TestProduceOPESCausalJobsV0GoalFirstTextoQAPassSinCheckpointNoAsientaTemaV0
 	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
 	if !ok ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "pendiente_continuar") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status", "waiting") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", topicRegistryGoalFirstCheckpointRequiredRefV0) ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "goal_first_lifecycle_status", topicRegistryLifecycleHeartbeatOnlyV0) ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "goal_first_heartbeat_refs", "heartbeat-ref-goal-first-tema-032") ||
