@@ -268,19 +268,27 @@ type serverCodeContextToolOwnerObserverV0 interface {
 	ObserveCodeContextToolOwnerV0(context.Context, orquestacontext.CodeContextToolLeaseV0, time.Time) (orquestacontext.CodeContextToolLeaseObservationV0, error)
 }
 
+type serverCodeContextToolProcessGuardRunnerV0 interface {
+	RunOnceV0(context.Context) (serverCodeContextToolProcessGuardResultV0, error)
+}
+
 type serverCodeContextToolWatchdogV0 struct {
-	Leases   orquestacontext.CodeContextToolLeaseListPortV0
-	Finisher orquestacontext.CodeContextToolLeasePortV0
-	Stopper  serverCodeContextToolOwnerStopperV0
-	Observer serverCodeContextToolOwnerObserverV0
-	Now      func() time.Time
+	Leases       orquestacontext.CodeContextToolLeaseListPortV0
+	Finisher     orquestacontext.CodeContextToolLeasePortV0
+	Stopper      serverCodeContextToolOwnerStopperV0
+	Observer     serverCodeContextToolOwnerObserverV0
+	ProcessGuard serverCodeContextToolProcessGuardRunnerV0
+	Now          func() time.Time
 }
 
 type serverCodeContextToolWatchdogResultV0 struct {
-	Observed int
-	Stopped  int
-	Errors   int
-	Evidence []string
+	Observed              int
+	Stopped               int
+	Errors                int
+	ProcessObserved       int
+	ProcessOrphans        int
+	ProcessOrphansStopped int
+	Evidence              []string
 }
 
 func (watchdog serverCodeContextToolWatchdogV0) RunOnceV0(ctx context.Context) (serverCodeContextToolWatchdogResultV0, error) {
@@ -353,6 +361,23 @@ func (watchdog serverCodeContextToolWatchdogV0) RunOnceV0(ctx context.Context) (
 		result.Stopped++
 		result.Evidence = append(result.Evidence, evidence...)
 	}
+	if watchdog.ProcessGuard != nil {
+		processResult, processErr := watchdog.ProcessGuard.RunOnceV0(ctx)
+		if processErr != nil {
+			if err := ctx.Err(); err != nil {
+				return result, err
+			}
+			result.Errors++
+			result.Evidence = append(result.Evidence, "evidence-ref-code-context-codebase-memory-process-guard-error-"+compactExternalBridgeErrorCodeV0(processErr))
+		} else {
+			result.ProcessObserved += processResult.Observed
+			result.ProcessOrphans += processResult.Orphans
+			result.ProcessOrphansStopped += processResult.OrphansStopped
+			result.Errors += processResult.Errors
+			result.Evidence = append(result.Evidence, processResult.Evidence...)
+		}
+	}
+	result.Evidence = compactEnvlessStringsV0(result.Evidence)
 	return result, nil
 }
 

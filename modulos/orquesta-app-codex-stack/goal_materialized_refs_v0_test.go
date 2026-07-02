@@ -84,6 +84,68 @@ func TestStackGoalMaterializedRefsSourceV0NoSaleDelProjectWorkDir(t *testing.T) 
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0DetectaReceiptTerminalAusenteTrasQAPass(t *testing.T) {
+	projectDir := t.TempDir()
+	topicDir := filepath.Join(projectDir, "temas", "tema_029")
+	validationDir := filepath.Join(topicDir, "09_validacion")
+	if err := os.MkdirAll(validationDir, 0o700); err != nil {
+		t.Fatalf("mkdir validation: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "tema_ampliado.md"), []byte("# Tema\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(validationDir, "informe_qa.json"),
+		[]byte(`{"qa_passes":{"extension_pass":true,"official_text_qa_pass":true,"strict_editorial_qa_pass":true}}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write qa: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-missing-receipt-001", "temas/tema_029")
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		!containsStringV0(result.IssueCodes, "missing_terminal_receipt_after_artifacts_pass") ||
+		!containsStringV0(result.EvidenceRefs, "evidence-ref-goal-materialized-missing-terminal-receipt-after-artifacts-pass") ||
+		len(result.ExpectedReceiptRefs) != 2 {
+		t.Fatalf("ok=%v result=%+v", ok, result)
+	}
+	if !containsStringPrefixForTestV0(result.EvidenceRefs, "evidence-ref-goal-materialized-qa-pass:") {
+		t.Fatalf("evidence=%+v", result.EvidenceRefs)
+	}
+}
+
+func TestStackGoalMaterializedRefsSourceV0NoAceptaQAPassPorTextoLibre(t *testing.T) {
+	projectDir := t.TempDir()
+	topicDir := filepath.Join(projectDir, "temas", "tema_030")
+	validationDir := filepath.Join(topicDir, "09_validacion")
+	if err := os.MkdirAll(validationDir, 0o700); err != nil {
+		t.Fatalf("mkdir validation: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "tema_ampliado.md"), []byte("# Tema\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(validationDir, "informe_qa.md"), []byte("QA pass\n"), 0o600); err != nil {
+		t.Fatalf("write qa markdown: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-text-qa-001", "temas/tema_030")
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if ok && containsStringV0(result.IssueCodes, "missing_terminal_receipt_after_artifacts_pass") {
+		t.Fatalf("ok=%v result=%+v", ok, result)
+	}
+}
+
 func goalMaterializedRefsStateForTestV0(
 	t *testing.T,
 	runRef string,
@@ -111,4 +173,13 @@ func goalMaterializedRefsStateForTestV0(
 		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
 	}
 	return state
+}
+
+func containsStringPrefixForTestV0(values []string, prefix string) bool {
+	for _, value := range values {
+		if strings.HasPrefix(value, prefix) {
+			return true
+		}
+	}
+	return false
 }

@@ -79,6 +79,8 @@ const (
 	envCodebaseBrokerTimeoutMSV0                     = "ORQUESTA_CODEBASE_BROKER_TIMEOUT_MS"
 	envCodebaseBrokerStateDirV0                      = "ORQUESTA_CODEBASE_BROKER_STATE_DIR"
 	envCodebaseBrokerWatchdogEnabledV0               = "ORQUESTA_CODEBASE_BROKER_WATCHDOG_ENABLED"
+	envCodebaseBrokerWatchdogStopOrphansV0           = "ORQUESTA_CODEBASE_BROKER_WATCHDOG_STOP_ORPHANS"
+	envCodebaseBrokerWatchdogOrphanMinAgeSecondsV0   = "ORQUESTA_CODEBASE_BROKER_WATCHDOG_ORPHAN_MIN_AGE_SECONDS"
 	envCodebaseBrokerCommandV0                       = "ORQUESTA_CODEBASE_BROKER_COMMAND"
 	envCodebaseBrokerProjectNameV0                   = "ORQUESTA_CODEBASE_BROKER_PROJECT_NAME"
 
@@ -415,6 +417,16 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "codebase_broker",
 		Label:       "Watchdog contexto",
 		Description: "Habilita watchdog opt-in de leases codebase-memory-mcp con parada cooperativa por owner marker.",
+	},
+	envCodebaseBrokerWatchdogStopOrphansV0: {
+		Scope:       "codebase_broker",
+		Label:       "Parar huerfanos Codebase",
+		Description: "Permite al watchdog parar con SIGTERM procesos codebase-memory-mcp antiguos sin owner marker de Orquesta.",
+	},
+	envCodebaseBrokerWatchdogOrphanMinAgeSecondsV0: {
+		Scope:       "codebase_broker",
+		Label:       "Edad huerfano Codebase",
+		Description: "Edad minima en segundos antes de considerar huerfano un proceso codebase-memory-mcp sin owner marker.",
 	},
 	envCodebaseBrokerCommandV0: {
 		Scope:       "codebase_broker",

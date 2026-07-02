@@ -20,6 +20,7 @@ const (
 	mcpAutoprogrammingActionExternalWorkNoAgentMaterializedV0 = "external_work_accepted_no_agent_materialized"
 	mcpAutoprogrammingActionGoalFirstStateMissingV0           = "goal_first_state_missing"
 	mcpAutoprogrammingActionGoalFirstBlockedV0                = "goal_first_blocked"
+	mcpAutoprogrammingActionMissingTerminalReceiptV0          = MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0
 	mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0  = "goal_active_timeout_backend_active"
 	mcpAutoprogrammingEvidenceRunningStaleReconciledV0        = "evidence-ref-run-queue-running-stale-no-live-process-reconciled"
 	mcpAutoprogrammingEvidenceProviderUsageLimitRetryV0       = "evidence-ref-provider-usage-limit-retry-after"
@@ -28,6 +29,7 @@ const (
 	mcpAutoprogrammingEvidenceRunCoordinatorExecutedV0        = "evidence-ref-run-coordinator-executed"
 	mcpAutoprogrammingEvidenceGoalFirstStateMissingV0         = "evidence-ref-autoprogramming-status-goal-first-state-missing"
 	mcpAutoprogrammingEvidenceGoalFirstBlockedV0              = "evidence-ref-autoprogramming-status-goal-first-blocked"
+	mcpAutoprogrammingEvidenceMissingTerminalReceiptV0        = "evidence-ref-autoprogramming-status-missing-terminal-receipt-after-artifacts-pass"
 	mcpAutoprogrammingEvidenceGoalActiveTimeoutBackendV0      = "evidence-ref-autoprogramming-goal-active-timeout-backend-active"
 	mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0 = "evidence-ref-autoprogramming-checkpoint-only-high-consumption"
 	mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensV0   = int64(100000)
@@ -55,6 +57,52 @@ func buildMCPAutoprogrammingStaleRunningV0(
 		}
 	}
 	return out
+}
+
+func mcpAutoprogrammingMissingTerminalReceiptActionsV0(
+	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
+) []MCPAutoprogrammingActionableRunV0 {
+	out := make([]MCPAutoprogrammingActionableRunV0, 0)
+	for runRef, observed := range observedByRunRef {
+		if !mcpAutoprogrammingObservedMissingTerminalReceiptV0(observed) {
+			continue
+		}
+		action := MCPAutoprogrammingActionableRunV0{
+			Code:              mcpAutoprogrammingActionMissingTerminalReceiptV0,
+			Severity:          "blocked",
+			RunRef:            strings.TrimSpace(runRef),
+			RunStatus:         mcpAutoprogrammingObservedRunStatusV0(observedByRunRef, runRef),
+			Reason:            "missing_terminal_receipt_after_artifacts_pass: validated artifacts and QA pass evidence exist, but terminal goal/domain receipt is missing",
+			RecommendedAction: MCPGoalFirstRepairReceiptActionV0,
+			EvidenceRefs: []string{
+				mcpAutoprogrammingEvidenceMissingTerminalReceiptV0,
+			},
+		}
+		action = mcpAutoprogrammingActionableRunWithObservedStatsV0(action, observed)
+		action = mcpAutoprogrammingActionableRunWithObservedGoalV0(action, observed)
+		out = append(out, action)
+	}
+	return out
+}
+
+func mcpAutoprogrammingObservedMissingTerminalReceiptV0(
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	if observed == nil {
+		return false
+	}
+	if observed.Goal != nil && containsStringMCPV0(observed.Goal.IssueCodes, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
+		return true
+	}
+	if observed.Stats == nil {
+		return false
+	}
+	for _, issue := range observed.Stats.Progress.Issues {
+		if strings.TrimSpace(issue.Code) == MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0 {
+			return true
+		}
+	}
+	return false
 }
 
 func mcpAutoprogrammingGoalFirstBlockedActionsV0(
@@ -441,6 +489,7 @@ func mcpAutoprogrammingActionableRunWithObservedGoalV0(
 	action.ClosureNeedsRework = action.ClosureNeedsRework || goal.ClosureNeedsRework
 	action.ArtifactRefs = compactStringsMCPV0(append(action.ArtifactRefs, goal.ArtifactRefs...))
 	action.DomainReceiptRefs = compactStringsMCPV0(append(action.DomainReceiptRefs, goal.DomainReceiptRefs...))
+	action.ExpectedReceiptRefs = compactStringsMCPV0(append(action.ExpectedReceiptRefs, goal.ExpectedReceiptRefs...))
 	action.EvidenceRefs = compactStringsMCPV0(append(action.EvidenceRefs, goal.EvidenceRefs...))
 	return action
 }

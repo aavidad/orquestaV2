@@ -205,6 +205,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	blockedGoalActions, resolvedGoalActions := mcpAutoprogrammingGoalFirstBlockedActionsV0(goalStates, observedByRunRef)
 	result.StaleRunning = append(result.StaleRunning, blockedGoalActions...)
 	result.ResolvedRuns = append(result.ResolvedRuns, resolvedGoalActions...)
+	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingMissingTerminalReceiptActionsV0(observedByRunRef)...)
 	result.Diagnostics = append(result.Diagnostics, diagnosticsFromStaleRunningMCPAutoprogrammingV0(result.StaleRunning)...)
 	result.Operator = newMCPAutoprogrammingOperatorV0(
 		result.Queue,
@@ -685,6 +686,21 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) executeQueueRunningStatsV
 			continue
 		}
 		if _, ok := goalStatesByRunRef[runRef]; !ok {
+			continue
+		}
+		seen[runRef] = true
+		stats, statsDiagnostics := executor.executeAutoprogrammingInternalLiveStatsV0(ctx, input, runRef)
+		diagnostics = append(diagnostics, statsDiagnostics...)
+		if stats != nil {
+			out = append(out, stats)
+		}
+	}
+	for runRef := range goalStatesByRunRef {
+		if len(out) >= mcpAutoprogrammingRunningStatsMaxV0 {
+			break
+		}
+		runRef = strings.TrimSpace(runRef)
+		if runRef == "" || seen[runRef] {
 			continue
 		}
 		seen[runRef] = true

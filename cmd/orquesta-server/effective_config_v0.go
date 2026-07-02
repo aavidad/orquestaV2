@@ -128,6 +128,14 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 			strconv.FormatBool(boolEnvOrDefaultV0(envCodebaseBrokerWatchdogEnabledV0, false)),
 		),
 		serverConfigSettingFromRegistryV0(
+			envCodebaseBrokerWatchdogStopOrphansV0,
+			strconv.FormatBool(boolEnvOrDefaultV0(envCodebaseBrokerWatchdogStopOrphansV0, false)),
+		),
+		serverConfigSettingFromRegistryV0(
+			envCodebaseBrokerWatchdogOrphanMinAgeSecondsV0,
+			strconv.Itoa(intEnvOrDefaultV0(envCodebaseBrokerWatchdogOrphanMinAgeSecondsV0, 120)),
+		),
+		serverConfigSettingFromRegistryV0(
 			envCodebaseBrokerCommandV0,
 			envOrDefaultV0(envCodebaseBrokerCommandV0, "codebase-memory-mcp"),
 		),

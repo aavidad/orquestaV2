@@ -58,6 +58,7 @@ type MCPObserveAppDirectorGoalToolResultV0 struct {
 	Summary               string                 `json:"summary,omitempty"`
 	ArtifactRefs          []string               `json:"artifact_refs,omitempty"`
 	DomainReceiptRefs     []string               `json:"domain_receipt_refs,omitempty"`
+	ExpectedReceiptRefs   []string               `json:"expected_terminal_receipt_refs,omitempty"`
 	EvidenceRefs          []string               `json:"evidence_refs,omitempty"`
 	ClosureIssues         []MCPValidationIssueV0 `json:"closure_issues,omitempty"`
 	Errores               []MCPValidationIssueV0 `json:"errores_publicos,omitempty"`
@@ -195,6 +196,9 @@ func mcpObserveAppDirectorGoalResultRefV0(result orquestagoal.GoalWorkResultV0) 
 func mcpObserveAppDirectorGoalRecommendedActionV0(
 	result MCPObserveAppDirectorGoalToolResultV0,
 ) string {
+	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
+		return MCPGoalFirstRepairReceiptActionV0
+	}
 	if mcpObserveAppDirectorGoalLooksUsageLimitedV0(result) {
 		return "inspect_goal_backend_limits"
 	}
@@ -230,6 +234,29 @@ func mcpObserveAppDirectorGoalLooksUsageLimitedV0(
 		strings.Contains(summary, "budgetlimited") ||
 		strings.Contains(summary, "budget_limited") ||
 		strings.Contains(summary, "provider_limited")
+}
+
+func mcpObserveAppDirectorGoalHasIssueV0(
+	result MCPObserveAppDirectorGoalToolResultV0,
+	code string,
+) bool {
+	return mcpObserveAppDirectorGoalHasClosureIssueCodeV0(result.ClosureIssues, code)
+}
+
+func mcpObserveAppDirectorGoalHasClosureIssueCodeV0(
+	issues []MCPValidationIssueV0,
+	code string,
+) bool {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return false
+	}
+	for _, issue := range issues {
+		if strings.TrimSpace(issue.Code) == code {
+			return true
+		}
+	}
+	return false
 }
 
 func mcpIssueSetLooksUsageLimitedV0(issues []MCPValidationIssueV0) bool {
@@ -271,9 +298,32 @@ func mergeMCPObserveAppDirectorGoalPartialIntoTimeoutV0(
 	timeout.Summary = firstNonEmptyMCPV0(partial.Summary, timeout.Summary)
 	timeout.ArtifactRefs = compactStringsMCPV0(append(timeout.ArtifactRefs, partial.ArtifactRefs...))
 	timeout.DomainReceiptRefs = compactStringsMCPV0(append(timeout.DomainReceiptRefs, partial.DomainReceiptRefs...))
+	timeout.ExpectedReceiptRefs = compactStringsMCPV0(append(timeout.ExpectedReceiptRefs, partial.ExpectedReceiptRefs...))
 	timeout.EvidenceRefs = compactStringsMCPV0(append(timeout.EvidenceRefs, partial.EvidenceRefs...))
 	timeout.ClosureIssues = append(timeout.ClosureIssues, partial.ClosureIssues...)
 	return timeout
+}
+
+func EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
+	result MCPObserveAppDirectorGoalToolResultV0,
+	refs MCPDirectorGoalMaterializedRefsV0,
+) MCPObserveAppDirectorGoalToolResultV0 {
+	result.ArtifactRefs = compactStringsMCPV0(append(result.ArtifactRefs, refs.ArtifactRefs...))
+	result.DomainReceiptRefs = compactStringsMCPV0(append(result.DomainReceiptRefs, refs.DomainReceiptRefs...))
+	result.ExpectedReceiptRefs = compactStringsMCPV0(append(result.ExpectedReceiptRefs, refs.ExpectedReceiptRefs...))
+	result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, refs.EvidenceRefs...))
+	for _, code := range compactStringsMCPV0(refs.IssueCodes) {
+		if mcpObserveAppDirectorGoalHasClosureIssueCodeV0(result.ClosureIssues, code) {
+			continue
+		}
+		result.ClosureIssues = append(result.ClosureIssues, MCPValidationIssueV0{
+			Code:    code,
+			Field:   "goal_first.receipt",
+			Message: code,
+		})
+	}
+	result.RecommendedAction = mcpObserveAppDirectorGoalRecommendedActionV0(result)
+	return result
 }
 
 func NewMCPObserveAppDirectorGoalTimeoutResultWithPartialV0(

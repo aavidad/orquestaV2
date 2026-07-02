@@ -38,7 +38,7 @@ func (executor CodexStackObserveAppDirectorGoalExecutorV0) Execute(
 		}
 		return orquestamcp.MCPObserveAppDirectorGoalToolResultV0{}, err
 	}
-	return orquestamcp.NewMCPObserveAppDirectorGoalResultV0(input, result), nil
+	return executor.withMaterializedRefsV0(ctx, input, orquestamcp.NewMCPObserveAppDirectorGoalResultV0(input, result)), nil
 }
 
 func (executor CodexStackObserveAppDirectorGoalExecutorV0) withPartialSnapshotAfterObserveErrorV0(
@@ -65,7 +65,8 @@ func (executor CodexStackObserveAppDirectorGoalExecutorV0) ObserveAppDirectorGoa
 	if err != nil {
 		return result, err
 	}
-	return executor.withProcessRefsV0(ctx, input, result), nil
+	result = executor.withProcessRefsV0(ctx, input, result)
+	return executor.withMaterializedRefsV0(ctx, input, result), nil
 }
 
 func (executor CodexStackObserveAppDirectorGoalExecutorV0) withProcessRefsV0(
@@ -96,4 +97,39 @@ func (executor CodexStackObserveAppDirectorGoalExecutorV0) withProcessRefsV0(
 	result.ProcessRefs = compactCodexStackStringsV0(refs)
 	result.EvidenceRefs = compactCodexStackStringsV0(evidence)
 	return result
+}
+
+func (executor CodexStackObserveAppDirectorGoalExecutorV0) withMaterializedRefsV0(
+	ctx context.Context,
+	input orquestamcp.MCPObserveAppDirectorGoalToolInputV0,
+	result orquestamcp.MCPObserveAppDirectorGoalToolResultV0,
+) orquestamcp.MCPObserveAppDirectorGoalToolResultV0 {
+	if executor.stack == nil {
+		return result
+	}
+	runRef := strings.TrimSpace(result.RunRef)
+	if runRef == "" {
+		runRef = strings.TrimSpace(input.RunRef)
+	}
+	if runRef == "" {
+		return result
+	}
+	store := executor.stack.Ports.GoalStateStore
+	if store == nil {
+		store = executor.stack.Stores.AppGoalStateStore
+	}
+	if store == nil {
+		return result
+	}
+	state, err := store.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil {
+		return result
+	}
+	refs, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: executor.stack.Codex},
+	}).ResolveDirectorGoalMaterializedRefsV0(ctx, state)
+	if err != nil || !ok {
+		return result
+	}
+	return orquestamcp.EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(result, refs)
 }

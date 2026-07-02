@@ -3,6 +3,8 @@ package orquestaappcodexstack
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
@@ -74,6 +76,73 @@ func TestCodexStackObserveAppDirectorGoalExecutorV0TimeoutSnapshotIncluyeProcess
 		!codexStackStringInSetForTestV0(result.ProcessRefs, "process-ref-stack-observe-snapshot-001") ||
 		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-stack-observe-snapshot-process-001") {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestCodexStackObserveAppDirectorGoalExecutorV0TimeoutSnapshotProponeRepairReceiptV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-stack-observe-goal-repair-receipt-001"
+	projectDir := t.TempDir()
+	topicDir := filepath.Join(projectDir, "temas", "tema_031")
+	validationDir := filepath.Join(topicDir, "09_validacion")
+	if err := os.MkdirAll(validationDir, 0o700); err != nil {
+		t.Fatalf("mkdir validation: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "tema_ampliado.md"), []byte("# Tema\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(validationDir, "informe_qa.json"),
+		[]byte(`{"qa_passes":{"extension_pass":true,"official_text_qa_pass":true,"strict_editorial_qa_pass":true}}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write qa: %v", err)
+	}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       "goal-ref-stack-observe-repair-receipt-001",
+			RunRef:        runRef,
+			Objective:     "Publicar snapshot con repair receipt.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "temas/tema_031"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:  orquestagoal.GoalStatusRunningV0,
+			GoalRef: "goal-ref-stack-observe-repair-receipt-001",
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	if err := goalStates.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	stack := &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore: goalStates,
+		},
+		Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir},
+	}
+
+	result, err := NewCodexStackObserveAppDirectorGoalExecutorV0(stack).ObserveAppDirectorGoalTimeoutSnapshotV0(
+		ctx,
+		orquestamcp.MCPObserveAppDirectorGoalToolInputV0{RunRef: runRef},
+	)
+
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalTimeoutSnapshotV0: %v", err)
+	}
+	if result.RecommendedAction != orquestamcp.MCPGoalFirstRepairReceiptActionV0 ||
+		len(result.ExpectedReceiptRefs) != 2 ||
+		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-goal-materialized-missing-terminal-receipt-after-artifacts-pass") {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(result.ClosureIssues) != 1 ||
+		result.ClosureIssues[0].Code != orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0 {
+		t.Fatalf("closure issues=%+v", result.ClosureIssues)
 	}
 }
 

@@ -551,6 +551,91 @@ func TestRunServerCodeContextToolWatchdogLoopAsyncV0ParaLeaseExpiradoSinPIDV0(t 
 	}
 }
 
+func TestServerCodeContextToolProcessGuardV0DetectaHuerfanoSinPararPorDefecto(t *testing.T) {
+	stateDir := t.TempDir()
+	started := time.Date(2026, 7, 2, 10, 0, 0, 0, time.UTC)
+	registry := newServerFileCodeContextToolOwnerRegistryV0(stateDir)
+	if err := registry.WriteCodeContextToolOwnerMarkerV0(serverCodeContextToolOwnerMarkerV0{
+		OwnerRef:     "owner-ref-codebase-owned",
+		ToolRef:      "tool-ref-codebase-central",
+		ProviderKind: orquestacontext.CodeContextProviderKindCodebaseMCPV0,
+		PID:          111,
+		StartedAt:    started.Format(time.RFC3339),
+	}); err != nil {
+		t.Fatalf("Write marker: %v", err)
+	}
+	stopper := &fakeCodeContextToolProcessStopperV0{}
+	guard := serverCodeContextToolProcessGuardV0{
+		Lister: fakeCodeContextToolProcessListerV0{processes: []serverCodeContextToolProcessV0{
+			{PID: 111, ElapsedSeconds: 600, Command: "/home/alberto/.local/bin/codebase-memory-mcp"},
+			{PID: 222, ElapsedSeconds: 600, Command: "/home/alberto/.local/bin/codebase-memory-mcp"},
+			{PID: 333, ElapsedSeconds: 600, Command: "/usr/bin/rg codebase-memory-mcp"},
+		}},
+		Stopper:      stopper,
+		OwnerMarkers: registry,
+		StopOrphans:  false,
+		OrphanMinAge: 2 * time.Minute,
+	}
+
+	result, err := guard.RunOnceV0(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnceV0: %v", err)
+	}
+	if result.Observed != 2 || result.Owned != 1 || result.Orphans != 1 || result.OrphansStopped != 0 {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(stopper.pids) != 0 {
+		t.Fatalf("stopper=%+v", stopper.pids)
+	}
+	if !codeContextEvidenceContainsForTestV0(result.Evidence, "evidence-ref-code-context-codebase-memory-orphan-detected") ||
+		!codeContextEvidenceContainsForTestV0(result.Evidence, "evidence-ref-code-context-codebase-memory-owner-marker-protected") {
+		t.Fatalf("evidence=%+v", result.Evidence)
+	}
+}
+
+func TestServerCodeContextToolProcessGuardV0ParaHuerfanoSoloConOptInYEdadMinima(t *testing.T) {
+	stopper := &fakeCodeContextToolProcessStopperV0{}
+	guard := serverCodeContextToolProcessGuardV0{
+		Lister: fakeCodeContextToolProcessListerV0{processes: []serverCodeContextToolProcessV0{
+			{PID: 222, ElapsedSeconds: 600, Command: "codebase-memory-mcp"},
+			{PID: 333, ElapsedSeconds: 10, Command: "codebase-memory-mcp"},
+		}},
+		Stopper:      stopper,
+		StopOrphans:  true,
+		OrphanMinAge: 2 * time.Minute,
+	}
+
+	result, err := guard.RunOnceV0(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnceV0: %v", err)
+	}
+	if result.Observed != 2 || result.Orphans != 1 || result.OrphansStopped != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(stopper.pids) != 1 || stopper.pids[0] != 222 {
+		t.Fatalf("stopper=%+v", stopper.pids)
+	}
+	if !codeContextEvidenceContainsForTestV0(result.Evidence, "evidence-ref-code-context-codebase-memory-orphan-term-signal-sent") ||
+		!codeContextEvidenceContainsForTestV0(result.Evidence, "evidence-ref-code-context-codebase-memory-young-process-observed") {
+		t.Fatalf("evidence=%+v", result.Evidence)
+	}
+}
+
+func TestParseServerPSCodeContextToolProcessesV0(t *testing.T) {
+	processes := parseServerPSCodeContextToolProcessesV0(`
+  111  1  111 Sl  34.6  301 /home/alberto/.local/bin/codebase-memory-mcp
+  222  1  222 S    0.0  20 /usr/bin/rg codebase-memory-mcp
+`)
+	if len(processes) != 2 ||
+		processes[0].PID != 111 ||
+		processes[0].CPUPercent != 35 ||
+		processes[0].ElapsedSeconds != 301 ||
+		!isServerCodebaseMemoryMCPProcessV0(processes[0]) ||
+		isServerCodebaseMemoryMCPProcessV0(processes[1]) {
+		t.Fatalf("processes=%+v", processes)
+	}
+}
+
 func TestServerFileCodeContextToolOwnerStopperV0UsaMarkerSeguro(t *testing.T) {
 	stateDir := t.TempDir()
 	started := time.Date(2026, 6, 30, 10, 0, 0, 0, time.UTC)
@@ -684,6 +769,40 @@ func (fake *fakeCodeContextToolOwnerStopperV0) StopCodeContextToolOwnerV0(
 	}
 	fake.owners = append(fake.owners, ownerRef)
 	return []string{"evidence-ref-code-context-owner-stopped"}, nil
+}
+
+type fakeCodeContextToolProcessListerV0 struct {
+	processes []serverCodeContextToolProcessV0
+}
+
+func (fake fakeCodeContextToolProcessListerV0) ListCodeContextToolProcessesV0(
+	ctx context.Context,
+) ([]serverCodeContextToolProcessV0, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return append([]serverCodeContextToolProcessV0{}, fake.processes...), nil
+}
+
+type fakeCodeContextToolProcessStopperV0 struct {
+	pids []int
+}
+
+func (fake *fakeCodeContextToolProcessStopperV0) StopCodeContextToolProcessV0(
+	ctx context.Context,
+	pid int,
+) ([]string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	fake.pids = append(fake.pids, pid)
+	return []string{"evidence-ref-code-context-codebase-memory-orphan-term-signal-sent"}, nil
 }
 
 func TestServerRGCodeContextScopesV0RechazaRutasAbsolutasYPadres(t *testing.T) {

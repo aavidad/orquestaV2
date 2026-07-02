@@ -75,6 +75,7 @@ type MCPDirectorGoalStatsV0 struct {
 	DomainCounters        map[string]int `json:"domain_counters,omitempty"`
 	ArtifactRefs          []string       `json:"artifact_refs,omitempty"`
 	DomainReceiptRefs     []string       `json:"domain_receipt_refs,omitempty"`
+	ExpectedReceiptRefs   []string       `json:"expected_terminal_receipt_refs,omitempty"`
 	IssueCodes            []string       `json:"issue_codes,omitempty"`
 	EvidenceRefs          []string       `json:"evidence_refs,omitempty"`
 }
@@ -136,10 +137,11 @@ type MCPDirectorGoalMaterializedRefsSourcePortV0 interface {
 }
 
 type MCPDirectorGoalMaterializedRefsV0 struct {
-	ArtifactRefs      []string `json:"artifact_refs,omitempty"`
-	DomainReceiptRefs []string `json:"domain_receipt_refs,omitempty"`
-	EvidenceRefs      []string `json:"evidence_refs,omitempty"`
-	IssueCodes        []string `json:"issue_codes,omitempty"`
+	ArtifactRefs        []string `json:"artifact_refs,omitempty"`
+	DomainReceiptRefs   []string `json:"domain_receipt_refs,omitempty"`
+	ExpectedReceiptRefs []string `json:"expected_terminal_receipt_refs,omitempty"`
+	EvidenceRefs        []string `json:"evidence_refs,omitempty"`
+	IssueCodes          []string `json:"issue_codes,omitempty"`
 }
 
 type MCPDirectorStatsToolExecutorV0 struct {
@@ -310,6 +312,7 @@ func (executor MCPDirectorStatsToolExecutorV0) applyGoalMaterializedRefsV0(
 	}
 	goal.ArtifactRefs = compactStringsMCPV0(append(goal.ArtifactRefs, resolved.ArtifactRefs...))
 	goal.DomainReceiptRefs = compactStringsMCPV0(append(goal.DomainReceiptRefs, resolved.DomainReceiptRefs...))
+	goal.ExpectedReceiptRefs = compactStringsMCPV0(append(goal.ExpectedReceiptRefs, resolved.ExpectedReceiptRefs...))
 	goal.EvidenceRefs = compactStringsMCPV0(append(goal.EvidenceRefs, resolved.EvidenceRefs...))
 	goal.IssueCodes = compactStringsMCPV0(append(goal.IssueCodes, resolved.IssueCodes...))
 }
@@ -468,6 +471,20 @@ func applyMCPDirectorGoalProgressProjectionV0(
 		return
 	}
 	stats.Progress.PercentComplete = 0
+	if containsStringMCPV0(goal.IssueCodes, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
+		stats.Status = MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0
+		stats.Closure.BlockedBy = compactStringsMCPV0(append(
+			stats.Closure.BlockedBy,
+			MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0,
+		))
+		stats.Closure.BlockerRefs = compactStringsMCPV0(append(stats.Closure.BlockerRefs, goal.EvidenceRefs...))
+		stats.Progress.Issues = append(stats.Progress.Issues, orquestacionnucleoapp.DirectorProgressIssueV0{
+			Code:    MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0,
+			Field:   "goal_first.receipt",
+			Message: "goal_first has validated artifacts and QA pass evidence, but no terminal goal/domain receipt; repair receipt before declaring closure",
+		})
+		return
+	}
 	if len(derivedDeliveries) > 0 {
 		stats.Closure.BlockedBy = compactStringsMCPV0(append(stats.Closure.BlockedBy, "blocked_with_partial_delivery"))
 		stats.Progress.Issues = append(stats.Progress.Issues, orquestacionnucleoapp.DirectorProgressIssueV0{

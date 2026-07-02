@@ -80,6 +80,36 @@ func (registry serverFileCodeContextToolOwnerRegistryV0) ReadCodeContextToolOwne
 	return marker, nil
 }
 
+func (registry serverFileCodeContextToolOwnerRegistryV0) ListCodeContextToolOwnerMarkersV0() ([]serverCodeContextToolOwnerMarkerV0, error) {
+	if strings.TrimSpace(registry.dir) == "" {
+		return nil, errors.New("code_context_owner_marker_invalid")
+	}
+	dir := filepath.Join(registry.dir, serverCodeContextToolOwnerMarkerDirV0)
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := make([]serverCodeContextToolOwnerMarkerV0, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		ownerRef := strings.TrimSuffix(entry.Name(), ".json")
+		if !isSafeServerCodeContextOwnerRefV0(ownerRef) {
+			continue
+		}
+		marker, readErr := registry.ReadCodeContextToolOwnerMarkerV0(ownerRef)
+		if readErr != nil {
+			return nil, readErr
+		}
+		out = append(out, marker)
+	}
+	return out, nil
+}
+
 func (registry serverFileCodeContextToolOwnerRegistryV0) markerPathV0(ownerRef string) (string, error) {
 	ownerRef = strings.TrimSpace(ownerRef)
 	if registry.dir == "" || ownerRef == "" || !isSafeServerCodeContextOwnerRefV0(ownerRef) {

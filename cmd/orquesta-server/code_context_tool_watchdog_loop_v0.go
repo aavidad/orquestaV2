@@ -21,8 +21,10 @@ const (
 )
 
 type serverCodeContextToolWatchdogLoopConfigV0 struct {
-	Loop     externalBridgeLoopConfigV0
-	StateDir string
+	Loop         externalBridgeLoopConfigV0
+	StateDir     string
+	StopOrphans  bool
+	OrphanMinAge time.Duration
 }
 
 func serverCodeContextToolWatchdogLoopConfigFromEnvV0() (serverCodeContextToolWatchdogLoopConfigV0, error) {
@@ -33,8 +35,14 @@ func serverCodeContextToolWatchdogLoopConfigFromEnvV0() (serverCodeContextToolWa
 	if stateDir == "" {
 		return serverCodeContextToolWatchdogLoopConfigV0{}, fmt.Errorf("codebase_broker_state_dir_required")
 	}
+	orphanMinAgeSeconds := intEnvOrDefaultV0(envCodebaseBrokerWatchdogOrphanMinAgeSecondsV0, int(defaultCodeContextToolOrphanMinAgeV0/time.Second))
+	if orphanMinAgeSeconds < 0 {
+		orphanMinAgeSeconds = int(defaultCodeContextToolOrphanMinAgeV0 / time.Second)
+	}
 	return serverCodeContextToolWatchdogLoopConfigV0{
-		StateDir: stateDir,
+		StateDir:     stateDir,
+		StopOrphans:  boolEnvOrDefaultV0(envCodebaseBrokerWatchdogStopOrphansV0, false),
+		OrphanMinAge: time.Duration(orphanMinAgeSeconds) * time.Second,
 		Loop: externalBridgeLoopConfigV0{
 			Enabled:       true,
 			Component:     codeContextToolWatchdogLoopComponentV0,
@@ -120,14 +128,24 @@ func serverCodeContextToolWatchdogFromLoopConfigV0(
 		Finisher: store,
 		Stopper:  serverFileCodeContextToolOwnerStopperV0{Registry: registry},
 		Observer: serverFileCodeContextToolOwnerObserverV0{Registry: registry},
+		ProcessGuard: serverCodeContextToolProcessGuardV0{
+			Lister:       serverPSCodeContextToolProcessListerV0{},
+			Stopper:      serverSignalCodeContextToolProcessStopperV0{},
+			OwnerMarkers: registry,
+			StopOrphans:  config.StopOrphans,
+			OrphanMinAge: config.OrphanMinAge,
+		},
 	}
 }
 
 func serverCodeContextToolWatchdogResultCountersV0(result serverCodeContextToolWatchdogResultV0) map[string]int {
 	return map[string]int{
-		"observed": result.Observed,
-		"stopped":  result.Stopped,
-		"errors":   result.Errors,
+		"observed":                 result.Observed,
+		"stopped":                  result.Stopped,
+		"errors":                   result.Errors,
+		"processes_observed":       result.ProcessObserved,
+		"orphan_processes":         result.ProcessOrphans,
+		"orphan_processes_stopped": result.ProcessOrphansStopped,
 	}
 }
 

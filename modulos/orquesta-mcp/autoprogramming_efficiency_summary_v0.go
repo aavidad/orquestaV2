@@ -82,6 +82,9 @@ func buildMCPAutoprogrammingEfficiencySummaryV0(
 		run != nil,
 		diagnostics,
 	)
+	if repairRunRef := repairReceiptRunRefMCPAutoprogrammingEfficiencyV0(diagnostics, run); repairRunRef != "" {
+		summary.RecommendedAction = strings.Join([]string{MCPGoalFirstRepairReceiptActionV0, "run", repairRunRef}, ":")
+	}
 	summary.State = stateMCPAutoprogrammingEfficiencyV0(summary, queueVisible, runVisible, run)
 	summary.OverallPercentage = overallPercentageMCPAutoprogrammingEfficiencyV0(summary, runVisible)
 	summary.Confidence = confidenceMCPAutoprogrammingEfficiencyV0(queueVisible, runVisible, summary)
@@ -224,6 +227,10 @@ func operationalHealthMCPAutoprogrammingEfficiencyV0(
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 60)
 		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, "goal_first_state_missing")
 	}
+	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
+		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
+		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0)
+	}
 	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, "supervisor_replan_amplification_blocked") {
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 30)
 		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, "supervisor_replan_amplification_blocked")
@@ -270,7 +277,8 @@ func stateMCPAutoprogrammingEfficiencyV0(
 	case strings.EqualFold(summary.ClosureStatus, "closed"):
 		return "closed"
 	case hasReasonMCPAutoprogrammingEfficiencyV0(summary, "goal_first_blocked") ||
-		hasReasonMCPAutoprogrammingEfficiencyV0(summary, "goal_first_state_missing"):
+		hasReasonMCPAutoprogrammingEfficiencyV0(summary, "goal_first_state_missing") ||
+		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0):
 		return "attention_required"
 	case hasRunReplanAmplificationMCPAutoprogrammingEfficiencyV0(run):
 		return "hung"
@@ -295,6 +303,34 @@ func stateMCPAutoprogrammingEfficiencyV0(
 	default:
 		return "unknown"
 	}
+}
+
+func repairReceiptRunRefMCPAutoprogrammingEfficiencyV0(
+	diagnostics []MCPAutoprogrammingDiagnosticV0,
+	run *MCPDirectorStatsToolResultV0,
+) string {
+	for _, diagnostic := range diagnostics {
+		if strings.TrimSpace(diagnostic.Code) != MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0 {
+			continue
+		}
+		if runRef := runRefFromScopeMCPAutoprogrammingEfficiencyV0(diagnostic.Scope); runRef != "" {
+			return runRef
+		}
+	}
+	if run != nil {
+		return strings.TrimSpace(run.RunRef)
+	}
+	return ""
+}
+
+func runRefFromScopeMCPAutoprogrammingEfficiencyV0(scope string) string {
+	for _, part := range strings.Fields(scope) {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "run:") {
+			return strings.TrimSpace(strings.TrimPrefix(part, "run:"))
+		}
+	}
+	return ""
 }
 
 func hasRunningLiveMCPAutoprogrammingEfficiencyV0(
