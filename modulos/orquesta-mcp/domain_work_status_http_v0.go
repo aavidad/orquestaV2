@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 )
 
 const (
@@ -53,6 +55,9 @@ type MCPDomainWorkStatusSummaryV0 struct {
 }
 
 type MCPDomainWorkStatusItemV0 struct {
+	JobRef            string         `json:"job_ref,omitempty"`
+	DomainRef         string         `json:"domain_ref,omitempty"`
+	WorkKind          string         `json:"work_kind,omitempty"`
 	RunRef            string         `json:"run_ref,omitempty"`
 	AppRef            string         `json:"app_ref,omitempty"`
 	Status            string         `json:"status"`
@@ -79,8 +84,16 @@ type mcpDomainWorkStatusHTTPInputV0 struct {
 func NewMCPDomainWorkStatusHTTPHandlerV0(
 	executor MCPTransportAutoprogrammingStatusExecutorV0,
 ) http.Handler {
-	return newMCPDomainWorkStatusHTTPHandlerWithTimeoutV0(
+	return NewMCPDomainWorkStatusHTTPHandlerWithRecordsV0(executor, nil)
+}
+
+func NewMCPDomainWorkStatusHTTPHandlerWithRecordsV0(
+	executor MCPTransportAutoprogrammingStatusExecutorV0,
+	records orquestadomainwork.DomainWorkJobRecordSourcePortV0,
+) http.Handler {
+	return newMCPDomainWorkStatusHTTPHandlerWithTimeoutAndRecordsV0(
 		executor,
+		records,
 		defaultMCPDomainWorkStatusHTTPResponseTimeoutV0,
 	)
 }
@@ -89,14 +102,28 @@ func newMCPDomainWorkStatusHTTPHandlerWithTimeoutV0(
 	executor MCPTransportAutoprogrammingStatusExecutorV0,
 	responseTimeout time.Duration,
 ) http.Handler {
+	return newMCPDomainWorkStatusHTTPHandlerWithTimeoutAndRecordsV0(
+		executor,
+		nil,
+		responseTimeout,
+	)
+}
+
+func newMCPDomainWorkStatusHTTPHandlerWithTimeoutAndRecordsV0(
+	executor MCPTransportAutoprogrammingStatusExecutorV0,
+	records orquestadomainwork.DomainWorkJobRecordSourcePortV0,
+	responseTimeout time.Duration,
+) http.Handler {
 	return mcpDomainWorkStatusHTTPHandlerV0{
 		executor:        executor,
+		records:         records,
 		responseTimeout: responseTimeout,
 	}
 }
 
 type mcpDomainWorkStatusHTTPHandlerV0 struct {
 	executor        MCPTransportAutoprogrammingStatusExecutorV0
+	records         orquestadomainwork.DomainWorkJobRecordSourcePortV0
 	responseTimeout time.Duration
 }
 
@@ -156,8 +183,10 @@ func (handler mcpDomainWorkStatusHTTPHandlerV0) ServeHTTP(w http.ResponseWriter,
 }
 
 type mcpDomainWorkStatusHTTPExecutionV0 struct {
-	result MCPAutoprogrammingStatusToolResultV0
-	err    error
+	result      MCPAutoprogrammingStatusToolResultV0
+	records     []orquestadomainwork.DomainWorkJobRecordV0
+	diagnostics []MCPAutoprogrammingDiagnosticV0
+	err         error
 }
 
 func (handler mcpDomainWorkStatusHTTPHandlerV0) executeDomainWorkStatusWithResponseTimeoutV0(
@@ -168,23 +197,72 @@ func (handler mcpDomainWorkStatusHTTPHandlerV0) executeDomainWorkStatusWithRespo
 	timeout := handler.responseTimeout
 	if timeout <= 0 {
 		status, err := handler.executor.Execute(r.Context(), statusInput)
-		return newMCPDomainWorkStatusResultV0(input, status), err, false
+		records, diagnostics := handler.domainWorkRecordsV0(r.Context(), input)
+		return newMCPDomainWorkStatusResultV0(input, status, records, diagnostics), err, false
 	}
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 	done := make(chan mcpDomainWorkStatusHTTPExecutionV0, 1)
 	go func() {
 		status, err := handler.executor.Execute(ctx, statusInput)
-		done <- mcpDomainWorkStatusHTTPExecutionV0{result: status, err: err}
+		records, diagnostics := handler.domainWorkRecordsV0(ctx, input)
+		done <- mcpDomainWorkStatusHTTPExecutionV0{
+			result:      status,
+			records:     records,
+			diagnostics: diagnostics,
+			err:         err,
+		}
 	}()
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
 	case execution := <-done:
-		return newMCPDomainWorkStatusResultV0(input, execution.result), execution.err, false
+		return newMCPDomainWorkStatusResultV0(
+			input,
+			execution.result,
+			execution.records,
+			execution.diagnostics,
+		), execution.err, false
 	case <-timer.C:
 		return newMCPDomainWorkStatusTimeoutResultV0(r, input), nil, true
 	}
+}
+
+func (handler mcpDomainWorkStatusHTTPHandlerV0) domainWorkRecordsV0(
+	ctx context.Context,
+	input mcpDomainWorkStatusHTTPInputV0,
+) ([]orquestadomainwork.DomainWorkJobRecordV0, []MCPAutoprogrammingDiagnosticV0) {
+	if handler.records == nil {
+		return nil, nil
+	}
+	limit := input.QueueLimit
+	if limit <= 0 {
+		limit = defaultMCPQueueGlobalStatusQueueLimitV0
+	}
+	if strings.TrimSpace(input.CourseSlug) != "" && limit < 100 {
+		limit = 100
+	}
+	filter := orquestadomainwork.DomainWorkJobRecordFilterV0{
+		DomainRef: strings.TrimSpace(input.Project),
+		JobRef:    strings.TrimSpace(input.ExternalJobRef),
+		Limit:     limit,
+	}
+	records, err := handler.records.ListDomainWorkJobRecordsV0(ctx, filter)
+	if err != nil {
+		return nil, []MCPAutoprogrammingDiagnosticV0{{
+			Code:         "domain_work_records_unavailable",
+			Scope:        "domain_work_records",
+			Message:      "no se pudieron consultar records directos de domain-work",
+			EvidenceRefs: []string{"evidence-ref-domain-work-records-unavailable"},
+		}}
+	}
+	out := make([]orquestadomainwork.DomainWorkJobRecordV0, 0, len(records))
+	for _, record := range records {
+		if mcpDomainWorkStatusRecordMatchesInputV0(input, record) {
+			out = append(out, record)
+		}
+	}
+	return out, nil
 }
 
 func mcpDomainWorkStatusInputFromQueryV0(r *http.Request) mcpDomainWorkStatusHTTPInputV0 {
@@ -229,12 +307,17 @@ func mcpDomainWorkStatusAutoprogrammingInputV0(
 func newMCPDomainWorkStatusResultV0(
 	input mcpDomainWorkStatusHTTPInputV0,
 	status MCPAutoprogrammingStatusToolResultV0,
+	records []orquestadomainwork.DomainWorkJobRecordV0,
+	recordDiagnostics []MCPAutoprogrammingDiagnosticV0,
 ) MCPDomainWorkStatusResultV0 {
 	queue := newMCPQueueGlobalStatusResultV0(mcpDomainWorkStatusAutoprogrammingInputV0(input), status)
-	items := mcpDomainWorkStatusItemsV0(queue.Items)
+	queueItems := mcpDomainWorkStatusItemsV0(queue.Items)
+	recordItems := mcpDomainWorkStatusRecordItemsV0(records)
+	items := mcpDomainWorkStatusAppendRecordItemsV0(queueItems, recordItems)
 	diagnostics := append([]MCPAutoprogrammingDiagnosticV0(nil), queue.Diagnostics...)
+	diagnostics = append(diagnostics, recordDiagnostics...)
 	diagnostics = append(diagnostics, mcpDomainWorkStatusFilterDiagnosticsV0(input)...)
-	summary := mcpDomainWorkStatusSummaryV0(queue.Summary, items, diagnostics)
+	summary := mcpDomainWorkStatusSummaryV0(queue.Summary, queueItems, recordItems, diagnostics)
 	return MCPDomainWorkStatusResultV0{
 		SchemaVersion: MCPDomainWorkStatusSchemaVersionV0,
 		Estado:        firstNonEmptyMCPV0(queue.Estado, MCPAutoprogrammingStatusEstadoOKV0),
@@ -299,9 +382,83 @@ func mcpDomainWorkStatusItemsV0(
 	return out
 }
 
+func mcpDomainWorkStatusRecordItemsV0(
+	records []orquestadomainwork.DomainWorkJobRecordV0,
+) []MCPDomainWorkStatusItemV0 {
+	out := make([]MCPDomainWorkStatusItemV0, 0, len(records))
+	for _, record := range records {
+		item := MCPDomainWorkStatusItemV0{
+			JobRef:       strings.TrimSpace(record.Job.JobRef),
+			DomainRef:    strings.TrimSpace(firstNonEmptyMCPV0(record.Job.DomainRef, record.Request.DomainRef)),
+			WorkKind:     strings.TrimSpace(firstNonEmptyMCPV0(record.Job.WorkKind, record.Request.WorkKind)),
+			RunRef:       mcpDomainWorkStatusRecordRefV0(record, "run_ref"),
+			AppRef:       mcpDomainWorkStatusRecordRefV0(record, "app_ref"),
+			Status:       mcpDomainWorkStatusNormalizeRecordStatusV0(record.Job.Status),
+			EvidenceRefs: mcpDomainWorkStatusRecordEvidenceRefsV0(record),
+		}
+		switch item.Status {
+		case "queued":
+			item.NoActionReason = "domain_work_job_record_accepted_waiting_delivery"
+		case "failed":
+			item.NeedsAction = true
+			item.RecommendedAction = "review_domain_work_job_issue"
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func mcpDomainWorkStatusAppendRecordItemsV0(
+	items []MCPDomainWorkStatusItemV0,
+	recordItems []MCPDomainWorkStatusItemV0,
+) []MCPDomainWorkStatusItemV0 {
+	if len(recordItems) == 0 {
+		return items
+	}
+	seen := map[string]struct{}{}
+	for _, item := range items {
+		for _, key := range mcpDomainWorkStatusItemKeysV0(item) {
+			seen[key] = struct{}{}
+		}
+	}
+	out := append([]MCPDomainWorkStatusItemV0(nil), items...)
+	for _, item := range recordItems {
+		duplicate := false
+		for _, key := range mcpDomainWorkStatusItemKeysV0(item) {
+			if _, ok := seen[key]; ok {
+				duplicate = true
+				break
+			}
+		}
+		if duplicate {
+			continue
+		}
+		for _, key := range mcpDomainWorkStatusItemKeysV0(item) {
+			seen[key] = struct{}{}
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func mcpDomainWorkStatusItemKeysV0(item MCPDomainWorkStatusItemV0) []string {
+	var keys []string
+	if value := strings.TrimSpace(item.JobRef); value != "" {
+		keys = append(keys, "job:"+value)
+	}
+	if value := strings.TrimSpace(item.RunRef); value != "" {
+		keys = append(keys, "run:"+value)
+	}
+	if value := strings.TrimSpace(item.AppRef); value != "" {
+		keys = append(keys, "app:"+value)
+	}
+	return keys
+}
+
 func mcpDomainWorkStatusSummaryV0(
 	queue MCPQueueGlobalStatusSummaryV0,
-	items []MCPDomainWorkStatusItemV0,
+	queueItems []MCPDomainWorkStatusItemV0,
+	recordItems []MCPDomainWorkStatusItemV0,
 	diagnostics []MCPAutoprogrammingDiagnosticV0,
 ) MCPDomainWorkStatusSummaryV0 {
 	summary := MCPDomainWorkStatusSummaryV0{
@@ -315,7 +472,7 @@ func mcpDomainWorkStatusSummaryV0(
 		NeedsAction:     queue.NeedsAction,
 		WillFinishAlone: queue.WillFinishAlone,
 	}
-	for _, item := range items {
+	for _, item := range queueItems {
 		switch item.Status {
 		case "waiting_quota":
 			summary.WaitingQuota++
@@ -327,6 +484,27 @@ func mcpDomainWorkStatusSummaryV0(
 			if summary.Stale == 0 {
 				summary.Stale = 1
 			}
+		}
+	}
+	for _, item := range recordItems {
+		switch item.Status {
+		case "waiting_quota":
+			summary.WaitingQuota++
+		case "queued":
+			summary.Queued++
+		case "running":
+			summary.Running++
+		case "blocked":
+			summary.Blocked++
+		case "failed":
+			summary.Failed++
+		case "stale":
+			summary.Stale++
+		case "completed":
+			summary.Completed++
+		}
+		if item.NeedsAction {
+			summary.NeedsAction = true
 		}
 	}
 	for _, diagnostic := range diagnostics {
@@ -359,6 +537,122 @@ func mcpDomainWorkStatusNormalizeStatusV0(status string, action string) string {
 	default:
 		return firstNonEmptyMCPV0(value, "unknown")
 	}
+}
+
+func mcpDomainWorkStatusNormalizeRecordStatusV0(status string) string {
+	value := strings.ToLower(strings.TrimSpace(status))
+	switch value {
+	case orquestadomainwork.DomainWorkStatusAcceptedV0:
+		return "queued"
+	case orquestadomainwork.DomainWorkStatusInvalidV0:
+		return "failed"
+	default:
+		return mcpDomainWorkStatusNormalizeStatusV0(value, "")
+	}
+}
+
+func mcpDomainWorkStatusRecordRefV0(
+	record orquestadomainwork.DomainWorkJobRecordV0,
+	kind string,
+) string {
+	kind = strings.TrimSpace(kind)
+	for _, ref := range append(append([]orquestadomainwork.DomainWorkExternalRefV0(nil), record.Job.ExternalRefs...), record.Request.ExternalRefs...) {
+		if strings.TrimSpace(ref.Kind) == kind {
+			return strings.TrimSpace(ref.Ref)
+		}
+	}
+	return ""
+}
+
+func mcpDomainWorkStatusRecordEvidenceRefsV0(
+	record orquestadomainwork.DomainWorkJobRecordV0,
+) []string {
+	refs := append([]string{"evidence-ref-domain-work-job-record"}, record.Job.EvidenceRefs...)
+	refs = append(refs, record.Request.EvidenceRefs...)
+	return compactStringsMCPV0(refs)
+}
+
+func mcpDomainWorkStatusRecordMatchesInputV0(
+	input mcpDomainWorkStatusHTTPInputV0,
+	record orquestadomainwork.DomainWorkJobRecordV0,
+) bool {
+	if expected := strings.TrimSpace(input.Project); expected != "" &&
+		!mcpDomainWorkStatusValueMatchesFilterV0(firstNonEmptyMCPV0(record.Job.DomainRef, record.Request.DomainRef), expected) {
+		return false
+	}
+	if expected := strings.TrimSpace(input.ExternalJobRef); expected != "" &&
+		!mcpDomainWorkStatusValueMatchesFilterV0(record.Job.JobRef, expected) &&
+		!mcpDomainWorkStatusRecordHasValueV0(record, expected) {
+		return false
+	}
+	if expected := strings.TrimSpace(input.RunRef); expected != "" &&
+		!mcpDomainWorkStatusValueMatchesFilterV0(mcpDomainWorkStatusRecordRefV0(record, "run_ref"), expected) &&
+		!mcpDomainWorkStatusRecordHasValueV0(record, expected) {
+		return false
+	}
+	if expected := strings.TrimSpace(input.AppRef); expected != "" &&
+		!mcpDomainWorkStatusValueMatchesFilterV0(mcpDomainWorkStatusRecordRefV0(record, "app_ref"), expected) &&
+		!mcpDomainWorkStatusRecordHasValueV0(record, expected) {
+		return false
+	}
+	if expected := strings.TrimSpace(input.CourseSlug); expected != "" &&
+		!mcpDomainWorkStatusRecordHasValueV0(record, expected) {
+		return false
+	}
+	return true
+}
+
+func mcpDomainWorkStatusRecordHasValueV0(
+	record orquestadomainwork.DomainWorkJobRecordV0,
+	expected string,
+) bool {
+	expected = strings.TrimSpace(expected)
+	if expected == "" {
+		return true
+	}
+	for _, ref := range append(append([]orquestadomainwork.DomainWorkExternalRefV0(nil), record.Job.ExternalRefs...), record.Request.ExternalRefs...) {
+		if mcpDomainWorkStatusValueMatchesFilterV0(ref.Ref, expected) ||
+			mcpDomainWorkStatusValueMatchesFilterV0(ref.Kind, expected) {
+			return true
+		}
+	}
+	for _, value := range []string{
+		record.Request.RequestID,
+		record.Request.CorrelationID,
+		record.Request.IdempotencyKey,
+		record.Request.DomainRef,
+		record.Request.WorkKind,
+		record.Request.Objective,
+		record.Job.JobRef,
+		record.Job.DomainRef,
+		record.Job.WorkKind,
+		record.Job.CorrelationID,
+		record.Job.IdempotencyKey,
+	} {
+		if mcpDomainWorkStatusValueMatchesFilterV0(value, expected) {
+			return true
+		}
+	}
+	for _, field := range record.Request.InputFields {
+		if mcpDomainWorkStatusValueMatchesFilterV0(field.Value, expected) {
+			return true
+		}
+		for _, value := range field.Values {
+			if mcpDomainWorkStatusValueMatchesFilterV0(value, expected) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func mcpDomainWorkStatusValueMatchesFilterV0(value string, expected string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	expected = strings.ToLower(strings.TrimSpace(expected))
+	if value == "" || expected == "" {
+		return false
+	}
+	return value == expected || strings.Contains(value, expected)
 }
 
 func mcpDomainWorkStatusMentionsQuotaV0(value string) bool {

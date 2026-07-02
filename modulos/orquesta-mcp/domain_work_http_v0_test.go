@@ -2,12 +2,14 @@ package orquestamcp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+	orquestadomainworkmemory "orquesta/modulos/orquesta-domain-work-memory"
 )
 
 func TestMCPDomainWorkHTTPHandlerV0PostDelegaYPropagaCorrelacion(t *testing.T) {
@@ -147,5 +149,62 @@ func TestMCPDomainWorkStatusHTTPHandlerV0FiltroContextualSinRefDiagnostica(t *te
 	}
 	if !hasMCPQueueGlobalStatusDiagnosticCodeForTestV0(result.Diagnostics, "domain_work_status_context_filter_without_ref") {
 		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+}
+
+func TestMCPDomainWorkStatusHTTPHandlerV0ObservaRecordsDirectosConColaVacia(t *testing.T) {
+	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+	job, err := creator.CreateDomainWorkJobV0(context.Background(), orquestadomainwork.DomainWorkJobRequestV0{
+		SchemaVersion:  orquestadomainwork.DomainWorkJobRequestSchemaV0,
+		RequestID:      "request-ref-domain-record-status-001",
+		CorrelationID:  "corr-domain-record-status-001",
+		IdempotencyKey: "idem-domain-record-status-001",
+		RequestedBy:    orquestadomainwork.DomainWorkDefaultRequestedByV0,
+		DomainRef:      "opes",
+		WorkKind:       "generate_audio_asset",
+		Objective:      "crear audio observable aunque no aparezca en cola",
+		InputFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "course_id", Value: "integracion-social"},
+		},
+		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
+			{Kind: "run_ref", Ref: "run-ref-domain-record-status-001"},
+			{Kind: "app_ref", Ref: "app-ref-opes"},
+		},
+		EvidenceRefs: []string{"evidence-ref-domain-record-request"},
+	})
+	if err != nil {
+		t.Fatalf("CreateDomainWorkJobV0: %v", err)
+	}
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+		},
+	}
+	req := httptest.NewRequest(
+		http.MethodGet,
+		MCPDomainWorkStatusHTTPPathV0+"?project=opes&course_slug=integracion-social&queue_limit=5",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+
+	NewMCPDomainWorkStatusHTTPHandlerWithRecordsV0(executor, creator).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPDomainWorkStatusResultV0
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Summary.Status != "queued" ||
+		result.Summary.Queued != 1 ||
+		result.Summary.Completed != 0 ||
+		len(result.Items) != 1 ||
+		result.Items[0].JobRef != job.JobRef ||
+		result.Items[0].Status != "queued" ||
+		result.Items[0].WorkKind != "generate_audio_asset" ||
+		result.Items[0].RunRef != "run-ref-domain-record-status-001" {
+		t.Fatalf("result=%+v", result)
 	}
 }

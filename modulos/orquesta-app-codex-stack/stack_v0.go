@@ -220,6 +220,7 @@ func buildStackHTTPHandlerV0(
 		AllowLegacyAutoprogrammingSupervisorActions: bindings.AllowLegacyAutoprogrammingSupervisorActions,
 		ServerShutdown:           bindings.ServerShutdown,
 		DomainWork:               bindings.DomainWork,
+		DomainWorkRecords:        config.DomainDelivery.JobRecords,
 		ExternalWorkDryRun:       bindings.ExternalWorkDryRun,
 		ExternalWorkDryRunConfig: externalWorkRunStartConfigV0(config, normalizeRunQueueConfigV0(config.RunQueue)),
 		ExternalWorkRun:          bindings.ExternalWorkRun,

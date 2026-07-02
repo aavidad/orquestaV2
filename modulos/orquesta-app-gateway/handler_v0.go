@@ -3,6 +3,7 @@ package orquestaappgateway
 import (
 	"net/http"
 
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestagovernance "orquesta/modulos/orquesta-governance"
 	orquestahttpgateway "orquesta/modulos/orquesta-http-gateway"
@@ -120,7 +121,7 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 		AutoprogrammingSupervise:          orquestamcp.NewMCPAutoprogrammingSuperviseHTTPHandlerV0(config.RunSupervisor),
 		GovernanceCatalogQuery:            orquestagovernance.GovernanceCatalogQueryHTTPHandlerV0(config.GovernanceCatalog),
 		DomainWork:                        orquestamcp.NewMCPDomainWorkHTTPHandlerV0(config.DomainWork),
-		DomainWorkStatus:                  orquestamcp.NewMCPDomainWorkStatusHTTPHandlerV0(firstNonNilAutoprogrammingStatusExecutorV0(config.DomainWorkStatus, autoprogrammingStatus)),
+		DomainWorkStatus:                  orquestamcp.NewMCPDomainWorkStatusHTTPHandlerWithRecordsV0(firstNonNilAutoprogrammingStatusExecutorV0(config.DomainWorkStatus, autoprogrammingStatus), firstNonNilDomainWorkRecordSourceV0(config.DomainWorkRecords, config.DomainWork)),
 		ExternalWorkDryRun:                newExternalWorkDryRunHTTPHandlerV0(config),
 		ExternalWorkRun:                   orquestamcp.NewMCPExternalWorkRunHTTPHandlerWithResponseTimeoutV0(config.ExternalWorkRun, config.Timeout),
 		CodebaseQuery:                     orquestamcp.NewMCPCodebaseQueryHTTPHandlerV0(config.CodebaseQuery),
@@ -136,6 +137,17 @@ func firstNonNilAutoprogrammingStatusExecutorV0(
 		return primary
 	}
 	return fallback
+}
+
+func firstNonNilDomainWorkRecordSourceV0(
+	primary orquestadomainwork.DomainWorkJobRecordSourcePortV0,
+	fallback orquestamcp.MCPDomainWorkExecutorPortV0,
+) orquestadomainwork.DomainWorkJobRecordSourcePortV0 {
+	if primary != nil {
+		return primary
+	}
+	source, _ := fallback.(orquestadomainwork.DomainWorkJobRecordSourcePortV0)
+	return source
 }
 
 func newExternalWorkDryRunHTTPHandlerV0(config ConfigV0) http.Handler {
