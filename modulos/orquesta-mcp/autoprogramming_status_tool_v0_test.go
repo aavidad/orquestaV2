@@ -957,14 +957,14 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalActiveTimeoutConBackendActivoEsRe
 		t.Fatalf("stale_running=%+v", result.StaleRunning)
 	}
 	action := result.StaleRunning[0]
-	if action.Code != mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0 ||
+	if action.Code != mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0 ||
 		action.Severity != "blocked" ||
 		action.GoalStatus != "active" ||
 		action.TokensUsed != 338171 ||
-		action.RecommendedAction != "replan_goal_after_active_timeout" ||
-		!strings.Contains(action.Reason, "goal_active_timeout_backend_active") ||
+		action.RecommendedAction != "replan_narrow_context" ||
+		!strings.Contains(action.Reason, "checkpoint_only_high_consumption") ||
 		!hasStringMCPAutoprogrammingStatusTestV0(action.ArtifactRefs, "artifact-ref-checkpoint:run-ref-autop-status-goal-active-timeout-backend-active-001:tema-001-checkpoint-started-txt") ||
-		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceGoalActiveTimeoutBackendV0) ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0) ||
 		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-backend-active-timeout-observed") {
 		t.Fatalf("action=%+v", action)
 	}
@@ -1065,6 +1065,96 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalActiveTimeoutConCheckpointRecient
 		!strings.Contains(action.Reason, "active_timeout_checkpoint_recent") ||
 		!hasStringMCPAutoprogrammingStatusTestV0(action.ArtifactRefs, checkpointRef) ||
 		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceActiveTimeoutCheckpointRecentV0) {
+		t.Fatalf("action=%+v", action)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0GoalActiveTimeoutConCheckpointRespetaUmbralConfiguradoV0(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-active-timeout-checkpoint-policy-001"
+	goalRef := "goal-ref-autop-status-goal-active-timeout-checkpoint-policy-001"
+	externalGoalRef := "thread-ref-autop-status-goal-active-timeout-checkpoint-policy-001"
+	checkpointRef := "artifact-ref-checkpoint:run-ref-autop-status-goal-active-timeout-checkpoint-policy-001:tema-001-checkpoint-started-txt"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Aplicar politica parametrizable de alto consumo con checkpoint.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+		LastResult: &orquestagoal.GoalWorkResultV0{
+			SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+			Status:        orquestagoal.GoalStatusBlockedV0,
+			GoalRef:       goalRef,
+			Summary:       "codex_app_server_goal_active_timeout",
+			ArtifactRefs:  []string{checkpointRef},
+			EvidenceRefs:  []string{"evidence-ref-codex-app-server-goal-active-timeout"},
+		},
+		LastClosure: &orquestagoal.GoalClosureValidationV0{
+			Status:      orquestagoal.GoalStatusBlockedV0,
+			NeedsRework: true,
+		},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: runRef,
+			Status: "stopped",
+			UsageSummary: &orquestacionnucleoapp.DirectorRunUsageStatsV0{
+				TotalTokens: 23000,
+			},
+		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:          runRef,
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          "active",
+			ArtifactRefs:    []string{checkpointRef},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			empty: true,
+			terminal: []MCPRunQueueRankedCandidateCompactV0{{
+				RunRef: runRef,
+				AppRef: "opes",
+				Status: "stopped",
+			}},
+		},
+		Stats:          stats,
+		GoalStateStore: goalStates,
+		GoalProgressPolicy: MCPAutoprogrammingGoalProgressPolicyV0{
+			CheckpointOnlyHighConsumptionTokens: 20000,
+		},
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{RunRef: runRef})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0 ||
+		action.Severity != "blocked" ||
+		action.GoalStatus != "active" ||
+		action.TokensUsed != 23000 ||
+		action.RecommendedAction != "replan_narrow_context" ||
+		!strings.Contains(action.Reason, "checkpoint_only_high_consumption") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.ArtifactRefs, checkpointRef) ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0) {
 		t.Fatalf("action=%+v", action)
 	}
 }

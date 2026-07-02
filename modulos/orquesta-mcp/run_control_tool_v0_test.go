@@ -236,6 +236,69 @@ func TestMCPRunControlExecutorV0StopForcedReconcilesGoalHighConsumptionCheckpoin
 	}
 }
 
+func TestMCPRunControlExecutorV0StopForcedRespetaUmbralConfiguradoV0(t *testing.T) {
+	runRef := "run-ref-run-control-goal-checkpoint-policy-stop-001"
+	goalRef := "goal-ref-run-control-goal-checkpoint-policy-stop-001"
+	checkpointRef := "artifact-ref-checkpoint:run-control:checkpoint-policy-started-txt"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: "thread-ref-" + goalRef,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Cerrar forced stop checkpoint-only con politica configurable.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: "thread-ref-" + goalRef,
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	port := &fakeMCPRunControlPortV0{
+		readState:  runControlStateForMCPTestV0(runRef, orquestaruncontrol.RunControlStatusRunningV0, false),
+		stopStatus: orquestaruncontrol.RunControlStatusStoppedV0,
+	}
+	goalBackend := &fakeMCPRunControlGoalBackendStateV0{
+		results: []MCPDirectorStatsToolResultV0{
+			mcpRunControlGoalBackendStatsWithUsageForTestV0(runRef, goalRef, "active", 23000, []string{checkpointRef}, nil),
+			{Estado: MCPDirectorStatsEstadoOKV0, RunRef: runRef},
+		},
+	}
+	executor := MCPRunControlToolExecutorV0{
+		Port:             port,
+		GoalBackendState: goalBackend,
+		GoalStateStore:   goalStates,
+		GoalProgressPolicy: MCPAutoprogrammingGoalProgressPolicyV0{
+			CheckpointOnlyHighConsumptionTokens: 20000,
+		},
+	}
+
+	result, err := executor.Execute(context.Background(), MCPRunControlToolInputV0{
+		RequestID:   "req-run-control-goal-checkpoint-policy-stop-001",
+		Action:      "stop",
+		RunRef:      runRef,
+		RequestedBy: "orquesta-director",
+		Reason:      "forced stop tras checkpoint_only_high_consumption configurado",
+		Forced:      true,
+	})
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPRunControlEstadoOKV0 ||
+		result.RecommendedAction != "replan_narrow_context" ||
+		!containsStringMCPTestV0(result.EvidenceRefs, mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPRunControlExecutorV0StopForcedReconcilesGoalHighConsumptionSinCheckpoint(t *testing.T) {
 	runRef := "run-ref-run-control-goal-no-checkpoint-stop-001"
 	goalRef := "goal-ref-run-control-goal-no-checkpoint-stop-001"

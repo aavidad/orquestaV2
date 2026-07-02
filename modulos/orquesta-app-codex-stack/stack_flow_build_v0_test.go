@@ -185,6 +185,9 @@ func TestBuildStackV0PropagaDiagnosticosAutoprogramacionABindingsV0(t *testing.T
 		Message:      "codex goal backend degradado: codex_app_server_auth_missing",
 		EvidenceRefs: []string{"evidence-ref-server-codex-goal-backend-degraded-app_goal"},
 	}}
+	config.AutoprogrammingGoalProgressPolicy = orquestamcp.MCPAutoprogrammingGoalProgressPolicyV0{
+		CheckpointOnlyHighConsumptionTokens: 42000,
+	}
 
 	stack, err := BuildStackV0(config)
 	if err != nil {
@@ -194,6 +197,15 @@ func TestBuildStackV0PropagaDiagnosticosAutoprogramacionABindingsV0(t *testing.T
 		stack.MCPTransportBindings.AutoprogrammingStatusDiagnostics[0].Code != "codex_goal_backend_degraded" ||
 		stack.MCPTransportBindings.AutoprogrammingStatusDiagnostics[0].Scope != "app_goal" {
 		t.Fatalf("diagnostics=%+v", stack.MCPTransportBindings.AutoprogrammingStatusDiagnostics)
+	}
+	runControl, ok := stack.MCPTransportBindings.RunControl.(orquestamcp.MCPRunControlToolExecutorV0)
+	if !ok ||
+		stack.MCPTransportBindings.AutoprogrammingGoalProgressPolicy.CheckpointOnlyHighConsumptionTokens != 42000 ||
+		runControl.GoalProgressPolicy.CheckpointOnlyHighConsumptionTokens != 42000 {
+		t.Fatalf("goal progress policy no propagada: %+v run_control=%+v",
+			stack.MCPTransportBindings.AutoprogrammingGoalProgressPolicy,
+			stack.MCPTransportBindings.RunControl,
+		)
 	}
 }
 

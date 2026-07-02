@@ -28,7 +28,16 @@ accion `observe_goal_backend_wait_for_checkpoint`.
 Si el consumo ya supera el umbral, conserva el bloqueo
 `checkpoint_only_high_consumption`/replan estrecho.
 
+El umbral ya no queda fijado solo en el MCP: la composicion `cmd/orquesta-server`
+publica `ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS` en
+`effective_config`, lo normaliza como politica de progreso y lo inyecta en
+`autoprogramming/status` y `runs/control`. El default conserva `100000` tokens.
+
 ## Pruebas
 
 - `TestMCPAutoprogrammingStatusExecutorV0GoalActiveTimeoutConCheckpointRecienteNoReplanificaAun`
+- `TestMCPAutoprogrammingStatusExecutorV0GoalActiveTimeoutConCheckpointRespetaUmbralConfiguradoV0`
+- `TestMCPRunControlExecutorV0StopForcedRespetaUmbralConfiguradoV0`
+- `TestBuildStackV0PropagaDiagnosticosAutoprogramacionABindingsV0`
+- `TestServerConfigFromEnvV0PublicaUmbralCheckpointGoalConfigurableV0`
 - `go test -count=1 ./modulos/orquesta-mcp`

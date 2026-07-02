@@ -71,7 +71,21 @@ type MCPAutoprogrammingStatusToolExecutorV0 struct {
 	GoalStateStore               orquestagoal.GoalWorkStateStorePortV0
 	GoalRunMarkerStore           orquestagoal.GoalWorkRunMarkerStorePortV0
 	StatusDiagnostics            []MCPAutoprogrammingDiagnosticV0
+	GoalProgressPolicy           MCPAutoprogrammingGoalProgressPolicyV0
 	AllowLegacySupervisorActions bool
+}
+
+type MCPAutoprogrammingGoalProgressPolicyV0 struct {
+	CheckpointOnlyHighConsumptionTokens int64 `json:"checkpoint_only_high_consumption_tokens,omitempty"`
+}
+
+func NormalizeMCPAutoprogrammingGoalProgressPolicyV0(
+	policy MCPAutoprogrammingGoalProgressPolicyV0,
+) MCPAutoprogrammingGoalProgressPolicyV0 {
+	if policy.CheckpointOnlyHighConsumptionTokens <= 0 {
+		policy.CheckpointOnlyHighConsumptionTokens = mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensDefaultV0
+	}
+	return policy
 }
 
 func MCPAutoprogrammingStatusDescriptorV0() MCPAutoprogrammingStatusToolDescriptorV0 {
@@ -202,7 +216,11 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	result.QueueHealth = buildMCPAutoprogrammingQueueHealthV0(result.Queue, goalStatesByRunRef, goalRunMarkersByRunRef, healthRun, healthObservedRuns...)
 	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, goalStatesByRunRef, goalRunMarkersByRunRef, healthRun, healthObservedRuns...)
 	observedByRunRef := mcpAutoprogrammingObservedRunsByRefV0(healthRun, healthObservedRuns...)
-	blockedGoalActions, resolvedGoalActions := mcpAutoprogrammingGoalFirstBlockedActionsV0(goalStates, observedByRunRef)
+	blockedGoalActions, resolvedGoalActions := mcpAutoprogrammingGoalFirstBlockedActionsV0(
+		goalStates,
+		observedByRunRef,
+		executor.GoalProgressPolicy,
+	)
 	result.StaleRunning = append(result.StaleRunning, blockedGoalActions...)
 	result.ResolvedRuns = append(result.ResolvedRuns, resolvedGoalActions...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingQAFailedPublicTextActionsV0(observedByRunRef)...)

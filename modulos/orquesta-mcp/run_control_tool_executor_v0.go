@@ -9,10 +9,11 @@ import (
 )
 
 type MCPRunControlToolExecutorV0 struct {
-	Port              orquestaruncontrol.RunControlWriterPortV0
-	ExternalJobSource MCPDirectorExternalJobStatsSourcePortV0
-	GoalBackendState  MCPTransportDirectorStatsExecutorV0
-	GoalStateStore    orquestagoal.GoalWorkStateStorePortV0
+	Port               orquestaruncontrol.RunControlWriterPortV0
+	ExternalJobSource  MCPDirectorExternalJobStatsSourcePortV0
+	GoalBackendState   MCPTransportDirectorStatsExecutorV0
+	GoalStateStore     orquestagoal.GoalWorkStateStorePortV0
+	GoalProgressPolicy MCPAutoprogrammingGoalProgressPolicyV0
 }
 
 func NewMCPRunControlToolExecutorV0(
@@ -200,7 +201,7 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 		mcpRunControlGoalBackendActiveV0(afterGoal) {
 		return result
 	}
-	reasonCode, evidenceRef, ok := mcpRunControlForcedTerminalReasonV0(beforeGoal)
+	reasonCode, evidenceRef, ok := mcpRunControlForcedTerminalReasonV0(beforeGoal, executor.GoalProgressPolicy)
 	if !ok {
 		return result
 	}
@@ -271,10 +272,12 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 
 func mcpRunControlForcedTerminalReasonV0(
 	stats *MCPDirectorStatsToolResultV0,
+	policy MCPAutoprogrammingGoalProgressPolicyV0,
 ) (string, string, bool) {
+	policy = NormalizeMCPAutoprogrammingGoalProgressPolicyV0(policy)
 	if stats == nil ||
 		!mcpRunControlGoalBackendActiveV0(stats) ||
-		mcpRunControlGoalTokensV0(stats) < mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensV0 ||
+		mcpRunControlGoalTokensV0(stats) < policy.CheckpointOnlyHighConsumptionTokens ||
 		len(mcpRunControlGoalDomainReceiptRefsV0(stats)) > 0 {
 		return "", "", false
 	}
