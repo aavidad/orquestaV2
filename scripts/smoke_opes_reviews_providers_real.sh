@@ -54,25 +54,7 @@ provider_enabled() {
 }
 
 cleanup() {
-  if [[ -n "$base_url" ]]; then
-    curl -sS -m 5 -X POST "$base_url/api/v0/server/shutdown" \
-      -H "Content-Type: application/json" \
-      -d '{"request_id":"req-smoke-shutdown","correlation_id":"corr-smoke-shutdown","forced":true}' \
-      >/dev/null 2>&1 || true
-  fi
-  if [[ -n "$server_pid" ]] && kill -0 "$server_pid" >/dev/null 2>&1; then
-    kill -INT "$server_pid" >/dev/null 2>&1 || true
-    for _ in $(seq 1 40); do
-      if ! kill -0 "$server_pid" >/dev/null 2>&1; then
-        break
-      fi
-      sleep 0.25
-    done
-    if kill -0 "$server_pid" >/dev/null 2>&1; then
-      kill -TERM "$server_pid" >/dev/null 2>&1 || true
-    fi
-    wait "$server_pid" >/dev/null 2>&1 || true
-  fi
+  smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 40 "$RUNTIME_DIR"
   if [[ -n "$external_pid" ]] && kill -0 "$external_pid" >/dev/null 2>&1; then
     kill -INT "$external_pid" >/dev/null 2>&1 || true
     wait "$external_pid" >/dev/null 2>&1 || true

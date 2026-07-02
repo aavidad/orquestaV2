@@ -40,7 +40,7 @@ need_cmd() {
 }
 
 cleanup() {
-  smoke_shutdown_orquesta_server "$server_pid" "$base_url"
+  smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 25 "$runtime_dir"
   smoke_temp_root_cleanup "$work_root" "$keep_dir"
 }
 

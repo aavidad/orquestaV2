@@ -174,6 +174,26 @@ func TestSmokeCommonShutdownCleanupBackendGoalSiWrapperCancelaV0(t *testing.T) {
 	}
 }
 
+func TestSmokesAisladosPasanRuntimeDirAlShutdownComunV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	checks := map[string]string{
+		"scripts/smoke_goal_first_app_server_real.sh":            `smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 25 "$runtime_dir"`,
+		"scripts/smoke_autoprogramming_supervised.sh":            `smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 30 "$runtime_dir"`,
+		"scripts/smoke_codex_required_test_runner_state_file.sh": `smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 30 "$runtime_dir"`,
+		"scripts/smoke_orquesta_server_rest_director.sh":         `smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 25 "$runtime_dir"`,
+		"scripts/smoke_autoprogramming_bolsa_real.sh":            `smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 30 "$runtime_dir"`,
+		"scripts/smoke_external_domain_fake_real.sh":             `smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 30 "$runtime_dir"`,
+		"scripts/smoke_external_domain_non_opes_real.sh":         `smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 30 "$runtime_dir"`,
+		"scripts/smoke_opes_reviews_providers_real.sh":           `smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 40 "$RUNTIME_DIR"`,
+	}
+	for path, want := range checks {
+		text := readOperationalDocGuardV0(t, root, path)
+		if !strings.Contains(text, want) {
+			t.Fatalf("%s no pasa runtime al shutdown comun: falta %q", path, want)
+		}
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
