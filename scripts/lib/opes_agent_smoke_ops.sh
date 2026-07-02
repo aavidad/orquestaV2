@@ -13,25 +13,7 @@ smoke_compact_ref() {
 }
 
 smoke_cleanup() {
-  if [[ -n "$base_url" ]]; then
-    curl -sS -m 5 -X POST "$base_url/api/v0/server/shutdown" \
-      -H "Content-Type: application/json" \
-      -d '{"request_id":"req-smoke-shutdown","correlation_id":"corr-smoke-shutdown","forced":true}' \
-      >/dev/null 2>&1 || true
-  fi
-  if [[ -n "$server_pid" ]] && kill -0 "$server_pid" >/dev/null 2>&1; then
-    kill -INT "$server_pid" >/dev/null 2>&1 || true
-    for _ in $(seq 1 30); do
-      if ! kill -0 "$server_pid" >/dev/null 2>&1; then
-        break
-      fi
-      sleep 0.2
-    done
-    if kill -0 "$server_pid" >/dev/null 2>&1; then
-      kill -TERM "$server_pid" >/dev/null 2>&1 || true
-    fi
-    wait "$server_pid" >/dev/null 2>&1 || true
-  fi
+  smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 30 "$RUNTIME_DIR"
   if [[ "$KEEP_DIR" == "1" ]]; then
     smoke_temp_root_cleanup "$SMOKE_ROOT" 1
   else

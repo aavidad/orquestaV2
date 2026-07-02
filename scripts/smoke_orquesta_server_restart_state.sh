@@ -94,20 +94,10 @@ start_server() {
 
 stop_server() {
   if [[ -z "$server_pid" ]]; then
+    smoke_cleanup_codex_app_server_tmux_runtime "$runtime_dir"
     return 0
   fi
-  if kill -0 "$server_pid" >/dev/null 2>&1; then
-    kill -INT "$server_pid" >/dev/null 2>&1 || true
-    for _ in $(seq 1 30); do
-      if ! kill -0 "$server_pid" >/dev/null 2>&1; then
-        server_pid=""
-        return 0
-      fi
-      sleep 0.2
-    done
-    kill -TERM "$server_pid" >/dev/null 2>&1 || true
-    wait "$server_pid" >/dev/null 2>&1 || true
-  fi
+  smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 30 "$runtime_dir"
   server_pid=""
 }
 

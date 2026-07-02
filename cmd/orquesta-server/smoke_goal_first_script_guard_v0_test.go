@@ -185,6 +185,8 @@ func TestSmokesAisladosPasanRuntimeDirAlShutdownComunV0(t *testing.T) {
 		"scripts/smoke_external_domain_fake_real.sh":             `smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 30 "$runtime_dir"`,
 		"scripts/smoke_external_domain_non_opes_real.sh":         `smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 30 "$runtime_dir"`,
 		"scripts/smoke_opes_reviews_providers_real.sh":           `smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 40 "$RUNTIME_DIR"`,
+		"scripts/lib/opes_agent_smoke_ops.sh":                    `smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 30 "$RUNTIME_DIR"`,
+		"scripts/smoke_orquesta_server_restart_state.sh":         `smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 30 "$runtime_dir"`,
 	}
 	for path, want := range checks {
 		text := readOperationalDocGuardV0(t, root, path)
