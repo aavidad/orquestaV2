@@ -66,16 +66,19 @@ type CodexGoalObservationRequestV0 struct {
 }
 
 type CodexGoalObservationReceiptV0 struct {
-	Status              string                                  `json:"status"`
-	GoalRef             string                                  `json:"goal_ref,omitempty"`
-	ExternalGoalRef     string                                  `json:"external_goal_ref,omitempty"`
-	Summary             string                                  `json:"summary,omitempty"`
-	ArtifactRefs        []string                                `json:"artifact_refs,omitempty"`
-	ArtifactPaths       []string                                `json:"artifact_paths,omitempty"`
-	RequiredTestResults []orquestagoal.GoalRequiredTestResultV0 `json:"required_test_results,omitempty"`
-	DomainReceiptRefs   []string                                `json:"domain_receipt_refs,omitempty"`
-	EvidenceRefs        []string                                `json:"evidence_refs,omitempty"`
-	IssueCode           string                                  `json:"issue_code,omitempty"`
+	Status                string                                    `json:"status"`
+	GoalRef               string                                    `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string                                    `json:"external_goal_ref,omitempty"`
+	Summary               string                                    `json:"summary,omitempty"`
+	ArtifactRefs          []string                                  `json:"artifact_refs,omitempty"`
+	ArtifactPaths         []string                                  `json:"artifact_paths,omitempty"`
+	MaterializedArtifacts []orquestagoal.GoalMaterializedArtifactV0 `json:"materialized_artifacts,omitempty"`
+	Checklist             orquestagoal.GoalWorkChecklistV0          `json:"checklist,omitempty"`
+	RequiredTestResults   []orquestagoal.GoalRequiredTestResultV0   `json:"required_test_results,omitempty"`
+	DomainReceiptRefs     []string                                  `json:"domain_receipt_refs,omitempty"`
+	ReworkPlanRefs        []string                                  `json:"rework_plan_refs,omitempty"`
+	EvidenceRefs          []string                                  `json:"evidence_refs,omitempty"`
+	IssueCode             string                                    `json:"issue_code,omitempty"`
 }
 
 type CodexGoalStarterPortV0 interface {
@@ -289,6 +292,15 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	if spec.ClosurePolicy.RequireArtifactPaths {
 		b.WriteString("- El recibo terminal debe declarar artifact_paths con rutas relativas dentro del write-set.\n")
 	}
+	if spec.ClosurePolicy.RequireMaterializedArtifacts {
+		b.WriteString("- El recibo terminal debe declarar materialized_artifacts: cada fichero/artefacto producido, tipo, path relativo, status valid/invalid/partial/non_publishable y evidence_refs.\n")
+	}
+	if spec.ClosurePolicy.RequireChecklist {
+		b.WriteString("- El recibo terminal debe declarar checklist.expected_refs, checklist.completed_refs, checklist.missing_refs y evidencias de QA/checkpoint.\n")
+	}
+	if spec.ClosurePolicy.RequireReworkPlanForPartialArtifacts {
+		b.WriteString("- Si algun artefacto queda partial, invalid o non_publishable, no cierres complete: devuelve blocked y rework_plan_refs con el plan/fase concreta de reparacion.\n")
+	}
 	if spec.ClosurePolicy.RequireDomainReceipt {
 		if strings.TrimSpace(spec.WorkProfileKind) == "domain_work" {
 			b.WriteString("- El receipt de dominio lo obtiene Orquesta fuera del goal despues de observar tu artefacto; no bloquees por no tener conector REST/MCP de la app externa.\n")
@@ -325,7 +337,7 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	b.WriteString(spec.GoalRef)
 	b.WriteString("\",\"schema_version\":\"")
 	b.WriteString(CodexGoalResultSchemaV0)
-	b.WriteString("\",\"status\":\"complete\",\"summary\":\"...\",\"artifact_refs\":[],\"artifact_paths\":[],\"required_test_results\":[{\"test_ref\":\"...\",\"status\":\"passed\",\"evidence_refs\":[]}],\"domain_receipt_refs\":[],\"evidence_refs\":[]}.\n")
+	b.WriteString("\",\"status\":\"complete\",\"summary\":\"...\",\"artifact_refs\":[],\"artifact_paths\":[],\"materialized_artifacts\":[{\"artifact_ref\":\"...\",\"path\":\"...\",\"artifact_type\":\"...\",\"status\":\"valid\",\"evidence_refs\":[],\"issues\":[]}],\"checklist\":{\"expected_refs\":[],\"completed_refs\":[],\"missing_refs\":[],\"evidence_refs\":[]},\"required_test_results\":[{\"test_ref\":\"...\",\"status\":\"passed\",\"evidence_refs\":[]}],\"domain_receipt_refs\":[],\"rework_plan_refs\":[],\"evidence_refs\":[]}.\n")
 	b.WriteString("- schema_version es obligatorio y status/estado debe ser terminal explicito: complete si entregas cierre verificable, blocked si hay bloqueo externo o invalid si el resultado no es usable.\n")
 	if spec.ClosurePolicy.RequireDomainReceipt && strings.TrimSpace(spec.WorkProfileKind) == "domain_work" {
 		b.WriteString("- En domain_work deja domain_receipt_refs vacio salvo que el contrato te haya dado un receipt real; Orquesta lo derivara del ledger despues de submit_artifact.\n")
@@ -339,6 +351,8 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	if len(spec.WriteSet) > 0 {
 		b.WriteString("- En artifact_paths lista todas las rutas relativas de ficheros creados, modificados o verificados para el cierre, incluido el JSON durable de resultado; si escribiste algo fuera del write-set, no lo ocultes: declaralo en artifact_paths y marca status blocked con summary out_of_scope_artifacts.\n")
 	}
+	b.WriteString("- En materialized_artifacts separa artefactos validos de borradores recuperables: usa status partial/invalid/non_publishable con issues si falta QA, calidad publicable, cobertura, schema o validacion.\n")
+	b.WriteString("- En checklist.missing_refs declara lo que falta para completar el contrato; si hay faltantes o materialized_artifacts no validos, devuelve status blocked y rework_plan_refs accionables.\n")
 	if resultFilePath := codexGoalResultFilePathV0(spec); resultFilePath != "" {
 		b.WriteString("- Antes de marcar el goal como complete, escribe el mismo JSON en ")
 		b.WriteString(resultFilePath)
@@ -527,16 +541,19 @@ func goalWorkResultFromCodexObservationV0(
 		status = orquestagoal.GoalStatusRunningV0
 	}
 	result := orquestagoal.GoalWorkResultV0{
-		SchemaVersion:       orquestagoal.GoalWorkResultSchemaV0,
-		Status:              status,
-		GoalRef:             firstNonEmptyCodexGoalStringV0(receipt.GoalRef, request.GoalRef),
-		ExternalGoalRef:     firstNonEmptyCodexGoalStringV0(receipt.ExternalGoalRef, request.ExternalGoalRef),
-		Summary:             strings.TrimSpace(receipt.Summary),
-		ArtifactRefs:        append([]string(nil), receipt.ArtifactRefs...),
-		ArtifactPaths:       append([]string(nil), receipt.ArtifactPaths...),
-		RequiredTestResults: append([]orquestagoal.GoalRequiredTestResultV0(nil), receipt.RequiredTestResults...),
-		DomainReceiptRefs:   append([]string(nil), receipt.DomainReceiptRefs...),
-		EvidenceRefs:        append([]string(nil), receipt.EvidenceRefs...),
+		SchemaVersion:         orquestagoal.GoalWorkResultSchemaV0,
+		Status:                status,
+		GoalRef:               firstNonEmptyCodexGoalStringV0(receipt.GoalRef, request.GoalRef),
+		ExternalGoalRef:       firstNonEmptyCodexGoalStringV0(receipt.ExternalGoalRef, request.ExternalGoalRef),
+		Summary:               strings.TrimSpace(receipt.Summary),
+		ArtifactRefs:          append([]string(nil), receipt.ArtifactRefs...),
+		ArtifactPaths:         append([]string(nil), receipt.ArtifactPaths...),
+		MaterializedArtifacts: append([]orquestagoal.GoalMaterializedArtifactV0(nil), receipt.MaterializedArtifacts...),
+		Checklist:             receipt.Checklist,
+		RequiredTestResults:   append([]orquestagoal.GoalRequiredTestResultV0(nil), receipt.RequiredTestResults...),
+		DomainReceiptRefs:     append([]string(nil), receipt.DomainReceiptRefs...),
+		ReworkPlanRefs:        append([]string(nil), receipt.ReworkPlanRefs...),
+		EvidenceRefs:          append([]string(nil), receipt.EvidenceRefs...),
 	}
 	if receipt.IssueCode != "" {
 		result.Issues = append(result.Issues, orquestagoal.GoalWorkIssueV0{Code: receipt.IssueCode})

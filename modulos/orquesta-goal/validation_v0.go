@@ -248,11 +248,17 @@ func ValidateGoalWorkClosureV0(spec GoalWorkSpecV0, result GoalWorkResultV0) Goa
 			Issues:      []GoalWorkIssueV0{{Code: ErrGoalClosureInvalidV0, Field: "goal_ref"}},
 		}
 	}
+	closureEvidenceRefs := goalClosureEvidenceRefsV0(result)
+	partialIssues := goalPartialArtifactClosureIssuesV0(spec, result)
 	if result.Status != GoalStatusCompleteV0 {
+		issues := []GoalWorkIssueV0{{Code: ErrGoalClosureInvalidV0, Field: "status"}}
+		issues = append(issues, result.Issues...)
+		issues = append(issues, partialIssues...)
 		return GoalClosureValidationV0{
-			Status:      GoalStatusBlockedV0,
-			NeedsRework: result.Status == GoalStatusBlockedV0 || result.Status == GoalStatusInvalidV0,
-			Issues:      []GoalWorkIssueV0{{Code: ErrGoalClosureInvalidV0, Field: "status"}},
+			Status:       GoalStatusBlockedV0,
+			NeedsRework:  result.Status == GoalStatusBlockedV0 || result.Status == GoalStatusInvalidV0 || len(partialIssues) > 0,
+			EvidenceRefs: closureEvidenceRefs,
+			Issues:       issues,
 		}
 	}
 	if spec.ClosurePolicy.RequireArtifactPaths && len(result.ArtifactPaths) == 0 {
@@ -262,7 +268,22 @@ func ValidateGoalWorkClosureV0(spec GoalWorkSpecV0, result GoalWorkResultV0) Goa
 			Issues:      []GoalWorkIssueV0{{Code: ErrGoalClosureInvalidV0, Field: "artifact_paths"}},
 		}
 	}
-	if outOfScope := goalArtifactPathsOutsideWriteSetV0(spec.WriteSet, result.ArtifactPaths); len(outOfScope) > 0 {
+	if spec.ClosurePolicy.RequireMaterializedArtifacts && len(result.MaterializedArtifacts) == 0 {
+		return GoalClosureValidationV0{
+			Status:      GoalStatusBlockedV0,
+			NeedsRework: true,
+			Issues:      []GoalWorkIssueV0{{Code: ErrGoalClosureInvalidV0, Field: "materialized_artifacts"}},
+		}
+	}
+	if len(partialIssues) > 0 {
+		return GoalClosureValidationV0{
+			Status:       GoalStatusBlockedV0,
+			NeedsRework:  true,
+			EvidenceRefs: closureEvidenceRefs,
+			Issues:       partialIssues,
+		}
+	}
+	if outOfScope := goalArtifactPathsOutsideWriteSetV0(spec.WriteSet, goalResultArtifactPathsForScopeV0(result)); len(outOfScope) > 0 {
 		issues := make([]GoalWorkIssueV0, 0, len(outOfScope))
 		for range outOfScope {
 			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalArtifactPathScopeV0, Field: "artifact_paths"})
@@ -301,7 +322,7 @@ func ValidateGoalWorkClosureV0(spec GoalWorkSpecV0, result GoalWorkResultV0) Goa
 	return GoalClosureValidationV0{
 		Status:       GoalStatusAcceptedV0,
 		Accepted:     true,
-		EvidenceRefs: append([]string(nil), result.EvidenceRefs...),
+		EvidenceRefs: closureEvidenceRefs,
 	}
 }
 
@@ -309,6 +330,60 @@ type DefaultGoalWorkClosureValidatorV0 struct{}
 
 func (DefaultGoalWorkClosureValidatorV0) ValidateGoalWorkClosureV0(_ context.Context, spec GoalWorkSpecV0, result GoalWorkResultV0) (GoalClosureValidationV0, error) {
 	return ValidateGoalWorkClosureV0(spec, result), nil
+}
+
+func goalPartialArtifactClosureIssuesV0(spec GoalWorkSpecV0, result GoalWorkResultV0) []GoalWorkIssueV0 {
+	issues := []GoalWorkIssueV0{}
+	partial := false
+	for _, artifact := range result.MaterializedArtifacts {
+		if artifact.Status != GoalMaterializedArtifactStatusValidV0 {
+			partial = true
+			issues = append(issues, GoalWorkIssueV0{
+				Code:  ErrGoalMaterializedArtifactInvalidV0,
+				Field: "materialized_artifacts.status",
+			})
+		}
+	}
+	if spec.ClosurePolicy.RequireChecklist && len(result.Checklist.ExpectedRefs) == 0 {
+		partial = true
+		issues = append(issues, GoalWorkIssueV0{
+			Code:  ErrGoalChecklistIncompleteV0,
+			Field: "checklist.expected_refs",
+		})
+	}
+	if len(result.Checklist.MissingRefs) > 0 {
+		partial = true
+		issues = append(issues, GoalWorkIssueV0{
+			Code:  ErrGoalChecklistIncompleteV0,
+			Field: "checklist.missing_refs",
+		})
+	}
+	if partial && spec.ClosurePolicy.RequireReworkPlanForPartialArtifacts && len(result.ReworkPlanRefs) == 0 {
+		issues = append(issues, GoalWorkIssueV0{
+			Code:  ErrGoalReworkPlanRequiredV0,
+			Field: "rework_plan_refs",
+		})
+	}
+	return issues
+}
+
+func goalClosureEvidenceRefsV0(result GoalWorkResultV0) []string {
+	refs := append([]string(nil), result.EvidenceRefs...)
+	for _, artifact := range result.MaterializedArtifacts {
+		refs = append(refs, artifact.EvidenceRefs...)
+	}
+	refs = append(refs, result.Checklist.EvidenceRefs...)
+	return compactGoalStringsV0(refs)
+}
+
+func goalResultArtifactPathsForScopeV0(result GoalWorkResultV0) []string {
+	paths := append([]string(nil), result.ArtifactPaths...)
+	for _, artifact := range result.MaterializedArtifacts {
+		if artifact.Path != "" {
+			paths = append(paths, artifact.Path)
+		}
+	}
+	return paths
 }
 
 func NormalizeGoalWorkResultV0(result GoalWorkResultV0) GoalWorkResultV0 {
@@ -323,6 +398,32 @@ func NormalizeGoalWorkResultV0(result GoalWorkResultV0) GoalWorkResultV0 {
 	for i := range result.ArtifactPaths {
 		result.ArtifactPaths[i] = filepath.ToSlash(strings.TrimSpace(result.ArtifactPaths[i]))
 	}
+	for i := range result.MaterializedArtifacts {
+		result.MaterializedArtifacts[i].ArtifactRef = strings.TrimSpace(result.MaterializedArtifacts[i].ArtifactRef)
+		result.MaterializedArtifacts[i].Path = filepath.ToSlash(strings.TrimSpace(result.MaterializedArtifacts[i].Path))
+		result.MaterializedArtifacts[i].ArtifactType = strings.TrimSpace(result.MaterializedArtifacts[i].ArtifactType)
+		result.MaterializedArtifacts[i].Scope = strings.TrimSpace(result.MaterializedArtifacts[i].Scope)
+		result.MaterializedArtifacts[i].Status = strings.TrimSpace(result.MaterializedArtifacts[i].Status)
+		for j := range result.MaterializedArtifacts[i].EvidenceRefs {
+			result.MaterializedArtifacts[i].EvidenceRefs[j] = strings.TrimSpace(result.MaterializedArtifacts[i].EvidenceRefs[j])
+		}
+		for j := range result.MaterializedArtifacts[i].Issues {
+			result.MaterializedArtifacts[i].Issues[j].Code = strings.TrimSpace(result.MaterializedArtifacts[i].Issues[j].Code)
+			result.MaterializedArtifacts[i].Issues[j].Field = strings.TrimSpace(result.MaterializedArtifacts[i].Issues[j].Field)
+		}
+	}
+	for i := range result.Checklist.ExpectedRefs {
+		result.Checklist.ExpectedRefs[i] = strings.TrimSpace(result.Checklist.ExpectedRefs[i])
+	}
+	for i := range result.Checklist.CompletedRefs {
+		result.Checklist.CompletedRefs[i] = strings.TrimSpace(result.Checklist.CompletedRefs[i])
+	}
+	for i := range result.Checklist.MissingRefs {
+		result.Checklist.MissingRefs[i] = strings.TrimSpace(result.Checklist.MissingRefs[i])
+	}
+	for i := range result.Checklist.EvidenceRefs {
+		result.Checklist.EvidenceRefs[i] = strings.TrimSpace(result.Checklist.EvidenceRefs[i])
+	}
 	for i := range result.RequiredTestResults {
 		result.RequiredTestResults[i].TestRef = strings.TrimSpace(result.RequiredTestResults[i].TestRef)
 		result.RequiredTestResults[i].Status = strings.TrimSpace(result.RequiredTestResults[i].Status)
@@ -333,8 +434,15 @@ func NormalizeGoalWorkResultV0(result GoalWorkResultV0) GoalWorkResultV0 {
 	for i := range result.DomainReceiptRefs {
 		result.DomainReceiptRefs[i] = strings.TrimSpace(result.DomainReceiptRefs[i])
 	}
+	for i := range result.ReworkPlanRefs {
+		result.ReworkPlanRefs[i] = strings.TrimSpace(result.ReworkPlanRefs[i])
+	}
 	for i := range result.EvidenceRefs {
 		result.EvidenceRefs[i] = strings.TrimSpace(result.EvidenceRefs[i])
+	}
+	for i := range result.Issues {
+		result.Issues[i].Code = strings.TrimSpace(result.Issues[i].Code)
+		result.Issues[i].Field = strings.TrimSpace(result.Issues[i].Field)
 	}
 	return result
 }
@@ -508,6 +616,28 @@ func ValidateGoalWorkResultV0(result GoalWorkResultV0) []GoalWorkIssueV0 {
 			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalWriteSetInvalidV0, Field: "artifact_paths"})
 		}
 	}
+	for _, artifact := range result.MaterializedArtifacts {
+		if artifact.ArtifactRef == "" && artifact.Path == "" {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalMaterializedArtifactInvalidV0, Field: "materialized_artifacts"})
+		}
+		validateGoalRefsV0(&issues, "materialized_artifacts.artifact_ref", artifact.ArtifactRef)
+		if artifact.Path != "" && !validGoalWriteScopePathV0(artifact.Path) {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalWriteSetInvalidV0, Field: "materialized_artifacts.path"})
+		}
+		if !validGoalMaterializedArtifactStatusV0(artifact.Status) {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalMaterializedArtifactInvalidV0, Field: "materialized_artifacts.status"})
+		}
+		for _, evidenceRef := range artifact.EvidenceRefs {
+			validateRequiredGoalRefV0(&issues, "materialized_artifacts.evidence_refs", evidenceRef)
+		}
+		for _, issue := range artifact.Issues {
+			validateRequiredGoalRefV0(&issues, "materialized_artifacts.issues.code", issue.Code)
+		}
+	}
+	validateGoalChecklistRefsV0(&issues, "checklist.expected_refs", result.Checklist.ExpectedRefs)
+	validateGoalChecklistRefsV0(&issues, "checklist.completed_refs", result.Checklist.CompletedRefs)
+	validateGoalChecklistRefsV0(&issues, "checklist.missing_refs", result.Checklist.MissingRefs)
+	validateGoalChecklistRefsV0(&issues, "checklist.evidence_refs", result.Checklist.EvidenceRefs)
 	for _, test := range result.RequiredTestResults {
 		validateRequiredGoalRefV0(&issues, "required_test_results.test_ref", test.TestRef)
 		if strings.TrimSpace(test.Status) == "" {
@@ -520,10 +650,22 @@ func ValidateGoalWorkResultV0(result GoalWorkResultV0) []GoalWorkIssueV0 {
 	for _, receiptRef := range result.DomainReceiptRefs {
 		validateRequiredGoalRefV0(&issues, "domain_receipt_refs", receiptRef)
 	}
+	for _, reworkPlanRef := range result.ReworkPlanRefs {
+		validateRequiredGoalRefV0(&issues, "rework_plan_refs", reworkPlanRef)
+	}
 	for _, evidenceRef := range result.EvidenceRefs {
 		validateRequiredGoalRefV0(&issues, "evidence_refs", evidenceRef)
 	}
+	for _, issue := range result.Issues {
+		validateRequiredGoalRefV0(&issues, "issues.code", issue.Code)
+	}
 	return issues
+}
+
+func validateGoalChecklistRefsV0(issues *[]GoalWorkIssueV0, field string, refs []string) {
+	for _, ref := range refs {
+		validateRequiredGoalRefV0(issues, field, ref)
+	}
 }
 
 func validateRequiredGoalRefV0(issues *[]GoalWorkIssueV0, field, value string) {
@@ -619,6 +761,18 @@ func validGoalWorkResultStatusV0(status string) bool {
 		GoalStatusCompleteV0,
 		GoalStatusBlockedV0,
 		GoalStatusInvalidV0:
+		return true
+	default:
+		return false
+	}
+}
+
+func validGoalMaterializedArtifactStatusV0(status string) bool {
+	switch strings.TrimSpace(status) {
+	case GoalMaterializedArtifactStatusValidV0,
+		GoalMaterializedArtifactStatusInvalidV0,
+		GoalMaterializedArtifactStatusPartialV0,
+		GoalMaterializedArtifactStatusNonPublishableV0:
 		return true
 	default:
 		return false

@@ -25,6 +25,24 @@ Incluye:
   residente sin reconstruir el loop director historico.
 - Validacion estructural de refs, write-set relativo, observaciones, resultados
   y evidencias requeridas.
+- Contrato nativo de artefactos materializados:
+  `materialized_artifacts` declara cada fichero/artefacto producido con path,
+  tipo, estado (`valid`, `invalid`, `partial`, `non_publishable`), evidencias e
+  issues; `checklist` declara expectativas completadas/faltantes; y
+  `rework_plan_refs` enlaza el plan causal de reparacion cuando el cierre no es
+  publicable.
+
+Regla de cierre:
+
+- Un resultado `complete` con cualquier `materialized_artifacts.status` distinto
+  de `valid` queda bloqueado y necesita rework.
+- Si la politica exige checklist, no se acepta cierre sin
+  `checklist.expected_refs` o con `checklist.missing_refs`.
+- Si hay artefactos parciales y la politica exige plan de rework, no se acepta
+  cierre sin `rework_plan_refs`.
+- Los `artifact_paths` y los paths de `materialized_artifacts` se validan contra
+  el `write_set`; el scanner de filesystem puede ayudar a recuperar evidencias,
+  pero el contrato canonico de cierre vive en `GoalWorkResultV0`.
 
 No incluye:
 

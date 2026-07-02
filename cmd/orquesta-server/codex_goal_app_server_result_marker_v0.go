@@ -10,17 +10,20 @@ import (
 )
 
 type codexAppServerGoalResultMarkerV0 struct {
-	SchemaVersion       string                                  `json:"schema_version,omitempty"`
-	Status              string                                  `json:"status,omitempty"`
-	Estado              string                                  `json:"estado,omitempty"`
-	GoalRef             string                                  `json:"goal_ref,omitempty"`
-	ExternalGoalRef     string                                  `json:"external_goal_ref,omitempty"`
-	Summary             string                                  `json:"summary,omitempty"`
-	ArtifactRefs        []string                                `json:"artifact_refs,omitempty"`
-	ArtifactPaths       []string                                `json:"artifact_paths,omitempty"`
-	RequiredTestResults []orquestagoal.GoalRequiredTestResultV0 `json:"required_test_results,omitempty"`
-	DomainReceiptRefs   []string                                `json:"domain_receipt_refs,omitempty"`
-	EvidenceRefs        []string                                `json:"evidence_refs,omitempty"`
+	SchemaVersion         string                                    `json:"schema_version,omitempty"`
+	Status                string                                    `json:"status,omitempty"`
+	Estado                string                                    `json:"estado,omitempty"`
+	GoalRef               string                                    `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string                                    `json:"external_goal_ref,omitempty"`
+	Summary               string                                    `json:"summary,omitempty"`
+	ArtifactRefs          []string                                  `json:"artifact_refs,omitempty"`
+	ArtifactPaths         []string                                  `json:"artifact_paths,omitempty"`
+	MaterializedArtifacts []orquestagoal.GoalMaterializedArtifactV0 `json:"materialized_artifacts,omitempty"`
+	Checklist             orquestagoal.GoalWorkChecklistV0          `json:"checklist,omitempty"`
+	RequiredTestResults   []orquestagoal.GoalRequiredTestResultV0   `json:"required_test_results,omitempty"`
+	DomainReceiptRefs     []string                                  `json:"domain_receipt_refs,omitempty"`
+	ReworkPlanRefs        []string                                  `json:"rework_plan_refs,omitempty"`
+	EvidenceRefs          []string                                  `json:"evidence_refs,omitempty"`
 }
 
 func codexAppServerGoalResultFromThreadV0(
@@ -151,10 +154,25 @@ func mergeCodexAppServerGoalResultV0(
 	}
 	receipt.ArtifactRefs = compactServerStackStringsV0(append(receipt.ArtifactRefs, marked.ArtifactRefs...))
 	receipt.ArtifactPaths = compactServerStackStringsV0(append(receipt.ArtifactPaths, marked.ArtifactPaths...))
+	receipt.MaterializedArtifacts = append(receipt.MaterializedArtifacts, marked.MaterializedArtifacts...)
+	receipt.Checklist = mergeCodexAppServerGoalResultChecklistV0(receipt.Checklist, marked.Checklist)
 	receipt.RequiredTestResults = append(receipt.RequiredTestResults, marked.RequiredTestResults...)
 	receipt.DomainReceiptRefs = compactServerStackStringsV0(append(receipt.DomainReceiptRefs, marked.DomainReceiptRefs...))
+	receipt.ReworkPlanRefs = compactServerStackStringsV0(append(receipt.ReworkPlanRefs, marked.ReworkPlanRefs...))
 	receipt.EvidenceRefs = compactServerStackStringsV0(append(
 		append(receipt.EvidenceRefs, sourceEvidenceRef),
 		marked.EvidenceRefs...,
 	))
+}
+
+func mergeCodexAppServerGoalResultChecklistV0(
+	current orquestagoal.GoalWorkChecklistV0,
+	next orquestagoal.GoalWorkChecklistV0,
+) orquestagoal.GoalWorkChecklistV0 {
+	return orquestagoal.GoalWorkChecklistV0{
+		ExpectedRefs:  compactServerStackStringsV0(append(current.ExpectedRefs, next.ExpectedRefs...)),
+		CompletedRefs: compactServerStackStringsV0(append(current.CompletedRefs, next.CompletedRefs...)),
+		MissingRefs:   compactServerStackStringsV0(append(current.MissingRefs, next.MissingRefs...)),
+		EvidenceRefs:  compactServerStackStringsV0(append(current.EvidenceRefs, next.EvidenceRefs...)),
+	}
 }

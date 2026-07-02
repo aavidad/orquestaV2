@@ -23,19 +23,29 @@ const (
 )
 
 const (
-	ErrGoalRefRequiredV0       = "goal_ref_required"
-	ErrGoalRefInvalidV0        = "goal_ref_invalid"
-	ErrGoalObjectiveRequiredV0 = "goal_objective_required"
-	ErrGoalDirectorRequiredV0  = "goal_director_kind_required"
-	ErrGoalDirectorInvalidV0   = "goal_director_kind_invalid"
-	ErrGoalWriteSetRequiredV0  = "goal_write_set_required"
-	ErrGoalWriteSetInvalidV0   = "goal_write_set_invalid"
-	ErrGoalRefFieldInvalidV0   = "goal_ref_field_invalid"
-	ErrGoalRuleInvalidV0       = "goal_rule_invalid"
-	ErrGoalSpecLimitExceededV0 = "goal_spec_limit_exceeded"
-	ErrGoalStatusInvalidV0     = "goal_status_invalid"
-	ErrGoalClosureInvalidV0    = "goal_closure_invalid"
-	ErrGoalArtifactPathScopeV0 = "goal_artifact_path_out_of_scope"
+	GoalMaterializedArtifactStatusValidV0          = "valid"
+	GoalMaterializedArtifactStatusInvalidV0        = "invalid"
+	GoalMaterializedArtifactStatusPartialV0        = "partial"
+	GoalMaterializedArtifactStatusNonPublishableV0 = "non_publishable"
+)
+
+const (
+	ErrGoalRefRequiredV0                 = "goal_ref_required"
+	ErrGoalRefInvalidV0                  = "goal_ref_invalid"
+	ErrGoalObjectiveRequiredV0           = "goal_objective_required"
+	ErrGoalDirectorRequiredV0            = "goal_director_kind_required"
+	ErrGoalDirectorInvalidV0             = "goal_director_kind_invalid"
+	ErrGoalWriteSetRequiredV0            = "goal_write_set_required"
+	ErrGoalWriteSetInvalidV0             = "goal_write_set_invalid"
+	ErrGoalRefFieldInvalidV0             = "goal_ref_field_invalid"
+	ErrGoalRuleInvalidV0                 = "goal_rule_invalid"
+	ErrGoalSpecLimitExceededV0           = "goal_spec_limit_exceeded"
+	ErrGoalStatusInvalidV0               = "goal_status_invalid"
+	ErrGoalClosureInvalidV0              = "goal_closure_invalid"
+	ErrGoalArtifactPathScopeV0           = "goal_artifact_path_out_of_scope"
+	ErrGoalMaterializedArtifactInvalidV0 = "goal_materialized_artifact_invalid"
+	ErrGoalChecklistIncompleteV0         = "goal_checklist_incomplete"
+	ErrGoalReworkPlanRequiredV0          = "goal_rework_plan_required"
 )
 
 const (
@@ -111,11 +121,14 @@ type GoalBudgetV0 struct {
 }
 
 type GoalClosurePolicyV0 struct {
-	RequireRequiredTests bool     `json:"require_required_tests,omitempty"`
-	RequireArtifacts     bool     `json:"require_artifacts,omitempty"`
-	RequireArtifactPaths bool     `json:"require_artifact_paths,omitempty"`
-	RequireDomainReceipt bool     `json:"require_domain_receipt,omitempty"`
-	RequiredEvidenceRefs []string `json:"required_evidence_refs,omitempty"`
+	RequireRequiredTests                 bool     `json:"require_required_tests,omitempty"`
+	RequireArtifacts                     bool     `json:"require_artifacts,omitempty"`
+	RequireArtifactPaths                 bool     `json:"require_artifact_paths,omitempty"`
+	RequireMaterializedArtifacts         bool     `json:"require_materialized_artifacts,omitempty"`
+	RequireChecklist                     bool     `json:"require_checklist,omitempty"`
+	RequireReworkPlanForPartialArtifacts bool     `json:"require_rework_plan_for_partial_artifacts,omitempty"`
+	RequireDomainReceipt                 bool     `json:"require_domain_receipt,omitempty"`
+	RequiredEvidenceRefs                 []string `json:"required_evidence_refs,omitempty"`
 }
 
 type GoalReworkPolicyV0 struct {
@@ -139,17 +152,37 @@ type GoalLaunchReceiptV0 struct {
 }
 
 type GoalWorkResultV0 struct {
-	SchemaVersion       string                     `json:"schema_version"`
-	Status              string                     `json:"status"`
-	GoalRef             string                     `json:"goal_ref,omitempty"`
-	ExternalGoalRef     string                     `json:"external_goal_ref,omitempty"`
-	Summary             string                     `json:"summary,omitempty"`
-	ArtifactRefs        []string                   `json:"artifact_refs,omitempty"`
-	ArtifactPaths       []string                   `json:"artifact_paths,omitempty"`
-	RequiredTestResults []GoalRequiredTestResultV0 `json:"required_test_results,omitempty"`
-	DomainReceiptRefs   []string                   `json:"domain_receipt_refs,omitempty"`
-	EvidenceRefs        []string                   `json:"evidence_refs,omitempty"`
-	Issues              []GoalWorkIssueV0          `json:"issues,omitempty"`
+	SchemaVersion         string                       `json:"schema_version"`
+	Status                string                       `json:"status"`
+	GoalRef               string                       `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string                       `json:"external_goal_ref,omitempty"`
+	Summary               string                       `json:"summary,omitempty"`
+	ArtifactRefs          []string                     `json:"artifact_refs,omitempty"`
+	ArtifactPaths         []string                     `json:"artifact_paths,omitempty"`
+	MaterializedArtifacts []GoalMaterializedArtifactV0 `json:"materialized_artifacts,omitempty"`
+	Checklist             GoalWorkChecklistV0          `json:"checklist,omitempty"`
+	RequiredTestResults   []GoalRequiredTestResultV0   `json:"required_test_results,omitempty"`
+	DomainReceiptRefs     []string                     `json:"domain_receipt_refs,omitempty"`
+	ReworkPlanRefs        []string                     `json:"rework_plan_refs,omitempty"`
+	EvidenceRefs          []string                     `json:"evidence_refs,omitempty"`
+	Issues                []GoalWorkIssueV0            `json:"issues,omitempty"`
+}
+
+type GoalMaterializedArtifactV0 struct {
+	ArtifactRef  string            `json:"artifact_ref,omitempty"`
+	Path         string            `json:"path,omitempty"`
+	ArtifactType string            `json:"artifact_type,omitempty"`
+	Scope        string            `json:"scope,omitempty"`
+	Status       string            `json:"status,omitempty"`
+	EvidenceRefs []string          `json:"evidence_refs,omitempty"`
+	Issues       []GoalWorkIssueV0 `json:"issues,omitempty"`
+}
+
+type GoalWorkChecklistV0 struct {
+	ExpectedRefs  []string `json:"expected_refs,omitempty"`
+	CompletedRefs []string `json:"completed_refs,omitempty"`
+	MissingRefs   []string `json:"missing_refs,omitempty"`
+	EvidenceRefs  []string `json:"evidence_refs,omitempty"`
 }
 
 type GoalWorkStateV0 struct {

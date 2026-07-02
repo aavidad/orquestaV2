@@ -63,9 +63,9 @@ llamar al puerto real.
 ## CodexGoalObserverPortV0
 
 Puerto de composicion que observa el goal real y devuelve estado, resumen,
-artefactos, tests, receipts y evidencias. El adaptador convierte esa respuesta a
-`GoalWorkResultV0`, valida refs/status y rechaza observaciones cuyo `goal_ref`
-no coincida con el pedido.
+artefactos, checklist, tests, receipts, planes de rework y evidencias. El
+adaptador convierte esa respuesta a `GoalWorkResultV0`, valida refs/status y
+rechaza observaciones cuyo `goal_ref` no coincida con el pedido.
 
 En los backends app-server, la observacion usa la `external_goal_ref` persistida
 como `threadId`, consulta `thread/goal/get` y, si el goal queda terminal,
@@ -74,13 +74,17 @@ debe incluir el marcador o, como fallback durable bajo el write-set,
 `docs/orquesta_goal_result_v0.json` con `goal_ref` coincidente:
 
 ```text
-ORQUESTA_GOAL_RESULT_V0 {"goal_ref":"...","summary":"...","artifact_refs":[],"required_test_results":[],"domain_receipt_refs":[],"evidence_refs":[]}
+ORQUESTA_GOAL_RESULT_V0 {"goal_ref":"...","summary":"...","artifact_refs":[],"artifact_paths":[],"materialized_artifacts":[],"checklist":{"expected_refs":[],"completed_refs":[],"missing_refs":[],"evidence_refs":[]},"required_test_results":[],"domain_receipt_refs":[],"rework_plan_refs":[],"evidence_refs":[]}
 ```
 
 Solo esas refs estructuradas se fusionan como artefactos/evidencias de cierre.
 Si faltan, Orquesta conserva el estado observado pero no inventa refs para
 aceptar cierre. El archivo durable tiene prioridad sobre un marcador textual
 incompleto o invalido.
+`materialized_artifacts` es el canal canonico para declarar trabajo parcial o no
+publicable: cada item debe incluir path/tipo/estado/evidencias/issues. Si algun
+estado no es `valid`, el resultado no debe declararse `complete`; debe quedar
+`blocked` con `checklist.missing_refs` y `rework_plan_refs` accionables.
 Si el backend falla al observar y devuelve `IssueCode`, el observer neutral lo
 conserva en el `GoalWorkResultV0` invalidado.
 Si falla sin `IssueCode`, aplica el mismo fallback de clasificacion compacta

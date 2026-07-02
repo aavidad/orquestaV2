@@ -318,6 +318,39 @@ func normalizeCodexAppServerGoalResultMarkerV0(
 		marked.ArtifactRefs = refs
 	}
 	marked.ArtifactPaths = normalizeCodexAppServerGoalResultPathsV0(marked.ArtifactPaths)
+	for index := range marked.MaterializedArtifacts {
+		if artifactRef, ok := sanitizeCodexAppServerGoalResultRefV0(marked.MaterializedArtifacts[index].ArtifactRef); ok {
+			marked.MaterializedArtifacts[index].ArtifactRef = artifactRef
+			sanitized = true
+		} else {
+			marked.MaterializedArtifacts[index].ArtifactRef = strings.TrimSpace(marked.MaterializedArtifacts[index].ArtifactRef)
+		}
+		marked.MaterializedArtifacts[index].Path = filepath.ToSlash(strings.TrimSpace(marked.MaterializedArtifacts[index].Path))
+		marked.MaterializedArtifacts[index].ArtifactType = strings.TrimSpace(marked.MaterializedArtifacts[index].ArtifactType)
+		marked.MaterializedArtifacts[index].Scope = strings.TrimSpace(marked.MaterializedArtifacts[index].Scope)
+		marked.MaterializedArtifacts[index].Status = strings.TrimSpace(marked.MaterializedArtifacts[index].Status)
+		if refs, ok := sanitizeCodexAppServerGoalResultRefsV0(marked.MaterializedArtifacts[index].EvidenceRefs); ok {
+			marked.MaterializedArtifacts[index].EvidenceRefs = refs
+			sanitized = true
+		} else {
+			marked.MaterializedArtifacts[index].EvidenceRefs = refs
+		}
+		for issueIndex := range marked.MaterializedArtifacts[index].Issues {
+			if code, ok := sanitizeCodexAppServerGoalResultRefV0(marked.MaterializedArtifacts[index].Issues[issueIndex].Code); ok {
+				marked.MaterializedArtifacts[index].Issues[issueIndex].Code = code
+				sanitized = true
+			} else {
+				marked.MaterializedArtifacts[index].Issues[issueIndex].Code = strings.TrimSpace(marked.MaterializedArtifacts[index].Issues[issueIndex].Code)
+			}
+			marked.MaterializedArtifacts[index].Issues[issueIndex].Field = strings.TrimSpace(marked.MaterializedArtifacts[index].Issues[issueIndex].Field)
+		}
+	}
+	if checklist, ok := normalizeCodexAppServerGoalResultChecklistV0(marked.Checklist); ok {
+		marked.Checklist = checklist
+		sanitized = true
+	} else {
+		marked.Checklist = checklist
+	}
 	if refs, ok := sanitizeCodexAppServerGoalResultRefsV0(marked.DomainReceiptRefs); ok {
 		marked.DomainReceiptRefs = refs
 		sanitized = true
@@ -345,6 +378,12 @@ func normalizeCodexAppServerGoalResultMarkerV0(
 			marked.RequiredTestResults[index].EvidenceRefs = refs
 		}
 	}
+	if refs, ok := sanitizeCodexAppServerGoalResultRefsV0(marked.ReworkPlanRefs); ok {
+		marked.ReworkPlanRefs = refs
+		sanitized = true
+	} else {
+		marked.ReworkPlanRefs = refs
+	}
 	if sanitized {
 		marked.EvidenceRefs = compactServerStackStringsV0(append(
 			marked.EvidenceRefs,
@@ -352,6 +391,37 @@ func normalizeCodexAppServerGoalResultMarkerV0(
 		))
 	}
 	return marked
+}
+
+func normalizeCodexAppServerGoalResultChecklistV0(
+	checklist orquestagoal.GoalWorkChecklistV0,
+) (orquestagoal.GoalWorkChecklistV0, bool) {
+	sanitized := false
+	if refs, ok := sanitizeCodexAppServerGoalResultRefsV0(checklist.ExpectedRefs); ok {
+		checklist.ExpectedRefs = refs
+		sanitized = true
+	} else {
+		checklist.ExpectedRefs = refs
+	}
+	if refs, ok := sanitizeCodexAppServerGoalResultRefsV0(checklist.CompletedRefs); ok {
+		checklist.CompletedRefs = refs
+		sanitized = true
+	} else {
+		checklist.CompletedRefs = refs
+	}
+	if refs, ok := sanitizeCodexAppServerGoalResultRefsV0(checklist.MissingRefs); ok {
+		checklist.MissingRefs = refs
+		sanitized = true
+	} else {
+		checklist.MissingRefs = refs
+	}
+	if refs, ok := sanitizeCodexAppServerGoalResultRefsV0(checklist.EvidenceRefs); ok {
+		checklist.EvidenceRefs = refs
+		sanitized = true
+	} else {
+		checklist.EvidenceRefs = refs
+	}
+	return checklist, sanitized
 }
 
 func sanitizeCodexAppServerGoalResultSummaryV0(value string) (string, bool) {

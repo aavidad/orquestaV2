@@ -219,6 +219,14 @@ func mcpObserveAppDirectorGoalRecommendedActionV0(
 	case orquestagoal.GoalStatusRunningV0, orquestagoal.GoalStatusAcceptedV0:
 		return "observe_later"
 	}
+	closureStatus := strings.TrimSpace(result.ClosureStatus)
+	switch {
+	case result.ClosureAccepted || closureStatus == orquestagoal.GoalStatusAcceptedV0:
+		return "no_action_closed"
+	}
+	if mcpObserveAppDirectorGoalLooksUsageLimitedV0(result) {
+		return "inspect_goal_backend_limits"
+	}
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstQAFailedPublicTextV0) {
 		return MCPGoalFirstReworkPublicTextActionV0
 	}
@@ -234,18 +242,12 @@ func mcpObserveAppDirectorGoalRecommendedActionV0(
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstPhase0CompleteNonPublishableV0) {
 		return MCPGoalFirstContinueFromPhase0ActionV0
 	}
-	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstPartialArtifactsWrittenV0) {
-		return MCPGoalFirstReviewPartialArtifactsActionV0
-	}
-	if mcpObserveAppDirectorGoalLooksUsageLimitedV0(result) {
-		return "inspect_goal_backend_limits"
-	}
-	closureStatus := strings.TrimSpace(result.ClosureStatus)
 	switch {
-	case result.ClosureAccepted || closureStatus == orquestagoal.GoalStatusAcceptedV0:
-		return "no_action_closed"
 	case result.ClosureNeedsRework || closureStatus == orquestagoal.GoalStatusBlockedV0:
 		return "replan"
+	}
+	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstPartialArtifactsWrittenV0) {
+		return MCPGoalFirstReviewPartialArtifactsActionV0
 	}
 	switch status {
 	case orquestagoal.GoalStatusRunningV0, orquestagoal.GoalStatusAcceptedV0:

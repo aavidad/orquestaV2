@@ -29,6 +29,9 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"Materializa cada artefacto requerido dentro de un write-set autorizado",
 		"<artifact_type>.json",
 		"El recibo terminal debe declarar artifact_paths",
+		"materialized_artifacts",
+		"checklist.expected_refs",
+		"rework_plan_refs",
 		"Evidencia requerida: evidence-ref-required",
 		CodexGoalResultMarkerV0,
 		CodexGoalResultSchemaV0,
@@ -40,7 +43,11 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"usa literalmente los test_ref",
 		"usa literalmente los artifact_ref",
 		"\"artifact_paths\":[]",
+		"\"materialized_artifacts\"",
+		"\"checklist\"",
 		"lista todas las rutas relativas de ficheros creados",
+		"separa artefactos validos de borradores recuperables",
+		"checklist.missing_refs",
 		"si escribiste algo fuera del write-set, no lo ocultes",
 		"status blocked con summary out_of_scope_artifacts",
 		"Resultado estructurado obligatorio",
@@ -400,6 +407,41 @@ func TestCodexGoalObserverV0RechazaRefsInvalidasDelBackend(t *testing.T) {
 	}
 }
 
+func TestCodexGoalObserverV0ConservaArtefactosMaterializadosChecklistYRework(t *testing.T) {
+	observer := CodexGoalObserverV0{Observer: &recordingCodexGoalObserverV0{
+		receipt: CodexGoalObservationReceiptV0{
+			Status:  orquestagoal.GoalStatusBlockedV0,
+			GoalRef: "goal-ref-001",
+			MaterializedArtifacts: []orquestagoal.GoalMaterializedArtifactV0{{
+				ArtifactRef:  "artifact-ref-tema-001",
+				Path:         "temas/tema_001.md",
+				ArtifactType: "markdown",
+				Status:       orquestagoal.GoalMaterializedArtifactStatusPartialV0,
+				EvidenceRefs: []string{"evidence-ref-artifact-partial"},
+			}},
+			Checklist: orquestagoal.GoalWorkChecklistV0{
+				ExpectedRefs:  []string{"check-ref-texto-publicable"},
+				MissingRefs:   []string{"check-ref-texto-publicable"},
+				EvidenceRefs:  []string{"evidence-ref-checklist"},
+				CompletedRefs: []string{"check-ref-fuentes"},
+			},
+			ReworkPlanRefs: []string{"rework-plan-ref-tema-001"},
+		},
+	}}
+
+	result, err := observer.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{GoalRef: "goal-ref-001"})
+
+	if err != nil ||
+		result.Status != orquestagoal.GoalStatusBlockedV0 ||
+		len(result.MaterializedArtifacts) != 1 ||
+		result.MaterializedArtifacts[0].Status != orquestagoal.GoalMaterializedArtifactStatusPartialV0 ||
+		len(result.Checklist.MissingRefs) != 1 ||
+		len(result.ReworkPlanRefs) != 1 ||
+		result.ReworkPlanRefs[0] != "rework-plan-ref-tema-001" {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+}
+
 func validCodexGoalSpecV0() orquestagoal.GoalWorkSpecV0 {
 	return orquestagoal.GoalWorkSpecV0{
 		GoalRef:            "goal-ref-001",
@@ -417,8 +459,15 @@ func validCodexGoalSpecV0() orquestagoal.GoalWorkSpecV0 {
 		ArtifactContracts:  []orquestagoal.GoalArtifactContractV0{{ArtifactRef: "artifact-ref-goal-summary", ArtifactType: "summary", Required: true}},
 		EvidenceRefs:       []string{"evidence-ref-input"},
 		Budget:             orquestagoal.GoalBudgetV0{MaxSubgoals: 2},
-		ClosurePolicy:      orquestagoal.GoalClosurePolicyV0{RequireRequiredTests: true, RequireArtifactPaths: true, RequiredEvidenceRefs: []string{"evidence-ref-required"}},
-		ReworkPolicy:       orquestagoal.GoalReworkPolicyV0{PreferNewGoal: true, PreserveArtifacts: true},
+		ClosurePolicy: orquestagoal.GoalClosurePolicyV0{
+			RequireRequiredTests:                 true,
+			RequireArtifactPaths:                 true,
+			RequireMaterializedArtifacts:         true,
+			RequireChecklist:                     true,
+			RequireReworkPlanForPartialArtifacts: true,
+			RequiredEvidenceRefs:                 []string{"evidence-ref-required"},
+		},
+		ReworkPolicy: orquestagoal.GoalReworkPolicyV0{PreferNewGoal: true, PreserveArtifacts: true},
 	}
 }
 

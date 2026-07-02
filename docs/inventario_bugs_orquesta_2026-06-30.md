@@ -190,6 +190,22 @@ al crear la raiz `generated-apps/...`; no crea rutas Markdown, escapes ni
 `TestServerCodexAppServerGoalBackendV0PreparaDirectoriosWriteSetAntesDelTurnV0`
 y `TestServerCodexAppServerGoalBackendV0LanzaThreadGoalYTurnV0`.
 
+Revision BUG-072/BUG-075 2026-07-02: el patron de artefactos parciales deja de
+ser una heuristica de scanner/log y pasa a contrato neutral ejecutable.
+`GoalWorkResultV0` incorpora `materialized_artifacts`, `checklist` y
+`rework_plan_refs`; `ValidateGoalWorkClosureV0` bloquea `complete` cuando hay
+artefactos `partial`, `invalid` o `non_publishable`, checklist faltante o plan
+de rework requerido; el adaptador Codex Goal y el parser `app_server` conservan
+esos campos desde `ORQUESTA_GOAL_RESULT_V0`; la copia de estado del servidor no
+los pierde al persistir resultado idle/automejora; y `observe_goal` no permite
+que una issue de scanner parcial pise un cierre aceptado o una decision de
+rework ya calculada. Evidencia:
+`TestValidateGoalWorkClosureV0BloqueaCompleteConArtefactosParciales`,
+`TestCodexGoalObserverV0ConservaArtefactosMaterializadosChecklistYRework`,
+`TestServerCodexAppServerGoalBackendV0ObservaResultadoMarcadoV0`,
+`TestCopyGoalWorkResultForServerStateV0ConservaContratoDeArtefactosParciales` y
+`TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0NoPisaCierreAceptado`.
+
 ## Riesgos arquitectonicos no funcionales
 
 | ID | Estado | Area | Hallazgo | Riesgo | Evidencia | Accion |

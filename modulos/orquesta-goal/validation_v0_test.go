@@ -301,6 +301,75 @@ func TestValidateGoalWorkClosureV0AceptaArtifactPathsDescendientesDeWriteSet(t *
 	}
 }
 
+func TestValidateGoalWorkClosureV0BloqueaCompleteConArtefactosParciales(t *testing.T) {
+	spec := GoalWorkSpecV0{
+		GoalRef:   "goal-ref-001",
+		Objective: "Objetivo",
+		WriteSet:  []GoalWriteScopeV0{{Path: "trabajo"}},
+		ClosurePolicy: GoalClosurePolicyV0{
+			RequireMaterializedArtifacts:         true,
+			RequireChecklist:                     true,
+			RequireReworkPlanForPartialArtifacts: true,
+		},
+	}
+	result := GoalWorkResultV0{
+		GoalRef: "goal-ref-001",
+		Status:  GoalStatusCompleteV0,
+		MaterializedArtifacts: []GoalMaterializedArtifactV0{{
+			ArtifactRef:  "artifact-ref-tema-001-borrador",
+			Path:         "trabajo/tema_001.md",
+			ArtifactType: "markdown",
+			Status:       GoalMaterializedArtifactStatusPartialV0,
+			EvidenceRefs: []string{"evidence-ref-artifact-partial"},
+		}},
+		Checklist: GoalWorkChecklistV0{
+			ExpectedRefs:  []string{"check-ref-texto-publicable", "check-ref-qa"},
+			CompletedRefs: []string{"check-ref-texto-publicable"},
+			MissingRefs:   []string{"check-ref-qa"},
+			EvidenceRefs:  []string{"evidence-ref-checklist"},
+		},
+		EvidenceRefs: []string{"evidence-ref-goal"},
+	}
+
+	validation := ValidateGoalWorkClosureV0(spec, result)
+	if validation.Accepted ||
+		!validation.NeedsRework ||
+		!hasGoalIssueFieldCodeV0(validation.Issues, "materialized_artifacts.status", ErrGoalMaterializedArtifactInvalidV0) ||
+		!hasGoalIssueFieldCodeV0(validation.Issues, "checklist.missing_refs", ErrGoalChecklistIncompleteV0) ||
+		!hasGoalIssueFieldCodeV0(validation.Issues, "rework_plan_refs", ErrGoalReworkPlanRequiredV0) ||
+		!hasGoalStringV0(validation.EvidenceRefs, "evidence-ref-artifact-partial") ||
+		!hasGoalStringV0(validation.EvidenceRefs, "evidence-ref-checklist") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
+func TestValidateGoalWorkClosureV0BlockedConArtefactosParcialesExponeCausa(t *testing.T) {
+	spec := GoalWorkSpecV0{
+		GoalRef:   "goal-ref-001",
+		Objective: "Objetivo",
+		WriteSet:  []GoalWriteScopeV0{{Path: "trabajo"}},
+	}
+	result := GoalWorkResultV0{
+		GoalRef: "goal-ref-001",
+		Status:  GoalStatusBlockedV0,
+		MaterializedArtifacts: []GoalMaterializedArtifactV0{{
+			Path:         "trabajo/tema_001.md",
+			ArtifactType: "markdown",
+			Status:       GoalMaterializedArtifactStatusNonPublishableV0,
+			Issues:       []GoalWorkIssueV0{{Code: "qa_failed_public_text", Field: "public_text"}},
+		}},
+		ReworkPlanRefs: []string{"rework-plan-ref-tema-001"},
+	}
+
+	validation := ValidateGoalWorkClosureV0(spec, result)
+	if validation.Accepted ||
+		!validation.NeedsRework ||
+		!hasGoalIssueFieldCodeV0(validation.Issues, "materialized_artifacts.status", ErrGoalMaterializedArtifactInvalidV0) ||
+		!hasGoalIssueFieldV0(validation.Issues, "status") {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
 func TestValidateGoalWorkClosureV0RechazaGoalRefDistinto(t *testing.T) {
 	spec := GoalWorkSpecV0{
 		GoalRef:   "goal-ref-001",
@@ -471,6 +540,15 @@ func hasGoalIssueFieldV0(issues []GoalWorkIssueV0, field string) bool {
 func hasGoalIssueFieldCodeV0(issues []GoalWorkIssueV0, field, code string) bool {
 	for _, issue := range issues {
 		if issue.Field == field && issue.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func hasGoalStringV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
 			return true
 		}
 	}

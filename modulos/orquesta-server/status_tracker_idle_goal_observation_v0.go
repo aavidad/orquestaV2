@@ -184,11 +184,36 @@ func copyGoalLaunchReceiptForServerStateV0(receipt orquestagoal.GoalLaunchReceip
 func copyGoalWorkResultForServerStateV0(result orquestagoal.GoalWorkResultV0) orquestagoal.GoalWorkResultV0 {
 	result = orquestagoal.NormalizeGoalWorkResultV0(result)
 	result.ArtifactRefs = append([]string(nil), result.ArtifactRefs...)
+	result.ArtifactPaths = append([]string(nil), result.ArtifactPaths...)
+	result.MaterializedArtifacts = copyGoalMaterializedArtifactsForServerStateV0(result.MaterializedArtifacts)
+	result.Checklist = copyGoalChecklistForServerStateV0(result.Checklist)
 	result.RequiredTestResults = copyGoalRequiredTestResultsForServerStateV0(result.RequiredTestResults)
 	result.DomainReceiptRefs = append([]string(nil), result.DomainReceiptRefs...)
+	result.ReworkPlanRefs = append([]string(nil), result.ReworkPlanRefs...)
 	result.EvidenceRefs = append([]string(nil), result.EvidenceRefs...)
 	result.Issues = append([]orquestagoal.GoalWorkIssueV0(nil), result.Issues...)
 	return result
+}
+
+func copyGoalMaterializedArtifactsForServerStateV0(
+	artifacts []orquestagoal.GoalMaterializedArtifactV0,
+) []orquestagoal.GoalMaterializedArtifactV0 {
+	out := append([]orquestagoal.GoalMaterializedArtifactV0(nil), artifacts...)
+	for i := range out {
+		out[i].EvidenceRefs = append([]string(nil), out[i].EvidenceRefs...)
+		out[i].Issues = append([]orquestagoal.GoalWorkIssueV0(nil), out[i].Issues...)
+	}
+	return out
+}
+
+func copyGoalChecklistForServerStateV0(
+	checklist orquestagoal.GoalWorkChecklistV0,
+) orquestagoal.GoalWorkChecklistV0 {
+	checklist.ExpectedRefs = append([]string(nil), checklist.ExpectedRefs...)
+	checklist.CompletedRefs = append([]string(nil), checklist.CompletedRefs...)
+	checklist.MissingRefs = append([]string(nil), checklist.MissingRefs...)
+	checklist.EvidenceRefs = append([]string(nil), checklist.EvidenceRefs...)
+	return checklist
 }
 
 func copyGoalClosureValidationForServerStateV0(

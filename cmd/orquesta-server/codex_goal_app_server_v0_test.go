@@ -847,7 +847,7 @@ func TestServerCodexAppServerGoalBackendV0ObservaGoalPorThreadIDV0(t *testing.T)
 }
 
 func TestServerCodexAppServerGoalBackendV0ObservaResultadoMarcadoV0(t *testing.T) {
-	marked := `ORQUESTA_GOAL_RESULT_V0 {"schema_version":"orquesta_goal_result.v0","status":"complete","summary":"cierre con {llaves}","artifact_refs":["artifact-ref-goal-summary"],"required_test_results":[{"test_ref":"test-ref-goal","status":"passed","evidence_refs":["evidence-ref-test-pass"]}],"domain_receipt_refs":["domain-receipt-ref-001"],"evidence_refs":["evidence-ref-required"]}`
+	marked := `ORQUESTA_GOAL_RESULT_V0 {"schema_version":"orquesta_goal_result.v0","status":"complete","summary":"cierre con {llaves}","artifact_refs":["artifact-ref-goal-summary"],"materialized_artifacts":[{"artifact_ref":"artifact-ref-goal-summary","path":"docs/resumen.md","artifact_type":"markdown","status":"valid","evidence_refs":["evidence-ref-artifact-valid"]}],"checklist":{"expected_refs":["check-ref-summary"],"completed_refs":["check-ref-summary"],"evidence_refs":["evidence-ref-checklist"]},"required_test_results":[{"test_ref":"test-ref-goal","status":"passed","evidence_refs":["evidence-ref-test-pass"]}],"domain_receipt_refs":["domain-receipt-ref-001"],"rework_plan_refs":["rework-plan-ref-none"],"evidence_refs":["evidence-ref-required"]}`
 	protocol := &fakeCodexAppServerProtocolV0{
 		observedGoal: &serverCodexAppServerThreadGoalV0{
 			ThreadID: "thread-ref-goal-003",
@@ -882,6 +882,12 @@ func TestServerCodexAppServerGoalBackendV0ObservaResultadoMarcadoV0(t *testing.T
 	if receipt.Summary != "cierre con {llaves}" ||
 		!containsStringForTestV0(receipt.ArtifactRefs, "artifact-ref-goal-summary") ||
 		!containsStringForTestV0(receipt.DomainReceiptRefs, "domain-receipt-ref-001") ||
+		len(receipt.MaterializedArtifacts) != 1 ||
+		receipt.MaterializedArtifacts[0].Path != "docs/resumen.md" ||
+		len(receipt.Checklist.CompletedRefs) != 1 ||
+		receipt.Checklist.CompletedRefs[0] != "check-ref-summary" ||
+		len(receipt.ReworkPlanRefs) != 1 ||
+		receipt.ReworkPlanRefs[0] != "rework-plan-ref-none" ||
 		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-required") ||
 		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-marker") ||
 		len(receipt.RequiredTestResults) != 1 ||

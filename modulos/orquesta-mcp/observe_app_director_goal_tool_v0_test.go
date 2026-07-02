@@ -98,6 +98,28 @@ func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0Phase0NoPublicable
 	}
 }
 
+func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0NoPisaCierreAceptado(t *testing.T) {
+	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
+		MCPObserveAppDirectorGoalToolResultV0{
+			GoalRef:         "goal-ref-observe-partial-after-close-001",
+			GoalStatus:      orquestagoal.GoalStatusCompleteV0,
+			ClosureStatus:   orquestagoal.GoalStatusAcceptedV0,
+			ClosureAccepted: true,
+		},
+		MCPDirectorGoalMaterializedRefsV0{
+			ArtifactRefs: []string{"artifact-ref-materialized-partial-after-close-001"},
+			EvidenceRefs: []string{"evidence-ref-goal-materialized-partial-after-close"},
+			IssueCodes:   []string{MCPGoalFirstPartialArtifactsWrittenV0},
+		},
+	)
+
+	if result.RecommendedAction != "no_action_closed" ||
+		!result.ClosureAccepted ||
+		!containsStringMCPV0(result.ArtifactRefs, "artifact-ref-materialized-partial-after-close-001") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0RequiredTestEvidenceAusentePideRepairReceipt(t *testing.T) {
 	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
 		MCPObserveAppDirectorGoalToolResultV0{
