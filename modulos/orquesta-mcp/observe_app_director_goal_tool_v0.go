@@ -125,6 +125,7 @@ func NewMCPObserveAppDirectorGoalResultV0(
 		ClosureIssues:         goalWorkIssuesMCPV0(append(goalResult.Issues, result.Closure.Issues...)),
 		Errores:               []MCPValidationIssueV0{},
 	}
+	toolResult = mcpObserveAppDirectorGoalSuppressStaleClosureForRunningGoalV0(toolResult)
 	toolResult.RecommendedAction = mcpObserveAppDirectorGoalRecommendedActionV0(toolResult)
 	return toolResult
 }
@@ -165,9 +166,26 @@ func NewMCPObserveAppDirectorGoalPartialResultFromStateV0(
 		toolResult.ClosureIssues = append(toolResult.ClosureIssues, goalWorkIssuesMCPV0(normalized.LastClosure.Issues)...)
 		toolResult.EvidenceRefs = compactStringsMCPV0(append(toolResult.EvidenceRefs, normalized.LastClosure.EvidenceRefs...))
 	}
+	toolResult = mcpObserveAppDirectorGoalSuppressStaleClosureForRunningGoalV0(toolResult)
 	toolResult = applyMCPObserveAppDirectorGoalDomainMetadataV0(toolResult, normalized)
 	toolResult.RecommendedAction = mcpObserveAppDirectorGoalRecommendedActionV0(toolResult)
 	return toolResult, nil
+}
+
+func mcpObserveAppDirectorGoalSuppressStaleClosureForRunningGoalV0(
+	result MCPObserveAppDirectorGoalToolResultV0,
+) MCPObserveAppDirectorGoalToolResultV0 {
+	status := strings.TrimSpace(result.GoalStatus)
+	if status != orquestagoal.GoalStatusRunningV0 && status != orquestagoal.GoalStatusAcceptedV0 {
+		return result
+	}
+	if !result.ClosureNeedsRework && strings.TrimSpace(result.ClosureStatus) != orquestagoal.GoalStatusBlockedV0 {
+		return result
+	}
+	result.ClosureStatus = ""
+	result.ClosureAccepted = false
+	result.ClosureNeedsRework = false
+	return result
 }
 
 func applyMCPObserveAppDirectorGoalDomainMetadataV0(
@@ -196,6 +214,11 @@ func mcpObserveAppDirectorGoalResultRefV0(result orquestagoal.GoalWorkResultV0) 
 func mcpObserveAppDirectorGoalRecommendedActionV0(
 	result MCPObserveAppDirectorGoalToolResultV0,
 ) string {
+	status := strings.TrimSpace(result.GoalStatus)
+	switch status {
+	case orquestagoal.GoalStatusRunningV0, orquestagoal.GoalStatusAcceptedV0:
+		return "observe_later"
+	}
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstQAFailedPublicTextV0) {
 		return MCPGoalFirstReworkPublicTextActionV0
 	}
@@ -208,7 +231,6 @@ func mcpObserveAppDirectorGoalRecommendedActionV0(
 	if mcpObserveAppDirectorGoalLooksUsageLimitedV0(result) {
 		return "inspect_goal_backend_limits"
 	}
-	status := strings.TrimSpace(result.GoalStatus)
 	closureStatus := strings.TrimSpace(result.ClosureStatus)
 	switch {
 	case result.ClosureAccepted || closureStatus == orquestagoal.GoalStatusAcceptedV0:

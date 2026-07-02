@@ -1,6 +1,12 @@
 package orquestamcp
 
-import "testing"
+import (
+	"testing"
+
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
+)
 
 func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0QAFailedPublicTextPideRework(t *testing.T) {
 	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
@@ -42,6 +48,49 @@ func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0ArtifactPathsOmiti
 		result.ClosureIssues[0].Code != MCPGoalFirstArtifactPathsOmittedMaterializedV0 ||
 		result.ClosureIssues[0].Field != "goal_first.artifact_paths" ||
 		!containsStringMCPV0(result.ArtifactRefs, "artifact-ref-materialized-omitted-path-001") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestNewMCPObserveAppDirectorGoalResultV0ReworkRunningNoPublicaClosureBloqueada(t *testing.T) {
+	result := NewMCPObserveAppDirectorGoalResultV0(
+		MCPObserveAppDirectorGoalToolInputV0{RunRef: "run-ref-observe-rework-running-001"},
+		orquestaappdirectorservice.ObserveAppDirectorGoalResultV0{
+			Status:                orquestagoal.GoalStatusRunningV0,
+			DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0,
+			RunRef:                "run-ref-observe-rework-running-001",
+			GoalRef:               "goal-ref-observe-rework-running-001-rework-1",
+			ExternalGoalRef:       "thread-ref-observe-rework-running-001",
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				RunID:  "run-ref-observe-rework-running-001",
+				Status: orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+			},
+			GoalResult: orquestagoal.GoalWorkResultV0{
+				SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+				Status:        orquestagoal.GoalStatusBlockedV0,
+				GoalRef:       "goal-ref-observe-rework-running-001",
+				Summary:       "codex_app_server_goal_active_timeout",
+				Issues: []orquestagoal.GoalWorkIssueV0{{
+					Code:  "codex_app_server_goal_active_timeout",
+					Field: "codex_goal_backend",
+				}},
+			},
+			Closure: orquestagoal.GoalClosureValidationV0{
+				Status:      orquestagoal.GoalStatusBlockedV0,
+				NeedsRework: true,
+				Issues: []orquestagoal.GoalWorkIssueV0{{
+					Code:  "goal_closure_invalid",
+					Field: "status",
+				}},
+			},
+		},
+	)
+
+	if result.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
+		result.RunStatus != string(orquestacoreworkflow.OrchestrationRunStatusActiveV0) ||
+		result.RecommendedAction != "observe_later" ||
+		result.ClosureStatus != "" ||
+		result.ClosureNeedsRework {
 		t.Fatalf("result=%+v", result)
 	}
 }
