@@ -217,8 +217,13 @@ payload_by_type = {
     "generate_tutor_assets": {
         "program_id": "program-ref-fake-operario-001",
         "topic_id": "topic-ref-fake-operario-001",
+        "title": "Tutor fake Operario",
         "assembled_topic_artifact_id": "artifact-assembled-topic-fake-001",
         "question_bank_artifact_id": "artifact-question-bank-fake-001",
+        "html_final_ref": "html-final-fake-001",
+        "question_bank_ref": "question-bank-fake-001",
+        "tutor_source_ref": "tutor-source-fake-001",
+        "scope_guard_ref": "scope-guard-fake-001",
     },
     "generate_learning_games": {
         "program_id": "program-ref-fake-operario-001",

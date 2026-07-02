@@ -223,8 +223,14 @@ func runOPESDrainSingleOnceV0(
 		if err != nil {
 			summary.Skipped++
 			result.Status = "context_error"
+			result.OperationalReason = opesBridgeContextErrorOperationalReasonV0(err.Error())
+			result.NextActions = opesBridgeContextErrorNextActionsV0(err.Error())
 			summary.Results = append(summary.Results, result)
-			summary.Errors = append(summary.Errors, opesDrainPublicErrorV0{JobRef: job.ID, Code: err.Error()})
+			summary.Errors = append(summary.Errors, opesDrainPublicErrorV0{
+				JobRef: job.ID,
+				Code:   err.Error(),
+				Reason: result.OperationalReason,
+			})
 			continue
 		}
 		result.ContextBlocks = len(jobContext.TopicBlocks)
@@ -463,6 +469,12 @@ func opesJobContextV0(
 	if workKind == "generate_question_bank" && opesQuestionBankPayloadHasPublicSourceContextV0(job.PayloadJSON) {
 		return orquestaopesbridge.JobContextV0{}, nil
 	}
+	if workKind == "generate_tutor_assets" {
+		if opesTutorPayloadHasCanonicalSourceContextV0(job.PayloadJSON) {
+			return orquestaopesbridge.JobContextV0{}, nil
+		}
+		return orquestaopesbridge.JobContextV0{}, fmt.Errorf("tutor_assets_source_context_required")
+	}
 	if workKind != "summarize_topic" && workKind != "generate_question_bank" {
 		return orquestaopesbridge.JobContextV0{}, nil
 	}
@@ -486,6 +498,30 @@ func opesJobContextV0(
 	return orquestaopesbridge.JobContextV0{TopicBlocks: blocks}, nil
 }
 
+func opesTutorPayloadHasCanonicalSourceContextV0(payload string) bool {
+	return opesJobPayloadHasAnyValueV0(payload, "topic_title", "title", "planned_title") &&
+		opesJobPayloadHasAnyValueV0(payload,
+			"html_final_ref",
+			"html_local_ref",
+			"source_content_ref",
+			"approved_content_ref",
+			"source_lesson_markdown",
+			"topic_text",
+		) &&
+		opesJobPayloadHasAnyValueV0(payload,
+			"question_bank_ref",
+			"tests_ref",
+			"question_bank",
+			"tests_json_ref",
+		) &&
+		opesJobPayloadHasAnyValueV0(payload,
+			"tutor_source_ref",
+			"tutor_prompt_ref",
+			"rag_manifest_ref",
+			"scope_guard_ref",
+		)
+}
+
 func opesQuestionBankPayloadHasPublicSourceContextV0(payload string) bool {
 	return opesJobPayloadHasAnyValueV0(payload, "topic_title", "title", "planned_title") &&
 		opesJobPayloadHasAnyValueV0(payload,
@@ -504,6 +540,33 @@ func opesQuestionBankPayloadHasPublicSourceContextV0(payload string) bool {
 			"sections",
 			"document_plan",
 		)
+}
+
+func opesBridgeContextErrorOperationalReasonV0(errorCode string) string {
+	switch strings.TrimSpace(errorCode) {
+	case "question_bank_source_context_required":
+		return "question_bank_source_context_required"
+	case "tutor_assets_source_context_required":
+		return "tutor_assets_source_context_required"
+	default:
+		return strings.TrimSpace(errorCode)
+	}
+}
+
+func opesBridgeContextErrorNextActionsV0(errorCode string) []string {
+	switch strings.TrimSpace(errorCode) {
+	case "question_bank_source_context_required":
+		return []string{"declare_question_bank_source_context", "hydrate_topic_blocks_before_submit"}
+	case "tutor_assets_source_context_required":
+		return []string{
+			"declare_tutor_canonical_sources",
+			"declare_question_bank_ref",
+			"declare_tutor_scope_guard_ref",
+			"rebuild_rag_after_html_tests_tutor_clean",
+		}
+	default:
+		return nil
+	}
 }
 
 func opesJobPayloadHasAnyValueV0(payload string, keys ...string) bool {

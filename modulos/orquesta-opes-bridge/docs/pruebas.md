@@ -62,6 +62,11 @@
   causal (`text_qa` para corrupcion textual, `prepare` para refs/stale),
   contadores `audio_counters` cuando aplican y `retry_from_phase`; con esas
   precondiciones y `speech_synthesis` completo, el submit sigue permitido.
+- Preflight ejecutable de tutor OPES en el drain del servidor:
+  `generate_tutor_assets` no postea a Orquesta sin fuentes canonicas declaradas
+  para tutor: contenido/HTML aprobado, banco de preguntas y fuente/guarda de
+  alcance del tutor. El bloqueo publica `tutor_assets_source_context_required`
+  y acciones para declarar refs antes de lanzar un goal.
 - Reutilizacion visual OPES: la secuencia incluye `visual_asset_reuse` antes de
   `generate_html_site`; el bridge mapea ese trabajo a `visual_reuse_manifest`
   con criterios de matriz/copia/insercion/justificacion; el cierre final exige

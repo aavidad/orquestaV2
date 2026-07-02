@@ -3461,6 +3461,93 @@ func TestOPESJobContextV0GenerateQuestionBankBloqueaSinFuentePublicaV0(t *testin
 	}
 }
 
+func TestOPESJobContextV0GenerateTutorAssetsExigeFuentesCanonicasV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("no debe consultar OPES blocks para tutor sin refs canonicas: %s %s", r.Method, r.URL.Path)
+	}))
+	defer opesServer.Close()
+	client := orquestaopesconnector.NewRESTClientV0(orquestaopesconnector.RESTClientConfigV0{
+		BaseURL: opesServer.URL,
+	})
+
+	_, err := opesJobContextV0(context.Background(), client, orquestaopesconnector.ExternalJobV0{
+		ID:          "job-ref-tutor-empty-001",
+		Type:        "generate_tutor_assets",
+		PayloadJSON: `{"topic_id":"topic-ref-001","title":"Tutor sin fuentes"}`,
+	})
+	if err == nil || err.Error() != "tutor_assets_source_context_required" {
+		t.Fatalf("err=%v", err)
+	}
+
+	context, err := opesJobContextV0(context.Background(), client, orquestaopesconnector.ExternalJobV0{
+		ID:   "job-ref-tutor-rich-001",
+		Type: "generate_tutor_assets",
+		PayloadJSON: `{
+			"topic_id":"topic-ref-001",
+			"title":"Tutor con fuentes",
+			"html_final_ref":"html-final-ref-001",
+			"question_bank_ref":"question-bank-ref-001",
+			"tutor_source_ref":"tutor-source-ref-001"
+		}`,
+	})
+	if err != nil || len(context.TopicBlocks) != 0 {
+		t.Fatalf("context=%+v err=%v", context, err)
+	}
+}
+
+func TestRunOPESDrainOnceV0TutorAssetsSinFuentesCanonicasNoPosteaOrquestaV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-tutor-no-sources-001",
+			"type":           "generate_tutor_assets",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   `{"topic_id":"topic-ref-001","title":"Tutor sin fuentes"}`,
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	posts := 0
+	orquestaServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		posts++
+		t.Fatalf("no debe postear tutor sin fuentes canonicas: %s %s", r.Method, r.URL.Path)
+	}))
+	defer orquestaServer.Close()
+
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:     opesServer.URL,
+		OrquestaBaseURL: orquestaServer.URL,
+		Limit:           1,
+		JobType:         "generate_tutor_assets",
+		HTTPTimeout:     time.Second,
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+		ExternalCapabilities: opesBridgeRemoteQACapabilityForDrainTestV0(),
+	})
+	if err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if posts != 0 ||
+		summary.Submitted != 0 ||
+		summary.Skipped != 1 ||
+		len(summary.Results) != 1 ||
+		summary.Results[0].Status != "context_error" ||
+		summary.Results[0].OperationalReason != "tutor_assets_source_context_required" ||
+		!containsStringForTestV0(summary.Results[0].NextActions, "declare_tutor_canonical_sources") ||
+		!containsStringForTestV0(summary.Results[0].NextActions, "declare_question_bank_ref") ||
+		len(summary.Errors) != 1 ||
+		summary.Errors[0].Code != "tutor_assets_source_context_required" {
+		t.Fatalf("posts=%d summary=%+v", posts, summary)
+	}
+}
+
 func TestSmokeOPESDerivativesRESTWrapperFakeServerV0(t *testing.T) {
 	requireLocalTCPForTestV0(t)
 	if _, err := exec.LookPath("python3"); err != nil {
