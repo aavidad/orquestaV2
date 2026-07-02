@@ -482,7 +482,7 @@ assert_app_server_tmux_shutdown_ready() {
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
             -H "X-Correlation-ID: $request_id-shutdown-retry" \
-            --data-binary "{\"request_id\":\"$request_id-shutdown-retry\",\"correlation_id\":\"$request_id-shutdown-retry\",\"reason\":\"smoke_goal_first_app_server_real_backend_cleanup_retry\"}"
+            --data-binary "{\"request_id\":\"$request_id-shutdown-retry\",\"correlation_id\":\"$request_id-shutdown-retry\",\"reason\":\"smoke_goal_first_app_server_real_backend_cleanup_retry\",\"cleanup_goal_backends\":true}"
         )"
         echo "POST /api/v0/server/shutdown retry -> HTTP $shutdown_status"
       fi

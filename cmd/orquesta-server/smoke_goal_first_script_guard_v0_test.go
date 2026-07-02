@@ -260,6 +260,42 @@ func TestScriptsQueUsanShutdownComunPasanRuntimeDirV0(t *testing.T) {
 	}
 }
 
+func TestScriptsConShutdownDirectoPidenCleanupGoalBackendsV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	scriptsDir := filepath.Join(root, "scripts")
+	err := filepath.WalkDir(scriptsDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".sh" {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		text := readOperationalDocGuardV0(t, root, rel)
+		lines := strings.Split(text, "\n")
+		for index, line := range lines {
+			if !strings.Contains(line, "$base_url/api/v0/server/shutdown") {
+				continue
+			}
+			windowEnd := index + 8
+			if windowEnd > len(lines) {
+				windowEnd = len(lines)
+			}
+			window := strings.Join(lines[index:windowEnd], "\n")
+			if !strings.Contains(window, "cleanup_goal_backends") {
+				t.Fatalf("%s invoca shutdown HTTP directo sin cleanup_goal_backends cerca de linea %d", rel, index+1)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk scripts: %v", err)
+	}
+}
+
 func TestInicioAgenteNoRecomiendaRuntimeManualV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/inicio_agente.sh")
