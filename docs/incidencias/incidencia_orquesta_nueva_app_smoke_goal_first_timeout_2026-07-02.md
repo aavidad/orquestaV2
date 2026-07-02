@@ -398,6 +398,18 @@ limpiaron manualmente despues de guardar evidencia. Queda pendiente decidir si
 el servidor debe apagar el backend tmux de goals cerrados o si el smoke debe
 usar una ruta explicita de cleanup para que el comando termine con exit 0.
 
+Actualizacion 2026-07-02, BUG-131 cerrado: el smoke conservado en
+`/srv/orquesta-self/runtime/smokes-goal-first/orquesta-goal-first-app-server.uSyxeu`
+cerro en poll 45 con `goal_status=complete`, `run_status=cerrada`,
+`closure_status=accepted`, `artifact_refs=10` y `evidence_refs=10`. El primer
+shutdown devolvio HTTP 409 `backend_still_running`, el wrapper limpio la sesion
+propia `orquesta-goal-109cb28dc631dd36` y los procesos `codex app-server`
+asociados al socket temporal, reintento `/api/v0/server/shutdown` y obtuvo HTTP
+200 con `app_server_tmux_shutdown_ready=true` y
+`app_server_tmux_processes_alive=0`. El endpoint mantiene su contrato estricto:
+no declara ready mientras el backend esta vivo; el smoke asume la limpieza de
+su backend aislado despues de demostrar cierre accepted.
+
 ## Smoke aceptado con cierre funcional
 
 Smoke real posterior desde worktree limpio `a3d7d7df28` conservado en

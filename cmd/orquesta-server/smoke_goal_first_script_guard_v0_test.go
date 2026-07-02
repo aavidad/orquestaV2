@@ -114,6 +114,26 @@ func TestSmokeGoalFirstAppServerRealShutdownToleraTmuxYaCerradoV0(t *testing.T) 
 	}
 }
 
+func TestSmokeGoalFirstAppServerRealShutdownLimpiaBackendPropioYReintentaV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+
+	for _, want := range []string{
+		"cleanup_app_server_tmux_for_shutdown_retry",
+		`"$session_name" != orquesta-goal-*`,
+		`"$shutdown_status" == "409" && "$(json_get "$shutdown_response" "status")" == "backend_still_running"`,
+		"app_server_tmux_cleanup_retry=session:",
+		"stop_app_server_processes_for_socket",
+		"kill -KILL",
+		"smoke_goal_first_app_server_real_backend_cleanup_retry",
+		"POST /api/v0/server/shutdown retry -> HTTP",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("smoke debe limpiar backend tmux propio y reintentar shutdown: falta %q", want)
+		}
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")

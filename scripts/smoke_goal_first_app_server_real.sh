@@ -220,10 +220,9 @@ find_tmux_socket_for_owner() {
   find "$(dirname "$owner_file")" -maxdepth 1 -type s -print -quit 2>/dev/null || true
 }
 
-app_server_process_count_for_socket() {
+app_server_process_pids_for_socket() {
   local socket_path="$1"
   if [[ -z "$socket_path" ]]; then
-    echo 0
     return 0
   fi
   ps -eo pid=,args= | python3 -c '
@@ -231,15 +230,69 @@ import os
 import sys
 socket = sys.argv[1]
 current_pid = str(os.getpid())
-count = 0
 for line in sys.stdin:
     parts = line.strip().split(None, 1)
     if len(parts) != 2 or parts[0] == current_pid:
         continue
     if "codex" in parts[1] and "app-server" in parts[1] and socket in parts[1]:
-        count += 1
-print(count)
+        print(parts[0])
 ' "$socket_path"
+}
+
+app_server_process_count_for_socket() {
+  app_server_process_pids_for_socket "$1" | wc -l | tr -d ' '
+}
+
+stop_app_server_processes_for_socket() {
+  local socket_path="$1"
+  local pids pid
+  pids="$(app_server_process_pids_for_socket "$socket_path" || true)"
+  if [[ -z "$pids" ]]; then
+    return 0
+  fi
+  for pid in $pids; do
+    kill "$pid" >/dev/null 2>&1 || true
+  done
+  for _ in $(seq 1 40); do
+    if [[ "$(app_server_process_count_for_socket "$socket_path")" == "0" ]]; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  for pid in $(app_server_process_pids_for_socket "$socket_path" || true); do
+    kill -KILL "$pid" >/dev/null 2>&1 || true
+  done
+}
+
+cleanup_app_server_tmux_for_shutdown_retry() {
+  local owner_file="$1"
+  local session_name="$2"
+  local pane_pid="$3"
+  local socket_path="$4"
+  if [[ -z "$owner_file" || -z "$session_name" ]]; then
+    return 1
+  fi
+  if [[ "$session_name" != orquesta-goal-* ]]; then
+    return 1
+  fi
+  echo "app_server_tmux_cleanup_retry=session:$session_name"
+  if tmux has-session -t "$session_name" >/dev/null 2>&1; then
+    tmux kill-session -t "$session_name" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$pane_pid" ]]; then
+    for _ in $(seq 1 40); do
+      if ! kill -0 "$pane_pid" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 0.25
+    done
+  fi
+  if [[ -n "$socket_path" ]]; then
+    stop_app_server_processes_for_socket "$socket_path"
+    rm -f "$socket_path"
+  fi
+  rm -f "$owner_file"
+  return 0
 }
 
 print_app_server_failure_diagnostics() {
@@ -420,6 +473,21 @@ assert_app_server_tmux_shutdown_ready() {
       --data-binary "{\"request_id\":\"$request_id-shutdown\",\"correlation_id\":\"$request_id-shutdown\",\"reason\":\"smoke_goal_first_app_server_real\"}"
   )"
   echo "POST /api/v0/server/shutdown -> HTTP $shutdown_status"
+  if [[ "$shutdown_status" -lt 200 || "$shutdown_status" -gt 299 ]]; then
+    if [[ "$shutdown_status" == "409" && "$(json_get "$shutdown_response" "status")" == "backend_still_running" ]]; then
+      if cleanup_app_server_tmux_for_shutdown_retry "$owner_file" "$session_name" "$pane_pid" "$socket_path"; then
+        shutdown_status="$(
+          curl -sS -m "$request_timeout" -o "$shutdown_response" -w "%{http_code}" \
+            -X POST "$base_url/api/v0/server/shutdown" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            -H "X-Correlation-ID: $request_id-shutdown-retry" \
+            --data-binary "{\"request_id\":\"$request_id-shutdown-retry\",\"correlation_id\":\"$request_id-shutdown-retry\",\"reason\":\"smoke_goal_first_app_server_real_backend_cleanup_retry\"}"
+        )"
+        echo "POST /api/v0/server/shutdown retry -> HTTP $shutdown_status"
+      fi
+    fi
+  fi
   if [[ "$shutdown_status" -lt 200 || "$shutdown_status" -gt 299 ]]; then
     smoke_print_file_excerpt "$shutdown_response"
     exit 1
