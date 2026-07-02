@@ -15,9 +15,10 @@ import (
 func TestGuardianV0ShutdownServerUsaCooperativoPorDefecto(t *testing.T) {
 	dir := t.TempDir()
 	var received struct {
-		Forced      bool   `json:"forced"`
-		RequestedBy string `json:"requested_by"`
-		QueueLimit  int    `json:"queue_limit"`
+		Forced              bool   `json:"forced"`
+		CleanupGoalBackends bool   `json:"cleanup_goal_backends"`
+		RequestedBy         string `json:"requested_by"`
+		QueueLimit          int    `json:"queue_limit"`
 	}
 	withGuardianFakeShutdownHTTPClientV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v0/server/shutdown" {
@@ -47,7 +48,10 @@ func TestGuardianV0ShutdownServerUsaCooperativoPorDefecto(t *testing.T) {
 		!result.Shutdown.ShutdownReady {
 		t.Fatalf("result=%+v", result)
 	}
-	if received.Forced || received.RequestedBy != "orquesta-director" || received.QueueLimit != 123 {
+	if received.Forced ||
+		!received.CleanupGoalBackends ||
+		received.RequestedBy != "orquesta-director" ||
+		received.QueueLimit != 123 {
 		t.Fatalf("received=%+v", received)
 	}
 }

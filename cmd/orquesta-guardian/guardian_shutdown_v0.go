@@ -148,15 +148,16 @@ func waitGuardianServerShutdownReadyV0(
 func requestGuardianServerShutdownV0(config guardianConfigV0) (guardianShutdownResultV0, error) {
 	now := time.Now().UTC()
 	payload := map[string]any{
-		"forced":            config.ShutdownForced,
-		"requested_by":      "orquesta-director",
-		"reason":            guardianShutdownReasonV0(config),
-		"idempotency_key":   "idem-orquesta-guardian-shutdown",
-		"queue_limit":       config.ShutdownQueueLimit,
-		"max_ticks":         8,
-		"max_runs_per_tick": 4,
-		"occurred_at":       now.Format(time.RFC3339),
-		"evidence_refs":     []string{"evidence-ref-guardian-controlled-shutdown"},
+		"forced":                config.ShutdownForced,
+		"cleanup_goal_backends": true,
+		"requested_by":          "orquesta-director",
+		"reason":                guardianShutdownReasonV0(config),
+		"idempotency_key":       "idem-orquesta-guardian-shutdown",
+		"queue_limit":           config.ShutdownQueueLimit,
+		"max_ticks":             8,
+		"max_runs_per_tick":     4,
+		"occurred_at":           now.Format(time.RFC3339),
+		"evidence_refs":         []string{"evidence-ref-guardian-controlled-shutdown"},
 	}
 	if !config.ShutdownForced {
 		payload["checkpoint_deadline_at"] = config.OccurredAt.Add(config.ShutdownTimeout).Format(time.RFC3339)
