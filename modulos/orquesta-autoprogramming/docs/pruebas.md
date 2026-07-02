@@ -60,7 +60,8 @@ Cobertura actual:
   objetivo;
 - planner de backlog salta tareas ya visibles en cola, filtra secciones
   narrativas y puede crear una tarea scanner `Escaneo backlog nuevos` con epoch,
-  reservas, lineas y hashes de documentos;
+  reservas, lineas y hashes de documentos; no duplica el scanner si ya esta
+  visible por `task_ref` o por `section_ref`;
 - proyeccion publica de trabajo externo distingue `outbox_pending`,
   `wait_external` y `external_process_verified`.
 

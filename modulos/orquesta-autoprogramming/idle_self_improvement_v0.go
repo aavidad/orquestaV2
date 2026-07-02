@@ -296,7 +296,7 @@ func autoprogrammingScannerVisibleInQueueV0(
 	if scannerTaskRef == "" {
 		scannerTaskRef = AutoprogrammingBacklogPlannerScannerTaskRefV0
 	}
-	return visible["task:"+scannerTaskRef]
+	return visible["task:"+scannerTaskRef] || visible["section:backlog_scanner"]
 }
 
 func autoprogrammingBacklogScannerEntryV0(

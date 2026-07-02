@@ -142,6 +142,19 @@ func TestPlanAutoprogrammingBacklogSelfImprovementV0SaltaColaNarrativasYCreaScan
 	assertAutoprogrammingSkipV0(t, result.Skipped, "task-ref-narrative", AutoprogrammingBacklogPlannerSkipNarrativeSectionV0)
 }
 
+func TestPlanAutoprogrammingBacklogSelfImprovementV0NoDuplicaScannerVisiblePorSeccion(t *testing.T) {
+	result := PlanAutoprogrammingBacklogSelfImprovementV0(AutoprogrammingBacklogPlannerInputV0{
+		CreateScanner: true,
+		VisibleQueue: []AutoprogrammingVisibleQueueItemV0{{
+			SectionRef: "backlog_scanner",
+		}},
+	})
+
+	if result.Scanner != nil {
+		t.Fatalf("scanner=%+v", result.Scanner)
+	}
+}
+
 func TestProjectAutoprogrammingExternalWorkV0DistingueEstadosPublicos(t *testing.T) {
 	cases := []struct {
 		name  string
