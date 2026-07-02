@@ -302,3 +302,14 @@ Evidencia focal:
 - `TestCodexAppServerTmuxBackendV0FiltraProjectsAjenosDelConfigV0`
 - `TestCodexAppServerTmuxBackendV0PreparaCodeHomeDesdeCODEXHOMEResueltoV0`
 - `TestServerCodexGoalBackendFromEnvV0TmuxPreflightOKV0`
+
+Smoke real posterior con Orquesta `a5723cb8b2`, directorio conservado en
+`/srv/orquesta-self/runtime/smokes-goal-first/orquesta-goal-first-app-server.cY3QQr`:
+el Codex home aislado ya queda con un unico `[projects]` para el proyecto
+temporal y el run supera el poll 44 del bloqueo anterior. Termina en poll 50
+con `goal_status=blocked`, `run_status=bloqueada`, `closure_status=blocked`,
+`generated_apps_present=0` y evidencia
+`evidence-ref-codex-app-server-goal-high-token-usage`. El resumen terminal del
+agente indica que no puede ejecutar comandos ni escribir archivos dentro del
+workspace autorizado. Esto se registra como `BUG-ORQ-20260702-129`, separado de
+BUG-128 porque el trust heredado de proyectos ajenos ya no esta presente.
