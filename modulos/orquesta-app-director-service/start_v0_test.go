@@ -161,7 +161,10 @@ func TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy(t *testing.T) 
 		len(spec.WriteSet) != 1 ||
 		spec.WriteSet[0].Path != "generated-apps/agenda" ||
 		len(spec.RequiredTests) != 1 ||
-		!spec.ClosurePolicy.RequireRequiredTests {
+		!spec.ClosurePolicy.RequireRequiredTests ||
+		spec.Budget.MaxRuntimeSeconds != 600 ||
+		spec.Budget.MaxReworkGoals != 2 ||
+		spec.ReworkPolicy.MaxReworkGoals != 2 {
 		t.Fatalf("goal spec inesperado: %+v", spec)
 	}
 	if !serviceGoalContextRefInSetForTestV0(spec.ContextRefs, "phase_policy", startAppDirectorGoalNewAppPhasePolicyRefV0) ||
@@ -814,7 +817,7 @@ func TestObserveAppDirectorGoalV0BloqueaSiReworkGoalAgotaPresupuesto(t *testing.
 	if err != nil {
 		t.Fatalf("LoadGoalWorkStateV0: %v", err)
 	}
-	state.GoalRef = spec.GoalRef + "-rework-1"
+	state.GoalRef = spec.GoalRef + "-rework-2"
 	state.Spec.GoalRef = state.GoalRef
 	state.LaunchReceipt.GoalRef = state.GoalRef
 	if err := goalStates.SaveGoalWorkStateV0(context.Background(), state); err != nil {

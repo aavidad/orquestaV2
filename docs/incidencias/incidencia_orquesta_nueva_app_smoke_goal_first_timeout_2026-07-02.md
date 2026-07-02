@@ -121,3 +121,20 @@ Evidencia focal:
 
 - `TestObserveAppDirectorGoalV0LanzaReworkGoalSiPolicyYPuertoDisponibles`
 - `TestObserveAppDirectorGoalV0LanzaReworkGoalPorTimeoutActivoV0`
+
+Smoke real posterior con Orquesta `c703f4d0ad` y directorio temporal
+conservado en `/tmp/orquesta-goal-first-app-server.6uPTwz`: el fix anterior
+evito el falso `closure_status=blocked` mientras el rework estaba activo, pero
+el rework agoto el unico intento permitido y termino de nuevo con
+`codex_app_server_goal_active_timeout` pese a existir artefactos, docs y tests
+materializados.
+
+Avance aplicado: el spec goal-first de Nueva App declara ahora
+`Budget.MaxRuntimeSeconds=600` y dos reworks causales (`MaxReworkGoals=2`) para
+permitir un primer rework de materializacion y un segundo intento acotado de
+reparacion/cierre del receipt final sin caer al loop legacy.
+
+Evidencia focal:
+
+- `TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy`
+- `TestObserveAppDirectorGoalV0BloqueaSiReworkGoalAgotaPresupuesto`
