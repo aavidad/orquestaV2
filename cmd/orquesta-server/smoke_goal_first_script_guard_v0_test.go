@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -193,6 +195,36 @@ func TestSmokesAisladosPasanRuntimeDirAlShutdownComunV0(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("%s no pasa runtime al shutdown comun: falta %q", path, want)
 		}
+	}
+}
+
+func TestScriptsQueArrancanServidorTemporalUsanShutdownComunV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	scriptsDir := filepath.Join(root, "scripts")
+	err := filepath.WalkDir(scriptsDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".sh" {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		text := readOperationalDocGuardV0(t, root, rel)
+		startsTemporaryServer := strings.Contains(text, "ORQUESTA_SERVER_ADDR") &&
+			strings.Contains(text, `server_pid="$!"`)
+		if !startsTemporaryServer {
+			return nil
+		}
+		if !strings.Contains(text, "smoke_shutdown_orquesta_server") {
+			t.Fatalf("%s arranca servidor temporal sin shutdown comun", rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk scripts: %v", err)
 	}
 }
 
