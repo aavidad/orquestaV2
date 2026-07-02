@@ -13,6 +13,7 @@ const (
 	mcpAutoprogrammingActionRunningStaleNoProcessV0           = "running_stale_no_process"
 	mcpAutoprogrammingActionRunningWithoutRecentStatsV0       = "running_without_recent_stats"
 	mcpAutoprogrammingActionActiveNoCheckpointYetV0           = "active_no_checkpoint_yet"
+	mcpAutoprogrammingActionActiveTimeoutCheckpointRecentV0   = "active_timeout_checkpoint_recent"
 	mcpAutoprogrammingActionNoCheckpointHighConsumptionV0     = "goal_active_no_checkpoint_high_consumption"
 	mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0   = "checkpoint_only_high_consumption"
 	mcpAutoprogrammingActionStaleRunningReconciledV0          = "stale_running_reconciled"
@@ -32,6 +33,7 @@ const (
 	mcpAutoprogrammingEvidenceRunCoordinatorExecutedV0        = "evidence-ref-run-coordinator-executed"
 	mcpAutoprogrammingEvidenceGoalFirstStateMissingV0         = "evidence-ref-autoprogramming-status-goal-first-state-missing"
 	mcpAutoprogrammingEvidenceGoalFirstBlockedV0              = "evidence-ref-autoprogramming-status-goal-first-blocked"
+	mcpAutoprogrammingEvidenceActiveTimeoutCheckpointRecentV0 = "evidence-ref-autoprogramming-active-timeout-checkpoint-recent"
 	mcpAutoprogrammingEvidenceMissingTerminalReceiptV0        = "evidence-ref-autoprogramming-status-missing-terminal-receipt-after-artifacts-pass"
 	mcpAutoprogrammingEvidenceArtifactPathsOmittedV0          = "evidence-ref-autoprogramming-status-artifact-paths-omitted-materialized"
 	mcpAutoprogrammingEvidenceQAFailedPublicTextV0            = "evidence-ref-autoprogramming-status-qa-failed-public-text"
@@ -271,7 +273,9 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 			observed,
 		)
 		action = mcpAutoprogrammingActionableRunWithObservedGoalV0(action, observed)
-		checkpointOnlyHighConsumption := !activeTimeoutBackendActive &&
+		activeTimeoutCheckpointRecent := activeTimeoutBackendActive &&
+			mcpAutoprogrammingActiveTimeoutCheckpointRecentV0(action, observed)
+		checkpointOnlyHighConsumption := (!activeTimeoutBackendActive || activeTimeoutCheckpointRecent) &&
 			mcpAutoprogrammingCheckpointOnlyHighConsumptionV0(action, observed)
 		noCheckpointHighConsumption := !activeTimeoutBackendActive &&
 			mcpAutoprogrammingNoCheckpointHighConsumptionV0(action, observed)
@@ -299,7 +303,17 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 				mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0,
 			))
 		}
-		if activeTimeoutBackendActive {
+		if activeTimeoutCheckpointRecent && !checkpointOnlyHighConsumption {
+			action.Code = mcpAutoprogrammingActionActiveTimeoutCheckpointRecentV0
+			action.Severity = "info"
+			action.Reason = "active_timeout_checkpoint_recent: local timeout fired after a checkpoint while backend goal remains active below high-consumption threshold; observe for next artifact before replan"
+			action.RecommendedAction = "observe_goal_backend_wait_for_checkpoint"
+			action.EvidenceRefs = compactStringsMCPV0(append(
+				action.EvidenceRefs,
+				mcpAutoprogrammingEvidenceActiveTimeoutCheckpointRecentV0,
+			))
+		}
+		if activeTimeoutBackendActive && !activeTimeoutCheckpointRecent {
 			action.Code = mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0
 			action.EvidenceRefs = compactStringsMCPV0(append(
 				action.EvidenceRefs,
@@ -610,6 +624,27 @@ func mcpAutoprogrammingCheckpointOnlyHighConsumptionV0(
 ) bool {
 	if !mcpAutoprogrammingObservedGoalActiveV0(observed) ||
 		action.TokensUsed < mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensV0 ||
+		len(action.DomainReceiptRefs) > 0 {
+		return false
+	}
+	artifactRefs := compactStringsMCPV0(action.ArtifactRefs)
+	if len(artifactRefs) == 0 {
+		return false
+	}
+	for _, ref := range artifactRefs {
+		if !mcpAutoprogrammingArtifactRefLooksCheckpointV0(ref) {
+			return false
+		}
+	}
+	return true
+}
+
+func mcpAutoprogrammingActiveTimeoutCheckpointRecentV0(
+	action MCPAutoprogrammingActionableRunV0,
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	if !mcpAutoprogrammingObservedGoalActiveV0(observed) ||
+		action.TokensUsed >= mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensV0 ||
 		len(action.DomainReceiptRefs) > 0 {
 		return false
 	}
