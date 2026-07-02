@@ -26,6 +26,7 @@ const (
 	goalMaterializedArtifactPathsOmittedEvidence   = "evidence-ref-goal-materialized-artifact-paths-omitted"
 	goalMaterializedQAFailedPublicTextEvidence     = "evidence-ref-goal-materialized-qa-failed-public-text"
 	goalMaterializedPartialArtifactsEvidence       = "evidence-ref-goal-materialized-partial-artifacts-written"
+	goalMaterializedRequiredTestEvidenceMissing    = "evidence-ref-goal-materialized-required-test-evidence-missing"
 )
 
 var errGoalMaterializedRefsScanDoneV0 = errors.New("goal_materialized_refs_scan_done")
@@ -44,6 +45,7 @@ type goalMaterializedRefsScanV0 struct {
 	HasQAPass          bool
 	HasQAFail          bool
 	HasTerminalReceipt bool
+	HasTestEvidenceGap bool
 	TerminalResult     *orquestagoal.GoalWorkResultV0
 	ArtifactPaths      []string
 }
@@ -106,6 +108,10 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 	if scan.HasArtifact && !scan.HasTerminalReceipt {
 		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstPartialArtifactsWrittenV0)
 		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedPartialArtifactsEvidence)
+	}
+	if scan.HasTestEvidenceGap {
+		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstRequiredTestEvidenceMissingV0)
+		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedRequiredTestEvidenceMissing)
 	}
 	if omitted := goalMaterializedArtifactPathsOmittedV0(state, scan.ArtifactPaths); len(omitted) > 0 {
 		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstArtifactPathsOmittedMaterializedV0)
@@ -223,6 +229,7 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalMaterializedFileV0(
 			scan.TerminalResult = &result
 			scan.HasArtifact = scan.HasArtifact || len(result.ArtifactRefs) > 0 || len(result.ArtifactPaths) > 0
 			scan.HasQAPass = scan.HasQAPass || goalMaterializedGoalResultRequiredTestsPassedV0(result)
+			scan.HasTestEvidenceGap = scan.HasTestEvidenceGap || goalMaterializedGoalResultRequiredTestEvidenceMissingV0(result)
 			scan.Result.ArtifactRefs = append(scan.Result.ArtifactRefs, result.ArtifactRefs...)
 			scan.Result.DomainReceiptRefs = append(scan.Result.DomainReceiptRefs, result.DomainReceiptRefs...)
 			scan.Result.EvidenceRefs = append(scan.Result.EvidenceRefs, result.EvidenceRefs...)
@@ -263,6 +270,7 @@ func mergeGoalMaterializedRefsScanV0(
 	current.HasQAPass = current.HasQAPass || next.HasQAPass
 	current.HasQAFail = current.HasQAFail || next.HasQAFail
 	current.HasTerminalReceipt = current.HasTerminalReceipt || next.HasTerminalReceipt
+	current.HasTestEvidenceGap = current.HasTestEvidenceGap || next.HasTestEvidenceGap
 	if next.TerminalResult != nil {
 		current.TerminalResult = next.TerminalResult
 	}
@@ -299,6 +307,17 @@ func goalMaterializedGoalResultRequiredTestsPassedV0(result orquestagoal.GoalWor
 		}
 	}
 	return true
+}
+
+func goalMaterializedGoalResultRequiredTestEvidenceMissingV0(result orquestagoal.GoalWorkResultV0) bool {
+	for _, test := range result.RequiredTestResults {
+		status := strings.ToLower(strings.TrimSpace(test.Status))
+		if (status == "passed" || status == "pass" || status == "ok" || status == "success") &&
+			len(compactStringsV0(test.EvidenceRefs)) == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func goalMaterializedFileLooksLikeArtifactV0(

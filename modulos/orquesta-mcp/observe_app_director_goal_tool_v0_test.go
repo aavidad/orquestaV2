@@ -75,6 +75,29 @@ func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0ArtefactosParciale
 	}
 }
 
+func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0RequiredTestEvidenceAusentePideRepairReceipt(t *testing.T) {
+	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
+		MCPObserveAppDirectorGoalToolResultV0{
+			GoalRef:    "goal-ref-observe-required-test-evidence-001",
+			GoalStatus: "blocked",
+		},
+		MCPDirectorGoalMaterializedRefsV0{
+			ArtifactRefs: []string{"artifact-ref-materialized-required-test-evidence-001"},
+			EvidenceRefs: []string{"evidence-ref-goal-materialized-required-test-evidence-missing"},
+			IssueCodes:   []string{MCPGoalFirstRequiredTestEvidenceMissingV0},
+		},
+	)
+
+	if result.RecommendedAction != MCPGoalFirstRepairReceiptActionV0 ||
+		len(result.ClosureIssues) != 1 ||
+		result.ClosureIssues[0].Code != MCPGoalFirstRequiredTestEvidenceMissingV0 ||
+		result.ClosureIssues[0].Field != "goal_first.required_tests" ||
+		!containsStringMCPV0(result.ArtifactRefs, "artifact-ref-materialized-required-test-evidence-001") ||
+		!containsStringMCPV0(result.EvidenceRefs, "evidence-ref-goal-materialized-required-test-evidence-missing") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestNewMCPObserveAppDirectorGoalResultV0ReworkRunningNoPublicaClosureBloqueada(t *testing.T) {
 	result := NewMCPObserveAppDirectorGoalResultV0(
 		MCPObserveAppDirectorGoalToolInputV0{RunRef: "run-ref-observe-rework-running-001"},

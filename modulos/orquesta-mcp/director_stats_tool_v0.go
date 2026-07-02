@@ -513,6 +513,20 @@ func applyMCPDirectorGoalProgressProjectionV0(
 		})
 		return
 	}
+	if containsStringMCPV0(goal.IssueCodes, MCPGoalFirstRequiredTestEvidenceMissingV0) {
+		stats.Status = MCPGoalFirstRequiredTestEvidenceMissingV0
+		stats.Closure.BlockedBy = compactStringsMCPV0(append(
+			stats.Closure.BlockedBy,
+			MCPGoalFirstRequiredTestEvidenceMissingV0,
+		))
+		stats.Closure.BlockerRefs = compactStringsMCPV0(append(stats.Closure.BlockerRefs, goal.EvidenceRefs...))
+		stats.Progress.Issues = append(stats.Progress.Issues, orquestacionnucleoapp.DirectorProgressIssueV0{
+			Code:    MCPGoalFirstRequiredTestEvidenceMissingV0,
+			Field:   "goal_first.required_tests",
+			Message: "goal_first terminal receipt declares passed required tests without evidence refs; repair receipt with durable test evidence before closure",
+		})
+		return
+	}
 	if containsStringMCPV0(goal.IssueCodes, MCPGoalFirstPartialArtifactsWrittenV0) {
 		stats.Status = MCPGoalFirstPartialArtifactsWrittenV0
 		stats.Closure.BlockedBy = compactStringsMCPV0(append(

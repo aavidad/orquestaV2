@@ -26,6 +26,7 @@ const (
 	mcpAutoprogrammingActionArtifactPathsOmittedV0                 = MCPGoalFirstArtifactPathsOmittedMaterializedV0
 	mcpAutoprogrammingActionQAFailedPublicTextV0                   = MCPGoalFirstQAFailedPublicTextV0
 	mcpAutoprogrammingActionPartialArtifactsWrittenV0              = MCPGoalFirstPartialArtifactsWrittenV0
+	mcpAutoprogrammingActionRequiredTestEvidenceMissingV0          = MCPGoalFirstRequiredTestEvidenceMissingV0
 	mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0       = "goal_active_timeout_backend_active"
 	mcpAutoprogrammingEvidenceRunningStaleReconciledV0             = "evidence-ref-run-queue-running-stale-no-live-process-reconciled"
 	mcpAutoprogrammingEvidenceProviderUsageLimitRetryV0            = "evidence-ref-provider-usage-limit-retry-after"
@@ -39,6 +40,7 @@ const (
 	mcpAutoprogrammingEvidenceArtifactPathsOmittedV0               = "evidence-ref-autoprogramming-status-artifact-paths-omitted-materialized"
 	mcpAutoprogrammingEvidenceQAFailedPublicTextV0                 = "evidence-ref-autoprogramming-status-qa-failed-public-text"
 	mcpAutoprogrammingEvidencePartialArtifactsWrittenV0            = "evidence-ref-autoprogramming-status-partial-artifacts-written"
+	mcpAutoprogrammingEvidenceRequiredTestEvidenceMissingV0        = "evidence-ref-autoprogramming-status-required-test-evidence-missing"
 	mcpAutoprogrammingEvidenceGoalActiveTimeoutBackendV0           = "evidence-ref-autoprogramming-goal-active-timeout-backend-active"
 	mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0        = "evidence-ref-autoprogramming-no-checkpoint-high-consumption"
 	mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0      = "evidence-ref-autoprogramming-checkpoint-only-high-consumption"
@@ -173,6 +175,32 @@ func mcpAutoprogrammingPartialArtifactsWrittenActionsV0(
 	return out
 }
 
+func mcpAutoprogrammingRequiredTestEvidenceMissingActionsV0(
+	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
+) []MCPAutoprogrammingActionableRunV0 {
+	out := make([]MCPAutoprogrammingActionableRunV0, 0)
+	for runRef, observed := range observedByRunRef {
+		if !mcpAutoprogrammingObservedRequiredTestEvidenceMissingV0(observed) {
+			continue
+		}
+		action := MCPAutoprogrammingActionableRunV0{
+			Code:              mcpAutoprogrammingActionRequiredTestEvidenceMissingV0,
+			Severity:          "blocked",
+			RunRef:            strings.TrimSpace(runRef),
+			RunStatus:         mcpAutoprogrammingObservedRunStatusV0(observedByRunRef, runRef),
+			Reason:            "required_test_evidence_missing: terminal receipt declares passed required tests without evidence refs",
+			RecommendedAction: MCPGoalFirstRepairReceiptActionV0,
+			EvidenceRefs: []string{
+				mcpAutoprogrammingEvidenceRequiredTestEvidenceMissingV0,
+			},
+		}
+		action = mcpAutoprogrammingActionableRunWithObservedStatsV0(action, observed)
+		action = mcpAutoprogrammingActionableRunWithObservedGoalV0(action, observed)
+		out = append(out, action)
+	}
+	return out
+}
+
 func mcpAutoprogrammingObservedMissingTerminalReceiptV0(
 	observed *MCPDirectorStatsToolResultV0,
 ) bool {
@@ -207,6 +235,26 @@ func mcpAutoprogrammingObservedArtifactPathsOmittedV0(
 	}
 	for _, issue := range observed.Stats.Progress.Issues {
 		if strings.TrimSpace(issue.Code) == MCPGoalFirstArtifactPathsOmittedMaterializedV0 {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpAutoprogrammingObservedRequiredTestEvidenceMissingV0(
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	if observed == nil {
+		return false
+	}
+	if observed.Goal != nil && containsStringMCPV0(observed.Goal.IssueCodes, MCPGoalFirstRequiredTestEvidenceMissingV0) {
+		return true
+	}
+	if observed.Stats == nil {
+		return false
+	}
+	for _, issue := range observed.Stats.Progress.Issues {
+		if strings.TrimSpace(issue.Code) == MCPGoalFirstRequiredTestEvidenceMissingV0 {
 			return true
 		}
 	}
