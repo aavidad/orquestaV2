@@ -16,6 +16,7 @@ const (
 	goalFirstResidentReworkReasonActiveTimeoutV0    = "codex_app_server_goal_active_timeout"
 	goalFirstResidentReworkReasonQAFailedTextV0     = orquestamcp.MCPGoalFirstQAFailedPublicTextV0
 	goalFirstResidentReworkReasonArtifactPathsV0    = orquestamcp.MCPGoalFirstArtifactPathsOmittedMaterializedV0
+	goalFirstResidentReworkReasonOutOfScopeV0       = orquestamcp.MCPGoalFirstOutOfScopeMaterializedArtifactsV0
 	goalFirstResidentReworkReasonMissingReceiptV0   = orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0
 	goalFirstResidentReworkReasonRequiredTestsV0    = orquestamcp.MCPGoalFirstRequiredTestEvidenceMissingV0
 	goalFirstResidentReworkReasonPhase0V0           = orquestamcp.MCPGoalFirstPhase0CompleteNonPublishableV0
@@ -104,6 +105,7 @@ func goalFirstResidentReworkReasonV0(state orquestagoal.GoalWorkStateV0) (string
 		goalFirstResidentReworkReasonBackendMissingV0,
 		goalFirstResidentReworkReasonQAFailedTextV0,
 		goalFirstResidentReworkReasonArtifactPathsV0,
+		goalFirstResidentReworkReasonOutOfScopeV0,
 		goalFirstResidentReworkReasonMissingReceiptV0,
 		goalFirstResidentReworkReasonRequiredTestsV0,
 		goalFirstResidentReworkReasonPhase0V0,
