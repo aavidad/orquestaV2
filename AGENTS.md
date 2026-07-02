@@ -207,6 +207,20 @@ cuando cambien versiones, runtimes o skills.
   `rag/corpus/summary.json`, `rag/manifest.json`) o un conector documental con
   refs compactas. `codebase-memory-mcp` sirve para codigo OPES/Orquesta,
   scripts, validadores y relaciones, no para leer todos los temas.
+- Higiene de disco: todo agente que trabaje en remoto o en sesiones largas debe
+  presupuestar espacio antes de lanzar smokes, builds, indexadores o subagentes,
+  y debe cerrar el frente dejando limpios temporales y caches que haya creado.
+  Usa rutas aisladas y declaradas (`TMPDIR`, `GOTMPDIR`, `GOCACHE`,
+  `GOMODCACHE`, `GOPATH`, `ORQUESTA_FLAKY_HARNESS_CACHE_ROOT` y runtimes bajo
+  `/srv/orquesta-self/runtime` o `.orquesta-runtime`) para que la limpieza sea
+  verificable. No dejes copias obsoletas, bundles, `go-build`, `go-cache`,
+  workdirs `audit-*-next`, smokes temporales ni logs enormes sin retencion
+  explicita. Antes de borrar, comprueba procesos vivos, sesiones tmux, PIDs,
+  worktrees Git, markers de owner, `agent_ack`, `director_decisions`, `outbox`,
+  `plan_state`, manifests de artefactos y evidencias citadas por incidencias.
+  Si hay duda, no borres: resume la evidencia, marca la ruta como pendiente de
+  retencion y pide/crea una tarea de limpieza gobernada. No limpies rutas de
+  produccion ni OPES productivo desde una sesion de programacion.
 
 ## Capas
 

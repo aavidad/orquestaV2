@@ -1,9 +1,10 @@
-# Limpieza local de runtime Orquesta
+# Limpieza de runtime Orquesta
 
 Estado: runbook operativo para `ARCH-ORQ-20260630-003`.
 
 Objetivo: reducir presion de disco/IO de `.orquesta-runtime` y
-`.orquesta-purged-*` sin borrar evidencias por defecto.
+`.orquesta-purged-*`, y evitar colapsos de disco en runtimes remotos aislados,
+sin borrar evidencias por defecto.
 
 Comando de inventario seguro:
 
@@ -34,3 +35,26 @@ Reglas:
 - Si hay duda sobre una evidencia, mover/copiar fuera del repo antes de borrar.
 - Si se necesita limpiar un runtime de ola concreta, preferir el mecanismo
   existente `--purge-runtime --confirm-purge-runtime=<wave_ref>`.
+
+## Norma remota
+
+En servidor remoto aislado, cada agente debe tratar el espacio como recurso de
+produccion aunque el runtime sea de pruebas:
+
+- Antes y despues de builds, smokes largos, indexacion, subagentes o goals
+  masivos, revisar `df -h`, `du -xh --max-depth=1` del runtime y procesos vivos.
+- Enviar temporales a rutas aisladas y conocidas: `TMPDIR`, `GOTMPDIR`,
+  `GOCACHE`, `GOMODCACHE`, `GOPATH`, `ORQUESTA_FLAKY_HARNESS_CACHE_ROOT` y
+  runtime propio bajo `/srv/orquesta-self/runtime`.
+- Limpiar al terminar solo lo que el agente haya creado y este probado como
+  inactivo: caches Go, `go-build`, bundles, copias `audit-*` sin worktree vivo,
+  smokes temporales no citados como evidencia, logs rotados y directorios de
+  indexadores parados.
+- No borrar nunca a ciegas worktrees Git, `server-latest`, runtimes con procesos
+  vivos, sesiones tmux, sockets activos, markers de owner, `agent_ack`,
+  `director_decisions`, `outbox`, `plan_state`, `plan.json`,
+  `artifact_manifest.json`, `artifacts_manifest.json` ni evidencias referidas
+  desde inventario/incidencias.
+- Si una carpeta parece obsoleta pero podria ser evidencia, primero escribir un
+  resumen compacto o manifest de retencion y dejarla pendiente de limpieza
+  gobernada. No convertir una limpieza manual urgente en politica normal.
