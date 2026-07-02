@@ -81,6 +81,16 @@ func topicRegistrySettlementForRecordV0(record OPESCausalArtifactRecordV0) topic
 			NextWorkKinds: []string{"review_director_consolidation"},
 		}
 	}
+	if lifecyclePendingRefs := topicRegistryLifecyclePendingRefsForRecordV0(record); len(lifecyclePendingRefs) > 0 {
+		lifecycle := topicRegistryLifecycleForRecordV0(record)
+		return topicRegistrySettlementV0{
+			Status:        topicRegistrySettlementNotSettledV0,
+			Scope:         "goal_first_lifecycle",
+			Reason:        "goal_first_checkpoint_required",
+			Refs:          compactStringsV0(append(append(baseRefs, lifecyclePendingRefs...), lifecycle.HeartbeatRefs...)),
+			NextWorkKinds: []string{"review_director_consolidation"},
+		}
+	}
 	pendingRefs := topicRegistryPendingRefsForRecordV0(record)
 	if len(pendingRefs) > 0 {
 		return topicRegistrySettlementV0{

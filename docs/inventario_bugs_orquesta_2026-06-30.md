@@ -594,6 +594,27 @@ No cierra el bug padre: siguen pendientes heartbeat/checkpoint durable por tema,
 vista unica por `run_ref`, reconciliacion tras cortes externos/manuales y smoke
 real largo OPES.
 
+Avance BUG-ORQ-20260701-058/066 2026-07-02 tarde:
+`orquesta-opes-director` anade contrato de lifecycle goal-first por tema:
+`goal_first_lifecycle_status`, `goal_first_lifecycle_reason`,
+`goal_first_lifecycle_contract`, `goal_first_checkpoint_refs` y
+`goal_first_heartbeat_refs`. Si una entrega OPES viene de `goal_first` y quiere
+asentarse como texto o paquete final sin checkpoint durable, no queda
+`settled_text`/`settled_final`: se publica
+`pending_refs=goal-first-topic-checkpoint-required`,
+`settlement_scope=goal_first_lifecycle` y rework causal del Director. Con
+checkpoint presente, conserva el settlement normal. Ademas el manifest final
+OPES del director ya exige banco de preguntas publicable y paquete tutor, no
+solo la terna QA antigua. Incidencia:
+`docs/incidencias/incidencia_orquesta_opes_goal_first_topic_lifecycle_checkpoint_2026-07-02.md`.
+Tests: `TestProduceOPESCausalJobsV0GoalFirstTextoQAPassSinCheckpointNoAsientaTemaV0`,
+`TestProduceOPESCausalJobsV0GoalFirstTextoQAPassConCheckpointAsientaTemaV0`,
+`TestProduceOPESCausalJobsV0PaqueteFinalSinBancoYTutorNoLiberaRegistroV0` y
+`go test -count=1 ./modulos/orquesta-opes-director ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-topic-registry ./modulos/orquesta-app-codex-stack`.
+BUG-058/066 siguen abiertos hasta enforcement runtime fuerte y smoke OPES
+temporal largo, pero ya no dependen de estado implicito para settlement por
+tema goal-first.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

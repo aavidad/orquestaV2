@@ -40,6 +40,7 @@ func topicRegistryUpdateRequestV0(
 		orquestadomainwork.DomainWorkFieldV0{Name: "done_refs", Values: compactStringsV0([]string{record.ArtifactRef, record.ReceiptRef})},
 		orquestadomainwork.DomainWorkFieldV0{Name: "pending_refs", Values: pendingRefs},
 	)
+	fields = append(fields, topicRegistryLifecycleFieldsForRecordV0(record)...)
 	fields = append(fields, topicRegistrySettlementFieldsForRecordV0(record)...)
 	fields = append(fields, topicRegistryQualityFieldsForRecordV0(record)...)
 	if sourceWorkKind := fieldStringV0(record.PayloadFields, "source_work_kind", "work_kind"); sourceWorkKind != "" {
@@ -181,6 +182,7 @@ func topicRegistryFinalPackageHasClosureEvidenceV0(record OPESCausalArtifactReco
 		{"opes-final-evidence:rag", "rag_evidence_ref", "rag/manifest.json", "tutor_rag_manifest"},
 		{"opes-final-evidence:audio", "audio_evidence_ref", "audio/guion_audio.md", "audio_manifest"},
 		{"opes-final-evidence:tests", "tests_evidence_ref", "question_bank", "tests.json"},
+		{"opes-final-evidence:tutor", "tutor_evidence_ref", "tutor_bot_package", "tutor_assets_publicable"},
 		{"opes-final-evidence:visual", "visual_evidence_ref", "visuales_plan.md", "visual_validation_report_ref"},
 	}
 	for _, options := range required {
@@ -222,9 +224,11 @@ type topicRegistryFinalPackageManifestV0 struct {
 	ReviewMatrixRef      string                     `json:"review_matrix_ref"`
 	RequiredEvidenceRefs map[string]json.RawMessage `json:"required_evidence_refs"`
 	QAPasses             struct {
-		ExtensionPass         bool `json:"extension_pass"`
-		OfficialTextQAPass    bool `json:"official_text_qa_pass"`
-		StrictEditorialQAPass bool `json:"strict_editorial_qa_pass"`
+		ExtensionPass              bool `json:"extension_pass"`
+		OfficialTextQAPass         bool `json:"official_text_qa_pass"`
+		StrictEditorialQAPass      bool `json:"strict_editorial_qa_pass"`
+		QuestionBankPublicablePass bool `json:"question_bank_publicable"`
+		TutorAssetsPublicablePass  bool `json:"tutor_assets_publicable"`
 	} `json:"qa_passes"`
 	QAReportRefs map[string]json.RawMessage `json:"qa_report_refs"`
 }
@@ -234,17 +238,19 @@ func topicRegistryFinalPackageHasCompatibleManifestV0(fields []orquestadomainwor
 	if !ok {
 		return false
 	}
-	for _, category := range []string{"html", "rag", "audio", "tests", "visual", "qa"} {
+	for _, category := range []string{"html", "rag", "audio", "tests", "tutor", "visual", "qa"} {
 		if len(topicRegistryJSONRawRefsV0(manifest.RequiredEvidenceRefs[category])) == 0 {
 			return false
 		}
 	}
 	if !manifest.QAPasses.ExtensionPass ||
 		!manifest.QAPasses.OfficialTextQAPass ||
-		!manifest.QAPasses.StrictEditorialQAPass {
+		!manifest.QAPasses.StrictEditorialQAPass ||
+		!manifest.QAPasses.QuestionBankPublicablePass ||
+		!manifest.QAPasses.TutorAssetsPublicablePass {
 		return false
 	}
-	for _, category := range []string{"extension", "official_text", "strict_editorial"} {
+	for _, category := range []string{"extension", "official_text", "strict_editorial", "question_bank_publicable", "tutor_assets_publicable"} {
 		if len(topicRegistryJSONRawRefsV0(manifest.QAReportRefs[category])) == 0 {
 			return false
 		}

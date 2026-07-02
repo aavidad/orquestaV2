@@ -22,6 +22,10 @@ Responsabilidad:
 - preservar estados estructurados de avance parcial del registro OPES, por
   ejemplo `texto_minimo_B_ok_pendiente_assets_html_tests_rag_audio_qa`, cuando
   vienen en el artefacto causal;
+- exigir checkpoint durable cuando un artefacto OPES procedente de `goal_first`
+  quiera asentarse como `settled_text` o `settled_final`; si solo hay heartbeat
+  o no hay checkpoint, publicar `goal-first-topic-checkpoint-required` y rework
+  causal en vez de cerrar por estado implicito;
 - aplicar el actualizador del registro OPES antes de persistir el job
   `update_topic_registry`, de modo que un fallo de herramienta no bloquee el
   siguiente tick por idempotencia prematura;
