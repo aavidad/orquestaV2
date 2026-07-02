@@ -40,18 +40,13 @@ func TestFlakyHarnessV0RepiteCasoDirectorRecursiveFakeRuntimeV0(t *testing.T) {
 	if strings.TrimSpace(os.Getenv(flakyHarnessChildEnvV0)) == "1" {
 		t.Skip("child run")
 	}
-	childGoCache := strings.TrimSpace(os.Getenv("GOCACHE"))
-	if childGoCache == "" {
-		childGoCache = filepath.Join(os.TempDir(), "orquesta-go-build-cache")
+	cacheRoot := strings.TrimSpace(os.Getenv("ORQUESTA_FLAKY_HARNESS_CACHE_ROOT"))
+	if cacheRoot == "" {
+		cacheRoot = filepath.Join(os.TempDir(), "orquesta-flaky-harness-go")
 	}
-	childGoModCache := strings.TrimSpace(os.Getenv("GOMODCACHE"))
-	if childGoModCache == "" {
-		childGoModCache = filepath.Join(os.TempDir(), "orquesta-go-mod-cache")
-	}
-	childGoPath := strings.TrimSpace(os.Getenv("GOPATH"))
-	if childGoPath == "" {
-		childGoPath = filepath.Join(os.TempDir(), "orquesta-go-path")
-	}
+	childGoCache := filepath.Join(cacheRoot, "build")
+	childGoModCache := filepath.Join(cacheRoot, "mod")
+	childGoPath := filepath.Join(cacheRoot, "path")
 	for label, path := range map[string]string{
 		"GOCACHE":    childGoCache,
 		"GOMODCACHE": childGoModCache,
@@ -61,6 +56,30 @@ func TestFlakyHarnessV0RepiteCasoDirectorRecursiveFakeRuntimeV0(t *testing.T) {
 			t.Fatalf("preparar %s para child: %v", label, err)
 		}
 	}
+	childEnv := append(
+		os.Environ(),
+		flakyHarnessChildEnvV0+"=1",
+		"GOCACHE="+childGoCache,
+		"GOMODCACHE="+childGoModCache,
+		"GOPATH="+childGoPath,
+	)
+	preflightCtx, preflightCancel := context.WithTimeout(context.Background(), flakyHarnessAttemptTimeoutV0)
+	preflight := exec.CommandContext(preflightCtx, "go", "mod", "download")
+	preflight.Dir = projectRootForFlakyHarnessV0(t)
+	preflight.Env = childEnv
+	var preflightStdout bytes.Buffer
+	var preflightStderr bytes.Buffer
+	preflight.Stdout = &preflightStdout
+	preflight.Stderr = &preflightStderr
+	if err := preflight.Run(); err != nil {
+		preflightCancel()
+		t.Fatalf("preparar modcache child: %v stdout=%s stderr=%s",
+			err,
+			goSmokeDiagnosticForTestV0(preflightStdout.String()),
+			goSmokeDiagnosticForTestV0(preflightStderr.String()),
+		)
+	}
+	preflightCancel()
 	for attempt := 1; attempt <= flakyHarnessAttemptsV0; attempt++ {
 		ctx, cancel := context.WithTimeout(context.Background(), flakyHarnessAttemptTimeoutV0)
 		cmd := exec.CommandContext(
@@ -75,13 +94,7 @@ func TestFlakyHarnessV0RepiteCasoDirectorRecursiveFakeRuntimeV0(t *testing.T) {
 			flakyHarnessChildTestTimeoutV0.String(),
 		)
 		cmd.Dir = projectRootForFlakyHarnessV0(t)
-		cmd.Env = append(
-			os.Environ(),
-			flakyHarnessChildEnvV0+"=1",
-			"GOCACHE="+childGoCache,
-			"GOMODCACHE="+childGoModCache,
-			"GOPATH="+childGoPath,
-		)
+		cmd.Env = childEnv
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 		cmd.Stdout = &stdout
