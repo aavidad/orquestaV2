@@ -107,13 +107,15 @@ ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_PROGRAM_ID=<program_id> \
 ORQUESTA_OPES_BRIDGE_CORRELATION_ID=<correlation_id> \
 ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=plan_temario,update_topic_registry,research_exam_precedents,draft_content_block,generate_visual_asset,generate_question_bank,review_legal,review_pedagogical,review_quality,review_codex,review_gemini,review_claude,review_pair_codex_gemini,review_pair_codex_claude,review_pair_gemini_claude,review_director_consolidation,validate_topic,assemble_topic,generate_audio_asset,generate_tutor_assets,generate_learning_games,generate_html_site,generate_help_manual_assets,finalize_temario_package \
-go run ./cmd/orquesta-server run
+orquesta-server start
 ```
 
 La secuencia consulta los tipos en orden y solo drena el primer tipo con jobs
 `pending`. Si el ledger marca un job como `already_submitted`, no lo reenvia y
 no avanza a fases posteriores hasta que OPES deje de mostrar pendientes de ese
 tipo.
+Para parar el residente usa `orquesta-server stop`, que conserva el shutdown
+gobernado y la limpieza de backends Goal propios.
 
 Modo autonomo acotado para cerrar temario:
 

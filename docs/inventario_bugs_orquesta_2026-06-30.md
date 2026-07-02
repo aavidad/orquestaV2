@@ -674,6 +674,14 @@ contenido, y conserva el artefacto como recuperable para rework. Evidencia:
 `TestValidateOPESTopicQualityContractV0DetectaTablaColapsadaEnEncabezadoV0` y
 `go test -count=1 ./modulos/orquesta-opes-director`.
 
+Avance BUG-ORQ-20260701-077 2026-07-02 noche 6: los README operativos de
+`modulos/orquesta-server` y `modulos/orquesta-opes-bridge` dejan de recomendar
+`go run ./cmd/orquesta-server run` como receta de operador y pasan a
+`orquesta-server start`/`orquesta-server stop`, conservando `app_server_tmux` y
+apagado gobernado. Evidencia:
+`TestReadmesOperativosNoRecomiendanRuntimeManualV0` y
+`go test -count=1 ./cmd/orquesta-server -run 'Test(ReadmesOperativosNoRecomiendanRuntimeManual|UsoActualAppOrquestaRecomiendaServidorGestionado|ArrancarCodexModuloNoRecomiendaRuntimeManual)V0'`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

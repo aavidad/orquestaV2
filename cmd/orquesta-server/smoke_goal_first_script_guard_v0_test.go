@@ -475,6 +475,26 @@ func TestUsoActualAppOrquestaRecomiendaServidorGestionadoV0(t *testing.T) {
 	}
 }
 
+func TestReadmesOperativosNoRecomiendanRuntimeManualV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	for _, rel := range []string{
+		"modulos/orquesta-server/README.md",
+		"modulos/orquesta-opes-bridge/README.md",
+	} {
+		t.Run(rel, func(t *testing.T) {
+			text := readOperationalDocGuardV0(t, root, rel)
+			if strings.Contains(text, "go run ./cmd/orquesta-server run") {
+				t.Fatalf("%s recomienda runtime manual no gobernado", rel)
+			}
+			for _, want := range []string{"orquesta-server start", "orquesta-server stop"} {
+				if !strings.Contains(text, want) {
+					t.Fatalf("%s debe documentar arranque/parada gestionados: falta %q", rel, want)
+				}
+			}
+		})
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")

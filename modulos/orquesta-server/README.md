@@ -15,8 +15,8 @@ reengancharse leyendo el statefile y consultando la API.
 
 ## Uso local y supervision
 
-Para trabajo local, arranca el residente desde la raiz con
-`go run ./cmd/orquesta-server run`. `/healthz` solo confirma socket/proceso
+Para trabajo local, arranca el residente gestionado con `orquesta-server start`
+y paralo con `orquesta-server stop`. `/healthz` solo confirma socket/proceso
 vivo; antes de lanzar Codex, OPES, `domain_work` o automejora usa
 `GET /api/v0/server/readiness` y exige `ready=true`. La supervision operativa
 debe hacerse contra las APIs publicas del servidor, por ejemplo
@@ -247,7 +247,7 @@ SRV-TASK-024 abierto hasta dispatch real o bloqueo causal publico probado.
 
 ## Bridge OPES residente
 
-`cmd/orquesta-server run` puede arrancar el bridge OPES por opt-in:
+El residente gestionado puede arrancar el bridge OPES por opt-in:
 
 ```sh
 ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18080 \
@@ -257,13 +257,15 @@ ORQUESTA_OPES_BRIDGE_ENABLED=1 \
 ORQUESTA_OPES_BRIDGE_CONFIRM=1 \
 ORQUESTA_OPES_BRIDGE_LIMIT=1 \
 ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE=draft_content_block,generate_visual_asset,review_legal,review_pedagogical,review_quality,validate_topic,assemble_topic,generate_audio_asset \
-go run ./cmd/orquesta-server run
+orquesta-server start
 ```
 
 La secuencia de tipos es composicion OPES, no contrato del runtime residente.
 Cada tick usa el loop generico y drena solo el primer tipo que siga pendiente.
 Este modo solo debe apuntar a OPES temporal o fake: loopback no equivale a
 temporalidad confirmada y el backend Goal operativo normal es `app_server_tmux`.
+Usa `orquesta-server stop` para el apagado gobernado y la limpieza de backends
+Goal propios.
 
 ## Guardian de autoprogramacion
 
