@@ -82,7 +82,7 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 	}
 	if source.RepairMissingTerminalReceipt &&
 		source.GoalStateStore != nil &&
-		containsStringV0(result.IssueCodes, orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
+		goalFirstStringSliceContainsV0(result.IssueCodes, orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
 		repaired, repairErr := repairGoalFirstReceiptFromMaterializedRefsV0(
 			ctx,
 			state,
@@ -536,7 +536,16 @@ func goalMaterializedMissingTerminalReceiptHandledV0(state orquestagoal.GoalWork
 	}
 	return state.LastResult != nil &&
 		state.LastClosure != nil &&
-		containsStringV0(state.LastResult.EvidenceRefs, goalFirstRepairReceiptAttemptedEvidenceRefV0)
+		goalFirstStringSliceContainsV0(state.LastResult.EvidenceRefs, goalFirstRepairReceiptAttemptedEvidenceRefV0)
+}
+
+func goalFirstStringSliceContainsV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func goalMaterializedQAPassRefV0(

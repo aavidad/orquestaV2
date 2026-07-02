@@ -37,7 +37,7 @@ func repairGoalFirstReceiptFromMaterializedRefsV0(
 	}
 	out := goalFirstReceiptRepairResultV0{State: state}
 	if store == nil ||
-		!containsStringV0(refs.IssueCodes, orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) ||
+		!goalFirstStringSliceContainsV0(refs.IssueCodes, orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) ||
 		goalFirstReceiptRepairAlreadyClosedV0(state) ||
 		goalFirstReceiptRepairAlreadyAttemptedV0(state) {
 		return out, nil
@@ -139,7 +139,7 @@ func goalFirstReceiptRepairAlreadyAttemptedV0(state orquestagoal.GoalWorkStateV0
 	if state.LastResult == nil || state.LastClosure == nil {
 		return false
 	}
-	return containsStringV0(state.LastResult.EvidenceRefs, goalFirstRepairReceiptAttemptedEvidenceRefV0)
+	return goalFirstStringSliceContainsV0(state.LastResult.EvidenceRefs, goalFirstRepairReceiptAttemptedEvidenceRefV0)
 }
 
 func goalFirstReceiptRepairHasIssueV0(issues []orquestagoal.GoalWorkIssueV0, code string) bool {

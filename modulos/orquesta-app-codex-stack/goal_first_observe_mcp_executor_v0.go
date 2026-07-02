@@ -138,7 +138,7 @@ func (executor CodexStackObserveAppDirectorGoalExecutorV0) withMaterializedRefsV
 	if repaired, loadErr := store.LoadGoalWorkStateV0(ctx, runRef); loadErr == nil {
 		if repaired.LastResult != nil &&
 			repaired.LastClosure != nil &&
-			containsStringV0(repaired.LastResult.EvidenceRefs, goalFirstRepairReceiptAttemptedEvidenceRefV0) {
+			goalFirstStringSliceContainsV0(repaired.LastResult.EvidenceRefs, goalFirstRepairReceiptAttemptedEvidenceRefV0) {
 			result = codexStackObserveResultWithGoalStateV0(result, repaired)
 		}
 	}
