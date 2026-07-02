@@ -78,7 +78,7 @@ func shutdownRequestErrorAllowsSignalV0(
 		return true
 	}
 	if forced {
-		return true
+		return !shutdownRequestErrorIsLiveWorkConflictV0(err)
 	}
 	if strings.TrimSpace(err.Error()) != "shutdown_timeout" {
 		return false
@@ -87,4 +87,16 @@ func shutdownRequestErrorAllowsSignalV0(
 		status.ShutdownAgentsInFlight == 0 &&
 		status.ShutdownCheckpointsPending == 0 &&
 		status.ShutdownAsyncWorkActive == 0
+}
+
+func shutdownRequestErrorIsLiveWorkConflictV0(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.TrimSpace(err.Error())
+	if strings.HasPrefix(message, "shutdown_http_409") {
+		return true
+	}
+	return strings.Contains(message, "backend_still_running") ||
+		strings.Contains(message, "active_goals_present")
 }

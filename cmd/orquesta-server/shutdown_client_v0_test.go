@@ -236,7 +236,16 @@ func TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado(t *testi
 		t.Fatalf("request_failed no debe permitir signal sin force")
 	}
 	if !shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_request_failed"), status, true) {
-		t.Fatalf("force debe permitir signal tras error de shutdown")
+		t.Fatalf("force debe permitir signal tras error de transporte de shutdown")
+	}
+	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_http_409"), status, true) {
+		t.Fatalf("force no debe saltar conflicto HTTP de trabajo vivo")
+	}
+	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_not_ready status=backend_still_running runs=0/0 agents_in_flight=0 checkpoints=0 checkpoint_agents=0"), status, true) {
+		t.Fatalf("force no debe saltar backend vivo")
+	}
+	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_status_active_goals_present"), status, true) {
+		t.Fatalf("force no debe saltar goals activos")
 	}
 }
 

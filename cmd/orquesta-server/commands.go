@@ -209,6 +209,9 @@ func stopServerCommandV0(args []string, stdout io.Writer, stderr io.Writer) int 
 	}
 	live, err := verifyLiveDaemonIdentityV0(state)
 	if err != nil {
+		if handled, exitCode := stopServerCommandHandleUnavailableDaemonV0(config, state, options, stdout, stderr, err); handled {
+			return exitCode
+		}
 		_, _ = fmt.Fprintf(stderr, "orquesta-server stop: %v\n", err)
 		return 1
 	}
@@ -249,6 +252,64 @@ func stopServerCommandV0(args []string, stdout io.Writer, stderr io.Writer) int 
 		return reportCommandStdioWriteFailureV0(stderr, "stop", "stdout", "text_write", err)
 	}
 	return 0
+}
+
+func stopServerCommandHandleUnavailableDaemonV0(
+	config orquestaserver.ConfigV0,
+	state orquestaserver.StateV0,
+	options serverShutdownClientOptionsV0,
+	stdout io.Writer,
+	stderr io.Writer,
+	identityErr error,
+) (bool, int) {
+	if !options.Forced ||
+		!stopServerSnapshotProcessNotAliveV0(state) ||
+		!stopServerSnapshotHTTPUnavailableV0(state, identityErr) {
+		return false, 0
+	}
+	reconciled, _ := reconcileStatefileSnapshotLivenessV0(config, state)
+	cleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0(config, state.PID)
+	processRef := strings.TrimSpace(reconciled.ProcessRef)
+	if processRef == "" {
+		processRef = "process-ref-unavailable"
+	}
+	if err := writeCommandTextOutputV0(stdout, fmt.Sprintf("stop forced stale process_ref=%s\n", processRef)); err != nil {
+		return true, reportCommandStdioWriteFailureV0(stderr, "stop", "stdout", "text_write", err)
+	}
+	return true, 0
+}
+
+func stopServerSnapshotProcessNotAliveV0(state orquestaserver.StateV0) bool {
+	return state.PID <= 0 || !processAliveV0(state.PID)
+}
+
+func stopServerSnapshotHTTPUnavailableV0(state orquestaserver.StateV0, identityErr error) bool {
+	if identityErr == nil || strings.TrimSpace(identityErr.Error()) != "daemon_identity_unavailable" {
+		return false
+	}
+	return !stopServerStatusEndpointReachableV0(state)
+}
+
+func stopServerStatusEndpointReachableV0(state orquestaserver.StateV0) bool {
+	addr := strings.TrimSpace(state.Addr)
+	if addr == "" {
+		return false
+	}
+	baseURL, err := commandRESTBaseURLFromAddrV0(addr)
+	if err != nil {
+		return false
+	}
+	target, err := commandRESTEndpointURLV0(baseURL, orquestaserver.ServerStatusEndpointV0)
+	if err != nil {
+		return false
+	}
+	client := commandHTTPClientWithRedirectPolicyV0(2*time.Second, baseURL)
+	response, err := client.Get(target)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	return true
 }
 
 func parseStopOptionsV0(args []string, stderr io.Writer) (serverShutdownClientOptionsV0, error) {
