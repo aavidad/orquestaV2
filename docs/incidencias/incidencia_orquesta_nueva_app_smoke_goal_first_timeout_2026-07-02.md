@@ -76,3 +76,17 @@ flujo Nueva App debe demostrar en smoke real que:
    `closure_status=accepted` y `artifact_refs/evidence_refs` no vacios.
 5. Si queda en receipt inicial invalido o brainstorming, replanifica de forma
    acotada sin volver al loop legacy y sin quemar cuota hasta timeout.
+
+## Avance Orquesta
+
+`runs.supervisor` en `resident_mode` prepara ahora un rework goal acotado cuando
+el estado goal-first ya quedo terminal/rework por
+`codex_app_server_goal_active_timeout` y no hay artefactos ni receipts. La
+accion conserva el mecanismo goal-first, devuelve `repair_run_refs`, marca el
+goal fuente para idempotencia y no relanza si ya existen artefactos, para evitar
+pisar trabajo recuperable.
+
+Evidencia focal:
+
+- `TestRunSupervisorGoalFirstResidentPreparaReworkPorTimeoutInicialSinArtefactosV0`
+- `TestRunSupervisorGoalFirstResidentNoRelanzaTimeoutConArtefactosV0`

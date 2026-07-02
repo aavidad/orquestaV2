@@ -97,6 +97,55 @@ func TestRunSupervisorGoalFirstResidentReworkEsIdempotenteV0(t *testing.T) {
 	}
 }
 
+func TestRunSupervisorGoalFirstResidentPreparaReworkPorTimeoutInicialSinArtefactosV0(t *testing.T) {
+	ctx := context.Background()
+	store := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	source := goalFirstResidentReworkSourceStateForTestV0(
+		"run-ref-goal-first-resident-new-app-timeout-001",
+		goalFirstResidentReworkReasonActiveTimeoutV0,
+	)
+	source.LastResult.Status = orquestagoal.GoalStatusInvalidV0
+	source.LastResult.Summary = goalFirstResidentReworkReasonActiveTimeoutV0
+	source.LastResult.ArtifactRefs = nil
+	source.LastResult.ArtifactPaths = nil
+	source.LastResult.DomainReceiptRefs = nil
+	source.LastResult.EvidenceRefs = []string{"evidence-ref-codex-app-server-goal-active-timeout"}
+	source.LastClosure.Issues = []orquestagoal.GoalWorkIssueV0{{Code: goalFirstResidentReworkReasonActiveTimeoutV0, Field: "goal_backend"}}
+	source.LastClosure.EvidenceRefs = []string{"evidence-ref-codex-app-server-goal-active-timeout"}
+	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
+	}
+	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:     store,
+			GoalReworkLauncher: launcher,
+		},
+		Stores: StoresV0{AppGoalStateStore: store},
+	}}
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef:       source.RunRef,
+		ResidentMode: true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.StopReason != "goal_first_resident_rework_prepared" ||
+		len(result.RepairRunRefs) != 1 ||
+		launcher.calls != 1 ||
+		!strings.Contains(launcher.specs[0].Objective, "Rework acotado") {
+		t.Fatalf("resultado rework inesperado: result=%+v calls=%d spec=%+v", result, launcher.calls, launcher.specs)
+	}
+	if !hasGoalFirstResidentReworkContextForTestV0(
+		launcher.specs[0].ContextRefs,
+		"rework_reason",
+		goalFirstResidentReworkReasonActiveTimeoutV0,
+	) {
+		t.Fatalf("context refs sin motivo timeout: %+v", launcher.specs[0].ContextRefs)
+	}
+}
+
 func TestRunSupervisorGoalFirstNoResidentNoLanzaReworkV0(t *testing.T) {
 	ctx := context.Background()
 	store := newGoalFirstQueueStateStoreForTestV0()
@@ -124,6 +173,44 @@ func TestRunSupervisorGoalFirstNoResidentNoLanzaReworkV0(t *testing.T) {
 		len(result.RepairRunRefs) != 0 ||
 		result.StopReason != "goal_first_observe_required" {
 		t.Fatalf("supervision no residente lanzo rework: result=%+v calls=%d", result, launcher.calls)
+	}
+}
+
+func TestRunSupervisorGoalFirstResidentNoRelanzaTimeoutConArtefactosV0(t *testing.T) {
+	ctx := context.Background()
+	store := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	source := goalFirstResidentReworkSourceStateForTestV0(
+		"run-ref-goal-first-resident-new-app-timeout-artifact-001",
+		goalFirstResidentReworkReasonActiveTimeoutV0,
+	)
+	source.LastResult.Summary = goalFirstResidentReworkReasonActiveTimeoutV0
+	source.LastResult.ArtifactRefs = []string{"artifact-ref-generated-app-code-001"}
+	source.LastResult.EvidenceRefs = []string{"evidence-ref-codex-app-server-goal-active-timeout"}
+	source.LastClosure.Issues = []orquestagoal.GoalWorkIssueV0{{Code: goalFirstResidentReworkReasonActiveTimeoutV0, Field: "goal_backend"}}
+	source.LastClosure.EvidenceRefs = []string{"evidence-ref-codex-app-server-goal-active-timeout"}
+	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
+	}
+	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:     store,
+			GoalReworkLauncher: launcher,
+		},
+		Stores: StoresV0{AppGoalStateStore: store},
+	}}
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef:       source.RunRef,
+		ResidentMode: true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if launcher.calls != 0 ||
+		len(result.RepairRunRefs) != 0 ||
+		result.StopReason != "goal_first_observe_required" {
+		t.Fatalf("timeout con artefactos no debe relanzar: result=%+v calls=%d", result, launcher.calls)
 	}
 }
 
@@ -173,6 +260,19 @@ func goalFirstResidentReworkSourceStateForTestV0(runRef, reason string) orquesta
 type goalFirstResidentReworkLauncherForTestV0 struct {
 	calls int
 	specs []orquestagoal.GoalWorkSpecV0
+}
+
+func hasGoalFirstResidentReworkContextForTestV0(
+	refs []orquestagoal.GoalContextRefV0,
+	kind string,
+	ref string,
+) bool {
+	for _, ctxRef := range refs {
+		if strings.TrimSpace(ctxRef.Kind) == kind && strings.TrimSpace(ctxRef.Ref) == ref {
+			return true
+		}
+	}
+	return false
 }
 
 func (launcher *goalFirstResidentReworkLauncherForTestV0) LaunchGoalWorkV0(
