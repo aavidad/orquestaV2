@@ -844,7 +844,7 @@ func supervisorResultWithUnhandledOutboxForTestV0(runRef string) orquestarunsupe
 				}},
 				Executions: []orquestaruncoordinator.RunExecutionSummaryV0{{
 					RunRef:      runRef,
-					Outcome:     "",
+					Outcome:     "running",
 					QueueStatus: "running",
 					Diagnostics: []orquestaruncoordinator.RunDrainDiagnosticV0{{
 						PendingOutboxCount: 1,

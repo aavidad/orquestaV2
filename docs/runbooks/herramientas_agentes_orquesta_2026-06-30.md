@@ -5,15 +5,19 @@ de uso de herramientas, no dependientes de memoria de sesion.
 
 ## Norma
 
-- `codebase-memory-mcp` es la herramienta canonica para navegar codigo:
-  simbolos, llamadas, rutas, clusters y arquitectura.
-- `rg` sigue siendo canonico para strings exactos, Markdown, incidencias,
-  configs, scripts shell y busquedas no cubiertas por el grafo.
+- El camino canonico en Orquesta es el broker central de contexto de codigo:
+  `rg` por defecto y `codebase-memory-mcp` solo como adaptador opt-in detras del
+  broker cuando hagan falta simbolos, llamadas, rutas, clusters o arquitectura.
+- `rg`/lectura local acotada sigue siendo canonico para strings exactos,
+  Markdown, incidencias, configs, scripts shell, logs y busquedas no cubiertas
+  por el grafo.
 - La comunicacion de agentes debe ser compacta. Si existe `caveman`, usarla o
   pedir estilo equivalente: hecho, tests, riesgos/bloqueos y siguiente accion.
-- En OPES, `codebase-memory-mcp` se usa para codigo y validadores. Para no leer
-  todos los temas, usar RAG/documentos canonicos OPES con refs compactas:
-  `rag/corpus/chunks.jsonl`, `rag/corpus/summary.json` y `rag/manifest.json`.
+- En OPES, `codebase-memory-mcp` no es indice de contenido pedagogico. Si se
+  usa, debe ser solo para codigo y validadores, preferentemente via broker. Para
+  no leer todos los temas, usar RAG/documentos canonicos OPES con refs
+  compactas: `rag/corpus/chunks.jsonl`, `rag/corpus/summary.json` y
+  `rag/manifest.json`.
 - No abrir UI ni puertos externos por defecto. En remoto aislado, cualquier
   indice o cache vive bajo usuario `berserk` o `/srv/orquesta-self`, nunca en
   produccion.
@@ -44,6 +48,8 @@ Efectos adicionales:
 - escribe norma persistente en `~/.codex/AGENTS.md`;
 - guarda version en `~/.codex/log/orquesta-agent-tooling.env`;
 - con `--index`, indexa el worktree actual en modo `fast`.
+- si se trabaja con subagentes, no se debe pasar este contexto como permiso para
+  que cada subagente arranque su propio MCP o indexador.
 
 `codebase-memory-mcp install -y --ui=false` solo se ejecuta con
 `--install-direct-mcp`. Ese modo requiere opt-in operativo explicito porque
@@ -87,15 +93,35 @@ En `berserk@uso.dipgra.cloud` se instalo el binario estatico
 
 Historico: `codebase-memory-mcp install -y --ui=false` configuro Codex remoto en
 `~/.codex/config.toml` y `~/.codex/AGENTS.md`. Desde el ajuste de gobernanza del
-2026-07-02, ese paso queda detras de `--install-direct-mcp`. El worktree aislado
+2026-07-02, ese paso queda detras de `--install-direct-mcp` y no forma parte del
+bootstrap normal. El worktree aislado
 `/srv/orquesta-self/runtime/audit-14ab41f1-next` quedo indexado como
 `srv-orquesta-self-runtime-audit-14ab41f1-next`, con busqueda verificada sobre
 `app_server_tmux shutdown pane pid`.
 
+## Desactivar MCP directo heredado
+
+Si `scripts/bootstrap_agent_tooling.sh --status` devuelve
+`config_codebase_memory_mcp=1` con `direct_mcp=false`, el entorno tiene una
+configuracion heredada fuera del broker. Hay que retirar el bloque
+`[mcp_servers.codebase-memory-mcp]` y el hook `codebase-memory-mcp SessionStart`
+de `CODEX_HOME/config.toml`, dejando copia de seguridad antes de editar.
+
+Despues de retirarlo, ejecutar:
+
+```bash
+scripts/bootstrap_agent_tooling.sh --repo "$(pwd)" --no-update
+scripts/bootstrap_agent_tooling.sh --repo "$(pwd)" --status
+```
+
+El estado esperado es `estado=ok`, `config_codebase_memory_mcp=0`,
+`direct_mcp=false` y `live_codebase_memory_mcp_processes=0`.
+
 ## Mantenimiento
 
-- Reejecutar `scripts/bootstrap_agent_tooling.sh --index` al preparar un nuevo
-  contenedor, usuario, worktree remoto o sesion larga.
+- Reejecutar `scripts/bootstrap_agent_tooling.sh --enable-codebase --index` solo
+  cuando haga falta preparar el proveedor opt-in en un nuevo contenedor, usuario,
+  worktree remoto o sesion larga.
 - Reindexar tras cambios grandes de arquitectura o imports.
 - Si `codebase-memory-mcp update` falla por red o entorno aislado, no bloquear
   trabajo: registrar aviso y continuar con la version instalada.

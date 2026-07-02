@@ -296,7 +296,7 @@ func supervisorExecutionPublicStatusV0(execution orquestaruncoordinator.RunExecu
 	}
 	if supervisorWaitOutboxValueV0(execution.Outcome, execution.QueueStatus) ||
 		(supervisorDiagnosticsHavePendingOutboxV0(execution.Diagnostics) &&
-			!supervisorRunningValueV0(execution.Outcome)) {
+			!supervisorExecutionHasUnverifiedProcessRefV0(execution)) {
 		return SupervisorPublicStatusWaitingOutboxV0
 	}
 	if supervisorRunningValueV0(execution.Outcome, execution.QueueStatus) ||
@@ -311,7 +311,8 @@ func supervisorExecutionIsOnlyWaitingOutboxV0(execution orquestaruncoordinator.R
 		return true
 	}
 	return supervisorDiagnosticsHavePendingOutboxV0(execution.Diagnostics) &&
-		!supervisorRunningValueV0(execution.Outcome)
+		!supervisorExecutionDiagnosticsHaveLiveProcessV0(execution) &&
+		!supervisorExecutionHasUnverifiedProcessRefV0(execution)
 }
 
 func supervisorExecutionDiagnosticsHaveLiveProcessV0(
@@ -330,6 +331,20 @@ func supervisorExecutionDiagnosticsHaveUnverifiedRunningV0(
 		return supervisorDiagnosticsHaveUnverifiedRunningV0(execution.Diagnostics)
 	}
 	return supervisorDiagnosticsHaveUnverifiedRunningForRunV0(execution.Diagnostics, execution.RunRef)
+}
+
+func supervisorExecutionHasUnverifiedProcessRefV0(
+	execution orquestaruncoordinator.RunExecutionSummaryV0,
+) bool {
+	if supervisorProcessRefRegisteredValueV0(execution.Outcome, execution.QueueStatus) &&
+		!supervisorLiveEvidenceV0(execution.Outcome, execution.QueueStatus, execution.EvidenceRefs) &&
+		!supervisorExecutionDiagnosticsHaveLiveProcessV0(execution) {
+		return true
+	}
+	if strings.TrimSpace(execution.RunRef) == "" {
+		return supervisorDiagnosticsHaveUnverifiedProcessRefV0(execution.Diagnostics)
+	}
+	return supervisorDiagnosticsHaveUnverifiedProcessRefForRunV0(execution.Diagnostics, execution.RunRef)
 }
 
 func supervisorWaitOutboxValueV0(values ...string) bool {
@@ -356,6 +371,16 @@ func supervisorLaunchFailedValueV0(values ...string) bool {
 	for _, value := range values {
 		switch strings.TrimSpace(value) {
 		case SupervisorPublicStatusLaunchFailedV0, "launch_error", "provider_launch_failed":
+			return true
+		}
+	}
+	return false
+}
+
+func supervisorProcessRefRegisteredValueV0(values ...string) bool {
+	for _, value := range values {
+		switch strings.TrimSpace(value) {
+		case "process_ref_registered", "process_registered":
 			return true
 		}
 	}
@@ -459,6 +484,42 @@ func supervisorDiagnosticHasPendingOutboxV0(diagnostic orquestaruncoordinator.Ru
 func supervisorDiagnosticsHaveLaunchFailedV0(diagnostics []orquestaruncoordinator.RunDrainDiagnosticV0) bool {
 	for _, diagnostic := range diagnostics {
 		if supervisorLaunchFailedValueV0(diagnostic.Kind, diagnostic.Status, diagnostic.Error) {
+			return true
+		}
+	}
+	return false
+}
+
+func supervisorDiagnosticsHaveUnverifiedProcessRefV0(diagnostics []orquestaruncoordinator.RunDrainDiagnosticV0) bool {
+	for _, diagnostic := range diagnostics {
+		if supervisorDiagnosticHasLiveProcessV0(diagnostic) {
+			continue
+		}
+		if supervisorProcessRefRegisteredValueV0(diagnostic.Kind, diagnostic.Status) &&
+			!supervisorLiveEvidenceV0(diagnostic.Kind, diagnostic.Status, diagnostic.EvidenceRefs) {
+			return true
+		}
+	}
+	return false
+}
+
+func supervisorDiagnosticsHaveUnverifiedProcessRefForRunV0(
+	diagnostics []orquestaruncoordinator.RunDrainDiagnosticV0,
+	runRef string,
+) bool {
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" {
+		return false
+	}
+	for _, diagnostic := range diagnostics {
+		if strings.TrimSpace(diagnostic.RunRef) != runRef {
+			continue
+		}
+		if supervisorDiagnosticHasLiveProcessV0(diagnostic) {
+			continue
+		}
+		if supervisorProcessRefRegisteredValueV0(diagnostic.Kind, diagnostic.Status) &&
+			!supervisorLiveEvidenceV0(diagnostic.Kind, diagnostic.Status, diagnostic.EvidenceRefs) {
 			return true
 		}
 	}
