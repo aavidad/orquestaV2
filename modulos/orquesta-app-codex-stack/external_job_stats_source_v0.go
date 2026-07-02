@@ -303,12 +303,13 @@ func externalJobGoalFirstStatusV0(
 	state orquestagoal.GoalWorkStateV0,
 ) (string, string) {
 	if state.LastClosure != nil {
-		if state.LastClosure.Accepted {
-			return "completed", codexStackExternalJobStatusReasonGoalFirstClosureAcceptedV0
-		}
 		if state.LastClosure.NeedsRework ||
+			len(state.LastClosure.Issues) > 0 ||
 			strings.TrimSpace(state.LastClosure.Status) == orquestagoal.GoalStatusBlockedV0 {
 			return "blocked", codexStackExternalJobStatusReasonGoalFirstClosureBlockedV0
+		}
+		if state.LastClosure.Accepted {
+			return "completed", codexStackExternalJobStatusReasonGoalFirstClosureAcceptedV0
 		}
 	}
 	switch strings.TrimSpace(state.Status) {
