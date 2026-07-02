@@ -13,6 +13,10 @@ func serverAutoprogrammingGoalProgressPolicyFromEnvV0() orquestamcp.MCPAutoprogr
 				envAutoprogrammingCheckpointOnlyMaxWaitSecondsV0,
 				0,
 			)),
+			NoCheckpointWarningMaxWaitSeconds: int64(intEnvOrDefaultV0(
+				envAutoprogrammingNoCheckpointWarningMaxWaitSecondsV0,
+				0,
+			)),
 		},
 	)
 }

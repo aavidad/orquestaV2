@@ -51,6 +51,7 @@ const (
 	mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0      = "evidence-ref-autoprogramming-checkpoint-only-high-consumption"
 	mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensDefaultV0 = int64(100000)
 	mcpAutoprogrammingCheckpointOnlyMaxWaitSecondsDefaultV0        = int64(15 * 60)
+	mcpAutoprogrammingNoCheckpointWarningMaxWaitSecondsDefaultV0   = int64(10 * 60)
 )
 
 func buildMCPAutoprogrammingStaleRunningV0(
@@ -428,6 +429,8 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 			mcpAutoprogrammingActiveTimeoutCheckpointRecentV0(action, observed, policy)
 		noCheckpointConsumptionWarning := !activeTimeoutBackendActive &&
 			mcpAutoprogrammingNoCheckpointConsumptionWarningV0(action, observed, policy)
+		noCheckpointWarningTimedOut := noCheckpointConsumptionWarning &&
+			mcpAutoprogrammingNoCheckpointWarningWaitExpiredV0(action, observedAt, policy)
 		checkpointOnlyHighConsumption := mcpAutoprogrammingCheckpointOnlyHighConsumptionV0(action, observed, policy)
 		checkpointOnlyTimedOut := activeTimeoutCheckpointRecent &&
 			mcpAutoprogrammingCheckpointOnlyWaitExpiredV0(action, observedAt, policy)
@@ -437,7 +440,7 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 			action.Code = mcpAutoprogrammingActionActiveNoCheckpointYetV0
 			action.Severity = "info"
 		}
-		if noCheckpointConsumptionWarning {
+		if noCheckpointConsumptionWarning && !noCheckpointWarningTimedOut {
 			action.Code = mcpAutoprogrammingActionNoCheckpointConsumptionWarningV0
 			action.Severity = "warning"
 			action.Reason = "goal_active_no_checkpoint_consumption_warning: backend goal is active with rising token usage but no checkpoint, artifacts or domain receipt yet; require a checkpoint soon before high-consumption replan"
@@ -451,6 +454,16 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 			action.Code = mcpAutoprogrammingActionNoCheckpointHighConsumptionV0
 			action.Severity = "blocked"
 			action.Reason = "goal_active_no_checkpoint_high_consumption: backend goal remains active after high token usage without checkpoint, artifacts or domain receipt; stop safely or replan with narrower context before relaunch"
+			action.RecommendedAction = "replan_narrow_context"
+			action.EvidenceRefs = compactStringsMCPV0(append(
+				action.EvidenceRefs,
+				mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0,
+			))
+		}
+		if noCheckpointWarningTimedOut && !noCheckpointHighConsumption {
+			action.Code = mcpAutoprogrammingActionNoCheckpointHighConsumptionV0
+			action.Severity = "blocked"
+			action.Reason = "goal_active_no_checkpoint_high_consumption: backend goal stayed active past max warning wait without checkpoint, artifacts or domain receipt; stop safely or replan with narrower context before relaunch"
 			action.RecommendedAction = "replan_narrow_context"
 			action.EvidenceRefs = compactStringsMCPV0(append(
 				action.EvidenceRefs,
@@ -885,6 +898,28 @@ func mcpAutoprogrammingNoCheckpointConsumptionWarningV0(
 		action.TokensUsed < policy.CheckpointOnlyHighConsumptionTokens &&
 		len(compactStringsMCPV0(action.ArtifactRefs)) == 0 &&
 		len(compactStringsMCPV0(action.DomainReceiptRefs)) == 0
+}
+
+func mcpAutoprogrammingNoCheckpointWarningWaitExpiredV0(
+	action MCPAutoprogrammingActionableRunV0,
+	observedAt string,
+	policy MCPAutoprogrammingGoalProgressPolicyV0,
+) bool {
+	policy = NormalizeMCPAutoprogrammingGoalProgressPolicyV0(policy)
+	if policy.NoCheckpointWarningMaxWaitSeconds <= 0 ||
+		len(compactStringsMCPV0(action.ArtifactRefs)) > 0 ||
+		len(compactStringsMCPV0(action.DomainReceiptRefs)) > 0 {
+		return false
+	}
+	observedAtTime, ok := mcpAutoprogrammingParseTimeV0(observedAt)
+	if !ok {
+		return false
+	}
+	lastOutputAt, ok := mcpAutoprogrammingParseTimeV0(action.LastOutputAt)
+	if !ok {
+		return false
+	}
+	return int64(observedAtTime.Sub(lastOutputAt).Seconds()) >= policy.NoCheckpointWarningMaxWaitSeconds
 }
 
 func mcpAutoprogrammingParseTimeV0(value string) (time.Time, bool) {

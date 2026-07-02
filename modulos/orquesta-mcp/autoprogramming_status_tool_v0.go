@@ -78,6 +78,7 @@ type MCPAutoprogrammingStatusToolExecutorV0 struct {
 type MCPAutoprogrammingGoalProgressPolicyV0 struct {
 	CheckpointOnlyHighConsumptionTokens int64 `json:"checkpoint_only_high_consumption_tokens,omitempty"`
 	CheckpointOnlyMaxWaitSeconds        int64 `json:"checkpoint_only_max_wait_seconds,omitempty"`
+	NoCheckpointWarningMaxWaitSeconds   int64 `json:"no_checkpoint_warning_max_wait_seconds,omitempty"`
 }
 
 func NormalizeMCPAutoprogrammingGoalProgressPolicyV0(
@@ -88,6 +89,9 @@ func NormalizeMCPAutoprogrammingGoalProgressPolicyV0(
 	}
 	if policy.CheckpointOnlyMaxWaitSeconds <= 0 {
 		policy.CheckpointOnlyMaxWaitSeconds = mcpAutoprogrammingCheckpointOnlyMaxWaitSecondsDefaultV0
+	}
+	if policy.NoCheckpointWarningMaxWaitSeconds <= 0 {
+		policy.NoCheckpointWarningMaxWaitSeconds = mcpAutoprogrammingNoCheckpointWarningMaxWaitSecondsDefaultV0
 	}
 	return policy
 }

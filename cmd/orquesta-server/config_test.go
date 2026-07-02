@@ -359,6 +359,7 @@ func TestServerConfigFromEnvV0PublicaUmbralCheckpointGoalConfigurableV0(t *testi
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0, "42000")
 	t.Setenv(envAutoprogrammingCheckpointOnlyMaxWaitSecondsV0, "1200")
+	t.Setenv(envAutoprogrammingNoCheckpointWarningMaxWaitSecondsV0, "900")
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
@@ -366,7 +367,8 @@ func TestServerConfigFromEnvV0PublicaUmbralCheckpointGoalConfigurableV0(t *testi
 	}
 	policy := serverAutoprogrammingGoalProgressPolicyFromEnvV0()
 	if policy.CheckpointOnlyHighConsumptionTokens != 42000 ||
-		policy.CheckpointOnlyMaxWaitSeconds != 1200 {
+		policy.CheckpointOnlyMaxWaitSeconds != 1200 ||
+		policy.NoCheckpointWarningMaxWaitSeconds != 900 {
 		t.Fatalf("policy=%+v", policy)
 	}
 	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0)
@@ -376,6 +378,10 @@ func TestServerConfigFromEnvV0PublicaUmbralCheckpointGoalConfigurableV0(t *testi
 	setting = effectiveSettingForTestV0(config.EffectiveConfig.Settings, envAutoprogrammingCheckpointOnlyMaxWaitSecondsV0)
 	if setting.Value != "1200" || setting.Source != "explicit" {
 		t.Fatalf("setting checkpoint wait=%+v", setting)
+	}
+	setting = effectiveSettingForTestV0(config.EffectiveConfig.Settings, envAutoprogrammingNoCheckpointWarningMaxWaitSecondsV0)
+	if setting.Value != "900" || setting.Source != "explicit" {
+		t.Fatalf("setting no checkpoint wait=%+v", setting)
 	}
 }
 
