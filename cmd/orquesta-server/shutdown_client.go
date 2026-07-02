@@ -57,7 +57,7 @@ func requestServerShutdownV0(addr string, options serverShutdownClientOptionsV0)
 	if result.Estado != "ok" {
 		return fmt.Errorf("shutdown_status_%s", result.Status)
 	}
-	if result.ShutdownReady {
+	if shutdownClientResultReadyForSignalV0(result) {
 		return nil
 	}
 	return waitServerShutdownReadyV0(
