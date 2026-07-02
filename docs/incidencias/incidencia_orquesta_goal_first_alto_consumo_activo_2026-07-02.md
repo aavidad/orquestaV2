@@ -24,6 +24,13 @@ de replan/corte.
   estan disponibles.
 - Se anade evidencia
   `evidence-ref-codex-app-server-goal-high-token-usage`.
+- `autoprogramming/status` ya distingue alto consumo sin checkpoint como
+  `goal_active_no_checkpoint_high_consumption` y alto consumo con solo
+  checkpoint como `checkpoint_only_high_consumption`, ambos con accion
+  `replan_narrow_context`.
+- `runs/control stop forced=true` reconcilia el estado Goal durable a
+  `blocked` replanificable si el backend activo de alto consumo deja de estar
+  vivo tras el control, tanto sin checkpoint como con solo checkpoint.
 
 ## Evidencia
 
@@ -31,11 +38,12 @@ Tests:
 
 ```bash
 go test -count=1 ./cmd/orquesta-server -run 'TestServerCodexAppServerGoalBackendV0(ExponeAltoConsumoActivo|BloqueaGoalActivoPorTimeout|ObservaUsageLimitedConCausaOperable)'
+go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPAutoprogrammingStatusExecutorV0(CheckpointOnlyHighConsumptionEsBloqueante|SinCheckpointHighConsumptionEsBloqueante)|TestMCPRunControlExecutorV0StopForcedReconcilesGoalHighConsumption(CheckpointOnly|SinCheckpoint)'
 git diff --check
 ```
 
 ## Residual
 
-Sigue pendiente detectar `checkpoint_only_high_consumption` con artefactos del
-write-set, proponer replan/corte seguro y garantizar que `shutdown forced=true`
-no publique `ready` si el backend app-server propio sigue vivo.
+Sigue pendiente la politica temprana de checkpoint por tiempo antes de llegar a
+alto consumo y la reconciliacion automatica tras cortes externos/manuales que no
+pasen por `runs/control` ni por el cleanup del backend propio.
