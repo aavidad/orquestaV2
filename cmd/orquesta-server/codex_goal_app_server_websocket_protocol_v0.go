@@ -268,7 +268,11 @@ func codexAppServerWebSocketReadResponseV0(reader *bufio.Reader, responseID int,
 		if len(response.Result) == 0 {
 			return errors.New("codex_app_server_empty_result")
 		}
-		return json.Unmarshal(response.Result, out)
+		if err := json.Unmarshal(response.Result, out); err != nil {
+			return err
+		}
+		sanitizeCodexAppServerRPCDecodedOutV0(out)
+		return nil
 	}
 }
 

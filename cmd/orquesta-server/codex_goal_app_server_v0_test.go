@@ -942,6 +942,87 @@ func TestServerCodexAppServerGoalBackendV0SanitizaResultadoDurableConBase64V0(t 
 	}
 }
 
+func TestCodexAppServerThreadReadSanitizaDataURIMultimodalV0(t *testing.T) {
+	imageDataURI := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lV84WQAAAABJRU5ErkJggg=="
+	thread := serverCodexAppServerThreadReadV0{
+		ID:     "thread-ref-multimodal-001",
+		Status: "idle",
+		Turns: []serverCodexAppServerReadTurnV0{{
+			ID:        "turn-ref-multimodal-001",
+			ItemsView: "tool output " + imageDataURI,
+			Items: []serverCodexAppServerReadItemV0{{
+				ID:   "item-ref-view-image-001",
+				Type: "toolOutput",
+				Text: "view_image result " + imageDataURI,
+			}},
+		}},
+	}
+
+	sanitized, changed := sanitizeCodexAppServerThreadReadV0(thread)
+
+	if !changed {
+		t.Fatalf("thread no marcado como saneado")
+	}
+	body := sanitized.Turns[0].ItemsView + "\n" + sanitized.Turns[0].Items[0].Text
+	for _, forbidden := range []string{"data:image", "iVBORw0KGgoAAAANSUhEUg"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("payload multimodal sin compactar: %s", body)
+		}
+	}
+	for _, want := range []string{
+		"orquesta_multimodal_payload_ref",
+		"mime=image/png",
+		"encoded_bytes=",
+		"decoded_bytes=",
+		"width=1 height=1",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("body=%s no contiene %s", body, want)
+		}
+	}
+}
+
+func TestDecodeCodexAppServerRPCResponseV0SanitizaThreadReadMultimodalV0(t *testing.T) {
+	imageDataURI := "data:image/png;base64," + strings.Repeat("A", 9000)
+	payload, err := json.Marshal(map[string]interface{}{
+		"id": 2,
+		"result": map[string]interface{}{
+			"thread": map[string]interface{}{
+				"id":     "thread-ref-rpc-multimodal-001",
+				"status": "idle",
+				"turns": []map[string]interface{}{{
+					"id":        "turn-ref-rpc-multimodal-001",
+					"itemsView": "vista " + imageDataURI,
+					"items": []map[string]interface{}{{
+						"id":   "item-ref-rpc-multimodal-001",
+						"type": "toolOutput",
+						"text": "view_image " + imageDataURI,
+					}},
+				}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	var response serverCodexAppServerThreadReadResponseV0
+
+	err = decodeCodexAppServerRPCResponseV0(append(payload, '\n'), 2, &response)
+
+	if err != nil {
+		t.Fatalf("decodeCodexAppServerRPCResponseV0: %v", err)
+	}
+	body := response.Thread.Turns[0].ItemsView + "\n" + response.Thread.Turns[0].Items[0].Text
+	if strings.Contains(body, "data:image") || strings.Contains(body, strings.Repeat("A", 128)) {
+		t.Fatalf("thread/read no saneado: %s", body)
+	}
+	if !strings.Contains(body, "orquesta_multimodal_payload_ref") ||
+		!strings.Contains(body, "sha256=") ||
+		!strings.Contains(body, "encoded_bytes=9000") {
+		t.Fatalf("thread/read sin referencia compacta: %s", body)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0PromueveResultadoDurableAunqueGoalSigaActivoV0(t *testing.T) {
 	projectDir := t.TempDir()
 	resultDir := filepath.Join(projectDir, "generated-apps", "agenda", "docs")

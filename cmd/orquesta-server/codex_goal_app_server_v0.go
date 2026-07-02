@@ -706,7 +706,11 @@ func decodeCodexAppServerRPCResponseScannerV0(scanner *bufio.Scanner, responseID
 		if len(response.Result) == 0 {
 			return errors.New("codex_app_server_empty_result")
 		}
-		return json.Unmarshal(response.Result, out)
+		if err := json.Unmarshal(response.Result, out); err != nil {
+			return err
+		}
+		sanitizeCodexAppServerRPCDecodedOutV0(out)
+		return nil
 	}
 	if err := scanner.Err(); err != nil {
 		return err
