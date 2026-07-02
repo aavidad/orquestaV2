@@ -75,11 +75,20 @@ func (handler mcpRunControlHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *ht
 		writeMCPRunControlHTTPV0(w, http.StatusInternalServerError, newMCPRunControlHTTPErrorV0(r, input, "executor", "run_control_error"))
 		return
 	}
-	status := http.StatusOK
-	if result.Estado == MCPRunControlEstadoErrorV0 {
-		status = http.StatusBadRequest
-	}
+	status := mcpRunControlHTTPStatusFromResultV0(result)
 	writeMCPRunControlHTTPV0(w, status, result)
+}
+
+func mcpRunControlHTTPStatusFromResultV0(result MCPRunControlToolResultV0) int {
+	if result.Estado != MCPRunControlEstadoErrorV0 {
+		return http.StatusOK
+	}
+	for _, issue := range result.Errores {
+		if strings.TrimSpace(issue.Code) == "control_not_propagated_to_goal_backend" {
+			return http.StatusConflict
+		}
+	}
+	return http.StatusBadRequest
 }
 
 type mcpRunControlHTTPExecutionV0 struct {

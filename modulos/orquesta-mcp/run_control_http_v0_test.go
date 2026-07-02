@@ -63,6 +63,50 @@ func TestMCPRunControlHTTPHandlerV0MetodoYExecutorNil(t *testing.T) {
 	}
 }
 
+func TestMCPRunControlHTTPHandlerV0BackendGoalActivoEsConflictV0(t *testing.T) {
+	executor := &fakeMCPRunControlHTTPExecutorV0{
+		result: MCPRunControlToolResultV0{
+			Estado:        MCPRunControlEstadoErrorV0,
+			RequestID:     "request-ref-run-control-http-conflict-001",
+			CorrelationID: "corr-run-control-http-conflict-001",
+			Action:        "stop",
+			RunRef:        "run-ref-control-http-conflict-001",
+			Status:        "stop_requested",
+			Errores: []MCPValidationIssueV0{{
+				Code:    "control_not_propagated_to_goal_backend",
+				Field:   "goal_backend",
+				Message: "goal backend sigue activo tras control local",
+			}},
+		},
+	}
+	body := bytes.NewBuffer(nil)
+	_ = json.NewEncoder(body).Encode(MCPRunControlToolInputV0{
+		Action:    "stop",
+		RunRef:    "run-ref-control-http-conflict-001",
+		RequestID: "request-ref-run-control-http-conflict-001",
+		Forced:    true,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, MCPRunControlHTTPPathV0, body)
+
+	NewMCPRunControlHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusConflict ||
+		rec.Header().Get("X-Correlation-ID") != "corr-run-control-http-conflict-001" {
+		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	var result MCPRunControlToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPRunControlEstadoErrorV0 ||
+		result.Status != "stop_requested" ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "control_not_propagated_to_goal_backend" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPRunControlHTTPHandlerV0TimeoutDevuelveJSONPublico(t *testing.T) {
 	executor := &blockingMCPRunControlHTTPExecutorV0{done: make(chan struct{})}
 	body := bytes.NewBuffer(nil)
