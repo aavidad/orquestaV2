@@ -29,6 +29,7 @@ const (
 	ErrDomainWorkHTTPResponseBodyTooLargeV0    = "domain_work_http_response_body_too_large"
 	ErrDomainWorkHTTPResponseContentTypeV0     = "domain_work_http_response_content_type"
 	ErrDomainWorkHTTPResponseTrailingDataV0    = "domain_work_http_response_trailing_data"
+	ErrDomainWorkHTTPResponseStatusInvalidV0   = "domain_work_http_response_status_invalid"
 	ErrDomainWorkHTTPResponseJobMissingV0      = "domain_work_http_response_job_missing"
 	ErrDomainWorkHTTPResponseReceiptMissingV0  = "domain_work_http_response_receipt_missing"
 	ErrDomainWorkHTTPCreatePathInvalidV0       = "domain_work_http_create_path_invalid"
@@ -132,7 +133,10 @@ func (client ClientV0) CreateDomainWorkJobV0(
 	if err := client.postJSONV0(ctx, client.createJobPath, request, &envelope); err != nil {
 		return orquestadomainwork.DomainWorkJobV0{}, err
 	}
-	job, ok := envelope.jobV0()
+	job, ok, err := envelope.jobV0()
+	if err != nil {
+		return orquestadomainwork.DomainWorkJobV0{}, err
+	}
 	if !ok {
 		return orquestadomainwork.DomainWorkJobV0{}, ErrorV0{Code: ErrDomainWorkHTTPResponseJobMissingV0}
 	}
@@ -161,7 +165,10 @@ func (client ClientV0) SubmitDomainWorkArtifactV0(
 	if err := client.postJSONV0(ctx, client.submitArtifactPath, submission, &envelope); err != nil {
 		return orquestadomainwork.DomainWorkArtifactReceiptV0{}, err
 	}
-	receipt, ok := envelope.receiptV0()
+	receipt, ok, err := envelope.receiptV0()
+	if err != nil {
+		return orquestadomainwork.DomainWorkArtifactReceiptV0{}, err
+	}
 	if !ok {
 		return orquestadomainwork.DomainWorkArtifactReceiptV0{}, ErrorV0{Code: ErrDomainWorkHTTPResponseReceiptMissingV0}
 	}
@@ -221,9 +228,16 @@ type domainWorkHTTPJobEnvelopeV0 struct {
 	Job            *orquestadomainwork.DomainWorkJobV0          `json:"job,omitempty"`
 }
 
-func (envelope domainWorkHTTPJobEnvelopeV0) jobV0() (orquestadomainwork.DomainWorkJobV0, bool) {
+func (envelope domainWorkHTTPJobEnvelopeV0) jobV0() (orquestadomainwork.DomainWorkJobV0, bool, error) {
 	if envelope.Job != nil {
-		return *envelope.Job, strings.TrimSpace(envelope.Job.JobRef) != ""
+		job := *envelope.Job
+		if err := validateDomainWorkHTTPResponseStatusV0(job.Status); err != nil {
+			return orquestadomainwork.DomainWorkJobV0{}, false, err
+		}
+		if strings.TrimSpace(job.SchemaVersion) == "" {
+			job.SchemaVersion = orquestadomainwork.DomainWorkJobSchemaV0
+		}
+		return job, domainWorkHTTPResponseHasRequiredRefV0(job.Status, job.JobRef), nil
 	}
 	job := orquestadomainwork.DomainWorkJobV0{
 		SchemaVersion:  envelope.SchemaVersion,
@@ -240,7 +254,10 @@ func (envelope domainWorkHTTPJobEnvelopeV0) jobV0() (orquestadomainwork.DomainWo
 	if job.SchemaVersion == "" {
 		job.SchemaVersion = orquestadomainwork.DomainWorkJobSchemaV0
 	}
-	return job, strings.TrimSpace(job.JobRef) != ""
+	if err := validateDomainWorkHTTPResponseStatusV0(job.Status); err != nil {
+		return orquestadomainwork.DomainWorkJobV0{}, false, err
+	}
+	return job, domainWorkHTTPResponseHasRequiredRefV0(job.Status, job.JobRef), nil
 }
 
 type domainWorkHTTPReceiptEnvelopeV0 struct {
@@ -257,9 +274,16 @@ type domainWorkHTTPReceiptEnvelopeV0 struct {
 	Receipt        *orquestadomainwork.DomainWorkArtifactReceiptV0 `json:"receipt,omitempty"`
 }
 
-func (envelope domainWorkHTTPReceiptEnvelopeV0) receiptV0() (orquestadomainwork.DomainWorkArtifactReceiptV0, bool) {
+func (envelope domainWorkHTTPReceiptEnvelopeV0) receiptV0() (orquestadomainwork.DomainWorkArtifactReceiptV0, bool, error) {
 	if envelope.Receipt != nil {
-		return *envelope.Receipt, strings.TrimSpace(envelope.Receipt.ReceiptRef) != ""
+		receipt := *envelope.Receipt
+		if err := validateDomainWorkHTTPResponseStatusV0(receipt.Status); err != nil {
+			return orquestadomainwork.DomainWorkArtifactReceiptV0{}, false, err
+		}
+		if strings.TrimSpace(receipt.SchemaVersion) == "" {
+			receipt.SchemaVersion = orquestadomainwork.DomainWorkArtifactReceiptSchemaV0
+		}
+		return receipt, domainWorkHTTPResponseHasRequiredRefV0(receipt.Status, receipt.ReceiptRef), nil
 	}
 	receipt := orquestadomainwork.DomainWorkArtifactReceiptV0{
 		SchemaVersion:  envelope.SchemaVersion,
@@ -276,7 +300,26 @@ func (envelope domainWorkHTTPReceiptEnvelopeV0) receiptV0() (orquestadomainwork.
 	if receipt.SchemaVersion == "" {
 		receipt.SchemaVersion = orquestadomainwork.DomainWorkArtifactReceiptSchemaV0
 	}
-	return receipt, strings.TrimSpace(receipt.ReceiptRef) != ""
+	if err := validateDomainWorkHTTPResponseStatusV0(receipt.Status); err != nil {
+		return orquestadomainwork.DomainWorkArtifactReceiptV0{}, false, err
+	}
+	return receipt, domainWorkHTTPResponseHasRequiredRefV0(receipt.Status, receipt.ReceiptRef), nil
+}
+
+func validateDomainWorkHTTPResponseStatusV0(status string) error {
+	switch strings.TrimSpace(status) {
+	case orquestadomainwork.DomainWorkStatusAcceptedV0, orquestadomainwork.DomainWorkStatusInvalidV0:
+		return nil
+	default:
+		return ErrorV0{Code: ErrDomainWorkHTTPResponseStatusInvalidV0}
+	}
+}
+
+func domainWorkHTTPResponseHasRequiredRefV0(status string, ref string) bool {
+	if strings.TrimSpace(status) == orquestadomainwork.DomainWorkStatusInvalidV0 {
+		return true
+	}
+	return strings.TrimSpace(ref) != ""
 }
 
 func normalizePathV0(raw string, fallback string, errCode string) (string, error) {

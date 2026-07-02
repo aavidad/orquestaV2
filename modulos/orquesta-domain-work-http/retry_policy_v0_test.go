@@ -30,7 +30,7 @@ func TestClientV0RetryPolicyRespetaRetryAfterYBudgetV0(t *testing.T) {
 			return &http.Response{
 				StatusCode: http.StatusCreated,
 				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body:       io.NopCloser(strings.NewReader(`{"job_ref":"job-ref-retry-001","status":"pending"}`)),
+				Body:       io.NopCloser(strings.NewReader(`{"job_ref":"job-ref-retry-001","status":"accepted"}`)),
 				Request:    r,
 			}, nil
 		})},

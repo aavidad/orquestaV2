@@ -250,6 +250,112 @@ func TestClientV0DevuelveErrorConPayloadInvalido(t *testing.T) {
 	}
 }
 
+func TestClientV0RechazaEstadosHTTPFueraDelContratoDomainWork(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		body string
+		call func(orquestadomainworkhttp.ClientV0) error
+	}{
+		{
+			name: "create job running",
+			path: "/jobs",
+			body: `{"status":"running","job_ref":"job-ref-running"}`,
+			call: func(client orquestadomainworkhttp.ClientV0) error {
+				_, err := client.CreateDomainWorkJobV0(context.Background(), validJobRequestV0())
+				return err
+			},
+		},
+		{
+			name: "create job completed nested",
+			path: "/jobs",
+			body: `{"job":{"status":"completed","job_ref":"job-ref-completed"}}`,
+			call: func(client orquestadomainworkhttp.ClientV0) error {
+				_, err := client.CreateDomainWorkJobV0(context.Background(), validJobRequestV0())
+				return err
+			},
+		},
+		{
+			name: "submit artifact running",
+			path: "/artifacts",
+			body: `{"status":"running","receipt_ref":"receipt-ref-running"}`,
+			call: func(client orquestadomainworkhttp.ClientV0) error {
+				_, err := client.SubmitDomainWorkArtifactV0(context.Background(), validArtifactSubmissionV0("job-ref-non-opes-001"))
+				return err
+			},
+		},
+		{
+			name: "submit artifact completed nested",
+			path: "/artifacts",
+			body: `{"receipt":{"status":"completed","receipt_ref":"receipt-ref-completed"}}`,
+			call: func(client orquestadomainworkhttp.ClientV0) error {
+				_, err := client.SubmitDomainWorkArtifactV0(context.Background(), validArtifactSubmissionV0("job-ref-non-opes-001"))
+				return err
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != tt.path {
+					t.Fatalf("path=%s", r.URL.Path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tt.body))
+			}))
+			defer server.Close()
+			client := mustNewClientV0(t, server.URL)
+			err := tt.call(client)
+			requireErrorCodeV0(t, err, orquestadomainworkhttp.ErrDomainWorkHTTPResponseStatusInvalidV0)
+		})
+	}
+}
+
+func TestClientV0AceptaRespuestaInvalidDeDominioSinRefsTerminales(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/jobs":
+			_ = json.NewEncoder(w).Encode(orquestadomainwork.DomainWorkJobV0{
+				SchemaVersion: orquestadomainwork.DomainWorkJobSchemaV0,
+				Status:        orquestadomainwork.DomainWorkStatusInvalidV0,
+				Issues: []orquestadomainwork.DomainWorkIssueV0{{
+					Code:  "domain_rejected",
+					Field: "objective",
+				}},
+			})
+		case "/artifacts":
+			_ = json.NewEncoder(w).Encode(orquestadomainwork.DomainWorkArtifactReceiptV0{
+				SchemaVersion: orquestadomainwork.DomainWorkArtifactReceiptSchemaV0,
+				Status:        orquestadomainwork.DomainWorkStatusInvalidV0,
+				Issues: []orquestadomainwork.DomainWorkIssueV0{{
+					Code:  "artifact_rejected",
+					Field: "artifact_ref",
+				}},
+			})
+		default:
+			t.Fatalf("path=%s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	client := mustNewClientV0(t, server.URL)
+
+	job, err := client.CreateDomainWorkJobV0(context.Background(), validJobRequestV0())
+	if err != nil {
+		t.Fatalf("CreateDomainWorkJobV0: %v", err)
+	}
+	receipt, err := client.SubmitDomainWorkArtifactV0(context.Background(), validArtifactSubmissionV0("job-ref-non-opes-001"))
+	if err != nil {
+		t.Fatalf("SubmitDomainWorkArtifactV0: %v", err)
+	}
+	if job.Status != orquestadomainwork.DomainWorkStatusInvalidV0 ||
+		len(job.Issues) != 1 ||
+		receipt.Status != orquestadomainwork.DomainWorkStatusInvalidV0 ||
+		len(receipt.Issues) != 1 {
+		t.Fatalf("job=%+v receipt=%+v", job, receipt)
+	}
+}
+
 func TestClientV0MantieneRefsOpacasEnJobsYArtefactos(t *testing.T) {
 	jobRequest := validJobRequestV0()
 	jobRequest.DomainRef = "tenant:alpha.topic#42"
