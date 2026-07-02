@@ -49,10 +49,12 @@ El contexto del Codex/Goal residente debe incluir
 o conectores se hace solo con fakes/temporales aislados.
 
 El entorno de agente tambien debe ejecutar
-`scripts/bootstrap_agent_tooling.sh --repo /workspace --index` o equivalente al
-preparar el contenedor/worktree. Deben quedar activos `codebase-memory-mcp` para
-navegacion de codigo, comunicacion compacta tipo `caveman` si existe y la norma
-persistente en `~/.codex/AGENTS.md`. Ver
+`scripts/bootstrap_agent_tooling.sh --repo /workspace --status` antes de una
+sesion larga y el bootstrap equivalente al preparar el contenedor/worktree. Debe
+quedar preparado el broker central de contexto; no deben quedar MCPs
+`codebase-memory-mcp` directos ni activos en subagentes salvo opt-in explicito
+con `--install-direct-mcp`. La comunicacion compacta tipo `caveman`, si existe,
+y la norma persistente en `~/.codex/AGENTS.md` siguen siendo obligatorias. Ver
 `docs/runbooks/herramientas_agentes_orquesta_2026-06-30.md`.
 
 ## Direccion operativa

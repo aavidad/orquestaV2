@@ -113,9 +113,14 @@ real y la publicacion en status pertenecen al servidor/composicion.
   stopper concreto envia SIGTERM solo al PID de un marker valido de
   `codebase-memory-mcp`.
 
-## Pendientes
+## Estado operativo y residuales
 
-- Adaptador real `codebase-memory-mcp` detras del puerto neutral.
-- Cablear watchdog/TTL de herramientas auxiliares a un loop residente opt-in con
-  evidencia publica de parada ejecutada/fallida.
-- Smoke opt-in con repo real acotado antes de habilitarlo en sesiones de agentes.
+- El adaptador real `codebase-memory-mcp` queda detras del puerto neutral del
+  broker central y no debe configurarse directamente en subagentes.
+- El watchdog/TTL de herramientas auxiliares queda cableado como loop residente
+  opt-in con evidencia publica de parada ejecutada/fallida.
+- El smoke real sigue siendo opt-in y acotado; no habilita MCP directo por
+  defecto en sesiones de agentes.
+- Residual operativo: procesos nacidos fuera de Orquesta por sesiones antiguas
+  solo se detectan como huerfanos hasta que esas sesiones usen owner marker o el
+  broker central.

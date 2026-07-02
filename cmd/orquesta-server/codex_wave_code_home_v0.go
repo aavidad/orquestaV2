@@ -259,7 +259,8 @@ func codexWaveCodebaseMemoryMCPOptInV0(sourceCodeHome string) bool {
 		values[strings.TrimSpace(key)] = strings.TrimSpace(value)
 	}
 	return strings.TrimSpace(values["tool"]) == codexWaveCodebaseMemoryMCPNameV0 &&
-		codexWaveTruthyLedgerValueV0(values["enabled"])
+		codexWaveTruthyLedgerValueV0(values["enabled"]) &&
+		codexWaveTruthyLedgerValueV0(values["direct_mcp"])
 }
 
 func codexWaveTruthyLedgerValueV0(value string) bool {
@@ -300,7 +301,7 @@ func codexWaveCodebaseMemoryMCPGuardBlockV0() string {
 		"# Orquesta Codebase MCP Guard",
 		"",
 		"Agentes lanzados por Orquesta: no arranques ni uses codebase-memory-mcp, MCP de codebase o indexadores de grafo salvo opt-in central durable de Orquesta.",
-		"Opt-in central valido: log/orquesta-agent-tooling.env con tool=codebase-memory-mcp y enabled=1 presente en el CODEX_HOME fuente durante la proyeccion.",
+		"Opt-in directo valido: log/orquesta-agent-tooling.env con tool=codebase-memory-mcp, enabled=1 y direct_mcp=true presente en el CODEX_HOME fuente durante la proyeccion.",
 		"Para strings exactos, Markdown, configs, incidencias y lectura local acotada usa rg/sed/find.",
 		codexWaveCodebaseMemoryMCPGuardEndV0,
 		"",
