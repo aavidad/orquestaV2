@@ -171,6 +171,7 @@ func followupRefsForRecordV0(record OPESCausalArtifactRecordV0) []string {
 		"rework_refs",
 		"missing_required_refs",
 	)
+	refs = append(refs, topicRegistryQualityPendingRefsForRecordV0(record)...)
 	status := strings.ToLower(firstNonEmptyV0(
 		fieldStringV0(record.PayloadFields, "status"),
 		fieldStringV0(record.PayloadFields, "estado"),

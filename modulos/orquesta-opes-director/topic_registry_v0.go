@@ -38,6 +38,7 @@ func topicRegistryUpdateRequestV0(
 		orquestadomainwork.DomainWorkFieldV0{Name: "done_refs", Values: compactStringsV0([]string{record.ArtifactRef, record.ReceiptRef})},
 		orquestadomainwork.DomainWorkFieldV0{Name: "pending_refs", Values: pendingRefs},
 	)
+	fields = append(fields, topicRegistryQualityFieldsForRecordV0(record)...)
 	if sourceWorkKind := fieldStringV0(record.PayloadFields, "source_work_kind", "work_kind"); sourceWorkKind != "" {
 		fields = append(fields, orquestadomainwork.DomainWorkFieldV0{Name: "source_work_kind", Value: sourceWorkKind})
 	}
@@ -95,6 +96,9 @@ func topicRegistryStatusForRecordV0(record OPESCausalArtifactRecordV0) string {
 		return strings.TrimSpace(status)
 	}
 	normalized := strings.ToLower(strings.TrimSpace(status))
+	if refs := topicRegistryQualityPendingRefsForRecordV0(record); len(refs) > 0 {
+		return "pendiente_rework_editorial"
+	}
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 && !record.CompleteJob {
 		return "pendiente_continuar"
 	}
