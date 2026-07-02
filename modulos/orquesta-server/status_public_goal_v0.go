@@ -120,7 +120,7 @@ func NewServerPublicIdleSelfImprovementGoalStateV0(state StateV0) *ServerPublicI
 	if !serverPublicGoalHasIdentityOrDurableStateV0(projection) {
 		return nil
 	}
-	projection.Active = true
+	projection.Active = serverPublicGoalIsOperationallyActiveV0(projection)
 	return &projection
 }
 
@@ -132,6 +132,45 @@ func serverPublicGoalHasIdentityOrDurableStateV0(projection ServerPublicIdleSelf
 		projection.ReceiptPresent ||
 		projection.ResultPresent ||
 		projection.ClosurePresent
+}
+
+func serverPublicGoalIsOperationallyActiveV0(projection ServerPublicIdleSelfImprovementGoalStateV0) bool {
+	reason := strings.TrimSpace(projection.OperationalReasonCode)
+	switch reason {
+	case "attempt_blocked",
+		idleSelfImprovementGoalObserverUnavailableReasonV0,
+		idleSelfImprovementGoalObservationErrorReasonV0,
+		idleSelfImprovementGoalBlockedReasonV0,
+		idleSelfImprovementGoalInvalidReasonV0,
+		idleSelfImprovementGoalCompletePendingClosureV0,
+		idleSelfImprovementGoalClosureAcceptedReasonV0:
+		return false
+	case idleSelfImprovementGoalRunningReasonV0:
+		return true
+	}
+	if projection.ClosureAccepted || projection.ClosureNeedsRework {
+		return false
+	}
+	for _, status := range []string{
+		projection.ResultStatus,
+		projection.OperationalStatus,
+		projection.ReceiptStatus,
+	} {
+		switch strings.TrimSpace(status) {
+		case orquestagoal.GoalStatusRunningV0,
+			idleSelfImprovementPreparePendingStatusV0,
+			"prepared":
+			return true
+		case orquestagoal.GoalStatusCompleteV0,
+			orquestagoal.GoalStatusAcceptedV0,
+			orquestagoal.GoalStatusBlockedV0,
+			orquestagoal.GoalStatusInvalidV0,
+			"checked",
+			"error":
+			return false
+		}
+	}
+	return false
 }
 
 func countAcceptedGoalTestResultsForPublicStatusV0(results []orquestagoal.GoalRequiredTestResultV0) int {

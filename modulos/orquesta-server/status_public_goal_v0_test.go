@@ -69,7 +69,7 @@ func TestServerPublicStatusV0ExponeGoalFirstCompactoSinSpecCompletaV0(t *testing
 		t.Fatalf("goal publico nil")
 	}
 	goal := status.IdleSelfImprovementGoal
-	if !goal.Active ||
+	if goal.Active ||
 		goal.GoalRef != "goal-ref-public-001" ||
 		goal.ExternalGoalRef != "external-goal-ref-public-001" ||
 		goal.RequestRef != "request-ref-public-001" ||
@@ -112,6 +112,53 @@ func TestServerPublicStatusV0ExponeGoalFirstCompactoSinSpecCompletaV0(t *testing
 	if !strings.Contains(body, "idle_self_improvement_goal") ||
 		!strings.Contains(body, "goal-ref-public-001") {
 		t.Fatalf("status publico sin goal compacto: %s", body)
+	}
+}
+
+func TestServerPublicStatusV0NoMarcaActivoUnIntentoBloqueadoConReceiptRunningV0(t *testing.T) {
+	state := StateV0{
+		Status:       "running",
+		StartupReady: true,
+		IdleSelfImprovementOperationalMessage: &ServerOperationalMessageV0{
+			SchemaVersion: serverOperationalMessageSchemaV0,
+			Scope:         "idle_self_improvement",
+			ReasonCode:    "attempt_blocked",
+			Status:        "checked",
+			GoalRefs:      []string{"goal-ref-public-blocked-001", "external-goal-ref-public-blocked-001"},
+		},
+		IdleSelfImprovementGoalSpec: &orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       "goal-ref-public-blocked-001",
+			Objective:     "NO_DEBE_FILTRARSE blocked",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+		},
+		IdleSelfImprovementGoalReceipt: &orquestagoal.GoalLaunchReceiptV0{
+			SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         "goal-ref-public-blocked-001",
+			ExternalGoalRef: "external-goal-ref-public-blocked-001",
+		},
+	}
+
+	status := NewServerPublicStatusV0(state)
+	readiness := NewServerReadinessV0(state)
+
+	if status.IdleSelfImprovementGoal == nil {
+		t.Fatalf("goal publico nil")
+	}
+	if status.IdleSelfImprovementGoal.Active ||
+		status.IdleSelfImprovementGoal.OperationalReasonCode != "attempt_blocked" ||
+		status.IdleSelfImprovementGoal.ReceiptStatus != orquestagoal.GoalStatusRunningV0 {
+		t.Fatalf("goal publico inesperado: %+v", status.IdleSelfImprovementGoal)
+	}
+	if readiness.IdleSelfImprovementGoalActive ||
+		readiness.IdleSelfImprovementGoalReasonCode != "attempt_blocked" ||
+		readiness.IdleSelfImprovementGoalStatus != "checked" {
+		t.Fatalf("readiness=%+v", readiness)
+	}
+	payload, _ := json.Marshal(status)
+	if strings.Contains(string(payload), "NO_DEBE_FILTRARSE") {
+		t.Fatalf("status filtra objetivo: %s", string(payload))
 	}
 }
 
