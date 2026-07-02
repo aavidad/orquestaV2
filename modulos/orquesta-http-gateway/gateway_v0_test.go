@@ -198,6 +198,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			},
 		},
 		{
+			name:  "external work observe",
+			route: RouteExternalWorkObserveV0,
+			handlers: RouteHandlersV0{
+				ExternalWorkObserve: markerHandler("external-work-observe"),
+			},
+		},
+		{
 			name:  "external work run",
 			route: RouteExternalWorkRunV0,
 			handlers: RouteHandlersV0{
@@ -325,6 +332,7 @@ func TestNewAppGatewayMuxV0Returns404ForUnconfiguredRoutes(t *testing.T) {
 		RouteAutoprogrammingObserveGoalV0,
 		RouteAutoprogrammingObserveActiveGoalsV0,
 		RouteDomainWorkV0,
+		RouteExternalWorkObserveV0,
 		"/no-existe",
 	} {
 		t.Run(route, func(t *testing.T) {

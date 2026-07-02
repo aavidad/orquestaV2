@@ -79,6 +79,7 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 		DomainWork:                        apiHandlers.DomainWork,
 		DomainWorkStatus:                  apiHandlers.DomainWorkStatus,
 		ExternalWorkDryRun:                apiHandlers.ExternalWorkDryRun,
+		ExternalWorkObserve:               apiHandlers.ExternalWorkObserve,
 		ExternalWorkRun:                   apiHandlers.ExternalWorkRun,
 		CodebaseQuery:                     apiHandlers.CodebaseQuery,
 		CodebaseStatus:                    apiHandlers.CodebaseStatus,
@@ -123,10 +124,24 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 		DomainWork:                        orquestamcp.NewMCPDomainWorkHTTPHandlerV0(config.DomainWork),
 		DomainWorkStatus:                  orquestamcp.NewMCPDomainWorkStatusHTTPHandlerWithRecordsV0(firstNonNilAutoprogrammingStatusExecutorV0(config.DomainWorkStatus, autoprogrammingStatus), firstNonNilDomainWorkRecordSourceV0(config.DomainWorkRecords, config.DomainWork)),
 		ExternalWorkDryRun:                newExternalWorkDryRunHTTPHandlerV0(config),
+		ExternalWorkObserve:               newExternalWorkObserveAliasHTTPHandlerV0(orquestamcp.NewMCPObserveAppDirectorGoalHTTPHandlerV0(config.ObserveDirectorGoal)),
 		ExternalWorkRun:                   orquestamcp.NewMCPExternalWorkRunHTTPHandlerWithResponseTimeoutV0(config.ExternalWorkRun, config.Timeout),
 		CodebaseQuery:                     orquestamcp.NewMCPCodebaseQueryHTTPHandlerV0(config.CodebaseQuery),
 		CodebaseStatus:                    orquestamcp.NewMCPCodebaseStatusHTTPHandlerV0(config.CodebaseStatus),
 	}
+}
+
+func newExternalWorkObserveAliasHTTPHandlerV0(canonical http.Handler) http.Handler {
+	if canonical == nil {
+		return nil
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		aliased := r.Clone(r.Context())
+		urlCopy := *r.URL
+		urlCopy.Path = orquestamcp.MCPObserveAppDirectorGoalHTTPPathV0
+		aliased.URL = &urlCopy
+		canonical.ServeHTTP(w, aliased)
+	})
 }
 
 func firstNonNilAutoprogrammingStatusExecutorV0(

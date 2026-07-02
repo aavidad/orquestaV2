@@ -41,6 +41,7 @@ const (
 	RouteDomainWorkV0                        = "/api/v0/domain-work"
 	RouteDomainWorkStatusV0                  = "/api/v0/domain-work/status"
 	RouteExternalWorkDryRunV0                = "/api/v0/external-work/dry-run"
+	RouteExternalWorkObserveV0               = "/api/v0/external-work/observe"
 	RouteExternalWorkRunV0                   = "/api/v0/external-work/run"
 	RouteCodebaseQueryV0                     = "/api/v0/codebase/query"
 	RouteCodebaseStatusV0                    = "/api/v0/codebase/status"
@@ -85,6 +86,7 @@ type RouteHandlersV0 struct {
 	DomainWork                        http.Handler
 	DomainWorkStatus                  http.Handler
 	ExternalWorkDryRun                http.Handler
+	ExternalWorkObserve               http.Handler
 	ExternalWorkRun                   http.Handler
 	CodebaseQuery                     http.Handler
 	CodebaseStatus                    http.Handler
@@ -160,6 +162,7 @@ func gatewayRouteRegistrationsV0(handlers RouteHandlersV0) []gatewayRouteRegistr
 		{ref: RouteRefDomainWorkStatusV0, route: RouteDomainWorkStatusV0, handler: handlers.DomainWorkStatus},
 		{ref: RouteRefDomainWorkV0, route: RouteDomainWorkV0, handler: handlers.DomainWork},
 		{ref: RouteRefExternalWorkDryRunV0, route: RouteExternalWorkDryRunV0, handler: handlers.ExternalWorkDryRun},
+		{ref: RouteRefExternalWorkObserveV0, route: RouteExternalWorkObserveV0, handler: handlers.ExternalWorkObserve},
 		{ref: RouteRefExternalWorkRunV0, route: RouteExternalWorkRunV0, handler: handlers.ExternalWorkRun},
 		{ref: RouteRefCodebaseQueryV0, route: RouteCodebaseQueryV0, handler: handlers.CodebaseQuery},
 		{ref: RouteRefCodebaseStatusV0, route: RouteCodebaseStatusV0, handler: handlers.CodebaseStatus},

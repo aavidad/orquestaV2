@@ -13,6 +13,7 @@ import (
 	orquestacore "orquesta/modulos/orquesta-core"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+	orquestahttpgateway "orquesta/modulos/orquesta-http-gateway"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -86,6 +87,39 @@ func TestAppDirectorGoalObserveAPIDelegaEnExecutorRESTV0(t *testing.T) {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	if executor.Input.RunRef != "run-ref-goal-observe-app-gateway-001" {
+		t.Fatalf("input=%+v", executor.Input)
+	}
+	var result orquestamcp.MCPObserveAppDirectorGoalToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPObserveAppDirectorGoalEstadoOKV0 ||
+		result.GoalRef != "goal-ref-app-gateway-observed-001" ||
+		result.RunStatus != "closed" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestExternalWorkObserveAliasDelegaEnObserveGoalRESTV0(t *testing.T) {
+	executor := &recordingObserveDirectorGoalExecutorV0{}
+	handler := NewHTTPHandlerV0(ConfigV0{
+		ObserveDirectorGoal: executor,
+		Timeout:             time.Second,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		orquestahttpgateway.RouteExternalWorkObserveV0,
+		strings.NewReader(`{"request_id":"req-external-work-observe-alias-001","run_ref":"run-ref-external-work-observe-alias-001"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if executor.Input.RunRef != "run-ref-external-work-observe-alias-001" {
 		t.Fatalf("input=%+v", executor.Input)
 	}
 	var result orquestamcp.MCPObserveAppDirectorGoalToolResultV0

@@ -33,6 +33,7 @@ func PublicRouteMutabilityV0(route string) string {
 		RouteAppDirectorV0,
 		RouteAppDirectorGoalObserveV0,
 		RouteAppChangeV0,
+		RouteExternalWorkObserveV0,
 		RouteExternalWorkRunV0,
 		RouteDomainWorkV0:
 		return PublicRouteMutationV0

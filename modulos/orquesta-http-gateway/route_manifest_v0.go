@@ -53,6 +53,7 @@ const (
 	RouteRefDomainWorkV0                        = "route-ref-domain-work-v0"
 	RouteRefDomainWorkStatusV0                  = "route-ref-domain-work-status-v0"
 	RouteRefExternalWorkDryRunV0                = "route-ref-external-work-dry-run-v0"
+	RouteRefExternalWorkObserveV0               = "route-ref-external-work-observe-v0"
 	RouteRefExternalWorkRunV0                   = "route-ref-external-work-run-v0"
 	RouteRefCodebaseQueryV0                     = "route-ref-codebase-query-v0"
 	RouteRefCodebaseStatusV0                    = "route-ref-codebase-status-v0"

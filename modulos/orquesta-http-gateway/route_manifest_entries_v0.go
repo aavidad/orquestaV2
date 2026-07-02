@@ -41,6 +41,7 @@ func routeManifestEntriesV0() []RouteManifestEntryV0 {
 		{Ref: RouteRefDomainWorkStatusV0, Pattern: RouteDomainWorkStatusV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodGetV0}, SecurityProfile: RouteSecurityControlPlaneReadV0},
 		{Ref: RouteRefDomainWorkV0, Pattern: RouteDomainWorkV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
 		{Ref: RouteRefExternalWorkDryRunV0, Pattern: RouteExternalWorkDryRunV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneReadV0},
+		{Ref: RouteRefExternalWorkObserveV0, Pattern: RouteExternalWorkObserveV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
 		{Ref: RouteRefExternalWorkRunV0, Pattern: RouteExternalWorkRunV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
 		{Ref: RouteRefCodebaseQueryV0, Pattern: RouteCodebaseQueryV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneReadV0},
 		{Ref: RouteRefCodebaseStatusV0, Pattern: RouteCodebaseStatusV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneReadV0},
