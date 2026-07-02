@@ -15,6 +15,7 @@ const (
 	DomainWorkArtifactTypeAudioAssetV0            = "audio_asset"
 	DomainWorkArtifactTypeExamResearchReportV0    = "exam_research_report"
 	DomainWorkArtifactTypeQuestionBankV0          = "question_bank"
+	DomainWorkArtifactTypePracticalCasesV0        = "practical_cases"
 	DomainWorkArtifactTypeLocalHTMLSiteV0         = "local_html_site"
 	DomainWorkArtifactTypeTutorBotPackageV0       = "tutor_bot_package"
 	DomainWorkArtifactTypeInteractivePracticeV0   = "interactive_practice_package"
@@ -75,7 +76,7 @@ func ExpectedDomainWorkArtifactContractForArtifactTypeV0(artifactType string) Do
 		DomainWorkArtifactTypeTopicOutlineV0, DomainWorkArtifactTypeTopicSummaryV0,
 		DomainWorkArtifactTypeTopicExpansionPackageV0, DomainWorkArtifactTypeAssembledTopicV0,
 		DomainWorkArtifactTypeContentBlockV0, DomainWorkArtifactTypeQuestionBankV0,
-		DomainWorkArtifactTypeLocalHTMLSiteV0:
+		DomainWorkArtifactTypePracticalCasesV0, DomainWorkArtifactTypeLocalHTMLSiteV0:
 		contract.SourceKind = DomainWorkArtifactSourceKindCanonicalSourceV0
 		contract.Canonicality = DomainWorkArtifactCanonicalityCanonicalV0
 		contract.Stage = DomainWorkArtifactStageSourceV0
@@ -140,6 +141,9 @@ func ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind string) string {
 	case "generate_question_bank", "generate_topic_tests", "create_topic_tests",
 		"crear_tests_tema", "banco_preguntas_tema":
 		return DomainWorkArtifactTypeQuestionBankV0
+	case "generate_practical_cases", "generate_practical_case_bank",
+		"create_practical_cases", "create_practical_case_bank":
+		return DomainWorkArtifactTypePracticalCasesV0
 	case "generate_html_site", "generate_local_html_site",
 		"assemble_local_html_site", "crear_html_temario", "html_temario_local":
 		return DomainWorkArtifactTypeLocalHTMLSiteV0

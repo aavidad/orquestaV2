@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
@@ -30,6 +31,8 @@ const (
 	goalDomainReceiptOPESVisualReuseIssueCodeV0             = "domain_work_opes_visual_reuse_missing"
 	goalDomainReceiptOPESHTMLShellIssueCodeV0               = "domain_work_opes_html_shell_incomplete"
 	goalDomainReceiptOPESPracticalCasesIssueCodeV0          = "domain_work_opes_practical_cases_contract_incomplete"
+	goalDomainReceiptOPESPracticalCasesContractRefV0        = "opes_practical_cases_validation.v1"
+	goalDomainReceiptOPESPracticalCasesReworkEvidenceV0     = "domain-work-opes-practical-cases-rework"
 	goalDomainReceiptRequiredTestEvidenceMissingIssueV0     = "domain_work_required_test_evidence_missing"
 	goalDomainReceiptLedgerRequiredArtifactFieldV0          = "domain_receipt_refs.artifact_contracts"
 	goalDomainReceiptStructuredArtifactFieldV0              = "domain_receipt_refs.artifact_payload"
@@ -46,6 +49,7 @@ const (
 	goalDomainReceiptOPESSubrolesAcceptedEvidenceRefV0      = "evidence-ref-goal-domain-receipt-opes-subroles-accepted"
 	goalDomainReceiptOPESSubrolesEvidencePrefixV0           = "domain-work-opes-subrole-"
 	goalDomainReceiptOPESSubrolesRequiredCountV0            = 6
+	goalDomainReceiptOPESPracticalCasesReworkRefsLimitV0    = 64
 )
 
 type domainWorkGoalReceiptClosureValidatorV0 struct {
@@ -72,16 +76,16 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) ValidateGoalWorkClosure
 	}
 	if !closure.Accepted {
 		if goalDomainReceiptClosureOnlyBlockedByArtifactPathsV0(closure) {
-			_, receiptIssue := validator.validateAcceptedDomainReceiptsV0(ctx, spec, result)
+			receiptEvidence, receiptIssue := validator.validateAcceptedDomainReceiptsV0(ctx, spec, result)
 			if receiptIssue.Code != "" {
-				return goalDomainReceiptBlockedClosureV0(closure, receiptIssue), nil
+				return goalDomainReceiptBlockedClosureV0(closure, receiptIssue, receiptEvidence...), nil
 			}
 		}
 		return closure, nil
 	}
 	receiptEvidence, receiptIssue := validator.validateAcceptedDomainReceiptsV0(ctx, spec, result)
 	if receiptIssue.Code != "" {
-		return goalDomainReceiptBlockedClosureV0(closure, receiptIssue), nil
+		return goalDomainReceiptBlockedClosureV0(closure, receiptIssue, receiptEvidence...), nil
 	}
 	closure.EvidenceRefs = compactStringsV0(append(closure.EvidenceRefs, receiptEvidence...))
 	return closure, nil
@@ -331,7 +335,7 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) validateAcceptedDomainR
 		return nil, issue
 	}
 	if issue := goalDomainReceiptOPESPracticalCasesIssueV0(spec, matching); issue.Code != "" {
-		return nil, issue
+		return goalDomainReceiptOPESPracticalCasesReworkEvidenceRefsV0(spec, matching), issue
 	}
 	if issue := goalDomainReceiptOPESVisualFinalIssueV0(spec, matching); issue.Code != "" {
 		return nil, issue
@@ -396,14 +400,15 @@ func goalDomainReceiptRequiredTestEvidenceIssueV0(
 func goalDomainReceiptBlockedClosureV0(
 	closure orquestagoal.GoalClosureValidationV0,
 	issue orquestagoal.GoalWorkIssueV0,
+	evidenceRefs ...string,
 ) orquestagoal.GoalClosureValidationV0 {
 	closure.Status = orquestagoal.GoalStatusBlockedV0
 	closure.Accepted = false
 	closure.NeedsRework = true
 	closure.Issues = append(closure.Issues, issue)
 	closure.EvidenceRefs = compactStringsV0(append(
-		closure.EvidenceRefs,
-		goalDomainReceiptLedgerMissingEvidenceRefV0,
+		append(closure.EvidenceRefs, goalDomainReceiptLedgerMissingEvidenceRefV0),
+		evidenceRefs...,
 	))
 	return closure
 }
@@ -530,6 +535,125 @@ func goalDomainReceiptOPESPracticalCasesIssueV0(
 		}
 	}
 	return orquestagoal.GoalWorkIssueV0{}
+}
+
+func goalDomainReceiptOPESPracticalCasesReworkEvidenceRefsV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	records []DomainWorkArtifactSubmissionRecordV0,
+) []string {
+	refs := []string{}
+	for _, record := range records {
+		record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+		if !goalDomainReceiptOPESPracticalCasesInvalidV0(spec, record) {
+			continue
+		}
+		scope := goalDomainReceiptOPESPracticalCasesReworkScopeV0(spec, record)
+		base := goalDomainReceiptOPESPracticalCasesReworkEvidenceV0 + ":" + scope
+		refs = append(refs,
+			base+":contract:"+safeDomainWorkEvidenceRefV0(goalDomainReceiptOPESPracticalCasesContractRefV0),
+		)
+		for _, missing := range goalDomainReceiptOPESPracticalCasesMissingRefsV0(record) {
+			refs = append(refs, base+":missing:"+safeDomainWorkEvidenceRefV0(missing))
+			if len(refs) >= goalDomainReceiptOPESPracticalCasesReworkRefsLimitV0 {
+				return compactStringsV0(refs)
+			}
+		}
+		refs = append(refs, goalDomainReceiptOPESPracticalCasesCountReworkRefsV0(base, record)...)
+		if len(refs) >= goalDomainReceiptOPESPracticalCasesReworkRefsLimitV0 {
+			return compactStringsV0(refs[:goalDomainReceiptOPESPracticalCasesReworkRefsLimitV0])
+		}
+		refs = append(refs, goalDomainReceiptOPESPracticalCasesSchemaReworkRefsV0(base, record)...)
+		if goalDomainReceiptFieldHasAnyValueV0(record, "tasks") &&
+			!goalDomainReceiptFieldHasAnyValueV0(record, "questions") {
+			refs = append(refs, base+":questions-required")
+		}
+		if goalDomainReceiptPracticalCasesHasDevelopmentTaskV0(record) {
+			refs = append(refs, base+":convert-development-task")
+		}
+		if len(refs) == 1 {
+			refs = append(refs, base+":review-incomplete-receipt")
+		}
+		if len(refs) >= goalDomainReceiptOPESPracticalCasesReworkRefsLimitV0 {
+			return compactStringsV0(refs[:goalDomainReceiptOPESPracticalCasesReworkRefsLimitV0])
+		}
+	}
+	return compactStringsV0(refs)
+}
+
+func goalDomainReceiptOPESPracticalCasesReworkScopeV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	record DomainWorkArtifactSubmissionRecordV0,
+) string {
+	return safeDomainWorkEvidenceRefV0(firstNonEmptyQueuedSourceV0(
+		record.JobRef,
+		record.ArtifactRef,
+		record.ReceiptRef,
+		spec.GoalRef,
+		spec.RunRef,
+		"practical-cases",
+	))
+}
+
+func goalDomainReceiptOPESPracticalCasesMissingRefsV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+) []string {
+	return goalDomainReceiptFieldStringValuesV0(record,
+		"missing_artifacts",
+		"missing_files",
+		"missing_folders",
+		"missing_topics",
+		"missing_refs",
+		"missing_case_refs",
+		"missing_practical_case_refs",
+		"missing_question_refs",
+		"missing_units",
+		"faltantes",
+	)
+}
+
+func goalDomainReceiptOPESPracticalCasesCountReworkRefsV0(
+	base string,
+	record DomainWorkArtifactSubmissionRecordV0,
+) []string {
+	out := []string{}
+	for _, pair := range []struct {
+		kind      string
+		expected  string
+		delivered string
+	}{
+		{kind: "artifact", expected: "expected_artifacts", delivered: "delivered_artifacts"},
+		{kind: "folder", expected: "expected_folders", delivered: "delivered_folders"},
+		{kind: "topic", expected: "expected_topics", delivered: "delivered_topics"},
+		{kind: "topic", expected: "expected_topics", delivered: "covered_topics_count"},
+	} {
+		expected, okExpected := domainWorkFieldIntValueV0(record.PayloadFields, pair.expected)
+		delivered, okDelivered := domainWorkFieldIntValueV0(record.PayloadFields, pair.delivered)
+		if !okExpected || !okDelivered || expected <= 0 || delivered < 0 || delivered >= expected {
+			continue
+		}
+		out = append(out, base+":missing-count:"+pair.kind+":"+strconv.Itoa(expected-delivered))
+		for index := delivered + 1; index <= expected && len(out) < goalDomainReceiptOPESPracticalCasesReworkRefsLimitV0; index++ {
+			out = append(out, base+":missing-index:"+pair.kind+":"+strconv.Itoa(index))
+		}
+	}
+	return compactStringsV0(out)
+}
+
+func goalDomainReceiptOPESPracticalCasesSchemaReworkRefsV0(
+	base string,
+	record DomainWorkArtifactSubmissionRecordV0,
+) []string {
+	out := []string{}
+	for _, value := range goalDomainReceiptFieldStringValuesV0(record, "schema_status", "validation_status") {
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "schema_invalid", "schema_repairable", "invalid":
+			out = append(out, base+":schema-repair:"+safeDomainWorkEvidenceRefV0(value))
+		}
+	}
+	if goalDomainReceiptFieldHasAnyValueV0(record, "schema_errors", "validation_errors") {
+		out = append(out, base+":schema-errors")
+	}
+	return compactStringsV0(out)
 }
 
 func goalDomainReceiptOPESVisualFinalIssueV0(
@@ -661,16 +785,23 @@ func goalDomainReceiptOPESPracticalCasesInvalidV0(
 		!goalDomainReceiptFieldHasAnyValueV0(record, "questions") {
 		return true
 	}
+	if goalDomainReceiptPracticalCasesHasDevelopmentTaskV0(record) {
+		return true
+	}
+	return false
+}
+
+func goalDomainReceiptPracticalCasesHasDevelopmentTaskV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+) bool {
 	for _, value := range goalDomainReceiptFieldStringValuesV0(record, "kind", "question_kind", "question_kinds", "kinds") {
 		if strings.EqualFold(strings.TrimSpace(value), "development_task") {
 			return true
 		}
 	}
-	if goalDomainReceiptFieldValueJSONContainsV0(record, "questions", `"kind":"development_task"`) ||
-		goalDomainReceiptFieldValueJSONContainsV0(record, "body", `"kind":"development_task"`) {
-		return true
-	}
-	return false
+	return goalDomainReceiptFieldValueJSONContainsV0(record, "questions", `"kind":"development_task"`) ||
+		goalDomainReceiptFieldValueJSONContainsV0(record, "tasks", `"kind":"development_task"`) ||
+		goalDomainReceiptFieldValueJSONContainsV0(record, "body", `"kind":"development_task"`)
 }
 
 func goalDomainReceiptIsOPESPracticalCasesV0(
@@ -699,18 +830,25 @@ func goalDomainReceiptIsOPESPracticalCasesV0(
 func goalDomainReceiptLooksLikePracticalCasesV0(value string) bool {
 	value = strings.ToLower(strings.TrimSpace(value))
 	value = strings.ReplaceAll(value, "-", "_")
-	for _, marker := range []string{
-		"supuesto",
+	switch value {
+	case "practical_cases",
 		"practical_case",
-		"practical_cases",
+		"practical_case_bank",
 		"case_bank",
+		"opes_practical_cases",
 		"opes_practical_case",
-	} {
-		if strings.Contains(value, marker) {
-			return true
-		}
+		"opes_practical_cases_validation.v1",
+		"generate_practical_cases",
+		"generate_practical_case_bank",
+		"create_practical_cases",
+		"create_practical_case_bank",
+		"generar_supuestos_practicos",
+		"crear_supuestos_practicos",
+		"supuestos_practicos",
+		"banco_supuestos_practicos":
+		return true
 	}
-	return false
+	return value == orquestadomainwork.DomainWorkArtifactTypePracticalCasesV0
 }
 
 func goalDomainReceiptPracticalCasesHasBadStatusV0(

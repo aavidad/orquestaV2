@@ -1475,6 +1475,18 @@ func TestCodexStackV0ExternalWorkGoalFirstNoCierraOPESSupuestosParcialesV0(t *te
 		!goalClosureHasIssueForTestV0(result.Closure, goalDomainReceiptOPESPracticalCasesIssueCodeV0) {
 		t.Fatalf("supuestos OPES parciales cerraron goal-first: result=%+v", result)
 	}
+	for _, want := range []string{
+		"domain-work-opes-practical-cases-rework:job-supuestos-partial-goal-001:contract:opes_practical_cases_validation.v1",
+		"domain-work-opes-practical-cases-rework:job-supuestos-partial-goal-001:missing:lote-19",
+		"domain-work-opes-practical-cases-rework:job-supuestos-partial-goal-001:missing-index:artifact:19",
+		"domain-work-opes-practical-cases-rework:job-supuestos-partial-goal-001:schema-repair:schema_repairable",
+		"domain-work-opes-practical-cases-rework:job-supuestos-partial-goal-001:questions-required",
+		"domain-work-opes-practical-cases-rework:job-supuestos-partial-goal-001:convert-development-task",
+	} {
+		if !codexStackStringInSetForTestV0(result.Closure.EvidenceRefs, want) {
+			t.Fatalf("evidence_refs=%v missing %s", result.Closure.EvidenceRefs, want)
+		}
+	}
 }
 
 func TestCodexStackV0ExternalWorkGoalFirstCierraOPESSupuestosCompletosValidosV0(t *testing.T) {

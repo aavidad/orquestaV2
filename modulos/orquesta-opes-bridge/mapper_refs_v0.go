@@ -91,6 +91,9 @@ func expectedArtifactTypeV0(jobType string) string {
 		return opesArtifactTypeHelpManualPackageV0
 	case "visual_asset_reuse", "reuse_visual_assets", "import_common_visual_assets":
 		return opesArtifactTypeVisualReuseManifestV0
+	case "generar_supuestos_practicos", "crear_supuestos_practicos",
+		"supuestos_practicos", "banco_supuestos_practicos":
+		return orquestadomainwork.DomainWorkArtifactTypePracticalCasesV0
 	case "finalize_topic_package":
 		return orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0
 	case "finalize_temario_package", "close_temario_package":

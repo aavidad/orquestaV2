@@ -15,6 +15,8 @@ func TestOPESBridgeArtifactContractMapConsumeOwnerNeutralV0(t *testing.T) {
 		"draft_content_block",
 		"generate_visual_asset",
 		"generate_question_bank",
+		"generate_practical_cases",
+		"generar_supuestos_practicos",
 		"review_legal",
 		"review_pedagogical",
 		"review_quality",
@@ -94,6 +96,8 @@ func expectedOPESArtifactForBridgeMapTestV0(workKind string) string {
 		return opesArtifactTypeHelpManualPackageV0
 	case "visual_asset_reuse":
 		return opesArtifactTypeVisualReuseManifestV0
+	case "generar_supuestos_practicos":
+		return orquestadomainwork.DomainWorkArtifactTypePracticalCasesV0
 	case "review_director_consolidation":
 		return orquestadomainwork.DomainWorkArtifactTypeDirectorReviewMatrixV0
 	case "audit_existing_syllabus_quality":
