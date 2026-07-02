@@ -424,6 +424,36 @@ func TestInicioAgenteNoRecomiendaRuntimeManualV0(t *testing.T) {
 	}
 }
 
+func TestArrancarCodexModuloNoRecomiendaRuntimeManualV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	modulesDir := filepath.Join(root, "modulos")
+	err := filepath.WalkDir(modulesDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || entry.Name() != "arrancar_codex.sh" {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		text := readOperationalDocGuardV0(t, root, rel)
+		if strings.Contains(text, "go run ./cmd/orquesta-server run") {
+			t.Fatalf("%s recomienda runtime manual no gobernado", rel)
+		}
+		if strings.Contains(text, "ruta_vigente:") &&
+			!strings.Contains(text, "orquesta-server start") &&
+			!strings.Contains(text, "servidor residente/cola OrquestaV2") {
+			t.Fatalf("%s debe orientar a servidor gestionado o cola residente", rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk modulos: %v", err)
+	}
+}
+
 func TestUsoActualAppOrquestaRecomiendaServidorGestionadoV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "docs/uso_actual_app_orquesta.md")
