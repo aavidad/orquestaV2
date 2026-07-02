@@ -67,6 +67,21 @@ func TestSmokeGoalFirstAppServerRealRetriesTransientObservationRejectedV0(t *tes
 	}
 }
 
+func TestSmokeGoalFirstAppServerRealRespetaPresupuestoNuevaAppV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+
+	for _, want := range []string{
+		`export ORQUESTA_CODEX_GOAL_TIMEOUT_MS="${ORQUESTA_CODEX_GOAL_TIMEOUT_MS:-600000}"`,
+		`polls="${ORQUESTA_GOAL_FIRST_SMOKE_POLLS:-120}"`,
+		`sleep_seconds="${ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS:-5}"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("smoke Nueva App no respeta presupuesto goal-first de 600s: falta %q", want)
+		}
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")

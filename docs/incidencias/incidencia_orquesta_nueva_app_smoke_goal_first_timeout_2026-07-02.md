@@ -261,3 +261,12 @@ ficheros reales bajo `generated-apps` y no directorios preparados.
 Evidencia focal:
 
 - `TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0`
+
+Avance aplicado: el smoke real usa ahora `ORQUESTA_CODEX_GOAL_TIMEOUT_MS=600000`
+por defecto, alineado con el presupuesto `MaxRuntimeSeconds=600` del
+`GoalWorkSpecV0` de Nueva App. Antes el backend cortaba a 90 segundos aunque el
+script observase hasta 120 polls de 5 segundos.
+
+Evidencia focal:
+
+- `TestSmokeGoalFirstAppServerRealRespetaPresupuestoNuevaAppV0`
