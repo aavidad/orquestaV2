@@ -22,6 +22,7 @@ const (
 	mcpQueueGlobalStatusActionReviewReplanGoalFirstV0          = "review_replan_goal_first"
 	mcpQueueGlobalStatusActionRetryFromPhaseV0                 = "retry_from_phase"
 	mcpQueueGlobalStatusActionCloseSupersededByLocalEvidenceV0 = "close_superseded_by_local_evidence"
+	mcpQueueGlobalStatusActionRunControlReconcileCleanupV0     = "run_control_reconcile_external_cleanup"
 )
 
 type MCPQueueGlobalStatusResultV0 struct {
@@ -663,7 +664,8 @@ func mcpQueueGlobalStatusNormalizeRecommendedActionV0(action string, fallback st
 		"inspect_liveness",
 		mcpQueueGlobalStatusActionReviewReplanGoalFirstV0,
 		mcpQueueGlobalStatusActionRetryFromPhaseV0,
-		mcpQueueGlobalStatusActionCloseSupersededByLocalEvidenceV0:
+		mcpQueueGlobalStatusActionCloseSupersededByLocalEvidenceV0,
+		mcpQueueGlobalStatusActionRunControlReconcileCleanupV0:
 		return action
 	}
 	if strings.Contains(action, "goal_state") ||

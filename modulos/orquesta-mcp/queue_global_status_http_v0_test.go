@@ -396,6 +396,48 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstStateMissingRecomiendaReparar
 	}
 }
 
+func TestMCPQueueGlobalStatusHTTPHandlerV0GoalBackendAusenteConservaRunControlReconcile(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				Blocked: 1,
+			},
+			StaleRunning: []MCPAutoprogrammingActionableRunV0{{
+				Code:              mcpAutoprogrammingActionGoalBackendMissingAfterExternalCleanupV0,
+				RunRef:            "run-ref-global-status-goal-cleanup-001",
+				RecommendedAction: mcpQueueGlobalStatusActionRunControlReconcileCleanupV0,
+				EvidenceRefs:      []string{"evidence-ref-goal-cleanup-global-status"},
+			}},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	NewMCPQueueGlobalStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !result.Summary.NeedsAttention ||
+		!result.Summary.NeedsAction ||
+		result.Summary.WillFinishAlone ||
+		!hasMCPQueueGlobalStatusItemForTestV0(
+			result.Items,
+			"run-ref-global-status-goal-cleanup-001",
+			mcpAutoprogrammingActionGoalBackendMissingAfterExternalCleanupV0,
+			true,
+			mcpQueueGlobalStatusActionRunControlReconcileCleanupV0,
+		) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstBlockedConservaReviewReplan(t *testing.T) {
 	executor := &fakeMCPQueueGlobalStatusExecutorV0{
 		result: MCPAutoprogrammingStatusToolResultV0{
@@ -486,6 +528,7 @@ func TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFir
 		mcpQueueGlobalStatusActionReviewReplanGoalFirstV0,
 		mcpQueueGlobalStatusActionRetryFromPhaseV0,
 		mcpQueueGlobalStatusActionCloseSupersededByLocalEvidenceV0,
+		mcpQueueGlobalStatusActionRunControlReconcileCleanupV0,
 	} {
 		t.Run(action, func(t *testing.T) {
 			if got := mcpQueueGlobalStatusNormalizeRecommendedActionV0(action, "repair_runtime"); got != action {
