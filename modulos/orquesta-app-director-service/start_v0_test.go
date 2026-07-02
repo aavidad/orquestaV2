@@ -164,6 +164,10 @@ func TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy(t *testing.T) 
 		!spec.ClosurePolicy.RequireRequiredTests {
 		t.Fatalf("goal spec inesperado: %+v", spec)
 	}
+	if !serviceGoalContextRefInSetForTestV0(spec.ContextRefs, "phase_policy", startAppDirectorGoalNewAppPhasePolicyRefV0) ||
+		!serviceStringInSetV0(spec.AcceptanceCriteria, startAppDirectorGoalNewAppPhasePolicyCriterionV0) {
+		t.Fatalf("goal spec sin politica de fase Nueva App: refs=%+v criteria=%+v", spec.ContextRefs, spec.AcceptanceCriteria)
+	}
 	if _, err := store.LoadRunV0(context.Background(), result.Run.RunID); err != nil {
 		t.Fatalf("run no persistida: %v", err)
 	}
