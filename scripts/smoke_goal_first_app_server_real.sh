@@ -378,33 +378,38 @@ assert_app_server_tmux_shutdown_ready() {
     return 0
   fi
   local owner_file session_name pane_pid socket_path shutdown_status shutdown_ready app_processes_alive
-  owner_file="$(find_tmux_owner_file)" || {
-    echo "no se encontro owner.json de app_server_tmux antes del shutdown" >&2
-    exit 1
-  }
-  session_name="$(json_owner_get "$owner_file" "session_name")"
-  if [[ -z "$session_name" ]]; then
-    echo "owner.json sin session_name: $owner_file" >&2
-    exit 1
+  owner_file="$(find_tmux_owner_file || true)"
+  if [[ -n "$owner_file" ]]; then
+    session_name="$(json_owner_get "$owner_file" "session_name")"
+    if [[ -z "$session_name" ]]; then
+      echo "owner.json sin session_name: $owner_file" >&2
+      exit 1
+    fi
+    socket_path="$(find_tmux_socket_for_owner "$owner_file")"
+    if tmux has-session -t "$session_name" >/dev/null 2>&1; then
+      pane_pid="$(tmux_pane_pid_for_session "$session_name")"
+      if [[ -z "$pane_pid" ]] || ! kill -0 "$pane_pid" >/dev/null 2>&1; then
+        echo "pane_pid invalido antes del shutdown: session=$session_name pane_pid=$pane_pid" >&2
+        exit 1
+      fi
+      if [[ -z "$socket_path" || ! -S "$socket_path" ]]; then
+        echo "socket tmux no encontrado antes del shutdown: owner=$owner_file socket=$socket_path" >&2
+        exit 1
+      fi
+    else
+      echo "tmux session ya estaba cerrada antes del shutdown: $session_name"
+    fi
+    echo "app_server_tmux_owner_json=$owner_file"
+    echo "app_server_tmux_session_name=$session_name"
+    if [[ -n "$pane_pid" ]]; then
+      echo "app_server_tmux_pane_pid=$pane_pid"
+    fi
+    if [[ -n "$socket_path" ]]; then
+      echo "app_server_tmux_socket=$socket_path"
+    fi
+  else
+    echo "app_server_tmux_owner_json=absent_before_shutdown"
   fi
-  if ! tmux has-session -t "$session_name" >/dev/null 2>&1; then
-    echo "tmux session no existe antes del shutdown: $session_name" >&2
-    exit 1
-  fi
-  pane_pid="$(tmux_pane_pid_for_session "$session_name")"
-  if [[ -z "$pane_pid" ]] || ! kill -0 "$pane_pid" >/dev/null 2>&1; then
-    echo "pane_pid invalido antes del shutdown: session=$session_name pane_pid=$pane_pid" >&2
-    exit 1
-  fi
-  socket_path="$(find_tmux_socket_for_owner "$owner_file")"
-  if [[ -z "$socket_path" || ! -S "$socket_path" ]]; then
-    echo "socket tmux no encontrado antes del shutdown: owner=$owner_file socket=$socket_path" >&2
-    exit 1
-  fi
-  echo "app_server_tmux_owner_json=$owner_file"
-  echo "app_server_tmux_session_name=$session_name"
-  echo "app_server_tmux_pane_pid=$pane_pid"
-  echo "app_server_tmux_socket=$socket_path"
 
   shutdown_status="$(
     curl -sS -m "$request_timeout" -o "$shutdown_response" -w "%{http_code}" \
@@ -437,19 +442,19 @@ assert_app_server_tmux_shutdown_ready() {
     echo "el servidor siguio vivo tras shutdown_ready=true" >&2
     exit 1
   fi
-  if tmux has-session -t "$session_name" >/dev/null 2>&1; then
+  if [[ -n "$session_name" ]] && tmux has-session -t "$session_name" >/dev/null 2>&1; then
     echo "tmux session sigue viva tras shutdown hook: $session_name" >&2
     exit 1
   fi
-  if [[ -e "$owner_file" ]]; then
+  if [[ -n "$owner_file" && -e "$owner_file" ]]; then
     echo "owner.json sigue existiendo tras shutdown hook: $owner_file" >&2
     exit 1
   fi
-  if [[ -e "$socket_path" ]]; then
+  if [[ -n "$socket_path" && -e "$socket_path" ]]; then
     echo "socket sigue existiendo tras shutdown hook: $socket_path" >&2
     exit 1
   fi
-  if kill -0 "$pane_pid" >/dev/null 2>&1; then
+  if [[ -n "$pane_pid" ]] && kill -0 "$pane_pid" >/dev/null 2>&1; then
     echo "pane_pid sigue vivo tras shutdown hook: $pane_pid" >&2
     exit 1
   fi

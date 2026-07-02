@@ -97,6 +97,23 @@ func TestSmokeGoalFirstAppServerRealUsaSandboxEfectivoEnWorkspaceAisladoV0(t *te
 	}
 }
 
+func TestSmokeGoalFirstAppServerRealShutdownToleraTmuxYaCerradoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+
+	for _, want := range []string{
+		"tmux session ya estaba cerrada antes del shutdown",
+		`if [[ -n "$session_name" ]] && tmux has-session -t "$session_name"`,
+		`if [[ -n "$owner_file" && -e "$owner_file" ]]`,
+		`if [[ -n "$socket_path" && -e "$socket_path" ]]`,
+		`if [[ -n "$pane_pid" ]] && kill -0 "$pane_pid"`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("smoke debe tolerar app-server tmux ya cerrado antes de shutdown: falta %q", want)
+		}
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")

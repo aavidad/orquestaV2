@@ -375,6 +375,29 @@ Pendiente: reejecutar el smoke real con el binario que contiene este cambio y
 comprobar cierre `goal_status=complete`, `run_status=cerrada`,
 `closure_status=accepted` y `closure_accepted=true`.
 
+Actualizacion 2026-07-02, smoke funcional aceptado y BUG-132 cerrado: con
+Orquesta `a3d7d7df28`, el smoke conservado en
+`/srv/orquesta-self/runtime/smokes-goal-first/orquesta-goal-first-app-server.aNcwnF`
+cerro en poll 44 con `goal_status=complete`, `run_status=cerrada`,
+`closure_status=accepted`, `closure_accepted=true`, `artifact_refs=9` y
+`evidence_refs=10`. El wrapper, no obstante, devolvio codigo 1 porque la
+sesion tmux del app-server ya no existia antes de llamar a shutdown. El script
+se ajusta para tratar esa condicion como cierre anticipado idempotente:
+continua al endpoint de shutdown y solo valida session/socket/pane si existian
+antes del shutdown.
+
+Actualizacion 2026-07-02, BUG-131 sigue abierto: tras el ajuste anterior, el smoke
+conservado en
+`/srv/orquesta-self/runtime/smokes-goal-first/orquesta-goal-first-app-server.2Ha1L8`
+volvio a cerrar funcionalmente en poll 54 con `goal_status=complete`,
+`run_status=cerrada`, `closure_status=accepted`, `artifact_refs=10` y
+`evidence_refs=10`, pero `/api/v0/server/shutdown` devolvio HTTP 409
+`backend_still_running` para la propia sesion tmux
+`orquesta-goal-765715c71afe1362`. Los procesos temporales app-server se
+limpiaron manualmente despues de guardar evidencia. Queda pendiente decidir si
+el servidor debe apagar el backend tmux de goals cerrados o si el smoke debe
+usar una ruta explicita de cleanup para que el comando termine con exit 0.
+
 ## Smoke aceptado con cierre funcional
 
 Smoke real posterior desde worktree limpio `a3d7d7df28` conservado en
