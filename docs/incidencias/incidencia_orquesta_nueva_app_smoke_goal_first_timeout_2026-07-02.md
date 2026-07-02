@@ -210,3 +210,27 @@ Evidencia focal:
 - `TestCodexGoalObserverV0ClasificaQuotaFilesystemBackendSinIssueCodeV0`
 - `TestMCPObserveAppDirectorGoalErrorResultFromErrorV0PreservaQuotaFilesystemV0`
 - `TestExternalWorkGoalFirstKnownLaunchFailureReasonV0ClasificaQuotaFilesystem`
+
+Smoke real posterior con Orquesta `5a71671fc5` usando `ORQUESTA_SMOKE_PARENT`
+y `TMPDIR` bajo `/srv/orquesta-self/runtime` para evitar `/tmp`, directorio
+conservado en
+`/srv/orquesta-self/runtime/smokes-goal-first/orquesta-goal-first-app-server.QsBxZZ`:
+el 500 temprano por cuota ya no se reproduce, `observe` llega a respuesta
+publica HTTP 200, pero en poll 56 termina bloqueado:
+
+- `goal_status=blocked`
+- `run_status=bloqueada`
+- `closure_status=blocked`
+- `current_phase=brainstorming_arquitectura`
+- `generated_apps_present=0`
+- `summary` empieza por `external_runtime_blocker: sandbox shell still fails
+  before execution with quota exceeded mounting .git`; indica que `apply_patch`
+  no puede crear los directorios de write-set requeridos y no puede materializar
+  ni verificar artefactos.
+
+El shutdown HTTP devuelve `backend_still_running` con `active_work_count=2`,
+pero la limpieza cooperativa del smoke elimina la sesion tmux temporal; solo
+queda el servidor persistente aislado esperado `orquesta-server-latest`. BUG-122
+sigue abierto: falta un smoke real con `goal_status=complete`,
+`run_status=cerrada`, `closure_status=accepted` y refs de artefactos/evidencias
+no vacios, o documentar una frontera externa reproducible fuera de Orquesta.

@@ -163,6 +163,17 @@ Regla operativa:
 | BUG-ORQ-20260702-123 | cerrado | Autoprogramacion/smokes aislados | el smoke real Nueva App `UbU4HI` lanzo un goal de autoprogramacion idle (`request-ref-autoprogramming-backlog-scanner-7e8a6ae9`) dentro del servidor temporal aunque el escenario pretendia validar solo el conector Nueva App; el shutdown termino con `active_work_count=3` y trabajo idle ajeno al smoke | la composicion residente mezcla automejora por capacidad libre con smokes/conectores de dominio si no hay opt-out global; `AFTER_SECONDS=0` desactiva solo reloj idle, no capacidad libre | `docs/incidencias/incidencia_orquesta_nueva_app_smoke_goal_first_timeout_2026-07-02.md`; evidencia temporal conservada en `/tmp/orquesta-smokes/orquesta-goal-first-app-server.UbU4HI`; respuesta shutdown HTTP 409 con `goal_first` backlog scanner activo; tests `TestServerConfigFromEnvV0DesactivaAutomejoraIdlePorEnvCanonicaV0`, `TestSmokeGoalFirstAppServerRealNoLanzaAutomejoraIdleV0`, `TestRuntimeV0SupervisorNoPreparaCapacidadConAutomejoraDesactivadaV0` | Cierre: se anade `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DISABLED=true` como opt-out canonico de toda automejora residente y el smoke Nueva App lo exporta. Los ceros de `AFTER_SECONDS`, `TARGET_QUEUE` y `MAX_REQUESTS` quedan como defensa documental, pero la garantia operativa es la bandera `DISABLED=true` |
 | BUG-ORQ-20260702-124 | cerrado | Runtime Codex Goal/observe | tras el avance de materialized receipt, el smoke real `6945acc914` fallo en poll 8 con HTTP 500 `observe_app_director_goal_http_error` mientras el log del backend mostraba `rollout writer failed: Quota exceeded (os error 122)`; el operador no recibia un codigo accionable de almacenamiento/cuota local | la normalizacion de errores del backend Codex distinguia cuota de proveedor, permisos, socket y comandos, pero no cuota de filesystem/ENOSPC del app-server, por lo que `observe` no podia proyectarlo como issue publico recuperable | `docs/incidencias/incidencia_orquesta_nueva_app_smoke_goal_first_timeout_2026-07-02.md`; smoke conservado en `/tmp/orquesta-goal-first-app-server.u5tcIA`; tests `TestCodexAppServerIssueCodeForErrorV0ClasificaDiagnosticosV0`, `TestCodexGoalObserverV0ClasificaQuotaFilesystemBackendSinIssueCodeV0`, `TestMCPObserveAppDirectorGoalErrorResultFromErrorV0PreservaQuotaFilesystemV0`, `TestExternalWorkGoalFirstKnownLaunchFailureReasonV0ClasificaQuotaFilesystem` | Cierre: `Quota exceeded (os error 122)`, `disk quota exceeded`, `no space left on device` y `ENOSPC` se normalizan como `codex_app_server_storage_quota_exceeded` en el servidor, el paquete runtime Codex Goal y el ejecutor goal-first externo; `observe` puede devolver el issue publico en vez de caer a 500 generico |
 
+Nota BUG-122 2026-07-02: el smoke real posterior con Orquesta `5a71671fc5`
+y evidencia conservada en
+`/srv/orquesta-self/runtime/smokes-goal-first/orquesta-goal-first-app-server.QsBxZZ`
+ya no cae en HTTP 500 por cuota, pero bloquea en poll 56 con
+`goal_status=blocked`, `run_status=bloqueada`, `closure_status=blocked`,
+`current_phase=brainstorming_arquitectura` y summary empezando por
+`external_runtime_blocker: sandbox shell still fails before execution with quota exceeded mounting .git`;
+no materializa app ni artefactos. BUG-122 sigue
+abierto hasta un smoke con cierre aceptado y refs no vacios, o hasta frontera
+externa reproducible/documentada fuera de Orquesta.
+
 ## Riesgos arquitectonicos no funcionales
 
 | ID | Estado | Area | Hallazgo | Riesgo | Evidencia | Accion |
