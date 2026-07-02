@@ -712,6 +712,100 @@ func TestMCPAutoprogrammingStatusExecutorV0CheckpointOnlyHighConsumptionEsBloque
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0SinCheckpointConsumoMedioAvisaAntesDeUmbralAlto(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-no-checkpoint-warning-tokens-001"
+	goalRef := "goal-ref-autop-status-goal-no-checkpoint-warning-tokens-001"
+	externalGoalRef := "thread-ref-autop-status-goal-no-checkpoint-warning-tokens-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Avisar antes de alto consumo sin checkpoint.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+		LastClosure: &orquestagoal.GoalClosureValidationV0{
+			Status:      orquestagoal.GoalStatusBlockedV0,
+			NeedsRework: true,
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-no-checkpoint-warning-tokens-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: runRef,
+			Status: "stopped",
+			UsageSummary: &orquestacionnucleoapp.DirectorRunUsageStatsV0{
+				TotalTokens: 60000,
+			},
+			Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{
+				AgentRequestID: "agent-ref-no-checkpoint-warning-tokens-001",
+				Status:         orquestacionnucleoapp.DirectorAgentStatusRunningV0,
+				InFlight:       true,
+				LastProgress: &orquestacionnucleoapp.DirectorAgentProgressV0{
+					DirectorProgressTemporalV0: orquestacionnucleoapp.DirectorProgressTemporalV0{
+						LastActivityAt: "2026-07-01T18:15:00Z",
+					},
+				},
+				Process: &orquestacionnucleoapp.DirectorAgentProcessStatsV0{
+					ProcessRef: "process-ref-no-checkpoint-warning-tokens-001",
+					Status:     orquestacionnucleoapp.DirectorAgentProcessStatusRunningV0,
+				},
+			}},
+		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:          runRef,
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          "active",
+			EvidenceRefs:    []string{"evidence-ref-no-checkpoint-warning-tokens-observed"},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			empty: true,
+			terminal: []MCPRunQueueRankedCandidateCompactV0{{
+				RunRef: runRef,
+				AppRef: "opes",
+				Status: "stopped",
+			}},
+		},
+		Stats:          stats,
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{RunRef: runRef})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != mcpAutoprogrammingActionNoCheckpointConsumptionWarningV0 ||
+		action.Severity != "warning" ||
+		action.GoalStatus != "active" ||
+		action.TokensUsed != 60000 ||
+		action.RecommendedAction != "observe_goal_backend_require_checkpoint" ||
+		!strings.Contains(action.Reason, "goal_active_no_checkpoint_consumption_warning") ||
+		len(action.ArtifactRefs) != 0 ||
+		len(action.DomainReceiptRefs) != 0 ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceNoCheckpointConsumptionWarningV0) {
+		t.Fatalf("action=%+v", action)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0SinCheckpointHighConsumptionEsBloqueante(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-no-checkpoint-high-tokens-001"
 	goalRef := "goal-ref-autop-status-goal-no-checkpoint-high-tokens-001"
