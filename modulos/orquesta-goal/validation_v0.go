@@ -255,6 +255,13 @@ func ValidateGoalWorkClosureV0(spec GoalWorkSpecV0, result GoalWorkResultV0) Goa
 			Issues:      []GoalWorkIssueV0{{Code: ErrGoalClosureInvalidV0, Field: "status"}},
 		}
 	}
+	if outOfScope := goalArtifactPathsOutsideWriteSetV0(spec.WriteSet, result.ArtifactPaths); len(outOfScope) > 0 {
+		issues := make([]GoalWorkIssueV0, 0, len(outOfScope))
+		for range outOfScope {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalArtifactPathScopeV0, Field: "artifact_paths"})
+		}
+		return GoalClosureValidationV0{Status: GoalStatusBlockedV0, NeedsRework: true, Issues: issues}
+	}
 	missing := missingGoalEvidenceRefsV0(spec.ClosurePolicy.RequiredEvidenceRefs, result.EvidenceRefs)
 	if len(missing) > 0 {
 		issues := make([]GoalWorkIssueV0, 0, len(missing))
@@ -305,6 +312,9 @@ func NormalizeGoalWorkResultV0(result GoalWorkResultV0) GoalWorkResultV0 {
 	result.Summary = strings.TrimSpace(result.Summary)
 	for i := range result.ArtifactRefs {
 		result.ArtifactRefs[i] = strings.TrimSpace(result.ArtifactRefs[i])
+	}
+	for i := range result.ArtifactPaths {
+		result.ArtifactPaths[i] = filepath.ToSlash(strings.TrimSpace(result.ArtifactPaths[i]))
 	}
 	for i := range result.RequiredTestResults {
 		result.RequiredTestResults[i].TestRef = strings.TrimSpace(result.RequiredTestResults[i].TestRef)
@@ -486,6 +496,11 @@ func ValidateGoalWorkResultV0(result GoalWorkResultV0) []GoalWorkIssueV0 {
 	for _, artifactRef := range result.ArtifactRefs {
 		validateRequiredGoalRefV0(&issues, "artifact_refs", artifactRef)
 	}
+	for _, artifactPath := range result.ArtifactPaths {
+		if !validGoalWriteScopePathV0(artifactPath) {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalWriteSetInvalidV0, Field: "artifact_paths"})
+		}
+	}
 	for _, test := range result.RequiredTestResults {
 		validateRequiredGoalRefV0(&issues, "required_test_results.test_ref", test.TestRef)
 		if strings.TrimSpace(test.Status) == "" {
@@ -532,6 +547,39 @@ func validGoalRefTokenV0(value string) bool {
 		}
 	}
 	return true
+}
+
+func goalArtifactPathsOutsideWriteSetV0(writeSet []GoalWriteScopeV0, artifactPaths []string) []string {
+	if len(artifactPaths) == 0 {
+		return nil
+	}
+	scopes := make([]string, 0, len(writeSet))
+	for _, scope := range writeSet {
+		path := filepath.ToSlash(strings.TrimSpace(scope.Path))
+		if path != "" {
+			scopes = append(scopes, path)
+		}
+	}
+	var out []string
+	for _, artifactPath := range artifactPaths {
+		path := filepath.ToSlash(strings.TrimSpace(artifactPath))
+		if path == "" {
+			continue
+		}
+		if !goalArtifactPathInsideAnyScopeV0(path, scopes) {
+			out = append(out, path)
+		}
+	}
+	return out
+}
+
+func goalArtifactPathInsideAnyScopeV0(path string, scopes []string) bool {
+	for _, scope := range scopes {
+		if path == scope || strings.HasPrefix(path, scope+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 func validGoalWriteScopePathV0(path string) bool {

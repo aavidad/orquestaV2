@@ -242,6 +242,45 @@ func TestValidateGoalWorkClosureV0ExigeEvidenciasTestsYArtefactos(t *testing.T) 
 	}
 }
 
+func TestValidateGoalWorkClosureV0BloqueaArtifactPathsFueraDeWriteSet(t *testing.T) {
+	spec := GoalWorkSpecV0{
+		GoalRef:   "goal-ref-001",
+		Objective: "Objetivo",
+		WriteSet:  []GoalWriteScopeV0{{Path: "docs"}},
+	}
+	validation := ValidateGoalWorkClosureV0(spec, GoalWorkResultV0{
+		GoalRef:       "goal-ref-001",
+		Status:        GoalStatusCompleteV0,
+		ArtifactPaths: []string{"docs/orquesta_goal_result_v0.json", "html/index.html"},
+	})
+
+	if validation.Accepted ||
+		!validation.NeedsRework ||
+		!hasGoalIssueFieldCodeV0(validation.Issues, "artifact_paths", ErrGoalArtifactPathScopeV0) {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
+func TestValidateGoalWorkClosureV0AceptaArtifactPathsDescendientesDeWriteSet(t *testing.T) {
+	spec := GoalWorkSpecV0{
+		GoalRef:   "goal-ref-001",
+		Objective: "Objetivo",
+		WriteSet: []GoalWriteScopeV0{
+			{Path: "docs"},
+			{Path: "trabajo/validacion"},
+		},
+	}
+	validation := ValidateGoalWorkClosureV0(spec, GoalWorkResultV0{
+		GoalRef:       "goal-ref-001",
+		Status:        GoalStatusCompleteV0,
+		ArtifactPaths: []string{"docs/orquesta_goal_result_v0.json", "trabajo/validacion/informe.json"},
+	})
+
+	if !validation.Accepted {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
 func TestValidateGoalWorkClosureV0RechazaGoalRefDistinto(t *testing.T) {
 	spec := GoalWorkSpecV0{
 		GoalRef:   "goal-ref-001",
@@ -346,6 +385,7 @@ func TestValidateGoalWorkResultV0RechazaRefsInvalidas(t *testing.T) {
 		GoalRef:           "goal-ref-001",
 		ExternalGoalRef:   "external-goal-ref-001",
 		ArtifactRefs:      []string{"artifact-ref-001", "/tmp/artifact"},
+		ArtifactPaths:     []string{"docs/ok.md", "/tmp/artifact.md"},
 		DomainReceiptRefs: []string{"receipt-ref-001"},
 		EvidenceRefs:      []string{"evidence-ref-001"},
 		RequiredTestResults: []GoalRequiredTestResultV0{{
@@ -356,6 +396,7 @@ func TestValidateGoalWorkResultV0RechazaRefsInvalidas(t *testing.T) {
 	})
 
 	if !hasGoalIssueFieldV0(issues, "artifact_refs") ||
+		!hasGoalIssueFieldV0(issues, "artifact_paths") ||
 		!hasGoalIssueFieldV0(issues, "required_test_results.evidence_refs") {
 		t.Fatalf("issues=%v", issues)
 	}

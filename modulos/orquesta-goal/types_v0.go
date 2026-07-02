@@ -35,6 +35,7 @@ const (
 	ErrGoalSpecLimitExceededV0 = "goal_spec_limit_exceeded"
 	ErrGoalStatusInvalidV0     = "goal_status_invalid"
 	ErrGoalClosureInvalidV0    = "goal_closure_invalid"
+	ErrGoalArtifactPathScopeV0 = "goal_artifact_path_out_of_scope"
 )
 
 const (
@@ -143,6 +144,7 @@ type GoalWorkResultV0 struct {
 	ExternalGoalRef     string                     `json:"external_goal_ref,omitempty"`
 	Summary             string                     `json:"summary,omitempty"`
 	ArtifactRefs        []string                   `json:"artifact_refs,omitempty"`
+	ArtifactPaths       []string                   `json:"artifact_paths,omitempty"`
 	RequiredTestResults []GoalRequiredTestResultV0 `json:"required_test_results,omitempty"`
 	DomainReceiptRefs   []string                   `json:"domain_receipt_refs,omitempty"`
 	EvidenceRefs        []string                   `json:"evidence_refs,omitempty"`

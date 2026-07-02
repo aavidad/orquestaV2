@@ -217,6 +217,12 @@ func codexAppServerGoalResultFromWorkspaceV0(
 		if !ok {
 			return nil
 		}
+		if rel, relErr := filepath.Rel(rootAbs, path); relErr == nil && rel != "" {
+			marked.ArtifactPaths = compactServerStackStringsV0(append(
+				marked.ArtifactPaths,
+				filepath.ToSlash(rel),
+			))
+		}
 		found = marked
 		foundOK = true
 		return errCodexAppServerGoalResultWalkDoneV0
@@ -293,6 +299,7 @@ func normalizeCodexAppServerGoalResultMarkerV0(
 	} else {
 		marked.ArtifactRefs = refs
 	}
+	marked.ArtifactPaths = normalizeCodexAppServerGoalResultPathsV0(marked.ArtifactPaths)
 	if refs, ok := sanitizeCodexAppServerGoalResultRefsV0(marked.DomainReceiptRefs); ok {
 		marked.DomainReceiptRefs = refs
 		sanitized = true
@@ -349,6 +356,18 @@ func sanitizeCodexAppServerGoalResultRefsV0(values []string) ([]string, bool) {
 		out = append(out, ref)
 	}
 	return compactServerStackStringsV0(out), sanitized
+}
+
+func normalizeCodexAppServerGoalResultPathsV0(values []string) []string {
+	out := []string{}
+	for _, value := range values {
+		value = filepath.ToSlash(strings.TrimSpace(value))
+		if value == "" {
+			continue
+		}
+		out = append(out, value)
+	}
+	return compactServerStackStringsV0(out)
 }
 
 func sanitizeCodexAppServerGoalResultRefV0(value string) (string, bool) {

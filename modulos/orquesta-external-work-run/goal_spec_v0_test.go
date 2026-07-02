@@ -100,12 +100,15 @@ func TestBuildExternalWorkGoalWorkSpecV0InlineaInputFieldsOperativosSeguros(t *t
 	context := externalWorkRunTestContextTextV0(spec.ContextRefs)
 	for _, want := range []string{
 		"input_fields.course_root_abs",
-		"local_path_ref:",
-		"basename=curso",
+		`"kind":"local_path_ref"`,
+		`"ref":"local-path-ref-`,
+		`"executable_path":false`,
+		`"resolution":"opaque_input_field_payload_ref_only"`,
+		`"basename_hint":"curso"`,
 		"input_fields.topic_dir_abs",
-		"basename=tema_001",
+		`"basename_hint":"tema_001"`,
 		"input_fields.program_json_abs",
-		"basename=programa.json",
+		`"basename_hint":"programa.json"`,
 		"input_fields.required_read_refs",
 		"temario/tema_001.md",
 		"normativa/ley-ref-001",
@@ -128,6 +131,8 @@ func TestBuildExternalWorkGoalWorkSpecV0InlineaInputFieldsOperativosSeguros(t *t
 	for _, forbidden := range []string{
 		"/home/alberto/Trabajo/OPES",
 		"/home-redacted/",
+		"local_path_ref:",
+		"basename=",
 	} {
 		if strings.Contains(context, forbidden) {
 			t.Fatalf("context contiene ruta local cruda %q:\n%s", forbidden, context)
@@ -135,9 +140,59 @@ func TestBuildExternalWorkGoalWorkSpecV0InlineaInputFieldsOperativosSeguros(t *t
 	}
 	if !externalWorkRunTestContainsStringV0(
 		spec.AcceptanceCriteria,
-		"Usar los input_fields inlineados en context_refs[input_field_value] como contrato operativo compacto; los campos omitidos por redaccion o presupuesto quedan durables en AppChange/DomainWork y solo deben resolverse si son imprescindibles para el artefacto. Bloquear con rework de dominio solo si falta un input imprescindible, no por un campo accesorio omitido.",
+		"Usar los input_fields inlineados en context_refs[input_field_value] como contrato operativo compacto; los local_path_ref estructurados son refs opacas no ejecutables y no deben tratarse como paths de filesystem. Los campos omitidos por redaccion o presupuesto quedan durables en AppChange/DomainWork y solo deben resolverse si son imprescindibles para el artefacto. Bloquear con rework de dominio solo si falta un input imprescindible, no por un campo accesorio omitido.",
 	) {
 		t.Fatalf("acceptance_criteria=%+v", spec.AcceptanceCriteria)
+	}
+}
+
+func TestBuildExternalWorkGoalWorkSpecV0NoExponeRutasLocalesComoContextRefsEjecutables(t *testing.T) {
+	request := validExternalWorkRunRequestForTestV0()
+	request.AppChangeRequest.ExternalWork.InputFields = append(
+		request.AppChangeRequest.ExternalWork.InputFields,
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:  "topic_manifest_abs",
+			Value: "/home/alberto/Trabajo/OPES/opes-salidas/curso/tema_001/manifest.json",
+		},
+	)
+
+	spec, issues := BuildExternalWorkGoalWorkSpecV0(
+		request,
+		StartExternalWorkRunConfigV0{OccurredAt: "2026-05-10T10:00:00Z"},
+	)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	context := externalWorkRunTestContextTextV0(spec.ContextRefs)
+	for _, ctx := range spec.ContextRefs {
+		if ctx.Kind != "input_field_value" {
+			continue
+		}
+		if strings.ContainsAny(ctx.Ref, `/\:`) {
+			t.Fatalf("context_ref input_field_value parece path ejecutable: %+v", ctx)
+		}
+	}
+	for _, want := range []string{
+		`"kind":"local_path_ref"`,
+		`"ref":"local-path-ref-`,
+		`"basename_hint":"manifest.json"`,
+		`"executable_path":false`,
+		"refs opacas no ejecutables",
+		"no deben tratarse como paths de filesystem",
+	} {
+		if !strings.Contains(context+"\n"+strings.Join(spec.AcceptanceCriteria, "\n"), want) {
+			t.Fatalf("spec no distingue ref opaca de path %q:\ncontext=%s\ncriteria=%+v", want, context, spec.AcceptanceCriteria)
+		}
+	}
+	for _, forbidden := range []string{
+		"/home/alberto/Trabajo/OPES",
+		"/home-redacted/",
+		"local_path_ref:",
+		"basename=",
+	} {
+		if strings.Contains(context, forbidden) {
+			t.Fatalf("context contiene ruta local deformada %q:\n%s", forbidden, context)
+		}
 	}
 }
 

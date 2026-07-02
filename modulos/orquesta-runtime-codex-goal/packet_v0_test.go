@@ -255,6 +255,7 @@ func TestCodexGoalObserverV0LlamaObserverInyectado(t *testing.T) {
 			ExternalGoalRef: "external-goal-ref-001",
 			Summary:         "cierre observado",
 			EvidenceRefs:    []string{"evidence-ref-observed"},
+			ArtifactPaths:   []string{" docs/orquesta_goal_result_v0.json "},
 			RequiredTestResults: []orquestagoal.GoalRequiredTestResultV0{{
 				TestRef: "test-ref-goal",
 				Status:  "passed",
@@ -276,6 +277,8 @@ func TestCodexGoalObserverV0LlamaObserverInyectado(t *testing.T) {
 		result.Status != orquestagoal.GoalStatusCompleteV0 ||
 		result.GoalRef != "goal-ref-001" ||
 		result.ExternalGoalRef != "external-goal-ref-001" ||
+		len(result.ArtifactPaths) != 1 ||
+		result.ArtifactPaths[0] != "docs/orquesta_goal_result_v0.json" ||
 		len(result.EvidenceRefs) != 1 {
 		t.Fatalf("called=%v request=%+v result=%+v", backend.called, backend.lastRequest, result)
 	}

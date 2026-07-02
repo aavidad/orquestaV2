@@ -70,6 +70,7 @@ type CodexGoalObservationReceiptV0 struct {
 	ExternalGoalRef     string                                  `json:"external_goal_ref,omitempty"`
 	Summary             string                                  `json:"summary,omitempty"`
 	ArtifactRefs        []string                                `json:"artifact_refs,omitempty"`
+	ArtifactPaths       []string                                `json:"artifact_paths,omitempty"`
 	RequiredTestResults []orquestagoal.GoalRequiredTestResultV0 `json:"required_test_results,omitempty"`
 	DomainReceiptRefs   []string                                `json:"domain_receipt_refs,omitempty"`
 	EvidenceRefs        []string                                `json:"evidence_refs,omitempty"`
@@ -476,6 +477,7 @@ func goalWorkResultFromCodexObservationV0(
 		ExternalGoalRef:     firstNonEmptyCodexGoalStringV0(receipt.ExternalGoalRef, request.ExternalGoalRef),
 		Summary:             strings.TrimSpace(receipt.Summary),
 		ArtifactRefs:        append([]string(nil), receipt.ArtifactRefs...),
+		ArtifactPaths:       append([]string(nil), receipt.ArtifactPaths...),
 		RequiredTestResults: append([]orquestagoal.GoalRequiredTestResultV0(nil), receipt.RequiredTestResults...),
 		DomainReceiptRefs:   append([]string(nil), receipt.DomainReceiptRefs...),
 		EvidenceRefs:        append([]string(nil), receipt.EvidenceRefs...),

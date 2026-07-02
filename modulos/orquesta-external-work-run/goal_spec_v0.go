@@ -350,7 +350,7 @@ func externalWorkGoalAcceptanceCriteriaV0(
 ) []string {
 	criteria := append([]string(nil), domainRequest.AcceptanceCriteria...)
 	if len(domainRequest.InputFields) > 0 {
-		criteria = append(criteria, "Usar los input_fields inlineados en context_refs[input_field_value] como contrato operativo compacto; los campos omitidos por redaccion o presupuesto quedan durables en AppChange/DomainWork y solo deben resolverse si son imprescindibles para el artefacto. Bloquear con rework de dominio solo si falta un input imprescindible, no por un campo accesorio omitido.")
+		criteria = append(criteria, "Usar los input_fields inlineados en context_refs[input_field_value] como contrato operativo compacto; los local_path_ref estructurados son refs opacas no ejecutables y no deben tratarse como paths de filesystem. Los campos omitidos por redaccion o presupuesto quedan durables en AppChange/DomainWork y solo deben resolverse si son imprescindibles para el artefacto. Bloquear con rework de dominio solo si falta un input imprescindible, no por un campo accesorio omitido.")
 	}
 	for _, constraint := range domainRequest.Constraints {
 		constraint = strings.TrimSpace(constraint)
@@ -407,10 +407,10 @@ func externalWorkGoalInputFieldSummaryV0(
 		return nil, false
 	}
 	summary := map[string]any{"name": name}
-	if value := externalWorkGoalSanitizeInputValueV0(name, field.Value); value != "" {
+	if value, ok := externalWorkGoalInputFieldSummaryScalarV0(name, field.Value); ok {
 		summary["value"] = value
 	}
-	values := externalWorkGoalSanitizeInputValuesV0(name, field.Values)
+	values := externalWorkGoalInputFieldSummaryValuesV0(name, field.Values)
 	if len(values) > 0 {
 		summary["values"] = values
 	}
@@ -433,6 +433,35 @@ func externalWorkGoalInputFieldTooLargeForInlineV0(field orquestadomainwork.Doma
 	}
 	return len(field.Values) > externalWorkGoalInputFieldMaxValuesV0 ||
 		total > externalWorkGoalInputFieldMaxRawBytesV0
+}
+
+func externalWorkGoalInputFieldSummaryScalarV0(name string, value string) (any, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, false
+	}
+	if externalWorkGoalFieldAllowsOperationalPathV0(name) &&
+		externalWorkGoalValueLooksAbsoluteLocalPathV0(value) {
+		return externalWorkGoalLocalPathRefSummaryObjectV0(value), true
+	}
+	sanitized := externalWorkGoalSanitizeInputValueV0(name, value)
+	if sanitized == "" {
+		return nil, false
+	}
+	return sanitized, true
+}
+
+func externalWorkGoalInputFieldSummaryValuesV0(name string, values []string) []any {
+	out := make([]any, 0, len(values))
+	for _, value := range values {
+		if sanitized, ok := externalWorkGoalInputFieldSummaryScalarV0(name, value); ok {
+			out = append(out, sanitized)
+		}
+	}
+	if out == nil {
+		return []any{}
+	}
+	return out
 }
 
 func externalWorkGoalInputJSONSummaryValueV0(value string) any {
@@ -560,12 +589,25 @@ func externalWorkGoalValueLooksAbsoluteLocalPathV0(value string) bool {
 }
 
 func externalWorkGoalLocalPathRefSummaryV0(value string) string {
-	hash := shortExternalWorkGoalHashV0(value)
-	base := externalWorkGoalPathBaseV0(value)
-	if base == "" {
-		return "local_path_ref:" + hash
+	summary := externalWorkGoalLocalPathRefSummaryObjectV0(value)
+	parts := []string{"local_path_ref", "ref=" + summary["ref"].(string), "executable_path=false"}
+	if base, ok := summary["basename_hint"].(string); ok && base != "" {
+		parts = append(parts, "basename_hint="+base)
 	}
-	return "local_path_ref:" + hash + " basename=" + base
+	return strings.Join(parts, " ")
+}
+
+func externalWorkGoalLocalPathRefSummaryObjectV0(value string) map[string]any {
+	summary := map[string]any{
+		"kind":            "local_path_ref",
+		"ref":             "local-path-ref-" + shortExternalWorkGoalHashV0(value),
+		"executable_path": false,
+		"resolution":      "opaque_input_field_payload_ref_only",
+	}
+	if base := externalWorkGoalPathBaseV0(value); base != "" {
+		summary["basename_hint"] = base
+	}
+	return summary
 }
 
 func externalWorkGoalPathBaseV0(value string) string {

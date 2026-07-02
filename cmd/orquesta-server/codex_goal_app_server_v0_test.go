@@ -762,6 +762,7 @@ func TestServerCodexAppServerGoalBackendV0ObservaResultadoDurableSinMarcadorV0(t
 	}
 	if receipt.Summary != "resultado durable" ||
 		!containsStringForTestV0(receipt.ArtifactRefs, "artifact-ref-goal-source") ||
+		!containsStringForTestV0(receipt.ArtifactPaths, "generated-apps/agenda/docs/orquesta_goal_result_v0.json") ||
 		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-required") ||
 		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-result-file") ||
 		len(receipt.RequiredTestResults) != 1 ||
