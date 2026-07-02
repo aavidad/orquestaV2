@@ -241,9 +241,74 @@ func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionV0(ctx conte
 			return err
 		}
 	}
+	backend.stopCodexAppServerSocketProcessesV0(runCtx)
 	_ = os.Remove(strings.TrimSpace(backend.SocketPath))
 	_ = os.Remove(backend.tmuxOwnerMarkerPathV0())
 	return nil
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) stopCodexAppServerSocketProcessesV0(ctx context.Context) {
+	socketPath := strings.TrimSpace(backend.SocketPath)
+	if socketPath == "" {
+		return
+	}
+	pids := codexAppServerTmuxSocketProcessPIDsV0(ctx, socketPath)
+	for _, pid := range pids {
+		_ = syscall.Kill(pid, syscall.SIGTERM)
+	}
+	backend.waitCodexAppServerSocketProcessesGoneV0(ctx, socketPath)
+	for _, pid := range codexAppServerTmuxSocketProcessPIDsV0(ctx, socketPath) {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+	}
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) waitCodexAppServerSocketProcessesGoneV0(ctx context.Context, socketPath string) {
+	ticker := time.NewTicker(codexAppServerTmuxSocketPollEveryV0)
+	defer ticker.Stop()
+	for {
+		if len(codexAppServerTmuxSocketProcessPIDsV0(ctx, socketPath)) == 0 {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func codexAppServerTmuxSocketProcessPIDsV0(ctx context.Context, socketPath string) []int {
+	socketPath = strings.TrimSpace(socketPath)
+	if socketPath == "" {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil
+	}
+	output, err := exec.CommandContext(ctx, "ps", "-eo", "pid=,args=").Output()
+	if err != nil {
+		return nil
+	}
+	out := []int{}
+	currentPID := os.Getpid()
+	for _, line := range strings.Split(string(output), "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 2 {
+			continue
+		}
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil || pid <= 0 || pid == currentPID {
+			continue
+		}
+		command := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), fields[0]))
+		if codexAppServerTmuxCommandMatchesSocketV0(command, socketPath) {
+			out = append(out, pid)
+		}
+	}
+	return out
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) tmuxConfiguredOrphanCleanupAllowedV0() bool {
