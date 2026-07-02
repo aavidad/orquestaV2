@@ -257,6 +257,7 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 	if err := executor.GoalStateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
 		return result
 	}
+	result = executor.completeRunControlAfterForcedGoalReconcileV0(ctx, result, input, evidenceRefs)
 	result.RecommendedAction = "replan_narrow_context"
 	result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, evidenceRefs...))
 	result.Diagnostics = append(result.Diagnostics, MCPRunControlDiagnosticV0{
@@ -269,6 +270,38 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 			externalGoalRef,
 		)),
 	})
+	return result
+}
+
+func (executor MCPRunControlToolExecutorV0) completeRunControlAfterForcedGoalReconcileV0(
+	ctx context.Context,
+	result MCPRunControlToolResultV0,
+	input MCPRunControlToolInputV0,
+	evidenceRefs []string,
+) MCPRunControlToolResultV0 {
+	terminal, ok := executor.Port.(orquestaruncontrol.RunControlTerminalWriterPortV0)
+	if !ok || terminal == nil {
+		return result
+	}
+	action := normalizeMCPRunControlActionV0(input.Action)
+	target := orquestaruncontrol.RunControlStatusStoppedV0
+	if action == "cancel" {
+		target = orquestaruncontrol.RunControlStatusCanceledV0
+	}
+	completed, err := terminal.CompleteRunControlV0(ctx, orquestaruncontrol.CompleteRunControlCommandV0{
+		RunRef:         strings.TrimSpace(input.RunRef),
+		TargetStatus:   target,
+		RequestedBy:    firstNonEmptyMCPV0(input.RequestedBy, "orquesta-mcp-run-control"),
+		Reason:         firstNonEmptyMCPV0(input.Reason, "forced goal backend reconcile completed run control"),
+		IdempotencyKey: firstNonEmptyMCPV0(input.IdempotencyKey, "idem-mcp-run-control-forced-reconcile-"+action+"-"+strings.TrimSpace(input.RunRef)),
+		EvidenceRefs:   compactStringsMCPV0(append(evidenceRefs, "evidence-ref-run-control-terminal-after-goal-reconcile")),
+	})
+	if err != nil {
+		return result
+	}
+	result.Status = string(orquestaruncontrol.NormalizeRunControlStatusV0(completed.Status))
+	result.FinalStatus = result.Status
+	result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, completed.EvidenceRefs...))
 	return result
 }
 
