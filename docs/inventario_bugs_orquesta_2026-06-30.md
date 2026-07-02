@@ -657,6 +657,15 @@ visible dispara rework editorial. Evidencia:
 `TestValidateOPESTopicQualityContractV0DetectaAnclasMarkdownPublicasV0` y
 `go test -count=1 ./modulos/orquesta-opes-director`.
 
+Avance BUG-ORQ-20260701-058/075 2026-07-02 noche 4:
+`OPESTopicQualityContractV0` detecta corrupciones ortograficas concretas
+observadas tras correccion masiva (`órgaños`, `confíanza`, `instituciónal`,
+`propuestá`) como texto publico corrupto antes de HTML/audio/paquete final. La
+lista es cerrada y conserva artefactos como recuperables para rework, no como
+descarte global por texto libre. Evidencia:
+`TestValidateOPESTopicQualityContractV0DetectaCorreccionOrtograficaCorruptaV0`
+y `go test -count=1 ./modulos/orquesta-opes-director`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

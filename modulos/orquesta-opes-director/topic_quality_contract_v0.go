@@ -361,6 +361,21 @@ func opesTopicPublicMojibakeMatchesV0(text string) []string {
 			matches = append(matches, pattern.label)
 		}
 	}
+	normalized := strings.ToLower(text)
+	orthographicCorruptions := []struct {
+		pattern string
+		label   string
+	}{
+		{pattern: "\u00f3rga\u00f1os", label: "orthographic_corruption:organos"},
+		{pattern: "conf\u00edanza", label: "orthographic_corruption:confianza"},
+		{pattern: "instituci\u00f3nal", label: "orthographic_corruption:institucional"},
+		{pattern: "propuest\u00e1", label: "orthographic_corruption:propuesta"},
+	}
+	for _, pattern := range orthographicCorruptions {
+		if strings.Contains(normalized, pattern.pattern) {
+			matches = append(matches, pattern.label)
+		}
+	}
 	return compactStringsV0(matches)
 }
 

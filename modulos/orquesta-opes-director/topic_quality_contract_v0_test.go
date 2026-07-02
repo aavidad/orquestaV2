@@ -53,6 +53,23 @@ func TestValidateOPESTopicQualityContractV0DetectaMojibakePreAudioV0(t *testing.
 	}
 }
 
+func TestValidateOPESTopicQualityContractV0DetectaCorreccionOrtograficaCorruptaV0(t *testing.T) {
+	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
+		TopicRef:           "tema-002",
+		Level:              OPESTopicQualityLevelBV0,
+		CanonicalWordCount: 11200,
+		Text: strings.Join([]string{
+			"Los \u00f3rga\u00f1os competentes deben mantener la conf\u00edanza institucional.",
+			"La regulacion instituci\u00f3nal no puede cerrar con una propuest\u00e1 corrupta.",
+		}, "\n"),
+	})
+
+	if result.Status != OPESTopicQualityStatusNeedsReworkV0 ||
+		!opesTopicQualityIssueCodeInSetV0(result.Issues, ErrOPESTopicQualityPublicMojibakeV0) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestValidateOPESTopicQualityContractV0DetectaAndamiajeInternoConTildesYMayusculasV0(t *testing.T) {
 	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
 		TopicRef:           "tema-029",
