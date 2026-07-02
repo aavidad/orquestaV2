@@ -194,6 +194,26 @@ func TestNuevaAppGuideV0IntegracionesEnumeraCatalogoVisibleV0(t *testing.T) {
 	}
 }
 
+func TestNuevaAppGuideV0DocumentaConectoresFrecuentesV0(t *testing.T) {
+	for _, want := range []string{
+		"### Atajo UI: Conectores Frecuentes",
+		"Tipo UI: checkboxes multiples sin campo contractual propio.",
+		"`api`",
+		"`auth`",
+		"`notifications`",
+		"`payments`",
+		"`search`",
+		"`analytics`",
+		"no envia el formulario ni elige proveedor",
+		"`nueva_app.ayuda.connectors.quick`",
+		"`nueva_app.ayuda.connectors.apply`",
+	} {
+		if !strings.Contains(nuevaAppGuideMarkdownV0, want) {
+			t.Fatalf("guia no documenta conectores frecuentes: falta %q", want)
+		}
+	}
+}
+
 func TestNuevaAppGuideV0DocumentaProfundidadDeManualesV0(t *testing.T) {
 	for _, want := range []string{
 		"### `documentacion.profundidad`",

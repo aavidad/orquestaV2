@@ -209,6 +209,11 @@ func nuevaAppHTMLTextosV0(locale string, catalog NuevaAppI18nCatalogV0) map[stri
 		"nueva_app.wizard.integracion_5",
 		"nueva_app.wizard.integracion_6",
 		"nueva_app.wizard.integraciones_adicionales",
+		"nueva_app.wizard.conectores_frecuentes",
+		"nueva_app.wizard.conectores_aplicar",
+		"nueva_app.wizard.guided_msg_connectors",
+		"nueva_app.wizard.connector_template_purpose",
+		"nueva_app.wizard.connector_template_auth",
 		"nueva_app.wizard.revision_final",
 		"nueva_app.wizard.resumen_vivo",
 		"nueva_app.wizard.back",
@@ -291,6 +296,8 @@ var nuevaAppHTMLHelpKeysV0 = []string{
 	"guided.quality_regulated",
 	"guided.quality_observable",
 	"guided.accessibility_none",
+	"connectors.quick",
+	"connectors.apply",
 	"preset.webapp",
 	"preset.api",
 	"preset.ops",
@@ -868,6 +875,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       data-guided-msg-maps="{{index .HTML "nueva_app.wizard.guided_msg_maps"}}"
       data-guided-msg-architecture="{{index .HTML "nueva_app.wizard.guided_msg_architecture"}}"
       data-guided-msg-quality="{{index .HTML "nueva_app.wizard.guided_msg_quality"}}"
+      data-guided-msg-connectors="{{index .HTML "nueva_app.wizard.guided_msg_connectors"}}"
       data-guided-msg-review="{{index .HTML "nueva_app.wizard.guided_msg_review"}}"
       data-guided-msg-answer="{{index .HTML "nueva_app.wizard.guided_msg_answer"}}"
       data-guided-pending-intro="{{index .HTML "nueva_app.wizard.guided_pending_intro"}}"
@@ -1126,6 +1134,18 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
           </div></div>
         </div></details></fieldset>
         <fieldset><legend>{{index .Labels "integraciones"}}</legend><div class="expert-block">
+          <div class="expert-row" data-help="{{index .Help "connectors.quick"}}">
+            <p class="expert-row-title">{{index .HTML "nueva_app.wizard.conectores_frecuentes"}}</p>
+            <div class="checks">
+              <label data-help="{{optionHelp $.Page.Locale "integration" "api"}}"><input type="checkbox" data-connector-quick value="api">{{optionLabel $.Page.Locale "integration" "api"}}</label>
+              <label data-help="{{optionHelp $.Page.Locale "integration" "auth"}}"><input type="checkbox" data-connector-quick value="auth">{{optionLabel $.Page.Locale "integration" "auth"}}</label>
+              <label data-help="{{optionHelp $.Page.Locale "integration" "notifications"}}"><input type="checkbox" data-connector-quick value="notifications">{{optionLabel $.Page.Locale "integration" "notifications"}}</label>
+              <label data-help="{{optionHelp $.Page.Locale "integration" "payments"}}"><input type="checkbox" data-connector-quick value="payments">{{optionLabel $.Page.Locale "integration" "payments"}}</label>
+              <label data-help="{{optionHelp $.Page.Locale "integration" "search"}}"><input type="checkbox" data-connector-quick value="search">{{optionLabel $.Page.Locale "integration" "search"}}</label>
+              <label data-help="{{optionHelp $.Page.Locale "integration" "analytics"}}"><input type="checkbox" data-connector-quick value="analytics">{{optionLabel $.Page.Locale "integration" "analytics"}}</label>
+            </div>
+            <button class="secondary" type="button" data-apply-connectors data-help="{{index .Help "connectors.apply"}}">{{index .HTML "nueva_app.wizard.conectores_aplicar"}}</button>
+          </div>
           <div class="expert-row"><p class="expert-row-title">{{index .HTML "nueva_app.wizard.integracion_1"}}</p><div class="grid">
             <label data-help="{{index .Help "integraciones.0.tipo"}}">{{index .Labels "integraciones.0.tipo"}}<select name="integraciones.0.tipo"><option value="" title="{{optionHelp $.Page.Locale "integration" ""}}">{{optionLabel $.Page.Locale "integration" ""}}</option>{{range .IntegrationTypes}}<option value="{{.}}" title="{{optionHelp $.Page.Locale "integration" .}}">{{optionLabel $.Page.Locale "integration" .}}</option>{{end}}</select></label>
             <label data-help="{{index .Help "integraciones.0.nombre"}}">{{index .Labels "integraciones.0.nombre"}}<input name="integraciones.0.nombre"></label>
@@ -1829,6 +1849,10 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       for(let index=0;index<6;index++){if(!val('integraciones.'+index+'.tipo'))return index;}
       return -1;
     }
+    function integrationTypeAlreadySelected(type){
+      for(let index=0;index<6;index++){if(val('integraciones.'+index+'.tipo')===type)return true;}
+      return false;
+    }
     function configureIntegration(type,name,proposito,auth){
       const index=firstEmptyIntegrationIndex();
       if(index<0)return;
@@ -1836,6 +1860,26 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       setValue('integraciones.'+index+'.nombre',name);
       setValue('integraciones.'+index+'.proposito',proposito);
       if(auth)setValue('integraciones.'+index+'.auth',auth);
+    }
+    const connectorTemplatePurpose='{{index .HTML "nueva_app.wizard.connector_template_purpose"}}';
+    const connectorTemplateAuth='{{index .HTML "nueva_app.wizard.connector_template_auth"}}';
+    const connectorTemplates={
+      api:{name:'{{optionLabel $.Page.Locale "integration" "api"}}',purpose:connectorTemplatePurpose+' {{optionLabel $.Page.Locale "integration" "api"}}',auth:connectorTemplateAuth},
+      auth:{name:'{{optionLabel $.Page.Locale "integration" "auth"}}',purpose:connectorTemplatePurpose+' {{optionLabel $.Page.Locale "integration" "auth"}}',auth:connectorTemplateAuth},
+      notifications:{name:'{{optionLabel $.Page.Locale "integration" "notifications"}}',purpose:connectorTemplatePurpose+' {{optionLabel $.Page.Locale "integration" "notifications"}}',auth:connectorTemplateAuth},
+      payments:{name:'{{optionLabel $.Page.Locale "integration" "payments"}}',purpose:connectorTemplatePurpose+' {{optionLabel $.Page.Locale "integration" "payments"}}',auth:connectorTemplateAuth},
+      search:{name:'{{optionLabel $.Page.Locale "integration" "search"}}',purpose:connectorTemplatePurpose+' {{optionLabel $.Page.Locale "integration" "search"}}',auth:connectorTemplateAuth},
+      analytics:{name:'{{optionLabel $.Page.Locale "integration" "analytics"}}',purpose:connectorTemplatePurpose+' {{optionLabel $.Page.Locale "integration" "analytics"}}',auth:connectorTemplateAuth}
+    };
+    function applySelectedConnectors(){
+      const selected=[...wizard.querySelectorAll('[data-connector-quick]:checked')].map(node=>node.value).filter(Boolean);
+      selected.forEach(type=>{
+        if(integrationTypeAlreadySelected(type))return;
+        const item=connectorTemplates[type]||{name:type,purpose:connectorTemplatePurpose+' '+type,auth:connectorTemplateAuth};
+        configureIntegration(type,item.name,item.purpose,item.auth);
+      });
+      if(selected.length)guidedLog(wizard.dataset.guidedMsgConnectors);
+      renderSummary();
     }
     async function applyGuidedNeed(){
       const input=document.getElementById('guided-need');
@@ -1909,6 +1953,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     const guided=document.getElementById('guided-assistant');
     if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-guided-action]');if(target)guidedAction(target.dataset.guidedAction);});}
     if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-guided-answer]');if(target)submitGuidedAnswer();});}
+    wizard.querySelectorAll('[data-apply-connectors]').forEach(node=>node.addEventListener('click',applySelectedConnectors));
     wizard.querySelectorAll('[data-preset]').forEach(node=>node.addEventListener('click',()=>preset(node.dataset.preset)));
     const goalButton=document.querySelector('[data-goal-observe]');
     if(goalButton)goalButton.addEventListener('click',()=>observeGoal(goalButton));

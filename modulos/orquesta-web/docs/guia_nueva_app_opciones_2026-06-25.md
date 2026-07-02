@@ -1160,6 +1160,46 @@ No usar para:
 
 - credenciales, tokens, DSN o secretos.
 
+### Atajo UI: Conectores Frecuentes
+
+Tipo UI: checkboxes multiples sin campo contractual propio.
+
+Que implica:
+
+- permite marcar varias capacidades externas habituales y pulsar "Aplicar
+  conectores";
+- rellena las primeras filas libres de `integraciones[]` con `tipo`, `nombre`,
+  `proposito` y `auth` editables;
+- no envia el formulario ni elige proveedor, credenciales, DB, runtime ni
+  backend concreto;
+- si JavaScript no esta disponible, las filas manuales de integraciones siguen
+  siendo el contrato usable.
+
+Opciones visibles del atajo:
+
+- `api`
+- `auth`
+- `notifications`
+- `payments`
+- `search`
+- `analytics`
+
+Cuando usarlo:
+
+- paneles que suelen necesitar identidad y notificaciones;
+- apps con pagos, analitica o busqueda como capacidades externas;
+- contratos iniciales donde conviene recordar varios conectores sin escribir
+  cada fila desde cero.
+
+Errores frecuentes:
+
+- asumir que marcar `payments` selecciona un proveedor de pagos;
+- dejar las filas generadas sin revisar `requerido`, direccion o datos;
+- usar el atajo para esconder integraciones criticas sin proposito verificable.
+
+Tooltips: `nueva_app.ayuda.connectors.quick` y
+`nueva_app.ayuda.connectors.apply`.
+
 ### Modo Experto: Varias Integraciones
 
 El DTO `WebNuevaAppFormV0` ya modela `integraciones[]`; el HTML muestra una
