@@ -73,7 +73,7 @@ func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T
 
 	for _, want := range []string{
 		"print_app_server_failure_diagnostics",
-		`find "$project_dir/generated-apps" -mindepth 1 -print -quit 2>/dev/null || true`,
+		`find "$project_dir/generated-apps" -type f -print -quit 2>/dev/null || true`,
 		"generated_apps_present=0",
 		"Missing bearer or basic authentication",
 		"401 Unauthorized",

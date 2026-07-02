@@ -244,7 +244,7 @@ print(count)
 
 print_app_server_failure_diagnostics() {
   local generated_apps_count logs_db auth_missing
-  generated_apps_count="$( (find "$project_dir/generated-apps" -mindepth 1 -print -quit 2>/dev/null || true) | wc -l | tr -d ' ')"
+  generated_apps_count="$( (find "$project_dir/generated-apps" -type f -print -quit 2>/dev/null || true) | wc -l | tr -d ' ')"
   if [[ "$generated_apps_count" == "0" ]]; then
     echo "generated_apps_present=0" >&2
   else

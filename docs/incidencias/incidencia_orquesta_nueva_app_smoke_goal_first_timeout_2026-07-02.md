@@ -245,3 +245,19 @@ Evidencia focal:
 
 - `TestServerCodexAppServerGoalBackendV0PreparaDirectoriosWriteSetAntesDelTurnV0`
 - `TestServerCodexAppServerGoalBackendV0LanzaThreadGoalYTurnV0`
+
+Smoke real posterior con Orquesta `7bff5cb89c`, directorio conservado en
+`/srv/orquesta-self/runtime/smokes-goal-first/orquesta-goal-first-app-server.gcZ6Yj`:
+el write-set raiz `generated-apps/smoke-goal-first` se crea antes del turno y
+el smoke ya no bloquea en poll 56 por sandbox/cuota. Termina en poll 59 con
+`goal_status=blocked`, `run_status=bloqueada`, `closure_status=blocked`,
+`summary=codex_app_server_goal_active_timeout` y sin ficheros bajo el write-set.
+El script informo `generated_apps_present=1` solo porque existia el directorio
+preparado.
+
+Avance aplicado: el diagnostico `generated_apps_present` del smoke cuenta ahora
+ficheros reales bajo `generated-apps` y no directorios preparados.
+
+Evidencia focal:
+
+- `TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0`
