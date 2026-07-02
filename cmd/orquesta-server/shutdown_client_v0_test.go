@@ -252,6 +252,31 @@ func TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado(t *testi
 	}
 }
 
+func TestShutdownClientReadyV0BloqueaActiveWorkPersistido(t *testing.T) {
+	status := orquestaserver.ServerPublicStatusV0{
+		ShutdownInProgress:      true,
+		ShutdownReady:           false,
+		ShutdownRunsRequested:   1,
+		ShutdownRunsStopped:     1,
+		ShutdownAsyncWorkActive: 0,
+		ShutdownActiveWorkCount: 1,
+		ShutdownActiveWorkRefs:  []string{"shutdown-active-work-goal-backend-goal-ref-test"},
+	}
+
+	if shutdownPublicStatusReadyForSignalV0(status) {
+		t.Fatalf("status con active_work persistido no debe permitir signal")
+	}
+	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_timeout"), status, false) {
+		t.Fatalf("timeout sin cuerpo no debe permitir signal si status conserva active_work")
+	}
+	result := serverShutdownClientResultFromStatusV0(status)
+	if shutdownClientResultReadyForSignalV0(result) ||
+		result.ActiveWorkCount != 1 ||
+		!shutdownClientStringRefsContainForTestV0(result.ActiveWorkRefs, "shutdown-active-work-goal-backend-goal-ref-test") {
+		t.Fatalf("result active_work no conservado/bloqueado: %+v", result)
+	}
+}
+
 func assertShutdownClientErrorV0(message string) error {
 	return shutdownClientTestErrorV0(message)
 }
@@ -260,4 +285,13 @@ type shutdownClientTestErrorV0 string
 
 func (err shutdownClientTestErrorV0) Error() string {
 	return string(err)
+}
+
+func shutdownClientStringRefsContainForTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

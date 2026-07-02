@@ -16,14 +16,16 @@ import (
 )
 
 type serverShutdownClientResultV0 struct {
-	Estado                  string `json:"estado"`
-	Status                  string `json:"status"`
-	ShutdownReady           bool   `json:"shutdown_ready"`
-	RunsRequested           int    `json:"runs_requested"`
-	RunsStopped             int    `json:"runs_stopped"`
-	AgentsInFlight          int    `json:"agents_in_flight"`
-	CheckpointsPending      int    `json:"checkpoints_pending"`
-	CheckpointAgentsPending int    `json:"checkpoint_agents_pending"`
+	Estado                  string   `json:"estado"`
+	Status                  string   `json:"status"`
+	ShutdownReady           bool     `json:"shutdown_ready"`
+	RunsRequested           int      `json:"runs_requested"`
+	RunsStopped             int      `json:"runs_stopped"`
+	AgentsInFlight          int      `json:"agents_in_flight"`
+	CheckpointsPending      int      `json:"checkpoints_pending"`
+	CheckpointAgentsPending int      `json:"checkpoint_agents_pending"`
+	ActiveWorkCount         int      `json:"active_work_count,omitempty"`
+	ActiveWorkRefs          []string `json:"active_work_refs,omitempty"`
 }
 
 type serverShutdownClientOptionsV0 struct {

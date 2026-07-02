@@ -21,6 +21,8 @@ func shutdownClientResultReadyForSignalV0(result serverShutdownClientResultV0) b
 		(result.AgentsInFlight == 0 &&
 			result.CheckpointsPending == 0 &&
 			result.CheckpointAgentsPending == 0 &&
+			result.ActiveWorkCount == 0 &&
+			len(compactStringsV0(result.ActiveWorkRefs)) == 0 &&
 			result.RunsRequested <= result.RunsStopped)
 }
 
@@ -30,6 +32,8 @@ func shutdownPublicStatusReadyForSignalV0(status orquestaserver.ServerPublicStat
 			status.ShutdownAgentsInFlight == 0 &&
 			status.ShutdownCheckpointsPending == 0 &&
 			status.ShutdownAsyncWorkActive == 0 &&
+			status.ShutdownActiveWorkCount == 0 &&
+			len(compactStringsV0(status.ShutdownActiveWorkRefs)) == 0 &&
 			status.ShutdownRunsRequested <= status.ShutdownRunsStopped)
 }
 
@@ -42,6 +46,8 @@ func serverShutdownClientResultFromStatusV0(status orquestaserver.ServerPublicSt
 		RunsStopped:        status.ShutdownRunsStopped,
 		AgentsInFlight:     status.ShutdownAgentsInFlight,
 		CheckpointsPending: status.ShutdownCheckpointsPending,
+		ActiveWorkCount:    status.ShutdownActiveWorkCount,
+		ActiveWorkRefs:     compactStringsV0(status.ShutdownActiveWorkRefs),
 	}
 }
 
@@ -86,7 +92,9 @@ func shutdownRequestErrorAllowsSignalV0(
 	return status.ShutdownInProgress &&
 		status.ShutdownAgentsInFlight == 0 &&
 		status.ShutdownCheckpointsPending == 0 &&
-		status.ShutdownAsyncWorkActive == 0
+		status.ShutdownAsyncWorkActive == 0 &&
+		status.ShutdownActiveWorkCount == 0 &&
+		len(compactStringsV0(status.ShutdownActiveWorkRefs)) == 0
 }
 
 func shutdownRequestErrorIsLiveWorkConflictV0(err error) bool {
