@@ -527,6 +527,20 @@ func applyMCPDirectorGoalProgressProjectionV0(
 		})
 		return
 	}
+	if containsStringMCPV0(goal.IssueCodes, MCPGoalFirstPhase0CompleteNonPublishableV0) {
+		stats.Status = MCPGoalFirstPhase0CompleteNonPublishableV0
+		stats.Closure.BlockedBy = compactStringsMCPV0(append(
+			stats.Closure.BlockedBy,
+			MCPGoalFirstPhase0CompleteNonPublishableV0,
+		))
+		stats.Closure.BlockerRefs = compactStringsMCPV0(append(stats.Closure.BlockerRefs, goal.EvidenceRefs...))
+		stats.Progress.Issues = append(stats.Progress.Issues, orquestacionnucleoapp.DirectorProgressIssueV0{
+			Code:    MCPGoalFirstPhase0CompleteNonPublishableV0,
+			Field:   "goal_first.phase0",
+			Message: "goal_first materialized a phase 0 checkpoint delivery; artifacts are recoverable but not publishable closure, continue from phase 0 before final package",
+		})
+		return
+	}
 	if containsStringMCPV0(goal.IssueCodes, MCPGoalFirstPartialArtifactsWrittenV0) {
 		stats.Status = MCPGoalFirstPartialArtifactsWrittenV0
 		stats.Closure.BlockedBy = compactStringsMCPV0(append(

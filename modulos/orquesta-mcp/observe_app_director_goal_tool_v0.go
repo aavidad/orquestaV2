@@ -231,6 +231,9 @@ func mcpObserveAppDirectorGoalRecommendedActionV0(
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstRequiredTestEvidenceMissingV0) {
 		return MCPGoalFirstRepairReceiptActionV0
 	}
+	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstPhase0CompleteNonPublishableV0) {
+		return MCPGoalFirstContinueFromPhase0ActionV0
+	}
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstPartialArtifactsWrittenV0) {
 		return MCPGoalFirstReviewPartialArtifactsActionV0
 	}
@@ -357,6 +360,8 @@ func EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
 			field = "goal_first.artifact_paths"
 		} else if code == MCPGoalFirstRequiredTestEvidenceMissingV0 {
 			field = "goal_first.required_tests"
+		} else if code == MCPGoalFirstPhase0CompleteNonPublishableV0 {
+			field = "goal_first.phase0"
 		} else if code == MCPGoalFirstPartialArtifactsWrittenV0 {
 			field = "goal_first.partial_artifacts"
 		}

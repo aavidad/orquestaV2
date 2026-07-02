@@ -75,6 +75,29 @@ func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0ArtefactosParciale
 	}
 }
 
+func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0Phase0NoPublicablePideContinuar(t *testing.T) {
+	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
+		MCPObserveAppDirectorGoalToolResultV0{
+			GoalRef:    "goal-ref-observe-phase0-001",
+			GoalStatus: "blocked",
+		},
+		MCPDirectorGoalMaterializedRefsV0{
+			ArtifactRefs: []string{"artifact-ref-materialized-phase0-001"},
+			EvidenceRefs: []string{"evidence-ref-goal-materialized-phase0-complete-non-publishable"},
+			IssueCodes:   []string{MCPGoalFirstPhase0CompleteNonPublishableV0},
+		},
+	)
+
+	if result.RecommendedAction != MCPGoalFirstContinueFromPhase0ActionV0 ||
+		len(result.ClosureIssues) != 1 ||
+		result.ClosureIssues[0].Code != MCPGoalFirstPhase0CompleteNonPublishableV0 ||
+		result.ClosureIssues[0].Field != "goal_first.phase0" ||
+		!containsStringMCPV0(result.ArtifactRefs, "artifact-ref-materialized-phase0-001") ||
+		!containsStringMCPV0(result.EvidenceRefs, "evidence-ref-goal-materialized-phase0-complete-non-publishable") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0RequiredTestEvidenceAusentePideRepairReceipt(t *testing.T) {
 	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
 		MCPObserveAppDirectorGoalToolResultV0{

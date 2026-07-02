@@ -90,6 +90,36 @@ func TestStackGoalMaterializedRefsSourceV0DetectaArtefactosParcialesSinReceiptTe
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0DetectaPhase0CheckpointDeliveryNoPublicable(t *testing.T) {
+	projectDir := t.TempDir()
+	topicDir := filepath.Join(projectDir, "temas", "tema_039")
+	if err := os.MkdirAll(topicDir, 0o700); err != nil {
+		t.Fatalf("mkdir topic: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(topicDir, "orquesta_phase0_checkpoint_delivery.json"),
+		[]byte(`{"status":"phase0_complete","publishable":false}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write phase0 delivery: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-phase0-001", "temas/tema_039")
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		!containsStringV0(result.IssueCodes, "phase0_complete_non_publishable") ||
+		!containsStringV0(result.IssueCodes, "partial_artifacts_written") ||
+		!containsStringV0(result.EvidenceRefs, "evidence-ref-goal-materialized-phase0-complete-non-publishable") ||
+		!containsStringPrefixForTestV0(result.ArtifactRefs, "artifact-ref-materialized:") {
+		t.Fatalf("phase0 delivery no publicable no detectada: ok=%v result=%+v", ok, result)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0PublicaChecklistEsperadoDesdeSpec(t *testing.T) {
 	projectDir := t.TempDir()
 	topicDir := filepath.Join(projectDir, "temas", "tema_038")

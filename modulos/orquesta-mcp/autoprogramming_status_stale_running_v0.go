@@ -27,6 +27,7 @@ const (
 	mcpAutoprogrammingActionArtifactPathsOmittedV0                 = MCPGoalFirstArtifactPathsOmittedMaterializedV0
 	mcpAutoprogrammingActionQAFailedPublicTextV0                   = MCPGoalFirstQAFailedPublicTextV0
 	mcpAutoprogrammingActionPartialArtifactsWrittenV0              = MCPGoalFirstPartialArtifactsWrittenV0
+	mcpAutoprogrammingActionPhase0CompleteNonPublishableV0         = MCPGoalFirstPhase0CompleteNonPublishableV0
 	mcpAutoprogrammingActionRequiredTestEvidenceMissingV0          = MCPGoalFirstRequiredTestEvidenceMissingV0
 	mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0       = "goal_active_timeout_backend_active"
 	mcpAutoprogrammingEvidenceRunningStaleReconciledV0             = "evidence-ref-run-queue-running-stale-no-live-process-reconciled"
@@ -42,6 +43,7 @@ const (
 	mcpAutoprogrammingEvidenceArtifactPathsOmittedV0               = "evidence-ref-autoprogramming-status-artifact-paths-omitted-materialized"
 	mcpAutoprogrammingEvidenceQAFailedPublicTextV0                 = "evidence-ref-autoprogramming-status-qa-failed-public-text"
 	mcpAutoprogrammingEvidencePartialArtifactsWrittenV0            = "evidence-ref-autoprogramming-status-partial-artifacts-written"
+	mcpAutoprogrammingEvidencePhase0CompleteNonPublishableV0       = "evidence-ref-autoprogramming-status-phase0-complete-non-publishable"
 	mcpAutoprogrammingEvidenceRequiredTestEvidenceMissingV0        = "evidence-ref-autoprogramming-status-required-test-evidence-missing"
 	mcpAutoprogrammingEvidenceGoalActiveTimeoutBackendV0           = "evidence-ref-autoprogramming-goal-active-timeout-backend-active"
 	mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0        = "evidence-ref-autoprogramming-no-checkpoint-high-consumption"
@@ -177,6 +179,32 @@ func mcpAutoprogrammingPartialArtifactsWrittenActionsV0(
 	return out
 }
 
+func mcpAutoprogrammingPhase0CompleteNonPublishableActionsV0(
+	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
+) []MCPAutoprogrammingActionableRunV0 {
+	out := make([]MCPAutoprogrammingActionableRunV0, 0)
+	for runRef, observed := range observedByRunRef {
+		if !mcpAutoprogrammingObservedPhase0CompleteNonPublishableV0(observed) {
+			continue
+		}
+		action := MCPAutoprogrammingActionableRunV0{
+			Code:              mcpAutoprogrammingActionPhase0CompleteNonPublishableV0,
+			Severity:          "blocked",
+			RunRef:            strings.TrimSpace(runRef),
+			RunStatus:         mcpAutoprogrammingObservedRunStatusV0(observedByRunRef, runRef),
+			Reason:            "phase0_complete_non_publishable: phase 0 checkpoint delivery exists and is recoverable, but it is not a publishable final closure",
+			RecommendedAction: MCPGoalFirstContinueFromPhase0ActionV0,
+			EvidenceRefs: []string{
+				mcpAutoprogrammingEvidencePhase0CompleteNonPublishableV0,
+			},
+		}
+		action = mcpAutoprogrammingActionableRunWithObservedStatsV0(action, observed)
+		action = mcpAutoprogrammingActionableRunWithObservedGoalV0(action, observed)
+		out = append(out, action)
+	}
+	return out
+}
+
 func mcpAutoprogrammingRequiredTestEvidenceMissingActionsV0(
 	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
 ) []MCPAutoprogrammingActionableRunV0 {
@@ -237,6 +265,26 @@ func mcpAutoprogrammingObservedArtifactPathsOmittedV0(
 	}
 	for _, issue := range observed.Stats.Progress.Issues {
 		if strings.TrimSpace(issue.Code) == MCPGoalFirstArtifactPathsOmittedMaterializedV0 {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpAutoprogrammingObservedPhase0CompleteNonPublishableV0(
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	if observed == nil {
+		return false
+	}
+	if observed.Goal != nil && containsStringMCPV0(observed.Goal.IssueCodes, MCPGoalFirstPhase0CompleteNonPublishableV0) {
+		return true
+	}
+	if observed.Stats == nil {
+		return false
+	}
+	for _, issue := range observed.Stats.Progress.Issues {
+		if strings.TrimSpace(issue.Code) == MCPGoalFirstPhase0CompleteNonPublishableV0 {
 			return true
 		}
 	}

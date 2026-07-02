@@ -22,10 +22,12 @@ const (
 	goalMaterializedOPESReworkDeliveryFileV0       = "opes_topic_rework_delivery.json"
 	goalMaterializedGoalResultFileV0               = "orquesta_goal_result_v0.json"
 	goalMaterializedCheckpointFileV0               = "checkpoint_started.txt"
+	goalMaterializedPhase0CheckpointDeliveryFileV0 = "orquesta_phase0_checkpoint_delivery.json"
 	goalMaterializedMissingTerminalReceiptEvidence = "evidence-ref-goal-materialized-missing-terminal-receipt-after-artifacts-pass"
 	goalMaterializedArtifactPathsOmittedEvidence   = "evidence-ref-goal-materialized-artifact-paths-omitted"
 	goalMaterializedQAFailedPublicTextEvidence     = "evidence-ref-goal-materialized-qa-failed-public-text"
 	goalMaterializedPartialArtifactsEvidence       = "evidence-ref-goal-materialized-partial-artifacts-written"
+	goalMaterializedPhase0NonPublishableEvidence   = "evidence-ref-goal-materialized-phase0-complete-non-publishable"
 	goalMaterializedRequiredTestEvidenceMissing    = "evidence-ref-goal-materialized-required-test-evidence-missing"
 )
 
@@ -46,6 +48,7 @@ type goalMaterializedRefsScanV0 struct {
 	HasQAFail          bool
 	HasTerminalReceipt bool
 	HasTestEvidenceGap bool
+	HasPhase0Delivery  bool
 	TerminalResult     *orquestagoal.GoalWorkResultV0
 	ArtifactPaths      []string
 }
@@ -108,6 +111,10 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 	if scan.HasArtifact && !scan.HasTerminalReceipt {
 		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstPartialArtifactsWrittenV0)
 		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedPartialArtifactsEvidence)
+	}
+	if scan.HasPhase0Delivery {
+		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstPhase0CompleteNonPublishableV0)
+		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedPhase0NonPublishableEvidence)
 	}
 	if scan.HasTestEvidenceGap {
 		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstRequiredTestEvidenceMissingV0)
@@ -223,6 +230,9 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalMaterializedFileV0(
 		scan.HasTerminalReceipt = true
 	case goalMaterializedCheckpointFileV0:
 		scan.Result.ArtifactRefs = []string{goalMaterializedCheckpointRefV0(projectRoot, path, state.RunRef)}
+	case goalMaterializedPhase0CheckpointDeliveryFileV0:
+		scan.HasPhase0Delivery = true
+		scan.Result.ArtifactRefs = []string{goalMaterializedArtifactRefV0(projectRoot, path, state.RunRef)}
 	}
 	if goalMaterializedFileIsGoalResultV0(base) {
 		scan.HasTerminalReceipt = true
@@ -272,6 +282,7 @@ func mergeGoalMaterializedRefsScanV0(
 	current.HasQAFail = current.HasQAFail || next.HasQAFail
 	current.HasTerminalReceipt = current.HasTerminalReceipt || next.HasTerminalReceipt
 	current.HasTestEvidenceGap = current.HasTestEvidenceGap || next.HasTestEvidenceGap
+	current.HasPhase0Delivery = current.HasPhase0Delivery || next.HasPhase0Delivery
 	if next.TerminalResult != nil {
 		current.TerminalResult = next.TerminalResult
 	}

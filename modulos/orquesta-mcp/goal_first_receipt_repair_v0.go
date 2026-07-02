@@ -5,8 +5,10 @@ const (
 	MCPGoalFirstArtifactPathsOmittedMaterializedV0         = "artifact_paths_omitted_materialized"
 	MCPGoalFirstQAFailedPublicTextV0                       = "qa_failed_public_text"
 	MCPGoalFirstPartialArtifactsWrittenV0                  = "partial_artifacts_written"
+	MCPGoalFirstPhase0CompleteNonPublishableV0             = "phase0_complete_non_publishable"
 	MCPGoalFirstRequiredTestEvidenceMissingV0              = "required_test_evidence_missing"
 	MCPGoalFirstRepairReceiptActionV0                      = "repair_receipt"
 	MCPGoalFirstReworkPublicTextActionV0                   = "rework_public_text"
 	MCPGoalFirstReviewPartialArtifactsActionV0             = "review_partial_artifacts"
+	MCPGoalFirstContinueFromPhase0ActionV0                 = "continue_from_phase0_checkpoint"
 )

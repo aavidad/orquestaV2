@@ -1829,6 +1829,57 @@ func TestMCPAutoprogrammingStatusExecutorV0ArtefactosParcialesPideRevisionV0(t *
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0Phase0NoPublicablePideContinuarV0(t *testing.T) {
+	runRef := "run-ref-autop-status-phase0-001"
+	goalRef := "goal-ref-autop-status-phase0-001"
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: runRef,
+			Status: MCPGoalFirstPhase0CompleteNonPublishableV0,
+			Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
+				Status:    orquestacionnucleoapp.DirectorClosureStatusBlockedV0,
+				Blocked:   true,
+				BlockedBy: []string{MCPGoalFirstPhase0CompleteNonPublishableV0},
+			},
+			Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+				Issues: []orquestacionnucleoapp.DirectorProgressIssueV0{{
+					Code:  MCPGoalFirstPhase0CompleteNonPublishableV0,
+					Field: "goal_first.phase0",
+				}},
+			},
+		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Status:       orquestagoal.GoalStatusBlockedV0,
+			ArtifactRefs: []string{"artifact-ref-materialized-phase0-001"},
+			EvidenceRefs: []string{"evidence-ref-goal-materialized-phase0-complete-non-publishable"},
+			IssueCodes:   []string{MCPGoalFirstPhase0CompleteNonPublishableV0},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{empty: true},
+		Stats: stats,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{RunRef: runRef})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != MCPGoalFirstPhase0CompleteNonPublishableV0 ||
+		action.RecommendedAction != MCPGoalFirstContinueFromPhase0ActionV0 ||
+		action.GoalRef != goalRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.ArtifactRefs, "artifact-ref-materialized-phase0-001") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-autoprogramming-status-phase0-complete-non-publishable") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-goal-materialized-phase0-complete-non-publishable") {
+		t.Fatalf("action=%+v", action)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0RequiredTestEvidenceAusentePideRepairReceiptV0(t *testing.T) {
 	runRef := "run-ref-autop-status-required-test-evidence-001"
 	goalRef := "goal-ref-autop-status-required-test-evidence-001"
