@@ -117,7 +117,10 @@ func buildStackMCPTransportBindingsV0(
 		GoalStateSource:   config.Stores.AppGoalStateStore,
 		GoalMarkerSource:  appGoalFirstRunMarkerStoreV0(config),
 		GoalMaterializedRefsSource: stackGoalMaterializedRefsSourceV0{
-			Config: config,
+			Config:                       config,
+			GoalStateStore:               config.Stores.AppGoalStateStore,
+			GoalClosureValidator:         ports.GoalClosureValidator,
+			RepairMissingTerminalReceipt: true,
 		},
 	}
 	return orquestamcp.MCPTransportBindingsV0{

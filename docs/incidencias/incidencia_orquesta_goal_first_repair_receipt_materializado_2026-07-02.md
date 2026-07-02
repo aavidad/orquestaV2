@@ -26,6 +26,14 @@ el trabajo o cerrar sin causalidad.
   `missing_terminal_receipt_after_artifacts_pass`.
 - `director.stats`, `autoprogramming/status` y `observe` transportan
   `expected_terminal_receipt_refs`, evidencias opacas y accion `repair_receipt`.
+- Cuando la composicion inyecta `GoalStateStore` y `GoalClosureValidator`, el
+  stack ejecuta un repair idempotente: construye `GoalWorkResultV0` terminal con
+  refs opacas materializadas, lo valida con el contrato de cierre existente y
+  persiste `LastResult`/`LastClosure`.
+- Si el validador acepta, el estado queda `complete` con closure `accepted`.
+  Si falta un receipt de dominio, required tests o cualquier evidencia causal,
+  el estado queda `complete` con closure `blocked` y
+  `repair_receipt_requires_rework`, sin cerrar por filesystem.
 
 ## Evidencia
 
@@ -38,7 +46,8 @@ go test -count=1 ./modulos/orquesta-mcp -run 'Test(MCPDirectorStats|Autoprogramm
 
 ## Residual
 
-El cambio no sintetiza aun el receipt terminal; solo hace el estado accionable.
-El siguiente paso es una accion `repair_receipt` que materialice el receipt
-faltante con evidencia causal o pida rework si la QA estructurada no es
-suficiente.
+El repair no inventa receipts de dominio ni tests shell pasados desde QA JSON.
+Si la politica exige receipt de dominio y no hay ledger/receipt aceptado, deja
+rework causal. Queda fuera de este cierre reflejar el cierre aceptado en todos
+los stores legacy de run si el repair ocurre desde una consulta de estado y no
+desde el flujo completo de observacion.

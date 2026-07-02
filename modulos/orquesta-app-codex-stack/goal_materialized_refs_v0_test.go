@@ -120,6 +120,57 @@ func TestStackGoalMaterializedRefsSourceV0DetectaReceiptTerminalAusenteTrasQAPas
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0ReparaReceiptTerminalConPuertosV0(t *testing.T) {
+	ctx := context.Background()
+	projectDir := t.TempDir()
+	topicDir := filepath.Join(projectDir, "temas", "tema_029")
+	validationDir := filepath.Join(topicDir, "09_validacion")
+	if err := os.MkdirAll(validationDir, 0o700); err != nil {
+		t.Fatalf("mkdir validation: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "tema_ampliado.md"), []byte("# Tema\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(validationDir, "informe_qa.json"),
+		[]byte(`{"qa_passes":{"extension_pass":true,"official_text_qa_pass":true,"strict_editorial_qa_pass":true}}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write qa: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-repair-receipt-001", "temas/tema_029")
+	store := newGoalFirstQueueStateStoreForTestV0()
+	if err := store.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config:                       ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+		GoalStateStore:               store,
+		GoalClosureValidator:         orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		RepairMissingTerminalReceipt: true,
+	}).ResolveDirectorGoalMaterializedRefsV0(ctx, state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		containsStringV0(result.IssueCodes, "missing_terminal_receipt_after_artifacts_pass") ||
+		!containsStringPrefixForTestV0(result.ArtifactRefs, "artifact-ref-materialized:") {
+		t.Fatalf("ok=%v result=%+v", ok, result)
+	}
+	persisted, err := store.LoadGoalWorkStateV0(ctx, state.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if persisted.Status != orquestagoal.GoalStatusCompleteV0 ||
+		persisted.LastResult == nil ||
+		persisted.LastClosure == nil ||
+		!persisted.LastClosure.Accepted ||
+		!containsStringV0(persisted.LastResult.EvidenceRefs, goalFirstRepairReceiptAttemptedEvidenceRefV0) {
+		t.Fatalf("persisted=%+v", persisted)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0NoAceptaQAGenericaEnContextoOPES(t *testing.T) {
 	projectDir := t.TempDir()
 	topicDir := filepath.Join(projectDir, "temas", "tema_032")

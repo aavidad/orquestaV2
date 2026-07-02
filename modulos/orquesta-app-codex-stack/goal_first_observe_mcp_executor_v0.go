@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
@@ -126,10 +127,45 @@ func (executor CodexStackObserveAppDirectorGoalExecutorV0) withMaterializedRefsV
 		return result
 	}
 	refs, ok, err := (stackGoalMaterializedRefsSourceV0{
-		Config: ConfigV0{Codex: executor.stack.Codex},
+		Config:                       ConfigV0{Codex: executor.stack.Codex},
+		GoalStateStore:               store,
+		GoalClosureValidator:         executor.stack.Ports.GoalClosureValidator,
+		RepairMissingTerminalReceipt: true,
 	}).ResolveDirectorGoalMaterializedRefsV0(ctx, state)
 	if err != nil || !ok {
 		return result
 	}
+	if repaired, loadErr := store.LoadGoalWorkStateV0(ctx, runRef); loadErr == nil {
+		if repaired.LastResult != nil &&
+			repaired.LastClosure != nil &&
+			containsStringV0(repaired.LastResult.EvidenceRefs, goalFirstRepairReceiptAttemptedEvidenceRefV0) {
+			result = codexStackObserveResultWithGoalStateV0(result, repaired)
+		}
+	}
 	return orquestamcp.EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(result, refs)
+}
+
+func codexStackObserveResultWithGoalStateV0(
+	result orquestamcp.MCPObserveAppDirectorGoalToolResultV0,
+	state orquestagoal.GoalWorkStateV0,
+) orquestamcp.MCPObserveAppDirectorGoalToolResultV0 {
+	partial, err := orquestamcp.NewMCPObserveAppDirectorGoalPartialResultFromStateV0(
+		orquestamcp.MCPObserveAppDirectorGoalToolInputV0{RunRef: result.RunRef},
+		state,
+	)
+	if err != nil {
+		return result
+	}
+	result.GoalStatus = partial.GoalStatus
+	result.ResultRef = partial.ResultRef
+	result.ClosureStatus = partial.ClosureStatus
+	result.ClosureAccepted = partial.ClosureAccepted
+	result.ClosureNeedsRework = partial.ClosureNeedsRework
+	result.Summary = partial.Summary
+	result.ArtifactRefs = compactCodexStackStringsV0(append(result.ArtifactRefs, partial.ArtifactRefs...))
+	result.DomainReceiptRefs = compactCodexStackStringsV0(append(result.DomainReceiptRefs, partial.DomainReceiptRefs...))
+	result.EvidenceRefs = compactCodexStackStringsV0(append(result.EvidenceRefs, partial.EvidenceRefs...))
+	result.ClosureIssues = append(result.ClosureIssues, partial.ClosureIssues...)
+	result.RecommendedAction = partial.RecommendedAction
+	return result
 }

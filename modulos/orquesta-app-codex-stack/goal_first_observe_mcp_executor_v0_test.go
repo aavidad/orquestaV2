@@ -79,7 +79,7 @@ func TestCodexStackObserveAppDirectorGoalExecutorV0TimeoutSnapshotIncluyeProcess
 	}
 }
 
-func TestCodexStackObserveAppDirectorGoalExecutorV0TimeoutSnapshotProponeRepairReceiptV0(t *testing.T) {
+func TestCodexStackObserveAppDirectorGoalExecutorV0TimeoutSnapshotReparaReceiptMaterializadoV0(t *testing.T) {
 	ctx := context.Background()
 	runRef := "run-ref-stack-observe-goal-repair-receipt-001"
 	projectDir := t.TempDir()
@@ -122,7 +122,8 @@ func TestCodexStackObserveAppDirectorGoalExecutorV0TimeoutSnapshotProponeRepairR
 	}
 	stack := &StackV0{
 		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
-			GoalStateStore: goalStates,
+			GoalStateStore:       goalStates,
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
 		},
 		Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir},
 	}
@@ -135,14 +136,113 @@ func TestCodexStackObserveAppDirectorGoalExecutorV0TimeoutSnapshotProponeRepairR
 	if err != nil {
 		t.Fatalf("ObserveAppDirectorGoalTimeoutSnapshotV0: %v", err)
 	}
-	if result.RecommendedAction != orquestamcp.MCPGoalFirstRepairReceiptActionV0 ||
-		len(result.ExpectedReceiptRefs) != 2 ||
-		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-goal-materialized-missing-terminal-receipt-after-artifacts-pass") {
+	if result.RecommendedAction != "no_action_closed" ||
+		!result.ClosureAccepted ||
+		result.ClosureNeedsRework ||
+		result.ClosureStatus != orquestagoal.GoalStatusAcceptedV0 ||
+		result.GoalStatus != orquestagoal.GoalStatusCompleteV0 ||
+		!codexStackStringInSetForTestV0(result.EvidenceRefs, goalFirstRepairReceiptAcceptedEvidenceRefV0) ||
+		result.ResultRef == "" {
 		t.Fatalf("result=%+v", result)
 	}
-	if len(result.ClosureIssues) != 1 ||
-		result.ClosureIssues[0].Code != orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0 {
+	for _, issue := range result.ClosureIssues {
+		if issue.Code == orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0 {
+			t.Fatalf("missing receipt no debe sobrevivir tras repair: result=%+v", result)
+		}
+	}
+	persisted, err := goalStates.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if persisted.Status != orquestagoal.GoalStatusCompleteV0 ||
+		persisted.LastResult == nil ||
+		persisted.LastClosure == nil ||
+		!persisted.LastClosure.Accepted ||
+		!codexStackStringInSetForTestV0(persisted.LastResult.EvidenceRefs, goalFirstRepairReceiptAttemptedEvidenceRefV0) {
+		t.Fatalf("persisted=%+v", persisted)
+	}
+}
+
+func TestCodexStackObserveAppDirectorGoalExecutorV0RepairReceiptRequiereReworkSinReceiptDominioV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-stack-observe-goal-repair-receipt-rework-001"
+	projectDir := t.TempDir()
+	topicDir := filepath.Join(projectDir, "temas", "tema_034")
+	validationDir := filepath.Join(topicDir, "09_validacion")
+	if err := os.MkdirAll(validationDir, 0o700); err != nil {
+		t.Fatalf("mkdir validation: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "tema_ampliado.md"), []byte("# Tema\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(validationDir, "informe_qa.json"),
+		[]byte(`{"qa_passes":{"extension_pass":true,"official_text_qa_pass":true,"strict_editorial_qa_pass":true}}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write qa: %v", err)
+	}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       "goal-ref-stack-observe-repair-receipt-rework-001",
+			RunRef:        runRef,
+			Objective:     "No aceptar repair sin receipt de dominio requerido.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "temas/tema_034"}},
+			ClosurePolicy: orquestagoal.GoalClosurePolicyV0{
+				RequireDomainReceipt: true,
+			},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:  orquestagoal.GoalStatusRunningV0,
+			GoalRef: "goal-ref-stack-observe-repair-receipt-rework-001",
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	if err := goalStates.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	stack := &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:       goalStates,
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		},
+		Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir},
+	}
+
+	result, err := NewCodexStackObserveAppDirectorGoalExecutorV0(stack).ObserveAppDirectorGoalTimeoutSnapshotV0(
+		ctx,
+		orquestamcp.MCPObserveAppDirectorGoalToolInputV0{RunRef: runRef},
+	)
+
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalTimeoutSnapshotV0: %v", err)
+	}
+	if result.RecommendedAction != "replan" ||
+		result.ClosureAccepted ||
+		!result.ClosureNeedsRework ||
+		result.ClosureStatus != orquestagoal.GoalStatusBlockedV0 ||
+		!codexStackStringInSetForTestV0(result.EvidenceRefs, goalFirstRepairReceiptRequiresReworkEvidenceRefV0) {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(result.ClosureIssues) == 0 ||
+		!codexStackValidationIssueCodeInSetForTestV0(result.ClosureIssues, goalFirstRepairReceiptRequiresReworkIssueV0) {
 		t.Fatalf("closure issues=%+v", result.ClosureIssues)
+	}
+	persisted, err := goalStates.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if persisted.Status != orquestagoal.GoalStatusCompleteV0 ||
+		persisted.LastClosure == nil ||
+		!persisted.LastClosure.NeedsRework ||
+		!goalFirstReceiptRepairHasIssueV0(persisted.LastClosure.Issues, goalFirstRepairReceiptRequiresReworkIssueV0) {
+		t.Fatalf("persisted=%+v", persisted)
 	}
 }
 
@@ -240,4 +340,16 @@ func (observer codexStackObserveRejectedForTestV0) ObserveGoalWorkV0(
 	_ orquestagoal.GoalObservationRequestV0,
 ) (orquestagoal.GoalWorkResultV0, error) {
 	return observer.result, errors.New("codex_goal_observation_rejected")
+}
+
+func codexStackValidationIssueCodeInSetForTestV0(
+	issues []orquestamcp.MCPValidationIssueV0,
+	code string,
+) bool {
+	for _, issue := range issues {
+		if issue.Code == code {
+			return true
+		}
+	}
+	return false
 }

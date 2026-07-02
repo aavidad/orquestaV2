@@ -27,7 +27,10 @@ const (
 var errGoalMaterializedRefsScanDoneV0 = errors.New("goal_materialized_refs_scan_done")
 
 type stackGoalMaterializedRefsSourceV0 struct {
-	Config ConfigV0
+	Config                       ConfigV0
+	GoalStateStore               orquestagoal.GoalWorkStateStorePortV0
+	GoalClosureValidator         orquestagoal.GoalWorkClosureValidatorPortV0
+	RepairMissingTerminalReceipt bool
 }
 
 type goalMaterializedRefsScanV0 struct {
@@ -39,9 +42,12 @@ type goalMaterializedRefsScanV0 struct {
 }
 
 func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedRefsV0(
-	_ context.Context,
+	ctx context.Context,
 	state orquestagoal.GoalWorkStateV0,
 ) (orquestamcp.MCPDirectorGoalMaterializedRefsV0, bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	projectRoot := strings.TrimSpace(source.Config.Codex.ProjectWorkDir)
 	if projectRoot == "" {
 		return orquestamcp.MCPDirectorGoalMaterializedRefsV0{}, false, nil
@@ -63,13 +69,31 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 		scan = mergeGoalMaterializedRefsScanV0(scan, next)
 	}
 	result := scan.Result
-	if !scan.HasTerminalReceipt && scan.HasArtifact && scan.HasQAPass {
+	if !scan.HasTerminalReceipt &&
+		scan.HasArtifact &&
+		scan.HasQAPass &&
+		!goalMaterializedMissingTerminalReceiptHandledV0(state) {
 		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0)
 		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedMissingTerminalReceiptEvidence)
 		result.ExpectedReceiptRefs = append(result.ExpectedReceiptRefs,
 			"expected-terminal-receipt:"+safeGoalMaterializedRefPartV0(goalMaterializedGoalResultFileV0),
 			"expected-terminal-receipt:"+safeGoalMaterializedRefPartV0(goalMaterializedOPESReworkDeliveryFileV0),
 		)
+	}
+	if source.RepairMissingTerminalReceipt &&
+		source.GoalStateStore != nil &&
+		containsStringV0(result.IssueCodes, orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
+		repaired, repairErr := repairGoalFirstReceiptFromMaterializedRefsV0(
+			ctx,
+			state,
+			result,
+			source.GoalStateStore,
+			source.GoalClosureValidator,
+		)
+		if repairErr == nil && repaired.Repaired {
+			source.RepairMissingTerminalReceipt = false
+			return source.ResolveDirectorGoalMaterializedRefsV0(ctx, repaired.State)
+		}
 	}
 	if len(result.DomainReceiptRefs) == 0 &&
 		len(result.ArtifactRefs) == 0 &&
@@ -161,6 +185,7 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalMaterializedFileV0(
 	}
 	if goalMaterializedFileLooksLikeArtifactV0(projectRoot, path, base) {
 		scan.HasArtifact = true
+		scan.Result.ArtifactRefs = append(scan.Result.ArtifactRefs, goalMaterializedArtifactRefV0(projectRoot, path, state.RunRef))
 	}
 	if goalMaterializedFileLooksLikeQAReportV0(projectRoot, path, base, info, state) {
 		scan.HasQAPass = true
@@ -190,6 +215,12 @@ func goalMaterializedFileLooksLikeArtifactV0(
 	path string,
 	base string,
 ) bool {
+	switch strings.ToLower(strings.TrimSpace(base)) {
+	case goalMaterializedWorkDeliveryFileV0,
+		goalMaterializedOPESReworkDeliveryFileV0,
+		goalMaterializedGoalResultFileV0:
+		return false
+	}
 	if goalMaterializedPathLooksLikeQAReportV0(projectRoot, path, base) {
 		return false
 	}
@@ -498,6 +529,16 @@ func goalMaterializedCanonicalQAKeyV0(value string) string {
 	return strings.Trim(builder.String(), "_")
 }
 
+func goalMaterializedMissingTerminalReceiptHandledV0(state orquestagoal.GoalWorkStateV0) bool {
+	if state.LastClosure != nil &&
+		(state.LastClosure.Accepted || strings.TrimSpace(state.LastClosure.Status) == orquestagoal.GoalStatusAcceptedV0) {
+		return true
+	}
+	return state.LastResult != nil &&
+		state.LastClosure != nil &&
+		containsStringV0(state.LastResult.EvidenceRefs, goalFirstRepairReceiptAttemptedEvidenceRefV0)
+}
+
 func goalMaterializedQAPassRefV0(
 	projectRoot string,
 	path string,
@@ -532,6 +573,19 @@ func goalMaterializedWorkDeliveryRefV0(
 	}
 	rel = filepath.ToSlash(filepath.Clean(rel))
 	return "domain-receipt-ref-work-delivery:" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(rel)
+}
+
+func goalMaterializedArtifactRefV0(
+	projectRoot string,
+	path string,
+	runRef string,
+) string {
+	rel, err := filepath.Rel(filepath.Clean(projectRoot), filepath.Clean(path))
+	if err != nil {
+		rel = filepath.Base(path)
+	}
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	return "artifact-ref-materialized:" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(rel)
 }
 
 func goalMaterializedCheckpointRefV0(
