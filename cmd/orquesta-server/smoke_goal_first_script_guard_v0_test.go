@@ -307,14 +307,21 @@ func TestScriptsConShutdownDirectoPidenCleanupGoalBackendsV0(t *testing.T) {
 		text := readOperationalDocGuardV0(t, root, rel)
 		lines := strings.Split(text, "\n")
 		for index, line := range lines {
-			if !strings.Contains(line, "$base_url/api/v0/server/shutdown") {
+			if !strings.Contains(line, "/api/v0/server/shutdown") {
 				continue
+			}
+			windowStart := index - 3
+			if windowStart < 0 {
+				windowStart = 0
 			}
 			windowEnd := index + 8
 			if windowEnd > len(lines) {
 				windowEnd = len(lines)
 			}
-			window := strings.Join(lines[index:windowEnd], "\n")
+			window := strings.Join(lines[windowStart:windowEnd], "\n")
+			if !strings.Contains(window, "curl") || !strings.Contains(window, "-X POST") {
+				continue
+			}
 			if !strings.Contains(window, "cleanup_goal_backends") {
 				t.Fatalf("%s invoca shutdown HTTP directo sin cleanup_goal_backends cerca de linea %d", rel, index+1)
 			}
