@@ -283,10 +283,17 @@ func ValidateGoalWorkClosureV0(spec GoalWorkSpecV0, result GoalWorkResultV0) Goa
 			Issues:       partialIssues,
 		}
 	}
-	if outOfScope := goalArtifactPathsOutsideWriteSetV0(spec.WriteSet, goalResultArtifactPathsForScopeV0(result)); len(outOfScope) > 0 {
+	if outOfScope := goalArtifactPathsOutsideWriteSetV0(spec.WriteSet, result.ArtifactPaths); len(outOfScope) > 0 {
 		issues := make([]GoalWorkIssueV0, 0, len(outOfScope))
 		for range outOfScope {
 			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalArtifactPathScopeV0, Field: "artifact_paths"})
+		}
+		return GoalClosureValidationV0{Status: GoalStatusBlockedV0, NeedsRework: true, Issues: issues}
+	}
+	if outOfScope := goalArtifactPathsOutsideWriteSetV0(spec.WriteSet, goalMaterializedArtifactPathsForScopeV0(result)); len(outOfScope) > 0 {
+		issues := make([]GoalWorkIssueV0, 0, len(outOfScope))
+		for range outOfScope {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalArtifactPathScopeV0, Field: "materialized_artifacts.path"})
 		}
 		return GoalClosureValidationV0{Status: GoalStatusBlockedV0, NeedsRework: true, Issues: issues}
 	}
@@ -376,8 +383,8 @@ func goalClosureEvidenceRefsV0(result GoalWorkResultV0) []string {
 	return compactGoalStringsV0(refs)
 }
 
-func goalResultArtifactPathsForScopeV0(result GoalWorkResultV0) []string {
-	paths := append([]string(nil), result.ArtifactPaths...)
+func goalMaterializedArtifactPathsForScopeV0(result GoalWorkResultV0) []string {
+	var paths []string
 	for _, artifact := range result.MaterializedArtifacts {
 		if artifact.Path != "" {
 			paths = append(paths, artifact.Path)

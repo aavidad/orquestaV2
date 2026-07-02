@@ -261,6 +261,30 @@ func TestValidateGoalWorkClosureV0BloqueaArtifactPathsFueraDeWriteSet(t *testing
 	}
 }
 
+func TestValidateGoalWorkClosureV0BloqueaMaterializedArtifactsFueraDeWriteSet(t *testing.T) {
+	spec := GoalWorkSpecV0{
+		GoalRef:   "goal-ref-001",
+		Objective: "Objetivo",
+		WriteSet:  []GoalWriteScopeV0{{Path: "docs"}},
+	}
+	validation := ValidateGoalWorkClosureV0(spec, GoalWorkResultV0{
+		GoalRef: "goal-ref-001",
+		Status:  GoalStatusCompleteV0,
+		MaterializedArtifacts: []GoalMaterializedArtifactV0{{
+			ArtifactRef:  "artifact-ref-html-extra",
+			Path:         "html/index.html",
+			ArtifactType: "html",
+			Status:       GoalMaterializedArtifactStatusValidV0,
+		}},
+	})
+
+	if validation.Accepted ||
+		!validation.NeedsRework ||
+		!hasGoalIssueFieldCodeV0(validation.Issues, "materialized_artifacts.path", ErrGoalArtifactPathScopeV0) {
+		t.Fatalf("validation=%+v", validation)
+	}
+}
+
 func TestValidateGoalWorkClosureV0ExigeArtifactPathsCuandoLaPoliticaLoPide(t *testing.T) {
 	spec := GoalWorkSpecV0{
 		GoalRef:       "goal-ref-001",
