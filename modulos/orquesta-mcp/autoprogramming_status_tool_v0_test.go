@@ -1393,6 +1393,58 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalFirstSupersededSinEvidenciaLocalN
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0QAFailedPublicTextPideReworkV0(t *testing.T) {
+	runRef := "run-ref-autop-status-qa-failed-public-text-001"
+	goalRef := "goal-ref-autop-status-qa-failed-public-text-001"
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: runRef,
+			Status: MCPGoalFirstQAFailedPublicTextV0,
+			Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
+				Status:    orquestacionnucleoapp.DirectorClosureStatusBlockedV0,
+				Blocked:   true,
+				BlockedBy: []string{MCPGoalFirstQAFailedPublicTextV0},
+			},
+			Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+				Issues: []orquestacionnucleoapp.DirectorProgressIssueV0{{
+					Code:  MCPGoalFirstQAFailedPublicTextV0,
+					Field: "goal_first.qa_public_text",
+				}},
+			},
+		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Status:       orquestagoal.GoalStatusBlockedV0,
+			ArtifactRefs: []string{"artifact-ref-materialized-qa-failed-public-text-001"},
+			EvidenceRefs: []string{"evidence-ref-goal-materialized-qa-failed-public-text-001"},
+			IssueCodes:   []string{MCPGoalFirstQAFailedPublicTextV0},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{empty: true},
+		Stats: stats,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{RunRef: runRef})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != MCPGoalFirstQAFailedPublicTextV0 ||
+		action.Severity != "blocked" ||
+		action.RecommendedAction != MCPGoalFirstReworkPublicTextActionV0 ||
+		action.GoalRef != goalRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.ArtifactRefs, "artifact-ref-materialized-qa-failed-public-text-001") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-autoprogramming-status-qa-failed-public-text") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-goal-materialized-qa-failed-public-text-001") {
+		t.Fatalf("action=%+v", action)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0ListaGoalMarkerSinStateAunqueColaNoVisible(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-marker-listed-001"
 	goalRef := "goal-ref-autop-status-goal-marker-listed-001"

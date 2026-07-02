@@ -196,6 +196,9 @@ func mcpObserveAppDirectorGoalResultRefV0(result orquestagoal.GoalWorkResultV0) 
 func mcpObserveAppDirectorGoalRecommendedActionV0(
 	result MCPObserveAppDirectorGoalToolResultV0,
 ) string {
+	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstQAFailedPublicTextV0) {
+		return MCPGoalFirstReworkPublicTextActionV0
+	}
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
 		return MCPGoalFirstRepairReceiptActionV0
 	}
@@ -316,9 +319,13 @@ func EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
 		if mcpObserveAppDirectorGoalHasClosureIssueCodeV0(result.ClosureIssues, code) {
 			continue
 		}
+		field := "goal_first.receipt"
+		if code == MCPGoalFirstQAFailedPublicTextV0 {
+			field = "goal_first.qa_public_text"
+		}
 		result.ClosureIssues = append(result.ClosureIssues, MCPValidationIssueV0{
 			Code:    code,
-			Field:   "goal_first.receipt",
+			Field:   field,
 			Message: code,
 		})
 	}

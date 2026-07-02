@@ -429,6 +429,47 @@ func TestMCPDirectorStatsToolExecutorV0GoalFirstReconcilaWorkDeliveryMaterializa
 	}
 }
 
+func TestMCPDirectorStatsToolExecutorV0GoalFirstProyectaQAFailedPublicTextV0(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-goal-qa-failed-public-text-001")
+	run.Tasks = nil
+	run.ClosedTasks = nil
+	run.DeliveredTasks = nil
+	run.Deliveries = nil
+	run.Agents = nil
+	run.StartedAgents = nil
+	state := mcpDirectorGoalStateForTestV0(run.RunID)
+	state.Status = orquestagoal.GoalStatusBlockedV0
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:      orquestagoal.GoalStatusBlockedV0,
+		NeedsRework: true,
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		GoalStateSource: mcpDirectorGoalStateSourceForTestV0{State: state},
+		GoalMaterializedRefsSource: mcpDirectorMaterializedRefsSourceStaticForTestV0{
+			Resolved: MCPDirectorGoalMaterializedRefsV0{
+				ArtifactRefs: []string{"artifact-ref-materialized-qa-failed-public-text-001"},
+				EvidenceRefs: []string{"evidence-ref-goal-materialized-qa-failed-public-text-001"},
+				IssueCodes:   []string{MCPGoalFirstQAFailedPublicTextV0},
+			},
+		},
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{RunRef: run.RunID})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.Goal == nil ||
+		!containsStringMCPTestV0(result.Goal.IssueCodes, MCPGoalFirstQAFailedPublicTextV0) ||
+		result.Stats == nil ||
+		result.Stats.Status != MCPGoalFirstQAFailedPublicTextV0 ||
+		!containsStringMCPTestV0(result.Stats.Closure.BlockedBy, MCPGoalFirstQAFailedPublicTextV0) ||
+		!containsStringMCPTestV0(result.Stats.Refs.Deliveries, "artifact-ref-materialized-qa-failed-public-text-001") ||
+		!mcpDirectorStatsProgressIssueExistsV0(result.Stats.Progress.Issues, MCPGoalFirstQAFailedPublicTextV0) {
+		t.Fatalf("goal=%+v stats=%+v", result.Goal, result.Stats)
+	}
+}
+
 func TestMCPDirectorStatsToolExecutorV0CalculaControlSinExponerProcessRefs(t *testing.T) {
 	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-control-redacted-001")
 	registry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
@@ -874,6 +915,10 @@ type mcpDirectorStatsSnapshotSourceForTestV0 struct {
 
 type mcpDirectorMaterializedRefsSourceForTestV0 struct{}
 
+type mcpDirectorMaterializedRefsSourceStaticForTestV0 struct {
+	Resolved MCPDirectorGoalMaterializedRefsV0
+}
+
 func (mcpDirectorMaterializedRefsSourceForTestV0) ResolveDirectorGoalMaterializedRefsV0(
 	context.Context,
 	orquestagoal.GoalWorkStateV0,
@@ -883,6 +928,13 @@ func (mcpDirectorMaterializedRefsSourceForTestV0) ResolveDirectorGoalMaterialize
 		EvidenceRefs:      []string{"evidence-ref-goal-materialized-work-delivery-detected"},
 		IssueCodes:        []string{"goal_first_materialized_work_delivery_detected"},
 	}, true, nil
+}
+
+func (source mcpDirectorMaterializedRefsSourceStaticForTestV0) ResolveDirectorGoalMaterializedRefsV0(
+	context.Context,
+	orquestagoal.GoalWorkStateV0,
+) (MCPDirectorGoalMaterializedRefsV0, bool, error) {
+	return source.Resolved, true, nil
 }
 
 func (source mcpDirectorStatsSnapshotSourceForTestV0) SnapshotV0(

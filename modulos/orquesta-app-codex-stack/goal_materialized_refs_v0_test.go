@@ -277,6 +277,40 @@ func TestStackGoalMaterializedRefsSourceV0AceptaTernaQAEnContextoOPES(t *testing
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0DetectaQAFailedPublicTextEnContextoOPES(t *testing.T) {
+	projectDir := t.TempDir()
+	topicDir := filepath.Join(projectDir, "temas", "tema_034")
+	validationDir := filepath.Join(topicDir, "09_validacion")
+	if err := os.MkdirAll(validationDir, 0o700); err != nil {
+		t.Fatalf("mkdir validation: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "tema_ampliado.md"), []byte("# Tema\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(validationDir, "informe_qa.json"),
+		[]byte(`{"qa_passes":{"extension_pass":true,"official_text_qa_pass":false,"strict_editorial_qa_pass":false},"findings":["texto publico no apto"]}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write qa: %v", err)
+	}
+	state := goalMaterializedRefsOPESStateForTestV0(t, "run-goal-materialized-opes-qa-fail-001", "temas/tema_034")
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		!containsStringV0(result.IssueCodes, "qa_failed_public_text") ||
+		containsStringV0(result.IssueCodes, "missing_terminal_receipt_after_artifacts_pass") ||
+		!containsStringPrefixForTestV0(result.ArtifactRefs, "artifact-ref-materialized:") ||
+		!containsStringPrefixForTestV0(result.EvidenceRefs, "evidence-ref-goal-materialized-qa-failed-public-text:") {
+		t.Fatalf("QA fail OPES debe conservar artefacto y pedir rework: ok=%v result=%+v", ok, result)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0NoAceptaQAPassPorTextoLibre(t *testing.T) {
 	projectDir := t.TempDir()
 	topicDir := filepath.Join(projectDir, "temas", "tema_030")

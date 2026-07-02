@@ -3,6 +3,7 @@ package orquestaappcodexstack
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -66,8 +67,17 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) ValidateGoalWorkClosure
 		base = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
 	}
 	closure, err := base.ValidateGoalWorkClosureV0(ctx, spec, result)
-	if err != nil || !closure.Accepted || !spec.ClosurePolicy.RequireDomainReceipt {
+	if err != nil || !spec.ClosurePolicy.RequireDomainReceipt {
 		return closure, err
+	}
+	if !closure.Accepted {
+		if goalDomainReceiptClosureOnlyBlockedByArtifactPathsV0(closure) {
+			_, receiptIssue := validator.validateAcceptedDomainReceiptsV0(ctx, spec, result)
+			if receiptIssue.Code != "" {
+				return goalDomainReceiptBlockedClosureV0(closure, receiptIssue), nil
+			}
+		}
+		return closure, nil
 	}
 	receiptEvidence, receiptIssue := validator.validateAcceptedDomainReceiptsV0(ctx, spec, result)
 	if receiptIssue.Code != "" {
@@ -77,6 +87,21 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) ValidateGoalWorkClosure
 	return closure, nil
 }
 
+func goalDomainReceiptClosureOnlyBlockedByArtifactPathsV0(
+	closure orquestagoal.GoalClosureValidationV0,
+) bool {
+	issues := closure.Issues
+	if len(issues) == 0 {
+		return false
+	}
+	for _, issue := range issues {
+		if strings.TrimSpace(issue.Field) != "artifact_paths" {
+			return false
+		}
+	}
+	return true
+}
+
 func (validator domainWorkGoalReceiptClosureValidatorV0) goalResultWithAcceptedDomainReceiptRefsV0(
 	ctx context.Context,
 	spec orquestagoal.GoalWorkSpecV0,
@@ -84,7 +109,9 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) goalResultWithAcceptedD
 ) orquestagoal.GoalWorkResultV0 {
 	spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
 	result = orquestagoal.NormalizeGoalWorkResultV0(result)
-	if len(compactStringsV0(result.DomainReceiptRefs)) > 0 ||
+	hasReceiptRefs := len(compactStringsV0(result.DomainReceiptRefs)) > 0
+	hasArtifactPaths := len(compactStringsV0(result.ArtifactPaths)) > 0
+	if (hasReceiptRefs && (!spec.ClosurePolicy.RequireArtifactPaths || hasArtifactPaths)) ||
 		strings.TrimSpace(spec.RunRef) == "" ||
 		validator.Ledger == nil {
 		return result
@@ -114,14 +141,36 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) goalResultWithAcceptedD
 		}
 		for _, contract := range required {
 			if goalDomainReceiptRecordMatchesContractV0(record, contract) {
-				result.DomainReceiptRefs = append(result.DomainReceiptRefs, record.ReceiptRef)
+				if !hasReceiptRefs {
+					result.DomainReceiptRefs = append(result.DomainReceiptRefs, record.ReceiptRef)
+				}
 				result.ArtifactRefs = append(result.ArtifactRefs, contract.ArtifactRef)
+				if fileRef := goalDomainReceiptArtifactPathFromRecordV0(record); fileRef != "" {
+					result.ArtifactPaths = append(result.ArtifactPaths, fileRef)
+				}
 				result.EvidenceRefs = append(result.EvidenceRefs, "domain-work-goal-receipt-derived-"+safeDomainWorkEvidenceRefV0(record.ReceiptRef))
 				break
 			}
 		}
 	}
 	return orquestagoal.NormalizeGoalWorkResultV0(result)
+}
+
+func goalDomainReceiptArtifactPathFromRecordV0(
+	record DomainWorkArtifactSubmissionRecordV0,
+) string {
+	record = normalizeDomainWorkArtifactSubmissionRecordV0(record)
+	for _, field := range record.PayloadFields {
+		if goalMaterializedCanonicalQAKeyV0(field.Name) != "file_ref" {
+			continue
+		}
+		value := filepath.ToSlash(filepath.Clean(strings.TrimSpace(field.Value)))
+		if value == "" || value == "." || strings.HasPrefix(value, "/") || strings.HasPrefix(value, "../") || value == ".." {
+			continue
+		}
+		return value
+	}
+	return ""
 }
 
 func (validator domainWorkGoalReceiptClosureValidatorV0) goalResultWithAcceptedDomainRequiredTestResultsV0(

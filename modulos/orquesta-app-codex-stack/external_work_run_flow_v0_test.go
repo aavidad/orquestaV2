@@ -2541,6 +2541,10 @@ func externalWorkGoalFirstAcceptedReceiptRecordForTestV0(
 	if len(spec.ArtifactContracts) > 0 {
 		contract = spec.ArtifactContracts[0]
 	}
+	fileRef := contract.ArtifactType + ".json"
+	if len(spec.WriteSet) > 0 && strings.TrimSpace(spec.WriteSet[0].Path) != "" {
+		fileRef = filepath.ToSlash(filepath.Join(spec.WriteSet[0].Path, contract.ArtifactType+".json"))
+	}
 	return DomainWorkArtifactSubmissionRecordV0{
 		IdempotencyKey: "idem-" + receiptRef,
 		Status:         DomainWorkArtifactSubmissionStatusAcceptedV0,
@@ -2552,9 +2556,13 @@ func externalWorkGoalFirstAcceptedReceiptRecordForTestV0(
 		ArtifactRef:    contract.ArtifactRef,
 		ArtifactType:   contract.ArtifactType,
 		Summary:        "Artefacto external-work aceptado por conector DomainWork.",
-		CompleteJob:    true,
-		ReceiptRef:     receiptRef,
-		EvidenceRefs:   []string{"evidence-ref-" + receiptRef},
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{{
+			Name:  "file_ref",
+			Value: fileRef,
+		}},
+		CompleteJob:  true,
+		ReceiptRef:   receiptRef,
+		EvidenceRefs: []string{"evidence-ref-" + receiptRef},
 	}
 }
 

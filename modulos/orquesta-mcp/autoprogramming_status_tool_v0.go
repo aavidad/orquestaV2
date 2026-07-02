@@ -205,6 +205,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	blockedGoalActions, resolvedGoalActions := mcpAutoprogrammingGoalFirstBlockedActionsV0(goalStates, observedByRunRef)
 	result.StaleRunning = append(result.StaleRunning, blockedGoalActions...)
 	result.ResolvedRuns = append(result.ResolvedRuns, resolvedGoalActions...)
+	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingQAFailedPublicTextActionsV0(observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingMissingTerminalReceiptActionsV0(observedByRunRef)...)
 	result.Diagnostics = append(result.Diagnostics, diagnosticsFromStaleRunningMCPAutoprogrammingV0(result.StaleRunning)...)
 	result.Operator = newMCPAutoprogrammingOperatorV0(

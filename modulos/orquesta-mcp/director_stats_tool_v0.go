@@ -471,6 +471,20 @@ func applyMCPDirectorGoalProgressProjectionV0(
 		return
 	}
 	stats.Progress.PercentComplete = 0
+	if containsStringMCPV0(goal.IssueCodes, MCPGoalFirstQAFailedPublicTextV0) {
+		stats.Status = MCPGoalFirstQAFailedPublicTextV0
+		stats.Closure.BlockedBy = compactStringsMCPV0(append(
+			stats.Closure.BlockedBy,
+			MCPGoalFirstQAFailedPublicTextV0,
+		))
+		stats.Closure.BlockerRefs = compactStringsMCPV0(append(stats.Closure.BlockerRefs, goal.EvidenceRefs...))
+		stats.Progress.Issues = append(stats.Progress.Issues, orquestacionnucleoapp.DirectorProgressIssueV0{
+			Code:    MCPGoalFirstQAFailedPublicTextV0,
+			Field:   "goal_first.qa_public_text",
+			Message: "goal_first materialized recoverable artifacts, but structured QA failed public/editorial text; rework public text before closure",
+		})
+		return
+	}
 	if containsStringMCPV0(goal.IssueCodes, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
 		stats.Status = MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0
 		stats.Closure.BlockedBy = compactStringsMCPV0(append(

@@ -23,6 +23,7 @@ const (
 	goalMaterializedGoalResultFileV0               = "orquesta_goal_result_v0.json"
 	goalMaterializedCheckpointFileV0               = "checkpoint_started.txt"
 	goalMaterializedMissingTerminalReceiptEvidence = "evidence-ref-goal-materialized-missing-terminal-receipt-after-artifacts-pass"
+	goalMaterializedQAFailedPublicTextEvidence     = "evidence-ref-goal-materialized-qa-failed-public-text"
 )
 
 var errGoalMaterializedRefsScanDoneV0 = errors.New("goal_materialized_refs_scan_done")
@@ -39,6 +40,7 @@ type goalMaterializedRefsScanV0 struct {
 	FilesScanned       int
 	HasArtifact        bool
 	HasQAPass          bool
+	HasQAFail          bool
 	HasTerminalReceipt bool
 }
 
@@ -73,6 +75,7 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 	if !scan.HasTerminalReceipt &&
 		scan.HasArtifact &&
 		scan.HasQAPass &&
+		!scan.HasQAFail &&
 		!goalMaterializedMissingTerminalReceiptHandledV0(state) {
 		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0)
 		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedMissingTerminalReceiptEvidence)
@@ -195,6 +198,11 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalMaterializedFileV0(
 		scan.HasQAPass = true
 		scan.Result.EvidenceRefs = append(scan.Result.EvidenceRefs, goalMaterializedQAPassRefV0(projectRoot, path, state.RunRef))
 	}
+	if goalMaterializedFileLooksLikeQAFailReportV0(projectRoot, path, base, info, state) {
+		scan.HasQAFail = true
+		scan.Result.EvidenceRefs = append(scan.Result.EvidenceRefs, goalMaterializedQAFailRefV0(projectRoot, path, state.RunRef))
+		scan.Result.IssueCodes = append(scan.Result.IssueCodes, orquestamcp.MCPGoalFirstQAFailedPublicTextV0)
+	}
 	return scan
 }
 
@@ -210,6 +218,7 @@ func mergeGoalMaterializedRefsScanV0(
 	current.FilesScanned += next.FilesScanned
 	current.HasArtifact = current.HasArtifact || next.HasArtifact
 	current.HasQAPass = current.HasQAPass || next.HasQAPass
+	current.HasQAFail = current.HasQAFail || next.HasQAFail
 	current.HasTerminalReceipt = current.HasTerminalReceipt || next.HasTerminalReceipt
 	return current
 }
@@ -267,6 +276,33 @@ func goalMaterializedFileLooksLikeQAReportV0(
 		}
 	}
 	return false
+}
+
+func goalMaterializedFileLooksLikeQAFailReportV0(
+	projectRoot string,
+	path string,
+	base string,
+	info fs.FileInfo,
+	state orquestagoal.GoalWorkStateV0,
+) bool {
+	if info == nil || info.IsDir() || info.Size() <= 0 || info.Size() > goalMaterializedQAScanMaxBytesV0 {
+		return false
+	}
+	if !goalMaterializedPathLooksLikeQAReportV0(projectRoot, path, base) {
+		return false
+	}
+	if !strings.EqualFold(filepath.Ext(base), ".json") {
+		return false
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var payload any
+	if json.Unmarshal(raw, &payload) != nil {
+		return false
+	}
+	return goalMaterializedJSONLooksLikeQAFailForContextV0(projectRoot, path, base, state, payload)
 }
 
 func goalMaterializedPathLooksLikeQAReportV0(
@@ -333,6 +369,57 @@ func goalMaterializedJSONLooksLikeQAPassForContextV0(
 		return goalMaterializedJSONLooksLikeOPESQAPassV0(value)
 	}
 	return goalMaterializedJSONLooksLikeQAPassV0(value)
+}
+
+func goalMaterializedJSONLooksLikeQAFailForContextV0(
+	projectRoot string,
+	path string,
+	base string,
+	state orquestagoal.GoalWorkStateV0,
+	value any,
+) bool {
+	if goalMaterializedStateOrReportLooksLikeOPESV0(projectRoot, path, base, state, value) {
+		return goalMaterializedJSONLooksLikeOPESQAFailV0(value)
+	}
+	return goalMaterializedJSONLooksLikeQAFailV0(value)
+}
+
+func goalMaterializedJSONLooksLikeQAFailV0(value any) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, item := range typed {
+			key = goalMaterializedCanonicalQAKeyV0(key)
+			switch v := item.(type) {
+			case bool:
+				if !v && (key == "passed" || key == "ok" || strings.HasSuffix(key, "_pass")) {
+					return true
+				}
+			case string:
+				text := strings.ToLower(strings.TrimSpace(v))
+				if (key == "status" || key == "estado" || strings.HasSuffix(key, "_status")) &&
+					(text == "fail" || text == "failed" || text == "error" || text == "blocked") {
+					return true
+				}
+				if strings.HasSuffix(key, "_pass") && (text == "false" || text == "fail" || text == "failed" || text == "error") {
+					return true
+				}
+			case float64:
+				if v == 0 && strings.HasSuffix(key, "_pass") {
+					return true
+				}
+			}
+			if goalMaterializedJSONLooksLikeQAFailV0(item) {
+				return true
+			}
+		}
+	case []any:
+		for _, item := range typed {
+			if goalMaterializedJSONLooksLikeQAFailV0(item) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func goalMaterializedStateOrReportLooksLikeOPESV0(
@@ -459,6 +546,32 @@ func goalMaterializedJSONLooksLikeOPESQAPassV0(value any) bool {
 	return passes.ExtensionPass && passes.OfficialTextQAPass && passes.StrictEditorialQAPass
 }
 
+func goalMaterializedJSONLooksLikeOPESQAFailV0(value any) bool {
+	return goalMaterializedCollectOPESQAFailV0(value)
+}
+
+func goalMaterializedCollectOPESQAFailV0(value any) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, item := range typed {
+			if passKind := goalMaterializedOPESQAPassKindForKeyV0(key); passKind != "" &&
+				goalMaterializedQAPassValueFalseyV0(item) {
+				return true
+			}
+			if goalMaterializedCollectOPESQAFailV0(item) {
+				return true
+			}
+		}
+	case []any:
+		for _, item := range typed {
+			if goalMaterializedCollectOPESQAFailV0(item) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func goalMaterializedCollectOPESQAPassesV0(value any, passes *goalMaterializedOPESQAPassesV0) {
 	if passes == nil || (passes.ExtensionPass && passes.OfficialTextQAPass && passes.StrictEditorialQAPass) {
 		return
@@ -519,6 +632,20 @@ func goalMaterializedQAPassValueTruthyV0(value any) bool {
 	}
 }
 
+func goalMaterializedQAPassValueFalseyV0(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return !typed
+	case string:
+		text := strings.ToLower(strings.TrimSpace(typed))
+		return text == "false" || text == "fail" || text == "failed" || text == "error" || text == "blocked"
+	case float64:
+		return typed == 0
+	default:
+		return false
+	}
+}
+
 func goalMaterializedCanonicalQAKeyV0(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	var builder strings.Builder
@@ -569,6 +696,19 @@ func goalMaterializedQAPassRefV0(
 	}
 	rel = filepath.ToSlash(filepath.Clean(rel))
 	return "evidence-ref-goal-materialized-qa-pass:" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(rel)
+}
+
+func goalMaterializedQAFailRefV0(
+	projectRoot string,
+	path string,
+	runRef string,
+) string {
+	rel, err := filepath.Rel(filepath.Clean(projectRoot), filepath.Clean(path))
+	if err != nil {
+		rel = filepath.Base(path)
+	}
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	return goalMaterializedQAFailedPublicTextEvidence + ":" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(rel)
 }
 
 func pathWithinRootV0(root string, path string) bool {

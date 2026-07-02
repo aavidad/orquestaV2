@@ -166,7 +166,8 @@ func goalFirstDomainWorkClosureNeedsArtifactReconciliationV0(
 	spec orquestagoal.GoalWorkSpecV0,
 	closure orquestagoal.GoalClosureValidationV0,
 ) bool {
-	if !goalFirstDomainWorkClosureHasIssueFieldV0(closure, "artifact_refs") {
+	if !goalFirstDomainWorkClosureHasIssueFieldV0(closure, "artifact_refs") &&
+		!goalFirstDomainWorkClosureHasIssueFieldV0(closure, "artifact_paths") {
 		return false
 	}
 	_, ok := goalFirstDomainWorkSingleRequiredContractV0(spec)
