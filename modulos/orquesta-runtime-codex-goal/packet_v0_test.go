@@ -38,6 +38,10 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"status/estado debe ser terminal explicito",
 		"usa literalmente los test_ref",
 		"usa literalmente los artifact_ref",
+		"\"artifact_paths\":[]",
+		"lista todas las rutas relativas de ficheros creados",
+		"si escribiste algo fuera del write-set, no lo ocultes",
+		"status blocked con summary out_of_scope_artifacts",
 		"Resultado estructurado obligatorio",
 		"Los command de Tests requeridos son parte del contrato neutral acotado",
 	} {

@@ -322,7 +322,7 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	b.WriteString(spec.GoalRef)
 	b.WriteString("\",\"schema_version\":\"")
 	b.WriteString(CodexGoalResultSchemaV0)
-	b.WriteString("\",\"status\":\"complete\",\"summary\":\"...\",\"artifact_refs\":[],\"required_test_results\":[{\"test_ref\":\"...\",\"status\":\"passed\",\"evidence_refs\":[]}],\"domain_receipt_refs\":[],\"evidence_refs\":[]}.\n")
+	b.WriteString("\",\"status\":\"complete\",\"summary\":\"...\",\"artifact_refs\":[],\"artifact_paths\":[],\"required_test_results\":[{\"test_ref\":\"...\",\"status\":\"passed\",\"evidence_refs\":[]}],\"domain_receipt_refs\":[],\"evidence_refs\":[]}.\n")
 	b.WriteString("- schema_version es obligatorio y status/estado debe ser terminal explicito: complete si entregas cierre verificable, blocked si hay bloqueo externo o invalid si el resultado no es usable.\n")
 	if spec.ClosurePolicy.RequireDomainReceipt && strings.TrimSpace(spec.WorkProfileKind) == "domain_work" {
 		b.WriteString("- En domain_work deja domain_receipt_refs vacio salvo que el contrato te haya dado un receipt real; Orquesta lo derivara del ledger despues de submit_artifact.\n")
@@ -332,6 +332,9 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	}
 	if len(spec.ArtifactContracts) > 0 {
 		b.WriteString("- En artifact_refs usa literalmente los artifact_ref declarados arriba para los artefactos producidos; no uses rutas de fichero como refs.\n")
+	}
+	if len(spec.WriteSet) > 0 {
+		b.WriteString("- En artifact_paths lista todas las rutas relativas de ficheros creados, modificados o verificados para el cierre, incluido el JSON durable de resultado; si escribiste algo fuera del write-set, no lo ocultes: declaralo en artifact_paths y marca status blocked con summary out_of_scope_artifacts.\n")
 	}
 	if resultFilePath := codexGoalResultFilePathV0(spec); resultFilePath != "" {
 		b.WriteString("- Antes de marcar el goal como complete, escribe el mismo JSON en ")
