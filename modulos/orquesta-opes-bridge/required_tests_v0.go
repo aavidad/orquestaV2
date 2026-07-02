@@ -65,6 +65,12 @@ func opesRequiredTestsForJobV0(
 	if opesAudioWorkKindV0(jobType) {
 		tests = append(tests, opesAudioTTSResumableRequiredTestsV0(safeJob, workRefs)...)
 	}
+	if opesQuestionBankWorkKindV0(jobType) {
+		tests = append(tests, opesQuestionBankQARequiredTestsV0(safeJob, workRefs)...)
+	}
+	if opesTutorWorkKindV0(jobType) {
+		tests = append(tests, opesTutorAssetsQARequiredTestsV0(safeJob, workRefs)...)
+	}
 	return tests
 }
 
@@ -162,28 +168,36 @@ func opesFinalPackageRequiredTestsV0(
 		{
 			TestRef: "opes-question-bank-publicable-" + safeJob,
 			AcceptanceCriteria: []string{
-				"Existe tests.json o question_bank equivalente con preguntas publicables.",
-				"El banco de preguntas no esta vacio y contiene al menos una pregunta revisable.",
-				"Un paquete con tests.json parseable pero sin preguntas queda pendiente_continuar, aunque tenga revision de agente aceptada.",
+				"Existe tests.json, banco_preguntas_i18n_es.json o question_bank equivalente con preguntas publicables por tema.",
+				"Cada tema declara al menos 50 preguntas, 4 opciones A/B/C/D, una unica respuesta correcta exacta, distractores plausibles y explicacion tutor para aciertos y fallos.",
+				"Existe informe estructural y de dificultad/proximidad del banco, mas revision 100% Codex/Gemini/Claude por lotes si hace falta.",
+				"Un paquete con JSON parseable pero sin preguntas suficientes, opciones incompletas, respuesta ambigua, distractores triviales o sin revision triple queda pendiente_continuar.",
 			},
 			AcceptanceCriteriaRefs: []string{"opes-required-question-bank-publicable"},
 			InputRefs:              inputRefs,
 			ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
 				{Kind: "domain_ref", Ref: "opes"},
 				{Kind: "job_ref", Ref: safeJob},
+				{Kind: "required_test_name", Ref: "question_bank_publicable"},
 				{Kind: "required_evidence", Ref: "question_bank"},
+				{Kind: "required_evidence", Ref: "question_bank_structural_report"},
+				{Kind: "required_evidence", Ref: "question_bank_difficulty_report"},
+				{Kind: "required_evidence", Ref: "question_bank_three_model_review"},
 			},
 			EvidenceRefs: []string{
 				"opes-rule-question-bank-publicable",
 				"opes-expected-evidence-question-bank",
+				"opes-expected-evidence-question-bank-qa-report",
+				"opes-final-evidence:question_bank_publicable",
 			},
 		},
+		opesTutorAssetsQARequiredTestsV0(safeJob, workRefs)[0],
 		{
 			TestRef: "opes-final-package-manifest-" + safeJob,
 			AcceptanceCriteria: []string{
 				"Existe manifest_cierre.json del completed_syllabus_package con schema opes_final_package_evidence_manifest.v0.",
 				"El manifest identifica package_ref, manifest_ref, checksum_refs, validation_report_ref y review_matrix_ref del paquete final.",
-				"El manifest declara evidencias requeridas para HTML, RAG, audio, tests, visual, qa_passes y qa_report_refs separados para extension_pass, official_text_qa_pass y strict_editorial_qa_pass.",
+				"El manifest declara evidencias requeridas para HTML, RAG, audio, tests, tutor, visual, qa_passes y qa_report_refs separados para extension_pass, official_text_qa_pass, strict_editorial_qa_pass, question_bank_publicable y tutor_assets_publicable.",
 				"El RAG final usa rag/corpus/chunks.jsonl, rag/corpus/summary.json y rag/manifest.json, con metadata course_id y source_variant o equivalentes en chunks y summary antes de aceptar ready.",
 				"Si falta una evidencia obligatoria, el estado es pendiente_continuar con followup_refs causales y no listo_para_revision_operador.",
 			},
@@ -202,10 +216,13 @@ func opesFinalPackageRequiredTestsV0(
 				"opes-final-evidence:rag",
 				"opes-final-evidence:audio",
 				"opes-final-evidence:tests",
+				"opes-final-evidence:tutor",
 				"opes-final-evidence:visual",
 				"opes-final-evidence:extension_pass",
 				"opes-final-evidence:official_text_qa_pass",
 				"opes-final-evidence:strict_editorial_qa_pass",
+				"opes-final-evidence:question_bank_publicable",
+				"opes-final-evidence:tutor_assets_publicable",
 			},
 		},
 		opesAudioTTSResumableRequiredTestsV0(safeJob, workRefs)[0],
@@ -232,6 +249,74 @@ func opesFinalPackageRequiredTestsV0(
 			},
 		},
 	}
+}
+
+func opesQuestionBankQARequiredTestsV0(
+	safeJob string,
+	workRefs []string,
+) []orquestadomainwork.DomainWorkRequiredTestV0 {
+	inputRefs := compactStringsV0(append([]string{"opes-job-" + safeJob}, workRefs...))
+	return []orquestadomainwork.DomainWorkRequiredTestV0{{
+		TestRef: "opes-question-bank-publicable-" + safeJob,
+		AcceptanceCriteria: []string{
+			"El banco entrega JSON por tema y HTML revisable, con metadata de curso/tema, fuente de contenido y validacion estructural.",
+			"Cada tema contiene al menos 50 preguntas publicables, 4 opciones A/B/C/D, una unica respuesta correcta exacta, distractores plausibles y explicacion tutor para cada opcion.",
+			"La QA cubre dificultad/proximidad de distractores y revision 100% Codex/Gemini/Claude por lotes si hace falta; una muestra o revision parcial no cierra el banco.",
+			"Si faltan preguntas, opciones, explicaciones, metadata, informes o revision triple, el estado es pendiente_continuar con followup_refs causales, no ready.",
+		},
+		AcceptanceCriteriaRefs: []string{"opes-required-question-bank-publicable"},
+		InputRefs:              inputRefs,
+		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
+			{Kind: "domain_ref", Ref: "opes"},
+			{Kind: "job_ref", Ref: safeJob},
+			{Kind: "required_test_name", Ref: "question_bank_publicable"},
+			{Kind: "required_evidence", Ref: "question_bank"},
+			{Kind: "required_evidence", Ref: "question_bank_html_review"},
+			{Kind: "required_evidence", Ref: "question_bank_structural_report"},
+			{Kind: "required_evidence", Ref: "question_bank_difficulty_report"},
+			{Kind: "required_evidence", Ref: "question_bank_three_model_review"},
+		},
+		EvidenceRefs: []string{
+			"opes-rule-question-bank-publicable",
+			"opes-rule-review-tests-three-models",
+			"opes-expected-evidence-question-bank",
+			"opes-expected-evidence-question-bank-qa-report",
+			"opes-final-evidence:question_bank_publicable",
+		},
+	}}
+}
+
+func opesTutorAssetsQARequiredTestsV0(
+	safeJob string,
+	workRefs []string,
+) []orquestadomainwork.DomainWorkRequiredTestV0 {
+	inputRefs := compactStringsV0(append([]string{"opes-job-" + safeJob}, workRefs...))
+	return []orquestadomainwork.DomainWorkRequiredTestV0{{
+		TestRef: "opes-tutor-assets-publicable-" + safeJob,
+		AcceptanceCriteria: []string{
+			"Existe paquete tutor/bots con fuentes canonicas aprobadas, prompt/guardas de alcance, mapa tema/apartado y fallback cuando no hay evidencia suficiente.",
+			"Si genera RAG, el corpus final usa rag/corpus/chunks.jsonl, rag/corpus/summary.json y rag/manifest.json reconstruidos desde HTML final/local, tests y tutor fuente limpios.",
+			"La QA del tutor comprueba respuestas por tema/apartado, explicacion de fallos de test, recomendacion de repaso, ausencia de invencion fuera de fuentes y cobertura de bloques clave.",
+			"Un tutor con corpus suelto, fuentes regenerables usadas como canon, respuestas sin trazabilidad o sin QA por tema queda pendiente_continuar, no listo_para_revision_operador.",
+		},
+		AcceptanceCriteriaRefs: []string{"opes-required-tutor-assets-publicable"},
+		InputRefs:              inputRefs,
+		ExternalRefs: []orquestadomainwork.DomainWorkExternalRefV0{
+			{Kind: "domain_ref", Ref: "opes"},
+			{Kind: "job_ref", Ref: safeJob},
+			{Kind: "required_test_name", Ref: "tutor_assets_publicable"},
+			{Kind: "required_evidence", Ref: "tutor_bot_package"},
+			{Kind: "required_evidence", Ref: "tutor_scope_guard_report"},
+			{Kind: "required_evidence", Ref: "tutor_qa_report"},
+			{Kind: "required_evidence", Ref: "rag_corpus_manifest"},
+		},
+		EvidenceRefs: []string{
+			"opes-rule-tutor-bots-canonical-sources",
+			"opes-rule-rag-corpus-regenerable",
+			"opes-expected-evidence-tutor-qa-report",
+			"opes-final-evidence:tutor_assets_publicable",
+		},
+	}}
 }
 
 func opesAudioTTSResumableRequiredTestsV0(
@@ -269,6 +354,14 @@ func opesAudioTTSResumableRequiredTestsV0(
 
 func opesAudioWorkKindV0(jobType string) bool {
 	return expectedArtifactTypeV0(jobType) == orquestadomainwork.DomainWorkArtifactTypeAudioAssetV0
+}
+
+func opesQuestionBankWorkKindV0(jobType string) bool {
+	return expectedArtifactTypeV0(jobType) == orquestadomainwork.DomainWorkArtifactTypeQuestionBankV0
+}
+
+func opesTutorWorkKindV0(jobType string) bool {
+	return expectedArtifactTypeV0(jobType) == orquestadomainwork.DomainWorkArtifactTypeTutorBotPackageV0
 }
 
 func opesFinalPackageWorkKindV0(jobType string) bool {

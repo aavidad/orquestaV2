@@ -74,6 +74,14 @@
   metadata `course_id`/`source_variant` o equivalente, o si un
   `visuals_manifest.json`/`visual_reuse_manifest.json` declara assets que ya no
   estan presentes y referenciados en `html_final`/`html_ampliado` tras rebuild.
+- Required tests OPES de QA tests/tutor: `generate_question_bank` declara
+  `opes-question-bank-publicable-*` con 50 preguntas por tema, 4 opciones,
+  respuesta unica, distractores plausibles, explicaciones tutor, informes de
+  estructura/dificultad y revision 100% Codex/Gemini/Claude; `generate_tutor_assets`
+  declara `opes-tutor-assets-publicable-*` con paquete tutor/bots, guardas de
+  alcance, QA por tema/apartado y RAG canonico reconstruido desde HTML/tests/tutor
+  limpios. `finalize_temario_package` exige ambas evidencias separadas en el
+  manifest de cierre.
 - Routing de proveedores en Orquesta:
   `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server -run 'TestClaude|TestProviderLaunchSpecResolverV0RuteaReview|TestProviderAwareAckPathResolverV0UsaRuntimeClaude|TestGeminiRuntimeConfig|TestClaudeRuntimeConfig'`.
   Debe demostrar que `review_gemini` se materializa por Gemini cuando esta
