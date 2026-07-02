@@ -134,15 +134,21 @@ smoke_shutdown_orquesta_server() {
   local base_url="${2:-}"
   local shutdown_timeout="${3:-5}"
   local grace_polls="${4:-25}"
+  local runtime_dir="${5:-}"
   if [[ -z "$server_pid" ]] || ! kill -0 "$server_pid" >/dev/null 2>&1; then
+    smoke_cleanup_codex_app_server_tmux_runtime "$runtime_dir"
     return 0
   fi
   if [[ -n "$base_url" ]] && command -v curl >/dev/null 2>&1; then
-    curl -sS -m "$shutdown_timeout" -X POST "$base_url/api/v0/server/shutdown" >/dev/null 2>&1 || true
+    curl -sS -m "$shutdown_timeout" -X POST "$base_url/api/v0/server/shutdown" \
+      -H "Content-Type: application/json" \
+      -d '{"request_id":"req-smoke-shutdown-cleanup","correlation_id":"corr-smoke-shutdown-cleanup","reason":"smoke_shutdown_orquesta_server","cleanup_goal_backends":true}' \
+      >/dev/null 2>&1 || true
     local _
     for _ in $(seq 1 "$grace_polls"); do
       if ! kill -0 "$server_pid" >/dev/null 2>&1; then
         wait "$server_pid" >/dev/null 2>&1 || true
+        smoke_cleanup_codex_app_server_tmux_runtime "$runtime_dir"
         return 0
       fi
       sleep 0.2
@@ -154,6 +160,7 @@ smoke_shutdown_orquesta_server() {
     for _ in $(seq 1 "$grace_polls"); do
       if ! kill -0 "$server_pid" >/dev/null 2>&1; then
         wait "$server_pid" >/dev/null 2>&1 || true
+        smoke_cleanup_codex_app_server_tmux_runtime "$runtime_dir"
         return 0
       fi
       sleep 0.2
@@ -163,6 +170,129 @@ smoke_shutdown_orquesta_server() {
     kill -TERM "$server_pid" >/dev/null 2>&1 || true
   fi
   wait "$server_pid" >/dev/null 2>&1 || true
+  smoke_cleanup_codex_app_server_tmux_runtime "$runtime_dir"
+}
+
+smoke_cleanup_codex_app_server_tmux_runtime() {
+  local runtime_dir="${1:-}"
+  if [[ -z "$runtime_dir" ]]; then
+    return 0
+  fi
+  local goal_dir="$runtime_dir/goal-srv"
+  if [[ ! -d "$goal_dir" ]]; then
+    return 0
+  fi
+  local owner_file="$goal_dir/owner.json"
+  if [[ -f "$owner_file" ]] && command -v python3 >/dev/null 2>&1; then
+    local tmux_session
+    tmux_session="$(python3 - "$owner_file" <<'PY' 2>/dev/null || true
+import json, sys
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+except (OSError, json.JSONDecodeError):
+    data = {}
+session = str(data.get("session_name", "")).strip()
+owner = str(data.get("owner_ref", "")).strip()
+if owner == "orquesta-codex-goal-app-server-tmux-v0" and session.startswith("orquesta-goal-"):
+    print(session)
+PY
+)"
+    if [[ -n "$tmux_session" ]] && command -v tmux >/dev/null 2>&1; then
+      tmux kill-session -t "$tmux_session" >/dev/null 2>&1 || true
+    fi
+  fi
+  smoke_stop_codex_app_server_runtime_owned_processes "$goal_dir"
+  if [[ -d "$goal_dir" ]]; then
+    find "$goal_dir" -maxdepth 1 \( -type s -o -name '*.sock' \) -exec rm -f {} + 2>/dev/null || true
+  fi
+  rm -f "$owner_file" 2>/dev/null || true
+}
+
+smoke_stop_codex_app_server_runtime_owned_processes() {
+  local goal_dir="${1:-}"
+  if [[ -z "$goal_dir" || ! -d "$goal_dir" ]] || ! command -v python3 >/dev/null 2>&1; then
+    return 0
+  fi
+  local pids
+  pids="$(python3 - "$goal_dir" <<'PY' 2>/dev/null || true
+import os, sys
+goal = os.path.realpath(sys.argv[1])
+self_pid = os.getpid()
+out = []
+for name in os.listdir("/proc"):
+    if not name.isdigit():
+        continue
+    pid = int(name)
+    if pid == self_pid:
+        continue
+    proc = os.path.join("/proc", name)
+    try:
+        raw = open(os.path.join(proc, "cmdline"), "rb").read().replace(b"\0", b" ").decode("utf-8", "ignore")
+    except OSError:
+        continue
+    if "codex" not in raw or "app-server" not in raw:
+        continue
+    owned = False
+    try:
+        cwd = os.path.realpath(os.readlink(os.path.join(proc, "cwd")))
+        owned = cwd == goal or cwd.startswith(goal + os.sep)
+    except OSError:
+        pass
+    if not owned:
+        try:
+            env = open(os.path.join(proc, "environ"), "rb").read().split(b"\0")
+        except OSError:
+            env = []
+        for item in env:
+            if item.startswith(b"CODEX_HOME="):
+                home = os.path.realpath(item.split(b"=", 1)[1].decode("utf-8", "ignore"))
+                if home == goal or home.startswith(goal + os.sep):
+                    owned = True
+                break
+    if owned:
+        out.append(str(pid))
+print(" ".join(out))
+PY
+)"
+  if [[ -z "$pids" ]]; then
+    return 0
+  fi
+  local pid
+  for pid in $pids; do
+    kill "$pid" >/dev/null 2>&1 || true
+  done
+  local _
+  for _ in $(seq 1 20); do
+    pids="$(python3 - "$goal_dir" <<'PY' 2>/dev/null || true
+import os, sys
+goal = os.path.realpath(sys.argv[1])
+out = []
+for name in os.listdir("/proc"):
+    if not name.isdigit():
+        continue
+    proc = os.path.join("/proc", name)
+    try:
+        raw = open(os.path.join(proc, "cmdline"), "rb").read().replace(b"\0", b" ").decode("utf-8", "ignore")
+    except OSError:
+        continue
+    if "codex" not in raw or "app-server" not in raw:
+        continue
+    try:
+        cwd = os.path.realpath(os.readlink(os.path.join(proc, "cwd")))
+    except OSError:
+        cwd = ""
+    if cwd == goal or cwd.startswith(goal + os.sep):
+        out.append(name)
+print(" ".join(out))
+PY
+)"
+    [[ -z "$pids" ]] && return 0
+    sleep 0.25
+  done
+  for pid in $pids; do
+    kill -KILL "$pid" >/dev/null 2>&1 || true
+  done
 }
 
 smoke_temp_root_abs() {

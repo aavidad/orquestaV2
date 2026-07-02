@@ -59,7 +59,7 @@ sleep_seconds="${ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS:-5}"
 goal_backend="${ORQUESTA_CODEX_GOAL_BACKEND:-app_server_tmux}"
 
 cleanup() {
-  smoke_shutdown_orquesta_server "$server_pid" "$base_url"
+  smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 25 "$runtime_dir"
   local tmux_owner="$runtime_dir/goal-srv/owner.json"
   if [[ -f "$tmux_owner" ]] && command -v python3 >/dev/null 2>&1 && command -v tmux >/dev/null 2>&1; then
     local tmux_session

@@ -149,6 +149,31 @@ func TestSmokeGoalFirstAppServerRealShutdownLimpiaBackendPropioYReintentaV0(t *t
 	}
 }
 
+func TestSmokeCommonShutdownCleanupBackendGoalSiWrapperCancelaV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	common := readOperationalDocGuardV0(t, root, "scripts/lib/smoke_common.sh")
+	smoke := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+
+	for _, want := range []string{
+		`local runtime_dir="${5:-}"`,
+		"cleanup_goal_backends",
+		"smoke_cleanup_codex_app_server_tmux_runtime",
+		"smoke_stop_codex_app_server_runtime_owned_processes",
+		`owner == "orquesta-codex-goal-app-server-tmux-v0"`,
+		`session.startswith("orquesta-goal-")`,
+		`"codex" not in raw or "app-server" not in raw`,
+		"CODEX_HOME=",
+		"kill -KILL",
+	} {
+		if !strings.Contains(common, want) {
+			t.Fatalf("smoke common no limpia backend goal propio al cancelar wrapper: falta %q", want)
+		}
+	}
+	if !strings.Contains(smoke, `smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 25 "$runtime_dir"`) {
+		t.Fatalf("smoke goal-first no pasa runtime_dir al cleanup comun")
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
