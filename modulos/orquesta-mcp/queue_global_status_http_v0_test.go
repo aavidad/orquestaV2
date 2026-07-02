@@ -587,6 +587,45 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0PropagaFaseYCountersOPESRetryFromPhase
 	}
 }
 
+func TestMCPQueueGlobalStatusHTTPHandlerV0ConservaRepairReceiptGoalFirst(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				Blocked: 1,
+			},
+			StaleRunning: []MCPAutoprogrammingActionableRunV0{{
+				Code:              mcpAutoprogrammingActionGoalFirstBlockedV0,
+				RunRef:            "run-ref-global-status-repair-receipt-001",
+				RecommendedAction: MCPGoalFirstRepairReceiptActionV0,
+				EvidenceRefs:      []string{"evidence-ref-repair-receipt"},
+			}},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	NewMCPQueueGlobalStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !hasMCPQueueGlobalStatusItemForTestV0(
+		result.Items,
+		"run-ref-global-status-repair-receipt-001",
+		mcpAutoprogrammingActionGoalFirstBlockedV0,
+		true,
+		MCPGoalFirstRepairReceiptActionV0,
+	) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPQueueGlobalStatusHTTPHandlerV0AcceptedNoRequiereAccion(t *testing.T) {
 	executor := &fakeMCPQueueGlobalStatusExecutorV0{
 		result: MCPAutoprogrammingStatusToolResultV0{
