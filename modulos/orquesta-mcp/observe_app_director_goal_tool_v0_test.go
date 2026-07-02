@@ -23,3 +23,25 @@ func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0QAFailedPublicText
 		t.Fatalf("result=%+v", result)
 	}
 }
+
+func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0ArtifactPathsOmitidosPideRepairReceipt(t *testing.T) {
+	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
+		MCPObserveAppDirectorGoalToolResultV0{
+			GoalRef:    "goal-ref-observe-artifact-paths-omitted-001",
+			GoalStatus: "blocked",
+		},
+		MCPDirectorGoalMaterializedRefsV0{
+			ArtifactRefs: []string{"artifact-ref-materialized-omitted-path-001"},
+			EvidenceRefs: []string{"evidence-ref-goal-materialized-artifact-paths-omitted"},
+			IssueCodes:   []string{MCPGoalFirstArtifactPathsOmittedMaterializedV0},
+		},
+	)
+
+	if result.RecommendedAction != MCPGoalFirstRepairReceiptActionV0 ||
+		len(result.ClosureIssues) != 1 ||
+		result.ClosureIssues[0].Code != MCPGoalFirstArtifactPathsOmittedMaterializedV0 ||
+		result.ClosureIssues[0].Field != "goal_first.artifact_paths" ||
+		!containsStringMCPV0(result.ArtifactRefs, "artifact-ref-materialized-omitted-path-001") {
+		t.Fatalf("result=%+v", result)
+	}
+}

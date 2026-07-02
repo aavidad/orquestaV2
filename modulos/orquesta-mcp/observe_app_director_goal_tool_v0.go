@@ -199,6 +199,9 @@ func mcpObserveAppDirectorGoalRecommendedActionV0(
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstQAFailedPublicTextV0) {
 		return MCPGoalFirstReworkPublicTextActionV0
 	}
+	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstArtifactPathsOmittedMaterializedV0) {
+		return MCPGoalFirstRepairReceiptActionV0
+	}
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
 		return MCPGoalFirstRepairReceiptActionV0
 	}
@@ -322,6 +325,8 @@ func EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
 		field := "goal_first.receipt"
 		if code == MCPGoalFirstQAFailedPublicTextV0 {
 			field = "goal_first.qa_public_text"
+		} else if code == MCPGoalFirstArtifactPathsOmittedMaterializedV0 {
+			field = "goal_first.artifact_paths"
 		}
 		result.ClosureIssues = append(result.ClosureIssues, MCPValidationIssueV0{
 			Code:    code,

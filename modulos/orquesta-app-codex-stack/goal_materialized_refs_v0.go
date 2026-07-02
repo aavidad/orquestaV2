@@ -23,6 +23,7 @@ const (
 	goalMaterializedGoalResultFileV0               = "orquesta_goal_result_v0.json"
 	goalMaterializedCheckpointFileV0               = "checkpoint_started.txt"
 	goalMaterializedMissingTerminalReceiptEvidence = "evidence-ref-goal-materialized-missing-terminal-receipt-after-artifacts-pass"
+	goalMaterializedArtifactPathsOmittedEvidence   = "evidence-ref-goal-materialized-artifact-paths-omitted"
 	goalMaterializedQAFailedPublicTextEvidence     = "evidence-ref-goal-materialized-qa-failed-public-text"
 )
 
@@ -42,6 +43,7 @@ type goalMaterializedRefsScanV0 struct {
 	HasQAPass          bool
 	HasQAFail          bool
 	HasTerminalReceipt bool
+	ArtifactPaths      []string
 }
 
 func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedRefsV0(
@@ -83,6 +85,13 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 			"expected-terminal-receipt:"+safeGoalMaterializedRefPartV0(goalMaterializedGoalResultFileV0),
 			"expected-terminal-receipt:"+safeGoalMaterializedRefPartV0(goalMaterializedOPESReworkDeliveryFileV0),
 		)
+	}
+	if omitted := goalMaterializedArtifactPathsOmittedV0(state, scan.ArtifactPaths); len(omitted) > 0 {
+		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstArtifactPathsOmittedMaterializedV0)
+		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedArtifactPathsOmittedEvidence)
+		for _, path := range omitted {
+			result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedArtifactPathOmittedRefV0(state.RunRef, path))
+		}
 	}
 	if source.RepairMissingTerminalReceipt &&
 		source.GoalStateStore != nil &&
@@ -193,6 +202,9 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalMaterializedFileV0(
 	if goalMaterializedFileLooksLikeArtifactV0(projectRoot, path, base) {
 		scan.HasArtifact = true
 		scan.Result.ArtifactRefs = append(scan.Result.ArtifactRefs, goalMaterializedArtifactRefV0(projectRoot, path, state.RunRef))
+		if rel := goalMaterializedRelPathV0(projectRoot, path); rel != "" {
+			scan.ArtifactPaths = append(scan.ArtifactPaths, rel)
+		}
 	}
 	if goalMaterializedFileLooksLikeQAReportV0(projectRoot, path, base, info, state) {
 		scan.HasQAPass = true
@@ -215,6 +227,7 @@ func mergeGoalMaterializedRefsScanV0(
 	current.Result.ExpectedReceiptRefs = compactStringsV0(append(current.Result.ExpectedReceiptRefs, next.Result.ExpectedReceiptRefs...))
 	current.Result.EvidenceRefs = compactStringsV0(append(current.Result.EvidenceRefs, next.Result.EvidenceRefs...))
 	current.Result.IssueCodes = compactStringsV0(append(current.Result.IssueCodes, next.Result.IssueCodes...))
+	current.ArtifactPaths = compactStringsV0(append(current.ArtifactPaths, next.ArtifactPaths...))
 	current.FilesScanned += next.FilesScanned
 	current.HasArtifact = current.HasArtifact || next.HasArtifact
 	current.HasQAPass = current.HasQAPass || next.HasQAPass
@@ -676,6 +689,34 @@ func goalMaterializedMissingTerminalReceiptHandledV0(state orquestagoal.GoalWork
 		goalFirstStringSliceContainsV0(state.LastResult.EvidenceRefs, goalFirstRepairReceiptAttemptedEvidenceRefV0)
 }
 
+func goalMaterializedArtifactPathsOmittedV0(
+	state orquestagoal.GoalWorkStateV0,
+	materialized []string,
+) []string {
+	state = orquestagoal.NormalizeGoalWorkStateV0(state)
+	if !state.Spec.ClosurePolicy.RequireArtifactPaths ||
+		state.LastResult == nil ||
+		strings.TrimSpace(state.LastResult.Status) != orquestagoal.GoalStatusCompleteV0 {
+		return nil
+	}
+	declared := map[string]bool{}
+	for _, path := range state.LastResult.ArtifactPaths {
+		path = filepath.ToSlash(filepath.Clean(strings.TrimSpace(path)))
+		if path != "" && path != "." {
+			declared[path] = true
+		}
+	}
+	omitted := make([]string, 0)
+	for _, path := range compactStringsV0(materialized) {
+		path = filepath.ToSlash(filepath.Clean(strings.TrimSpace(path)))
+		if path == "" || path == "." || declared[path] {
+			continue
+		}
+		omitted = append(omitted, path)
+	}
+	return compactStringsV0(omitted)
+}
+
 func goalFirstStringSliceContainsV0(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
@@ -683,6 +724,21 @@ func goalFirstStringSliceContainsV0(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func goalMaterializedRelPathV0(
+	projectRoot string,
+	path string,
+) string {
+	rel, err := filepath.Rel(filepath.Clean(projectRoot), filepath.Clean(path))
+	if err != nil {
+		return ""
+	}
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	if rel == "." || strings.HasPrefix(rel, "../") || rel == ".." {
+		return ""
+	}
+	return rel
 }
 
 func goalMaterializedQAPassRefV0(
@@ -696,6 +752,13 @@ func goalMaterializedQAPassRefV0(
 	}
 	rel = filepath.ToSlash(filepath.Clean(rel))
 	return "evidence-ref-goal-materialized-qa-pass:" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(rel)
+}
+
+func goalMaterializedArtifactPathOmittedRefV0(
+	runRef string,
+	path string,
+) string {
+	return goalMaterializedArtifactPathsOmittedEvidence + ":" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(path)
 }
 
 func goalMaterializedQAFailRefV0(

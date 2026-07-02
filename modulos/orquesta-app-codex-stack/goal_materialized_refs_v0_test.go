@@ -311,6 +311,45 @@ func TestStackGoalMaterializedRefsSourceV0DetectaQAFailedPublicTextEnContextoOPE
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0DetectaArtifactPathsOmitidosEnReceiptTerminal(t *testing.T) {
+	projectDir := t.TempDir()
+	topicDir := filepath.Join(projectDir, "temas", "tema_035")
+	if err := os.MkdirAll(topicDir, 0o700); err != nil {
+		t.Fatalf("mkdir topic: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "plan_rework_por_fases.md"), []byte("# Plan\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "matriz_fuentes_reutilizacion.md"), []byte("# Matriz\n"), 0o600); err != nil {
+		t.Fatalf("write omitted artifact: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "orquesta_goal_result_v0.json"), []byte(`{"status":"complete"}`), 0o600); err != nil {
+		t.Fatalf("write receipt: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-omitted-paths-001", "temas/tema_035")
+	state.Spec.ClosurePolicy.RequireArtifactPaths = true
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+		Status:        orquestagoal.GoalStatusCompleteV0,
+		GoalRef:       state.GoalRef,
+		ArtifactPaths: []string{"temas/tema_035/plan_rework_por_fases.md"},
+		ArtifactRefs:  []string{"artifact-ref-plan-rework"},
+	}
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		!containsStringV0(result.IssueCodes, "artifact_paths_omitted_materialized") ||
+		!containsStringPrefixForTestV0(result.EvidenceRefs, "evidence-ref-goal-materialized-artifact-paths-omitted:") ||
+		!containsStringPrefixForTestV0(result.ArtifactRefs, "artifact-ref-materialized:") {
+		t.Fatalf("artifact_paths omitidos no detectados: ok=%v result=%+v", ok, result)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0NoAceptaQAPassPorTextoLibre(t *testing.T) {
 	projectDir := t.TempDir()
 	topicDir := filepath.Join(projectDir, "temas", "tema_030")

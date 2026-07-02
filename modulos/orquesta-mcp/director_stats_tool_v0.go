@@ -485,6 +485,20 @@ func applyMCPDirectorGoalProgressProjectionV0(
 		})
 		return
 	}
+	if containsStringMCPV0(goal.IssueCodes, MCPGoalFirstArtifactPathsOmittedMaterializedV0) {
+		stats.Status = MCPGoalFirstArtifactPathsOmittedMaterializedV0
+		stats.Closure.BlockedBy = compactStringsMCPV0(append(
+			stats.Closure.BlockedBy,
+			MCPGoalFirstArtifactPathsOmittedMaterializedV0,
+		))
+		stats.Closure.BlockerRefs = compactStringsMCPV0(append(stats.Closure.BlockerRefs, goal.EvidenceRefs...))
+		stats.Progress.Issues = append(stats.Progress.Issues, orquestacionnucleoapp.DirectorProgressIssueV0{
+			Code:    MCPGoalFirstArtifactPathsOmittedMaterializedV0,
+			Field:   "goal_first.artifact_paths",
+			Message: "goal_first terminal receipt omitted materialized artifact paths from the declared write_set; repair receipt before closure",
+		})
+		return
+	}
 	if containsStringMCPV0(goal.IssueCodes, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
 		stats.Status = MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0
 		stats.Closure.BlockedBy = compactStringsMCPV0(append(

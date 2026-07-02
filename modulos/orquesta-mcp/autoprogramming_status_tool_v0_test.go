@@ -1445,6 +1445,56 @@ func TestMCPAutoprogrammingStatusExecutorV0QAFailedPublicTextPideReworkV0(t *tes
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0ArtifactPathsOmitidosPideRepairReceiptV0(t *testing.T) {
+	runRef := "run-ref-autop-status-artifact-paths-omitted-001"
+	goalRef := "goal-ref-autop-status-artifact-paths-omitted-001"
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: runRef,
+			Status: MCPGoalFirstArtifactPathsOmittedMaterializedV0,
+			Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
+				Status:    orquestacionnucleoapp.DirectorClosureStatusBlockedV0,
+				Blocked:   true,
+				BlockedBy: []string{MCPGoalFirstArtifactPathsOmittedMaterializedV0},
+			},
+			Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+				Issues: []orquestacionnucleoapp.DirectorProgressIssueV0{{
+					Code:  MCPGoalFirstArtifactPathsOmittedMaterializedV0,
+					Field: "goal_first.artifact_paths",
+				}},
+			},
+		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Status:       orquestagoal.GoalStatusBlockedV0,
+			ArtifactRefs: []string{"artifact-ref-materialized-omitted-path-001"},
+			EvidenceRefs: []string{"evidence-ref-goal-materialized-artifact-paths-omitted"},
+			IssueCodes:   []string{MCPGoalFirstArtifactPathsOmittedMaterializedV0},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{empty: true},
+		Stats: stats,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{RunRef: runRef})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != MCPGoalFirstArtifactPathsOmittedMaterializedV0 ||
+		action.RecommendedAction != MCPGoalFirstRepairReceiptActionV0 ||
+		action.GoalRef != goalRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.ArtifactRefs, "artifact-ref-materialized-omitted-path-001") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-autoprogramming-status-artifact-paths-omitted-materialized") {
+		t.Fatalf("action=%+v", action)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0ListaGoalMarkerSinStateAunqueColaNoVisible(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-marker-listed-001"
 	goalRef := "goal-ref-autop-status-goal-marker-listed-001"

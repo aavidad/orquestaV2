@@ -22,6 +22,7 @@ const (
 	mcpAutoprogrammingActionGoalFirstStateMissingV0           = "goal_first_state_missing"
 	mcpAutoprogrammingActionGoalFirstBlockedV0                = "goal_first_blocked"
 	mcpAutoprogrammingActionMissingTerminalReceiptV0          = MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0
+	mcpAutoprogrammingActionArtifactPathsOmittedV0            = MCPGoalFirstArtifactPathsOmittedMaterializedV0
 	mcpAutoprogrammingActionQAFailedPublicTextV0              = MCPGoalFirstQAFailedPublicTextV0
 	mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0  = "goal_active_timeout_backend_active"
 	mcpAutoprogrammingEvidenceRunningStaleReconciledV0        = "evidence-ref-run-queue-running-stale-no-live-process-reconciled"
@@ -32,6 +33,7 @@ const (
 	mcpAutoprogrammingEvidenceGoalFirstStateMissingV0         = "evidence-ref-autoprogramming-status-goal-first-state-missing"
 	mcpAutoprogrammingEvidenceGoalFirstBlockedV0              = "evidence-ref-autoprogramming-status-goal-first-blocked"
 	mcpAutoprogrammingEvidenceMissingTerminalReceiptV0        = "evidence-ref-autoprogramming-status-missing-terminal-receipt-after-artifacts-pass"
+	mcpAutoprogrammingEvidenceArtifactPathsOmittedV0          = "evidence-ref-autoprogramming-status-artifact-paths-omitted-materialized"
 	mcpAutoprogrammingEvidenceQAFailedPublicTextV0            = "evidence-ref-autoprogramming-status-qa-failed-public-text"
 	mcpAutoprogrammingEvidenceGoalActiveTimeoutBackendV0      = "evidence-ref-autoprogramming-goal-active-timeout-backend-active"
 	mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0   = "evidence-ref-autoprogramming-no-checkpoint-high-consumption"
@@ -115,6 +117,32 @@ func mcpAutoprogrammingQAFailedPublicTextActionsV0(
 	return out
 }
 
+func mcpAutoprogrammingArtifactPathsOmittedActionsV0(
+	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
+) []MCPAutoprogrammingActionableRunV0 {
+	out := make([]MCPAutoprogrammingActionableRunV0, 0)
+	for runRef, observed := range observedByRunRef {
+		if !mcpAutoprogrammingObservedArtifactPathsOmittedV0(observed) {
+			continue
+		}
+		action := MCPAutoprogrammingActionableRunV0{
+			Code:              mcpAutoprogrammingActionArtifactPathsOmittedV0,
+			Severity:          "blocked",
+			RunRef:            strings.TrimSpace(runRef),
+			RunStatus:         mcpAutoprogrammingObservedRunStatusV0(observedByRunRef, runRef),
+			Reason:            "artifact_paths_omitted_materialized: materialized artifacts exist in the write_set but the terminal receipt omitted their paths",
+			RecommendedAction: MCPGoalFirstRepairReceiptActionV0,
+			EvidenceRefs: []string{
+				mcpAutoprogrammingEvidenceArtifactPathsOmittedV0,
+			},
+		}
+		action = mcpAutoprogrammingActionableRunWithObservedStatsV0(action, observed)
+		action = mcpAutoprogrammingActionableRunWithObservedGoalV0(action, observed)
+		out = append(out, action)
+	}
+	return out
+}
+
 func mcpAutoprogrammingObservedMissingTerminalReceiptV0(
 	observed *MCPDirectorStatsToolResultV0,
 ) bool {
@@ -129,6 +157,26 @@ func mcpAutoprogrammingObservedMissingTerminalReceiptV0(
 	}
 	for _, issue := range observed.Stats.Progress.Issues {
 		if strings.TrimSpace(issue.Code) == MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0 {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpAutoprogrammingObservedArtifactPathsOmittedV0(
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	if observed == nil {
+		return false
+	}
+	if observed.Goal != nil && containsStringMCPV0(observed.Goal.IssueCodes, MCPGoalFirstArtifactPathsOmittedMaterializedV0) {
+		return true
+	}
+	if observed.Stats == nil {
+		return false
+	}
+	for _, issue := range observed.Stats.Progress.Issues {
+		if strings.TrimSpace(issue.Code) == MCPGoalFirstArtifactPathsOmittedMaterializedV0 {
 			return true
 		}
 	}
