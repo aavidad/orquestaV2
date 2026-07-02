@@ -26,6 +26,7 @@ const (
 	codexStackExternalJobStatusReasonGoalFirstCompletePendingClosureV0            = "goal_first_complete_pending_closure"
 	codexStackExternalJobStatusReasonGoalFirstClosureAcceptedV0                   = "goal_first_closure_accepted"
 	codexStackExternalJobStatusReasonGoalFirstClosureBlockedV0                    = "goal_first_closure_blocked"
+	codexStackExternalJobStatusReasonGoalFirstClosureMissingDomainReceiptV0       = "goal_first_closure_missing_domain_receipt"
 	codexStackExternalJobStatusReasonGoalFirstBlockedV0                           = "goal_first_blocked"
 	codexStackExternalJobStatusReasonGoalFirstInvalidV0                           = "goal_first_invalid"
 	codexStackExternalJobStatusReasonGoalFirstStateMissingV0                      = "goal_first_state_missing"
@@ -310,7 +311,7 @@ func externalJobGoalFirstStatusV0(
 		}
 		if state.LastClosure.Accepted {
 			if state.LastResult == nil || len(compactCodexStackStringsV0(state.LastResult.DomainReceiptRefs)) == 0 {
-				return "blocked", codexStackExternalJobStatusReasonGoalFirstClosureBlockedV0
+				return "blocked", codexStackExternalJobStatusReasonGoalFirstClosureMissingDomainReceiptV0
 			}
 			return "completed", codexStackExternalJobStatusReasonGoalFirstClosureAcceptedV0
 		}
@@ -355,6 +356,8 @@ func externalJobGoalFirstDiagnosticMessageV0(
 		return "external job gobernado por GoalWorkStateV0; el loop legacy no aplica"
 	case codexStackExternalJobStatusReasonGoalFirstClosureAcceptedV0:
 		return "external job cerrado por goal-first con cierre aceptado"
+	case codexStackExternalJobStatusReasonGoalFirstClosureMissingDomainReceiptV0:
+		return "external job goal-first aceptado sin recibo de dominio; reparar receipt terminal antes de settled/completed"
 	case codexStackExternalJobStatusReasonGoalFirstClosureBlockedV0,
 		codexStackExternalJobStatusReasonGoalFirstBlockedV0,
 		codexStackExternalJobStatusReasonGoalFirstInvalidV0:

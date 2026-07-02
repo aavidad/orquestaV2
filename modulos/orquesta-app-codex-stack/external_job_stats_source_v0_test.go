@@ -276,10 +276,10 @@ func TestCodexStackExternalJobStatsSourceV0GoalFirstAcceptedSinReceiptNoCompleta
 	}
 	if !ok ||
 		stats.Status != "blocked" ||
-		stats.StatusReason != codexStackExternalJobStatusReasonGoalFirstClosureBlockedV0 ||
+		stats.StatusReason != codexStackExternalJobStatusReasonGoalFirstClosureMissingDomainReceiptV0 ||
 		!stats.ClosureAccepted ||
 		codexStackStringInSetForTestV0(stats.DeliveryRefs, "domain-receipt-ref-goal-first-external-job-001") ||
-		!codexStackExternalJobDiagnosticForTestV0(stats.Diagnostics, codexStackExternalJobStatusReasonGoalFirstClosureBlockedV0) {
+		!codexStackExternalJobDiagnosticForTestV0(stats.Diagnostics, codexStackExternalJobStatusReasonGoalFirstClosureMissingDomainReceiptV0) {
 		t.Fatalf("stats=%+v", stats)
 	}
 }
