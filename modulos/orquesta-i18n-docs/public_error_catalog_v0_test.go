@@ -23,10 +23,23 @@ func TestPublicErrorCatalogV0DeclaraMetadataYCodigosUnicos(t *testing.T) {
 		PublicErrorOperatorPortV0,
 		PublicErrorTransportV0,
 		PublicErrorRunRefRequiredV0,
+		PublicErrorRunControlGoalBackendActiveV0,
 	} {
 		if !seen[code] {
 			t.Fatalf("catalogo no contiene %s", code)
 		}
+	}
+}
+
+func TestPublicErrorCatalogV0RunControlGoalBackendActivoEsConflictRetryableV0(t *testing.T) {
+	descriptor, ok := PublicErrorDescriptorByCodeV0(PublicErrorRunControlGoalBackendActiveV0)
+	if !ok {
+		t.Fatalf("catalogo no contiene %s", PublicErrorRunControlGoalBackendActiveV0)
+	}
+	if descriptor.HTTPStatus != 409 ||
+		!descriptor.Retryable ||
+		descriptor.Severity != PublicErrorSeverityWarnV0 {
+		t.Fatalf("descriptor=%+v", descriptor)
 	}
 }
 

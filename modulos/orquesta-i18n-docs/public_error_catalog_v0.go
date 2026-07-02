@@ -58,6 +58,7 @@ const (
 	PublicErrorWebTransportMissingV0             = "transporte_no_configurado"
 	PublicErrorRunRefRequiredV0                  = "run_ref_requerido"
 	PublicErrorDomainWorkCompletedReviewFailedV0 = "domain_work_completed_review_failed"
+	PublicErrorRunControlGoalBackendActiveV0     = "control_not_propagated_to_goal_backend"
 )
 
 type PublicErrorDescriptorV0 struct {
@@ -143,6 +144,7 @@ var publicErrorCatalogV0 = []PublicErrorDescriptorV0{
 	publicErrorV0("external_work_run_timeout", "http", "mcp", 504, -32000, true, PublicErrorSeverityWarnV0),
 	publicErrorV0("run_control_no_configurado", "http", "mcp", 503, -32000, true, PublicErrorSeverityWarnV0),
 	publicErrorV0("run_control_timeout", "http", "mcp", 504, -32000, true, PublicErrorSeverityWarnV0),
+	publicErrorV0(PublicErrorRunControlGoalBackendActiveV0, "http", "mcp", 409, -32000, true, PublicErrorSeverityWarnV0),
 	publicErrorV0("run_supervisor_no_configurado", "http", "mcp", 503, -32000, true, PublicErrorSeverityWarnV0),
 	publicErrorV0("run_queue_no_configurado", "http", "mcp", 503, -32000, true, PublicErrorSeverityWarnV0),
 	publicErrorV0("director_stats_no_configurado", "http", "mcp", 503, -32000, true, PublicErrorSeverityWarnV0),
