@@ -665,7 +665,12 @@ func mcpQueueGlobalStatusNormalizeRecommendedActionV0(action string, fallback st
 		mcpQueueGlobalStatusActionReviewReplanGoalFirstV0,
 		mcpQueueGlobalStatusActionRetryFromPhaseV0,
 		mcpQueueGlobalStatusActionCloseSupersededByLocalEvidenceV0,
-		mcpQueueGlobalStatusActionRunControlReconcileCleanupV0:
+		mcpQueueGlobalStatusActionRunControlReconcileCleanupV0,
+		MCPGoalFirstRepairReceiptActionV0,
+		MCPGoalFirstReworkWriteSetViolationActionV0,
+		MCPGoalFirstReworkPublicTextActionV0,
+		MCPGoalFirstReviewPartialArtifactsActionV0,
+		MCPGoalFirstContinueFromPhase0ActionV0:
 		return action
 	}
 	if strings.Contains(action, "goal_state") ||

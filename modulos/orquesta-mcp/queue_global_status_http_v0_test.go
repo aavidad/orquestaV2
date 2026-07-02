@@ -529,6 +529,11 @@ func TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFir
 		mcpQueueGlobalStatusActionRetryFromPhaseV0,
 		mcpQueueGlobalStatusActionCloseSupersededByLocalEvidenceV0,
 		mcpQueueGlobalStatusActionRunControlReconcileCleanupV0,
+		MCPGoalFirstRepairReceiptActionV0,
+		MCPGoalFirstReworkWriteSetViolationActionV0,
+		MCPGoalFirstReworkPublicTextActionV0,
+		MCPGoalFirstReviewPartialArtifactsActionV0,
+		MCPGoalFirstContinueFromPhase0ActionV0,
 	} {
 		t.Run(action, func(t *testing.T) {
 			if got := mcpQueueGlobalStatusNormalizeRecommendedActionV0(action, "repair_runtime"); got != action {
