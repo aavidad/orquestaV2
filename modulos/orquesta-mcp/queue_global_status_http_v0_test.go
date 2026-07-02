@@ -523,12 +523,55 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstBlockedDesdeDiagnosticoNoRepa
 	}
 }
 
+func TestMCPQueueGlobalStatusHTTPHandlerV0ConservaObserveGoalBackendNextArtifact(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				RunningStale: 1,
+			},
+			StaleRunning: []MCPAutoprogrammingActionableRunV0{{
+				Code:              "checkpoint_only_consumption_warning",
+				RunRef:            "run-ref-global-status-checkpoint-next-artifact-001",
+				AppRef:            "app-ref-global-status-checkpoint",
+				RecommendedAction: mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0,
+				EvidenceRefs:      []string{"artifact-ref-checkpoint"},
+			}},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	NewMCPQueueGlobalStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !hasMCPQueueGlobalStatusItemForTestV0(
+		result.Items,
+		"run-ref-global-status-checkpoint-next-artifact-001",
+		"checkpoint_only_consumption_warning",
+		true,
+		mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0,
+	) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFirstEspecificas(t *testing.T) {
 	for _, action := range []string{
 		mcpQueueGlobalStatusActionReviewReplanGoalFirstV0,
 		mcpQueueGlobalStatusActionRetryFromPhaseV0,
 		mcpQueueGlobalStatusActionCloseSupersededByLocalEvidenceV0,
 		mcpQueueGlobalStatusActionRunControlReconcileCleanupV0,
+		mcpQueueGlobalStatusActionObserveGoalRequireCheckpointV0,
+		mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0,
+		mcpQueueGlobalStatusActionObserveGoalWaitForCheckpointV0,
 		MCPGoalFirstRepairReceiptActionV0,
 		MCPGoalFirstReworkWriteSetViolationActionV0,
 		MCPGoalFirstReworkPublicTextActionV0,

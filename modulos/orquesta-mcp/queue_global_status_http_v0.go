@@ -23,6 +23,9 @@ const (
 	mcpQueueGlobalStatusActionRetryFromPhaseV0                 = "retry_from_phase"
 	mcpQueueGlobalStatusActionCloseSupersededByLocalEvidenceV0 = "close_superseded_by_local_evidence"
 	mcpQueueGlobalStatusActionRunControlReconcileCleanupV0     = "run_control_reconcile_external_cleanup"
+	mcpQueueGlobalStatusActionObserveGoalRequireCheckpointV0   = "observe_goal_backend_require_checkpoint"
+	mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0 = "observe_goal_backend_require_next_artifact"
+	mcpQueueGlobalStatusActionObserveGoalWaitForCheckpointV0   = "observe_goal_backend_wait_for_checkpoint"
 )
 
 type MCPQueueGlobalStatusResultV0 struct {
@@ -666,6 +669,9 @@ func mcpQueueGlobalStatusNormalizeRecommendedActionV0(action string, fallback st
 		mcpQueueGlobalStatusActionRetryFromPhaseV0,
 		mcpQueueGlobalStatusActionCloseSupersededByLocalEvidenceV0,
 		mcpQueueGlobalStatusActionRunControlReconcileCleanupV0,
+		mcpQueueGlobalStatusActionObserveGoalRequireCheckpointV0,
+		mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0,
+		mcpQueueGlobalStatusActionObserveGoalWaitForCheckpointV0,
 		MCPGoalFirstRepairReceiptActionV0,
 		MCPGoalFirstReworkWriteSetViolationActionV0,
 		MCPGoalFirstReworkPublicTextActionV0,
