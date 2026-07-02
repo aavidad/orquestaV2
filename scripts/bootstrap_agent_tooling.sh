@@ -129,14 +129,17 @@ print_status() {
   config_has_mcp="$(codebase_config_present "$config_file")"
   live_processes="$(codebase_process_count)"
   estado="ok"
+  next_action="none"
   if [ "$config_has_mcp" = "1" ] && [ "$direct_mcp" != "true" ]; then
     estado="attention_required"
+    next_action="remove_direct_mcp_config_or_enable_explicit_opt_in"
   fi
   if [ "$live_processes" != "0" ] && [ "$live_processes" != "unknown" ]; then
     estado="attention_required"
+    next_action="stop_orphan_codebase_memory_mcp_processes"
   fi
-  printf 'agent_tooling_status: estado=%s repo=%s codex_home=%s tool=%s ledger_enabled=%s direct_mcp=%s broker_state_dir=%s config_codebase_memory_mcp=%s live_codebase_memory_mcp_processes=%s policy=broker_only\n' \
-    "$estado" "$repo_root" "$codex_home" "$tool_bin" "$ledger_enabled" "$direct_mcp" "$broker_state_dir" "$config_has_mcp" "$live_processes"
+  printf 'agent_tooling_status: estado=%s repo=%s codex_home=%s tool=%s ledger_enabled=%s direct_mcp=%s broker_state_dir=%s config_codebase_memory_mcp=%s live_codebase_memory_mcp_processes=%s next_action=%s policy=broker_only\n' \
+    "$estado" "$repo_root" "$codex_home" "$tool_bin" "$ledger_enabled" "$direct_mcp" "$broker_state_dir" "$config_has_mcp" "$live_processes" "$next_action"
 }
 
 if [ "$status_only" -eq 1 ]; then
@@ -197,7 +200,10 @@ For Orquesta repositories:
 - use Orquesta broker endpoints/tools for code context by default;
 - direct MCP install requires explicit operator opt-in and --install-direct-mcp;
 - run scripts/bootstrap_agent_tooling.sh --status before long sessions when
-  investigating duplicate codebase-memory-mcp processes.
+  investigating duplicate codebase-memory-mcp processes;
+- if --status reports live_codebase_memory_mcp_processes above zero without an
+  active Orquesta broker lease, stop the orphan processes cooperatively or start
+  the configured Orquesta watchdog instead of leaving them attached to sessions.
 <!-- orquesta-agent-tooling-codebase-broker:end -->
 EOF
 fi
