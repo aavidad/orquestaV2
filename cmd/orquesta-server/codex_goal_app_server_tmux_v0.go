@@ -437,6 +437,9 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 	socketPath := strings.TrimSpace(backend.SocketPath)
 	nextSessionCheck := time.Now()
 	for {
+		if ctx.Err() != nil {
+			return backend.tmuxStartupFailureV0("codex_app_server_tmux_socket_timeout", ctx.Err())
+		}
 		if _, err := os.Stat(socketPath); err == nil &&
 			backend.ensureTmuxSocketPrivateV0() == nil &&
 			preflight.ProbeV0(ctx) == nil {
@@ -444,6 +447,9 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 		}
 		if !nextSessionCheck.After(time.Now()) {
 			hasSession, err := backend.tmuxHasSessionV0(ctx, tmuxPath)
+			if ctx.Err() != nil {
+				return backend.tmuxStartupFailureV0("codex_app_server_tmux_socket_timeout", ctx.Err())
+			}
 			if err != nil {
 				return err
 			}

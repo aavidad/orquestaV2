@@ -100,18 +100,43 @@ func TestFlakyHarnessV0RepiteCasoDirectorRecursiveFakeRuntimeV0(t *testing.T) {
 		)
 	}
 	preflightCancel()
+	binaryPath := filepath.Join(childTempDir, "orquesta-server-flaky-harness.test")
+	compileCtx, compileCancel := context.WithTimeout(context.Background(), flakyHarnessAttemptTimeoutV0)
+	compile := exec.CommandContext(
+		compileCtx,
+		"go",
+		"test",
+		"-c",
+		"./cmd/orquesta-server",
+		"-o",
+		binaryPath,
+	)
+	compile.Dir = projectRootForFlakyHarnessV0(t)
+	compile.Env = childEnv
+	var compileStdout bytes.Buffer
+	var compileStderr bytes.Buffer
+	compile.Stdout = &compileStdout
+	compile.Stderr = &compileStderr
+	if err := compile.Run(); err != nil {
+		compileCancel()
+		t.Fatalf("compilar testbin child: %v stdout=%s stderr=%s",
+			err,
+			goSmokeDiagnosticForTestV0(compileStdout.String()),
+			goSmokeDiagnosticForTestV0(compileStderr.String()),
+		)
+	}
+	compileCancel()
 	for attempt := 1; attempt <= flakyHarnessAttemptsV0; attempt++ {
 		ctx, cancel := context.WithTimeout(context.Background(), flakyHarnessAttemptTimeoutV0)
 		cmd := exec.CommandContext(
 			ctx,
-			"go",
-			"test",
-			"-count=1",
-			"./cmd/orquesta-server",
-			"-run",
+			binaryPath,
+			"-test.run",
 			"^TestCodexLaunchDirectorWaveCommandV0RecursiveFakeRuntimeEjecutableConLinaje$",
-			"-timeout",
+			"-test.timeout",
 			flakyHarnessChildTestTimeoutV0.String(),
+			"-test.count",
+			"1",
 		)
 		cmd.Dir = projectRootForFlakyHarnessV0(t)
 		cmd.Env = childEnv
