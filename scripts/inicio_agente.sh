@@ -68,7 +68,7 @@ check_readiness() {
   fi
   command -v curl >/dev/null 2>&1 || fail_public "curl_no_disponible"
   readiness="$(curl -fsS --max-time 2 "$server_url/api/v0/server/readiness" 2>/dev/null || true)"
-  [ -n "$readiness" ] || fail_public "servidor_no_disponible: arranque go run ./cmd/orquesta-server run"
+  [ -n "$readiness" ] || fail_public "servidor_no_disponible: arranque orquesta-server start o use el servidor residente gobernado"
   printf '%s' "$readiness" | grep -q '"ready"[[:space:]]*:[[:space:]]*true' || fail_public "servidor_no_ready"
 }
 

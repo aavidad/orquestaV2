@@ -196,6 +196,23 @@ func TestSmokesAisladosPasanRuntimeDirAlShutdownComunV0(t *testing.T) {
 	}
 }
 
+func TestInicioAgenteNoRecomiendaRuntimeManualV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/inicio_agente.sh")
+
+	if strings.Contains(text, "go run ./cmd/orquesta-server run") {
+		t.Fatalf("inicio_agente no debe recomendar runtime manual no gobernado")
+	}
+	for _, want := range []string{
+		"orquesta-server start",
+		"servidor residente gobernado",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("inicio_agente debe orientar a servidor gestionado: falta %q", want)
+		}
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
