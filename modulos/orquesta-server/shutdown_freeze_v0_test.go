@@ -321,6 +321,34 @@ func TestShutdownProjectionFromHTTPV0StopPendingNoPublicaReadyV0(t *testing.T) {
 	}
 }
 
+func TestShutdownProjectionFromHTTPV0ConservaActiveWorkRefsV0(t *testing.T) {
+	body := []byte(`{
+		"estado":"ok",
+		"status":"backend_still_running",
+		"shutdown_ready":false,
+		"active_work_count":1,
+		"active_works":[{
+			"kind":"goal_backend",
+			"run_ref":"run-ref-shutdown-active-001",
+			"work_ref":"goal-ref-shutdown-active-001",
+			"external_work_ref":"thread-ref-shutdown-active-001",
+			"status":"backend_still_running"
+		}]
+	}`)
+
+	projection, keepFrozen := shutdownProjectionFromHTTPV0(http.StatusConflict, body)
+
+	if keepFrozen ||
+		projection.Ready ||
+		projection.Status != "backend_still_running" ||
+		projection.ActiveWorkCount != 1 ||
+		!hasShutdownProjectionRefForTestV0(projection.ActiveWorkRefs, "shutdown-active-work-goal-backend-run-ref-shutdown-active-001") ||
+		!hasShutdownProjectionRefForTestV0(projection.ActiveWorkRefs, "shutdown-active-work-goal-backend-goal-ref-shutdown-active-001") ||
+		!hasShutdownProjectionRefForTestV0(projection.ActiveWorkRefs, "shutdown-active-work-goal-backend-thread-ref-shutdown-active-001") {
+		t.Fatalf("projection=%+v keep_frozen=%v", projection, keepFrozen)
+	}
+}
+
 type countingShutdownFreezeSupervisorV0 struct {
 	calls int
 }
@@ -333,6 +361,15 @@ func (supervisor *countingShutdownFreezeSupervisorV0) RunGlobalSupervisorV0(
 	return orquestarunsupervisor.RunSupervisorResultV0{
 		StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
 	}, nil
+}
+
+func hasShutdownProjectionRefForTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 type notifyingRuntimeShutdownHookV0 struct {

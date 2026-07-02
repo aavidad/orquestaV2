@@ -11,13 +11,23 @@ import (
 const serverShutdownRoutePathV0 = "/api/v0/server/shutdown"
 
 type serverShutdownHTTPProjectionV0 struct {
-	Estado             string `json:"estado,omitempty"`
-	Status             string `json:"status,omitempty"`
-	ShutdownReady      bool   `json:"shutdown_ready,omitempty"`
-	RunsRequested      int    `json:"runs_requested,omitempty"`
-	RunsStopped        int    `json:"runs_stopped,omitempty"`
-	AgentsInFlight     int    `json:"agents_in_flight,omitempty"`
-	CheckpointsPending int    `json:"checkpoints_pending,omitempty"`
+	Estado             string                               `json:"estado,omitempty"`
+	Status             string                               `json:"status,omitempty"`
+	ShutdownReady      bool                                 `json:"shutdown_ready,omitempty"`
+	RunsRequested      int                                  `json:"runs_requested,omitempty"`
+	RunsStopped        int                                  `json:"runs_stopped,omitempty"`
+	AgentsInFlight     int                                  `json:"agents_in_flight,omitempty"`
+	CheckpointsPending int                                  `json:"checkpoints_pending,omitempty"`
+	ActiveWorkCount    int                                  `json:"active_work_count,omitempty"`
+	ActiveWorks        []serverShutdownHTTPWorkProjectionV0 `json:"active_works,omitempty"`
+}
+
+type serverShutdownHTTPWorkProjectionV0 struct {
+	Kind            string `json:"kind,omitempty"`
+	RunRef          string `json:"run_ref,omitempty"`
+	WorkRef         string `json:"work_ref,omitempty"`
+	ExternalWorkRef string `json:"external_work_ref,omitempty"`
+	Status          string `json:"status,omitempty"`
 }
 
 func (runtime *RuntimeV0) shutdownFreezeHTTPHandlerV0(next http.Handler) http.Handler {
@@ -107,6 +117,8 @@ func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjecti
 		RunsStopped:        payload.RunsStopped,
 		AgentsInFlight:     payload.AgentsInFlight,
 		CheckpointsPending: payload.CheckpointsPending,
+		ActiveWorkCount:    payload.ActiveWorkCount,
+		ActiveWorkRefs:     shutdownProjectionActiveWorkRefsV0(payload.ActiveWorks),
 	}
 	projection = normalizeShutdownStopConfirmationV0(projection)
 	if statusCode >= http.StatusBadRequest || shutdownFreezeResultIsRejectedV0(payload) {
@@ -121,6 +133,47 @@ func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjecti
 		return projection, projection.Status == "stop_pending"
 	}
 	return projection, true
+}
+
+func shutdownProjectionActiveWorkRefsV0(
+	works []serverShutdownHTTPWorkProjectionV0,
+) []string {
+	out := make([]string, 0, len(works)*4)
+	for _, work := range works {
+		prefix := "shutdown-active-work"
+		if kind := safeShutdownProjectionRefPartV0(work.Kind); kind != "" {
+			prefix += "-" + kind
+		}
+		for _, ref := range []string{work.RunRef, work.WorkRef, work.ExternalWorkRef, work.Status} {
+			if safe := safeShutdownProjectionRefPartV0(ref); safe != "" {
+				out = append(out, prefix+"-"+safe)
+			}
+		}
+	}
+	return compactServerStringsV0(out)
+}
+
+func safeShutdownProjectionRefPartV0(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+	var builder strings.Builder
+	lastSep := false
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= '0' && r <= '9':
+			builder.WriteRune(r)
+			lastSep = false
+		default:
+			if !lastSep {
+				builder.WriteByte('-')
+				lastSep = true
+			}
+		}
+	}
+	return strings.Trim(builder.String(), "-")
 }
 
 func normalizeShutdownStopConfirmationV0(projection ShutdownProjectionV0) ShutdownProjectionV0 {

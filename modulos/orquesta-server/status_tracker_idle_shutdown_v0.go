@@ -13,6 +13,8 @@ type ShutdownProjectionV0 struct {
 	RunsStopped        int
 	AgentsInFlight     int
 	CheckpointsPending int
+	ActiveWorkCount    int
+	ActiveWorkRefs     []string
 }
 
 func (tracker *StatusTrackerV0) MarkShutdownRequestedV0(now time.Time) StateV0 {
@@ -46,6 +48,8 @@ func (tracker *StatusTrackerV0) MarkShutdownResultV0(
 		state.ShutdownRunsStopped = result.RunsStopped
 		state.ShutdownAgentsInFlight = result.AgentsInFlight
 		state.ShutdownCheckpointsPending = result.CheckpointsPending
+		state.ShutdownActiveWorkCount = nonNegativeServerIntV0(result.ActiveWorkCount)
+		state.ShutdownActiveWorkRefs = compactServerStringsV0(result.ActiveWorkRefs)
 		state.SupervisorFrozen = keepFrozen
 		if keepFrozen {
 			state.SupervisorTickActive = false
