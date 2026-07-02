@@ -2052,6 +2052,44 @@ func TestCodexGoalBackendArgsV0NoUsaProxyParaTmuxV0(t *testing.T) {
 	}
 }
 
+func TestServerCodexGoalBackendFromEnvV0TmuxNoArrancaAppServerEnConstruccionV0(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	runtimeDir := filepath.Join(root, "runtime")
+	if err := os.MkdirAll(projectDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll project: %v", err)
+	}
+	fakeCodex := filepath.Join(root, "codex")
+	marker := filepath.Join(root, "codex-invoked")
+	script := "#!/usr/bin/env bash\nprintf invoked > " + shellQuoteCodexAppServerTmuxV0(marker) + "\nexit 42\n"
+	if err := os.WriteFile(fakeCodex, []byte(script), 0o755); err != nil {
+		t.Fatalf("WriteFile fake codex: %v", err)
+	}
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envCodexRuntimeWorkDirV0, runtimeDir)
+	t.Setenv(envCodexCommandV0, fakeCodex)
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0)
+	t.Setenv("OPENAI_API_KEY", "test")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	backend, err := serverCodexGoalBackendFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("serverCodexGoalBackendFromEnvV0: %v", err)
+	}
+	if _, degraded := backend.Starter.(serverCodexUnavailableGoalBackendV0); degraded {
+		t.Fatalf("app_server_tmux no debe degradar por preflight eager en construccion")
+	}
+	if _, ok := backend.Starter.(orquestaruntimecodexgoal.CodexGoalStarterPortV0); !ok || backend.Starter == nil || backend.Observer == nil {
+		t.Fatalf("backend lazy debe exponer starter/observer: %+v", backend)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("app-server se invoco durante construccion: err=%v", err)
+	}
+}
+
 func TestServerConfigWithCodexGoalBackendDiagnosticsV0BloqueaReadinessV0(t *testing.T) {
 	unavailable := serverCodexUnavailableGoalBackendV0{
 		IssueCode: "codex_app_server_tmux_session_exited",

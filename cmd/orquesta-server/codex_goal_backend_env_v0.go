@@ -76,6 +76,7 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	commandPreflightProtocol := commandProtocol
 	commandPreflightProtocol.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
 	var preflightProtocol serverCodexAppServerProbePortV0 = commandPreflightProtocol
+	preflightAtStartup := true
 	var shutdownHook orquestaserver.RuntimeShutdownHookPortV0
 	codeHomePath := ""
 	authIssueCode := ""
@@ -120,27 +121,31 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 			Timeout:           time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
 			DiagnosticLogPath: tmuxBackend.tmuxLogPathV0(),
 		}
-		runtimeProtocol = websocketProtocol
-		preflightProtocol = serverCodexAppServerWebSocketProtocolV0{
+		tmuxPreflightProtocol := serverCodexAppServerWebSocketProtocolV0{
 			SocketPath:        socketPath,
 			Timeout:           time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond,
 			DiagnosticLogPath: tmuxBackend.tmuxLogPathV0(),
 		}
-		if err := tmuxBackend.EnsureV0(context.Background(), preflightProtocol); err != nil {
+		runtimeProtocol = serverCodexAppServerLazyTmuxProtocolV0{
+			Backend:   tmuxBackend,
+			Inner:     websocketProtocol,
+			Preflight: tmuxPreflightProtocol,
+		}
+		preflightProtocol = tmuxPreflightProtocol
+		preflightAtStartup = false
+	}
+	if preflightAtStartup {
+		if err := preflightProtocol.ProbeV0(context.Background()); err != nil {
 			degraded := serverCodexUnavailableGoalBackendV0{
-				IssueCode: codexAppServerIssueCodeForErrorV0(err, "codex_app_server_tmux_unavailable"),
+				IssueCode: codexAppServerIssueCodeForErrorV0(err, "codex_app_server_unavailable"),
 			}
 			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 		}
 	}
-	if err := preflightProtocol.ProbeV0(context.Background()); err != nil {
-		degraded := serverCodexUnavailableGoalBackendV0{
-			IssueCode: codexAppServerIssueCodeForErrorV0(err, "codex_app_server_unavailable"),
-		}
-		return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
-	}
 	if authIssueCode = codexAppServerAuthIssueCodeV0(codeHomePath); authIssueCode != "" {
-		degraded := serverCodexUnavailableGoalBackendV0{IssueCode: authIssueCode}
+		degraded := serverCodexUnavailableGoalBackendV0{
+			IssueCode: authIssueCode,
+		}
 		return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded, ShutdownHook: shutdownHook}, nil
 	}
 	client := serverCodexAppServerGoalBackendV0{
@@ -161,6 +166,9 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 func diagnosticLogPathForCodexAppServerProtocolV0(protocol serverCodexAppServerProtocolPortV0) string {
 	if websocket, ok := protocol.(serverCodexAppServerWebSocketProtocolV0); ok {
 		return strings.TrimSpace(websocket.DiagnosticLogPath)
+	}
+	if lazyTmux, ok := protocol.(serverCodexAppServerLazyTmuxProtocolV0); ok {
+		return strings.TrimSpace(lazyTmux.Inner.DiagnosticLogPath)
 	}
 	return ""
 }
