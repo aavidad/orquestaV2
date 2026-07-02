@@ -115,6 +115,7 @@ type serverCodexAppServerThreadReadResponseV0 struct {
 type serverCodexAppServerThreadReadV0 struct {
 	ID     string                             `json:"id"`
 	Status serverCodexAppServerThreadStatusV0 `json:"status,omitempty"`
+	Path   string                             `json:"path,omitempty"`
 	Turns  []serverCodexAppServerReadTurnV0   `json:"turns,omitempty"`
 }
 

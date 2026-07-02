@@ -358,6 +358,53 @@ func TestServerCodexAppServerGoalBackendV0ObservaUsageLimitedConCausaOperableV0(
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0BloqueaGoalActivoSiThreadTerminaSinCreditosV0(t *testing.T) {
+	root := t.TempDir()
+	sessionPath := filepath.Join(root, "rollout.jsonl")
+	raw := []byte(`{"type":"event_msg","payload":{"type":"token_count","rate_limits":{"credits":{"has_credits":false,"balance":"0"}}}}` + "\n")
+	if err := os.WriteFile(sessionPath, raw, 0o600); err != nil {
+		t.Fatalf("write session: %v", err)
+	}
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID:        "thread-ref-goal-active-no-credits-001",
+			Status:          "active",
+			TokensUsed:      0,
+			TimeUsedSeconds: 1,
+		},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-active-no-credits-001",
+			Status: serverCodexAppServerThreadStatusV0("systemError"),
+			Path:   sessionPath,
+			Turns: []serverCodexAppServerReadTurnV0{{
+				ID:     "turn-ref-goal-active-no-credits-001",
+				Status: "completed",
+			}},
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: root}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-codex-app-server-active-no-credits-001",
+		ExternalGoalRef: "thread-ref-goal-active-no-credits-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusBlockedV0 ||
+		receipt.Summary != "codex_app_server_thread_status_systemError" ||
+		receipt.IssueCode != "codex_app_server_goal_provider_limited" ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-active-goal-thread-status") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-provider-limited") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if want := []string{"thread/goal/get", "thread/read"}; !reflect.DeepEqual(protocol.calls, want) {
+		t.Fatalf("calls=%v want=%v", protocol.calls, want)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0BloqueaThreadReadSinResultadoTrasTimeoutV0(t *testing.T) {
 	now := time.Date(2026, 6, 30, 3, 20, 0, 0, time.UTC)
 	runtime := &serverCodexAppServerGoalRuntimeV0{}

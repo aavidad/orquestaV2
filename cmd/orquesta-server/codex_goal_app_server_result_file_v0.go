@@ -108,8 +108,11 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 		return receipt, false
 	}
 	observed := receipt
+	threadIssueCode := ""
+	threadStatus := ""
 	if threadID := strings.TrimSpace(observed.ExternalGoalRef); threadID != "" && backend.Protocol != nil {
 		if thread, err := backend.Protocol.ReadThreadV0(ctx, threadID, true); err == nil {
+			threadStatus = strings.TrimSpace(string(thread.Status))
 			marked, found, markerErr := codexAppServerGoalResultFromThreadV0(thread)
 			if markerErr != nil && found && !codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, request.GoalRef) {
 				observed.IssueCode = codexAppServerGoalResultErrorIssueCodeV0(
@@ -131,6 +134,7 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 				)
 				return observed, true
 			}
+			threadIssueCode = backend.codexAppServerThreadIssueCodeV0(thread)
 		}
 	}
 	fileMarked, fileFound, fileErr := codexAppServerGoalResultFromWorkspaceV0(
@@ -153,6 +157,20 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 			fileMarked,
 			"evidence-ref-codex-app-server-goal-result-file",
 		)
+		return observed, true
+	}
+	if threadIssueCode != "" {
+		observed.Status = orquestagoal.GoalStatusBlockedV0
+		observed.Summary = "codex_app_server_thread_status_" + threadStatus
+		observed.IssueCode = threadIssueCode
+		observed.EvidenceRefs = compactServerStackStringsV0(append(
+			observed.EvidenceRefs,
+			"evidence-ref-codex-app-server-active-goal-thread-status",
+			"evidence-ref-codex-app-server-thread-system-error",
+		))
+		if issueEvidence := codexAppServerIssueEvidenceRefV0(threadIssueCode); issueEvidence != "" {
+			observed.EvidenceRefs = compactServerStackStringsV0(append(observed.EvidenceRefs, issueEvidence))
+		}
 		return observed, true
 	}
 	return receipt, false

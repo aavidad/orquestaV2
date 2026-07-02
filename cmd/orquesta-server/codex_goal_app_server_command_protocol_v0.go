@@ -330,7 +330,9 @@ func codexAppServerIssueCodeFromMessageV0(message string) string {
 		strings.Contains(normalized, "usage limit") ||
 		strings.Contains(normalized, "quota limited") ||
 		strings.Contains(normalized, "quota exhausted") ||
-		strings.Contains(normalized, "provider limited"):
+		strings.Contains(normalized, "provider limited") ||
+		strings.Contains(normalized, `"has_credits":false`) ||
+		strings.Contains(normalized, `"has_credits": false`):
 		return "codex_app_server_goal_provider_limited"
 	case strings.Contains(normalized, "managed standalone codex install not found"):
 		return "codex_app_server_standalone_missing"
