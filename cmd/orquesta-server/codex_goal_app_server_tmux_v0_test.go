@@ -203,11 +203,7 @@ func TestCodexAppServerTmuxBackendV0FiltraProjectsAjenosDelConfigV0(t *testing.T
 }
 
 func TestServerCodexGoalBackendFromEnvV0TmuxSinAuthDegradaYConservaShutdownV0(t *testing.T) {
-	root, err := os.MkdirTemp("/tmp", "og")
-	if err != nil {
-		t.Fatalf("mkdir temp root: %v", err)
-	}
-	defer os.RemoveAll(root)
+	root := t.TempDir()
 	binDir := filepath.Join(root, "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil {
 		t.Fatalf("mkdir bin: %v", err)
