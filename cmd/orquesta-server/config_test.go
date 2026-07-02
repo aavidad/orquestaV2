@@ -885,6 +885,59 @@ func TestServerStackIdleSelfImprovementFiltraSeccionesNoTxxV0(t *testing.T) {
 	}
 }
 
+func TestIdleSelfImprovementBacklogPlannerV0IgnoraSeccionesNarrativasV0(t *testing.T) {
+	projectDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	content := `# Backlog
+
+## Tareas futuras tras estabilizar la automejora
+
+Texto narrativo que no debe convertirse en run.
+
+## Escaneo backlog 2026-07-02
+
+Evidencia revisada sin tarea ejecutable propia.
+
+## T260 goal-first-codex-loop-delgado
+
+Objetivo: adelgazar el loop residente con Codex Goal.
+`
+	if err := os.WriteFile(filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0), []byte(content), 0o600); err != nil {
+		t.Fatalf("write backlog: %v", err)
+	}
+
+	result, err := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).PlanV0(
+		orquestaserver.IdleSelfImprovementPlanRequestV0{
+			MaxRequests: 3,
+			Trigger:     "capacity_free",
+			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+				RequestRef:    "request-ref-base",
+				CorrelationID: "corr-request-ref-base",
+				ProjectRef:    "project-ref-orquesta",
+				WriteSet:      []string{"cmd/orquesta-server"},
+				RequiredTests: []string{"go test -count=1 ./cmd/orquesta-server"},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	if len(result.Requests) != 1 ||
+		result.Requests[0].SuggestedArea != "t260-goal-first-codex-loop-delgado" ||
+		result.Requests[0].FailureKind != "backlog_autoprogramming" {
+		t.Fatalf("requests=%+v", result.Requests)
+	}
+	for _, request := range result.Requests {
+		if strings.Contains(request.RequestRef, "tareas-futuras") ||
+			strings.Contains(request.RequestRef, "escaneo-backlog") ||
+			request.FailureKind == "backlog_scan" {
+			t.Fatalf("seccion narrativa convertida en request: %+v", request)
+		}
+	}
+}
+
 func TestServerStackIdleSelfImprovementPermiteAliasesFederadosV0(t *testing.T) {
 	supervisor := serverStackSupervisorV0{}
 	result, err := supervisor.FilterIdleSelfImprovementRequestsV0(context.Background(), orquestaserver.IdleSelfImprovementRequestFilterRequestV0{

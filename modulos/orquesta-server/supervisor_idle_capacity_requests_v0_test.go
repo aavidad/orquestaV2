@@ -130,6 +130,58 @@ func TestRuntimeV0SupervisorPreparaAutomejoraConColaVaciaBajoObjetivoV0(t *testi
 	}
 }
 
+func TestRuntimeV0SupervisorSaltaRequestsYaVisiblesAunquePlannerLosDevuelvaV0(t *testing.T) {
+	now := time.Date(2026, 7, 2, 12, 10, 0, 0, time.UTC)
+	visibleRef := "request-ref-autoprogramming-backlog-srv-task-011-guardian-visible"
+	supervisor := &fakeSupervisorV0{
+		results: []fakeSupervisorResultV0{{result: orquestarunsupervisor.RunSupervisorResultV0{
+			StopReason:      orquestarunsupervisor.RunSupervisorStopMaxExecutionsV0,
+			TotalExecutions: 1,
+			Ticks: []orquestarunsupervisor.RunSupervisorTickSummaryV0{{
+				Result: orquestaruncoordinator.RunCoordinatorTickResultV0{
+					Ranked: []orquestaruncoordinator.RankedRunSummaryV0{{
+						RunRef: visibleRef,
+						Rank:   1,
+					}},
+				},
+			}},
+		}}},
+		planRequests: []IdleSelfImprovementRequestV0{{
+			RequestRef: visibleRef,
+		}, {
+			RequestRef: "request-ref-autoprogramming-backlog-srv-task-011-guardian-new",
+		}},
+		selfStarted: make(chan struct{}, 1),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                       t.TempDir(),
+		TickInterval:                   time.Hour,
+		IdleSelfImprovementAfter:       time.Minute,
+		IdleSelfImprovementMaxRequests: 3,
+		IdleSelfImprovementTargetQueue: 3,
+		AuditDisabled:                  true,
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: &memoryStateStoreV0{},
+		Clock:      fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.runSupervisorTickV0(context.Background())
+
+	select {
+	case <-supervisor.selfStarted:
+	case <-time.After(time.Second):
+		t.Fatalf("automejora nueva no preparada: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
+	}
+	if supervisor.selfCalls != 1 ||
+		supervisor.lastSelfRequest.RequestRef != "request-ref-autoprogramming-backlog-srv-task-011-guardian-new" {
+		t.Fatalf("self_calls=%d refs=%v last=%+v", supervisor.selfCalls, supervisor.selfRequestRefs, supervisor.lastSelfRequest)
+	}
+}
+
 func TestRuntimeV0SupervisorPreparaCapacidadAunqueRelojIdleEsteDesactivadoV0(t *testing.T) {
 	now := time.Date(2026, 7, 2, 12, 0, 0, 0, time.UTC)
 	supervisor := &fakeSupervisorV0{

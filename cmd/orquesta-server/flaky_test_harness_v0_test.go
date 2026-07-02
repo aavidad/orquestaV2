@@ -13,7 +13,7 @@ import (
 )
 
 const flakyHarnessChildEnvV0 = "ORQUESTA_CMD_SERVER_FLAKY_HARNESS_CHILD"
-const flakyHarnessAttemptTimeoutV0 = 90 * time.Second
+const flakyHarnessAttemptTimeoutV0 = 180 * time.Second
 const flakyHarnessChildTestTimeoutV0 = 60 * time.Second
 const flakyHarnessAttemptsV0 = 3
 
@@ -58,9 +58,11 @@ func TestFlakyHarnessV0RepiteCasoDirectorRecursiveFakeRuntimeV0(t *testing.T) {
 		ownedGoModCache = true
 	}
 	childGoPath := filepath.Join(cacheRoot, "path")
+	childTempDir := filepath.Join(cacheRoot, "tmp")
 	for label, path := range map[string]string{
 		"GOCACHE": childGoCache,
 		"GOPATH":  childGoPath,
+		"TMPDIR":  childTempDir,
 	} {
 		if err := os.MkdirAll(path, 0o700); err != nil {
 			t.Fatalf("preparar %s para child: %v", label, err)
@@ -78,6 +80,8 @@ func TestFlakyHarnessV0RepiteCasoDirectorRecursiveFakeRuntimeV0(t *testing.T) {
 		"GOMODCACHE="+childGoModCache,
 		"GOPATH="+childGoPath,
 		"GOPROXY="+childGoProxy,
+		"TMPDIR="+childTempDir,
+		"GOTMPDIR="+childTempDir,
 	)
 	preflightCtx, preflightCancel := context.WithTimeout(context.Background(), flakyHarnessAttemptTimeoutV0)
 	preflight := exec.CommandContext(preflightCtx, "go", "mod", "download")

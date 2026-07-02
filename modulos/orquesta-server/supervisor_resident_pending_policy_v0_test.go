@@ -256,6 +256,60 @@ func TestRuntimeV0SupervisorNoBloqueaAutomejoraPorResidentPendingConProcesoVivoV
 	}
 }
 
+func TestRuntimeV0SupervisorResidentPendingIgnoraProcesoVivoDeOtraRunV0(t *testing.T) {
+	now := time.Date(2026, 7, 2, 4, 42, 39, 0, time.UTC)
+	runRef := "run-external-work-opes-b305970086cb77343865513f32df7a66-opes-job-b305970086cb77343865513f32df7a66"
+	otherRunRef := "run-external-work-opes-otra-run-con-proceso-vivo"
+	result := supervisorResultWithResidentPendingForTestV0(runRef)
+	result.Ticks[0].Result.Executions = []orquestaruncoordinator.RunExecutionSummaryV0{{
+		RunRef:      runRef,
+		Outcome:     "resident_director_pending",
+		QueueStatus: "resident_director_pending",
+		Diagnostics: []orquestaruncoordinator.RunDrainDiagnosticV0{{
+			Kind:   "process_runtime_snapshot",
+			Status: "running",
+			RunRef: otherRunRef,
+			EvidenceRefs: []string{
+				"evidence-ref-codex-supervisor-process-live",
+			},
+		}},
+	}}
+	store := &memoryStateStoreV0{}
+	supervisor := &fakeSupervisorV0{
+		results: []fakeSupervisorResultV0{{result: result}},
+		planRequests: []IdleSelfImprovementRequestV0{{
+			RequestRef: "request-ref-backlog-no-debe-usarse",
+		}},
+		selfStarted: make(chan struct{}, 1),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                       t.TempDir(),
+		TickInterval:                   time.Hour,
+		IdleSelfImprovementAfter:       time.Minute,
+		IdleSelfImprovementMaxRequests: 3,
+		IdleSelfImprovementTargetQueue: 4,
+		AuditDisabled:                  true,
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: store,
+		Clock:      fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.runSupervisorTickV0(context.Background())
+
+	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
+		t.Fatalf("resident pending con proceso de otra run no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
+	}
+	if store.last.IdleSelfImprovementOperationalMessage == nil ||
+		store.last.IdleSelfImprovementOperationalMessage.Counters["resident_pending_without_dispatch"] != 1 ||
+		!strings.Contains(strings.Join(store.last.IdleSelfImprovementOperationalMessage.RunRefs, ","), "b305970086cb77343865513f32df7a66") {
+		t.Fatalf("state=%+v", store.last)
+	}
+}
+
 func supervisorResultWithResidentPendingForTestV0(runRef string) orquestarunsupervisor.RunSupervisorResultV0 {
 	return orquestarunsupervisor.RunSupervisorResultV0{
 		StopReason:      orquestarunsupervisor.RunSupervisorStopMaxExecutionsV0,

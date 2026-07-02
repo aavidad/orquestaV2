@@ -38,6 +38,8 @@ func (runtime *RuntimeV0) idleSelfImprovementRequestsV0(
 		requests = planned.Requests
 	}
 	requests = runtime.filterIdleSelfImprovementRequestsV0(ctx, base, requests, decision)
+	requests = normalizeIdleSelfImprovementCausalRequestsV0(requests)
+	requests = filterIdleSelfImprovementKnownQueueRequestsV0(requests, decision)
 	if decision.MaxRequests > 0 && len(requests) > decision.MaxRequests {
 		requests = requests[:decision.MaxRequests]
 	}
@@ -64,6 +66,41 @@ func (runtime *RuntimeV0) filterIdleSelfImprovementRequestsV0(
 		return nil
 	}
 	return result.Requests
+}
+
+func filterIdleSelfImprovementKnownQueueRequestsV0(
+	requests []IdleSelfImprovementRequestV0,
+	decision idleSelfImprovementScheduleDecisionV0,
+) []IdleSelfImprovementRequestV0 {
+	if len(requests) == 0 {
+		return []IdleSelfImprovementRequestV0{}
+	}
+	known := map[string]bool{}
+	for _, ref := range append(append([]string(nil), decision.KnownRequestRefs...), decision.KnownRunRefs...) {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		known[ref] = true
+		known[idleSelfImprovementRequestRefFromRunRefV0(ref)] = true
+		known[idleSelfImprovementCausalBaseRefV0(ref)] = true
+	}
+	out := make([]IdleSelfImprovementRequestV0, 0, len(requests))
+	for _, request := range requests {
+		baseRef := idleSelfImprovementCausalBaseRefV0(request.RequestRef)
+		target := idleSelfImprovementDedupeTargetV0(request)
+		if known[request.RequestRef] || known[baseRef] || known[target] {
+			continue
+		}
+		out = append(out, request)
+		known[request.RequestRef] = true
+		known[baseRef] = true
+		known[target] = true
+	}
+	if out == nil {
+		return []IdleSelfImprovementRequestV0{}
+	}
+	return out
 }
 
 func (runtime *RuntimeV0) prepareIdleSelfImprovementBatchV0(

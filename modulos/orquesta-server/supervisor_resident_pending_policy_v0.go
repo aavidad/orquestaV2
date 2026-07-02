@@ -23,7 +23,7 @@ func detectResidentPendingWithoutDispatchV0(
 		for _, execution := range tick.Result.Executions {
 			if !residentPendingValueV0(execution.Outcome, execution.QueueStatus) ||
 				supervisorLiveEvidenceV0(execution.Outcome, execution.QueueStatus, execution.EvidenceRefs) ||
-				supervisorDiagnosticsHaveLiveProcessV0(execution.Diagnostics) {
+				supervisorExecutionDiagnosticsHaveLiveProcessV0(execution) {
 				continue
 			}
 			block.Blocked = true
