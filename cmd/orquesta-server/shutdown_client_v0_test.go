@@ -24,6 +24,9 @@ func TestRequestServerShutdownV0DefaultCooperativo(t *testing.T) {
 		if request["forced"] != false {
 			t.Fatalf("forced default=%v", request["forced"])
 		}
+		if request["cleanup_goal_backends"] != true {
+			t.Fatalf("cleanup_goal_backends default=%v", request["cleanup_goal_backends"])
+		}
 		refs, ok := request["evidence_refs"].([]any)
 		if !ok || !shutdownClientBodyRefsContainForTestV0(refs, orquestaruncontrol.RunControlEvidenceAutoResumeAllowedV0) {
 			t.Fatalf("evidence_refs sin auto-resume: %#v", request["evidence_refs"])

@@ -90,12 +90,13 @@ func postServerShutdownRequestV0(
 ) (serverShutdownClientResultV0, error) {
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(map[string]any{
-		"request_id":      requestID,
-		"correlation_id":  correlationID,
-		"forced":          options.Forced,
-		"requested_by":    "orquesta-director",
-		"reason":          reason,
-		"idempotency_key": idempotencyKey,
+		"request_id":            requestID,
+		"correlation_id":        correlationID,
+		"forced":                options.Forced,
+		"cleanup_goal_backends": true,
+		"requested_by":          "orquesta-director",
+		"reason":                reason,
+		"idempotency_key":       idempotencyKey,
 		"evidence_refs": []string{
 			orquestaruncontrol.RunControlEvidenceAutoResumeAllowedV0,
 			"evidence-ref-orquesta-server-cli-stop-auto-resume-safe",
