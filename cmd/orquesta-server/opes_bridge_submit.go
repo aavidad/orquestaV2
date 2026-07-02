@@ -61,7 +61,7 @@ func submitOPESExternalWorkRunResultV0(
 	httpRequest.Header.Set("Content-Type", "application/json")
 	response, err := client.Do(httpRequest)
 	if err != nil {
-		return opesExternalWorkRunSubmitResultV0{}, errors.New(commandEffectHTTPErrorCodeV0(ctx, err))
+		return opesExternalWorkRunSubmitResultV0{}, errors.New(opesBridgeOrquestaSubmitErrorCodeV0(ctx, err))
 	}
 	defer response.Body.Close()
 	responseBody, err := readOPESExternalWorkRunSubmitResponseBodyV0(response)
@@ -91,6 +91,20 @@ func submitOPESExternalWorkRunResultV0(
 		ExternalGoalRef:       strings.TrimSpace(decoded.ExternalGoalRef),
 		NextActions:           compactStringsV0(decoded.NextActions),
 	}, nil
+}
+
+func opesBridgeOrquestaSubmitErrorCodeV0(ctx context.Context, err error) string {
+	code := commandEffectHTTPErrorCodeV0(ctx, err)
+	switch code {
+	case "request_http_error":
+		return "orquesta_unreachable"
+	case "effect_timeout":
+		return "orquesta_unreachable_timeout"
+	case "effect_cancelled":
+		return "orquesta_unreachable_cancelled"
+	default:
+		return code
+	}
 }
 
 func checkOPESBridgeRuntimeCompatibilityV0(

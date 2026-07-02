@@ -314,9 +314,15 @@ func runOPESDrainSingleOnceV0(
 				appendOPESDrainErrorV0(&summary, job.ID, externalBridgeClaimFailedCodeV0)
 			}
 			summary.Skipped++
-			result.Status = "submit_error"
+			result.Status = opesBridgeSubmitErrorStatusV0(errorCode)
+			result.OperationalReason = opesBridgeSubmitOperationalReasonV0(errorCode)
+			result.NextActions = opesBridgeSubmitErrorNextActionsV0(errorCode)
 			summary.Results = append(summary.Results, result)
-			summary.Errors = append(summary.Errors, opesDrainPublicErrorV0{JobRef: job.ID, Code: errorCode})
+			summary.Errors = append(summary.Errors, opesDrainPublicErrorV0{
+				JobRef: job.ID,
+				Code:   errorCode,
+				Reason: result.OperationalReason,
+			})
 			continue
 		}
 		opesBridgeApplySubmitResultV0(&result, submitResult)
@@ -571,6 +577,42 @@ func opesBridgeExternalCapabilityErrorCodeV0(
 		return strings.TrimSpace(evaluation.Issues[0].Code)
 	}
 	return orquestadomainwork.ErrDomainWorkExternalCapabilityMissingV0
+}
+
+func opesBridgeSubmitErrorStatusV0(errorCode string) string {
+	switch strings.TrimSpace(errorCode) {
+	case "orquesta_unreachable", "orquesta_unreachable_timeout", "orquesta_unreachable_cancelled":
+		return "orquesta_unreachable"
+	default:
+		return "submit_error"
+	}
+}
+
+func opesBridgeSubmitOperationalReasonV0(errorCode string) string {
+	switch strings.TrimSpace(errorCode) {
+	case "orquesta_unreachable":
+		return "orquesta_server_unreachable"
+	case "orquesta_unreachable_timeout":
+		return "orquesta_server_unreachable_timeout"
+	case "orquesta_unreachable_cancelled":
+		return "orquesta_server_unreachable_cancelled"
+	default:
+		return strings.TrimSpace(errorCode)
+	}
+}
+
+func opesBridgeSubmitErrorNextActionsV0(errorCode string) []string {
+	switch strings.TrimSpace(errorCode) {
+	case "orquesta_unreachable", "orquesta_unreachable_timeout", "orquesta_unreachable_cancelled":
+		return []string{
+			"check_orquesta_readiness",
+			"start_orquesta_server_goal_first_app_server_tmux",
+			"inspect_orquesta_server_status_or_statefile",
+			"do_not_fallback_to_local_opes_without_operator_exception",
+		}
+	default:
+		return nil
+	}
 }
 
 func opesBridgeExternalCapabilityNextActionsV0(

@@ -38,7 +38,7 @@ func TestSubmitOPESExternalWorkRunV0MapeaDeadlinePublico(t *testing.T) {
 		"http://orquesta-test.invalid",
 		map[string]string{"request_ref": "request-ref-001"},
 	)
-	if err == nil || err.Error() != "effect_timeout" {
+	if err == nil || err.Error() != "orquesta_unreachable_timeout" {
 		t.Fatalf("err=%v", err)
 	}
 }

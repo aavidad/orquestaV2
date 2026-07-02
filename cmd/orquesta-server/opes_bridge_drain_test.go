@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -2920,6 +2921,66 @@ func TestRunOPESDrainOnceV0BloqueaSinRuntimeIdentityCompatibleV0(t *testing.T) {
 		summary.Errors[0].Code != "orquesta_runtime_compatibility_binary_sha_mismatch" {
 		t.Fatalf("posts=%d summary=%+v", posts, summary)
 	}
+}
+
+func TestRunOPESDrainOnceV0BloqueaSubmitConOrquestaUnreachableV0(t *testing.T) {
+	opesServer := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/jobs" || r.Method != http.MethodGet {
+			t.Fatalf("opes request inesperada %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]any{{
+			"id":             "job-ref-orquesta-unreachable-001",
+			"type":           "draft_content_block",
+			"status":         "pending",
+			"execution_mode": "external",
+			"payload_json":   `{"topic_id":"topic-ref-001","title":"Bloque sin Orquesta"}`,
+			"requested_by":   "opes",
+		}})
+	}))
+	defer opesServer.Close()
+
+	orquestaURL := closedLoopbackURLForTestV0(t)
+	summary, err := runOPESDrainOnceV0(context.Background(), opesDrainConfigV0{
+		OPESBaseURL:     opesServer.URL,
+		OrquestaBaseURL: orquestaURL,
+		Limit:           1,
+		JobType:         "draft_content_block",
+		HTTPTimeout:     200 * time.Millisecond,
+		RunConfig: orquestaopesbridge.JobRunConfigV0{
+			PriorityScore: 70,
+			RequestedBy:   "test",
+		},
+		ExternalCapabilities: opesBridgeRemoteQACapabilityForDrainTestV0(),
+	})
+	if err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if summary.Submitted != 0 ||
+		summary.Skipped != 1 ||
+		len(summary.Results) != 1 ||
+		summary.Results[0].Status != "orquesta_unreachable" ||
+		summary.Results[0].OperationalReason != "orquesta_server_unreachable" ||
+		!containsStringForTestV0(summary.Results[0].NextActions, "check_orquesta_readiness") ||
+		!containsStringForTestV0(summary.Results[0].NextActions, "do_not_fallback_to_local_opes_without_operator_exception") ||
+		len(summary.Errors) != 1 ||
+		summary.Errors[0].Code != "orquesta_unreachable" ||
+		summary.Errors[0].Reason != "orquesta_server_unreachable" {
+		t.Fatalf("summary=%+v", summary)
+	}
+}
+
+func closedLoopbackURLForTestV0(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen closed loopback: %v", err)
+	}
+	addr := listener.Addr().String()
+	if err := listener.Close(); err != nil {
+		t.Fatalf("close listener: %v", err)
+	}
+	return "http://" + addr
 }
 
 func TestRunOPESDrainOnceV0AudioSinHeartbeatProveedorNoPosteaOrquestaV0(t *testing.T) {
