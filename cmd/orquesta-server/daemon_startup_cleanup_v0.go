@@ -5,6 +5,7 @@ import (
 	"time"
 
 	orquestaserver "orquesta/modulos/orquesta-server"
+	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
 
 func cleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0(config orquestaserver.ConfigV0, pid int) {
@@ -42,5 +43,8 @@ func cleanupCodexAppServerTmuxAfterStartupFailureV0(config orquestaserver.Config
 		SourceCodeHomeDir: runtimeConfig.CodeHomeDir,
 		Timeout:           timeout,
 	}
-	_ = backend.ShutdownConfiguredSessionAfterStartupFailureV0(context.Background())
+	_, _ = backend.CleanupActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0{
+		CleanupGoalBackends: true,
+		EvidenceRefs:        []string{"evidence-ref-orquesta-startup-goal-backend-cleanup"},
+	})
 }
