@@ -189,6 +189,8 @@ func TestProduceOPESCausalJobsV0CreaActualizacionRegistroPorTema(t *testing.T) {
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_id", "tema-001") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "registry_action", "update") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "en_progreso_orquesta") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status", "working") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status_contract", "working|waiting|needs_rework|blocked|complete") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "expected_artifact_type", orquestadomainwork.DomainWorkArtifactTypeTopicRegistryUpdateV0) {
 		t.Fatalf("request=%+v ok=%v", request, ok)
 	}
@@ -533,8 +535,37 @@ func TestProduceOPESCausalJobsV0PreservaEstadoTextoMinimoPendiente(t *testing.T)
 	}
 	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
 	if !ok ||
-		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", partialStatus) {
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", partialStatus) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status", "waiting") {
 		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
+	}
+}
+
+func TestTopicRegistryOperationalStatusV0NormalizaAliasesCanonicosV0(t *testing.T) {
+	cases := map[string]string{
+		"working":                         "working",
+		"en_progreso_orquesta":            "working",
+		"waiting":                         "waiting",
+		"pendiente_continuar":             "waiting",
+		"needs_rework":                    "needs_rework",
+		"pendiente_rework_editorial":      "needs_rework",
+		"blocked":                         "blocked",
+		"stale_lock_no_process":           "blocked",
+		"complete":                        "complete",
+		"paquete_final_local_verificable": "complete",
+	}
+	for status, want := range cases {
+		t.Run(status, func(t *testing.T) {
+			record := OPESCausalArtifactRecordV0{
+				ArtifactType: orquestadomainwork.DomainWorkArtifactTypeContentBlockV0,
+				PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+					{Name: "status", Value: status},
+				},
+			}
+			if got := topicRegistryOperationalStatusForRecordV0(record); got != want {
+				t.Fatalf("status=%q got=%q want=%q", status, got, want)
+			}
+		})
 	}
 }
 
@@ -568,7 +599,8 @@ func TestProduceOPESCausalJobsV0BloqueaRegistroPorQATemaFallidaV0(t *testing.T) 
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", topicRegistryQualityNeedsReworkRefV0) ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "topic-quality-"+safeRefV0(ErrOPESTopicQualityStudyScaffoldingV0)) ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_quality_status", OPESTopicQualityStatusNeedsReworkV0) ||
-		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_quality_issue_refs", ErrOPESTopicQualityStudyScaffoldingV0) {
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_quality_issue_refs", ErrOPESTopicQualityStudyScaffoldingV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status", "needs_rework") {
 		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
 	}
 	followup, ok := requestedWorkKindForTestV0(result.RequestedJobs, "review_director_consolidation")

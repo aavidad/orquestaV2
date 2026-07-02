@@ -35,6 +35,8 @@ func topicRegistryUpdateRequestV0(
 		orquestadomainwork.DomainWorkFieldV0{Name: "registry_action", Value: topicRegistryActionForRecordV0(record)},
 		orquestadomainwork.DomainWorkFieldV0{Name: "registry_tool_ref", Value: "opes-registro-trabajo-temas"},
 		orquestadomainwork.DomainWorkFieldV0{Name: "proposed_status", Value: topicRegistryStatusForRecordV0(record)},
+		orquestadomainwork.DomainWorkFieldV0{Name: "operational_status", Value: topicRegistryOperationalStatusForRecordV0(record)},
+		orquestadomainwork.DomainWorkFieldV0{Name: "operational_status_contract", Value: "working|waiting|needs_rework|blocked|complete"},
 		orquestadomainwork.DomainWorkFieldV0{Name: "done_refs", Values: compactStringsV0([]string{record.ArtifactRef, record.ReceiptRef})},
 		orquestadomainwork.DomainWorkFieldV0{Name: "pending_refs", Values: pendingRefs},
 	)
@@ -95,6 +97,9 @@ func topicRegistryStatusForRecordV0(record OPESCausalArtifactRecordV0) string {
 	if topicRegistryExplicitPartialStatusV0(status) {
 		return strings.TrimSpace(status)
 	}
+	if explicit, ok := topicRegistryExplicitOperationalStatusV0(status); ok {
+		return explicit
+	}
 	normalized := strings.ToLower(strings.TrimSpace(status))
 	if refs := topicRegistryQualityPendingRefsForRecordV0(record); len(refs) > 0 {
 		return "pendiente_rework_editorial"
@@ -113,6 +118,37 @@ func topicRegistryStatusForRecordV0(record OPESCausalArtifactRecordV0) string {
 		return "paquete_final_local_verificable"
 	}
 	return "en_progreso_orquesta"
+}
+
+func topicRegistryOperationalStatusForRecordV0(record OPESCausalArtifactRecordV0) string {
+	status := firstNonEmptyV0(
+		fieldStringV0(record.PayloadFields, "operational_status"),
+		fieldStringV0(record.PayloadFields, "status"),
+		fieldStringV0(record.PayloadFields, "estado"),
+		fieldStringV0(record.PayloadFields, "decision"),
+	)
+	if refs := topicRegistryQualityPendingRefsForRecordV0(record); len(refs) > 0 {
+		return "needs_rework"
+	}
+	if explicit, ok := topicRegistryExplicitOperationalStatusV0(status); ok {
+		return explicit
+	}
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	if topicRegistryExplicitPartialStatusV0(status) ||
+		len(followupRefsForRecordV0(record)) > 0 ||
+		strings.Contains(normalized, "pendiente") {
+		return "waiting"
+	}
+	if strings.Contains(normalized, "blocked") || strings.Contains(normalized, "bloqueado") {
+		return "blocked"
+	}
+	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+		record.CompleteJob &&
+		len(topicRegistryPendingRefsForRecordV0(record)) == 0 &&
+		topicRegistryFinalPackageHasClosureEvidenceV0(record) {
+		return "complete"
+	}
+	return "working"
 }
 
 func topicRegistryPendingRefsForRecordV0(record OPESCausalArtifactRecordV0) []string {
@@ -312,5 +348,23 @@ func topicRegistryExplicitPartialStatusV0(status string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func topicRegistryExplicitOperationalStatusV0(status string) (string, bool) {
+	status = strings.ToLower(strings.TrimSpace(status))
+	switch status {
+	case "working", "in_progress", "in-progress", "en_progreso", "en_progreso_orquesta":
+		return "working", true
+	case "waiting", "pending", "pendiente", "pendiente_continuar":
+		return "waiting", true
+	case "needs_rework", "needs-rework", "rework", "pendiente_rework_editorial":
+		return "needs_rework", true
+	case "blocked", "bloqueado", "stale_lock_no_process":
+		return "blocked", true
+	case "complete", "completed", "done", "paquete_final_local_verificable":
+		return "complete", true
+	default:
+		return "", false
 	}
 }
