@@ -54,6 +54,24 @@ func TestValidateOPESTopicQualityContractV0DetectaAndamiajeInternoConTildesYMayu
 	}
 }
 
+func TestValidateOPESTopicQualityContractV0DetectaContaminacionEstructuralV0(t *testing.T) {
+	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
+		TopicRef:           "tema-046",
+		Level:              OPESTopicQualityLevelBV0,
+		CanonicalWordCount: 11120,
+		Text: strings.Join([]string{
+			"El apartado incorpora un bloque ajeno procedente del tema_017.",
+			"Se conserva una referencia interna a canon maestro y derivaciones futuras.",
+			"El texto visible apunta a 02_temas/tema_014/02_markdown/tema_ampliado.md y a una figura .svg.",
+		}, "\n"),
+	})
+
+	if result.Status != OPESTopicQualityStatusNeedsReworkV0 ||
+		!opesTopicQualityIssueCodeInSetV0(result.Issues, ErrOPESTopicQualityStructuralContaminationV0) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestValidateOPESTopicQualityContractV0NoAceptaRasterDecorativoComoDidacticoV0(t *testing.T) {
 	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
 		TopicRef:              "tema-010",

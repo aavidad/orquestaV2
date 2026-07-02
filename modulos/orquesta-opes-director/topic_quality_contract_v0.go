@@ -16,13 +16,14 @@ const (
 	OPESTopicQualityLevelBV0         = "B"
 	OPESTopicQualityMinWordsLevelBV0 = 10800
 
-	ErrOPESTopicQualityWordsRequiredV0          = "opes_topic_words_required"
-	ErrOPESTopicQualityCanonicalWordsRequiredV0 = "opes_canonical_word_count_required"
-	ErrOPESTopicQualityMinWordsNotMetV0         = "needs_expansion_min_words_B"
-	ErrOPESTopicQualityInvalidReportContractV0  = "invalid_report_contract"
-	ErrOPESTopicQualityPublicMetacommentV0      = "opes_public_text_metacomment"
-	ErrOPESTopicQualityStudyScaffoldingV0       = "opes_public_text_study_scaffolding"
-	ErrOPESTopicQualityDidacticVisualRequiredV0 = "opes_visual_didactic_function_required"
+	ErrOPESTopicQualityWordsRequiredV0           = "opes_topic_words_required"
+	ErrOPESTopicQualityCanonicalWordsRequiredV0  = "opes_canonical_word_count_required"
+	ErrOPESTopicQualityMinWordsNotMetV0          = "needs_expansion_min_words_B"
+	ErrOPESTopicQualityInvalidReportContractV0   = "invalid_report_contract"
+	ErrOPESTopicQualityPublicMetacommentV0       = "opes_public_text_metacomment"
+	ErrOPESTopicQualityStudyScaffoldingV0        = "opes_public_text_study_scaffolding"
+	ErrOPESTopicQualityStructuralContaminationV0 = "opes_public_text_structural_contamination"
+	ErrOPESTopicQualityDidacticVisualRequiredV0  = "opes_visual_didactic_function_required"
 )
 
 type OPESTopicQualityContractRequestV0 struct {
@@ -134,6 +135,13 @@ func ValidateOPESTopicQualityContractV0(
 	for _, phrase := range opesTopicPublicStudyScaffoldingMatchesV0(request.Text) {
 		result.Issues = append(result.Issues, OPESTopicQualityIssueV0{
 			Code:    ErrOPESTopicQualityStudyScaffoldingV0,
+			Field:   "text",
+			Message: phrase,
+		})
+	}
+	for _, phrase := range opesTopicPublicStructuralContaminationMatchesV0(request.Text) {
+		result.Issues = append(result.Issues, OPESTopicQualityIssueV0{
+			Code:    ErrOPESTopicQualityStructuralContaminationV0,
 			Field:   "text",
 			Message: phrase,
 		})
@@ -370,6 +378,54 @@ func opesTopicPublicStudyScaffoldingMatchesV0(text string) []string {
 		"bloques de otros temas",
 		"referencias a svg",
 		"referencias a .md",
+	}
+	var matches []string
+	for _, pattern := range patterns {
+		if strings.Contains(normalized, pattern) {
+			matches = append(matches, pattern)
+		}
+	}
+	return compactStringsV0(matches)
+}
+
+func opesTopicPublicStructuralContaminationMatchesV0(text string) []string {
+	normalized := opesTopicQualityNormalizePublicTextV0(text)
+	if normalized == "" {
+		return nil
+	}
+	patterns := []string{
+		"bloque ajeno",
+		"bloque de otro tema",
+		"bloques de otro tema",
+		"bloques de otros temas",
+		"contenido injertado",
+		"contaminacion cruzada",
+		"contaminacion estructural",
+		"fuente de tema ajeno",
+		"fuentes de temas ajenos",
+		"procedencia de bloques",
+		"canon maestro",
+		"bloque de canon",
+		"bloque maestro",
+		"derivacion futura",
+		"derivaciones futuras",
+		"trazabilidad b",
+		"referencia interna a canon",
+		"referencias internas a canones",
+		"visual svg",
+		"archivo svg",
+		"referencia svg",
+		"referencia a .svg",
+		"referencias a .svg",
+		"referencia a .md",
+		"referencias a .md",
+		"tema_",
+		"/tema_",
+		"02_temas/",
+		"00_control/",
+		"visuales_plan.md",
+		"tema_ampliado.md",
+		"tema_resumen.md",
 	}
 	var matches []string
 	for _, pattern := range patterns {

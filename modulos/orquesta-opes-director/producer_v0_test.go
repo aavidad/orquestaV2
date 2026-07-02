@@ -579,6 +579,46 @@ func TestProduceOPESCausalJobsV0BloqueaRegistroPorQATemaFallidaV0(t *testing.T) 
 	}
 }
 
+func TestProduceOPESCausalJobsV0BloqueaRegistroPorContaminacionEstructuralV0(t *testing.T) {
+	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
+		Status:       "accepted",
+		DomainRef:    "opes",
+		JobRef:       "job-topic-quality-structural-fails-001",
+		ArtifactRef:  "artifact-topic-quality-structural-fails-001",
+		ArtifactType: orquestadomainwork.DomainWorkArtifactTypeContentBlockV0,
+		ReceiptRef:   "receipt-topic-quality-structural-fails-001",
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "course_id", Value: "curso-grupo-b"},
+			{Name: "topic_id", Value: "tema-046"},
+			{Name: "source_work_kind", Value: "draft_content_block"},
+			{Name: "status", Value: "ready"},
+			{Name: "canonical_word_count", Value: "12000"},
+			{Name: "topic_quality_status", Value: "passed"},
+			{Name: "topic_text", Value: "Bloque ajeno del tema_017 con referencia interna a canon maestro y figura .svg visible."},
+		},
+	}}}
+	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+	result, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{},
+		OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator})
+	if err != nil {
+		t.Fatalf("ProduceOPESCausalJobsV0: %v", err)
+	}
+	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "pendiente_rework_editorial") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", topicRegistryQualityNeedsReworkRefV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "topic-quality-"+safeRefV0(ErrOPESTopicQualityStructuralContaminationV0)) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_quality_issue_refs", ErrOPESTopicQualityStructuralContaminationV0) {
+		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
+	}
+	followup, ok := requestedWorkKindForTestV0(result.RequestedJobs, "review_director_consolidation")
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "followup_ref", topicRegistryQualityNeedsReworkRefV0) ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "topic_id", "tema-046") {
+		t.Fatalf("followup=%+v ok=%v result=%+v", followup, ok, result)
+	}
+}
+
 func TestProduceOPESCausalJobsV0NoBloqueaRegistroConQATemaCompletaV0(t *testing.T) {
 	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
 		Status:       "accepted",

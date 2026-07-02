@@ -109,6 +109,8 @@ func topicRegistryQualityRefLooksExplicitV0(value string) bool {
 		"extension_pass",
 		"informe_texto_publico",
 		"andamiaje_interno",
+		"contaminacion_estructural",
+		"structural_contamination",
 		"metacomentarios_examen",
 	} {
 		if strings.Contains(normalized, token) {
