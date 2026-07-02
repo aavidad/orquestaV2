@@ -78,6 +78,7 @@ func autoprogrammingRequiredTestsForGroupV0(
 	for _, task := range group.Tasks {
 		out = append(out, task.RequiredTests...)
 	}
+	out = append(out, autoprogrammingContractRequiredTestsForGroupV0(group)...)
 	return compactStringsV0(out)
 }
 
@@ -120,6 +121,7 @@ func autoprogrammingContextRefsForGroupV0(
 		refs = append(refs, "source_task_ref:"+task.TaskRef)
 		refs = append(refs, autoprogrammingSafeWorkflowContextRefsV0(task.ContextRefs)...)
 	}
+	refs = append(refs, autoprogrammingContractRefsForGroupV0(group)...)
 	return compactStringsV0(refs)
 }
 
@@ -179,6 +181,7 @@ func autoprogrammingAcceptanceCriteriaForGroupV0(
 			out = append(out, "Regla compacta "+task.TaskRef+": "+rule)
 		}
 	}
+	out = append(out, autoprogrammingContractAcceptanceCriteriaForGroupV0(group)...)
 	return compactAutoprogrammingWorkflowTextsLimitedV0(
 		compactStringsV0(out),
 		autoprogrammingWorkflowCriteriaLimitV0,

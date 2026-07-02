@@ -102,6 +102,54 @@ func TestBuildAutoprogrammingProgrammableWorkV0GeneraGoalSpecsPorGrupo(t *testin
 	}
 }
 
+func TestBuildAutoprogrammingProgrammableWorkV0GoalSpecInyectaGuardStartupLockDesdeIncidencia(t *testing.T) {
+	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{{
+			TaskRef: "task-ref-goal-startup-lock-001",
+			Area:    "Runtime Codex",
+			ContextRefs: []string{
+				"goal_migration:goal-first",
+				"goal_capability:starter",
+				"goal_capability:observer",
+				"goal_capability:closure-validator",
+				autoprogrammingStartupLockRemoteIncidentRefV0,
+			},
+		}}
+		request.WriteSet = []string{
+			"modulos/orquesta-runtime-codex/codex_wrapper_v0.go",
+			"modulos/orquesta-runtime-codex/codex_wrapper_v0_test.go",
+		}
+		request.MaxWriteSetEntries = 2
+	})
+
+	result := BuildAutoprogrammingProgrammableWorkV0(request)
+
+	if !result.Accepted ||
+		result.Work.GoalMigration.Status != AutoprogrammingGoalMigrationGoalReadyV0 ||
+		len(result.Work.GoalSpecs) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	spec := result.Work.GoalSpecs[0]
+	if issues := orquestagoal.ValidateGoalWorkSpecV0(spec); len(issues) > 0 {
+		t.Fatalf("goal spec invalido: %+v spec=%+v", issues, spec)
+	}
+	if !hasGoalRequiredTestCommandForAutoprogrammingTestV0(spec.RequiredTests, autoprogrammingStartupLockRegressionTestV0) {
+		t.Fatalf("required_tests=%+v", spec.RequiredTests)
+	}
+	if !hasGoalRuleRefForAutoprogrammingTestV0(spec.RuleRefs, autoprogrammingStartupLockContractRefV0) {
+		t.Fatalf("rule_refs=%+v", spec.RuleRefs)
+	}
+	for _, want := range []string{
+		"ORQUESTA_CODEX_STARTUP_LOCK_SECONDS",
+		"ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS",
+		"ORQUESTA_CODEX_STARTUP_LOCK_STALE_SECONDS",
+	} {
+		if !stringsSliceContainsSubstringForAutoprogrammingTestV0(spec.AcceptanceCriteria, want) {
+			t.Fatalf("criteria no contiene %q: %v", want, spec.AcceptanceCriteria)
+		}
+	}
+}
+
 func TestBuildAutoprogrammingProgrammableWorkV0NoGeneraGoalSpecsSinCapacidades(t *testing.T) {
 	result := BuildAutoprogrammingProgrammableWorkV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
 		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{{
@@ -134,6 +182,30 @@ func goalSpecPathsForTestV0(values []orquestagoal.GoalWriteScopeV0) []string {
 func hasGoalContextRefForAutoprogrammingTestV0(values []orquestagoal.GoalContextRefV0, kind, ref string) bool {
 	for _, value := range values {
 		if value.Kind == kind && value.Ref == ref {
+			return true
+		}
+	}
+	return false
+}
+
+func hasGoalRequiredTestCommandForAutoprogrammingTestV0(
+	values []orquestagoal.GoalRequiredTestV0,
+	command string,
+) bool {
+	for _, value := range values {
+		if value.Command == command {
+			return true
+		}
+	}
+	return false
+}
+
+func hasGoalRuleRefForAutoprogrammingTestV0(
+	values []orquestagoal.GoalRuleRefV0,
+	ref string,
+) bool {
+	for _, value := range values {
+		if value.Ref == ref {
 			return true
 		}
 	}

@@ -51,7 +51,7 @@ func autoprogrammingGoalWorkSpecForGroupV0(
 		Objective:          firstAutoprogrammingGoalTextV0(group.Profile.Objective, task.Title, task.Summary),
 		DirectorKind:       orquestagoal.GoalDirectorKindCodexGoalV0,
 		ContextRefs:        autoprogrammingGoalContextRefsV0(work, group),
-		RuleRefs:           autoprogrammingGoalRuleRefsV0(),
+		RuleRefs:           autoprogrammingGoalRuleRefsV0(group),
 		SkillRefs:          append([]string(nil), task.SkillRefs...),
 		WriteSet:           autoprogrammingGoalWriteSetV0(group.WriteSet),
 		RequiredTests:      autoprogrammingGoalRequiredTestsV0(task.RequiredTests, task.TaskID),
@@ -101,11 +101,15 @@ func autoprogrammingGoalContextRefsV0(
 	return refs
 }
 
-func autoprogrammingGoalRuleRefsV0() []orquestagoal.GoalRuleRefV0 {
-	return []orquestagoal.GoalRuleRefV0{
+func autoprogrammingGoalRuleRefsV0(
+	group AutoprogrammingProgrammableGroupV0,
+) []orquestagoal.GoalRuleRefV0 {
+	refs := []orquestagoal.GoalRuleRefV0{
 		{Kind: "repo_instructions", Ref: "AGENTS.md", Enforcement: orquestagoal.GoalRuleEnforcementHardV0},
 		{Kind: "goal_first_cut", Ref: "docs/orquesta_goal_first_codex_2026-06-25.md", Enforcement: orquestagoal.GoalRuleEnforcementAdvisoryV0},
 	}
+	refs = append(refs, autoprogrammingGoalContractRuleRefsForGroupV0(group)...)
+	return refs
 }
 
 func autoprogrammingGoalWriteSetV0(paths []string) []orquestagoal.GoalWriteScopeV0 {

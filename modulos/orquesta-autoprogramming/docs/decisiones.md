@@ -124,3 +124,22 @@ visibles en cola como skipped, filtra narrativas y puede emitir una tarea
 scanner con refs de scanner/hash. La proyeccion publica distingue
 `outbox_pending`, `wait_external` y `external_process_verified`; la composicion
 real sigue siendo responsable de observar outbox/procesos y ejecutar tests.
+
+## 2026-07-02: guards de contrato por refs explicitas
+
+Decision: `BuildAutoprogrammingProgrammableWorkV0` puede inyectar tests de
+regresion, criterios y refs de contrato cuando una tarea declara una ref
+explicita conocida en `context_refs`.
+
+Motivo: los agentes remotos goal-first reabrieron bugs ya cerrados de
+startup-lock/codex_wrapper al no recibir los invariantes completos antes de
+editar. El contrato debe viajar en el spec, no depender de memoria local del
+agente ni de inferencia por nombres de fichero.
+
+Consecuencia: el primer guard soportado es
+`contract:codex-startup-lock:v0`/`bug:BUG-ORQ-20260701-092`. Inyecta tests
+focales de `codex_wrapper` y criterios para enumerar las variables
+`ORQUESTA_CODEX_STARTUP_LOCK_SECONDS`,
+`ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS` y
+`ORQUESTA_CODEX_STARTUP_LOCK_STALE_SECONDS`. No se activan guards por
+subcadenas libres: solo por refs explicitas versionables.

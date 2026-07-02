@@ -28,12 +28,15 @@ Cobertura actual:
   payload durable por debajo del limite del core;
 - transforma solicitudes validas en `WorkProfileV0`/`WorkflowTaskV0` con refs
   opacas y pruebas requeridas preservadas;
+- inyecta guards de contrato/incidencia explicitos: startup-lock/codex_wrapper
+  agrega tests de regresion, criterios de variables
+  `ORQUESTA_CODEX_STARTUP_LOCK_*`, `context_refs` y `function_contract_refs`;
 - clasifica tareas de autoprogramacion goal-first sin runtime: legacy
   compatible, bloqueada por capacidades Goal, lista para Goal, cubierta por
   Goal y legacy requerido;
 - genera `GoalWorkSpecV0` valido cuando la clasificacion queda `goal_ready`,
-  conserva `write_set`, pruebas requeridas, criterios y refs opacas, y no genera
-  specs si faltan capacidades Goal;
+  conserva `write_set`, pruebas requeridas, criterios, refs opacas y rule refs
+  hard de contratos conocidos, y no genera specs si faltan capacidades Goal;
 - `v1` materializa perfiles de trabajo por tipo de app/area/tarea, prioriza
   `task_ref` sobre area y conserva fallback `v0`;
 - particiona `write_set` por area, normaliza aliases y rechaza rutas no

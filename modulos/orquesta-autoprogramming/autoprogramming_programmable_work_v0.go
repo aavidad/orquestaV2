@@ -181,10 +181,10 @@ func autoprogrammingWorkflowTaskForGroupV0(
 		MaxChildAgents:       limits.maxSubagentsPerAgent,
 		MaxSubagentsPerAgent: limits.maxSubagentsPerAgent,
 		MaxRecursiveAgents:   limits.maxRecursiveAgents,
-		FunctionContractRefs: []orquestacoreworkflow.WorkflowFunctionContractRefV0{
+		FunctionContractRefs: append([]orquestacoreworkflow.WorkflowFunctionContractRefV0{
 			{FunctionName: "ValidateAutoprogrammingRequestV0"},
 			{FunctionName: "BuildAutoprogrammingProgrammableWorkV0"},
-		},
+		}, autoprogrammingWorkflowFunctionContractRefsForGroupV0(group)...),
 		DependsOn: dependsOn,
 	})
 	if err != nil {

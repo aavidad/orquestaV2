@@ -152,6 +152,50 @@ func TestBuildAutoprogrammingProgrammableWorkV0TransportaContratoExplicitoDeTare
 	}
 }
 
+func TestBuildAutoprogrammingProgrammableWorkV0InyectaGuardStartupLockDesdeContrato(t *testing.T) {
+	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{{
+			TaskRef:     "task-ref-startup-lock-001",
+			Area:        "Runtime Codex",
+			ContextRefs: []string{autoprogrammingStartupLockContractRefV0},
+		}}
+		request.WriteSet = []string{
+			"modulos/orquesta-runtime-codex/codex_wrapper_v0.go",
+			"modulos/orquesta-runtime-codex/codex_wrapper_v0_test.go",
+		}
+		request.MaxWriteSetEntries = 2
+	})
+
+	result := BuildAutoprogrammingProgrammableWorkV0(request)
+
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
+	}
+	task := result.Work.Tasks[0]
+	for _, want := range []string{
+		autoprogrammingStartupLockRegressionTestV0,
+		request.RequiredTests[0],
+	} {
+		if !stringsSliceContainsForAutoprogrammingTestV0(task.RequiredTests, want) {
+			t.Fatalf("required_tests no contiene %q: %v", want, task.RequiredTests)
+		}
+	}
+	for _, want := range []string{
+		"ORQUESTA_CODEX_STARTUP_LOCK_SECONDS",
+		"ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS",
+		"ORQUESTA_CODEX_STARTUP_LOCK_STALE_SECONDS",
+		"stale efectivo no supera timeout efectivo",
+	} {
+		if !stringsSliceContainsSubstringForAutoprogrammingTestV0(task.AcceptanceCriteria, want) {
+			t.Fatalf("criteria no contiene %q: %v", want, task.AcceptanceCriteria)
+		}
+	}
+	assertAutoprogrammingContextRefV0(t, task.ContextRefs, autoprogrammingStartupLockContractRefV0)
+	if !autoprogrammingWorkflowTaskHasContractRefForTestV0(task, autoprogrammingStartupLockContractRefV0) {
+		t.Fatalf("function_contract_refs=%+v", task.FunctionContractRefs)
+	}
+}
+
 func TestBuildAutoprogrammingProgrammableWorkV0NormalizaContextRefsNoCompactos(t *testing.T) {
 	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
 		request.Tasks[0].ContextRefs = []string{
@@ -543,6 +587,18 @@ func stringsSliceContainsForAutoprogrammingTestV0(values []string, want string) 
 func stringsSliceContainsSubstringForAutoprogrammingTestV0(values []string, want string) bool {
 	for _, value := range values {
 		if strings.Contains(value, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func autoprogrammingWorkflowTaskHasContractRefForTestV0(
+	task orquestacoreworkflow.WorkflowTaskV0,
+	want string,
+) bool {
+	for _, ref := range task.FunctionContractRefs {
+		if ref.ContractRef == want {
 			return true
 		}
 	}

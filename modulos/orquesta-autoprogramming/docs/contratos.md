@@ -150,6 +150,14 @@ programable compatible con el nucleo:
   `GoalWorkSpecV0` neutral, uno por grupo programable, con `director_kind`
   `codex_goal`, `write_set`, pruebas requeridas, criterios, refs de contexto y
   politica de cierre por tests. No lanza ni observa ningun goal.
+- si una tarea declara refs explicitas de contrato/incidencia conocidas, puede
+  inyectar invariantes y pruebas de regresion obligatorias antes de entregar el
+  trabajo. Primer guard soportado: `contract:codex-startup-lock:v0`,
+  `bug:BUG-ORQ-20260701-092` o las incidencias startup-lock asociadas anaden
+  los tests focales de `codex_wrapper` y criterios para enumerar
+  `ORQUESTA_CODEX_STARTUP_LOCK_SECONDS`,
+  `ORQUESTA_CODEX_STARTUP_LOCK_TIMEOUT_SECONDS` y
+  `ORQUESTA_CODEX_STARTUP_LOCK_STALE_SECONDS`.
 - una composicion externa puede consumir esos `goal_specs[]` para lanzar y
   persistir `GoalWorkStateV0` si tiene backend Goal opt-in; esa decision no
   vive en este modulo puro.
@@ -199,6 +207,9 @@ Invariantes:
 - no importa runtime, Codex, MCP, servidor, HTTP, DB, VCS ni filesystem;
 - conserva paths relativos del `write_set`, pruebas requeridas y criterios del
   `WorkflowTaskV0`;
+- conserva/incluye guards de contrato como `rule_refs` hard cuando el task trae
+  una ref explicita conocida y los tests de regresion quedan en
+  `required_tests`;
 - usa refs opacas de request/proyecto/worktree/branch y contexto compacto de la
   tarea;
 - `complete` de un goal no se considera cierre por este modulo; la validacion
