@@ -232,6 +232,27 @@ func TestMCPObserveAppDirectorGoalErrorResultFromErrorV0PreservaIssueCodeV0(t *t
 	}
 }
 
+func TestMCPObserveAppDirectorGoalErrorResultFromErrorV0PreservaQuotaFilesystemV0(t *testing.T) {
+	result, ok := NewMCPObserveAppDirectorGoalErrorResultFromErrorV0(
+		MCPObserveAppDirectorGoalToolInputV0{RunRef: "run-ref-goal-issue-001"},
+		orquestagoal.GoalWorkLifecycleIssueErrorV0{
+			Field: "goal_result",
+			Issues: []orquestagoal.GoalWorkIssueV0{{
+				Code:  "codex_app_server_storage_quota_exceeded",
+				Field: "codex_goal_backend",
+			}},
+		},
+	)
+	if !ok ||
+		result.Estado != MCPObserveAppDirectorGoalEstadoErrorV0 ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "codex_app_server_storage_quota_exceeded" ||
+		result.Errores[0].Field != "codex_goal_backend" ||
+		result.Errores[0].Message != "codex_app_server_storage_quota_exceeded" {
+		t.Fatalf("ok=%v result=%+v", ok, result)
+	}
+}
+
 func TestMCPObserveAppDirectorGoalToolExecutorV0RunRefRequerido(t *testing.T) {
 	result, err := NewMCPObserveAppDirectorGoalToolExecutorV0(orquestaappdirectorservice.StartAppDirectorPortsV0{}).Execute(
 		context.Background(),

@@ -334,6 +334,12 @@ func codexAppServerIssueCodeFromMessageV0(message string) string {
 		strings.Contains(normalized, `"has_credits":false`) ||
 		strings.Contains(normalized, `"has_credits": false`):
 		return "codex_app_server_goal_provider_limited"
+	case strings.Contains(normalized, "codex_app_server_storage_quota_exceeded") ||
+		strings.Contains(normalized, "quota exceeded (os error 122)") ||
+		strings.Contains(normalized, "disk quota exceeded") ||
+		strings.Contains(normalized, "no space left on device") ||
+		strings.Contains(normalized, "enospc"):
+		return "codex_app_server_storage_quota_exceeded"
 	case strings.Contains(normalized, "managed standalone codex install not found"):
 		return "codex_app_server_standalone_missing"
 	case strings.Contains(normalized, "failed to connect to socket") ||

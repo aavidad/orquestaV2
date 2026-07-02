@@ -190,3 +190,22 @@ Evidencia focal:
 
 - `TestCodexStackObserveAppDirectorGoalExecutorV0IngiereReceiptTerminalMaterializadoV0`
 - `go test -count=1 ./modulos/orquesta-app-codex-stack`
+
+## Error de cuota local durante revalidacion
+
+Smoke real posterior con Orquesta `6945acc914` y directorio temporal conservado
+en `/tmp/orquesta-goal-first-app-server.u5tcIA`: la revalidacion no llego a
+comprobar el cierre porque `observe` fallo en el poll 8 con HTTP 500
+`observe_app_director_goal_http_error`; el log del backend Codex contenia
+`rollout writer failed: Quota exceeded (os error 122)`.
+
+Avance aplicado: los errores de cuota/espacio local del app-server Codex se
+normalizan como `codex_app_server_storage_quota_exceeded` para que `observe`
+los proyecte como issue publico accionable en vez de 500 generico. Ver
+`BUG-ORQ-20260702-124`.
+
+Evidencia focal:
+
+- `TestCodexAppServerIssueCodeForErrorV0ClasificaDiagnosticosV0`
+- `TestCodexGoalObserverV0ClasificaQuotaFilesystemBackendSinIssueCodeV0`
+- `TestMCPObserveAppDirectorGoalErrorResultFromErrorV0PreservaQuotaFilesystemV0`
