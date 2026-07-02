@@ -213,8 +213,7 @@ func TestScriptsQueArrancanServidorTemporalUsanShutdownComunV0(t *testing.T) {
 			return err
 		}
 		text := readOperationalDocGuardV0(t, root, rel)
-		startsTemporaryServer := strings.Contains(text, "ORQUESTA_SERVER_ADDR") &&
-			strings.Contains(text, `server_pid="$!"`)
+		startsTemporaryServer := scriptStartsTemporaryOrquestaServerV0(text)
 		if !startsTemporaryServer {
 			return nil
 		}
@@ -226,6 +225,19 @@ func TestScriptsQueArrancanServidorTemporalUsanShutdownComunV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("walk scripts: %v", err)
 	}
+}
+
+func scriptStartsTemporaryOrquestaServerV0(text string) bool {
+	if !strings.Contains(text, "ORQUESTA_SERVER_ADDR") {
+		return false
+	}
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.Contains(trimmed, "$!") {
+			return true
+		}
+	}
+	return false
 }
 
 func TestScriptsQueUsanShutdownComunPasanRuntimeDirV0(t *testing.T) {
