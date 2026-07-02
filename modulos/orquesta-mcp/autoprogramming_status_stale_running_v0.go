@@ -16,6 +16,7 @@ const (
 	mcpAutoprogrammingActionActiveNoCheckpointYetV0                = "active_no_checkpoint_yet"
 	mcpAutoprogrammingActionActiveTimeoutCheckpointRecentV0        = "active_timeout_checkpoint_recent"
 	mcpAutoprogrammingActionNoCheckpointConsumptionWarningV0       = "goal_active_no_checkpoint_consumption_warning"
+	mcpAutoprogrammingActionCheckpointOnlyConsumptionWarningV0     = "checkpoint_only_consumption_warning"
 	mcpAutoprogrammingActionNoCheckpointHighConsumptionV0          = "goal_active_no_checkpoint_high_consumption"
 	mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0        = "checkpoint_only_high_consumption"
 	mcpAutoprogrammingActionStaleRunningReconciledV0               = "stale_running_reconciled"
@@ -40,6 +41,7 @@ const (
 	mcpAutoprogrammingEvidenceGoalFirstBlockedV0                   = "evidence-ref-autoprogramming-status-goal-first-blocked"
 	mcpAutoprogrammingEvidenceActiveTimeoutCheckpointRecentV0      = "evidence-ref-autoprogramming-active-timeout-checkpoint-recent"
 	mcpAutoprogrammingEvidenceNoCheckpointConsumptionWarningV0     = "evidence-ref-autoprogramming-no-checkpoint-consumption-warning"
+	mcpAutoprogrammingEvidenceCheckpointOnlyConsumptionWarningV0   = "evidence-ref-autoprogramming-checkpoint-only-consumption-warning"
 	mcpAutoprogrammingEvidenceMissingTerminalReceiptV0             = "evidence-ref-autoprogramming-status-missing-terminal-receipt-after-artifacts-pass"
 	mcpAutoprogrammingEvidenceArtifactPathsOmittedV0               = "evidence-ref-autoprogramming-status-artifact-paths-omitted-materialized"
 	mcpAutoprogrammingEvidenceQAFailedPublicTextV0                 = "evidence-ref-autoprogramming-status-qa-failed-public-text"
@@ -434,6 +436,8 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 		checkpointOnlyHighConsumption := mcpAutoprogrammingCheckpointOnlyHighConsumptionV0(action, observed, policy)
 		checkpointOnlyTimedOut := activeTimeoutCheckpointRecent &&
 			mcpAutoprogrammingCheckpointOnlyWaitExpiredV0(action, observedAt, policy)
+		checkpointOnlyConsumptionWarning := !activeTimeoutBackendActive &&
+			mcpAutoprogrammingCheckpointOnlyConsumptionWarningV0(action, observed, policy)
 		noCheckpointHighConsumption := !activeTimeoutBackendActive &&
 			mcpAutoprogrammingNoCheckpointHighConsumptionV0(action, observed, policy)
 		if activeNoCheckpoint {
@@ -468,6 +472,16 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 			action.EvidenceRefs = compactStringsMCPV0(append(
 				action.EvidenceRefs,
 				mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0,
+			))
+		}
+		if checkpointOnlyConsumptionWarning && !checkpointOnlyHighConsumption {
+			action.Code = mcpAutoprogrammingActionCheckpointOnlyConsumptionWarningV0
+			action.Severity = "warning"
+			action.Reason = "checkpoint_only_consumption_warning: backend goal is active with rising token usage after checkpoint but no next artifact or domain receipt yet; require the next artifact soon before high-consumption replan"
+			action.RecommendedAction = "observe_goal_backend_require_next_artifact"
+			action.EvidenceRefs = compactStringsMCPV0(append(
+				action.EvidenceRefs,
+				mcpAutoprogrammingEvidenceCheckpointOnlyConsumptionWarningV0,
 			))
 		}
 		if checkpointOnlyHighConsumption || checkpointOnlyTimedOut {
@@ -803,6 +817,34 @@ func mcpAutoprogrammingCheckpointOnlyHighConsumptionV0(
 	policy = NormalizeMCPAutoprogrammingGoalProgressPolicyV0(policy)
 	if !mcpAutoprogrammingObservedGoalActiveV0(observed) ||
 		action.TokensUsed < policy.CheckpointOnlyHighConsumptionTokens ||
+		len(action.DomainReceiptRefs) > 0 {
+		return false
+	}
+	artifactRefs := compactStringsMCPV0(action.ArtifactRefs)
+	if len(artifactRefs) == 0 {
+		return false
+	}
+	for _, ref := range artifactRefs {
+		if !mcpAutoprogrammingArtifactRefLooksCheckpointV0(ref) {
+			return false
+		}
+	}
+	return true
+}
+
+func mcpAutoprogrammingCheckpointOnlyConsumptionWarningV0(
+	action MCPAutoprogrammingActionableRunV0,
+	observed *MCPDirectorStatsToolResultV0,
+	policy MCPAutoprogrammingGoalProgressPolicyV0,
+) bool {
+	policy = NormalizeMCPAutoprogrammingGoalProgressPolicyV0(policy)
+	warningTokens := policy.CheckpointOnlyHighConsumptionTokens / 2
+	if warningTokens <= 0 {
+		warningTokens = mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensDefaultV0 / 2
+	}
+	if !mcpAutoprogrammingObservedGoalActiveV0(observed) ||
+		action.TokensUsed < warningTokens ||
+		action.TokensUsed >= policy.CheckpointOnlyHighConsumptionTokens ||
 		len(action.DomainReceiptRefs) > 0 {
 		return false
 	}
