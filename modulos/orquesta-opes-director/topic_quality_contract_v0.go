@@ -70,6 +70,7 @@ var (
 	opesTopicQualityCodeFenceReV0      = regexp.MustCompile("(?s)```.*?```")
 	opesTopicQualityInlineCodeReV0     = regexp.MustCompile("`[^`]*`")
 	opesTopicQualityMarkdownAnchorReV0 = regexp.MustCompile(`\{#[A-Za-z0-9][A-Za-z0-9_-]*\}`)
+	opesTopicQualityHeadingTableReV0   = regexp.MustCompile(`(?m)^#{1,6}\s+.*\|.*\|`)
 )
 
 type OPESTopicQualityVisualResultV0 struct {
@@ -477,6 +478,9 @@ func opesTopicPublicStructuralContaminationMatchesV0(text string) []string {
 	var matches []string
 	if opesTopicQualityMarkdownAnchorReV0.MatchString(text) {
 		matches = append(matches, "markdown_anchor")
+	}
+	if opesTopicQualityHeadingTableReV0.MatchString(text) {
+		matches = append(matches, "markdown_heading_table")
 	}
 	for _, pattern := range patterns {
 		if strings.Contains(normalized, pattern) {

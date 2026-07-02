@@ -666,6 +666,14 @@ descarte global por texto libre. Evidencia:
 `TestValidateOPESTopicQualityContractV0DetectaCorreccionOrtograficaCorruptaV0`
 y `go test -count=1 ./modulos/orquesta-opes-director`.
 
+Avance BUG-ORQ-20260701-058/075 2026-07-02 noche 5:
+`OPESTopicQualityContractV0` detecta tablas Markdown colapsadas dentro de un
+encabezado (`## ... | ... | ...`) como contaminacion estructural del texto
+publico. Es una marca formal de exportacion defectuosa, no una heuristica de
+contenido, y conserva el artefacto como recuperable para rework. Evidencia:
+`TestValidateOPESTopicQualityContractV0DetectaTablaColapsadaEnEncabezadoV0` y
+`go test -count=1 ./modulos/orquesta-opes-director`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

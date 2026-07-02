@@ -150,6 +150,24 @@ func TestValidateOPESTopicQualityContractV0DetectaAnclasMarkdownPublicasV0(t *te
 	}
 }
 
+func TestValidateOPESTopicQualityContractV0DetectaTablaColapsadaEnEncabezadoV0(t *testing.T) {
+	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
+		TopicRef:           "tema-002",
+		Level:              OPESTopicQualityLevelBV0,
+		CanonicalWordCount: 11200,
+		Text: strings.Join([]string{
+			"## Concepto | Regimen | Efecto",
+			"| --- | --- | --- |",
+			"El texto publico debe separar encabezado, tabla y desarrollo.",
+		}, "\n"),
+	})
+
+	if result.Status != OPESTopicQualityStatusNeedsReworkV0 ||
+		!opesTopicQualityIssueCodeInSetV0(result.Issues, ErrOPESTopicQualityStructuralContaminationV0) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestValidateOPESTopicQualityContractV0NoAceptaRasterDecorativoComoDidacticoV0(t *testing.T) {
 	result := ValidateOPESTopicQualityContractV0(OPESTopicQualityContractRequestV0{
 		TopicRef:              "tema-010",
