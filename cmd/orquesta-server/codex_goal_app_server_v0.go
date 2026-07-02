@@ -280,6 +280,7 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 	if strings.TrimSpace(goal.ThreadID) != "" {
 		receipt.ExternalGoalRef = strings.TrimSpace(goal.ThreadID)
 	}
+	receipt = codexAppServerObservationReceiptWithGoalUsageV0(receipt, goal)
 	if activeResult, found := backend.observeCodexAppServerActiveGoalResultV0(ctx, request, receipt); found {
 		return activeResult, nil
 	}

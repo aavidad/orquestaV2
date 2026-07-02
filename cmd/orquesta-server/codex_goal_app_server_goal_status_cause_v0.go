@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 )
+
+const codexAppServerGoalHighTokenUsageThresholdV0 = 100000
 
 func (backend serverCodexAppServerGoalBackendV0) codexAppServerStartImmediateLimitedReceiptV0(
 	ctx context.Context,
@@ -46,6 +49,34 @@ func codexAppServerObservationReceiptWithGoalStatusCauseV0(
 	}
 	receipt.IssueCode = code
 	receipt.EvidenceRefs = compactServerStackStringsV0(append(receipt.EvidenceRefs, evidenceRef))
+	return receipt
+}
+
+func codexAppServerObservationReceiptWithGoalUsageV0(
+	receipt orquestaruntimecodexgoal.CodexGoalObservationReceiptV0,
+	goal *serverCodexAppServerThreadGoalV0,
+) orquestaruntimecodexgoal.CodexGoalObservationReceiptV0 {
+	if goal == nil || strings.TrimSpace(receipt.Status) != orquestagoal.GoalStatusRunningV0 {
+		return receipt
+	}
+	if goal.TokensUsed < codexAppServerGoalHighTokenUsageThresholdV0 {
+		return receipt
+	}
+	usage := []string{
+		"codex_app_server_goal_status_active_high_token_usage",
+		fmt.Sprintf("tokens_used=%d", goal.TokensUsed),
+	}
+	if goal.TimeUsedSeconds > 0 {
+		usage = append(usage, fmt.Sprintf("time_used_seconds=%d", goal.TimeUsedSeconds))
+	}
+	if goal.TokenBudget != nil && *goal.TokenBudget > 0 {
+		usage = append(usage, fmt.Sprintf("token_budget=%d", *goal.TokenBudget))
+	}
+	receipt.Summary = strings.Join(usage, " ")
+	receipt.EvidenceRefs = compactServerStackStringsV0(append(
+		receipt.EvidenceRefs,
+		"evidence-ref-codex-app-server-goal-high-token-usage",
+	))
 	return receipt
 }
 

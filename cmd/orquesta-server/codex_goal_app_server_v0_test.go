@@ -358,6 +358,43 @@ func TestServerCodexAppServerGoalBackendV0ObservaUsageLimitedConCausaOperableV0(
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0ExponeAltoConsumoActivoV0(t *testing.T) {
+	tokenBudget := 180000
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID:        "thread-ref-goal-high-tokens-001",
+			Status:          "active",
+			TokenBudget:     &tokenBudget,
+			TokensUsed:      139028,
+			TimeUsedSeconds: 309,
+		},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-high-tokens-001",
+			Status: serverCodexAppServerThreadStatusV0("idle"),
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, Timeout: 10 * time.Minute}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		SchemaVersion:   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+		GoalRef:         "goal-ref-codex-app-server-high-tokens-001",
+		ExternalGoalRef: "thread-ref-goal-high-tokens-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		receipt.IssueCode != "" ||
+		!strings.Contains(receipt.Summary, "codex_app_server_goal_status_active_high_token_usage") ||
+		!strings.Contains(receipt.Summary, "tokens_used=139028") ||
+		!strings.Contains(receipt.Summary, "time_used_seconds=309") ||
+		!strings.Contains(receipt.Summary, "token_budget=180000") ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-high-token-usage") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0BloqueaGoalActivoSiThreadTerminaSinCreditosV0(t *testing.T) {
 	root := t.TempDir()
 	sessionPath := filepath.Join(root, "rollout.jsonl")
