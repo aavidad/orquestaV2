@@ -246,12 +246,38 @@ func TestScriptsQueArrancanServidorTemporalUsanShutdownComunV0(t *testing.T) {
 }
 
 func scriptStartsTemporaryOrquestaServerV0(text string) bool {
+	if scriptRunsTemporaryOrquestaServerCommandV0(text) {
+		return true
+	}
 	if !strings.Contains(text, "ORQUESTA_SERVER_ADDR") {
 		return false
 	}
 	for _, line := range strings.Split(text, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.Contains(trimmed, "$!") {
+			return true
+		}
+	}
+	return false
+}
+
+func scriptRunsTemporaryOrquestaServerCommandV0(text string) bool {
+	lines := strings.Split(text, "\n")
+	for index, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if !strings.Contains(trimmed, "orquesta-server") ||
+			!strings.Contains(trimmed, " run") {
+			continue
+		}
+		windowEnd := index + 4
+		if windowEnd > len(lines) {
+			windowEnd = len(lines)
+		}
+		window := strings.Join(lines[index:windowEnd], "\n")
+		if strings.Contains(window, "&") {
 			return true
 		}
 	}
