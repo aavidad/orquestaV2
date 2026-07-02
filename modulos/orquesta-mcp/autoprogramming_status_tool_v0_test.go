@@ -1684,6 +1684,57 @@ func TestMCPAutoprogrammingStatusExecutorV0ArtifactPathsOmitidosPideRepairReceip
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0ArtefactosParcialesPideRevisionV0(t *testing.T) {
+	runRef := "run-ref-autop-status-partial-artifacts-001"
+	goalRef := "goal-ref-autop-status-partial-artifacts-001"
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: runRef,
+			Status: MCPGoalFirstPartialArtifactsWrittenV0,
+			Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
+				Status:    orquestacionnucleoapp.DirectorClosureStatusBlockedV0,
+				Blocked:   true,
+				BlockedBy: []string{MCPGoalFirstPartialArtifactsWrittenV0},
+			},
+			Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+				Issues: []orquestacionnucleoapp.DirectorProgressIssueV0{{
+					Code:  MCPGoalFirstPartialArtifactsWrittenV0,
+					Field: "goal_first.partial_artifacts",
+				}},
+			},
+		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Status:       orquestagoal.GoalStatusBlockedV0,
+			ArtifactRefs: []string{"artifact-ref-materialized-partial-001"},
+			EvidenceRefs: []string{"evidence-ref-goal-materialized-partial-artifacts-written"},
+			IssueCodes:   []string{MCPGoalFirstPartialArtifactsWrittenV0},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{empty: true},
+		Stats: stats,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{RunRef: runRef})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != MCPGoalFirstPartialArtifactsWrittenV0 ||
+		action.RecommendedAction != MCPGoalFirstReviewPartialArtifactsActionV0 ||
+		action.GoalRef != goalRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.ArtifactRefs, "artifact-ref-materialized-partial-001") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-autoprogramming-status-partial-artifacts-written") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-goal-materialized-partial-artifacts-written") {
+		t.Fatalf("action=%+v", action)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0ListaGoalMarkerSinStateAunqueColaNoVisible(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-marker-listed-001"
 	goalRef := "goal-ref-autop-status-goal-marker-listed-001"

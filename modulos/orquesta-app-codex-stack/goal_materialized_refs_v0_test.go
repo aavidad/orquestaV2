@@ -64,6 +64,32 @@ func TestStackGoalMaterializedRefsSourceV0DetectaCheckpointEnWriteSet(t *testing
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0DetectaArtefactosParcialesSinReceiptTerminal(t *testing.T) {
+	projectDir := t.TempDir()
+	topicDir := filepath.Join(projectDir, "temas", "tema_036")
+	if err := os.MkdirAll(topicDir, 0o700); err != nil {
+		t.Fatalf("mkdir topic: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "borrador_reutilizable.md"), []byte("# Borrador\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-partial-artifacts-001", "temas/tema_036")
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		!containsStringV0(result.IssueCodes, "partial_artifacts_written") ||
+		containsStringV0(result.IssueCodes, "missing_terminal_receipt_after_artifacts_pass") ||
+		!containsStringV0(result.EvidenceRefs, "evidence-ref-goal-materialized-partial-artifacts-written") ||
+		!containsStringPrefixForTestV0(result.ArtifactRefs, "artifact-ref-materialized:") {
+		t.Fatalf("artefactos parciales no proyectados: ok=%v result=%+v", ok, result)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0NoSaleDelProjectWorkDir(t *testing.T) {
 	projectDir := t.TempDir()
 	state := orquestagoal.GoalWorkStateV0{

@@ -228,6 +228,9 @@ func mcpObserveAppDirectorGoalRecommendedActionV0(
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
 		return MCPGoalFirstRepairReceiptActionV0
 	}
+	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstPartialArtifactsWrittenV0) {
+		return MCPGoalFirstReviewPartialArtifactsActionV0
+	}
 	if mcpObserveAppDirectorGoalLooksUsageLimitedV0(result) {
 		return "inspect_goal_backend_limits"
 	}
@@ -349,6 +352,8 @@ func EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
 			field = "goal_first.qa_public_text"
 		} else if code == MCPGoalFirstArtifactPathsOmittedMaterializedV0 {
 			field = "goal_first.artifact_paths"
+		} else if code == MCPGoalFirstPartialArtifactsWrittenV0 {
+			field = "goal_first.partial_artifacts"
 		}
 		result.ClosureIssues = append(result.ClosureIssues, MCPValidationIssueV0{
 			Code:    code,

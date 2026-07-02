@@ -52,6 +52,29 @@ func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0ArtifactPathsOmiti
 	}
 }
 
+func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0ArtefactosParcialesPideRevision(t *testing.T) {
+	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
+		MCPObserveAppDirectorGoalToolResultV0{
+			GoalRef:    "goal-ref-observe-partial-artifacts-001",
+			GoalStatus: "blocked",
+		},
+		MCPDirectorGoalMaterializedRefsV0{
+			ArtifactRefs: []string{"artifact-ref-materialized-partial-001"},
+			EvidenceRefs: []string{"evidence-ref-goal-materialized-partial-artifacts-written"},
+			IssueCodes:   []string{MCPGoalFirstPartialArtifactsWrittenV0},
+		},
+	)
+
+	if result.RecommendedAction != MCPGoalFirstReviewPartialArtifactsActionV0 ||
+		len(result.ClosureIssues) != 1 ||
+		result.ClosureIssues[0].Code != MCPGoalFirstPartialArtifactsWrittenV0 ||
+		result.ClosureIssues[0].Field != "goal_first.partial_artifacts" ||
+		!containsStringMCPV0(result.ArtifactRefs, "artifact-ref-materialized-partial-001") ||
+		!containsStringMCPV0(result.EvidenceRefs, "evidence-ref-goal-materialized-partial-artifacts-written") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestNewMCPObserveAppDirectorGoalResultV0ReworkRunningNoPublicaClosureBloqueada(t *testing.T) {
 	result := NewMCPObserveAppDirectorGoalResultV0(
 		MCPObserveAppDirectorGoalToolInputV0{RunRef: "run-ref-observe-rework-running-001"},

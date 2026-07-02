@@ -25,6 +25,7 @@ const (
 	goalMaterializedMissingTerminalReceiptEvidence = "evidence-ref-goal-materialized-missing-terminal-receipt-after-artifacts-pass"
 	goalMaterializedArtifactPathsOmittedEvidence   = "evidence-ref-goal-materialized-artifact-paths-omitted"
 	goalMaterializedQAFailedPublicTextEvidence     = "evidence-ref-goal-materialized-qa-failed-public-text"
+	goalMaterializedPartialArtifactsEvidence       = "evidence-ref-goal-materialized-partial-artifacts-written"
 )
 
 var errGoalMaterializedRefsScanDoneV0 = errors.New("goal_materialized_refs_scan_done")
@@ -101,6 +102,10 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 			"expected-terminal-receipt:"+safeGoalMaterializedRefPartV0(goalMaterializedGoalResultFileV0),
 			"expected-terminal-receipt:"+safeGoalMaterializedRefPartV0(goalMaterializedOPESReworkDeliveryFileV0),
 		)
+	}
+	if scan.HasArtifact && !scan.HasTerminalReceipt {
+		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstPartialArtifactsWrittenV0)
+		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedPartialArtifactsEvidence)
 	}
 	if omitted := goalMaterializedArtifactPathsOmittedV0(state, scan.ArtifactPaths); len(omitted) > 0 {
 		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstArtifactPathsOmittedMaterializedV0)

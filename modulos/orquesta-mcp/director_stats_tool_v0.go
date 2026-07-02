@@ -513,6 +513,20 @@ func applyMCPDirectorGoalProgressProjectionV0(
 		})
 		return
 	}
+	if containsStringMCPV0(goal.IssueCodes, MCPGoalFirstPartialArtifactsWrittenV0) {
+		stats.Status = MCPGoalFirstPartialArtifactsWrittenV0
+		stats.Closure.BlockedBy = compactStringsMCPV0(append(
+			stats.Closure.BlockedBy,
+			MCPGoalFirstPartialArtifactsWrittenV0,
+		))
+		stats.Closure.BlockerRefs = compactStringsMCPV0(append(stats.Closure.BlockerRefs, goal.EvidenceRefs...))
+		stats.Progress.Issues = append(stats.Progress.Issues, orquestacionnucleoapp.DirectorProgressIssueV0{
+			Code:    MCPGoalFirstPartialArtifactsWrittenV0,
+			Field:   "goal_first.partial_artifacts",
+			Message: "goal_first materialized recoverable artifacts without terminal receipt; review partial artifacts and continue or repair receipt before closure",
+		})
+		return
+	}
 	if len(derivedDeliveries) > 0 {
 		stats.Closure.BlockedBy = compactStringsMCPV0(append(stats.Closure.BlockedBy, "blocked_with_partial_delivery"))
 		stats.Progress.Issues = append(stats.Progress.Issues, orquestacionnucleoapp.DirectorProgressIssueV0{
