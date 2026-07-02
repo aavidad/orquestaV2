@@ -258,6 +258,54 @@ func scriptStartsTemporaryOrquestaServerV0(text string) bool {
 	return false
 }
 
+func TestScriptsQueDeleganArranqueServidorTemporalInstalanCleanupV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	scriptsDir := filepath.Join(root, "scripts")
+	err := filepath.WalkDir(scriptsDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".sh" {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		text := readOperationalDocGuardV0(t, root, rel)
+		if !scriptInvokesOrquestaServerStartHelperV0(text) {
+			return nil
+		}
+		if !strings.Contains(text, "trap ") || !strings.Contains(text, " EXIT") {
+			t.Fatalf("%s delega arranque de servidor temporal sin trap EXIT de cleanup", rel)
+		}
+		if !strings.Contains(text, "smoke_shutdown_orquesta_server") &&
+			!strings.Contains(text, "trap smoke_cleanup EXIT") {
+			t.Fatalf("%s delega arranque de servidor temporal sin cleanup comun directo o delegado", rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk scripts: %v", err)
+	}
+}
+
+func scriptInvokesOrquestaServerStartHelperV0(text string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") ||
+			strings.HasPrefix(trimmed, "func ") ||
+			strings.HasSuffix(trimmed, "() {") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "smoke_start_orquesta_server") ||
+			strings.HasPrefix(trimmed, "start_orquesta_server") {
+			return true
+		}
+	}
+	return false
+}
+
 func TestScriptsQueUsanShutdownComunPasanRuntimeDirV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	scriptsDir := filepath.Join(root, "scripts")
