@@ -1,0 +1,191 @@
+package orquestaappcodexstack
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestamcp "orquesta/modulos/orquesta-mcp"
+)
+
+func TestRunSupervisorGoalFirstResidentPreparaReworkPorCheckpointHighConsumptionV0(t *testing.T) {
+	ctx := context.Background()
+	store := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	source := goalFirstResidentReworkSourceStateForTestV0(
+		"run-ref-goal-first-resident-rework-source-001",
+		"checkpoint_only_high_consumption",
+	)
+	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
+	}
+	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:     store,
+			GoalReworkLauncher: launcher,
+		},
+		Stores: StoresV0{AppGoalStateStore: store},
+	}}
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef:       source.RunRef,
+		ResidentMode: true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.StopReason != "goal_first_resident_rework_prepared" ||
+		len(result.RepairRunRefs) != 1 ||
+		launcher.calls != 1 {
+		t.Fatalf("resultado rework inesperado: result=%+v calls=%d", result, launcher.calls)
+	}
+	spec := launcher.specs[0]
+	if spec.RunRef != result.RepairRunRefs[0] ||
+		!strings.Contains(spec.Objective, "Rework acotado") ||
+		!stringInSetV0(spec.EvidenceRefs, goalFirstResidentReworkPreparedEvidenceRefV0) {
+		t.Fatalf("spec rework incompleto: %+v result=%+v", spec, result)
+	}
+	if _, err := store.LoadGoalWorkStateV0(ctx, result.RepairRunRefs[0]); err != nil {
+		t.Fatalf("estado rework no persistido: %v", err)
+	}
+	persistedSource, err := store.LoadGoalWorkStateV0(ctx, source.RunRef)
+	if err != nil {
+		t.Fatalf("Load source: %v", err)
+	}
+	if goalFirstResidentExistingReworkRunRefV0(persistedSource) != result.RepairRunRefs[0] {
+		t.Fatalf("source sin marca de rework: %+v", persistedSource.EvidenceRefs)
+	}
+}
+
+func TestRunSupervisorGoalFirstResidentReworkEsIdempotenteV0(t *testing.T) {
+	ctx := context.Background()
+	store := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	source := goalFirstResidentReworkSourceStateForTestV0(
+		"run-ref-goal-first-resident-rework-source-002",
+		"goal_active_no_checkpoint_high_consumption",
+	)
+	existingRunRef := "run-ref-goal-first-resident-rework-existing-002"
+	source.EvidenceRefs = append(source.EvidenceRefs, goalFirstResidentReworkExistingEvidencePrefixV0+existingRunRef)
+	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
+	}
+	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:     store,
+			GoalReworkLauncher: launcher,
+		},
+		Stores: StoresV0{AppGoalStateStore: store},
+	}}
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef:       source.RunRef,
+		ResidentMode: true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if launcher.calls != 0 ||
+		len(result.RepairRunRefs) != 1 ||
+		result.RepairRunRefs[0] != existingRunRef {
+		t.Fatalf("rework no idempotente: result=%+v calls=%d", result, launcher.calls)
+	}
+	if !strings.Contains(result.Diagnostics[len(result.Diagnostics)-1].Code, "already_prepared") {
+		t.Fatalf("diagnostico idempotente ausente: %+v", result.Diagnostics)
+	}
+}
+
+func TestRunSupervisorGoalFirstNoResidentNoLanzaReworkV0(t *testing.T) {
+	ctx := context.Background()
+	store := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	source := goalFirstResidentReworkSourceStateForTestV0(
+		"run-ref-goal-first-resident-rework-source-003",
+		"checkpoint_only_high_consumption",
+	)
+	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
+	}
+	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:     store,
+			GoalReworkLauncher: launcher,
+		},
+		Stores: StoresV0{AppGoalStateStore: store},
+	}}
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{RunRef: source.RunRef})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if launcher.calls != 0 ||
+		len(result.RepairRunRefs) != 0 ||
+		result.StopReason != "goal_first_observe_required" {
+		t.Fatalf("supervision no residente lanzo rework: result=%+v calls=%d", result, launcher.calls)
+	}
+}
+
+func goalFirstResidentReworkSourceStateForTestV0(runRef, reason string) orquestagoal.GoalWorkStateV0 {
+	goalRef := strings.Replace(runRef, "run-ref-", "goal-ref-", 1)
+	return orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusBlockedV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			GoalRef:      goalRef,
+			RequestRef:   strings.Replace(runRef, "run-ref-", "request-ref-", 1),
+			RunRef:       runRef,
+			ProjectRef:   "project-ref-goal-first-resident-rework-test",
+			Objective:    "Continuar trabajo goal-first con entrega verificable.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{
+				Path:    "docs/goal-first-resident-rework-test.md",
+				Purpose: "evidencia de test",
+			}},
+			EvidenceRefs: []string{"evidence-ref-goal-first-resident-rework-source"},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			SchemaVersion: orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+			Status:        orquestagoal.GoalStatusRunningV0,
+			GoalRef:       goalRef,
+		},
+		LastResult: &orquestagoal.GoalWorkResultV0{
+			SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+			Status:        orquestagoal.GoalStatusBlockedV0,
+			GoalRef:       goalRef,
+			EvidenceRefs: []string{
+				"evidence-ref-autoprogramming-checkpoint-only-high-consumption",
+				"evidence-ref-autoprogramming-no-checkpoint-high-consumption",
+			},
+			Issues: []orquestagoal.GoalWorkIssueV0{{Code: reason, Field: "goal_backend"}},
+		},
+		LastClosure: &orquestagoal.GoalClosureValidationV0{
+			Status:      orquestagoal.GoalStatusBlockedV0,
+			NeedsRework: true,
+			Issues:      []orquestagoal.GoalWorkIssueV0{{Code: reason, Field: "goal_backend"}},
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-first-resident-rework-source-state"},
+	}
+}
+
+type goalFirstResidentReworkLauncherForTestV0 struct {
+	calls int
+	specs []orquestagoal.GoalWorkSpecV0
+}
+
+func (launcher *goalFirstResidentReworkLauncherForTestV0) LaunchGoalWorkV0(
+	_ context.Context,
+	spec orquestagoal.GoalWorkSpecV0,
+) (orquestagoal.GoalLaunchReceiptV0, error) {
+	launcher.calls++
+	launcher.specs = append(launcher.specs, spec)
+	return orquestagoal.GoalLaunchReceiptV0{
+		SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: "thread-ref-goal-first-resident-rework-test",
+		EvidenceRefs:    []string{"evidence-ref-goal-first-resident-rework-launch"},
+	}, nil
+}
