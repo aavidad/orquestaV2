@@ -227,7 +227,7 @@ Evidencia esperada:
 - `docker-compose.yml` publica solo `127.0.0.1:19039:19039`.
 - Los binds del host salen solo de `/srv/orquesta-self` y no montan Docker socket, OPES productivo, `uso-app` ni rutas de temarios.
 - El contenedor conserva usuario `10001:10001`, `read_only: true`, `no-new-privileges:true` y `cap_drop: ALL`.
-- `orquesta-self.env.example` mantiene desactivados promocion, OPES/DomainWork productivos y fallbacks `stdio`/proxy; `app_server_tmux` sigue siendo obligatorio.
+- `orquesta-self.env.example` mantiene desactivados promocion, OPES/DomainWork productivos y backends historicos/proxy; `app_server_tmux` sigue siendo obligatorio.
 - El runbook documenta `sudo` solo para preparacion/operacion host del contenedor aislado y conserva el check de `docker inspect`.
 
 Ultima ejecucion: `2026-07-02: OK`

@@ -61,7 +61,7 @@ La prueba debe fallar si el compose publica puertos fuera de
 `127.0.0.1:19039`, monta rutas fuera de `/srv/orquesta-self`, monta
 `/var/run/docker.sock`, pierde `no-new-privileges`, `cap_drop: ALL`,
 `read_only: true` o usuario `10001:10001`, o si el env de ejemplo activa
-produccion, OPES/DomainWork, promocion automatica o fallback `stdio`/proxy.
+produccion, OPES/DomainWork, promocion automatica o backends historicos/proxy.
 
 ## Quien dirige
 
