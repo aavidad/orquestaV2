@@ -146,6 +146,95 @@ func TestRunSupervisorGoalFirstResidentPreparaReworkPorTimeoutInicialSinArtefact
 	}
 }
 
+func TestRunSupervisorGoalFirstResidentPreparaReworkPorArtefactosParcialesTerminalesV0(t *testing.T) {
+	ctx := context.Background()
+	store := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	source := goalFirstResidentReworkSourceStateForTestV0(
+		"run-ref-goal-first-resident-partial-artifacts-001",
+		orquestamcp.MCPGoalFirstPartialArtifactsWrittenV0,
+	)
+	source.LastResult.EvidenceRefs = []string{
+		"evidence-ref-goal-materialized-partial-artifacts-written",
+		"evidence-ref-goal-materialized-checkpoint-detected",
+	}
+	source.LastClosure.Issues = []orquestagoal.GoalWorkIssueV0{{
+		Code:  orquestamcp.MCPGoalFirstPartialArtifactsWrittenV0,
+		Field: "goal_first.partial_artifacts",
+	}}
+	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
+	}
+	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:     store,
+			GoalReworkLauncher: launcher,
+		},
+		Stores: StoresV0{AppGoalStateStore: store},
+	}}
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef:       source.RunRef,
+		ResidentMode: true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.StopReason != "goal_first_resident_rework_prepared" ||
+		len(result.RepairRunRefs) != 1 ||
+		launcher.calls != 1 ||
+		!hasGoalFirstResidentReworkContextForTestV0(
+			launcher.specs[0].ContextRefs,
+			"rework_reason",
+			orquestamcp.MCPGoalFirstPartialArtifactsWrittenV0,
+		) ||
+		!stringInSetV0(launcher.specs[0].EvidenceRefs, "evidence-ref-goal-materialized-partial-artifacts-written") {
+		t.Fatalf("rework por artefactos parciales no preparado: result=%+v calls=%d spec=%+v", result, launcher.calls, launcher.specs)
+	}
+}
+
+func TestRunSupervisorGoalFirstResidentNoReworkPorIssueRecuperableActivoV0(t *testing.T) {
+	ctx := context.Background()
+	store := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	source := goalFirstResidentReworkSourceStateForTestV0(
+		"run-ref-goal-first-resident-partial-artifacts-active-001",
+		orquestamcp.MCPGoalFirstPartialArtifactsWrittenV0,
+	)
+	source.Status = orquestagoal.GoalStatusRunningV0
+	source.LastResult = nil
+	source.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status: orquestagoal.GoalStatusRunningV0,
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  orquestamcp.MCPGoalFirstPartialArtifactsWrittenV0,
+			Field: "goal_first.partial_artifacts",
+		}},
+	}
+	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
+	}
+	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:     store,
+			GoalReworkLauncher: launcher,
+		},
+		Stores: StoresV0{AppGoalStateStore: store},
+	}}
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef:       source.RunRef,
+		ResidentMode: true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if launcher.calls != 0 ||
+		len(result.RepairRunRefs) != 0 ||
+		result.StopReason != "goal_first_observe_required" {
+		t.Fatalf("estado activo no debe lanzar rework: result=%+v calls=%d", result, launcher.calls)
+	}
+}
+
 func TestRunSupervisorGoalFirstNoResidentNoLanzaReworkV0(t *testing.T) {
 	ctx := context.Background()
 	store := newGoalFirstQueueStateStoreForTestV0()

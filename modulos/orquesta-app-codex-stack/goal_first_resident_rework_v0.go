@@ -14,6 +14,12 @@ const (
 	goalFirstResidentReworkReasonCheckpointOnlyV0   = "checkpoint_only_high_consumption"
 	goalFirstResidentReworkReasonNoCheckpointV0     = "goal_active_no_checkpoint_high_consumption"
 	goalFirstResidentReworkReasonActiveTimeoutV0    = "codex_app_server_goal_active_timeout"
+	goalFirstResidentReworkReasonQAFailedTextV0     = orquestamcp.MCPGoalFirstQAFailedPublicTextV0
+	goalFirstResidentReworkReasonArtifactPathsV0    = orquestamcp.MCPGoalFirstArtifactPathsOmittedMaterializedV0
+	goalFirstResidentReworkReasonMissingReceiptV0   = orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0
+	goalFirstResidentReworkReasonRequiredTestsV0    = orquestamcp.MCPGoalFirstRequiredTestEvidenceMissingV0
+	goalFirstResidentReworkReasonPhase0V0           = orquestamcp.MCPGoalFirstPhase0CompleteNonPublishableV0
+	goalFirstResidentReworkReasonPartialArtifactsV0 = orquestamcp.MCPGoalFirstPartialArtifactsWrittenV0
 )
 
 func (executor CodexStackRunSupervisorExecutorV0) maybePrepareGoalFirstResidentReworkV0(
@@ -82,15 +88,26 @@ func goalFirstResidentReworkReasonV0(state orquestagoal.GoalWorkStateV0) (string
 	if !goalFirstResidentStateNeedsReworkV0(state) {
 		return "", nil, false
 	}
-	evidenceRefs := goalFirstResidentHighConsumptionEvidenceRefsV0(state)
 	if goalFirstResidentHasIssueOrEvidenceV0(state, goalFirstResidentReworkReasonCheckpointOnlyV0) {
-		return goalFirstResidentReworkReasonCheckpointOnlyV0, evidenceRefs, true
+		return goalFirstResidentReworkReasonCheckpointOnlyV0, goalFirstResidentReworkEvidenceRefsV0(state), true
 	}
 	if goalFirstResidentHasIssueOrEvidenceV0(state, goalFirstResidentReworkReasonNoCheckpointV0) {
-		return goalFirstResidentReworkReasonNoCheckpointV0, evidenceRefs, true
+		return goalFirstResidentReworkReasonNoCheckpointV0, goalFirstResidentReworkEvidenceRefsV0(state), true
 	}
 	if goalFirstResidentInitialTimeoutWithoutArtifactsV0(state) {
-		return goalFirstResidentReworkReasonActiveTimeoutV0, evidenceRefs, true
+		return goalFirstResidentReworkReasonActiveTimeoutV0, goalFirstResidentReworkEvidenceRefsV0(state), true
+	}
+	for _, reason := range []string{
+		goalFirstResidentReworkReasonQAFailedTextV0,
+		goalFirstResidentReworkReasonArtifactPathsV0,
+		goalFirstResidentReworkReasonMissingReceiptV0,
+		goalFirstResidentReworkReasonRequiredTestsV0,
+		goalFirstResidentReworkReasonPhase0V0,
+		goalFirstResidentReworkReasonPartialArtifactsV0,
+	} {
+		if goalFirstResidentHasIssueOrEvidenceV0(state, reason) {
+			return reason, goalFirstResidentReworkEvidenceRefsV0(state), true
+		}
 	}
 	return "", nil, false
 }
@@ -173,7 +190,7 @@ func goalFirstResidentAllEvidenceRefsV0(state orquestagoal.GoalWorkStateV0) []st
 	return compactStringsV0(refs)
 }
 
-func goalFirstResidentHighConsumptionEvidenceRefsV0(state orquestagoal.GoalWorkStateV0) []string {
+func goalFirstResidentReworkEvidenceRefsV0(state orquestagoal.GoalWorkStateV0) []string {
 	refs := []string{goalFirstResidentReworkPreparedEvidenceRefV0}
 	for _, ref := range goalFirstResidentAllEvidenceRefsV0(state) {
 		trimmed := strings.TrimSpace(ref)
@@ -182,7 +199,12 @@ func goalFirstResidentHighConsumptionEvidenceRefsV0(state orquestagoal.GoalWorkS
 			strings.Contains(trimmed, "checkpoint-only") ||
 			strings.Contains(trimmed, "no-checkpoint") ||
 			strings.Contains(trimmed, "active-timeout") ||
-			strings.Contains(trimmed, "goal-active-timeout") {
+			strings.Contains(trimmed, "goal-active-timeout") ||
+			strings.Contains(trimmed, "goal-materialized") ||
+			strings.Contains(trimmed, "artifact_paths") ||
+			strings.Contains(trimmed, "artifact-paths") ||
+			strings.Contains(trimmed, "required-test") ||
+			strings.Contains(trimmed, "required_test") {
 			refs = append(refs, trimmed)
 		}
 	}
