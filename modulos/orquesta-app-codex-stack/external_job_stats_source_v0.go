@@ -309,6 +309,9 @@ func externalJobGoalFirstStatusV0(
 			return "blocked", codexStackExternalJobStatusReasonGoalFirstClosureBlockedV0
 		}
 		if state.LastClosure.Accepted {
+			if state.LastResult == nil || len(compactCodexStackStringsV0(state.LastResult.DomainReceiptRefs)) == 0 {
+				return "blocked", codexStackExternalJobStatusReasonGoalFirstClosureBlockedV0
+			}
 			return "completed", codexStackExternalJobStatusReasonGoalFirstClosureAcceptedV0
 		}
 	}

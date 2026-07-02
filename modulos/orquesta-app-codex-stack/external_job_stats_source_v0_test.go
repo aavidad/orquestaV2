@@ -255,6 +255,35 @@ func TestCodexStackExternalJobStatsSourceV0GoalFirstAcceptedConIssuesNoCompletaJ
 	}
 }
 
+func TestCodexStackExternalJobStatsSourceV0GoalFirstAcceptedSinReceiptNoCompletaJob(t *testing.T) {
+	fixture := newCodexStackExternalJobGoalFirstStatsFixtureV0(t, orquestagoal.GoalStatusCompleteV0, true)
+	state, err := fixture.source.GoalStateStore.LoadGoalWorkStateV0(context.Background(), fixture.runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	state.LastResult.DomainReceiptRefs = nil
+	if err := fixture.source.GoalStateStore.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	stats, ok, err := fixture.source.ResolveDirectorExternalJobStatsV0(
+		context.Background(),
+		fixture.request,
+	)
+
+	if err != nil {
+		t.Fatalf("ResolveDirectorExternalJobStatsV0: %v", err)
+	}
+	if !ok ||
+		stats.Status != "blocked" ||
+		stats.StatusReason != codexStackExternalJobStatusReasonGoalFirstClosureBlockedV0 ||
+		!stats.ClosureAccepted ||
+		codexStackStringInSetForTestV0(stats.DeliveryRefs, "domain-receipt-ref-goal-first-external-job-001") ||
+		!codexStackExternalJobDiagnosticForTestV0(stats.Diagnostics, codexStackExternalJobStatusReasonGoalFirstClosureBlockedV0) {
+		t.Fatalf("stats=%+v", stats)
+	}
+}
+
 func TestCodexStackExternalJobStatsSourceV0GoalFirstSinStateNoPareceLegacyRegistrado(t *testing.T) {
 	fixture := newCodexStackExternalJobGoalFirstStatsFixtureV0(t, orquestagoal.GoalStatusRunningV0, false)
 	fixture.source.GoalStateStore = newGoalFirstQueueStateStoreForTestV0()
