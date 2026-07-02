@@ -235,6 +235,7 @@ func TestDomainWorkRequiredTestRunnerV0DistingueLatenciaRechazoYAceptacion(t *te
 				"rag":"rag listo",
 				"audio":"audio listo",
 				"tests":"tests listos",
+				"tutor":"tests listos-tutor",
 				"visual":"visual listo",
 				"qa":"qa listo"
 			}`)},

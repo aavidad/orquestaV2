@@ -535,6 +535,21 @@ y `go test -count=1 ./modulos/orquesta-opes-bridge`. No cierra el bug padre:
 siguen pendientes la proyeccion `stopped/crashed` desde state/status y el
 preflight especifico de tutor antes de lanzar el job.
 
+Avance finalpkg cierre stack 2026-07-02: el cierre agregado OPES en
+`orquesta-app-codex-stack` ya no acepta `completed_syllabus_package` sin
+evidencia final `tutor`, `qa_passes.question_bank_publicable`,
+`qa_passes.tutor_assets_publicable` y sus `qa_report_refs` especificos. La
+brecha era arquitectonica: `orquesta-opes-bridge` ya declaraba esos required
+tests, pero el cierre real solo exigia QA editorial generica. Evidencia:
+`docs/incidencias/incidencia_orquesta_opes_finalpkg_tutor_question_bank_qa_2026-07-02.md`,
+`TestCodexStackOPESFinalPackageEvidenceIssueRefV0BloqueaSinTutorV0`,
+`TestCodexStackOPESFinalPackageEvidenceIssueRefV0BloqueaQABancoYTutorV0`,
+`TestCodexStackOPESFinalPackageEvidenceIssueRefV0AceptaTutorBancoYQAEstrictaV0`,
+`go test -count=1 ./modulos/orquesta-app-codex-stack` y
+`go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-director ./modulos/orquesta-opes-topic-registry`.
+No cierra BUG-058: siguen pendientes heartbeat/checkpoint durable por tema y
+smoke OPES largo aislado.
+
 Avance preflight tutor 2026-07-02: `runOPESDrainOnceV0` bloquea
 `generate_tutor_assets` con `tutor_assets_source_context_required` antes de
 postear a Orquesta si el payload no declara fuentes canonicas de tutor:

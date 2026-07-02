@@ -265,7 +265,9 @@ func TestOperationalClosureSourceV0CierraOPESFinalConMinimosComunesYManifest(t *
 			"qa_passes":{
 				"extension_pass":true,
 				"official_text_qa_pass":true,
-				"strict_editorial_qa_pass":true
+				"strict_editorial_qa_pass":true,
+				"question_bank_publicable":true,
+				"tutor_assets_publicable":true
 			},
 			"qa_report_refs":{
 				"extension":"09_validacion/informe_extension_temario.json",
@@ -273,7 +275,9 @@ func TestOperationalClosureSourceV0CierraOPESFinalConMinimosComunesYManifest(t *
 					"09_validacion/informe_texto_publico_sin_notas_autor.json",
 					"09_validacion/informe_texto_publico_sin_metacomentarios_examen.json"
 				],
-				"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json"
+				"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json",
+				"question_bank_publicable":"09_validacion/informe_question_bank_publicable.json",
+				"tutor_assets_publicable":"09_validacion/informe_tutor_assets_publicable.json"
 			},
 			"topic_quality_contract_result_refs":{
 				"tema_001":"topic-quality-contract-result-ref-closure-final-001"
@@ -283,6 +287,7 @@ func TestOperationalClosureSourceV0CierraOPESFinalConMinimosComunesYManifest(t *
 				"rag":"evidence-ref-closure-final-rag-001",
 				"audio":"evidence-ref-closure-final-audio-001",
 				"tests":"evidence-ref-closure-final-tests-001",
+				"tutor":"evidence-ref-closure-final-tests-001-tutor",
 				"visual":"evidence-ref-closure-final-visual-001",
 				"qa":"evidence-ref-closure-final-qa-001"
 			}
@@ -345,18 +350,23 @@ func TestOperationalClosureSourceV0NoCierraOPESFinalSinResultadosTopicQualityPor
 			"qa_passes":{
 				"extension_pass":true,
 				"official_text_qa_pass":true,
-				"strict_editorial_qa_pass":true
+				"strict_editorial_qa_pass":true,
+				"question_bank_publicable":true,
+				"tutor_assets_publicable":true
 			},
 			"qa_report_refs":{
 				"extension":"09_validacion/informe_extension_temario.json",
 				"official_text":"09_validacion/informe_texto_publico_sin_notas_autor.json",
-				"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json"
+				"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json",
+				"question_bank_publicable":"09_validacion/informe_question_bank_publicable.json",
+				"tutor_assets_publicable":"09_validacion/informe_tutor_assets_publicable.json"
 			},
 			"required_evidence_refs":{
 				"html":"evidence-ref-closure-final-html-sin-topic-quality-001",
 				"rag":"evidence-ref-closure-final-rag-sin-topic-quality-001",
 				"audio":"evidence-ref-closure-final-audio-sin-topic-quality-001",
 				"tests":"evidence-ref-closure-final-tests-sin-topic-quality-001",
+				"tutor":"evidence-ref-closure-final-tests-sin-topic-quality-001-tutor",
 				"visual":"evidence-ref-closure-final-visual-sin-topic-quality-001",
 				"qa":"evidence-ref-closure-final-qa-sin-topic-quality-001"
 			}
@@ -414,6 +424,7 @@ func TestOperationalClosureSourceV0NoCierraOPESFinalConQAGenericoSinQAEstricta(t
 				"rag":"evidence-ref-closure-final-rag-qa-generico-001",
 				"audio":"evidence-ref-closure-final-audio-qa-generico-001",
 				"tests":"evidence-ref-closure-final-tests-qa-generico-001",
+				"tutor":"evidence-ref-closure-final-tests-qa-generico-001-tutor",
 				"visual":"evidence-ref-closure-final-visual-qa-generico-001",
 				"qa":"evidence-ref-closure-final-qa-generico-001"
 			}

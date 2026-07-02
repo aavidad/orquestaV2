@@ -812,7 +812,9 @@ func goalDomainReceiptOPESFinalPackageEvidenceIssueV0(
 			switch issueRef {
 			case goalDomainReceiptOPESFinalPackageExtensionQAIssueV0,
 				goalDomainReceiptOPESFinalPackageOfficialTextIssueV0,
-				goalDomainReceiptOPESFinalPackageStrictEditorialIssueV0:
+				goalDomainReceiptOPESFinalPackageStrictEditorialIssueV0,
+				codexStackOPESFinalPackageQuestionBankQAMissingIssueV0,
+				codexStackOPESFinalPackageTutorAssetsQAMissingIssueV0:
 				field = goalDomainReceiptOPESFinalPackageQAPassesFieldV0
 			case codexStackOPESFinalPackageTopicQualityMissingIssueV0:
 				field = goalDomainReceiptOPESFinalPackageTopicQualityFieldV0

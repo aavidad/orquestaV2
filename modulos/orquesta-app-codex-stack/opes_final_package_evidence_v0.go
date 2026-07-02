@@ -12,6 +12,8 @@ const (
 	codexStackOPESFinalPackageExtensionQAMissingIssueV0       = "domain_work_opes_extension_qa_missing"
 	codexStackOPESFinalPackageOfficialTextQAMissingIssueV0    = "domain_work_opes_official_text_qa_missing"
 	codexStackOPESFinalPackageStrictEditorialQAMissingIssueV0 = "domain_work_opes_strict_editorial_qa_missing"
+	codexStackOPESFinalPackageQuestionBankQAMissingIssueV0    = "domain_work_opes_question_bank_qa_missing"
+	codexStackOPESFinalPackageTutorAssetsQAMissingIssueV0     = "domain_work_opes_tutor_assets_qa_missing"
 	codexStackOPESFinalPackageTopicQualityMissingIssueV0      = "domain_work_opes_topic_quality_contract_missing"
 	goalDomainReceiptOPESFinalPackageEvidenceFieldV0          = "domain_receipt_refs.opes_final_package"
 	goalDomainReceiptOPESFinalPackageQAPassesFieldV0          = "domain_receipt_refs.opes_final_package.qa_passes"
@@ -100,6 +102,18 @@ func codexStackOPESFinalPackageEvidenceIssueRefV0(
 	if len(manifest.QAReportRefs["extension"]) == 0 {
 		return codexStackOPESFinalPackageExtensionQAMissingIssueV0
 	}
+	if !manifest.QAPasses.QuestionBankPublicablePass {
+		return codexStackOPESFinalPackageQuestionBankQAMissingIssueV0
+	}
+	if len(manifest.QAReportRefs["question_bank_publicable"]) == 0 {
+		return codexStackOPESFinalPackageQuestionBankQAMissingIssueV0
+	}
+	if !manifest.QAPasses.TutorAssetsPublicablePass {
+		return codexStackOPESFinalPackageTutorAssetsQAMissingIssueV0
+	}
+	if len(manifest.QAReportRefs["tutor_assets_publicable"]) == 0 {
+		return codexStackOPESFinalPackageTutorAssetsQAMissingIssueV0
+	}
 	if len(manifest.TopicQualityContractResultRefs) == 0 {
 		return codexStackOPESFinalPackageTopicQualityMissingIssueV0
 	}
@@ -119,13 +133,15 @@ type codexStackOPESFinalPackageManifestV0 struct {
 }
 
 type codexStackOPESFinalPackageQAPassesV0 struct {
-	ExtensionPass         bool
-	OfficialTextQAPass    bool
-	StrictEditorialQAPass bool
+	ExtensionPass              bool
+	OfficialTextQAPass         bool
+	StrictEditorialQAPass      bool
+	QuestionBankPublicablePass bool
+	TutorAssetsPublicablePass  bool
 }
 
 func codexStackOPESFinalPackageRequiredEvidenceCategoriesV0() []string {
-	return []string{"html", "rag", "audio", "tests", "visual", "qa"}
+	return []string{"html", "rag", "audio", "tests", "tutor", "visual", "qa"}
 }
 
 func codexStackOPESFinalPackageStructuredManifestV0(
@@ -203,9 +219,11 @@ func codexStackOPESFinalPackageQAPassesFromJSONV0(
 		return codexStackOPESFinalPackageQAPassesV0{}
 	}
 	return codexStackOPESFinalPackageQAPassesV0{
-		ExtensionPass:         codexStackJSONRawBoolV0(values["extension_pass"]),
-		OfficialTextQAPass:    codexStackJSONRawBoolV0(values["official_text_qa_pass"]),
-		StrictEditorialQAPass: codexStackJSONRawBoolV0(values["strict_editorial_qa_pass"]),
+		ExtensionPass:              codexStackJSONRawBoolV0(values["extension_pass"]),
+		OfficialTextQAPass:         codexStackJSONRawBoolV0(values["official_text_qa_pass"]),
+		StrictEditorialQAPass:      codexStackJSONRawBoolV0(values["strict_editorial_qa_pass"]),
+		QuestionBankPublicablePass: codexStackJSONRawBoolV0(values["question_bank_publicable"]),
+		TutorAssetsPublicablePass:  codexStackJSONRawBoolV0(values["tutor_assets_publicable"]),
 	}
 }
 
@@ -237,7 +255,13 @@ func codexStackOPESFinalPackageQAReportRefsV0(
 		return nil
 	}
 	out := map[string][]string{}
-	for _, category := range []string{"extension", "official_text", "strict_editorial"} {
+	for _, category := range []string{
+		"extension",
+		"official_text",
+		"strict_editorial",
+		"question_bank_publicable",
+		"tutor_assets_publicable",
+	} {
 		out[category] = compactCodexStackStringsV0(domainWorkDeliveryRawRefsV0(byCategory[category]))
 	}
 	return out

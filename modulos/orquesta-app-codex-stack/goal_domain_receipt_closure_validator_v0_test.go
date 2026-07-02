@@ -101,6 +101,7 @@ func TestGoalDomainReceiptClosureValidatorV0BloqueaOPESFinalConQAGenericoSinStri
 					"rag":"opes-final-evidence:rag:strict-editorial",
 					"audio":"opes-final-evidence:audio:strict-editorial",
 					"tests":"opes-final-evidence:tests:strict-editorial",
+					"tutor":"opes-final-evidence:tests:strict-editorial-tutor",
 					"visual":"opes-final-evidence:visual:strict-editorial",
 					"qa":"opes-final-evidence:qa:strict-editorial"
 				}
@@ -173,18 +174,23 @@ func TestGoalDomainReceiptClosureValidatorV0BloqueaOPESFinalSinTopicQualityContr
 				"qa_passes":{
 					"extension_pass":true,
 					"official_text_qa_pass":true,
-					"strict_editorial_qa_pass":true
+					"strict_editorial_qa_pass":true,
+				"question_bank_publicable":true,
+				"tutor_assets_publicable":true
 				},
 				"qa_report_refs":{
 					"extension":"09_validacion/informe_extension_temario.json",
 					"official_text":"09_validacion/informe_texto_publico_sin_notas_autor.json",
-					"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json"
+					"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json",
+				"question_bank_publicable":"09_validacion/informe_question_bank_publicable.json",
+				"tutor_assets_publicable":"09_validacion/informe_tutor_assets_publicable.json"
 				},
 				"required_evidence_refs":{
 					"html":"opes-final-evidence:html:topic-quality",
 					"rag":"opes-final-evidence:rag:topic-quality",
 					"audio":"opes-final-evidence:audio:topic-quality",
 					"tests":"opes-final-evidence:tests:topic-quality",
+					"tutor":"opes-final-evidence:tests:topic-quality-tutor",
 					"visual":"opes-final-evidence:visual:topic-quality",
 					"qa":"opes-final-evidence:qa:topic-quality"
 				}

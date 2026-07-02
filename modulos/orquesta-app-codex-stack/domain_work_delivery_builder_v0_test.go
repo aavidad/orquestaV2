@@ -1580,7 +1580,9 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0DerivaManifestCierreOPESFin
 				"qa_passes":{
 					"extension_pass":true,
 					"official_text_qa_pass":true,
-					"strict_editorial_qa_pass":true
+					"strict_editorial_qa_pass":true,
+				"question_bank_publicable":true,
+				"tutor_assets_publicable":true
 				},
 				"qa_report_refs":{
 					"extension":"09_validacion/informe_extension_temario.json",
@@ -1588,7 +1590,9 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0DerivaManifestCierreOPESFin
 						"09_validacion/informe_texto_publico_sin_notas_autor.json",
 						"09_validacion/informe_texto_publico_sin_metacomentarios_examen.json"
 					],
-					"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json"
+					"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json",
+				"question_bank_publicable":"09_validacion/informe_question_bank_publicable.json",
+				"tutor_assets_publicable":"09_validacion/informe_tutor_assets_publicable.json"
 				},
 				"topic_quality_contract_result_refs":{
 					"tema_001":"topic-quality-contract-result-ref-final-001"
@@ -1598,6 +1602,7 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0DerivaManifestCierreOPESFin
 					"rag":"opes-final-evidence:rag:001",
 					"audio":"opes-final-evidence:audio:001",
 					"tests":"opes-final-evidence:tests:001",
+					"tutor":"opes-final-evidence:tests:001-tutor",
 					"visual":"opes-final-evidence:visual:001",
 					"qa":"opes-final-evidence:qa:001"
 				}
@@ -1767,18 +1772,23 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0NoCompletaOPESFinalSinTopic
 				"qa_passes":{
 					"extension_pass":true,
 					"official_text_qa_pass":true,
-					"strict_editorial_qa_pass":true
+					"strict_editorial_qa_pass":true,
+				"question_bank_publicable":true,
+				"tutor_assets_publicable":true
 				},
 				"qa_report_refs":{
 					"extension":"09_validacion/informe_extension_temario.json",
 					"official_text":"09_validacion/informe_texto_publico_sin_notas_autor.json",
-					"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json"
+					"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json",
+				"question_bank_publicable":"09_validacion/informe_question_bank_publicable.json",
+				"tutor_assets_publicable":"09_validacion/informe_tutor_assets_publicable.json"
 				},
 				"required_evidence_refs":{
 					"html":"opes-final-evidence:html:no-topic-quality",
 					"rag":"opes-final-evidence:rag:no-topic-quality",
 					"audio":"opes-final-evidence:audio:no-topic-quality",
 					"tests":"opes-final-evidence:tests:no-topic-quality",
+					"tutor":"opes-final-evidence:tests:no-topic-quality-tutor",
 					"visual":"opes-final-evidence:visual:no-topic-quality",
 					"qa":"opes-final-evidence:qa:no-topic-quality"
 				}
@@ -1856,13 +1866,16 @@ func TestDefaultDomainWorkArtifactSubmissionBuilderV0NoCompletaOPESFinalSinQARep
 				"qa_passes":{
 					"extension_pass":true,
 					"official_text_qa_pass":true,
-					"strict_editorial_qa_pass":true
+					"strict_editorial_qa_pass":true,
+				"question_bank_publicable":true,
+				"tutor_assets_publicable":true
 				},
 				"required_evidence_refs":{
 					"html":"opes-final-evidence:html:no-qa-report",
 					"rag":"opes-final-evidence:rag:no-qa-report",
 					"audio":"opes-final-evidence:audio:no-qa-report",
 					"tests":"opes-final-evidence:tests:no-qa-report",
+					"tutor":"opes-final-evidence:tests:no-qa-report-tutor",
 					"visual":"opes-final-evidence:visual:no-qa-report",
 					"qa":"opes-final-evidence:qa:no-qa-report"
 				}

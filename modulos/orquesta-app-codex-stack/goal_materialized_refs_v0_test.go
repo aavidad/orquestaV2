@@ -186,7 +186,9 @@ func TestStackGoalMaterializedRefsSourceV0DetectaReceiptTerminalAusenteTrasQAPas
 	}
 	if err := os.WriteFile(
 		filepath.Join(validationDir, "informe_qa.json"),
-		[]byte(`{"qa_passes":{"extension_pass":true,"official_text_qa_pass":true,"strict_editorial_qa_pass":true}}`),
+		[]byte(`{"qa_passes":{"extension_pass":true,"official_text_qa_pass":true,"strict_editorial_qa_pass":true,
+				"question_bank_publicable":true,
+				"tutor_assets_publicable":true}}`),
 		0o600,
 	); err != nil {
 		t.Fatalf("write qa: %v", err)
@@ -234,7 +236,9 @@ func TestStackGoalMaterializedRefsSourceV0ReparaReceiptTerminalConPuertosV0(t *t
 	}
 	if err := os.WriteFile(
 		filepath.Join(validationDir, "informe_qa.json"),
-		[]byte(`{"qa_passes":{"extension_pass":true,"official_text_qa_pass":true,"strict_editorial_qa_pass":true}}`),
+		[]byte(`{"qa_passes":{"extension_pass":true,"official_text_qa_pass":true,"strict_editorial_qa_pass":true,
+				"question_bank_publicable":true,
+				"tutor_assets_publicable":true}}`),
 		0o600,
 	); err != nil {
 		t.Fatalf("write qa: %v", err)
@@ -441,7 +445,9 @@ func TestStackGoalMaterializedRefsSourceV0AceptaTernaQAEnContextoOPES(t *testing
 	}
 	if err := os.WriteFile(
 		filepath.Join(validationDir, "informe_qa.json"),
-		[]byte(`{"qa_passes":{"extension_pass":true,"official_text_qa_pass":true,"strict_editorial_qa_pass":true}}`),
+		[]byte(`{"qa_passes":{"extension_pass":true,"official_text_qa_pass":true,"strict_editorial_qa_pass":true,
+				"question_bank_publicable":true,
+				"tutor_assets_publicable":true}}`),
 		0o600,
 	); err != nil {
 		t.Fatalf("write qa: %v", err)

@@ -2491,7 +2491,9 @@ func writeGoalFirstDomainWorkArtifactForTestV0(
 					"qa_passes":{
 						"extension_pass":true,
 						"official_text_qa_pass":true,
-						"strict_editorial_qa_pass":true
+						"strict_editorial_qa_pass":true,
+				"question_bank_publicable":true,
+				"tutor_assets_publicable":true
 					},
 					"qa_report_refs":{
 						"extension":"09_validacion/informe_extension_temario.json",
@@ -2499,7 +2501,9 @@ func writeGoalFirstDomainWorkArtifactForTestV0(
 							"09_validacion/informe_texto_publico_sin_notas_autor.json",
 							"09_validacion/informe_texto_publico_sin_metacomentarios_examen.json"
 						],
-						"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json"
+						"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json",
+				"question_bank_publicable":"09_validacion/informe_question_bank_publicable.json",
+				"tutor_assets_publicable":"09_validacion/informe_tutor_assets_publicable.json"
 					},
 					"topic_quality_contract_result_refs":{
 						"tema_001":"topic-quality-contract-result-ref-goal-first-final-001"
@@ -2509,6 +2513,7 @@ func writeGoalFirstDomainWorkArtifactForTestV0(
 						"rag":"opes-final-evidence:rag:goal-first",
 						"audio":"opes-final-evidence:audio:goal-first",
 						"tests":"opes-final-evidence:tests:goal-first",
+						"tutor":"opes-final-evidence:tests:goal-first-tutor",
 						"visual":"opes-final-evidence:visual:goal-first",
 						"qa":"opes-final-evidence:qa:goal-first"
 					}
