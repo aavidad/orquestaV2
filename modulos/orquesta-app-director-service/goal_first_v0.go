@@ -163,6 +163,7 @@ func ObserveAppDirectorGoalV0(
 				state = normalized
 			}
 		}
+		result, closure = appDirectorGoalObservationForCurrentStateV0(state, result, closure)
 	}
 	return ObserveAppDirectorGoalResultV0{
 		SchemaVersion:         ObserveAppDirectorGoalResultSchemaV0,
@@ -176,6 +177,25 @@ func ObserveAppDirectorGoalV0(
 		Closure:               closure,
 		EvidenceRefs:          append([]string(nil), state.EvidenceRefs...),
 	}, nil
+}
+
+func appDirectorGoalObservationForCurrentStateV0(
+	state AppDirectorGoalStateV0,
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+) (orquestagoal.GoalWorkResultV0, orquestagoal.GoalClosureValidationV0) {
+	if strings.TrimSpace(state.Status) != orquestagoal.GoalStatusRunningV0 ||
+		strings.TrimSpace(state.GoalRef) == "" ||
+		strings.TrimSpace(state.GoalRef) == strings.TrimSpace(result.GoalRef) {
+		return result, closure
+	}
+	return orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		GoalRef:         strings.TrimSpace(state.GoalRef),
+		ExternalGoalRef: strings.TrimSpace(state.ExternalGoalRef),
+		EvidenceRefs:    append([]string(nil), state.EvidenceRefs...),
+	}, orquestagoal.GoalClosureValidationV0{}
 }
 
 func reflectAppDirectorGoalClosureInRunV0(

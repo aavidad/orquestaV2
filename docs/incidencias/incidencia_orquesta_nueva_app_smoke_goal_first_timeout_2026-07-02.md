@@ -101,3 +101,23 @@ la frontera antes del primer intento.
 Evidencia focal:
 
 - `TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy`
+
+Smoke real posterior con Orquesta `cab6104cd5`, backend `app_server_tmux` y
+directorio temporal conservado en
+`/tmp/orquesta-goal-first-app-server.SbBpHg`: la app ya materializo codigo,
+docs, tests y handoff bajo `generated-apps/smoke-goal-first`, y `observe`
+publico `artifact_refs`/`evidence_refs`. El cierre aun no fue aceptado porque,
+tras disparar `goal-ref...-rework-1`, la respuesta mezclaba
+`goal_status=running` del rework con `closure_status=blocked`,
+`closure_needs_rework=true` y `summary=codex_app_server_goal_active_timeout`
+del intento anterior.
+
+Avance aplicado: `ObserveAppDirectorGoalV0` refresca la observacion publica
+cuando un intento terminal lanza un nuevo goal de rework y el estado actual ya
+esta `running`; en ese caso no publica la closure bloqueada ni el summary
+terminal del intento previo como estado vigente del rework.
+
+Evidencia focal:
+
+- `TestObserveAppDirectorGoalV0LanzaReworkGoalSiPolicyYPuertoDisponibles`
+- `TestObserveAppDirectorGoalV0LanzaReworkGoalPorTimeoutActivoV0`

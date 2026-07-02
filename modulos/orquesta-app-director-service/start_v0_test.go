@@ -726,7 +726,10 @@ func TestObserveAppDirectorGoalV0LanzaReworkGoalSiPolicyYPuertoDisponibles(t *te
 	}
 	if result.Status != orquestagoal.GoalStatusRunningV0 ||
 		result.GoalRef != reworkSpec.GoalRef ||
-		!result.Closure.NeedsRework ||
+		result.Closure.Status != "" ||
+		result.Closure.NeedsRework ||
+		result.GoalResult.GoalRef != reworkSpec.GoalRef ||
+		result.GoalResult.Summary != "" ||
 		result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 {
 		t.Fatalf("result=%+v", result)
 	}
@@ -785,7 +788,10 @@ func TestObserveAppDirectorGoalV0LanzaReworkGoalPorTimeoutActivoV0(t *testing.T)
 	}
 	if result.Status != orquestagoal.GoalStatusRunningV0 ||
 		result.GoalRef != reworkSpec.GoalRef ||
-		!result.Closure.NeedsRework ||
+		result.Closure.Status != "" ||
+		result.Closure.NeedsRework ||
+		result.GoalResult.GoalRef != reworkSpec.GoalRef ||
+		result.GoalResult.Summary != "" ||
 		result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 {
 		t.Fatalf("result=%+v", result)
 	}
