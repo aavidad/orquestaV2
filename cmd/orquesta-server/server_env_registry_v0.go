@@ -66,6 +66,7 @@ const (
 	envStartupQueueLimitV0                                  = "ORQUESTA_STARTUP_QUEUE_LIMIT"
 	envAutoprogrammingLegacyDirectorLoopV0                  = "ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP"
 	envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0 = "ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS"
+	envAutoprogrammingCheckpointOnlyMaxWaitSecondsV0        = "ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_MAX_WAIT_SECONDS"
 	envExternalWorkLegacyDirectorLoopV0                     = "ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP"
 	envReviewGateStrictGoLineBudgetV0                       = "ORQUESTA_REVIEW_GATE_STRICT_GO_LINE_BUDGET"
 	envDomainDeliveryLedgerPathV0                           = "ORQUESTA_DOMAIN_DELIVERY_LEDGER_PATH"
@@ -394,6 +395,11 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "autoprogramming",
 		Label:       "Umbral checkpoint",
 		Description: "Tokens a partir de los que un Goal activo con solo checkpoint se trata como alto consumo y requiere replan acotado.",
+	},
+	envAutoprogrammingCheckpointOnlyMaxWaitSecondsV0: {
+		Scope:       "autoprogramming",
+		Label:       "Espera checkpoint",
+		Description: "Segundos maximos que un Goal activo puede permanecer solo con checkpoint tras timeout local antes de requerir replan acotado.",
 	},
 	envExternalWorkLegacyDirectorLoopV0: {
 		Scope:       "external_work",

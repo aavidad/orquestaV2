@@ -77,6 +77,7 @@ type MCPAutoprogrammingStatusToolExecutorV0 struct {
 
 type MCPAutoprogrammingGoalProgressPolicyV0 struct {
 	CheckpointOnlyHighConsumptionTokens int64 `json:"checkpoint_only_high_consumption_tokens,omitempty"`
+	CheckpointOnlyMaxWaitSeconds        int64 `json:"checkpoint_only_max_wait_seconds,omitempty"`
 }
 
 func NormalizeMCPAutoprogrammingGoalProgressPolicyV0(
@@ -84,6 +85,9 @@ func NormalizeMCPAutoprogrammingGoalProgressPolicyV0(
 ) MCPAutoprogrammingGoalProgressPolicyV0 {
 	if policy.CheckpointOnlyHighConsumptionTokens <= 0 {
 		policy.CheckpointOnlyHighConsumptionTokens = mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensDefaultV0
+	}
+	if policy.CheckpointOnlyMaxWaitSeconds <= 0 {
+		policy.CheckpointOnlyMaxWaitSeconds = mcpAutoprogrammingCheckpointOnlyMaxWaitSecondsDefaultV0
 	}
 	return policy
 }
@@ -220,6 +224,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 		goalStates,
 		observedByRunRef,
 		executor.GoalProgressPolicy,
+		input.OccurredAt,
 	)
 	result.StaleRunning = append(result.StaleRunning, blockedGoalActions...)
 	result.ResolvedRuns = append(result.ResolvedRuns, resolvedGoalActions...)

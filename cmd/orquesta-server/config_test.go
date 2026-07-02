@@ -358,18 +358,24 @@ func TestServerConfigFromEnvV0PromocionMaterialSinACKOptOutVisibleV0(t *testing.
 func TestServerConfigFromEnvV0PublicaUmbralCheckpointGoalConfigurableV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0, "42000")
+	t.Setenv(envAutoprogrammingCheckpointOnlyMaxWaitSecondsV0, "1200")
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
 	policy := serverAutoprogrammingGoalProgressPolicyFromEnvV0()
-	if policy.CheckpointOnlyHighConsumptionTokens != 42000 {
+	if policy.CheckpointOnlyHighConsumptionTokens != 42000 ||
+		policy.CheckpointOnlyMaxWaitSeconds != 1200 {
 		t.Fatalf("policy=%+v", policy)
 	}
 	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0)
 	if setting.Value != "42000" || setting.Source != "explicit" {
 		t.Fatalf("setting checkpoint threshold=%+v", setting)
+	}
+	setting = effectiveSettingForTestV0(config.EffectiveConfig.Settings, envAutoprogrammingCheckpointOnlyMaxWaitSecondsV0)
+	if setting.Value != "1200" || setting.Source != "explicit" {
+		t.Fatalf("setting checkpoint wait=%+v", setting)
 	}
 }
 

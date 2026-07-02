@@ -2,6 +2,7 @@ package orquestamcp
 
 import (
 	"strings"
+	"time"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -49,6 +50,7 @@ const (
 	mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0        = "evidence-ref-autoprogramming-no-checkpoint-high-consumption"
 	mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0      = "evidence-ref-autoprogramming-checkpoint-only-high-consumption"
 	mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensDefaultV0 = int64(100000)
+	mcpAutoprogrammingCheckpointOnlyMaxWaitSecondsDefaultV0        = int64(15 * 60)
 )
 
 func buildMCPAutoprogrammingStaleRunningV0(
@@ -355,6 +357,7 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 	states []orquestagoal.GoalWorkStateV0,
 	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
 	policy MCPAutoprogrammingGoalProgressPolicyV0,
+	observedAt string,
 ) ([]MCPAutoprogrammingActionableRunV0, []MCPAutoprogrammingActionableRunV0) {
 	policy = NormalizeMCPAutoprogrammingGoalProgressPolicyV0(policy)
 	blocked := make([]MCPAutoprogrammingActionableRunV0, 0)
@@ -426,6 +429,8 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 		noCheckpointConsumptionWarning := !activeTimeoutBackendActive &&
 			mcpAutoprogrammingNoCheckpointConsumptionWarningV0(action, observed, policy)
 		checkpointOnlyHighConsumption := mcpAutoprogrammingCheckpointOnlyHighConsumptionV0(action, observed, policy)
+		checkpointOnlyTimedOut := activeTimeoutCheckpointRecent &&
+			mcpAutoprogrammingCheckpointOnlyWaitExpiredV0(action, observedAt, policy)
 		noCheckpointHighConsumption := !activeTimeoutBackendActive &&
 			mcpAutoprogrammingNoCheckpointHighConsumptionV0(action, observed, policy)
 		if activeNoCheckpoint {
@@ -452,17 +457,17 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 				mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0,
 			))
 		}
-		if checkpointOnlyHighConsumption {
+		if checkpointOnlyHighConsumption || checkpointOnlyTimedOut {
 			action.Code = mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0
 			action.Severity = "blocked"
-			action.Reason = "checkpoint_only_high_consumption: backend goal remains active after high token usage with only checkpoint artifacts and no domain receipt; narrow context or stop safely before relaunch"
+			action.Reason = "checkpoint_only_high_consumption: backend goal remains active after high token usage or max checkpoint wait with only checkpoint artifacts and no domain receipt; narrow context or stop safely before relaunch"
 			action.RecommendedAction = "replan_narrow_context"
 			action.EvidenceRefs = compactStringsMCPV0(append(
 				action.EvidenceRefs,
 				mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0,
 			))
 		}
-		if activeTimeoutCheckpointRecent && !checkpointOnlyHighConsumption {
+		if activeTimeoutCheckpointRecent && !checkpointOnlyHighConsumption && !checkpointOnlyTimedOut {
 			action.Code = mcpAutoprogrammingActionActiveTimeoutCheckpointRecentV0
 			action.Severity = "info"
 			action.Reason = "active_timeout_checkpoint_recent: local timeout fired after a checkpoint while backend goal remains active below high-consumption threshold; observe for next artifact before replan"
@@ -823,6 +828,36 @@ func mcpAutoprogrammingActiveTimeoutCheckpointRecentV0(
 	return true
 }
 
+func mcpAutoprogrammingCheckpointOnlyWaitExpiredV0(
+	action MCPAutoprogrammingActionableRunV0,
+	observedAt string,
+	policy MCPAutoprogrammingGoalProgressPolicyV0,
+) bool {
+	policy = NormalizeMCPAutoprogrammingGoalProgressPolicyV0(policy)
+	if policy.CheckpointOnlyMaxWaitSeconds <= 0 ||
+		len(compactStringsMCPV0(action.DomainReceiptRefs)) > 0 {
+		return false
+	}
+	artifactRefs := compactStringsMCPV0(action.ArtifactRefs)
+	if len(artifactRefs) == 0 {
+		return false
+	}
+	for _, ref := range artifactRefs {
+		if !mcpAutoprogrammingArtifactRefLooksCheckpointV0(ref) {
+			return false
+		}
+	}
+	observedAtTime, ok := mcpAutoprogrammingParseTimeV0(observedAt)
+	if !ok {
+		return false
+	}
+	checkpointAt, ok := mcpAutoprogrammingParseTimeV0(action.LastArtifactAt)
+	if !ok {
+		return false
+	}
+	return int64(observedAtTime.Sub(checkpointAt).Seconds()) >= policy.CheckpointOnlyMaxWaitSeconds
+}
+
 func mcpAutoprogrammingNoCheckpointHighConsumptionV0(
 	action MCPAutoprogrammingActionableRunV0,
 	observed *MCPDirectorStatsToolResultV0,
@@ -850,6 +885,18 @@ func mcpAutoprogrammingNoCheckpointConsumptionWarningV0(
 		action.TokensUsed < policy.CheckpointOnlyHighConsumptionTokens &&
 		len(compactStringsMCPV0(action.ArtifactRefs)) == 0 &&
 		len(compactStringsMCPV0(action.DomainReceiptRefs)) == 0
+}
+
+func mcpAutoprogrammingParseTimeV0(value string) (time.Time, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return time.Time{}, false
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, trimmed)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return parsed, true
 }
 
 func mcpAutoprogrammingArtifactRefLooksCheckpointV0(ref string) bool {

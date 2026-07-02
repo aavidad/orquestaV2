@@ -98,6 +98,10 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 			strconv.FormatInt(goalProgressPolicy.CheckpointOnlyHighConsumptionTokens, 10),
 		),
 		serverConfigSettingFromRegistryV0(
+			envAutoprogrammingCheckpointOnlyMaxWaitSecondsV0,
+			strconv.FormatInt(goalProgressPolicy.CheckpointOnlyMaxWaitSeconds, 10),
+		),
+		serverConfigSettingFromRegistryV0(
 			envExternalWorkLegacyDirectorLoopV0,
 			strconv.FormatBool(boolEnvOrDefaultV0(envExternalWorkLegacyDirectorLoopV0, false)),
 		),
