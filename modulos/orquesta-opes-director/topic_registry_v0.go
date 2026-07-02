@@ -1,6 +1,7 @@
 package orquestaopesdirector
 
 import (
+	"encoding/json"
 	"strings"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -122,16 +123,16 @@ func topicRegistryPendingRefsForRecordV0(record OPESCausalArtifactRecordV0) []st
 }
 
 func topicRegistryFinalPackageHasClosureEvidenceV0(record OPESCausalArtifactRecordV0) bool {
-	refs := append([]string(nil), record.EvidenceRefs...)
-	refs = append(refs, fieldStringsV0(record.PayloadFields, "evidence_refs", "validation_refs", "required_test_evidence_refs")...)
-	refs = append(refs, record.PayloadRefs...)
-	if !topicRegistryEvidenceContainsAnyV0(refs,
-		"manifest_cierre",
-		"manifest_cierre.json",
-		"completed_syllabus_package_manifest",
-		"opes-expected-evidence-manifest-cierre",
-		"opes-rule-final-package-manifest",
-	) {
+	refs := topicRegistryFinalPackageEvidenceRefsV0(record)
+	hasCompatibleManifest := topicRegistryFinalPackageHasCompatibleManifestV0(record.PayloadFields)
+	if !hasCompatibleManifest &&
+		!topicRegistryEvidenceContainsAnyV0(refs,
+			"manifest_cierre",
+			"manifest_cierre.json",
+			"completed_syllabus_package_manifest",
+			"opes-expected-evidence-manifest-cierre",
+			"opes-rule-final-package-manifest",
+		) {
 		return false
 	}
 	required := [][]string{
@@ -140,7 +141,28 @@ func topicRegistryFinalPackageHasClosureEvidenceV0(record OPESCausalArtifactReco
 		{"opes-final-evidence:audio", "audio_evidence_ref", "audio/guion_audio.md", "audio_manifest"},
 		{"opes-final-evidence:tests", "tests_evidence_ref", "question_bank", "tests.json"},
 		{"opes-final-evidence:visual", "visual_evidence_ref", "visuales_plan.md", "visual_validation_report_ref"},
-		{"opes-final-evidence:qa", "qa_evidence_ref", "qa_final.md", "review_matrix_ref", "director_review_matrix"},
+	}
+	for _, options := range required {
+		if !topicRegistryEvidenceContainsAnyV0(refs, options...) {
+			return false
+		}
+	}
+	return hasCompatibleManifest || topicRegistryFinalPackageHasStrictQAEvidenceV0(refs)
+}
+
+func topicRegistryFinalPackageEvidenceRefsV0(record OPESCausalArtifactRecordV0) []string {
+	refs := append([]string(nil), record.EvidenceRefs...)
+	refs = append(refs, fieldStringsV0(record.PayloadFields, "evidence_refs", "validation_refs", "required_test_evidence_refs")...)
+	refs = append(refs, record.PayloadRefs...)
+	refs = append(refs, topicRegistryFinalPackageManifestEvidenceRefsV0(record.PayloadFields)...)
+	return compactStringsV0(refs)
+}
+
+func topicRegistryFinalPackageHasStrictQAEvidenceV0(refs []string) bool {
+	required := [][]string{
+		{"opes-final-evidence:extension_pass", "extension_pass"},
+		{"opes-final-evidence:official_text_qa_pass", "official_text_qa_pass"},
+		{"opes-final-evidence:strict_editorial_qa_pass", "strict_editorial_qa_pass"},
 	}
 	for _, options := range required {
 		if !topicRegistryEvidenceContainsAnyV0(refs, options...) {
@@ -148,6 +170,112 @@ func topicRegistryFinalPackageHasClosureEvidenceV0(record OPESCausalArtifactReco
 		}
 	}
 	return true
+}
+
+type topicRegistryFinalPackageManifestV0 struct {
+	SchemaVersion        string                     `json:"schema_version"`
+	PackageRef           string                     `json:"package_ref"`
+	ManifestRef          string                     `json:"manifest_ref"`
+	ChecksumRefs         []string                   `json:"checksum_refs"`
+	ValidationReportRef  string                     `json:"validation_report_ref"`
+	ReviewMatrixRef      string                     `json:"review_matrix_ref"`
+	RequiredEvidenceRefs map[string]json.RawMessage `json:"required_evidence_refs"`
+	QAPasses             struct {
+		ExtensionPass         bool `json:"extension_pass"`
+		OfficialTextQAPass    bool `json:"official_text_qa_pass"`
+		StrictEditorialQAPass bool `json:"strict_editorial_qa_pass"`
+	} `json:"qa_passes"`
+	QAReportRefs map[string]json.RawMessage `json:"qa_report_refs"`
+}
+
+func topicRegistryFinalPackageHasCompatibleManifestV0(fields []orquestadomainwork.DomainWorkFieldV0) bool {
+	manifest, ok := topicRegistryFinalPackageManifestV0FromFields(fields)
+	if !ok {
+		return false
+	}
+	for _, category := range []string{"html", "rag", "audio", "tests", "visual", "qa"} {
+		if len(topicRegistryJSONRawRefsV0(manifest.RequiredEvidenceRefs[category])) == 0 {
+			return false
+		}
+	}
+	if !manifest.QAPasses.ExtensionPass ||
+		!manifest.QAPasses.OfficialTextQAPass ||
+		!manifest.QAPasses.StrictEditorialQAPass {
+		return false
+	}
+	for _, category := range []string{"extension", "official_text", "strict_editorial"} {
+		if len(topicRegistryJSONRawRefsV0(manifest.QAReportRefs[category])) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func topicRegistryFinalPackageManifestEvidenceRefsV0(fields []orquestadomainwork.DomainWorkFieldV0) []string {
+	manifest, ok := topicRegistryFinalPackageManifestV0FromFields(fields)
+	if !ok {
+		return nil
+	}
+	refs := []string{"manifest_cierre", manifest.ManifestRef, manifest.ValidationReportRef, manifest.ReviewMatrixRef}
+	refs = append(refs, manifest.ChecksumRefs...)
+	for _, raw := range manifest.RequiredEvidenceRefs {
+		refs = append(refs, topicRegistryJSONRawRefsV0(raw)...)
+	}
+	return compactStringsV0(refs)
+}
+
+func topicRegistryFinalPackageManifestV0FromFields(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) (topicRegistryFinalPackageManifestV0, bool) {
+	for _, field := range fields {
+		name := strings.TrimSpace(field.Name)
+		if name != "manifest_cierre" && name != "manifest_cierre.json" && name != "completed_syllabus_package_manifest" {
+			continue
+		}
+		manifest, ok := topicRegistryFinalPackageManifestV0FromRaw(field.ValueJSON)
+		if ok {
+			return manifest, true
+		}
+		manifest, ok = topicRegistryFinalPackageManifestV0FromRaw([]byte(field.Value))
+		if ok {
+			return manifest, true
+		}
+	}
+	return topicRegistryFinalPackageManifestV0{}, false
+}
+
+func topicRegistryFinalPackageManifestV0FromRaw(raw json.RawMessage) (topicRegistryFinalPackageManifestV0, bool) {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return topicRegistryFinalPackageManifestV0{}, false
+	}
+	var manifest topicRegistryFinalPackageManifestV0
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return topicRegistryFinalPackageManifestV0{}, false
+	}
+	if manifest.SchemaVersion != "opes_final_package_evidence_manifest.v0" ||
+		strings.TrimSpace(manifest.PackageRef) == "" ||
+		strings.TrimSpace(manifest.ManifestRef) == "" ||
+		len(compactStringsV0(manifest.ChecksumRefs)) == 0 ||
+		strings.TrimSpace(manifest.ValidationReportRef) == "" ||
+		strings.TrimSpace(manifest.ReviewMatrixRef) == "" {
+		return topicRegistryFinalPackageManifestV0{}, false
+	}
+	return manifest, true
+}
+
+func topicRegistryJSONRawRefsV0(raw json.RawMessage) []string {
+	if len(raw) == 0 || !json.Valid(raw) {
+		return nil
+	}
+	var values []string
+	if err := json.Unmarshal(raw, &values); err == nil {
+		return compactStringsV0(values)
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err == nil {
+		return compactStringsV0([]string{value})
+	}
+	return nil
 }
 
 func topicRegistryEvidenceContainsAnyV0(refs []string, accepted ...string) bool {
