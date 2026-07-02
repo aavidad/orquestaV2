@@ -608,6 +608,15 @@ func TestExternalWorkGoalFirstKnownLaunchFailureReasonV0ClasificaUsageLimit(t *t
 	}
 }
 
+func TestExternalWorkGoalFirstKnownLaunchFailureReasonV0ClasificaQuotaFilesystem(t *testing.T) {
+	got := externalWorkGoalFirstKnownLaunchFailureReasonV0(
+		"ERROR codex_rollout::recorder: rollout writer failed: Quota exceeded (os error 122)",
+	)
+	if got != "codex_app_server_storage_quota_exceeded" {
+		t.Fatalf("reason=%q", got)
+	}
+}
+
 func TestCodexStackV0ExternalWorkGoalFirstBloqueaReceiptInventadoSinLedger(t *testing.T) {
 	stack, observer, launcher := buildExternalWorkGoalFirstDomainDeliveryStackForTestV0(t)
 	started := postExternalWorkRunStackV0(t, stack)

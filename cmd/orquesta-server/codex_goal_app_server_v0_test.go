@@ -1749,6 +1749,11 @@ func TestCodexAppServerIssueCodeForErrorV0ClasificaDiagnosticosV0(t *testing.T) 
 			want:    "codex_app_server_goal_provider_limited",
 		},
 		{
+			name:    "storage quota exceeded",
+			message: "ERROR codex_rollout::recorder: rollout writer failed: Quota exceeded (os error 122)",
+			want:    "codex_app_server_storage_quota_exceeded",
+		},
+		{
 			name:    "budget limited",
 			message: "goal status budgetLimited",
 			want:    "codex_app_server_goal_budget_limited",

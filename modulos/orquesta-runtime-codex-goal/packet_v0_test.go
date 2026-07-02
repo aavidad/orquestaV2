@@ -520,6 +520,23 @@ func TestCodexGoalObserverV0ClasificaErrorBackendSinIssueCodeV0(t *testing.T) {
 	}
 }
 
+func TestCodexGoalObserverV0ClasificaQuotaFilesystemBackendSinIssueCodeV0(t *testing.T) {
+	observer := CodexGoalObserverV0{Observer: &recordingCodexGoalObserverV0{
+		err: errors.New("rollout writer failed: Quota exceeded (os error 122)"),
+	}}
+
+	result, err := observer.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
+		GoalRef:         "goal-ref-001",
+		ExternalGoalRef: "external-goal-ref-001",
+	})
+
+	if err == nil ||
+		result.Status != orquestagoal.GoalStatusInvalidV0 ||
+		!hasGoalIssueCodeForTestV0(result.Issues, "codex_app_server_storage_quota_exceeded") {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+}
+
 func hasGoalIssueCodeForTestV0(issues []orquestagoal.GoalWorkIssueV0, code string) bool {
 	for _, issue := range issues {
 		if issue.Code == code {
