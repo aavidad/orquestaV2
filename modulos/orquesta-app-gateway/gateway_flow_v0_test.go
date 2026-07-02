@@ -133,6 +133,39 @@ func TestExternalWorkObserveAliasDelegaEnObserveGoalRESTV0(t *testing.T) {
 	}
 }
 
+func TestExternalWorkObserveGETLegacyDelegaEnObserveGoalRESTV0(t *testing.T) {
+	executor := &recordingObserveDirectorGoalExecutorV0{}
+	handler := NewHTTPHandlerV0(ConfigV0{
+		ObserveDirectorGoal: executor,
+		Timeout:             time.Second,
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodGet,
+		orquestahttpgateway.RouteExternalWorkObserveV0+"?request_id=req-external-work-observe-get-001&run_ref=run-ref-external-work-observe-get-001&requested_by=opes-bridge",
+		nil,
+	)
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if executor.Input.RunRef != "run-ref-external-work-observe-get-001" ||
+		executor.Input.RequestID != "req-external-work-observe-get-001" ||
+		executor.Input.RequestedBy != "opes-bridge" {
+		t.Fatalf("input=%+v", executor.Input)
+	}
+	var result orquestamcp.MCPObserveAppDirectorGoalToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPObserveAppDirectorGoalEstadoOKV0 ||
+		result.GoalRef != "goal-ref-app-gateway-observed-001" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestAppDirectorPreviewAPIDelegaEnExecutorRESTV0(t *testing.T) {
 	executor := &recordingPreviewDirectorExecutorV0{}
 	handler := NewHTTPHandlerV0(ConfigV0{

@@ -1,6 +1,9 @@
 package orquestaappgateway
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -140,6 +143,25 @@ func newExternalWorkObserveAliasHTTPHandlerV0(canonical http.Handler) http.Handl
 		urlCopy := *r.URL
 		urlCopy.Path = orquestamcp.MCPObserveAppDirectorGoalHTTPPathV0
 		aliased.URL = &urlCopy
+		if r.Method == http.MethodGet {
+			input := orquestamcp.MCPObserveAppDirectorGoalToolInputV0{
+				RequestID:     r.URL.Query().Get("request_id"),
+				CorrelationID: r.URL.Query().Get("correlation_id"),
+				RunRef:        r.URL.Query().Get("run_ref"),
+				OccurredAt:    r.URL.Query().Get("occurred_at"),
+				RequestedBy:   r.URL.Query().Get("requested_by"),
+			}
+			body, err := json.Marshal(input)
+			if err == nil {
+				aliased.Method = http.MethodPost
+				aliased.Body = http.NoBody
+				aliased.GetBody = nil
+				aliased.ContentLength = int64(len(body))
+				aliased.Body = io.NopCloser(bytes.NewReader(body))
+				aliased.Header = r.Header.Clone()
+				aliased.Header.Set("Content-Type", "application/json")
+			}
+		}
 		canonical.ServeHTTP(w, aliased)
 	})
 }
