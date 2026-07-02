@@ -43,6 +43,7 @@ type goalMaterializedRefsScanV0 struct {
 	HasQAPass          bool
 	HasQAFail          bool
 	HasTerminalReceipt bool
+	TerminalResult     *orquestagoal.GoalWorkResultV0
 	ArtifactPaths      []string
 }
 
@@ -74,6 +75,22 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 		scan = mergeGoalMaterializedRefsScanV0(scan, next)
 	}
 	result := scan.Result
+	if source.RepairMissingTerminalReceipt &&
+		source.GoalStateStore != nil &&
+		scan.TerminalResult != nil &&
+		!goalMaterializedMissingTerminalReceiptHandledV0(state) {
+		repaired, repairErr := repairGoalFirstReceiptFromMaterializedResultV0(
+			ctx,
+			state,
+			*scan.TerminalResult,
+			source.GoalStateStore,
+			source.GoalClosureValidator,
+		)
+		if repairErr == nil && repaired.Repaired {
+			source.RepairMissingTerminalReceipt = false
+			return source.ResolveDirectorGoalMaterializedRefsV0(ctx, repaired.State)
+		}
+	}
 	if !scan.HasTerminalReceipt &&
 		scan.HasArtifact &&
 		scan.HasQAPass &&
@@ -198,6 +215,15 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalMaterializedFileV0(
 	}
 	if goalMaterializedFileIsGoalResultV0(base) {
 		scan.HasTerminalReceipt = true
+		if result, ok := goalMaterializedReadTerminalGoalResultV0(path); ok {
+			scan.TerminalResult = &result
+			scan.HasArtifact = scan.HasArtifact || len(result.ArtifactRefs) > 0 || len(result.ArtifactPaths) > 0
+			scan.HasQAPass = scan.HasQAPass || goalMaterializedGoalResultRequiredTestsPassedV0(result)
+			scan.Result.ArtifactRefs = append(scan.Result.ArtifactRefs, result.ArtifactRefs...)
+			scan.Result.DomainReceiptRefs = append(scan.Result.DomainReceiptRefs, result.DomainReceiptRefs...)
+			scan.Result.EvidenceRefs = append(scan.Result.EvidenceRefs, result.EvidenceRefs...)
+			scan.ArtifactPaths = append(scan.ArtifactPaths, result.ArtifactPaths...)
+		}
 	}
 	if goalMaterializedFileLooksLikeArtifactV0(projectRoot, path, base) {
 		scan.HasArtifact = true
@@ -233,7 +259,42 @@ func mergeGoalMaterializedRefsScanV0(
 	current.HasQAPass = current.HasQAPass || next.HasQAPass
 	current.HasQAFail = current.HasQAFail || next.HasQAFail
 	current.HasTerminalReceipt = current.HasTerminalReceipt || next.HasTerminalReceipt
+	if next.TerminalResult != nil {
+		current.TerminalResult = next.TerminalResult
+	}
 	return current
+}
+
+func goalMaterializedReadTerminalGoalResultV0(path string) (orquestagoal.GoalWorkResultV0, bool) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return orquestagoal.GoalWorkResultV0{}, false
+	}
+	var result orquestagoal.GoalWorkResultV0
+	if json.Unmarshal(raw, &result) != nil {
+		return orquestagoal.GoalWorkResultV0{}, false
+	}
+	result = orquestagoal.NormalizeGoalWorkResultV0(result)
+	if strings.TrimSpace(result.Status) != orquestagoal.GoalStatusCompleteV0 {
+		return orquestagoal.GoalWorkResultV0{}, false
+	}
+	return result, true
+}
+
+func goalMaterializedGoalResultRequiredTestsPassedV0(result orquestagoal.GoalWorkResultV0) bool {
+	if len(result.RequiredTestResults) == 0 {
+		return false
+	}
+	for _, test := range result.RequiredTestResults {
+		status := strings.ToLower(strings.TrimSpace(test.Status))
+		if status != "passed" && status != "pass" && status != "ok" && status != "success" {
+			return false
+		}
+		if len(compactStringsV0(test.EvidenceRefs)) == 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func goalMaterializedFileLooksLikeArtifactV0(

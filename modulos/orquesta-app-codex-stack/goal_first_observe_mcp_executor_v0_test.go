@@ -163,6 +163,91 @@ func TestCodexStackObserveAppDirectorGoalExecutorV0TimeoutSnapshotReparaReceiptM
 	}
 }
 
+func TestCodexStackObserveAppDirectorGoalExecutorV0IngiereReceiptTerminalMaterializadoV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-stack-observe-goal-terminal-receipt-001"
+	goalRef := "goal-ref-stack-observe-terminal-receipt-001"
+	testRef := "test-ref-terminal-receipt-generated-app"
+	projectDir := t.TempDir()
+	appDir := filepath.Join(projectDir, "generated-apps", "smoke-goal-first")
+	docsDir := filepath.Join(appDir, "docs")
+	if err := os.MkdirAll(docsDir, 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(appDir, "README.md"), []byte("# App\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	receipt := `{
+		"schema_version":"orquesta_goal_result.v0",
+		"status":"complete",
+		"summary":"receipt terminal materializado",
+		"artifact_refs":["artifact-ref-terminal-source","artifact-ref-terminal-handoff"],
+		"artifact_paths":["generated-apps/smoke-goal-first/README.md"],
+		"required_test_results":[{"test_ref":"` + testRef + `","status":"passed","evidence_refs":["evidence-ref-terminal-test"]}],
+		"evidence_refs":["evidence-ref-terminal-receipt"]
+	}`
+	if err := os.WriteFile(filepath.Join(docsDir, "orquesta_goal_result_v0.json"), []byte(receipt), 0o600); err != nil {
+		t.Fatalf("write receipt: %v", err)
+	}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       goalRef,
+			RunRef:        runRef,
+			Objective:     "Ingerir receipt terminal ya materializado.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "generated-apps/smoke-goal-first"}},
+			RequiredTests: []orquestagoal.GoalRequiredTestV0{{TestRef: testRef}},
+			ClosurePolicy: orquestagoal.GoalClosurePolicyV0{RequireRequiredTests: true, RequireArtifacts: true, RequiredEvidenceRefs: []string{"evidence-ref-terminal-receipt"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:  orquestagoal.GoalStatusRunningV0,
+			GoalRef: goalRef,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	if err := goalStates.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	stack := &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:       goalStates,
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		},
+		Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir},
+	}
+
+	result, err := NewCodexStackObserveAppDirectorGoalExecutorV0(stack).ObserveAppDirectorGoalTimeoutSnapshotV0(
+		ctx,
+		orquestamcp.MCPObserveAppDirectorGoalToolInputV0{RunRef: runRef},
+	)
+
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalTimeoutSnapshotV0: %v", err)
+	}
+	if result.GoalStatus != orquestagoal.GoalStatusCompleteV0 ||
+		result.ClosureStatus != orquestagoal.GoalStatusAcceptedV0 ||
+		!result.ClosureAccepted ||
+		result.ClosureNeedsRework ||
+		!codexStackStringInSetForTestV0(result.EvidenceRefs, goalFirstRepairReceiptAcceptedEvidenceRefV0) {
+		t.Fatalf("result=%+v", result)
+	}
+	persisted, err := goalStates.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if persisted.LastResult == nil ||
+		persisted.LastClosure == nil ||
+		!persisted.LastClosure.Accepted ||
+		!codexStackStringInSetForTestV0(persisted.LastResult.EvidenceRefs, goalFirstRepairReceiptAttemptedEvidenceRefV0) {
+		t.Fatalf("persisted=%+v", persisted)
+	}
+}
+
 func TestCodexStackObserveAppDirectorGoalExecutorV0RepairReceiptRequiereReworkSinReceiptDominioV0(t *testing.T) {
 	ctx := context.Background()
 	runRef := "run-ref-stack-observe-goal-repair-receipt-rework-001"

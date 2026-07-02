@@ -154,3 +154,39 @@ solo Nueva App aislada. Ver `BUG-ORQ-20260702-123`, cerrado haciendo que el
 servidor acepte `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DISABLED=true` como
 opt-out global y que el smoke lo exporte. Los ceros de `TARGET_QUEUE` y
 `MAX_REQUESTS` quedan solo como defensa adicional.
+
+## Avances posteriores remotos
+
+Smoke real posterior con Orquesta `c703f4d0ad` y directorio temporal
+conservado en `/tmp/orquesta-goal-first-app-server.6uPTwz`: el fix anterior
+evito el falso `closure_status=blocked` mientras el rework estaba activo, pero
+el rework agoto el unico intento permitido y termino de nuevo con
+`codex_app_server_goal_active_timeout` pese a existir artefactos, docs y tests
+materializados.
+
+Avance aplicado: el spec goal-first de Nueva App declara ahora
+`Budget.MaxRuntimeSeconds=600` y dos reworks causales (`MaxReworkGoals=2`) para
+permitir un primer rework de materializacion y un segundo intento acotado de
+reparacion/cierre del receipt final sin caer al loop legacy.
+
+Evidencia focal:
+
+- `TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy`
+- `TestObserveAppDirectorGoalV0BloqueaSiReworkGoalAgotaPresupuesto`
+
+Smoke real posterior con Orquesta `0906935bf8` y directorio temporal conservado
+en `/tmp/orquesta-goal-first-app-server.5dwqlc`: el segundo rework permitio que
+el agente actualizara el receipt a `status=complete`, con `artifact_refs`,
+`artifact_paths`, `required_test_results passed` y `evidence_refs`, pero
+`observe` siguio viendo el backend como `running` hasta timeout y finalmente
+bloqueo el run sin ingerir ese receipt terminal materializado.
+
+Avance aplicado: el scanner de materialized refs lee ahora
+`orquesta_goal_result*.json` completos, valida el cierre con el
+`GoalClosureValidator` y persiste `LastResult`/`LastClosure` aceptados aunque el
+backend todavia no haya devuelto el resultado por API.
+
+Evidencia focal:
+
+- `TestCodexStackObserveAppDirectorGoalExecutorV0IngiereReceiptTerminalMaterializadoV0`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack`

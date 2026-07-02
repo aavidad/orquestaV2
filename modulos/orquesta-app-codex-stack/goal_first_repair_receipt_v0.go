@@ -74,6 +74,61 @@ func repairGoalFirstReceiptFromMaterializedRefsV0(
 	}, nil
 }
 
+func repairGoalFirstReceiptFromMaterializedResultV0(
+	ctx context.Context,
+	state orquestagoal.GoalWorkStateV0,
+	result orquestagoal.GoalWorkResultV0,
+	store orquestagoal.GoalWorkStateStorePortV0,
+	validator orquestagoal.GoalWorkClosureValidatorPortV0,
+) (goalFirstReceiptRepairResultV0, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	state, err := orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		return goalFirstReceiptRepairResultV0{}, err
+	}
+	out := goalFirstReceiptRepairResultV0{State: state}
+	if store == nil ||
+		goalFirstReceiptRepairAlreadyClosedV0(state) ||
+		goalFirstReceiptRepairAlreadyAttemptedV0(state) {
+		return out, nil
+	}
+	result = orquestagoal.NormalizeGoalWorkResultV0(result)
+	if strings.TrimSpace(result.Status) != orquestagoal.GoalStatusCompleteV0 {
+		return out, nil
+	}
+	result.GoalRef = strings.TrimSpace(state.GoalRef)
+	result.ExternalGoalRef = strings.TrimSpace(state.ExternalGoalRef)
+	result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, goalFirstRepairReceiptAttemptedEvidenceRefV0))
+	if validator == nil {
+		validator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	}
+	closure, err := validator.ValidateGoalWorkClosureV0(ctx, state.Spec, result)
+	if err != nil {
+		return goalFirstReceiptRepairResultV0{}, err
+	}
+	closure = goalFirstReceiptRepairClosureV0(closure)
+	updated := state
+	updated.Status = result.Status
+	updated.LastResult = &result
+	updated.LastClosure = &closure
+	updated.EvidenceRefs = compactStringsV0(append(updated.EvidenceRefs, result.EvidenceRefs...))
+	updated.EvidenceRefs = compactStringsV0(append(updated.EvidenceRefs, closure.EvidenceRefs...))
+	updated, err = orquestagoal.NewGoalWorkStateV0(updated)
+	if err != nil {
+		return goalFirstReceiptRepairResultV0{}, err
+	}
+	if err := store.SaveGoalWorkStateV0(ctx, updated); err != nil {
+		return goalFirstReceiptRepairResultV0{}, err
+	}
+	return goalFirstReceiptRepairResultV0{
+		State:    updated,
+		Closure:  closure,
+		Repaired: true,
+	}, nil
+}
+
 func goalFirstReceiptRepairResultFromRefsV0(
 	state orquestagoal.GoalWorkStateV0,
 	refs orquestamcp.MCPDirectorGoalMaterializedRefsV0,

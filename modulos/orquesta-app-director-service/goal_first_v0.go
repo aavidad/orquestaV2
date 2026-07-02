@@ -815,7 +815,7 @@ func buildStartAppDirectorGoalWorkSpecV0(
 			RequireArtifacts:     true,
 			RequiredEvidenceRefs: []string{evidenceRef},
 		},
-		ReworkPolicy: orquestagoal.GoalReworkPolicyV0{PreferNewGoal: true, MaxReworkGoals: 1, PreserveArtifacts: true},
+		ReworkPolicy: startAppDirectorGoalReworkPolicyV0(),
 	})
 }
 
@@ -897,7 +897,11 @@ func startAppDirectorGoalBudgetV0(spec orquestafactory.AppSpecV0) orquestagoal.G
 	if strings.TrimSpace(spec.AgentPreferences.Autonomy) == "alta" || strings.TrimSpace(spec.Quality.Tests) == "alta" {
 		maxSubgoals = 10
 	}
-	return orquestagoal.GoalBudgetV0{MaxSubgoals: maxSubgoals, MaxReworkGoals: 1}
+	return orquestagoal.GoalBudgetV0{MaxRuntimeSeconds: 600, MaxSubgoals: maxSubgoals, MaxReworkGoals: 2}
+}
+
+func startAppDirectorGoalReworkPolicyV0() orquestagoal.GoalReworkPolicyV0 {
+	return orquestagoal.GoalReworkPolicyV0{PreferNewGoal: true, MaxReworkGoals: 2, PreserveArtifacts: true}
 }
 
 func startAppDirectorGoalJoinV0(values []string) string {
