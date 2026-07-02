@@ -254,6 +254,7 @@ func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionWithOptionsV
 		}
 	}
 	backend.stopCodexAppServerSocketProcessesV0(runCtx)
+	backend.stopCodexAppServerRuntimeOwnedProcessesV0(runCtx)
 	_ = os.Remove(strings.TrimSpace(backend.SocketPath))
 	_ = os.Remove(backend.tmuxOwnerMarkerPathV0())
 	return nil
@@ -288,6 +289,40 @@ func (backend serverCodexAppServerTmuxBackendV0) stopCodexAppServerSocketProcess
 		_ = syscall.Kill(pid, syscall.SIGKILL)
 	}
 	backend.waitCodexAppServerSocketProcessesGoneV0(killCtx, socketPath)
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) stopCodexAppServerRuntimeOwnedProcessesV0(ctx context.Context) {
+	runtimeDir := strings.TrimSpace(backend.RuntimeWorkDir)
+	if runtimeDir == "" || !backend.tmuxConfiguredOrphanCleanupAllowedV0() {
+		return
+	}
+	runtimeGoalDir := filepath.Join(filepath.Clean(runtimeDir), codexAppServerTmuxDirV0)
+	pids := codexAppServerTmuxRuntimeOwnedProcessPIDsV0(ctx, runtimeGoalDir)
+	for _, pid := range pids {
+		_ = syscall.Kill(pid, syscall.SIGTERM)
+	}
+	backend.waitCodexAppServerRuntimeOwnedProcessesGoneV0(ctx, runtimeGoalDir)
+	killCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	for _, pid := range codexAppServerTmuxRuntimeOwnedProcessPIDsV0(killCtx, runtimeGoalDir) {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
+	}
+	backend.waitCodexAppServerRuntimeOwnedProcessesGoneV0(killCtx, runtimeGoalDir)
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) waitCodexAppServerRuntimeOwnedProcessesGoneV0(ctx context.Context, runtimeGoalDir string) {
+	ticker := time.NewTicker(codexAppServerTmuxSocketPollEveryV0)
+	defer ticker.Stop()
+	for {
+		if len(codexAppServerTmuxRuntimeOwnedProcessPIDsV0(ctx, runtimeGoalDir)) == 0 {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) waitCodexAppServerSocketProcessesGoneV0(ctx context.Context, socketPath string) {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
@@ -349,19 +350,29 @@ func (backend serverCodexAppServerTmuxBackendV0) detectCodexAppServerRuntimeOwne
 }
 
 func codexAppServerTmuxRuntimeOwnedProcessExistsV0(ctx context.Context, runtimeGoalDir string) bool {
+	return len(codexAppServerTmuxRuntimeOwnedProcessPIDsV0(ctx, runtimeGoalDir)) > 0
+}
+
+func codexAppServerTmuxRuntimeOwnedProcessPIDsV0(ctx context.Context, runtimeGoalDir string) []int {
 	runtimeGoalDir = strings.TrimSpace(runtimeGoalDir)
 	if runtimeGoalDir == "" {
-		return false
+		return nil
 	}
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
-		return false
+		return nil
 	}
+	out := []int{}
+	currentPID := os.Getpid()
 	for _, entry := range entries {
 		if err := ctx.Err(); err != nil {
-			return false
+			return nil
 		}
 		if !entry.IsDir() || !codexAppServerTmuxProcNameLooksPIDV0(entry.Name()) {
+			continue
+		}
+		pid, err := strconv.Atoi(entry.Name())
+		if err != nil || pid <= 0 || pid == currentPID {
 			continue
 		}
 		procDir := filepath.Join("/proc", entry.Name())
@@ -370,10 +381,10 @@ func codexAppServerTmuxRuntimeOwnedProcessExistsV0(ctx context.Context, runtimeG
 			continue
 		}
 		if codexAppServerTmuxProcRuntimeOwnedV0(procDir, runtimeGoalDir) {
-			return true
+			out = append(out, pid)
 		}
 	}
-	return false
+	return out
 }
 
 func codexAppServerTmuxProcNameLooksPIDV0(name string) bool {

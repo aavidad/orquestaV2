@@ -959,6 +959,99 @@ exit 2
 	}
 }
 
+func TestCodexAppServerTmuxBackendV0CleanupActiveWorkMataProcesoPropioSinSocketV0(t *testing.T) {
+	if _, err := os.Stat("/proc/self/cwd"); err != nil {
+		t.Skip("procfs no disponible")
+	}
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	fakeTmux := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte(`#!/bin/sh
+case "${1:-}" in
+  has-session)
+    exit 1
+    ;;
+esac
+exit 2
+`), 0o700); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	runtimeDir := filepath.Join(root, "runtime")
+	ownedWorkdir := filepath.Join(runtimeDir, codexAppServerTmuxDirV0, "owned-cwd")
+	if err := os.MkdirAll(ownedWorkdir, 0o700); err != nil {
+		t.Fatalf("mkdir owned workdir: %v", err)
+	}
+	process := exec.Command("bash", "-c", "trap '' TERM; exec -a 'codex app-server' sleep 30")
+	process.Dir = ownedWorkdir
+	if err := process.Start(); err != nil {
+		t.Fatalf("start fake app-server process: %v", err)
+	}
+	processDone := make(chan error, 1)
+	go func() {
+		processDone <- process.Wait()
+	}()
+	defer func() {
+		_ = process.Process.Kill()
+		select {
+		case <-processDone:
+		case <-time.After(time.Second):
+		}
+	}()
+	socketPath := filepath.Join(runtimeDir, codexAppServerTmuxDirV0, "configured.sock")
+	backend := serverCodexAppServerTmuxBackendV0{
+		PathEnv:                binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		RuntimeWorkDir:         runtimeDir,
+		SocketPath:             socketPath,
+		SessionName:            "orquesta-goal-runtime-owned-cleanup-1234567890",
+		Timeout:                50 * time.Millisecond,
+		ShutdownCleanupTimeout: 200 * time.Millisecond,
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var before orquestaservershutdown.ActiveShutdownWorkResultV0
+	var err error
+	for time.Now().Before(deadline) {
+		before, err = backend.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{})
+		if err != nil {
+			t.Fatalf("ReadActiveShutdownWorkV0 before: %v", err)
+		}
+		if containsStringForTestV0(before.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-runtime-owned") {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if len(before.ActiveWorks) != 1 ||
+		!containsStringForTestV0(before.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-runtime-owned") {
+		t.Fatalf("before=%+v", before)
+	}
+	result, err := backend.CleanupActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0{
+		CleanupGoalBackends: true,
+		ActiveWorks:         before.ActiveWorks,
+	})
+	if err != nil {
+		t.Fatalf("CleanupActiveShutdownWorkV0: %v", err)
+	}
+	if result.CleanedWorkCount != 1 ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-configured-cleaned") {
+		t.Fatalf("result=%+v", result)
+	}
+	select {
+	case <-processDone:
+	case <-time.After(time.Second):
+		t.Fatalf("fake app-server runtime-owned sigue vivo tras cleanup")
+	}
+	after, err := backend.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{})
+	if err != nil {
+		t.Fatalf("ReadActiveShutdownWorkV0 after: %v", err)
+	}
+	if len(after.ActiveWorks) != 0 {
+		t.Fatalf("after=%+v", after)
+	}
+}
+
 func TestCodexAppServerTmuxBackendV0CleanupActiveWorkNoMataSesionSinOwnerNiConfigSeguraV0(t *testing.T) {
 	root := t.TempDir()
 	binDir := filepath.Join(root, "bin")
