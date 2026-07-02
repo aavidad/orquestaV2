@@ -44,8 +44,22 @@ func TestFlakyHarnessV0RepiteCasoDirectorRecursiveFakeRuntimeV0(t *testing.T) {
 	if childGoCache == "" {
 		childGoCache = filepath.Join(os.TempDir(), "orquesta-go-build-cache")
 	}
-	if err := os.MkdirAll(childGoCache, 0o700); err != nil {
-		t.Fatalf("preparar GOCACHE para child: %v", err)
+	childGoModCache := strings.TrimSpace(os.Getenv("GOMODCACHE"))
+	if childGoModCache == "" {
+		childGoModCache = filepath.Join(os.TempDir(), "orquesta-go-mod-cache")
+	}
+	childGoPath := strings.TrimSpace(os.Getenv("GOPATH"))
+	if childGoPath == "" {
+		childGoPath = filepath.Join(os.TempDir(), "orquesta-go-path")
+	}
+	for label, path := range map[string]string{
+		"GOCACHE":    childGoCache,
+		"GOMODCACHE": childGoModCache,
+		"GOPATH":     childGoPath,
+	} {
+		if err := os.MkdirAll(path, 0o700); err != nil {
+			t.Fatalf("preparar %s para child: %v", label, err)
+		}
 	}
 	for attempt := 1; attempt <= flakyHarnessAttemptsV0; attempt++ {
 		ctx, cancel := context.WithTimeout(context.Background(), flakyHarnessAttemptTimeoutV0)
@@ -61,7 +75,13 @@ func TestFlakyHarnessV0RepiteCasoDirectorRecursiveFakeRuntimeV0(t *testing.T) {
 			flakyHarnessChildTestTimeoutV0.String(),
 		)
 		cmd.Dir = projectRootForFlakyHarnessV0(t)
-		cmd.Env = append(os.Environ(), flakyHarnessChildEnvV0+"=1", "GOCACHE="+childGoCache)
+		cmd.Env = append(
+			os.Environ(),
+			flakyHarnessChildEnvV0+"=1",
+			"GOCACHE="+childGoCache,
+			"GOMODCACHE="+childGoModCache,
+			"GOPATH="+childGoPath,
+		)
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 		cmd.Stdout = &stdout
