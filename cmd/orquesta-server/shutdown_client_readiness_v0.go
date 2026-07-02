@@ -57,13 +57,14 @@ func serverShutdownClientResultFromStatusV0(status orquestaserver.ServerPublicSt
 
 func shutdownClientNotReadyErrorV0(result serverShutdownClientResultV0) error {
 	return fmt.Errorf(
-		"shutdown_not_ready status=%s runs=%d/%d agents_in_flight=%d checkpoints=%d checkpoint_agents=%d",
+		"shutdown_not_ready status=%s runs=%d/%d agents_in_flight=%d checkpoints=%d checkpoint_agents=%d active_work=%d",
 		result.Status,
 		result.RunsStopped,
 		result.RunsRequested,
 		result.AgentsInFlight,
 		result.CheckpointsPending,
 		result.CheckpointAgentsPending,
+		result.ActiveWorkCount,
 	)
 }
 

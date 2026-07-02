@@ -68,6 +68,36 @@ func TestRequestServerShutdownV0ReadyNoSaltaActiveWorkPersistido(t *testing.T) {
 	}
 }
 
+func TestRequestServerShutdownV0ReadyNoSaltaActiveWorksEstructuradosV0(t *testing.T) {
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v0/server/shutdown" {
+			t.Fatalf("request inesperada: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(serverShutdownClientResultV0{
+			Estado:        "ok",
+			Status:        "ready",
+			ShutdownReady: true,
+			ActiveWorks: []serverShutdownClientActiveWorkV0{{
+				Kind:            "goal_backend",
+				RunRef:          "run-ref-ready-structured",
+				WorkRef:         "goal-ref-ready-structured",
+				ExternalWorkRef: "thread-ref-ready-structured",
+				Status:          "backend_still_running",
+			}},
+		})
+	}))
+	defer server.Close()
+
+	err := requestServerShutdownV0(strings.TrimPrefix(server.URL, "http://"), serverShutdownClientOptionsV0{})
+
+	if err == nil ||
+		!strings.Contains(err.Error(), "shutdown_not_ready status=ready") ||
+		!strings.Contains(err.Error(), "active_work=1") {
+		t.Fatalf("ready con active_works estructurado no debe cerrar signal: %v", err)
+	}
+}
+
 func TestParseStopOptionsV0ExigeRazonParaForce(t *testing.T) {
 	_, err := parseStopOptionsV0([]string{"--force"}, bytes.NewBuffer(nil))
 
@@ -305,6 +335,26 @@ func TestShutdownClientReadyV0BloqueaActiveWorkPersistido(t *testing.T) {
 		result.CheckpointAgentsPending != 1 ||
 		!shutdownClientStringRefsContainForTestV0(result.ActiveWorkRefs, "shutdown-active-work-goal-backend-goal-ref-test") {
 		t.Fatalf("result active_work no conservado/bloqueado: %+v", result)
+	}
+}
+
+func TestNormalizeServerShutdownClientResultV0ConvierteActiveWorksEnRefs(t *testing.T) {
+	result := normalizeServerShutdownClientResultV0(serverShutdownClientResultV0{
+		ActiveWorks: []serverShutdownClientActiveWorkV0{{
+			Kind:            "goal_backend",
+			RunRef:          "run-ref-client-active-001",
+			WorkRef:         "goal-ref-client-active-001",
+			ExternalWorkRef: "thread-ref-client-active-001",
+			Status:          "backend_still_running",
+		}},
+	})
+
+	if result.ActiveWorkCount != 1 ||
+		!shutdownClientStringRefsContainForTestV0(result.ActiveWorkRefs, "shutdown-active-work-goal-backend-run-ref-client-active-001") ||
+		!shutdownClientStringRefsContainForTestV0(result.ActiveWorkRefs, "shutdown-active-work-goal-backend-goal-ref-client-active-001") ||
+		!shutdownClientStringRefsContainForTestV0(result.ActiveWorkRefs, "shutdown-active-work-goal-backend-thread-ref-client-active-001") ||
+		!shutdownClientStringRefsContainForTestV0(result.ActiveWorkRefs, "shutdown-active-work-goal-backend-backend-still-running") {
+		t.Fatalf("active_works no normalizado: %+v", result)
 	}
 }
 

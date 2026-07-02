@@ -16,16 +16,25 @@ import (
 )
 
 type serverShutdownClientResultV0 struct {
-	Estado                  string   `json:"estado"`
-	Status                  string   `json:"status"`
-	ShutdownReady           bool     `json:"shutdown_ready"`
-	RunsRequested           int      `json:"runs_requested"`
-	RunsStopped             int      `json:"runs_stopped"`
-	AgentsInFlight          int      `json:"agents_in_flight"`
-	CheckpointsPending      int      `json:"checkpoints_pending"`
-	CheckpointAgentsPending int      `json:"checkpoint_agents_pending"`
-	ActiveWorkCount         int      `json:"active_work_count,omitempty"`
-	ActiveWorkRefs          []string `json:"active_work_refs,omitempty"`
+	Estado                  string                             `json:"estado"`
+	Status                  string                             `json:"status"`
+	ShutdownReady           bool                               `json:"shutdown_ready"`
+	RunsRequested           int                                `json:"runs_requested"`
+	RunsStopped             int                                `json:"runs_stopped"`
+	AgentsInFlight          int                                `json:"agents_in_flight"`
+	CheckpointsPending      int                                `json:"checkpoints_pending"`
+	CheckpointAgentsPending int                                `json:"checkpoint_agents_pending"`
+	ActiveWorkCount         int                                `json:"active_work_count,omitempty"`
+	ActiveWorkRefs          []string                           `json:"active_work_refs,omitempty"`
+	ActiveWorks             []serverShutdownClientActiveWorkV0 `json:"active_works,omitempty"`
+}
+
+type serverShutdownClientActiveWorkV0 struct {
+	Kind            string `json:"kind,omitempty"`
+	RunRef          string `json:"run_ref,omitempty"`
+	WorkRef         string `json:"work_ref,omitempty"`
+	ExternalWorkRef string `json:"external_work_ref,omitempty"`
+	Status          string `json:"status,omitempty"`
 }
 
 type serverShutdownClientOptionsV0 struct {
@@ -142,7 +151,63 @@ func postServerShutdownRequestV0(
 	if err := json.Unmarshal(responseBody, &result); err != nil {
 		return serverShutdownClientResultV0{}, fmt.Errorf("shutdown_response_invalid")
 	}
+	result = normalizeServerShutdownClientResultV0(result)
 	return result, nil
+}
+
+func normalizeServerShutdownClientResultV0(result serverShutdownClientResultV0) serverShutdownClientResultV0 {
+	activeWorkRefs := compactStringsV0(append(
+		append([]string(nil), result.ActiveWorkRefs...),
+		serverShutdownClientActiveWorkRefsV0(result.ActiveWorks)...,
+	))
+	result.ActiveWorkRefs = activeWorkRefs
+	if result.ActiveWorkCount <= 0 {
+		if len(result.ActiveWorks) > 0 {
+			result.ActiveWorkCount = len(result.ActiveWorks)
+		} else if len(activeWorkRefs) > 0 {
+			result.ActiveWorkCount = len(activeWorkRefs)
+		}
+	}
+	return result
+}
+
+func serverShutdownClientActiveWorkRefsV0(works []serverShutdownClientActiveWorkV0) []string {
+	out := make([]string, 0, len(works)*4)
+	for _, work := range works {
+		prefix := "shutdown-active-work"
+		if kind := safeShutdownClientRefPartV0(work.Kind); kind != "" {
+			prefix += "-" + kind
+		}
+		for _, ref := range []string{work.RunRef, work.WorkRef, work.ExternalWorkRef, work.Status} {
+			if safe := safeShutdownClientRefPartV0(ref); safe != "" {
+				out = append(out, prefix+"-"+safe)
+			}
+		}
+	}
+	return compactStringsV0(out)
+}
+
+func safeShutdownClientRefPartV0(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+	var builder strings.Builder
+	lastSep := false
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= '0' && r <= '9':
+			builder.WriteRune(r)
+			lastSep = false
+		default:
+			if !lastSep {
+				builder.WriteByte('-')
+				lastSep = true
+			}
+		}
+	}
+	return strings.Trim(builder.String(), "-")
 }
 
 func shutdownHTTPErrorCodeV0(ctx context.Context, err error) string {
