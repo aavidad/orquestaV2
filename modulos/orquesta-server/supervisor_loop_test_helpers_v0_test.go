@@ -221,9 +221,25 @@ type fixedClockV0 struct{ now time.Time }
 func (clock fixedClockV0) Now() time.Time { return clock.now }
 
 func markNoExecutionSinceForTestV0(runtime *RuntimeV0, now time.Time) {
+	markNoExecutionObservedAtForTestV0(runtime, now.Add(-61*time.Second))
+}
+
+func markNoExecutionObservedAtForTestV0(runtime *RuntimeV0, now time.Time) {
 	runtime.tracker.MarkSupervisorV0(runtime.config.SupervisorCommand, orquestarunsupervisor.RunSupervisorResultV0{
 		StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
-	}, now.Add(-61*time.Second))
+	}, now)
+}
+
+func resetNoExecutionWindowForTestV0(runtime *RuntimeV0) {
+	runtime.tracker.mu.Lock()
+	defer runtime.tracker.mu.Unlock()
+	runtime.tracker.supervisorNoExecutionSince = time.Time{}
+}
+
+func markNoExecutionWindowStartForTestV0(runtime *RuntimeV0, idleSince time.Time) {
+	runtime.tracker.MarkSupervisorV0(runtime.config.SupervisorCommand, orquestarunsupervisor.RunSupervisorResultV0{
+		StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
+	}, idleSince)
 }
 
 func waitRuntimeAsyncWorkForTestV0(t *testing.T, runtime *RuntimeV0) {

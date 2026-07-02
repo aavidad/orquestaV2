@@ -1,11 +1,8 @@
 package orquestaserver
 
 import (
-	"strings"
-
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
-	stopreason "orquesta/modulos/orquesta-run-supervisor/stopreason"
 )
 
 const idleSelfImprovementExternalWaitBlockedReasonV0 = "active_external_wait"
@@ -22,7 +19,7 @@ func detectIdleSelfImprovementExternalWaitBlockV0(
 	block := idleSelfImprovementExternalWaitBlockV0{}
 	for _, tick := range result.Ticks {
 		for _, execution := range tick.Result.Executions {
-			if !idleSelfImprovementExternalWaitOutcomeV0(execution.Outcome, execution.QueueStatus) {
+			if !supervisorExecutionHasExternalWaitV0(execution) {
 				continue
 			}
 			block.Blocked = true
@@ -31,14 +28,14 @@ func detectIdleSelfImprovementExternalWaitBlockV0(
 			block.EvidenceRefs = append(block.EvidenceRefs, idleSelfImprovementDiagnosticEvidenceV0(execution.Diagnostics)...)
 		}
 		for _, skip := range tick.Result.Skips {
-			if !idleSelfImprovementExternalWaitOutcomeV0(skip.Reason, skip.Status) {
+			if !supervisorExternalWaitValueV0(skip.Reason, skip.Status) {
 				continue
 			}
 			block.Blocked = true
 			block.RunRefs = append(block.RunRefs, skip.RunRef)
 		}
 	}
-	if !block.Blocked && result.StopProjection.PublicReason == stopreason.PublicReasonWaitExternalV0 {
+	if !block.Blocked && supervisorResultHasExternalWaitV0(result) {
 		block.Blocked = true
 		block.RunRefs = idleSelfImprovementKnownRunRefsV0(result)
 		block.EvidenceRefs = append(block.EvidenceRefs, result.StopProjection.EvidenceRefs...)
@@ -49,16 +46,6 @@ func detectIdleSelfImprovementExternalWaitBlockV0(
 		idleSelfImprovementDiagnosticEvidenceV0(result.Diagnostics)...,
 	))
 	return block
-}
-
-func idleSelfImprovementExternalWaitOutcomeV0(values ...string) bool {
-	for _, value := range values {
-		switch strings.TrimSpace(value) {
-		case "wait_external", "candidate_pending":
-			return true
-		}
-	}
-	return false
 }
 
 func idleSelfImprovementDiagnosticEvidenceV0(

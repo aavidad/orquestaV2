@@ -9,6 +9,7 @@ import (
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
+	stopreason "orquesta/modulos/orquesta-run-supervisor/stopreason"
 )
 
 func TestSupervisorProjectionV0WaitUnhandledOutboxNoEsRunningV0(t *testing.T) {
@@ -117,6 +118,69 @@ func TestRuntimeV0IdleSelfImprovementAfterZeroDesactivaPlanificacionV0(t *testin
 	}
 }
 
+func TestRuntimeV0IdleSelfImprovementDefaultDisparaTrasSesentaSegundosV0(t *testing.T) {
+	now := time.Date(2026, 7, 2, 13, 20, 0, 0, time.UTC)
+	clock := &mutableClockForGoalFirstChainTestV0{now: now}
+	store := &memoryStateStoreV0{}
+	supervisor := &fakeSupervisorV0{
+		results: []fakeSupervisorResultV0{{
+			result: orquestarunsupervisor.RunSupervisorResultV0{
+				StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
+			},
+		}, {
+			result: orquestarunsupervisor.RunSupervisorResultV0{
+				StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
+			},
+		}},
+		planRequests: []IdleSelfImprovementRequestV0{{
+			RequestRef: "request-ref-backlog-default-idle-after-60s",
+		}},
+		selfStarted: make(chan struct{}, 1),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:      t.TempDir(),
+		TickInterval:  time.Hour,
+		AuditDisabled: true,
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: store,
+		Clock:      clock,
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	markNoExecutionObservedAtForTestV0(runtime, now.Add(-59*time.Second))
+	runtime.runSupervisorTickV0(context.Background())
+	select {
+	case <-supervisor.selfStarted:
+		t.Fatalf("automejora disparo antes de 60s")
+	case <-time.After(50 * time.Millisecond):
+	}
+	if supervisor.planCalls != 0 ||
+		store.last.IdleSelfImprovementReason != "idle_window_waiting" {
+		t.Fatalf("antes de umbral plan_calls=%d state=%+v", supervisor.planCalls, store.last)
+	}
+
+	clock.now = now.Add(time.Second)
+	runtime.runSupervisorTickV0(context.Background())
+	select {
+	case <-supervisor.selfStarted:
+	case <-time.After(time.Second):
+		t.Fatalf("automejora no disparo al cumplir 60s: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
+	}
+	if supervisor.planCalls != 1 ||
+		supervisor.selfCalls != 1 ||
+		supervisor.lastPlanRequest.Trigger != idleSelfImprovementTriggerIdleV0 ||
+		supervisor.lastSelfRequest.RequestRef != "request-ref-backlog-default-idle-after-60s" {
+		t.Fatalf("plan=%+v self_calls=%d last_self=%+v",
+			supervisor.lastPlanRequest,
+			supervisor.selfCalls,
+			supervisor.lastSelfRequest,
+		)
+	}
+}
+
 func TestSupervisorProjectionV0WaitExternalNoEsRunningV0(t *testing.T) {
 	now := time.Date(2026, 6, 11, 10, 20, 0, 0, time.UTC)
 	state := (&StatusTrackerV0{}).MarkSupervisorV0(
@@ -136,6 +200,54 @@ func TestSupervisorProjectionV0WaitExternalNoEsRunningV0(t *testing.T) {
 	}
 	if got := state.LastSupervisorOperationalMessage.Counters["running_live"]; got != 0 {
 		t.Fatalf("running_live=%d counters=%v", got, state.LastSupervisorOperationalMessage.Counters)
+	}
+}
+
+func TestSupervisorProjectionV0RuntimeErrorConAckPendienteEsWaitExternalV0(t *testing.T) {
+	now := time.Date(2026, 7, 2, 12, 25, 0, 0, time.UTC)
+	runRef := "run-ref-srv-task-022-ack-pending"
+	result := orquestarunsupervisor.RunSupervisorResultV0{
+		StopReason:      "runtime_error",
+		TotalExecutions: 1,
+		StopProjection: stopreason.ProjectionV0{
+			SchemaVersion: stopreason.SchemaVersionV0,
+			PublicReason:  "runtime_error",
+			Category:      "blocked",
+		},
+		Ticks: []orquestarunsupervisor.RunSupervisorTickSummaryV0{{
+			TickNumber: 1,
+			Result: orquestaruncoordinator.RunCoordinatorTickResultV0{
+				Ranked: []orquestaruncoordinator.RankedRunSummaryV0{{RunRef: runRef, Rank: 1}},
+				Executions: []orquestaruncoordinator.RunExecutionSummaryV0{{
+					RunRef:      runRef,
+					Outcome:     "runtime_error",
+					QueueStatus: "blocked",
+					Diagnostics: []orquestaruncoordinator.RunDrainDiagnosticV0{{
+						RunRef:       runRef,
+						Kind:         "ack_pending",
+						Status:       "pending",
+						EvidenceRefs: []string{"ack_pending"},
+					}},
+				}},
+			},
+		}},
+	}
+	state := (&StatusTrackerV0{}).MarkSupervisorV0(
+		orquestarunsupervisor.RunSupervisorCommandV0{QueueRef: "queue-ref-srv-task-022"},
+		result,
+		now,
+	)
+
+	if state.LastSupervisorStatus != SupervisorPublicStatusWaitingExternalV0 ||
+		state.LastSupervisorStopPublic != SupervisorPublicStopWaitingExternalV0 ||
+		state.LastSupervisorStopCategory != SupervisorPublicCategoryWaitExternalV0 {
+		t.Fatalf("state=%+v", state)
+	}
+	if got := state.LastSupervisorOperationalMessage.Counters["waiting_external"]; got != 1 {
+		t.Fatalf("waiting_external=%d counters=%v", got, state.LastSupervisorOperationalMessage.Counters)
+	}
+	if got := state.LastSupervisorOperationalMessage.Counters["stalled"]; got != 0 {
+		t.Fatalf("stalled=%d counters=%v", got, state.LastSupervisorOperationalMessage.Counters)
 	}
 }
 
@@ -261,6 +373,69 @@ func TestSupervisorProjectionV0ProcessRefConEvidenciaVivaEsRunningLiveV0(t *test
 	}
 }
 
+func TestSupervisorProjectionV0ErrorRecuperableConservaEstadoOperativoV0(t *testing.T) {
+	now := time.Date(2026, 7, 2, 12, 20, 0, 0, time.UTC)
+	cases := []struct {
+		name         string
+		result       orquestarunsupervisor.RunSupervisorResultV0
+		wantStatus   string
+		wantStop     string
+		wantCategory string
+		wantCounter  string
+	}{
+		{
+			name:         "outbox pendiente",
+			result:       supervisorResultWithUnhandledOutboxForTestV0("run-ref-t260-outbox-error"),
+			wantStatus:   SupervisorPublicStatusWaitingOutboxV0,
+			wantStop:     SupervisorPublicStopWaitingOutboxV0,
+			wantCategory: SupervisorPublicCategoryWaitOutboxV0,
+			wantCounter:  "waiting_outbox",
+		},
+		{
+			name:         "wait externo",
+			result:       supervisorResultWithWaitExternalForTestV0("run-ref-t260-external-error"),
+			wantStatus:   SupervisorPublicStatusWaitingExternalV0,
+			wantStop:     SupervisorPublicStopWaitingExternalV0,
+			wantCategory: SupervisorPublicCategoryWaitExternalV0,
+			wantCounter:  "waiting_external",
+		},
+		{
+			name:         "proceso vivo",
+			result:       supervisorResultWithLiveProcessEvidenceForTestV0("run-ref-t260-live-error"),
+			wantStatus:   SupervisorPublicStatusRunningLiveV0,
+			wantStop:     SupervisorPublicStopRunningLiveV0,
+			wantCategory: SupervisorPublicCategoryExternalProcessV0,
+			wantCounter:  "running_live",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state := (&StatusTrackerV0{}).MarkSupervisorErrorV0(
+				orquestarunsupervisor.RunSupervisorCommandV0{QueueRef: "queue-ref-t260"},
+				tc.result,
+				"supervisor timeout con estado operacional recuperable",
+				now,
+			)
+			if state.LastSupervisorStatus != tc.wantStatus ||
+				state.LastSupervisorStopPublic != tc.wantStop ||
+				state.LastSupervisorStopCategory != tc.wantCategory ||
+				state.LastSupervisorError != "" ||
+				state.LastError != "" {
+				t.Fatalf("state=%+v", state)
+			}
+			if state.LastSupervisorOperationalMessage == nil ||
+				state.LastSupervisorOperationalMessage.Status != tc.wantStatus ||
+				state.LastSupervisorOperationalMessage.Counters[tc.wantCounter] != 1 ||
+				state.LastSupervisorOperationalMessage.Counters["supervisor_error_advisory"] != 1 {
+				t.Fatalf("message=%+v", state.LastSupervisorOperationalMessage)
+			}
+			if state.SupervisorLastError == "" || len(state.RecentErrors) != 1 {
+				t.Fatalf("error evidence missing state=%+v", state)
+			}
+		})
+	}
+}
+
 func TestSupervisorProjectionV0ProcesoVivoNoQuedaTapadoPorHistoricoNoVerificadoV0(t *testing.T) {
 	now := time.Date(2026, 6, 11, 10, 50, 0, 0, time.UTC)
 	state := (&StatusTrackerV0{}).MarkSupervisorV0(
@@ -312,6 +487,104 @@ func TestSupervisorProjectionV0NoMezclaEvidenciaVivaDeOtroRunV0(t *testing.T) {
 	}
 	if got := state.LastSupervisorOperationalMessage.Counters["stalled"]; got != 1 {
 		t.Fatalf("stalled=%d counters=%v", got, state.LastSupervisorOperationalMessage.Counters)
+	}
+}
+
+func TestSupervisorErrorProjectionV0ProcesoVivoOAckPendienteNoEsTerminalV0(t *testing.T) {
+	now := time.Date(2026, 6, 20, 18, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name       string
+		result     orquestarunsupervisor.RunSupervisorResultV0
+		wantStatus string
+		wantStop   string
+		wantCat    string
+		wantCount  string
+		wantEvid   string
+	}{
+		{
+			name: "proceso vivo verificado",
+			result: orquestarunsupervisor.RunSupervisorResultV0{
+				StopReason:      orquestarunsupervisor.RunSupervisorStopTickErrorV0,
+				ErrorRunRefs:    []string{"run-ref-srv-task-022-live"},
+				TotalExecutions: 1,
+				Ticks: []orquestarunsupervisor.RunSupervisorTickSummaryV0{{
+					Result: orquestaruncoordinator.RunCoordinatorTickResultV0{
+						Executions: []orquestaruncoordinator.RunExecutionSummaryV0{{
+							RunRef:       "run-ref-srv-task-022-live",
+							Outcome:      "wait_external",
+							QueueStatus:  "candidate_pending",
+							EvidenceRefs: []string{"process_live"},
+						}},
+					},
+				}},
+			},
+			wantStatus: SupervisorPublicStatusRunningLiveV0,
+			wantStop:   SupervisorPublicStopRunningLiveV0,
+			wantCat:    SupervisorPublicCategoryExternalProcessV0,
+			wantCount:  "running_live",
+			wantEvid:   "process_live",
+		},
+		{
+			name: "ack tardio pendiente",
+			result: orquestarunsupervisor.RunSupervisorResultV0{
+				StopReason:      orquestarunsupervisor.RunSupervisorStopTickErrorV0,
+				ErrorRunRefs:    []string{"run-ref-srv-task-022-ack"},
+				TotalExecutions: 1,
+				Ticks: []orquestarunsupervisor.RunSupervisorTickSummaryV0{{
+					Result: orquestaruncoordinator.RunCoordinatorTickResultV0{
+						Executions: []orquestaruncoordinator.RunExecutionSummaryV0{{
+							RunRef:      "run-ref-srv-task-022-ack",
+							Outcome:     "wait_external",
+							QueueStatus: "candidate_pending",
+							Diagnostics: []orquestaruncoordinator.RunDrainDiagnosticV0{{
+								Kind:         "ack_pending",
+								Status:       "wait_external",
+								RunRef:       "run-ref-srv-task-022-ack",
+								PendingCount: 1,
+								EvidenceRefs: []string{
+									"evidence-ref-srv-task-022-ack-pending",
+								},
+							}},
+						}},
+					},
+				}},
+			},
+			wantStatus: SupervisorPublicStatusWaitingExternalV0,
+			wantStop:   SupervisorPublicStopWaitingExternalV0,
+			wantCat:    SupervisorPublicCategoryWaitExternalV0,
+			wantCount:  "waiting_external",
+			wantEvid:   "evidence-ref-srv-task-022-ack-pending",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			state := (&StatusTrackerV0{}).MarkSupervisorErrorV0(
+				orquestarunsupervisor.RunSupervisorCommandV0{QueueRef: "queue-ref-srv-task-022"},
+				tc.result,
+				"supervise_timeout_waiting_for_ack",
+				now,
+			)
+			if state.LastSupervisorStatus != tc.wantStatus ||
+				state.LastSupervisorStatus == "error" ||
+				state.LastSupervisorStopPublic != tc.wantStop ||
+				state.LastSupervisorStopCategory != tc.wantCat ||
+				state.LastSupervisorError != "" ||
+				state.LastError != "" ||
+				state.SupervisorLastError != "supervise_timeout_waiting_for_ack" ||
+				state.LastSupervisorOperationalMessage == nil ||
+				state.LastSupervisorOperationalMessage.Status != tc.wantStatus ||
+				state.LastSupervisorOperationalMessage.Counters[tc.wantCount] != 1 ||
+				state.LastSupervisorOperationalMessage.Counters["supervisor_error_advisory"] != 1 ||
+				len(state.RecentErrors) != 1 ||
+				!containsStringForTestV0(state.LastSupervisorOperationalMessage.EvidenceRefs, tc.wantEvid) ||
+				!containsStringForTestV0(state.RecentErrors[0].EvidenceRefs, tc.wantEvid) {
+				t.Fatalf("state=%+v", state)
+			}
+			if tc.name == "proceso vivo verificado" &&
+				state.LastSupervisorOperationalMessage.Counters["external_wait_live_process"] != 1 {
+				t.Fatalf("external_wait_live_process missing counters=%v", state.LastSupervisorOperationalMessage.Counters)
+			}
+		})
 	}
 }
 

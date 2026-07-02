@@ -172,6 +172,18 @@ func supervisorPublicProjectionV0(result orquestarunsupervisor.RunSupervisorResu
 		StopPublic:   strings.TrimSpace(metrics.PublicStop),
 		StopCategory: strings.TrimSpace(metrics.StopCategory),
 	}
+	if supervisorResultHasRunningLiveV0(result) {
+		projection.Status = SupervisorPublicStatusRunningLiveV0
+		projection.StopPublic = SupervisorPublicStopRunningLiveV0
+		projection.StopCategory = SupervisorPublicCategoryExternalProcessV0
+		return projection
+	}
+	if supervisorResultHasExternalWaitV0(result) {
+		projection.Status = SupervisorPublicStatusWaitingExternalV0
+		projection.StopPublic = SupervisorPublicStopWaitingExternalV0
+		projection.StopCategory = SupervisorPublicCategoryWaitExternalV0
+		return projection
+	}
 	if supervisorResultHasExternalEmptyRunV0(result) {
 		projection.Status = SupervisorPublicStatusExternalEmptyRunV0
 		projection.StopPublic = SupervisorPublicStopExternalEmptyRunV0
@@ -184,22 +196,10 @@ func supervisorPublicProjectionV0(result orquestarunsupervisor.RunSupervisorResu
 		projection.StopCategory = SupervisorPublicCategoryExternalProcessV0
 		return projection
 	}
-	if supervisorResultHasRunningLiveV0(result) {
-		projection.Status = SupervisorPublicStatusRunningLiveV0
-		projection.StopPublic = SupervisorPublicStopRunningLiveV0
-		projection.StopCategory = SupervisorPublicCategoryExternalProcessV0
-		return projection
-	}
 	if supervisorResultHasUnverifiedRunningV0(result) {
 		projection.Status = SupervisorPublicStatusStalledV0
 		projection.StopPublic = SupervisorPublicStopStalledV0
 		projection.StopCategory = SupervisorPublicCategoryExternalProcessV0
-		return projection
-	}
-	if supervisorResultHasExternalWaitV0(result) {
-		projection.Status = SupervisorPublicStatusWaitingExternalV0
-		projection.StopPublic = SupervisorPublicStopWaitingExternalV0
-		projection.StopCategory = SupervisorPublicCategoryWaitExternalV0
 		return projection
 	}
 	if supervisorResultHasUnhandledOutboxWaitV0(result) {
@@ -245,27 +245,54 @@ func (tracker *StatusTrackerV0) MarkSupervisorErrorV0(
 ) StateV0 {
 	message = projectServerOperationalMessageV0("supervisor", message)
 	metrics := collectSupervisorResultMetricsV0(result)
+	projection := supervisorPublicProjectionV0(result, metrics)
+	recoverable := supervisorRecoverableErrorProjectionV0(projection)
+	evidenceRefs := supervisorResultEvidenceRefsV0(result)
 	return tracker.updateV0(func(state *StateV0) {
+		status := "error"
+		stopPublic := strings.TrimSpace(metrics.PublicStop)
+		stopCategory := strings.TrimSpace(metrics.StopCategory)
+		reasonCode := firstNonEmptyServerDiagnosticV0(metrics.StopReason, "supervisor_error")
+		messageStatus := "error"
+		currentSupervisorError := message
+		currentLastError := message
+		if recoverable {
+			status = strings.TrimSpace(projection.Status)
+			stopPublic = strings.TrimSpace(projection.StopPublic)
+			stopCategory = strings.TrimSpace(projection.StopCategory)
+			reasonCode = firstNonEmptyServerDiagnosticV0(status, reasonCode)
+			messageStatus = status
+			currentSupervisorError = ""
+			currentLastError = ""
+		}
+		counters := map[string]int{
+			"queue_size":   metrics.QueueSize,
+			"result_ticks": metrics.ResultTicks,
+			"executions":   metrics.Executions,
+			"skips":        metrics.Skips,
+		}
+		if recoverable {
+			for key, value := range supervisorPublicCountersV0(result) {
+				counters[key] = value
+			}
+			counters["supervisor_error_advisory"] = 1
+		}
 		state.LastHeartbeatAt = formatTimeV0(now)
 		state.LastSupervisorAt = formatTimeV0(now)
-		state.LastSupervisorStatus = "error"
+		state.LastSupervisorStatus = status
 		state.LastSupervisorStop = strings.TrimSpace(metrics.StopReason)
-		state.LastSupervisorStopPublic = strings.TrimSpace(metrics.PublicStop)
-		state.LastSupervisorStopCategory = strings.TrimSpace(metrics.StopCategory)
-		state.LastSupervisorError = message
+		state.LastSupervisorStopPublic = stopPublic
+		state.LastSupervisorStopCategory = stopCategory
+		state.LastSupervisorError = currentSupervisorError
 		state.LastSupervisorOperationalMessage = projectServerOperationalMessageRecordV0(
 			serverOperationalMessageInputV0{
-				Scope:      "supervisor",
-				ReasonCode: firstNonEmptyServerDiagnosticV0(metrics.StopReason, "supervisor_error"),
-				Status:     "error",
-				Message:    message,
-				RunRefs:    result.ErrorRunRefs,
-				Counters: map[string]int{
-					"queue_size":   metrics.QueueSize,
-					"result_ticks": metrics.ResultTicks,
-					"executions":   metrics.Executions,
-					"skips":        metrics.Skips,
-				},
+				Scope:        "supervisor",
+				ReasonCode:   reasonCode,
+				Status:       messageStatus,
+				Message:      message,
+				RunRefs:      result.ErrorRunRefs,
+				EvidenceRefs: evidenceRefs,
+				Counters:     counters,
 			},
 		)
 		state.SupervisorLastErrorAt = formatTimeV0(now)
@@ -281,10 +308,41 @@ func (tracker *StatusTrackerV0) MarkSupervisorErrorV0(
 		state.SupervisorErrorTicks++
 		state.SupervisorExecutions += metrics.Executions
 		state.SupervisorSkips += metrics.Skips
-		state.LastError = message
-		state.LastErrorOperationalMessage = copyServerOperationalMessageV0(state.LastSupervisorOperationalMessage)
-		appendRecentServerErrorV0(state, now, firstNonEmptyServerDiagnosticV0(metrics.StopReason, "supervisor_error"), "supervisor", message, result.ErrorRunRefs)
+		state.LastError = currentLastError
+		if recoverable {
+			state.LastErrorOperationalMessage = nil
+		} else {
+			state.LastErrorOperationalMessage = copyServerOperationalMessageV0(state.LastSupervisorOperationalMessage)
+		}
+		appendRecentServerErrorV0(state, now, reasonCode, "supervisor", message, evidenceRefs)
 	})
+}
+
+func supervisorRecoverableErrorProjectionV0(projection SupervisorPublicProjectionV0) bool {
+	switch strings.TrimSpace(projection.Status) {
+	case SupervisorPublicStatusRunningLiveV0,
+		SupervisorPublicStatusWaitingExternalV0,
+		SupervisorPublicStatusWaitingOutboxV0:
+		return true
+	default:
+		return false
+	}
+}
+
+func supervisorResultEvidenceRefsV0(result orquestarunsupervisor.RunSupervisorResultV0) []string {
+	refs := append([]string(nil), result.StopProjection.EvidenceRefs...)
+	for _, diagnostic := range result.Diagnostics {
+		refs = append(refs, diagnostic.EvidenceRefs...)
+	}
+	for _, tick := range result.Ticks {
+		for _, execution := range tick.Result.Executions {
+			refs = append(refs, execution.EvidenceRefs...)
+			for _, diagnostic := range execution.Diagnostics {
+				refs = append(refs, diagnostic.EvidenceRefs...)
+			}
+		}
+	}
+	return compactServerDiagnosticStringsV0(refs)
 }
 
 func (tracker *StatusTrackerV0) updateV0(fn func(*StateV0)) StateV0 {
@@ -313,8 +371,10 @@ func (tracker *StatusTrackerV0) markSupervisorIdleWindowV0(
 		tracker.supervisorNoExecutionSince = time.Time{}
 		return
 	}
-	if tracker.supervisorNoExecutionSince.IsZero() {
-		tracker.supervisorNoExecutionSince = now.UTC()
+	observedAt := now.UTC()
+	if tracker.supervisorNoExecutionSince.IsZero() ||
+		observedAt.Before(tracker.supervisorNoExecutionSince) {
+		tracker.supervisorNoExecutionSince = observedAt
 	}
 }
 

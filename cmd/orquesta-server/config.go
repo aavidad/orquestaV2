@@ -139,6 +139,7 @@ func startupCleanupModeEffectiveValueV0() string {
 }
 func defaultIdleSelfImprovementWriteSetV0() []string {
 	return []string{
+		"modulos/orquesta-server",
 		"modulos/orquesta-server/config_v0.go",
 		"modulos/orquesta-server/ports_v0.go",
 		"modulos/orquesta-server/supervisor_loop_v0.go",

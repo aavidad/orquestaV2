@@ -61,6 +61,64 @@ func TestRuntimeV0SupervisorNoPreparaAutomejoraConWaitExternalActivoV0(t *testin
 	}
 }
 
+func TestRuntimeV0SupervisorNoPreparaAutomejoraConAckPendienteV0(t *testing.T) {
+	now := time.Date(2026, 7, 2, 12, 35, 0, 0, time.UTC)
+	store := &memoryStateStoreV0{}
+	runRef := "run-ref-srv-task-022-ack-pending"
+	supervisor := &fakeSupervisorV0{
+		results: []fakeSupervisorResultV0{{result: orquestarunsupervisor.RunSupervisorResultV0{
+			StopReason:      "runtime_error",
+			TotalExecutions: 1,
+			Ticks: []orquestarunsupervisor.RunSupervisorTickSummaryV0{{
+				Result: orquestaruncoordinator.RunCoordinatorTickResultV0{
+					Ranked: []orquestaruncoordinator.RankedRunSummaryV0{{
+						RunRef: runRef,
+						Rank:   1,
+					}},
+					Executions: []orquestaruncoordinator.RunExecutionSummaryV0{{
+						RunRef:      runRef,
+						Outcome:     "runtime_error",
+						QueueStatus: "blocked",
+						Diagnostics: []orquestaruncoordinator.RunDrainDiagnosticV0{{
+							RunRef:       runRef,
+							Kind:         "ack_pending",
+							Status:       "pending",
+							EvidenceRefs: []string{"ack_pending"},
+						}},
+					}},
+				},
+			}},
+		}}},
+		planRequests: []IdleSelfImprovementRequestV0{{RequestRef: "request-ref-backlog-no-debe-usarse"}},
+		selfStarted:  make(chan struct{}, 1),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                       t.TempDir(),
+		TickInterval:                   time.Hour,
+		IdleSelfImprovementAfter:       time.Minute,
+		IdleSelfImprovementMaxRequests: 3,
+		IdleSelfImprovementTargetQueue: 4,
+		AuditDisabled:                  true,
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: store,
+		Clock:      fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.runSupervisorTickV0(context.Background())
+
+	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
+		t.Fatalf("ack pendiente no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
+	}
+	if store.last.LastSupervisorStatus != SupervisorPublicStatusWaitingExternalV0 ||
+		store.last.IdleSelfImprovementReason != idleSelfImprovementExternalWaitBlockedReasonV0 {
+		t.Fatalf("state=%+v", store.last)
+	}
+}
+
 func TestRuntimeV0SupervisorNoBloqueaAutomejoraPorWaitExternalRetryableV0(t *testing.T) {
 	now := time.Date(2026, 5, 26, 10, 30, 0, 0, time.UTC)
 	waitRunRef := "request-ref-autoprogramming-backlog-t88-wait-stale-retry-001"

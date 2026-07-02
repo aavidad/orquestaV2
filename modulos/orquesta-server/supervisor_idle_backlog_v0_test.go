@@ -26,7 +26,6 @@ func TestRuntimeV0SupervisorPreparaAutomejoraDesdeBacklogPlanV0(t *testing.T) {
 	runtime, err := NewRuntimeV0(ConfigV0{
 		StateDir:                       t.TempDir(),
 		TickInterval:                   time.Hour,
-		IdleSelfImprovementAfter:       time.Minute,
 		IdleSelfImprovementMaxRequests: 2,
 	}, RuntimeDepsV0{
 		Supervisor: supervisor,
@@ -35,6 +34,9 @@ func TestRuntimeV0SupervisorPreparaAutomejoraDesdeBacklogPlanV0(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	if runtime.config.IdleSelfImprovementAfter != 60*time.Second {
+		t.Fatalf("idle default=%s want=60s", runtime.config.IdleSelfImprovementAfter)
 	}
 	markNoExecutionSinceForTestV0(runtime, now)
 	runtime.runSupervisorTickV0(context.Background())

@@ -28,6 +28,28 @@ func TestSupervisorProjectionV0ExternalWorkEmptyRunNoEsOKV0(t *testing.T) {
 	}
 }
 
+func TestSupervisorProjectionV0SubmitFailedEmptyRunConvertibleNoEsOKV0(t *testing.T) {
+	now := time.Date(2026, 7, 2, 13, 45, 0, 0, time.UTC)
+	state := (&StatusTrackerV0{}).MarkSupervisorV0(
+		orquestarunsupervisor.RunSupervisorCommandV0{QueueRef: "queue-ref-srv-task-021"},
+		supervisorResultWithSubmitFailedEmptyRunForTestV0("run-ref-generate-tutor-assets-empty"),
+		now,
+	)
+
+	if state.LastSupervisorStatus != SupervisorPublicStatusExternalEmptyRunV0 ||
+		state.LastSupervisorStopPublic != SupervisorPublicStopExternalEmptyRunV0 ||
+		state.LastSupervisorStopCategory != SupervisorPublicCategoryExternalProcessV0 ||
+		state.LastSupervisorOperationalMessage == nil {
+		t.Fatalf("state=%+v", state)
+	}
+	if got := state.LastSupervisorOperationalMessage.Counters["external_work_empty_run"]; got != 1 {
+		t.Fatalf("external_work_empty_run=%d counters=%v", got, state.LastSupervisorOperationalMessage.Counters)
+	}
+	if got := state.LastSupervisorOperationalMessage.Counters["registered"]; got != 1 {
+		t.Fatalf("registered=%d counters=%v", got, state.LastSupervisorOperationalMessage.Counters)
+	}
+}
+
 func TestSupervisorProjectionV0DistingueOutboxExternalWaitYProcesoVerificadoV0(t *testing.T) {
 	cases := []struct {
 		name         string
@@ -82,6 +104,36 @@ func TestSupervisorProjectionV0DistingueOutboxExternalWaitYProcesoVerificadoV0(t
 				t.Fatalf("projection=%+v", projection)
 			}
 		})
+	}
+}
+
+func supervisorResultWithSubmitFailedEmptyRunForTestV0(runRef string) orquestarunsupervisor.RunSupervisorResultV0 {
+	return orquestarunsupervisor.RunSupervisorResultV0{
+		StopReason:      "done",
+		TotalExecutions: 1,
+		Ticks: []orquestarunsupervisor.RunSupervisorTickSummaryV0{{
+			TickNumber: 1,
+			Result: orquestaruncoordinator.RunCoordinatorTickResultV0{
+				Ranked: []orquestaruncoordinator.RankedRunSummaryV0{{RunRef: runRef, Rank: 1}},
+				Executions: []orquestaruncoordinator.RunExecutionSummaryV0{{
+					RunRef:      runRef,
+					Outcome:     "done",
+					QueueStatus: "done",
+					Diagnostics: []orquestaruncoordinator.RunDrainDiagnosticV0{{
+						RunRef:      runRef,
+						Kind:        "submit_failed",
+						Status:      "done",
+						FinalAction: "failed_empty_run",
+						EvidenceRefs: []string{
+							"submit_failed",
+							"projection-tasks-0",
+							"projection-open-tasks-0",
+							"projection-requested-agents-0",
+						},
+					}},
+				}},
+			},
+		}},
 	}
 }
 

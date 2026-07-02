@@ -115,6 +115,9 @@ func TestServerConfigFromEnvV0AutomejoraIdleDefaultYApagadoPorEnvV0(t *testing.T
 		config.IdleSelfImprovementAfter != 60*time.Second {
 		t.Fatalf("idle default disabled=%v after=%s", config.IdleSelfImprovementDisabled, config.IdleSelfImprovementAfter)
 	}
+	if len(config.IdleSelfImprovementWriteSet) == 0 || config.IdleSelfImprovementWriteSet[0] != "modulos/orquesta-server" {
+		t.Fatalf("idle write-set=%v", config.IdleSelfImprovementWriteSet)
+	}
 
 	t.Setenv(envServerIdleSelfImprovementAfterV0, "0")
 	config, err = serverConfigFromEnvV0()
@@ -935,6 +938,28 @@ Objetivo: adelgazar el loop residente con Codex Goal.
 			request.FailureKind == "backlog_scan" {
 			t.Fatalf("seccion narrativa convertida en request: %+v", request)
 		}
+	}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0BloqueaT260AmbiguoPorNumeroHumanoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	mustWriteBacklogTaskIDDocV0(t, projectDir, `# Backlog
+
+## T260 goal-first-codex-loop-delgado
+
+Objetivo: adelgazar goal-first.
+
+## T260 corregir-estados-falsos-running-en-agentes-externos
+
+Objetivo: corregir proyeccion externa.
+`)
+	result := planBacklogTaskIDReadModelForTestV0(t, projectDir, []string{"T260"})
+	if len(result.Requests) != 0 || result.Message != "backlog_duplicate_task_id_ambiguous" {
+		t.Fatalf("result=%+v", result)
+	}
+	collision := backlogCollisionForTestV0(result.Collisions, "backlog_duplicate_task_id_ambiguous")
+	if collision.TaskID != "T260" || len(collision.InstanceRefs) != 2 {
+		t.Fatalf("collision=%+v", collision)
 	}
 }
 

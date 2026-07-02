@@ -131,12 +131,14 @@ func supervisorResultHasUnhandledOutboxWaitV0(result orquestarunsupervisor.RunSu
 }
 
 func supervisorResultHasExternalWaitV0(result orquestarunsupervisor.RunSupervisorResultV0) bool {
-	if supervisorExternalWaitValueV0(result.StopProjection.PublicReason, result.StopProjection.Category, result.StopReason) {
+	if supervisorExternalWaitValueV0(result.StopProjection.PublicReason, result.StopProjection.Category, result.StopReason) ||
+		supervisorExternalWaitEvidenceRefsV0(result.StopProjection.EvidenceRefs) ||
+		supervisorDiagnosticsHaveExternalWaitV0(result.Diagnostics, "") {
 		return true
 	}
 	for _, tick := range result.Ticks {
 		for _, execution := range tick.Result.Executions {
-			if supervisorExternalWaitValueV0(execution.Outcome, execution.QueueStatus) {
+			if supervisorExecutionHasExternalWaitV0(execution) {
 				return true
 			}
 		}
@@ -147,6 +149,12 @@ func supervisorResultHasExternalWaitV0(result orquestarunsupervisor.RunSuperviso
 		}
 	}
 	return false
+}
+
+func supervisorExecutionHasExternalWaitV0(execution orquestaruncoordinator.RunExecutionSummaryV0) bool {
+	return supervisorExternalWaitValueV0(execution.Outcome, execution.QueueStatus) ||
+		supervisorExternalWaitEvidenceRefsV0(execution.EvidenceRefs) ||
+		supervisorDiagnosticsHaveExternalWaitV0(execution.Diagnostics, execution.RunRef)
 }
 
 func supervisorResultHasLaunchFailedV0(result orquestarunsupervisor.RunSupervisorResultV0) bool {
@@ -225,6 +233,7 @@ func supervisorPublicCountersV0(result orquestarunsupervisor.RunSupervisorResult
 		"waiting_outbox":                    0,
 		"waiting_external":                  0,
 		"running_live":                      0,
+		"external_wait_live_process":        0,
 		"stalled":                           0,
 		"launch_failed":                     0,
 		"external_work_empty_run":           0,
@@ -233,6 +242,14 @@ func supervisorPublicCountersV0(result orquestarunsupervisor.RunSupervisorResult
 	for _, tick := range result.Ticks {
 		counters["registered"] += len(tick.Result.Ranked)
 		for _, execution := range tick.Result.Executions {
+			if supervisorExternalWaitLiveProcessEvidenceV0(
+				execution.Outcome,
+				execution.QueueStatus,
+				execution.EvidenceRefs,
+				execution.Diagnostics,
+			) {
+				counters["external_wait_live_process"]++
+			}
 			switch supervisorExecutionPublicStatusV0(execution) {
 			case SupervisorPublicStatusExternalEmptyRunV0:
 				counters["external_work_empty_run"]++
@@ -264,6 +281,15 @@ func supervisorPublicCountersV0(result orquestarunsupervisor.RunSupervisorResult
 	if counters["external_work_empty_run"] == 0 && supervisorResultHasExternalEmptyRunV0(result) {
 		counters["external_work_empty_run"] = 1
 	}
+	if counters["external_wait_live_process"] == 0 &&
+		supervisorExternalWaitLiveProcessEvidenceV0(
+			result.StopProjection.PublicReason,
+			result.StopProjection.Category,
+			result.StopProjection.EvidenceRefs,
+			result.Diagnostics,
+		) {
+		counters["external_wait_live_process"] = 1
+	}
 	if residentPending := detectResidentPendingWithoutDispatchV0(result); residentPending.Blocked {
 		counters["resident_pending_without_dispatch"] = len(residentPending.RunRefs)
 		if counters["resident_pending_without_dispatch"] == 0 {
@@ -274,6 +300,13 @@ func supervisorPublicCountersV0(result orquestarunsupervisor.RunSupervisorResult
 }
 
 func supervisorExecutionPublicStatusV0(execution orquestaruncoordinator.RunExecutionSummaryV0) string {
+	if supervisorLiveEvidenceV0(execution.Outcome, execution.QueueStatus, execution.EvidenceRefs) ||
+		supervisorExecutionDiagnosticsHaveLiveProcessV0(execution) {
+		return SupervisorPublicStatusRunningLiveV0
+	}
+	if supervisorExecutionHasExternalWaitV0(execution) {
+		return SupervisorPublicStatusWaitingExternalV0
+	}
 	if supervisorTerminalEmptyRunEvidenceV0(
 		execution.Outcome,
 		execution.QueueStatus,
@@ -286,13 +319,6 @@ func supervisorExecutionPublicStatusV0(execution orquestaruncoordinator.RunExecu
 	if supervisorLaunchFailedValueV0(execution.Outcome, execution.QueueStatus) ||
 		supervisorDiagnosticsHaveLaunchFailedV0(execution.Diagnostics) {
 		return SupervisorPublicStatusLaunchFailedV0
-	}
-	if supervisorLiveEvidenceV0(execution.Outcome, execution.QueueStatus, execution.EvidenceRefs) ||
-		supervisorExecutionDiagnosticsHaveLiveProcessV0(execution) {
-		return SupervisorPublicStatusRunningLiveV0
-	}
-	if supervisorExternalWaitValueV0(execution.Outcome, execution.QueueStatus) {
-		return SupervisorPublicStatusWaitingExternalV0
 	}
 	if supervisorWaitOutboxValueV0(execution.Outcome, execution.QueueStatus) ||
 		(supervisorDiagnosticsHavePendingOutboxV0(execution.Diagnostics) &&
@@ -360,11 +386,75 @@ func supervisorWaitOutboxValueV0(values ...string) bool {
 func supervisorExternalWaitValueV0(values ...string) bool {
 	for _, value := range values {
 		switch strings.TrimSpace(value) {
-		case "wait_external", "candidate_pending", SupervisorPublicStatusWaitingExternalV0:
+		case "wait_external",
+			"candidate_pending",
+			SupervisorPublicStatusWaitingExternalV0,
+			"reconcile_pending",
+			"ack_pending",
+			"submit_pending",
+			"late_ack_pending",
+			"late_submit_probable",
+			"submit_late_probable",
+			"external_wait_live_process",
+			"wait_for_live_agent_ack",
+			"reconcile_late_ack",
+			"supervise_timeout_waiting_for_ack",
+			"artifact_recoverable",
+			"local_artifact_recoverable",
+			"artifact_local_recoverable",
+			"recoverable_artifact":
 			return true
 		}
 	}
 	return false
+}
+
+func supervisorExternalWaitEvidenceRefsV0(values []string) bool {
+	for _, value := range values {
+		if supervisorExternalWaitValueV0(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func supervisorExternalWaitLiveProcessEvidenceV0(values ...interface{}) bool {
+	hasExternalWait := false
+	hasLiveProcess := false
+	for _, value := range values {
+		switch typed := value.(type) {
+		case string:
+			if strings.TrimSpace(typed) == "external_wait_live_process" {
+				return true
+			}
+			if supervisorExternalWaitValueV0(typed) {
+				hasExternalWait = true
+			}
+			if supervisorLiveEvidenceStringV0(typed) {
+				hasLiveProcess = true
+			}
+		case []string:
+			for _, item := range typed {
+				if strings.TrimSpace(item) == "external_wait_live_process" {
+					return true
+				}
+			}
+			if supervisorExternalWaitEvidenceRefsV0(typed) {
+				hasExternalWait = true
+			}
+			if supervisorLiveEvidenceV0(typed) {
+				hasLiveProcess = true
+			}
+		case []orquestaruncoordinator.RunDrainDiagnosticV0:
+			if supervisorDiagnosticsHaveExternalWaitV0(typed, "") {
+				hasExternalWait = true
+			}
+			if supervisorDiagnosticsHaveLiveProcessV0(typed) {
+				hasLiveProcess = true
+			}
+		}
+	}
+	return hasExternalWait && hasLiveProcess
 }
 
 func supervisorLaunchFailedValueV0(values ...string) bool {
@@ -418,7 +508,7 @@ func supervisorLiveEvidenceV0(values ...interface{}) bool {
 func supervisorLiveEvidenceStringV0(value string) bool {
 	value = strings.TrimSpace(value)
 	switch value {
-	case SupervisorPublicStatusRunningLiveV0, "process_live", "heartbeat_recent", "ack_recent", "lease_active",
+	case SupervisorPublicStatusRunningLiveV0, "process_live", "external_wait_live_process", "heartbeat_recent", "ack_recent", "lease_active",
 		"evidence-ref-codex-supervisor-process-live":
 		return true
 	default:
@@ -484,6 +574,29 @@ func supervisorDiagnosticHasPendingOutboxV0(diagnostic orquestaruncoordinator.Ru
 func supervisorDiagnosticsHaveLaunchFailedV0(diagnostics []orquestaruncoordinator.RunDrainDiagnosticV0) bool {
 	for _, diagnostic := range diagnostics {
 		if supervisorLaunchFailedValueV0(diagnostic.Kind, diagnostic.Status, diagnostic.Error) {
+			return true
+		}
+	}
+	return false
+}
+
+func supervisorDiagnosticsHaveExternalWaitV0(
+	diagnostics []orquestaruncoordinator.RunDrainDiagnosticV0,
+	runRef string,
+) bool {
+	runRef = strings.TrimSpace(runRef)
+	for _, diagnostic := range diagnostics {
+		diagnosticRunRef := strings.TrimSpace(diagnostic.RunRef)
+		if runRef != "" && diagnosticRunRef != "" && diagnosticRunRef != runRef {
+			continue
+		}
+		if supervisorExternalWaitValueV0(
+			diagnostic.Kind,
+			diagnostic.Status,
+			diagnostic.FinalAction,
+			diagnostic.MessageType,
+			diagnostic.Error,
+		) || supervisorExternalWaitEvidenceRefsV0(diagnostic.EvidenceRefs) {
 			return true
 		}
 	}
