@@ -1550,6 +1550,69 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalActiveTimeoutConCheckpointRespeta
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0GoalRunningSinBackendActivoPideReconciliarCleanupExternoV0(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-running-backend-missing-001"
+	goalRef := "goal-ref-autop-status-goal-running-backend-missing-001"
+	externalGoalRef := "thread-ref-autop-status-goal-running-backend-missing-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Reconciliar estado running tras cleanup externo del backend.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-running-before-external-cleanup-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		statsByRun: map[string]*orquestacionnucleoapp.DirectorRunStatsV0{
+			runRef: {
+				RunRef: runRef,
+				Status: "stopped",
+				UsageSummary: &orquestacionnucleoapp.DirectorRunUsageStatsV0{
+					TotalTokens: 151000,
+				},
+			},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue:          &fakeMCPAutoprogrammingQueueStatusV0{empty: true},
+		Stats:          stats,
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{RunRef: runRef})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != mcpAutoprogrammingActionGoalBackendMissingAfterExternalCleanupV0 ||
+		action.Severity != "blocked" ||
+		action.GoalRef != goalRef ||
+		action.ExternalGoalRef != externalGoalRef ||
+		action.TokensUsed != 151000 ||
+		action.RecommendedAction != "run_control_reconcile_external_cleanup" ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) ||
+		!strings.Contains(action.Reason, "goal_backend_missing_after_external_cleanup") {
+		t.Fatalf("action=%+v", action)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0GoalBloqueadoConBackendCompleteSaleDeStaleRunning(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-backend-complete-001"
 	goalRef := "goal-ref-autop-status-goal-backend-complete-001"
