@@ -313,6 +313,27 @@ func TestInicioAgenteNoRecomiendaRuntimeManualV0(t *testing.T) {
 	}
 }
 
+func TestUsoActualAppOrquestaRecomiendaServidorGestionadoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "docs/uso_actual_app_orquesta.md")
+	current, _, _ := strings.Cut(text, "## Contenido historico V1 preservado")
+
+	if strings.Contains(current, "```bash\ngo run ./cmd/orquesta-server run\n```") {
+		t.Fatalf("uso actual no debe recomendar runtime manual no gobernado en seccion vigente")
+	}
+	for _, want := range []string{
+		"orquesta-server start",
+		"orquesta-server stop",
+		"queda solo para harnesses aislados",
+		"smoke_shutdown_orquesta_server",
+		"runtime_dir",
+	} {
+		if !strings.Contains(current, want) {
+			t.Fatalf("uso actual debe documentar arranque/parada gestionados: falta %q", want)
+		}
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
