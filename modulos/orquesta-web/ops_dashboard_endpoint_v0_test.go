@@ -73,6 +73,7 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 		"effective_config",
 		"requestServerShutdownFromAdmin(false)",
 		"requestServerShutdownFromAdmin(true)",
+		"cleanup_goal_backends: true",
 		"Variables pendientes para reinicio",
 		"orquesta.ops.pending_env.v1",
 		"director-primary-action",

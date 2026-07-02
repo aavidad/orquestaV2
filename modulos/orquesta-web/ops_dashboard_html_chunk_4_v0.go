@@ -522,6 +522,7 @@ const opsDashboardHTMLChunk4V0 = `          '</div></div>';
             request_id: 'ops-admin-shutdown-' + Date.now(),
             correlation_id: 'corr-ops-admin-shutdown-' + Date.now(),
             forced: !!forced,
+            cleanup_goal_backends: true,
             requested_by: 'orquesta-director-admin-web',
             reason: forced ? 'cierre forzoso solicitado desde admin web para reinicio de entorno' : 'cierre ordenado solicitado desde admin web para reinicio de entorno',
             idempotency_key: 'ops-admin-shutdown-' + (forced ? 'forced' : 'ordered') + '-' + Date.now(),
