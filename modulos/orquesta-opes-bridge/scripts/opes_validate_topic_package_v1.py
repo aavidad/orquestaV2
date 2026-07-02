@@ -382,6 +382,63 @@ def validate_manifest_cierre(package_dir: Path, result: FinalPackageValidationRe
     }
     if "opes_final_package_evidence_manifest.v0" not in schema_values:
         result.errors.append("manifest_cierre_schema_invalid")
+    manifest_values = {normalized_metadata_key(value) for value in collect_string_values(data)}
+    for evidence_ref in (
+        "question_bank_publicable",
+        "tutor_assets_publicable",
+        "tutor",
+    ):
+        expected = normalized_metadata_key(evidence_ref)
+        if not any(value == expected or value.endswith("_" + expected) for value in manifest_values):
+            result.errors.append(f"manifest_cierre_missing_evidence={evidence_ref}")
+
+
+def find_question_bank_files(package_dir: Path) -> list[Path]:
+    candidates = [
+        package_dir / "tests.json",
+        package_dir / "question_bank.json",
+        package_dir / "banco_preguntas_i18n_es.json",
+        package_dir / "tests" / "tests.json",
+        package_dir / "tests" / "question_bank.json",
+        package_dir / "tests" / "banco_preguntas_i18n_es.json",
+    ]
+    return [path for path in candidates if path.is_file()]
+
+
+def validate_final_question_bank(package_dir: Path, result: FinalPackageValidationResult) -> None:
+    bank_files = find_question_bank_files(package_dir)
+    if not bank_files:
+        result.errors.append("missing_required_file=question_bank")
+        return
+    topic_result = TopicValidationResult(topic_dir=package_dir)
+    validate_json_bank(bank_files[0], topic_result)
+    for error in topic_result.errors:
+        result.errors.append(f"question_bank_{error}")
+
+
+def validate_tutor_assets(package_dir: Path, result: FinalPackageValidationResult) -> None:
+    tutor_dir = package_dir / "tutor"
+    prompt_path = tutor_dir / "tutor_prompt.md"
+    qa_report_candidates = [
+        tutor_dir / "tutor_qa_report.json",
+        tutor_dir / "tutor_qa_report.md",
+        tutor_dir / "qa_report.json",
+        tutor_dir / "qa_report.md",
+    ]
+    scope_report_candidates = [
+        tutor_dir / "tutor_scope_guard_report.json",
+        tutor_dir / "tutor_scope_guard_report.md",
+        tutor_dir / "scope_guard_report.json",
+        tutor_dir / "scope_guard_report.md",
+    ]
+    if not prompt_path.is_file():
+        result.errors.append("missing_required_file=tutor/tutor_prompt.md")
+    elif word_count(prompt_path.read_text(encoding="utf-8", errors="replace")) < 20:
+        result.errors.append("tutor_prompt_too_short")
+    if not any(path.is_file() for path in qa_report_candidates):
+        result.errors.append("missing_required_file=tutor_qa_report")
+    if not any(path.is_file() for path in scope_report_candidates):
+        result.errors.append("missing_required_file=tutor_scope_guard_report")
 
 
 RAG_COURSE_KEYS = {
@@ -588,6 +645,8 @@ def validate_final_package(package_dir: Path) -> FinalPackageValidationResult:
         result.errors.append(f"final_package_dir_missing={package_dir}")
         return result
     validate_manifest_cierre(package_dir, result)
+    validate_final_question_bank(package_dir, result)
+    validate_tutor_assets(package_dir, result)
     validate_rag_contract(package_dir, result)
     for manifest_path in find_visual_manifests(package_dir):
         validate_visual_manifest(package_dir, manifest_path, result)

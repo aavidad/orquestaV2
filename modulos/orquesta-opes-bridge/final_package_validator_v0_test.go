@@ -40,6 +40,36 @@ func TestOPESValidateTopicPackageV1FinalPackageAceptaRAGMetadataYVisualPreservad
 	}
 }
 
+func TestOPESValidateTopicPackageV1FinalPackageBloqueaTestsYTutorSinEvidencia(t *testing.T) {
+	packageDir := t.TempDir()
+	writeFinalPackageFixtureV0(t, packageDir, true)
+	writeFileV0(t, filepath.Join(packageDir, "manifest_cierre.json"), `{
+  "schema": "opes_final_package_evidence_manifest.v0",
+  "status": "listo_para_revision_operador",
+  "package_ref": "package-ref-001"
+}`)
+	writeFileV0(t, filepath.Join(packageDir, "tests", "banco_preguntas_i18n_es.json"), `{"questions":[{"stem":"Pregunta pobre","options":["A","B"],"correcta":"A"}]}`)
+	if err := os.Remove(filepath.Join(packageDir, "tutor", "tutor_qa_report.json")); err != nil {
+		t.Fatalf("remove tutor qa: %v", err)
+	}
+
+	output, err := runOPESFinalPackageValidatorV0(t, packageDir)
+	if err == nil {
+		t.Fatalf("validator ok inesperado output=%s", output)
+	}
+	for _, want := range []string{
+		"manifest_cierre_missing_evidence=question_bank_publicable",
+		"manifest_cierre_missing_evidence=tutor_assets_publicable",
+		"question_bank_question_count_below_min=1<50",
+		"question_bank_question_1_options=2!=4",
+		"missing_required_file=tutor_qa_report",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output=%s falta %s", output, want)
+		}
+	}
+}
+
 func runOPESFinalPackageValidatorV0(t *testing.T, packageDir string) (string, error) {
 	t.Helper()
 	cmd := exec.Command(
@@ -58,8 +88,17 @@ func writeFinalPackageFixtureV0(t *testing.T, packageDir string, valid bool) {
   "schema": "opes_final_package_evidence_manifest.v0",
   "status": "listo_para_revision_operador",
   "package_ref": "package-ref-001",
-  "manifest_ref": "manifest-cierre-ref-001"
+  "manifest_ref": "manifest-cierre-ref-001",
+  "evidence_refs": [
+    "opes-final-evidence:question_bank_publicable",
+    "opes-final-evidence:tutor_assets_publicable",
+    "opes-final-evidence:tutor"
+  ]
 }`)
+	writeFileV0(t, filepath.Join(packageDir, "tests", "banco_preguntas_i18n_es.json"), finalPackageQuestionBankFixtureV0())
+	writeFileV0(t, filepath.Join(packageDir, "tutor", "tutor_prompt.md"), strings.Repeat("Tutor basado en fuentes canonicas aprobadas para responder por tema y apartado. ", 2))
+	writeFileV0(t, filepath.Join(packageDir, "tutor", "tutor_qa_report.json"), `{"status":"pass","topics_checked":1}`)
+	writeFileV0(t, filepath.Join(packageDir, "tutor", "tutor_scope_guard_report.json"), `{"status":"pass","scope":"canonical_sources_only"}`)
 	writeFileV0(t, filepath.Join(packageDir, "rag", "manifest.json"), `{
   "schema": "opes.rag_manifest.v2",
   "course_id": "course-ref-001",
@@ -112,6 +151,31 @@ func writeFinalPackageFixtureV0(t *testing.T, packageDir string, valid bool) {
 	}
 	writeFileV0(t, filepath.Join(packageDir, "html_final", "tema_001.html"), htmlBody)
 	writeFileV0(t, filepath.Join(packageDir, "html_ampliado", "tema_001.html"), htmlBody)
+}
+
+func finalPackageQuestionBankFixtureV0() string {
+	var builder strings.Builder
+	builder.WriteString(`{"questions":[`)
+	for i := 1; i <= 50; i++ {
+		if i > 1 {
+			builder.WriteString(",")
+		}
+		builder.WriteString(`{`)
+		builder.WriteString(`"stem":"Pregunta `)
+		builder.WriteString(strings.Repeat("x", i))
+		builder.WriteString(` sobre el contenido canonico del tema?",`)
+		builder.WriteString(`"options":["Opcion correcta desarrollada `)
+		builder.WriteString(strings.Repeat("a", i))
+		builder.WriteString(`","Distractor plausible relacionado `)
+		builder.WriteString(strings.Repeat("b", i))
+		builder.WriteString(`","Distractor parcial razonable `)
+		builder.WriteString(strings.Repeat("c", i))
+		builder.WriteString(`","Distractor tecnico alternativo `)
+		builder.WriteString(strings.Repeat("d", i))
+		builder.WriteString(`"],"correcta":"A"}`)
+	}
+	builder.WriteString(`]}`)
+	return builder.String()
 }
 
 func writeFileV0(t *testing.T, path string, content string) {

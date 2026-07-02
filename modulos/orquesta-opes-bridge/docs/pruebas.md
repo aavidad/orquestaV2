@@ -74,6 +74,10 @@
   metadata `course_id`/`source_variant` o equivalente, o si un
   `visuals_manifest.json`/`visual_reuse_manifest.json` declara assets que ya no
   estan presentes y referenciados en `html_final`/`html_ampliado` tras rebuild.
+  Tambien bloquea si el manifest no declara evidencias
+  `question_bank_publicable`/`tutor_assets_publicable`, si el banco final no
+  cumple conteo/opciones/respuesta/distractores, o si falta paquete tutor con
+  prompt, QA report y scope guard report.
 - Required tests OPES de QA tests/tutor: `generate_question_bank` declara
   `opes-question-bank-publicable-*` con 50 preguntas por tema, 4 opciones,
   respuesta unica, distractores plausibles, explicaciones tutor, informes de
