@@ -470,7 +470,7 @@ assert_app_server_tmux_shutdown_ready() {
       -H "Content-Type: application/json" \
       -H "Accept: application/json" \
       -H "X-Correlation-ID: $request_id-shutdown" \
-      --data-binary "{\"request_id\":\"$request_id-shutdown\",\"correlation_id\":\"$request_id-shutdown\",\"reason\":\"smoke_goal_first_app_server_real\"}"
+      --data-binary "{\"request_id\":\"$request_id-shutdown\",\"correlation_id\":\"$request_id-shutdown\",\"reason\":\"smoke_goal_first_app_server_real\",\"cleanup_goal_backends\":true}"
   )"
   echo "POST /api/v0/server/shutdown -> HTTP $shutdown_status"
   if [[ "$shutdown_status" -lt 200 || "$shutdown_status" -gt 299 ]]; then

@@ -15,6 +15,7 @@ type serverShutdownDepsForTestV0 struct {
 	supervisor *fakeShutdownSupervisorV0
 	stats      *fakeShutdownStatsV0
 	active     *fakeShutdownActiveWorkV0
+	cleaner    *fakeShutdownActiveWorkCleanerV0
 	events     *[]string
 }
 
@@ -35,6 +36,7 @@ func newServerShutdownDepsForTestV0(
 		supervisor: &fakeShutdownSupervisorV0{},
 		stats:      &fakeShutdownStatsV0{stats: map[string]RunShutdownStatsV0{}},
 		active:     &fakeShutdownActiveWorkV0{},
+		cleaner:    &fakeShutdownActiveWorkCleanerV0{},
 		events:     &events,
 	}
 	deps.control.events = deps.events
@@ -52,6 +54,7 @@ func (deps serverShutdownDepsForTestV0) deps() ServerShutdownDepsV0 {
 		Supervisor:          deps.supervisor,
 		StatsReader:         deps.stats,
 		ActiveWorkReader:    deps.active,
+		ActiveWorkCleaner:   deps.cleaner,
 	}
 }
 
@@ -214,6 +217,7 @@ func (fake *fakeShutdownStatsV0) ReadRunShutdownStatsV0(
 
 type fakeShutdownActiveWorkV0 struct {
 	works       []ActiveShutdownWorkV0
+	reads       [][]ActiveShutdownWorkV0
 	evidence    []string
 	calls       int
 	lastRequest ActiveShutdownWorkRequestV0
@@ -225,8 +229,32 @@ func (fake *fakeShutdownActiveWorkV0) ReadActiveShutdownWorkV0(
 ) (ActiveShutdownWorkResultV0, error) {
 	fake.calls++
 	fake.lastRequest = request
+	works := fake.works
+	if len(fake.reads) > 0 {
+		works = fake.reads[0]
+		fake.reads = fake.reads[1:]
+	}
 	return ActiveShutdownWorkResultV0{
-		ActiveWorks:  append([]ActiveShutdownWorkV0(nil), fake.works...),
+		ActiveWorks:  append([]ActiveShutdownWorkV0(nil), works...),
 		EvidenceRefs: append([]string(nil), fake.evidence...),
 	}, nil
+}
+
+type fakeShutdownActiveWorkCleanerV0 struct {
+	calls       int
+	lastCommand ActiveShutdownWorkCleanupCommandV0
+	result      ActiveShutdownWorkCleanupResultV0
+	err         error
+}
+
+func (fake *fakeShutdownActiveWorkCleanerV0) CleanupActiveShutdownWorkV0(
+	_ context.Context,
+	command ActiveShutdownWorkCleanupCommandV0,
+) (ActiveShutdownWorkCleanupResultV0, error) {
+	fake.calls++
+	fake.lastCommand = command
+	if fake.err != nil {
+		return ActiveShutdownWorkCleanupResultV0{}, fake.err
+	}
+	return fake.result, nil
 }

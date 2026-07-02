@@ -33,6 +33,7 @@ type ServerShutdownCommandV0 struct {
 	MaxRunsPerTick       int       `json:"max_runs_per_tick,omitempty"`
 	MaxExecutions        int       `json:"max_executions,omitempty"`
 	Forced               bool      `json:"forced,omitempty"`
+	CleanupGoalBackends  bool      `json:"cleanup_goal_backends,omitempty"`
 	RequestedBy          string    `json:"requested_by,omitempty"`
 	Reason               string    `json:"reason,omitempty"`
 	IdempotencyKey       string    `json:"idempotency_key,omitempty"`
@@ -51,6 +52,7 @@ type ServerShutdownDepsV0 struct {
 	Supervisor          RunSupervisorPortV0
 	StatsReader         RunStatsReaderPortV0
 	ActiveWorkReader    ActiveShutdownWorkReaderPortV0
+	ActiveWorkCleaner   ActiveShutdownWorkCleanerPortV0
 }
 
 type RunSupervisorPortV0 interface {
@@ -81,6 +83,13 @@ type ActiveShutdownWorkReaderPortV0 interface {
 	) (ActiveShutdownWorkResultV0, error)
 }
 
+type ActiveShutdownWorkCleanerPortV0 interface {
+	CleanupActiveShutdownWorkV0(
+		context.Context,
+		ActiveShutdownWorkCleanupCommandV0,
+	) (ActiveShutdownWorkCleanupResultV0, error)
+}
+
 type ActiveShutdownWorkRequestV0 struct {
 	QueueRef      string   `json:"queue_ref,omitempty"`
 	AppRefs       []string `json:"app_refs,omitempty"`
@@ -92,6 +101,20 @@ type ActiveShutdownWorkRequestV0 struct {
 type ActiveShutdownWorkResultV0 struct {
 	ActiveWorks  []ActiveShutdownWorkV0 `json:"active_works,omitempty"`
 	EvidenceRefs []string               `json:"evidence_refs,omitempty"`
+}
+
+type ActiveShutdownWorkCleanupCommandV0 struct {
+	QueueRef            string                 `json:"queue_ref,omitempty"`
+	AppRefs             []string               `json:"app_refs,omitempty"`
+	CorrelationID       string                 `json:"correlation_id,omitempty"`
+	EvidenceRefs        []string               `json:"evidence_refs,omitempty"`
+	ActiveWorks         []ActiveShutdownWorkV0 `json:"active_works,omitempty"`
+	CleanupGoalBackends bool                   `json:"cleanup_goal_backends,omitempty"`
+}
+
+type ActiveShutdownWorkCleanupResultV0 struct {
+	CleanedWorkCount int      `json:"cleaned_work_count,omitempty"`
+	EvidenceRefs     []string `json:"evidence_refs,omitempty"`
 }
 
 type ActiveShutdownWorkV0 struct {

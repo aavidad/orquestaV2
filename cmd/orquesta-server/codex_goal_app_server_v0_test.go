@@ -2208,6 +2208,14 @@ func TestServerGoalWorkPortsFromBackendV0PropaganActiveShutdownWorkV0(t *testing
 	if !ok {
 		t.Fatalf("observer no expone ActiveShutdownWorkReader")
 	}
+	launcherCleaner, ok := serverGoalWorkLauncherFromBackendV0(backend).(orquestaservershutdown.ActiveShutdownWorkCleanerPortV0)
+	if !ok {
+		t.Fatalf("launcher no expone ActiveShutdownWorkCleaner")
+	}
+	observerCleaner, ok := serverGoalWorkObserverFromBackendV0(backend).(orquestaservershutdown.ActiveShutdownWorkCleanerPortV0)
+	if !ok {
+		t.Fatalf("observer no expone ActiveShutdownWorkCleaner")
+	}
 	for name, reader := range map[string]orquestaservershutdown.ActiveShutdownWorkReaderPortV0{
 		"launcher": launcher,
 		"observer": observer,
@@ -2218,6 +2226,20 @@ func TestServerGoalWorkPortsFromBackendV0PropaganActiveShutdownWorkV0(t *testing
 		}
 		if len(result.ActiveWorks) != 1 || !containsStringForTestV0(result.EvidenceRefs, "evidence-ref-active-hook") {
 			t.Fatalf("%s result=%+v", name, result)
+		}
+	}
+	for name, cleaner := range map[string]orquestaservershutdown.ActiveShutdownWorkCleanerPortV0{
+		"launcher": launcherCleaner,
+		"observer": observerCleaner,
+	} {
+		result, err := cleaner.CleanupActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0{
+			CleanupGoalBackends: true,
+		})
+		if err != nil {
+			t.Fatalf("%s CleanupActiveShutdownWorkV0: %v", name, err)
+		}
+		if !containsStringForTestV0(result.EvidenceRefs, "evidence-ref-active-cleaner") {
+			t.Fatalf("%s cleanup result=%+v", name, result)
 		}
 	}
 }
@@ -2243,6 +2265,16 @@ func (hook fakeServerGoalActiveShutdownHookV0) ReadActiveShutdownWorkV0(
 	orquestaservershutdown.ActiveShutdownWorkRequestV0,
 ) (orquestaservershutdown.ActiveShutdownWorkResultV0, error) {
 	return hook.result, nil
+}
+
+func (hook fakeServerGoalActiveShutdownHookV0) CleanupActiveShutdownWorkV0(
+	context.Context,
+	orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0,
+) (orquestaservershutdown.ActiveShutdownWorkCleanupResultV0, error) {
+	return orquestaservershutdown.ActiveShutdownWorkCleanupResultV0{
+		CleanedWorkCount: 1,
+		EvidenceRefs:     []string{"evidence-ref-active-cleaner"},
+	}, nil
 }
 
 func TestServerConfigFromEnvV0ProxyDiagnosticoNoDerivaGoalFirstIdleV0(t *testing.T) {

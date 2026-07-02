@@ -34,6 +34,7 @@ type MCPServerShutdownToolInputV0 struct {
 	MaxRunsPerTick       int      `json:"max_runs_per_tick,omitempty"`
 	MaxExecutions        int      `json:"max_executions,omitempty"`
 	Forced               bool     `json:"forced,omitempty"`
+	CleanupGoalBackends  bool     `json:"cleanup_goal_backends,omitempty"`
 	RequestedBy          string   `json:"requested_by,omitempty"`
 	Reason               string   `json:"reason,omitempty"`
 	IdempotencyKey       string   `json:"idempotency_key,omitempty"`
@@ -93,7 +94,7 @@ func MCPServerShutdownDescriptorV0() MCPServerShutdownToolDescriptorV0 {
 	return MCPServerShutdownToolDescriptorV0{
 		Name:        MCPServerShutdownToolNameV0,
 		Version:     MCPServerShutdownToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,queue_ref?,app_refs?,forced?,checkpoint_deadline_at?,max_ticks?,max_runs_per_tick?,max_executions?,requested_by?,reason?,idempotency_key?,evidence_refs?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,queue_ref?,app_refs?,forced?,cleanup_goal_backends?,checkpoint_deadline_at?,max_ticks?,max_runs_per_tick?,max_executions?,requested_by?,reason?,idempotency_key?,evidence_refs?}",
 		Output:      "ok:{status,shutdown_ready,runs_requested,runs_stopped,agents_in_flight,checkpoint_agents_pending,checkpoint_deadlines_expired,active_work_count,active_works?,runs?}|error:{errores_publicos}",
 		ResourceURI: MCPServerShutdownResourceURIV0,
 		Invariantes: []string{
@@ -103,6 +104,7 @@ func MCPServerShutdownDescriptorV0() MCPServerShutdownToolDescriptorV0 {
 			"no para procesos ni toca runtime directamente",
 			"usa RunControl RunQueue Supervisor y stats por puertos",
 			"si hay trabajo goal-first activo, el apagado no forzado devuelve active_goals_present",
+			"cleanup_goal_backends solo intenta limpiar backends propios y vuelve a comprobar trabajo vivo antes de shutdown_ready",
 		},
 	}
 }
@@ -257,6 +259,7 @@ func serverShutdownCommandFromMCPV0(
 		MaxRunsPerTick:       input.MaxRunsPerTick,
 		MaxExecutions:        input.MaxExecutions,
 		Forced:               input.Forced,
+		CleanupGoalBackends:  input.CleanupGoalBackends,
 		RequestedBy:          input.RequestedBy,
 		Reason:               input.Reason,
 		IdempotencyKey:       input.IdempotencyKey,

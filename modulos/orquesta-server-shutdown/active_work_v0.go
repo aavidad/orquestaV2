@@ -11,9 +11,9 @@ func blockingActiveShutdownWorkV0(
 	ctx context.Context,
 	deps ServerShutdownDepsV0,
 	command ServerShutdownCommandV0,
-) (ServerShutdownResultV0, bool, error) {
+) (ServerShutdownResultV0, bool, []string, error) {
 	if deps.ActiveWorkReader == nil {
-		return ServerShutdownResultV0{}, false, nil
+		return ServerShutdownResultV0{}, false, nil, nil
 	}
 	active, err := deps.ActiveWorkReader.ReadActiveShutdownWorkV0(ctx, ActiveShutdownWorkRequestV0{
 		QueueRef:      command.QueueRef,
@@ -23,14 +23,40 @@ func blockingActiveShutdownWorkV0(
 		MaxItems:      activeShutdownWorkMaxItemsV0(command.QueueLimit),
 	})
 	if err != nil {
-		return ServerShutdownResultV0{}, false, err
+		return ServerShutdownResultV0{}, false, nil, err
 	}
 	works := compactActiveShutdownWorksV0(active.ActiveWorks)
+	cleanupEvidenceRefs := []string{}
+	if command.CleanupGoalBackends && deps.ActiveWorkCleaner != nil {
+		var cleaned ActiveShutdownWorkCleanupResultV0
+		var cleanupRan bool
+		cleaned, cleanupRan, err = cleanupActiveGoalBackendsV0(ctx, deps, command, works)
+		if err != nil {
+			return ServerShutdownResultV0{}, false, nil, err
+		}
+		if cleanupRan {
+			cleanupEvidenceRefs = compactServerShutdownStringsV0(cleaned.EvidenceRefs)
+			active, err = deps.ActiveWorkReader.ReadActiveShutdownWorkV0(ctx, ActiveShutdownWorkRequestV0{
+				QueueRef:      command.QueueRef,
+				AppRefs:       append([]string(nil), command.AppRefs...),
+				CorrelationID: command.CorrelationID,
+				EvidenceRefs: compactServerShutdownStringsV0(append(
+					append([]string(nil), command.EvidenceRefs...),
+					cleanupEvidenceRefs...,
+				)),
+				MaxItems: activeShutdownWorkMaxItemsV0(command.QueueLimit),
+			})
+			if err != nil {
+				return ServerShutdownResultV0{}, false, nil, err
+			}
+			works = compactActiveShutdownWorksV0(active.ActiveWorks)
+		}
+	}
 	if command.Forced {
 		works = forcedBlockingActiveShutdownWorksV0(works)
 	}
 	if len(works) == 0 {
-		return ServerShutdownResultV0{}, false, nil
+		return ServerShutdownResultV0{}, false, cleanupEvidenceRefs, nil
 	}
 	status := activeShutdownWorkBlockingStatusV0(works)
 	result := ServerShutdownResultV0{
@@ -41,10 +67,53 @@ func blockingActiveShutdownWorkV0(
 		ActiveWorks:     works,
 		EvidenceRefs: compactServerShutdownStringsV0(append(
 			append([]string(nil), command.EvidenceRefs...),
-			append(active.EvidenceRefs, activeShutdownWorkBlockingEvidenceV0(status))...,
+			append(append(active.EvidenceRefs, cleanupEvidenceRefs...), activeShutdownWorkBlockingEvidenceV0(status))...,
 		)),
 	}
-	return result, true, nil
+	return result, true, nil, nil
+}
+
+func cleanupActiveGoalBackendsV0(
+	ctx context.Context,
+	deps ServerShutdownDepsV0,
+	command ServerShutdownCommandV0,
+	works []ActiveShutdownWorkV0,
+) (ActiveShutdownWorkCleanupResultV0, bool, error) {
+	backendWorks := activeShutdownBackendWorksV0(works)
+	if len(backendWorks) == 0 || len(backendWorks) != len(works) {
+		return ActiveShutdownWorkCleanupResultV0{}, false, nil
+	}
+	cleaned, err := deps.ActiveWorkCleaner.CleanupActiveShutdownWorkV0(ctx, ActiveShutdownWorkCleanupCommandV0{
+		QueueRef:            command.QueueRef,
+		AppRefs:             append([]string(nil), command.AppRefs...),
+		CorrelationID:       command.CorrelationID,
+		EvidenceRefs:        append([]string(nil), command.EvidenceRefs...),
+		ActiveWorks:         backendWorks,
+		CleanupGoalBackends: true,
+	})
+	if err != nil {
+		return ActiveShutdownWorkCleanupResultV0{}, true, err
+	}
+	cleaned.EvidenceRefs = compactServerShutdownStringsV0(append(
+		cleaned.EvidenceRefs,
+		"evidence-ref-shutdown-goal-backend-cleanup-requested",
+	))
+	return cleaned, true, nil
+}
+
+func activeShutdownBackendWorksV0(
+	works []ActiveShutdownWorkV0,
+) []ActiveShutdownWorkV0 {
+	out := make([]ActiveShutdownWorkV0, 0, len(works))
+	for _, work := range works {
+		if activeShutdownWorkIsBackendStillRunningV0(work) {
+			out = append(out, work)
+		}
+	}
+	if out == nil {
+		return []ActiveShutdownWorkV0{}
+	}
+	return out
 }
 
 func activeShutdownWorkBlockingStatusV0(

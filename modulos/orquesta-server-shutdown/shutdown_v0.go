@@ -24,8 +24,10 @@ func ShutdownServerV0(
 	if result, ok := missingRequiredServerShutdownDepsV0(deps); ok {
 		return result, nil
 	}
-	if result, ok, err := blockingActiveShutdownWorkV0(ctx, deps, command); err != nil || ok {
+	if result, ok, evidenceRefs, err := blockingActiveShutdownWorkV0(ctx, deps, command); err != nil || ok {
 		return result, err
+	} else if len(evidenceRefs) > 0 {
+		command.EvidenceRefs = compactServerShutdownStringsV0(append(command.EvidenceRefs, evidenceRefs...))
 	}
 	candidates, err := deps.QueueReader.ListRunSchedulingCandidatesV0(
 		ctx,

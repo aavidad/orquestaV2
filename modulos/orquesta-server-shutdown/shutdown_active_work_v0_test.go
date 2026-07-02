@@ -142,3 +142,115 @@ func TestShutdownServerV0NoForzadoBloqueaConBackendStillRunning(t *testing.T) {
 		t.Fatalf("result=%+v stopped=%v supervisor=%+v", result, deps.control.stopped, deps.supervisor)
 	}
 }
+
+func TestShutdownServerV0CleanupGoalBackendsReleeYPermiteReadySiLimpiaV0(t *testing.T) {
+	deps := newServerShutdownDepsForTestV0(nil)
+	deps.active.reads = [][]ActiveShutdownWorkV0{
+		{{
+			Kind:            "goal_backend",
+			WorkRef:         "orquesta-goal-cleanup-ok",
+			ExternalWorkRef: "codex-goal-app-server-tmux",
+			Status:          ServerShutdownStatusBackendStillRunningV0,
+			EvidenceRefs:    []string{"evidence-ref-backend-before-cleanup"},
+		}},
+		{},
+	}
+	deps.cleaner.result = ActiveShutdownWorkCleanupResultV0{
+		CleanedWorkCount: 1,
+		EvidenceRefs:     []string{"evidence-ref-backend-cleaned"},
+	}
+
+	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
+		RequestedBy:         "orquesta-director",
+		Reason:              "cleanup backend propio tras cierre aceptado",
+		CorrelationID:       "corr-cleanup-backend-ok",
+		CleanupGoalBackends: true,
+		EvidenceRefs:        []string{"operator-cleanup-request"},
+	})
+	if err != nil {
+		t.Fatalf("ShutdownServerV0: %v", err)
+	}
+	if !result.ShutdownReady ||
+		result.Status != ServerShutdownStatusReadyV0 ||
+		result.ActiveWorkCount != 0 ||
+		deps.active.calls != 2 ||
+		deps.cleaner.calls != 1 ||
+		!deps.cleaner.lastCommand.CleanupGoalBackends ||
+		len(deps.cleaner.lastCommand.ActiveWorks) != 1 ||
+		!serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-backend-cleaned") ||
+		!serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-goal-backend-cleanup-requested") {
+		t.Fatalf("result=%+v active_calls=%d cleaner=%+v", result, deps.active.calls, deps.cleaner)
+	}
+}
+
+func TestShutdownServerV0CleanupGoalBackendsNoPublicaReadySiSigueVivoV0(t *testing.T) {
+	deps := newServerShutdownDepsForTestV0(nil)
+	backendWork := ActiveShutdownWorkV0{
+		Kind:            "goal_backend",
+		WorkRef:         "orquesta-goal-cleanup-still-live",
+		ExternalWorkRef: "codex-goal-app-server-tmux",
+		Status:          ServerShutdownStatusBackendStillRunningV0,
+		EvidenceRefs:    []string{"evidence-ref-backend-still-live"},
+	}
+	deps.active.reads = [][]ActiveShutdownWorkV0{
+		{backendWork},
+		{backendWork},
+	}
+	deps.cleaner.result = ActiveShutdownWorkCleanupResultV0{
+		CleanedWorkCount: 0,
+		EvidenceRefs:     []string{"evidence-ref-backend-cleanup-attempted"},
+	}
+
+	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
+		RequestedBy:         "orquesta-director",
+		Reason:              "cleanup backend propio aun vivo",
+		CorrelationID:       "corr-cleanup-backend-still-live",
+		CleanupGoalBackends: true,
+	})
+	if err != nil {
+		t.Fatalf("ShutdownServerV0: %v", err)
+	}
+	if result.ShutdownReady ||
+		result.Status != ServerShutdownStatusBackendStillRunningV0 ||
+		result.ActiveWorkCount != 1 ||
+		deps.active.calls != 2 ||
+		deps.cleaner.calls != 1 ||
+		!serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-goal-backend-cleanup-requested") ||
+		!serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-backend-still-running") {
+		t.Fatalf("result=%+v active_calls=%d cleaner=%+v", result, deps.active.calls, deps.cleaner)
+	}
+}
+
+func TestShutdownServerV0CleanupGoalBackendsNoLimpiaSiHayGoalFirstActivoV0(t *testing.T) {
+	deps := newServerShutdownDepsForTestV0(nil)
+	deps.active.works = []ActiveShutdownWorkV0{
+		{
+			Kind:    "goal_first",
+			RunRef:  "run-goal-first-active",
+			WorkRef: "goal-ref-active",
+			Status:  "running",
+		},
+		{
+			Kind:            "goal_backend",
+			WorkRef:         "orquesta-goal-backend-with-active-goal",
+			ExternalWorkRef: "codex-goal-app-server-tmux",
+			Status:          ServerShutdownStatusBackendStillRunningV0,
+		},
+	}
+
+	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
+		RequestedBy:         "orquesta-director",
+		Reason:              "no limpiar backend si goal_first sigue activo",
+		CleanupGoalBackends: true,
+	})
+	if err != nil {
+		t.Fatalf("ShutdownServerV0: %v", err)
+	}
+	if result.ShutdownReady ||
+		result.Status != ServerShutdownStatusBackendStillRunningV0 ||
+		result.ActiveWorkCount != 2 ||
+		deps.active.calls != 1 ||
+		deps.cleaner.calls != 0 {
+		t.Fatalf("result=%+v active_calls=%d cleaner_calls=%d", result, deps.active.calls, deps.cleaner.calls)
+	}
+}

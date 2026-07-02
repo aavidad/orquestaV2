@@ -26,6 +26,10 @@ Invariantes:
 - `forced=true` permite drenar agentes sin checkpoint previo, pero no puede
   declarar `shutdown_ready` si el lector de trabajo activo informa un backend
   Goal vivo (`backend_still_running`);
+- `cleanup_goal_backends=true` habilita una limpieza gobernada de backends Goal
+  propios antes de decidir `shutdown_ready`: solo se ejecuta si todo el trabajo
+  activo observado son backends Goal residuales, nunca si queda un `goal_first`
+  activo, y despues siempre relee `ActiveShutdownWorkReaderPortV0`;
 - `checkpoint_deadline_at` permite declarar que la espera cooperativa ya vencio;
   si llega vencido junto a `occurred_at`, el caso de uso pide `StopRunV0`
   forzado y devuelve evidencia de deadline, sin ocultar que faltaba checkpoint;

@@ -26,6 +26,7 @@ func serverShutdownExecutorV0(
 			Supervisor:          stackShutdownSupervisorV0{Stack: stack},
 			StatsReader:         stackShutdownStatsReaderV0{Config: config},
 			ActiveWorkReader:    stackShutdownActiveWorkReaderV0{Config: config},
+			ActiveWorkCleaner:   stackShutdownActiveWorkCleanerV0{Config: config},
 		},
 	)
 }
@@ -61,6 +62,10 @@ type stackShutdownStatsReaderV0 struct {
 }
 
 type stackShutdownActiveWorkReaderV0 struct {
+	Config ConfigV0
+}
+
+type stackShutdownActiveWorkCleanerV0 struct {
 	Config ConfigV0
 }
 
@@ -139,6 +144,40 @@ func stackShutdownActiveWorkReadersFromGoalBackendV0(
 			continue
 		}
 		out = append(out, activeReader)
+	}
+	return out
+}
+
+func (cleaner stackShutdownActiveWorkCleanerV0) CleanupActiveShutdownWorkV0(
+	ctx context.Context,
+	command orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0,
+) (orquestaservershutdown.ActiveShutdownWorkCleanupResultV0, error) {
+	out := orquestaservershutdown.ActiveShutdownWorkCleanupResultV0{}
+	for _, activeCleaner := range stackShutdownActiveWorkCleanersFromGoalBackendV0(cleaner.Config) {
+		cleaned, err := activeCleaner.CleanupActiveShutdownWorkV0(ctx, command)
+		if err != nil {
+			return orquestaservershutdown.ActiveShutdownWorkCleanupResultV0{}, err
+		}
+		out.CleanedWorkCount += cleaned.CleanedWorkCount
+		out.EvidenceRefs = compactStringsV0(append(out.EvidenceRefs, cleaned.EvidenceRefs...))
+	}
+	return out, nil
+}
+
+func stackShutdownActiveWorkCleanersFromGoalBackendV0(
+	config ConfigV0,
+) []orquestaservershutdown.ActiveShutdownWorkCleanerPortV0 {
+	out := []orquestaservershutdown.ActiveShutdownWorkCleanerPortV0{}
+	for _, candidate := range []interface{}{
+		config.AppGoalObserver,
+		config.AppGoalLauncher,
+		config.AppGoalReworkLauncher,
+	} {
+		activeCleaner, ok := candidate.(orquestaservershutdown.ActiveShutdownWorkCleanerPortV0)
+		if !ok || activeCleaner == nil {
+			continue
+		}
+		out = append(out, activeCleaner)
 	}
 	return out
 }

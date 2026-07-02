@@ -20,6 +20,21 @@ func TestSmokeGoalFirstAppServerRealShutdownEvidenceOnGoalFailureV0(t *testing.T
 	}
 }
 
+func TestSmokeGoalFirstAppServerRealPideCleanupGoalBackendsV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+
+	for _, want := range []string{
+		"cleanup_goal_backends",
+		"assert_app_server_tmux_shutdown_ready",
+		"app_server_tmux_shutdown_ready=true",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("smoke debe pedir cleanup gobernado de backend goal: falta %q", want)
+		}
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealProcessCounterDoesNotCountItselfV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")

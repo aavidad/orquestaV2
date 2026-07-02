@@ -726,6 +726,106 @@ func TestCodexAppServerTmuxBackendV0ShutdownNormalNoMataSesionSinOwnerMarkerV0(t
 	}
 }
 
+func TestCodexAppServerTmuxBackendV0CleanupActiveWorkLimpiaSesionPropiaV0(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	tmuxLog := filepath.Join(root, "tmux.log")
+	fakeTmux := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte(fakeCodexAppServerTmuxCommandForTestV0()), 0o700); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	socketPath := filepath.Join(root, "runtime", codexAppServerTmuxDirV0, "g-cleanup.sock")
+	backend := serverCodexAppServerTmuxBackendV0{
+		PathEnv:     binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		SocketPath:  socketPath,
+		SessionName: "orquesta-goal-cleanup-1234567890",
+		Timeout:     time.Second,
+	}
+	t.Setenv("ORQUESTA_TEST_TMUX_LOG", tmuxLog)
+	if err := backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{}); err != nil {
+		t.Fatalf("EnsureV0: %v", err)
+	}
+
+	result, err := backend.CleanupActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0{
+		CleanupGoalBackends: true,
+		ActiveWorks: []orquestaservershutdown.ActiveShutdownWorkV0{{
+			Kind:    "goal_backend",
+			WorkRef: backend.SessionName,
+			Status:  orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CleanupActiveShutdownWorkV0: %v", err)
+	}
+	if result.CleanedWorkCount != 1 ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-configured-cleaned") {
+		t.Fatalf("result=%+v", result)
+	}
+	if _, err := os.Stat(socketPath); !os.IsNotExist(err) {
+		t.Fatalf("socket no eliminado err=%v", err)
+	}
+	if _, err := os.Stat(backend.tmuxOwnerMarkerPathV0()); !os.IsNotExist(err) {
+		t.Fatalf("owner marker no eliminado err=%v", err)
+	}
+	if _, err := os.Stat(tmuxLog + ".session"); !os.IsNotExist(err) {
+		t.Fatalf("session fake no eliminada err=%v", err)
+	}
+}
+
+func TestCodexAppServerTmuxBackendV0CleanupActiveWorkNoMataSesionSinOwnerNiConfigSeguraV0(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	tmuxLog := filepath.Join(root, "tmux.log")
+	fakeTmux := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte(fakeCodexAppServerTmuxCommandForTestV0()), 0o700); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	socketPath := filepath.Join(root, "runtime", codexAppServerTmuxDirV0, "g-unowned.sock")
+	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
+		t.Fatalf("mkdir socket dir: %v", err)
+	}
+	if err := os.WriteFile(socketPath, []byte("stale socket"), 0o600); err != nil {
+		t.Fatalf("write socket: %v", err)
+	}
+	if err := os.WriteFile(tmuxLog+".session", []byte("stale session"), 0o600); err != nil {
+		t.Fatalf("write fake session: %v", err)
+	}
+	backend := serverCodexAppServerTmuxBackendV0{
+		PathEnv:     binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		SocketPath:  socketPath,
+		SessionName: "external-session",
+		Timeout:     time.Second,
+	}
+	t.Setenv("ORQUESTA_TEST_TMUX_LOG", tmuxLog)
+
+	result, err := backend.CleanupActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0{
+		CleanupGoalBackends: true,
+		ActiveWorks: []orquestaservershutdown.ActiveShutdownWorkV0{{
+			Kind:    "goal_backend",
+			WorkRef: backend.SessionName,
+			Status:  orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CleanupActiveShutdownWorkV0: %v", err)
+	}
+	if result.CleanedWorkCount != 0 {
+		t.Fatalf("result=%+v", result)
+	}
+	if _, err := os.Stat(tmuxLog + ".session"); err != nil {
+		t.Fatalf("session fake no debe eliminarse sin owner/config segura: %v", err)
+	}
+	if _, err := os.Stat(socketPath); err != nil {
+		t.Fatalf("socket no debe eliminarse sin owner/config segura: %v", err)
+	}
+}
+
 func TestCodexAppServerTmuxBackendV0ReadActiveShutdownWorkDetectaRestosPropiosV0(t *testing.T) {
 	root := t.TempDir()
 	binDir := filepath.Join(root, "bin")

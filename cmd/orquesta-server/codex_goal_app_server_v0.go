@@ -64,10 +64,13 @@ func serverGoalWorkLauncherFromBackendV0(
 	launcher := orquestaruntimecodexgoal.CodexGoalLauncherV0{
 		Starter: backend.Starter,
 	}
-	if active := serverGoalActiveShutdownWorkReaderFromBackendV0(backend); active != nil {
+	active := serverGoalActiveShutdownWorkReaderFromBackendV0(backend)
+	cleaner := serverGoalActiveShutdownWorkCleanerFromBackendV0(backend)
+	if active != nil || cleaner != nil {
 		return serverGoalWorkLauncherWithActiveShutdownWorkV0{
-			Inner:      launcher,
-			ActiveWork: active,
+			Inner:         launcher,
+			ActiveWork:    active,
+			ActiveCleaner: cleaner,
 		}
 	}
 	return launcher
@@ -82,10 +85,13 @@ func serverGoalWorkObserverFromBackendV0(
 	observer := orquestaruntimecodexgoal.CodexGoalObserverV0{
 		Observer: backend.Observer,
 	}
-	if active := serverGoalActiveShutdownWorkReaderFromBackendV0(backend); active != nil {
+	active := serverGoalActiveShutdownWorkReaderFromBackendV0(backend)
+	cleaner := serverGoalActiveShutdownWorkCleanerFromBackendV0(backend)
+	if active != nil || cleaner != nil {
 		return serverGoalWorkObserverWithActiveShutdownWorkV0{
-			Inner:      observer,
-			ActiveWork: active,
+			Inner:         observer,
+			ActiveWork:    active,
+			ActiveCleaner: cleaner,
 		}
 	}
 	return observer
