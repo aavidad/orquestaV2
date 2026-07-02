@@ -242,7 +242,10 @@ proyectadas por la composicion:
   `narrative_section`, sin convertirlas en runs;
 - puede emitir una tarea scanner `Escaneo backlog nuevos` para descubrir huecos
   nuevos, preservando `backlog_scan_epoch`, reservas y `backlog_scan_doc` con
-  linea/hash.
+  linea/hash;
+- no duplica el scanner si la cola visible ya lo expone por `scanner_task_ref`,
+  por la seccion tecnica `backlog_scanner` o por el `backlog_scan_ref` de la
+  foto vigente.
 
 `ProjectAutoprogrammingExternalWorkV0` publica un estado compacto y distinguible
 para trabajo externo: `outbox_pending`, `wait_external`,

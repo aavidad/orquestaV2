@@ -143,15 +143,34 @@ func TestPlanAutoprogrammingBacklogSelfImprovementV0SaltaColaNarrativasYCreaScan
 }
 
 func TestPlanAutoprogrammingBacklogSelfImprovementV0NoDuplicaScannerVisiblePorSeccion(t *testing.T) {
-	result := PlanAutoprogrammingBacklogSelfImprovementV0(AutoprogrammingBacklogPlannerInputV0{
-		CreateScanner: true,
-		VisibleQueue: []AutoprogrammingVisibleQueueItemV0{{
-			SectionRef: "backlog_scanner",
-		}},
-	})
+	for _, tc := range []struct {
+		name           string
+		backlogScanRef string
+		visibleSection string
+	}{
+		{
+			name:           "seccion_scanner",
+			visibleSection: "backlog_scanner",
+		},
+		{
+			name:           "scan_ref",
+			backlogScanRef: "scan-ref-backlog-72c73a98bd54",
+			visibleSection: "scan-ref-backlog-72c73a98bd54",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := PlanAutoprogrammingBacklogSelfImprovementV0(AutoprogrammingBacklogPlannerInputV0{
+				CreateScanner:  true,
+				BacklogScanRef: tc.backlogScanRef,
+				VisibleQueue: []AutoprogrammingVisibleQueueItemV0{{
+					SectionRef: tc.visibleSection,
+				}},
+			})
 
-	if result.Scanner != nil {
-		t.Fatalf("scanner=%+v", result.Scanner)
+			if result.Scanner != nil {
+				t.Fatalf("scanner=%+v", result.Scanner)
+			}
+		})
 	}
 }
 

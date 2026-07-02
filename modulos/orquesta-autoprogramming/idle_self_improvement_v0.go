@@ -192,7 +192,7 @@ func PlanAutoprogrammingBacklogSelfImprovementV0(
 		}
 		result.Tasks = append(result.Tasks, entry)
 	}
-	if input.CreateScanner && !autoprogrammingScannerVisibleInQueueV0(input.ScannerTaskRef, visible) {
+	if input.CreateScanner && !autoprogrammingScannerVisibleInQueueV0(input.ScannerTaskRef, input.BacklogScanRef, visible) {
 		scanner := autoprogrammingBacklogScannerEntryV0(input)
 		result.Scanner = &scanner
 	}
@@ -290,13 +290,18 @@ func autoprogrammingBacklogEntryVisibleInQueueV0(
 
 func autoprogrammingScannerVisibleInQueueV0(
 	scannerTaskRef string,
+	backlogScanRef string,
 	visible map[string]bool,
 ) bool {
 	scannerTaskRef = strings.TrimSpace(scannerTaskRef)
 	if scannerTaskRef == "" {
 		scannerTaskRef = AutoprogrammingBacklogPlannerScannerTaskRefV0
 	}
-	return visible["task:"+scannerTaskRef] || visible["section:backlog_scanner"]
+	if visible["task:"+scannerTaskRef] || visible["section:backlog_scanner"] {
+		return true
+	}
+	backlogScanRef = strings.TrimSpace(backlogScanRef)
+	return backlogScanRef != "" && visible["section:"+backlogScanRef]
 }
 
 func autoprogrammingBacklogScannerEntryV0(
