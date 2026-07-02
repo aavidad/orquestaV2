@@ -211,6 +211,14 @@ func codexAppServerTmuxPIDAliveV0(panePID string) bool {
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionV0(ctx context.Context, allowConfiguredOrphan bool) error {
+	return backend.shutdownTmuxSessionWithOptionsV0(ctx, allowConfiguredOrphan, false)
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionWithOptionsV0(
+	ctx context.Context,
+	allowConfiguredOrphan bool,
+	continueAfterPaneExitTimeout bool,
+) error {
 	timeout := backend.Timeout
 	if timeout <= 0 {
 		timeout = codexAppServerTmuxDefaultTimeoutV0
@@ -240,7 +248,9 @@ func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionV0(ctx conte
 			return err
 		}
 		if err := backend.waitTmuxPaneExitedV0(runCtx, panePID); err != nil {
-			return err
+			if !continueAfterPaneExitTimeout {
+				return err
+			}
 		}
 	}
 	backend.stopCodexAppServerSocketProcessesV0(runCtx)
@@ -259,7 +269,7 @@ func (backend serverCodexAppServerTmuxBackendV0) shutdownCleanupTimeoutV0() time
 func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionForCleanupV0(ctx context.Context) error {
 	cleanup := backend
 	cleanup.Timeout = backend.shutdownCleanupTimeoutV0()
-	return cleanup.shutdownTmuxSessionV0(ctx, true)
+	return cleanup.shutdownTmuxSessionWithOptionsV0(ctx, true, true)
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) stopCodexAppServerSocketProcessesV0(ctx context.Context) {

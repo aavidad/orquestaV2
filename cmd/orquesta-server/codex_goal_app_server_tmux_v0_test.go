@@ -858,6 +858,107 @@ func TestCodexAppServerTmuxBackendV0CleanupActiveWorkMataProcesoSocketSinSesionV
 	}
 }
 
+func TestCodexAppServerTmuxBackendV0CleanupActiveWorkContinuaTrasPaneTimeoutV0(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	tmuxLog := filepath.Join(root, "tmux.log")
+	fakeTmux := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte(`#!/bin/sh
+set -eu
+if [ -n "${ORQUESTA_TEST_TMUX_LOG:-}" ]; then
+  printf '%s\n' "$*" >> "$ORQUESTA_TEST_TMUX_LOG"
+fi
+case "${1:-}" in
+  has-session)
+    if [ -n "${ORQUESTA_TEST_TMUX_LOG:-}" ] && [ -e "${ORQUESTA_TEST_TMUX_LOG}.session" ]; then
+      exit 0
+    fi
+    exit 1
+    ;;
+  kill-session)
+    if [ -n "${ORQUESTA_TEST_TMUX_LOG:-}" ]; then
+      rm -f "${ORQUESTA_TEST_TMUX_LOG}.session"
+    fi
+    exit 0
+    ;;
+  display-message)
+    printf '%s\n' "${ORQUESTA_TEST_PANE_PID:-}"
+    exit 0
+    ;;
+esac
+exit 2
+`), 0o700); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	socketPath := filepath.Join(root, "runtime", codexAppServerTmuxDirV0, "g-cleanup-pane.sock")
+	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
+		t.Fatalf("mkdir socket dir: %v", err)
+	}
+	if err := os.WriteFile(socketPath, []byte("stale socket"), 0o600); err != nil {
+		t.Fatalf("write socket: %v", err)
+	}
+	process := exec.Command("bash", "-c", "trap '' TERM; exec -a 'codex app-server --listen unix://"+socketPath+"' sleep 30")
+	if err := process.Start(); err != nil {
+		t.Fatalf("start fake app-server process: %v", err)
+	}
+	processDone := make(chan error, 1)
+	go func() {
+		processDone <- process.Wait()
+	}()
+	defer func() {
+		_ = process.Process.Kill()
+		select {
+		case <-processDone:
+		case <-time.After(time.Second):
+		}
+	}()
+	if err := os.WriteFile(tmuxLog+".session", []byte("stale session"), 0o600); err != nil {
+		t.Fatalf("write fake session: %v", err)
+	}
+	backend := serverCodexAppServerTmuxBackendV0{
+		PathEnv:                binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		SocketPath:             socketPath,
+		SessionName:            "orquesta-goal-cleanup-pane-1234567890",
+		Timeout:                50 * time.Millisecond,
+		ShutdownCleanupTimeout: 200 * time.Millisecond,
+	}
+	t.Setenv("ORQUESTA_TEST_TMUX_LOG", tmuxLog)
+	t.Setenv("ORQUESTA_TEST_PANE_PID", strconv.Itoa(process.Process.Pid))
+	if err := backend.writeTmuxOwnerMarkerV0(); err != nil {
+		t.Fatalf("write owner marker: %v", err)
+	}
+
+	result, err := backend.CleanupActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0{
+		CleanupGoalBackends: true,
+		ActiveWorks: []orquestaservershutdown.ActiveShutdownWorkV0{{
+			Kind:    "goal_backend",
+			WorkRef: backend.SessionName,
+			Status:  orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("CleanupActiveShutdownWorkV0: %v", err)
+	}
+	if result.CleanedWorkCount != 1 ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-configured-cleaned") {
+		t.Fatalf("result=%+v", result)
+	}
+	select {
+	case <-processDone:
+	case <-time.After(time.Second):
+		t.Fatalf("fake app-server process sigue vivo tras cleanup")
+	}
+	if _, err := os.Stat(socketPath); !os.IsNotExist(err) {
+		t.Fatalf("socket no eliminado err=%v", err)
+	}
+	if _, err := os.Stat(backend.tmuxOwnerMarkerPathV0()); !os.IsNotExist(err) {
+		t.Fatalf("owner marker no eliminado err=%v", err)
+	}
+}
+
 func TestCodexAppServerTmuxBackendV0CleanupActiveWorkNoMataSesionSinOwnerNiConfigSeguraV0(t *testing.T) {
 	root := t.TempDir()
 	binDir := filepath.Join(root, "bin")
