@@ -15,9 +15,14 @@ smoke_require_confirm \
   1 \
   "smoke legacy external-work desactivado: exporta ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1 para probar revisiones por loop historico"
 
+smoke_require_confirm \
+  ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP \
+  true \
+  "smoke legacy supervise desactivado: exporta ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=true porque este smoke usa director_execution_mode=legacy_director_loop"
+
 PROJECT_DIR="${ORQUESTA_OPES_REVIEW_PROJECT_DIR:-}"
 if [[ -z "$PROJECT_DIR" || ! -d "$PROJECT_DIR" ]]; then
-  echo "define ORQUESTA_OPES_REVIEW_PROJECT_DIR con el paquete OPES local a revisar" >&2
+  echo "define ORQUESTA_OPES_REVIEW_PROJECT_DIR con el repo OPES real a revisar; para pruebas locales acota el write-set a external/opes/" >&2
   exit 2
 fi
 
@@ -223,6 +228,7 @@ start_orquesta_server() {
   ORQUESTA_DOMAIN_WORK_HTTP_SUBMIT_PATH="/api/domain-work/artifacts" \
   ORQUESTA_DOMAIN_WORK_HTTP_EGRESS_MODE="smoke_local" \
   ORQUESTA_DOMAIN_WORK_HTTP_TIMEOUT_SECONDS="${ORQUESTA_DOMAIN_WORK_HTTP_TIMEOUT_SECONDS:-120}" \
+  ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=true \
   ORQUESTA_SERVER_TICK_INTERVAL_MS="${ORQUESTA_SERVER_TICK_INTERVAL_MS:-60000}" \
   ORQUESTA_SERVER_MAX_RUNS_PER_TICK="${ORQUESTA_SERVER_MAX_RUNS_PER_TICK:-3}" \
   ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK="${ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK:-6}" \

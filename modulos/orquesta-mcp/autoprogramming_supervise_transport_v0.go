@@ -29,6 +29,27 @@ func mcpAutoprogrammingSuperviseTransportHandlerV0(
 		}
 		result, err := port.Execute(ctx, input.MCPRunSupervisorToolInputV0)
 		if err != nil {
+			if mcpRunSupervisorClassifiedOKResultDespiteExecutorErrorV0(result) {
+				normalizedAdvice := input.OperatorAdvice.normalizedMCPV0(
+					firstNonEmptyMCPV0(result.RunRef, result.RequestID, result.CorrelationID),
+				)
+				if len(normalizedAdvice) == 0 {
+					return json.Marshal(result)
+				}
+				diagnostics := append([]MCPAutoprogrammingDiagnosticV0(nil), result.Diagnostics...)
+				diagnostics = append(diagnostics, mcpAutoprogrammingDiagnosticV0(
+					"operator_advice_recorded_non_blocking",
+					"operator_advice",
+					"consejo de operador registrado sin bloquear supervisor",
+				))
+				payloadResult := result
+				payloadResult.Diagnostics = nil
+				return json.Marshal(mcpAutoprogrammingSuperviseTransportResultV0{
+					MCPRunSupervisorToolResultV0: payloadResult,
+					OperatorAdvice:               normalizedAdvice,
+					Diagnostics:                  diagnostics,
+				})
+			}
 			if result.Estado == MCPRunSupervisorEstadoErrorV0 && len(result.Errores) > 0 {
 				return json.Marshal(result)
 			}

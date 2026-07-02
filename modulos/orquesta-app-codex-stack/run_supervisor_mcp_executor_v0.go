@@ -89,7 +89,11 @@ func (executor CodexStackRunSupervisorExecutorV0) Execute(
 		},
 	)
 	if err != nil {
-		return codexStackRunSupervisorErrorResultMCPV0(input, result, err), err
+		output := codexStackRunSupervisorErrorResultMCPV0(input, result, err)
+		if output.Estado == orquestamcp.MCPRunSupervisorEstadoOKV0 {
+			return output, nil
+		}
+		return output, err
 	}
 	output := orquestamcp.NewMCPRunSupervisorOKResultV0(
 		input,

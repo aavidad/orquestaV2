@@ -285,6 +285,45 @@ func TestMCPRunSupervisorHTTPHandlerV0PropagaErrorPublicoDelExecutor(t *testing.
 	}
 }
 
+func TestMCPRunSupervisorHTTPHandlerV0RespetaOKConErrorPostEntrega(t *testing.T) {
+	input := MCPRunSupervisorToolInputV0{
+		RequestID: "request-ref-run-supervisor-http-post-delivery-001",
+		RunRef:    "run-ref-supervisor-http-post-delivery-001",
+	}
+	executor := &fakeMCPRunSupervisorHTTPExecutorV0{
+		result: MCPRunSupervisorToolResultV0{
+			Estado:     MCPRunSupervisorEstadoOKV0,
+			RunRef:     input.RunRef,
+			StopReason: "delivered_with_post_delivery_supervisor_error",
+			Diagnostics: []MCPAutoprogrammingDiagnosticV0{{
+				Code: "delivered_with_post_delivery_supervisor_error",
+			}},
+		},
+		err: errors.New("post delivery supervisor error already classified"),
+	}
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(input); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, MCPRunSupervisorHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	NewMCPRunSupervisorHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPRunSupervisorToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPRunSupervisorEstadoOKV0 ||
+		result.StopReason != "delivered_with_post_delivery_supervisor_error" ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "delivered_with_post_delivery_supervisor_error") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPRunSupervisorHTTPHandlerV0NoPropagaErrorNoCatalogado(t *testing.T) {
 	input := MCPRunSupervisorToolInputV0{
 		RequestID:     "request-ref-run-supervisor-http-cause-001",

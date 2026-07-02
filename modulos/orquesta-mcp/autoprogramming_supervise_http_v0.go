@@ -80,6 +80,10 @@ func (handler mcpAutoprogrammingSuperviseHTTPHandlerV0) ServeHTTP(w http.Respons
 		return
 	}
 	if err != nil {
+		if mcpRunSupervisorClassifiedOKResultDespiteExecutorErrorV0(result) {
+			writeMCPAutoprogrammingSuperviseHTTPResultV0(w, http.StatusOK, result, input.OperatorAdvice)
+			return
+		}
 		if result.Estado == MCPRunSupervisorEstadoErrorV0 && len(result.Errores) > 0 {
 			writeMCPAutoprogrammingSuperviseHTTPResultV0(w, http.StatusInternalServerError, result, input.OperatorAdvice)
 			return

@@ -143,3 +143,13 @@ func NewMCPRunSupervisorErrorResultV0(
 		}},
 	}
 }
+
+func mcpRunSupervisorClassifiedOKResultDespiteExecutorErrorV0(
+	result MCPRunSupervisorToolResultV0,
+) bool {
+	return result.Estado == MCPRunSupervisorEstadoOKV0 &&
+		(strings.TrimSpace(result.StopReason) != "" ||
+			len(result.Diagnostics) > 0 ||
+			len(result.EvidenceRefs) > 0 ||
+			len(result.NextActions) > 0)
+}

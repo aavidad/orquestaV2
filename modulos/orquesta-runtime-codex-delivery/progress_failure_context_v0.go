@@ -1,6 +1,7 @@
 package orquestaruntimecodexdelivery
 
 import (
+	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -13,22 +14,36 @@ import (
 const maxCodexProgressFailureLogBytesV0 = 64 * 1024
 
 const codexProgressWarningStreamFDEvidenceRefV0 = "evidence-ref-warning-stream-fd"
+const codexProgressProviderDiagnosticFileNameV0 = "orquesta_provider_diagnostic_v0.json"
+const codexProgressProviderAuthOrTierBlockedEvidenceRefV0 = "evidence-ref-provider-auth-or-tier-blocked"
 
 type codexProgressFailureClassV0 string
 
 const (
-	CodexProgressFailureNoACKV0                  codexProgressFailureClassV0 = "no_ack"
-	CodexProgressFailureInterruptedV0            codexProgressFailureClassV0 = "interrupted"
-	CodexProgressFailureCapacityWarningV0        codexProgressFailureClassV0 = "capacity_warning"
-	CodexProgressFailureAuthInvalidV0            codexProgressFailureClassV0 = "auth_invalid"
-	CodexProgressFailureProviderQuotaExhaustedV0 codexProgressFailureClassV0 = "provider_quota_exhausted"
+	CodexProgressFailureNoACKV0                     codexProgressFailureClassV0 = "no_ack"
+	CodexProgressFailureInterruptedV0               codexProgressFailureClassV0 = "interrupted"
+	CodexProgressFailureCapacityWarningV0           codexProgressFailureClassV0 = "capacity_warning"
+	CodexProgressFailureAuthInvalidV0               codexProgressFailureClassV0 = "auth_invalid"
+	CodexProgressFailureProviderAuthOrTierBlockedV0 codexProgressFailureClassV0 = "provider_auth_or_tier_blocked"
+	CodexProgressFailureProviderQuotaExhaustedV0    codexProgressFailureClassV0 = "provider_quota_exhausted"
 
-	codexProgressFailureNoACKV0                  = CodexProgressFailureNoACKV0
-	codexProgressFailureInterruptedV0            = CodexProgressFailureInterruptedV0
-	codexProgressFailureCapacityWarningV0        = CodexProgressFailureCapacityWarningV0
-	codexProgressFailureAuthInvalidV0            = CodexProgressFailureAuthInvalidV0
-	codexProgressFailureProviderQuotaExhaustedV0 = CodexProgressFailureProviderQuotaExhaustedV0
+	codexProgressFailureNoACKV0                     = CodexProgressFailureNoACKV0
+	codexProgressFailureInterruptedV0               = CodexProgressFailureInterruptedV0
+	codexProgressFailureCapacityWarningV0           = CodexProgressFailureCapacityWarningV0
+	codexProgressFailureAuthInvalidV0               = CodexProgressFailureAuthInvalidV0
+	codexProgressFailureProviderAuthOrTierBlockedV0 = CodexProgressFailureProviderAuthOrTierBlockedV0
+	codexProgressFailureProviderQuotaExhaustedV0    = CodexProgressFailureProviderQuotaExhaustedV0
 )
+
+type codexProgressProviderDiagnosticV0 struct {
+	SchemaVersion string   `json:"schema_version"`
+	Provider      string   `json:"provider"`
+	Status        string   `json:"status"`
+	Code          string   `json:"code"`
+	Message       string   `json:"message"`
+	NextActions   []string `json:"next_actions,omitempty"`
+	EvidenceRefs  []string `json:"evidence_refs,omitempty"`
+}
 
 func codexProgressReportWithProcessFailureContextV0(
 	descriptor CodexReceiptDescriptorV0,
@@ -60,6 +75,14 @@ func CodexProgressReportWithProcessFailureContextV0(
 	}
 	failure := codexProgressFailureClassFromDescriptorV0(descriptor)
 	switch failure {
+	case CodexProgressFailureProviderAuthOrTierBlockedV0:
+		diagnostic, _ := codexProgressProviderDiagnosticFromDescriptorV0(descriptor)
+		report.Summary = "Proveedor externo bloqueado por autenticacion o tier; requiere accion del operador."
+		report.DecisionRequired = true
+		report.EvidenceRefs = compactCodexDeliveryRefsV0(append(
+			report.EvidenceRefs,
+			append(diagnostic.EvidenceRefs, codexProgressProviderAuthOrTierBlockedEvidenceRefV0)...,
+		))
 	case CodexProgressFailureAuthInvalidV0:
 		report.Summary = "Autenticacion externa invalida; requiere reautorizacion del operador."
 		report.DecisionRequired = true
@@ -139,6 +162,10 @@ func codexProgressFailureClassFromDescriptorV0(
 func CodexProgressFailureClassFromDescriptorV0(
 	descriptor CodexReceiptDescriptorV0,
 ) codexProgressFailureClassV0 {
+	if diagnostic, ok := codexProgressProviderDiagnosticFromDescriptorV0(descriptor); ok &&
+		strings.TrimSpace(diagnostic.Code) == string(CodexProgressFailureProviderAuthOrTierBlockedV0) {
+		return CodexProgressFailureProviderAuthOrTierBlockedV0
+	}
 	if codexProgressDescriptorHasProviderQuotaExhaustedV0(descriptor) {
 		return CodexProgressFailureProviderQuotaExhaustedV0
 	}
@@ -149,6 +176,30 @@ func CodexProgressFailureClassFromDescriptorV0(
 		}
 	}
 	return CodexProgressFailureNoACKV0
+}
+
+func codexProgressProviderDiagnosticFromDescriptorV0(
+	descriptor CodexReceiptDescriptorV0,
+) (codexProgressProviderDiagnosticV0, bool) {
+	ackPath := strings.TrimSpace(descriptor.AckPath)
+	if ackPath == "" {
+		return codexProgressProviderDiagnosticV0{}, false
+	}
+	data, ok := codexProgressReadTailV0(
+		filepath.Join(filepath.Dir(ackPath), codexProgressProviderDiagnosticFileNameV0),
+		maxCodexProgressFailureLogBytesV0,
+	)
+	if !ok {
+		return codexProgressProviderDiagnosticV0{}, false
+	}
+	var diagnostic codexProgressProviderDiagnosticV0
+	if err := json.Unmarshal(data, &diagnostic); err != nil ||
+		strings.TrimSpace(diagnostic.SchemaVersion) != "orquesta_provider_diagnostic.v0" ||
+		strings.TrimSpace(diagnostic.Code) == "" {
+		return codexProgressProviderDiagnosticV0{}, false
+	}
+	diagnostic.EvidenceRefs = compactCodexDeliveryRefsV0(diagnostic.EvidenceRefs)
+	return diagnostic, true
 }
 
 func codexProgressFailureLogsFromDescriptorV0(

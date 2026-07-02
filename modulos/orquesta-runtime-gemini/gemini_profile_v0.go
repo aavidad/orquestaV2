@@ -19,6 +19,7 @@ const (
 	GeminiShutdownCheckpointAckFileNameV0 = "agent_shutdown_checkpoint_ack.json"
 	GeminiStdoutFileNameV0                = "gemini_stdout.log"
 	GeminiStderrFileNameV0                = "gemini_stderr.log"
+	GeminiProviderDiagnosticFileNameV0    = "orquesta_provider_diagnostic_v0.json"
 	GeminiWrapperFileNameV0               = "orquesta_gemini_exec_v0.sh"
 )
 

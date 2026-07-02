@@ -29,3 +29,26 @@ func TestBuildGeminiWrapperScriptV0UsaPromptPorStdin(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildGeminiWrapperScriptV0DiagnosticaIneligibleTier(t *testing.T) {
+	root := t.TempDir()
+	script := BuildGeminiWrapperScriptV0(GeminiConnectorProfileV0{
+		CommandPath:    filepath.Join(root, "gemini"),
+		ProjectWorkDir: filepath.Join(root, "project"),
+		RuntimeWorkDir: filepath.Join(root, "runtime"),
+	})
+	for _, want := range []string{
+		"IneligibleTierError",
+		GeminiProviderDiagnosticFileNameV0,
+		"orquesta_provider_diagnostic.v0",
+		"provider_auth_or_tier_blocked",
+		"update_gemini_cli",
+		"migrate_to_supported_provider",
+		"configure_valid_credentials_or_tier",
+		"evidence-ref-gemini-ineligible-tier",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("wrapper sin diagnostico Gemini tier/auth: falta %q en %s", want, script)
+		}
+	}
+}

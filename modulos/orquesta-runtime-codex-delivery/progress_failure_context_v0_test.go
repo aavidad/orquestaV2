@@ -77,6 +77,39 @@ func TestCodexProgressReportWithProcessFailureContextV0ClasificaCuotaEstructurad
 	}
 }
 
+func TestCodexProgressReportWithProcessFailureContextV0ClasificaProviderAuthTierEstructurado(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(dir, codexProgressProviderDiagnosticFileNameV0),
+		[]byte(`{"schema_version":"orquesta_provider_diagnostic.v0","provider":"gemini","status":"blocked","code":"provider_auth_or_tier_blocked","message":"gemini_cli_ineligible_tier","evidence_refs":["evidence-ref-gemini-ineligible-tier"]}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write provider diagnostic: %v", err)
+	}
+	report := validCodexProgressFailureReportForTestV0()
+	descriptor := CodexReceiptDescriptorV0{
+		AckPath: filepath.Join(dir, orquestaruntimecodex.CodexAgentAckFileNameV0),
+	}
+
+	got := codexProgressReportWithProcessFailureContextV0(descriptor, report)
+
+	if !got.DecisionRequired ||
+		got.Summary != "Proveedor externo bloqueado por autenticacion o tier; requiere accion del operador." ||
+		!stringInCodexDeliverySetV0(got.EvidenceRefs, "evidence-ref-gemini-ineligible-tier") ||
+		!stringInCodexDeliverySetV0(got.EvidenceRefs, codexProgressProviderAuthOrTierBlockedEvidenceRefV0) {
+		t.Fatalf("report provider auth/tier inesperado=%+v", got)
+	}
+	if got.BudgetStatus != "" || got.BudgetReason != "" {
+		t.Fatalf("provider auth/tier no debe marcar presupuesto generico: %+v", got)
+	}
+	if gotClass := codexProgressFailureClassFromDescriptorV0(descriptor); gotClass != codexProgressFailureProviderAuthOrTierBlockedV0 {
+		t.Fatalf("failure class=%s want=%s", gotClass, codexProgressFailureProviderAuthOrTierBlockedV0)
+	}
+	if issues := orquestaruntime.ValidateAgentProgressReportV0(got); len(issues) > 0 {
+		t.Fatalf("progress report invalido: %+v", issues)
+	}
+}
+
 func TestCodexProgressReportWithProcessFailureContextV0NoClasificaAuthPorTextoLibre(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(

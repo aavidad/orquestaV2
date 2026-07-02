@@ -236,6 +236,44 @@ func TestCodexStackRunSupervisorErrorResultMCPV0ExponeReviewPayloadInvalidoTrasE
 	}
 }
 
+func TestCodexStackRunSupervisorErrorResultMCPV0NoFallaProveedorTrasEntregaAceptada(t *testing.T) {
+	partial := CodexSupervisorResultV0{
+		StopReason: CodexSupervisorStopRuntimeErrorV0,
+		Ticks:      1,
+		Last: CodexSupervisorRuntimeSnapshotV0{
+			Status:     CodexSupervisorRuntimeFailedV0,
+			SessionRef: "run-ref-post-delivery-error-001",
+			AgentRef:   "agent-ref-post-delivery-error-001",
+			EvidenceRefs: []string{
+				"ack-ref-post-delivery-error-001",
+				"evidence-ref-domain-work-completed",
+			},
+		},
+	}
+
+	result := codexStackRunSupervisorErrorResultMCPV0(
+		orquestamcp.MCPRunSupervisorToolInputV0{RunRef: "run-ref-post-delivery-error-001"},
+		partial,
+		errors.New("transicion_invalida: status"),
+	)
+
+	if result.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
+		result.StopReason != codexStackDeliveredWithPostDeliverySupervisorErrorV0 ||
+		len(result.Errores) != 0 ||
+		!codexStackDiagnosticsContainCodeForTestV0(result.Diagnostics, codexStackDeliveredWithPostDeliverySupervisorErrorV0) ||
+		!codexStackStringInSetForTestV0(result.EvidenceRefs, "ack-ref-post-delivery-error-001") ||
+		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-domain-work-completed-post-delivery-supervisor-error") {
+		t.Fatalf("result=%+v", result)
+	}
+	diagnostic := codexStackDiagnosticByCodeForTestV0(result.Diagnostics, codexStackDeliveredWithPostDeliverySupervisorErrorV0)
+	if !strings.Contains(diagnostic.Message, "preserve_delivery_evidence_retry_supervise_do_not_relaunch_provider_agent") ||
+		!codexStackStringInSetForTestV0(result.NextActions, "preserve_delivery_evidence") ||
+		!codexStackStringInSetForTestV0(result.NextActions, "retry_supervise") ||
+		!codexStackStringInSetForTestV0(result.NextActions, "do_not_relaunch_provider_agent") {
+		t.Fatalf("diagnostic=%+v next=%+v", diagnostic, result.NextActions)
+	}
+}
+
 func TestCodexStackRunSupervisorErrorResultMCPV0NoMarcaDominioCompletoSinEntrega(t *testing.T) {
 	partial := CodexSupervisorResultV0{
 		StopReason: CodexSupervisorStopRuntimeErrorV0,

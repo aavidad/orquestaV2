@@ -23,6 +23,7 @@ const (
 	codexStackCodexProviderQuotaExhaustedDiagnosticV0          = "codex_provider_quota_exhausted"
 	codexStackCodexProviderCapacityLimitedDiagnosticV0         = "codex_provider_capacity_limited"
 	codexStackDomainWorkCompletedReviewFailedDiagnosticV0      = "domain_work_completed_review_failed"
+	codexStackDeliveredWithPostDeliverySupervisorErrorV0       = "delivered_with_post_delivery_supervisor_error"
 )
 
 func codexStackRunSupervisorErrorResultMCPV0(
@@ -46,6 +47,9 @@ func codexStackRunSupervisorErrorResultMCPV0(
 		))
 		result.NextActions = compactStringsV0([]string{drainErr.NextActionV0()})
 		return result
+	}
+	if codexStackRunSupervisorDeliveredWithPostDeliverySupervisorErrorV0(partial.Last, err) {
+		return codexStackRunSupervisorPostDeliveryErrorOKResultMCPV0(input, partial, err)
 	}
 	publicCode := "run_supervisor_execute_error"
 	if codexStackRunSupervisorReviewFailedAfterDomainCompletionV0(partial.Last, err) {
@@ -86,6 +90,42 @@ func codexStackRunSupervisorErrorResultMCPV0(
 			Message:      "executor fallo con snapshot parcial disponible error=" + codexStackRunSupervisorPublicDiagnosticErrorV0(err.Error()),
 			EvidenceRefs: result.EvidenceRefs,
 		}}
+	}
+	return result
+}
+
+func codexStackRunSupervisorPostDeliveryErrorOKResultMCPV0(
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+	partial CodexSupervisorResultV0,
+	err error,
+) orquestamcp.MCPRunSupervisorToolResultV0 {
+	last := codexStackRunSupervisorSnapshotMCPV0(partial.Last)
+	last.EvidenceRefs = compactStringsV0(append(
+		last.EvidenceRefs,
+		"evidence-ref-domain-work-completed-post-delivery-supervisor-error",
+	))
+	result := orquestamcp.NewMCPRunSupervisorOKResultV0(
+		input,
+		firstNonEmptyQueuedSourceV0(partial.Last.SessionRef, input.RunRef),
+		codexStackDeliveredWithPostDeliverySupervisorErrorV0,
+		partial.Ticks,
+		last,
+		codexStackRunSupervisorHistoryMCPV0(partial.History),
+	)
+	result.Diagnostics = []orquestamcp.MCPAutoprogrammingDiagnosticV0{{
+		Code:  codexStackDeliveredWithPostDeliverySupervisorErrorV0,
+		Scope: codexStackRunSupervisorReviewResultErrorScopeMCPV0(result.RunRef, partial.Last),
+		Message: strings.Join(compactStringsV0([]string{
+			"domain_work_completed=true",
+			"post_delivery_supervisor_error=" + codexStackRunSupervisorPublicDiagnosticErrorV0(codexStackRunSupervisorErrorStringV0(err)),
+			"action=preserve_delivery_evidence_retry_supervise_do_not_relaunch_provider_agent",
+		}), " "),
+		EvidenceRefs: result.EvidenceRefs,
+	}}
+	result.NextActions = []string{
+		"preserve_delivery_evidence",
+		"retry_supervise",
+		"do_not_relaunch_provider_agent",
 	}
 	return result
 }
@@ -366,6 +406,17 @@ func codexStackRunSupervisorSnapshotHasDomainCompletionEvidenceV0(
 		}
 	}
 	return false
+}
+
+func codexStackRunSupervisorDeliveredWithPostDeliverySupervisorErrorV0(
+	snapshot CodexSupervisorRuntimeSnapshotV0,
+	err error,
+) bool {
+	if err == nil || !codexStackRunSupervisorSnapshotHasDomainCompletionEvidenceV0(snapshot) {
+		return false
+	}
+	var reviewErr orquestacoreworkflow.ReviewResultErrorV0
+	return !errors.As(err, &reviewErr)
 }
 
 func codexStackRunSupervisorReviewResultErrorScopeMCPV0(

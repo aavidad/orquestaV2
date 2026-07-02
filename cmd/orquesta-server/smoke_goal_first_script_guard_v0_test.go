@@ -198,6 +198,24 @@ func TestSmokesAisladosPasanRuntimeDirAlShutdownComunV0(t *testing.T) {
 	}
 }
 
+func TestSmokeOPESReviewsProvidersRealExigeOptInLegacyYWorkdirOPESV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_opes_reviews_providers_real.sh")
+
+	for _, want := range []string{
+		"ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP",
+		"ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP",
+		"director_execution_mode=legacy_director_loop",
+		"ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=true",
+		"repo OPES real",
+		"external/opes/",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("smoke OPES proveedores debe fijar opt-in legacy y workdir seguro: falta %q", want)
+		}
+	}
+}
+
 func TestScriptsQueArrancanServidorTemporalUsanShutdownComunV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	scriptsDir := filepath.Join(root, "scripts")

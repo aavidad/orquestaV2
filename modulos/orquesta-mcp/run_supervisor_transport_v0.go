@@ -18,6 +18,9 @@ func mcpRunSupervisorTransportHandlerV0(
 		}
 		result, err := port.Execute(ctx, input)
 		if err != nil {
+			if mcpRunSupervisorClassifiedOKResultDespiteExecutorErrorV0(result) {
+				return json.Marshal(result)
+			}
 			if result.Estado == MCPRunSupervisorEstadoErrorV0 && len(result.Errores) > 0 {
 				return json.Marshal(result)
 			}

@@ -66,6 +66,10 @@ func (handler mcpRunSupervisorHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r 
 		return
 	}
 	if err != nil {
+		if mcpRunSupervisorClassifiedOKResultDespiteExecutorErrorV0(result) {
+			writeMCPRunSupervisorHTTPV0(w, http.StatusOK, result)
+			return
+		}
 		if result.Estado == MCPRunSupervisorEstadoErrorV0 && len(result.Errores) > 0 {
 			writeMCPRunSupervisorHTTPV0(w, http.StatusInternalServerError, result)
 			return
