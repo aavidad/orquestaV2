@@ -375,6 +375,83 @@ func TestMCPRunControlExecutorV0StopForcedReconcilesGoalHighConsumptionSinCheckp
 	}
 }
 
+func TestMCPRunControlExecutorV0StopForcedReconcilesGoalBackendMissingAfterExternalCleanup(t *testing.T) {
+	runRef := "run-ref-run-control-goal-backend-missing-stop-001"
+	goalRef := "goal-ref-run-control-goal-backend-missing-stop-001"
+	externalGoalRef := "thread-ref-" + goalRef
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Reconciliar estado running tras cleanup externo.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+		EvidenceRefs: []string{"evidence-ref-run-control-goal-state-external-cleanup-seeded"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	port := &fakeMCPRunControlPortV0{
+		readState:  runControlStateForMCPTestV0(runRef, orquestaruncontrol.RunControlStatusRunningV0, false),
+		stopStatus: orquestaruncontrol.RunControlStatusStoppedV0,
+	}
+	goalBackend := &fakeMCPRunControlGoalBackendStateV0{
+		results: []MCPDirectorStatsToolResultV0{
+			{Estado: MCPDirectorStatsEstadoOKV0, RunRef: runRef},
+			{Estado: MCPDirectorStatsEstadoOKV0, RunRef: runRef},
+		},
+	}
+	executor := MCPRunControlToolExecutorV0{
+		Port:             port,
+		GoalBackendState: goalBackend,
+		GoalStateStore:   goalStates,
+	}
+
+	result, err := executor.Execute(context.Background(), MCPRunControlToolInputV0{
+		RequestID:   "req-run-control-goal-backend-missing-stop-001",
+		Action:      "stop",
+		RunRef:      runRef,
+		RequestedBy: "orquesta-director",
+		Reason:      "reconciliar cleanup externo de backend goal",
+		Forced:      true,
+	})
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPRunControlEstadoOKV0 ||
+		result.Status != string(orquestaruncontrol.RunControlStatusStoppedV0) ||
+		result.RecommendedAction != "replan_narrow_context" ||
+		!containsMCPRunControlDiagnosticForTestV0(result.Diagnostics, "goal_state_terminal_reconciled_after_forced_stop") ||
+		!containsStringMCPTestV0(result.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) {
+		t.Fatalf("result=%+v", result)
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if state.Status != orquestagoal.GoalStatusBlockedV0 ||
+		state.LastResult == nil ||
+		state.LastResult.Status != orquestagoal.GoalStatusBlockedV0 ||
+		state.LastResult.GoalRef != goalRef ||
+		state.LastResult.ExternalGoalRef != externalGoalRef ||
+		state.LastClosure == nil ||
+		!state.LastClosure.NeedsRework ||
+		!containsStringMCPTestV0(state.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) {
+		t.Fatalf("state=%+v", state)
+	}
+}
+
 func TestMCPRunControlExecutorV0ValidaAction(t *testing.T) {
 	result, err := NewMCPRunControlToolExecutorV0(&fakeMCPRunControlPortV0{}).Execute(
 		context.Background(),

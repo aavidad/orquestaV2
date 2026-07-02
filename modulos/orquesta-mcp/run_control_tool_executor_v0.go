@@ -197,12 +197,7 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 		result.Estado != MCPRunControlEstadoOKV0 ||
 		(action != "stop" && action != "cancel") ||
 		!input.Forced ||
-		!mcpRunControlGoalBackendActiveV0(beforeGoal) ||
 		mcpRunControlGoalBackendActiveV0(afterGoal) {
-		return result
-	}
-	reasonCode, evidenceRef, ok := mcpRunControlForcedTerminalReasonV0(beforeGoal, executor.GoalProgressPolicy)
-	if !ok {
 		return result
 	}
 	runRef := strings.TrimSpace(input.RunRef)
@@ -212,6 +207,13 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 	}
 	state, err = orquestagoal.NewGoalWorkStateV0(state)
 	if err != nil || orquestagoal.GoalWorkResultTerminalV0(state.Status) {
+		return result
+	}
+	reasonCode, evidenceRef, ok := mcpRunControlForcedTerminalReasonV0(beforeGoal, executor.GoalProgressPolicy)
+	if !ok {
+		reasonCode, evidenceRef, ok = mcpRunControlForcedExternalCleanupReasonV0(state, beforeGoal, afterGoal)
+	}
+	if !ok {
 		return result
 	}
 	evidenceRefs := compactStringsMCPV0([]string{
@@ -268,6 +270,22 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 		)),
 	})
 	return result
+}
+
+func mcpRunControlForcedExternalCleanupReasonV0(
+	state orquestagoal.GoalWorkStateV0,
+	beforeGoal *MCPDirectorStatsToolResultV0,
+	afterGoal *MCPDirectorStatsToolResultV0,
+) (string, string, bool) {
+	if mcpRunControlGoalBackendActiveV0(beforeGoal) ||
+		mcpRunControlGoalBackendActiveV0(afterGoal) ||
+		strings.TrimSpace(state.ExternalGoalRef) == "" ||
+		!orquestagoal.GoalWorkStatePendingObservationV0(state) {
+		return "", "", false
+	}
+	return mcpAutoprogrammingActionGoalBackendMissingAfterExternalCleanupV0,
+		mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0,
+		true
 }
 
 func mcpRunControlForcedTerminalReasonV0(
