@@ -72,6 +72,7 @@ func BuildExternalWorkRunRequestWithContextV0(
 	expectedArtifactType := expectedArtifactTypeV0(workKind)
 	fields = appendFieldIfMissingV0(fields, "expected_artifact_type", expectedArtifactType)
 	fields = appendArtifactContractFieldsV0(fields, expectedArtifactType)
+	fields = appendExistingSyllabusQualityAuditFieldsV0(fields, workKind)
 	fields = appendFieldIfMissingV0(fields, "context_budget_profile", contextProfileForJobTypeV0(workKind))
 	fields = appendExpansionDocumentContractFieldsV0(fields, workKind)
 	fields = appendDocumentPlanContractFieldsV0(fields, workKind)
@@ -133,6 +134,11 @@ func appendArtifactContractFieldsV0(
 		contract.Canonicality = orquestadomainwork.DomainWorkArtifactCanonicalityCanonicalV0
 		contract.Stage = orquestadomainwork.DomainWorkArtifactStageFinalV0
 		contract.MaterializationTarget = orquestadomainwork.DomainWorkArtifactMaterializationTargetDomainV0
+	case opesArtifactTypeQualityAuditReportV0:
+		contract.SourceKind = orquestadomainwork.DomainWorkArtifactSourceKindEvidenceOnlyV0
+		contract.Canonicality = orquestadomainwork.DomainWorkArtifactCanonicalityEvidenceOnlyV0
+		contract.Stage = orquestadomainwork.DomainWorkArtifactStageReviewV0
+		contract.MaterializationTarget = orquestadomainwork.DomainWorkArtifactMaterializationTargetEvidenceV0
 	case opesArtifactTypeLearningGamesPackageV0, opesArtifactTypeHelpManualPackageV0,
 		opesArtifactTypeVisualReuseManifestV0:
 		contract.SourceKind = orquestadomainwork.DomainWorkArtifactSourceKindDerivedRegenerableV0
@@ -144,6 +150,30 @@ func appendArtifactContractFieldsV0(
 	fields = appendFieldIfMissingV0(fields, "artifact_canonicality", contract.Canonicality)
 	fields = appendFieldIfMissingV0(fields, "artifact_stage", contract.Stage)
 	fields = appendFieldIfMissingV0(fields, "artifact_materialization_target", contract.MaterializationTarget)
+	return fields
+}
+
+func appendExistingSyllabusQualityAuditFieldsV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+	workKind string,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	switch strings.TrimSpace(workKind) {
+	case "audit_existing_syllabus_quality", "audit_temario_existente",
+		"quality_audit_existing_syllabus", "auditoria_calidad_temario_existente":
+	default:
+		return fields
+	}
+	fields = appendFieldIfMissingV0(fields, "audit_contract", "opes_existing_syllabus_quality_audit.v0")
+	fields = appendFieldIfMissingV0(fields, "audit_scope", "existing_syllabus")
+	fields = appendValuesFieldIfMissingV0(fields, "required_decision_values", []string{
+		"apto",
+		"revision",
+		"rework_menor",
+		"rework_mayor",
+		"bloqueado",
+	})
+	fields = appendFieldIfMissingV0(fields, "required_rework_task_materialization", "per_topic_rework_tasks")
+	fields = appendFieldIfMissingV0(fields, "orquesta_runtime_discovery_contract", "server_readiness_then_resources_route_manifest")
 	return fields
 }
 
@@ -505,9 +535,14 @@ func workRefsForPayloadV0(
 ) []string {
 	refs := []string{"opes-job-" + compactOPESBridgeRefV0(job.ID)}
 	for _, name := range []string{
+		"course_id",
 		"program_id",
 		"topic_id",
 		"chapter_id",
+		"package_ref",
+		"syllabus_ref",
+		"existing_syllabus_ref",
+		"audit_scope_ref",
 		"summary_job_id",
 		"summary_artifact_id",
 		"source_version_id",

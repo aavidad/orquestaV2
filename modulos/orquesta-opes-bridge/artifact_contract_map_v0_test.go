@@ -31,6 +31,7 @@ func TestOPESBridgeArtifactContractMapConsumeOwnerNeutralV0(t *testing.T) {
 		"vote_agent_candidates_gemini",
 		"vote_agent_candidates_claude",
 		"review_director_consolidation",
+		"audit_existing_syllabus_quality",
 		"validate_topic",
 		"expand_topic_from_summary",
 		"assemble_topic",
@@ -95,6 +96,8 @@ func expectedOPESArtifactForBridgeMapTestV0(workKind string) string {
 		return opesArtifactTypeVisualReuseManifestV0
 	case "review_director_consolidation":
 		return orquestadomainwork.DomainWorkArtifactTypeDirectorReviewMatrixV0
+	case "audit_existing_syllabus_quality":
+		return opesArtifactTypeQualityAuditReportV0
 	case "finalize_temario_package":
 		return opesArtifactTypeCompletedSyllabusPackageV0
 	default:
@@ -112,6 +115,11 @@ func expectedOPESArtifactContractForBridgeMapTestV0(
 		contract.Canonicality = orquestadomainwork.DomainWorkArtifactCanonicalityCanonicalV0
 		contract.Stage = orquestadomainwork.DomainWorkArtifactStageFinalV0
 		contract.MaterializationTarget = orquestadomainwork.DomainWorkArtifactMaterializationTargetDomainV0
+	case opesArtifactTypeQualityAuditReportV0:
+		contract.SourceKind = orquestadomainwork.DomainWorkArtifactSourceKindEvidenceOnlyV0
+		contract.Canonicality = orquestadomainwork.DomainWorkArtifactCanonicalityEvidenceOnlyV0
+		contract.Stage = orquestadomainwork.DomainWorkArtifactStageReviewV0
+		contract.MaterializationTarget = orquestadomainwork.DomainWorkArtifactMaterializationTargetEvidenceV0
 	case opesArtifactTypeLearningGamesPackageV0, opesArtifactTypeHelpManualPackageV0,
 		opesArtifactTypeVisualReuseManifestV0:
 		contract.SourceKind = orquestadomainwork.DomainWorkArtifactSourceKindDerivedRegenerableV0

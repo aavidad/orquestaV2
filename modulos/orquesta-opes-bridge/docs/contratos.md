@@ -102,6 +102,17 @@ Reglas:
   reutilizables del temario antes de ampliar alcance; excluye por defecto
   backups, paquetes historicos, snapshots y runtime salvo auditoria global
   explicita;
+- para `audit_existing_syllabus_quality` y alias
+  `audit_temario_existente`, `quality_audit_existing_syllabus` y
+  `auditoria_calidad_temario_existente`, el bridge exige
+  `expected_artifact_type=opes_quality_audit_report`, contrato
+  `opes_existing_syllabus_quality_audit.v0` y contexto `large`. El job audita
+  un temario OPES ya existente sin crear curso nuevo ni depender de puertos
+  historicos locales; debe devolver `decision_global` en
+  `apto|revision|rework_menor|rework_mayor|bloqueado`, evidencias, temas
+  afectados y `rework_task_requests` por tema cuando el dictamen pida revision
+  o rework. La disponibilidad de Orquesta se demuestra por readiness y
+  `server/resources.route_manifest`, no por `/healthz` ni puertos memorizados;
 - para `generate_question_bank`, el bridge exige
   `expected_artifact_type=question_bank` y tests por tema con 4 opciones A-D,
   una correcta exacta, distractores plausibles, explicacion tutor, JSON por

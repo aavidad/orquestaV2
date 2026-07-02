@@ -34,8 +34,15 @@
   agent_review_report`, revisiones por pares
   `review_pair_codex_gemini|review_pair_codex_claude|review_pair_gemini_claude
   -> agent_pair_review_report`, `review_director_consolidation ->
-  director_review_matrix` y `finalize_temario_package ->
+  director_review_matrix`, `audit_existing_syllabus_quality ->
+  opes_quality_audit_report` y `finalize_temario_package ->
   completed_syllabus_package`.
+- Contrato de auditoria de temario existente: `audit_existing_syllabus_quality`
+  conserva el `work_kind` aunque se transporte como `review_textual`, declara
+  `audit_contract=opes_existing_syllabus_quality_audit.v0`, decision global
+  obligatoria `apto|revision|rework_menor|rework_mayor|bloqueado`, refs de
+  curso/paquete/temario existente y materializacion posterior por
+  `rework_task_requests`, sin depender de puertos historicos.
 - Contrato de corpus RAG regenerable: audio, tutor, QA independiente, QA por
   pares, consolidacion del Director y cierre de temario transportan que
   `10_tutor_rag/corpus/` no es fuente primaria de rework textual por defecto;

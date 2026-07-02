@@ -79,6 +79,22 @@ ORQUESTA_OPES_BRIDGE_JOB_TYPE=plan_temario
 Ese scope solo separa temarios y evita mezclar colas; no es un filtro de
 calidad, formato ni palabras exactas de los agentes.
 
+## Auditoria de temario existente
+
+El modo vigente de OPES prioriza revisar y mejorar temarios existentes. Para
+ese caso OPES debe crear jobs externos con
+`work_kind=audit_existing_syllabus_quality` o alias
+`audit_temario_existente`/`quality_audit_existing_syllabus`. El bridge conserva
+ese `work_kind`, lo puede transportar como `review_textual` y exige el artefacto
+`opes_quality_audit_report`.
+
+El contrato de salida debe incluir `decision_global` con uno de
+`apto|revision|rework_menor|rework_mayor|bloqueado`, evidencias del dictamen y,
+si procede, `rework_task_requests` por tema para que Orquesta materialice
+trabajos focales posteriores. El agente no debe buscar Orquesta en puertos
+historicos: la disponibilidad se prueba por `/api/v0/server/readiness` y
+`/api/v0/server/resources`.
+
 Modo residente por pases:
 
 ```sh

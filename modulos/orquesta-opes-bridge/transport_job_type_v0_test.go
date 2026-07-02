@@ -11,6 +11,7 @@ func TestOPESBridgeTransportJobTypeForWorkKindV0(t *testing.T) {
 		{workKind: "review_codex", want: "review_textual"},
 		{workKind: "review_pair_codex_gemini", want: "review_textual"},
 		{workKind: "review_director_consolidation", want: "review_textual"},
+		{workKind: "audit_existing_syllabus_quality", want: "review_textual"},
 		{workKind: "generate_learning_games", want: "generate_tutor_assets"},
 		{workKind: "finalize_temario_package", want: "generate_help_manual_assets"},
 		{workKind: "research_exam_precedents", want: "research_exam_precedents"},

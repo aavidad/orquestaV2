@@ -9,6 +9,8 @@ func OPESBridgeTransportJobTypeForWorkKindV0(workKind string) string {
 		"review_codex", "review_gemini", "review_claude",
 		"review_pair_codex_gemini", "review_pair_codex_claude", "review_pair_gemini_claude",
 		"review_director_consolidation", "review_director_final", "review_consensus_director",
+		"audit_existing_syllabus_quality", "audit_temario_existente",
+		"quality_audit_existing_syllabus", "auditoria_calidad_temario_existente",
 		"generate_agent_candidate_codex", "generate_agent_candidate_gemini", "generate_agent_candidate_claude",
 		"generate_provider_candidate",
 		"vote_agent_candidates_codex", "vote_agent_candidates_gemini", "vote_agent_candidates_claude",

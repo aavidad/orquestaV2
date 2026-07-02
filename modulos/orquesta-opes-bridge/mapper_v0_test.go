@@ -103,6 +103,61 @@ func TestBuildExternalWorkRunRequestV0UsaWorkKindCanonicoConJobTypeTransporte(t 
 	}
 }
 
+func TestBuildExternalWorkRunRequestV0MapeaAuditoriaTemarioExistenteV0(t *testing.T) {
+	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
+		ID:   "job-ref-auditoria-grupo-b-001",
+		Type: "review_textual",
+		PayloadJSON: `{
+			"work_kind":"audit_existing_syllabus_quality",
+			"course_id":"grupo-b-informatica",
+			"program_id":"program-ref-grupo-b",
+			"package_ref":"package-ref-grupo-b-final-local",
+			"existing_syllabus_ref":"syllabus-ref-grupo-b-final-local",
+			"audit_scope_ref":"audit-scope-ref-grupo-b-calidad"
+		}`,
+	}, JobRunConfigV0{})
+
+	if !ok {
+		t.Fatalf("request no construida")
+	}
+	work := req.AppChangeRequest.ExternalWork
+	if work == nil ||
+		work.WorkKind != "audit_existing_syllabus_quality" ||
+		req.AppChangeRequest.AllowedWriteSet[0] != "external/opes/audit_existing_syllabus_quality/job-ref-auditoria-grupo-b-001" ||
+		!fieldValueForTestV0(work.InputFields, "job_type", "review_textual") ||
+		!fieldValueForTestV0(work.InputFields, "transport_job_type", "review_textual") ||
+		!fieldValueForTestV0(work.InputFields, "expected_artifact_type", opesArtifactTypeQualityAuditReportV0) ||
+		!fieldValueForTestV0(work.InputFields, "audit_contract", "opes_existing_syllabus_quality_audit.v0") ||
+		!fieldValueForTestV0(work.InputFields, "audit_scope", "existing_syllabus") ||
+		!fieldValueForTestV0(work.InputFields, "required_rework_task_materialization", "per_topic_rework_tasks") ||
+		!fieldValueForTestV0(work.InputFields, "orquesta_runtime_discovery_contract", "server_readiness_then_resources_route_manifest") ||
+		!fieldValuesForTestV0(work.InputFields, "required_decision_values", []string{
+			"apto",
+			"revision",
+			"rework_menor",
+			"rework_mayor",
+			"bloqueado",
+		}) ||
+		!fieldValueForTestV0(work.InputFields, "artifact_source_kind", orquestadomainwork.DomainWorkArtifactSourceKindEvidenceOnlyV0) ||
+		!fieldValueForTestV0(work.InputFields, "artifact_canonicality", orquestadomainwork.DomainWorkArtifactCanonicalityEvidenceOnlyV0) ||
+		!fieldValueForTestV0(work.InputFields, "artifact_stage", orquestadomainwork.DomainWorkArtifactStageReviewV0) ||
+		!fieldValueForTestV0(work.InputFields, "artifact_materialization_target", orquestadomainwork.DomainWorkArtifactMaterializationTargetEvidenceV0) ||
+		!containsStringForTestV0(work.WorkRefs, "opes-course_id-grupo-b-informatica") ||
+		!containsStringForTestV0(work.WorkRefs, "opes-package_ref-package-ref-grupo-b-final-local") ||
+		!containsStringForTestV0(work.WorkRefs, "opes-existing_syllabus_ref-syllabus-ref-grupo-b-final-local") ||
+		!containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "devolver opes_quality_audit_report con decision_global apto|revision|rework_menor|rework_mayor|bloqueado") ||
+		!containsStringForTestV0(req.AppChangeRequest.AcceptanceCriteria, "preparar rework_task_requests por tema para que Orquesta materialice trabajos focales posteriores, sin editar internals de OPES ni SQL directo") {
+		t.Fatalf("request=%+v work=%+v", req, work)
+	}
+	if len(work.RequiredTests) == 0 ||
+		!containsStringForTestV0(
+			work.RequiredTests[0].AcceptanceCriteriaRefs,
+			"opes-required-artifact-"+opesArtifactTypeQualityAuditReportV0,
+		) {
+		t.Fatalf("required_tests=%+v", work.RequiredTests)
+	}
+}
+
 func TestBuildExternalWorkRunRequestV0MapeaExpansionComoLarge(t *testing.T) {
 	req, ok := BuildExternalWorkRunRequestV0(orquestaopesconnector.ExternalJobV0{
 		ID:   "job-ref-expansion-001",

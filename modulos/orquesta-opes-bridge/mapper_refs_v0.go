@@ -13,6 +13,7 @@ const (
 	opesArtifactTypeHelpManualPackageV0        = "help_manual_package"
 	opesArtifactTypeVisualReuseManifestV0      = "visual_reuse_manifest"
 	opesArtifactTypeCompletedSyllabusPackageV0 = "completed_syllabus_package"
+	opesArtifactTypeQualityAuditReportV0       = "opes_quality_audit_report"
 )
 
 func appendOpaqueExecutionRefFieldsV0(
@@ -73,6 +74,9 @@ func expectedArtifactTypeV0(jobType string) string {
 		return orquestadomainwork.DomainWorkArtifactTypeAgentPairReviewReportV0
 	case "review_director_consolidation", "review_director_final":
 		return orquestadomainwork.DomainWorkArtifactTypeDirectorReviewMatrixV0
+	case "audit_existing_syllabus_quality", "audit_temario_existente",
+		"quality_audit_existing_syllabus", "auditoria_calidad_temario_existente":
+		return opesArtifactTypeQualityAuditReportV0
 	case "generate_agent_candidate_codex", "generate_agent_candidate_gemini",
 		"generate_agent_candidate_claude", "generate_provider_candidate":
 		return orquestadomainwork.DomainWorkArtifactTypeAgentCandidateV0
@@ -123,6 +127,10 @@ func contextProfileForJobTypeV0(jobType string) string {
 		"review_pair_codex_claude",
 		"review_pair_gemini_claude",
 		"review_director_consolidation",
+		"audit_existing_syllabus_quality",
+		"audit_temario_existente",
+		"quality_audit_existing_syllabus",
+		"auditoria_calidad_temario_existente",
 		"validate_topic",
 		"assemble_topic",
 		"generate_html_site",
@@ -195,6 +203,9 @@ func acceptanceCriteriaForJobV0(jobType string) []string {
 		criteria = append(criteria, pairedAgentReviewAcceptanceCriteriaV0(jobType)...)
 	case "review_director_consolidation", "review_director_final":
 		criteria = append(criteria, directorConsolidationAcceptanceCriteriaV0()...)
+	case "audit_existing_syllabus_quality", "audit_temario_existente",
+		"quality_audit_existing_syllabus", "auditoria_calidad_temario_existente":
+		criteria = append(criteria, existingSyllabusQualityAuditAcceptanceCriteriaV0()...)
 	case "update_topic_registry", "claim_topic_registry", "release_topic_registry":
 		criteria = append(criteria, topicRegistryUpdateAcceptanceCriteriaV0()...)
 	case "finalize_topic_package":
@@ -203,6 +214,17 @@ func acceptanceCriteriaForJobV0(jobType string) []string {
 		criteria = append(criteria, finalizedTemarioPackageAcceptanceCriteriaV0()...)
 	}
 	return criteria
+}
+
+func existingSyllabusQualityAuditAcceptanceCriteriaV0() []string {
+	return append([]string{
+		"auditar un temario OPES existente sin crear temario nuevo ni rehacer material por defecto",
+		"no depender de puertos historicos locales; usar solo la Orquesta ya descubierta por readiness y route_manifest o bloquear con orquesta_unavailable accionable",
+		"devolver opes_quality_audit_report con decision_global apto|revision|rework_menor|rework_mayor|bloqueado",
+		"si decision_global es revision, rework_menor o rework_mayor, listar topic_refs afectados con severity, reason, evidence_refs y proposed_work_kind por tema",
+		"preparar rework_task_requests por tema para que Orquesta materialice trabajos focales posteriores, sin editar internals de OPES ni SQL directo",
+		"registrar el dictamen como evidencia de dominio y topic_registry_update propuesto cuando aplique; no cerrar solo con informe local fuera de Orquesta",
+	}, regenerableRAGCorpusAcceptanceCriteriaV0()...)
 }
 
 func topicRegistryUpdateAcceptanceCriteriaV0() []string {
