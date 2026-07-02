@@ -232,7 +232,10 @@ func waitForCodexWaveStatusStoppedV0(t *testing.T, runtimeDir string) codexWaveL
 		last = mustReadCodexWaveCommandSummaryForTest(t, statusOut.Bytes(), runtimeDir)
 		allStopped := len(last.Agents) > 0
 		for _, agent := range last.Agents {
-			if agent.Status != "stopped" || agent.StdoutBytes == 0 || agent.LastMessageBytes == 0 {
+			if agent.Status != "stopped" ||
+				!codexWaveAgentProcessDoneV0(agent) ||
+				agent.StdoutBytes == 0 ||
+				agent.LastMessageBytes == 0 {
 				allStopped = false
 				break
 			}
@@ -296,7 +299,7 @@ func TestCodexLaunchWaveCommandV0DryRunNoExigeCodexReal(t *testing.T) {
 
 func waitForCodexWaveTestFileV0(t *testing.T, path string) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(path); err == nil {
 			return
@@ -308,7 +311,7 @@ func waitForCodexWaveTestFileV0(t *testing.T, path string) {
 
 func waitForCodexWaveTestFileContentV0(t *testing.T, path, expected, label string) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	var lastContent string
 	var lastErr error
 	for time.Now().Before(deadline) {

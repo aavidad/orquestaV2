@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"go/build"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,15 +46,29 @@ func TestFlakyHarnessV0RepiteCasoDirectorRecursiveFakeRuntimeV0(t *testing.T) {
 		cacheRoot = filepath.Join(os.TempDir(), "orquesta-flaky-harness-go")
 	}
 	childGoCache := filepath.Join(cacheRoot, "build")
-	childGoModCache := filepath.Join(cacheRoot, "mod")
+	childGoModCache := flakyHarnessReusableModCacheV0()
+	childGoProxy := "off"
+	ownedGoModCache := false
+	if childGoModCache == "" {
+		childGoModCache = filepath.Join(cacheRoot, "mod")
+		childGoProxy = strings.TrimSpace(os.Getenv("GOPROXY"))
+		if childGoProxy == "" {
+			childGoProxy = "https://proxy.golang.org,direct"
+		}
+		ownedGoModCache = true
+	}
 	childGoPath := filepath.Join(cacheRoot, "path")
 	for label, path := range map[string]string{
-		"GOCACHE":    childGoCache,
-		"GOMODCACHE": childGoModCache,
-		"GOPATH":     childGoPath,
+		"GOCACHE": childGoCache,
+		"GOPATH":  childGoPath,
 	} {
 		if err := os.MkdirAll(path, 0o700); err != nil {
 			t.Fatalf("preparar %s para child: %v", label, err)
+		}
+	}
+	if ownedGoModCache {
+		if err := os.MkdirAll(childGoModCache, 0o700); err != nil {
+			t.Fatalf("preparar GOMODCACHE para child: %v", err)
 		}
 	}
 	childEnv := append(
@@ -62,6 +77,7 @@ func TestFlakyHarnessV0RepiteCasoDirectorRecursiveFakeRuntimeV0(t *testing.T) {
 		"GOCACHE="+childGoCache,
 		"GOMODCACHE="+childGoModCache,
 		"GOPATH="+childGoPath,
+		"GOPROXY="+childGoProxy,
 	)
 	preflightCtx, preflightCancel := context.WithTimeout(context.Background(), flakyHarnessAttemptTimeoutV0)
 	preflight := exec.CommandContext(preflightCtx, "go", "mod", "download")
@@ -118,6 +134,26 @@ func TestFlakyHarnessV0RepiteCasoDirectorRecursiveFakeRuntimeV0(t *testing.T) {
 		}
 		cancel()
 	}
+}
+
+func flakyHarnessReusableModCacheV0() string {
+	candidates := []string{strings.TrimSpace(os.Getenv("GOMODCACHE"))}
+	if gopath := strings.TrimSpace(os.Getenv("GOPATH")); gopath != "" {
+		candidates = append(candidates, filepath.Join(gopath, "pkg", "mod"))
+	}
+	if build.Default.GOPATH != "" {
+		candidates = append(candidates, filepath.Join(build.Default.GOPATH, "pkg", "mod"))
+	}
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(candidate, "golang.org", "x", "text@v0.38.0", "go.mod")); err == nil {
+			return candidate
+		}
+	}
+	return ""
 }
 
 func projectRootForFlakyHarnessV0(t *testing.T) string {
