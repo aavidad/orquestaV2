@@ -111,6 +111,10 @@ func (backend serverCodexAppServerTmuxBackendV0) detectTmuxResidueV0(ctx context
 		residue.Active = true
 		residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-runtime-workdir")
 	}
+	if backend.detectCodexAppServerRuntimeOwnedProcessV0(ctx) {
+		residue.Active = true
+		residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-runtime-owned")
+	}
 	if residue.Active {
 		residue.EvidenceRefs = compactStringsV0(append(
 			[]string{"evidence-ref-codex-app-server-tmux-residue"},
@@ -328,4 +332,110 @@ func codexAppServerTmuxCommandMatchesRuntimeWorkdirSocketV0(command string, sock
 		return false
 	}
 	return strings.Contains(command, "unix://"+socketRoot+"/")
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) detectCodexAppServerRuntimeOwnedProcessV0(ctx context.Context) bool {
+	runtimeDir := strings.TrimSpace(backend.RuntimeWorkDir)
+	if runtimeDir == "" || !backend.tmuxConfiguredOrphanCleanupAllowedV0() {
+		return false
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return false
+	}
+	return codexAppServerTmuxRuntimeOwnedProcessExistsV0(ctx, filepath.Join(filepath.Clean(runtimeDir), codexAppServerTmuxDirV0))
+}
+
+func codexAppServerTmuxRuntimeOwnedProcessExistsV0(ctx context.Context, runtimeGoalDir string) bool {
+	runtimeGoalDir = strings.TrimSpace(runtimeGoalDir)
+	if runtimeGoalDir == "" {
+		return false
+	}
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return false
+		}
+		if !entry.IsDir() || !codexAppServerTmuxProcNameLooksPIDV0(entry.Name()) {
+			continue
+		}
+		procDir := filepath.Join("/proc", entry.Name())
+		command, ok := codexAppServerTmuxProcCommandV0(procDir)
+		if !ok || !codexAppServerTmuxCommandLooksAppServerV0(command) {
+			continue
+		}
+		if codexAppServerTmuxProcRuntimeOwnedV0(procDir, runtimeGoalDir) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexAppServerTmuxProcNameLooksPIDV0(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, char := range name {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func codexAppServerTmuxProcCommandV0(procDir string) (string, bool) {
+	raw, err := os.ReadFile(filepath.Join(procDir, "cmdline"))
+	if err != nil || len(raw) == 0 {
+		return "", false
+	}
+	return strings.TrimSpace(strings.ReplaceAll(string(raw), "\x00", " ")), true
+}
+
+func codexAppServerTmuxCommandLooksAppServerV0(command string) bool {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return false
+	}
+	return strings.Contains(command, "codex") && strings.Contains(command, "app-server")
+}
+
+func codexAppServerTmuxProcRuntimeOwnedV0(procDir string, runtimeGoalDir string) bool {
+	if cwd, err := os.Readlink(filepath.Join(procDir, "cwd")); err == nil &&
+		codexAppServerTmuxPathUnderRuntimeGoalDirV0(cwd, runtimeGoalDir) {
+		return true
+	}
+	raw, err := os.ReadFile(filepath.Join(procDir, "environ"))
+	if err != nil || len(raw) == 0 {
+		return false
+	}
+	for _, entry := range strings.Split(string(raw), "\x00") {
+		value, ok := strings.CutPrefix(entry, "CODEX_HOME=")
+		if ok && codexAppServerTmuxPathUnderRuntimeGoalDirV0(value, runtimeGoalDir) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexAppServerTmuxPathUnderRuntimeGoalDirV0(path string, runtimeGoalDir string) bool {
+	path = strings.TrimSpace(path)
+	runtimeGoalDir = strings.TrimSpace(runtimeGoalDir)
+	if path == "" || runtimeGoalDir == "" {
+		return false
+	}
+	cleanPath := filepath.Clean(path)
+	cleanRoot := filepath.Clean(runtimeGoalDir)
+	if cleanPath == cleanRoot {
+		return true
+	}
+	rel, err := filepath.Rel(cleanRoot, cleanPath)
+	if err != nil || rel == "." || rel == "" {
+		return false
+	}
+	return !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && rel != ".."
 }

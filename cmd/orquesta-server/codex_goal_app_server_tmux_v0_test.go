@@ -1163,6 +1163,62 @@ func TestCodexAppServerTmuxBackendV0ReadActiveShutdownWorkDetectaProcesoEnRuntim
 	}
 }
 
+func TestCodexAppServerTmuxBackendV0ReadActiveShutdownWorkDetectaProcesoPropioSinSocketPorRuntimeWorkdirV0(t *testing.T) {
+	if _, err := os.Stat("/proc/self/cwd"); err != nil {
+		t.Skipf("procfs no disponible: %v", err)
+	}
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "runtime")
+	ownedWorkdir := filepath.Join(runtimeDir, codexAppServerTmuxDirV0, "owned-cwd")
+	if err := os.MkdirAll(ownedWorkdir, 0o700); err != nil {
+		t.Fatalf("mkdir owned workdir: %v", err)
+	}
+	command := exec.Command(
+		"bash",
+		"-c",
+		"exec -a codex sh -c 'sleep 30' app-server",
+	)
+	command.Dir = ownedWorkdir
+	if err := command.Start(); err != nil {
+		t.Fatalf("start fake app-server runtime-owned: %v", err)
+	}
+	defer func() {
+		_ = command.Process.Kill()
+		_, _ = command.Process.Wait()
+	}()
+	backend := serverCodexAppServerTmuxBackendV0{
+		RuntimeWorkDir: runtimeDir,
+		SocketPath:     filepath.Join(runtimeDir, codexAppServerTmuxDirV0, "configured.sock"),
+		SessionName:    "orquesta-goal-runtime-owned-1234567890",
+		Timeout:        50 * time.Millisecond,
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var result orquestaservershutdown.ActiveShutdownWorkResultV0
+	var err error
+	for time.Now().Before(deadline) {
+		result, err = backend.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{})
+		if err != nil {
+			t.Fatalf("ReadActiveShutdownWorkV0: %v", err)
+		}
+		if containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-runtime-owned") {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if len(result.ActiveWorks) != 1 ||
+		result.ActiveWorks[0].WorkRef != backend.SessionName ||
+		result.ActiveWorks[0].Status != orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0 ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-runtime-owned") {
+		t.Fatalf("result=%+v", result)
+	}
+	for _, ref := range result.EvidenceRefs {
+		if strings.Contains(ref, ownedWorkdir) || strings.Contains(ref, strconv.Itoa(command.Process.Pid)) {
+			t.Fatalf("evidence filtro ruta/pid: %+v", result.EvidenceRefs)
+		}
+	}
+}
+
 func TestCodexAppServerTmuxCommandsContainRuntimeWorkdirSocketV0IgnoraSocketExternoV0(t *testing.T) {
 	root := t.TempDir()
 	runtimeDir := filepath.Join(root, "runtime")
