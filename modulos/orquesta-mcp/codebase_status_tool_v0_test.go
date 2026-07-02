@@ -48,7 +48,7 @@ func TestMCPCodebaseStatusInputSchemaV0ExponeCampos(t *testing.T) {
 	for _, field := range fields {
 		seen[field.Name] = true
 	}
-	for _, want := range []string{"request_ref", "repository_ref", "tool_ref", "observed_at", "include_terminal"} {
+	for _, want := range []string{"request_ref", "repository_ref", "tool_ref", "observed_at", "include_terminal", "default_cpu_high_percent", "observations"} {
 		if !seen[want] {
 			t.Fatalf("campo %q no encontrado en %+v", want, fields)
 		}
@@ -83,6 +83,23 @@ func codebaseStatusLeaseStoreTestV0(
 		t.Fatalf("begin lease: %v", err)
 	}
 	return leases
+}
+
+func codebaseStatusActiveLeaseTestV0(
+	t *testing.T,
+	leases *orquestacontext.InMemoryCodeContextToolLeaseStoreV0,
+) orquestacontext.CodeContextToolLeaseV0 {
+	t.Helper()
+	active, err := leases.ListCodeContextToolLeasesV0(context.Background(), orquestacontext.CodeContextToolLeaseListFilterV0{
+		Status: orquestacontext.CodeContextToolLeaseStatusActiveV0,
+	})
+	if err != nil {
+		t.Fatalf("list active leases: %v", err)
+	}
+	if len(active) != 1 {
+		t.Fatalf("active leases=%+v", active)
+	}
+	return active[0]
 }
 
 func validMCPCodebaseStatusInputTestV0(started time.Time) MCPCodebaseStatusToolInputV0 {
