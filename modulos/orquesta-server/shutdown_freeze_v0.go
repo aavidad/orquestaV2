@@ -19,6 +19,7 @@ type serverShutdownHTTPProjectionV0 struct {
 	AgentsInFlight          int                                  `json:"agents_in_flight,omitempty"`
 	CheckpointsPending      int                                  `json:"checkpoints_pending,omitempty"`
 	CheckpointAgentsPending int                                  `json:"checkpoint_agents_pending,omitempty"`
+	AsyncWorkActive         int                                  `json:"shutdown_async_work_active,omitempty"`
 	ActiveWorkCount         int                                  `json:"active_work_count,omitempty"`
 	ActiveWorkRefs          []string                             `json:"active_work_refs,omitempty"`
 	ActiveWorks             []serverShutdownHTTPWorkProjectionV0 `json:"active_works,omitempty"`
@@ -142,6 +143,7 @@ func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjecti
 		AgentsInFlight:          payload.AgentsInFlight,
 		CheckpointsPending:      payload.CheckpointsPending,
 		CheckpointAgentsPending: payload.CheckpointAgentsPending,
+		AsyncWorkActive:         payload.AsyncWorkActive,
 		ActiveWorkCount:         payload.ActiveWorkCount,
 		ActiveWorkRefs: compactServerStringsV0(append(
 			shutdownProjectionDirectActiveWorkRefsV0(payload.ActiveWorkRefs),
@@ -235,6 +237,7 @@ func normalizeShutdownStopConfirmationV0(projection ShutdownProjectionV0) Shutdo
 	if projection.AgentsInFlight > 0 ||
 		projection.CheckpointsPending > 0 ||
 		projection.CheckpointAgentsPending > 0 ||
+		projection.AsyncWorkActive > 0 ||
 		projection.ActiveWorkCount > 0 ||
 		len(projection.ActiveWorkRefs) > 0 ||
 		(projection.RunsRequested > 0 && projection.RunsStopped < projection.RunsRequested) {

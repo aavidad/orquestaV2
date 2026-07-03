@@ -904,6 +904,14 @@ error publico `shutdown_not_ready` conserva `async_work=N` para que
 `TestShutdownClientReadyV0NoSaltaTrabajoPendienteAunqueReadyV0` y
 `TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 14: la proyeccion HTTP del
+runtime servidor tambien ingiere `shutdown_async_work_active` cuando el handler
+de shutdown lo devuelve; si llega junto a `shutdown_ready=true`, lo convierte en
+`stop_pending`, mantiene congelado el supervisor y publica el contador en
+`/status`. Evidencia:
+`TestRuntimeV0ServerShutdownConservaAsyncWorkActiveV0` y
+`TestShutdownProjectionFromHTTPV0ReadySinConfirmacionesQuedaStopPendingV0`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y

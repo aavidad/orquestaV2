@@ -292,6 +292,16 @@ func TestShutdownProjectionFromHTTPV0ReadySinConfirmacionesQuedaStopPendingV0(t 
 			"runs_stopped":              1,
 			"checkpoint_agents_pending": 1,
 		},
+	}, {
+		name: "async_work_pendiente",
+		body: map[string]any{
+			"estado":                     "ok",
+			"status":                     "ready",
+			"shutdown_ready":             true,
+			"runs_requested":             1,
+			"runs_stopped":               1,
+			"shutdown_async_work_active": 1,
+		},
 	}}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -308,6 +318,48 @@ func TestShutdownProjectionFromHTTPV0ReadySinConfirmacionesQuedaStopPendingV0(t 
 				t.Fatalf("projection=%+v keep_frozen=%v", projection, keepFrozen)
 			}
 		})
+	}
+}
+
+func TestRuntimeV0ServerShutdownConservaAsyncWorkActiveV0(t *testing.T) {
+	stateDir := t.TempDir()
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != serverShutdownRoutePathV0 {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"estado":"ok",
+			"status":"ready",
+			"shutdown_ready":true,
+			"runs_requested":1,
+			"runs_stopped":1,
+			"shutdown_async_work_active":1
+		}`))
+	})
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:     stateDir,
+		TickInterval: time.Hour,
+	}, RuntimeDepsV0{
+		AppHandler: app,
+		Clock:      fixedClockV0{now: time.Date(2026, 7, 3, 23, 0, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, serverShutdownRoutePathV0, nil)
+	runtime.HandlerV0().ServeHTTP(httptest.NewRecorder(), req)
+	state := runtime.StateV0()
+	public := NewServerPublicStatusV0(state)
+
+	if !state.ShutdownInProgress ||
+		state.ShutdownReady ||
+		state.ShutdownStatus != "stop_pending" ||
+		state.ShutdownAsyncWorkActive != 1 ||
+		public.ShutdownAsyncWorkActive != 1 {
+		t.Fatalf("async_work_active no conservado: state=%+v public=%+v", state, public)
 	}
 }
 
