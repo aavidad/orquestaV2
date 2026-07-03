@@ -175,6 +175,15 @@ func TestRuntimeV0EscalationDirectorAplicaStopYEsIdempotentePorFirmaV0(t *testin
 		stopper.last.RequestedBy != escalationDirectorRequestedByV0 {
 		t.Fatalf("stopper calls=%d request=%+v", stopper.calls, stopper.last)
 	}
+	for _, want := range []string{
+		escalationDirectorStopEvidenceV0,
+		"evidence-ref-escalation-director-issue:goal_completed_without_materialized_result",
+		"evidence-ref-escalation-director-field:goal_result",
+	} {
+		if !containsStringForTestV0(stopper.last.EvidenceRefs, want) {
+			t.Fatalf("stopper evidence refs=%v want %s", stopper.last.EvidenceRefs, want)
+		}
+	}
 	if store.last.EscalationDirectorLastDecision != escalationDirectorDecisionStopV0 ||
 		store.last.EscalationDirectorInvocationsToday != 1 ||
 		store.last.EscalationDirectorDay != "2026-07-03" ||

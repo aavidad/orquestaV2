@@ -702,3 +702,37 @@ No se ejecuta smoke real por la congelacion operativa; queda recomendado como
 validacion acotada antes de reactivar automejora/pilotajes caros. En esta tanda
 solo sigue abierto `BUG-ORQ-20260703-149`; la deuda antigua OPES/goal-first/
 shutdown/write-set/status permanece inventariada como frente estructural aparte.
+
+### 2026-07-03 noche — Codex avanza BUG-088 y cierra BUG-149/160
+
+Trabajo directo acotado, sin relanzar automejora ni pilotajes congelados. Se
+usaron dos subagentes solo lectura, sin `codebase-memory-mcp`:
+- `019f29cc-f586-7b30-b6cd-2bde332358d8` (Singer): audito
+  `BUG-ORQ-20260703-149`; confirmo que el WIP remoto ya no tiene piezas
+  pequenas recomendables para extraer sobre HEAD. Los focales citados por la
+  incidencia estan verdes y el unico resto visible reintroduciria rail duro por
+  contexto truncado/ref-only.
+- `019f29cd-0c0d-7310-8c9c-8e1e27fb4223` (Ampere): audito `BUG-065/088` y
+  recomendo mover al `GoalObserver` residente el corte automatico de alto
+  consumo/checkpoint-only que ya estaba resuelto por superficies de status y
+  run-control.
+
+Cambios aplicados:
+- `BUG-ORQ-20260703-149` queda cerrado como WIP remoto triado/obsoleto: no se
+  integra ni se extraen mas piezas; el patch queda solo como evidencia
+  historica.
+- Nuevo helper `goal_observation_high_consumption_v0.go`: el observador
+  residente bloquea cualquier goal-first `running` con alto consumo y sin
+  artefacto util publicable, distingue `checkpoint_only_high_consumption` de
+  `goal_active_no_checkpoint_high_consumption`, persiste `blocked`/`NeedsRework`
+  y pide stop cooperativo con `replan_narrow_context`.
+- El director de escalada conserva evidencias compactas en el stop cooperativo
+  (`BUG-ORQ-20260703-160` cerrado): `evidence-ref-escalation-director-stop`,
+  codigo y campo saneados.
+
+Evidencia ejecutada:
+- `go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0GoalObserver(AltoConsumoCheckpointOnlyPideStopCooperativo|AltoConsumoSinCheckpointPideStopCooperativo|NoParaSiHayArtefactoUtil)V0|TestRuntimeV0EscalationDirectorAplicaStopYEsIdempotentePorFirmaV0'`
+- `go test -count=1 ./modulos/orquesta-server`
+
+`BUG-088` no se cierra: falta smoke real que confirme la ruta completa alto
+consumo/checkpoint -> segundo artefacto o replan sin app-server residual.

@@ -380,6 +380,212 @@ func TestRuntimeV0GoalObservationCheckpointInvalidoRepetidoCuentaSinProgresoV0(t
 	}
 }
 
+func TestRuntimeV0GoalObserverAltoConsumoCheckpointOnlyPideStopCooperativoV0(t *testing.T) {
+	now := time.Date(2026, 7, 3, 22, 45, 0, 0, time.UTC)
+	const runRef = "run-ref-goal-observer-checkpoint-only-001"
+	const goalRef = "goal-ref-goal-observer-checkpoint-only-001"
+	const externalGoalRef = "external-goal-ref-goal-observer-checkpoint-only-001"
+	state := mustIdleSelfImprovementGoalStateForProgressTestV0(t, runRef, goalRef, externalGoalRef)
+	goalStore := newMemoryGoalStateStoreV0()
+	if err := goalStore.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	supervisor := &fakeSupervisorV0{
+		goalObservationResult: []orquestagoal.GoalWorkObserveActiveResultV0{{
+			Observations: []orquestagoal.GoalWorkObserveResultV0{{
+				State: state,
+				Result: orquestagoal.GoalWorkResultV0{
+					Status:          orquestagoal.GoalStatusRunningV0,
+					GoalRef:         goalRef,
+					ExternalGoalRef: externalGoalRef,
+					Summary:         "codex_app_server_goal_status_active_high_token_usage tokens_used=139028",
+					MaterializedArtifacts: []orquestagoal.GoalMaterializedArtifactV0{{
+						ArtifactRef:  "artifact-ref-checkpoint-only-001",
+						Path:         "scratchpad/checkpoint_started.txt",
+						ArtifactType: "checkpoint",
+						Status:       "valid",
+					}},
+					EvidenceRefs: []string{"evidence-ref-codex-app-server-goal-high-token-usage"},
+				},
+			}},
+		}},
+	}
+	stopper := &fakeGoalCooperativeStopperForTestV0{}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                      t.TempDir(),
+		TickInterval:                  time.Hour,
+		GoalObserverEnabledConfigured: true,
+		GoalObserverEnabled:           true,
+		GoalObserverMaxItems:          5,
+		ResidentDirectorEnabled:       false,
+		AuditDisabled:                 true,
+	}, RuntimeDepsV0{
+		Supervisor:     supervisor,
+		GoalStateStore: goalStore,
+		GoalStopper:    stopper,
+		StateStore:     &memoryStateStoreV0{},
+		Clock:          fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.runGoalObservationTickV0(context.Background())
+
+	if stopper.calls != 1 ||
+		stopper.last.RunRef != runRef ||
+		stopper.last.Reason != goalObserverHighConsumptionCheckpointOnlyReasonV0 ||
+		stopper.last.RecommendedAction != goalObserverHighConsumptionRecommendedActionV0 ||
+		stopper.last.RequestedBy != goalObserverHighConsumptionRequestedByV0 {
+		t.Fatalf("stopper calls=%d request=%+v", stopper.calls, stopper.last)
+	}
+	for _, want := range []string{
+		goalObserverCheckpointOnlyHighConsumptionRefV0,
+		goalObserverHighConsumptionStopEvidenceV0,
+		"evidence-ref-codex-app-server-goal-high-token-usage",
+	} {
+		if !containsStringForTestV0(stopper.last.EvidenceRefs, want) {
+			t.Fatalf("stopper evidence refs=%v want %s", stopper.last.EvidenceRefs, want)
+		}
+	}
+	loaded, err := goalStore.LoadGoalWorkStateV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if loaded.Status != orquestagoal.GoalStatusBlockedV0 ||
+		loaded.LastResult == nil ||
+		loaded.LastResult.Summary != goalObserverHighConsumptionCheckpointOnlyReasonV0 ||
+		loaded.LastClosure == nil ||
+		!loaded.LastClosure.NeedsRework ||
+		!goalWorkResultHasIssueCodeV0(*loaded.LastResult, goalObserverHighConsumptionCheckpointOnlyReasonV0) {
+		t.Fatalf("goal state=%+v", loaded)
+	}
+}
+
+func TestRuntimeV0GoalObserverAltoConsumoSinCheckpointPideStopCooperativoV0(t *testing.T) {
+	now := time.Date(2026, 7, 3, 23, 0, 0, 0, time.UTC)
+	const runRef = "run-ref-goal-observer-no-checkpoint-001"
+	const goalRef = "goal-ref-goal-observer-no-checkpoint-001"
+	const externalGoalRef = "external-goal-ref-goal-observer-no-checkpoint-001"
+	state := mustIdleSelfImprovementGoalStateForProgressTestV0(t, runRef, goalRef, externalGoalRef)
+	goalStore := newMemoryGoalStateStoreV0()
+	if err := goalStore.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	supervisor := &fakeSupervisorV0{
+		goalObservationResult: []orquestagoal.GoalWorkObserveActiveResultV0{{
+			Observations: []orquestagoal.GoalWorkObserveResultV0{{
+				State: state,
+				Result: orquestagoal.GoalWorkResultV0{
+					Status:          orquestagoal.GoalStatusRunningV0,
+					GoalRef:         goalRef,
+					ExternalGoalRef: externalGoalRef,
+					Summary:         "codex_app_server_goal_status_active_high_token_usage tokens_used=166009",
+					EvidenceRefs:    []string{"evidence-ref-codex-app-server-goal-high-token-usage"},
+				},
+			}},
+		}},
+	}
+	stopper := &fakeGoalCooperativeStopperForTestV0{}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                      t.TempDir(),
+		TickInterval:                  time.Hour,
+		GoalObserverEnabledConfigured: true,
+		GoalObserverEnabled:           true,
+		GoalObserverMaxItems:          5,
+		ResidentDirectorEnabled:       false,
+		AuditDisabled:                 true,
+	}, RuntimeDepsV0{
+		Supervisor:     supervisor,
+		GoalStateStore: goalStore,
+		GoalStopper:    stopper,
+		StateStore:     &memoryStateStoreV0{},
+		Clock:          fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.runGoalObservationTickV0(context.Background())
+
+	if stopper.calls != 1 ||
+		stopper.last.Reason != goalObserverHighConsumptionNoCheckpointReasonV0 ||
+		stopper.last.RecommendedAction != goalObserverHighConsumptionRecommendedActionV0 {
+		t.Fatalf("stopper calls=%d request=%+v", stopper.calls, stopper.last)
+	}
+	if !containsStringForTestV0(stopper.last.EvidenceRefs, goalObserverNoCheckpointHighConsumptionRefV0) {
+		t.Fatalf("stopper evidence refs=%v", stopper.last.EvidenceRefs)
+	}
+	loaded, err := goalStore.LoadGoalWorkStateV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if loaded.Status != orquestagoal.GoalStatusBlockedV0 ||
+		loaded.LastResult == nil ||
+		loaded.LastResult.Summary != goalObserverHighConsumptionNoCheckpointReasonV0 {
+		t.Fatalf("goal state=%+v", loaded)
+	}
+}
+
+func TestRuntimeV0GoalObserverNoParaSiHayArtefactoUtilV0(t *testing.T) {
+	now := time.Date(2026, 7, 3, 23, 15, 0, 0, time.UTC)
+	const runRef = "run-ref-goal-observer-useful-artifact-001"
+	const goalRef = "goal-ref-goal-observer-useful-artifact-001"
+	const externalGoalRef = "external-goal-ref-goal-observer-useful-artifact-001"
+	state := mustIdleSelfImprovementGoalStateForProgressTestV0(t, runRef, goalRef, externalGoalRef)
+	goalStore := newMemoryGoalStateStoreV0()
+	if err := goalStore.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	supervisor := &fakeSupervisorV0{
+		goalObservationResult: []orquestagoal.GoalWorkObserveActiveResultV0{{
+			Observations: []orquestagoal.GoalWorkObserveResultV0{{
+				State: state,
+				Result: orquestagoal.GoalWorkResultV0{
+					Status:          orquestagoal.GoalStatusRunningV0,
+					GoalRef:         goalRef,
+					ExternalGoalRef: externalGoalRef,
+					Summary:         "codex_app_server_goal_status_active_high_token_usage tokens_used=120000",
+					ArtifactPaths:   []string{"modulos/orquesta-server/avance_util.go"},
+					EvidenceRefs:    []string{"evidence-ref-codex-app-server-goal-high-token-usage"},
+				},
+			}},
+		}},
+	}
+	stopper := &fakeGoalCooperativeStopperForTestV0{}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                      t.TempDir(),
+		TickInterval:                  time.Hour,
+		GoalObserverEnabledConfigured: true,
+		GoalObserverEnabled:           true,
+		GoalObserverMaxItems:          5,
+		ResidentDirectorEnabled:       false,
+		AuditDisabled:                 true,
+	}, RuntimeDepsV0{
+		Supervisor:     supervisor,
+		GoalStateStore: goalStore,
+		GoalStopper:    stopper,
+		StateStore:     &memoryStateStoreV0{},
+		Clock:          fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.runGoalObservationTickV0(context.Background())
+
+	if stopper.calls != 0 {
+		t.Fatalf("goal con artefacto util no debe parar: calls=%d request=%+v", stopper.calls, stopper.last)
+	}
+	loaded, err := goalStore.LoadGoalWorkStateV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if loaded.Status != orquestagoal.GoalStatusRunningV0 {
+		t.Fatalf("goal state=%+v", loaded)
+	}
+}
+
 func TestRuntimeV0IdleFallbackReconciliaResultMaterializadoPorPuertoV0(t *testing.T) {
 	now := time.Date(2026, 7, 3, 15, 30, 0, 0, time.UTC)
 	const runRef = "run-ref-idle-materialized-port-001"

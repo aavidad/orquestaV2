@@ -24,6 +24,7 @@ const (
 
 	escalationDirectorStopReasonV0       = "escalation_director_stop"
 	escalationDirectorRequestedByV0      = "orquesta-server-escalation-director"
+	escalationDirectorStopEvidenceV0     = "evidence-ref-escalation-director-stop"
 	escalationDirectorReviewOKEvidenceV0 = "evidence-ref-escalation-director-review-ok"
 )
 
@@ -260,6 +261,7 @@ func (runtime *RuntimeV0) applyEscalationDirectorDecisionV0(
 			RecommendedAction: idleSelfImprovementGoalReviewReplanRecommendedActionV0,
 			RequestedBy:       escalationDirectorRequestedByV0,
 			IdempotencyKey:    "idem-escalation-stop-" + serverGoalProgressSafeRefPartV0(issue.RunRef),
+			EvidenceRefs:      escalationDirectorStopEvidenceRefsV0(issue),
 		})
 	case escalationDirectorDecisionReviewOKV0:
 		if runtime.goalStateStore == nil {
@@ -286,6 +288,19 @@ func (runtime *RuntimeV0) applyEscalationDirectorDecisionV0(
 			_ = runtime.goalStateStore.SaveGoalWorkStateV0(ctx, state)
 		}
 	}
+}
+
+func escalationDirectorStopEvidenceRefsV0(
+	issue orquestagoal.GoalWorkObserveActiveIssueV0,
+) []string {
+	refs := []string{escalationDirectorStopEvidenceV0}
+	if code := serverGoalProgressSafeRefPartV0(issue.Code); code != "unknown" {
+		refs = append(refs, "evidence-ref-escalation-director-issue:"+code)
+	}
+	if field := serverGoalProgressSafeRefPartV0(issue.Field); field != "unknown" {
+		refs = append(refs, "evidence-ref-escalation-director-field:"+field)
+	}
+	return compactConfigStringsV0(refs)
 }
 
 func (runtime *RuntimeV0) persistEscalationDirectorOutcomeV0(
