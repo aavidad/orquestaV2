@@ -17,6 +17,7 @@ import (
 
 const codexAppServerThreadTextMaxBytesV0 = orquestaruntimecodexgoal.CodexGoalToolOutputMaxBytesV0
 const codexAppServerThreadItemsViewMaxBytesV0 = 4 * 1024
+const codexAppServerThreadOutputSanitizedEvidenceRefV0 = "evidence-ref-codex-app-server-thread-output-sanitized"
 
 func sanitizeCodexAppServerRPCDecodedOutV0(out interface{}) {
 	switch value := out.(type) {

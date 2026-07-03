@@ -356,8 +356,10 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 		receipt.ExternalGoalRef = strings.TrimSpace(goal.ThreadID)
 	}
 	receipt = codexAppServerObservationReceiptWithGoalUsageV0(receipt, goal)
-	if activeResult, found := backend.observeCodexAppServerActiveGoalResultV0(ctx, request, receipt); found {
-		return activeResult, nil
+	var activeFound bool
+	receipt, activeFound = backend.observeCodexAppServerActiveGoalResultV0(ctx, request, receipt)
+	if activeFound {
+		return receipt, nil
 	}
 	if timedOut, timeoutReceipt := backend.codexAppServerActiveGoalTimeoutV0(request, goal, status, receipt); timedOut {
 		return timeoutReceipt, nil
@@ -457,6 +459,7 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_thread_read_failed")
 		return codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusInvalidV0, code), err
 	}
+	thread, sanitized := sanitizeCodexAppServerThreadReadV0(thread)
 	status := codexAppServerThreadStatusToGoalWorkStatusV0(thread.Status)
 	receipt := codexAppServerObservationReceiptV0(
 		request,
@@ -467,6 +470,12 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 		receipt.EvidenceRefs,
 		"evidence-ref-codex-app-server-goal-rpc-unsupported",
 	))
+	if sanitized {
+		receipt.EvidenceRefs = compactServerStackStringsV0(append(
+			receipt.EvidenceRefs,
+			codexAppServerThreadOutputSanitizedEvidenceRefV0,
+		))
+	}
 	marked, found, markerErr := codexAppServerGoalResultFromThreadV0(thread)
 	if markerErr != nil {
 		receipt.IssueCode = codexAppServerGoalResultErrorIssueCodeV0(

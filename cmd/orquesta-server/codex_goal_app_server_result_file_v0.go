@@ -112,6 +112,14 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 	threadStatus := ""
 	if threadID := strings.TrimSpace(observed.ExternalGoalRef); threadID != "" && backend.Protocol != nil {
 		if thread, err := backend.Protocol.ReadThreadV0(ctx, threadID, true); err == nil {
+			var sanitized bool
+			thread, sanitized = sanitizeCodexAppServerThreadReadV0(thread)
+			if sanitized {
+				observed.EvidenceRefs = compactServerStackStringsV0(append(
+					observed.EvidenceRefs,
+					codexAppServerThreadOutputSanitizedEvidenceRefV0,
+				))
+			}
 			threadStatus = strings.TrimSpace(string(thread.Status))
 			marked, found, markerErr := codexAppServerGoalResultFromThreadV0(thread)
 			if markerErr != nil && found && !codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, request.GoalRef) {
@@ -173,7 +181,7 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 		}
 		return observed, true
 	}
-	return receipt, false
+	return observed, false
 }
 
 func codexAppServerGoalResultReadyForActiveCompletionV0(marked codexAppServerGoalResultMarkerV0) bool {

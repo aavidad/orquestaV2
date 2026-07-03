@@ -961,6 +961,13 @@ limite se transforma en ref compacto `thread-output-ref-*` antes de alimentar
 observacion/cierre. Evidencia:
 `TestCodexAppServerThreadReadLimiteTextoSigueContratoDireccionV0`.
 
+Avance BUG-ORQ-20260701-079 2026-07-03 tarde 22: la observacion de un goal activo
+vuelve a sanear defensivamente `thread/read` y conserva
+`evidence-ref-codex-app-server-thread-output-sanitized` cuando compacta una
+salida textual gigante, sin marcar terminal ni bloquear el timeout/replan
+posterior. Evidencia:
+`TestServerCodexAppServerGoalBackendV0ObservaOutputGiganteConEvidenciaSaneadaV0`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y

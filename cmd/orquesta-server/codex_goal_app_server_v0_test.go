@@ -1151,6 +1151,41 @@ func TestCodexAppServerThreadReadLimiteTextoSigueContratoDireccionV0(t *testing.
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0ObservaOutputGiganteConEvidenciaSaneadaV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID: "thread-ref-goal-large-output-001",
+			Status:   "active",
+		},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-large-output-001",
+			Status: "running",
+			Turns: []serverCodexAppServerReadTurnV0{{
+				ID: "turn-ref-goal-large-output-001",
+				Items: []serverCodexAppServerReadItemV0{{
+					ID:   "item-ref-goal-large-output-001",
+					Type: "toolOutput",
+					Text: "tool-output-" + strings.Repeat("x", codexAppServerThreadTextMaxBytesV0+1),
+				}},
+			}},
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         "goal-ref-codex-app-server-large-output-001",
+		ExternalGoalRef: "thread-ref-goal-large-output-001",
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		!containsStringForTestV0(receipt.EvidenceRefs, codexAppServerThreadOutputSanitizedEvidenceRefV0) {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
 func TestDecodeCodexAppServerRPCResponseV0SanitizaThreadReadMultimodalV0(t *testing.T) {
 	imageDataURI := "data:image/png;base64," + strings.Repeat("A", 9000)
 	payload, err := json.Marshal(map[string]interface{}{
