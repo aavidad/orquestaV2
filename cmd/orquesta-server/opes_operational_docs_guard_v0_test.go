@@ -27,6 +27,9 @@ func TestOPESOperationalDocsGuardV0(t *testing.T) {
 			if isEffectfulOPESCommandBlockV0(block) && !strings.Contains(block, "ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux") {
 				t.Fatalf("%s bloque OPES con efectos %d sin app_server_tmux:\n%s", rel, i+1, block)
 			}
+			if isEffectfulOPESCommandBlockV0(block) && strings.Contains(block, "go run ./cmd/orquesta-server run") {
+				t.Fatalf("%s bloque OPES con efectos %d usa runtime manual no gestionado:\n%s", rel, i+1, block)
+			}
 		}
 	}
 }

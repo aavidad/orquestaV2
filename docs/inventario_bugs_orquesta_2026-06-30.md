@@ -759,6 +759,12 @@ manual y de asumir `127.0.0.1:8787`; la seccion actual apunta a
 `orquesta-server start/stop/status` y a `ORQUESTA_RUNTIME_DIR/base_url.txt`.
 Evidencia: `TestUsoActualAppOrquestaRecomiendaServidorGestionadoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 9: el runbook OPES vigente de
+`plan_temario` deja de arrancar Orquesta con el runtime manual en bloques con
+efectos y usa `orquesta-server start` con backend `app_server_tmux`; la guarda
+OPES bloquea nuevos bloques efectivos con `go run ./cmd/orquesta-server run`.
+Evidencia: `TestOPESOperationalDocsGuardV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado

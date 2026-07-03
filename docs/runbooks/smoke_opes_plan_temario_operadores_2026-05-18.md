@@ -405,8 +405,12 @@ ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/opes-salidas/operario-20260518/runtime \
 ORQUESTA_CODEX_MODEL=gpt-5.5 \
 ORQUESTA_CODEX_REASONING_EFFORT=xhigh \
 ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \
-go run ./cmd/orquesta-server run
+orquesta-server start
 ```
+
+Tras arrancar, resolver la URL efectiva con `orquesta-server status --json`,
+`ORQUESTA_SERVER_URL` u `ORQUESTA_RUNTIME_DIR/base_url.txt`; no asumir un puerto
+historico para drenar o consultar Orquesta.
 
 Para una prueba acotada, anadir `ORQUESTA_OPES_BRIDGE_MAX_TICKS=<n>`. No mezclar
 `ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE` con `ORQUESTA_OPES_BRIDGE_JOB_TYPE` ni
