@@ -2391,6 +2391,15 @@ func TestMCPAutoprogrammingStatusExecutorV0OutputGiganteSaneadoPideContextoAcota
 		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceCodexAppServerThreadOutputSanitizedV0) {
 		t.Fatalf("action=%+v", action)
 	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "attention_required" ||
+		result.EfficiencySummary.RecommendedAction != "replan_narrow_context:run:"+runRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(
+			result.EfficiencySummary.Reasons,
+			mcpAutoprogrammingActionThreadOutputSanitizedV0,
+		) {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
 }
 
 func TestMCPAutoprogrammingStatusExecutorV0Phase0NoPublicablePideContinuarV0(t *testing.T) {
