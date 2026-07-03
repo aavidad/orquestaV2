@@ -570,6 +570,30 @@ func TestSmokesOPESRESTDirectosUsanEndpointOrquestaGestionadoV0(t *testing.T) {
 	}
 }
 
+func TestSmokesOPESLargosAceptanEndpointOrquestaGestionadoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	for _, rel := range []string{
+		"scripts/smoke_opes_plan_temario_operadores.sh",
+		"scripts/smoke_opes_derivatives_rest.sh",
+	} {
+		t.Run(rel, func(t *testing.T) {
+			text := readOperationalDocGuardV0(t, root, rel)
+			for _, want := range []string{
+				"smoke_orquesta_base_url_from_env_or_runtime",
+				"ORQUESTA_RUNTIME_DIR/base_url.txt",
+				"falta endpoint Orquesta gestionado",
+			} {
+				if !strings.Contains(text, want) {
+					t.Fatalf("%s debe aceptar endpoint Orquesta gestionado: falta %q", rel, want)
+				}
+			}
+			if strings.Contains(text, "falta ORQUESTA_BASE_URL explicito") {
+				t.Fatalf("%s no debe exigir solo ORQUESTA_BASE_URL", rel)
+			}
+		})
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")

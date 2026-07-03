@@ -706,6 +706,16 @@ o `ORQUESTA_RUNTIME_DIR/base_url.txt`) y bloquean con mensaje publico si no hay
 servidor identificable. Evidencia: `TestInicioAgenteNoRecomiendaRuntimeManualV0`,
 `TestOrquestaStatusNowUsaEndpointGestionadoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 2: los wrappers OPES largos
+`scripts/smoke_opes_plan_temario_operadores.sh` y
+`scripts/smoke_opes_derivatives_rest.sh` ya no exigen solo
+`ORQUESTA_BASE_URL` para crear runs; aceptan el resolvedor comun
+`ORQUESTA_SERVER_URL`/`ORQUESTA_BASE_URL`/`ORQUESTA_RUNTIME_DIR/base_url.txt` y
+mantienen el bloqueo antes de efectos cuando no hay endpoint Orquesta
+gestionado. Evidencia:
+`TestSmokesOPESLargosAceptanEndpointOrquestaGestionadoV0` y
+`TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinOrquestaBaseURLV0`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y

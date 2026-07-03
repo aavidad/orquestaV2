@@ -10,6 +10,9 @@ SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 SMOKE_OUT_DIR="${SMOKE_OUT_DIR:-/tmp/opes-salidas/plan-temario-operadores-$SMOKE_ID}"
 OPES_BASE_URL_EFFECTIVE="${ORQUESTA_OPES_BASE_URL:-${OPES_BASE_URL:-}}"
 ORQUESTA_BASE_URL_EFFECTIVE="${ORQUESTA_BASE_URL:-}"
+if [[ -z "$ORQUESTA_BASE_URL_EFFECTIVE" ]]; then
+  ORQUESTA_BASE_URL_EFFECTIVE="$(smoke_orquesta_base_url_from_env_or_runtime || true)"
+fi
 JOB_REF="${ORQUESTA_OPES_BRIDGE_JOB_REF:-}"
 LIMIT="${ORQUESTA_OPES_BRIDGE_LIMIT:-1}"
 INPUT_LEDGER_PATH="${ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH:-$SMOKE_OUT_DIR/external-bridge-input-ledger.json}"
@@ -263,7 +266,7 @@ run_execute_drain_once() {
     exit 2
   fi
   if [[ -z "$ORQUESTA_BASE_URL_EFFECTIVE" ]]; then
-    echo "falta ORQUESTA_BASE_URL explicito para crear run plan_temario" >&2
+    echo "falta endpoint Orquesta gestionado para crear run plan_temario: define ORQUESTA_SERVER_URL u ORQUESTA_RUNTIME_DIR/base_url.txt" >&2
     exit 2
   fi
   export ORQUESTA_OPES_BASE_URL="$OPES_BASE_URL_EFFECTIVE"

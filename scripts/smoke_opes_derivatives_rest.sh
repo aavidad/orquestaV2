@@ -12,6 +12,9 @@ SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 SMOKE_OUT_DIR="${SMOKE_OUT_DIR:-/tmp/opes-salidas/derivatives-rest-$SMOKE_ID}"
 OPES_BASE_URL_EFFECTIVE="${ORQUESTA_OPES_BASE_URL:-${OPES_BASE_URL:-}}"
 ORQUESTA_BASE_URL_EFFECTIVE="${ORQUESTA_BASE_URL:-}"
+if [[ -z "$ORQUESTA_BASE_URL_EFFECTIVE" ]]; then
+  ORQUESTA_BASE_URL_EFFECTIVE="$(smoke_orquesta_base_url_from_env_or_runtime || true)"
+fi
 SEQUENCE="${ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE:-$DEFAULT_SEQUENCE}"
 LIMIT="${ORQUESTA_OPES_BRIDGE_LIMIT:-1}"
 INPUT_LEDGER_PATH="${ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH:-$SMOKE_OUT_DIR/external-bridge-input-ledger.json}"
@@ -812,7 +815,7 @@ require_derivatives_real_preflight() {
     exit 2
   fi
   if [[ -z "$ORQUESTA_BASE_URL_EFFECTIVE" ]]; then
-    echo "smoke derivados real bloqueado: falta ORQUESTA_BASE_URL explicito para crear runs goal-first en Orquesta temporal" >&2
+    echo "smoke derivados real bloqueado: falta endpoint Orquesta gestionado para crear runs goal-first; define ORQUESTA_SERVER_URL u ORQUESTA_RUNTIME_DIR/base_url.txt" >&2
     exit 2
   fi
   if target_mode_requires_audio_guards "$target_mode" &&
@@ -1224,7 +1227,7 @@ run_execute_drain_once() {
     exit 2
   fi
   if [[ -z "$ORQUESTA_BASE_URL_EFFECTIVE" ]]; then
-    echo "falta ORQUESTA_BASE_URL explicito para crear runs desde derivados" >&2
+    echo "falta endpoint Orquesta gestionado para crear runs desde derivados: define ORQUESTA_SERVER_URL u ORQUESTA_RUNTIME_DIR/base_url.txt" >&2
     exit 2
   fi
   export ORQUESTA_OPES_BASE_URL="$OPES_BASE_URL_EFFECTIVE"
@@ -1245,7 +1248,7 @@ run_execute_drain_once_to() {
     exit 2
   fi
   if [[ -z "$ORQUESTA_BASE_URL_EFFECTIVE" ]]; then
-    echo "falta ORQUESTA_BASE_URL explicito para crear runs desde derivados" >&2
+    echo "falta endpoint Orquesta gestionado para crear runs desde derivados: define ORQUESTA_SERVER_URL u ORQUESTA_RUNTIME_DIR/base_url.txt" >&2
     exit 2
   fi
   export ORQUESTA_OPES_BASE_URL="$OPES_BASE_URL_EFFECTIVE"

@@ -4464,7 +4464,8 @@ func TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinOrquestaBaseURLV0
 		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
 	)...)
 	if err == nil ||
-		!strings.Contains(stderr, "falta ORQUESTA_BASE_URL explicito") {
+		!strings.Contains(stderr, "falta endpoint Orquesta gestionado") ||
+		!strings.Contains(stderr, "ORQUESTA_RUNTIME_DIR/base_url.txt") {
 		t.Fatalf("err=%v stdout=%s stderr=%s", err, stdout, stderr)
 	}
 }
