@@ -735,6 +735,7 @@ func newMCPDomainWorkStatusHTTPErrorV0(
 	field string,
 	message string,
 ) MCPDomainWorkStatusResultV0 {
+	message = strings.TrimSpace(firstNonEmptyMCPV0(message, "domain_work_status_http_error"))
 	return MCPDomainWorkStatusResultV0{
 		SchemaVersion: MCPDomainWorkStatusSchemaVersionV0,
 		Estado:        MCPAutoprogrammingStatusEstadoErrorV0,
@@ -747,10 +748,16 @@ func newMCPDomainWorkStatusHTTPErrorV0(
 			NeedsAction:     true,
 			WillFinishAlone: false,
 		},
+		Diagnostics: []MCPAutoprogrammingDiagnosticV0{{
+			Code:         "domain_work_status_http_error",
+			Scope:        strings.TrimSpace(field),
+			Message:      message,
+			EvidenceRefs: []string{"evidence-ref-domain-work-status-http-error"},
+		}},
 		Errores: []MCPValidationIssueV0{{
 			Code:    "domain_work_status_http_error",
 			Field:   strings.TrimSpace(field),
-			Message: strings.TrimSpace(firstNonEmptyMCPV0(message, "domain_work_status_http_error")),
+			Message: message,
 		}},
 	}
 }

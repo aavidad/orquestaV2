@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -346,6 +348,43 @@ func TestMCPDomainWorkStatusHTTPHandlerV0FiltroContextualSinRefDiagnostica(t *te
 	}
 	if !hasMCPQueueGlobalStatusDiagnosticCodeForTestV0(result.Diagnostics, "domain_work_status_context_filter_without_ref") {
 		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+}
+
+func TestMCPDomainWorkStatusHTTPHandlerV0ExecutorErrorDevuelveDiagnosticoPublico(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		err: errors.New("payload invalido en /home/alberto/Trabajo secreto sk-123456789"),
+	}
+	req := httptest.NewRequest(
+		http.MethodGet,
+		MCPDomainWorkStatusHTTPPathV0+"?request_id=req-domain-status-error-001&project=opes&course_slug=integracion-social&run_ref=run-ref-domain-status-error-001",
+		nil,
+	)
+	req.Header.Set("X-Correlation-ID", "corr-domain-status-error-001")
+	rec := httptest.NewRecorder()
+
+	NewMCPDomainWorkStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError ||
+		rec.Header().Get("X-Correlation-ID") != "corr-domain-status-error-001" {
+		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	var result MCPDomainWorkStatusResultV0
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPAutoprogrammingStatusEstadoErrorV0 ||
+		result.Summary.Status != "blocked" ||
+		!result.Summary.NeedsAction ||
+		result.Summary.WillFinishAlone ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "domain_work_status_http_error" ||
+		result.Errores[0].Message != "domain_work_status_executor_error" ||
+		!hasMCPQueueGlobalStatusDiagnosticCodeForTestV0(result.Diagnostics, "domain_work_status_http_error") ||
+		!containsStringMCPTestV0(result.Diagnostics[0].EvidenceRefs, "evidence-ref-domain-work-status-http-error") ||
+		strings.Contains(result.Errores[0].Message, "/home/alberto") ||
+		strings.Contains(result.Errores[0].Message, "sk-123456789") {
+		t.Fatalf("result=%+v", result)
 	}
 }
 

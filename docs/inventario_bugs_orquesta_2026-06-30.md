@@ -1137,6 +1137,14 @@ del request. Evidencia:
 `TestMCPServerShutdownHTTPHandlerV0NoPropagaErrorNoCatalogado` y
 `TestMCPTransportV0ServerShutdownDevuelvePayloadPublicoSiExecutorFalla`.
 
+Avance BUG-ORQ-20260701-066/075 2026-07-03 tarde 34: la fachada
+`/api/v0/domain-work/status` publica diagnostico compacto
+`domain_work_status_http_error` con evidencia estable cuando falla el executor,
+manteniendo mensaje publico saneado. Esto permite a OPES/domain-work distinguir
+fallo operacional de consulta frente a un estado bloqueado real sin inspeccionar
+logs internos. Evidencia:
+`TestMCPDomainWorkStatusHTTPHandlerV0ExecutorErrorDevuelveDiagnosticoPublico`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
