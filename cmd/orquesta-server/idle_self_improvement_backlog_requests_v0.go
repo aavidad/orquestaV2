@@ -55,16 +55,16 @@ func idleSelfImprovementRequestForBacklogSectionV0(
 	request.FailureKind = "backlog_autoprogramming"
 	request.FailureSummary = idleSelfImprovementBacklogSummaryV0(section)
 	request.WriteSet = idleSelfImprovementBacklogWriteSetV0(base.WriteSet, section.Scope)
-	request.AcceptanceCriteria = compactServerStackStringsV0(append(append(
-		append([]string(nil), base.AcceptanceCriteria...),
-		section.Criteria...,
-	), append(
-		idleSelfImprovementBacklogDependencyAcceptanceCriteriaV0(section),
+	request.AcceptanceCriteria = compactServerStackStringsV0(append(
+		append([]string(nil), section.Criteria...),
 		append(
-			idleSelfImprovementBacklogManualVerificationCriteriaV0(section),
-			idleSelfImprovementBacklogTaskInstanceCriteriaV0(section)...,
+			idleSelfImprovementBacklogDependencyAcceptanceCriteriaV0(section),
+			append(
+				idleSelfImprovementBacklogManualVerificationCriteriaV0(section),
+				idleSelfImprovementBacklogTaskInstanceCriteriaV0(section)...,
+			)...,
 		)...,
-	)...))
+	))
 	request.CompactRules = compactServerStackStringsV0(append(append([]string(nil), base.CompactRules...),
 		"el director revisa backlog y genera tareas concretas; no una tarea generica",
 		"un agente padre por tarea; subagentes hasta 6 si ayudan",
@@ -82,10 +82,10 @@ func idleSelfImprovementDocumentReviewRequestForBacklogSectionV0(
 	request.FailureSummary = "sincronizar estado documental ambiguo de " + section.Heading
 	request.SuggestedArea = firstNonEmptyServerStackV0(section.Ref+"-documentacion", base.SuggestedArea)
 	request.WriteSet = idleSelfImprovementBacklogDocumentReviewWriteSetV0(section)
-	request.AcceptanceCriteria = compactServerStackStringsV0(append(append([]string(nil), base.AcceptanceCriteria...),
+	request.AcceptanceCriteria = compactServerStackStringsV0([]string{
 		"revisar evidencia declarada y marcar estado canonico o pendiente verificable",
 		"no ejecutar cambios amplios de codigo desde una seccion con evidencia ambigua",
-	))
+	})
 	request.CompactRules = compactServerStackStringsV0(append(append([]string(nil), base.CompactRules...),
 		"revision documental acotada; no tocar runtime ni worktrees",
 	))

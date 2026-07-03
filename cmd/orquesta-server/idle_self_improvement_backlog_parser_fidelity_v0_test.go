@@ -79,6 +79,60 @@ Criterios:
 	}
 }
 
+func TestIdleSelfImprovementBacklogPlannerV0SeccionEjecutableNoHeredaCriteriosBaseV0(t *testing.T) {
+	projectDir := t.TempDir()
+	mustWriteBacklogForParserFidelityTestV0(t, projectDir, `# Backlog
+
+## T290 biblioteca-habilidades-curada
+
+Objetivo: construir biblioteca compacta de habilidades reutilizables.
+
+Alcance:
+
+- skills
+- docs/runbooks
+
+Criterios:
+
+- la biblioteca contiene solo habilidades curadas para agentes.
+- no modifica la politica de automejora idle.
+
+Tests:
+
+- `+"`go test -count=1 ./cmd/orquesta-server`"+`
+`)
+
+	result := mustPlanParserFidelityWithRequestTestV0(t, projectDir,
+		orquestaserver.IdleSelfImprovementPlanRequestV0{
+			MaxRequests: 1,
+			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+				RequestRef:    "request-ref-base",
+				CorrelationID: "corr-request-ref-base",
+				WriteSet:      []string{"cmd/orquesta-server"},
+				RequiredTests: []string{"go test -count=1 ./..."},
+				AcceptanceCriteria: []string{
+					"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS por defecto dispara tras 60 segundos sin ejecuciones",
+					"el planner scanner salta tareas ya visibles en cola",
+					"la proyeccion publica distingue outbox pendiente, wait_external y proceso externo verificado",
+				},
+			},
+		},
+	)
+	request := result.Requests[0]
+	if !containsStringForTestV0(request.AcceptanceCriteria, "la biblioteca contiene solo habilidades curadas para agentes.") {
+		t.Fatalf("criteria=%+v", request.AcceptanceCriteria)
+	}
+	for _, forbidden := range []string{
+		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS",
+		"planner scanner",
+		"outbox pendiente, wait_external",
+	} {
+		if containsSubstringForParserFidelityTestV0(request.AcceptanceCriteria, forbidden) {
+			t.Fatalf("criteria hereda base %q: %+v", forbidden, request.AcceptanceCriteria)
+		}
+	}
+}
+
 func TestIdleSelfImprovementBacklogPlannerV0ScannerDocumentalNoHeredaGoTestGlobalV0(t *testing.T) {
 	projectDir := t.TempDir()
 	mustWriteBacklogForParserFidelityTestV0(t, projectDir, "# Backlog\n\nSin secciones Txx.\n")
@@ -488,4 +542,13 @@ func stringSlicesEqualForParserFidelityTestV0(got []string, want []string) bool 
 		}
 	}
 	return true
+}
+
+func containsSubstringForParserFidelityTestV0(values []string, target string) bool {
+	for _, value := range values {
+		if strings.Contains(value, target) {
+			return true
+		}
+	}
+	return false
 }

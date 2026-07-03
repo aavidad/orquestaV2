@@ -563,3 +563,37 @@ Documentacion actualizada para Claude:
 
 Pendiente para cierre final, sin relanzar lo congelado: revisar procesos vivos
 antes de entregar, commitear y hacer push para que Claude siga.
+
+### 2026-07-03 noche — Codex cierra BUG-155 sin relanzar automejora
+
+Trabajo directo acotado, coherente con la cola congelada: se corrige la mezcla
+de criterios de backlog vista en MEJ-206/T290. La causa no estaba en el parser
+de secciones, sino en `idleSelfImprovementRequestForBacklogSectionV0`: cada
+seccion ejecutable heredaba `base.AcceptanceCriteria`, que incluye politicas
+globales de idle/scanner como
+`ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS`, planner scanner y
+proyeccion publica de outbox/wait_external.
+
+Cambio aplicado:
+- las secciones ejecutables usan solo `section.Criteria` mas guardas causales
+  propias de backlog/dependencias/manual verification/task instance;
+- las revisiones documentales ambiguas tampoco heredan criterios base;
+- scanner y fallback conservan criterios globales, porque son inventario
+  documental y no implementacion de una tarea concreta.
+
+Evidencia focal:
+- antes del fix, `TestIdleSelfImprovementBacklogPlannerV0SeccionEjecutableNoHeredaCriteriosBaseV0`
+  fallaba reproduciendo `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS`
+  en `AcceptanceCriteria`;
+- tras el fix, pasa junto a los tests focales de parser/planner ya existentes.
+- `go test -count=1 ./cmd/orquesta-server`;
+- `go build ./...`;
+- primer `go test -count=1 ./...` tuvo un fallo aislado en
+  `TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0`; se inventaria como
+  `BUG-ORQ-20260703-159` porque el repo exige registrar flakes observados;
+- reruns verdes: `go test -count=1 ./modulos/orquesta-server -run TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0`,
+  `go test -count=1 ./modulos/orquesta-server` y `go test -count=1 ./...`.
+
+Cierre operativo antes de commit: `git diff --check` limpio y sin procesos
+vivos de `orquesta-server run`, `codebase-memory-mcp` ni
+`codex app-server --listen`.
