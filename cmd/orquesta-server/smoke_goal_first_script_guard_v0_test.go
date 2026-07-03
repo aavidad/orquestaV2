@@ -504,6 +504,12 @@ func scriptCurlCommandUsesPostV0(command string) bool {
 		if strings.HasPrefix(field, "-X") && strings.EqualFold(strings.TrimPrefix(field, "-X"), "POST") {
 			return true
 		}
+		if field == "--request" && index+1 < len(fields) && strings.EqualFold(fields[index+1], "POST") {
+			return true
+		}
+		if strings.HasPrefix(field, "--request=") && strings.EqualFold(strings.TrimPrefix(field, "--request="), "POST") {
+			return true
+		}
 	}
 	return false
 }

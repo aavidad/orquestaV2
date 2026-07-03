@@ -920,6 +920,12 @@ los wrappers shell: `ORQUESTA_SERVER_URL`, compatibilidad `ORQUESTA_BASE_URL`,
 `ORQUESTA_RUNTIME_DIR/base_url.txt` y bloqueo sin fallback al puerto historico
 `8787`. Evidencia: `TestLauncherOPESA1NoUsaPuertoHistoricoPorDefectoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 29: la guarda de shutdown HTTP
+directo en scripts detecta tambien `curl --request POST` y `curl --request=POST`
+contra `/api/v0/server/shutdown`, no solo `-X POST`, y sigue exigiendo
+`cleanup_goal_backends`. Evidencia:
+`TestScriptShutdownCurlCommandsV0DetectaRequestPostLargoV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 26: la reconciliacion
 automatica de `goal_backend_missing_after_external_cleanup` queda fijada como
 responsabilidad opt-in del supervisor residente; una llamada no residente a
