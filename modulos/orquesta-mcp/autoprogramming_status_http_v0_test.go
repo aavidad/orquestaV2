@@ -66,7 +66,9 @@ func TestMCPAutoprogrammingStatusHTTPHandlerV0TimeoutDevuelveJSONPublico(t *test
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "autoprogramming_status_timeout" ||
 		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_status_timeout") ||
-		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_status_timeout_action") {
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_status_timeout_action") ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-autoprogramming-status-timeout") ||
+		!containsStringMCPTestV0(result.Diagnostics[0].EvidenceRefs, "evidence-ref-autoprogramming-status-timeout") {
 		t.Fatalf("result=%+v", result)
 	}
 }
@@ -304,7 +306,9 @@ func TestMCPAutoprogrammingStatusHTTPHandlerV0NoPropagaErrorNoCatalogado(t *test
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "autoprogramming_status_executor_error" ||
 		result.Errores[0].Message != "autoprogramming_status_executor_error" ||
-		len(result.Diagnostics) != 1 {
+		len(result.Diagnostics) != 1 ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-autoprogramming-status-executor-error") ||
+		!containsStringMCPTestV0(result.Diagnostics[0].EvidenceRefs, "evidence-ref-autoprogramming-status-executor-error") {
 		t.Fatalf("error publico incompleto: %+v", result)
 	}
 	if strings.Contains(rec.Body.String(), "/root/Trabajo") ||
@@ -335,7 +339,10 @@ func TestMCPAutoprogrammingStatusTransportV0DevuelvePayloadPublicoSiExecutorFall
 	if result.Estado != MCPAutoprogrammingStatusEstadoErrorV0 ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "autoprogramming_status_executor_error" ||
-		result.Errores[0].Message != "autoprogramming_status_executor_error" {
+		result.Errores[0].Message != "autoprogramming_status_executor_error" ||
+		len(result.Diagnostics) != 1 ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-autoprogramming-status-executor-error") ||
+		!containsStringMCPTestV0(result.Diagnostics[0].EvidenceRefs, "evidence-ref-autoprogramming-status-executor-error") {
 		t.Fatalf("payload publico incompleto: %+v", result)
 	}
 	if strings.Contains(string(output), "/root/Trabajo") ||

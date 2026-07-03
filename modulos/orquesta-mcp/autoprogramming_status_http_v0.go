@@ -131,11 +131,16 @@ func newMCPAutoprogrammingStatusExecutorErrorResultV0(
 		Field:   "executor",
 		Message: strings.TrimSpace(firstNonEmptyMCPV0(message, "autoprogramming_status_executor_error")),
 	}}
+	result.EvidenceRefs = compactStringsMCPV0([]string{
+		"evidence-ref-autoprogramming-status-executor-error",
+		mcpAutoprogrammingStatusOperationRefV0(input),
+	})
 	result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingDiagnosticV0(
 		"autoprogramming_status_executor_error",
 		"executor",
 		result.Errores[0].Message,
 	))
+	result.Diagnostics[len(result.Diagnostics)-1].EvidenceRefs = result.EvidenceRefs
 	return result
 }
 
@@ -151,17 +156,35 @@ func newMCPAutoprogrammingStatusTimeoutResultV0(
 		Field:   "executor",
 		Message: "consulta de estado excedio la ventana HTTP acotada",
 	}}
+	result.EvidenceRefs = compactStringsMCPV0([]string{
+		"evidence-ref-autoprogramming-status-timeout",
+		mcpAutoprogrammingStatusOperationRefV0(input),
+	})
 	result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingDiagnosticV0(
 		"autoprogramming_status_timeout",
 		"executor",
 		"consulta de estado cancelada por timeout HTTP; no relanzar goal ni usar loop legacy sin diagnostico acotado",
 	))
+	result.Diagnostics[len(result.Diagnostics)-1].EvidenceRefs = result.EvidenceRefs
 	result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingDiagnosticV0(
 		"autoprogramming_status_timeout_action",
 		"operator",
 		"acciones: poll_autoprogramming_status_with_run_ref, observe_active_goals_once_with_operation_ref, inspect_goal_backend_snapshot",
 	))
+	result.Diagnostics[len(result.Diagnostics)-1].EvidenceRefs = result.EvidenceRefs
 	return result
+}
+
+func mcpAutoprogrammingStatusOperationRefV0(input MCPAutoprogrammingStatusToolInputV0) string {
+	base := firstNonEmptyMCPV0(
+		input.RunRef,
+		input.ExternalJobRef,
+		input.QueueRef,
+		input.RequestID,
+		input.CorrelationID,
+		"status",
+	)
+	return "operation-ref-autoprogramming-status-" + safeMCPAutoprogrammingOperationRefPartV0(base)
 }
 
 func newMCPAutoprogrammingStatusHTTPErrorV0(

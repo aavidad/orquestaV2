@@ -1177,6 +1177,16 @@ misma regla de evidencia: errores de executor sin resultado propio conservan
 `TestMCPAutoprogrammingSuperviseTransportV0DevuelvePayloadPublicoSiExecutorFalla`
 y `TestMCPAutoprogrammingSuperviseDescriptorV0DeclaraEvidenciaEnErrores`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 37: `autoprogramming/status`
+publica `evidence_refs` de primer nivel y en diagnosticos para errores de
+executor y timeout HTTP, y su descriptor declara esa evidencia en la rama de
+error. Asi los consumidores compactos conservan la causa de status/shutdown
+sin inspeccionar logs internos. Evidencia:
+`TestMCPAutoprogrammingStatusHTTPHandlerV0NoPropagaErrorNoCatalogado`,
+`TestMCPAutoprogrammingStatusHTTPHandlerV0TimeoutDevuelveJSONPublico`,
+`TestMCPAutoprogrammingStatusTransportV0DevuelvePayloadPublicoSiExecutorFalla`
+y `TestMCPAutoprogrammingStatusDescriptorV0EsAdaptadorFino`.
+
 Avance BUG-ORQ-20260701-066/075 2026-07-03 tarde 34: la fachada
 `/api/v0/domain-work/status` publica diagnostico compacto
 `domain_work_status_http_error` con evidencia estable cuando falla el executor,

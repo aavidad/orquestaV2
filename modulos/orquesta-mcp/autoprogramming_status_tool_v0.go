@@ -61,6 +61,7 @@ type MCPAutoprogrammingStatusToolResultV0 struct {
 	Operator          *MCPAutoprogrammingOperatorV0                          `json:"operator,omitempty"`
 	EfficiencySummary *MCPAutoprogrammingEfficiencySummaryV0                 `json:"efficiency_summary,omitempty"`
 	OpsSnapshot       *orquestaobservability.DirectorAutonomousOpsSnapshotV0 `json:"ops_snapshot,omitempty"`
+	EvidenceRefs      []string                                               `json:"evidence_refs,omitempty"`
 	Diagnostics       []MCPAutoprogrammingDiagnosticV0                       `json:"diagnostics,omitempty"`
 	Errores           []MCPValidationIssueV0                                 `json:"errores_publicos,omitempty"`
 }
@@ -101,7 +102,7 @@ func MCPAutoprogrammingStatusDescriptorV0() MCPAutoprogrammingStatusToolDescript
 		Name:        MCPAutoprogrammingStatusToolNameV0,
 		Version:     MCPAutoprogrammingStatusToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,external_job_ref?,queue_ref?,app_refs?,queue_limit?,operator_advice?}",
-		Output:      "ok:{queue?,run?,queue_health?,stale_running?,projects?,tasks?,agents?,operator?,efficiency_summary?,ops_snapshot?,diagnostics?}|error:{errores_publicos,diagnostics?,operator_advice?}",
+		Output:      "ok:{queue?,run?,queue_health?,stale_running?,projects?,tasks?,agents?,operator?,efficiency_summary?,ops_snapshot?,diagnostics?,evidence_refs?}|error:{errores_publicos,evidence_refs?,diagnostics?,operator_advice?}",
 		ResourceURI: MCPAutoprogrammingStatusResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",

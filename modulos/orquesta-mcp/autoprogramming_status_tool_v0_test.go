@@ -21,7 +21,8 @@ func TestMCPAutoprogrammingStatusDescriptorV0EsAdaptadorFino(t *testing.T) {
 	if descriptor.Name != MCPAutoprogrammingStatusToolNameV0 ||
 		descriptor.ResourceURI != MCPAutoprogrammingStatusResourceURIV0 ||
 		len(descriptor.Invariantes) == 0 ||
-		!strings.Contains(descriptor.Output, "efficiency_summary") {
+		!strings.Contains(descriptor.Output, "efficiency_summary") ||
+		!strings.Contains(descriptor.Output, "error:{errores_publicos,evidence_refs?") {
 		t.Fatalf("descriptor incompleto: %+v", descriptor)
 	}
 }
