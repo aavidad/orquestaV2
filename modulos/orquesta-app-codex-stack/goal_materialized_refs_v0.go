@@ -130,7 +130,7 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstRequiredTestEvidenceMissingV0)
 		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedRequiredTestEvidenceMissing)
 	}
-	if omitted := goalMaterializedArtifactPathsOmittedV0(state, scan.ArtifactPaths); len(omitted) > 0 {
+	if omitted := goalMaterializedArtifactPathsOmittedV0(state, scan.TerminalResult, scan.ArtifactPaths); len(omitted) > 0 {
 		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstArtifactPathsOmittedMaterializedV0)
 		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedArtifactPathsOmittedEvidence)
 		for _, path := range omitted {
@@ -1236,19 +1236,32 @@ func goalMaterializedMissingTerminalReceiptHandledV0(state orquestagoal.GoalWork
 
 func goalMaterializedArtifactPathsOmittedV0(
 	state orquestagoal.GoalWorkStateV0,
+	terminalResult *orquestagoal.GoalWorkResultV0,
 	materialized []string,
 ) []string {
 	state = orquestagoal.NormalizeGoalWorkStateV0(state)
-	if !state.Spec.ClosurePolicy.RequireArtifactPaths ||
-		state.LastResult == nil ||
-		strings.TrimSpace(state.LastResult.Status) != orquestagoal.GoalStatusCompleteV0 {
+	if !state.Spec.ClosurePolicy.RequireArtifactPaths {
+		return nil
+	}
+	declaredResults := make([]orquestagoal.GoalWorkResultV0, 0, 2)
+	if state.LastResult != nil &&
+		strings.TrimSpace(state.LastResult.Status) == orquestagoal.GoalStatusCompleteV0 {
+		declaredResults = append(declaredResults, *state.LastResult)
+	}
+	if terminalResult != nil &&
+		strings.TrimSpace(terminalResult.Status) == orquestagoal.GoalStatusCompleteV0 {
+		declaredResults = append(declaredResults, *terminalResult)
+	}
+	if len(declaredResults) == 0 {
 		return nil
 	}
 	declared := map[string]bool{}
-	for _, path := range state.LastResult.ArtifactPaths {
-		path = filepath.ToSlash(filepath.Clean(strings.TrimSpace(path)))
-		if path != "" && path != "." {
-			declared[path] = true
+	for _, result := range declaredResults {
+		for _, path := range result.ArtifactPaths {
+			path = filepath.ToSlash(filepath.Clean(strings.TrimSpace(path)))
+			if path != "" && path != "." {
+				declared[path] = true
+			}
 		}
 	}
 	omitted := make([]string, 0)

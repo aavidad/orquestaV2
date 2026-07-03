@@ -544,6 +544,42 @@ func TestStackGoalMaterializedRefsSourceV0DetectaArtifactPathsOmitidosEnReceiptT
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0DetectaArtifactPathsOmitidosDesdeReceiptDurable(t *testing.T) {
+	projectDir := t.TempDir()
+	topicDir := filepath.Join(projectDir, "temas", "tema_036")
+	if err := os.MkdirAll(topicDir, 0o700); err != nil {
+		t.Fatalf("mkdir topic: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "plan_rework_por_fases.md"), []byte("# Plan\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "matriz_fuentes_reutilizacion.md"), []byte("# Matriz\n"), 0o600); err != nil {
+		t.Fatalf("write omitted artifact: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(topicDir, "orquesta_goal_result_v0.json"),
+		[]byte(`{"status":"complete","artifact_paths":["temas/tema_036/plan_rework_por_fases.md"]}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write receipt: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-durable-omitted-paths-001", "temas/tema_036")
+	state.Spec.ClosurePolicy.RequireArtifactPaths = true
+	state.LastResult = nil
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		!containsStringV0(result.IssueCodes, "artifact_paths_omitted_materialized") ||
+		!containsStringPrefixForTestV0(result.EvidenceRefs, "evidence-ref-goal-materialized-artifact-paths-omitted:") {
+		t.Fatalf("artifact_paths omitidos desde receipt durable no detectados: ok=%v result=%+v", ok, result)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0DetectaArtefactosOPESFueraDeWriteSet(t *testing.T) {
 	projectDir := t.TempDir()
 	phaseDir := filepath.Join(projectDir, "temas", "tema_003", "coordinacion_wave14")
