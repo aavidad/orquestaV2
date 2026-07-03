@@ -1273,8 +1273,21 @@ Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 33: los transportes HTTP y MCP
 de `server.shutdown` quedan cubiertos para errores de executor: ambos devuelven
 mensaje publico saneado sin rutas/tokens y conservan `evidence_refs` compactas
 del request. Evidencia:
+`TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0`,
+`TestMCPServerShutdownToolExecutorV0ErrorConservaEvidenciaV0`,
+`TestMCPServerShutdownHTTPHandlerV0ActiveGoalsDevuelveConflict` y
+`TestMCPServerShutdownHTTPHandlerV0BackendStillRunningDevuelveConflict`,
 `TestMCPServerShutdownHTTPHandlerV0NoPropagaErrorNoCatalogado` y
 `TestMCPTransportV0ServerShutdownDevuelvePayloadPublicoSiExecutorFalla`.
+
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 33b: los contratos y pruebas
+documentales de `orquesta.server.shutdown.v0` quedan alineados con esa
+superficie: `cleanup_goal_backends`, `active_work_count`, `active_works`,
+`evidence_refs` en errores y HTTP 409 JSON para `active_goals_present`/
+`backend_still_running` ya no quedan como comportamiento implicito de codigo.
+Evidencia documental: `modulos/orquesta-mcp/docs/contratos.md`,
+`modulos/orquesta-mcp/docs/pruebas.md` y
+`modulos/orquesta-mcp/docs/decisiones.md`.
 
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 34: el transporte MCP de
 `orquesta.runs.supervisor.v0` tambien conserva `operation_ref`,

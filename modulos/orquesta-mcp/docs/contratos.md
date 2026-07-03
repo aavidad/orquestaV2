@@ -1332,24 +1332,32 @@ Campos:
     queue_ref, app_refs, queue_limit: filtro de runs a cerrar
     max_ticks, max_runs_per_tick, max_executions: limites del drainer
     forced: true permite drenar sin exigir checkpoint previo
+    cleanup_goal_backends?: habilita limpieza gobernada de backends Goal
+      propios antes de declarar `shutdown_ready`
     requested_by, reason, idempotency_key, evidence_refs: auditoria compacta
   output_ok:
     estado: ok
-    status: ready | waiting_drain | waiting_checkpoint
+    status: ready | waiting_drain | waiting_checkpoint |
+      active_goals_present | backend_still_running
     shutdown_ready: true solo si todos los runs objetivo estan listos
     runs_requested, runs_stopped, agents_in_flight, checkpoints_pending,
-      checkpoint_agents_pending
+      checkpoint_agents_pending, active_work_count
+    active_works?: trabajos goal-first/backend propios que impiden cerrar
+    evidence_refs?: evidencia compacta de checkpoint, cleanup y decision
     runs: resumen por run con estado de control, checkpoint_ref opcional,
       pending_checkpoint_agent_refs, checkpoint_evidence_refs, stats y readiness
   output_error:
     estado: error
     errores_publicos compactos si faltan puertos obligatorios o falla HTTP
+    evidence_refs?: evidencia compacta conservada aunque la ejecucion falle
 Invariantes:
   - Adaptador inbound fino: delega en `orquesta-server-shutdown`.
   - No envia senales al PID del servidor ni mata runtimes directamente.
   - No lee DB, filesystem, HOME, OAuth, proveedor ni modelo.
   - Usa solo puertos inyectados de RunQueue, RunControl, checkpoint,
     supervisor y stats.
+  - `active_goals_present` y `backend_still_running` devuelven HTTP 409 con
+    JSON operacional, no 500 ni cuerpo vacio.
   - El apagado real del proceso servidor queda en el borde externo cuando
     `shutdown_ready=true`.
 Pruebas de contrato:
@@ -1357,6 +1365,10 @@ Pruebas de contrato:
   - Executor transforma input MCP y delega en puerto fake de shutdown.
   - HTTP `POST /api/v0/server/shutdown` conserva correlacion y errores
     publicos.
+  - `TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0`
+  - `TestMCPServerShutdownToolExecutorV0ErrorConservaEvidenciaV0`
+  - `TestMCPServerShutdownHTTPHandlerV0ActiveGoalsDevuelveConflict`
+  - `TestMCPServerShutdownHTTPHandlerV0BackendStillRunningDevuelveConflict`
 ```
 
 ## Contrato minimo para mejorar una app existente

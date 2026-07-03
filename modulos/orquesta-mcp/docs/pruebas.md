@@ -119,8 +119,11 @@ MCP opt-in, `POST /api/v0/server/shutdown` delega en el executor inyectado,
 conserva `X-Correlation-ID`, devuelve `shutdown_ready`, contadores de runs,
 agentes en vuelo, checkpoints pendientes, agentes pendientes de checkpoint y
 `checkpoint_ref` por run cuando exista. Si falta ACK, proyecta
-`pending_checkpoint_agent_refs` y evidencia compacta por run. Falla de forma
-publica si falta binding. MCP/REST no paran procesos ni leen runtime/DB.
+`pending_checkpoint_agent_refs` y evidencia compacta por run. Conserva
+`evidence_refs` tambien en errores tempranos y devuelve HTTP 409 JSON para
+`active_goals_present` o `backend_still_running`, con `active_work_count` y
+`active_works` cuando existan. Falla de forma publica si falta binding. MCP/REST
+no paran procesos ni leen runtime/DB.
 Ultima ejecucion: 2026-05-13; pasa en bateria focal junto a gateway.
 Riesgos: el endpoint coordina stop/drain/stats; el borde que cierre el proceso
 servidor debe invocarlo antes de enviar la senal final.
