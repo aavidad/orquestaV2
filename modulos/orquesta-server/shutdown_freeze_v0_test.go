@@ -659,6 +659,55 @@ func TestRuntimeV0ServerShutdownReadyNoBorraSnapshotPrevioActivoV0(t *testing.T)
 	}
 }
 
+func TestRuntimeV0ServerShutdownConflictSinCuerpoConservaSnapshotPrevioActivoV0(t *testing.T) {
+	stateDir := t.TempDir()
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != serverShutdownRoutePathV0 {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusConflict)
+	})
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:     stateDir,
+		TickInterval: time.Hour,
+	}, RuntimeDepsV0{
+		AppHandler: app,
+		Clock:      fixedClockV0{now: time.Date(2026, 7, 3, 23, 15, 0, 0, time.UTC)},
+		ShutdownSnapshot: fakeShutdownSnapshotPortV0{
+			result: ShutdownSnapshotResultV0{
+				Status:          "backend_still_running",
+				ActiveWorkCount: 1,
+				ActiveWorks: []ShutdownSnapshotWorkV0{{
+					Kind:            "goal_backend",
+					RunRef:          "run-ref-shutdown-conflict-snapshot-001",
+					WorkRef:         "goal-ref-shutdown-conflict-snapshot-001",
+					ExternalWorkRef: "thread-ref-shutdown-conflict-snapshot-001",
+					Status:          "backend_still_running",
+				}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, serverShutdownRoutePathV0, nil)
+	rec := httptest.NewRecorder()
+	runtime.HandlerV0().ServeHTTP(rec, req)
+
+	state := runtime.StateV0()
+	if rec.Code != http.StatusConflict ||
+		!state.ShutdownInProgress ||
+		state.ShutdownReady ||
+		state.ShutdownStatus != "backend_still_running" ||
+		state.ShutdownActiveWorkCount != 1 ||
+		!state.SupervisorFrozen ||
+		!hasShutdownProjectionRefForTestV0(state.ShutdownActiveWorkRefs, "shutdown-active-work-goal-backend-goal-ref-shutdown-conflict-snapshot-001") {
+		t.Fatalf("conflict sin cuerpo no conservo snapshot previo activo: code=%d state=%+v", rec.Code, state)
+	}
+}
+
 type countingShutdownFreezeSupervisorV0 struct {
 	calls int
 }

@@ -110,7 +110,8 @@ func (runtime *RuntimeV0) shutdownProjectionWithPreviousSnapshotV0(
 	projection ShutdownProjectionV0,
 	keepFrozen bool,
 ) ShutdownProjectionV0 {
-	if runtime == nil || runtime.tracker == nil || (!keepFrozen && !projection.Ready) {
+	if runtime == nil || runtime.tracker == nil ||
+		(!keepFrozen && !projection.Ready && !shutdownProjectionCanRecoverPreviousSnapshotV0(projection)) {
 		return projection
 	}
 	state := runtime.tracker.SnapshotV0()
@@ -128,6 +129,10 @@ func (runtime *RuntimeV0) shutdownProjectionWithPreviousSnapshotV0(
 		projection.Status = firstNonEmptyShutdownFreezeV0(state.ShutdownStatus, projection.Status)
 	}
 	return projection
+}
+
+func shutdownProjectionCanRecoverPreviousSnapshotV0(projection ShutdownProjectionV0) bool {
+	return projection.HTTPStatus == http.StatusConflict || projection.HTTPStatus >= http.StatusInternalServerError
 }
 
 func shutdownProjectionHasBlockingWorkV0(projection ShutdownProjectionV0) bool {

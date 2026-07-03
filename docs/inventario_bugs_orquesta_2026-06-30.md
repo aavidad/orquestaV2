@@ -925,6 +925,13 @@ ready; normaliza a `stop_pending`, mantiene `SupervisorFrozen` y conserva refs
 compactas del backend vivo. Evidencia:
 `TestRuntimeV0ServerShutdownReadyNoBorraSnapshotPrevioActivoV0`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 17: si el handler responde
+HTTP 409 sin cuerpo util despues del snapshot previo, el runtime recupera el
+active work observado antes del handler y mantiene el estado
+`backend_still_running`/congelado en vez de perder la causa por body vacio.
+Evidencia:
+`TestRuntimeV0ServerShutdownConflictSinCuerpoConservaSnapshotPrevioActivoV0`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y
