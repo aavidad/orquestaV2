@@ -195,3 +195,24 @@ Reproducido 2 de 2 veces en el pilotaje.
 4 bugs nuevos encontrados (A arreglado+commiteado, B/C/D abiertos y
 documentados), 2 evidencias reproducibles de shutdown para T-PER-401.
 El dogfooding funciona: seguir usándolo tarea a tarea con esta receta.
+
+### 2026-07-03 (noche) — claude-fable-5 asume dirección (relevo del operador)
+
+Todos los Codex locales cortados por el operador; ver
+`docs/relevo_claude_orquestador_2026-07-03.md`. Dirección actual:
+
+- **T270 en vuelo vía Orquesta** (rama `pericial/pilot-t270`, puerto 35231):
+  cerrar BUG-ORQ-20260703-150 / T-PER-301-302 — recolector único de
+  observaciones + consumo de `TransicionBackendV0` + migración de tests +
+  reducción de los `cmd/orquesta-server/codex_goal_app_server*.go` a fachadas.
+- **T272 en vuelo vía Orquesta** (rama `pericial/pilot-t272`, puerto 45849):
+  limpieza de raíz — mover TAREA_OPES_*/HANDOFF_* a `docs/historico/2026-06/`
+  con índice, quitar binarios *.test, sin borrar contenido OPES.
+- Siguiente en cola (NO lanzar en paralelo con T270, cruza `cmd/`):
+  T-PER-901 control plane dormido por eventos; después CTX-TASK-801A..D.
+- Verificación e integración: según receta de esta bitácora; los Tests de
+  cada sección son el criterio. Integrar T270 con revisión especialmente
+  cuidadosa (toca el componente más crítico).
+- Pendiente de decisión humana: WIP remoto sucio de 71 ficheros en
+  `/srv/orquesta-self/worktrees/orquesta` (no integrar completo, triar);
+  quién borró `docs/diseno_router_contexto_hibrido_2026-07-03.md`.
