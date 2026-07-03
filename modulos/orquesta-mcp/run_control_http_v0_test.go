@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -157,7 +158,6 @@ func TestMCPRunControlHTTPHandlerV0CancelExternalCleanupSinForceV0(t *testing.T)
 		RequestID:     "request-ref-run-control-http-external-cleanup-cancel-001",
 		CorrelationID: "corr-run-control-http-external-cleanup-cancel-001",
 		RequestedBy:   "orquesta-director",
-		Reason:        "seguir run_control_reconcile_external_cleanup cancelando por HTTP",
 		Forced:        false,
 		EvidenceRefs:  []string{mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0},
 	})
@@ -185,6 +185,11 @@ func TestMCPRunControlHTTPHandlerV0CancelExternalCleanupSinForceV0(t *testing.T)
 	}
 	if port.complete.TargetStatus != orquestaruncontrol.RunControlStatusCanceledV0 {
 		t.Fatalf("complete=%+v", port.complete)
+	}
+	if strings.Contains(port.complete.Reason, "forced") ||
+		!strings.Contains(port.complete.Reason, "external cleanup") ||
+		strings.Contains(port.complete.IdempotencyKey, "forced") {
+		t.Fatalf("complete HTTP cancel degrada cleanup externo a forced: %+v", port.complete)
 	}
 }
 
@@ -235,7 +240,6 @@ func TestMCPRunControlHTTPHandlerV0StopExternalCleanupSinForceV0(t *testing.T) {
 		RequestID:     "request-ref-run-control-http-external-cleanup-stop-001",
 		CorrelationID: "corr-run-control-http-external-cleanup-stop-001",
 		RequestedBy:   "orquesta-director",
-		Reason:        "seguir run_control_reconcile_external_cleanup parando por HTTP",
 		Forced:        false,
 		EvidenceRefs:  []string{mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0},
 	})
@@ -263,6 +267,11 @@ func TestMCPRunControlHTTPHandlerV0StopExternalCleanupSinForceV0(t *testing.T) {
 	}
 	if port.complete.TargetStatus != orquestaruncontrol.RunControlStatusStoppedV0 {
 		t.Fatalf("complete=%+v", port.complete)
+	}
+	if strings.Contains(port.complete.Reason, "forced") ||
+		!strings.Contains(port.complete.Reason, "external cleanup") ||
+		strings.Contains(port.complete.IdempotencyKey, "forced") {
+		t.Fatalf("complete HTTP stop degrada cleanup externo a forced: %+v", port.complete)
 	}
 }
 

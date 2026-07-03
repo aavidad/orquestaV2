@@ -3,6 +3,7 @@ package orquestamcp
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
@@ -116,7 +117,6 @@ func TestMCPTransportV0RunControlCancelExternalCleanupSinForce(t *testing.T) {
 			Action:       "cancel",
 			RunRef:       runRef,
 			RequestedBy:  "orquesta-director",
-			Reason:       "seguir run_control_reconcile_external_cleanup cancelando por transporte",
 			Forced:       false,
 			EvidenceRefs: []string{mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0},
 		},
@@ -137,6 +137,11 @@ func TestMCPTransportV0RunControlCancelExternalCleanupSinForce(t *testing.T) {
 		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-run-control-goal-external-cleanup-reconciled") ||
 		!containsStringMCPTestV0(result.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) {
 		t.Fatalf("result=%+v complete=%+v", result, port.complete)
+	}
+	if strings.Contains(port.complete.Reason, "forced") ||
+		!strings.Contains(port.complete.Reason, "external cleanup") ||
+		strings.Contains(port.complete.IdempotencyKey, "forced") {
+		t.Fatalf("complete transporte cancel degrada cleanup externo a forced: %+v", port.complete)
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 1400)
 }
@@ -196,7 +201,6 @@ func TestMCPTransportV0RunControlStopExternalCleanupSinForce(t *testing.T) {
 			Action:       "stop",
 			RunRef:       runRef,
 			RequestedBy:  "orquesta-director",
-			Reason:       "seguir run_control_reconcile_external_cleanup parando por transporte",
 			Forced:       false,
 			EvidenceRefs: []string{mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0},
 		},
@@ -217,6 +221,11 @@ func TestMCPTransportV0RunControlStopExternalCleanupSinForce(t *testing.T) {
 		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-run-control-goal-external-cleanup-reconciled") ||
 		!containsStringMCPTestV0(result.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) {
 		t.Fatalf("result=%+v complete=%+v", result, port.complete)
+	}
+	if strings.Contains(port.complete.Reason, "forced") ||
+		!strings.Contains(port.complete.Reason, "external cleanup") ||
+		strings.Contains(port.complete.IdempotencyKey, "forced") {
+		t.Fatalf("complete transporte stop degrada cleanup externo a forced: %+v", port.complete)
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 1400)
 }
