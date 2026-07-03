@@ -4,11 +4,26 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
+
+func TestMCPRunQueuePriorityDescriptorV0DeclaraEvidenciaDeCandidatos(t *testing.T) {
+	descriptor := MCPRunQueuePriorityDescriptorV0()
+
+	for _, want := range []string{
+		"ranked?[]{run_ref,status,priority_score,evidence_refs?}",
+		"terminal?[]{run_ref,status,priority_score,evidence_refs?}",
+		"updated?{run_ref,status,priority_score,evidence_refs?}",
+	} {
+		if !strings.Contains(descriptor.Output, want) {
+			t.Fatalf("descriptor run_queue.priority no declara evidencia de candidatos %q: %s", want, descriptor.Output)
+		}
+	}
+}
 
 func TestMCPRunQueuePriorityExecutorV0RankDelegaEnReaderYRanking(t *testing.T) {
 	now := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)

@@ -1312,8 +1312,10 @@ Campos:
     input_schema: action rank|set_priority, queue_ref?, app_refs?, run_ref?,
       app_ref?, priority_score?, limit?, occurred_at?
   output_ok:
-    rank: ranked[{rank,run_ref,app_ref,status,priority_score,aging_boost}]
-    set_priority: updated{run_ref,app_ref,status,priority_score}
+    rank: ranked[{rank,run_ref,app_ref,status,priority_score,aging_boost,
+      evidence_refs?}]
+    terminal: terminal[{run_ref,app_ref,status,priority_score,evidence_refs?}]
+    set_priority: updated{run_ref,app_ref,status,priority_score,evidence_refs?}
   output_error:
     errores_publicos compactos
 Invariantes:
