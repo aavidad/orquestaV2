@@ -1610,6 +1610,9 @@ Campos:
       estable y contadores, pero no publican objective, write-set, contexto ni
       comandos de tests completos. El handoff interno de la composicion puede
       conservar `GoalWorkSpecV0`.
+      El descriptor compacto declara `schema_version`, refs publicas,
+      `spec_hash`, tipos de artefacto, refs de tests y contadores para que
+      clientes MCP/HTTP no traten el resumen como blob opaco.
     continue: request compacta opcional para supervision legacy posterior con
       `run_ref` explicito
   output_error:
@@ -1630,6 +1633,8 @@ Pruebas de contrato:
   - Transporte bound invoca executor fake y devuelve resultado `ok`.
   - Descriptor y transporte publican `goal_spec_summaries` como salida opcional
     y no filtran specs Goal completos.
+  - Descriptor tipa los campos publicos de `goal_spec_summaries` sin exponer
+    objective, write-set ni comandos completos.
   - Descriptor y HTTP publican `goals[]` tipado para batch goal-first.
   - Transporte sin executor devuelve `mcp_transport_tool_unbound`.
   - HTTP `POST /api/v0/autoprogramming/prepare-run` delega en executor fake.

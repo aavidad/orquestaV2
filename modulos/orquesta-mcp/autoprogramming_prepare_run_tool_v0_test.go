@@ -28,6 +28,20 @@ func TestMCPAutoprogrammingPrepareRunDescriptorV0EsAdaptadorOptIn(t *testing.T) 
 		strings.Contains(descriptor.Output, "goal_specs?") {
 		t.Fatalf("descriptor debe publicar solo resumenes de specs en prepare-run: %q", descriptor.Output)
 	}
+	for _, want := range []string{
+		"goal_spec_summaries?[]{schema_version,goal_ref?,run_ref?,director_kind?,spec_hash?",
+		"context_refs?",
+		"rule_refs?",
+		"required_test_refs?",
+		"artifact_types?",
+		"write_set_count?",
+		"required_test_count?",
+		"closure_requires_artifact_paths?",
+	} {
+		if !strings.Contains(descriptor.Output, want) {
+			t.Fatalf("descriptor debe tipar goal_spec_summaries publicos: falta %q en %q", want, descriptor.Output)
+		}
+	}
 	if !strings.Contains(descriptor.Output, "goals?[]") ||
 		!strings.Contains(descriptor.Output, "external_goal_ref?") {
 		t.Fatalf("descriptor debe publicar goals[] tipado en prepare-run: %q", descriptor.Output)

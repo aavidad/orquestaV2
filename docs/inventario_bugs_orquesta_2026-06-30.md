@@ -1540,6 +1540,14 @@ pero el descriptor compacto solo anunciaba `job`, `receipt` y
 manteniendo evidencia causal para OPES/domain-work sin mirar logs internos.
 Evidencia: `TestMCPDomainWorkDescriptorV0EsAdaptadorFino`.
 
+Avance BUG-ORQ-20260701-066/088 2026-07-03 tarde 52:
+`orquesta.autoprogramming.prepare_run.v0` ya no publica
+`goal_spec_summaries` como array opaco en el descriptor compacto: declara
+`schema_version`, refs publicas, `spec_hash`, refs de tests, tipos de artefacto
+y contadores de cierre sin exponer `GoalWorkSpecV0` completo, objective,
+write-set ni comandos. Evidencia:
+`TestMCPAutoprogrammingPrepareRunDescriptorV0EsAdaptadorOptIn`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
