@@ -1175,6 +1175,13 @@ evidencias de observaciones activas y con los contratos de `observe_goal`.
 Evidencia:
 `TestMCPAutoprogrammingObserveActiveGoalsDescriptorV0DeclaraEvidenciaEnErrores`.
 
+Avance BUG-ORQ-20260701-073/075 2026-07-03 tarde 38: el HTTP handler de
+`/api/v0/autoprogramming/goals/observe-active` devuelve diagnostico publico y
+`evidence_refs` estables cuando falla el executor, con mensaje saneado sin
+rutas ni secretos. Esto permite distinguir fallo operacional de observacion
+batch frente a ausencia de goals o estado idle. Evidencia:
+`TestMCPAutoprogrammingObserveActiveGoalsHTTPHandlerV0ExecutorErrorDevuelveDiagnosticoPublico`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -325,6 +326,44 @@ func TestMCPAutoprogrammingObserveActiveGoalsHTTPHandlerV0CancelaExecutorAlAcept
 	}
 }
 
+func TestMCPAutoprogrammingObserveActiveGoalsHTTPHandlerV0ExecutorErrorDevuelveDiagnosticoPublico(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingObserveActiveGoalsHTTPExecutorForTestV0{
+		err: errors.New("fallo interno /home/alberto/Trabajo token=secret"),
+	}
+	req := httptest.NewRequest(
+		http.MethodPost,
+		MCPAutoprogrammingObserveActiveGoalsHTTPPathV0,
+		bytes.NewBufferString(`{
+			"request_id":"request-ref-observe-active-goals-error-001",
+			"run_refs":["run-ref-observe-active-goals-error-001"]
+		}`),
+	)
+	req.Header.Set("X-Correlation-ID", "corr-observe-active-goals-error-001")
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingObserveActiveGoalsHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError ||
+		rec.Header().Get("X-Correlation-ID") != "corr-observe-active-goals-error-001" {
+		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	var result MCPAutoprogrammingObserveActiveGoalsToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPAutoprogrammingObserveActiveGoalsEstadoErrorV0 ||
+		result.OperationRef == "" ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "autoprogramming_observe_active_goals_execute_error" ||
+		result.Errores[0].Message != "autoprogramming_observe_active_goals_execute_error" ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_observe_active_goals_execute_error") ||
+		!hasStringMCPAutoprogrammingObserveActiveGoalsTestV0(result.EvidenceRefs, "evidence-ref-autoprogramming-observe-active-goals-execute-error") ||
+		strings.Contains(result.Errores[0].Message, "/home/alberto") ||
+		strings.Contains(result.Errores[0].Message, "secret") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 type errMCPAutoprogrammingObserveActiveGoalsForTestV0 string
 
 func (err errMCPAutoprogrammingObserveActiveGoalsForTestV0) Error() string {
@@ -358,6 +397,7 @@ type fakeMCPAutoprogrammingObserveActiveGoalsHTTPExecutorForTestV0 struct {
 	input          MCPAutoprogrammingObserveActiveGoalsToolInputV0
 	result         MCPAutoprogrammingObserveActiveGoalsToolResultV0
 	delay          time.Duration
+	err            error
 	waitForCancel  bool
 	cancelObserved chan struct{}
 }
@@ -377,6 +417,9 @@ func (executor *fakeMCPAutoprogrammingObserveActiveGoalsHTTPExecutorForTestV0) E
 	}
 	if executor.delay > 0 {
 		time.Sleep(executor.delay)
+	}
+	if executor.err != nil {
+		return MCPAutoprogrammingObserveActiveGoalsToolResultV0{}, executor.err
 	}
 	return executor.result, nil
 }

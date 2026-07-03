@@ -80,9 +80,9 @@ func (handler mcpAutoprogrammingObserveActiveGoalsHTTPHandlerV0) ServeHTTP(w htt
 		return
 	}
 	if err != nil {
-		writeMCPAutoprogrammingObserveActiveGoalsHTTPV0(w, http.StatusInternalServerError, mcpAutoprogrammingObserveActiveGoalsErrorV0(
+		writeMCPAutoprogrammingObserveActiveGoalsHTTPV0(w, http.StatusInternalServerError, newMCPAutoprogrammingObserveActiveGoalsHTTPExecutorErrorV0(
+			r,
 			input,
-			"autoprogramming_observe_active_goals_execute_error",
 			"executor",
 			publicMCPExecutorErrorMessageFromErrorV0("autoprogramming_observe_active_goals_execute_error", err),
 		))
@@ -247,6 +247,33 @@ func newMCPAutoprogrammingObserveActiveGoalsHTTPErrorV0(
 		message,
 	)
 	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), input.CorrelationID, input.RequestID)
+	return result
+}
+
+func newMCPAutoprogrammingObserveActiveGoalsHTTPExecutorErrorV0(
+	r *http.Request,
+	input MCPAutoprogrammingObserveActiveGoalsToolInputV0,
+	field string,
+	message string,
+) MCPAutoprogrammingObserveActiveGoalsToolResultV0 {
+	result := mcpAutoprogrammingObserveActiveGoalsErrorV0(
+		input,
+		"autoprogramming_observe_active_goals_execute_error",
+		field,
+		message,
+	)
+	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), input.CorrelationID, input.RequestID)
+	result.OperationRef = mcpAutoprogrammingObserveActiveGoalsOperationRefV0(input)
+	result.EvidenceRefs = compactStringsMCPV0([]string{
+		"evidence-ref-autoprogramming-observe-active-goals-execute-error",
+		result.OperationRef,
+	})
+	result.Diagnostics = []MCPAutoprogrammingDiagnosticV0{{
+		Code:         "autoprogramming_observe_active_goals_execute_error",
+		Scope:        mcpAutoprogrammingObserveActiveGoalsOperationScopeV0(input),
+		Message:      "fallo publico al observar goals activos",
+		EvidenceRefs: result.EvidenceRefs,
+	}}
 	return result
 }
 
