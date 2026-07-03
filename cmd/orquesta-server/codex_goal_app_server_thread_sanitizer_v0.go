@@ -11,9 +11,11 @@ import (
 	_ "image/png"
 	"strconv"
 	"strings"
+
+	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 )
 
-const codexAppServerThreadTextMaxBytesV0 = 16 * 1024
+const codexAppServerThreadTextMaxBytesV0 = orquestaruntimecodexgoal.CodexGoalToolOutputMaxBytesV0
 const codexAppServerThreadItemsViewMaxBytesV0 = 4 * 1024
 
 func sanitizeCodexAppServerRPCDecodedOutV0(out interface{}) {

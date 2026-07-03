@@ -1121,6 +1121,36 @@ func TestCodexAppServerThreadReadSanitizaDataURIMultimodalV0(t *testing.T) {
 	}
 }
 
+func TestCodexAppServerThreadReadLimiteTextoSigueContratoDireccionV0(t *testing.T) {
+	if codexAppServerThreadTextMaxBytesV0 != orquestaruntimecodexgoal.CodexGoalToolOutputMaxBytesV0 {
+		t.Fatalf("thread text max=%d direction max=%d", codexAppServerThreadTextMaxBytesV0, orquestaruntimecodexgoal.CodexGoalToolOutputMaxBytesV0)
+	}
+	largeOutput := "tool-output-" + strings.Repeat("x", codexAppServerThreadTextMaxBytesV0+1)
+	thread := serverCodexAppServerThreadReadV0{
+		ID:     "thread-ref-large-output-001",
+		Status: "idle",
+		Turns: []serverCodexAppServerReadTurnV0{{
+			ID: "turn-ref-large-output-001",
+			Items: []serverCodexAppServerReadItemV0{{
+				ID:   "item-ref-large-output-001",
+				Type: "toolOutput",
+				Text: largeOutput,
+			}},
+		}},
+	}
+
+	sanitized, changed := sanitizeCodexAppServerThreadReadV0(thread)
+
+	if !changed {
+		t.Fatalf("thread con output gigante no saneado")
+	}
+	text := sanitized.Turns[0].Items[0].Text
+	if strings.Contains(text, largeOutput[:128]) ||
+		!strings.HasPrefix(text, "codex_app_server_operational_text_sanitized thread-output-ref-") {
+		t.Fatalf("output gigante sin ref compacto: %s", text)
+	}
+}
+
 func TestDecodeCodexAppServerRPCResponseV0SanitizaThreadReadMultimodalV0(t *testing.T) {
 	imageDataURI := "data:image/png;base64," + strings.Repeat("A", 9000)
 	payload, err := json.Marshal(map[string]interface{}{

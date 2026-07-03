@@ -954,6 +954,13 @@ politica de salidas, incluyendo `max_text_bytes=16384` y hints acotados como
 estructurado y superficie ejecutada por Codex Goal. Evidencia:
 `TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion`.
 
+Avance BUG-ORQ-20260701-079 2026-07-03 tarde 21: el sanitizer de `thread/read`
+del backend `app_server` usa el mismo limite `CodexGoalToolOutputMaxBytesV0`
+que el `direction_contract`; una salida textual de herramienta que excede ese
+limite se transforma en ref compacto `thread-output-ref-*` antes de alimentar
+observacion/cierre. Evidencia:
+`TestCodexAppServerThreadReadLimiteTextoSigueContratoDireccionV0`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y
