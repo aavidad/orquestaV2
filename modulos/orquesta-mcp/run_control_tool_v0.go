@@ -72,7 +72,7 @@ func MCPRunControlDescriptorV0() MCPRunControlToolDescriptorV0 {
 		Name:        MCPRunControlToolNameV0,
 		Version:     MCPRunControlToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,action:pause|resume|stop|cancel,run_ref?|external_job_ref?,app_ref?,requested_by?,reason?,forced?,idempotency_key?,evidence_refs?}",
-		Output:      "ok:{run_ref,action,status,checkpoint_recorded,forced?,evidence_refs?,diagnostics?}|error:{errores_publicos,forced?,evidence_refs?,diagnostics?}",
+		Output:      "ok:{run_ref,action,status,previous_status?,final_status?,goal_ref?,external_goal_ref?,goal_status_before?,goal_status_after?,goal_control_signal_sent?,goal_control_signal_confirmed?,recommended_action?,checkpoint_recorded,forced?,evidence_refs?,diagnostics?}|error:{errores_publicos,forced?,evidence_refs?,diagnostics?}",
 		ResourceURI: MCPRunControlResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",

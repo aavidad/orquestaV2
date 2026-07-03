@@ -24,7 +24,20 @@ func TestMCPRunControlDescriptorV0EsAdaptadorFino(t *testing.T) {
 			t.Fatalf("descriptor no declara action %q: %+v", action, descriptor)
 		}
 	}
-	for _, field := range []string{"forced?", "evidence_refs?", "diagnostics?"} {
+	for _, field := range []string{
+		"previous_status?",
+		"final_status?",
+		"goal_ref?",
+		"external_goal_ref?",
+		"goal_status_before?",
+		"goal_status_after?",
+		"goal_control_signal_sent?",
+		"goal_control_signal_confirmed?",
+		"recommended_action?",
+		"forced?",
+		"evidence_refs?",
+		"diagnostics?",
+	} {
 		if !strings.Contains(descriptor.Output, field) {
 			t.Fatalf("descriptor no declara salida operacional %q: %+v", field, descriptor)
 		}

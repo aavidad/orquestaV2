@@ -1222,6 +1222,14 @@ publico queda alineado con los errores recuperables HTTP y evita que clientes
 compactos descarten evidencia. Evidencia:
 `TestMCPRunControlDescriptorV0EsAdaptadorFino`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 30b: el mismo descriptor y los
+docs de contrato declaran tambien los campos operacionales de Goal-first:
+`previous_status`, `final_status`, refs/estado de Goal antes y despues, senal
+Goal enviada/confirmada y `recommended_action`. Asi clientes MCP/HTTP compactos
+no pierden el diagnostico de `control_not_propagated_to_goal_backend` ni la
+reconciliacion de cleanup externo. Evidencia:
+`TestMCPRunControlDescriptorV0EsAdaptadorFino`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 31: el constructor comun de
 errores de `orquesta.runs.control.v0` conserva ahora `forced`,
 `evidence_refs` compactas y diagnostico con scope de run tambien para errores

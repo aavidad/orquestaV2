@@ -1261,9 +1261,13 @@ Campos:
       external_job_ref?, app_ref?, reason?, requested_by?, forced?,
       idempotency_key?, evidence_refs?
   output_ok:
-    estado, run_ref, action, status, checkpoint_recorded, forced, evidence_refs
+    estado, run_ref, action, status, previous_status?, final_status?,
+    goal_ref?, external_goal_ref?, goal_status_before?, goal_status_after?,
+    goal_control_signal_sent?, goal_control_signal_confirmed?,
+    recommended_action?, checkpoint_recorded, forced, evidence_refs,
+    diagnostics?
   output_error:
-    errores_publicos compactos
+    errores_publicos compactos, forced?, evidence_refs?, diagnostics?
 Invariantes:
   - Adaptador inbound fino.
   - Delega solo en `RunControlWriterPortV0` inyectado.
@@ -1271,6 +1275,11 @@ Invariantes:
     accion controla la run completa, no un bloque OPES aislado dentro de una
     run compartida.
   - No usa DB, runtime, filesystem, scheduler interno ni proceso de agente.
+  - Si `stop`/`cancel` no se propaga causalmente al backend Goal, conserva refs
+    y estado antes/despues del Goal y publica accion recomendada en vez de
+    fingir terminalidad local.
+  - Si reconcilia cleanup externo gobernado, conserva evidencia y diagnostico
+    sin degradarlo a parada forzada.
   - El bridge HTTP cancela el contexto del puerto y devuelve `504` JSON con
     `run_control_timeout` si el control no responde dentro de la ventana
     publica; no deja al cliente esperando sin cuerpo.
@@ -1278,6 +1287,7 @@ Pruebas de contrato:
   - Executor delega en puerto fake.
   - Executor resuelve run por job externo mediante puerto fake.
   - Transporte queda opt-in sin binding.
+  - `TestMCPRunControlDescriptorV0EsAdaptadorFino`.
   - HTTP POST delega y propaga correlacion.
   - HTTP timeout devuelve JSON publico y cancela el puerto.
 ```

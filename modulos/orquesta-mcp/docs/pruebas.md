@@ -111,6 +111,19 @@ proveedor; solo evita que la ruta HTTP reduzca la ola por defaults de entrada.
 ```
 
 ```text
+Caso: MCP-CT-029b control de runs conserva estado Goal y evidencia
+Tipo: contract
+Comando: go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPRunControlDescriptorV0EsAdaptadorFino'
+Evidencia esperada: `orquesta.runs.control.v0` declara en su descriptor la
+salida operacional completa: `previous_status`, `final_status`, refs/estado
+Goal antes y despues, flags de senal Goal, `recommended_action`, `forced`,
+`evidence_refs` y `diagnostics` tanto para salida ok como error cuando aplica.
+Ultima ejecucion: 2026-07-03; pasa focal.
+Riesgos: el descriptor no ejecuta reconciliacion; solo evita que clientes
+compactos descarten campos ya publicados por executor, HTTP y transporte.
+```
+
+```text
 Caso: MCP-CT-030 apagado controlado de servidor por MCP/REST
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway
