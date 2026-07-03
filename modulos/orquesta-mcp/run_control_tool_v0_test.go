@@ -112,6 +112,10 @@ func TestMCPRunControlExecutorV0StopForcedNoPublicaStoppedSiGoalBackendSigueActi
 		result.Errores[0].Code != "control_not_propagated_to_goal_backend" {
 		t.Fatalf("diagnostics=%+v errores=%+v", result.Diagnostics, result.Errores)
 	}
+	if !containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-run-control-goal-backend-active") ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-goal-backend-active") {
+		t.Fatalf("evidence_refs=%+v", result.EvidenceRefs)
+	}
 	if len(goalBackend.inputs) != 2 ||
 		goalBackend.inputs[0].RunRef != runRef ||
 		!goalBackend.inputs[1].IncludeProcessRefs ||

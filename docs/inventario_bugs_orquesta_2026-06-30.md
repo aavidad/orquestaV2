@@ -725,6 +725,15 @@ arranque/estado. Evidencia:
 `TestOPESBridgeLoopConfigUsaBaseURLDeRuntimeGestionadoV0` y guardas del
 registry de env del servidor.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
+evidencia de `control_not_propagated_to_goal_backend` solo dentro de
+`diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado
+publico de primer nivel conserva `evidence_refs` compactas del backend activo y
+del goal observado para que clientes HTTP/MCP compactos no pierdan la causa del
+409 ni publiquen un terminal falso. Evidencia:
+`TestMCPRunControlExecutorV0StopForcedNoPublicaStoppedSiGoalBackendSigueActive`
+y `TestMCPRunControlHTTPHandlerV0BackendGoalActivoEsConflictV0`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y

@@ -161,18 +161,24 @@ func (executor MCPRunControlToolExecutorV0) enrichRunControlGoalBackendResultV0(
 	if !mcpRunControlGoalBackendActiveV0(afterGoal) {
 		return result
 	}
+	backendEvidenceRefs := compactStringsMCPV0([]string{
+		"evidence-ref-run-control-goal-backend-active",
+		result.GoalRef,
+		result.ExternalGoalRef,
+	})
+	backendEvidenceRefs = compactStringsMCPV0(append(
+		backendEvidenceRefs,
+		mcpRunControlGoalEvidenceRefsV0(afterGoal)...,
+	))
+	result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, backendEvidenceRefs...))
 	result.GoalControlSignalSent = false
 	result.GoalControlSignalConfirmed = false
 	result.RecommendedAction = "observe_goal_backend_before_declaring_stopped"
 	result.Diagnostics = append(result.Diagnostics, MCPRunControlDiagnosticV0{
-		Code:    "control_not_propagated_to_goal_backend",
-		Scope:   "run:" + strings.TrimSpace(result.RunRef),
-		Message: "run control local no confirma stop/cancel del backend goal-first; no publicar stopped como terminal",
-		EvidenceRefs: compactStringsMCPV0([]string{
-			"evidence-ref-run-control-goal-backend-active",
-			result.GoalRef,
-			result.ExternalGoalRef,
-		}),
+		Code:         "control_not_propagated_to_goal_backend",
+		Scope:        "run:" + strings.TrimSpace(result.RunRef),
+		Message:      "run control local no confirma stop/cancel del backend goal-first; no publicar stopped como terminal",
+		EvidenceRefs: backendEvidenceRefs,
 	})
 	result.Errores = append(result.Errores, MCPValidationIssueV0{
 		Code:    "control_not_propagated_to_goal_backend",
@@ -367,6 +373,13 @@ func mcpRunControlGoalDomainReceiptRefsV0(stats *MCPDirectorStatsToolResultV0) [
 		return []string{}
 	}
 	return compactStringsMCPV0(stats.Goal.DomainReceiptRefs)
+}
+
+func mcpRunControlGoalEvidenceRefsV0(stats *MCPDirectorStatsToolResultV0) []string {
+	if stats == nil || stats.Goal == nil {
+		return []string{}
+	}
+	return compactStringsMCPV0(stats.Goal.EvidenceRefs)
 }
 
 func mcpRunControlGoalStatusFromStatsV0(stats *MCPDirectorStatsToolResultV0) string {
