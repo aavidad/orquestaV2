@@ -908,10 +908,13 @@ running, no marca `blocked` y no lanza rework tras cleanup externo. Evidencia:
 Avance BUG-ORQ-20260701-065 2026-07-03 tarde 27: la evidencia
 `evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup` queda
 acotada a acciones ejecutivas de `runs/control`: `stop` y `cancel` pueden
-reconciliar cleanup externo, pero `pause` solo conserva la evidencia en el
-comando y no consulta cierre terminal, no completa run-control, no marca el
-`GoalWorkState` como `blocked` y no genera rework implicito. Evidencia:
-`TestMCPRunControlExecutorV0PauseNoReconciliaExternalCleanupAunqueTraigaEvidencia`.
+reconciliar cleanup externo, pero `pause` y `resume` solo conservan la evidencia
+en el comando y no consultan cierre terminal, no completan run-control, no
+marcan el `GoalWorkState` como `blocked` y no generan rework implicito.
+Evidencia:
+`TestMCPRunControlExecutorV0PauseNoReconciliaExternalCleanupAunqueTraigaEvidencia`
+y
+`TestMCPRunControlExecutorV0ResumeNoReconciliaExternalCleanupAunqueTraigaEvidencia`.
 
 Avance BUG-ORQ-20260701-085 2026-07-03 tarde 22: `efficiency_summary` conserva
 ahora tambien las acciones compactas de launch write-set: si el goal queda
