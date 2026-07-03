@@ -284,6 +284,7 @@ func TestServerCodexAppServerGoalBackendV0WriteSetGuardNoUsaDangerFullAccess(t *
 		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
 			WriteSetEnforcement: orquestaruntimecodexgoal.CodexGoalWriteSetEnforcementV0,
 			MinimumSandbox:      orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0,
+			AllowedWriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
 		},
 	})
 
@@ -295,11 +296,76 @@ func TestServerCodexAppServerGoalBackendV0WriteSetGuardNoUsaDangerFullAccess(t *
 	}
 }
 
-func TestCodexAppServerGoalSandboxForPacketV0AplicaMinimoConWriteSetGuard(t *testing.T) {
-	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+func TestServerCodexAppServerGoalBackendV0WriteSetGuardExigeAllowedWriteSet(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-guard-missing-001"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		CWD:      t.TempDir(),
+		Sandbox:  "workspace-write",
+	}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		SchemaVersion: orquestaruntimecodexgoal.CodexGoalStartPacketSchemaV0,
+		GoalRef:       "goal-ref-codex-app-server-guard-missing-001",
+		Objective:     "probar allowed write-set ausente",
+		Prompt:        "prompt compacto",
+		WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
 		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
 			WriteSetEnforcement: orquestaruntimecodexgoal.CodexGoalWriteSetEnforcementV0,
 			MinimumSandbox:      orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0,
+		},
+	})
+
+	if err == nil ||
+		receipt.Status != orquestagoal.GoalStatusInvalidV0 ||
+		receipt.IssueCode != "codex_app_server_write_set_guard_allowed_write_set_missing" ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-write-set-guard-allowed-write-set-missing") ||
+		len(protocol.calls) != 0 {
+		t.Fatalf("receipt=%+v err=%v calls=%v", receipt, err, protocol.calls)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0WriteSetGuardBloqueaAllowedWriteSetDivergente(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-guard-mismatch-001"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		CWD:      t.TempDir(),
+		Sandbox:  "workspace-write",
+	}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		SchemaVersion: orquestaruntimecodexgoal.CodexGoalStartPacketSchemaV0,
+		GoalRef:       "goal-ref-codex-app-server-guard-mismatch-001",
+		Objective:     "probar allowed write-set divergente",
+		Prompt:        "prompt compacto",
+		WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
+			WriteSetEnforcement: orquestaruntimecodexgoal.CodexGoalWriteSetEnforcementV0,
+			MinimumSandbox:      orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0,
+			AllowedWriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "html"}},
+		},
+	})
+
+	if err == nil ||
+		receipt.Status != orquestagoal.GoalStatusInvalidV0 ||
+		receipt.IssueCode != "codex_app_server_write_set_guard_allowed_write_set_mismatch" ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-write-set-guard-allowed-write-set-mismatch") ||
+		len(protocol.calls) != 0 {
+		t.Fatalf("receipt=%+v err=%v calls=%v", receipt, err, protocol.calls)
+	}
+}
+
+func TestCodexAppServerGoalSandboxForPacketV0AplicaMinimoConWriteSetGuard(t *testing.T) {
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		WriteSet: []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
+			WriteSetEnforcement: orquestaruntimecodexgoal.CodexGoalWriteSetEnforcementV0,
+			MinimumSandbox:      orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0,
+			AllowedWriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
 		},
 	}
 	for _, configured := range []string{"", "danger-full-access"} {
@@ -340,6 +406,7 @@ func TestServerCodexAppServerGoalBackendV0ReadOnlyBloqueaWriteSetGuard(t *testin
 		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
 			WriteSetEnforcement: orquestaruntimecodexgoal.CodexGoalWriteSetEnforcementV0,
 			MinimumSandbox:      orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0,
+			AllowedWriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
 		},
 	})
 

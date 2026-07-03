@@ -213,6 +213,9 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	if backend.Protocol == nil {
 		return codexAppServerStartReceiptV0(packet, "", "codex_app_server_protocol_missing"), errors.New("codex_app_server_protocol_missing")
 	}
+	if code := codexAppServerGoalWriteSetPolicyIssueForPacketV0(packet); code != "" {
+		return codexAppServerStartReceiptV0(packet, "", code), errors.New(code)
+	}
 	if code := codexAppServerGoalSandboxIssueForPacketV0(backend.Sandbox, packet); code != "" {
 		return codexAppServerStartReceiptV0(packet, "", code), errors.New(code)
 	}
@@ -684,6 +687,44 @@ func codexAppServerGoalSandboxIssueForPacketV0(
 	return ""
 }
 
+func codexAppServerGoalWriteSetPolicyIssueForPacketV0(
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+) string {
+	if strings.TrimSpace(packet.DirectionContract.WriteSetEnforcement) != orquestaruntimecodexgoal.CodexGoalWriteSetEnforcementV0 {
+		return ""
+	}
+	packetWriteSet := codexAppServerGoalWriteSetPolicyPathsV0(packet.WriteSet)
+	allowedWriteSet := codexAppServerGoalWriteSetPolicyPathsV0(packet.DirectionContract.AllowedWriteSet)
+	if len(allowedWriteSet) == 0 {
+		return "codex_app_server_write_set_guard_allowed_write_set_missing"
+	}
+	if len(packetWriteSet) != len(allowedWriteSet) {
+		return "codex_app_server_write_set_guard_allowed_write_set_mismatch"
+	}
+	for i := range packetWriteSet {
+		if packetWriteSet[i] != allowedWriteSet[i] {
+			return "codex_app_server_write_set_guard_allowed_write_set_mismatch"
+		}
+	}
+	return ""
+}
+
+func codexAppServerGoalWriteSetPolicyPathsV0(scopes []orquestagoal.GoalWriteScopeV0) []string {
+	out := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		path := strings.TrimSpace(scope.Path)
+		if path == "" {
+			continue
+		}
+		path = filepath.ToSlash(filepath.Clean(strings.Trim(path, "/")))
+		if path == "." {
+			continue
+		}
+		out = append(out, path)
+	}
+	return compactServerStackStringsV0(out)
+}
+
 func (backend serverCodexAppServerGoalBackendV0) turnStartParamsV0(
 	threadID string,
 	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
@@ -718,6 +759,10 @@ func codexAppServerStartIssueEvidenceRefsV0(code string) []string {
 	switch strings.TrimSpace(code) {
 	case "codex_app_server_write_set_requires_workspace_write":
 		return []string{"evidence-ref-codex-app-server-write-set-requires-workspace-write"}
+	case "codex_app_server_write_set_guard_allowed_write_set_missing":
+		return []string{"evidence-ref-codex-app-server-write-set-guard-allowed-write-set-missing"}
+	case "codex_app_server_write_set_guard_allowed_write_set_mismatch":
+		return []string{"evidence-ref-codex-app-server-write-set-guard-allowed-write-set-mismatch"}
 	default:
 		return nil
 	}
