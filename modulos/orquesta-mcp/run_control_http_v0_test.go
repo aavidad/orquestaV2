@@ -188,6 +188,84 @@ func TestMCPRunControlHTTPHandlerV0CancelExternalCleanupSinForceV0(t *testing.T)
 	}
 }
 
+func TestMCPRunControlHTTPHandlerV0StopExternalCleanupSinForceV0(t *testing.T) {
+	runRef := "run-ref-control-http-external-cleanup-stop-001"
+	goalRef := "goal-ref-control-http-external-cleanup-stop-001"
+	externalGoalRef := "thread-ref-" + goalRef
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Parar por HTTP tras cleanup externo gobernado.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	port := &fakeMCPRunControlPortV0{
+		readState:  runControlStateForMCPTestV0(runRef, orquestaruncontrol.RunControlStatusRunningV0, false),
+		stopStatus: orquestaruncontrol.RunControlStatusStoppedV0,
+	}
+	goalBackend := &fakeMCPRunControlGoalBackendStateV0{
+		results: []MCPDirectorStatsToolResultV0{
+			{Estado: MCPDirectorStatsEstadoOKV0, RunRef: runRef},
+			{Estado: MCPDirectorStatsEstadoOKV0, RunRef: runRef},
+		},
+	}
+	executor := MCPRunControlToolExecutorV0{
+		Port:             port,
+		GoalBackendState: goalBackend,
+		GoalStateStore:   goalStates,
+	}
+	body := bytes.NewBuffer(nil)
+	_ = json.NewEncoder(body).Encode(MCPRunControlToolInputV0{
+		Action:        "stop",
+		RunRef:        runRef,
+		RequestID:     "request-ref-run-control-http-external-cleanup-stop-001",
+		CorrelationID: "corr-run-control-http-external-cleanup-stop-001",
+		RequestedBy:   "orquesta-director",
+		Reason:        "seguir run_control_reconcile_external_cleanup parando por HTTP",
+		Forced:        false,
+		EvidenceRefs:  []string{mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0},
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, MCPRunControlHTTPPathV0, body)
+
+	NewMCPRunControlHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK ||
+		rec.Header().Get("X-Correlation-ID") != "corr-run-control-http-external-cleanup-stop-001" {
+		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	var result MCPRunControlToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPRunControlEstadoOKV0 ||
+		result.Action != "stop" ||
+		result.Status != string(orquestaruncontrol.RunControlStatusStoppedV0) ||
+		result.RecommendedAction != "replan_narrow_context" ||
+		!containsMCPRunControlDiagnosticForTestV0(result.Diagnostics, "goal_state_terminal_reconciled_after_external_cleanup") ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-run-control-goal-external-cleanup-reconciled") ||
+		!containsStringMCPTestV0(result.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) {
+		t.Fatalf("result=%+v", result)
+	}
+	if port.complete.TargetStatus != orquestaruncontrol.RunControlStatusStoppedV0 {
+		t.Fatalf("complete=%+v", port.complete)
+	}
+}
+
 func TestMCPRunControlHTTPHandlerV0ExecutorErrorConservaEvidenciaV0(t *testing.T) {
 	executor := &fakeMCPRunControlHTTPExecutorV0{
 		err: errors.New("executor unavailable"),
