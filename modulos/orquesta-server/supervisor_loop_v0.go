@@ -10,11 +10,18 @@ import (
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 )
 
+const (
+	supervisorTickCauseInitialV0  = "initial"
+	supervisorTickCauseManualV0   = "manual"
+	supervisorTickCauseWakeupV0   = "wakeup"
+	supervisorTickCauseWatchdogV0 = "watchdog"
+)
+
 func (runtime *RuntimeV0) runSupervisorLoopV0(ctx context.Context) {
 	if runtime.supervisor == nil {
 		return
 	}
-	runtime.runSupervisorTickAsyncV0(ctx)
+	runtime.runSupervisorTickAsyncV0(ctx, supervisorTickCauseInitialV0)
 	ticker := time.NewTicker(runtime.config.TickInterval)
 	defer ticker.Stop()
 	for {
@@ -22,14 +29,14 @@ func (runtime *RuntimeV0) runSupervisorLoopV0(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-runtime.supervisorWakeups:
-			runtime.runSupervisorTickAsyncV0(ctx)
+			runtime.runSupervisorTickAsyncV0(ctx, supervisorTickCauseWakeupV0)
 		case <-ticker.C:
-			runtime.runSupervisorTickAsyncV0(ctx)
+			runtime.runSupervisorTickAsyncV0(ctx, supervisorTickCauseWatchdogV0)
 		}
 	}
 }
 
-func (runtime *RuntimeV0) runSupervisorTickAsyncV0(ctx context.Context) bool {
+func (runtime *RuntimeV0) runSupervisorTickAsyncV0(ctx context.Context, causes ...string) bool {
 	if runtime.supervisorFrozenForShutdownV0() {
 		runtime.markSupervisorFrozenForShutdownV0(ctx, "shutdown_in_progress")
 		return false
@@ -38,6 +45,7 @@ func (runtime *RuntimeV0) runSupervisorTickAsyncV0(ctx context.Context) bool {
 		atomic.StoreInt32(&runtime.supervisorTickPending, 1)
 		return false
 	}
+	cause := normalizeSupervisorTickCauseV0(causes...)
 	atomic.StoreInt32(&runtime.supervisorTickPending, 0)
 	runtime.runAsyncWorkV0("supervisor_tick", func() {
 		runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkSupervisorTickActiveV0(true, runtime.clock.Now()), "supervisor_tick_active")
@@ -48,17 +56,17 @@ func (runtime *RuntimeV0) runSupervisorTickAsyncV0(ctx context.Context) bool {
 				runtime.persistStateTransitionV0(receiptCtx, runtime.tracker.MarkSupervisorTickActiveV0(false, runtime.clock.Now()), "supervisor_tick_inactive")
 			})
 		}()
-		runtime.runSupervisorTickV0(ctx)
+		runtime.runSupervisorTickV0(ctx, cause)
 		if atomic.SwapInt32(&runtime.supervisorTickPending, 0) == 1 &&
 			ctx.Err() == nil &&
 			!runtime.supervisorFrozenForShutdownV0() {
-			runtime.runSupervisorTickV0(ctx)
+			runtime.runSupervisorTickV0(ctx, cause)
 		}
 	})
 	return true
 }
 
-func (runtime *RuntimeV0) runSupervisorTickV0(ctx context.Context) {
+func (runtime *RuntimeV0) runSupervisorTickV0(ctx context.Context, causes ...string) {
 	defer runtime.recoverSupervisorTickPanicV0(ctx)
 	if runtime.supervisorFrozenForShutdownV0() {
 		runtime.markSupervisorFrozenForShutdownV0(ctx, "shutdown_in_progress")
@@ -67,12 +75,14 @@ func (runtime *RuntimeV0) runSupervisorTickV0(ctx context.Context) {
 	if err := ctx.Err(); err != nil {
 		return
 	}
+	cause := normalizeSupervisorTickCauseV0(causes...)
 	command := runtime.config.SupervisorCommand
 	if command.MaxTicks <= 0 {
 		command.MaxTicks = DefaultSupervisorMaxTicksV0
 	}
 	runtime.auditEventV0(ctx, "supervisor_tick_start", "running", "", map[string]interface{}{
 		"command_summary": supervisorCommandAuditSummaryV0(command),
+		"tick_cause":      cause,
 	})
 	result, err := runtime.supervisor.RunGlobalSupervisorV0(ctx, command)
 	now := runtime.clock.Now()
@@ -92,6 +102,7 @@ func (runtime *RuntimeV0) runSupervisorTickV0(ctx context.Context) {
 	runtime.auditEventV0(ctx, "supervisor_tick_result", "ok", "", map[string]interface{}{
 		"command_summary": supervisorCommandAuditSummaryV0(command),
 		"result_summary":  supervisorResultAuditSummaryWithStateV0(result, runtime.tracker.SnapshotV0()),
+		"tick_cause":      cause,
 	})
 	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkSupervisorV0(command, result, now), "supervisor_tick")
 	residentPending := detectResidentPendingWithoutDispatchV0(result)
@@ -106,7 +117,22 @@ func (runtime *RuntimeV0) runSupervisorTickV0(ctx context.Context) {
 		runtime.markIdleSelfImprovementCheckedV0(ctx, SupervisorPublicStopQueueIdleButGoalBackendActiveV0, now)
 		return
 	}
-	runtime.maybeScheduleIdleSelfImprovementCausalV0(ctx, result, now)
+	runtime.maybeScheduleIdleSelfImprovementCausalV0(ctx, result, now, cause)
+}
+
+func normalizeSupervisorTickCauseV0(causes ...string) string {
+	if len(causes) == 0 {
+		return supervisorTickCauseManualV0
+	}
+	switch strings.TrimSpace(causes[0]) {
+	case supervisorTickCauseInitialV0,
+		supervisorTickCauseWakeupV0,
+		supervisorTickCauseWatchdogV0,
+		supervisorTickCauseManualV0:
+		return strings.TrimSpace(causes[0])
+	default:
+		return supervisorTickCauseManualV0
+	}
 }
 
 func supervisorResultHasUnhandledOutboxWaitV0(result orquestarunsupervisor.RunSupervisorResultV0) bool {

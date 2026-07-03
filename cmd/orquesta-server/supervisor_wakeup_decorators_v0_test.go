@@ -10,6 +10,7 @@ import (
 	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaoutboxdispatch "orquesta/modulos/orquesta-outbox-dispatch"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
@@ -289,6 +290,68 @@ func TestServerWakeupDomainWorkArtifactSubmissionLedgerV0DisparaAlRegistrar(t *t
 	}
 }
 
+func TestServerWakeupGoalStateStoreV0DisparaSupervisorSoloConTerminalV0(t *testing.T) {
+	ctx := context.Background()
+	var causes []string
+	var goalCauses []string
+	relay := &serverSupervisorWakeupRelayV0{
+		request: func(cause string) bool {
+			causes = append(causes, cause)
+			return true
+		},
+		requestGoalObservation: func(cause string) bool {
+			goalCauses = append(goalCauses, cause)
+			return true
+		},
+	}
+	store := serverWakeupGoalStateStoreV0{
+		inner:  newFakeServerGoalStateStoreV0(),
+		wakeup: relay,
+	}
+
+	if err := store.SaveGoalWorkStateV0(ctx, orquestagoal.GoalWorkStateV0{
+		RunRef:  "run-ref-goal-wakeup-running",
+		GoalRef: "goal-ref-goal-wakeup-running",
+		Status:  orquestagoal.GoalStatusRunningV0,
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 running: %v", err)
+	}
+	if err := store.SaveGoalWorkStateV0(ctx, orquestagoal.GoalWorkStateV0{
+		RunRef:  "run-ref-goal-wakeup-complete",
+		GoalRef: "goal-ref-goal-wakeup-complete",
+		Status:  orquestagoal.GoalStatusCompleteV0,
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 complete: %v", err)
+	}
+	if err := store.SaveGoalWorkRunMarkerV0(ctx, orquestagoal.GoalWorkRunMarkerV0{
+		RunRef:  "run-ref-goal-marker-running",
+		GoalRef: "goal-ref-goal-marker-running",
+		Status:  orquestagoal.GoalStatusRunningV0,
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkRunMarkerV0 running: %v", err)
+	}
+	if err := store.SaveGoalWorkRunMarkerV0(ctx, orquestagoal.GoalWorkRunMarkerV0{
+		RunRef:  "run-ref-goal-marker-blocked",
+		GoalRef: "goal-ref-goal-marker-blocked",
+		Status:  orquestagoal.GoalStatusBlockedV0,
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkRunMarkerV0 blocked: %v", err)
+	}
+
+	if !stringSlicesEqualV0(causes, []string{"goal_state_terminal", "goal_run_marker_terminal"}) {
+		t.Fatalf("causes=%v", causes)
+	}
+	wantGoalCauses := []string{
+		"goal_state_saved",
+		"goal_state_saved",
+		"goal_run_marker_saved",
+		"goal_run_marker_saved",
+	}
+	if !stringSlicesEqualV0(goalCauses, wantGoalCauses) {
+		t.Fatalf("goalCauses=%v want=%v", goalCauses, wantGoalCauses)
+	}
+}
+
 type fakeServerDirectorCycleOutboxLedgerV0 struct {
 	pending []orquestacoreworkflow.OutboxMessageV0
 }
@@ -354,6 +417,70 @@ func (store *fakeServerCodexReceiptStoreV0) RecordDirectorAgentDecisionFileConsu
 ) error {
 	store.sidecars = append(store.sidecars, receipt)
 	return nil
+}
+
+type fakeServerGoalStateStoreV0 struct {
+	states  map[string]orquestagoal.GoalWorkStateV0
+	markers map[string]orquestagoal.GoalWorkRunMarkerV0
+}
+
+func newFakeServerGoalStateStoreV0() *fakeServerGoalStateStoreV0 {
+	return &fakeServerGoalStateStoreV0{
+		states:  map[string]orquestagoal.GoalWorkStateV0{},
+		markers: map[string]orquestagoal.GoalWorkRunMarkerV0{},
+	}
+}
+
+func (store *fakeServerGoalStateStoreV0) SaveGoalWorkStateV0(
+	_ context.Context,
+	state orquestagoal.GoalWorkStateV0,
+) error {
+	store.states[state.RunRef] = state
+	return nil
+}
+
+func (store *fakeServerGoalStateStoreV0) LoadGoalWorkStateV0(
+	_ context.Context,
+	runRef string,
+) (orquestagoal.GoalWorkStateV0, error) {
+	return store.states[runRef], nil
+}
+
+func (store *fakeServerGoalStateStoreV0) SaveGoalWorkRunMarkerV0(
+	_ context.Context,
+	marker orquestagoal.GoalWorkRunMarkerV0,
+) error {
+	store.markers[marker.RunRef] = marker
+	return nil
+}
+
+func (store *fakeServerGoalStateStoreV0) LoadGoalWorkRunMarkerV0(
+	_ context.Context,
+	runRef string,
+) (orquestagoal.GoalWorkRunMarkerV0, error) {
+	return store.markers[runRef], nil
+}
+
+func (store *fakeServerGoalStateStoreV0) ListGoalWorkRunMarkersV0(
+	_ context.Context,
+	_ orquestagoal.GoalWorkRunMarkerListRequestV0,
+) ([]orquestagoal.GoalWorkRunMarkerV0, error) {
+	out := make([]orquestagoal.GoalWorkRunMarkerV0, 0, len(store.markers))
+	for _, marker := range store.markers {
+		out = append(out, marker)
+	}
+	return out, nil
+}
+
+func (store *fakeServerGoalStateStoreV0) ListGoalWorkStatesV0(
+	_ context.Context,
+	_ orquestagoal.GoalWorkStateListRequestV0,
+) ([]orquestagoal.GoalWorkStateV0, error) {
+	out := make([]orquestagoal.GoalWorkStateV0, 0, len(store.states))
+	for _, state := range store.states {
+		out = append(out, state)
+	}
+	return out, nil
 }
 
 func stringSlicesEqualV0(got []string, want []string) bool {

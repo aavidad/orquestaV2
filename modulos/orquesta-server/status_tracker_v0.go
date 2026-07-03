@@ -9,14 +9,17 @@ import (
 )
 
 type StatusTrackerV0 struct {
-	mu                          sync.RWMutex
-	state                       StateV0
-	supervisorNoExecutionSince  time.Time
-	lastIdleSelfImprovementAt   time.Time
-	idleSelfImprovementInFlight bool
-	idleSelfImprovementAccepted bool
-	idleSelfImprovementAttempts int
-	idleSelfImprovementPrepared int
+	mu                                     sync.RWMutex
+	state                                  StateV0
+	supervisorNoExecutionSince             time.Time
+	lastIdleSelfImprovementAt              time.Time
+	idleSelfImprovementInFlight            bool
+	idleSelfImprovementAccepted            bool
+	idleSelfImprovementAttempts            int
+	idleSelfImprovementPrepared            int
+	lastIdleSelfImprovementPublication     idleSelfImprovementPublicationV0
+	idleSelfImprovementSkippedIdentical    int
+	idleSelfImprovementPublicationRecorded bool
 }
 
 func (tracker *StatusTrackerV0) SnapshotV0() StateV0 {

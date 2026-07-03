@@ -125,11 +125,15 @@ func (runtime *RuntimeV0) runGoalObservationTickV0(ctx context.Context) {
 		"result_summary": goalObservationResultAuditSummaryV0(result),
 		"correlation_id": correlationID,
 	})
+	terminal := goalObserverTerminalCountV0(result)
 	runtime.persistStateTransitionV0(
 		ctx,
 		runtime.tracker.MarkGoalObserverV0(result, now),
 		"goal_observer_tick",
 	)
+	if terminal > 0 {
+		runtime.RequestSupervisorWakeupV0("goal_observer_terminal")
+	}
 }
 
 func (runtime *RuntimeV0) goalObservationAvailableV0() bool {

@@ -350,6 +350,9 @@ func (store serverWakeupGoalStateStoreV0) SaveGoalWorkStateV0(
 		return err
 	}
 	store.wakeup.requestGoalObservationV0("goal_state_saved")
+	if orquestagoal.GoalWorkResultTerminalV0(state.Status) {
+		store.wakeup.requestV0("goal_state_terminal")
+	}
 	return nil
 }
 
@@ -368,6 +371,9 @@ func (store serverWakeupGoalStateStoreV0) SaveGoalWorkRunMarkerV0(
 		return err
 	}
 	store.wakeup.requestGoalObservationV0("goal_run_marker_saved")
+	if orquestagoal.GoalWorkResultTerminalV0(marker.Status) {
+		store.wakeup.requestV0("goal_run_marker_terminal")
+	}
 	return nil
 }
 

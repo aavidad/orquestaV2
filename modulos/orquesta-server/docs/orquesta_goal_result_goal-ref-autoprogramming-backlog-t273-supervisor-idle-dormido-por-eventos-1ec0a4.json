@@ -1,0 +1,158 @@
+{
+  "goal_ref": "goal-ref-autoprogramming-backlog-t273-supervisor-idle-dormido-por-eventos-1ec0a46f",
+  "schema_version": "orquesta_goal_result.v0",
+  "status": "complete",
+  "summary": "Implementado anti-churn idle por huella scheduled/blocked, wakeup de supervisor por terminal de goal persistido/observado y tick de supervisor etiquetado como watchdog sin nuevas env vars ni cambios HTTP.",
+  "artifact_refs": [
+    "artifact-ref-t273-idle-idempotency",
+    "artifact-ref-t273-terminal-wakeup",
+    "artifact-ref-t273-tests",
+    "artifact-ref-t273-goal-result"
+  ],
+  "artifact_paths": [
+    "cmd/orquesta-server/supervisor_wakeup_decorators_v0.go",
+    "cmd/orquesta-server/supervisor_wakeup_decorators_v0_test.go",
+    "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+    "docs/manual_correccion_pericial_orquesta_2026-07-03.md",
+    "modulos/orquesta-server/AGENTS.md",
+    "modulos/orquesta-server/docs/checkpoint_started_t273_supervisor_idle_dormido_por_eventos.txt",
+    "modulos/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t273-supervisor-idle-dormido-por-eventos-1ec0a4.json",
+    "modulos/orquesta-server/goal_observation_loop_v0.go",
+    "modulos/orquesta-server/status_tracker_idle_idempotency_v0.go",
+    "modulos/orquesta-server/status_tracker_v0.go",
+    "modulos/orquesta-server/supervisor_idle_causal_schedule_v0.go",
+    "modulos/orquesta-server/supervisor_idle_idempotency_v0_test.go",
+    "modulos/orquesta-server/supervisor_loop_v0.go"
+  ],
+  "materialized_artifacts": [
+    {
+      "artifact_ref": "artifact-ref-t273-checkpoint-started",
+      "path": "modulos/orquesta-server/docs/checkpoint_started_t273_supervisor_idle_dormido_por_eventos.txt",
+      "artifact_type": "checkpoint",
+      "status": "valid",
+      "evidence_refs": [
+        "scan-ref-backlog-550fd4b2e993",
+        "task-instance-ref-backlog-88123edb"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t273-idle-idempotency",
+      "path": "modulos/orquesta-server/status_tracker_idle_idempotency_v0.go",
+      "artifact_type": "implementation",
+      "status": "valid",
+      "evidence_refs": [
+        "test:go-test-modulos-orquesta-server:passed",
+        "test:TestRuntimeV0IdleSelfImprovementSaltaBloqueoIdenticoYPublicaWatchdogV0:passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t273-terminal-wakeup",
+      "path": "cmd/orquesta-server/supervisor_wakeup_decorators_v0.go",
+      "artifact_type": "implementation",
+      "status": "valid",
+      "evidence_refs": [
+        "test:go-test-cmd-orquesta-server:passed",
+        "test:TestServerWakeupGoalStateStoreV0DisparaSupervisorSoloConTerminalV0:passed",
+        "test:TestRuntimeV0SupervisorDespiertaPorGoalTerminalObservadoV0:passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t273-tests",
+      "path": "modulos/orquesta-server/supervisor_idle_idempotency_v0_test.go",
+      "artifact_type": "test",
+      "status": "valid",
+      "evidence_refs": [
+        "test:go-test-modulos-orquesta-server:passed",
+        "test:go-test-cmd-orquesta-server:passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t273-goal-result",
+      "path": "modulos/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t273-supervisor-idle-dormido-por-eventos-1ec0a4.json",
+      "artifact_type": "goal_result",
+      "status": "valid",
+      "evidence_refs": [
+        "command:go-test-required-suite:passed",
+        "command:go-build-all:passed"
+      ],
+      "issues": []
+    }
+  ],
+  "checklist": {
+    "expected_refs": [
+      "task-instance-ref-backlog-88123edb",
+      "scan-ref-backlog-550fd4b2e993",
+      "reservation-ref-backlog-scan-doc-merge-075a8e09920d",
+      "reservation-ref-backlog-task-id-4eff5d6e760c",
+      "task-id-ref-backlog-4adbd9d43ad8",
+      "required-test-ref-c99943d8261a",
+      "required-test-ref-48b206d82e36",
+      "required-test-ref-c908af756958",
+      "manual:go-build-all"
+    ],
+    "completed_refs": [
+      "anti-churn-idle-scheduled-blocked",
+      "watchdog-skipped-identical-counter",
+      "goal-terminal-supervisor-wakeup",
+      "no-new-env-vars",
+      "no-http-contract-change",
+      "required-test-ref-c99943d8261a",
+      "required-test-ref-48b206d82e36",
+      "required-test-ref-c908af756958",
+      "manual:go-build-all"
+    ],
+    "missing_refs": [],
+    "evidence_refs": [
+      "backlog_scan_ref:scan-ref-backlog-550fd4b2e993",
+      "backlog_scan_doc:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:17:sha256:a3dc086bdc2bab46a17d0ae66680e9a69a3bf0073df867876d54f6b871651882",
+      "backlog_line_current_sha256:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:17:sha256:4677e4c54aeab4da519161adbccf17f0699ca7a145e730ba7503428bb0b23665",
+      "backlog_doc_current_sha256:ee851ceb6ad93644b8215ef4785cec86f6ab8e185542c2418fbc631ddccb0ece",
+      "diff-scan:ORQUESTA_:no_new_env_vars",
+      "command:git-diff-check:passed"
+    ]
+  },
+  "required_test_results": [
+    {
+      "test_ref": "required-test-ref-c99943d8261a",
+      "status": "passed",
+      "evidence_refs": [
+        "command:go test -count=1 ./modulos/orquesta-server:passed"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-48b206d82e36",
+      "status": "passed",
+      "evidence_refs": [
+        "command:go test -count=1 ./cmd/orquesta-server:passed"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-c908af756958",
+      "status": "passed",
+      "evidence_refs": [
+        "command:go test -count=1 ./:passed"
+      ]
+    }
+  ],
+  "domain_receipt_refs": [],
+  "rework_plan_refs": [],
+  "evidence_refs": [
+    "command:go test -count=1 ./modulos/orquesta-server:passed",
+    "command:go test -count=1 ./cmd/orquesta-server:passed",
+    "command:go test -count=1 ./:passed",
+    "command:go build ./...:passed_with_worktree_vcs_env",
+    "diagnostic:plain_go_build_failed_before_compile_due_to_external_tmp_git_status",
+    "command:go build -buildvcs=false ./...:passed_diagnostic",
+    "command:git diff --check:passed",
+    "test:TestRuntimeV0IdleSelfImprovementSaltaBloqueoIdenticoYPublicaWatchdogV0:passed",
+    "test:TestRuntimeV0SupervisorDespiertaPorGoalTerminalObservadoV0:passed",
+    "test:TestServerWakeupGoalStateStoreV0DisparaSupervisorSoloConTerminalV0:passed",
+    "backlog_scan_ref:scan-ref-backlog-550fd4b2e993",
+    "backlog_task_instance_ref:task-instance-ref-backlog-88123edb",
+    "backlog_task_id_ref:task-id-ref-backlog-4adbd9d43ad8"
+  ]
+}

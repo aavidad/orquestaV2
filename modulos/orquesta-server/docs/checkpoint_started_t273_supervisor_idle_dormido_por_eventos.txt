@@ -1,0 +1,9 @@
+goal_ref: goal-ref-autoprogramming-backlog-t273-supervisor-idle-dormido-por-eventos-1ec0a46f
+request_ref: request-ref-autoprogramming-backlog-t273-supervisor-idle-dormido-por-eventos-1ec0a46f
+area: t273-supervisor-idle-dormido-por-eventos
+scope: modulos/orquesta-server supervisor/automejora-idle; cmd/orquesta-server only if wiring requires it
+next_artifact: durable result JSON plus focused supervisor idle tests
+evidence:
+- backlog_scan_ref: scan-ref-backlog-550fd4b2e993
+- backlog_task_instance_ref: task-instance-ref-backlog-88123edb
+- backlog_scan_doc: docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:17:sha256:a3dc086bdc2bab46a17d0ae66680e9a69a3bf0073df867876d54f6b871651882
