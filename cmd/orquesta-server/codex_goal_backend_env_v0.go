@@ -77,6 +77,7 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	commandPreflightProtocol.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
 	var preflightProtocol serverCodexAppServerProbePortV0 = commandPreflightProtocol
 	preflightAtStartup := true
+	authCheckedAtStartup := false
 	var shutdownHook orquestaserver.RuntimeShutdownHookPortV0
 	codeHomePath := ""
 	authIssueCode := ""
@@ -112,6 +113,7 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		shutdownTmuxBackend.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
 		shutdownHook = shutdownTmuxBackend
 		authIssueCode = codexAppServerAuthIssueCodeFromDirsV0(runtimeConfig.CodeHomeDir, tmuxCodeHomePath)
+		authCheckedAtStartup = true
 		if authIssueCode != "" {
 			degraded := serverCodexUnavailableGoalBackendV0{IssueCode: authIssueCode}
 			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded, ShutdownHook: shutdownHook}, nil
@@ -142,7 +144,10 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 		}
 	}
-	if authIssueCode = codexAppServerAuthIssueCodeV0(codeHomePath); authIssueCode != "" {
+	if !authCheckedAtStartup {
+		authIssueCode = codexAppServerAuthIssueCodeV0(codeHomePath)
+	}
+	if authIssueCode != "" {
 		degraded := serverCodexUnavailableGoalBackendV0{
 			IssueCode: authIssueCode,
 		}

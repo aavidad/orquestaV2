@@ -163,6 +163,13 @@ configure_smoke_codex_code_home_source() {
     echo "codex_app_server_auth_source=CODEX_HOME"
     return 0
   fi
+  if [[ -n "${HOME:-}" &&
+    -f "$HOME/.codex/auth.json" &&
+    -f "$HOME/.codex/config.toml" ]]; then
+    export ORQUESTA_CODEX_CODE_HOME="$HOME/.codex"
+    echo "codex_app_server_auth_source=default_codex_home"
+    return 0
+  fi
   echo "codex_app_server_auth_source=default"
   return 0
 }

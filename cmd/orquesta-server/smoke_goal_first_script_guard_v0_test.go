@@ -1246,8 +1246,12 @@ func TestSmokeGoalFirstAppServerRealProjectsCodeHomeFromCodexHomeV0(t *testing.T
 		`-f "$CODEX_HOME/auth.json"`,
 		`-f "$CODEX_HOME/config.toml"`,
 		`export ORQUESTA_CODEX_CODE_HOME="$CODEX_HOME"`,
+		`-f "$HOME/.codex/auth.json"`,
+		`-f "$HOME/.codex/config.toml"`,
+		`export ORQUESTA_CODEX_CODE_HOME="$HOME/.codex"`,
 		"codex_app_server_auth_source=CODEX_HOME",
 		"codex_app_server_auth_source=ORQUESTA_CODEX_CODE_HOME",
+		"codex_app_server_auth_source=default_codex_home",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("smoke no proyecta CODEX_HOME autenticado al app-server tmux: falta %q", want)
