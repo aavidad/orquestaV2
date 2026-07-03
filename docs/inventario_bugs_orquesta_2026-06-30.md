@@ -905,6 +905,14 @@ responsabilidad opt-in del supervisor residente; una llamada no residente a
 running, no marca `blocked` y no lanza rework tras cleanup externo. Evidencia:
 `TestRunSupervisorGoalFirstNoResidentNoReconciliaBackendMissingTrasCleanupExternoV0`.
 
+Avance BUG-ORQ-20260701-065 2026-07-03 tarde 27: la evidencia
+`evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup` queda
+acotada a acciones ejecutivas de `runs/control`: `stop` y `cancel` pueden
+reconciliar cleanup externo, pero `pause` solo conserva la evidencia en el
+comando y no consulta cierre terminal, no completa run-control, no marca el
+`GoalWorkState` como `blocked` y no genera rework implicito. Evidencia:
+`TestMCPRunControlExecutorV0PauseNoReconciliaExternalCleanupAunqueTraigaEvidencia`.
+
 Avance BUG-ORQ-20260701-085 2026-07-03 tarde 22: `efficiency_summary` conserva
 ahora tambien las acciones compactas de launch write-set: si el goal queda
 invalid por `codex_app_server_write_set_requires_workspace_write`, publica
