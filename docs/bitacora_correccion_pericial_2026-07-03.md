@@ -216,3 +216,12 @@ Todos los Codex locales cortados por el operador; ver
 - Pendiente de decisión humana: WIP remoto sucio de 71 ficheros en
   `/srv/orquesta-self/worktrees/orquesta` (no integrar completo, triar);
   quién borró `docs/diseno_router_contexto_hibrido_2026-07-03.md`.
+
+### 2026-07-03 (noche) — T272 integrada; T270 sigue en vuelo
+
+T272 (limpieza raíz) terminó `blocked` en Orquesta pero con trabajo completo
+y correcto (patrón BUG D otra vez: falta result formal). Verificado e
+integrado como `757fef2b`: 29 históricos movidos a `docs/historico/2026-06/`
+con INDICE y resúmenes, raíz sin TAREA_OPES_*/HANDOFF_*/*.test, `.gitignore`
+cubre `*.test`, build limpio. Instancia T272 apagada (la sesión tmux del
+backend de T270 sigue viva, no tocar hasta su terminal).
