@@ -614,6 +614,7 @@ func TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFir
 		mcpQueueGlobalStatusActionObserveGoalWaitForCheckpointV0,
 		mcpQueueGlobalStatusActionReplanNarrowContextV0,
 		mcpQueueGlobalStatusActionReconcileGoalTerminalV0,
+		mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0,
 		MCPGoalFirstRepairReceiptActionV0,
 		MCPGoalFirstReworkWriteSetViolationActionV0,
 		MCPGoalFirstReworkPublicTextActionV0,
@@ -625,6 +626,48 @@ func TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFir
 				t.Fatalf("action=%q, want %q", got, action)
 			}
 		})
+	}
+}
+
+func TestMCPQueueGlobalStatusHTTPHandlerV0ConservaWriteSetRequiresWorkspaceWrite(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				Blocked: 1,
+			},
+			StaleRunning: []MCPAutoprogrammingActionableRunV0{{
+				Code:              mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0,
+				RunRef:            "run-ref-global-status-write-set-read-only-001",
+				RecommendedAction: mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0,
+				EvidenceRefs: []string{
+					mcpAutoprogrammingEvidenceWriteSetRequiresWorkspaceWriteV0,
+					"evidence-ref-codex-app-server-write-set-requires-workspace-write",
+				},
+			}},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	NewMCPQueueGlobalStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !hasMCPQueueGlobalStatusItemForTestV0(
+		result.Items,
+		"run-ref-global-status-write-set-read-only-001",
+		mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0,
+		true,
+		mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0,
+	) {
+		t.Fatalf("result=%+v", result)
 	}
 }
 

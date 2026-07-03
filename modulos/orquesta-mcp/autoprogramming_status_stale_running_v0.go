@@ -20,6 +20,7 @@ const (
 	mcpAutoprogrammingActionNoCheckpointHighConsumptionV0              = "goal_active_no_checkpoint_high_consumption"
 	mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0            = "checkpoint_only_high_consumption"
 	mcpAutoprogrammingActionThreadOutputSanitizedV0                    = "codex_app_server_thread_output_sanitized"
+	mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0           = "codex_app_server_write_set_requires_workspace_write"
 	mcpAutoprogrammingActionGoalBackendMissingAfterExternalCleanupV0   = "goal_backend_missing_after_external_cleanup"
 	mcpAutoprogrammingActionStaleRunningReconciledV0                   = "stale_running_reconciled"
 	mcpAutoprogrammingActionProviderUsageLimitRetryV0                  = "provider_usage_limit_retry_after"
@@ -57,6 +58,7 @@ const (
 	mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0          = "evidence-ref-autoprogramming-checkpoint-only-high-consumption"
 	mcpAutoprogrammingEvidenceThreadOutputSanitizedV0                  = "evidence-ref-autoprogramming-status-thread-output-sanitized"
 	mcpAutoprogrammingEvidenceCodexAppServerThreadOutputSanitizedV0    = "evidence-ref-codex-app-server-thread-output-sanitized"
+	mcpAutoprogrammingEvidenceWriteSetRequiresWorkspaceWriteV0         = "evidence-ref-autoprogramming-status-write-set-requires-workspace-write"
 	mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0 = "evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup"
 	mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensDefaultV0     = int64(100000)
 	mcpAutoprogrammingCheckpointOnlyMaxWaitSecondsDefaultV0            = int64(15 * 60)
@@ -511,6 +513,15 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 				[]string{mcpAutoprogrammingEvidenceGoalFirstBlockedV0},
 				state.EvidenceRefs...,
 			)),
+		}
+		if containsStringMCPV0(mcpDirectorGoalIssueCodesFromStateV0(state), mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0) {
+			action.Code = mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0
+			action.Reason = "codex_app_server_write_set_requires_workspace_write: goal declares write_set enforcement but backend sandbox is read-only; configure workspace-write or cancel/replan without writes before relaunch"
+			action.RecommendedAction = mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0
+			action.EvidenceRefs = compactStringsMCPV0(append(
+				append(action.EvidenceRefs, mcpAutoprogrammingEvidenceWriteSetRequiresWorkspaceWriteV0),
+				state.LaunchReceipt.EvidenceRefs...,
+			))
 		}
 		action = mcpAutoprogrammingActionableRunWithGoalStateSnapshotV0(action, state)
 		action = mcpAutoprogrammingActionableRunWithObservedStatsV0(

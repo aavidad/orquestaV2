@@ -494,6 +494,54 @@ func TestMCPAutoprogrammingStatusExecutorV0ListaGoalBloqueadoAunqueColaNoVisible
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0WriteSetReadOnlyPideConfigurarSandboxV0(t *testing.T) {
+	runRef := "run-ref-autop-status-write-set-read-only-001"
+	goalRef := "goal-ref-autop-status-write-set-read-only-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusInvalidV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "No elevar sandbox read-only cuando el goal necesita write-set.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef: goalRef,
+			Status:  orquestagoal.GoalStatusInvalidV0,
+			Issues: []orquestagoal.GoalWorkIssueV0{{
+				Code: mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0,
+			}},
+			EvidenceRefs: []string{"evidence-ref-codex-app-server-write-set-requires-workspace-write"},
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-write-set-read-only-status-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0 ||
+		action.RecommendedAction != mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0 ||
+		action.GoalRef != goalRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceWriteSetRequiresWorkspaceWriteV0) ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-codex-app-server-write-set-requires-workspace-write") {
+		t.Fatalf("action=%+v", action)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0GoalBloqueadoConBackendActivoPublicaSnapshotAccionable(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-backend-active-001"
 	goalRef := "goal-ref-autop-status-goal-backend-active-001"
