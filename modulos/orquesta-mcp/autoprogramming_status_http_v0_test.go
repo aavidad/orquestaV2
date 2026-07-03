@@ -207,6 +207,35 @@ func TestMCPAutoprogrammingStatusHTTPHandlerV0SerializaEfficiencySummary(t *test
 	}
 }
 
+func TestMCPAutoprogrammingStatusHTTPHandlerV0SerializaGoalProgressPolicyConfigurada(t *testing.T) {
+	executor := MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{},
+		GoalProgressPolicy: MCPAutoprogrammingGoalProgressPolicyV0{
+			CheckpointOnlyHighConsumptionTokens: 42000,
+			CheckpointOnlyMaxWaitSeconds:        123,
+			NoCheckpointWarningMaxWaitSeconds:   456,
+		},
+	}
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingStatusHTTPPathV0, bytes.NewBufferString(`{}`))
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPAutoprogrammingStatusToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.GoalProgressPolicy == nil ||
+		result.GoalProgressPolicy.CheckpointOnlyHighConsumptionTokens != 42000 ||
+		result.GoalProgressPolicy.CheckpointOnlyMaxWaitSeconds != 123 ||
+		result.GoalProgressPolicy.NoCheckpointWarningMaxWaitSeconds != 456 {
+		t.Fatalf("goal_progress_policy=%+v", result.GoalProgressPolicy)
+	}
+}
+
 func TestMCPAutoprogrammingStatusHTTPHandlerV0NoMarcaRunningStaleSiHayAgentesVivos(t *testing.T) {
 	queue := &fakeMCPAutoprogrammingQueueStatusV0{}
 	stats := &fakeMCPAutoprogrammingRunStatusV0{}

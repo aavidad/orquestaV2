@@ -59,3 +59,36 @@ func TestMCPTransportV0AutoprogrammingStatusPublicaDiagnosticosConfiguradosDesde
 		t.Fatalf("diagnostics=%+v", result.Diagnostics)
 	}
 }
+
+func TestMCPTransportV0AutoprogrammingStatusPublicaGoalProgressPolicyDesdeBindings(t *testing.T) {
+	transport := newFakeMCPTransportV0()
+	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{
+		RunQueuePriority: &fakeMCPAutoprogrammingQueueStatusV0{},
+		AutoprogrammingGoalProgressPolicy: MCPAutoprogrammingGoalProgressPolicyV0{
+			CheckpointOnlyHighConsumptionTokens: 33000,
+			CheckpointOnlyMaxWaitSeconds:        222,
+			NoCheckpointWarningMaxWaitSeconds:   111,
+		},
+	}); err != nil {
+		t.Fatalf("register transport: %v", err)
+	}
+
+	output, err := transport.CallToolV0(
+		context.Background(),
+		MCPAutoprogrammingStatusToolNameV0,
+		MCPAutoprogrammingStatusToolInputV0{},
+	)
+	if err != nil {
+		t.Fatalf("call autoprogramming status: %v", err)
+	}
+	var result MCPAutoprogrammingStatusToolResultV0
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode: %v payload=%s", err, string(output))
+	}
+	if result.GoalProgressPolicy == nil ||
+		result.GoalProgressPolicy.CheckpointOnlyHighConsumptionTokens != 33000 ||
+		result.GoalProgressPolicy.CheckpointOnlyMaxWaitSeconds != 222 ||
+		result.GoalProgressPolicy.NoCheckpointWarningMaxWaitSeconds != 111 {
+		t.Fatalf("goal_progress_policy=%+v", result.GoalProgressPolicy)
+	}
+}

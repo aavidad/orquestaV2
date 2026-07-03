@@ -1372,6 +1372,16 @@ sin consultar aparte `/server/status`. Evidencia:
 `TestMCPAutoprogrammingStatusDescriptorV0EsAdaptadorFino` y
 `TestMCPAutoprogrammingStatusExecutorV0GoalActiveTimeoutConCheckpointRespetaUmbralConfiguradoV0`.
 
+Avance BUG-ORQ-20260701-073/088 2026-07-03 tarde 41: la publicacion de
+`goal_progress_policy` queda cubierta tambien por las superficies publicas
+HTTP y transporte MCP registrado con bindings, no solo por el executor directo.
+Esto evita que paneles o agentes remotos pierdan los umbrales efectivos al
+consultar `/api/v0/autoprogramming/status` o
+`orquesta.autoprogramming.status.v0`. Evidencia:
+`TestMCPAutoprogrammingStatusHTTPHandlerV0SerializaGoalProgressPolicyConfigurada`
+y
+`TestMCPTransportV0AutoprogrammingStatusPublicaGoalProgressPolicyDesdeBindings`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
