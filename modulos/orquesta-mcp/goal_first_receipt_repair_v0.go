@@ -8,6 +8,7 @@ const (
 	MCPGoalFirstPartialArtifactsWrittenV0                  = "partial_artifacts_written"
 	MCPGoalFirstPhase0CompleteNonPublishableV0             = "phase0_complete_non_publishable"
 	MCPGoalFirstRequiredTestEvidenceMissingV0              = "required_test_evidence_missing"
+	MCPGoalFirstRepairReceiptRequiresReworkV0              = "repair_receipt_requires_rework"
 	MCPGoalFirstRepairReceiptActionV0                      = "repair_receipt"
 	MCPGoalFirstReworkWriteSetViolationActionV0            = "rework_write_set_violation"
 	MCPGoalFirstReworkPublicTextActionV0                   = "rework_public_text"

@@ -244,6 +244,9 @@ func mcpObserveAppDirectorGoalRecommendedActionV0(
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstRequiredTestEvidenceMissingV0) {
 		return MCPGoalFirstRepairReceiptActionV0
 	}
+	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstRepairReceiptRequiresReworkV0) {
+		return "replan"
+	}
 	if mcpObserveAppDirectorGoalHasIssueV0(result, mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0) {
 		return mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0
 	}

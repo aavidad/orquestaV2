@@ -209,6 +209,10 @@ func goalFirstResidentReworkEvidenceRefsV0(state orquestagoal.GoalWorkStateV0) [
 			strings.Contains(trimmed, "goal-materialized") ||
 			strings.Contains(trimmed, "artifact_paths") ||
 			strings.Contains(trimmed, "artifact-paths") ||
+			strings.Contains(trimmed, "external-cleanup") ||
+			strings.Contains(trimmed, "external_cleanup") ||
+			strings.Contains(trimmed, "backend-missing") ||
+			strings.Contains(trimmed, "backend_missing") ||
 			strings.Contains(trimmed, "required-test") ||
 			strings.Contains(trimmed, "required_test") {
 			refs = append(refs, trimmed)

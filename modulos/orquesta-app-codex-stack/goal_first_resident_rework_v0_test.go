@@ -163,6 +163,11 @@ func TestRunSupervisorGoalFirstResidentReconciliaBackendMissingTrasCleanupExtern
 		!codexStackStringInSetForTestV0(result.EvidenceRefs, goalFirstResidentBackendMissingReconciledV0) {
 		t.Fatalf("resultado inesperado: result=%+v stats_calls=%d launcher_calls=%d", result, stats.calls, launcher.calls)
 	}
+	if len(launcher.specs) != 1 ||
+		!stringInSetV0(launcher.specs[0].EvidenceRefs, goalFirstResidentBackendMissingReconciledV0) ||
+		!stringInSetV0(launcher.specs[0].EvidenceRefs, goalFirstResidentBackendMissingEvidenceRefV0) {
+		t.Fatalf("spec rework sin evidencias de cleanup externo: %+v", launcher.specs)
+	}
 	persistedSource, err := store.LoadGoalWorkStateV0(ctx, source.RunRef)
 	if err != nil {
 		t.Fatalf("Load source: %v", err)

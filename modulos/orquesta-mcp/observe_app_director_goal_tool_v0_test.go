@@ -198,6 +198,34 @@ func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0Phase0NoPublicable
 	}
 }
 
+func TestObserveAppDirectorGoalRecommendedActionV0RepairReceiptRequiresReworkGanaAParciales(t *testing.T) {
+	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
+		MCPObserveAppDirectorGoalToolResultV0{
+			GoalRef:            "goal-ref-observe-repair-receipt-rework-001",
+			GoalStatus:         orquestagoal.GoalStatusCompleteV0,
+			ClosureStatus:      orquestagoal.GoalStatusBlockedV0,
+			ClosureNeedsRework: true,
+			ClosureIssues: []MCPValidationIssueV0{{
+				Code:    MCPGoalFirstRepairReceiptRequiresReworkV0,
+				Field:   "goal_first.receipt",
+				Message: MCPGoalFirstRepairReceiptRequiresReworkV0,
+			}},
+		},
+		MCPDirectorGoalMaterializedRefsV0{
+			ArtifactRefs: []string{"artifact-ref-materialized-partial-after-repair-rework-001"},
+			EvidenceRefs: []string{"evidence-ref-goal-materialized-partial-after-repair-rework-001"},
+			IssueCodes:   []string{MCPGoalFirstPartialArtifactsWrittenV0},
+		},
+	)
+
+	if result.RecommendedAction != "replan" ||
+		!containsStringMCPV0(result.ArtifactRefs, "artifact-ref-materialized-partial-after-repair-rework-001") ||
+		!mcpObserveAppDirectorGoalHasClosureIssueCodeV0(result.ClosureIssues, MCPGoalFirstRepairReceiptRequiresReworkV0) ||
+		!mcpObserveAppDirectorGoalHasClosureIssueCodeV0(result.ClosureIssues, MCPGoalFirstPartialArtifactsWrittenV0) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0NoPisaCierreAceptado(t *testing.T) {
 	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
 		MCPObserveAppDirectorGoalToolResultV0{
