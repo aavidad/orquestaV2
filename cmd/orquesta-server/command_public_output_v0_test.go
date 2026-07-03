@@ -194,8 +194,8 @@ func TestStatusServerCommandV0ReconciliaStoppedConStartupReadyHeredado(t *testin
 		Addr:           "127.0.0.1:18787",
 		ProjectWorkDir: projectDir,
 		RuntimeWorkDir: filepath.Join(projectDir, ".orquesta-runtime"),
-		StartupReady:   true,
-		StartupStatus:  "startup_ready",
+		StartupReady:   false,
+		StartupStatus:  "stopped",
 		StartupMessage: "director: orquesta preparada",
 		StartupOperationalMessage: &orquestaserver.ServerOperationalMessageV0{
 			SchemaVersion: "orquesta_server_operational_message.v0",

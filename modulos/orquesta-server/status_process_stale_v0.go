@@ -57,12 +57,22 @@ func MarkServerProcessStaleStateV0(state StateV0, now time.Time) StateV0 {
 }
 
 func NormalizeStoppedServerSnapshotV0(state StateV0) (StateV0, bool) {
-	if state.Status != "stopped" || (!state.StartupReady && state.StartupStatus == "stopped") {
+	if state.Status != "stopped" || stoppedStartupProjectionCleanV0(state) {
 		return state, false
 	}
 	state.SchemaVersion = StateSchemaVersionV0
 	clearStoppedStartupProjectionV0(&state)
 	return state, true
+}
+
+func stoppedStartupProjectionCleanV0(state StateV0) bool {
+	return !state.StartupReady &&
+		state.StartupStatus == "stopped" &&
+		state.StartupMessage == "" &&
+		state.StartupOperationalMessage == nil &&
+		len(state.StartupBlockers) == 0 &&
+		len(state.StartupEvidenceRefs) == 0 &&
+		state.StartupRevision == (StartupRevisionSummaryV0{})
 }
 
 func clearStoppedStartupProjectionV0(state *StateV0) {
