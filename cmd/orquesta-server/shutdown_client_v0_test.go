@@ -68,6 +68,31 @@ func TestRequestServerShutdownV0ReadyNoSaltaActiveWorkPersistido(t *testing.T) {
 	}
 }
 
+func TestRequestServerShutdownV0ReadyNoSaltaActiveWorkRefsSinContadorV0(t *testing.T) {
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v0/server/shutdown" {
+			t.Fatalf("request inesperada: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(serverShutdownClientResultV0{
+			Estado:         "ok",
+			Status:         "ready",
+			ShutdownReady:  true,
+			ActiveWorkRefs: []string{"shutdown-active-work-goal-backend-goal-ref-ready-sin-contador"},
+		})
+	}))
+	defer server.Close()
+
+	err := requestServerShutdownV0(strings.TrimPrefix(server.URL, "http://"), serverShutdownClientOptionsV0{})
+
+	if err == nil ||
+		!strings.Contains(err.Error(), "shutdown_not_ready status=ready") ||
+		!strings.Contains(err.Error(), "active_work=1") ||
+		!strings.Contains(err.Error(), "shutdown-active-work-goal-backend-goal-ref-ready-sin-contador") {
+		t.Fatalf("ready con active_work_refs sin contador no debe cerrar signal: %v", err)
+	}
+}
+
 func TestRequestServerShutdownV0ReadyNoSaltaActiveWorksEstructuradosV0(t *testing.T) {
 	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/api/v0/server/shutdown" {

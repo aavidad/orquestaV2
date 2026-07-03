@@ -1356,6 +1356,13 @@ la accion especifica de replan cuando aplica, incluido
 `TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesCheckpointComoEstadoOperacional`
 y `TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFirstEspecificas`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 28: la guarda del cliente
+`orquesta-server stop` cubre tambien respuestas `ready` que conservan
+`active_work_refs` pero omiten `active_work_count`; el cliente normaliza el
+contador y no permite senal local mientras quede evidencia de backend Goal
+activo. Evidencia:
+`TestRequestServerShutdownV0ReadyNoSaltaActiveWorkRefsSinContadorV0`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
