@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
@@ -206,6 +207,7 @@ func BuildCodexGoalObservationRequestV0(
 
 func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	var b strings.Builder
+	directionContract := codexGoalDirectionContractV0(spec)
 	b.WriteString("Eres el Director operativo interno de este Codex Goal.\n")
 	b.WriteString("Orquesta gobierna desde fuera: objetivo, reglas, write-set, tests, artefactos y cierre.\n")
 	b.WriteString("No intentes reactivar el loop historico de Orquesta; trabaja dentro del goal hasta complete o blocked.\n\n")
@@ -315,7 +317,11 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 		b.WriteString("<artifact_type>.json, <artifact_type>.md, artifact.json o artifact.md directamente bajo el write-set; usa el artifact_type declarado y contenido verificable.\n")
 	}
 	if len(spec.WriteSet) > 0 {
-		b.WriteString("- Antes de exploracion larga o comandos costosos, materializa un checkpoint temprano dentro del write-set autorizado, por ejemplo checkpoint_started.txt, con objetivo, alcance, siguiente artefacto y evidencia compacta; declaralo despues en artifact_paths, materialized_artifacts y evidence_refs.\n")
+		if directionContract.RequireEarlyCheckpoint {
+			b.WriteString("- Antes de exploracion larga o comandos costosos, materializa un checkpoint temprano dentro del write-set autorizado, por ejemplo ")
+			b.WriteString(directionContract.EarlyCheckpointFile)
+			b.WriteString(", con objetivo, alcance, siguiente artefacto y evidencia compacta; declaralo despues en artifact_paths, materialized_artifacts y evidence_refs.\n")
+		}
 		for _, scope := range spec.WriteSet {
 			path := strings.Trim(strings.TrimSpace(scope.Path), "/")
 			if codexGoalWriteScopeIsMarkdownFileV0(path) {
@@ -368,7 +374,14 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	if spec.Budget.TokenBudget > 0 || spec.Budget.MaxRuntimeSeconds > 0 || spec.Budget.MaxSubgoals > 0 {
 		b.WriteString("- Respeta el presupuesto operativo declarado en el paquete.\n")
 	}
-	b.WriteString("- No vuelques salidas gigantes de herramientas al chat/log: usa comandos acotados como head, tail, sed -n o rg con limites, guarda evidencia durable en el write-set si hace falta y resume refs compactas.\n")
+	b.WriteString("- No vuelques salidas gigantes de herramientas al chat/log: max_text_bytes=")
+	b.WriteString(strconv.Itoa(directionContract.ToolOutputPolicy.MaxTextBytes))
+	b.WriteString("; usa comandos acotados")
+	if len(directionContract.ToolOutputPolicy.BoundedCommandHints) > 0 {
+		b.WriteString(" como ")
+		b.WriteString(strings.Join(directionContract.ToolOutputPolicy.BoundedCommandHints, ", "))
+	}
+	b.WriteString(", guarda evidencia durable en el write-set si hace falta y resume refs compactas.\n")
 	b.WriteString("- Devuelve blocked si falta input externo, permiso, proveedor o cambio de estado externo.\n")
 	b.WriteString("- Conserva refs opacas y no publiques HOME, tokens, OAuth, comandos internos de runtime/local ni transcripts completos.\n")
 	if len(spec.RequiredTests) > 0 {

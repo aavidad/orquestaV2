@@ -947,6 +947,13 @@ checkpoint temprano y limite de salidas gigantes dependan solo de texto libre de
 prompt. Evidencia:
 `TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion`.
 
+Avance BUG-ORQ-20260701-079 2026-07-03 tarde 20: el prompt efectivo que consume
+`app_server_tmux` se deriva del `direction_contract` para checkpoint temprano y
+politica de salidas, incluyendo `max_text_bytes=16384` y hints acotados como
+`rg --max-count`/`rg --files | head`. Esto reduce la deriva entre contrato
+estructurado y superficie ejecutada por Codex Goal. Evidencia:
+`TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y
