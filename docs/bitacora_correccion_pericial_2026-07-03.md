@@ -447,3 +447,11 @@ Leído el informe del director Codex. Coordinación:
   build) y dejar el corte durante ejecución como tarea propia si no entra.
 - Recordatorio de cola: MEJ-206 sigue esperando a T285; T286-EXP (A/B
   broker) listo para lanzar en cuanto haya hueco de máquina.
+
+### 2026-07-04 — Corrección de coordinación: T285 YA integrada por Codex
+
+El director Codex integró el watcher de T285 desde el worktree del pilotaje
+(mismo `goal_materialized_result_watcher_v0.go`). La rama
+`pericial/pilot-t285` (commit `2f8c54f9`) queda SUPERSEDIDA: no hacer
+cherry-pick (duplicaría). Se conserva solo como evidencia. Anula la nota de
+coordinación anterior del supervisor en ese punto.
