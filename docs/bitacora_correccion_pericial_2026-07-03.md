@@ -313,3 +313,15 @@ Verificación/integración: receta de esta bitácora.
   a `clasificacion.md` + secciones WIP-TASK ejecutables para lo valioso.
 - En vuelo simultáneo: T275 (bug 153), T276 (bug 151), T278 (repo-map),
   T279 (triaje) — 4 goals, write-sets disjuntos.
+
+### 2026-07-04 — triaje remoto cerrado; ola de 4 activa
+
+T279 integrada (`1097671f`): clasificación de los 72 elementos del WIP
+remoto — 57 ya implementados (spot-check del supervisor confirmó los 4
+veredictos de mayor riesgo: socket corto, symlink guard, reconciliador
+external-work más estricto trackeado, QA remota), 11 obsoletos, 5 doc-tasks
+→ WIP-TASK-001/002. T280 lanzada (puerto 37393, rama `pericial/pilot-t280`)
+ejecutando ambas WIP-TASK. En vuelo simultáneo: T275 (bug 153), T276
+(bug 151), T278 (repo-map), T280 (docs/guard T12+matriz). El stash remoto
+`triaje-claude-2026-07-04` puede borrarse tras integrar T280 (decisión
+operador); mientras, permanece como respaldo.
