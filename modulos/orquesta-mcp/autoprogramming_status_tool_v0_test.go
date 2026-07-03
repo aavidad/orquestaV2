@@ -549,6 +549,17 @@ func TestMCPAutoprogrammingStatusExecutorV0WriteSetReadOnlyPideConfigurarSandbox
 		) {
 		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
 	}
+	if result.OpsSnapshot == nil ||
+		result.OpsSnapshot.Decision.Action != orquestaobservability.DirectorAutonomousOpsActionReviewReplanV0 ||
+		result.OpsSnapshot.Decision.RunRef != runRef ||
+		result.OpsSnapshot.Decision.ReasonCode != mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0 ||
+		!result.OpsSnapshot.Decision.Attention ||
+		!hasStringMCPAutoprogrammingStatusTestV0(
+			result.OpsSnapshot.Decision.EvidenceRefs,
+			mcpAutoprogrammingEvidenceWriteSetRequiresWorkspaceWriteV0,
+		) {
+		t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
+	}
 }
 
 func TestMCPAutoprogrammingStatusExecutorV0WriteSetGuardContractPideRepairPacketV0(t *testing.T) {
@@ -619,6 +630,14 @@ func TestMCPAutoprogrammingStatusExecutorV0WriteSetGuardContractPideRepairPacket
 				result.EfficiencySummary.RecommendedAction != mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0+":run:"+runRef ||
 				!hasStringMCPAutoprogrammingStatusTestV0(result.EfficiencySummary.Reasons, tc.issueCode) {
 				t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+			}
+			if result.OpsSnapshot == nil ||
+				result.OpsSnapshot.Decision.Action != orquestaobservability.DirectorAutonomousOpsActionReviewReplanV0 ||
+				result.OpsSnapshot.Decision.RunRef != runRef ||
+				result.OpsSnapshot.Decision.ReasonCode != tc.issueCode ||
+				!result.OpsSnapshot.Decision.Attention ||
+				!hasStringMCPAutoprogrammingStatusTestV0(result.OpsSnapshot.Decision.EvidenceRefs, tc.evidenceRef) {
+				t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
 			}
 		})
 	}

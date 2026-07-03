@@ -878,6 +878,14 @@ generico cuando la causa durable ya esta en `stale_running`. Evidencia:
 `TestMCPAutoprogrammingStatusExecutorV0WriteSetReadOnlyPideConfigurarSandboxV0`
 y `TestMCPAutoprogrammingStatusExecutorV0WriteSetGuardContractPideRepairPacketV0`.
 
+Avance BUG-ORQ-20260701-085 2026-07-03 tarde 23: `ops_snapshot` de
+`autoprogramming/status` tambien conserva los bloqueos write-set como decision
+con `attention=true`, `run_ref`, `reason_code` especifico y evidencias del
+launch receipt. Antes podia caer a `idle/no_safe_autoprogramming_action` porque
+solo reconocia `goal_first_blocked` generico. Evidencia:
+`TestMCPAutoprogrammingStatusExecutorV0WriteSetReadOnlyPideConfigurarSandboxV0`
+y `TestMCPAutoprogrammingStatusExecutorV0WriteSetGuardContractPideRepairPacketV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado
