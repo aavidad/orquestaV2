@@ -918,11 +918,13 @@ y
 
 Avance BUG-ORQ-20260701-065 2026-07-03 tarde 28: la misma frontera de acciones
 no terminales queda cubierta en adaptadores: HTTP y transporte MCP nativo
-propagan `resume` con evidencia de cleanup externo al puerto de run-control,
-pero no completan run-control, no publican `replan_narrow_context`, no generan
-diagnostico `goal_state_terminal_reconciled_after_external_cleanup` y no mutan
-el `GoalWorkState` running. Evidencia:
-`TestMCPRunControlHTTPHandlerV0ResumeNoReconciliaExternalCleanupSinForceV0` y
+propagan `pause`/`resume` con evidencia de cleanup externo al puerto de
+run-control, pero no completan run-control, no publican `replan_narrow_context`,
+no generan diagnostico `goal_state_terminal_reconciled_after_external_cleanup` y
+no mutan el `GoalWorkState` running. Evidencia:
+`TestMCPRunControlHTTPHandlerV0PauseNoReconciliaExternalCleanupSinForceV0`,
+`TestMCPRunControlHTTPHandlerV0ResumeNoReconciliaExternalCleanupSinForceV0`,
+`TestMCPTransportV0RunControlPauseNoReconciliaExternalCleanupSinForce` y
 `TestMCPTransportV0RunControlResumeNoReconciliaExternalCleanupSinForce`.
 
 Avance BUG-ORQ-20260701-085 2026-07-03 tarde 22: `efficiency_summary` conserva
