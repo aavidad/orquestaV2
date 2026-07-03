@@ -137,10 +137,12 @@ Orden de autoridad documental:
 
 1. `AGENTS.md` y `docs/estado_actual_2026-05-17.md` fijan la foto vigente y la
    frontera conceptual.
-2. Los cortes y la matriz vigentes (`docs/guia_nucleo_orquestacion_2026-05-17.md`,
-   `docs/corte_cierre_generico_director_operativo_2026-05-17.md` y
-   `docs/matriz_pruebas_reales_y_smoke_2026-05-17.md`) fijan estado operativo,
-   evidencias y smokes.
+2. Los cortes, la matriz y el mapa de generaciones vigentes
+   (`docs/guia_nucleo_orquestacion_2026-05-17.md`,
+   `docs/corte_cierre_generico_director_operativo_2026-05-17.md`,
+   `docs/matriz_pruebas_reales_y_smoke_2026-05-17.md` y
+   `docs/mapa_generaciones_director_2026-07-03.md`) fijan estado operativo,
+   generaciones de Director, evidencias y smokes.
 3. `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md` es backlog
    ejecutable. No debe relanzar un frente que la foto vigente y la matriz ya
    declaran cerrado salvo regresion demostrada.
