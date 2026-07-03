@@ -56,6 +56,16 @@ func MarkServerProcessStaleStateV0(state StateV0, now time.Time) StateV0 {
 	return state
 }
 
+func NormalizeStoppedServerSnapshotV0(state StateV0) (StateV0, bool) {
+	if state.Status != "stopped" || (!state.StartupReady && state.StartupStatus == "stopped") {
+		return state, false
+	}
+	state.SchemaVersion = StateSchemaVersionV0
+	state.StartupReady = false
+	state.StartupStatus = "stopped"
+	return state, true
+}
+
 func boolIntV0(value bool) int {
 	if value {
 		return 1

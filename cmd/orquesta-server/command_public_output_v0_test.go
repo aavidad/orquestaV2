@@ -177,6 +177,75 @@ func TestStatusServerCommandV0ReconciliaStatefileConPIDMuerto(t *testing.T) {
 	}
 }
 
+func TestStatusServerCommandV0ReconciliaStoppedConStartupReadyHeredado(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)
+	t.Setenv("ORQUESTA_SERVER_STATE_DIR", stateDir)
+	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", filepath.Join(t.TempDir(), "runtime"))
+
+	store, err := orquestaserver.NewFileStateStoreV0(filepath.Join(stateDir, orquestaserver.DefaultStateFileV0))
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	if err := store.SaveServerStateV0(context.Background(), orquestaserver.StateV0{
+		Status:             "stopped",
+		PID:                os.Getpid(),
+		Addr:               "127.0.0.1:18787",
+		ProjectWorkDir:     projectDir,
+		RuntimeWorkDir:     filepath.Join(projectDir, ".orquesta-runtime"),
+		StartupReady:       true,
+		StartupStatus:      "startup_ready",
+		LastHeartbeatAt:    "2026-07-02T22:33:36Z",
+		ShutdownReady:      true,
+		ShutdownStatus:     "stopped",
+		LastStartupCheckAt: "2026-07-02T22:33:36Z",
+	}); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := statusServerCommandV0(&stdout, &stderr)
+	if exitCode != 1 {
+		t.Fatalf("exit=%d stderr=%s", exitCode, stderr.String())
+	}
+	var envelope commandPublicOutputV0
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("json publico invalido: %v\n%s", err, stdout.String())
+	}
+	if envelope.Status != "stopped" ||
+		envelope.Freshness != commandPublicFreshnessSnapshotV0 ||
+		envelope.DiagnosticsMode != "statefile_snapshot_reconciled" {
+		t.Fatalf("envelope no reconciliado: %+v", envelope)
+	}
+	var payload orquestaserver.ServerPublicStatusV0
+	rawPayload, err := json.Marshal(envelope.Payload)
+	if err != nil {
+		t.Fatalf("payload marshal: %v", err)
+	}
+	if err := json.Unmarshal(rawPayload, &payload); err != nil {
+		t.Fatalf("payload publico invalido: %v\n%+v", err, envelope.Payload)
+	}
+	if payload.StartupReady || payload.StartupStatus != "stopped" {
+		t.Fatalf("payload conserva startup heredado: %+v", payload)
+	}
+	reconciled, err := store.LoadServerStateV0(context.Background())
+	if err != nil {
+		t.Fatalf("load reconciled: %v", err)
+	}
+	if reconciled.Status != "stopped" ||
+		reconciled.StartupReady ||
+		reconciled.StartupStatus != "stopped" ||
+		reconciled.LastHeartbeatAt != "2026-07-02T22:33:36Z" {
+		t.Fatalf("state no reconciliado: %+v", reconciled)
+	}
+	if strings.Contains(stdout.String(), projectDir) ||
+		strings.Contains(stdout.String(), "127.0.0.1:18787") {
+		t.Fatalf("stdout filtra detalle local: %s", stdout.String())
+	}
+}
+
 func TestStatusServerCommandV0FalloStdoutDevuelveReasonCode(t *testing.T) {
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()
