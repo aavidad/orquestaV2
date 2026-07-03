@@ -1248,6 +1248,13 @@ transporte no dispara senal local mientras el propio status dice que shutdown
 sigue esperando drain o checkpoint. Evidencia:
 `TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 32e: si el propio error
+`shutdown_not_ready` conserva `status=waiting_drain`, `waiting_checkpoint` o
+`stop_pending`, `orquesta-server stop --force` lo trata como estado no terminal
+aunque el error no incluya contadores positivos. Asi un body parcial convertido
+en error no puede autorizar senal local solo por `runs=0/0`.
+Evidencia: `TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado`.
+
 Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 33: los transportes HTTP y MCP
 de `server.shutdown` quedan cubiertos para errores de executor: ambos devuelven
 mensaje publico saneado sin rutas/tokens y conservan `evidence_refs` compactas

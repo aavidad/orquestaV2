@@ -178,7 +178,26 @@ func shutdownRequestErrorIsLiveWorkConflictV0(err error) bool {
 	}
 	return strings.Contains(message, "backend_still_running") ||
 		strings.Contains(message, "active_goals_present") ||
+		shutdownNotReadyErrorHasWaitingStatusV0(message) ||
 		shutdownNotReadyErrorHasBlockingWorkV0(message)
+}
+
+func shutdownNotReadyErrorHasWaitingStatusV0(message string) bool {
+	if !strings.HasPrefix(strings.TrimSpace(message), "shutdown_not_ready ") {
+		return false
+	}
+	for _, field := range strings.Fields(message) {
+		if !strings.HasPrefix(field, "status=") {
+			continue
+		}
+		switch strings.TrimSpace(strings.TrimPrefix(field, "status=")) {
+		case "waiting_drain", "waiting_checkpoint", "stop_pending":
+			return true
+		default:
+			return false
+		}
+	}
+	return false
 }
 
 func shutdownNotReadyErrorHasBlockingWorkV0(message string) bool {
