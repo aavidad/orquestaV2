@@ -881,6 +881,14 @@ resolvedor comun y de scripts concretos para que nuevos wrappers no vuelvan a
 asumir un endpoint local fijo. Evidencia:
 `TestScriptsNoAsumenPuertoOrquestaHistoricoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 24: la guarda de shutdown HTTP
+directo en scripts deja de depender de una ventana fija alrededor de
+`/api/v0/server/shutdown`; ahora reconstruye el comando `curl` multilinea
+completo y exige `cleanup_goal_backends` aunque el payload quede lejos del
+endpoint. Evidencia:
+`TestScriptShutdownCurlCommandsV0DetectaCleanupLejanoV0` y
+`TestScriptsConShutdownDirectoPidenCleanupGoalBackendsV0`.
+
 Avance BUG-ORQ-20260701-085 2026-07-03 tarde 22: `efficiency_summary` conserva
 ahora tambien las acciones compactas de launch write-set: si el goal queda
 invalid por `codex_app_server_write_set_requires_workspace_write`, publica

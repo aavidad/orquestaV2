@@ -458,31 +458,64 @@ func TestScriptsConShutdownDirectoPidenCleanupGoalBackendsV0(t *testing.T) {
 			return err
 		}
 		text := readOperationalDocGuardV0(t, root, rel)
-		lines := strings.Split(text, "\n")
-		for index, line := range lines {
-			if !strings.Contains(line, "/api/v0/server/shutdown") {
-				continue
-			}
-			windowStart := index - 3
-			if windowStart < 0 {
-				windowStart = 0
-			}
-			windowEnd := index + 8
-			if windowEnd > len(lines) {
-				windowEnd = len(lines)
-			}
-			window := strings.Join(lines[windowStart:windowEnd], "\n")
-			if !strings.Contains(window, "curl") || !strings.Contains(window, "-X POST") {
-				continue
-			}
-			if !strings.Contains(window, "cleanup_goal_backends") {
-				t.Fatalf("%s invoca shutdown HTTP directo sin cleanup_goal_backends cerca de linea %d", rel, index+1)
+		for _, command := range scriptShutdownCurlCommandsV0(text) {
+			if !strings.Contains(command, "cleanup_goal_backends") {
+				t.Fatalf("%s invoca shutdown HTTP directo sin cleanup_goal_backends:\n%s", rel, command)
 			}
 		}
 		return nil
 	})
 	if err != nil {
 		t.Fatalf("walk scripts: %v", err)
+	}
+}
+
+func scriptShutdownCurlCommandsV0(text string) []string {
+	lines := strings.Split(text, "\n")
+	var commands []string
+	for index, line := range lines {
+		if !strings.Contains(line, "curl") {
+			continue
+		}
+		commandLines := []string{line}
+		if shellLineContinuesV0(line) {
+			for _, candidate := range lines[index+1:] {
+				commandLines = append(commandLines, candidate)
+				if !shellLineContinuesV0(candidate) {
+					break
+				}
+			}
+		}
+		command := strings.Join(commandLines, "\n")
+		if strings.Contains(command, "/api/v0/server/shutdown") &&
+			strings.Contains(command, "-X POST") {
+			commands = append(commands, command)
+		}
+	}
+	return commands
+}
+
+func shellLineContinuesV0(line string) bool {
+	return strings.HasSuffix(strings.TrimSpace(line), `\`)
+}
+
+func TestScriptShutdownCurlCommandsV0DetectaCleanupLejanoV0(t *testing.T) {
+	text := strings.Join([]string{
+		`shutdown_status="$(curl -sS -m "$request_timeout" \`,
+		`  -o "$shutdown_response" \`,
+		`  -w "%{http_code}" \`,
+		`  -X POST \`,
+		`  "$base_url/api/v0/server/shutdown" \`,
+		`  -H "Content-Type: application/json" \`,
+		`  -H "Accept: application/json" \`,
+		`  -H "X-Correlation-ID: $request_id-shutdown" \`,
+		`  --data-binary "{\"request_id\":\"$request_id-shutdown\",\"cleanup_goal_backends\":true}"`,
+		`)"`,
+	}, "\n")
+
+	commands := scriptShutdownCurlCommandsV0(text)
+	if len(commands) != 1 || !strings.Contains(commands[0], "cleanup_goal_backends") {
+		t.Fatalf("detector debe cubrir shutdown multilinea completo: %+v", commands)
 	}
 }
 
