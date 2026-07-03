@@ -20,6 +20,8 @@ const (
 	CodexGoalMaxPromptBytesV0           = 32 * 1024
 	CodexGoalMaxStartPacketBytesV0      = 64 * 1024
 	CodexGoalToolOutputMaxBytesV0       = 16 * 1024
+	CodexGoalWriteSetEnforcementV0      = "workspace_write_guard"
+	CodexGoalMinimumSandboxV0           = "workspace-write"
 
 	ErrCodexGoalStarterMissingV0      = "codex_goal_starter_missing"
 	ErrCodexGoalObserverMissingV0     = "codex_goal_observer_missing"
@@ -59,6 +61,8 @@ type CodexGoalDirectionContractV0 struct {
 	EarlyCheckpointFile       string                                `json:"early_checkpoint_file,omitempty"`
 	ToolOutputPolicy          CodexGoalToolOutputPolicyV0           `json:"tool_output_policy,omitempty"`
 	RequiredTerminalFields    []string                              `json:"required_terminal_fields,omitempty"`
+	WriteSetEnforcement       string                                `json:"write_set_enforcement,omitempty"`
+	MinimumSandbox            string                                `json:"minimum_sandbox,omitempty"`
 	AllowedWriteSet           []orquestagoal.GoalWriteScopeV0       `json:"allowed_write_set,omitempty"`
 	RequiredArtifactContracts []orquestagoal.GoalArtifactContractV0 `json:"required_artifact_contracts,omitempty"`
 }
@@ -186,6 +190,8 @@ func codexGoalDirectionContractV0(spec orquestagoal.GoalWorkSpecV0) CodexGoalDir
 			"checklist",
 			"evidence_refs",
 		},
+		WriteSetEnforcement:       CodexGoalWriteSetEnforcementV0,
+		MinimumSandbox:            CodexGoalMinimumSandboxV0,
 		AllowedWriteSet:           append([]orquestagoal.GoalWriteScopeV0(nil), spec.WriteSet...),
 		RequiredArtifactContracts: append([]orquestagoal.GoalArtifactContractV0(nil), spec.ArtifactContracts...),
 	}
@@ -267,6 +273,13 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 		b.WriteString("- ")
 		b.WriteString(scope.Path)
 		b.WriteString("\n")
+	}
+	if len(spec.WriteSet) > 0 {
+		b.WriteString("- El runtime debe aplicar write_set_enforcement=")
+		b.WriteString(directionContract.WriteSetEnforcement)
+		b.WriteString(" con sandbox minimo ")
+		b.WriteString(directionContract.MinimumSandbox)
+		b.WriteString("; no ejecutes con acceso de escritura irrestricto y respeta el write-set autorizado en el cierre.\n")
 	}
 	b.WriteString("\nTests requeridos:\n")
 	for _, test := range spec.RequiredTests {

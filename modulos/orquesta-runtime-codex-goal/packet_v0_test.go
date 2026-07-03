@@ -34,6 +34,8 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"max_text_bytes=16384",
 		"rg --max-count",
 		"rg --files | head",
+		"write_set_enforcement=workspace_write_guard",
+		"sandbox minimo workspace-write",
 		"El recibo terminal debe declarar artifact_paths",
 		"materialized_artifacts",
 		"checklist.expected_refs",
@@ -85,6 +87,8 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		packet.DirectionContract.ToolOutputPolicy.MaxTextBytes != CodexGoalToolOutputMaxBytesV0 ||
 		!packet.DirectionContract.ToolOutputPolicy.RequireBoundedCommands ||
 		!packet.DirectionContract.ToolOutputPolicy.DurableEvidenceRequired ||
+		packet.DirectionContract.WriteSetEnforcement != CodexGoalWriteSetEnforcementV0 ||
+		packet.DirectionContract.MinimumSandbox != CodexGoalMinimumSandboxV0 ||
 		len(packet.DirectionContract.AllowedWriteSet) != 1 ||
 		len(packet.DirectionContract.RequiredArtifactContracts) != 1 ||
 		packet.RequiredTests[0].Command != "go test -count=1 ./modulos/orquesta-goal" {

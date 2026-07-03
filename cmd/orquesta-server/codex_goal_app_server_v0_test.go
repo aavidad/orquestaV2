@@ -263,6 +263,61 @@ func TestServerCodexAppServerGoalBackendV0PreparaDirectoriosWriteSetAntesDelTurn
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0WriteSetGuardNoUsaDangerFullAccess(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-guard-001"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-goal-guard-001", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-goal-guard-001", Status: "inProgress"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		CWD:      t.TempDir(),
+		Sandbox:  "danger-full-access",
+	}
+
+	_, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		SchemaVersion: orquestaruntimecodexgoal.CodexGoalStartPacketSchemaV0,
+		GoalRef:       "goal-ref-codex-app-server-guard-001",
+		Objective:     "probar guard de write-set",
+		Prompt:        "prompt compacto",
+		WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
+			WriteSetEnforcement: orquestaruntimecodexgoal.CodexGoalWriteSetEnforcementV0,
+			MinimumSandbox:      orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0,
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	if protocol.startParams.Sandbox != orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0 {
+		t.Fatalf("sandbox=%q", protocol.startParams.Sandbox)
+	}
+}
+
+func TestCodexAppServerGoalSandboxForPacketV0AplicaMinimoConWriteSetGuard(t *testing.T) {
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
+			WriteSetEnforcement: orquestaruntimecodexgoal.CodexGoalWriteSetEnforcementV0,
+			MinimumSandbox:      orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0,
+		},
+	}
+	for _, configured := range []string{"", "danger-full-access", "read-only"} {
+		if got := codexAppServerGoalSandboxForPacketV0(configured, packet); got != orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0 {
+			t.Fatalf("configured=%q got=%q", configured, got)
+		}
+	}
+	if got := codexAppServerGoalSandboxForPacketV0("workspace-write", packet); got != "workspace-write" {
+		t.Fatalf("workspace-write no preservado: %q", got)
+	}
+	if got := codexAppServerGoalSandboxForPacketV0(
+		"danger-full-access",
+		orquestaruntimecodexgoal.CodexGoalStartPacketV0{},
+	); got != "danger-full-access" {
+		t.Fatalf("sin enforcement no debe cambiar sandbox legado: %q", got)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0LanzaTurnSiGoalSetNoExisteV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		thread:     serverCodexAppServerThreadV0{ID: "thread-ref-goal-no-set-001"},

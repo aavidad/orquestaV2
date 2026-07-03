@@ -217,7 +217,7 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_write_set_prepare_failed")
 		return codexAppServerStartReceiptV0(packet, "", code), err
 	}
-	thread, err := backend.Protocol.StartThreadV0(ctx, backend.threadStartParamsV0())
+	thread, err := backend.Protocol.StartThreadV0(ctx, backend.threadStartParamsV0(packet))
 	if err != nil {
 		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_thread_start_failed")
 		return codexAppServerStartReceiptV0(packet, "", code), err
@@ -635,14 +635,36 @@ func codexAppServerGoalObjectiveV0(objective string) string {
 	return strings.TrimSpace(string([]rune(objective)[:limit])) + suffix
 }
 
-func (backend serverCodexAppServerGoalBackendV0) threadStartParamsV0() serverCodexAppServerThreadStartParamsV0 {
+func (backend serverCodexAppServerGoalBackendV0) threadStartParamsV0(
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+) serverCodexAppServerThreadStartParamsV0 {
 	return serverCodexAppServerThreadStartParamsV0{
 		CWD:            strings.TrimSpace(backend.CWD),
 		Ephemeral:      false,
 		Model:          strings.TrimSpace(backend.Model),
-		Sandbox:        strings.TrimSpace(backend.Sandbox),
+		Sandbox:        codexAppServerGoalSandboxForPacketV0(backend.Sandbox, packet),
 		ApprovalPolicy: strings.TrimSpace(backend.ApprovalPolicy),
 		ServiceTier:    strings.TrimSpace(backend.ServiceTier),
+	}
+}
+
+func codexAppServerGoalSandboxForPacketV0(
+	configured string,
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+) string {
+	configured = strings.TrimSpace(configured)
+	if strings.TrimSpace(packet.DirectionContract.WriteSetEnforcement) != orquestaruntimecodexgoal.CodexGoalWriteSetEnforcementV0 {
+		return configured
+	}
+	minimum := strings.TrimSpace(packet.DirectionContract.MinimumSandbox)
+	if minimum == "" {
+		minimum = orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0
+	}
+	switch strings.TrimSpace(configured) {
+	case "", "danger-full-access", "read-only":
+		return minimum
+	default:
+		return configured
 	}
 }
 
