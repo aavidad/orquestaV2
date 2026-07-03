@@ -141,11 +141,19 @@ smoke_wait_orquesta_readiness_from_state_file() {
   local sleep_seconds="${3:-0.5}"
   local out_var="$4"
   local addr=""
+  local pid=""
   local url=""
   local _
   for _ in $(seq 1 "$polls"); do
     if [[ -s "$state_file" ]]; then
-      addr="$(jq -r '.addr // empty' "$state_file")"
+      pid="$(jq -r '.pid // empty' "$state_file" 2>/dev/null || true)"
+      if [[ -n "$pid" ]]; then
+        if [[ ! "$pid" =~ ^[0-9]+$ ]] || [[ "$pid" == "0" ]] || ! kill -0 "$pid" >/dev/null 2>&1; then
+          sleep "$sleep_seconds"
+          continue
+        fi
+      fi
+      addr="$(jq -r '.addr // empty' "$state_file" 2>/dev/null || true)"
       if [[ -n "$addr" ]]; then
         url="http://$addr"
         if curl -fsS -m 2 "$url/api/v0/server/readiness" >/dev/null; then

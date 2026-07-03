@@ -16,6 +16,8 @@ func (runtime *RuntimeV0) shutdownRuntimeV0(
 	defer runtime.cancelShutdownReadyForceExitV0()
 	shutdownCtx, cancelShutdown := runtime.shutdownContextV0()
 	defer cancelShutdown()
+	shutdownHooksRun := false
+	defer runtime.runShutdownHooksOnExitV0(&shutdownHooksRun)
 	atomic.StoreInt32(&runtime.shutdownInProgress, 1)
 	initialState := runtime.tracker.MarkRuntimeStoppingV0(
 		"async_work_draining",
@@ -68,7 +70,7 @@ func (runtime *RuntimeV0) shutdownRuntimeV0(
 		})
 		return fmt.Errorf("orquesta_server: async_work_timeout")
 	}
-	runtime.runShutdownHooksV0(shutdownCtx)
+	runtime.runShutdownHooksOnceV0(shutdownCtx, &shutdownHooksRun)
 	runtime.withAsyncReceiptContextV0(func(receiptCtx context.Context) {
 		runtime.persistStateTransitionV0(
 			receiptCtx,
@@ -97,6 +99,8 @@ func (runtime *RuntimeV0) runtimeShutdownDrainingStateV0(cause ShutdownSignalCau
 func (runtime *RuntimeV0) stopRuntimeAfterServeClosedV0(cancelRun context.CancelFunc) error {
 	shutdownCtx, cancelShutdown := runtime.shutdownContextV0()
 	defer cancelShutdown()
+	shutdownHooksRun := false
+	defer runtime.runShutdownHooksOnExitV0(&shutdownHooksRun)
 	if cancelRun != nil {
 		cancelRun()
 	}
@@ -116,7 +120,7 @@ func (runtime *RuntimeV0) stopRuntimeAfterServeClosedV0(cancelRun context.Cancel
 		})
 		return fmt.Errorf("orquesta_server: async_work_timeout")
 	}
-	runtime.runShutdownHooksV0(shutdownCtx)
+	runtime.runShutdownHooksOnceV0(shutdownCtx, &shutdownHooksRun)
 	runtime.withAsyncReceiptContextV0(func(receiptCtx context.Context) {
 		runtime.persistStateTransitionV0(
 			receiptCtx,
@@ -155,4 +159,23 @@ func (runtime *RuntimeV0) runShutdownHooksV0(ctx context.Context) {
 			})
 		}
 	}
+}
+
+func (runtime *RuntimeV0) runShutdownHooksOnceV0(ctx context.Context, ran *bool) {
+	if ran != nil {
+		if *ran {
+			return
+		}
+		*ran = true
+	}
+	runtime.runShutdownHooksV0(ctx)
+}
+
+func (runtime *RuntimeV0) runShutdownHooksOnExitV0(ran *bool) {
+	if ran != nil && *ran {
+		return
+	}
+	runtime.withAsyncReceiptContextV0(func(ctx context.Context) {
+		runtime.runShutdownHooksOnceV0(ctx, ran)
+	})
 }

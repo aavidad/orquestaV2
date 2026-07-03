@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -66,6 +67,7 @@ func TestRuntimeV0ShutdownTimeoutPublicaStopTimeoutV0(t *testing.T) {
 	store := &threadSafeStateStoreV0{}
 	supervisor := newBlockingIdlePrepareSupervisorV0()
 	defer close(supervisor.releasePrepare)
+	hook := &countingRuntimeShutdownHookV0{}
 	runtime, err := NewRuntimeV0(ConfigV0{
 		Addr:                        "127.0.0.1:0",
 		StateDir:                    t.TempDir(),
@@ -78,6 +80,9 @@ func TestRuntimeV0ShutdownTimeoutPublicaStopTimeoutV0(t *testing.T) {
 		Supervisor: supervisor,
 		StateStore: store,
 		Clock:      fixedClockV0{now: now},
+		ShutdownHooks: []RuntimeShutdownHookPortV0{
+			hook,
+		},
 	})
 	if err != nil {
 		t.Fatalf("NewRuntimeV0: %v", err)
@@ -99,6 +104,9 @@ func TestRuntimeV0ShutdownTimeoutPublicaStopTimeoutV0(t *testing.T) {
 		state.ShutdownAsyncWorkActive == 0 ||
 		state.ShutdownStopTimeoutAt == "" {
 		t.Fatalf("timeout no visible: %+v", state)
+	}
+	if got := atomic.LoadInt32(&hook.calls); got != 1 {
+		t.Fatalf("shutdown hook no corrio en timeout: calls=%d", got)
 	}
 }
 

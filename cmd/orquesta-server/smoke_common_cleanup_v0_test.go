@@ -1,9 +1,13 @@
 package main
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -52,5 +56,47 @@ func TestSmokeCommonShutdownCleanupMataAppServerPropioSinBaseURLV0(t *testing.T)
 	case <-processDone:
 	case <-time.After(time.Second):
 		t.Fatalf("fake app-server propio sigue vivo tras cleanup sin base_url")
+	}
+}
+
+func TestSmokeCommonReadinessStateFileRechazaPIDMuertoV0(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash no disponible")
+	}
+	if _, err := exec.LookPath("jq"); err != nil {
+		t.Skip("jq no disponible")
+	}
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v0/server/readiness" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"ready":true}`))
+	}))
+	defer server.Close()
+	addr := strings.TrimPrefix(server.URL, "http://")
+	stateFile := filepath.Join(t.TempDir(), "orquesta_server_state_v0.json")
+	if err := os.WriteFile(
+		stateFile,
+		[]byte(fmt.Sprintf(`{"addr":%q,"pid":999999999}`, addr)),
+		0o600,
+	); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+
+	check := exec.Command(
+		"bash",
+		"-c",
+		`source scripts/lib/smoke_common.sh; if smoke_wait_orquesta_readiness_from_state_file "$ORQUESTA_TEST_STATE_FILE" 1 0 base_url; then echo "ready:$base_url"; exit 0; fi; echo "pid_dead"; exit 7`,
+	)
+	check.Dir = root
+	check.Env = append(os.Environ(), "ORQUESTA_TEST_STATE_FILE="+stateFile)
+	output, err := check.CombinedOutput()
+	if err == nil {
+		t.Fatalf("readiness acepto PID muerto: output=%s", string(output))
+	}
+	if !strings.Contains(string(output), "pid_dead") {
+		t.Fatalf("salida inesperada: err=%v output=%s", err, string(output))
 	}
 }

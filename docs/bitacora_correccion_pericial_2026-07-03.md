@@ -629,3 +629,32 @@ Subagente usado: `019f29a7-e2e5-7fd0-b5b5-6770deb56e88` (explorer Wegener),
 solo lectura, sin `codebase-memory-mcp`; coincidió en la causa y recomendó el
 reset de publicacion en error/fallo. Pendiente antes de entregar: suites
 globales, revision de procesos vivos, commit y push.
+
+### 2026-07-03 noche — Codex cierra BUG-156/157 de shutdown y harness
+
+Trabajo directo acotado, sin relanzar pilotajes congelados. Se investigaron los
+procesos residuales de pilotos y el falso arranque background de MEJ-206 con dos
+subagentes de solo lectura:
+- `019f29b0-562d-74d1-8d36-eac6119d0961` (Epicurus): confirmo que el cleaner de
+  `codex app-server` tmux existe, pero los hooks no corrian si shutdown salia
+  por `async_work_timeout`;
+- `019f29b0-683a-7412-a969-8d2970a74db3` (Gibbs): confirmo que
+  `orquesta-server run` es foreground, que `start/status/stop` es el contrato
+  daemon y que el helper comun de readiness no validaba PID vivo.
+
+Cambios aplicados:
+- `RuntimeV0` ejecuta hooks de shutdown una sola vez tambien en rutas de salida
+  por timeout, usando contexto fresco best-effort antes de devolver error;
+- `smoke_wait_orquesta_readiness_from_state_file` rechaza statefiles con `pid`
+  no numerico, cero o muerto antes de aceptar readiness HTTP por `addr`;
+- el inventario cierra `BUG-ORQ-20260703-156` y `BUG-ORQ-20260703-157` con causa
+  estructural y evidencia.
+
+Evidencia focal ejecutada:
+- `bash -n scripts/lib/smoke_common.sh`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeCommonReadinessStateFileRechazaPIDMuertoV0|TestSmokeCommonShutdownCleanupMataAppServerPropioSinBaseURLV0'`
+- `go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0ShutdownTimeoutPublicaStopTimeoutV0|TestRuntimeV0ShutdownEsperaPreparacionIdleAntesDeStoppedV0|TestRuntimeV0CompactaShutdownHooksV0'`
+
+Pendiente antes de entregar: suites globales, revision de procesos vivos, commit
+y push. Residuales nuevos no abiertos en este corte; siguen como deuda
+estructural visible `BUG-ORQ-20260703-149` y `BUG-ORQ-20260703-154`.
