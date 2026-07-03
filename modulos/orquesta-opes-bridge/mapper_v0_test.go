@@ -520,6 +520,8 @@ func TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados(t
 		{workKind: "generate_help_manual_assets", artifactType: "help_manual_package", context: "large"},
 		{workKind: "finalize_topic_package", artifactType: "final_domain_package", context: "large"},
 		{workKind: "finalize_temario_package", artifactType: "completed_syllabus_package", context: "large"},
+		{workKind: "finalize_syllabus_package", artifactType: "completed_syllabus_package", context: "large"},
+		{workKind: "completed_syllabus_package", artifactType: "completed_syllabus_package", context: "large"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.workKind, func(t *testing.T) {

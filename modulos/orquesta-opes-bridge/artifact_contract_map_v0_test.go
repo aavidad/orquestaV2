@@ -45,6 +45,8 @@ func TestOPESBridgeArtifactContractMapConsumeOwnerNeutralV0(t *testing.T) {
 		"generate_learning_games",
 		"generate_help_manual_assets",
 		"finalize_temario_package",
+		"finalize_syllabus_package",
+		"completed_syllabus_package",
 		"configure_temario_bots",
 		"unknown_work_kind",
 	} {
@@ -102,7 +104,7 @@ func expectedOPESArtifactForBridgeMapTestV0(workKind string) string {
 		return orquestadomainwork.DomainWorkArtifactTypeDirectorReviewMatrixV0
 	case "audit_existing_syllabus_quality":
 		return opesArtifactTypeQualityAuditReportV0
-	case "finalize_temario_package":
+	case "finalize_temario_package", "finalize_syllabus_package", "completed_syllabus_package":
 		return opesArtifactTypeCompletedSyllabusPackageV0
 	default:
 		return orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind)

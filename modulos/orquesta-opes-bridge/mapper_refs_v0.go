@@ -96,7 +96,8 @@ func expectedArtifactTypeV0(jobType string) string {
 		return orquestadomainwork.DomainWorkArtifactTypePracticalCasesV0
 	case "finalize_topic_package":
 		return orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0
-	case "finalize_temario_package", "close_temario_package":
+	case "finalize_temario_package", "close_temario_package",
+		"finalize_syllabus_package", "completed_syllabus_package", "paquete_final_temario":
 		return opesArtifactTypeCompletedSyllabusPackageV0
 	}
 	return orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(jobType)
@@ -146,6 +147,8 @@ func contextProfileForJobTypeV0(jobType string) string {
 		"update_topic_registry",
 		"finalize_topic_package",
 		"finalize_temario_package",
+		"finalize_syllabus_package",
+		"completed_syllabus_package",
 		"configure_temario_bots":
 		return "large"
 	default:
@@ -213,7 +216,8 @@ func acceptanceCriteriaForJobV0(jobType string) []string {
 		criteria = append(criteria, topicRegistryUpdateAcceptanceCriteriaV0()...)
 	case "finalize_topic_package":
 		criteria = append(criteria, finalizedTopicPackageAcceptanceCriteriaV0()...)
-	case "finalize_temario_package", "close_temario_package":
+	case "finalize_temario_package", "close_temario_package",
+		"finalize_syllabus_package", "completed_syllabus_package", "paquete_final_temario":
 		criteria = append(criteria, finalizedTemarioPackageAcceptanceCriteriaV0()...)
 	}
 	return criteria

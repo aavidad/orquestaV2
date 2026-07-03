@@ -682,6 +682,16 @@ apagado gobernado. Evidencia:
 `TestReadmesOperativosNoRecomiendanRuntimeManualV0` y
 `go test -count=1 ./cmd/orquesta-server -run 'Test(ReadmesOperativosNoRecomiendanRuntimeManual|UsoActualAppOrquestaRecomiendaServidorGestionado|ArrancarCodexModuloNoRecomiendaRuntimeManual)V0'`.
 
+Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
+`orquesta-opes-bridge` normaliza los aliases de cierre
+`finalize_syllabus_package`, `completed_syllabus_package` y
+`paquete_final_temario` al contrato OPES `completed_syllabus_package`, con
+contexto `large` y criterios de cierre de temario, en vez de caer al paquete
+generico. Evidencia:
+`TestBuildExternalWorkRunRequestV0MapeaDerivadosOPESConArtefactosEsperados`,
+`TestOPESBridgeArtifactContractMapConsumeOwnerNeutralV0` y
+`go test -count=1 ./modulos/orquesta-opes-bridge`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
