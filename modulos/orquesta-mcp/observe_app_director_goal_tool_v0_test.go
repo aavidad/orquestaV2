@@ -31,22 +31,62 @@ func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0QAFailedPublicText
 }
 
 func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0QAFailedPublicTextRunningNoEspera(t *testing.T) {
-	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
-		MCPObserveAppDirectorGoalToolResultV0{
-			GoalRef:    "goal-ref-observe-qa-failed-public-text-running-001",
-			GoalStatus: orquestagoal.GoalStatusRunningV0,
+	cases := []struct {
+		name              string
+		issueCode         string
+		recommendedAction string
+	}{
+		{
+			name:              "qa_failed_public_text",
+			issueCode:         MCPGoalFirstQAFailedPublicTextV0,
+			recommendedAction: MCPGoalFirstReworkPublicTextActionV0,
 		},
-		MCPDirectorGoalMaterializedRefsV0{
-			ArtifactRefs: []string{"artifact-ref-materialized-qa-failed-public-text-running-001"},
-			EvidenceRefs: []string{"evidence-ref-goal-materialized-qa-failed-public-text-running-001"},
-			IssueCodes:   []string{MCPGoalFirstQAFailedPublicTextV0},
+		{
+			name:              "artifact_paths_omitted_materialized",
+			issueCode:         MCPGoalFirstArtifactPathsOmittedMaterializedV0,
+			recommendedAction: MCPGoalFirstRepairReceiptActionV0,
 		},
-	)
+		{
+			name:              "out_of_scope_materialized_artifacts",
+			issueCode:         MCPGoalFirstOutOfScopeMaterializedArtifactsV0,
+			recommendedAction: MCPGoalFirstReworkWriteSetViolationActionV0,
+		},
+		{
+			name:              "partial_artifacts_written",
+			issueCode:         MCPGoalFirstPartialArtifactsWrittenV0,
+			recommendedAction: MCPGoalFirstReviewPartialArtifactsActionV0,
+		},
+		{
+			name:              "phase0_complete_non_publishable",
+			issueCode:         MCPGoalFirstPhase0CompleteNonPublishableV0,
+			recommendedAction: MCPGoalFirstContinueFromPhase0ActionV0,
+		},
+		{
+			name:              "required_test_evidence_missing",
+			issueCode:         MCPGoalFirstRequiredTestEvidenceMissingV0,
+			recommendedAction: MCPGoalFirstRepairReceiptActionV0,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
+				MCPObserveAppDirectorGoalToolResultV0{
+					GoalRef:    "goal-ref-observe-" + tc.name + "-running-001",
+					GoalStatus: orquestagoal.GoalStatusRunningV0,
+				},
+				MCPDirectorGoalMaterializedRefsV0{
+					ArtifactRefs: []string{"artifact-ref-materialized-" + tc.name + "-running-001"},
+					EvidenceRefs: []string{"evidence-ref-goal-materialized-" + tc.name + "-running-001"},
+					IssueCodes:   []string{tc.issueCode},
+				},
+			)
 
-	if result.RecommendedAction != MCPGoalFirstReworkPublicTextActionV0 ||
-		!containsStringMCPV0(result.ArtifactRefs, "artifact-ref-materialized-qa-failed-public-text-running-001") ||
-		!containsStringMCPV0(result.EvidenceRefs, "evidence-ref-goal-materialized-qa-failed-public-text-running-001") {
-		t.Fatalf("result=%+v", result)
+			if result.RecommendedAction != tc.recommendedAction ||
+				!containsStringMCPV0(result.ArtifactRefs, "artifact-ref-materialized-"+tc.name+"-running-001") ||
+				!containsStringMCPV0(result.EvidenceRefs, "evidence-ref-goal-materialized-"+tc.name+"-running-001") {
+				t.Fatalf("result=%+v", result)
+			}
+		})
 	}
 }
 
