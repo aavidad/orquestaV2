@@ -140,6 +140,30 @@ Manejo real de agentes en Orquesta:
 - progreso parado/lento entra por `ProgressSupervisionCandidateProviderV0` y el
   replan por `AssessmentReplanSourceV0`, que puede pedir `replace_agent`.
 
+## Evidencias de estado vivo
+
+`EvidenciaEstadoAgregadorV0` implementa el puerto consumer-side neutral
+`FuenteEvidenciaEstadoPortV0` de `orquesta-estado-vivo`. El agregador solo
+combina fuentes disponibles y tolera fuentes nil; no decide fase ni resuelve
+conflictos. Cada adaptador traduce estado bruto a
+`orquestaestadovivo.EvidenciaEstadoV0` y conserva `RunRef`, `GoalRef`,
+`ExternalGoalRef` y `EvidenceRefs` disponibles.
+
+Tabla de traducciones del stack:
+
+| Adaptador | Fuente `EvidenciaEstadoV0` | Estado bruto | Flags estructurales | Refs conservadas |
+| --- | --- | --- | --- | --- |
+| `EvidenciaEstadoRunStoreV0` | `run_store` | `OrchestrationRunV0.Status` (`pendiente`, `activa`, `bloqueada`, `cerrada`, etc.) | No marca `ProcesoVivo`, `Terminal` ni `Aceptado`. | `LastEventID` y refs durables del run: agentes, entregas, artefactos de fase, reviews, rework/replan, validaciones, cierres y blockers. |
+| `EvidenciaEstadoGoalStateV0` | `goal_state` | `GoalWorkStateV0.Status` (`running`, `complete`, `blocked`, `invalid`) | No marca terminalidad; el estado de goal se conserva como fuente bruta. | `GoalWorkStateV0.EvidenceRefs`, refs del `GoalWorkSpecV0`, launch receipt, último result y último closure si existen. |
+| `EvidenciaEstadoMarkerV0` | `run_marker` | `GoalWorkRunMarkerV0.Status` o vacío si el marker no lo trae. | No marca proceso ni terminalidad. | `GoalWorkRunMarkerV0.EvidenceRefs`, refs del spec y launch receipt embebidos si existen. |
+| `EvidenciaEstadoProcesosV0` | `process_registry` | `registered`. | No marca `ProcesoVivo`; el registro por sí solo no confirma vida. | `AgentRequestID`, `ProcessRef`, `SessionRef`, `LaunchRef`, `ReadinessRef` y `EvidenceRefs` del registry. |
+| `EvidenciaEstadoProcesosV0` | `process_snapshot` | `ProcessRuntimeSnapshotV0.Status` (`running`, `stopping`, `stopped`). | `ProcesoVivo=true` solo si el snapshot confirma el mismo `process_ref` y refs compatibles del registro, y el estado es `running` o `stopping`. | Refs del registry más `ProcessRuntimeSnapshotEvidenceRefsV0`. |
+| `EvidenciaEstadoReceiptsV0` | `receipt` | `GoalWorkResultV0.Status` validado (`running`, `complete`, `blocked`, `invalid`). | `Terminal=true` solo para estados terminales validados por `orquesta-goal`; `Aceptado=true` solo si el último closure persistido declara `Accepted`. | `GoalWorkResultV0.EvidenceRefs`, artifact refs, test evidence refs, domain receipts, rework plan refs, checklist evidence y closure evidence. |
+| `EvidenciaEstadoReceiptsV0` | `receipt` | `CodexAgentAckV0.Status` validado desde descriptor ACK (`completed`, `blocked`, `failed`). | No marca terminalidad ni aceptación; un ACK de agente es entrega/receipt, no cierre aceptado. | Descriptor ref, agent ref, ACK/mailbox/readiness/checkpoint refs y receipts de tests requeridos. |
+
+Si una traduccion futura necesita decidir fase, precedencia o conflicto, la
+regla pertenece a `orquesta-estado-vivo`, no a este stack.
+
 `CodexSupervisorStackLifecycleV0` es el adaptador de stack para
 `ContinueV0("sigue")`: con `RunRef` reentra por `DrainRunV0`; sin `RunRef`
 ejecuta `RunGlobalSupervisorV0`. En ambos casos el avance real sigue siendo tick
