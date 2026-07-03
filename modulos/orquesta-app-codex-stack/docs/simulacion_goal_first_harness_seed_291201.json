@@ -1,0 +1,39 @@
+{
+  "schema_version": "orquesta_simulacion_goal_first_harness.v0",
+  "seed": 291201,
+  "task_ref": "MEJ-TASK-201",
+  "goal_ref": "goal-ref-autoprogramming-backlog-t291-simulacion-determinista-fallos-aa4bc2a0",
+  "harness": {
+    "test": "TestSimulacionDeterministaFallosGoalFirstV0",
+    "package": "orquesta/modulos/orquesta-app-codex-stack",
+    "short_mode_limit_seconds": 60
+  },
+  "real_sources": [
+    "orquesta-goal StartGoalWorkV0",
+    "orquesta-goal ObserveGoalWorkV0",
+    "orquesta-runtime-codex-appserver TransicionBackendV0",
+    "orquesta-estado-vivo ConstruirProyeccionCicloVidaV0",
+    "orquesta-run-coordinator ReconcileExternalWorkPublicStatusV0",
+    "orquesta-server NewServerPublicStatusV0"
+  ],
+  "fault_modes": [
+    "backend_kill",
+    "delay_materialization",
+    "duplicate_observation",
+    "process_cut"
+  ],
+  "invariants": [
+    "no goal remains running forever",
+    "terminal result remains visible in public lifecycle projection",
+    "live process after terminal is reported as conflict",
+    "illegal backend transition fails with reproducible seed and sequence",
+    "simulation output is deterministic for the declared seed"
+  ],
+  "out_of_scope": [
+    "supervisor_idle_budget*",
+    "goal_first_observer_reconciliation*",
+    "goal_materialized_result_watcher*",
+    "cmd/orquesta-server"
+  ],
+  "status": "valid"
+}

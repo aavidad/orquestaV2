@@ -1,0 +1,7 @@
+goal_ref: goal-ref-autoprogramming-backlog-t291-simulacion-determinista-fallos-aa4bc2a0
+task: MEJ-TASK-201 / T291 simulacion-determinista-fallos
+scope: modulos/orquesta-app-codex-stack, modulos/orquesta-estado-vivo
+out_of_scope: supervisor_idle_budget*, goal_first_observer_reconciliation*, goal_materialized_result_watcher*
+next_artifact: deterministic goal-first failure-simulation harness and required tests
+input_refs: scan-ref-backlog-9411b9a7c995, task-instance-ref-backlog-b00ceae1, task-id-ref-backlog-b68383aa2173
+status: started
