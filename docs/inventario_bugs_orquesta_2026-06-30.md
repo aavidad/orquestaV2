@@ -1307,6 +1307,14 @@ de `orquesta.server.shutdown.v0` declara tambien los estados publicos
 campos de active work. Evidencia:
 `TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 33d: la politica de escalado
+del cliente `orquesta-server stop --force` trata tambien
+`shutdown_status=stop_pending` leido desde `/status` como conflicto vivo aunque
+el snapshot haya perdido contadores. Antes ese veto existia si `stop_pending`
+venia en el error `shutdown_not_ready`, pero no en el estado publico posterior.
+Evidencia: `TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado`
+y `TestShutdownClientReadyV0NoSaltaStatusConflictoSinContadoresV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 34: el transporte MCP de
 `orquesta.runs.supervisor.v0` tambien conserva `operation_ref`,
 `evidence_refs` estables y diagnostico `run_supervisor_execute_error` cuando el

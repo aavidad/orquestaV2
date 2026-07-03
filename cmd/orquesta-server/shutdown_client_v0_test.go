@@ -681,6 +681,10 @@ func TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado(t *testi
 	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_timeout"), status, false) {
 		t.Fatalf("timeout no debe saltar espera de checkpoint declarada en status aunque no haya contadores")
 	}
+	status.ShutdownStatus = "stop_pending"
+	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_request_failed"), status, true) {
+		t.Fatalf("force no debe saltar stop_pending declarado en status aunque no haya contadores")
+	}
 	status.ShutdownStatus = ""
 	status.ShutdownActiveWorkCount = 1
 	status.ShutdownActiveWorkRefs = []string{"shutdown-active-work-goal-backend-goal-ref-force"}
@@ -808,7 +812,7 @@ func TestShutdownClientReadyV0NoSaltaTrabajoPendienteAunqueReadyV0(t *testing.T)
 }
 
 func TestShutdownClientReadyV0NoSaltaStatusConflictoSinContadoresV0(t *testing.T) {
-	for _, status := range []string{"backend_still_running", "active_goals_present", "waiting_drain", "waiting_checkpoint"} {
+	for _, status := range []string{"backend_still_running", "active_goals_present", "waiting_drain", "waiting_checkpoint", "stop_pending"} {
 		result := serverShutdownClientResultV0{
 			Status:        status,
 			RunsRequested: 0,
