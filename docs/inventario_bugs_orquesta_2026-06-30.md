@@ -898,6 +898,13 @@ de sesion queda fijado contra regresiones de runtime manual: debe conservar
 `go run ./cmd/orquesta-server run` ni el puerto historico `8787`. Evidencia:
 `TestHandoffCierreSesionNoReabreBUG077V0`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 26: la reconciliacion
+automatica de `goal_backend_missing_after_external_cleanup` queda fijada como
+responsabilidad opt-in del supervisor residente; una llamada no residente a
+`runs.supervisor` no consulta `DirectorStats`, no muta el `GoalWorkState`
+running, no marca `blocked` y no lanza rework tras cleanup externo. Evidencia:
+`TestRunSupervisorGoalFirstNoResidentNoReconciliaBackendMissingTrasCleanupExternoV0`.
+
 Avance BUG-ORQ-20260701-085 2026-07-03 tarde 22: `efficiency_summary` conserva
 ahora tambien las acciones compactas de launch write-set: si el goal queda
 invalid por `codex_app_server_write_set_requires_workspace_write`, publica

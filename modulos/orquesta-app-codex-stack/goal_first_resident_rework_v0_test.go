@@ -183,6 +183,81 @@ func TestRunSupervisorGoalFirstResidentReconciliaBackendMissingTrasCleanupExtern
 	}
 }
 
+func TestRunSupervisorGoalFirstNoResidentNoReconciliaBackendMissingTrasCleanupExternoV0(t *testing.T) {
+	ctx := context.Background()
+	store := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	runRef := "run-ref-goal-first-no-resident-backend-missing-001"
+	goalRef := "goal-ref-goal-first-no-resident-backend-missing-001"
+	externalGoalRef := "thread-ref-goal-first-no-resident-backend-missing-001"
+	source := orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			GoalRef:      goalRef,
+			RequestRef:   "request-ref-goal-first-no-resident-backend-missing-001",
+			RunRef:       runRef,
+			ProjectRef:   "project-ref-goal-first-no-resident-backend-missing",
+			Objective:    "No reconciliar cleanup externo fuera de modo residente.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{
+				Path:    "docs/goal-first-no-resident-backend-missing.md",
+				Purpose: "evidencia de test",
+			}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-first-no-resident-backend-missing-source"},
+	}
+	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
+	}
+	stats := &goalFirstResidentDirectorStatsForTestV0{
+		result: orquestamcp.MCPDirectorStatsToolResultV0{
+			Estado: orquestamcp.MCPDirectorStatsEstadoOKV0,
+			RunRef: runRef,
+		},
+	}
+	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:     store,
+			GoalReworkLauncher: launcher,
+		},
+		Stores: StoresV0{AppGoalStateStore: store},
+		MCPTransportBindings: orquestamcp.MCPTransportBindingsV0{
+			DirectorStats: stats,
+		},
+	}}
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{RunRef: source.RunRef})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if stats.calls != 0 ||
+		launcher.calls != 0 ||
+		len(result.RepairRunRefs) != 0 ||
+		result.StopReason != "goal_first_observe_required" {
+		t.Fatalf("supervision no residente reconcilio cleanup externo: result=%+v stats_calls=%d launcher_calls=%d", result, stats.calls, launcher.calls)
+	}
+	persistedSource, err := store.LoadGoalWorkStateV0(ctx, source.RunRef)
+	if err != nil {
+		t.Fatalf("Load source: %v", err)
+	}
+	if persistedSource.Status != orquestagoal.GoalStatusRunningV0 ||
+		persistedSource.LastResult != nil ||
+		persistedSource.LastClosure != nil ||
+		goalFirstResidentHasIssueOrEvidenceV0(persistedSource, goalFirstResidentReworkReasonBackendMissingV0) ||
+		goalFirstResidentHasIssueOrEvidenceV0(persistedSource, goalFirstResidentBackendMissingReconciledV0) {
+		t.Fatalf("source no residente mutado por reconciliacion: %+v", persistedSource)
+	}
+}
+
 func TestRunSupervisorGoalFirstResidentPreparaReworkPorTimeoutInicialSinArtefactosV0(t *testing.T) {
 	ctx := context.Background()
 	store := newGoalFirstQueueStateStoreForTestV0()
