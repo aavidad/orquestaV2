@@ -109,14 +109,17 @@ Campos:
     estado: ok
     run_ref, stop_reason, ticks, last, history?, evidence_refs?,
     idempotency_key?, operation_ref?, repair_run_refs?, operator_advice?,
-    diagnostics?, next_actions?; por HTTP, si el executor sigue vivo mas alla
-    de la ventana de respuesta, devuelve `202 accepted` con
+    diagnostics[]?: code, scope?, message?, evidence_refs?
+    next_actions?; por HTTP, si el executor sigue vivo mas alla de la ventana
+    de respuesta, devuelve `202 accepted` con
     `stop_reason=accepted_background`, `operation_ref`, diagnostico y acciones
     de consulta
   output_error:
     estado: error
     errores_publicos: issues compactos; evidence_refs?, idempotency_key?,
-    operation_ref?, repair_run_refs?, diagnostics?, next_actions?
+    operation_ref?, repair_run_refs?,
+    diagnostics[]?: code, scope?, message?, evidence_refs?
+    next_actions?
 Invariantes:
   - Adaptador inbound fino y opt-in por executor inyectado.
   - Compatibilidad legacy/resident: si la run tiene `GoalWorkStateV0`, el caller

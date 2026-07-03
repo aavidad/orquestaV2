@@ -1648,6 +1648,15 @@ backend activo o reconciliacion terminal para clientes que deciden
 `stop/cancel/wait` sin leer logs. Evidencia:
 `TestMCPRunControlDescriptorV0EsAdaptadorFino`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 63:
+`orquesta.runs.supervisor.v0` tambien transporta diagnosticos publicos con
+`code/scope/message/evidence_refs` para aceptacion en background, errores de
+executor y reworks/reconciliaciones, pero el descriptor compacto los mantenia
+opacos. El descriptor y contrato publican ahora esa forma tipada en `ok` y
+`error`, evitando que clientes compactos pierdan causa/evidencia al decidir
+consulta posterior, wait o escalado por `runs/control`. Evidencia:
+`TestMCPRunSupervisorDescriptorV0DeclaraEvidenciaEnErrores`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
