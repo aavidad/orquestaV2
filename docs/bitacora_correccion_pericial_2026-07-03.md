@@ -468,3 +468,31 @@ de apagado de pilotos, no reproducido en 2 reruns; vigilar si reaparece.
 T292 lanzada (MEJ-204 actor-crítico, rama `pericial/pilot-t292`). Cola tras
 T292: T286-EXP (A/B broker), MEJ-102/105/207, y decisiones de operador
 (MEJ-101/103/106).
+
+### 2026-07-03 noche — T292 integrada; AUTOMEJORA CORTADA por orden del operador
+
+T292 integrada en `0ce95763` (actor-crítico de tests congelados, MEJ-204),
+suites focales verdes (autoprogramming + stack + server + cmd) verificadas en
+el worktree del pilotaje antes de integrar. Dos sesiones supervisoras
+hicieron cherry-pick concurrente y el commit entró UNA sola vez; sin
+duplicados.
+
+**Anomalías del run T292 (deuda real del director, no del código entregado):**
+1. El resumen vivo del goal al cerrar decía "MEJ-TASK-201 implementada"
+   (tarea equivocada, la de T291) mientras el result durable dice MEJ-204.
+   El autoinforme vivo no es fiable como señal de qué se hizo.
+2. El result JSON materializó ~3 minutos DESPUÉS de `goal complete`
+   (21:22 → 21:25): ventana ciega en la que un watcher por fichero no ve el
+   cierre y un observador por estado no tiene evidencia durable.
+
+**ORDEN DEL OPERADOR (2026-07-03): automejora CORTADA.** No lanzar T286-EXP,
+MEJ-102/105/207 ni ninguna tarea nueva de mejora. La cola queda CONGELADA.
+Prioridad única: que Orquesta funcione autónoma con lo ya integrado y que el
+director no se atranque. A cualquier otra sesión supervisora: NO relanzar
+pilotajes; los servidores/tmux residuales los apaga la sesión dd9320fa.
+
+**Siguiente trabajo (directo, sin pilotajes Codex):** el director debe
+detectar por sí mismo (a) `goal complete` sin result materializado
+(publicar anomalía y acción recomendada, no quedarse ciego) y (b)
+discrepancia entre el task-ref de la sección de backlog y el autoinforme
+del goal.
