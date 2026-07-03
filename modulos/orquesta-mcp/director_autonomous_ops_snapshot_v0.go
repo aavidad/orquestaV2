@@ -234,9 +234,18 @@ func directorOpsDecisionFromAutoprogrammingActionableRunMCPV0(
 		RunRef:       strings.TrimSpace(action.RunRef),
 		Attention:    true,
 		ReasonCode:   code,
-		SummaryKey:   "director.ops.decision." + recommendedAction,
+		SummaryKey:   "director.ops.decision." + directorOpsSummaryActionKeyMCPV0(recommendedAction),
 		EvidenceRefs: compactStringsMCPV0(action.EvidenceRefs),
 	}, true
+}
+
+func directorOpsSummaryActionKeyMCPV0(action string) string {
+	action = strings.TrimSpace(action)
+	prefix, _, found := strings.Cut(action, ":run:")
+	if found && strings.TrimSpace(prefix) != "" {
+		return strings.TrimSpace(prefix)
+	}
+	return action
 }
 
 func directorOpsDecisionFromAutoprogrammingSnapshotWithoutQueueSuperviseMCPV0(

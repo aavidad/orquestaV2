@@ -48,3 +48,23 @@ func TestDirectorOpsDecisionFromAutoprogrammingActionableRunV0RespetaSeveridadV0
 		t.Fatalf("info no debe convertirse en decision de atencion: %+v", decision)
 	}
 }
+
+func TestDirectorOpsDecisionFromAutoprogrammingActionableRunV0NormalizaSummaryKeyPorRunV0(t *testing.T) {
+	runRef := "run-ref-ops-snapshot-repair-receipt-001"
+	decision, ok := directorOpsDecisionFromAutoprogrammingActionableRunMCPV0(MCPAutoprogrammingActionableRunV0{
+		Code:              MCPGoalFirstArtifactPathsOmittedMaterializedV0,
+		Severity:          "blocked",
+		RunRef:            runRef,
+		RecommendedAction: MCPGoalFirstRepairReceiptActionV0 + ":run:" + runRef,
+		EvidenceRefs:      []string{mcpAutoprogrammingEvidenceArtifactPathsOmittedV0},
+	})
+
+	if !ok ||
+		decision.Action != orquestaobservability.DirectorAutonomousOpsActionReviewReplanV0 ||
+		decision.RunRef != runRef ||
+		decision.SummaryKey != "director.ops.decision."+MCPGoalFirstRepairReceiptActionV0 ||
+		!decision.Attention ||
+		!containsStringMCPV0(decision.EvidenceRefs, mcpAutoprogrammingEvidenceArtifactPathsOmittedV0) {
+		t.Fatalf("decision=%+v ok=%v", decision, ok)
+	}
+}
