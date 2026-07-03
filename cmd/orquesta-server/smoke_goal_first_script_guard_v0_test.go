@@ -874,11 +874,20 @@ func TestLauncherOPESA1NoUsaPuertoHistoricoPorDefectoV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/opes_a1_finalpkg_registry_launcher.py")
 
-	if strings.Contains(text, `os.environ.get("ORQUESTA_BASE_URL", "http://127.0.0.1:8787")`) {
-		t.Fatalf("launcher OPES A1 no debe caer al puerto historico 8787 por defecto")
+	for _, forbidden := range []string{
+		`os.environ.get("ORQUESTA_BASE_URL", "http://127.0.0.1:8787")`,
+		"http://127.0.0.1:8787",
+		"http://localhost:8787",
+		"127.0.0.1:8787",
+		"localhost:8787",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("launcher OPES A1 no debe caer al puerto historico 8787 por defecto: contiene %q", forbidden)
+		}
 	}
 	for _, want := range []string{
 		"ORQUESTA_SERVER_URL",
+		"ORQUESTA_BASE_URL",
 		"ORQUESTA_RUNTIME_DIR",
 		"base_url.txt",
 		"--orquesta-base-url required",
@@ -886,6 +895,23 @@ func TestLauncherOPESA1NoUsaPuertoHistoricoPorDefectoV0(t *testing.T) {
 		if !strings.Contains(text, want) {
 			t.Fatalf("launcher OPES A1 debe resolver endpoint gestionado: falta %q", want)
 		}
+	}
+	ordered := []string{
+		`for name in ("ORQUESTA_SERVER_URL", "ORQUESTA_BASE_URL"):`,
+		`runtime_dir = os.environ.get("ORQUESTA_RUNTIME_DIR", "").strip()`,
+		`return (Path(runtime_dir) / "base_url.txt").read_text(encoding="utf-8").strip()`,
+		`return ""`,
+	}
+	lastIndex := -1
+	for _, want := range ordered {
+		index := strings.Index(text, want)
+		if index < 0 {
+			t.Fatalf("launcher OPES A1 debe conservar precedencia endpoint gestionado: falta %q", want)
+		}
+		if index <= lastIndex {
+			t.Fatalf("launcher OPES A1 debe resolver endpoint gestionado en orden; %q aparece fuera de orden", want)
+		}
+		lastIndex = index
 	}
 }
 

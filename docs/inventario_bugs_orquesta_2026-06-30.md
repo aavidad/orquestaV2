@@ -912,6 +912,12 @@ wrapper OPES external-work debe conservar `trap smoke_cleanup EXIT`,
 `smoke_shutdown_orquesta_server`, evitando que un cleanup delegado reabra el
 residual de app-server/base_url.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 27: la guarda del launcher Python
+OPES A1 queda ampliada para fijar la misma resolucion de endpoint gestionado que
+los wrappers shell: `ORQUESTA_SERVER_URL`, compatibilidad `ORQUESTA_BASE_URL`,
+`ORQUESTA_RUNTIME_DIR/base_url.txt` y bloqueo sin fallback al puerto historico
+`8787`. Evidencia: `TestLauncherOPESA1NoUsaPuertoHistoricoPorDefectoV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 26: la reconciliacion
 automatica de `goal_backend_missing_after_external_cleanup` queda fijada como
 responsabilidad opt-in del supervisor residente; una llamada no residente a
