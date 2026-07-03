@@ -241,7 +241,7 @@ func directorOpsDecisionFromAutoprogrammingActionableRunMCPV0(
 
 func directorOpsSummaryActionKeyMCPV0(action string) string {
 	action = strings.TrimSpace(action)
-	prefix, _, found := strings.Cut(action, ":run:")
+	prefix, _, found := strings.Cut(action, ":")
 	if found && strings.TrimSpace(prefix) != "" {
 		return strings.TrimSpace(prefix)
 	}

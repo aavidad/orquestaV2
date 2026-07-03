@@ -67,4 +67,7 @@ func TestDirectorOpsDecisionFromAutoprogrammingActionableRunV0NormalizaSummaryKe
 		!containsStringMCPV0(decision.EvidenceRefs, mcpAutoprogrammingEvidenceArtifactPathsOmittedV0) {
 		t.Fatalf("decision=%+v ok=%v", decision, ok)
 	}
+	if got := directorOpsSummaryActionKeyMCPV0(MCPGoalFirstReworkPublicTextActionV0 + ":external_job:job-ref-ops-snapshot-001"); got != MCPGoalFirstReworkPublicTextActionV0 {
+		t.Fatalf("summary action key=%q", got)
+	}
 }
