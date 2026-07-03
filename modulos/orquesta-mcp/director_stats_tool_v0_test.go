@@ -28,6 +28,14 @@ func TestMCPDirectorStatsToolDescriptorV0ExponeContratoCompacto(t *testing.T) {
 		len(descriptor.Invariantes) == 0 {
 		t.Fatalf("descriptor incompleto=%+v", descriptor)
 	}
+	for _, want := range []string{
+		"external_job?{status,status_reason?,issue_refs?,evidence_refs?,diagnostics?}",
+		"goal?{goal_ref,status,closure_status?,issue_codes?,evidence_refs?}",
+	} {
+		if !strings.Contains(descriptor.Output, want) {
+			t.Fatalf("descriptor director.stats no declara evidencia accionable %q: %s", want, descriptor.Output)
+		}
+	}
 	assertTransportPayloadSaneadoMCPTestV0(t, descriptor, 1400)
 }
 

@@ -447,7 +447,10 @@ Campos:
   output_ok:
     estado: ok
     run_ref
-    goal: bloque opcional goal-first con refs y estado persistido
+    external_job: bloque opcional con status, status_reason, issue_refs,
+      evidence_refs y diagnostics publicos de domain/external-work
+    goal: bloque opcional goal-first con refs, estado persistido, issue_codes y
+      evidence_refs
     stats: DirectorRunStatsV0 completo serializado como contrato publico
     decision_context: DirectorDecisionContextV0 compacto para decision del
       director/API/MCP/web
