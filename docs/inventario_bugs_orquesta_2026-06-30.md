@@ -867,6 +867,13 @@ wrappers que documenten `ORQUESTA_RUNTIME_DIR/base_url.txt` pero fallen en
 ejecucion o vuelvan a rutas manuales. Evidencia:
 `TestScriptsConEndpointGestionadoCarganSmokeCommonV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 22: el resolvedor comun de
+endpoint Orquesta queda fijado por guarda sin fallback al puerto historico
+`8787`: primero `ORQUESTA_SERVER_URL`, luego compatibilidad
+`ORQUESTA_BASE_URL`, despues `ORQUESTA_RUNTIME_DIR/base_url.txt` y, si no hay
+endpoint gestionado, bloqueo explicito. Evidencia:
+`TestSmokeCommonEndpointGestionadoSinPuertoHistoricoV0`.
+
 Avance BUG-ORQ-20260701-085 2026-07-03 tarde 22: `efficiency_summary` conserva
 ahora tambien las acciones compactas de launch write-set: si el goal queda
 invalid por `codex_app_server_write_set_requires_workspace_write`, publica

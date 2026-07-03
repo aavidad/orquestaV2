@@ -823,6 +823,43 @@ func TestSmokesOPESRESTDirectosUsanEndpointOrquestaGestionadoV0(t *testing.T) {
 	}
 }
 
+func TestSmokeCommonEndpointGestionadoSinPuertoHistoricoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	common := readOperationalDocGuardV0(t, root, "scripts/lib/smoke_common.sh")
+
+	if strings.Contains(common, "127.0.0.1:8787") ||
+		strings.Contains(common, "localhost:8787") {
+		t.Fatalf("smoke_common no debe caer al puerto historico 8787")
+	}
+	ordered := []string{
+		`if [[ -n "${ORQUESTA_SERVER_URL:-}" ]]; then`,
+		`if [[ -n "${ORQUESTA_BASE_URL:-}" ]]; then`,
+		`if [[ -n "${ORQUESTA_RUNTIME_DIR:-}" && -s "${ORQUESTA_RUNTIME_DIR%/}/base_url.txt" ]]; then`,
+		`return 1`,
+	}
+	lastIndex := -1
+	for _, want := range ordered {
+		index := strings.Index(common, want)
+		if index < 0 {
+			t.Fatalf("smoke_common debe resolver endpoint gestionado: falta %q", want)
+		}
+		if index <= lastIndex {
+			t.Fatalf("smoke_common debe preservar precedencia endpoint gestionado; %q aparece fuera de orden", want)
+		}
+		lastIndex = index
+	}
+	for _, want := range []string{
+		`printf '%s\n' "${ORQUESTA_SERVER_URL%/}"`,
+		`printf '%s\n' "${ORQUESTA_BASE_URL%/}"`,
+		`base_url="$(head -n 1 "${ORQUESTA_RUNTIME_DIR%/}/base_url.txt" | tr -d '[:space:]')"`,
+		"smoke Orquesta bloqueado: define $label o ORQUESTA_RUNTIME_DIR con base_url.txt",
+	} {
+		if !strings.Contains(common, want) {
+			t.Fatalf("smoke_common debe conservar resolvedor gestionado sin fallback historico: falta %q", want)
+		}
+	}
+}
+
 func TestScriptsConEndpointGestionadoCarganSmokeCommonV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	scriptsDir := filepath.Join(root, "scripts")
