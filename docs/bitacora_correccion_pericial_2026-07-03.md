@@ -242,3 +242,12 @@ Nueva regla de contrato en `AGENTS.md`: paralelización por defecto.
 Cola pendiente: T-PER-901 (ya sin conflicto de write-set), CTX-TASK-801A..D,
 BUG D (result formal de goals idle), filas de inventario para bugs B/C/D.
 Instancias de pilotaje apagadas; ramas `pericial/pilot-*` conservan evidencia.
+
+### 2026-07-03 (madrugada) — T273 en vuelo (primer tramo T-PER-901)
+
+Lanzado a Orquesta en rama `pericial/pilot-t901`, puerto 44971: anti-churn
+idempotente + despertar por evento + tick como watchdog en supervisor/idle
+de `modulos/orquesta-server`. Verificar con los Tests de la sección T273 e
+integrar tras revisión (receta de esta bitácora). Tras integrar T273, los
+siguientes paralelizables son: BUG D (result formal de goals idle),
+CTX-TASK-801A..D y filas de inventario de bugs B/C/D del pilotaje.
