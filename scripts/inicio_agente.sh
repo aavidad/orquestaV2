@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-server_url="${ORQUESTA_SERVER_URL:-http://127.0.0.1:8787}"
+repo_root="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)"
+# shellcheck source=scripts/lib/smoke_common.sh
+source "$repo_root/scripts/lib/smoke_common.sh"
+
+server_url=""
 orquesta_bin="${ORQUESTA_BIN:-orquesta}"
 agent=""
 task_ref=""
@@ -61,6 +65,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$agent" ] || fail_public "agente_requerido"
+server_url="$(smoke_require_orquesta_base_url ORQUESTA_SERVER_URL)"
 
 check_readiness() {
   if [ "${ORQUESTA_MANUAL_AGENT_ALLOW_OFFLINE:-0}" = "1" ]; then

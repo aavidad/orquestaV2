@@ -11,7 +11,8 @@ Uso:
   scripts/orquesta_status_now.sh [--json] [--watch SEGUNDOS]
 
 Variables:
-  ORQUESTA_SERVER_URL                  URL base del servidor. Default: http://127.0.0.1:8787
+  ORQUESTA_SERVER_URL                  URL base del servidor gestionado.
+  ORQUESTA_RUNTIME_DIR                 Runtime con base_url.txt si no hay URL explicita.
   ORQUESTA_STATUS_QUEUE_REF            Cola a consultar. Default: global
   ORQUESTA_STATUS_QUEUE_LIMIT          Numero de tareas de cola. Default: 20
   ORQUESTA_STATUS_TIMEOUT_SECONDS      Timeout HTTP por llamada. Default: 5
@@ -190,7 +191,7 @@ done
 require_command curl
 require_command jq
 
-SERVER_URL="$(trim_trailing_slash "${ORQUESTA_SERVER_URL:-http://127.0.0.1:8787}")"
+SERVER_URL="$(trim_trailing_slash "$(smoke_require_orquesta_base_url ORQUESTA_SERVER_URL)")"
 QUEUE_REF="${ORQUESTA_STATUS_QUEUE_REF:-global}"
 QUEUE_LIMIT="${ORQUESTA_STATUS_QUEUE_LIMIT:-20}"
 TIMEOUT_SECONDS="${ORQUESTA_STATUS_TIMEOUT_SECONDS:-5}"

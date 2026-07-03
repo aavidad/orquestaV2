@@ -414,12 +414,39 @@ func TestInicioAgenteNoRecomiendaRuntimeManualV0(t *testing.T) {
 	if strings.Contains(text, "go run ./cmd/orquesta-server run") {
 		t.Fatalf("inicio_agente no debe recomendar runtime manual no gobernado")
 	}
+	if strings.Contains(text, `ORQUESTA_SERVER_URL:-http://127.0.0.1:8787`) {
+		t.Fatalf("inicio_agente no debe asumir puerto historico por defecto")
+	}
 	for _, want := range []string{
 		"orquesta-server start",
 		"servidor residente gobernado",
+		"smoke_require_orquesta_base_url",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("inicio_agente debe orientar a servidor gestionado: falta %q", want)
+		}
+	}
+}
+
+func TestOrquestaStatusNowUsaEndpointGestionadoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/orquesta_status_now.sh")
+
+	for _, forbidden := range []string{
+		`ORQUESTA_SERVER_URL:-http://127.0.0.1:8787`,
+		"Default: http://127.0.0.1:8787",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("orquesta_status_now no debe asumir puerto historico: %q", forbidden)
+		}
+	}
+	for _, want := range []string{
+		"smoke_require_orquesta_base_url",
+		"ORQUESTA_RUNTIME_DIR",
+		"base_url.txt",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("orquesta_status_now debe usar endpoint gestionado: falta %q", want)
 		}
 	}
 }

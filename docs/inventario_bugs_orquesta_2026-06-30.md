@@ -698,6 +698,14 @@ compatibilidad `ORQUESTA_BASE_URL` o `ORQUESTA_RUNTIME_DIR/base_url.txt`, y
 bloquean antes de tocar OPES temporal si no hay endpoint gestionado. Evidencia:
 `TestSmokesOPESRESTDirectosUsanEndpointOrquestaGestionadoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde: los wrappers generales
+`scripts/inicio_agente.sh` y `scripts/orquesta_status_now.sh` dejan de caer al
+puerto historico `127.0.0.1:8787`; ambos consumen el resolvedor comun de
+endpoint gestionado (`ORQUESTA_SERVER_URL`, compatibilidad `ORQUESTA_BASE_URL`
+o `ORQUESTA_RUNTIME_DIR/base_url.txt`) y bloquean con mensaje publico si no hay
+servidor identificable. Evidencia: `TestInicioAgenteNoRecomiendaRuntimeManualV0`,
+`TestOrquestaStatusNowUsaEndpointGestionadoV0`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y
