@@ -12,7 +12,7 @@ Informe: docs/informe_pericial_claude_orquesta_2026-07-03.md
 | Tarea | Estado | Agente | Claim | Evidencia de cierre |
 | --- | --- | --- | --- | --- |
 | T-PER-101 | **hecho vía Orquesta** (goal T266, Codex) | orquesta+codex, supervisa claude-fable-5 | 2026-07-03 | módulo `orquesta-estado-vivo` integrado: 9 tests verdes (los 6 obligatorios + 2 extra), frontera neutral cubierta y verde, `go build ./...` limpio. Matiz: `puertos_v0.go` quedó solo con la cláusula de paquete — T-PER-102 debe definir `FuenteEvidenciaEstadoPortV0` (consumer-side) al crear los adaptadores. Segundo shutdown también dejó residuos (3ª evidencia T-PER-401) |
-| T-PER-102 | libre (dep: 101) | — | — | — |
+| T-PER-102 | en curso vía Orquesta (goal T267, rama `pericial/pilot-t102`) | orquesta+codex, supervisa claude-fable-5 | 2026-07-03 | si el supervisor cae: verificar con los Tests de la sección T267 (focales de EvidenciaEstado + fronteras + build), revisar que ningún adaptador tenga lógica de fase, e integrar solo tras revisión |
 | T-PER-103 | libre (dep: 102) | — | — | — |
 | T-PER-104 | libre (dep: 102) | — | — | — |
 | T-PER-105 | libre (dep: 102) | — | — | — |
