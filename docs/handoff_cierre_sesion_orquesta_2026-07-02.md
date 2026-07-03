@@ -50,6 +50,9 @@ Abiertos tras integrar la guarda de wrappers de BUG-077:
 Actualizacion 2026-07-03: BUG-077 queda cerrado en el inventario vigente. La
 guarda `TestScriptStartsTemporaryOrquestaServerV0DetectaPIDConAddrGestionadoV0`
 fija el caso `ORQUESTA_SERVER_ADDR` + `server_pid="$!"` y exige shutdown comun.
+Los cierres locales deben conservar `smoke_shutdown_orquesta_server` en scripts
+temporales y `orquesta-server stop` como parada gestionada para servidor
+residente.
 
 ## Agente remoto
 

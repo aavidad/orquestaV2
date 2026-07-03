@@ -781,9 +781,19 @@ func TestHandoffCierreSesionNoReabreBUG077V0(t *testing.T) {
 		`ORQUESTA_SERVER_ADDR`,
 		`server_pid="$!"`,
 		"smoke_shutdown_orquesta_server",
+		"orquesta-server stop",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("handoff cierre sesion debe conservar cierre/guarda BUG-077: falta %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"go run ./cmd/orquesta-server run",
+		"127.0.0.1:8787",
+		"localhost:8787",
+	} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("handoff cierre sesion reabre ruta manual BUG-077: contiene %q", forbidden)
 		}
 	}
 }

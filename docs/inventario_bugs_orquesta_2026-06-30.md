@@ -891,6 +891,13 @@ endpoint. Evidencia:
 `TestScriptShutdownCurlCommandsV0DetectaCleanupLejanoV0` y
 `TestScriptsConShutdownDirectoPidenCleanupGoalBackendsV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 25: el handoff vigente de cierre
+de sesion queda fijado contra regresiones de runtime manual: debe conservar
+`orquesta-server stop` como parada gestionada, seguir declarando
+`smoke_shutdown_orquesta_server` para scripts temporales y no reintroducir
+`go run ./cmd/orquesta-server run` ni el puerto historico `8787`. Evidencia:
+`TestHandoffCierreSesionNoReabreBUG077V0`.
+
 Avance BUG-ORQ-20260701-085 2026-07-03 tarde 22: `efficiency_summary` conserva
 ahora tambien las acciones compactas de launch write-set: si el goal queda
 invalid por `codex_app_server_write_set_requires_workspace_write`, publica
