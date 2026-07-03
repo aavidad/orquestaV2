@@ -48,8 +48,7 @@ func (tracker *StatusTrackerV0) MarkRuntimeStopTimeoutV0(reason string, active i
 func (tracker *StatusTrackerV0) MarkRuntimeStoppedV0(now time.Time) StateV0 {
 	return tracker.updateV0(func(state *StateV0) {
 		state.Status = "stopped"
-		state.StartupReady = false
-		state.StartupStatus = "stopped"
+		clearStoppedStartupProjectionV0(state)
 		state.LastHeartbeatAt = formatTimeV0(now)
 		state.LastShutdownAt = formatTimeV0(now)
 		state.ShutdownInProgress = false

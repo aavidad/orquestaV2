@@ -146,7 +146,10 @@ func TestStatusTrackerStoppedV0LimpiaStartupReadyV0(t *testing.T) {
 
 	if stopped.Status != "stopped" ||
 		stopped.StartupReady ||
-		stopped.StartupStatus != "stopped" {
+		stopped.StartupStatus != "stopped" ||
+		stopped.StartupMessage != "" ||
+		stopped.StartupOperationalMessage != nil ||
+		len(stopped.StartupEvidenceRefs) != 0 {
 		t.Fatalf("MarkStoppedV0 debe limpiar startup ready: %+v", stopped)
 	}
 	readiness := NewServerReadinessV0(stopped)
@@ -170,12 +173,14 @@ func TestStatusTrackerRuntimeStoppedV0LimpiaStartupReadyV0(t *testing.T) {
 	if stopped.Status != "stopped" ||
 		stopped.StartupReady ||
 		stopped.StartupStatus != "stopped" ||
+		stopped.StartupMessage != "" ||
+		stopped.StartupOperationalMessage != nil ||
 		stopped.ShutdownStatus != "stopped" ||
 		!stopped.ShutdownReady {
 		t.Fatalf("MarkRuntimeStoppedV0 debe limpiar startup ready y conservar shutdown stopped: %+v", stopped)
 	}
 	public := NewServerPublicStatusV0(stopped)
-	if public.StartupReady || public.StartupStatus != "stopped" {
+	if public.StartupReady || public.StartupStatus != "stopped" || public.StartupMessage != "" {
 		t.Fatalf("status publico stopped no debe heredar startup ready: %+v", public)
 	}
 }

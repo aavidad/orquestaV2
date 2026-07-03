@@ -209,8 +209,7 @@ func (tracker *StatusTrackerV0) MarkStatePersistConfirmedV0(transition string, n
 func (tracker *StatusTrackerV0) MarkStoppedV0(now time.Time) StateV0 {
 	return tracker.updateV0(func(state *StateV0) {
 		state.Status = "stopped"
-		state.StartupReady = false
-		state.StartupStatus = "stopped"
+		clearStoppedStartupProjectionV0(state)
 		state.LastHeartbeatAt = formatTimeV0(now)
 	})
 }

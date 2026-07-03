@@ -189,17 +189,26 @@ func TestStatusServerCommandV0ReconciliaStoppedConStartupReadyHeredado(t *testin
 		t.Fatalf("store: %v", err)
 	}
 	if err := store.SaveServerStateV0(context.Background(), orquestaserver.StateV0{
-		Status:             "stopped",
-		PID:                os.Getpid(),
-		Addr:               "127.0.0.1:18787",
-		ProjectWorkDir:     projectDir,
-		RuntimeWorkDir:     filepath.Join(projectDir, ".orquesta-runtime"),
-		StartupReady:       true,
-		StartupStatus:      "startup_ready",
-		LastHeartbeatAt:    "2026-07-02T22:33:36Z",
-		ShutdownReady:      true,
-		ShutdownStatus:     "stopped",
-		LastStartupCheckAt: "2026-07-02T22:33:36Z",
+		Status:         "stopped",
+		PID:            os.Getpid(),
+		Addr:           "127.0.0.1:18787",
+		ProjectWorkDir: projectDir,
+		RuntimeWorkDir: filepath.Join(projectDir, ".orquesta-runtime"),
+		StartupReady:   true,
+		StartupStatus:  "startup_ready",
+		StartupMessage: "director: orquesta preparada",
+		StartupOperationalMessage: &orquestaserver.ServerOperationalMessageV0{
+			SchemaVersion: "orquesta_server_operational_message.v0",
+			Scope:         "startup",
+			ReasonCode:    "startup_ready",
+			Status:        "startup_ready",
+			Message:       "director: orquesta preparada",
+		},
+		StartupEvidenceRefs: []string{"evidence-ref-startup-ready-stale"},
+		LastHeartbeatAt:     "2026-07-02T22:33:36Z",
+		ShutdownReady:       true,
+		ShutdownStatus:      "stopped",
+		LastStartupCheckAt:  "2026-07-02T22:33:36Z",
 	}); err != nil {
 		t.Fatalf("save state: %v", err)
 	}
@@ -227,7 +236,10 @@ func TestStatusServerCommandV0ReconciliaStoppedConStartupReadyHeredado(t *testin
 	if err := json.Unmarshal(rawPayload, &payload); err != nil {
 		t.Fatalf("payload publico invalido: %v\n%+v", err, envelope.Payload)
 	}
-	if payload.StartupReady || payload.StartupStatus != "stopped" {
+	if payload.StartupReady ||
+		payload.StartupStatus != "stopped" ||
+		payload.StartupMessage != "" ||
+		payload.StartupOperationalMessage != nil {
 		t.Fatalf("payload conserva startup heredado: %+v", payload)
 	}
 	reconciled, err := store.LoadServerStateV0(context.Background())
@@ -237,6 +249,9 @@ func TestStatusServerCommandV0ReconciliaStoppedConStartupReadyHeredado(t *testin
 	if reconciled.Status != "stopped" ||
 		reconciled.StartupReady ||
 		reconciled.StartupStatus != "stopped" ||
+		reconciled.StartupMessage != "" ||
+		reconciled.StartupOperationalMessage != nil ||
+		len(reconciled.StartupEvidenceRefs) != 0 ||
 		reconciled.LastHeartbeatAt != "2026-07-02T22:33:36Z" {
 		t.Fatalf("state no reconciliado: %+v", reconciled)
 	}

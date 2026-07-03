@@ -61,9 +61,21 @@ func NormalizeStoppedServerSnapshotV0(state StateV0) (StateV0, bool) {
 		return state, false
 	}
 	state.SchemaVersion = StateSchemaVersionV0
+	clearStoppedStartupProjectionV0(&state)
+	return state, true
+}
+
+func clearStoppedStartupProjectionV0(state *StateV0) {
+	if state == nil {
+		return
+	}
 	state.StartupReady = false
 	state.StartupStatus = "stopped"
-	return state, true
+	state.StartupMessage = ""
+	state.StartupOperationalMessage = nil
+	state.StartupBlockers = nil
+	state.StartupEvidenceRefs = nil
+	state.StartupRevision = StartupRevisionSummaryV0{}
 }
 
 func boolIntV0(value bool) int {
