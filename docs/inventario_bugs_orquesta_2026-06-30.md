@@ -796,6 +796,14 @@ aislados con `smoke_shutdown_orquesta_server`, `runtime_dir` y
 `cleanup_goal_backends`. Evidencia:
 `TestHandoffTerminarOrquestaUsaServidorGestionadoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 14: la matriz vigente de smokes
+para `OPES-DER-RESTO` deja de recomendar `go run ./cmd/orquesta-server run`
+como servidor residente goal-first; documenta `orquesta-server start`,
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`,
+`ORQUESTA_RUNTIME_DIR/base_url.txt`, `ORQUESTA_SERVER_URL` para el wrapper y
+`orquesta-server stop`. Evidencia:
+`TestMatrizOPESDerivadosUsaServidorGestionadoV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado

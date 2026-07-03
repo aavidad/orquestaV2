@@ -751,6 +751,36 @@ func TestSmokesOPESLargosAceptanEndpointOrquestaGestionadoV0(t *testing.T) {
 	}
 }
 
+func TestMatrizOPESDerivadosUsaServidorGestionadoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "docs/matriz_pruebas_reales_y_smoke_2026-05-17.md")
+	start := strings.Index(text, "| OPES-DER-RESTO |")
+	if start < 0 {
+		t.Fatalf("matriz sin fila OPES-DER-RESTO")
+	}
+	rest := text[start:]
+	end := strings.Index(rest, "\n| EXT-NO-OPES |")
+	if end < 0 {
+		t.Fatalf("matriz OPES-DER-RESTO sin cierre esperado")
+	}
+	row := rest[:end]
+
+	if strings.Contains(row, "go run ./cmd/orquesta-server run") {
+		t.Fatalf("OPES-DER-RESTO no debe recomendar runtime manual no gestionado")
+	}
+	for _, want := range []string{
+		"orquesta-server start",
+		"ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux",
+		"ORQUESTA_RUNTIME_DIR/base_url.txt",
+		"ORQUESTA_SERVER_URL",
+		"orquesta-server stop",
+	} {
+		if !strings.Contains(row, want) {
+			t.Fatalf("OPES-DER-RESTO debe documentar servidor gestionado: falta %q", want)
+		}
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
