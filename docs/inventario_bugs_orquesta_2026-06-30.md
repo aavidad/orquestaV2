@@ -1240,6 +1240,14 @@ trabajo vivo. Esto conserva el veto operacional del estado explicito y evita
 que un error de transporte convierta un conflicto vivo en parada local.
 Evidencia: `TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 32d: el mismo veto aplica a
+snapshots publicos que declaran `shutdown_status=waiting_drain` o
+`waiting_checkpoint` sin contadores por una respuesta parcial. Esos estados de
+espera no se tratan como drenados por omision, de modo que un timeout/error de
+transporte no dispara senal local mientras el propio status dice que shutdown
+sigue esperando drain o checkpoint. Evidencia:
+`TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado`.
+
 Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 33: los transportes HTTP y MCP
 de `server.shutdown` quedan cubiertos para errores de executor: ambos devuelven
 mensaje publico saneado sin rutas/tokens y conservan `evidence_refs` compactas

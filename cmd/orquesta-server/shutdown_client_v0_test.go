@@ -648,6 +648,14 @@ func TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado(t *testi
 	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_timeout"), status, false) {
 		t.Fatalf("timeout no debe saltar goals activos declarados en status aunque no haya contadores")
 	}
+	status.ShutdownStatus = "waiting_drain"
+	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_request_failed"), status, true) {
+		t.Fatalf("force no debe saltar espera de drenaje declarada en status aunque no haya contadores")
+	}
+	status.ShutdownStatus = "waiting_checkpoint"
+	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_timeout"), status, false) {
+		t.Fatalf("timeout no debe saltar espera de checkpoint declarada en status aunque no haya contadores")
+	}
 	status.ShutdownStatus = ""
 	status.ShutdownActiveWorkCount = 1
 	status.ShutdownActiveWorkRefs = []string{"shutdown-active-work-goal-backend-goal-ref-force"}

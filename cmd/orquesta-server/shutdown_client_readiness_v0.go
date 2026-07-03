@@ -161,7 +161,7 @@ func shutdownPublicStatusHasBlockingWorkV0(status orquestaserver.ServerPublicSta
 
 func shutdownPublicStatusHasLiveWorkConflictV0(status orquestaserver.ServerPublicStatusV0) bool {
 	switch strings.TrimSpace(status.ShutdownStatus) {
-	case "backend_still_running", "active_goals_present":
+	case "backend_still_running", "active_goals_present", "waiting_drain", "waiting_checkpoint":
 		return true
 	default:
 		return false
