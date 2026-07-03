@@ -1918,7 +1918,8 @@ Campos:
   output_ok:
     estado: ok
     action
-    list_result? o action_result?
+    list_result?: models?, evidence?
+    action_result?: accepted, status, evidence?
   output_error:
     estado: error
     errores_publicos

@@ -1459,6 +1459,15 @@ adaptador conserva la evidencia del notifier. Evidencia:
 `TestMCPRequestAppChangeV0DelegaEnCasoDeUso` y
 `TestMCPRequestAppChangeDescriptorV0EsAdaptadorFino`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 45:
+`orquesta.runtime.models.v0` ya acepta evidencia operacional en acciones de
+runtime y los resultados `RuntimeModelListResultV0`/`RuntimeModelActionResultV0`
+pueden devolver `evidence`, pero el descriptor compacto solo anunciaba
+`list_result`/`action_result`. El contrato MCP y `docs/contratos.md` declaran
+ahora evidencia en ambas salidas para que clientes compactos no pierdan contexto
+de serve/stop/pull/status antes de decidir shutdown o reconciliacion. Evidencia:
+`TestMCPRuntimeModelsDescriptorV0DeclaraEvidenciaOperativa`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

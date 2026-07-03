@@ -47,7 +47,7 @@ func MCPRuntimeModelsDescriptorV0() MCPRuntimeModelsToolDescriptorV0 {
 		Name:        MCPRuntimeModelsToolNameV0,
 		Version:     MCPRuntimeModelsToolVersionV0,
 		InputSchema: "envelope:{action:list|status|pull|serve|stop,provider_ref?,endpoint_ref?,model?,keep_alive?,tags?,evidence_refs?}",
-		Output:      "ok:{list_result?|action_result?}|error:{errores_publicos}",
+		Output:      "ok:{list_result?{models?,evidence?},action_result?{accepted,status,evidence?}}|error:{errores_publicos}",
 		ResourceURI: MCPRuntimeModelsResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino para gestion de modelos",

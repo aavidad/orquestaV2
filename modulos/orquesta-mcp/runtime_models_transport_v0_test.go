@@ -43,8 +43,9 @@ func TestMCPTransportV0RuntimeModelsInvocaPuerto(t *testing.T) {
 		context.Background(),
 		MCPRuntimeModelsToolNameV0,
 		MCPRuntimeModelsToolInputV0{
-			Action: "serve",
-			Model:  "qwen2.5:7b",
+			Action:       "serve",
+			Model:        "qwen2.5:7b",
+			EvidenceRefs: []string{"evidence-ref-runtime-model-serve-001"},
 		},
 	)
 	if err != nil {
@@ -57,6 +58,8 @@ func TestMCPTransportV0RuntimeModelsInvocaPuerto(t *testing.T) {
 	if result.Estado != MCPRuntimeModelsEstadoOKV0 ||
 		result.ActionResult == nil ||
 		result.ActionResult.Model != "qwen2.5:7b" ||
+		len(result.ActionResult.Evidence) != 1 ||
+		result.ActionResult.Evidence[0].Ref != "evidence-ref-runtime-model-serve-001" ||
 		port.serve.Model != "qwen2.5:7b" {
 		t.Fatalf("result=%+v port=%+v", result, port)
 	}
@@ -75,6 +78,16 @@ func TestRuntimeModelsInputPublicoNoAceptaBaseURLV0(t *testing.T) {
 	}
 	if strings.Contains(MCPRuntimeModelsDescriptorV0().InputSchema, "base_url") {
 		t.Fatalf("descriptor no debe publicar base_url: %s", MCPRuntimeModelsDescriptorV0().InputSchema)
+	}
+}
+
+func TestMCPRuntimeModelsDescriptorV0DeclaraEvidenciaOperativa(t *testing.T) {
+	descriptor := MCPRuntimeModelsDescriptorV0()
+
+	if !strings.Contains(descriptor.Output, "evidence?") ||
+		!strings.Contains(descriptor.Output, "action_result?") ||
+		!strings.Contains(descriptor.Output, "list_result?") {
+		t.Fatalf("descriptor output sin evidencia runtime: %s", descriptor.Output)
 	}
 }
 
@@ -142,10 +155,17 @@ func runtimeModelActionResultForTestV0(
 	request orquestaruntime.RuntimeModelActionRequestV0,
 	status string,
 ) orquestaruntime.RuntimeModelActionResultV0 {
-	return orquestaruntime.RuntimeModelActionResultV0{
+	result := orquestaruntime.RuntimeModelActionResultV0{
 		ProviderRef: "ollama",
 		Model:       request.Model,
 		Accepted:    true,
 		Status:      status,
 	}
+	if len(request.Evidence) > 0 {
+		result.Evidence = []orquestaruntime.RuntimeModelEvidence{{
+			Kind: "request",
+			Ref:  request.Evidence[0],
+		}}
+	}
+	return result
 }
