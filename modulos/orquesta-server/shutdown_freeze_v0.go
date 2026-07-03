@@ -89,6 +89,10 @@ func (runtime *RuntimeV0) recordShutdownHTTPResultV0(ctx context.Context, status
 	}
 	projection, keepFrozen := shutdownProjectionFromHTTPV0(statusCode, body)
 	projection = runtime.shutdownProjectionWithPreviousSnapshotV0(projection, keepFrozen)
+	projection = normalizeShutdownStopConfirmationV0(projection)
+	if !projection.Ready && shutdownProjectionHasBlockingWorkV0(projection) {
+		keepFrozen = true
+	}
 	if !keepFrozen {
 		atomic.StoreInt32(&runtime.shutdownInProgress, 0)
 	}
@@ -106,7 +110,7 @@ func (runtime *RuntimeV0) shutdownProjectionWithPreviousSnapshotV0(
 	projection ShutdownProjectionV0,
 	keepFrozen bool,
 ) ShutdownProjectionV0 {
-	if runtime == nil || runtime.tracker == nil || !keepFrozen || projection.Ready {
+	if runtime == nil || runtime.tracker == nil || (!keepFrozen && !projection.Ready) {
 		return projection
 	}
 	state := runtime.tracker.SnapshotV0()
@@ -124,6 +128,16 @@ func (runtime *RuntimeV0) shutdownProjectionWithPreviousSnapshotV0(
 		projection.Status = firstNonEmptyShutdownFreezeV0(state.ShutdownStatus, projection.Status)
 	}
 	return projection
+}
+
+func shutdownProjectionHasBlockingWorkV0(projection ShutdownProjectionV0) bool {
+	return projection.AgentsInFlight > 0 ||
+		projection.CheckpointsPending > 0 ||
+		projection.CheckpointAgentsPending > 0 ||
+		projection.AsyncWorkActive > 0 ||
+		projection.ActiveWorkCount > 0 ||
+		len(projection.ActiveWorkRefs) > 0 ||
+		(projection.RunsRequested > 0 && projection.RunsStopped < projection.RunsRequested)
 }
 
 func (runtime *RuntimeV0) requestShutdownReadyV0() {
@@ -238,13 +252,7 @@ func normalizeShutdownStopConfirmationV0(projection ShutdownProjectionV0) Shutdo
 	if !projection.Ready {
 		return projection
 	}
-	if projection.AgentsInFlight > 0 ||
-		projection.CheckpointsPending > 0 ||
-		projection.CheckpointAgentsPending > 0 ||
-		projection.AsyncWorkActive > 0 ||
-		projection.ActiveWorkCount > 0 ||
-		len(projection.ActiveWorkRefs) > 0 ||
-		(projection.RunsRequested > 0 && projection.RunsStopped < projection.RunsRequested) {
+	if shutdownProjectionHasBlockingWorkV0(projection) {
 		projection.Ready = false
 		projection.Status = "stop_pending"
 	}

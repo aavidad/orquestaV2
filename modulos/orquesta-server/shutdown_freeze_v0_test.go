@@ -610,6 +610,55 @@ func TestRuntimeV0ServerShutdownSnapshotPrevioSobreviveRespuestaSinCuerpoV0(t *t
 	}
 }
 
+func TestRuntimeV0ServerShutdownReadyNoBorraSnapshotPrevioActivoV0(t *testing.T) {
+	stateDir := t.TempDir()
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != serverShutdownRoutePathV0 {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"estado":"ok","status":"ready","shutdown_ready":true}`))
+	})
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:     stateDir,
+		TickInterval: time.Hour,
+	}, RuntimeDepsV0{
+		AppHandler: app,
+		Clock:      fixedClockV0{now: time.Date(2026, 7, 3, 23, 10, 0, 0, time.UTC)},
+		ShutdownSnapshot: fakeShutdownSnapshotPortV0{
+			result: ShutdownSnapshotResultV0{
+				Status:          "backend_still_running",
+				ActiveWorkCount: 1,
+				ActiveWorks: []ShutdownSnapshotWorkV0{{
+					Kind:            "goal_backend",
+					RunRef:          "run-ref-shutdown-ready-snapshot-001",
+					WorkRef:         "goal-ref-shutdown-ready-snapshot-001",
+					ExternalWorkRef: "thread-ref-shutdown-ready-snapshot-001",
+					Status:          "backend_still_running",
+				}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, serverShutdownRoutePathV0, nil)
+	rec := httptest.NewRecorder()
+	runtime.HandlerV0().ServeHTTP(rec, req)
+
+	state := runtime.StateV0()
+	if !state.ShutdownInProgress ||
+		state.ShutdownReady ||
+		state.ShutdownStatus != "stop_pending" ||
+		state.ShutdownActiveWorkCount != 1 ||
+		!state.SupervisorFrozen ||
+		!hasShutdownProjectionRefForTestV0(state.ShutdownActiveWorkRefs, "shutdown-active-work-goal-backend-goal-ref-shutdown-ready-snapshot-001") {
+		t.Fatalf("ready falso borro snapshot previo activo: %+v", state)
+	}
+}
+
 type countingShutdownFreezeSupervisorV0 struct {
 	calls int
 }
