@@ -15,6 +15,8 @@ canonica, leer:
 
 - `docs/estado_actual_2026-05-17.md`
 - `docs/guia_nucleo_orquestacion_2026-05-17.md`
+- `docs/informe_pericial_claude_orquesta_2026-07-03.md`
+- `docs/manual_correccion_pericial_orquesta_2026-07-03.md`
 - `AGENTS.md`
 
 Este fichero conserva contexto historico y vision amplia. Cualquier referencia
@@ -439,7 +441,7 @@ Referencia documental asociada:
    El nucleo decide por `cli`, `mcp_stdio`, `mcp_http`, `api`, sin codificar proveedores concretos.
 
 3. Hacer de `orquesta serve` el escritor principal.
-   La CLI y la web deberían hablar con el servidor local para centralizar la trazabilidad y la gestión del acceso concurrente, aprovechando que el almacenamiento principal ya está sobre PostgreSQL.
+   La CLI y la web deberían hablar con el servidor local para centralizar la trazabilidad y la gestión del acceso concurrente sobre la persistencia file-based actual.
 
 4. Añadir politicas de reparto de agentes.
    Ejemplo: `slots_por_proyecto`, prioridad, exclusiones y colas.
@@ -551,4 +553,4 @@ El objetivo es explorar variantes pequeñas y comparables sin perder la forma de
 
 - No perder datos actuales.
 - Todas las migraciones deben ser aditivas e idempotentes.
-- La persistencia principal corre sobre PostgreSQL, resolviendo los antiguos bloqueos por concurrencia que existían con SQLite. El acceso debe seguir centralizándose por arquitectura, no por limitación del motor.
+- La persistencia principal actual es file-based: ledgers en `modulos/orquesta-persistence`, statefile en `modulos/orquesta-state-file`, y markers/estados JSON bajo el state dir del servidor. PostgreSQL queda como dirección futura condicionada a una decisión explícita; el acceso debe seguir centralizándose por arquitectura, no por limitación del motor.
