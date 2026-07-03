@@ -1,0 +1,5 @@
+Objetivo: T279 triaje-wip-remoto.
+Alcance: comparar wip-remoto-71.patch y wip-untracked.tgz contra el worktree actual sin aplicar el parche viejo.
+Write-set autorizado: docs/triaje_wip_remoto_2026-07-04/.
+Siguiente artefacto: docs/triaje_wip_remoto_2026-07-04/clasificacion.md.
+Evidencia inicial: existen wip-remoto-71.patch y wip-untracked.tgz; git status muestra una modificacion previa fuera del write-set que no se tocara.
