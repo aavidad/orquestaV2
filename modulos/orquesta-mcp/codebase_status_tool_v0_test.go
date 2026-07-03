@@ -3,6 +3,7 @@ package orquestamcp
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,6 +53,15 @@ func TestMCPCodebaseStatusInputSchemaV0ExponeCampos(t *testing.T) {
 		if !seen[want] {
 			t.Fatalf("campo %q no encontrado en %+v", want, fields)
 		}
+	}
+}
+
+func TestMCPCodebaseStatusDescriptorV0DeclaraEvidenciaPublica(t *testing.T) {
+	descriptor := MCPCodebaseStatusDescriptorV0()
+	if !strings.Contains(descriptor.InputSchema, "evidence_refs?") ||
+		!strings.Contains(descriptor.Output, "entries?[]{lease_ref,decision,reason_code,active_requests,evidence_refs?}") ||
+		!strings.Contains(descriptor.Output, "evidence_refs?") {
+		t.Fatalf("descriptor debe declarar evidencia publica de codebase status: %+v", descriptor)
 	}
 }
 

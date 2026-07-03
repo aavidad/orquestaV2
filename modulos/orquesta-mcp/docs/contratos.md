@@ -65,7 +65,8 @@ Campos:
     include_terminal
   output_ok:
     estado: ok|attention_required
-    result: CodeContextToolingStatusV0
+    result: CodeContextToolingStatusV0 con `entries[].evidence_refs` y
+      `evidence_refs` de primer nivel cuando existan observaciones/owner markers
   output_error:
     estado: error
     errores_publicos compactos

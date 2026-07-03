@@ -22,7 +22,8 @@ Comando: go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPCodebaseStatus'
 Evidencia esperada: `orquesta.codebase.status.v0` queda registrado, delega en
 `CodeContextToolLeaseListPortV0`, expone HTTP `POST /api/v0/codebase/status` y
 publica `request_stop` para leases expirados sin arrancar ni detener procesos.
-No filtra PID, HOME, tokens ni command line.
+Conserva `evidence_refs` de owner markers/observaciones en las entradas y en el
+contrato ejecutable. No filtra PID, HOME, tokens ni command line.
 Ultima ejecucion: 2026-06-30, ok en bateria local del tool.
 Riesgos: la parada cooperativa real queda pendiente en servidor/composicion.
 ```

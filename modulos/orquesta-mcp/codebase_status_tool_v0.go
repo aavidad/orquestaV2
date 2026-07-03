@@ -65,7 +65,7 @@ func MCPCodebaseStatusDescriptorV0() MCPCodebaseStatusToolDescriptorV0 {
 		Name:        MCPCodebaseStatusToolNameV0,
 		Version:     MCPCodebaseStatusToolVersionV0,
 		InputSchema: "codebase_status:{schema_version?,request_ref?,repository_ref?,tool_ref?,observed_at?,include_terminal?,default_cpu_high_percent?,observations?[{lease_ref,observed_at?,cpu_percent?,active_requests?,cpu_high_percent?,evidence_refs?}]}",
-		Output:      "code_context_tooling_status:{estado,total_leases,active_leases,stop_requested,high_cpu_stop_requested,entries,next_actions,issues}",
+		Output:      "code_context_tooling_status:{estado,total_leases,active_leases,stop_requested,high_cpu_stop_requested,entries?[]{lease_ref,decision,reason_code,active_requests,evidence_refs?},next_actions,issues,evidence_refs?}",
 		ResourceURI: MCPCodebaseStatusResourceURIV0,
 		Invariantes: []string{
 			"publica estado compacto de leases del broker central de contexto",

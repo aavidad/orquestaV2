@@ -1516,6 +1516,14 @@ agregadas con scope `:run:<run_ref>`; asi no se pierde el run causal al cruzar
 desde `queue/global-status` hacia estado de dominio OPES/domain-work. Evidencia:
 `TestMCPDomainWorkStatusHTTPHandlerV0ConservaAccionGoalFirstPorRun`.
 
+Avance BUG-ORQ-CODEBASE-20260702-001/BUG-ORQ-20260701-065 2026-07-03 tarde 50:
+`orquesta.codebase.status.v0` ya transportaba `evidence_refs` de owner markers
+y observaciones en `entries`, pero el descriptor compacto solo declaraba
+`entries` genericas. El descriptor y docs de contrato publican ahora
+`entries[].evidence_refs` y evidencia de primer nivel, manteniendo visible por
+que un lease de codebase debe continuar o puede pararse sin inspeccionar logs.
+Evidencia: `TestMCPCodebaseStatusDescriptorV0DeclaraEvidenciaPublica`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
