@@ -159,31 +159,38 @@ go test -count=1 ./...
 go build ./...
 ```
 
-Falta antes de cierre:
+Estado actualizado tras T290/Codex:
 
-- Hacer smoke real acotado de automejora idle con presupuesto bajo y confirmar
-  que `budget_deferred`/`budget_degraded` aparecen en
-  `orquesta.autoprogramming.status.v0` y en `/api/v0/server/status`.
-- Completar la parte "durante launch": si un goal ya activo entra en consumo
-  alto sin artefacto/checkpoint valido repetido, debe producir bloqueo/replan
-  accionable, no solo gobernar el siguiente lanzamiento.
-- Comitear y pushear este corte si se acepta como MEJ-104 parcial.
+- El presupuesto pre-launch de MEJ-104 ya queda en codigo y tests:
+  `budget_deferred`/`budget_degraded` viajan por state, status publico y
+  `orquesta.autoprogramming.status.v0`.
+- La parte "durante launch" queda cubierta por T290 (`eab3be97`): un goal idle
+  activo con consumo creciente sin progreso util entra en
+  `goal_high_consumption_without_progress`, se persiste como `blocked`, conserva
+  rework accionable y solicita stop cooperativo por run-control. Incluye el caso
+  de checkpoint invalido repetido.
+- Queda recomendado un smoke real acotado de presupuesto antes de reactivar
+  automejora/pilotajes caros. No se lanza aqui por la congelacion operativa
+  vigente.
 
 ## Bugs documentados
 
 Inventario actualizado en `docs/inventario_bugs_orquesta_2026-06-30.md` con:
 
-- `BUG-ORQ-20260703-154`: MEJ-206 consumio muchos tokens sin progreso util y
-  dejo checkpoint invalido.
-- `BUG-ORQ-20260703-155`: MEJ-206 mezclo criterios de habilidades curadas con
-  criterios idle/APG no relacionados.
-- `BUG-ORQ-20260703-156`: pilotos previos dejaron procesos `orquesta-server`
-  y `codex app-server` vivos tras la entrega.
-- `BUG-ORQ-20260703-157`: el launcher background/nohup del piloto podia quedar
-  matado por el wrapper mientras el estado parecia vivo.
+- `BUG-ORQ-20260703-154`: cerrado por MEJ-104/T290; queda solo smoke real
+  acotado como validacion antes de reactivar automejora/pilotajes.
+- `BUG-ORQ-20260703-155`: cerrado; MEJ-206 ya no hereda criterios base ajenos
+  en secciones ejecutables.
+- `BUG-ORQ-20260703-156`: cerrado; shutdown ejecuta hooks tambien en rutas de
+  timeout.
+- `BUG-ORQ-20260703-157`: cerrado; el helper comun de readiness rechaza PID
+  muerto antes de aceptar `addr`.
+- `BUG-ORQ-20260703-159`: cerrado; los retries idle tras error/prepare_failed ya
+  no quedan bloqueados por idempotencia stale.
 
-Estos bugs quedan abiertos para analisis estructural posterior; no deben
-tratarse como anecdotas aisladas.
+Sigue abierto en esta tanda `BUG-ORQ-20260703-149`: WIP remoto no integrable tal
+cual. Las filas largas antiguas de OPES/goal-first/shutdown/write-set/status
+siguen como deuda amplia y no son regresion nueva de estos commits.
 
 ## Pruebas ejecutadas
 

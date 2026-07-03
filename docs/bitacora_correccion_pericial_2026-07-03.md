@@ -658,3 +658,44 @@ Evidencia focal ejecutada:
 Pendiente antes de entregar: suites globales, revision de procesos vivos, commit
 y push. Residuales nuevos no abiertos en este corte; siguen como deuda
 estructural visible `BUG-ORQ-20260703-149` y `BUG-ORQ-20260703-154`.
+
+### 2026-07-03 noche — Codex reconcilia BUG-154/T290 para Claude
+
+Trabajo directo acotado, sin relanzar automejora ni pilotajes congelados. Se
+audito `BUG-ORQ-20260703-154` contra codigo, commits y docs: `eab3be97` ya esta
+en `trabajo/plataforma-agentes` y contiene T290, por lo que la nota antigua que
+decia que faltaba "cortar/replanificar un goal ya activo" estaba stale.
+
+Subagentes usados, ambos solo lectura y sin `codebase-memory-mcp`:
+- `019f29b9-371f-7290-94ff-be8763382b7f` (Franklin): auditoria T290/MEJ-104;
+  confirmo que el corte durante ejecucion es cerrable y que solo queda smoke
+  real si se exige validacion de piloto.
+- `019f29b9-4921-79a3-97fc-6587f3a1a5d8` (Confucius): auditoria del inventario;
+  confirmo `BUG-ORQ-20260703-149` como WIP remoto no integrable y separo deuda
+  antigua de esta tanda.
+
+Evidencia revisada:
+- `modulos/orquesta-server/goal_progress_governor_v0.go`: razon
+  `goal_high_consumption_without_progress`, persistencia `blocked`, rework y
+  stop cooperativo;
+- `modulos/orquesta-server/goal_observation_loop_v0.go`: el observer aplica el
+  gobernador;
+- `cmd/orquesta-server/goal_cooperative_stop_run_control_v0.go` y
+  `cmd/orquesta-server/stack.go`: adaptador y wiring de `GoalStopper`;
+- `modulos/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t290-corte-durante-ejecucion-goal-sin-progreso.json`:
+  resultado durable completo de T290 sin `missing_refs`;
+- `docs/inventario_bugs_orquesta_2026-06-30.md` y
+  `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`:
+  reconciliados para no pedir a Claude trabajo ya cerrado.
+
+Validacion focal reejecutada:
+- `go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0GoalObservation(AltoConsumoSinProgreso|NoCortaConProgresoUtilReciente|CheckpointInvalidoRepetidoCuentaSinProgreso)V0|TestRuntimeV0IdleSelfImprovement(Goal|Observe)'`
+- `go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0AutomejoraIdle(AplazaPorPresupuestoAgotado|DegradaLotePorPresupuestoContexto)V0|TestServerPublicStatusV0ExponePresupuestoAutomejoraIdleV0'`
+- `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPAutoprogrammingStatusExecutorV0PublicaPresupuestoIdleV0'`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerConfigFromEnvV0LeePresupuestoAutomejoraIdleV0|TestServerAutoprogrammingIdleBudgetSourceV0(LeeEstadoDurable|OmiteDecisionVacia)'`
+
+Resultado: `BUG-ORQ-20260703-154` queda cerrado en inventario por MEJ-104/T290.
+No se ejecuta smoke real por la congelacion operativa; queda recomendado como
+validacion acotada antes de reactivar automejora/pilotajes caros. En esta tanda
+solo sigue abierto `BUG-ORQ-20260703-149`; la deuda antigua OPES/goal-first/
+shutdown/write-set/status permanece inventariada como frente estructural aparte.

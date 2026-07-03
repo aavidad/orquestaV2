@@ -1687,25 +1687,35 @@ consulta posterior, wait o escalado por `runs/control`. Evidencia:
 
 | ID | Estado | Area | Sintoma | Hipotesis arquitectonica | Evidencia / enlace | Accion |
 | --- | --- | --- | --- | --- | --- | --- |
-| BUG-ORQ-20260703-154 | abierto | Autoprogramacion idle / presupuesto | el piloto MEJ-206 `goal-ref-autoprogramming-backlog-t290-biblioteca-habilidades-curada-5dfce62a` materializo solo un checkpoint `status=invalid` con `implementation_pending`/`tests_pending` y siguio como `running`, acumulando `codex_app_server_goal_status_active_high_token_usage tokens_used=157367 time_used_seconds=214` sin progreso observable | el loop goal-first idle no tiene corte cooperativo por presupuesto/tokens ni promocion de checkpoint invalido a bloqueo accionable; el self-watchdog vigila CPU, pero no gasto alto sin avance de artefactos ni checklist | piloto aislado `scratchpad/pilot-m206`; result parcial `skills/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t290-biblioteca-habilidades-curada-5dfce62a.json`; state `idle_self_improvement_goal_result.summary=...high_token_usage`; servidor parado manualmente tras checkpoint sin avance | MEJ-104 debe incorporar presupuesto medido antes/durante launch; abrir frente focal para convertir `high_token_usage + same invalid checkpoint` en `budget_deferred`/`blocked_no_progress` con accion de replan y sin seguir consumiendo |
+| BUG-ORQ-20260703-154 | cerrado | Autoprogramacion idle / presupuesto | el piloto MEJ-206 `goal-ref-autoprogramming-backlog-t290-biblioteca-habilidades-curada-5dfce62a` materializo solo un checkpoint `status=invalid` con `implementation_pending`/`tests_pending` y siguio como `running`, acumulando `codex_app_server_goal_status_active_high_token_usage tokens_used=157367 time_used_seconds=214` sin progreso observable | el loop goal-first idle no tenia presupuesto pre-launch ni corte cooperativo durante ejecucion para consumo creciente sin progreso util; un checkpoint invalido repetido podia parecer actividad recuperable y seguir consumiendo | piloto aislado `scratchpad/pilot-m206`; cierre MEJ-104/T290: `budget_deferred`/`budget_degraded` antes de launch, `goal_high_consumption_without_progress` durante observacion, stop cooperativo por run-control, estado durable `blocked` y rework accionable; evidencia durable `modulos/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t290-corte-durante-ejecucion-goal-sin-progreso.json`; tests `TestDecideAutoprogrammingIdleSelfImprovementBudgetV0AplazaAgotado`, `TestDecideAutoprogrammingIdleSelfImprovementBudgetV0DegradaLote`, `TestDecideAutoprogrammingIdleSelfImprovementBudgetV0UsaEstimacionRealParaAplazar`, `TestRuntimeV0AutomejoraIdleAplazaPorPresupuestoAgotadoV0`, `TestRuntimeV0AutomejoraIdleDegradaLotePorPresupuestoContextoV0`, `TestRuntimeV0GoalObservationBloqueaIdleGoalConsumoCrecienteSinProgresoV0`, `TestRuntimeV0GoalObservationNoCortaConProgresoUtilRecienteV0`, `TestRuntimeV0GoalObservationCheckpointInvalidoRepetidoCuentaSinProgresoV0` | Cierre: la causa raiz queda cubierta por presupuesto de automejora idle antes de lanzar y gobernador de progreso para goals activos. No se relanzo smoke real por congelacion operativa de automejora/pilotajes; antes de reactivar pilotos caros queda recomendada una validacion real acotada de `budget_deferred`/`budget_degraded`, pero no hay brecha de implementacion conocida en T290/MEJ-104 |
 | BUG-ORQ-20260703-155 | cerrado | Autoprogramacion backlog / contrato de tarea | la request MEJ-206 generada por el planner mezclaba criterios propios de `biblioteca-habilidades-curada` con criterios ajenos de automejora idle (`ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS`, planner scanner, proyeccion publica de outbox/wait_external, etc.) | `idleSelfImprovementRequestForBacklogSectionV0` concatenaba `base.AcceptanceCriteria` con `section.Criteria`, convirtiendo politicas globales de idle/scanner en contrato funcional de una tarea concreta | state del piloto m206 en `idle_self_improvement_goal_spec.objective` y `acceptance_criteria`; cierre 2026-07-03 noche: `TestIdleSelfImprovementBacklogPlannerV0SeccionEjecutableNoHeredaCriteriosBaseV0` reproduce el fallo y pasa tras aislar criterios por seccion | Cierre: las secciones ejecutables y revisiones documentales ambiguas ya no heredan `base.AcceptanceCriteria`; conservan criterios declarados por la seccion y guardas causales propias de backlog. Scanner/fallback mantienen criterios globales porque son inventario, no tarea de implementacion |
 | BUG-ORQ-20260703-156 | cerrado | Runtime piloto / procesos residentes | tras cerrar pilotos ya integrados, seguian vivos `orquesta-server run` de `pilot-t285`, `pilot-m202`, `pilot-m203`, `pilot-m205` y varios `codex app-server --listen` bajo sus `CODEX_HOME` temporales; MEJ-206 tambien dejo app-server huerfano tras parar el servidor | los cleaners y hooks de backend Goal existian, pero `shutdownRuntimeV0` y `stopRuntimeAfterServeClosedV0` retornaban por `async_work_timeout` antes de ejecutar `runShutdownHooksV0`; si un tick/preparacion no drenaba, el servidor terminaba con timeout visible pero sin apagar el app-server tmux propio | cierre 2026-07-03 noche: `runShutdownHooksOnceV0`/`runShutdownHooksOnExitV0` garantizan hooks una vez tambien en rutas de timeout; `TestRuntimeV0ShutdownTimeoutPublicaStopTimeoutV0` verifica `hook.calls==1` con `async_work_timeout`; focales `TestRuntimeV0ShutdownEsperaPreparacionIdleAntesDeStoppedV0` y `TestRuntimeV0CompactaShutdownHooksV0` verdes | Cierre: shutdown con timeout conserva evidencia `stop_timeout` y ejecuta limpieza best-effort de backends Goal antes de devolver error; no se tocan core puro ni contratos de dominio |
 | BUG-ORQ-20260703-157 | cerrado | Harness de pilotos / ejecucion background | el arranque del piloto MEJ-206 como proceso background/nohup desde el wrapper murio al terminar la llamada de shell: state quedaba con pids `2600222`/`2602158` pero sin proceso vivo, logs vacios y auditoria de startup lista; solo funciono al mantener `orquesta-server run` en una sesion PTY foreground | `orquesta-server run` es foreground, no contrato daemon; los guards ya exigen `orquesta-server start/status/stop` o harness aislado con cleanup, pero el helper comun `smoke_wait_orquesta_readiness_from_state_file` aceptaba `addr` sin validar que el `pid` declarado por el state siguiera vivo | cierre 2026-07-03 noche: el helper comun rechaza statefiles con `pid` no numerico, cero o muerto antes de aceptar readiness HTTP; `TestSmokeCommonReadinessStateFileRechazaPIDMuertoV0` reproduce un HTTP ready con PID muerto y queda bloqueado; `bash -n scripts/lib/smoke_common.sh` verde | Cierre: wrappers versionados no deben usar `nohup ... orquesta-server run &`; para piloto gestionado usar `orquesta-server start/status/stop`, y los smokes que lean state validan PID vivo antes de declarar ready |
 | BUG-ORQ-20260703-159 | cerrado | Tests/automejora idle async / idempotencia | durante la validacion global del cierre BUG-155, `TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0` fallaba con `retry no lanzado tras cooldown`; reproducido localmente con `go test -count=100 ./modulos/orquesta-server -run TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0` antes del fix | la deduplicacion de publicaciones idle conservaba la ultima publicacion `scheduled` aunque el intento terminara en `MarkIdleSelfImprovementErrorV0` o `MarkIdleSelfImprovementPrepareFailedV0`; un retry tras cooldown con el mismo `request_ref` podia silenciarse como duplicado identico antes de invocar `PrepareIdleSelfImprovementV0`; ademas el test mutaba el tracker sin esperar el drenaje del tick async previo | cierre 2026-07-03 noche: `resetIdleSelfImprovementPublicationLockedV0` libera la publicacion activa al cerrar por error/prepare_failed; `TestStatusTrackerV0IdleSelfImprovementErrorLiberaPublicacionParaRetryV0`, `TestStatusTrackerV0PrepareFailedLiberaPublicacionParaRetryV0` y `go test -count=100 ./modulos/orquesta-server -run TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0` verdes | Cierre: retries fallidos ya no quedan bloqueados por idempotencia stale; la prueba async espera el drenaje del trabajo anterior antes de forzar el retry |
 
-Avance BUG-ORQ-20260703-154 2026-07-03 noche:
-MEJ-104 queda empezado con gobernador pre-launch de automejora idle. La decision
-usa presupuesto diario declarado de goals y bytes de contexto, consumo durable
-del dia, estimacion de contexto de la siguiente goal y tokens de prompt cache.
-Si el presupuesto no cabe, la automejora idle se aplaza con `budget_deferred`;
-si solo cabe parte del lote, degrada a menos goals con `budget_degraded`. La
-decision se persiste en state, se expone en `/api/v0/server/status` y en
-`orquesta.autoprogramming.status.v0` por puerto opcional. Evidencia focal:
-`go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`;
-`git diff --check`; `go test -count=1 ./...`; `go build ./...`. Estado del
-bug: abierto hasta ejecutar un smoke real acotado que demuestre el aplazamiento
-sin lanzar trabajo caro; falta tambien cortar/replanificar un goal ya activo con
-alto consumo y mismo checkpoint invalido.
+Cierre BUG-ORQ-20260703-154 2026-07-03 noche:
+MEJ-104 aporta el gobernador pre-launch de automejora idle. La decision usa
+presupuesto diario declarado de goals y bytes de contexto, consumo durable del
+dia, estimacion de contexto de la siguiente goal y tokens de prompt cache. Si el
+presupuesto no cabe, la automejora idle se aplaza con `budget_deferred`; si solo
+cabe parte del lote, degrada a menos goals con `budget_degraded`. La decision se
+persiste en state, se expone en `/api/v0/server/status` y en
+`orquesta.autoprogramming.status.v0` por puerto opcional.
+
+T290, commit `eab3be97`, completa la parte durante ejecucion: el observer de
+goals idle aplica `goal_high_consumption_without_progress` cuando el consumo
+crece sin progreso util fuera de la ventana, ignora checkpoints invalidos como
+progreso, cuenta checkpoint invalido repetido como evidencia, persiste el goal
+como `blocked`/`NeedsRework` y pide stop cooperativo por run-control. Evidencia
+durable:
+`modulos/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t290-corte-durante-ejecucion-goal-sin-progreso.json`.
+Validacion focal reejecutada en este cierre documental:
+`go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0GoalObservation(AltoConsumoSinProgreso|NoCortaConProgresoUtilReciente|CheckpointInvalidoRepetidoCuentaSinProgreso)V0|TestRuntimeV0IdleSelfImprovement(Goal|Observe)'`;
+`go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0AutomejoraIdle(AplazaPorPresupuestoAgotado|DegradaLotePorPresupuestoContexto)V0|TestServerPublicStatusV0ExponePresupuestoAutomejoraIdleV0'`;
+`go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPAutoprogrammingStatusExecutorV0PublicaPresupuestoIdleV0'`;
+`go test -count=1 ./cmd/orquesta-server -run 'TestServerConfigFromEnvV0LeePresupuestoAutomejoraIdleV0|TestServerAutoprogrammingIdleBudgetSourceV0(LeeEstadoDurable|OmiteDecisionVacia)'`.
+Residual: smoke real acotado de presupuesto antes de reactivar automejora
+productiva; no se lanza aqui por congelacion de pilotajes/automejora.
 
 Cierre T292/escalation director 2026-07-03 noche:
 El riesgo de que el director de escalada por eventos quedara inaccesible desde
@@ -1721,11 +1731,13 @@ top-level, `Result.Issues` y `Closure.Issues`. Evidencia:
 `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`,
 `go test -count=1 ./...`, `go build ./...` y `git diff --check`. No se abre
 `BUG-ORQ-20260703-158`: el hueco queda
-cubierto por codigo y tests en esta sesion. Residuales de esta tanda que siguen
-abiertos para revision estructural: `BUG-ORQ-20260703-149` (WIP remoto no
-integrable tal cual) y `BUG-ORQ-20260703-154` (smoke real/corte de goal activo
-con alto consumo). `BUG-ORQ-20260703-156`, `BUG-ORQ-20260703-157` y
-`BUG-ORQ-20260703-159` quedan cerrados con causa reproducida y tests focales.
+cubierto por codigo y tests en esta sesion. Residual de esta tanda que sigue
+abierto para revision estructural: `BUG-ORQ-20260703-149` (WIP remoto no
+integrable tal cual). `BUG-ORQ-20260703-154`, `BUG-ORQ-20260703-156`,
+`BUG-ORQ-20260703-157` y `BUG-ORQ-20260703-159` quedan cerrados con causa
+reproducida y tests focales; para `BUG-154` queda solo smoke real acotado como
+validacion antes de reactivar automejora/pilotajes, no como brecha de codigo
+conocida.
 Las filas largas antiguas
 `BUG-ORQ-20260701-065/066/075/085/088` y OPES calidad siguen abiertas como
 deuda amplia, no como regresion nueva de T292.
