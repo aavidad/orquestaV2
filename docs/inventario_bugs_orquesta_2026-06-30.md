@@ -896,6 +896,13 @@ replan. Evidencia:
 `TestMCPAutoprogrammingStatusExecutorV0QAFailedPublicTextPideReworkV0` y
 `TestMCPAutoprogrammingStatusExecutorV0OutputGiganteSaneadoPideContextoAcotadoV0`.
 
+Avance BUG-ORQ-20260701-073/079 2026-07-03 tarde 25: la regla anterior queda
+fijada tambien como prueba unitaria de decision autonoma: severidad `blocked` y
+`warning` con accion recomendada producen atencion, pero una senal `info` como
+`active_timeout_checkpoint_recent`/esperar checkpoint no se convierte en replan
+ni en atencion artificial. Evidencia:
+`TestDirectorOpsDecisionFromAutoprogrammingActionableRunV0RespetaSeveridadV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado
