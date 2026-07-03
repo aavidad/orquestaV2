@@ -351,8 +351,17 @@ func TestMCPRunSupervisorHTTPHandlerV0NoPropagaErrorNoCatalogado(t *testing.T) {
 	}
 	if result.Estado != MCPRunSupervisorEstadoErrorV0 ||
 		len(result.Errores) != 1 ||
-		result.Errores[0].Message != "run_supervisor_error" {
+		result.Errores[0].Code != "run_supervisor_execute_error" ||
+		result.Errores[0].Message != "run_supervisor_execute_error" {
 		t.Fatalf("error publico inesperado: %+v", result)
+	}
+	if result.CorrelationID != input.CorrelationID ||
+		result.OperationRef == "" ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-run-supervisor-execute-error") ||
+		!containsStringMCPTestV0(result.EvidenceRefs, result.OperationRef) ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "run_supervisor_execute_error") ||
+		!containsStringMCPTestV0(result.Diagnostics[0].EvidenceRefs, "evidence-ref-run-supervisor-execute-error") {
+		t.Fatalf("error debe conservar correlacion/evidencia/diagnostico: %+v", result)
 	}
 	if strings.Contains(rec.Body.String(), "/root/Trabajo") ||
 		strings.Contains(rec.Body.String(), "secret123456") {

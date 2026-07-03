@@ -74,12 +74,13 @@ func (handler mcpRunSupervisorHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r 
 			writeMCPRunSupervisorHTTPV0(w, http.StatusInternalServerError, result)
 			return
 		}
-		writeMCPRunSupervisorHTTPV0(w, http.StatusInternalServerError, newMCPRunSupervisorHTTPErrorV0(
-			r,
+		result := NewMCPRunSupervisorExecutorErrorResultV0(
 			input,
 			"executor",
-			publicMCPExecutorErrorMessageFromErrorV0("run_supervisor_error", err),
-		))
+			publicMCPExecutorErrorMessageFromErrorV0("run_supervisor_execute_error", err),
+		)
+		result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), input.CorrelationID, input.RequestID)
+		writeMCPRunSupervisorHTTPV0(w, http.StatusInternalServerError, result)
 		return
 	}
 	status := http.StatusOK
