@@ -1122,6 +1122,14 @@ de tool como accion no soportada, puerto ausente o validacion. Esto mantiene la
 misma evidencia de reconciliacion fuera del transporte HTTP. Evidencia:
 `TestMCPRunControlExecutorV0ErrorConservaEvidenciaV0`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 32: el contrato MCP de
+`orquesta.server.shutdown.v0` declara `evidence_refs` en respuestas `ok` y
+`error`, y los errores tempranos de la tool conservan evidencia compacta de la
+peticion. Esto evita que un fallo de identidad/transporte borre evidencia de
+checkpoint, cleanup o shutdown gobernado antes de llegar al caso de uso.
+Evidencia: `TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0` y
+`TestMCPServerShutdownToolExecutorV0ErrorConservaEvidenciaV0`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

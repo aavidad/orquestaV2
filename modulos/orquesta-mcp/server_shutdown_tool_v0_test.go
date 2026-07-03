@@ -2,6 +2,7 @@ package orquestamcp
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,21 @@ import (
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
+
+func TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0(t *testing.T) {
+	descriptor := MCPServerShutdownDescriptorV0()
+	if descriptor.Name != MCPServerShutdownToolNameV0 ||
+		descriptor.ResourceURI != MCPServerShutdownResourceURIV0 ||
+		descriptor.InputSchema == "" ||
+		len(descriptor.Invariantes) == 0 {
+		t.Fatalf("descriptor=%+v", descriptor)
+	}
+	if !strings.Contains(descriptor.InputSchema, "evidence_refs?") ||
+		!strings.Contains(descriptor.Output, "evidence_refs?") ||
+		!strings.Contains(descriptor.Output, "error:{errores_publicos,evidence_refs?}") {
+		t.Fatalf("descriptor shutdown debe declarar evidencia en entrada y salida: %+v", descriptor)
+	}
+}
 
 func TestMCPServerShutdownToolExecutorV0DrenaPorCasoDeUso(t *testing.T) {
 	control := &fakeMCPServerShutdownControlV0{
@@ -129,6 +145,28 @@ func TestMCPServerShutdownToolExecutorV0RechazaAgente(t *testing.T) {
 		result.Status != orquestaservershutdown.ServerShutdownStatusRequesterDeniedV0 ||
 		control.stop.RunRef != "" {
 		t.Fatalf("result=%+v stop=%+v", result, control.stop)
+	}
+}
+
+func TestMCPServerShutdownToolExecutorV0ErrorConservaEvidenciaV0(t *testing.T) {
+	result, err := NewMCPServerShutdownToolExecutorV0(orquestaservershutdown.ServerShutdownDepsV0{}).Execute(
+		context.Background(),
+		MCPServerShutdownToolInputV0{
+			RequestedBy:    "agent-ref-not-authorized",
+			Reason:         "apagado no autorizado con evidencia",
+			EvidenceRefs:   []string{" evidence-ref-shutdown-denied-001 ", "evidence-ref-shutdown-denied-001", ""},
+		},
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPServerShutdownEstadoErrorV0 ||
+		result.Status != "" ||
+		len(result.EvidenceRefs) != 1 ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-shutdown-denied-001") ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != MCPPublicMutationIssueIdempotencyKeyRequiredV0 {
+		t.Fatalf("error shutdown debe conservar evidencia compacta: %+v", result)
 	}
 }
 

@@ -95,7 +95,7 @@ func MCPServerShutdownDescriptorV0() MCPServerShutdownToolDescriptorV0 {
 		Name:        MCPServerShutdownToolNameV0,
 		Version:     MCPServerShutdownToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,queue_ref?,app_refs?,forced?,cleanup_goal_backends?,checkpoint_deadline_at?,max_ticks?,max_runs_per_tick?,max_executions?,requested_by?,reason?,idempotency_key?,evidence_refs?}",
-		Output:      "ok:{status,shutdown_ready,runs_requested,runs_stopped,agents_in_flight,checkpoint_agents_pending,checkpoint_deadlines_expired,active_work_count,active_works?,runs?}|error:{errores_publicos}",
+		Output:      "ok:{status,shutdown_ready,runs_requested,runs_stopped,agents_in_flight,checkpoint_agents_pending,checkpoint_deadlines_expired,active_work_count,active_works?,runs?,evidence_refs?}|error:{errores_publicos,evidence_refs?}",
 		ResourceURI: MCPServerShutdownResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -170,6 +170,7 @@ func newMCPServerShutdownErrorV0(
 		Estado:        MCPServerShutdownEstadoErrorV0,
 		RequestID:     strings.TrimSpace(input.RequestID),
 		CorrelationID: firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
+		EvidenceRefs:  compactStringsMCPV0(input.EvidenceRefs),
 		Errores: []MCPValidationIssueV0{{
 			Code:    strings.TrimSpace(code),
 			Field:   strings.TrimSpace(field),
