@@ -1101,6 +1101,13 @@ reconciliacion por cleanup externo o alto consumo pierdan la evidencia que ya
 aportaba el operador/status. Evidencia:
 `TestMCPRunControlHTTPHandlerV0TimeoutDevuelveJSONPublico`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 29: si el executor de
+`runs/control` falla antes de devolver resultado, la respuesta HTTP 500 conserva
+`forced`, `evidence_refs` compactas y diagnostico `run_control_http_error` con
+scope de run. Asi el operador puede repetir o reconciliar con la misma evidencia
+sin depender de logs internos. Evidencia:
+`TestMCPRunControlHTTPHandlerV0ExecutorErrorConservaEvidenciaV0`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
