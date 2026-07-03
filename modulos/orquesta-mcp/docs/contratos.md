@@ -381,9 +381,11 @@ Campos:
       composicion usa goal-first
     goal_launch_receipt: receipt neutral de `orquesta-goal`, sin prompt ni
       payload interno
+    evidence_refs: evidencias compactas de arranque, goal-first y receipt
   output_error:
     estado: error
     errores_publicos: issues de factory o servicio de aplicacion
+    evidence_refs: evidencias compactas conservadas cuando el arranque falla
     goal_backend_unavailable: error publico cuando el caller pide goal-first y
       la composicion no inyecta backend Goal completo
 Invariantes:

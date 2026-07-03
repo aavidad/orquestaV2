@@ -73,7 +73,7 @@ func MCPArrancarDirectorAppDescriptorV0() MCPArrancarDirectorAppToolDescriptorV0
 		Name:        MCPArrancarDirectorAppToolNameV0,
 		Version:     MCPArrancarDirectorAppToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,respuesta?,director_execution_mode?:goal_first|legacy_director_loop,app_spec_request:AppSpecRequestV0(request_kind?,execution_mode?),max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_external_waits?}",
-		Output:      "ok:{route_policy,app_spec,run_ref,director_execution_mode?,goal_ref?,goal_status?,phase_id?,loop_status?}|error:{route_policy,errores_publicos}",
+		Output:      "ok:{route_policy,app_spec,run_ref,director_execution_mode?,goal_ref?,external_goal_ref?,goal_status?,phase_id?,loop_status?,evidence_refs?}|error:{route_policy,errores_publicos,evidence_refs?}",
 		ResourceURI: MCPArrancarDirectorAppResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",

@@ -71,10 +71,12 @@ func TestMCPArrancarDirectorAppToolV0DeclaraRutaOperativaPreferente(t *testing.T
 
 func TestMCPAppSpecDescriptorsV0PublicanRoutePolicy(t *testing.T) {
 	cases := []struct {
-		name      string
-		output    string
-		input     string
-		requireV2 bool
+		name             string
+		output           string
+		input            string
+		requireV2        bool
+		requireGoalRefs  bool
+		requireEvidences bool
 	}{
 		{
 			name:   MCPPrepararOrquestacionAppToolNameV0,
@@ -87,8 +89,10 @@ func TestMCPAppSpecDescriptorsV0PublicanRoutePolicy(t *testing.T) {
 			requireV2: true,
 		},
 		{
-			name:   MCPArrancarDirectorAppToolNameV0,
-			output: MCPArrancarDirectorAppDescriptorV0().Output,
+			name:             MCPArrancarDirectorAppToolNameV0,
+			output:           MCPArrancarDirectorAppDescriptorV0().Output,
+			requireGoalRefs:  true,
+			requireEvidences: true,
 		},
 	}
 	for _, tc := range cases {
@@ -97,6 +101,12 @@ func TestMCPAppSpecDescriptorsV0PublicanRoutePolicy(t *testing.T) {
 		}
 		if tc.requireV2 && !strings.Contains(tc.input, "require_director_v2") {
 			t.Fatalf("%s input_schema=%q", tc.name, tc.input)
+		}
+		if tc.requireGoalRefs && !strings.Contains(tc.output, "external_goal_ref?") {
+			t.Fatalf("%s output no declara external_goal_ref: %q", tc.name, tc.output)
+		}
+		if tc.requireEvidences && !strings.Contains(tc.output, "evidence_refs?") {
+			t.Fatalf("%s output no declara evidence_refs: %q", tc.name, tc.output)
 		}
 	}
 }
