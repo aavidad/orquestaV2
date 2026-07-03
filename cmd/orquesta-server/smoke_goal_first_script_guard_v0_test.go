@@ -778,8 +778,12 @@ func TestHandoffCierreSesionNoReabreBUG077V0(t *testing.T) {
 	for _, want := range []string{
 		"BUG-077 queda cerrado",
 		"TestScriptStartsTemporaryOrquestaServerV0DetectaPIDConAddrGestionadoV0",
+		"TestSmokeOPESExternalWorkAgentRealUsaShutdownDelegadoConRuntimeDirV0",
 		`ORQUESTA_SERVER_ADDR`,
 		`server_pid="$!"`,
+		"trap smoke_cleanup EXIT",
+		"scripts/lib/opes_agent_smoke_ops.sh",
+		"RUNTIME_DIR",
 		"smoke_shutdown_orquesta_server",
 		"orquesta-server stop",
 	} {

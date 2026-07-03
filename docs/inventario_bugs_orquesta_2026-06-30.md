@@ -898,6 +898,14 @@ de sesion queda fijado contra regresiones de runtime manual: debe conservar
 `go run ./cmd/orquesta-server run` ni el puerto historico `8787`. Evidencia:
 `TestHandoffCierreSesionNoReabreBUG077V0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 26: el handoff vigente de cierre
+tambien queda fijado a la guarda delegada
+`TestSmokeOPESExternalWorkAgentRealUsaShutdownDelegadoConRuntimeDirV0`: el
+wrapper OPES external-work debe conservar `trap smoke_cleanup EXIT`,
+`scripts/lib/opes_agent_smoke_ops.sh`, `RUNTIME_DIR` y
+`smoke_shutdown_orquesta_server`, evitando que un cleanup delegado reabra el
+residual de app-server/base_url.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 26: la reconciliacion
 automatica de `goal_backend_missing_after_external_cleanup` queda fijada como
 responsabilidad opt-in del supervisor residente; una llamada no residente a

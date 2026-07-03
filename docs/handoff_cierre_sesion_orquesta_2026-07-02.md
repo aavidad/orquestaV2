@@ -50,9 +50,13 @@ Abiertos tras integrar la guarda de wrappers de BUG-077:
 Actualizacion 2026-07-03: BUG-077 queda cerrado en el inventario vigente. La
 guarda `TestScriptStartsTemporaryOrquestaServerV0DetectaPIDConAddrGestionadoV0`
 fija el caso `ORQUESTA_SERVER_ADDR` + `server_pid="$!"` y exige shutdown comun.
-Los cierres locales deben conservar `smoke_shutdown_orquesta_server` en scripts
-temporales y `orquesta-server stop` como parada gestionada para servidor
-residente.
+La guarda `TestSmokeOPESExternalWorkAgentRealUsaShutdownDelegadoConRuntimeDirV0`
+fija tambien el wrapper OPES delegado:
+`scripts/smoke_opes_external_work_agent_real.sh` instala
+`trap smoke_cleanup EXIT`, usa `scripts/lib/opes_agent_smoke_ops.sh` y conserva
+`RUNTIME_DIR` hasta `smoke_shutdown_orquesta_server`. Los cierres locales deben
+conservar `smoke_shutdown_orquesta_server` en scripts temporales y
+`orquesta-server stop` como parada gestionada para servidor residente.
 
 ## Agente remoto
 
