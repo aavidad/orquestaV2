@@ -1639,6 +1639,15 @@ de checkpoints global de refs de agentes concretos antes de decidir wait,
 repost o stop final. Evidencia:
 `TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 62:
+`orquesta.runs.control.v0` transportaba diagnosticos publicos con
+`code/scope/message/evidence_refs`, pero el descriptor compacto y contrato solo
+declaraban `diagnostics?` como bloque opaco. El contrato publica ahora la forma
+tipada en `ok` y `error`, conservando la causa compacta de cleanup externo,
+backend activo o reconciliacion terminal para clientes que deciden
+`stop/cancel/wait` sin leer logs. Evidencia:
+`TestMCPRunControlDescriptorV0EsAdaptadorFino`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

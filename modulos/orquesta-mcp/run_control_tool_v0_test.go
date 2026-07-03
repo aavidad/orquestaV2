@@ -36,7 +36,7 @@ func TestMCPRunControlDescriptorV0EsAdaptadorFino(t *testing.T) {
 		"recommended_action?",
 		"forced?",
 		"evidence_refs?",
-		"diagnostics?",
+		"diagnostics?[]{code,scope?,message?,evidence_refs?}",
 	} {
 		if !strings.Contains(descriptor.Output, field) {
 			t.Fatalf("descriptor no declara salida operacional %q: %+v", field, descriptor)

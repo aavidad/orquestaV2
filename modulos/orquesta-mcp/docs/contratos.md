@@ -1352,9 +1352,10 @@ Campos:
     goal_ref?, external_goal_ref?, goal_status_before?, goal_status_after?,
     goal_control_signal_sent?, goal_control_signal_confirmed?,
     recommended_action?, checkpoint_recorded, forced, evidence_refs,
-    diagnostics?
+    diagnostics[]?: code, scope?, message?, evidence_refs?
   output_error:
-    errores_publicos compactos, forced?, evidence_refs?, diagnostics?
+    errores_publicos compactos, forced?, evidence_refs?,
+    diagnostics[]?: code, scope?, message?, evidence_refs?
 Invariantes:
   - Adaptador inbound fino.
   - Delega solo en `RunControlWriterPortV0` inyectado.
