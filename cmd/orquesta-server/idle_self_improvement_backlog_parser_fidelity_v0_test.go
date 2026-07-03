@@ -150,6 +150,151 @@ Alcance:
 	}
 }
 
+func TestIdleSelfImprovementBacklogParserV0WriteSetAliasesAlimentanScopeV0(t *testing.T) {
+	baseContent := func(label string) string {
+		return `# Backlog
+
+## T42 alias-scope
+
+Objetivo: comprobar alias de alcance.
+
+` + label + `
+
+- ` + "`cmd/orquesta-server`" + `
+- ` + "`modulos/orquesta-server`" + `
+`
+	}
+	canonical := parseIdleSelfImprovementBacklogSectionsV0(baseContent("Alcance:"))
+	if len(canonical) != 1 {
+		t.Fatalf("canonical sections=%+v", canonical)
+	}
+	for _, label := range []string{"Write-set previsto:", "Write-set:"} {
+		sections := parseIdleSelfImprovementBacklogSectionsV0(baseContent(label))
+		if len(sections) != 1 {
+			t.Fatalf("%s sections=%+v", label, sections)
+		}
+		if !stringSlicesEqualForParserFidelityTestV0(sections[0].Scope, canonical[0].Scope) {
+			t.Fatalf("%s scope=%+v want=%+v", label, sections[0].Scope, canonical[0].Scope)
+		}
+		if len(sections[0].DiagnosticEvidenceRefs) != 0 {
+			t.Fatalf("%s diagnostics=%+v", label, sections[0].DiagnosticEvidenceRefs)
+		}
+	}
+}
+
+func TestIdleSelfImprovementBacklogParserV0ValidacionAliasAlimentaTestsV0(t *testing.T) {
+	baseContent := func(label string) string {
+		return `# Backlog
+
+## T43 alias-tests
+
+Objetivo: comprobar alias de validacion.
+
+Alcance:
+
+- cmd/orquesta-server
+
+` + label + ` ` + "`go test -count=1 ./cmd/orquesta-server`" + ` y prueba manual focal.
+`
+	}
+	canonical := parseIdleSelfImprovementBacklogSectionsV0(baseContent("Tests:"))
+	aliased := parseIdleSelfImprovementBacklogSectionsV0(baseContent("Validacion:"))
+	if len(canonical) != 1 || len(aliased) != 1 {
+		t.Fatalf("canonical=%+v aliased=%+v", canonical, aliased)
+	}
+	if !stringSlicesEqualForParserFidelityTestV0(aliased[0].Tests, canonical[0].Tests) {
+		t.Fatalf("tests=%+v want=%+v", aliased[0].Tests, canonical[0].Tests)
+	}
+	if !stringSlicesEqualForParserFidelityTestV0(aliased[0].ManualVerifications, canonical[0].ManualVerifications) {
+		t.Fatalf("manual=%+v want=%+v", aliased[0].ManualVerifications, canonical[0].ManualVerifications)
+	}
+	if len(aliased[0].DiagnosticEvidenceRefs) != 0 {
+		t.Fatalf("diagnostics=%+v", aliased[0].DiagnosticEvidenceRefs)
+	}
+}
+
+func TestIdleSelfImprovementBacklogPlannerV0EtiquetaDesconocidaViajaEnEvidenceRefsV0(t *testing.T) {
+	for _, tc := range []struct {
+		label    string
+		evidence string
+	}{
+		{label: "Scope:", evidence: "section_label_unrecognized:Scope"},
+		{label: "Alcance previsto:", evidence: "section_label_unrecognized:Alcance previsto"},
+	} {
+		t.Run(tc.label, func(t *testing.T) {
+			projectDir := t.TempDir()
+			mustWriteBacklogForParserFidelityTestV0(t, projectDir, `# Backlog
+
+## T44 etiqueta-desconocida
+
+Objetivo: diagnosticar etiqueta parecida.
+
+`+tc.label+`
+
+- modulos/orquesta-server
+
+Criterios:
+
+- emitir evidencia diagnostica.
+
+Tests:
+
+- `+"`go test -count=1 ./cmd/orquesta-server`"+`
+`)
+
+			result := mustPlanParserFidelityWithRequestTestV0(t, projectDir,
+				orquestaserver.IdleSelfImprovementPlanRequestV0{
+					MaxRequests: 1,
+					BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+						RequestRef:    "request-ref-base",
+						CorrelationID: "corr-request-ref-base",
+						WriteSet:      []string{"base-write-set"},
+					},
+				},
+			)
+			request := result.Requests[0]
+			if !containsStringForTestV0(request.EvidenceRefs, tc.evidence) {
+				t.Fatalf("evidence_refs=%+v want=%s", request.EvidenceRefs, tc.evidence)
+			}
+			if containsStringForTestV0(request.WriteSet, "modulos/orquesta-server") ||
+				!containsStringForTestV0(request.WriteSet, "base-write-set") {
+				t.Fatalf("write_set=%+v", request.WriteSet)
+			}
+		})
+	}
+}
+
+func TestIdleSelfImprovementBacklogParserV0EtiquetaDesconocidaNoDiagnosticaConCanonicoV0(t *testing.T) {
+	sections := parseIdleSelfImprovementBacklogSectionsV0(`# Backlog
+
+## T45 canonico-presente
+
+Objetivo: no ensuciar seccion correcta.
+
+Alcance:
+
+- cmd/orquesta-server
+
+Scope:
+
+- modulos/orquesta-server
+
+Criterios:
+
+- conservar diagnostico vacio si el campo canonico esta presente.
+
+Tests:
+
+- ` + "`go test -count=1 ./cmd/orquesta-server`" + `
+`)
+	if len(sections) != 1 {
+		t.Fatalf("sections=%+v", sections)
+	}
+	if len(sections[0].DiagnosticEvidenceRefs) != 0 {
+		t.Fatalf("diagnostics=%+v", sections[0].DiagnosticEvidenceRefs)
+	}
+}
+
 func TestIdleSelfImprovementBacklogPlannerV0PreservaGoTestGlobalDeclaradoEnSeccionV0(t *testing.T) {
 	projectDir := t.TempDir()
 	mustWriteBacklogForParserFidelityTestV0(t, projectDir, `# Backlog

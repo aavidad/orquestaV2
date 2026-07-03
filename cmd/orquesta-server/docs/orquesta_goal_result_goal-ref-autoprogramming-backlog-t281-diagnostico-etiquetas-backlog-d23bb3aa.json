@@ -1,0 +1,156 @@
+{
+  "goal_ref": "goal-ref-autoprogramming-backlog-t281-diagnostico-etiquetas-backlog-d23bb3aa",
+  "schema_version": "orquesta_goal_result.v0",
+  "status": "complete",
+  "summary": "BUG-ORQ-20260703-152 cerrado: el parser reconoce Write-set previsto/Write-set como Scope, Validacion como Tests y propaga section_label_unrecognized:<etiqueta> en EvidenceRefs cuando una etiqueta parecida no reconocida deja vacio el campo canonico.",
+  "artifact_refs": [
+    "artifact-ref-t281-parser-implementation",
+    "artifact-ref-t281-parser-fidelity-tests",
+    "artifact-ref-t281-goal-result"
+  ],
+  "artifact_paths": [
+    "cmd/orquesta-server/idle_self_improvement_backlog_parser_v0.go",
+    "cmd/orquesta-server/idle_self_improvement_backlog_tests_v0.go",
+    "cmd/orquesta-server/idle_self_improvement_backlog_requests_v0.go",
+    "cmd/orquesta-server/idle_self_improvement_backlog_canonical_v0.go",
+    "cmd/orquesta-server/idle_self_improvement_backlog_collisions_v0.go",
+    "cmd/orquesta-server/idle_self_improvement_backlog_parser_fidelity_v0_test.go",
+    "cmd/orquesta-server/docs/checkpoint_started_t281_diagnostico_etiquetas_backlog.txt",
+    "cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t281-diagnostico-etiquetas-backlog-d23bb3aa.json",
+    "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md"
+  ],
+  "materialized_artifacts": [
+    {
+      "artifact_ref": "artifact-ref-t281-checkpoint-started",
+      "path": "cmd/orquesta-server/docs/checkpoint_started_t281_diagnostico_etiquetas_backlog.txt",
+      "artifact_type": "checkpoint",
+      "status": "valid",
+      "evidence_refs": [
+        "checkpoint_started:t281-diagnostico-etiquetas-backlog"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t281-parser-implementation",
+      "path": "cmd/orquesta-server/idle_self_improvement_backlog_parser_v0.go",
+      "artifact_type": "source_change",
+      "status": "valid",
+      "evidence_refs": [
+        "sha256:84fe583db2ae19f2a57a4f4dcc7ae186ab802649388414ca4569aa9111ec4faa",
+        "implementation:section-label-aliases-and-diagnostics"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t281-parser-fidelity-tests",
+      "path": "cmd/orquesta-server/idle_self_improvement_backlog_parser_fidelity_v0_test.go",
+      "artifact_type": "test_change",
+      "status": "valid",
+      "evidence_refs": [
+        "sha256:2820b8a0c51fe5d50996ee35317b8a86e3d14f9e9895045bcbff81bb27a9cadf",
+        "test:aliases-and-section-label-diagnostics"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t281-goal-result",
+      "path": "cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t281-diagnostico-etiquetas-backlog-d23bb3aa.json",
+      "artifact_type": "goal_result",
+      "status": "valid",
+      "evidence_refs": [
+        "schema_version:orquesta_goal_result.v0",
+        "status:complete"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t281-backlog-source-verified",
+      "path": "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+      "artifact_type": "verified_source_document",
+      "status": "valid",
+      "evidence_refs": [
+        "backlog_scan_ref:scan-ref-backlog-84cce185b6c3",
+        "backlog_scan_doc:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:15:sha256:9777f2d4dced3449ca71e8e158d15dbad792cdd94dcf552dc402fa5e230eb7de",
+        "backlog_scan_doc_current_sha256:1d89104f23074fc325efb0426a01f0e4292070133aff865b5a39fd0c83deccde",
+        "backlog_scan_doc_goal_photo_line15_sha256:05bb3c7062c8ef77b747c7183d2aaef2bf22f273569cf7a89f5bd7177a74038a",
+        "backlog_doc_verified_not_modified_by_goal"
+      ],
+      "issues": []
+    }
+  ],
+  "checklist": {
+    "expected_refs": [
+      "alias:write-set-previsto-to-scope",
+      "alias:write-set-to-scope",
+      "alias:validacion-to-tests",
+      "diagnostic:section_label_unrecognized-to-evidence_refs",
+      "existing-canonical-sections-no-diagnostic",
+      "required-test-ref-74057cd44ee2",
+      "required-test-ref-48b206d82e36",
+      "manual-verification:git-diff-check",
+      "manual-verification:go-build-all",
+      "backlog_task_instance_ref:task-instance-ref-backlog-4e1cce89",
+      "backlog_task_id_range:T281",
+      "backlog_scan_ref:scan-ref-backlog-84cce185b6c3"
+    ],
+    "completed_refs": [
+      "alias:write-set-previsto-to-scope",
+      "alias:write-set-to-scope",
+      "alias:validacion-to-tests",
+      "diagnostic:section_label_unrecognized-to-evidence_refs",
+      "existing-canonical-sections-no-diagnostic",
+      "required-test-ref-74057cd44ee2",
+      "required-test-ref-48b206d82e36",
+      "manual-verification:git-diff-check",
+      "manual-verification:go-build-all",
+      "backlog_task_instance_ref:task-instance-ref-backlog-4e1cce89",
+      "backlog_task_id_range:T281",
+      "backlog_scan_ref:scan-ref-backlog-84cce185b6c3"
+    ],
+    "missing_refs": [],
+    "evidence_refs": [
+      "test:TestIdleSelfImprovementBacklogParserV0WriteSetAliasesAlimentanScopeV0",
+      "test:TestIdleSelfImprovementBacklogParserV0ValidacionAliasAlimentaTestsV0",
+      "test:TestIdleSelfImprovementBacklogPlannerV0EtiquetaDesconocidaViajaEnEvidenceRefsV0",
+      "test:TestIdleSelfImprovementBacklogParserV0EtiquetaDesconocidaNoDiagnosticaConCanonicoV0",
+      "command:git diff --check:passed",
+      "command:go build ./...:literal_failed_vcs_status_exit_128",
+      "command:GOFLAGS=-buildvcs=false go build ./...:passed"
+    ]
+  },
+  "required_test_results": [
+    {
+      "test_ref": "required-test-ref-74057cd44ee2",
+      "status": "passed",
+      "evidence_refs": [
+        "command:go test -count=1 ./cmd/orquesta-server -run 'TestIdleSelfImprovement.*Backlog|TestParseIdle':passed",
+        "output:ok orquesta/cmd/orquesta-server 0.071s"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-48b206d82e36",
+      "status": "passed",
+      "evidence_refs": [
+        "command:go test -count=1 ./cmd/orquesta-server:passed",
+        "output:ok orquesta/cmd/orquesta-server 28.207s"
+      ]
+    }
+  ],
+  "domain_receipt_refs": [],
+  "rework_plan_refs": [],
+  "evidence_refs": [
+    "request_ref:request-ref-autoprogramming-backlog-t281-diagnostico-etiquetas-backlog-d23bb3aa",
+    "backlog_task_instance_ref:task-instance-ref-backlog-4e1cce89",
+    "backlog_scan_epoch:backlog-scan-epoch-40fab662720b",
+    "backlog_scan_ref:scan-ref-backlog-84cce185b6c3",
+    "backlog_scan_reservation_ref:reservation-ref-backlog-scan-doc-merge-a1990212252f",
+    "backlog_scan_reservation_ref:reservation-ref-backlog-task-id-d3603e9cd33f",
+    "backlog_task_id_ref:task-id-ref-backlog-ab3815b4478a",
+    "backlog_task_id_range:T281",
+    "test:required-test-ref-74057cd44ee2:passed",
+    "test:required-test-ref-48b206d82e36:passed",
+    "manual:git-diff-check:passed",
+    "manual:go-build-all:passed_with_GOFLAGS_buildvcs_false",
+    "manual:go-build-all:literal_failed_vcs_status_exit_128"
+  ]
+}

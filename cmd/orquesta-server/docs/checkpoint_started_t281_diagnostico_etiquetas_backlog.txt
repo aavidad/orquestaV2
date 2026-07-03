@@ -1,0 +1,8 @@
+goal_ref: goal-ref-autoprogramming-backlog-t281-diagnostico-etiquetas-backlog-d23bb3aa
+request_ref: request-ref-autoprogramming-backlog-t281-diagnostico-etiquetas-backlog-d23bb3aa
+area: t281-diagnostico-etiquetas-backlog
+started_at: 2026-07-03
+scope: cmd/orquesta-server
+objective: cerrar BUG-ORQ-20260703-152 en el parser de backlog de automejora idle.
+next_artifact: cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t281-diagnostico-etiquetas-backlog-d23bb3aa.json
+evidence: checkpoint temprano materializado antes de exploracion larga o comandos costosos.

@@ -84,6 +84,7 @@ func idleSelfImprovementBacklogSectionFingerprintV0(
 		strings.TrimSpace(section.LocalEntryHash),
 		strings.Join(compactServerStackStringsV0(section.Scope), ","),
 		strings.Join(compactServerStackStringsV0(section.StateEvidenceRefs), ","),
+		strings.Join(compactServerStackStringsV0(section.DiagnosticEvidenceRefs), ","),
 	}
 	return strings.Join(parts, "|")
 }

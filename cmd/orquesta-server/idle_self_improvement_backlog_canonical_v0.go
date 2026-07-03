@@ -79,6 +79,10 @@ func idleSelfImprovementMergeCanonicalBacklogSectionV0(
 		canonical.StateEvidenceRefs,
 		"evidence-ref-autoprogramming-backlog-canonical-merge:"+duplicate.Ref,
 	))
+	canonical.DiagnosticEvidenceRefs = compactServerStackStringsV0(append(
+		canonical.DiagnosticEvidenceRefs,
+		duplicate.DiagnosticEvidenceRefs...,
+	))
 	return canonical
 }
 

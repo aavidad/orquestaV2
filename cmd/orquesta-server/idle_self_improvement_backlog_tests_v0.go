@@ -19,8 +19,8 @@ func idleSelfImprovementSectionTestValuesV0(lines []string) []string {
 	inBlock := false
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if index := strings.Index(trimmed, "Tests:"); index >= 0 {
-			value := strings.TrimSpace(trimmed[index+len("Tests:"):])
+		if label, index, ok := idleSelfImprovementSectionTestLabelInLineV0(trimmed); ok {
+			value := strings.TrimSpace(trimmed[index+len(label):])
 			if value != "" {
 				values = append(values, value)
 			}
@@ -35,6 +35,25 @@ func idleSelfImprovementSectionTestValuesV0(lines []string) []string {
 		}
 	}
 	return values
+}
+
+func idleSelfImprovementSectionTestLabelInLineV0(line string) (string, int, bool) {
+	selectedLabel := ""
+	selectedIndex := -1
+	for _, label := range []string{"Tests:", "Validacion:", "Validación:"} {
+		index := strings.Index(line, label)
+		if index < 0 {
+			continue
+		}
+		if selectedIndex < 0 || index < selectedIndex {
+			selectedLabel = label
+			selectedIndex = index
+		}
+	}
+	if selectedIndex < 0 {
+		return "", -1, false
+	}
+	return selectedLabel, selectedIndex, true
 }
 
 func idleSelfImprovementSplitTestValueV0(value string) ([]string, []string) {

@@ -143,6 +143,9 @@ func idleSelfImprovementBaseRequestForBacklogSectionV0(
 		"evidence-ref-autoprogramming-backlog-doc",
 		"evidence-ref-autoprogramming-backlog-section-"+section.Ref,
 	))
+	request.EvidenceRefs = compactServerStackStringsV0(append(request.EvidenceRefs,
+		section.DiagnosticEvidenceRefs...,
+	))
 	return request
 }
 

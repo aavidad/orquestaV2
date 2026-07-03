@@ -22,7 +22,7 @@ type idleSelfImprovementBacklogSectionV0 struct {
 	Scope, Criteria, Tests                          []string
 	ManualVerifications                             []string
 	Dependencies, Inputs, Outputs                   []string
-	StateEvidenceRefs                               []string
+	StateEvidenceRefs, DiagnosticEvidenceRefs       []string
 	Completed, PendingExplicit, NeedsDocumentReview bool
 	SourceLine                                      int
 	SourceIndexLine                                 int
@@ -71,24 +71,33 @@ func idleSelfImprovementParseBacklogSectionV0(
 	sourceLine int,
 ) idleSelfImprovementBacklogSectionV0 {
 	state := idleSelfImprovementSectionStateV0(lines)
+	scope := idleSelfImprovementSectionScopeV0(lines)
+	criteria := idleSelfImprovementSectionListV0(lines, "Criterios:")
 	tests, manualVerifications := idleSelfImprovementSectionTestsV0(lines)
+	diagnosticEvidenceRefs := idleSelfImprovementSectionLabelDiagnosticEvidenceRefsV0(
+		lines,
+		scope,
+		criteria,
+		tests,
+	)
 	return idleSelfImprovementBacklogSectionV0{
-		Ref:                 idleSelfImprovementHeadingRefV0(heading),
-		Heading:             strings.TrimPrefix(heading, "## "),
-		Objective:           idleSelfImprovementSectionValueV0(lines, "Objetivo:"),
-		Scope:               idleSelfImprovementSectionListV0(lines, "Alcance:"),
-		Criteria:            idleSelfImprovementSectionListV0(lines, "Criterios:"),
-		CanonicalRef:        idleSelfImprovementSectionCanonicalRefV0(lines),
-		Dependencies:        idleSelfImprovementSectionDependenciesV0(lines),
-		Inputs:              idleSelfImprovementSectionIOV0(lines, "Entrada:", "Entradas:"),
-		Outputs:             idleSelfImprovementSectionIOV0(lines, "Salida:", "Salidas:"),
-		Tests:               tests,
-		ManualVerifications: manualVerifications,
-		StateEvidenceRefs:   state.EvidenceRefs,
-		Completed:           state.Completed,
-		PendingExplicit:     state.PendingExplicit,
-		NeedsDocumentReview: state.NeedsDocumentReview,
-		SourceLine:          sourceLine,
+		Ref:                    idleSelfImprovementHeadingRefV0(heading),
+		Heading:                strings.TrimPrefix(heading, "## "),
+		Objective:              idleSelfImprovementSectionValueV0(lines, "Objetivo:"),
+		Scope:                  scope,
+		Criteria:               criteria,
+		CanonicalRef:           idleSelfImprovementSectionCanonicalRefV0(lines),
+		Dependencies:           idleSelfImprovementSectionDependenciesV0(lines),
+		Inputs:                 idleSelfImprovementSectionIOV0(lines, "Entrada:", "Entradas:"),
+		Outputs:                idleSelfImprovementSectionIOV0(lines, "Salida:", "Salidas:"),
+		Tests:                  tests,
+		ManualVerifications:    manualVerifications,
+		StateEvidenceRefs:      state.EvidenceRefs,
+		DiagnosticEvidenceRefs: diagnosticEvidenceRefs,
+		Completed:              state.Completed,
+		PendingExplicit:        state.PendingExplicit,
+		NeedsDocumentReview:    state.NeedsDocumentReview,
+		SourceLine:             sourceLine,
 	}
 }
 
@@ -195,12 +204,24 @@ func idleSelfImprovementSectionValueV0(lines []string, label string) string {
 	return ""
 }
 
+func idleSelfImprovementSectionScopeV0(lines []string) []string {
+	return idleSelfImprovementSectionListAnyLabelV0(lines,
+		"Alcance:",
+		"Write-set previsto:",
+		"Write-set:",
+	)
+}
+
 func idleSelfImprovementSectionListV0(lines []string, label string) []string {
+	return idleSelfImprovementSectionListAnyLabelV0(lines, label)
+}
+
+func idleSelfImprovementSectionListAnyLabelV0(lines []string, labels ...string) []string {
 	var out []string
 	inBlock := false
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, label) {
+		if label, ok := idleSelfImprovementMatchingSectionPrefixLabelV0(trimmed, labels...); ok {
 			if value := strings.TrimSpace(strings.TrimPrefix(trimmed, label)); value != "" {
 				out = append(out, value)
 			}
@@ -216,6 +237,122 @@ func idleSelfImprovementSectionListV0(lines []string, label string) []string {
 		out = append(out, strings.TrimSpace(strings.TrimPrefix(trimmed, "- ")))
 	}
 	return compactServerStackStringsV0(out)
+}
+
+func idleSelfImprovementMatchingSectionPrefixLabelV0(line string, labels ...string) (string, bool) {
+	for _, label := range labels {
+		if label != "" && strings.HasPrefix(line, label) {
+			return label, true
+		}
+	}
+	return "", false
+}
+
+func idleSelfImprovementSectionLabelDiagnosticEvidenceRefsV0(
+	lines []string,
+	scope []string,
+	criteria []string,
+	tests []string,
+) []string {
+	out := []string{}
+	for _, line := range lines {
+		label, ok := idleSelfImprovementSectionLineLabelV0(line)
+		if !ok || idleSelfImprovementKnownBacklogSectionLabelV0(label) {
+			continue
+		}
+		switch {
+		case len(scope) == 0 && idleSelfImprovementScopeLikeBacklogSectionLabelV0(label):
+			out = append(out, idleSelfImprovementSectionUnrecognizedLabelEvidenceRefV0(label))
+		case len(criteria) == 0 && idleSelfImprovementCriteriaLikeBacklogSectionLabelV0(label):
+			out = append(out, idleSelfImprovementSectionUnrecognizedLabelEvidenceRefV0(label))
+		case len(tests) == 0 && idleSelfImprovementTestsLikeBacklogSectionLabelV0(label):
+			out = append(out, idleSelfImprovementSectionUnrecognizedLabelEvidenceRefV0(label))
+		}
+	}
+	return compactServerStackStringsV0(out)
+}
+
+func idleSelfImprovementSectionLineLabelV0(line string) (string, bool) {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" || strings.HasPrefix(trimmed, "- ") {
+		return "", false
+	}
+	before, _, ok := strings.Cut(trimmed, ":")
+	if !ok {
+		return "", false
+	}
+	label := strings.Join(strings.Fields(strings.TrimSpace(before)), " ")
+	if label == "" {
+		return "", false
+	}
+	return label, true
+}
+
+func idleSelfImprovementKnownBacklogSectionLabelV0(label string) bool {
+	normalized := idleSelfImprovementNormalizeBacklogSectionLabelV0(label)
+	switch normalized {
+	case "objetivo",
+		"estado",
+		"cierre local",
+		"alcance",
+		"write-set previsto",
+		"write-set",
+		"criterios",
+		"tests",
+		"validacion",
+		"validación",
+		"depende",
+		"dependencias",
+		"entrada",
+		"entradas",
+		"salida",
+		"salidas",
+		"reemplazada_por",
+		"fusionada_con",
+		"fusionada con",
+		"alias canonico",
+		"canonica",
+		"revalidacion final",
+		"validacion focal",
+		"validación focal",
+		"evidencia focal",
+		"evidencia ejecutada",
+		"evidencia local":
+		return true
+	}
+	return strings.HasPrefix(normalized, "estado ") ||
+		strings.HasPrefix(normalized, "cierre local ")
+}
+
+func idleSelfImprovementScopeLikeBacklogSectionLabelV0(label string) bool {
+	normalized := idleSelfImprovementNormalizeBacklogSectionLabelV0(label)
+	return normalized == "scope" ||
+		strings.HasPrefix(normalized, "alcance ") ||
+		strings.HasPrefix(normalized, "write-set ") ||
+		strings.HasPrefix(normalized, "write set ")
+}
+
+func idleSelfImprovementCriteriaLikeBacklogSectionLabelV0(label string) bool {
+	normalized := idleSelfImprovementNormalizeBacklogSectionLabelV0(label)
+	return normalized == "criterio" ||
+		normalized == "criteria" ||
+		strings.HasPrefix(normalized, "criterios ")
+}
+
+func idleSelfImprovementTestsLikeBacklogSectionLabelV0(label string) bool {
+	normalized := idleSelfImprovementNormalizeBacklogSectionLabelV0(label)
+	return normalized == "validation" ||
+		strings.HasPrefix(normalized, "validacion ") ||
+		strings.HasPrefix(normalized, "validación ") ||
+		strings.HasPrefix(normalized, "tests ")
+}
+
+func idleSelfImprovementNormalizeBacklogSectionLabelV0(label string) string {
+	return strings.ToLower(strings.TrimSpace(strings.TrimSuffix(label, ":")))
+}
+
+func idleSelfImprovementSectionUnrecognizedLabelEvidenceRefV0(label string) string {
+	return "section_label_unrecognized:" + strings.Join(strings.Fields(strings.TrimSpace(label)), " ")
 }
 
 func idleSelfImprovementSectionDependenciesV0(lines []string) []string {
@@ -276,6 +413,7 @@ func idleSelfImprovementBacklogTaskInstanceRefV0(
 		section.Heading,
 		idleSelfImprovementBacklogSectionFingerprintV0(section),
 		strings.Join(compactServerStackStringsV0(section.StateEvidenceRefs), ","),
+		strings.Join(compactServerStackStringsV0(section.DiagnosticEvidenceRefs), ","),
 	}, "|")
 	return "task-instance-ref-backlog-" + idleSelfImprovementBacklogHashV0(seed)
 }
