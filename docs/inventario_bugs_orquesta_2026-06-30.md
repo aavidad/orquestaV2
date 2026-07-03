@@ -1335,6 +1335,17 @@ rutas ni secretos. Esto permite distinguir fallo operacional de observacion
 batch frente a ausencia de goals o estado idle. Evidencia:
 `TestMCPAutoprogrammingObserveActiveGoalsHTTPHandlerV0ExecutorErrorDevuelveDiagnosticoPublico`.
 
+Avance BUG-ORQ-20260701-073/075/088 2026-07-03 tarde 39: la fachada
+`/api/v0/domain-work/status` traduce las senales goal-first de checkpoint y alto
+consumo a estados operacionales de dominio: `active_timeout_checkpoint_recent`,
+`active_no_checkpoint_yet`, `checkpoint_only_consumption_warning` y
+`goal_active_no_checkpoint_consumption_warning` se publican como `running` con
+accion concreta de observar/exigir checkpoint o siguiente artefacto; los cortes
+`checkpoint_only_high_consumption`, `goal_active_no_checkpoint_high_consumption`
+y `goal_active_timeout_backend_active` se publican como `blocked`, conservando
+la accion normalizada por la fachada global. Evidencia:
+`TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesCheckpointComoEstadoOperacional`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

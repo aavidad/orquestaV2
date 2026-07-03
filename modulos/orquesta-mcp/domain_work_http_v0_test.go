@@ -296,6 +296,75 @@ func TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesGoalFirstRecuperablesCo
 	}
 }
 
+func TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesCheckpointComoEstadoOperacional(t *testing.T) {
+	cases := []struct {
+		name              string
+		code              string
+		recommendedAction string
+		wantStatus        string
+	}{
+		{
+			name:              "active_timeout_checkpoint_recent",
+			code:              mcpAutoprogrammingActionActiveTimeoutCheckpointRecentV0,
+			recommendedAction: mcpQueueGlobalStatusActionObserveGoalWaitForCheckpointV0,
+			wantStatus:        "running",
+		},
+		{
+			name:              "active_no_checkpoint_yet",
+			code:              mcpAutoprogrammingActionActiveNoCheckpointYetV0,
+			recommendedAction: mcpQueueGlobalStatusActionObserveGoalRequireCheckpointV0,
+			wantStatus:        "running",
+		},
+		{
+			name:              "checkpoint_only_consumption_warning",
+			code:              mcpAutoprogrammingActionCheckpointOnlyConsumptionWarningV0,
+			recommendedAction: mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0,
+			wantStatus:        "running",
+		},
+		{
+			name:              "goal_active_no_checkpoint_consumption_warning",
+			code:              mcpAutoprogrammingActionNoCheckpointConsumptionWarningV0,
+			recommendedAction: mcpQueueGlobalStatusActionObserveGoalRequireCheckpointV0,
+			wantStatus:        "running",
+		},
+		{
+			name:              "checkpoint_only_high_consumption",
+			code:              mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0,
+			recommendedAction: "replan_narrow_context",
+			wantStatus:        "blocked",
+		},
+		{
+			name:              "goal_active_no_checkpoint_high_consumption",
+			code:              mcpAutoprogrammingActionNoCheckpointHighConsumptionV0,
+			recommendedAction: "replan_narrow_context",
+			wantStatus:        "blocked",
+		},
+		{
+			name:              "goal_active_timeout_backend_active",
+			code:              mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0,
+			recommendedAction: "retry",
+			wantStatus:        "blocked",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := domainWorkStatusResultForActionableRunTestV0(
+				t,
+				tc.code,
+				tc.recommendedAction,
+				"evidence-ref-domain-status-"+tc.name,
+			)
+
+			if len(result.Items) != 1 ||
+				result.Items[0].Status != tc.wantStatus ||
+				result.Items[0].RecommendedAction != tc.recommendedAction ||
+				!result.Items[0].NeedsAction {
+				t.Fatalf("result=%+v", result)
+			}
+		})
+	}
+}
+
 func domainWorkStatusResultForActionableRunTestV0(
 	t *testing.T,
 	code string,

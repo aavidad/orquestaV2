@@ -524,7 +524,15 @@ func mcpDomainWorkStatusNormalizeStatusV0(status string, action string) string {
 	switch value {
 	case mcpAutoprogrammingHealthQueuedV0, "ready", "queued_not_dispatched", "waiting_outbox":
 		return "queued"
-	case mcpAutoprogrammingHealthRunningLiveV0, mcpAutoprogrammingHealthRunningWithoutRecentStatsV0, "running", "in_progress", "working":
+	case mcpAutoprogrammingHealthRunningLiveV0,
+		mcpAutoprogrammingHealthRunningWithoutRecentStatsV0,
+		mcpAutoprogrammingActionActiveTimeoutCheckpointRecentV0,
+		mcpAutoprogrammingActionActiveNoCheckpointYetV0,
+		mcpAutoprogrammingActionCheckpointOnlyConsumptionWarningV0,
+		mcpAutoprogrammingActionNoCheckpointConsumptionWarningV0,
+		"running",
+		"in_progress",
+		"working":
 		return "running"
 	case mcpAutoprogrammingHealthRunningStaleV0, mcpAutoprogrammingHealthRunningStaleNoProcessV0, "stale", "stale_running":
 		return "stale"
@@ -542,6 +550,9 @@ func mcpDomainWorkStatusNormalizeStatusV0(status string, action string) string {
 		mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0,
 		mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMissingV0,
 		mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0,
+		mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0,
+		mcpAutoprogrammingActionNoCheckpointHighConsumptionV0,
+		mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0,
 		"needs_action",
 		"queue_needs_action",
 		"observer_required",
