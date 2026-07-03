@@ -279,6 +279,9 @@ func waitServerShutdownReadyV0(
 				return nil
 			}
 			last = serverShutdownClientResultFromStatusV0(status)
+			if !shutdownClientResultCanWaitV0(last) {
+				return shutdownClientNotReadyErrorV0(last)
+			}
 		}
 		if !time.Now().Before(deadline) {
 			return shutdownClientNotReadyErrorV0(last)

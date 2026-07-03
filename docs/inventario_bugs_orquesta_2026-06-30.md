@@ -1032,6 +1032,13 @@ de backend, para no limpiar un backend que aun podria pertenecer a trabajo vivo
 no terminal. Evidencia:
 `TestRequestServerShutdownV0NoReintentaBackendStillRunningConRunsPendientes`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 27: si el cliente entro en
+ventana de espera por un `backend_still_running` inicialmente recuperable, pero
+el `/status` posterior revela runs pendientes o cualquier estado ya no
+esperable, corta inmediatamente con `shutdown_not_ready` en vez de dormir hasta
+timeout. Evidencia:
+`TestRequestServerShutdownV0CortaEsperaSiStatusBackendTieneRunsPendientes`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

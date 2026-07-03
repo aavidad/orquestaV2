@@ -467,6 +467,71 @@ func TestRequestServerShutdownV0NoReintentaBackendStillRunningConRunsPendientes(
 	}
 }
 
+func TestRequestServerShutdownV0CortaEsperaSiStatusBackendTieneRunsPendientes(t *testing.T) {
+	shutdownCalls := 0
+	statusCalls := 0
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v0/server/shutdown":
+			shutdownCalls++
+			_ = json.NewEncoder(w).Encode(serverShutdownClientResultV0{
+				Estado:          "ok",
+				Status:          "backend_still_running",
+				ShutdownReady:   false,
+				RunsRequested:   0,
+				RunsStopped:     0,
+				ActiveWorkCount: 1,
+				ActiveWorkRefs:  []string{"shutdown-active-work-goal-backend-goal-ref-status-pending"},
+			})
+		case orquestaserver.ServerStatusEndpointV0:
+			statusCalls++
+			_ = json.NewEncoder(w).Encode(orquestaserver.ServerPublicStatusV0{
+				Status:                  "running",
+				ShutdownInProgress:      true,
+				ShutdownStatus:          "backend_still_running",
+				ShutdownRunsRequested:   1,
+				ShutdownRunsStopped:     0,
+				ShutdownActiveWorkCount: 1,
+				ShutdownActiveWorkRefs:  []string{"shutdown-active-work-goal-backend-goal-ref-status-pending"},
+			})
+		default:
+			t.Fatalf("path inesperado: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	err := waitServerShutdownReadyV0(
+		strings.TrimPrefix(server.URL, "http://"),
+		serverShutdownClientOptionsV0{},
+		serverShutdownClientResultV0{
+			Estado:          "ok",
+			Status:          "backend_still_running",
+			ShutdownReady:   false,
+			ActiveWorkCount: 1,
+			ActiveWorkRefs:  []string{"shutdown-active-work-goal-backend-goal-ref-status-pending"},
+		},
+		serverShutdownClientRequestIdentityV0{
+			requestID:      "request-test-status-pending",
+			correlationID:  "corr-test-status-pending",
+			idempotencyKey: "idem-test-status-pending",
+			reason:         "test status pending",
+		},
+		time.Minute,
+		time.Millisecond,
+	)
+
+	if err == nil || !strings.Contains(err.Error(), "shutdown_not_ready status=backend_still_running") {
+		t.Fatalf("error status backend_still_running con runs pendientes esperado: %v", err)
+	}
+	if shutdownCalls != 1 {
+		t.Fatalf("shutdownCalls=%d, no debe reintentar tras status no recuperable", shutdownCalls)
+	}
+	if statusCalls != 1 {
+		t.Fatalf("statusCalls=%d, debe cortar tras primer status no recuperable", statusCalls)
+	}
+}
+
 func TestWaitServerShutdownReadyV0NoEsperaEstadosNoRecuperables(t *testing.T) {
 	started := time.Now()
 	err := waitServerShutdownReadyV0(
