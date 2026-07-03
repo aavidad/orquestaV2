@@ -1152,6 +1152,14 @@ del request. Evidencia:
 `TestMCPServerShutdownHTTPHandlerV0NoPropagaErrorNoCatalogado` y
 `TestMCPTransportV0ServerShutdownDevuelvePayloadPublicoSiExecutorFalla`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 34: el transporte MCP de
+`orquesta.runs.supervisor.v0` tambien conserva `operation_ref`,
+`evidence_refs` estables y diagnostico `run_supervisor_execute_error` cuando el
+executor falla sin devolver resultado publico propio. Esto evita perder la
+causa compacta durante supervisiones/reconciliaciones de lifecycle. Evidencia:
+`TestMCPRunSupervisorTransportHandlerV0DevuelvePayloadPublicoSiExecutorNoDaResultado`
+y `TestMCPRunSupervisorDescriptorV0DeclaraEvidenciaEnErrores`.
+
 Avance BUG-ORQ-20260701-066/075 2026-07-03 tarde 34: la fachada
 `/api/v0/domain-work/status` publica diagnostico compacto
 `domain_work_status_http_error` con evidencia estable cuando falla el executor,

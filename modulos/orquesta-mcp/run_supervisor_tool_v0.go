@@ -81,7 +81,7 @@ func MCPRunSupervisorDescriptorV0() MCPRunSupervisorToolDescriptorV0 {
 		Name:        MCPRunSupervisorToolNameV0,
 		Version:     MCPRunSupervisorToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,director_execution_mode?:goal_first|legacy_director_loop,run_ref?,operational_director_plan_ref?,queue_ref?,continue_message?,occurred_at?,idempotency_key?,max_ticks?,max_runs_per_tick?,max_executions?,allow_repeated_runs?,max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_decision_cycles?,max_external_waits?,resident_mode?}",
-		Output:      "ok:{run_ref,stop_reason,ticks,last,history?,evidence_refs?,idempotency_key?,diagnostics?,next_actions?}|error:{errores_publicos,idempotency_key?,diagnostics?,next_actions?}",
+		Output:      "ok:{run_ref,stop_reason,ticks,last,history?,evidence_refs?,idempotency_key?,diagnostics?,next_actions?}|error:{errores_publicos,evidence_refs?,idempotency_key?,diagnostics?,next_actions?}",
 		ResourceURI: MCPRunSupervisorResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -142,6 +142,31 @@ func NewMCPRunSupervisorErrorResultV0(
 			Message: strings.TrimSpace(firstNonEmptyMCPV0(message, code)),
 		}},
 	}
+}
+
+func NewMCPRunSupervisorExecutorErrorResultV0(
+	input MCPRunSupervisorToolInputV0,
+	field string,
+	message string,
+) MCPRunSupervisorToolResultV0 {
+	result := NewMCPRunSupervisorErrorResultV0(
+		input,
+		"run_supervisor_execute_error",
+		field,
+		message,
+	)
+	result.OperationRef = mcpRunSupervisorOperationRefV0(input)
+	result.EvidenceRefs = compactStringsMCPV0([]string{
+		"evidence-ref-run-supervisor-execute-error",
+		result.OperationRef,
+	})
+	result.Diagnostics = []MCPAutoprogrammingDiagnosticV0{{
+		Code:         "run_supervisor_execute_error",
+		Scope:        mcpRunSupervisorOperationScopeV0(input),
+		Message:      "fallo publico al supervisar run",
+		EvidenceRefs: result.EvidenceRefs,
+	}}
+	return result
 }
 
 func mcpRunSupervisorClassifiedOKResultDespiteExecutorErrorV0(
