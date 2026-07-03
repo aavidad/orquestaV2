@@ -1582,6 +1582,16 @@ un operador reutilice el verde antiguo para reabrir rutas manuales de servidor
 o saltarse la guarda de shutdown gestionado. Evidencia:
 `TestHandoffCierreSesionNoReabreBUG077V0`.
 
+Avance BUG-ORQ-20260701-066/075/088 2026-07-03 tarde 57:
+`orquesta.apps.observe_director_goal.v0` y
+`orquesta.autoprogramming.observe_goal.v0` ya devolvian
+`recommended_action` para esperar, reparar receipt, rework de QA/write-set,
+continuar fase 0, replanificar o reintentar tras timeout, pero el descriptor
+compacto no lo publicaba. Los descriptores y docs de contrato declaran ahora
+`recommended_action?` en `ok` y `error`, evitando que clientes MCP compactos
+traten un goal accionable como simple observacion pasiva. Evidencia:
+`TestObserveGoalDescriptorsDeclaranEvidenciaYAccionRecomendadaV0`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

@@ -1664,12 +1664,14 @@ Campos:
     estado: ok
     run_ref, run_status?, director_execution_mode?
     goal_ref, external_goal_ref?, goal_status?
+    recommended_action?
     closure_status?, closure_accepted?, closure_needs_rework?
     summary?, artifact_refs?, domain_receipt_refs?, evidence_refs?,
     closure_issues?
   output_error:
     estado: error
     errores_publicos
+    recommended_action?, evidence_refs?
 Invariantes:
   - Adaptador inbound fino.
   - Observa un `GoalWorkStateV0` ya persistido por `run_ref`.
@@ -1974,12 +1976,13 @@ Campos:
   output_ok:
     estado: ok
     run_ref, run_status?, director_execution_mode?, goal_ref,
-    external_goal_ref?, goal_status, closure_status?, closure_accepted?,
+    external_goal_ref?, goal_status, recommended_action?, closure_status?, closure_accepted?,
     closure_needs_rework?, artifact_refs?, domain_receipt_refs?,
     evidence_refs?
   output_error:
     estado: error
     errores_publicos
+    recommended_action?, evidence_refs?
 Invariantes:
   - Adaptador inbound fino para observar un goal ya lanzado.
   - No ejecuta loop legacy, no arranca proveedor y no decide cierre.

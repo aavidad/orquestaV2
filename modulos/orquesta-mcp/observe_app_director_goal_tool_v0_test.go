@@ -9,7 +9,7 @@ import (
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
-func TestObserveGoalDescriptorsDeclaranEvidenciaEnErroresV0(t *testing.T) {
+func TestObserveGoalDescriptorsDeclaranEvidenciaYAccionRecomendadaV0(t *testing.T) {
 	observe := MCPObserveAppDirectorGoalDescriptorV0()
 	autoprogramming := MCPAutoprogrammingObserveGoalDescriptorV0()
 	for _, descriptor := range []struct {
@@ -20,8 +20,9 @@ func TestObserveGoalDescriptorsDeclaranEvidenciaEnErroresV0(t *testing.T) {
 		{name: autoprogramming.Name, output: autoprogramming.Output},
 	} {
 		if !strings.Contains(descriptor.output, "evidence_refs?") ||
-			!strings.Contains(descriptor.output, "error:{errores_publicos,evidence_refs?}") {
-			t.Fatalf("%s debe declarar evidencia en errores observe_goal: %s", descriptor.name, descriptor.output)
+			!strings.Contains(descriptor.output, "recommended_action?") ||
+			!strings.Contains(descriptor.output, "error:{errores_publicos,recommended_action?,evidence_refs?}") {
+			t.Fatalf("%s debe declarar evidencia y accion en observe_goal: %s", descriptor.name, descriptor.output)
 		}
 	}
 }
