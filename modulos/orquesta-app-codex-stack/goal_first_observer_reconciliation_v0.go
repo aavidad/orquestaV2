@@ -117,12 +117,11 @@ func (observer goalFirstReconciledObserverV0) backendGoneWithoutResultV0(
 	if err != nil {
 		return false
 	}
-	for _, work := range active.ActiveWorks {
-		if goalFirstActiveWorkMatchesStateV0(work, state) {
-			return false
-		}
-	}
-	return true
+	// Un ActiveWork de backend describe la sesion del app-server (work_ref =
+	// sesion tmux), no refs por goal: la correspondencia por goal_ref nunca
+	// casa y decaia goals con backend vivo. La unica evidencia segura de
+	// backend caido es la ausencia total de trabajos activos.
+	return len(active.ActiveWorks) == 0
 }
 
 func goalFirstStateMatchesObservationV0(
@@ -133,18 +132,6 @@ func goalFirstStateMatchesObservationV0(
 	externalGoalRef := strings.TrimSpace(request.ExternalGoalRef)
 	return goalRef != "" && strings.TrimSpace(state.GoalRef) == goalRef ||
 		externalGoalRef != "" && strings.TrimSpace(state.ExternalGoalRef) == externalGoalRef
-}
-
-func goalFirstActiveWorkMatchesStateV0(
-	work orquestaservershutdown.ActiveShutdownWorkV0,
-	state orquestagoal.GoalWorkStateV0,
-) bool {
-	runRef := strings.TrimSpace(state.RunRef)
-	goalRef := strings.TrimSpace(state.GoalRef)
-	externalGoalRef := strings.TrimSpace(state.ExternalGoalRef)
-	return runRef != "" && strings.TrimSpace(work.RunRef) == runRef ||
-		goalRef != "" && strings.TrimSpace(work.WorkRef) == goalRef ||
-		externalGoalRef != "" && strings.TrimSpace(work.ExternalWorkRef) == externalGoalRef
 }
 
 func goalFirstBackendGoneWithoutResultV0(
