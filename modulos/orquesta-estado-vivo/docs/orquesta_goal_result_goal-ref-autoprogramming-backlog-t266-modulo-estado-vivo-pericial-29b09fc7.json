@@ -1,0 +1,162 @@
+{
+  "goal_ref": "goal-ref-autoprogramming-backlog-t266-modulo-estado-vivo-pericial-29b09fc7",
+  "schema_version": "orquesta_goal_result.v0",
+  "status": "complete",
+  "summary": "Modulo neutral orquesta-estado-vivo implementado segun T-PER-101, cubierto por tests focales y frontera neutral; backlog T266 unico en linea 19 con rebase pendiente informativo por divergencia de hash de la foto del scanner.",
+  "artifact_refs": [
+    "artifact-ref-orquesta-estado-vivo-module",
+    "artifact-ref-orquesta-estado-vivo-contracts",
+    "artifact-ref-architecture-boundary-estado-vivo",
+    "artifact-ref-goal-result-durable-t266"
+  ],
+  "artifact_paths": [
+    "architecture_boundaries_test.go",
+    "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+    "docs/estado_actual_2026-05-17.md",
+    "docs/guia_nucleo_orquestacion_2026-05-17.md",
+    "docs/manual_correccion_pericial_orquesta_2026-07-03.md",
+    "docs/principio_orquesta_piensa_director.md",
+    "modulos/orquesta-estado-vivo/AGENTS.md",
+    "modulos/orquesta-estado-vivo/docs/contratos.md",
+    "modulos/orquesta-estado-vivo/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t266-modulo-estado-vivo-pericial-29b09fc7.json",
+    "modulos/orquesta-estado-vivo/proyeccion_v0.go",
+    "modulos/orquesta-estado-vivo/proyeccion_v0_test.go",
+    "modulos/orquesta-estado-vivo/puertos_v0.go",
+    "modulos/orquesta-estado-vivo/reglas_precedencia_v0.go",
+    "modulos/orquesta-estado-vivo/tipos_v0.go"
+  ],
+  "materialized_artifacts": [
+    {
+      "artifact_ref": "artifact-ref-orquesta-estado-vivo-module",
+      "path": "modulos/orquesta-estado-vivo",
+      "artifact_type": "go_neutral_module",
+      "status": "valid",
+      "evidence_refs": [
+        "test:go-test-orquesta-estado-vivo:passed",
+        "audit:imports-orquesta-estado-vivo-stdlib-only"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-orquesta-estado-vivo-contracts",
+      "path": "modulos/orquesta-estado-vivo/docs/contratos.md",
+      "artifact_type": "module_contract_doc",
+      "status": "valid",
+      "evidence_refs": [
+        "manual:tper101-lines-108-222",
+        "audit:agents-phrase-present"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-architecture-boundary-estado-vivo",
+      "path": "architecture_boundaries_test.go",
+      "artifact_type": "architecture_boundary_update",
+      "status": "valid",
+      "evidence_refs": [
+        "test:go-test-root:passed",
+        "test:boundary-neutral-imports-selected:passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-goal-result-durable-t266",
+      "path": "modulos/orquesta-estado-vivo/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t266-modulo-estado-vivo-pericial-29b09fc7.json",
+      "artifact_type": "goal_result_receipt",
+      "status": "valid",
+      "evidence_refs": [
+        "goal-result:durable-json-written"
+      ],
+      "issues": []
+    }
+  ],
+  "checklist": {
+    "expected_refs": [
+      "requirement:tper101-types-and-constants",
+      "requirement:schema-version-orquesta-proyeccion-ciclo-vida-v0",
+      "requirement:pure-deterministic-function-no-io-no-clock",
+      "requirement:group-by-runref-or-goalref",
+      "requirement:precedence-process-live-dominates-nonterminal",
+      "requirement:terminal-accepted-vs-rework",
+      "requirement:process-live-plus-terminal-conflict",
+      "requirement:old-marker-orphan",
+      "requirement:no-evidence-unknown",
+      "requirement:partial-receipt-outbox-wait-process-public-distinction",
+      "requirement:module-agents-and-contracts-docs",
+      "requirement:architecture-boundary-neutral-package",
+      "required-test-ref-5cf5a08737cd",
+      "required-test-ref-c908af756958",
+      "manual-verification:go-build-all",
+      "backlog_scan_ref:scan-ref-backlog-9fb12cbe3549",
+      "backlog_task_instance_ref:task-instance-ref-backlog-772d64f6"
+    ],
+    "completed_refs": [
+      "requirement:tper101-types-and-constants",
+      "requirement:schema-version-orquesta-proyeccion-ciclo-vida-v0",
+      "requirement:pure-deterministic-function-no-io-no-clock",
+      "requirement:group-by-runref-or-goalref",
+      "requirement:precedence-process-live-dominates-nonterminal",
+      "requirement:terminal-accepted-vs-rework",
+      "requirement:process-live-plus-terminal-conflict",
+      "requirement:old-marker-orphan",
+      "requirement:no-evidence-unknown",
+      "requirement:partial-receipt-outbox-wait-process-public-distinction",
+      "requirement:module-agents-and-contracts-docs",
+      "requirement:architecture-boundary-neutral-package",
+      "required-test-ref-5cf5a08737cd",
+      "required-test-ref-c908af756958",
+      "manual-verification:go-build-all",
+      "backlog_scan_ref:scan-ref-backlog-9fb12cbe3549",
+      "backlog_task_instance_ref:task-instance-ref-backlog-772d64f6"
+    ],
+    "missing_refs": [],
+    "evidence_refs": [
+      "test:go-test-orquesta-estado-vivo:passed",
+      "test:go-test-root:passed",
+      "test:go-build-all:passed",
+      "test:git-diff-check:passed",
+      "test:go-test-autoprogramming-existing-idle-criteria:passed",
+      "test:go-test-orquesta-server-selected-idle-backlog-criteria:passed",
+      "backlog:T266-unique-line-19"
+    ]
+  },
+  "required_test_results": [
+    {
+      "test_ref": "required-test-ref-5cf5a08737cd",
+      "status": "passed",
+      "evidence_refs": [
+        "test:go-test-orquesta-estado-vivo:passed"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-c908af756958",
+      "status": "passed",
+      "evidence_refs": [
+        "test:go-test-root:passed"
+      ]
+    }
+  ],
+  "domain_receipt_refs": [],
+  "rework_plan_refs": [],
+  "evidence_refs": [
+    "backlog_scan_epoch:backlog-scan-epoch-76cbf8be6fbb",
+    "backlog_scan_ref:scan-ref-backlog-9fb12cbe3549",
+    "backlog_scan_reservation_ref:reservation-ref-backlog-scan-doc-merge-db781cf08b86",
+    "backlog_scan_reservation_ref:reservation-ref-backlog-task-id-051caee45c75",
+    "backlog_scan_doc_declared:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:19:sha256:72b20d48ed84c1ae8383f13e456dd9e2e4fcec4c947b4f05e67c1ca9f77db8ff",
+    "backlog_scan_doc_current:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:19:sha256:d4e8624d103bf031716aa970ed913ff2701b011965d0d676c1fb49c59fb85ed3",
+    "backlog_scan_doc_current_file_sha256:67f48e988c7dfb9dab43643ca03ccf37e0c6d6ab4e1dacd49205a8de6bf99a96",
+    "backlog_scan_rebase_pending:line_hash_mismatch_current_vs_declared",
+    "backlog_task_instance_ref:task-instance-ref-backlog-772d64f6",
+    "backlog_task_id_unique:T266:line:19",
+    "manual:tper101-lines-108-222:sha256:5a63c8846d0fa9b6d552024b40c1d30e2f5c7d417dac91592e6586bb597a3a48",
+    "test:go-test-orquesta-estado-vivo:passed",
+    "test:go-test-root:passed",
+    "test:go-build-all:passed",
+    "test:git-diff-check:passed",
+    "test:go-test-autoprogramming-existing-idle-criteria:passed",
+    "test:go-test-orquesta-server-selected-idle-backlog-criteria:passed",
+    "audit:imports-orquesta-estado-vivo-stdlib-only",
+    "audit:agents-phrase-present"
+  ]
+}
