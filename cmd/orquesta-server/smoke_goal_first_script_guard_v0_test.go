@@ -489,12 +489,20 @@ func TestUsoActualAppOrquestaRecomiendaServidorGestionadoV0(t *testing.T) {
 	if strings.Contains(current, "```bash\ngo run ./cmd/orquesta-server run\n```") {
 		t.Fatalf("uso actual no debe recomendar runtime manual no gobernado en seccion vigente")
 	}
+	if strings.Contains(current, "go run ./cmd/orquesta-server run") {
+		t.Fatalf("uso actual no debe enseñar el comando runtime manual exacto en seccion vigente")
+	}
+	if strings.Contains(current, "127.0.0.1:8787") {
+		t.Fatalf("uso actual no debe asumir puerto historico en seccion vigente")
+	}
 	for _, want := range []string{
 		"orquesta-server start",
 		"orquesta-server stop",
-		"queda solo para harnesses aislados",
+		"queda solo para harnesses",
 		"smoke_shutdown_orquesta_server",
 		"runtime_dir",
+		"orquesta-server status --json",
+		"ORQUESTA_RUNTIME_DIR/base_url.txt",
 	} {
 		if !strings.Contains(current, want) {
 			t.Fatalf("uso actual debe documentar arranque/parada gestionados: falta %q", want)

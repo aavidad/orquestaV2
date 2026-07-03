@@ -753,6 +753,12 @@ Avance BUG-ORQ-20260701-077 2026-07-03 tarde 7: el runbook
 `ORQUESTA_RUNTIME_DIR/base_url.txt` y usa `--server-url "$ORQUESTA_SERVER_URL"`.
 Evidencia: `TestRunbookAutoprogramacionCLIUsaEndpointGestionadoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 8: el manual vigente
+`docs/uso_actual_app_orquesta.md` deja de enseñar el comando literal de runtime
+manual y de asumir `127.0.0.1:8787`; la seccion actual apunta a
+`orquesta-server start/stop/status` y a `ORQUESTA_RUNTIME_DIR/base_url.txt`.
+Evidencia: `TestUsoActualAppOrquestaRecomiendaServidorGestionadoV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado

@@ -41,13 +41,16 @@ orquesta-server stop
 
 `start`/`stop` son el camino gestionado para operadores: publican estado durable
 del daemon, usan el shutdown gobernado y conservan la limpieza de backends Goal
-propios. `go run ./cmd/orquesta-server run` queda solo para harnesses aislados
-que declaren `ORQUESTA_SERVER_STATE_DIR`, `ORQUESTA_CODEX_RUNTIME_WORKDIR`,
-`ORQUESTA_SERVER_ADDR` loopback y cleanup explicito por
-`/api/v0/server/shutdown` o `smoke_shutdown_orquesta_server` con `runtime_dir`.
+propios. El subcomando directo `run` del binario queda solo para harnesses
+aislados que declaren `ORQUESTA_SERVER_STATE_DIR`,
+`ORQUESTA_CODEX_RUNTIME_WORKDIR`, `ORQUESTA_SERVER_ADDR` loopback y cleanup
+explicito por `/api/v0/server/shutdown` o `smoke_shutdown_orquesta_server` con
+`runtime_dir`.
 
-El puerto por defecto lo fija la composicion `orquesta-server`; en esta rama se
-usa `127.0.0.1:8787` salvo configuracion explicita.
+El endpoint efectivo lo publica la composicion gestionada: usa
+`orquesta-server status --json`, `ORQUESTA_SERVER_URL` o
+`ORQUESTA_RUNTIME_DIR/base_url.txt`; no asumas un puerto historico salvo en
+fixtures o tests que lo declaren explicitamente.
 
 Salud y readiness:
 
