@@ -175,6 +175,14 @@ func NewMCPObserveAppDirectorGoalPartialResultFromStateV0(
 	toolResult = mcpObserveAppDirectorGoalSuppressStaleClosureForRunningGoalV0(toolResult)
 	toolResult = applyMCPObserveAppDirectorGoalDomainMetadataV0(toolResult, normalized)
 	toolResult.RecommendedAction = mcpObserveAppDirectorGoalRecommendedActionV0(toolResult)
+	if _, issueReason, issueRecommendedAction, ok := mcpAutoprogrammingLaunchReceiptInvalidIssueV0(normalized); ok {
+		toolResult.Summary = firstNonEmptyMCPV0(toolResult.Summary, issueReason)
+		toolResult.RecommendedAction = issueRecommendedAction
+		toolResult.EvidenceRefs = compactStringsMCPV0(append(
+			toolResult.EvidenceRefs,
+			mcpAutoprogrammingEvidenceLaunchReceiptInvalidV0,
+		))
+	}
 	return toolResult, nil
 }
 
@@ -497,6 +505,7 @@ func mcpObserveAppDirectorGoalPublicIssueFromGoalIssuesV0(
 	issues []orquestagoal.GoalWorkIssueV0,
 ) (mcpObserveAppDirectorGoalPublicIssueV0, bool) {
 	for _, issue := range issues {
+		issue = orquestagoal.NormalizeGoalWorkIssueV0(issue)
 		code := strings.TrimSpace(issue.Code)
 		if code == "" {
 			continue
@@ -504,7 +513,7 @@ func mcpObserveAppDirectorGoalPublicIssueFromGoalIssuesV0(
 		return mcpObserveAppDirectorGoalPublicIssueV0{
 			Code:    code,
 			Field:   strings.TrimSpace(issue.Field),
-			Message: code,
+			Message: firstNonEmptyMCPV0(orquestagoal.NormalizeGoalWorkIssueDetailV0(issue.Detail), code),
 		}, true
 	}
 	return mcpObserveAppDirectorGoalPublicIssueV0{}, false
@@ -598,14 +607,15 @@ func mcpObserveAppDirectorGoalLooksLikeMissingStateV0(value string) bool {
 func goalWorkIssuesMCPV0(values []orquestagoal.GoalWorkIssueV0) []MCPValidationIssueV0 {
 	out := make([]MCPValidationIssueV0, 0, len(values))
 	for _, value := range values {
-		code := strings.TrimSpace(value.Code)
+		issue := orquestagoal.NormalizeGoalWorkIssueV0(value)
+		code := strings.TrimSpace(issue.Code)
 		if code == "" {
 			code = "goal_issue"
 		}
 		out = append(out, MCPValidationIssueV0{
 			Code:    code,
-			Field:   strings.TrimSpace(value.Field),
-			Message: code,
+			Field:   strings.TrimSpace(issue.Field),
+			Message: firstNonEmptyMCPV0(orquestagoal.NormalizeGoalWorkIssueDetailV0(issue.Detail), code),
 		})
 	}
 	if out == nil {

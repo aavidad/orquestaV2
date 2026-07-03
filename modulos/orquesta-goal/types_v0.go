@@ -51,6 +51,7 @@ const (
 const (
 	GoalWorkSpecMaxStringBytesV0        = 32 * 1024
 	GoalWorkSpecMaxCommandBytesV0       = 16 * 1024
+	GoalWorkIssueDetailMaxBytesV0       = 4 * 1024
 	GoalWorkSpecMaxListItemsV0          = 512
 	GoalWorkSpecMaxProjectedJSONBytesV0 = 256 * 1024
 )
@@ -138,8 +139,9 @@ type GoalReworkPolicyV0 struct {
 }
 
 type GoalWorkIssueV0 struct {
-	Code  string `json:"code"`
-	Field string `json:"field,omitempty"`
+	Code   string `json:"code"`
+	Field  string `json:"field,omitempty"`
+	Detail string `json:"detail,omitempty"`
 }
 
 type GoalLaunchReceiptV0 struct {

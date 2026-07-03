@@ -23,6 +23,8 @@ const (
 	mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0           = "codex_app_server_write_set_requires_workspace_write"
 	mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMissingV0      = "codex_app_server_write_set_guard_allowed_write_set_missing"
 	mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0     = "codex_app_server_write_set_guard_allowed_write_set_mismatch"
+	mcpAutoprogrammingActionLaunchReceiptInvalidV0                     = "launch_receipt_invalid"
+	mcpAutoprogrammingActionRetryLaunchAfterFixV0                      = "retry_launch_after_fix"
 	mcpAutoprogrammingActionGoalBackendMissingAfterExternalCleanupV0   = "goal_backend_missing_after_external_cleanup"
 	mcpAutoprogrammingActionStaleRunningReconciledV0                   = "stale_running_reconciled"
 	mcpAutoprogrammingActionProviderUsageLimitRetryV0                  = "provider_usage_limit_retry_after"
@@ -65,6 +67,7 @@ const (
 	mcpAutoprogrammingEvidenceWriteSetRequiresWorkspaceWriteV0         = "evidence-ref-autoprogramming-status-write-set-requires-workspace-write"
 	mcpAutoprogrammingEvidenceWriteSetGuardAllowedWriteSetMissingV0    = "evidence-ref-autoprogramming-status-write-set-guard-allowed-write-set-missing"
 	mcpAutoprogrammingEvidenceWriteSetGuardAllowedWriteSetMismatchV0   = "evidence-ref-autoprogramming-status-write-set-guard-allowed-write-set-mismatch"
+	mcpAutoprogrammingEvidenceLaunchReceiptInvalidV0                   = "evidence-ref-autoprogramming-status-launch-receipt-invalid"
 	mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0 = "evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup"
 	mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensDefaultV0     = int64(100000)
 	mcpAutoprogrammingCheckpointOnlyMaxWaitSecondsDefaultV0            = int64(15 * 60)
@@ -161,6 +164,33 @@ func mcpAutoprogrammingWriteSetGuardContractIssueV0(
 		}
 	}
 	return "", ""
+}
+
+func mcpAutoprogrammingLaunchReceiptInvalidIssueV0(
+	state orquestagoal.GoalWorkStateV0,
+) (string, string, string, bool) {
+	receipt := orquestagoal.NormalizeGoalLaunchReceiptV0(state.LaunchReceipt)
+	if strings.TrimSpace(receipt.Status) != orquestagoal.GoalStatusInvalidV0 || len(receipt.Issues) == 0 {
+		return "", "", "", false
+	}
+	for _, rawIssue := range receipt.Issues {
+		issue := orquestagoal.NormalizeGoalWorkIssueV0(rawIssue)
+		code := strings.TrimSpace(issue.Code)
+		detail := orquestagoal.NormalizeGoalWorkIssueDetailV0(issue.Detail)
+		if code == "" || detail == "" {
+			continue
+		}
+		return code, detail, mcpAutoprogrammingLaunchReceiptRecommendedActionV0(code, detail), true
+	}
+	return "", "", "", false
+}
+
+func mcpAutoprogrammingLaunchReceiptRecommendedActionV0(code string, detail string) string {
+	joined := strings.ToLower(strings.TrimSpace(code + " " + detail))
+	if strings.Contains(joined, "write_set_prepare_failed") {
+		return mcpAutoprogrammingActionRetryLaunchAfterFixV0
+	}
+	return mcpQueueGlobalStatusActionReviewReplanGoalFirstV0
 }
 
 func mcpAutoprogrammingQAFailedPublicTextActionsV0(
@@ -540,7 +570,18 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 		if metadata.CloseSupersededByLocalEvidence {
 			recommendedAction = "close_superseded_by_local_evidence"
 		}
+		actionCode := mcpAutoprogrammingActionGoalFirstBlockedV0
+		var launchReceiptEvidence []string
 		reason := "goal_backend_state_unreconciled: local goal-first state blocked or invalid without reconciled backend snapshot"
+		if issueCode, issueReason, issueRecommendedAction, ok := mcpAutoprogrammingLaunchReceiptInvalidIssueV0(state); ok {
+			actionCode = firstNonEmptyMCPV0(issueCode, mcpAutoprogrammingActionLaunchReceiptInvalidV0)
+			reason = issueReason
+			recommendedAction = issueRecommendedAction
+			launchReceiptEvidence = compactStringsMCPV0(append(
+				[]string{mcpAutoprogrammingEvidenceLaunchReceiptInvalidV0},
+				state.LaunchReceipt.EvidenceRefs...,
+			))
+		}
 		if state.LastClosure != nil && state.LastClosure.Accepted {
 			reason = "goal_terminal_result_requires_state_reconcile"
 			recommendedAction = "reconcile_goal_terminal"
@@ -565,7 +606,7 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 			recommendedAction = "observe_goal_backend_wait_for_checkpoint"
 		}
 		action := MCPAutoprogrammingActionableRunV0{
-			Code:              mcpAutoprogrammingActionGoalFirstBlockedV0,
+			Code:              actionCode,
 			Severity:          "blocked",
 			RunRef:            strings.TrimSpace(state.RunRef),
 			Status:            strings.TrimSpace(state.Status),
@@ -578,7 +619,7 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 			CurrentPhase:      metadata.CurrentPhase,
 			DomainCounters:    metadata.DomainCounters,
 			EvidenceRefs: compactStringsMCPV0(append(
-				[]string{mcpAutoprogrammingEvidenceGoalFirstBlockedV0},
+				append([]string{mcpAutoprogrammingEvidenceGoalFirstBlockedV0}, launchReceiptEvidence...),
 				state.EvidenceRefs...,
 			)),
 		}

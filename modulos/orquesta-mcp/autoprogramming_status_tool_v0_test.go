@@ -788,6 +788,60 @@ func TestMCPAutoprogrammingStatusExecutorV0WriteSetGuardContractPideRepairPacket
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0LaunchReceiptInvalidPublicaDetailSaneadoV0(t *testing.T) {
+	runRef := "run-ref-autop-status-launch-detail-001"
+	goalRef := "goal-ref-autop-status-launch-detail-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusInvalidV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Publicar causa concreta de launch invalid.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-goal"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef: goalRef,
+			Status:  orquestagoal.GoalStatusInvalidV0,
+			Issues: []orquestagoal.GoalWorkIssueV0{{
+				Code:   "codex_app_server_write_set_prepare_failed",
+				Detail: "write_set_prepare_failed: mkdir_existing_file modulos/orquesta-goal /home/alberto/project token=secret sk-testsecret999",
+			}},
+			EvidenceRefs: []string{"evidence-ref-codex-app-server-write-set-prepare-failed"},
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-launch-detail-status-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != "codex_app_server_write_set_prepare_failed" ||
+		action.RecommendedAction != mcpAutoprogrammingActionRetryLaunchAfterFixV0 ||
+		!strings.Contains(action.Reason, "write_set_prepare_failed") ||
+		!strings.Contains(action.Reason, "modulos/orquesta-goal") ||
+		strings.Contains(action.Reason, "goal_backend_state_unreconciled") ||
+		strings.Contains(action.Reason, "/home") ||
+		strings.Contains(action.Reason, "token=secret") ||
+		strings.Contains(action.Reason, "sk-testsecret999") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceLaunchReceiptInvalidV0) ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-codex-app-server-write-set-prepare-failed") {
+		t.Fatalf("action=%+v", action)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0GoalBloqueadoConBackendActivoPublicaSnapshotAccionable(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-backend-active-001"
 	goalRef := "goal-ref-autop-status-goal-backend-active-001"

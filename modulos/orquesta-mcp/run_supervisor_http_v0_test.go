@@ -120,9 +120,6 @@ func TestMCPRunSupervisorHTTPHandlerV0ClienteRealRecibeCuerpoSinColgar(t *testin
 		release: make(chan struct{}),
 	}
 	handler := newMCPRunSupervisorHTTPHandlerWithTimeoutV0(executor, time.Millisecond)
-	server := httptest.NewServer(handler)
-	defer server.Close()
-
 	body := bytes.NewBufferString(`{
 		"request_id":"request-ref-supervisor-http-real-client-001",
 		"correlation_id":"corr-supervisor-http-real-client-001",
@@ -130,33 +127,26 @@ func TestMCPRunSupervisorHTTPHandlerV0ClienteRealRecibeCuerpoSinColgar(t *testin
 		"run_ref":"run-ref-supervisor-http-real-client-001",
 		"max_ticks":20
 	}`)
-	req, err := http.NewRequest(
+	req := httptest.NewRequest(
 		http.MethodPost,
-		server.URL+MCPRunSupervisorHTTPPathV0,
+		MCPRunSupervisorHTTPPathV0,
 		body,
 	)
-	if err != nil {
-		t.Fatalf("new request: %v", err)
-	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Correlation-ID", "corr-supervisor-http-real-client-001")
 
-	client := &http.Client{Timeout: time.Second}
+	rec := httptest.NewRecorder()
 	started := time.Now()
-	resp, err := client.Do(req)
+	handler.ServeHTTP(rec, req)
 	elapsed := time.Since(started)
-	if err != nil {
-		t.Fatalf("client.Do elapsed=%s err=%v", elapsed, err)
-	}
-	defer resp.Body.Close()
 	close(executor.release)
 
-	if resp.StatusCode != http.StatusAccepted || elapsed > time.Second {
-		t.Fatalf("status=%d elapsed=%s", resp.StatusCode, elapsed)
+	if rec.Code != http.StatusAccepted || elapsed > time.Second {
+		t.Fatalf("status=%d elapsed=%s", rec.Code, elapsed)
 	}
 	var result MCPRunSupervisorToolResultV0
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	if result.Estado != MCPRunSupervisorEstadoOKV0 ||

@@ -141,6 +141,38 @@ func TestStartGoalWorkV0PersisteEstadoParcialSiLauncherFallaConExternalRefV0(t *
 	}
 }
 
+func TestNormalizeGoalLaunchReceiptV0ConservaDetailSaneadoV0(t *testing.T) {
+	receipt := NormalizeGoalLaunchReceiptV0(GoalLaunchReceiptV0{
+		Status:  GoalStatusInvalidV0,
+		GoalRef: "goal-ref-launch-detail-001",
+		Issues: []GoalWorkIssueV0{{
+			Code: " codex_app_server_write_set_prepare_failed: write_set_prepare_failed: mkdir_existing_file modulos/orquesta-goal /home/alberto/project token=secret sk-testsecret999 ",
+		}, {
+			Code:   "codex_app_server_other_issue",
+			Detail: "",
+		}},
+	})
+
+	if len(receipt.Issues) != 2 {
+		t.Fatalf("issues=%+v", receipt.Issues)
+	}
+	first := receipt.Issues[0]
+	if first.Code != "codex_app_server_write_set_prepare_failed" ||
+		!strings.Contains(first.Detail, "write_set_prepare_failed") ||
+		!strings.Contains(first.Detail, "modulos/orquesta-goal") ||
+		strings.Contains(first.Detail, "/home") ||
+		strings.Contains(first.Detail, "token=secret") ||
+		strings.Contains(first.Detail, "sk-testsecret999") {
+		t.Fatalf("issue saneado=%+v", first)
+	}
+	if receipt.Issues[1].Detail != "" {
+		t.Fatalf("detail vacio debe seguir vacio: %+v", receipt.Issues[1])
+	}
+	if issues := ValidateGoalLaunchReceiptV0(receipt); len(issues) != 0 {
+		t.Fatalf("ValidateGoalLaunchReceiptV0 issues=%+v", issues)
+	}
+}
+
 func TestStartGoalWorkV0RechazaRunRefAusenteAntesDeLanzar(t *testing.T) {
 	launcher := &goalLifecycleLauncherForTestV0{
 		receipt: GoalLaunchReceiptV0{Status: GoalStatusRunningV0},

@@ -430,6 +430,50 @@ func TestNewMCPObserveAppDirectorGoalPartialResultFromStateV0ConservaLaunchIssue
 	}
 }
 
+func TestNewMCPObserveAppDirectorGoalPartialResultFromStateV0LaunchReceiptInvalidPublicaDetailV0(t *testing.T) {
+	result, err := NewMCPObserveAppDirectorGoalPartialResultFromStateV0(
+		MCPObserveAppDirectorGoalToolInputV0{RunRef: "run-ref-observe-launch-detail-001"},
+		orquestagoal.GoalWorkStateV0{
+			RunRef:  "run-ref-observe-launch-detail-001",
+			GoalRef: "goal-ref-observe-launch-detail-001",
+			Status:  orquestagoal.GoalStatusInvalidV0,
+			Spec: orquestagoal.GoalWorkSpecV0{
+				RunRef:       "run-ref-observe-launch-detail-001",
+				GoalRef:      "goal-ref-observe-launch-detail-001",
+				Objective:    "No perder Detail de launch invalid en observe.",
+				DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+				WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-goal"}},
+			},
+			LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+				GoalRef: "goal-ref-observe-launch-detail-001",
+				Status:  orquestagoal.GoalStatusInvalidV0,
+				Issues: []orquestagoal.GoalWorkIssueV0{{
+					Code:   "codex_app_server_write_set_prepare_failed",
+					Detail: "write_set_prepare_failed: mkdir_existing_file modulos/orquesta-goal /home/alberto/project token=secret sk-testsecret999",
+				}},
+				EvidenceRefs: []string{"evidence-ref-codex-app-server-write-set-prepare-failed"},
+			},
+			EvidenceRefs: []string{"evidence-ref-observe-launch-detail-state"},
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("partial: %v", err)
+	}
+	if result.RecommendedAction != mcpAutoprogrammingActionRetryLaunchAfterFixV0 ||
+		!strings.Contains(result.Summary, "write_set_prepare_failed") ||
+		!strings.Contains(result.Summary, "modulos/orquesta-goal") ||
+		strings.Contains(result.Summary, "/home") ||
+		strings.Contains(result.Summary, "token=secret") ||
+		strings.Contains(result.Summary, "sk-testsecret999") ||
+		len(result.ClosureIssues) != 1 ||
+		result.ClosureIssues[0].Code != "codex_app_server_write_set_prepare_failed" ||
+		!strings.Contains(result.ClosureIssues[0].Message, "write_set_prepare_failed") ||
+		!containsStringMCPV0(result.EvidenceRefs, mcpAutoprogrammingEvidenceLaunchReceiptInvalidV0) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestNewMCPObserveAppDirectorGoalResultV0OutputSaneadoPideContextoAcotado(t *testing.T) {
 	result := NewMCPObserveAppDirectorGoalResultV0(
 		MCPObserveAppDirectorGoalToolInputV0{RunRef: "run-ref-observe-thread-output-sanitized-001"},

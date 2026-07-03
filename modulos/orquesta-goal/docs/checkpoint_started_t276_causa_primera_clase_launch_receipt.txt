@@ -1,0 +1,4 @@
+objective: t276-causa-primera-clase-launch-receipt
+scope: modulos/orquesta-goal, modulos/orquesta-runtime-codex-appserver, modulos/orquesta-mcp
+next_artifact: durable goal result JSON and focused tests for launch receipt detail propagation
+evidence: checkpoint created before extended repository exploration

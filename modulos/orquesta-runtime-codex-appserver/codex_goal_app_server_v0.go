@@ -83,8 +83,9 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 		return codexAppServerStartReceiptV0(packet, "", code), errors.New(code)
 	}
 	if err := backend.prepareCodexGoalWriteSetV0(packet); err != nil {
-		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_write_set_prepare_failed")
-		return codexAppServerStartReceiptV0(packet, "", code), err
+		code := "codex_app_server_write_set_prepare_failed"
+		detail := backend.codexAppServerLaunchIssueDetailV0(code, err)
+		return codexAppServerStartReceiptV0(packet, "", codexAppServerIssueCodeWithDetailV0(code, detail)), err
 	}
 	thread, err := backend.Protocol.StartThreadV0(ctx, backend.threadStartParamsV0(packet))
 	if err != nil {
@@ -163,10 +164,31 @@ func (backend serverCodexAppServerGoalBackendV0) prepareCodexGoalWriteSetV0(
 			continue
 		}
 		if err := os.MkdirAll(target, 0o700); err != nil {
-			return fmt.Errorf("codex_app_server_write_set_prepare_failed: %w", err)
+			return codexAppServerWriteSetPrepareErrorV0{
+				Operation: "mkdir",
+				RelPath:   rel,
+				Err:       err,
+			}
 		}
 	}
 	return nil
+}
+
+type codexAppServerWriteSetPrepareErrorV0 struct {
+	Operation string
+	RelPath   string
+	Err       error
+}
+
+func (err codexAppServerWriteSetPrepareErrorV0) Error() string {
+	if err.Err == nil {
+		return "codex_app_server_write_set_prepare_failed"
+	}
+	return "codex_app_server_write_set_prepare_failed: " + err.Err.Error()
+}
+
+func (err codexAppServerWriteSetPrepareErrorV0) Unwrap() error {
+	return err.Err
 }
 
 func codexAppServerWriteSetDirectoryRelV0(path string) (string, bool) {
@@ -205,6 +227,68 @@ func codexAppServerPathInsideRootV0(root string, target string) bool {
 		return false
 	}
 	return rel == "." || (rel != "" && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
+func (backend serverCodexAppServerGoalBackendV0) codexAppServerLaunchIssueDetailV0(
+	code string,
+	err error,
+) string {
+	switch strings.TrimSpace(code) {
+	case "codex_app_server_write_set_prepare_failed":
+		return codexAppServerWriteSetPrepareIssueDetailV0(err)
+	default:
+		return ""
+	}
+}
+
+func codexAppServerWriteSetPrepareIssueDetailV0(err error) string {
+	var prepareErr codexAppServerWriteSetPrepareErrorV0
+	if errors.As(err, &prepareErr) {
+		operation := strings.TrimSpace(prepareErr.Operation)
+		if operation == "" {
+			operation = "prepare"
+		}
+		parts := []string{"write_set_prepare_failed:", operation + "_" + codexAppServerWriteSetPrepareCauseV0(prepareErr.Err)}
+		if rel := codexAppServerSafeRelativeIssuePathV0(prepareErr.RelPath); rel != "" {
+			parts = append(parts, rel)
+		}
+		return orquestagoal.NormalizeGoalWorkIssueDetailV0(strings.Join(parts, " "))
+	}
+	return orquestagoal.NormalizeGoalWorkIssueDetailV0("write_set_prepare_failed")
+}
+
+func codexAppServerWriteSetPrepareCauseV0(err error) string {
+	if err == nil {
+		return "failed"
+	}
+	message := strings.ToLower(strings.TrimSpace(err.Error()))
+	switch {
+	case errors.Is(err, os.ErrExist),
+		strings.Contains(message, "file exists"),
+		strings.Contains(message, "not a directory"):
+		return "existing_file"
+	case errors.Is(err, os.ErrPermission),
+		strings.Contains(message, "permission denied"),
+		strings.Contains(message, "operation not permitted"):
+		return "permission_denied"
+	case strings.Contains(message, "no space left on device"),
+		strings.Contains(message, "disk quota exceeded"):
+		return "storage_unavailable"
+	default:
+		return "failed"
+	}
+}
+
+func codexAppServerSafeRelativeIssuePathV0(path string) string {
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	if path == "" || strings.HasPrefix(path, "/") || filepath.IsAbs(path) || strings.Contains(path, `:\`) {
+		return ""
+	}
+	clean := filepath.ToSlash(filepath.Clean(strings.Trim(path, "/")))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+		return ""
+	}
+	return clean
 }
 
 func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
@@ -629,8 +713,17 @@ func codexAppServerStartReceiptV0(
 	}
 }
 
+func codexAppServerIssueCodeWithDetailV0(code string, detail string) string {
+	code = strings.TrimSpace(code)
+	detail = orquestagoal.NormalizeGoalWorkIssueDetailV0(detail)
+	if code == "" || detail == "" {
+		return code
+	}
+	return code + ": " + detail
+}
+
 func codexAppServerStartIssueEvidenceRefsV0(code string) []string {
-	switch strings.TrimSpace(code) {
+	switch strings.TrimSpace(codexAppServerIssueCodeBaseV0(code)) {
 	case "codex_app_server_write_set_requires_workspace_write":
 		return []string{"evidence-ref-codex-app-server-write-set-requires-workspace-write"}
 	case "codex_app_server_write_set_guard_allowed_write_set_missing":
@@ -640,6 +733,14 @@ func codexAppServerStartIssueEvidenceRefsV0(code string) []string {
 	default:
 		return nil
 	}
+}
+
+func codexAppServerIssueCodeBaseV0(code string) string {
+	code = strings.TrimSpace(code)
+	if before, _, ok := strings.Cut(code, ":"); ok {
+		return strings.TrimSpace(before)
+	}
+	return code
 }
 
 func codexAppServerObservationReceiptV0(

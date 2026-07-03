@@ -4,8 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"unicode"
+)
+
+var (
+	goalWorkIssueAbsolutePathPatternV0 = regexp.MustCompile(`(^|[\s"'=:(])(/[^ \n\r\t"')]+)`)
+	goalWorkIssueWindowsPathPatternV0  = regexp.MustCompile(`(?i)(^|[\s"'=:(])([a-z]:\\[^ \n\r\t"')]+)`)
+	goalWorkIssueSecretPatternV0       = regexp.MustCompile(`(?i)(bearer\s+)[a-z0-9._\-+/=]{12,}|(sk-[a-z0-9_\-]{8,})|((?:api[_-]?key|token|oauth[_-]?token|access[_-]?token|authorization)=)[^ \n\r\t"')]+`)
 )
 
 func NormalizeGoalWorkSpecV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
@@ -80,6 +87,88 @@ func cloneGoalWorkSpecSlicesV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
 	spec.EvidenceRefs = append([]string(nil), spec.EvidenceRefs...)
 	spec.ClosurePolicy.RequiredEvidenceRefs = append([]string(nil), spec.ClosurePolicy.RequiredEvidenceRefs...)
 	return spec
+}
+
+func NormalizeGoalWorkIssueDetailV0(detail string) string {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return ""
+	}
+	var builder strings.Builder
+	previousSpace := false
+	for _, r := range detail {
+		if unicode.IsControl(r) || unicode.IsSpace(r) {
+			if !previousSpace {
+				builder.WriteByte(' ')
+				previousSpace = true
+			}
+			continue
+		}
+		builder.WriteRune(r)
+		previousSpace = false
+	}
+	detail = strings.TrimSpace(builder.String())
+	detail = goalWorkIssueAbsolutePathPatternV0.ReplaceAllString(detail, `${1}<path>`)
+	detail = goalWorkIssueWindowsPathPatternV0.ReplaceAllString(detail, `${1}<path>`)
+	detail = goalWorkIssueSecretPatternV0.ReplaceAllStringFunc(detail, func(match string) string {
+		lower := strings.ToLower(match)
+		switch {
+		case strings.HasPrefix(lower, "bearer "):
+			return "<redacted>"
+		case strings.Contains(match, "="):
+			return "<redacted>"
+		default:
+			return "<redacted>"
+		}
+	})
+	if len([]byte(detail)) <= GoalWorkIssueDetailMaxBytesV0 {
+		return detail
+	}
+	return strings.TrimSpace(string([]rune(detail)[:goalIssueDetailRuneLimitV0(detail, GoalWorkIssueDetailMaxBytesV0)]))
+}
+
+func NormalizeGoalWorkIssueV0(issue GoalWorkIssueV0) GoalWorkIssueV0 {
+	return normalizeGoalWorkIssueV0(issue)
+}
+
+func normalizeGoalWorkIssueV0(issue GoalWorkIssueV0) GoalWorkIssueV0 {
+	issue.Code = strings.TrimSpace(issue.Code)
+	issue.Field = strings.TrimSpace(issue.Field)
+	issue.Detail = NormalizeGoalWorkIssueDetailV0(issue.Detail)
+	if issue.Detail == "" {
+		if code, detail, ok := splitGoalWorkIssueDetailCarrierV0(issue.Code); ok {
+			issue.Code = code
+			issue.Detail = NormalizeGoalWorkIssueDetailV0(detail)
+		}
+	}
+	return issue
+}
+
+func splitGoalWorkIssueDetailCarrierV0(value string) (string, string, bool) {
+	left, right, found := strings.Cut(strings.TrimSpace(value), ":")
+	if !found {
+		return "", "", false
+	}
+	left = strings.TrimSpace(left)
+	right = strings.TrimSpace(right)
+	if left == "" || right == "" || strings.ContainsAny(left, " \n\r\t/\\") {
+		return "", "", false
+	}
+	return left, right, true
+}
+
+func goalIssueDetailRuneLimitV0(value string, maxBytes int) int {
+	total := 0
+	for i, r := range []rune(value) {
+		total += len(string(r))
+		if total > maxBytes {
+			if i == 0 {
+				return 0
+			}
+			return i
+		}
+	}
+	return len([]rune(value))
 }
 
 func ValidateGoalWorkSpecV0(spec GoalWorkSpecV0) []GoalWorkIssueV0 {
@@ -415,8 +504,7 @@ func NormalizeGoalWorkResultV0(result GoalWorkResultV0) GoalWorkResultV0 {
 			result.MaterializedArtifacts[i].EvidenceRefs[j] = strings.TrimSpace(result.MaterializedArtifacts[i].EvidenceRefs[j])
 		}
 		for j := range result.MaterializedArtifacts[i].Issues {
-			result.MaterializedArtifacts[i].Issues[j].Code = strings.TrimSpace(result.MaterializedArtifacts[i].Issues[j].Code)
-			result.MaterializedArtifacts[i].Issues[j].Field = strings.TrimSpace(result.MaterializedArtifacts[i].Issues[j].Field)
+			result.MaterializedArtifacts[i].Issues[j] = normalizeGoalWorkIssueV0(result.MaterializedArtifacts[i].Issues[j])
 		}
 	}
 	for i := range result.Checklist.ExpectedRefs {
@@ -448,8 +536,7 @@ func NormalizeGoalWorkResultV0(result GoalWorkResultV0) GoalWorkResultV0 {
 		result.EvidenceRefs[i] = strings.TrimSpace(result.EvidenceRefs[i])
 	}
 	for i := range result.Issues {
-		result.Issues[i].Code = strings.TrimSpace(result.Issues[i].Code)
-		result.Issues[i].Field = strings.TrimSpace(result.Issues[i].Field)
+		result.Issues[i] = normalizeGoalWorkIssueV0(result.Issues[i])
 	}
 	return result
 }
@@ -469,19 +556,15 @@ func NormalizeGoalWorkStateV0(state GoalWorkStateV0) GoalWorkStateV0 {
 	state.ExternalGoalRef = strings.TrimSpace(state.ExternalGoalRef)
 	state.Status = strings.TrimSpace(state.Status)
 	state.Spec = NormalizeGoalWorkSpecV0(state.Spec)
-	state.LaunchReceipt.SchemaVersion = strings.TrimSpace(state.LaunchReceipt.SchemaVersion)
-	if state.LaunchReceipt.SchemaVersion == "" {
-		state.LaunchReceipt.SchemaVersion = GoalWorkLaunchReceiptSchemaV0
-	}
-	state.LaunchReceipt.Status = strings.TrimSpace(state.LaunchReceipt.Status)
-	state.LaunchReceipt.GoalRef = strings.TrimSpace(state.LaunchReceipt.GoalRef)
-	state.LaunchReceipt.ExternalGoalRef = strings.TrimSpace(state.LaunchReceipt.ExternalGoalRef)
-	for i := range state.LaunchReceipt.EvidenceRefs {
-		state.LaunchReceipt.EvidenceRefs[i] = strings.TrimSpace(state.LaunchReceipt.EvidenceRefs[i])
-	}
+	state.LaunchReceipt = NormalizeGoalLaunchReceiptV0(state.LaunchReceipt)
 	if state.LastResult != nil {
 		normalized := NormalizeGoalWorkResultV0(*state.LastResult)
 		state.LastResult = &normalized
+	}
+	if state.LastClosure != nil {
+		for i := range state.LastClosure.Issues {
+			state.LastClosure.Issues[i] = normalizeGoalWorkIssueV0(state.LastClosure.Issues[i])
+		}
 	}
 	for i := range state.EvidenceRefs {
 		state.EvidenceRefs[i] = strings.TrimSpace(state.EvidenceRefs[i])

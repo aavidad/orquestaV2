@@ -126,6 +126,56 @@ func TestPrepareCodexGoalWriteSetV0NoFallaConFicheroExistenteMigradoV0(t *testin
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0LaunchPrepareFallidoPublicaDetailRelativoV0(t *testing.T) {
+	root := t.TempDir()
+	blocker := filepath.Join(root, "modulos")
+	if err := os.WriteFile(blocker, []byte("not a directory\n"), 0o600); err != nil {
+		t.Fatalf("write blocker: %v", err)
+	}
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-prepare-detail-001"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		CWD:      root,
+	}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef:   "goal-ref-prepare-detail-001",
+		Objective: "preparar write set",
+		WriteSet: []orquestagoal.GoalWriteScopeV0{{
+			Path: "modulos/orquesta-goal",
+		}},
+	})
+
+	if err == nil {
+		t.Fatal("StartCodexGoalV0 debe fallar al preparar write_set bloqueado por fichero intermedio")
+	}
+	if len(protocol.calls) != 0 {
+		t.Fatalf("no debe llamar al backend tras prepare fallido: calls=%v", protocol.calls)
+	}
+	if receipt.Status != orquestagoal.GoalStatusInvalidV0 ||
+		!strings.HasPrefix(receipt.IssueCode, "codex_app_server_write_set_prepare_failed: ") ||
+		!strings.Contains(receipt.IssueCode, "write_set_prepare_failed") ||
+		!strings.Contains(receipt.IssueCode, "modulos/orquesta-goal") ||
+		strings.Contains(receipt.IssueCode, root) {
+		t.Fatalf("receipt=%+v root=%q", receipt, root)
+	}
+	normalized := orquestagoal.NormalizeGoalLaunchReceiptV0(orquestagoal.GoalLaunchReceiptV0{
+		Status:  receipt.Status,
+		GoalRef: receipt.GoalRef,
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code: receipt.IssueCode,
+		}},
+	})
+	if len(normalized.Issues) != 1 ||
+		normalized.Issues[0].Code != "codex_app_server_write_set_prepare_failed" ||
+		!strings.Contains(normalized.Issues[0].Detail, "modulos/orquesta-goal") ||
+		strings.Contains(normalized.Issues[0].Detail, root) {
+		t.Fatalf("normalized=%+v root=%q", normalized.Issues, root)
+	}
+}
+
 func TestCodexAppServerWriteSetLooksLikeFileV0TrataExtensionesComoFicheroMigradoV0(t *testing.T) {
 	cases := map[string]bool{
 		"docs/informe.md":              true,

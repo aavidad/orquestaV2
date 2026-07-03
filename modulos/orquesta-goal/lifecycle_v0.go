@@ -273,8 +273,7 @@ func NormalizeGoalLaunchReceiptV0(receipt GoalLaunchReceiptV0) GoalLaunchReceipt
 		receipt.EvidenceRefs[i] = strings.TrimSpace(receipt.EvidenceRefs[i])
 	}
 	for i := range receipt.Issues {
-		receipt.Issues[i].Code = strings.TrimSpace(receipt.Issues[i].Code)
-		receipt.Issues[i].Field = strings.TrimSpace(receipt.Issues[i].Field)
+		receipt.Issues[i] = normalizeGoalWorkIssueV0(receipt.Issues[i])
 	}
 	return receipt
 }
