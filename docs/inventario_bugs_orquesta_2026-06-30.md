@@ -1468,6 +1468,15 @@ ahora evidencia en ambas salidas para que clientes compactos no pierdan contexto
 de serve/stop/pull/status antes de decidir shutdown o reconciliacion. Evidencia:
 `TestMCPRuntimeModelsDescriptorV0DeclaraEvidenciaOperativa`.
 
+Avance BUG-ORQ-20260701-066/088 2026-07-03 tarde 46:
+`orquesta.external_work.run.v0` podia devolver `evidence_refs`, `next_actions`
+y `operation_endpoints` tambien cuando el caso de uso rechazaba la peticion, por
+ejemplo por backend Goal no disponible o necesidad de observar/reparar, pero el
+descriptor compacto de error solo anunciaba `errores_publicos`. El descriptor y
+`docs/contratos.md` declaran ahora esas salidas en error, y la prueba focal
+verifica que un resultado rechazado conserva evidencia y acciones compactas.
+Evidencia: `TestNewMCPExternalWorkRunResultV0ConservaEvidenciaEnError`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

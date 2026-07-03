@@ -40,7 +40,8 @@ func TestMCPExternalWorkRunDescriptorV0DeclaraLegacyExplicito(t *testing.T) {
 	if !mcpExternalWorkRunStringContainsTestV0(descriptor.Output, "route_policy") ||
 		!mcpExternalWorkRunStringContainsTestV0(descriptor.Output, "director_execution_mode") ||
 		!mcpExternalWorkRunStringContainsTestV0(descriptor.Output, "external_goal_ref?") ||
-		!mcpExternalWorkRunStringContainsTestV0(descriptor.Output, "evidence_refs?") {
+		!mcpExternalWorkRunStringContainsTestV0(descriptor.Output, "evidence_refs?") ||
+		!mcpExternalWorkRunStringContainsTestV0(descriptor.Output, "error:{errores_publicos,evidence_refs?,next_actions?,operation_endpoints?}") {
 		t.Fatalf("output no declara politica legacy: %s", descriptor.Output)
 	}
 	for _, want := range []string{
@@ -71,6 +72,24 @@ func TestNewMCPExternalWorkRunResultV0MarcaLegacyDirectorLoop(t *testing.T) {
 	if !mcpExternalWorkRunStringInSetTestV0(result.NextActions, MCPExternalWorkRunNextActionSuperviseLegacyRunV0) ||
 		!mcpExternalWorkRunStringInSetTestV0(result.NextActions, MCPExternalWorkRunNextActionMigrateGoalFirstV0) {
 		t.Fatalf("next_actions=%+v", result.NextActions)
+	}
+}
+
+func TestNewMCPExternalWorkRunResultV0ConservaEvidenciaEnError(t *testing.T) {
+	result := newMCPExternalWorkRunResultV0(orquestaexternalworkrun.StartExternalWorkRunResultV0{
+		Status:       orquestaexternalworkrun.ExternalWorkRunStatusInvalidV0,
+		RequestID:    "req-external-result-error-001",
+		EvidenceRefs: []string{"evidence-ref-external-work-goal-backend-required"},
+		Issues: []orquestaexternalworkrun.ExternalWorkRunIssueV0{{
+			Code: "external_work_goal_backend_required",
+		}},
+	})
+
+	if result.Estado != MCPExternalWorkRunEstadoErrorV0 ||
+		!mcpExternalWorkRunStringInSetTestV0(result.EvidenceRefs, "evidence-ref-external-work-goal-backend-required") ||
+		!mcpExternalWorkRunStringInSetTestV0(result.NextActions, MCPExternalWorkRunNextActionMigrateGoalFirstV0) ||
+		result.OperationEndpoints != nil {
+		t.Fatalf("result=%+v", result)
 	}
 }
 

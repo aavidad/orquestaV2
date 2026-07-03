@@ -204,6 +204,7 @@ Campos:
   output_error:
     estado: error
     errores_publicos: issues compactos
+    evidence_refs?, next_actions?, operation_endpoints?
 Invariantes:
   - Goal-first es la ruta normal para trabajo externo nuevo.
   - Sin backend Goal completo no degrada automaticamente a legacy.

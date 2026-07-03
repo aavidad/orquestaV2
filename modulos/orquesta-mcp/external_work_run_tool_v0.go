@@ -80,7 +80,7 @@ func MCPExternalWorkRunDescriptorV0() MCPExternalWorkRunToolDescriptorV0 {
 		Name:        MCPExternalWorkRunToolNameV0,
 		Version:     MCPExternalWorkRunToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,director_execution_mode?:goal_first|legacy_director_loop,external_work_run_request?:StartExternalWorkRunRequestV0,app_change_request?:AppChangeRequestV0}",
-		Output:      "ok:{route_policy,director_execution_mode,run_ref,change_ref,goal_ref?,external_goal_ref?,evidence_refs?,next_actions?,operation_endpoints?}|error:{errores_publicos}",
+		Output:      "ok:{route_policy,director_execution_mode,run_ref,change_ref,goal_ref?,external_goal_ref?,evidence_refs?,next_actions?,operation_endpoints?}|error:{errores_publicos,evidence_refs?,next_actions?,operation_endpoints?}",
 		ResourceURI: MCPExternalWorkRunResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
