@@ -116,6 +116,12 @@ func TestMCPRunControlHTTPHandlerV0TimeoutDevuelveJSONPublico(t *testing.T) {
 		RequestID:      "request-ref-run-control-http-timeout-001",
 		CorrelationID:  "corr-run-control-http-timeout-input-001",
 		IdempotencyKey: "idem-run-control-http-timeout-001",
+		Forced:         true,
+		EvidenceRefs: []string{
+			mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0,
+			"",
+			mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0,
+		},
 	})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, MCPRunControlHTTPPathV0, body)
@@ -134,9 +140,21 @@ func TestMCPRunControlHTTPHandlerV0TimeoutDevuelveJSONPublico(t *testing.T) {
 	if result.Estado != MCPRunControlEstadoErrorV0 ||
 		result.Action != "stop" ||
 		result.RunRef != "run-ref-control-http-timeout-001" ||
+		!result.Forced ||
+		!containsStringMCPTestV0(result.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) ||
+		!containsMCPRunControlDiagnosticForTestV0(result.Diagnostics, "run_control_timeout") ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "run_control_timeout" {
 		t.Fatalf("result=%+v", result)
+	}
+	if len(result.EvidenceRefs) != 1 ||
+		len(result.Diagnostics) != 1 ||
+		result.Diagnostics[0].Scope != "run:run-ref-control-http-timeout-001" ||
+		!containsStringMCPTestV0(
+			result.Diagnostics[0].EvidenceRefs,
+			mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0,
+		) {
+		t.Fatalf("timeout debe conservar evidencia compacta y diagnostico: %+v", result)
 	}
 	select {
 	case <-executor.done:

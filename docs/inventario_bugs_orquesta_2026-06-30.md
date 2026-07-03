@@ -1093,6 +1093,14 @@ esperable, corta inmediatamente con `shutdown_not_ready` en vez de dormir hasta
 timeout. Evidencia:
 `TestRequestServerShutdownV0CortaEsperaSiStatusBackendTieneRunsPendientes`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 28: si
+`POST /api/v0/runs/control` excede la ventana HTTP acotada, el JSON publico de
+timeout conserva `forced`, `evidence_refs` compactas y un diagnostico
+`run_control_timeout` con scope de run. Esto evita que reintentos de
+reconciliacion por cleanup externo o alto consumo pierdan la evidencia que ya
+aportaba el operador/status. Evidencia:
+`TestMCPRunControlHTTPHandlerV0TimeoutDevuelveJSONPublico`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

@@ -142,6 +142,18 @@ func newMCPRunControlTimeoutResultV0(
 ) MCPRunControlToolResultV0 {
 	result := newMCPRunControlErrorV0(input, "run_control_timeout", "executor")
 	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get(MCPPublicCorrelationHeaderV0), result.CorrelationID)
+	result.Forced = input.Forced
+	result.EvidenceRefs = compactStringsMCPV0(input.EvidenceRefs)
+	scope := ""
+	if runRef := strings.TrimSpace(input.RunRef); runRef != "" {
+		scope = "run:" + runRef
+	}
+	result.Diagnostics = append(result.Diagnostics, MCPRunControlDiagnosticV0{
+		Code:         "run_control_timeout",
+		Scope:        scope,
+		Message:      "control de run excedio la ventana HTTP acotada; conserva evidencia para reintento gobernado",
+		EvidenceRefs: result.EvidenceRefs,
+	})
 	if len(result.Errores) > 0 {
 		result.Errores[0].Message = "control de run excedio la ventana HTTP acotada"
 	}
