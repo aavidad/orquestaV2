@@ -138,8 +138,9 @@ agentes en vuelo, checkpoints pendientes, agentes pendientes de checkpoint y
 `pending_checkpoint_agent_refs` y evidencia compacta por run. Conserva
 `evidence_refs` tambien en errores tempranos y devuelve HTTP 409 JSON para
 `stop_pending`, `active_goals_present` o `backend_still_running`, con
-`active_work_count` y `active_works` cuando existan. Falla de forma publica si
-falta binding. MCP/REST no paran procesos ni leen runtime/DB.
+`active_work_count` y `active_works` tipados con refs/evidencias cuando
+existan. Falla de forma publica si falta binding. MCP/REST no paran procesos ni
+leen runtime/DB.
 Ultima ejecucion: 2026-05-13; pasa en bateria focal junto a gateway.
 Riesgos: el endpoint coordina stop/drain/stats; el borde que cierre el proceso
 servidor debe invocarlo antes de enviar la senal final.

@@ -1612,6 +1612,17 @@ modo que clientes compactos pueden preservar replan, repair receipt,
 write-set/sandbox y cleanup externo sin inspeccionar logs ni listas internas.
 Evidencia: `TestMCPAutoprogrammingStatusDescriptorV0EsAdaptadorFino`.
 
+Avance BUG-ORQ-20260701-065/076/088 2026-07-03 tarde 60:
+`orquesta.server.shutdown.v0` ya transportaba `active_works` de backends Goal y
+resumenes `runs` con checkpoint por agente, pero el descriptor declaraba esos
+bloques como opacos. El contrato compacto publica ahora
+`active_works?[]{kind,run_ref?,work_ref?,external_work_ref?,status?,
+evidence_refs?}` y `runs?[]{run_ref,control_status?,checkpoint_required?,
+checkpoint_ref?,pending_checkpoint_agent_refs?,checkpoint_evidence_refs?,ready}`,
+manteniendo visible por que un shutdown queda en `active_goals_present`,
+`backend_still_running` o `stop_pending` sin leer logs. Evidencia:
+`TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

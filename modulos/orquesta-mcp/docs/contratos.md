@@ -1404,7 +1404,8 @@ Campos:
     shutdown_ready: true solo si todos los runs objetivo estan listos
     runs_requested, runs_stopped, agents_in_flight, checkpoints_pending,
       checkpoint_agents_pending, active_work_count
-    active_works?: trabajos goal-first/backend propios que impiden cerrar
+    active_works?: trabajos goal-first/backend propios que impiden cerrar, con
+      kind, run_ref?, work_ref?, external_work_ref?, status?, evidence_refs?
     evidence_refs?: evidencia compacta de checkpoint, cleanup y decision
     runs: resumen por run con estado de control, checkpoint_ref opcional,
       pending_checkpoint_agent_refs, checkpoint_evidence_refs, stats y readiness
