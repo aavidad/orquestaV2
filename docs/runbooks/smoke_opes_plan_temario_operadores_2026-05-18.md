@@ -39,10 +39,12 @@ OPES plan_temario pending
   -> OPES valida y crea derivados
 ```
 
-Si `cmd/orquesta-server run` esta activo, el supervisor global del servidor ya
-empuja la cola en cada tick. `POST /api/v0/runs/supervise` queda como empuje
-manual/acotado para una run concreta, no como canal alternativo. En los casos
-legacy hacen falta las dos llaves: opt-in de composicion
+Si el servidor residente gestionado esta activo con `orquesta-server start`, el
+supervisor global del servidor ya empuja la cola en cada tick. El endpoint se
+resuelve por `ORQUESTA_SERVER_URL` o `ORQUESTA_RUNTIME_DIR/base_url.txt`; no se
+asume un runtime manual ni un puerto historico. `POST /api/v0/runs/supervise`
+queda como empuje manual/acotado para una run concreta, no como canal
+alternativo. En los casos legacy hacen falta las dos llaves: opt-in de composicion
 (`ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1` para esta ruta OPES) y
 `director_execution_mode=legacy_director_loop`; el tick residente traduce ese
 opt-in a `allow_legacy_drain`.

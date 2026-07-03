@@ -773,6 +773,27 @@ func TestSmokesOPESLargosAceptanEndpointOrquestaGestionadoV0(t *testing.T) {
 	}
 }
 
+func TestRunbookOPESPlanTemarioUsaServidorGestionadoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md")
+	if strings.Contains(text, "Si `cmd/orquesta-server run` esta activo") {
+		t.Fatalf("runbook OPES plan_temario no debe presentar runtime manual como ruta activa")
+	}
+	for _, want := range []string{
+		"servidor residente gestionado",
+		"orquesta-server start",
+		"ORQUESTA_SERVER_URL",
+		"ORQUESTA_RUNTIME_DIR/base_url.txt",
+		"no se",
+		"asume un runtime manual ni un puerto historico",
+		"director_execution_mode=legacy_director_loop",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("runbook OPES plan_temario debe usar servidor gestionado: falta %q", want)
+		}
+	}
+}
+
 func TestMatrizOPESDerivadosUsaServidorGestionadoV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "docs/matriz_pruebas_reales_y_smoke_2026-05-17.md")
