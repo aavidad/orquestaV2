@@ -589,6 +589,9 @@ func TestMCPRunControlExecutorV0StopReconcilesExternalCleanupConEvidenciaSinForc
 		result.Status != string(orquestaruncontrol.RunControlStatusStoppedV0) ||
 		result.RecommendedAction != "replan_narrow_context" ||
 		port.complete.TargetStatus != orquestaruncontrol.RunControlStatusStoppedV0 ||
+		!containsMCPRunControlDiagnosticForTestV0(result.Diagnostics, "goal_state_terminal_reconciled_after_external_cleanup") ||
+		containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-run-control-goal-forced-terminal-reconciled") ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-run-control-goal-external-cleanup-reconciled") ||
 		!containsStringMCPTestV0(result.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) {
 		t.Fatalf("result=%+v complete=%+v", result, port.complete)
 	}
@@ -601,6 +604,8 @@ func TestMCPRunControlExecutorV0StopReconcilesExternalCleanupConEvidenciaSinForc
 		state.LastResult.Status != orquestagoal.GoalStatusBlockedV0 ||
 		state.LastResult.GoalRef != goalRef ||
 		state.LastResult.ExternalGoalRef != externalGoalRef ||
+		strings.Contains(state.LastResult.Summary, "forced ") ||
+		!strings.Contains(state.LastResult.Summary, "external cleanup") ||
 		state.LastClosure == nil ||
 		!state.LastClosure.NeedsRework {
 		t.Fatalf("state=%+v", state)

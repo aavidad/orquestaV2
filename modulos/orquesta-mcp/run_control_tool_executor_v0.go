@@ -229,8 +229,18 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 	if !ok {
 		return result
 	}
+	reconcileCode := "goal_state_terminal_reconciled_after_forced_stop"
+	reconcileEvidenceRef := "evidence-ref-run-control-goal-forced-terminal-reconciled"
+	reconcileSummary := "forced " + action + " reconciled active goal into terminal rework state"
+	reconcileMessage := "goal-first state marked blocked/rework after forced " + action + " of high-consumption active backend"
+	if allowExternalCleanupReconcile && !allowForcedReconcile {
+		reconcileCode = "goal_state_terminal_reconciled_after_external_cleanup"
+		reconcileEvidenceRef = "evidence-ref-run-control-goal-external-cleanup-reconciled"
+		reconcileSummary = "external cleanup reconciled missing goal backend into terminal rework state"
+		reconcileMessage = "goal-first state marked blocked/rework after governed reconciliation of external backend cleanup"
+	}
 	evidenceRefs := compactStringsMCPV0([]string{
-		"evidence-ref-run-control-goal-forced-terminal-reconciled",
+		reconcileEvidenceRef,
 		evidenceRef,
 	})
 	goalRef := firstNonEmptyMCPV0(
@@ -249,7 +259,7 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 		Status:          orquestagoal.GoalStatusBlockedV0,
 		GoalRef:         goalRef,
 		ExternalGoalRef: externalGoalRef,
-		Summary:         "forced " + action + " reconciled active goal into terminal rework state",
+		Summary:         reconcileSummary,
 		ArtifactRefs:    compactStringsMCPV0(mcpRunControlGoalArtifactRefsV0(beforeGoal)),
 		EvidenceRefs:    evidenceRefs,
 		Issues: []orquestagoal.GoalWorkIssueV0{{
@@ -274,9 +284,9 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 	result.RecommendedAction = "replan_narrow_context"
 	result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, evidenceRefs...))
 	result.Diagnostics = append(result.Diagnostics, MCPRunControlDiagnosticV0{
-		Code:    "goal_state_terminal_reconciled_after_forced_stop",
+		Code:    reconcileCode,
 		Scope:   "run:" + runRef,
-		Message: "goal-first state marked blocked/rework after forced " + action + " of high-consumption active backend",
+		Message: reconcileMessage,
 		EvidenceRefs: compactStringsMCPV0(append(
 			evidenceRefs,
 			goalRef,
