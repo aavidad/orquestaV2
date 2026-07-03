@@ -1389,6 +1389,12 @@ por `checkpoint_only_high_consumption`. Asi el panel global no pierde los
 umbrales efectivos que explican un corte por alto consumo/checkpoint. Evidencia:
 `TestMCPQueueGlobalStatusHTTPHandlerV0ConservaReplanNarrowContext`.
 
+Avance BUG-ORQ-20260701-073/088 2026-07-03 tarde 43:
+el contrato y las pruebas documentales de `rest.bridge.orquesta.queue.global_status.v0`
+declaran `goal_progress_policy` como salida publica y enlazan la evidencia
+`TestMCPQueueGlobalStatusHTTPHandlerV0ConservaReplanNarrowContext`, evitando que
+la superficie global vuelva a quedar por detras de `autoprogramming/status`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

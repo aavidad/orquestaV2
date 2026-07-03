@@ -1759,6 +1759,8 @@ Campos:
   output_ok:
     estado: ok
     summary: resumen compacto de cola, liveness, bloqueos y acciones
+    goal_progress_policy?: umbrales efectivos usados por
+      `autoprogramming/status` para avisos y replan por progreso de goals
     items[]:
       run_ref?, app_ref?, status, needs_action?, recommended_action?,
       no_action_reason?, evidence_refs?
@@ -1773,10 +1775,14 @@ Invariantes:
     accion, incluidos candidatos de `queue.terminal`.
   - No ejecuta `supervise`, no reencola, no observa goal y no lee runtime por su
     cuenta.
+  - Conserva `goal_progress_policy` cuando `autoprogramming/status` lo publica,
+    para que el operador vea los umbrales que explican acciones como
+    `replan_narrow_context` por `checkpoint_only_high_consumption`.
 Pruebas de contrato:
   - `TestMCPQueueGlobalStatusHTTPHandlerV0CadaRunVisibleTieneAccionORazon`
   - `TestMCPQueueGlobalStatusHTTPHandlerV0AcceptedNoRequiereAccion`
   - `TestMCPQueueGlobalStatusHTTPHandlerV0GoalFirstStateMissingRecomiendaRepararState`
+  - `TestMCPQueueGlobalStatusHTTPHandlerV0ConservaReplanNarrowContext`
 ```
 
 ```text

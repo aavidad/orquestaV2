@@ -664,6 +664,11 @@ los dominios puedan aportar fase/evidencia sin perder semantica en
 `queue/global-status`. `TestMCPQueueGlobalStatusHTTPHandlerV0PropagaFaseYCountersOPESRetryFromPhase`
 fija que `current_phase` y `domain_counters` aportados por dominio viajan hasta
 el item publico junto a `retry_from_phase`.
+`TestMCPQueueGlobalStatusHTTPHandlerV0ConservaReplanNarrowContext` fija que
+`/api/v0/queue/global-status` conserva `goal_progress_policy` desde
+`autoprogramming/status` cuando publica `replan_narrow_context` por
+`checkpoint_only_high_consumption`, de modo que el operador ve los umbrales
+efectivos de tokens y espera asociados a esa accion.
 `TestMCPQueueGlobalStatusHTTPHandlerV0CadaRunVisibleTieneAccionORazon` fija el
 contrato publico item por item: cada run visible publica una accion recomendada
 si requiere operador o `no_action_reason` si puede esperar/cerrar sin accion.

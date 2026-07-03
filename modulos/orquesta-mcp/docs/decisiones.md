@@ -44,6 +44,10 @@ debe tener `recommended_action` si requiere operador o `no_action_reason` si es
 seguro no actuar. Estados `accepted`/`completed`/`closed`/`delivered` quedan
 como terminales sin accion, incluidos los candidatos publicados en
 `queue.terminal`.
+Actualizacion 2026-07-03: `/queue/global-status` conserva
+`goal_progress_policy` publicado por `autoprogramming/status`, para que las
+acciones de alto consumo o espera de goals no pierdan los umbrales efectivos en
+la vista global.
 Contratos afectados: mcp.tool.orquesta.autoprogramming.status.v0;
 orquesta.director.stats.v0; GoalWorkRunMarkerStorePortV0.
 Estado: aceptada localmente
