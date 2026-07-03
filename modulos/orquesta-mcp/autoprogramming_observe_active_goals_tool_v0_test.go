@@ -97,7 +97,7 @@ func TestMCPAutoprogrammingObserveActiveGoalsDescriptorV0DeclaraObservacionesAcc
 		!strings.Contains(descriptor.Output, "error:{errores_publicos,operation_ref?") ||
 		!strings.Contains(descriptor.Output, "operation_ref?") ||
 		!strings.Contains(descriptor.Output, "next_actions?") ||
-		!strings.Contains(descriptor.Output, "diagnostics?") {
+		!strings.Contains(descriptor.Output, "diagnostics?[]{code,scope?,message?,evidence_refs?}") {
 		t.Fatalf("observe_active_goals debe declarar observaciones accionables y evidencia: %+v", descriptor)
 	}
 }

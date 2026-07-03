@@ -1745,12 +1745,14 @@ Campos:
       run_ref, goal_ref?, goal_status?, recommended_action?, evidence_refs?
     issues?: incidencias por run sin cancelar todo el lote
     next_actions?: acciones de seguimiento para operador o agente
-    diagnostics?: diagnosticos publicos de la pasada
+    diagnostics[]?: code, scope?, message?, evidence_refs?
     evidence_refs?: evidencias agregadas
   output_error:
     estado: error
     errores_publicos
-    operation_ref?, next_actions?, diagnostics?, evidence_refs?
+    operation_ref?, next_actions?,
+    diagnostics[]?: code, scope?, message?, evidence_refs?
+    evidence_refs?
 Invariantes:
   - Adaptador inbound fino.
   - Lista estados por `GoalWorkStateListPortV0`.

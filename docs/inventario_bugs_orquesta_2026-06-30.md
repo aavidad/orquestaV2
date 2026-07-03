@@ -1617,6 +1617,14 @@ evidencia por goal cuando se observa un lote de goals activos sin relanzar
 supervision legacy. Evidencia:
 `TestMCPAutoprogrammingObserveActiveGoalsDescriptorV0DeclaraObservacionesAccionables`.
 
+Avance BUG-ORQ-20260701-066/075/088 2026-07-03 tarde 58b:
+`orquesta.autoprogramming.observe_active_goals.v0` tambien publica diagnosticos
+publicos de la pasada (`code/scope/message/evidence_refs`) para background,
+errores de executor e incidencias por goal, pero el descriptor y contrato los
+dejaban opacos. La salida `ok` y `error` declara ahora la forma tipada,
+preservando causa/evidencia por lote sin inspeccionar logs. Evidencia:
+`TestMCPAutoprogrammingObserveActiveGoalsDescriptorV0DeclaraObservacionesAccionables`.
+
 Avance BUG-ORQ-20260701-065/075/085/088 2026-07-03 tarde 59:
 `orquesta.autoprogramming.status.v0` ya publicaba acciones por run en
 `stale_running` y una accion agregada en `efficiency_summary`, pero el
