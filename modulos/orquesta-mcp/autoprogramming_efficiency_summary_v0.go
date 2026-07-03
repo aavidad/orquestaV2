@@ -86,6 +86,8 @@ func buildMCPAutoprogrammingEfficiencySummaryV0(
 		summary.RecommendedAction = strings.Join([]string{MCPGoalFirstRepairReceiptActionV0, "run", repairRunRef}, ":")
 	} else if runRef := phase0CompleteNonPublishableRunRefMCPAutoprogrammingEfficiencyV0(diagnostics, run); runRef != "" {
 		summary.RecommendedAction = strings.Join([]string{MCPGoalFirstContinueFromPhase0ActionV0, "run", runRef}, ":")
+	} else if action, runRef := recoverableGoalFirstActionMCPAutoprogrammingEfficiencyV0(diagnostics, run); action != "" && runRef != "" {
+		summary.RecommendedAction = strings.Join([]string{action, "run", runRef}, ":")
 	} else if runRef := threadOutputSanitizedRunRefMCPAutoprogrammingEfficiencyV0(diagnostics, run); runRef != "" {
 		summary.RecommendedAction = strings.Join([]string{"replan_narrow_context", "run", runRef}, ":")
 	}
@@ -243,6 +245,12 @@ func operationalHealthMCPAutoprogrammingEfficiencyV0(
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
 		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, MCPGoalFirstPhase0CompleteNonPublishableV0)
 	}
+	for _, code := range recoverableGoalFirstCodesMCPAutoprogrammingEfficiencyV0() {
+		if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, code) {
+			health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
+			summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, code)
+		}
+	}
 	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, mcpAutoprogrammingActionThreadOutputSanitizedV0) {
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
 		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, mcpAutoprogrammingActionThreadOutputSanitizedV0)
@@ -297,6 +305,7 @@ func stateMCPAutoprogrammingEfficiencyV0(
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) ||
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstRequiredTestEvidenceMissingV0) ||
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstPhase0CompleteNonPublishableV0) ||
+		hasRecoverableGoalFirstReasonMCPAutoprogrammingEfficiencyV0(summary) ||
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, mcpAutoprogrammingActionThreadOutputSanitizedV0):
 		return "attention_required"
 	case hasRunReplanAmplificationMCPAutoprogrammingEfficiencyV0(run):
@@ -331,7 +340,9 @@ func repairReceiptRunRefMCPAutoprogrammingEfficiencyV0(
 	matched := false
 	for _, diagnostic := range diagnostics {
 		switch strings.TrimSpace(diagnostic.Code) {
-		case MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0, MCPGoalFirstRequiredTestEvidenceMissingV0:
+		case MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0,
+			MCPGoalFirstRequiredTestEvidenceMissingV0,
+			MCPGoalFirstArtifactPathsOmittedMaterializedV0:
 		default:
 			continue
 		}
@@ -344,6 +355,58 @@ func repairReceiptRunRefMCPAutoprogrammingEfficiencyV0(
 		return strings.TrimSpace(run.RunRef)
 	}
 	return ""
+}
+
+func recoverableGoalFirstActionMCPAutoprogrammingEfficiencyV0(
+	diagnostics []MCPAutoprogrammingDiagnosticV0,
+	run *MCPDirectorStatsToolResultV0,
+) (string, string) {
+	for _, diagnostic := range diagnostics {
+		action := recoverableGoalFirstActionForCodeMCPAutoprogrammingEfficiencyV0(diagnostic.Code)
+		if action == "" {
+			continue
+		}
+		if runRef := runRefFromScopeMCPAutoprogrammingEfficiencyV0(diagnostic.Scope); runRef != "" {
+			return action, runRef
+		}
+		if run != nil && strings.TrimSpace(run.RunRef) != "" {
+			return action, strings.TrimSpace(run.RunRef)
+		}
+	}
+	return "", ""
+}
+
+func recoverableGoalFirstActionForCodeMCPAutoprogrammingEfficiencyV0(code string) string {
+	switch strings.TrimSpace(code) {
+	case MCPGoalFirstQAFailedPublicTextV0:
+		return MCPGoalFirstReworkPublicTextActionV0
+	case MCPGoalFirstOutOfScopeMaterializedArtifactsV0:
+		return MCPGoalFirstReworkWriteSetViolationActionV0
+	case MCPGoalFirstPartialArtifactsWrittenV0:
+		return MCPGoalFirstReviewPartialArtifactsActionV0
+	default:
+		return ""
+	}
+}
+
+func recoverableGoalFirstCodesMCPAutoprogrammingEfficiencyV0() []string {
+	return []string{
+		MCPGoalFirstQAFailedPublicTextV0,
+		MCPGoalFirstArtifactPathsOmittedMaterializedV0,
+		MCPGoalFirstOutOfScopeMaterializedArtifactsV0,
+		MCPGoalFirstPartialArtifactsWrittenV0,
+	}
+}
+
+func hasRecoverableGoalFirstReasonMCPAutoprogrammingEfficiencyV0(
+	summary *MCPAutoprogrammingEfficiencySummaryV0,
+) bool {
+	for _, code := range recoverableGoalFirstCodesMCPAutoprogrammingEfficiencyV0() {
+		if hasReasonMCPAutoprogrammingEfficiencyV0(summary, code) {
+			return true
+		}
+	}
+	return false
 }
 
 func phase0CompleteNonPublishableRunRefMCPAutoprogrammingEfficiencyV0(

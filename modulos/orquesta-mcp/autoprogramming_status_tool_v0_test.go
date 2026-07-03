@@ -2201,6 +2201,15 @@ func TestMCPAutoprogrammingStatusExecutorV0QAFailedPublicTextPideReworkV0(t *tes
 		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-goal-materialized-qa-failed-public-text-001") {
 		t.Fatalf("action=%+v", action)
 	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "attention_required" ||
+		result.EfficiencySummary.RecommendedAction != MCPGoalFirstReworkPublicTextActionV0+":run:"+runRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(
+			result.EfficiencySummary.Reasons,
+			MCPGoalFirstQAFailedPublicTextV0,
+		) {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
 }
 
 func TestMCPAutoprogrammingStatusExecutorV0ArtifactPathsOmitidosPideRepairReceiptV0(t *testing.T) {
@@ -2251,6 +2260,15 @@ func TestMCPAutoprogrammingStatusExecutorV0ArtifactPathsOmitidosPideRepairReceip
 		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-autoprogramming-status-artifact-paths-omitted-materialized") {
 		t.Fatalf("action=%+v", action)
 	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "attention_required" ||
+		result.EfficiencySummary.RecommendedAction != MCPGoalFirstRepairReceiptActionV0+":run:"+runRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(
+			result.EfficiencySummary.Reasons,
+			MCPGoalFirstArtifactPathsOmittedMaterializedV0,
+		) {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
 }
 
 func TestMCPAutoprogrammingStatusExecutorV0OutOfScopeMaterializedPideReworkV0(t *testing.T) {
@@ -2299,6 +2317,15 @@ func TestMCPAutoprogrammingStatusExecutorV0OutOfScopeMaterializedPideReworkV0(t 
 		!hasStringMCPAutoprogrammingStatusTestV0(action.ArtifactRefs, "artifact-ref-materialized-out-of-scope-001") ||
 		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-autoprogramming-status-out-of-scope-materialized-artifacts") {
 		t.Fatalf("action=%+v", action)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "attention_required" ||
+		result.EfficiencySummary.RecommendedAction != MCPGoalFirstReworkWriteSetViolationActionV0+":run:"+runRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(
+			result.EfficiencySummary.Reasons,
+			MCPGoalFirstOutOfScopeMaterializedArtifactsV0,
+		) {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
 	}
 }
 
@@ -2350,6 +2377,15 @@ func TestMCPAutoprogrammingStatusExecutorV0ArtefactosParcialesPideRevisionV0(t *
 		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-autoprogramming-status-partial-artifacts-written") ||
 		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-goal-materialized-partial-artifacts-written") {
 		t.Fatalf("action=%+v", action)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "attention_required" ||
+		result.EfficiencySummary.RecommendedAction != MCPGoalFirstReviewPartialArtifactsActionV0+":run:"+runRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(
+			result.EfficiencySummary.Reasons,
+			MCPGoalFirstPartialArtifactsWrittenV0,
+		) {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
 	}
 }
 
