@@ -57,8 +57,11 @@ bateria focal + `go test -count=1 -p=1 ./...` pasaron.
 
 ## Pendientes concretos siguientes
 
-1. Reiniciar solo el servidor web local `127.0.0.1:8787` con el binario nuevo
-   cuando se retome; no tocar servidores OPES.
+1. Reiniciar solo el servidor Orquesta aislado con `orquesta-server start`
+   cuando se retome; resolver el endpoint con
+   `orquesta-server status --json`, `ORQUESTA_SERVER_URL` o
+   `ORQUESTA_RUNTIME_DIR/base_url.txt`, y cerrarlo con `orquesta-server stop`.
+   No asumir el puerto historico `8787` ni tocar servidores OPES.
 2. Mejorar `/nueva-app` en el siguiente corte:
    - validar en navegador real que tooltips, foco, tabs y scroll funcionan bien
      en desktop/movil;

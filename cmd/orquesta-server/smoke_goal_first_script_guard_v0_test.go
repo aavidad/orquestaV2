@@ -624,6 +624,28 @@ func TestHandoffTerminarOrquestaUsaServidorGestionadoV0(t *testing.T) {
 	}
 }
 
+func TestHandoffGoalFirstParadaUsaServidorGestionadoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "docs/handoff_orquesta_goal_first_parada_2026-06-26.md")
+	current, _, _ := strings.Cut(text, "## Cierre local posterior")
+
+	if strings.Contains(current, "servidor web local `127.0.0.1:8787`") {
+		t.Fatalf("handoff goal-first parada no debe pedir reinicio por puerto historico")
+	}
+	for _, want := range []string{
+		"orquesta-server start",
+		"orquesta-server status --json",
+		"ORQUESTA_SERVER_URL",
+		"ORQUESTA_RUNTIME_DIR/base_url.txt",
+		"orquesta-server stop",
+		"No asumir el puerto historico `8787`",
+	} {
+		if !strings.Contains(current, want) {
+			t.Fatalf("handoff goal-first parada debe usar servidor gestionado: falta %q", want)
+		}
+	}
+}
+
 func TestRunbookPruebasLocalesUsaEndpointGestionadoV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "docs/runbooks/pruebas_locales_orquesta_2026-05-25.md")

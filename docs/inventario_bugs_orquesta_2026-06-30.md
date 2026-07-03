@@ -804,6 +804,13 @@ como servidor residente goal-first; documenta `orquesta-server start`,
 `orquesta-server stop`. Evidencia:
 `TestMatrizOPESDerivadosUsaServidorGestionadoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 15: el handoff
+`docs/handoff_orquesta_goal_first_parada_2026-06-26.md` deja de pedir
+reiniciar el servidor web local por puerto historico `127.0.0.1:8787`; orienta
+a `orquesta-server start/status/stop`, `ORQUESTA_SERVER_URL` y
+`ORQUESTA_RUNTIME_DIR/base_url.txt` sin tocar servidores OPES. Evidencia:
+`TestHandoffGoalFirstParadaUsaServidorGestionadoV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado
