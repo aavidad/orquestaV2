@@ -15,6 +15,8 @@ const (
 	MCPObserveAppDirectorGoalResourceURIV0 = "orquesta://contracts/observe-app-director-goal/v0"
 	MCPObserveAppDirectorGoalEstadoOKV0    = "ok"
 	MCPObserveAppDirectorGoalEstadoErrorV0 = "error"
+	MCPGoalFirstWrongLanguageGeneratedV0   = "wrong_language_generated"
+	MCPGoalFirstReplanLanguageConstraintV0 = "replan_with_language_constraint"
 )
 
 type MCPObserveAppDirectorGoalToolDescriptorV0 struct {
@@ -246,6 +248,9 @@ func mcpObserveAppDirectorGoalRecommendedActionV0(
 	}
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstRepairReceiptRequiresReworkV0) {
 		return "replan"
+	}
+	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstWrongLanguageGeneratedV0) {
+		return MCPGoalFirstReplanLanguageConstraintV0
 	}
 	if mcpObserveAppDirectorGoalHasIssueV0(result, mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0) {
 		return mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0

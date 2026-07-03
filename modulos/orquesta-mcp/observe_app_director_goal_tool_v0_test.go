@@ -292,6 +292,23 @@ func TestObserveAppDirectorGoalRecommendedActionV0RepairReceiptRequiresReworkGan
 	}
 }
 
+func TestObserveAppDirectorGoalRecommendedActionV0LenguajeEquivocadoReplanConstraint(t *testing.T) {
+	result := MCPObserveAppDirectorGoalToolResultV0{
+		GoalRef:            "goal-ref-observe-wrong-language-001",
+		GoalStatus:         orquestagoal.GoalStatusCompleteV0,
+		ClosureStatus:      orquestagoal.GoalStatusBlockedV0,
+		ClosureNeedsRework: true,
+		ClosureIssues: []MCPValidationIssueV0{{
+			Code:  MCPGoalFirstWrongLanguageGeneratedV0,
+			Field: "technical.language",
+		}},
+	}
+
+	if action := mcpObserveAppDirectorGoalRecommendedActionV0(result); action != MCPGoalFirstReplanLanguageConstraintV0 {
+		t.Fatalf("action=%q result=%+v", action, result)
+	}
+}
+
 func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0NoPisaCierreAceptado(t *testing.T) {
 	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
 		MCPObserveAppDirectorGoalToolResultV0{

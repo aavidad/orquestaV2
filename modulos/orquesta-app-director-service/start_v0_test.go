@@ -173,9 +173,10 @@ func TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy(t *testing.T) 
 		t.Fatalf("goal spec sin politica de fase Nueva App: refs=%+v criteria=%+v", spec.ContextRefs, spec.AcceptanceCriteria)
 	}
 	if !serviceGoalContextRefInSetForTestV0(spec.ContextRefs, "technical_stack", "technical-language-go") ||
+		!serviceGoalRuleRefInSetForTestV0(spec.RuleRefs, "technical_constraint", "technical_constraint:language=go", orquestagoal.GoalRuleEnforcementHardV0) ||
 		!serviceGoalArtifactContractInSetForTestV0(spec.ArtifactContracts, "technical_stack_manifest") ||
 		!serviceStringsContainPartV0(spec.AcceptanceCriteria, "Stack tecnico solicitado: lenguaje=go") {
-		t.Fatalf("goal spec sin contrato tecnico: refs=%+v artifacts=%+v criteria=%+v", spec.ContextRefs, spec.ArtifactContracts, spec.AcceptanceCriteria)
+		t.Fatalf("goal spec sin contrato tecnico: refs=%+v rules=%+v artifacts=%+v criteria=%+v", spec.ContextRefs, spec.RuleRefs, spec.ArtifactContracts, spec.AcceptanceCriteria)
 	}
 	if _, err := store.LoadRunV0(context.Background(), result.Run.RunID); err != nil {
 		t.Fatalf("run no persistida: %v", err)
@@ -188,6 +189,40 @@ func TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy(t *testing.T) 
 		state.ExternalGoalRef != result.ExternalGoalRef ||
 		state.Spec.RunRef != result.Run.RunID {
 		t.Fatalf("goal state=%+v result=%+v", state, result)
+	}
+}
+
+func TestBuildStartAppDirectorGoalWorkSpecV0TransportaConstraintLenguajeV0(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	launcher := &serviceGoalLauncherForTestV0{}
+	goalStates := newServiceGoalStateStoreForTestV0()
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = AppDirectorExecutionModeGoalFirstV0
+	request.AppSpecRequest.PreferenciasTecnicas.Lenguaje = "Go"
+	request.AppSpecRequest.PreferenciasTecnicas.Framework = "net/http"
+
+	if _, err := StartAppDirectorV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{
+			RunStore:             store,
+			EventSink:            sink,
+			GoalLauncher:         launcher,
+			GoalObserver:         serviceGoalObserverForTestV0{},
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+			GoalStateStore:       goalStates,
+		},
+	); err != nil {
+		t.Fatalf("StartAppDirectorV0: %v", err)
+	}
+	if len(launcher.specs) != 1 {
+		t.Fatalf("launcher specs=%d want 1", len(launcher.specs))
+	}
+	spec := launcher.specs[0]
+	if !serviceGoalRuleRefInSetForTestV0(spec.RuleRefs, "technical_constraint", "technical_constraint:language=go", orquestagoal.GoalRuleEnforcementHardV0) ||
+		!serviceGoalRuleRefInSetForTestV0(spec.RuleRefs, "technical_constraint", "technical_constraint:framework=net-http", orquestagoal.GoalRuleEnforcementHardV0) {
+		t.Fatalf("spec sin constraints tecnicas hard: %+v", spec.RuleRefs)
 	}
 }
 
@@ -659,6 +694,46 @@ func TestObserveAppDirectorGoalV0BloqueaRunSiStackTecnicoContradiceAppSpecV0(t *
 		result.Closure.Issues[0].Code != appDirectorGoalTechnicalLanguageMismatchV0 ||
 		result.Closure.Issues[0].Field != "technical.language" {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestCodexStackV0GoalFirstNoCierraNuevaAppConLenguajeEquivocadoV0(t *testing.T) {
+	issues := appDirectorGoalTechnicalClosureIssuesV0(
+		orquestagoal.GoalWorkSpecV0{
+			ContextRefs: []orquestagoal.GoalContextRefV0{{
+				Kind:     "technical_stack",
+				Ref:      "technical-language-go",
+				Required: true,
+			}},
+		},
+		orquestagoal.GoalWorkResultV0{
+			Status: orquestagoal.GoalStatusCompleteV0,
+			ArtifactPaths: []string{
+				"generated-apps/agenda/pyproject.toml",
+				"generated-apps/agenda/src/app.py",
+			},
+		},
+	)
+	if len(issues) != 1 ||
+		issues[0].Code != appDirectorGoalTechnicalLanguageMismatchV0 ||
+		issues[0].Field != "technical.language" {
+		t.Fatalf("issues=%+v", issues)
+	}
+}
+
+func TestCodexStackV0GoalFirstCierraNuevaAppSinConstraintDeLenguajeV0(t *testing.T) {
+	issues := appDirectorGoalTechnicalClosureIssuesV0(
+		orquestagoal.GoalWorkSpecV0{},
+		orquestagoal.GoalWorkResultV0{
+			Status: orquestagoal.GoalStatusCompleteV0,
+			ArtifactPaths: []string{
+				"generated-apps/agenda/pyproject.toml",
+				"generated-apps/agenda/src/app.py",
+			},
+		},
+	)
+	if len(issues) != 0 {
+		t.Fatalf("sin constraint no debe bloquear por lenguaje: %+v", issues)
 	}
 }
 
@@ -1311,6 +1386,20 @@ func serviceGoalContextRefInSetForTestV0(
 ) bool {
 	for _, candidate := range refs {
 		if candidate.Kind == kind && candidate.Ref == ref {
+			return true
+		}
+	}
+	return false
+}
+
+func serviceGoalRuleRefInSetForTestV0(
+	refs []orquestagoal.GoalRuleRefV0,
+	kind string,
+	ref string,
+	enforcement string,
+) bool {
+	for _, candidate := range refs {
+		if candidate.Kind == kind && candidate.Ref == ref && candidate.Enforcement == enforcement {
 			return true
 		}
 	}

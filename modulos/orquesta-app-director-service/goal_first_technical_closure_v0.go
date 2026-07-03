@@ -9,9 +9,15 @@ import (
 )
 
 const (
-	appDirectorGoalTechnicalLanguageMismatchV0  = "goal_technical_language_mismatch"
+	appDirectorGoalTechnicalLanguageMismatchV0  = "wrong_language_generated"
 	appDirectorGoalTechnicalFrameworkMismatchV0 = "goal_technical_framework_mismatch"
 )
+
+type appDirectorGoalLanguageManifestRuleV0 struct {
+	Canonical            string
+	ExpectedManifests    []string
+	ConflictingManifests []string
+}
 
 type appDirectorGoalClosureValidatorV0 struct {
 	Base orquestagoal.GoalWorkClosureValidatorPortV0
@@ -83,12 +89,16 @@ func appDirectorGoalResultMatchesLanguageV0(
 	language string,
 	result orquestagoal.GoalWorkResultV0,
 ) bool {
-	switch strings.TrimSpace(language) {
-	case "go", "golang":
-		return appDirectorGoalResultHasGoSignalsV0(result)
-	default:
-		return appDirectorGoalResultTextHasTokenV0(result, language)
+	if rule, ok := appDirectorGoalLanguageManifestRuleForTokenV0(language); ok {
+		if appDirectorGoalResultHasAnyManifestV0(result, rule.ExpectedManifests...) {
+			return true
+		}
+		if appDirectorGoalResultHasAnyManifestV0(result, rule.ConflictingManifests...) {
+			return false
+		}
+		return appDirectorGoalResultTextHasTokenV0(result, rule.Canonical)
 	}
+	return appDirectorGoalResultTextHasTokenV0(result, language)
 }
 
 func appDirectorGoalResultMatchesFrameworkV0(
@@ -103,14 +113,50 @@ func appDirectorGoalResultMatchesFrameworkV0(
 	}
 }
 
-func appDirectorGoalResultHasGoSignalsV0(result orquestagoal.GoalWorkResultV0) bool {
+func appDirectorGoalLanguageManifestRuleForTokenV0(language string) (appDirectorGoalLanguageManifestRuleV0, bool) {
+	switch strings.TrimSpace(language) {
+	case "go", "golang":
+		return appDirectorGoalLanguageManifestRuleV0{
+			Canonical:            "go",
+			ExpectedManifests:    []string{"go.mod"},
+			ConflictingManifests: []string{"pyproject.toml", "setup.py", "package.json", "Cargo.toml"},
+		}, true
+	case "python", "py":
+		return appDirectorGoalLanguageManifestRuleV0{
+			Canonical:            "python",
+			ExpectedManifests:    []string{"pyproject.toml", "setup.py"},
+			ConflictingManifests: []string{"go.mod", "package.json", "Cargo.toml"},
+		}, true
+	case "node", "nodejs", "javascript", "js", "typescript", "ts":
+		return appDirectorGoalLanguageManifestRuleV0{
+			Canonical:            "node",
+			ExpectedManifests:    []string{"package.json"},
+			ConflictingManifests: []string{"go.mod", "pyproject.toml", "setup.py", "Cargo.toml"},
+		}, true
+	case "rust":
+		return appDirectorGoalLanguageManifestRuleV0{
+			Canonical:            "rust",
+			ExpectedManifests:    []string{"Cargo.toml"},
+			ConflictingManifests: []string{"go.mod", "pyproject.toml", "setup.py", "package.json"},
+		}, true
+	default:
+		return appDirectorGoalLanguageManifestRuleV0{}, false
+	}
+}
+
+func appDirectorGoalResultHasAnyManifestV0(
+	result orquestagoal.GoalWorkResultV0,
+	manifests ...string,
+) bool {
 	for _, path := range appDirectorGoalResultPathsV0(result) {
-		base := strings.ToLower(filepath.Base(path))
-		if strings.HasSuffix(strings.ToLower(path), ".go") || base == "go.mod" || base == "go.sum" {
-			return true
+		base := filepath.Base(strings.ToLower(strings.TrimSpace(path)))
+		for _, manifest := range manifests {
+			if base == strings.ToLower(strings.TrimSpace(manifest)) {
+				return true
+			}
 		}
 	}
-	return appDirectorGoalResultTextHasAnyTokenV0(result, "go.mod", ".go", "golang")
+	return false
 }
 
 func appDirectorGoalResultTextHasTokenV0(

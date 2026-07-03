@@ -791,12 +791,7 @@ func buildStartAppDirectorGoalWorkSpecV0(
 		Objective:       startAppDirectorGoalObjectiveV0(spec),
 		DirectorKind:    orquestagoal.GoalDirectorKindCodexGoalV0,
 		ContextRefs:     contextRefs,
-		RuleRefs: []orquestagoal.GoalRuleRefV0{
-			{Kind: "repo", Ref: "AGENTS.md", Enforcement: orquestagoal.GoalRuleEnforcementHardV0},
-			{Kind: "docs", Ref: "docs/orquesta_goal_first_codex_2026-06-25.md", Enforcement: orquestagoal.GoalRuleEnforcementAdvisoryV0},
-			{Kind: "contract", Ref: "modulos/orquesta-factory/docs/contratos.md", Enforcement: orquestagoal.GoalRuleEnforcementHardV0},
-			{Kind: "contract", Ref: "modulos/orquesta-web/docs/guia_nueva_app_opciones_2026-06-25.md", Enforcement: orquestagoal.GoalRuleEnforcementAdvisoryV0},
-		},
+		RuleRefs:        startAppDirectorGoalRuleRefsV0(spec),
 		WriteSet: []orquestagoal.GoalWriteScopeV0{{
 			Path:    writeSetPath,
 			Purpose: "Arbol fuente de la app generada desde el contrato AppSpecV0.",
@@ -834,6 +829,30 @@ func startAppDirectorGoalTechnicalContextRefsV0(spec orquestafactory.AppSpecV0) 
 			Ref:      "technical-framework-" + appDirectorGoalSafeTokenV0(framework),
 			Purpose:  "Framework solicitado por AppSpecV0: " + framework,
 			Required: true,
+		})
+	}
+	return refs
+}
+
+func startAppDirectorGoalRuleRefsV0(spec orquestafactory.AppSpecV0) []orquestagoal.GoalRuleRefV0 {
+	refs := []orquestagoal.GoalRuleRefV0{
+		{Kind: "repo", Ref: "AGENTS.md", Enforcement: orquestagoal.GoalRuleEnforcementHardV0},
+		{Kind: "docs", Ref: "docs/orquesta_goal_first_codex_2026-06-25.md", Enforcement: orquestagoal.GoalRuleEnforcementAdvisoryV0},
+		{Kind: "contract", Ref: "modulos/orquesta-factory/docs/contratos.md", Enforcement: orquestagoal.GoalRuleEnforcementHardV0},
+		{Kind: "contract", Ref: "modulos/orquesta-web/docs/guia_nueva_app_opciones_2026-06-25.md", Enforcement: orquestagoal.GoalRuleEnforcementAdvisoryV0},
+	}
+	if language := strings.TrimSpace(spec.Technical.Language); language != "" {
+		refs = append(refs, orquestagoal.GoalRuleRefV0{
+			Kind:        "technical_constraint",
+			Ref:         "technical_constraint:language=" + appDirectorGoalSafeTokenV0(language),
+			Enforcement: orquestagoal.GoalRuleEnforcementHardV0,
+		})
+	}
+	if framework := strings.TrimSpace(spec.Technical.Framework); framework != "" {
+		refs = append(refs, orquestagoal.GoalRuleRefV0{
+			Kind:        "technical_constraint",
+			Ref:         "technical_constraint:framework=" + appDirectorGoalSafeTokenV0(framework),
+			Enforcement: orquestagoal.GoalRuleEnforcementHardV0,
 		})
 	}
 	return refs
