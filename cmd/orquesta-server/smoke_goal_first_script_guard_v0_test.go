@@ -768,6 +768,13 @@ func TestHandoffCierreSesionNoReabreBUG077V0(t *testing.T) {
 	if strings.Contains(openSection, "BUG-ORQ-20260701-077") {
 		t.Fatalf("handoff cierre sesion no debe reabrir BUG-077 sin evidencia nueva")
 	}
+	for _, line := range strings.Split(openSection, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- ") &&
+			(strings.Contains(trimmed, "BUG-077") || strings.Contains(trimmed, "BUG-ORQ-20260701-077")) {
+			t.Fatalf("handoff cierre sesion no debe listar BUG-077 como abierto: %s", trimmed)
+		}
+	}
 	for _, want := range []string{
 		"BUG-077 queda cerrado",
 		"TestScriptStartsTemporaryOrquestaServerV0DetectaPIDConAddrGestionadoV0",
