@@ -18,16 +18,16 @@ Informe: docs/informe_pericial_claude_orquesta_2026-07-03.md
 | T-PER-105 | libre (dep: 102 cerrada) | — | — | — |
 | T-PER-106 | libre (dep: 103-105) | — | — | — |
 | T-PER-201 | libre | — | — | — |
-| T-PER-202 | en curso vía Orquesta (goal T268, rama `pericial/pilot-t202`, puerto 34247) | orquesta+codex | 2026-07-03 | verificar: `go test -count=1 ./ -run TestDirectorV2Freeze` + `./` |
+| T-PER-202 | **hecho vía Orquesta** (goal T268, integrado como `db09e240`) | orquesta+codex, revisa Codex local | 2026-07-03 | espina Director V2 congelada con notas en 5 `AGENTS.md` y `director_v2_freeze_test.go`. Verificado `go test -count=1 ./ -run 'TestDirectorV2Freeze|TestStatusSurfaceBudgetTPer502V0'`, `go test -count=1 ./`, `go build ./...` |
 | T-PER-601 | **hecho vía Orquesta** (goal T269, integrado como `b99dffb4`) | orquesta+codex, revisa Codex local | 2026-07-03 | `ARQUITECTURA.md` enlaza informe/manual pericial y corrige persistencia actual a file-based. Verificado grep de enlaces y `go build ./...` tras integrar |
-| RELEVO 98% cuota | **instrucciones actualizadas** | siguiente agente | 2026-07-03 | Queda 1 pilotaje en vuelo: T268 (puerto 34247, rama `pericial/pilot-t202`). T267 y T269 ya están integrados en principal. Para T268: esperar terminal con `POST /api/v0/autoprogramming/status` body `{}`; verificar `go test -count=1 ./ -run TestDirectorV2Freeze` + `go test -count=1 ./`; revisar diff; integrar solo los ficheros de su write-set; apagar con shutdown forced + kill PID (`<pilot>/server.pid`) + `tmux kill-session orquesta-goal-*` + `pkill -f 'codex app-server'` si quedan residuos; actualizar esta tabla. Los worktrees viven en el scratchpad de la sesión Claude (volátil) pero las ramas `pericial/pilot-*` son permanentes |
+| RELEVO 98% cuota | **cerrado por Codex local** | siguiente agente | 2026-07-03 | Los 3 pilotajes en vuelo de Claude (`T267`, `T268`, `T269`) fueron revisados, verificados e integrados en principal. Servidores/panes de esos pilotajes apagados manualmente tras reproducir `backend_still_running`; el bug de shutdown sigue como evidencia T-PER-401 |
 | T-PER-203 | libre (dep: 201,202) | — | — | — |
 | T-PER-301 | BLOQUEADA-POR-WRITE-SET | — | — | — |
 | T-PER-302 | bloqueada (dep: 301) | — | — | — |
 | T-PER-401 | BLOQUEADA-POR-WRITE-SET | — | — | — |
 | T-PER-402 | bloqueada (dep: 401) | — | — | — |
 | T-PER-501 | **hecho vía Orquesta** (goal T265, Codex) | orquesta+codex, supervisado por claude-fable-5 | 2026-07-03 | scripts integrados y verificados; test `orquesta_metricas_deuda_ok=true`; métricas: env=500, status=16, interfaces=64, director=17 |
-| T-PER-502 | libre (dep: 501) | — | — | — |
+| T-PER-502 | **hecho por Codex local** (integrado como `77fa3c0a`) | Codex local | 2026-07-03 | añadido `status_surface_budget_test.go` con allowlist literal de 16 endpoints status/observe/control/readiness. Verificado `go test -count=1 ./ -run TestStatusSurfaceBudgetTPer502V0`, `go test -count=1 ./`, `bash scripts/test_orquesta_metricas_deuda.sh` |
 | T-PER-701 | libre | — | — | — |
 | T-PER-801 (router contexto híbrido) | libre | — | — | manual §8.5 |
 | BUG write-set prepare (pilotaje) | hecho | claude-fable-5 | 2026-07-03 | commit 13d526d1, tests focales + frontera verdes |
