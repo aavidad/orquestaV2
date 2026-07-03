@@ -1145,6 +1145,14 @@ fallo operacional de consulta frente a un estado bloqueado real sin inspeccionar
 logs internos. Evidencia:
 `TestMCPDomainWorkStatusHTTPHandlerV0ExecutorErrorDevuelveDiagnosticoPublico`.
 
+Avance BUG-ORQ-20260701-066/075 2026-07-03 tarde 35: la fachada
+`/api/v0/domain-work/status` queda cubierta tambien para timeout HTTP acotado:
+devuelve 504 con JSON publico, filtros conservados, diagnostico
+`domain_work_status_timeout` y evidencia estable. Esto evita que conectores
+OPES/domain-work interpreten un timeout de consulta como cola vacia o estado
+no accionable. Evidencia:
+`TestMCPDomainWorkStatusHTTPHandlerV0TimeoutDevuelveJSONPublico`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

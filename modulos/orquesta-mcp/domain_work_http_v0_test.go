@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestadomainworkmemory "orquesta/modulos/orquesta-domain-work-memory"
@@ -384,6 +385,42 @@ func TestMCPDomainWorkStatusHTTPHandlerV0ExecutorErrorDevuelveDiagnosticoPublico
 		!containsStringMCPTestV0(result.Diagnostics[0].EvidenceRefs, "evidence-ref-domain-work-status-http-error") ||
 		strings.Contains(result.Errores[0].Message, "/home/alberto") ||
 		strings.Contains(result.Errores[0].Message, "sk-123456789") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPDomainWorkStatusHTTPHandlerV0TimeoutDevuelveJSONPublico(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{waitForCancel: true}
+	req := httptest.NewRequest(
+		http.MethodGet,
+		MCPDomainWorkStatusHTTPPathV0+"?request_id=req-domain-status-timeout-001&project=opes&course_slug=integracion-social&run_ref=run-ref-domain-status-timeout-001",
+		nil,
+	)
+	req.Header.Set("X-Correlation-ID", "corr-domain-status-timeout-001")
+	rec := httptest.NewRecorder()
+
+	newMCPDomainWorkStatusHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusGatewayTimeout ||
+		rec.Header().Get("X-Correlation-ID") != "corr-domain-status-timeout-001" {
+		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	var result MCPDomainWorkStatusResultV0
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != MCPAutoprogrammingStatusEstadoErrorV0 ||
+		result.RequestID != "req-domain-status-timeout-001" ||
+		result.Filters.Project != "opes" ||
+		result.Filters.CourseSlug != "integracion-social" ||
+		result.Filters.RunRef != "run-ref-domain-status-timeout-001" ||
+		result.Summary.Status != "blocked" ||
+		!result.Summary.NeedsAction ||
+		result.Summary.WillFinishAlone ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "domain_work_status_timeout" ||
+		!hasMCPQueueGlobalStatusDiagnosticCodeForTestV0(result.Diagnostics, "domain_work_status_timeout") ||
+		!containsStringMCPTestV0(result.Diagnostics[0].EvidenceRefs, "evidence-ref-domain-work-status-timeout") {
 		t.Fatalf("result=%+v", result)
 	}
 }
