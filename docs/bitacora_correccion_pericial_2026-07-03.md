@@ -807,3 +807,31 @@ abiertos y documentados para revision estructural:
   como `artifact_refs`.
 - `BUG-ORQ-20260703-162`: `shutdown_ready=true` sin `exit_pending/pid` en una
   rama de fallo con cleanup efectivo.
+
+### 2026-07-03 noche — Codex cierra residuales BUG-161/162 del smoke BUG-088
+
+Trabajo directo acotado tras el smoke real. Subagente solo lectura
+`019f29f6-d108-7cf0-b45a-304ae5da833a` (Kierkegaard) audito `BUG-161` sin MCP
+ni edits: confirmo que el scanner no reconocia `checkpoint_started_bug088.txt`
+ni `bug088_second_artifact.txt`, y que `autoprogramming observe` no aplicaba el
+mismo enriquecimiento de refs materializadas que `apps/director/goal/observe`.
+
+Cambios aplicados:
+- `goal_materialized_refs_v0.go` reconoce de forma estrecha
+  `checkpoint_started*.txt` como checkpoint y `*_artifact.txt` como artefacto,
+  sin aceptar `.txt` generico.
+- `autoprogramming_observe_goal_mcp_executor_v0.go` reutiliza
+  `withMaterializedRefsV0` para que `/api/v0/autoprogramming/goal/observe`
+  publique `artifact_refs`/evidencias igual que la ruta de apps.
+- `shutdown_freeze_v0.go` conserva la proteccion contra falsos `ready`, pero no
+  reinyecta snapshots activos stale cuando la respuesta `ready` trae evidencia
+  de cleanup de backend. Asi `shutdown_ready=true` vuelve a salir con
+  `exit_pending=true` y `pid`.
+
+Evidencia ejecutada:
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestStackGoalMaterializedRefsSourceV0DetectaArtefactosTxtBUG088V0|TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaLegacy'`
+- `go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0ServerShutdown(ReadyNoBorraSnapshotPrevioActivo|ReadyTrasCleanupNoHeredaSnapshotPrevioActivo|ConflictSinCuerpoConservaSnapshotPrevioActivo|ReadyDetieneRuntimeHTTP)V0|TestShutdownProjectionFromHTTPV0ReadyConActiveWork'`
+
+Estado: `BUG-ORQ-20260703-161` y `BUG-ORQ-20260703-162` quedan cerrados por
+codigo y pruebas focales. `BUG-088` sigue cerrado funcionalmente por el smoke
+real ya documentado; no se relanza otro smoke Codex real en este bloque.

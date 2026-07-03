@@ -50,12 +50,18 @@ Evidencia durable del temporal:
 - El write-set contiene `generated-apps/checkpoint_started_bug088.txt` y `generated-apps/bug088_second_artifact.txt`.
 - La comprobacion final no encontro procesos `orquesta-server run`, `codex app-server --listen` ni `codebase-memory-mcp`.
 
-## Residuales
+## Residuales cerrados despues del smoke
 
-Durante los intentos previos quedaron documentados dos residuales:
+Durante los intentos previos quedaron documentados dos residuales. El cierre
+posterior de la misma noche los cubre por codigo y pruebas focales:
 
 - `BUG-ORQ-20260703-161`: `observe_goal` puede tardar en proyectar como
   `artifact_refs` los ficheros directos del smoke aunque existan en el write-set.
+  Cierre: `checkpoint_started*.txt` se reconoce como checkpoint,
+  `*_artifact.txt` como artefacto materializado y
+  `autoprogramming observe` reutiliza el enriquecimiento de refs materializadas.
 - `BUG-ORQ-20260703-162`: en una rama de fallo, `/server/shutdown` devolvio
   `shutdown_ready=true` sin `exit_pending/pid`; el cleanup no dejo procesos
-  vivos, pero el contrato HTTP sigue ambiguo.
+  vivos. Cierre: el runtime no hereda snapshots activos stale cuando el `ready`
+  trae evidencia de cleanup de backend, por lo que vuelve a publicar
+  `exit_pending/pid`.

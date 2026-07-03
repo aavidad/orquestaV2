@@ -27,6 +27,7 @@ type serverShutdownHTTPProjectionV0 struct {
 	ActiveWorkCount         int                                  `json:"active_work_count,omitempty"`
 	ActiveWorkRefs          []string                             `json:"active_work_refs,omitempty"`
 	ActiveWorks             []serverShutdownHTTPWorkProjectionV0 `json:"active_works,omitempty"`
+	EvidenceRefs            []string                             `json:"evidence_refs,omitempty"`
 }
 
 type serverShutdownHTTPWorkProjectionV0 struct {
@@ -123,6 +124,9 @@ func (runtime *RuntimeV0) shutdownProjectionWithPreviousSnapshotV0(
 		(!keepFrozen && !projection.Ready && !shutdownProjectionCanRecoverPreviousSnapshotV0(projection)) {
 		return projection
 	}
+	if !keepFrozen && projection.Ready && shutdownProjectionHasCleanupEvidenceV0(projection) {
+		return projection
+	}
 	state := runtime.tracker.SnapshotV0()
 	if projection.ActiveWorkCount <= 0 &&
 		len(projection.ActiveWorkRefs) == 0 &&
@@ -152,6 +156,16 @@ func shutdownProjectionHasBlockingWorkV0(projection ShutdownProjectionV0) bool {
 		projection.ActiveWorkCount > 0 ||
 		len(projection.ActiveWorkRefs) > 0 ||
 		(projection.RunsRequested > 0 && projection.RunsStopped < projection.RunsRequested)
+}
+
+func shutdownProjectionHasCleanupEvidenceV0(projection ShutdownProjectionV0) bool {
+	for _, ref := range projection.EvidenceRefs {
+		switch strings.TrimSpace(ref) {
+		case "evidence-ref-shutdown-goal-backend-cleanup-requested":
+			return true
+		}
+	}
+	return false
 }
 
 func (runtime *RuntimeV0) requestShutdownReadyV0() {
@@ -228,6 +242,7 @@ func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjecti
 			shutdownProjectionDirectActiveWorkRefsV0(payload.ActiveWorkRefs),
 			shutdownProjectionActiveWorkRefsV0(payload.ActiveWorks)...,
 		)),
+		EvidenceRefs: compactServerStringsV0(payload.EvidenceRefs),
 	}
 	if projection.ActiveWorkCount <= 0 && len(payload.ActiveWorks) > 0 {
 		projection.ActiveWorkCount = len(payload.ActiveWorks)

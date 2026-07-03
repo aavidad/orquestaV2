@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -569,6 +571,20 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaL
 		state.Spec.RunRef != prepared.RunRef {
 		t.Fatalf("state=%+v prepared=%+v", state, prepared)
 	}
+	generatedDir := filepath.Join(stack.Codex.ProjectWorkDir, "generated-apps")
+	if err := os.MkdirAll(generatedDir, 0o700); err != nil {
+		t.Fatalf("mkdir generated-apps: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(generatedDir, "bug088_second_artifact.txt"), []byte("second artifact\n"), 0o600); err != nil {
+		t.Fatalf("write materialized artifact: %v", err)
+	}
+	state.Spec.WriteSet = []orquestagoal.GoalWriteScopeV0{{
+		Path:    "generated-apps",
+		Purpose: "bug088-materialized-artifact-test",
+	}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
 	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
 		Action:   orquestamcp.MCPRunQueuePriorityActionRankV0,
 		QueueRef: DefaultRunQueueRefV0,
@@ -625,7 +641,9 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaL
 		observed.RunRef != prepared.RunRef ||
 		observed.GoalStatus != orquestagoal.GoalStatusCompleteV0 ||
 		!observed.ClosureAccepted ||
-		observed.RunStatus != string(orquestacoreworkflow.OrchestrationRunStatusClosedV0) {
+		observed.RunStatus != string(orquestacoreworkflow.OrchestrationRunStatusClosedV0) ||
+		!codexStackStringHasPrefixForTestV0(observed.ArtifactRefs, "artifact-ref-materialized:") ||
+		!codexStackStringInSetForTestV0(observed.EvidenceRefs, "evidence-ref-goal-materialized-partial-artifacts-written") {
 		t.Fatalf("observed=%+v", observed)
 	}
 	closed, err := stack.Ports.RunStore.LoadRunV0(context.Background(), prepared.RunRef)
@@ -1449,6 +1467,15 @@ func codexStackDrainDiagnosticsContainKindStatusForTestV0(
 ) bool {
 	for _, diagnostic := range diagnostics {
 		if diagnostic.Kind == kind && diagnostic.Status == status {
+			return true
+		}
+	}
+	return false
+}
+
+func codexStackStringHasPrefixForTestV0(values []string, prefix string) bool {
+	for _, value := range values {
+		if strings.HasPrefix(value, prefix) {
 			return true
 		}
 	}

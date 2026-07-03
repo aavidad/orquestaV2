@@ -36,7 +36,18 @@ func (executor CodexStackAutoprogrammingObserveGoalExecutorV0) Execute(
 		}
 		return orquestamcp.MCPAutoprogrammingObserveGoalToolResultV0{}, err
 	}
-	return orquestamcp.NewMCPAutoprogrammingObserveGoalResultV0(input, result), nil
+	publicResult := orquestamcp.NewMCPAutoprogrammingObserveGoalResultV0(input, result)
+	return NewCodexStackObserveAppDirectorGoalExecutorV0(executor.stack).withMaterializedRefsV0(
+		ctx,
+		orquestamcp.MCPObserveAppDirectorGoalToolInputV0{
+			RequestID:     input.RequestID,
+			CorrelationID: input.CorrelationID,
+			RunRef:        input.RunRef,
+			OccurredAt:    input.OccurredAt,
+			RequestedBy:   input.RequestedBy,
+		},
+		publicResult,
+	), nil
 }
 
 func (executor CodexStackAutoprogrammingObserveGoalExecutorV0) ObserveAppDirectorGoalTimeoutSnapshotV0(

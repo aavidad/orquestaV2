@@ -325,14 +325,15 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalMaterializedFileV0(
 ) goalMaterializedRefsScanV0 {
 	scan := goalMaterializedRefsScanV0{FilesScanned: 1}
 	base := strings.ToLower(strings.TrimSpace(filepath.Base(path)))
+	if goalMaterializedFileLooksLikeCheckpointV0(base) {
+		scan.Result.ArtifactRefs = []string{goalMaterializedCheckpointRefV0(projectRoot, path, state.RunRef)}
+	}
 	switch base {
 	case goalMaterializedWorkDeliveryFileV0:
 		scan.Result.DomainReceiptRefs = []string{goalMaterializedWorkDeliveryRefV0(projectRoot, path, state.RunRef)}
 		scan.HasTerminalReceipt = true
 	case goalMaterializedOPESReworkDeliveryFileV0:
 		scan.HasTerminalReceipt = true
-	case goalMaterializedCheckpointFileV0:
-		scan.Result.ArtifactRefs = []string{goalMaterializedCheckpointRefV0(projectRoot, path, state.RunRef)}
 	case goalMaterializedPhase0CheckpointDeliveryFileV0:
 		scan.HasPhase0Delivery = true
 		scan.Result.ArtifactRefs = []string{goalMaterializedArtifactRefV0(projectRoot, path, state.RunRef)}
@@ -764,12 +765,24 @@ func goalMaterializedFileLooksLikeArtifactV0(
 	if goalMaterializedPathLooksLikeQAReportV0(projectRoot, path, base) {
 		return false
 	}
+	if goalMaterializedFileLooksLikeCheckpointV0(base) {
+		return false
+	}
+	if strings.HasSuffix(strings.ToLower(strings.TrimSpace(base)), "_artifact.txt") {
+		return true
+	}
 	switch strings.ToLower(filepath.Ext(base)) {
 	case ".md", ".html", ".json", ".jsonl", ".pdf", ".mp3", ".wav", ".ogg", ".png", ".jpg", ".jpeg", ".webp":
 		return true
 	default:
 		return false
 	}
+}
+
+func goalMaterializedFileLooksLikeCheckpointV0(base string) bool {
+	base = strings.ToLower(strings.TrimSpace(base))
+	return base == goalMaterializedCheckpointFileV0 ||
+		(strings.HasPrefix(base, "checkpoint_started") && strings.HasSuffix(base, ".txt"))
 }
 
 func goalMaterializedFileIsGoalResultV0(base string) bool {

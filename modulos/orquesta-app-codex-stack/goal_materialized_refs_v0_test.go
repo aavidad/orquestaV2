@@ -64,6 +64,35 @@ func TestStackGoalMaterializedRefsSourceV0DetectaCheckpointEnWriteSet(t *testing
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0DetectaArtefactosTxtBUG088V0(t *testing.T) {
+	projectDir := t.TempDir()
+	generatedDir := filepath.Join(projectDir, "generated-apps")
+	if err := os.MkdirAll(generatedDir, 0o700); err != nil {
+		t.Fatalf("mkdir generated: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(generatedDir, "checkpoint_started_bug088.txt"), []byte("started\n"), 0o600); err != nil {
+		t.Fatalf("write checkpoint: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(generatedDir, "bug088_second_artifact.txt"), []byte("second artifact\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-bug088-001", "generated-apps")
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		!containsStringPrefixForTestV0(result.ArtifactRefs, "artifact-ref-checkpoint:") ||
+		!containsStringPrefixForTestV0(result.ArtifactRefs, "artifact-ref-materialized:") ||
+		!containsStringV0(result.IssueCodes, "partial_artifacts_written") ||
+		!containsStringV0(result.EvidenceRefs, "evidence-ref-goal-materialized-partial-artifacts-written") {
+		t.Fatalf("artefactos BUG-088 no proyectados: ok=%v result=%+v", ok, result)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0DetectaArtefactosParcialesSinReceiptTerminal(t *testing.T) {
 	projectDir := t.TempDir()
 	topicDir := filepath.Join(projectDir, "temas", "tema_036")

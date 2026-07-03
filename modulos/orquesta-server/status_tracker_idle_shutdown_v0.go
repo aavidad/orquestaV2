@@ -19,6 +19,7 @@ type ShutdownProjectionV0 struct {
 	AsyncWorkActive         int
 	ActiveWorkCount         int
 	ActiveWorkRefs          []string
+	EvidenceRefs            []string
 }
 
 func (tracker *StatusTrackerV0) MarkShutdownRequestedV0(now time.Time) StateV0 {

@@ -694,6 +694,78 @@ func TestRuntimeV0ServerShutdownReadyNoBorraSnapshotPrevioActivoV0(t *testing.T)
 	}
 }
 
+func TestRuntimeV0ServerShutdownReadyTrasCleanupNoHeredaSnapshotPrevioActivoV0(t *testing.T) {
+	stateDir := t.TempDir()
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != serverShutdownRoutePathV0 {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"estado":"ok",
+			"status":"ready",
+			"shutdown_ready":true,
+			"runs_requested":0,
+			"runs_stopped":0,
+			"evidence_refs":[
+				"evidence-ref-codex-app-server-tmux-cleanup-requested",
+				"evidence-ref-codex-app-server-tmux-configured-cleaned",
+				"evidence-ref-shutdown-goal-backend-cleanup-requested"
+			]
+		}`))
+	})
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:     stateDir,
+		TickInterval: time.Hour,
+	}, RuntimeDepsV0{
+		AppHandler: app,
+		Clock:      fixedClockV0{now: time.Date(2026, 7, 3, 23, 20, 0, 0, time.UTC)},
+		ShutdownSnapshot: fakeShutdownSnapshotPortV0{
+			result: ShutdownSnapshotResultV0{
+				Status:          "backend_still_running",
+				ActiveWorkCount: 1,
+				ActiveWorks: []ShutdownSnapshotWorkV0{{
+					Kind:            "goal_backend",
+					RunRef:          "run-ref-shutdown-cleanup-snapshot-001",
+					WorkRef:         "goal-ref-shutdown-cleanup-snapshot-001",
+					ExternalWorkRef: "thread-ref-shutdown-cleanup-snapshot-001",
+					Status:          "backend_still_running",
+				}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, serverShutdownRoutePathV0, nil)
+	rec := httptest.NewRecorder()
+	runtime.HandlerV0().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("shutdown status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload serverShutdownHTTPProjectionV0
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rec.Body.String())
+	}
+	if !payload.ShutdownReady ||
+		!payload.ExitPending ||
+		payload.PID != os.Getpid() {
+		t.Fatalf("shutdown ready tras cleanup sin salida programada: %+v", payload)
+	}
+	state := runtime.StateV0()
+	if state.ShutdownInProgress ||
+		state.SupervisorFrozen ||
+		!state.ShutdownReady ||
+		state.ShutdownStatus != "ready" ||
+		state.ShutdownActiveWorkCount != 0 ||
+		len(state.ShutdownActiveWorkRefs) != 0 {
+		t.Fatalf("ready tras cleanup heredo snapshot previo activo: %+v", state)
+	}
+}
+
 func TestRuntimeV0ServerShutdownConflictSinCuerpoConservaSnapshotPrevioActivoV0(t *testing.T) {
 	stateDir := t.TempDir()
 	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
