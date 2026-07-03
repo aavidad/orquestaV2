@@ -496,3 +496,31 @@ detectar por sí mismo (a) `goal complete` sin result materializado
 (publicar anomalía y acción recomendada, no quedarse ciego) y (b)
 discrepancia entre el task-ref de la sección de backlog y el autoinforme
 del goal.
+
+### 2026-07-03 noche — TESTIGO A CODEX; rumbo fijado por el operador
+
+Integrado por el supervisor Claude (suites `orquesta-server` verdes):
+- `6167cff6`: detección de integridad de cierres (`goal_completed_without_
+  materialized_result` solo si el cierre no fue aceptado, y
+  `goal_self_report_task_mismatch`).
+- `717dc4ae`: director de escalada POR EVENTOS: ante anomalías sin acción
+  automática invoca un comando externo (default `claude -p`) que decide
+  `stop`/`review_ok`/`defer` en JSON; presupuesto diario (default 8),
+  idempotencia por firma, lista blanca de acciones, todo auditado.
+
+**Para Codex (siguiente trabajo, por este orden):**
+1. Fontanería env del director de escalada en `cmd/orquesta-server`
+   siguiendo el patrón de T292 (`ESCALATION_DIRECTOR_ENABLED`, `_COMMAND`
+   CSV argv, `_TIMEOUT_SECONDS`, `_MAX_PER_DAY`) + test de config.
+2. Ampliar `escalationDirectorEscalatableCodesV0` con los códigos "review_*"
+   ya existentes que hoy esperan humano (p.ej. `partial_artifacts_written`
+   expuesto vía observación) — solo cablear, sin inventar códigos.
+
+**Decisión del operador sobre la cola congelada (2026-07-03):** entra solo
+lo que acerque a TERMINAR Orquesta; nada nuevo después. Entran: MEJ-106
+(deuda residual/ratchets; reduce código) tras ventana §9, y MEJ-101 (ciclo
+OPES real de validación en campo) como cierre final. Muertas/pospuestas sine
+die: MEJ-102 (meta-director de olas), MEJ-105 (memoria entre goals), MEJ-206
+(biblioteca habilidades), MEJ-207 (cascada modelos), T286-EXP (A/B broker) y
+MEJ-103 en su forma residente (supersedida por el director de escalada).
+Regla operativa: programa Codex vía Orquesta; Claude solo supervisa.
