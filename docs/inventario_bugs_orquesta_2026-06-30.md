@@ -1289,6 +1289,12 @@ Evidencia documental: `modulos/orquesta-mcp/docs/contratos.md`,
 `modulos/orquesta-mcp/docs/pruebas.md` y
 `modulos/orquesta-mcp/docs/decisiones.md`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 33c: el descriptor ejecutable
+de `orquesta.server.shutdown.v0` declara tambien los estados publicos
+`active_goals_present` y `backend_still_running` en `Output`, no solo los
+campos de active work. Evidencia:
+`TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 34: el transporte MCP de
 `orquesta.runs.supervisor.v0` tambien conserva `operation_ref`,
 `evidence_refs` estables y diagnostico `run_supervisor_execute_error` cuando el

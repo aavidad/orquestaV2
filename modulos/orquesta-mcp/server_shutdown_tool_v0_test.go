@@ -22,7 +22,9 @@ func TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0(t *testing.T) {
 	}
 	if !strings.Contains(descriptor.InputSchema, "evidence_refs?") ||
 		!strings.Contains(descriptor.Output, "evidence_refs?") ||
-		!strings.Contains(descriptor.Output, "error:{errores_publicos,evidence_refs?}") {
+		!strings.Contains(descriptor.Output, "error:{errores_publicos,evidence_refs?}") ||
+		!strings.Contains(descriptor.Output, "active_goals_present") ||
+		!strings.Contains(descriptor.Output, "backend_still_running") {
 		t.Fatalf("descriptor shutdown debe declarar evidencia en entrada y salida: %+v", descriptor)
 	}
 }
@@ -152,9 +154,9 @@ func TestMCPServerShutdownToolExecutorV0ErrorConservaEvidenciaV0(t *testing.T) {
 	result, err := NewMCPServerShutdownToolExecutorV0(orquestaservershutdown.ServerShutdownDepsV0{}).Execute(
 		context.Background(),
 		MCPServerShutdownToolInputV0{
-			RequestedBy:    "agent-ref-not-authorized",
-			Reason:         "apagado no autorizado con evidencia",
-			EvidenceRefs:   []string{" evidence-ref-shutdown-denied-001 ", "evidence-ref-shutdown-denied-001", ""},
+			RequestedBy:  "agent-ref-not-authorized",
+			Reason:       "apagado no autorizado con evidencia",
+			EvidenceRefs: []string{" evidence-ref-shutdown-denied-001 ", "evidence-ref-shutdown-denied-001", ""},
 		},
 	)
 	if err != nil {

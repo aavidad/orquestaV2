@@ -95,7 +95,7 @@ func MCPServerShutdownDescriptorV0() MCPServerShutdownToolDescriptorV0 {
 		Name:        MCPServerShutdownToolNameV0,
 		Version:     MCPServerShutdownToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,queue_ref?,app_refs?,forced?,cleanup_goal_backends?,checkpoint_deadline_at?,max_ticks?,max_runs_per_tick?,max_executions?,requested_by?,reason?,idempotency_key?,evidence_refs?}",
-		Output:      "ok:{status,shutdown_ready,runs_requested,runs_stopped,agents_in_flight,checkpoint_agents_pending,checkpoint_deadlines_expired,active_work_count,active_works?,runs?,evidence_refs?}|error:{errores_publicos,evidence_refs?}",
+		Output:      "ok:{status=ready|waiting_drain|waiting_checkpoint|active_goals_present|backend_still_running,shutdown_ready,runs_requested,runs_stopped,agents_in_flight,checkpoint_agents_pending,checkpoint_deadlines_expired,active_work_count,active_works?,runs?,evidence_refs?}|error:{errores_publicos,evidence_refs?}",
 		ResourceURI: MCPServerShutdownResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
