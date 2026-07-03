@@ -662,32 +662,7 @@ func mcpQueueGlobalStatusRecommendedActionFromDiagnosticV0(diagnostic MCPAutopro
 
 func mcpQueueGlobalStatusNormalizeRecommendedActionV0(action string, fallback string) string {
 	action = strings.ToLower(strings.TrimSpace(action))
-	switch action {
-	case "retry",
-		"replan",
-		"reencolar",
-		"cancel_stale",
-		"restart_observer",
-		"repair_runtime",
-		"repair_goal_state",
-		"inspect_liveness",
-		mcpQueueGlobalStatusActionReviewReplanGoalFirstV0,
-		mcpQueueGlobalStatusActionRetryFromPhaseV0,
-		mcpQueueGlobalStatusActionCloseSupersededByLocalEvidenceV0,
-		mcpQueueGlobalStatusActionRunControlReconcileCleanupV0,
-		mcpQueueGlobalStatusActionObserveGoalRequireCheckpointV0,
-		mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0,
-		mcpQueueGlobalStatusActionObserveGoalWaitForCheckpointV0,
-		mcpQueueGlobalStatusActionReplanNarrowContextV0,
-		mcpQueueGlobalStatusActionReplanGoalAfterActiveTimeoutV0,
-		mcpQueueGlobalStatusActionReconcileGoalTerminalV0,
-		mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0,
-		mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0,
-		MCPGoalFirstRepairReceiptActionV0,
-		MCPGoalFirstReworkWriteSetViolationActionV0,
-		MCPGoalFirstReworkPublicTextActionV0,
-		MCPGoalFirstReviewPartialArtifactsActionV0,
-		MCPGoalFirstContinueFromPhase0ActionV0:
+	if mcpQueueGlobalStatusIsPreservedRecommendedActionV0(action) {
 		return action
 	}
 	if strings.Contains(action, "goal_state") ||
@@ -719,6 +694,39 @@ func mcpQueueGlobalStatusNormalizeRecommendedActionV0(action string, fallback st
 		return "cancel_stale"
 	}
 	return firstNonEmptyMCPV0(fallback, "repair_runtime")
+}
+
+func mcpQueueGlobalStatusIsPreservedRecommendedActionV0(action string) bool {
+	switch action {
+	case "retry",
+		"replan",
+		"reencolar",
+		"cancel_stale",
+		"restart_observer",
+		"repair_runtime",
+		"repair_goal_state",
+		"inspect_liveness",
+		mcpQueueGlobalStatusActionReviewReplanGoalFirstV0,
+		mcpQueueGlobalStatusActionRetryFromPhaseV0,
+		mcpQueueGlobalStatusActionCloseSupersededByLocalEvidenceV0,
+		mcpQueueGlobalStatusActionRunControlReconcileCleanupV0,
+		mcpQueueGlobalStatusActionObserveGoalRequireCheckpointV0,
+		mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0,
+		mcpQueueGlobalStatusActionObserveGoalWaitForCheckpointV0,
+		mcpQueueGlobalStatusActionReplanNarrowContextV0,
+		mcpQueueGlobalStatusActionReplanGoalAfterActiveTimeoutV0,
+		mcpQueueGlobalStatusActionReconcileGoalTerminalV0,
+		mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0,
+		mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0,
+		MCPGoalFirstRepairReceiptActionV0,
+		MCPGoalFirstReworkWriteSetViolationActionV0,
+		MCPGoalFirstReworkPublicTextActionV0,
+		MCPGoalFirstReviewPartialArtifactsActionV0,
+		MCPGoalFirstContinueFromPhase0ActionV0:
+		return true
+	}
+	prefix, runRef, found := strings.Cut(action, ":run:")
+	return found && strings.TrimSpace(runRef) != "" && mcpQueueGlobalStatusIsPreservedRecommendedActionV0(prefix)
 }
 
 func mcpQueueGlobalStatusEvidenceRefsFromSafeActionV0(action MCPAutoprogrammingSafeActionV0) []string {

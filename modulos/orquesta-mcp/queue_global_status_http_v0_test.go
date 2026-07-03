@@ -632,6 +632,28 @@ func TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFir
 	}
 }
 
+func TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFirstPorRun(t *testing.T) {
+	runRef := "run-ref-global-status-goal-first-action-001"
+	for _, action := range []string{
+		mcpQueueGlobalStatusActionReplanNarrowContextV0,
+		mcpQueueGlobalStatusActionReplanGoalAfterActiveTimeoutV0,
+		mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0,
+		mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0,
+		MCPGoalFirstRepairReceiptActionV0,
+		MCPGoalFirstReworkWriteSetViolationActionV0,
+		MCPGoalFirstReworkPublicTextActionV0,
+		MCPGoalFirstReviewPartialArtifactsActionV0,
+		MCPGoalFirstContinueFromPhase0ActionV0,
+	} {
+		want := action + ":run:" + runRef
+		t.Run(want, func(t *testing.T) {
+			if got := mcpQueueGlobalStatusNormalizeRecommendedActionV0(want, "repair_runtime"); got != want {
+				t.Fatalf("action=%q, want %q", got, want)
+			}
+		})
+	}
+}
+
 func TestMCPQueueGlobalStatusHTTPHandlerV0ConservaWriteSetGuardContract(t *testing.T) {
 	executor := &fakeMCPQueueGlobalStatusExecutorV0{
 		result: MCPAutoprogrammingStatusToolResultV0{
