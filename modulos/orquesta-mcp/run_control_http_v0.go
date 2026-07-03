@@ -137,12 +137,12 @@ func newMCPRunControlHTTPErrorV0(
 		if runRef := strings.TrimSpace(input.RunRef); runRef != "" {
 			scope = "run:" + runRef
 		}
-		result.Diagnostics = append(result.Diagnostics, MCPRunControlDiagnosticV0{
+		result.Diagnostics = []MCPRunControlDiagnosticV0{{
 			Code:         "run_control_http_error",
 			Scope:        scope,
 			Message:      strings.TrimSpace(message),
 			EvidenceRefs: result.EvidenceRefs,
-		})
+		}}
 	}
 	if len(result.Errores) > 0 {
 		result.Errores[0].Message = strings.TrimSpace(message)
@@ -162,12 +162,12 @@ func newMCPRunControlTimeoutResultV0(
 	if runRef := strings.TrimSpace(input.RunRef); runRef != "" {
 		scope = "run:" + runRef
 	}
-	result.Diagnostics = append(result.Diagnostics, MCPRunControlDiagnosticV0{
+	result.Diagnostics = []MCPRunControlDiagnosticV0{{
 		Code:         "run_control_timeout",
 		Scope:        scope,
 		Message:      "control de run excedio la ventana HTTP acotada; conserva evidencia para reintento gobernado",
 		EvidenceRefs: result.EvidenceRefs,
-	})
+	}}
 	if len(result.Errores) > 0 {
 		result.Errores[0].Message = "control de run excedio la ventana HTTP acotada"
 	}

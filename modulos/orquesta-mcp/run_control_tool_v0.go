@@ -123,16 +123,29 @@ func newMCPRunControlResultV0(
 }
 
 func newMCPRunControlErrorV0(input MCPRunControlToolInputV0, code string, field string) MCPRunControlToolResultV0 {
+	normalizedCode := strings.TrimSpace(code)
+	evidenceRefs := compactStringsMCPV0(input.EvidenceRefs)
+	scope := ""
+	if runRef := strings.TrimSpace(input.RunRef); runRef != "" {
+		scope = "run:" + runRef
+	}
 	return MCPRunControlToolResultV0{
 		Estado:        MCPRunControlEstadoErrorV0,
 		RequestID:     strings.TrimSpace(input.RequestID),
 		CorrelationID: firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
 		Action:        normalizeMCPRunControlActionV0(input.Action),
 		RunRef:        strings.TrimSpace(input.RunRef),
+		Forced:        input.Forced,
+		EvidenceRefs:  evidenceRefs,
+		Diagnostics: []MCPRunControlDiagnosticV0{{
+			Code:         normalizedCode,
+			Scope:        scope,
+			EvidenceRefs: evidenceRefs,
+		}},
 		Errores: []MCPValidationIssueV0{{
-			Code:    strings.TrimSpace(code),
+			Code:    normalizedCode,
 			Field:   strings.TrimSpace(field),
-			Message: strings.TrimSpace(code),
+			Message: normalizedCode,
 		}},
 	}
 }

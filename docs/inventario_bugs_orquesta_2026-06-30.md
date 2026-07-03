@@ -1115,6 +1115,13 @@ publico queda alineado con los errores recuperables HTTP y evita que clientes
 compactos descarten evidencia. Evidencia:
 `TestMCPRunControlDescriptorV0EsAdaptadorFino`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 31: el constructor comun de
+errores de `orquesta.runs.control.v0` conserva ahora `forced`,
+`evidence_refs` compactas y diagnostico con scope de run tambien para errores
+de tool como accion no soportada, puerto ausente o validacion. Esto mantiene la
+misma evidencia de reconciliacion fuera del transporte HTTP. Evidencia:
+`TestMCPRunControlExecutorV0ErrorConservaEvidenciaV0`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

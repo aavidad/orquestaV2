@@ -70,6 +70,43 @@ func TestMCPRunControlExecutorV0DelegaEnPuertoInyectado(t *testing.T) {
 	}
 }
 
+func TestMCPRunControlExecutorV0ErrorConservaEvidenciaV0(t *testing.T) {
+	executor := NewMCPRunControlToolExecutorV0(&fakeMCPRunControlPortV0{})
+
+	result, err := executor.Execute(context.Background(), MCPRunControlToolInputV0{
+		RequestID: "req-run-control-error-evidence-001",
+		Action:    "restart",
+		RunRef:    "run-ref-control-error-evidence-001",
+		Forced:    true,
+		EvidenceRefs: []string{
+			mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0,
+			"",
+			mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0,
+		},
+	})
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPRunControlEstadoErrorV0 ||
+		result.Action != "restart" ||
+		result.RunRef != "run-ref-control-error-evidence-001" ||
+		!result.Forced ||
+		len(result.EvidenceRefs) != 1 ||
+		!containsStringMCPTestV0(result.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) ||
+		len(result.Diagnostics) != 1 ||
+		result.Diagnostics[0].Code != "action_no_soportada" ||
+		result.Diagnostics[0].Scope != "run:run-ref-control-error-evidence-001" ||
+		!containsStringMCPTestV0(
+			result.Diagnostics[0].EvidenceRefs,
+			mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0,
+		) ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "action_no_soportada" {
+		t.Fatalf("error run-control debe conservar evidencia compacta: %+v", result)
+	}
+}
+
 func TestMCPRunControlExecutorV0StopForcedNoPublicaStoppedSiGoalBackendSigueActive(t *testing.T) {
 	runRef := "run-ref-run-control-goal-active-001"
 	goalRef := "goal-ref-run-control-goal-active-001"
