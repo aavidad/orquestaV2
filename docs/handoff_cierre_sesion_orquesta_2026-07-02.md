@@ -5,9 +5,14 @@ Fecha: 2026-07-02
 ## Estado Git
 
 - Rama remota de trabajo: `origin/trabajo/plataforma-agentes`.
-- Local integrado y empujado hasta: `777e027c Separa code-home tmux app-server`.
+- Corte original integrado y empujado hasta:
+  `777e027c Separa code-home tmux app-server`.
+- Actualizacion operativa: no usar `777e027c` como HEAD vigente sin verificar
+  remoto. Antes de nuevas ediciones, commits o push ejecutar
+  `git fetch origin trabajo/plataforma-agentes && git rebase origin/trabajo/plataforma-agentes`.
 - Worktree local usado para integracion: `/tmp/orquesta-rootfix.y9E0W9`.
-- El arbol local queda limpio en `777e027c`.
+- El arbol local quedaba limpio en el corte original `777e027c`; cualquier
+  reanudacion debe comprobar `git status --short --branch` despues del rebase.
 - Agente remoto sigue vivo en
   `/srv/orquesta-self/runtime/audit-13611445`.
 
