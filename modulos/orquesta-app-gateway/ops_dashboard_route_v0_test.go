@@ -26,6 +26,29 @@ func TestAppGatewayOpsDashboardRouteV0(t *testing.T) {
 	}
 }
 
+func TestAppGatewayOpsKanbanRouteV0(t *testing.T) {
+	handler := NewHTTPHandlerV0(ConfigV0{Timeout: time.Second})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ops/kanban", nil)
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	for _, required := range []string{
+		"Kanban de observacion",
+		"/api/v0/autoprogramming/status",
+		"/api/v0/queue/global-status",
+		"no_new_source_of_truth",
+	} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("ops kanban sin %q: %s", required, body)
+		}
+	}
+}
+
 func TestAppGatewayHomeRouteV0(t *testing.T) {
 	handler := NewHTTPHandlerV0(ConfigV0{Timeout: time.Second})
 
@@ -40,6 +63,7 @@ func TestAppGatewayHomeRouteV0(t *testing.T) {
 	for _, required := range []string{
 		"Orquesta",
 		`href="/ops"`,
+		`href="/ops/kanban"`,
 		`href="/nueva-app"`,
 		`href="/autoprogramming"`,
 		`href="/app-change"`,

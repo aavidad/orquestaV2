@@ -104,6 +104,7 @@ func homeHTMLV0() string {
         <div class="actions">
           <a class="button primary" href="/nueva-app">Pedir app</a>
           <a class="button" href="/ops">Abrir cockpit</a>
+          <a class="button" href="/ops/kanban">Kanban</a>
           <a class="button" href="/autoprogramming">Autoprogramar</a>
           <a class="button" href="/app-change">Pedir cambio</a>
         </div>
@@ -112,6 +113,7 @@ func homeHTMLV0() string {
         <h2>Estado del sistema</h2>
         <ul>
           <li><span class="route">/ops</span>: vision live, cola, agentes, fases y acciones de supervision.</li>
+          <li><span class="route">/ops/kanban</span>: carriles de observacion derivados de estado vivo y cola.</li>
           <li><span class="route">/run-queue</span>: prioridad y cola multiapp.</li>
           <li><span class="route">/run-control</span>: pausar, reanudar, parar o cancelar runs.</li>
         </ul>
@@ -123,6 +125,11 @@ func homeHTMLV0() string {
         <span class="tag">operacion</span>
         <h3>Cockpit autonomo</h3>
         <p class="muted">Panel unico para ver actividad, detectar atencion real y pedir una pasada acotada del supervisor.</p>
+      </a>
+      <a class="card" href="/ops/kanban">
+        <span class="tag">observacion</span>
+        <h3>Kanban vivo</h3>
+        <p class="muted">Carriles read-only sobre cola, estado vivo, runs y agentes sin crear otra fuente de verdad.</p>
       </a>
       <a class="card" href="/nueva-app">
         <span class="tag">creacion</span>

@@ -152,6 +152,7 @@ const opsDashboardHTMLChunk0V0 = `<!doctype html>
         <span class="pill">refresco <strong id="refresh-ms">1000 ms</strong></span>
         <span class="pill">última lectura <strong id="last-refresh">-</strong></span>
         <a class="navlink" href="/">Inicio</a>
+        <a class="navlink" href="/ops/kanban">Kanban</a>
         <a class="navlink" href="/nueva-app">Nueva app</a>
         <a class="navlink" href="/autoprogramming">Autoprogramar</a>
         <a class="navlink" href="/app-change">Cambio</a>

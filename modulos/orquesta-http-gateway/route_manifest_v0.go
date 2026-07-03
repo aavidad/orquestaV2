@@ -18,6 +18,7 @@ const (
 	RouteRefNuevaAppV0                          = "route-ref-nueva-app-v0"
 	RouteRefNuevaAppGuideV0                     = "route-ref-nueva-app-guide-v0"
 	RouteRefOpsDashboardV0                      = "route-ref-ops-dashboard-v0"
+	RouteRefOpsKanbanV0                         = "route-ref-ops-kanban-v0"
 	RouteRefAutoprogrammingPageV0               = "route-ref-autoprogramming-page-v0"
 	RouteRefAppChangePageV0                     = "route-ref-app-change-page-v0"
 	RouteRefDirectorStatsPageV0                 = "route-ref-director-stats-page-v0"

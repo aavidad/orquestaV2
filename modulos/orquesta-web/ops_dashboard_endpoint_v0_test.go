@@ -19,6 +19,7 @@ func TestOpsDashboardWebEndpointV0RenderizaPanelLiveCompleto(t *testing.T) {
 	body := rec.Body.String()
 	for _, want := range []string{
 		"Orquesta Ops",
+		"/ops/kanban",
 		"/api/v0/server/status",
 		"/api/v0/server/resources",
 		"/api/v0/autoprogramming/status",

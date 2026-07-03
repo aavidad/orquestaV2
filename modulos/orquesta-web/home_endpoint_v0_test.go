@@ -17,6 +17,7 @@ func TestHomeWebEndpointV0RenderizaConsolaOperativa(t *testing.T) {
 	if rec.Code != http.StatusOK ||
 		!strings.Contains(body, "Orquesta") ||
 		!strings.Contains(body, `href="/ops"`) ||
+		!strings.Contains(body, `href="/ops/kanban"`) ||
 		!strings.Contains(body, `href="/nueva-app"`) ||
 		!strings.Contains(body, `href="/autoprogramming"`) ||
 		!strings.Contains(body, `href="/app-change"`) ||

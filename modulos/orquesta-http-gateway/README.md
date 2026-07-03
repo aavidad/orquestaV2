@@ -13,6 +13,8 @@ Responsabilidades:
 Rutas v0:
 
 - `/nueva-app`
+- `/ops`
+- `/ops/kanban`
 - `/app-change`
 - `/director-stats`
 - `/run-control`

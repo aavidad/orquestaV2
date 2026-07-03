@@ -17,6 +17,22 @@ Estado:
 ## Decisiones iniciales
 
 ```text
+Fecha: 2026-07-03
+Decision: `/ops/kanban` es una proyeccion read-only, no una nueva fuente de verdad.
+Motivo: el analisis pericial identifico retrasos por fuentes de estado
+duplicadas. El operador necesita observar trabajo en formato kanban, pero las
+mutaciones y el estado canonico deben seguir en cola, estado vivo, stats,
+outbox y contratos existentes.
+Impacto: la pantalla consume `/api/v0/autoprogramming/status` y
+`/api/v0/queue/global-status`, deriva carriles en cliente y no introduce store,
+drag/drop, endpoint nuevo ni acciones mutadoras. Las `safe_actions` se muestran
+como evidencia publicada, no como boton ejecutable desde esta vista.
+Contratos afectados: `/ops/kanban`,
+`orquesta.autoprogramming.status.v0`, `orquesta.queue.global_status.v0`.
+Estado: aceptada localmente.
+```
+
+```text
 Fecha: 2026-06-27
 Decision: El avance manual en `/ops` observa Goal cuando el run es goal-first.
 Motivo: el panel operativo aun mostraba botones de avance conectados al

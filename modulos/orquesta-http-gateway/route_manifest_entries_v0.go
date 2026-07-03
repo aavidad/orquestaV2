@@ -6,6 +6,7 @@ func routeManifestEntriesV0() []RouteManifestEntryV0 {
 		{Ref: RouteRefNuevaAppV0, Pattern: RouteNuevaAppV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerHTTPGatewayV0, Methods: []string{routeMethodAnyV0}, SecurityProfile: RouteSecurityBrowserHTMLV0},
 		{Ref: RouteRefNuevaAppGuideV0, Pattern: RouteNuevaAppGuideV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerHTTPGatewayV0, Methods: []string{routeMethodGetV0}, SecurityProfile: RouteSecurityBrowserHTMLV0},
 		{Ref: RouteRefOpsDashboardV0, Pattern: RouteOpsDashboardV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerHTTPGatewayV0, Methods: []string{routeMethodGetV0}, SecurityProfile: RouteSecurityBrowserHTMLV0},
+		{Ref: RouteRefOpsKanbanV0, Pattern: RouteOpsKanbanV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerHTTPGatewayV0, Methods: []string{routeMethodGetV0}, SecurityProfile: RouteSecurityBrowserHTMLV0},
 		{Ref: RouteRefAutoprogrammingPageV0, Pattern: RouteAutoprogrammingPageV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerHTTPGatewayV0, Methods: []string{routeMethodGetV0}, SecurityProfile: RouteSecurityBrowserHTMLV0},
 		{Ref: RouteRefAppChangePageV0, Pattern: RouteAppChangePageV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerHTTPGatewayV0, Methods: []string{routeMethodAnyV0}, SecurityProfile: RouteSecurityBrowserHTMLV0},
 		{Ref: RouteRefDirectorStatsPageV0, Pattern: RouteDirectorStatsPageV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerHTTPGatewayV0, Methods: []string{routeMethodGetV0}, SecurityProfile: RouteSecurityBrowserHTMLV0},

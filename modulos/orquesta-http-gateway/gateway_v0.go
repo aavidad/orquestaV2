@@ -7,6 +7,7 @@ const (
 	RouteNuevaAppV0                          = "/nueva-app"
 	RouteNuevaAppGuideV0                     = "/nueva-app/guia"
 	RouteOpsDashboardV0                      = "/ops"
+	RouteOpsKanbanV0                         = "/ops/kanban"
 	RouteAutoprogrammingPageV0               = "/autoprogramming"
 	RouteAppChangePageV0                     = "/app-change"
 	RouteDirectorStatsPageV0                 = "/director-stats"
@@ -52,6 +53,7 @@ type RouteHandlersV0 struct {
 	NuevaApp                          http.Handler
 	NuevaAppGuide                     http.Handler
 	OpsDashboard                      http.Handler
+	OpsKanban                         http.Handler
 	AutoprogrammingPage               http.Handler
 	AppChangePage                     http.Handler
 	DirectorStatsPage                 http.Handler
@@ -128,6 +130,7 @@ func gatewayRouteRegistrationsV0(handlers RouteHandlersV0) []gatewayRouteRegistr
 		{ref: RouteRefNuevaAppV0, route: RouteNuevaAppV0, handler: handlers.NuevaApp},
 		{ref: RouteRefNuevaAppGuideV0, route: RouteNuevaAppGuideV0, handler: handlers.NuevaAppGuide},
 		{ref: RouteRefOpsDashboardV0, route: RouteOpsDashboardV0, handler: handlers.OpsDashboard},
+		{ref: RouteRefOpsKanbanV0, route: RouteOpsKanbanV0, handler: handlers.OpsKanban},
 		{ref: RouteRefAutoprogrammingPageV0, route: RouteAutoprogrammingPageV0, handler: handlers.AutoprogrammingPage},
 		{ref: RouteRefAppChangePageV0, route: RouteAppChangePageV0, handler: handlers.AppChangePage},
 		{ref: RouteRefDirectorStatsPageV0, route: RouteDirectorStatsPageV0, handler: handlers.DirectorStatsPage},

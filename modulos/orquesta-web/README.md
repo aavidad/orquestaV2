@@ -5,6 +5,7 @@ Responsabilidad: interfaz primaria para pedir apps, revisar progreso y operar ac
 Incluye:
 
 - consola inicial `/`;
+- kanban de observacion `/ops/kanban`;
 - pantalla de autoprogramacion `/autoprogramming`;
 - nueva app;
 - panel de agentes;
@@ -32,8 +33,15 @@ acoplarse a sus bases de datos, runtime, proveedor o contratos internos.
 
 La consola inicial `/` es un indice operativo fino: no lee estado ni decide
 negocio; enlaza a `/ops`, `/nueva-app`, `/autoprogramming`, `/app-change`,
-`/director-stats`, `/run-queue` y `/run-control` para que el operador pueda
-usar Orquesta desde la web sin recordar rutas API.
+`/ops/kanban`, `/director-stats`, `/run-queue` y `/run-control` para que el
+operador pueda usar Orquesta desde la web sin recordar rutas API.
+
+`/ops/kanban` es un panel de observacion read-only. Consume por navegador
+same-origin `/api/v0/autoprogramming/status` y
+`/api/v0/queue/global-status`, deriva carriles visuales en cliente y no crea
+store, endpoint de mutacion, drag/drop ni fuente de verdad nueva. Si faltan
+datos, muestra vacio/diagnostico; las acciones seguras publicadas se muestran
+como evidencia operativa y no se ejecutan desde este panel.
 
 La guia de opciones de `/nueva-app` esta servida en `/nueva-app/guia` y vive en
 `docs/guia_nueva_app_opciones_2026-06-25.md`. Documenta el asistente guiado, el

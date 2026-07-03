@@ -31,6 +31,7 @@ Informe: docs/informe_pericial_claude_orquesta_2026-07-03.md
 | T-PER-701 | libre | — | — | — |
 | T-PER-801 (router contexto híbrido) | libre | — | — | manual §8.5 |
 | BUG write-set prepare (pilotaje) | hecho | claude-fable-5 | 2026-07-03 | commit 13d526d1, tests focales + frontera verdes |
+| OPS-KANBAN | hecho por Codex local | Codex local + Orquesta observador | 2026-07-03 | panel `/ops/kanban` read-only sobre `autoprogramming/status` y `queue/global-status`, sin store ni fuente de verdad nueva. Verificado con tests focales web/gateway/app-gateway, `go build ./...`, `cmd/orquesta-server` y smoke real contra Orquesta aislado |
 
 ## Registro cronológico
 

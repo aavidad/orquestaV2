@@ -17,6 +17,7 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 		{name: "nueva app guide", route: RouteNuevaAppGuideV0, handlers: RouteHandlersV0{NuevaAppGuide: markerHandler("nueva-app-guide")}},
 		{name: "app spec", route: RouteAppSpecV0, handlers: RouteHandlersV0{AppSpec: markerHandler("app-spec")}},
 		{name: "ops dashboard", route: RouteOpsDashboardV0, handlers: RouteHandlersV0{OpsDashboard: markerHandler("ops-dashboard")}},
+		{name: "ops kanban", route: RouteOpsKanbanV0, handlers: RouteHandlersV0{OpsKanban: markerHandler("ops-kanban")}},
 		{name: "autoprogramming page", route: RouteAutoprogrammingPageV0, handlers: RouteHandlersV0{AutoprogrammingPage: markerHandler("autoprogramming-page")}},
 		{name: "app change page", route: RouteAppChangePageV0, handlers: RouteHandlersV0{AppChangePage: markerHandler("app-change-page")}},
 		{name: "director stats page", route: RouteDirectorStatsPageV0, handlers: RouteHandlersV0{DirectorStatsPage: markerHandler("director-stats-page")}},
