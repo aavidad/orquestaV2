@@ -220,3 +220,90 @@ func TestMCPTransportV0RunControlStopExternalCleanupSinForce(t *testing.T) {
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 1400)
 }
+
+func TestMCPTransportV0RunControlResumeNoReconciliaExternalCleanupSinForce(t *testing.T) {
+	runRef := "run-ref-control-transport-external-cleanup-resume-001"
+	goalRef := "goal-ref-control-transport-external-cleanup-resume-001"
+	externalGoalRef := "thread-ref-" + goalRef
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Reanudar por transporte MCP sin reconciliar cleanup externo.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	port := &fakeMCPRunControlPortV0{
+		readState: runControlStateForMCPTestV0(runRef, orquestaruncontrol.RunControlStatusPausedV0, false),
+	}
+	goalBackend := &fakeMCPRunControlGoalBackendStateV0{
+		results: []MCPDirectorStatsToolResultV0{
+			{Estado: MCPDirectorStatsEstadoOKV0, RunRef: runRef},
+			{Estado: MCPDirectorStatsEstadoOKV0, RunRef: runRef},
+		},
+	}
+	transport := newFakeMCPTransportV0()
+	err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{
+		RunControl: MCPRunControlToolExecutorV0{
+			Port:             port,
+			GoalBackendState: goalBackend,
+			GoalStateStore:   goalStates,
+		},
+	})
+	if err != nil {
+		t.Fatalf("register transport: %v", err)
+	}
+
+	output, err := transport.CallToolV0(
+		context.Background(),
+		MCPRunControlToolNameV0,
+		MCPRunControlToolInputV0{
+			RequestID:    "request-ref-run-control-transport-external-cleanup-resume-001",
+			Action:       "resume",
+			RunRef:       runRef,
+			RequestedBy:  "orquesta-director",
+			Reason:       "reanudar sin reconciliar cleanup externo por transporte",
+			Forced:       false,
+			EvidenceRefs: []string{mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0},
+		},
+	)
+	if err != nil {
+		t.Fatalf("call run control: %v", err)
+	}
+	var result MCPRunControlToolResultV0
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.Estado != MCPRunControlEstadoOKV0 ||
+		result.Action != "resume" ||
+		result.Status != string(orquestaruncontrol.RunControlStatusRunningV0) ||
+		result.RecommendedAction != "" ||
+		port.complete.RunRef != "" ||
+		containsMCPRunControlDiagnosticForTestV0(result.Diagnostics, "goal_state_terminal_reconciled_after_external_cleanup") ||
+		!containsStringMCPTestV0(port.resume.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) {
+		t.Fatalf("result=%+v resume=%+v complete=%+v", result, port.resume, port.complete)
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if state.Status != orquestagoal.GoalStatusRunningV0 ||
+		state.LastResult != nil ||
+		state.LastClosure != nil {
+		t.Fatalf("state mutado por resume transporte con evidencia cleanup externo: %+v", state)
+	}
+	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 1400)
+}
