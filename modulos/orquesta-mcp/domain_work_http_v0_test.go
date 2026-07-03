@@ -179,6 +179,50 @@ func TestMCPDomainWorkStatusHTTPHandlerV0ConservaRepairReceiptGoalFirst(t *testi
 	}
 }
 
+func TestMCPDomainWorkStatusHTTPHandlerV0ConservaAccionGoalFirstPorRun(t *testing.T) {
+	runRef := "run-ref-domain-status-repair-receipt-scoped-001"
+	action := MCPGoalFirstRepairReceiptActionV0 + ":run:" + runRef
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				Blocked: 1,
+			},
+			StaleRunning: []MCPAutoprogrammingActionableRunV0{{
+				Code:              mcpAutoprogrammingActionArtifactPathsOmittedV0,
+				RunRef:            runRef,
+				AppRef:            "app-ref-domain-status-opes",
+				RecommendedAction: action,
+				EvidenceRefs:      []string{"evidence-ref-domain-status-repair-receipt-scoped"},
+			}},
+		},
+	}
+	req := httptest.NewRequest(
+		http.MethodGet,
+		MCPDomainWorkStatusHTTPPathV0+"?project=opes&course_slug=integracion-social&run_ref="+runRef,
+		nil,
+	)
+	rec := httptest.NewRecorder()
+
+	NewMCPDomainWorkStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPDomainWorkStatusResultV0
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Summary.Status != "blocked" ||
+		!result.Summary.NeedsAction ||
+		len(result.Items) != 1 ||
+		result.Items[0].Status != "blocked" ||
+		result.Items[0].RecommendedAction != action {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPDomainWorkStatusHTTPHandlerV0ConservaOutputSaneadoGoalFirst(t *testing.T) {
 	result := domainWorkStatusResultForActionableRunTestV0(
 		t,

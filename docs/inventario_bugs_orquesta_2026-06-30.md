@@ -1495,6 +1495,12 @@ publican ahora esas refs para que clientes compactos puedan decidir `runs/contro
 reparacion de receipt o rework por write-set sin inferirlo desde logs. Evidencia:
 `TestMCPDirectorStatsToolDescriptorV0ExponeContratoCompacto`.
 
+Avance BUG-ORQ-20260701-066/075/085 2026-07-03 tarde 49:
+la fachada `/api/v0/domain-work/status` queda cubierta para acciones goal-first
+agregadas con scope `:run:<run_ref>`; asi no se pierde el run causal al cruzar
+desde `queue/global-status` hacia estado de dominio OPES/domain-work. Evidencia:
+`TestMCPDomainWorkStatusHTTPHandlerV0ConservaAccionGoalFirstPorRun`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
