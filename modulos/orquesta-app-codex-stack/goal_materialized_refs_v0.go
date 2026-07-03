@@ -242,10 +242,16 @@ func (source stackGoalMaterializedRefsSourceV0) loadTerminalGoalMaterializedResu
 		if err != nil || foundOK {
 			return nil
 		}
+		if entry != nil && entry.IsDir() {
+			if path != target && goalMaterializedResultSkipDirV0(entry.Name()) {
+				return fs.SkipDir
+			}
+			return nil
+		}
 		if filesScanned >= goalMaterializedQAScanMaxFilesV0 {
 			return errGoalMaterializedRefsScanDoneV0
 		}
-		if entry == nil || entry.IsDir() || !pathWithinRootV0(projectRoot, path) {
+		if entry == nil || !pathWithinRootV0(projectRoot, path) {
 			return nil
 		}
 		filesScanned++
@@ -291,11 +297,17 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalWriteScopeForMaterialize
 		if err != nil {
 			return nil
 		}
+		if entry != nil && entry.IsDir() {
+			if path != target && goalMaterializedResultSkipDirV0(entry.Name()) {
+				return fs.SkipDir
+			}
+			return nil
+		}
 		if len(scan.Result.DomainReceiptRefs)+len(scan.Result.ArtifactRefs) >= goalMaterializedRefsMaxFilesV0 ||
 			scan.FilesScanned >= goalMaterializedQAScanMaxFilesV0 {
 			return errGoalMaterializedRefsScanDoneV0
 		}
-		if entry == nil || entry.IsDir() {
+		if entry == nil {
 			return nil
 		}
 		if !pathWithinRootV0(projectRoot, path) {
@@ -800,6 +812,15 @@ func goalMaterializedFileLooksLikeCheckpointV0(base string) bool {
 
 func goalMaterializedFileIsGoalResultV0(base string) bool {
 	return orquestaruntimecodexgoal.CodexGoalResultFileNameLooksValidV0(base)
+}
+
+func goalMaterializedResultSkipDirV0(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case ".git", ".codex", ".gocache", "node_modules", "vendor":
+		return true
+	default:
+		return false
+	}
 }
 
 func goalMaterializedFileLooksLikeQAReportV0(

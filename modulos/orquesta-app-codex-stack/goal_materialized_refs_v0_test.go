@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -642,6 +643,76 @@ func TestStackGoalMaterializedRefsSourceV0NormalizaMissingRefsRaizEnReceiptDurab
 		!containsStringV0(result.Checklist.MissingRefs, "source_tree") ||
 		!containsStringV0(result.Checklist.MissingRefs, "tests") {
 		t.Fatalf("missing_refs raiz no normalizado: ok=%v result=%+v", ok, result)
+	}
+}
+
+func TestStackGoalMaterializedRefsSourceV0EncuentraReceiptTerminalTrasCacheVoluminosaV0(t *testing.T) {
+	projectDir := t.TempDir()
+	appDir := filepath.Join(projectDir, "generated-apps", "cache-heavy")
+	cacheDir := filepath.Join(appDir, ".gocache", "00")
+	docsDir := filepath.Join(appDir, "docs")
+	for _, dir := range []string{cacheDir, docsDir} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatalf("mkdir %s: %v", dir, err)
+		}
+	}
+	for i := 0; i < goalMaterializedQAScanMaxFilesV0+40; i++ {
+		if err := os.WriteFile(
+			filepath.Join(cacheDir, "cache-"+strconv.Itoa(i)+".txt"),
+			[]byte("cache\n"),
+			0o600,
+		); err != nil {
+			t.Fatalf("write cache %d: %v", i, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(appDir, "source_tree.md"), []byte("# Source\n"), 0o600); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(
+		t,
+		"run-goal-materialized-cache-heavy-001",
+		"generated-apps/cache-heavy",
+	)
+	artifactRef := "artifact-ref-" + state.RunRef + "-source"
+	testRef := "test-ref-" + state.RunRef + "-generated-app"
+	evidenceRef := "evidence-ref-app-director-goal-first-v0"
+	receipt := `{
+  "schema_version":"orquesta_goal_result.v0",
+  "goal_ref":"` + state.GoalRef + `",
+  "status":"complete",
+  "summary":"receipt terminal tras cache",
+  "artifact_refs":["` + artifactRef + `"],
+  "artifact_paths":["generated-apps/cache-heavy/source_tree.md"],
+  "required_test_results":[{"test_ref":"` + testRef + `","status":"passed","evidence_refs":["` + evidenceRef + `"]}],
+  "evidence_refs":["` + evidenceRef + `"]
+}`
+	if err := os.WriteFile(filepath.Join(docsDir, goalMaterializedGoalResultFileV0), []byte(receipt), 0o600); err != nil {
+		t.Fatalf("write receipt: %v", err)
+	}
+
+	terminal, terminalOK, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).LoadTerminalGoalMaterializedResultV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("LoadTerminalGoalMaterializedResultV0: %v", err)
+	}
+	if !terminalOK ||
+		terminal.Status != orquestagoal.GoalStatusCompleteV0 ||
+		!containsStringV0(terminal.ArtifactRefs, artifactRef) {
+		t.Fatalf("terminalOK=%v terminal=%+v", terminalOK, terminal)
+	}
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		containsStringV0(result.IssueCodes, "partial_artifacts_written") ||
+		!containsStringV0(result.ArtifactRefs, artifactRef) ||
+		!containsStringV0(result.EvidenceRefs, evidenceRef) {
+		t.Fatalf("ok=%v result=%+v", ok, result)
 	}
 }
 
