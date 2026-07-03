@@ -46,8 +46,7 @@ func (runtime *RuntimeV0) goalObservationFingerprintPlanV0(
 		if fingerprint.RunRef == "" {
 			fingerprint.RunRef = runRef
 		}
-		if previous, ok := runtime.goalObservationFingerprints[runRef]; ok &&
-			orquestagoal.GoalObservationUnchangedV0(previous, fingerprint) {
+		if runtime.goalObservationFingerprintUnchangedV0(runRef, fingerprint) {
 			plan.Skipped++
 			continue
 		}
@@ -79,11 +78,11 @@ func (runtime *RuntimeV0) rememberGoalObservationFingerprintsV0(
 			continue
 		}
 		if observation.Terminal || orquestagoal.GoalWorkResultTerminalV0(observation.State.Status) {
-			delete(runtime.goalObservationFingerprints, runRef)
+			runtime.deleteGoalObservationFingerprintV0(runRef)
 			continue
 		}
 		if fingerprint, ok := pending[runRef]; ok {
-			runtime.goalObservationFingerprints[runRef] = fingerprint
+			runtime.storeGoalObservationFingerprintV0(runRef, fingerprint)
 			continue
 		}
 		if runtime.goalFingerprint != nil {
@@ -92,9 +91,69 @@ func (runtime *RuntimeV0) rememberGoalObservationFingerprintsV0(
 				if fingerprint.RunRef == "" {
 					fingerprint.RunRef = runRef
 				}
-				runtime.goalObservationFingerprints[runRef] = fingerprint
+				runtime.storeGoalObservationFingerprintV0(runRef, fingerprint)
 				continue
 			}
 		}
 	}
+}
+
+func (runtime *RuntimeV0) ForgetGoalObservationFingerprintV0(runRef string) bool {
+	runRef = strings.TrimSpace(runRef)
+	if runtime == nil || runRef == "" {
+		return false
+	}
+	runtime.goalObservationFingerprintsMu.Lock()
+	defer runtime.goalObservationFingerprintsMu.Unlock()
+	if runtime.goalObservationFingerprints == nil {
+		return false
+	}
+	if _, ok := runtime.goalObservationFingerprints[runRef]; !ok {
+		return false
+	}
+	delete(runtime.goalObservationFingerprints, runRef)
+	return true
+}
+
+func (runtime *RuntimeV0) goalObservationFingerprintUnchangedV0(
+	runRef string,
+	fingerprint orquestagoal.GoalObservationFingerprintV0,
+) bool {
+	runRef = strings.TrimSpace(runRef)
+	if runtime == nil || runRef == "" {
+		return false
+	}
+	runtime.goalObservationFingerprintsMu.Lock()
+	defer runtime.goalObservationFingerprintsMu.Unlock()
+	if runtime.goalObservationFingerprints == nil {
+		return false
+	}
+	previous, ok := runtime.goalObservationFingerprints[runRef]
+	return ok && orquestagoal.GoalObservationUnchangedV0(previous, fingerprint)
+}
+
+func (runtime *RuntimeV0) storeGoalObservationFingerprintV0(
+	runRef string,
+	fingerprint orquestagoal.GoalObservationFingerprintV0,
+) {
+	runRef = strings.TrimSpace(runRef)
+	if runtime == nil || runRef == "" {
+		return
+	}
+	runtime.goalObservationFingerprintsMu.Lock()
+	defer runtime.goalObservationFingerprintsMu.Unlock()
+	if runtime.goalObservationFingerprints == nil {
+		runtime.goalObservationFingerprints = map[string]orquestagoal.GoalObservationFingerprintV0{}
+	}
+	runtime.goalObservationFingerprints[runRef] = fingerprint
+}
+
+func (runtime *RuntimeV0) deleteGoalObservationFingerprintV0(runRef string) {
+	runRef = strings.TrimSpace(runRef)
+	if runtime == nil || runRef == "" {
+		return
+	}
+	runtime.goalObservationFingerprintsMu.Lock()
+	defer runtime.goalObservationFingerprintsMu.Unlock()
+	delete(runtime.goalObservationFingerprints, runRef)
 }

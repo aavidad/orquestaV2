@@ -1,0 +1,6 @@
+goal_ref: goal-ref-autoprogramming-backlog-t285-despertar-por-result-materializado-4c8de71d
+area: t285-despertar-por-result-materializado
+scope: modulos/orquesta-app-codex-stack, modulos/orquesta-server, cmd/orquesta-server
+next_artifact: file-based watcher in the Codex stack that wakes the existing goal observer when terminal orquesta_goal_result_*.json files appear under active goal write-sets.
+input_evidence_refs: evidence-ref-autoprogramming-backlog-section-t285-despertar-por-result-materializado, scan-ref-backlog-2776fda27382
+started_at: 2026-07-03T17:10:00Z

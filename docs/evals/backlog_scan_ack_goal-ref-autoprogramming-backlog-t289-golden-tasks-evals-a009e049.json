@@ -1,0 +1,43 @@
+{
+  "schema_version": "orquesta_backlog_scan_ack.v0",
+  "goal_ref": "goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049",
+  "backlog_scan_epoch": "backlog-scan-epoch-76ec396daab3",
+  "backlog_scan_ref": "scan-ref-backlog-f6ae5d12b919",
+  "backlog_task_instance_ref": "task-instance-ref-backlog-9b80fe2c",
+  "backlog_task_id_ref": "task-id-ref-backlog-91022865d324",
+  "backlog_task_id_range": "T289",
+  "reservation_refs": [
+    "reservation-ref-backlog-scan-doc-merge-67156fd3ca69",
+    "reservation-ref-backlog-task-id-0830a722051b"
+  ],
+  "input_scan_docs": [
+    {
+      "path": "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+      "line": 16,
+      "sha256": "f3a155199c1adc0859a198bd2c4d80afd14a1d12d9e6cb3dd97e5160dad0d93a"
+    }
+  ],
+  "current_scan_docs": [
+    {
+      "path": "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+      "line": 16,
+      "line_sha256": "840a1f33c65b7d734862eaec033e99c29888017cf314a110dbda166c62cd8d3e",
+      "file_sha256": "58dd8f5c4b23c50a4240e907a784b3b0eabc9fb43894efe9589fa3e4f1c5160d"
+    }
+  ],
+  "merge_decision": {
+    "status": "draft_rebase_pending",
+    "reason": "scanner_doc_hash_changed_from_input_snapshot",
+    "task_id_range_consumed": false,
+    "reservations_consumed": false,
+    "new_txx_inserted": false
+  },
+  "duplicate_task_id_check": {
+    "caller_reference": "T289",
+    "current_matches": [
+      "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:16"
+    ],
+    "status": "not_ambiguous",
+    "required_block_code_if_duplicate": "backlog_duplicate_task_id_ambiguous"
+  }
+}

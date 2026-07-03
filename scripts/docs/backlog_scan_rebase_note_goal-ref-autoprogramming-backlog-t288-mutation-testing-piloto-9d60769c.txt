@@ -1,0 +1,14 @@
+goal_ref=goal-ref-autoprogramming-backlog-t288-mutation-testing-piloto-9d60769c
+backlog_scan_ref=scan-ref-backlog-07ddca92c54d
+backlog_scan_epoch=backlog-scan-epoch-7e5164205026
+declared_scan_doc=docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:sha256:2cc3a048d2a1c7d13d9c87967796aecd8be29a68befe352fe13e1d940781a97f
+current_line_16_sha256_newline=7a2988d43ca6a66a670bbd1d8ebcfd22915ce60504900e5351aa31057813b905
+current_line_16_sha256_no_newline=23a50c9e0b4a7da40544eb17cf0ef38975010922cbd25cfd15bc51ebcdbae6c8
+current_file_sha256=ca3ccaa6b013ab28129dda4caeb2cfac0987d772460e097e6f9351cdc6fe15f5
+line_16=## T288 mutation-testing-piloto
+task_id_ref=task-id-ref-backlog-4be70117399b
+task_id_range=T288
+task_id_range_consumed=false
+new_backlog_tasks_inserted=false
+rebase_or_merge_pending=true
+reason=declared scanner hash differs from current backlog document; MEJ-TASK-203 does not require adding new ## Txx tasks, so no backlog merge was attempted.

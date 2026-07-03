@@ -791,6 +791,39 @@ func TestRuntimeV0IdleSelfImprovementGoalFirstCompactaObjectiveLargoV0(t *testin
 	}
 }
 
+func TestRuntimeV0IdleSelfImprovementGoalFirstPropagaSkillRefsDeRequestV0(t *testing.T) {
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                      t.TempDir(),
+		IdleSelfImprovementProjectRef: "project-ref-orquesta",
+		AuditDisabled:                 true,
+	}, RuntimeDepsV0{
+		Supervisor:     &goalFirstSupervisorForTestV0{},
+		GoalStateStore: newMemoryGoalStateStoreV0(),
+		StateStore:     &memoryStateStoreV0{},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	spec := runtime.idleSelfImprovementGoalWorkSpecV0(IdleSelfImprovementRequestV0{
+		RequestRef:     "request-ref-idle-skill-curada",
+		ProjectRef:     "project-ref-orquesta",
+		FailureSummary: "Anadir validacion con go test.",
+		WriteSet:       []string{"modulos/orquesta-autoprogramming"},
+		RequiredTests:  []string{"go test -count=1 ./modulos/orquesta-autoprogramming"},
+		SkillRefs: []string{
+			"skill-ref-orquesta-programacion-tests-v0",
+			"skill-ref-orquesta-programacion-tests-v0",
+		},
+	})
+
+	if !containsStringForTestV0(spec.SkillRefs, "skill-ref-orquesta-programacion-tests-v0") {
+		t.Fatalf("skill_refs=%+v", spec.SkillRefs)
+	}
+	if !containsGoalContextRefForTestV0(spec.ContextRefs, "skill-ref-orquesta-programacion-tests-v0") {
+		t.Fatalf("context_refs=%+v", spec.ContextRefs)
+	}
+}
+
 func TestRuntimeV0IdleSelfImprovementGoalFirstSinLauncherNoCaeALegacyV0(t *testing.T) {
 	now := time.Date(2026, 6, 25, 12, 30, 0, 0, time.UTC)
 	store := &memoryStateStoreV0{}

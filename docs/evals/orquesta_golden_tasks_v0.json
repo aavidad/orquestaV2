@@ -1,0 +1,169 @@
+{
+  "schema_version": "orquesta_golden_tasks.v0",
+  "task_set_ref": "golden-tasks-evals-initial-2026-07-04",
+  "source_task_ref": "MEJ-TASK-205",
+  "description": "Banco inicial de tareas doradas para medir deriva de calidad de agentes Orquesta.",
+  "input_evidence_refs": [
+    "scan-ref-backlog-f6ae5d12b919",
+    "task-instance-ref-backlog-9b80fe2c",
+    "modulos/orquesta-autoprogramming/self_improvement_apg004_test.go",
+    "modulos/orquesta-autoprogramming/idle_self_improvement_v0_test.go"
+  ],
+  "global_forbidden_path_prefixes": [
+    "OPES/productivo",
+    "opes_productivo",
+    "produccion/opes"
+  ],
+  "required_result_checks": [
+    "tests_pass",
+    "expected_files_present",
+    "writeset_only"
+  ],
+  "tasks": [
+    {
+      "task_id": "golden-new-app-smoke-v0",
+      "task_class": "new_app_smoke",
+      "source_analogy": "Nueva App del smoke",
+      "objective": "Crear una app externa minima, hexagonal y verificable desde una solicitud de Orquesta en una instancia aislada.",
+      "write_set": [
+        "apps/orquesta-golden-smoke-app",
+        "docs/runbooks/golden-smoke-app"
+      ],
+      "expected_files": [
+        "apps/orquesta-golden-smoke-app/domain/model.go",
+        "apps/orquesta-golden-smoke-app/application/service.go",
+        "apps/orquesta-golden-smoke-app/adapters/http/server.go",
+        "apps/orquesta-golden-smoke-app/cmd/server/main.go",
+        "apps/orquesta-golden-smoke-app/domain/model_test.go"
+      ],
+      "required_tests": [
+        "go test -count=1 ./apps/orquesta-golden-smoke-app/..."
+      ],
+      "forbidden_path_prefixes": [
+        "OPES",
+        "ops/production"
+      ],
+      "verifier_refs": [
+        "tests_pass",
+        "expected_files_present",
+        "writeset_only",
+        "no_opes_productive_touch"
+      ]
+    },
+    {
+      "task_id": "golden-script-t265-idle-self-improvement-v0",
+      "task_class": "script_contract_fix",
+      "source_analogy": "T265/script acotado",
+      "objective": "Corregir un fallo de contrato de automejora idle usando evidencia de tests y cerrarlo con un script o test focal.",
+      "write_set": [
+        "scripts",
+        "docs/runbooks"
+      ],
+      "expected_files": [
+        "scripts/test_autoprogramming_fast.sh",
+        "docs/runbooks/autoprogramacion_api_gateway_server_2026-05-23.md"
+      ],
+      "required_tests": [
+        "go test -count=1 ./modulos/orquesta-autoprogramming -run 'TestResolveAutoprogrammingIdleSelfImprovementConfigV0|TestDecideAutoprogrammingIdleSelfImprovementV0'",
+        "bash -n scripts/test_autoprogramming_fast.sh"
+      ],
+      "failure_evidence_refs": [
+        "modulos/orquesta-autoprogramming/idle_self_improvement_v0_test.go"
+      ],
+      "verifier_refs": [
+        "tests_pass",
+        "expected_files_present",
+        "writeset_only",
+        "idle_default_60",
+        "idle_zero_disables_clock",
+        "idle_or_capacity_prepares",
+        "root_cause_corrected_from_failure_evidence"
+      ]
+    },
+    {
+      "task_id": "golden-docs-t280-backlog-scanner-v0",
+      "task_class": "docs_backlog_scanner",
+      "source_analogy": "T280/docs y scanner de backlog",
+      "objective": "Actualizar documentacion de backlog sin convertir secciones narrativas en runs y conservando hashes/lineas de scanner.",
+      "write_set": [
+        "docs/runbooks",
+        "docs/evals"
+      ],
+      "expected_files": [
+        "docs/runbooks/autoprogramacion_backlog_state_sync_2026-05-24.md",
+        "docs/evals/backlog_scanner_notes.md"
+      ],
+      "required_tests": [
+        "go test -count=1 ./modulos/orquesta-autoprogramming -run TestPlanAutoprogrammingBacklogSelfImprovementV0"
+      ],
+      "expected_scan_ref": "scan-ref-backlog-f6ae5d12b919",
+      "expected_scan_docs": [
+        {
+          "path": "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+          "line": 16,
+          "sha256": "f3a155199c1adc0859a198bd2c4d80afd14a1d12d9e6cb3dd97e5160dad0d93a"
+        }
+      ],
+      "verifier_refs": [
+        "tests_pass",
+        "expected_files_present",
+        "writeset_only",
+        "planner_skips_visible_queue",
+        "planner_creates_scanner",
+        "narrative_sections_filtered",
+        "scanner_ack_cites_ref_lines_hashes",
+        "scanner_doc_hash_guard",
+        "backlog_duplicate_task_id_ambiguous"
+      ]
+    },
+    {
+      "task_id": "golden-frozen-test-fix-v0",
+      "task_class": "frozen_test_fix",
+      "source_analogy": "Fix con test congelado",
+      "objective": "Arreglar una regresion manteniendo intacto el test congelado que reproduce el fallo.",
+      "write_set": [
+        "modulos/orquesta-autoprogramming"
+      ],
+      "expected_files": [
+        "modulos/orquesta-autoprogramming/idle_self_improvement_v0.go"
+      ],
+      "frozen_files": [
+        "modulos/orquesta-autoprogramming/idle_self_improvement_v0_test.go"
+      ],
+      "required_tests": [
+        "go test -count=1 ./modulos/orquesta-autoprogramming -run TestResolveAutoprogrammingIdleSelfImprovementConfigV0"
+      ],
+      "verifier_refs": [
+        "tests_pass",
+        "expected_files_present",
+        "writeset_only",
+        "frozen_files_unchanged",
+        "root_cause_corrected_from_failure_evidence"
+      ]
+    },
+    {
+      "task_id": "golden-public-map-exploration-v0",
+      "task_class": "public_map_exploration",
+      "source_analogy": "Exploracion tipo mapa publico",
+      "objective": "Explorar y documentar la proyeccion publica de trabajo externo sin tocar runtime productivo.",
+      "write_set": [
+        "docs/runbooks",
+        "modulos/orquesta-server"
+      ],
+      "expected_files": [
+        "docs/runbooks/panel_ops_orquesta_2026-05-24.md",
+        "modulos/orquesta-server/status_public_v0.go"
+      ],
+      "required_tests": [
+        "go test -count=1 ./modulos/orquesta-autoprogramming -run TestProjectAutoprogrammingExternalWorkV0DistingueEstadosPublicos"
+      ],
+      "verifier_refs": [
+        "tests_pass",
+        "expected_files_present",
+        "writeset_only",
+        "public_projection_distinguishes_external_work",
+        "no_opes_productive_touch"
+      ]
+    }
+  ]
+}

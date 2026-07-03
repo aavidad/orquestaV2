@@ -24,6 +24,7 @@ type serverSupervisorWakeupRelayV0 struct {
 	request                 func(string) bool
 	requestResidentDirector func(string) bool
 	requestGoalObservation  func(string) bool
+	forgetGoalObservation   func(string) bool
 }
 
 func (relay *serverSupervisorWakeupRelayV0) bindRuntimeV0(runtime *orquestaserver.RuntimeV0) {
@@ -36,11 +37,13 @@ func (relay *serverSupervisorWakeupRelayV0) bindRuntimeV0(runtime *orquestaserve
 		relay.request = nil
 		relay.requestResidentDirector = nil
 		relay.requestGoalObservation = nil
+		relay.forgetGoalObservation = nil
 		return
 	}
 	relay.request = runtime.RequestSupervisorWakeupV0
 	relay.requestResidentDirector = runtime.RequestResidentDirectorWakeupV0
 	relay.requestGoalObservation = runtime.RequestGoalObservationWakeupV0
+	relay.forgetGoalObservation = runtime.ForgetGoalObservationFingerprintV0
 }
 
 func (relay *serverSupervisorWakeupRelayV0) requestV0(cause string) bool {
@@ -80,6 +83,46 @@ func (relay *serverSupervisorWakeupRelayV0) requestGoalObservationV0(cause strin
 		return false
 	}
 	return request(cause)
+}
+
+func (relay *serverSupervisorWakeupRelayV0) forgetGoalObservationFingerprintV0(runRef string) bool {
+	if relay == nil {
+		return false
+	}
+	relay.mu.RLock()
+	forget := relay.forgetGoalObservation
+	relay.mu.RUnlock()
+	if forget == nil {
+		return false
+	}
+	return forget(runRef)
+}
+
+type serverGoalStateChangeRelayV0 struct {
+	mu     sync.RWMutex
+	notify func() bool
+}
+
+func (relay *serverGoalStateChangeRelayV0) bindV0(notify func() bool) {
+	if relay == nil {
+		return
+	}
+	relay.mu.Lock()
+	defer relay.mu.Unlock()
+	relay.notify = notify
+}
+
+func (relay *serverGoalStateChangeRelayV0) notifyV0() bool {
+	if relay == nil {
+		return false
+	}
+	relay.mu.RLock()
+	notify := relay.notify
+	relay.mu.RUnlock()
+	if notify == nil {
+		return false
+	}
+	return notify()
 }
 
 type serverWakeupRunStoreV0 struct {
@@ -331,8 +374,9 @@ func (store serverWakeupCodexReceiptStoreV0) RecordDirectorAgentDecisionFileCons
 }
 
 type serverWakeupGoalStateStoreV0 struct {
-	inner  serverWakeupGoalStateStorePortV0
-	wakeup *serverSupervisorWakeupRelayV0
+	inner       serverWakeupGoalStateStorePortV0
+	wakeup      *serverSupervisorWakeupRelayV0
+	stateChange *serverGoalStateChangeRelayV0
 }
 
 type serverWakeupGoalStateStorePortV0 interface {
@@ -348,6 +392,9 @@ func (store serverWakeupGoalStateStoreV0) SaveGoalWorkStateV0(
 ) error {
 	if err := store.inner.SaveGoalWorkStateV0(ctx, state); err != nil {
 		return err
+	}
+	if store.stateChange != nil {
+		store.stateChange.notifyV0()
 	}
 	store.wakeup.requestGoalObservationV0("goal_state_saved")
 	if orquestagoal.GoalWorkResultTerminalV0(state.Status) {

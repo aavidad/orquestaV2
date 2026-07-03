@@ -1,0 +1,234 @@
+{
+  "goal_ref": "goal-ref-autoprogramming-backlog-t287-property-based-nucleo-puro-1728e5b3",
+  "schema_version": "orquesta_goal_result.v0",
+  "status": "complete",
+  "summary": "MEJ-TASK-202 implementada dentro del alcance: propiedades rapid para ConstruirProyeccionCicloVidaV0, TransicionBackendV0 y ReconcileExternalWorkPublicStatusV0; se corrigieron las causas generales detectadas por propiedades y pasaron los tests requeridos y go build.",
+  "artifact_refs": [
+    "artifact-ref-t287-checkpoint-started",
+    "artifact-ref-t287-goal-result-json",
+    "artifact-ref-t287-rapid-test-dependency",
+    "artifact-ref-t287-property-tests-estado-vivo",
+    "artifact-ref-t287-property-tests-backend",
+    "artifact-ref-t287-property-tests-reconcile",
+    "artifact-ref-t287-backend-transition-fix",
+    "artifact-ref-t287-external-work-reconcile-fix"
+  ],
+  "artifact_paths": [
+    "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+    "docs/plan_mejora_continua_orquesta_2026-07-04.md",
+    "go.mod",
+    "modulos/orquesta-estado-vivo/docs/checkpoint_started_t287_property_based_nucleo_puro.txt",
+    "modulos/orquesta-estado-vivo/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t287-property-based-nucleo-puro-1728e5b3.json",
+    "modulos/orquesta-estado-vivo/proyeccion_properties_v0_test.go",
+    "modulos/orquesta-estado-vivo/testdeps/rapid/go.mod",
+    "modulos/orquesta-estado-vivo/testdeps/rapid/rapid.go",
+    "modulos/orquesta-runtime-codex-appserver/estado_backend_v0.go",
+    "modulos/orquesta-runtime-codex-appserver/estado_backend_properties_v0_test.go",
+    "modulos/orquesta-run-coordinator/external_work_reconciliation_v0.go",
+    "modulos/orquesta-run-coordinator/external_work_reconciliation_properties_v0_test.go"
+  ],
+  "materialized_artifacts": [
+    {
+      "artifact_ref": "artifact-ref-t287-checkpoint-started",
+      "path": "modulos/orquesta-estado-vivo/docs/checkpoint_started_t287_property_based_nucleo_puro.txt",
+      "artifact_type": "checkpoint",
+      "status": "valid",
+      "evidence_refs": [
+        "checkpoint_started_before_long_exploration"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t287-goal-result-json",
+      "path": "modulos/orquesta-estado-vivo/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t287-property-based-nucleo-puro-1728e5b3.json",
+      "artifact_type": "goal_result",
+      "status": "valid",
+      "evidence_refs": [
+        "schema_version:orquesta_goal_result.v0",
+        "goal_ref:goal-ref-autoprogramming-backlog-t287-property-based-nucleo-puro-1728e5b3"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t287-rapid-test-dependency",
+      "path": "go.mod",
+      "artifact_type": "test_dependency",
+      "status": "valid",
+      "evidence_refs": [
+        "go-list-production-deps:no-pgregory.net/rapid",
+        "go-list-test-deps:pgregory.net/rapid",
+        "source-ref:github.com/flyingmutant/rapid-tags-v1.3.0"
+      ],
+      "issues": [
+        "sandbox_go_proxy_dns_blocked; local replace under write-set used for test-only resolver"
+      ]
+    },
+    {
+      "artifact_ref": "artifact-ref-t287-property-tests-estado-vivo",
+      "path": "modulos/orquesta-estado-vivo/proyeccion_properties_v0_test.go",
+      "artifact_type": "property_tests",
+      "status": "valid",
+      "evidence_refs": [
+        "properties:4",
+        "invariants:determinism_permutation:no_silent_conflict:precedence_monotonicity:outbox_wait_process_distinction",
+        "test-output:required-test-ref-49861468ad59:passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t287-property-tests-backend",
+      "path": "modulos/orquesta-runtime-codex-appserver/estado_backend_properties_v0_test.go",
+      "artifact_type": "property_tests",
+      "status": "valid",
+      "evidence_refs": [
+        "properties:5",
+        "invariants:idempotent_repeated_observation:ready_prerequisites:owner_invalid_orphan:apagado_live_illegal:shutdown_converges",
+        "test-output:required-test-ref-49861468ad59:passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t287-property-tests-reconcile",
+      "path": "modulos/orquesta-run-coordinator/external_work_reconciliation_properties_v0_test.go",
+      "artifact_type": "property_tests",
+      "status": "valid",
+      "evidence_refs": [
+        "properties:5",
+        "invariants:never_completed_without_terminal_evidence:ack_without_closure_blocked:pending_outbox_running:domain_pending_without_work_blocked:stale_no_process_not_running",
+        "test-output:required-test-ref-49861468ad59:passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t287-backend-transition-fix",
+      "path": "modulos/orquesta-runtime-codex-appserver/estado_backend_v0.go",
+      "artifact_type": "code_fix",
+      "status": "valid",
+      "evidence_refs": [
+        "failure-evidence:TestTransicionBackendV0PropEstadoIdempotenteConObservacionRepetidaV0",
+        "failure-evidence:TestTransicionBackendV0PropApagadoConTrabajoVivoEsIlegalSinAccionApagadoV0",
+        "test-output:required-test-ref-49861468ad59:passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t287-external-work-reconcile-fix",
+      "path": "modulos/orquesta-run-coordinator/external_work_reconciliation_v0.go",
+      "artifact_type": "code_fix",
+      "status": "valid",
+      "evidence_refs": [
+        "failure-evidence:TestReconcileExternalWorkPublicStatusV0PropOutboxPendienteMantieneRunningV0",
+        "test-output:required-test-ref-49861468ad59:passed"
+      ],
+      "issues": []
+    }
+  ],
+  "checklist": {
+    "expected_refs": [
+      "MEJ-TASK-202",
+      "criterio:rapid-test-only",
+      "criterio:4-properties-per-function",
+      "criterio:invariant-line-per-property",
+      "criterio:synthetic-regression-caught",
+      "criterio:short-under-30s",
+      "criterio:idle-default-60s",
+      "criterio:idle-after-zero-disables-clock-only",
+      "criterio:capacity-free-under-target-prepares",
+      "criterio:planner-skips-visible-and-scanner",
+      "criterio:narrative-sections-filtered",
+      "criterio:public-projection-outbox-wait-process",
+      "criterio:duplicate-txx-ambiguous-general",
+      "criterio:no-new-Txx-inserted",
+      "criterio:within-authorized-write-set",
+      "criterio:manual-go-build"
+    ],
+    "completed_refs": [
+      "MEJ-TASK-202",
+      "criterio:rapid-test-only",
+      "criterio:4-properties-per-function",
+      "criterio:invariant-line-per-property",
+      "criterio:synthetic-regression-caught",
+      "criterio:short-under-30s",
+      "criterio:idle-default-60s",
+      "criterio:idle-after-zero-disables-clock-only",
+      "criterio:capacity-free-under-target-prepares",
+      "criterio:planner-skips-visible-and-scanner",
+      "criterio:narrative-sections-filtered",
+      "criterio:public-projection-outbox-wait-process",
+      "criterio:duplicate-txx-ambiguous-general",
+      "criterio:no-new-Txx-inserted",
+      "criterio:within-authorized-write-set",
+      "criterio:manual-go-build"
+    ],
+    "missing_refs": [],
+    "evidence_refs": [
+      "required-test-ref-49861468ad59:passed",
+      "required-test-ref-c908af756958:passed",
+      "manual-verification:go-build-all:passed",
+      "git-diff-check:passed",
+      "short-mode:focal-tests:passed:0.049s-max-package",
+      "cmd-orquesta-server-idle-existing-criteria:passed",
+      "modulos-orquesta-server-idle-existing-criteria:passed",
+      "backlog_scan_ref:scan-ref-backlog-535d24d71dfa",
+      "backlog_scan_epoch:backlog-scan-epoch-e79e7162b0ac",
+      "backlog_scan_doc_declared:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:sha256:3f2999f70bc375ffa635f87261935a9715ca478e9f8c314c40315a7916f89801",
+      "backlog_scan_doc_current_line16_sha256:af2172ca10389a1396ef09e61877ff5b4fff8a3d4a2e30baa070c7b617f5e1d0",
+      "backlog_doc_current_sha256:282e3c9072cd1809d50c3e9425b56bd1d67448743d83cd8854d3410cb5ad7fd6",
+      "plan_doc_current_sha256:e8be14ce3d5445982fd4c68027176ecf949d7136d56d121354153b16536144de",
+      "scanner_rebase_note:declared_line_hash_mismatch_no_new_Txx_inserted_no_backlog_write",
+      "backlog_task_id_range:T287",
+      "backlog_task_instance_ref:task-instance-ref-backlog-74e3df33",
+      "backlog_task_id_ref:task-id-ref-backlog-638dc376531a",
+      "backlog_scan_reservation_ref:reservation-ref-backlog-scan-doc-merge-2fd652b749d4",
+      "backlog_scan_reservation_ref:reservation-ref-backlog-task-id-528a1dbb36ec"
+    ]
+  },
+  "required_test_results": [
+    {
+      "test_ref": "required-test-ref-49861468ad59",
+      "status": "passed",
+      "evidence_refs": [
+        "command:GOCACHE=/tmp/orquesta-go-build-cache-t287 go test -count=1 ./modulos/orquesta-estado-vivo ./modulos/orquesta-runtime-codex-appserver ./modulos/orquesta-run-coordinator",
+        "packages:orquesta/modulos/orquesta-estado-vivo:ok:0.008s",
+        "packages:orquesta/modulos/orquesta-runtime-codex-appserver:ok:0.050s",
+        "packages:orquesta/modulos/orquesta-run-coordinator:ok:0.008s"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-c908af756958",
+      "status": "passed",
+      "evidence_refs": [
+        "command:GOCACHE=/tmp/orquesta-go-build-cache-t287 go test -count=1 ./",
+        "package:orquesta:ok:1.326s"
+      ]
+    }
+  ],
+  "domain_receipt_refs": [],
+  "rework_plan_refs": [],
+  "evidence_refs": [
+    "checkpoint_started_before_long_exploration",
+    "failure-evidence:first-property-run:backend-idempotence-and-apagado-illegal-and-outbox-pending-failed",
+    "required-test-ref-49861468ad59:passed",
+    "required-test-ref-c908af756958:passed",
+    "manual-verification:go-build-all:passed:command:GOCACHE=/tmp/orquesta-go-build-cache-t287 GIT_DIR=$(git rev-parse --absolute-git-dir) GIT_WORK_TREE=$PWD go build ./...",
+    "git-diff-check:passed",
+    "go-test-short-focal:passed-under-30s",
+    "go-list-production-deps:no-pgregory.net/rapid",
+    "go-list-test-deps:pgregory.net/rapid",
+    "cmd-orquesta-server-idle-existing-criteria:passed",
+    "modulos-orquesta-server-idle-existing-criteria:passed",
+    "cmd/orquesta-server/config_test.go:107-131 default 60s and AFTER_SECONDS=0 idle-clock-disable",
+    "modulos/orquesta-server/supervisor_idle_capacity_requests_v0_test.go:80-128 capacity_free_empty_queue_scanner",
+    "modulos/orquesta-server/supervisor_idle_capacity_requests_v0_test.go:133-183 skip_visible_request",
+    "cmd/orquesta-server/config_test.go:884-971 narrative_sections_filtered",
+    "cmd/orquesta-server/config_test.go:974-994 duplicate_txx_ambiguous_general",
+    "modulos/orquesta-estado-vivo/proyeccion_properties_v0_test.go public_projection_outbox_wait_process_property",
+    "full-go-test-all:not-required:failed-by-sandbox-loopback-socket-in-httptest-packages",
+    "temporary-cleanup:rm-blocked-by-policy-for-/tmp/orquesta-go-build-cache-t287",
+    "backlog_scan_ref:scan-ref-backlog-535d24d71dfa",
+    "backlog_scan_epoch:backlog-scan-epoch-e79e7162b0ac",
+    "backlog_scan_doc_declared_line16_sha256:3f2999f70bc375ffa635f87261935a9715ca478e9f8c314c40315a7916f89801",
+    "backlog_scan_doc_current_line16_sha256:af2172ca10389a1396ef09e61877ff5b4fff8a3d4a2e30baa070c7b617f5e1d0",
+    "scanner_rebase_note:declared_line_hash_mismatch_no_new_Txx_inserted_no_backlog_write"
+  ]
+}

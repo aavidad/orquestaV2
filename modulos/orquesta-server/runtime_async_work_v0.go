@@ -51,3 +51,15 @@ func (runtime *RuntimeV0) waitAsyncWorkV0(ctx context.Context) bool {
 		return false
 	}
 }
+
+func (runtime *RuntimeV0) runBackgroundWorkersV0(ctx context.Context) {
+	if runtime == nil || len(runtime.backgroundWorkers) == 0 {
+		return
+	}
+	for _, worker := range runtime.backgroundWorkers {
+		worker := worker
+		runtime.runAsyncWorkV0("background_worker", func() {
+			worker.RunBackgroundV0(ctx)
+		})
+	}
+}

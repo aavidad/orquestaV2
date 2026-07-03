@@ -1,0 +1,8 @@
+goal_ref=goal-ref-autoprogramming-backlog-t288-mutation-testing-piloto-9d60769c
+area=t288-mutation-testing-piloto
+task=MEJ-TASK-203
+objective=execute the scoped mutation-testing pilot task from docs/plan_mejora_continua_orquesta_2026-07-04.md without touching files outside scripts and docs/runbooks.
+write_set=scripts,docs/runbooks
+next_artifact=scripts/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t288-mutation-testing-piloto-9d60769c.json
+input_refs=scan-ref-backlog-07ddca92c54d,task-instance-ref-backlog-eb3cab9d,task-id-ref-backlog-4be70117399b
+status=started

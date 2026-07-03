@@ -1,0 +1,6 @@
+goal_ref: goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049
+task: MEJ-TASK-205 / T289 golden-tasks-evals
+scope: docs/evals, scripts, docs/runbooks
+next_artifact: docs/evals/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.json
+input_refs: scan-ref-backlog-f6ae5d12b919, task-instance-ref-backlog-9b80fe2c
+status: started

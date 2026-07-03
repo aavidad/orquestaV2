@@ -85,7 +85,8 @@ func ReconcileExternalWorkPublicStatusV0(
 	if externalWorkDomainPendingV0(domainStatus) &&
 		externalWorkProjectionDoneV0(projectionStatus) &&
 		input.ProjectionTaskCount == 0 &&
-		input.WorkflowTaskOpenCount == 0 {
+		input.WorkflowTaskOpenCount == 0 &&
+		input.PendingOutboxCount == 0 {
 		decision.PublicStatus = ExternalWorkPublicStatusBlockedV0
 		decision.Action = ExternalWorkReconcileActionReopenOrBlockDomainV0
 		decision.Reason = "projection_done_but_domain_job_pending_without_open_tasks"

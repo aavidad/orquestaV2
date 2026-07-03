@@ -22,6 +22,7 @@ type serverStackSupervisorV0 struct {
 	runtimeWorkDir          string
 	stateDir                string
 	selfAuditBacklogEnabled bool
+	curatedSkills           []orquestaautoprogramming.AutoprogrammingCuratedSkillV0
 }
 
 func (supervisor serverStackSupervisorV0) RunGlobalSupervisorV0(

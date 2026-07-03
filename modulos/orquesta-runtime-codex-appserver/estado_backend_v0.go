@@ -67,11 +67,20 @@ func TransicionBackendV0(
 		}
 		return BackendApagadoV0, compactServerStackStringsV0(issues)
 	}
+	if actual == BackendApagadoV0 && backendTieneTrabajoVivoV0(obs) {
+		return BackendHuerfanoV0, compactServerStackStringsV0(append(issues, BackendTransitionIssueIllegalV0))
+	}
+	if actual == BackendHuerfanoV0 {
+		return BackendHuerfanoV0, compactServerStackStringsV0(issues)
+	}
 	if obs.IssueCode != "" {
 		return BackendDegradadoV0, compactServerStackStringsV0(issues)
 	}
 	if obs.SocketObserved && obs.PreflightOK && (obs.OwnerMarkerValid || obs.SessionObserved || backendTieneProcesoV0(obs)) {
 		return BackendListoV0, compactServerStackStringsV0(issues)
+	}
+	if obs.SocketObserved && !obs.OwnerMarkerValid && !obs.SessionObserved && !obs.PanePIDLive && !backendTieneProcesoV0(obs) {
+		return BackendDegradadoV0, compactServerStackStringsV0(append(issues, BackendTransitionIssueSessionDiedV0))
 	}
 	if actual == BackendListoV0 && !backendTieneTrabajoVivoV0(obs) {
 		return BackendDegradadoV0, compactServerStackStringsV0(append(issues, BackendTransitionIssueSessionDiedV0))
@@ -87,9 +96,6 @@ func TransicionBackendV0(
 			return BackendSocketPendienteV0, compactServerStackStringsV0(issues)
 		}
 		return BackendPreparandoV0, compactServerStackStringsV0(issues)
-	}
-	if actual == BackendApagadoV0 && backendTieneTrabajoVivoV0(obs) {
-		return BackendHuerfanoV0, compactServerStackStringsV0(append(issues, BackendTransitionIssueIllegalV0))
 	}
 	if actual == BackendInexistenteV0 && !backendTieneTrabajoVivoV0(obs) {
 		return BackendInexistenteV0, compactServerStackStringsV0(issues)

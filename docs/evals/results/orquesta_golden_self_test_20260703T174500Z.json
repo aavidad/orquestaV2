@@ -1,0 +1,99 @@
+{
+  "generated_at": "2026-07-03T17:45:00Z",
+  "manifest_issues": [],
+  "manifest_sha256": "1eac0e4f03dc271f648a563c5aa0a1145860a031d8eb0de1d50fa04e4a682202",
+  "results_dir": "external-results-dir",
+  "schema_version": "orquesta_golden_eval_result.v0",
+  "status": "passed",
+  "summary": {
+    "failed": 0,
+    "passed": 5,
+    "score": 1.0,
+    "task_classes": [
+      "docs_backlog_scanner",
+      "frozen_test_fix",
+      "new_app_smoke",
+      "public_map_exploration",
+      "script_contract_fix"
+    ],
+    "total": 5
+  },
+  "task_set_ref": "golden-tasks-evals-initial-2026-07-04",
+  "tasks": [
+    {
+      "issues": [],
+      "score": 1.0,
+      "status": "passed",
+      "task_class": "new_app_smoke",
+      "task_id": "golden-new-app-smoke-v0",
+      "verifier_refs": [
+        "tests_pass",
+        "expected_files_present",
+        "writeset_only",
+        "no_opes_productive_touch"
+      ]
+    },
+    {
+      "issues": [],
+      "score": 1.0,
+      "status": "passed",
+      "task_class": "script_contract_fix",
+      "task_id": "golden-script-t265-idle-self-improvement-v0",
+      "verifier_refs": [
+        "tests_pass",
+        "expected_files_present",
+        "writeset_only",
+        "idle_default_60",
+        "idle_zero_disables_clock",
+        "idle_or_capacity_prepares",
+        "root_cause_corrected_from_failure_evidence"
+      ]
+    },
+    {
+      "issues": [],
+      "score": 1.0,
+      "status": "passed",
+      "task_class": "docs_backlog_scanner",
+      "task_id": "golden-docs-t280-backlog-scanner-v0",
+      "verifier_refs": [
+        "tests_pass",
+        "expected_files_present",
+        "writeset_only",
+        "planner_skips_visible_queue",
+        "planner_creates_scanner",
+        "narrative_sections_filtered",
+        "scanner_ack_cites_ref_lines_hashes",
+        "scanner_doc_hash_guard",
+        "backlog_duplicate_task_id_ambiguous"
+      ]
+    },
+    {
+      "issues": [],
+      "score": 1.0,
+      "status": "passed",
+      "task_class": "frozen_test_fix",
+      "task_id": "golden-frozen-test-fix-v0",
+      "verifier_refs": [
+        "tests_pass",
+        "expected_files_present",
+        "writeset_only",
+        "frozen_files_unchanged",
+        "root_cause_corrected_from_failure_evidence"
+      ]
+    },
+    {
+      "issues": [],
+      "score": 1.0,
+      "status": "passed",
+      "task_class": "public_map_exploration",
+      "task_id": "golden-public-map-exploration-v0",
+      "verifier_refs": [
+        "tests_pass",
+        "expected_files_present",
+        "writeset_only",
+        "public_projection_distinguishes_external_work",
+        "no_opes_productive_touch"
+      ]
+    }
+  ]
+}

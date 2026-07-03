@@ -70,6 +70,17 @@ func (runtime *RuntimeV0) idleSelfImprovementGoalWorkSpecV0(
 	for _, ref := range compactConfigStringsV0(request.ContextRefs) {
 		contextRefs = append(contextRefs, orquestagoal.GoalContextRefV0{Kind: "context_ref", Ref: ref})
 	}
+	skillRefs := compactConfigStringsV0(append(
+		append([]string(nil), runtime.config.IdleSelfImprovementSkillRefs...),
+		request.SkillRefs...,
+	))
+	for _, ref := range compactConfigStringsV0(request.SkillRefs) {
+		contextRefs = append(contextRefs, orquestagoal.GoalContextRefV0{
+			Kind:    "skill_ref",
+			Ref:     ref,
+			Purpose: "Habilidad curada casada por clase de tarea.",
+		})
+	}
 	rules := make([]orquestagoal.GoalRuleRefV0, 0, len(request.CompactRules))
 	for _, ref := range compactConfigStringsV0(request.CompactRules) {
 		rules = append(rules, orquestagoal.GoalRuleRefV0{
@@ -90,7 +101,7 @@ func (runtime *RuntimeV0) idleSelfImprovementGoalWorkSpecV0(
 		DirectorKind:       orquestagoal.GoalDirectorKindCodexGoalV0,
 		ContextRefs:        contextRefs,
 		RuleRefs:           rules,
-		SkillRefs:          append([]string(nil), runtime.config.IdleSelfImprovementSkillRefs...),
+		SkillRefs:          skillRefs,
 		WriteSet:           writeSet,
 		RequiredTests:      tests,
 		AcceptanceCriteria: append([]string(nil), request.AcceptanceCriteria...),

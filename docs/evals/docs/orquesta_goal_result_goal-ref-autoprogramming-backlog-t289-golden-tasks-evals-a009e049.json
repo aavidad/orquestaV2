@@ -1,0 +1,215 @@
+{
+  "goal_ref": "goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049",
+  "schema_version": "orquesta_goal_result.v0",
+  "status": "complete",
+  "summary": "MEJ-TASK-205 completada: banco inicial de 5 tareas doradas, harness opt-in con evaluador JSON datado, runbook semanal, self-test focal 5/5 y tests requeridos en verde. El backlog scanner detecto hash actual distinto de la foto y no consumio reservas ni inserto Txx.",
+  "artifact_refs": [
+    "docs/evals/orquesta_golden_tasks_v0.json",
+    "scripts/orquesta_golden_evals.sh",
+    "docs/runbooks/orquesta_golden_evals_2026-07-04.md",
+    "docs/evals/results/orquesta_golden_self_test_20260703T174500Z.json",
+    "docs/evals/backlog_scan_ack_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.json",
+    "docs/evals/scope_audit_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.md",
+    "docs/evals/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.json"
+  ],
+  "artifact_paths": [
+    "docs/evals/checkpoint_started_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.txt",
+    "docs/evals/orquesta_golden_tasks_v0.json",
+    "scripts/orquesta_golden_evals.sh",
+    "docs/runbooks/orquesta_golden_evals_2026-07-04.md",
+    "docs/evals/results/orquesta_golden_self_test_20260703T174500Z.json",
+    "docs/evals/backlog_scan_ack_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.json",
+    "docs/evals/scope_audit_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.md",
+    "docs/evals/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.json",
+    "docs/plan_mejora_continua_orquesta_2026-07-04.md",
+    "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+    "modulos/orquesta-autoprogramming/self_improvement_apg004_test.go",
+    "modulos/orquesta-autoprogramming/idle_self_improvement_v0_test.go",
+    "modulos/orquesta-autoprogramming/docs/contratos.md",
+    "modulos/orquesta-autoprogramming/docs/pruebas.md"
+  ],
+  "materialized_artifacts": [
+    {
+      "artifact_ref": "checkpoint-started-goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049",
+      "path": "docs/evals/checkpoint_started_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.txt",
+      "artifact_type": "checkpoint",
+      "status": "valid",
+      "evidence_refs": [
+        "scan-ref-backlog-f6ae5d12b919",
+        "task-instance-ref-backlog-9b80fe2c"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "orquesta-golden-tasks-v0-manifest",
+      "path": "docs/evals/orquesta_golden_tasks_v0.json",
+      "artifact_type": "golden_task_manifest",
+      "status": "valid",
+      "evidence_refs": [
+        "sha256:1eac0e4f03dc271f648a563c5aa0a1145860a031d8eb0de1d50fa04e4a682202",
+        "manual-shell-focal-self-test:passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "orquesta-golden-evals-shell-harness",
+      "path": "scripts/orquesta_golden_evals.sh",
+      "artifact_type": "script",
+      "status": "valid",
+      "evidence_refs": [
+        "sha256:6231a9d672812e6f7ab0ddabd9959928cc452dd7bff3b269903ca1a324014e94",
+        "required-test-ref-f26dc5db9067:passed",
+        "manual-shell-focal-self-test:passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "orquesta-golden-evals-runbook",
+      "path": "docs/runbooks/orquesta_golden_evals_2026-07-04.md",
+      "artifact_type": "runbook",
+      "status": "valid",
+      "evidence_refs": [
+        "sha256:d7877dca4aa8adff45ccb268e7514655eb7c6356db629b92c6a79d77b34d501f"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "orquesta-golden-evals-self-test-20260703T174500Z",
+      "path": "docs/evals/results/orquesta_golden_self_test_20260703T174500Z.json",
+      "artifact_type": "eval_result_json",
+      "status": "valid",
+      "evidence_refs": [
+        "sha256:1bcd8da07c15364a3c1b84c93797d6162a34bd9339981cd58bc9d1a1f1e917fb",
+        "orquesta_golden_eval_result.v0:passed:score_1.0:tasks_5"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "backlog-scan-ack-t289-golden-tasks-evals",
+      "path": "docs/evals/backlog_scan_ack_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.json",
+      "artifact_type": "backlog_scan_ack",
+      "status": "valid",
+      "evidence_refs": [
+        "sha256:925f30da5c62def7dbda2ec22045fa1d75996ebc2f657b9e06eac52bf4f9bb7a",
+        "backlog_scan_ref:scan-ref-backlog-f6ae5d12b919",
+        "backlog_scan_doc:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:sha256:f3a155199c1adc0859a198bd2c4d80afd14a1d12d9e6cb3dd97e5160dad0d93a",
+        "current_line16_sha256:840a1f33c65b7d734862eaec033e99c29888017cf314a110dbda166c62cd8d3e",
+        "merge_decision:draft_rebase_pending"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "scope-audit-t289-golden-tasks-evals",
+      "path": "docs/evals/scope_audit_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.md",
+      "artifact_type": "scope_audit",
+      "status": "valid",
+      "evidence_refs": [
+        "sha256:a2045a43de01245aee4c9ad5cd788473a98f04267424c13a53a39fda48936574",
+        "git-status:external-dirty-doc-observed-not-edited"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "orquesta-goal-result-goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049",
+      "path": "docs/evals/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.json",
+      "artifact_type": "goal_result_json",
+      "status": "valid",
+      "evidence_refs": [
+        "schema_version:orquesta_goal_result.v0",
+        "status:complete",
+        "json-tool-valid"
+      ],
+      "issues": []
+    }
+  ],
+  "checklist": {
+    "expected_refs": [
+      "MEJ-TASK-205:five_golden_tasks",
+      "MEJ-TASK-205:script_opt_in_serial_parallel",
+      "MEJ-TASK-205:evaluator_scores_tests_files_writeset_to_dated_json",
+      "MEJ-TASK-205:weekly_runbook",
+      "criterion:idle_default_60",
+      "criterion:idle_zero_disables_clock",
+      "criterion:idle_or_capacity_prepare",
+      "criterion:planner_skips_visible_queue_and_scanner",
+      "criterion:narrative_sections_filtered",
+      "criterion:public_projection_external_states",
+      "criterion:failure_evidence_general_cause",
+      "criterion:no_out_of_scope_write_by_goal",
+      "criterion:manual_shell_focal",
+      "criterion:backlog_duplicate_task_id_ambiguous_if_duplicate",
+      "criterion:backlog_scan_refs_lines_hashes",
+      "criterion:scanner_doc_hash_guard",
+      "required-test-ref-f26dc5db9067",
+      "required-test-ref-466c2f308b48"
+    ],
+    "completed_refs": [
+      "MEJ-TASK-205:five_golden_tasks",
+      "MEJ-TASK-205:script_opt_in_serial_parallel",
+      "MEJ-TASK-205:evaluator_scores_tests_files_writeset_to_dated_json",
+      "MEJ-TASK-205:weekly_runbook",
+      "criterion:idle_default_60",
+      "criterion:idle_zero_disables_clock",
+      "criterion:idle_or_capacity_prepare",
+      "criterion:planner_skips_visible_queue_and_scanner",
+      "criterion:narrative_sections_filtered",
+      "criterion:public_projection_external_states",
+      "criterion:failure_evidence_general_cause",
+      "criterion:no_out_of_scope_write_by_goal",
+      "criterion:manual_shell_focal",
+      "criterion:backlog_duplicate_task_id_ambiguous_if_duplicate",
+      "criterion:backlog_scan_refs_lines_hashes",
+      "criterion:scanner_doc_hash_guard",
+      "required-test-ref-f26dc5db9067",
+      "required-test-ref-466c2f308b48"
+    ],
+    "missing_refs": [],
+    "evidence_refs": [
+      "docs/evals/orquesta_golden_tasks_v0.json",
+      "scripts/orquesta_golden_evals.sh",
+      "docs/runbooks/orquesta_golden_evals_2026-07-04.md",
+      "docs/evals/results/orquesta_golden_self_test_20260703T174500Z.json",
+      "docs/evals/backlog_scan_ack_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.json",
+      "docs/evals/scope_audit_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.md",
+      "required-test-ref-f26dc5db9067:passed",
+      "required-test-ref-466c2f308b48:passed"
+    ]
+  },
+  "required_test_results": [
+    {
+      "test_ref": "required-test-ref-f26dc5db9067",
+      "status": "passed",
+      "evidence_refs": [
+        "command:bash -n scripts/orquesta_golden_evals.sh"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-466c2f308b48",
+      "status": "passed",
+      "evidence_refs": [
+        "command:git diff --check"
+      ]
+    }
+  ],
+  "domain_receipt_refs": [],
+  "rework_plan_refs": [],
+  "evidence_refs": [
+    "manual-shell-focal-self-test:ORQUESTA_GOLDEN_EVALS_NOW=2026-07-03T17:45:00Z scripts/orquesta_golden_evals.sh --self-test --output docs/evals/results/orquesta_golden_self_test_20260703T174500Z.json:passed",
+    "orquesta_golden_eval_result.v0:passed:score_1.0:tasks_5",
+    "required-test-ref-f26dc5db9067:passed",
+    "required-test-ref-466c2f308b48:passed",
+    "backlog_scan_epoch:backlog-scan-epoch-76ec396daab3",
+    "backlog_scan_ref:scan-ref-backlog-f6ae5d12b919",
+    "backlog_scan_reservation_ref:reservation-ref-backlog-scan-doc-merge-67156fd3ca69",
+    "backlog_scan_reservation_ref:reservation-ref-backlog-task-id-0830a722051b",
+    "backlog_scan_doc:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:sha256:f3a155199c1adc0859a198bd2c4d80afd14a1d12d9e6cb3dd97e5160dad0d93a",
+    "current_backlog_line16_sha256:840a1f33c65b7d734862eaec033e99c29888017cf314a110dbda166c62cd8d3e",
+    "current_backlog_file_sha256:58dd8f5c4b23c50a4240e907a784b3b0eabc9fb43894efe9589fa3e4f1c5160d",
+    "merge_decision:draft_rebase_pending:no_new_txx_inserted:no_reservation_consumed",
+    "backlog_task_id_ref:task-id-ref-backlog-91022865d324",
+    "backlog_task_id_range:T289",
+    "backlog_task_instance_ref:task-instance-ref-backlog-9b80fe2c",
+    "duplicate_task_id_check:T289:not_ambiguous:required_block_code_if_duplicate:backlog_duplicate_task_id_ambiguous",
+    "scope_audit:no_out_of_scope_write_by_goal"
+  ]
+}

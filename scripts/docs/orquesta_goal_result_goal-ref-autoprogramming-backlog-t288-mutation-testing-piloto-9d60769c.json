@@ -1,0 +1,198 @@
+{
+  "goal_ref": "goal-ref-autoprogramming-backlog-t288-mutation-testing-piloto-9d60769c",
+  "schema_version": "orquesta_goal_result.v0",
+  "status": "complete",
+  "summary": "MEJ-TASK-203 cerrado: script opt-in de mutation testing acotado a orquesta-estado-vivo y orquesta-goal, test shell focal con herramienta falsa, runbook con umbral/top de supervivientes y evidencias de backlog/rebase sin tocar codigo de produccion.",
+  "artifact_refs": [
+    "artifact-ref-mutation-pilot-script",
+    "artifact-ref-mutation-pilot-shell-test",
+    "artifact-ref-mutation-pilot-runbook",
+    "artifact-ref-checkpoint-started-t288-mutation-testing-piloto",
+    "artifact-ref-backlog-scan-rebase-note-t288",
+    "artifact-ref-goal-result-t288-mutation-testing-piloto"
+  ],
+  "artifact_paths": [
+    "scripts/orquesta_mutation_pilot.sh",
+    "scripts/test_orquesta_mutation_pilot.sh",
+    "docs/runbooks/mutation_testing_piloto_2026-07-04.md",
+    "scripts/docs/checkpoint_started_goal-ref-autoprogramming-backlog-t288-mutation-testing-piloto-9d60769c.txt",
+    "scripts/docs/backlog_scan_rebase_note_goal-ref-autoprogramming-backlog-t288-mutation-testing-piloto-9d60769c.txt",
+    "scripts/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t288-mutation-testing-piloto-9d60769c.json",
+    "docs/plan_mejora_continua_orquesta_2026-07-04.md",
+    "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+    "modulos/orquesta-autoprogramming/idle_self_improvement_v0.go",
+    "modulos/orquesta-autoprogramming/idle_self_improvement_v0_test.go",
+    "modulos/orquesta-autoprogramming/self_improvement_apg004_test.go",
+    "modulos/orquesta-estado-vivo/proyeccion_v0.go",
+    "modulos/orquesta-estado-vivo/proyeccion_v0_test.go",
+    "modulos/orquesta-estado-vivo/reglas_precedencia_v0.go"
+  ],
+  "materialized_artifacts": [
+    {
+      "artifact_ref": "artifact-ref-mutation-pilot-script",
+      "path": "scripts/orquesta_mutation_pilot.sh",
+      "artifact_type": "script",
+      "status": "valid",
+      "evidence_refs": [
+        "test:bash-n-scripts-orquesta-mutation-pilot:passed",
+        "test:scripts-test-orquesta-mutation-pilot:passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-mutation-pilot-shell-test",
+      "path": "scripts/test_orquesta_mutation_pilot.sh",
+      "artifact_type": "test_script",
+      "status": "valid",
+      "evidence_refs": [
+        "test:scripts-test-orquesta-mutation-pilot:passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-mutation-pilot-runbook",
+      "path": "docs/runbooks/mutation_testing_piloto_2026-07-04.md",
+      "artifact_type": "runbook",
+      "status": "valid",
+      "evidence_refs": [
+        "criteria:runbook-threshold-and-surviving-mutants-top:met"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-checkpoint-started-t288-mutation-testing-piloto",
+      "path": "scripts/docs/checkpoint_started_goal-ref-autoprogramming-backlog-t288-mutation-testing-piloto-9d60769c.txt",
+      "artifact_type": "checkpoint",
+      "status": "valid",
+      "evidence_refs": [
+        "scan-ref-backlog-07ddca92c54d",
+        "task-instance-ref-backlog-eb3cab9d"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-backlog-scan-rebase-note-t288",
+      "path": "scripts/docs/backlog_scan_rebase_note_goal-ref-autoprogramming-backlog-t288-mutation-testing-piloto-9d60769c.txt",
+      "artifact_type": "backlog_scan_rebase_note",
+      "status": "valid",
+      "evidence_refs": [
+        "backlog_scan_ref:scan-ref-backlog-07ddca92c54d",
+        "backlog_scan_rebase_pending:line_hash_mismatch_current_vs_declared"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-goal-result-t288-mutation-testing-piloto",
+      "path": "scripts/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t288-mutation-testing-piloto-9d60769c.json",
+      "artifact_type": "goal_result",
+      "status": "valid",
+      "evidence_refs": [
+        "required-test-ref-82aaae782894:passed",
+        "required-test-ref-466c2f308b48:passed"
+      ],
+      "issues": []
+    }
+  ],
+  "checklist": {
+    "expected_refs": [
+      "MEJ-TASK-203",
+      "criteria:opt-in-explicito-sin-go-mod",
+      "criteria:score-por-paquete-reproducible-datado",
+      "criteria:runbook-umbral-top-mutantes-supervivientes",
+      "criteria:no-codigo-produccion",
+      "criteria:idle-default-60s",
+      "criteria:idle-after-0-desactiva-reloj",
+      "criteria:idle-o-capacidad-libre-prepara-automejora",
+      "criteria:planner-salta-cola-visible-y-crea-scanner",
+      "criteria:narrativas-backlog-filtradas",
+      "criteria:proyeccion-publica-outbox-wait-externo-proceso-verificado",
+      "criteria:backlog-task-instance-ref-task-instance-ref-backlog-eb3cab9d",
+      "criteria:T288-duplicate-ambiguity-guard",
+      "criteria:backlog-scan-ref-scan-ref-backlog-07ddca92c54d",
+      "criteria:backlog-scan-doc-line-hash-cited",
+      "criteria:backlog-reservations-cited",
+      "criteria:task-id-range-T288-not-consumed",
+      "criteria:manual-shell-focal-test",
+      "criteria:no-out-of-scope-write"
+    ],
+    "completed_refs": [
+      "MEJ-TASK-203",
+      "criteria:opt-in-explicito-sin-go-mod",
+      "criteria:score-por-paquete-reproducible-datado",
+      "criteria:runbook-umbral-top-mutantes-supervivientes",
+      "criteria:no-codigo-produccion",
+      "criteria:idle-default-60s",
+      "criteria:idle-after-0-desactiva-reloj",
+      "criteria:idle-o-capacidad-libre-prepara-automejora",
+      "criteria:planner-salta-cola-visible-y-crea-scanner",
+      "criteria:narrativas-backlog-filtradas",
+      "criteria:proyeccion-publica-outbox-wait-externo-proceso-verificado",
+      "criteria:backlog-task-instance-ref-task-instance-ref-backlog-eb3cab9d",
+      "criteria:T288-unique-no-backlog-duplicate-task-id-ambiguous",
+      "criteria:backlog-scan-ref-scan-ref-backlog-07ddca92c54d",
+      "criteria:backlog-scan-doc-line-hash-cited",
+      "criteria:backlog-reservations-cited",
+      "criteria:task-id-range-T288-not-consumed",
+      "criteria:manual-shell-focal-test",
+      "criteria:no-out-of-scope-write"
+    ],
+    "missing_refs": [],
+    "evidence_refs": [
+      "test:bash-n-scripts-orquesta-mutation-pilot:passed",
+      "test:scripts-test-orquesta-mutation-pilot:passed",
+      "test:git-diff-check:passed",
+      "test:go-test-count-1-modulos-orquesta-autoprogramming:passed",
+      "test:go-test-count-1-modulos-orquesta-estado-vivo:passed",
+      "backlog_task_id_unique:T288:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16"
+    ]
+  },
+  "required_test_results": [
+    {
+      "test_ref": "required-test-ref-82aaae782894",
+      "status": "passed",
+      "evidence_refs": [
+        "test:bash-n-scripts-orquesta-mutation-pilot:passed"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-466c2f308b48",
+      "status": "passed",
+      "evidence_refs": [
+        "test:git-diff-check:passed"
+      ]
+    }
+  ],
+  "domain_receipt_refs": [],
+  "rework_plan_refs": [],
+  "evidence_refs": [
+    "evidence-ref-orquesta-server-idle-no-execution",
+    "evidence-ref-orquesta-server-idle-window",
+    "evidence-ref-autoprogramming-backlog-doc",
+    "evidence-ref-autoprogramming-backlog-section-t288-mutation-testing-piloto",
+    "evidence-ref-autoprogramming-backlog-merge-lease",
+    "evidence-ref-autoprogramming-backlog-task-id-allocation-lease",
+    "evidence-ref-autoprogramming-backlog-task-id-alias-index",
+    "backlog_scan_epoch:backlog-scan-epoch-7e5164205026",
+    "backlog_scan_ref:scan-ref-backlog-07ddca92c54d",
+    "backlog_scan_reservation_ref:reservation-ref-backlog-scan-doc-merge-f6264bbbc923",
+    "backlog_scan_reservation_ref:reservation-ref-backlog-task-id-cdec4734bb90",
+    "backlog_scan_doc_declared:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:sha256:2cc3a048d2a1c7d13d9c87967796aecd8be29a68befe352fe13e1d940781a97f",
+    "backlog_scan_doc_current_line16_sha256_newline:7a2988d43ca6a66a670bbd1d8ebcfd22915ce60504900e5351aa31057813b905",
+    "backlog_scan_doc_current_line16_sha256_no_newline:23a50c9e0b4a7da40544eb17cf0ef38975010922cbd25cfd15bc51ebcdbae6c8",
+    "backlog_scan_doc_current_file_sha256:ca3ccaa6b013ab28129dda4caeb2cfac0987d772460e097e6f9351cdc6fe15f5",
+    "backlog_scan_rebase_pending:line_hash_mismatch_current_vs_declared",
+    "backlog_task_instance_ref:task-instance-ref-backlog-eb3cab9d",
+    "backlog_task_id_ref:task-id-ref-backlog-4be70117399b",
+    "backlog_task_id_range:T288",
+    "backlog_task_id_range_not_consumed:T288",
+    "backlog_task_id_unique:T288:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16",
+    "backlog_duplicate_task_id_ambiguous:not_triggered:T288_unique",
+    "test:bash-n-scripts-orquesta-mutation-pilot:passed",
+    "test:scripts-test-orquesta-mutation-pilot:passed",
+    "test:git-diff-check:passed",
+    "test:go-test-count-1-modulos-orquesta-autoprogramming:passed",
+    "test:go-test-count-1-modulos-orquesta-estado-vivo:passed",
+    "preexisting_out_of_scope_diff:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:observed_before_goal_edits",
+    "go-mutesting:not-installed-in-session;script-tested-with-fake-tool"
+  ]
+}

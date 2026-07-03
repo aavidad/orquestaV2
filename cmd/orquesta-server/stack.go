@@ -54,19 +54,21 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 		runtimeWorkDir:          serverConfig.RuntimeWorkDir,
 		stateDir:                serverConfig.StateDir,
 		selfAuditBacklogEnabled: serverConfig.SelfAuditBacklogEnabled,
+		curatedSkills:           serverCuratedSkillsFromProjectV0(serverConfig.IdleSelfImprovementProjectWorkDir),
 	}
 	supervisor := serverSupervisorWithCodexGoalBackendV0(baseSupervisor, goalBackends.IdleGoal)
 	residentDirector := newServerResidentDirectorV0(&stack, serverConfig)
 	runtime, err := orquestaserver.NewRuntimeV0(serverConfig, orquestaserver.RuntimeDepsV0{
-		AppHandler:       appHandler,
-		Supervisor:       supervisor,
-		ResidentDirector: residentDirector,
-		RouteManifest:    serverRouteManifestResourcesV0(),
-		GoalStateStore:   stack.Stores.AppGoalStateStore,
-		GoalFingerprint:  serverGoalObservationFingerprintFromBackendV0(goalBackends.AppGoal, serverGoalObserverFingerprintEnabledFromEnvV0()),
-		ShutdownSnapshot: serverShutdownSnapshotFromStackV0(stack, goalBackends),
-		ShutdownHooks:    serverGoalShutdownHooksFromBackendsV0(goalBackends.AppGoal, goalBackends.IdleGoal),
-		StartupCheck:     startupCheckFromEnvV0(stack, serverConfig),
+		AppHandler:        appHandler,
+		Supervisor:        supervisor,
+		ResidentDirector:  residentDirector,
+		RouteManifest:     serverRouteManifestResourcesV0(),
+		GoalStateStore:    stack.Stores.AppGoalStateStore,
+		GoalFingerprint:   serverGoalObservationFingerprintFromBackendV0(goalBackends.AppGoal, serverGoalObserverFingerprintEnabledFromEnvV0()),
+		ShutdownSnapshot:  serverShutdownSnapshotFromStackV0(stack, goalBackends),
+		ShutdownHooks:     serverGoalShutdownHooksFromBackendsV0(goalBackends.AppGoal, goalBackends.IdleGoal),
+		BackgroundWorkers: serverBackgroundWorkersFromStackV0(stack),
+		StartupCheck:      startupCheckFromEnvV0(stack, serverConfig),
 		SelfWatchdog: orquestaserver.NewProcessSelfWatchdogObserverV0(
 			orquestaserver.NewProcSelfCPUSamplerV0(),
 		),
@@ -185,6 +187,7 @@ func buildStackFromEnvWithGoalBackendV0(
 	appChangeStore := orquestaappchange.AppChangeRecordStorePortV0(runFileStore)
 	var appGoalStateStore orquestagoal.GoalWorkStateStorePortV0 = stateStore
 	domainDeliveryLedger := domainDeliveryLedgerFromEnvV0(serverConfig)
+	goalStateChange := &serverGoalStateChangeRelayV0{}
 	if supervisorWakeup != nil {
 		runStore = serverWakeupRunStoreV0{inner: stateStore, wakeup: supervisorWakeup}
 		runQueue = serverWakeupRunQueueV0{inner: runFileStore, wakeup: supervisorWakeup}
@@ -198,8 +201,9 @@ func buildStackFromEnvWithGoalBackendV0(
 			wakeup: supervisorWakeup,
 		}
 		appGoalStateStore = serverWakeupGoalStateStoreV0{
-			inner:  stateStore,
-			wakeup: supervisorWakeup,
+			inner:       stateStore,
+			wakeup:      supervisorWakeup,
+			stateChange: goalStateChange,
 		}
 		outboxLedgerPort = serverWakeupDirectorCycleOutboxLedgerV0{
 			inner:  outboxLedgerPort,
@@ -291,6 +295,10 @@ func buildStackFromEnvWithGoalBackendV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	if watcher := serverGoalMaterializedResultWatcherFromStackV0(serverConfig, stack, goalBackend, supervisorWakeup); watcher != nil {
+		goalStateChange.bindV0(watcher.NotifyActiveGoalsChangedV0)
+		stack.GoalMaterializedResultWatcher = watcher
+	}
 	if operatorConnector != nil {
 		stack.MCPTransportBindings.OperatorConnector = operatorConnector
 	}
@@ -302,6 +310,43 @@ func buildStackFromEnvWithGoalBackendV0(
 	)
 	stack.Handler = withFunctionContractRoutesV0(stack.Handler, stateStore)
 	return stack, nil
+}
+
+func serverBackgroundWorkersFromStackV0(
+	stack orquestaappcodexstack.StackV0,
+) []orquestaserver.RuntimeBackgroundWorkerPortV0 {
+	if stack.GoalMaterializedResultWatcher == nil {
+		return nil
+	}
+	return []orquestaserver.RuntimeBackgroundWorkerPortV0{stack.GoalMaterializedResultWatcher}
+}
+
+func serverGoalMaterializedResultWatcherFromStackV0(
+	serverConfig orquestaserver.ConfigV0,
+	stack orquestaappcodexstack.StackV0,
+	goalBackend serverCodexGoalBackendV0,
+	supervisorWakeup *serverSupervisorWakeupRelayV0,
+) *orquestaappcodexstack.GoalMaterializedResultWatcherV0 {
+	serverConfig = orquestaserver.NormalizeConfigV0(serverConfig)
+	if supervisorWakeup == nil ||
+		!serverConfig.GoalObserverEnabled ||
+		stack.Stores.AppGoalStateStore == nil ||
+		strings.TrimSpace(stack.Codex.ProjectWorkDir) == "" ||
+		goalBackend.Observer == nil {
+		return nil
+	}
+	return orquestaappcodexstack.NewGoalMaterializedResultWatcherV0(
+		orquestaappcodexstack.GoalMaterializedResultWatcherConfigV0{
+			ProjectWorkDir: stack.Codex.ProjectWorkDir,
+			StateStore:     stack.Stores.AppGoalStateStore,
+			BeforeWakeup: func(_ context.Context, wakeup orquestaappcodexstack.GoalMaterializedResultWakeupV0) {
+				supervisorWakeup.forgetGoalObservationFingerprintV0(wakeup.RunRef)
+			},
+			Wakeup: func(_ context.Context, wakeup orquestaappcodexstack.GoalMaterializedResultWakeupV0) bool {
+				return supervisorWakeup.requestGoalObservationV0(wakeup.Cause)
+			},
+		},
+	)
 }
 
 func codexPromoteMaterializedArtifactWithoutAckFromEnvV0() bool {
@@ -361,7 +406,7 @@ func (supervisor serverStackSupervisorV0) FilterIdleSelfImprovementRequestsV0(
 	dropped := 0
 	for _, candidate := range request.Requests {
 		if serverStackIdleSelfImprovementBacklogRequestAllowedV0(candidate) {
-			out = append(out, candidate)
+			out = append(out, supervisor.withCuratedSkillRefsV0(candidate))
 			continue
 		}
 		dropped++

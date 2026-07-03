@@ -1,0 +1,5 @@
+goal_ref=goal-ref-autoprogramming-backlog-t287-property-based-nucleo-puro-1728e5b3
+objective=MEJ-TASK-202 T287 property-based-nucleo-puro
+scope=modulos/orquesta-estado-vivo modulos/orquesta-runtime-codex-appserver modulos/orquesta-run-coordinator go.mod go.sum
+next_artifact=durable_goal_result_json_and_code_changes_after_spec_audit
+evidence=checkpoint_started_before_long_exploration

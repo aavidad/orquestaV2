@@ -450,6 +450,41 @@ func TestRuntimeV0GoalObservationFingerprintSaltaRunSinCambiosV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0ForgetGoalObservationFingerprintV0(t *testing.T) {
+	runRef := "run-ref-goal-observer-forget-001"
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:      t.TempDir(),
+		TickInterval:  time.Hour,
+		AuditDisabled: true,
+	}, RuntimeDepsV0{
+		Supervisor:     &fakeSupervisorV0{},
+		GoalStateStore: newMemoryGoalStateStoreV0(),
+		StateStore:     &memoryStateStoreV0{},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	fingerprint := orquestagoal.GoalObservationFingerprintV0{
+		RunRef:       runRef,
+		GoalRef:      "goal-ref-goal-observer-forget-001",
+		AckFilesHash: "ack-hash-stable",
+		ProcessAlive: true,
+		LastStatus:   orquestagoal.GoalStatusRunningV0,
+		EvidenceHash: "evidence-hash-stable",
+	}
+	runtime.storeGoalObservationFingerprintV0(runRef, fingerprint)
+
+	if !runtime.ForgetGoalObservationFingerprintV0(runRef) {
+		t.Fatalf("fingerprint no olvidada")
+	}
+	if runtime.goalObservationFingerprintUnchangedV0(runRef, fingerprint) {
+		t.Fatalf("fingerprint sigue presente")
+	}
+	if runtime.ForgetGoalObservationFingerprintV0(runRef) {
+		t.Fatalf("segunda invalidacion no debe reportar cambio")
+	}
+}
+
 func TestRuntimeV0GoalObservationDisabledNoArrancaV0(t *testing.T) {
 	supervisor := &fakeSupervisorV0{}
 	runtime, err := NewRuntimeV0(ConfigV0{

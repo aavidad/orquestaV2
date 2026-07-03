@@ -414,6 +414,38 @@ func TestBuildStackFromEnvV0CableaPromocionMaterialSinACKV0(t *testing.T) {
 	}
 }
 
+func TestBuildStackFromEnvV0CableaWatcherResultMaterializadoConBackendGoalV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	relay := &serverSupervisorWakeupRelayV0{}
+	backend := serverCodexGoalBackendV0{
+		Observer: serverCodexAppServerGoalBackendV0{Protocol: &fakeCodexAppServerProtocolV0{}},
+	}
+	stack, err := buildStackFromEnvWithGoalBackendV0(config, backend, relay)
+	if err != nil {
+		t.Fatalf("buildStackFromEnvWithGoalBackendV0: %v", err)
+	}
+	if stack.GoalMaterializedResultWatcher == nil {
+		t.Fatalf("watcher result materializado no cableado")
+	}
+	if workers := serverBackgroundWorkersFromStackV0(stack); len(workers) != 1 {
+		t.Fatalf("background workers=%d", len(workers))
+	}
+
+	config.GoalObserverEnabledConfigured = true
+	config.GoalObserverEnabled = false
+	stack, err = buildStackFromEnvWithGoalBackendV0(config, backend, relay)
+	if err != nil {
+		t.Fatalf("buildStackFromEnvWithGoalBackendV0 disabled: %v", err)
+	}
+	if stack.GoalMaterializedResultWatcher != nil {
+		t.Fatalf("watcher cableado pese a goal observer disabled")
+	}
+}
+
 func TestServerConfigFromEnvV0PerfilAutonomiaActivaDirectorResidenteV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerAutonomyEnabledV0, "true")

@@ -43,6 +43,7 @@ type StackV0 struct {
 	PromoteMaterializedArtifactWithoutAck bool
 	AllowLegacyAutoprogrammingRun         bool
 	AllowLegacyExternalWorkRun            bool
+	GoalMaterializedResultWatcher         *GoalMaterializedResultWatcherV0
 }
 
 func BuildStackV0(config ConfigV0) (StackV0, error) {

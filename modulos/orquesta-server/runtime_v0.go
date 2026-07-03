@@ -11,58 +11,61 @@ import (
 )
 
 type RuntimeDepsV0 struct {
-	AppHandler       http.Handler
-	Supervisor       SupervisorPortV0
-	ResidentDirector ResidentDirectorPortV0
-	RouteManifest    []ServerRouteResourceV0
-	GoalStateStore   orquestagoal.GoalWorkStateStorePortV0
-	GoalFingerprint  GoalObservationFingerprintPortV0
-	ShutdownSnapshot ShutdownSnapshotPortV0
-	ShutdownHooks    []RuntimeShutdownHookPortV0
-	StateStore       StateStorePortV0
-	AuditSink        AuditSinkPortV0
-	StartupCheck     StartupCheckPortV0
-	SelfWatchdog     SelfWatchdogObservationPortV0
-	ForceExit        ForceExitPortV0
-	Clock            ClockPortV0
+	AppHandler        http.Handler
+	Supervisor        SupervisorPortV0
+	ResidentDirector  ResidentDirectorPortV0
+	RouteManifest     []ServerRouteResourceV0
+	GoalStateStore    orquestagoal.GoalWorkStateStorePortV0
+	GoalFingerprint   GoalObservationFingerprintPortV0
+	ShutdownSnapshot  ShutdownSnapshotPortV0
+	ShutdownHooks     []RuntimeShutdownHookPortV0
+	BackgroundWorkers []RuntimeBackgroundWorkerPortV0
+	StateStore        StateStorePortV0
+	AuditSink         AuditSinkPortV0
+	StartupCheck      StartupCheckPortV0
+	SelfWatchdog      SelfWatchdogObservationPortV0
+	ForceExit         ForceExitPortV0
+	Clock             ClockPortV0
 }
 
 type RuntimeV0 struct {
-	config                      ConfigV0
-	appHandler                  http.Handler
-	supervisor                  SupervisorPortV0
-	residentDirector            ResidentDirectorPortV0
-	routeManifest               []ServerRouteResourceV0
-	goalStateStore              orquestagoal.GoalWorkStateStorePortV0
-	goalFingerprint             GoalObservationFingerprintPortV0
-	goalObservationFingerprints map[string]orquestagoal.GoalObservationFingerprintV0
-	shutdownSnapshot            ShutdownSnapshotPortV0
-	shutdownHooks               []RuntimeShutdownHookPortV0
-	asyncWork                   runtimeAsyncWorkGroupV0
-	supervisorTickActive        int32
-	supervisorTickPending       int32
-	supervisorWakeups           chan SupervisorWakeupV0
-	residentDirectorPaused      int32
-	residentDirectorTickActive  int32
-	residentDirectorTickPending int32
-	residentDirectorWakeups     chan ResidentDirectorWakeupV0
-	goalObservationTickActive   int32
-	goalObservationTickPending  int32
-	goalObservationWakeups      chan GoalObservationWakeupV0
-	shutdownInProgress          int32
-	stateStore                  StateStorePortV0
-	auditSink                   AuditSinkPortV0
-	startupCheck                StartupCheckPortV0
-	selfWatchdog                SelfWatchdogObservationPortV0
-	forceExit                   ForceExitPortV0
-	clock                       ClockPortV0
-	tracker                     *StatusTrackerV0
-	handoffRequested            chan struct{}
-	handoffOnce                 sync.Once
-	shutdownReadyRequested      chan struct{}
-	shutdownReadyOnce           sync.Once
-	shutdownForceExitMu         sync.Mutex
-	shutdownForceExitCancel     context.CancelFunc
+	config                        ConfigV0
+	appHandler                    http.Handler
+	supervisor                    SupervisorPortV0
+	residentDirector              ResidentDirectorPortV0
+	routeManifest                 []ServerRouteResourceV0
+	goalStateStore                orquestagoal.GoalWorkStateStorePortV0
+	goalFingerprint               GoalObservationFingerprintPortV0
+	goalObservationFingerprintsMu sync.Mutex
+	goalObservationFingerprints   map[string]orquestagoal.GoalObservationFingerprintV0
+	shutdownSnapshot              ShutdownSnapshotPortV0
+	shutdownHooks                 []RuntimeShutdownHookPortV0
+	backgroundWorkers             []RuntimeBackgroundWorkerPortV0
+	asyncWork                     runtimeAsyncWorkGroupV0
+	supervisorTickActive          int32
+	supervisorTickPending         int32
+	supervisorWakeups             chan SupervisorWakeupV0
+	residentDirectorPaused        int32
+	residentDirectorTickActive    int32
+	residentDirectorTickPending   int32
+	residentDirectorWakeups       chan ResidentDirectorWakeupV0
+	goalObservationTickActive     int32
+	goalObservationTickPending    int32
+	goalObservationWakeups        chan GoalObservationWakeupV0
+	shutdownInProgress            int32
+	stateStore                    StateStorePortV0
+	auditSink                     AuditSinkPortV0
+	startupCheck                  StartupCheckPortV0
+	selfWatchdog                  SelfWatchdogObservationPortV0
+	forceExit                     ForceExitPortV0
+	clock                         ClockPortV0
+	tracker                       *StatusTrackerV0
+	handoffRequested              chan struct{}
+	handoffOnce                   sync.Once
+	shutdownReadyRequested        chan struct{}
+	shutdownReadyOnce             sync.Once
+	shutdownForceExitMu           sync.Mutex
+	shutdownForceExitCancel       context.CancelFunc
 }
 
 func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
@@ -102,6 +105,7 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		goalObservationFingerprints: map[string]orquestagoal.GoalObservationFingerprintV0{},
 		shutdownSnapshot:            deps.ShutdownSnapshot,
 		shutdownHooks:               compactRuntimeShutdownHooksV0(deps.ShutdownHooks),
+		backgroundWorkers:           compactRuntimeBackgroundWorkersV0(deps.BackgroundWorkers),
 		stateStore:                  deps.StateStore,
 		auditSink:                   deps.AuditSink,
 		startupCheck:                deps.StartupCheck,
@@ -183,6 +187,7 @@ func (runtime *RuntimeV0) RunWithShutdownCauseV0(
 			runtime.runSelfWatchdogLoopV0(runCtx, selfWatchdogStop)
 		})
 	}
+	runtime.runBackgroundWorkersV0(runCtx)
 
 	select {
 	case <-ctx.Done():
