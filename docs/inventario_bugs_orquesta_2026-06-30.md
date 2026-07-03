@@ -746,6 +746,13 @@ locales `docs/runbooks/pruebas_locales_orquesta_2026-05-25.md` deja de fijar
 `ORQUESTA_RUNTIME_DIR/base_url.txt`. Evidencia:
 `TestRunbookPruebasLocalesUsaEndpointGestionadoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 7: el runbook
+`docs/runbooks/autoprogramacion_cli_2026-05-23.md` deja de fijar
+`--server-url http://127.0.0.1:8787`; documenta resolucion previa por
+`orquesta-server status --json`, `ORQUESTA_SERVER_URL` o
+`ORQUESTA_RUNTIME_DIR/base_url.txt` y usa `--server-url "$ORQUESTA_SERVER_URL"`.
+Evidencia: `TestRunbookAutoprogramacionCLIUsaEndpointGestionadoV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado

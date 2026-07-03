@@ -181,14 +181,18 @@ ni `branch_ref` en rutas o nombres Git.
 
 Comprobacion por CLI:
 
+Resolver antes la URL efectiva del servidor con `orquesta-server status --json`,
+`ORQUESTA_SERVER_URL` o `ORQUESTA_RUNTIME_DIR/base_url.txt`; no asumir el puerto
+historico.
+
 ```bash
-orquesta-cli servidor estado --server-url http://127.0.0.1:8787 --json
-orquesta-cli autoprogramacion preparar --server-url http://127.0.0.1:8787 --input prepare-run.json --json
-orquesta-cli autoprogramacion estado ver --server-url http://127.0.0.1:8787 --run-ref RUN_REF --json
-orquesta-cli autoprogramacion cola listar --server-url http://127.0.0.1:8787 --json
-orquesta-cli autoprogramacion supervisar --server-url http://127.0.0.1:8787 --run-ref RUN_REF --director-execution-mode legacy_director_loop --max-ticks 1 --json
-orquesta-cli autoprogramacion run ver --server-url http://127.0.0.1:8787 --run-ref RUN_REF --json
-orquesta-cli autoprogramacion run controlar --server-url http://127.0.0.1:8787 --run-ref RUN_REF --action pause --json
+orquesta-cli servidor estado --server-url "$ORQUESTA_SERVER_URL" --json
+orquesta-cli autoprogramacion preparar --server-url "$ORQUESTA_SERVER_URL" --input prepare-run.json --json
+orquesta-cli autoprogramacion estado ver --server-url "$ORQUESTA_SERVER_URL" --run-ref RUN_REF --json
+orquesta-cli autoprogramacion cola listar --server-url "$ORQUESTA_SERVER_URL" --json
+orquesta-cli autoprogramacion supervisar --server-url "$ORQUESTA_SERVER_URL" --run-ref RUN_REF --director-execution-mode legacy_director_loop --max-ticks 1 --json
+orquesta-cli autoprogramacion run ver --server-url "$ORQUESTA_SERVER_URL" --run-ref RUN_REF --json
+orquesta-cli autoprogramacion run controlar --server-url "$ORQUESTA_SERVER_URL" --run-ref RUN_REF --action pause --json
 ```
 
 `servidor estado` muestra estado publico, ultimos ticks, ejecuciones, skips y
