@@ -346,6 +346,7 @@ func TestServerCodexAppServerGoalBackendV0ReadOnlyBloqueaWriteSetGuard(t *testin
 	if err == nil ||
 		receipt.Status != orquestagoal.GoalStatusInvalidV0 ||
 		receipt.IssueCode != "codex_app_server_write_set_requires_workspace_write" ||
+		!containsStringForTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-write-set-requires-workspace-write") ||
 		len(protocol.calls) != 0 {
 		t.Fatalf("receipt=%+v err=%v calls=%v", receipt, err, protocol.calls)
 	}

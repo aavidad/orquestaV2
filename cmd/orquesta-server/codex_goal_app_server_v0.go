@@ -710,6 +710,16 @@ func codexAppServerStartReceiptV0(
 		GoalRef:         strings.TrimSpace(packet.GoalRef),
 		ExternalGoalRef: strings.TrimSpace(externalGoalRef),
 		IssueCode:       code,
+		EvidenceRefs:    codexAppServerStartIssueEvidenceRefsV0(code),
+	}
+}
+
+func codexAppServerStartIssueEvidenceRefsV0(code string) []string {
+	switch strings.TrimSpace(code) {
+	case "codex_app_server_write_set_requires_workspace_write":
+		return []string{"evidence-ref-codex-app-server-write-set-requires-workspace-write"}
+	default:
+		return nil
 	}
 }
 
