@@ -22,6 +22,13 @@ const (
 	AutoprogrammingBacklogPlannerScannerTaskRefV0              = "task-ref-backlog-scanner"
 )
 
+const (
+	AutoprogrammingIdleBudgetUnconfiguredV0 = "budget_unconfigured"
+	AutoprogrammingIdleBudgetWithinV0       = "within_budget"
+	AutoprogrammingIdleBudgetDeferredV0     = "budget_deferred"
+	AutoprogrammingIdleBudgetDegradedV0     = "budget_degraded"
+)
+
 type AutoprogrammingIdleSelfImprovementConfigV0 struct {
 	AfterSeconds int `json:"after_seconds"`
 	TargetQueue  int `json:"target_queue"`
@@ -45,6 +52,41 @@ type AutoprogrammingIdleSelfImprovementDecisionV0 struct {
 	IdleTriggered  bool   `json:"idle_triggered"`
 	QueueTriggered bool   `json:"queue_triggered"`
 	Disabled       bool   `json:"disabled"`
+}
+
+type AutoprogrammingIdleSelfImprovementBudgetConfigV0 struct {
+	MaxGoalsPerDay              int   `json:"max_goals_per_day,omitempty"`
+	MaxContextBudgetBytesPerDay int64 `json:"max_context_budget_bytes_per_day,omitempty"`
+}
+
+type AutoprogrammingIdleSelfImprovementBudgetUsageV0 struct {
+	GoalsUsedToday                    int   `json:"goals_used_today,omitempty"`
+	ContextBudgetBytesUsedToday       int64 `json:"context_budget_bytes_used_today,omitempty"`
+	EstimatedNextContextBudgetBytes   int64 `json:"estimated_next_context_budget_bytes,omitempty"`
+	PromptCacheCachedInputTokensToday int64 `json:"prompt_cache_cached_input_tokens_today,omitempty"`
+}
+
+type AutoprogrammingIdleSelfImprovementBudgetDecisionInputV0 struct {
+	Config         AutoprogrammingIdleSelfImprovementBudgetConfigV0 `json:"config,omitempty"`
+	Usage          AutoprogrammingIdleSelfImprovementBudgetUsageV0  `json:"usage,omitempty"`
+	RequestedGoals int                                              `json:"requested_goals,omitempty"`
+}
+
+type AutoprogrammingIdleSelfImprovementBudgetDecisionV0 struct {
+	Prepare                              bool   `json:"prepare"`
+	Degraded                             bool   `json:"degraded,omitempty"`
+	Reason                               string `json:"reason"`
+	RequestedGoals                       int    `json:"requested_goals,omitempty"`
+	AllowedGoals                         int    `json:"allowed_goals,omitempty"`
+	MaxGoalsPerDay                       int    `json:"max_goals_per_day,omitempty"`
+	GoalsUsedToday                       int    `json:"goals_used_today,omitempty"`
+	GoalsRemainingToday                  int    `json:"goals_remaining_today,omitempty"`
+	MaxContextBudgetBytesPerDay          int64  `json:"max_context_budget_bytes_per_day,omitempty"`
+	ContextBudgetBytesUsedToday          int64  `json:"context_budget_bytes_used_today,omitempty"`
+	ContextBudgetBytesRemainingToday     int64  `json:"context_budget_bytes_remaining_today,omitempty"`
+	EstimatedNextContextBudgetBytes      int64  `json:"estimated_next_context_budget_bytes,omitempty"`
+	PromptCacheCachedInputTokensToday    int64  `json:"prompt_cache_cached_input_tokens_today,omitempty"`
+	ContextBudgetEstimateEvidencePresent bool   `json:"context_budget_estimate_evidence_present,omitempty"`
 }
 
 type AutoprogrammingBacklogPlannerEntryV0 struct {
@@ -164,6 +206,88 @@ func DecideAutoprogrammingIdleSelfImprovementV0(
 	}
 }
 
+func DecideAutoprogrammingIdleSelfImprovementBudgetV0(
+	input AutoprogrammingIdleSelfImprovementBudgetDecisionInputV0,
+) AutoprogrammingIdleSelfImprovementBudgetDecisionV0 {
+	config := normalizeAutoprogrammingIdleBudgetConfigV0(input.Config)
+	usage := normalizeAutoprogrammingIdleBudgetUsageV0(input.Usage)
+	requested := input.RequestedGoals
+	if requested <= 0 {
+		requested = 1
+	}
+	decision := AutoprogrammingIdleSelfImprovementBudgetDecisionV0{
+		Prepare:                              true,
+		Reason:                               AutoprogrammingIdleBudgetUnconfiguredV0,
+		RequestedGoals:                       requested,
+		AllowedGoals:                         requested,
+		MaxGoalsPerDay:                       config.MaxGoalsPerDay,
+		GoalsUsedToday:                       usage.GoalsUsedToday,
+		MaxContextBudgetBytesPerDay:          config.MaxContextBudgetBytesPerDay,
+		ContextBudgetBytesUsedToday:          usage.ContextBudgetBytesUsedToday,
+		EstimatedNextContextBudgetBytes:      usage.EstimatedNextContextBudgetBytes,
+		PromptCacheCachedInputTokensToday:    usage.PromptCacheCachedInputTokensToday,
+		ContextBudgetEstimateEvidencePresent: usage.EstimatedNextContextBudgetBytes > 0,
+	}
+	if config.MaxGoalsPerDay <= 0 && config.MaxContextBudgetBytesPerDay <= 0 {
+		return decision
+	}
+	decision.Reason = AutoprogrammingIdleBudgetWithinV0
+	allowed := requested
+	if config.MaxGoalsPerDay > 0 {
+		remaining := config.MaxGoalsPerDay - usage.GoalsUsedToday
+		if remaining < 0 {
+			remaining = 0
+		}
+		decision.GoalsRemainingToday = remaining
+		if remaining <= 0 {
+			decision.Prepare = false
+			decision.AllowedGoals = 0
+			decision.Reason = AutoprogrammingIdleBudgetDeferredV0
+			return decision
+		}
+		if remaining < allowed {
+			allowed = remaining
+		}
+	}
+	if config.MaxContextBudgetBytesPerDay > 0 {
+		remaining := config.MaxContextBudgetBytesPerDay - usage.ContextBudgetBytesUsedToday
+		if remaining < 0 {
+			remaining = 0
+		}
+		decision.ContextBudgetBytesRemainingToday = remaining
+		if remaining <= 0 {
+			decision.Prepare = false
+			decision.AllowedGoals = 0
+			decision.Reason = AutoprogrammingIdleBudgetDeferredV0
+			return decision
+		}
+		if usage.EstimatedNextContextBudgetBytes > 0 {
+			allowedByContext := int(remaining / usage.EstimatedNextContextBudgetBytes)
+			if allowedByContext <= 0 {
+				decision.Prepare = false
+				decision.AllowedGoals = 0
+				decision.Reason = AutoprogrammingIdleBudgetDeferredV0
+				return decision
+			}
+			if allowedByContext < allowed {
+				allowed = allowedByContext
+			}
+		}
+	}
+	if allowed <= 0 {
+		decision.Prepare = false
+		decision.AllowedGoals = 0
+		decision.Reason = AutoprogrammingIdleBudgetDeferredV0
+		return decision
+	}
+	decision.AllowedGoals = allowed
+	if allowed < requested {
+		decision.Degraded = true
+		decision.Reason = AutoprogrammingIdleBudgetDegradedV0
+	}
+	return decision
+}
+
 func PlanAutoprogrammingBacklogSelfImprovementV0(
 	input AutoprogrammingBacklogPlannerInputV0,
 ) AutoprogrammingBacklogPlannerResultV0 {
@@ -197,6 +321,36 @@ func PlanAutoprogrammingBacklogSelfImprovementV0(
 		result.Scanner = &scanner
 	}
 	return result
+}
+
+func normalizeAutoprogrammingIdleBudgetConfigV0(
+	config AutoprogrammingIdleSelfImprovementBudgetConfigV0,
+) AutoprogrammingIdleSelfImprovementBudgetConfigV0 {
+	if config.MaxGoalsPerDay < 0 {
+		config.MaxGoalsPerDay = 0
+	}
+	if config.MaxContextBudgetBytesPerDay < 0 {
+		config.MaxContextBudgetBytesPerDay = 0
+	}
+	return config
+}
+
+func normalizeAutoprogrammingIdleBudgetUsageV0(
+	usage AutoprogrammingIdleSelfImprovementBudgetUsageV0,
+) AutoprogrammingIdleSelfImprovementBudgetUsageV0 {
+	if usage.GoalsUsedToday < 0 {
+		usage.GoalsUsedToday = 0
+	}
+	if usage.ContextBudgetBytesUsedToday < 0 {
+		usage.ContextBudgetBytesUsedToday = 0
+	}
+	if usage.EstimatedNextContextBudgetBytes < 0 {
+		usage.EstimatedNextContextBudgetBytes = 0
+	}
+	if usage.PromptCacheCachedInputTokensToday < 0 {
+		usage.PromptCacheCachedInputTokensToday = 0
+	}
+	return usage
 }
 
 func ProjectAutoprogrammingExternalWorkV0(

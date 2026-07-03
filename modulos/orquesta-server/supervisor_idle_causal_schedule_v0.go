@@ -92,7 +92,12 @@ func (runtime *RuntimeV0) maybeScheduleIdleSelfImprovementCausalV0(
 		)
 		runtime.auditEventV0(ctx, "idle_self_improvement_scheduled", "scheduled", "", payload)
 	}
-	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkIdleSelfImprovementScheduledV0(now), "idle_self_improvement_scheduled")
+	runtime.tracker.MarkIdleSelfImprovementScheduledV0(now)
+	runtime.persistStateTransitionV0(
+		ctx,
+		runtime.tracker.MarkIdleSelfImprovementBudgetDecisionV0(decision.BudgetDecision, now),
+		"idle_self_improvement_scheduled",
+	)
 	if goalReady {
 		runtime.runAsyncWorkV0("idle_self_improvement_goal_launch", func() {
 			runtime.launchIdleSelfImprovementGoalsV0(ctx, goalLauncher, requests)

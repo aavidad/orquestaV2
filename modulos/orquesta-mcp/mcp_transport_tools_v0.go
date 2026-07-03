@@ -109,17 +109,19 @@ func autoprogrammingStatusExecutorFromBindingsV0(
 	if bindings.RunQueuePriority == nil &&
 		bindings.DirectorStats == nil &&
 		bindings.AutoprogrammingEstadoVivoSource == nil &&
+		bindings.AutoprogrammingIdleSelfImprovementBudgetSource == nil &&
 		len(bindings.AutoprogrammingStatusDiagnostics) == 0 {
 		return nil
 	}
 	return MCPAutoprogrammingStatusToolExecutorV0{
-		Queue:                        bindings.RunQueuePriority,
-		Stats:                        bindings.DirectorStats,
-		EstadoVivoSource:             bindings.AutoprogrammingEstadoVivoSource,
-		GoalStateStore:               bindings.AutoprogrammingGoalStates,
-		StatusDiagnostics:            bindings.AutoprogrammingStatusDiagnostics,
-		GoalProgressPolicy:           bindings.AutoprogrammingGoalProgressPolicy,
-		AllowLegacySupervisorActions: bindings.AllowLegacyAutoprogrammingSupervisorActions,
+		Queue:                           bindings.RunQueuePriority,
+		Stats:                           bindings.DirectorStats,
+		EstadoVivoSource:                bindings.AutoprogrammingEstadoVivoSource,
+		GoalStateStore:                  bindings.AutoprogrammingGoalStates,
+		IdleSelfImprovementBudgetSource: bindings.AutoprogrammingIdleSelfImprovementBudgetSource,
+		StatusDiagnostics:               bindings.AutoprogrammingStatusDiagnostics,
+		GoalProgressPolicy:              bindings.AutoprogrammingGoalProgressPolicy,
+		AllowLegacySupervisorActions:    bindings.AllowLegacyAutoprogrammingSupervisorActions,
 	}
 }
 

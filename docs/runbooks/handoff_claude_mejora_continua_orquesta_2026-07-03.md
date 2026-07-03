@@ -15,6 +15,9 @@ verificable de la ola actual y de las incidencias observadas.
   `codebase-memory-mcp` ni `codex app-server --listen`.
 - Verificacion global ejecutada: verde con `go test -count=1 ./...`,
   `go build ./...` y `git diff --check`.
+- Actualizacion posterior al commit `a9f3b455`: Codex esta integrando MEJ-104
+  como reparacion acotada antes de relanzar automejora real. El cambio aun no
+  esta comiteado ni pusheado en el momento de esta nota.
 - Excepcion operativa: MEJ-206 se lanzo por Orquesta, pero el piloto quedo sin
   progreso util con consumo alto de tokens y checkpoint invalido. Se paro el
   runtime y Codex integro una reparacion acotada, dejando bugs documentados.
@@ -107,6 +110,65 @@ Nota para Claude: no clasificar MEJ-206 como cierre autonomo de Orquesta. El
 runtime se uso, pero quedo bloqueado; la integracion final es una excepcion de
 reparacion local documentada.
 
+### MEJ-104 - gobernador de presupuesto de automejora idle
+
+Estado: en curso, con pruebas focales y validacion global verdes; no marcar
+como cierre productivo hasta ejecutar un piloto real controlado.
+
+Motivo de la excepcion: BUG-ORQ-20260703-154 demostro que relanzar Orquesta
+sin gobernador podia volver a consumir muchos tokens sin progreso. Por eso
+Codex hizo una reparacion local acotada antes de otro goal real.
+
+Hecho:
+
+- `orquesta-autoprogramming` incorpora
+  `DecideAutoprogrammingIdleSelfImprovementBudgetV0` y tipos de config/uso/
+  decision para `budget_unconfigured`, `within_budget`, `budget_deferred` y
+  `budget_degraded`.
+- `orquesta-server` decide antes de lanzar automejora idle, reduce el lote si
+  el presupuesto restante solo permite parte de las goals, o aplaza con
+  `budget_deferred` si no cabe.
+- El uso diario se estima desde estado durable: goals idle usadas hoy, budget
+  de contexto observado en receipt/result, y tokens de prompt cache publicados
+  como evidencias `evidence-ref-codex-goal-cached-input-tokens-*`.
+- El estado del servidor y `/api/v0/server/status` publican
+  `idle_self_improvement_budget`.
+- `orquesta.autoprogramming.status.v0` publica el mismo presupuesto mediante
+  puerto opcional inyectado, no por dependencia directa del runtime.
+- `cmd/orquesta-server` registra
+  `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DAILY_GOAL_BUDGET` y
+  `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DAILY_CONTEXT_BUDGET_BYTES`.
+
+Archivos principales:
+
+- `modulos/orquesta-autoprogramming/idle_self_improvement_v0.go`
+- `modulos/orquesta-server/supervisor_idle_budget_v0.go`
+- `modulos/orquesta-server/status_tracker_idle_budget_v0.go`
+- `modulos/orquesta-server/status_public_v0.go`
+- `modulos/orquesta-mcp/autoprogramming_status_tool_v0.go`
+- `cmd/orquesta-server/autoprogramming_idle_budget_source_v0.go`
+- Wiring en `modulos/orquesta-app-codex-stack`, `modulos/orquesta-app-gateway`
+  y `cmd/orquesta-server/stack.go`.
+
+Pruebas verdes tras el cambio:
+
+```bash
+go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server
+git diff --check
+go test -count=1 ./...
+go build ./...
+```
+
+Falta antes de cierre:
+
+- Hacer smoke real acotado de automejora idle con presupuesto bajo y confirmar
+  que `budget_deferred`/`budget_degraded` aparecen en
+  `orquesta.autoprogramming.status.v0` y en `/api/v0/server/status`.
+- Completar la parte "durante launch": si un goal ya activo entra en consumo
+  alto sin artefacto/checkpoint valido repetido, debe producir bloqueo/replan
+  accionable, no solo gobernar el siguiente lanzamiento.
+- Comitear y pushear este corte si se acepta como MEJ-104 parcial.
+
 ## Bugs documentados
 
 Inventario actualizado en `docs/inventario_bugs_orquesta_2026-06-30.md` con:
@@ -189,7 +251,9 @@ Siguiente ola recomendada:
 
 - MEJ-201.
 - MEJ-204.
-- MEJ-104, para presupuesto/no-progreso y parada cooperativa.
+- MEJ-104 queda empezado: presupuesto pre-launch implementado y validacion
+  global verde; falta smoke real y corte durante ejecucion por alto consumo sin
+  progreso.
 
 Ola posterior:
 
@@ -209,7 +273,7 @@ Condicionales, si siguen vigentes tras revision de backlog:
 2. Revisar diff de MEJ-206 con foco en contratos y frontera core/composicion.
 3. Confirmar que `docs/inventario_bugs_orquesta_2026-06-30.md` contiene los
    bugs 154-157.
-4. Ejecutar `git diff --check`, `go test -count=1 ./...` y `go build ./...`.
+4. Confirmar MEJ-104 en `autoprogramming/status` con presupuesto bajo.
 5. Confirmar que no quedan procesos vivos con el `pgrep` indicado arriba.
-6. Si todo sigue verde, preparar commit o siguiente ola sin relanzar los pilotos
+6. Si todo sigue verde, preparar siguiente ola sin relanzar los pilotos
    cerrados.

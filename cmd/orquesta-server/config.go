@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
@@ -106,13 +107,17 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		IdleSelfImprovementPriorityScore: intEnvOrDefaultV0(envServerIdleSelfImprovementPriorityScoreV0, orquestaserver.DefaultIdleSelfImprovementPriorityScoreV0),
 		IdleSelfImprovementMaxRequests:   intEnvOrDefaultV0(envServerIdleSelfImprovementMaxRequestsV0, orquestaserver.DefaultIdleSelfImprovementMaxRequestsV0),
 		IdleSelfImprovementTargetQueue:   intEnvOrDefaultV0(envServerIdleSelfImprovementTargetQueueV0, orquestaserver.DefaultIdleSelfImprovementTargetQueueV0),
-		SelfAuditBacklogEnabled:          boolEnvOrDefaultV0(envSelfAuditBacklogEnabledV0, false),
-		GoalObserverEnabled:              goalObserverEnabled,
-		GoalObserverEnabledConfigured:    goalObserverConfigured,
-		GoalObserverInterval:             time.Duration(intEnvOrZeroV0(envServerGoalObserverIntervalMSV0)) * time.Millisecond,
-		GoalObserverMaxItems:             intEnvOrDefaultV0(envServerGoalObserverMaxItemsV0, orquestaserver.DefaultGoalObserverMaxItemsV0),
-		ResidentDirectorEnabled:          serverResidentDirectorEnabledFromEnvV0(),
-		ResidentDirectorMaxActions:       intEnvOrDefaultV0(envServerResidentDirectorMaxActionsV0, orquestaserver.DefaultResidentDirectorMaxActionsV0),
+		IdleSelfImprovementBudget: orquestaautoprogramming.AutoprogrammingIdleSelfImprovementBudgetConfigV0{
+			MaxGoalsPerDay:              intEnvOrDefaultV0(envServerIdleSelfImprovementDailyGoalBudgetV0, 0),
+			MaxContextBudgetBytesPerDay: int64EnvOrDefaultV0(envServerIdleSelfImprovementDailyContextBudgetBytesV0, 0),
+		},
+		SelfAuditBacklogEnabled:       boolEnvOrDefaultV0(envSelfAuditBacklogEnabledV0, false),
+		GoalObserverEnabled:           goalObserverEnabled,
+		GoalObserverEnabledConfigured: goalObserverConfigured,
+		GoalObserverInterval:          time.Duration(intEnvOrZeroV0(envServerGoalObserverIntervalMSV0)) * time.Millisecond,
+		GoalObserverMaxItems:          intEnvOrDefaultV0(envServerGoalObserverMaxItemsV0, orquestaserver.DefaultGoalObserverMaxItemsV0),
+		ResidentDirectorEnabled:       serverResidentDirectorEnabledFromEnvV0(),
+		ResidentDirectorMaxActions:    intEnvOrDefaultV0(envServerResidentDirectorMaxActionsV0, orquestaserver.DefaultResidentDirectorMaxActionsV0),
 		SelfWatchdog: orquestaserver.SelfWatchdogConfigV0{
 			Disabled:       boolEnvOrDefaultV0(envServerSelfWatchdogDisabledV0, false),
 			CPUHighPercent: intEnvOrDefaultV0(envServerSelfWatchdogCPUHighPercentV0, orquestaserver.DefaultSelfWatchdogCPUHighPercentV0),

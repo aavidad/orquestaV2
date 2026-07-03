@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 )
 
@@ -34,6 +35,7 @@ type idleSelfImprovementScheduleDecisionV0 struct {
 	BlockerNextActions    []string
 	ExternalWaitRefs      []string
 	ExternalWaitEvid      []string
+	BudgetDecision        orquestaautoprogramming.AutoprogrammingIdleSelfImprovementBudgetDecisionV0
 }
 
 func (runtime *RuntimeV0) idleSelfImprovementScheduleDecisionV0(

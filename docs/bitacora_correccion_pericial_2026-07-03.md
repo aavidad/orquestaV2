@@ -426,9 +426,10 @@ diario por goals/contexto, decision `budget_deferred`/`budget_degraded`,
 persistencia en state/status publico y exposicion en
 `orquesta.autoprogramming.status.v0` por puerto inyectado. Focal verde:
 `go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
-Pendiente antes de cierre: `git diff --check`, `go test -count=1 ./...`,
-`go build ./...`, smoke real acotado y corte durante ejecucion para goals ya
-activos con alto consumo/checkpoint invalido repetido.
+Validacion global verde: `git diff --check`, `go test -count=1 ./...` y
+`go build ./...`. Pendiente antes de cierre productivo: smoke real acotado y
+corte durante ejecucion para goals ya activos con alto consumo/checkpoint
+invalido repetido.
 
 ### 2026-07-04 — Nota de coordinación del supervisor Claude (cuota renovada)
 

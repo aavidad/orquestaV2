@@ -57,6 +57,8 @@ const (
 	envServerIdleSelfImprovementPriorityScoreV0             = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PRIORITY_SCORE"
 	envServerIdleSelfImprovementMaxRequestsV0               = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS"
 	envServerIdleSelfImprovementTargetQueueV0               = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE"
+	envServerIdleSelfImprovementDailyGoalBudgetV0           = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DAILY_GOAL_BUDGET"
+	envServerIdleSelfImprovementDailyContextBudgetBytesV0   = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DAILY_CONTEXT_BUDGET_BYTES"
 	envSelfAuditBacklogEnabledV0                            = "ORQUESTA_SELF_AUDIT_BACKLOG_ENABLED"
 	envServerAutoprogrammingPromotionEnabledV0              = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_ENABLED"
 	envServerAutoprogrammingPromotionArchiveDirV0           = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_ARCHIVE_DIR"
@@ -403,6 +405,16 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "autoprogramming",
 		Label:       "Goal-first automejora",
 		Description: "Activa modo goal-first estricto para automejora residente; si no se define y hay backend Codex Goal, se deriva automaticamente.",
+	},
+	envServerIdleSelfImprovementDailyGoalBudgetV0: {
+		Scope:       "autoprogramming",
+		Label:       "Presupuesto diario goals",
+		Description: "Maximo diario opt-in de goals de automejora idle; 0 deja comportamiento compatible sin limite.",
+	},
+	envServerIdleSelfImprovementDailyContextBudgetBytesV0: {
+		Scope:       "autoprogramming",
+		Label:       "Presupuesto diario contexto",
+		Description: "Maximo diario opt-in de bytes de contexto 801A para automejora idle; 0 deja comportamiento compatible sin limite.",
 	},
 	envAutoprogrammingLegacyDirectorLoopV0: {
 		Scope:       "autoprogramming",

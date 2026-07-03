@@ -175,6 +175,10 @@ func buildStackFromEnvWithGoalBackendV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	idleBudgetSource, err := newServerAutoprogrammingIdleBudgetSourceV0(serverConfig)
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
 	egressSanitizer, err := egressSanitizerConfigWithSidecarPortFromEnvV0()
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
@@ -267,18 +271,19 @@ func buildStackFromEnvWithGoalBackendV0(
 			LineBudgetSnapshotStore: worktreeSnapshotStore,
 			SnapshotReadBudget:      codexServerWorktreeSnapshotReadBudgetFromEnvV0(),
 		},
-		RequiredTests:                         requiredTestRunner,
-		DomainTests:                           domainWorkRequiredTestConfigFromEnvV0(),
-		AutoprogrammingPromotion:              autoprogrammingPromotionConfigFromEnvV0(serverConfig),
-		AutoprogrammingStatusDiagnostics:      serverAutoprogrammingStatusDiagnosticsFromEffectiveConfigV0(serverConfig.EffectiveConfig),
-		AutoprogrammingGoalProgressPolicy:     serverAutoprogrammingGoalProgressPolicyFromEnvV0(),
-		DomainWork:                            domainWorkExecutor,
-		CodeContext:                           codeContextWiring.Query,
-		CodeContextToolLeases:                 codeContextWiring.ToolLeases,
-		ExternalWorkRunGuard:                  externalWorkRunProjectWorkDirGuardConfigFromEnvV0(serverConfig),
-		ExternalWorkRunRuntimeGuard:           externalWorkRunRuntimeCompatibilityGuardConfigFromServerV0(serverConfig),
-		GoalObserverResidentEnabled:           serverConfig.GoalObserverEnabled,
-		PromoteMaterializedArtifactWithoutAck: codexPromoteMaterializedArtifactWithoutAckFromEnvV0(),
+		RequiredTests:                    requiredTestRunner,
+		DomainTests:                      domainWorkRequiredTestConfigFromEnvV0(),
+		AutoprogrammingPromotion:         autoprogrammingPromotionConfigFromEnvV0(serverConfig),
+		AutoprogrammingStatusDiagnostics: serverAutoprogrammingStatusDiagnosticsFromEffectiveConfigV0(serverConfig.EffectiveConfig),
+		AutoprogrammingIdleSelfImprovementBudgetSource: idleBudgetSource,
+		AutoprogrammingGoalProgressPolicy:              serverAutoprogrammingGoalProgressPolicyFromEnvV0(),
+		DomainWork:                                     domainWorkExecutor,
+		CodeContext:                                    codeContextWiring.Query,
+		CodeContextToolLeases:                          codeContextWiring.ToolLeases,
+		ExternalWorkRunGuard:                           externalWorkRunProjectWorkDirGuardConfigFromEnvV0(serverConfig),
+		ExternalWorkRunRuntimeGuard:                    externalWorkRunRuntimeCompatibilityGuardConfigFromServerV0(serverConfig),
+		GoalObserverResidentEnabled:                    serverConfig.GoalObserverEnabled,
+		PromoteMaterializedArtifactWithoutAck:          codexPromoteMaterializedArtifactWithoutAckFromEnvV0(),
 		AllowLegacyAutoprogrammingRun: boolEnvOrDefaultV0(
 			envAutoprogrammingLegacyDirectorLoopV0,
 			false,

@@ -26,7 +26,7 @@ func (runtime *RuntimeV0) idleSelfImprovementIdleDecisionV0(
 	decision.Schedule = true
 	decision.AuditStatus = "scheduled"
 	decision.Reason = "scheduled"
-	return decision
+	return runtime.applyIdleSelfImprovementBudgetV0(decision, now)
 }
 
 func (runtime *RuntimeV0) idleSelfImprovementCapacityDecisionV0(
@@ -64,7 +64,7 @@ func (runtime *RuntimeV0) idleSelfImprovementCapacityDecisionV0(
 	decision.Schedule = true
 	decision.AuditStatus = "scheduled"
 	decision.Reason = "capacity_free"
-	return decision
+	return runtime.applyIdleSelfImprovementBudgetV0(decision, now)
 }
 
 func (decision idleSelfImprovementScheduleDecisionV0) AuditPayload() map[string]interface{} {
@@ -103,6 +103,7 @@ func (decision idleSelfImprovementScheduleDecisionV0) AuditPayload() map[string]
 			[]string(nil),
 			decision.ExternalWaitEvid...,
 		),
+		"budget": decision.BudgetDecision,
 	}
 }
 

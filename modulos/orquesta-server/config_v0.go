@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 )
 
@@ -94,6 +95,7 @@ type ConfigV0 struct {
 	IdleSelfImprovementPriorityScore  int
 	IdleSelfImprovementMaxRequests    int
 	IdleSelfImprovementTargetQueue    int
+	IdleSelfImprovementBudget         orquestaautoprogramming.AutoprogrammingIdleSelfImprovementBudgetConfigV0
 	SelfAuditBacklogEnabled           bool
 	GoalObserverEnabled               bool
 	GoalObserverEnabledConfigured     bool
@@ -220,6 +222,12 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	}
 	if config.IdleSelfImprovementTargetQueue < config.IdleSelfImprovementMaxRequests {
 		config.IdleSelfImprovementTargetQueue = config.IdleSelfImprovementMaxRequests
+	}
+	if config.IdleSelfImprovementBudget.MaxGoalsPerDay < 0 {
+		config.IdleSelfImprovementBudget.MaxGoalsPerDay = 0
+	}
+	if config.IdleSelfImprovementBudget.MaxContextBudgetBytesPerDay < 0 {
+		config.IdleSelfImprovementBudget.MaxContextBudgetBytesPerDay = 0
 	}
 	if !config.GoalObserverEnabledConfigured {
 		config.GoalObserverEnabled = true

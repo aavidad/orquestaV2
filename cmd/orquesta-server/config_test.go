@@ -99,8 +99,33 @@ func TestServerConfigFromEnvV0ExponeSupervisorDesatendidoV0(t *testing.T) {
 	if config.IdleSelfImprovementTargetQueue != orquestaserver.DefaultIdleSelfImprovementTargetQueueV0 {
 		t.Fatalf("idle target_queue=%d", config.IdleSelfImprovementTargetQueue)
 	}
+	if config.IdleSelfImprovementBudget.MaxGoalsPerDay != 0 ||
+		config.IdleSelfImprovementBudget.MaxContextBudgetBytesPerDay != 0 {
+		t.Fatalf("idle budget default=%+v", config.IdleSelfImprovementBudget)
+	}
 	if !containsStringV0(config.IdleSelfImprovementAcceptance, "la proyeccion publica distingue outbox pendiente, wait_external y proceso externo verificado") {
 		t.Fatalf("acceptance=%v", config.IdleSelfImprovementAcceptance)
+	}
+}
+
+func TestServerConfigFromEnvV0LeePresupuestoAutomejoraIdleV0(t *testing.T) {
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", t.TempDir())
+	t.Setenv(envServerIdleSelfImprovementDailyGoalBudgetV0, "7")
+	t.Setenv(envServerIdleSelfImprovementDailyContextBudgetBytesV0, "123456")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.IdleSelfImprovementBudget.MaxGoalsPerDay != 7 ||
+		config.IdleSelfImprovementBudget.MaxContextBudgetBytesPerDay != 123456 {
+		t.Fatalf("idle budget=%+v", config.IdleSelfImprovementBudget)
+	}
+	if got := effectiveSettingValueForTestV0(
+		config.EffectiveConfig.Settings,
+		envServerIdleSelfImprovementDailyGoalBudgetV0,
+	); got != "7" {
+		t.Fatalf("daily goal budget effective=%q", got)
 	}
 }
 

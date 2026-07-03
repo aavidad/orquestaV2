@@ -1692,6 +1692,20 @@ consulta posterior, wait o escalado por `runs/control`. Evidencia:
 | BUG-ORQ-20260703-156 | abierto | Runtime piloto / procesos residentes | tras cerrar pilotos ya integrados, seguian vivos `orquesta-server run` de `pilot-t285`, `pilot-m202`, `pilot-m203`, `pilot-m205` y varios `codex app-server --listen` bajo sus `CODEX_HOME` temporales; MEJ-206 tambien dejo app-server huerfano tras parar el servidor | el cierre de pilotos/automejora no encadena de forma fiable shutdown del backend Goal app-server ni limpieza de procesos temporales; el operador debe mapear manualmente `CODEX_HOME` y matar hijos, lo que no escala a Orquesta autonoma | pids observados antes de limpieza: servidores `2299757`, `2381726`, `2381872`, `2382034`; app-servers bajo `scratchpad/pilot-*`; MEJ-206 app-server `2604525/2604540` quedo vivo tras `SIGINT` al servidor | Unificar contrato de shutdown de piloto: servidor temporal debe parar backend propio al recibir señal y publicar evidencia `backend_cleaned`; al cerrar una tanda, el runtime debe listar procesos asociados por state dir/runtime dir |
 | BUG-ORQ-20260703-157 | abierto | Harness de pilotos / ejecucion background | el arranque del piloto MEJ-206 como proceso background/nohup desde el wrapper murio al terminar la llamada de shell: state quedaba con pids `2600222`/`2602158` pero sin proceso vivo, logs vacios y auditoria de startup lista; solo funciono al mantener `orquesta-server run` en una sesion PTY foreground | el harness de pilotos depende de semantica de proceso del entorno Codex/shell y no de un supervisor durable; el state puede publicar `running` aunque el proceso haya sido limpiado por el wrapper antes del primer heartbeat real util | intentos m206 previos con `run_pilot.sh`/`nohup`, `curl` posterior fallando, logs `server_stdout.log`/`server_stderr.log` vacios; workaround: sesion PTY foreground `pid=2604304` | Crear lanzador de pilotos supervisado por Orquesta o usar `orquesta-server start` con PID/state validado; readiness debe reconciliar pid muerto inmediatamente y el runbook debe evitar background frágil desde wrappers |
 
+Avance BUG-ORQ-20260703-154 2026-07-03 noche:
+MEJ-104 queda empezado con gobernador pre-launch de automejora idle. La decision
+usa presupuesto diario declarado de goals y bytes de contexto, consumo durable
+del dia, estimacion de contexto de la siguiente goal y tokens de prompt cache.
+Si el presupuesto no cabe, la automejora idle se aplaza con `budget_deferred`;
+si solo cabe parte del lote, degrada a menos goals con `budget_degraded`. La
+decision se persiste en state, se expone en `/api/v0/server/status` y en
+`orquesta.autoprogramming.status.v0` por puerto opcional. Evidencia focal:
+`go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`;
+`git diff --check`; `go test -count=1 ./...`; `go build ./...`. Estado del
+bug: abierto hasta ejecutar un smoke real acotado que demuestre el aplazamiento
+sin lanzar trabajo caro; falta tambien cortar/replanificar un goal ya activo con
+alto consumo y mismo checkpoint invalido.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

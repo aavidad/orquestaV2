@@ -11,15 +11,17 @@ func (runtime *RuntimeV0) markIdleSelfImprovementDecisionCheckedV0(
 	decision idleSelfImprovementScheduleDecisionV0,
 	now time.Time,
 ) {
+	persist := func(transition string) {
+		state := runtime.tracker.MarkIdleSelfImprovementBudgetDecisionV0(decision.BudgetDecision, now)
+		runtime.persistStateTransitionV0(ctx, state, transition)
+	}
 	if decision.hasIdleSelfImprovementBlockerProjectionV0() {
-		runtime.persistStateTransitionV0(
-			ctx,
-			runtime.tracker.MarkIdleSelfImprovementBlockedV0(decision.blockerProjectionV0(), now),
-			"idle_self_improvement_blocked",
-		)
+		runtime.tracker.MarkIdleSelfImprovementBlockedV0(decision.blockerProjectionV0(), now)
+		persist("idle_self_improvement_blocked")
 		return
 	}
-	runtime.markIdleSelfImprovementCheckedV0(ctx, decision.Reason, now)
+	runtime.tracker.MarkIdleSelfImprovementCheckedV0(decision.Reason, now)
+	persist("idle_self_improvement_checked")
 }
 
 func (decision idleSelfImprovementScheduleDecisionV0) hasIdleSelfImprovementBlockerProjectionV0() bool {
