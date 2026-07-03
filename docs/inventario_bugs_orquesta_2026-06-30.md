@@ -912,6 +912,12 @@ de shutdown lo devuelve; si llega junto a `shutdown_ready=true`, lo convierte en
 `TestRuntimeV0ServerShutdownConservaAsyncWorkActiveV0` y
 `TestShutdownProjectionFromHTTPV0ReadySinConfirmacionesQuedaStopPendingV0`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 15: si una respuesta parcial
+de shutdown omite `shutdown_async_work_active`, la proyeccion HTTP conserva el
+contador ya persistido en el snapshot previo del runtime y no publica un estado
+drenado por falta del campo en el body. Evidencia:
+`TestRuntimeV0ServerShutdownSnapshotPrevioConservaAsyncWorkActiveV0`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y

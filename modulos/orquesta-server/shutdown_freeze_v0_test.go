@@ -363,6 +363,48 @@ func TestRuntimeV0ServerShutdownConservaAsyncWorkActiveV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0ServerShutdownSnapshotPrevioConservaAsyncWorkActiveV0(t *testing.T) {
+	stateDir := t.TempDir()
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != serverShutdownRoutePathV0 {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"estado":"ok",
+			"status":"waiting_drain",
+			"shutdown_ready":false,
+			"runs_requested":1,
+			"runs_stopped":1
+		}`))
+	})
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:     stateDir,
+		TickInterval: time.Hour,
+	}, RuntimeDepsV0{
+		AppHandler: app,
+		Clock:      fixedClockV0{now: time.Date(2026, 7, 3, 23, 5, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	runtime.tracker.MarkRuntimeStoppingV0("async_work_draining", 2, time.Date(2026, 7, 3, 23, 4, 0, 0, time.UTC))
+
+	req := httptest.NewRequest(http.MethodPost, serverShutdownRoutePathV0, nil)
+	runtime.HandlerV0().ServeHTTP(httptest.NewRecorder(), req)
+	state := runtime.StateV0()
+	public := NewServerPublicStatusV0(state)
+
+	if !state.ShutdownInProgress ||
+		state.ShutdownReady ||
+		state.ShutdownStatus != "waiting_drain" ||
+		state.ShutdownAsyncWorkActive != 2 ||
+		public.ShutdownAsyncWorkActive != 2 {
+		t.Fatalf("snapshot previo no conservo async_work_active: state=%+v public=%+v", state, public)
+	}
+}
+
 func TestRuntimeV0ServerShutdownConservaCheckpointAgentsPendingV0(t *testing.T) {
 	stateDir := t.TempDir()
 	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

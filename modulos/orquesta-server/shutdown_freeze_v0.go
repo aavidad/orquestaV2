@@ -106,17 +106,21 @@ func (runtime *RuntimeV0) shutdownProjectionWithPreviousSnapshotV0(
 	projection ShutdownProjectionV0,
 	keepFrozen bool,
 ) ShutdownProjectionV0 {
-	if runtime == nil || runtime.tracker == nil || !keepFrozen || projection.Ready ||
-		projection.ActiveWorkCount > 0 || len(projection.ActiveWorkRefs) > 0 {
+	if runtime == nil || runtime.tracker == nil || !keepFrozen || projection.Ready {
 		return projection
 	}
 	state := runtime.tracker.SnapshotV0()
-	if state.ShutdownActiveWorkCount <= 0 && len(state.ShutdownActiveWorkRefs) == 0 {
-		return projection
+	if projection.ActiveWorkCount <= 0 &&
+		len(projection.ActiveWorkRefs) == 0 &&
+		(state.ShutdownActiveWorkCount > 0 || len(state.ShutdownActiveWorkRefs) > 0) {
+		projection.ActiveWorkCount = state.ShutdownActiveWorkCount
+		projection.ActiveWorkRefs = compactServerStringsV0(state.ShutdownActiveWorkRefs)
 	}
-	projection.ActiveWorkCount = state.ShutdownActiveWorkCount
-	projection.ActiveWorkRefs = compactServerStringsV0(state.ShutdownActiveWorkRefs)
-	if strings.TrimSpace(projection.Status) == "http_status" {
+	if projection.AsyncWorkActive <= 0 && state.ShutdownAsyncWorkActive > 0 {
+		projection.AsyncWorkActive = state.ShutdownAsyncWorkActive
+	}
+	if strings.TrimSpace(projection.Status) == "http_status" &&
+		(projection.ActiveWorkCount > 0 || len(projection.ActiveWorkRefs) > 0 || projection.AsyncWorkActive > 0) {
 		projection.Status = firstNonEmptyShutdownFreezeV0(state.ShutdownStatus, projection.Status)
 	}
 	return projection
