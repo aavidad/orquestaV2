@@ -213,6 +213,9 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	if backend.Protocol == nil {
 		return codexAppServerStartReceiptV0(packet, "", "codex_app_server_protocol_missing"), errors.New("codex_app_server_protocol_missing")
 	}
+	if code := codexAppServerGoalSandboxIssueForPacketV0(backend.Sandbox, packet); code != "" {
+		return codexAppServerStartReceiptV0(packet, "", code), errors.New(code)
+	}
 	if err := backend.prepareCodexGoalWriteSetV0(packet); err != nil {
 		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_write_set_prepare_failed")
 		return codexAppServerStartReceiptV0(packet, "", code), err
@@ -661,11 +664,24 @@ func codexAppServerGoalSandboxForPacketV0(
 		minimum = orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0
 	}
 	switch strings.TrimSpace(configured) {
-	case "", "danger-full-access", "read-only":
+	case "", "danger-full-access":
 		return minimum
 	default:
 		return configured
 	}
+}
+
+func codexAppServerGoalSandboxIssueForPacketV0(
+	configured string,
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+) string {
+	if strings.TrimSpace(packet.DirectionContract.WriteSetEnforcement) != orquestaruntimecodexgoal.CodexGoalWriteSetEnforcementV0 {
+		return ""
+	}
+	if strings.TrimSpace(configured) == "read-only" {
+		return "codex_app_server_write_set_requires_workspace_write"
+	}
+	return ""
 }
 
 func (backend serverCodexAppServerGoalBackendV0) turnStartParamsV0(

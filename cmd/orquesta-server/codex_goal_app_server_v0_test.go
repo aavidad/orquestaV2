@@ -302,10 +302,13 @@ func TestCodexAppServerGoalSandboxForPacketV0AplicaMinimoConWriteSetGuard(t *tes
 			MinimumSandbox:      orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0,
 		},
 	}
-	for _, configured := range []string{"", "danger-full-access", "read-only"} {
+	for _, configured := range []string{"", "danger-full-access"} {
 		if got := codexAppServerGoalSandboxForPacketV0(configured, packet); got != orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0 {
 			t.Fatalf("configured=%q got=%q", configured, got)
 		}
+	}
+	if got := codexAppServerGoalSandboxIssueForPacketV0("read-only", packet); got != "codex_app_server_write_set_requires_workspace_write" {
+		t.Fatalf("read-only debe bloquear write-set guard: %q", got)
 	}
 	if got := codexAppServerGoalSandboxForPacketV0("workspace-write", packet); got != "workspace-write" {
 		t.Fatalf("workspace-write no preservado: %q", got)
@@ -315,6 +318,36 @@ func TestCodexAppServerGoalSandboxForPacketV0AplicaMinimoConWriteSetGuard(t *tes
 		orquestaruntimecodexgoal.CodexGoalStartPacketV0{},
 	); got != "danger-full-access" {
 		t.Fatalf("sin enforcement no debe cambiar sandbox legado: %q", got)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0ReadOnlyBloqueaWriteSetGuard(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-read-only-001"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		CWD:      t.TempDir(),
+		Sandbox:  "read-only",
+	}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		SchemaVersion: orquestaruntimecodexgoal.CodexGoalStartPacketSchemaV0,
+		GoalRef:       "goal-ref-codex-app-server-read-only-001",
+		Objective:     "probar read-only incompatible",
+		Prompt:        "prompt compacto",
+		WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
+			WriteSetEnforcement: orquestaruntimecodexgoal.CodexGoalWriteSetEnforcementV0,
+			MinimumSandbox:      orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0,
+		},
+	})
+
+	if err == nil ||
+		receipt.Status != orquestagoal.GoalStatusInvalidV0 ||
+		receipt.IssueCode != "codex_app_server_write_set_requires_workspace_write" ||
+		len(protocol.calls) != 0 {
+		t.Fatalf("receipt=%+v err=%v calls=%v", receipt, err, protocol.calls)
 	}
 }
 
