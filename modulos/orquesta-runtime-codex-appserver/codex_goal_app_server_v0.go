@@ -47,18 +47,19 @@ func (backend serverCodexUnavailableGoalBackendV0) ObserveCodexGoalV0(
 }
 
 type serverCodexAppServerGoalBackendV0 struct {
-	Protocol          serverCodexAppServerProtocolPortV0
-	CWD               string
-	DiagnosticLogPath string
-	AuthIssueCode     string
-	Model             string
-	ReasoningEffort   string
-	Sandbox           string
-	ApprovalPolicy    string
-	ServiceTier       string
-	Timeout           time.Duration
-	Runtime           *serverCodexAppServerGoalRuntimeV0
-	Now               func() time.Time
+	Protocol                serverCodexAppServerProtocolPortV0
+	CWD                     string
+	DiagnosticLogPath       string
+	AuthIssueCode           string
+	Model                   string
+	ReasoningEffort         string
+	Sandbox                 string
+	ApprovalPolicy          string
+	ServiceTier             string
+	Timeout                 time.Duration
+	HighTokenUsageThreshold int
+	Runtime                 *serverCodexAppServerGoalRuntimeV0
+	Now                     func() time.Time
 }
 
 type serverCodexAppServerProtocolPortV0 interface {
@@ -319,7 +320,7 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 	if strings.TrimSpace(goal.ThreadID) != "" {
 		receipt.ExternalGoalRef = strings.TrimSpace(goal.ThreadID)
 	}
-	receipt = codexAppServerObservationReceiptWithGoalUsageV0(receipt, goal)
+	receipt = backend.codexAppServerObservationReceiptWithGoalUsageV0(receipt, goal)
 	var activeFound bool
 	receipt, activeFound = backend.observeCodexAppServerActiveGoalResultV0(ctx, request, receipt)
 	if activeFound {

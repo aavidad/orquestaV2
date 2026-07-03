@@ -1793,6 +1793,64 @@ artefacto no-checkpoint o receipt de dominio. Evidencia:
 smoke real que confirme la ruta completa alto consumo/checkpoint -> segundo
 artefacto o replan sin app-server residual.
 
+Cierre funcional BUG-ORQ-20260701-088 2026-07-03 noche:
+Se anadio el smoke real opt-in
+`scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh`, separado
+del smoke normal Nueva App. El backend real `app_server_tmux` toma ahora el
+umbral de uso alto desde
+`ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS`, conservando
+100000 tokens como default si no se configura. Evidencia real cerrada:
+`ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1`
+`ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1`
+`ORQUESTA_GOAL_FIRST_SMOKE_POLLS=50`
+`./scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh` produjo
+`smoke_goal_first_high_consumption_real=ok`,
+`bug088_path=second_artifact_or_partial_artifacts`,
+`recommended_action=review_partial_artifacts`,
+`app_server_tmux_processes_alive=0` y
+`smoke_root=/tmp/orquesta-goal-first-app-server.lwNV5d`.
+El `observe_response.json` conserva
+`codex_app_server_goal_status_active_high_token_usage tokens_used=13512`,
+`evidence-ref-goal-observer-no-checkpoint-high-consumption`,
+`evidence-ref-goal-observer-high-consumption-stop-requested` y
+`evidence-ref-goal-cooperative-stop-requested-run-control`; el write-set
+contiene `generated-apps/checkpoint_started_bug088.txt` y
+`generated-apps/bug088_second_artifact.txt`. No quedaron procesos
+`orquesta-server run`, `codex app-server --listen` ni `codebase-memory-mcp`.
+Runbook:
+`docs/runbooks/smoke_goal_first_checkpoint_only_high_consumption_real_2026-07-03.md`.
+Estado: `BUG-088` queda cerrado funcionalmente para la ruta real acotada de
+alto consumo -> segundo artefacto recuperable o replan/stop gobernado sin
+app-server residual. No cierra los residuales nuevos `BUG-ORQ-20260703-161` y
+`BUG-ORQ-20260703-162`.
+
+BUG nuevo `BUG-ORQ-20260703-161` (abierto):
+`observe_goal` puede publicar uso alto y stop cooperativo sin proyectar todavia
+los ficheros directos del smoke como `artifact_refs`, aunque existan en el
+write-set (`generated-apps/checkpoint_started_bug088.txt` y
+`generated-apps/bug088_second_artifact.txt`). Evidencia:
+`/tmp/orquesta-goal-first-app-server.uW9So4/observe_response.json` con
+`summary=codex_app_server_goal_status_active_high_token_usage`,
+`evidence-ref-goal-observer-high-consumption-stop-requested`,
+`artifact_refs=null`, y ficheros presentes bajo
+`/tmp/orquesta-goal-first-app-server.uW9So4/project/generated-apps/`.
+Hipotesis: hay desfase entre scanner/materializer de artefactos y ficheros
+directos del write-set generados por el agente; revisar si se debe proyectar
+`generated-apps/*.txt` de smoke como artefacto parcial o declarar esa ruta como
+evidencia de harness.
+
+BUG nuevo `BUG-ORQ-20260703-162` (abierto):
+En ramas de fallo del smoke alto consumo, `/api/v0/server/shutdown` pudo
+devolver `status=ready`, `shutdown_ready=true` sin `exit_pending/pid`. El
+cleanup de procesos fue efectivo, pero el contrato HTTP vuelve ambiguo el
+resultado para wrappers que necesitan distinguir drenaje operativo de salida
+programada del proceso temporal. Evidencia:
+`/tmp/orquesta-goal-first-app-server.GG1Btr/shutdown_response.json` y
+`/tmp/orquesta-goal-first-app-server.dmyZi0/shutdown_response.json`; ambos sin
+`exit_pending/pid`. No quedaron procesos residuales. Hipotesis: la ruta con
+`cleanup_goal_backends=true` y servidor temporal puede publicar `ready` sin
+pasar por el mismo wrapper de salida programada que cerraba `BUG-146`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

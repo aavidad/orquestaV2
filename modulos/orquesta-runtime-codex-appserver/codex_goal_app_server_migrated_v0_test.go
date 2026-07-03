@@ -83,6 +83,47 @@ func TestServerCodexAppServerGoalBackendV0ObservaResultadoMarcadoMigradoV0(t *te
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0UmbralUsoAltoConfigurableV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID:        "thread-ref-goal-high-usage-001",
+			Status:          "active",
+			TokensUsed:      42,
+			TimeUsedSeconds: 7,
+		},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-high-usage-001",
+			Status: "running",
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol:                protocol,
+		HighTokenUsageThreshold: 10,
+	}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         "goal-ref-high-usage-001",
+		ExternalGoalRef: "thread-ref-goal-high-usage-001",
+	})
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		!strings.Contains(receipt.Summary, "codex_app_server_goal_status_active_high_token_usage") ||
+		!strings.Contains(receipt.Summary, "tokens_used=42") ||
+		!containsStringMigratedTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-goal-high-token-usage") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0UmbralUsoAltoDefaultConserva100kV0(t *testing.T) {
+	backend := serverCodexAppServerGoalBackendV0{}
+
+	if got := backend.codexAppServerGoalHighTokenUsageThresholdV0(); got != 100000 {
+		t.Fatalf("threshold=%d", got)
+	}
+}
+
 func TestCodexAppServerIssueCodeFromLogFileV0ClasificaResetStdioMigradoV0(t *testing.T) {
 	root := t.TempDir()
 	logPath := filepath.Join(root, "orquesta-goal.log")

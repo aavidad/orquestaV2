@@ -59,11 +59,42 @@ func TestSmokeGoalFirstAppServerRealDisablesResidentGoalObserverV0(t *testing.T)
 
 	for _, want := range []string{
 		"export ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false",
-		"export ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED=false",
+		`export ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED="${ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED:-false}"`,
 		"/api/v0/apps/director/goal/observe",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("smoke manual puede competir con observador residente: falta %q", want)
+		}
+	}
+}
+
+func TestSmokeGoalFirstHighConsumptionWrapperActivaObserverYUmbralBajoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	wrapper := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh")
+	smoke := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+
+	for _, want := range []string{
+		"ORQUESTA" + "_GOAL_FIRST_SMOKE_HIGH_CONSUMPTION_MODE=1",
+		`ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED="${ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED:-true}"`,
+		`ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS="${ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS:-1}"`,
+		`exec "$repo_root/scripts/smoke_goal_first_app_server_real.sh" "$@"`,
+	} {
+		if !strings.Contains(wrapper, want) {
+			t.Fatalf("wrapper BUG-088 incompleto: falta %q", want)
+		}
+	}
+	for _, want := range []string{
+		"smoke_goal_first_high_consumption_real=ok",
+		"bug088_path=checkpoint_only_replan",
+		"bug088_path=no_checkpoint_replan",
+		"bug088_path=second_artifact_or_terminal_artifact",
+		"bug088_path=second_artifact_or_partial_artifacts",
+		"generated-apps/bug088_second_artifact.txt",
+		"recommended_action=replan_narrow_context",
+		"recommended_action=review_partial_artifacts",
+	} {
+		if !strings.Contains(smoke, want) {
+			t.Fatalf("smoke BUG-088 no reconoce replan alto consumo: falta %q", want)
 		}
 	}
 }

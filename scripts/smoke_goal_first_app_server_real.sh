@@ -57,6 +57,7 @@ request_timeout="${ORQUESTA_GOAL_FIRST_SMOKE_REQUEST_TIMEOUT_SECONDS:-90}"
 polls="${ORQUESTA_GOAL_FIRST_SMOKE_POLLS:-120}"
 sleep_seconds="${ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS:-5}"
 goal_backend="${ORQUESTA_CODEX_GOAL_BACKEND:-app_server_tmux}"
+high_consumption_mode="${ORQUESTA_GOAL_FIRST_SMOKE_HIGH_CONSUMPTION_MODE:-0}"
 
 cleanup() {
   smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 25 "$runtime_dir"
@@ -195,6 +196,29 @@ elif value is None:
     print("")
 else:
     print(value)
+PY
+}
+
+json_contains_string() {
+  local file="$1"
+  local needle="$2"
+  python3 - "$file" "$needle" <<'PY'
+import json, sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    data = json.load(fh)
+needle = sys.argv[2]
+
+def walk(value):
+    if isinstance(value, str):
+        return needle in value
+    if isinstance(value, list):
+        return any(walk(item) for item in value)
+    if isinstance(value, dict):
+        return any(walk(item) for item in value.values())
+    return False
+
+sys.exit(0 if walk(data) else 1)
 PY
 }
 
@@ -570,6 +594,41 @@ fail_after_app_server_tmux_shutdown_ready() {
   exit "$status"
 }
 
+shutdown_high_consumption_smoke() {
+  local owner_file socket_path app_processes_alive
+  owner_file="$(find_tmux_owner_file || true)"
+  if [[ -n "$owner_file" ]]; then
+    socket_path="$(find_tmux_socket_for_owner "$owner_file")"
+  fi
+  smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 25 "$runtime_dir"
+  if [[ -n "$server_pid" ]] && kill -0 "$server_pid" >/dev/null 2>&1; then
+    echo "servidor temporal sigue vivo tras cleanup BUG-088: $server_pid" >&2
+    exit 1
+  fi
+  if [[ -n "$server_pid" ]]; then
+    wait "$server_pid" >/dev/null 2>&1 || true
+  fi
+  server_pid=""
+  if [[ -n "$owner_file" && -e "$owner_file" ]]; then
+    echo "owner.json sigue existiendo tras cleanup BUG-088: $owner_file" >&2
+    exit 1
+  fi
+  if [[ -n "$socket_path" && -e "$socket_path" ]]; then
+    echo "socket sigue existiendo tras cleanup BUG-088: $socket_path" >&2
+    exit 1
+  fi
+  app_processes_alive="$(app_server_process_count_for_socket "$socket_path")"
+  if [[ "$app_processes_alive" != "0" ]]; then
+    echo "quedan procesos codex app-server para socket $socket_path: $app_processes_alive" >&2
+    exit 1
+  fi
+  echo "app_server_tmux_processes_alive=0"
+}
+
+bug088_second_artifact_exists() {
+  [[ -s "$project_dir/generated-apps/bug088_second_artifact.txt" ]]
+}
+
 need_cmd python3
 
 codex_command="$(resolve_command "${ORQUESTA_CODEX_COMMAND:-codex}")" || {
@@ -633,12 +692,24 @@ mkdir -p "$state_dir" "$project_dir" "$idle_project_dir" "$runtime_dir" "$bin_di
   "$project_dir/modulos/orquesta-factory/docs" \
   "$project_dir/modulos/orquesta-web/docs"
 
-cat >"$project_dir/AGENTS.md" <<'EOF'
+if [[ "$high_consumption_mode" == "1" ]]; then
+  cat >"$project_dir/AGENTS.md" <<'EOF'
+# Smoke temporal goal-first BUG-088
+
+Trabaja solo dentro de este proyecto temporal. Primero escribe
+`generated-apps/checkpoint_started_bug088.txt` con una linea de estado. Despues
+intenta escribir `generated-apps/bug088_second_artifact.txt`. No publiques HOME,
+tokens ni rutas privadas. No escribas `ORQUESTA_GOAL_RESULT_V0` hasta que exista
+un segundo artefacto no checkpoint.
+EOF
+else
+  cat >"$project_dir/AGENTS.md" <<'EOF'
 # Smoke temporal goal-first
 
 Trabaja solo dentro de este proyecto temporal. Crea una app pequena, hexagonal y
 verificable bajo `generated-apps/`. No publiques HOME, tokens ni rutas privadas.
 EOF
+fi
 
 cat >"$project_dir/docs/orquesta_goal_first_codex_2026-06-25.md" <<'EOF'
 # Goal-first smoke
@@ -688,7 +759,21 @@ fi
 echo "compilando servidor temporal..."
 go build -o "$bin_dir/orquesta-server" ./cmd/orquesta-server
 
-request_id="request-ref-goal-first-real-$(date -u +%Y%m%dT%H%M%SZ)"
+if [[ "$high_consumption_mode" == "1" ]]; then
+  request_id="request-ref-goal-first-bug088-$(date -u +%Y%m%dT%H%M%SZ)"
+  app_name="Smoke Goal First BUG088"
+  app_objective="BUG-088: crear primero generated-apps/checkpoint_started_bug088.txt; despues crear generated-apps/bug088_second_artifact.txt y resultado final solo si ese segundo artefacto existe."
+  app_description="Smoke acotado de alto consumo goal-first real: validar que Orquesta permite segundo artefacto util o prepara replan gobernado por el observador residente sin dejar app-server residual."
+  app_restriction_one="checkpoint_started_bug088.txt debe ser el primer artefacto durable"
+  app_restriction_two="no escribir resultado terminal antes del segundo artefacto"
+else
+  request_id="request-ref-goal-first-real-$(date -u +%Y%m%dT%H%M%SZ)"
+  app_name="Smoke Goal First"
+  app_objective="Crear una app local minima para gestionar notas con API HTTP y una pantalla HTML sencilla."
+  app_description="Smoke acotado de goal-first real: generar una app pequena bajo generated-apps, separando dominio/aplicacion, puertos y adaptadores, con una verificacion local documentada."
+  app_restriction_one="hexagonal puro"
+  app_restriction_two="entrega pequena y verificable"
+fi
 cat >"$payload_file" <<JSON
 {
   "request_id": "$request_id",
@@ -701,9 +786,9 @@ cat >"$payload_file" <<JSON
     "locale": "es",
     "request_kind": "crear_app_completa",
     "execution_mode": "normal",
-    "nombre": "Smoke Goal First",
-    "objetivo": "Crear una app local minima para gestionar notas con API HTTP y una pantalla HTML sencilla.",
-    "descripcion": "Smoke acotado de goal-first real: generar una app pequena bajo generated-apps, separando dominio/aplicacion, puertos y adaptadores, con una verificacion local documentada.",
+    "nombre": "$app_name",
+    "objetivo": "$app_objective",
+    "descripcion": "$app_description",
     "tipo_app": "mixed",
     "usuarios_objetivo": ["operador de smoke"],
     "plataformas": ["web", "api"],
@@ -724,8 +809,8 @@ cat >"$payload_file" <<JSON
       "locales": ["es"]
     },
     "restricciones": [
-      "hexagonal puro",
-      "entrega pequena y verificable",
+      "$app_restriction_one",
+      "$app_restriction_two",
       "resultado final con marcador ORQUESTA_GOAL_RESULT_V0"
     ]
   }
@@ -742,7 +827,17 @@ export ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER=0
 export ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE=0
 export ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS=0
 export ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false
-export ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED=false
+if [[ "$high_consumption_mode" == "1" ]]; then
+  export ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED="${ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED:-true}"
+  export ORQUESTA_SERVER_GOAL_OBSERVER_INTERVAL_MS="${ORQUESTA_SERVER_GOAL_OBSERVER_INTERVAL_MS:-1000}"
+  export ORQUESTA_SERVER_GOAL_OBSERVER_MAX_ITEMS="${ORQUESTA_SERVER_GOAL_OBSERVER_MAX_ITEMS:-5}"
+  export ORQUESTA_SERVER_GOAL_OBSERVER_FINGERPRINT_ENABLED="${ORQUESTA_SERVER_GOAL_OBSERVER_FINGERPRINT_ENABLED:-false}"
+  export ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS="${ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS:-1}"
+  export ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_MAX_WAIT_SECONDS="${ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_MAX_WAIT_SECONDS:-1}"
+  export ORQUESTA_AUTOPROGRAMMING_NO_CHECKPOINT_WARNING_MAX_WAIT_SECONDS="${ORQUESTA_AUTOPROGRAMMING_NO_CHECKPOINT_WARNING_MAX_WAIT_SECONDS:-1}"
+else
+  export ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED="${ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED:-false}"
+fi
 export ORQUESTA_CODEX_RUNTIME_WORKDIR="$runtime_dir"
 export ORQUESTA_CODEX_COMMAND="$codex_command"
 export ORQUESTA_CODEX_PATH="${ORQUESTA_CODEX_PATH:-$PATH}"
@@ -858,7 +953,22 @@ JSON
     terminal="1"
     break
   fi
+  if [[ "$high_consumption_mode" == "1" ]] &&
+    json_contains_string "$observe_response" "codex_app_server_goal_status_active_high_token_usage" &&
+    json_contains_string "$observe_response" "evidence-ref-goal-observer-high-consumption-stop-requested" &&
+    { json_contains_string "$observe_response" "evidence-ref-goal-materialized-partial-artifacts-written" ||
+      bug088_second_artifact_exists; }; then
+    terminal="bug088_second_artifact"
+    break
+  fi
   if [[ "$goal_status" == "blocked" || "$goal_status" == "invalid" || "$run_status" == "bloqueada" || "$closure_status" == "blocked" ]]; then
+    if [[ "$high_consumption_mode" == "1" ]] &&
+      { json_contains_string "$observe_response" "checkpoint_only_high_consumption" ||
+        json_contains_string "$observe_response" "goal_active_no_checkpoint_high_consumption"; } &&
+      json_contains_string "$observe_response" "replan_narrow_context"; then
+      terminal="bug088_replan"
+      break
+    fi
     echo "goal-first termino bloqueado; respuesta final:" >&2
     smoke_print_file_excerpt "$observe_response"
     fail_after_app_server_tmux_shutdown_ready 1
@@ -866,10 +976,40 @@ JSON
   sleep "$sleep_seconds"
 done
 
-if [[ "$terminal" != "1" ]]; then
+if [[ "$terminal" != "1" && "$terminal" != "bug088_replan" && "$terminal" != "bug088_second_artifact" ]] &&
+  [[ "$high_consumption_mode" == "1" ]] &&
+  json_contains_string "$observe_response" "codex_app_server_goal_status_active_high_token_usage" &&
+  json_contains_string "$observe_response" "evidence-ref-goal-observer-high-consumption-stop-requested" &&
+  bug088_second_artifact_exists; then
+  terminal="bug088_second_artifact"
+fi
+
+if [[ "$terminal" != "1" && "$terminal" != "bug088_replan" && "$terminal" != "bug088_second_artifact" ]]; then
   echo "timeout esperando cierre aceptado goal-first; ultimo observe:" >&2
   smoke_print_file_excerpt "$observe_response"
   fail_after_app_server_tmux_shutdown_ready 1
+fi
+
+if [[ "$terminal" == "bug088_replan" ]]; then
+  echo "smoke_goal_first_high_consumption_real=ok"
+  if json_contains_string "$observe_response" "checkpoint_only_high_consumption"; then
+    echo "bug088_path=checkpoint_only_replan"
+  else
+    echo "bug088_path=no_checkpoint_replan"
+  fi
+  echo "recommended_action=replan_narrow_context"
+  shutdown_high_consumption_smoke
+  echo "smoke_root=$smoke_root"
+  exit 0
+fi
+
+if [[ "$terminal" == "bug088_second_artifact" ]]; then
+  echo "smoke_goal_first_high_consumption_real=ok"
+  echo "bug088_path=second_artifact_or_partial_artifacts"
+  echo "recommended_action=review_partial_artifacts"
+  shutdown_high_consumption_smoke
+  echo "smoke_root=$smoke_root"
+  exit 0
 fi
 
 artifact_count="$(python3 - "$observe_response" <<'PY'
@@ -896,6 +1036,10 @@ if [[ "$evidence_count" -lt 1 ]]; then
   exit 1
 fi
 
+if [[ "$high_consumption_mode" == "1" ]]; then
+  echo "smoke_goal_first_high_consumption_real=ok"
+  echo "bug088_path=second_artifact_or_terminal_artifact"
+fi
 echo "smoke_goal_first_app_server_real=ok"
 echo "artifact_refs=$artifact_count"
 echo "evidence_refs=$evidence_count"

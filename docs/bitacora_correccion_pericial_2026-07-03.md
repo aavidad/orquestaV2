@@ -765,3 +765,45 @@ Evidencia ejecutada para cierre:
 El plan `docs/plan_mejora_continua_orquesta_2026-07-04.md` queda actualizado
 para no relanzar MEJ-106 como aparcada; retirada legacy sigue siendo decision
 posterior, no parte de este cierre.
+
+### 2026-07-03 noche — Codex cierra smoke real acotado BUG-088
+
+Trabajo directo acotado con Orquesta/Codex real opt-in, OPES vacio y runtime
+temporal. Subagente solo lectura `019f29df-1fc9-7212-9d83-750ccf8d0ed8`
+(Einstein) confirmo que no existia script exacto: el smoke normal Nueva App
+apagaba el observador residente y no cerraba la ruta alto consumo/checkpoint.
+
+Cambios aplicados:
+- `modulos/orquesta-runtime-codex-appserver` permite configurar el umbral real
+  de uso alto del backend app-server con
+  `ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS`; default
+  compatible: 100000 tokens.
+- `scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh` envuelve
+  el smoke normal en modo `BUG-088`: observador residente activo, fingerprint
+  apagado para smoke, umbral bajo, doble confirmacion y cleanup gobernado.
+- `scripts/smoke_goal_first_app_server_real.sh` conserva el comportamiento
+  normal, pero en modo alto consumo acepta dos cierres de smoke: replan
+  gobernado o segundo artefacto/artefactos parciales con stop cooperativo y
+  limpieza `app_server_tmux`.
+- Runbook nuevo:
+  `docs/runbooks/smoke_goal_first_checkpoint_only_high_consumption_real_2026-07-03.md`.
+
+Evidencia ejecutada:
+- Preflight: `ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY=1 ./scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh`.
+- Smoke real final:
+  `ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 ORQUESTA_GOAL_FIRST_SMOKE_POLLS=50 ./scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh`.
+- Resultado final: `smoke_goal_first_high_consumption_real=ok`,
+  `bug088_path=second_artifact_or_partial_artifacts`,
+  `recommended_action=review_partial_artifacts`,
+  `app_server_tmux_processes_alive=0`,
+  `smoke_root=/tmp/orquesta-goal-first-app-server.lwNV5d`.
+- Focales: `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0(UmbralUsoAltoConfigurable|UmbralUsoAltoDefault|ObservaResultadoMarcado)'`,
+  `go test -count=1 ./cmd/orquesta-server -run 'TestServerCodexGoalBackendFromEnvV0TmuxNoArrancaAppServerEnConstruccionV0|TestSmokeGoalFirstHighConsumptionWrapperActivaObserverYUmbralBajoV0'`,
+  `bash -n scripts/smoke_goal_first_app_server_real.sh scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh`.
+
+`BUG-088` queda cerrado funcionalmente para esta ruta real acotada. Quedan
+abiertos y documentados para revision estructural:
+- `BUG-ORQ-20260703-161`: desfase/proyeccion de ficheros directos del smoke
+  como `artifact_refs`.
+- `BUG-ORQ-20260703-162`: `shutdown_ready=true` sin `exit_pending/pid` en una
+  rama de fallo con cleanup efectivo.

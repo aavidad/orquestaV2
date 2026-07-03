@@ -76,6 +76,7 @@ func TestServerCodexGoalBackendFromEnvV0TmuxNoArrancaAppServerEnConstruccionV0(t
 	t.Setenv(envCodexCodeHomeV0, codeHome)
 	t.Setenv(envCodexCommandV0, fakeCodex)
 	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0)
+	t.Setenv(envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0, "37")
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
@@ -87,6 +88,14 @@ func TestServerCodexGoalBackendFromEnvV0TmuxNoArrancaAppServerEnConstruccionV0(t
 	}
 	if backend.Starter == nil || backend.Observer == nil || backend.ShutdownHook == nil {
 		t.Fatalf("backend no cableado: %+v", backend)
+	}
+	starter, ok := backend.Starter.(serverCodexAppServerGoalBackendV0)
+	if !ok || starter.HighTokenUsageThreshold != 37 {
+		t.Fatalf("starter sin umbral alto configurable: %#v", backend.Starter)
+	}
+	observer, ok := backend.Observer.(serverCodexAppServerGoalBackendV0)
+	if !ok || observer.HighTokenUsageThreshold != 37 {
+		t.Fatalf("observer sin umbral alto configurable: %#v", backend.Observer)
 	}
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatalf("construir backend no debe invocar app-server")

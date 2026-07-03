@@ -9,7 +9,7 @@ import (
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 )
 
-const codexAppServerGoalHighTokenUsageThresholdV0 = 100000
+const codexAppServerGoalHighTokenUsageThresholdDefaultV0 = 100000
 
 func (backend serverCodexAppServerGoalBackendV0) codexAppServerStartImmediateLimitedReceiptV0(
 	ctx context.Context,
@@ -52,14 +52,14 @@ func codexAppServerObservationReceiptWithGoalStatusCauseV0(
 	return receipt
 }
 
-func codexAppServerObservationReceiptWithGoalUsageV0(
+func (backend serverCodexAppServerGoalBackendV0) codexAppServerObservationReceiptWithGoalUsageV0(
 	receipt orquestaruntimecodexgoal.CodexGoalObservationReceiptV0,
 	goal *serverCodexAppServerThreadGoalV0,
 ) orquestaruntimecodexgoal.CodexGoalObservationReceiptV0 {
 	if goal == nil || strings.TrimSpace(receipt.Status) != orquestagoal.GoalStatusRunningV0 {
 		return receipt
 	}
-	if goal.TokensUsed < codexAppServerGoalHighTokenUsageThresholdV0 {
+	if goal.TokensUsed < backend.codexAppServerGoalHighTokenUsageThresholdV0() {
 		return receipt
 	}
 	usage := []string{
@@ -78,6 +78,13 @@ func codexAppServerObservationReceiptWithGoalUsageV0(
 		"evidence-ref-codex-app-server-goal-high-token-usage",
 	))
 	return receipt
+}
+
+func (backend serverCodexAppServerGoalBackendV0) codexAppServerGoalHighTokenUsageThresholdV0() int {
+	if backend.HighTokenUsageThreshold > 0 {
+		return backend.HighTokenUsageThreshold
+	}
+	return codexAppServerGoalHighTokenUsageThresholdDefaultV0
 }
 
 func codexAppServerGoalStatusIssueCodeV0(status string) (string, string) {

@@ -165,7 +165,11 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		Sandbox:           runtimeConfig.Sandbox,
 		ApprovalPolicy:    runtimeConfig.ApprovalPolicy,
 		Timeout:           time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
-		Runtime:           &orquestaruntimecodexappserver.GoalRuntimeV0{},
+		HighTokenUsageThreshold: intEnvOrDefaultV0(
+			envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0,
+			0,
+		),
+		Runtime: &orquestaruntimecodexappserver.GoalRuntimeV0{},
 	}
 	return serverCodexGoalBackendV0{Starter: client, Observer: client, ShutdownHook: shutdownHook}, nil
 }
