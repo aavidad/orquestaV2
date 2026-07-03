@@ -1,0 +1,48 @@
+{
+  "compressor": {
+    "external_command_used": false,
+    "name": "stdlib_extractive_baseline",
+    "target_ratio": 0.45
+  },
+  "confirmation_env": "ORQUESTA_CONTEXT_COMPRESSION_BENCHMARK_CONFIRM",
+  "decision_gate": {
+    "decision_required_before_product_adapter": true,
+    "minimum_manual_evidence": [
+      "zero lost refs on selected non-critical corpus",
+      "acceptable local runtime cost",
+      "separate product adapter design reviewed in modulos/orquesta-context/docs/decisiones.md"
+    ]
+  },
+  "inputs": [
+    {
+      "bytes": 3925,
+      "path": "scripts/docs/context_compression_benchmark_sample_noncritical_t284.md",
+      "refs_count": 7,
+      "tokens_estimated": 709
+    }
+  ],
+  "metrics": {
+    "byte_ratio": 0.4535,
+    "compressed_bytes": 1817,
+    "compressed_tokens_estimated": 334,
+    "elapsed_ms": 0.057,
+    "lost_refs": [],
+    "lost_refs_count": 0,
+    "source_bytes": 4007,
+    "source_tokens_estimated": 720,
+    "token_ratio": 0.4639
+  },
+  "mode": "opt_in_local_only",
+  "policy": {
+    "productive_adapter_allowed_by_this_script": false,
+    "productive_adapter_recommendation": "do_not_enable_product_adapter_from_benchmark_alone",
+    "protected_material_never_compressed": [
+      "AGENTS.md",
+      "hard_rules",
+      "write_set",
+      "contracts"
+    ]
+  },
+  "schema_version": "orquesta_context_compression_benchmark.v0",
+  "status": "valid_benchmark"
+}

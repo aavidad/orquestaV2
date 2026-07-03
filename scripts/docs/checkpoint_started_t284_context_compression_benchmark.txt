@@ -1,0 +1,13 @@
+checkpoint_ref: checkpoint-t284-context-compression-benchmark-started
+goal_ref: goal-ref-autoprogramming-backlog-t284-benchmark-compresion-contexto-optin-2425a2b7
+backlog_scan_ref: scan-ref-backlog-d438fd99b7a6
+backlog_task_instance_ref: task-instance-ref-backlog-f43e8f42
+scope:
+  - Implement CTX-TASK-801D as an opt-in documentary context compression benchmark.
+  - Keep hard rules, write-set, AGENTS, contracts, and refs outside compression.
+  - Add only opt-in scripts under scripts/, a runbook under docs/runbooks/, and a decision in modulos/orquesta-context/docs/decisiones.md.
+next_artifact: inspect docs/revision_router_contexto_hibrido_2026-07-03.md and current write-set state before final edits.
+input_evidence:
+  - evidence-ref-autoprogramming-backlog-section-t284-benchmark-compresion-contexto-optin
+  - backlog_scan_doc:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:sha256:49ddfa8cf3f609e42a9cec0342e28231a4bce588da6c8af8ba14f046c9e78d7a
+status: started

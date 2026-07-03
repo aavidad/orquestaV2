@@ -1,0 +1,181 @@
+{
+  "goal_ref": "goal-ref-autoprogramming-backlog-t284-benchmark-compresion-contexto-optin-2425a2b7",
+  "schema_version": "orquesta_goal_result.v0",
+  "status": "complete",
+  "summary": "CTX-TASK-801D implementado como benchmark documental opt-in: script con confirmacion por env, test shell focal, muestra/evidencia durable, runbook y decision local con comparacion de bytes/tokens/refs/tiempo y conclusion de no crear adaptador productivo.",
+  "artifact_refs": [
+    "artifact-ref-t284-context-compression-benchmark-script",
+    "artifact-ref-t284-context-compression-shell-test",
+    "artifact-ref-t284-context-compression-runbook",
+    "artifact-ref-t284-context-compression-decision",
+    "artifact-ref-t284-context-compression-sample-result",
+    "artifact-ref-t284-goal-result"
+  ],
+  "artifact_paths": [
+    "AGENTS.md",
+    "docs/estado_actual_2026-05-17.md",
+    "docs/guia_nucleo_orquestacion_2026-05-17.md",
+    "docs/principio_orquesta_piensa_director.md",
+    "docs/revision_router_contexto_hibrido_2026-07-03.md",
+    "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+    "docs/runbooks/benchmark_compresion_contexto_optin_2026-07-03.md",
+    "modulos/orquesta-context/AGENTS.md",
+    "modulos/orquesta-context/README.md",
+    "modulos/orquesta-context/docs/decisiones.md",
+    "scripts/benchmark_context_compression_optin.sh",
+    "scripts/test_benchmark_context_compression_optin.sh",
+    "scripts/docs/checkpoint_started_t284_context_compression_benchmark.txt",
+    "scripts/docs/context_compression_benchmark_sample_noncritical_t284.md",
+    "scripts/docs/context_compression_benchmark_sample_result_t284.json",
+    "scripts/docs/context_compression_benchmark_sample_compressed_t284.md",
+    "scripts/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t284-benchmark-compresion-contexto-optin-2425a2.json"
+  ],
+  "materialized_artifacts": [
+    {
+      "artifact_ref": "artifact-ref-t284-checkpoint",
+      "path": "scripts/docs/checkpoint_started_t284_context_compression_benchmark.txt",
+      "artifact_type": "checkpoint",
+      "status": "valid",
+      "evidence_refs": [
+        "scan-ref-backlog-d438fd99b7a6",
+        "task-instance-ref-backlog-f43e8f42"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t284-context-compression-benchmark-script",
+      "path": "scripts/benchmark_context_compression_optin.sh",
+      "artifact_type": "script",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-bash-n-context-compression-script-20260703",
+        "evidence-ref-shell-test-context-compression-benchmark-20260703"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t284-context-compression-shell-test",
+      "path": "scripts/test_benchmark_context_compression_optin.sh",
+      "artifact_type": "test",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-bash-n-context-compression-test-20260703",
+        "evidence-ref-shell-test-context-compression-benchmark-20260703"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t284-context-compression-runbook",
+      "path": "docs/runbooks/benchmark_compresion_contexto_optin_2026-07-03.md",
+      "artifact_type": "runbook",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-runbook-written-20260703"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t284-context-compression-decision",
+      "path": "modulos/orquesta-context/docs/decisiones.md",
+      "artifact_type": "decision",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-context-decision-ctx-d006-20260703",
+        "evidence-ref-context-compression-sample-benchmark-20260703"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t284-context-compression-sample-result",
+      "path": "scripts/docs/context_compression_benchmark_sample_result_t284.json",
+      "artifact_type": "benchmark_result",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-context-compression-sample-benchmark-20260703"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t284-goal-result",
+      "path": "scripts/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t284-benchmark-compresion-contexto-optin-2425a2.json",
+      "artifact_type": "goal_result",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-result-json-written-20260703-t284"
+      ],
+      "issues": []
+    }
+  ],
+  "checklist": {
+    "expected_refs": [
+      "CTX-TASK-801D",
+      "no_runtime_dependency_added",
+      "scripts_opt_in_env_confirmation",
+      "protected_material_refused",
+      "benchmark_compares_tokens_bytes_refs_time",
+      "runbook_added",
+      "decision_documented_before_product_adapter",
+      "conclusion_no_product_adapter_now",
+      "manual_bash_n_each_new_script",
+      "manual_shell_focal_main_script",
+      "git_diff_check",
+      "backlog_scan_ref_scan-ref-backlog-d438fd99b7a6_line16_hash_checked_and_rebase_note_written"
+    ],
+    "completed_refs": [
+      "CTX-TASK-801D",
+      "no_runtime_dependency_added",
+      "scripts_opt_in_env_confirmation",
+      "protected_material_refused",
+      "benchmark_compares_tokens_bytes_refs_time",
+      "runbook_added",
+      "decision_documented_before_product_adapter",
+      "conclusion_no_product_adapter_now",
+      "manual_bash_n_each_new_script",
+      "manual_shell_focal_main_script",
+      "git_diff_check",
+      "backlog_scan_ref_scan-ref-backlog-d438fd99b7a6_line16_hash_checked_and_rebase_note_written"
+    ],
+    "missing_refs": [],
+    "evidence_refs": [
+      "evidence-ref-bash-n-context-compression-script-20260703",
+      "evidence-ref-bash-n-context-compression-test-20260703",
+      "evidence-ref-shell-test-context-compression-benchmark-20260703",
+      "evidence-ref-git-diff-check-20260703",
+      "evidence-ref-context-compression-sample-benchmark-20260703",
+      "backlog_scan_ref:scan-ref-backlog-d438fd99b7a6",
+      "backlog_scan_doc_expected:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:sha256:49ddfa8cf3f609e42a9cec0342e28231a4bce588da6c8af8ba14f046c9e78d7a",
+      "backlog_scan_doc_current:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:sha256:c294611add48932f0fb6ea5ee3c5f87e89d890d7e6ca20430c7c3cf69653d0c1"
+    ]
+  },
+  "required_test_results": [
+    {
+      "test_ref": "required-test-ref-59f712ff0f9b",
+      "status": "passed",
+      "evidence_refs": [
+        "evidence-ref-bash-n-context-compression-script-20260703",
+        "evidence-ref-bash-n-context-compression-test-20260703"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-466c2f308b48",
+      "status": "passed",
+      "evidence_refs": [
+        "evidence-ref-git-diff-check-20260703"
+      ]
+    }
+  ],
+  "domain_receipt_refs": [],
+  "rework_plan_refs": [],
+  "evidence_refs": [
+    "evidence-ref-bash-n-context-compression-script-20260703",
+    "evidence-ref-bash-n-context-compression-test-20260703",
+    "evidence-ref-shell-test-context-compression-benchmark-20260703",
+    "evidence-ref-git-diff-check-20260703",
+    "evidence-ref-context-compression-sample-benchmark-20260703",
+    "evidence-ref-result-json-written-20260703-t284",
+    "scan-ref-backlog-d438fd99b7a6",
+    "task-instance-ref-backlog-f43e8f42",
+    "backlog_scan_doc_expected:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:sha256:49ddfa8cf3f609e42a9cec0342e28231a4bce588da6c8af8ba14f046c9e78d7a",
+    "backlog_scan_doc_current:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:sha256:c294611add48932f0fb6ea5ee3c5f87e89d890d7e6ca20430c7c3cf69653d0c1"
+  ]
+}
