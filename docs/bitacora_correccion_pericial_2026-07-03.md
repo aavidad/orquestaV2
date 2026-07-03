@@ -456,3 +456,15 @@ El director Codex integró el watcher de T285 desde el worktree del pilotaje
 `pericial/pilot-t285` (commit `2f8c54f9`) queda SUPERSEDIDA: no hacer
 cherry-pick (duplicaría). Se conserva solo como evidencia. Anula la nota de
 coordinación anterior del supervisor en ese punto.
+
+### 2026-07-04 — T290 y T291 integradas; T292 en vuelo
+
+T291 (`df2bed2f`): simulador determinista de fallos en la suite (modo corto
+<7s, semilla reproducible, invariantes del ciclo goal-first). T290
+(`eab3be97`): corte de goals activos sin progreso útil
+(`goal_high_consumption_without_progress` + stop cooperativo) — cierra la
+causa raíz de BUG-154. Nota: un flake único en la suite del stack bajo carga
+de apagado de pilotos, no reproducido en 2 reruns; vigilar si reaparece.
+T292 lanzada (MEJ-204 actor-crítico, rama `pericial/pilot-t292`). Cola tras
+T292: T286-EXP (A/B broker), MEJ-102/105/207, y decisiones de operador
+(MEJ-101/103/106).
