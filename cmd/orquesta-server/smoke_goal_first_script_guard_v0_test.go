@@ -272,16 +272,55 @@ func scriptRunsTemporaryOrquestaServerCommandV0(text string) bool {
 			!strings.Contains(trimmed, " run") {
 			continue
 		}
-		windowEnd := index + 4
-		if windowEnd > len(lines) {
-			windowEnd = len(lines)
-		}
-		window := strings.Join(lines[index:windowEnd], "\n")
-		if strings.Contains(window, "&") {
-			return true
+		for _, candidate := range lines[index:] {
+			candidate = strings.TrimSpace(candidate)
+			if candidate == "" || strings.HasPrefix(candidate, "#") {
+				continue
+			}
+			if shellLineEndsInBackgroundV0(candidate) {
+				return true
+			}
+			if !strings.HasSuffix(candidate, `\`) {
+				break
+			}
 		}
 	}
 	return false
+}
+
+func shellLineEndsInBackgroundV0(line string) bool {
+	line = strings.TrimSpace(line)
+	return line == "&" || strings.HasSuffix(line, " &")
+}
+
+func TestScriptRunsTemporaryOrquestaServerCommandV0DetectaBackgroundMultilineaLargoV0(t *testing.T) {
+	text := strings.Join([]string{
+		`ORQUESTA_SERVER_ADDR="127.0.0.1:0" \`,
+		`ORQUESTA_SERVER_STATE_DIR="$state_dir" \`,
+		`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \`,
+		`ORQUESTA_CODEX_PROJECT_WORKDIR="$project_dir" \`,
+		`ORQUESTA_CODEX_RUNTIME_WORKDIR="$runtime_dir" \`,
+		`ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DISABLED=true \`,
+		`go run ./cmd/orquesta-server run \`,
+		`  --some-local-flag \`,
+		`  >"$server_log" 2>&1 &`,
+	}, "\n")
+
+	if !scriptRunsTemporaryOrquestaServerCommandV0(text) {
+		t.Fatalf("detector debe cubrir comandos orquesta-server run en background aunque el & este lejos")
+	}
+}
+
+func TestScriptRunsTemporaryOrquestaServerCommandV0IgnoraForegroundMultilineaV0(t *testing.T) {
+	text := strings.Join([]string{
+		`ORQUESTA_SERVER_ADDR="127.0.0.1:0" \`,
+		`go run ./cmd/orquesta-server run \`,
+		`  --some-local-flag >"$server_log" 2>&1`,
+	}, "\n")
+
+	if scriptRunsTemporaryOrquestaServerCommandV0(text) {
+		t.Fatalf("detector no debe marcar comandos foreground sin background")
+	}
 }
 
 func TestScriptsQueDeleganArranqueServidorTemporalInstalanCleanupV0(t *testing.T) {

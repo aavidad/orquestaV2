@@ -778,6 +778,15 @@ endpoint gestionado antes de consultar o drenar. La guarda OPES cubre tambien
 este runbook y bloquea cualquier bloque OPES que vuelva a publicar el runtime
 manual. Evidencia: `TestOPESOperationalDocsGuardV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 12: la guarda de wrappers que
+arrancan `orquesta-server run` temporal en background ya no depende de una
+ventana corta de cuatro lineas; sigue continuaciones multilinea hasta el cierre
+del comando y distingue el `&` de background de redirecciones como `2>&1`. Esto
+evita que un wrapper largo fuera de `smoke_common.sh` escape al requisito de
+shutdown comun con `runtime_dir`. Evidencia:
+`TestScriptRunsTemporaryOrquestaServerCommandV0DetectaBackgroundMultilineaLargoV0`
+y `TestScriptRunsTemporaryOrquestaServerCommandV0IgnoraForegroundMultilineaV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado
