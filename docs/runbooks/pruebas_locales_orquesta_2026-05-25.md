@@ -29,15 +29,19 @@ Refs preservadas como opacas en este corte:
 
 ## Preparacion segura
 
-1. Arrancar el servidor local temporal o residente con el stack Codex opt-in.
-2. Confirmar liveness en `http://127.0.0.1:8787/healthz` y readiness
-   operativa en `http://127.0.0.1:8787/api/v0/server/readiness` antes de
-   lanzar trabajo externo o automejora.
-3. Preparar una solicitud de autoprogramacion de bajo impacto con write-set
+1. Arrancar el servidor local temporal o residente con `orquesta-server start`
+   y el stack Codex opt-in.
+2. Resolver la URL efectiva con `orquesta-server status --json`,
+   `ORQUESTA_SERVER_URL` o `ORQUESTA_RUNTIME_DIR/base_url.txt`; no asumir el
+   puerto historico.
+3. Confirmar liveness en `$ORQUESTA_SERVER_URL/healthz` y readiness operativa
+   en `$ORQUESTA_SERVER_URL/api/v0/server/readiness` antes de lanzar trabajo
+   externo o automejora.
+4. Preparar una solicitud de autoprogramacion de bajo impacto con write-set
    documental acotado y tests requeridos explicitos.
-4. Transportar `worktree_ref` y `branch_ref` como strings opacos; no usarlos
+5. Transportar `worktree_ref` y `branch_ref` como strings opacos; no usarlos
    para derivar carpetas, ramas Git ni comandos de shell.
-5. No pegar `auth.json`, tokens, cabeceras `Authorization`, rutas privadas,
+6. No pegar `auth.json`, tokens, cabeceras `Authorization`, rutas privadas,
    prompts ni transcripts en logs o artefactos.
 
 ## Comprobacion recomendada
@@ -45,15 +49,15 @@ Refs preservadas como opacas en este corte:
 Usar solo API publica del servidor:
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8787/api/v0/autoprogramming/prepare-run \
+curl -sS -X POST "$ORQUESTA_SERVER_URL/api/v0/autoprogramming/prepare-run" \
   -H 'Content-Type: application/json' \
   --data @prepare-local-auth-probe.json
 
-curl -sS -X POST http://127.0.0.1:8787/api/v0/autoprogramming/goal/observe \
+curl -sS -X POST "$ORQUESTA_SERVER_URL/api/v0/autoprogramming/goal/observe" \
   -H 'Content-Type: application/json' \
   --data '{"run_ref":"RUN_REF"}'
 
-curl -sS -X POST http://127.0.0.1:8787/api/v0/autoprogramming/status \
+curl -sS -X POST "$ORQUESTA_SERVER_URL/api/v0/autoprogramming/status" \
   -H 'Content-Type: application/json' \
   --data '{"run_ref":"RUN_REF"}'
 ```
