@@ -176,6 +176,84 @@ func TestMCPDomainWorkStatusHTTPHandlerV0ConservaRepairReceiptGoalFirst(t *testi
 	}
 }
 
+func TestMCPDomainWorkStatusHTTPHandlerV0ConservaOutputSaneadoGoalFirst(t *testing.T) {
+	result := domainWorkStatusResultForActionableRunTestV0(
+		t,
+		mcpAutoprogrammingActionThreadOutputSanitizedV0,
+		mcpQueueGlobalStatusActionReplanNarrowContextV0,
+		"evidence-ref-domain-status-thread-output-sanitized",
+	)
+
+	if result.Summary.Status != "blocked" ||
+		!result.Summary.NeedsAction ||
+		len(result.Items) != 1 ||
+		result.Items[0].Status != "blocked" ||
+		!result.Items[0].NeedsAction ||
+		result.Items[0].RecommendedAction != mcpQueueGlobalStatusActionReplanNarrowContextV0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPDomainWorkStatusHTTPHandlerV0ConservaWriteSetRequiresWorkspaceWrite(t *testing.T) {
+	result := domainWorkStatusResultForActionableRunTestV0(
+		t,
+		mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0,
+		mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0,
+		"evidence-ref-domain-status-write-set-workspace-write",
+	)
+
+	if result.Summary.Status != "blocked" ||
+		!result.Summary.NeedsAction ||
+		len(result.Items) != 1 ||
+		result.Items[0].Status != "blocked" ||
+		!result.Items[0].NeedsAction ||
+		result.Items[0].RecommendedAction != mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func domainWorkStatusResultForActionableRunTestV0(
+	t *testing.T,
+	code string,
+	recommendedAction string,
+	evidenceRef string,
+) MCPDomainWorkStatusResultV0 {
+	t.Helper()
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				Blocked: 1,
+			},
+			StaleRunning: []MCPAutoprogrammingActionableRunV0{{
+				Code:              code,
+				RunRef:            "run-ref-domain-status-actionable-001",
+				AppRef:            "app-ref-domain-status-opes",
+				RecommendedAction: recommendedAction,
+				EvidenceRefs:      []string{evidenceRef},
+			}},
+		},
+	}
+	req := httptest.NewRequest(
+		http.MethodGet,
+		MCPDomainWorkStatusHTTPPathV0+"?project=opes&course_slug=integracion-social&run_ref=run-ref-domain-status-actionable-001",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+
+	NewMCPDomainWorkStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPDomainWorkStatusResultV0
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	return result
+}
+
 func TestMCPDomainWorkStatusHTTPHandlerV0FiltroContextualSinRefDiagnostica(t *testing.T) {
 	executor := &fakeMCPQueueGlobalStatusExecutorV0{}
 	req := httptest.NewRequest(http.MethodGet, MCPDomainWorkStatusHTTPPathV0+"?project=opes&course_slug=curso", nil)

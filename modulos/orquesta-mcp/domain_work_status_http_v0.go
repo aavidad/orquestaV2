@@ -528,7 +528,15 @@ func mcpDomainWorkStatusNormalizeStatusV0(status string, action string) string {
 		return "running"
 	case mcpAutoprogrammingHealthRunningStaleV0, mcpAutoprogrammingHealthRunningStaleNoProcessV0, "stale", "stale_running":
 		return "stale"
-	case mcpAutoprogrammingHealthBlockedV0, mcpAutoprogrammingActionGoalFirstBlockedV0, "needs_action", "queue_needs_action", "observer_required", "retry_required", "review_required":
+	case mcpAutoprogrammingHealthBlockedV0,
+		mcpAutoprogrammingActionGoalFirstBlockedV0,
+		mcpAutoprogrammingActionThreadOutputSanitizedV0,
+		mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0,
+		"needs_action",
+		"queue_needs_action",
+		"observer_required",
+		"retry_required",
+		"review_required":
 		return "blocked"
 	case mcpAutoprogrammingHealthFailedV0, "error":
 		return "failed"
