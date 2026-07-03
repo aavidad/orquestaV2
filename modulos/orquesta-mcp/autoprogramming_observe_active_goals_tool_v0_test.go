@@ -83,6 +83,20 @@ func TestMCPAutoprogrammingObserveActiveGoalsToolExecutorV0ListaYObservaActivos(
 	}
 }
 
+func TestMCPAutoprogrammingObserveActiveGoalsDescriptorV0DeclaraEvidenciaEnErrores(t *testing.T) {
+	descriptor := MCPAutoprogrammingObserveActiveGoalsDescriptorV0()
+	if descriptor.Name != MCPAutoprogrammingObserveActiveGoalsToolNameV0 ||
+		descriptor.ResourceURI != MCPAutoprogrammingObserveActiveGoalsResourceURIV0 ||
+		descriptor.InputSchema == "" ||
+		len(descriptor.Invariantes) == 0 {
+		t.Fatalf("descriptor=%+v", descriptor)
+	}
+	if !strings.Contains(descriptor.Output, "evidence_refs?") ||
+		!strings.Contains(descriptor.Output, "error:{errores_publicos,evidence_refs?}") {
+		t.Fatalf("observe_active_goals debe declarar evidencia en errores: %+v", descriptor)
+	}
+}
+
 func TestMCPAutoprogrammingObserveActiveGoalsToolExecutorV0PublicaSnapshotUsageLimited(t *testing.T) {
 	store := newMCPAutoprogrammingObserveActiveGoalsStoreForTestV0(t,
 		"run-ref-observe-active-goals-usage-limited-001",

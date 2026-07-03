@@ -1168,6 +1168,13 @@ errores enriquecidos que ya conservan evidencia para decidir esperar, reparar
 receipt o replanificar sin depender de logs internos. Evidencia:
 `TestObserveGoalDescriptorsDeclaranEvidenciaEnErroresV0`.
 
+Avance BUG-ORQ-20260701-073/075 2026-07-03 tarde 37: el descriptor MCP de
+`orquesta.autoprogramming.observe_active_goals.v0` declara tambien
+`evidence_refs?` en respuestas de error, alineandose con la agregacion de
+evidencias de observaciones activas y con los contratos de `observe_goal`.
+Evidencia:
+`TestMCPAutoprogrammingObserveActiveGoalsDescriptorV0DeclaraEvidenciaEnErrores`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
