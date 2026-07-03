@@ -199,8 +199,8 @@ Campos:
     estado: ok
     route_policy: goal_first|legacy_director_loop
     director_execution_mode: goal_first|legacy_director_loop
-    run_ref, change_ref, goal_ref?, director_question_ref?, evidence_refs?,
-    next_actions?
+    run_ref, change_ref, goal_ref?, external_goal_ref?,
+    director_question_ref?, evidence_refs?, next_actions?
   output_error:
     estado: error
     errores_publicos: issues compactos

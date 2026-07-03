@@ -38,7 +38,9 @@ func TestMCPExternalWorkRunDescriptorV0DeclaraLegacyExplicito(t *testing.T) {
 	descriptor := MCPExternalWorkRunDescriptorV0()
 
 	if !mcpExternalWorkRunStringContainsTestV0(descriptor.Output, "route_policy") ||
-		!mcpExternalWorkRunStringContainsTestV0(descriptor.Output, "director_execution_mode") {
+		!mcpExternalWorkRunStringContainsTestV0(descriptor.Output, "director_execution_mode") ||
+		!mcpExternalWorkRunStringContainsTestV0(descriptor.Output, "external_goal_ref?") ||
+		!mcpExternalWorkRunStringContainsTestV0(descriptor.Output, "evidence_refs?") {
 		t.Fatalf("output no declara politica legacy: %s", descriptor.Output)
 	}
 	for _, want := range []string{
