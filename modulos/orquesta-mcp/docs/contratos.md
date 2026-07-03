@@ -356,6 +356,43 @@ Pruebas de contrato:
 ```
 
 ```text
+Nombre: rest.bridge.orquesta.domain_work.status.v0
+Tipo: puerto_entrada_http
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: OPES/domain-work, paneles operativos y operadores automatizados
+Campos:
+  rest:
+    method: GET
+    path: /api/v0/domain-work/status
+  input:
+    request_id?, correlation_id?, project?, course_slug?, run_ref?, app_ref?,
+    external_job_ref?, queue_ref?, queue_limit?
+  output_ok:
+    estado: ok
+    filters: filtros recibidos normalizados
+    summary: status, queued, running, blocked, failed, completed, stale,
+      waiting_quota, active_runs, needs_action, will_finish_alone
+    items[]:
+      job_ref?, domain_ref?, work_kind?, run_ref?, app_ref?, status,
+      needs_action?, recommended_action?, current_phase?, domain_counters?,
+      no_action_reason?, evidence_refs?
+    safe_actions?, diagnostics?
+Invariantes:
+  - Fachada read-only de dominio sobre `autoprogramming/status` y
+    `queue/global-status`; no duplica stores ni introduce OPES en el nucleo.
+  - Una fila accionable conserva `recommended_action`; una fila no accionable
+    conserva `no_action_reason` para evitar estados mudos durante espera,
+    shutdown o reconciliacion.
+  - Las senales goal-first recuperables se normalizan a estado operacional
+    estable, sin perder accion concreta ni evidencias compactas.
+Pruebas de contrato:
+  - `TestMCPDomainWorkStatusHTTPHandlerV0GetProyectaFachadaEstable`
+  - `TestMCPDomainWorkStatusHTTPHandlerV0ConservaRazonSinAccionV0`
+  - `TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesGoalFirstRecuperablesComoBloqueadas`
+```
+
+```text
 Nombre: mcp.tool.orquesta.apps.request_change.v0
 Tipo: puerto_entrada
 Version: v0

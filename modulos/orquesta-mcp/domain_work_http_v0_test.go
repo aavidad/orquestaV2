@@ -136,6 +136,51 @@ func TestMCPDomainWorkStatusHTTPHandlerV0GetProyectaFachadaEstable(t *testing.T)
 	}
 }
 
+func TestMCPDomainWorkStatusHTTPHandlerV0ConservaRazonSinAccionV0(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				RunningLive: 1,
+			},
+			Operator: &MCPAutoprogrammingOperatorV0{
+				ActiveRuns: []MCPAutoprogrammingActiveRunV0{{
+					RunRef: "run-ref-domain-status-live-001",
+					AppRef: "app-ref-domain-status-opes",
+					Status: "running",
+				}},
+			},
+		},
+	}
+	req := httptest.NewRequest(
+		http.MethodGet,
+		MCPDomainWorkStatusHTTPPathV0+"?project=opes&course_slug=integracion-social&run_ref=run-ref-domain-status-live-001",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+
+	NewMCPDomainWorkStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPDomainWorkStatusResultV0
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Summary.Status != "running" ||
+		result.Summary.NeedsAction ||
+		!result.Summary.WillFinishAlone ||
+		len(result.Items) != 1 ||
+		result.Items[0].Status != "running" ||
+		result.Items[0].NeedsAction ||
+		result.Items[0].RecommendedAction != "" ||
+		result.Items[0].NoActionReason != "running_live_wait_processes" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPDomainWorkStatusHTTPHandlerV0ConservaRepairReceiptGoalFirst(t *testing.T) {
 	executor := &fakeMCPQueueGlobalStatusExecutorV0{
 		result: MCPAutoprogrammingStatusToolResultV0{

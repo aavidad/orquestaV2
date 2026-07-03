@@ -937,6 +937,13 @@ contra `/api/v0/server/shutdown`, no solo `-X POST`, y sigue exigiendo
 `cleanup_goal_backends`. Evidencia:
 `TestScriptShutdownCurlCommandsV0DetectaRequestPostLargoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 30: el contrato publico de
+`/api/v0/domain-work/status` queda declarado como bridge read-only propio sobre
+`autoprogramming/status` y `queue/global-status`, y la fachada conserva
+`no_action_reason` en filas vivas no accionables para que paneles OPES/domain
+work no muestren estados mudos durante espera, shutdown o reconciliacion.
+Evidencia: `TestMCPDomainWorkStatusHTTPHandlerV0ConservaRazonSinAccionV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 26: la reconciliacion
 automatica de `goal_backend_missing_after_external_cleanup` queda fijada como
 responsabilidad opt-in del supervisor residente; una llamada no residente a
