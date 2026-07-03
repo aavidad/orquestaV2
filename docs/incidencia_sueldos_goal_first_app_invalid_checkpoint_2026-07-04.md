@@ -322,3 +322,41 @@ Siguiente artefacto verificable: test focal que reproduce un
 sigue publicando `running`, y fix que lo reconcilia o devuelve
 `codex_app_server_runtime_write_set_violation` con rutas accionables si el guard
 lo rechaza.
+
+## Cierre tecnico de la causa reproducida
+
+Fecha: 2026-07-04
+
+Commit: `ff620ecf fix: skip cache dirs when reconciling goal receipts`.
+
+Diagnostico cerrado:
+
+El write-set real de Sueldos contenia `.gocache` junto al receipt terminal. El
+scanner de refs materializadas podia recorrer demasiados ficheros de cache y
+agotar `goalMaterializedQAScanMaxFilesV0` antes de llegar a
+`docs/orquesta_goal_result_*.json`; entonces proyectaba artefactos parciales en
+vez de fusionar el `status=complete`.
+
+Cambios:
+
+- `goalMaterializedResultSkipDirV0` salta `.gocache`, `.git`, `.codex`,
+  `node_modules` y `vendor` durante escaneo de refs/resultados materializados.
+- `codexAppServerGoalResultSkipDirV0` aplica la misma exclusion a resultados de
+  app-server.
+- Nuevo test reproduce una app con cache mas grande que el limite de escaneo y
+  verifica que el receipt terminal `complete` se encuentra y no aparece
+  `partial_artifacts_written`.
+
+Pruebas ejecutadas:
+
+```sh
+go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestStackGoalMaterializedRefsSourceV0(EncuentraReceiptTerminalTrasCacheVoluminosa|NormalizaMissingRefsRaizEnReceiptDurable)'
+go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0(ObservaResultadoMarcadoMigrado|NormalizaMissingRefsRaizEnChecklist)'
+```
+
+Estado:
+
+cerrado funcionalmente para la causa reproducida. Queda pendiente no bloqueante
+reintentar el caso de campo Sueldos/Orquesta para comprobar que el run historico
+pasa a `goal_status=complete`, `run_status=cerrada` y
+`closure_status=accepted` con el state/runtime existente.
