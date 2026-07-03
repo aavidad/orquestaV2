@@ -23,6 +23,7 @@ type RuntimeDepsV0 struct {
 	AuditSink        AuditSinkPortV0
 	StartupCheck     StartupCheckPortV0
 	SelfWatchdog     SelfWatchdogObservationPortV0
+	ForceExit        ForceExitPortV0
 	Clock            ClockPortV0
 }
 
@@ -53,12 +54,15 @@ type RuntimeV0 struct {
 	auditSink                   AuditSinkPortV0
 	startupCheck                StartupCheckPortV0
 	selfWatchdog                SelfWatchdogObservationPortV0
+	forceExit                   ForceExitPortV0
 	clock                       ClockPortV0
 	tracker                     *StatusTrackerV0
 	handoffRequested            chan struct{}
 	handoffOnce                 sync.Once
 	shutdownReadyRequested      chan struct{}
 	shutdownReadyOnce           sync.Once
+	shutdownForceExitMu         sync.Mutex
+	shutdownForceExitCancel     context.CancelFunc
 }
 
 func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
@@ -102,6 +106,7 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		auditSink:                   deps.AuditSink,
 		startupCheck:                deps.StartupCheck,
 		selfWatchdog:                deps.SelfWatchdog,
+		forceExit:                   deps.ForceExit,
 		clock:                       deps.Clock,
 		tracker:                     tracker,
 		supervisorWakeups:           make(chan SupervisorWakeupV0, 1),

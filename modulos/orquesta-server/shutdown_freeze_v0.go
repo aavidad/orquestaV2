@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 const serverShutdownRoutePathV0 = "/api/v0/server/shutdown"
@@ -14,6 +16,8 @@ type serverShutdownHTTPProjectionV0 struct {
 	Estado                  string                               `json:"estado,omitempty"`
 	Status                  string                               `json:"status,omitempty"`
 	ShutdownReady           bool                                 `json:"shutdown_ready,omitempty"`
+	ExitPending             bool                                 `json:"exit_pending,omitempty"`
+	PID                     int                                  `json:"pid,omitempty"`
 	RunsRequested           int                                  `json:"runs_requested,omitempty"`
 	RunsStopped             int                                  `json:"runs_stopped,omitempty"`
 	AgentsInFlight          int                                  `json:"agents_in_flight,omitempty"`
@@ -48,7 +52,14 @@ func (runtime *RuntimeV0) shutdownFreezeHTTPHandlerV0(next http.Handler) http.Ha
 		runtime.snapshotShutdownActiveWorkForHTTPV0(r.Context())
 		capture := &shutdownFreezeResponseCaptureV0{ResponseWriter: w, statusCode: http.StatusOK}
 		next.ServeHTTP(capture, r)
-		runtime.recordShutdownHTTPResultV0(r.Context(), capture.statusCode, capture.body)
+		projection, keepFrozen := runtime.recordShutdownHTTPResultV0(r.Context(), capture.statusCode, capture.body)
+		if projection.Ready && !keepFrozen {
+			capture.body = shutdownHTTPBodyWithExitPendingV0(capture.body, os.Getpid())
+		}
+		capture.FlushV0()
+		if projection.Ready && !keepFrozen {
+			runtime.requestShutdownReadyV0()
+		}
 	})
 }
 
@@ -83,9 +94,9 @@ func (runtime *RuntimeV0) markSupervisorFrozenForShutdownV0(ctx context.Context,
 	runtime.persistStateTransitionV0(ctx, runtime.tracker.MarkSupervisorFrozenV0(reason, runtime.clock.Now()), "supervisor_frozen")
 }
 
-func (runtime *RuntimeV0) recordShutdownHTTPResultV0(ctx context.Context, statusCode int, body []byte) {
+func (runtime *RuntimeV0) recordShutdownHTTPResultV0(ctx context.Context, statusCode int, body []byte) (ShutdownProjectionV0, bool) {
 	if runtime == nil || runtime.tracker == nil {
-		return
+		return ShutdownProjectionV0{}, false
 	}
 	projection, keepFrozen := shutdownProjectionFromHTTPV0(statusCode, body)
 	projection = runtime.shutdownProjectionWithPreviousSnapshotV0(projection, keepFrozen)
@@ -101,9 +112,7 @@ func (runtime *RuntimeV0) recordShutdownHTTPResultV0(ctx context.Context, status
 		keepFrozen,
 		runtime.clock.Now(),
 	), "shutdown_result")
-	if projection.Ready && !keepFrozen {
-		runtime.requestShutdownReadyV0()
-	}
+	return projection, keepFrozen
 }
 
 func (runtime *RuntimeV0) shutdownProjectionWithPreviousSnapshotV0(
@@ -150,8 +159,53 @@ func (runtime *RuntimeV0) requestShutdownReadyV0() {
 		return
 	}
 	runtime.shutdownReadyOnce.Do(func() {
+		runtime.scheduleShutdownReadyForceExitV0()
 		close(runtime.shutdownReadyRequested)
 	})
+}
+
+func (runtime *RuntimeV0) scheduleShutdownReadyForceExitV0() {
+	if runtime == nil || runtime.forceExit == nil {
+		return
+	}
+	timeout := runtime.config.ShutdownGracePeriod
+	if timeout <= 0 {
+		timeout = DefaultShutdownGracePeriodV0
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	runtime.shutdownForceExitMu.Lock()
+	if runtime.shutdownForceExitCancel != nil {
+		runtime.shutdownForceExitMu.Unlock()
+		cancel()
+		return
+	}
+	runtime.shutdownForceExitCancel = cancel
+	runtime.shutdownForceExitMu.Unlock()
+	go runtime.runShutdownReadyForceExitAfterV0(ctx, timeout)
+}
+
+func (runtime *RuntimeV0) runShutdownReadyForceExitAfterV0(ctx context.Context, timeout time.Duration) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return
+	case <-timer.C:
+		runtime.forceExit.ExitV0(0)
+	}
+}
+
+func (runtime *RuntimeV0) cancelShutdownReadyForceExitV0() {
+	if runtime == nil {
+		return
+	}
+	runtime.shutdownForceExitMu.Lock()
+	cancel := runtime.shutdownForceExitCancel
+	runtime.shutdownForceExitCancel = nil
+	runtime.shutdownForceExitMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
 
 func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjectionV0, bool) {
@@ -160,6 +214,8 @@ func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjecti
 	projection := ShutdownProjectionV0{
 		Status:                  firstNonEmptyShutdownFreezeV0(payload.Status, payload.Estado, "http_status"),
 		Ready:                   payload.ShutdownReady,
+		ExitPending:             payload.ExitPending,
+		PID:                     payload.PID,
 		HTTPStatus:              statusCode,
 		RunsRequested:           payload.RunsRequested,
 		RunsStopped:             payload.RunsStopped,
@@ -189,6 +245,23 @@ func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjecti
 		return projection, projection.Status == "stop_pending"
 	}
 	return projection, true
+}
+
+func shutdownHTTPBodyWithExitPendingV0(body []byte, pid int) []byte {
+	if pid <= 0 {
+		return body
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(body, &payload); err != nil || payload == nil {
+		return body
+	}
+	payload["exit_pending"] = true
+	payload["pid"] = pid
+	out, err := json.Marshal(payload)
+	if err != nil {
+		return body
+	}
+	return append(out, '\n')
 }
 
 func shutdownProjectionActiveWorkRefsV0(
@@ -296,7 +369,6 @@ type shutdownFreezeResponseCaptureV0 struct {
 
 func (capture *shutdownFreezeResponseCaptureV0) WriteHeader(statusCode int) {
 	capture.statusCode = statusCode
-	capture.ResponseWriter.WriteHeader(statusCode)
 }
 
 func (capture *shutdownFreezeResponseCaptureV0) Write(data []byte) (int, error) {
@@ -311,5 +383,18 @@ func (capture *shutdownFreezeResponseCaptureV0) Write(data []byte) (int, error) 
 		}
 		capture.body = append(capture.body, data[:remaining]...)
 	}
-	return capture.ResponseWriter.Write(data)
+	return len(data), nil
+}
+
+func (capture *shutdownFreezeResponseCaptureV0) FlushV0() {
+	if capture == nil || capture.ResponseWriter == nil {
+		return
+	}
+	if capture.statusCode == 0 {
+		capture.statusCode = http.StatusOK
+	}
+	capture.ResponseWriter.WriteHeader(capture.statusCode)
+	if len(capture.body) > 0 {
+		_, _ = capture.ResponseWriter.Write(capture.body)
+	}
 }

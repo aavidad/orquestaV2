@@ -8,6 +8,8 @@ import (
 type ShutdownProjectionV0 struct {
 	Status                  string
 	Ready                   bool
+	ExitPending             bool
+	PID                     int
 	HTTPStatus              int
 	RunsRequested           int
 	RunsStopped             int

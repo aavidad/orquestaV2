@@ -70,12 +70,19 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 		SelfWatchdog: orquestaserver.NewProcessSelfWatchdogObserverV0(
 			orquestaserver.NewProcSelfCPUSamplerV0(),
 		),
+		ForceExit: serverForceExitPortV0{},
 	})
 	if err != nil {
 		return nil, err
 	}
 	supervisorWakeup.bindRuntimeV0(runtime)
 	return runtime, nil
+}
+
+type serverForceExitPortV0 struct{}
+
+func (serverForceExitPortV0) ExitV0(code int) {
+	os.Exit(code)
 }
 
 func buildServerAppHandlerV0(stack orquestaappcodexstack.StackV0) (http.Handler, error) {

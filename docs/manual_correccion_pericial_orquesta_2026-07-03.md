@@ -479,7 +479,8 @@ lógica de decisión.
 
 ## FASE 4 — Shutdown fiable y smoke nightly (P4)
 
-> T-PER-401 también **BLOQUEADA-POR-WRITE-SET** (toca el smoke y el server).
+> T-PER-401 quedó desbloqueada y cerrada sobre rama limpia el 2026-07-03; no se
+> integró el WIP remoto completo de `BUG-ORQ-20260703-149`.
 
 ### T-PER-401 — Contrato de shutdown en dos fases
 
@@ -508,6 +509,11 @@ BUG-ORQ-20260630-023, un nivel arriba):
 - `TestRuntimeV0ProcesoSaleTrasShutdownReadyV0` (con proceso de test real,
   estilo `TestCodexAppServerTmuxBackendV0EsperaPanePIDAntesDeReadyV0`)
 - guard del script: la espera de PID existe y tiene timeout.
+
+**Cierre 2026-07-03**: implementado como `exit_pending/pid` en el wrapper HTTP
+del runtime, `ForceExitPortV0` inyectable en `orquesta-server` y espera de PID
+en `scripts/smoke_goal_first_app_server_real.sh`. El caso de uso puro
+`orquesta-server-shutdown` solo transporta campos opcionales; no conoce procesos.
 
 ### T-PER-402 — Smoke E2E nightly
 

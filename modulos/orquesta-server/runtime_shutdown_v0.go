@@ -13,6 +13,7 @@ func (runtime *RuntimeV0) shutdownRuntimeV0(
 	cancelRun context.CancelFunc,
 	cause ShutdownSignalCauseV0,
 ) error {
+	defer runtime.cancelShutdownReadyForceExitV0()
 	shutdownCtx, cancelShutdown := runtime.shutdownContextV0()
 	defer cancelShutdown()
 	atomic.StoreInt32(&runtime.shutdownInProgress, 1)

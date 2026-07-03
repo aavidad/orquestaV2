@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -194,9 +195,18 @@ func TestRuntimeV0ServerShutdownReadyDetieneRuntimeHTTPV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST shutdown: %v", err)
 	}
-	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("shutdown status=%d", resp.StatusCode)
+	}
+	var payload serverShutdownHTTPProjectionV0
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode shutdown body: %v", err)
+	}
+	_ = resp.Body.Close()
+	if !payload.ShutdownReady ||
+		!payload.ExitPending ||
+		payload.PID != os.Getpid() {
+		t.Fatalf("shutdown response sin salida programada: %+v", payload)
 	}
 	if err := waitRuntimeDoneV0(t, done); err != nil {
 		t.Fatalf("RunV0: %v", err)
@@ -212,6 +222,31 @@ func TestRuntimeV0ServerShutdownReadyDetieneRuntimeHTTPV0(t *testing.T) {
 		state.ShutdownSignalName != "http_shutdown_ready" ||
 		state.ShutdownSignalCount != 1 {
 		t.Fatalf("runtime no paro por shutdown HTTP ready: %+v", state)
+	}
+}
+
+func TestRuntimeV0ShutdownReadyProgramaSalidaForzadaSiNoTerminaV0(t *testing.T) {
+	forceExit := &recordingForceExitPortV0{codes: make(chan int, 1)}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:            t.TempDir(),
+		AuditDisabled:       true,
+		ShutdownGracePeriod: 20 * time.Millisecond,
+	}, RuntimeDepsV0{
+		ForceExit: forceExit,
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.requestShutdownReadyV0()
+
+	select {
+	case code := <-forceExit.codes:
+		if code != 0 {
+			t.Fatalf("exit code=%d", code)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("shutdown_ready no programo salida forzada")
 	}
 }
 
@@ -757,6 +792,14 @@ func (fake fakeShutdownSnapshotPortV0) SnapshotShutdownV0(
 	ShutdownSnapshotRequestV0,
 ) (ShutdownSnapshotResultV0, error) {
 	return fake.result, fake.err
+}
+
+type recordingForceExitPortV0 struct {
+	codes chan int
+}
+
+func (port *recordingForceExitPortV0) ExitV0(code int) {
+	port.codes <- code
 }
 
 func waitRuntimeAddrV0(t *testing.T, runtime *RuntimeV0) string {

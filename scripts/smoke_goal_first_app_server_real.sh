@@ -437,7 +437,7 @@ assert_app_server_tmux_shutdown_ready() {
   if [[ "$goal_backend" != "app_server_tmux" ]]; then
     return 0
   fi
-  local owner_file session_name pane_pid socket_path shutdown_status shutdown_ready app_processes_alive
+  local owner_file session_name pane_pid socket_path shutdown_status shutdown_ready exit_pending shutdown_pid app_processes_alive
   owner_file="$(find_tmux_owner_file || true)"
   if [[ -n "$owner_file" ]]; then
     session_name="$(json_owner_get "$owner_file" "session_name")"
@@ -505,9 +505,21 @@ assert_app_server_tmux_shutdown_ready() {
     smoke_print_file_excerpt "$shutdown_response"
     exit 1
   fi
+  exit_pending="$(json_get "$shutdown_response" "exit_pending")"
+  shutdown_pid="$(json_get "$shutdown_response" "pid")"
+  if [[ "$exit_pending" != "true" || -z "$shutdown_pid" ]]; then
+    echo "shutdown_ready=true sin exit_pending/pid; respuesta:" >&2
+    smoke_print_file_excerpt "$shutdown_response"
+    exit 1
+  fi
+  if [[ "$shutdown_pid" != "$server_pid" ]]; then
+    echo "shutdown pid inesperado: respuesta=$shutdown_pid esperado=$server_pid" >&2
+    smoke_print_file_excerpt "$shutdown_response"
+    exit 1
+  fi
   for _ in $(seq 1 80); do
-    if ! kill -0 "$server_pid" >/dev/null 2>&1; then
-      wait "$server_pid" >/dev/null 2>&1 || true
+    if ! kill -0 "$shutdown_pid" >/dev/null 2>&1; then
+      wait "$shutdown_pid" >/dev/null 2>&1 || true
       server_pid=""
       break
     fi

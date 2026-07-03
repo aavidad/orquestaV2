@@ -166,6 +166,8 @@ type ServerShutdownResultV0 struct {
 	SchemaVersion              string                                       `json:"schema_version"`
 	Status                     string                                       `json:"status"`
 	ShutdownReady              bool                                         `json:"shutdown_ready"`
+	ExitPending                bool                                         `json:"exit_pending,omitempty"`
+	PID                        int                                          `json:"pid,omitempty"`
 	RunsRequested              int                                          `json:"runs_requested"`
 	RunsStopped                int                                          `json:"runs_stopped"`
 	AgentsInFlight             int                                          `json:"agents_in_flight"`

@@ -24,6 +24,8 @@ func TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0(t *testing.T) {
 		!strings.Contains(descriptor.Output, "evidence_refs?") ||
 		!strings.Contains(descriptor.Output, "error:{errores_publicos,evidence_refs?}") ||
 		!strings.Contains(descriptor.Output, "stop_pending") ||
+		!strings.Contains(descriptor.Output, "exit_pending?") ||
+		!strings.Contains(descriptor.Output, "pid?") ||
 		!strings.Contains(descriptor.Output, "active_goals_present") ||
 		!strings.Contains(descriptor.Output, "backend_still_running") ||
 		!strings.Contains(descriptor.Output, "checkpoints_pending") ||
