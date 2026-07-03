@@ -162,18 +162,10 @@ func directorOpsDecisionFromAutoprogrammingSafeActionsMCPV0(
 	staleRunning []MCPAutoprogrammingActionableRunV0,
 ) orquestaobservability.DirectorAutonomousOpsDecisionV0 {
 	for _, action := range staleRunning {
-		code := strings.TrimSpace(action.Code)
-		if directorOpsWriteSetActionCodeMCPV0(code) {
-			return orquestaobservability.DirectorAutonomousOpsDecisionV0{
-				Action:       orquestaobservability.DirectorAutonomousOpsActionReviewReplanV0,
-				Scope:        "run",
-				RunRef:       strings.TrimSpace(action.RunRef),
-				Attention:    true,
-				ReasonCode:   code,
-				SummaryKey:   "director.ops.decision." + strings.TrimSpace(action.RecommendedAction),
-				EvidenceRefs: compactStringsMCPV0(action.EvidenceRefs),
-			}
+		if decision, ok := directorOpsDecisionFromAutoprogrammingActionableRunMCPV0(action); ok {
+			return decision
 		}
+		code := strings.TrimSpace(action.Code)
 		if code != mcpAutoprogrammingActionGoalFirstStateMissingV0 &&
 			code != mcpAutoprogrammingActionGoalFirstBlockedV0 {
 			continue
@@ -219,15 +211,32 @@ func directorOpsDecisionFromAutoprogrammingSafeActionsMCPV0(
 	return directorOpsDecisionFromSnapshotMCPV0(snapshot)
 }
 
-func directorOpsWriteSetActionCodeMCPV0(code string) bool {
-	switch strings.TrimSpace(code) {
-	case mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0,
-		mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMissingV0,
-		mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0:
-		return true
-	default:
-		return false
+func directorOpsDecisionFromAutoprogrammingActionableRunMCPV0(
+	action MCPAutoprogrammingActionableRunV0,
+) (orquestaobservability.DirectorAutonomousOpsDecisionV0, bool) {
+	recommendedAction := strings.TrimSpace(action.RecommendedAction)
+	if recommendedAction == "" {
+		return orquestaobservability.DirectorAutonomousOpsDecisionV0{}, false
 	}
+	switch strings.TrimSpace(action.Severity) {
+	case "blocked", "warning":
+	default:
+		return orquestaobservability.DirectorAutonomousOpsDecisionV0{}, false
+	}
+	code := strings.TrimSpace(action.Code)
+	if code == "" || code == mcpAutoprogrammingActionGoalFirstBlockedV0 ||
+		code == mcpAutoprogrammingActionGoalFirstStateMissingV0 {
+		return orquestaobservability.DirectorAutonomousOpsDecisionV0{}, false
+	}
+	return orquestaobservability.DirectorAutonomousOpsDecisionV0{
+		Action:       orquestaobservability.DirectorAutonomousOpsActionReviewReplanV0,
+		Scope:        "run",
+		RunRef:       strings.TrimSpace(action.RunRef),
+		Attention:    true,
+		ReasonCode:   code,
+		SummaryKey:   "director.ops.decision." + recommendedAction,
+		EvidenceRefs: compactStringsMCPV0(action.EvidenceRefs),
+	}, true
 }
 
 func directorOpsDecisionFromAutoprogrammingSnapshotWithoutQueueSuperviseMCPV0(

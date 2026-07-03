@@ -2244,6 +2244,17 @@ func TestMCPAutoprogrammingStatusExecutorV0QAFailedPublicTextPideReworkV0(t *tes
 		) {
 		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
 	}
+	if result.OpsSnapshot == nil ||
+		result.OpsSnapshot.Decision.Action != orquestaobservability.DirectorAutonomousOpsActionReviewReplanV0 ||
+		result.OpsSnapshot.Decision.RunRef != runRef ||
+		result.OpsSnapshot.Decision.ReasonCode != MCPGoalFirstQAFailedPublicTextV0 ||
+		!result.OpsSnapshot.Decision.Attention ||
+		!hasStringMCPAutoprogrammingStatusTestV0(
+			result.OpsSnapshot.Decision.EvidenceRefs,
+			mcpAutoprogrammingEvidenceQAFailedPublicTextV0,
+		) {
+		t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
+	}
 }
 
 func TestMCPAutoprogrammingStatusExecutorV0ArtifactPathsOmitidosPideRepairReceiptV0(t *testing.T) {
@@ -2469,6 +2480,17 @@ func TestMCPAutoprogrammingStatusExecutorV0OutputGiganteSaneadoPideContextoAcota
 			mcpAutoprogrammingActionThreadOutputSanitizedV0,
 		) {
 		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
+	if result.OpsSnapshot == nil ||
+		result.OpsSnapshot.Decision.Action != orquestaobservability.DirectorAutonomousOpsActionReviewReplanV0 ||
+		result.OpsSnapshot.Decision.RunRef != runRef ||
+		result.OpsSnapshot.Decision.ReasonCode != mcpAutoprogrammingActionThreadOutputSanitizedV0 ||
+		!result.OpsSnapshot.Decision.Attention ||
+		!hasStringMCPAutoprogrammingStatusTestV0(
+			result.OpsSnapshot.Decision.EvidenceRefs,
+			mcpAutoprogrammingEvidenceThreadOutputSanitizedV0,
+		) {
+		t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
 	}
 }
 

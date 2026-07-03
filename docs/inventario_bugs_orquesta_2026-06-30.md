@@ -886,6 +886,16 @@ solo reconocia `goal_first_blocked` generico. Evidencia:
 `TestMCPAutoprogrammingStatusExecutorV0WriteSetReadOnlyPideConfigurarSandboxV0`
 y `TestMCPAutoprogrammingStatusExecutorV0WriteSetGuardContractPideRepairPacketV0`.
 
+Avance BUG-ORQ-20260701-075/079/085 2026-07-03 tarde 24: la misma decision
+autonoma de `ops_snapshot` ya no depende de una lista corta de codigos; cualquier
+`stale_running` con `recommended_action` especifica y severidad `blocked` o
+`warning` se proyecta como decision con atencion, `run_ref`, `reason_code`
+causal y evidencias. Cubre QA publica fallida, artefactos/receipt/write-set
+recuperables y salida gigante saneada sin convertir senales `info` de espera en
+replan. Evidencia:
+`TestMCPAutoprogrammingStatusExecutorV0QAFailedPublicTextPideReworkV0` y
+`TestMCPAutoprogrammingStatusExecutorV0OutputGiganteSaneadoPideContextoAcotadoV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado
