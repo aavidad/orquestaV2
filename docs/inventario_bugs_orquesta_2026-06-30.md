@@ -927,6 +927,13 @@ no mutan el `GoalWorkState` running. Evidencia:
 `TestMCPTransportV0RunControlPauseNoReconciliaExternalCleanupSinForce` y
 `TestMCPTransportV0RunControlResumeNoReconciliaExternalCleanupSinForce`.
 
+Avance BUG-ORQ-20260701-065 2026-07-03 tarde 29: con un `RunMemoryStoreV0` real,
+`pause` y `resume` con evidencia de cleanup externo conservan esa evidencia en
+la respuesta publica y en el estado run-control durable, sin recomendar
+`replan_narrow_context` ni emitir diagnostico de reconciliacion terminal.
+Evidencia:
+`TestMCPRunControlExecutorV0PauseResumeExternalCleanupConservanEvidenciaEnResultadoV0`.
+
 Avance BUG-ORQ-20260701-085 2026-07-03 tarde 22: `efficiency_summary` conserva
 ahora tambien las acciones compactas de launch write-set: si el goal queda
 invalid por `codex_app_server_write_set_requires_workspace_write`, publica

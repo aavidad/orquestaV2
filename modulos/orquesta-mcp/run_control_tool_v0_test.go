@@ -8,6 +8,7 @@ import (
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
+	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
 )
 
 func TestMCPRunControlDescriptorV0EsAdaptadorFino(t *testing.T) {
@@ -875,6 +876,59 @@ func TestMCPRunControlExecutorV0ResumeNoReconciliaExternalCleanupAunqueTraigaEvi
 		state.LastClosure != nil ||
 		containsStringMCPTestV0(state.EvidenceRefs, "evidence-ref-run-control-goal-external-cleanup-reconciled") {
 		t.Fatalf("state mutado por resume con evidencia de cleanup externo: %+v", state)
+	}
+}
+
+func TestMCPRunControlExecutorV0PauseResumeExternalCleanupConservanEvidenciaEnResultadoV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-run-control-goal-backend-missing-real-store-001"
+	store := orquestarunmemory.NewRunMemoryStoreV0()
+	executor := MCPRunControlToolExecutorV0{Port: store}
+
+	paused, err := executor.Execute(ctx, MCPRunControlToolInputV0{
+		RequestID:    "req-run-control-goal-backend-missing-real-store-pause-001",
+		Action:       "pause",
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-director",
+		Reason:       "pausar conservando evidencia de cleanup externo",
+		EvidenceRefs: []string{mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0},
+	})
+	if err != nil {
+		t.Fatalf("Execute pause: %v", err)
+	}
+	if paused.Estado != MCPRunControlEstadoOKV0 ||
+		paused.Status != string(orquestaruncontrol.RunControlStatusPausedV0) ||
+		paused.RecommendedAction != "" ||
+		!containsStringMCPTestV0(paused.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) ||
+		containsMCPRunControlDiagnosticForTestV0(paused.Diagnostics, "goal_state_terminal_reconciled_after_external_cleanup") {
+		t.Fatalf("pause debe conservar evidencia sin reconciliar: %+v", paused)
+	}
+
+	resumed, err := executor.Execute(ctx, MCPRunControlToolInputV0{
+		RequestID:    "req-run-control-goal-backend-missing-real-store-resume-001",
+		Action:       "resume",
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-director",
+		Reason:       "reanudar conservando evidencia de cleanup externo",
+		EvidenceRefs: []string{mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0},
+	})
+	if err != nil {
+		t.Fatalf("Execute resume: %v", err)
+	}
+	if resumed.Estado != MCPRunControlEstadoOKV0 ||
+		resumed.Status != string(orquestaruncontrol.RunControlStatusRunningV0) ||
+		resumed.RecommendedAction != "" ||
+		!containsStringMCPTestV0(resumed.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) ||
+		containsMCPRunControlDiagnosticForTestV0(resumed.Diagnostics, "goal_state_terminal_reconciled_after_external_cleanup") {
+		t.Fatalf("resume debe conservar evidencia sin reconciliar: %+v", resumed)
+	}
+	state, err := store.ReadRunControlStateV0(ctx, orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef})
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusRunningV0 ||
+		!containsStringMCPTestV0(state.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) {
+		t.Fatalf("estado real sin evidencia de cleanup externo: %+v", state)
 	}
 }
 
