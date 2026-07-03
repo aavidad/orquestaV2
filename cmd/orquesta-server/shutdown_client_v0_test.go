@@ -419,6 +419,67 @@ func TestRequestServerShutdownV0NoReintentaHTTP409ActiveGoalsPresent(t *testing.
 	}
 }
 
+func TestWaitServerShutdownReadyV0CortaTrasRepostNoRecuperableV0(t *testing.T) {
+	shutdownCalls := 0
+	statusCalls := 0
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v0/server/shutdown":
+			shutdownCalls++
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(serverShutdownClientResultV0{
+				Estado:         "ok",
+				Status:         "active_goals_present",
+				ShutdownReady:  false,
+				RunsRequested:  1,
+				RunsStopped:    0,
+				AgentsInFlight: 1,
+			})
+		case orquestaserver.ServerStatusEndpointV0:
+			statusCalls++
+			http.Error(w, "status unavailable", http.StatusServiceUnavailable)
+		default:
+			t.Fatalf("path inesperado: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	started := time.Now()
+	err := waitServerShutdownReadyV0(
+		strings.TrimPrefix(server.URL, "http://"),
+		serverShutdownClientOptionsV0{Forced: true},
+		serverShutdownClientResultV0{
+			Estado:          "ok",
+			Status:          "backend_still_running",
+			ShutdownReady:   false,
+			ActiveWorkCount: 1,
+			ActiveWorkRefs:  []string{"shutdown-active-work-goal-backend-goal-ref-repost"},
+		},
+		serverShutdownClientRequestIdentityV0{
+			requestID:      "request-test-repost-nonrecoverable",
+			correlationID:  "corr-test-repost-nonrecoverable",
+			idempotencyKey: "idem-test-repost-nonrecoverable",
+			reason:         "test repost nonrecoverable",
+		},
+		time.Minute,
+		time.Millisecond,
+	)
+
+	if err == nil || !strings.Contains(err.Error(), "shutdown_not_ready status=active_goals_present") {
+		t.Fatalf("error active_goals_present esperado: %v", err)
+	}
+	if time.Since(started) > time.Second {
+		t.Fatalf("estado no recuperable del rePOST no debe esperar hasta timeout")
+	}
+	if shutdownCalls != 1 {
+		t.Fatalf("shutdownCalls=%d, debe cortar tras primer rePOST no recuperable", shutdownCalls)
+	}
+	if statusCalls != 0 {
+		t.Fatalf("statusCalls=%d, no debe consultar status tras cuerpo shutdown no recuperable", statusCalls)
+	}
+}
+
 func TestRequestServerShutdownV0NoReintentaBackendStillRunningConRunsPendientes(t *testing.T) {
 	shutdownCalls := 0
 	statusCalls := 0

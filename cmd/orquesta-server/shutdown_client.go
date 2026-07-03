@@ -271,6 +271,9 @@ func waitServerShutdownReadyV0(
 				if shutdownClientResultReadyForSignalV0(last) {
 					return nil
 				}
+				if !shutdownClientResultCanWaitV0(last) {
+					return shutdownClientNotReadyErrorV0(last)
+				}
 			}
 		}
 		status, err := getServerPublicStatusForShutdownV0(addr)
