@@ -16,8 +16,8 @@ func serverShutdownRequesterAuthorizedV0(requestedBy string) bool {
 }
 
 func missingServerShutdownDepV0(status string) ServerShutdownResultV0 {
-	return ServerShutdownResultV0{
+	return withServerShutdownRecommendedActionV0(ServerShutdownResultV0{
 		SchemaVersion: ServerShutdownSchemaVersionV0,
 		Status:        status,
-	}
+	})
 }

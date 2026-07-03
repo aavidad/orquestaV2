@@ -610,6 +610,41 @@ func TestStackGoalMaterializedRefsSourceV0DetectaArtifactPathsOmitidosDesdeRecei
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0NormalizaMissingRefsRaizEnReceiptDurable(t *testing.T) {
+	projectDir := t.TempDir()
+	appDir := filepath.Join(projectDir, "generated-apps", "missing-refs")
+	docsDir := filepath.Join(appDir, "docs")
+	if err := os.MkdirAll(docsDir, 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-missing-refs-001", "generated-apps/missing-refs")
+	raw := `{
+		"schema_version":"orquesta_goal_result.v0",
+		"status":"invalid",
+		"goal_ref":"` + state.GoalRef + `",
+		"summary":"resultado durable inicial; pendiente de implementacion, artefactos y pruebas",
+		"artifact_paths":["generated-apps/missing-refs/checkpoint_started.txt"],
+		"missing_refs":["source_tree","handoff_report","technical_stack_manifest","go_app","tests"],
+		"evidence_refs":["evidence-ref-app-director-goal-first-v0"]
+	}`
+	if err := os.WriteFile(filepath.Join(docsDir, "orquesta_goal_result_v0.json"), []byte(raw), 0o600); err != nil {
+		t.Fatalf("write receipt: %v", err)
+	}
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).LoadTerminalGoalMaterializedResultV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("LoadTerminalGoalMaterializedResultV0: %v", err)
+	}
+	if !ok ||
+		result.Status != orquestagoal.GoalStatusInvalidV0 ||
+		!containsStringV0(result.Checklist.MissingRefs, "source_tree") ||
+		!containsStringV0(result.Checklist.MissingRefs, "tests") {
+		t.Fatalf("missing_refs raiz no normalizado: ok=%v result=%+v", ok, result)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0DetectaArtefactosOPESFueraDeWriteSet(t *testing.T) {
 	projectDir := t.TempDir()
 	phaseDir := filepath.Join(projectDir, "temas", "tema_003", "coordinacion_wave14")

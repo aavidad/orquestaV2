@@ -87,8 +87,12 @@ func shutdownClientNotReadyErrorV0(result serverShutdownClientResultV0) error {
 	if len(activeWorkRefs) > 0 {
 		activeWorkRefsPart = " active_work_refs=" + strings.Join(activeWorkRefs, ",")
 	}
+	recommendedActionPart := ""
+	if action := safeShutdownClientRecommendedActionV0(result.RecommendedAction); action != "" {
+		recommendedActionPart = " recommended_action=" + action
+	}
 	return fmt.Errorf(
-		"shutdown_not_ready status=%s runs=%d/%d agents_in_flight=%d checkpoints=%d checkpoint_agents=%d async_work=%d active_work=%d%s",
+		"shutdown_not_ready status=%s runs=%d/%d agents_in_flight=%d checkpoints=%d checkpoint_agents=%d async_work=%d active_work=%d%s%s",
 		result.Status,
 		result.RunsStopped,
 		result.RunsRequested,
@@ -98,7 +102,30 @@ func shutdownClientNotReadyErrorV0(result serverShutdownClientResultV0) error {
 		result.AsyncWorkActive,
 		result.ActiveWorkCount,
 		activeWorkRefsPart,
+		recommendedActionPart,
 	)
+}
+
+func safeShutdownClientRecommendedActionV0(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == '_',
+			r == '-',
+			r == ':',
+			r == '.':
+			continue
+		default:
+			return ""
+		}
+	}
+	return value
 }
 
 func shutdownClientNotReadyActiveWorkRefsV0(result serverShutdownClientResultV0) []string {

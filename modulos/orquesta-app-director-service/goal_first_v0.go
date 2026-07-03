@@ -306,7 +306,7 @@ func appDirectorGoalShouldLaunchReworkV0(
 		ports.GoalStateStore == nil {
 		return false
 	}
-	if !appDirectorGoalResultPermiteReworkV0(result, closure) {
+	if !appDirectorGoalResultPermiteReworkV0(state.Spec, result, closure) {
 		return false
 	}
 	maxRework := appDirectorGoalMaxReworkGoalsV0(state.Spec)
@@ -317,6 +317,7 @@ func appDirectorGoalShouldLaunchReworkV0(
 }
 
 func appDirectorGoalResultPermiteReworkV0(
+	spec orquestagoal.GoalWorkSpecV0,
 	result orquestagoal.GoalWorkResultV0,
 	closure orquestagoal.GoalClosureValidationV0,
 ) bool {
@@ -324,7 +325,8 @@ func appDirectorGoalResultPermiteReworkV0(
 	case orquestagoal.GoalStatusCompleteV0:
 		return true
 	case orquestagoal.GoalStatusBlockedV0, orquestagoal.GoalStatusInvalidV0:
-		return appDirectorGoalOperationalReworkIssueV0(result, closure)
+		return appDirectorGoalOperationalReworkIssueV0(result, closure) ||
+			appDirectorGoalNewAppMissingRefsReworkIssueV0(spec, result, closure)
 	default:
 		return false
 	}
@@ -347,6 +349,41 @@ func appDirectorGoalOperationalReworkIssueV0(
 	return strings.Contains(summary, "codex_app_server_goal_active_timeout") ||
 		strings.Contains(summary, "checkpoint_only_high_consumption") ||
 		strings.Contains(summary, "goal_active_no_checkpoint_high_consumption")
+}
+
+func appDirectorGoalNewAppMissingRefsReworkIssueV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	result orquestagoal.GoalWorkResultV0,
+	closure orquestagoal.GoalClosureValidationV0,
+) bool {
+	if strings.TrimSpace(spec.WorkKind) != "new_app" {
+		return false
+	}
+	if !appDirectorGoalIssueFieldInSetV0(closure.Issues, "checklist.missing_refs") &&
+		!appDirectorGoalIssueFieldInSetV0(result.Issues, "checklist.missing_refs") &&
+		len(compactStartAppDirectorStringsV0(result.Checklist.MissingRefs)) == 0 {
+		return false
+	}
+	for _, ref := range result.Checklist.MissingRefs {
+		switch strings.TrimSpace(ref) {
+		case "source_tree", "handoff_report", "technical_stack_manifest", "go_app", "tests":
+			return true
+		}
+	}
+	return false
+}
+
+func appDirectorGoalIssueFieldInSetV0(issues []orquestagoal.GoalWorkIssueV0, field string) bool {
+	field = strings.TrimSpace(field)
+	if field == "" {
+		return false
+	}
+	for _, issue := range issues {
+		if strings.TrimSpace(issue.Field) == field {
+			return true
+		}
+	}
+	return false
 }
 
 func appDirectorGoalResultAndClosureIssueCodesV0(

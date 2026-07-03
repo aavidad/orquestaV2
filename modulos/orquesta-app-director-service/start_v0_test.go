@@ -971,6 +971,69 @@ func TestObserveAppDirectorGoalV0LanzaReworkGoalPorTimeoutActivoV0(t *testing.T)
 	}
 }
 
+func TestObserveAppDirectorGoalV0LanzaReworkGoalSiNuevaAppSoloCheckpointInvalidV0(t *testing.T) {
+	store, sink, goalStates, launcher, started := serviceStartGoalFirstForObserveTestV0(t)
+	spec := launcher.specs[0]
+	observer := serviceGoalObserverForTestV0{result: orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusInvalidV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: started.ExternalGoalRef,
+		Summary:         "resultado durable inicial; pendiente de implementacion, artefactos y pruebas",
+		ArtifactPaths: []string{
+			spec.WriteSet[0].Path + "/checkpoint_started.txt",
+			spec.WriteSet[0].Path + "/docs/orquesta_goal_result_" + spec.GoalRef + ".json",
+		},
+		Checklist: orquestagoal.GoalWorkChecklistV0{
+			ExpectedRefs:  serviceRequiredArtifactRefsForGoalSpecV0(spec),
+			MissingRefs:   []string{"source_tree", "handoff_report", "technical_stack_manifest", "go_app", "tests"},
+			EvidenceRefs:  []string{"evidence-ref-app-director-goal-first-v0"},
+			CompletedRefs: []string{},
+		},
+		RequiredTestResults: []orquestagoal.GoalRequiredTestResultV0{{
+			TestRef:      spec.RequiredTests[0].TestRef,
+			Status:       "pending",
+			EvidenceRefs: []string{},
+		}},
+		EvidenceRefs: spec.ClosurePolicy.RequiredEvidenceRefs,
+	}}
+
+	result, err := ObserveAppDirectorGoalV0(
+		context.Background(),
+		ObserveAppDirectorGoalRequestV0{RunRef: spec.RunRef},
+		StartAppDirectorPortsV0{
+			RunStore:             store,
+			EventSink:            sink,
+			GoalStateStore:       goalStates,
+			GoalReworkLauncher:   launcher,
+			GoalObserver:         observer,
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if launcher.calls != 2 || len(launcher.specs) != 2 {
+		t.Fatalf("launcher calls=%d specs=%d", launcher.calls, len(launcher.specs))
+	}
+	reworkSpec := launcher.specs[1]
+	if reworkSpec.GoalRef != spec.GoalRef+"-rework-1" ||
+		reworkSpec.RunRef != spec.RunRef ||
+		!serviceStringInSetV0(reworkSpec.EvidenceRefs, "evidence-ref-app-director-goal-rework-v0") ||
+		!serviceGoalContextRefInSetForTestV0(reworkSpec.ContextRefs, "goal", spec.GoalRef) {
+		t.Fatalf("reworkSpec=%+v", reworkSpec)
+	}
+	if result.Status != orquestagoal.GoalStatusRunningV0 ||
+		result.GoalRef != reworkSpec.GoalRef ||
+		result.Closure.NeedsRework ||
+		result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 {
+		t.Fatalf("result=%+v", result)
+	}
+	if serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventRunBlockedV0) {
+		t.Fatalf("invalid checkpoint con launcher debe relanzar rework, no bloquear run: %+v", sink.EventsV0())
+	}
+}
+
 func TestObserveAppDirectorGoalV0BloqueaSiReworkGoalAgotaPresupuesto(t *testing.T) {
 	store, sink, goalStates, launcher, started := serviceStartGoalFirstForObserveTestV0(t)
 	spec := launcher.specs[0]

@@ -18,6 +18,7 @@ import (
 type serverShutdownClientResultV0 struct {
 	Estado                  string                             `json:"estado"`
 	Status                  string                             `json:"status"`
+	RecommendedAction       string                             `json:"recommended_action,omitempty"`
 	ShutdownReady           bool                               `json:"shutdown_ready"`
 	RunsRequested           int                                `json:"runs_requested"`
 	RunsStopped             int                                `json:"runs_stopped"`
@@ -168,6 +169,7 @@ func readServerShutdownClientResponseBodyV0(response *http.Response) ([]byte, er
 }
 
 func normalizeServerShutdownClientResultV0(result serverShutdownClientResultV0) serverShutdownClientResultV0 {
+	result.RecommendedAction = strings.TrimSpace(result.RecommendedAction)
 	activeWorkRefs := compactStringsV0(append(
 		append([]string(nil), result.ActiveWorkRefs...),
 		serverShutdownClientActiveWorkRefsV0(result.ActiveWorks)...,

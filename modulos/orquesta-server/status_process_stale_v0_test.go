@@ -26,6 +26,8 @@ func TestMarkServerProcessStaleStateV0ExponeCausaTrasReadinessV0(t *testing.T) {
 		ShutdownStatus:             "waiting_backend",
 		ShutdownReady:              true,
 		ShutdownHTTPStatus:         503,
+		ShutdownActiveWorkCount:    2,
+		ShutdownActiveWorkRefs:     []string{"shutdown-active-work-goal-backend-goal-ref-stale"},
 	}
 
 	stale := MarkServerProcessStaleStateV0(state, now)
@@ -50,6 +52,8 @@ func TestMarkServerProcessStaleStateV0ExponeCausaTrasReadinessV0(t *testing.T) {
 		stale.ShutdownAgentsInFlight != 0 ||
 		stale.ShutdownCheckpointsPending != 0 ||
 		stale.ShutdownCheckpointAgentsPending != 0 ||
+		stale.ShutdownActiveWorkCount != 0 ||
+		len(stale.ShutdownActiveWorkRefs) != 0 ||
 		stale.ShutdownAsyncWorkActive != 0 ||
 		stale.ShutdownStopTimeoutAt != "" {
 		t.Fatalf("actividad viva no limpiada en stale: %+v", stale)
@@ -132,6 +136,45 @@ func TestServerAvailabilityV0ExponeStoppedAccionableV0(t *testing.T) {
 	}
 }
 
+func TestNormalizeStoppedServerSnapshotV0LimpiaActiveWorkStaleV0(t *testing.T) {
+	state := StateV0{
+		SchemaVersion:           StateSchemaVersionV0,
+		Status:                  "stopped",
+		StartupReady:            false,
+		StartupStatus:           "stopped",
+		ShutdownInProgress:      true,
+		ShutdownStatus:          "stopped",
+		ShutdownReady:           true,
+		ShutdownHTTPStatus:      500,
+		ShutdownActiveWorkCount: 2,
+		ShutdownActiveWorkRefs: []string{
+			"shutdown-active-work-goal-backend-goal-ref-stale-001",
+			"shutdown-active-work-goal-backend-goal-ref-stale-002",
+		},
+		ShutdownAsyncWorkActive: 1,
+		ShutdownStopTimeoutAt:   "2026-07-04T00:52:33Z",
+	}
+
+	reconciled, ok := NormalizeStoppedServerSnapshotV0(state)
+
+	if !ok {
+		t.Fatalf("snapshot stopped con active_work stale debe reconciliarse")
+	}
+	if reconciled.Status != "stopped" ||
+		reconciled.StartupReady ||
+		reconciled.StartupStatus != "stopped" ||
+		reconciled.ShutdownInProgress ||
+		reconciled.ShutdownStatus != "stopped" ||
+		!reconciled.ShutdownReady ||
+		reconciled.ShutdownHTTPStatus != 0 ||
+		reconciled.ShutdownActiveWorkCount != 0 ||
+		len(reconciled.ShutdownActiveWorkRefs) != 0 ||
+		reconciled.ShutdownAsyncWorkActive != 0 ||
+		reconciled.ShutdownStopTimeoutAt != "" {
+		t.Fatalf("snapshot stopped conserva trabajo activo stale: %+v", reconciled)
+	}
+}
+
 func TestStatusTrackerStoppedV0LimpiaStartupReadyV0(t *testing.T) {
 	now := time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC)
 	tracker := NewStatusTrackerV0(ConfigV0{Addr: "127.0.0.1:18787"}, now)
@@ -141,6 +184,12 @@ func TestStatusTrackerStoppedV0LimpiaStartupReadyV0(t *testing.T) {
 		Message:      "startup_ready",
 		EvidenceRefs: []string{"evidence-ref-startup-ready"},
 	}, now)
+	tracker.MarkShutdownResultV0(ShutdownProjectionV0{
+		Status:          "backend_still_running",
+		HTTPStatus:      409,
+		ActiveWorkCount: 1,
+		ActiveWorkRefs:  []string{"shutdown-active-work-goal-backend-goal-ref-stopped"},
+	}, true, now.Add(30*time.Second))
 
 	stopped := tracker.MarkStoppedV0(now.Add(time.Minute))
 
@@ -149,7 +198,11 @@ func TestStatusTrackerStoppedV0LimpiaStartupReadyV0(t *testing.T) {
 		stopped.StartupStatus != "stopped" ||
 		stopped.StartupMessage != "" ||
 		stopped.StartupOperationalMessage != nil ||
-		len(stopped.StartupEvidenceRefs) != 0 {
+		len(stopped.StartupEvidenceRefs) != 0 ||
+		stopped.ShutdownInProgress ||
+		stopped.ShutdownHTTPStatus != 0 ||
+		stopped.ShutdownActiveWorkCount != 0 ||
+		len(stopped.ShutdownActiveWorkRefs) != 0 {
 		t.Fatalf("MarkStoppedV0 debe limpiar startup ready: %+v", stopped)
 	}
 	readiness := NewServerReadinessV0(stopped)
@@ -167,6 +220,12 @@ func TestStatusTrackerRuntimeStoppedV0LimpiaStartupReadyV0(t *testing.T) {
 		Message: "startup_ready",
 	}, now)
 	tracker.MarkRuntimeStoppingV0("async_work_draining", 1, now.Add(time.Minute))
+	tracker.MarkShutdownResultV0(ShutdownProjectionV0{
+		Status:          "backend_still_running",
+		HTTPStatus:      500,
+		ActiveWorkCount: 2,
+		ActiveWorkRefs:  []string{"shutdown-active-work-goal-backend-goal-ref-runtime-stopped"},
+	}, true, now.Add(90*time.Second))
 
 	stopped := tracker.MarkRuntimeStoppedV0(now.Add(2 * time.Minute))
 
@@ -176,7 +235,11 @@ func TestStatusTrackerRuntimeStoppedV0LimpiaStartupReadyV0(t *testing.T) {
 		stopped.StartupMessage != "" ||
 		stopped.StartupOperationalMessage != nil ||
 		stopped.ShutdownStatus != "stopped" ||
-		!stopped.ShutdownReady {
+		!stopped.ShutdownReady ||
+		stopped.ShutdownInProgress ||
+		stopped.ShutdownHTTPStatus != 0 ||
+		stopped.ShutdownActiveWorkCount != 0 ||
+		len(stopped.ShutdownActiveWorkRefs) != 0 {
 		t.Fatalf("MarkRuntimeStoppedV0 debe limpiar startup ready y conservar shutdown stopped: %+v", stopped)
 	}
 	public := NewServerPublicStatusV0(stopped)

@@ -54,6 +54,7 @@ func (tracker *StatusTrackerV0) MarkRuntimeStoppedV0(now time.Time) StateV0 {
 		state.ShutdownInProgress = false
 		state.ShutdownStatus = "stopped"
 		state.ShutdownReady = true
+		clearStoppedShutdownActiveProjectionV0(state)
 		state.ShutdownAsyncWorkActive = 0
 		state.SupervisorFrozen = false
 		state.SupervisorTickActive = false

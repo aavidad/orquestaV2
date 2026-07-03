@@ -144,8 +144,8 @@ func TestShutdownServerV0EsperaDrainConAgentesEnVuelo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ShutdownServerV0: %v", err)
 	}
-	if result.ShutdownReady ||
-		result.Status != ServerShutdownStatusWaitingDrainV0 ||
+	if result.ShutdownReady || result.Status != ServerShutdownStatusWaitingDrainV0 ||
+		result.RecommendedAction != ServerShutdownRecommendedActionWaitDrainV0 ||
 		result.RunsStopped != 0 ||
 		result.AgentsInFlight != 1 ||
 		deps.supervisor.calls != 1 {
@@ -169,6 +169,7 @@ func TestShutdownServerV0NoDrenaSiFaltaCheckpoint(t *testing.T) {
 	}
 	if result.ShutdownReady ||
 		result.Status != ServerShutdownStatusWaitingCheckpointV0 ||
+		result.RecommendedAction != ServerShutdownRecommendedActionWaitCheckpointV0 ||
 		result.CheckpointsPending != 1 ||
 		result.CheckpointAgentsPending != 1 ||
 		deps.supervisor.calls != 0 {

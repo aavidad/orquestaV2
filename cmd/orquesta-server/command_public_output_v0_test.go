@@ -261,6 +261,107 @@ func TestStatusServerCommandV0ReconciliaStoppedConStartupReadyHeredado(t *testin
 	}
 }
 
+func TestStatusServerCommandV0ReconciliaStoppedConActiveWorkStaleV0(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)
+	t.Setenv("ORQUESTA_SERVER_STATE_DIR", stateDir)
+	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", filepath.Join(t.TempDir(), "runtime"))
+
+	store, err := orquestaserver.NewFileStateStoreV0(filepath.Join(stateDir, orquestaserver.DefaultStateFileV0))
+	if err != nil {
+		t.Fatalf("store: %v", err)
+	}
+	if err := store.SaveServerStateV0(context.Background(), orquestaserver.StateV0{
+		SchemaVersion:           orquestaserver.StateSchemaVersionV0,
+		Status:                  "stopped",
+		PID:                     os.Getpid(),
+		Addr:                    "127.0.0.1:18787",
+		ProjectWorkDir:          projectDir,
+		RuntimeWorkDir:          filepath.Join(projectDir, ".orquesta-runtime"),
+		StartupReady:            false,
+		StartupStatus:           "stopped",
+		ShutdownInProgress:      true,
+		ShutdownStatus:          "stopped",
+		ShutdownReady:           true,
+		ShutdownHTTPStatus:      500,
+		ShutdownActiveWorkCount: 2,
+		ShutdownActiveWorkRefs: []string{
+			"shutdown-active-work-goal-backend-goal-ref-stale-001",
+			"shutdown-active-work-goal-backend-goal-ref-stale-002",
+		},
+		ShutdownAsyncWorkActive: 1,
+		ShutdownStopTimeoutAt:   "2026-07-04T00:52:33Z",
+		LastHeartbeatAt:         "2026-07-04T00:52:33Z",
+	}); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := statusServerCommandV0(&stdout, &stderr)
+	if exitCode != 1 {
+		t.Fatalf("exit=%d stderr=%s", exitCode, stderr.String())
+	}
+	var envelope commandPublicOutputV0
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("json publico invalido: %v\n%s", err, stdout.String())
+	}
+	if envelope.Status != "stopped" ||
+		envelope.Freshness != commandPublicFreshnessSnapshotV0 ||
+		envelope.DiagnosticsMode != "statefile_snapshot_reconciled" {
+		t.Fatalf("envelope stopped no reconciliado: %+v", envelope)
+	}
+	var payload orquestaserver.ServerPublicStatusV0
+	rawPayload, err := json.Marshal(envelope.Payload)
+	if err != nil {
+		t.Fatalf("payload marshal: %v", err)
+	}
+	if err := json.Unmarshal(rawPayload, &payload); err != nil {
+		t.Fatalf("payload publico invalido: %v\n%+v", err, envelope.Payload)
+	}
+	if payload.Status != "stopped" ||
+		payload.AvailabilityStatus != "stopped" ||
+		payload.ShutdownInProgress ||
+		payload.ShutdownHTTPStatus != 0 ||
+		payload.ShutdownActiveWorkCount != 0 ||
+		len(payload.ShutdownActiveWorkRefs) != 0 {
+		t.Fatalf("payload conserva active_work stale: %+v", payload)
+	}
+	reconciled, err := store.LoadServerStateV0(context.Background())
+	if err != nil {
+		t.Fatalf("load reconciled: %v", err)
+	}
+	if reconciled.Status != "stopped" ||
+		reconciled.ShutdownInProgress ||
+		reconciled.ShutdownHTTPStatus != 0 ||
+		reconciled.ShutdownActiveWorkCount != 0 ||
+		len(reconciled.ShutdownActiveWorkRefs) != 0 ||
+		reconciled.ShutdownAsyncWorkActive != 0 ||
+		reconciled.ShutdownStopTimeoutAt != "" {
+		t.Fatalf("state stopped conserva active_work stale: %+v", reconciled)
+	}
+	if strings.Contains(stdout.String(), projectDir) ||
+		strings.Contains(stdout.String(), "127.0.0.1:18787") {
+		t.Fatalf("stdout filtra detalle local: %s", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	exitCode = statusServerCommandV0(&stdout, &stderr)
+	if exitCode != 1 {
+		t.Fatalf("exit segunda lectura=%d stderr=%s", exitCode, stderr.String())
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+		t.Fatalf("json publico invalido segunda lectura: %v\n%s", err, stdout.String())
+	}
+	if envelope.Status != "stopped" ||
+		envelope.Freshness != commandPublicFreshnessSnapshotV0 ||
+		envelope.DiagnosticsMode != "statefile_snapshot_public_projection" {
+		t.Fatalf("envelope stopped limpio no debe degradar: %+v", envelope)
+	}
+}
+
 func TestStatusServerCommandV0FalloStdoutDevuelveReasonCode(t *testing.T) {
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()

@@ -150,13 +150,16 @@ func statusServerCommandV0(stdout io.Writer, stderr io.Writer) int {
 	}
 	status := "degraded"
 	diagnosticsMode := "statefile_snapshot_public_projection"
-	if reconciled || strings.TrimSpace(state.Status) == "stale" {
+	stateStatus := strings.TrimSpace(state.Status)
+	if reconciled || stateStatus == "stale" || stateStatus == "stopped" {
 		status = strings.TrimSpace(state.Status)
 		if status == "" {
 			status = "degraded"
 		}
-		diagnosticsMode = "statefile_snapshot_reconciled"
-		if strings.TrimSpace(state.Status) == "stale" {
+		if reconciled {
+			diagnosticsMode = "statefile_snapshot_reconciled"
+		}
+		if stateStatus == "stale" {
 			diagnosticsMode = "statefile_snapshot_reconciled_process_not_alive"
 		}
 	}

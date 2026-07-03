@@ -49,6 +49,7 @@ type MCPServerShutdownToolResultV0 struct {
 	RequestID                  string                    `json:"request_id,omitempty"`
 	CorrelationID              string                    `json:"correlation_id,omitempty"`
 	Status                     string                    `json:"status,omitempty"`
+	RecommendedAction          string                    `json:"recommended_action,omitempty"`
 	ShutdownReady              bool                      `json:"shutdown_ready"`
 	ExitPending                bool                      `json:"exit_pending,omitempty"`
 	PID                        int                       `json:"pid,omitempty"`
@@ -97,7 +98,7 @@ func MCPServerShutdownDescriptorV0() MCPServerShutdownToolDescriptorV0 {
 		Name:        MCPServerShutdownToolNameV0,
 		Version:     MCPServerShutdownToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,queue_ref?,app_refs?,forced?,cleanup_goal_backends?,checkpoint_deadline_at?,max_ticks?,max_runs_per_tick?,max_executions?,requested_by?,reason?,idempotency_key?,evidence_refs?}",
-		Output:      "ok:{status=ready|waiting_drain|waiting_checkpoint|stop_pending|active_goals_present|backend_still_running,shutdown_ready,exit_pending?,pid?,runs_requested,runs_stopped,agents_in_flight,checkpoints_pending,checkpoint_agents_pending,checkpoint_deadlines_expired,active_work_count,active_works?[]{kind,run_ref?,work_ref?,external_work_ref?,status?,evidence_refs?},runs?[]{run_ref,control_status?,checkpoint_required?,checkpoint_ref?,pending_checkpoint_agent_refs?,checkpoint_evidence_refs?,ready},evidence_refs?}|error:{errores_publicos,evidence_refs?}",
+		Output:      "ok:{status=ready|waiting_drain|waiting_checkpoint|stop_pending|active_goals_present|backend_still_running,recommended_action?,shutdown_ready,exit_pending?,pid?,runs_requested,runs_stopped,agents_in_flight,checkpoints_pending,checkpoint_agents_pending,checkpoint_deadlines_expired,active_work_count,active_works?[]{kind,run_ref?,work_ref?,external_work_ref?,status?,evidence_refs?},runs?[]{run_ref,control_status?,checkpoint_required?,checkpoint_ref?,pending_checkpoint_agent_refs?,checkpoint_evidence_refs?,ready},evidence_refs?}|error:{errores_publicos,recommended_action?,evidence_refs?}",
 		ResourceURI: MCPServerShutdownResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -144,6 +145,7 @@ func newMCPServerShutdownResultV0(
 		RequestID:                  strings.TrimSpace(input.RequestID),
 		CorrelationID:              firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
 		Status:                     strings.TrimSpace(result.Status),
+		RecommendedAction:          strings.TrimSpace(result.RecommendedAction),
 		ShutdownReady:              result.ShutdownReady,
 		ExitPending:                result.ExitPending,
 		PID:                        result.PID,

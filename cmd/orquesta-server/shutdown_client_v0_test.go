@@ -856,6 +856,28 @@ func TestShutdownClientNotReadyErrorV0IncluyeRefsActiveWorkCompactas(t *testing.
 	}
 }
 
+func TestShutdownClientNotReadyErrorV0IncluyeRecommendedActionSegura(t *testing.T) {
+	err := shutdownClientNotReadyErrorV0(serverShutdownClientResultV0{
+		Status:            "backend_still_running",
+		RecommendedAction: "wait_or_reconcile_goal_backend_cleanup",
+		ActiveWorkCount:   1,
+	})
+
+	if err == nil ||
+		!strings.Contains(err.Error(), "recommended_action=wait_or_reconcile_goal_backend_cleanup") {
+		t.Fatalf("err=%v", err)
+	}
+
+	err = shutdownClientNotReadyErrorV0(serverShutdownClientResultV0{
+		Status:            "backend_still_running",
+		RecommendedAction: "/tmp/private/action",
+		ActiveWorkCount:   1,
+	})
+	if err == nil || strings.Contains(err.Error(), "recommended_action=") || strings.Contains(err.Error(), "/tmp") {
+		t.Fatalf("err con accion no segura=%v", err)
+	}
+}
+
 func TestNormalizeServerShutdownClientResultV0ConvierteActiveWorksEnRefs(t *testing.T) {
 	result := normalizeServerShutdownClientResultV0(serverShutdownClientResultV0{
 		ActiveWorks: []serverShutdownClientActiveWorkV0{{

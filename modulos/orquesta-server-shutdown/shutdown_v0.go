@@ -19,7 +19,7 @@ func ShutdownServerV0(
 			command.EvidenceRefs,
 			"evidence-ref-shutdown-requester-not-director",
 		))
-		return result, nil
+		return withServerShutdownRecommendedActionV0(result), nil
 	}
 	if result, ok := missingRequiredServerShutdownDepsV0(deps); ok {
 		return result, nil
@@ -49,7 +49,7 @@ func ShutdownServerV0(
 	if len(targets) == 0 {
 		result.Status = ServerShutdownStatusReadyV0
 		result.ShutdownReady = true
-		return result, nil
+		return withServerShutdownRecommendedActionV0(result), nil
 	}
 	result.Runs, err = refreshShutdownRunsV0(ctx, deps, command, result.Runs)
 	if err != nil {

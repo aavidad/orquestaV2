@@ -347,6 +347,14 @@ func normalizeCodexAppServerGoalResultMarkerV0(
 	} else {
 		marked.Checklist = checklist
 	}
+	if refs, ok := sanitizeCodexAppServerGoalResultRefsV0(marked.MissingRefs); ok {
+		marked.Checklist.MissingRefs = compactServerStackStringsV0(append(marked.Checklist.MissingRefs, refs...))
+		marked.MissingRefs = nil
+		sanitized = true
+	} else {
+		marked.Checklist.MissingRefs = compactServerStackStringsV0(append(marked.Checklist.MissingRefs, refs...))
+		marked.MissingRefs = nil
+	}
 	if refs, ok := sanitizeCodexAppServerGoalResultRefsV0(marked.DomainReceiptRefs); ok {
 		marked.DomainReceiptRefs = refs
 		sanitized = true

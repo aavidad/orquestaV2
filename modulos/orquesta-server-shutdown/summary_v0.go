@@ -66,7 +66,7 @@ func summarizeShutdownResultV0(
 			}
 		}
 	}
-	return result
+	return withServerShutdownRecommendedActionV0(result)
 }
 
 func shutdownRunWaitingAgentsV0(run ServerShutdownRunResultV0) int {

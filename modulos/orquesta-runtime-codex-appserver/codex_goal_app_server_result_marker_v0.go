@@ -20,6 +20,7 @@ type codexAppServerGoalResultMarkerV0 struct {
 	ArtifactPaths         []string                                  `json:"artifact_paths,omitempty"`
 	MaterializedArtifacts []orquestagoal.GoalMaterializedArtifactV0 `json:"materialized_artifacts,omitempty"`
 	Checklist             orquestagoal.GoalWorkChecklistV0          `json:"checklist,omitempty"`
+	MissingRefs           []string                                  `json:"missing_refs,omitempty"`
 	RequiredTestResults   []orquestagoal.GoalRequiredTestResultV0   `json:"required_test_results,omitempty"`
 	DomainReceiptRefs     []string                                  `json:"domain_receipt_refs,omitempty"`
 	ReworkPlanRefs        []string                                  `json:"rework_plan_refs,omitempty"`
@@ -149,6 +150,9 @@ func mergeCodexAppServerGoalResultV0(
 	marked codexAppServerGoalResultMarkerV0,
 	sourceEvidenceRef string,
 ) {
+	if status := codexAppServerGoalResultExplicitStatusV0(marked); status != "" {
+		receipt.Status = status
+	}
 	if strings.TrimSpace(marked.Summary) != "" {
 		receipt.Summary = strings.TrimSpace(marked.Summary)
 	}

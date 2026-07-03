@@ -22,7 +22,8 @@ func TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0(t *testing.T) {
 	}
 	if !strings.Contains(descriptor.InputSchema, "evidence_refs?") ||
 		!strings.Contains(descriptor.Output, "evidence_refs?") ||
-		!strings.Contains(descriptor.Output, "error:{errores_publicos,evidence_refs?}") ||
+		!strings.Contains(descriptor.Output, "recommended_action?") ||
+		!strings.Contains(descriptor.Output, "error:{errores_publicos,recommended_action?,evidence_refs?}") ||
 		!strings.Contains(descriptor.Output, "stop_pending") ||
 		!strings.Contains(descriptor.Output, "exit_pending?") ||
 		!strings.Contains(descriptor.Output, "pid?") ||
@@ -118,6 +119,7 @@ func TestMCPServerShutdownToolExecutorV0DrenaConAgentesEnVuelo(t *testing.T) {
 	if result.Estado != MCPServerShutdownEstadoOKV0 ||
 		result.ShutdownReady ||
 		result.Status != orquestaservershutdown.ServerShutdownStatusWaitingDrainV0 ||
+		result.RecommendedAction != orquestaservershutdown.ServerShutdownRecommendedActionWaitDrainV0 ||
 		result.AgentsInFlight != 1 ||
 		supervisor.calls != 1 {
 		t.Fatalf("result=%+v supervisor=%+v", result, supervisor)
@@ -209,6 +211,7 @@ func TestMCPServerShutdownToolExecutorV0ExponeGoalsActivos(t *testing.T) {
 	if result.Estado != MCPServerShutdownEstadoOKV0 ||
 		result.ShutdownReady ||
 		result.Status != orquestaservershutdown.ServerShutdownStatusActiveGoalsPresentV0 ||
+		result.RecommendedAction != orquestaservershutdown.ServerShutdownRecommendedActionObserveActiveGoalsV0 ||
 		result.ActiveWorkCount != 1 ||
 		len(result.ActiveWorks) != 1 ||
 		result.ActiveWorks[0].RunRef != "run-ref-goal-active-001" ||

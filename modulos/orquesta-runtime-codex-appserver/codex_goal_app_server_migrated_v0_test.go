@@ -84,6 +84,48 @@ func TestServerCodexAppServerGoalBackendV0ObservaResultadoMarcadoMigradoV0(t *te
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0NormalizaMissingRefsRaizEnChecklistV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID: "thread-ref-goal-missing-refs-001",
+			Status:   "complete",
+		},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-missing-refs-001",
+			Status: "closed",
+			Turns: []serverCodexAppServerReadTurnV0{{
+				ID: "turn-ref-goal-missing-refs-001",
+				Items: []serverCodexAppServerReadItemV0{{
+					Type:  "agentMessage",
+					Phase: "final_answer",
+					Text: orquestaruntimecodexgoal.CodexGoalResultMarkerV0 + ` {
+						"schema_version":"orquesta_goal_result.v0",
+						"status":"invalid",
+						"goal_ref":"goal-ref-missing-refs-001",
+						"external_goal_ref":"thread-ref-goal-missing-refs-001",
+						"missing_refs":["source_tree","handoff_report","technical_stack_manifest","go_app","tests"],
+						"evidence_refs":["evidence-ref-app-director-goal-first-v0"]
+					}`,
+				}},
+			}},
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         "goal-ref-missing-refs-001",
+		ExternalGoalRef: "thread-ref-goal-missing-refs-001",
+	})
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusInvalidV0 ||
+		!containsStringMigratedTestV0(receipt.Checklist.MissingRefs, "source_tree") ||
+		!containsStringMigratedTestV0(receipt.Checklist.MissingRefs, "tests") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0UmbralUsoAltoConfigurableV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		observedGoal: &serverCodexAppServerThreadGoalV0{

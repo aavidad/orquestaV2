@@ -34,6 +34,7 @@ func TestShutdownServerV0NoForzadoBloqueaConGoalActivo(t *testing.T) {
 	}
 	if result.ShutdownReady ||
 		result.Status != ServerShutdownStatusActiveGoalsPresentV0 ||
+		result.RecommendedAction != ServerShutdownRecommendedActionObserveActiveGoalsV0 ||
 		result.ActiveWorkCount != 1 ||
 		len(result.ActiveWorks) != 1 ||
 		result.ActiveWorks[0].RunRef != "run-goal-active" ||
@@ -101,6 +102,7 @@ func TestShutdownServerV0ForzadoBloqueaConBackendStillRunning(t *testing.T) {
 	}
 	if result.ShutdownReady ||
 		result.Status != ServerShutdownStatusBackendStillRunningV0 ||
+		result.RecommendedAction != ServerShutdownRecommendedActionRetryCleanupGoalBackendsV0 ||
 		result.ActiveWorkCount != 1 ||
 		len(result.ActiveWorks) != 1 ||
 		result.ActiveWorks[0].Kind != "goal_backend" ||
@@ -135,6 +137,7 @@ func TestShutdownServerV0NoForzadoBloqueaConBackendStillRunning(t *testing.T) {
 	}
 	if result.ShutdownReady ||
 		result.Status != ServerShutdownStatusBackendStillRunningV0 ||
+		result.RecommendedAction != ServerShutdownRecommendedActionRetryCleanupGoalBackendsV0 ||
 		result.ActiveWorkCount != 1 ||
 		result.ActiveWorks[0].Kind != "goal_backend" ||
 		len(deps.control.stopped) != 0 ||
@@ -213,6 +216,7 @@ func TestShutdownServerV0CleanupGoalBackendsNoPublicaReadySiSigueVivoV0(t *testi
 	}
 	if result.ShutdownReady ||
 		result.Status != ServerShutdownStatusBackendStillRunningV0 ||
+		result.RecommendedAction != ServerShutdownRecommendedActionWaitOrReconcileBackendV0 ||
 		result.ActiveWorkCount != 1 ||
 		deps.active.calls != 2 ||
 		deps.cleaner.calls != 1 ||
@@ -247,6 +251,7 @@ func TestShutdownServerV0CleanupGoalBackendsErrorNoEscalaAHTTP500V0(t *testing.T
 	}
 	if result.ShutdownReady ||
 		result.Status != ServerShutdownStatusBackendStillRunningV0 ||
+		result.RecommendedAction != ServerShutdownRecommendedActionWaitOrReconcileBackendV0 ||
 		result.ActiveWorkCount != 1 ||
 		deps.active.calls != 1 ||
 		deps.cleaner.calls != 1 ||

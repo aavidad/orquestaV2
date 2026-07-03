@@ -70,7 +70,7 @@ func blockingActiveShutdownWorkV0(
 			append(append(active.EvidenceRefs, cleanupEvidenceRefs...), activeShutdownWorkBlockingEvidenceV0(status))...,
 		)),
 	}
-	return result, true, nil, nil
+	return withServerShutdownRecommendedActionV0(result), true, nil, nil
 }
 
 func cleanupActiveGoalBackendsV0(
@@ -155,7 +155,7 @@ func activeShutdownWorkCleanupErrorResultV0(
 	works []ActiveShutdownWorkV0,
 ) ServerShutdownResultV0 {
 	status := activeShutdownWorkBlockingStatusV0(works)
-	return ServerShutdownResultV0{
+	return withServerShutdownRecommendedActionV0(ServerShutdownResultV0{
 		SchemaVersion:   ServerShutdownSchemaVersionV0,
 		Status:          status,
 		ShutdownReady:   false,
@@ -169,7 +169,7 @@ func activeShutdownWorkCleanupErrorResultV0(
 				activeShutdownWorkBlockingEvidenceV0(status),
 			)...,
 		)),
-	}
+	})
 }
 
 func activeShutdownWorkBlockingEvidenceV0(status string) string {

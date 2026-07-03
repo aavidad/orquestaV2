@@ -555,11 +555,10 @@ func goalMaterializedReadTerminalGoalResultV0(path string) (orquestagoal.GoalWor
 	if err != nil {
 		return orquestagoal.GoalWorkResultV0{}, false
 	}
-	var result orquestagoal.GoalWorkResultV0
-	if json.Unmarshal(raw, &result) != nil {
+	result, err := goalMaterializedDecodeGoalWorkResultV0(raw)
+	if err != nil {
 		return orquestagoal.GoalWorkResultV0{}, false
 	}
-	result = orquestagoal.NormalizeGoalWorkResultV0(result)
 	if strings.TrimSpace(result.Status) != orquestagoal.GoalStatusCompleteV0 {
 		return orquestagoal.GoalWorkResultV0{}, false
 	}
@@ -575,11 +574,10 @@ func goalMaterializedReadValidTerminalGoalResultForStateV0(
 	if err != nil {
 		return orquestagoal.GoalWorkResultV0{}, false
 	}
-	var result orquestagoal.GoalWorkResultV0
-	if json.Unmarshal(raw, &result) != nil {
+	result, err := goalMaterializedDecodeGoalWorkResultV0(raw)
+	if err != nil {
 		return orquestagoal.GoalWorkResultV0{}, false
 	}
-	result = orquestagoal.NormalizeGoalWorkResultV0(result)
 	if !orquestagoal.GoalWorkResultTerminalV0(result.Status) ||
 		!goalMaterializedTerminalResultMatchesStateV0(result, state) ||
 		len(orquestagoal.ValidateGoalWorkResultV0(result)) > 0 {
@@ -590,6 +588,21 @@ func goalMaterializedReadValidTerminalGoalResultForStateV0(
 		goalMaterializedTerminalResultRefV0(projectRoot, path, state.RunRef),
 	))
 	return result, true
+}
+
+type goalMaterializedGoalWorkResultEnvelopeV0 struct {
+	orquestagoal.GoalWorkResultV0
+	MissingRefs []string `json:"missing_refs,omitempty"`
+}
+
+func goalMaterializedDecodeGoalWorkResultV0(raw []byte) (orquestagoal.GoalWorkResultV0, error) {
+	var envelope goalMaterializedGoalWorkResultEnvelopeV0
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return orquestagoal.GoalWorkResultV0{}, err
+	}
+	result := envelope.GoalWorkResultV0
+	result.Checklist.MissingRefs = compactStringsV0(append(result.Checklist.MissingRefs, envelope.MissingRefs...))
+	return orquestagoal.NormalizeGoalWorkResultV0(result), nil
 }
 
 func goalMaterializedTerminalResultMatchesStateV0(
