@@ -144,7 +144,7 @@ func postServerShutdownRequestV0(
 		return serverShutdownClientResultV0{}, errors.New(shutdownHTTPErrorCodeV0(ctx, err))
 	}
 	defer response.Body.Close()
-	responseBody, err := readCommandHTTPResponseBodyV0(response, "shutdown")
+	responseBody, err := readServerShutdownClientResponseBodyV0(response)
 	if err != nil {
 		return serverShutdownClientResultV0{}, err
 	}
@@ -154,6 +154,17 @@ func postServerShutdownRequestV0(
 	}
 	result = normalizeServerShutdownClientResultV0(result)
 	return result, nil
+}
+
+func readServerShutdownClientResponseBodyV0(response *http.Response) ([]byte, error) {
+	if response != nil && response.StatusCode == http.StatusConflict {
+		body, err := readCommandHTTPResponseBodyAllowStatusV0(response, "shutdown", http.StatusConflict)
+		if err == nil {
+			return body, nil
+		}
+		return nil, err
+	}
+	return readCommandHTTPResponseBodyV0(response, "shutdown")
 }
 
 func normalizeServerShutdownClientResultV0(result serverShutdownClientResultV0) serverShutdownClientResultV0 {

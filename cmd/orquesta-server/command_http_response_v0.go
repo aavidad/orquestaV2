@@ -12,6 +12,10 @@ import (
 const commandHTTPResponseMaxBytesV0 int64 = 1 << 20
 
 func readCommandHTTPResponseBodyV0(response *http.Response, context string) ([]byte, error) {
+	return readCommandHTTPResponseBodyAllowStatusV0(response, context)
+}
+
+func readCommandHTTPResponseBodyAllowStatusV0(response *http.Response, context string, allowedStatus ...int) ([]byte, error) {
 	if response == nil || response.Body == nil {
 		return nil, fmt.Errorf("%s_response_missing", context)
 	}
@@ -22,7 +26,8 @@ func readCommandHTTPResponseBodyV0(response *http.Response, context string) ([]b
 	if int64(len(body)) > commandHTTPResponseMaxBytesV0 {
 		return nil, fmt.Errorf("%s_response_too_large", context)
 	}
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+	if (response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices) &&
+		!commandHTTPStatusAllowedV0(response.StatusCode, allowedStatus) {
 		return nil, commandHTTPStatusErrorV0(context, response.StatusCode, response.Header.Get("Content-Type"), body)
 	}
 	if !commandHTTPContentTypeIsJSONV0(response.Header.Get("Content-Type")) {
@@ -37,6 +42,15 @@ func readCommandHTTPResponseBodyV0(response *http.Response, context string) ([]b
 		return nil, fmt.Errorf("%s_response_trailing_data", context)
 	}
 	return body, nil
+}
+
+func commandHTTPStatusAllowedV0(status int, allowed []int) bool {
+	for _, value := range allowed {
+		if status == value {
+			return true
+		}
+	}
+	return false
 }
 
 func commandHTTPContentTypeIsJSONV0(value string) bool {

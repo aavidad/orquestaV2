@@ -63,6 +63,23 @@ func TestReadCommandHTTPResponseBodyV0PropagaCodigosPublicosJSONNo2xx(t *testing
 	}
 }
 
+func TestReadCommandHTTPResponseBodyAllowStatusV0PermiteConflictJSON(t *testing.T) {
+	response := commandHTTPResponseForTestV0(
+		http.StatusConflict,
+		"application/json; charset=utf-8",
+		`{"estado":"ok","status":"backend_still_running"}`,
+	)
+
+	body, err := readCommandHTTPResponseBodyAllowStatusV0(response, "shutdown", http.StatusConflict)
+
+	if err != nil {
+		t.Fatalf("readCommandHTTPResponseBodyAllowStatusV0: %v", err)
+	}
+	if string(body) != `{"estado":"ok","status":"backend_still_running"}` {
+		t.Fatalf("body=%s", string(body))
+	}
+}
+
 func TestReadCommandHTTPResponseBodyV0RechazaJSONConTrailingData(t *testing.T) {
 	response := commandHTTPResponseForTestV0(http.StatusOK, "application/json", `{"estado":"ok"} {"extra":true}`)
 

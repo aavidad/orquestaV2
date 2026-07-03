@@ -313,6 +313,66 @@ func TestRequestServerShutdownV0ReintentaCleanupBackendStillRunningHastaReady(t 
 	}
 }
 
+func TestRequestServerShutdownV0ReintentaCleanupBackendStillRunningHTTP409HastaReady(t *testing.T) {
+	shutdownCalls := 0
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v0/server/shutdown":
+			shutdownCalls++
+			if shutdownCalls == 1 {
+				w.WriteHeader(http.StatusConflict)
+				_ = json.NewEncoder(w).Encode(serverShutdownClientResultV0{
+					Estado:          "ok",
+					Status:          "backend_still_running",
+					ShutdownReady:   false,
+					RunsRequested:   0,
+					RunsStopped:     0,
+					ActiveWorkCount: 1,
+					ActiveWorks: []serverShutdownClientActiveWorkV0{{
+						Kind:    "goal_backend",
+						WorkRef: "goal-ref-cleanup-http-409",
+						Status:  "backend_still_running",
+					}},
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(serverShutdownClientResultV0{
+				Estado:        "ok",
+				Status:        "ready",
+				ShutdownReady: true,
+				RunsRequested: 0,
+				RunsStopped:   0,
+			})
+		case orquestaserver.ServerStatusEndpointV0:
+			_ = json.NewEncoder(w).Encode(orquestaserver.ServerPublicStatusV0{
+				Status:                  "running",
+				ShutdownInProgress:      true,
+				ShutdownStatus:          "backend_still_running",
+				ShutdownReady:           false,
+				ShutdownRunsRequested:   0,
+				ShutdownRunsStopped:     0,
+				ShutdownActiveWorkCount: 1,
+				ShutdownActiveWorkRefs: []string{
+					"shutdown-active-work-goal-backend-goal-ref-cleanup-http-409",
+				},
+			})
+		default:
+			t.Fatalf("path inesperado: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	err := requestServerShutdownV0(strings.TrimPrefix(server.URL, "http://"), serverShutdownClientOptionsV0{})
+
+	if err != nil {
+		t.Fatalf("requestServerShutdownV0: %v", err)
+	}
+	if shutdownCalls < 2 {
+		t.Fatalf("shutdownCalls=%d, esperaba rePOST tras HTTP 409 backend_still_running", shutdownCalls)
+	}
+}
+
 func TestWaitServerShutdownReadyV0NoEsperaEstadosNoRecuperables(t *testing.T) {
 	started := time.Now()
 	err := waitServerShutdownReadyV0(

@@ -1010,6 +1010,13 @@ backend Goal propio antes de fallar. No permite senal local ni declara ready si
 el backend sigue vivo. Evidencia:
 `TestRequestServerShutdownV0ReintentaCleanupBackendStillRunningHastaReady`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 24: el mismo reintento de
+cleanup cubre tambien el contrato HTTP real `409 backend_still_running`,
+decodificando solo el JSON publico de shutdown y sin relajar el saneamiento
+global de otros comandos. Evidencia:
+`TestRequestServerShutdownV0ReintentaCleanupBackendStillRunningHTTP409HastaReady`
+y `TestReadCommandHTTPResponseBodyAllowStatusV0PermiteConflictJSON`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
