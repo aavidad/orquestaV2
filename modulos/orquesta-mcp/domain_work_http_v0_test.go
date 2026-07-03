@@ -269,6 +269,11 @@ func TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesGoalFirstRecuperablesCo
 			code:              mcpAutoprogrammingActionRequiredTestEvidenceMissingV0,
 			recommendedAction: MCPGoalFirstRepairReceiptActionV0,
 		},
+		{
+			name:              "repair_receipt_requires_rework",
+			code:              mcpAutoprogrammingActionRepairReceiptRequiresReworkV0,
+			recommendedAction: "replan",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

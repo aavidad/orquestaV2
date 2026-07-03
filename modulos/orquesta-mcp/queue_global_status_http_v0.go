@@ -663,6 +663,7 @@ func mcpQueueGlobalStatusNormalizeRecommendedActionV0(action string, fallback st
 	action = strings.ToLower(strings.TrimSpace(action))
 	switch action {
 	case "retry",
+		"replan",
 		"reencolar",
 		"cancel_stale",
 		"restart_observer",

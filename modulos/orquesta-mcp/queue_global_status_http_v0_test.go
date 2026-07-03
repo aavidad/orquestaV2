@@ -605,6 +605,7 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0ConservaReplanNarrowContext(t *testing
 
 func TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFirstEspecificas(t *testing.T) {
 	for _, action := range []string{
+		"replan",
 		mcpQueueGlobalStatusActionReviewReplanGoalFirstV0,
 		mcpQueueGlobalStatusActionRetryFromPhaseV0,
 		mcpQueueGlobalStatusActionCloseSupersededByLocalEvidenceV0,

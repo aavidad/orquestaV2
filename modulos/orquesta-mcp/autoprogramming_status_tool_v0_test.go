@@ -2435,6 +2435,63 @@ func TestMCPAutoprogrammingStatusExecutorV0ArtefactosParcialesPideRevisionV0(t *
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0RepairReceiptRequiresReworkPideReplanV0(t *testing.T) {
+	runRef := "run-ref-autop-status-repair-receipt-rework-001"
+	goalRef := "goal-ref-autop-status-repair-receipt-rework-001"
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: runRef,
+			Status: MCPGoalFirstRepairReceiptRequiresReworkV0,
+			Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
+				Status:    orquestacionnucleoapp.DirectorClosureStatusBlockedV0,
+				Blocked:   true,
+				BlockedBy: []string{MCPGoalFirstRepairReceiptRequiresReworkV0},
+			},
+			Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+				Issues: []orquestacionnucleoapp.DirectorProgressIssueV0{{
+					Code:  MCPGoalFirstRepairReceiptRequiresReworkV0,
+					Field: "goal_first.receipt",
+				}},
+			},
+		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Status:       orquestagoal.GoalStatusBlockedV0,
+			ArtifactRefs: []string{"artifact-ref-materialized-repair-receipt-rework-001"},
+			EvidenceRefs: []string{"evidence-ref-goal-first-repair-receipt-requires-rework"},
+			IssueCodes:   []string{MCPGoalFirstRepairReceiptRequiresReworkV0},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{empty: true},
+		Stats: stats,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{RunRef: runRef})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != MCPGoalFirstRepairReceiptRequiresReworkV0 ||
+		action.RecommendedAction != "replan" ||
+		action.GoalRef != goalRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.ArtifactRefs, "artifact-ref-materialized-repair-receipt-rework-001") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceRepairReceiptRequiresReworkV0) ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-goal-first-repair-receipt-requires-rework") {
+		t.Fatalf("action=%+v", action)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "attention_required" ||
+		result.EfficiencySummary.RecommendedAction != "replan:run:"+runRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(result.EfficiencySummary.Reasons, MCPGoalFirstRepairReceiptRequiresReworkV0) {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0OutputGiganteSaneadoPideContextoAcotadoV0(t *testing.T) {
 	runRef := "run-ref-autop-status-thread-output-sanitized-001"
 	goalRef := "goal-ref-autop-status-thread-output-sanitized-001"

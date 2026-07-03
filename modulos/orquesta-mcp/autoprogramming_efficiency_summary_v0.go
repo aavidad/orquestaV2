@@ -243,6 +243,10 @@ func operationalHealthMCPAutoprogrammingEfficiencyV0(
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
 		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, MCPGoalFirstRequiredTestEvidenceMissingV0)
 	}
+	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, MCPGoalFirstRepairReceiptRequiresReworkV0) {
+		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
+		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, MCPGoalFirstRepairReceiptRequiresReworkV0)
+	}
 	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, MCPGoalFirstPhase0CompleteNonPublishableV0) {
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
 		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, MCPGoalFirstPhase0CompleteNonPublishableV0)
@@ -310,6 +314,7 @@ func stateMCPAutoprogrammingEfficiencyV0(
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, "goal_first_state_missing") ||
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) ||
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstRequiredTestEvidenceMissingV0) ||
+		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstRepairReceiptRequiresReworkV0) ||
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstPhase0CompleteNonPublishableV0) ||
 		hasRecoverableGoalFirstReasonMCPAutoprogrammingEfficiencyV0(summary) ||
 		hasWriteSetReasonMCPAutoprogrammingEfficiencyV0(summary) ||
@@ -393,6 +398,8 @@ func recoverableGoalFirstActionForCodeMCPAutoprogrammingEfficiencyV0(code string
 		return MCPGoalFirstReworkWriteSetViolationActionV0
 	case MCPGoalFirstPartialArtifactsWrittenV0:
 		return MCPGoalFirstReviewPartialArtifactsActionV0
+	case MCPGoalFirstRepairReceiptRequiresReworkV0:
+		return "replan"
 	default:
 		return ""
 	}
@@ -404,6 +411,7 @@ func recoverableGoalFirstCodesMCPAutoprogrammingEfficiencyV0() []string {
 		MCPGoalFirstArtifactPathsOmittedMaterializedV0,
 		MCPGoalFirstOutOfScopeMaterializedArtifactsV0,
 		MCPGoalFirstPartialArtifactsWrittenV0,
+		MCPGoalFirstRepairReceiptRequiresReworkV0,
 	}
 }
 
