@@ -57,7 +57,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--orchestration-runs-dir", default=os.environ.get("ORQUESTA_ORCHESTRATION_RUNS_DIR", ""))
     parser.add_argument("--template-run-ref", default=os.environ.get("ORQUESTA_TEMPLATE_RUN_REF", "run-ref-opes-a1-t001-finalpkg-20260612"))
     parser.add_argument("--template-topic-id", default=os.environ.get("ORQUESTA_TEMPLATE_TOPIC_ID", "001"))
-    parser.add_argument("--orquesta-base-url", default=os.environ.get("ORQUESTA_BASE_URL", "http://127.0.0.1:8787"))
+    parser.add_argument("--orquesta-base-url", default=default_orquesta_base_url())
     parser.add_argument("--queue-ref", default=os.environ.get("ORQUESTA_QUEUE_REF", "global"))
     parser.add_argument("--batch-size", type=int, default=int(os.environ.get("ORQUESTA_BATCH_SIZE", "6")))
     parser.add_argument("--max-in-flight", type=int, default=int(os.environ.get("ORQUESTA_MAX_IN_FLIGHT", "6")))
@@ -131,6 +131,24 @@ def validate_args(args: argparse.Namespace) -> None:
         raise SystemExit("missing required args: " + ", ".join(missing))
     if args.batch_size < 1 or args.max_in_flight < 1:
         raise SystemExit("--batch-size and --max-in-flight must be positive")
+    if not args.dry_run and not str(args.orquesta_base_url).strip():
+        raise SystemExit(
+            "--orquesta-base-url required; set ORQUESTA_SERVER_URL or ORQUESTA_RUNTIME_DIR/base_url.txt",
+        )
+
+
+def default_orquesta_base_url() -> str:
+    for name in ("ORQUESTA_SERVER_URL", "ORQUESTA_BASE_URL"):
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    runtime_dir = os.environ.get("ORQUESTA_RUNTIME_DIR", "").strip()
+    if runtime_dir:
+        try:
+            return (Path(runtime_dir) / "base_url.txt").read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+    return ""
 
 
 def read_json(path: Path) -> Any:

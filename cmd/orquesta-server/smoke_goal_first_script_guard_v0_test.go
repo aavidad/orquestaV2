@@ -495,6 +495,25 @@ func TestReadmesOperativosNoRecomiendanRuntimeManualV0(t *testing.T) {
 	}
 }
 
+func TestLauncherOPESA1NoUsaPuertoHistoricoPorDefectoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/opes_a1_finalpkg_registry_launcher.py")
+
+	if strings.Contains(text, `os.environ.get("ORQUESTA_BASE_URL", "http://127.0.0.1:8787")`) {
+		t.Fatalf("launcher OPES A1 no debe caer al puerto historico 8787 por defecto")
+	}
+	for _, want := range []string{
+		"ORQUESTA_SERVER_URL",
+		"ORQUESTA_RUNTIME_DIR",
+		"base_url.txt",
+		"--orquesta-base-url required",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("launcher OPES A1 debe resolver endpoint gestionado: falta %q", want)
+		}
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
