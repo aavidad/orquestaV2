@@ -1229,7 +1229,8 @@ Campos:
     estado: ok
     app_spec: resumen compacto
     run_ref, phase_id: refs del run preparado
-    plan: resumen de unidades, dependencias, capacidades y write-set
+    plan: resumen de unidades, dependencias, capacidades, write-set y
+      evidence_refs? del plan
     progress: total, listas, bloqueadas, pendientes y entregadas
     evidence_refs: refs compactas
   output_error:

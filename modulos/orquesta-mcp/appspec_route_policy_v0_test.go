@@ -79,8 +79,9 @@ func TestMCPAppSpecDescriptorsV0PublicanRoutePolicy(t *testing.T) {
 		requireEvidences bool
 	}{
 		{
-			name:   MCPPrepararOrquestacionAppToolNameV0,
-			output: MCPPrepararOrquestacionAppDescriptorV0().Output,
+			name:             MCPPrepararOrquestacionAppToolNameV0,
+			output:           MCPPrepararOrquestacionAppDescriptorV0().Output,
+			requireEvidences: true,
 		},
 		{
 			name:      MCPEjecutarOrquestacionAppToolNameV0,

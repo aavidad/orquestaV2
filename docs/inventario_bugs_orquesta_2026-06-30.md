@@ -1548,6 +1548,15 @@ y contadores de cierre sin exponer `GoalWorkSpecV0` completo, objective,
 write-set ni comandos. Evidencia:
 `TestMCPAutoprogrammingPrepareRunDescriptorV0EsAdaptadorOptIn`.
 
+Avance BUG-ORQ-20260701-066/088 2026-07-03 tarde 53:
+`orquesta.apps.preparar_orquestacion.v0` ya transportaba `evidence_refs` de
+primer nivel y dentro del plan compacto, pero el descriptor ejecutable solo
+declaraba `plan`/`progress` genericos. El descriptor y docs publican ahora
+`plan.evidence_refs?` y `evidence_refs?`, manteniendo trazabilidad de preview
+legacy sin relanzar runtime ni ocultar que `arrancar_director` es la entrada
+preferente goal-first. Evidencia:
+`TestMCPAppSpecDescriptorsV0PublicanRoutePolicy`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

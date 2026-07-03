@@ -506,7 +506,7 @@ Riesgos: No abre servidor real ni configura puertos productivos; solo fija el br
 Caso: MCP-CT-024 tool preparar orquestacion de app
 Tipo: contract
 Comando: go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-runner ./modulos/orquesta-app-planner
-Evidencia esperada: `orquesta.apps.preparar_orquestacion.v0` recibe AppSpecV0 validada, delega en app-runner, devuelve run_ref, fase programacion, plan grande de 11 unidades, progreso inicial, `route_policy` de preview/compatibilidad con `orquesta.apps.arrancar_director.v0` como preferente y error publico con field exacto si la AppSpec no es valida.
+Evidencia esperada: `orquesta.apps.preparar_orquestacion.v0` recibe AppSpecV0 validada, delega en app-runner, devuelve run_ref, fase programacion, plan grande de 11 unidades, progreso inicial, `evidence_refs` de plan/resultado, `route_policy` de preview/compatibilidad con `orquesta.apps.arrancar_director.v0` como preferente y error publico con field exacto si la AppSpec no es valida.
 Ultima ejecucion: 2026-05-09; pasa.
 Riesgos: No arranca agentes reales ni persiste runtime; es el contrato MCP seco para que el wizard/director pidan una preparacion sin conocer scheduler ni provider interno.
 ```

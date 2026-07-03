@@ -91,7 +91,7 @@ func MCPPrepararOrquestacionAppDescriptorV0() MCPPrepararOrquestacionAppToolDesc
 		Name:        MCPPrepararOrquestacionAppToolNameV0,
 		Version:     MCPPrepararOrquestacionAppToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,project_ref?,app_spec:AppSpecV0}",
-		Output:      "ok:{route_policy,app_spec,run_ref,phase_id,plan,progress}|error:{route_policy,errores_publicos}",
+		Output:      "ok:{route_policy,app_spec,run_ref,phase_id,plan{schema_version?,run_ref?,app_ref?,units,unit_refs?,evidence_refs?},progress,evidence_refs?}|error:{route_policy,errores_publicos}",
 		ResourceURI: MCPPrepararOrquestacionAppResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
