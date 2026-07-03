@@ -765,6 +765,12 @@ efectos y usa `orquesta-server start` con backend `app_server_tmux`; la guarda
 OPES bloquea nuevos bloques efectivos con `go run ./cmd/orquesta-server run`.
 Evidencia: `TestOPESOperationalDocsGuardV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 10: el runbook del panel ops deja
+de publicar `http://127.0.0.1:8787/ops` como URL fija y exige resolver el
+endpoint gestionado por `orquesta-server status --json`, `ORQUESTA_SERVER_URL`
+o `ORQUESTA_RUNTIME_DIR/base_url.txt`. Evidencia:
+`TestRunbookPanelOpsUsaEndpointGestionadoV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado

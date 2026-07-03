@@ -2,7 +2,9 @@
 
 ## URL
 
-- Panel live: `http://127.0.0.1:8787/ops`
+- Panel live: resolver la URL efectiva con `orquesta-server status --json`,
+  `ORQUESTA_SERVER_URL` o `ORQUESTA_RUNTIME_DIR/base_url.txt`, y abrir
+  `$ORQUESTA_SERVER_URL/ops`.
 - Estado servidor: `GET /api/v0/server/status`
 - Recursos servidor: `GET /api/v0/server/resources`
 - Cola/autoprogramacion: `POST /api/v0/autoprogramming/status`

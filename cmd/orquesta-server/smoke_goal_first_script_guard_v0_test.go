@@ -591,6 +591,24 @@ func TestRunbookAutoprogramacionCLIUsaEndpointGestionadoV0(t *testing.T) {
 	}
 }
 
+func TestRunbookPanelOpsUsaEndpointGestionadoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "docs/runbooks/panel_ops_orquesta_2026-05-24.md")
+	if strings.Contains(text, "http://127.0.0.1:8787/ops") {
+		t.Fatalf("runbook panel ops no debe asumir puerto historico")
+	}
+	for _, want := range []string{
+		"orquesta-server status --json",
+		"ORQUESTA_SERVER_URL",
+		"ORQUESTA_RUNTIME_DIR/base_url.txt",
+		"$ORQUESTA_SERVER_URL/ops",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("runbook panel ops debe usar endpoint gestionado: falta %q", want)
+		}
+	}
+}
+
 func TestLauncherOPESA1NoUsaPuertoHistoricoPorDefectoV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/opes_a1_finalpkg_registry_launcher.py")
