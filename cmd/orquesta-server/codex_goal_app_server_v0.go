@@ -290,6 +290,11 @@ func (backend serverCodexAppServerGoalBackendV0) prepareCodexGoalWriteSetV0(
 		if !codexAppServerPathInsideRootV0(root, target) {
 			continue
 		}
+		if info, statErr := os.Stat(target); statErr == nil && !info.IsDir() {
+			// Un write-set puede listar ficheros existentes (codigo, scripts);
+			// no deben convertirse en directorios ni abortar el launch.
+			continue
+		}
 		if err := os.MkdirAll(target, 0o700); err != nil {
 			return fmt.Errorf("codex_app_server_write_set_prepare_failed: %w", err)
 		}
@@ -318,7 +323,13 @@ func codexAppServerWriteSetDirectoryRelV0(path string) (string, bool) {
 
 func codexAppServerWriteSetLooksLikeFileV0(path string) bool {
 	lower := strings.ToLower(strings.TrimSpace(path))
-	return strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".markdown")
+	if strings.HasSuffix(lower, "/") {
+		return false
+	}
+	// Cualquier extension marca fichero, no solo Markdown: un write-set con
+	// `foo.go` o `foo.sh` no debe materializarse como directorio (BUG-036).
+	ext := filepath.Ext(lower)
+	return len(ext) >= 2 && len(ext) <= 11
 }
 
 func codexAppServerPathInsideRootV0(root string, target string) bool {
