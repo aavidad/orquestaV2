@@ -373,3 +373,14 @@ broker no se impone por defecto en self-programming y se documenta; si
 mejora, se enciende por defecto y se abre seguimiento con las métricas de
 deuda. Una muestra por brazo = indicativo, no estadístico; si el resultado
 es dudoso, repetir con 3 tareas distintas antes de decidir.
+
+### 2026-07-04 — Plan de mejora continua creado (fase 2)
+
+`docs/plan_mejora_continua_orquesta_2026-07-04.md`: 13 tareas ejecutables por
+Orquesta — 6 huecos estructurales (MEJ-101..106: ciclo OPES real,
+meta-director de olas, backend Claude, gobernador de presupuesto, memoria
+entre goals, deuda residual gobernada) y 7 técnicas del campo (MEJ-201..207:
+simulación determinista, property-based, mutation testing, actor-crítico,
+golden evals, biblioteca de habilidades, cascada medida). Olas sugeridas por
+Alcance disjunto en el propio plan. Pendiente además: experimento A/B del
+broker (T286-EXP, diseñado más arriba).

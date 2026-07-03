@@ -1,0 +1,365 @@
+<!--
+Plan de mejora continua — Orquesta (fase 2 tras el plan pericial)
+Autor: dirección Claude (Fable 5), decisión del propietario 2026-07-04
+Origen: docs/informe_pericial_claude_orquesta_2026-07-03.md (cerrado) y
+revisión experta de huecos y técnicas del campo.
+Formato: cada sección MEJ-TASK-NNN es ejecutable por la automejora de
+Orquesta (etiquetas canónicas del parser: Objetivo/Estado/Alcance/Criterios/
+Tests). Pilotar con la receta de docs/bitacora_correccion_pericial_2026-07-03.md.
+Paralelización por contrato (AGENTS.md): lanzar en ola todo lo que no comparta
+Alcance.
+-->
+
+# Plan de mejora continua — huecos y técnicas
+
+## Cómo usar este plan
+
+- Grupo A (MEJ-TASK-101..106): huecos estructurales detectados por la
+  dirección. Grupo B (MEJ-TASK-201..207): técnicas del campo con buen ratio
+  esfuerzo/impacto.
+- Olas sugeridas por Alcance disjunto:
+  - Ola 1: 202 + 203 + 205 + 206 (baratas, sin cruces).
+  - Ola 2: 201 + 204 + 104 (tras integrar ola 1).
+  - Ola 3: 102 + 105 + 207.
+  - Aparte, con decisión del operador: 101 (gasta cuota real), 103 (necesita
+    credenciales Claude), 106 (retirada legacy tras ventana §9).
+- Cada cierre actualiza la bitácora pericial y no abre frentes fuera de su
+  Alcance.
+
+## MEJ-TASK-101 ciclo-opes-real-validacion-campo
+
+Objetivo: ejecutar y documentar el primer ciclo OPES completo sobre el nucleo nuevo contra OPES temporal aislado (nunca productivo): un tema de temario con derivados (tests, audio fake o preflight, HTML) pasando por goal-first, gates de cierre vigentes (visual, linguistico, html_ampliado, links) y reconciliacion por result materializado, siguiendo docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md como base pero sobre HEAD actual. Producir runbook con resultados, bugs encontrados como filas de inventario y veredicto de si la autonomia de dominio queda validada en campo.
+
+Estado: pendiente.
+
+Alcance:
+
+- `docs/runbooks`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `external/opes`
+
+Criterios:
+
+- OPES productivo intacto; solo temporal aislado con confirmaciones opt-in
+- cada fallo observado queda como fila de inventario con evidencia
+- veredicto explicito: autonomia de dominio validada o lista de bloqueos
+- sin cambios de codigo en este ciclo: solo ejecucion, evidencia y triaje
+
+Tests:
+
+- el runbook nuevo existe y declara comandos reproducibles
+- `git diff --stat` toca solo docs/ y external/opes
+
+## MEJ-TASK-102 meta-director-olas-disjuntas
+
+Objetivo: primer corte del meta-director: que una instancia de Orquesta pueda aceptar un objetivo compuesto por varias secciones de backlog pendientes, calcular cruces de Alcance entre ellas (interseccion de rutas normalizadas), y lanzar en paralelo como goals separados las que sean disjuntas, serializando las que se cruzan, con limite configurable de goals simultaneos reutilizando ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS. La integracion de resultados sigue siendo por revision (no auto-merge). Publicar en autoprogramming/status la ola activa: goals lanzados, en espera por cruce y terminados.
+
+Estado: pendiente.
+
+Alcance:
+
+- `modulos/orquesta-server`
+- `modulos/orquesta-autoprogramming`
+- `cmd/orquesta-server`
+- `modulos/orquesta-mcp`
+
+Criterios:
+
+- dos secciones con Alcance disjunto se lanzan en paralelo en la misma instancia, cubierto por test con fakes
+- dos secciones con Alcance cruzado se serializan con evidencia del cruce detectado
+- el limite de simultaneos se respeta y se publica en status
+- sin auto-merge: cada goal conserva write-set y result propios
+
+Tests:
+
+- `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-autoprogramming`
+- `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-mcp`
+- `go test -count=1 ./`
+- `go build ./...`
+
+## MEJ-TASK-103 segundo-backend-goal-claude
+
+Objetivo: primer corte de redundancia de proveedor: adaptador goal-first opt-in para Claude Code CLI como segundo backend del contrato CodexGoalStarterPortV0/ObserverPortV0 (o puerto neutral equivalente renombrado), reutilizando el patron app_server_tmux donde aplique o sesion CLI supervisada donde no, con el mismo contrato de result durable ORQUESTA_GOAL_RESULT_V0, write-set y required tests. Sin tocar el camino Codex por defecto; seleccion por configuracion explicita. Registrar la incidencia T18 (tier Gemini) como fuera de alcance de este corte.
+
+Estado: pendiente.
+
+Alcance:
+
+- `modulos/orquesta-runtime-claude`
+- `modulos/orquesta-goal`
+- `cmd/orquesta-server`
+- `docs/runbooks`
+
+Criterios:
+
+- con backend claude configurado, un goal acotado fake/real opt-in lanza, observa y reconcilia por result durable
+- sin configuracion explicita nada cambia para Codex
+- el contrato neutral no gana dependencias especificas de proveedor
+- runbook con precondiciones de credenciales y smoke opt-in
+
+Tests:
+
+- `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-goal`
+- `go test -count=1 ./cmd/orquesta-server`
+- `go test -count=1 ./`
+- `go build ./...`
+
+## MEJ-TASK-104 gobernador-presupuesto-goals
+
+Objetivo: convertir la politica frugal en decision medida: un gobernador de presupuesto que, con las metricas 801A (context_budget), el prompt_cache 801C y un presupuesto operativo declarado por configuracion (tokens o goals por dia), decida antes de lanzar automejora idle si procede lanzar, aplazar con razon budget_deferred o degradar a tarea mas barata. Publicar en autoprogramming/status el presupuesto restante estimado y los aplazamientos con razon. Sin env vars nuevas mas alla del presupuesto declarado.
+
+Estado: pendiente.
+
+Alcance:
+
+- `modulos/orquesta-server`
+- `modulos/orquesta-autoprogramming`
+- `cmd/orquesta-server`
+- `modulos/orquesta-mcp`
+
+Criterios:
+
+- con presupuesto agotado, la automejora idle aplaza con budget_deferred visible en status, no lanza en silencio
+- con presupuesto disponible el comportamiento actual no cambia
+- el gasto estimado por goal usa metricas reales 801A, no constantes inventadas
+- test con fakes de las tres decisiones: lanzar, aplazar, degradar
+
+Tests:
+
+- `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-autoprogramming`
+- `go test -count=1 ./modulos/orquesta-mcp ./cmd/orquesta-server`
+- `go test -count=1 ./`
+- `go build ./...`
+
+## MEJ-TASK-105 memoria-entre-goals-fitness
+
+Objetivo: primer corte de memoria entre goals: al cerrar un goal (aceptado o rework), destilar una leccion compacta y anonima de rutas privadas (clase de tarea, modulo, resultado, tests fallados/pasados, tokens 801A) a un almacen file-based append-only bajo el state dir, y permitir que el compilador de GoalWorkSpec inyecte como context_refs las 3 lecciones mas relevantes por clase de tarea/modulo. Base para el fitness por materias de ARQUITECTURA.md sin construir aun el scheduler ponderado.
+
+Estado: pendiente.
+
+Alcance:
+
+- `modulos/orquesta-autoprogramming`
+- `modulos/orquesta-server`
+- `modulos/orquesta-app-codex-stack`
+- `cmd/orquesta-server`
+
+Criterios:
+
+- las lecciones no contienen rutas absolutas, tokens ni prompts completos
+- un goal nuevo de la misma clase recibe hasta 3 lecciones como refs compactas
+- el almacen es append-only, acotado por retencion configurable, y su ausencia no rompe nada
+- sin store de base de datos nueva: file-based bajo state dir existente
+
+Tests:
+
+- `go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`
+- `go test -count=1 ./`
+- `go build ./...`
+
+## MEJ-TASK-106 deuda-residual-gobernada
+
+Objetivo: gobernar la deuda residual conocida sin big-bang: (1) plan de troceo incremental del hub orquesta-core-workflow actualizando docs/runbooks/plan_troceo_hubs_orquesta_2026-07-01.md con el primer subpaquete concreto a extraer y su ratchet; (2) ratchet descendente de env vars: test raiz que fija el numero actual de ORQUESTA_* (medido con scripts/orquesta_metricas_deuda.sh) como maximo y obliga a bajar para anadir; (3) checklist de retirada del legacy_director_loop condicionada a ventana §9 verde y segundo backend goal, documentada para decision del operador, sin borrar codigo en esta tarea.
+
+Estado: pendiente.
+
+Alcance:
+
+- `docs/runbooks`
+- `env_vars_budget_test.go`
+- `scripts`
+
+Criterios:
+
+- el ratchet de env vars falla si el conteo sube y pasa si baja o se mantiene
+- el plan de troceo nombra el primer subpaquete, sus ficheros y su test focal
+- la checklist de retirada legacy lista condiciones verificables, no fechas blandas
+- ningun codigo de produccion cambia en esta tarea
+
+Tests:
+
+- `go test -count=1 ./ -run TestEnvVarsBudget`
+- `go test -count=1 ./`
+- `bash scripts/orquesta_metricas_deuda.sh`
+
+## MEJ-TASK-201 simulacion-determinista-fallos
+
+Objetivo: simulador determinista del ciclo goal-first con inyeccion sistematica de fallos, estilo FoundationDB: con reloj falso, backend falso y stores in-memory existentes, un arnes que ejecuta el ciclo completo (lanzar, observar, materializar result, reconciliar, cerrar) matando el backend, retrasando la materializacion, duplicando observaciones o cortando el proceso en CADA punto de transicion enumerable, y verifica los invariantes: ningun goal queda running eterno, ningun terminal desaparece sin estado visible, ningun conflicto se resuelve en silencio, ninguna transicion ilegal de TransicionBackendV0. Semilla reproducible: cada fallo detectado imprime la secuencia exacta para reproducirlo.
+
+Estado: pendiente.
+
+Alcance:
+
+- `modulos/orquesta-app-codex-stack`
+- `modulos/orquesta-server`
+- `modulos/orquesta-estado-vivo`
+
+Criterios:
+
+- el arnes enumera los puntos de inyeccion desde las transiciones reales, no lista manual
+- corre en menos de 60 segundos en modo corto y es determinista por semilla
+- cada invariante violado falla con la secuencia reproducible
+- entra en go test normal (modo corto) sin flags nuevos
+
+Tests:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestSimulacion'`
+- `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-estado-vivo`
+- `go test -count=1 ./`
+- `go build ./...`
+
+## MEJ-TASK-202 property-based-nucleo-puro
+
+Objetivo: tests basados en propiedades (pgregory.net/rapid, dependencia solo de test) para las funciones puras del nucleo: ConstruirProyeccionCicloVidaV0 (determinismo bajo permutacion de evidencias, ningun conflicto silencioso, monotonia de precedencias), TransicionBackendV0 (sin transiciones ilegales alcanzables, idempotencia de observaciones repetidas) y ReconcileExternalWorkPublicStatusV0 (estado publico nunca completed sin evidencia terminal). Minimo 4 propiedades por funcion con generadores de entradas.
+
+Estado: pendiente.
+
+Alcance:
+
+- `modulos/orquesta-estado-vivo`
+- `modulos/orquesta-runtime-codex-appserver`
+- `modulos/orquesta-run-coordinator`
+- `go.mod`
+- `go.sum`
+
+Criterios:
+
+- rapid solo como dependencia de test; go build ./... sin cambios de dependencias de produccion
+- cada propiedad documenta el invariante en una linea
+- una regresion sintetica (mutacion manual local) es cazada por al menos una propiedad antes de commitear
+- corren en modo corto en menos de 30 segundos
+
+Tests:
+
+- `go test -count=1 ./modulos/orquesta-estado-vivo ./modulos/orquesta-runtime-codex-appserver ./modulos/orquesta-run-coordinator`
+- `go test -count=1 ./`
+- `go build ./...`
+
+## MEJ-TASK-203 mutation-testing-piloto
+
+Objetivo: piloto de mutation testing acotado y opt-in: script scripts/orquesta_mutation_pilot.sh que ejecute go-mutesting (o herramienta Go equivalente activa) SOLO sobre modulos/orquesta-estado-vivo y modulos/orquesta-goal, publique el mutation score por paquete en un JSON datado bajo el directorio de resultados nightly, y documente en runbook el umbral aceptable propuesto y los mutantes supervivientes mas graves como candidatos a test nuevo. No entra en CI por defecto: solo opt-in manual/nightly extendido.
+
+Estado: pendiente.
+
+Alcance:
+
+- `scripts`
+- `docs/runbooks`
+
+Criterios:
+
+- opt-in explicito; sin dependencia obligatoria nueva en go.mod
+- score por paquete reproducible y datado
+- runbook con umbral propuesto y top de mutantes supervivientes
+- no toca codigo de produccion
+
+Tests:
+
+- `bash -n scripts/orquesta_mutation_pilot.sh`
+- test shell focal del script
+- `git diff --check`
+
+## MEJ-TASK-204 tests-congelados-actor-critico
+
+Objetivo: separar quien define los tests de quien implementa en la automejora idle: modo opt-in en el que, antes de lanzar el goal implementador, se lanza un goal barato definidor que SOLO escribe los required tests (ficheros _test.go nuevos con casos que deben pasar) y los congela con hash en el GoalWorkSpec del implementador; el implementador no puede modificar los tests congelados (la validacion de cierre rechaza diffs sobre ellos con reason frozen_tests_modified) y su cierre exige que pasen. Aplicable primero a tareas de backlog con Alcance de un solo modulo.
+
+Estado: pendiente.
+
+Alcance:
+
+- `modulos/orquesta-autoprogramming`
+- `modulos/orquesta-app-codex-stack`
+- `modulos/orquesta-server`
+- `cmd/orquesta-server`
+
+Criterios:
+
+- modo opt-in; sin el flag el flujo actual no cambia
+- el implementador que toca un test congelado queda en rework con frozen_tests_modified
+- el cierre exige tests congelados en verde con evidencia
+- cubierto de punta a punta con fakes
+
+Tests:
+
+- `go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-app-codex-stack`
+- `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`
+- `go test -count=1 ./`
+- `go build ./...`
+
+## MEJ-TASK-205 golden-tasks-evals
+
+Objetivo: banco de tareas doradas para medir deriva de calidad de agentes: definir en docs/evals/ un set inicial de 5 tareas acotadas con resultado esperado verificable (la Nueva App del smoke como primera; una tarea de script tipo T265; una de docs tipo T280; una de fix con test congelado; una de exploracion tipo mapa publico), un script scripts/orquesta_golden_evals.sh opt-in que las lance en serie o paralelo contra una instancia aislada usando la receta de pilotaje, y un evaluador que puntue cada resultado con los criterios declarados (tests pasan, ficheros esperados, sin fuera de write-set) a JSON datado. Runbook con cadencia recomendada semanal.
+
+Estado: pendiente.
+
+Alcance:
+
+- `docs/evals`
+- `scripts`
+- `docs/runbooks`
+
+Criterios:
+
+- cada tarea dorada declara criterios verificables por script, no juicio manual
+- el resultado es un JSON datado comparable entre ejecuciones
+- opt-in con confirmacion; nunca toca OPES productivo
+- las 5 tareas cubren clases distintas de trabajo
+
+Tests:
+
+- `bash -n scripts/orquesta_golden_evals.sh`
+- test shell focal del script
+- `git diff --check`
+
+## MEJ-TASK-206 biblioteca-habilidades-curada
+
+Objetivo: curacion de habilidades reutilizables estilo Voyager: un goal idle opcional que revisa results durables aceptados recientes, detecta artefactos reutilizables (scripts, patrones de test, plantillas de runbook), y propone su destilacion a skills/ como habilidad con contrato (nombre, cuando usarla, entrada/salida, validacion) via seccion de backlog nueva para revision, nunca copiando secretos ni rutas privadas. El compilador de GoalWorkSpec anade como context_refs las habilidades cuyo nombre/etiquetas casen con la clase de tarea.
+
+Estado: pendiente.
+
+Alcance:
+
+- `skills`
+- `modulos/orquesta-autoprogramming`
+- `cmd/orquesta-server`
+
+Criterios:
+
+- la destilacion siempre pasa por seccion de backlog y revision, no auto-commit de skills
+- una habilidad casada por clase llega al spec como ref compacta, cubierto por test
+- sin secretos ni rutas absolutas en habilidades
+- con el directorio skills/ vacio nada cambia
+
+Tests:
+
+- `go test -count=1 ./modulos/orquesta-autoprogramming ./cmd/orquesta-server`
+- `go test -count=1 ./`
+- `go build ./...`
+
+## MEJ-TASK-207 cascada-modelos-medida
+
+Objetivo: convertir la escalera worker-barato/repair-helper/prime en decision medida estilo FrugalGPT: registrar por goal el modelo/reasoning usado y el desenlace (aceptado, rework, escalado) junto a las metricas 801A; producir una proyeccion en autoprogramming/status con el ratio de exito por escalon y coste medio; y permitir configurar umbral de escalado por evidencia (n fallos del barato en la clase de tarea) en lugar de heuristica fija. Sin cambiar el default actual hasta tener 2 semanas de datos.
+
+Estado: pendiente.
+
+Alcance:
+
+- `modulos/orquesta-autoprogramming`
+- `modulos/orquesta-server`
+- `modulos/orquesta-mcp`
+- `cmd/orquesta-server`
+
+Criterios:
+
+- el registro por goal no publica prompts ni secretos
+- la proyeccion de ratios por escalon es visible en status con datos falsos de test
+- el umbral configurable no altera el comportamiento por defecto
+- decision de cambio de default documentada como pendiente de datos, no aplicada
+
+Tests:
+
+- `go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-server`
+- `go test -count=1 ./modulos/orquesta-mcp ./cmd/orquesta-server`
+- `go test -count=1 ./`
+- `go build ./...`
