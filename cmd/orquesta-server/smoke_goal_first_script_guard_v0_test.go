@@ -823,6 +823,38 @@ func TestSmokesOPESRESTDirectosUsanEndpointOrquestaGestionadoV0(t *testing.T) {
 	}
 }
 
+func TestScriptsConEndpointGestionadoCarganSmokeCommonV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	scriptsDir := filepath.Join(root, "scripts")
+	err := filepath.WalkDir(scriptsDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".sh" {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if rel == "scripts/lib/smoke_common.sh" {
+			return nil
+		}
+		text := readOperationalDocGuardV0(t, root, rel)
+		if !strings.Contains(text, "smoke_require_orquesta_base_url") &&
+			!strings.Contains(text, "smoke_orquesta_base_url_from_env_or_runtime") {
+			return nil
+		}
+		if !strings.Contains(text, "smoke_common.sh") {
+			t.Fatalf("%s usa endpoint gestionado sin cargar scripts/lib/smoke_common.sh", rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk scripts: %v", err)
+	}
+}
+
 func TestSmokesOPESLargosAceptanEndpointOrquestaGestionadoV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	for _, rel := range []string{

@@ -859,6 +859,14 @@ abierto tras integrar la guarda de wrappers; conserva la evidencia del detector
 reabrirlo en ese handoff sin evidencia nueva. Evidencia:
 `TestHandoffCierreSesionNoReabreBUG077V0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 21: los scripts que resuelven el
+endpoint gestionado mediante `smoke_require_orquesta_base_url` o
+`smoke_orquesta_base_url_from_env_or_runtime` quedan cubiertos por una guarda
+que exige cargar `scripts/lib/smoke_common.sh`; asi se evita reintroducir
+wrappers que documenten `ORQUESTA_RUNTIME_DIR/base_url.txt` pero fallen en
+ejecucion o vuelvan a rutas manuales. Evidencia:
+`TestScriptsConEndpointGestionadoCarganSmokeCommonV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado
