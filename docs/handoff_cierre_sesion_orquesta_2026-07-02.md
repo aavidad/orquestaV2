@@ -68,7 +68,8 @@ conservar `smoke_shutdown_orquesta_server` en scripts temporales y
 El agente remoto quedaba trabajando al cierre de esta sesion. Estado observado
 en el corte original:
 
-- HEAD remoto/origin: `777e027c`.
+- HEAD remoto/origin observado en el corte original: `777e027c`; no usarlo como
+  estado vigente sin fetch/rebase.
 - Cambio vivo remoto ya integrado:
   `cmd/orquesta-server/smoke_goal_first_script_guard_v0_test.go`.
 - Proposito del cambio integrado: anadir guarda automatica para que scripts que

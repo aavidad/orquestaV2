@@ -804,6 +804,7 @@ func TestHandoffCierreSesionNoReabreBUG077V0(t *testing.T) {
 		"go run ./cmd/orquesta-server run",
 		"127.0.0.1:8787",
 		"localhost:8787",
+		"HEAD remoto/origin: `777e027c`",
 		"El arbol local queda limpio en `777e027c`.",
 	} {
 		if strings.Contains(text, forbidden) {
