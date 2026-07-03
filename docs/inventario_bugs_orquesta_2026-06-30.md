@@ -1575,6 +1575,13 @@ evidencia. El descriptor y docs publican ahora `accepted`/`background` en `ok`
 y `error`. Evidencia:
 `TestMCPAutoprogrammingSelfImprovementDescriptorV0EsAdaptadorFino`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 56: el handoff de cierre de
+sesion conserva las verificaciones de `777e027c` solo como evidencia historica
+del corte original y exige nueva prueba focal tras `fetch/rebase`, evitando que
+un operador reutilice el verde antiguo para reabrir rutas manuales de servidor
+o saltarse la guarda de shutdown gestionado. Evidencia:
+`TestHandoffCierreSesionNoReabreBUG077V0`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

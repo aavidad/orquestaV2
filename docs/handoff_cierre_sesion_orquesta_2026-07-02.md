@@ -26,6 +26,9 @@ Fecha: 2026-07-02
 
 ## Verificacion
 
+Las verificaciones siguientes son evidencia historica del corte original; no
+son un verde vigente para reanudar sin `fetch/rebase` y nueva prueba focal.
+
 - `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-mcp`
   verde para el detector OPES fuera de write-set.
 - `go test -count=1 ./cmd/orquesta-server` verde tras el split T90.

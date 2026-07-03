@@ -788,6 +788,8 @@ func TestHandoffCierreSesionNoReabreBUG077V0(t *testing.T) {
 		"git status --short --branch",
 		"HEAD remoto/origin observado en el corte original",
 		"estado vigente sin fetch/rebase",
+		"evidencia historica del corte original",
+		"nueva prueba focal",
 		"TestScriptStartsTemporaryOrquestaServerV0DetectaPIDConAddrGestionadoV0",
 		"TestSmokeOPESExternalWorkAgentRealUsaShutdownDelegadoConRuntimeDirV0",
 		`ORQUESTA_SERVER_ADDR`,
