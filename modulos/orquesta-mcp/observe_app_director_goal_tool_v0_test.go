@@ -30,6 +30,26 @@ func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0QAFailedPublicText
 	}
 }
 
+func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0QAFailedPublicTextRunningNoEspera(t *testing.T) {
+	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
+		MCPObserveAppDirectorGoalToolResultV0{
+			GoalRef:    "goal-ref-observe-qa-failed-public-text-running-001",
+			GoalStatus: orquestagoal.GoalStatusRunningV0,
+		},
+		MCPDirectorGoalMaterializedRefsV0{
+			ArtifactRefs: []string{"artifact-ref-materialized-qa-failed-public-text-running-001"},
+			EvidenceRefs: []string{"evidence-ref-goal-materialized-qa-failed-public-text-running-001"},
+			IssueCodes:   []string{MCPGoalFirstQAFailedPublicTextV0},
+		},
+	)
+
+	if result.RecommendedAction != MCPGoalFirstReworkPublicTextActionV0 ||
+		!containsStringMCPV0(result.ArtifactRefs, "artifact-ref-materialized-qa-failed-public-text-running-001") ||
+		!containsStringMCPV0(result.EvidenceRefs, "evidence-ref-goal-materialized-qa-failed-public-text-running-001") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0ArtifactPathsOmitidosPideRepairReceipt(t *testing.T) {
 	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
 		MCPObserveAppDirectorGoalToolResultV0{
