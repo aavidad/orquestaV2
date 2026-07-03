@@ -15,6 +15,10 @@ func TestMCPDomainWorkDescriptorV0EsAdaptadorFino(t *testing.T) {
 		!strings.Contains(descriptor.InputSchema, MCPDomainWorkActionCreateJobV0) ||
 		!strings.Contains(descriptor.InputSchema, MCPDomainWorkActionSubmitArtifactV0) ||
 		!strings.Contains(descriptor.InputSchema, MCPDomainWorkActionEvaluateCapabilitiesV0) ||
+		!strings.Contains(descriptor.Output, "job?{job_ref,status,evidence_refs?}") ||
+		!strings.Contains(descriptor.Output, "receipt?{receipt_ref,status,evidence_refs?}") ||
+		!strings.Contains(descriptor.Output, "matched_capabilities?[]{capability_ref,kind,evidence_refs?}") ||
+		!strings.Contains(descriptor.Output, "missing_requirements?[]{capability_ref,kind,evidence_refs?}") ||
 		len(descriptor.Invariantes) == 0 {
 		t.Fatalf("descriptor=%+v", descriptor)
 	}

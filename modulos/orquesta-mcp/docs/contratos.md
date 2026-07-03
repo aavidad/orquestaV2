@@ -252,14 +252,18 @@ Campos:
   output_ok:
     estado: ok
     action
-    job: DomainWorkJobV0 para create_job
-    receipt: DomainWorkArtifactReceiptV0 para submit_artifact
+    job: DomainWorkJobV0 para create_job, con `job_ref`, `status` y
+      `evidence_refs` compactas cuando existan
+    receipt: DomainWorkArtifactReceiptV0 para submit_artifact, con
+      `receipt_ref`, `status` y `evidence_refs` compactas cuando existan
     external_capability_evaluation: DomainWorkExternalCapabilityEvaluationV0
-      para evaluate_external_capabilities
+      para evaluate_external_capabilities; conserva `operational_reason`,
+      capabilities/missing requirements y sus `evidence_refs`
   output_error:
     estado: error
     errores_publicos
     external_capability_evaluation: presente si faltan capabilities requeridas
+      con `operational_reason`, missing requirements y evidencia compacta
 Invariantes:
   - Adaptador inbound fino.
   - `create_job` delega solo en `DomainWorkJobCreatorPortV0` inyectado.

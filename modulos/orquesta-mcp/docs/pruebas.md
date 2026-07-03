@@ -64,7 +64,9 @@ ejecuta `create_job` solo por `DomainWorkJobCreatorPortV0`, ejecuta
 `evaluate_external_capabilities` sin efectos de dominio con capabilities
 declaradas o source opt-in, queda opt-in en el transporte si falta puerto,
 expone `POST /api/v0/domain-work` como bridge fino y reexporta
-`DomainWorkJobRecordSourcePortV0` cuando el backend lo soporta.
+`DomainWorkJobRecordSourcePortV0` cuando el backend lo soporta. El descriptor
+declara `evidence_refs` en job, receipt, matched capabilities y missing
+requirements para que consumidores compactos no pierdan evidencia causal.
 El test de arquitectura confirma que los ficheros `domain_work_*_v0.go` no
 importan OPES ni conector REST.
 Ultima ejecucion: 2026-05-13; pasa con bateria focal.
