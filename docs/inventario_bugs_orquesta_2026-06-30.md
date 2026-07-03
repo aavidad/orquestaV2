@@ -734,6 +734,16 @@ del goal observado para que clientes HTTP/MCP compactos no pierdan la causa del
 `TestMCPRunControlExecutorV0StopForcedNoPublicaStoppedSiGoalBackendSigueActive`
 y `TestMCPRunControlHTTPHandlerV0BackendGoalActivoEsConflictV0`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 5: el cliente
+`orquesta-server stop` conserva hasta dos refs compactas de `active_work` en el
+error publico `shutdown_not_ready`, de modo que un timeout o una respuesta
+`ready` bloqueada por backend Goal vivo no pierde la causa concreta al salir por
+CLI/wrapper. Las refs se limitan y se filtran por formato compacto para no
+publicar paths ni detalle runtime. Evidencia:
+`TestShutdownClientNotReadyErrorV0IncluyeRefsActiveWorkCompactas`,
+`TestShutdownClientReadyV0BloqueaActiveWorkPersistido` y
+`TestRequestServerShutdownV0ReadyNoSaltaActiveWorksEstructuradosV0`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y

@@ -56,8 +56,13 @@ func serverShutdownClientResultFromStatusV0(status orquestaserver.ServerPublicSt
 }
 
 func shutdownClientNotReadyErrorV0(result serverShutdownClientResultV0) error {
+	activeWorkRefs := shutdownClientNotReadyActiveWorkRefsV0(result)
+	activeWorkRefsPart := ""
+	if len(activeWorkRefs) > 0 {
+		activeWorkRefsPart = " active_work_refs=" + strings.Join(activeWorkRefs, ",")
+	}
 	return fmt.Errorf(
-		"shutdown_not_ready status=%s runs=%d/%d agents_in_flight=%d checkpoints=%d checkpoint_agents=%d active_work=%d",
+		"shutdown_not_ready status=%s runs=%d/%d agents_in_flight=%d checkpoints=%d checkpoint_agents=%d active_work=%d%s",
 		result.Status,
 		result.RunsStopped,
 		result.RunsRequested,
@@ -65,7 +70,24 @@ func shutdownClientNotReadyErrorV0(result serverShutdownClientResultV0) error {
 		result.CheckpointsPending,
 		result.CheckpointAgentsPending,
 		result.ActiveWorkCount,
+		activeWorkRefsPart,
 	)
+}
+
+func shutdownClientNotReadyActiveWorkRefsV0(result serverShutdownClientResultV0) []string {
+	refs := compactStringsV0(result.ActiveWorkRefs)
+	out := make([]string, 0, 2)
+	for _, ref := range refs {
+		safe := safeShutdownClientRefPartV0(ref)
+		if safe == "" || safe != strings.TrimSpace(ref) {
+			continue
+		}
+		out = append(out, safe)
+		if len(out) >= 2 {
+			break
+		}
+	}
+	return out
 }
 
 func shutdownRequestErrorMayStillNeedSignalV0(err error) bool {

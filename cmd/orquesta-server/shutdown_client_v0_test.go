@@ -345,6 +345,28 @@ func TestShutdownClientReadyV0BloqueaActiveWorkPersistido(t *testing.T) {
 	}
 }
 
+func TestShutdownClientNotReadyErrorV0IncluyeRefsActiveWorkCompactas(t *testing.T) {
+	err := shutdownClientNotReadyErrorV0(serverShutdownClientResultV0{
+		Status:          "ready",
+		ShutdownReady:   true,
+		ActiveWorkCount: 2,
+		ActiveWorkRefs: []string{
+			"shutdown-active-work-goal-backend-goal-ref-001",
+			"shutdown-active-work-goal-backend-thread-ref-001",
+			"shutdown-active-work-goal-backend-extra-ref-ignored",
+			"/tmp/no-publicar",
+		},
+	})
+
+	if err == nil ||
+		!strings.Contains(err.Error(), "active_work=2") ||
+		!strings.Contains(err.Error(), "active_work_refs=shutdown-active-work-goal-backend-goal-ref-001,shutdown-active-work-goal-backend-thread-ref-001") ||
+		strings.Contains(err.Error(), "/tmp/no-publicar") ||
+		strings.Contains(err.Error(), "extra-ref-ignored") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestNormalizeServerShutdownClientResultV0ConvierteActiveWorksEnRefs(t *testing.T) {
 	result := normalizeServerShutdownClientResultV0(serverShutdownClientResultV0{
 		ActiveWorks: []serverShutdownClientActiveWorkV0{{
