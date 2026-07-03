@@ -21,6 +21,8 @@ const (
 	mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0            = "checkpoint_only_high_consumption"
 	mcpAutoprogrammingActionThreadOutputSanitizedV0                    = "codex_app_server_thread_output_sanitized"
 	mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0           = "codex_app_server_write_set_requires_workspace_write"
+	mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMissingV0      = "codex_app_server_write_set_guard_allowed_write_set_missing"
+	mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0     = "codex_app_server_write_set_guard_allowed_write_set_mismatch"
 	mcpAutoprogrammingActionGoalBackendMissingAfterExternalCleanupV0   = "goal_backend_missing_after_external_cleanup"
 	mcpAutoprogrammingActionStaleRunningReconciledV0                   = "stale_running_reconciled"
 	mcpAutoprogrammingActionProviderUsageLimitRetryV0                  = "provider_usage_limit_retry_after"
@@ -59,6 +61,8 @@ const (
 	mcpAutoprogrammingEvidenceThreadOutputSanitizedV0                  = "evidence-ref-autoprogramming-status-thread-output-sanitized"
 	mcpAutoprogrammingEvidenceCodexAppServerThreadOutputSanitizedV0    = "evidence-ref-codex-app-server-thread-output-sanitized"
 	mcpAutoprogrammingEvidenceWriteSetRequiresWorkspaceWriteV0         = "evidence-ref-autoprogramming-status-write-set-requires-workspace-write"
+	mcpAutoprogrammingEvidenceWriteSetGuardAllowedWriteSetMissingV0    = "evidence-ref-autoprogramming-status-write-set-guard-allowed-write-set-missing"
+	mcpAutoprogrammingEvidenceWriteSetGuardAllowedWriteSetMismatchV0   = "evidence-ref-autoprogramming-status-write-set-guard-allowed-write-set-mismatch"
 	mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0 = "evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup"
 	mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensDefaultV0     = int64(100000)
 	mcpAutoprogrammingCheckpointOnlyMaxWaitSecondsDefaultV0            = int64(15 * 60)
@@ -113,6 +117,22 @@ func mcpAutoprogrammingMissingTerminalReceiptActionsV0(
 		out = append(out, action)
 	}
 	return out
+}
+
+func mcpAutoprogrammingWriteSetGuardContractIssueV0(
+	state orquestagoal.GoalWorkStateV0,
+) (string, string) {
+	for _, code := range mcpDirectorGoalIssueCodesFromStateV0(state) {
+		switch strings.TrimSpace(code) {
+		case mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMissingV0:
+			return mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMissingV0,
+				mcpAutoprogrammingEvidenceWriteSetGuardAllowedWriteSetMissingV0
+		case mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0:
+			return mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0,
+				mcpAutoprogrammingEvidenceWriteSetGuardAllowedWriteSetMismatchV0
+		}
+	}
+	return "", ""
 }
 
 func mcpAutoprogrammingQAFailedPublicTextActionsV0(
@@ -520,6 +540,15 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 			action.RecommendedAction = mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0
 			action.EvidenceRefs = compactStringsMCPV0(append(
 				append(action.EvidenceRefs, mcpAutoprogrammingEvidenceWriteSetRequiresWorkspaceWriteV0),
+				state.LaunchReceipt.EvidenceRefs...,
+			))
+		}
+		if issueCode, evidenceRef := mcpAutoprogrammingWriteSetGuardContractIssueV0(state); issueCode != "" {
+			action.Code = issueCode
+			action.Reason = issueCode + ": goal declares workspace_write_guard but the start packet write_set and direction_contract.allowed_write_set are missing or inconsistent; rebuild the goal packet before relaunch"
+			action.RecommendedAction = mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0
+			action.EvidenceRefs = compactStringsMCPV0(append(
+				append(action.EvidenceRefs, evidenceRef),
 				state.LaunchReceipt.EvidenceRefs...,
 			))
 		}

@@ -539,6 +539,8 @@ func mcpDomainWorkStatusNormalizeStatusV0(status string, action string) string {
 		mcpAutoprogrammingActionRequiredTestEvidenceMissingV0,
 		mcpAutoprogrammingActionThreadOutputSanitizedV0,
 		mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0,
+		mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMissingV0,
+		mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0,
 		"needs_action",
 		"queue_needs_action",
 		"observer_required",

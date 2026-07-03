@@ -542,6 +542,73 @@ func TestMCPAutoprogrammingStatusExecutorV0WriteSetReadOnlyPideConfigurarSandbox
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0WriteSetGuardContractPideRepairPacketV0(t *testing.T) {
+	cases := []struct {
+		name        string
+		issueCode   string
+		evidenceRef string
+	}{
+		{
+			name:        "allowed_write_set_missing",
+			issueCode:   mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMissingV0,
+			evidenceRef: "evidence-ref-codex-app-server-write-set-guard-allowed-write-set-missing",
+		},
+		{
+			name:        "allowed_write_set_mismatch",
+			issueCode:   mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0,
+			evidenceRef: "evidence-ref-codex-app-server-write-set-guard-allowed-write-set-mismatch",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runRef := "run-ref-autop-status-" + tc.name + "-001"
+			goalRef := "goal-ref-autop-status-" + tc.name + "-001"
+			goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+			if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+				RunRef:  runRef,
+				GoalRef: goalRef,
+				Status:  orquestagoal.GoalStatusInvalidV0,
+				Spec: orquestagoal.GoalWorkSpecV0{
+					RunRef:       runRef,
+					GoalRef:      goalRef,
+					Objective:    "No arrancar con contrato write-set incoherente.",
+					DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+					WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+				},
+				LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+					GoalRef: goalRef,
+					Status:  orquestagoal.GoalStatusInvalidV0,
+					Issues: []orquestagoal.GoalWorkIssueV0{{
+						Code: tc.issueCode,
+					}},
+					EvidenceRefs: []string{tc.evidenceRef},
+				},
+				EvidenceRefs: []string{"evidence-ref-goal-write-set-guard-contract-status-test"},
+			}); err != nil {
+				t.Fatalf("SaveGoalWorkStateV0: %v", err)
+			}
+
+			result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+				GoalStateStore: goalStates,
+			}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{})
+
+			if err != nil {
+				t.Fatalf("execute: %v", err)
+			}
+			if len(result.StaleRunning) != 1 {
+				t.Fatalf("stale_running=%+v", result.StaleRunning)
+			}
+			action := result.StaleRunning[0]
+			if action.Code != tc.issueCode ||
+				action.RecommendedAction != mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0 ||
+				action.GoalRef != goalRef ||
+				!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, tc.evidenceRef) {
+				t.Fatalf("action=%+v", action)
+			}
+		})
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0GoalBloqueadoConBackendActivoPublicaSnapshotAccionable(t *testing.T) {
 	runRef := "run-ref-autop-status-goal-backend-active-001"
 	goalRef := "goal-ref-autop-status-goal-backend-active-001"

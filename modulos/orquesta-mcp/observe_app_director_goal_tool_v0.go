@@ -247,6 +247,10 @@ func mcpObserveAppDirectorGoalRecommendedActionV0(
 	if mcpObserveAppDirectorGoalHasIssueV0(result, mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0) {
 		return mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0
 	}
+	if mcpObserveAppDirectorGoalHasIssueV0(result, mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMissingV0) ||
+		mcpObserveAppDirectorGoalHasIssueV0(result, mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0) {
+		return mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0
+	}
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstPhase0CompleteNonPublishableV0) {
 		return MCPGoalFirstContinueFromPhase0ActionV0
 	}

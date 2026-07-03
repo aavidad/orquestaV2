@@ -615,6 +615,7 @@ func TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFir
 		mcpQueueGlobalStatusActionReplanNarrowContextV0,
 		mcpQueueGlobalStatusActionReconcileGoalTerminalV0,
 		mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0,
+		mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0,
 		MCPGoalFirstRepairReceiptActionV0,
 		MCPGoalFirstReworkWriteSetViolationActionV0,
 		MCPGoalFirstReworkPublicTextActionV0,
@@ -626,6 +627,48 @@ func TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFir
 				t.Fatalf("action=%q, want %q", got, action)
 			}
 		})
+	}
+}
+
+func TestMCPQueueGlobalStatusHTTPHandlerV0ConservaWriteSetGuardContract(t *testing.T) {
+	executor := &fakeMCPQueueGlobalStatusExecutorV0{
+		result: MCPAutoprogrammingStatusToolResultV0{
+			Estado:   MCPAutoprogrammingStatusEstadoOKV0,
+			QueueRef: "global",
+			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
+				Blocked: 1,
+			},
+			StaleRunning: []MCPAutoprogrammingActionableRunV0{{
+				Code:              mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0,
+				RunRef:            "run-ref-global-status-write-set-guard-mismatch-001",
+				RecommendedAction: mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0,
+				EvidenceRefs: []string{
+					mcpAutoprogrammingEvidenceWriteSetGuardAllowedWriteSetMismatchV0,
+					"evidence-ref-codex-app-server-write-set-guard-allowed-write-set-mismatch",
+				},
+			}},
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, MCPQueueGlobalStatusHTTPPathV0, nil)
+	rec := httptest.NewRecorder()
+
+	NewMCPQueueGlobalStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !hasMCPQueueGlobalStatusItemForTestV0(
+		result.Items,
+		"run-ref-global-status-write-set-guard-mismatch-001",
+		mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0,
+		true,
+		mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0,
+	) {
+		t.Fatalf("result=%+v", result)
 	}
 }
 

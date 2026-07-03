@@ -212,6 +212,24 @@ func TestMCPDomainWorkStatusHTTPHandlerV0ConservaWriteSetRequiresWorkspaceWrite(
 	}
 }
 
+func TestMCPDomainWorkStatusHTTPHandlerV0ConservaWriteSetGuardContract(t *testing.T) {
+	result := domainWorkStatusResultForActionableRunTestV0(
+		t,
+		mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0,
+		mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0,
+		"evidence-ref-domain-status-write-set-guard-mismatch",
+	)
+
+	if result.Summary.Status != "blocked" ||
+		!result.Summary.NeedsAction ||
+		len(result.Items) != 1 ||
+		result.Items[0].Status != "blocked" ||
+		!result.Items[0].NeedsAction ||
+		result.Items[0].RecommendedAction != mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesGoalFirstRecuperablesComoBloqueadas(t *testing.T) {
 	cases := []struct {
 		name              string

@@ -29,6 +29,7 @@ const (
 	mcpQueueGlobalStatusActionReplanNarrowContextV0            = "replan_narrow_context"
 	mcpQueueGlobalStatusActionReconcileGoalTerminalV0          = "reconcile_goal_terminal"
 	mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0 = "configure_goal_backend_workspace_write"
+	mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0     = "repair_goal_write_set_contract"
 )
 
 type MCPQueueGlobalStatusResultV0 struct {
@@ -678,6 +679,7 @@ func mcpQueueGlobalStatusNormalizeRecommendedActionV0(action string, fallback st
 		mcpQueueGlobalStatusActionReplanNarrowContextV0,
 		mcpQueueGlobalStatusActionReconcileGoalTerminalV0,
 		mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0,
+		mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0,
 		MCPGoalFirstRepairReceiptActionV0,
 		MCPGoalFirstReworkWriteSetViolationActionV0,
 		MCPGoalFirstReworkPublicTextActionV0,

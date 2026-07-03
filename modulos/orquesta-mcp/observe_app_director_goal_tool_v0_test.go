@@ -263,6 +263,44 @@ func TestNewMCPObserveAppDirectorGoalPartialResultFromStateV0ConservaLaunchIssue
 	}
 }
 
+func TestNewMCPObserveAppDirectorGoalPartialResultFromStateV0ConservaLaunchIssueWriteSetGuardContract(t *testing.T) {
+	result, err := NewMCPObserveAppDirectorGoalPartialResultFromStateV0(
+		MCPObserveAppDirectorGoalToolInputV0{RunRef: "run-ref-observe-write-set-guard-mismatch-001"},
+		orquestagoal.GoalWorkStateV0{
+			RunRef:  "run-ref-observe-write-set-guard-mismatch-001",
+			GoalRef: "goal-ref-observe-write-set-guard-mismatch-001",
+			Status:  orquestagoal.GoalStatusInvalidV0,
+			Spec: orquestagoal.GoalWorkSpecV0{
+				RunRef:       "run-ref-observe-write-set-guard-mismatch-001",
+				GoalRef:      "goal-ref-observe-write-set-guard-mismatch-001",
+				Objective:    "No perder causa de contrato write-set invalido.",
+				DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+				WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+			},
+			LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+				GoalRef: "goal-ref-observe-write-set-guard-mismatch-001",
+				Status:  orquestagoal.GoalStatusInvalidV0,
+				Issues: []orquestagoal.GoalWorkIssueV0{{
+					Code: mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0,
+				}},
+				EvidenceRefs: []string{"evidence-ref-codex-app-server-write-set-guard-allowed-write-set-mismatch"},
+			},
+			EvidenceRefs: []string{"evidence-ref-observe-write-set-guard-mismatch-state"},
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("partial: %v", err)
+	}
+	if result.RecommendedAction != mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0 ||
+		len(result.ClosureIssues) != 1 ||
+		result.ClosureIssues[0].Code != mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0 ||
+		!containsStringMCPV0(result.EvidenceRefs, "evidence-ref-codex-app-server-write-set-guard-allowed-write-set-mismatch") ||
+		!containsStringMCPV0(result.EvidenceRefs, "evidence-ref-observe-write-set-guard-mismatch-state") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestNewMCPObserveAppDirectorGoalResultV0OutputSaneadoPideContextoAcotado(t *testing.T) {
 	result := NewMCPObserveAppDirectorGoalResultV0(
 		MCPObserveAppDirectorGoalToolInputV0{RunRef: "run-ref-observe-thread-output-sanitized-001"},
