@@ -325,3 +325,21 @@ ejecutando ambas WIP-TASK. En vuelo simultáneo: T275 (bug 153), T276
 (bug 151), T278 (repo-map), T280 (docs/guard T12+matriz). El stash remoto
 `triaje-claude-2026-07-04` puede borrarse tras integrar T280 (decisión
 operador); mientras, permanece como respaldo.
+
+### 2026-07-04 — ola de 4 completada e integrada: bugs 151 y 153 CERRADOS
+
+Los 4 goals entregaron result formal `complete` (la disciplina de result ya
+prende en los agentes). Integrados en orden con verificación completa:
+- `72fecb30` T280: matriz smokes + docs/guard T12.
+- `e47c2561` T275: **BUG-153 cerrado** — reconciliación de goals idle por
+  result materializado, decaimiento `goal_backend_gone_without_result`,
+  terminal siempre visible. El bucle autónomo ya se cierra solo.
+- `c8e9dbd1` T276: **BUG-151 cerrado** — `Detail` saneado de causa raíz
+  hasta status/observe con acción recomendada.
+- `60b0ed47` T278: repo_map compacto en el broker (CTX-801B). Un conflicto
+  cosmético en 2 tests de mcp resuelto conservando la versión integrada.
+Suites verdes en main tras cada integración. Ironía de cierre: los goals de
+esta ola aún aparecían `running` en sus instancias por el propio bug 153
+que T275 arregla — las olas futuras ya reconciliarán solas.
+Pendiente de código: última ola (BUG-152 + CTX-801A/C/D). Después: solo
+ventana §9 y decisión de subir el nightly a modo real.
