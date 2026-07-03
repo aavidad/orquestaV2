@@ -312,6 +312,14 @@ no en prompts ni revisiones manuales.
 
 ## Preguntas para Claude
 
+Actualizacion antes de parada 2026-07-03:
+
+- `BUG-ORQ-20260703-145` queda cerrado en codigo: `AppSpecV0` conserva
+  `technical`, Nueva App goal-first lo convierte en refs/criterios/manifest y
+  `ObserveAppDirectorGoalV0` bloquea/rework si una entrega contradice lenguaje
+  o framework declarado. Cobertura focal en `orquesta-factory`,
+  `orquesta-app-director-service` y `cmd/orquesta-server`.
+
 1. Revisar si el fallo Nueva App actual debe cerrarse como:
    - bug de prompt/spec por generar Python en vez de Go;
    - bug de validador por no cortar lenguaje/framework;

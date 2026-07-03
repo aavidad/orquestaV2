@@ -3,6 +3,7 @@ package orquestaappdirectorservice
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -170,6 +171,11 @@ func TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy(t *testing.T) 
 	if !serviceGoalContextRefInSetForTestV0(spec.ContextRefs, "phase_policy", startAppDirectorGoalNewAppPhasePolicyRefV0) ||
 		!serviceStringInSetV0(spec.AcceptanceCriteria, startAppDirectorGoalNewAppPhasePolicyCriterionV0) {
 		t.Fatalf("goal spec sin politica de fase Nueva App: refs=%+v criteria=%+v", spec.ContextRefs, spec.AcceptanceCriteria)
+	}
+	if !serviceGoalContextRefInSetForTestV0(spec.ContextRefs, "technical_stack", "technical-language-go") ||
+		!serviceGoalArtifactContractInSetForTestV0(spec.ArtifactContracts, "technical_stack_manifest") ||
+		!serviceStringsContainPartV0(spec.AcceptanceCriteria, "Stack tecnico solicitado: lenguaje=go") {
+		t.Fatalf("goal spec sin contrato tecnico: refs=%+v artifacts=%+v criteria=%+v", spec.ContextRefs, spec.ArtifactContracts, spec.AcceptanceCriteria)
 	}
 	if _, err := store.LoadRunV0(context.Background(), result.Run.RunID); err != nil {
 		t.Fatalf("run no persistida: %v", err)
@@ -489,7 +495,12 @@ func TestObserveAppDirectorGoalV0PersisteResultadoCompletoYClosure(t *testing.T)
 		Status:          orquestagoal.GoalStatusCompleteV0,
 		GoalRef:         spec.GoalRef,
 		ExternalGoalRef: started.ExternalGoalRef,
+		Summary:         "Entrega Go con API HTTP.",
 		ArtifactRefs:    serviceRequiredArtifactRefsForGoalSpecV0(spec),
+		ArtifactPaths: []string{
+			"generated-apps/agenda/go.mod",
+			"generated-apps/agenda/main.go",
+		},
 		RequiredTestResults: serviceRequiredTestResultsForGoalSpecV0(
 			spec,
 			"evidence-ref-service-goal-required-test-passed",
@@ -573,6 +584,52 @@ func TestObserveAppDirectorGoalV0BloqueaRunSiFaltanRequiredTestsV0(t *testing.T)
 	}
 	if !serviceHasEventTypeV0(sink.EventsV0(), orquestacoreworkflow.OrchestrationEventRunBlockedV0) {
 		t.Fatalf("eventos sin RunBlocked: %+v", sink.EventsV0())
+	}
+}
+
+func TestObserveAppDirectorGoalV0BloqueaRunSiStackTecnicoContradiceAppSpecV0(t *testing.T) {
+	store, sink, goalStates, launcher, started := serviceStartGoalFirstForObserveTestV0(t)
+	spec := launcher.specs[0]
+	observer := serviceGoalObserverForTestV0{result: orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusCompleteV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: started.ExternalGoalRef,
+		Summary:         "Entrega Python con API HTTP.",
+		ArtifactRefs:    serviceRequiredArtifactRefsForGoalSpecV0(spec),
+		ArtifactPaths: []string{
+			"generated-apps/agenda/pyproject.toml",
+			"generated-apps/agenda/run.py",
+			"generated-apps/agenda/tests/test_http_api.py",
+		},
+		RequiredTestResults: serviceRequiredTestResultsForGoalSpecV0(
+			spec,
+			"evidence-ref-service-goal-required-test-passed",
+		),
+		EvidenceRefs: spec.ClosurePolicy.RequiredEvidenceRefs,
+	}}
+
+	result, err := ObserveAppDirectorGoalV0(
+		context.Background(),
+		ObserveAppDirectorGoalRequestV0{RunRef: spec.RunRef},
+		StartAppDirectorPortsV0{
+			RunStore:             store,
+			EventSink:            sink,
+			GoalStateStore:       goalStates,
+			GoalObserver:         observer,
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if result.Closure.Accepted ||
+		!result.Closure.NeedsRework ||
+		result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 ||
+		len(result.Closure.Issues) == 0 ||
+		result.Closure.Issues[0].Code != appDirectorGoalTechnicalLanguageMismatchV0 ||
+		result.Closure.Issues[0].Field != "technical.language" {
+		t.Fatalf("result=%+v", result)
 	}
 }
 
@@ -1225,6 +1282,27 @@ func serviceGoalContextRefInSetForTestV0(
 ) bool {
 	for _, candidate := range refs {
 		if candidate.Kind == kind && candidate.Ref == ref {
+			return true
+		}
+	}
+	return false
+}
+
+func serviceGoalArtifactContractInSetForTestV0(
+	contracts []orquestagoal.GoalArtifactContractV0,
+	artifactType string,
+) bool {
+	for _, candidate := range contracts {
+		if candidate.ArtifactType == artifactType {
+			return true
+		}
+	}
+	return false
+}
+
+func serviceStringsContainPartV0(values []string, part string) bool {
+	for _, value := range values {
+		if strings.Contains(value, part) {
 			return true
 		}
 	}

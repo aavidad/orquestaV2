@@ -143,7 +143,7 @@ func ObserveAppDirectorGoalV0(
 		orquestagoal.GoalWorkObserveRequestV0{RunRef: request.RunRef},
 		orquestagoal.GoalWorkLifecyclePortsV0{
 			Observer:         ports.GoalObserver,
-			ClosureValidator: ports.GoalClosureValidator,
+			ClosureValidator: appDirectorGoalClosureValidatorV0{Base: ports.GoalClosureValidator},
 			StateStore:       ports.GoalStateStore,
 		},
 	)
@@ -774,6 +774,13 @@ func buildStartAppDirectorGoalWorkSpecV0(
 	token := appDirectorGoalSafeTokenV0(prepared.Run.RunID, request.RunRef, spec.RequestID, spec.App.Slug)
 	writeSetPath := "generated-apps/" + appDirectorGoalSafeTokenV0(spec.App.Slug, spec.RequestID, token)
 	evidenceRef := "evidence-ref-app-director-goal-first-v0"
+	contextRefs := []orquestagoal.GoalContextRefV0{
+		{Kind: "request", Ref: spec.RequestID, Purpose: "Solicitud publica normalizada", Required: true},
+		{Kind: "run", Ref: prepared.Run.RunID, Purpose: "Run persistida por Orquesta", Required: true},
+		{Kind: "app_spec", Ref: spec.SpecID, Purpose: "Contrato AppSpecV0 validado", Required: true},
+		{Kind: "phase_policy", Ref: startAppDirectorGoalNewAppPhasePolicyRefV0, Purpose: "Politica de progreso temprano para evitar timeout inicial sin artefactos.", Required: true},
+	}
+	contextRefs = append(contextRefs, startAppDirectorGoalTechnicalContextRefsV0(spec)...)
 	return orquestagoal.NormalizeGoalWorkSpecV0(orquestagoal.GoalWorkSpecV0{
 		GoalRef:         "goal-ref-app-director-" + token,
 		RequestRef:      spec.RequestID,
@@ -783,12 +790,7 @@ func buildStartAppDirectorGoalWorkSpecV0(
 		WorkProfileKind: "implementation",
 		Objective:       startAppDirectorGoalObjectiveV0(spec),
 		DirectorKind:    orquestagoal.GoalDirectorKindCodexGoalV0,
-		ContextRefs: []orquestagoal.GoalContextRefV0{
-			{Kind: "request", Ref: spec.RequestID, Purpose: "Solicitud publica normalizada", Required: true},
-			{Kind: "run", Ref: prepared.Run.RunID, Purpose: "Run persistida por Orquesta", Required: true},
-			{Kind: "app_spec", Ref: spec.SpecID, Purpose: "Contrato AppSpecV0 validado", Required: true},
-			{Kind: "phase_policy", Ref: startAppDirectorGoalNewAppPhasePolicyRefV0, Purpose: "Politica de progreso temprano para evitar timeout inicial sin artefactos.", Required: true},
-		},
+		ContextRefs:     contextRefs,
 		RuleRefs: []orquestagoal.GoalRuleRefV0{
 			{Kind: "repo", Ref: "AGENTS.md", Enforcement: orquestagoal.GoalRuleEnforcementHardV0},
 			{Kind: "docs", Ref: "docs/orquesta_goal_first_codex_2026-06-25.md", Enforcement: orquestagoal.GoalRuleEnforcementAdvisoryV0},
@@ -801,10 +803,7 @@ func buildStartAppDirectorGoalWorkSpecV0(
 		}},
 		RequiredTests:      startAppDirectorGoalRequiredTestsV0(token, writeSetPath, spec),
 		AcceptanceCriteria: startAppDirectorGoalAcceptanceCriteriaV0(spec, writeSetPath),
-		ArtifactContracts: []orquestagoal.GoalArtifactContractV0{
-			{ArtifactRef: "artifact-ref-" + token + "-source", ArtifactType: "source_tree", Required: true},
-			{ArtifactRef: "artifact-ref-" + token + "-handoff", ArtifactType: "handoff_report", Required: true},
-		},
+		ArtifactContracts:  startAppDirectorGoalArtifactContractsV0(token, spec),
 		EvidenceRefs: compactStartAppDirectorStringsV0(append(
 			[]string{evidenceRef},
 			prepared.EvidenceRefs...,
@@ -817,6 +816,45 @@ func buildStartAppDirectorGoalWorkSpecV0(
 		},
 		ReworkPolicy: startAppDirectorGoalReworkPolicyV0(),
 	})
+}
+
+func startAppDirectorGoalTechnicalContextRefsV0(spec orquestafactory.AppSpecV0) []orquestagoal.GoalContextRefV0 {
+	var refs []orquestagoal.GoalContextRefV0
+	if language := strings.TrimSpace(spec.Technical.Language); language != "" {
+		refs = append(refs, orquestagoal.GoalContextRefV0{
+			Kind:     "technical_stack",
+			Ref:      "technical-language-" + appDirectorGoalSafeTokenV0(language),
+			Purpose:  "Lenguaje solicitado por AppSpecV0: " + language,
+			Required: true,
+		})
+	}
+	if framework := strings.TrimSpace(spec.Technical.Framework); framework != "" {
+		refs = append(refs, orquestagoal.GoalContextRefV0{
+			Kind:     "technical_stack",
+			Ref:      "technical-framework-" + appDirectorGoalSafeTokenV0(framework),
+			Purpose:  "Framework solicitado por AppSpecV0: " + framework,
+			Required: true,
+		})
+	}
+	return refs
+}
+
+func startAppDirectorGoalArtifactContractsV0(
+	token string,
+	spec orquestafactory.AppSpecV0,
+) []orquestagoal.GoalArtifactContractV0 {
+	contracts := []orquestagoal.GoalArtifactContractV0{
+		{ArtifactRef: "artifact-ref-" + token + "-source", ArtifactType: "source_tree", Required: true},
+		{ArtifactRef: "artifact-ref-" + token + "-handoff", ArtifactType: "handoff_report", Required: true},
+	}
+	if appDirectorGoalTechnicalStackDeclaredV0(spec) {
+		contracts = append(contracts, orquestagoal.GoalArtifactContractV0{
+			ArtifactRef:  "artifact-ref-" + token + "-technical-stack",
+			ArtifactType: "technical_stack_manifest",
+			Required:     true,
+		})
+	}
+	return contracts
 }
 
 func startAppDirectorGoalFirstResultV0(
@@ -860,6 +898,7 @@ func startAppDirectorGoalAcceptanceCriteriaV0(
 		"Crear la app bajo el write-set autorizado " + writeSetPath + ".",
 		"Nombre: " + spec.App.Nombre + ". Tipo: " + spec.App.TipoApp + ". Plataformas: " + startAppDirectorGoalJoinV0(spec.Platforms) + ".",
 		"Arquitectura solicitada: " + spec.Architecture.Patron + ". Mantener dominio/aplicacion, puertos, adaptadores y bootstrap separados si el patron no lo contradice.",
+		"Stack tecnico solicitado: lenguaje=" + startAppDirectorGoalValueOrDefaultV0(spec.Technical.Language) + "; framework=" + startAppDirectorGoalValueOrDefaultV0(spec.Technical.Framework) + "; restricciones=" + startAppDirectorGoalJoinV0(spec.Technical.Restrictions) + "; preferencias=" + startAppDirectorGoalJoinV0(spec.Technical.Preferences) + ". Si lenguaje o framework estan declarados, son contrato verificable: entregar manifiesto tecnico y artefactos coherentes.",
 		"Objetivo funcional: " + spec.App.Objetivo,
 		"Datos: persistencia=" + startAppDirectorGoalBoolV0(spec.Data.PersistenceRequired) + "; necesidades=" + startAppDirectorGoalJoinV0(spec.Data.Needs) + "; sensibilidad=" + spec.Data.Sensitivity + "; storage=" + startAppDirectorGoalStorageSummaryV0(spec.Data.Storage) + "; tipos=" + startAppDirectorGoalDataTypesSummaryV0(spec.Data.Types) + ".",
 		"Integraciones requeridas: " + startAppDirectorGoalConnectorsSummaryV0(spec.Connectors.Required) + ". Integraciones opcionales: " + startAppDirectorGoalConnectorsSummaryV0(spec.Connectors.Optional) + ".",
@@ -886,6 +925,7 @@ func startAppDirectorGoalRequiredTestsV0(
 		AcceptanceCriteria: compactStartAppDirectorStringsV0([]string{
 			"El arbol fuente requerido existe bajo " + writeSetPath + ".",
 			"La app cumple el contrato funcional: " + strings.TrimSpace(spec.App.Objetivo),
+			"La app materializa el stack tecnico declarado: lenguaje=" + startAppDirectorGoalValueOrDefaultV0(spec.Technical.Language) + "; framework=" + startAppDirectorGoalValueOrDefaultV0(spec.Technical.Framework) + ".",
 			"Las pruebas declaradas para calidad=" + strings.TrimSpace(spec.Quality.Tests) + " pasan o quedan justificadas como no aplicables con evidencia local.",
 		}),
 		EvidenceRefs: []string{"evidence-ref-app-director-goal-required-test-v0"},
@@ -917,6 +957,18 @@ func startAppDirectorGoalBoolV0(value bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+func startAppDirectorGoalValueOrDefaultV0(value string) string {
+	if trimmed := strings.TrimSpace(value); trimmed != "" {
+		return trimmed
+	}
+	return "sin_declarar"
+}
+
+func appDirectorGoalTechnicalStackDeclaredV0(spec orquestafactory.AppSpecV0) bool {
+	return strings.TrimSpace(spec.Technical.Language) != "" ||
+		strings.TrimSpace(spec.Technical.Framework) != ""
 }
 
 func startAppDirectorGoalStorageSummaryV0(values []orquestafactory.DataStorageSpecV0) string {

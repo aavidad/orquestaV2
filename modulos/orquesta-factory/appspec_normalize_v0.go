@@ -49,6 +49,15 @@ func (n appSpecNormalizerV0) architecture() ArchitectureV0 {
 	}
 }
 
+func (n appSpecNormalizerV0) technical() TechnicalSpecV0 {
+	return TechnicalSpecV0{
+		Language:     strings.TrimSpace(n.req.PreferenciasTecnicas.Lenguaje),
+		Framework:    strings.TrimSpace(n.req.PreferenciasTecnicas.Framework),
+		Restrictions: emptyStringsV0(compactUniqueV0(n.req.PreferenciasTecnicas.Restricciones)),
+		Preferences:  emptyStringsV0(compactUniqueV0(n.req.PreferenciasTecnicas.Preferencias)),
+	}
+}
+
 func architectureModulesV0(pattern string) []ModuleBoundaryV0 {
 	modules := []ModuleBoundaryV0{
 		{Nombre: "domain", Responsabilidad: "Entidades, value objects y reglas puras sin framework, IO ni adaptadores.", Puertos: []string{"domain_services"}},

@@ -187,6 +187,8 @@ Campos:
 - `app`: nombre, slug, objetivo, descripcion, tipo y usuarios objetivo.
 - `scope`: objetivos, fuera de alcance, supuestos y preguntas abiertas.
 - `architecture`: patron, modulos iniciales, fronteras y contratos esperados.
+- `technical`: lenguaje, framework, restricciones y preferencias tecnicas
+  normalizadas desde `preferencias_tecnicas`.
 - `i18n`: enabled, default_locale, locales y justificacion si se desactiva.
 - `data`: necesidades de persistencia expresadas como conector.
 - `connectors`: conectores requeridos y opcionales.
@@ -211,6 +213,9 @@ Invariantes:
 - `architecture.modulos_iniciales` solo propone fronteras; no genera codigo.
 - `architecture.modulos_iniciales` debe incluir domain, application, ports,
   adapters y bootstrap.
+- Si `technical.language` o `technical.framework` estan declarados, las
+  composiciones que generen codigo deben tratarlos como contrato verificable o
+  declarar degradacion/rework; no pueden desaparecer entre request y cierre.
 - `architecture.fronteras` debe declarar que domain/application no importan
   adaptadores ni tecnologias externas, que los handlers son finos y que el
   wiring vive en bootstrap/cmd.

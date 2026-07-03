@@ -12,6 +12,7 @@ type AppSpecV0 struct {
 	App              AppInfoV0           `json:"app"`
 	Scope            ScopeV0             `json:"scope"`
 	Architecture     ArchitectureV0      `json:"architecture"`
+	Technical        TechnicalSpecV0     `json:"technical"`
 	I18N             I18NSpecV0          `json:"i18n"`
 	Data             DataSpecV0          `json:"data"`
 	Connectors       ConnectorsSpecV0    `json:"connectors"`
@@ -45,6 +46,13 @@ type ArchitectureV0 struct {
 	ModulosIniciales   []ModuleBoundaryV0 `json:"modulos_iniciales"`
 	Fronteras          []string           `json:"fronteras"`
 	ContratosEsperados []string           `json:"contratos_esperados"`
+}
+
+type TechnicalSpecV0 struct {
+	Language     string   `json:"language,omitempty"`
+	Framework    string   `json:"framework,omitempty"`
+	Restrictions []string `json:"restrictions,omitempty"`
+	Preferences  []string `json:"preferences,omitempty"`
 }
 
 type ModuleBoundaryV0 struct {

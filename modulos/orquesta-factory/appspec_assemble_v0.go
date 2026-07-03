@@ -19,6 +19,7 @@ func assembleAppSpecV0(req AppSpecRequestV0, now time.Time) AppSpecV0 {
 		App:              normalizer.app(),
 		Scope:            normalizer.scope(),
 		Architecture:     normalizer.architecture(),
+		Technical:        normalizer.technical(),
 		I18N:             normalizer.i18n(),
 		Data:             normalizer.data(),
 		Connectors:       normalizer.connectors(),

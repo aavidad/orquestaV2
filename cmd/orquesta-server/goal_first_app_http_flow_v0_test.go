@@ -1003,8 +1003,9 @@ func (backend *goalFirstHTTPBackendForTestV0) ObserveCodexGoalV0(
 		Status:          orquestagoal.GoalStatusCompleteV0,
 		GoalRef:         request.GoalRef,
 		ExternalGoalRef: request.ExternalGoalRef,
-		Summary:         "goal-first fake completo",
+		Summary:         "goal-first fake completo con app Go net/http",
 		ArtifactRefs:    goalFirstHTTPRequiredArtifactRefsForTestV0(backend.packet),
+		ArtifactPaths:   goalFirstHTTPArtifactPathsForTestV0(backend.packet),
 		RequiredTestResults: goalFirstHTTPRequiredTestResultsForTestV0(
 			backend.packet,
 			"evidence-ref-http-goal-first-required-test",
@@ -1014,6 +1015,26 @@ func (backend *goalFirstHTTPBackendForTestV0) ObserveCodexGoalV0(
 			backend.packet.ClosurePolicy.RequiredEvidenceRefs...,
 		),
 	}, nil
+}
+
+func goalFirstHTTPArtifactPathsForTestV0(
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+) []string {
+	if strings.TrimSpace(packet.WorkKind) != "new_app" {
+		return nil
+	}
+	if len(packet.WriteSet) == 0 {
+		return nil
+	}
+	scopePath := filepath.ToSlash(strings.Trim(filepath.Clean(strings.TrimSpace(packet.WriteSet[0].Path)), "/"))
+	if scopePath == "" || scopePath == "." || strings.HasPrefix(scopePath, "../") {
+		return nil
+	}
+	return []string{
+		scopePath + "/go.mod",
+		scopePath + "/main.go",
+		scopePath + "/docs/technical_stack.md",
+	}
 }
 
 func writeGoalFirstHTTPDomainArtifactsForTestV0(

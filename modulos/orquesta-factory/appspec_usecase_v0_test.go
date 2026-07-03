@@ -136,6 +136,10 @@ func TestSolicitarNuevaAppV0HonorsExplicitOptions(t *testing.T) {
 func TestSolicitarNuevaAppV0PreservaDatosExpertosArquitecturaYAccesibilidadV0(t *testing.T) {
 	req := validMinimalRequestV0()
 	req.PreferenciasTecnicas.Arquitectura = "event_driven"
+	req.PreferenciasTecnicas.Lenguaje = "Go"
+	req.PreferenciasTecnicas.Framework = "net/http"
+	req.PreferenciasTecnicas.Restricciones = []string{"sin ORM pesado"}
+	req.PreferenciasTecnicas.Preferencias = []string{"render server-side"}
 	req.Datos = DatosRequestV0{
 		DBRequired: true,
 		TiposDetallados: []DataTypeRequestV0{
@@ -205,6 +209,12 @@ func TestSolicitarNuevaAppV0PreservaDatosExpertosArquitecturaYAccesibilidadV0(t 
 		!factoryStringInSetV0(spec.Architecture.ContratosEsperados, "ArquitecturaLimpiaSegunPatron v0") ||
 		factoryStringInSetV0(spec.Architecture.ContratosEsperados, "ArquitecturaHexagonalEstricta v0") {
 		t.Fatalf("architecture=%+v", spec.Architecture)
+	}
+	if spec.Technical.Language != "Go" ||
+		spec.Technical.Framework != "net/http" ||
+		!factoryStringInSetV0(spec.Technical.Restrictions, "sin ORM pesado") ||
+		!factoryStringInSetV0(spec.Technical.Preferences, "render server-side") {
+		t.Fatalf("technical=%+v", spec.Technical)
 	}
 	if len(spec.Data.Types) != 2 ||
 		spec.Data.Types[0].Nombre != "Pisos" ||

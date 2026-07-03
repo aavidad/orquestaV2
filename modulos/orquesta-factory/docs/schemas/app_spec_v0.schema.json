@@ -16,6 +16,7 @@
     "app",
     "scope",
     "architecture",
+    "technical",
     "i18n",
     "data",
     "connectors",
@@ -286,6 +287,28 @@
           }
         }
       ]
+    },
+    "technical": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "language": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "framework": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "restrictions": {
+          "$ref": "#/$defs/string_list"
+        },
+        "preferences": {
+          "$ref": "#/$defs/string_list"
+        }
+      }
     },
     "i18n": {
       "type": "object",
