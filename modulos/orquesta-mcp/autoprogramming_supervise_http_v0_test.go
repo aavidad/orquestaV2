@@ -20,7 +20,7 @@ func TestMCPAutoprogrammingSuperviseDescriptorV0DeclaraEvidenciaEnErrores(t *tes
 		!strings.Contains(descriptor.Output, "repair_run_refs?") ||
 		!strings.Contains(descriptor.Output, "idempotency_key?") ||
 		!strings.Contains(descriptor.Output, "next_actions?") ||
-		!strings.Contains(descriptor.Output, "diagnostics?") {
+		!strings.Contains(descriptor.Output, "diagnostics?[]{code,scope?,message?,evidence_refs?}") {
 		t.Fatalf("descriptor autoprogramming.supervise debe declarar evidencia en errores: %+v", descriptor)
 	}
 }

@@ -1374,6 +1374,14 @@ de `orquesta.autoprogramming.supervise.v0` declaran tambien `idempotency_key`,
 el resultado compacto de `runs.supervisor` que transporta. Evidencia:
 `TestMCPAutoprogrammingSuperviseDescriptorV0DeclaraEvidenciaEnErrores`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 36c: la misma fachada
+`orquesta.autoprogramming.supervise.v0` publica ahora la forma tipada de
+`diagnostics` (`code/scope/message/evidence_refs`) en descriptor y contrato,
+alineandose con `orquesta.runs.supervisor.v0` y evitando que clientes compactos
+pierdan causa/evidencia de aceptacion en background, error de executor o rework
+residente. Evidencia:
+`TestMCPAutoprogrammingSuperviseDescriptorV0DeclaraEvidenciaEnErrores`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 37: `autoprogramming/status`
 publica `evidence_refs` de primer nivel y en diagnosticos para errores de
 executor y timeout HTTP, y su descriptor declara esa evidencia en la rama de

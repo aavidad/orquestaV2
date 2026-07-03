@@ -20,7 +20,7 @@ func MCPAutoprogrammingSuperviseDescriptorV0() MCPAutoprogrammingSuperviseToolDe
 		Name:        MCPAutoprogrammingSuperviseToolNameV0,
 		Version:     MCPAutoprogrammingSuperviseToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,director_execution_mode?:goal_first|legacy_director_loop,run_ref?,queue_ref?,max_ticks?,resident_mode?,operator_advice?}",
-		Output:      "ok:{run_ref,stop_reason,ticks,last,history?,evidence_refs?,idempotency_key?,operation_ref?,repair_run_refs?,operator_advice?,diagnostics?,next_actions?}|error:{errores_publicos,evidence_refs?,idempotency_key?,operation_ref?,repair_run_refs?,operator_advice?,diagnostics?,next_actions?}",
+		Output:      "ok:{run_ref,stop_reason,ticks,last,history?,evidence_refs?,idempotency_key?,operation_ref?,repair_run_refs?,operator_advice?,diagnostics?[]{code,scope?,message?,evidence_refs?},next_actions?}|error:{errores_publicos,evidence_refs?,idempotency_key?,operation_ref?,repair_run_refs?,operator_advice?,diagnostics?[]{code,scope?,message?,evidence_refs?},next_actions?}",
 		ResourceURI: MCPAutoprogrammingSuperviseResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
