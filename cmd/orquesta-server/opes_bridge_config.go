@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -138,8 +139,14 @@ func orquestaBaseURLFromEnvOrStateOrFallbackV0(
 	dryRun bool,
 	fallback string,
 ) (string, error) {
+	if value := strings.TrimSpace(os.Getenv(envOrquestaServerURLV0)); value != "" {
+		return value, nil
+	}
 	if value := strings.TrimSpace(os.Getenv(envOrquestaBaseURLV0)); value != "" {
 		return value, nil
+	}
+	if value, ok, err := orquestaBaseURLFromRuntimeDirEnvV0(); ok || err != nil {
+		return value, err
 	}
 	if value := strings.TrimSpace(fallback); value != "" {
 		return value, nil
@@ -159,6 +166,26 @@ func orquestaBaseURLFromEnvOrStateOrFallbackV0(
 		return "", fmt.Errorf("estado de servidor sin addr")
 	}
 	return "http://" + strings.TrimSpace(state.Addr), nil
+}
+
+func orquestaBaseURLFromRuntimeDirEnvV0() (string, bool, error) {
+	runtimeDir := strings.TrimSpace(os.Getenv(envOrquestaRuntimeDirV0))
+	if runtimeDir == "" {
+		return "", false, nil
+	}
+	path := filepath.Join(runtimeDir, "base_url.txt")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", false, nil
+		}
+		return "", true, fmt.Errorf("ORQUESTA_RUNTIME_DIR/base_url.txt no legible")
+	}
+	value := strings.TrimSpace(string(data))
+	if value == "" {
+		return "", false, nil
+	}
+	return value, true, nil
 }
 
 func firstNonEmptyEnvV0(keys ...string) string {

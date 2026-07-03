@@ -716,6 +716,15 @@ gestionado. Evidencia:
 `TestSmokesOPESLargosAceptanEndpointOrquestaGestionadoV0` y
 `TestSmokeOPESDerivativesRESTWrapperPreflightRealBloqueaSinOrquestaBaseURLV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 3: el bridge OPES residente en
+`cmd/orquesta-server` deja de exigir solo `ORQUESTA_BASE_URL` cuando no puede
+derivar estado; resuelve endpoint por `ORQUESTA_SERVER_URL`, compatibilidad
+`ORQUESTA_BASE_URL` o `ORQUESTA_RUNTIME_DIR/base_url.txt` antes del fallback de
+arranque/estado. Evidencia:
+`TestOPESBridgeLoopConfigUsaEndpointGestionadoV0`,
+`TestOPESBridgeLoopConfigUsaBaseURLDeRuntimeGestionadoV0` y guardas del
+registry de env del servidor.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y

@@ -6,7 +6,9 @@ import (
 )
 
 const (
-	envOrquestaBaseURLV0 = "ORQUESTA_BASE_URL"
+	envOrquestaServerURLV0  = "ORQUESTA_SERVER_URL"
+	envOrquestaBaseURLV0    = "ORQUESTA_BASE_URL"
+	envOrquestaRuntimeDirV0 = "ORQUESTA_RUNTIME_DIR"
 
 	envServerAddrV0                                         = "ORQUESTA_SERVER_ADDR"
 	envServerStateDirV0                                     = "ORQUESTA_SERVER_STATE_DIR"
@@ -277,6 +279,21 @@ type serverEnvSettingMetadataV0 struct {
 }
 
 var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
+	envOrquestaServerURLV0: {
+		Scope:       "server_endpoint",
+		Label:       "URL servidor Orquesta",
+		Description: "Endpoint gestionado del servidor Orquesta para wrappers y conectores operadores.",
+	},
+	envOrquestaBaseURLV0: {
+		Scope:       "server_endpoint",
+		Label:       "Base URL Orquesta",
+		Description: "Alias historico de endpoint Orquesta mantenido por compatibilidad con conectores existentes.",
+	},
+	envOrquestaRuntimeDirV0: {
+		Scope:       "server_endpoint",
+		Label:       "Runtime Orquesta",
+		Description: "Directorio runtime gestionado desde el que los conectores pueden leer base_url.txt durable.",
+	},
 	envServerAuditFileV0: {
 		Scope:       "audit",
 		Label:       "Archivo audit",

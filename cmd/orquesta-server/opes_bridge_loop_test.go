@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -49,6 +51,49 @@ func TestOPESBridgeLoopConfigUsesServerFallbackV0(t *testing.T) {
 		config.Loop.InitialDelay != time.Second ||
 		config.Loop.MaxTicks != 2 {
 		t.Fatalf("config=%+v", config)
+	}
+}
+
+func TestOPESBridgeLoopConfigUsaEndpointGestionadoV0(t *testing.T) {
+	t.Setenv("ORQUESTA_SERVER_URL", "http://127.0.0.1:19101")
+	t.Setenv("ORQUESTA_BASE_URL", "http://127.0.0.1:19102")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_ENABLED", "1")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_CONFIRM", "1")
+	t.Setenv("ORQUESTA_OPES_TEMPORAL_CONFIRM", "1")
+	t.Setenv("ORQUESTA_OPES_BASE_URL", "http://127.0.0.1:18082")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_JOB_REF", "job-ref-endpoint-gestionado-001")
+
+	config, err := opesBridgeLoopConfigFromEnvV0("http://127.0.0.1:19103")
+
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	if config.DrainConfig.OrquestaBaseURL != "http://127.0.0.1:19101" {
+		t.Fatalf("orquesta base url=%s", config.DrainConfig.OrquestaBaseURL)
+	}
+}
+
+func TestOPESBridgeLoopConfigUsaBaseURLDeRuntimeGestionadoV0(t *testing.T) {
+	runtimeDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(runtimeDir, "base_url.txt"), []byte("http://127.0.0.1:19111\n"), 0o600); err != nil {
+		t.Fatalf("write base_url: %v", err)
+	}
+	t.Setenv("ORQUESTA_SERVER_URL", "")
+	t.Setenv("ORQUESTA_BASE_URL", "")
+	t.Setenv("ORQUESTA_RUNTIME_DIR", runtimeDir)
+	t.Setenv("ORQUESTA_OPES_BRIDGE_ENABLED", "1")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_CONFIRM", "1")
+	t.Setenv("ORQUESTA_OPES_TEMPORAL_CONFIRM", "1")
+	t.Setenv("ORQUESTA_OPES_BASE_URL", "http://127.0.0.1:18082")
+	t.Setenv("ORQUESTA_OPES_BRIDGE_JOB_REF", "job-ref-runtime-endpoint-001")
+
+	config, err := opesBridgeLoopConfigFromEnvV0("http://127.0.0.1:19112")
+
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	if config.DrainConfig.OrquestaBaseURL != "http://127.0.0.1:19111" {
+		t.Fatalf("orquesta base url=%s", config.DrainConfig.OrquestaBaseURL)
 	}
 }
 
