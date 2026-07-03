@@ -162,7 +162,7 @@ func MCPDirectorStatsDescriptorV0() MCPDirectorStatsToolDescriptorV0 {
 		Name:        MCPDirectorStatsToolNameV0,
 		Version:     MCPDirectorStatsToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,app_ref?,external_job_ref?,occurred_at?,include_process_refs?,include_agent_progress?,include_agent_usage?}",
-		Output:      "ok:{run_ref,external_job?{status,status_reason?,issue_refs?,evidence_refs?,diagnostics?},goal?{goal_ref,status,closure_status?,issue_codes?,evidence_refs?},stats{progress,closure},decision_context,ops_snapshot}|error:{errores_publicos}",
+		Output:      "ok:{run_ref,external_job?{status,status_reason?,issue_refs?,evidence_refs?,diagnostics?},goal?{goal_ref,status,closure_status?,artifact_refs?,domain_receipt_refs?,expected_terminal_receipt_refs?,issue_codes?,evidence_refs?},stats{progress,closure},decision_context,ops_snapshot}|error:{errores_publicos}",
 		ResourceURI: MCPDirectorStatsResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",

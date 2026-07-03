@@ -1487,6 +1487,14 @@ errores de input, contrato externo y validacion GoalSpec conservan ahora
 `TestBuildExternalWorkDryRunV0RechazaEntradaAmbiguaV0` y
 `TestMCPExternalWorkDryRunDescriptorV0DeclaraEvidenciaEnError`.
 
+Avance BUG-ORQ-20260701-065/085/088 2026-07-03 tarde 48:
+`orquesta.director.stats.v0` ya proyectaba en `goal` los artefactos,
+`domain_receipt_refs` y `expected_terminal_receipt_refs`, pero el descriptor
+compacto solo declaraba issue/evidence. El descriptor y `docs/contratos.md`
+publican ahora esas refs para que clientes compactos puedan decidir `runs/control`,
+reparacion de receipt o rework por write-set sin inferirlo desde logs. Evidencia:
+`TestMCPDirectorStatsToolDescriptorV0ExponeContratoCompacto`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

@@ -30,7 +30,7 @@ func TestMCPDirectorStatsToolDescriptorV0ExponeContratoCompacto(t *testing.T) {
 	}
 	for _, want := range []string{
 		"external_job?{status,status_reason?,issue_refs?,evidence_refs?,diagnostics?}",
-		"goal?{goal_ref,status,closure_status?,issue_codes?,evidence_refs?}",
+		"goal?{goal_ref,status,closure_status?,artifact_refs?,domain_receipt_refs?,expected_terminal_receipt_refs?,issue_codes?,evidence_refs?}",
 	} {
 		if !strings.Contains(descriptor.Output, want) {
 			t.Fatalf("descriptor director.stats no declara evidencia accionable %q: %s", want, descriptor.Output)

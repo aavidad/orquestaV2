@@ -309,7 +309,9 @@ Campos:
       change_ref, run_ref, task_ref, agent_ref, status, status_reason,
       delivery_refs, issue_refs, evidence_refs y diagnostics publicos
     goal: proyeccion compacta opcional con `goal_ref`, `external_goal_ref`,
-      status, cierre y evidencias si la composicion inyecta un `GoalStateStore`
+      status, cierre, `artifact_refs`, `domain_receipt_refs`,
+      `expected_terminal_receipt_refs`, issues y evidencias si la composicion
+      inyecta un `GoalStateStore`
     decision_context
 Invariantes:
   - Si llega `external_job_ref`, MCP delega la resolucion en un puerto
