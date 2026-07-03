@@ -283,3 +283,19 @@ conservadas como evidencia.
 **Pendiente de operador:** activar timer nightly (runbook
 `docs/runbooks/smoke_nightly_2026-07.md`); triaje del WIP remoto de 71
 ficheros; ventana de observación §9 de dos semanas una vez el nightly corra.
+
+### 2026-07-04 — ola paralela de cierre: T275+T276+T278
+
+Tres pilotajes simultáneos (doctrina de paralelización, write-sets
+module-disjuntos):
+- T275 (puerto 36361, rama `pericial/pilot-t275`): fix BUG-153 —
+  reconciliación de goals idle por result materializado, decaimiento con
+  causa y terminal visible. El fix de autonomía definitivo.
+- T276 (puerto 37149, rama `pericial/pilot-t276`): fix BUG-151 — `Detail`
+  saneado en issues de launch receipt hasta las proyecciones.
+- T278 (puerto 43787, rama `pericial/pilot-t278`): CTX-TASK-801B —
+  `query_kind=repo_map` en el broker central de contexto.
+En cola para la ola siguiente (cruzan write-sets con esta): BUG-152
+(diagnóstico etiquetas backlog), CTX-TASK-801A (presupuesto de contexto),
+801C (prompt estable para cache), 801D (evaluación LLMLingua opt-in).
+Verificación/integración: receta de esta bitácora.
