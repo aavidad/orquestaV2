@@ -159,6 +159,11 @@ func TestMCPServerShutdownHTTPHandlerV0NoPropagaErrorNoCatalogado(t *testing.T) 
 		CorrelationID: "corr-shutdown-http-error-001",
 		Forced:        true,
 		RequestedBy:   "orquesta-director",
+		EvidenceRefs: []string{
+			"evidence-ref-shutdown-http-error-001",
+			"",
+			"evidence-ref-shutdown-http-error-001",
+		},
 	})
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, MCPServerShutdownHTTPPathV0, body)
@@ -177,6 +182,8 @@ func TestMCPServerShutdownHTTPHandlerV0NoPropagaErrorNoCatalogado(t *testing.T) 
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "server_shutdown_http_error" ||
 		result.Errores[0].Message != "server_shutdown_executor_error" ||
+		len(result.EvidenceRefs) != 1 ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-shutdown-http-error-001") ||
 		strings.Contains(result.Errores[0].Message, "/home/alberto") ||
 		strings.Contains(result.Errores[0].Message, "sk-123456789") {
 		t.Fatalf("result=%+v", result)

@@ -1130,6 +1130,13 @@ checkpoint, cleanup o shutdown gobernado antes de llegar al caso de uso.
 Evidencia: `TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0` y
 `TestMCPServerShutdownToolExecutorV0ErrorConservaEvidenciaV0`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 33: los transportes HTTP y MCP
+de `server.shutdown` quedan cubiertos para errores de executor: ambos devuelven
+mensaje publico saneado sin rutas/tokens y conservan `evidence_refs` compactas
+del request. Evidencia:
+`TestMCPServerShutdownHTTPHandlerV0NoPropagaErrorNoCatalogado` y
+`TestMCPTransportV0ServerShutdownDevuelvePayloadPublicoSiExecutorFalla`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

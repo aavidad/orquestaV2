@@ -79,6 +79,10 @@ func TestMCPTransportV0ServerShutdownDevuelvePayloadPublicoSiExecutorFalla(t *te
 			CorrelationID: "corr-shutdown-transport-error-001",
 			Forced:        true,
 			RequestedBy:   "orquesta-director",
+			EvidenceRefs: []string{
+				"evidence-ref-shutdown-transport-error-001",
+				"evidence-ref-shutdown-transport-error-001",
+			},
 		},
 	)
 	if err != nil {
@@ -92,6 +96,8 @@ func TestMCPTransportV0ServerShutdownDevuelvePayloadPublicoSiExecutorFalla(t *te
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "server_shutdown_executor_error" ||
 		result.Errores[0].Message != "server_shutdown_executor_error" ||
+		len(result.EvidenceRefs) != 1 ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-shutdown-transport-error-001") ||
 		strings.Contains(result.Errores[0].Message, "/root/") ||
 		strings.Contains(result.Errores[0].Message, "sk-123456789") {
 		t.Fatalf("result=%+v", result)
