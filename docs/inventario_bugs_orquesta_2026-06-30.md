@@ -751,6 +751,13 @@ Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 6: la politica de escalado de
 en señal cooperativa prematura. Evidencia:
 `TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 7: la tool MCP
+`orquesta.server.shutdown.v0` eleva las evidencias de `active_works` al campo
+`evidence_refs` superior del resultado, manteniendo tambien el detalle por
+trabajo activo. Asi clientes MCP compactos que no recorren `active_works` no
+pierden la causa del bloqueo por Goal/backend vivo. Evidencia:
+`TestMCPServerShutdownToolExecutorV0ExponeGoalsActivos`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y

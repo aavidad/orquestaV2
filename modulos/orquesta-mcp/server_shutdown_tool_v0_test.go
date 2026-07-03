@@ -167,6 +167,7 @@ func TestMCPServerShutdownToolExecutorV0ExponeGoalsActivos(t *testing.T) {
 		len(result.ActiveWorks) != 1 ||
 		result.ActiveWorks[0].RunRef != "run-ref-goal-active-001" ||
 		result.ActiveWorks[0].ExternalWorkRef != "external-goal-ref-active-001" ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "goal-state-ref-active-001") ||
 		control.stop.RunRef != "" {
 		t.Fatalf("result=%+v stop=%+v", result, control.stop)
 	}

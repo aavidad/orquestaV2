@@ -136,6 +136,7 @@ func newMCPServerShutdownResultV0(
 	if serverShutdownStatusIsErrorV0(result.Status) {
 		estado = MCPServerShutdownEstadoErrorV0
 	}
+	activeWorks := mcpServerShutdownActiveWorksV0(result.ActiveWorks)
 	return MCPServerShutdownToolResultV0{
 		Estado:                     estado,
 		RequestID:                  strings.TrimSpace(input.RequestID),
@@ -149,10 +150,13 @@ func newMCPServerShutdownResultV0(
 		CheckpointAgentsPending:    result.CheckpointAgentsPending,
 		CheckpointDeadlinesExpired: result.CheckpointDeadlinesExpired,
 		ActiveWorkCount:            result.ActiveWorkCount,
-		ActiveWorks:                mcpServerShutdownActiveWorksV0(result.ActiveWorks),
+		ActiveWorks:                activeWorks,
 		Runs:                       mcpServerShutdownRunsV0(result.Runs),
-		EvidenceRefs:               compactStringsMCPV0(result.EvidenceRefs),
-		Errores:                    serverShutdownErrorsV0(result.Status),
+		EvidenceRefs: compactStringsMCPV0(append(
+			append([]string(nil), result.EvidenceRefs...),
+			mcpServerShutdownActiveWorkEvidenceRefsV0(activeWorks)...,
+		)),
+		Errores: serverShutdownErrorsV0(result.Status),
 	}
 }
 
@@ -244,6 +248,16 @@ func mcpServerShutdownActiveWorksV0(
 		return []MCPServerShutdownWorkV0{}
 	}
 	return out
+}
+
+func mcpServerShutdownActiveWorkEvidenceRefsV0(
+	works []MCPServerShutdownWorkV0,
+) []string {
+	out := []string{}
+	for _, work := range works {
+		out = append(out, work.EvidenceRefs...)
+	}
+	return compactStringsMCPV0(out)
 }
 
 func serverShutdownCommandFromMCPV0(
