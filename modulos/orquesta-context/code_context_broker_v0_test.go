@@ -36,6 +36,87 @@ func TestCodeContextBrokerV0UsaCacheCentralSinReinvocarProveedor(t *testing.T) {
 	}
 }
 
+func TestCodeContextBrokerV0RepoMapHeredaCacheDedupeYFingerprint(t *testing.T) {
+	provider := &fakeCodeContextProviderV0{hits: []CodeContextHitV0{{
+		Kind:    "function",
+		Path:    "modulos/orquesta-context/code_context_broker_v0.go",
+		Line:    172,
+		Symbol:  "QueryCodeContextV0",
+		Summary: "funcion QueryCodeContextV0 en mapa compacto",
+		Snippet: "func (broker *CodeContextBrokerV0) QueryCodeContextV0(...)",
+		Score:   1,
+	}}}
+	broker := NewCodeContextBrokerV0(CodeContextBrokerConfigV0{
+		Provider: provider,
+		Cache:    NewInMemoryCodeContextCacheV0(),
+	})
+	query := validCodeContextQueryTestV0()
+	query.QueryKind = CodeContextQueryKindRepoMapV0
+	query.Query = "CodeContextBroker"
+	query.WorktreeFingerprint = "fingerprint-ref-repo-map-clean"
+
+	first, err := broker.QueryCodeContextV0(context.Background(), query)
+	if err != nil {
+		t.Fatalf("first query: %v", err)
+	}
+	second, err := broker.QueryCodeContextV0(context.Background(), query)
+	if err != nil {
+		t.Fatalf("second query: %v", err)
+	}
+	if first.CacheStatus != CodeContextCacheStoreV0 || second.CacheStatus != CodeContextCacheHitV0 {
+		t.Fatalf("cache statuses first=%q second=%q", first.CacheStatus, second.CacheStatus)
+	}
+	if provider.callCountV0() != 1 {
+		t.Fatalf("provider calls=%d, want 1", provider.callCountV0())
+	}
+	dirty := query
+	dirty.WorktreeFingerprint = "fingerprint-ref-repo-map-dirty"
+	dirty.DirtyWorktree = true
+	if _, err := broker.QueryCodeContextV0(context.Background(), dirty); err != nil {
+		t.Fatalf("dirty query: %v", err)
+	}
+	if provider.callCountV0() != 2 {
+		t.Fatalf("provider calls=%d, want 2 por fingerprint distinto", provider.callCountV0())
+	}
+
+	concurrentProvider := &fakeCodeContextProviderV0{delay: 50 * time.Millisecond}
+	concurrentBroker := NewCodeContextBrokerV0(CodeContextBrokerConfigV0{
+		Provider:     concurrentProvider,
+		ProviderKind: CodeContextProviderKindFallbackRGV0,
+		Timeout:      time.Second,
+	})
+	var wg sync.WaitGroup
+	results := make(chan CodeContextResultV0, 2)
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := concurrentBroker.QueryCodeContextV0(context.Background(), query)
+			if err != nil {
+				t.Errorf("concurrent repo_map query: %v", err)
+				return
+			}
+			results <- result
+		}()
+	}
+	wg.Wait()
+	close(results)
+	if concurrentProvider.callCountV0() != 1 {
+		t.Fatalf("concurrent provider calls=%d, want 1", concurrentProvider.callCountV0())
+	}
+	var joined bool
+	for result := range results {
+		for _, diagnostic := range result.Diagnostics {
+			if diagnostic.Code == "code_context_inflight_joined" {
+				joined = true
+			}
+		}
+	}
+	if !joined {
+		t.Fatalf("repo_map no reutilizo inflight")
+	}
+}
+
 func TestCodeContextBrokerV0BloqueaCodebaseMCPHastaOptInCentral(t *testing.T) {
 	broker := NewCodeContextBrokerV0(CodeContextBrokerConfigV0{
 		Provider:     &fakeCodeContextProviderV0{},

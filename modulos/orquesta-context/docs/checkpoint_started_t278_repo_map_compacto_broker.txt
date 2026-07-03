@@ -1,0 +1,16 @@
+checkpoint_ref: checkpoint-started-t278-repo-map-compacto-broker
+goal_ref: goal-ref-autoprogramming-backlog-t278-repo-map-compacto-broker-2b547c9d
+request_ref: request-ref-autoprogramming-backlog-t278-repo-map-compacto-broker-2b547c9d
+area: t278-repo-map-compacto-broker
+created_for: CTX-TASK-801B repo_map central code context broker
+scope:
+- modulos/orquesta-context
+- modulos/orquesta-mcp
+- cmd/orquesta-server
+- docs/diseno_orquesta_codebase_broker_2026-06-30.md
+next_artifact: modulos/orquesta-context/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t278-repo-map-compacto-broker-2b547c9d.json
+evidence:
+- backlog_scan_ref: scan-ref-backlog-38db3f941661
+- backlog_scan_epoch: backlog-scan-epoch-e5c4988b97bc
+- backlog_doc_snapshot: docs/autoprogramacion_orquesta_pendientes_2026-05-23.md line 16 sha256 4f924724cf163f79816762a19539b3414fb3d397601aba992e1ad2cd6152f7bf
+- task_instance_ref: task-instance-ref-backlog-667b25f0

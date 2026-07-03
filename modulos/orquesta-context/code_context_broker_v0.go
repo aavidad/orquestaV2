@@ -20,6 +20,7 @@ const (
 	CodeContextQueryKindSearchV0       = "search"
 	CodeContextQueryKindSymbolV0       = "symbol"
 	CodeContextQueryKindArchitectureV0 = "architecture"
+	CodeContextQueryKindRepoMapV0      = "repo_map"
 
 	CodeContextCacheHitV0   = "hit"
 	CodeContextCacheMissV0  = "miss"
@@ -312,7 +313,7 @@ func ValidateCodeContextQueryV0(query CodeContextQueryV0) []CodeContextIssueV0 {
 		}
 	}
 	switch query.QueryKind {
-	case CodeContextQueryKindSearchV0, CodeContextQueryKindSymbolV0, CodeContextQueryKindArchitectureV0:
+	case CodeContextQueryKindSearchV0, CodeContextQueryKindSymbolV0, CodeContextQueryKindArchitectureV0, CodeContextQueryKindRepoMapV0:
 	default:
 		issues = append(issues, codeContextIssueV0(ErrCodeContextQueryKindNoSoportadoV0, "query_kind", "tipo de consulta no soportado"))
 	}

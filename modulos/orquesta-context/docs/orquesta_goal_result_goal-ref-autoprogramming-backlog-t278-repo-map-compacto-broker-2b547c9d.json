@@ -1,0 +1,174 @@
+{
+  "goal_ref": "goal-ref-autoprogramming-backlog-t278-repo-map-compacto-broker-2b547c9d",
+  "schema_version": "orquesta_goal_result.v0",
+  "status": "complete",
+  "summary": "CTX-TASK-801B implementado: query_kind=repo_map entra por CodeContextQueryPortV0, usa el broker/cache/dedupe/fingerprint existentes, devuelve rutas/tipos/funciones/snippets compactos via rg con fallback Go, y queda documentado. Tests requeridos y go build pasaron.",
+  "artifact_refs": [
+    "artifact-ref-t278-repo-map-implementation",
+    "artifact-ref-t278-repo-map-contract-docs",
+    "artifact-ref-t278-repo-map-verification"
+  ],
+  "artifact_paths": [
+    "cmd/orquesta-server/code_context_broker_v0.go",
+    "cmd/orquesta-server/code_context_repo_map_v0.go",
+    "cmd/orquesta-server/code_context_repo_map_parse_v0.go",
+    "cmd/orquesta-server/code_context_broker_v0_test.go",
+    "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+    "docs/diseno_orquesta_codebase_broker_2026-06-30.md",
+    "docs/revision_router_contexto_hibrido_2026-07-03.md",
+    "modulos/orquesta-context/code_context_broker_v0.go",
+    "modulos/orquesta-context/code_context_broker_v0_test.go",
+    "modulos/orquesta-context/docs/checkpoint_started_t278_repo_map_compacto_broker.txt",
+    "modulos/orquesta-context/docs/contratos.md",
+    "modulos/orquesta-context/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t278-repo-map-compacto-broker-2b547c9d.json",
+    "modulos/orquesta-context/docs/pruebas.md",
+    "modulos/orquesta-context/docs/tareas.md",
+    "modulos/orquesta-mcp/codebase_query_tool_v0.go",
+    "modulos/orquesta-mcp/codebase_query_tool_v0_test.go",
+    "modulos/orquesta-mcp/mcp_transport_tool_input_schema_v0.go",
+    "modulos/orquesta-mcp/run_queue_priority_http_v0_test.go",
+    "modulos/orquesta-mcp/run_supervisor_http_v0_test.go"
+  ],
+  "materialized_artifacts": [
+    {
+      "artifact_ref": "artifact-ref-t278-repo-map-implementation",
+      "path": "cmd/orquesta-server/code_context_repo_map_v0.go",
+      "artifact_type": "implementation",
+      "status": "valid",
+      "evidence_refs": [
+        "required-test-ref-df931e809259:passed",
+        "required-test-ref-8f8dc465c7d2:passed",
+        "manual-go-build-all:passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t278-repo-map-contract-docs",
+      "path": "modulos/orquesta-context/docs/contratos.md",
+      "artifact_type": "documentation",
+      "status": "valid",
+      "evidence_refs": [
+        "docs-diseno-codebase-broker-sha256:36425bb021909607a2ab5ebe83ed80c93e150ee100d2fd7d6b1c8504081f4a27",
+        "context-contratos-sha256:3f089eb24569beff7141ec4a00891d456ff9e29e8336798f22286eeb33902264"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "checkpoint-started-t278-repo-map-compacto-broker",
+      "path": "modulos/orquesta-context/docs/checkpoint_started_t278_repo_map_compacto_broker.txt",
+      "artifact_type": "checkpoint",
+      "status": "valid",
+      "evidence_refs": [
+        "scan-ref-backlog-38db3f941661",
+        "task-instance-ref-backlog-667b25f0"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t278-repo-map-verification",
+      "path": "modulos/orquesta-context/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t278-repo-map-compacto-broker-2b547c9d.json",
+      "artifact_type": "goal_result",
+      "status": "valid",
+      "evidence_refs": [
+        "required-test-ref-df931e809259:passed",
+        "required-test-ref-8f8dc465c7d2:passed",
+        "required-test-ref-c908af756958:passed",
+        "git-diff-check:passed",
+        "manual-go-build-all:passed"
+      ],
+      "issues": []
+    }
+  ],
+  "checklist": {
+    "expected_refs": [
+      "CTX-TASK-801B",
+      "CodeContextQueryPortV0-single-entry",
+      "repo_map-compact-max_results-max_bytes",
+      "cache-dedupe-fingerprint-identical-to-search",
+      "no-new-indexers-or-resident-processes",
+      "contratos-doc-updated",
+      "codebase-broker-design-updated",
+      "idle-self-improvement-criteria-covered-by-existing-server-tests",
+      "backlog_scan_ref:scan-ref-backlog-38db3f941661",
+      "backlog_scan_doc_line_16_snapshot_sha256:4f924724cf163f79816762a19539b3414fb3d397601aba992e1ad2cd6152f7bf",
+      "backlog_task_id_range:T278",
+      "required-test-ref-df931e809259",
+      "required-test-ref-8f8dc465c7d2",
+      "required-test-ref-c908af756958",
+      "manual-go-build-all"
+    ],
+    "completed_refs": [
+      "CTX-TASK-801B",
+      "CodeContextQueryPortV0-single-entry",
+      "repo_map-compact-max_results-max_bytes",
+      "cache-dedupe-fingerprint-identical-to-search",
+      "no-new-indexers-or-resident-processes",
+      "contratos-doc-updated",
+      "codebase-broker-design-updated",
+      "idle-self-improvement-criteria-covered-by-existing-server-tests",
+      "backlog_scan_ref:scan-ref-backlog-38db3f941661",
+      "backlog_doc_verified_without_merge",
+      "required-test-ref-df931e809259",
+      "required-test-ref-8f8dc465c7d2",
+      "required-test-ref-c908af756958",
+      "manual-go-build-all"
+    ],
+    "missing_refs": [],
+    "evidence_refs": [
+      "scan-ref-backlog-38db3f941661",
+      "backlog-scan-epoch-e5c4988b97bc",
+      "backlog-doc-current-sha256:068e87bafc54ba3be1ccb302bea449412a57d5994fb0e0514a18739ea5d2da71",
+      "backlog-doc-line-16-current-sha256:9f0d527424345175dd0fa9640373f4e8d672f0db06d0c155d4e508364d5336e7",
+      "backlog-doc-snapshot-hash-mismatch-no-merge-performed",
+      "required-test-ref-df931e809259:passed",
+      "required-test-ref-8f8dc465c7d2:passed",
+      "required-test-ref-c908af756958:passed",
+      "git-diff-check:passed",
+      "manual-go-build-all:passed",
+      "go-test-all-non-required:blocked-by-sandbox-httptest-newserver-outside-write-set"
+    ]
+  },
+  "required_test_results": [
+    {
+      "test_ref": "required-test-ref-df931e809259",
+      "status": "passed",
+      "evidence_refs": [
+        "go test -count=1 ./modulos/orquesta-context ./modulos/orquesta-mcp ./cmd/orquesta-server -run 'Test.*CodeContext.*RepoMap|Test.*CodebaseQuery'"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-8f8dc465c7d2",
+      "status": "passed",
+      "evidence_refs": [
+        "go test -count=1 ./modulos/orquesta-context ./modulos/orquesta-mcp ./cmd/orquesta-server"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-c908af756958",
+      "status": "passed",
+      "evidence_refs": [
+        "go test -count=1 ./"
+      ]
+    }
+  ],
+  "domain_receipt_refs": [],
+  "rework_plan_refs": [],
+  "evidence_refs": [
+    "scan-ref-backlog-38db3f941661",
+    "backlog-scan-epoch-e5c4988b97bc",
+    "task-instance-ref-backlog-667b25f0",
+    "task-id-ref-backlog-90e21363b043",
+    "reservation-ref-backlog-scan-doc-merge-540d49fe753f",
+    "reservation-ref-backlog-task-id-1505b78c7bba",
+    "backlog-doc-current-sha256:068e87bafc54ba3be1ccb302bea449412a57d5994fb0e0514a18739ea5d2da71",
+    "backlog-doc-line-16-current-sha256:9f0d527424345175dd0fa9640373f4e8d672f0db06d0c155d4e508364d5336e7",
+    "revision-router-contexto-hibrido-sha256:4998cb01c2d0b6856c15a08e97dd3f134b923aa101cc7f4d8fcda8121facba58",
+    "docs-diseno-codebase-broker-sha256:36425bb021909607a2ab5ebe83ed80c93e150ee100d2fd7d6b1c8504081f4a27",
+    "context-contratos-sha256:3f089eb24569beff7141ec4a00891d456ff9e29e8336798f22286eeb33902264",
+    "required-test-ref-df931e809259:passed",
+    "required-test-ref-8f8dc465c7d2:passed",
+    "required-test-ref-c908af756958:passed",
+    "git-diff-check:passed",
+    "manual-go-build-all:passed"
+  ]
+}

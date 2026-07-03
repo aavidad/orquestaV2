@@ -173,7 +173,7 @@ func serverCodebaseMemoryCLIToolPayloadV0(
 	switch query.QueryKind {
 	case orquestacontext.CodeContextQueryKindArchitectureV0:
 		return "get_architecture", map[string]any{"project": projectName}, nil
-	case orquestacontext.CodeContextQueryKindSearchV0, orquestacontext.CodeContextQueryKindSymbolV0, "":
+	case orquestacontext.CodeContextQueryKindSearchV0, orquestacontext.CodeContextQueryKindSymbolV0, orquestacontext.CodeContextQueryKindRepoMapV0, "":
 		limit := query.MaxResults
 		if limit <= 0 {
 			limit = 8
@@ -323,6 +323,9 @@ func (provider serverRGCodeContextProviderV0) QueryCodeContextV0(
 	command := strings.TrimSpace(provider.Command)
 	if command == "" {
 		command = "rg"
+	}
+	if query.QueryKind == orquestacontext.CodeContextQueryKindRepoMapV0 {
+		return provider.queryRepoMapCodeContextV0(ctx, root, command, query)
 	}
 	if _, err := exec.LookPath(command); err != nil {
 		hits, fallbackErr := serverGoCodeContextHitsV0(root, query)

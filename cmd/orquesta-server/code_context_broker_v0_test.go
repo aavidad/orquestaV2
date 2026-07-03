@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -48,6 +49,55 @@ func TestServerRGCodeContextProviderV0DevuelveCoincidenciasCompactas(t *testing.
 	if result.Results[0].Path != "modulos/demo/service.go" ||
 		result.Results[0].Line != 3 {
 		t.Fatalf("hit=%+v", result.Results[0])
+	}
+}
+
+func TestServerRGCodeContextProviderV0RepoMapDevuelveFuncionesYTiposCompactos(t *testing.T) {
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("rg no disponible")
+	}
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "modulos", "demo"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(root, "modulos", "demo", "service.go"),
+		[]byte("package demo\n\n// comentario que no debe salir como fichero completo\ntype BrokerService struct{}\n\nfunc (BrokerService) QueryCodeContextV0() {}\n\nfunc helperNoRelacionado() {}\n"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	provider := serverRGCodeContextProviderV0{RootDir: root, Command: "rg"}
+	result, err := provider.QueryCodeContextV0(context.Background(), orquestacontext.CodeContextQueryV0{
+		SchemaVersion: orquestacontext.CodeContextQuerySchemaVersionV0,
+		RepositoryRef: "repo-ref-test",
+		QueryKind:     orquestacontext.CodeContextQueryKindRepoMapV0,
+		Query:         "Broker",
+		Scope:         []string{"modulos"},
+		MaxResults:    2,
+		MaxBytes:      1200,
+	})
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if result.Estado != orquestacontext.CodeContextEstadoOKV0 ||
+		result.ProviderKind != orquestacontext.CodeContextProviderKindFallbackRGV0 ||
+		len(result.Results) != 2 {
+		t.Fatalf("result=%+v", result)
+	}
+	if !containsStringForTestV0(result.EvidenceRefs, "evidence-ref-code-context-rg-repo-map-central-v0") {
+		t.Fatalf("evidence=%+v", result.EvidenceRefs)
+	}
+	for _, hit := range result.Results {
+		if hit.Path != "modulos/demo/service.go" || hit.Line <= 0 || hit.Symbol == "" || hit.Snippet == "" {
+			t.Fatalf("hit incompleto=%+v", hit)
+		}
+		if hit.Kind != "type" && hit.Kind != "function" {
+			t.Fatalf("kind=%q hit=%+v", hit.Kind, hit)
+		}
+		if strings.Contains(hit.Snippet, "comentario que no debe salir") {
+			t.Fatalf("snippet parece fichero completo: %+v", hit)
+		}
 	}
 }
 
@@ -94,6 +144,46 @@ func TestServerRGCodeContextProviderV0UsaFallbackGoSiRGAusente(t *testing.T) {
 	if result.Results[0].HitRef != "code-context-go-hit-1" ||
 		result.Results[1].HitRef != "code-context-go-hit-2" ||
 		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-code-context-go-fallback-v0") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestServerRGCodeContextProviderV0RepoMapUsaFallbackGoSiRGAusente(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "modulos", "demo"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(root, "modulos", "demo", "repo_map.go"),
+		[]byte("package demo\n\ntype RepoMapService struct{}\n\nfunc (RepoMapService) BuildRepoMap() {}\n"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	provider := serverRGCodeContextProviderV0{
+		RootDir: root,
+		Command: filepath.Join(t.TempDir(), "rg-no-existe"),
+	}
+	result, err := provider.QueryCodeContextV0(context.Background(), orquestacontext.CodeContextQueryV0{
+		SchemaVersion: orquestacontext.CodeContextQuerySchemaVersionV0,
+		RepositoryRef: "repo-ref-test",
+		QueryKind:     orquestacontext.CodeContextQueryKindRepoMapV0,
+		Query:         "RepoMap",
+		Scope:         []string{"modulos"},
+		MaxResults:    5,
+		MaxBytes:      3000,
+	})
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if result.Estado != orquestacontext.CodeContextEstadoOKV0 ||
+		result.ProviderKind != orquestacontext.CodeContextProviderKindFallbackRGV0 ||
+		len(result.Results) != 2 {
+		t.Fatalf("result=%+v", result)
+	}
+	if result.Results[0].HitRef != "code-context-repo-map-hit-1" ||
+		result.Results[1].HitRef != "code-context-repo-map-hit-2" ||
+		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-code-context-go-repo-map-fallback-v0") {
 		t.Fatalf("result=%+v", result)
 	}
 }

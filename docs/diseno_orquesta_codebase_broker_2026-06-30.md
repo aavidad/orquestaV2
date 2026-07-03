@@ -37,7 +37,7 @@ Entrada minima implementada:
 
 - `repository_ref`
 - `commit_ref` o `worktree_ref`
-- `query_kind`: `search`, `symbol`, `architecture`
+- `query_kind`: `search`, `symbol`, `architecture`, `repo_map`
 - `query`
 - `scope`: rutas permitidas, modulo o paquete
 - `max_results` y `max_bytes`
@@ -48,6 +48,11 @@ Regla de enrutado:
   adaptador opt-in y el indice este listo o pueda prepararse dentro del
   deadline.
 - `search`, docs, configs, errores, mensajes y rutas: `rg` central.
+- `repo_map`: estrategia interna del broker central para devolver rutas,
+  tipos/funciones/metodos y snippets minimos del scope. En el primer corte usa
+  `rg` central sobre declaraciones Go y fallback Go local cuando `rg` no esta
+  disponible. Respeta `max_results`, `max_bytes`, cache, dedupe y fingerprint
+  igual que `search`; no arranca tree-sitter ni indexadores residentes nuevos.
 - Si Codebase falla, expira o no esta indexado, responder con fallback o bloqueo
   operativo explicito; no lanzar instancias paralelas desde agentes.
 
@@ -88,6 +93,8 @@ real y la publicacion en status pertenecen al servidor/composicion.
   acciones recomendadas y evidencias compactas sin PID, HOME ni command line.
 - Ruta publicada por gateway, stack Codex y toolbelt de agentes.
 - Proveedor `rg` central en `cmd/orquesta-server`.
+- Estrategia `repo_map` compacta por el mismo `CodeContextQueryPortV0`, expuesta
+  tambien por MCP/HTTP con `query_kind=repo_map` y sin puerto paralelo.
 - Cache en memoria, limite de concurrencia, dedupe in-flight y bloqueo de
   `codebase-memory-mcp` salvo opt-in central con lease.
 - Cache distingue `worktree_fingerprint` y `dirty_worktree` para no ocultar

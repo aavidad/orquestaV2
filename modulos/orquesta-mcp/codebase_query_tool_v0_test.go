@@ -50,6 +50,9 @@ func TestMCPCodebaseQueryInputSchemaV0ExponeCamposYEnum(t *testing.T) {
 	if len(enums["query_kind"]) == 0 {
 		t.Fatalf("query_kind sin enum: %+v", fields)
 	}
+	if !containsMCPStringTestV0(enums["query_kind"], orquestacontext.CodeContextQueryKindRepoMapV0) {
+		t.Fatalf("query_kind no expone repo_map: %+v", enums["query_kind"])
+	}
 }
 
 func TestMCPCodebaseQueryToolExecutorV0RellenaRequestedByPorDefecto(t *testing.T) {
@@ -100,4 +103,13 @@ func validMCPCodebaseQueryInputTestV0() MCPCodebaseQueryToolInputV0 {
 		MaxResults:    3,
 		MaxBytes:      3000,
 	}
+}
+
+func containsMCPStringTestV0(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }

@@ -1,5 +1,24 @@
 # Pruebas locales: orquesta-context
 
+## CTX-P006 repo_map compacto del broker de codigo
+
+Tipo: unit_contract | adapter_boundary
+
+Comando: `go test -count=1 ./modulos/orquesta-context ./modulos/orquesta-mcp ./cmd/orquesta-server -run 'Test.*CodeContext.*RepoMap|Test.*CodebaseQuery'`
+
+Evidencia esperada:
+
+- `repo_map` es aceptado por `CodeContextQueryPortV0`;
+- cache central, dedupe in-flight y fingerprint/dirty-worktree funcionan igual
+  que en `search`;
+- el proveedor central del servidor devuelve rutas, tipos/funciones y snippets
+  minimos con `rg`;
+- si `rg` falta, el fallback Go local produce refs compactas sin indexador;
+- MCP expone `repo_map` en el enum de `query_kind`.
+
+Ultima ejecucion: 2026-07-03, ok en T278 con:
+`go test -count=1 ./modulos/orquesta-context ./modulos/orquesta-mcp ./cmd/orquesta-server -run 'Test.*CodeContext.*RepoMap|Test.*CodebaseQuery'`.
+
 ## CTX-P005 broker de codigo central y leases de herramienta
 
 Tipo: unit_contract

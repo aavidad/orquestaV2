@@ -2,6 +2,32 @@
 
 Cada tarea debe ser pequena y cerrada.
 
+## CTX-008
+
+Estado: completada 2026-07-03.
+
+Objetivo: anadir `query_kind=repo_map` como estrategia compacta del broker
+central de contexto, sin crear puerto paralelo ni arrancar indexadores nuevos.
+
+Write-set:
+
+- `code_context_broker_v0.go`
+- tests y docs locales.
+
+Contrato: `CodeContextQueryPortV0`.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-context ./modulos/orquesta-mcp ./cmd/orquesta-server -run 'Test.*CodeContext.*RepoMap|Test.*CodebaseQuery'`
+
+Resultado:
+
+- `repo_map` comparte cache central, dedupe in-flight y fingerprint con
+  `search`;
+- el servidor usa proveedor central `rg` con fallback Go local para devolver
+  rutas, tipos/funciones y snippets minimos;
+- MCP/HTTP conservan `CodeContextQueryPortV0` como unica entrada.
+
 ## CTX-007
 
 Estado: completada 2026-06-30.

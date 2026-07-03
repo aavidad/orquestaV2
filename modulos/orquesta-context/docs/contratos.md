@@ -148,6 +148,9 @@ Entrada:
   `worktree_fingerprint` opcional, `dirty_worktree`, `query_kind`, `query`,
   `scope`, `max_results`, `max_bytes`, `cache_only`,
   `allow_external_indexer` y `requested_by`.
+- `query_kind` admite `search`, `symbol`, `architecture` y `repo_map`.
+  `repo_map` usa el mismo puerto para pedir un mapa compacto del repo/scope:
+  rutas, tipos, funciones/metodos y snippets minimos, nunca ficheros completos.
 
 Salida:
 
@@ -164,6 +167,11 @@ Reglas:
   esperan el resultado de la primera.
 - La cache incluye fingerprint/dirty-worktree para no ocultar cambios locales
   sin commit limpio.
+- `repo_map` comparte la misma cache, dedupe in-flight, `query_hash`,
+  fingerprint de worktree y politicas de max_results/max_bytes que `search`.
+- El primer proveedor productivo de `repo_map` es el proveedor central existente
+  `rg` con fallback Go local; tree-sitter y `codebase-memory-mcp` quedan fuera
+  de este primer corte salvo opt-in central posterior.
 - Los resultados son snippets compactos; no transportan contexto bruto ni
   secretos.
 
