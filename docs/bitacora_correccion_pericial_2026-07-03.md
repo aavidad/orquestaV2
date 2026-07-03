@@ -261,3 +261,25 @@ CTX-TASK-801A..D y filas de inventario de bugs B/C/D del pilotaje.
 - Timer nightly: unidades systemd de usuario pendientes de activación por el
   operador (bloqueo de permisos correcto del harness); comandos en
   `docs/runbooks/smoke_nightly_2026-07.md` sección systemd.
+
+### 2026-07-03/04 — T273 y T274 integradas: plan T-PER 18/18 completado
+
+T273 integrada como `a9eafe5e` (supervisor idle dormido por eventos,
+anti-churn idempotente, tick watchdog; suites server+cmd+fronteras verdes).
+T274 integrada como `794b541d` (bugs 151/152/153 inventariados).
+Quinta reproducción del bug 153: el goal T273 estaba `complete` con result
+formal escrito y Orquesta lo mantenía `running` sin reconciliar.
+Instancias y residuos de pilotaje barridos; ramas `pericial/pilot-*`
+conservadas como evidencia.
+
+**Cola siguiente (paralelizable, write-sets disjuntos):**
+1. Fix BUG-ORQ-20260703-153 (result formal/reconciliación de goals idle) —
+   el más valioso: elimina la clase de falso `blocked`/`running` vista en
+   5 de 8 pilotajes.
+2. Fix BUG-ORQ-20260703-151 (causa de primera clase en launch receipt).
+3. Fix BUG-ORQ-20260703-152 (diagnóstico de etiquetas de backlog).
+4. CTX-TASK-801A..D (ahorro de tokens del broker, incremental).
+
+**Pendiente de operador:** activar timer nightly (runbook
+`docs/runbooks/smoke_nightly_2026-07.md`); triaje del WIP remoto de 71
+ficheros; ventana de observación §9 de dos semanas una vez el nightly corra.
