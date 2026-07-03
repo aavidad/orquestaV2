@@ -144,6 +144,9 @@ func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjecti
 		ActiveWorkCount:         payload.ActiveWorkCount,
 		ActiveWorkRefs:          shutdownProjectionActiveWorkRefsV0(payload.ActiveWorks),
 	}
+	if projection.ActiveWorkCount <= 0 && len(payload.ActiveWorks) > 0 {
+		projection.ActiveWorkCount = len(payload.ActiveWorks)
+	}
 	projection = normalizeShutdownStopConfirmationV0(projection)
 	if statusCode >= http.StatusBadRequest || shutdownFreezeResultIsRejectedV0(payload) {
 		projection.Ready = false
@@ -201,12 +204,17 @@ func safeShutdownProjectionRefPartV0(value string) string {
 }
 
 func normalizeShutdownStopConfirmationV0(projection ShutdownProjectionV0) ShutdownProjectionV0 {
+	if projection.ActiveWorkCount <= 0 && len(projection.ActiveWorkRefs) > 0 {
+		projection.ActiveWorkCount = len(projection.ActiveWorkRefs)
+	}
 	if !projection.Ready {
 		return projection
 	}
 	if projection.AgentsInFlight > 0 ||
 		projection.CheckpointsPending > 0 ||
 		projection.CheckpointAgentsPending > 0 ||
+		projection.ActiveWorkCount > 0 ||
+		len(projection.ActiveWorkRefs) > 0 ||
 		(projection.RunsRequested > 0 && projection.RunsStopped < projection.RunsRequested) {
 		projection.Ready = false
 		projection.Status = "stop_pending"

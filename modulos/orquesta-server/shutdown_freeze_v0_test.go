@@ -401,6 +401,31 @@ func TestShutdownProjectionFromHTTPV0ConservaActiveWorkRefsV0(t *testing.T) {
 	}
 }
 
+func TestShutdownProjectionFromHTTPV0ReadyConActiveWorkQuedaStopPendingV0(t *testing.T) {
+	body := []byte(`{
+		"estado":"ok",
+		"status":"ready",
+		"shutdown_ready":true,
+		"active_works":[{
+			"kind":"goal_backend",
+			"run_ref":"run-ref-ready-active-001",
+			"work_ref":"goal-ref-ready-active-001",
+			"external_work_ref":"thread-ref-ready-active-001",
+			"status":"backend_still_running"
+		}]
+	}`)
+
+	projection, keepFrozen := shutdownProjectionFromHTTPV0(http.StatusOK, body)
+
+	if !keepFrozen ||
+		projection.Ready ||
+		projection.Status != "stop_pending" ||
+		projection.ActiveWorkCount != 1 ||
+		!hasShutdownProjectionRefForTestV0(projection.ActiveWorkRefs, "shutdown-active-work-goal-backend-goal-ref-ready-active-001") {
+		t.Fatalf("projection=%+v keep_frozen=%v", projection, keepFrozen)
+	}
+}
+
 func TestRuntimeV0ServerShutdownSnapshotPrevioSobreviveRespuestaSinCuerpoV0(t *testing.T) {
 	stateDir := t.TempDir()
 	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

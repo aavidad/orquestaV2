@@ -834,6 +834,14 @@ o async work pendientes. `shutdown_ready` solo permite senal cuando todo el
 trabajo bloqueante esta drenado. Evidencia:
 `TestShutdownClientReadyV0NoSaltaTrabajoPendienteAunqueReadyV0`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 10: la proyeccion HTTP del
+runtime servidor tampoco acepta `shutdown_ready=true` si la respuesta conserva
+`active_work_count` o `active_works`; normaliza `active_works` a contador de
+trabajos, cambia el estado a `stop_pending` y mantiene el shutdown congelado
+para que el servidor no publique ready ni dispare cierre con backend Goal vivo.
+Evidencia:
+`TestShutdownProjectionFromHTTPV0ReadyConActiveWorkQuedaStopPendingV0`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y
