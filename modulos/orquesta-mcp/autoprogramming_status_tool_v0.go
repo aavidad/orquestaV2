@@ -240,6 +240,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingRequiredTestEvidenceMissingActionsV0(observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingPhase0CompleteNonPublishableActionsV0(observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingPartialArtifactsWrittenActionsV0(observedByRunRef)...)
+	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingThreadOutputSanitizedActionsV0(observedByRunRef)...)
 	result.Diagnostics = append(result.Diagnostics, diagnosticsFromStaleRunningMCPAutoprogrammingV0(result.StaleRunning)...)
 	result.Operator = newMCPAutoprogrammingOperatorV0(
 		result.Queue,

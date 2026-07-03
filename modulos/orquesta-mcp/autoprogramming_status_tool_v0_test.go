@@ -2238,6 +2238,46 @@ func TestMCPAutoprogrammingStatusExecutorV0ArtefactosParcialesPideRevisionV0(t *
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0OutputGiganteSaneadoPideContextoAcotadoV0(t *testing.T) {
+	runRef := "run-ref-autop-status-thread-output-sanitized-001"
+	goalRef := "goal-ref-autop-status-thread-output-sanitized-001"
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: runRef,
+			Status: "running",
+		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:  runRef,
+			GoalRef: goalRef,
+			Status:  orquestagoal.GoalStatusRunningV0,
+			EvidenceRefs: []string{
+				mcpAutoprogrammingEvidenceCodexAppServerThreadOutputSanitizedV0,
+			},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{empty: true},
+		Stats: stats,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{RunRef: runRef})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != mcpAutoprogrammingActionThreadOutputSanitizedV0 ||
+		action.Severity != "warning" ||
+		action.RecommendedAction != "replan_narrow_context" ||
+		action.GoalRef != goalRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceThreadOutputSanitizedV0) ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceCodexAppServerThreadOutputSanitizedV0) {
+		t.Fatalf("action=%+v", action)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0Phase0NoPublicablePideContinuarV0(t *testing.T) {
 	runRef := "run-ref-autop-status-phase0-001"
 	goalRef := "goal-ref-autop-status-phase0-001"

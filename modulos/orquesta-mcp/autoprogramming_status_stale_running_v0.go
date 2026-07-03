@@ -19,6 +19,7 @@ const (
 	mcpAutoprogrammingActionCheckpointOnlyConsumptionWarningV0         = "checkpoint_only_consumption_warning"
 	mcpAutoprogrammingActionNoCheckpointHighConsumptionV0              = "goal_active_no_checkpoint_high_consumption"
 	mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0            = "checkpoint_only_high_consumption"
+	mcpAutoprogrammingActionThreadOutputSanitizedV0                    = "codex_app_server_thread_output_sanitized"
 	mcpAutoprogrammingActionGoalBackendMissingAfterExternalCleanupV0   = "goal_backend_missing_after_external_cleanup"
 	mcpAutoprogrammingActionStaleRunningReconciledV0                   = "stale_running_reconciled"
 	mcpAutoprogrammingActionProviderUsageLimitRetryV0                  = "provider_usage_limit_retry_after"
@@ -54,6 +55,8 @@ const (
 	mcpAutoprogrammingEvidenceGoalActiveTimeoutBackendV0               = "evidence-ref-autoprogramming-goal-active-timeout-backend-active"
 	mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0            = "evidence-ref-autoprogramming-no-checkpoint-high-consumption"
 	mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0          = "evidence-ref-autoprogramming-checkpoint-only-high-consumption"
+	mcpAutoprogrammingEvidenceThreadOutputSanitizedV0                  = "evidence-ref-autoprogramming-status-thread-output-sanitized"
+	mcpAutoprogrammingEvidenceCodexAppServerThreadOutputSanitizedV0    = "evidence-ref-codex-app-server-thread-output-sanitized"
 	mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0 = "evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup"
 	mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensDefaultV0     = int64(100000)
 	mcpAutoprogrammingCheckpointOnlyMaxWaitSecondsDefaultV0            = int64(15 * 60)
@@ -205,6 +208,32 @@ func mcpAutoprogrammingPartialArtifactsWrittenActionsV0(
 			RecommendedAction: MCPGoalFirstReviewPartialArtifactsActionV0,
 			EvidenceRefs: []string{
 				mcpAutoprogrammingEvidencePartialArtifactsWrittenV0,
+			},
+		}
+		action = mcpAutoprogrammingActionableRunWithObservedStatsV0(action, observed)
+		action = mcpAutoprogrammingActionableRunWithObservedGoalV0(action, observed)
+		out = append(out, action)
+	}
+	return out
+}
+
+func mcpAutoprogrammingThreadOutputSanitizedActionsV0(
+	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
+) []MCPAutoprogrammingActionableRunV0 {
+	out := make([]MCPAutoprogrammingActionableRunV0, 0)
+	for runRef, observed := range observedByRunRef {
+		if !mcpAutoprogrammingObservedThreadOutputSanitizedV0(observed) {
+			continue
+		}
+		action := MCPAutoprogrammingActionableRunV0{
+			Code:              mcpAutoprogrammingActionThreadOutputSanitizedV0,
+			Severity:          "warning",
+			RunRef:            strings.TrimSpace(runRef),
+			RunStatus:         mcpAutoprogrammingObservedRunStatusV0(observedByRunRef, runRef),
+			Reason:            "codex_app_server_thread_output_sanitized: backend goal produced oversized or multimodal thread output; require bounded tool output and narrower context before continuing",
+			RecommendedAction: "replan_narrow_context",
+			EvidenceRefs: []string{
+				mcpAutoprogrammingEvidenceThreadOutputSanitizedV0,
 			},
 		}
 		action = mcpAutoprogrammingActionableRunWithObservedStatsV0(action, observed)
@@ -384,6 +413,18 @@ func mcpAutoprogrammingObservedPartialArtifactsWrittenV0(
 		}
 	}
 	return false
+}
+
+func mcpAutoprogrammingObservedThreadOutputSanitizedV0(
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	if observed == nil || observed.Goal == nil {
+		return false
+	}
+	return containsStringMCPV0(
+		observed.Goal.EvidenceRefs,
+		mcpAutoprogrammingEvidenceCodexAppServerThreadOutputSanitizedV0,
+	)
 }
 
 func mcpAutoprogrammingObservedQAFailedPublicTextV0(
