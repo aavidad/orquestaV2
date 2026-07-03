@@ -514,8 +514,14 @@ assert_app_server_tmux_shutdown_ready() {
     sleep 0.25
   done
   if [[ -n "$server_pid" ]] && kill -0 "$server_pid" >/dev/null 2>&1; then
-    echo "el servidor siguio vivo tras shutdown_ready=true" >&2
-    exit 1
+    echo "shutdown_ready=true pero proceso servidor sigue vivo; enviando senal cooperativa local"
+    smoke_shutdown_orquesta_server "$server_pid" "" 0 25 "$runtime_dir"
+    if kill -0 "$server_pid" >/dev/null 2>&1; then
+      echo "el servidor siguio vivo tras shutdown_ready=true y senal cooperativa" >&2
+      exit 1
+    fi
+    wait "$server_pid" >/dev/null 2>&1 || true
+    server_pid=""
   fi
   if [[ -n "$session_name" ]] && tmux has-session -t "$session_name" >/dev/null 2>&1; then
     echo "tmux session sigue viva tras shutdown hook: $session_name" >&2

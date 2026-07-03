@@ -151,6 +151,22 @@ func TestSmokeGoalFirstAppServerRealShutdownLimpiaBackendPropioYReintentaV0(t *t
 	}
 }
 
+func TestSmokeGoalFirstAppServerRealShutdownReadyUsaSenalCooperativaSiServidorSigueVivoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+
+	for _, want := range []string{
+		"shutdown_ready=true pero proceso servidor sigue vivo; enviando senal cooperativa local",
+		`smoke_shutdown_orquesta_server "$server_pid" "" 0 25 "$runtime_dir"`,
+		"el servidor siguio vivo tras shutdown_ready=true y senal cooperativa",
+		`server_pid=""`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("smoke debe cerrar proceso temporal con senal cooperativa tras shutdown_ready: falta %q", want)
+		}
+	}
+}
+
 func TestSmokeCommonShutdownCleanupBackendGoalSiWrapperCancelaV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	common := readOperationalDocGuardV0(t, root, "scripts/lib/smoke_common.sh")

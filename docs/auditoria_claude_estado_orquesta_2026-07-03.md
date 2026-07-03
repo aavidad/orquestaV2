@@ -249,6 +249,11 @@ Residuales observados:
   `orquesta-goal-first-app-server.a4QRfx` ni a la sesion
   `orquesta-goal-4a2ea0ed70880029`. El fallo es de contrato temporal del
   shutdown/wrapper, no de cierre funcional de la app.
+- Actualizacion posterior: `BUG-ORQ-20260703-146` queda cerrado en wrapper. Si
+  `shutdown_ready=true` indica drenaje operativo pero el proceso temporal sigue
+  vivo, el smoke envia senal cooperativa local mediante
+  `smoke_shutdown_orquesta_server "$server_pid" "" 0 25 "$runtime_dir"` y solo
+  falla si el proceso continua vivo despues.
 
 ## Bugs abiertos de arquitectura a revisar
 
