@@ -744,6 +744,13 @@ publicar paths ni detalle runtime. Evidencia:
 `TestShutdownClientReadyV0BloqueaActiveWorkPersistido` y
 `TestRequestServerShutdownV0ReadyNoSaltaActiveWorksEstructuradosV0`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 6: la politica de escalado de
+`orquesta-server stop --force` clasifica `shutdown_not_ready` con
+`active_work>0` o `active_work_refs` como conflicto vivo aunque no haya un
+`/status` rico disponible, evitando que un wrapper convierta ese handoff parcial
+en señal cooperativa prematura. Evidencia:
+`TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y

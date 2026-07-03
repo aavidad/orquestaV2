@@ -138,5 +138,26 @@ func shutdownRequestErrorIsLiveWorkConflictV0(err error) bool {
 		return true
 	}
 	return strings.Contains(message, "backend_still_running") ||
-		strings.Contains(message, "active_goals_present")
+		strings.Contains(message, "active_goals_present") ||
+		shutdownNotReadyErrorHasActiveWorkV0(message)
+}
+
+func shutdownNotReadyErrorHasActiveWorkV0(message string) bool {
+	if !strings.HasPrefix(strings.TrimSpace(message), "shutdown_not_ready ") {
+		return false
+	}
+	fields := strings.Fields(message)
+	for _, field := range fields {
+		switch {
+		case strings.HasPrefix(field, "active_work_refs=") &&
+			strings.TrimSpace(strings.TrimPrefix(field, "active_work_refs=")) != "":
+			return true
+		case strings.HasPrefix(field, "active_work="):
+			value := strings.TrimSpace(strings.TrimPrefix(field, "active_work="))
+			if value != "" && value != "0" {
+				return true
+			}
+		}
+	}
+	return false
 }
