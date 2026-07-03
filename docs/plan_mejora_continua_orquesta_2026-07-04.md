@@ -17,20 +17,26 @@ Alcance.
 - Grupo A (MEJ-TASK-101..106): huecos estructurales detectados por la
   dirección. Grupo B (MEJ-TASK-201..207): técnicas del campo con buen ratio
   esfuerzo/impacto.
-- Olas sugeridas por Alcance disjunto:
-  - Ola 1: 202 + 203 + 205 + 206 (baratas, sin cruces).
-  - Ola 2: 201 + 204 + 104 (tras integrar ola 1).
-  - Ola 3: 102 + 105 + 207.
-  - Aparte, con decisión del operador: 101 (gasta cuota real), 103 (necesita
-    credenciales Claude), 106 (retirada legacy tras ventana §9).
+- Olas sugeridas originalmente por Alcance disjunto:
+  - Ola 1: 202 + 203 + 205 + 206 (integrada).
+  - Ola 2: 201 + 204 + 104 (integrada con validacion local/fakes).
+  - Ola 3: 102 + 105 + 207 (congelada por decision del operador).
+  - Condicionales: 101 (cierre OPES real opt-in), 103 (supersedida por
+    director de escalada para la forma residente), 106 (aparcada hasta ventana
+    §9 y decision de retirada legacy).
 - Cada cierre actualiza la bitácora pericial y no abre frentes fuera de su
   Alcance.
+- Corte vigente 2026-07-03 noche: la cola de automejora queda congelada. No
+  relanzar pilotajes ni tareas nuevas desde este documento salvo decision
+  explicita del operador. Para evitar falsos relanzamientos, las tareas ya
+  integradas o congeladas quedan con `Estado:` cerrado/aparcado, que el parser
+  de automejora trata como no ejecutable.
 
 ## MEJ-TASK-101 ciclo-opes-real-validacion-campo
 
 Objetivo: ejecutar y documentar el primer ciclo OPES completo sobre el nucleo nuevo contra OPES temporal aislado (nunca productivo): un tema de temario con derivados (tests, audio fake o preflight, HTML) pasando por goal-first, gates de cierre vigentes (visual, linguistico, html_ampliado, links) y reconciliacion por result materializado, siguiendo docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md como base pero sobre HEAD actual. Producir runbook con resultados, bugs encontrados como filas de inventario y veredicto de si la autonomia de dominio queda validada en campo.
 
-Estado: pendiente.
+Estado: aparcado hasta decision operativa de cierre OPES real opt-in.
 
 Alcance:
 
@@ -54,7 +60,7 @@ Tests:
 
 Objetivo: primer corte del meta-director: que una instancia de Orquesta pueda aceptar un objetivo compuesto por varias secciones de backlog pendientes, calcular cruces de Alcance entre ellas (interseccion de rutas normalizadas), y lanzar en paralelo como goals separados las que sean disjuntas, serializando las que se cruzan, con limite configurable de goals simultaneos reutilizando ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS. La integracion de resultados sigue siendo por revision (no auto-merge). Publicar en autoprogramming/status la ola activa: goals lanzados, en espera por cruce y terminados.
 
-Estado: pendiente.
+Estado: aparcado/congelado por orden del operador; no relanzar desde automejora.
 
 Alcance:
 
@@ -81,7 +87,7 @@ Tests:
 
 Objetivo: primer corte de redundancia de proveedor: adaptador goal-first opt-in para Claude Code CLI como segundo backend del contrato CodexGoalStarterPortV0/ObserverPortV0 (o puerto neutral equivalente renombrado), reutilizando el patron app_server_tmux donde aplique o sesion CLI supervisada donde no, con el mismo contrato de result durable ORQUESTA_GOAL_RESULT_V0, write-set y required tests. Sin tocar el camino Codex por defecto; seleccion por configuracion explicita. Registrar la incidencia T18 (tier Gemini) como fuera de alcance de este corte.
 
-Estado: pendiente.
+Estado: aparcado/supersedido para la forma residente por el director de escalada; no relanzar sin credenciales y decision explicita.
 
 Alcance:
 
@@ -108,7 +114,7 @@ Tests:
 
 Objetivo: convertir la politica frugal en decision medida: un gobernador de presupuesto que, con las metricas 801A (context_budget), el prompt_cache 801C y un presupuesto operativo declarado por configuracion (tokens o goals por dia), decida antes de lanzar automejora idle si procede lanzar, aplazar con razon budget_deferred o degradar a tarea mas barata. Publicar en autoprogramming/status el presupuesto restante estimado y los aplazamientos con razon. Sin env vars nuevas mas alla del presupuesto declarado.
 
-Estado: pendiente.
+Estado: cerrado localmente por MEJ-104/T290; queda solo smoke real acotado antes de reactivar automejora productiva.
 
 Alcance:
 
@@ -135,7 +141,7 @@ Tests:
 
 Objetivo: primer corte de memoria entre goals: al cerrar un goal (aceptado o rework), destilar una leccion compacta y anonima de rutas privadas (clase de tarea, modulo, resultado, tests fallados/pasados, tokens 801A) a un almacen file-based append-only bajo el state dir, y permitir que el compilador de GoalWorkSpec inyecte como context_refs las 3 lecciones mas relevantes por clase de tarea/modulo. Base para el fitness por materias de ARQUITECTURA.md sin construir aun el scheduler ponderado.
 
-Estado: pendiente.
+Estado: aparcado/congelado por orden del operador; no relanzar desde automejora.
 
 Alcance:
 
@@ -162,7 +168,7 @@ Tests:
 
 Objetivo: gobernar la deuda residual conocida sin big-bang: (1) plan de troceo incremental del hub orquesta-core-workflow actualizando docs/runbooks/plan_troceo_hubs_orquesta_2026-07-01.md con el primer subpaquete concreto a extraer y su ratchet; (2) ratchet descendente de env vars: test raiz que fija el numero actual de ORQUESTA_* (medido con scripts/orquesta_metricas_deuda.sh) como maximo y obliga a bajar para anadir; (3) checklist de retirada del legacy_director_loop condicionada a ventana §9 verde y segundo backend goal, documentada para decision del operador, sin borrar codigo en esta tarea.
 
-Estado: pendiente.
+Estado: aparcado hasta ventana §9 verde y decision explicita de retirada legacy.
 
 Alcance:
 
@@ -187,7 +193,7 @@ Tests:
 
 Objetivo: simulador determinista del ciclo goal-first con inyeccion sistematica de fallos, estilo FoundationDB: con reloj falso, backend falso y stores in-memory existentes, un arnes que ejecuta el ciclo completo (lanzar, observar, materializar result, reconciliar, cerrar) matando el backend, retrasando la materializacion, duplicando observaciones o cortando el proceso en CADA punto de transicion enumerable, y verifica los invariantes: ningun goal queda running eterno, ningun terminal desaparece sin estado visible, ningun conflicto se resuelve en silencio, ninguna transicion ilegal de TransicionBackendV0. Semilla reproducible: cada fallo detectado imprime la secuencia exacta para reproducirlo.
 
-Estado: pendiente.
+Estado: cerrado por T291/df2bed2f, integrado y verificado con simulador determinista.
 
 Alcance:
 
@@ -213,7 +219,7 @@ Tests:
 
 Objetivo: tests basados en propiedades (pgregory.net/rapid, dependencia solo de test) para las funciones puras del nucleo: ConstruirProyeccionCicloVidaV0 (determinismo bajo permutacion de evidencias, ningun conflicto silencioso, monotonia de precedencias), TransicionBackendV0 (sin transiciones ilegales alcanzables, idempotencia de observaciones repetidas) y ReconcileExternalWorkPublicStatusV0 (estado publico nunca completed sin evidencia terminal). Minimo 4 propiedades por funcion con generadores de entradas.
 
-Estado: pendiente.
+Estado: cerrado por T287/a9f3b455, integrado y verificado.
 
 Alcance:
 
@@ -240,7 +246,7 @@ Tests:
 
 Objetivo: piloto de mutation testing acotado y opt-in: script scripts/orquesta_mutation_pilot.sh que ejecute go-mutesting (o herramienta Go equivalente activa) SOLO sobre modulos/orquesta-estado-vivo y modulos/orquesta-goal, publique el mutation score por paquete en un JSON datado bajo el directorio de resultados nightly, y documente en runbook el umbral aceptable propuesto y los mutantes supervivientes mas graves como candidatos a test nuevo. No entra en CI por defecto: solo opt-in manual/nightly extendido.
 
-Estado: pendiente.
+Estado: cerrado por T288/a9f3b455, integrado y verificado como piloto opt-in.
 
 Alcance:
 
@@ -264,7 +270,7 @@ Tests:
 
 Objetivo: separar quien define los tests de quien implementa en la automejora idle: modo opt-in en el que, antes de lanzar el goal implementador, se lanza un goal barato definidor que SOLO escribe los required tests (ficheros _test.go nuevos con casos que deben pasar) y los congela con hash en el GoalWorkSpec del implementador; el implementador no puede modificar los tests congelados (la validacion de cierre rechaza diffs sobre ellos con reason frozen_tests_modified) y su cierre exige que pasen. Aplicable primero a tareas de backlog con Alcance de un solo modulo.
 
-Estado: pendiente.
+Estado: cerrado por T292/0ce95763, integrado y verificado.
 
 Alcance:
 
@@ -291,7 +297,7 @@ Tests:
 
 Objetivo: banco de tareas doradas para medir deriva de calidad de agentes: definir en docs/evals/ un set inicial de 5 tareas acotadas con resultado esperado verificable (la Nueva App del smoke como primera; una tarea de script tipo T265; una de docs tipo T280; una de fix con test congelado; una de exploracion tipo mapa publico), un script scripts/orquesta_golden_evals.sh opt-in que las lance en serie o paralelo contra una instancia aislada usando la receta de pilotaje, y un evaluador que puntue cada resultado con los criterios declarados (tests pasan, ficheros esperados, sin fuera de write-set) a JSON datado. Runbook con cadencia recomendada semanal.
 
-Estado: pendiente.
+Estado: cerrado por T289/a9f3b455, integrado y verificado.
 
 Alcance:
 
@@ -316,7 +322,7 @@ Tests:
 
 Objetivo: curacion de habilidades reutilizables estilo Voyager: un goal idle opcional que revisa results durables aceptados recientes, detecta artefactos reutilizables (scripts, patrones de test, plantillas de runbook), y propone su destilacion a skills/ como habilidad con contrato (nombre, cuando usarla, entrada/salida, validacion) via seccion de backlog nueva para revision, nunca copiando secretos ni rutas privadas. El compilador de GoalWorkSpec anade como context_refs las habilidades cuyo nombre/etiquetas casen con la clase de tarea.
 
-Estado: pendiente.
+Estado: cerrado por MEJ-206/a9f3b455 mediante reparacion acotada; no relanzar destilacion autonoma.
 
 Alcance:
 
@@ -341,7 +347,7 @@ Tests:
 
 Objetivo: convertir la escalera worker-barato/repair-helper/prime en decision medida estilo FrugalGPT: registrar por goal el modelo/reasoning usado y el desenlace (aceptado, rework, escalado) junto a las metricas 801A; producir una proyeccion en autoprogramming/status con el ratio de exito por escalon y coste medio; y permitir configurar umbral de escalado por evidencia (n fallos del barato en la clase de tarea) en lugar de heuristica fija. Sin cambiar el default actual hasta tener 2 semanas de datos.
 
-Estado: pendiente.
+Estado: aparcado/congelado por orden del operador; no cambiar defaults sin datos y decision explicita.
 
 Alcance:
 

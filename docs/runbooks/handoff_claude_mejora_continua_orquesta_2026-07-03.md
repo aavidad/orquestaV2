@@ -10,14 +10,16 @@ verificable de la ola actual y de las incidencias observadas.
 ## Estado corto
 
 - Fecha de corte: 2026-07-03.
-- Worktree: con cambios sin commit.
+- Worktree: limpio tras commits y push de la tanda; si Claude ve cambios, deben
+  tratarse como trabajo posterior.
 - Procesos: tras la limpieza no quedaban procesos `orquesta-server run`,
   `codebase-memory-mcp` ni `codex app-server --listen`.
 - Verificacion global ejecutada: verde con `go test -count=1 ./...`,
   `go build ./...` y `git diff --check`.
-- Actualizacion posterior al commit `a9f3b455`: Codex esta integrando MEJ-104
-  como reparacion acotada antes de relanzar automejora real. El cambio aun no
-  esta comiteado ni pusheado en el momento de esta nota.
+- Actualizacion posterior al commit `a9f3b455`: MEJ-104/T290 queda integrado y
+  pusheado como reparacion acotada antes de relanzar automejora real. El smoke
+  real de presupuesto queda solo como validacion condicional antes de reactivar
+  pilotajes caros.
 - Excepcion operativa: MEJ-206 se lanzo por Orquesta, pero el piloto quedo sin
   progreso util con consumo alto de tokens y checkpoint invalido. Se paro el
   runtime y Codex integro una reparacion acotada, dejando bugs documentados.
@@ -112,8 +114,8 @@ reparacion local documentada.
 
 ### MEJ-104 - gobernador de presupuesto de automejora idle
 
-Estado: en curso, con pruebas focales y validacion global verdes; no marcar
-como cierre productivo hasta ejecutar un piloto real controlado.
+Estado: integrado localmente con pruebas focales y validacion global verdes; no
+reactivar automejora productiva hasta ejecutar un smoke real controlado.
 
 Motivo de la excepcion: BUG-ORQ-20260703-154 demostro que relanzar Orquesta
 sin gobernador podia volver a consumir muchos tokens sin progreso. Por eso
@@ -246,33 +248,31 @@ Resultado observado: sin salida.
 
 ## Pendiente aproximado
 
-Ola actual cerrada en terminos de integracion verificable:
+Olas cerradas en terminos de integracion verificable:
 
 - T285.
+- MEJ-201 / T291.
 - MEJ-202.
 - MEJ-203.
+- MEJ-204 / T292.
+- MEJ-104 / T290, con presupuesto pre-launch y corte durante ejecucion cubiertos
+  por codigo/fakes; queda solo smoke real acotado antes de reactivar
+  automejora/pilotajes caros.
 - MEJ-205.
 - MEJ-206, con excepcion documentada.
 
-Siguiente ola recomendada:
+Cola congelada por orden del operador:
 
-- MEJ-201.
-- MEJ-204.
-- MEJ-104 queda empezado: presupuesto pre-launch implementado y validacion
-  global verde; falta smoke real y corte durante ejecucion por alto consumo sin
-  progreso.
-
-Ola posterior:
-
-- MEJ-102.
-- MEJ-105.
-- MEJ-207.
+- No relanzar T286-EXP, MEJ-102, MEJ-105, MEJ-207 ni nuevos pilotajes de
+  automejora desde este handoff.
+- MEJ-103 residente queda supersedida por el director de escalada para esta
+  tanda.
 
 Condicionales, si siguen vigentes tras revision de backlog:
 
-- MEJ-101.
-- MEJ-103.
-- MEJ-106.
+- MEJ-101: cierre OPES real temporal opt-in como validacion final de campo.
+- MEJ-106: deuda residual/ratchets tras ventana §9 y decision de retirada
+  legacy.
 
 ## Checklist de Claude
 
@@ -280,7 +280,8 @@ Condicionales, si siguen vigentes tras revision de backlog:
 2. Revisar diff de MEJ-206 con foco en contratos y frontera core/composicion.
 3. Confirmar que `docs/inventario_bugs_orquesta_2026-06-30.md` contiene los
    bugs 154-157.
-4. Confirmar MEJ-104 en `autoprogramming/status` con presupuesto bajo.
+4. Confirmar MEJ-104 en `autoprogramming/status` con presupuesto bajo si se
+   decide ejecutar smoke real acotado; no hacerlo automaticamente.
 5. Confirmar que no quedan procesos vivos con el `pgrep` indicado arriba.
-6. Si todo sigue verde, preparar siguiente ola sin relanzar los pilotos
-   cerrados.
+6. Si todo sigue verde, no preparar ola nueva salvo orden explicita: la cola
+   esta congelada.

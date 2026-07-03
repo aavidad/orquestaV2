@@ -556,10 +556,13 @@ Documentacion actualizada para Claude:
   como cerrados segun esta bitacora.
 - No se abre `BUG-158`: el hueco de escalation director queda cubierto por
   codigo y tests.
-- Siguen abiertos como residuales de esta tanda:
+- Nota historica en ese momento del corte: seguian abiertos como residuales de
+  esa tanda:
   `BUG-ORQ-20260703-149`, `BUG-ORQ-20260703-154`,
   `BUG-ORQ-20260703-155`, `BUG-ORQ-20260703-156` y
-  `BUG-ORQ-20260703-157`.
+  `BUG-ORQ-20260703-157`. El estado vigente queda actualizado en las entradas
+  posteriores de esta bitacora y en el inventario: `BUG-154/155/156/157/159`
+  estan cerrados; solo `BUG-149` sigue abierto en esta tanda.
 
 Pendiente para cierre final, sin relanzar lo congelado: revisar procesos vivos
 antes de entregar, commitear y hacer push para que Claude siga.
