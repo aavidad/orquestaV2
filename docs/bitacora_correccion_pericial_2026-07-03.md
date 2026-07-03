@@ -384,3 +384,35 @@ simulación determinista, property-based, mutation testing, actor-crítico,
 golden evals, biblioteca de habilidades, cascada medida). Olas sugeridas por
 Alcance disjunto en el propio plan. Pendiente además: experimento A/B del
 broker (T286-EXP, diseñado más arriba).
+
+### 2026-07-04 — RELEVO A DIRECTOR CODEX (cuota Claude agotada)
+
+**En vuelo ahora (verificar e integrar con la receta de esta bitácora):**
+| Pilotaje | Puerto | Rama | Tarea | Verificación |
+| --- | --- | --- | --- | --- |
+| T285 despertar-por-result | 35175 | pericial/pilot-t285 | wakeup <2s al materializar result | suites stack+server+cmd+raíz |
+| T287 (MEJ-202) property-based | 41411 | pericial/pilot-m202 | propiedades núcleo puro | suites estado-vivo+appserver+run-coordinator+raíz |
+| T288 (MEJ-203) mutation piloto | 44545 | pericial/pilot-m203 | script opt-in + runbook | bash -n + test shell focal |
+| T289 (MEJ-205) golden evals | 44909 | pericial/pilot-m205 | banco 5 tareas doradas | bash -n + test shell focal |
+
+Protocolo por pilotaje: esperar result durable con matching EXACTO del
+task-ref en el nombre del json (no glob amplio: los worktrees contienen
+results antiguos commiteados); ignorar placeholders `invalid` iniciales;
+verificar con los Tests de su sección; `git checkout --` del backlog mínimo;
+commit en la rama del worktree; cherry-pick a `trabajo/plataforma-agentes`;
+resolver conflictos aditivos por unión; suites en main; apagar servidor
+(kill PID en `<pilot>/server.pid`) y tmux/app-server residuales.
+
+**Cola tras integrar lo anterior (paralelizar por Alcance disjunto):**
+1. MEJ-206 (espera a T285: cruza cmd/autoprogramming).
+2. T286-EXP experimento A/B broker (diseño completo más arriba; usar
+   thread_goals.tokens_used + métricas 801A; criterio ≥15% predefinido).
+3. Ola 2: MEJ-201 + MEJ-204 + MEJ-104. Ola 3: MEJ-102 + MEJ-105 + MEJ-207.
+4. Con decisión del operador: MEJ-101 (OPES real), MEJ-103 (backend Claude),
+   MEJ-106 (deuda residual; retirada legacy solo tras ventana §9 verde).
+
+**Estado global**: plan pericial 18/18 + bugs 151/152/153 cerrados + CTX-801
+A/B/C/D integrados + nightly activo (03:30) + remoto saneado. La ventana §9
+corre desde hoy: 7 nightlies verdes + métricas planas/bajando = firmar
+autonomía. Regla permanente: paralelización por contrato (AGENTS.md),
+verificación antes de integrar, y todo cierre deja evidencia aquí.
