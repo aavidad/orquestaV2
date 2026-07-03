@@ -620,7 +620,6 @@ func TestMCPRunControlExecutorV0StopReconcilesExternalCleanupConEvidenciaSinForc
 		Action:       "stop",
 		RunRef:       runRef,
 		RequestedBy:  "orquesta-director",
-		Reason:       "seguir run_control_reconcile_external_cleanup",
 		Forced:       false,
 		EvidenceRefs: []string{mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0},
 	})
@@ -637,6 +636,11 @@ func TestMCPRunControlExecutorV0StopReconcilesExternalCleanupConEvidenciaSinForc
 		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-run-control-goal-external-cleanup-reconciled") ||
 		!containsStringMCPTestV0(result.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) {
 		t.Fatalf("result=%+v complete=%+v", result, port.complete)
+	}
+	if strings.Contains(port.complete.Reason, "forced") ||
+		!strings.Contains(port.complete.Reason, "external cleanup") ||
+		strings.Contains(port.complete.IdempotencyKey, "forced") {
+		t.Fatalf("complete terminal degrada cleanup externo a forced: %+v", port.complete)
 	}
 	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), runRef)
 	if err != nil {

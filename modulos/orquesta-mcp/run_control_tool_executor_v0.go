@@ -320,12 +320,18 @@ func (executor MCPRunControlToolExecutorV0) completeRunControlAfterForcedGoalRec
 	if action == "cancel" {
 		target = orquestaruncontrol.RunControlStatusCanceledV0
 	}
+	defaultReason := "forced goal backend reconcile completed run control"
+	defaultIdempotencyKey := "idem-mcp-run-control-forced-reconcile-" + action + "-" + strings.TrimSpace(input.RunRef)
+	if !input.Forced && mcpRunControlInputRequestsExternalCleanupReconcileV0(input) {
+		defaultReason = "external cleanup goal backend reconcile completed run control"
+		defaultIdempotencyKey = "idem-mcp-run-control-external-cleanup-reconcile-" + action + "-" + strings.TrimSpace(input.RunRef)
+	}
 	completed, err := terminal.CompleteRunControlV0(ctx, orquestaruncontrol.CompleteRunControlCommandV0{
 		RunRef:         strings.TrimSpace(input.RunRef),
 		TargetStatus:   target,
 		RequestedBy:    firstNonEmptyMCPV0(input.RequestedBy, "orquesta-mcp-run-control"),
-		Reason:         firstNonEmptyMCPV0(input.Reason, "forced goal backend reconcile completed run control"),
-		IdempotencyKey: firstNonEmptyMCPV0(input.IdempotencyKey, "idem-mcp-run-control-forced-reconcile-"+action+"-"+strings.TrimSpace(input.RunRef)),
+		Reason:         firstNonEmptyMCPV0(input.Reason, defaultReason),
+		IdempotencyKey: firstNonEmptyMCPV0(input.IdempotencyKey, defaultIdempotencyKey),
 		EvidenceRefs:   compactStringsMCPV0(append(evidenceRefs, "evidence-ref-run-control-terminal-after-goal-reconcile")),
 	})
 	if err != nil {
