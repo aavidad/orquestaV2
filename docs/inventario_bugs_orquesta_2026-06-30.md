@@ -924,6 +924,13 @@ los wrappers shell: `ORQUESTA_SERVER_URL`, compatibilidad `ORQUESTA_BASE_URL`,
 `ORQUESTA_RUNTIME_DIR/base_url.txt` y bloqueo sin fallback al puerto historico
 `8787`. Evidencia: `TestLauncherOPESA1NoUsaPuertoHistoricoPorDefectoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 28: la guarda del handoff de cierre
+permite conservar `777e027c` solo como corte historico observado y exige que la
+reanudacion declare `fetch/rebase` antes de tratar cualquier HEAD como vigente;
+ademas bloquea que el documento vuelva a publicar un `HEAD remoto/origin
+vigente` o una ruta de reanudacion sin `fetch/rebase`. Evidencia:
+`TestHandoffCierreSesionNoReabreBUG077V0`.
+
 Avance BUG-ORQ-20260701-077 2026-07-03 tarde 29: la guarda de shutdown HTTP
 directo en scripts detecta tambien `curl --request POST` y `curl --request=POST`
 contra `/api/v0/server/shutdown`, no solo `-X POST`, y sigue exigiendo

@@ -786,6 +786,8 @@ func TestHandoffCierreSesionNoReabreBUG077V0(t *testing.T) {
 		"no usar `777e027c` como HEAD vigente",
 		"git fetch origin trabajo/plataforma-agentes && git rebase origin/trabajo/plataforma-agentes",
 		"git status --short --branch",
+		"HEAD remoto/origin observado en el corte original",
+		"estado vigente sin fetch/rebase",
 		"TestScriptStartsTemporaryOrquestaServerV0DetectaPIDConAddrGestionadoV0",
 		"TestSmokeOPESExternalWorkAgentRealUsaShutdownDelegadoConRuntimeDirV0",
 		`ORQUESTA_SERVER_ADDR`,
@@ -805,6 +807,7 @@ func TestHandoffCierreSesionNoReabreBUG077V0(t *testing.T) {
 		"127.0.0.1:8787",
 		"localhost:8787",
 		"HEAD remoto/origin: `777e027c`",
+		"HEAD remoto/origin vigente",
 		"El arbol local queda limpio en `777e027c`.",
 	} {
 		if strings.Contains(text, forbidden) {
