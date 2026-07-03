@@ -540,6 +540,15 @@ func TestMCPAutoprogrammingStatusExecutorV0WriteSetReadOnlyPideConfigurarSandbox
 		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-codex-app-server-write-set-requires-workspace-write") {
 		t.Fatalf("action=%+v", action)
 	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "attention_required" ||
+		result.EfficiencySummary.RecommendedAction != mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0+":run:"+runRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(
+			result.EfficiencySummary.Reasons,
+			mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0,
+		) {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
 }
 
 func TestMCPAutoprogrammingStatusExecutorV0WriteSetGuardContractPideRepairPacketV0(t *testing.T) {
@@ -604,6 +613,12 @@ func TestMCPAutoprogrammingStatusExecutorV0WriteSetGuardContractPideRepairPacket
 				action.GoalRef != goalRef ||
 				!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, tc.evidenceRef) {
 				t.Fatalf("action=%+v", action)
+			}
+			if result.EfficiencySummary == nil ||
+				result.EfficiencySummary.State != "attention_required" ||
+				result.EfficiencySummary.RecommendedAction != mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0+":run:"+runRef ||
+				!hasStringMCPAutoprogrammingStatusTestV0(result.EfficiencySummary.Reasons, tc.issueCode) {
+				t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
 			}
 		})
 	}

@@ -867,6 +867,17 @@ wrappers que documenten `ORQUESTA_RUNTIME_DIR/base_url.txt` pero fallen en
 ejecucion o vuelvan a rutas manuales. Evidencia:
 `TestScriptsConEndpointGestionadoCarganSmokeCommonV0`.
 
+Avance BUG-ORQ-20260701-085 2026-07-03 tarde 22: `efficiency_summary` conserva
+ahora tambien las acciones compactas de launch write-set: si el goal queda
+invalid por `codex_app_server_write_set_requires_workspace_write`, publica
+`state=attention_required`, razon causal y
+`configure_goal_backend_workspace_write:run:<run_ref>`; si falla el contrato
+`allowed_write_set`, publica `repair_goal_write_set_contract:run:<run_ref>`.
+Esto evita que consumidores compactos vean solo `unavailable` o un bloqueo
+generico cuando la causa durable ya esta en `stale_running`. Evidencia:
+`TestMCPAutoprogrammingStatusExecutorV0WriteSetReadOnlyPideConfigurarSandboxV0`
+y `TestMCPAutoprogrammingStatusExecutorV0WriteSetGuardContractPideRepairPacketV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado

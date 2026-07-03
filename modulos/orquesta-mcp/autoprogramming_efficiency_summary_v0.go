@@ -88,6 +88,8 @@ func buildMCPAutoprogrammingEfficiencySummaryV0(
 		summary.RecommendedAction = strings.Join([]string{MCPGoalFirstContinueFromPhase0ActionV0, "run", runRef}, ":")
 	} else if action, runRef := recoverableGoalFirstActionMCPAutoprogrammingEfficiencyV0(diagnostics, run); action != "" && runRef != "" {
 		summary.RecommendedAction = strings.Join([]string{action, "run", runRef}, ":")
+	} else if action, runRef := writeSetActionMCPAutoprogrammingEfficiencyV0(diagnostics, run); action != "" && runRef != "" {
+		summary.RecommendedAction = strings.Join([]string{action, "run", runRef}, ":")
 	} else if runRef := threadOutputSanitizedRunRefMCPAutoprogrammingEfficiencyV0(diagnostics, run); runRef != "" {
 		summary.RecommendedAction = strings.Join([]string{"replan_narrow_context", "run", runRef}, ":")
 	}
@@ -251,6 +253,12 @@ func operationalHealthMCPAutoprogrammingEfficiencyV0(
 			summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, code)
 		}
 	}
+	for _, code := range writeSetCodesMCPAutoprogrammingEfficiencyV0() {
+		if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, code) {
+			health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
+			summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, code)
+		}
+	}
 	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, mcpAutoprogrammingActionThreadOutputSanitizedV0) {
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
 		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, mcpAutoprogrammingActionThreadOutputSanitizedV0)
@@ -296,8 +304,6 @@ func stateMCPAutoprogrammingEfficiencyV0(
 	run *MCPDirectorStatsToolResultV0,
 ) string {
 	switch {
-	case !queueVisible && !runVisible:
-		return "unavailable"
 	case strings.EqualFold(summary.ClosureStatus, "closed"):
 		return "closed"
 	case hasReasonMCPAutoprogrammingEfficiencyV0(summary, "goal_first_blocked") ||
@@ -306,8 +312,11 @@ func stateMCPAutoprogrammingEfficiencyV0(
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstRequiredTestEvidenceMissingV0) ||
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstPhase0CompleteNonPublishableV0) ||
 		hasRecoverableGoalFirstReasonMCPAutoprogrammingEfficiencyV0(summary) ||
+		hasWriteSetReasonMCPAutoprogrammingEfficiencyV0(summary) ||
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, mcpAutoprogrammingActionThreadOutputSanitizedV0):
 		return "attention_required"
+	case !queueVisible && !runVisible:
+		return "unavailable"
 	case hasRunReplanAmplificationMCPAutoprogrammingEfficiencyV0(run):
 		return "hung"
 	case summary.StuckPercentage >= 50 || (summary.AgentsStuck > 0 && summary.AlivePercentage == 0):
@@ -402,6 +411,56 @@ func hasRecoverableGoalFirstReasonMCPAutoprogrammingEfficiencyV0(
 	summary *MCPAutoprogrammingEfficiencySummaryV0,
 ) bool {
 	for _, code := range recoverableGoalFirstCodesMCPAutoprogrammingEfficiencyV0() {
+		if hasReasonMCPAutoprogrammingEfficiencyV0(summary, code) {
+			return true
+		}
+	}
+	return false
+}
+
+func writeSetActionMCPAutoprogrammingEfficiencyV0(
+	diagnostics []MCPAutoprogrammingDiagnosticV0,
+	run *MCPDirectorStatsToolResultV0,
+) (string, string) {
+	for _, diagnostic := range diagnostics {
+		action := writeSetActionForCodeMCPAutoprogrammingEfficiencyV0(diagnostic.Code)
+		if action == "" {
+			continue
+		}
+		if runRef := runRefFromScopeMCPAutoprogrammingEfficiencyV0(diagnostic.Scope); runRef != "" {
+			return action, runRef
+		}
+		if run != nil && strings.TrimSpace(run.RunRef) != "" {
+			return action, strings.TrimSpace(run.RunRef)
+		}
+	}
+	return "", ""
+}
+
+func writeSetActionForCodeMCPAutoprogrammingEfficiencyV0(code string) string {
+	switch strings.TrimSpace(code) {
+	case mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0:
+		return mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0
+	case mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMissingV0,
+		mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0:
+		return mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0
+	default:
+		return ""
+	}
+}
+
+func writeSetCodesMCPAutoprogrammingEfficiencyV0() []string {
+	return []string{
+		mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0,
+		mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMissingV0,
+		mcpAutoprogrammingActionWriteSetGuardAllowedWriteSetMismatchV0,
+	}
+}
+
+func hasWriteSetReasonMCPAutoprogrammingEfficiencyV0(
+	summary *MCPAutoprogrammingEfficiencySummaryV0,
+) bool {
+	for _, code := range writeSetCodesMCPAutoprogrammingEfficiencyV0() {
 		if hasReasonMCPAutoprogrammingEfficiencyV0(summary, code) {
 			return true
 		}
