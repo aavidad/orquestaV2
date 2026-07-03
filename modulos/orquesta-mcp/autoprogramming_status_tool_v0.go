@@ -45,25 +45,26 @@ type MCPAutoprogrammingStatusToolInputV0 struct {
 }
 
 type MCPAutoprogrammingStatusToolResultV0 struct {
-	Estado            string                                                 `json:"estado"`
-	RequestID         string                                                 `json:"request_id,omitempty"`
-	CorrelationID     string                                                 `json:"correlation_id,omitempty"`
-	RunRef            string                                                 `json:"run_ref,omitempty"`
-	QueueRef          string                                                 `json:"queue_ref,omitempty"`
-	Queue             *MCPRunQueuePriorityToolResultV0                       `json:"queue,omitempty"`
-	Run               *MCPDirectorStatsToolResultV0                          `json:"run,omitempty"`
-	QueueHealth       *MCPAutoprogrammingQueueHealthV0                       `json:"queue_health,omitempty"`
-	StaleRunning      []MCPAutoprogrammingActionableRunV0                    `json:"stale_running,omitempty"`
-	ResolvedRuns      []MCPAutoprogrammingActionableRunV0                    `json:"resolved_runs,omitempty"`
-	Projects          []MCPAutoprogrammingProjectV0                          `json:"projects,omitempty"`
-	Tasks             []MCPAutoprogrammingTaskV0                             `json:"tasks,omitempty"`
-	Agents            []MCPAutoprogrammingAgentV0                            `json:"agents,omitempty"`
-	Operator          *MCPAutoprogrammingOperatorV0                          `json:"operator,omitempty"`
-	EfficiencySummary *MCPAutoprogrammingEfficiencySummaryV0                 `json:"efficiency_summary,omitempty"`
-	OpsSnapshot       *orquestaobservability.DirectorAutonomousOpsSnapshotV0 `json:"ops_snapshot,omitempty"`
-	EvidenceRefs      []string                                               `json:"evidence_refs,omitempty"`
-	Diagnostics       []MCPAutoprogrammingDiagnosticV0                       `json:"diagnostics,omitempty"`
-	Errores           []MCPValidationIssueV0                                 `json:"errores_publicos,omitempty"`
+	Estado             string                                                 `json:"estado"`
+	RequestID          string                                                 `json:"request_id,omitempty"`
+	CorrelationID      string                                                 `json:"correlation_id,omitempty"`
+	RunRef             string                                                 `json:"run_ref,omitempty"`
+	QueueRef           string                                                 `json:"queue_ref,omitempty"`
+	Queue              *MCPRunQueuePriorityToolResultV0                       `json:"queue,omitempty"`
+	Run                *MCPDirectorStatsToolResultV0                          `json:"run,omitempty"`
+	QueueHealth        *MCPAutoprogrammingQueueHealthV0                       `json:"queue_health,omitempty"`
+	StaleRunning       []MCPAutoprogrammingActionableRunV0                    `json:"stale_running,omitempty"`
+	ResolvedRuns       []MCPAutoprogrammingActionableRunV0                    `json:"resolved_runs,omitempty"`
+	Projects           []MCPAutoprogrammingProjectV0                          `json:"projects,omitempty"`
+	Tasks              []MCPAutoprogrammingTaskV0                             `json:"tasks,omitempty"`
+	Agents             []MCPAutoprogrammingAgentV0                            `json:"agents,omitempty"`
+	Operator           *MCPAutoprogrammingOperatorV0                          `json:"operator,omitempty"`
+	GoalProgressPolicy *MCPAutoprogrammingGoalProgressPolicyV0                `json:"goal_progress_policy,omitempty"`
+	EfficiencySummary  *MCPAutoprogrammingEfficiencySummaryV0                 `json:"efficiency_summary,omitempty"`
+	OpsSnapshot        *orquestaobservability.DirectorAutonomousOpsSnapshotV0 `json:"ops_snapshot,omitempty"`
+	EvidenceRefs       []string                                               `json:"evidence_refs,omitempty"`
+	Diagnostics        []MCPAutoprogrammingDiagnosticV0                       `json:"diagnostics,omitempty"`
+	Errores            []MCPValidationIssueV0                                 `json:"errores_publicos,omitempty"`
 }
 
 type MCPAutoprogrammingStatusToolExecutorV0 struct {
@@ -102,7 +103,7 @@ func MCPAutoprogrammingStatusDescriptorV0() MCPAutoprogrammingStatusToolDescript
 		Name:        MCPAutoprogrammingStatusToolNameV0,
 		Version:     MCPAutoprogrammingStatusToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,external_job_ref?,queue_ref?,app_refs?,queue_limit?,operator_advice?}",
-		Output:      "ok:{queue?,run?,queue_health?,stale_running?,projects?,tasks?,agents?,operator?,efficiency_summary?,ops_snapshot?,diagnostics?,evidence_refs?}|error:{errores_publicos,evidence_refs?,diagnostics?,operator_advice?}",
+		Output:      "ok:{queue?,run?,queue_health?,stale_running?,projects?,tasks?,agents?,operator?,goal_progress_policy?,efficiency_summary?,ops_snapshot?,diagnostics?,evidence_refs?}|error:{errores_publicos,evidence_refs?,diagnostics?,operator_advice?}",
 		ResourceURI: MCPAutoprogrammingStatusResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -127,6 +128,8 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 		ctx = context.Background()
 	}
 	result := newMCPAutoprogrammingStatusBaseV0(input)
+	goalProgressPolicy := NormalizeMCPAutoprogrammingGoalProgressPolicyV0(executor.GoalProgressPolicy)
+	result.GoalProgressPolicy = &goalProgressPolicy
 	result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingStatusConfiguredDiagnosticsV0(executor.StatusDiagnostics)...)
 	okCount := 0
 	if executor.Queue != nil {
@@ -228,7 +231,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	blockedGoalActions, resolvedGoalActions := mcpAutoprogrammingGoalFirstBlockedActionsV0(
 		goalStates,
 		observedByRunRef,
-		executor.GoalProgressPolicy,
+		goalProgressPolicy,
 		input.OccurredAt,
 	)
 	result.StaleRunning = append(result.StaleRunning, blockedGoalActions...)

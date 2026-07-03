@@ -1363,6 +1363,15 @@ contador y no permite senal local mientras quede evidencia de backend Goal
 activo. Evidencia:
 `TestRequestServerShutdownV0ReadyNoSaltaActiveWorkRefsSinContadorV0`.
 
+Avance BUG-ORQ-20260701-073/088 2026-07-03 tarde 40:
+`autoprogramming/status` publica `goal_progress_policy` normalizada en el mismo
+payload que decide `active_timeout_checkpoint_recent`,
+`checkpoint_only_consumption_warning` y `checkpoint_only_high_consumption`.
+Asi un operador o panel puede auditar los umbrales efectivos de tokens y espera
+sin consultar aparte `/server/status`. Evidencia:
+`TestMCPAutoprogrammingStatusDescriptorV0EsAdaptadorFino` y
+`TestMCPAutoprogrammingStatusExecutorV0GoalActiveTimeoutConCheckpointRespetaUmbralConfiguradoV0`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

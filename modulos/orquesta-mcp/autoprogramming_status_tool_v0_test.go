@@ -21,6 +21,7 @@ func TestMCPAutoprogrammingStatusDescriptorV0EsAdaptadorFino(t *testing.T) {
 	if descriptor.Name != MCPAutoprogrammingStatusToolNameV0 ||
 		descriptor.ResourceURI != MCPAutoprogrammingStatusResourceURIV0 ||
 		len(descriptor.Invariantes) == 0 ||
+		!strings.Contains(descriptor.Output, "goal_progress_policy") ||
 		!strings.Contains(descriptor.Output, "efficiency_summary") ||
 		!strings.Contains(descriptor.Output, "error:{errores_publicos,evidence_refs?") {
 		t.Fatalf("descriptor incompleto: %+v", descriptor)
@@ -847,6 +848,12 @@ func TestMCPAutoprogrammingStatusExecutorV0CheckpointOnlyHighConsumptionEsBloque
 	}
 	if len(result.StaleRunning) != 1 {
 		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	if result.GoalProgressPolicy == nil ||
+		result.GoalProgressPolicy.CheckpointOnlyHighConsumptionTokens != mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensDefaultV0 ||
+		result.GoalProgressPolicy.CheckpointOnlyMaxWaitSeconds != mcpAutoprogrammingCheckpointOnlyMaxWaitSecondsDefaultV0 ||
+		result.GoalProgressPolicy.NoCheckpointWarningMaxWaitSeconds != mcpAutoprogrammingNoCheckpointWarningMaxWaitSecondsDefaultV0 {
+		t.Fatalf("goal_progress_policy no publica politica efectiva normalizada: %+v", result.GoalProgressPolicy)
 	}
 	action := result.StaleRunning[0]
 	if action.Code != mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0 ||
@@ -1686,6 +1693,12 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalActiveTimeoutConCheckpointRespeta
 	}
 	if len(result.StaleRunning) != 1 {
 		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	if result.GoalProgressPolicy == nil ||
+		result.GoalProgressPolicy.CheckpointOnlyHighConsumptionTokens != 20000 ||
+		result.GoalProgressPolicy.CheckpointOnlyMaxWaitSeconds != mcpAutoprogrammingCheckpointOnlyMaxWaitSecondsDefaultV0 ||
+		result.GoalProgressPolicy.NoCheckpointWarningMaxWaitSeconds != mcpAutoprogrammingNoCheckpointWarningMaxWaitSecondsDefaultV0 {
+		t.Fatalf("goal_progress_policy no conserva politica configurada normalizada: %+v", result.GoalProgressPolicy)
 	}
 	action := result.StaleRunning[0]
 	if action.Code != mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0 ||
