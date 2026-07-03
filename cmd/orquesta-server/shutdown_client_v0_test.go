@@ -373,6 +373,52 @@ func TestRequestServerShutdownV0ReintentaCleanupBackendStillRunningHTTP409HastaR
 	}
 }
 
+func TestRequestServerShutdownV0NoReintentaHTTP409ActiveGoalsPresent(t *testing.T) {
+	shutdownCalls := 0
+	statusCalls := 0
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v0/server/shutdown":
+			shutdownCalls++
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(serverShutdownClientResultV0{
+				Estado:         "ok",
+				Status:         "active_goals_present",
+				ShutdownReady:  false,
+				RunsRequested:  1,
+				RunsStopped:    0,
+				AgentsInFlight: 1,
+			})
+		case orquestaserver.ServerStatusEndpointV0:
+			statusCalls++
+			_ = json.NewEncoder(w).Encode(orquestaserver.ServerPublicStatusV0{
+				Status:                 "running",
+				ShutdownInProgress:     true,
+				ShutdownStatus:         "active_goals_present",
+				ShutdownRunsRequested:  1,
+				ShutdownRunsStopped:    0,
+				ShutdownAgentsInFlight: 1,
+			})
+		default:
+			t.Fatalf("path inesperado: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	err := requestServerShutdownV0(strings.TrimPrefix(server.URL, "http://"), serverShutdownClientOptionsV0{Forced: true})
+
+	if err == nil || !strings.Contains(err.Error(), "shutdown_not_ready status=active_goals_present") {
+		t.Fatalf("error active_goals_present esperado: %v", err)
+	}
+	if shutdownCalls != 1 {
+		t.Fatalf("shutdownCalls=%d, no debe reintentar active_goals_present", shutdownCalls)
+	}
+	if statusCalls != 0 {
+		t.Fatalf("statusCalls=%d, active_goals_present no debe entrar en espera", statusCalls)
+	}
+}
+
 func TestWaitServerShutdownReadyV0NoEsperaEstadosNoRecuperables(t *testing.T) {
 	started := time.Now()
 	err := waitServerShutdownReadyV0(

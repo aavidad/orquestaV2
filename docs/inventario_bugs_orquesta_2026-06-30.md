@@ -1017,6 +1017,13 @@ global de otros comandos. Evidencia:
 `TestRequestServerShutdownV0ReintentaCleanupBackendStillRunningHTTP409HastaReady`
 y `TestReadCommandHTTPResponseBodyAllowStatusV0PermiteConflictJSON`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 25: la ventana de reintento
+del cliente queda acotada a `backend_still_running` recuperable; un
+`HTTP 409 active_goals_present`, incluso con `--force`, falla como
+`shutdown_not_ready` sin rePOST ni polling de estado, evitando convertir goals
+activos normales en cleanup de backend. Evidencia:
+`TestRequestServerShutdownV0NoReintentaHTTP409ActiveGoalsPresent`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
