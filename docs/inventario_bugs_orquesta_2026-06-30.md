@@ -934,6 +934,12 @@ la respuesta publica y en el estado run-control durable, sin recomendar
 Evidencia:
 `TestMCPRunControlExecutorV0PauseResumeExternalCleanupConservanEvidenciaEnResultadoV0`.
 
+Avance BUG-ORQ-20260701-065 2026-07-03 tarde 30: el adaptador file-based de
+run-control conserva de forma durable la evidencia de cleanup externo en
+`pause` y `resume`, normalizada y sin duplicados, y la recupera tras recrear el
+store desde disco. Evidencia:
+`TestRunFileStorePauseResumePersisteEvidenciaCleanupExternoV0`.
+
 Avance BUG-ORQ-20260701-085 2026-07-03 tarde 22: `efficiency_summary` conserva
 ahora tambien las acciones compactas de launch write-set: si el goal queda
 invalid por `codex_app_server_write_set_requires_workspace_write`, publica

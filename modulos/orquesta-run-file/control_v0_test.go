@@ -85,6 +85,52 @@ func TestRunFileStoreControlMissingAndInvalidCompletionV0(t *testing.T) {
 	}
 }
 
+func TestRunFileStorePauseResumePersisteEvidenciaCleanupExternoV0(t *testing.T) {
+	dir := t.TempDir()
+	store := mustNewRunFileStoreV0(t, dir)
+	ctx := context.Background()
+	const cleanupEvidence = "evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup"
+
+	paused, err := store.PauseRunV0(ctx, orquestaruncontrol.PauseRunCommandV0{
+		RunRef:       "run-control-cleanup-evidence",
+		RequestedBy:  "orquesta-director",
+		Reason:       "pausar conservando evidencia de cleanup externo",
+		EvidenceRefs: []string{" " + cleanupEvidence + " ", cleanupEvidence, ""},
+	})
+	if err != nil {
+		t.Fatalf("PauseRunV0: %v", err)
+	}
+	if paused.Status != orquestaruncontrol.RunControlStatusPausedV0 ||
+		!reflect.DeepEqual(paused.EvidenceRefs, []string{cleanupEvidence}) {
+		t.Fatalf("paused=%+v", paused)
+	}
+
+	resumed, err := store.ResumeRunV0(ctx, orquestaruncontrol.ResumeRunCommandV0{
+		RunRef:       "run-control-cleanup-evidence",
+		RequestedBy:  "orquesta-director",
+		Reason:       "reanudar conservando evidencia de cleanup externo",
+		EvidenceRefs: []string{cleanupEvidence},
+	})
+	if err != nil {
+		t.Fatalf("ResumeRunV0: %v", err)
+	}
+	if resumed.Status != orquestaruncontrol.RunControlStatusRunningV0 ||
+		!reflect.DeepEqual(resumed.EvidenceRefs, []string{cleanupEvidence}) {
+		t.Fatalf("resumed=%+v", resumed)
+	}
+
+	reopened := mustNewRunFileStoreV0(t, dir)
+	read, err := reopened.ReadRunControlStateV0(ctx, orquestaruncontrol.RunControlReadRequestV0{
+		RunRef: "run-control-cleanup-evidence",
+	})
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if !reflect.DeepEqual(read, resumed) {
+		t.Fatalf("read=%+v resumed=%+v", read, resumed)
+	}
+}
+
 func TestRunFileStoreRecordRunCheckpointPersisteV0(t *testing.T) {
 	dir := t.TempDir()
 	store := mustNewRunFileStoreV0(t, dir)
