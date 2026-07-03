@@ -488,11 +488,36 @@ func scriptShutdownCurlCommandsV0(text string) []string {
 		}
 		command := strings.Join(commandLines, "\n")
 		if strings.Contains(command, "/api/v0/server/shutdown") &&
-			strings.Contains(command, "-X POST") {
+			scriptCurlCommandUsesPostV0(command) {
 			commands = append(commands, command)
 		}
 	}
 	return commands
+}
+
+func scriptCurlCommandUsesPostV0(command string) bool {
+	fields := scriptShellCommandFieldsV0(command)
+	for index, field := range fields {
+		if field == "-X" && index+1 < len(fields) && strings.EqualFold(fields[index+1], "POST") {
+			return true
+		}
+		if strings.HasPrefix(field, "-X") && strings.EqualFold(strings.TrimPrefix(field, "-X"), "POST") {
+			return true
+		}
+	}
+	return false
+}
+
+func scriptShellCommandFieldsV0(command string) []string {
+	rawFields := strings.Fields(command)
+	fields := make([]string, 0, len(rawFields))
+	for _, field := range rawFields {
+		if field == `\` {
+			continue
+		}
+		fields = append(fields, field)
+	}
+	return fields
 }
 
 func shellLineContinuesV0(line string) bool {
@@ -516,6 +541,22 @@ func TestScriptShutdownCurlCommandsV0DetectaCleanupLejanoV0(t *testing.T) {
 	commands := scriptShutdownCurlCommandsV0(text)
 	if len(commands) != 1 || !strings.Contains(commands[0], "cleanup_goal_backends") {
 		t.Fatalf("detector debe cubrir shutdown multilinea completo: %+v", commands)
+	}
+}
+
+func TestScriptShutdownCurlCommandsV0DetectaPostSeparadoPorContinuacionV0(t *testing.T) {
+	text := strings.Join([]string{
+		`shutdown_status="$(curl -sS \`,
+		`  -X \`,
+		`  POST \`,
+		`  "$base_url/api/v0/server/shutdown" \`,
+		`  --data-binary "{\"request_id\":\"req-shutdown\",\"cleanup_goal_backends\":true}"`,
+		`)"`,
+	}, "\n")
+
+	commands := scriptShutdownCurlCommandsV0(text)
+	if len(commands) != 1 || !strings.Contains(commands[0], "cleanup_goal_backends") {
+		t.Fatalf("detector debe cubrir -X y POST separados por continuacion: %+v", commands)
 	}
 }
 
