@@ -2,8 +2,10 @@ package orquestaruntimecodexgoal
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -42,6 +44,7 @@ type CodexGoalStartPacketV0 struct {
 	WorkProfileKind    string                                `json:"work_profile_kind,omitempty"`
 	Objective          string                                `json:"objective"`
 	Prompt             string                                `json:"prompt"`
+	PromptCache        CodexGoalPromptCacheProjectionV0      `json:"prompt_cache,omitempty"`
 	ContextRefs        []orquestagoal.GoalContextRefV0       `json:"context_refs,omitempty"`
 	RuleRefs           []orquestagoal.GoalRuleRefV0          `json:"rule_refs,omitempty"`
 	SkillRefs          []string                              `json:"skill_refs,omitempty"`
@@ -55,6 +58,15 @@ type CodexGoalStartPacketV0 struct {
 	ClosurePolicy      orquestagoal.GoalClosurePolicyV0      `json:"closure_policy,omitempty"`
 	ReworkPolicy       orquestagoal.GoalReworkPolicyV0       `json:"rework_policy,omitempty"`
 	DirectionContract  CodexGoalDirectionContractV0          `json:"direction_contract,omitempty"`
+}
+
+type CodexGoalPromptCacheProjectionV0 struct {
+	CacheKey           string `json:"cache_key,omitempty"`
+	StablePrefixSHA256 string `json:"stable_prefix_sha256,omitempty"`
+	StablePrefixBytes  int    `json:"stable_prefix_bytes,omitempty"`
+	DynamicSuffixBytes int    `json:"dynamic_suffix_bytes,omitempty"`
+	CachedInputTokens  int    `json:"cached_input_tokens,omitempty"`
+	InputTokens        int    `json:"input_tokens,omitempty"`
 }
 
 type CodexGoalDirectionContractV0 struct {
@@ -82,6 +94,7 @@ type CodexGoalStartReceiptV0 struct {
 	ContextBudget   orquestagoal.GoalContextBudgetV0 `json:"context_budget,omitempty"`
 	EvidenceRefs    []string                         `json:"evidence_refs,omitempty"`
 	IssueCode       string                           `json:"issue_code,omitempty"`
+	PromptCache     CodexGoalPromptCacheProjectionV0 `json:"prompt_cache,omitempty"`
 }
 
 type CodexGoalObservationRequestV0 struct {
@@ -105,6 +118,7 @@ type CodexGoalObservationReceiptV0 struct {
 	ReworkPlanRefs        []string                                  `json:"rework_plan_refs,omitempty"`
 	EvidenceRefs          []string                                  `json:"evidence_refs,omitempty"`
 	IssueCode             string                                    `json:"issue_code,omitempty"`
+	PromptCache           CodexGoalPromptCacheProjectionV0          `json:"prompt_cache,omitempty"`
 }
 
 type CodexGoalStarterPortV0 interface {
@@ -129,7 +143,8 @@ func BuildCodexGoalStartPacketV0(spec orquestagoal.GoalWorkSpecV0) (CodexGoalSta
 	if issues := orquestagoal.ValidateGoalWorkSpecV0(spec); len(issues) > 0 {
 		return CodexGoalStartPacketV0{}, issues
 	}
-	prompt := BuildCodexGoalPromptV0(spec)
+	promptParts := buildCodexGoalPromptPartsV0(spec)
+	prompt := promptParts.Prompt()
 	contextBudget := codexGoalContextBudgetForPromptV0(spec, prompt)
 	if len([]byte(prompt)) > CodexGoalMaxPromptBytesV0 {
 		return CodexGoalStartPacketV0{}, []orquestagoal.GoalWorkIssueV0{{
@@ -146,6 +161,7 @@ func BuildCodexGoalStartPacketV0(spec orquestagoal.GoalWorkSpecV0) (CodexGoalSta
 		WorkProfileKind:    spec.WorkProfileKind,
 		Objective:          spec.Objective,
 		Prompt:             prompt,
+		PromptCache:        promptParts.PromptCache,
 		ContextRefs:        append([]orquestagoal.GoalContextRefV0(nil), spec.ContextRefs...),
 		RuleRefs:           append([]orquestagoal.GoalRuleRefV0(nil), spec.RuleRefs...),
 		SkillRefs:          append([]string(nil), spec.SkillRefs...),
@@ -327,6 +343,10 @@ func BuildCodexGoalObservationRequestV0(
 }
 
 func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
+	return buildCodexGoalPromptPartsV0(spec).Prompt()
+}
+
+func buildCodexGoalPromptLegacyV0(spec orquestagoal.GoalWorkSpecV0) string {
 	var b strings.Builder
 	directionContract := codexGoalDirectionContractV0(spec)
 	b.WriteString("Eres el Director operativo interno de este Codex Goal.\n")
@@ -554,6 +574,369 @@ func BuildCodexGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	return b.String()
 }
 
+type codexGoalPromptPartsV0 struct {
+	StablePrefix  string
+	DynamicSuffix string
+	PromptCache   CodexGoalPromptCacheProjectionV0
+}
+
+func (parts codexGoalPromptPartsV0) Prompt() string {
+	return parts.StablePrefix + parts.DynamicSuffix
+}
+
+func buildCodexGoalPromptPartsV0(spec orquestagoal.GoalWorkSpecV0) codexGoalPromptPartsV0 {
+	directionContract := codexGoalDirectionContractV0(spec)
+	var stable strings.Builder
+	var dynamic strings.Builder
+	writeCodexGoalStablePromptPrefixV0(&stable, spec, directionContract)
+	writeCodexGoalDynamicPromptSuffixV0(&dynamic, spec, directionContract)
+	stablePrefix := stable.String()
+	dynamicSuffix := dynamic.String()
+	return codexGoalPromptPartsV0{
+		StablePrefix:  stablePrefix,
+		DynamicSuffix: dynamicSuffix,
+		PromptCache:   codexGoalPromptCacheProjectionForPartsV0(stablePrefix, dynamicSuffix),
+	}
+}
+
+func writeCodexGoalStablePromptPrefixV0(
+	b *strings.Builder,
+	spec orquestagoal.GoalWorkSpecV0,
+	directionContract CodexGoalDirectionContractV0,
+) {
+	b.WriteString("Eres el Director operativo interno de este Codex Goal.\n")
+	b.WriteString("Orquesta gobierna desde fuera: objetivo, reglas, write-set, tests, artefactos y cierre.\n")
+	b.WriteString("No intentes reactivar el loop historico de Orquesta; trabaja dentro del goal hasta complete o blocked.\n\n")
+	b.WriteString("Prefijo estable cacheable:\n")
+	b.WriteString("- Reglas estables, AGENTS/toolbelt y contratos van antes del contexto dinamico para cache del proveedor.\n")
+	b.WriteString("- Objetivo, write-set, estado vivo y refs variables quedan al final en el bloque dinamico.\n")
+	b.WriteString("\nReglas estables:\n")
+	if len(spec.RuleRefs) == 0 {
+		b.WriteString("- sin rule_refs declaradas\n")
+	}
+	for _, rule := range spec.RuleRefs {
+		b.WriteString("- ")
+		b.WriteString(rule.Ref)
+		if rule.Enforcement != "" {
+			b.WriteString(" [")
+			b.WriteString(rule.Enforcement)
+			b.WriteString("]")
+		}
+		if rule.Kind != "" {
+			b.WriteString(" kind=")
+			b.WriteString(rule.Kind)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("\nToolbelt / skill_refs:\n")
+	if len(spec.SkillRefs) == 0 {
+		b.WriteString("- sin skill_refs/toolbelt declarados\n")
+	}
+	for _, skillRef := range spec.SkillRefs {
+		b.WriteString("- ")
+		b.WriteString(skillRef)
+		b.WriteString("\n")
+	}
+	writeCodexGoalStableClosureContractV0(b, spec, directionContract)
+}
+
+func writeCodexGoalStableClosureContractV0(
+	b *strings.Builder,
+	spec orquestagoal.GoalWorkSpecV0,
+	directionContract CodexGoalDirectionContractV0,
+) {
+	b.WriteString("\nCierre:\n")
+	b.WriteString("- Devuelve complete solo con evidencias verificables.\n")
+	if spec.ClosurePolicy.RequireRequiredTests {
+		b.WriteString("- Deben pasar todos los tests requeridos.\n")
+	}
+	if spec.ClosurePolicy.RequireArtifacts {
+		b.WriteString("- Deben existir los artefactos requeridos.\n")
+	}
+	if spec.ClosurePolicy.RequireArtifactPaths {
+		b.WriteString("- El recibo terminal debe declarar artifact_paths con rutas relativas dentro del write-set.\n")
+	}
+	if spec.ClosurePolicy.RequireMaterializedArtifacts {
+		b.WriteString("- El recibo terminal debe declarar materialized_artifacts: cada fichero/artefacto producido, tipo, path relativo, status valid/invalid/partial/non_publishable y evidence_refs.\n")
+	}
+	if spec.ClosurePolicy.RequireChecklist {
+		b.WriteString("- El recibo terminal debe declarar checklist.expected_refs, checklist.completed_refs, checklist.missing_refs y evidencias de QA/checkpoint.\n")
+	}
+	if spec.ClosurePolicy.RequireReworkPlanForPartialArtifacts {
+		b.WriteString("- Si algun artefacto queda partial, invalid o non_publishable, no cierres complete: devuelve blocked y rework_plan_refs con el plan/fase concreta de reparacion.\n")
+	}
+	if spec.ClosurePolicy.RequireDomainReceipt {
+		if strings.TrimSpace(spec.WorkProfileKind) == "domain_work" {
+			b.WriteString("- El receipt de dominio lo obtiene Orquesta fuera del goal despues de observar tu artefacto; no bloquees por no tener conector REST/MCP de la app externa.\n")
+			b.WriteString("- En trabajos domain_work, no intentes llamar conectores REST/MCP de la app externa desde el sandbox salvo que el contrato te entregue ese puerto: materializa el artefacto en el write-set como entrega terminal y deja submit_artifact/receipt al adaptador externo de Orquesta.\n")
+			b.WriteString("- No pongas public_blocker, pending, ready=false ni estados no terminales por faltar el conector externo; si el artefacto esta materializado para que Orquesta lo suba, el resultado del goal puede ser complete con domain_receipt_refs vacio.\n")
+		} else {
+			b.WriteString("- Debe existir receipt de dominio.\n")
+		}
+	}
+	for _, evidenceRef := range spec.ClosurePolicy.RequiredEvidenceRefs {
+		b.WriteString("- Evidencia requerida: ")
+		b.WriteString(evidenceRef)
+		b.WriteString("\n")
+	}
+	if spec.ReworkPolicy.PreferNewGoal {
+		b.WriteString("- Si hace falta rework, prefiere abrir un nuevo goal causal.\n")
+	}
+	if spec.ReworkPolicy.PreserveArtifacts {
+		b.WriteString("- Conserva artefactos aprovechables durante rework.\n")
+	}
+	if spec.Budget.TokenBudget > 0 || spec.Budget.MaxRuntimeSeconds > 0 || spec.Budget.MaxSubgoals > 0 {
+		b.WriteString("- Respeta el presupuesto operativo declarado en el paquete.\n")
+	}
+	b.WriteString("- No vuelques salidas gigantes de herramientas al chat/log: max_text_bytes=")
+	b.WriteString(strconv.Itoa(directionContract.ToolOutputPolicy.MaxTextBytes))
+	b.WriteString("; usa comandos acotados")
+	if len(directionContract.ToolOutputPolicy.BoundedCommandHints) > 0 {
+		b.WriteString(" como ")
+		b.WriteString(strings.Join(directionContract.ToolOutputPolicy.BoundedCommandHints, ", "))
+	}
+	b.WriteString(", guarda evidencia durable en el write-set si hace falta y resume refs compactas.\n")
+	b.WriteString("- Devuelve blocked si falta input externo, permiso, proveedor o cambio de estado externo.\n")
+	b.WriteString("- Conserva refs opacas y no publiques HOME, tokens, OAuth, comandos internos de runtime/local ni transcripts completos.\n")
+	if len(spec.RequiredTests) > 0 {
+		b.WriteString("- Los command de Tests requeridos son parte del contrato neutral acotado; puedes usarlos solo para reportar evidencias de esos tests.\n")
+	}
+	b.WriteString("\nResultado estructurado obligatorio:\n")
+	b.WriteString("- Termina la respuesta final con una sola linea que empiece por ")
+	b.WriteString(CodexGoalResultMarkerV0)
+	b.WriteString(" seguida de JSON compacto.\n")
+	b.WriteString("- El JSON debe usar esta forma: {\"goal_ref\":\"<goal_ref>\",\"schema_version\":\"")
+	b.WriteString(CodexGoalResultSchemaV0)
+	b.WriteString("\",\"status\":\"complete\",\"summary\":\"...\",\"artifact_refs\":[],\"artifact_paths\":[],\"materialized_artifacts\":[{\"artifact_ref\":\"...\",\"path\":\"...\",\"artifact_type\":\"...\",\"status\":\"valid\",\"evidence_refs\":[],\"issues\":[]}],\"checklist\":{\"expected_refs\":[],\"completed_refs\":[],\"missing_refs\":[],\"evidence_refs\":[]},\"required_test_results\":[{\"test_ref\":\"...\",\"status\":\"passed\",\"evidence_refs\":[]}],\"domain_receipt_refs\":[],\"rework_plan_refs\":[],\"evidence_refs\":[]}.\n")
+	b.WriteString("- schema_version es obligatorio y status/estado debe ser terminal explicito: complete si entregas cierre verificable, blocked si hay bloqueo externo o invalid si el resultado no es usable.\n")
+	if spec.ClosurePolicy.RequireDomainReceipt && strings.TrimSpace(spec.WorkProfileKind) == "domain_work" {
+		b.WriteString("- En domain_work deja domain_receipt_refs vacio salvo que el contrato te haya dado un receipt real; Orquesta lo derivara del ledger despues de submit_artifact.\n")
+	}
+	if len(spec.RequiredTests) > 0 {
+		b.WriteString("- En required_test_results usa literalmente los test_ref declarados arriba; no los resumas ni inventes aliases.\n")
+	}
+	if len(spec.ArtifactContracts) > 0 {
+		b.WriteString("- En artifact_refs usa literalmente los artifact_ref declarados arriba para los artefactos producidos; no uses rutas de fichero como refs.\n")
+	}
+	if len(spec.WriteSet) > 0 {
+		b.WriteString("- En artifact_paths lista todas las rutas relativas de ficheros creados, modificados o verificados para el cierre, incluido el JSON durable de resultado; si escribiste algo fuera del write-set, no lo ocultes: declaralo en artifact_paths y marca status blocked con summary out_of_scope_artifacts.\n")
+	}
+	b.WriteString("- En materialized_artifacts separa artefactos validos de borradores recuperables: usa status partial/invalid/non_publishable con issues si falta QA, calidad publicable, cobertura, schema o validacion.\n")
+	b.WriteString("- En checklist.missing_refs declara lo que falta para completar el contrato; si hay faltantes o materialized_artifacts no validos, devuelve status blocked y rework_plan_refs accionables.\n")
+	b.WriteString("- Incluye en evidence_refs las evidencias requeridas solo si han sido verificadas; no inventes refs para forzar el cierre.\n")
+	b.WriteString("- Incluye en artifact_refs solo artefactos producidos o verificados que cumplan el contrato.\n")
+}
+
+func writeCodexGoalDynamicPromptSuffixV0(
+	b *strings.Builder,
+	spec orquestagoal.GoalWorkSpecV0,
+	directionContract CodexGoalDirectionContractV0,
+) {
+	b.WriteString("\nContexto dinamico del goal (leer al final):\n")
+	b.WriteString("\nObjetivo:\n")
+	b.WriteString(spec.Objective)
+	b.WriteString("\n\nMetadatos:\n")
+	if spec.RequestRef != "" {
+		b.WriteString("- request_ref: ")
+		b.WriteString(spec.RequestRef)
+		b.WriteString("\n")
+	}
+	if spec.ProjectRef != "" {
+		b.WriteString("- project_ref: ")
+		b.WriteString(spec.ProjectRef)
+		b.WriteString("\n")
+	}
+	if spec.WorkKind != "" {
+		b.WriteString("- work_kind: ")
+		b.WriteString(spec.WorkKind)
+		b.WriteString("\n")
+	}
+	if spec.WorkProfileKind != "" {
+		b.WriteString("- work_profile_kind: ")
+		b.WriteString(spec.WorkProfileKind)
+		b.WriteString("\n")
+	}
+	b.WriteString("\nEstado vivo y refs:\n")
+	b.WriteString("\nContexto:\n")
+	for _, ctx := range spec.ContextRefs {
+		b.WriteString("- ")
+		b.WriteString(ctx.Ref)
+		if ctx.Kind != "" {
+			b.WriteString(" kind=")
+			b.WriteString(ctx.Kind)
+		}
+		if ctx.Required {
+			b.WriteString(" [required]")
+		}
+		if ctx.Purpose != "" {
+			b.WriteString(": ")
+			b.WriteString(ctx.Purpose)
+		}
+		b.WriteString("\n")
+	}
+	if len(spec.EvidenceRefs) > 0 {
+		b.WriteString("\nEvidencias de entrada:\n")
+		for _, evidenceRef := range spec.EvidenceRefs {
+			b.WriteString("- ")
+			b.WriteString(evidenceRef)
+			b.WriteString("\n")
+		}
+	}
+	b.WriteString("\nWrite-set autorizado:\n")
+	for _, scope := range spec.WriteSet {
+		b.WriteString("- ")
+		b.WriteString(scope.Path)
+		b.WriteString("\n")
+	}
+	if len(spec.WriteSet) > 0 {
+		b.WriteString("- El runtime debe aplicar write_set_enforcement=")
+		b.WriteString(directionContract.WriteSetEnforcement)
+		b.WriteString(" con sandbox minimo ")
+		b.WriteString(directionContract.MinimumSandbox)
+		b.WriteString("; no ejecutes con acceso de escritura irrestricto y respeta el write-set autorizado en el cierre.\n")
+	}
+	b.WriteString("\nTests requeridos:\n")
+	for _, test := range spec.RequiredTests {
+		b.WriteString("- ")
+		if test.TestRef != "" {
+			b.WriteString("test_ref=")
+			b.WriteString(test.TestRef)
+			if test.CommandRef != "" || test.Command != "" {
+				b.WriteString(" ")
+			}
+		}
+		if test.CommandRef != "" {
+			b.WriteString("command_ref=")
+			b.WriteString(test.CommandRef)
+			if test.Command != "" {
+				b.WriteString(" ")
+			}
+		}
+		if test.Command != "" {
+			b.WriteString("command=")
+			b.WriteString(test.Command)
+		} else if test.TestRef == "" {
+			b.WriteString(test.TestRef)
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("\nCriterios de aceptacion:\n")
+	for _, criterion := range spec.AcceptanceCriteria {
+		b.WriteString("- ")
+		b.WriteString(criterion)
+		b.WriteString("\n")
+	}
+	b.WriteString("\nArtefactos esperados:\n")
+	for _, artifact := range spec.ArtifactContracts {
+		b.WriteString("- ")
+		b.WriteString(artifact.ArtifactRef)
+		if artifact.ArtifactType != "" {
+			b.WriteString(" type=")
+			b.WriteString(artifact.ArtifactType)
+		}
+		if artifact.Required {
+			b.WriteString(" required")
+		}
+		b.WriteString("\n")
+	}
+	if len(spec.ArtifactContracts) > 0 && len(spec.WriteSet) > 0 {
+		b.WriteString("- Materializa cada artefacto requerido dentro de un write-set autorizado. Para artefactos DomainWork, Orquesta detecta ")
+		b.WriteString("<artifact_type>.json, <artifact_type>.md, artifact.json o artifact.md directamente bajo el write-set; usa el artifact_type declarado y contenido verificable.\n")
+	}
+	if len(spec.WriteSet) > 0 {
+		if directionContract.RequireEarlyCheckpoint {
+			b.WriteString("- Antes de exploracion larga o comandos costosos, materializa un checkpoint temprano dentro del write-set autorizado, por ejemplo ")
+			b.WriteString(directionContract.EarlyCheckpointFile)
+			b.WriteString(", con objetivo, alcance, siguiente artefacto y evidencia compacta; declaralo despues en artifact_paths, materialized_artifacts y evidence_refs.\n")
+		}
+		for _, scope := range spec.WriteSet {
+			path := strings.Trim(strings.TrimSpace(scope.Path), "/")
+			if codexGoalWriteScopeIsMarkdownFileV0(path) {
+				b.WriteString("- El write-set ")
+				b.WriteString(path)
+				b.WriteString(" es un archivo Markdown final: crea o actualiza ese fichero, no crees un directorio con ese nombre.\n")
+			}
+		}
+	}
+	b.WriteString("\nValores dinamicos para cierre:\n")
+	b.WriteString("- goal_ref: ")
+	b.WriteString(spec.GoalRef)
+	b.WriteString("\n")
+	b.WriteString("- schema_version: ")
+	b.WriteString(CodexGoalResultSchemaV0)
+	b.WriteString("\n")
+	if resultFilePath := codexGoalResultFilePathV0(spec); resultFilePath != "" {
+		b.WriteString("- Antes de marcar el goal como complete, escribe el mismo JSON en ")
+		b.WriteString(resultFilePath)
+		b.WriteString(" incluyendo \"goal_ref\":\"")
+		b.WriteString(spec.GoalRef)
+		b.WriteString("\", \"schema_version\":\"")
+		b.WriteString(CodexGoalResultSchemaV0)
+		b.WriteString("\" y \"status\":\"complete\" para que Orquesta pueda cerrar aunque no haya respuesta final textual.\n")
+		b.WriteString("- Materializa primero el directorio del write-set y este archivo durable de resultado; si luego corriges artefactos o tests, actualiza el JSON antes de cerrar.\n")
+	}
+}
+
+func codexGoalPromptCacheProjectionForPartsV0(stablePrefix string, dynamicSuffix string) CodexGoalPromptCacheProjectionV0 {
+	sum := sha256.Sum256([]byte(stablePrefix))
+	hash := fmt.Sprintf("%x", sum[:])
+	return CodexGoalPromptCacheProjectionV0{
+		CacheKey:           "codex-goal-stable-prefix-v0-" + hash[:16],
+		StablePrefixSHA256: hash,
+		StablePrefixBytes:  len([]byte(stablePrefix)),
+		DynamicSuffixBytes: len([]byte(dynamicSuffix)),
+	}
+}
+
+func codexGoalPromptCacheEvidenceRefsV0(caches ...CodexGoalPromptCacheProjectionV0) []string {
+	var refs []string
+	for _, cache := range caches {
+		if key := codexGoalResultFileSafePartV0(cache.CacheKey); key != "" {
+			refs = append(refs, "evidence-ref-codex-goal-prompt-cache-key-"+key)
+		}
+		if hash := codexGoalPromptCacheHashRefPartV0(cache.StablePrefixSHA256); hash != "" {
+			refs = append(refs, "evidence-ref-codex-goal-stable-prefix-sha256-"+hash)
+		}
+		if cache.CachedInputTokens > 0 {
+			refs = append(refs, fmt.Sprintf("evidence-ref-codex-goal-cached-input-tokens-%d", cache.CachedInputTokens))
+		}
+		if cache.InputTokens > 0 {
+			refs = append(refs, fmt.Sprintf("evidence-ref-codex-goal-input-tokens-%d", cache.InputTokens))
+		}
+	}
+	return codexGoalCompactStringsV0(refs)
+}
+
+func codexGoalPromptCacheHashRefPartV0(hash string) string {
+	hash = strings.ToLower(strings.TrimSpace(hash))
+	if len(hash) < 16 {
+		return ""
+	}
+	for _, r := range hash {
+		if !((r >= 'a' && r <= 'f') || (r >= '0' && r <= '9')) {
+			return ""
+		}
+	}
+	return hash[:16]
+}
+
+func codexGoalCompactStringsV0(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	if out == nil {
+		return []string{}
+	}
+	return out
+}
+
 func codexGoalResultFilePathV0(spec orquestagoal.GoalWorkSpecV0) string {
 	resultFileName := CodexGoalResultFileNameForGoalRefV0(spec.GoalRef)
 	for _, scope := range spec.WriteSet {
@@ -645,7 +1028,10 @@ func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec o
 		if strings.TrimSpace(receipt.ExternalGoalRef) != "" {
 			result.ExternalGoalRef = strings.TrimSpace(receipt.ExternalGoalRef)
 		}
-		result.EvidenceRefs = append([]string(nil), receipt.EvidenceRefs...)
+		result.EvidenceRefs = codexGoalCompactStringsV0(append(
+			append([]string(nil), receipt.EvidenceRefs...),
+			codexGoalPromptCacheEvidenceRefsV0(packet.PromptCache, receipt.PromptCache)...,
+		))
 		return result, err
 	}
 	status := receipt.Status
@@ -657,8 +1043,11 @@ func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec o
 		Status:          status,
 		GoalRef:         packet.GoalRef,
 		ExternalGoalRef: receipt.ExternalGoalRef,
-		ContextBudget:   orquestagoal.MergeGoalContextBudgetV0(packet.ContextBudget, receipt.ContextBudget),
-		EvidenceRefs:    append([]string(nil), receipt.EvidenceRefs...),
+		ContextBudget: orquestagoal.MergeGoalContextBudgetV0(packet.ContextBudget, receipt.ContextBudget),
+		EvidenceRefs: codexGoalCompactStringsV0(append(
+			append([]string(nil), receipt.EvidenceRefs...),
+			codexGoalPromptCacheEvidenceRefsV0(packet.PromptCache, receipt.PromptCache)...,
+		)),
 	}
 	if receipt.IssueCode != "" {
 		result.Issues = append(result.Issues, orquestagoal.GoalWorkIssueV0{Code: receipt.IssueCode})
@@ -692,6 +1081,10 @@ func (observer CodexGoalObserverV0) ObserveGoalWorkV0(
 		if strings.TrimSpace(receipt.ExternalGoalRef) != "" {
 			result.ExternalGoalRef = strings.TrimSpace(receipt.ExternalGoalRef)
 		}
+		result.EvidenceRefs = codexGoalCompactStringsV0(append(
+			result.EvidenceRefs,
+			codexGoalPromptCacheEvidenceRefsV0(receipt.PromptCache)...,
+		))
 		return result, err
 	}
 	result := goalWorkResultFromCodexObservationV0(packet, receipt)
@@ -742,7 +1135,10 @@ func goalWorkResultFromCodexObservationV0(
 		RequiredTestResults:   append([]orquestagoal.GoalRequiredTestResultV0(nil), receipt.RequiredTestResults...),
 		DomainReceiptRefs:     append([]string(nil), receipt.DomainReceiptRefs...),
 		ReworkPlanRefs:        append([]string(nil), receipt.ReworkPlanRefs...),
-		EvidenceRefs:          append([]string(nil), receipt.EvidenceRefs...),
+		EvidenceRefs: codexGoalCompactStringsV0(append(
+			append([]string(nil), receipt.EvidenceRefs...),
+			codexGoalPromptCacheEvidenceRefsV0(receipt.PromptCache)...,
+		)),
 	}
 	if receipt.IssueCode != "" {
 		result.Issues = append(result.Issues, orquestagoal.GoalWorkIssueV0{Code: receipt.IssueCode})

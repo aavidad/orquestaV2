@@ -1,0 +1,6 @@
+checkpoint_ref: checkpoint-t283-prompt-estable-cache-proveedor-started
+goal_ref: goal-ref-autoprogramming-backlog-t283-prompt-estable-cache-proveedor-e080eaeb
+objective: implement CTX-TASK-801C stable cacheable Codex Goal prompt prefix and dynamic suffix.
+scope: cmd/orquesta-server, modulos/orquesta-runtime-codex-goal, modulos/orquesta-runtime-codex, docs/orquesta_goal_first_codex_2026-06-25.md
+next_artifact: cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t283-prompt-estable-cache-proveedor-e080eaeb.json
+evidence: initial checkpoint before long exploration; backlog_scan_ref=scan-ref-backlog-40e6dd5e3c08; backlog_task_instance_ref=task-instance-ref-backlog-2c1de1d8.

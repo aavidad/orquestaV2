@@ -127,6 +127,24 @@ actividad y bloqueo semantico si el goal queda `invalid` o `blocked`. El
 statefile local puede contener spec/receipt/result/closure completos para
 restauracion, pero no es API publica.
 
+Actualizacion 2026-07-03, CTX-TASK-801C: el prompt que
+`orquesta-runtime-codex-goal` envia al backend app-server se construye con dos
+bloques ordenados. Primero va un prefijo estable cacheable con direccion del
+Director interno, reglas `RuleRefs` (incluido `AGENTS.md` cuando el spec lo
+declara), `SkillRefs`/toolbelt y contratos de cierre/salida. Al final va el
+sufijo dinamico con objetivo, metadatos, estado vivo y refs, write-set, tests,
+criterios, artefactos esperados y valores concretos de cierre como `goal_ref` y
+ruta del resultado durable. Las reglas no cambian por esta reordenacion: solo se
+mueve lo variable al final para favorecer cache de proveedor con prefijos
+identicos.
+
+El `CodexGoalStartPacketV0` proyecta `prompt_cache` de forma agnostica al
+proveedor: `cache_key`, `stable_prefix_sha256`, bytes de prefijo estable y bytes
+de sufijo dinamico. Si un backend devuelve una clave o metrica equivalente
+(`cached_input_tokens`, `input_tokens`), el adaptador la conserva como evidence
+refs compactas (`prompt-cache-key`, `cached-input-tokens`, etc.) sin ampliar el
+core neutral ni acoplarlo a OpenAI.
+
 Evidencia 2026-06-29: `1f9eec3c` compacta el `Objective` de
 `idle_self_improvement` a 4000 runas maximo antes de llamar a app-server y
 conserva el contexto largo fuera del objetivo. Test focal:

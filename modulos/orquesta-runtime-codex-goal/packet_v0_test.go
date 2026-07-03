@@ -140,6 +140,131 @@ func TestBuildCodexGoalContextBudgetV0NoPublicaPromptCompletoV0(t *testing.T) {
 	}
 }
 
+func TestBuildCodexGoalPromptV0OrdenaPrefijoEstableAntesDeDinamicoV0(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.Objective = "Implementar objetivo dinamico CTX-TASK-801C."
+	spec.RuleRefs = []orquestagoal.GoalRuleRefV0{
+		{Kind: "repo", Ref: "AGENTS.md", Enforcement: orquestagoal.GoalRuleEnforcementHardV0},
+		{Kind: "security", Ref: "rule-ref-hard-no-secrets", Enforcement: orquestagoal.GoalRuleEnforcementHardV0},
+	}
+	spec.SkillRefs = []string{"skill-ref-codex-toolbelt-v0"}
+	spec.ContextRefs = []orquestagoal.GoalContextRefV0{{
+		Kind: "live_state",
+		Ref:  "state-ref-live-001",
+	}}
+	spec.WriteSet = []orquestagoal.GoalWriteScopeV0{{Path: "cmd/orquesta-server"}}
+
+	packet, issues := BuildCodexGoalStartPacketV0(spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	prompt := packet.Prompt
+	stable := promptIndexForTestV0(t, prompt, "Prefijo estable cacheable:")
+	agents := promptIndexForTestV0(t, prompt, "AGENTS.md [hard]")
+	toolbelt := promptIndexForTestV0(t, prompt, "skill-ref-codex-toolbelt-v0")
+	hardRule := promptIndexForTestV0(t, prompt, "rule-ref-hard-no-secrets [hard]")
+	dynamic := promptIndexForTestV0(t, prompt, "Contexto dinamico del goal")
+	objective := promptIndexForTestV0(t, prompt, "Objetivo:\nImplementar objetivo dinamico CTX-TASK-801C.")
+	liveState := promptIndexForTestV0(t, prompt, "state-ref-live-001 kind=live_state")
+	writeSet := promptIndexForTestV0(t, prompt, "Write-set autorizado:")
+	if !(stable < agents && stable < toolbelt && stable < hardRule &&
+		agents < dynamic && toolbelt < dynamic && hardRule < dynamic &&
+		dynamic < objective && dynamic < liveState && dynamic < writeSet) {
+		t.Fatalf("orden estable/dinamico inesperado: stable=%d agents=%d toolbelt=%d hard=%d dynamic=%d objective=%d live=%d write=%d\n%s",
+			stable, agents, toolbelt, hardRule, dynamic, objective, liveState, writeSet, prompt)
+	}
+}
+
+func TestBuildCodexGoalStartPacketV0ProjectaPromptCacheKeyEstableV0(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.RuleRefs = []orquestagoal.GoalRuleRefV0{{Kind: "repo", Ref: "AGENTS.md", Enforcement: orquestagoal.GoalRuleEnforcementHardV0}}
+	spec.SkillRefs = []string{"skill-ref-codex-toolbelt-v0"}
+
+	changed := spec
+	changed.GoalRef = "goal-ref-002"
+	changed.Objective = "Otro objetivo dinamico."
+	changed.ContextRefs = []orquestagoal.GoalContextRefV0{{Kind: "live_state", Ref: "state-ref-live-002"}}
+	changed.WriteSet = []orquestagoal.GoalWriteScopeV0{{Path: "cmd/orquesta-server"}}
+	changed.RequiredTests = []orquestagoal.GoalRequiredTestV0{{TestRef: "test-ref-other", Command: "go test -count=1 ./cmd/orquesta-server"}}
+
+	first, firstIssues := BuildCodexGoalStartPacketV0(spec)
+	second, secondIssues := BuildCodexGoalStartPacketV0(changed)
+
+	if len(firstIssues) != 0 || len(secondIssues) != 0 {
+		t.Fatalf("issues first=%+v second=%+v", firstIssues, secondIssues)
+	}
+	if first.Prompt == second.Prompt {
+		t.Fatalf("prompts dinamicos no cambiaron")
+	}
+	if first.PromptCache.CacheKey == "" ||
+		first.PromptCache.StablePrefixSHA256 == "" ||
+		first.PromptCache.StablePrefixBytes <= 0 ||
+		first.PromptCache.DynamicSuffixBytes <= 0 {
+		t.Fatalf("prompt_cache incompleto: %+v", first.PromptCache)
+	}
+	if first.PromptCache.CacheKey != second.PromptCache.CacheKey ||
+		first.PromptCache.StablePrefixSHA256 != second.PromptCache.StablePrefixSHA256 {
+		t.Fatalf("cache key debe depender del prefijo estable, first=%+v second=%+v", first.PromptCache, second.PromptCache)
+	}
+}
+
+func TestCodexGoalPromptCacheProjectionV0SePropagaComoEvidenceRefV0(t *testing.T) {
+	launcher := CodexGoalLauncherV0{Starter: &recordingCodexGoalStarterV0{
+		receipt: CodexGoalStartReceiptV0{
+			Status:          orquestagoal.GoalStatusAcceptedV0,
+			ExternalGoalRef: "external-goal-ref-cache-001",
+			PromptCache: CodexGoalPromptCacheProjectionV0{
+				CacheKey:          "provider-cache-key-hit-001",
+				CachedInputTokens: 2048,
+			},
+		},
+	}}
+
+	receipt, err := launcher.LaunchGoalWorkV0(context.Background(), validCodexGoalSpecV0())
+
+	if err != nil {
+		t.Fatalf("launch: %v", err)
+	}
+	for _, want := range []string{
+		"evidence-ref-codex-goal-prompt-cache-key-provider-cache-key-hit-001",
+		"evidence-ref-codex-goal-cached-input-tokens-2048",
+	} {
+		if !hasGoalStringForTestV0(receipt.EvidenceRefs, want) {
+			t.Fatalf("receipt no proyecta %s: %+v", want, receipt)
+		}
+	}
+
+	observer := CodexGoalObserverV0{Observer: &recordingCodexGoalObserverV0{
+		receipt: CodexGoalObservationReceiptV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         "goal-ref-001",
+			ExternalGoalRef: "external-goal-ref-cache-001",
+			PromptCache: CodexGoalPromptCacheProjectionV0{
+				CacheKey:          "provider-cache-key-observe-001",
+				CachedInputTokens: 512,
+			},
+		},
+	}}
+
+	result, observeErr := observer.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
+		GoalRef:         "goal-ref-001",
+		ExternalGoalRef: "external-goal-ref-cache-001",
+	})
+
+	if observeErr != nil {
+		t.Fatalf("observe: %v", observeErr)
+	}
+	for _, want := range []string{
+		"evidence-ref-codex-goal-prompt-cache-key-provider-cache-key-observe-001",
+		"evidence-ref-codex-goal-cached-input-tokens-512",
+	} {
+		if !hasGoalStringForTestV0(result.EvidenceRefs, want) {
+			t.Fatalf("result no proyecta %s: %+v", want, result)
+		}
+	}
+}
+
 func TestBuildCodexGoalPromptV0IncluyePropositoDeContextRefs(t *testing.T) {
 	spec := validCodexGoalSpecV0()
 	spec.ContextRefs = append(spec.ContextRefs, orquestagoal.GoalContextRefV0{
@@ -691,6 +816,15 @@ func hasGoalStringForTestV0(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func promptIndexForTestV0(t *testing.T, prompt string, needle string) int {
+	t.Helper()
+	index := strings.Index(prompt, needle)
+	if index < 0 {
+		t.Fatalf("prompt no contiene %q:\n%s", needle, prompt)
+	}
+	return index
 }
 
 func hasGoalIssueFieldForTestV0(issues []orquestagoal.GoalWorkIssueV0, field string) bool {

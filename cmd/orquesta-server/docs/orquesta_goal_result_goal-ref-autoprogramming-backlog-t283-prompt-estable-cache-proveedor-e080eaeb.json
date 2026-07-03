@@ -1,0 +1,138 @@
+{
+  "goal_ref": "goal-ref-autoprogramming-backlog-t283-prompt-estable-cache-proveedor-e080eaeb",
+  "schema_version": "orquesta_goal_result.v0",
+  "status": "complete",
+  "summary": "CTX-TASK-801C implementado: el prompt Codex Goal separa prefijo estable cacheable y sufijo dinamico, conserva AGENTS/toolbelt/reglas hard por test, proyecta prompt_cache de forma agnostica al proveedor y documenta la estructura nueva. Tests requeridos, diff-check y go build ./... verificados.",
+  "artifact_refs": [
+    "artifact-ref-t283-checkpoint",
+    "artifact-ref-t283-codex-goal-prompt-cache-layout",
+    "artifact-ref-t283-prompt-cache-projection-tests",
+    "artifact-ref-t283-goal-first-doc",
+    "artifact-ref-t283-result-json"
+  ],
+  "artifact_paths": [
+    "cmd/orquesta-server/docs/checkpoint_started_t283_prompt_estable_cache_proveedor.txt",
+    "cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t283-prompt-estable-cache-proveedor-e080eaeb.json",
+    "modulos/orquesta-runtime-codex-goal/packet_v0.go",
+    "modulos/orquesta-runtime-codex-goal/packet_v0_test.go",
+    "docs/orquesta_goal_first_codex_2026-06-25.md",
+    "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md"
+  ],
+  "materialized_artifacts": [
+    {
+      "artifact_ref": "artifact-ref-t283-checkpoint",
+      "path": "cmd/orquesta-server/docs/checkpoint_started_t283_prompt_estable_cache_proveedor.txt",
+      "artifact_type": "checkpoint",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-checkpoint-started-t283"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t283-codex-goal-prompt-cache-layout",
+      "path": "modulos/orquesta-runtime-codex-goal/packet_v0.go",
+      "artifact_type": "go-source",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-go-test-required-341ac47f5aa5-passed",
+        "evidence-ref-go-test-root-c908af756958-passed",
+        "evidence-ref-go-build-all-passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t283-prompt-cache-projection-tests",
+      "path": "modulos/orquesta-runtime-codex-goal/packet_v0_test.go",
+      "artifact_type": "go-test",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-go-test-required-341ac47f5aa5-passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t283-goal-first-doc",
+      "path": "docs/orquesta_goal_first_codex_2026-06-25.md",
+      "artifact_type": "documentation",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-doc-updated-ctx-task-801c",
+        "evidence-ref-git-diff-check-passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t283-result-json",
+      "path": "cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t283-prompt-estable-cache-proveedor-e080eaeb.json",
+      "artifact_type": "goal_result",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-result-json-written-t283"
+      ],
+      "issues": []
+    }
+  ],
+  "checklist": {
+    "expected_refs": [
+      "ctx-task-801c-stable-prefix-before-dynamic-suffix",
+      "prompt-preserves-agents-toolbelt-hard-rules-test",
+      "prompt-cache-key-projected-provider-agnostic",
+      "docs-orquesta-goal-first-updated",
+      "required-test-ref-341ac47f5aa5",
+      "required-test-ref-c908af756958",
+      "manual-go-build-dot-slash-ellipsis",
+      "backlog-scan-ref-scan-ref-backlog-40e6dd5e3c08"
+    ],
+    "completed_refs": [
+      "ctx-task-801c-stable-prefix-before-dynamic-suffix",
+      "prompt-preserves-agents-toolbelt-hard-rules-test",
+      "prompt-cache-key-projected-provider-agnostic",
+      "docs-orquesta-goal-first-updated",
+      "required-test-ref-341ac47f5aa5",
+      "required-test-ref-c908af756958",
+      "manual-go-build-dot-slash-ellipsis",
+      "git-diff-check",
+      "backlog-current-line-16-verified-hash-mismatch"
+    ],
+    "missing_refs": [],
+    "evidence_refs": [
+      "evidence-ref-go-test-required-341ac47f5aa5-passed",
+      "evidence-ref-go-test-root-c908af756958-passed",
+      "evidence-ref-go-build-all-passed",
+      "evidence-ref-git-diff-check-passed",
+      "backlog_scan_ref:scan-ref-backlog-40e6dd5e3c08",
+      "backlog_scan_doc_expected:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:sha256:55719d00ff015e63beb45f99ce09d476c2e9264ef6e591f819ec69eb3bd0ea8e",
+      "backlog_scan_doc_current:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:sha256:c2db70ce0df19b8923b051d1f1210b7c7c2967212ef4957ddc61193f85df6f55",
+      "backlog_scan_rebase_note:current-doc-hash-differs-no-backlog-merge-performed"
+    ]
+  },
+  "required_test_results": [
+    {
+      "test_ref": "required-test-ref-341ac47f5aa5",
+      "status": "passed",
+      "evidence_refs": [
+        "evidence-ref-go-test-required-341ac47f5aa5-passed"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-c908af756958",
+      "status": "passed",
+      "evidence_refs": [
+        "evidence-ref-go-test-root-c908af756958-passed"
+      ]
+    }
+  ],
+  "domain_receipt_refs": [],
+  "rework_plan_refs": [],
+  "evidence_refs": [
+    "evidence-ref-checkpoint-started-t283",
+    "evidence-ref-result-json-written-t283",
+    "evidence-ref-go-test-required-341ac47f5aa5-passed",
+    "evidence-ref-go-test-root-c908af756958-passed",
+    "evidence-ref-go-build-all-passed",
+    "evidence-ref-git-diff-check-passed",
+    "backlog_scan_ref:scan-ref-backlog-40e6dd5e3c08",
+    "backlog_scan_doc_current:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:sha256:c2db70ce0df19b8923b051d1f1210b7c7c2967212ef4957ddc61193f85df6f55"
+  ]
+}
