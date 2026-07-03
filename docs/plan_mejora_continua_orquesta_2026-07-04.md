@@ -22,8 +22,10 @@ Alcance.
   - Ola 2: 201 + 204 + 104 (integrada con validacion local/fakes).
   - Ola 3: 102 + 105 + 207 (congelada por decision del operador).
   - Condicionales: 101 (cierre OPES real opt-in), 103 (supersedida por
-    director de escalada para la forma residente), 106 (aparcada hasta ventana
-    §9 y decision de retirada legacy).
+    director de escalada para la forma residente).
+  - Cerrada posterior: 106 (deuda residual/ratchets cerrada por Codex local en
+    modo deuda gobernada). La retirada de `legacy_director_loop` queda como
+    decision separada del operador, condicionada a checklist verificable.
 - Cada cierre actualiza la bitácora pericial y no abre frentes fuera de su
   Alcance.
 - Corte vigente 2026-07-03 noche: la cola de automejora queda congelada. No
@@ -31,6 +33,11 @@ Alcance.
   explicita del operador. Para evitar falsos relanzamientos, las tareas ya
   integradas o congeladas quedan con `Estado:` cerrado/aparcado, que el parser
   de automejora trata como no ejecutable.
+- Auditoria 2026-07-04: tras la orden de paralelizar todo lo que no pise otros
+  trabajos, solo queda lanzable `MEJ-101` si el operador confirma OPES temporal
+  opt-in; `MEJ-102/103/105/207/T286-EXP` siguen aparcadas o supersedidas y no se
+  deben arrancar automaticamente. La limpieza documental de historicos falsos se
+  ejecuto por Orquesta como tarea aparte y queda registrada en el handoff.
 
 ## MEJ-TASK-101 ciclo-opes-real-validacion-campo
 

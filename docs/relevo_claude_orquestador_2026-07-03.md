@@ -7,14 +7,20 @@
 > `BUG-ORQ-20260703-150`. No reabrir T-PER-301/T-PER-302 salvo regresion del
 > recolector unico o reintroduccion de implementacion tmux/app-server dentro de
 > `cmd/orquesta-server`.
+> Actualizacion 2026-07-04: la limpieza de historicos falsos y el nuevo
+> `BUG-ORQ-20260704-165` estan documentados en
+> `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md` y en
+> `docs/inventario_bugs_orquesta_2026-06-30.md`.
 
 ## Corte operativo
 
 - Subagentes locales de Codex cerrados por orden del operador.
 - `orquesta-server run` local de prueba parado.
-- Remoto `berserk@uso.dipgra.cloud`: sin `codex`, `tmux` ni `orquesta-server`
-  vivos observados; worktree `/srv/orquesta-self/worktrees/orquesta` sigue en
-  HEAD `1667a411d4` con WIP sucio de 71 ficheros. No integrar completo.
+- Remoto `berserk@uso.dipgra.cloud`: el bloque remoto de 71 ficheros ya no debe
+  leerse como estado vivo del worktree. Quedo preservado en el stash remoto
+  `triaje-claude-2026-07-04` y como evidencia local commiteada en
+  `docs/triaje_wip_remoto_2026-07-04/`; el worktree remoto quedo limpio. No
+  integrar el bloque completo ni reabrirlo salvo bug nuevo con write-set propio.
 - No hay `codebase-memory-mcp` vivo observado en local.
 
 ## Cambio guardado para revision en el momento del corte

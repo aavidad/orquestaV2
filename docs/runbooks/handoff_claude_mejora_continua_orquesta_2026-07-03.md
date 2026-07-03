@@ -1,5 +1,15 @@
 # Handoff para Claude - mejora continua Orquesta 2026-07-03
 
+<!--
+checkpoint_started: task-ref-doc-cleanup-handoff-plan-20260704 rework-1.
+scope: handoff/relevo/plan docs only.
+intent: preserve the source task ref before required checks and keep Claude
+pointed at the current closed/superseded status for BUG-149, MEJ-106 and the
+remote-WIP triage.
+evidence: current diff scan found reusable prior edits in the authorized
+write-set.
+-->
+
 ## Proposito
 
 Este documento deja el estado para revision posterior de Claude tras la tanda de
@@ -190,9 +200,11 @@ Inventario actualizado en `docs/inventario_bugs_orquesta_2026-06-30.md` con:
 - `BUG-ORQ-20260703-159`: cerrado; los retries idle tras error/prepare_failed ya
   no quedan bloqueados por idempotencia stale.
 
-Sigue abierto en esta tanda `BUG-ORQ-20260703-149`: WIP remoto no integrable tal
-cual. Las filas largas antiguas de OPES/goal-first/shutdown/write-set/status
-siguen como deuda amplia y no son regresion nueva de estos commits.
+Actualizacion posterior: `BUG-ORQ-20260703-149` queda cerrado como WIP remoto
+triado/obsoleto: no integrar el patch completo ni extraer mas piezas salvo bug
+nuevo con write-set propio y pruebas actuales. Las filas largas antiguas de
+OPES/goal-first/shutdown/write-set/status siguen como deuda amplia y no son
+regresion nueva de estos commits.
 
 ## Pruebas ejecutadas
 
@@ -271,15 +283,58 @@ Cola congelada por orden del operador:
 Condicionales, si siguen vigentes tras revision de backlog:
 
 - MEJ-101: cierre OPES real temporal opt-in como validacion final de campo.
-- MEJ-106: deuda residual/ratchets tras ventana §9 y decision de retirada
-  legacy.
+
+Cerrados/supersedidos tras este handoff:
+
+- MEJ-106: deuda residual/ratchets cerrada por Codex local en modo deuda
+  gobernada. La retirada de `legacy_director_loop` no se ejecuto aqui y queda
+  como decision separada del operador, condicionada a checklist verificable.
+
+## Actualizacion 2026-07-04 - limpieza documental con Orquesta
+
+Codex lanzo Orquesta con tres goals paralelos, todos con write-set documental
+disjunto:
+
+- `task-ref-doc-cleanup-inventario-20260704` sobre
+  `docs/inventario_bugs_orquesta_2026-06-30.md`.
+- `task-ref-doc-cleanup-bitacora-20260704` sobre
+  `docs/bitacora_correccion_pericial_2026-07-03.md`.
+- `task-ref-doc-cleanup-handoff-plan-20260704` sobre este handoff,
+  `docs/relevo_claude_orquestador_2026-07-03.md` y
+  `docs/plan_mejora_continua_orquesta_2026-07-04.md`.
+
+Resultado documental:
+
+- `BUG-085` queda historico/supersedido por `BUG-164`; no contarlo como vivo
+  salvo smoke OPES/productivo especifico o fallo externo de sandbox/proveedor.
+- `BUG-088` queda cerrado funcionalmente; las menciones antiguas a "sigue
+  abierto" son historicas y no deben alimentar el conteo vivo.
+- `BUG-120` queda cerrado; sus notas intermedias de "no cierra el bug padre"
+  estan marcadas como historicas cuando correspondia a ese bug.
+- `BUG-149` queda cerrado como WIP remoto triado/obsoleto; no integrar el patch
+  completo de 71 ficheros.
+- `MEJ-106` queda cerrado como deuda gobernada; retirada de
+  `legacy_director_loop` sigue siendo decision separada.
+
+Incidencia nueva para Claude:
+
+- `BUG-ORQ-20260704-165` queda abierto. Orquesta ejecuto y escribio los docs,
+  pero `autoprogramming/status` y `observe_goal` devolvieron timeouts; antes de
+  reiniciar con backend, `runs/control stop forced=true` sobre T260 fallo con
+  `control_not_propagated_to_goal_backend` pese a no observarse app-server local
+  vivo. Al cierre, `orquesta-server stop --force --reason ...` quedo sin
+  respuesta mas de 60s con active works stale; se aborto el cliente y se paro el
+  servidor local por SIGINT. No quedaron procesos `orquesta-server run`,
+  `codex app-server`, tmux `orquesta-goal-*` ni `codebase-memory-mcp`; el state
+  residual puede aparecer `stopped/degraded`. Revisar observabilidad/control
+  goal-first, no reabrir la limpieza documental por este fallo.
 
 ## Checklist de Claude
 
 1. Revisar `git status --short` y separar cambios de cada frente.
 2. Revisar diff de MEJ-206 con foco en contratos y frontera core/composicion.
 3. Confirmar que `docs/inventario_bugs_orquesta_2026-06-30.md` contiene los
-   bugs 154-157.
+   bugs 154-157, 163-165 y la lectura vigente 2026-07-04.
 4. Confirmar MEJ-104 en `autoprogramming/status` con presupuesto bajo si se
    decide ejecutar smoke real acotado; no hacerlo automaticamente.
 5. Confirmar que no quedan procesos vivos con el `pgrep` indicado arriba.

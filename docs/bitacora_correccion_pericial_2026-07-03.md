@@ -7,6 +7,31 @@ Informe: docs/informe_pericial_claude_orquesta_2026-07-03.md
 
 # Bitácora — corrección pericial Orquesta
 
+<!--
+Checkpoint task-ref-doc-cleanup-bitacora-20260704:
+alcance autorizado: docs/bitacora_correccion_pericial_2026-07-03.md.
+Objetivo: anotar estado vigente y supersedencias sin reescribir la historia.
+Evidencia inicial: refs stale localizadas para T-PER-301/302, BUG-149,
+BUG-088, BUG-161/162 y BUG-085/164.
+-->
+
+## Nota de lectura vigente
+
+Esta bitácora es cronológica. Las filas y entradas antiguas son snapshots del
+momento en que se escribieron; no son estado actual salvo que una nota vigente
+lo confirme. No relanzar tareas ni abrir trabajo nuevo solo porque una entrada
+antigua diga `AVANCE-PARCIAL`, `abierto`, `en vuelo` o `pendiente`: leer esta
+nota, la última entrada cronológica aplicable y el inventario de bugs vigente.
+
+| Ref | Estado vigente | Cómo leer entradas antiguas |
+| --- | --- | --- |
+| `T-PER-301` / `T-PER-302` | Cerradas por T270 / `BUG-ORQ-20260703-150`. | Las filas `AVANCE-PARCIAL` y las menciones a T270 en vuelo son snapshots supersedidos por la entrada "T270 integrada: BUG-ORQ-20260703-150 cerrado". |
+| `BUG-ORQ-20260703-150` | Cerrado. | No reabrir la doble implementacion `cmd`/modulo salvo regresion nueva con write-set y pruebas propias. |
+| `BUG-ORQ-20260703-149` | Cerrado. | Las notas que lo listan como abierto quedaron supersedidas por "Codex avanza BUG-088 y cierra BUG-149/160" y por el inventario. |
+| `BUG-ORQ-20260701-088` | Cerrado funcionalmente para la ruta real acotada de alto consumo/checkpoint. | La frase "`BUG-088` no se cierra" es snapshot anterior al smoke real acotado y al cierre posterior de `BUG-161/162`. |
+| `BUG-ORQ-20260703-161` / `BUG-ORQ-20260703-162` | Cerrados. | La lista de residuales abiertos tras el smoke de `BUG-088` queda supersedida por la entrada inmediata de cierre de residuales. |
+| `BUG-ORQ-20260701-085` / `BUG-ORQ-20260704-164` | El residual de runtime guard/write-set queda cerrado por `BUG-ORQ-20260704-164`. | Las menciones a `BUG-085` como pendiente de guard runtime son snapshots previos; no relanzar esa guardia sin una regresion nueva. |
+
 ## Estado de tareas
 
 | Tarea | Estado | Agente | Claim | Evidencia de cierre |
@@ -22,9 +47,9 @@ Informe: docs/informe_pericial_claude_orquesta_2026-07-03.md
 | T-PER-601 | **hecho vía Orquesta** (goal T269, integrado como `b99dffb4`) | orquesta+codex, revisa Codex local | 2026-07-03 | `ARQUITECTURA.md` enlaza informe/manual pericial y corrige persistencia actual a file-based. Verificado grep de enlaces y `go build ./...` tras integrar |
 | RELEVO 98% cuota | **cerrado por Codex local** | siguiente agente | 2026-07-03 | Los 3 pilotajes en vuelo de Claude (`T267`, `T268`, `T269`) fueron revisados, verificados e integrados en principal. Servidores/panes de esos pilotajes apagados manualmente tras reproducir `backend_still_running`; el bug de shutdown sigue como evidencia T-PER-401 |
 | T-PER-203 | **hecho por Codex local** | Codex local | 2026-07-03 | creado `docs/mapa_generaciones_director_2026-07-03.md` con los 17 módulos `*director*`, generación, estado, consumidores por imports actuales y decisión; `AGENTS.md` lo enlaza en el orden de autoridad documental nivel 2. Declara goal-first como único camino de producción y `legacy_director_loop` en sunset. Verificado recuento de 17 filas, grep de enlace/decisión, `go test -count=1 ./ -run 'TestDirectorV2Freeze\|TestEstadoVivoStatusSurfacesDoNotImportStateStoresDirectly'`, `go build ./...`, `git diff --check` |
-| T-PER-301 | AVANCE-PARCIAL | subagente Socrates + Codex local | 2026-07-03 | creado `modulos/orquesta-runtime-codex-appserver` y el wiring principal de `cmd/orquesta-server/codex_goal_backend_env_v0.go` instancia `CommandProtocolV0`, `TmuxBackendV0`, `LazyTmuxProtocolV0` y `GoalBackendV0` desde el módulo nuevo; añadido boundary `TestCodexAppServerAdapterDoesNotImportCmdOrProductStorage`. Tests: `go test -count=1 ./modulos/orquesta-runtime-codex-appserver ./cmd/orquesta-server` y boundary raíz. No se marca cerrada porque siguen duplicados los `cmd/orquesta-server/codex_goal_app_server*.go` legacy y los tests principales viven fuera del módulo; ver `BUG-ORQ-20260703-150`. |
-| T-PER-302 | AVANCE-PARCIAL | Codex local | 2026-07-03 | añadido `estado_backend_v0.go` con `EstadoBackendAppServerV0`, `ObservacionBackendV0` y `TransicionBackendV0` pura, más tests de transiciones legales/ilegales. No se marca cerrada porque Ensure/shutdown/cleanup/active-work aún no consumen la máquina de estados ni existe recolector único de observaciones; queda dependiente de cerrar T-PER-301/`BUG-ORQ-20260703-150`. |
-| RELEVO CLAUDE ORQUESTADOR | guardado parcial | Codex local | 2026-07-03 | operador ordena cortar todo para que Claude siga como orquestador. Subagentes cerrados, `orquesta-server run` local de prueba parado, remoto sin agentes vivos observados. Relevo detallado en `docs/relevo_claude_orquestador_2026-07-03.md`. Desviacion principal: T-PER-301/T-PER-302 siguen abiertas por doble implementacion `cmd`/modulo y estado backend no consumido. |
+| T-PER-301 | AVANCE-PARCIAL (snapshot supersedido) | subagente Socrates + Codex local | 2026-07-03 | creado `modulos/orquesta-runtime-codex-appserver` y el wiring principal de `cmd/orquesta-server/codex_goal_backend_env_v0.go` instancia `CommandProtocolV0`, `TmuxBackendV0`, `LazyTmuxProtocolV0` y `GoalBackendV0` desde el módulo nuevo; añadido boundary `TestCodexAppServerAdapterDoesNotImportCmdOrProductStorage`. Tests: `go test -count=1 ./modulos/orquesta-runtime-codex-appserver ./cmd/orquesta-server` y boundary raíz. Nota vigente 2026-07-04: este snapshot queda supersedido por T270 / `BUG-ORQ-20260703-150`, cerrados en la entrada "T270 integrada". |
+| T-PER-302 | AVANCE-PARCIAL (snapshot supersedido) | Codex local | 2026-07-03 | añadido `estado_backend_v0.go` con `EstadoBackendAppServerV0`, `ObservacionBackendV0` y `TransicionBackendV0` pura, más tests de transiciones legales/ilegales. Nota vigente 2026-07-04: este snapshot queda supersedido por T270 / `BUG-ORQ-20260703-150`, cerrados en la entrada "T270 integrada". |
+| RELEVO CLAUDE ORQUESTADOR | guardado parcial (snapshot supersedido para T-PER-301/302) | Codex local | 2026-07-03 | operador ordena cortar todo para que Claude siga como orquestador. Subagentes cerrados, `orquesta-server run` local de prueba parado, remoto sin agentes vivos observados. Relevo detallado en `docs/relevo_claude_orquestador_2026-07-03.md`. Nota vigente 2026-07-04: la desviacion de T-PER-301/T-PER-302 abiertas queda supersedida por T270 / `BUG-ORQ-20260703-150`; no relanzar por esta fila. |
 | T-PER-401 | **hecho por Codex local** | Codex local | 2026-07-03 | contrato de shutdown en dos fases implementado sobre rama limpia, sin integrar el WIP remoto: `/api/v0/server/shutdown` aumenta respuestas ready con `exit_pending=true` y `pid`, el runtime programa salida forzada por puerto inyectado si no termina tras `ShutdownGracePeriod`, y el smoke espera desaparicion del PID antes de fallar. Tests: `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-mcp ./modulos/orquesta-server-shutdown ./cmd/orquesta-server`; focal `TestRuntimeV0ShutdownReadyProgramaSalidaForzadaSiNoTerminaV0`; guard script `TestSmokeGoalFirstScript*`. |
 | T-PER-402 | **hecho por subagente Bernoulli** | Codex subagente | 2026-07-03 | añadido `scripts/orquesta_smoke_nightly.sh`, guard `scripts/test_orquesta_smoke_nightly.sh` y runbook `docs/runbooks/smoke_nightly_2026-07.md`. Preflight por defecto sin cuota, modo real solo con `ORQUESTA_NIGHTLY_REAL_CONFIRM=1`, JSON diario y bloqueo OPES/productivo. Tests: `bash -n scripts/orquesta_smoke_nightly.sh scripts/test_orquesta_smoke_nightly.sh`, `scripts/test_orquesta_smoke_nightly.sh`, preflight real sin cuota con `ORQUESTA_NIGHTLY_RESULTS_DIR=/tmp/...`. |
 | T-PER-501 | **hecho vía Orquesta** (goal T265, Codex) | orquesta+codex, supervisado por claude-fable-5 | 2026-07-03 | scripts integrados y verificados; test `orquesta_metricas_deuda_ok=true`; métricas: env=500, status=16, interfaces=64, director=17 |
@@ -46,6 +71,9 @@ Informe: docs/informe_pericial_claude_orquesta_2026-07-03.md
 - Write-set ajeno vigente (agente local del informe preliminar) sobre
   `cmd/orquesta-server/codex_goal_app_server*.go` y smoke goal-first:
   T-PER-301/302/401/402 bloqueadas hasta integración.
+  Nota vigente 2026-07-04: este bloqueo era un snapshot inicial;
+  T-PER-301/302 quedaron cerradas por T270 / `BUG-ORQ-20260703-150` y
+  T-PER-401/402 tambien tienen cierres posteriores en esta bitácora.
 - Decisión de pilotaje: T-PER-501 como primera tarea vía Orquesta
   (write-set mínimo, solo `scripts/`), siguiendo manual sección 8.
 - Pilotaje paso 1: preflight barato del entorno goal-first (sin cuota).
@@ -213,9 +241,15 @@ Todos los Codex locales cortados por el operador; ver
 - Verificación e integración: según receta de esta bitácora; los Tests de
   cada sección son el criterio. Integrar T270 con revisión especialmente
   cuidadosa (toca el componente más crítico).
-- Pendiente de decisión humana: WIP remoto sucio de 71 ficheros en
-  `/srv/orquesta-self/worktrees/orquesta` (no integrar completo, triar);
-  quién borró `docs/diseno_router_contexto_hibrido_2026-07-03.md`.
+- Historico de decision humana de ese momento: bloque remoto de 71 ficheros
+  en `/srv/orquesta-self/worktrees/orquesta` (no integrar completo, triar) y
+  aclarar quien borro `docs/diseno_router_contexto_hibrido_2026-07-03.md`.
+
+Nota vigente 2026-07-04: esta entrada de T270 en vuelo es histórica; T270 se
+integró más abajo y cerró `BUG-ORQ-20260703-150` / T-PER-301-302. El WIP remoto
+de 71 ficheros tambien dejo de ser una decision viva: quedo preservado en stash
+remoto `triaje-claude-2026-07-04` y tratado como evidencia historica, no como
+patch pendiente de integrar.
 
 ### 2026-07-03 (noche) — T272 integrada; T270 sigue en vuelo
 
@@ -562,7 +596,12 @@ Documentacion actualizada para Claude:
   `BUG-ORQ-20260703-155`, `BUG-ORQ-20260703-156` y
   `BUG-ORQ-20260703-157`. El estado vigente queda actualizado en las entradas
   posteriores de esta bitacora y en el inventario: `BUG-154/155/156/157/159`
-  estan cerrados; solo `BUG-149` sigue abierto en esta tanda.
+  estan cerrados; en ese momento solo quedaba abierto `BUG-149` dentro de esa
+  tanda.
+
+Nota vigente 2026-07-04: la lectura intermedia de `BUG-149` como unico residual
+vivo queda supersedida por la entrada posterior "Codex avanza BUG-088 y cierra
+BUG-149/160" y por el inventario vigente.
 
 Pendiente para cierre final, sin relanzar lo congelado: revisar procesos vivos
 antes de entregar, commitear y hacer push para que Claude siga.
@@ -703,6 +742,10 @@ validacion acotada antes de reactivar automejora/pilotajes caros. En esta tanda
 solo sigue abierto `BUG-ORQ-20260703-149`; la deuda antigua OPES/goal-first/
 shutdown/write-set/status permanece inventariada como frente estructural aparte.
 
+Nota vigente 2026-07-04: esta lectura de `BUG-149` abierto queda supersedida
+por la entrada inmediatamente posterior, que lo cierra como WIP remoto
+triado/obsoleto.
+
 ### 2026-07-03 noche — Codex avanza BUG-088 y cierra BUG-149/160
 
 Trabajo directo acotado, sin relanzar automejora ni pilotajes congelados. Se
@@ -736,6 +779,10 @@ Evidencia ejecutada:
 
 `BUG-088` no se cierra: falta smoke real que confirme la ruta completa alto
 consumo/checkpoint -> segundo artefacto o replan sin app-server residual.
+
+Nota vigente 2026-07-04: este no-cierre es snapshot anterior; `BUG-088` queda
+cerrado funcionalmente por el smoke real acotado documentado más abajo y sus
+residuales `BUG-161/162` quedan cerrados en la entrada siguiente.
 
 ### 2026-07-03 noche — Codex cierra MEJ-106 de deuda residual gobernada
 
@@ -808,6 +855,9 @@ abiertos y documentados para revision estructural:
 - `BUG-ORQ-20260703-162`: `shutdown_ready=true` sin `exit_pending/pid` en una
   rama de fallo con cleanup efectivo.
 
+Nota vigente 2026-07-04: estos residuales quedan cerrados por la entrada
+inmediata "Codex cierra residuales BUG-161/162 del smoke BUG-088".
+
 ### 2026-07-03 noche — Codex cierra residuales BUG-161/162 del smoke BUG-088
 
 Trabajo directo acotado tras el smoke real. Subagente solo lectura
@@ -859,6 +909,10 @@ corte:
 - OPES done/settled: conservar `settlement_*` y lifecycle en
   `orquesta-opes-topic-registry` antes de validar `release`.
 
+Nota vigente 2026-07-04: el residual runtime guard de `BUG-085` queda cerrado
+por `BUG-ORQ-20260704-164` en la entrada siguiente; `BUG-065` y OPES
+done/settled conservan su estado propio.
+
 ### 2026-07-04 — Codex cierra guard runtime de write-set BUG-164 / BUG-085 residual
 
 Trabajo directo acotado, sin OPES productivo ni smoke real. Se cerro el
@@ -895,3 +949,51 @@ Limites del cierre:
   a un sandbox del proveedor ni a enforcement kernel/FS preventivo.
 - Queda pendiente fuera de este corte: `BUG-065` recomendado publico de
   shutdown y OPES done/settled con `settlement_*` en topic registry.
+
+### 2026-07-04 — Orquesta limpia datos historicos falsos para relevo Claude
+
+Trabajo dirigido por Orquesta con tres goals paralelos y write-sets separados:
+
+- `task-ref-doc-cleanup-inventario-20260704`: inventario de bugs.
+- `task-ref-doc-cleanup-bitacora-20260704`: bitacora pericial.
+- `task-ref-doc-cleanup-handoff-plan-20260704`: handoff, relevo y plan de
+  mejora continua.
+
+Refs de Orquesta aceptadas para la ola:
+`request-ref-doc-cleanup-historicos-falsos-20260704`,
+`goal-ref-task-autoprogramming-39ecd0187760-g01`,
+`goal-ref-task-autoprogramming-39ecd0187760-g02` y
+`goal-ref-task-autoprogramming-39ecd0187760-g03`.
+
+Cambios documentales integrados:
+
+- `docs/inventario_bugs_orquesta_2026-06-30.md` anade lectura vigente
+  2026-07-04: `BUG-085` queda historico/supersedido por `BUG-164`,
+  `BUG-088` cerrado funcionalmente, `BUG-120` cerrado por cierre posterior y
+  `BUG-065` sigue abierto. Las filas mixtas antiguas ya no cuentan `BUG-085` ni
+  `BUG-088` como deuda viva.
+- `docs/bitacora_correccion_pericial_2026-07-03.md` conserva los snapshots
+  historicos, pero marca como supersedidas las frases de T-PER-301/302,
+  `BUG-149`, `BUG-088`, `BUG-161/162` y `BUG-085` que ya no reflejan estado
+  vigente.
+- `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`,
+  `docs/relevo_claude_orquestador_2026-07-03.md` y
+  `docs/plan_mejora_continua_orquesta_2026-07-04.md` quedan alineados:
+  `BUG-149` esta cerrado, `MEJ-106` esta cerrado como deuda gobernada y el
+  WIP remoto de 71 ficheros queda preservado/triado, no vivo.
+
+Fallo observado usando Orquesta y registrado como bug nuevo:
+`BUG-ORQ-20260704-165`. La ejecucion escribio los docs, pero
+`/api/v0/autoprogramming/status` y `observe_goal` devolvieron timeouts; antes
+del reinicio con backend, `runs/control stop forced=true` sobre T260 no pudo
+propagar control pese a no observarse `codex app-server` local vivo. Esto queda
+pendiente como problema de observabilidad/control goal-first, no como bloqueo
+de los cambios documentales.
+
+Cierre operativo de la sesion: `orquesta-server stop --force --reason ...`
+quedo sin respuesta mas de 60s con `shutdown_in_progress` y active works stale
+de esta limpieza. Se aborto el cliente de parada y se envio SIGINT al
+`orquesta-server run` local de prueba; despues no quedaron procesos
+`orquesta-server run`, `codex app-server`, sesiones tmux `orquesta-goal-*` ni
+`codebase-memory-mcp`. El state residual queda `stopped/degraded` y forma parte
+de `BUG-ORQ-20260704-165`.
