@@ -343,3 +343,33 @@ esta ola aún aparecían `running` en sus instancias por el propio bug 153
 que T275 arregla — las olas futuras ya reconciliarán solas.
 Pendiente de código: última ola (BUG-152 + CTX-801A/C/D). Después: solo
 ventana §9 y decisión de subir el nightly a modo real.
+
+### 2026-07-04 — EXPERIMENTO A/B de contexto (decisión del propietario: probar en práctica, no en papel)
+
+Diseño T286-EXP, a ejecutar tras integrar T284/T285:
+
+**Hipótesis**: el broker central de contexto (rg + codebase-memory + repo_map
+por refs compactas) reduce tokens/tiempo frente a exploración libre del
+agente, sin degradar calidad.
+
+**Método**: misma tarea acotada de exploración (redactar
+`modulos/orquesta-goal/docs/mapa_publico.md` con funciones públicas del
+módulo y sus consumidores por imports — tarea que obliga a buscar), dos
+pilotajes gemelos desde el mismo HEAD:
+- Brazo A (control): perfil actual, broker apagado.
+- Brazo B: broker encendido en el perfil self-programming
+  (`ORQUESTA_CODEBASE_BROKER_STATE_DIR` + opt-in central + toolbelt).
+
+**Métricas por brazo** (todas ya disponibles):
+1. `tokens_used` de `thread_goals` (goals_1.sqlite del codex-home del pilotaje).
+2. `context_budget_total_bytes` / `static_prompt_bytes` /
+   `dynamic_context_bytes` (801A, en el estado del goal).
+3. `prompt_cache.cached_input_tokens` (801C).
+4. Duración del goal (created→updated en thread_goals).
+5. Calidad: el doc resultante cubre las mismas funciones (diff manual).
+
+**Criterio**: si B no mejora ≥15% en tokens o tiempo con calidad igual, el
+broker no se impone por defecto en self-programming y se documenta; si
+mejora, se enciende por defecto y se abre seguimiento con las métricas de
+deuda. Una muestra por brazo = indicativo, no estadístico; si el resultado
+es dudoso, repetir con 3 tareas distintas antes de decidir.
