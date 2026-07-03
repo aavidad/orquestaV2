@@ -55,6 +55,39 @@ func TestOPESLocalTaskDocsGuardV0NoReabrenT12CerradoV0(t *testing.T) {
 	}
 }
 
+func TestOPESConnectorDocsGuardV0T12CierreFuncionalVigenteV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	for _, rel := range []string{
+		"modulos/orquesta-opes-connector/docs/decisiones.md",
+		"modulos/orquesta-opes-connector/docs/pruebas.md",
+		"modulos/orquesta-opes-connector/docs/tareas.md",
+	} {
+		text := readOperationalDocGuardV0(t, root, rel)
+		for _, stale := range []string{
+			"T12 se declara bloqueada",
+			"bloqueada por falta de entorno temporal",
+			"bloqueado verificable 2026-05-27",
+			"smoke real OPES sigue bloqueado",
+			"sigue bloqueado sin OPES temporal",
+		} {
+			if strings.Contains(text, stale) {
+				t.Fatalf("%s conserva narrativa stale de T12 bloqueada: %q", rel, stale)
+			}
+		}
+		for _, required := range []string{
+			"resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md",
+			"completed_syllabus_package",
+			"app_server_tmux",
+			"OPES temporal",
+			"scope duro",
+		} {
+			if !strings.Contains(text, required) {
+				t.Fatalf("%s no documenta requisito vigente %q", rel, required)
+			}
+		}
+	}
+}
+
 func TestGoalOperationalDocsGuardV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	for _, rel := range []string{

@@ -22,6 +22,9 @@ Pendiente residual de revalidacion:
 - OPES temporal vivo;
 - Orquesta temporal viva;
 - `ORQUESTA_OPES_BASE_URL` y `ORQUESTA_BASE_URL` explicitos;
+- `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux` para efectos goal-first;
+- scope duro por `job_ref`, `program_id`, `topic_id`, `correlation_id` o cola
+  temporal dedicada antes de drenar;
 - `ORQUESTA_OPES_TEMPORAL_CONFIRM=1` y confirmacion de efectos;
 - cuota/modelo confirmados para agente real.
 

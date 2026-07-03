@@ -1,0 +1,126 @@
+{
+  "goal_ref": "goal-ref-autoprogramming-backlog-t280-wip-tasks-docs-guards-29858632",
+  "schema_version": "orquesta_goal_result.v0",
+  "status": "complete",
+  "summary": "WIP-TASK-001 actualiza la fila OPES-DER-DRAFT-AGENT al flujo goal-first app_server_tmux con external_goal_ref, observacion/cierre Goal y legacy solo historico opt-in. WIP-TASK-002 reconcilia decisiones/pruebas/tareas del conector OPES con el cierre funcional 2026-06-28 y amplia el guard OPES. El backlog scanner declarado tiene hash de linea divergente en el worktree actual; no se insertaron nuevas tareas ni se toco el backlog, queda nota de rebase en evidence_refs.",
+  "artifact_refs": [
+    "artifact-ref-t280-matriz-opes-der-draft-agent",
+    "artifact-ref-t280-opes-connector-t12-docs",
+    "artifact-ref-t280-opes-docs-guard",
+    "artifact-ref-t280-goal-result-json"
+  ],
+  "artifact_paths": [
+    "docs/triaje_wip_remoto_2026-07-04/clasificacion.md",
+    "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+    "docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md",
+    "docs/matriz_pruebas_reales_y_smoke_2026-05-17.md",
+    "modulos/orquesta-opes-connector/docs/decisiones.md",
+    "modulos/orquesta-opes-connector/docs/pruebas.md",
+    "modulos/orquesta-opes-connector/docs/tareas.md",
+    "cmd/orquesta-server/opes_operational_docs_guard_v0_test.go",
+    "modulos/orquesta-opes-connector/docs/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t280-wip-tasks-docs-guards-29858632.json"
+  ],
+  "materialized_artifacts": [
+    {
+      "artifact_ref": "artifact-ref-t280-matriz-opes-der-draft-agent",
+      "path": "docs/matriz_pruebas_reales_y_smoke_2026-05-17.md",
+      "artifact_type": "markdown_smoke_matrix_update",
+      "status": "valid",
+      "evidence_refs": [
+        "sha256:38ddae923aa0caadfa193f5c4593251afe49ac122a670c48d200143608bbd240",
+        "manual:OPES-DER-DRAFT-AGENT_contains_app_server_tmux_external_goal_ref_goal_observe_OPES-DER-RESTO_CODEX-GOAL-FIRST-APP-SERVER-REAL"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t280-opes-connector-t12-docs",
+      "path": "modulos/orquesta-opes-connector/docs",
+      "artifact_type": "markdown_connector_operational_docs",
+      "status": "valid",
+      "evidence_refs": [
+        "sha256:decisiones.md:c4426d82cc3a80a06a665e9ef669ec22f3631b2fa1079b8fe02f9ca64f744421",
+        "sha256:pruebas.md:2bca64a7a2969637fab3c084be7edc11553f73067aa6fee91f028fb6cb2889f6",
+        "sha256:tareas.md:1f8f64a17c1eba44272f3cb744f0b8c85c262d02f238389a36b9d4a4c028921f",
+        "manual:connector_docs_link_runbook_completed_syllabus_package_OPES_temporal_scope_duro_app_server_tmux"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t280-opes-docs-guard",
+      "path": "cmd/orquesta-server/opes_operational_docs_guard_v0_test.go",
+      "artifact_type": "go_test_guard",
+      "status": "valid",
+      "evidence_refs": [
+        "sha256:5d611669a888cbecdaa77fdecf1b74e5b484683fd02c9de39370111ec75c4e07",
+        "test:go test -count=1 ./cmd/orquesta-server -run TestOPES.*DocsGuardV0:passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t280-goal-result-json",
+      "path": "modulos/orquesta-opes-connector/docs/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t280-wip-tasks-docs-guards-29858632.json",
+      "artifact_type": "orquesta_goal_result",
+      "status": "valid",
+      "evidence_refs": [
+        "schema_version:orquesta_goal_result.v0",
+        "status:complete"
+      ],
+      "issues": []
+    }
+  ],
+  "checklist": {
+    "expected_refs": [
+      "WIP-TASK-001",
+      "WIP-TASK-002",
+      "required-test-ref-df6cb0607485",
+      "git diff --check -- docs/matriz_pruebas_reales_y_smoke_2026-05-17.md",
+      "go test -count=1 ./cmd/orquesta-server -run TestOPES.*DocsGuardV0",
+      "git diff --check -- cmd/orquesta-server/opes_operational_docs_guard_v0_test.go modulos/orquesta-opes-connector/docs",
+      "go build ./..."
+    ],
+    "completed_refs": [
+      "WIP-TASK-001",
+      "WIP-TASK-002",
+      "required-test-ref-df6cb0607485",
+      "git diff --check -- docs/matriz_pruebas_reales_y_smoke_2026-05-17.md:passed",
+      "go test -count=1 ./cmd/orquesta-server -run TestOPES.*DocsGuardV0:passed",
+      "git diff --check -- cmd/orquesta-server/opes_operational_docs_guard_v0_test.go modulos/orquesta-opes-connector/docs:passed",
+      "GOFLAGS=-buildvcs=false go build ./...:passed"
+    ],
+    "missing_refs": [],
+    "evidence_refs": [
+      "docs/triaje_wip_remoto_2026-07-04/clasificacion.md:lines:93-98:sha256:cb3e4512d6a533737146c4ffea86cd82ed4ee25b3bdbcf27317c023e3cfb4579",
+      "docs/triaje_wip_remoto_2026-07-04/clasificacion.md:lines:100-105:sha256:cb3e4512d6a533737146c4ffea86cd82ed4ee25b3bdbcf27317c023e3cfb4579",
+      "backlog_scan_ref:scan-ref-backlog-9dc27d8d661c"
+    ]
+  },
+  "required_test_results": [
+    {
+      "test_ref": "required-test-ref-df6cb0607485",
+      "status": "passed",
+      "evidence_refs": [
+        "test:go test -count=1 ./cmd/orquesta-server -run 'TestOPES':passed"
+      ]
+    }
+  ],
+  "domain_receipt_refs": [],
+  "rework_plan_refs": [],
+  "evidence_refs": [
+    "backlog_scan_ref:scan-ref-backlog-9dc27d8d661c",
+    "backlog_scan_epoch:backlog-scan-epoch-51399d8284cb",
+    "backlog_task_instance_ref:task-instance-ref-backlog-bb00aaaf",
+    "backlog_scan_doc_declared:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:sha256:4912dbafaedc8205d6114abac77656178cb630eb7b61bb589bca4c3684945e2a",
+    "backlog_scan_doc_current:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:sha256:79f10c9b629f181e8bb7809e7247cbbae8030c917cd9f66911e3386f421ed1e8",
+    "backlog_scan_doc_current_file_sha256:8d9b4cd992105aa030036e28bf47745b84f92aa503e3e6673918dcec99a769e2",
+    "scanner_rebase_note:declared_line_hash_mismatch_no_new_Txx_inserted_no_backlog_write",
+    "clasificacion_sha256:cb3e4512d6a533737146c4ffea86cd82ed4ee25b3bdbcf27317c023e3cfb4579",
+    "runbook_2026_06_28_sha256:aeb63ca810ff4b945d5fd06521c199542e69dea8e292a53de31e9f619cb360f2",
+    "git diff --check -- docs/matriz_pruebas_reales_y_smoke_2026-05-17.md:passed",
+    "go test -count=1 ./cmd/orquesta-server -run TestOPES.*DocsGuardV0:passed",
+    "git diff --check -- cmd/orquesta-server/opes_operational_docs_guard_v0_test.go modulos/orquesta-opes-connector/docs:passed",
+    "go test -count=1 ./cmd/orquesta-server -run 'TestOPES':passed",
+    "go build ./...:failed_vcs_status_exit_1",
+    "GOFLAGS=-buildvcs=false go build ./...:passed",
+    "git diff --check:passed"
+  ]
+}

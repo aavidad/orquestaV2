@@ -12,7 +12,7 @@ Comando obligatorio T12 para revalidar frontera bridge/conector:
 go test -count=1 ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-connector
 ```
 
-Evidencia reconciliada 2026-05-27:
+Evidencia reconciliada:
 
 - los intentos T12 `agent-ref-task-autoprogramming-5373ad36695c-g01` y
   `agent-ref-task-autoprogramming-51f9a01810a0-g01` pasaron los tests
@@ -28,5 +28,22 @@ Evidencia reconciliada 2026-05-27:
   (`provider_timeout`, `running_no_recent_progress`, `provider_status`,
   `provider_reason`) para que el bridge proyecte bloqueos de jobs ya lanzados
   sin leer internals de OPES;
-- el smoke real OPES sigue bloqueado sin OPES temporal, Orquesta temporal,
-  confirmacion de efectos y cuota/modelo confirmados.
+- el cierre funcional real de derivados/cierre OPES quedo documentado el
+  2026-06-28 en
+  `docs/runbooks/resultado_smoke_opes_derivados_goal_first_real_2026-06-28.md`:
+  flujo `goal_first` con `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`, OPES
+  temporal, Orquesta temporal, receipts de dominio, cierre aceptado y
+  `completed_syllabus_package`.
+
+Revalidar con efectos solo si hay:
+
+- OPES temporal y Orquesta temporal confirmadas;
+- scope duro por `job_ref`, `program_id`, `topic_id`, `correlation_id` o cola
+  temporal dedicada;
+- `ORQUESTA_OPES_TEMPORAL_CONFIRM=1`, confirmacion explicita de efectos y
+  `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`;
+- cuota/modelo confirmados.
+
+Sin esas precondiciones, la accion correcta es registrar bloqueo externo de
+revalidacion y conservar las pruebas focales/offline; no reabrir T12 como fallo
+vigente del conector.
