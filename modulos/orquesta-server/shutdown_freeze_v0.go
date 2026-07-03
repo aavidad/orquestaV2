@@ -20,6 +20,7 @@ type serverShutdownHTTPProjectionV0 struct {
 	CheckpointsPending      int                                  `json:"checkpoints_pending,omitempty"`
 	CheckpointAgentsPending int                                  `json:"checkpoint_agents_pending,omitempty"`
 	ActiveWorkCount         int                                  `json:"active_work_count,omitempty"`
+	ActiveWorkRefs          []string                             `json:"active_work_refs,omitempty"`
 	ActiveWorks             []serverShutdownHTTPWorkProjectionV0 `json:"active_works,omitempty"`
 }
 
@@ -142,7 +143,10 @@ func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjecti
 		CheckpointsPending:      payload.CheckpointsPending,
 		CheckpointAgentsPending: payload.CheckpointAgentsPending,
 		ActiveWorkCount:         payload.ActiveWorkCount,
-		ActiveWorkRefs:          shutdownProjectionActiveWorkRefsV0(payload.ActiveWorks),
+		ActiveWorkRefs: compactServerStringsV0(append(
+			append([]string(nil), payload.ActiveWorkRefs...),
+			shutdownProjectionActiveWorkRefsV0(payload.ActiveWorks)...,
+		)),
 	}
 	if projection.ActiveWorkCount <= 0 && len(payload.ActiveWorks) > 0 {
 		projection.ActiveWorkCount = len(payload.ActiveWorks)

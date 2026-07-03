@@ -842,6 +842,13 @@ para que el servidor no publique ready ni dispare cierre con backend Goal vivo.
 Evidencia:
 `TestShutdownProjectionFromHTTPV0ReadyConActiveWorkQuedaStopPendingV0`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 11: la misma proyeccion HTTP
+ingiere tambien `active_work_refs` compactas cuando un adaptador no devuelve
+`active_works` estructurados; esas refs bastan para convertir un
+`shutdown_ready=true` en `stop_pending` y preservar la causa compacta del
+bloqueo. Evidencia:
+`TestShutdownProjectionFromHTTPV0ReadyConActiveWorkRefsQuedaStopPendingV0`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y
