@@ -12,15 +12,15 @@ Informe: docs/informe_pericial_claude_orquesta_2026-07-03.md
 | Tarea | Estado | Agente | Claim | Evidencia de cierre |
 | --- | --- | --- | --- | --- |
 | T-PER-101 | **hecho vía Orquesta** (goal T266, Codex) | orquesta+codex, supervisa claude-fable-5 | 2026-07-03 | módulo `orquesta-estado-vivo` integrado: 9 tests verdes (los 6 obligatorios + 2 extra), frontera neutral cubierta y verde, `go build ./...` limpio. Matiz: `puertos_v0.go` quedó solo con la cláusula de paquete — T-PER-102 debe definir `FuenteEvidenciaEstadoPortV0` (consumer-side) al crear los adaptadores. Segundo shutdown también dejó residuos (3ª evidencia T-PER-401) |
-| T-PER-102 | en curso vía Orquesta (goal T267, rama `pericial/pilot-t102`) | orquesta+codex, supervisa claude-fable-5 | 2026-07-03 | si el supervisor cae: verificar con los Tests de la sección T267 (focales de EvidenciaEstado + fronteras + build), revisar que ningún adaptador tenga lógica de fase, e integrar solo tras revisión |
-| T-PER-103 | libre (dep: 102) | — | — | — |
-| T-PER-104 | libre (dep: 102) | — | — | — |
-| T-PER-105 | libre (dep: 102) | — | — | — |
+| T-PER-102 | **hecho vía Orquesta** (goal T267, integrado como `26cab434`) | orquesta+codex, revisa Codex local | 2026-07-03 | adaptadores de evidencia integrados; verificados `go test -count=1 ./modulos/orquesta-estado-vivo`, `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'EvidenciaEstado|AgregadorEvidencia'`, `go test -count=1 ./`, `go build ./...`. Orquesta dejó el goal `blocked` por contrato de reconciliación, pero el código/tests eran válidos |
+| T-PER-103 | libre (dep: 102 cerrada) | — | — | — |
+| T-PER-104 | libre (dep: 102 cerrada) | — | — | — |
+| T-PER-105 | libre (dep: 102 cerrada) | — | — | — |
 | T-PER-106 | libre (dep: 103-105) | — | — | — |
 | T-PER-201 | libre | — | — | — |
 | T-PER-202 | en curso vía Orquesta (goal T268, rama `pericial/pilot-t202`, puerto 34247) | orquesta+codex | 2026-07-03 | verificar: `go test -count=1 ./ -run TestDirectorV2Freeze` + `./` |
-| T-PER-601 | en curso vía Orquesta (goal T269, rama `pericial/pilot-t601`, puerto 39553) | orquesta+codex | 2026-07-03 | verificar: diff solo ARQUITECTURA.md + grep del enlace pericial |
-| RELEVO 98% cuota | **instrucciones** | siguiente agente | 2026-07-03 | Hay 3 pilotajes en vuelo: T267 (puerto 36249, rama pilot-t102), T268 (34247, pilot-t202), T269 (39553, pilot-t601). Para cada uno: esperar terminal con `POST /api/v0/autoprogramming/status` body `{}`; verificar con los Tests de su sección de backlog; revisar diff; integrar al árbol principal con commit propio; apagar con shutdown forced + kill PID (`<pilot>/server.pid`) + `tmux kill-session orquesta-goal-*` + `pkill -f 'codex app-server'` (residuos esperados, evidencia T-PER-401); actualizar esta tabla. Los worktrees viven en el scratchpad de la sesión Claude (volátil) pero las ramas `pericial/pilot-*` son permanentes: si el scratchpad desapareció, los cambios sin commitear del worktree se pierden — en ese caso relanzar el pilotaje con la receta de arriba, que las ramas y backlogs son reproducibles |
+| T-PER-601 | **hecho vía Orquesta** (goal T269, integrado como `b99dffb4`) | orquesta+codex, revisa Codex local | 2026-07-03 | `ARQUITECTURA.md` enlaza informe/manual pericial y corrige persistencia actual a file-based. Verificado grep de enlaces y `go build ./...` tras integrar |
+| RELEVO 98% cuota | **instrucciones actualizadas** | siguiente agente | 2026-07-03 | Queda 1 pilotaje en vuelo: T268 (puerto 34247, rama `pericial/pilot-t202`). T267 y T269 ya están integrados en principal. Para T268: esperar terminal con `POST /api/v0/autoprogramming/status` body `{}`; verificar `go test -count=1 ./ -run TestDirectorV2Freeze` + `go test -count=1 ./`; revisar diff; integrar solo los ficheros de su write-set; apagar con shutdown forced + kill PID (`<pilot>/server.pid`) + `tmux kill-session orquesta-goal-*` + `pkill -f 'codex app-server'` si quedan residuos; actualizar esta tabla. Los worktrees viven en el scratchpad de la sesión Claude (volátil) pero las ramas `pericial/pilot-*` son permanentes |
 | T-PER-203 | libre (dep: 201,202) | — | — | — |
 | T-PER-301 | BLOQUEADA-POR-WRITE-SET | — | — | — |
 | T-PER-302 | bloqueada (dep: 301) | — | — | — |
@@ -28,7 +28,6 @@ Informe: docs/informe_pericial_claude_orquesta_2026-07-03.md
 | T-PER-402 | bloqueada (dep: 401) | — | — | — |
 | T-PER-501 | **hecho vía Orquesta** (goal T265, Codex) | orquesta+codex, supervisado por claude-fable-5 | 2026-07-03 | scripts integrados y verificados; test `orquesta_metricas_deuda_ok=true`; métricas: env=500, status=16, interfaces=64, director=17 |
 | T-PER-502 | libre (dep: 501) | — | — | — |
-| T-PER-601 | libre | — | — | — |
 | T-PER-701 | libre | — | — | — |
 | T-PER-801 (router contexto híbrido) | libre | — | — | manual §8.5 |
 | BUG write-set prepare (pilotaje) | hecho | claude-fable-5 | 2026-07-03 | commit 13d526d1, tests focales + frontera verdes |
