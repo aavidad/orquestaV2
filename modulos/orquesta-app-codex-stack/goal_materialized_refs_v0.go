@@ -36,6 +36,7 @@ const (
 	goalMaterializedRequiredTestEvidenceDetected   = "evidence-ref-goal-materialized-required-test-evidence-detected"
 	goalMaterializedValidArtifactListEvidence      = "evidence-ref-goal-materialized-valid-artifact-list"
 	goalMaterializedInvalidArtifactListEvidence    = "evidence-ref-goal-materialized-invalid-artifact-list"
+	goalMaterializedTerminalResultEvidence         = "evidence-ref-goal-materialized-terminal-result"
 )
 
 var errGoalMaterializedRefsScanDoneV0 = errors.New("goal_materialized_refs_scan_done")
@@ -187,6 +188,82 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 	result.EvidenceRefs = compactStringsV0(result.EvidenceRefs)
 	result.IssueCodes = compactStringsV0(result.IssueCodes)
 	return result, true, nil
+}
+
+func (source stackGoalMaterializedRefsSourceV0) LoadTerminalGoalMaterializedResultV0(
+	ctx context.Context,
+	state orquestagoal.GoalWorkStateV0,
+) (orquestagoal.GoalWorkResultV0, bool, error) {
+	_ = ctx
+	projectRoot := strings.TrimSpace(source.Config.Codex.ProjectWorkDir)
+	if projectRoot == "" {
+		return orquestagoal.GoalWorkResultV0{}, false, nil
+	}
+	projectRoot, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return orquestagoal.GoalWorkResultV0{}, false, nil
+	}
+	projectRoot = filepath.Clean(projectRoot)
+	for _, scope := range state.Spec.WriteSet {
+		result, ok, err := source.loadTerminalGoalMaterializedResultFromScopeV0(projectRoot, state, scope)
+		if err != nil || ok {
+			return result, ok, err
+		}
+	}
+	return orquestagoal.GoalWorkResultV0{}, false, nil
+}
+
+func (source stackGoalMaterializedRefsSourceV0) loadTerminalGoalMaterializedResultFromScopeV0(
+	projectRoot string,
+	state orquestagoal.GoalWorkStateV0,
+	scope orquestagoal.GoalWriteScopeV0,
+) (orquestagoal.GoalWorkResultV0, bool, error) {
+	relScope := filepath.Clean(filepath.FromSlash(strings.TrimSpace(scope.Path)))
+	if relScope == "." || relScope == "" || filepath.IsAbs(relScope) ||
+		strings.HasPrefix(relScope, ".."+string(filepath.Separator)) || relScope == ".." {
+		return orquestagoal.GoalWorkResultV0{}, false, nil
+	}
+	target := filepath.Join(projectRoot, relScope)
+	if !pathWithinRootV0(projectRoot, target) {
+		return orquestagoal.GoalWorkResultV0{}, false, nil
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		return orquestagoal.GoalWorkResultV0{}, false, nil
+	}
+	if !info.IsDir() {
+		result, ok := goalMaterializedReadValidTerminalGoalResultForStateV0(projectRoot, target, state)
+		return result, ok, nil
+	}
+	var found orquestagoal.GoalWorkResultV0
+	foundOK := false
+	filesScanned := 0
+	walkErr := filepath.WalkDir(target, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || foundOK {
+			return nil
+		}
+		if filesScanned >= goalMaterializedQAScanMaxFilesV0 {
+			return errGoalMaterializedRefsScanDoneV0
+		}
+		if entry == nil || entry.IsDir() || !pathWithinRootV0(projectRoot, path) {
+			return nil
+		}
+		filesScanned++
+		if !goalMaterializedFileIsGoalResultV0(filepath.Base(path)) {
+			return nil
+		}
+		result, ok := goalMaterializedReadValidTerminalGoalResultForStateV0(projectRoot, path, state)
+		if !ok {
+			return nil
+		}
+		found = result
+		foundOK = true
+		return errGoalMaterializedRefsScanDoneV0
+	})
+	if errors.Is(walkErr, errGoalMaterializedRefsScanDoneV0) {
+		walkErr = nil
+	}
+	return found, foundOK, walkErr
 }
 
 func (source stackGoalMaterializedRefsSourceV0) scanGoalWriteScopeForMaterializedRefsV0(
@@ -486,6 +563,40 @@ func goalMaterializedReadTerminalGoalResultV0(path string) (orquestagoal.GoalWor
 		return orquestagoal.GoalWorkResultV0{}, false
 	}
 	return result, true
+}
+
+func goalMaterializedReadValidTerminalGoalResultForStateV0(
+	projectRoot string,
+	path string,
+	state orquestagoal.GoalWorkStateV0,
+) (orquestagoal.GoalWorkResultV0, bool) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return orquestagoal.GoalWorkResultV0{}, false
+	}
+	var result orquestagoal.GoalWorkResultV0
+	if json.Unmarshal(raw, &result) != nil {
+		return orquestagoal.GoalWorkResultV0{}, false
+	}
+	result = orquestagoal.NormalizeGoalWorkResultV0(result)
+	if !orquestagoal.GoalWorkResultTerminalV0(result.Status) ||
+		!goalMaterializedTerminalResultMatchesStateV0(result, state) ||
+		len(orquestagoal.ValidateGoalWorkResultV0(result)) > 0 {
+		return orquestagoal.GoalWorkResultV0{}, false
+	}
+	result.EvidenceRefs = compactStringsV0(append(
+		result.EvidenceRefs,
+		goalMaterializedTerminalResultRefV0(projectRoot, path, state.RunRef),
+	))
+	return result, true
+}
+
+func goalMaterializedTerminalResultMatchesStateV0(
+	result orquestagoal.GoalWorkResultV0,
+	state orquestagoal.GoalWorkStateV0,
+) bool {
+	goalRef := strings.TrimSpace(state.GoalRef)
+	return goalRef != "" && strings.TrimSpace(result.GoalRef) == goalRef
 }
 
 func goalMaterializedGoalResultRequiredTestsPassedV0(result orquestagoal.GoalWorkResultV0) bool {
@@ -1315,6 +1426,20 @@ func goalMaterializedQAPassRefV0(
 	}
 	rel = filepath.ToSlash(filepath.Clean(rel))
 	return "evidence-ref-goal-materialized-qa-pass:" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(rel)
+}
+
+func goalMaterializedTerminalResultRefV0(
+	projectRoot string,
+	path string,
+	runRef string,
+) string {
+	rel := goalMaterializedRelPathV0(projectRoot, path)
+	if rel == "" {
+		rel = filepath.Base(path)
+	}
+	return goalMaterializedTerminalResultEvidence + ":" +
+		safeGoalMaterializedRefPartV0(runRef) + ":" +
+		safeGoalMaterializedRefPartV0(rel)
 }
 
 func goalMaterializedArtifactPathOmittedRefV0(

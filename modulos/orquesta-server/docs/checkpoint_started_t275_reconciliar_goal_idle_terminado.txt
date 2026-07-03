@@ -1,0 +1,13 @@
+checkpoint_ref: checkpoint-started-t275-reconciliar-goal-idle-terminado
+goal_ref: goal-ref-autoprogramming-backlog-t275-reconciliar-goal-idle-terminado-48dda62f
+area: t275-reconciliar-goal-idle-terminado
+started_at: 2026-07-03
+objective: reconcile idle self-improvement goals that are functionally finished or whose backend vanished, preserving a visible terminal run state.
+authorized_write_set:
+- modulos/orquesta-server
+- modulos/orquesta-app-codex-stack
+- cmd/orquesta-server
+next_artifact: implementation and tests for materialized result reconciliation, backend-gone decay, and terminal public projection.
+evidence_refs:
+- backlog_scan_ref:scan-ref-backlog-522f3cca54bd
+- backlog_scan_doc:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:17:sha256:b4b62575b504d4974f677274131a42d67e83b588f4fcba77b31a6bad9d35d645

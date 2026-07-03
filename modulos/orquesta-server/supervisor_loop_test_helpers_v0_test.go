@@ -12,34 +12,37 @@ import (
 )
 
 type fakeSupervisorV0 struct {
-	calls                 int
-	selfCalls             int
-	planCalls             int
-	lastCommand           orquestarunsupervisor.RunSupervisorCommandV0
-	lastSelfRequest       IdleSelfImprovementRequestV0
-	lastPlanRequest       IdleSelfImprovementPlanRequestV0
-	results               []fakeSupervisorResultV0
-	planRequests          []IdleSelfImprovementRequestV0
-	planErr               error
-	blocker               IdleSelfImprovementBlockerResultV0
-	retryableRunRefs      []string
-	retryableRequestRefs  []string
-	retryableEvidenceRefs []string
-	filterCalls           int
-	lastFilterRequest     IdleSelfImprovementRequestFilterRequestV0
-	filterRequests        []IdleSelfImprovementRequestV0
-	filterErr             error
-	selfRequestRefs       []string
-	selfResults           []IdleSelfImprovementResultV0
-	selfErrs              []error
-	selfStarted           chan struct{}
-	selfRelease           chan struct{}
-	goalObservationCalls  int
-	lastGoalObservation   orquestagoal.GoalWorkObserveActiveRequestV0
-	goalObservationResult []orquestagoal.GoalWorkObserveActiveResultV0
-	goalObservationErrs   []error
-	goalStarted           chan struct{}
-	goalRelease           chan struct{}
+	calls                  int
+	selfCalls              int
+	planCalls              int
+	lastCommand            orquestarunsupervisor.RunSupervisorCommandV0
+	lastSelfRequest        IdleSelfImprovementRequestV0
+	lastPlanRequest        IdleSelfImprovementPlanRequestV0
+	results                []fakeSupervisorResultV0
+	planRequests           []IdleSelfImprovementRequestV0
+	planErr                error
+	blocker                IdleSelfImprovementBlockerResultV0
+	retryableRunRefs       []string
+	retryableRequestRefs   []string
+	retryableEvidenceRefs  []string
+	filterCalls            int
+	lastFilterRequest      IdleSelfImprovementRequestFilterRequestV0
+	filterRequests         []IdleSelfImprovementRequestV0
+	filterErr              error
+	selfRequestRefs        []string
+	selfResults            []IdleSelfImprovementResultV0
+	selfErrs               []error
+	selfStarted            chan struct{}
+	selfRelease            chan struct{}
+	goalObservationCalls   int
+	lastGoalObservation    orquestagoal.GoalWorkObserveActiveRequestV0
+	goalObservationResult  []orquestagoal.GoalWorkObserveActiveResultV0
+	goalObservationErrs    []error
+	goalStarted            chan struct{}
+	goalRelease            chan struct{}
+	materializedGoalCalls  int
+	materializedGoalResult IdleSelfImprovementMaterializedGoalResultV0
+	materializedGoalErr    error
 }
 
 func (fake *fakeSupervisorV0) PrepareIdleSelfImprovementV0(
@@ -146,6 +149,17 @@ func (fake *fakeSupervisorV0) ObserveActiveGoalWorksV0(
 		return fake.goalObservationResult[index], nil
 	}
 	return orquestagoal.GoalWorkObserveActiveResultV0{}, nil
+}
+
+func (fake *fakeSupervisorV0) LoadIdleSelfImprovementMaterializedGoalResultV0(
+	context.Context,
+	IdleSelfImprovementMaterializedGoalResultRequestV0,
+) (IdleSelfImprovementMaterializedGoalResultV0, error) {
+	fake.materializedGoalCalls++
+	if fake.materializedGoalErr != nil {
+		return IdleSelfImprovementMaterializedGoalResultV0{}, fake.materializedGoalErr
+	}
+	return fake.materializedGoalResult, nil
 }
 
 type memoryStateStoreV0 struct {

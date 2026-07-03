@@ -104,6 +104,9 @@ func idleSelfImprovementGoalObservationReasonCodeV0(
 	case orquestagoal.GoalStatusCompleteV0:
 		return idleSelfImprovementGoalCompletePendingClosureV0
 	case orquestagoal.GoalStatusBlockedV0:
+		if strings.TrimSpace(result.Summary) == idleSelfImprovementGoalBackendGoneWithoutResultV0 {
+			return idleSelfImprovementGoalBackendGoneWithoutResultV0
+		}
 		return idleSelfImprovementGoalBlockedReasonV0
 	case orquestagoal.GoalStatusInvalidV0:
 		return idleSelfImprovementGoalInvalidReasonV0
@@ -145,6 +148,9 @@ func idleSelfImprovementGoalObservationKeepsAttemptV0(
 		return true
 	}
 	if reasonCode == idleSelfImprovementGoalClosureAcceptedReasonV0 {
+		return false
+	}
+	if reasonCode == idleSelfImprovementGoalBackendGoneWithoutResultV0 {
 		return false
 	}
 	switch result.Status {

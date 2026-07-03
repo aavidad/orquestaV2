@@ -2,7 +2,10 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -16,6 +19,7 @@ import (
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunmemory "orquesta/modulos/orquesta-run-memory"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
+	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 	orquestastatefile "orquesta/modulos/orquesta-state-file"
 )
 
@@ -187,6 +191,109 @@ func TestObserveActiveGoalWorksV0UsaWrapperYSincronizaCola(t *testing.T) {
 		all[0].RunRef != runRef ||
 		all[0].Status != orquestarunqueue.RunStatusClosedV0 {
 		t.Fatalf("queue no sincronizada por observacion activa: %+v", all)
+	}
+}
+
+func TestObserveActiveGoalWorksV0ReconciliaResultMaterializadoTerminalV0(t *testing.T) {
+	ctx := context.Background()
+	stack, observer, launcher, started := startGoalFirstQueueSyncStackForTestV0(t)
+	runRef := started.Run.RunID
+	spec := launcher.specs[0]
+	projectRoot := t.TempDir()
+	stack.Ports.GoalObserver = goalFirstReconciledObserverV0{
+		Inner:      observer,
+		StateStore: stack.Stores.AppGoalStateStore,
+		MaterializedResultSource: stackGoalMaterializedRefsSourceV0{
+			Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectRoot}},
+		},
+	}
+	state, err := stack.Ports.GoalStateStore.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if len(state.Spec.WriteSet) == 0 {
+		t.Fatalf("spec sin write-set: %+v", state.Spec)
+	}
+	materializedDir := filepath.Join(projectRoot, filepath.FromSlash(state.Spec.WriteSet[0].Path))
+	if err := os.MkdirAll(materializedDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	materializedResult := orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusCompleteV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: started.ExternalGoalRef,
+		ArtifactRefs:    goalFirstQueueRequiredArtifactRefsV0(spec),
+		ArtifactPaths:   goalFirstQueueTechnicalArtifactPathsV0(),
+		RequiredTestResults: goalFirstQueueRequiredTestResultsV0(
+			spec,
+			"evidence-ref-goal-first-materialized-required-test",
+		),
+		EvidenceRefs: spec.ClosurePolicy.RequiredEvidenceRefs,
+	}
+	raw, err := json.Marshal(materializedResult)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(materializedDir, goalMaterializedGoalResultFileV0), raw, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	result, err := stack.ObserveActiveGoalWorksV0(ctx, orquestagoal.GoalWorkObserveActiveRequestV0{
+		List: orquestagoal.GoalWorkStateListRequestV0{MaxItems: 3},
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveActiveGoalWorksV0: %v", err)
+	}
+	if len(observer.requests) != 0 {
+		t.Fatalf("observer backend llamado pese a result materializado: %+v", observer.requests)
+	}
+	if len(result.Observations) != 1 ||
+		!result.Observations[0].Terminal ||
+		!result.Observations[0].Accepted ||
+		!goalFirstQueueStringWithPrefixForTestV0(result.Observations[0].Result.EvidenceRefs, goalMaterializedTerminalResultEvidence) {
+		t.Fatalf("result=%+v", result)
+	}
+	all := listGoalFirstQueueCandidatesForTestV0(t, stack)
+	if len(all) != 1 || all[0].RunRef != runRef || all[0].Status != orquestarunqueue.RunStatusClosedV0 {
+		t.Fatalf("queue no publica terminal closed: %+v", all)
+	}
+}
+
+func TestObserveActiveGoalWorksV0BackendGoneSinResultDecaeBlockedV0(t *testing.T) {
+	ctx := context.Background()
+	stack, _, _, started := startGoalFirstQueueSyncStackForTestV0(t)
+	runRef := started.Run.RunID
+	observer := &goalFirstQueueShutdownObserverForTestV0{}
+	stack.Ports.GoalObserver = goalFirstReconciledObserverV0{
+		Inner:      observer,
+		StateStore: stack.Stores.AppGoalStateStore,
+		MaterializedResultSource: stackGoalMaterializedRefsSourceV0{
+			Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: t.TempDir()}},
+		},
+	}
+
+	result, err := stack.ObserveActiveGoalWorksV0(ctx, orquestagoal.GoalWorkObserveActiveRequestV0{
+		List: orquestagoal.GoalWorkStateListRequestV0{MaxItems: 3},
+	})
+
+	if err != nil {
+		t.Fatalf("ObserveActiveGoalWorksV0: %v", err)
+	}
+	if observer.activeCalls != 1 || len(observer.requests) != 0 {
+		t.Fatalf("observer active=%d observe=%+v", observer.activeCalls, observer.requests)
+	}
+	if len(result.Observations) != 1 ||
+		!result.Observations[0].Terminal ||
+		result.Observations[0].Accepted ||
+		result.Observations[0].Result.Status != orquestagoal.GoalStatusBlockedV0 ||
+		result.Observations[0].Result.Summary != goalFirstBackendGoneWithoutResultReasonV0 {
+		t.Fatalf("result=%+v", result)
+	}
+	all := listGoalFirstQueueCandidatesForTestV0(t, stack)
+	if len(all) != 1 || all[0].RunRef != runRef || all[0].Status != orquestarunqueue.RunStatusStoppedV0 {
+		t.Fatalf("queue no publica terminal stopped: %+v", all)
 	}
 }
 
@@ -629,6 +736,34 @@ func (observer *goalFirstQueueObserverForTestV0) ObserveGoalWorkV0(
 		return orquestagoal.GoalWorkResultV0{}, fmt.Errorf("goal result no configurado: %s", request.GoalRef)
 	}
 	return observer.result, nil
+}
+
+type goalFirstQueueShutdownObserverForTestV0 struct {
+	goalFirstQueueObserverForTestV0
+	activeCalls  int
+	activeResult orquestaservershutdown.ActiveShutdownWorkResultV0
+	activeErr    error
+}
+
+func (observer *goalFirstQueueShutdownObserverForTestV0) ReadActiveShutdownWorkV0(
+	_ context.Context,
+	_ orquestaservershutdown.ActiveShutdownWorkRequestV0,
+) (orquestaservershutdown.ActiveShutdownWorkResultV0, error) {
+	observer.activeCalls++
+	if observer.activeErr != nil {
+		return orquestaservershutdown.ActiveShutdownWorkResultV0{}, observer.activeErr
+	}
+	return observer.activeResult, nil
+}
+
+func goalFirstQueueStringWithPrefixForTestV0(values []string, prefix string) bool {
+	prefix = strings.TrimSpace(prefix)
+	for _, value := range values {
+		if strings.HasPrefix(strings.TrimSpace(value), prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 type goalFirstQueueStateStoreForTestV0 struct {

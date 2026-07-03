@@ -154,6 +154,101 @@ func TestRuntimeV0GoalObservationTickActualizaIdleSelfImprovementV0(t *testing.T
 	}
 }
 
+func TestRuntimeV0IdleFallbackReconciliaResultMaterializadoPorPuertoV0(t *testing.T) {
+	now := time.Date(2026, 7, 3, 15, 30, 0, 0, time.UTC)
+	const runRef = "run-ref-idle-materialized-port-001"
+	const goalRef = "goal-ref-idle-materialized-port-001"
+	const externalGoalRef = "external-goal-ref-idle-materialized-port-001"
+	store := &memoryStateStoreV0{}
+	goalStore := newMemoryGoalStateStoreV0()
+	requiredEvidence := "evidence-ref-idle-materialized-required-001"
+	spec := orquestagoal.GoalWorkSpecV0{
+		RunRef:       runRef,
+		GoalRef:      goalRef,
+		Objective:    "cerrar automejora idle desde result materializado",
+		DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+		WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-server"}},
+		ClosurePolicy: orquestagoal.GoalClosurePolicyV0{
+			RequiredEvidenceRefs: []string{requiredEvidence},
+		},
+	}
+	if err := goalStore.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		SchemaVersion:   orquestagoal.GoalWorkStateSchemaV0,
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		Spec:            spec,
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+		},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	supervisor := &fakeSupervisorV0{
+		materializedGoalResult: IdleSelfImprovementMaterializedGoalResultV0{
+			Found: true,
+			Result: orquestagoal.GoalWorkResultV0{
+				SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+				Status:          orquestagoal.GoalStatusCompleteV0,
+				GoalRef:         goalRef,
+				ExternalGoalRef: externalGoalRef,
+				Summary:         "cerrado por result materializado",
+				EvidenceRefs:    []string{requiredEvidence},
+			},
+			EvidenceRefs: []string{"evidence-ref-idle-materialized-port"},
+		},
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                      t.TempDir(),
+		TickInterval:                  time.Hour,
+		GoalObserverEnabledConfigured: true,
+		GoalObserverEnabled:           false,
+		IdleSelfImprovementGoalFirst:  true,
+		ResidentDirectorEnabled:       false,
+		AuditDisabled:                 true,
+	}, RuntimeDepsV0{
+		Supervisor:     supervisor,
+		GoalStateStore: goalStore,
+		StateStore:     store,
+		Clock:          fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	runtime.tracker.MarkIdleSelfImprovementPreparedV0(IdleSelfImprovementResultV0{
+		Accepted:        true,
+		Status:          orquestagoal.GoalStatusAcceptedV0,
+		Message:         "goal_first_launched",
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		GoalSpec:        spec,
+		GoalReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+		},
+	}, now.Add(-time.Minute))
+
+	if !runtime.observePendingIdleSelfImprovementGoalV0(context.Background(), now) {
+		t.Fatalf("fallback idle no observo")
+	}
+	if supervisor.materializedGoalCalls != 1 {
+		t.Fatalf("materialized calls=%d", supervisor.materializedGoalCalls)
+	}
+	if store.last.IdleSelfImprovementOperationalMessage == nil ||
+		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalClosureAcceptedReasonV0 ||
+		store.last.IdleSelfImprovementGoalClosure == nil ||
+		!store.last.IdleSelfImprovementGoalClosure.Accepted ||
+		store.last.IdleSelfImprovementGoalResult == nil ||
+		!containsStringForTestV0(store.last.IdleSelfImprovementGoalResult.EvidenceRefs, "evidence-ref-idle-materialized-port") {
+		t.Fatalf("state=%+v", store.last)
+	}
+}
+
 func TestRuntimeV0GoalObservationLoopCierraGoalActivoSinDirectorResidenteV0(t *testing.T) {
 	requireLocalTCPForServerTestV0(t)
 	ctx := context.Background()
