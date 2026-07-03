@@ -1,0 +1,6 @@
+goal_ref: goal-ref-autoprogramming-backlog-t270-cerrar-migracion-backend-appserver-4176cd2c
+area: t270-cerrar-migracion-backend-appserver
+started_at: 2026-07-03
+scope: modulos/orquesta-runtime-codex-appserver, cmd/orquesta-server
+next_artifact: docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t270-cerrar-migracion-backend-appserver-4176cd2.json
+evidence: checkpoint created before long exploration; implementation and tests pending.

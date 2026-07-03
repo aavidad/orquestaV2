@@ -177,16 +177,6 @@ func codexAppServerConfigFromServerConfigV0(config orquestaserver.ConfigV0) orqu
 	}
 }
 
-func diagnosticLogPathForCodexAppServerProtocolV0(protocol serverCodexAppServerProtocolPortV0) string {
-	if websocket, ok := protocol.(serverCodexAppServerWebSocketProtocolV0); ok {
-		return strings.TrimSpace(websocket.DiagnosticLogPath)
-	}
-	if lazyTmux, ok := protocol.(serverCodexAppServerLazyTmuxProtocolV0); ok {
-		return strings.TrimSpace(lazyTmux.Inner.DiagnosticLogPath)
-	}
-	return ""
-}
-
 func codexAppServerAuthIssueCodeV0(codeHomeDir string) string {
 	return codexAppServerAuthIssueCodeFromDirsV0(codeHomeDir)
 }

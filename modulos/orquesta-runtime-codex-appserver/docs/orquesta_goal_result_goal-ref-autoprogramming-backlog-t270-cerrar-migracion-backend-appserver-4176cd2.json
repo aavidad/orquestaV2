@@ -1,0 +1,215 @@
+{
+  "goal_ref": "goal-ref-autoprogramming-backlog-t270-cerrar-migracion-backend-appserver-4176cd2c",
+  "schema_version": "orquesta_goal_result.v0",
+  "status": "complete",
+  "summary": "T270 cerrado: la logica de observacion/decision del backend Codex appserver vive en modulos/orquesta-runtime-codex-appserver, cmd/orquesta-server queda como fachada de wiring, los tests principales fueron migrados al modulo y las verificaciones requeridas pasan.",
+  "artifact_refs": [
+    "artifact-ref-t270-checkpoint-started",
+    "artifact-ref-t270-goal-result-json",
+    "artifact-ref-t270-backend-observation-collector",
+    "artifact-ref-t270-cmd-appserver-facade",
+    "artifact-ref-t270-migrated-module-tests",
+    "artifact-ref-t270-cmd-wiring-tests",
+    "artifact-ref-t270-verification-evidence"
+  ],
+  "artifact_paths": [
+    "cmd/orquesta-server/codex_goal_app_server_command_protocol_v0.go",
+    "cmd/orquesta-server/codex_goal_app_server_goal_status_cause_v0.go",
+    "cmd/orquesta-server/codex_goal_app_server_lazy_tmux_protocol_v0.go",
+    "cmd/orquesta-server/codex_goal_app_server_reset_stdio_v0_test.go",
+    "cmd/orquesta-server/codex_goal_app_server_result_file_v0.go",
+    "cmd/orquesta-server/codex_goal_app_server_result_marker_v0.go",
+    "cmd/orquesta-server/codex_goal_app_server_rpc_v0.go",
+    "cmd/orquesta-server/codex_goal_app_server_status_diagnostics_v0.go",
+    "cmd/orquesta-server/codex_goal_app_server_thread_sanitizer_v0.go",
+    "cmd/orquesta-server/codex_goal_app_server_timeout_v0.go",
+    "cmd/orquesta-server/codex_goal_app_server_tmux_active_work_v0.go",
+    "cmd/orquesta-server/codex_goal_app_server_tmux_cleanup_v0.go",
+    "cmd/orquesta-server/codex_goal_app_server_tmux_code_home_v0.go",
+    "cmd/orquesta-server/codex_goal_app_server_tmux_v0.go",
+    "cmd/orquesta-server/codex_goal_app_server_tmux_v0_test.go",
+    "cmd/orquesta-server/codex_goal_app_server_types_v0.go",
+    "cmd/orquesta-server/codex_goal_app_server_v0.go",
+    "cmd/orquesta-server/codex_goal_app_server_v0_test.go",
+    "cmd/orquesta-server/codex_goal_app_server_websocket_protocol_v0.go",
+    "cmd/orquesta-server/codex_goal_backend_env_v0.go",
+    "cmd/orquesta-server/codex_goal_write_set_prepare_v0_test.go",
+    "cmd/orquesta-server/daemon_startup_cleanup_v0_test.go",
+    "cmd/orquesta-server/codex_goal_app_server_wiring_v0_test.go",
+    "modulos/orquesta-runtime-codex-appserver/api_v0.go",
+    "modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_tmux_active_work_v0.go",
+    "modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_tmux_v0.go",
+    "modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_migrated_v0_test.go",
+    "modulos/orquesta-runtime-codex-appserver/docs/checkpoint_started_t270.txt",
+    "modulos/orquesta-runtime-codex-appserver/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t270-cerrar-migracion-backend-appserver-4176cd2.json",
+    "modulos/orquesta-runtime-codex-appserver/recolector_observacion_backend_v0.go"
+  ],
+  "materialized_artifacts": [
+    {
+      "artifact_ref": "artifact-ref-t270-checkpoint-started",
+      "path": "modulos/orquesta-runtime-codex-appserver/docs/checkpoint_started_t270.txt",
+      "artifact_type": "checkpoint",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-t270-checkpoint-created"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t270-goal-result-json",
+      "path": "modulos/orquesta-runtime-codex-appserver/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t270-cerrar-migracion-backend-appserver-4176cd2.json",
+      "artifact_type": "goal_result",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-t270-goal-result-written"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t270-backend-observation-collector",
+      "path": "modulos/orquesta-runtime-codex-appserver/recolector_observacion_backend_v0.go",
+      "artifact_type": "implementation",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-t270-grep-has-session-pane-pid",
+        "evidence-ref-t270-transition-consumers"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t270-cmd-appserver-facade",
+      "path": "cmd/orquesta-server/codex_goal_app_server_v0.go",
+      "artifact_type": "wiring_facade",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-t270-cmd-no-backend-decision-grep"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t270-migrated-module-tests",
+      "path": "modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_migrated_v0_test.go",
+      "artifact_type": "test",
+      "status": "valid",
+      "evidence_refs": [
+        "required-test-ref-22801fb1aa71"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t270-cmd-wiring-tests",
+      "path": "cmd/orquesta-server/codex_goal_app_server_wiring_v0_test.go",
+      "artifact_type": "test",
+      "status": "valid",
+      "evidence_refs": [
+        "required-test-ref-48b206d82e36"
+      ],
+      "issues": []
+    }
+  ],
+  "checklist": {
+    "expected_refs": [
+      "criterion-no-duplicated-backend-decision",
+      "criterion-collector-owns-has-session-pane-pid",
+      "criterion-ensure-shutdown-cleanup-activework-use-transition",
+      "criterion-tests-migrated-to-module",
+      "criterion-cmd-wiring-only",
+      "criterion-boundary-tests-green",
+      "criterion-go-build-all-green",
+      "criterion-observable-behavior-unchanged",
+      "criterion-idle-self-improvement-default-60s",
+      "criterion-idle-self-improvement-zero-disabled",
+      "criterion-idle-or-free-capacity-prepares-work",
+      "criterion-planner-skips-visible-queue-and-can-create-scanner",
+      "criterion-backlog-narrative-filtered",
+      "criterion-public-projection-distinguishes-outbox-wait-external-process",
+      "criterion-backlog-scan-ack",
+      "required-test-ref-22801fb1aa71",
+      "required-test-ref-48b206d82e36",
+      "required-test-ref-c908af756958",
+      "manual-verification-go-build-all"
+    ],
+    "completed_refs": [
+      "criterion-no-duplicated-backend-decision",
+      "criterion-collector-owns-has-session-pane-pid",
+      "criterion-ensure-shutdown-cleanup-activework-use-transition",
+      "criterion-tests-migrated-to-module",
+      "criterion-cmd-wiring-only",
+      "criterion-boundary-tests-green",
+      "criterion-go-build-all-green",
+      "criterion-observable-behavior-unchanged",
+      "criterion-idle-self-improvement-default-60s",
+      "criterion-idle-self-improvement-zero-disabled",
+      "criterion-idle-or-free-capacity-prepares-work",
+      "criterion-planner-skips-visible-queue-and-can-create-scanner",
+      "criterion-backlog-narrative-filtered",
+      "criterion-public-projection-distinguishes-outbox-wait-external-process",
+      "criterion-backlog-scan-ack",
+      "required-test-ref-22801fb1aa71",
+      "required-test-ref-48b206d82e36",
+      "required-test-ref-c908af756958",
+      "manual-verification-go-build-all"
+    ],
+    "missing_refs": [],
+    "evidence_refs": [
+      "evidence-ref-t270-grep-has-session-pane-pid",
+      "evidence-ref-t270-cmd-no-backend-decision-grep",
+      "evidence-ref-t270-transition-consumers",
+      "evidence-ref-t270-boundary-tests",
+      "evidence-ref-t270-go-build-all",
+      "evidence-ref-t270-autoprogramming-tests",
+      "backlog_scan_ref:scan-ref-backlog-c45484c33d18",
+      "backlog_scan_doc:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:18:expected_sha256:0105573badede1fc9e1c8b988539c332a4828503bc92dfc4846e422e745b3422:current_sha256:66e0e406d6a50682b7f0b897221a0d38802c1455d6a73955b8d781e2bea43bac:no_backlog_merge_performed"
+    ]
+  },
+  "required_test_results": [
+    {
+      "test_ref": "required-test-ref-22801fb1aa71",
+      "status": "passed",
+      "evidence_refs": [
+        "command:go test -count=1 ./modulos/orquesta-runtime-codex-appserver:ok"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-48b206d82e36",
+      "status": "passed",
+      "evidence_refs": [
+        "command:go test -count=1 ./cmd/orquesta-server:ok"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-c908af756958",
+      "status": "passed",
+      "evidence_refs": [
+        "command:go test -count=1 ./:ok"
+      ]
+    }
+  ],
+  "domain_receipt_refs": [
+    "request-ref-autoprogramming-backlog-t270-cerrar-migracion-backend-appserver-4176cd2c",
+    "task-instance-ref-backlog-0bda7dc0",
+    "scan-ref-backlog-c45484c33d18",
+    "reservation-ref-backlog-scan-doc-merge-e504e10ad361",
+    "reservation-ref-backlog-task-id-fad3831af57b",
+    "task-id-ref-backlog-8441747bfde2"
+  ],
+  "rework_plan_refs": [],
+  "evidence_refs": [
+    "evidence-ref-t270-checkpoint-created",
+    "evidence-ref-t270-goal-result-written",
+    "evidence-ref-t270-grep-has-session-pane-pid:modulos/orquesta-runtime-codex-appserver/recolector_observacion_backend_v0.go:has-session-and-pane-pid-only",
+    "evidence-ref-t270-cmd-no-backend-decision-grep:no-production-matches",
+    "evidence-ref-t270-transition-consumers:EnsureV0-shutdown-cleanup-active-work-call-recolectarObservacionBackendV0-and-TransicionBackendV0",
+    "evidence-ref-t270-boundary-tests:go test -count=1 . -run TestCodexAppServerAdapterDoesNotImportCmdOrProductStorage-or-TestCodexGoalAdapterDoesNotImportServerStorageOrShell-or-TestNeutralOrchestrationPackagesDoNotImportProductAdapters:ok",
+    "evidence-ref-t270-go-build-all:go build ./...:ok-with-sandbox-git-worktree-env",
+    "evidence-ref-t270-autoprogramming-tests:go test -count=1 ./modulos/orquesta-autoprogramming:ok",
+    "backlog_task_instance_ref:task-instance-ref-backlog-0bda7dc0",
+    "backlog_scan_epoch:backlog-scan-epoch-499a746e491b",
+    "backlog_scan_ref:scan-ref-backlog-c45484c33d18",
+    "backlog_scan_reservation_ref:reservation-ref-backlog-scan-doc-merge-e504e10ad361",
+    "backlog_scan_reservation_ref:reservation-ref-backlog-task-id-fad3831af57b",
+    "backlog_task_id_ref:task-id-ref-backlog-8441747bfde2",
+    "backlog_task_id_range:T270",
+    "backlog_scan_doc:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:18:expected_sha256:0105573badede1fc9e1c8b988539c332a4828503bc92dfc4846e422e745b3422:current_sha256:66e0e406d6a50682b7f0b897221a0d38802c1455d6a73955b8d781e2bea43bac:no_new_Txx_inserted"
+  ]
+}

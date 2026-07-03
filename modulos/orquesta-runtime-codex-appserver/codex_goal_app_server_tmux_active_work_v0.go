@@ -88,33 +88,18 @@ func (backend serverCodexAppServerTmuxBackendV0) detectTmuxResidueV0(ctx context
 	if !backend.tmuxResidueConfigLooksOwnV0() {
 		return codexAppServerTmuxResidueV0{}
 	}
-	residue := codexAppServerTmuxResidueV0{}
-	if backend.tmuxOwnerMarkerExistsV0() {
-		residue.Active = true
-		residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-owner-marker")
+	observed, _ := backend.recolectarObservacionBackendV0(ctx, solicitudObservacionBackendV0{
+		Actual:         BackendInexistenteV0,
+		CheckProcesses: true,
+	})
+	residue := codexAppServerTmuxResidueV0{
+		Active: observed.Estado != BackendInexistenteV0 &&
+			observed.Estado != BackendApagadoV0 &&
+			observed.Estado != "",
+		EvidenceRefs: observed.EvidenceRefs,
 	}
-	if codexAppServerTmuxSocketPresentV0(backend.SocketPath) {
+	if observed.Observacion.OwnerMarkerObserved {
 		residue.Active = true
-		residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-socket")
-	}
-	if session, process := backend.detectTmuxSessionResidueV0(ctx); session {
-		residue.Active = true
-		residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-session")
-		if process {
-			residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process")
-		}
-	}
-	if backend.detectCodexAppServerConfiguredSocketProcessV0(ctx) {
-		residue.Active = true
-		residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-cmdline")
-	}
-	if backend.detectCodexAppServerRuntimeWorkdirProcessV0(ctx) {
-		residue.Active = true
-		residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-runtime-workdir")
-	}
-	if backend.detectCodexAppServerRuntimeOwnedProcessV0(ctx) {
-		residue.Active = true
-		residue.EvidenceRefs = append(residue.EvidenceRefs, "evidence-ref-codex-app-server-tmux-process-runtime-owned")
 	}
 	if residue.Active {
 		residue.EvidenceRefs = compactStringsV0(append(
@@ -238,11 +223,15 @@ func (backend serverCodexAppServerTmuxBackendV0) detectTmuxSessionResidueByNameV
 
 	probe := backend
 	probe.SessionName = sessionName
-	hasSession, err := probe.tmuxHasSessionV0(runCtx, tmuxPath)
-	if err != nil || !hasSession {
+	observed, err := probe.recolectarObservacionBackendV0(runCtx, solicitudObservacionBackendV0{
+		Actual:      BackendPreparandoV0,
+		TmuxPath:    tmuxPath,
+		RequireTmux: true,
+	})
+	if err != nil || !observed.Observacion.SessionObserved {
 		return false, false
 	}
-	return true, codexAppServerTmuxPIDAliveV0(probe.tmuxPanePIDV0(runCtx, tmuxPath))
+	return true, observed.Observacion.PanePIDLive
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) detectCodexAppServerConfiguredSocketProcessV0(ctx context.Context) bool {

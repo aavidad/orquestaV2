@@ -72,18 +72,29 @@ func (backend serverCodexAppServerTmuxBackendV0) EnsureV0(
 	if err != nil {
 		return err
 	}
-	hasSession, err := backend.tmuxHasSessionV0(runCtx, tmuxPath)
+	observed, err := backend.recolectarObservacionBackendV0(runCtx, solicitudObservacionBackendV0{
+		Actual:                BackendPreparandoV0,
+		ActionRequested:       AccionBackendEnsureV0,
+		TmuxPath:              tmuxPath,
+		Preflight:             preflight,
+		CheckPreflight:        true,
+		RequireTmux:           true,
+		SessionUnownedIsIssue: true,
+	})
 	if err != nil {
 		return err
 	}
-	if hasSession {
-		if !backend.tmuxOwnerMarkerExistsV0() {
+	if observed.Estado == BackendListoV0 {
+		return nil
+	}
+	if observed.Observacion.SessionObserved {
+		if observed.Observacion.IssueCode == "codex_app_server_tmux_session_unowned" {
 			return codexAppServerCallErrorV0{
 				Code: "codex_app_server_tmux_session_unowned",
 				Err:  errors.New("codex_app_server_tmux_session_unowned"),
 			}
 		}
-		if backend.ensureTmuxSocketPrivateV0() == nil && preflight.ProbeV0(runCtx) == nil {
+		if observed.Estado == BackendListoV0 {
 			return nil
 		}
 		if err := backend.tmuxKillSessionV0(runCtx, tmuxPath); err != nil {
@@ -109,21 +120,6 @@ func (backend serverCodexAppServerTmuxBackendV0) EnsureV0(
 	return nil
 }
 
-func (backend serverCodexAppServerTmuxBackendV0) tmuxHasSessionV0(
-	ctx context.Context,
-	tmuxPath string,
-) (bool, error) {
-	output, err := backend.runTmuxCommandV0(ctx, tmuxPath, "has-session", "-t", strings.TrimSpace(backend.SessionName))
-	if err == nil {
-		return true, nil
-	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		return false, nil
-	}
-	return false, codexAppServerTmuxCommandErrorV0("codex_app_server_tmux_has_session_failed", output, err)
-}
-
 func (backend serverCodexAppServerTmuxBackendV0) tmuxKillSessionV0(
 	ctx context.Context,
 	tmuxPath string,
@@ -133,25 +129,6 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxKillSessionV0(
 		return codexAppServerTmuxCommandErrorV0("codex_app_server_tmux_kill_failed", output, err)
 	}
 	return nil
-}
-
-func (backend serverCodexAppServerTmuxBackendV0) tmuxPanePIDV0(
-	ctx context.Context,
-	tmuxPath string,
-) string {
-	output, err := backend.runTmuxCommandV0(
-		ctx,
-		tmuxPath,
-		"display-message",
-		"-p",
-		"-t",
-		strings.TrimSpace(backend.SessionName),
-		"#{pane_pid}",
-	)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(output)
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) waitTmuxPaneExitedV0(
@@ -235,17 +212,21 @@ func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionWithOptionsV
 	if err != nil {
 		return err
 	}
-	hasSession, err := backend.tmuxHasSessionV0(runCtx, tmuxPath)
+	observed, err := backend.recolectarObservacionBackendV0(runCtx, solicitudObservacionBackendV0{
+		Actual:          BackendListoV0,
+		ActionRequested: AccionBackendShutdownV0,
+		TmuxPath:        tmuxPath,
+		CheckProcesses:  true,
+		RequireTmux:     true,
+	})
 	if err != nil {
 		return err
 	}
-	panePID := ""
-	if hasSession {
-		panePID = backend.tmuxPanePIDV0(runCtx, tmuxPath)
+	if observed.Observacion.SessionObserved {
 		if err := backend.tmuxKillSessionV0(runCtx, tmuxPath); err != nil {
 			return err
 		}
-		if err := backend.waitTmuxPaneExitedV0(runCtx, panePID); err != nil {
+		if err := backend.waitTmuxPaneExitedV0(runCtx, observed.PanePID); err != nil {
 			if !continueAfterPaneExitTimeout {
 				return err
 			}
@@ -394,7 +375,12 @@ func (backend serverCodexAppServerTmuxBackendV0) cleanupTmuxSessionAfterStartupF
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), codexAppServerTmuxDefaultTimeoutV0)
 	defer cancel()
 
-	if hasSession, err := backend.tmuxHasSessionV0(cleanupCtx, tmuxPath); err == nil && hasSession {
+	observed, err := backend.recolectarObservacionBackendV0(cleanupCtx, solicitudObservacionBackendV0{
+		Actual:          BackendPreparandoV0,
+		ActionRequested: AccionBackendCleanupV0,
+		TmuxPath:        tmuxPath,
+	})
+	if err == nil && observed.Observacion.SessionObserved {
 		_ = backend.tmuxKillSessionV0(cleanupCtx, tmuxPath)
 	}
 	_ = os.Remove(strings.TrimSpace(backend.SocketPath))
@@ -490,14 +476,19 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 			return nil
 		}
 		if !nextSessionCheck.After(time.Now()) {
-			hasSession, err := backend.tmuxHasSessionV0(ctx, tmuxPath)
+			observed, err := backend.recolectarObservacionBackendV0(ctx, solicitudObservacionBackendV0{
+				Actual:          BackendSocketPendienteV0,
+				ActionRequested: AccionBackendEnsureV0,
+				TmuxPath:        tmuxPath,
+				RequireTmux:     true,
+			})
 			if ctx.Err() != nil {
 				return backend.tmuxStartupFailureV0("codex_app_server_tmux_socket_timeout", ctx.Err())
 			}
 			if err != nil {
 				return err
 			}
-			if !hasSession {
+			if !observed.Observacion.SessionObserved {
 				return backend.tmuxStartupFailureV0(
 					"codex_app_server_tmux_session_exited",
 					errors.New("codex_app_server_tmux_session_exited"),

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	orquestaruntimecodexappserver "orquesta/modulos/orquesta-runtime-codex-appserver"
 )
 
 func TestCleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0SoloMataSiProcesoCayo(t *testing.T) {
@@ -77,7 +79,7 @@ func TestCleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0SoloMataSiProce
 	if _, err := os.Stat(socketPath); !os.IsNotExist(err) {
 		t.Fatalf("socket no eliminado err=%v", err)
 	}
-	if _, err := os.Stat(backend.tmuxOwnerMarkerPathV0()); !os.IsNotExist(err) {
+	if _, err := os.Stat(orquestaruntimecodexappserver.CodexAppServerTmuxOwnerMarkerPathV0(backend)); !os.IsNotExist(err) {
 		t.Fatalf("owner marker no eliminado err=%v", err)
 	}
 }
@@ -127,7 +129,7 @@ func TestCleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0MataSesionConfi
 		SocketPath:  socketPath,
 		SessionName: codexAppServerTmuxSessionNameV0(config),
 	}
-	if _, err := os.Stat(backend.tmuxOwnerMarkerPathV0()); !os.IsNotExist(err) {
+	if _, err := os.Stat(orquestaruntimecodexappserver.CodexAppServerTmuxOwnerMarkerPathV0(backend)); !os.IsNotExist(err) {
 		t.Fatalf("owner marker debe estar ausente err=%v", err)
 	}
 
