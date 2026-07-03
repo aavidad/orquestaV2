@@ -17,6 +17,9 @@ func TestMCPAutoprogrammingSuperviseDescriptorV0DeclaraEvidenciaEnErrores(t *tes
 	descriptor := MCPAutoprogrammingSuperviseDescriptorV0()
 	if !strings.Contains(descriptor.Output, "error:{errores_publicos,evidence_refs?") ||
 		!strings.Contains(descriptor.Output, "operation_ref?") ||
+		!strings.Contains(descriptor.Output, "repair_run_refs?") ||
+		!strings.Contains(descriptor.Output, "idempotency_key?") ||
+		!strings.Contains(descriptor.Output, "next_actions?") ||
 		!strings.Contains(descriptor.Output, "diagnostics?") {
 		t.Fatalf("descriptor autoprogramming.supervise debe declarar evidencia en errores: %+v", descriptor)
 	}

@@ -1834,10 +1834,13 @@ Campos:
     mismo resultado compacto de `orquesta.runs.supervisor.v0` y, por HTTP,
     eco opcional de operator_advice no bloqueante; si la ejecucion sigue viva
     mas alla de la ventana de respuesta HTTP, devuelve `202 accepted` con
-    `operation_ref`, diagnostico y siguientes acciones de consulta
+    `operation_ref`, `repair_run_refs`, diagnostico y siguientes acciones de
+    consulta
   output_error:
     mismo error publico reparable de `orquesta.runs.supervisor.v0` y, por HTTP,
-    eco opcional de operator_advice no bloqueante si el puerto falta o falla
+    eco opcional de operator_advice no bloqueante si el puerto falta o falla;
+    conserva `evidence_refs`, `idempotency_key`, `operation_ref`,
+    `repair_run_refs`, diagnosticos y `next_actions`
 Invariantes:
   - Adaptador inbound fino.
   - Delega la supervision puntual en `runs.supervisor` inyectado.

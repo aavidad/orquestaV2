@@ -1334,6 +1334,12 @@ misma regla de evidencia: errores de executor sin resultado propio conservan
 `TestMCPAutoprogrammingSuperviseTransportV0DevuelvePayloadPublicoSiExecutorFalla`
 y `TestMCPAutoprogrammingSuperviseDescriptorV0DeclaraEvidenciaEnErrores`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 36b: el descriptor y contrato
+de `orquesta.autoprogramming.supervise.v0` declaran tambien `idempotency_key`,
+`repair_run_refs` y `next_actions` en salidas `ok` y `error`, alineandose con
+el resultado compacto de `runs.supervisor` que transporta. Evidencia:
+`TestMCPAutoprogrammingSuperviseDescriptorV0DeclaraEvidenciaEnErrores`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 37: `autoprogramming/status`
 publica `evidence_refs` de primer nivel y en diagnosticos para errores de
 executor y timeout HTTP, y su descriptor declara esa evidencia en la rama de
