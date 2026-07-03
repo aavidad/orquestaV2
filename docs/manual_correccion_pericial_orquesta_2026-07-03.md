@@ -730,6 +730,60 @@ implementarlo.
    "todo lo que sea mejora de eficiencia, bienvenido" — pero sin duplicar el
    broker existente ni añadir una cuarta fuente de verdad de contexto.
 
+### T-PER-901 — Control plane dormido: despertar por evento + watchdog (nueva, decisión del propietario 2026-07-03)
+
+**Objetivo**: que ningún bucle residente de Orquesta gaste ciclos ni tokens
+mientras hay trabajo delegado en curso: se duerme hasta que (a) llega el
+evento de finalización/cambio, o (b) vence un watchdog largo por si el
+trabajo se colgó. Es el patrón que el supervisor humano/Claude usó en los
+pilotajes y el propietario quiere como norma de toda la app: "gastar cuanto
+menos mejor, sin merma de eficiencia".
+
+**Evidencia del problema** (auditoría del pilotaje 2026-07-03,
+`state/audit/orquesta_server_audit_v0.jsonl`): con UN goal en vuelo y nada
+más que hacer, el supervisor emitía `supervisor_tick_start/result` +
+`idle_self_improvement_scheduled`→`check blocked` cada 5 segundos,
+indefinidamente (pares idénticos con la misma request); el `goal_observer`
+acumuló 31 ticks en ~2,5 min sin observaciones (`observed: 0`).
+
+**Contrato a implementar** (por bucle residente: supervisor, idle
+self-improvement, goal observer, resident director, outbox dispatch,
+watchdog de leases):
+
+1. Cada bucle declara sus **fuentes de despertar por evento**: terminal de
+   run/goal (transición persistida), cambio de cola, ACK/delivery, marker
+   nuevo en filesystem. Donde ya exista canal de wakeups (el resident
+   director lo tiene: `residentDirectorWakeups`), usarlo; donde no, añadirlo.
+2. El tick por reloj pasa a ser **solo watchdog**: intervalo largo
+   (config por bucle, default 60-300s, no 5s) y su única función es detectar
+   cuelgue/pérdida de evento, no dirigir el trabajo.
+3. **Anti-churn idempotente**: si la decisión de un tick es idéntica a la
+   anterior (misma request, mismo blocked), no se re-emite ni se re-audita
+   como evento nuevo; se registra un contador compacto (`skipped_identical`).
+4. Ningún componente re-pregunta a un agente/proveedor LLM por status: el
+   status se lee de estado durable/proyección (cuando exista T-PER-101/102,
+   de la proyección de ciclo de vida).
+5. Config nueva mínima; preferir reutilizar `TickInterval` existente como
+   watchdog y añadir el canal de eventos, no multiplicar env vars (regla R5).
+
+**Write-set orientativo**: `modulos/orquesta-server` (loops residentes),
+`cmd/orquesta-server` (wiring), tests focales por bucle.
+
+**Criterios de cierre**:
+
+- con un goal en vuelo y sin eventos, la auditoría de 10 minutos contiene
+  como mucho los ticks watchdog esperados (no cientos de pares
+  scheduled/blocked idénticos);
+- un terminal de goal despierta al supervisor en <1s vía evento, no
+  esperando al siguiente tick;
+- un backend colgado se detecta por watchdog y produce diagnóstico, no
+  silencio;
+- tests: uno por bucle demostrando "duerme sin eventos" y "despierta por
+  evento"; p.ej. `TestSupervisorLoopV0DuermeSinEventosYDespiertaPorTerminalV0`.
+
+**Cómo pilotarlo**: mismo procedimiento de la bitácora, una sección `## Txxx`
+por bucle (empezar por el par supervisor/idle, que es el churn peor).
+
 ## 9. Criterio global de éxito
 
 El trabajo de este manual está terminado cuando:
