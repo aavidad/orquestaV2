@@ -84,10 +84,11 @@ func TestMCPAppSpecDescriptorsV0PublicanRoutePolicy(t *testing.T) {
 			requireEvidences: true,
 		},
 		{
-			name:      MCPEjecutarOrquestacionAppToolNameV0,
-			output:    MCPEjecutarOrquestacionAppDescriptorV0().Output,
-			input:     MCPEjecutarOrquestacionAppDescriptorV0().InputSchema,
-			requireV2: true,
+			name:             MCPEjecutarOrquestacionAppToolNameV0,
+			output:           MCPEjecutarOrquestacionAppDescriptorV0().Output,
+			input:            MCPEjecutarOrquestacionAppDescriptorV0().InputSchema,
+			requireV2:        true,
+			requireEvidences: true,
 		},
 		{
 			name:             MCPArrancarDirectorAppToolNameV0,

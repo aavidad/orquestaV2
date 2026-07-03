@@ -1557,6 +1557,15 @@ legacy sin relanzar runtime ni ocultar que `arrancar_director` es la entrada
 preferente goal-first. Evidencia:
 `TestMCPAppSpecDescriptorsV0PublicanRoutePolicy`.
 
+Avance BUG-ORQ-20260701-066/088 2026-07-03 tarde 54:
+`orquesta.apps.ejecutar_orquestacion.v0` ya transportaba `evidence_refs` desde
+el loop legacy por puertos, pero el descriptor compacto de salida `ok` no las
+declaraba. El descriptor y docs publican ahora `evidence_refs?` sin cambiar la
+frontera: sigue siendo compatibilidad legacy solo con
+`director_execution_mode=legacy_director_loop`, y `arrancar_director` queda como
+entrada preferente goal-first. Evidencia:
+`TestMCPAppSpecDescriptorsV0PublicanRoutePolicy`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
