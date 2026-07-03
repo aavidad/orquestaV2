@@ -794,6 +794,64 @@ func TestRunbookOPESPlanTemarioUsaServidorGestionadoV0(t *testing.T) {
 	}
 }
 
+func TestOperationalDocsRuntimeManualMentionsAreHistoricalOrHarnessV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	allowed := map[string]string{
+		"docs/autoprogramacion_orquesta_pendientes_2026-05-23.md":                        "fuente historica",
+		"docs/handoff_terminar_orquesta_2026-06-19.md":                                   "harness local de bajo nivel",
+		"docs/incidencia_opes_project_workdir_revision_operario_2026-06-12.md":           "incidencia",
+		"docs/rail_errors_observados_2026-05-23.md":                                      "errores de rail observados",
+		"docs/runbooks/incidencia_opes_modo_automatico_desactivado_2026-06-13.md":        "incidencia",
+		"docs/runbooks/incidencia_startup_lock_stale_codex_a2_informatica_2026-06-13.md": "incidencia",
+		"modulos/orquesta-server/docs/pruebas.md":                                        "harnesses aislados",
+	}
+	needles := []string{
+		"go run ./cmd/orquesta-server run",
+		"./orquesta-server run",
+		"cmd/orquesta-server run",
+		"127.0.0.1:8787",
+	}
+	for _, base := range []string{"docs", "modulos"} {
+		err := filepath.WalkDir(filepath.Join(root, base), func(path string, entry os.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() || filepath.Ext(path) != ".md" {
+				return nil
+			}
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
+			if rel == "docs/inventario_bugs_orquesta_2026-06-30.md" {
+				return nil
+			}
+			text := readOperationalDocGuardV0(t, root, rel)
+			hasMention := false
+			for _, needle := range needles {
+				if strings.Contains(text, needle) {
+					hasMention = true
+					break
+				}
+			}
+			if !hasMention {
+				return nil
+			}
+			reason, ok := allowed[rel]
+			if !ok {
+				t.Fatalf("%s contiene runtime manual/puerto historico sin clasificacion historica o harness", rel)
+			}
+			if !strings.Contains(strings.ToLower(text), reason) && !strings.Contains(text, reason) {
+				t.Fatalf("%s permitido por %q, pero el documento no declara ese contexto", rel, reason)
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", base, err)
+		}
+	}
+}
+
 func TestMatrizOPESDerivadosUsaServidorGestionadoV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "docs/matriz_pruebas_reales_y_smoke_2026-05-17.md")

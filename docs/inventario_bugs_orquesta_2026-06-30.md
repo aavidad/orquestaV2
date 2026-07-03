@@ -818,6 +818,14 @@ endpoint por `ORQUESTA_SERVER_URL`/`ORQUESTA_RUNTIME_DIR/base_url.txt` y
 mantiene `legacy_director_loop` solo como opt-in explicito de replay. Evidencia:
 `TestRunbookOPESPlanTemarioUsaServidorGestionadoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 17: las menciones residuales a
+runtime manual o puerto historico en Markdown quedan limitadas por guarda a
+incidencias historicas, backlog tecnico o harnesses aislados explicitos; nuevos
+docs operativos que vuelvan a publicar `go run ./cmd/orquesta-server run`,
+`cmd/orquesta-server run` o `127.0.0.1:8787` sin esa clasificacion fallan en
+test. Evidencia:
+`TestOperationalDocsRuntimeManualMentionsAreHistoricalOrHarnessV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado
