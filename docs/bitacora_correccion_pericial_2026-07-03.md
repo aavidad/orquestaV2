@@ -524,3 +524,42 @@ die: MEJ-102 (meta-director de olas), MEJ-105 (memoria entre goals), MEJ-206
 (biblioteca habilidades), MEJ-207 (cascada modelos), T286-EXP (A/B broker) y
 MEJ-103 en su forma residente (supersedida por el director de escalada).
 Regla operativa: programa Codex vía Orquesta; Claude solo supervisa.
+
+### 2026-07-03 noche — Codex cierra fontanería T292/escalation director
+
+Trabajo directo por orden de Claude/operador, sin relanzar pilotajes de
+automejora: se uso Codex local para integrar el tapon acotado y subagentes
+compactos para auditoria de codigos, config y documentacion. El director de
+escalada por eventos queda cableado desde `cmd/orquesta-server`:
+`ORQUESTA_SERVER_ESCALATION_DIRECTOR_ENABLED`,
+`ORQUESTA_SERVER_ESCALATION_DIRECTOR_COMMAND` (CSV argv redactado en
+effective config), `ORQUESTA_SERVER_ESCALATION_DIRECTOR_TIMEOUT_SECONDS` y
+`ORQUESTA_SERVER_ESCALATION_DIRECTOR_MAX_PER_DAY`.
+
+Tambien queda ampliada la ingesta de anomalias escalables sin inventar codigos:
+`partial_artifacts_written` entra como codigo existente y cualquier `review_*`
+se acepta desde issues top-level, `observation.Result.Issues` y
+`observation.Closure.Issues`, con dedupe por run/goal/code/field. Esto evita
+que revisiones humanas o artefactos parciales observados queden fuera del
+director de escalada.
+
+Evidencia ejecutada:
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerConfigFromEnvV0LeeDirectorEscaladaV0|TestServerEnvRegistryV0'`
+- `go test -count=1 ./modulos/orquesta-server -run 'Test(EscalationDirector|RuntimeV0EscalationDirector|ParseEscalationDirector)'`
+- `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`
+- `go test -count=1 ./...`
+- `go build ./...`
+- `git diff --check`
+
+Documentacion actualizada para Claude:
+- `docs/inventario_bugs_orquesta_2026-06-30.md` reconcilia `BUG-150/151/152/153`
+  como cerrados segun esta bitacora.
+- No se abre `BUG-158`: el hueco de escalation director queda cubierto por
+  codigo y tests.
+- Siguen abiertos como residuales de esta tanda:
+  `BUG-ORQ-20260703-149`, `BUG-ORQ-20260703-154`,
+  `BUG-ORQ-20260703-155`, `BUG-ORQ-20260703-156` y
+  `BUG-ORQ-20260703-157`.
+
+Pendiente para cierre final, sin relanzar lo congelado: revisar procesos vivos
+antes de entregar, commitear y hacer push para que Claude siga.

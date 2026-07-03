@@ -243,6 +243,13 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	if config.ResidentDirectorMaxActions <= 0 {
 		config.ResidentDirectorMaxActions = DefaultResidentDirectorMaxActionsV0
 	}
+	config.EscalationDirectorCommand = compactConfigStringsV0(config.EscalationDirectorCommand)
+	if config.EscalationDirectorTimeout < 0 {
+		config.EscalationDirectorTimeout = 0
+	}
+	if config.EscalationDirectorMaxPerDay < 0 {
+		config.EscalationDirectorMaxPerDay = 0
+	}
 	config.SelfWatchdog = NormalizeSelfWatchdogConfigV0(config.SelfWatchdog)
 	return config
 }

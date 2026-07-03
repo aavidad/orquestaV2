@@ -194,6 +194,60 @@ func TestServerConfigFromEnvV0ExponeTestsCongeladosOptInV0(t *testing.T) {
 	}
 }
 
+func TestServerConfigFromEnvV0LeeDirectorEscaladaV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envServerEscalationDirectorEnabledV0, "true")
+	t.Setenv(envServerEscalationDirectorCommandV0, "claude,-p,--model,sonnet")
+	t.Setenv(envServerEscalationDirectorTimeoutSecondsV0, "33")
+	t.Setenv(envServerEscalationDirectorMaxPerDayV0, "5")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if !config.EscalationDirectorEnabled {
+		t.Fatalf("director de escalada no activo: %+v", config)
+	}
+	wantCommand := []string{"claude", "-p", "--model", "sonnet"}
+	if len(config.EscalationDirectorCommand) != len(wantCommand) {
+		t.Fatalf("command=%v want=%v", config.EscalationDirectorCommand, wantCommand)
+	}
+	for index, want := range wantCommand {
+		if config.EscalationDirectorCommand[index] != want {
+			t.Fatalf("command=%v want=%v", config.EscalationDirectorCommand, wantCommand)
+		}
+	}
+	if config.EscalationDirectorTimeout != 33*time.Second {
+		t.Fatalf("timeout=%s want=33s", config.EscalationDirectorTimeout)
+	}
+	if config.EscalationDirectorMaxPerDay != 5 {
+		t.Fatalf("max_per_day=%d want=5", config.EscalationDirectorMaxPerDay)
+	}
+	settings := config.EffectiveConfig.Settings
+	for key, want := range map[string]string{
+		envServerEscalationDirectorEnabledV0:        "true",
+		envServerEscalationDirectorCommandV0:        "escalation-director-command-configured",
+		envServerEscalationDirectorTimeoutSecondsV0: "33",
+		envServerEscalationDirectorMaxPerDayV0:      "5",
+	} {
+		if got := effectiveSettingValueForTestV0(settings, key); got != want {
+			t.Fatalf("%s=%q want %q settings=%+v", key, got, want, settings)
+		}
+	}
+	commandSetting := effectiveSettingForTestV0(settings, envServerEscalationDirectorCommandV0)
+	if !commandSetting.Sensitive {
+		t.Fatalf("command debe quedar sensible: %+v", commandSetting)
+	}
+	rawEffectiveConfig, err := json.Marshal(config.EffectiveConfig)
+	if err != nil {
+		t.Fatalf("marshal effective config: %v", err)
+	}
+	if strings.Contains(string(rawEffectiveConfig), "--model") ||
+		strings.Contains(string(rawEffectiveConfig), "sonnet") {
+		t.Fatalf("effective_config filtra argv crudo: %s", string(rawEffectiveConfig))
+	}
+}
+
 func TestServerConfigFromEnvV0DerivaAutomejoraGoalFirstDeBackendCodexGoalV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "")

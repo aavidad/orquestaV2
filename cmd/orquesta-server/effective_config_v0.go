@@ -48,6 +48,13 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		),
 		serverConfigSettingFromRegistryV0(envServerResidentDirectorEnabledV0, strconv.FormatBool(config.ResidentDirectorEnabled)),
 		serverConfigSettingFromRegistryV0(envServerResidentDirectorMaxActionsV0, strconv.Itoa(config.ResidentDirectorMaxActions)),
+		serverConfigSettingFromRegistryV0(envServerEscalationDirectorEnabledV0, strconv.FormatBool(config.EscalationDirectorEnabled)),
+		serverSensitiveConfigSettingFromRegistryV0(
+			envServerEscalationDirectorCommandV0,
+			configuredEnvValueV0(envServerEscalationDirectorCommandV0, "escalation-director-command-configured"),
+		),
+		serverConfigSettingFromRegistryV0(envServerEscalationDirectorTimeoutSecondsV0, strconv.Itoa(int(config.EscalationDirectorTimeout/time.Second))),
+		serverConfigSettingFromRegistryV0(envServerEscalationDirectorMaxPerDayV0, strconv.Itoa(config.EscalationDirectorMaxPerDay)),
 		serverConfigSettingFromRegistryV0(envServerTickIntervalMSV0, strconv.Itoa(int(config.TickInterval/time.Millisecond))),
 		serverConfigSettingFromRegistryV0(envServerShutdownGraceMSV0, strconv.Itoa(int(config.ShutdownGracePeriod/time.Millisecond))),
 		serverConfigSettingFromRegistryV0(envServerReadHeaderTimeoutMSV0, strconv.Itoa(int(config.HTTPResourceLimits.ReadHeaderTimeout/time.Millisecond))),

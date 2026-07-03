@@ -35,6 +35,7 @@ var escalationDirectorDefaultCommandV0 = []string{"claude", "-p"}
 var escalationDirectorEscalatableCodesV0 = map[string]struct{}{
 	idleSelfImprovementGoalCompletedWithoutResultReasonV0: {},
 	idleSelfImprovementGoalSelfReportTaskMismatchReasonV0: {},
+	"partial_artifacts_written":                           {},
 }
 
 type escalationDirectorDecisionV0 struct {
@@ -103,12 +104,65 @@ func escalationDirectorPendingIssuesV0(
 	result orquestagoal.GoalWorkObserveActiveResultV0,
 ) []orquestagoal.GoalWorkObserveActiveIssueV0 {
 	pending := []orquestagoal.GoalWorkObserveActiveIssueV0{}
+	seen := map[string]struct{}{}
 	for _, issue := range result.Issues {
-		if _, ok := escalationDirectorEscalatableCodesV0[strings.TrimSpace(issue.Code)]; ok {
-			pending = append(pending, issue)
+		pending = appendEscalationDirectorIssueV0(pending, seen, issue)
+	}
+	for _, observation := range result.Observations {
+		runRef := strings.TrimSpace(observation.State.RunRef)
+		goalRef := strings.TrimSpace(observation.State.GoalRef)
+		if goalRef == "" {
+			goalRef = strings.TrimSpace(observation.Result.GoalRef)
+		}
+		for _, issue := range observation.Result.Issues {
+			pending = appendEscalationDirectorIssueV0(pending, seen, orquestagoal.GoalWorkObserveActiveIssueV0{
+				RunRef:  runRef,
+				GoalRef: goalRef,
+				Code:    issue.Code,
+				Field:   issue.Field,
+				Message: issue.Detail,
+			})
+		}
+		for _, issue := range observation.Closure.Issues {
+			pending = appendEscalationDirectorIssueV0(pending, seen, orquestagoal.GoalWorkObserveActiveIssueV0{
+				RunRef:  runRef,
+				GoalRef: goalRef,
+				Code:    issue.Code,
+				Field:   issue.Field,
+				Message: issue.Detail,
+			})
 		}
 	}
 	return pending
+}
+
+func appendEscalationDirectorIssueV0(
+	pending []orquestagoal.GoalWorkObserveActiveIssueV0,
+	seen map[string]struct{},
+	issue orquestagoal.GoalWorkObserveActiveIssueV0,
+) []orquestagoal.GoalWorkObserveActiveIssueV0 {
+	issue.Code = strings.TrimSpace(issue.Code)
+	if !escalationDirectorIssueEscalatableV0(issue.Code) {
+		return pending
+	}
+	issue.RunRef = strings.TrimSpace(issue.RunRef)
+	issue.GoalRef = strings.TrimSpace(issue.GoalRef)
+	issue.Field = strings.TrimSpace(issue.Field)
+	issue.Message = strings.TrimSpace(issue.Message)
+	key := issue.RunRef + "|" + issue.GoalRef + "|" + issue.Code + "|" + issue.Field
+	if _, ok := seen[key]; ok {
+		return pending
+	}
+	seen[key] = struct{}{}
+	return append(pending, issue)
+}
+
+func escalationDirectorIssueEscalatableV0(code string) bool {
+	code = strings.TrimSpace(code)
+	if _, ok := escalationDirectorEscalatableCodesV0[code]; ok {
+		return true
+	}
+	return strings.HasPrefix(code, "review_")
 }
 
 func escalationDirectorSignatureV0(issues []orquestagoal.GoalWorkObserveActiveIssueV0) string {

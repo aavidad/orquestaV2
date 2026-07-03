@@ -119,6 +119,10 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		GoalObserverMaxItems:          intEnvOrDefaultV0(envServerGoalObserverMaxItemsV0, orquestaserver.DefaultGoalObserverMaxItemsV0),
 		ResidentDirectorEnabled:       serverResidentDirectorEnabledFromEnvV0(),
 		ResidentDirectorMaxActions:    intEnvOrDefaultV0(envServerResidentDirectorMaxActionsV0, orquestaserver.DefaultResidentDirectorMaxActionsV0),
+		EscalationDirectorEnabled:     boolEnvOrDefaultV0(envServerEscalationDirectorEnabledV0, false),
+		EscalationDirectorCommand:     csvEnvOrDefaultV0(envServerEscalationDirectorCommandV0, nil),
+		EscalationDirectorTimeout:     time.Duration(intEnvOrDefaultV0(envServerEscalationDirectorTimeoutSecondsV0, 0)) * time.Second,
+		EscalationDirectorMaxPerDay:   intEnvOrDefaultV0(envServerEscalationDirectorMaxPerDayV0, 0),
 		SelfWatchdog: orquestaserver.SelfWatchdogConfigV0{
 			Disabled:       boolEnvOrDefaultV0(envServerSelfWatchdogDisabledV0, false),
 			CPUHighPercent: intEnvOrDefaultV0(envServerSelfWatchdogCPUHighPercentV0, orquestaserver.DefaultSelfWatchdogCPUHighPercentV0),

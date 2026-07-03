@@ -67,6 +67,76 @@ func escalationDirectorAnomalousSupervisorV0(
 	}
 }
 
+func TestEscalationDirectorPendingIssuesV0IncluyeReviewYArtefactosParcialesObservadosV0(t *testing.T) {
+	result := orquestagoal.GoalWorkObserveActiveResultV0{
+		Issues: []orquestagoal.GoalWorkObserveActiveIssueV0{{
+			RunRef:  " run-top ",
+			GoalRef: " goal-top ",
+			Code:    " review_result_payload_invalid_after_delivery ",
+			Field:   " review_result ",
+			Message: " retry_review ",
+		}},
+		Observations: []orquestagoal.GoalWorkObserveResultV0{{
+			State: orquestagoal.GoalWorkStateV0{
+				RunRef:  "run-observed",
+				GoalRef: "goal-observed",
+			},
+			Result: orquestagoal.GoalWorkResultV0{
+				Issues: []orquestagoal.GoalWorkIssueV0{
+					{
+						Code:   "partial_artifacts_written",
+						Field:  "materialized_artifacts",
+						Detail: "hay artefactos parciales",
+					},
+					{
+						Code:   "observe_goal_failed",
+						Field:  "run_ref",
+						Detail: "este codigo ya tiene camino automatico",
+					},
+				},
+			},
+			Closure: orquestagoal.GoalClosureValidationV0{
+				Issues: []orquestagoal.GoalWorkIssueV0{{
+					Code:   "review_requires_human",
+					Field:  "closure",
+					Detail: "la revision humana no debe dejar al loop esperando",
+				}},
+			},
+		}},
+	}
+
+	pending := escalationDirectorPendingIssuesV0(result)
+	if len(pending) != 3 {
+		t.Fatalf("pending=%+v want 3 issues escalables", pending)
+	}
+	assertEscalationDirectorIssueForTestV0(t, pending, "review_result_payload_invalid_after_delivery", "run-top", "goal-top")
+	assertEscalationDirectorIssueForTestV0(t, pending, "partial_artifacts_written", "run-observed", "goal-observed")
+	assertEscalationDirectorIssueForTestV0(t, pending, "review_requires_human", "run-observed", "goal-observed")
+	for _, issue := range pending {
+		if issue.Code == "observe_goal_failed" {
+			t.Fatalf("codigo con accion automatica no debia escalarse: %+v", pending)
+		}
+	}
+}
+
+func assertEscalationDirectorIssueForTestV0(
+	t *testing.T,
+	issues []orquestagoal.GoalWorkObserveActiveIssueV0,
+	code string,
+	runRef string,
+	goalRef string,
+) {
+	t.Helper()
+	for _, issue := range issues {
+		if issue.Code == code &&
+			issue.RunRef == runRef &&
+			issue.GoalRef == goalRef {
+			return
+		}
+	}
+	t.Fatalf("issue code=%s run=%s goal=%s no encontrado en %+v", code, runRef, goalRef, issues)
+}
+
 func TestRuntimeV0EscalationDirectorAplicaStopYEsIdempotentePorFirmaV0(t *testing.T) {
 	now := time.Date(2026, 7, 3, 22, 0, 0, 0, time.UTC)
 	const runRef = "run-ref-escalation-director-001"
