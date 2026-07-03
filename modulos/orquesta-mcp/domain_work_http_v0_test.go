@@ -342,7 +342,7 @@ func TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesCheckpointComoEstadoOpe
 		{
 			name:              "goal_active_timeout_backend_active",
 			code:              mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0,
-			recommendedAction: "retry",
+			recommendedAction: mcpQueueGlobalStatusActionReplanGoalAfterActiveTimeoutV0,
 			wantStatus:        "blocked",
 		},
 	}

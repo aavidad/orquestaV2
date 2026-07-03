@@ -1343,8 +1343,10 @@ consumo a estados operacionales de dominio: `active_timeout_checkpoint_recent`,
 accion concreta de observar/exigir checkpoint o siguiente artefacto; los cortes
 `checkpoint_only_high_consumption`, `goal_active_no_checkpoint_high_consumption`
 y `goal_active_timeout_backend_active` se publican como `blocked`, conservando
-la accion normalizada por la fachada global. Evidencia:
-`TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesCheckpointComoEstadoOperacional`.
+la accion especifica de replan cuando aplica, incluido
+`replan_goal_after_active_timeout`. Evidencia:
+`TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesCheckpointComoEstadoOperacional`
+y `TestMCPQueueGlobalStatusNormalizeRecommendedActionV0PreservaAccionesGoalFirstEspecificas`.
 
 ## Pendientes de analisis agrupado
 

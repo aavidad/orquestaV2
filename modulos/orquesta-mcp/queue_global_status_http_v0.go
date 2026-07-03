@@ -27,6 +27,7 @@ const (
 	mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0 = "observe_goal_backend_require_next_artifact"
 	mcpQueueGlobalStatusActionObserveGoalWaitForCheckpointV0   = "observe_goal_backend_wait_for_checkpoint"
 	mcpQueueGlobalStatusActionReplanNarrowContextV0            = "replan_narrow_context"
+	mcpQueueGlobalStatusActionReplanGoalAfterActiveTimeoutV0   = "replan_goal_after_active_timeout"
 	mcpQueueGlobalStatusActionReconcileGoalTerminalV0          = "reconcile_goal_terminal"
 	mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0 = "configure_goal_backend_workspace_write"
 	mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0     = "repair_goal_write_set_contract"
@@ -678,6 +679,7 @@ func mcpQueueGlobalStatusNormalizeRecommendedActionV0(action string, fallback st
 		mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0,
 		mcpQueueGlobalStatusActionObserveGoalWaitForCheckpointV0,
 		mcpQueueGlobalStatusActionReplanNarrowContextV0,
+		mcpQueueGlobalStatusActionReplanGoalAfterActiveTimeoutV0,
 		mcpQueueGlobalStatusActionReconcileGoalTerminalV0,
 		mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0,
 		mcpQueueGlobalStatusActionRepairGoalWriteSetContractV0,
