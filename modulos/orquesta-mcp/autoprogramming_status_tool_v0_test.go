@@ -2451,6 +2451,15 @@ func TestMCPAutoprogrammingStatusExecutorV0Phase0NoPublicablePideContinuarV0(t *
 		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-goal-materialized-phase0-complete-non-publishable") {
 		t.Fatalf("action=%+v", action)
 	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "attention_required" ||
+		result.EfficiencySummary.RecommendedAction != MCPGoalFirstContinueFromPhase0ActionV0+":run:"+runRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(
+			result.EfficiencySummary.Reasons,
+			MCPGoalFirstPhase0CompleteNonPublishableV0,
+		) {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
 }
 
 func TestMCPAutoprogrammingStatusExecutorV0RequiredTestEvidenceAusentePideRepairReceiptV0(t *testing.T) {
@@ -2501,6 +2510,15 @@ func TestMCPAutoprogrammingStatusExecutorV0RequiredTestEvidenceAusentePideRepair
 		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-autoprogramming-status-required-test-evidence-missing") ||
 		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-goal-materialized-required-test-evidence-missing") {
 		t.Fatalf("action=%+v", action)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "attention_required" ||
+		result.EfficiencySummary.RecommendedAction != MCPGoalFirstRepairReceiptActionV0+":run:"+runRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(
+			result.EfficiencySummary.Reasons,
+			MCPGoalFirstRequiredTestEvidenceMissingV0,
+		) {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
 	}
 }
 

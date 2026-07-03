@@ -84,6 +84,8 @@ func buildMCPAutoprogrammingEfficiencySummaryV0(
 	)
 	if repairRunRef := repairReceiptRunRefMCPAutoprogrammingEfficiencyV0(diagnostics, run); repairRunRef != "" {
 		summary.RecommendedAction = strings.Join([]string{MCPGoalFirstRepairReceiptActionV0, "run", repairRunRef}, ":")
+	} else if runRef := phase0CompleteNonPublishableRunRefMCPAutoprogrammingEfficiencyV0(diagnostics, run); runRef != "" {
+		summary.RecommendedAction = strings.Join([]string{MCPGoalFirstContinueFromPhase0ActionV0, "run", runRef}, ":")
 	} else if runRef := threadOutputSanitizedRunRefMCPAutoprogrammingEfficiencyV0(diagnostics, run); runRef != "" {
 		summary.RecommendedAction = strings.Join([]string{"replan_narrow_context", "run", runRef}, ":")
 	}
@@ -233,6 +235,14 @@ func operationalHealthMCPAutoprogrammingEfficiencyV0(
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
 		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0)
 	}
+	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, MCPGoalFirstRequiredTestEvidenceMissingV0) {
+		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
+		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, MCPGoalFirstRequiredTestEvidenceMissingV0)
+	}
+	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, MCPGoalFirstPhase0CompleteNonPublishableV0) {
+		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
+		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, MCPGoalFirstPhase0CompleteNonPublishableV0)
+	}
 	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, mcpAutoprogrammingActionThreadOutputSanitizedV0) {
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
 		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, mcpAutoprogrammingActionThreadOutputSanitizedV0)
@@ -285,6 +295,8 @@ func stateMCPAutoprogrammingEfficiencyV0(
 	case hasReasonMCPAutoprogrammingEfficiencyV0(summary, "goal_first_blocked") ||
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, "goal_first_state_missing") ||
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) ||
+		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstRequiredTestEvidenceMissingV0) ||
+		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstPhase0CompleteNonPublishableV0) ||
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, mcpAutoprogrammingActionThreadOutputSanitizedV0):
 		return "attention_required"
 	case hasRunReplanAmplificationMCPAutoprogrammingEfficiencyV0(run):
@@ -318,7 +330,29 @@ func repairReceiptRunRefMCPAutoprogrammingEfficiencyV0(
 ) string {
 	matched := false
 	for _, diagnostic := range diagnostics {
-		if strings.TrimSpace(diagnostic.Code) != MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0 {
+		switch strings.TrimSpace(diagnostic.Code) {
+		case MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0, MCPGoalFirstRequiredTestEvidenceMissingV0:
+		default:
+			continue
+		}
+		matched = true
+		if runRef := runRefFromScopeMCPAutoprogrammingEfficiencyV0(diagnostic.Scope); runRef != "" {
+			return runRef
+		}
+	}
+	if matched && run != nil {
+		return strings.TrimSpace(run.RunRef)
+	}
+	return ""
+}
+
+func phase0CompleteNonPublishableRunRefMCPAutoprogrammingEfficiencyV0(
+	diagnostics []MCPAutoprogrammingDiagnosticV0,
+	run *MCPDirectorStatsToolResultV0,
+) string {
+	matched := false
+	for _, diagnostic := range diagnostics {
+		if strings.TrimSpace(diagnostic.Code) != MCPGoalFirstPhase0CompleteNonPublishableV0 {
 			continue
 		}
 		matched = true
