@@ -300,6 +300,39 @@ func TestCodexGoalAdapterDoesNotImportServerStorageOrShell(t *testing.T) {
 	}
 }
 
+func TestCodexAppServerAdapterDoesNotImportCmdOrProductStorage(t *testing.T) {
+	deps := packageDepsForBoundaryTest(t, "orquesta/modulos/orquesta-runtime-codex-appserver")
+	for _, forbidden := range []string{
+		"database/sql",
+		"github.com/go-sql-driver/mysql",
+		"github.com/jackc/pgx",
+		"github.com/lib/pq",
+		"github.com/mattn/go-sqlite3",
+		"modernc.org/sqlite",
+		"orquesta/cmd",
+		"orquesta/db",
+		"orquesta/modulos/orquesta-app-codex-stack",
+		"orquesta/modulos/orquesta-domain-work-file",
+		"orquesta/modulos/orquesta-domain-work-sql",
+		"orquesta/modulos/orquesta-mcp",
+		"orquesta/modulos/orquesta-opes-",
+		"orquesta/modulos/orquesta-run-file",
+		"orquesta/modulos/orquesta-state-file",
+		"orquesta/modulos/orquesta-web",
+	} {
+		for _, dep := range deps {
+			if strings.Contains(dep, forbidden) {
+				t.Fatalf("orquesta-runtime-codex-appserver depends on forbidden adapter dependency %s", dep)
+			}
+		}
+	}
+	for _, dep := range deps {
+		if dep == "orquesta/modulos/orquesta-server" {
+			t.Fatalf("orquesta-runtime-codex-appserver depends on composition server config %s", dep)
+		}
+	}
+}
+
 func TestDirectorV2NeutralPackagesDoNotDependOnRuntimeOrProductAdapters(t *testing.T) {
 	for _, pkg := range []string{
 		"orquesta/modulos/orquesta-agent-progress",

@@ -440,6 +440,14 @@ composición.
 
 **Verificación**: `go build ./... && go test -count=1 ./modulos/orquesta-runtime-codex-appserver ./cmd/orquesta-server ./`
 
+**Avance 2026-07-03**: se creó el módulo y el wiring principal ya instancia el
+backend desde `modulos/orquesta-runtime-codex-appserver`, con boundary de
+arquitectura. El modulo ya no importa `orquesta-server.ConfigV0`; `cmd` adapta
+su configuracion al `ConfigV0` neutral del modulo. No está cerrado: siguen duplicados legacy en
+`cmd/orquesta-server/codex_goal_app_server*.go` y los tests principales aún no
+viven dentro del módulo. Incidencia de seguimiento:
+`BUG-ORQ-20260703-150`.
+
 ### T-PER-302 — Máquina de estados explícita del backend
 
 **Objetivo**: sustituir los checks dispersos de vida del app-server/tmux por
@@ -474,6 +482,11 @@ cierres de BUG-023/029/033/043/044 los señalan) y haz que todos consulten
 **Criterio de cierre**: `grep -n "has-session\|pane_pid" *.go` dentro del
 módulo muestra esas consultas SOLO en el recolector de observaciones, no en
 lógica de decisión.
+
+**Avance 2026-07-03**: existe `estado_backend_v0.go` con transiciones puras y
+tests unitarios, pero aún no sustituye las decisiones dispersas de
+Ensure/shutdown/cleanup/active-work. Cierre pendiente junto a
+`BUG-ORQ-20260703-150`.
 
 ---
 

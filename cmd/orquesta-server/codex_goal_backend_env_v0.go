@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	orquestaruntimecodexappserver "orquesta/modulos/orquesta-runtime-codex-appserver"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
@@ -55,59 +56,60 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	if backend == "" {
 		return serverCodexGoalBackendV0{}, nil
 	}
-	if backend != codexGoalBackendAppServerProxyV0 &&
-		backend != codexGoalBackendAppServerTmuxV0 {
+	if backend != orquestaruntimecodexappserver.CodexGoalBackendAppServerProxyV0 &&
+		backend != orquestaruntimecodexappserver.CodexGoalBackendAppServerTmuxV0 {
 		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_no_soportado:%s", backend)
 	}
-	if backend == codexGoalBackendAppServerProxyV0 && !codexGoalBackendProxyDiagnosticAllowedV0() {
+	if backend == orquestaruntimecodexappserver.CodexGoalBackendAppServerProxyV0 && !codexGoalBackendProxyDiagnosticAllowedV0() {
 		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_proxy_diagnostic_opt_in_required:%s", envAllowAppServerProxyDiagnosticV0)
 	}
-	if backend == codexGoalBackendAppServerProxyV0 {
+	if backend == orquestaruntimecodexappserver.CodexGoalBackendAppServerProxyV0 {
 		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_proxy_diagnostic_not_operational")
 	}
 	runtimeConfig := codexRuntimeEnvConfigFromEnvV0()
-	commandProtocol := serverCodexAppServerCommandProtocolV0{
+	commandProtocol := orquestaruntimecodexappserver.CommandProtocolV0{
 		CommandPath: runtimeConfig.CommandPath,
 		Args:        codexGoalBackendArgsV0(backend),
 		PathEnv:     runtimeConfig.PathEnv,
 		Timeout:     time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
 	}
-	var runtimeProtocol serverCodexAppServerProtocolPortV0 = commandProtocol
+	var runtimeProtocol orquestaruntimecodexappserver.ProtocolPortV0 = commandProtocol
 	commandPreflightProtocol := commandProtocol
 	commandPreflightProtocol.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
-	var preflightProtocol serverCodexAppServerProbePortV0 = commandPreflightProtocol
+	var preflightProtocol orquestaruntimecodexappserver.ProbePortV0 = commandPreflightProtocol
 	preflightAtStartup := true
 	authCheckedAtStartup := false
 	var shutdownHook orquestaserver.RuntimeShutdownHookPortV0
 	codeHomePath := ""
 	authIssueCode := ""
-	if backend == codexGoalBackendAppServerTmuxV0 {
-		socketPath, err := codexAppServerTmuxSocketPathV0(config)
+	if backend == orquestaruntimecodexappserver.CodexGoalBackendAppServerTmuxV0 {
+		appServerConfig := codexAppServerConfigFromServerConfigV0(config)
+		socketPath, err := orquestaruntimecodexappserver.CodexAppServerTmuxSocketPathV0(appServerConfig)
 		if err != nil {
-			degraded := serverCodexUnavailableGoalBackendV0{
-				IssueCode: codexAppServerIssueCodeForErrorV0(err, "codex_app_server_tmux_unavailable"),
+			degraded := orquestaruntimecodexappserver.UnavailableGoalBackendV0{
+				IssueCode: orquestaruntimecodexappserver.CodexAppServerIssueCodeForErrorV0(err, "codex_app_server_tmux_unavailable"),
 			}
 			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 		}
-		tmuxCodeHomePath, err := codexAppServerTmuxCodeHomePathV0(config)
+		tmuxCodeHomePath, err := orquestaruntimecodexappserver.CodexAppServerTmuxCodeHomePathV0(appServerConfig)
 		if err != nil {
-			degraded := serverCodexUnavailableGoalBackendV0{
-				IssueCode: codexAppServerIssueCodeForErrorV0(err, "codex_app_server_tmux_unavailable"),
+			degraded := orquestaruntimecodexappserver.UnavailableGoalBackendV0{
+				IssueCode: orquestaruntimecodexappserver.CodexAppServerIssueCodeForErrorV0(err, "codex_app_server_tmux_unavailable"),
 			}
 			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 		}
 		codeHomePath = tmuxCodeHomePath
-		tmuxBackend := serverCodexAppServerTmuxBackendV0{
+		tmuxBackend := orquestaruntimecodexappserver.TmuxBackendV0{
 			CommandPath:       runtimeConfig.CommandPath,
 			PathEnv:           runtimeConfig.PathEnv,
 			SocketPath:        socketPath,
-			SessionName:       codexAppServerTmuxSessionNameV0(config),
+			SessionName:       orquestaruntimecodexappserver.CodexAppServerTmuxSessionNameV0(appServerConfig),
 			HomeDir:           runtimeConfig.HomeDir,
 			CodeHomeDir:       tmuxCodeHomePath,
 			RuntimeWorkDir:    config.RuntimeWorkDir,
 			ProjectWorkDir:    firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir),
 			SourceCodeHomeDir: runtimeConfig.CodeHomeDir,
-			Timeout:           codexAppServerTmuxStartupTimeoutV0(time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond),
+			Timeout:           orquestaruntimecodexappserver.CodexAppServerTmuxStartupTimeoutV0(time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond),
 		}
 		shutdownTmuxBackend := tmuxBackend
 		shutdownTmuxBackend.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
@@ -115,20 +117,20 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		authIssueCode = codexAppServerAuthIssueCodeFromDirsV0(runtimeConfig.CodeHomeDir, tmuxCodeHomePath)
 		authCheckedAtStartup = true
 		if authIssueCode != "" {
-			degraded := serverCodexUnavailableGoalBackendV0{IssueCode: authIssueCode}
+			degraded := orquestaruntimecodexappserver.UnavailableGoalBackendV0{IssueCode: authIssueCode}
 			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded, ShutdownHook: shutdownHook}, nil
 		}
-		websocketProtocol := serverCodexAppServerWebSocketProtocolV0{
+		websocketProtocol := orquestaruntimecodexappserver.WebSocketProtocolV0{
 			SocketPath:        socketPath,
 			Timeout:           time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
-			DiagnosticLogPath: tmuxBackend.tmuxLogPathV0(),
+			DiagnosticLogPath: orquestaruntimecodexappserver.CodexAppServerTmuxLogPathV0(tmuxBackend),
 		}
-		tmuxPreflightProtocol := serverCodexAppServerWebSocketProtocolV0{
+		tmuxPreflightProtocol := orquestaruntimecodexappserver.WebSocketProtocolV0{
 			SocketPath:        socketPath,
 			Timeout:           time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond,
-			DiagnosticLogPath: tmuxBackend.tmuxLogPathV0(),
+			DiagnosticLogPath: websocketProtocol.DiagnosticLogPath,
 		}
-		runtimeProtocol = serverCodexAppServerLazyTmuxProtocolV0{
+		runtimeProtocol = orquestaruntimecodexappserver.LazyTmuxProtocolV0{
 			Backend:   tmuxBackend,
 			Inner:     websocketProtocol,
 			Preflight: tmuxPreflightProtocol,
@@ -138,8 +140,8 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	}
 	if preflightAtStartup {
 		if err := preflightProtocol.ProbeV0(context.Background()); err != nil {
-			degraded := serverCodexUnavailableGoalBackendV0{
-				IssueCode: codexAppServerIssueCodeForErrorV0(err, "codex_app_server_unavailable"),
+			degraded := orquestaruntimecodexappserver.UnavailableGoalBackendV0{
+				IssueCode: orquestaruntimecodexappserver.CodexAppServerIssueCodeForErrorV0(err, "codex_app_server_unavailable"),
 			}
 			return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded}, nil
 		}
@@ -148,24 +150,31 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		authIssueCode = codexAppServerAuthIssueCodeV0(codeHomePath)
 	}
 	if authIssueCode != "" {
-		degraded := serverCodexUnavailableGoalBackendV0{
+		degraded := orquestaruntimecodexappserver.UnavailableGoalBackendV0{
 			IssueCode: authIssueCode,
 		}
 		return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded, ShutdownHook: shutdownHook}, nil
 	}
-	client := serverCodexAppServerGoalBackendV0{
+	client := orquestaruntimecodexappserver.GoalBackendV0{
 		Protocol:          runtimeProtocol,
 		CWD:               firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir),
-		DiagnosticLogPath: diagnosticLogPathForCodexAppServerProtocolV0(runtimeProtocol),
+		DiagnosticLogPath: orquestaruntimecodexappserver.DiagnosticLogPathForProtocolV0(runtimeProtocol),
 		AuthIssueCode:     authIssueCode,
 		Model:             runtimeConfig.Model,
 		ReasoningEffort:   runtimeConfig.ReasoningEffort,
 		Sandbox:           runtimeConfig.Sandbox,
 		ApprovalPolicy:    runtimeConfig.ApprovalPolicy,
 		Timeout:           time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
-		Runtime:           &serverCodexAppServerGoalRuntimeV0{},
+		Runtime:           &orquestaruntimecodexappserver.GoalRuntimeV0{},
 	}
 	return serverCodexGoalBackendV0{Starter: client, Observer: client, ShutdownHook: shutdownHook}, nil
+}
+
+func codexAppServerConfigFromServerConfigV0(config orquestaserver.ConfigV0) orquestaruntimecodexappserver.ConfigV0 {
+	return orquestaruntimecodexappserver.ConfigV0{
+		RuntimeWorkDir: config.RuntimeWorkDir,
+		ProjectWorkDir: config.ProjectWorkDir,
+	}
 }
 
 func diagnosticLogPathForCodexAppServerProtocolV0(protocol serverCodexAppServerProtocolPortV0) string {
@@ -260,6 +269,12 @@ func serverCodexGoalBackendUnavailableIssueCodeV0(backend serverCodexGoalBackend
 		return strings.TrimSpace(unavailable.IssueCode)
 	}
 	if unavailable, ok := backend.Observer.(serverCodexUnavailableGoalBackendV0); ok {
+		return strings.TrimSpace(unavailable.IssueCode)
+	}
+	if unavailable, ok := backend.Starter.(orquestaruntimecodexappserver.UnavailableGoalBackendV0); ok {
+		return strings.TrimSpace(unavailable.IssueCode)
+	}
+	if unavailable, ok := backend.Observer.(orquestaruntimecodexappserver.UnavailableGoalBackendV0); ok {
 		return strings.TrimSpace(unavailable.IssueCode)
 	}
 	return ""
