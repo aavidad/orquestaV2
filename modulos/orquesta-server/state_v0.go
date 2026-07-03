@@ -85,6 +85,12 @@ type StateV0 struct {
 	IdleSelfImprovementFlight                         bool                                                                       `json:"idle_self_improvement_in_flight,omitempty"`
 	IdleSelfImprovementRuns                           int                                                                        `json:"idle_self_improvement_runs,omitempty"`
 	IdleSelfImprovementOK                             int                                                                        `json:"idle_self_improvement_ok,omitempty"`
+	EscalationDirectorDay                             string                                                                     `json:"escalation_director_day,omitempty"`
+	EscalationDirectorInvocationsToday                int                                                                        `json:"escalation_director_invocations_today,omitempty"`
+	EscalationDirectorLastSignature                   string                                                                     `json:"escalation_director_last_signature,omitempty"`
+	EscalationDirectorLastDecision                    string                                                                     `json:"escalation_director_last_decision,omitempty"`
+	EscalationDirectorLastReason                      string                                                                     `json:"escalation_director_last_reason,omitempty"`
+	EscalationDirectorLastAt                          string                                                                     `json:"escalation_director_last_at,omitempty"`
 	ResidentDirectorStatus                            string                                                                     `json:"resident_director_status,omitempty"`
 	ResidentDirectorTickActive                        bool                                                                       `json:"resident_director_tick_active,omitempty"`
 	ResidentDirectorLastTickAt                        string                                                                     `json:"resident_director_last_tick_at,omitempty"`

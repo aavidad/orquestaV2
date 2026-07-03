@@ -122,6 +122,7 @@ func (runtime *RuntimeV0) runGoalObservationTickV0(ctx context.Context) {
 	}
 	result = runtime.reconcileIdleSelfImprovementGoalProgressV0(ctx, result, now)
 	result = runtime.reconcileIdleSelfImprovementGoalCompletionIntegrityV0(ctx, result)
+	runtime.escalateGoalObservationAnomaliesV0(ctx, result, now)
 	runtime.rememberGoalObservationFingerprintsV0(ctx, result, fingerprintPlan.Pending)
 	runtime.auditEventV0(ctx, "goal_observer_tick_result", "ok", "", map[string]interface{}{
 		"result_summary": goalObservationResultAuditSummaryV0(result),

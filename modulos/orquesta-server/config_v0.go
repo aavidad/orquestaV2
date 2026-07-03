@@ -104,6 +104,10 @@ type ConfigV0 struct {
 	GoalObserverMaxItems              int
 	ResidentDirectorEnabled           bool
 	ResidentDirectorMaxActions        int
+	EscalationDirectorEnabled         bool
+	EscalationDirectorCommand         []string
+	EscalationDirectorTimeout         time.Duration
+	EscalationDirectorMaxPerDay       int
 	SelfWatchdog                      SelfWatchdogConfigV0
 }
 
