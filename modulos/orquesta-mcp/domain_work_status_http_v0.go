@@ -530,6 +530,13 @@ func mcpDomainWorkStatusNormalizeStatusV0(status string, action string) string {
 		return "stale"
 	case mcpAutoprogrammingHealthBlockedV0,
 		mcpAutoprogrammingActionGoalFirstBlockedV0,
+		mcpAutoprogrammingActionMissingTerminalReceiptV0,
+		mcpAutoprogrammingActionArtifactPathsOmittedV0,
+		mcpAutoprogrammingActionOutOfScopeMaterializedArtifactsV0,
+		mcpAutoprogrammingActionQAFailedPublicTextV0,
+		mcpAutoprogrammingActionPartialArtifactsWrittenV0,
+		mcpAutoprogrammingActionPhase0CompleteNonPublishableV0,
+		mcpAutoprogrammingActionRequiredTestEvidenceMissingV0,
 		mcpAutoprogrammingActionThreadOutputSanitizedV0,
 		mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0,
 		"needs_action",

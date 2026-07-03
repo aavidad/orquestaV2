@@ -212,6 +212,54 @@ func TestMCPDomainWorkStatusHTTPHandlerV0ConservaWriteSetRequiresWorkspaceWrite(
 	}
 }
 
+func TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesGoalFirstRecuperablesComoBloqueadas(t *testing.T) {
+	cases := []struct {
+		name              string
+		code              string
+		recommendedAction string
+	}{
+		{
+			name:              "qa_failed_public_text",
+			code:              mcpAutoprogrammingActionQAFailedPublicTextV0,
+			recommendedAction: MCPGoalFirstReworkPublicTextActionV0,
+		},
+		{
+			name:              "partial_artifacts_written",
+			code:              mcpAutoprogrammingActionPartialArtifactsWrittenV0,
+			recommendedAction: MCPGoalFirstReviewPartialArtifactsActionV0,
+		},
+		{
+			name:              "artifact_paths_omitted_materialized",
+			code:              mcpAutoprogrammingActionArtifactPathsOmittedV0,
+			recommendedAction: MCPGoalFirstRepairReceiptActionV0,
+		},
+		{
+			name:              "out_of_scope_materialized_artifacts",
+			code:              mcpAutoprogrammingActionOutOfScopeMaterializedArtifactsV0,
+			recommendedAction: MCPGoalFirstReworkWriteSetViolationActionV0,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := domainWorkStatusResultForActionableRunTestV0(
+				t,
+				tc.code,
+				tc.recommendedAction,
+				"evidence-ref-domain-status-"+tc.name,
+			)
+
+			if result.Summary.Status != "blocked" ||
+				!result.Summary.NeedsAction ||
+				len(result.Items) != 1 ||
+				result.Items[0].Status != "blocked" ||
+				!result.Items[0].NeedsAction ||
+				result.Items[0].RecommendedAction != tc.recommendedAction {
+				t.Fatalf("result=%+v", result)
+			}
+		})
+	}
+}
+
 func domainWorkStatusResultForActionableRunTestV0(
 	t *testing.T,
 	code string,
