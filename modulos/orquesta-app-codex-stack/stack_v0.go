@@ -9,6 +9,7 @@ import (
 	orquestaappgateway "orquesta/modulos/orquesta-app-gateway"
 	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -123,6 +124,7 @@ func buildStackMCPTransportBindingsV0(
 			RepairMissingTerminalReceipt: true,
 		},
 	}
+	estadoVivoSource := estadoVivoSourceV0(config)
 	return orquestamcp.MCPTransportBindingsV0{
 		ArrancarDirector: arrancar,
 		PreviewDirector:  orquestamcp.NewMCPPreviewDirectorAppToolExecutorV0(),
@@ -162,6 +164,7 @@ func buildStackMCPTransportBindingsV0(
 			NewCodexStackAutoprogrammingObserveGoalExecutorV0(stack),
 		),
 		AutoprogrammingGoalStates:                   config.Stores.AppGoalStateStore,
+		AutoprogrammingEstadoVivoSource:             estadoVivoSource,
 		AutoprogrammingStatusDiagnostics:            config.AutoprogrammingStatusDiagnostics,
 		AutoprogrammingGoalProgressPolicy:           config.AutoprogrammingGoalProgressPolicy,
 		AllowLegacyAutoprogrammingSupervisorActions: config.AllowLegacyAutoprogrammingRun,
@@ -218,6 +221,7 @@ func buildStackHTTPHandlerV0(
 		AutoprogrammingObserveGoal:        bindings.AutoprogrammingObserveGoal,
 		AutoprogrammingObserveActiveGoals: bindings.AutoprogrammingObserveActiveGoals,
 		AutoprogrammingGoalStates:         bindings.AutoprogrammingGoalStates,
+		AutoprogrammingEstadoVivoSource:   bindings.AutoprogrammingEstadoVivoSource,
 		AutoprogrammingStatusDiagnostics:  bindings.AutoprogrammingStatusDiagnostics,
 		AllowLegacyAutoprogrammingSupervisorActions: bindings.AllowLegacyAutoprogrammingSupervisorActions,
 		ServerShutdown:           bindings.ServerShutdown,
@@ -291,6 +295,37 @@ func appGoalFirstRunMarkerStoreV0(
 		return nil
 	}
 	return store
+}
+
+func estadoVivoSourceV0(
+	config ConfigV0,
+) orquestaestadovivo.FuenteEvidenciaEstadoPortV0 {
+	fuentes := make([]orquestaestadovivo.FuenteEvidenciaEstadoPortV0, 0, 5)
+	if config.Stores.RunStore != nil {
+		fuentes = append(fuentes, EvidenciaEstadoRunStoreV0{Store: config.Stores.RunStore})
+	}
+	if config.Stores.AppGoalStateStore != nil {
+		fuentes = append(fuentes, EvidenciaEstadoGoalStateV0{Store: config.Stores.AppGoalStateStore})
+	}
+	if markerStore := appGoalFirstRunMarkerStoreV0(config); markerStore != nil {
+		fuentes = append(fuentes, EvidenciaEstadoMarkerV0{Store: markerStore})
+	}
+	if registry, ok := config.Stores.ProcessRegistry.(orquestacionnucleoapp.AgentProcessRegistryListPortV0); ok && registry != nil {
+		fuentes = append(fuentes, EvidenciaEstadoProcesosV0{
+			Registry:       registry,
+			SnapshotSource: config.Codex.SnapshotSource,
+		})
+	}
+	if config.Stores.AppGoalStateStore != nil && config.Stores.ReceiptStore != nil {
+		fuentes = append(fuentes, EvidenciaEstadoReceiptsV0{
+			GoalStateStore: config.Stores.AppGoalStateStore,
+			ReceiptStore:   config.Stores.ReceiptStore,
+		})
+	}
+	if len(fuentes) == 0 {
+		return nil
+	}
+	return EvidenciaEstadoAgregadorV0{Fuentes: fuentes}
 }
 
 func appGoalClosureValidatorV0(

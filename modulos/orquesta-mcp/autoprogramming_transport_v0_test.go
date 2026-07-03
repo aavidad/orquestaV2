@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 )
 
 func TestMCPTransportV0AutoprogrammingStatusQuedaOptInSinPuertos(t *testing.T) {
@@ -90,5 +92,41 @@ func TestMCPTransportV0AutoprogrammingStatusPublicaGoalProgressPolicyDesdeBindin
 		result.GoalProgressPolicy.CheckpointOnlyMaxWaitSeconds != 222 ||
 		result.GoalProgressPolicy.NoCheckpointWarningMaxWaitSeconds != 111 {
 		t.Fatalf("goal_progress_policy=%+v", result.GoalProgressPolicy)
+	}
+}
+
+func TestMCPTransportV0AutoprogrammingStatusUsaEstadoVivoDesdeBindings(t *testing.T) {
+	runRef := "run-ref-estado-vivo-transport-001"
+	transport := newFakeMCPTransportV0()
+	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{
+		AutoprogrammingEstadoVivoSource: &fakeMCPAutoprogrammingEstadoVivoSourceV0{
+			evidencias: []orquestaestadovivo.EvidenciaEstadoV0{{
+				RunRef:       runRef,
+				Fuente:       "process_snapshot",
+				Estado:       "running",
+				ProcesoVivo:  true,
+				EvidenceRefs: []string{"evidence-ref-estado-vivo-transport-live"},
+			}},
+		},
+	}); err != nil {
+		t.Fatalf("register transport: %v", err)
+	}
+
+	output, err := transport.CallToolV0(
+		context.Background(),
+		MCPAutoprogrammingStatusToolNameV0,
+		MCPAutoprogrammingStatusToolInputV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("call autoprogramming status: %v", err)
+	}
+	var result MCPAutoprogrammingStatusToolResultV0
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode: %v payload=%s", err, string(output))
+	}
+	if result.Estado != MCPAutoprogrammingStatusEstadoOKV0 ||
+		result.QueueHealth == nil ||
+		result.QueueHealth.RunningLive != 1 {
+		t.Fatalf("result=%+v", result)
 	}
 }

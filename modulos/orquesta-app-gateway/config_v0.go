@@ -6,6 +6,7 @@ import (
 
 	orquestacore "orquesta/modulos/orquesta-core"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestaexternalworkrun "orquesta/modulos/orquesta-external-work-run"
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestagoal "orquesta/modulos/orquesta-goal"
@@ -40,6 +41,7 @@ type ConfigV0 struct {
 	AutoprogrammingObserveGoal                  orquestamcp.MCPTransportAutoprogrammingObserveGoalExecutorV0
 	AutoprogrammingObserveActiveGoals           orquestamcp.MCPTransportAutoprogrammingObserveActiveGoalsExecutorV0
 	AutoprogrammingGoalStates                   orquestagoal.GoalWorkStateStorePortV0
+	AutoprogrammingEstadoVivoSource             orquestaestadovivo.FuenteEvidenciaEstadoPortV0
 	AutoprogrammingStatusDiagnostics            []orquestamcp.MCPAutoprogrammingDiagnosticV0
 	AllowLegacyAutoprogrammingSupervisorActions bool
 	GovernanceCatalog                           orquestagovernance.GovernanceCatalogProviderV0

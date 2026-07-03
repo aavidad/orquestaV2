@@ -3,12 +3,22 @@ package orquestamcp
 import (
 	"context"
 
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func hasMCPAutoprogrammingDiagnosticCodeV0(diagnostics []MCPAutoprogrammingDiagnosticV0, code string) bool {
 	for _, diagnostic := range diagnostics {
 		if diagnostic.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+func hasMCPAutoprogrammingActionCodeV0(actions []MCPAutoprogrammingActionableRunV0, code string) bool {
+	for _, action := range actions {
+		if action.Code == code {
 			return true
 		}
 	}
@@ -162,4 +172,30 @@ func defaultFakeMCPAutoprogrammingStatsV0(runRef string) *orquestacionnucleoapp.
 			},
 		}},
 	}
+}
+
+type fakeMCPAutoprogrammingEstadoVivoSourceV0 struct {
+	inputs     []orquestaestadovivo.FiltroEvidenciaEstadoV0
+	evidencias []orquestaestadovivo.EvidenciaEstadoV0
+}
+
+func (source *fakeMCPAutoprogrammingEstadoVivoSourceV0) ListarEvidenciasEstadoV0(
+	_ context.Context,
+	filtro orquestaestadovivo.FiltroEvidenciaEstadoV0,
+) ([]orquestaestadovivo.EvidenciaEstadoV0, error) {
+	source.inputs = append(source.inputs, filtro)
+	out := make([]orquestaestadovivo.EvidenciaEstadoV0, 0, len(source.evidencias))
+	for _, evidencia := range source.evidencias {
+		if filtro.RunRef != "" && evidencia.RunRef != filtro.RunRef {
+			continue
+		}
+		if filtro.GoalRef != "" && evidencia.GoalRef != filtro.GoalRef {
+			continue
+		}
+		out = append(out, evidencia)
+		if filtro.Limit > 0 && len(out) >= filtro.Limit {
+			break
+		}
+	}
+	return out, nil
 }

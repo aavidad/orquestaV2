@@ -93,6 +93,7 @@ func NewAPIRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 
 	autoprogrammingStatus := orquestamcp.MCPAutoprogrammingStatusToolExecutorV0{
 		Queue:                        config.RunQueuePriority,
 		Stats:                        config.DirectorStats,
+		EstadoVivoSource:             config.AutoprogrammingEstadoVivoSource,
 		GoalStateStore:               config.AutoprogrammingGoalStates,
 		StatusDiagnostics:            config.AutoprogrammingStatusDiagnostics,
 		AllowLegacySupervisorActions: config.AllowLegacyAutoprogrammingSupervisorActions,

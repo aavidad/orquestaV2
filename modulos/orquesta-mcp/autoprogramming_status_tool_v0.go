@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 )
@@ -70,6 +71,7 @@ type MCPAutoprogrammingStatusToolResultV0 struct {
 type MCPAutoprogrammingStatusToolExecutorV0 struct {
 	Queue                        MCPTransportRunQueuePriorityExecutorV0
 	Stats                        MCPTransportDirectorStatsExecutorV0
+	EstadoVivoSource             orquestaestadovivo.FuenteEvidenciaEstadoPortV0
 	GoalStateStore               orquestagoal.GoalWorkStateStorePortV0
 	GoalRunMarkerStore           orquestagoal.GoalWorkRunMarkerStorePortV0
 	StatusDiagnostics            []MCPAutoprogrammingDiagnosticV0
@@ -214,6 +216,18 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 			append([]*MCPDirectorStatsToolResultV0{result.Run}, observedRuns...)...,
 		)...,
 	)
+	estadoVivo, estadoVivoOK, estadoVivoDiagnostics := executor.estadoVivoProjectionForAutoprogrammingStatusV0(
+		ctx,
+		input,
+		result.Queue,
+		result.Run,
+		observedRuns...,
+	)
+	if estadoVivoOK {
+		okCount++
+	}
+	result.Diagnostics = append(result.Diagnostics, estadoVivoDiagnostics...)
+	result.Diagnostics = append(result.Diagnostics, diagnosticsFromEstadoVivoMCPAutoprogrammingV0(estadoVivo)...)
 	if okCount == 0 {
 		result.Estado = MCPAutoprogrammingStatusEstadoErrorV0
 		result.Errores = []MCPValidationIssueV0{{
@@ -226,7 +240,15 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	result.Tasks = buildMCPAutoprogrammingTasksV0(result.Run, goalFirstRunRefs)
 	result.Agents = buildMCPAutoprogrammingAgentsV0(result.Run, goalFirstRunRefs)
 	result.QueueHealth = buildMCPAutoprogrammingQueueHealthV0(result.Queue, goalStatesByRunRef, goalRunMarkersByRunRef, healthRun, healthObservedRuns...)
+	result.QueueHealth = applyEstadoVivoToQueueHealthMCPAutoprogrammingV0(
+		result.QueueHealth,
+		estadoVivo,
+		result.Queue,
+		goalStatesByRunRef,
+		goalRunMarkersByRunRef,
+	)
 	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, goalStatesByRunRef, goalRunMarkersByRunRef, healthRun, healthObservedRuns...)
+	result.StaleRunning = append(result.StaleRunning, staleRunningFromEstadoVivoMCPAutoprogrammingV0(estadoVivo)...)
 	observedByRunRef := mcpAutoprogrammingObservedRunsByRefV0(healthRun, healthObservedRuns...)
 	blockedGoalActions, resolvedGoalActions := mcpAutoprogrammingGoalFirstBlockedActionsV0(
 		goalStates,

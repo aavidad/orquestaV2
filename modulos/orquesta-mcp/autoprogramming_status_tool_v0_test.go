@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -136,6 +137,147 @@ func TestMCPAutoprogrammingStatusExecutorV0PublicaDiagnosticosConfigurados(t *te
 		len(found.EvidenceRefs) != 1 ||
 		found.EvidenceRefs[0] != "evidence-ref-server-codex-goal-backend-degraded-app_goal" {
 		t.Fatalf("diagnostico=%+v diagnostics=%+v", found, result.Diagnostics)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0DerivaVidaDesdeProyeccionV0(t *testing.T) {
+	runRef := "run-ref-estado-vivo-status-001"
+	estadoVivo := &fakeMCPAutoprogrammingEstadoVivoSourceV0{
+		evidencias: []orquestaestadovivo.EvidenciaEstadoV0{{
+			RunRef:       runRef,
+			Fuente:       "process_snapshot",
+			Estado:       "running",
+			ProcesoVivo:  true,
+			EvidenceRefs: []string{"evidence-ref-estado-vivo-process-live"},
+		}},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        runRef,
+				AppRef:        "app-ref-estado-vivo-status",
+				Status:        "running",
+				PriorityScore: 80,
+			}},
+		},
+		EstadoVivoSource: estadoVivo,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{
+		RunRef:     runRef,
+		OccurredAt: "2026-07-03T10:00:00Z",
+	})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.RunningLive != 1 ||
+		result.QueueHealth.RunningWithoutRecentStats != 0 ||
+		result.QueueHealth.RunningStale != 0 ||
+		result.QueueHealth.Unclassified != 0 {
+		t.Fatalf("queue_health=%+v stale_running=%+v diagnostics=%+v", result.QueueHealth, result.StaleRunning, result.Diagnostics)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "live" ||
+		result.EfficiencySummary.OverallPercentage >= 100 {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
+	if len(estadoVivo.inputs) != 1 || estadoVivo.inputs[0].RunRef != runRef {
+		t.Fatalf("estado_vivo_inputs=%+v", estadoVivo.inputs)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0ConflictoEstadoVivoNuncaProyectaVerdeV0(t *testing.T) {
+	runRef := "run-ref-estado-vivo-conflicto-001"
+	estadoVivo := &fakeMCPAutoprogrammingEstadoVivoSourceV0{
+		evidencias: []orquestaestadovivo.EvidenciaEstadoV0{
+			{
+				RunRef:       runRef,
+				Fuente:       "process_snapshot",
+				Estado:       "running",
+				ProcesoVivo:  true,
+				EvidenceRefs: []string{"evidence-ref-estado-vivo-process-live"},
+			},
+			{
+				RunRef:       runRef,
+				Fuente:       "goal_receipt",
+				Estado:       "accepted",
+				Terminal:     true,
+				Aceptado:     true,
+				EvidenceRefs: []string{"evidence-ref-estado-vivo-terminal-accepted"},
+			},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        runRef,
+				AppRef:        "app-ref-estado-vivo-status",
+				Status:        "running",
+				PriorityScore: 80,
+			}},
+		},
+		EstadoVivoSource: estadoVivo,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{
+		RunRef:     runRef,
+		OccurredAt: "2026-07-03T10:00:00Z",
+	})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.QueueHealth == nil ||
+		result.QueueHealth.Blocked != 1 ||
+		result.QueueHealth.RunningLive != 0 ||
+		result.QueueHealth.RunningWithoutRecentStats != 0 {
+		t.Fatalf("queue_health=%+v", result.QueueHealth)
+	}
+	if !hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, mcpAutoprogrammingActionEstadoVivoConflictoV0) ||
+		!hasMCPAutoprogrammingActionCodeV0(result.StaleRunning, mcpAutoprogrammingActionEstadoVivoConflictoV0) {
+		t.Fatalf("stale_running=%+v diagnostics=%+v", result.StaleRunning, result.Diagnostics)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "attention_required" ||
+		result.EfficiencySummary.OverallPercentage >= 100 ||
+		!strings.HasPrefix(result.EfficiencySummary.RecommendedAction, "reconcile_estado_vivo") {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0EstadoVivoDesconocidoNuncaProyectaCienV0(t *testing.T) {
+	runRef := "run-ref-estado-vivo-desconocido-001"
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        runRef,
+				AppRef:        "app-ref-estado-vivo-status",
+				Status:        "running",
+				PriorityScore: 80,
+			}},
+		},
+		EstadoVivoSource: &fakeMCPAutoprogrammingEstadoVivoSourceV0{},
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{
+		RunRef:     runRef,
+		OccurredAt: "2026-07-03T10:00:00Z",
+	})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if result.QueueHealth == nil || result.QueueHealth.Unclassified != 1 {
+		t.Fatalf("queue_health=%+v diagnostics=%+v", result.QueueHealth, result.Diagnostics)
+	}
+	if !hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, mcpAutoprogrammingActionEstadoVivoDesconocidoV0) {
+		t.Fatalf("diagnostics=%+v", result.Diagnostics)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "attention_required" ||
+		result.EfficiencySummary.OverallPercentage >= 100 {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
 	}
 }
 

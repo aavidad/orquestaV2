@@ -82,7 +82,13 @@ func buildMCPAutoprogrammingEfficiencySummaryV0(
 		run != nil,
 		diagnostics,
 	)
-	if repairRunRef := repairReceiptRunRefMCPAutoprogrammingEfficiencyV0(diagnostics, run); repairRunRef != "" {
+	if action, runRef := estadoVivoActionMCPAutoprogrammingEfficiencyV0(diagnostics, run); action != "" {
+		parts := []string{action}
+		if runRef != "" {
+			parts = append(parts, "run", runRef)
+		}
+		summary.RecommendedAction = strings.Join(parts, ":")
+	} else if repairRunRef := repairReceiptRunRefMCPAutoprogrammingEfficiencyV0(diagnostics, run); repairRunRef != "" {
 		summary.RecommendedAction = strings.Join([]string{MCPGoalFirstRepairReceiptActionV0, "run", repairRunRef}, ":")
 	} else if runRef := phase0CompleteNonPublishableRunRefMCPAutoprogrammingEfficiencyV0(diagnostics, run); runRef != "" {
 		summary.RecommendedAction = strings.Join([]string{MCPGoalFirstContinueFromPhase0ActionV0, "run", runRef}, ":")
@@ -235,6 +241,18 @@ func operationalHealthMCPAutoprogrammingEfficiencyV0(
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 60)
 		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, "goal_first_state_missing")
 	}
+	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, mcpAutoprogrammingActionEstadoVivoConflictoV0) {
+		health = minIntMCPAutoprogrammingEfficiencyV0(health, 40)
+		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, mcpAutoprogrammingActionEstadoVivoConflictoV0)
+	}
+	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, mcpAutoprogrammingActionEstadoVivoHuerfanoV0) {
+		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
+		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, mcpAutoprogrammingActionEstadoVivoHuerfanoV0)
+	}
+	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, mcpAutoprogrammingActionEstadoVivoDesconocidoV0) {
+		health = minIntMCPAutoprogrammingEfficiencyV0(health, 60)
+		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, mcpAutoprogrammingActionEstadoVivoDesconocidoV0)
+	}
 	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
 		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0)
@@ -316,6 +334,9 @@ func stateMCPAutoprogrammingEfficiencyV0(
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstRequiredTestEvidenceMissingV0) ||
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstRepairReceiptRequiresReworkV0) ||
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, MCPGoalFirstPhase0CompleteNonPublishableV0) ||
+		hasReasonMCPAutoprogrammingEfficiencyV0(summary, mcpAutoprogrammingActionEstadoVivoConflictoV0) ||
+		hasReasonMCPAutoprogrammingEfficiencyV0(summary, mcpAutoprogrammingActionEstadoVivoHuerfanoV0) ||
+		hasReasonMCPAutoprogrammingEfficiencyV0(summary, mcpAutoprogrammingActionEstadoVivoDesconocidoV0) ||
 		hasRecoverableGoalFirstReasonMCPAutoprogrammingEfficiencyV0(summary) ||
 		hasWriteSetReasonMCPAutoprogrammingEfficiencyV0(summary) ||
 		hasReasonMCPAutoprogrammingEfficiencyV0(summary, mcpAutoprogrammingActionThreadOutputSanitizedV0):
@@ -388,6 +409,39 @@ func recoverableGoalFirstActionMCPAutoprogrammingEfficiencyV0(
 		}
 	}
 	return "", ""
+}
+
+func estadoVivoActionMCPAutoprogrammingEfficiencyV0(
+	diagnostics []MCPAutoprogrammingDiagnosticV0,
+	run *MCPDirectorStatsToolResultV0,
+) (string, string) {
+	for _, diagnostic := range diagnostics {
+		action := estadoVivoActionForCodeMCPAutoprogrammingEfficiencyV0(diagnostic.Code)
+		if action == "" {
+			continue
+		}
+		if runRef := runRefFromScopeMCPAutoprogrammingEfficiencyV0(diagnostic.Scope); runRef != "" {
+			return action, runRef
+		}
+		if run != nil && strings.TrimSpace(run.RunRef) != "" {
+			return action, strings.TrimSpace(run.RunRef)
+		}
+		return action, ""
+	}
+	return "", ""
+}
+
+func estadoVivoActionForCodeMCPAutoprogrammingEfficiencyV0(code string) string {
+	switch strings.TrimSpace(code) {
+	case mcpAutoprogrammingActionEstadoVivoConflictoV0:
+		return "reconcile_estado_vivo"
+	case mcpAutoprogrammingActionEstadoVivoHuerfanoV0:
+		return "observe_or_reconcile_estado_vivo"
+	case mcpAutoprogrammingActionEstadoVivoDesconocidoV0:
+		return "observe_estado_vivo"
+	default:
+		return ""
+	}
 }
 
 func recoverableGoalFirstActionForCodeMCPAutoprogrammingEfficiencyV0(code string) string {

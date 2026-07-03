@@ -61,6 +61,7 @@ func TestObserveAppDirectorGoalV0SincronizaColaClosedConCandidatoPrevio(t *testi
 		GoalRef:         spec.GoalRef,
 		ExternalGoalRef: started.ExternalGoalRef,
 		ArtifactRefs:    goalFirstQueueRequiredArtifactRefsV0(spec),
+		ArtifactPaths:   goalFirstQueueTechnicalArtifactPathsV0(),
 		RequiredTestResults: goalFirstQueueRequiredTestResultsV0(
 			spec,
 			"evidence-ref-goal-first-queue-required-test",
@@ -120,6 +121,7 @@ func TestCodexStackObserveAppDirectorGoalExecutorV0UsaWrapperYSincronizaCola(t *
 		GoalRef:         spec.GoalRef,
 		ExternalGoalRef: started.ExternalGoalRef,
 		ArtifactRefs:    goalFirstQueueRequiredArtifactRefsV0(spec),
+		ArtifactPaths:   goalFirstQueueTechnicalArtifactPathsV0(),
 		RequiredTestResults: goalFirstQueueRequiredTestResultsV0(
 			spec,
 			"evidence-ref-goal-first-mcp-required-test",
@@ -159,6 +161,7 @@ func TestObserveActiveGoalWorksV0UsaWrapperYSincronizaCola(t *testing.T) {
 		GoalRef:         spec.GoalRef,
 		ExternalGoalRef: started.ExternalGoalRef,
 		ArtifactRefs:    goalFirstQueueRequiredArtifactRefsV0(spec),
+		ArtifactPaths:   goalFirstQueueTechnicalArtifactPathsV0(),
 		RequiredTestResults: goalFirstQueueRequiredTestResultsV0(
 			spec,
 			"evidence-ref-goal-first-active-required-test",
@@ -349,6 +352,7 @@ func TestObserveAppDirectorGoalV0ReanudaTrasRestartDesdeStateFile(t *testing.T) 
 		GoalRef:         spec.GoalRef,
 		ExternalGoalRef: started.ExternalGoalRef,
 		ArtifactRefs:    goalFirstQueueRequiredArtifactRefsV0(spec),
+		ArtifactPaths:   goalFirstQueueTechnicalArtifactPathsV0(),
 		RequiredTestResults: goalFirstQueueRequiredTestResultsV0(
 			spec,
 			"evidence-ref-goal-first-restart-required-test",
@@ -546,6 +550,13 @@ func goalFirstQueueRequiredArtifactRefsV0(spec orquestagoal.GoalWorkSpecV0) []st
 		}
 	}
 	return refs
+}
+
+func goalFirstQueueTechnicalArtifactPathsV0() []string {
+	return []string{
+		"generated-apps/agenda/go.mod",
+		"generated-apps/agenda/cmd/server/main.go",
+	}
 }
 
 func goalFirstQueueRequiredTestResultsV0(
