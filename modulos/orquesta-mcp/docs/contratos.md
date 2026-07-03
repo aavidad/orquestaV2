@@ -107,13 +107,15 @@ Campos:
   output_ok:
     estado: ok
     run_ref, stop_reason, ticks, last, history?, evidence_refs?,
-    operator_advice?, diagnostics?; por HTTP, si el executor sigue vivo mas
-    alla de la ventana de respuesta, devuelve `202 accepted` con
+    idempotency_key?, operation_ref?, repair_run_refs?, operator_advice?,
+    diagnostics?, next_actions?; por HTTP, si el executor sigue vivo mas alla
+    de la ventana de respuesta, devuelve `202 accepted` con
     `stop_reason=accepted_background`, `operation_ref`, diagnostico y acciones
     de consulta
   output_error:
     estado: error
-    errores_publicos: issues compactos
+    errores_publicos: issues compactos; evidence_refs?, idempotency_key?,
+    operation_ref?, repair_run_refs?, diagnostics?, next_actions?
 Invariantes:
   - Adaptador inbound fino y opt-in por executor inyectado.
   - Compatibilidad legacy/resident: si la run tiene `GoalWorkStateV0`, el caller
@@ -124,6 +126,9 @@ Invariantes:
     supervisor residente.
   - El HTTP no mantiene al cliente bloqueado indefinidamente tras delegar en el
     executor; deja `operation_ref` y obliga a observar por stats/cola.
+  - Los errores publicos conservan `operation_ref`, evidencias y diagnosticos
+    para que el operador pueda reintentar o revisar rework causal sin logs
+    internos.
   - `operator_advice` se conserva como observacion; no decide runtime ni cierre.
 Pruebas de contrato:
   - HTTP delega en executor fake y preserva correlation id.

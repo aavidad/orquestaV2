@@ -1311,6 +1311,12 @@ causa compacta durante supervisiones/reconciliaciones de lifecycle. Evidencia:
 `TestMCPRunSupervisorTransportHandlerV0DevuelvePayloadPublicoSiExecutorNoDaResultado`
 y `TestMCPRunSupervisorDescriptorV0DeclaraEvidenciaEnErrores`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 34b: el descriptor ejecutable y
+el contrato documental de `orquesta.runs.supervisor.v0` declaran
+`operation_ref` y `repair_run_refs` en salidas `ok` y `error`, alineando el
+contrato con errores recuperables y reworks causales que ya publica el executor.
+Evidencia: `TestMCPRunSupervisorDescriptorV0DeclaraEvidenciaEnErrores`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 35: el HTTP
 `POST /api/v0/runs/supervise` usa el mismo error publico de executor que el
 transporte MCP cuando no hay resultado propio: conserva correlacion,

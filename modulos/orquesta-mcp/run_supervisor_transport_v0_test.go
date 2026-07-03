@@ -11,7 +11,9 @@ import (
 func TestMCPRunSupervisorDescriptorV0DeclaraEvidenciaEnErrores(t *testing.T) {
 	descriptor := MCPRunSupervisorDescriptorV0()
 	if !strings.Contains(descriptor.Output, "error:{errores_publicos,evidence_refs?") ||
-		!strings.Contains(descriptor.Output, "diagnostics?") {
+		!strings.Contains(descriptor.Output, "diagnostics?") ||
+		!strings.Contains(descriptor.Output, "operation_ref?") ||
+		!strings.Contains(descriptor.Output, "repair_run_refs?") {
 		t.Fatalf("descriptor runs.supervisor debe declarar evidencia/diagnosticos en errores: %+v", descriptor)
 	}
 }
