@@ -835,3 +835,26 @@ Evidencia ejecutada:
 Estado: `BUG-ORQ-20260703-161` y `BUG-ORQ-20260703-162` quedan cerrados por
 codigo y pruebas focales. `BUG-088` sigue cerrado funcionalmente por el smoke
 real ya documentado; no se relanza otro smoke Codex real en este bloque.
+
+### 2026-07-04 — Codex cierra BUG-163 de skills curadas
+
+Revision rapida del handoff de Claude sin relanzar automejora ni pilotos. Se
+cerro `BUG-ORQ-20260704-163`: el filtro de MEJ-206 para skills curadas ya no
+acepta rutas absolutas genericas tipo `/workspaces/...`, `/project/.../file.md`,
+`C:\Users\...` o UNC `\\server\share\...` en metadata compacta o propuestas de
+destilacion.
+
+Evidencia ejecutada:
+- `go test -count=1 ./modulos/orquesta-autoprogramming -run 'Test(ValidateAutoprogrammingCuratedSkillCatalogV0RechazaRutasAbsolutasGenericas|BuildAutoprogrammingSkillDistillationReviewProposalV0RechazaRutaAbsolutaGenerica)'`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerCuratedSkillsFromProjectV0IgnoraRutaAbsolutaGenericaV0'`
+- `go test -count=1 ./modulos/orquesta-autoprogramming ./cmd/orquesta-server`
+- `git diff --check`
+
+Pendientes localizados por subagentes solo lectura y no implementados en este
+corte:
+- `BUG-065`: anadir `recommended_action` al contrato publico de shutdown para
+  active goals/backend still running antes de abordar coordinacion automatica.
+- `BUG-085`: runtime path guard en `orquesta-runtime-codex-appserver` usando
+  snapshot/verificacion de write-set antes de promover cierre.
+- OPES done/settled: conservar `settlement_*` y lifecycle en
+  `orquesta-opes-topic-registry` antes de validar `release`.

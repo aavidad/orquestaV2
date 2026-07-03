@@ -323,6 +323,7 @@ func autoprogrammingContainsUnsafeSkillDetailV0(value string) bool {
 	lower := strings.ToLower(value)
 	for _, marker := range []string{
 		"/home/", "/users/", "/srv/", "/tmp/", "/var/", "/etc/", "/root/", "/mnt/", "/opt/",
+		"/workspace/", "/workspaces/", "/private/", "/volumes/", "file:///",
 		"api_key=", "apikey=", "token=", "password=", "passwd=", "secret=", "bearer ",
 	} {
 		if strings.Contains(lower, marker) {
@@ -330,9 +331,49 @@ func autoprogrammingContainsUnsafeSkillDetailV0(value string) bool {
 		}
 	}
 	for _, field := range strings.Fields(value) {
+		if autoprogrammingLooksLikeAbsoluteFilesystemPathV0(field) {
+			return true
+		}
 		if strings.HasPrefix(field, "sk-") && len(field) > 12 {
 			return true
 		}
 	}
 	return false
+}
+
+func autoprogrammingLooksLikeAbsoluteFilesystemPathV0(value string) bool {
+	value = strings.Trim(strings.TrimSpace(value), `"'.,;:()[]{}<>`)
+	if value == "" {
+		return false
+	}
+	lower := strings.ToLower(value)
+	if strings.HasPrefix(lower, `\\`) {
+		return true
+	}
+	if len(value) >= 3 &&
+		((value[0] >= 'a' && value[0] <= 'z') || (value[0] >= 'A' && value[0] <= 'Z')) &&
+		value[1] == ':' &&
+		(value[2] == '\\' || value[2] == '/') {
+		return true
+	}
+	if !strings.HasPrefix(value, "/") {
+		return false
+	}
+	first := strings.Trim(strings.Split(strings.TrimPrefix(lower, "/"), "/")[0], " ")
+	switch first {
+	case "home", "users", "srv", "tmp", "var", "etc", "root", "mnt", "opt",
+		"workspace", "workspaces", "private", "volumes":
+		return true
+	default:
+		return strings.Contains(filepathBaseForAutoprogrammingSkillPathV0(value), ".")
+	}
+}
+
+func filepathBaseForAutoprogrammingSkillPathV0(value string) string {
+	value = strings.ReplaceAll(value, "\\", "/")
+	parts := strings.Split(strings.Trim(value, "/"), "/")
+	if len(parts) == 0 {
+		return ""
+	}
+	return parts[len(parts)-1]
 }

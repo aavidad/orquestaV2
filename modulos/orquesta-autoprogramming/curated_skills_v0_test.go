@@ -56,6 +56,42 @@ func TestValidateAutoprogrammingCuratedSkillCatalogV0RechazaSecretosYRutasAbsolu
 	}
 }
 
+func TestValidateAutoprogrammingCuratedSkillCatalogV0RechazaRutasAbsolutasGenericas(t *testing.T) {
+	cases := []string{
+		"Plantilla local en /workspaces/orquesta/skills/private.md",
+		"Plantilla local en /project/secretos/private.md",
+		`Plantilla local en C:\Users\alberto\secretos\skill.md`,
+		`Plantilla local en \\server\share\secret.md`,
+	}
+	for _, description := range cases {
+		issues := ValidateAutoprogrammingCuratedSkillCatalogV0([]AutoprogrammingCuratedSkillV0{{
+			Name:        "orquesta-programacion-tests",
+			Description: description,
+			Tags:        []string{"tests"},
+		}})
+		if len(issues) == 0 || issues[0].Code != "curated_skill_sensitive_detail" {
+			t.Fatalf("description=%q issues=%+v", description, issues)
+		}
+	}
+}
+
+func TestBuildAutoprogrammingSkillDistillationReviewProposalV0RechazaRutaAbsolutaGenerica(t *testing.T) {
+	proposal := BuildAutoprogrammingSkillDistillationReviewProposalV0(
+		AutoprogrammingSkillDistillationCandidateV0{
+			SourceResultRef: "result-ref-goal-001",
+			SourceRunRef:    "run-ref-goal-001",
+			SkillName:       "orquesta-programacion-tests",
+			Summary:         `Patron reutilizable desde C:\Users\alberto\privado\skill.md`,
+			Tags:            []string{"tests"},
+		},
+	)
+
+	if proposal.Accepted || len(proposal.Issues) == 0 ||
+		proposal.Issues[0].Code != "skill_distillation_sensitive_detail" {
+		t.Fatalf("proposal=%+v", proposal)
+	}
+}
+
 func TestBuildAutoprogrammingSkillDistillationReviewProposalV0NoAutoCommit(t *testing.T) {
 	proposal := BuildAutoprogrammingSkillDistillationReviewProposalV0(
 		AutoprogrammingSkillDistillationCandidateV0{

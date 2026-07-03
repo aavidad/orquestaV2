@@ -100,6 +100,25 @@ description: Plantilla local /home/alberto/privado token=secreto
 	}
 }
 
+func TestServerCuratedSkillsFromProjectV0IgnoraRutaAbsolutaGenericaV0(t *testing.T) {
+	root := t.TempDir()
+	skillDir := filepath.Join(root, "skills", "orquesta-programacion-tests")
+	if err := os.MkdirAll(skillDir, 0o700); err != nil {
+		t.Fatalf("mkdir skill: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
+name: orquesta-programacion-tests
+description: Plantilla local /workspaces/orquesta/privado/skill.md
+---
+`), 0o600); err != nil {
+		t.Fatalf("write skill: %v", err)
+	}
+
+	if skills := serverCuratedSkillsFromProjectV0(root); len(skills) != 0 {
+		t.Fatalf("skills con ruta absoluta generica no filtradas: %+v", skills)
+	}
+}
+
 func containsServerTestStringV0(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
