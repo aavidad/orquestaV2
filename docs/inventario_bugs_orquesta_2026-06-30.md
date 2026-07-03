@@ -820,6 +820,13 @@ trabajo activo. Asi clientes MCP compactos que no recorren `active_works` no
 pierden la causa del bloqueo por Goal/backend vivo. Evidencia:
 `TestMCPServerShutdownToolExecutorV0ExponeGoalsActivos`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 8: `orquesta-server stop
+--force` ya no depende solo del `/status` rico para no escalar; si el propio
+error `shutdown_not_ready` conserva `agents_in_flight`, `checkpoints`,
+`checkpoint_agents` o `runs` pendientes, el cliente lo trata como trabajo vivo
+y no envia senal cooperativa aunque el status posterior llegue vacio. Evidencia:
+`TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y

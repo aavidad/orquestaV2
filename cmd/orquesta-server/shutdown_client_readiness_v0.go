@@ -139,10 +139,10 @@ func shutdownRequestErrorIsLiveWorkConflictV0(err error) bool {
 	}
 	return strings.Contains(message, "backend_still_running") ||
 		strings.Contains(message, "active_goals_present") ||
-		shutdownNotReadyErrorHasActiveWorkV0(message)
+		shutdownNotReadyErrorHasBlockingWorkV0(message)
 }
 
-func shutdownNotReadyErrorHasActiveWorkV0(message string) bool {
+func shutdownNotReadyErrorHasBlockingWorkV0(message string) bool {
 	if !strings.HasPrefix(strings.TrimSpace(message), "shutdown_not_ready ") {
 		return false
 	}
@@ -157,7 +157,36 @@ func shutdownNotReadyErrorHasActiveWorkV0(message string) bool {
 			if value != "" && value != "0" {
 				return true
 			}
+		case strings.HasPrefix(field, "agents_in_flight="):
+			if shutdownNotReadyNumericFieldIsPositiveV0(field, "agents_in_flight=") {
+				return true
+			}
+		case strings.HasPrefix(field, "checkpoints="):
+			if shutdownNotReadyNumericFieldIsPositiveV0(field, "checkpoints=") {
+				return true
+			}
+		case strings.HasPrefix(field, "checkpoint_agents="):
+			if shutdownNotReadyNumericFieldIsPositiveV0(field, "checkpoint_agents=") {
+				return true
+			}
+		case strings.HasPrefix(field, "runs="):
+			if shutdownNotReadyRunsFieldIsPendingV0(field) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+func shutdownNotReadyNumericFieldIsPositiveV0(field string, prefix string) bool {
+	value := strings.TrimSpace(strings.TrimPrefix(field, prefix))
+	return value != "" && value != "0"
+}
+
+func shutdownNotReadyRunsFieldIsPendingV0(field string) bool {
+	value := strings.TrimSpace(strings.TrimPrefix(field, "runs="))
+	stopped, requested, ok := strings.Cut(value, "/")
+	return ok &&
+		strings.TrimSpace(requested) != "" &&
+		strings.TrimSpace(stopped) != strings.TrimSpace(requested)
 }

@@ -316,6 +316,18 @@ func TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado(t *testi
 	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_not_ready status=ready runs=1/1 agents_in_flight=0 checkpoints=0 checkpoint_agents=0 active_work=1 active_work_refs=shutdown-active-work-goal-backend-goal-ref-force"), status, true) {
 		t.Fatalf("force no debe saltar active_work conservado en error shutdown_not_ready")
 	}
+	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_not_ready status=waiting_checkpoint runs=1/1 agents_in_flight=0 checkpoints=0 checkpoint_agents=1 active_work=0"), orquestaserver.ServerPublicStatusV0{}, true) {
+		t.Fatalf("force no debe saltar checkpoint_agents conservado solo en error shutdown_not_ready")
+	}
+	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_not_ready status=waiting_drain runs=1/1 agents_in_flight=1 checkpoints=0 checkpoint_agents=0 active_work=0"), orquestaserver.ServerPublicStatusV0{}, true) {
+		t.Fatalf("force no debe saltar agents_in_flight conservado solo en error shutdown_not_ready")
+	}
+	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_not_ready status=waiting_checkpoint runs=1/1 agents_in_flight=0 checkpoints=1 checkpoint_agents=0 active_work=0"), orquestaserver.ServerPublicStatusV0{}, true) {
+		t.Fatalf("force no debe saltar checkpoints conservados solo en error shutdown_not_ready")
+	}
+	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_not_ready status=waiting_drain runs=0/1 agents_in_flight=0 checkpoints=0 checkpoint_agents=0 active_work=0"), orquestaserver.ServerPublicStatusV0{}, true) {
+		t.Fatalf("force no debe saltar runs pendientes conservados solo en error shutdown_not_ready")
+	}
 	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0("shutdown_status_active_goals_present"), status, true) {
 		t.Fatalf("force no debe saltar goals activos")
 	}
