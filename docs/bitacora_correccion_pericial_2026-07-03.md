@@ -299,3 +299,17 @@ En cola para la ola siguiente (cruzan write-sets con esta): BUG-152
 (diagnóstico etiquetas backlog), CTX-TASK-801A (presupuesto de contexto),
 801C (prompt estable para cache), 801D (evaluación LLMLingua opt-in).
 Verificación/integración: receta de esta bitácora.
+
+### 2026-07-04 — nightly activado, remoto saneado, 4 pilotajes simultáneos
+
+- Timer nightly instalado y activo (autorizado por operador): systemd user
+  `orquesta-smoke-nightly.timer`, preflight 03:30, primer disparo esta noche.
+- Remoto `uso.dipgra.cloud`: WIP de 71 ficheros preservado en stash remoto
+  `triaje-claude-2026-07-04` y como evidencia local commiteada en
+  `docs/triaje_wip_remoto_2026-07-04/` (parche + tgz de no-trackeados);
+  worktree remoto limpio. 4 ficheros ya obsoletos de partida (backend cmd
+  migrado). Sin tocar contenedores ni servicios productivos.
+- T279 lanzada (puerto 46461, rama `pericial/pilot-t279`): triaje del parche
+  a `clasificacion.md` + secciones WIP-TASK ejecutables para lo valioso.
+- En vuelo simultáneo: T275 (bug 153), T276 (bug 151), T278 (repo-map),
+  T279 (triaje) — 4 goals, write-sets disjuntos.
