@@ -139,12 +139,15 @@ func shutdownRequestErrorAllowsSignalV0(
 	}
 	if forced {
 		return !shutdownRequestErrorIsLiveWorkConflictV0(err) &&
+			!shutdownPublicStatusHasLiveWorkConflictV0(status) &&
 			!shutdownPublicStatusHasBlockingWorkV0(status)
 	}
 	if strings.TrimSpace(err.Error()) != "shutdown_timeout" {
 		return false
 	}
-	return status.ShutdownInProgress && !shutdownPublicStatusHasBlockingWorkV0(status)
+	return status.ShutdownInProgress &&
+		!shutdownPublicStatusHasLiveWorkConflictV0(status) &&
+		!shutdownPublicStatusHasBlockingWorkV0(status)
 }
 
 func shutdownPublicStatusHasBlockingWorkV0(status orquestaserver.ServerPublicStatusV0) bool {
@@ -154,6 +157,15 @@ func shutdownPublicStatusHasBlockingWorkV0(status orquestaserver.ServerPublicSta
 		status.ShutdownAsyncWorkActive > 0 ||
 		status.ShutdownActiveWorkCount > 0 ||
 		len(compactStringsV0(status.ShutdownActiveWorkRefs)) > 0
+}
+
+func shutdownPublicStatusHasLiveWorkConflictV0(status orquestaserver.ServerPublicStatusV0) bool {
+	switch strings.TrimSpace(status.ShutdownStatus) {
+	case "backend_still_running", "active_goals_present":
+		return true
+	default:
+		return false
+	}
 }
 
 func shutdownRequestErrorIsLiveWorkConflictV0(err error) bool {

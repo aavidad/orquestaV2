@@ -1232,6 +1232,14 @@ status terminal/compatible (`ready`, `stopped`, `handoff_ready` o vacio legacy),
 evitando una senal local prematura ante cuerpos parciales de conflicto.
 Evidencia: `TestShutdownClientReadyV0NoSaltaStatusConflictoSinContadoresV0`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 32c: la politica de escalado
+de `orquesta-server stop --force` tampoco permite senal local si el `/status`
+posterior declara `shutdown_status=backend_still_running` o
+`active_goals_present`, aunque ese snapshot haya perdido contadores y refs de
+trabajo vivo. Esto conserva el veto operacional del estado explicito y evita
+que un error de transporte convierta un conflicto vivo en parada local.
+Evidencia: `TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado`.
+
 Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 33: los transportes HTTP y MCP
 de `server.shutdown` quedan cubiertos para errores de executor: ambos devuelven
 mensaje publico saneado sin rutas/tokens y conservan `evidence_refs` compactas
