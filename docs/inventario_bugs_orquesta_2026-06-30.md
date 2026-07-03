@@ -1108,6 +1108,13 @@ scope de run. Asi el operador puede repetir o reconciliar con la misma evidencia
 sin depender de logs internos. Evidencia:
 `TestMCPRunControlHTTPHandlerV0ExecutorErrorConservaEvidenciaV0`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 30: el descriptor MCP de
+`orquesta.runs.control.v0` ya declara que tanto respuestas `ok` como `error`
+pueden transportar `forced`, `evidence_refs` y `diagnostics`; el contrato
+publico queda alineado con los errores recuperables HTTP y evita que clientes
+compactos descarten evidencia. Evidencia:
+`TestMCPRunControlDescriptorV0EsAdaptadorFino`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
