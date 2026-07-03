@@ -1699,7 +1699,8 @@ Campos:
   output_ok:
     estado: ok
     operation_ref?: referencia de operacion para background/dedupe
-    observations?: resultados compactos de observe_goal por run
+    observations?: resultados compactos de observe_goal por run con
+      run_ref, goal_ref?, goal_status?, recommended_action?, evidence_refs?
     issues?: incidencias por run sin cancelar todo el lote
     next_actions?: acciones de seguimiento para operador o agente
     diagnostics?: diagnosticos publicos de la pasada

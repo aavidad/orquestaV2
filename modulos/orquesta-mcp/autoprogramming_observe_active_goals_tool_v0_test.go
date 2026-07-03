@@ -84,7 +84,7 @@ func TestMCPAutoprogrammingObserveActiveGoalsToolExecutorV0ListaYObservaActivos(
 	}
 }
 
-func TestMCPAutoprogrammingObserveActiveGoalsDescriptorV0DeclaraEvidenciaEnErrores(t *testing.T) {
+func TestMCPAutoprogrammingObserveActiveGoalsDescriptorV0DeclaraObservacionesAccionables(t *testing.T) {
 	descriptor := MCPAutoprogrammingObserveActiveGoalsDescriptorV0()
 	if descriptor.Name != MCPAutoprogrammingObserveActiveGoalsToolNameV0 ||
 		descriptor.ResourceURI != MCPAutoprogrammingObserveActiveGoalsResourceURIV0 ||
@@ -93,11 +93,12 @@ func TestMCPAutoprogrammingObserveActiveGoalsDescriptorV0DeclaraEvidenciaEnError
 		t.Fatalf("descriptor=%+v", descriptor)
 	}
 	if !strings.Contains(descriptor.Output, "evidence_refs?") ||
+		!strings.Contains(descriptor.Output, "observations?[]{run_ref,goal_ref?,goal_status?,recommended_action?,evidence_refs?}") ||
 		!strings.Contains(descriptor.Output, "error:{errores_publicos,operation_ref?") ||
 		!strings.Contains(descriptor.Output, "operation_ref?") ||
 		!strings.Contains(descriptor.Output, "next_actions?") ||
 		!strings.Contains(descriptor.Output, "diagnostics?") {
-		t.Fatalf("observe_active_goals debe declarar evidencia en errores: %+v", descriptor)
+		t.Fatalf("observe_active_goals debe declarar observaciones accionables y evidencia: %+v", descriptor)
 	}
 }
 

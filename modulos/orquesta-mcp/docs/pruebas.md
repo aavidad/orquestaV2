@@ -836,7 +836,8 @@ go test -count=1 ./modulos/orquesta-mcp \
 Evidencia esperada: `orquesta.autoprogramming.observe_active_goals.v0` queda
 registrado como tool opt-in, `POST
 /api/v0/autoprogramming/goals/observe-active` delega en executor inyectado,
-lista solo goals activos por defecto, conserva incidencias por run y
+lista solo goals activos por defecto, publica observaciones por run con
+`recommended_action` y evidencias compactas, conserva incidencias por run y
 `autoprogramming/status` publica `observe_active_goals` cuando hay varios goals
 activos.
 
