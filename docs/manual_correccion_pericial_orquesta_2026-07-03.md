@@ -539,6 +539,11 @@ systemd/cron de usuario documentada en
    contra el último verde (para que el primer agente de la mañana abra
    fila de inventario con contexto).
 
+**Cierre 2026-07-03**: implementado `scripts/orquesta_smoke_nightly.sh` con
+preflight por defecto, modo real opt-in mediante `ORQUESTA_NIGHTLY_REAL_CONFIRM=1`,
+resultado JSON diario, retencion, diff contra ultimo verde y bloqueo de entorno
+OPES/productivo. Runbook: `docs/runbooks/smoke_nightly_2026-07.md`.
+
 ---
 
 ## FASE 5 — Higiene de superficie (P5)
