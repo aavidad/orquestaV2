@@ -142,6 +142,7 @@ func serverPublicGoalIsOperationallyActiveV0(projection ServerPublicIdleSelfImpr
 		idleSelfImprovementGoalObservationErrorReasonV0,
 		idleSelfImprovementGoalBlockedReasonV0,
 		idleSelfImprovementGoalBackendGoneWithoutResultV0,
+		idleSelfImprovementGoalHighConsumptionNoProgressReasonV0,
 		idleSelfImprovementGoalInvalidReasonV0,
 		idleSelfImprovementGoalCompletePendingClosureV0,
 		idleSelfImprovementGoalClosureAcceptedReasonV0:

@@ -1,0 +1,7 @@
+goal_ref: goal-ref-autoprogramming-backlog-t290-corte-durante-ejecucion-goal-sin-progreso-08115fb2
+backlog_task: T290 corte-durante-ejecucion-goal-sin-progreso
+started_at: 2026-07-03
+scope: modulos/orquesta-server, modulos/orquesta-autoprogramming, modulos/orquesta-app-codex-stack, cmd/orquesta-server
+objective: bloquear/replanificar de forma accionable un goal activo con consumo creciente y sin progreso util observable.
+next_artifact: implementacion y tests focales sobre observacion/reconciliacion goal-first existente.
+input_evidence_refs: scan-ref-backlog-f670eb385bea, task-instance-ref-backlog-b1e058e1, evidence-ref-orquesta-server-idle-no-execution, evidence-ref-orquesta-server-idle-window

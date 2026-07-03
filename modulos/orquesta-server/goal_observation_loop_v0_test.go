@@ -154,6 +154,232 @@ func TestRuntimeV0GoalObservationTickActualizaIdleSelfImprovementV0(t *testing.T
 	}
 }
 
+func TestRuntimeV0GoalObservationBloqueaIdleGoalConsumoCrecienteSinProgresoV0(t *testing.T) {
+	now := time.Date(2026, 7, 3, 19, 0, 0, 0, time.UTC)
+	const runRef = "run-ref-idle-progress-governor-001"
+	const goalRef = "goal-ref-idle-progress-governor-001"
+	const externalGoalRef = "external-goal-ref-idle-progress-governor-001"
+	state := mustIdleSelfImprovementGoalStateForProgressTestV0(t, runRef, goalRef, externalGoalRef)
+	store := &memoryStateStoreV0{}
+	goalStore := newMemoryGoalStateStoreV0()
+	if err := goalStore.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	supervisor := &fakeSupervisorV0{
+		goalObservationResult: []orquestagoal.GoalWorkObserveActiveResultV0{{
+			Observations: []orquestagoal.GoalWorkObserveResultV0{{
+				State: state,
+				Result: orquestagoal.GoalWorkResultV0{
+					Status:          orquestagoal.GoalStatusRunningV0,
+					GoalRef:         goalRef,
+					ExternalGoalRef: externalGoalRef,
+					ContextBudget:   orquestagoal.GoalContextBudgetV0{ContextBudgetTotalBytes: 250},
+					EvidenceRefs:    []string{"evidence-ref-codex-goal-cached-input-tokens-250"},
+				},
+			}},
+		}},
+	}
+	stopper := &fakeGoalCooperativeStopperForTestV0{}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                      t.TempDir(),
+		TickInterval:                  time.Hour,
+		GoalObserverEnabledConfigured: true,
+		GoalObserverEnabled:           true,
+		GoalObserverMaxItems:          5,
+		ResidentDirectorEnabled:       false,
+		AuditDisabled:                 true,
+		SelfWatchdog:                  SelfWatchdogConfigV0{NoProgressFor: time.Minute},
+	}, RuntimeDepsV0{
+		Supervisor:     supervisor,
+		GoalStateStore: goalStore,
+		GoalStopper:    stopper,
+		StateStore:     store,
+		Clock:          fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	runtime.tracker.MarkIdleSelfImprovementPreparedV0(idleSelfImprovementPreparedForProgressTestV0(state), now.Add(-3*time.Minute))
+	runtime.tracker.MarkIdleSelfImprovementGoalProgressV0(idleSelfImprovementGoalProgressUpdateV0{
+		UsefulProgressAt:        now.Add(-2 * time.Minute),
+		UsefulProgressSignature: "sha256:previous-useful-progress",
+		ObservedConsumption:     100,
+	}, now.Add(-2*time.Minute))
+
+	runtime.runGoalObservationTickV0(context.Background())
+
+	if stopper.calls != 1 ||
+		stopper.last.RunRef != runRef ||
+		stopper.last.Reason != idleSelfImprovementGoalHighConsumptionNoProgressReasonV0 ||
+		stopper.last.RecommendedAction != idleSelfImprovementGoalReviewReplanRecommendedActionV0 {
+		t.Fatalf("stopper calls=%d request=%+v", stopper.calls, stopper.last)
+	}
+	if store.last.IdleSelfImprovementOperationalMessage == nil ||
+		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalHighConsumptionNoProgressReasonV0 ||
+		store.last.IdleSelfImprovementGoalResult == nil ||
+		store.last.IdleSelfImprovementGoalResult.Status != orquestagoal.GoalStatusBlockedV0 ||
+		!containsStringForTestV0(store.last.IdleSelfImprovementGoalResult.ReworkPlanRefs, idleSelfImprovementGoalReviewReplanRefV0) ||
+		!containsStringForTestV0(store.last.IdleSelfImprovementGoalResult.EvidenceRefs, "evidence-ref-goal-cooperative-stop-requested") ||
+		!goalWorkResultHasIssueCodeV0(*store.last.IdleSelfImprovementGoalResult, idleSelfImprovementGoalHighConsumptionNoProgressReasonV0) {
+		t.Fatalf("idle state=%+v", store.last)
+	}
+	loaded, err := goalStore.LoadGoalWorkStateV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if loaded.Status != orquestagoal.GoalStatusBlockedV0 ||
+		loaded.LastResult == nil ||
+		loaded.LastResult.Summary != idleSelfImprovementGoalHighConsumptionNoProgressReasonV0 {
+		t.Fatalf("goal state=%+v", loaded)
+	}
+}
+
+func TestRuntimeV0GoalObservationNoCortaConProgresoUtilRecienteV0(t *testing.T) {
+	now := time.Date(2026, 7, 3, 19, 15, 0, 0, time.UTC)
+	const runRef = "run-ref-idle-progress-governor-002"
+	const goalRef = "goal-ref-idle-progress-governor-002"
+	const externalGoalRef = "external-goal-ref-idle-progress-governor-002"
+	state := mustIdleSelfImprovementGoalStateForProgressTestV0(t, runRef, goalRef, externalGoalRef)
+	store := &memoryStateStoreV0{}
+	goalStore := newMemoryGoalStateStoreV0()
+	if err := goalStore.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	supervisor := &fakeSupervisorV0{
+		goalObservationResult: []orquestagoal.GoalWorkObserveActiveResultV0{{
+			Observations: []orquestagoal.GoalWorkObserveResultV0{{
+				State: state,
+				Result: orquestagoal.GoalWorkResultV0{
+					Status:          orquestagoal.GoalStatusRunningV0,
+					GoalRef:         goalRef,
+					ExternalGoalRef: externalGoalRef,
+					ContextBudget:   orquestagoal.GoalContextBudgetV0{ContextBudgetTotalBytes: 100000},
+					ArtifactPaths:   []string{"modulos/orquesta-server/generated_progress_marker.go"},
+					EvidenceRefs:    []string{"evidence-ref-codex-goal-cached-input-tokens-100000"},
+				},
+			}},
+		}},
+	}
+	stopper := &fakeGoalCooperativeStopperForTestV0{}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                      t.TempDir(),
+		TickInterval:                  time.Hour,
+		GoalObserverEnabledConfigured: true,
+		GoalObserverEnabled:           true,
+		GoalObserverMaxItems:          5,
+		ResidentDirectorEnabled:       false,
+		AuditDisabled:                 true,
+		SelfWatchdog:                  SelfWatchdogConfigV0{NoProgressFor: time.Minute},
+	}, RuntimeDepsV0{
+		Supervisor:     supervisor,
+		GoalStateStore: goalStore,
+		GoalStopper:    stopper,
+		StateStore:     store,
+		Clock:          fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	runtime.tracker.MarkIdleSelfImprovementPreparedV0(idleSelfImprovementPreparedForProgressTestV0(state), now.Add(-3*time.Minute))
+	runtime.tracker.MarkIdleSelfImprovementGoalProgressV0(idleSelfImprovementGoalProgressUpdateV0{
+		UsefulProgressAt:        now.Add(-2 * time.Minute),
+		UsefulProgressSignature: "sha256:previous-useful-progress",
+		ObservedConsumption:     100,
+	}, now.Add(-2*time.Minute))
+
+	runtime.runGoalObservationTickV0(context.Background())
+
+	if stopper.calls != 0 {
+		t.Fatalf("goal con progreso util no debe parar: calls=%d request=%+v", stopper.calls, stopper.last)
+	}
+	if store.last.IdleSelfImprovementOperationalMessage == nil ||
+		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalRunningReasonV0 ||
+		store.last.IdleSelfImprovementGoalResult == nil ||
+		store.last.IdleSelfImprovementGoalResult.Status != orquestagoal.GoalStatusRunningV0 ||
+		store.last.IdleSelfImprovementGoalUsefulProgressAt != formatTimeV0(now) ||
+		store.last.IdleSelfImprovementGoalUsefulProgressSignature == "sha256:previous-useful-progress" {
+		t.Fatalf("idle state=%+v", store.last)
+	}
+}
+
+func TestRuntimeV0GoalObservationCheckpointInvalidoRepetidoCuentaSinProgresoV0(t *testing.T) {
+	now := time.Date(2026, 7, 3, 19, 30, 0, 0, time.UTC)
+	const runRef = "run-ref-idle-progress-governor-003"
+	const goalRef = "goal-ref-idle-progress-governor-003"
+	const externalGoalRef = "external-goal-ref-idle-progress-governor-003"
+	state := mustIdleSelfImprovementGoalStateForProgressTestV0(t, runRef, goalRef, externalGoalRef)
+	invalidCheckpoint := orquestagoal.GoalMaterializedArtifactV0{
+		ArtifactRef:  "artifact-ref-invalid-checkpoint-001",
+		Path:         "modulos/orquesta-server/checkpoint_started_t290.txt",
+		ArtifactType: "checkpoint",
+		Status:       "invalid",
+	}
+	invalidSignature := idleSelfImprovementGoalInvalidCheckpointSignatureV0(orquestagoal.GoalWorkResultV0{
+		MaterializedArtifacts: []orquestagoal.GoalMaterializedArtifactV0{invalidCheckpoint},
+	})
+	store := &memoryStateStoreV0{}
+	goalStore := newMemoryGoalStateStoreV0()
+	if err := goalStore.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	supervisor := &fakeSupervisorV0{
+		goalObservationResult: []orquestagoal.GoalWorkObserveActiveResultV0{{
+			Observations: []orquestagoal.GoalWorkObserveResultV0{{
+				State: state,
+				Result: orquestagoal.GoalWorkResultV0{
+					Status:                orquestagoal.GoalStatusRunningV0,
+					GoalRef:               goalRef,
+					ExternalGoalRef:       externalGoalRef,
+					ContextBudget:         orquestagoal.GoalContextBudgetV0{ContextBudgetTotalBytes: 300},
+					MaterializedArtifacts: []orquestagoal.GoalMaterializedArtifactV0{invalidCheckpoint},
+					EvidenceRefs:          []string{"evidence-ref-codex-goal-cached-input-tokens-300"},
+				},
+			}},
+		}},
+	}
+	stopper := &fakeGoalCooperativeStopperForTestV0{}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                      t.TempDir(),
+		TickInterval:                  time.Hour,
+		GoalObserverEnabledConfigured: true,
+		GoalObserverEnabled:           true,
+		GoalObserverMaxItems:          5,
+		ResidentDirectorEnabled:       false,
+		AuditDisabled:                 true,
+		SelfWatchdog:                  SelfWatchdogConfigV0{NoProgressFor: time.Minute},
+	}, RuntimeDepsV0{
+		Supervisor:     supervisor,
+		GoalStateStore: goalStore,
+		GoalStopper:    stopper,
+		StateStore:     store,
+		Clock:          fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	runtime.tracker.MarkIdleSelfImprovementPreparedV0(idleSelfImprovementPreparedForProgressTestV0(state), now.Add(-3*time.Minute))
+	runtime.tracker.MarkIdleSelfImprovementGoalProgressV0(idleSelfImprovementGoalProgressUpdateV0{
+		UsefulProgressAt:           now.Add(-2 * time.Minute),
+		UsefulProgressSignature:    "sha256:previous-useful-progress",
+		ObservedConsumption:        100,
+		InvalidCheckpointSignature: invalidSignature,
+		InvalidCheckpointRepeats:   1,
+	}, now.Add(-2*time.Minute))
+
+	runtime.runGoalObservationTickV0(context.Background())
+
+	if stopper.calls != 1 {
+		t.Fatalf("checkpoint invalido repetido debe cortar por sin-progreso: calls=%d", stopper.calls)
+	}
+	if store.last.IdleSelfImprovementGoalInvalidCheckpointRepeats != 2 ||
+		store.last.IdleSelfImprovementOperationalMessage == nil ||
+		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalHighConsumptionNoProgressReasonV0 ||
+		store.last.IdleSelfImprovementGoalResult == nil ||
+		!containsStringForTestV0(store.last.IdleSelfImprovementGoalResult.EvidenceRefs, "evidence-ref-goal-invalid-checkpoint-repeated") {
+		t.Fatalf("idle state=%+v", store.last)
+	}
+}
+
 func TestRuntimeV0IdleFallbackReconciliaResultMaterializadoPorPuertoV0(t *testing.T) {
 	now := time.Date(2026, 7, 3, 15, 30, 0, 0, time.UTC)
 	const runRef = "run-ref-idle-materialized-port-001"
@@ -770,4 +996,73 @@ func goalObservationResultHasTerminalForTestV0(
 		}
 	}
 	return false
+}
+
+func mustIdleSelfImprovementGoalStateForProgressTestV0(
+	t *testing.T,
+	runRef string,
+	goalRef string,
+	externalGoalRef string,
+) orquestagoal.GoalWorkStateV0 {
+	t.Helper()
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Gobernar progreso util de una automejora goal-first.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet: []orquestagoal.GoalWriteScopeV0{
+				{Path: "modulos/orquesta-server"},
+			},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+		},
+		EvidenceRefs: []string{"evidence-ref-" + goalRef},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	return state
+}
+
+func idleSelfImprovementPreparedForProgressTestV0(
+	state orquestagoal.GoalWorkStateV0,
+) IdleSelfImprovementResultV0 {
+	return IdleSelfImprovementResultV0{
+		Accepted:        true,
+		RunRef:          state.RunRef,
+		Status:          orquestagoal.GoalStatusAcceptedV0,
+		Message:         "goal_first_launched",
+		GoalRef:         state.GoalRef,
+		ExternalGoalRef: state.ExternalGoalRef,
+		GoalSpec:        state.Spec,
+		GoalReceipt:     state.LaunchReceipt,
+		EvidenceRefs:    []string{"evidence-ref-idle-progress-governor-launched"},
+	}
+}
+
+type fakeGoalCooperativeStopperForTestV0 struct {
+	calls int
+	last  GoalCooperativeStopRequestV0
+	err   error
+}
+
+func (fake *fakeGoalCooperativeStopperForTestV0) RequestGoalCooperativeStopV0(
+	_ context.Context,
+	request GoalCooperativeStopRequestV0,
+) (GoalCooperativeStopResultV0, error) {
+	fake.calls++
+	fake.last = request
+	if fake.err != nil {
+		return GoalCooperativeStopResultV0{}, fake.err
+	}
+	return GoalCooperativeStopResultV0{
+		Requested:    true,
+		Status:       "stop_requested",
+		EvidenceRefs: []string{"evidence-ref-fake-goal-cooperative-stop"},
+	}, nil
 }

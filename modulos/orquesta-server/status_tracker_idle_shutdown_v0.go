@@ -84,6 +84,11 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementPreparedV0(
 		}
 		state.IdleSelfImprovementGoalResult = nil
 		state.IdleSelfImprovementGoalClosure = nil
+		state.IdleSelfImprovementGoalUsefulProgressAt = ""
+		state.IdleSelfImprovementGoalUsefulProgressSignature = ""
+		state.IdleSelfImprovementGoalObservedConsumption = 0
+		state.IdleSelfImprovementGoalInvalidCheckpointSignature = ""
+		state.IdleSelfImprovementGoalInvalidCheckpointRepeats = 0
 		state.IdleSelfImprovementOperationalMessage = projectServerOperationalMessageRecordV0(
 			serverOperationalMessageInputV0{
 				Scope:        "idle_self_improvement",

@@ -17,6 +17,7 @@ type RuntimeDepsV0 struct {
 	RouteManifest     []ServerRouteResourceV0
 	GoalStateStore    orquestagoal.GoalWorkStateStorePortV0
 	GoalFingerprint   GoalObservationFingerprintPortV0
+	GoalStopper       GoalCooperativeStopPortV0
 	ShutdownSnapshot  ShutdownSnapshotPortV0
 	ShutdownHooks     []RuntimeShutdownHookPortV0
 	BackgroundWorkers []RuntimeBackgroundWorkerPortV0
@@ -36,6 +37,7 @@ type RuntimeV0 struct {
 	routeManifest                 []ServerRouteResourceV0
 	goalStateStore                orquestagoal.GoalWorkStateStorePortV0
 	goalFingerprint               GoalObservationFingerprintPortV0
+	goalStopper                   GoalCooperativeStopPortV0
 	goalObservationFingerprintsMu sync.Mutex
 	goalObservationFingerprints   map[string]orquestagoal.GoalObservationFingerprintV0
 	shutdownSnapshot              ShutdownSnapshotPortV0
@@ -102,6 +104,7 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		routeManifest:               compactServerRouteResourcesV0(deps.RouteManifest),
 		goalStateStore:              deps.GoalStateStore,
 		goalFingerprint:             deps.GoalFingerprint,
+		goalStopper:                 deps.GoalStopper,
 		goalObservationFingerprints: map[string]orquestagoal.GoalObservationFingerprintV0{},
 		shutdownSnapshot:            deps.ShutdownSnapshot,
 		shutdownHooks:               compactRuntimeShutdownHooksV0(deps.ShutdownHooks),

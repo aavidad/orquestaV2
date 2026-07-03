@@ -66,6 +66,31 @@ type GoalObservationFingerprintPortV0 interface {
 	) (orquestagoal.GoalObservationFingerprintV0, bool, error)
 }
 
+type GoalCooperativeStopPortV0 interface {
+	RequestGoalCooperativeStopV0(
+		context.Context,
+		GoalCooperativeStopRequestV0,
+	) (GoalCooperativeStopResultV0, error)
+}
+
+type GoalCooperativeStopRequestV0 struct {
+	RunRef            string
+	GoalRef           string
+	ExternalGoalRef   string
+	Reason            string
+	RecommendedAction string
+	RequestedBy       string
+	IdempotencyKey    string
+	EvidenceRefs      []string
+}
+
+type GoalCooperativeStopResultV0 struct {
+	Requested    bool
+	Status       string
+	Message      string
+	EvidenceRefs []string
+}
+
 type IdleSelfImprovementPlannerPortV0 interface {
 	PlanIdleSelfImprovementV0(
 		context.Context,

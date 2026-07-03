@@ -205,6 +205,7 @@ func idleSelfImprovementGoalObservationReasonV0(reason string, reasonCode string
 		reasonCode == idleSelfImprovementGoalRunningReasonV0 ||
 		reasonCode == idleSelfImprovementGoalCompletePendingClosureV0 ||
 		reasonCode == idleSelfImprovementGoalBlockedReasonV0 ||
+		reasonCode == idleSelfImprovementGoalHighConsumptionNoProgressReasonV0 ||
 		reasonCode == idleSelfImprovementGoalInvalidReasonV0 ||
 		reasonCode == idleSelfImprovementGoalObservationErrorReasonV0 ||
 		reasonCode == idleSelfImprovementGoalObserverUnavailableReasonV0 {

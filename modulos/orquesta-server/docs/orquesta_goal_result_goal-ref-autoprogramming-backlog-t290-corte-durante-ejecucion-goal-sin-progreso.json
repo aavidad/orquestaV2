@@ -1,0 +1,186 @@
+{
+  "goal_ref": "goal-ref-autoprogramming-backlog-t290-corte-durante-ejecucion-goal-sin-progreso-08115fb2",
+  "schema_version": "orquesta_goal_result.v0",
+  "status": "complete",
+  "summary": "T290 implementado: el observer tick corta goals idle con consumo creciente sin progreso util, persiste blocked con goal_high_consumption_without_progress, pide stop cooperativo por run-control y cubre progreso reciente/checkpoint invalido repetido con fakes.",
+  "artifact_refs": [
+    "artifact-ref-t290-goal-progress-governor",
+    "artifact-ref-t290-goal-cooperative-stop-run-control-adapter",
+    "artifact-ref-t290-progress-governor-tests",
+    "artifact-ref-t290-checkpoint-started",
+    "artifact-ref-t290-durable-result",
+    "artifact-ref-t290-backlog-input-verified"
+  ],
+  "artifact_paths": [
+    "cmd/orquesta-server/goal_cooperative_stop_run_control_v0.go",
+    "cmd/orquesta-server/stack.go",
+    "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+    "modulos/orquesta-server/docs/checkpoint_started_t290_goal_high_consumption_without_progress.txt",
+    "modulos/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t290-corte-durante-ejecucion-goal-sin-progreso.json",
+    "modulos/orquesta-server/goal_observation_loop_v0.go",
+    "modulos/orquesta-server/goal_observation_loop_v0_test.go",
+    "modulos/orquesta-server/goal_progress_governor_v0.go",
+    "modulos/orquesta-server/ports_v0.go",
+    "modulos/orquesta-server/runtime_v0.go",
+    "modulos/orquesta-server/state_v0.go",
+    "modulos/orquesta-server/status_public_goal_v0.go",
+    "modulos/orquesta-server/status_tracker_idle_goal_observation_v0.go",
+    "modulos/orquesta-server/status_tracker_idle_shutdown_v0.go",
+    "modulos/orquesta-server/supervisor_idle_goal_observation_v0.go"
+  ],
+  "materialized_artifacts": [
+    {
+      "artifact_ref": "artifact-ref-t290-goal-progress-governor",
+      "path": "modulos/orquesta-server/goal_progress_governor_v0.go",
+      "artifact_type": "implementation",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-goal-progress-governor-observer-tick",
+        "evidence-ref-goal-high-consumption-without-progress-fake-test",
+        "evidence-ref-goal-progress-recent-not-cut-fake-test",
+        "evidence-ref-goal-invalid-checkpoint-repeated-fake-test"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t290-goal-cooperative-stop-run-control-adapter",
+      "path": "cmd/orquesta-server/goal_cooperative_stop_run_control_v0.go",
+      "artifact_type": "adapter",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-goal-cooperative-stop-run-control-adapter",
+        "evidence-ref-required-test-79484b57b75b-passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t290-progress-governor-tests",
+      "path": "modulos/orquesta-server/goal_observation_loop_v0_test.go",
+      "artifact_type": "tests",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-goal-high-consumption-without-progress-fake-test",
+        "evidence-ref-goal-progress-recent-not-cut-fake-test",
+        "evidence-ref-goal-invalid-checkpoint-repeated-fake-test",
+        "evidence-ref-required-test-63efe37057ba-passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t290-checkpoint-started",
+      "path": "modulos/orquesta-server/docs/checkpoint_started_t290_goal_high_consumption_without_progress.txt",
+      "artifact_type": "checkpoint",
+      "status": "valid",
+      "evidence_refs": [
+        "scan-ref-backlog-f670eb385bea",
+        "task-instance-ref-backlog-b1e058e1"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t290-durable-result",
+      "path": "modulos/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t290-corte-durante-ejecucion-goal-sin-progreso.json",
+      "artifact_type": "goal_result",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-orquesta-goal-result-durable-complete"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t290-backlog-input-verified",
+      "path": "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+      "artifact_type": "input_evidence",
+      "status": "valid",
+      "evidence_refs": [
+        "scan-ref-backlog-f670eb385bea",
+        "evidence-ref-backlog-line17-current-sha256-5fd2ea39095b7caa2e4e937c6ca95d334607e2f7a8101ba387a9cd78f89e694f",
+        "evidence-ref-backlog-line17-photo-sha256-02b73f2e19b0a721c139f354b8ce6031882404fec9bb4173a95ea2c53266c339"
+      ],
+      "issues": []
+    }
+  ],
+  "checklist": {
+    "expected_refs": [
+      "criterion-goal-high-consumption-without-progress-blocked",
+      "criterion-recent-useful-progress-not-cut",
+      "criterion-invalid-checkpoint-repeated-no-progress",
+      "criterion-no-new-polling-existing-observer-ticks",
+      "criterion-cooperative-stop-existing-shutdown-path",
+      "required-test-ref-63efe37057ba",
+      "required-test-ref-79484b57b75b",
+      "required-test-ref-c908af756958",
+      "manual-verification-go-build-all",
+      "backlog_scan_ref:scan-ref-backlog-f670eb385bea",
+      "backlog_scan_doc:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:17"
+    ],
+    "completed_refs": [
+      "criterion-goal-high-consumption-without-progress-blocked",
+      "criterion-recent-useful-progress-not-cut",
+      "criterion-invalid-checkpoint-repeated-no-progress",
+      "criterion-no-new-polling-existing-observer-ticks",
+      "criterion-cooperative-stop-existing-shutdown-path",
+      "required-test-ref-63efe37057ba",
+      "required-test-ref-79484b57b75b",
+      "required-test-ref-c908af756958",
+      "manual-verification-go-build-all",
+      "backlog_scan_ref:scan-ref-backlog-f670eb385bea",
+      "backlog_scan_doc:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:17"
+    ],
+    "missing_refs": [],
+    "evidence_refs": [
+      "evidence-ref-required-test-63efe37057ba-passed",
+      "evidence-ref-required-test-79484b57b75b-passed",
+      "evidence-ref-required-test-c908af756958-passed",
+      "evidence-ref-go-build-all-passed",
+      "evidence-ref-git-diff-check-passed",
+      "evidence-ref-backlog-line17-current-sha256-5fd2ea39095b7caa2e4e937c6ca95d334607e2f7a8101ba387a9cd78f89e694f"
+    ]
+  },
+  "required_test_results": [
+    {
+      "test_ref": "required-test-ref-63efe37057ba",
+      "status": "passed",
+      "evidence_refs": [
+        "evidence-ref-required-test-63efe37057ba-passed"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-79484b57b75b",
+      "status": "passed",
+      "evidence_refs": [
+        "evidence-ref-required-test-79484b57b75b-passed"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-c908af756958",
+      "status": "passed",
+      "evidence_refs": [
+        "evidence-ref-required-test-c908af756958-passed"
+      ]
+    }
+  ],
+  "domain_receipt_refs": [],
+  "rework_plan_refs": [],
+  "evidence_refs": [
+    "scan-ref-backlog-f670eb385bea",
+    "task-instance-ref-backlog-b1e058e1",
+    "reservation-ref-backlog-scan-doc-merge-207050f48deb",
+    "reservation-ref-backlog-task-id-00d1ef084582",
+    "task-id-ref-backlog-0157a379c4c9",
+    "evidence-ref-backlog-line17-current-sha256-5fd2ea39095b7caa2e4e937c6ca95d334607e2f7a8101ba387a9cd78f89e694f",
+    "evidence-ref-backlog-line17-photo-sha256-02b73f2e19b0a721c139f354b8ce6031882404fec9bb4173a95ea2c53266c339",
+    "evidence-ref-backlog-photo-hash-mismatch-rebase-note-doc-only",
+    "evidence-ref-goal-progress-governor-observer-tick",
+    "evidence-ref-goal-cooperative-stop-run-control-adapter",
+    "evidence-ref-goal-high-consumption-without-progress-fake-test",
+    "evidence-ref-goal-progress-recent-not-cut-fake-test",
+    "evidence-ref-goal-invalid-checkpoint-repeated-fake-test",
+    "evidence-ref-required-test-63efe37057ba-passed",
+    "evidence-ref-required-test-79484b57b75b-passed",
+    "evidence-ref-required-test-c908af756958-passed",
+    "evidence-ref-go-build-all-passed",
+    "evidence-ref-git-diff-check-passed",
+    "evidence-ref-orquesta-goal-result-durable-complete"
+  ]
+}

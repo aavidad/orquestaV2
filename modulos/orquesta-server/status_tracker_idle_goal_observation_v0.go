@@ -107,12 +107,29 @@ func idleSelfImprovementGoalObservationReasonCodeV0(
 		if strings.TrimSpace(result.Summary) == idleSelfImprovementGoalBackendGoneWithoutResultV0 {
 			return idleSelfImprovementGoalBackendGoneWithoutResultV0
 		}
+		if strings.TrimSpace(result.Summary) == idleSelfImprovementGoalHighConsumptionNoProgressReasonV0 ||
+			goalWorkResultHasIssueCodeV0(result, idleSelfImprovementGoalHighConsumptionNoProgressReasonV0) {
+			return idleSelfImprovementGoalHighConsumptionNoProgressReasonV0
+		}
 		return idleSelfImprovementGoalBlockedReasonV0
 	case orquestagoal.GoalStatusInvalidV0:
 		return idleSelfImprovementGoalInvalidReasonV0
 	default:
 		return idleSelfImprovementGoalInvalidReasonV0
 	}
+}
+
+func goalWorkResultHasIssueCodeV0(result orquestagoal.GoalWorkResultV0, code string) bool {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return false
+	}
+	for _, issue := range result.Issues {
+		if strings.TrimSpace(issue.Code) == code {
+			return true
+		}
+	}
+	return false
 }
 
 func idleSelfImprovementGoalObservedReasonV0(
