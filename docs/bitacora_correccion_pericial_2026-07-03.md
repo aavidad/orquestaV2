@@ -24,10 +24,12 @@ Informe: docs/informe_pericial_claude_orquesta_2026-07-03.md
 | T-PER-302 | bloqueada (dep: 301) | — | — | — |
 | T-PER-401 | BLOQUEADA-POR-WRITE-SET | — | — | — |
 | T-PER-402 | bloqueada (dep: 401) | — | — | — |
-| T-PER-501 | en curso (pilotaje Orquesta) | claude-fable-5 | 2026-07-03 | — |
+| T-PER-501 | **hecho vía Orquesta** (goal T265, Codex) | orquesta+codex, supervisado por claude-fable-5 | 2026-07-03 | scripts integrados y verificados; test `orquesta_metricas_deuda_ok=true`; métricas: env=500, status=16, interfaces=64, director=17 |
 | T-PER-502 | libre (dep: 501) | — | — | — |
 | T-PER-601 | libre | — | — | — |
 | T-PER-701 | libre | — | — | — |
+| T-PER-801 (router contexto híbrido) | libre | — | — | manual §8.5 |
+| BUG write-set prepare (pilotaje) | hecho | claude-fable-5 | 2026-07-03 | commit 13d526d1, tests focales + frontera verdes |
 
 ## Registro cronológico
 
@@ -157,3 +159,36 @@ armado. El resultado del goal queda en el worktree
    `POST /api/v0/server/shutdown` body
    `{"forced":true,"reason":"...","idempotency_key":"..."}` y verificar que
    el PID sale (si no sale: evidencia extra para T-PER-401; matar y anotar).
+
+### 2026-07-03 (cierre del pilotaje) — RESULTADO: T265 completada por Codex vía Orquesta
+
+Segundo intento tras el fix `13d526d1`: **el ciclo completo funcionó**. El
+planner idle recogió T265, el goal se lanzó por `app_server_tmux`, Codex
+escribió `scripts/orquesta_metricas_deuda.sh` y
+`scripts/test_orquesta_metricas_deuda.sh` respetando el `Alcance:` (write-set)
+exacto, con calidad alta (contrato exit-2, `--json`, líneas base, `set -euo
+pipefail`). Verificado por el supervisor: `bash -n` ok, test propio
+`orquesta_metricas_deuda_ok=true`, salida real env=500/status=16/
+interfaces=64/director=17 (status 16 vs 15 de la línea base: diferencia de
+regex aceptable). Scripts integrados a la rama de trabajo.
+
+**BUG NUEVO D (abierto): goal `complete` sin `GoalWorkResultV0` ni validación
+de cierre.** El estado durable quedó `status=complete` con `result` y
+`closure_validation` vacíos; `autoprogramming/status` lo proyecta como
+`goal_first_blocked`/`attention_required` (correcto, no falso verde) pero
+`POST /autoprogramming/goal/observe` devolvió
+`autoprogramming_observe_goal_error` genérico en vez del estado parcial.
+Consecuencia: un goal funcionalmente terminado queda "bloqueado" para siempre
+sin acción clara. Refuerza T-PER-101/105 (el observe debe leer la proyección)
+y sugiere que el prompt/packet goal-first de automejora idle debe exigir el
+marcador `ORQUESTA_GOAL_RESULT_V0`/fichero result como hace el smoke Nueva App.
+
+**Evidencia T-PER-401 (segunda vez, reproducible)**: shutdown forzado →
+`status=backend_still_running`, `shutdown_ready=false`, proceso servidor no
+sale (kill manual), sesión tmux y `codex app-server` residuales (kill manual).
+Reproducido 2 de 2 veces en el pilotaje.
+
+**Balance del pilotaje**: 1 tarea completada de punta a punta por Orquesta,
+4 bugs nuevos encontrados (A arreglado+commiteado, B/C/D abiertos y
+documentados), 2 evidencias reproducibles de shutdown para T-PER-401.
+El dogfooding funciona: seguir usándolo tarea a tarea con esta receta.
