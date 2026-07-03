@@ -18,6 +18,7 @@ const (
 	CodexGoalResultFilePrefixV0         = "orquesta_goal_result_"
 	CodexGoalMaxPromptBytesV0           = 32 * 1024
 	CodexGoalMaxStartPacketBytesV0      = 64 * 1024
+	CodexGoalToolOutputMaxBytesV0       = 16 * 1024
 
 	ErrCodexGoalStarterMissingV0      = "codex_goal_starter_missing"
 	ErrCodexGoalObserverMissingV0     = "codex_goal_observer_missing"
@@ -49,6 +50,23 @@ type CodexGoalStartPacketV0 struct {
 	Budget             orquestagoal.GoalBudgetV0             `json:"budget,omitempty"`
 	ClosurePolicy      orquestagoal.GoalClosurePolicyV0      `json:"closure_policy,omitempty"`
 	ReworkPolicy       orquestagoal.GoalReworkPolicyV0       `json:"rework_policy,omitempty"`
+	DirectionContract  CodexGoalDirectionContractV0          `json:"direction_contract,omitempty"`
+}
+
+type CodexGoalDirectionContractV0 struct {
+	RequireEarlyCheckpoint    bool                                  `json:"require_early_checkpoint,omitempty"`
+	EarlyCheckpointFile       string                                `json:"early_checkpoint_file,omitempty"`
+	ToolOutputPolicy          CodexGoalToolOutputPolicyV0           `json:"tool_output_policy,omitempty"`
+	RequiredTerminalFields    []string                              `json:"required_terminal_fields,omitempty"`
+	AllowedWriteSet           []orquestagoal.GoalWriteScopeV0       `json:"allowed_write_set,omitempty"`
+	RequiredArtifactContracts []orquestagoal.GoalArtifactContractV0 `json:"required_artifact_contracts,omitempty"`
+}
+
+type CodexGoalToolOutputPolicyV0 struct {
+	MaxTextBytes            int      `json:"max_text_bytes,omitempty"`
+	RequireBoundedCommands  bool     `json:"require_bounded_commands,omitempty"`
+	BoundedCommandHints     []string `json:"bounded_command_hints,omitempty"`
+	DurableEvidenceRequired bool     `json:"durable_evidence_required,omitempty"`
 }
 
 type CodexGoalStartReceiptV0 struct {
@@ -130,6 +148,7 @@ func BuildCodexGoalStartPacketV0(spec orquestagoal.GoalWorkSpecV0) (CodexGoalSta
 		Budget:             spec.Budget,
 		ClosurePolicy:      spec.ClosurePolicy,
 		ReworkPolicy:       spec.ReworkPolicy,
+		DirectionContract:  codexGoalDirectionContractV0(spec),
 	}
 	packetBytes, err := json.Marshal(packet)
 	if err != nil {
@@ -145,6 +164,30 @@ func BuildCodexGoalStartPacketV0(spec orquestagoal.GoalWorkSpecV0) (CodexGoalSta
 		}}
 	}
 	return packet, nil
+}
+
+func codexGoalDirectionContractV0(spec orquestagoal.GoalWorkSpecV0) CodexGoalDirectionContractV0 {
+	return CodexGoalDirectionContractV0{
+		RequireEarlyCheckpoint: true,
+		EarlyCheckpointFile:    "checkpoint_started.txt",
+		ToolOutputPolicy: CodexGoalToolOutputPolicyV0{
+			MaxTextBytes:            CodexGoalToolOutputMaxBytesV0,
+			RequireBoundedCommands:  true,
+			BoundedCommandHints:     []string{"head", "tail", "sed -n", "rg --max-count", "rg --files | head"},
+			DurableEvidenceRequired: true,
+		},
+		RequiredTerminalFields: []string{
+			"goal_ref",
+			"schema_version",
+			"status",
+			"artifact_paths",
+			"materialized_artifacts",
+			"checklist",
+			"evidence_refs",
+		},
+		AllowedWriteSet:           append([]orquestagoal.GoalWriteScopeV0(nil), spec.WriteSet...),
+		RequiredArtifactContracts: append([]orquestagoal.GoalArtifactContractV0(nil), spec.ArtifactContracts...),
+	}
 }
 
 func BuildCodexGoalObservationRequestV0(

@@ -938,6 +938,15 @@ active work observado antes del handler y mantiene el estado
 Evidencia:
 `TestRuntimeV0ServerShutdownConflictSinCuerpoConservaSnapshotPrevioActivoV0`.
 
+Avance BUG-ORQ-20260701-079 2026-07-03 tarde 18: el start packet Codex Goal ya
+incluye `direction_contract` estructurado con `require_early_checkpoint`,
+`early_checkpoint_file=checkpoint_started.txt`, `tool_output_policy` con
+`max_text_bytes`, comandos acotados y evidencia durable requerida, ademas de
+campos terminales obligatorios, write-set y artefactos esperados. Esto evita que
+checkpoint temprano y limite de salidas gigantes dependan solo de texto libre de
+prompt. Evidencia:
+`TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y

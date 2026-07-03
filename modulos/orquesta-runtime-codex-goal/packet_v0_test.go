@@ -78,8 +78,23 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		!packet.ReworkPolicy.PreferNewGoal ||
 		packet.Budget.MaxSubgoals != 2 ||
 		len(packet.RequiredTests) != 1 ||
+		!packet.DirectionContract.RequireEarlyCheckpoint ||
+		packet.DirectionContract.EarlyCheckpointFile != "checkpoint_started.txt" ||
+		packet.DirectionContract.ToolOutputPolicy.MaxTextBytes != CodexGoalToolOutputMaxBytesV0 ||
+		!packet.DirectionContract.ToolOutputPolicy.RequireBoundedCommands ||
+		!packet.DirectionContract.ToolOutputPolicy.DurableEvidenceRequired ||
+		len(packet.DirectionContract.AllowedWriteSet) != 1 ||
+		len(packet.DirectionContract.RequiredArtifactContracts) != 1 ||
 		packet.RequiredTests[0].Command != "go test -count=1 ./modulos/orquesta-goal" {
 		t.Fatalf("packet no conserva gobierno: %+v", packet)
+	}
+	for _, want := range []string{"artifact_paths", "materialized_artifacts", "checklist", "evidence_refs"} {
+		if !hasGoalStringForTestV0(packet.DirectionContract.RequiredTerminalFields, want) {
+			t.Fatalf("direction_contract no exige %s: %+v", want, packet.DirectionContract)
+		}
+	}
+	if !hasGoalStringForTestV0(packet.DirectionContract.ToolOutputPolicy.BoundedCommandHints, "rg --max-count") {
+		t.Fatalf("direction_contract sin hints de comandos acotados: %+v", packet.DirectionContract.ToolOutputPolicy)
 	}
 }
 
