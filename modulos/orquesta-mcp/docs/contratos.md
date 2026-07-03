@@ -1639,18 +1639,24 @@ Campos:
     occurred_at, requested_by: metadata opcional
   output_ok:
     estado: ok
+    operation_ref?: referencia de operacion para background/dedupe
     observations?: resultados compactos de observe_goal por run
     issues?: incidencias por run sin cancelar todo el lote
+    next_actions?: acciones de seguimiento para operador o agente
+    diagnostics?: diagnosticos publicos de la pasada
     evidence_refs?: evidencias agregadas
   output_error:
     estado: error
     errores_publicos
+    operation_ref?, next_actions?, diagnostics?, evidence_refs?
 Invariantes:
   - Adaptador inbound fino.
   - Lista estados por `GoalWorkStateListPortV0`.
   - Observa cada `run_ref` con `orquesta.autoprogramming.observe_goal.v0` para
     reutilizar cierre y reconciliacion de composicion.
   - No ejecuta `supervise` legacy ni arranca proveedor.
+  - Si acepta background o falla el executor, conserva `operation_ref`,
+    diagnosticos, evidencias y siguientes acciones en JSON publico.
 ```
 
 ```text

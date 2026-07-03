@@ -1381,6 +1381,12 @@ evidencias de observaciones activas y con los contratos de `observe_goal`.
 Evidencia:
 `TestMCPAutoprogrammingObserveActiveGoalsDescriptorV0DeclaraEvidenciaEnErrores`.
 
+Avance BUG-ORQ-20260701-073/075 2026-07-03 tarde 37b: el mismo descriptor y
+contrato declaran `operation_ref`, `next_actions` y `diagnostics` en salidas
+`ok` y `error`, de modo que los clientes no descartan el handoff de background
+ni el diagnostico publico de observe-active. Evidencia:
+`TestMCPAutoprogrammingObserveActiveGoalsDescriptorV0DeclaraEvidenciaEnErrores`.
+
 Avance BUG-ORQ-20260701-073/075 2026-07-03 tarde 38: el HTTP handler de
 `/api/v0/autoprogramming/goals/observe-active` devuelve diagnostico publico y
 `evidence_refs` estables cuando falla el executor, con mensaje saneado sin

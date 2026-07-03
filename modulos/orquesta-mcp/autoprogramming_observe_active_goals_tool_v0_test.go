@@ -93,7 +93,10 @@ func TestMCPAutoprogrammingObserveActiveGoalsDescriptorV0DeclaraEvidenciaEnError
 		t.Fatalf("descriptor=%+v", descriptor)
 	}
 	if !strings.Contains(descriptor.Output, "evidence_refs?") ||
-		!strings.Contains(descriptor.Output, "error:{errores_publicos,evidence_refs?}") {
+		!strings.Contains(descriptor.Output, "error:{errores_publicos,operation_ref?") ||
+		!strings.Contains(descriptor.Output, "operation_ref?") ||
+		!strings.Contains(descriptor.Output, "next_actions?") ||
+		!strings.Contains(descriptor.Output, "diagnostics?") {
 		t.Fatalf("observe_active_goals debe declarar evidencia en errores: %+v", descriptor)
 	}
 }
