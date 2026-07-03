@@ -161,13 +161,19 @@
   `go test -count=1 ./modulos/orquesta-orchestration-core ./modulos/orquesta-server ./modulos/orquesta-web ./cmd/orquesta-server`.
 - T208 reconciliado requiere la bateria cruzada de guardian, servidor,
   autoprogramacion, worktree y Codex sin promover smokes reales.
-- Prueba manual recomendada:
-  - `go run ./cmd/orquesta-server run`
-  - `curl http://127.0.0.1:8787/healthz`
-  - `curl http://127.0.0.1:8787/api/v0/server/readiness`
-  - `curl http://127.0.0.1:8787/api/v0/server/status`
-  - `curl -i http://127.0.0.1:8787/api/status` solo para validar headers del
+- Prueba manual recomendada para operadores:
+  - `orquesta-server start`
+  - `orquesta-server status --json`
+  - leer la URL efectiva desde `ORQUESTA_RUNTIME_DIR/base_url.txt` o desde la
+    salida del comando gestionado.
+  - `curl "$ORQUESTA_SERVER_URL/healthz"`
+  - `curl "$ORQUESTA_SERVER_URL/api/v0/server/readiness"`
+  - `curl "$ORQUESTA_SERVER_URL/api/v0/server/status"`
+  - `curl -i "$ORQUESTA_SERVER_URL/api/status"` solo para validar headers del
     alias legacy.
+  - `orquesta-server stop`
+  `go run ./cmd/orquesta-server run` queda reservado a harnesses aislados con
+  runtime temporal, loopback y shutdown gobernado por `smoke_shutdown_orquesta_server`.
 - Reconciliacion SRV-TASK-015 2026-06-20 requiere conservar verde:
   `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`.
   Esta prueba valida que la sincronizacion documental del backlog no rompe el

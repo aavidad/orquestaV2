@@ -725,6 +725,13 @@ arranque/estado. Evidencia:
 `TestOPESBridgeLoopConfigUsaBaseURLDeRuntimeGestionadoV0` y guardas del
 registry de env del servidor.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 4: la receta publica de pruebas de
+`modulos/orquesta-server` deja de recomendar `go run ./cmd/orquesta-server run`
+con curls directos a `127.0.0.1:8787`; orienta a `orquesta-server start/status/stop`
+y a consumir la URL gestionada desde `ORQUESTA_RUNTIME_DIR/base_url.txt` o
+`ORQUESTA_SERVER_URL`. Evidencia:
+`TestPruebasServidorNoRecomiendaPuertoHistoricoV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado

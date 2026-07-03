@@ -522,6 +522,29 @@ func TestReadmesOperativosNoRecomiendanRuntimeManualV0(t *testing.T) {
 	}
 }
 
+func TestPruebasServidorNoRecomiendaPuertoHistoricoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "modulos/orquesta-server/docs/pruebas.md")
+	if strings.Contains(text, "curl http://127.0.0.1:8787") {
+		t.Fatalf("pruebas servidor no debe recomendar puerto historico con curl directo")
+	}
+	if strings.Contains(text, "Prueba manual recomendada:\n  - `go run ./cmd/orquesta-server run`") {
+		t.Fatalf("pruebas servidor no debe recomendar runtime manual como camino operativo")
+	}
+	for _, want := range []string{
+		"orquesta-server start",
+		"orquesta-server status --json",
+		"ORQUESTA_RUNTIME_DIR/base_url.txt",
+		"ORQUESTA_SERVER_URL",
+		"orquesta-server stop",
+		"smoke_shutdown_orquesta_server",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("pruebas servidor debe documentar endpoint gestionado: falta %q", want)
+		}
+	}
+}
+
 func TestLauncherOPESA1NoUsaPuertoHistoricoPorDefectoV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/opes_a1_finalpkg_registry_launcher.py")
