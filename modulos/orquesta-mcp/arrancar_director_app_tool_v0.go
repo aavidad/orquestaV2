@@ -49,6 +49,7 @@ type MCPArrancarDirectorAppToolResultV0 struct {
 	RunRef                string                            `json:"run_ref,omitempty"`
 	PhaseID               string                            `json:"phase_id,omitempty"`
 	DirectorExecutionMode string                            `json:"director_execution_mode,omitempty"`
+	LegacySunsetNotice    string                            `json:"legacy_sunset_notice,omitempty"`
 	DirectorTask          MCPDirectorTaskCompactV0          `json:"director_task,omitempty"`
 	DirectorTasks         []MCPDirectorTaskCompactV0        `json:"director_tasks,omitempty"`
 	LoopStatus            string                            `json:"loop_status,omitempty"`
@@ -73,7 +74,7 @@ func MCPArrancarDirectorAppDescriptorV0() MCPArrancarDirectorAppToolDescriptorV0
 		Name:        MCPArrancarDirectorAppToolNameV0,
 		Version:     MCPArrancarDirectorAppToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,respuesta?,director_execution_mode?:goal_first|legacy_director_loop,app_spec_request:AppSpecRequestV0(request_kind?,execution_mode?),max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_external_waits?}",
-		Output:      "ok:{route_policy,app_spec,run_ref,director_execution_mode?,goal_ref?,external_goal_ref?,goal_status?,phase_id?,loop_status?,evidence_refs?}|error:{route_policy,errores_publicos,evidence_refs?}",
+		Output:      "ok:{route_policy,app_spec,run_ref,director_execution_mode?,legacy_sunset_notice?,goal_ref?,external_goal_ref?,goal_status?,phase_id?,loop_status?,evidence_refs?}|error:{route_policy,errores_publicos,evidence_refs?}",
 		ResourceURI: MCPArrancarDirectorAppResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -148,6 +149,7 @@ func NewMCPArrancarDirectorAppResultV0(
 		RunRef:                strings.TrimSpace(result.Run.RunID),
 		PhaseID:               strings.TrimSpace(string(result.Run.CurrentPhase)),
 		DirectorExecutionMode: strings.TrimSpace(result.DirectorExecutionMode),
+		LegacySunsetNotice:    strings.TrimSpace(result.LegacySunsetNotice),
 		DirectorTask: MCPDirectorTaskCompactV0{
 			TaskRef:        strings.TrimSpace(result.DirectorTask.TaskRef),
 			BrainstormRef:  strings.TrimSpace(result.DirectorTask.BrainstormRef),

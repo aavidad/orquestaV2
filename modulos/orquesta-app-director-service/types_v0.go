@@ -26,6 +26,7 @@ const (
 
 	AppDirectorExecutionModeGoalFirstV0          = "goal_first"
 	AppDirectorExecutionModeLegacyDirectorLoopV0 = "legacy_director_loop"
+	AppDirectorLegacyLoopSunsetNoticeV0          = "legacy_director_loop: solo mantenimiento correctivo; sin features nuevas; candidato a retirada cuando goal-first cubra Claude y Gemini (ver T18)"
 )
 
 type StartAppDirectorRequestV0 struct {
@@ -149,6 +150,7 @@ type StartAppDirectorResultV0 struct {
 	SchemaVersion         string                                        `json:"schema_version"`
 	Status                string                                        `json:"status"`
 	DirectorExecutionMode string                                        `json:"director_execution_mode,omitempty"`
+	LegacySunsetNotice    string                                        `json:"legacy_sunset_notice,omitempty"`
 	CorrelationID         string                                        `json:"correlation_id,omitempty"`
 	AppSpec               orquestafactory.AppSpecV0                     `json:"app_spec,omitempty"`
 	Run                   orquestacoreworkflow.OrchestrationRunV0       `json:"run,omitempty"`

@@ -45,6 +45,7 @@ func TestMCPArrancarDirectorAppToolExecutorV0UsaServicioCanonico(t *testing.T) {
 	}
 	if result.Estado != MCPArrancarDirectorAppEstadoOKV0 ||
 		result.DirectorExecutionMode != orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0 ||
+		result.LegacySunsetNotice != orquestaappdirectorservice.AppDirectorLegacyLoopSunsetNoticeV0 ||
 		result.PhaseID != string(orquestacoreworkflow.OrchestrationPhaseBrainstormingArquitecturaV0) ||
 		result.DirectorTask.AgentRequestID == "" ||
 		len(result.DirectorTasks) != 1 ||

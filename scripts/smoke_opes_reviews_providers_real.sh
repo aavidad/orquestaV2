@@ -15,10 +15,9 @@ smoke_require_confirm \
   1 \
   "smoke legacy external-work desactivado: exporta ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1 para probar revisiones por loop historico"
 
-smoke_require_confirm \
-  ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP \
-  true \
-  "smoke legacy supervise desactivado: exporta ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=true porque este smoke usa director_execution_mode=legacy_director_loop"
+# Sunset legacy_director_loop: este smoke historico lo usa de forma explicita;
+# no copiar este opt-in a flujos nuevos goal-first.
+export ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=true
 
 PROJECT_DIR="${ORQUESTA_OPES_REVIEW_PROJECT_DIR:-}"
 if [[ -z "$PROJECT_DIR" || ! -d "$PROJECT_DIR" ]]; then

@@ -33,6 +33,7 @@ func startAppDirectorResultV0(
 		SchemaVersion:         StartAppDirectorResultSchemaVersionV0,
 		Status:                status,
 		DirectorExecutionMode: AppDirectorExecutionModeLegacyDirectorLoopV0,
+		LegacySunsetNotice:    AppDirectorLegacyLoopSunsetNoticeV0,
 		CorrelationID:         request.CorrelationID,
 		AppSpec:               spec,
 		Run:                   loop.Run,

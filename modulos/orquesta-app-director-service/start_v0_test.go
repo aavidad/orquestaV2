@@ -293,6 +293,35 @@ func TestStartAppDirectorV0LegacyDirectorLoopExplicitoNoLanzaGoal(t *testing.T) 
 	}
 }
 
+func TestStartAppDirectorV0LegacyLoopPublicaSunsetNoticeV0(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = AppDirectorExecutionModeLegacyDirectorLoopV0
+
+	result, err := StartAppDirectorV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{
+			RunStore:     store,
+			EventSink:    sink,
+			OutboxLedger: ledger,
+			Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
+				serviceCapacityDispatcherForTestV0(store, sink, ledger),
+				serviceAgentLauncherDispatcherForTestV0(store, sink, ledger),
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("StartAppDirectorV0: %v", err)
+	}
+	if result.DirectorExecutionMode != AppDirectorExecutionModeLegacyDirectorLoopV0 ||
+		result.LegacySunsetNotice != AppDirectorLegacyLoopSunsetNoticeV0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestStartAppDirectorV0GoalFirstLauncherDegradadoNoCaeALoopLegacy(t *testing.T) {
 	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
 	ledger := orquestacionnucleoapp.NewInMemoryOutboxLedgerV0()

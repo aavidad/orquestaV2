@@ -248,7 +248,9 @@ func TestSmokeOPESReviewsProvidersRealExigeOptInLegacyYWorkdirOPESV0(t *testing.
 	for _, want := range []string{
 		"ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP",
 		"ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP",
-		"director_execution_mode=legacy_director_loop",
+		`"director_execution_mode": "legacy_director_loop"`,
+		"Sunset legacy_director_loop",
+		"export ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=true",
 		"ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=true",
 		"repo OPES real",
 		"external/opes/",

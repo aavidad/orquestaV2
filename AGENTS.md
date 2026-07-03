@@ -129,7 +129,9 @@ Tras los cortes del 2026-05-17, el estado real es:
   `orquesta.apps.arrancar_director.v0`, modo vacio significa `goal_first`; si
   falta backend Goal se devuelve `goal_backend_unavailable` y no se cae al loop
   historico. El loop antiguo exige `director_execution_mode=legacy_director_loop`
-  explicito.
+  explicito. Sunset 2026-07-03: `legacy_director_loop` queda solo para
+  mantenimiento correctivo, sin features nuevas, y es candidato a retirada
+  cuando goal-first cubra Claude y Gemini (ver T18).
 
 Orden de autoridad documental:
 
