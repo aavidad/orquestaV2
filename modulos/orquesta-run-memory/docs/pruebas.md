@@ -8,7 +8,9 @@ go test -count=1 ./modulos/orquesta-run-memory
 
 Cobertura v0:
 
-- `PauseRunV0` y `ResumeRunV0` cambian el estado y preservan copias defensivas.
+- `PauseRunV0` y `ResumeRunV0` cambian el estado, conservan evidencias
+  normalizadas como `evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup`
+  y preservan copias defensivas.
 - `StopRunV0` registra `forced` y estado `stop_requested`.
 - `CancelRunV0` registra `forced` y estado `cancel_requested`.
 - `CompleteRunControlV0` marca `stopped/canceled` y rechaza estados no

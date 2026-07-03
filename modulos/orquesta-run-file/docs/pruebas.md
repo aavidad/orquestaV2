@@ -11,6 +11,9 @@ Cobertura v0:
 - `RunFileStoreV0` satisface los puertos esperados.
 - run-control persiste estado terminal y conserva checkpoint al recrear
   instancia.
+- run-control persiste evidencias de `pause`/`resume`, incluida
+  `evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup`,
+  al recrear instancia.
 - run-queue persiste candidatos y prioridades al recrear instancia.
 - run-queue persiste estados terminales escritos por `SetRunPriorityV0` y los
   filtra al recrear instancia.

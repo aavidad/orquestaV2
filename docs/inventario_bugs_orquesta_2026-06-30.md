@@ -946,6 +946,13 @@ duplicados, manteniendo paridad con el conector file-based para pruebas y
 composiciones en memoria. Evidencia:
 `TestRunMemoryStorePauseResumeConservaEvidenciaCleanupExternoV0`.
 
+Avance BUG-ORQ-20260701-065 2026-07-03 tarde 32: la matriz local de pruebas de
+los conectores `orquesta-run-memory` y `orquesta-run-file` documenta ya que
+`pause`/`resume` conservan la evidencia
+`evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup`, de
+modo que el contrato queda visible junto a las pruebas focales de cada
+adaptador.
+
 Avance BUG-ORQ-20260701-085 2026-07-03 tarde 22: `efficiency_summary` conserva
 ahora tambien las acciones compactas de launch write-set: si el goal queda
 invalid por `codex_app_server_write_set_requires_workspace_write`, publica
