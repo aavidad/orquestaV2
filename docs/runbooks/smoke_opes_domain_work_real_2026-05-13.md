@@ -37,11 +37,15 @@ ORQUESTA_OPES_BASE_URL=http://127.0.0.1:18082 \
 ORQUESTA_OPES_TEMPORAL_CONFIRM=1 \
 ORQUESTA_CODEX_MODEL=gpt-5.5 \
 ORQUESTA_CODEX_REASONING_EFFORT=xhigh \
-go run ./cmd/orquesta-server run
+ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \
+orquesta-server start
 ```
 
 Nota: `ORQUESTA_CODEX_RUNTIME_WORKDIR` debe vivir dentro del
 `ORQUESTA_CODEX_PROJECT_WORKDIR` cuando el sandbox es `workspace-write`.
+Tras arrancar, resolver la URL efectiva con `orquesta-server status --json`,
+`ORQUESTA_SERVER_URL` u `ORQUESTA_RUNTIME_DIR/base_url.txt`; no asumir un puerto
+historico para drenar o consultar Orquesta.
 
 ## Script permanente
 

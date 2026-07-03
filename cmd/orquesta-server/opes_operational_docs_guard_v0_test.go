@@ -14,6 +14,7 @@ func TestOPESOperationalDocsGuardV0(t *testing.T) {
 		"modulos/orquesta-server/README.md",
 		"docs/opes_flujo_temario_operativo_2026-06-02.md",
 		"docs/runbooks/smoke_opes_plan_temario_operadores_2026-05-18.md",
+		"docs/runbooks/smoke_opes_domain_work_real_2026-05-13.md",
 	} {
 		text := readOperationalDocGuardV0(t, root, rel)
 		blocks := shellBlocksWithNeedleV0(text, "ORQUESTA_OPES_BASE_URL=")
@@ -29,6 +30,9 @@ func TestOPESOperationalDocsGuardV0(t *testing.T) {
 			}
 			if isEffectfulOPESCommandBlockV0(block) && strings.Contains(block, "go run ./cmd/orquesta-server run") {
 				t.Fatalf("%s bloque OPES con efectos %d usa runtime manual no gestionado:\n%s", rel, i+1, block)
+			}
+			if strings.Contains(block, "go run ./cmd/orquesta-server run") {
+				t.Fatalf("%s bloque OPES %d usa runtime manual no gestionado:\n%s", rel, i+1, block)
 			}
 		}
 	}

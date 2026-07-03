@@ -771,6 +771,13 @@ endpoint gestionado por `orquesta-server status --json`, `ORQUESTA_SERVER_URL`
 o `ORQUESTA_RUNTIME_DIR/base_url.txt`. Evidencia:
 `TestRunbookPanelOpsUsaEndpointGestionadoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 11: el runbook OPES real de
+`domain_work` deja de arrancar Orquesta con `go run ./cmd/orquesta-server run`;
+usa `orquesta-server start` con backend `app_server_tmux` y exige resolver el
+endpoint gestionado antes de consultar o drenar. La guarda OPES cubre tambien
+este runbook y bloquea cualquier bloque OPES que vuelva a publicar el runtime
+manual. Evidencia: `TestOPESOperationalDocsGuardV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado
