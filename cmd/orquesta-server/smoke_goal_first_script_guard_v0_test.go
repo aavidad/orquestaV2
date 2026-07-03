@@ -514,6 +514,35 @@ func TestLauncherOPESA1NoUsaPuertoHistoricoPorDefectoV0(t *testing.T) {
 	}
 }
 
+func TestSmokesOPESRESTDirectosUsanEndpointOrquestaGestionadoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	common := readOperationalDocGuardV0(t, root, "scripts/lib/smoke_common.sh")
+	for _, want := range []string{
+		"smoke_orquesta_base_url_from_env_or_runtime",
+		"ORQUESTA_SERVER_URL",
+		"ORQUESTA_RUNTIME_DIR",
+		"base_url.txt",
+	} {
+		if !strings.Contains(common, want) {
+			t.Fatalf("smoke_common no resuelve endpoint Orquesta gestionado: falta %q", want)
+		}
+	}
+	for _, rel := range []string{
+		"scripts/smoke_opes_domain_work_real.sh",
+		"scripts/smoke_opes_visual_asset_real.sh",
+	} {
+		t.Run(rel, func(t *testing.T) {
+			text := readOperationalDocGuardV0(t, root, rel)
+			if strings.Contains(text, `ORQUESTA_BASE_URL="${ORQUESTA_BASE_URL:-http://127.0.0.1`) {
+				t.Fatalf("%s no debe caer a puerto historico por defecto", rel)
+			}
+			if !strings.Contains(text, `ORQUESTA_BASE_URL="$(smoke_require_orquesta_base_url ORQUESTA_SERVER_URL)"`) {
+				t.Fatalf("%s debe exigir endpoint Orquesta gestionado", rel)
+			}
+		})
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")

@@ -8,7 +8,7 @@ source "$repo_root/scripts/lib/smoke_common.sh"
 smoke_require_confirm ORQUESTA_OPES_DOMAIN_SMOKE_CONFIRM 1 \
   "smoke domain_work real desactivado: exporta ORQUESTA_OPES_DOMAIN_SMOKE_CONFIRM=1"
 
-ORQUESTA_BASE_URL="${ORQUESTA_BASE_URL:-http://127.0.0.1:18787}"
+ORQUESTA_BASE_URL="$(smoke_require_orquesta_base_url ORQUESTA_SERVER_URL)"
 OPES_BASE_URL="${OPES_BASE_URL:-http://127.0.0.1:18082}"
 smoke_require_opes_temporal_destination "$OPES_BASE_URL" "OPES_BASE_URL"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"

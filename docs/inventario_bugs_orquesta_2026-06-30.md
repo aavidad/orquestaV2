@@ -690,6 +690,14 @@ Avance BUG-ORQ-20260701-077 2026-07-02 noche 8: el launcher operador
 `--orquesta-base-url` explicito cuando no hay endpoint gestionado. Evidencia:
 `TestLauncherOPESA1NoUsaPuertoHistoricoPorDefectoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03: los smokes OPES REST directos
+`scripts/smoke_opes_domain_work_real.sh` y
+`scripts/smoke_opes_visual_asset_real.sh` dejan de asumir un puerto Orquesta
+historico por defecto; ahora resuelven endpoint por `ORQUESTA_SERVER_URL`,
+compatibilidad `ORQUESTA_BASE_URL` o `ORQUESTA_RUNTIME_DIR/base_url.txt`, y
+bloquean antes de tocar OPES temporal si no hay endpoint gestionado. Evidencia:
+`TestSmokesOPESRESTDirectosUsanEndpointOrquestaGestionadoV0`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y

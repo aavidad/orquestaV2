@@ -25,6 +25,36 @@ smoke_require_confirm() {
   fi
 }
 
+smoke_orquesta_base_url_from_env_or_runtime() {
+  if [[ -n "${ORQUESTA_SERVER_URL:-}" ]]; then
+    printf '%s\n' "${ORQUESTA_SERVER_URL%/}"
+    return 0
+  fi
+  if [[ -n "${ORQUESTA_BASE_URL:-}" ]]; then
+    printf '%s\n' "${ORQUESTA_BASE_URL%/}"
+    return 0
+  fi
+  if [[ -n "${ORQUESTA_RUNTIME_DIR:-}" && -s "${ORQUESTA_RUNTIME_DIR%/}/base_url.txt" ]]; then
+    local base_url
+    base_url="$(head -n 1 "${ORQUESTA_RUNTIME_DIR%/}/base_url.txt" | tr -d '[:space:]')"
+    if [[ -n "$base_url" ]]; then
+      printf '%s\n' "${base_url%/}"
+      return 0
+    fi
+  fi
+  return 1
+}
+
+smoke_require_orquesta_base_url() {
+  local label="${1:-ORQUESTA_SERVER_URL}"
+  local base_url
+  if ! base_url="$(smoke_orquesta_base_url_from_env_or_runtime)"; then
+    echo "smoke Orquesta bloqueado: define $label o ORQUESTA_RUNTIME_DIR con base_url.txt" >&2
+    exit 2
+  fi
+  printf '%s\n' "$base_url"
+}
+
 smoke_is_local_url() {
   case "$1" in
     http://127.0.0.1|http://127.0.0.1:*|http://localhost|http://localhost:*|http://[::1]|http://[::1]:*)
