@@ -874,6 +874,13 @@ endpoint Orquesta queda fijado por guarda sin fallback al puerto historico
 endpoint gestionado, bloqueo explicito. Evidencia:
 `TestSmokeCommonEndpointGestionadoSinPuertoHistoricoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 23: una guarda generica recorre
+`scripts/*.sh` y falla ante cualquier reintroduccion del puerto historico
+Orquesta `127.0.0.1:8787`/`localhost:8787`. Esto complementa las guardas de
+resolvedor comun y de scripts concretos para que nuevos wrappers no vuelvan a
+asumir un endpoint local fijo. Evidencia:
+`TestScriptsNoAsumenPuertoOrquestaHistoricoV0`.
+
 Avance BUG-ORQ-20260701-085 2026-07-03 tarde 22: `efficiency_summary` conserva
 ahora tambien las acciones compactas de launch write-set: si el goal queda
 invalid por `codex_app_server_write_set_requires_workspace_write`, publica

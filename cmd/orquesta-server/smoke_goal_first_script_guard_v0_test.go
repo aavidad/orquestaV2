@@ -860,6 +860,39 @@ func TestSmokeCommonEndpointGestionadoSinPuertoHistoricoV0(t *testing.T) {
 	}
 }
 
+func TestScriptsNoAsumenPuertoOrquestaHistoricoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	scriptsDir := filepath.Join(root, "scripts")
+	forbidden := []string{
+		"http://127.0.0.1:8787",
+		"http://localhost:8787",
+		"127.0.0.1:8787",
+		"localhost:8787",
+	}
+	err := filepath.WalkDir(scriptsDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".sh" {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		text := readOperationalDocGuardV0(t, root, rel)
+		for _, needle := range forbidden {
+			if strings.Contains(text, needle) {
+				t.Fatalf("%s no debe asumir puerto historico Orquesta: %q", rel, needle)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk scripts: %v", err)
+	}
+}
+
 func TestScriptsConEndpointGestionadoCarganSmokeCommonV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	scriptsDir := filepath.Join(root, "scripts")
