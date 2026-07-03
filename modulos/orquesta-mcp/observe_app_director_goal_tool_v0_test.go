@@ -165,6 +165,44 @@ func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0RequiredTestEviden
 	}
 }
 
+func TestNewMCPObserveAppDirectorGoalPartialResultFromStateV0ConservaLaunchIssueWriteSetReadOnly(t *testing.T) {
+	result, err := NewMCPObserveAppDirectorGoalPartialResultFromStateV0(
+		MCPObserveAppDirectorGoalToolInputV0{RunRef: "run-ref-observe-write-set-read-only-001"},
+		orquestagoal.GoalWorkStateV0{
+			RunRef:  "run-ref-observe-write-set-read-only-001",
+			GoalRef: "goal-ref-observe-write-set-read-only-001",
+			Status:  orquestagoal.GoalStatusInvalidV0,
+			Spec: orquestagoal.GoalWorkSpecV0{
+				RunRef:       "run-ref-observe-write-set-read-only-001",
+				GoalRef:      "goal-ref-observe-write-set-read-only-001",
+				Objective:    "No perder causa del launch invalid.",
+				DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+				WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+			},
+			LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+				GoalRef: "goal-ref-observe-write-set-read-only-001",
+				Status:  orquestagoal.GoalStatusInvalidV0,
+				Issues: []orquestagoal.GoalWorkIssueV0{{
+					Code: mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0,
+				}},
+				EvidenceRefs: []string{"evidence-ref-codex-app-server-write-set-requires-workspace-write"},
+			},
+			EvidenceRefs: []string{"evidence-ref-observe-write-set-read-only-state"},
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("partial: %v", err)
+	}
+	if result.RecommendedAction != mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0 ||
+		len(result.ClosureIssues) != 1 ||
+		result.ClosureIssues[0].Code != mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0 ||
+		!containsStringMCPV0(result.EvidenceRefs, "evidence-ref-codex-app-server-write-set-requires-workspace-write") ||
+		!containsStringMCPV0(result.EvidenceRefs, "evidence-ref-observe-write-set-read-only-state") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestNewMCPObserveAppDirectorGoalResultV0ReworkRunningNoPublicaClosureBloqueada(t *testing.T) {
 	result := NewMCPObserveAppDirectorGoalResultV0(
 		MCPObserveAppDirectorGoalToolInputV0{RunRef: "run-ref-observe-rework-running-001"},

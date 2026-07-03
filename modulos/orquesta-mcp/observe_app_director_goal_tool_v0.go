@@ -148,8 +148,12 @@ func NewMCPObserveAppDirectorGoalPartialResultFromStateV0(
 		GoalRef:               strings.TrimSpace(normalized.GoalRef),
 		ExternalGoalRef:       strings.TrimSpace(normalized.ExternalGoalRef),
 		GoalStatus:            strings.TrimSpace(normalized.Status),
-		EvidenceRefs:          compactStringsMCPV0(normalized.EvidenceRefs),
-		Errores:               []MCPValidationIssueV0{},
+		EvidenceRefs: compactStringsMCPV0(append(
+			normalized.EvidenceRefs,
+			normalized.LaunchReceipt.EvidenceRefs...,
+		)),
+		ClosureIssues: goalWorkIssuesMCPV0(normalized.LaunchReceipt.Issues),
+		Errores:       []MCPValidationIssueV0{},
 	}
 	if normalized.LastResult != nil {
 		toolResult.ResultRef = mcpObserveAppDirectorGoalResultRefV0(*normalized.LastResult)
@@ -241,6 +245,9 @@ func mcpObserveAppDirectorGoalRecommendedActionV0(
 	}
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstRequiredTestEvidenceMissingV0) {
 		return MCPGoalFirstRepairReceiptActionV0
+	}
+	if mcpObserveAppDirectorGoalHasIssueV0(result, mcpAutoprogrammingActionWriteSetRequiresWorkspaceWriteV0) {
+		return mcpQueueGlobalStatusActionConfigureWorkspaceWriteSandboxV0
 	}
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstPhase0CompleteNonPublishableV0) {
 		return MCPGoalFirstContinueFromPhase0ActionV0
