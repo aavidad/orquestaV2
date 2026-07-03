@@ -23,6 +23,15 @@ trabaja media hora alrededor del bloqueo ni se convierte la excepcion en nuevo
 flujo normal. Gemini y Claude se usan como revisores compactos cuando aporten
 valor, no como lectores de contexto bruto completo salvo necesidad justificada.
 
+Regla de paralelizacion por defecto (decision del propietario 2026-07-03):
+todo trabajo dirigido por Orquesta se paraleliza al maximo posible para
+terminar cuanto antes. El director descompone en tareas con write-sets
+disjuntos y las lanza en paralelo (instancias/goals separados); solo se
+serializa lo que comparte write-set o tiene dependencia causal declarada.
+Una cola secuencial de tareas paralelizables es una desviacion, no una
+preferencia estilistica. La disciplina de verificacion e integracion por
+tarea no se relaja por paralelizar.
+
 Tras los cortes del 2026-05-17, el estado real es:
 
 - `modulos/orquesta-director-operativo` existe como contrato puro del Director

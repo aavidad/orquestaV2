@@ -1157,6 +1157,11 @@ func TestOperationalDocsRuntimeManualMentionsAreHistoricalOrHarnessV0(t *testing
 			if rel == "docs/inventario_bugs_orquesta_2026-06-30.md" {
 				return nil
 			}
+			// docs/historico/ es archivo historico por definicion (T272):
+			// su INDICE declara el contexto; no exige clasificacion por fila.
+			if strings.HasPrefix(filepath.ToSlash(rel), "docs/historico/") {
+				return nil
+			}
 			text := readOperationalDocGuardV0(t, root, rel)
 			hasMention := false
 			for _, needle := range needles {

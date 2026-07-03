@@ -225,3 +225,20 @@ integrado como `757fef2b`: 29 históricos movidos a `docs/historico/2026-06/`
 con INDICE y resúmenes, raíz sin TAREA_OPES_*/HANDOFF_*/*.test, `.gitignore`
 cubre `*.test`, build limpio. Instancia T272 apagada (la sesión tmux del
 backend de T270 sigue viva, no tocar hasta su terminal).
+
+### 2026-07-03 (noche) — T270 integrada: BUG-ORQ-20260703-150 cerrado
+
+T270 vía Orquesta completó T-PER-301/302: 19 ficheros legacy borrados de
+`cmd/`, fachada fina + wiring test únicos restantes,
+`recolector_observacion_backend_v0.go` como único punto con
+has-session/pane_pid, `TransicionBackendV0` gobernando el ciclo. Verificado
+en worktree y en main: módulo + suite completa `cmd` + fronteras verdes.
+La integración rompió el guard documental
+`TestOperationalDocsRuntimeManualMentionsAreHistoricalOrHarnessV0` por
+interacción con T272; arreglado eximiendo `docs/historico/` por ruta.
+Matiz de monitoreo: el run de T270 desapareció de `active_runs` al terminar
+en vez de quedar terminal visible (variante del BUG D, añadir al inventario).
+Nueva regla de contrato en `AGENTS.md`: paralelización por defecto.
+Cola pendiente: T-PER-901 (ya sin conflicto de write-set), CTX-TASK-801A..D,
+BUG D (result formal de goals idle), filas de inventario para bugs B/C/D.
+Instancias de pilotaje apagadas; ramas `pericial/pilot-*` conservan evidencia.
