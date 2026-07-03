@@ -1623,6 +1623,15 @@ manteniendo visible por que un shutdown queda en `active_goals_present`,
 `backend_still_running` o `stop_pending` sin leer logs. Evidencia:
 `TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0`.
 
+Avance BUG-ORQ-20260701-065/076/088 2026-07-03 tarde 61:
+`orquesta.server.shutdown.v0` devolvia `checkpoints_pending` y los runbooks lo
+describian, pero el descriptor compacto solo declaraba agentes pendientes y
+deadlines expirados. El descriptor publica ahora tambien
+`checkpoints_pending`, de modo que clientes MCP/REST pueden distinguir backlog
+de checkpoints global de refs de agentes concretos antes de decidir wait,
+repost o stop final. Evidencia:
+`TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
