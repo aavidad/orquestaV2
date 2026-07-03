@@ -635,8 +635,9 @@ publica como `POST /api/v0/server/shutdown`. El proceso servidor solo debe
 recibir senal final cuando `shutdown_ready=true`.
 Actualizacion 2026-07-03: el contrato publico conserva `evidence_refs` en
 errores y expone conflictos vivos `active_goals_present`/
-`backend_still_running` como HTTP 409 JSON con `active_works`, para que los
-clientes no pierdan handoff de shutdown ni limpien backends Goal sin causa.
+`backend_still_running`, ademas de `stop_pending` como estado no terminal, para
+que los clientes no pierdan handoff de shutdown ni limpien backends Goal sin
+causa.
 Contratos afectados: mcp.tool.orquesta.server.shutdown.v0,
 orquesta://contracts/server-shutdown/v0, /api/v0/server/shutdown.
 Estado: aceptada localmente.

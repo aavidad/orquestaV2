@@ -1315,6 +1315,13 @@ venia en el error `shutdown_not_ready`, pero no en el estado publico posterior.
 Evidencia: `TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado`
 y `TestShutdownClientReadyV0NoSaltaStatusConflictoSinContadoresV0`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 33e: el descriptor y docs de
+`orquesta.server.shutdown.v0` declaran `stop_pending` como estado publico no
+terminal junto a `waiting_drain`, `waiting_checkpoint`, `active_goals_present`
+y `backend_still_running`. Asi clientes MCP/REST compactos no tratan ese estado
+como legacy desconocido ni autorizan senal local por omision. Evidencia:
+`TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 34: el transporte MCP de
 `orquesta.runs.supervisor.v0` tambien conserva `operation_ref`,
 `evidence_refs` estables y diagnostico `run_supervisor_execute_error` cuando el

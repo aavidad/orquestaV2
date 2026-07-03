@@ -1393,7 +1393,7 @@ Campos:
     requested_by, reason, idempotency_key, evidence_refs: auditoria compacta
   output_ok:
     estado: ok
-    status: ready | waiting_drain | waiting_checkpoint |
+    status: ready | waiting_drain | waiting_checkpoint | stop_pending |
       active_goals_present | backend_still_running
     shutdown_ready: true solo si todos los runs objetivo estan listos
     runs_requested, runs_stopped, agents_in_flight, checkpoints_pending,
