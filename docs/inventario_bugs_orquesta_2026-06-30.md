@@ -1223,6 +1223,15 @@ checkpoint, cleanup o shutdown gobernado antes de llegar al caso de uso.
 Evidencia: `TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0` y
 `TestMCPServerShutdownToolExecutorV0ErrorConservaEvidenciaV0`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 32b: el cliente
+`orquesta-server stop` ya no interpreta `runs=0/0` y ausencia de contadores como
+estado drenado si el `status` explicito del shutdown sigue siendo
+`backend_still_running`, `active_goals_present`, `waiting_drain` o
+`waiting_checkpoint`. El atajo de cierre por runs drenadas queda limitado a
+status terminal/compatible (`ready`, `stopped`, `handoff_ready` o vacio legacy),
+evitando una senal local prematura ante cuerpos parciales de conflicto.
+Evidencia: `TestShutdownClientReadyV0NoSaltaStatusConflictoSinContadoresV0`.
+
 Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 33: los transportes HTTP y MCP
 de `server.shutdown` quedan cubiertos para errores de executor: ambos devuelven
 mensaje publico saneado sin rutas/tokens y conservan `evidence_refs` compactas

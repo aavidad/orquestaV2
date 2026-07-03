@@ -26,15 +26,25 @@ func shutdownClientResultCanWaitV0(result serverShutdownClientResultV0) bool {
 func shutdownClientResultReadyForSignalV0(result serverShutdownClientResultV0) bool {
 	noBlockingWork := shutdownClientResultHasNoBlockingWorkV0(result)
 	return (result.ShutdownReady && noBlockingWork) ||
-		(noBlockingWork && result.RunsRequested <= result.RunsStopped)
+		(noBlockingWork && shutdownClientStatusAllowsDrainedReadyV0(result.Status) && result.RunsRequested <= result.RunsStopped)
 }
 
 func shutdownPublicStatusReadyForSignalV0(status orquestaserver.ServerPublicStatusV0) bool {
 	noBlockingWork := shutdownPublicStatusHasNoBlockingWorkV0(status)
 	return (status.ShutdownReady && noBlockingWork) ||
 		(status.ShutdownInProgress &&
+			shutdownClientStatusAllowsDrainedReadyV0(status.ShutdownStatus) &&
 			noBlockingWork &&
 			status.ShutdownRunsRequested <= status.ShutdownRunsStopped)
+}
+
+func shutdownClientStatusAllowsDrainedReadyV0(status string) bool {
+	switch strings.TrimSpace(status) {
+	case "", "ready", "stopped", "handoff_ready":
+		return true
+	default:
+		return false
+	}
 }
 
 func shutdownClientResultHasNoBlockingWorkV0(result serverShutdownClientResultV0) bool {

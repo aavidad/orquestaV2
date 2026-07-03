@@ -756,6 +756,29 @@ func TestShutdownClientReadyV0NoSaltaTrabajoPendienteAunqueReadyV0(t *testing.T)
 	}
 }
 
+func TestShutdownClientReadyV0NoSaltaStatusConflictoSinContadoresV0(t *testing.T) {
+	for _, status := range []string{"backend_still_running", "active_goals_present", "waiting_drain", "waiting_checkpoint"} {
+		result := serverShutdownClientResultV0{
+			Status:        status,
+			RunsRequested: 0,
+			RunsStopped:   0,
+		}
+		if shutdownClientResultReadyForSignalV0(result) {
+			t.Fatalf("result status=%s no debe permitir signal por runs 0/0", status)
+		}
+
+		publicStatus := orquestaserver.ServerPublicStatusV0{
+			ShutdownInProgress:    true,
+			ShutdownStatus:        status,
+			ShutdownRunsRequested: 0,
+			ShutdownRunsStopped:   0,
+		}
+		if shutdownPublicStatusReadyForSignalV0(publicStatus) {
+			t.Fatalf("public status=%s no debe permitir signal por runs 0/0", status)
+		}
+	}
+}
+
 func TestShutdownClientNotReadyErrorV0IncluyeRefsActiveWorkCompactas(t *testing.T) {
 	err := shutdownClientNotReadyErrorV0(serverShutdownClientResultV0{
 		Status:          "ready",
