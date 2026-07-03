@@ -240,16 +240,17 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	result.Tasks = buildMCPAutoprogrammingTasksV0(result.Run, goalFirstRunRefs)
 	result.Agents = buildMCPAutoprogrammingAgentsV0(result.Run, goalFirstRunRefs)
 	result.QueueHealth = buildMCPAutoprogrammingQueueHealthV0(result.Queue, goalStatesByRunRef, goalRunMarkersByRunRef, healthRun, healthObservedRuns...)
+	observedByRunRef := mcpAutoprogrammingObservedRunsByRefV0(healthRun, healthObservedRuns...)
 	result.QueueHealth = applyEstadoVivoToQueueHealthMCPAutoprogrammingV0(
 		result.QueueHealth,
 		estadoVivo,
 		result.Queue,
 		goalStatesByRunRef,
 		goalRunMarkersByRunRef,
+		observedByRunRef,
 	)
 	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, goalStatesByRunRef, goalRunMarkersByRunRef, healthRun, healthObservedRuns...)
 	result.StaleRunning = append(result.StaleRunning, staleRunningFromEstadoVivoMCPAutoprogrammingV0(estadoVivo)...)
-	observedByRunRef := mcpAutoprogrammingObservedRunsByRefV0(healthRun, healthObservedRuns...)
 	blockedGoalActions, resolvedGoalActions := mcpAutoprogrammingGoalFirstBlockedActionsV0(
 		goalStates,
 		observedByRunRef,

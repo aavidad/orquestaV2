@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestMCPQueueGlobalStatusHTTPHandlerV0GetProyectaEstadoCompacto(t *testing.T) {
@@ -170,6 +173,95 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0WillFinishAloneSinAccionPendiente(t *t
 	item := mcpQueueGlobalStatusItemForTestV0(result.Items, "run-ref-global-status-live-001")
 	if item.NoActionReason != "running_live_wait_processes" {
 		t.Fatalf("item sin razon estable de no accion: %+v", item)
+	}
+}
+
+func TestMCPQueueGlobalStatusHTTPHandlerV0DerivaVidaDesdeProyeccionV0(t *testing.T) {
+	runRef := "run-ref-global-status-estado-vivo-001"
+	queue := &fakeMCPAutoprogrammingQueueStatusV0{
+		ranked: []MCPRunQueueRankedCandidateCompactV0{{
+			Rank:         1,
+			RunRef:       runRef,
+			AppRef:       "app-ref-global-status-estado-vivo-001",
+			Status:       "running",
+			EvidenceRefs: []string{"evidence-ref-queue-estado-vivo-001"},
+		}},
+	}
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		statsByRun: map[string]*orquestacionnucleoapp.DirectorRunStatsV0{
+			runRef: {
+				RunRef:     runRef,
+				ProjectRef: "app-ref-global-status-estado-vivo-001",
+				Status:     "running",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					TasksTotal:     1,
+					AgentsInFlight: 1,
+				},
+				Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+					TasksTotal:        1,
+					PercentComplete:   50,
+					ProgressingAgents: 1,
+				},
+				Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
+					Status: orquestacionnucleoapp.DirectorClosureStatusReadyV0,
+				},
+				Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{
+					AgentRequestID: "agent-ref-global-status-estado-vivo-001",
+					Status:         orquestacionnucleoapp.DirectorAgentStatusRunningV0,
+					InFlight:       true,
+					LastProgress: &orquestacionnucleoapp.DirectorAgentProgressV0{
+						Status: "progressing",
+					},
+					Process: &orquestacionnucleoapp.DirectorAgentProcessStatsV0{
+						ProcessRef: "process-ref-global-status-estado-vivo-001",
+						Status:     orquestacionnucleoapp.DirectorAgentProcessStatusRunningV0,
+					},
+				}},
+			},
+		},
+	}
+	estadoVivo := &fakeMCPAutoprogrammingEstadoVivoSourceV0{
+		evidencias: []orquestaestadovivo.EvidenciaEstadoV0{{
+			RunRef:       runRef,
+			Fuente:       "process_snapshot",
+			ProcesoVivo:  true,
+			ObservadoEn:  "2026-07-03T09:59:00Z",
+			EvidenceRefs: []string{"evidence-ref-estado-vivo-running-live-001"},
+		}},
+	}
+	executor := MCPAutoprogrammingStatusToolExecutorV0{
+		Queue:            queue,
+		Stats:            stats,
+		EstadoVivoSource: estadoVivo,
+	}
+	req := httptest.NewRequest(
+		http.MethodGet,
+		MCPQueueGlobalStatusHTTPPathV0+"?occurred_at=2026-07-03T10:00:00Z",
+		nil,
+	)
+	rec := httptest.NewRecorder()
+
+	NewMCPQueueGlobalStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPQueueGlobalStatusResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.SchemaVersion != MCPQueueGlobalStatusSchemaVersionV0 ||
+		result.Estado != MCPAutoprogrammingStatusEstadoOKV0 ||
+		result.Summary.RunningLive != 1 ||
+		result.Summary.NeedsAttention ||
+		result.Summary.NeedsAction ||
+		!result.Summary.WillFinishAlone ||
+		!hasMCPQueueGlobalStatusItemForTestV0(result.Items, runRef, "running_live", false, "") {
+		t.Fatalf("result=%+v", result)
+	}
+	item := mcpQueueGlobalStatusItemForTestV0(result.Items, runRef)
+	if item.NoActionReason != "running_live_wait_processes" {
+		t.Fatalf("item=%+v", item)
 	}
 }
 

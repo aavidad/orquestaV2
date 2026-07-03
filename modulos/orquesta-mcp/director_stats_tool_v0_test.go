@@ -7,6 +7,7 @@ import (
 
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -298,6 +299,124 @@ func TestMCPDirectorStatsToolExecutorV0GoalFirstAceptadoCierraStats(t *testing.T
 		result.Stats.Closure.Ready ||
 		result.Stats.Closure.Blocked {
 		t.Fatalf("goal=%+v stats=%+v", result.Goal, result.Stats)
+	}
+}
+
+func TestMCPDirectorStatsToolExecutorV0DerivaVidaDesdeProyeccionV0(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-estado-vivo-001")
+	run.Tasks = []string{"task-ref-stats-estado-vivo-001"}
+	run.ClosedTasks = []string{"task-ref-stats-estado-vivo-001"}
+	run.DeliveredTasks = []string{"task-ref-stats-estado-vivo-001"}
+	run.Agents = nil
+	run.StartedAgents = nil
+	run.Deliveries = []string{"delivery-ref-stats-estado-vivo-001"}
+	estadoVivo := &fakeMCPAutoprogrammingEstadoVivoSourceV0{
+		evidencias: []orquestaestadovivo.EvidenciaEstadoV0{{
+			RunRef:       run.RunID,
+			Fuente:       "process_snapshot",
+			ProcesoVivo:  true,
+			ObservadoEn:  "2026-07-03T09:59:00Z",
+			EvidenceRefs: []string{"evidence-ref-estado-vivo-process-live-001"},
+		}},
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:         orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		EstadoVivoSource: estadoVivo,
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{
+		RunRef:     run.RunID,
+		OccurredAt: "2026-07-03T10:00:00Z",
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.Stats == nil ||
+		result.Stats.Status != mcpDirectorStatsEstadoVivoProcesoVivoV0 ||
+		result.Stats.Progress.PercentComplete >= 100 ||
+		result.Stats.Closure.Status != orquestacionnucleoapp.DirectorClosureStatusBlockedV0 ||
+		!result.Stats.Closure.Blocked ||
+		result.Stats.Closure.Closed ||
+		!containsStringMCPTestV0(result.Stats.Closure.BlockedBy, mcpDirectorStatsEstadoVivoProcesoVivoV0) ||
+		!containsStringMCPTestV0(result.Stats.Closure.BlockerRefs, "evidence-ref-estado-vivo-process-live-001") {
+		t.Fatalf("stats=%+v", result.Stats)
+	}
+	if len(estadoVivo.inputs) != 1 ||
+		estadoVivo.inputs[0].RunRef != run.RunID ||
+		estadoVivo.inputs[0].Limit != mcpDirectorStatsEstadoVivoEvidenceLimitV0 {
+		t.Fatalf("estado vivo inputs=%+v", estadoVivo.inputs)
+	}
+	if result.OpsSnapshot == nil ||
+		result.OpsSnapshot.Decision.Action != orquestaobservability.DirectorAutonomousOpsActionReviewReplanV0 ||
+		!result.OpsSnapshot.Decision.Attention {
+		t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
+	}
+}
+
+func TestMCPDirectorStatsToolExecutorV0ConflictoEstadoVivoNuncaProyectaVerdeV0(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-estado-vivo-conflict-001")
+	run.Tasks = []string{"task-ref-stats-estado-vivo-conflict-001"}
+	run.ClosedTasks = []string{"task-ref-stats-estado-vivo-conflict-001"}
+	run.DeliveredTasks = []string{"task-ref-stats-estado-vivo-conflict-001"}
+	run.Agents = nil
+	run.StartedAgents = nil
+	run.Deliveries = []string{"delivery-ref-stats-estado-vivo-conflict-001"}
+	state := mcpDirectorGoalStateForTestV0(run.RunID)
+	state.Status = orquestagoal.GoalStatusCompleteV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+		Status:        orquestagoal.GoalStatusCompleteV0,
+		GoalRef:       state.GoalRef,
+		EvidenceRefs:  []string{"evidence-ref-goal-result-accepted-before-conflict"},
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:       orquestagoal.GoalStatusAcceptedV0,
+		Accepted:     true,
+		EvidenceRefs: []string{"evidence-ref-goal-closure-accepted-before-conflict"},
+	}
+	estadoVivo := &fakeMCPAutoprogrammingEstadoVivoSourceV0{
+		evidencias: []orquestaestadovivo.EvidenciaEstadoV0{{
+			RunRef:       run.RunID,
+			Fuente:       "process_snapshot",
+			ProcesoVivo:  true,
+			ObservadoEn:  "2026-07-03T09:59:00Z",
+			EvidenceRefs: []string{"evidence-ref-estado-vivo-process-live-conflict"},
+		}, {
+			RunRef:       run.RunID,
+			Fuente:       "receipt",
+			Terminal:     true,
+			Aceptado:     true,
+			ObservadoEn:  "2026-07-03T09:58:00Z",
+			EvidenceRefs: []string{"evidence-ref-estado-vivo-terminal-accepted-conflict"},
+		}},
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:         orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		GoalStateSource:  mcpDirectorGoalStateSourceForTestV0{State: state},
+		EstadoVivoSource: estadoVivo,
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{
+		RunRef:     run.RunID,
+		OccurredAt: "2026-07-03T10:00:00Z",
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.Stats == nil ||
+		result.Stats.Status != mcpDirectorStatsEstadoVivoConflictoV0 ||
+		result.Stats.Progress.PercentComplete >= 100 ||
+		result.Stats.Closure.Status != orquestacionnucleoapp.DirectorClosureStatusBlockedV0 ||
+		!result.Stats.Closure.Blocked ||
+		result.Stats.Closure.Closed ||
+		!containsStringMCPTestV0(result.Stats.Closure.BlockedBy, mcpDirectorStatsEstadoVivoConflictoV0) ||
+		!mcpDirectorStatsProgressIssueExistsV0(result.Stats.Progress.Issues, mcpDirectorStatsEstadoVivoConflictoV0) {
+		t.Fatalf("goal=%+v stats=%+v", result.Goal, result.Stats)
+	}
+	if result.OpsSnapshot == nil ||
+		result.OpsSnapshot.Decision.Action != orquestaobservability.DirectorAutonomousOpsActionReviewReplanV0 ||
+		result.OpsSnapshot.Decision.ReasonCode != "attention_required" {
+		t.Fatalf("ops_snapshot=%+v", result.OpsSnapshot)
 	}
 }
 

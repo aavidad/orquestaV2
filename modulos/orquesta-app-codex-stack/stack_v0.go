@@ -107,6 +107,7 @@ func buildStackMCPTransportBindingsV0(
 		Source: "orquesta-app-codex-stack",
 		Reason: "run creado desde director app",
 	})
+	estadoVivoSource := estadoVivoSourceV0(config)
 	directorStats := orquestamcp.MCPDirectorStatsToolExecutorV0{
 		RunStore:          config.Stores.RunStore,
 		RunControl:        config.Stores.RunControl,
@@ -114,6 +115,7 @@ func buildStackMCPTransportBindingsV0(
 		ProcessSnapshot:   config.Codex.SnapshotSource,
 		ProgressSource:    statsProgressSourceV0(config),
 		AgentUsageSource:  agentUsageSourceV0(config),
+		EstadoVivoSource:  estadoVivoSource,
 		ExternalJobSource: externalJobStatsSourceV0(config),
 		GoalStateSource:   config.Stores.AppGoalStateStore,
 		GoalMarkerSource:  appGoalFirstRunMarkerStoreV0(config),
@@ -124,7 +126,6 @@ func buildStackMCPTransportBindingsV0(
 			RepairMissingTerminalReceipt: true,
 		},
 	}
-	estadoVivoSource := estadoVivoSourceV0(config)
 	return orquestamcp.MCPTransportBindingsV0{
 		ArrancarDirector: arrancar,
 		PreviewDirector:  orquestamcp.NewMCPPreviewDirectorAppToolExecutorV0(),

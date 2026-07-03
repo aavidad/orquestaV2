@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -151,6 +152,7 @@ type MCPDirectorStatsToolExecutorV0 struct {
 	ProcessSnapshot            orquestacionnucleoapp.ProcessRuntimeIdentitySnapshotPortV0
 	ProgressSource             orquestacionnucleoapp.AgentProgressObservationProviderPortV0
 	AgentUsageSource           orquestacionnucleoapp.AgentUsageStatsProviderPortV0
+	EstadoVivoSource           orquestaestadovivo.FuenteEvidenciaEstadoPortV0
 	ExternalJobSource          MCPDirectorExternalJobStatsSourcePortV0
 	GoalStateSource            MCPDirectorGoalStateSourcePortV0
 	GoalMarkerSource           MCPDirectorGoalRunMarkerSourcePortV0
@@ -261,6 +263,7 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 	enrichMCPDirectorStatsExternalWorkNoAgentMaterializedV0(&stats)
 	goal := executor.resolveGoalStatsV0(ctx, stats.RunRef)
 	applyMCPDirectorGoalRunProjectionV0(goal, &stats)
+	executor.applyEstadoVivoProjectionV0(ctx, input, &stats)
 	decisionContext := buildMCPDirectorDecisionContextV0(run, stats, input.OccurredAt)
 	return MCPDirectorStatsToolResultV0{
 		Estado:          MCPDirectorStatsEstadoOKV0,

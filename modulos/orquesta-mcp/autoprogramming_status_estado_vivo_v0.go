@@ -7,6 +7,8 @@ import (
 
 	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
+	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 )
 
 const (
@@ -130,6 +132,7 @@ func applyEstadoVivoToQueueHealthMCPAutoprogrammingV0(
 	queue *MCPRunQueuePriorityToolResultV0,
 	goalStatesByRunRef map[string]orquestagoal.GoalWorkStateV0,
 	goalRunMarkersByRunRef map[string]orquestagoal.GoalWorkRunMarkerV0,
+	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
 ) *MCPAutoprogrammingQueueHealthV0 {
 	if projection == nil || len(projection.Nodos) == 0 {
 		return health
@@ -152,6 +155,11 @@ func applyEstadoVivoToQueueHealthMCPAutoprogrammingV0(
 				classifyMCPAutoprogrammingQueuedRunHealthV0(candidate, goalStatesByRunRef, goalRunMarkersByRunRef),
 				-1,
 			)
+		}
+		if observed := observedByRunRef[strings.TrimSpace(node.RunRef)]; observed != nil && observed.Stats != nil {
+			for _, class := range healthClassesFromRunStatsMCPAutoprogrammingV0(*observed.Stats) {
+				applyMCPAutoprogrammingHealthClassV0(health, class, -1)
+			}
 		}
 		applyMCPAutoprogrammingHealthClassV0(health, healthClassFromEstadoVivoMCPAutoprogrammingV0(node.Fase), 1)
 	}
@@ -181,6 +189,42 @@ func healthClassFromEstadoVivoMCPAutoprogrammingV0(
 	default:
 		return mcpAutoprogrammingHealthUnclassifiedV0
 	}
+}
+
+func healthClassesFromRunStatsMCPAutoprogrammingV0(
+	stats orquestacionnucleoapp.DirectorRunStatsV0,
+) []string {
+	classes := make([]string, 0, 3)
+	liveness := mcpAutoprogrammingRunLivenessV0(stats)
+	if stats.Counts.AgentsFailed > 0 {
+		classes = append(classes, mcpAutoprogrammingHealthFailedV0)
+	}
+	if stats.Counts.AgentsLost > 0 {
+		classes = append(classes, mcpAutoprogrammingHealthLostV0)
+	}
+	if stats.Closure.Blocked {
+		classes = append(classes, mcpAutoprogrammingHealthBlockedV0)
+	}
+	if liveness.Class == orquestaruncoordinator.RunLivenessClassRunningLiveV0 {
+		return append(classes, mcpAutoprogrammingHealthRunningLiveV0)
+	}
+	if stats.Counts.AgentsInFlight > 0 {
+		switch liveness.Class {
+		case orquestaruncoordinator.RunLivenessClassRunningWithoutRecentStatsV0:
+			return append(classes, mcpAutoprogrammingHealthRunningWithoutRecentStatsV0)
+		case orquestaruncoordinator.RunLivenessClassRunningStaleNoProcessV0:
+			return append(classes, mcpAutoprogrammingHealthRunningStaleNoProcessV0)
+		default:
+			return append(classes, mcpAutoprogrammingHealthRunningWithoutRecentStatsV0)
+		}
+	}
+	if stats.Closure.Closed || mcpAutoprogrammingRunStatusCompletedV0(stats.Status) {
+		return append(classes, mcpAutoprogrammingHealthCompletedV0)
+	}
+	if stats.Counts.AgentsFailed == 0 && stats.Counts.AgentsLost == 0 && !stats.Closure.Blocked {
+		classes = append(classes, mcpAutoprogrammingHealthUnclassifiedV0)
+	}
+	return classes
 }
 
 func staleRunningFromEstadoVivoMCPAutoprogrammingV0(
