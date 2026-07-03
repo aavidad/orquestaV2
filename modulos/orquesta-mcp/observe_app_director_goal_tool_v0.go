@@ -218,6 +218,9 @@ func mcpObserveAppDirectorGoalResultRefV0(result orquestagoal.GoalWorkResultV0) 
 func mcpObserveAppDirectorGoalRecommendedActionV0(
 	result MCPObserveAppDirectorGoalToolResultV0,
 ) string {
+	if mcpObserveAppDirectorGoalHasEvidenceV0(result, mcpAutoprogrammingEvidenceCodexAppServerThreadOutputSanitizedV0) {
+		return mcpQueueGlobalStatusActionReplanNarrowContextV0
+	}
 	status := strings.TrimSpace(result.GoalStatus)
 	switch status {
 	case orquestagoal.GoalStatusRunningV0, orquestagoal.GoalStatusAcceptedV0:
@@ -290,6 +293,13 @@ func mcpObserveAppDirectorGoalHasIssueV0(
 	code string,
 ) bool {
 	return mcpObserveAppDirectorGoalHasClosureIssueCodeV0(result.ClosureIssues, code)
+}
+
+func mcpObserveAppDirectorGoalHasEvidenceV0(
+	result MCPObserveAppDirectorGoalToolResultV0,
+	ref string,
+) bool {
+	return containsStringMCPV0(result.EvidenceRefs, ref)
 }
 
 func mcpObserveAppDirectorGoalHasClosureIssueCodeV0(

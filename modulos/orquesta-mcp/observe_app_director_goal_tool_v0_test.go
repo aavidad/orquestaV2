@@ -203,6 +203,34 @@ func TestNewMCPObserveAppDirectorGoalPartialResultFromStateV0ConservaLaunchIssue
 	}
 }
 
+func TestNewMCPObserveAppDirectorGoalResultV0OutputSaneadoPideContextoAcotado(t *testing.T) {
+	result := NewMCPObserveAppDirectorGoalResultV0(
+		MCPObserveAppDirectorGoalToolInputV0{RunRef: "run-ref-observe-thread-output-sanitized-001"},
+		orquestaappdirectorservice.ObserveAppDirectorGoalResultV0{
+			Status:                orquestagoal.GoalStatusRunningV0,
+			DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0,
+			RunRef:                "run-ref-observe-thread-output-sanitized-001",
+			GoalRef:               "goal-ref-observe-thread-output-sanitized-001",
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				RunID:  "run-ref-observe-thread-output-sanitized-001",
+				Status: orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+			},
+			GoalResult: orquestagoal.GoalWorkResultV0{
+				SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+				Status:        orquestagoal.GoalStatusRunningV0,
+				GoalRef:       "goal-ref-observe-thread-output-sanitized-001",
+			},
+			EvidenceRefs: []string{mcpAutoprogrammingEvidenceCodexAppServerThreadOutputSanitizedV0},
+		},
+	)
+
+	if result.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
+		result.RecommendedAction != mcpQueueGlobalStatusActionReplanNarrowContextV0 ||
+		!containsStringMCPV0(result.EvidenceRefs, mcpAutoprogrammingEvidenceCodexAppServerThreadOutputSanitizedV0) {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestNewMCPObserveAppDirectorGoalResultV0ReworkRunningNoPublicaClosureBloqueada(t *testing.T) {
 	result := NewMCPObserveAppDirectorGoalResultV0(
 		MCPObserveAppDirectorGoalToolInputV0{RunRef: "run-ref-observe-rework-running-001"},
