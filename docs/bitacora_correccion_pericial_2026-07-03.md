@@ -18,7 +18,9 @@ Informe: docs/informe_pericial_claude_orquesta_2026-07-03.md
 | T-PER-105 | libre (dep: 102) | — | — | — |
 | T-PER-106 | libre (dep: 103-105) | — | — | — |
 | T-PER-201 | libre | — | — | — |
-| T-PER-202 | libre | — | — | — |
+| T-PER-202 | en curso vía Orquesta (goal T268, rama `pericial/pilot-t202`, puerto 34247) | orquesta+codex | 2026-07-03 | verificar: `go test -count=1 ./ -run TestDirectorV2Freeze` + `./` |
+| T-PER-601 | en curso vía Orquesta (goal T269, rama `pericial/pilot-t601`, puerto 39553) | orquesta+codex | 2026-07-03 | verificar: diff solo ARQUITECTURA.md + grep del enlace pericial |
+| RELEVO 98% cuota | **instrucciones** | siguiente agente | 2026-07-03 | Hay 3 pilotajes en vuelo: T267 (puerto 36249, rama pilot-t102), T268 (34247, pilot-t202), T269 (39553, pilot-t601). Para cada uno: esperar terminal con `POST /api/v0/autoprogramming/status` body `{}`; verificar con los Tests de su sección de backlog; revisar diff; integrar al árbol principal con commit propio; apagar con shutdown forced + kill PID (`<pilot>/server.pid`) + `tmux kill-session orquesta-goal-*` + `pkill -f 'codex app-server'` (residuos esperados, evidencia T-PER-401); actualizar esta tabla. Los worktrees viven en el scratchpad de la sesión Claude (volátil) pero las ramas `pericial/pilot-*` son permanentes: si el scratchpad desapareció, los cambios sin commitear del worktree se pierden — en ese caso relanzar el pilotaje con la receta de arriba, que las ramas y backlogs son reproducibles |
 | T-PER-203 | libre (dep: 201,202) | — | — | — |
 | T-PER-301 | BLOQUEADA-POR-WRITE-SET | — | — | — |
 | T-PER-302 | bloqueada (dep: 301) | — | — | — |
