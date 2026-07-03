@@ -238,6 +238,16 @@ func TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesGoalFirstRecuperablesCo
 			code:              mcpAutoprogrammingActionOutOfScopeMaterializedArtifactsV0,
 			recommendedAction: MCPGoalFirstReworkWriteSetViolationActionV0,
 		},
+		{
+			name:              "phase0_complete_non_publishable",
+			code:              mcpAutoprogrammingActionPhase0CompleteNonPublishableV0,
+			recommendedAction: MCPGoalFirstContinueFromPhase0ActionV0,
+		},
+		{
+			name:              "required_test_evidence_missing",
+			code:              mcpAutoprogrammingActionRequiredTestEvidenceMissingV0,
+			recommendedAction: MCPGoalFirstRepairReceiptActionV0,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
