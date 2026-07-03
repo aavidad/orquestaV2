@@ -61,8 +61,16 @@ func (executor CodexStackObserveAppDirectorGoalExecutorV0) ObserveAppDirectorGoa
 	if executor.stack == nil {
 		return orquestamcp.MCPObserveAppDirectorGoalToolResultV0{}, fmt.Errorf("stack requerido")
 	}
-	result, err := orquestamcp.NewMCPObserveAppDirectorGoalToolExecutorV0(executor.stack.Ports).
-		ObserveAppDirectorGoalTimeoutSnapshotV0(ctx, input)
+	codex := executor.stack.Codex
+	if codex.SnapshotSource == nil {
+		codex.SnapshotSource = executor.stack.CodexSnapshotSource
+	}
+	observeExecutor := orquestamcp.NewMCPObserveAppDirectorGoalToolExecutorV0(executor.stack.Ports)
+	observeExecutor.EstadoVivoSource = estadoVivoSourceV0(ConfigV0{
+		Stores: executor.stack.Stores,
+		Codex:  codex,
+	})
+	result, err := observeExecutor.ObserveAppDirectorGoalTimeoutSnapshotV0(ctx, input)
 	if err != nil {
 		return result, err
 	}

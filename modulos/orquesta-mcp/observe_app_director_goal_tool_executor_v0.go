@@ -5,10 +5,12 @@ import (
 	"strings"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 )
 
 type MCPObserveAppDirectorGoalToolExecutorV0 struct {
-	Ports orquestaappdirectorservice.StartAppDirectorPortsV0
+	Ports            orquestaappdirectorservice.StartAppDirectorPortsV0
+	EstadoVivoSource orquestaestadovivo.FuenteEvidenciaEstadoPortV0
 }
 
 func NewMCPObserveAppDirectorGoalToolExecutorV0(
@@ -88,5 +90,6 @@ func (executor MCPObserveAppDirectorGoalToolExecutorV0) ObserveAppDirectorGoalTi
 			}
 		}
 	}
+	result = executor.withEstadoVivoSnapshotV0(ctx, input, result)
 	return result, nil
 }

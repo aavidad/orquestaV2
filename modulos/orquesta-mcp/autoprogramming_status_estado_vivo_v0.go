@@ -247,6 +247,21 @@ func actionableRunFromEstadoVivoMCPAutoprogrammingV0(
 	node orquestaestadovivo.NodoCicloVidaV0,
 ) (MCPAutoprogrammingActionableRunV0, bool) {
 	switch node.Fase {
+	case orquestaestadovivo.FaseEntregadoParcialV0:
+		return MCPAutoprogrammingActionableRunV0{
+			Code:              mcpAutoprogrammingActionPartialArtifactsWrittenV0,
+			Severity:          "blocked",
+			RunRef:            strings.TrimSpace(node.RunRef),
+			GoalRef:           strings.TrimSpace(node.GoalRef),
+			ExternalGoalRef:   strings.TrimSpace(node.ExternalGoalRef),
+			Status:            string(node.Fase),
+			Reason:            "estado vivo con entrega parcial pendiente de revision y cierre",
+			RecommendedAction: MCPGoalFirstReviewPartialArtifactsActionV0,
+			EvidenceRefs: compactStringsMCPV0(append(
+				[]string{mcpAutoprogrammingEvidencePartialArtifactsWrittenV0},
+				evidenceRefsFromEstadoVivoNodeMCPAutoprogrammingV0(node)...,
+			)),
+		}, true
 	case orquestaestadovivo.FaseConflictoV0:
 		return MCPAutoprogrammingActionableRunV0{
 			Code:              mcpAutoprogrammingActionEstadoVivoConflictoV0,

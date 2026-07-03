@@ -1,11 +1,13 @@
 package orquestamcp
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
@@ -24,6 +26,69 @@ func TestObserveGoalDescriptorsDeclaranEvidenciaYAccionRecomendadaV0(t *testing.
 			!strings.Contains(descriptor.output, "error:{errores_publicos,recommended_action?,evidence_refs?}") {
 			t.Fatalf("%s debe declarar evidencia y accion en observe_goal: %s", descriptor.name, descriptor.output)
 		}
+	}
+}
+
+func TestMCPObserveAppDirectorGoalToolExecutorV0SnapshotDesdeProyeccionV0(t *testing.T) {
+	runRef := "run-ref-observe-estado-vivo-partial-001"
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       "goal-ref-observe-estado-vivo-partial-001",
+			RunRef:        runRef,
+			Objective:     "Observar entrega parcial desde estado vivo.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "docs/estado-vivo"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         "goal-ref-observe-estado-vivo-partial-001",
+			ExternalGoalRef: "thread-ref-observe-estado-vivo-partial-001",
+			EvidenceRefs:    []string{"evidence-ref-observe-estado-vivo-launch"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	store := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := store.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	executor := NewMCPObserveAppDirectorGoalToolExecutorV0(orquestaappdirectorservice.StartAppDirectorPortsV0{
+		GoalStateStore: store,
+	})
+	executor.EstadoVivoSource = &fakeMCPAutoprogrammingEstadoVivoSourceV0{
+		evidencias: []orquestaestadovivo.EvidenciaEstadoV0{{
+			RunRef:          runRef,
+			GoalRef:         state.GoalRef,
+			ExternalGoalRef: state.ExternalGoalRef,
+			Fuente:          "receipt",
+			Estado:          "partial_artifacts_written",
+			ObservadoEn:     "2026-07-03T09:59:00Z",
+			EvidenceRefs:    []string{"evidence-ref-observe-estado-vivo-partial"},
+		}},
+	}
+
+	result, err := executor.ObserveAppDirectorGoalTimeoutSnapshotV0(
+		context.Background(),
+		MCPObserveAppDirectorGoalToolInputV0{
+			RequestID:  "req-observe-estado-vivo-partial-001",
+			RunRef:     runRef,
+			OccurredAt: "2026-07-03T10:00:00Z",
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalTimeoutSnapshotV0: %v", err)
+	}
+	if !result.Partial ||
+		result.ClosureStatus != orquestagoal.GoalStatusBlockedV0 ||
+		!result.ClosureNeedsRework ||
+		result.ClosureAccepted ||
+		result.RecommendedAction != MCPGoalFirstReviewPartialArtifactsActionV0 ||
+		!mcpObserveAppDirectorGoalHasClosureIssueCodeV0(result.ClosureIssues, MCPGoalFirstPartialArtifactsWrittenV0) ||
+		!containsStringMCPV0(result.EvidenceRefs, "evidence-ref-observe-estado-vivo-partial") {
+		t.Fatalf("result=%+v", result)
 	}
 }
 

@@ -13,6 +13,7 @@ import (
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestadomainworkmemory "orquesta/modulos/orquesta-domain-work-memory"
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 )
 
 func TestMCPDomainWorkHTTPHandlerV0PostDelegaYPropagaCorrelacion(t *testing.T) {
@@ -132,6 +133,49 @@ func TestMCPDomainWorkStatusHTTPHandlerV0GetProyectaFachadaEstable(t *testing.T)
 		result.Items[0].CurrentPhase != "qa" ||
 		result.Items[0].DomainCounters["audio_pending"] != 2 ||
 		len(result.SafeActions) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPDomainWorkStatusHTTPHandlerV0DerivaVidaDesdeProyeccionV0(t *testing.T) {
+	runRef := "run-ref-domain-status-estado-vivo-partial-001"
+	executor := MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{empty: true},
+		EstadoVivoSource: &fakeMCPAutoprogrammingEstadoVivoSourceV0{
+			evidencias: []orquestaestadovivo.EvidenciaEstadoV0{{
+				RunRef:       runRef,
+				Fuente:       "receipt",
+				Estado:       "partial_artifacts_written",
+				ObservadoEn:  "2026-07-03T09:59:00Z",
+				EvidenceRefs: []string{"evidence-ref-domain-status-estado-vivo-partial"},
+			}},
+		},
+	}
+	req := httptest.NewRequest(
+		http.MethodGet,
+		MCPDomainWorkStatusHTTPPathV0+"?project=opes&course_slug=integracion-social&run_ref="+runRef,
+		nil,
+	)
+	rec := httptest.NewRecorder()
+
+	NewMCPDomainWorkStatusHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPDomainWorkStatusResultV0
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Summary.Status != "blocked" ||
+		!result.Summary.NeedsAction ||
+		result.Summary.WillFinishAlone ||
+		len(result.Items) != 1 ||
+		result.Items[0].RunRef != runRef ||
+		result.Items[0].Status != "blocked" ||
+		!result.Items[0].NeedsAction ||
+		result.Items[0].RecommendedAction != MCPGoalFirstReviewPartialArtifactsActionV0 ||
+		!containsStringMCPV0(result.Items[0].EvidenceRefs, "evidence-ref-domain-status-estado-vivo-partial") {
 		t.Fatalf("result=%+v", result)
 	}
 }
