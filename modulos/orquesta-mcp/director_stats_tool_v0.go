@@ -565,6 +565,20 @@ func applyMCPDirectorGoalProgressProjectionV0(
 		})
 		return
 	}
+	if containsStringMCPV0(goal.IssueCodes, mcpAutoprogrammingActionRuntimeWriteSetViolationV0) {
+		stats.Status = mcpAutoprogrammingActionRuntimeWriteSetViolationV0
+		stats.Closure.BlockedBy = compactStringsMCPV0(append(
+			stats.Closure.BlockedBy,
+			mcpAutoprogrammingActionRuntimeWriteSetViolationV0,
+		))
+		stats.Closure.BlockerRefs = compactStringsMCPV0(append(stats.Closure.BlockerRefs, goal.EvidenceRefs...))
+		stats.Progress.Issues = append(stats.Progress.Issues, orquestacionnucleoapp.DirectorProgressIssueV0{
+			Code:    mcpAutoprogrammingActionRuntimeWriteSetViolationV0,
+			Field:   "goal_first.write_set",
+			Message: "goal_first runtime detected file changes outside the declared write_set; preserve changed paths as evidence and rework with corrected scope before closure",
+		})
+		return
+	}
 	if containsStringMCPV0(goal.IssueCodes, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
 		stats.Status = MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0
 		stats.Closure.BlockedBy = compactStringsMCPV0(append(

@@ -393,6 +393,11 @@ func TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesGoalFirstRecuperablesCo
 			recommendedAction: MCPGoalFirstReworkWriteSetViolationActionV0,
 		},
 		{
+			name:              "runtime_write_set_violation",
+			code:              mcpAutoprogrammingActionRuntimeWriteSetViolationV0,
+			recommendedAction: MCPGoalFirstReworkWriteSetViolationActionV0,
+		},
+		{
 			name:              "phase0_complete_non_publishable",
 			code:              mcpAutoprogrammingActionPhase0CompleteNonPublishableV0,
 			recommendedAction: MCPGoalFirstContinueFromPhase0ActionV0,

@@ -88,6 +88,10 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 		detail := backend.codexAppServerLaunchIssueDetailV0(code, err)
 		return codexAppServerStartReceiptV0(packet, "", codexAppServerIssueCodeWithDetailV0(code, detail)), err
 	}
+	writeSetBaseline, hasWriteSetBaseline, baselineIssue := backend.captureCodexAppServerRuntimeWriteSetBaselineV0(ctx, packet)
+	if baselineIssue != "" {
+		return codexAppServerStartReceiptV0(packet, "", baselineIssue), errors.New(baselineIssue)
+	}
 	thread, err := backend.Protocol.StartThreadV0(ctx, backend.threadStartParamsV0(packet))
 	if err != nil {
 		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_thread_start_failed")
@@ -96,6 +100,9 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	threadID := strings.TrimSpace(thread.ID)
 	if threadID == "" {
 		return codexAppServerStartReceiptV0(packet, "", "codex_app_server_thread_id_missing"), errors.New("codex_app_server_thread_id_missing")
+	}
+	if hasWriteSetBaseline {
+		backend.recordCodexAppServerRuntimeWriteSetBaselineV0(threadID, writeSetBaseline)
 	}
 	tokenBudget := 0
 	if packet.Budget.TokenBudget > 0 {
@@ -455,11 +462,7 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 		(status != orquestagoal.GoalStatusRunningV0 || codexAppServerGoalResultReadyForActiveCompletionV0(marked)) {
 		receipt.Status = orquestagoal.GoalStatusCompleteV0
 		receipt.Summary = "codex_app_server_goal_result_marker"
-		mergeCodexAppServerGoalResultV0(
-			&receipt,
-			marked,
-			"evidence-ref-codex-app-server-goal-result-marker",
-		)
+		backend.mergeCodexAppServerGoalResultGuardedV0(ctx, request, &receipt, marked, "evidence-ref-codex-app-server-goal-result-marker")
 		return receipt, nil
 	}
 	fileMarked, fileFound, fileErr := codexAppServerGoalResultFromWorkspaceV0(
@@ -478,11 +481,7 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 		(status != orquestagoal.GoalStatusRunningV0 || codexAppServerGoalResultReadyForActiveCompletionV0(fileMarked)) {
 		receipt.Status = orquestagoal.GoalStatusCompleteV0
 		receipt.Summary = "codex_app_server_goal_result_file"
-		mergeCodexAppServerGoalResultV0(
-			&receipt,
-			fileMarked,
-			"evidence-ref-codex-app-server-goal-result-file",
-		)
+		backend.mergeCodexAppServerGoalResultGuardedV0(ctx, request, &receipt, fileMarked, "evidence-ref-codex-app-server-goal-result-file")
 		return receipt, nil
 	}
 	if issueCode := backend.codexAppServerThreadStatusIssueCodeV0(thread.Status); issueCode != "" {
@@ -731,6 +730,8 @@ func codexAppServerStartIssueEvidenceRefsV0(code string) []string {
 		return []string{"evidence-ref-codex-app-server-write-set-guard-allowed-write-set-missing"}
 	case "codex_app_server_write_set_guard_allowed_write_set_mismatch":
 		return []string{"evidence-ref-codex-app-server-write-set-guard-allowed-write-set-mismatch"}
+	case codexAppServerRuntimeWriteSetGuardSnapshotV0:
+		return []string{"evidence-ref-codex-app-server-runtime-write-set-guard-snapshot-failed"}
 	default:
 		return nil
 	}

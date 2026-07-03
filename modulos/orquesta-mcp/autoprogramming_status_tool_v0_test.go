@@ -2585,6 +2585,64 @@ func TestMCPAutoprogrammingStatusExecutorV0OutOfScopeMaterializedPideReworkV0(t 
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0RuntimeWriteSetViolationPideReworkV0(t *testing.T) {
+	runRef := "run-ref-autop-status-runtime-write-set-001"
+	goalRef := "goal-ref-autop-status-runtime-write-set-001"
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: runRef,
+			Status: mcpAutoprogrammingActionRuntimeWriteSetViolationV0,
+			Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
+				Blocked:   true,
+				BlockedBy: []string{mcpAutoprogrammingActionRuntimeWriteSetViolationV0},
+			},
+			Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+				Issues: []orquestacionnucleoapp.DirectorProgressIssueV0{{
+					Code:  mcpAutoprogrammingActionRuntimeWriteSetViolationV0,
+					Field: "goal_first.write_set",
+				}},
+			},
+		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Status:       orquestagoal.GoalStatusBlockedV0,
+			ArtifactRefs: []string{"artifact-ref-runtime-write-set-outside-fuera-md"},
+			EvidenceRefs: []string{"evidence-ref-codex-app-server-runtime-write-set-violation"},
+			IssueCodes:   []string{mcpAutoprogrammingActionRuntimeWriteSetViolationV0},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{empty: true},
+		Stats: stats,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{RunRef: runRef})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != mcpAutoprogrammingActionRuntimeWriteSetViolationV0 ||
+		action.RecommendedAction != MCPGoalFirstReworkWriteSetViolationActionV0 ||
+		action.GoalRef != goalRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.ArtifactRefs, "artifact-ref-runtime-write-set-outside-fuera-md") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceRuntimeWriteSetViolationV0) {
+		t.Fatalf("action=%+v", action)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "attention_required" ||
+		result.EfficiencySummary.RecommendedAction != MCPGoalFirstReworkWriteSetViolationActionV0+":run:"+runRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(
+			result.EfficiencySummary.Reasons,
+			mcpAutoprogrammingActionRuntimeWriteSetViolationV0,
+		) {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0ArtefactosParcialesPideRevisionV0(t *testing.T) {
 	runRef := "run-ref-autop-status-partial-artifacts-001"
 	goalRef := "goal-ref-autop-status-partial-artifacts-001"

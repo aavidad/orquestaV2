@@ -541,6 +541,7 @@ func mcpDomainWorkStatusNormalizeStatusV0(status string, action string) string {
 		mcpAutoprogrammingActionMissingTerminalReceiptV0,
 		mcpAutoprogrammingActionArtifactPathsOmittedV0,
 		mcpAutoprogrammingActionOutOfScopeMaterializedArtifactsV0,
+		mcpAutoprogrammingActionRuntimeWriteSetViolationV0,
 		mcpAutoprogrammingActionQAFailedPublicTextV0,
 		mcpAutoprogrammingActionPartialArtifactsWrittenV0,
 		mcpAutoprogrammingActionPhase0CompleteNonPublishableV0,

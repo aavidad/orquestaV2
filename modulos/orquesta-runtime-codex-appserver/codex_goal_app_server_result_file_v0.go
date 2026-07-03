@@ -70,18 +70,14 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerTerminalGo
 	}
 	resultFound := false
 	if fileFound {
-		mergeCodexAppServerGoalResultV0(
-			&receipt,
-			fileMarked,
-			"evidence-ref-codex-app-server-goal-result-file",
-		)
+		if backend.mergeCodexAppServerGoalResultGuardedV0(ctx, request, &receipt, fileMarked, "evidence-ref-codex-app-server-goal-result-file") {
+			return receipt, nil
+		}
 		resultFound = true
 	} else if markerFound {
-		mergeCodexAppServerGoalResultV0(
-			&receipt,
-			marker,
-			"evidence-ref-codex-app-server-goal-result-marker",
-		)
+		if backend.mergeCodexAppServerGoalResultGuardedV0(ctx, request, &receipt, marker, "evidence-ref-codex-app-server-goal-result-marker") {
+			return receipt, nil
+		}
 		resultFound = true
 	}
 	if markerIssue != "" && !resultFound {
@@ -135,11 +131,7 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 				codexAppServerGoalResultReadyForActiveCompletionV0(marked) {
 				observed.Status = "complete"
 				observed.Summary = "codex_app_server_goal_result_marker"
-				mergeCodexAppServerGoalResultV0(
-					&observed,
-					marked,
-					"evidence-ref-codex-app-server-goal-result-marker",
-				)
+				backend.mergeCodexAppServerGoalResultGuardedV0(ctx, request, &observed, marked, "evidence-ref-codex-app-server-goal-result-marker")
 				return observed, true
 			}
 			threadIssueCode = backend.codexAppServerThreadIssueCodeV0(thread)
@@ -160,11 +152,7 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 	if fileErr == nil && fileFound && codexAppServerGoalResultReadyForActiveCompletionV0(fileMarked) {
 		observed.Status = "complete"
 		observed.Summary = "codex_app_server_goal_result_file"
-		mergeCodexAppServerGoalResultV0(
-			&observed,
-			fileMarked,
-			"evidence-ref-codex-app-server-goal-result-file",
-		)
+		backend.mergeCodexAppServerGoalResultGuardedV0(ctx, request, &observed, fileMarked, "evidence-ref-codex-app-server-goal-result-file")
 		return observed, true
 	}
 	if threadIssueCode != "" {

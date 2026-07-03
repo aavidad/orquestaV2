@@ -448,7 +448,8 @@ func recoverableGoalFirstActionForCodeMCPAutoprogrammingEfficiencyV0(code string
 	switch strings.TrimSpace(code) {
 	case MCPGoalFirstQAFailedPublicTextV0:
 		return MCPGoalFirstReworkPublicTextActionV0
-	case MCPGoalFirstOutOfScopeMaterializedArtifactsV0:
+	case MCPGoalFirstOutOfScopeMaterializedArtifactsV0,
+		mcpAutoprogrammingActionRuntimeWriteSetViolationV0:
 		return MCPGoalFirstReworkWriteSetViolationActionV0
 	case MCPGoalFirstPartialArtifactsWrittenV0:
 		return MCPGoalFirstReviewPartialArtifactsActionV0
@@ -464,6 +465,7 @@ func recoverableGoalFirstCodesMCPAutoprogrammingEfficiencyV0() []string {
 		MCPGoalFirstQAFailedPublicTextV0,
 		MCPGoalFirstArtifactPathsOmittedMaterializedV0,
 		MCPGoalFirstOutOfScopeMaterializedArtifactsV0,
+		mcpAutoprogrammingActionRuntimeWriteSetViolationV0,
 		MCPGoalFirstPartialArtifactsWrittenV0,
 		MCPGoalFirstRepairReceiptRequiresReworkV0,
 	}

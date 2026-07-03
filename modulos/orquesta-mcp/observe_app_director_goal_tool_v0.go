@@ -273,6 +273,9 @@ func mcpObserveAppDirectorGoalRecommendedActionV0(
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstOutOfScopeMaterializedArtifactsV0) {
 		return MCPGoalFirstReworkWriteSetViolationActionV0
 	}
+	if mcpObserveAppDirectorGoalHasIssueV0(result, mcpAutoprogrammingActionRuntimeWriteSetViolationV0) {
+		return MCPGoalFirstReworkWriteSetViolationActionV0
+	}
 	if mcpObserveAppDirectorGoalHasIssueV0(result, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
 		return MCPGoalFirstRepairReceiptActionV0
 	}
@@ -442,6 +445,8 @@ func EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
 		} else if code == MCPGoalFirstArtifactPathsOmittedMaterializedV0 {
 			field = "goal_first.artifact_paths"
 		} else if code == MCPGoalFirstOutOfScopeMaterializedArtifactsV0 {
+			field = "goal_first.write_set"
+		} else if code == mcpAutoprogrammingActionRuntimeWriteSetViolationV0 {
 			field = "goal_first.write_set"
 		} else if code == MCPGoalFirstRequiredTestEvidenceMissingV0 {
 			field = "goal_first.required_tests"

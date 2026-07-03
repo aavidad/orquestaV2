@@ -7,12 +7,20 @@ import (
 	"time"
 
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
+	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 )
 
 type serverCodexAppServerGoalRuntimeV0 struct {
-	mu        sync.Mutex
-	startedAt map[string]time.Time
-	timeouts  map[string]time.Duration
+	mu                sync.Mutex
+	startedAt         map[string]time.Time
+	timeouts          map[string]time.Duration
+	writeSetBaselines map[string]codexAppServerRuntimeWriteSetBaselineV0
+}
+
+type codexAppServerRuntimeWriteSetBaselineV0 struct {
+	ProjectWorkDir string
+	WriteSet       []string
+	Snapshot       orquestaruntimeworktree.WorktreeSnapshotV0
 }
 
 func (backend serverCodexAppServerGoalBackendV0) codexAppServerActiveGoalElapsedV0(
@@ -58,6 +66,16 @@ func (backend serverCodexAppServerGoalBackendV0) recordCodexAppServerGoalRuntime
 		return
 	}
 	backend.Runtime.recordGoalRuntimeV0(threadID, startedAt, timeout)
+}
+
+func (backend serverCodexAppServerGoalBackendV0) recordCodexAppServerRuntimeWriteSetBaselineV0(
+	threadID string,
+	baseline codexAppServerRuntimeWriteSetBaselineV0,
+) {
+	if backend.Runtime == nil {
+		return
+	}
+	backend.Runtime.recordWriteSetBaselineV0(threadID, baseline)
 }
 
 func (backend serverCodexAppServerGoalBackendV0) codexAppServerGoalTimeoutForThreadV0(threadID string) time.Duration {
@@ -164,6 +182,53 @@ func (runtime *serverCodexAppServerGoalRuntimeV0) timeoutForThreadV0(threadID st
 		return 0
 	}
 	return runtime.timeouts[threadID]
+}
+
+func (runtime *serverCodexAppServerGoalRuntimeV0) recordWriteSetBaselineV0(
+	threadID string,
+	baseline codexAppServerRuntimeWriteSetBaselineV0,
+) {
+	threadID = strings.TrimSpace(threadID)
+	if runtime == nil ||
+		threadID == "" ||
+		strings.TrimSpace(baseline.ProjectWorkDir) == "" ||
+		baseline.Snapshot.SchemaVersion == "" ||
+		len(baseline.WriteSet) == 0 {
+		return
+	}
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	if runtime.writeSetBaselines == nil {
+		runtime.writeSetBaselines = map[string]codexAppServerRuntimeWriteSetBaselineV0{}
+	}
+	if _, exists := runtime.writeSetBaselines[threadID]; exists {
+		return
+	}
+	runtime.writeSetBaselines[threadID] = codexAppServerRuntimeWriteSetBaselineV0{
+		ProjectWorkDir: strings.TrimSpace(baseline.ProjectWorkDir),
+		WriteSet:       append([]string(nil), baseline.WriteSet...),
+		Snapshot:       baseline.Snapshot,
+	}
+}
+
+func (runtime *serverCodexAppServerGoalRuntimeV0) writeSetBaselineForThreadV0(
+	threadID string,
+) (codexAppServerRuntimeWriteSetBaselineV0, bool) {
+	threadID = strings.TrimSpace(threadID)
+	if runtime == nil || threadID == "" {
+		return codexAppServerRuntimeWriteSetBaselineV0{}, false
+	}
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	if runtime.writeSetBaselines == nil {
+		return codexAppServerRuntimeWriteSetBaselineV0{}, false
+	}
+	baseline, ok := runtime.writeSetBaselines[threadID]
+	if !ok {
+		return codexAppServerRuntimeWriteSetBaselineV0{}, false
+	}
+	baseline.WriteSet = append([]string(nil), baseline.WriteSet...)
+	return baseline, true
 }
 
 type serverCodexAppServerTimestampV0 struct {

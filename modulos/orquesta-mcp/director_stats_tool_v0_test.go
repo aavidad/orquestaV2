@@ -711,6 +711,46 @@ func TestMCPDirectorStatsToolExecutorV0GoalFirstProyectaOutOfScopeMaterializedV0
 	}
 }
 
+func TestMCPDirectorStatsToolExecutorV0GoalFirstProyectaRuntimeWriteSetViolationV0(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-runtime-write-set-001")
+	run.Tasks = nil
+	run.ClosedTasks = nil
+	run.DeliveredTasks = nil
+	run.Deliveries = nil
+	run.Agents = nil
+	run.StartedAgents = nil
+	state := mcpDirectorGoalStateForTestV0(run.RunID)
+	state.Status = orquestagoal.GoalStatusBlockedV0
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:      orquestagoal.GoalStatusBlockedV0,
+		NeedsRework: true,
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		GoalStateSource: mcpDirectorGoalStateSourceForTestV0{State: state},
+		GoalMaterializedRefsSource: mcpDirectorMaterializedRefsSourceStaticForTestV0{
+			Resolved: MCPDirectorGoalMaterializedRefsV0{
+				ArtifactRefs: []string{"artifact-ref-runtime-write-set-outside-fuera-md"},
+				EvidenceRefs: []string{"evidence-ref-codex-app-server-runtime-write-set-violation"},
+				IssueCodes:   []string{mcpAutoprogrammingActionRuntimeWriteSetViolationV0},
+			},
+		},
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{RunRef: run.RunID})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.Goal == nil ||
+		!containsStringMCPTestV0(result.Goal.IssueCodes, mcpAutoprogrammingActionRuntimeWriteSetViolationV0) ||
+		result.Stats == nil ||
+		result.Stats.Status != mcpAutoprogrammingActionRuntimeWriteSetViolationV0 ||
+		!containsStringMCPTestV0(result.Stats.Closure.BlockedBy, mcpAutoprogrammingActionRuntimeWriteSetViolationV0) ||
+		!mcpDirectorStatsProgressIssueExistsV0(result.Stats.Progress.Issues, mcpAutoprogrammingActionRuntimeWriteSetViolationV0) {
+		t.Fatalf("goal=%+v stats=%+v", result.Goal, result.Stats)
+	}
+}
+
 func TestMCPDirectorStatsToolExecutorV0GoalFirstProyectaArtefactosParcialesV0(t *testing.T) {
 	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-goal-partial-artifacts-001")
 	run.Tasks = nil

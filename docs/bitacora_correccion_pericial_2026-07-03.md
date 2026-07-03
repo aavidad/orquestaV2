@@ -858,3 +858,40 @@ corte:
   snapshot/verificacion de write-set antes de promover cierre.
 - OPES done/settled: conservar `settlement_*` y lifecycle en
   `orquesta-opes-topic-registry` antes de validar `release`.
+
+### 2026-07-04 — Codex cierra guard runtime de write-set BUG-164 / BUG-085 residual
+
+Trabajo directo acotado, sin OPES productivo ni smoke real. Se cerro el
+residual de `BUG-ORQ-20260701-085` registrado como
+`BUG-ORQ-20260704-164`: el backend app-server ya no acepta un resultado
+`complete` si el worktree cambio fuera de `DirectionContract.allowed_write_set`.
+
+Cambios aplicados:
+- `orquesta-runtime-codex-appserver` captura un baseline del worktree al lanzar
+  goals con `write_set_enforcement=workspace_write_guard`.
+- Antes de fusionar un resultado terminal `complete`, ejecuta
+  `VerifyWorktreeWriteSetV0`; si hay cambios fuera de scope, bloquea el goal
+  como `codex_app_server_runtime_write_set_violation`, elimina recibos de
+  dominio del cierre y conserva evidencias compactas de la ruta fuera de scope.
+- `orquesta-mcp` proyecta esa senal en `director.stats`,
+  `observe_director_goal`, `autoprogramming.status`, `efficiency_summary` y
+  `/api/v0/domain-work/status` como bloqueo recuperable con accion
+  `rework_write_set_violation`.
+
+Evidencia ejecutada:
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0RuntimeWriteSetGuard'`
+- `go test -count=1 ./modulos/orquesta-runtime-worktree -run 'TestVerifyWorktreeWriteSetV0(RechazaCambioFueraDelWriteSet|AceptaCambiosDentroDelWriteSet)'`
+- `go test -count=1 ./modulos/orquesta-mcp -run 'Test(MCPAutoprogrammingStatusExecutorV0RuntimeWriteSetViolationPideReworkV0|MCPDirectorStatsToolExecutorV0GoalFirstProyectaRuntimeWriteSetViolationV0|EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0RuntimeWriteSetViolationPideRework|MCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesGoalFirstRecuperablesComoBloqueadas)'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`
+- `go test -count=1 ./modulos/orquesta-runtime-worktree ./modulos/orquesta-runtime-codex-goal`
+- `go test -count=1 ./modulos/orquesta-mcp`
+- `go test -count=1 ./cmd/orquesta-server`
+- `go test -count=1 ./...`
+- `git diff --check`
+
+Limites del cierre:
+- No se relanza smoke real Codex/OPES en este bloque.
+- La proteccion es de verificacion runtime previa a aceptar cierre; no sustituye
+  a un sandbox del proveedor ni a enforcement kernel/FS preventivo.
+- Queda pendiente fuera de este corte: `BUG-065` recomendado publico de
+  shutdown y OPES done/settled con `settlement_*` en topic registry.

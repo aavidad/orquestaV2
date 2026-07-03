@@ -294,6 +294,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingQAFailedPublicTextActionsV0(observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingArtifactPathsOmittedActionsV0(observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingOutOfScopeMaterializedArtifactsActionsV0(observedByRunRef)...)
+	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingRuntimeWriteSetViolationActionsV0(observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingMissingTerminalReceiptActionsV0(observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingRepairReceiptRequiresReworkActionsV0(observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingRequiredTestEvidenceMissingActionsV0(observedByRunRef)...)

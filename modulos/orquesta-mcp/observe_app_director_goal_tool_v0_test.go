@@ -136,6 +136,11 @@ func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0QAFailedPublicText
 			recommendedAction: MCPGoalFirstReworkWriteSetViolationActionV0,
 		},
 		{
+			name:              "runtime_write_set_violation",
+			issueCode:         mcpAutoprogrammingActionRuntimeWriteSetViolationV0,
+			recommendedAction: MCPGoalFirstReworkWriteSetViolationActionV0,
+		},
+		{
 			name:              "partial_artifacts_written",
 			issueCode:         MCPGoalFirstPartialArtifactsWrittenV0,
 			recommendedAction: MCPGoalFirstReviewPartialArtifactsActionV0,
@@ -214,6 +219,28 @@ func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0OutOfScopePideRewo
 		result.ClosureIssues[0].Code != MCPGoalFirstOutOfScopeMaterializedArtifactsV0 ||
 		result.ClosureIssues[0].Field != "goal_first.write_set" ||
 		!containsStringMCPV0(result.ArtifactRefs, "artifact-ref-materialized-out-of-scope-001") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0RuntimeWriteSetViolationPideRework(t *testing.T) {
+	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
+		MCPObserveAppDirectorGoalToolResultV0{
+			GoalRef:    "goal-ref-observe-runtime-write-set-001",
+			GoalStatus: "blocked",
+		},
+		MCPDirectorGoalMaterializedRefsV0{
+			ArtifactRefs: []string{"artifact-ref-runtime-write-set-outside-fuera-md"},
+			EvidenceRefs: []string{"evidence-ref-codex-app-server-runtime-write-set-violation"},
+			IssueCodes:   []string{mcpAutoprogrammingActionRuntimeWriteSetViolationV0},
+		},
+	)
+
+	if result.RecommendedAction != MCPGoalFirstReworkWriteSetViolationActionV0 ||
+		len(result.ClosureIssues) != 1 ||
+		result.ClosureIssues[0].Code != mcpAutoprogrammingActionRuntimeWriteSetViolationV0 ||
+		result.ClosureIssues[0].Field != "goal_first.write_set" ||
+		!containsStringMCPV0(result.ArtifactRefs, "artifact-ref-runtime-write-set-outside-fuera-md") {
 		t.Fatalf("result=%+v", result)
 	}
 }

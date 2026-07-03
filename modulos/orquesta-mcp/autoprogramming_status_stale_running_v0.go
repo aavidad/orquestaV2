@@ -35,6 +35,7 @@ const (
 	mcpAutoprogrammingActionMissingTerminalReceiptV0                   = MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0
 	mcpAutoprogrammingActionArtifactPathsOmittedV0                     = MCPGoalFirstArtifactPathsOmittedMaterializedV0
 	mcpAutoprogrammingActionOutOfScopeMaterializedArtifactsV0          = MCPGoalFirstOutOfScopeMaterializedArtifactsV0
+	mcpAutoprogrammingActionRuntimeWriteSetViolationV0                 = "codex_app_server_runtime_write_set_violation"
 	mcpAutoprogrammingActionQAFailedPublicTextV0                       = MCPGoalFirstQAFailedPublicTextV0
 	mcpAutoprogrammingActionPartialArtifactsWrittenV0                  = MCPGoalFirstPartialArtifactsWrittenV0
 	mcpAutoprogrammingActionPhase0CompleteNonPublishableV0             = MCPGoalFirstPhase0CompleteNonPublishableV0
@@ -54,6 +55,7 @@ const (
 	mcpAutoprogrammingEvidenceMissingTerminalReceiptV0                 = "evidence-ref-autoprogramming-status-missing-terminal-receipt-after-artifacts-pass"
 	mcpAutoprogrammingEvidenceArtifactPathsOmittedV0                   = "evidence-ref-autoprogramming-status-artifact-paths-omitted-materialized"
 	mcpAutoprogrammingEvidenceOutOfScopeMaterializedArtifactsV0        = "evidence-ref-autoprogramming-status-out-of-scope-materialized-artifacts"
+	mcpAutoprogrammingEvidenceRuntimeWriteSetViolationV0               = "evidence-ref-autoprogramming-status-runtime-write-set-violation"
 	mcpAutoprogrammingEvidenceQAFailedPublicTextV0                     = "evidence-ref-autoprogramming-status-qa-failed-public-text"
 	mcpAutoprogrammingEvidencePartialArtifactsWrittenV0                = "evidence-ref-autoprogramming-status-partial-artifacts-written"
 	mcpAutoprogrammingEvidencePhase0CompleteNonPublishableV0           = "evidence-ref-autoprogramming-status-phase0-complete-non-publishable"
@@ -271,6 +273,32 @@ func mcpAutoprogrammingOutOfScopeMaterializedArtifactsActionsV0(
 	return out
 }
 
+func mcpAutoprogrammingRuntimeWriteSetViolationActionsV0(
+	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
+) []MCPAutoprogrammingActionableRunV0 {
+	out := make([]MCPAutoprogrammingActionableRunV0, 0)
+	for runRef, observed := range observedByRunRef {
+		if !mcpAutoprogrammingObservedRuntimeWriteSetViolationV0(observed) {
+			continue
+		}
+		action := MCPAutoprogrammingActionableRunV0{
+			Code:              mcpAutoprogrammingActionRuntimeWriteSetViolationV0,
+			Severity:          "blocked",
+			RunRef:            strings.TrimSpace(runRef),
+			RunStatus:         mcpAutoprogrammingObservedRunStatusV0(observedByRunRef, runRef),
+			Reason:            "codex_app_server_runtime_write_set_violation: runtime detected changes outside the declared write_set before accepting completion",
+			RecommendedAction: MCPGoalFirstReworkWriteSetViolationActionV0,
+			EvidenceRefs: []string{
+				mcpAutoprogrammingEvidenceRuntimeWriteSetViolationV0,
+			},
+		}
+		action = mcpAutoprogrammingActionableRunWithObservedStatsV0(action, observed)
+		action = mcpAutoprogrammingActionableRunWithObservedGoalV0(action, observed)
+		out = append(out, action)
+	}
+	return out
+}
+
 func mcpAutoprogrammingPartialArtifactsWrittenActionsV0(
 	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
 ) []MCPAutoprogrammingActionableRunV0 {
@@ -449,6 +477,26 @@ func mcpAutoprogrammingObservedOutOfScopeMaterializedArtifactsV0(
 	}
 	for _, issue := range observed.Stats.Progress.Issues {
 		if strings.TrimSpace(issue.Code) == MCPGoalFirstOutOfScopeMaterializedArtifactsV0 {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpAutoprogrammingObservedRuntimeWriteSetViolationV0(
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	if observed == nil {
+		return false
+	}
+	if observed.Goal != nil && containsStringMCPV0(observed.Goal.IssueCodes, mcpAutoprogrammingActionRuntimeWriteSetViolationV0) {
+		return true
+	}
+	if observed.Stats == nil {
+		return false
+	}
+	for _, issue := range observed.Stats.Progress.Issues {
+		if strings.TrimSpace(issue.Code) == mcpAutoprogrammingActionRuntimeWriteSetViolationV0 {
 			return true
 		}
 	}

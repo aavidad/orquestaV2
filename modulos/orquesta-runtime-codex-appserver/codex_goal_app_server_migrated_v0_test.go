@@ -2,6 +2,7 @@ package orquestaruntimecodexappserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -214,6 +215,97 @@ func TestServerCodexAppServerGoalBackendV0LaunchPrepareFallidoPublicaDetailRelat
 		!strings.Contains(normalized.Issues[0].Detail, "modulos/orquesta-goal") ||
 		strings.Contains(normalized.Issues[0].Detail, root) {
 		t.Fatalf("normalized=%+v root=%q", normalized.Issues, root)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0RuntimeWriteSetGuardBloqueaCambioFueraDeScope(t *testing.T) {
+	root := t.TempDir()
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-runtime-write-set-001"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-runtime-write-set-001", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-runtime-write-set-001", Status: "complete"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		CWD:      root,
+		Sandbox:  "workspace-write",
+		Runtime:  &serverCodexAppServerGoalRuntimeV0{},
+	}
+	packet := codexAppServerRuntimeWriteSetGuardPacketForTestV0(
+		"goal-ref-runtime-write-set-001",
+		"docs",
+	)
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil || receipt.Status != orquestagoal.GoalStatusRunningV0 {
+		t.Fatalf("StartCodexGoalV0 receipt=%+v err=%v", receipt, err)
+	}
+	writeCodexAppServerGoalResultForTestV0(t, root, "docs", packet.GoalRef, receipt.ExternalGoalRef)
+	writeCodexAppServerTestFileV0(t, root, "docs/ok.md", "ok\n")
+	writeCodexAppServerTestFileV0(t, root, "fuera.md", "fuera\n")
+	protocol.observedGoal = &serverCodexAppServerThreadGoalV0{
+		ThreadID: receipt.ExternalGoalRef,
+		Status:   "complete",
+	}
+
+	observed, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         packet.GoalRef,
+		ExternalGoalRef: receipt.ExternalGoalRef,
+	})
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if observed.Status != orquestagoal.GoalStatusBlockedV0 ||
+		observed.IssueCode != codexAppServerRuntimeWriteSetViolationV0 ||
+		len(observed.DomainReceiptRefs) != 0 ||
+		!containsStringMigratedTestV0(observed.EvidenceRefs, codexAppServerRuntimeWriteSetViolationEvidenceV0) {
+		t.Fatalf("observed=%+v", observed)
+	}
+	if !containsStringPrefixMigratedTestV0(observed.EvidenceRefs, "evidence-ref-codex-app-server-runtime-write-set-outside-fuera-md") {
+		t.Fatalf("evidence_refs=%+v", observed.EvidenceRefs)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0RuntimeWriteSetGuardPermiteCambioDentroDeScope(t *testing.T) {
+	root := t.TempDir()
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-runtime-write-set-002"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-runtime-write-set-002", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-runtime-write-set-002", Status: "complete"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		CWD:      root,
+		Sandbox:  "workspace-write",
+		Runtime:  &serverCodexAppServerGoalRuntimeV0{},
+	}
+	packet := codexAppServerRuntimeWriteSetGuardPacketForTestV0(
+		"goal-ref-runtime-write-set-002",
+		"docs",
+	)
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil || receipt.Status != orquestagoal.GoalStatusRunningV0 {
+		t.Fatalf("StartCodexGoalV0 receipt=%+v err=%v", receipt, err)
+	}
+	writeCodexAppServerGoalResultForTestV0(t, root, "docs", packet.GoalRef, receipt.ExternalGoalRef)
+	writeCodexAppServerTestFileV0(t, root, "docs/ok.md", "ok\n")
+	protocol.observedGoal = &serverCodexAppServerThreadGoalV0{
+		ThreadID: receipt.ExternalGoalRef,
+		Status:   "complete",
+	}
+
+	observed, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         packet.GoalRef,
+		ExternalGoalRef: receipt.ExternalGoalRef,
+	})
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if observed.Status != orquestagoal.GoalStatusCompleteV0 ||
+		!containsStringMigratedTestV0(observed.DomainReceiptRefs, "domain-receipt-ref-runtime-write-set") ||
+		!containsStringMigratedTestV0(observed.EvidenceRefs, codexAppServerRuntimeWriteSetGuardEvidenceV0) {
+		t.Fatalf("observed=%+v", observed)
 	}
 }
 
@@ -433,6 +525,72 @@ func containsStringMigratedTestV0(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func containsStringPrefixMigratedTestV0(values []string, prefix string) bool {
+	for _, value := range values {
+		if strings.HasPrefix(value, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func codexAppServerRuntimeWriteSetGuardPacketForTestV0(
+	goalRef string,
+	writeSet string,
+) orquestaruntimecodexgoal.CodexGoalStartPacketV0 {
+	scopes := []orquestagoal.GoalWriteScopeV0{{Path: writeSet}}
+	return orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef:   goalRef,
+		Objective: "probar guard runtime de write-set",
+		WriteSet:  scopes,
+		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
+			WriteSetEnforcement: orquestaruntimecodexgoal.CodexGoalWriteSetEnforcementV0,
+			MinimumSandbox:      orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0,
+			AllowedWriteSet:     scopes,
+		},
+	}
+}
+
+func writeCodexAppServerGoalResultForTestV0(
+	t *testing.T,
+	root string,
+	dir string,
+	goalRef string,
+	externalGoalRef string,
+) {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"schema_version":      orquestaruntimecodexgoal.CodexGoalResultSchemaV0,
+		"status":              orquestagoal.GoalStatusCompleteV0,
+		"goal_ref":            goalRef,
+		"external_goal_ref":   externalGoalRef,
+		"summary":             "resultado terminal",
+		"artifact_paths":      []string{filepath.ToSlash(filepath.Join(dir, "ok.md"))},
+		"domain_receipt_refs": []string{"domain-receipt-ref-runtime-write-set"},
+		"evidence_refs":       []string{"evidence-ref-runtime-write-set-result"},
+	})
+	if err != nil {
+		t.Fatalf("marshal result: %v", err)
+	}
+	writeCodexAppServerTestFileV0(
+		t,
+		root,
+		filepath.ToSlash(filepath.Join(dir, orquestaruntimecodexgoal.CodexGoalResultFileNameForGoalRefV0(goalRef))),
+		string(payload),
+	)
+}
+
+func writeCodexAppServerTestFileV0(t *testing.T, root string, rel string, body string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("mkdir %s: %v", rel, err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write %s: %v", rel, err)
+	}
 }
 
 var _ = errors.New
