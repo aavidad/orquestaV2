@@ -52,9 +52,12 @@ El handler y el reducer son puros. No llaman a DB, runtime, MCP, CLI, web, Git n
 La ruta vigente para agentes OrquestaV2 es el servidor residente y la cola
 gobernada, no el wrapper local. El wrapper `./arrancar_codex.sh` queda como
 compatibilidad historica y devuelve un error publico si no hay contrato manual
-versionado. Para trabajo operativo usa `go run ./cmd/orquesta-server run` desde
-la raiz y APIs/CLI publicas con write-set, ACK, checkpoint y shutdown
-gobernados.
+versionado. Para trabajo operativo usa `orquesta-server start`, consulta el
+endpoint gestionado con `orquesta-server status --json` o
+`ORQUESTA_RUNTIME_DIR/base_url.txt`, y opera mediante APIs/CLI publicas con
+write-set, ACK, checkpoint y shutdown gobernados. Para parar, usa
+`orquesta-server stop`. El subcomando `run` directo del binario queda reservado
+a harnesses aislados con runtime temporal, loopback y cleanup explicito.
 
 ## Rails de detalle
 

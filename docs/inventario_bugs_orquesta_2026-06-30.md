@@ -733,6 +733,12 @@ y a consumir la URL gestionada desde `ORQUESTA_RUNTIME_DIR/base_url.txt` o
 `ORQUESTA_SERVER_URL`. Evidencia:
 `TestPruebasServidorNoRecomiendaPuertoHistoricoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 5: el README de
+`modulos/orquesta-core-workflow` deja de indicar `go run ./cmd/orquesta-server run`
+como ruta operativa normal; apunta a `orquesta-server start/status`, endpoint
+gestionado y reserva `go run` para harnesses aislados con cleanup explicito.
+Evidencia: `TestReadmesOperativosNoRecomiendanRuntimeManualV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado

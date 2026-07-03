@@ -507,6 +507,7 @@ func TestReadmesOperativosNoRecomiendanRuntimeManualV0(t *testing.T) {
 	for _, rel := range []string{
 		"modulos/orquesta-server/README.md",
 		"modulos/orquesta-opes-bridge/README.md",
+		"modulos/orquesta-core-workflow/README.md",
 	} {
 		t.Run(rel, func(t *testing.T) {
 			text := readOperationalDocGuardV0(t, root, rel)
