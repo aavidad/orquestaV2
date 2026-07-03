@@ -593,6 +593,37 @@ func TestPruebasServidorNoRecomiendaPuertoHistoricoV0(t *testing.T) {
 	}
 }
 
+func TestHandoffTerminarOrquestaUsaServidorGestionadoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "docs/handoff_terminar_orquesta_2026-06-19.md")
+	current, _, _ := strings.Cut(text, "# ESTADO DE CIERRE Y PENDIENTES")
+
+	if strings.Contains(current, "127.0.0.1:8799") {
+		t.Fatalf("handoff vigente no debe fijar puerto manual para reproduccion")
+	}
+	for _, forbidden := range []string{
+		"  ./orquesta-server run\n# luego:",
+		"POST el spec a /api/v0/autoprogramming/prepare-run",
+	} {
+		if strings.Contains(current, forbidden) {
+			t.Fatalf("handoff vigente conserva reproduccion manual no gobernada: %q", forbidden)
+		}
+	}
+	for _, want := range []string{
+		"orquesta-server start",
+		"ORQUESTA_RUNTIME_DIR/base_url.txt",
+		"ORQUESTA_SERVER_URL",
+		"orquesta-server status --json",
+		"orquesta-server stop",
+		"smoke_shutdown_orquesta_server",
+		"cleanup_goal_backends",
+	} {
+		if !strings.Contains(current, want) {
+			t.Fatalf("handoff vigente debe usar servidor gestionado: falta %q", want)
+		}
+	}
+}
+
 func TestRunbookPruebasLocalesUsaEndpointGestionadoV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "docs/runbooks/pruebas_locales_orquesta_2026-05-25.md")

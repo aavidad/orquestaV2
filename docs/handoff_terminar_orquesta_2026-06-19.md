@@ -40,19 +40,50 @@ Spec real de app multi-tarea con dependencias hexagonales:
 `~/Trabajo/Bolsa_Diputacion_app/orquesta_spec_nucleo.json` (8 tareas:
 base→{baremo,ports,auth,i18n}→{usecase,repo}→http).
 
-Arranque del servidor con Codex real (OAuth en `~/.codex`, gestionado por Orquesta):
+Arranque del servidor con Codex real (OAuth en `~/.codex`, gestionado por Orquesta).
+El camino operativo vigente usa el servidor residente gestionado; el modo
+`run` queda reservado a harnesses aislados que instalan shutdown y cleanup
+explicitos.
+
 ```bash
-ORQUESTA_SERVER_ADDR=127.0.0.1:8799 \
+export ORQUESTA_RUNTIME_DIR=<dir-runtime-orquesta>
+export ORQUESTA_SERVER_STATE_DIR=<dir-estado>
+export ORQUESTA_CODEX_PROJECT_WORKDIR=~/Trabajo/Bolsa_Diputacion_app
+export ORQUESTA_CODEX_RUNTIME_WORKDIR=<dir-runtime-codex>
+export ORQUESTA_CODEX_HOME=$HOME
+export ORQUESTA_CODEX_CODE_HOME=$HOME/.codex
+export ORQUESTA_CODEX_COMMAND=$(command -v codex)
+export ORQUESTA_CODEX_PATH=$PATH
+export ORQUESTA_CODEX_MODEL=gpt-5.5
+export ORQUESTA_CODEX_APPROVAL_POLICY=never
+export ORQUESTA_CODEX_SANDBOX=workspace-write
+export ORQUESTA_OPES_BASE_URL=
+export OPES_BASE_URL=
+
+orquesta-server start
+export ORQUESTA_SERVER_URL="$(cat "$ORQUESTA_RUNTIME_DIR/base_url.txt")"
+orquesta-server status --json
+
+# luego: POST el spec a "$ORQUESTA_SERVER_URL/api/v0/autoprogramming/prepare-run"
+# el supervisor residente del servidor debe drenar la cola hasta cierre.
+orquesta-server stop --reason "fin reproduccion Bolsa"
+```
+
+Si se necesita un harness local de bajo nivel, debe quedar acotado asi:
+
+```bash
+ORQUESTA_SERVER_ADDR=127.0.0.1:0 \
+ORQUESTA_RUNTIME_DIR=<dir-runtime-orquesta> \
 ORQUESTA_SERVER_STATE_DIR=<dir-estado> \
 ORQUESTA_CODEX_PROJECT_WORKDIR=~/Trabajo/Bolsa_Diputacion_app \
-ORQUESTA_CODEX_RUNTIME_WORKDIR=<dir-runtime> \
+ORQUESTA_CODEX_RUNTIME_WORKDIR=<dir-runtime-codex> \
 ORQUESTA_CODEX_HOME=$HOME ORQUESTA_CODEX_CODE_HOME=$HOME/.codex \
 ORQUESTA_CODEX_COMMAND=$(command -v codex) ORQUESTA_CODEX_PATH=$PATH \
 ORQUESTA_CODEX_MODEL=gpt-5.5 ORQUESTA_CODEX_APPROVAL_POLICY=never \
 ORQUESTA_CODEX_SANDBOX=workspace-write ORQUESTA_OPES_BASE_URL= OPES_BASE_URL= \
   ./orquesta-server run
-# luego: POST el spec a /api/v0/autoprogramming/prepare-run
-# el supervisor residente del servidor debe drenar la cola hasta cierre.
+# instalar trap EXIT que invoque smoke_shutdown_orquesta_server con runtime_dir
+# y cleanup_goal_backends antes de lanzar efectos.
 ```
 
 ---

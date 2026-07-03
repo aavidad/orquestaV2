@@ -787,6 +787,15 @@ shutdown comun con `runtime_dir`. Evidencia:
 `TestScriptRunsTemporaryOrquestaServerCommandV0DetectaBackgroundMultilineaLargoV0`
 y `TestScriptRunsTemporaryOrquestaServerCommandV0IgnoraForegroundMultilineaV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 13: el handoff vigente
+`docs/handoff_terminar_orquesta_2026-06-19.md` deja de publicar como
+reproduccion operativa un servidor en primer plano con puerto fijo y runtime
+manual; usa `orquesta-server start/status/stop`, consume
+`ORQUESTA_RUNTIME_DIR/base_url.txt` y limita `orquesta-server run` a harnesses
+aislados con `smoke_shutdown_orquesta_server`, `runtime_dir` y
+`cleanup_goal_backends`. Evidencia:
+`TestHandoffTerminarOrquestaUsaServidorGestionadoV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado
