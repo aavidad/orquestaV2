@@ -385,6 +385,15 @@ func TestShutdownClientReadyV0NoSaltaTrabajoPendienteAunqueReadyV0(t *testing.T)
 		t.Fatalf("resultado shutdown_ready no debe permitir signal con agentes en vuelo")
 	}
 
+	result.AgentsInFlight = 0
+	result.AsyncWorkActive = 1
+	if shutdownClientResultReadyForSignalV0(result) {
+		t.Fatalf("resultado shutdown_ready no debe permitir signal con async work pendiente")
+	}
+	if shutdownRequestErrorAllowsSignalV0(assertShutdownClientErrorV0(shutdownClientNotReadyErrorV0(result).Error()), orquestaserver.ServerPublicStatusV0{}, true) {
+		t.Fatalf("force no debe saltar async work conservado solo en error shutdown_not_ready")
+	}
+
 	status := orquestaserver.ServerPublicStatusV0{
 		ShutdownInProgress:              true,
 		ShutdownReady:                   true,
@@ -400,6 +409,10 @@ func TestShutdownClientReadyV0NoSaltaTrabajoPendienteAunqueReadyV0(t *testing.T)
 	status.ShutdownAsyncWorkActive = 1
 	if shutdownPublicStatusReadyForSignalV0(status) {
 		t.Fatalf("status shutdown_ready no debe permitir signal con async work pendiente")
+	}
+	statusResult := serverShutdownClientResultFromStatusV0(status)
+	if statusResult.AsyncWorkActive != 1 || shutdownClientResultReadyForSignalV0(statusResult) {
+		t.Fatalf("status result no conserva/bloquea async work: %+v", statusResult)
 	}
 }
 

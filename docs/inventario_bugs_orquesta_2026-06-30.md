@@ -895,6 +895,15 @@ causa como `shutdown-active-work-ref-redacted` sin publicar la ruta original.
 Evidencia:
 `TestShutdownProjectionFromHTTPV0ReadyConActiveWorkRefsQuedaStopPendingV0`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 13: el cliente
+`orquesta-server stop` ingiere `shutdown_async_work_active` del resultado HTTP
+de shutdown y lo conserva tambien al convertir `/status` a resultado interno.
+Un `shutdown_ready=true` con async work pendiente ya no permite senal local y el
+error publico `shutdown_not_ready` conserva `async_work=N` para que
+`--force` no lo trate como transporte drenado. Evidencia:
+`TestShutdownClientReadyV0NoSaltaTrabajoPendienteAunqueReadyV0` y
+`TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y

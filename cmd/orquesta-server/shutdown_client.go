@@ -24,6 +24,7 @@ type serverShutdownClientResultV0 struct {
 	AgentsInFlight          int                                `json:"agents_in_flight"`
 	CheckpointsPending      int                                `json:"checkpoints_pending"`
 	CheckpointAgentsPending int                                `json:"checkpoint_agents_pending"`
+	AsyncWorkActive         int                                `json:"shutdown_async_work_active,omitempty"`
 	ActiveWorkCount         int                                `json:"active_work_count,omitempty"`
 	ActiveWorkRefs          []string                           `json:"active_work_refs,omitempty"`
 	ActiveWorks             []serverShutdownClientActiveWorkV0 `json:"active_works,omitempty"`

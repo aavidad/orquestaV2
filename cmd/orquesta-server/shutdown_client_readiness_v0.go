@@ -34,6 +34,7 @@ func shutdownClientResultHasNoBlockingWorkV0(result serverShutdownClientResultV0
 	return result.AgentsInFlight == 0 &&
 		result.CheckpointsPending == 0 &&
 		result.CheckpointAgentsPending == 0 &&
+		result.AsyncWorkActive == 0 &&
 		result.ActiveWorkCount == 0 &&
 		len(compactStringsV0(result.ActiveWorkRefs)) == 0
 }
@@ -57,6 +58,7 @@ func serverShutdownClientResultFromStatusV0(status orquestaserver.ServerPublicSt
 		AgentsInFlight:          status.ShutdownAgentsInFlight,
 		CheckpointsPending:      status.ShutdownCheckpointsPending,
 		CheckpointAgentsPending: status.ShutdownCheckpointAgentsPending,
+		AsyncWorkActive:         status.ShutdownAsyncWorkActive,
 		ActiveWorkCount:         status.ShutdownActiveWorkCount,
 		ActiveWorkRefs:          compactStringsV0(status.ShutdownActiveWorkRefs),
 	}
@@ -69,13 +71,14 @@ func shutdownClientNotReadyErrorV0(result serverShutdownClientResultV0) error {
 		activeWorkRefsPart = " active_work_refs=" + strings.Join(activeWorkRefs, ",")
 	}
 	return fmt.Errorf(
-		"shutdown_not_ready status=%s runs=%d/%d agents_in_flight=%d checkpoints=%d checkpoint_agents=%d active_work=%d%s",
+		"shutdown_not_ready status=%s runs=%d/%d agents_in_flight=%d checkpoints=%d checkpoint_agents=%d async_work=%d active_work=%d%s",
 		result.Status,
 		result.RunsStopped,
 		result.RunsRequested,
 		result.AgentsInFlight,
 		result.CheckpointsPending,
 		result.CheckpointAgentsPending,
+		result.AsyncWorkActive,
 		result.ActiveWorkCount,
 		activeWorkRefsPart,
 	)
@@ -174,6 +177,10 @@ func shutdownNotReadyErrorHasBlockingWorkV0(message string) bool {
 			}
 		case strings.HasPrefix(field, "checkpoint_agents="):
 			if shutdownNotReadyNumericFieldIsPositiveV0(field, "checkpoint_agents=") {
+				return true
+			}
+		case strings.HasPrefix(field, "async_work="):
+			if shutdownNotReadyNumericFieldIsPositiveV0(field, "async_work=") {
 				return true
 			}
 		case strings.HasPrefix(field, "runs="):
