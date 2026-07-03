@@ -54,10 +54,8 @@ func mcpAutoprogrammingSuperviseTransportHandlerV0(
 				return json.Marshal(result)
 			}
 			message := publicMCPExecutorErrorMessageFromErrorV0("autoprogramming_supervise_executor_error", err)
-			payload := NewMCPRunSupervisorErrorResultV0(
+			payload := newMCPAutoprogrammingSuperviseExecutorErrorResultV0(
 				input.MCPRunSupervisorToolInputV0,
-				"autoprogramming_supervise_executor_error",
-				"executor",
 				message,
 			)
 			return json.Marshal(payload)

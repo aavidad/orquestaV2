@@ -304,8 +304,27 @@ func newMCPAutoprogrammingSuperviseExecutorErrorV0(
 	err error,
 ) MCPRunSupervisorToolResultV0 {
 	message := publicMCPExecutorErrorMessageFromErrorV0("autoprogramming_supervise_executor_error", err)
-	result := NewMCPRunSupervisorErrorResultV0(input, "autoprogramming_supervise_executor_error", "executor", message)
+	result := newMCPAutoprogrammingSuperviseExecutorErrorResultV0(input, message)
 	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), input.CorrelationID, input.RequestID)
+	return result
+}
+
+func newMCPAutoprogrammingSuperviseExecutorErrorResultV0(
+	input MCPRunSupervisorToolInputV0,
+	message string,
+) MCPRunSupervisorToolResultV0 {
+	result := NewMCPRunSupervisorErrorResultV0(input, "autoprogramming_supervise_executor_error", "executor", message)
+	result.OperationRef = mcpAutoprogrammingSuperviseOperationRefV0(input)
+	result.EvidenceRefs = compactStringsMCPV0([]string{
+		"evidence-ref-autoprogramming-supervise-execute-error",
+		result.OperationRef,
+	})
+	result.Diagnostics = []MCPAutoprogrammingDiagnosticV0{{
+		Code:         "autoprogramming_supervise_executor_error",
+		Scope:        mcpAutoprogrammingSuperviseOperationScopeV0(input),
+		Message:      "fallo publico al supervisar autoprogramacion",
+		EvidenceRefs: result.EvidenceRefs,
+	}}
 	return result
 }
 

@@ -1167,6 +1167,16 @@ transporte MCP cuando no hay resultado propio: conserva correlacion,
 sin filtrar rutas ni secretos. Evidencia:
 `TestMCPRunSupervisorHTTPHandlerV0NoPropagaErrorNoCatalogado`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 36: la fachada
+`orquesta.autoprogramming.supervise.v0` alinea HTTP y transporte MCP con la
+misma regla de evidencia: errores de executor sin resultado propio conservan
+`operation_ref`, `evidence_refs` y diagnostico
+`autoprogramming_supervise_executor_error`, y el descriptor declara
+`evidence_refs` en errores. Evidencia:
+`TestMCPAutoprogrammingSuperviseHTTPHandlerV0DevuelvePayloadPublicoSiExecutorFalla`,
+`TestMCPAutoprogrammingSuperviseTransportV0DevuelvePayloadPublicoSiExecutorFalla`
+y `TestMCPAutoprogrammingSuperviseDescriptorV0DeclaraEvidenciaEnErrores`.
+
 Avance BUG-ORQ-20260701-066/075 2026-07-03 tarde 34: la fachada
 `/api/v0/domain-work/status` publica diagnostico compacto
 `domain_work_status_http_error` con evidencia estable cuando falla el executor,

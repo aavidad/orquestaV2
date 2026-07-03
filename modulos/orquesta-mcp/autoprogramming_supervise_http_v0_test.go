@@ -13,6 +13,15 @@ import (
 	"time"
 )
 
+func TestMCPAutoprogrammingSuperviseDescriptorV0DeclaraEvidenciaEnErrores(t *testing.T) {
+	descriptor := MCPAutoprogrammingSuperviseDescriptorV0()
+	if !strings.Contains(descriptor.Output, "error:{errores_publicos,evidence_refs?") ||
+		!strings.Contains(descriptor.Output, "operation_ref?") ||
+		!strings.Contains(descriptor.Output, "diagnostics?") {
+		t.Fatalf("descriptor autoprogramming.supervise debe declarar evidencia en errores: %+v", descriptor)
+	}
+}
+
 func TestMCPAutoprogrammingSuperviseHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
 	executor := &fakeMCPAutoprogrammingSuperviseHTTPExecutorV0{
 		result: MCPRunSupervisorToolResultV0{
@@ -370,6 +379,13 @@ func TestMCPAutoprogrammingSuperviseHTTPHandlerV0DevuelvePayloadPublicoSiExecuto
 		result.Errores[0].Message != "autoprogramming_supervise_executor_error" {
 		t.Fatalf("result=%+v", result)
 	}
+	if result.OperationRef == "" ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-autoprogramming-supervise-execute-error") ||
+		!containsStringMCPTestV0(result.EvidenceRefs, result.OperationRef) ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_supervise_executor_error") ||
+		!containsStringMCPTestV0(result.Diagnostics[0].EvidenceRefs, "evidence-ref-autoprogramming-supervise-execute-error") {
+		t.Fatalf("error debe conservar evidencia/diagnostico: %+v", result)
+	}
 }
 
 func TestMCPAutoprogrammingSuperviseHTTPHandlerV0PreservaPayloadPublicoDelExecutorConDiagnostics(t *testing.T) {
@@ -446,6 +462,13 @@ func TestMCPAutoprogrammingSuperviseTransportV0DevuelvePayloadPublicoSiExecutorF
 		result.Errores[0].Code != "autoprogramming_supervise_executor_error" ||
 		result.Errores[0].Message != "autoprogramming_supervise_executor_error" {
 		t.Fatalf("result=%+v", result)
+	}
+	if result.OperationRef == "" ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-autoprogramming-supervise-execute-error") ||
+		!containsStringMCPTestV0(result.EvidenceRefs, result.OperationRef) ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, "autoprogramming_supervise_executor_error") ||
+		!containsStringMCPTestV0(result.Diagnostics[0].EvidenceRefs, "evidence-ref-autoprogramming-supervise-execute-error") {
+		t.Fatalf("error debe conservar evidencia/diagnostico: %+v", result)
 	}
 }
 
