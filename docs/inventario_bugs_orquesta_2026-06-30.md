@@ -1024,6 +1024,14 @@ del cliente queda acotada a `backend_still_running` recuperable; un
 activos normales en cleanup de backend. Evidencia:
 `TestRequestServerShutdownV0NoReintentaHTTP409ActiveGoalsPresent`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 26: el reintento de cleanup
+por `backend_still_running` exige tambien runs drenadas (`runs_stopped >=
+runs_requested` cuando hay runs solicitadas); si quedan runs pendientes, el
+cliente falla como `shutdown_not_ready` sin rePOST ni polling, aunque haya refs
+de backend, para no limpiar un backend que aun podria pertenecer a trabajo vivo
+no terminal. Evidencia:
+`TestRequestServerShutdownV0NoReintentaBackendStillRunningConRunsPendientes`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

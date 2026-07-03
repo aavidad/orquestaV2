@@ -16,6 +16,7 @@ func shutdownClientResultCanWaitV0(result serverShutdownClientResultV0) bool {
 			result.CheckpointsPending == 0 &&
 			result.CheckpointAgentsPending == 0 &&
 			result.AsyncWorkActive == 0 &&
+			(result.RunsRequested <= 0 || result.RunsStopped >= result.RunsRequested) &&
 			(result.ActiveWorkCount > 0 || len(compactStringsV0(result.ActiveWorkRefs)) > 0)
 	default:
 		return false

@@ -419,6 +419,54 @@ func TestRequestServerShutdownV0NoReintentaHTTP409ActiveGoalsPresent(t *testing.
 	}
 }
 
+func TestRequestServerShutdownV0NoReintentaBackendStillRunningConRunsPendientes(t *testing.T) {
+	shutdownCalls := 0
+	statusCalls := 0
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v0/server/shutdown":
+			shutdownCalls++
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(serverShutdownClientResultV0{
+				Estado:          "ok",
+				Status:          "backend_still_running",
+				ShutdownReady:   false,
+				RunsRequested:   1,
+				RunsStopped:     0,
+				ActiveWorkCount: 1,
+				ActiveWorkRefs:  []string{"shutdown-active-work-goal-backend-goal-ref-run-pending"},
+			})
+		case orquestaserver.ServerStatusEndpointV0:
+			statusCalls++
+			_ = json.NewEncoder(w).Encode(orquestaserver.ServerPublicStatusV0{
+				Status:                  "running",
+				ShutdownInProgress:      true,
+				ShutdownStatus:          "backend_still_running",
+				ShutdownRunsRequested:   1,
+				ShutdownRunsStopped:     0,
+				ShutdownActiveWorkCount: 1,
+				ShutdownActiveWorkRefs:  []string{"shutdown-active-work-goal-backend-goal-ref-run-pending"},
+			})
+		default:
+			t.Fatalf("path inesperado: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	err := requestServerShutdownV0(strings.TrimPrefix(server.URL, "http://"), serverShutdownClientOptionsV0{Forced: true})
+
+	if err == nil || !strings.Contains(err.Error(), "shutdown_not_ready status=backend_still_running") {
+		t.Fatalf("error backend_still_running con runs pendientes esperado: %v", err)
+	}
+	if shutdownCalls != 1 {
+		t.Fatalf("shutdownCalls=%d, no debe reintentar backend_still_running con runs pendientes", shutdownCalls)
+	}
+	if statusCalls != 0 {
+		t.Fatalf("statusCalls=%d, backend con runs pendientes no debe entrar en espera de cleanup", statusCalls)
+	}
+}
+
 func TestWaitServerShutdownReadyV0NoEsperaEstadosNoRecuperables(t *testing.T) {
 	started := time.Now()
 	err := waitServerShutdownReadyV0(
