@@ -849,6 +849,13 @@ ingiere tambien `active_work_refs` compactas cuando un adaptador no devuelve
 bloqueo. Evidencia:
 `TestShutdownProjectionFromHTTPV0ReadyConActiveWorkRefsQuedaStopPendingV0`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 12: las
+`active_work_refs` directas se normalizan como refs publicas compactas antes de
+persistir estado; si una entrada parece path o detalle runtime, se conserva la
+causa como `shutdown-active-work-ref-redacted` sin publicar la ruta original.
+Evidencia:
+`TestShutdownProjectionFromHTTPV0ReadyConActiveWorkRefsQuedaStopPendingV0`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y

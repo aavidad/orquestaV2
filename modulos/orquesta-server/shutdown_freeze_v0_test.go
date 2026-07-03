@@ -431,7 +431,11 @@ func TestShutdownProjectionFromHTTPV0ReadyConActiveWorkRefsQuedaStopPendingV0(t 
 		"estado":"ok",
 		"status":"ready",
 		"shutdown_ready":true,
-		"active_work_refs":["shutdown-active-work-goal-backend-goal-ref-ready-ref-001"]
+		"active_work_refs":[
+			"goal-ref-ready-ref-001",
+			"shutdown-active-work-goal-backend-thread-ref-ready-ref-001",
+			"/tmp/oq-gsrv-secret/socket"
+		]
 	}`)
 
 	projection, keepFrozen := shutdownProjectionFromHTTPV0(http.StatusOK, body)
@@ -439,8 +443,11 @@ func TestShutdownProjectionFromHTTPV0ReadyConActiveWorkRefsQuedaStopPendingV0(t 
 	if !keepFrozen ||
 		projection.Ready ||
 		projection.Status != "stop_pending" ||
-		projection.ActiveWorkCount != 1 ||
-		!hasShutdownProjectionRefForTestV0(projection.ActiveWorkRefs, "shutdown-active-work-goal-backend-goal-ref-ready-ref-001") {
+		projection.ActiveWorkCount != 3 ||
+		!hasShutdownProjectionRefForTestV0(projection.ActiveWorkRefs, "shutdown-active-work-goal-ref-ready-ref-001") ||
+		!hasShutdownProjectionRefForTestV0(projection.ActiveWorkRefs, "shutdown-active-work-goal-backend-thread-ref-ready-ref-001") ||
+		!hasShutdownProjectionRefForTestV0(projection.ActiveWorkRefs, "shutdown-active-work-ref-redacted") ||
+		hasShutdownProjectionRefForTestV0(projection.ActiveWorkRefs, "/tmp/oq-gsrv-secret/socket") {
 		t.Fatalf("projection=%+v keep_frozen=%v", projection, keepFrozen)
 	}
 }

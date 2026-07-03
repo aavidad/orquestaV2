@@ -144,7 +144,7 @@ func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjecti
 		CheckpointAgentsPending: payload.CheckpointAgentsPending,
 		ActiveWorkCount:         payload.ActiveWorkCount,
 		ActiveWorkRefs: compactServerStringsV0(append(
-			append([]string(nil), payload.ActiveWorkRefs...),
+			shutdownProjectionDirectActiveWorkRefsV0(payload.ActiveWorkRefs),
 			shutdownProjectionActiveWorkRefsV0(payload.ActiveWorks)...,
 		)),
 	}
@@ -179,6 +179,24 @@ func shutdownProjectionActiveWorkRefsV0(
 			if safe := safeShutdownProjectionRefPartV0(ref); safe != "" {
 				out = append(out, prefix+"-"+safe)
 			}
+		}
+	}
+	return compactServerStringsV0(out)
+}
+
+func shutdownProjectionDirectActiveWorkRefsV0(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if strings.Contains(value, "/") || strings.Contains(value, `\`) {
+			out = append(out, "shutdown-active-work-ref-redacted")
+			continue
+		}
+		if safe := safeShutdownProjectionRefPartV0(value); safe != "" {
+			if strings.HasPrefix(safe, "shutdown-active-work-") {
+				out = append(out, safe)
+				continue
+			}
+			out = append(out, "shutdown-active-work-"+safe)
 		}
 	}
 	return compactServerStringsV0(out)
