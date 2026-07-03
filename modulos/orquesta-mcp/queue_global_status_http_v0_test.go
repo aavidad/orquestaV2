@@ -571,6 +571,11 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0ConservaReplanNarrowContext(t *testing
 			QueueHealth: &MCPAutoprogrammingQueueHealthV0{
 				Blocked: 1,
 			},
+			GoalProgressPolicy: &MCPAutoprogrammingGoalProgressPolicyV0{
+				CheckpointOnlyHighConsumptionTokens: 64000,
+				CheckpointOnlyMaxWaitSeconds:        321,
+				NoCheckpointWarningMaxWaitSeconds:   654,
+			},
 			StaleRunning: []MCPAutoprogrammingActionableRunV0{{
 				Code:              mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0,
 				RunRef:            "run-ref-global-status-checkpoint-high-001",
@@ -600,6 +605,12 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0ConservaReplanNarrowContext(t *testing
 		mcpQueueGlobalStatusActionReplanNarrowContextV0,
 	) {
 		t.Fatalf("result=%+v", result)
+	}
+	if result.GoalProgressPolicy == nil ||
+		result.GoalProgressPolicy.CheckpointOnlyHighConsumptionTokens != 64000 ||
+		result.GoalProgressPolicy.CheckpointOnlyMaxWaitSeconds != 321 ||
+		result.GoalProgressPolicy.NoCheckpointWarningMaxWaitSeconds != 654 {
+		t.Fatalf("goal_progress_policy no conservada en global-status: %+v", result.GoalProgressPolicy)
 	}
 }
 

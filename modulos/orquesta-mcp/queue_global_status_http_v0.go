@@ -34,20 +34,21 @@ const (
 )
 
 type MCPQueueGlobalStatusResultV0 struct {
-	SchemaVersion string                              `json:"schema_version"`
-	Estado        string                              `json:"estado"`
-	RequestID     string                              `json:"request_id,omitempty"`
-	CorrelationID string                              `json:"correlation_id,omitempty"`
-	QueueRef      string                              `json:"queue_ref,omitempty"`
-	Summary       MCPQueueGlobalStatusSummaryV0       `json:"summary"`
-	Items         []MCPQueueGlobalStatusItemV0        `json:"items,omitempty"`
-	QueueHealth   *MCPAutoprogrammingQueueHealthV0    `json:"queue_health,omitempty"`
-	ActiveRuns    []MCPAutoprogrammingActiveRunV0     `json:"active_runs,omitempty"`
-	GoalRunRefs   []string                            `json:"goal_run_refs,omitempty"`
-	StaleRunning  []MCPAutoprogrammingActionableRunV0 `json:"stale_running,omitempty"`
-	SafeActions   []MCPAutoprogrammingSafeActionV0    `json:"safe_actions,omitempty"`
-	Diagnostics   []MCPAutoprogrammingDiagnosticV0    `json:"diagnostics,omitempty"`
-	Errores       []MCPValidationIssueV0              `json:"errores_publicos,omitempty"`
+	SchemaVersion      string                                  `json:"schema_version"`
+	Estado             string                                  `json:"estado"`
+	RequestID          string                                  `json:"request_id,omitempty"`
+	CorrelationID      string                                  `json:"correlation_id,omitempty"`
+	QueueRef           string                                  `json:"queue_ref,omitempty"`
+	Summary            MCPQueueGlobalStatusSummaryV0           `json:"summary"`
+	Items              []MCPQueueGlobalStatusItemV0            `json:"items,omitempty"`
+	QueueHealth        *MCPAutoprogrammingQueueHealthV0        `json:"queue_health,omitempty"`
+	GoalProgressPolicy *MCPAutoprogrammingGoalProgressPolicyV0 `json:"goal_progress_policy,omitempty"`
+	ActiveRuns         []MCPAutoprogrammingActiveRunV0         `json:"active_runs,omitempty"`
+	GoalRunRefs        []string                                `json:"goal_run_refs,omitempty"`
+	StaleRunning       []MCPAutoprogrammingActionableRunV0     `json:"stale_running,omitempty"`
+	SafeActions        []MCPAutoprogrammingSafeActionV0        `json:"safe_actions,omitempty"`
+	Diagnostics        []MCPAutoprogrammingDiagnosticV0        `json:"diagnostics,omitempty"`
+	Errores            []MCPValidationIssueV0                  `json:"errores_publicos,omitempty"`
 }
 
 type MCPQueueGlobalStatusSummaryV0 struct {
@@ -262,20 +263,21 @@ func newMCPQueueGlobalStatusResultV0(
 	summary.NeedsAction = mcpQueueGlobalStatusNeedsActionV0(summary, items)
 	summary.WillFinishAlone = !summary.NeedsAction
 	return MCPQueueGlobalStatusResultV0{
-		SchemaVersion: MCPQueueGlobalStatusSchemaVersionV0,
-		Estado:        firstNonEmptyMCPV0(status.Estado, MCPAutoprogrammingStatusEstadoOKV0),
-		RequestID:     firstNonEmptyMCPV0(status.RequestID, input.RequestID),
-		CorrelationID: firstNonEmptyMCPV0(status.CorrelationID, input.CorrelationID, input.RequestID),
-		QueueRef:      firstNonEmptyMCPV0(status.QueueRef, input.QueueRef),
-		Summary:       summary,
-		Items:         items,
-		QueueHealth:   status.QueueHealth,
-		ActiveRuns:    activeRuns,
-		GoalRunRefs:   goalRunRefs,
-		StaleRunning:  append([]MCPAutoprogrammingActionableRunV0(nil), status.StaleRunning...),
-		SafeActions:   safeActions,
-		Diagnostics:   diagnostics,
-		Errores:       append([]MCPValidationIssueV0(nil), status.Errores...),
+		SchemaVersion:      MCPQueueGlobalStatusSchemaVersionV0,
+		Estado:             firstNonEmptyMCPV0(status.Estado, MCPAutoprogrammingStatusEstadoOKV0),
+		RequestID:          firstNonEmptyMCPV0(status.RequestID, input.RequestID),
+		CorrelationID:      firstNonEmptyMCPV0(status.CorrelationID, input.CorrelationID, input.RequestID),
+		QueueRef:           firstNonEmptyMCPV0(status.QueueRef, input.QueueRef),
+		Summary:            summary,
+		Items:              items,
+		QueueHealth:        status.QueueHealth,
+		GoalProgressPolicy: status.GoalProgressPolicy,
+		ActiveRuns:         activeRuns,
+		GoalRunRefs:        goalRunRefs,
+		StaleRunning:       append([]MCPAutoprogrammingActionableRunV0(nil), status.StaleRunning...),
+		SafeActions:        safeActions,
+		Diagnostics:        diagnostics,
+		Errores:            append([]MCPValidationIssueV0(nil), status.Errores...),
 	}
 }
 

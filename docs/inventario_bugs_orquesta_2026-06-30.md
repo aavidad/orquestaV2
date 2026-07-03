@@ -1382,6 +1382,13 @@ consultar `/api/v0/autoprogramming/status` o
 y
 `TestMCPTransportV0AutoprogrammingStatusPublicaGoalProgressPolicyDesdeBindings`.
 
+Avance BUG-ORQ-20260701-073/088 2026-07-03 tarde 42:
+`/api/v0/queue/global-status` conserva `goal_progress_policy` desde
+`autoprogramming/status` cuando publica acciones como `replan_narrow_context`
+por `checkpoint_only_high_consumption`. Asi el panel global no pierde los
+umbrales efectivos que explican un corte por alto consumo/checkpoint. Evidencia:
+`TestMCPQueueGlobalStatusHTTPHandlerV0ConservaReplanNarrowContext`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
