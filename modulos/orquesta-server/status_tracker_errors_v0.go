@@ -27,6 +27,7 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementErrorV0(message string, n
 		tracker.idleSelfImprovementInFlight = false
 		tracker.idleSelfImprovementAccepted = false
 		tracker.idleSelfImprovementAttempts++
+		tracker.resetIdleSelfImprovementPublicationLockedV0()
 		state.IdleSelfImprovementFlight = false
 		state.IdleSelfImprovementRuns = tracker.idleSelfImprovementAttempts
 		state.IdleSelfImprovementOK = tracker.idleSelfImprovementPrepared
@@ -74,6 +75,7 @@ func (tracker *StatusTrackerV0) MarkIdleSelfImprovementPrepareFailedV0(
 		tracker.idleSelfImprovementInFlight = false
 		tracker.idleSelfImprovementAccepted = false
 		tracker.idleSelfImprovementAttempts++
+		tracker.resetIdleSelfImprovementPublicationLockedV0()
 		state.IdleSelfImprovementFlight = false
 		state.IdleSelfImprovementRuns = tracker.idleSelfImprovementAttempts
 		state.IdleSelfImprovementOK = tracker.idleSelfImprovementPrepared

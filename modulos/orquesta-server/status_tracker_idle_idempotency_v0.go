@@ -64,6 +64,12 @@ func (tracker *StatusTrackerV0) RegisterIdleSelfImprovementPublicationV0(
 	return false, skipped
 }
 
+func (tracker *StatusTrackerV0) resetIdleSelfImprovementPublicationLockedV0() {
+	tracker.lastIdleSelfImprovementPublication = idleSelfImprovementPublicationV0{}
+	tracker.idleSelfImprovementPublicationRecorded = false
+	tracker.idleSelfImprovementSkippedIdentical = 0
+}
+
 func (tracker *StatusTrackerV0) ConsumeIdleSelfImprovementSkippedIdenticalV0() int {
 	tracker.mu.Lock()
 	defer tracker.mu.Unlock()

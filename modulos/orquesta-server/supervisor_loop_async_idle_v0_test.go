@@ -98,6 +98,7 @@ func TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0(t *testing.T) {
 	}
 	close(supervisor.selfRelease)
 	waitIdleSelfImprovementFinishedForTestV0(t, runtime)
+	waitRuntimeAsyncWorkForTestV0(t, runtime)
 	if supervisor.selfCalls != 1 ||
 		!strings.Contains(supervisor.lastSelfRequest.FailureSummary, "1m0s") ||
 		supervisor.lastSelfRequest.PriorityScore != DefaultIdleSelfImprovementPriorityScoreV0 ||

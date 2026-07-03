@@ -597,3 +597,35 @@ Evidencia focal:
 Cierre operativo antes de commit: `git diff --check` limpio y sin procesos
 vivos de `orquesta-server run`, `codebase-memory-mcp` ni
 `codex app-server --listen`.
+
+### 2026-07-03 noche — Codex cierra BUG-159 de automejora idle async
+
+Trabajo directo acotado, sin relanzar pilotajes: se investigó el fallo
+`retry no lanzado tras cooldown` observado al validar BUG-155. La incidencia se
+reprodujo con `go test -count=100 ./modulos/orquesta-server -run
+TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0`.
+
+Causa: la idempotencia de publicaciones idle conservaba una publicacion
+`scheduled` tras `MarkIdleSelfImprovementErrorV0` o
+`MarkIdleSelfImprovementPrepareFailedV0`. Si el retry posterior usaba el mismo
+`request_ref`, `RegisterIdleSelfImprovementPublicationV0` lo trataba como
+duplicado identico y no llegaba a invocar `PrepareIdleSelfImprovementV0`.
+Tambien se estabilizo el test para que espere el drenaje del tick async previo
+antes de mutar manualmente el tracker.
+
+Cambio aplicado:
+- `resetIdleSelfImprovementPublicationLockedV0` limpia la publicacion activa de
+  automejora idle;
+- los cierres por error y `prepare_failed` liberan esa idempotencia para permitir
+  retry tras cooldown;
+- quedan pruebas focales de tracker para error y prepare_failed, mas el stress
+  del test async que antes reproducia el fallo.
+
+Evidencia ejecutada:
+- `go test -count=100 ./modulos/orquesta-server -run TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0`
+- `go test -count=1 ./modulos/orquesta-server -run 'TestStatusTrackerV0(IdleSelfImprovementError|PrepareFailed)LiberaPublicacionParaRetryV0|TestRuntimeV0IdleSelfImprovementSaltaBloqueoIdenticoYPublicaWatchdogV0'`
+
+Subagente usado: `019f29a7-e2e5-7fd0-b5b5-6770deb56e88` (explorer Wegener),
+solo lectura, sin `codebase-memory-mcp`; coincidió en la causa y recomendó el
+reset de publicacion en error/fallo. Pendiente antes de entregar: suites
+globales, revision de procesos vivos, commit y push.

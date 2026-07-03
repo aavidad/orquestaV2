@@ -53,6 +53,54 @@ func TestRuntimeV0IdleSelfImprovementSaltaBloqueoIdenticoYPublicaWatchdogV0(t *t
 	}
 }
 
+func TestStatusTrackerV0IdleSelfImprovementErrorLiberaPublicacionParaRetryV0(t *testing.T) {
+	now := time.Date(2026, 7, 3, 15, 10, 0, 0, time.UTC)
+	tracker := NewStatusTrackerV0(ConfigV0{}, now)
+	publication := newIdleSelfImprovementPublicationV0(
+		"scheduled",
+		"scheduled",
+		[]string{"request-ref-idle-retry-001"},
+	)
+	if skip, skipped := tracker.RegisterIdleSelfImprovementPublicationV0(publication); skip || skipped != 0 {
+		t.Fatalf("primera publicacion skip=%v skipped=%d", skip, skipped)
+	}
+	if skip, skipped := tracker.RegisterIdleSelfImprovementPublicationV0(publication); !skip || skipped != 1 {
+		t.Fatalf("duplicado no bloqueado: skip=%v skipped=%d", skip, skipped)
+	}
+
+	tracker.MarkIdleSelfImprovementErrorV0("fallo_transitorio", now.Add(-61*time.Second))
+
+	if skip, skipped := tracker.RegisterIdleSelfImprovementPublicationV0(publication); skip || skipped != 0 {
+		t.Fatalf("error no libero retry identico: skip=%v skipped=%d", skip, skipped)
+	}
+}
+
+func TestStatusTrackerV0PrepareFailedLiberaPublicacionParaRetryV0(t *testing.T) {
+	now := time.Date(2026, 7, 3, 15, 15, 0, 0, time.UTC)
+	tracker := NewStatusTrackerV0(ConfigV0{}, now)
+	publication := newIdleSelfImprovementPublicationV0(
+		"scheduled",
+		"scheduled",
+		[]string{"request-ref-idle-prepare-failed-001"},
+	)
+	if skip, skipped := tracker.RegisterIdleSelfImprovementPublicationV0(publication); skip || skipped != 0 {
+		t.Fatalf("primera publicacion skip=%v skipped=%d", skip, skipped)
+	}
+	if skip, skipped := tracker.RegisterIdleSelfImprovementPublicationV0(publication); !skip || skipped != 1 {
+		t.Fatalf("duplicado no bloqueado: skip=%v skipped=%d", skip, skipped)
+	}
+
+	tracker.MarkIdleSelfImprovementPrepareFailedV0(IdleSelfImprovementResultV0{
+		RequestRef: "request-ref-idle-prepare-failed-001",
+		Status:     "error",
+		Message:    "prepare_failed",
+	}, now.Add(-61*time.Second))
+
+	if skip, skipped := tracker.RegisterIdleSelfImprovementPublicationV0(publication); skip || skipped != 0 {
+		t.Fatalf("prepare_failed no libero retry identico: skip=%v skipped=%d", skip, skipped)
+	}
+}
+
 func TestRuntimeV0SupervisorDespiertaPorGoalTerminalObservadoV0(t *testing.T) {
 	supervisor := &blockingGoalObserverSupervisorV0{
 		blockingSupervisorV0: newBlockingSupervisorV0(),

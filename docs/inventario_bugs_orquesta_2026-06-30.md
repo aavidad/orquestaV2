@@ -1691,7 +1691,7 @@ consulta posterior, wait o escalado por `runs/control`. Evidencia:
 | BUG-ORQ-20260703-155 | cerrado | Autoprogramacion backlog / contrato de tarea | la request MEJ-206 generada por el planner mezclaba criterios propios de `biblioteca-habilidades-curada` con criterios ajenos de automejora idle (`ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS`, planner scanner, proyeccion publica de outbox/wait_external, etc.) | `idleSelfImprovementRequestForBacklogSectionV0` concatenaba `base.AcceptanceCriteria` con `section.Criteria`, convirtiendo politicas globales de idle/scanner en contrato funcional de una tarea concreta | state del piloto m206 en `idle_self_improvement_goal_spec.objective` y `acceptance_criteria`; cierre 2026-07-03 noche: `TestIdleSelfImprovementBacklogPlannerV0SeccionEjecutableNoHeredaCriteriosBaseV0` reproduce el fallo y pasa tras aislar criterios por seccion | Cierre: las secciones ejecutables y revisiones documentales ambiguas ya no heredan `base.AcceptanceCriteria`; conservan criterios declarados por la seccion y guardas causales propias de backlog. Scanner/fallback mantienen criterios globales porque son inventario, no tarea de implementacion |
 | BUG-ORQ-20260703-156 | abierto | Runtime piloto / procesos residentes | tras cerrar pilotos ya integrados, seguian vivos `orquesta-server run` de `pilot-t285`, `pilot-m202`, `pilot-m203`, `pilot-m205` y varios `codex app-server --listen` bajo sus `CODEX_HOME` temporales; MEJ-206 tambien dejo app-server huerfano tras parar el servidor | el cierre de pilotos/automejora no encadena de forma fiable shutdown del backend Goal app-server ni limpieza de procesos temporales; el operador debe mapear manualmente `CODEX_HOME` y matar hijos, lo que no escala a Orquesta autonoma | pids observados antes de limpieza: servidores `2299757`, `2381726`, `2381872`, `2382034`; app-servers bajo `scratchpad/pilot-*`; MEJ-206 app-server `2604525/2604540` quedo vivo tras `SIGINT` al servidor | Unificar contrato de shutdown de piloto: servidor temporal debe parar backend propio al recibir señal y publicar evidencia `backend_cleaned`; al cerrar una tanda, el runtime debe listar procesos asociados por state dir/runtime dir |
 | BUG-ORQ-20260703-157 | abierto | Harness de pilotos / ejecucion background | el arranque del piloto MEJ-206 como proceso background/nohup desde el wrapper murio al terminar la llamada de shell: state quedaba con pids `2600222`/`2602158` pero sin proceso vivo, logs vacios y auditoria de startup lista; solo funciono al mantener `orquesta-server run` en una sesion PTY foreground | el harness de pilotos depende de semantica de proceso del entorno Codex/shell y no de un supervisor durable; el state puede publicar `running` aunque el proceso haya sido limpiado por el wrapper antes del primer heartbeat real util | intentos m206 previos con `run_pilot.sh`/`nohup`, `curl` posterior fallando, logs `server_stdout.log`/`server_stderr.log` vacios; workaround: sesion PTY foreground `pid=2604304` | Crear lanzador de pilotos supervisado por Orquesta o usar `orquesta-server start` con PID/state validado; readiness debe reconciliar pid muerto inmediatamente y el runbook debe evitar background frágil desde wrappers |
-| BUG-ORQ-20260703-159 | en investigacion | Tests/automejora idle async | durante la validacion global del cierre BUG-155, el primer `go test -count=1 ./...` fallo una vez en `TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0` con `retry no lanzado tras cooldown`; el test exacto, el paquete `modulos/orquesta-server` y una segunda suite global pasaron despues | posible flake de timing/cooldown en supervisor async idle; no hay evidencia todavia de regresion funcional ni relacion con el cambio de parser, pero el fallo indica sensibilidad temporal | salida local 2026-07-03 noche; reruns verdes: `go test -count=1 ./modulos/orquesta-server -run TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0`, `go test -count=1 ./modulos/orquesta-server`, `go test -count=1 ./...` | Vigilar si reaparece; si hay segunda reproduccion, estabilizar el test con reloj/fake scheduler o documentar la dependencia temporal exacta |
+| BUG-ORQ-20260703-159 | cerrado | Tests/automejora idle async / idempotencia | durante la validacion global del cierre BUG-155, `TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0` fallaba con `retry no lanzado tras cooldown`; reproducido localmente con `go test -count=100 ./modulos/orquesta-server -run TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0` antes del fix | la deduplicacion de publicaciones idle conservaba la ultima publicacion `scheduled` aunque el intento terminara en `MarkIdleSelfImprovementErrorV0` o `MarkIdleSelfImprovementPrepareFailedV0`; un retry tras cooldown con el mismo `request_ref` podia silenciarse como duplicado identico antes de invocar `PrepareIdleSelfImprovementV0`; ademas el test mutaba el tracker sin esperar el drenaje del tick async previo | cierre 2026-07-03 noche: `resetIdleSelfImprovementPublicationLockedV0` libera la publicacion activa al cerrar por error/prepare_failed; `TestStatusTrackerV0IdleSelfImprovementErrorLiberaPublicacionParaRetryV0`, `TestStatusTrackerV0PrepareFailedLiberaPublicacionParaRetryV0` y `go test -count=100 ./modulos/orquesta-server -run TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0` verdes | Cierre: retries fallidos ya no quedan bloqueados por idempotencia stale; la prueba async espera el drenaje del trabajo anterior antes de forzar el retry |
 
 Avance BUG-ORQ-20260703-154 2026-07-03 noche:
 MEJ-104 queda empezado con gobernador pre-launch de automejora idle. La decision
@@ -1725,11 +1725,26 @@ cubierto por codigo y tests en esta sesion. Residuales de esta tanda que siguen
 abiertos para revision estructural: `BUG-ORQ-20260703-149` (WIP remoto no
 integrable tal cual), `BUG-ORQ-20260703-154` (smoke real/corte de goal activo
 con alto consumo), `BUG-ORQ-20260703-156` (procesos residuales de pilotos) y
-`BUG-ORQ-20260703-157` (harness background fragil). En investigacion queda
-`BUG-ORQ-20260703-159` por flake aislado de test async idle observado durante
-la validacion de BUG-155. Las filas largas antiguas
+`BUG-ORQ-20260703-157` (harness background fragil). `BUG-ORQ-20260703-159`
+queda cerrado despues de reproducirlo como idempotencia stale de automejora idle
+y cubrirlo con tests focales. Las filas largas antiguas
 `BUG-ORQ-20260701-065/066/075/085/088` y OPES calidad siguen abiertas como
 deuda amplia, no como regresion nueva de T292.
+
+Cierre BUG-ORQ-20260703-159 2026-07-03 noche:
+La incidencia deja de ser flake no explicado. Se reprodujo con
+`go test -count=100 ./modulos/orquesta-server -run TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0`.
+La causa era una publicacion idle `scheduled` guardada para deduplicacion que no
+se invalidaba cuando el intento terminaba por error o `prepare_failed`. Un retry
+legitimo tras cooldown con el mismo `request_ref` podia quedar silenciado antes
+de preparar automejora. El cierre introduce
+`resetIdleSelfImprovementPublicationLockedV0` en el tracker y lo aplica desde
+`MarkIdleSelfImprovementErrorV0` y
+`MarkIdleSelfImprovementPrepareFailedV0`; el test async tambien espera el drenaje
+del trabajo previo antes de forzar el retry. Evidencia focal:
+`TestStatusTrackerV0IdleSelfImprovementErrorLiberaPublicacionParaRetryV0`,
+`TestStatusTrackerV0PrepareFailedLiberaPublicacionParaRetryV0` y
+`go test -count=100 ./modulos/orquesta-server -run TestRuntimeV0SupervisorPreparaAutomejoraTrasIdleV0`.
 
 ## Pendientes de analisis agrupado
 
