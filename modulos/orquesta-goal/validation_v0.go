@@ -131,6 +131,66 @@ func NormalizeGoalWorkIssueV0(issue GoalWorkIssueV0) GoalWorkIssueV0 {
 	return normalizeGoalWorkIssueV0(issue)
 }
 
+func NormalizeGoalContextBudgetV0(metric GoalContextBudgetV0) GoalContextBudgetV0 {
+	if metric.ContextBudgetTotalBytes < 0 {
+		metric.ContextBudgetTotalBytes = 0
+	}
+	if metric.StaticPromptBytes < 0 {
+		metric.StaticPromptBytes = 0
+	}
+	if metric.QueriedContextBytes < 0 {
+		metric.QueriedContextBytes = 0
+	}
+	if metric.MaterializedContextBytes < 0 {
+		metric.MaterializedContextBytes = 0
+	}
+	if metric.DynamicContextBytes < 0 {
+		metric.DynamicContextBytes = 0
+	}
+	metric.CodeContextCacheStatus = strings.TrimSpace(metric.CodeContextCacheStatus)
+	if metric.DynamicContextBytes == 0 && (metric.QueriedContextBytes > 0 || metric.MaterializedContextBytes > 0) {
+		metric.DynamicContextBytes = metric.QueriedContextBytes + metric.MaterializedContextBytes
+	}
+	if metric.ContextBudgetTotalBytes == 0 && (metric.StaticPromptBytes > 0 || metric.DynamicContextBytes > 0) {
+		metric.ContextBudgetTotalBytes = metric.StaticPromptBytes + metric.DynamicContextBytes
+	}
+	return metric
+}
+
+func GoalContextBudgetEmptyV0(metric GoalContextBudgetV0) bool {
+	metric = NormalizeGoalContextBudgetV0(metric)
+	return metric.ContextBudgetTotalBytes == 0 &&
+		metric.StaticPromptBytes == 0 &&
+		metric.QueriedContextBytes == 0 &&
+		metric.MaterializedContextBytes == 0 &&
+		metric.DynamicContextBytes == 0 &&
+		metric.CodeContextCacheStatus == ""
+}
+
+func MergeGoalContextBudgetV0(base GoalContextBudgetV0, update GoalContextBudgetV0) GoalContextBudgetV0 {
+	base = NormalizeGoalContextBudgetV0(base)
+	update = NormalizeGoalContextBudgetV0(update)
+	if update.ContextBudgetTotalBytes > 0 {
+		base.ContextBudgetTotalBytes = update.ContextBudgetTotalBytes
+	}
+	if update.StaticPromptBytes > 0 {
+		base.StaticPromptBytes = update.StaticPromptBytes
+	}
+	if update.QueriedContextBytes > 0 {
+		base.QueriedContextBytes = update.QueriedContextBytes
+	}
+	if update.MaterializedContextBytes > 0 {
+		base.MaterializedContextBytes = update.MaterializedContextBytes
+	}
+	if update.DynamicContextBytes > 0 {
+		base.DynamicContextBytes = update.DynamicContextBytes
+	}
+	if update.CodeContextCacheStatus != "" {
+		base.CodeContextCacheStatus = update.CodeContextCacheStatus
+	}
+	return NormalizeGoalContextBudgetV0(base)
+}
+
 func normalizeGoalWorkIssueV0(issue GoalWorkIssueV0) GoalWorkIssueV0 {
 	issue.Code = strings.TrimSpace(issue.Code)
 	issue.Field = strings.TrimSpace(issue.Field)
@@ -488,6 +548,7 @@ func NormalizeGoalWorkResultV0(result GoalWorkResultV0) GoalWorkResultV0 {
 	result.GoalRef = strings.TrimSpace(result.GoalRef)
 	result.ExternalGoalRef = strings.TrimSpace(result.ExternalGoalRef)
 	result.Summary = strings.TrimSpace(result.Summary)
+	result.ContextBudget = NormalizeGoalContextBudgetV0(result.ContextBudget)
 	for i := range result.ArtifactRefs {
 		result.ArtifactRefs[i] = strings.TrimSpace(result.ArtifactRefs[i])
 	}
@@ -557,8 +618,11 @@ func NormalizeGoalWorkStateV0(state GoalWorkStateV0) GoalWorkStateV0 {
 	state.Status = strings.TrimSpace(state.Status)
 	state.Spec = NormalizeGoalWorkSpecV0(state.Spec)
 	state.LaunchReceipt = NormalizeGoalLaunchReceiptV0(state.LaunchReceipt)
+	state.ContextBudget = MergeGoalContextBudgetV0(state.ContextBudget, state.LaunchReceipt.ContextBudget)
 	if state.LastResult != nil {
 		normalized := NormalizeGoalWorkResultV0(*state.LastResult)
+		state.ContextBudget = MergeGoalContextBudgetV0(state.ContextBudget, normalized.ContextBudget)
+		normalized.ContextBudget = state.ContextBudget
 		state.LastResult = &normalized
 	}
 	if state.LastClosure != nil {
@@ -623,7 +687,9 @@ func NormalizeGoalWorkRunMarkerV0(marker GoalWorkRunMarkerV0) GoalWorkRunMarkerV
 	if marker.LaunchReceipt != nil {
 		normalized := NormalizeGoalLaunchReceiptV0(*marker.LaunchReceipt)
 		marker.LaunchReceipt = &normalized
+		marker.ContextBudget = MergeGoalContextBudgetV0(marker.ContextBudget, normalized.ContextBudget)
 	}
+	marker.ContextBudget = NormalizeGoalContextBudgetV0(marker.ContextBudget)
 	for i := range marker.EvidenceRefs {
 		marker.EvidenceRefs[i] = strings.TrimSpace(marker.EvidenceRefs[i])
 	}

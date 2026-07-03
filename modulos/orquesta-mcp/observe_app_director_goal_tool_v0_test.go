@@ -502,6 +502,35 @@ func TestNewMCPObserveAppDirectorGoalResultV0OutputSaneadoPideContextoAcotado(t 
 	}
 }
 
+func TestNewMCPObserveAppDirectorGoalResultV0ProyectaContextBudgetV0(t *testing.T) {
+	result := NewMCPObserveAppDirectorGoalResultV0(
+		MCPObserveAppDirectorGoalToolInputV0{RunRef: "run-ref-observe-context-budget-001"},
+		orquestaappdirectorservice.ObserveAppDirectorGoalResultV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			RunRef:          "run-ref-observe-context-budget-001",
+			GoalRef:         "goal-ref-observe-context-budget-001",
+			ExternalGoalRef: "thread-ref-observe-context-budget-001",
+			GoalResult: orquestagoal.GoalWorkResultV0{
+				Status:  orquestagoal.GoalStatusRunningV0,
+				GoalRef: "goal-ref-observe-context-budget-001",
+				ContextBudget: orquestagoal.GoalContextBudgetV0{
+					ContextBudgetTotalBytes: 7000,
+					StaticPromptBytes:       2000,
+					DynamicContextBytes:     5000,
+					CodeContextCacheStatus:  "miss",
+				},
+			},
+		},
+	)
+
+	if result.ContextBudgetTotalBytes != 7000 ||
+		result.StaticPromptBytes != 2000 ||
+		result.DynamicContextBytes != 5000 ||
+		result.CodeContextCacheStatus != "miss" {
+		t.Fatalf("context budget no proyectado: %+v", result)
+	}
+}
+
 func TestNewMCPObserveAppDirectorGoalResultV0ReworkRunningNoPublicaClosureBloqueada(t *testing.T) {
 	result := NewMCPObserveAppDirectorGoalResultV0(
 		MCPObserveAppDirectorGoalToolInputV0{RunRef: "run-ref-observe-rework-running-001"},

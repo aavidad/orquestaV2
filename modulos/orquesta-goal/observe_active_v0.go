@@ -120,6 +120,7 @@ func GoalWorkObservationSnapshotFromStateV0(
 		Status:          state.Status,
 		GoalRef:         state.GoalRef,
 		ExternalGoalRef: state.ExternalGoalRef,
+		ContextBudget:   state.ContextBudget,
 		EvidenceRefs:    append([]string(nil), state.EvidenceRefs...),
 	})
 	if state.LastResult != nil {
@@ -133,6 +134,7 @@ func GoalWorkObservationSnapshotFromStateV0(
 		if strings.TrimSpace(result.ExternalGoalRef) == "" {
 			result.ExternalGoalRef = strings.TrimSpace(state.ExternalGoalRef)
 		}
+		result.ContextBudget = MergeGoalContextBudgetV0(state.ContextBudget, result.ContextBudget)
 	}
 	closure := GoalClosureValidationV0{}
 	closureEvaluated := false

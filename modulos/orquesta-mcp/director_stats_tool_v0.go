@@ -62,23 +62,29 @@ type MCPDirectorExternalJobStatsRequestV0 struct {
 }
 
 type MCPDirectorGoalStatsV0 struct {
-	DirectorExecutionMode string         `json:"director_execution_mode,omitempty"`
-	RunRef                string         `json:"run_ref,omitempty"`
-	GoalRef               string         `json:"goal_ref"`
-	ExternalGoalRef       string         `json:"external_goal_ref,omitempty"`
-	Status                string         `json:"status,omitempty"`
-	ClosureStatus         string         `json:"closure_status,omitempty"`
-	ClosureAccepted       bool           `json:"closure_accepted,omitempty"`
-	ClosureNeedsRework    bool           `json:"closure_needs_rework,omitempty"`
-	CurrentPhase          string         `json:"current_phase,omitempty"`
-	RetryFromPhase        string         `json:"retry_from_phase,omitempty"`
-	OperationalReason     string         `json:"operational_reason,omitempty"`
-	DomainCounters        map[string]int `json:"domain_counters,omitempty"`
-	ArtifactRefs          []string       `json:"artifact_refs,omitempty"`
-	DomainReceiptRefs     []string       `json:"domain_receipt_refs,omitempty"`
-	ExpectedReceiptRefs   []string       `json:"expected_terminal_receipt_refs,omitempty"`
-	IssueCodes            []string       `json:"issue_codes,omitempty"`
-	EvidenceRefs          []string       `json:"evidence_refs,omitempty"`
+	DirectorExecutionMode    string         `json:"director_execution_mode,omitempty"`
+	RunRef                   string         `json:"run_ref,omitempty"`
+	GoalRef                  string         `json:"goal_ref"`
+	ExternalGoalRef          string         `json:"external_goal_ref,omitempty"`
+	Status                   string         `json:"status,omitempty"`
+	ClosureStatus            string         `json:"closure_status,omitempty"`
+	ClosureAccepted          bool           `json:"closure_accepted,omitempty"`
+	ClosureNeedsRework       bool           `json:"closure_needs_rework,omitempty"`
+	CurrentPhase             string         `json:"current_phase,omitempty"`
+	RetryFromPhase           string         `json:"retry_from_phase,omitempty"`
+	OperationalReason        string         `json:"operational_reason,omitempty"`
+	DomainCounters           map[string]int `json:"domain_counters,omitempty"`
+	ContextBudgetTotalBytes  int64          `json:"context_budget_total_bytes,omitempty"`
+	StaticPromptBytes        int64          `json:"static_prompt_bytes,omitempty"`
+	QueriedContextBytes      int64          `json:"queried_context_bytes,omitempty"`
+	MaterializedContextBytes int64          `json:"materialized_context_bytes,omitempty"`
+	DynamicContextBytes      int64          `json:"dynamic_context_bytes,omitempty"`
+	CodeContextCacheStatus   string         `json:"code_context_cache_status,omitempty"`
+	ArtifactRefs             []string       `json:"artifact_refs,omitempty"`
+	DomainReceiptRefs        []string       `json:"domain_receipt_refs,omitempty"`
+	ExpectedReceiptRefs      []string       `json:"expected_terminal_receipt_refs,omitempty"`
+	IssueCodes               []string       `json:"issue_codes,omitempty"`
+	EvidenceRefs             []string       `json:"evidence_refs,omitempty"`
 }
 
 type MCPDirectorExternalJobStatsV0 struct {
@@ -164,7 +170,7 @@ func MCPDirectorStatsDescriptorV0() MCPDirectorStatsToolDescriptorV0 {
 		Name:        MCPDirectorStatsToolNameV0,
 		Version:     MCPDirectorStatsToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,app_ref?,external_job_ref?,occurred_at?,include_process_refs?,include_agent_progress?,include_agent_usage?}",
-		Output:      "ok:{run_ref,external_job?{status,status_reason?,issue_refs?,evidence_refs?,diagnostics?},goal?{goal_ref,status,closure_status?,artifact_refs?,domain_receipt_refs?,expected_terminal_receipt_refs?,issue_codes?,evidence_refs?},stats{progress,closure},decision_context,ops_snapshot}|error:{errores_publicos}",
+		Output:      "ok:{run_ref,external_job?{status,status_reason?,issue_refs?,evidence_refs?,diagnostics?},goal?{goal_ref,status,closure_status?,context_budget_total_bytes?,static_prompt_bytes?,dynamic_context_bytes?,code_context_cache_status?,artifact_refs?,domain_receipt_refs?,expected_terminal_receipt_refs?,issue_codes?,evidence_refs?},stats{progress,closure},decision_context,ops_snapshot}|error:{errores_publicos}",
 		ResourceURI: MCPDirectorStatsResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -340,6 +346,7 @@ func mcpDirectorGoalStatsFromStateV0(
 		goal.ArtifactRefs = compactStringsMCPV0(state.LastResult.ArtifactRefs)
 		goal.DomainReceiptRefs = compactStringsMCPV0(state.LastResult.DomainReceiptRefs)
 	}
+	applyMCPDirectorGoalContextBudgetV0(&goal, mcpGoalContextBudgetFromStateV0(state))
 	goal.IssueCodes = mcpDirectorGoalIssueCodesFromStateV0(state)
 	if state.LastClosure != nil {
 		goal.ClosureStatus = strings.TrimSpace(state.LastClosure.Status)
@@ -347,6 +354,47 @@ func mcpDirectorGoalStatsFromStateV0(
 		goal.ClosureNeedsRework = state.LastClosure.NeedsRework
 	}
 	return &goal
+}
+
+func applyMCPDirectorGoalContextBudgetV0(
+	goal *MCPDirectorGoalStatsV0,
+	metric orquestagoal.GoalContextBudgetV0,
+) *MCPDirectorGoalStatsV0 {
+	if goal == nil {
+		return nil
+	}
+	metric = orquestagoal.NormalizeGoalContextBudgetV0(metric)
+	if orquestagoal.GoalContextBudgetEmptyV0(metric) {
+		return goal
+	}
+	goal.ContextBudgetTotalBytes = metric.ContextBudgetTotalBytes
+	goal.StaticPromptBytes = metric.StaticPromptBytes
+	goal.QueriedContextBytes = metric.QueriedContextBytes
+	goal.MaterializedContextBytes = metric.MaterializedContextBytes
+	goal.DynamicContextBytes = metric.DynamicContextBytes
+	goal.CodeContextCacheStatus = strings.TrimSpace(metric.CodeContextCacheStatus)
+	return goal
+}
+
+func mcpGoalContextBudgetFromStateV0(
+	state orquestagoal.GoalWorkStateV0,
+) orquestagoal.GoalContextBudgetV0 {
+	metric := state.ContextBudget
+	metric = orquestagoal.MergeGoalContextBudgetV0(metric, state.LaunchReceipt.ContextBudget)
+	if state.LastResult != nil {
+		metric = orquestagoal.MergeGoalContextBudgetV0(metric, state.LastResult.ContextBudget)
+	}
+	return metric
+}
+
+func mcpGoalContextBudgetFromMarkerV0(
+	marker orquestagoal.GoalWorkRunMarkerV0,
+) orquestagoal.GoalContextBudgetV0 {
+	metric := marker.ContextBudget
+	if marker.LaunchReceipt != nil {
+		metric = orquestagoal.MergeGoalContextBudgetV0(metric, marker.LaunchReceipt.ContextBudget)
+	}
+	return metric
 }
 
 func (executor MCPDirectorStatsToolExecutorV0) resolveGoalMarkerStatsV0(
@@ -365,7 +413,7 @@ func (executor MCPDirectorStatsToolExecutorV0) resolveGoalMarkerStatsV0(
 	if err != nil {
 		return nil
 	}
-	return &MCPDirectorGoalStatsV0{
+	goal := &MCPDirectorGoalStatsV0{
 		DirectorExecutionMode: "goal_first",
 		RunRef:                strings.TrimSpace(marker.RunRef),
 		GoalRef:               strings.TrimSpace(marker.GoalRef),
@@ -378,6 +426,7 @@ func (executor MCPDirectorStatsToolExecutorV0) resolveGoalMarkerStatsV0(
 			marker.EvidenceRefs...,
 		)),
 	}
+	return applyMCPDirectorGoalContextBudgetV0(goal, mcpGoalContextBudgetFromMarkerV0(marker))
 }
 
 func (executor MCPDirectorStatsToolExecutorV0) goalMarkerSourceV0() MCPDirectorGoalRunMarkerSourcePortV0 {

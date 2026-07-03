@@ -2,6 +2,7 @@ package orquestaruntimecodexgoal
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -91,6 +92,10 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		packet.DirectionContract.MinimumSandbox != CodexGoalMinimumSandboxV0 ||
 		len(packet.DirectionContract.AllowedWriteSet) != 1 ||
 		len(packet.DirectionContract.RequiredArtifactContracts) != 1 ||
+		packet.ContextBudget.ContextBudgetTotalBytes <= 0 ||
+		packet.ContextBudget.StaticPromptBytes <= 0 ||
+		packet.ContextBudget.DynamicContextBytes <= 0 ||
+		packet.ContextBudget.MaterializedContextBytes <= 0 ||
 		packet.RequiredTests[0].Command != "go test -count=1 ./modulos/orquesta-goal" {
 		t.Fatalf("packet no conserva gobierno: %+v", packet)
 	}
@@ -101,6 +106,37 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 	}
 	if !hasGoalStringForTestV0(packet.DirectionContract.ToolOutputPolicy.BoundedCommandHints, "rg --max-count") {
 		t.Fatalf("direction_contract sin hints de comandos acotados: %+v", packet.DirectionContract.ToolOutputPolicy)
+	}
+}
+
+func TestBuildCodexGoalContextBudgetV0NoPublicaPromptCompletoV0(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.Objective = "No serializar este objetivo completo como metrica secreta."
+	spec.ContextRefs = []orquestagoal.GoalContextRefV0{{
+		Kind:    "code_context",
+		Ref:     "code-context-ref-goal-001",
+		Purpose: "fragmento materializado acotado",
+	}}
+
+	packet, issues := BuildCodexGoalStartPacketV0(spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	metricJSON := mustMarshalCodexGoalTestV0(t, packet.ContextBudget)
+	for _, want := range []string{
+		"context_budget_total_bytes",
+		"static_prompt_bytes",
+		"dynamic_context_bytes",
+		"materialized_context_bytes",
+	} {
+		if !strings.Contains(metricJSON, want) {
+			t.Fatalf("context budget no contiene %q: %s", want, metricJSON)
+		}
+	}
+	if strings.Contains(metricJSON, "No serializar") ||
+		strings.Contains(metricJSON, "fragmento materializado") {
+		t.Fatalf("context budget publico contenido de prompt/contexto: %s", metricJSON)
 	}
 }
 
@@ -265,6 +301,34 @@ func TestCodexGoalLauncherV0LlamaStarterInyectado(t *testing.T) {
 	}
 	if receipt.ExternalGoalRef != "external-goal-ref-001" {
 		t.Fatalf("external=%q", receipt.ExternalGoalRef)
+	}
+	if receipt.ContextBudget.ContextBudgetTotalBytes <= 0 ||
+		receipt.ContextBudget.StaticPromptBytes <= 0 ||
+		receipt.ContextBudget.DynamicContextBytes <= 0 {
+		t.Fatalf("receipt sin context budget: %+v", receipt.ContextBudget)
+	}
+}
+
+func TestCodexGoalLauncherV0FusionaCacheStatusDelBackendV0(t *testing.T) {
+	starter := &recordingCodexGoalStarterV0{
+		receipt: CodexGoalStartReceiptV0{
+			Status:          orquestagoal.GoalStatusAcceptedV0,
+			ExternalGoalRef: "external-goal-ref-cache-001",
+			ContextBudget: orquestagoal.GoalContextBudgetV0{
+				CodeContextCacheStatus: "hit",
+			},
+		},
+	}
+	launcher := CodexGoalLauncherV0{Starter: starter}
+
+	receipt, err := launcher.LaunchGoalWorkV0(context.Background(), validCodexGoalSpecV0())
+
+	if err != nil {
+		t.Fatalf("LaunchGoalWorkV0: %v", err)
+	}
+	if receipt.ContextBudget.ContextBudgetTotalBytes <= 0 ||
+		receipt.ContextBudget.CodeContextCacheStatus != "hit" {
+		t.Fatalf("context budget no fusionado: %+v", receipt.ContextBudget)
 	}
 }
 
@@ -636,4 +700,13 @@ func hasGoalIssueFieldForTestV0(issues []orquestagoal.GoalWorkIssueV0, field str
 		}
 	}
 	return false
+}
+
+func mustMarshalCodexGoalTestV0(t *testing.T, value any) string {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	return string(raw)
 }

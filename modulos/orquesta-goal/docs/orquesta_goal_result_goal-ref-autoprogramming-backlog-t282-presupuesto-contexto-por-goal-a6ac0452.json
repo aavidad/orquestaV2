@@ -1,0 +1,135 @@
+{
+  "goal_ref": "goal-ref-autoprogramming-backlog-t282-presupuesto-contexto-por-goal-a6ac0452",
+  "schema_version": "orquesta_goal_result.v0",
+  "status": "complete",
+  "summary": "CTX-TASK-801A implementado: presupuesto de contexto aproximado persistido en estado Goal, fusionado desde proveedor Codex Goal y proyectado por diagnosticos MCP sin publicar prompts completos ni secretos.",
+  "artifact_refs": [
+    "artifact-ref-t282-checkpoint-started",
+    "artifact-ref-t282-context-budget-implementation",
+    "artifact-ref-t282-goal-result-json"
+  ],
+  "artifact_paths": [
+    "modulos/orquesta-goal/types_v0.go",
+    "modulos/orquesta-goal/validation_v0.go",
+    "modulos/orquesta-goal/lifecycle_v0.go",
+    "modulos/orquesta-goal/observe_active_v0.go",
+    "modulos/orquesta-goal/lifecycle_v0_test.go",
+    "modulos/orquesta-runtime-codex-goal/packet_v0.go",
+    "modulos/orquesta-runtime-codex-goal/packet_v0_test.go",
+    "modulos/orquesta-mcp/director_stats_tool_v0.go",
+    "modulos/orquesta-mcp/director_stats_tool_v0_test.go",
+    "modulos/orquesta-mcp/observe_app_director_goal_tool_v0.go",
+    "modulos/orquesta-mcp/observe_app_director_goal_tool_v0_test.go",
+    "modulos/orquesta-mcp/autoprogramming_observe_goal_tool_v0.go",
+    "modulos/orquesta-mcp/autoprogramming_observe_active_goals_tool_v0.go",
+    "modulos/orquesta-mcp/autoprogramming_observe_active_goals_tool_v0_test.go",
+    "modulos/orquesta-mcp/autoprogramming_status_models_v0.go",
+    "modulos/orquesta-mcp/autoprogramming_status_stale_running_v0.go",
+    "modulos/orquesta-mcp/autoprogramming_status_tool_v0.go",
+    "modulos/orquesta-mcp/autoprogramming_status_tool_v0_test.go",
+    "modulos/orquesta-goal/docs/checkpoint_started_t282_presupuesto_contexto_por_goal.txt",
+    "modulos/orquesta-goal/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t282-presupuesto-contexto-por-goal-a6ac0452.json"
+  ],
+  "materialized_artifacts": [
+    {
+      "artifact_ref": "artifact-ref-t282-checkpoint-started",
+      "path": "modulos/orquesta-goal/docs/checkpoint_started_t282_presupuesto_contexto_por_goal.txt",
+      "artifact_type": "checkpoint",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-t282-checkpoint-created"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t282-context-budget-implementation",
+      "path": "modulos/orquesta-goal/types_v0.go",
+      "artifact_type": "code_change",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-ctx-task-801a-goal-state",
+        "evidence-ref-ctx-task-801a-codex-goal-packet",
+        "evidence-ref-ctx-task-801a-mcp-projection",
+        "evidence-ref-required-test-1f8e92e335a1-passed",
+        "evidence-ref-required-test-c908af756958-passed",
+        "evidence-ref-manual-go-build-passed-with-worktree-git-env",
+        "evidence-ref-git-diff-check-passed"
+      ],
+      "issues": []
+    },
+    {
+      "artifact_ref": "artifact-ref-t282-goal-result-json",
+      "path": "modulos/orquesta-goal/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t282-presupuesto-contexto-por-goal-a6ac0452.json",
+      "artifact_type": "goal_result",
+      "status": "valid",
+      "evidence_refs": [
+        "evidence-ref-goal-result-json-written"
+      ],
+      "issues": []
+    }
+  ],
+  "checklist": {
+    "expected_refs": [
+      "CTX-TASK-801A",
+      "no-new-store",
+      "goal-state-or-existing-diagnostic-metric",
+      "no-full-prompt-or-secrets",
+      "project-context-budget-total-static-dynamic-cache-status",
+      "required-test-ref-1f8e92e335a1",
+      "required-test-ref-c908af756958",
+      "manual-go-build",
+      "backlog_scan_ref:scan-ref-backlog-ef04d5780ab2"
+    ],
+    "completed_refs": [
+      "CTX-TASK-801A",
+      "no-new-store",
+      "goal-state-or-existing-diagnostic-metric",
+      "no-full-prompt-or-secrets",
+      "project-context-budget-total-static-dynamic-cache-status",
+      "required-test-ref-1f8e92e335a1",
+      "required-test-ref-c908af756958",
+      "manual-go-build",
+      "backlog_scan_ref:scan-ref-backlog-ef04d5780ab2"
+    ],
+    "missing_refs": [],
+    "evidence_refs": [
+      "evidence-ref-ctx-task-801a-goal-state",
+      "evidence-ref-ctx-task-801a-codex-goal-packet",
+      "evidence-ref-ctx-task-801a-mcp-projection",
+      "evidence-ref-required-test-1f8e92e335a1-passed",
+      "evidence-ref-required-test-c908af756958-passed",
+      "evidence-ref-manual-go-build-passed-with-worktree-git-env",
+      "backlog_scan_ref:scan-ref-backlog-ef04d5780ab2:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:expected_sha256:68a3131f15b077ff2908ffe1ccd74ab2ad84630e218050d477a88214c0bf3239:current_sha256:ab7bcb5f9599bad17062255e9678aeed3318237c538132a0c7845738f4ce1431:no_backlog_merge"
+    ]
+  },
+  "required_test_results": [
+    {
+      "test_ref": "required-test-ref-1f8e92e335a1",
+      "status": "passed",
+      "evidence_refs": [
+        "evidence-ref-required-test-1f8e92e335a1-passed"
+      ]
+    },
+    {
+      "test_ref": "required-test-ref-c908af756958",
+      "status": "passed",
+      "evidence_refs": [
+        "evidence-ref-required-test-c908af756958-passed"
+      ]
+    }
+  ],
+  "domain_receipt_refs": [],
+  "rework_plan_refs": [],
+  "evidence_refs": [
+    "evidence-ref-t282-checkpoint-created",
+    "evidence-ref-ctx-task-801a-goal-state",
+    "evidence-ref-ctx-task-801a-codex-goal-packet",
+    "evidence-ref-ctx-task-801a-mcp-projection",
+    "evidence-ref-required-test-1f8e92e335a1-passed",
+    "evidence-ref-required-test-c908af756958-passed",
+    "evidence-ref-manual-go-build-passed-with-worktree-git-env",
+    "evidence-ref-git-diff-check-passed",
+    "evidence-ref-goal-result-json-written",
+    "backlog_scan_ref:scan-ref-backlog-ef04d5780ab2:docs/autoprogramacion_orquesta_pendientes_2026-05-23.md:line:16:expected_sha256:68a3131f15b077ff2908ffe1ccd74ab2ad84630e218050d477a88214c0bf3239:current_sha256:ab7bcb5f9599bad17062255e9678aeed3318237c538132a0c7845738f4ce1431:no_backlog_merge"
+  ]
+}

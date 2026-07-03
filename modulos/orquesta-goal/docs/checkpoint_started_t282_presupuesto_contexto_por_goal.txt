@@ -1,0 +1,8 @@
+goal_ref: goal-ref-autoprogramming-backlog-t282-presupuesto-contexto-por-goal-a6ac0452
+request_ref: request-ref-autoprogramming-backlog-t282-presupuesto-contexto-por-goal-a6ac0452
+area: t282-presupuesto-contexto-por-goal
+status: started
+scope: modulos/orquesta-goal, modulos/orquesta-runtime-codex-goal, modulos/orquesta-mcp, cmd/orquesta-server
+objective: implement CTX-TASK-801A context budget metrics per goal/app-server without a new store.
+next_artifact: modulos/orquesta-goal/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t282-presupuesto-contexto-por-goal-a6ac0452.json
+evidence: created before long exploration; authoritative spec pending in docs/revision_router_contexto_hibrido_2026-07-03.md.

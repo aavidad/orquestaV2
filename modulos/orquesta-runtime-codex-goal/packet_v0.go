@@ -51,6 +51,7 @@ type CodexGoalStartPacketV0 struct {
 	ArtifactContracts  []orquestagoal.GoalArtifactContractV0 `json:"artifact_contracts,omitempty"`
 	EvidenceRefs       []string                              `json:"evidence_refs,omitempty"`
 	Budget             orquestagoal.GoalBudgetV0             `json:"budget,omitempty"`
+	ContextBudget      orquestagoal.GoalContextBudgetV0      `json:"context_budget,omitempty"`
 	ClosurePolicy      orquestagoal.GoalClosurePolicyV0      `json:"closure_policy,omitempty"`
 	ReworkPolicy       orquestagoal.GoalReworkPolicyV0       `json:"rework_policy,omitempty"`
 	DirectionContract  CodexGoalDirectionContractV0          `json:"direction_contract,omitempty"`
@@ -75,11 +76,12 @@ type CodexGoalToolOutputPolicyV0 struct {
 }
 
 type CodexGoalStartReceiptV0 struct {
-	Status          string   `json:"status"`
-	GoalRef         string   `json:"goal_ref,omitempty"`
-	ExternalGoalRef string   `json:"external_goal_ref,omitempty"`
-	EvidenceRefs    []string `json:"evidence_refs,omitempty"`
-	IssueCode       string   `json:"issue_code,omitempty"`
+	Status          string                           `json:"status"`
+	GoalRef         string                           `json:"goal_ref,omitempty"`
+	ExternalGoalRef string                           `json:"external_goal_ref,omitempty"`
+	ContextBudget   orquestagoal.GoalContextBudgetV0 `json:"context_budget,omitempty"`
+	EvidenceRefs    []string                         `json:"evidence_refs,omitempty"`
+	IssueCode       string                           `json:"issue_code,omitempty"`
 }
 
 type CodexGoalObservationRequestV0 struct {
@@ -93,6 +95,7 @@ type CodexGoalObservationReceiptV0 struct {
 	GoalRef               string                                    `json:"goal_ref,omitempty"`
 	ExternalGoalRef       string                                    `json:"external_goal_ref,omitempty"`
 	Summary               string                                    `json:"summary,omitempty"`
+	ContextBudget         orquestagoal.GoalContextBudgetV0          `json:"context_budget,omitempty"`
 	ArtifactRefs          []string                                  `json:"artifact_refs,omitempty"`
 	ArtifactPaths         []string                                  `json:"artifact_paths,omitempty"`
 	MaterializedArtifacts []orquestagoal.GoalMaterializedArtifactV0 `json:"materialized_artifacts,omitempty"`
@@ -127,6 +130,7 @@ func BuildCodexGoalStartPacketV0(spec orquestagoal.GoalWorkSpecV0) (CodexGoalSta
 		return CodexGoalStartPacketV0{}, issues
 	}
 	prompt := BuildCodexGoalPromptV0(spec)
+	contextBudget := codexGoalContextBudgetForPromptV0(spec, prompt)
 	if len([]byte(prompt)) > CodexGoalMaxPromptBytesV0 {
 		return CodexGoalStartPacketV0{}, []orquestagoal.GoalWorkIssueV0{{
 			Code:  ErrCodexGoalPromptTooLargeV0,
@@ -151,6 +155,7 @@ func BuildCodexGoalStartPacketV0(spec orquestagoal.GoalWorkSpecV0) (CodexGoalSta
 		ArtifactContracts:  append([]orquestagoal.GoalArtifactContractV0(nil), spec.ArtifactContracts...),
 		EvidenceRefs:       append([]string(nil), spec.EvidenceRefs...),
 		Budget:             spec.Budget,
+		ContextBudget:      contextBudget,
 		ClosurePolicy:      spec.ClosurePolicy,
 		ReworkPolicy:       spec.ReworkPolicy,
 		DirectionContract:  codexGoalDirectionContractV0(spec),
@@ -169,6 +174,116 @@ func BuildCodexGoalStartPacketV0(spec orquestagoal.GoalWorkSpecV0) (CodexGoalSta
 		}}
 	}
 	return packet, nil
+}
+
+func BuildCodexGoalContextBudgetV0(spec orquestagoal.GoalWorkSpecV0) orquestagoal.GoalContextBudgetV0 {
+	spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
+	return codexGoalContextBudgetForPromptV0(spec, BuildCodexGoalPromptV0(spec))
+}
+
+func codexGoalContextBudgetForPromptV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	prompt string,
+) orquestagoal.GoalContextBudgetV0 {
+	totalBytes := int64(len([]byte(prompt)))
+	staticBytes := int64(len([]byte(BuildCodexGoalPromptV0(codexGoalStaticBudgetSpecV0(spec)))))
+	dynamicBytes := totalBytes - staticBytes
+	if dynamicBytes < 0 {
+		dynamicBytes = 0
+	}
+	queriedBytes := codexGoalQueriedContextBytesV0(spec)
+	materializedBytes := codexGoalMaterializedContextBytesV0(spec)
+	if dynamicBytes == 0 && (queriedBytes > 0 || materializedBytes > 0) {
+		dynamicBytes = queriedBytes + materializedBytes
+	}
+	return orquestagoal.NormalizeGoalContextBudgetV0(orquestagoal.GoalContextBudgetV0{
+		ContextBudgetTotalBytes:  totalBytes,
+		StaticPromptBytes:        staticBytes,
+		QueriedContextBytes:      queriedBytes,
+		MaterializedContextBytes: materializedBytes,
+		DynamicContextBytes:      dynamicBytes,
+	})
+}
+
+func codexGoalStaticBudgetSpecV0(spec orquestagoal.GoalWorkSpecV0) orquestagoal.GoalWorkSpecV0 {
+	spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
+	spec.GoalRef = ""
+	spec.RequestRef = ""
+	spec.RunRef = ""
+	spec.ProjectRef = ""
+	spec.DomainRef = ""
+	spec.WorkKind = ""
+	spec.WorkProfileKind = ""
+	spec.Objective = ""
+	for i := range spec.ContextRefs {
+		spec.ContextRefs[i].Kind = ""
+		spec.ContextRefs[i].Ref = ""
+		spec.ContextRefs[i].Purpose = ""
+	}
+	for i := range spec.RuleRefs {
+		spec.RuleRefs[i].Kind = ""
+		spec.RuleRefs[i].Ref = ""
+		spec.RuleRefs[i].Enforcement = ""
+	}
+	for i := range spec.SkillRefs {
+		spec.SkillRefs[i] = ""
+	}
+	for i := range spec.WriteSet {
+		spec.WriteSet[i].Path = ""
+		spec.WriteSet[i].Purpose = ""
+	}
+	for i := range spec.RequiredTests {
+		spec.RequiredTests[i].TestRef = ""
+		spec.RequiredTests[i].CommandRef = ""
+		spec.RequiredTests[i].Command = ""
+		spec.RequiredTests[i].AcceptanceCriteria = nil
+		spec.RequiredTests[i].AcceptanceCriteriaRefs = nil
+		spec.RequiredTests[i].EvidenceRefs = nil
+	}
+	for i := range spec.AcceptanceCriteria {
+		spec.AcceptanceCriteria[i] = ""
+	}
+	for i := range spec.ArtifactContracts {
+		spec.ArtifactContracts[i].ArtifactRef = ""
+		spec.ArtifactContracts[i].ArtifactType = ""
+		spec.ArtifactContracts[i].EvidenceRefs = nil
+	}
+	for i := range spec.EvidenceRefs {
+		spec.EvidenceRefs[i] = ""
+	}
+	for i := range spec.ClosurePolicy.RequiredEvidenceRefs {
+		spec.ClosurePolicy.RequiredEvidenceRefs[i] = ""
+	}
+	return spec
+}
+
+func codexGoalQueriedContextBytesV0(spec orquestagoal.GoalWorkSpecV0) int64 {
+	var total int64
+	for _, ctx := range spec.ContextRefs {
+		total += int64(len([]byte(strings.TrimSpace(ctx.Kind))))
+		total += int64(len([]byte(strings.TrimSpace(ctx.Ref))))
+	}
+	return total
+}
+
+func codexGoalMaterializedContextBytesV0(spec orquestagoal.GoalWorkSpecV0) int64 {
+	var b strings.Builder
+	for _, ctx := range spec.ContextRefs {
+		b.WriteString(strings.TrimSpace(ctx.Ref))
+		if kind := strings.TrimSpace(ctx.Kind); kind != "" {
+			b.WriteString(" kind=")
+			b.WriteString(kind)
+		}
+		if ctx.Required {
+			b.WriteString(" [required]")
+		}
+		if purpose := strings.TrimSpace(ctx.Purpose); purpose != "" {
+			b.WriteString(": ")
+			b.WriteString(purpose)
+		}
+		b.WriteByte('\n')
+	}
+	return int64(len([]byte(b.String())))
 }
 
 func codexGoalDirectionContractV0(spec orquestagoal.GoalWorkSpecV0) CodexGoalDirectionContractV0 {
@@ -523,6 +638,7 @@ func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec o
 	receipt, err := launcher.Starter.StartCodexGoalV0(ctx, packet)
 	if err != nil {
 		result := codexGoalLaunchInvalidReceiptV0(packet.GoalRef, ErrCodexGoalStartRejectedV0)
+		result.ContextBudget = orquestagoal.MergeGoalContextBudgetV0(packet.ContextBudget, receipt.ContextBudget)
 		if code := codexGoalBackendIssueCodeV0(receipt.IssueCode, err); code != "" {
 			result.Issues = []orquestagoal.GoalWorkIssueV0{{Code: code}}
 		}
@@ -541,6 +657,7 @@ func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec o
 		Status:          status,
 		GoalRef:         packet.GoalRef,
 		ExternalGoalRef: receipt.ExternalGoalRef,
+		ContextBudget:   orquestagoal.MergeGoalContextBudgetV0(packet.ContextBudget, receipt.ContextBudget),
 		EvidenceRefs:    append([]string(nil), receipt.EvidenceRefs...),
 	}
 	if receipt.IssueCode != "" {
@@ -617,6 +734,7 @@ func goalWorkResultFromCodexObservationV0(
 		GoalRef:               firstNonEmptyCodexGoalStringV0(receipt.GoalRef, request.GoalRef),
 		ExternalGoalRef:       firstNonEmptyCodexGoalStringV0(receipt.ExternalGoalRef, request.ExternalGoalRef),
 		Summary:               strings.TrimSpace(receipt.Summary),
+		ContextBudget:         receipt.ContextBudget,
 		ArtifactRefs:          append([]string(nil), receipt.ArtifactRefs...),
 		ArtifactPaths:         append([]string(nil), receipt.ArtifactPaths...),
 		MaterializedArtifacts: append([]orquestagoal.GoalMaterializedArtifactV0(nil), receipt.MaterializedArtifacts...),

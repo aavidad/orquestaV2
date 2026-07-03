@@ -31,7 +31,7 @@ func TestMCPDirectorStatsToolDescriptorV0ExponeContratoCompacto(t *testing.T) {
 	}
 	for _, want := range []string{
 		"external_job?{status,status_reason?,issue_refs?,evidence_refs?,diagnostics?}",
-		"goal?{goal_ref,status,closure_status?,artifact_refs?,domain_receipt_refs?,expected_terminal_receipt_refs?,issue_codes?,evidence_refs?}",
+		"goal?{goal_ref,status,closure_status?,context_budget_total_bytes?,static_prompt_bytes?,dynamic_context_bytes?,code_context_cache_status?,artifact_refs?,domain_receipt_refs?,expected_terminal_receipt_refs?,issue_codes?,evidence_refs?}",
 	} {
 		if !strings.Contains(descriptor.Output, want) {
 			t.Fatalf("descriptor director.stats no declara evidencia accionable %q: %s", want, descriptor.Output)
@@ -299,6 +299,34 @@ func TestMCPDirectorStatsToolExecutorV0GoalFirstAceptadoCierraStats(t *testing.T
 		result.Stats.Closure.Ready ||
 		result.Stats.Closure.Blocked {
 		t.Fatalf("goal=%+v stats=%+v", result.Goal, result.Stats)
+	}
+}
+
+func TestMCPDirectorStatsToolExecutorV0ProyectaContextBudgetGoalFirstV0(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-context-budget-001")
+	state := mcpDirectorGoalStateForTestV0(run.RunID)
+	state.ContextBudget = orquestagoal.GoalContextBudgetV0{
+		ContextBudgetTotalBytes:  8192,
+		StaticPromptBytes:        2048,
+		QueriedContextBytes:      384,
+		MaterializedContextBytes: 768,
+		DynamicContextBytes:      6144,
+		CodeContextCacheStatus:   "hit",
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		GoalStateSource: mcpDirectorGoalStateSourceForTestV0{State: state},
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{RunRef: run.RunID})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Goal == nil ||
+		result.Goal.ContextBudgetTotalBytes != 8192 ||
+		result.Goal.StaticPromptBytes != 2048 ||
+		result.Goal.DynamicContextBytes != 6144 ||
+		result.Goal.CodeContextCacheStatus != "hit" {
+		t.Fatalf("goal context budget no proyectado: %+v", result.Goal)
 	}
 }
 

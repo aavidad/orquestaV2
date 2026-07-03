@@ -145,12 +145,22 @@ type GoalWorkIssueV0 struct {
 }
 
 type GoalLaunchReceiptV0 struct {
-	SchemaVersion   string            `json:"schema_version"`
-	Status          string            `json:"status"`
-	GoalRef         string            `json:"goal_ref,omitempty"`
-	ExternalGoalRef string            `json:"external_goal_ref,omitempty"`
-	EvidenceRefs    []string          `json:"evidence_refs,omitempty"`
-	Issues          []GoalWorkIssueV0 `json:"issues,omitempty"`
+	SchemaVersion   string              `json:"schema_version"`
+	Status          string              `json:"status"`
+	GoalRef         string              `json:"goal_ref,omitempty"`
+	ExternalGoalRef string              `json:"external_goal_ref,omitempty"`
+	ContextBudget   GoalContextBudgetV0 `json:"context_budget,omitempty"`
+	EvidenceRefs    []string            `json:"evidence_refs,omitempty"`
+	Issues          []GoalWorkIssueV0   `json:"issues,omitempty"`
+}
+
+type GoalContextBudgetV0 struct {
+	ContextBudgetTotalBytes  int64  `json:"context_budget_total_bytes,omitempty"`
+	StaticPromptBytes        int64  `json:"static_prompt_bytes,omitempty"`
+	QueriedContextBytes      int64  `json:"queried_context_bytes,omitempty"`
+	MaterializedContextBytes int64  `json:"materialized_context_bytes,omitempty"`
+	DynamicContextBytes      int64  `json:"dynamic_context_bytes,omitempty"`
+	CodeContextCacheStatus   string `json:"code_context_cache_status,omitempty"`
 }
 
 type GoalWorkResultV0 struct {
@@ -159,6 +169,7 @@ type GoalWorkResultV0 struct {
 	GoalRef               string                       `json:"goal_ref,omitempty"`
 	ExternalGoalRef       string                       `json:"external_goal_ref,omitempty"`
 	Summary               string                       `json:"summary,omitempty"`
+	ContextBudget         GoalContextBudgetV0          `json:"context_budget,omitempty"`
 	ArtifactRefs          []string                     `json:"artifact_refs,omitempty"`
 	ArtifactPaths         []string                     `json:"artifact_paths,omitempty"`
 	MaterializedArtifacts []GoalMaterializedArtifactV0 `json:"materialized_artifacts,omitempty"`
@@ -195,6 +206,7 @@ type GoalWorkStateV0 struct {
 	Status          string                   `json:"status"`
 	Spec            GoalWorkSpecV0           `json:"spec"`
 	LaunchReceipt   GoalLaunchReceiptV0      `json:"launch_receipt"`
+	ContextBudget   GoalContextBudgetV0      `json:"context_budget,omitempty"`
 	LastResult      *GoalWorkResultV0        `json:"last_result,omitempty"`
 	LastClosure     *GoalClosureValidationV0 `json:"last_closure,omitempty"`
 	EvidenceRefs    []string                 `json:"evidence_refs,omitempty"`
@@ -209,6 +221,7 @@ type GoalWorkRunMarkerV0 struct {
 	Status          string               `json:"status,omitempty"`
 	Spec            *GoalWorkSpecV0      `json:"spec,omitempty"`
 	LaunchReceipt   *GoalLaunchReceiptV0 `json:"launch_receipt,omitempty"`
+	ContextBudget   GoalContextBudgetV0  `json:"context_budget,omitempty"`
 	EvidenceRefs    []string             `json:"evidence_refs,omitempty"`
 }
 

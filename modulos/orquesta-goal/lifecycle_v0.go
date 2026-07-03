@@ -185,6 +185,8 @@ func ObserveGoalWorkV0(
 	if issues := ValidateGoalWorkResultV0(result); len(issues) > 0 {
 		return GoalWorkObserveResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "goal_result"}
 	}
+	state.ContextBudget = MergeGoalContextBudgetV0(state.ContextBudget, result.ContextBudget)
+	result.ContextBudget = state.ContextBudget
 	state.LastResult = &result
 	state.Status = result.Status
 	state.EvidenceRefs = compactGoalStringsV0(append(state.EvidenceRefs, result.EvidenceRefs...))
@@ -253,6 +255,7 @@ func NewGoalWorkStateFromLaunchV0(
 		Status:          goalWorkStateStatusFromLaunchReceiptV0(receipt),
 		Spec:            spec,
 		LaunchReceipt:   receipt,
+		ContextBudget:   receipt.ContextBudget,
 		EvidenceRefs: compactGoalStringsV0(append(
 			append(append([]string(nil), request.EvidenceRefs...), spec.EvidenceRefs...),
 			receipt.EvidenceRefs...,
@@ -269,6 +272,7 @@ func NormalizeGoalLaunchReceiptV0(receipt GoalLaunchReceiptV0) GoalLaunchReceipt
 	receipt.Status = strings.TrimSpace(receipt.Status)
 	receipt.GoalRef = strings.TrimSpace(receipt.GoalRef)
 	receipt.ExternalGoalRef = strings.TrimSpace(receipt.ExternalGoalRef)
+	receipt.ContextBudget = NormalizeGoalContextBudgetV0(receipt.ContextBudget)
 	for i := range receipt.EvidenceRefs {
 		receipt.EvidenceRefs[i] = strings.TrimSpace(receipt.EvidenceRefs[i])
 	}

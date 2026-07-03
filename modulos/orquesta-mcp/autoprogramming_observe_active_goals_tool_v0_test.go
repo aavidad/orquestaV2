@@ -93,7 +93,7 @@ func TestMCPAutoprogrammingObserveActiveGoalsDescriptorV0DeclaraObservacionesAcc
 		t.Fatalf("descriptor=%+v", descriptor)
 	}
 	if !strings.Contains(descriptor.Output, "evidence_refs?") ||
-		!strings.Contains(descriptor.Output, "observations?[]{run_ref,goal_ref?,goal_status?,recommended_action?,evidence_refs?}") ||
+		!strings.Contains(descriptor.Output, "observations?[]{run_ref,goal_ref?,goal_status?,context_budget_total_bytes?,static_prompt_bytes?,dynamic_context_bytes?,code_context_cache_status?,recommended_action?,evidence_refs?}") ||
 		!strings.Contains(descriptor.Output, "error:{errores_publicos,operation_ref?") ||
 		!strings.Contains(descriptor.Output, "operation_ref?") ||
 		!strings.Contains(descriptor.Output, "next_actions?") ||

@@ -37,33 +37,39 @@ type MCPObserveAppDirectorGoalToolInputV0 struct {
 }
 
 type MCPObserveAppDirectorGoalToolResultV0 struct {
-	Estado                string                 `json:"estado"`
-	RequestID             string                 `json:"request_id,omitempty"`
-	CorrelationID         string                 `json:"correlation_id,omitempty"`
-	Partial               bool                   `json:"partial,omitempty"`
-	RunRef                string                 `json:"run_ref,omitempty"`
-	RunStatus             string                 `json:"run_status,omitempty"`
-	DirectorExecutionMode string                 `json:"director_execution_mode,omitempty"`
-	GoalRef               string                 `json:"goal_ref,omitempty"`
-	ExternalGoalRef       string                 `json:"external_goal_ref,omitempty"`
-	GoalStatus            string                 `json:"goal_status,omitempty"`
-	ResultRef             string                 `json:"result_ref,omitempty"`
-	LastEventAt           string                 `json:"last_event_at,omitempty"`
-	CurrentPhase          string                 `json:"current_phase,omitempty"`
-	RetryFromPhase        string                 `json:"retry_from_phase,omitempty"`
-	DomainCounters        map[string]int         `json:"domain_counters,omitempty"`
-	ProcessRefs           []string               `json:"process_refs,omitempty"`
-	RecommendedAction     string                 `json:"recommended_action,omitempty"`
-	ClosureStatus         string                 `json:"closure_status,omitempty"`
-	ClosureAccepted       bool                   `json:"closure_accepted,omitempty"`
-	ClosureNeedsRework    bool                   `json:"closure_needs_rework,omitempty"`
-	Summary               string                 `json:"summary,omitempty"`
-	ArtifactRefs          []string               `json:"artifact_refs,omitempty"`
-	DomainReceiptRefs     []string               `json:"domain_receipt_refs,omitempty"`
-	ExpectedReceiptRefs   []string               `json:"expected_terminal_receipt_refs,omitempty"`
-	EvidenceRefs          []string               `json:"evidence_refs,omitempty"`
-	ClosureIssues         []MCPValidationIssueV0 `json:"closure_issues,omitempty"`
-	Errores               []MCPValidationIssueV0 `json:"errores_publicos,omitempty"`
+	Estado                   string                 `json:"estado"`
+	RequestID                string                 `json:"request_id,omitempty"`
+	CorrelationID            string                 `json:"correlation_id,omitempty"`
+	Partial                  bool                   `json:"partial,omitempty"`
+	RunRef                   string                 `json:"run_ref,omitempty"`
+	RunStatus                string                 `json:"run_status,omitempty"`
+	DirectorExecutionMode    string                 `json:"director_execution_mode,omitempty"`
+	GoalRef                  string                 `json:"goal_ref,omitempty"`
+	ExternalGoalRef          string                 `json:"external_goal_ref,omitempty"`
+	GoalStatus               string                 `json:"goal_status,omitempty"`
+	ResultRef                string                 `json:"result_ref,omitempty"`
+	LastEventAt              string                 `json:"last_event_at,omitempty"`
+	CurrentPhase             string                 `json:"current_phase,omitempty"`
+	RetryFromPhase           string                 `json:"retry_from_phase,omitempty"`
+	DomainCounters           map[string]int         `json:"domain_counters,omitempty"`
+	ProcessRefs              []string               `json:"process_refs,omitempty"`
+	ContextBudgetTotalBytes  int64                  `json:"context_budget_total_bytes,omitempty"`
+	StaticPromptBytes        int64                  `json:"static_prompt_bytes,omitempty"`
+	QueriedContextBytes      int64                  `json:"queried_context_bytes,omitempty"`
+	MaterializedContextBytes int64                  `json:"materialized_context_bytes,omitempty"`
+	DynamicContextBytes      int64                  `json:"dynamic_context_bytes,omitempty"`
+	CodeContextCacheStatus   string                 `json:"code_context_cache_status,omitempty"`
+	RecommendedAction        string                 `json:"recommended_action,omitempty"`
+	ClosureStatus            string                 `json:"closure_status,omitempty"`
+	ClosureAccepted          bool                   `json:"closure_accepted,omitempty"`
+	ClosureNeedsRework       bool                   `json:"closure_needs_rework,omitempty"`
+	Summary                  string                 `json:"summary,omitempty"`
+	ArtifactRefs             []string               `json:"artifact_refs,omitempty"`
+	DomainReceiptRefs        []string               `json:"domain_receipt_refs,omitempty"`
+	ExpectedReceiptRefs      []string               `json:"expected_terminal_receipt_refs,omitempty"`
+	EvidenceRefs             []string               `json:"evidence_refs,omitempty"`
+	ClosureIssues            []MCPValidationIssueV0 `json:"closure_issues,omitempty"`
+	Errores                  []MCPValidationIssueV0 `json:"errores_publicos,omitempty"`
 }
 
 type mcpObserveAppDirectorGoalPublicIssueV0 struct {
@@ -77,7 +83,7 @@ func MCPObserveAppDirectorGoalDescriptorV0() MCPObserveAppDirectorGoalToolDescri
 		Name:        MCPObserveAppDirectorGoalToolNameV0,
 		Version:     MCPObserveAppDirectorGoalToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref,occurred_at?,requested_by?}",
-		Output:      "ok:{run_ref,run_status?,director_execution_mode?,goal_ref,goal_status,recommended_action?,closure_status?,closure_accepted?,artifact_refs?,evidence_refs?}|error:{errores_publicos,recommended_action?,evidence_refs?}",
+		Output:      "ok:{run_ref,run_status?,director_execution_mode?,goal_ref,goal_status,context_budget_total_bytes?,static_prompt_bytes?,dynamic_context_bytes?,code_context_cache_status?,recommended_action?,closure_status?,closure_accepted?,artifact_refs?,evidence_refs?}|error:{errores_publicos,recommended_action?,evidence_refs?}",
 		ResourceURI: MCPObserveAppDirectorGoalResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -127,6 +133,7 @@ func NewMCPObserveAppDirectorGoalResultV0(
 		ClosureIssues:         goalWorkIssuesMCPV0(append(goalResult.Issues, result.Closure.Issues...)),
 		Errores:               []MCPValidationIssueV0{},
 	}
+	toolResult = applyMCPObserveAppDirectorGoalContextBudgetV0(toolResult, goalResult.ContextBudget)
 	toolResult = mcpObserveAppDirectorGoalSuppressStaleClosureForRunningGoalV0(toolResult)
 	toolResult.RecommendedAction = mcpObserveAppDirectorGoalRecommendedActionV0(toolResult)
 	return toolResult
@@ -165,6 +172,7 @@ func NewMCPObserveAppDirectorGoalPartialResultFromStateV0(
 		toolResult.EvidenceRefs = compactStringsMCPV0(append(toolResult.EvidenceRefs, normalized.LastResult.EvidenceRefs...))
 		toolResult.ClosureIssues = append(toolResult.ClosureIssues, goalWorkIssuesMCPV0(normalized.LastResult.Issues)...)
 	}
+	toolResult = applyMCPObserveAppDirectorGoalContextBudgetV0(toolResult, mcpGoalContextBudgetFromStateV0(normalized))
 	if normalized.LastClosure != nil {
 		toolResult.ClosureStatus = strings.TrimSpace(normalized.LastClosure.Status)
 		toolResult.ClosureAccepted = normalized.LastClosure.Accepted
@@ -184,6 +192,23 @@ func NewMCPObserveAppDirectorGoalPartialResultFromStateV0(
 		))
 	}
 	return toolResult, nil
+}
+
+func applyMCPObserveAppDirectorGoalContextBudgetV0(
+	result MCPObserveAppDirectorGoalToolResultV0,
+	metric orquestagoal.GoalContextBudgetV0,
+) MCPObserveAppDirectorGoalToolResultV0 {
+	metric = orquestagoal.NormalizeGoalContextBudgetV0(metric)
+	if orquestagoal.GoalContextBudgetEmptyV0(metric) {
+		return result
+	}
+	result.ContextBudgetTotalBytes = metric.ContextBudgetTotalBytes
+	result.StaticPromptBytes = metric.StaticPromptBytes
+	result.QueriedContextBytes = metric.QueriedContextBytes
+	result.MaterializedContextBytes = metric.MaterializedContextBytes
+	result.DynamicContextBytes = metric.DynamicContextBytes
+	result.CodeContextCacheStatus = strings.TrimSpace(metric.CodeContextCacheStatus)
+	return result
 }
 
 func mcpObserveAppDirectorGoalSuppressStaleClosureForRunningGoalV0(
@@ -370,6 +395,22 @@ func mergeMCPObserveAppDirectorGoalPartialIntoTimeoutV0(
 	timeout.RetryFromPhase = firstNonEmptyMCPV0(partial.RetryFromPhase, timeout.RetryFromPhase)
 	timeout.DomainCounters = mergeMCPDomainOperationalCountersV0(timeout.DomainCounters, partial.DomainCounters)
 	timeout.ProcessRefs = compactStringsMCPV0(append(timeout.ProcessRefs, partial.ProcessRefs...))
+	if timeout.ContextBudgetTotalBytes == 0 {
+		timeout.ContextBudgetTotalBytes = partial.ContextBudgetTotalBytes
+	}
+	if timeout.StaticPromptBytes == 0 {
+		timeout.StaticPromptBytes = partial.StaticPromptBytes
+	}
+	if timeout.QueriedContextBytes == 0 {
+		timeout.QueriedContextBytes = partial.QueriedContextBytes
+	}
+	if timeout.MaterializedContextBytes == 0 {
+		timeout.MaterializedContextBytes = partial.MaterializedContextBytes
+	}
+	if timeout.DynamicContextBytes == 0 {
+		timeout.DynamicContextBytes = partial.DynamicContextBytes
+	}
+	timeout.CodeContextCacheStatus = firstNonEmptyMCPV0(timeout.CodeContextCacheStatus, partial.CodeContextCacheStatus)
 	timeout.RecommendedAction = firstNonEmptyMCPV0(partial.RecommendedAction, timeout.RecommendedAction)
 	timeout.ClosureStatus = firstNonEmptyMCPV0(partial.ClosureStatus, timeout.ClosureStatus)
 	timeout.ClosureAccepted = timeout.ClosureAccepted || partial.ClosureAccepted

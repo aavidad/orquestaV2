@@ -58,6 +58,88 @@ func TestStartGoalWorkV0LanzaYGuardaEstadoNeutral(t *testing.T) {
 	}
 }
 
+func TestStartGoalWorkV0PersisteContextBudgetDelReceiptV0(t *testing.T) {
+	launcher := &goalLifecycleLauncherForTestV0{
+		receipt: GoalLaunchReceiptV0{
+			Status: GoalStatusAcceptedV0,
+			ContextBudget: GoalContextBudgetV0{
+				ContextBudgetTotalBytes:  4096,
+				StaticPromptBytes:        1024,
+				QueriedContextBytes:      256,
+				MaterializedContextBytes: 512,
+				DynamicContextBytes:      3072,
+			},
+		},
+	}
+	store := newGoalLifecycleStoreForTestV0()
+
+	result, err := StartGoalWorkV0(
+		context.Background(),
+		GoalWorkStartRequestV0{
+			RunRef: "run-ref-goal-context-budget-001",
+			Spec:   validGoalLifecycleSpecForTestV0(),
+		},
+		GoalWorkLifecyclePortsV0{
+			Launcher:   launcher,
+			StateStore: store,
+		},
+	)
+	if err != nil {
+		t.Fatalf("StartGoalWorkV0: %v", err)
+	}
+	if result.State.ContextBudget.ContextBudgetTotalBytes != 4096 ||
+		result.State.ContextBudget.StaticPromptBytes != 1024 ||
+		result.State.ContextBudget.DynamicContextBytes != 3072 {
+		t.Fatalf("context budget no persistido en state: %+v", result.State.ContextBudget)
+	}
+	loaded, err := store.LoadGoalWorkStateV0(context.Background(), "run-ref-goal-context-budget-001")
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if loaded.ContextBudget.ContextBudgetTotalBytes != 4096 {
+		t.Fatalf("loaded context_budget=%+v", loaded.ContextBudget)
+	}
+}
+
+func TestObserveGoalWorkV0FusionaContextBudgetDeProveedorV0(t *testing.T) {
+	state := mustGoalLifecycleStateForTestV0(t)
+	state.ContextBudget = GoalContextBudgetV0{
+		ContextBudgetTotalBytes: 2048,
+		StaticPromptBytes:       512,
+		DynamicContextBytes:     1536,
+	}
+	store := newGoalLifecycleStoreForTestV0()
+	if err := store.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	observer := &goalLifecycleObserverForTestV0{
+		result: GoalWorkResultV0{
+			Status:  GoalStatusRunningV0,
+			GoalRef: state.GoalRef,
+			ContextBudget: GoalContextBudgetV0{
+				CodeContextCacheStatus: "hit",
+			},
+		},
+	}
+
+	result, err := ObserveGoalWorkV0(
+		context.Background(),
+		GoalWorkObserveRequestV0{RunRef: state.RunRef},
+		GoalWorkLifecyclePortsV0{
+			Observer:   observer,
+			StateStore: store,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveGoalWorkV0: %v", err)
+	}
+	if result.State.ContextBudget.ContextBudgetTotalBytes != 2048 ||
+		result.State.ContextBudget.CodeContextCacheStatus != "hit" ||
+		result.Result.ContextBudget.CodeContextCacheStatus != "hit" {
+		t.Fatalf("context budget no fusionado: state=%+v result=%+v", result.State.ContextBudget, result.Result.ContextBudget)
+	}
+}
+
 func TestStartGoalWorkV0DevuelveErrorSiStoreFallaSinRelanzar(t *testing.T) {
 	launcher := &goalLifecycleLauncherForTestV0{
 		receipt: GoalLaunchReceiptV0{

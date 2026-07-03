@@ -1046,6 +1046,7 @@ func mcpAutoprogrammingActionableRunWithGoalStateSnapshotV0(
 	if action.ExternalGoalRef == "" {
 		action.ExternalGoalRef = strings.TrimSpace(state.LaunchReceipt.ExternalGoalRef)
 	}
+	action = mcpAutoprogrammingActionableRunWithContextBudgetV0(action, mcpGoalContextBudgetFromStateV0(state))
 	return action
 }
 
@@ -1066,8 +1067,40 @@ func mcpAutoprogrammingActionableRunWithObservedGoalV0(
 	action.ArtifactRefs = compactStringsMCPV0(append(action.ArtifactRefs, goal.ArtifactRefs...))
 	action.DomainReceiptRefs = compactStringsMCPV0(append(action.DomainReceiptRefs, goal.DomainReceiptRefs...))
 	action.ExpectedReceiptRefs = compactStringsMCPV0(append(action.ExpectedReceiptRefs, goal.ExpectedReceiptRefs...))
+	action.ContextBudgetTotalBytes = firstNonZeroInt64MCPV0(action.ContextBudgetTotalBytes, goal.ContextBudgetTotalBytes)
+	action.StaticPromptBytes = firstNonZeroInt64MCPV0(action.StaticPromptBytes, goal.StaticPromptBytes)
+	action.QueriedContextBytes = firstNonZeroInt64MCPV0(action.QueriedContextBytes, goal.QueriedContextBytes)
+	action.MaterializedContextBytes = firstNonZeroInt64MCPV0(action.MaterializedContextBytes, goal.MaterializedContextBytes)
+	action.DynamicContextBytes = firstNonZeroInt64MCPV0(action.DynamicContextBytes, goal.DynamicContextBytes)
+	action.CodeContextCacheStatus = firstNonEmptyMCPV0(action.CodeContextCacheStatus, goal.CodeContextCacheStatus)
 	action.EvidenceRefs = compactStringsMCPV0(append(action.EvidenceRefs, goal.EvidenceRefs...))
 	return action
+}
+
+func mcpAutoprogrammingActionableRunWithContextBudgetV0(
+	action MCPAutoprogrammingActionableRunV0,
+	metric orquestagoal.GoalContextBudgetV0,
+) MCPAutoprogrammingActionableRunV0 {
+	metric = orquestagoal.NormalizeGoalContextBudgetV0(metric)
+	if orquestagoal.GoalContextBudgetEmptyV0(metric) {
+		return action
+	}
+	action.ContextBudgetTotalBytes = firstNonZeroInt64MCPV0(action.ContextBudgetTotalBytes, metric.ContextBudgetTotalBytes)
+	action.StaticPromptBytes = firstNonZeroInt64MCPV0(action.StaticPromptBytes, metric.StaticPromptBytes)
+	action.QueriedContextBytes = firstNonZeroInt64MCPV0(action.QueriedContextBytes, metric.QueriedContextBytes)
+	action.MaterializedContextBytes = firstNonZeroInt64MCPV0(action.MaterializedContextBytes, metric.MaterializedContextBytes)
+	action.DynamicContextBytes = firstNonZeroInt64MCPV0(action.DynamicContextBytes, metric.DynamicContextBytes)
+	action.CodeContextCacheStatus = firstNonEmptyMCPV0(action.CodeContextCacheStatus, metric.CodeContextCacheStatus)
+	return action
+}
+
+func firstNonZeroInt64MCPV0(values ...int64) int64 {
+	for _, value := range values {
+		if value != 0 {
+			return value
+		}
+	}
+	return 0
 }
 
 func mcpAutoprogrammingCheckpointOnlyHighConsumptionV0(
