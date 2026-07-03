@@ -1,12 +1,30 @@
 package orquestamcp
 
 import (
+	"strings"
 	"testing"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
+
+func TestObserveGoalDescriptorsDeclaranEvidenciaEnErroresV0(t *testing.T) {
+	observe := MCPObserveAppDirectorGoalDescriptorV0()
+	autoprogramming := MCPAutoprogrammingObserveGoalDescriptorV0()
+	for _, descriptor := range []struct {
+		name   string
+		output string
+	}{
+		{name: observe.Name, output: observe.Output},
+		{name: autoprogramming.Name, output: autoprogramming.Output},
+	} {
+		if !strings.Contains(descriptor.output, "evidence_refs?") ||
+			!strings.Contains(descriptor.output, "error:{errores_publicos,evidence_refs?}") {
+			t.Fatalf("%s debe declarar evidencia en errores observe_goal: %s", descriptor.name, descriptor.output)
+		}
+	}
+}
 
 func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0QAFailedPublicTextPideRework(t *testing.T) {
 	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(

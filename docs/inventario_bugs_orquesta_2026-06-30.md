@@ -1160,6 +1160,14 @@ OPES/domain-work interpreten un timeout de consulta como cola vacia o estado
 no accionable. Evidencia:
 `TestMCPDomainWorkStatusHTTPHandlerV0TimeoutDevuelveJSONPublico`.
 
+Avance BUG-ORQ-20260701-073/075 2026-07-03 tarde 36: los descriptores MCP de
+`orquesta.apps.observe_director_goal.v0` y
+`orquesta.autoprogramming.observe_goal.v0` declaran `evidence_refs?` tambien en
+respuestas de error. El contrato queda alineado con los timeouts parciales y
+errores enriquecidos que ya conservan evidencia para decidir esperar, reparar
+receipt o replanificar sin depender de logs internos. Evidencia:
+`TestObserveGoalDescriptorsDeclaranEvidenciaEnErroresV0`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

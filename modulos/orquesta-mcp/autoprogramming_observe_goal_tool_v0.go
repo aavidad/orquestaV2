@@ -38,7 +38,7 @@ func MCPAutoprogrammingObserveGoalDescriptorV0() MCPAutoprogrammingObserveGoalTo
 		Name:        MCPAutoprogrammingObserveGoalToolNameV0,
 		Version:     MCPAutoprogrammingObserveGoalToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref,occurred_at?,requested_by?}",
-		Output:      "ok:{run_ref,run_status?,director_execution_mode?,goal_ref,goal_status,closure_status?,closure_accepted?,artifact_refs?,evidence_refs?}|error:{errores_publicos}",
+		Output:      "ok:{run_ref,run_status?,director_execution_mode?,goal_ref,goal_status,closure_status?,closure_accepted?,artifact_refs?,evidence_refs?}|error:{errores_publicos,evidence_refs?}",
 		ResourceURI: MCPAutoprogrammingObserveGoalResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
