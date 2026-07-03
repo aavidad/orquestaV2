@@ -251,3 +251,13 @@ de `modulos/orquesta-server`. Verificar con los Tests de la sección T273 e
 integrar tras revisión (receta de esta bitácora). Tras integrar T273, los
 siguientes paralelizables son: BUG D (result formal de goals idle),
 CTX-TASK-801A..D y filas de inventario de bugs B/C/D del pilotaje.
+
+### 2026-07-03/04 — dirección con cuota renovada: T273+T274 en paralelo
+
+- T273 (supervisor dormido por eventos) sigue en vuelo con avance real
+  (idempotencia, wakeup decorators, checkpoint declarado).
+- T274 lanzada en paralelo (rama `pericial/pilot-t274`, puerto 33811): filas
+  de inventario para bugs B/C/D del pilotaje. Write-sets disjuntos.
+- Timer nightly: unidades systemd de usuario pendientes de activación por el
+  operador (bloqueo de permisos correcto del harness); comandos en
+  `docs/runbooks/smoke_nightly_2026-07.md` sección systemd.
