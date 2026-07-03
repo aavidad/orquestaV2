@@ -1,3 +1,5 @@
+# MODULO CONGELADO 2026-07-03: solo fixes correctivos con bug enlazado. Features nuevas requieren decision documentada en docs/ raiz. Motivo: informe pericial P2 (docs/informe_pericial_claude_orquesta_2026-07-03.md)
+
 # Contexto Codex: orquesta-director-cycle
 
 Lee primero este archivo y `README.md`. Despues lee solo los docs locales necesarios para tu microtarea.
