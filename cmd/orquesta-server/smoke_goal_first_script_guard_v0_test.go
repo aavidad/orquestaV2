@@ -261,6 +261,19 @@ func scriptStartsTemporaryOrquestaServerV0(text string) bool {
 	return false
 }
 
+func TestScriptStartsTemporaryOrquestaServerV0DetectaPIDConAddrGestionadoV0(t *testing.T) {
+	text := strings.Join([]string{
+		`ORQUESTA_SERVER_ADDR="127.0.0.1:0" \`,
+		`ORQUESTA_SERVER_STATE_DIR="$state_dir" \`,
+		`orquesta-server run >"$server_log" 2>&1 &`,
+		`server_pid="$!"`,
+	}, "\n")
+
+	if !scriptStartsTemporaryOrquestaServerV0(text) {
+		t.Fatalf("detector debe cubrir servidor temporal con ORQUESTA_SERVER_ADDR y server_pid=$!")
+	}
+}
+
 func scriptRunsTemporaryOrquestaServerCommandV0(text string) bool {
 	lines := strings.Split(text, "\n")
 	for index, line := range lines {

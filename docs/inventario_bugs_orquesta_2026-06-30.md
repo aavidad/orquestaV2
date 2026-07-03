@@ -826,6 +826,12 @@ docs operativos que vuelvan a publicar `go run ./cmd/orquesta-server run`,
 test. Evidencia:
 `TestOperationalDocsRuntimeManualMentionsAreHistoricalOrHarnessV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 19: la guarda de wrappers fija con
+regresion explicita el caso `ORQUESTA_SERVER_ADDR` + `server_pid="$!"`, para que
+un script que arranque servidor temporal por PID capturado siga exigiendo
+`smoke_shutdown_orquesta_server` y cleanup gobernado. Evidencia:
+`TestScriptStartsTemporaryOrquestaServerV0DetectaPIDConAddrGestionadoV0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado
