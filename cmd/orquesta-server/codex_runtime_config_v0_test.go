@@ -111,6 +111,24 @@ func TestCodeHomeDirV0UsaCODEXHOMEAntesDeHomeCodexV0(t *testing.T) {
 	}
 }
 
+func TestCodexCommandPathV0ResuelveConCodexPathProyectado(t *testing.T) {
+	binDir := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	codexBin := filepath.Join(binDir, "codex")
+	if err := os.WriteFile(codexBin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write codex: %v", err)
+	}
+	t.Setenv(envCodexCommandV0, "codex")
+	t.Setenv(envCodexPathV0, binDir)
+	t.Setenv("PATH", filepath.Join(t.TempDir(), "empty-path"))
+
+	if got := codexCommandPathV0(); got != codexBin {
+		t.Fatalf("codex_command=%q want %q", got, codexBin)
+	}
+}
+
 func TestCodexRuntimeConfigV0DangerFullAccessSoloOptInExplicito(t *testing.T) {
 	t.Setenv(envCodexSandboxV0, "danger-full-access")
 

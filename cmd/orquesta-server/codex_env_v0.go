@@ -16,11 +16,34 @@ func codexCommandPathV0() string {
 	if filepath.IsAbs(raw) {
 		return raw
 	}
+	if path := lookPathInPathListV0(raw, os.Getenv(envCodexPathV0)); path != "" {
+		return path
+	}
 	path, err := exec.LookPath(raw)
 	if err != nil {
 		return raw
 	}
 	return path
+}
+
+func lookPathInPathListV0(command string, pathList string) string {
+	command = strings.TrimSpace(command)
+	if command == "" || strings.ContainsRune(command, os.PathSeparator) {
+		return ""
+	}
+	for _, dir := range filepath.SplitList(pathList) {
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
+			continue
+		}
+		candidate := filepath.Join(dir, command)
+		info, err := os.Stat(candidate)
+		if err != nil || info.IsDir() || info.Mode().Perm()&0o111 == 0 {
+			continue
+		}
+		return candidate
+	}
+	return ""
 }
 
 func codeHomeDirV0() string {
