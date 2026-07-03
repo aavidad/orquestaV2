@@ -1002,6 +1002,14 @@ generico. Evidencia:
 `TestOPESBridgeArtifactContractMapConsumeOwnerNeutralV0` y
 `go test -count=1 ./modulos/orquesta-opes-bridge`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 23: el cliente
+`orquesta-server stop` reintenta el POST gobernado a `/api/v0/server/shutdown`
+cuando recibe `backend_still_running` con `cleanup_goal_backends=true`, sin
+agentes, checkpoints ni async work pendientes, para dar ventana al cleaner de
+backend Goal propio antes de fallar. No permite senal local ni declara ready si
+el backend sigue vivo. Evidencia:
+`TestRequestServerShutdownV0ReintentaCleanupBackendStillRunningHastaReady`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

@@ -11,6 +11,12 @@ func shutdownClientResultCanWaitV0(result serverShutdownClientResultV0) bool {
 	switch strings.TrimSpace(result.Status) {
 	case "waiting_drain", "waiting_checkpoint":
 		return true
+	case "backend_still_running":
+		return result.AgentsInFlight == 0 &&
+			result.CheckpointsPending == 0 &&
+			result.CheckpointAgentsPending == 0 &&
+			result.AsyncWorkActive == 0 &&
+			(result.ActiveWorkCount > 0 || len(compactStringsV0(result.ActiveWorkRefs)) > 0)
 	default:
 		return false
 	}
