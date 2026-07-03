@@ -1601,6 +1601,17 @@ evidencia por goal cuando se observa un lote de goals activos sin relanzar
 supervision legacy. Evidencia:
 `TestMCPAutoprogrammingObserveActiveGoalsDescriptorV0DeclaraObservacionesAccionables`.
 
+Avance BUG-ORQ-20260701-065/075/085/088 2026-07-03 tarde 59:
+`orquesta.autoprogramming.status.v0` ya publicaba acciones por run en
+`stale_running` y una accion agregada en `efficiency_summary`, pero el
+descriptor compacto dejaba ambos bloques sin forma publica. El descriptor y
+contrato declaran ahora `stale_running?[]{code,severity?,run_ref?,status?,
+goal_ref?,goal_status?,recommended_action?,evidence_refs?}` y
+`efficiency_summary?{schema_version,state,recommended_action?,reasons?}`, de
+modo que clientes compactos pueden preservar replan, repair receipt,
+write-set/sandbox y cleanup externo sin inspeccionar logs ni listas internas.
+Evidencia: `TestMCPAutoprogrammingStatusDescriptorV0EsAdaptadorFino`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

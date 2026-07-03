@@ -1758,7 +1758,12 @@ Campos:
       tambien incluye external-work terminal `stopped` sin agentes ni entregas
       como `external_work_accepted_stopped_without_delivery`, y external-work
       `done`/`completed` sin ningun agente materializado ni entrega como
-      `external_work_accepted_no_agent_materialized`
+      `external_work_accepted_no_agent_materialized`; cada item compacto
+      conserva `code`, `run_ref`, estado/goal y `recommended_action` con
+      `evidence_refs`
+    efficiency_summary?: resumen compacto con `schema_version`, `state`,
+      `recommended_action?` y `reasons?` para paneles que no consumen la lista
+      completa de `stale_running`
     ops_snapshot?: DirectorAutonomousOpsSnapshotV0 agregado de cola/run para
       `/ops` y cockpit operativo
     diagnostics?: diagnostico publico de puertos/errores y consejo no bloqueante

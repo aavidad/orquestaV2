@@ -22,7 +22,8 @@ func TestMCPAutoprogrammingStatusDescriptorV0EsAdaptadorFino(t *testing.T) {
 		descriptor.ResourceURI != MCPAutoprogrammingStatusResourceURIV0 ||
 		len(descriptor.Invariantes) == 0 ||
 		!strings.Contains(descriptor.Output, "goal_progress_policy") ||
-		!strings.Contains(descriptor.Output, "efficiency_summary") ||
+		!strings.Contains(descriptor.Output, "stale_running?[]{code,severity?,run_ref?,status?,goal_ref?,goal_status?,recommended_action?,evidence_refs?}") ||
+		!strings.Contains(descriptor.Output, "efficiency_summary?{schema_version,state,recommended_action?,reasons?}") ||
 		!strings.Contains(descriptor.Output, "error:{errores_publicos,evidence_refs?") {
 		t.Fatalf("descriptor incompleto: %+v", descriptor)
 	}
