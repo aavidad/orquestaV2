@@ -2,6 +2,7 @@ package orquestamcp
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
@@ -35,6 +36,7 @@ func TestMCPRequestAppChangeV0DelegaEnCasoDeUso(t *testing.T) {
 	}
 	if result.Estado != MCPRequestAppChangeEstadoOKV0 ||
 		result.DirectorQuestionRef != "question-ref-change-mcp-001" ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "change-ref-mcp-001") ||
 		store.saved.Request.RequestID != "req-change-mcp-001" ||
 		notifier.notified.Request.CorrelationID != "corr-change-mcp-001" {
 		t.Fatalf("result=%+v store=%+v notifier=%+v", result, store.saved, notifier.notified)
@@ -45,6 +47,7 @@ func TestMCPRequestAppChangeDescriptorV0EsAdaptadorFino(t *testing.T) {
 	descriptor := MCPRequestAppChangeDescriptorV0()
 	if descriptor.Name != MCPRequestAppChangeToolNameV0 ||
 		descriptor.ResourceURI != MCPRequestAppChangeResourceURIV0 ||
+		!strings.Contains(descriptor.Output, "evidence_refs?") ||
 		len(descriptor.Invariantes) == 0 {
 		t.Fatalf("descriptor=%+v", descriptor)
 	}

@@ -1450,6 +1450,15 @@ declaran `goal_progress_policy` como salida publica y enlazan la evidencia
 `TestMCPQueueGlobalStatusHTTPHandlerV0ConservaReplanNarrowContext`, evitando que
 la superficie global vuelva a quedar por detras de `autoprogramming/status`.
 
+Avance BUG-ORQ-20260701-066/088 2026-07-03 tarde 44:
+`orquesta.apps.request_change.v0` ya transportaba `evidence_refs` desde la
+notificacion de app-change al Director, pero el descriptor compacto no las
+declaraba. El contrato MCP y `docs/contratos.md` publican ahora
+`evidence_refs?` en salidas `ok` y `error`, y la prueba focal verifica que el
+adaptador conserva la evidencia del notifier. Evidencia:
+`TestMCPRequestAppChangeV0DelegaEnCasoDeUso` y
+`TestMCPRequestAppChangeDescriptorV0EsAdaptadorFino`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

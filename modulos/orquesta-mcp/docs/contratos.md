@@ -347,6 +347,36 @@ Pruebas de contrato:
 ```
 
 ```text
+Nombre: mcp.tool.orquesta.apps.request_change.v0
+Tipo: puerto_entrada
+Version: v0
+Propietario: orquesta-mcp
+Consumidores: web wizard, servidor MCP futuro y cliente IA
+Campos:
+  descriptor:
+    name: orquesta.apps.request_change.v0
+    resource_uri: orquesta://contracts/request-app-change/v0
+  input:
+    request_id, correlation_id: refs externas opcionales
+    app_change_request: AppChangeRequestV0
+  output_ok:
+    estado: ok
+    run_ref, app_ref, change_ref, director_question_ref
+    evidence_refs: evidencias compactas del receipt/notificacion al Director
+  output_error:
+    estado: error
+    errores_publicos: issues compactos
+    evidence_refs: evidencias compactas conservadas si el caso de uso las emite
+Invariantes:
+  - Adaptador inbound fino.
+  - Delega en `orquesta-app-change` y en el notifier inyectado.
+  - No elige proveedor, modelo, DB, runtime ni filesystem.
+Pruebas de contrato:
+  - `TestMCPRequestAppChangeV0DelegaEnCasoDeUso`
+  - `TestMCPRequestAppChangeDescriptorV0EsAdaptadorFino`
+```
+
+```text
 Nombre: mcp.tool.orquesta.apps.arrancar_director.v0
 Tipo: puerto_entrada
 Version: v0

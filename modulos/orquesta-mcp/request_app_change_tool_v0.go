@@ -52,7 +52,7 @@ func MCPRequestAppChangeDescriptorV0() MCPRequestAppChangeToolDescriptorV0 {
 		Name:        MCPRequestAppChangeToolNameV0,
 		Version:     MCPRequestAppChangeToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,app_change_request:AppChangeRequestV0}",
-		Output:      "ok:{run_ref,change_ref,director_question_ref}|error:{errores_publicos}",
+		Output:      "ok:{run_ref,change_ref,director_question_ref,evidence_refs?}|error:{errores_publicos,evidence_refs?}",
 		ResourceURI: MCPRequestAppChangeResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
