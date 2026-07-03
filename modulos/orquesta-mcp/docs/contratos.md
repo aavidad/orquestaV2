@@ -1556,11 +1556,16 @@ Campos:
       `kind`, `advice` y `text`
   output_ok:
     estado: ok
+    accepted: true
+    background: true para automejora secundaria de baja prioridad
     autoprogramming_request, priority_score, prepare_run, prepared_run?
     operator_advice?: consejos normalizados con non_blocking=true
     next_actions
   output_error:
     estado: error
+    accepted: false
+    background?: conserva si la propuesta fallida seguia siendo automejora de
+      background
     errores_publicos y next_actions reparables sin descartar evidencia
     operator_advice?: consejos normalizados si llegaron en la entrada
 Invariantes:

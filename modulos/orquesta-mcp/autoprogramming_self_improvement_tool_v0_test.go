@@ -24,6 +24,19 @@ func TestMCPAutoprogrammingSelfImprovementDescriptorV0EsAdaptadorFino(t *testing
 	if !containsMCPStringPartForTestV0(descriptor.Invariantes, "no sustituye la ruta goal-first") {
 		t.Fatalf("descriptor debe marcar automejora como secundaria: %+v", descriptor.Invariantes)
 	}
+	for _, want := range []string{
+		"accepted",
+		"background",
+		"priority_score",
+		"prepared_run?",
+		"operator_advice?",
+		"next_actions",
+		"error:{accepted:false,background?",
+	} {
+		if !containsMCPTestStringV0(descriptor.Output, want) {
+			t.Fatalf("descriptor self-improvement no declara %q en output=%q", want, descriptor.Output)
+		}
+	}
 	assertTransportPayloadSaneadoMCPTestV0(t, descriptor, 1200)
 }
 

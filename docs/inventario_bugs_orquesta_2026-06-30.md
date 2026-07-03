@@ -1566,6 +1566,15 @@ frontera: sigue siendo compatibilidad legacy solo con
 entrada preferente goal-first. Evidencia:
 `TestMCPAppSpecDescriptorsV0PublicanRoutePolicy`.
 
+Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 55:
+`orquesta.autoprogramming.self_improvement.propose.v0` devolvia `accepted` y
+`background`, pero el descriptor compacto no declaraba esos campos; clientes
+finos podian tratar una automejora secundaria de baja prioridad como trabajo
+principal o perder que el rechazo seguia siendo reparable sin descartar
+evidencia. El descriptor y docs publican ahora `accepted`/`background` en `ok`
+y `error`. Evidencia:
+`TestMCPAutoprogrammingSelfImprovementDescriptorV0EsAdaptadorFino`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

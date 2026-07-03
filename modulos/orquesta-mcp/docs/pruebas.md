@@ -592,11 +592,12 @@ Evidencia esperada: `orquesta.autoprogramming.self_improvement.propose.v0`,
 `operator_advice` compacto, aceptan aliases reparables de refs, accion y texto,
 lo normalizan con `non_blocking=true` y no lo usan para bloquear, arrancar
 runtime ni decidir proveedor. En self-improvement, el consejo normalizado queda
-como contexto/regla no bloqueante de la request de automejora. Los puertos de
-cola, stats y supervisor siguen siendo inyectados; si falta un puerto o falla el
-executor, el error publico sigue siendo reparable y el bridge HTTP devuelve el
-consejo normalizado como observacion no bloqueante sin descartar evidencia de
-automejora.
+como contexto/regla no bloqueante de la request de automejora, y el descriptor
+declara `accepted`/`background` para distinguir automejora secundaria de trabajo
+principal. Los puertos de cola, stats y supervisor siguen siendo inyectados; si
+falta un puerto o falla el executor, el error publico sigue siendo reparable y el
+bridge HTTP devuelve el consejo normalizado como observacion no bloqueante sin
+descartar evidencia de automejora.
 
 Evidencia adicional 2026-06-26: `autoprogramming/status` separa una run
 `running` sin stats recientes (`running_without_recent_stats`) de una run

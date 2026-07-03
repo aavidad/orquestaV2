@@ -63,7 +63,7 @@ func MCPAutoprogrammingSelfImprovementDescriptorV0() MCPAutoprogrammingSelfImpro
 		Name:        MCPAutoprogrammingSelfImprovementToolNameV0,
 		Version:     MCPAutoprogrammingSelfImprovementToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,director_execution_mode?:goal_first|legacy_director_loop,auto_prepare_run?,operator_advice?,proposal:AutoprogrammingSelfImprovementProposalV0}",
-		Output:      "ok:{autoprogramming_request,priority_score,prepare_run,prepared_run?,operator_advice?,next_actions}|error:{errores_publicos,operator_advice?,next_actions}",
+		Output:      "ok:{accepted,background,autoprogramming_request,priority_score,prepare_run,prepared_run?,operator_advice?,next_actions}|error:{accepted:false,background?,errores_publicos,operator_advice?,next_actions}",
 		ResourceURI: MCPAutoprogrammingSelfImprovementResourceURIV0,
 		Invariantes: []string{
 			"convierte fallos observados en automejora secundaria",
