@@ -143,6 +143,38 @@ go test -count=1 ./cmd/orquesta-server -run 'TestSmokeGoalFirstAppServerRealProj
 
 Resultado observado: verde.
 
+### BUG-ORQ-20260703-147: catalogo MCP demasiado grande tras sincronizar remoto
+
+Sintoma:
+
+Tras rebasear sobre `7fb0568`, `go test -count=1 ./modulos/orquesta-mcp`
+fallaba en `TestRegisterMCPTransportV0ExponeOperacionesExistentes` porque el
+JSON del catalogo completo de tools subio a 33.259 bytes frente al limite
+31.800.
+
+Causa tecnica:
+
+Los contratos completos `InputShape`/`OutputShape` seguian siendo correctos como
+campos internos, pero al serializar el registro entero se duplicaban esquemas
+largos de varias herramientas MCP. El remoto habia anadido diagnosticos y
+acciones utiles, pero el indice compacto dejo de ser compacto.
+
+Cambio:
+
+- `MCPTransportToolEnvelopeV0.MarshalJSON` compacta shapes largas como
+  `shape_ref:<resource>#input|output` solo en la serializacion JSON del catalogo.
+- Los campos Go completos no se mutan.
+- El MCP real sigue construyendo schemas desde `InputShape` y `OutputShape`.
+
+Evidencia:
+
+```bash
+go test -count=1 ./modulos/orquesta-mcp
+go test -count=1 ./cmd/orquesta-server
+```
+
+Resultado observado: verde.
+
 ## Smoke Nueva App real ejecutado
 
 Comando lanzado:
