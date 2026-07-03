@@ -686,6 +686,40 @@ func TestHandoffGoalFirstParadaUsaServidorGestionadoV0(t *testing.T) {
 	}
 }
 
+func TestHandoffCierreSesionNoReabreBUG077V0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "docs/handoff_cierre_sesion_orquesta_2026-07-02.md")
+	openSection := handoffCierreSesionOpenBugsSectionV0(text)
+
+	if strings.Contains(openSection, "BUG-ORQ-20260701-077") {
+		t.Fatalf("handoff cierre sesion no debe reabrir BUG-077 sin evidencia nueva")
+	}
+	for _, want := range []string{
+		"BUG-077 queda cerrado",
+		"TestScriptStartsTemporaryOrquestaServerV0DetectaPIDConAddrGestionadoV0",
+		`ORQUESTA_SERVER_ADDR`,
+		`server_pid="$!"`,
+		"smoke_shutdown_orquesta_server",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("handoff cierre sesion debe conservar cierre/guarda BUG-077: falta %q", want)
+		}
+	}
+}
+
+func handoffCierreSesionOpenBugsSectionV0(text string) string {
+	start := strings.Index(text, "Abiertos")
+	if start < 0 {
+		return ""
+	}
+	rest := text[start:]
+	end := strings.Index(rest, "\n## Agente remoto")
+	if end < 0 {
+		return rest
+	}
+	return rest[:end]
+}
+
 func TestRunbookPruebasLocalesUsaEndpointGestionadoV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "docs/runbooks/pruebas_locales_orquesta_2026-05-25.md")

@@ -845,6 +845,13 @@ un script que arranque servidor temporal por PID capturado siga exigiendo
 `smoke_shutdown_orquesta_server` y cleanup gobernado. Evidencia:
 `TestScriptStartsTemporaryOrquestaServerV0DetectaPIDConAddrGestionadoV0`.
 
+Avance BUG-ORQ-20260701-077 2026-07-03 tarde 20: el handoff de cierre de sesion
+`docs/handoff_cierre_sesion_orquesta_2026-07-02.md` deja de listar BUG-077 como
+abierto tras integrar la guarda de wrappers; conserva la evidencia del detector
+`ORQUESTA_SERVER_ADDR` + `server_pid="$!"` y una guarda documental impide
+reabrirlo en ese handoff sin evidencia nueva. Evidencia:
+`TestHandoffCierreSesionNoReabreBUG077V0`.
+
 Avance BUG-ORQ-20260701-065/088 2026-07-03 tarde 4: `runs/control` ya no deja la
 evidencia de `control_not_propagated_to_goal_backend` solo dentro de
 `diagnostics`; cuando el backend Goal sigue activo tras stop/cancel, el resultado

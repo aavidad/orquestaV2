@@ -32,10 +32,10 @@ Fecha: 2026-07-02
 ## Numeros actuales del inventario
 
 - Total bugs funcionales inventariados: 134.
-- Cerrados: 124.
-- Abiertos: 10.
+- Cerrados: 125.
+- Abiertos: 9.
 
-Abiertos:
+Abiertos tras integrar la guarda de wrappers de BUG-077:
 
 - `BUG-ORQ-20260701-058` OPES/contrato de calidad.
 - `BUG-ORQ-20260701-065` Shutdown/Goal backend.
@@ -43,30 +43,34 @@ Abiertos:
 - `BUG-ORQ-20260701-073` Goal-first/timeout tras checkpoint.
 - `BUG-ORQ-20260701-075` Goal-first/QA de artefactos parciales.
 - `BUG-ORQ-20260701-076` Shutdown forzado/app-server residual.
-- `BUG-ORQ-20260701-077` Startup/base_url y app-server residual.
 - `BUG-ORQ-20260701-079` Goal-first/sin checkpoint temprano y salidas gigantes.
 - `BUG-ORQ-20260701-085` Goal-first/write-set y recibo de dominio.
 - `BUG-ORQ-20260701-088` Goal-first/status/shutdown alto consumo.
 
+Actualizacion 2026-07-03: BUG-077 queda cerrado en el inventario vigente. La
+guarda `TestScriptStartsTemporaryOrquestaServerV0DetectaPIDConAddrGestionadoV0`
+fija el caso `ORQUESTA_SERVER_ADDR` + `server_pid="$!"` y exige shutdown comun.
+
 ## Agente remoto
 
-El agente remoto quedaba trabajando al cierre de esta sesion. Estado observado:
+El agente remoto quedaba trabajando al cierre de esta sesion. Estado observado
+en el corte original:
 
 - HEAD remoto/origin: `777e027c`.
-- Cambio vivo remoto: `cmd/orquesta-server/smoke_goal_first_script_guard_v0_test.go`.
-- Proposito del cambio remoto: anadir guarda automatica para que scripts que
+- Cambio vivo remoto ya integrado:
+  `cmd/orquesta-server/smoke_goal_first_script_guard_v0_test.go`.
+- Proposito del cambio integrado: anadir guarda automatica para que scripts que
   arrancan servidor temporal con `server_pid="$!"` y `ORQUESTA_SERVER_ADDR`
   usen `smoke_shutdown_orquesta_server`.
-- No cortar ese agente ni borrar sus untracked generados; debe terminar,
-  probar, commitear y hacer fetch/rebase antes de push si origin avanza.
+- No borrar los untracked generados; si se vuelve a tocar este frente, probar,
+  commitear y hacer fetch/rebase antes de push si origin avanza.
 
 ## Siguiente accion recomendada
 
-1. Dejar terminar el cambio remoto de guarda de wrappers.
-2. Traer su commit localmente y repetir `go test -count=1 ./cmd/orquesta-server`
+1. Repetir `go test -count=1 ./cmd/orquesta-server`
    y, si no hay prisa, `go test -count=1 ./...`.
-3. Recalcular inventario; si BUG-077 queda cubierto solo por wrappers pero
-   siguen residuales reales de startup/backend, mantenerlo abierto con avance.
-4. Continuar con los abiertos de runtime alto consumo/shutdown
+2. Recalcular inventario si aparecen nuevos residuales reales de
+   startup/backend; no reabrir BUG-077 sin evidencia nueva.
+3. Continuar con los abiertos de runtime alto consumo/shutdown
    (`065`, `073`, `076`, `079`, `088`) y los de OPES largo (`058`, `066`,
    `075`, `085`) sin tocar produccion.
