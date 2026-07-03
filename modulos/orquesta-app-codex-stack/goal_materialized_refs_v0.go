@@ -113,10 +113,7 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 		!goalMaterializedMissingTerminalReceiptHandledV0(state) {
 		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0)
 		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedMissingTerminalReceiptEvidence)
-		result.ExpectedReceiptRefs = append(result.ExpectedReceiptRefs,
-			"expected-terminal-receipt:"+safeGoalMaterializedRefPartV0(goalMaterializedGoalResultFileV0),
-			"expected-terminal-receipt:"+safeGoalMaterializedRefPartV0(goalMaterializedOPESReworkDeliveryFileV0),
-		)
+		result.ExpectedReceiptRefs = append(result.ExpectedReceiptRefs, goalMaterializedExpectedTerminalReceiptRefsV0(state)...)
 	}
 	if scan.HasArtifact && !scan.HasTerminalReceipt {
 		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstPartialArtifactsWrittenV0)
@@ -630,6 +627,14 @@ func goalMaterializedExpectedChecklistRefsV0(state orquestagoal.GoalWorkStateV0)
 		}
 	}
 	return compactStringsV0(refs)
+}
+
+func goalMaterializedExpectedTerminalReceiptRefsV0(state orquestagoal.GoalWorkStateV0) []string {
+	return compactStringsV0([]string{
+		"expected-terminal-receipt:" + safeGoalMaterializedRefPartV0(goalMaterializedGoalResultFileV0),
+		"expected-terminal-receipt:" + safeGoalMaterializedRefPartV0(orquestaruntimecodexgoal.CodexGoalResultFileNameForGoalRefV0(state.GoalRef)),
+		"expected-terminal-receipt:" + safeGoalMaterializedRefPartV0(goalMaterializedOPESReworkDeliveryFileV0),
+	})
 }
 
 func goalMaterializedFileLooksLikeArtifactV0(
