@@ -198,6 +198,33 @@ func TestSmokesAisladosPasanRuntimeDirAlShutdownComunV0(t *testing.T) {
 	}
 }
 
+func TestSmokeOPESExternalWorkAgentRealUsaShutdownDelegadoConRuntimeDirV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	wrapper := readOperationalDocGuardV0(t, root, "scripts/smoke_opes_external_work_agent_real.sh")
+	ops := readOperationalDocGuardV0(t, root, "scripts/lib/opes_agent_smoke_ops.sh")
+
+	for _, want := range []string{
+		"source \"$repo_root/scripts/lib/opes_agent_smoke_ops.sh\"",
+		`RUNTIME_DIR="$PROJECT_DIR/.orquesta-runtime"`,
+		"trap smoke_cleanup EXIT",
+		"smoke_start_orquesta_server",
+	} {
+		if !strings.Contains(wrapper, want) {
+			t.Fatalf("smoke OPES external-work debe delegar arranque/cleanup gobernado: falta %q", want)
+		}
+	}
+	for _, want := range []string{
+		`smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 30 "$RUNTIME_DIR"`,
+		`export ORQUESTA_CODEX_RUNTIME_WORKDIR="$RUNTIME_DIR"`,
+		`export ORQUESTA_SERVER_ADDR="127.0.0.1:0"`,
+		`server_pid="$!"`,
+	} {
+		if !strings.Contains(ops, want) {
+			t.Fatalf("helper OPES external-work debe pasar runtime_dir al shutdown comun: falta %q", want)
+		}
+	}
+}
+
 func TestSmokeOPESReviewsProvidersRealExigeOptInLegacyYWorkdirOPESV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_opes_reviews_providers_real.sh")
