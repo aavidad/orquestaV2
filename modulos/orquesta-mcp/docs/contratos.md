@@ -168,6 +168,7 @@ Campos:
   output_error:
     estado: error
     errores_publicos: issues compactos
+    evidence_refs?: evidencia compacta del preview fallido sin lanzar agentes
 Invariantes:
   - Compila el mismo contrato GoalWorkSpecV0 que external_work.run goal-first.
   - No lanza agentes, no crea run, no encola y no escribe en stores.

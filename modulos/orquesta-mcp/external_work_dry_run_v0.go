@@ -86,7 +86,7 @@ func MCPExternalWorkDryRunDescriptorV0() MCPExternalWorkDryRunToolDescriptorV0 {
 		Name:        MCPExternalWorkDryRunToolNameV0,
 		Version:     MCPExternalWorkDryRunToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,director_execution_mode?:goal_first,model?,external_work_run_request?:StartExternalWorkRunRequestV0,app_change_request?:AppChangeRequestV0}",
-		Output:      "ok:{route_policy=goal_first,director_execution_mode=goal_first,spec_summary,est_model,est_tokens,est_cost_usd,est_wall_clock,evidence_refs}|error:{errores_publicos}",
+		Output:      "ok:{route_policy=goal_first,director_execution_mode=goal_first,spec_summary,est_model,est_tokens,est_cost_usd,est_wall_clock,evidence_refs}|error:{errores_publicos,evidence_refs?}",
 		ResourceURI: MCPExternalWorkDryRunResourceURIV0,
 		Invariantes: []string{
 			"compila el mismo GoalWorkSpecV0 que la ruta goal-first de external_work.run",
@@ -272,6 +272,7 @@ func newMCPExternalWorkDryRunInputErrorV0(
 		DirectorExecutionMode: MCPExternalWorkRunDirectorExecutionModeGoalFirstV0,
 		RequestID:             strings.TrimSpace(input.RequestID),
 		CorrelationID:         firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
+		EvidenceRefs:          []string{MCPExternalWorkDryRunEvidenceRefV0},
 		Errores:               issues,
 	}
 }
@@ -291,6 +292,7 @@ func newMCPExternalWorkDryRunExternalWorkErrorV0(
 		ProjectRef:            strings.TrimSpace(request.ProjectRef),
 		AppRef:                strings.TrimSpace(request.AppChangeRequest.AppRef),
 		ChangeRef:             strings.TrimSpace(request.AppChangeRequest.ChangeRef),
+		EvidenceRefs:          []string{MCPExternalWorkDryRunEvidenceRefV0},
 		Errores:               externalWorkRunIssuesMCPV0(issues),
 	}
 }
@@ -324,6 +326,7 @@ func newMCPExternalWorkDryRunGoalSpecErrorV0(
 		ProjectRef:            strings.TrimSpace(request.ProjectRef),
 		AppRef:                strings.TrimSpace(request.AppChangeRequest.AppRef),
 		ChangeRef:             strings.TrimSpace(request.AppChangeRequest.ChangeRef),
+		EvidenceRefs:          []string{MCPExternalWorkDryRunEvidenceRefV0},
 		Errores:               out,
 	}
 }

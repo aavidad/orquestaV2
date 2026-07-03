@@ -1477,6 +1477,16 @@ descriptor compacto de error solo anunciaba `errores_publicos`. El descriptor y
 verifica que un resultado rechazado conserva evidencia y acciones compactas.
 Evidencia: `TestNewMCPExternalWorkRunResultV0ConservaEvidenciaEnError`.
 
+Avance BUG-ORQ-20260701-066/088 2026-07-03 tarde 47:
+`orquesta.external_work.dry_run.v0` devolvia evidencia del preview solo en
+salidas `ok`; si la compilacion del spec fallaba, el cliente veia errores sin
+ref compacta que distinguiese un preview fallido de un lanzamiento real. Los
+errores de input, contrato externo y validacion GoalSpec conservan ahora
+`evidence-ref-external-work-dry-run-v0`, y el descriptor/contrato declaran
+`evidence_refs?` tambien en `error`. Evidencia:
+`TestBuildExternalWorkDryRunV0RechazaEntradaAmbiguaV0` y
+`TestMCPExternalWorkDryRunDescriptorV0DeclaraEvidenciaEnError`.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.

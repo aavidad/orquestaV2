@@ -76,8 +76,17 @@ func TestBuildExternalWorkDryRunV0RechazaEntradaAmbiguaV0(t *testing.T) {
 
 	if result.Estado != MCPExternalWorkRunEstadoErrorV0 ||
 		len(result.Errores) != 1 ||
-		result.Errores[0].Code != MCPExternalWorkRunInputAmbiguousV0 {
+		result.Errores[0].Code != MCPExternalWorkRunInputAmbiguousV0 ||
+		!mcpExternalWorkRunStringInSetTestV0(result.EvidenceRefs, MCPExternalWorkDryRunEvidenceRefV0) {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPExternalWorkDryRunDescriptorV0DeclaraEvidenciaEnError(t *testing.T) {
+	descriptor := MCPExternalWorkDryRunDescriptorV0()
+
+	if !strings.Contains(descriptor.Output, "error:{errores_publicos,evidence_refs?}") {
+		t.Fatalf("descriptor output sin evidencia en error: %s", descriptor.Output)
 	}
 }
 
