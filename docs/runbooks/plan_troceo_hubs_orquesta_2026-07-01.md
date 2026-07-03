@@ -7,6 +7,9 @@ Estado: cierre operativo de `ARCH-ORQ-20260630-001` y
 
 - `orquesta-core-workflow`: 154 ficheros `.go` no-test en un paquete plano.
 - `orquesta-orchestration-core`: 144 ficheros `.go` no-test en un paquete plano.
+- Metricas MEJ-106 medidas en HEAD 2026-07-03:
+  `env_vars_orquesta=513`, `endpoints_status=16`,
+  `interfaces_estado=65`, `modulos_director=17`.
 - Frontera neutral vigente: `architecture_boundaries_test.go` ya cubre
   `orquesta-core-workflow` y `orquesta-orchestration-core`.
 - Hotspots no-test actuales:
@@ -38,9 +41,22 @@ Cuando un cambio toque un fichero no-test de mas de 700 lineas:
 
 ## Cortes sugeridos
 
-- `orquesta-core-workflow`: separar por invariantes, no por estetica:
-  comandos/eventos, reducer/replay, waits/outbox, tasks/closure y tests
-  contractuales.
+- Primer subpaquete a extraer cuando haya cambio funcional:
+  workflow tasks/microtasks de `orquesta-core-workflow`. Criterio de entrada:
+  tocar `WorkflowTaskV0`, `WorkProfileV0`, `CreateMicrotask` o su validacion.
+  Ficheros candidatos:
+  `work_items_v0.go`, `work_items_validation_v0.go`,
+  `work_items_normalize_v0.go`, `work_items_command_v0.go`,
+  `work_items_command_flow_v0.go`, `work_items_command_invariant_v0_test.go`,
+  `work_items_command_v0_test.go`, `work_items_v0_test.go`,
+  `work_profile_v0.go`, `work_profile_task_v0.go`,
+  `work_profile_validation_v0.go` y `work_profile_v0_test.go`.
+  Ratchet documental: el paquete plano parte de 154 ficheros `.go` no-test y
+  debe bajar tras la extraccion real; si se anade fachada temporal en el paquete
+  actual, debe ser mas pequena que el grupo extraido. Ratchet focal:
+  `go test -count=1 ./modulos/orquesta-core-workflow -run 'Test(NewWorkflowTask|ValidateWorkflowTask|WorkflowTaskFromWorkProfile|CreateMicrotask)'`
+  y
+  `go test -count=1 . -run 'TestNeutralOrchestrationPackagesDoNot(ImportProductAdapters|DependOnProductAdapters|DependOnFactoryOrHTTP)'`.
 - `orquesta-orchestration-core`: mantener como composicion de puertos del
   Director V2; no introducir runtime real, Codex, OPES, HTTP ni DB.
 - `orquesta-web/nueva_app_html_render_v0.go`: extraer cuando se vuelva a tocar
@@ -48,9 +64,38 @@ Cuando un cambio toque un fichero no-test de mas de 700 lineas:
 - `orquesta-app-codex-stack`: dividir validadores OPES/goal-first por contrato
   de dominio cuando aparezca un bug nuevo en ese contrato.
 
+## Ratchet MEJ-106
+
+- `env_vars_budget_test.go` fija `env_vars_orquesta <= 513`, medido con
+  `scripts/orquesta_metricas_deuda.sh --json`.
+- Si el conteo baja, actualizar el maximo a la baja en el mismo commit que
+  elimina o consolida variables.
+- Si una variable nueva es inevitable, documentar primero por que no cabe en una
+  superficie canonica existente y compensar eliminando/consolidando otra.
+- Mantener `scripts/test_orquesta_metricas_deuda.sh` como test de forma del
+  medidor; el ratchet de presupuesto vive en `go test`.
+
+## Checklist retirada `legacy_director_loop`
+
+No retirar codigo legacy por fecha blanda. Condiciones acumulativas:
+
+1. Ventana §9 verde con nightly activo y sin reapertura de shutdown/status
+   goal-first.
+2. Segundo backend goal o decision explicita de que el director de escalada
+   sustituye esa redundancia para produccion.
+3. Smokes OPES temporales y Nueva App goal-first con cierre aceptado, refs no
+   vacios y shutdown sin app-server residual.
+4. Inventario sin bugs abiertos de compatibilidad que dependan de
+   `legacy_director_loop`; los runbooks historicos deben quedar marcados como
+   legacy explicito.
+5. PR/commit de retirada con test que falle si una ruta productiva vuelve a
+   seleccionar legacy de forma implicita.
+
 ## Evidencia de cierre
 
 - `go test -count=1 . -run 'TestNeutralOrchestrationPackagesDoNot(ImportProductAdapters|DependOnProductAdapters|DependOnFactoryOrHTTP)'`.
+- `go test -count=1 ./ -run TestEnvVarsBudget`.
 - `go test -count=1 ./...`.
+- `bash scripts/orquesta_metricas_deuda.sh`.
 - Inventario vivo actualizado; los riesgos quedan cerrados como deuda gobernada,
   no como codigo refactorizado.

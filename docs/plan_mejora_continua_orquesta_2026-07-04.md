@@ -168,7 +168,7 @@ Tests:
 
 Objetivo: gobernar la deuda residual conocida sin big-bang: (1) plan de troceo incremental del hub orquesta-core-workflow actualizando docs/runbooks/plan_troceo_hubs_orquesta_2026-07-01.md con el primer subpaquete concreto a extraer y su ratchet; (2) ratchet descendente de env vars: test raiz que fija el numero actual de ORQUESTA_* (medido con scripts/orquesta_metricas_deuda.sh) como maximo y obliga a bajar para anadir; (3) checklist de retirada del legacy_director_loop condicionada a ventana §9 verde y segundo backend goal, documentada para decision del operador, sin borrar codigo en esta tarea.
 
-Estado: aparcado hasta ventana §9 verde y decision explicita de retirada legacy.
+Estado: cerrado por Codex local en modo deuda gobernada; retirada legacy no ejecutada y queda condicionada a checklist/decision explicita.
 
 Alcance:
 

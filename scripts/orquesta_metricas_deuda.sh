@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Lineas base 2026-07-03: env=500, status=15, interfaces=64, director=17.
+# Lectura MEJ-106 2026-07-03: env=513, status=16, interfaces=65, director=17.
 
 usage() {
   echo "usage: scripts/orquesta_metricas_deuda.sh [--json]" >&2

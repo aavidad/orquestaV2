@@ -736,3 +736,32 @@ Evidencia ejecutada:
 
 `BUG-088` no se cierra: falta smoke real que confirme la ruta completa alto
 consumo/checkpoint -> segundo artefacto o replan sin app-server residual.
+
+### 2026-07-03 noche — Codex cierra MEJ-106 de deuda residual gobernada
+
+Trabajo directo acotado, sin cambios de produccion. Subagente solo lectura
+`019f29d8-ee54-7580-8cb2-984b65828d31` (Poincare) audito MEJ-106 y confirmo
+que faltaban ratchet de env vars, primer subpaquete concreto y checklist de
+retirada `legacy_director_loop`.
+
+Cambios aplicados:
+- `env_vars_budget_test.go` fija `TestEnvVarsBudgetMEJ106V0` con baseline real
+  `env_vars_orquesta <= 513`, medido por
+  `scripts/orquesta_metricas_deuda.sh --json`. Si baja, debe actualizarse a la
+  baja; si sube, falla.
+- `docs/runbooks/plan_troceo_hubs_orquesta_2026-07-01.md` nombra el primer
+  subpaquete a extraer: workflow tasks/microtasks de
+  `orquesta-core-workflow`, con ficheros candidatos exactos, test focal y
+  ratchet de paquete plano (154 ficheros no-test).
+- La checklist de retirada `legacy_director_loop` queda condicionada a ventana
+  §9 verde, redundancia/decision de backend goal, smokes goal-first equivalentes
+  y decision explicita del operador. No se borra legacy en esta tarea.
+
+Evidencia ejecutada para cierre:
+- `go test -count=1 ./ -run TestEnvVarsBudget`
+- `bash scripts/orquesta_metricas_deuda.sh --json`
+- `bash scripts/test_orquesta_metricas_deuda.sh`
+
+El plan `docs/plan_mejora_continua_orquesta_2026-07-04.md` queda actualizado
+para no relanzar MEJ-106 como aparcada; retirada legacy sigue siendo decision
+posterior, no parte de este cierre.
