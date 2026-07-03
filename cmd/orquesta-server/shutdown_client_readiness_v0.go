@@ -17,27 +17,34 @@ func shutdownClientResultCanWaitV0(result serverShutdownClientResultV0) bool {
 }
 
 func shutdownClientResultReadyForSignalV0(result serverShutdownClientResultV0) bool {
-	noActiveWork := result.ActiveWorkCount == 0 &&
-		len(compactStringsV0(result.ActiveWorkRefs)) == 0
-	return (result.ShutdownReady && noActiveWork) ||
-		(result.AgentsInFlight == 0 &&
-			result.CheckpointsPending == 0 &&
-			result.CheckpointAgentsPending == 0 &&
-			noActiveWork &&
-			result.RunsRequested <= result.RunsStopped)
+	noBlockingWork := shutdownClientResultHasNoBlockingWorkV0(result)
+	return (result.ShutdownReady && noBlockingWork) ||
+		(noBlockingWork && result.RunsRequested <= result.RunsStopped)
 }
 
 func shutdownPublicStatusReadyForSignalV0(status orquestaserver.ServerPublicStatusV0) bool {
-	noActiveWork := status.ShutdownActiveWorkCount == 0 &&
-		len(compactStringsV0(status.ShutdownActiveWorkRefs)) == 0
-	return (status.ShutdownReady && noActiveWork) ||
+	noBlockingWork := shutdownPublicStatusHasNoBlockingWorkV0(status)
+	return (status.ShutdownReady && noBlockingWork) ||
 		(status.ShutdownInProgress &&
-			status.ShutdownAgentsInFlight == 0 &&
-			status.ShutdownCheckpointsPending == 0 &&
-			status.ShutdownCheckpointAgentsPending == 0 &&
-			status.ShutdownAsyncWorkActive == 0 &&
-			noActiveWork &&
+			noBlockingWork &&
 			status.ShutdownRunsRequested <= status.ShutdownRunsStopped)
+}
+
+func shutdownClientResultHasNoBlockingWorkV0(result serverShutdownClientResultV0) bool {
+	return result.AgentsInFlight == 0 &&
+		result.CheckpointsPending == 0 &&
+		result.CheckpointAgentsPending == 0 &&
+		result.ActiveWorkCount == 0 &&
+		len(compactStringsV0(result.ActiveWorkRefs)) == 0
+}
+
+func shutdownPublicStatusHasNoBlockingWorkV0(status orquestaserver.ServerPublicStatusV0) bool {
+	return status.ShutdownAgentsInFlight == 0 &&
+		status.ShutdownCheckpointsPending == 0 &&
+		status.ShutdownCheckpointAgentsPending == 0 &&
+		status.ShutdownAsyncWorkActive == 0 &&
+		status.ShutdownActiveWorkCount == 0 &&
+		len(compactStringsV0(status.ShutdownActiveWorkRefs)) == 0
 }
 
 func serverShutdownClientResultFromStatusV0(status orquestaserver.ServerPublicStatusV0) serverShutdownClientResultV0 {

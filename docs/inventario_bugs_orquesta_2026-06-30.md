@@ -827,6 +827,13 @@ error `shutdown_not_ready` conserva `agents_in_flight`, `checkpoints`,
 y no envia senal cooperativa aunque el status posterior llegue vacio. Evidencia:
 `TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado`.
 
+Avance BUG-ORQ-20260701-065/076 2026-07-03 tarde 9: el cliente ya no acepta
+`shutdown_ready=true` como atajo suficiente si el resultado HTTP o el status
+publico todavia conservan agentes en vuelo, checkpoints, agentes de checkpoint
+o async work pendientes. `shutdown_ready` solo permite senal cuando todo el
+trabajo bloqueante esta drenado. Evidencia:
+`TestShutdownClientReadyV0NoSaltaTrabajoPendienteAunqueReadyV0`.
+
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre
 `finalize_syllabus_package`, `completed_syllabus_package` y

@@ -360,6 +360,49 @@ func TestShutdownClientReadyV0BloqueaActiveWorkPersistido(t *testing.T) {
 	}
 }
 
+func TestShutdownClientReadyV0NoSaltaTrabajoPendienteAunqueReadyV0(t *testing.T) {
+	result := serverShutdownClientResultV0{
+		ShutdownReady:           true,
+		RunsRequested:           1,
+		RunsStopped:             1,
+		AgentsInFlight:          0,
+		CheckpointsPending:      0,
+		CheckpointAgentsPending: 1,
+	}
+	if shutdownClientResultReadyForSignalV0(result) {
+		t.Fatalf("resultado shutdown_ready no debe permitir signal con checkpoint_agents pendientes")
+	}
+
+	result.CheckpointAgentsPending = 0
+	result.CheckpointsPending = 1
+	if shutdownClientResultReadyForSignalV0(result) {
+		t.Fatalf("resultado shutdown_ready no debe permitir signal con checkpoints pendientes")
+	}
+
+	result.CheckpointsPending = 0
+	result.AgentsInFlight = 1
+	if shutdownClientResultReadyForSignalV0(result) {
+		t.Fatalf("resultado shutdown_ready no debe permitir signal con agentes en vuelo")
+	}
+
+	status := orquestaserver.ServerPublicStatusV0{
+		ShutdownInProgress:              true,
+		ShutdownReady:                   true,
+		ShutdownRunsRequested:           1,
+		ShutdownRunsStopped:             1,
+		ShutdownCheckpointAgentsPending: 1,
+	}
+	if shutdownPublicStatusReadyForSignalV0(status) {
+		t.Fatalf("status shutdown_ready no debe permitir signal con checkpoint_agents pendientes")
+	}
+
+	status.ShutdownCheckpointAgentsPending = 0
+	status.ShutdownAsyncWorkActive = 1
+	if shutdownPublicStatusReadyForSignalV0(status) {
+		t.Fatalf("status shutdown_ready no debe permitir signal con async work pendiente")
+	}
+}
+
 func TestShutdownClientNotReadyErrorV0IncluyeRefsActiveWorkCompactas(t *testing.T) {
 	err := shutdownClientNotReadyErrorV0(serverShutdownClientResultV0{
 		Status:          "ready",
