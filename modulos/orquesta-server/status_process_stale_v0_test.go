@@ -131,3 +131,51 @@ func TestServerAvailabilityV0ExponeStoppedAccionableV0(t *testing.T) {
 		t.Fatalf("public stopped=%+v", public)
 	}
 }
+
+func TestStatusTrackerStoppedV0LimpiaStartupReadyV0(t *testing.T) {
+	now := time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC)
+	tracker := NewStatusTrackerV0(ConfigV0{Addr: "127.0.0.1:18787"}, now)
+	tracker.MarkServingV0("127.0.0.1:18787", now)
+	tracker.MarkStartupReadyV0(StartupCheckResultV0{
+		Status:       StartupCheckStatusReadyV0,
+		Message:      "startup_ready",
+		EvidenceRefs: []string{"evidence-ref-startup-ready"},
+	}, now)
+
+	stopped := tracker.MarkStoppedV0(now.Add(time.Minute))
+
+	if stopped.Status != "stopped" ||
+		stopped.StartupReady ||
+		stopped.StartupStatus != "stopped" {
+		t.Fatalf("MarkStoppedV0 debe limpiar startup ready: %+v", stopped)
+	}
+	readiness := NewServerReadinessV0(stopped)
+	if readiness.Ready || readiness.StartupReady || readiness.StartupStatus != "stopped" {
+		t.Fatalf("readiness stopped no debe publicar startup ready: %+v", readiness)
+	}
+}
+
+func TestStatusTrackerRuntimeStoppedV0LimpiaStartupReadyV0(t *testing.T) {
+	now := time.Date(2026, 7, 3, 9, 15, 0, 0, time.UTC)
+	tracker := NewStatusTrackerV0(ConfigV0{Addr: "127.0.0.1:18787"}, now)
+	tracker.MarkServingV0("127.0.0.1:18787", now)
+	tracker.MarkStartupReadyV0(StartupCheckResultV0{
+		Status:  StartupCheckStatusReadyV0,
+		Message: "startup_ready",
+	}, now)
+	tracker.MarkRuntimeStoppingV0("async_work_draining", 1, now.Add(time.Minute))
+
+	stopped := tracker.MarkRuntimeStoppedV0(now.Add(2 * time.Minute))
+
+	if stopped.Status != "stopped" ||
+		stopped.StartupReady ||
+		stopped.StartupStatus != "stopped" ||
+		stopped.ShutdownStatus != "stopped" ||
+		!stopped.ShutdownReady {
+		t.Fatalf("MarkRuntimeStoppedV0 debe limpiar startup ready y conservar shutdown stopped: %+v", stopped)
+	}
+	public := NewServerPublicStatusV0(stopped)
+	if public.StartupReady || public.StartupStatus != "stopped" {
+		t.Fatalf("status publico stopped no debe heredar startup ready: %+v", public)
+	}
+}
