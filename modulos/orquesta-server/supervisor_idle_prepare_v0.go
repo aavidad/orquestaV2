@@ -37,6 +37,7 @@ func (runtime *RuntimeV0) idleSelfImprovementRequestsV0(
 		}
 		requests = planned.Requests
 	}
+	requests = runtime.idleSelfImprovementFrozenTestsRequestsV0(requests)
 	requests = runtime.filterIdleSelfImprovementRequestsV0(ctx, base, requests, decision)
 	requests = normalizeIdleSelfImprovementCausalRequestsV0(requests)
 	requests = filterIdleSelfImprovementKnownQueueRequestsV0(requests, decision)

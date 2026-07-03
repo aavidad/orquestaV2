@@ -60,8 +60,8 @@ func (tracker *StatusTrackerV0) MarkGoalObserverV0(
 		)
 		state.LastError = ""
 		state.LastErrorOperationalMessage = nil
-		if observed, ok := goalObserverIdleSelfImprovementObservationV0(*state, result); ok {
-			tracker.applyIdleSelfImprovementGoalObservedV0(state, observed, nil, now)
+		if observed, closure, ok := goalObserverIdleSelfImprovementObservationV0(*state, result); ok {
+			tracker.applyIdleSelfImprovementGoalObservedWithClosureV0(state, observed, closure, nil, now)
 		}
 	})
 }
@@ -163,7 +163,7 @@ func goalObserverGoalRefsV0(result orquestagoal.GoalWorkObserveActiveResultV0) [
 func goalObserverIdleSelfImprovementObservationV0(
 	state StateV0,
 	result orquestagoal.GoalWorkObserveActiveResultV0,
-) (orquestagoal.GoalWorkResultV0, bool) {
+) (orquestagoal.GoalWorkResultV0, *orquestagoal.GoalClosureValidationV0, bool) {
 	expected := map[string]struct{}{}
 	if message := state.IdleSelfImprovementOperationalMessage; message != nil {
 		for _, ref := range compactConfigStringsV0(message.GoalRefs) {
@@ -186,7 +186,7 @@ func goalObserverIdleSelfImprovementObservationV0(
 		}
 	}
 	if len(expected) == 0 {
-		return orquestagoal.GoalWorkResultV0{}, false
+		return orquestagoal.GoalWorkResultV0{}, nil, false
 	}
 	for _, observation := range result.Observations {
 		observed := orquestagoal.NormalizeGoalWorkResultV0(observation.Result)
@@ -198,11 +198,15 @@ func goalObserverIdleSelfImprovementObservationV0(
 				if strings.TrimSpace(observed.ExternalGoalRef) == "" {
 					observed.ExternalGoalRef = strings.TrimSpace(observation.State.ExternalGoalRef)
 				}
-				return observed, true
+				if observation.ClosureEvaluated {
+					closure := copyGoalClosureValidationForServerStateV0(observation.Closure)
+					return observed, &closure, true
+				}
+				return observed, nil, true
 			}
 		}
 	}
-	return orquestagoal.GoalWorkResultV0{}, false
+	return orquestagoal.GoalWorkResultV0{}, nil, false
 }
 
 func goalObserverObservationRefsV0(

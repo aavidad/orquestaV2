@@ -339,9 +339,13 @@ func appGoalClosureValidatorV0(
 	if base == nil {
 		base = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
 	}
-	return domainWorkGoalReceiptClosureValidatorV0{
+	domainValidator := domainWorkGoalReceiptClosureValidatorV0{
 		Base:   base,
 		Ledger: domainWorkSubmissionRecordReaderV0(config.DomainDelivery.Ledger),
+	}
+	return frozenRequiredTestsClosureValidatorV0{
+		Base:           domainValidator,
+		ProjectWorkDir: strings.TrimSpace(config.Codex.ProjectWorkDir),
 	}
 }
 

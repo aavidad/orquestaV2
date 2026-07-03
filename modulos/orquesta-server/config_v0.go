@@ -92,6 +92,7 @@ type ConfigV0 struct {
 	IdleSelfImprovementCompactRules   []string
 	IdleSelfImprovementSkillRefs      []string
 	IdleSelfImprovementGoalFirst      bool
+	IdleSelfImprovementFrozenTests    bool
 	IdleSelfImprovementPriorityScore  int
 	IdleSelfImprovementMaxRequests    int
 	IdleSelfImprovementTargetQueue    int

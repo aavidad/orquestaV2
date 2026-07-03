@@ -35,6 +35,7 @@ func (runtime *RuntimeV0) observePendingIdleSelfImprovementGoalV0(ctx context.Co
 		return false
 	}
 	if result, ok := runtime.materializedIdleSelfImprovementGoalResultV0(ctx, request); ok {
+		result = runtime.idleSelfImprovementResultWithFrozenTestGuardV0(result)
 		runtime.persistStateTransitionV0(
 			ctx,
 			runtime.tracker.MarkIdleSelfImprovementGoalObservedV0(result, nil, now),
@@ -68,6 +69,7 @@ func (runtime *RuntimeV0) observePendingIdleSelfImprovementGoalV0(ctx context.Co
 	if strings.TrimSpace(result.ExternalGoalRef) == "" {
 		result.ExternalGoalRef = request.ExternalGoalRef
 	}
+	result = runtime.idleSelfImprovementResultWithFrozenTestGuardV0(result)
 	runtime.persistStateTransitionV0(
 		ctx,
 		runtime.tracker.MarkIdleSelfImprovementGoalObservedV0(result, err, now),

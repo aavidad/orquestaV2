@@ -169,6 +169,31 @@ func TestServerConfigFromEnvV0ExponeAutomejoraGoalFirstOptInV0(t *testing.T) {
 	}
 }
 
+func TestServerConfigFromEnvV0ExponeTestsCongeladosOptInV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0 default: %v", err)
+	}
+	if config.IdleSelfImprovementFrozenTests {
+		t.Fatalf("tests congelados deben estar apagados por defecto")
+	}
+
+	t.Setenv(envServerIdleSelfImprovementFrozenTestsV0, "true")
+	config, err = serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0 opt-in: %v", err)
+	}
+	if !config.IdleSelfImprovementFrozenTests {
+		t.Fatalf("tests congelados no activos: %+v", config)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerIdleSelfImprovementFrozenTestsV0)
+	if setting.Value != "true" {
+		t.Fatalf("setting tests congelados=%+v", setting)
+	}
+}
+
 func TestServerConfigFromEnvV0DerivaAutomejoraGoalFirstDeBackendCodexGoalV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "")

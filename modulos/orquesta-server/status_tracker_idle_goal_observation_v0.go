@@ -24,6 +24,16 @@ func (tracker *StatusTrackerV0) applyIdleSelfImprovementGoalObservedV0(
 	observeErr error,
 	now time.Time,
 ) {
+	tracker.applyIdleSelfImprovementGoalObservedWithClosureV0(state, result, nil, observeErr, now)
+}
+
+func (tracker *StatusTrackerV0) applyIdleSelfImprovementGoalObservedWithClosureV0(
+	state *StateV0,
+	result orquestagoal.GoalWorkResultV0,
+	observedClosure *orquestagoal.GoalClosureValidationV0,
+	observeErr error,
+	now time.Time,
+) {
 	result = orquestagoal.NormalizeGoalWorkResultV0(result)
 	reasonCode := idleSelfImprovementGoalObservationReasonCodeV0(result, observeErr)
 	message := firstNonEmptyConfigStringV0(result.Summary, reasonCode)
@@ -40,7 +50,12 @@ func (tracker *StatusTrackerV0) applyIdleSelfImprovementGoalObservedV0(
 	}
 	state.IdleSelfImprovementGoalClosure = nil
 	if observeErr == nil && result.Status == orquestagoal.GoalStatusCompleteV0 && state.IdleSelfImprovementGoalSpec != nil {
-		closure := orquestagoal.ValidateGoalWorkClosureV0(*state.IdleSelfImprovementGoalSpec, result)
+		closure := orquestagoal.GoalClosureValidationV0{}
+		if observedClosure != nil {
+			closure = copyGoalClosureValidationForServerStateV0(*observedClosure)
+		} else {
+			closure = orquestagoal.ValidateGoalWorkClosureV0(*state.IdleSelfImprovementGoalSpec, result)
+		}
 		goalClosure := copyGoalClosureValidationForServerStateV0(closure)
 		state.IdleSelfImprovementGoalClosure = &goalClosure
 		if closure.Accepted {

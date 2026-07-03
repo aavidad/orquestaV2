@@ -1,0 +1,8 @@
+checkpoint_ref: checkpoint-started-t292-tests-congelados-actor-critico
+goal_ref: goal-ref-autoprogramming-backlog-t292-tests-congelados-actor-critico-65e58024
+task: T292 tests-congelados-actor-critico / MEJ-TASK-204
+scope: modulos/orquesta-autoprogramming, modulos/orquesta-app-codex-stack, modulos/orquesta-server, cmd/orquesta-server
+started_at_context: 2026-07-03 goal-first idle_self_improvement
+next_artifact: opt-in frozen required tests implementation and closure evidence JSON
+input_evidence_refs: scan-ref-backlog-5080e9b0247f, task-instance-ref-backlog-6275e559, task-id-ref-backlog-8e8b45c2ee4d
+required_manual_verification: go build ./...

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 )
@@ -163,33 +164,37 @@ type IdleSelfImprovementRequestFilterResultV0 struct {
 }
 
 type IdleSelfImprovementRequestV0 struct {
-	RequestRef         string
-	CorrelationID      string
-	ProjectRef         string
-	WorktreeRef        string
-	BranchRef          string
-	ParentRunRef       string
-	RescueReason       string
-	SupersedesRunRef   string
-	ActiveAttemptRef   string
-	RequestedBy        string
-	Source             string
-	FailureKind        string
-	FailureSummary     string
-	SuggestedArea      string
-	WriteSet           []string
-	RequiredTests      []string
-	AcceptanceCriteria []string
-	CompactRules       []string
-	SkillRefs          []string
-	ContextRefs        []string
-	EvidenceRefs       []string
-	BacklogScanRef     string
-	BacklogScanEpoch   string
-	BacklogScanDocs    []BacklogScanDocumentV0
-	ReservationRefs    []string
-	OccurredAt         string
-	PriorityScore      int
+	RequestRef                        string
+	CorrelationID                     string
+	ProjectRef                        string
+	WorktreeRef                       string
+	BranchRef                         string
+	ParentRunRef                      string
+	RescueReason                      string
+	SupersedesRunRef                  string
+	ActiveAttemptRef                  string
+	RequestedBy                       string
+	Source                            string
+	FailureKind                       string
+	FailureSummary                    string
+	SuggestedArea                     string
+	WriteSet                          []string
+	RequiredTests                     []string
+	AcceptanceCriteria                []string
+	CompactRules                      []string
+	SkillRefs                         []string
+	FrozenRequiredTests               []orquestaautoprogramming.FrozenRequiredTestV0
+	FrozenRequiredTestsPhase          string
+	FrozenRequiredTestsBaseRequestRef string
+	FrozenRequiredTestsSourceGoalRef  string
+	ContextRefs                       []string
+	EvidenceRefs                      []string
+	BacklogScanRef                    string
+	BacklogScanEpoch                  string
+	BacklogScanDocs                   []BacklogScanDocumentV0
+	ReservationRefs                   []string
+	OccurredAt                        string
+	PriorityScore                     int
 }
 
 type BacklogScanDocumentV0 struct {

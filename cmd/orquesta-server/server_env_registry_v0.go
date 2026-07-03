@@ -53,6 +53,7 @@ const (
 	envServerIdleSelfImprovementEvidenceRefsV0              = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_EVIDENCE_REFS"
 	envServerIdleSelfImprovementAcceptanceV0                = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_ACCEPTANCE"
 	envServerIdleSelfImprovementGoalFirstV0                 = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_GOAL_FIRST_ENABLED"
+	envServerIdleSelfImprovementFrozenTestsV0               = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_FROZEN_TESTS_ENABLED"
 	envServerIdleSelfImprovementCompactRulesV0              = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_COMPACT_RULES"
 	envServerIdleSelfImprovementPriorityScoreV0             = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PRIORITY_SCORE"
 	envServerIdleSelfImprovementMaxRequestsV0               = "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS"
@@ -405,6 +406,11 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "autoprogramming",
 		Label:       "Goal-first automejora",
 		Description: "Activa modo goal-first estricto para automejora residente; si no se define y hay backend Codex Goal, se deriva automaticamente.",
+	},
+	envServerIdleSelfImprovementFrozenTestsV0: {
+		Scope:       "autoprogramming",
+		Label:       "Tests congelados",
+		Description: "Opt-in para separar goal definidor de required tests y goal implementador con hashes congelados.",
 	},
 	envServerIdleSelfImprovementDailyGoalBudgetV0: {
 		Scope:       "autoprogramming",

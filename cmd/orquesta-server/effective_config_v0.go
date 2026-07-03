@@ -64,6 +64,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverIdleSelfImprovementAfterSettingV0(config),
 		serverConfigSettingFromRegistryV0(envServerIdleSelfImprovementTargetQueueV0, strconv.Itoa(config.IdleSelfImprovementTargetQueue)),
 		serverIdleSelfImprovementGoalFirstSettingV0(config),
+		serverConfigSettingFromRegistryV0(envServerIdleSelfImprovementFrozenTestsV0, strconv.FormatBool(config.IdleSelfImprovementFrozenTests)),
 		serverSensitiveConfigSettingFromRegistryV0(
 			envServerIdleSelfImprovementProjectWorkDirV0,
 			configuredRefValueV0(config.IdleSelfImprovementProjectWorkDir, "idle-self-improvement-project-workdir-configured"),

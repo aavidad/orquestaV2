@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
@@ -89,7 +90,8 @@ func (runtime *RuntimeV0) idleSelfImprovementGoalWorkSpecV0(
 			Enforcement: orquestagoal.GoalRuleEnforcementAdvisoryV0,
 		})
 	}
-	return orquestagoal.NormalizeGoalWorkSpecV0(orquestagoal.GoalWorkSpecV0{
+	closurePolicy := orquestagoal.GoalClosurePolicyV0{RequireRequiredTests: len(tests) > 0}
+	spec := orquestagoal.GoalWorkSpecV0{
 		GoalRef:            idleSelfImprovementGoalRefV0(request),
 		RequestRef:         request.RequestRef,
 		RunRef:             idleSelfImprovementGoalRunRefV0(request),
@@ -106,9 +108,11 @@ func (runtime *RuntimeV0) idleSelfImprovementGoalWorkSpecV0(
 		RequiredTests:      tests,
 		AcceptanceCriteria: append([]string(nil), request.AcceptanceCriteria...),
 		EvidenceRefs:       append([]string(nil), request.EvidenceRefs...),
-		ClosurePolicy:      orquestagoal.GoalClosurePolicyV0{RequireRequiredTests: len(tests) > 0},
+		ClosurePolicy:      closurePolicy,
 		ReworkPolicy:       orquestagoal.GoalReworkPolicyV0{PreferNewGoal: true, MaxReworkGoals: 1, PreserveArtifacts: true},
-	})
+	}
+	spec = idleSelfImprovementGoalSpecWithFrozenRequiredTestsV0(spec, request)
+	return orquestagoal.NormalizeGoalWorkSpecV0(spec)
 }
 
 func idleSelfImprovementGoalRunRefV0(request IdleSelfImprovementRequestV0) string {
@@ -140,6 +144,12 @@ func idleSelfImprovementGoalObjectiveV0(request IdleSelfImprovementRequestV0) st
 	for _, criterion := range compactConfigStringsV0(request.AcceptanceCriteria) {
 		b.WriteString("\nCriterio: ")
 		b.WriteString(criterion)
+	}
+	switch request.FrozenRequiredTestsPhase {
+	case orquestaautoprogramming.FrozenRequiredTestsDefinerPhaseV0:
+		b.WriteString("\nCriterio: definir solo tests requeridos nuevos en ficheros _test.go y no implementar el cambio.")
+	case orquestaautoprogramming.FrozenRequiredTestsImplementerPhaseV0:
+		b.WriteString("\nCriterio: no modificar tests congelados; el cierre rechaza frozen_tests_modified.")
 	}
 	return compactIdleSelfImprovementGoalObjectiveV0(b.String())
 }

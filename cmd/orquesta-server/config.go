@@ -100,6 +100,7 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		IdleSelfImprovementEvidenceRefs:  csvEnvOrDefaultV0(envServerIdleSelfImprovementEvidenceRefsV0, nil),
 		IdleSelfImprovementAcceptance:    csvEnvOrDefaultV0(envServerIdleSelfImprovementAcceptanceV0, defaultIdleSelfImprovementAcceptanceV0()),
 		IdleSelfImprovementGoalFirst:     idleSelfImprovementGoalFirstFromEnvV0(),
+		IdleSelfImprovementFrozenTests:   boolEnvOrDefaultV0(envServerIdleSelfImprovementFrozenTestsV0, false),
 		IdleSelfImprovementCompactRules: csvEnvOrDefaultV0(envServerIdleSelfImprovementCompactRulesV0, []string{
 			"comunicacion compacta",
 			"trabajo secundario: no bloquear ni mezclar con el trabajo principal",
