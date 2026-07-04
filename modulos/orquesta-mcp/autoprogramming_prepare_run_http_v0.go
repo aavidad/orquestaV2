@@ -96,6 +96,8 @@ func (handler mcpAutoprogrammingPrepareRunHTTPHandlerV0) ServeHTTP(w http.Respon
 	status := http.StatusOK
 	if result.Estado == MCPAutoprogrammingPrepareRunEstadoErrorV0 {
 		status = http.StatusBadRequest
+	} else {
+		result.EvidenceRefs = WithMCPConfigProjectionVerifiedEvidenceV0(result.EvidenceRefs, input.RequiredSettings)
 	}
 	writeMCPAutoprogrammingPrepareRunHTTPV0(w, status, result)
 }

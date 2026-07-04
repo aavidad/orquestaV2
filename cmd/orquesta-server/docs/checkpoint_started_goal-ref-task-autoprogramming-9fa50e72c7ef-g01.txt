@@ -1,0 +1,6 @@
+goal_ref=goal-ref-task-autoprogramming-9fa50e72c7ef-g01
+source_task_ref=task-guard-proyeccion-config
+objetivo=TAREA-8.2 required_settings guard de proyeccion config prepare-run/apps-director
+alcance=cmd/orquesta-server modulos/orquesta-server modulos/orquesta-mcp scripts docs/autoprogramacion_orquesta_pendientes_2026-05-23.md
+siguiente=localizar contratos HTTP/config y tests focales
+evidence=input:evidence-ref-code-context-go-repo-map-fallback-v0

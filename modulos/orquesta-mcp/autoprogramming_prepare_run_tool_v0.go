@@ -79,6 +79,7 @@ type MCPAutoprogrammingPrepareRunToolResultV0 struct {
 	Goals             []MCPAutoprogrammingGoalRunV0        `json:"goals,omitempty"`
 	Continue          *MCPAutoprogrammingContinueRequestV0 `json:"continue,omitempty"`
 	Errores           []MCPValidationIssueV0               `json:"errores_publicos,omitempty"`
+	EvidenceRefs      []string                             `json:"evidence_refs,omitempty"`
 }
 
 func (result MCPAutoprogrammingPrepareRunToolResultV0) MarshalJSON() ([]byte, error) {
@@ -99,6 +100,7 @@ func (result MCPAutoprogrammingPrepareRunToolResultV0) MarshalJSON() ([]byte, er
 		Goals             []MCPAutoprogrammingGoalRunV0        `json:"goals,omitempty"`
 		Continue          *MCPAutoprogrammingContinueRequestV0 `json:"continue,omitempty"`
 		Errores           []MCPValidationIssueV0               `json:"errores_publicos,omitempty"`
+		EvidenceRefs      []string                             `json:"evidence_refs,omitempty"`
 	}
 	return json.Marshal(publicResult{
 		Estado:            result.Estado,
@@ -117,6 +119,7 @@ func (result MCPAutoprogrammingPrepareRunToolResultV0) MarshalJSON() ([]byte, er
 		Goals:             result.Goals,
 		Continue:          result.Continue,
 		Errores:           result.Errores,
+		EvidenceRefs:      compactStringsMCPV0(result.EvidenceRefs),
 	})
 }
 
@@ -148,7 +151,7 @@ func MCPAutoprogrammingPrepareRunDescriptorV0() MCPAutoprogrammingPrepareRunTool
 		Name:        MCPAutoprogrammingPrepareRunToolNameV0,
 		Version:     MCPAutoprogrammingPrepareRunToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,idempotency_key?,occurred_at?,requested_by?,director_execution_mode?:goal_first|legacy_director_loop,autoprogramming_request:AutoprogrammingRequestV0,max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,priority_score?,required_settings?[]{key,value}}",
-		Output:      "ok:{run_ref?,workflow_task_refs?,wait_agent_refs?,goal_spec_summaries?[]{schema_version,goal_ref?,run_ref?,director_kind?,spec_hash?,context_refs?,rule_refs?,required_test_refs?,artifact_types?,context_ref_count?,rule_ref_count?,write_set_count?,required_test_count?,acceptance_criteria_count?,artifact_contract_count?,closure_requires_tests?,closure_requires_artifacts?,closure_requires_artifact_paths?},goal?{run_ref,goal_ref,external_goal_ref?,goal_status,evidence_refs?},goals?[]{run_ref,goal_ref,external_goal_ref?,goal_status,evidence_refs?},continue?{run_ref,operational_director_plan_ref?}}|error:{errores_publicos(config_projection_mismatch?)}",
+		Output:      "ok:{run_ref?,workflow_task_refs?,wait_agent_refs?,goal_spec_summaries?[]{schema_version,goal_ref?,run_ref?,director_kind?,spec_hash?,context_refs?,rule_refs?,required_test_refs?,artifact_types?,context_ref_count?,rule_ref_count?,write_set_count?,required_test_count?,acceptance_criteria_count?,artifact_contract_count?,closure_requires_tests?,closure_requires_artifacts?,closure_requires_artifact_paths?},goal?{run_ref,goal_ref,external_goal_ref?,goal_status,evidence_refs?},goals?[]{run_ref,goal_ref,external_goal_ref?,goal_status,evidence_refs?},continue?{run_ref,operational_director_plan_ref?},evidence_refs?}|error:{errores_publicos(config_projection_mismatch?)}",
 		ResourceURI: MCPAutoprogrammingPrepareRunResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",

@@ -80,6 +80,8 @@ func (handler mcpArrancarDirectorAppHTTPHandlerV0) ServeHTTP(w http.ResponseWrit
 	status := http.StatusOK
 	if result.Estado == MCPArrancarDirectorAppEstadoErrorV0 {
 		status = http.StatusBadRequest
+	} else {
+		result.EvidenceRefs = WithMCPConfigProjectionVerifiedEvidenceV0(result.EvidenceRefs, input.RequiredSettings)
 	}
 	writeMCPArrancarDirectorAppHTTPV0(w, status, result)
 }

@@ -3,6 +3,7 @@ package orquestamcp
 import "strings"
 
 const MCPConfigProjectionMismatchV0 = "config_projection_mismatch"
+const MCPConfigProjectionVerifiedEvidenceRefV0 = "evidence-ref-config-projection-required-settings-verified"
 
 type MCPRequiredSettingV0 struct {
 	Key   string `json:"key"`
@@ -50,7 +51,7 @@ func ValidateMCPRequiredSettingsProjectionV0(
 			issues = append(issues, MCPValidationIssueV0{
 				Code:    MCPConfigProjectionMismatchV0,
 				Field:   field,
-				Message: "configuracion efectiva no coincide con required_settings para " + key,
+				Message: "configuracion efectiva no coincide con required_settings para " + key + " (expected_configured=true actual_configured=" + configProjectionBoolTextV0(ok) + ")",
 			})
 			continue
 		}
@@ -59,4 +60,21 @@ func ValidateMCPRequiredSettingsProjectionV0(
 		return nil
 	}
 	return issues
+}
+
+func WithMCPConfigProjectionVerifiedEvidenceV0(
+	evidenceRefs []string,
+	required []MCPRequiredSettingV0,
+) []string {
+	if len(required) == 0 {
+		return compactStringsMCPV0(evidenceRefs)
+	}
+	return compactStringsMCPV0(append(evidenceRefs, MCPConfigProjectionVerifiedEvidenceRefV0))
+}
+
+func configProjectionBoolTextV0(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
 }

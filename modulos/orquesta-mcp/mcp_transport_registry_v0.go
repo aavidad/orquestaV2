@@ -206,6 +206,9 @@ func mcpArrancarDirectorAppTransportHandlerV0(
 			result,
 			firstNonEmptyMCPV0(input.CorrelationID, input.RequestID, input.AppSpecRequest.RequestID),
 		)
+		if result.Estado != MCPArrancarDirectorAppEstadoErrorV0 {
+			result.EvidenceRefs = WithMCPConfigProjectionVerifiedEvidenceV0(result.EvidenceRefs, input.RequiredSettings)
+		}
 		return json.Marshal(result)
 	}
 }

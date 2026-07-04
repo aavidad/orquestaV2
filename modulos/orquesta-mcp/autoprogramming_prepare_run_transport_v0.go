@@ -34,6 +34,9 @@ func mcpAutoprogrammingPrepareRunTransportHandlerV0(
 			)
 			return json.Marshal(payload)
 		}
+		if result.Estado != MCPAutoprogrammingPrepareRunEstadoErrorV0 {
+			result.EvidenceRefs = WithMCPConfigProjectionVerifiedEvidenceV0(result.EvidenceRefs, input.RequiredSettings)
+		}
 		return json.Marshal(result)
 	}
 }

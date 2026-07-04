@@ -102,6 +102,36 @@ func TestMCPAutoprogrammingPrepareRunHTTPHandlerV0SerializaGoalsBatch(t *testing
 	}
 }
 
+func TestMCPAutoprogrammingPrepareRunHTTPHandlerV0DeclaraEvidenciaConfigProjectionVerificada(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingPrepareRunHTTPExecutorV0{
+		result: MCPAutoprogrammingPrepareRunToolResultV0{
+			Estado:       MCPAutoprogrammingPrepareRunEstadoOKV0,
+			Accepted:     true,
+			RunRef:       "run-autoprogramming-config-projection-ok-001",
+			EvidenceRefs: []string{"evidence-ref-pre-existing"},
+		},
+	}
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingPrepareRunHTTPPathV0, bytes.NewBufferString(`{
+		"request_id":"request-autoprogramming-config-projection-ok-001",
+		"required_settings":[{"key":"ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS","value":"450000"}]
+	}`))
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingPrepareRunHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPAutoprogrammingPrepareRunToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !containsMCPStringPartForTestV0(result.EvidenceRefs, MCPConfigProjectionVerifiedEvidenceRefV0) ||
+		!containsMCPStringPartForTestV0(result.EvidenceRefs, "evidence-ref-pre-existing") {
+		t.Fatalf("evidence_refs=%+v", result.EvidenceRefs)
+	}
+}
+
 func TestMCPAutoprogrammingPrepareRunHTTPHandlerV0ExecutorNil(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingPrepareRunHTTPPathV0, bytes.NewBufferString(`{}`))
 	rec := httptest.NewRecorder()

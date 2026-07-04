@@ -75,6 +75,8 @@ func TestValidateMCPRequiredSettingsProjectionV0DetectaMismatchSinValoresSensibl
 	if len(issues) != 1 ||
 		issues[0].Code != MCPConfigProjectionMismatchV0 ||
 		!strings.Contains(issues[0].Field, "ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS") ||
+		!strings.Contains(issues[0].Message, "expected_configured=true") ||
+		!strings.Contains(issues[0].Message, "actual_configured=true") ||
 		strings.Contains(issues[0].Message, "450000") ||
 		strings.Contains(issues[0].Message, "123") {
 		t.Fatalf("issues=%+v", issues)

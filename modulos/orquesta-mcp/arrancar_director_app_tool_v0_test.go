@@ -256,6 +256,41 @@ func TestMCPArrancarDirectorAppHTTPHandlerV0SirveBridgeREST(t *testing.T) {
 	}
 }
 
+func TestMCPArrancarDirectorAppHTTPHandlerV0DeclaraEvidenciaConfigProjectionVerificada(t *testing.T) {
+	executor := &fakeMCPArrancarDirectorAppHTTPExecutorV0{
+		result: MCPArrancarDirectorAppToolResultV0{
+			Estado:       MCPArrancarDirectorAppEstadoOKV0,
+			RunRef:       "run-ref-app-config-projection-ok-001",
+			EvidenceRefs: []string{"evidence-ref-existing-app"},
+		},
+	}
+	input := validMCPDirectorAppInputForTestV0()
+	input.RequiredSettings = []MCPRequiredSettingV0{{
+		Key:   "ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS",
+		Value: "450000",
+	}}
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(input); err != nil {
+		t.Fatalf("encode input: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, MCPArrancarDirectorAppHTTPPathV0, body)
+
+	NewMCPArrancarDirectorAppHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPArrancarDirectorAppToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if !containsMCPStringPartForTestV0(result.EvidenceRefs, MCPConfigProjectionVerifiedEvidenceRefV0) ||
+		!containsMCPStringPartForTestV0(result.EvidenceRefs, "evidence-ref-existing-app") {
+		t.Fatalf("evidence_refs=%+v", result.EvidenceRefs)
+	}
+}
+
 func TestMCPArrancarDirectorAppHTTPHandlerV0RechazaOKSinRunRef(t *testing.T) {
 	executor := &fakeMCPArrancarDirectorAppHTTPExecutorV0{
 		result: MCPArrancarDirectorAppToolResultV0{
