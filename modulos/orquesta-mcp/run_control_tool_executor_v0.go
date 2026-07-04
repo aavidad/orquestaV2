@@ -6,6 +6,7 @@ import (
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
+	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 )
 
 type MCPRunControlToolExecutorV0 struct {
@@ -158,7 +159,7 @@ func (executor MCPRunControlToolExecutorV0) enrichRunControlGoalBackendResultV0(
 		mcpRunControlExternalGoalRefFromStatsV0(beforeGoal),
 	)
 	result.GoalControlSignalConfirmed = mcpRunControlGoalBackendTerminalV0(afterGoal)
-	if !mcpRunControlGoalBackendActiveV0(afterGoal) {
+	if !mcpRunControlGoalBackendActiveForControlV0(input, afterGoal) {
 		return result
 	}
 	backendEvidenceRefs := compactStringsMCPV0([]string{
@@ -202,7 +203,7 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 	if executor.GoalStateStore == nil ||
 		result.Estado != MCPRunControlEstadoOKV0 ||
 		(action != "stop" && action != "cancel") ||
-		mcpRunControlGoalBackendActiveV0(afterGoal) {
+		mcpRunControlGoalBackendActiveForControlV0(input, afterGoal) {
 		return result
 	}
 	allowForcedReconcile := input.Forced
@@ -348,8 +349,8 @@ func mcpRunControlForcedExternalCleanupReasonV0(
 	beforeGoal *MCPDirectorStatsToolResultV0,
 	afterGoal *MCPDirectorStatsToolResultV0,
 ) (string, string, bool) {
-	if mcpRunControlGoalBackendActiveV0(beforeGoal) ||
-		mcpRunControlGoalBackendActiveV0(afterGoal) ||
+	if mcpRunControlGoalBackendActiveBlocksExternalCleanupV0(beforeGoal) ||
+		mcpRunControlGoalBackendActiveBlocksExternalCleanupV0(afterGoal) ||
 		strings.TrimSpace(state.ExternalGoalRef) == "" ||
 		!orquestagoal.GoalWorkStatePendingObservationV0(state) {
 		return "", "", false
@@ -443,6 +444,38 @@ func mcpRunControlGoalBackendActiveV0(stats *MCPDirectorStatsToolResultV0) bool 
 	default:
 		return false
 	}
+}
+
+func mcpRunControlGoalBackendActiveForControlV0(
+	input MCPRunControlToolInputV0,
+	stats *MCPDirectorStatsToolResultV0,
+) bool {
+	if !mcpRunControlGoalBackendActiveV0(stats) {
+		return false
+	}
+	if mcpRunControlInputRequestsExternalCleanupReconcileV0(input) &&
+		mcpRunControlGoalBackendStaleNoLiveProcessSafeToReconcileV0(stats) {
+		return false
+	}
+	return true
+}
+
+func mcpRunControlGoalBackendActiveBlocksExternalCleanupV0(
+	stats *MCPDirectorStatsToolResultV0,
+) bool {
+	return mcpRunControlGoalBackendActiveV0(stats) &&
+		!mcpRunControlGoalBackendStaleNoLiveProcessSafeToReconcileV0(stats)
+}
+
+func mcpRunControlGoalBackendStaleNoLiveProcessSafeToReconcileV0(
+	stats *MCPDirectorStatsToolResultV0,
+) bool {
+	if stats == nil || stats.Stats == nil {
+		return false
+	}
+	liveness := mcpAutoprogrammingRunLivenessV0(*stats.Stats)
+	return liveness.Class == orquestaruncoordinator.RunLivenessClassRunningStaleNoProcessV0 &&
+		liveness.SafeToReconcile
 }
 
 func mcpRunControlGoalBackendTerminalV0(stats *MCPDirectorStatsToolResultV0) bool {

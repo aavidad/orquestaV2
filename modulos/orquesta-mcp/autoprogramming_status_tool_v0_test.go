@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"testing"
@@ -1970,6 +1971,124 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalRunningSinBackendActivoPideReconc
 		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) ||
 		!strings.Contains(action.Reason, "goal_backend_missing_after_external_cleanup") {
 		t.Fatalf("action=%+v", action)
+	}
+	if result.Operator == nil ||
+		!hasMCPAutoprogrammingSafeActionForTestV0(
+			result.Operator.SafeActions,
+			mcpQueueGlobalStatusActionRunControlReconcileCleanupV0,
+			"run",
+			runRef,
+		) ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "observe_goal", "run", runRef) {
+		t.Fatalf("operator=%+v", result.Operator)
+	}
+	reconcileAction := mcpAutoprogrammingSafeActionForTestV0(
+		result.Operator.SafeActions,
+		mcpQueueGlobalStatusActionRunControlReconcileCleanupV0,
+		"run",
+		runRef,
+	)
+	if reconcileAction == nil ||
+		reconcileAction.Endpoint != MCPRunControlHTTPPathV0 ||
+		reconcileAction.Method != http.MethodPost ||
+		reconcileAction.Payload["action"] != "stop" ||
+		reconcileAction.Payload["run_ref"] != runRef ||
+		reconcileAction.Payload["requested_by"] != "orquesta-autoprogramming-status" ||
+		reconcileAction.Payload["forced"] != false ||
+		!mcpAutoprogrammingSafeActionPayloadEvidenceForTestV0(
+			reconcileAction,
+			mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0,
+		) {
+		t.Fatalf("safe_action=%+v", reconcileAction)
+	}
+}
+
+func TestMCPAutoprogrammingStatusExecutorV0GoalRunningStaleSinProcesoPideReconciliarCleanupExternoV0(t *testing.T) {
+	runRef := "run-ref-autop-status-goal-running-stale-no-process-001"
+	goalRef := "goal-ref-autop-status-goal-running-stale-no-process-001"
+	externalGoalRef := "thread-ref-autop-status-goal-running-stale-no-process-001"
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Reconciliar estado running cuando el goal stats stale no tiene proceso vivo.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-running-stale-no-process-test"},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		statsByRun: map[string]*orquestacionnucleoapp.DirectorRunStatsV0{
+			runRef: {
+				RunRef: runRef,
+				Status: "running",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					AgentsInFlight: 1,
+				},
+				Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{
+					AgentRequestID: "agent-ref-" + runRef,
+					Status:         orquestacionnucleoapp.DirectorAgentStatusRunningV0,
+					InFlight:       true,
+					ControlState:   orquestacionnucleoapp.DirectorAgentControlStateMissingV0,
+				}},
+				UsageSummary: &orquestacionnucleoapp.DirectorRunUsageStatsV0{
+					TotalTokens: 175000,
+				},
+			},
+		},
+		goalsByRun: map[string]*MCPDirectorGoalStatsV0{
+			runRef: {
+				RunRef:          runRef,
+				GoalRef:         goalRef,
+				ExternalGoalRef: externalGoalRef,
+				Status:          orquestagoal.GoalStatusRunningV0,
+			},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue:          &fakeMCPAutoprogrammingQueueStatusV0{empty: true},
+		Stats:          stats,
+		GoalStateStore: goalStates,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{RunRef: runRef})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != mcpAutoprogrammingActionGoalBackendMissingAfterExternalCleanupV0 ||
+		action.Severity != "blocked" ||
+		action.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
+		action.ProcessAliveCount != 0 ||
+		action.TokensUsed != 175000 ||
+		action.RecommendedAction != mcpQueueGlobalStatusActionRunControlReconcileCleanupV0 ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0) {
+		t.Fatalf("action=%+v", action)
+	}
+	if result.Operator == nil ||
+		!hasMCPAutoprogrammingSafeActionForTestV0(
+			result.Operator.SafeActions,
+			mcpQueueGlobalStatusActionRunControlReconcileCleanupV0,
+			"run",
+			runRef,
+		) ||
+		hasMCPAutoprogrammingSafeActionForTestV0(result.Operator.SafeActions, "observe_goal", "run", runRef) {
+		t.Fatalf("operator=%+v", result.Operator)
 	}
 }
 
@@ -4636,6 +4755,37 @@ func hasMCPAutoprogrammingSafeActionForTestV0(
 		}
 	}
 	return false
+}
+
+func mcpAutoprogrammingSafeActionForTestV0(
+	actions []MCPAutoprogrammingSafeActionV0,
+	action string,
+	scope string,
+	runRef string,
+) *MCPAutoprogrammingSafeActionV0 {
+	for index := range actions {
+		value := &actions[index]
+		if value.Action == action &&
+			value.Scope == scope &&
+			value.RunRef == runRef {
+			return value
+		}
+	}
+	return nil
+}
+
+func mcpAutoprogrammingSafeActionPayloadEvidenceForTestV0(
+	action *MCPAutoprogrammingSafeActionV0,
+	want string,
+) bool {
+	if action == nil || action.Payload == nil {
+		return false
+	}
+	refs, ok := action.Payload["evidence_refs"].([]string)
+	if !ok {
+		return false
+	}
+	return hasStringMCPAutoprogrammingStatusTestV0(refs, want)
 }
 
 func hasMCPAutoprogrammingSafeActionPayloadForTestV0(

@@ -310,6 +310,67 @@ func mcpAutoprogrammingObserveActiveGoalsSafeActionV0(runRefs []string) MCPAutop
 	}
 }
 
+func mcpAutoprogrammingRunControlReconcileCleanupSafeActionV0(runRef string) MCPAutoprogrammingSafeActionV0 {
+	runRef = strings.TrimSpace(runRef)
+	return MCPAutoprogrammingSafeActionV0{
+		Action:       mcpQueueGlobalStatusActionRunControlReconcileCleanupV0,
+		Scope:        "run",
+		RunRef:       runRef,
+		Method:       "POST",
+		Endpoint:     MCPRunControlHTTPPathV0,
+		Reason:       mcpAutoprogrammingActionGoalBackendMissingAfterExternalCleanupV0,
+		RequiresPost: true,
+		Payload: map[string]any{
+			"action":       "stop",
+			"run_ref":      runRef,
+			"requested_by": "orquesta-autoprogramming-status",
+			"reason":       "reconcile missing goal backend after external cleanup",
+			"forced":       false,
+			"evidence_refs": []string{
+				mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0,
+			},
+		},
+	}
+}
+
+func mcpAutoprogrammingOperatorWithGoalBackendCleanupReconcileActionsV0(
+	operator *MCPAutoprogrammingOperatorV0,
+	staleRunning []MCPAutoprogrammingActionableRunV0,
+) *MCPAutoprogrammingOperatorV0 {
+	if operator == nil {
+		return operator
+	}
+	cleanupRunRefs := map[string]bool{}
+	var ordered []string
+	for _, stale := range staleRunning {
+		if strings.TrimSpace(stale.Code) != mcpAutoprogrammingActionGoalBackendMissingAfterExternalCleanupV0 {
+			continue
+		}
+		runRef := strings.TrimSpace(stale.RunRef)
+		if runRef == "" || cleanupRunRefs[runRef] {
+			continue
+		}
+		cleanupRunRefs[runRef] = true
+		ordered = append(ordered, runRef)
+	}
+	if len(ordered) == 0 {
+		return operator
+	}
+	next := make([]MCPAutoprogrammingSafeActionV0, 0, len(operator.SafeActions)+len(ordered))
+	for _, runRef := range ordered {
+		next = append(next, mcpAutoprogrammingRunControlReconcileCleanupSafeActionV0(runRef))
+	}
+	for _, action := range operator.SafeActions {
+		if cleanupRunRefs[strings.TrimSpace(action.RunRef)] &&
+			strings.TrimSpace(action.Action) == "observe_goal" {
+			continue
+		}
+		next = append(next, action)
+	}
+	operator.SafeActions = mcpAutoprogrammingDeduplicateSafeActionsV0(next)
+	return operator
+}
+
 func mcpAutoprogrammingOperatorWithGoalFirstActionsV0(
 	operator *MCPAutoprogrammingOperatorV0,
 	allowLegacySupervisorActions bool,

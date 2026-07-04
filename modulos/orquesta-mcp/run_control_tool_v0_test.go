@@ -752,6 +752,84 @@ func TestMCPRunControlExecutorV0StopReconcilesExternalCleanupConEvidenciaSinForc
 	}
 }
 
+func TestMCPRunControlExecutorV0StopReconcilesExternalCleanupConGoalStatsRunningStaleSinProcesoV0(t *testing.T) {
+	runRef := "run-ref-run-control-goal-backend-stale-no-process-stop-001"
+	goalRef := "goal-ref-run-control-goal-backend-stale-no-process-stop-001"
+	externalGoalRef := "thread-ref-" + goalRef
+	goalStates := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), orquestagoal.GoalWorkStateV0{
+		RunRef:          runRef,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalGoalRef,
+		Status:          orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Objective:    "Reconciliar cleanup externo aunque goal stats conserve running stale sin proceso.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: externalGoalRef,
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+	}); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	port := &fakeMCPRunControlPortV0{
+		readState:  runControlStateForMCPTestV0(runRef, orquestaruncontrol.RunControlStatusRunningV0, false),
+		stopStatus: orquestaruncontrol.RunControlStatusStoppedV0,
+	}
+	before := mcpRunControlGoalBackendStatsForTestV0(runRef, goalRef, orquestagoal.GoalStatusRunningV0)
+	before.Stats = mcpRunControlStaleNoProcessStatsForTestV0(runRef)
+	after := mcpRunControlGoalBackendStatsForTestV0(runRef, goalRef, orquestagoal.GoalStatusRunningV0)
+	after.Stats = mcpRunControlStaleNoProcessStatsForTestV0(runRef)
+	goalBackend := &fakeMCPRunControlGoalBackendStateV0{
+		results: []MCPDirectorStatsToolResultV0{before, after},
+	}
+	executor := MCPRunControlToolExecutorV0{
+		Port:             port,
+		GoalBackendState: goalBackend,
+		GoalStateStore:   goalStates,
+	}
+
+	result, err := executor.Execute(context.Background(), MCPRunControlToolInputV0{
+		RequestID:    "req-run-control-goal-backend-stale-no-process-stop-001",
+		Action:       "stop",
+		RunRef:       runRef,
+		RequestedBy:  "orquesta-director",
+		Forced:       false,
+		EvidenceRefs: []string{mcpAutoprogrammingEvidenceGoalBackendMissingAfterExternalCleanupV0},
+	})
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPRunControlEstadoOKV0 ||
+		result.Status != string(orquestaruncontrol.RunControlStatusStoppedV0) ||
+		result.GoalStatusAfter != orquestagoal.GoalStatusRunningV0 ||
+		result.RecommendedAction != "replan_narrow_context" ||
+		port.complete.TargetStatus != orquestaruncontrol.RunControlStatusStoppedV0 ||
+		containsMCPRunControlDiagnosticForTestV0(result.Diagnostics, "control_not_propagated_to_goal_backend") ||
+		!containsMCPRunControlDiagnosticForTestV0(result.Diagnostics, "goal_state_terminal_reconciled_after_external_cleanup") ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-run-control-goal-external-cleanup-reconciled") {
+		t.Fatalf("result=%+v complete=%+v", result, port.complete)
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if state.Status != orquestagoal.GoalStatusBlockedV0 ||
+		state.LastResult == nil ||
+		state.LastResult.Status != orquestagoal.GoalStatusBlockedV0 ||
+		!strings.Contains(state.LastResult.Summary, "external cleanup") ||
+		state.LastClosure == nil ||
+		!state.LastClosure.NeedsRework {
+		t.Fatalf("state=%+v", state)
+	}
+}
+
 func TestMCPRunControlExecutorV0CancelReconcilesExternalCleanupConEvidenciaSinForce(t *testing.T) {
 	runRef := "run-ref-run-control-goal-backend-missing-soft-cancel-001"
 	goalRef := "goal-ref-run-control-goal-backend-missing-soft-cancel-001"
@@ -1200,6 +1278,24 @@ func mcpRunControlGoalBackendStatsWithUsageForTestV0(
 		},
 	}
 	return result
+}
+
+func mcpRunControlStaleNoProcessStatsForTestV0(
+	runRef string,
+) *orquestacionnucleoapp.DirectorRunStatsV0 {
+	return &orquestacionnucleoapp.DirectorRunStatsV0{
+		RunRef: runRef,
+		Status: "running",
+		Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+			AgentsInFlight: 1,
+		},
+		Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{
+			AgentRequestID: "agent-ref-" + runRef,
+			Status:         orquestacionnucleoapp.DirectorAgentStatusRunningV0,
+			InFlight:       true,
+			ControlState:   orquestacionnucleoapp.DirectorAgentControlStateMissingV0,
+		}},
+	}
 }
 
 func containsMCPRunControlDiagnosticForTestV0(

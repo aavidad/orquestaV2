@@ -104,6 +104,46 @@ func TestServerCodexAppServerGoalBackendV0TurnStartInyectaContratoSalidaCompacta
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0TurnStartNoRelajaContratoSalidaCompactaV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-compacto-flojo-001"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-goal-compacto-flojo-001", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-goal-compacto-flojo-001", Status: "inProgress"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol:       protocol,
+		Sandbox:        "workspace-write",
+		ApprovalPolicy: "never",
+	}
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef:   "goal-ref-compacto-flojo-001",
+		Objective: "probar que appserver no relaja contrato de salidas",
+		Prompt:    "prompt operativo con contrato debil",
+		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
+			ToolOutputPolicy: orquestaruntimecodexgoal.CodexGoalToolOutputPolicyV0{
+				MaxTextBytes:        orquestaruntimecodexgoal.CodexGoalToolOutputMaxBytesV0 * 8,
+				BoundedCommandHints: []string{"custom bounded helper"},
+			},
+		},
+	}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	input := protocol.turnParams.InputText
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		!strings.Contains(input, codexAppServerTurnStartRuntimeContractHeaderV0) ||
+		!strings.Contains(input, "checkpoint_started.txt") ||
+		!strings.Contains(input, "max_text_bytes=16384") ||
+		strings.Contains(input, "max_text_bytes=131072") ||
+		!strings.Contains(input, "rg --max-count") ||
+		!strings.Contains(input, "rg --files | head") ||
+		!strings.Contains(input, "custom bounded helper") {
+		t.Fatalf("contrato runtime relajado: receipt=%+v input=%q", receipt, input)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0StopForcedBloqueaGoalYApagaBackendV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		goal: serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-stop-forced-001", Status: "blocked"},

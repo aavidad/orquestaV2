@@ -724,13 +724,8 @@ func codexAppServerTurnStartRuntimeContractV0(packet orquestaruntimecodexgoal.Co
 		checkpointFile = "checkpoint_started.txt"
 	}
 	maxTextBytes := directionContract.ToolOutputPolicy.MaxTextBytes
-	if maxTextBytes <= 0 {
-		maxTextBytes = orquestaruntimecodexgoal.CodexGoalToolOutputMaxBytesV0
-	}
-	hints := compactServerStackStringsV0(directionContract.ToolOutputPolicy.BoundedCommandHints)
-	if len(hints) == 0 {
-		hints = []string{"head", "tail", "sed -n", "rg --max-count", "rg --files | head"}
-	}
+	maxTextBytes = codexAppServerRuntimeContractMaxTextBytesV0(maxTextBytes)
+	hints := codexAppServerRuntimeContractBoundedCommandHintsV0(directionContract.ToolOutputPolicy.BoundedCommandHints)
 	var b strings.Builder
 	b.WriteString(codexAppServerTurnStartRuntimeContractHeaderV0)
 	b.WriteByte('\n')
@@ -747,6 +742,22 @@ func codexAppServerTurnStartRuntimeContractV0(packet orquestaruntimecodexgoal.Co
 	b.WriteString(orquestaruntimecodexgoal.CodexGoalResultMarkerV0)
 	b.WriteString(" seguido de JSON compacto.")
 	return b.String()
+}
+
+func codexAppServerRuntimeContractMaxTextBytesV0(value int) int {
+	if value <= 0 || value > orquestaruntimecodexgoal.CodexGoalToolOutputMaxBytesV0 {
+		return orquestaruntimecodexgoal.CodexGoalToolOutputMaxBytesV0
+	}
+	return value
+}
+
+func codexAppServerRuntimeContractBoundedCommandHintsV0(values []string) []string {
+	defaults := []string{"head", "tail", "sed -n", "rg --max-count", "rg --files | head"}
+	hints := compactServerStackStringsV0(append(defaults, values...))
+	if len(hints) == 0 {
+		return defaults
+	}
+	return hints
 }
 
 func codexAppServerStartReceiptV0(

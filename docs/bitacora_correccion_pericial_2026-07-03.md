@@ -2177,3 +2177,41 @@ Verificacion ejecutada en este corte:
 - `go test -count=1 ./modulos/orquesta-mcp`
 - `git diff --check`
 - `go test -count=1 ./...`
+
+## Continuacion Codex 2026-07-04 noche 25
+
+Reduccion adicional de `BUG-ORQ-20260704-165` y `BUG-ORQ-20260701-079`:
+
+- `autoprogramming/status` convierte el caso
+  `goal_backend_missing_after_external_cleanup` en una `safe_action`
+  ejecutable contra `/api/v0/runs/control` con accion `stop`, `run_ref`,
+  `requested_by=orquesta-autoprogramming-status` y evidencia
+  `evidence-ref-goal-backend-missing-after-external-cleanup`.
+- Si `Goal.Status=running` viene de una observacion stale pero la liveness del
+  run clasifica `running_stale_no_process` con `SafeToReconcile`,
+  `autoprogramming/status` y `runs/control` ya no lo tratan como backend vivo:
+  publican/reconcilian `run_control_reconcile_external_cleanup` y evitan
+  `control_not_propagated_to_goal_backend` falso.
+- En el borde app-server, `turn/start` ya no puede relajar el contrato de
+  salida compacta: `max_text_bytes` queda acotado al maximo canonico y los
+  hints acotados canonicos se conservan aunque el packet intente sustituirlos.
+
+Archivos tocados:
+
+- `modulos/orquesta-mcp/autoprogramming_operator_v0.go`
+- `modulos/orquesta-mcp/autoprogramming_status_tool_v0.go`
+- `modulos/orquesta-mcp/autoprogramming_status_stale_running_v0.go`
+- `modulos/orquesta-mcp/run_control_tool_executor_v0.go`
+- `modulos/orquesta-mcp/autoprogramming_status_tool_v0_test.go`
+- `modulos/orquesta-mcp/run_control_tool_v0_test.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_v0.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_migrated_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion ejecutada en este corte:
+
+- `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCP(AutoprogrammingStatusExecutorV0GoalRunning(StaleSinProcesoPideReconciliarCleanupExterno|SinBackendActivoPideReconciliarCleanupExterno)|RunControlExecutorV0Stop(ReconcilesExternalCleanupConGoalStatsRunningStaleSinProceso|ReconcilesExternalCleanupConEvidenciaSinForce|ForcedNoPublicaStoppedSiGoalBackendSigueActive))V0'`
+- `go test -count=1 ./modulos/orquesta-mcp`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0TurnStart(InyectaContratoSalidaCompacta|NoRelajaContratoSalidaCompacta)V0'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`

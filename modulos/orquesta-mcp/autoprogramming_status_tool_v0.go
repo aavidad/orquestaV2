@@ -345,6 +345,10 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 			mcpAutoprogrammingGoalStateObservableRunRefsV0(goalStates)...,
 		)
 	}
+	result.Operator = mcpAutoprogrammingOperatorWithGoalBackendCleanupReconcileActionsV0(
+		result.Operator,
+		result.StaleRunning,
+	)
 	result.EfficiencySummary = buildMCPAutoprogrammingEfficiencySummaryV0(
 		result.Queue,
 		result.Run,

@@ -805,7 +805,7 @@ func mcpAutoprogrammingGoalBackendMissingAfterExternalCleanupActionsV0(
 		runRef := strings.TrimSpace(state.RunRef)
 		observed := observedByRunRef[runRef]
 		if observed == nil ||
-			mcpAutoprogrammingObservedGoalActiveV0(observed) ||
+			mcpAutoprogrammingObservedGoalActiveBlocksCleanupReconcileV0(observed) ||
 			mcpAutoprogrammingObservedGoalTerminalV0(observed) {
 			continue
 		}
@@ -831,6 +831,26 @@ func mcpAutoprogrammingGoalBackendMissingAfterExternalCleanupActionsV0(
 		out = append(out, action)
 	}
 	return out
+}
+
+func mcpAutoprogrammingObservedGoalActiveBlocksCleanupReconcileV0(
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	if !mcpAutoprogrammingObservedGoalActiveV0(observed) {
+		return false
+	}
+	return !mcpAutoprogrammingObservedRunSafeExternalCleanupReconcileV0(observed)
+}
+
+func mcpAutoprogrammingObservedRunSafeExternalCleanupReconcileV0(
+	observed *MCPDirectorStatsToolResultV0,
+) bool {
+	if observed == nil || observed.Stats == nil {
+		return false
+	}
+	liveness := mcpAutoprogrammingRunLivenessV0(*observed.Stats)
+	return liveness.Class == orquestaruncoordinator.RunLivenessClassRunningStaleNoProcessV0 &&
+		liveness.SafeToReconcile
 }
 
 func mcpAutoprogrammingStaleRunningActionForCandidateV0(
