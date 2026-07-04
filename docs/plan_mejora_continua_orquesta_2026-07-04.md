@@ -205,6 +205,23 @@ evitar heredar MCPs locales de Claude. Gemini real sigue pendiente por
 `runs/control`/shutdown con proveedor externo vivo o lento sigue como residual
 separado de `BUG-ORQ-20260704-165`.
 
+Avance 2026-07-04 noche 21: la parte Claude de
+`runs/control`/shutdown con proveedor externo vivo queda validada. El mismo
+smoke servidor acepta `SMOKE_CLAUDE_GOAL_PROCESS_SERVER_CONTROL_MODE=forced_stop`;
+arranca `claude_process`, espera manifiesto/proceso vivo, llama a
+`POST /api/v0/runs/control` con `forced=true` y verifica `estado=ok`,
+`status=stopped`, `final_status=stopped`, `goal_status_before=running`,
+`goal_status_after=blocked` y `goal_control_signal_confirmed=true`. La
+ejecucion retenida en `/tmp/orquesta-claude-process-server.GnFFpX` conserva
+evidencias `evidence-ref-claude-goal-process-stop-completed`,
+`evidence-ref-run-control-goal-forced-stop-terminal` y
+`evidence-ref-run-control-terminal-after-goal-forced-stop`; el observe
+posterior queda `blocked/replan` y el state final queda `status=stopped`,
+`shutdown_status=stopped`, `shutdown_ready=true`, sin procesos residuales. El
+residual de esta linea ya no es Claude process control, sino Gemini real
+bloqueado por tier/credencial y los casos largos de observabilidad global si
+reaparecen.
+
 Alcance:
 
 - `modulos/orquesta-runtime-claude`

@@ -142,6 +142,7 @@ func TestSmokeGoalFirstClaudeProcessServerRealEsOptInYLimpiaBackendV0(t *testing
 	for _, want := range []string{
 		"SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REAL",
 		"SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SAFE_MODE",
+		"SMOKE_CLAUDE_GOAL_PROCESS_SERVER_CONTROL_MODE",
 		"--safe-mode",
 		"ORQUESTA_CODEX_GOAL_BACKEND=claude_process",
 		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DISABLED=true",
@@ -149,11 +150,16 @@ func TestSmokeGoalFirstClaudeProcessServerRealEsOptInYLimpiaBackendV0(t *testing
 		"ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED=false",
 		"/api/v0/apps/director",
 		"/api/v0/apps/director/goal/observe",
+		"/api/v0/runs/control",
+		`"forced": true`,
+		"goal_control_signal_confirmed",
+		"evidence-ref-claude-goal-process-stop-completed",
 		"cleanup_goal_backends",
 		"stop_claude_processes_from_runtime_manifest",
 		"claude_goal_process_state_",
 		"claude_goal_wrapper_",
 		"smoke_goal_first_claude_process_server_real=ok",
+		"smoke_goal_first_claude_process_forced_stop_server_real=ok",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("smoke Claude process server real incompleto: falta %q", want)

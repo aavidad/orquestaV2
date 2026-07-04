@@ -151,6 +151,59 @@ Incidencias detectadas y cerradas durante el smoke de servidor:
   `orquesta-server run`, `claude_goal_wrapper`, `claude -p`,
   `codebase-memory-mcp`, `codex app-server` ni `orquesta-goal-*` vivos.
 
+## Smoke Claude runs/control real
+
+Comando reproducible validado:
+
+```bash
+SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REAL=1 \
+SMOKE_CLAUDE_GOAL_PROCESS_SERVER_CONTROL_MODE=forced_stop \
+SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SKIP_PREFLIGHT=1 \
+SMOKE_CLAUDE_GOAL_PROCESS_SERVER_KEEP_DIR=1 \
+SMOKE_CLAUDE_GOAL_PROCESS_SERVER_MAX_BUDGET_USD=0.80 \
+./scripts/smoke_goal_first_claude_process_server_real.sh
+```
+
+Resultado: `smoke_goal_first_claude_process_forced_stop_server_real=ok`.
+
+Evidencia retenida:
+
+- `smoke_root=/tmp/orquesta-claude-process-server.GnFFpX`
+- `run_ref=run-spec-smoke-claude-process-server-req-smoke-claude-process-server-dff02568d5f2f00ac86d8f91237536c7`
+- `goal_ref=goal-ref-app-director-run-spec-smoke-claude-process-server-req-smoke-claude-process-server-dff02568d5f2f00ac86d8f91237536c7`
+- `external_goal_ref=claude-goal-06148fd846fd9f64`
+- `claude_process_manifest_pid=4047077`
+
+Salida clave de `/api/v0/runs/control`:
+
+- `HTTP 200`
+- `estado=ok`
+- `status=stopped`
+- `final_status=stopped`
+- `goal_status_before=running`
+- `goal_status_after=blocked`
+- `goal_control_signal_confirmed=true`
+- evidencia `evidence-ref-claude-goal-process-stop-completed`
+- evidencia `evidence-ref-run-control-goal-forced-stop-terminal`
+- evidencia `evidence-ref-run-control-terminal-after-goal-forced-stop`
+
+Observe posterior:
+
+- `goal_status=blocked`
+- `run_status=bloqueada`
+- `closure_status=blocked`
+- `recommended_action=replan`
+- `evidence_refs`: 16
+
+Shutdown/limpieza posterior:
+
+- `state/orquesta_server_state_v0.json`: `status=stopped`,
+  `shutdown_status=stopped`, `shutdown_ready=true`.
+- Comprobacion de procesos: sin `orquesta-server run`, sin
+  `claude_goal_wrapper`, sin `claude -p`, sin `codebase-memory-mcp`, sin
+  `codex app-server` y sin `orquesta-goal-*`.
+- El wrapper retenido conserva `claude -p ... --safe-mode`.
+
 ## Cobertura permanente
 
 Tests por defecto, sin proveedor real:
@@ -175,6 +228,14 @@ SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REAL=1 \
 ./scripts/smoke_goal_first_claude_process_server_real.sh
 ```
 
+Smoke opt-in Claude por `cmd/orquesta-server` con forced stop:
+
+```bash
+SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REAL=1 \
+SMOKE_CLAUDE_GOAL_PROCESS_SERVER_CONTROL_MODE=forced_stop \
+./scripts/smoke_goal_first_claude_process_server_real.sh
+```
+
 Smoke opt-in Gemini, cuando exista tier/credencial valido:
 
 ```bash
@@ -187,6 +248,8 @@ go test -count=1 ./modulos/orquesta-runtime-gemini \
 
 - Repetir el smoke Gemini cuando el proveedor deje de devolver
   `IneligibleTierError`.
-- Ejecutar una prueba real de `runs/control`/shutdown contra proveedor externo
-  vivo o lento; el smoke de servidor ya cubre launch/observe/closure accepted
-  por HTTP, pero no fuerza stop/cancel durante ejecucion.
+- Repetir forced stop/cancel equivalente contra Gemini cuando exista
+  tier/credencial valido.
+- Mantener un smoke largo de `status/observe` lento si reaparece el bloqueo de
+  observabilidad global de `BUG-ORQ-20260704-165`; Claude ya cubre
+  launch/observe/closure accepted y forced stop por HTTP.

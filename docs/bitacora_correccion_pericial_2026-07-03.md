@@ -1991,3 +1991,57 @@ Verificacion ejecutada en este tramo:
 Pendiente real tras este tramo: `runs/control`/shutdown con proveedor externo
 vivo o lento, y smoke Gemini cuando exista tier/credencial valido. Antes de
 commit quedan `git diff --check` y `go test -count=1 ./...`.
+
+## Continuacion Codex 2026-07-04 noche 21
+
+Avance MEJ-103/T18 y reduccion de `BUG-ORQ-20260704-165`: forced stop real de
+`claude_process` atravesando `cmd/orquesta-server`.
+
+- `scripts/smoke_goal_first_claude_process_server_real.sh` gana modo
+  `SMOKE_CLAUDE_GOAL_PROCESS_SERVER_CONTROL_MODE=forced_stop`.
+- El modo nuevo arranca el mismo servidor temporal con
+  `ORQUESTA_CODEX_GOAL_BACKEND=claude_process`, espera un manifiesto interno
+  `claude_goal_process_state_*.json` con wrapper vivo, llama a
+  `/api/v0/runs/control` con `action=stop` y `forced=true`, observa el goal
+  despues del control y valida que no queda proceso Claude vivo.
+- Resultado real aceptado:
+  `smoke_goal_first_claude_process_forced_stop_server_real=ok`,
+  `run_control_estado=ok`, `run_control_status=stopped`,
+  `run_control_final_status=stopped`,
+  `run_control_goal_status_after=blocked`,
+  `run_control_goal_control_signal_confirmed=true`,
+  `observe_after_control_poll=1 goal_status=blocked closure_status=blocked
+  recommended_action=replan`, `claude_processes_alive_after_control=0`.
+- Evidencia retenida:
+  `/tmp/orquesta-claude-process-server.GnFFpX`,
+  `run_ref=run-spec-smoke-claude-process-server-req-smoke-claude-process-server-dff02568d5f2f00ac86d8f91237536c7`,
+  `external_goal_ref=claude-goal-06148fd846fd9f64`.
+- Evidencias de control:
+  `evidence-ref-claude-goal-process-stop-completed`,
+  `evidence-ref-run-control-goal-forced-stop-terminal`,
+  `evidence-ref-run-control-terminal-after-goal-forced-stop`,
+  `evidence-ref-mcp-run-control-checkpoint-recorded`.
+- Shutdown/limpieza: `state/orquesta_server_state_v0.json` queda
+  `status=stopped`, `shutdown_status=stopped`, `shutdown_ready=true`, y la
+  comprobacion posterior no encuentra `orquesta-server run`,
+  `claude_goal_wrapper`, `claude -p`, `codebase-memory-mcp`,
+  `codex app-server` ni `orquesta-goal-*`.
+
+Archivos tocados en este avance:
+
+- `scripts/smoke_goal_first_claude_process_server_real.sh`
+- `cmd/orquesta-server/smoke_goal_first_script_guard_v0_test.go`
+- `docs/runbooks/smoke_goal_first_provider_process_real_2026-07-04.md`
+- `docs/plan_mejora_continua_orquesta_2026-07-04.md`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion ejecutada:
+
+- `bash -n scripts/smoke_goal_first_claude_process_server_real.sh`
+- `go test -count=1 ./cmd/orquesta-server -run TestSmokeGoalFirstClaudeProcessServerRealEsOptInYLimpiaBackendV0`
+- `SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REAL=1 SMOKE_CLAUDE_GOAL_PROCESS_SERVER_CONTROL_MODE=forced_stop SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SKIP_PREFLIGHT=1 SMOKE_CLAUDE_GOAL_PROCESS_SERVER_KEEP_DIR=1 SMOKE_CLAUDE_GOAL_PROCESS_SERVER_MAX_BUDGET_USD=0.80 ./scripts/smoke_goal_first_claude_process_server_real.sh`
+
+Pendiente real tras este tramo: Gemini real con tier/credencial valido y, si
+reaparece, smoke largo de observabilidad global `status/observe`; Claude ya
+cubre launch/observe/closure accepted y forced stop por HTTP con backend vivo.

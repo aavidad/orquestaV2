@@ -77,6 +77,10 @@ payload_file="$smoke_root/start_request.json"
 start_response="$smoke_root/start_response.json"
 observe_payload="$smoke_root/observe_request.json"
 observe_response="$smoke_root/observe_response.json"
+control_payload="$smoke_root/run_control_request.json"
+control_response="$smoke_root/run_control_response.json"
+observe_after_control_payload="$smoke_root/observe_after_control_request.json"
+observe_after_control_response="$smoke_root/observe_after_control_response.json"
 shutdown_response="$smoke_root/shutdown_response.json"
 server_stdout="$smoke_root/server.stdout.log"
 server_stderr="$smoke_root/server.stderr.log"
@@ -92,12 +96,19 @@ keep_dir="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_KEEP_DIR:-${ORQUESTA_KEEP_SMOKE_DIR
 request_timeout="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REQUEST_TIMEOUT_SECONDS:-120}"
 polls="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_POLLS:-90}"
 sleep_seconds="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SLEEP_SECONDS:-5}"
+control_mode="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_CONTROL_MODE:-accepted}"
+control_wait_polls="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_CONTROL_WAIT_POLLS:-40}"
+control_observe_polls="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_CONTROL_OBSERVE_POLLS:-20}"
 budget="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_MAX_BUDGET_USD:-0.60}"
 preflight_budget="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_PREFLIGHT_BUDGET_USD:-0.20}"
 model="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_MODEL:-${ORQUESTA_CLAUDE_MODEL:-sonnet}}"
 safe_mode="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SAFE_MODE:-1}"
 if [[ "$safe_mode" != "0" && "$safe_mode" != "1" ]]; then
   echo "SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SAFE_MODE debe ser 0 o 1" >&2
+  exit 2
+fi
+if [[ "$control_mode" != "accepted" && "$control_mode" != "forced_stop" ]]; then
+  echo "SMOKE_CLAUDE_GOAL_PROCESS_SERVER_CONTROL_MODE debe ser accepted o forced_stop" >&2
   exit 2
 fi
 
@@ -146,6 +157,173 @@ for name in os.listdir(runtime):
         except OSError:
             pass
 PY
+}
+
+claude_process_manifest_live_pid() {
+  if [[ ! -d "$claude_runtime_dir" ]]; then
+    return 0
+  fi
+  python3 - "$claude_runtime_dir" <<'PY'
+import json, os, sys
+
+runtime = os.path.realpath(sys.argv[1])
+for name in sorted(os.listdir(runtime)):
+    if not (name.startswith("claude_goal_process_state_") and name.endswith(".json")):
+        continue
+    path = os.path.join(runtime, name)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            state = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        continue
+    pid = state.get("pid")
+    if not isinstance(pid, int) or pid <= 1:
+        continue
+    proc = f"/proc/{pid}"
+    try:
+        cmdline = open(os.path.join(proc, "cmdline"), "rb").read().replace(b"\0", b" ").decode("utf-8", "ignore")
+    except OSError:
+        continue
+    if runtime in cmdline and "claude_goal_wrapper_" in cmdline:
+        print(pid)
+        break
+PY
+}
+
+wait_for_claude_process_manifest_live() {
+  local pid=""
+  for _ in $(seq 1 "$control_wait_polls"); do
+    pid="$(claude_process_manifest_live_pid)"
+    if [[ -n "$pid" ]]; then
+      echo "claude_process_manifest_pid=$pid"
+      return 0
+    fi
+    sleep 0.5
+  done
+  return 1
+}
+
+assert_no_claude_process_manifest_live() {
+  local pid=""
+  pid="$(claude_process_manifest_live_pid)"
+  if [[ -n "$pid" ]]; then
+    echo "claude process sigue vivo tras control: pid=$pid" >&2
+    return 1
+  fi
+  return 0
+}
+
+run_forced_stop_control_smoke() {
+  if ! wait_for_claude_process_manifest_live; then
+    echo "no se observo proceso claude_process vivo antes de runs/control" >&2
+    find "$claude_runtime_dir" -maxdepth 1 -type f -print >&2 || true
+    exit 1
+  fi
+
+  cat >"$control_payload" <<JSON
+{
+  "request_id": "$request_id-control-stop",
+  "correlation_id": "$request_id-control-stop",
+  "run_ref": "$run_ref",
+  "action": "stop",
+  "forced": true,
+  "requested_by": "smoke-goal-first-claude-process-server-real",
+  "reason": "smoke forced stop sobre claude_process real vivo",
+  "evidence_refs": ["evidence-ref-smoke-claude-process-server-forced-stop-requested"]
+}
+JSON
+  control_status="$(
+    curl -sS -m "$request_timeout" -o "$control_response" -w "%{http_code}" \
+      -X POST "$base_url/api/v0/runs/control" \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json" \
+      -H "X-Correlation-ID: $request_id-control-stop" \
+      --data-binary "@$control_payload" || true
+  )"
+  echo "POST /api/v0/runs/control -> HTTP $control_status"
+  if [[ "$control_status" -lt 200 || "$control_status" -gt 299 ]]; then
+    smoke_print_file_excerpt "$control_response"
+    exit 1
+  fi
+
+  control_estado="$(json_get "$control_response" "estado")"
+  control_status_value="$(json_get "$control_response" "status")"
+  control_final_status="$(json_get "$control_response" "final_status")"
+  control_goal_after="$(json_get "$control_response" "goal_status_after")"
+  control_signal_confirmed="$(json_get "$control_response" "goal_control_signal_confirmed")"
+  echo "run_control_estado=$control_estado"
+  echo "run_control_status=$control_status_value"
+  echo "run_control_final_status=$control_final_status"
+  echo "run_control_goal_status_after=$control_goal_after"
+  echo "run_control_goal_control_signal_confirmed=$control_signal_confirmed"
+
+  if [[ "$control_estado" != "ok" ||
+    "$control_status_value" != "stopped" ||
+    "$control_final_status" != "stopped" ||
+    "$control_goal_after" != "blocked" ||
+    "$control_signal_confirmed" != "true" ]]; then
+    echo "runs/control no dejo terminal unico esperado:" >&2
+    smoke_print_file_excerpt "$control_response"
+    exit 1
+  fi
+  if ! grep -q "evidence-ref-claude-goal-process-stop-completed" "$control_response"; then
+    echo "runs/control no conserva evidencia de stop Claude completado" >&2
+    smoke_print_file_excerpt "$control_response"
+    exit 1
+  fi
+
+  local observed_terminal="0"
+  for i in $(seq 1 "$control_observe_polls"); do
+    cat >"$observe_after_control_payload" <<JSON
+{
+  "request_id": "$request_id-observe-after-control-$i",
+  "correlation_id": "$request_id-observe-after-control-$i",
+  "run_ref": "$run_ref",
+  "requested_by": "smoke-goal-first-claude-process-server-real"
+}
+JSON
+    observe_status="$(
+      curl -sS -m "$request_timeout" -o "$observe_after_control_response" -w "%{http_code}" \
+        -X POST "$base_url/api/v0/apps/director/goal/observe" \
+        -H "Content-Type: application/json" \
+        -H "Accept: application/json" \
+        -H "X-Correlation-ID: $request_id-observe-after-control-$i" \
+        --data-binary "@$observe_after_control_payload" || true
+    )"
+    if [[ "$observe_status" == "504" ]]; then
+      echo "observe_after_control_poll=$i observe_status=504 transient_timeout"
+      sleep "$sleep_seconds"
+      continue
+    fi
+    if [[ "$observe_status" -lt 200 || "$observe_status" -gt 299 ]]; then
+      echo "observe after control HTTP $observe_status" >&2
+      smoke_print_file_excerpt "$observe_after_control_response"
+      exit 1
+    fi
+    post_stop_goal_status="$(json_get "$observe_after_control_response" "goal_status")"
+    post_stop_closure_status="$(json_get "$observe_after_control_response" "closure_status")"
+    post_stop_recommended_action="$(json_get "$observe_after_control_response" "recommended_action")"
+    echo "observe_after_control_poll=$i goal_status=$post_stop_goal_status closure_status=$post_stop_closure_status recommended_action=$post_stop_recommended_action"
+    if [[ "$post_stop_goal_status" == "blocked" &&
+      "$post_stop_closure_status" == "blocked" &&
+      "$post_stop_recommended_action" == "replan" ]]; then
+      observed_terminal="1"
+      break
+    fi
+    sleep "$sleep_seconds"
+  done
+  if [[ "$observed_terminal" != "1" ]]; then
+    echo "observe posterior a runs/control no publico bloqueo replanificable" >&2
+    smoke_print_file_excerpt "$observe_after_control_response"
+    exit 1
+  fi
+
+  if ! assert_no_claude_process_manifest_live; then
+    exit 1
+  fi
+  echo "claude_processes_alive_after_control=0"
+  echo "smoke_goal_first_claude_process_forced_stop_server_real=ok"
+  echo "smoke_root=$smoke_root"
 }
 
 cleanup() {
@@ -318,6 +496,11 @@ fi
 echo "run_ref=$run_ref"
 echo "goal_ref=$goal_ref"
 echo "external_goal_ref=$external_goal_ref"
+
+if [[ "$control_mode" == "forced_stop" ]]; then
+  run_forced_stop_control_smoke
+  exit 0
+fi
 
 terminal="0"
 for i in $(seq 1 "$polls"); do
