@@ -6,6 +6,7 @@ import (
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 )
 
 const (
@@ -24,6 +25,7 @@ const (
 	goalFirstResidentReworkReasonBackendMissingV0   = "goal_backend_missing_after_external_cleanup"
 	goalFirstResidentBackendMissingEvidenceRefV0    = "evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup"
 	goalFirstResidentBackendMissingReconciledV0     = "evidence-ref-goal-first-resident-backend-missing-reconciled"
+	goalFirstResidentRunControlTerminalEvidenceV0   = "evidence-ref-run-control-terminal-after-goal-reconcile"
 )
 
 func (executor CodexStackRunSupervisorExecutorV0) maybePrepareGoalFirstResidentReworkV0(
@@ -289,6 +291,7 @@ func (executor CodexStackRunSupervisorExecutorV0) maybeReconcileGoalFirstResiden
 		})
 		return state, result
 	}
+	result = executor.completeRunControlAfterResidentBackendMissingV0(ctx, input, state, evidenceRefs, result)
 	result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, evidenceRefs...))
 	result.NextActions = compactStringsV0(append(result.NextActions, "goal_first_resident_rework_after_external_cleanup"))
 	result.Diagnostics = append(result.Diagnostics, orquestamcp.MCPAutoprogrammingDiagnosticV0{
@@ -298,6 +301,53 @@ func (executor CodexStackRunSupervisorExecutorV0) maybeReconcileGoalFirstResiden
 		EvidenceRefs: evidenceRefs,
 	})
 	return state, result
+}
+
+func (executor CodexStackRunSupervisorExecutorV0) completeRunControlAfterResidentBackendMissingV0(
+	ctx context.Context,
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+	state orquestagoal.GoalWorkStateV0,
+	evidenceRefs []string,
+	result orquestamcp.MCPRunSupervisorToolResultV0,
+) orquestamcp.MCPRunSupervisorToolResultV0 {
+	if executor.Stack == nil || executor.Stack.Ports.RunControlTerminal == nil {
+		return result
+	}
+	runRef := strings.TrimSpace(state.RunRef)
+	if runRef == "" {
+		runRef = strings.TrimSpace(input.RunRef)
+	}
+	completed, err := executor.Stack.Ports.RunControlTerminal.CompleteRunControlV0(ctx, orquestaruncontrol.CompleteRunControlCommandV0{
+		RunRef:         runRef,
+		TargetStatus:   orquestaruncontrol.RunControlStatusStoppedV0,
+		RequestedBy:    "orquesta-run-supervisor-resident",
+		Reason:         "external cleanup goal backend reconcile completed run control",
+		IdempotencyKey: "idem-run-supervisor-external-cleanup-reconcile-stop-" + runRef,
+		EvidenceRefs: compactStringsV0(append(
+			evidenceRefs,
+			goalFirstResidentRunControlTerminalEvidenceV0,
+		)),
+	})
+	if err != nil {
+		result.Diagnostics = append(result.Diagnostics, orquestamcp.MCPAutoprogrammingDiagnosticV0{
+			Code:         "goal_first_resident_run_control_terminal_failed",
+			Scope:        "run:" + runRef,
+			Message:      err.Error(),
+			EvidenceRefs: evidenceRefs,
+		})
+		return result
+	}
+	result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, completed.EvidenceRefs...))
+	result.Diagnostics = append(result.Diagnostics, orquestamcp.MCPAutoprogrammingDiagnosticV0{
+		Code:    "goal_first_resident_run_control_terminal_completed",
+		Scope:   "run:" + runRef,
+		Message: "resident supervisor completed RunControl after external cleanup reconcile",
+		EvidenceRefs: compactStringsV0(append(
+			completed.EvidenceRefs,
+			runRef,
+		)),
+	})
+	return result
 }
 
 func goalFirstResidentObservedGoalActiveV0(

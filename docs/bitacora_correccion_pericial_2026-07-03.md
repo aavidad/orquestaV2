@@ -1377,3 +1377,32 @@ Evidencia ejecutada:
 Pendiente real: `BUG-165` sigue abierto para smoke real amplio con
 backend/proveedor lento o vivo tras stop forzado, y para confirmar propagacion
 completa de stop/cancel cuando el backend siga activo.
+
+## Continuacion Codex 2026-07-04 noche 7
+
+Avance adicional sobre `BUG-ORQ-20260701-065`:
+
+- El supervisor residente goal-first ya cerraba `GoalWorkState` a
+  `blocked/rework` cuando detectaba que un backend Goal habia desaparecido por
+  cleanup externo y preparaba un rework causal.
+- Ahora esa misma ruta completa tambien `RunControl` como `stopped`, con
+  reason/idempotencia de `external cleanup`, sin texto `forced`.
+- Conserva `evidence-ref-run-control-terminal-after-goal-reconcile` junto a la
+  evidencia causal `evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup`.
+- Esto evita que el estado goal quede terminal mientras `RunControl` sigue
+  pendiente y obliga al operador a reconciliarlo manualmente.
+
+Archivos tocados en este avance:
+
+- `modulos/orquesta-app-codex-stack/goal_first_resident_rework_v0.go`
+- `modulos/orquesta-app-codex-stack/goal_first_resident_rework_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Evidencia ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestRunSupervisorGoalFirstResidentReconciliaBackendMissingTrasCleanupExternoV0|TestRunSupervisorGoalFirstNoResidentNoReconciliaBackendMissingTrasCleanupExternoV0'`
+
+Pendiente real: `BUG-065` sigue abierto para smoke real amplio y coordinacion
+automatica completa backend/checkpoint/stop/cancel/wait tras cortes externos o
+manuales.

@@ -8,6 +8,7 @@ import (
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 )
 
 func TestRunSupervisorGoalFirstResidentPreparaReworkPorCheckpointHighConsumptionV0(t *testing.T) {
@@ -101,6 +102,7 @@ func TestRunSupervisorGoalFirstResidentReconciliaBackendMissingTrasCleanupExtern
 	ctx := context.Background()
 	store := newGoalFirstQueueStateStoreForTestV0()
 	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	runControl := &goalFirstResidentRunControlTerminalForTestV0{}
 	runRef := "run-ref-goal-first-resident-backend-missing-001"
 	goalRef := "goal-ref-goal-first-resident-backend-missing-001"
 	externalGoalRef := "thread-ref-goal-first-resident-backend-missing-001"
@@ -142,6 +144,7 @@ func TestRunSupervisorGoalFirstResidentReconciliaBackendMissingTrasCleanupExtern
 		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
 			GoalStateStore:     store,
 			GoalReworkLauncher: launcher,
+			RunControlTerminal: runControl,
 		},
 		Stores: StoresV0{AppGoalStateStore: store},
 		MCPTransportBindings: orquestamcp.MCPTransportBindingsV0{
@@ -157,11 +160,20 @@ func TestRunSupervisorGoalFirstResidentReconciliaBackendMissingTrasCleanupExtern
 		t.Fatalf("Execute: %v", err)
 	}
 	if stats.calls != 1 ||
+		runControl.calls != 1 ||
 		result.StopReason != "goal_first_resident_rework_prepared" ||
 		len(result.RepairRunRefs) != 1 ||
 		launcher.calls != 1 ||
 		!codexStackStringInSetForTestV0(result.EvidenceRefs, goalFirstResidentBackendMissingReconciledV0) {
-		t.Fatalf("resultado inesperado: result=%+v stats_calls=%d launcher_calls=%d", result, stats.calls, launcher.calls)
+		t.Fatalf("resultado inesperado: result=%+v stats_calls=%d launcher_calls=%d run_control_calls=%d", result, stats.calls, launcher.calls, runControl.calls)
+	}
+	if runControl.command.RunRef != runRef ||
+		runControl.command.TargetStatus != orquestaruncontrol.RunControlStatusStoppedV0 ||
+		!strings.Contains(runControl.command.Reason, "external cleanup") ||
+		strings.Contains(runControl.command.Reason, "forced") ||
+		!stringInSetV0(runControl.command.EvidenceRefs, "evidence-ref-run-control-terminal-after-goal-reconcile") ||
+		!stringInSetV0(runControl.command.EvidenceRefs, goalFirstResidentBackendMissingEvidenceRefV0) {
+		t.Fatalf("run control no completado como cleanup externo: %+v", runControl.command)
 	}
 	if len(launcher.specs) != 1 ||
 		!stringInSetV0(launcher.specs[0].EvidenceRefs, goalFirstResidentBackendMissingReconciledV0) ||
@@ -656,6 +668,24 @@ type goalFirstResidentReworkLauncherForTestV0 struct {
 type goalFirstResidentDirectorStatsForTestV0 struct {
 	calls  int
 	result orquestamcp.MCPDirectorStatsToolResultV0
+}
+
+type goalFirstResidentRunControlTerminalForTestV0 struct {
+	calls   int
+	command orquestaruncontrol.CompleteRunControlCommandV0
+}
+
+func (terminal *goalFirstResidentRunControlTerminalForTestV0) CompleteRunControlV0(
+	_ context.Context,
+	command orquestaruncontrol.CompleteRunControlCommandV0,
+) (orquestaruncontrol.RunControlStateV0, error) {
+	terminal.calls++
+	terminal.command = command
+	return orquestaruncontrol.RunControlStateV0{
+		RunRef:       strings.TrimSpace(command.RunRef),
+		Status:       command.TargetStatus,
+		EvidenceRefs: append([]string(nil), command.EvidenceRefs...),
+	}, nil
 }
 
 func (fake *goalFirstResidentDirectorStatsForTestV0) Execute(
