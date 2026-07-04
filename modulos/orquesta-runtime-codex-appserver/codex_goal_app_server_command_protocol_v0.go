@@ -22,7 +22,8 @@ type serverCodexAppServerCommandProtocolV0 struct {
 
 const (
 	codexAppServerDiagnosticLogMaxBytesV0                         = 8192
-	codexAppServerCommandProtocolDefaultMaxResponseLineBytesV0    = 1024 * 1024
+	codexAppServerCommandResponseTooLargeIssueCodeV0              = "codex_app_server_command_response_too_large"
+	codexAppServerCommandProtocolDefaultMaxResponseLineBytesV0    = codexAppServerThreadReadMaxResponseFrameBytesV0
 	codexAppServerCommandProtocolInitialResponseLineBufferBytesV0 = 64 * 1024
 )
 
@@ -96,7 +97,14 @@ func (protocol serverCodexAppServerCommandProtocolV0) callV0(
 	params interface{},
 	out interface{},
 ) error {
-	return protocol.callWithMaxResponseLineBytesV0(ctx, method, params, out, 0, "")
+	return protocol.callWithMaxResponseLineBytesV0(
+		ctx,
+		method,
+		params,
+		out,
+		codexAppServerCommandProtocolDefaultMaxResponseLineBytesV0,
+		codexAppServerCommandResponseTooLargeIssueCodeV0,
+	)
 }
 
 func (protocol serverCodexAppServerCommandProtocolV0) callWithMaxResponseLineBytesV0(

@@ -654,6 +654,42 @@ printf '%s\n' '"]}}}'
 	}
 }
 
+func TestCodexAppServerCommandProtocolTurnStartResponseBudgetV0(t *testing.T) {
+	root := t.TempDir()
+	fakeCodex := filepath.Join(root, "fake-codex-app-server")
+	oversizedResponseBytes := codexAppServerCommandProtocolDefaultMaxResponseLineBytesV0 + 1
+	body := `#!/bin/sh
+set -eu
+IFS= read -r _init
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{}}'
+IFS= read -r _initialized
+IFS= read -r _call
+printf '%s' '{"jsonrpc":"2.0","id":2,"result":{"turn":{"id":"turn-big","status":"'
+dd if=/dev/zero bs=1 count=` + strconv.Itoa(oversizedResponseBytes) + ` 2>/dev/null | tr '\000' x
+printf '%s\n' '"}}}'
+`
+	if err := os.WriteFile(fakeCodex, []byte(body), 0o700); err != nil {
+		t.Fatalf("write fake codex app server: %v", err)
+	}
+	protocol := serverCodexAppServerCommandProtocolV0{
+		CommandPath: fakeCodex,
+		Args:        []string{"--fake"},
+		Timeout:     2 * time.Second,
+	}
+
+	_, err := protocol.StartTurnV0(context.Background(), serverCodexAppServerTurnStartParamsV0{
+		ThreadID:  "thread-big",
+		InputText: "turn con respuesta gigante",
+	})
+	var callErr codexAppServerCallErrorV0
+	if !errors.As(err, &callErr) {
+		t.Fatalf("err=%T %v", err, err)
+	}
+	if callErr.Code != codexAppServerCommandResponseTooLargeIssueCodeV0 {
+		t.Fatalf("code=%q", callErr.Code)
+	}
+}
+
 func TestCodexAppServerWebSocketDefaultFrameBudgetConserva16MiBV0(t *testing.T) {
 	payload := []byte(`{"id":2,"result":{"thread":{"id":"thread-ref-small","status":"closed"}}}`)
 	reader := bufio.NewReader(bytes.NewReader(codexAppServerTestWebSocketFrameV0(payload)))

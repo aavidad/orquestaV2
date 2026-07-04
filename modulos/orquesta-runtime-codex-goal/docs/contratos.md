@@ -35,6 +35,11 @@ aunque el `prompt` legacy venga incompleto, con `max_text_bytes=16384` y
 app-server tambien materializa `checkpoint_started.txt` antes de `turn/start`
 cuando hay `write_set` autorizado.
 
+En el adaptador `app_server_command`, las respuestas JSON-RPC por stdout tambien
+quedan acotadas a 256 KiB por linea. `thread/read` conserva el codigo especifico
+`codex_app_server_thread_read_response_too_large`; otros metodos devuelven
+`codex_app_server_command_response_too_large` y el proceso se corta por grupo.
+
 Estos limites no equivalen a un corte duro previo a herramientas internas del
 proveedor: Orquesta puede acotar `thread/read`, sanear outputs ya generados y
 pedir/replanificar contexto estrecho, pero no puede impedir por este contrato

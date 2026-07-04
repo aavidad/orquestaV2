@@ -628,6 +628,39 @@ No sobrecerrar:
   solo elimina dos work-kinds textuales de la lista de siguientes trabajos tras
   `settled_text` y evita falso `completed` si el ledger contradice el receipt.
 
+## Actualizacion Codex 2026-07-04 noche 36
+
+Avance de este bloque:
+
+- `BUG-ORQ-20260701-079` queda reducido en el borde `app_server_command`.
+- El protocolo command ya no acepta lineas JSON-RPC de hasta 1 MiB: el default
+  queda en 256 KiB, alineado con `thread_read_max_bytes`.
+- `thread/read` mantiene `codex_app_server_thread_read_response_too_large`.
+  Los demas metodos, incluido `turn/start`, devuelven
+  `codex_app_server_command_response_too_large` si la respuesta stdout supera
+  el presupuesto.
+
+Archivos tocados en esta tanda:
+
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_command_protocol_v0.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_migrated_v0_test.go`
+- `modulos/orquesta-runtime-codex-goal/docs/contratos.md`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`
+
+Pruebas focales ejecutadas:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestCodexAppServerCommandProtocol(TurnStartResponseBudget|ThreadReadResponseBudget)V0'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-goal -run 'TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion'`
+
+No sobrecerrar:
+
+- No es enforcement duro pre-tool dentro del proveedor. Reduce stdout gigante en
+  el transporte command de Orquesta, pero si el proveedor ejecuta una herramienta
+  interna y quema tokens antes de exponer el resultado, sigue haciendo falta
+  soporte del runtime/proveedor o mediacion real de herramientas por app-server.
+- Falta smoke largo real con proveedor.
+
 ## Checklist de Claude
 
 1. Revisar `git status --short` y separar cambios de cada frente.

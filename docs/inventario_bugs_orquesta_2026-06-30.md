@@ -260,6 +260,17 @@ antes de su cierre posterior:
   `TestCodexStackV0OPESGoalFirstLifecycleAsientaDerivadosYCierraRegistroFinalConTopicQualityV0`.
   Siguen abiertos hasta smoke OPES temporal real, cierre agregado del arbol y
   prueba de ausencia de reescritura tardia con proveedor.
+- Avance 2026-07-04 noche 36: `BUG-ORQ-20260701-079` queda reducido en el
+  protocolo `app_server_command`: el presupuesto por linea JSON-RPC baja de
+  1 MiB a 256 KiB tambien para metodos genericos como `turn/start`, y una
+  respuesta sobredimensionada devuelve
+  `codex_app_server_command_response_too_large` en vez de error opaco de
+  scanner. `thread/read` conserva su issue especifico
+  `codex_app_server_thread_read_response_too_large`. Tests:
+  `TestCodexAppServerCommandProtocolTurnStartResponseBudgetV0` y
+  `TestCodexAppServerCommandProtocolThreadReadResponseBudgetV0`. Sigue abierto
+  el limite duro previo a herramientas internas del proveedor y el smoke largo
+  real.
 - Incidencia operativa 2026-07-04 noche 30: durante la verificacion de OPES,
   `go test` fallo antes de compilar por `/home` al 100% y cache Go
   `/home/alberto/.cache/go-build` de 17G. Se libero con `go clean -cache` y la
