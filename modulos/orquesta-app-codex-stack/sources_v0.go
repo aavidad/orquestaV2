@@ -178,6 +178,7 @@ func externalJobStatsSourceV0(config ConfigV0) CodexStackExternalJobStatsSourceV
 		TaskStore:               config.Stores.TaskStore,
 		GoalStateStore:          config.Stores.AppGoalStateStore,
 		GoalFirstRunMarkerStore: appGoalFirstRunMarkerStoreV0(config),
+		DomainSubmissionLedger:  domainWorkSubmissionRecordReaderV0(config.DomainDelivery.Ledger),
 	}
 }
 

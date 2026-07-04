@@ -969,7 +969,9 @@ func TestProduceOPESCausalJobsV0NoBloqueaRegistroConQATemaCompletaV0(t *testing.
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_reason", "topic_quality_contract_passed") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settled_refs", "artifact-topic-quality-pass-001") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "next_required_work_kinds", "generate_audio_asset") ||
-		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "next_required_work_kinds", "finalize_temario_package") {
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "next_required_work_kinds", "finalize_temario_package") ||
+		domainWorkFieldValueForDirectorTestV0(request.InputFields, "next_required_work_kinds", "review_director_consolidation") ||
+		domainWorkFieldValueForDirectorTestV0(request.InputFields, "next_required_work_kinds", "assemble_topic") {
 		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
 	}
 	if _, ok := requestedWorkKindForTestV0(result.RequestedJobs, "review_director_consolidation"); ok {

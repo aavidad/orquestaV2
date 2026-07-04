@@ -43,6 +43,7 @@ type CodexStackExternalJobStatsSourceV0 struct {
 	TaskStore               orquestacionnucleoapp.WorkflowTaskStorePortV0
 	GoalStateStore          orquestagoal.GoalWorkStateStorePortV0
 	GoalFirstRunMarkerStore orquestagoal.GoalWorkRunMarkerStorePortV0
+	DomainSubmissionLedger  DomainWorkArtifactSubmissionRecordReaderPortV0
 }
 
 func (source CodexStackExternalJobStatsSourceV0) ResolveDirectorExternalJobStatsV0(
@@ -171,7 +172,7 @@ func (source CodexStackExternalJobStatsSourceV0) applyExternalJobGoalFirstStatsV
 	if err != nil {
 		return false
 	}
-	source.markExternalJobGoalFirstV0(stats, state)
+	source.markExternalJobGoalFirstV0(ctx, stats, state)
 	return true
 }
 
@@ -203,6 +204,7 @@ func (source CodexStackExternalJobStatsSourceV0) applyExternalJobGoalFirstMarker
 }
 
 func (source CodexStackExternalJobStatsSourceV0) markExternalJobGoalFirstV0(
+	ctx context.Context,
 	stats *orquestamcp.MCPDirectorExternalJobStatsV0,
 	state orquestagoal.GoalWorkStateV0,
 ) {
@@ -233,6 +235,7 @@ func (source CodexStackExternalJobStatsSourceV0) markExternalJobGoalFirstV0(
 		stats.ClosureAccepted = state.LastClosure.Accepted
 		stats.ClosureNeedsRework = state.LastClosure.NeedsRework
 	}
+	source.applyExternalJobGoalFirstLedgerDiagnosisV0(ctx, stats, state)
 	if stats.Status == "blocked" || stats.Status == codexStackExternalJobStatusGoalCompletePendingClosureV0 {
 		stats.IssueRefs = compactCodexStackStringsV0(append(
 			stats.IssueRefs,
@@ -244,6 +247,47 @@ func (source CodexStackExternalJobStatsSourceV0) markExternalJobGoalFirstV0(
 		Scope:        strings.TrimSpace(stats.JobRef),
 		Message:      externalJobGoalFirstDiagnosticMessageV0(stats.Status, stats.StatusReason),
 		EvidenceRefs: compactCodexStackStringsV0([]string{state.RunRef, state.GoalRef}),
+	})
+}
+
+func (source CodexStackExternalJobStatsSourceV0) applyExternalJobGoalFirstLedgerDiagnosisV0(
+	ctx context.Context,
+	stats *orquestamcp.MCPDirectorExternalJobStatsV0,
+	state orquestagoal.GoalWorkStateV0,
+) {
+	if stats == nil ||
+		source.DomainSubmissionLedger == nil ||
+		state.LastResult == nil ||
+		stats.Status != "completed" ||
+		stats.StatusReason != codexStackExternalJobStatusReasonGoalFirstClosureAcceptedV0 ||
+		!state.Spec.ClosurePolicy.RequireDomainReceipt {
+		return
+	}
+	evidenceRefs, issue := domainWorkGoalReceiptClosureValidatorV0{
+		Ledger: source.DomainSubmissionLedger,
+	}.validateAcceptedDomainReceiptsV0(ctx, state.Spec, *state.LastResult)
+	if issue.Code == "" {
+		stats.EvidenceRefs = compactCodexStackStringsV0(append(stats.EvidenceRefs, evidenceRefs...))
+		return
+	}
+	stats.Status = "blocked"
+	stats.StatusReason = codexStackExternalJobStatusReasonGoalFirstClosureBlockedV0
+	stats.ClosureNeedsRework = true
+	stats.IssueRefs = compactCodexStackStringsV0(append(
+		stats.IssueRefs,
+		"issue-ref-external-job-goal-first-receipt-"+safeDomainWorkEvidenceRefV0(issue.Code),
+		issue.Code,
+		issue.Field,
+	))
+	stats.EvidenceRefs = compactCodexStackStringsV0(append(
+		append(stats.EvidenceRefs, goalDomainReceiptLedgerMissingEvidenceRefV0),
+		evidenceRefs...,
+	))
+	stats.Diagnostics = append(stats.Diagnostics, orquestamcp.MCPDirectorExternalJobDiagnosticV0{
+		Code:         strings.TrimSpace(issue.Code),
+		Scope:        strings.TrimSpace(stats.JobRef),
+		Message:      "external job goal-first aceptado contradice el ledger de dominio; requiere rework/receipt antes de completed",
+		EvidenceRefs: compactCodexStackStringsV0(append([]string{state.RunRef, state.GoalRef, issue.Field}, evidenceRefs...)),
 	})
 }
 

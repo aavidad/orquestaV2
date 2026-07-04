@@ -157,7 +157,9 @@ func TestCodexStackV0OPESGoalFirstLifecycleAsientaDerivadosYCierraRegistroFinalC
 			"generate_question_bank",
 			"generate_html_site",
 			"finalize_temario_package",
-		}) {
+		}) ||
+		domainWorkFieldValueForTestV0(textUpdate.InputFields, "next_required_work_kinds", "review_director_consolidation") ||
+		domainWorkFieldValueForTestV0(textUpdate.InputFields, "next_required_work_kinds", "assemble_topic") {
 		t.Fatalf("registro texto no asienta y deriva: %+v", textUpdate)
 	}
 

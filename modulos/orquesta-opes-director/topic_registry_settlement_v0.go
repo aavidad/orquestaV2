@@ -209,8 +209,6 @@ func topicRegistryNextWorkKindsAfterTextSettledV0() []string {
 		"review_legal",
 		"review_pedagogical",
 		"review_quality",
-		"review_director_consolidation",
-		"assemble_topic",
 		"generate_audio_asset",
 		"generate_tutor_assets",
 		"generate_html_site",

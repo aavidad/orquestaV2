@@ -583,6 +583,51 @@ No sobrecerrar:
   lento y coordinacion automatica completa
   `backend/checkpoint/stop/cancel/wait`.
 
+## Actualizacion Codex 2026-07-04 noche 35
+
+Avance de este bloque:
+
+- `BUG-ORQ-20260701-058/066` quedan reducidos por dos cambios locales
+  complementarios.
+- `external_job_stats` de `orquesta-app-codex-stack` ahora recibe el ledger de
+  DomainWork y revalida un cierre goal-first aceptado antes de publicar
+  `completed`. Si el receipt aceptado no cubre el contrato durable del ledger,
+  degrada el external job a `blocked` y conserva el issue causal.
+- `orquesta-opes-director` deja de publicar `review_director_consolidation` y
+  `assemble_topic` como `next_required_work_kinds` despues de `settled_text`;
+  el texto asentado deriva a visuales, tests, revisiones, audio/tutor/html y
+  paquete final, no a reescritura textual sin rework.
+
+Archivos tocados en esta tanda:
+
+- `modulos/orquesta-app-codex-stack/external_job_stats_source_v0.go`
+- `modulos/orquesta-app-codex-stack/external_job_stats_source_v0_test.go`
+- `modulos/orquesta-app-codex-stack/external_work_goal_first_opes_sequence_v0_test.go`
+- `modulos/orquesta-app-codex-stack/sources_v0.go`
+- `modulos/orquesta-opes-director/producer_v0_test.go`
+- `modulos/orquesta-opes-director/topic_registry_settlement_v0.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`
+
+Pruebas focales ejecutadas:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackExternalJobStatsSourceV0GoalFirst(AceptadoCompletaJob|AcceptedConIssuesNoCompletaJob|AcceptedSinReceiptNoCompletaJob|AcceptedConLedgerIncompletoNoCompletaJob)'`
+- `go test -count=1 ./modulos/orquesta-opes-director -run 'TestProduceOPESCausalJobsV0NoBloqueaRegistroConQATemaCompletaV0'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackV0OPESGoalFirstLifecycleAsientaDerivadosYCierraRegistroFinalConTopicQualityV0'`
+
+Verificacion amplia:
+
+- `git diff --check`
+- `GOCACHE=/tmp/orquesta-codex-gocache GOTMPDIR=/tmp/orquesta-codex-gotmp go test -count=1 ./...`
+
+No sobrecerrar:
+
+- No prueba OPES temporal real ni proveedor real.
+- No demuestra cierre agregado de todo el arbol OPES.
+- No demuestra por si solo ausencia de reescritura tardia en un goal ya vivo;
+  solo elimina dos work-kinds textuales de la lista de siguientes trabajos tras
+  `settled_text` y evita falso `completed` si el ledger contradice el receipt.
+
 ## Checklist de Claude
 
 1. Revisar `git status --short` y separar cambios de cada frente.

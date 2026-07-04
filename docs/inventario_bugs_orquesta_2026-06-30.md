@@ -246,6 +246,20 @@ antes de su cierre posterior:
   `TestWaitServerShutdownReadyV0RepostColgadoRespetaDeadlineYDevuelveStatusAccionableV0`.
   Siguen abiertos los bugs padre hasta smoke real amplio de proveedor/status
   lento y coordinacion automatica completa `backend/checkpoint/stop/cancel/wait`.
+- Avance 2026-07-04 noche 35: `BUG-ORQ-20260701-058/066` quedan reducidos en
+  dos bordes locales. `external_job_stats` ya cablea el ledger de DomainWork y
+  no proyecta `completed` si un cierre goal-first aceptado con
+  `DomainReceiptRefs` contradice el contrato durable del ledger; degrada a
+  `blocked` con diagnostico `domain_work_receipt_artifact_incomplete` u otro
+  issue causal del validador. Ademas, `orquesta-opes-director` ya no publica
+  `review_director_consolidation` ni `assemble_topic` como
+  `next_required_work_kinds` tras `settled_text`, evitando reescritura textual
+  tardia sin rework causal. Tests:
+  `TestCodexStackExternalJobStatsSourceV0GoalFirstAcceptedConLedgerIncompletoNoCompletaJob`,
+  `TestProduceOPESCausalJobsV0NoBloqueaRegistroConQATemaCompletaV0` y
+  `TestCodexStackV0OPESGoalFirstLifecycleAsientaDerivadosYCierraRegistroFinalConTopicQualityV0`.
+  Siguen abiertos hasta smoke OPES temporal real, cierre agregado del arbol y
+  prueba de ausencia de reescritura tardia con proveedor.
 - Incidencia operativa 2026-07-04 noche 30: durante la verificacion de OPES,
   `go test` fallo antes de compilar por `/home` al 100% y cache Go
   `/home/alberto/.cache/go-build` de 17G. Se libero con `go clean -cache` y la
