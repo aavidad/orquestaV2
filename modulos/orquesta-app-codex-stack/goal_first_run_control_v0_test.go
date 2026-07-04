@@ -158,6 +158,96 @@ func TestCodexStackRunControlAPIV0ForcedStopGoalFirstPropagaBackendYBloqueaTermi
 	}
 }
 
+func TestGoalFirstRunControlPortV0ForcedStopCompletaControlSiObserverYaBloqueoAltoConsumoV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-goal-first-forced-stop-already-blocked-001"
+	goalRef := "goal-ref-goal-first-forced-stop-already-blocked-001"
+	externalRef := "thread-ref-goal-first-forced-stop-already-blocked-001"
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	state := goalFirstRunControlRunningStateForTestV0(t, runRef, goalRef, externalRef)
+	state.Status = orquestagoal.GoalStatusBlockedV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		GoalRef:         goalRef,
+		ExternalGoalRef: externalRef,
+		Summary:         "goal_active_no_checkpoint_high_consumption",
+		EvidenceRefs: []string{
+			"evidence-ref-goal-observer-high-consumption-stop-requested",
+			"evidence-ref-goal-cooperative-stop-requested-run-control",
+		},
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  "goal_active_no_checkpoint_high_consumption",
+			Field: "goal_progress",
+		}},
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:      orquestagoal.GoalStatusBlockedV0,
+		NeedsRework: true,
+		EvidenceRefs: []string{
+			"evidence-ref-goal-observer-high-consumption-stop-requested",
+		},
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  "goal_active_no_checkpoint_high_consumption",
+			Field: "goal_progress",
+		}},
+	}
+	if err := goalStates.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	runControl := orquestarunmemory.NewRunMemoryStoreV0()
+	if _, err := runControl.StopRunV0(ctx, orquestaruncontrol.StopRunCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "goal_observer",
+		Reason:       "cooperative high consumption stop",
+		EvidenceRefs: []string{"evidence-ref-goal-cooperative-stop-requested-run-control"},
+	}); err != nil {
+		t.Fatalf("StopRunV0 cooperative: %v", err)
+	}
+	backend := &fakeGoalBackendControlForRunControlTestV0{
+		result: GoalBackendControlResultV0{
+			Status:         orquestagoal.GoalStatusBlockedV0,
+			BackendStopped: true,
+		},
+	}
+	port := goalFirstRunControlPortV0{
+		Inner:          runControl,
+		GoalStateStore: goalStates,
+		BackendControl: backend,
+	}
+
+	controlState, err := port.StopRunV0(ctx, orquestaruncontrol.StopRunCommandV0{
+		RunRef:       runRef,
+		RequestedBy:  "operator",
+		Reason:       "forced stop tras alto consumo",
+		Forced:       true,
+		EvidenceRefs: []string{"evidence-ref-operator-forced-stop-after-high-consumption"},
+	})
+	if err != nil {
+		t.Fatalf("StopRunV0 forced: %v", err)
+	}
+	if controlState.Status != orquestaruncontrol.RunControlStatusStoppedV0 || !controlState.Forced {
+		t.Fatalf("controlState=%+v", controlState)
+	}
+	if backend.calls != 0 {
+		t.Fatalf("backend no debe reabrirse para goal ya terminal: calls=%d last=%+v", backend.calls, backend.last)
+	}
+	persisted, err := goalStates.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if persisted.Status != orquestagoal.GoalStatusBlockedV0 ||
+		persisted.LastResult == nil ||
+		persisted.LastClosure == nil ||
+		!persisted.LastClosure.NeedsRework ||
+		!stringInSetV0(persisted.EvidenceRefs, runControlGoalForcedStopTerminalEvidenceV0) ||
+		!stringInSetV0(persisted.LastResult.EvidenceRefs, runControlGoalForcedStopTerminalEvidenceV0) ||
+		!stringInSetV0(persisted.LastClosure.EvidenceRefs, runControlGoalForcedStopTerminalEvidenceV0) ||
+		!stringInSetV0(controlState.EvidenceRefs, runControlGoalForcedStopCompleteEvidenceV0) {
+		t.Fatalf("persisted=%+v controlState=%+v", persisted, controlState)
+	}
+}
+
 func goalFirstRunControlRunningStateForTestV0(
 	t *testing.T,
 	runRef string,

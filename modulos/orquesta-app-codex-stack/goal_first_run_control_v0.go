@@ -109,6 +109,25 @@ func (port goalFirstRunControlPortV0) StopRunV0(
 			TargetStatus:     orquestaruncontrol.RunControlStatusStoppedV0,
 		})
 	}
+	if command.Forced {
+		if completed, ok, err := port.completeAlreadyTerminalGoalRunControlV0(ctx, goalFirstRunControlForcedCommandV0{
+			RunRef:           command.RunRef,
+			RequestedBy:      command.RequestedBy,
+			Reason:           command.Reason,
+			IdempotencyKey:   command.IdempotencyKey,
+			EvidenceRefs:     command.EvidenceRefs,
+			Action:           "stop",
+			IssueField:       "goal_backend",
+			IssueCode:        "operator_forced_stop_goal_first",
+			NoArtifactsCode:  "operator_forced_stop_no_artifacts",
+			Summary:          "forced stop accepted after goal was already terminal",
+			TerminalEvidence: runControlGoalForcedStopTerminalEvidenceV0,
+			CompleteEvidence: runControlGoalForcedStopCompleteEvidenceV0,
+			TargetStatus:     orquestaruncontrol.RunControlStatusStoppedV0,
+		}); ok || err != nil {
+			return completed, err
+		}
+	}
 	state, err := port.Inner.StopRunV0(ctx, command)
 	if err != nil || !command.Forced {
 		return state, err
@@ -148,6 +167,25 @@ func (port goalFirstRunControlPortV0) CancelRunV0(
 			CompleteEvidence: runControlGoalForcedCancelCompleteEvidenceV0,
 			TargetStatus:     orquestaruncontrol.RunControlStatusCanceledV0,
 		})
+	}
+	if command.Forced {
+		if completed, ok, err := port.completeAlreadyTerminalGoalRunControlV0(ctx, goalFirstRunControlForcedCommandV0{
+			RunRef:           command.RunRef,
+			RequestedBy:      command.RequestedBy,
+			Reason:           command.Reason,
+			IdempotencyKey:   command.IdempotencyKey,
+			EvidenceRefs:     command.EvidenceRefs,
+			Action:           "cancel",
+			IssueField:       "goal_backend",
+			IssueCode:        "operator_forced_cancel_goal_first",
+			NoArtifactsCode:  "operator_forced_cancel_no_artifacts",
+			Summary:          "forced cancel accepted after goal was already terminal",
+			TerminalEvidence: runControlGoalForcedCancelTerminalEvidenceV0,
+			CompleteEvidence: runControlGoalForcedCancelCompleteEvidenceV0,
+			TargetStatus:     orquestaruncontrol.RunControlStatusCanceledV0,
+		}); ok || err != nil {
+			return completed, err
+		}
 	}
 	state, err := port.Inner.CancelRunV0(ctx, command)
 	if err != nil || !command.Forced {
@@ -274,6 +312,129 @@ func (port goalFirstRunControlPortV0) completeAlreadyForcedTerminalRunControlV0(
 	}
 	completed.Forced = true
 	return completed, nil
+}
+
+func (port goalFirstRunControlPortV0) completeAlreadyTerminalGoalRunControlV0(
+	ctx context.Context,
+	command goalFirstRunControlForcedCommandV0,
+) (orquestaruncontrol.RunControlStateV0, bool, error) {
+	if port.GoalStateStore == nil {
+		return orquestaruncontrol.RunControlStateV0{}, false, nil
+	}
+	state, err := port.GoalStateStore.LoadGoalWorkStateV0(ctx, strings.TrimSpace(command.RunRef))
+	if err != nil {
+		return orquestaruncontrol.RunControlStateV0{}, false, nil
+	}
+	state, err = orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil || !goalFirstRunControlAlreadyTerminalForForcedControlV0(state) {
+		return orquestaruncontrol.RunControlStateV0{}, false, nil
+	}
+	evidenceRefs := compactStringsV0(append(
+		append(append([]string(nil), command.EvidenceRefs...), state.EvidenceRefs...),
+		command.TerminalEvidence,
+	))
+	state = goalFirstRunControlMarkAlreadyTerminalStateForcedV0(state, command, evidenceRefs)
+	if err := port.GoalStateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
+		return orquestaruncontrol.RunControlStateV0{}, true, err
+	}
+	completed, err := port.Inner.CompleteRunControlV0(ctx, orquestaruncontrol.CompleteRunControlCommandV0{
+		RunRef:         state.RunRef,
+		TargetStatus:   command.TargetStatus,
+		RequestedBy:    command.RequestedBy,
+		Reason:         command.Reason,
+		IdempotencyKey: command.IdempotencyKey,
+		EvidenceRefs: compactStringsV0(append(
+			evidenceRefs,
+			command.CompleteEvidence,
+		)),
+	})
+	if err != nil {
+		return completed, true, err
+	}
+	completed.Forced = true
+	return completed, true, nil
+}
+
+func goalFirstRunControlAlreadyTerminalForForcedControlV0(
+	state orquestagoal.GoalWorkStateV0,
+) bool {
+	if strings.TrimSpace(state.Status) == orquestagoal.GoalStatusRunningV0 {
+		return false
+	}
+	if goalFirstForcedTerminalStateV0(state) {
+		return true
+	}
+	if orquestagoal.GoalWorkResultTerminalV0(state.Status) {
+		return true
+	}
+	if state.LastResult != nil && orquestagoal.GoalWorkResultTerminalV0(state.LastResult.Status) {
+		return true
+	}
+	if state.LastClosure != nil &&
+		(state.LastClosure.NeedsRework ||
+			strings.TrimSpace(state.LastClosure.Status) == orquestagoal.GoalStatusBlockedV0 ||
+			strings.TrimSpace(state.LastClosure.Status) == orquestagoal.GoalStatusInvalidV0) {
+		return true
+	}
+	return false
+}
+
+func goalFirstRunControlMarkAlreadyTerminalStateForcedV0(
+	state orquestagoal.GoalWorkStateV0,
+	command goalFirstRunControlForcedCommandV0,
+	evidenceRefs []string,
+) orquestagoal.GoalWorkStateV0 {
+	state.Status = orquestagoal.GoalStatusBlockedV0
+	state.EvidenceRefs = compactStringsV0(append(state.EvidenceRefs, evidenceRefs...))
+	if state.LastResult != nil {
+		result := orquestagoal.NormalizeGoalWorkResultV0(*state.LastResult)
+		result.Status = orquestagoal.GoalStatusBlockedV0
+		result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, evidenceRefs...))
+		if len(result.Issues) == 0 {
+			result.Issues = []orquestagoal.GoalWorkIssueV0{{
+				Code:  command.IssueCode,
+				Field: command.IssueField,
+			}}
+		}
+		state.LastResult = &result
+	} else {
+		state.LastResult = &orquestagoal.GoalWorkResultV0{
+			SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+			Status:          orquestagoal.GoalStatusBlockedV0,
+			GoalRef:         strings.TrimSpace(state.GoalRef),
+			ExternalGoalRef: strings.TrimSpace(state.ExternalGoalRef),
+			Summary:         command.Summary,
+			EvidenceRefs:    evidenceRefs,
+			Issues: []orquestagoal.GoalWorkIssueV0{{
+				Code:  command.IssueCode,
+				Field: command.IssueField,
+			}},
+		}
+	}
+	if state.LastClosure != nil {
+		closure := *state.LastClosure
+		closure.Status = orquestagoal.GoalStatusBlockedV0
+		closure.NeedsRework = true
+		closure.EvidenceRefs = compactStringsV0(append(closure.EvidenceRefs, evidenceRefs...))
+		if len(closure.Issues) == 0 {
+			closure.Issues = []orquestagoal.GoalWorkIssueV0{{
+				Code:  command.IssueCode,
+				Field: command.IssueField,
+			}}
+		}
+		state.LastClosure = &closure
+	} else {
+		state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+			Status:       orquestagoal.GoalStatusBlockedV0,
+			NeedsRework:  true,
+			EvidenceRefs: evidenceRefs,
+			Issues: []orquestagoal.GoalWorkIssueV0{{
+				Code:  command.IssueCode,
+				Field: command.IssueField,
+			}},
+		}
+	}
+	return state
 }
 
 func (port goalFirstRunControlPortV0) forcedTerminalGoalStateExistsV0(

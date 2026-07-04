@@ -129,10 +129,11 @@ func TestServerCodexAppServerGoalBackendV0StopForcedBloqueaGoalYApagaBackendV0(t
 		result.Status != orquestagoal.GoalStatusBlockedV0 ||
 		protocol.setParams.ThreadID != "thread-ref-stop-forced-001" ||
 		protocol.setParams.Status != "blocked" ||
-		shutdown.calls != 1 ||
+		shutdown.calls != 0 ||
+		shutdown.forcedCalls != 1 ||
 		!containsStringMigratedTestV0(result.EvidenceRefs, codexAppServerGoalForcedStopSetEvidenceV0) ||
 		!containsStringMigratedTestV0(result.EvidenceRefs, codexAppServerGoalForcedStopTmuxStoppedV0) {
-		t.Fatalf("result=%+v set=%+v shutdown_calls=%d", result, protocol.setParams, shutdown.calls)
+		t.Fatalf("result=%+v set=%+v shutdown_calls=%d forced_calls=%d", result, protocol.setParams, shutdown.calls, shutdown.forcedCalls)
 	}
 }
 
@@ -599,13 +600,20 @@ func (fakeCodexAppServerProbeV0) ProbeV0(context.Context) error {
 }
 
 type fakeCodexAppServerBackendShutdownV0 struct {
-	calls int
-	err   error
+	calls       int
+	forcedCalls int
+	err         error
+	forcedErr   error
 }
 
 func (fake *fakeCodexAppServerBackendShutdownV0) ShutdownV0(context.Context) error {
 	fake.calls++
 	return fake.err
+}
+
+func (fake *fakeCodexAppServerBackendShutdownV0) ShutdownForcedStopV0(context.Context) error {
+	fake.forcedCalls++
+	return fake.forcedErr
 }
 
 type fakeCodexAppServerProtocolV0 struct {

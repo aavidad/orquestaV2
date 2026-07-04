@@ -23,6 +23,7 @@ const (
 	codexAppServerTmuxEvidenceOwnedV0   = "orquesta-codex-goal-app-server-tmux-v0"
 	codexAppServerTmuxDefaultTimeoutV0  = 3 * time.Second
 	codexAppServerTmuxCleanupTimeoutV0  = 10 * time.Second
+	codexAppServerTmuxForcedStopV0      = 750 * time.Millisecond
 	codexAppServerTmuxMinStartupV0      = 60 * time.Second
 	codexAppServerTmuxMaxSocketPathV0   = 107
 	codexAppServerTmuxSocketPollEveryV0 = 50 * time.Millisecond
@@ -160,6 +161,12 @@ func (backend serverCodexAppServerTmuxBackendV0) ShutdownV0(ctx context.Context)
 	return backend.shutdownTmuxSessionV0(ctx, false)
 }
 
+func (backend serverCodexAppServerTmuxBackendV0) ShutdownForcedStopV0(ctx context.Context) error {
+	cleanup := backend
+	cleanup.Timeout = codexAppServerTmuxForcedStopV0
+	return cleanup.shutdownTmuxSessionWithOptionsV0(ctx, true, true)
+}
+
 func (backend serverCodexAppServerTmuxBackendV0) ShutdownConfiguredSessionAfterStartupFailureV0(ctx context.Context) error {
 	return backend.shutdownTmuxSessionV0(ctx, true)
 }
@@ -230,6 +237,9 @@ func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionWithOptionsV
 			if !continueAfterPaneExitTimeout {
 				return err
 			}
+			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Second)
+			defer cleanupCancel()
+			runCtx = cleanupCtx
 		}
 	}
 	backend.stopCodexAppServerSocketProcessesV0(runCtx)

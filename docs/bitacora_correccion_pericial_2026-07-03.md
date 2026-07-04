@@ -1524,3 +1524,76 @@ Pendiente real: la reejecucion reduce `BUG-079`, `BUG-165` y `BUG-065/076` en
 la ruta alto consumo -> artefacto recuperable -> cleanup, pero no cierra el
 caso Sueldos de forced stop con backend vivo ni el enforcement duro previo a
 herramientas.
+
+## Continuacion Codex 2026-07-04 noche 11
+
+Cierre de la ruta Sueldos de `BUG-ORQ-20260704-165`:
+
+- Se anade `scripts/smoke_goal_first_forced_stop_backend_real.sh`, wrapper real
+  opt-in para alto consumo + backend `app_server_tmux` vivo + forced stop.
+- El modo del smoke usa `SMOKE_GOAL_FIRST_FORCED_STOP_MODE=1`, no una variable
+  `ORQUESTA_*`, para no romper el ratchet MEJ-106.
+- `runs/control` completa `stopped/canceled` si el observer ya dejo el goal en
+  estado terminal/rework antes del control forzado. Esto cubre el caso
+  `goal_status_before=blocked` que antes quedaba en `stop_requested`.
+- El backend `app_server_tmux` expone `ShutdownForcedStopV0` y usa timeout corto
+  con cleanup de proceso/socket en contexto fresco, evitando que un wait
+  agotado deje el backend vivo.
+- El smoke valida que el observe posterior no publique `running`: exige
+  `goal_status=blocked`, `closure_status=blocked` y
+  `recommended_action=replan`.
+
+Smoke real final:
+
+```text
+smoke_goal_first_forced_stop_backend_real=ok
+run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-116f51fcff09efa9aa525ee7dfd94ce7
+goal_ref=goal-ref-app-director-run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-116f51fcff09efa9aa525ee7dfd94ce7
+external_goal_ref=019f2c28-d0c3-7551-9972-dcba0f3daeb2
+run_control_estado=ok
+run_control_status=stopped
+run_control_final_status=stopped
+run_control_goal_status_after=blocked
+observe_after_forced_stop_goal_status=blocked
+observe_after_forced_stop_closure_status=blocked
+observe_after_forced_stop_recommended_action=replan
+app_server_tmux_processes_alive=0
+smoke_root=/tmp/orquesta-goal-first-app-server.Sc7e7K
+```
+
+Evidencia saneada: se borraron `runtime/goal-srv/codex-home` y
+`bin/orquesta-server` del temporal retenido. Quedan JSON/logs/estado/artefactos
+compactos (~296 KiB) y no quedan `orquesta-server run`, `codex app-server` ni
+tmux `orquesta-goal-*` vivos.
+
+Archivos tocados en este avance:
+
+- `scripts/smoke_goal_first_app_server_real.sh`
+- `scripts/smoke_goal_first_forced_stop_backend_real.sh`
+- `cmd/orquesta-server/smoke_goal_first_script_guard_v0_test.go`
+- `modulos/orquesta-app-codex-stack/goal_first_run_control_v0.go`
+- `modulos/orquesta-app-codex-stack/goal_first_run_control_v0_test.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_stop_v0.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_tmux_v0.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_migrated_v0_test.go`
+- `docs/runbooks/smoke_goal_first_forced_stop_backend_real_2026-07-04.md`
+- `docs/incidencia_sueldos_goal_first_app_invalid_checkpoint_2026-07-04.md`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion:
+
+- `find scripts -name '*.sh' -print0 | xargs -0 -n1 bash -n`
+- `go test -count=1 ./ -run TestEnvVarsBudget`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeGoalFirst(AppServerReal|HighConsumption|ForcedStop)'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestGoalFirstRunControl|TestCodexStackRunControl'`
+- `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPRunControl'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0StopForced|TestCodexAppServerTmuxBackendV0EnsureShutdownCleanup'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver ./modulos/orquesta-app-codex-stack ./modulos/orquesta-mcp ./cmd/orquesta-server`
+- `go test -count=1 ./...`
+- `git diff --check`
+
+Pendiente real: `BUG-165` queda abierto solo para residuales amplios de
+`status/observe` lento y coordinacion automatica completa
+shutdown/backend/checkpoint/stop/cancel/wait. La ruta Sueldos forced stop con
+backend vivo queda cerrada.

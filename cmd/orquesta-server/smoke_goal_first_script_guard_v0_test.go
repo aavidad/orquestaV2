@@ -99,6 +99,42 @@ func TestSmokeGoalFirstHighConsumptionWrapperActivaObserverYUmbralBajoV0(t *test
 	}
 }
 
+func TestSmokeGoalFirstForcedStopWrapperEjercitaRunControlBackendVivoV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	wrapper := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_forced_stop_backend_real.sh")
+	smoke := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+
+	for _, want := range []string{
+		"ORQUESTA" + "_GOAL_FIRST_SMOKE_HIGH_CONSUMPTION_MODE=1",
+		"SMOKE" + "_GOAL_FIRST_FORCED_STOP_MODE=1",
+		`ORQUESTA_CODEX_GOAL_BACKEND="${ORQUESTA_CODEX_GOAL_BACKEND:-app_server_tmux}"`,
+		`ORQUESTA_CODEX_GOAL_TIMEOUT_MS="${ORQUESTA_CODEX_GOAL_TIMEOUT_MS:-600000}"`,
+		`ORQUESTA_CODEX_SANDBOX="${ORQUESTA_CODEX_SANDBOX:-danger-full-access}"`,
+		`ORQUESTA_CODEX_APPROVAL_POLICY="${ORQUESTA_CODEX_APPROVAL_POLICY:-never}"`,
+		`exec "$repo_root/scripts/smoke_goal_first_app_server_real.sh" "$@"`,
+	} {
+		if !strings.Contains(wrapper, want) {
+			t.Fatalf("wrapper forced-stop incompleto: falta %q", want)
+		}
+	}
+	for _, want := range []string{
+		`forced_stop_mode="${SMOKE_GOAL_FIRST_FORCED_STOP_MODE:-0}"`,
+		"run_forced_stop_smoke",
+		"/api/v0/runs/control",
+		`"forced": true`,
+		`"action": "stop"`,
+		`"$control_status_value" != "stopped"`,
+		`"$control_final_status" != "stopped"`,
+		`"$post_stop_goal_status" == "running"`,
+		"evidence-ref-observe-goal-run-control-terminal",
+		"smoke_goal_first_forced_stop_backend_real=ok",
+	} {
+		if !strings.Contains(smoke, want) {
+			t.Fatalf("smoke forced-stop no valida control/observe terminal: falta %q", want)
+		}
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealRetriesTransientObservationRejectedV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")

@@ -21,6 +21,10 @@ type BackendShutdownPortV0 interface {
 	ShutdownV0(context.Context) error
 }
 
+type BackendForcedStopShutdownPortV0 interface {
+	ShutdownForcedStopV0(context.Context) error
+}
+
 type CodexGoalStopRequestV0 struct {
 	GoalRef         string   `json:"goal_ref,omitempty"`
 	ExternalGoalRef string   `json:"external_goal_ref,omitempty"`
@@ -118,6 +122,22 @@ func (backend serverCodexAppServerGoalBackendV0) shutdownCodexGoalBackendForForc
 		result.EvidenceRefs,
 		codexAppServerGoalForcedStopTmuxRequestedV0,
 	))
+	if forcedShutdown, ok := shutdown.(BackendForcedStopShutdownPortV0); ok && forcedShutdown != nil {
+		if err := forcedShutdown.ShutdownForcedStopV0(ctx); err != nil {
+			result.IssueCode = codexAppServerIssueCodeForErrorV0(err, "codex_app_server_goal_stop_shutdown_failed")
+			result.EvidenceRefs = compactServerStackStringsV0(append(
+				result.EvidenceRefs,
+				codexAppServerGoalForcedStopTmuxFailedV0,
+			))
+			return err
+		}
+		result.BackendStopped = true
+		result.EvidenceRefs = compactServerStackStringsV0(append(
+			result.EvidenceRefs,
+			codexAppServerGoalForcedStopTmuxStoppedV0,
+		))
+		return nil
+	}
 	if err := shutdown.ShutdownV0(ctx); err != nil {
 		result.IssueCode = codexAppServerIssueCodeForErrorV0(err, "codex_app_server_goal_stop_shutdown_failed")
 		result.EvidenceRefs = compactServerStackStringsV0(append(

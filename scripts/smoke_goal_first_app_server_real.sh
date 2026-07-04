@@ -42,6 +42,10 @@ payload_file="$smoke_root/start_request.json"
 start_response="$smoke_root/start_response.json"
 observe_payload="$smoke_root/observe_request.json"
 observe_response="$smoke_root/observe_response.json"
+control_payload="$smoke_root/run_control_request.json"
+control_response="$smoke_root/run_control_response.json"
+post_stop_observe_payload="$smoke_root/observe_after_forced_stop_request.json"
+post_stop_observe_response="$smoke_root/observe_after_forced_stop_response.json"
 shutdown_response="$smoke_root/shutdown_response.json"
 server_stdout="$smoke_root/server.stdout.log"
 server_stderr="$smoke_root/server.stderr.log"
@@ -58,6 +62,7 @@ polls="${ORQUESTA_GOAL_FIRST_SMOKE_POLLS:-120}"
 sleep_seconds="${ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS:-5}"
 goal_backend="${ORQUESTA_CODEX_GOAL_BACKEND:-app_server_tmux}"
 high_consumption_mode="${ORQUESTA_GOAL_FIRST_SMOKE_HIGH_CONSUMPTION_MODE:-0}"
+forced_stop_mode="${SMOKE_GOAL_FIRST_FORCED_STOP_MODE:-0}"
 
 cleanup() {
   smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 25 "$runtime_dir"
@@ -462,6 +467,8 @@ assert_app_server_tmux_shutdown_ready() {
     return 0
   fi
   local owner_file session_name pane_pid socket_path shutdown_status shutdown_ready exit_pending shutdown_pid app_processes_alive
+  pane_pid=""
+  socket_path=""
   owner_file="$(find_tmux_owner_file || true)"
   if [[ -n "$owner_file" ]]; then
     session_name="$(json_owner_get "$owner_file" "session_name")"
@@ -596,6 +603,7 @@ fail_after_app_server_tmux_shutdown_ready() {
 
 shutdown_high_consumption_smoke() {
   local owner_file socket_path app_processes_alive
+  socket_path=""
   owner_file="$(find_tmux_owner_file || true)"
   if [[ -n "$owner_file" ]]; then
     socket_path="$(find_tmux_socket_for_owner "$owner_file")"
@@ -623,6 +631,106 @@ shutdown_high_consumption_smoke() {
     exit 1
   fi
   echo "app_server_tmux_processes_alive=0"
+}
+
+run_forced_stop_smoke() {
+  local control_status control_estado control_status_value control_final_status control_goal_status_after
+  local post_stop_observe_status post_stop_goal_status post_stop_closure_status post_stop_recommended_action
+
+  cat >"$control_payload" <<JSON
+{
+  "request_id": "$request_id-run-control-forced-stop",
+  "correlation_id": "$request_id-run-control-forced-stop",
+  "action": "stop",
+  "run_ref": "$run_ref",
+  "requested_by": "smoke_goal_first_forced_stop_backend_real",
+  "reason": "smoke forced stop backend vivo tras alto consumo",
+  "forced": true,
+  "evidence_refs": ["evidence-ref-smoke-goal-first-forced-stop-backend-real"]
+}
+JSON
+  control_status="$(
+    curl -sS -m "$request_timeout" -o "$control_response" -w "%{http_code}" \
+      -X POST "$base_url/api/v0/runs/control" \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json" \
+      -H "X-Correlation-ID: $request_id-run-control-forced-stop" \
+      --data-binary "@$control_payload"
+  )"
+  echo "POST /api/v0/runs/control forced stop -> HTTP $control_status"
+  if [[ "$control_status" -lt 200 || "$control_status" -gt 299 ]]; then
+    echo "runs/control forced stop no devolvio 2xx:" >&2
+    smoke_print_file_excerpt "$control_response"
+    fail_after_app_server_tmux_shutdown_ready 1
+  fi
+
+  control_estado="$(json_get "$control_response" "estado")"
+  control_status_value="$(json_get "$control_response" "status")"
+  control_final_status="$(json_get "$control_response" "final_status")"
+  control_goal_status_after="$(json_get "$control_response" "goal_status_after")"
+  echo "run_control_estado=$control_estado"
+  echo "run_control_status=$control_status_value"
+  echo "run_control_final_status=$control_final_status"
+  echo "run_control_goal_status_after=$control_goal_status_after"
+  if [[ "$control_estado" != "ok" ||
+    "$control_status_value" != "stopped" ||
+    "$control_final_status" != "stopped" ||
+    "$control_goal_status_after" == "running" ]]; then
+    echo "runs/control forced stop no confirmo estado terminal seguro:" >&2
+    smoke_print_file_excerpt "$control_response"
+    fail_after_app_server_tmux_shutdown_ready 1
+  fi
+
+  cat >"$post_stop_observe_payload" <<JSON
+{
+  "request_id": "$request_id-observe-after-forced-stop",
+  "correlation_id": "$request_id-observe-after-forced-stop",
+  "run_ref": "$run_ref",
+  "requested_by": "smoke-goal-first-forced-stop-backend-real"
+}
+JSON
+  post_stop_observe_status="$(
+    curl -sS -m "$request_timeout" -o "$post_stop_observe_response" -w "%{http_code}" \
+      -X POST "$base_url/api/v0/apps/director/goal/observe" \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json" \
+      -H "X-Correlation-ID: $request_id-observe-after-forced-stop" \
+      --data-binary "@$post_stop_observe_payload"
+  )"
+  echo "POST /api/v0/apps/director/goal/observe after forced stop -> HTTP $post_stop_observe_status"
+  if [[ "$post_stop_observe_status" != "200" && "$post_stop_observe_status" != "504" ]]; then
+    echo "observe posterior a forced stop devolvio HTTP inesperado:" >&2
+    smoke_print_file_excerpt "$post_stop_observe_response"
+    fail_after_app_server_tmux_shutdown_ready 1
+  fi
+  post_stop_goal_status="$(json_get "$post_stop_observe_response" "goal_status")"
+  post_stop_closure_status="$(json_get "$post_stop_observe_response" "closure_status")"
+  post_stop_recommended_action="$(json_get "$post_stop_observe_response" "recommended_action")"
+  echo "observe_after_forced_stop_goal_status=$post_stop_goal_status"
+  echo "observe_after_forced_stop_closure_status=$post_stop_closure_status"
+  echo "observe_after_forced_stop_recommended_action=$post_stop_recommended_action"
+  if [[ "$post_stop_goal_status" == "running" || "$post_stop_goal_status" != "blocked" ]]; then
+    echo "observe posterior a forced stop publico estado no terminal replanificable:" >&2
+    smoke_print_file_excerpt "$post_stop_observe_response"
+    fail_after_app_server_tmux_shutdown_ready 1
+  fi
+  if ! json_contains_string "$post_stop_observe_response" "evidence-ref-observe-goal-run-control-terminal" &&
+    ! json_contains_string "$post_stop_observe_response" "evidence-ref-run-control-goal-forced-stop-terminal" &&
+    ! json_contains_string "$post_stop_observe_response" "evidence-ref-run-control-goal-forced-terminal-reconciled" &&
+    ! json_contains_string "$post_stop_observe_response" "evidence-ref-run-control-terminal-after-goal-forced-stop" &&
+    ! json_contains_string "$post_stop_observe_response" "evidence-ref-run-control-terminal-after-goal-reconcile"; then
+    echo "observe posterior a forced stop no conserva evidencia terminal de RunControl:" >&2
+    smoke_print_file_excerpt "$post_stop_observe_response"
+    fail_after_app_server_tmux_shutdown_ready 1
+  fi
+
+  echo "smoke_goal_first_forced_stop_backend_real=ok"
+  echo "run_control_status=$control_status_value"
+  echo "run_control_final_status=$control_final_status"
+  echo "run_control_goal_status_after=$control_goal_status_after"
+  shutdown_high_consumption_smoke
+  echo "smoke_root=$smoke_root"
+  exit 0
 }
 
 bug088_second_artifact_exists() {
@@ -958,6 +1066,9 @@ JSON
     json_contains_string "$observe_response" "evidence-ref-goal-observer-high-consumption-stop-requested" &&
     { json_contains_string "$observe_response" "evidence-ref-goal-materialized-partial-artifacts-written" ||
       bug088_second_artifact_exists; }; then
+    if [[ "$forced_stop_mode" == "1" ]]; then
+      run_forced_stop_smoke
+    fi
     terminal="bug088_second_artifact"
     break
   fi
@@ -966,6 +1077,11 @@ JSON
       { json_contains_string "$observe_response" "checkpoint_only_high_consumption" ||
         json_contains_string "$observe_response" "goal_active_no_checkpoint_high_consumption"; } &&
       json_contains_string "$observe_response" "replan_narrow_context"; then
+      if [[ "$forced_stop_mode" == "1" ]]; then
+        echo "forced-stop smoke no encontro backend vivo antes de replan alto consumo:" >&2
+        smoke_print_file_excerpt "$observe_response"
+        fail_after_app_server_tmux_shutdown_ready 1
+      fi
       terminal="bug088_replan"
       break
     fi

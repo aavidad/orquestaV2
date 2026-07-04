@@ -628,3 +628,67 @@ Decision operativa:
 Se permite limpieza manual del runtime temporal y desbloqueo directo sobre la
 app Sueldos, conservando los cambios parciales de Orquesta que sean utiles y
 sin tocar fuera de `generated-apps/mapa-de-gasto-publico`.
+
+## Cierre posterior del forced stop
+
+Continuacion Codex 2026-07-04 noche 11:
+
+La ruta bloqueante de Sueldos queda reproducida y cerrada con smoke real
+aislado en Orquesta:
+
+```text
+script=./scripts/smoke_goal_first_forced_stop_backend_real.sh
+smoke_goal_first_forced_stop_backend_real=ok
+run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-116f51fcff09efa9aa525ee7dfd94ce7
+goal_ref=goal-ref-app-director-run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-116f51fcff09efa9aa525ee7dfd94ce7
+external_goal_ref=019f2c28-d0c3-7551-9972-dcba0f3daeb2
+```
+
+Resultado validado:
+
+```text
+runs/control forced stop -> HTTP 200
+run_control_estado=ok
+run_control_status=stopped
+run_control_final_status=stopped
+run_control_goal_status_after=blocked
+observe_after_forced_stop_goal_status=blocked
+observe_after_forced_stop_closure_status=blocked
+observe_after_forced_stop_recommended_action=replan
+app_server_tmux_processes_alive=0
+```
+
+Evidencia retenida saneada:
+
+```text
+smoke_root=/tmp/orquesta-goal-first-app-server.Sc7e7K
+```
+
+Se borraron del temporal retenido `runtime/goal-srv/codex-home` y
+`bin/orquesta-server`; quedan JSON/logs/estado/artefactos compactos.
+Comprobacion posterior sin `orquesta-server run`, sin `codex app-server` y sin
+tmux `orquesta-goal-*`.
+
+Cambios de cierre:
+
+- `runs/control` completa forced stop si el observer ya dejo el goal en
+  estado terminal/rework (`blocked`, `invalid` o cierre terminal), en vez de
+  dejar `stop_requested`.
+- El backend `app_server_tmux` expone shutdown forzado especifico y usa un
+  timeout fresco para limpiar proceso/socket aunque el wait del pane haya
+  agotado plazo.
+- El smoke real valida control terminal y observe posterior antes de aceptar el
+  cierre.
+
+Verificacion:
+
+```text
+go test -count=1 ./...
+git diff --check
+smoke real forced stop backend vivo en verde
+```
+
+Esta nota cierra la ruta Sueldos de `BUG-ORQ-20260704-165`. Los residuales
+amplios de `status/observe` lento y coordinacion automatica completa de
+shutdown/backend/checkpoint/stop/cancel/wait siguen documentados en el
+inventario vivo, no en esta incidencia.
