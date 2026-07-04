@@ -306,3 +306,49 @@ Orden sugerido: TAREA-1 sola primero (toca la cola idle). Despues 2+3 en
 paralelo (eficiencia) y 4+5 en paralelo (residuales). TAREA-6 en cualquier
 hueco. Al terminar todo: informe en bitacora con SHAs y estado del inventario;
 los 6 bugs abiertos deberian quedar en 0-2 filas con residual justificado.
+
+### TAREA-7: wizard de programacion conversacional (orden del operador 2026-07-04)
+
+Peticion textual del operador: "necesito un wizard de programacion que me
+consulte para llegar a una app completa, no solo un formulario. Debe dar
+siempre las mejores opciones (incluso con sugerencias) y preguntarme por los
+huecos que no he especificado".
+
+Base existente (NO partir de cero): sesion de intake guiado en
+`modulos/orquesta-web/nueva_app_intake_session_v0.go` con `PendingQuestions`
+y `RecommendedQuestions` (hoy: listas planas de nombres de campo). El wizard
+la evoluciona:
+
+1. **Pregunta rica por hueco**: cada turno devuelve, por cada hueco detectado,
+   un objeto pregunta con: texto de la pregunta (i18n es/en), por que importa,
+   y 2-4 OPCIONES concretas derivadas de los catalogos ya validados por la
+   factory (tipo_app, datos.storage.tipo, deploy.target, calidad, i18n...),
+   con UNA marcada `recommended=true` y su justificacion breve. Siempre se
+   acepta ademas texto libre.
+2. **Sugerencias proactivas**: el wizard propone la mejor opcion para cada
+   hueco segun el contexto ya respondido (ej.: tipo_app=web + datos con
+   fuentes publicas -> storage `mixta` recomendado). Debe existir la accion
+   "aceptar todas las recomendaciones" que completa el spec de una vez.
+3. **Huecos cruzados, no solo campos vacios**: reglas de coherencia que
+   pregunten cuando falta algo implicito: db_required sin storage;
+   integraciones declaradas sin auth/criticidad; app movil sin plataformas;
+   objetivo que menciona datos externos sin fuentes; deploy sin target
+   compatible con tipo_app. Cada regla con test focal.
+4. **Cierre verificable**: el wizard termina cuando el `AppSpecRequestV0`
+   compuesto pasa la validacion de la factory Y no quedan huecos de
+   importancia alta. Entonces ofrece resumen final + lanzamiento directo por
+   `/api/v0/apps/director` (goal_first) reutilizando el contrato existente.
+5. **Superficies**: endpoint HTTP POST (evolucion del intake guiado actual),
+   tool MCP equivalente, y render web usable. Todo i18n por catalogo con test
+   de propiedad (patron `nueva_app_i18n_owner_v0_test.go`).
+
+Write-set: modulos/orquesta-web, modulos/orquesta-app-director-intake,
+modulos/orquesta-mcp (tool nueva), modulos/orquesta-app-gateway (ruta),
+modulos/orquesta-i18n-docs, docs. DISJUNTO de TAREA-1..6: puede ir en
+paralelo desde ya.
+Tests: go test ./modulos/orquesta-web ./modulos/orquesta-app-director-intake
+./modulos/orquesta-mcp ./modulos/orquesta-app-gateway
+Criterio de aceptacion global: una sesion de wizard simulada en test parte de
+solo `nombre+objetivo` y llega a spec completo valido en <=6 turnos usando
+recomendaciones; y una segunda sesion detecta al menos 3 huecos cruzados de
+los listados arriba.
