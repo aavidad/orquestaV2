@@ -184,6 +184,69 @@ func TestCodexStackV0OPESGoalFirstLifecycleAsientaDerivadosYCierraRegistroFinalC
 	}
 }
 
+func TestCodexStackV0OPESGoalFirstArtifactQualityHTMLDerivadoReworkYPassV0(t *testing.T) {
+	stack, observer, launcher, domainWork := buildExternalWorkGoalFirstDomainDeliveryStackWithExecutorForTestV0(t)
+	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+
+	badHTMLSubmission := runOPESGoalFirstSequenceWorkAndSubmitForTestV0(
+		t,
+		stack,
+		observer,
+		launcher,
+		domainWork,
+		"generate_html_site",
+		"job-ref-opes-aq-b",
+		opesGoalFirstArtifactQualityHTMLArtifactJSONForTestV0(false),
+	)
+	badResult := produceOPESCausalJobsFromStackSubmissionsForTestV0(t, creator, badHTMLSubmission)
+	badUpdate := opesDirectorRequestedWorkKindForStackTestV0(t, badResult.RequestedJobs, "update_topic_registry")
+	if !domainWorkFieldValueForTestV0(badUpdate.InputFields, "registry_action", "update") ||
+		!domainWorkFieldValueForTestV0(badUpdate.InputFields, "proposed_status", "pendiente_rework_artifact_quality") ||
+		!domainWorkFieldValueForTestV0(badUpdate.InputFields, "operational_status", "needs_rework") ||
+		!domainWorkFieldContainsValuesForTestV0(badUpdate.InputFields, "pending_refs", []string{"artifact-quality-needs-rework"}) ||
+		!domainWorkFieldValueForTestV0(badUpdate.InputFields, "artifact_quality_status", "needs_rework") ||
+		!domainWorkFieldContainsValuesForTestV0(badUpdate.InputFields, "artifact_quality_issue_refs", []string{
+			"opes_artifact_html_topic_pages_required",
+			"opes_artifact_html_validation_required",
+		}) ||
+		!domainWorkFieldValueForTestV0(badUpdate.InputFields, "settlement_status", "needs_rework") ||
+		!domainWorkFieldValueForTestV0(badUpdate.InputFields, "settlement_scope", "artifact_quality") ||
+		!domainWorkFieldValueForTestV0(badUpdate.InputFields, "settlement_reason", "artifact_quality_contract_failed") ||
+		!domainWorkFieldContainsValuesForTestV0(badUpdate.InputFields, "next_required_work_kinds", []string{"review_director_consolidation"}) {
+		t.Fatalf("HTML goal-first sin contrato artifact quality debe quedar en rework: %+v", badUpdate)
+	}
+	badFollowup := opesDirectorRequestedWorkKindForStackTestV0(t, badResult.RequestedJobs, "review_director_consolidation")
+	if !domainWorkFieldValueForTestV0(badFollowup.InputFields, "rework_reason", "artifact_quality_contract_failed") ||
+		!domainWorkFieldContainsValuesForTestV0(badFollowup.InputFields, "artifact_quality_missing_refs", []string{"artifact-quality-needs-rework"}) ||
+		!domainWorkFieldValueForTestV0(badFollowup.InputFields, "recommended_action", "review_artifact_quality") ||
+		!domainWorkFieldValueForTestV0(badFollowup.InputFields, "publication_status", "not_publicable_artifact_quality_failed") {
+		t.Fatalf("HTML goal-first sin contrato artifact quality debe crear followup causal: %+v", badFollowup)
+	}
+
+	goodHTMLSubmission := runOPESGoalFirstSequenceWorkAndSubmitForTestV0(
+		t,
+		stack,
+		observer,
+		launcher,
+		domainWork,
+		"generate_html_site",
+		"job-ref-opes-aq-g",
+		opesGoalFirstArtifactQualityHTMLArtifactJSONForTestV0(true),
+	)
+	goodResult := produceOPESCausalJobsFromStackSubmissionsForTestV0(t, creator, goodHTMLSubmission)
+	goodUpdate := opesDirectorRequestedWorkKindForStackTestV0(t, goodResult.RequestedJobs, "update_topic_registry")
+	if !domainWorkFieldValueForTestV0(goodUpdate.InputFields, "registry_action", "update") ||
+		!domainWorkFieldValueForTestV0(goodUpdate.InputFields, "artifact_quality_status", "complete") ||
+		!domainWorkFieldValueForTestV0(goodUpdate.InputFields, "artifact_quality_issue_count", "0") ||
+		domainWorkFieldContainsValuesForTestV0(goodUpdate.InputFields, "pending_refs", []string{"artifact-quality-needs-rework"}) ||
+		domainWorkFieldValueForTestV0(goodUpdate.InputFields, "settlement_reason", "artifact_quality_contract_failed") {
+		t.Fatalf("HTML goal-first con contrato artifact quality no debe crear rework: %+v", goodUpdate)
+	}
+	if _, ok := opesDirectorMaybeRequestedWorkKindForStackTestV0(goodResult.RequestedJobs, "review_director_consolidation"); ok {
+		t.Fatalf("HTML goal-first con contrato artifact quality no debe crear followup de rework: %+v", goodResult.RequestedJobs)
+	}
+}
+
 func buildOPESGoalFirstSequenceRunRequestForTestV0(
 	t *testing.T,
 	workKind string,
@@ -370,6 +433,36 @@ func opesGoalFirstLifecycleFinalArtifactJSONForTestV0(includeTopicQuality bool) 
 					"qa":"opes-final-evidence:qa:lifecycle"
 				}
 			}
+		}
+	}`
+}
+
+func opesGoalFirstArtifactQualityHTMLArtifactJSONForTestV0(valid bool) string {
+	if valid {
+		return `{
+			"artifact_type":"html_site",
+			"payload_json":{
+				"course_id":"course-ref-opes-artifact-quality-001",
+				"topic_id":"tema-artifact-quality-html-good",
+				"source_work_kind":"generate_html_site",
+				"status":"complete",
+				"evidence_refs":[
+					"opes-final-evidence:html_site_publicable",
+					"html_validation_report"
+				],
+				"html_topic_pages_manifest":"html/topic_pages_manifest.json",
+				"html_validation_report":"validacion/html_links.json"
+			}
+		}`
+	}
+	return `{
+		"artifact_type":"html_site",
+		"payload_json":{
+			"course_id":"course-ref-opes-artifact-quality-001",
+			"topic_id":"tema-artifact-quality-html-bad",
+			"source_work_kind":"generate_html_site",
+			"status":"complete",
+			"evidence_refs":["opes-final-evidence:html_site_publicable"]
 		}
 	}`
 }

@@ -229,6 +229,52 @@ func TestRequestServerShutdownV0ErrorTransporteConsultaStatusAccionableV0(t *tes
 	}
 }
 
+func TestRequestServerShutdownV0PostColgadoConsultaStatusAccionableV0(t *testing.T) {
+	withShutdownClientRequestTimeoutForTestV0(t, 20*time.Millisecond)
+	shutdownCalls := 0
+	statusCalls := 0
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v0/server/shutdown":
+			shutdownCalls++
+			time.Sleep(60 * time.Millisecond)
+		case orquestaserver.ServerStatusEndpointV0:
+			statusCalls++
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(orquestaserver.NewServerPublicStatusV0(orquestaserver.StateV0{
+				Status:                  "running",
+				ShutdownInProgress:      true,
+				ShutdownStatus:          "backend_still_running",
+				ShutdownReady:           false,
+				ShutdownActiveWorkCount: 1,
+				ShutdownActiveWorkRefs:  []string{"shutdown-active-work-goal-backend-goal-ref-post-hang"},
+			}))
+		default:
+			t.Fatalf("request inesperada: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	started := time.Now()
+	err := requestServerShutdownV0(strings.TrimPrefix(server.URL, "http://"), serverShutdownClientOptionsV0{Forced: true, Reason: "test force con POST colgado"})
+
+	if time.Since(started) > time.Second {
+		t.Fatalf("POST colgado no debe esperar timeout global")
+	}
+	if shutdownCalls != 1 || statusCalls != 1 {
+		t.Fatalf("calls shutdown=%d status=%d", shutdownCalls, statusCalls)
+	}
+	if err == nil ||
+		!strings.Contains(err.Error(), "shutdown_not_ready status=backend_still_running") ||
+		!strings.Contains(err.Error(), "active_work=1") ||
+		!strings.Contains(err.Error(), "shutdown-active-work-goal-backend-goal-ref-post-hang") {
+		t.Fatalf("err=%v", err)
+	}
+	if shutdownRequestErrorAllowsSignalV0(err, orquestaserver.ServerPublicStatusV0{}, true) {
+		t.Fatalf("force no debe permitir signal si el error ya conserva active_work")
+	}
+}
+
 func TestRequestServerShutdownV0RechazaJSONConTrailingData(t *testing.T) {
 	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -580,6 +626,67 @@ func TestWaitServerShutdownReadyV0CortaTrasRepostNoRecuperableV0(t *testing.T) {
 	}
 	if statusCalls != 0 {
 		t.Fatalf("statusCalls=%d, no debe consultar status tras cuerpo shutdown no recuperable", statusCalls)
+	}
+}
+
+func TestWaitServerShutdownReadyV0RepostColgadoRespetaDeadlineYDevuelveStatusAccionableV0(t *testing.T) {
+	withShutdownClientRequestTimeoutForTestV0(t, 20*time.Millisecond)
+	shutdownCalls := 0
+	statusCalls := 0
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v0/server/shutdown":
+			shutdownCalls++
+			time.Sleep(60 * time.Millisecond)
+		case orquestaserver.ServerStatusEndpointV0:
+			statusCalls++
+			_ = json.NewEncoder(w).Encode(orquestaserver.ServerPublicStatusV0{
+				Status:                  "running",
+				ShutdownInProgress:      true,
+				ShutdownStatus:          "backend_still_running",
+				ShutdownReady:           false,
+				ShutdownActiveWorkCount: 1,
+				ShutdownActiveWorkRefs:  []string{"shutdown-active-work-goal-backend-goal-ref-repost-hang"},
+			})
+		default:
+			t.Fatalf("path inesperado: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	started := time.Now()
+	err := waitServerShutdownReadyV0(
+		strings.TrimPrefix(server.URL, "http://"),
+		serverShutdownClientOptionsV0{Forced: true},
+		serverShutdownClientResultV0{
+			Estado:          "ok",
+			Status:          "backend_still_running",
+			ShutdownReady:   false,
+			ActiveWorkCount: 1,
+			ActiveWorkRefs:  []string{"shutdown-active-work-goal-backend-goal-ref-repost-hang"},
+		},
+		serverShutdownClientRequestIdentityV0{
+			requestID:      "request-test-repost-hang",
+			correlationID:  "corr-test-repost-hang",
+			idempotencyKey: "idem-test-repost-hang",
+			reason:         "test repost hang",
+		},
+		70*time.Millisecond,
+		5*time.Millisecond,
+	)
+
+	if time.Since(started) > time.Second {
+		t.Fatalf("rePOST colgado no debe esperar timeout global")
+	}
+	if err == nil ||
+		!strings.Contains(err.Error(), "shutdown_not_ready status=backend_still_running") ||
+		!strings.Contains(err.Error(), "active_work=1") ||
+		!strings.Contains(err.Error(), "shutdown-active-work-goal-backend-goal-ref-repost-hang") {
+		t.Fatalf("err=%v", err)
+	}
+	if shutdownCalls == 0 || statusCalls == 0 {
+		t.Fatalf("calls shutdown=%d status=%d", shutdownCalls, statusCalls)
 	}
 }
 
@@ -993,4 +1100,13 @@ func shutdownClientStringRefsContainForTestV0(values []string, want string) bool
 		}
 	}
 	return false
+}
+
+func withShutdownClientRequestTimeoutForTestV0(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	previous := shutdownClientRequestTimeoutV0
+	shutdownClientRequestTimeoutV0 = timeout
+	t.Cleanup(func() {
+		shutdownClientRequestTimeoutV0 = previous
+	})
 }

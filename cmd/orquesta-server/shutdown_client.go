@@ -50,6 +50,8 @@ const (
 	defaultShutdownClientWaitPollV0    = 500 * time.Millisecond
 )
 
+var shutdownClientRequestTimeoutV0 = 120 * time.Second
+
 func requestServerShutdownV0(addr string, options serverShutdownClientOptionsV0) error {
 	addr = strings.TrimSpace(addr)
 	if addr == "" {
@@ -119,6 +121,29 @@ func postServerShutdownRequestV0(
 	idempotencyKey string,
 	reason string,
 ) (serverShutdownClientResultV0, error) {
+	return postServerShutdownRequestWithTimeoutV0(
+		addr,
+		options,
+		requestID,
+		correlationID,
+		idempotencyKey,
+		reason,
+		shutdownClientRequestTimeoutV0,
+	)
+}
+
+func postServerShutdownRequestWithTimeoutV0(
+	addr string,
+	options serverShutdownClientOptionsV0,
+	requestID string,
+	correlationID string,
+	idempotencyKey string,
+	reason string,
+	timeout time.Duration,
+) (serverShutdownClientResultV0, error) {
+	if timeout <= 0 {
+		timeout = shutdownClientRequestTimeoutV0
+	}
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(map[string]any{
 		"request_id":            requestID,
@@ -135,7 +160,7 @@ func postServerShutdownRequestV0(
 	}); err != nil {
 		return serverShutdownClientResultV0{}, fmt.Errorf("shutdown_request_encode")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	baseURL, err := commandRESTBaseURLFromAddrV0(addr)
 	if err != nil {
@@ -157,7 +182,7 @@ func postServerShutdownRequestV0(
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set(publicidentity.PublicCorrelationHeaderV0, correlationID)
 	request.Header.Set(publicidentity.PublicIdempotencyKeyHeaderV0, idempotencyKey)
-	client := commandHTTPClientWithRedirectPolicyV0(120*time.Second, baseURL)
+	client := commandHTTPClientWithRedirectPolicyV0(timeout, baseURL)
 	response, err := client.Do(request)
 	if err != nil {
 		return serverShutdownClientResultV0{}, errors.New(shutdownHTTPErrorCodeV0(ctx, err))
@@ -336,14 +361,19 @@ func waitServerShutdownReadyV0(
 	deadline := time.Now().Add(timeout)
 	last := initial
 	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return shutdownClientNotReadyErrorV0(last)
+		}
 		if shutdownClientResultCanWaitV0(last) {
-			if refreshed, err := postServerShutdownRequestV0(
+			if refreshed, err := postServerShutdownRequestWithTimeoutV0(
 				addr,
 				options,
 				identity.requestID,
 				identity.correlationID,
 				identity.idempotencyKey,
 				identity.reason,
+				shutdownClientPostAttemptTimeoutV0(remaining),
 			); err == nil {
 				last = refreshed
 				if shutdownClientResultReadyForSignalV0(last) {
@@ -367,8 +397,22 @@ func waitServerShutdownReadyV0(
 		if !time.Now().Before(deadline) {
 			return shutdownClientNotReadyErrorV0(last)
 		}
-		time.Sleep(pollInterval)
+		sleepFor := pollInterval
+		if remaining := time.Until(deadline); remaining < sleepFor {
+			sleepFor = remaining
+		}
+		if sleepFor > 0 {
+			time.Sleep(sleepFor)
+		}
 	}
+}
+
+func shutdownClientPostAttemptTimeoutV0(remaining time.Duration) time.Duration {
+	timeout := shutdownClientRequestTimeoutV0
+	if timeout <= 0 || timeout > remaining {
+		return remaining
+	}
+	return timeout
 }
 
 func getServerPublicStatusForShutdownV0(addr string) (orquestaserver.ServerPublicStatusV0, error) {

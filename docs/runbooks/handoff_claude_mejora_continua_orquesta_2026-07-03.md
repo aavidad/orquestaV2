@@ -513,6 +513,76 @@ Pendiente para no sobrecerrar:
 - `BUG-079`: soporte runtime/proveedor para limite duro pre-tool stdout o
   mediacion del app-server, mas smoke largo con proveedor real.
 
+## Actualizacion Codex 2026-07-04 noche 33
+
+Avance de este bloque:
+
+- `BUG-ORQ-20260701-075` queda reducido con un smoke offline transversal en
+  `orquesta-app-codex-stack`.
+- El nuevo test
+  `TestCodexStackV0OPESGoalFirstArtifactQualityHTMLDerivadoReworkYPassV0`
+  cubre `/api/v0/external-work/run` fake, goal-first fake,
+  `ObserveAppDirectorGoalV0`, submit DomainWork y productor OPES.
+- Caso negativo: HTML terminal con evidencia nominal
+  `opes-final-evidence:html_site_publicable` pero sin
+  `html_topic_pages_manifest` ni `html_validation_report` genera
+  `artifact_quality_status=needs_rework`,
+  `settlement_reason=artifact_quality_contract_failed` y followup
+  `review_director_consolidation` con
+  `recommended_action=review_artifact_quality`.
+- Caso positivo: HTML con manifest y reporte estructurado queda
+  `artifact_quality_status=complete`, `artifact_quality_issue_count=0` y no
+  crea followup de rework.
+
+Archivos tocados en esta tanda:
+
+- `modulos/orquesta-app-codex-stack/external_work_goal_first_opes_sequence_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`
+
+Prueba focal ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackV0OPESGoalFirstArtifactQualityHTMLDerivadoReworkYPassV0'`
+
+No sobrecerrar:
+
+- No prueba OPES temporal real, proveedor real, servidor real, ausencia de
+  reescritura tardia ni calidad semantica/links HTML reales.
+- Solo prueba pipeline offline stack -> DomainWork -> OPES director para
+  `artifact_quality_failed/pass`.
+
+## Actualizacion Codex 2026-07-04 noche 34
+
+Avance de este bloque:
+
+- `BUG-ORQ-20260704-165` y `BUG-ORQ-20260701-065` quedan reducidos en el
+  cliente CLI shutdown.
+- `postServerShutdownRequestV0` usa ahora un timeout por intento, y
+  `waitServerShutdownReadyV0` acota cada re-POST al deadline restante.
+- Si el POST inicial o un re-POST de `/api/v0/server/shutdown` se cuelga, el
+  cliente consulta `/status` y devuelve `shutdown_not_ready` con
+  `active_work_refs` compactas. No permite señal forzada si el status conserva
+  active work.
+
+Archivos tocados en esta tanda:
+
+- `cmd/orquesta-server/shutdown_client.go`
+- `cmd/orquesta-server/shutdown_client_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`
+
+Pruebas focales ejecutadas:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'TestRequestServerShutdownV0(PostColgadoConsultaStatusAccionable|ErrorTransporteConsultaStatusAccionable|CortaEsperaSiStatusBackendTieneRunsPendientes)|TestWaitServerShutdownReadyV0(RepostColgadoRespetaDeadlineYDevuelveStatusAccionable|CortaTrasRepostNoRecuperable)|TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado'`
+
+No sobrecerrar:
+
+- Esto cierra solo el subcaso CLI: no quedarse sin cuerpo accionable si el POST
+  shutdown cuelga y `/status` conserva active work.
+- `BUG-165/065` siguen abiertos hasta smoke real amplio con proveedor/status
+  lento y coordinacion automatica completa
+  `backend/checkpoint/stop/cancel/wait`.
+
 ## Checklist de Claude
 
 1. Revisar `git status --short` y separar cambios de cada frente.
