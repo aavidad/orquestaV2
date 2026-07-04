@@ -3544,3 +3544,62 @@ Estado para el servidor remoto:
 - Siguiente parche recomendado: test focal TAREA-10.3; despues TAREA-10.2
   (politica autonoma de paralelismo/coste) y TAREA-10.1 (absorber cierre real
   del wizard viejo y eliminar duplicado).
+
+## Actualizacion Codex 2026-07-04 noche 32
+
+TAREA-10.3 verificada con codigo, test y smoke vivo:
+
+- Anado `TestBuildStackFromEnvV0CableaBrokerContextoEnMCPHTTPYGoalV0` en
+  `cmd/orquesta-server/stack_wiring_test.go`.
+- El test construye `buildStackFromEnvWithGoalBackendV0` desde env real con
+  `ProjectWorkDir` temporal, crea fixture `cmd/demo/service.go`, comprueba
+  `stack.CodeContext`, ejecuta el binding MCP `CodebaseQuery`, monta
+  `buildServerAppHandlerV0`, hace POST a `/api/v0/codebase/query` y lanza un
+  goal fake de codigo verificando `code_context_prepared:repo_map:*` y
+  `ContextBudget.CodeContextCacheStatus`.
+- Smoke Orquesta real temporal: servidor aislado con
+  `ORQUESTA_SERVER_ADDR=127.0.0.1:0`,
+  `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DISABLED=true`,
+  `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false` y
+  `ORQUESTA_OPES_REGISTRY_FINALPKG_ENABLED=false`; `POST
+  /api/v0/codebase/query` con `query_kind=repo_map`,
+  `query=CodebaseWiringDemoV0`, `scope=["cmd/demo"]` -> HTTP 200,
+  `estado=ok`, `provider_kind=fallback_rg`, `results=1`,
+  `cache_status=stored`.
+
+Verificacion:
+
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestBuildStackFromEnvV0CableaBrokerContextoEnMCPHTTPYGoalV0'` -> verde.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestBuildStackFromEnvV0CableaBrokerContextoEnMCPHTTPYGoalV0|TestBuildServerAppHandlerV0CodebaseQueryPublicoUsaBindingDirecto|TestServerCodeContext|TestCodeContextBroker'` -> verde.
+- `git diff --check` -> verde.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./...` -> verde.
+
+Estado: TAREA-10.3 queda cerrada para el cableado servidor/MCP/HTTP/goal. No
+rehacer el broker. Residual separado si producto lo exige: proyeccion de MCP
+local en `CODEX_HOME` aislado del agente, siempre pasando por el broker
+central.
+
+TAREA-10.1 avanzadilla de cierre del wizard nuevo:
+
+- Subagente read-only verifico que el wizard nuevo ya aplica rutas punteadas
+  mas ricas que el viejo (`integraciones.N.*`,
+  `datos.tipos_detallados.N.*`, `datos.fuentes.N.*`, `datos.storage.N.*`) via
+  `ApplyWebNuevaAppWizardAnswersV0` -> `ApplyDecisionV0`.
+- El cierre `SolicitarNuevaAppV0(draft, now)` no debe meterse directo en
+  `orquesta-web`; ya existe por puerto/adaptador: `RESTSolicitarNuevaAppClientV0`
+  contra `orquesta-factory-http`.
+- Anado `TestWizardNuevoListoCierraFactoryRealPorPuertoV0` en
+  `modulos/orquesta-web/nueva_app_wizard_rest_flow_v0_test.go`: crea sesion
+  wizard, acepta recomendaciones hasta `LaunchReady`, valida `SpecPreview`,
+  comprueba conector `calendar` preservado desde rutas punteadas, llama al
+  factory HTTP real por cliente REST y exige spec/backlog reales validos.
+
+Verificacion:
+
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-web -run 'TestWizardNuevoListoCierraFactoryRealPorPuertoV0|TestWizardAgendaDesdeSoloObjetivoV0|TestNuevaAppRESTFlowV0ValidaWebRESTFactory|TestNuevaAppIntakeGuidedResponseV0AplicaWizardAnswersV0'` -> verde.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-director-intake ./modulos/orquesta-factory-http -run 'Test(AdvanceAppDirectorIntakeWizardV0|ApplyWebNuevaAppIntake|WebNuevaAppIntakeSessionV0|NuevaAppIntakeGuided|Wizard|NuevaAppRESTFlow|AppSpecHTTPV0PostValido)'` -> verde.
+
+Estado: el hueco funcional "wizard nuevo listo -> cierre factory real" queda
+cubierto por test. No borrar aun `modulos/orquesta-app-director-intake` ni sus
+`wizard_*.go`: el modulo tiene consumidores historicos y el borrado exige
+deprecacion/refactor con evidencia propia.

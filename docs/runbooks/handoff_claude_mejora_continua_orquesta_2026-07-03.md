@@ -1881,3 +1881,50 @@ Aviso operativo: `scripts/bootstrap_agent_tooling.sh --status` marco
 `attention_required` por un `codebase-memory-mcp` vivo. No se paro desde Codex
 local porque parecia pertenecer a una sesion Claude activa. En el servidor
 remoto, revisar procesos vivos antes de lanzar smokes largos.
+
+## Actualizacion Codex 2026-07-04 noche 32
+
+TAREA-10.3 ya tiene evidencia integrada:
+
+- Nuevo test:
+  `TestBuildStackFromEnvV0CableaBrokerContextoEnMCPHTTPYGoalV0` en
+  `cmd/orquesta-server/stack_wiring_test.go`.
+- Cubre stack desde env, broker real `fallback_rg`, binding MCP
+  `CodebaseQuery`, handler HTTP `/api/v0/codebase/query` y precarga goal-first
+  `code_context_prepared:repo_map:*`.
+- Smoke Orquesta real temporal: `POST /api/v0/codebase/query` contra servidor
+  aislado -> HTTP 200, `estado=ok`, `provider_kind=fallback_rg`,
+  `results=1`, `cache_status=stored`.
+
+Comandos verdes:
+
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestBuildStackFromEnvV0CableaBrokerContextoEnMCPHTTPYGoalV0'`
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestBuildStackFromEnvV0CableaBrokerContextoEnMCPHTTPYGoalV0|TestBuildServerAppHandlerV0CodebaseQueryPublicoUsaBindingDirecto|TestServerCodeContext|TestCodeContextBroker'`
+- `git diff --check`
+- `GOFLAGS=-buildvcs=false go test -count=1 ./...`
+
+Para el siguiente agente: no reescribir `code_context_broker_v0.go`. TAREA-10.3
+queda cerrada para cableado servidor/MCP/HTTP/goal. Solo queda como posible
+frente separado la proyeccion MCP local dentro del `CODEX_HOME` aislado del
+agente, si se decide que la herramienta debe ser invocable sin HTTP; esa pieza
+debe seguir usando el broker central.
+
+TAREA-10.1 tambien tiene nueva evidencia parcial:
+
+- Nuevo test:
+  `TestWizardNuevoListoCierraFactoryRealPorPuertoV0` en
+  `modulos/orquesta-web/nueva_app_wizard_rest_flow_v0_test.go`.
+- Cubre sesion wizard nueva, `LaunchReady`, preview factory valida, rutas
+  punteadas de conector `calendar` preservadas y cierre real por puerto
+  `RESTSolicitarNuevaAppClientV0` contra `orquesta-factory-http`.
+- No se mete `SolicitarNuevaAppV0` directo en `orquesta-web`: se conserva la
+  frontera hexagonal web/cliente/adaptador factory.
+
+Comando verde:
+
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-web -run 'TestWizardNuevoListoCierraFactoryRealPorPuertoV0|TestWizardAgendaDesdeSoloObjetivoV0|TestNuevaAppRESTFlowV0ValidaWebRESTFactory|TestNuevaAppIntakeGuidedResponseV0AplicaWizardAnswersV0'`
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-app-director-intake ./modulos/orquesta-factory-http -run 'Test(AdvanceAppDirectorIntakeWizardV0|ApplyWebNuevaAppIntake|WebNuevaAppIntakeSessionV0|NuevaAppIntakeGuided|Wizard|NuevaAppRESTFlow|AppSpecHTTPV0PostValido)'`
+
+No borrar todavia `modulos/orquesta-app-director-intake` ni sus `wizard_*.go`:
+el modulo sigue importado por `orquesta-app-director-service`/`orquesta-mcp` y
+la retirada requiere deprecacion compatible o refactor con tests propios.

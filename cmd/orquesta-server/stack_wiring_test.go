@@ -1,18 +1,27 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
+	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestapersistence "orquesta/modulos/orquesta-persistence"
 	orquestarunfile "orquesta/modulos/orquesta-run-file"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
+	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 	orquestaserver "orquesta/modulos/orquesta-server"
 	orquestastatefile "orquesta/modulos/orquesta-state-file"
 )
@@ -343,6 +352,78 @@ func TestBuildStackFromEnvV0CableaRequiredTestRunnerOptIn(t *testing.T) {
 	}
 }
 
+func TestBuildStackFromEnvV0CableaBrokerContextoEnMCPHTTPYGoalV0(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	runtimeDir := filepath.Join(t.TempDir(), "runtime")
+	if err := writeServerCodeContextFixtureV0(projectDir); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envServerStateDirV0, stateDir)
+	t.Setenv(envCodexRuntimeWorkDirV0, runtimeDir)
+	t.Setenv(envCodexCommandV0, filepath.Join(projectDir, "codex-bin"))
+	t.Setenv(envOPESBaseURLV0, "")
+	t.Setenv("OPES_BASE_URL", "")
+	t.Setenv(envDomainWorkFileEnabledV0, "")
+	t.Setenv(envDomainWorkFileDirV0, "")
+
+	backend := &serverCodeContextGoalStarterForTestV0{}
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	stack, err := buildStackFromEnvWithGoalBackendV0(config, serverCodexGoalBackendV0{
+		Starter: backend,
+	})
+	if err != nil {
+		t.Fatalf("buildStackFromEnvWithGoalBackendV0: %v", err)
+	}
+	if stack.CodeContext == nil ||
+		stack.MCPTransportBindings.CodebaseQuery == nil {
+		t.Fatalf("broker de contexto no cableado: stack.CodeContext=%T binding=%T", stack.CodeContext, stack.MCPTransportBindings.CodebaseQuery)
+	}
+
+	mcpResult, err := stack.MCPTransportBindings.CodebaseQuery.Execute(
+		context.Background(),
+		serverCodeContextQueryForTestV0("request-ref-codebase-wiring-mcp"),
+	)
+	if err != nil {
+		t.Fatalf("CodebaseQuery.Execute: %v", err)
+	}
+	assertServerCodeContextResultV0(t, mcpResult)
+
+	handler, err := buildServerAppHandlerV0(stack)
+	if err != nil {
+		t.Fatalf("buildServerAppHandlerV0: %v", err)
+	}
+	httpResult := postServerCodeContextQueryForTestV0(t, handler, "request-ref-codebase-wiring-http")
+	assertServerCodeContextResultV0(t, httpResult)
+
+	receipt, err := stack.Ports.GoalLauncher.LaunchGoalWorkV0(context.Background(), orquestagoal.GoalWorkSpecV0{
+		GoalRef:      "goal-ref-codebase-wiring-001",
+		RunRef:       "run-ref-codebase-wiring-001",
+		ProjectRef:   "repo-ref-codebase-wiring",
+		Objective:    "Modificar el broker de contexto desde el stack real.",
+		DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+		WriteSet: []orquestagoal.GoalWriteScopeV0{{
+			Path:    "cmd/demo",
+			Purpose: "codigo de prueba del broker",
+		}},
+		RuleRefs: []orquestagoal.GoalRuleRefV0{{Ref: "AGENTS.md"}},
+	})
+	if err != nil {
+		t.Fatalf("LaunchGoalWorkV0: %v", err)
+	}
+	if receipt.ContextBudget.CodeContextCacheStatus == "" {
+		t.Fatalf("receipt sin cache_status de broker: %+v", receipt.ContextBudget)
+	}
+	if backend.calls != 1 ||
+		!serverGoalContextRefPrefixForTestV0(backend.packet.ContextRefs, "code_context_prepared:repo_map:") {
+		t.Fatalf("goal sin repo_map precargado: calls=%d packet=%+v", backend.calls, backend.packet)
+	}
+}
+
 func assertServerStackDurableStoresV0(
 	t *testing.T,
 	stack orquestaappcodexstack.StackV0,
@@ -368,4 +449,104 @@ func assertTypeV0[T any](t *testing.T, name string, value any) {
 	if _, ok := value.(T); !ok {
 		t.Fatalf("%s usa %T, debe usar %T", name, value, *new(T))
 	}
+}
+
+type serverCodeContextGoalStarterForTestV0 struct {
+	calls  int
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0
+}
+
+func (starter *serverCodeContextGoalStarterForTestV0) StartCodexGoalV0(
+	_ context.Context,
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+) (orquestaruntimecodexgoal.CodexGoalStartReceiptV0, error) {
+	starter.calls++
+	starter.packet = packet
+	return orquestaruntimecodexgoal.CodexGoalStartReceiptV0{
+		Status:          orquestagoal.GoalStatusRunningV0,
+		GoalRef:         packet.GoalRef,
+		ExternalGoalRef: "thread-ref-codebase-wiring-001",
+		EvidenceRefs:    []string{"evidence-ref-codebase-wiring-launch"},
+	}, nil
+}
+
+func writeServerCodeContextFixtureV0(root string) error {
+	path := filepath.Join(root, "cmd", "demo", "service.go")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(`package demo
+
+func CodebaseWiringDemoV0() string {
+	return "codebase wiring demo"
+}
+`), 0o644)
+}
+
+func serverCodeContextQueryForTestV0(requestRef string) orquestamcp.MCPCodebaseQueryToolInputV0 {
+	return orquestamcp.MCPCodebaseQueryToolInputV0{
+		SchemaVersion: orquestacontext.CodeContextQuerySchemaVersionV0,
+		RequestRef:    requestRef,
+		RepositoryRef: "repo-ref-codebase-wiring",
+		QueryKind:     orquestacontext.CodeContextQueryKindRepoMapV0,
+		Query:         "CodebaseWiringDemoV0",
+		Scope:         []string{"cmd/demo"},
+		MaxResults:    4,
+		MaxBytes:      4000,
+		RequestedBy:   "cmd-orquesta-server-stack-wiring-test",
+	}
+}
+
+func postServerCodeContextQueryForTestV0(
+	t *testing.T,
+	handler http.Handler,
+	requestRef string,
+) orquestamcp.MCPCodebaseQueryToolResultV0 {
+	t.Helper()
+	body, err := json.Marshal(serverCodeContextQueryForTestV0(requestRef))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, orquestamcp.MCPCodebaseQueryHTTPPathV0, bytes.NewReader(body))
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST %s status=%d body=%s", orquestamcp.MCPCodebaseQueryHTTPPathV0, rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPCodebaseQueryToolResultV0
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	return result
+}
+
+func assertServerCodeContextResultV0(t *testing.T, result orquestamcp.MCPCodebaseQueryToolResultV0) {
+	t.Helper()
+	if result.Estado != orquestacontext.CodeContextEstadoOKV0 ||
+		result.ProviderKind != orquestacontext.CodeContextProviderKindFallbackRGV0 ||
+		result.IndexerPolicy != orquestacontext.CodeContextProviderPolicyCentralOnlyV0 ||
+		len(result.Results) == 0 {
+		t.Fatalf("code context result inesperado: %+v", result)
+	}
+	found := false
+	for _, hit := range result.Results {
+		if strings.Contains(hit.Path, "cmd/demo/service.go") ||
+			strings.Contains(hit.Symbol, "CodebaseWiringDemoV0") ||
+			strings.Contains(hit.Snippet, "CodebaseWiringDemoV0") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("resultado no incluye fixture cmd/demo/service.go: %+v", result.Results)
+	}
+}
+
+func serverGoalContextRefPrefixForTestV0(refs []orquestagoal.GoalContextRefV0, prefix string) bool {
+	for _, ref := range refs {
+		if strings.HasPrefix(strings.TrimSpace(ref.Ref), prefix) {
+			return true
+		}
+	}
+	return false
 }

@@ -525,6 +525,14 @@ la TAREA-9: antes de borrar, clasificar "muerta-de-verdad" vs
    igual de sólido; absorber lo que falte con sus tests; después BORRAR el
    módulo viejo de wizard entero (no dejar dos wizards otra vez).
 
+   Estado Codex 2026-07-04 noche: el wizard nuevo ya cubre rutas punteadas
+   mas ricas que el viejo y queda probado el cierre "wizard listo -> factory
+   real" por puerto con TestWizardNuevoListoCierraFactoryRealPorPuertoV0.
+   Mantener frontera hexagonal: no llamar SolicitarNuevaAppV0 directo desde
+   orquesta-web. No borrar todavia modulos/orquesta-app-director-intake ni sus
+   wizard_*.go sin deprecacion/refactor, porque el modulo tiene consumidores
+   historicos; retirar solo con evidencia propia.
+
 10.2 Política autónoma de dirección (modulos/orquesta-orchestration-core/
    autonomous_director_policy.go + autonomous_quality_policy.go, ~31
    funciones): heurística completa que decide TeamSize, MaxParallelAgents,
@@ -543,6 +551,14 @@ la TAREA-9: antes de borrar, clasificar "muerta-de-verdad" vs
    leases, state dir desde project config) y nunca se llama en el arranque.
    La TAREA-2 AMPLIADA debe partir de aquí: conectar este constructor al
    stack del servidor y exponerlo como tool del goal, NO reescribirlo.
+
+   Estado Codex 2026-07-04 noche: el HEAD ya llama a
+   codeContextBrokerWiringFromEnvV0 desde el stack y queda probado por
+   TestBuildStackFromEnvV0CableaBrokerContextoEnMCPHTTPYGoalV0: stack desde
+   env, binding MCP, HTTP /api/v0/codebase/query y precarga goal-first
+   code_context_prepared. No reabrir salvo regresion. Residual separado:
+   proyeccion MCP local en CODEX_HOME aislado del agente si se exige invocacion
+   sin HTTP, siempre usando el broker central.
 
 Prioridad: 10.3 dentro de TAREA-2 (ya en cabeza); 10.2 junto a TAREA-3;
 10.1 al cerrar el wizard. Cada retoma con test focal y nota en bitácora.
