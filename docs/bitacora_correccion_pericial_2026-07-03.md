@@ -1131,3 +1131,64 @@ Pendientes reales para Claude:
   `work_kind`, aunque el caso terminal sin evidencia minima ya queda corregido.
 - `BUG-079` sigue abierto para enforcement runtime/proveedor de checkpoint
   temprano y limites preventivos de salida de herramientas.
+
+## Relevo director Codex 2026-07-04 noche
+
+Cambios integrados en este tramo:
+
+- `BUG-ORQ-20260701-075`: el director OPES ya no solo marca el registro de tema
+  cuando falta evidencia minima. Ahora el follow-up causal
+  `review_director_consolidation` recibe campos accionables:
+  `rework_reason=required_evidence_missing`,
+  `required_evidence_missing_refs`, `publication_status` no publicable y
+  `recommended_action=review_required_evidence`. Se anadio matriz ejecutiva
+  para toda la secuencia OPES: cada `work_kind` terminal sin evidencia minima
+  queda en `needs_rework` y no publicable.
+- `BUG-ORQ-20260701-079`: `thread/read` del backend
+  `orquesta-runtime-codex-appserver` tiene limite especifico de respuesta de
+  256 KiB. Si el frame WebSocket anunciado supera ese limite, Orquesta falla
+  antes de reservar/leer el payload completo con
+  `codex_app_server_thread_read_response_too_large`. Los RPCs no `thread/read`
+  conservan el limite general de 16 MiB.
+- `BUG-ORQ-20260704-165`: el observador residente goal-first tiene timeout
+  interno `GoalObserverTimeout`, default 2000 ms, configurable por composicion
+  `ConfigV0` sin env nueva por el ratchet MEJ-106. El tick de
+  `ObserveActiveGoalWorksV0` usa contexto acotado y publica
+  `goal_observer_timeout` como error accionable.
+
+Archivos tocados por este tramo:
+
+- `modulos/orquesta-opes-director/job_requests_v0.go`
+- `modulos/orquesta-opes-director/producer_v0_test.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_websocket_protocol_v0.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_migrated_v0_test.go`
+- `modulos/orquesta-server/config_v0.go`
+- `modulos/orquesta-server/config_v0_test.go`
+- `modulos/orquesta-server/goal_observation_loop_v0.go`
+- `modulos/orquesta-server/goal_observation_loop_v0_test.go`
+- `cmd/orquesta-server/config_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+- `docs/instrucciones_director_codex_2026-07-04.md`
+
+Evidencia ejecutada en este tramo:
+
+- `go test -count=1 ./modulos/orquesta-opes-director -run 'TestProduceOPESCausalJobsV0(BloqueaSecuenciaOPESCompletaSinEvidenciaMinima|BloqueaDerivadoOPESSinEvidenciaMinima|DerivadoOPESConEvidenciaMinimaNoCreaRework)|TestTopicRegistryRequiredEvidencePolicyV0CubreSecuenciaOPESCompleta'`
+- `go test -count=1 ./modulos/orquesta-opes-director ./modulos/orquesta-opes-bridge`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver ./modulos/orquesta-server ./cmd/orquesta-server`
+
+Pendientes reales para Claude tras este tramo:
+
+- `BUG-075` ya no queda pendiente por la matriz terminal sin evidencia minima.
+  Sigue abierto para validadores OPES semanticos/editoriales por artefacto
+  canonico y smoke OPES temporal end-to-end.
+- `BUG-079` queda reducido por corte de ingesta en Orquesta, pero sigue abierto
+  para enforcement preventivo real antes de que el proveedor/runtime genere
+  salidas gigantes o avance sin checkpoint temprano.
+- `BUG-165` queda reducido para el observador residente que respeta
+  `context.Context`, pero sigue abierto si un backend ignora el contexto y para
+  revalidacion real amplia de `status/observe` lento con backend/proveedor.
+- `BUG-065/076` siguen abiertos para smoke amplio de cleanup externo y
+  coordinacion completa backend/checkpoint/stop/cancel/wait.
+- `BUG-058/066` siguen abiertos para lifecycle OPES end-to-end con instancia
+  temporal y criterios nativos `done/settled`.

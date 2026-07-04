@@ -987,8 +987,77 @@ func TestProduceOPESCausalJobsV0BloqueaDerivadoOPESSinEvidenciaMinimaV0(t *testi
 	followup, ok := requestedWorkKindForTestV0(result.RequestedJobs, "review_director_consolidation")
 	if !ok ||
 		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "followup_ref", "required-evidence-html-site-publicable") ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "rework_reason", "required_evidence_missing") ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "required_evidence_missing_refs", "required-evidence-html-site-publicable") ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "publication_status", "not_publicable_without_required_evidence") ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "recommended_action", "review_required_evidence") ||
 		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "topic_id", "tema-html-no-evidence") {
 		t.Fatalf("followup=%+v ok=%v result=%+v", followup, ok, result)
+	}
+}
+
+func TestProduceOPESCausalJobsV0BloqueaSecuenciaOPESCompletaSinEvidenciaMinimaV0(t *testing.T) {
+	for _, workKind := range orquestaopesbridge.OPESFullTemarioJobTypeSequenceV0() {
+		if workKind == orquestadomainwork.DomainWorkKindPlanSyllabusV0 ||
+			workKind == "finalize_temario_package" ||
+			workKind == opesTopicRegistryUpdateWorkKindV0 {
+			continue
+		}
+		t.Run(workKind, func(t *testing.T) {
+			artifactType := opesSequenceArtifactTypeForEvidenceGateTestV0(workKind)
+			requirements := topicRegistryRequiredEvidenceRequirementsV0(workKind, artifactType)
+			if len(requirements) == 0 {
+				t.Fatalf("work_kind=%s artifact=%s sin requisito de evidencia minima", workKind, artifactType)
+			}
+			pendingRef := requirements[0].PendingRef
+			ref := safeRefV0(workKind)
+			source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
+				IdempotencyKey: "idem-opes-required-evidence-" + ref,
+				Status:         "accepted",
+				CorrelationID:  "corr-opes-required-evidence-" + ref,
+				DomainRef:      OPESCausalProducerDefaultDomainRefV0,
+				JobRef:         "job-ref-opes-required-evidence-" + ref,
+				ArtifactRef:    "artifact-ref-opes-required-evidence-" + ref,
+				ArtifactType:   artifactType,
+				CompleteJob:    true,
+				ReceiptRef:     "receipt-ref-opes-required-evidence-" + ref,
+				PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+					{Name: "course_id", Value: "curso-required-evidence"},
+					{Name: "topic_id", Value: "tema-" + ref},
+					{Name: "source_work_kind", Value: workKind},
+					{Name: "status", Value: "complete"},
+				},
+			}}}
+			creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+			result, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{
+				DomainRef:     OPESCausalProducerDefaultDomainRefV0,
+				CorrelationID: "corr-opes-required-evidence-" + ref,
+			}, OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator})
+			if err != nil {
+				t.Fatalf("ProduceOPESCausalJobsV0: %v", err)
+			}
+			request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
+			if !ok ||
+				!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "pendiente_rework_evidencia_minima") ||
+				!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status", "needs_rework") ||
+				!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", pendingRef) ||
+				!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_status", topicRegistrySettlementNeedsReworkV0) ||
+				!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_scope", "required_evidence") ||
+				!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_reason", "required_evidence_missing") ||
+				!domainWorkFieldValueForDirectorTestV0(request.InputFields, "next_required_work_kinds", "review_director_consolidation") {
+				t.Fatalf("registry_update=%+v ok=%v result=%+v", request, ok, result)
+			}
+			followup, ok := requestedWorkKindForTestV0(result.RequestedJobs, "review_director_consolidation")
+			if !ok ||
+				!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "followup_ref", pendingRef) ||
+				!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "rework_reason", "required_evidence_missing") ||
+				!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "required_evidence_missing_refs", pendingRef) ||
+				!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "publication_status", "not_publicable_without_required_evidence") ||
+				!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "recommended_action", "review_required_evidence") ||
+				!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "topic_id", "tema-"+ref) {
+				t.Fatalf("followup=%+v ok=%v result=%+v", followup, ok, result)
+			}
+		})
 	}
 }
 
@@ -1036,21 +1105,7 @@ func TestTopicRegistryRequiredEvidencePolicyV0CubreSecuenciaOPESCompletaV0(t *te
 			if workKind == "finalize_temario_package" || workKind == opesTopicRegistryUpdateWorkKindV0 {
 				return
 			}
-			artifactType := orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind)
-			switch workKind {
-			case "review_codex", "review_gemini", "review_claude":
-				artifactType = orquestadomainwork.DomainWorkArtifactTypeAgentReviewReportV0
-			case "review_pair_codex_gemini", "review_pair_codex_claude", "review_pair_gemini_claude":
-				artifactType = orquestadomainwork.DomainWorkArtifactTypeAgentPairReviewReportV0
-			case "review_director_consolidation":
-				artifactType = orquestadomainwork.DomainWorkArtifactTypeDirectorReviewMatrixV0
-			case "generate_learning_games":
-				artifactType = "learning_games_package"
-			case "generate_help_manual_assets":
-				artifactType = "help_manual_package"
-			case "visual_asset_reuse":
-				artifactType = "visual_reuse_manifest"
-			}
+			artifactType := opesSequenceArtifactTypeForEvidenceGateTestV0(workKind)
 			record := OPESCausalArtifactRecordV0{
 				ArtifactType: artifactType,
 				PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
@@ -1062,6 +1117,25 @@ func TestTopicRegistryRequiredEvidencePolicyV0CubreSecuenciaOPESCompletaV0(t *te
 				t.Fatalf("work_kind=%s artifact=%s sin gate de evidencia minima", workKind, artifactType)
 			}
 		})
+	}
+}
+
+func opesSequenceArtifactTypeForEvidenceGateTestV0(workKind string) string {
+	switch workKind {
+	case "review_codex", "review_gemini", "review_claude":
+		return orquestadomainwork.DomainWorkArtifactTypeAgentReviewReportV0
+	case "review_pair_codex_gemini", "review_pair_codex_claude", "review_pair_gemini_claude":
+		return orquestadomainwork.DomainWorkArtifactTypeAgentPairReviewReportV0
+	case "review_director_consolidation":
+		return orquestadomainwork.DomainWorkArtifactTypeDirectorReviewMatrixV0
+	case "generate_learning_games":
+		return "learning_games_package"
+	case "generate_help_manual_assets":
+		return "help_manual_package"
+	case "visual_asset_reuse":
+		return "visual_reuse_manifest"
+	default:
+		return orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind)
 	}
 }
 

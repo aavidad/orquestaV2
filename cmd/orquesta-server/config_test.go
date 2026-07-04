@@ -312,7 +312,8 @@ func TestServerConfigFromEnvV0ObservadorGoalFirstResidentePorDefectoV0(t *testin
 	}
 	if !config.GoalObserverEnabled ||
 		config.GoalObserverMaxItems != orquestaserver.DefaultGoalObserverMaxItemsV0 ||
-		config.GoalObserverInterval != config.TickInterval {
+		config.GoalObserverInterval != config.TickInterval ||
+		config.GoalObserverTimeout != orquestaserver.DefaultGoalObserverTimeoutV0 {
 		t.Fatalf("goal observer config=%+v", config)
 	}
 	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envServerGoalObserverEnabledV0); got != "true" {
@@ -342,6 +343,7 @@ func TestServerConfigFromEnvV0PermiteApagarObservadorGoalFirstV0(t *testing.T) {
 	}
 	if config.GoalObserverEnabled ||
 		config.GoalObserverInterval != 1500*time.Millisecond ||
+		config.GoalObserverTimeout != orquestaserver.DefaultGoalObserverTimeoutV0 ||
 		config.GoalObserverMaxItems != 11 {
 		t.Fatalf("goal observer config=%+v", config)
 	}

@@ -1081,6 +1081,59 @@ func TestRuntimeV0GoalObservationAsyncCoalesceaUnTickPendienteV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0GoalObservationTickTimeoutPublicaErrorAccionableV0(t *testing.T) {
+	store := &memoryStateStoreV0{}
+	supervisor := &timeoutGoalObserverSupervisorForTestV0{}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                      t.TempDir(),
+		TickInterval:                  time.Hour,
+		GoalObserverEnabledConfigured: true,
+		GoalObserverEnabled:           true,
+		GoalObserverTimeout:           20 * time.Millisecond,
+		AuditDisabled:                 true,
+	}, RuntimeDepsV0{
+		Supervisor:     supervisor,
+		GoalStateStore: newMemoryGoalStateStoreV0(),
+		StateStore:     store,
+		Clock:          fixedClockV0{now: time.Date(2026, 7, 4, 11, 0, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	runtime.runGoalObservationTickV0(context.Background())
+
+	if supervisor.calls != 1 {
+		t.Fatalf("goal observer calls=%d", supervisor.calls)
+	}
+	if store.last.GoalObserverStatus != "error" ||
+		store.last.GoalObserverLastError != "goal_observer_timeout" ||
+		store.last.GoalObserverErrorTicks != 1 ||
+		store.last.GoalObserverTickActive {
+		t.Fatalf("state=%+v", store.last)
+	}
+}
+
+type timeoutGoalObserverSupervisorForTestV0 struct {
+	calls int
+}
+
+func (supervisor *timeoutGoalObserverSupervisorForTestV0) RunGlobalSupervisorV0(
+	_ context.Context,
+	_ orquestarunsupervisor.RunSupervisorCommandV0,
+) (orquestarunsupervisor.RunSupervisorResultV0, error) {
+	return orquestarunsupervisor.RunSupervisorResultV0{}, nil
+}
+
+func (supervisor *timeoutGoalObserverSupervisorForTestV0) ObserveActiveGoalWorksV0(
+	ctx context.Context,
+	_ orquestagoal.GoalWorkObserveActiveRequestV0,
+) (orquestagoal.GoalWorkObserveActiveResultV0, error) {
+	supervisor.calls++
+	<-ctx.Done()
+	return orquestagoal.GoalWorkObserveActiveResultV0{}, ctx.Err()
+}
+
 type goalObservationLifecycleSupervisorForTestV0 struct {
 	mu               sync.Mutex
 	observed         chan struct{}

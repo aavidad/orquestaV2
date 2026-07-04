@@ -2,6 +2,7 @@ package orquestaserver
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -106,16 +107,19 @@ func (runtime *RuntimeV0) runGoalObservationTickV0(ctx context.Context) {
 		"run_refs":       compactServerDiagnosticStringsV0(request.List.RunRefs),
 		"skipped":        fingerprintPlan.Skipped,
 	})
-	result, err := observer.ObserveActiveGoalWorksV0(ctx, request)
+	observeCtx, cancelObserve := runtime.goalObservationTickContextV0(ctx)
+	defer cancelObserve()
+	result, err := observer.ObserveActiveGoalWorksV0(observeCtx, request)
 	now := runtime.clock.Now()
 	if err != nil {
-		runtime.auditEventV0(ctx, "goal_observer_tick_error", "error", err.Error(), map[string]interface{}{
+		message := goalObservationErrorMessageV0(observeCtx, err)
+		runtime.auditEventV0(ctx, "goal_observer_tick_error", "error", message, map[string]interface{}{
 			"result_summary": goalObservationResultAuditSummaryV0(result),
 			"correlation_id": correlationID,
 		})
 		runtime.persistStateTransitionV0(
 			ctx,
-			runtime.tracker.MarkGoalObserverErrorV0(err.Error(), now),
+			runtime.tracker.MarkGoalObserverErrorV0(message, now),
 			"goal_observer_error",
 		)
 		return
@@ -138,6 +142,27 @@ func (runtime *RuntimeV0) runGoalObservationTickV0(ctx context.Context) {
 	if terminal > 0 {
 		runtime.RequestSupervisorWakeupV0("goal_observer_terminal")
 	}
+}
+
+func (runtime *RuntimeV0) goalObservationTickContextV0(
+	ctx context.Context,
+) (context.Context, context.CancelFunc) {
+	timeout := runtime.config.GoalObserverTimeout
+	if timeout <= 0 {
+		timeout = DefaultGoalObserverTimeoutV0
+	}
+	return context.WithTimeout(ctx, timeout)
+}
+
+func goalObservationErrorMessageV0(ctx context.Context, err error) string {
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, context.DeadlineExceeded) ||
+		(ctx != nil && errors.Is(ctx.Err(), context.DeadlineExceeded)) {
+		return "goal_observer_timeout"
+	}
+	return err.Error()
 }
 
 func (runtime *RuntimeV0) goalObservationAvailableV0() bool {

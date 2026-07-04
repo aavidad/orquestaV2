@@ -17,11 +17,17 @@ Resumen de cierre:
   smoke high-consumption; MEJ-104 queda cerrado tambien por smoke real acotado
   de `budget_deferred`; `BUG-075` queda reducido por rework causal de evidencia
   minima OPES faltante.
+- Actualizacion noche Codex: `BUG-075` cubre ya la matriz terminal sin evidencia
+  minima para la secuencia OPES completa; `BUG-079` tiene corte de ingesta
+  `thread/read` > 256 KiB en app-server; `BUG-165` tiene timeout interno del
+  observador residente con `goal_observer_timeout`, sin env nueva por ratchet
+  MEJ-106.
 - Queda pendiente no cerrado total: `BUG-165` para timeouts amplios
   status/observe y coordinacion real completa, `BUG-065/076` para smoke amplio,
-  `BUG-058/066` para lifecycle OPES end-to-end, `BUG-075` para matriz OPES
-  completa por `work_kind` y `BUG-079` para enforcement runtime/proveedor de
-  checkpoint temprano y salidas gigantes.
+  `BUG-058/066` para lifecycle OPES end-to-end, `BUG-075` para validadores OPES
+  semanticos/editoriales por artefacto canonico y smoke OPES temporal, y
+  `BUG-079` para enforcement runtime/proveedor de checkpoint temprano y salidas
+  gigantes.
 
 Eres el DIRECTOR del proyecto Orquesta. Claude queda fuera por límite de
 tokens. Este documento es autocontenido: síguelo al pie de la letra y no

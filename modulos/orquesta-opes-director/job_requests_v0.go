@@ -13,6 +13,8 @@ func followupRequestV0(
 	workKind := followupWorkKindV0(record)
 	expectedArtifactType := orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind)
 	key := causalJobIdempotencyKeyV0("followup", record, followupRef, workKind)
+	fields := provenanceFieldsV0(record, followupRef, expectedArtifactType)
+	fields = appendRequiredEvidenceReworkFieldsV0(record, followupRef, fields)
 	return orquestadomainwork.NormalizeDomainWorkJobRequestV0(orquestadomainwork.DomainWorkJobRequestV0{
 		RequestID:      "request-" + key,
 		CorrelationID:  firstNonEmptyV0(record.CorrelationID, record.IdempotencyKey),
@@ -26,16 +28,36 @@ func followupRequestV0(
 			"source-artifact-" + safeRefV0(record.ArtifactRef),
 			"followup-" + safeRefV0(followupRef),
 		},
-		Objective:   "Resolver seguimiento causal OPES sin cerrar el temario mientras queden tareas pendientes.",
-		InputFields: provenanceFieldsV0(record, followupRef, expectedArtifactType),
+		Objective: "Resolver seguimiento causal OPES sin cerrar el temario mientras queden tareas pendientes.",
 		Constraints: []string{
 			"Reutilizar el artefacto fuente como insumo; no rehacer material valido por formato reparable.",
 			"No subir a produccion; entregar artefacto local revisable.",
 		},
 		AcceptanceCriteria: followupAcceptanceCriteriaV0(expectedArtifactType),
+		InputFields:        fields,
 		ExternalRefs:       provenanceExternalRefsV0(record, followupRef),
 		EvidenceRefs:       provenanceEvidenceRefsV0(record),
 	})
+}
+
+func appendRequiredEvidenceReworkFieldsV0(
+	record OPESCausalArtifactRecordV0,
+	followupRef string,
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if !strings.HasPrefix(strings.TrimSpace(followupRef), "required-evidence-") {
+		return fields
+	}
+	pending := topicRegistryRequiredEvidencePendingRefsForRecordV0(record)
+	if len(pending) == 0 {
+		pending = []string{followupRef}
+	}
+	return append(fields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "rework_reason", Value: "required_evidence_missing"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "required_evidence_missing_refs", Values: compactStringsV0(pending)},
+		orquestadomainwork.DomainWorkFieldV0{Name: "publication_status", Value: "not_publicable_without_required_evidence"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "recommended_action", Value: "review_required_evidence"},
+	)
 }
 
 func rejectedArtifactCorrectionRequestV0(

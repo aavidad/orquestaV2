@@ -81,7 +81,8 @@ func TestNormalizeConfigV0ObservadorGoalFirstActivoPorDefectoV0(t *testing.T) {
 
 	if !config.GoalObserverEnabled ||
 		config.GoalObserverMaxItems != DefaultGoalObserverMaxItemsV0 ||
-		config.GoalObserverInterval != DefaultTickIntervalV0 {
+		config.GoalObserverInterval != DefaultTickIntervalV0 ||
+		config.GoalObserverTimeout != DefaultGoalObserverTimeoutV0 {
 		t.Fatalf("goal observer config=%+v", config)
 	}
 }
@@ -91,9 +92,12 @@ func TestNormalizeConfigV0PermiteDesactivarObservadorGoalFirstV0(t *testing.T) {
 		GoalObserverEnabledConfigured: true,
 		GoalObserverEnabled:           false,
 		GoalObserverMaxItems:          12,
+		GoalObserverTimeout:           3 * time.Second,
 	})
 
-	if config.GoalObserverEnabled || config.GoalObserverMaxItems != 12 {
+	if config.GoalObserverEnabled ||
+		config.GoalObserverMaxItems != 12 ||
+		config.GoalObserverTimeout != 3*time.Second {
 		t.Fatalf("goal observer config=%+v", config)
 	}
 }

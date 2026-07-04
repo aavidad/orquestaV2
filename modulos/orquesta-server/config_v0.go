@@ -17,6 +17,7 @@ const (
 	DefaultAuditFileV0                        = "orquesta_server_audit_v0.jsonl"
 	DefaultTickIntervalV0                     = 5 * time.Second
 	DefaultGoalObserverIntervalV0             = DefaultTickIntervalV0
+	DefaultGoalObserverTimeoutV0              = 2 * time.Second
 	DefaultShutdownGracePeriodV0              = 10 * time.Second
 	DefaultSupervisorMaxTicksV0               = 1
 	DefaultIdleSelfImprovementAfterV0         = 60 * time.Second
@@ -101,6 +102,7 @@ type ConfigV0 struct {
 	GoalObserverEnabled               bool
 	GoalObserverEnabledConfigured     bool
 	GoalObserverInterval              time.Duration
+	GoalObserverTimeout               time.Duration
 	GoalObserverMaxItems              int
 	ResidentDirectorEnabled           bool
 	ResidentDirectorMaxActions        int
@@ -165,6 +167,9 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	}
 	if config.GoalObserverInterval <= 0 {
 		config.GoalObserverInterval = DefaultGoalObserverIntervalV0
+	}
+	if config.GoalObserverTimeout <= 0 {
+		config.GoalObserverTimeout = DefaultGoalObserverTimeoutV0
 	}
 	if config.ShutdownGracePeriod <= 0 {
 		config.ShutdownGracePeriod = DefaultShutdownGracePeriodV0

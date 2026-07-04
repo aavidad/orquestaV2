@@ -28,6 +28,12 @@ type serverCodexAppServerWebSocketProtocolV0 struct {
 	DiagnosticLogPath string
 }
 
+const (
+	codexAppServerWebSocketMaxFrameBytesV0           = 16 * 1024 * 1024
+	codexAppServerThreadReadMaxResponseFrameBytesV0  = 256 * 1024
+	codexAppServerThreadReadFrameTooLargeIssueCodeV0 = "codex_app_server_thread_read_response_too_large"
+)
+
 func (protocol serverCodexAppServerWebSocketProtocolV0) ProbeV0(ctx context.Context) error {
 	var response serverCodexAppServerThreadLoadedListResponseV0
 	return protocol.callV0(ctx, "thread/loaded/list", map[string]interface{}{}, &response)
@@ -78,10 +84,10 @@ func (protocol serverCodexAppServerWebSocketProtocolV0) ReadThreadV0(
 	includeTurns bool,
 ) (serverCodexAppServerThreadReadV0, error) {
 	var response serverCodexAppServerThreadReadResponseV0
-	err := protocol.callV0(ctx, "thread/read", map[string]interface{}{
+	err := protocol.callWithMaxResponseFrameBytesV0(ctx, "thread/read", map[string]interface{}{
 		"threadId":     strings.TrimSpace(threadID),
 		"includeTurns": includeTurns,
-	}, &response)
+	}, &response, codexAppServerThreadReadMaxResponseFrameBytesV0, codexAppServerThreadReadFrameTooLargeIssueCodeV0)
 	return response.Thread, err
 }
 
@@ -90,6 +96,17 @@ func (protocol serverCodexAppServerWebSocketProtocolV0) callV0(
 	method string,
 	params interface{},
 	out interface{},
+) error {
+	return protocol.callWithMaxResponseFrameBytesV0(ctx, method, params, out, 0, "")
+}
+
+func (protocol serverCodexAppServerWebSocketProtocolV0) callWithMaxResponseFrameBytesV0(
+	ctx context.Context,
+	method string,
+	params interface{},
+	out interface{},
+	maxResponseFrameBytes int,
+	frameTooLargeIssueCode string,
 ) error {
 	socketPath := strings.TrimSpace(protocol.SocketPath)
 	if socketPath == "" {
@@ -130,7 +147,13 @@ func (protocol serverCodexAppServerWebSocketProtocolV0) callV0(
 	}); err != nil {
 		return protocol.wrapWebSocketErrorV0(err)
 	}
-	return protocol.wrapWebSocketErrorV0(codexAppServerWebSocketReadResponseV0(reader, 2, out))
+	return protocol.wrapWebSocketErrorV0(codexAppServerWebSocketReadResponseWithMaxFrameBytesV0(
+		reader,
+		2,
+		out,
+		maxResponseFrameBytes,
+		frameTooLargeIssueCode,
+	))
 }
 
 func (protocol serverCodexAppServerWebSocketProtocolV0) wrapWebSocketErrorV0(err error) error {
@@ -236,8 +259,18 @@ func codexAppServerWebSocketWriteJSONV0(conn net.Conn, payload interface{}) erro
 }
 
 func codexAppServerWebSocketReadResponseV0(reader *bufio.Reader, responseID int, out interface{}) error {
+	return codexAppServerWebSocketReadResponseWithMaxFrameBytesV0(reader, responseID, out, 0, "")
+}
+
+func codexAppServerWebSocketReadResponseWithMaxFrameBytesV0(
+	reader *bufio.Reader,
+	responseID int,
+	out interface{},
+	maxFrameBytes int,
+	frameTooLargeIssueCode string,
+) error {
 	for {
-		payload, opcode, err := codexAppServerWebSocketReadFrameV0(reader)
+		payload, opcode, err := codexAppServerWebSocketReadFrameWithMaxBytesV0(reader, maxFrameBytes, frameTooLargeIssueCode)
 		if err != nil {
 			return err
 		}
@@ -277,6 +310,14 @@ func codexAppServerWebSocketReadResponseV0(reader *bufio.Reader, responseID int,
 }
 
 func codexAppServerWebSocketReadFrameV0(reader *bufio.Reader) ([]byte, byte, error) {
+	return codexAppServerWebSocketReadFrameWithMaxBytesV0(reader, 0, "")
+}
+
+func codexAppServerWebSocketReadFrameWithMaxBytesV0(
+	reader *bufio.Reader,
+	maxFrameBytes int,
+	frameTooLargeIssueCode string,
+) ([]byte, byte, error) {
 	header, err := reader.Peek(2)
 	if err != nil {
 		return nil, 0, err
@@ -308,8 +349,16 @@ func codexAppServerWebSocketReadFrameV0(reader *bufio.Reader) ([]byte, byte, err
 			return nil, 0, err
 		}
 	}
-	if length > 16*1024*1024 {
-		return nil, 0, codexAppServerCallErrorV0{Code: "codex_app_server_websocket_frame_too_large", Err: fmt.Errorf("bytes=%d", length)}
+	limit := codexAppServerWebSocketMaxFrameBytesV0
+	code := "codex_app_server_websocket_frame_too_large"
+	if maxFrameBytes > 0 && maxFrameBytes < limit {
+		limit = maxFrameBytes
+		if trimmed := strings.TrimSpace(frameTooLargeIssueCode); trimmed != "" {
+			code = trimmed
+		}
+	}
+	if length > uint64(limit) {
+		return nil, 0, codexAppServerCallErrorV0{Code: code, Err: fmt.Errorf("bytes=%d limit=%d", length, limit)}
 	}
 	payload := make([]byte, int(length))
 	if _, err := io.ReadFull(reader, payload); err != nil {

@@ -1,7 +1,10 @@
 package orquestaruntimecodexappserver
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"os"
@@ -455,6 +458,55 @@ func TestCodexAppServerTmuxBackendV0EnsureShutdownCleanupMigradoV0(t *testing.T)
 	if err != nil {
 		t.Fatalf("CleanupActiveShutdownWorkV0: %v", err)
 	}
+}
+
+func TestCodexAppServerWebSocketThreadReadResponseBudgetV0(t *testing.T) {
+	payload := bytes.Repeat([]byte("x"), codexAppServerThreadReadMaxResponseFrameBytesV0+1)
+	reader := bufio.NewReader(bytes.NewReader(codexAppServerTestWebSocketFrameV0(payload)))
+
+	err := codexAppServerWebSocketReadResponseWithMaxFrameBytesV0(
+		reader,
+		2,
+		&serverCodexAppServerThreadReadResponseV0{},
+		codexAppServerThreadReadMaxResponseFrameBytesV0,
+		codexAppServerThreadReadFrameTooLargeIssueCodeV0,
+	)
+	var callErr codexAppServerCallErrorV0
+	if !errors.As(err, &callErr) {
+		t.Fatalf("err=%T %v", err, err)
+	}
+	if callErr.Code != codexAppServerThreadReadFrameTooLargeIssueCodeV0 {
+		t.Fatalf("code=%q", callErr.Code)
+	}
+}
+
+func TestCodexAppServerWebSocketDefaultFrameBudgetConserva16MiBV0(t *testing.T) {
+	payload := []byte(`{"id":2,"result":{"thread":{"id":"thread-ref-small","status":"closed"}}}`)
+	reader := bufio.NewReader(bytes.NewReader(codexAppServerTestWebSocketFrameV0(payload)))
+	var out serverCodexAppServerThreadReadResponseV0
+
+	if err := codexAppServerWebSocketReadResponseV0(reader, 2, &out); err != nil {
+		t.Fatalf("ReadResponseV0: %v", err)
+	}
+	if out.Thread.ID != "thread-ref-small" || out.Thread.Status != "closed" {
+		t.Fatalf("out=%+v", out)
+	}
+}
+
+func codexAppServerTestWebSocketFrameV0(payload []byte) []byte {
+	header := []byte{0x81}
+	switch size := len(payload); {
+	case size < 126:
+		header = append(header, byte(size))
+	case size <= 65535:
+		header = append(header, 126, byte(size>>8), byte(size))
+	default:
+		header = append(header, 127)
+		var length [8]byte
+		binary.BigEndian.PutUint64(length[:], uint64(size))
+		header = append(header, length[:]...)
+	}
+	return append(header, payload...)
 }
 
 type fakeCodexAppServerProbeV0 struct{}
