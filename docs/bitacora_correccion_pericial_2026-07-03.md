@@ -3507,3 +3507,40 @@ el servidor remoto. Para el director Codex:
    (058/066/075).
 4. Los placeholders de goal results y checkpoints sueltos de los pilotajes
    T1-T7A quedan commiteados como evidencia citada por el inventario.
+
+## Corte Codex local: TAREA-10.3 y relevo remoto (2026-07-04 noche)
+
+Revision read-only con subagentes sobre la nota nueva de Claude:
+
+- `TAREA-10.3` no esta realmente sin cablear en el HEAD actual. El constructor
+  `codeContextBrokerWiringFromEnvV0` se llama desde el arranque del stack,
+  inyecta `CodeContext`/leases en `BuildStackV0`, expone
+  `/api/v0/codebase/query` y `orquesta.codebase.query.v0`, y el launcher
+  goal-first precarga `repo_map` para write-sets de codigo.
+- La conclusion de Claude sigue siendo util como guardia contra reescrituras:
+  no rehacer el broker. La siguiente accion correcta es test focal
+  extremo-a-extremo del wiring real y, si se confirma necesario, proyectar la
+  herramienta MCP local al `CODEX_HOME` aislado del agente sin saltarse el
+  broker central.
+- Subagentes usados: auditoria de wiring servidor/stack y auditoria de
+  superficie API/MCP/goal. Ambos coinciden en que el broker central existe y
+  esta cableado; hueco real: falta test que construya
+  `buildStackFromEnvWithGoalBackendV0`, consulte el binding MCP/HTTP con
+  `ProjectWorkDir` real y demuestre `code_context_prepared:*` en el goal.
+- `scripts/bootstrap_agent_tooling.sh --status` devuelve
+  `attention_required` porque hay un proceso `codebase-memory-mcp` vivo. No se
+  paro en este corte porque pertenece a una sesion Claude activa; el servidor
+  remoto debe revisar procesos vivos antes de lanzar trabajo largo.
+
+Estado para el servidor remoto:
+
+- Rama local: `trabajo/plataforma-agentes`, con commit de Claude
+  `5bc76f1d` y este corte de handoff.
+- Artefactos `checkpoint_started.txt` y
+  `orquesta_goal_result_goal-ref-task-autoprogramming-*.json` de los pilotajes
+  T2/T3/T4/T5/T6/T7A/T10 quedan commiteados solo como evidencia de arranque o
+  interrupcion (`status=invalid` en los JSON). No cerrar esas tareas sin nueva
+  evidencia.
+- Siguiente parche recomendado: test focal TAREA-10.3; despues TAREA-10.2
+  (politica autonoma de paralelismo/coste) y TAREA-10.1 (absorber cierre real
+  del wizard viejo y eliminar duplicado).

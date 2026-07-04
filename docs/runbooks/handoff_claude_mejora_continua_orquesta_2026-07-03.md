@@ -1840,3 +1840,44 @@ Mantener abiertos para siguiente agente:
 - `BUG-065`, `BUG-079`: no cerrar sin evidencia real indicada en inventario.
 - Wizard universal: completar secciones 9-12 del diseno antes de venderlo como
   generador universal.
+
+## Corte Codex local para relevo remoto 2026-07-04 noche
+
+Claude anadio `TAREA-10` en
+`docs/instrucciones_director_codex_2026-07-04.md` y la nota de bitacora sobre
+codigo construido-y-nunca-cableado. Codex local reviso esa entrada con
+subagentes antes de apagar la sesion.
+
+Hallazgo principal: `TAREA-10.3` esta parcialmente resuelta en el HEAD actual,
+aunque el texto de Claude dice que "nunca se llama". En codigo:
+
+- `cmd/orquesta-server/stack.go` llama a
+  `codeContextBrokerWiringFromEnvV0`.
+- `BuildStackV0` recibe `CodeContext` y `CodeContextToolLeases`.
+- Se exponen `orquesta.codebase.query.v0` y `/api/v0/codebase/query`.
+- El launcher goal-first se envuelve con
+  `goalLauncherWithCodeContextPrepareFromConfigV0` y precarga `repo_map` en
+  goals con write-set de codigo.
+
+No reescribir el broker. Lo que falta para cerrar TAREA-10.3 es test focal
+integrado:
+
+- construir `buildStackFromEnvWithGoalBackendV0` con `ProjectWorkDir` temporal;
+- consultar el binding MCP/HTTP real de `CodebaseQuery`;
+- lanzar un goal fake de codigo y comprobar `code_context_prepared:*`;
+- decidir despues si hace falta proyeccion MCP local en `CODEX_HOME` aislado
+  del agente. Si se hace, debe seguir pasando por el broker central.
+
+Artefactos de pilotajes goal-first:
+
+- Los `checkpoint_started.txt` y
+  `orquesta_goal_result_goal-ref-task-autoprogramming-*.json` que quedan bajo
+  `cmd/orquesta-server/docs` y `modulos/*/docs` se commitean para que el
+  servidor remoto vea la misma evidencia de arranque.
+- Esos JSON son `status=invalid` o equivalentes provisionales: no son cierre
+  de tarea, solo handoff durable de trabajo interrumpido.
+
+Aviso operativo: `scripts/bootstrap_agent_tooling.sh --status` marco
+`attention_required` por un `codebase-memory-mcp` vivo. No se paro desde Codex
+local porque parecia pertenecer a una sesion Claude activa. En el servidor
+remoto, revisar procesos vivos antes de lanzar smokes largos.
