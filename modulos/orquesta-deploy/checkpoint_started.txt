@@ -1,0 +1,10 @@
+schema_version=orquesta.codex_app_server.early_checkpoint.v0
+goal_ref=goal-ref-task-autoprogramming-49e10ec01497-g01
+external_goal_ref=019f2f1b-0808-7951-b6e4-67327e36c104
+reason=runtime_checkpoint_before_turn_start
+created_by=orquesta-runtime-codex-appserver
+source_task_ref=task-poda-deadcode-deploy-capacity
+scope=wave_1_deadcode_pruning_orquesta_deploy_orquesta_capacity
+authorized_write_set=modulos/orquesta-deploy,modulos/orquesta-capacity,docs/bitacora_correccion_pericial_2026-07-03.md,docs/autoprogramacion_orquesta_pendientes_2026-05-23.md
+next_artifact=durable_goal_result_json_and_candidate_classification_notes
+evidence=checkpoint_materialized_before_long_exploration_or_expensive_commands

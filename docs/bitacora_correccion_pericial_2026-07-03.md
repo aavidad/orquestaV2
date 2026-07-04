@@ -3698,3 +3698,34 @@ deberia reservar blocked para estados terminales reales.
 
 Siguiente en cola remota: TAREA-9 ola 1 (poda deadcode orquesta-deploy),
 TAREA-8 olas de envs, smoke OPES real (058/066/075), G5 opt-in.
+## Actualizacion Codex remoto 2026-07-04 noche 35
+
+TAREA-9 ola `orquesta-deploy` + `orquesta-capacity`, goal
+`goal-ref-task-autoprogramming-49e10ec01497-g01`.
+
+Hecho:
+
+- Materializado checkpoint temprano en
+  `modulos/orquesta-deploy/checkpoint_started.txt`.
+- Clasificadas las 185 candidatas del snapshot de
+  `docs/auditoria_codigo_deadcode_2026-07-04.txt` para ambos modulos en
+  `modulos/orquesta-deploy/docs/deadcode_classification_goal-ref-task-autoprogramming-49e10ec01497-g01.json`.
+- Resultado de clasificacion: 9 candidatas categoria (a) ya no existen en el
+  arbol actual por podas previas verificadas; 176 quedan como categoria (b)
+  porque son contratos/DTOs/adaptadores dry-run cubiertos por docs o tests
+  locales, o helpers de esos contratos no cableados desde `cmd/...`.
+- No se borran mas simbolos en esta ola: la poda segura ya estaba aplicada en
+  el arbol actual y borrar APIs retenidas romperia contratos locales.
+
+Verificacion:
+
+- `git diff --check` -> verde.
+- `GOCACHE=/tmp/orquesta-goal-g01-gocache GOTMPDIR=/tmp/orquesta-goal-g01-gotmp GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-deploy ./modulos/orquesta-capacity` -> verde.
+- `GOCACHE=/tmp/orquesta-goal-g01-gocache GOTMPDIR=/tmp/orquesta-goal-g01-gotmp GOFLAGS=-buildvcs=false go build ./...` -> verde.
+- `scripts/orquesta_auditoria_codigo.sh --no-sqlite --deadcode-file docs/auditoria_codigo_deadcode_2026-07-04.txt --json-out modulos/orquesta-deploy/docs/auditoria_codigo_goal-ref-task-autoprogramming-49e10ec01497-g01.json` -> `deadcode_candidates=1188`, `helper_duplicate_definitions=288`.
+
+Nota operativa: el primer intento de pruebas/build fallo porque `GOCACHE`
+apuntaba a una ruta runtime de solo lectura; se reejecuto con cache temporal
+aislada. El primer intento de `go build ./...` con `GOMODCACHE` vacio fallo por
+red restringida; el build verde uso el cache de modulos existente y solo
+movio `GOCACHE`/`GOTMPDIR`.
