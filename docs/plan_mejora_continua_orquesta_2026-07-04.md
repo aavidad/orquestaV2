@@ -159,6 +159,19 @@ brecha pendiente queda acotada a smoke opt-in contra Gemini real con
 credenciales/tier valido, persistencia/adopcion de procesos Claude/Gemini tras
 reinicio y una prueba real amplia de shutdown/control con proveedor externo.
 
+Avance 2026-07-04 noche 18: queda cerrado el residual offline/fake de
+persistencia/adopcion tras reinicio para `claude_process` y `gemini_process`.
+Ambos backends escriben un manifiesto interno por goal en el runtime aislado
+con refs opacas del `ProcessRuntimeConnectorV0` y PID solo interno, sin
+publicarlo en specs/prompts/issues/evidencias publicas. Si una instancia nueva
+no conserva el `process_ref` en memoria, carga el manifiesto, llama a
+`AdoptProcessV0`, recupera el proceso vivo y puede observarlo o pararlo por el
+mismo `GoalBackendControlPortV0`. La cobertura focal verifica backend
+reiniciado, mapa en memoria vacio, adopcion y stop efectivo para Claude y
+Gemini. La brecha pendiente queda reducida a smoke opt-in contra proveedores
+reales con credenciales/tier validos y prueba real amplia de shutdown/control
+con proveedor externo.
+
 Alcance:
 
 - `modulos/orquesta-runtime-claude`

@@ -117,6 +117,55 @@ func TestGeminiGoalProcessBackendV0StopParaProcesoVivoV0(t *testing.T) {
 	}
 }
 
+func TestGeminiGoalProcessBackendV0AdoptaProcesoPersistidoTrasReinicioYLoParaV0(t *testing.T) {
+	root := t.TempDir()
+	goalRef := "goal-ref-gemini-process-adopt-001"
+	startedPath := filepath.Join(root, "started-adopt.txt")
+	commandPath := geminiGoalFakeCommandLongRunningV0(t, root, startedPath)
+	backend := geminiGoalProcessBackendForTestV0(t, root, commandPath)
+	spec := geminiGoalProcessSpecForTestV0(goalRef)
+	if _, err := backend.LaunchGoalWorkV0(context.Background(), spec); err != nil {
+		t.Fatalf("LaunchGoalWorkV0: %v", err)
+	}
+	processRef := backend.loadProcessRefV0(goalRef)
+	if processRef == "" {
+		t.Fatalf("process_ref no persistido en memoria")
+	}
+	statePath := filepath.Join(backend.Control.RuntimeWorkDir, geminiGoalProcessStateFileNameV0(goalRef))
+	if _, err := os.Stat(statePath); err != nil {
+		t.Fatalf("estado de proceso no persistido: %v", err)
+	}
+	waitForGeminiGoalProcessTestV0(t, func() bool {
+		_, err := os.Stat(startedPath)
+		return err == nil
+	})
+
+	restarted := geminiGoalProcessBackendForTestV0(t, root, commandPath)
+	if got := restarted.loadProcessRefV0(goalRef); got != "" {
+		t.Fatalf("backend reiniciado no debe tener process_ref en memoria: %q", got)
+	}
+	result, err := restarted.StopGeminiGoalV0(context.Background(), GeminiGoalStopRequestV0{
+		GoalRef:      goalRef,
+		Action:       "stop",
+		Reason:       "test_restart_adoption",
+		Forced:       true,
+		EvidenceRefs: []string{"evidence-ref-test-restart-adoption"},
+	})
+	if err != nil {
+		t.Fatalf("StopGeminiGoalV0 reiniciado: %v result=%+v", err, result)
+	}
+	if result.Status != orquestagoal.GoalStatusBlockedV0 ||
+		!result.BackendStopped ||
+		!containsGeminiGoalStringV0(result.EvidenceRefs, GeminiGoalEvidenceProcessAdoptedV0) ||
+		!containsGeminiGoalStringV0(result.EvidenceRefs, GeminiGoalEvidenceStopCompletedV0) {
+		t.Fatalf("stop adoptado inesperado: %+v", result)
+	}
+	waitForGeminiGoalProcessTestV0(t, func() bool {
+		snapshot, err := backend.ProcessRuntime.SnapshotV0(processRef)
+		return err == nil && snapshot.Status == orquestaruntime.ProcessRuntimeStoppedV0
+	})
+}
+
 func geminiGoalProcessBackendForTestV0(
 	t *testing.T,
 	root string,

@@ -2,6 +2,7 @@ package orquestaruntimegemini
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -13,13 +14,16 @@ import (
 )
 
 const (
-	GeminiGoalWrapperFilePrefixV0 = "gemini_goal_wrapper_"
-	GeminiGoalStdoutFilePrefixV0  = "gemini_goal_stdout_"
-	GeminiGoalStderrFilePrefixV0  = "gemini_goal_stderr_"
+	GeminiGoalWrapperFilePrefixV0  = "gemini_goal_wrapper_"
+	GeminiGoalStdoutFilePrefixV0   = "gemini_goal_stdout_"
+	GeminiGoalStderrFilePrefixV0   = "gemini_goal_stderr_"
+	GeminiGoalProcessStatePrefixV0 = "gemini_goal_process_state_"
+	GeminiGoalProcessStateSchemaV0 = "gemini_goal_process_state.v0"
 
 	GeminiGoalEvidenceProcessLaunchedV0 = "evidence-ref-gemini-goal-process-launched"
 	GeminiGoalEvidenceProcessRunningV0  = "evidence-ref-gemini-goal-process-running"
 	GeminiGoalEvidenceProcessStoppedV0  = "evidence-ref-gemini-goal-process-stopped"
+	GeminiGoalEvidenceProcessAdoptedV0  = "evidence-ref-gemini-goal-process-adopted"
 	GeminiGoalEvidenceStopRequestedV0   = "evidence-ref-gemini-goal-process-stop-requested"
 	GeminiGoalEvidenceStopCompletedV0   = "evidence-ref-gemini-goal-process-stop-completed"
 	GeminiGoalEvidenceStopFailedV0      = "evidence-ref-gemini-goal-process-stop-failed"
@@ -29,6 +33,8 @@ const (
 	ErrGeminiGoalProcessStoppedWithoutResultV0 = "gemini_goal_process_stopped_without_result"
 	ErrGeminiGoalProcessRefMissingV0           = "gemini_goal_process_ref_missing"
 	ErrGeminiGoalProcessStopFailedV0           = "gemini_goal_process_stop_failed"
+	ErrGeminiGoalProcessStateWriteFailedV0     = "gemini_goal_process_state_write_failed"
+	ErrGeminiGoalProcessStateReadFailedV0      = "gemini_goal_process_state_read_failed"
 )
 
 type GeminiGoalProcessBackendV0 struct {
@@ -57,6 +63,15 @@ type GeminiGoalStopResultV0 struct {
 	BackendStopped  bool     `json:"backend_stopped,omitempty"`
 	IssueCode       string   `json:"issue_code,omitempty"`
 	EvidenceRefs    []string `json:"evidence_refs,omitempty"`
+}
+
+type geminiGoalProcessStateV0 struct {
+	SchemaVersion string `json:"schema_version"`
+	GoalRef       string `json:"goal_ref"`
+	ProcessRef    string `json:"process_ref"`
+	SessionRef    string `json:"session_ref,omitempty"`
+	LaunchRef     string `json:"launch_ref,omitempty"`
+	PID           int    `json:"pid"`
 }
 
 func (backend *GeminiGoalProcessBackendV0) LaunchGoalWorkV0(
@@ -90,7 +105,13 @@ func (backend *GeminiGoalProcessBackendV0) LaunchGoalWorkV0(
 	if err != nil {
 		return geminiGoalInvalidLaunchReceiptV0(spec.GoalRef, ErrGeminiGoalProcessLaunchFailedV0, "process"), err
 	}
-	backend.saveProcessRefV0(spec.GoalRef, snapshot.ProcessRef)
+	if err := backend.saveProcessSnapshotV0(spec.GoalRef, snapshot); err != nil {
+		receipt.Issues = append(receipt.Issues, orquestagoal.GoalWorkIssueV0{
+			Code:  ErrGeminiGoalProcessStateWriteFailedV0,
+			Field: "process_state",
+		})
+		backend.saveProcessRefV0(spec.GoalRef, snapshot.ProcessRef)
+	}
 	receipt.EvidenceRefs = compactGeminiGoalStringsV0(append(
 		receipt.EvidenceRefs,
 		GeminiGoalEvidenceProcessLaunchedV0,
@@ -113,7 +134,7 @@ func (backend *GeminiGoalProcessBackendV0) ObserveGoalWorkV0(
 	if err != nil || result.Status != orquestagoal.GoalStatusRunningV0 {
 		return result, err
 	}
-	processRef := backend.loadProcessRefV0(request.GoalRef)
+	processRef, adopted := backend.ensureProcessRefV0(ctx, request.GoalRef)
 	if processRef == "" || backend.ProcessRuntime == nil {
 		return result, nil
 	}
@@ -129,6 +150,9 @@ func (backend *GeminiGoalProcessBackendV0) ObserveGoalWorkV0(
 		result.EvidenceRefs,
 		orquestaruntime.ProcessRuntimeSnapshotEvidenceRefsV0(snapshot)...,
 	))
+	if adopted {
+		result.EvidenceRefs = compactGeminiGoalStringsV0(append(result.EvidenceRefs, GeminiGoalEvidenceProcessAdoptedV0))
+	}
 	switch snapshot.Status {
 	case orquestaruntime.ProcessRuntimeRunningV0, orquestaruntime.ProcessRuntimeStoppingV0:
 		result.EvidenceRefs = compactGeminiGoalStringsV0(append(result.EvidenceRefs, GeminiGoalEvidenceProcessRunningV0))
@@ -166,16 +190,19 @@ func (backend *GeminiGoalProcessBackendV0) StopGeminiGoalV0(
 			GeminiGoalEvidenceStopRequestedV0,
 		)),
 	}
-	if backend == nil || backend.ProcessRuntime == nil {
+	if backend == nil {
 		result.IssueCode = ErrGeminiGoalProcessRefMissingV0
 		result.EvidenceRefs = compactGeminiGoalStringsV0(append(result.EvidenceRefs, GeminiGoalEvidenceStopFailedV0))
 		return normalizeGeminiGoalStopResultV0(result), errors.New(result.IssueCode)
 	}
-	processRef := backend.loadProcessRefV0(request.GoalRef)
+	processRef, adopted := backend.ensureProcessRefV0(ctx, request.GoalRef)
 	if processRef == "" {
 		result.IssueCode = ErrGeminiGoalProcessRefMissingV0
 		result.EvidenceRefs = compactGeminiGoalStringsV0(append(result.EvidenceRefs, GeminiGoalEvidenceStopFailedV0))
 		return normalizeGeminiGoalStopResultV0(result), errors.New(result.IssueCode)
+	}
+	if adopted {
+		result.EvidenceRefs = compactGeminiGoalStringsV0(append(result.EvidenceRefs, GeminiGoalEvidenceProcessAdoptedV0))
 	}
 	snapshot, err := backend.ProcessRuntime.StopV0(ctx, processRef)
 	result.EvidenceRefs = compactGeminiGoalStringsV0(append(
@@ -257,8 +284,78 @@ func (backend *GeminiGoalProcessBackendV0) loadProcessRefV0(goalRef string) stri
 	return strings.TrimSpace(backend.processRefs[strings.TrimSpace(goalRef)])
 }
 
+func (backend *GeminiGoalProcessBackendV0) ensureProcessRefV0(ctx context.Context, goalRef string) (string, bool) {
+	if backend == nil {
+		return "", false
+	}
+	if processRef := backend.loadProcessRefV0(goalRef); processRef != "" {
+		return processRef, false
+	}
+	state, ok := backend.loadProcessStateV0(goalRef)
+	if !ok {
+		return "", false
+	}
+	runtime := backend.processRuntimeV0()
+	snapshot, err := runtime.AdoptProcessV0(ctx, orquestaruntime.ProcessRuntimeSnapshotV0{
+		SchemaVersion: orquestaruntime.ProcessRuntimeConnectorVersionV0,
+		ProcessRef:    state.ProcessRef,
+		SessionRef:    state.SessionRef,
+		LaunchRef:     state.LaunchRef,
+		PID:           state.PID,
+		Status:        orquestaruntime.ProcessRuntimeRunningV0,
+	})
+	if err != nil {
+		return "", false
+	}
+	backend.saveProcessRefV0(goalRef, snapshot.ProcessRef)
+	return snapshot.ProcessRef, true
+}
+
+func (backend *GeminiGoalProcessBackendV0) saveProcessSnapshotV0(
+	goalRef string,
+	snapshot orquestaruntime.ProcessRuntimeSnapshotV0,
+) error {
+	backend.saveProcessRefV0(goalRef, snapshot.ProcessRef)
+	state := geminiGoalProcessStateV0{
+		SchemaVersion: GeminiGoalProcessStateSchemaV0,
+		GoalRef:       strings.TrimSpace(goalRef),
+		ProcessRef:    strings.TrimSpace(snapshot.ProcessRef),
+		SessionRef:    strings.TrimSpace(snapshot.SessionRef),
+		LaunchRef:     strings.TrimSpace(snapshot.LaunchRef),
+		PID:           snapshot.PID,
+	}
+	return writeGeminiJSONFileV0(
+		backend.Control.RuntimeWorkDir,
+		filepath.Join(backend.Control.RuntimeWorkDir, geminiGoalProcessStateFileNameV0(goalRef)),
+		state,
+	)
+}
+
+func (backend *GeminiGoalProcessBackendV0) loadProcessStateV0(goalRef string) (geminiGoalProcessStateV0, bool) {
+	path := filepath.Join(backend.Control.RuntimeWorkDir, geminiGoalProcessStateFileNameV0(goalRef))
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return geminiGoalProcessStateV0{}, false
+	}
+	var state geminiGoalProcessStateV0
+	if err := json.Unmarshal(data, &state); err != nil {
+		return geminiGoalProcessStateV0{}, false
+	}
+	if state.SchemaVersion != GeminiGoalProcessStateSchemaV0 ||
+		strings.TrimSpace(state.GoalRef) != strings.TrimSpace(goalRef) ||
+		strings.TrimSpace(state.ProcessRef) == "" ||
+		state.PID <= 0 {
+		return geminiGoalProcessStateV0{}, false
+	}
+	return state, true
+}
+
 func geminiGoalWrapperFileNameV0(goalRef string) string {
 	return GeminiGoalWrapperFilePrefixV0 + geminiGoalSafeRefV0(goalRef) + ".sh"
+}
+
+func geminiGoalProcessStateFileNameV0(goalRef string) string {
+	return GeminiGoalProcessStatePrefixV0 + geminiGoalSafeRefV0(goalRef) + ".json"
 }
 
 func geminiGoalStdoutFileNameV0(goalRef string) string {

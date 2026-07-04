@@ -1854,3 +1854,36 @@ Pendiente real tras este tramo: smoke opt-in contra Gemini real con
 credenciales/tier valido, smoke opt-in contra Claude real con credenciales,
 persistencia/adopcion de procesos Claude/Gemini tras reinicio y prueba real
 amplia de shutdown/control con proveedor externo.
+
+## Continuacion Codex 2026-07-04 noche 18
+
+Avance MEJ-103/T18: persistencia y adopcion tras reinicio para procesos
+Claude/Gemini goal-first.
+
+- `claude_process` y `gemini_process` persisten un manifiesto interno por goal
+  bajo su runtime aislado con `goal_ref`, refs opacas de
+  `ProcessRuntimeConnectorV0` y PID solo interno.
+- Si el servidor se reconstruye y el mapa en memoria esta vacio, el backend
+  carga el manifiesto, usa `ProcessRuntimeConnectorV0.AdoptProcessV0` y recupera
+  el control del proceso vivo antes de observar o parar.
+- El PID no se publica en specs, prompts, issues ni evidencias publicas; solo
+  queda en el fichero de control interno del runtime.
+- Se anade evidencia `*-goal-process-adopted` en los resultados de observe/stop
+  cuando la adopcion ocurre.
+
+Archivos tocados en este avance:
+
+- `modulos/orquesta-runtime-claude/claude_goal_process_backend_v0.go`
+- `modulos/orquesta-runtime-claude/claude_goal_process_backend_v0_test.go`
+- `modulos/orquesta-runtime-gemini/gemini_goal_process_backend_v0.go`
+- `modulos/orquesta-runtime-gemini/gemini_goal_process_backend_v0_test.go`
+- `docs/plan_mejora_continua_orquesta_2026-07-04.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion focal inicial:
+
+- `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-runtime-gemini`
+
+Pendiente real tras este tramo: smoke opt-in contra Claude real con
+credenciales, smoke opt-in contra Gemini real con credenciales/tier valido y
+prueba real amplia de shutdown/control con proveedor externo.
