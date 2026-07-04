@@ -406,6 +406,8 @@ func nuevaAppI18nEnglishV0() map[string]string {
 		"nueva_app.wizard.default.linters.why":                               "Makes verification reproducible.",
 		"nueva_app.wizard.default.errors.why":                                "Avoids ambiguous public errors.",
 		"nueva_app.wizard.default.observability.why":                         "Supports operation and audit from the first cut.",
+		"nueva_app.wizard.default.persistence.why":                           "Avoids data loss and proves recovery before production.",
+		"nueva_app.wizard.default.resilience.why":                            "Avoids stalls from slow calls, large listings, or unbounded resources.",
 		"nueva_app.wizard.default.docs.why":                                  "Leaves handoff and structure reviewable.",
 		"nueva_app.validation.summary_title":                                 "Required fields missing",
 		"nueva_app.validation.summary_intro":                                 "Review these fields before sending the request.",

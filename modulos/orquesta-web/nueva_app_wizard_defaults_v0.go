@@ -7,7 +7,9 @@ func WebNuevaAppWizardEngineeringDefaultsV0() []WizardDefaultV0 {
 		wizardDefaultV0("calidad", "tests_unitarios_y_arquitectura_ratchet", "tests"),
 		wizardDefaultV0("calidad", "linters_format_y_scripts_verificacion", "linters"),
 		wizardDefaultV0("calidad", "errores_tipados_catalogo_publico", "errors"),
-		wizardDefaultV0("observabilidad", "logging_estructurado", "observability"),
+		wizardDefaultV0("observabilidad", "logging_estructurado_rotado_y_healthchecks", "observability"),
+		wizardDefaultV0("persistencia", "migraciones_backups_y_restore_probado", "persistence"),
+		wizardDefaultV0("resiliencia", "timeouts_reintentos_paginacion_y_limites", "resilience"),
 		wizardDefaultV0("docs", "handoff_report_source_tree_technical_stack_manifest", "docs"),
 	}
 }
@@ -35,6 +37,12 @@ func ApplyWebNuevaAppWizardEngineeringDefaultsV0(form WebNuevaAppFormV0) WebNuev
 		"linters_format",
 		"errores_tipados_catalogo_publico",
 		"logging_estructurado",
+		"logging_rotado_retencion_compresion",
+		"healthchecks_liveness_readiness",
+		"migraciones_versionadas_rollback",
+		"backups_automaticos_restore_probado",
+		"timeouts_reintentos_circuit_breakers",
+		"paginacion_limites_recursos",
 		"ci_ready_scripts_verificacion",
 		"documentacion_tecnica_handoff_source_tree_stack_manifest",
 	)

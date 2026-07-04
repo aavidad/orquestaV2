@@ -3,3 +3,14 @@ goal_ref=goal-ref-task-autoprogramming-ab120c16445e-g01
 external_goal_ref=019f2d86-4f30-7c81-a25d-7ae23b5f3699
 reason=runtime_checkpoint_before_turn_start
 created_by=orquesta-runtime-codex-appserver
+checkpoint_ref: checkpoint-started-goal-ref-task-autoprogramming-441c8ac7373d-g01
+timestamp_utc: 2026-07-04T21:30:12Z
+goal_ref: goal-ref-task-autoprogramming-441c8ac7373d-g01
+source_task_ref: task-wizard-t18-tecnica
+objective: Implementar en modulos/orquesta-web las secciones 10.1 y 10.3 de docs/diseno_wizard_programacion_2026-07-04.md para las dimensiones tecnicas T1-T8 del wizard.
+authorized_write_set:
+- modulos/orquesta-web
+- docs/wizard_glosario_generado.md
+- docs/autoprogramacion_orquesta_pendientes_2026-05-23.md
+next_artifact: modulos/orquesta-web/docs/orquesta_goal_result_goal-ref-task-autoprogramming-441c8ac7373d-g01.json
+evidence: checkpoint materializado antes de exploracion larga; broker orquesta.codebase.query.v0 no expuesto via MCP en esta sesion.

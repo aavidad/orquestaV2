@@ -394,6 +394,106 @@ func TestWizardActiveDirectoryPorContextoEmpresaV0(t *testing.T) {
 	}
 }
 
+func TestWizardTecnicoActivaT1AT8V0(t *testing.T) {
+	form := WebNuevaAppFormV0{
+		Objetivo:         "API publica para empresa con Active Directory, datos sanitarios, muchos usuarios y contrato REST",
+		TipoApp:          "api",
+		UsuariosObjetivo: []string{"equipo"},
+		Datos: WebNuevaAppDatosFormV0{
+			DBRequired:         true,
+			NecesidadFuncional: "Gestionar datos propios",
+			Sensibilidad:       "sanitaria",
+		},
+		Deploy: WebNuevaAppDeployFormV0{Target: "contenedor"},
+	}
+	questions := webNuevaAppWizardAllGapQuestionsV0(form)
+	for _, ref := range []string{
+		"wizard-t1-control-acceso",
+		"wizard-t2-identidad-corporativa",
+		"wizard-t3-observabilidad",
+		"wizard-t4-persistencia-tecnica",
+		"wizard-t5-api-contratos",
+		"wizard-t6-despliegue-avanzado",
+		"wizard-t7-resiliencia-rendimiento",
+		"wizard-t8-cumplimiento-tecnico",
+	} {
+		if !hasWizardQuestionRefV0(questions, ref) {
+			t.Fatalf("dimension tecnica %s no activada: %+v", ref, questions)
+		}
+	}
+}
+
+func TestWizardDefaultsTecnicosSilenciososIncluyenMejoresPracticasV0(t *testing.T) {
+	form := ApplyWebNuevaAppWizardEngineeringDefaultsV0(WebNuevaAppFormV0{})
+	for _, expected := range []string{
+		"logging_rotado_retencion_compresion",
+		"healthchecks_liveness_readiness",
+		"migraciones_versionadas_rollback",
+		"backups_automaticos_restore_probado",
+		"timeouts_reintentos_circuit_breakers",
+		"paginacion_limites_recursos",
+	} {
+		if !stringSliceHasV0(form.PreferenciasTecnicas.Preferencias, expected) {
+			t.Fatalf("default tecnico ausente %s: %+v", expected, form.PreferenciasTecnicas.Preferencias)
+		}
+	}
+	defaults := WebNuevaAppWizardEngineeringDefaultsV0()
+	for _, expectedArea := range []string{"persistencia", "resiliencia"} {
+		found := false
+		for _, defaultValue := range defaults {
+			if defaultValue.Area == expectedArea && defaultValue.WhyKey != "" && defaultValue.HelpKey != "" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("default visible ausente para area=%s: %+v", expectedArea, defaults)
+		}
+	}
+}
+
+func TestWizardTecnicoMaterializaDecisionesT4T5T7T8V0(t *testing.T) {
+	t4 := wizardQuestionV0("wizard-t4-persistencia-tecnica", "datos.storage.0.tipo", WizardTopicDatosV0, WizardImportanceAltaV0, []WizardOptionV0{
+		wizardOptionV0("postgresql_migraciones_backups_restore", "nueva_app.wizard.option.t4.postgresql", true, "nueva_app.wizard.rationale.t4.postgresql"),
+	})
+	t5 := wizardQuestionV0("wizard-t5-api-contratos", "integraciones.0.tipo", WizardTopicDatosV0, WizardImportanceAltaV0, []WizardOptionV0{
+		wizardOptionV0("rest_versionada_openapi", "nueva_app.wizard.option.t5.rest_openapi", true, "nueva_app.wizard.rationale.t5.rest_openapi"),
+	})
+	t7 := wizardQuestionV0("wizard-t7-resiliencia-rendimiento", "agentes.preferencias", WizardTopicEntregaV0, WizardImportanceAltaV0, []WizardOptionV0{
+		wizardOptionV0("timeouts_reintentos_circuit_breakers", "nueva_app.wizard.option.t7.timeouts", true, "nueva_app.wizard.rationale.t7.timeouts"),
+	})
+	t8 := wizardQuestionV0("wizard-t8-cumplimiento-tecnico", "agentes.preferencias", WizardTopicDatosV0, WizardImportanceAltaV0, []WizardOptionV0{
+		wizardOptionV0("auditoria_inmutable_retencion_rgpd", "nueva_app.wizard.option.t8.auditoria_rgpd", true, "nueva_app.wizard.rationale.t8.auditoria_rgpd"),
+	})
+
+	session := NewWebNuevaAppIntakeSessionV0("session-wizard-tech-decisions", "", "", "")
+	t7Decisions := wizardDecisionsForAnswerV0(t7, t7.Options[0].Value, false)
+	if len(t7Decisions) != 1 ||
+		!stringSliceHasV0(t7Decisions[0].Values, "resiliencia: timeouts_reintentos_circuit_breakers") {
+		t.Fatalf("T7 no produce decision de resiliencia: %+v", t7Decisions)
+	}
+	for _, question := range []WizardQuestionV0{t4, t5, t8} {
+		for _, decision := range wizardDecisionsForAnswerV0(question, question.Options[0].Value, false) {
+			session = session.ApplyDecisionV0(decision)
+		}
+	}
+	if len(session.Form.Datos.Storage) == 0 ||
+		session.Form.Datos.Storage[0].Tipo != "relacional" ||
+		!stringSliceHasV0(session.Form.Datos.Storage[0].Restricciones, "motor preferido: PostgreSQL") {
+		t.Fatalf("T4 no materializa persistencia valida: %+v", session.Form.Datos.Storage)
+	}
+	if len(session.Form.Integraciones) == 0 ||
+		session.Form.Integraciones[0].Tipo != "api_contract" ||
+		session.Form.Integraciones[0].Direccion != "inbound" ||
+		!session.Form.Integraciones[0].Requerido {
+		t.Fatalf("T5 no materializa contrato API: %+v", session.Form.Integraciones)
+	}
+	if !stringSliceHasV0(session.Form.Calidad.Compliance, "auditoria_inmutable_retencion_rgpd") ||
+		!session.Form.Datos.Operacion.Auditoria ||
+		!stringSliceHasV0(session.Form.Agentes.Preferencias, "cumplimiento tecnico: auditoria_inmutable_retencion_rgpd") {
+		t.Fatalf("T8 no materializa preferencias/compliance: calidad=%+v datos=%+v agentes=%+v", session.Form.Calidad, session.Form.Datos.Operacion, session.Form.Agentes)
+	}
+}
+
 func TestWizardGlosarioGeneradoV0(t *testing.T) {
 	const glossaryPath = "../../docs/wizard_glosario_generado.md"
 	expected := wizardGlossaryMarkdownV0()

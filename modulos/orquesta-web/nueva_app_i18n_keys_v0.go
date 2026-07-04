@@ -401,6 +401,8 @@ var nuevaAppI18nRequiredKeysV0 = []string{
 	"nueva_app.wizard.default.linters.why",
 	"nueva_app.wizard.default.errors.why",
 	"nueva_app.wizard.default.observability.why",
+	"nueva_app.wizard.default.persistence.why",
+	"nueva_app.wizard.default.resilience.why",
 	"nueva_app.wizard.default.docs.why",
 	"nueva_app.validation.summary_title",
 	"nueva_app.validation.summary_intro",

@@ -159,6 +159,8 @@ func nuevaAppWizardHelpI18nSpanishV0() map[string]string {
 		"nueva_app.wizard.default.linters.help":                               "Linters y formato revisan estilo y errores mecanicos. Conviene para que la verificacion sea repetible.",
 		"nueva_app.wizard.default.errors.help":                                "Errores tipados usan codigos publicos estables. Conviene para que UI y operadores entiendan fallos sin leer detalles internos.",
 		"nueva_app.wizard.default.observability.help":                         "Logging estructurado registra hechos operativos con campos claros. Conviene para investigar problemas sin depender de frases sueltas.",
+		"nueva_app.wizard.default.persistence.help":                           "Migraciones, backups y restore probado hacen recuperables los datos. Conviene definirlos aunque el motor exacto se elija despues.",
+		"nueva_app.wizard.default.resilience.help":                            "Timeouts, reintentos, paginacion y limites evitan que una app se bloquee o consuma recursos sin control.",
 		"nueva_app.wizard.default.docs.help":                                  "Documentacion de handoff deja estructura, arbol de ficheros y stack tecnico. Conviene para que otro equipo pueda continuar.",
 		"nueva_app.wizard.rich.explain_all":                                   "Que significa todo esto?",
 		"nueva_app.wizard.rich.full_glossary":                                 "Ver glosario completo",
@@ -181,6 +183,8 @@ func nuevaAppWizardHelpI18nSpanishV0() map[string]string {
 		"nueva_app.wizard.default.linters.example":                            "Ejemplo: el verificador avisa si un fichero no tiene el formato esperado.",
 		"nueva_app.wizard.default.errors.example":                             "Ejemplo: mostrar formulario_incompleto en vez de una traza interna.",
 		"nueva_app.wizard.default.observability.example":                      "Ejemplo: registrar usuario, accion y resultado en campos separados.",
+		"nueva_app.wizard.default.persistence.example":                        "Ejemplo: restaurar una copia en un entorno de prueba antes de confiar en el backup.",
+		"nueva_app.wizard.default.resilience.example":                         "Ejemplo: cortar una llamada externa lenta y devolver una respuesta controlada.",
 		"nueva_app.wizard.default.docs.example":                               "Ejemplo: dejar una guia con comandos de prueba y mapa de carpetas.",
 	}
 }
@@ -294,6 +298,8 @@ func nuevaAppWizardHelpDefaultEnglishV0() map[string]string {
 		"nueva_app.wizard.default.linters.help":       "Linters and formatting check style and mechanical errors. Use them so verification is repeatable.",
 		"nueva_app.wizard.default.errors.help":        "Typed errors use stable public codes. Use them so UI and operators understand failures without internal details.",
 		"nueva_app.wizard.default.observability.help": "Structured logging records operational facts with clear fields. Use it to investigate issues without relying on loose text.",
+		"nueva_app.wizard.default.persistence.help":   "Migrations, backups, and tested restore make data recoverable. Use them even when the exact engine is chosen later.",
+		"nueva_app.wizard.default.resilience.help":    "Timeouts, retries, pagination, and limits prevent stalls and unbounded resource use.",
 		"nueva_app.wizard.default.docs.help":          "Handoff documentation records structure, file tree, and technical stack. Use it so another team can continue.",
 	}
 }
@@ -319,6 +325,8 @@ func nuevaAppWizardExampleEnglishV0() map[string]string {
 		"nueva_app.wizard.default.linters.example":                            "Example: the checker warns when a file does not use the expected format.",
 		"nueva_app.wizard.default.errors.example":                             "Example: show form_incomplete instead of an internal trace.",
 		"nueva_app.wizard.default.observability.example":                      "Example: record user, action, and result in separate fields.",
+		"nueva_app.wizard.default.persistence.example":                        "Example: restore a backup in a test environment before trusting it.",
+		"nueva_app.wizard.default.resilience.example":                         "Example: cut off a slow external call and return a controlled response.",
 		"nueva_app.wizard.default.docs.example":                               "Example: leave a guide with test commands and folder map.",
 	}
 }

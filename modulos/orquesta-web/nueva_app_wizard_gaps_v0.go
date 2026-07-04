@@ -254,6 +254,9 @@ func wizardTechnicalDimensionQuestionsV0(form WebNuevaAppFormV0) []WizardQuestio
 		q.RequiresFacts = []WizardFactV0{{Key: "corporate_identity", Value: "true"}}
 		q.ExcludedByFacts = []WizardFactV0{{Key: "audience", Value: "single"}, {Key: "ui", Value: "none"}}
 		out = append(out, q)
+		if nextIntegrationIndex < nuevaAppMaxIntegrationRowsV0-1 {
+			nextIntegrationIndex++
+		}
 	}
 	if !wizardHasObservabilityDecisionV0(form) {
 		q := wizardQuestionV0("wizard-t3-observabilidad", "calidad.observabilidad", WizardTopicEntregaV0, WizardImportanceAltaV0, []WizardOptionV0{
@@ -265,6 +268,30 @@ func wizardTechnicalDimensionQuestionsV0(form WebNuevaAppFormV0) []WizardQuestio
 		q.RequiresFacts = []WizardFactV0{{Key: "observability_question", Value: "true"}}
 		out = append(out, q)
 	}
+	if !wizardHasPersistenceDecisionV0(form) {
+		q := wizardQuestionV0("wizard-t4-persistencia-tecnica", "datos.storage.0.tipo", WizardTopicDatosV0, WizardImportanceAltaV0, []WizardOptionV0{
+			wizardOptionV0("sqlite_backups_restore", "nueva_app.wizard.option.t4.sqlite", true, "nueva_app.wizard.rationale.t4.sqlite"),
+			wizardOptionV0("postgresql_migraciones_backups_restore", "nueva_app.wizard.option.t4.postgresql", false, ""),
+			wizardOptionV0("mysql_migraciones_backups_restore", "nueva_app.wizard.option.t4.mysql", false, ""),
+			wizardOptionV0("kv_embebido_backups_restore", "nueva_app.wizard.option.t4.kv_embebido", false, ""),
+			wizardOptionV0("redis_cache_jobs_cron", "nueva_app.wizard.option.t4.redis_jobs", false, "").withRequiresFactsV0([]WizardFactV0{{Key: "deploy", Value: "server"}}),
+		})
+		q.RequiresFacts = []WizardFactV0{{Key: "data", Value: "own"}}
+		out = append(out, q)
+	}
+	if !wizardHasAPIDecisionV0(form) {
+		q := wizardQuestionV0("wizard-t5-api-contratos", "integraciones."+strconv.Itoa(nextIntegrationIndex)+".tipo", WizardTopicDatosV0, WizardImportanceAltaV0, []WizardOptionV0{
+			wizardOptionV0("rest_versionada_openapi", "nueva_app.wizard.option.t5.rest_openapi", true, "nueva_app.wizard.rationale.t5.rest_openapi"),
+			wizardOptionV0("grpc_contracts", "nueva_app.wizard.option.t5.grpc", false, ""),
+			wizardOptionV0("graphql_schema", "nueva_app.wizard.option.t5.graphql", false, ""),
+			wizardOptionV0("webhooks_firmados_reintentos", "nueva_app.wizard.option.t5.webhooks", false, ""),
+		})
+		q.RequiresFacts = []WizardFactV0{{Key: "api_contract", Value: "true"}}
+		out = append(out, q)
+		if nextIntegrationIndex < nuevaAppMaxIntegrationRowsV0-1 {
+			nextIntegrationIndex++
+		}
+	}
 	if !wizardHasDeployAdvancedDecisionV0(form) {
 		q := wizardQuestionV0("wizard-t6-despliegue-avanzado", "deploy.restricciones", WizardTopicEntregaV0, WizardImportanceAltaV0, []WizardOptionV0{
 			wizardOptionV0("contenedor_systemd_ci", "nueva_app.wizard.option.t6.contenedor_systemd", true, "nueva_app.wizard.rationale.t6.contenedor_systemd"),
@@ -272,6 +299,24 @@ func wizardTechnicalDimensionQuestionsV0(form WebNuevaAppFormV0) []WizardQuestio
 			wizardOptionV0("ha_failover", "nueva_app.wizard.option.t6.ha_failover", false, "").withRequiresFactsV0([]WizardFactV0{{Key: "deploy", Value: "server"}}),
 		})
 		q.RequiresFacts = []WizardFactV0{{Key: "deploy", Value: "server"}}
+		out = append(out, q)
+	}
+	if !wizardHasResilienceDecisionV0(form) {
+		q := wizardQuestionV0("wizard-t7-resiliencia-rendimiento", "agentes.preferencias", WizardTopicEntregaV0, WizardImportanceAltaV0, []WizardOptionV0{
+			wizardOptionV0("timeouts_reintentos_circuit_breakers", "nueva_app.wizard.option.t7.timeouts", true, "nueva_app.wizard.rationale.t7.timeouts"),
+			wizardOptionV0("paginacion_limites_recursos", "nueva_app.wizard.option.t7.paginacion", false, ""),
+			wizardOptionV0("presupuesto_latencia", "nueva_app.wizard.option.t7.latencia", false, "").withRequiresFactsV0([]WizardFactV0{{Key: "latency_budget", Value: "true"}}),
+		})
+		q.RequiresFacts = []WizardFactV0{{Key: "resilience_question", Value: "true"}}
+		out = append(out, q)
+	}
+	if !wizardHasComplianceDecisionV0(form) {
+		q := wizardQuestionV0("wizard-t8-cumplimiento-tecnico", "agentes.preferencias", WizardTopicDatosV0, WizardImportanceAltaV0, []WizardOptionV0{
+			wizardOptionV0("auditoria_inmutable_retencion_rgpd", "nueva_app.wizard.option.t8.auditoria_rgpd", true, "nueva_app.wizard.rationale.t8.auditoria_rgpd"),
+			wizardOptionV0("anonimizacion_pseudonimizacion", "nueva_app.wizard.option.t8.anonimizacion", false, ""),
+			wizardOptionV0("borrado_real_bajo_peticion", "nueva_app.wizard.option.t8.borrado_real", false, ""),
+		})
+		q.RequiresFacts = []WizardFactV0{{Key: "sensitive_data", Value: "true"}}
 		out = append(out, q)
 	}
 	if len(out) == 0 && len(facts) == 0 {
@@ -954,6 +999,7 @@ func wizardFactsForFormV0(form WebNuevaAppFormV0) map[string]map[string]bool {
 	if trimV0(form.Deploy.Target) != "" && !containsStringV0(trimV0(form.Deploy.Target), "local", "desktop", "mobile_store") {
 		add("deploy", "server")
 		add("observability_question", "true")
+		add("resilience_question", "true")
 	}
 	if wizardAudienceLooksPersonalV0(form) {
 		add("audience", "single")
@@ -966,6 +1012,18 @@ func wizardFactsForFormV0(form WebNuevaAppFormV0) map[string]map[string]bool {
 	}
 	if form.Datos.DBRequired || trimV0(form.Datos.NecesidadFuncional) != "" {
 		add("data", "own")
+	}
+	if len(form.Integraciones) > 0 || trimV0(form.TipoApp) == "api" {
+		add("api_contract", "true")
+		add("resilience_question", "true")
+	}
+	if guidedContainsAnyV0(need, "api", "webhook", "graphql", "grpc", "integracion entrante", "api publica", "contrato") {
+		add("api_contract", "true")
+		add("resilience_question", "true")
+	}
+	if guidedContainsAnyV0(need, "latencia", "tiempo real", "alto rendimiento", "muchos usuarios", "critica") {
+		add("latency_budget", "true")
+		add("resilience_question", "true")
 	}
 	if guidedContainsAnyV0(normalizeGuidedNeedV0(form.Datos.Sensibilidad), "personal", "sanitaria", "salud", "financiera") {
 		add("sensitive_data", "true")
@@ -1038,6 +1096,37 @@ func wizardHasObservabilityDecisionV0(form WebNuevaAppFormV0) bool {
 
 func wizardHasDeployAdvancedDecisionV0(form WebNuevaAppFormV0) bool {
 	return len(compactStringsV0(form.Deploy.Restricciones)) > 0
+}
+
+func wizardHasPersistenceDecisionV0(form WebNuevaAppFormV0) bool {
+	return wizardHasStorageTypeV0(form)
+}
+
+func wizardHasAPIDecisionV0(form WebNuevaAppFormV0) bool {
+	for _, integration := range form.Integraciones {
+		if trimV0(integration.Tipo) == "api_contract" {
+			return true
+		}
+	}
+	return false
+}
+
+func wizardHasResilienceDecisionV0(form WebNuevaAppFormV0) bool {
+	for _, value := range form.Agentes.Preferencias {
+		if strings.HasPrefix(trimV0(value), "resiliencia: ") {
+			return true
+		}
+	}
+	return false
+}
+
+func wizardHasComplianceDecisionV0(form WebNuevaAppFormV0) bool {
+	for _, value := range form.Agentes.Preferencias {
+		if strings.HasPrefix(trimV0(value), "cumplimiento tecnico: ") {
+			return true
+		}
+	}
+	return false
 }
 
 func containsStringV0(value string, candidates ...string) bool {

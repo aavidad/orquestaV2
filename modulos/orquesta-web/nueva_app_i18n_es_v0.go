@@ -406,6 +406,8 @@ func nuevaAppI18nSpanishV0() map[string]string {
 		"nueva_app.wizard.default.linters.why":                               "Hace reproducible la verificacion.",
 		"nueva_app.wizard.default.errors.why":                                "Evita errores publicos ambiguos.",
 		"nueva_app.wizard.default.observability.why":                         "Permite operar y auditar desde el primer corte.",
+		"nueva_app.wizard.default.persistence.why":                           "Evita perder datos y prueba la recuperacion antes de produccion.",
+		"nueva_app.wizard.default.resilience.why":                            "Evita bloqueos por llamadas lentas, listados grandes o recursos sin limite.",
 		"nueva_app.wizard.default.docs.why":                                  "Deja handoff y estructura revisables.",
 		"nueva_app.validation.summary_title":                                 "Faltan campos obligatorios",
 		"nueva_app.validation.summary_intro":                                 "Revisa estos campos antes de enviar la solicitud.",

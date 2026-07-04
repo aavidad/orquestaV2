@@ -224,8 +224,33 @@ func wizardDecisionsForAnswerV0(
 			{Field: "calidad.observabilidad", Value: "true"},
 			{Field: "agentes.preferencias", Values: []string{"observabilidad: " + choice}},
 		}
+	case "wizard-t4-persistencia-tecnica":
+		return wizardTechnicalPersistenceDecisionsV0(question.Field, choice)
+	case "wizard-t5-api-contratos":
+		index, _, ok := indexedNuevaAppDecisionFieldV0(question.Field, "integraciones")
+		if !ok {
+			index = 0
+		}
+		prefix := "integraciones." + strconv.Itoa(index) + "."
+		return []WebNuevaAppIntakeDecisionV0{
+			{Field: prefix + "tipo", Value: "api_contract"},
+			{Field: prefix + "nombre", Value: "contratos de API"},
+			{Field: prefix + "proposito", Value: wizardAPIPurposeV0(choice)},
+			{Field: prefix + "direccion", Value: "inbound"},
+			{Field: prefix + "auth", Value: "rate-limit e idempotencia por adaptador"},
+			{Field: prefix + "criticidad", Value: "alta"},
+			{Field: prefix + "requerido", Value: "true"},
+		}
 	case "wizard-t6-despliegue-avanzado":
 		return []WebNuevaAppIntakeDecisionV0{{Field: "deploy.restricciones", Values: []string{choice}}}
+	case "wizard-t7-resiliencia-rendimiento":
+		return []WebNuevaAppIntakeDecisionV0{{Field: "agentes.preferencias", Values: []string{"resiliencia: " + choice}}}
+	case "wizard-t8-cumplimiento-tecnico":
+		return []WebNuevaAppIntakeDecisionV0{
+			{Field: "calidad.compliance", Values: []string{choice}},
+			{Field: "datos.operacion.auditoria", Value: "true"},
+			{Field: "agentes.preferencias", Values: []string{"cumplimiento tecnico: " + choice}},
+		}
 	}
 	if index, suffix, ok := indexedNuevaAppDecisionFieldV0(question.Field, "integraciones"); ok {
 		return wizardIntegrationDecisionsV0(index, suffix, choice)
@@ -395,6 +420,70 @@ func wizardDataNeedDecisionsV0(choice string) []WebNuevaAppIntakeDecisionV0 {
 			{Field: "datos.db_required", Value: "false"},
 			{Field: "datos.necesidad_funcional", Value: "No requiere persistencia propia inicialmente."},
 		}
+	}
+}
+
+func wizardTechnicalPersistenceDecisionsV0(field string, choice string) []WebNuevaAppIntakeDecisionV0 {
+	index, _, ok := indexedNuevaAppDecisionFieldV0(field, "datos.storage")
+	if !ok {
+		index = 0
+	}
+	prefix := "datos.storage." + strconv.Itoa(index) + "."
+	storageType := "relacional"
+	switch choice {
+	case "kv_embebido_backups_restore":
+		storageType = "clave_valor"
+	case "redis_cache_jobs_cron":
+		storageType = "clave_valor_cache"
+	}
+	return []WebNuevaAppIntakeDecisionV0{
+		{Field: prefix + "tipo", Value: storageType},
+		{Field: prefix + "proposito", Value: wizardTechnicalPersistencePurposeV0(choice)},
+		{Field: prefix + "requerido", Value: "true"},
+		{Field: prefix + "restricciones", Values: wizardTechnicalPersistenceRestrictionsV0(choice)},
+	}
+}
+
+func wizardTechnicalPersistencePurposeV0(choice string) string {
+	switch choice {
+	case "postgresql_migraciones_backups_restore":
+		return "Persistir datos compartidos con PostgreSQL, migraciones versionadas y restore probado."
+	case "mysql_migraciones_backups_restore":
+		return "Persistir datos compartidos con MySQL, migraciones versionadas y restore probado."
+	case "kv_embebido_backups_restore":
+		return "Persistir estado clave-valor embebido con backups y restore probado."
+	case "redis_cache_jobs_cron":
+		return "Cubrir cache, tareas en segundo plano y cron con adaptador gestionado."
+	default:
+		return "Persistir datos locales con SQLite, migraciones, backups diarios y restore probado."
+	}
+}
+
+func wizardTechnicalPersistenceRestrictionsV0(choice string) []string {
+	switch choice {
+	case "postgresql_migraciones_backups_restore":
+		return []string{"motor preferido: PostgreSQL", "migraciones versionadas con rollback", "backup automatico y restore probado"}
+	case "mysql_migraciones_backups_restore":
+		return []string{"motor preferido: MySQL", "migraciones versionadas con rollback", "backup automatico y restore probado"}
+	case "kv_embebido_backups_restore":
+		return []string{"motor preferido: KV embebido", "backup automatico y restore probado"}
+	case "redis_cache_jobs_cron":
+		return []string{"cache Redis o equivalente por adaptador", "jobs y cron gobernados", "backup/restore si hay estado durable"}
+	default:
+		return []string{"motor preferido: SQLite", "migraciones versionadas con rollback", "backup diario y restore semanal probado"}
+	}
+}
+
+func wizardAPIPurposeV0(choice string) string {
+	switch choice {
+	case "grpc_contracts":
+		return "Exponer contratos gRPC versionados con limites, idempotencia y documentacion tecnica."
+	case "graphql_schema":
+		return "Exponer schema GraphQL versionado con limites, idempotencia y documentacion tecnica."
+	case "webhooks_firmados_reintentos":
+		return "Emitir webhooks firmados con reintentos, idempotencia y trazabilidad."
+	default:
+		return "Exponer REST versionada con OpenAPI, rate limiting e idempotencia en mutaciones."
 	}
 }
 
