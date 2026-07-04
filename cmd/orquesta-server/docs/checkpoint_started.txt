@@ -1,6 +1,6 @@
-goal_ref: goal-ref-task-autoprogramming-d75ef5f8379d-g01
-source_task_ref: task-autonomia-t6-env-ratchet-20260704-002
-objective: consolidate two real ORQUESTA_* env vars if safe to reduce env_vars_orquesta from 513 toward 511; otherwise keep current ratchet with explicit justification and MEJ-106 open.
-scope: cmd/orquesta-server, scripts, docs/runbooks, docs/bitacora_correccion_pericial_2026-07-03.md, docs/inventario_bugs_orquesta_2026-06-30.md
-next_artifact: cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-d75ef5f8379d-g01.json
-status: started
+goal_ref: goal-ref-task-autoprogramming-6d18adf66582-g01
+source_task_ref: task-envs-ola2-familias-a-config
+objective: migrate ORQUESTA_OPES_BRIDGE_* and ORQUESTA_CODEX_WAVE_* env families to typed orquesta.config.json sections with deprecated env alias overrides.
+write_set: cmd/orquesta-server, modulos/orquesta-server, docs/auditoria_envs_pisadas_2026-07-04.md, docs/autoprogramacion_orquesta_pendientes_2026-05-23.md
+next_artifact: cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-6d18adf66582-g01.json
+evidence: checkpoint materialized before long exploration; MCP broker resources unavailable in session.

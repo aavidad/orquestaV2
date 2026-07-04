@@ -101,16 +101,17 @@ func codexWaveTailCommandV0(args []string, stdout io.Writer, stderr io.Writer) i
 }
 
 func codexWaveControlConfigFromArgsV0(command string, args []string, stderr io.Writer) (codexWaveControlConfigV0, error) {
+	projectConfig := codexWaveProjectConfigFromArgsEnvV0(args)
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	waveRef := flags.String("wave-ref", strings.TrimSpace(os.Getenv(envCodexWaveRefV0)), "ref de la ola")
-	runtimeDir := flags.String("runtime-dir", strings.TrimSpace(os.Getenv(envCodexWaveRuntimeWorkDirV0)), "directorio runtime de la ola")
+	waveRef := flags.String("wave-ref", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveRefV0, ""), "ref de la ola")
+	runtimeDir := flags.String("runtime-dir", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveRuntimeWorkDirV0, ""), "directorio runtime de la ola")
 	agentRef := flags.String("agent-ref", "", "agente concreto")
 	logKind := flags.String("file", "stdout", "stdout, stderr o last-message")
 	mode := flags.String("mode", "summary", "summary o fragment")
-	reason := flags.String("reason", strings.TrimSpace(os.Getenv(envCodexWaveTailReasonV0)), "razon de diagnostico")
-	confirmStop := flags.String("confirm-stop", strings.TrimSpace(os.Getenv(envCodexWaveStopConfirmV0)), "confirmacion explicita: debe coincidir con wave-ref")
-	forceStop := flags.Bool("force", boolEnvOrDefaultV0(envCodexWaveStopForceV0, false), "senalar proceso tras confirmacion explicita")
+	reason := flags.String("reason", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveTailReasonV0, ""), "razon de diagnostico")
+	confirmStop := flags.String("confirm-stop", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveStopConfirmV0, ""), "confirmacion explicita: debe coincidir con wave-ref")
+	forceStop := flags.Bool("force", codexWaveBoolValueFromProjectConfigFileV0(projectConfig, envCodexWaveStopForceV0, false), "senalar proceso tras confirmacion explicita")
 	lines := flags.Int("lines", 20, "lineas maximas a leer")
 	maxBytes := flags.Int64("max-bytes", 8192, "bytes maximos a leer")
 	if err := flags.Parse(args); err != nil {

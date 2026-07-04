@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 )
@@ -20,10 +19,10 @@ func opesBridgeLoopConfigFromEnvV0(
 	orquestaBaseURLFallback string,
 ) (opesBridgeLoopConfigV0, error) {
 	projectConfig := opesProjectConfigFromEnvBestEffortV0()
-	if strings.TrimSpace(os.Getenv(envOPESBridgeEnabledV0)) != "1" {
+	if !opesBridgeEnabledFromProjectConfigFileV0(projectConfig) {
 		return opesBridgeLoopConfigV0{}, nil
 	}
-	if strings.TrimSpace(os.Getenv(envOPESBridgeConfirmV0)) != "1" {
+	if !opesBridgeConfirmFromProjectConfigFileV0(projectConfig) {
 		return opesBridgeLoopConfigV0{}, fmt.Errorf("ORQUESTA_OPES_BRIDGE_CONFIRM requerido para opes bridge loop")
 	}
 	drainConfig, err := opesDrainConfigFromEnvWithBaseURLV0(orquestaBaseURLFallback)
@@ -114,8 +113,9 @@ func waitOPESBridgeLoopDoneV0(
 }
 
 func opesBridgeHasSafeFilterV0(config opesDrainConfigV0) bool {
-	if strings.TrimSpace(os.Getenv(envOPESBridgeAllowUnfilteredV0)) == "1" &&
-		compactEvidenceRefV0(os.Getenv(envOPESBridgeDestinationEvidenceV0)) {
+	projectConfig := opesProjectConfigFromEnvBestEffortV0()
+	if opesBridgeBoolValueFromProjectConfigFileV0(projectConfig, envOPESBridgeAllowUnfilteredV0, false) &&
+		compactEvidenceRefV0(opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeDestinationEvidenceV0)) {
 		return true
 	}
 	hasHardScope := strings.TrimSpace(config.JobRef) != "" ||

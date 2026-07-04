@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"os"
 	"path/filepath"
-	"strings"
 
 	orquestaopesconnector "orquesta/modulos/orquesta-opes-connector"
 )
@@ -14,16 +12,23 @@ const opesBridgeExternalSystemV0 = "opes"
 func opesBridgeInputLedgerFromEnvV0(
 	dryRun bool,
 ) (externalBridgeInputLedgerV0, error) {
-	if dryRun || strings.TrimSpace(os.Getenv(envOPESBridgeInputLedgerDisabledV0)) == "1" {
+	return opesBridgeInputLedgerFromProjectConfigFileV0(opesProjectConfigFromEnvBestEffortV0(), dryRun)
+}
+
+func opesBridgeInputLedgerFromProjectConfigFileV0(
+	config serverProjectConfigFileV0,
+	dryRun bool,
+) (externalBridgeInputLedgerV0, error) {
+	if dryRun || opesBridgeBoolValueFromProjectConfigFileV0(config, envOPESBridgeInputLedgerDisabledV0, false) {
 		return nil, nil
 	}
-	path := strings.TrimSpace(os.Getenv(envOPESBridgeInputLedgerPathV0))
+	path := opesBridgeStringValueFromProjectConfigFileV0(config, envOPESBridgeInputLedgerPathV0)
 	if path == "" {
-		config, err := serverConfigFromEnvV0()
+		serverConfig, err := serverConfigFromEnvV0()
 		if err != nil {
 			return nil, err
 		}
-		path = filepath.Join(config.StateDir, "external-bridge-input-ledger.json")
+		path = filepath.Join(serverConfig.StateDir, "external-bridge-input-ledger.json")
 	}
 	return newFileExternalBridgeInputLedgerV0(path)
 }

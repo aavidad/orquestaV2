@@ -75,11 +75,11 @@ func opesDrainConfigFromEnvWithBaseURLV0(
 	if err != nil {
 		return opesDrainConfigV0{}, err
 	}
-	inputLedger, err := opesBridgeInputLedgerFromEnvV0(dryRun)
+	inputLedger, err := opesBridgeInputLedgerFromProjectConfigFileV0(projectConfig, dryRun)
 	if err != nil {
 		return opesDrainConfigV0{}, err
 	}
-	destination, err := opesDrainDestinationPolicyFromEnvV0(opesBaseURL, orquestaBaseURL, dryRun)
+	destination, err := opesDrainDestinationPolicyFromProjectConfigFileV0(projectConfig, opesBaseURL, orquestaBaseURL, dryRun)
 	if err != nil {
 		return opesDrainConfigV0{}, err
 	}
@@ -495,26 +495,31 @@ func opesBridgeEffectiveConfigSettingsV0(
 			opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeRequiredRuntimeCommitRefV0),
 			configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeRequiredRuntimeCommitRefV0),
 		),
-		serverConfigSettingFromRegistryV0(envOPESBridgeSpeechSynthesisCapabilityV0, strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisCapabilityV0))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeSpeechSynthesisCapabilityRefV0, strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisCapabilityRefV0))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeSpeechSynthesisEvidenceRefsV0, strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisEvidenceRefsV0))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeSpeechSynthesisReasonV0, strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisReasonV0))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeSpeechSynthesisNetworkReadyV0, strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisNetworkReadyV0))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeSpeechSynthesisToolPathReadyV0, strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisToolPathReadyV0))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeSpeechSynthesisQuotaReadyV0, strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisQuotaReadyV0))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeSpeechSynthesisProgressHeartbeatReadyV0, strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisProgressHeartbeatReadyV0))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeSpeechSynthesisProviderTimeoutReadyV0, strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisProviderTimeoutReadyV0))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeSpeechSynthesisNoProgressTimeoutSecondsV0, strconv.Itoa(intEnvOrDefaultV0(envOPESBridgeSpeechSynthesisNoProgressTimeoutSecondsV0, 300))),
-		serverSensitiveConfigSettingFromRegistryV0(envOPESBridgeSpeechSynthesisToolWorkDirV0, configuredEnvValueV0(envOPESBridgeSpeechSynthesisToolWorkDirV0, "opes-speech-synthesis-tool-workdir-configured")),
-		serverSensitiveConfigSettingFromRegistryV0(envOPESBridgeSpeechSynthesisToolCommandV0, configuredEnvValueV0(envOPESBridgeSpeechSynthesisToolCommandV0, "opes-speech-synthesis-tool-command-configured")),
-		serverConfigSettingFromRegistryV0(envOPESBridgeSpeechSynthesisToolPreflightTimeoutSecondsV0, strconv.Itoa(intEnvOrDefaultV0(envOPESBridgeSpeechSynthesisToolPreflightTimeoutSecondsV0, int(defaultOPESBridgeSpeechSynthesisToolPreflightTimeoutV0/time.Second)))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeRemoteQACapabilityV0, strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQACapabilityV0))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeRemoteQACapabilityRefV0, strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQACapabilityRefV0))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeRemoteQAEvidenceRefsV0, strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQAEvidenceRefsV0))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeRemoteQAReasonV0, strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQAReasonV0))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeRemoteQANetworkReadyV0, strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQANetworkReadyV0))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeRemoteQAAuthStateReadyV0, strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQAAuthStateReadyV0))),
-		serverConfigSettingFromRegistryV0(envOPESBridgeRemoteQAQuotaReadyV0, strings.TrimSpace(os.Getenv(envOPESBridgeRemoteQAQuotaReadyV0))),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeAllowUnfilteredV0, strconv.FormatBool(opesBridgeBoolValueFromProjectConfigFileV0(projectConfig, envOPESBridgeAllowUnfilteredV0, false)), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeAllowUnfilteredV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeInputLedgerDisabledV0, strconv.FormatBool(opesBridgeBoolValueFromProjectConfigFileV0(projectConfig, envOPESBridgeInputLedgerDisabledV0, false)), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeInputLedgerDisabledV0)),
+		serverSensitiveConfigSettingFromRegistryWithSourceV0(envOPESBridgeInputLedgerPathV0, configuredRefValueV0(opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeInputLedgerPathV0), "opes-bridge-input-ledger-path-configured"), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeInputLedgerPathV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeProductiveConfirmV0, strconv.FormatBool(opesBridgeBoolValueFromProjectConfigFileV0(projectConfig, envOPESBridgeProductiveConfirmV0, false)), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeProductiveConfirmV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeDestinationEvidenceV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeDestinationEvidenceV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeDestinationEvidenceV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeSpeechSynthesisCapabilityV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeSpeechSynthesisCapabilityV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeSpeechSynthesisCapabilityV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeSpeechSynthesisCapabilityRefV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeSpeechSynthesisCapabilityRefV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeSpeechSynthesisCapabilityRefV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeSpeechSynthesisEvidenceRefsV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeSpeechSynthesisEvidenceRefsV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeSpeechSynthesisEvidenceRefsV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeSpeechSynthesisReasonV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeSpeechSynthesisReasonV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeSpeechSynthesisReasonV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeSpeechSynthesisNetworkReadyV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeSpeechSynthesisNetworkReadyV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeSpeechSynthesisNetworkReadyV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeSpeechSynthesisToolPathReadyV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeSpeechSynthesisToolPathReadyV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeSpeechSynthesisToolPathReadyV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeSpeechSynthesisQuotaReadyV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeSpeechSynthesisQuotaReadyV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeSpeechSynthesisQuotaReadyV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeSpeechSynthesisProgressHeartbeatReadyV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeSpeechSynthesisProgressHeartbeatReadyV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeSpeechSynthesisProgressHeartbeatReadyV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeSpeechSynthesisProviderTimeoutReadyV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeSpeechSynthesisProviderTimeoutReadyV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeSpeechSynthesisProviderTimeoutReadyV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeSpeechSynthesisNoProgressTimeoutSecondsV0, strconv.Itoa(opesBridgeIntValueFromProjectConfigFileV0(projectConfig, envOPESBridgeSpeechSynthesisNoProgressTimeoutSecondsV0, 300)), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeSpeechSynthesisNoProgressTimeoutSecondsV0)),
+		serverSensitiveConfigSettingFromRegistryWithSourceV0(envOPESBridgeSpeechSynthesisToolWorkDirV0, configuredRefValueV0(opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeSpeechSynthesisToolWorkDirV0), "opes-speech-synthesis-tool-workdir-configured"), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeSpeechSynthesisToolWorkDirV0)),
+		serverSensitiveConfigSettingFromRegistryWithSourceV0(envOPESBridgeSpeechSynthesisToolCommandV0, configuredRefValueV0(opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeSpeechSynthesisToolCommandV0), "opes-speech-synthesis-tool-command-configured"), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeSpeechSynthesisToolCommandV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeSpeechSynthesisToolPreflightTimeoutSecondsV0, strconv.Itoa(opesBridgeIntValueFromProjectConfigFileV0(projectConfig, envOPESBridgeSpeechSynthesisToolPreflightTimeoutSecondsV0, int(defaultOPESBridgeSpeechSynthesisToolPreflightTimeoutV0/time.Second))), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeSpeechSynthesisToolPreflightTimeoutSecondsV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeRemoteQACapabilityV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeRemoteQACapabilityV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeRemoteQACapabilityV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeRemoteQACapabilityRefV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeRemoteQACapabilityRefV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeRemoteQACapabilityRefV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeRemoteQAEvidenceRefsV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeRemoteQAEvidenceRefsV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeRemoteQAEvidenceRefsV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeRemoteQAReasonV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeRemoteQAReasonV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeRemoteQAReasonV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeRemoteQANetworkReadyV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeRemoteQANetworkReadyV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeRemoteQANetworkReadyV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeRemoteQAAuthStateReadyV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeRemoteQAAuthStateReadyV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeRemoteQAAuthStateReadyV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envOPESBridgeRemoteQAQuotaReadyV0, opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeRemoteQAQuotaReadyV0), configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeRemoteQAQuotaReadyV0)),
 	}
 }
 
@@ -558,44 +563,50 @@ func opesBridgeExternalCapabilitiesFromEnvV0() []orquestadomainwork.DomainWorkEx
 	return opesBridgeExternalCapabilitiesFromProjectConfigFileV0(serverProjectConfigFileV0{})
 }
 
-func opesBridgeExternalCapabilitiesFromProjectConfigFileV0(serverProjectConfigFileV0) []orquestadomainwork.DomainWorkExternalCapabilityV0 {
+func opesBridgeExternalCapabilitiesFromProjectConfigFileV0(config serverProjectConfigFileV0) []orquestadomainwork.DomainWorkExternalCapabilityV0 {
 	out := []orquestadomainwork.DomainWorkExternalCapabilityV0{}
-	if capability, ok := opesBridgeExternalCapabilityFromEnvV0(
+	if capability, ok := opesBridgeExternalCapabilityFromProjectConfigFileV0(
+		config,
 		orquestadomainwork.DomainWorkExternalCapabilityKindSpeechSynthesisV0,
 		envOPESBridgeSpeechSynthesisCapabilityV0,
 		envOPESBridgeSpeechSynthesisCapabilityRefV0,
 		envOPESBridgeSpeechSynthesisEvidenceRefsV0,
 		envOPESBridgeSpeechSynthesisReasonV0,
 	); ok {
-		capability.NetworkReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+		capability.NetworkReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromProjectConfigFileV0(
+			config,
 			envOPESBridgeSpeechSynthesisNetworkReadyV0,
 			capability.Available,
 			capability.OperationalReason,
 			capability.Kind,
 			"network_ready",
 		)
-		capability.ToolPathReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+		capability.ToolPathReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromProjectConfigFileV0(
+			config,
 			envOPESBridgeSpeechSynthesisToolPathReadyV0,
 			capability.Available,
 			capability.OperationalReason,
 			capability.Kind,
 			"tool_path_ready",
 		)
-		capability.ProviderQuotaReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+		capability.ProviderQuotaReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromProjectConfigFileV0(
+			config,
 			envOPESBridgeSpeechSynthesisQuotaReadyV0,
 			capability.Available,
 			capability.OperationalReason,
 			capability.Kind,
 			"provider_quota_ready",
 		)
-		capability.ProgressHeartbeatReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+		capability.ProgressHeartbeatReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromProjectConfigFileV0(
+			config,
 			envOPESBridgeSpeechSynthesisProgressHeartbeatReadyV0,
 			false,
 			capability.OperationalReason,
 			capability.Kind,
 			"progress_heartbeat_ready",
 		)
-		capability.ProviderTimeoutReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+		capability.ProviderTimeoutReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromProjectConfigFileV0(
+			config,
 			envOPESBridgeSpeechSynthesisProviderTimeoutReadyV0,
 			false,
 			capability.OperationalReason,
@@ -603,37 +614,42 @@ func opesBridgeExternalCapabilitiesFromProjectConfigFileV0(serverProjectConfigFi
 			"provider_timeout_ready",
 		)
 		if capability.ProviderTimeoutReady {
-			capability.ProviderNoProgressTimeoutSeconds = intEnvOrDefaultV0(
+			capability.ProviderNoProgressTimeoutSeconds = opesBridgeIntValueFromProjectConfigFileV0(
+				config,
 				envOPESBridgeSpeechSynthesisNoProgressTimeoutSecondsV0,
 				300,
 			)
 		}
 		capability.CommandTimeoutSeconds = 1800
-		capability = opesBridgeSpeechSynthesisToolPreflightFromEnvV0(capability)
+		capability = opesBridgeSpeechSynthesisToolPreflightFromProjectConfigFileV0(config, capability)
 		out = append(out, orquestadomainwork.NormalizeDomainWorkExternalCapabilityV0(capability))
 	}
-	if capability, ok := opesBridgeExternalCapabilityFromEnvV0(
+	if capability, ok := opesBridgeExternalCapabilityFromProjectConfigFileV0(
+		config,
 		orquestadomainwork.DomainWorkExternalCapabilityKindRemoteQAProviderV0,
 		envOPESBridgeRemoteQACapabilityV0,
 		envOPESBridgeRemoteQACapabilityRefV0,
 		envOPESBridgeRemoteQAEvidenceRefsV0,
 		envOPESBridgeRemoteQAReasonV0,
 	); ok {
-		capability.NetworkReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+		capability.NetworkReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromProjectConfigFileV0(
+			config,
 			envOPESBridgeRemoteQANetworkReadyV0,
 			capability.Available,
 			capability.OperationalReason,
 			capability.Kind,
 			"network_ready",
 		)
-		capability.AuthStateReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+		capability.AuthStateReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromProjectConfigFileV0(
+			config,
 			envOPESBridgeRemoteQAAuthStateReadyV0,
 			capability.Available,
 			capability.OperationalReason,
 			capability.Kind,
 			"auth_state_ready",
 		)
-		capability.ProviderQuotaReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromEnvV0(
+		capability.ProviderQuotaReady, capability.OperationalReason = opesBridgeCapabilityReadinessFromProjectConfigFileV0(
+			config,
 			envOPESBridgeRemoteQAQuotaReadyV0,
 			capability.Available,
 			capability.OperationalReason,
@@ -652,8 +668,15 @@ func opesBridgeExternalCapabilitiesFromProjectConfigFileV0(serverProjectConfigFi
 func opesBridgeSpeechSynthesisToolPreflightFromEnvV0(
 	capability orquestadomainwork.DomainWorkExternalCapabilityV0,
 ) orquestadomainwork.DomainWorkExternalCapabilityV0 {
-	workdir := strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisToolWorkDirV0))
-	commandRaw := strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisToolCommandV0))
+	return opesBridgeSpeechSynthesisToolPreflightFromProjectConfigFileV0(serverProjectConfigFileV0{}, capability)
+}
+
+func opesBridgeSpeechSynthesisToolPreflightFromProjectConfigFileV0(
+	config serverProjectConfigFileV0,
+	capability orquestadomainwork.DomainWorkExternalCapabilityV0,
+) orquestadomainwork.DomainWorkExternalCapabilityV0 {
+	workdir := opesBridgeStringValueFromProjectConfigFileV0(config, envOPESBridgeSpeechSynthesisToolWorkDirV0)
+	commandRaw := opesBridgeStringValueFromProjectConfigFileV0(config, envOPESBridgeSpeechSynthesisToolCommandV0)
 	if workdir == "" && commandRaw == "" {
 		return capability
 	}
@@ -661,7 +684,7 @@ func opesBridgeSpeechSynthesisToolPreflightFromEnvV0(
 		return capability
 	}
 	if !capability.ToolPathReady &&
-		strings.TrimSpace(os.Getenv(envOPESBridgeSpeechSynthesisToolPathReadyV0)) != "" {
+		opesBridgeStringValueFromProjectConfigFileV0(config, envOPESBridgeSpeechSynthesisToolPathReadyV0) != "" {
 		return capability
 	}
 	args := opesBridgeSpeechSynthesisToolPreflightCommandV0(commandRaw)
@@ -676,7 +699,8 @@ func opesBridgeSpeechSynthesisToolPreflightFromEnvV0(
 		}
 	}
 	timeout := time.Duration(
-		intEnvOrDefaultV0(
+		opesBridgeIntValueFromProjectConfigFileV0(
+			config,
 			envOPESBridgeSpeechSynthesisToolPreflightTimeoutSecondsV0,
 			int(defaultOPESBridgeSpeechSynthesisToolPreflightTimeoutV0/time.Second),
 		),
@@ -768,13 +792,24 @@ func opesBridgeExternalCapabilityFromEnvV0(
 	evidenceEnv string,
 	reasonEnv string,
 ) (orquestadomainwork.DomainWorkExternalCapabilityV0, bool) {
-	raw := strings.TrimSpace(os.Getenv(capabilityEnv))
+	return opesBridgeExternalCapabilityFromProjectConfigFileV0(serverProjectConfigFileV0{}, kind, capabilityEnv, refEnv, evidenceEnv, reasonEnv)
+}
+
+func opesBridgeExternalCapabilityFromProjectConfigFileV0(
+	config serverProjectConfigFileV0,
+	kind string,
+	capabilityEnv string,
+	refEnv string,
+	evidenceEnv string,
+	reasonEnv string,
+) (orquestadomainwork.DomainWorkExternalCapabilityV0, bool) {
+	raw := opesBridgeStringValueFromProjectConfigFileV0(config, capabilityEnv)
 	if raw == "" {
 		return orquestadomainwork.DomainWorkExternalCapabilityV0{}, false
 	}
 	available, reason := opesBridgeCapabilityAvailabilityFromEnvV0(raw, kind)
-	reason = firstNonEmptyV0(strings.TrimSpace(os.Getenv(reasonEnv)), reason)
-	capabilityRef := strings.TrimSpace(os.Getenv(refEnv))
+	reason = firstNonEmptyV0(opesBridgeStringValueFromProjectConfigFileV0(config, reasonEnv), reason)
+	capabilityRef := opesBridgeStringValueFromProjectConfigFileV0(config, refEnv)
 	if capabilityRef == "" {
 		capabilityRef = kind
 	}
@@ -783,7 +818,7 @@ func opesBridgeExternalCapabilityFromEnvV0(
 		Kind:              kind,
 		Available:         available,
 		OperationalReason: reason,
-		EvidenceRefs:      parseOPESBridgeJobTypeSequenceV0(os.Getenv(evidenceEnv)),
+		EvidenceRefs:      parseOPESBridgeJobTypeSequenceV0(opesBridgeStringValueFromProjectConfigFileV0(config, evidenceEnv)),
 	}, true
 }
 
@@ -806,7 +841,18 @@ func opesBridgeCapabilityReadinessFromEnvV0(
 	kind string,
 	check string,
 ) (bool, string) {
-	raw := strings.TrimSpace(os.Getenv(envName))
+	return opesBridgeCapabilityReadinessFromProjectConfigFileV0(serverProjectConfigFileV0{}, envName, defaultReady, currentReason, kind, check)
+}
+
+func opesBridgeCapabilityReadinessFromProjectConfigFileV0(
+	config serverProjectConfigFileV0,
+	envName string,
+	defaultReady bool,
+	currentReason string,
+	kind string,
+	check string,
+) (bool, string) {
+	raw := opesBridgeStringValueFromProjectConfigFileV0(config, envName)
 	if raw == "" {
 		return defaultReady, strings.TrimSpace(currentReason)
 	}

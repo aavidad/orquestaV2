@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
@@ -46,12 +45,13 @@ type opesTemarioCycleSummaryV0 struct {
 }
 
 func opesTemarioCycleCommandV0(stdout io.Writer, stderr io.Writer) int {
+	projectConfig := opesProjectConfigFromEnvBestEffortV0()
 	config, err := opesTemarioCycleConfigFromEnvV0()
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "%s: %v\n", opesTemarioCycleCommandNameV0, err)
 		return 2
 	}
-	if !config.DrainConfig.DryRun && strings.TrimSpace(os.Getenv(envOPESBridgeConfirmV0)) != "1" {
+	if !config.DrainConfig.DryRun && !opesBridgeConfirmFromProjectConfigFileV0(projectConfig) {
 		_, _ = fmt.Fprintf(stderr, "%s: exporta ORQUESTA_OPES_BRIDGE_CONFIRM=1 para crear runs\n", opesTemarioCycleCommandNameV0)
 		return 2
 	}

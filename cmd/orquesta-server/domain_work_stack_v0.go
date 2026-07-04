@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -115,17 +114,18 @@ func domainWorkHTTPEgressPolicyFromProjectConfigFileV0(config serverProjectConfi
 }
 
 func opesDomainWorkDestinationPolicyFromEnvV0(baseURL string) error {
-	if strings.TrimSpace(os.Getenv(envOPESBridgeProductiveConfirmV0)) == "1" {
+	config := opesProjectConfigFromEnvBestEffortV0()
+	if opesBridgeBoolValueFromProjectConfigFileV0(config, envOPESBridgeProductiveConfirmV0, false) {
 		return fmt.Errorf("opes_destination_productive_not_allowed")
 	}
-	destination, err := opesBridgeDestinationFromURLV0("opes", baseURL, false)
+	destination, err := opesBridgeDestinationFromProjectConfigFileV0(config, "opes", baseURL, false)
 	if err != nil {
 		return err
 	}
-	if err := opesBridgeRequireRealOPESConfirmationV0(destination, false); err != nil {
+	if err := opesBridgeRequireRealOPESConfirmationFromProjectConfigFileV0(config, destination, false); err != nil {
 		return err
 	}
-	evidenceRef := strings.TrimSpace(os.Getenv(envOPESBridgeDestinationEvidenceV0))
+	evidenceRef := opesBridgeStringValueFromProjectConfigFileV0(config, envOPESBridgeDestinationEvidenceV0)
 	if evidenceRef != "" && !compactEvidenceRefV0(evidenceRef) {
 		return fmt.Errorf("opes_destination_evidence_ref_invalid")
 	}

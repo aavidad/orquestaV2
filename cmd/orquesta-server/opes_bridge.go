@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
@@ -89,12 +88,13 @@ func copyStringIntMapV0(values map[string]int) map[string]int {
 }
 
 func opesDrainOnceCommandV0(stdout io.Writer, stderr io.Writer) int {
+	projectConfig := opesProjectConfigFromEnvBestEffortV0()
 	config, err := opesDrainConfigFromEnvV0()
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "opes-drain-once: %v\n", err)
 		return 2
 	}
-	if !config.DryRun && strings.TrimSpace(os.Getenv(envOPESBridgeConfirmV0)) != "1" {
+	if !config.DryRun && !opesBridgeConfirmFromProjectConfigFileV0(projectConfig) {
 		_, _ = fmt.Fprintln(stderr, "opes-drain-once: exporta ORQUESTA_OPES_BRIDGE_CONFIRM=1 para crear runs")
 		return 2
 	}

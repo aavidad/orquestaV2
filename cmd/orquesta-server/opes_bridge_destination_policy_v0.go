@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"os"
 	"strings"
 )
 
@@ -26,21 +25,30 @@ func opesDrainDestinationPolicyFromEnvV0(
 	orquestaBaseURL string,
 	dryRun bool,
 ) (opesDrainDestinationPolicyV0, error) {
-	if strings.TrimSpace(os.Getenv(envOPESBridgeProductiveConfirmV0)) == "1" {
+	return opesDrainDestinationPolicyFromProjectConfigFileV0(opesProjectConfigFromEnvBestEffortV0(), opesBaseURL, orquestaBaseURL, dryRun)
+}
+
+func opesDrainDestinationPolicyFromProjectConfigFileV0(
+	config serverProjectConfigFileV0,
+	opesBaseURL string,
+	orquestaBaseURL string,
+	dryRun bool,
+) (opesDrainDestinationPolicyV0, error) {
+	if opesBridgeBoolValueFromProjectConfigFileV0(config, envOPESBridgeProductiveConfirmV0, false) {
 		return opesDrainDestinationPolicyV0{}, fmt.Errorf("opes_destination_productive_not_allowed")
 	}
-	opes, err := opesBridgeDestinationFromURLV0("opes", opesBaseURL, dryRun)
+	opes, err := opesBridgeDestinationFromProjectConfigFileV0(config, "opes", opesBaseURL, dryRun)
 	if err != nil {
 		return opesDrainDestinationPolicyV0{}, err
 	}
-	orquesta, err := opesBridgeDestinationFromURLV0("orquesta", orquestaBaseURL, dryRun)
+	orquesta, err := opesBridgeDestinationFromProjectConfigFileV0(config, "orquesta", orquestaBaseURL, dryRun)
 	if err != nil {
 		return opesDrainDestinationPolicyV0{}, err
 	}
-	if err := opesBridgeRequireRealOPESConfirmationV0(opes, dryRun); err != nil {
+	if err := opesBridgeRequireRealOPESConfirmationFromProjectConfigFileV0(config, opes, dryRun); err != nil {
 		return opesDrainDestinationPolicyV0{}, err
 	}
-	evidenceRef := strings.TrimSpace(os.Getenv(envOPESBridgeDestinationEvidenceV0))
+	evidenceRef := opesBridgeStringValueFromProjectConfigFileV0(config, envOPESBridgeDestinationEvidenceV0)
 	if evidenceRef != "" && !compactEvidenceRefV0(evidenceRef) {
 		return opesDrainDestinationPolicyV0{}, fmt.Errorf("opes_destination_evidence_ref_invalid")
 	}
@@ -58,6 +66,15 @@ func opesDrainDestinationPolicyFromEnvV0(
 }
 
 func opesBridgeDestinationFromURLV0(
+	kind string,
+	raw string,
+	dryRun bool,
+) (opesDrainDestinationV0, error) {
+	return opesBridgeDestinationFromProjectConfigFileV0(opesProjectConfigFromEnvBestEffortV0(), kind, raw, dryRun)
+}
+
+func opesBridgeDestinationFromProjectConfigFileV0(
+	config serverProjectConfigFileV0,
 	kind string,
 	raw string,
 	dryRun bool,
@@ -82,7 +99,7 @@ func opesBridgeDestinationFromURLV0(
 	if parsed.RawQuery != "" || parsed.Fragment != "" {
 		return opesDrainDestinationV0{}, fmt.Errorf("%s_destination_query_not_allowed", kind)
 	}
-	category, err := opesBridgeDestinationCategoryV0(parsed)
+	category, err := opesBridgeDestinationCategoryFromProjectConfigFileV0(config, parsed)
 	if err != nil {
 		return opesDrainDestinationV0{}, err
 	}
@@ -93,6 +110,10 @@ func opesBridgeDestinationFromURLV0(
 }
 
 func opesBridgeDestinationCategoryV0(parsed *url.URL) (string, error) {
+	return opesBridgeDestinationCategoryFromProjectConfigFileV0(opesProjectConfigFromEnvBestEffortV0(), parsed)
+}
+
+func opesBridgeDestinationCategoryFromProjectConfigFileV0(config serverProjectConfigFileV0, parsed *url.URL) (string, error) {
 	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
 	if host == "" {
 		return "", fmt.Errorf("opes_destination_host_required")
@@ -100,7 +121,7 @@ func opesBridgeDestinationCategoryV0(parsed *url.URL) (string, error) {
 	if opesBridgeHostIsLoopbackV0(host) {
 		return "loopback", nil
 	}
-	if strings.TrimSpace(os.Getenv(envOPESTemporalConfirmV0)) == "1" {
+	if opesBridgeBoolValueFromProjectConfigFileV0(config, envOPESTemporalConfirmV0, false) {
 		return "temporal", nil
 	}
 	return "", fmt.Errorf("opes_destination_confirmation_required")
@@ -115,10 +136,14 @@ func opesBridgeHostIsLoopbackV0(host string) bool {
 }
 
 func opesBridgeRequireRealOPESConfirmationV0(destination opesDrainDestinationV0, dryRun bool) error {
+	return opesBridgeRequireRealOPESConfirmationFromProjectConfigFileV0(opesProjectConfigFromEnvBestEffortV0(), destination, dryRun)
+}
+
+func opesBridgeRequireRealOPESConfirmationFromProjectConfigFileV0(config serverProjectConfigFileV0, destination opesDrainDestinationV0, dryRun bool) error {
 	if dryRun || destination.Category == "dry_run" {
 		return nil
 	}
-	if strings.TrimSpace(os.Getenv(envOPESTemporalConfirmV0)) == "1" {
+	if opesBridgeBoolValueFromProjectConfigFileV0(config, envOPESTemporalConfirmV0, false) {
 		return nil
 	}
 	return fmt.Errorf("opes_destination_confirmation_required")

@@ -10,13 +10,14 @@ import (
 )
 
 func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDirectorWaveConfigV0, error) {
+	projectConfig := codexWaveProjectConfigFromArgsEnvV0(args)
 	flags := flag.NewFlagSet("codex-launch-director-wave", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	var domainContextFiles codexDirectorStringListFlagV0
 	directorWaveLimits := codexDirectorWaveLimitsEnvConfigFromEnvV0()
 
 	agents := flags.Int("agents", directorWaveLimits.Agents, "numero de agentes que puede lanzar el Director")
-	waveRef := flags.String("wave-ref", strings.TrimSpace(os.Getenv(envCodexWaveRefV0)), "ref opaca de la ola")
+	waveRef := flags.String("wave-ref", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveRefV0, ""), "ref opaca de la ola")
 	objective := flags.String("objective", "", "objetivo para el Director Operativo")
 	objectiveFile := flags.String("objective-file", "", "archivo con objetivo para el Director Operativo")
 	writeSet := flags.String("write-set", "", "write-set separado por comas")
@@ -28,28 +29,28 @@ func codexDirectorWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexDi
 	projectRef := flags.String("project-ref", envOrDefaultV0(envCodexDirectorProjectRefV0, "orquesta"), "project_ref opaco")
 	domainRefs := flags.String("domain-ref", strings.TrimSpace(os.Getenv(envCodexDirectorDomainRefsV0)), "domain_refs separados por comas")
 	projectDir := flags.String("project-dir", strings.TrimSpace(os.Getenv(envCodexProjectWorkDirV0)), "directorio de trabajo del proyecto")
-	runtimeDir := flags.String("runtime-dir", strings.TrimSpace(os.Getenv(envCodexWaveRuntimeWorkDirV0)), "directorio runtime de esta ola")
+	runtimeDir := flags.String("runtime-dir", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveRuntimeWorkDirV0, ""), "directorio runtime de esta ola")
 	commandPath := flags.String("command", strings.TrimSpace(os.Getenv(envCodexCommandV0)), "ruta al binario codex")
-	sourceCodeHome := flags.String("source-code-home", strings.TrimSpace(os.Getenv(envCodexWaveSourceCodeHomeV0)), "CODEX_HOME fuente para copiar credenciales/config")
-	model := flags.String("model", firstNonEmptyEnvV0(envCodexWaveModelV0, envCodexModelV0), "modelo Codex opcional")
-	reasoningEffort := flags.String("reasoning-effort", envOrDefaultV0(envCodexWaveReasoningEffortV0, envOrDefaultV0(envCodexReasoningEffortV0, "medium")), "esfuerzo de razonamiento")
-	profile := flags.String("profile", firstNonEmptyEnvV0(envCodexWaveProfileV0, envCodexProfileV0), "perfil Codex opcional")
-	sandbox := flags.String("sandbox", envOrDefaultV0(envCodexWaveSandboxV0, "workspace-write"), "sandbox Codex")
-	approval := flags.String("approval-policy", envOrDefaultV0(envCodexWaveApprovalPolicyV0, "never"), "politica de aprobacion Codex")
-	extraArgs := flags.String("extra-args", strings.TrimSpace(os.Getenv(envCodexWaveExtraArgsV0)), "argumentos extra para codex exec")
-	isolateHome := flags.Bool("isolate-home", boolEnvOrDefaultV0(envCodexWaveIsolateHomeV0, false), "copiar CODEX_HOME por agente bajo el runtime")
-	strictCredentialProjection := flags.Bool("strict-credential-projection", boolEnvOrDefaultV0(envCodexWaveStrictCredentialProjectionV0, false), "exigir proyeccion aislada con auth/config presentes")
-	projectMemories := flags.Bool("project-memories", boolEnvOrDefaultV0(envCodexWaveProjectMemoriesV0, false), "permitir proyeccion explicita de memories de CODEX_HOME")
-	projectionMaxFiles := flags.Int("projection-max-files", intEnvOrDefaultV0(envCodexWaveProjectionMaxFilesV0, codexWaveProjectionDefaultMaxFilesV0), "maximo de ficheros a copiar desde CODEX_HOME")
-	projectionMaxFileBytes := flags.Int("projection-max-file-bytes", intEnvOrDefaultV0(envCodexWaveProjectionMaxFileBytesV0, int(codexWaveProjectionDefaultMaxFileBytesV0)), "maximo de bytes por fichero proyectado")
-	projectionMaxTotalBytes := flags.Int("projection-max-total-bytes", intEnvOrDefaultV0(envCodexWaveProjectionMaxTotalBytesV0, int(codexWaveProjectionDefaultMaxTotalBytesV0)), "maximo total de bytes proyectados desde CODEX_HOME")
+	sourceCodeHome := flags.String("source-code-home", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveSourceCodeHomeV0, ""), "CODEX_HOME fuente para copiar credenciales/config")
+	model := flags.String("model", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveModelV0, firstNonEmptyEnvV0(envCodexModelV0)), "modelo Codex opcional")
+	reasoningEffort := flags.String("reasoning-effort", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveReasoningEffortV0, envOrDefaultV0(envCodexReasoningEffortV0, "medium")), "esfuerzo de razonamiento")
+	profile := flags.String("profile", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveProfileV0, firstNonEmptyEnvV0(envCodexProfileV0)), "perfil Codex opcional")
+	sandbox := flags.String("sandbox", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveSandboxV0, "workspace-write"), "sandbox Codex")
+	approval := flags.String("approval-policy", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveApprovalPolicyV0, "never"), "politica de aprobacion Codex")
+	extraArgs := flags.String("extra-args", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveExtraArgsV0, ""), "argumentos extra para codex exec")
+	isolateHome := flags.Bool("isolate-home", codexWaveBoolValueFromProjectConfigFileV0(projectConfig, envCodexWaveIsolateHomeV0, false), "copiar CODEX_HOME por agente bajo el runtime")
+	strictCredentialProjection := flags.Bool("strict-credential-projection", codexWaveBoolValueFromProjectConfigFileV0(projectConfig, envCodexWaveStrictCredentialProjectionV0, false), "exigir proyeccion aislada con auth/config presentes")
+	projectMemories := flags.Bool("project-memories", codexWaveBoolValueFromProjectConfigFileV0(projectConfig, envCodexWaveProjectMemoriesV0, false), "permitir proyeccion explicita de memories de CODEX_HOME")
+	projectionMaxFiles := flags.Int("projection-max-files", codexWaveIntValueFromProjectConfigFileV0(projectConfig, envCodexWaveProjectionMaxFilesV0, codexWaveProjectionDefaultMaxFilesV0), "maximo de ficheros a copiar desde CODEX_HOME")
+	projectionMaxFileBytes := flags.Int("projection-max-file-bytes", codexWaveIntValueFromProjectConfigFileV0(projectConfig, envCodexWaveProjectionMaxFileBytesV0, int(codexWaveProjectionDefaultMaxFileBytesV0)), "maximo de bytes por fichero proyectado")
+	projectionMaxTotalBytes := flags.Int("projection-max-total-bytes", codexWaveIntValueFromProjectConfigFileV0(projectConfig, envCodexWaveProjectionMaxTotalBytesV0, int(codexWaveProjectionDefaultMaxTotalBytesV0)), "maximo total de bytes proyectados desde CODEX_HOME")
 	dryRun := flags.Bool("dry-run", false, "materializar prompts/wrappers sin arrancar procesos")
-	purgeRuntime := flags.Bool("purge-runtime", boolEnvOrDefaultV0(envCodexWavePurgeRuntimeV0, false), "purgar runtime de esta ola antes de materializar")
-	purgeConfirm := flags.String("confirm-purge-runtime", strings.TrimSpace(os.Getenv(envCodexWavePurgeRuntimeConfirmV0)), "confirmacion explicita: debe coincidir con wave-ref")
-	purgeReportOnly := flags.Bool("purge-runtime-report", boolEnvOrDefaultV0(envCodexWavePurgeRuntimeReportV0, false), "reportar purga sin borrar")
-	allowUnmanagedLaunch := flags.Bool("allow-unmanaged-launch", boolEnvOrDefaultV0(envCodexWaveAllowUnmanagedLaunchV0, false), "breakglass auditado para lanzar agentes fuera del servidor/cola de Orquesta")
-	unmanagedLaunchReason := flags.String("unmanaged-launch-reason", strings.TrimSpace(os.Getenv(envCodexWaveUnmanagedLaunchReasonV0)), "motivo auditado para el breakglass unmanaged")
-	unmanagedLaunchConfirm := flags.String("confirm-unmanaged-launch", strings.TrimSpace(os.Getenv(envCodexWaveUnmanagedLaunchConfirmV0)), "confirmacion explicita unmanaged: debe coincidir con wave-ref")
+	purgeRuntime := flags.Bool("purge-runtime", codexWaveBoolValueFromProjectConfigFileV0(projectConfig, envCodexWavePurgeRuntimeV0, false), "purgar runtime de esta ola antes de materializar")
+	purgeConfirm := flags.String("confirm-purge-runtime", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWavePurgeRuntimeConfirmV0, ""), "confirmacion explicita: debe coincidir con wave-ref")
+	purgeReportOnly := flags.Bool("purge-runtime-report", codexWaveBoolValueFromProjectConfigFileV0(projectConfig, envCodexWavePurgeRuntimeReportV0, false), "reportar purga sin borrar")
+	allowUnmanagedLaunch := flags.Bool("allow-unmanaged-launch", codexWaveBoolValueFromProjectConfigFileV0(projectConfig, envCodexWaveAllowUnmanagedLaunchV0, false), "breakglass auditado para lanzar agentes fuera del servidor/cola de Orquesta")
+	unmanagedLaunchReason := flags.String("unmanaged-launch-reason", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveUnmanagedLaunchReasonV0, ""), "motivo auditado para el breakglass unmanaged")
+	unmanagedLaunchConfirm := flags.String("confirm-unmanaged-launch", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveUnmanagedLaunchConfirmV0, ""), "confirmacion explicita unmanaged: debe coincidir con wave-ref")
 	allowRecursive := flags.Bool("allow-recursive-delegation", false, "permitir que el Director gobierne delegacion recursiva")
 	maxDepth := flags.Int("max-delegation-depth", 0, "profundidad maxima de delegacion")
 	maxChildren := flags.Int("max-subagents-per-agent", directorWaveLimits.MaxSubagentsPerAgent, "fanout maximo por agente")
@@ -163,7 +164,7 @@ func codexDirectorWaveConfigFromParsedFlagsV0(values parsedCodexDirectorWaveFlag
 			Agents: values.agents, WaveRef: values.waveRef, Prompt: values.objectiveText,
 			ProjectWorkDir: values.projectWorkDir, RuntimeWorkDir: values.rootRuntimeDir,
 			CommandPath: values.resolvedCommand, SourceCodeHome: values.sourceHome,
-			PathEnv: envOrDefaultV0(envCodexWavePathV0, envOrDefaultV0(envCodexPathV0, os.Getenv("PATH"))),
+			PathEnv: codexWaveStringValueFromProjectConfigFileV0(codexWaveProjectConfigFromEnvBestEffortV0(), envCodexWavePathV0, envOrDefaultV0(envCodexPathV0, os.Getenv("PATH"))),
 			Model:   strings.TrimSpace(values.model), ReasoningEffort: codexReasoningEffortPolicyV0(values.reasoningEffort),
 			Profile: strings.TrimSpace(values.profile), Sandbox: strings.TrimSpace(values.sandbox),
 			ApprovalPolicy: strings.TrimSpace(values.approval), ExtraArgs: strings.Fields(values.extraArgs),

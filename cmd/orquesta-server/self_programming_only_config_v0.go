@@ -94,7 +94,8 @@ func validateServerSelfProgrammingOnlyConfigV0(config orquestaserver.ConfigV0) e
 			}
 		}
 	}
-	if !boolEnvOrDefaultV0(envOPESBridgeDryRunV0, true) {
+	projectConfig := opesProjectConfigFromEnvBestEffortV0()
+	if !opesBridgeBoolValueFromProjectConfigFileV0(projectConfig, envOPESBridgeDryRunV0, true) {
 		return fmt.Errorf("orquesta_server: self_programming_only_opes_bridge_dry_run_required")
 	}
 	if !boolEnvOrDefaultV0(envOPESRegistryFinalPkgDryRunV0, true) {

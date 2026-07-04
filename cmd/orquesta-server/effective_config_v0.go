@@ -370,6 +370,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 	settings = append(settings, codebaseBrokerEffectiveSettingsV0(config.ProjectWorkDir, projectConfig)...)
 	settings = append(settings, domainWorkEffectiveSettingsV0(config.ProjectWorkDir, projectConfig)...)
 	settings = append(settings, opesBridgeEffectiveConfigSettingsV0(config, projectConfig)...)
+	settings = append(settings, codexWaveEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, codexServerWorktreeSnapshotBudgetSettingsV0(config.ProjectWorkDir, worktreeSnapshotBudget)...)
 	settings = append(settings, hermesOperatorEffectiveConfigSettingsV0()...)
 	settings = append(settings, ollamaModelManagerEffectiveConfigSettingsV0()...)
@@ -463,6 +464,20 @@ func serverEffectiveConfigDiagnosticsFromConfigV0(projectConfig serverProjectCon
 		"evidence-ref-config-alias-opes-base-url",
 		envOPESBaseURLLegacyV0,
 	)...)
+	diagnostics = append(diagnostics, serverDeprecatedEnvOverridesForProjectConfigV0(
+		projectConfig,
+		"opes_bridge",
+		"opes_bridge.*",
+		"evidence-ref-config-deprecated-env-override-opes-bridge",
+		opesBridgeEnvKeysV0()...,
+	)...)
+	diagnostics = append(diagnostics, serverDeprecatedEnvOverridesForProjectConfigV0(
+		projectConfig,
+		"codex_wave",
+		"codex_wave.*",
+		"evidence-ref-config-deprecated-env-override-codex-wave",
+		codexWaveEnvKeysV0()...,
+	)...)
 	if !serverGoalBackendOperationalFromProjectConfigFileV0(projectConfig) &&
 		!boolEnvOrDefaultV0(envExternalWorkLegacyDirectorLoopV0, false) {
 		diagnostics = append(diagnostics, orquestaserver.ServerDiagnosticV0{
@@ -501,6 +516,95 @@ func serverEffectiveConfigDiagnosticsFromConfigV0(projectConfig serverProjectCon
 		Message:      envServerIdleSelfImprovementAfterLegacyV0 + " es legacy; usar " + envServerIdleSelfImprovementAfterV0,
 		EvidenceRefs: []string{"evidence-ref-server-idle-self-improvement-env-legacy-alias"},
 	})
+}
+
+func serverDeprecatedEnvOverridesForProjectConfigV0(
+	projectConfig serverProjectConfigFileV0,
+	scope string,
+	configPath string,
+	evidenceRef string,
+	keys ...string,
+) []orquestaserver.ServerDiagnosticV0 {
+	diagnostics := []orquestaserver.ServerDiagnosticV0{}
+	for _, key := range keys {
+		key = strings.TrimSpace(key)
+		if key == "" || strings.TrimSpace(os.Getenv(key)) == "" {
+			continue
+		}
+		if !serverProjectConfigHasEffectiveValueForEnvKeyV0(projectConfig, key) {
+			continue
+		}
+		diagnostics = append(diagnostics, orquestaserver.ServerDiagnosticV0{
+			Code:         "deprecated_env_used",
+			Scope:        scope,
+			Message:      key + " override deprecated; usar " + configPath + " en orquesta.config.json",
+			EvidenceRefs: []string{evidenceRef},
+		})
+	}
+	return diagnostics
+}
+
+func opesBridgeEnvKeysV0() []string {
+	return []string{
+		envOPESBridgeEnabledV0, envOPESBridgeConfirmV0, envOPESBridgeDryRunV0,
+		envOPESBridgeJobTypeV0, envOPESBridgeJobRefV0, envOPESBridgeProgramIDV0,
+		envOPESBridgeTopicIDV0, envOPESBridgeCorrelationIDV0,
+		envOPESBridgeJobTypeSequenceV0, envOPESBridgeLimitV0,
+		envOPESBridgeTimeoutSecondsV0, envOPESBridgePriorityV0,
+		envOPESBridgeIntervalSecondsV0, envOPESBridgeInitialDelaySecondsV0,
+		envOPESBridgeMaxTicksV0, envOPESBridgeSuperviseSubmittedV0,
+		envOPESBridgeWaitResidentSecondsV0, envOPESBridgeWaitResidentIntervalMSV0,
+		envOPESBridgeRequireRuntimeCompatibilityV0,
+		envOPESBridgeRequiredRuntimeBinarySHA256V0,
+		envOPESBridgeRequiredRuntimeBuildRefV0,
+		envOPESBridgeRequiredRuntimeCommitRefV0,
+		envOPESBridgeSpeechSynthesisCapabilityV0,
+		envOPESBridgeSpeechSynthesisCapabilityRefV0,
+		envOPESBridgeSpeechSynthesisEvidenceRefsV0,
+		envOPESBridgeSpeechSynthesisReasonV0,
+		envOPESBridgeSpeechSynthesisNetworkReadyV0,
+		envOPESBridgeSpeechSynthesisToolPathReadyV0,
+		envOPESBridgeSpeechSynthesisQuotaReadyV0,
+		envOPESBridgeSpeechSynthesisProgressHeartbeatReadyV0,
+		envOPESBridgeSpeechSynthesisProviderTimeoutReadyV0,
+		envOPESBridgeSpeechSynthesisNoProgressTimeoutSecondsV0,
+		envOPESBridgeSpeechSynthesisToolWorkDirV0,
+		envOPESBridgeSpeechSynthesisToolCommandV0,
+		envOPESBridgeSpeechSynthesisToolPreflightTimeoutSecondsV0,
+		envOPESBridgeRemoteQACapabilityV0,
+		envOPESBridgeRemoteQACapabilityRefV0,
+		envOPESBridgeRemoteQAEvidenceRefsV0,
+		envOPESBridgeRemoteQAReasonV0,
+		envOPESBridgeRemoteQANetworkReadyV0,
+		envOPESBridgeRemoteQAAuthStateReadyV0,
+		envOPESBridgeRemoteQAQuotaReadyV0,
+		envOPESBridgeAllowUnfilteredV0,
+		envOPESBridgeInputLedgerDisabledV0,
+		envOPESBridgeInputLedgerPathV0,
+		envOPESBridgeProductiveConfirmV0,
+		envOPESBridgeDestinationEvidenceV0,
+	}
+}
+
+func codexWaveEnvKeysV0() []string {
+	return []string{
+		envCodexWaveAgentsV0, envCodexWaveRefV0, envCodexWaveRuntimeWorkDirV0,
+		envCodexWaveSourceCodeHomeV0, envCodexWaveModelV0,
+		envCodexWaveReasoningEffortV0, envCodexWaveProfileV0,
+		envCodexWaveSandboxV0, envCodexWaveApprovalPolicyV0,
+		envCodexWaveExtraArgsV0, envCodexWaveIsolateHomeV0,
+		envCodexWaveStrictCredentialProjectionV0,
+		envCodexWaveProjectMemoriesV0, envCodexWaveProjectionMaxFilesV0,
+		envCodexWaveProjectionMaxFileBytesV0,
+		envCodexWaveProjectionMaxTotalBytesV0,
+		envCodexWavePurgeRuntimeV0, envCodexWavePurgeRuntimeConfirmV0,
+		envCodexWavePurgeRuntimeReportV0,
+		envCodexWaveAllowUnmanagedLaunchV0,
+		envCodexWaveUnmanagedLaunchReasonV0,
+		envCodexWaveUnmanagedLaunchConfirmV0, envCodexWavePathV0,
+		envCodexWaveTailReasonV0, envCodexWaveStopConfirmV0,
+		envCodexWaveStopForceV0,
+	}
 }
 
 func serverEnvAliasDiagnosticsV0(

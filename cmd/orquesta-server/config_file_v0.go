@@ -33,6 +33,7 @@ type serverProjectConfigFileV0 struct {
 	DaemonLogs           serverProjectConfigDaemonLogsV0           `json:"daemon_logs,omitempty"`
 	CodexRuntime         serverProjectConfigCodexRuntimeV0         `json:"codex_runtime,omitempty"`
 	CodexDirector        serverProjectConfigCodexDirectorV0        `json:"codex_director,omitempty"`
+	CodexWave            serverProjectConfigCodexWaveV0            `json:"codex_wave,omitempty"`
 	GoalBackend          serverProjectConfigGoalBackendV0          `json:"goal_backend,omitempty"`
 	CodexUsageAccounting serverProjectConfigCodexUsageAccountingV0 `json:"codex_usage_accounting,omitempty"`
 	CodebaseBroker       serverProjectConfigCodebaseBrokerV0       `json:"codebase_broker,omitempty"`
@@ -596,6 +597,18 @@ func serverProjectConfigHasEffectiveValueForEnvKeyV0(config serverProjectConfigF
 		return configIntPointerPositiveV0(config.GoalBackend.PreflightTimeoutMS)
 	case envAllowAppServerProxyDiagnosticV0:
 		return config.GoalBackend.AllowAppServerProxyDiagnostic != nil
+	case envCodexWaveAgentsV0, envCodexWaveRefV0, envCodexWaveRuntimeWorkDirV0,
+		envCodexWaveSourceCodeHomeV0, envCodexWaveModelV0, envCodexWaveReasoningEffortV0,
+		envCodexWaveProfileV0, envCodexWaveSandboxV0, envCodexWaveApprovalPolicyV0,
+		envCodexWaveExtraArgsV0, envCodexWaveIsolateHomeV0,
+		envCodexWaveStrictCredentialProjectionV0, envCodexWaveProjectMemoriesV0,
+		envCodexWaveProjectionMaxFilesV0, envCodexWaveProjectionMaxFileBytesV0,
+		envCodexWaveProjectionMaxTotalBytesV0, envCodexWavePurgeRuntimeV0,
+		envCodexWavePurgeRuntimeConfirmV0, envCodexWavePurgeRuntimeReportV0,
+		envCodexWaveAllowUnmanagedLaunchV0, envCodexWaveUnmanagedLaunchReasonV0,
+		envCodexWaveUnmanagedLaunchConfirmV0, envCodexWavePathV0,
+		envCodexWaveTailReasonV0, envCodexWaveStopConfirmV0, envCodexWaveStopForceV0:
+		return codexWaveProjectConfigHasValueForEnvKeyV0(config.CodexWave, key)
 	case envCodexUsageAccountingV0:
 		return configStringPointerHasValueV0(config.CodexUsageAccounting.Mode)
 	case envCodexUsageLogMaxBytesV0:

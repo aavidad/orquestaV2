@@ -647,3 +647,34 @@ Verificación:
 - Suite requerida de cierre:
   `go test ./cmd/orquesta-server ./modulos/orquesta-server`.
 - `git diff --check` verde.
+
+## Actualización Codex 2026-07-05 ola 2 familias A config
+
+TAREA-8.4 migra las dos familias grandes de tuning al fichero canónico
+`orquesta.config.json`:
+
+- `opes_bridge.*` cubre las 47 envs de la familia
+  `ORQUESTA_OPES_BRIDGE_*`: activación/confirmación, `dry_run`, scope,
+  secuencia de jobs, límites, timeouts, prioridad, espera residente,
+  compatibilidad runtime, `allow_unfiltered`, ledger, confirmación productiva,
+  evidencia de destino, speech synthesis y remote QA.
+- `codex_wave.*` cubre las 26 envs de la familia `ORQUESTA_CODEX_WAVE_*`:
+  agentes, refs, runtime, source code home, modelo, effort, perfil, sandbox,
+  approval, args, aislamiento, proyección de credenciales, purge, unmanaged
+  launch, `PATH`, tail reason y stop.
+- Las envs se conservan como override deprecated con precedencia sobre fichero;
+  cuando un valor existe en fichero y la env está seteada, `effective_config`
+  publica diagnóstico `deprecated_env_used` con scope `opes_bridge` o
+  `codex_wave`.
+- Rutas, refs de confirmación, `PATH`, source home, ledger y comandos de
+  preflight se publican redactados como refs configuradas en la configuración
+  efectiva.
+- No se añaden envs nuevas; el objetivo de reducción queda en desplazar uso
+  operativo a fichero y dejar las envs como compatibilidad temporal.
+
+Verificación:
+
+- Focal:
+  `go test -count=1 ./cmd/orquesta-server -run 'Test(CodexWaveConfigV0|OPESBridgeConfig|OPESDrainConfig|OPESBridgeLoopConfig|OPESSpeechSynthesis|ServerConfigFromEnvV0PublicaOPESSpeechSynthesisPreflightRedactadoV0)'`.
+- Requerida:
+  `go test ./cmd/orquesta-server ./modulos/orquesta-server`.
