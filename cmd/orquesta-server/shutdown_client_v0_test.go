@@ -180,6 +180,55 @@ func TestRequestServerShutdownV0NoPropagaBodyCrudoEnError(t *testing.T) {
 	}
 }
 
+func TestRequestServerShutdownV0ErrorTransporteConsultaStatusAccionableV0(t *testing.T) {
+	shutdownCalls := 0
+	statusCalls := 0
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v0/server/shutdown":
+			shutdownCalls++
+			hijacker, ok := w.(http.Hijacker)
+			if !ok {
+				t.Fatalf("response writer sin hijacker")
+			}
+			conn, _, err := hijacker.Hijack()
+			if err != nil {
+				t.Fatalf("hijack: %v", err)
+			}
+			_ = conn.Close()
+		case orquestaserver.ServerStatusEndpointV0:
+			statusCalls++
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(orquestaserver.NewServerPublicStatusV0(orquestaserver.StateV0{
+				Status:                  "running",
+				ShutdownInProgress:      true,
+				ShutdownStatus:          "backend_still_running",
+				ShutdownReady:           false,
+				ShutdownActiveWorkCount: 1,
+				ShutdownActiveWorkRefs:  []string{"shutdown-active-work-goal-backend-goal-ref-post-error"},
+			}))
+		default:
+			t.Fatalf("request inesperada: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	err := requestServerShutdownV0(strings.TrimPrefix(server.URL, "http://"), serverShutdownClientOptionsV0{Forced: true, Reason: "test force con POST sin cuerpo"})
+
+	if shutdownCalls != 1 || statusCalls != 1 {
+		t.Fatalf("calls shutdown=%d status=%d", shutdownCalls, statusCalls)
+	}
+	if err == nil ||
+		!strings.Contains(err.Error(), "shutdown_not_ready status=backend_still_running") ||
+		!strings.Contains(err.Error(), "active_work=1") ||
+		!strings.Contains(err.Error(), "shutdown-active-work-goal-backend-goal-ref-post-error") {
+		t.Fatalf("err=%v", err)
+	}
+	if shutdownRequestErrorAllowsSignalV0(err, orquestaserver.ServerPublicStatusV0{}, true) {
+		t.Fatalf("force no debe permitir signal si el error ya conserva active_work")
+	}
+}
+
 func TestRequestServerShutdownV0RechazaJSONConTrailingData(t *testing.T) {
 	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

@@ -359,6 +359,50 @@ Pruebas focales ejecutadas:
 - `git diff --check`
 - `go test -count=1 ./...`
 
+## Actualizacion Codex 2026-07-04 noche 29
+
+Commits ya empujados antes de este bloque:
+
+- `a3cdcff8 fix: distinguir checkpoint inicial en status goal-first`.
+
+Avance de este bloque:
+
+- `BUG-ORQ-20260704-165` y `BUG-ORQ-20260701-065` quedan reducidos en el borde
+  CLI/HTTP de shutdown: si el `POST /api/v0/server/shutdown` falla por
+  transporte, timeout o conexion cortada sin cuerpo, `orquesta-server stop`
+  consulta `/status` y devuelve `shutdown_not_ready ...` con
+  `backend_still_running`, `active_work` y refs compactas cuando el state
+  publico conserva trabajo activo. Ese error bloquea tambien la escalada por
+  `--force`; ya no queda un `shutdown_timeout` opaco cuando `/status` contiene
+  causa accionable.
+- Auditoria OPES read-only por subagente, sin ediciones ni
+  `codebase-memory-mcp`: `BUG-075` es el siguiente frente mas cerrable por
+  codigo/test; `BUG-058` requiere fake/temporal de ciclo de paquete para no
+  sobrecerrar; `BUG-066` necesita smoke temporal real de external-work/OPES y
+  reconciliacion de cleanup, no solo unit tests.
+
+Conteo operativo tras esta tanda local:
+
+- Inventario: 208 filas de bugs, 173 IDs unicos.
+- Filas abiertas mantenidas: `BUG-165`, `BUG-058`, `BUG-065`, `BUG-066`,
+  `BUG-075`, `BUG-079`.
+- Deduplicando por ultimo registro, solo `BUG-058` y `BUG-066` quedan como IDs
+  claramente abiertos, pero no borrar las filas abiertas antiguas sin limpieza
+  documental explicita.
+
+Pruebas focales ejecutadas antes del commit de esta tanda:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'TestRequestServerShutdownV0(ErrorTransporteConsultaStatusAccionable|NoPropagaBodyCrudoEnError|ReadyNoSaltaActiveWorkPersistido|ReadyNoSaltaActiveWorksEstructurados|ReadyNoSaltaGoalActionsSinActiveWork|CortaEsperaSiStatusBackendTieneRunsPendientes)|TestShutdownRequestErrorAllowsSignalV0SoloConTimeoutYEstadoDrenado|TestShutdownClientReadyV0'`
+- `git diff --check`
+- `go test -count=1 ./cmd/orquesta-server`
+- `go test -count=1 ./...`
+
+Pendiente para Claude si reanuda desde aqui:
+
+- Validar `git status --short --branch`.
+- Confirmar el commit/push de esta tanda si aparece como pendiente.
+- No cerrar `BUG-075/058/066` sin las evidencias indicadas arriba.
+
 ## Checklist de Claude
 
 1. Revisar `git status --short` y separar cambios de cada frente.

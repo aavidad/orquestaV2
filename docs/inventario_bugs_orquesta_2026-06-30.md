@@ -161,6 +161,26 @@ antes de su cierre posterior:
   activo con checkpoint reciente usa la misma accion de siguiente artefacto. El
   conteo vigente baja a 6 abiertos reales: `BUG-165`, `BUG-058`, `BUG-065`,
   `BUG-066`, `BUG-075` y `BUG-079`.
+- Avance 2026-07-04 noche 29: `BUG-ORQ-20260704-165` y
+  `BUG-ORQ-20260701-065` quedan reducidos en el borde CLI/HTTP de shutdown: si
+  el `POST /api/v0/server/shutdown` inicial falla por transporte, timeout o
+  conexion cortada sin cuerpo, `orquesta-server stop` consulta `/status` y, si
+  hay `shutdown_in_progress`, `backend_still_running`, `active_work_refs` o
+  acciones goal pendientes, devuelve el mismo `shutdown_not_ready ...` con refs
+  compactas que ya bloquea la escalada por `--force`. Ya no queda un simple
+  `shutdown_timeout`/`shutdown_request_failed` opaco cuando el state publico
+  conserva causa accionable. Pendiente: smoke real amplio de proveedor/status
+  lento y coordinacion automatica completa backend/checkpoint/stop/cancel/wait.
+- Auditoria read-only 2026-07-04 noche 29b sobre residuales OPES: `BUG-075` es
+  el cierre mas acotado por codigo/test, mediante validadores estructurados por
+  `work_kind` para HTML, visual, audio, tutor/RAG, fuentes/reviews, casos,
+  juegos/ayuda y rework causal; `BUG-058` puede reducirse con fake/temporal que
+  demuestre tema asentado -> derivados pendientes -> paquete final solo con
+  refs de calidad por tema; `BUG-066` no debe cerrarse solo con unit tests,
+  porque requiere smoke temporal de external-work/OPES donde artefactos
+  suficientes dejen de reescribirse y el cleanup/reconcile terminalice sin
+  residuos SQLite/proceso. No usar rails por texto libre: solo campos
+  estructurados, evidencias y validadores de dominio.
 - Avance 2026-07-04: `BUG-ORQ-20260704-165` queda parcialmente reducido por
   `7a6dea0d`: `runs/control stop/cancel forced=true` propaga el stop al backend
   Goal cuando el puerto de control esta disponible, guarda cierre terminal

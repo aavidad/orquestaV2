@@ -64,7 +64,7 @@ func requestServerShutdownV0(addr string, options serverShutdownClientOptionsV0)
 	idempotencyKey := "idem-orquesta-server-stop"
 	result, err := postServerShutdownRequestV0(addr, options, requestID, correlationID, idempotencyKey, reason)
 	if err != nil {
-		return err
+		return actionableServerShutdownErrorFromStatusV0(addr, err)
 	}
 	if result.Estado != "ok" {
 		return fmt.Errorf("shutdown_status_%s", result.Status)
@@ -85,6 +85,23 @@ func requestServerShutdownV0(addr string, options serverShutdownClientOptionsV0)
 		defaultShutdownClientWaitTimeoutV0,
 		defaultShutdownClientWaitPollV0,
 	)
+}
+
+func actionableServerShutdownErrorFromStatusV0(addr string, cause error) error {
+	if cause == nil || !shutdownRequestErrorMayStillNeedSignalV0(cause) {
+		return cause
+	}
+	status, err := getServerPublicStatusForShutdownV0(addr)
+	if err != nil {
+		return cause
+	}
+	result := serverShutdownClientResultFromStatusV0(status)
+	if status.ShutdownInProgress ||
+		status.ShutdownStatus != "" ||
+		!shutdownClientResultHasNoBlockingWorkV0(result) {
+		return shutdownClientNotReadyErrorV0(result)
+	}
+	return cause
 }
 
 type serverShutdownClientRequestIdentityV0 struct {
