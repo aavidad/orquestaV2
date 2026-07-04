@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -166,6 +167,71 @@ func TestGeminiGoalProcessBackendV0AdoptaProcesoPersistidoTrasReinicioYLoParaV0(
 	})
 }
 
+func TestGeminiGoalProcessBackendV0RealOptInEscribeResultadoDurableV0(t *testing.T) {
+	if strings.TrimSpace(os.Getenv("SMOKE_GEMINI_GOAL_PROCESS_REAL")) != "1" {
+		t.Skip("smoke real Gemini desactivado; exporta SMOKE_GEMINI_GOAL_PROCESS_REAL=1")
+	}
+	root := geminiGoalRealSmokeRootV0(t)
+	goalRef := "goal-ref-gemini-process-real-smoke-001"
+	commandPath := geminiGoalRealSmokeCommandPathV0(t)
+	homeDir, _ := os.UserHomeDir()
+	extraArgs := []string{"--skip-trust"}
+	extraArgs = append(extraArgs, strings.Fields(os.Getenv("SMOKE_GEMINI_EXTRA_ARGS"))...)
+	backend := geminiGoalProcessBackendForTestV0(t, root, commandPath)
+	backend.Profile.HomeDir = firstNonEmptyGeminiGoalV0(strings.TrimSpace(os.Getenv("SMOKE_GEMINI_HOME")), homeDir)
+	backend.Profile.PathEnv = os.Getenv("PATH")
+	backend.Profile.Model = strings.TrimSpace(os.Getenv("SMOKE_GEMINI_MODEL"))
+	backend.Profile.ExtraArgs = extraArgs
+	spec := geminiGoalProcessSpecForTestV0(goalRef)
+	spec.Objective = "Smoke real Gemini process: crea docs/provider_goal_smoke.txt con el texto exacto gemini real smoke ok. Despues escribe docs/orquesta_goal_result_v0.json como JSON puro estricto desde el primer byte, sin markdown, sin fences y sin texto alrededor, con status complete, checklist.missing_refs vacio, artifact_refs no vacio, artifact_paths incluyendo docs/provider_goal_smoke.txt y docs/orquesta_goal_result_v0.json, materialized_artifacts con artifact_ref no vacio para cada path, y required_test_results passed para el test requerido."
+	spec.RequiredTests[0].Command = "test -f docs/provider_goal_smoke.txt"
+
+	receipt, err := backend.LaunchGoalWorkV0(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("LaunchGoalWorkV0 real Gemini: %v receipt=%+v", err, receipt)
+	}
+	timeout := geminiGoalRealSmokeTimeoutV0(t)
+	deadline := time.Now().Add(timeout)
+	var observed orquestagoal.GoalWorkResultV0
+	for time.Now().Before(deadline) {
+		observed, err = backend.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
+			GoalRef:         spec.GoalRef,
+			ExternalGoalRef: receipt.ExternalGoalRef,
+		})
+		if err != nil {
+			t.Fatalf("ObserveGoalWorkV0 real Gemini: %v", err)
+		}
+		if observed.Status == orquestagoal.GoalStatusCompleteV0 {
+			break
+		}
+		if observed.Status == orquestagoal.GoalStatusBlockedV0 ||
+			observed.Status == orquestagoal.GoalStatusInvalidV0 {
+			t.Fatalf("Gemini real smoke bloqueado: %+v", observed)
+		}
+		time.Sleep(2 * time.Second)
+	}
+	if observed.Status != orquestagoal.GoalStatusCompleteV0 {
+		_, _ = backend.StopGeminiGoalV0(context.Background(), GeminiGoalStopRequestV0{
+			GoalRef: spec.GoalRef,
+			Action:  "stop",
+			Reason:  "real_smoke_timeout",
+			Forced:  true,
+		})
+		t.Fatalf("Gemini real smoke timeout tras %s; ultimo resultado=%+v", timeout, observed)
+	}
+	if _, err := os.Stat(filepath.Join(backend.Control.ProjectWorkDir, "docs", "provider_goal_smoke.txt")); err != nil {
+		t.Fatalf("artefacto real Gemini ausente: %v; result=%+v", err, observed)
+	}
+	if len(observed.ArtifactRefs) == 0 || len(observed.MaterializedArtifacts) < 2 {
+		t.Fatalf("result real Gemini sin artefactos suficientes: %+v", observed)
+	}
+	for _, artifact := range observed.MaterializedArtifacts {
+		if strings.TrimSpace(artifact.ArtifactRef) == "" || strings.TrimSpace(artifact.Path) == "" {
+			t.Fatalf("materialized_artifact incompleto en result real Gemini: %+v", observed.MaterializedArtifacts)
+		}
+	}
+}
+
 func geminiGoalProcessBackendForTestV0(
 	t *testing.T,
 	root string,
@@ -283,4 +349,46 @@ func waitForGeminiGoalProcessTestV0(t *testing.T, ready func() bool) {
 
 func shellQuoteGeminiGoalProcessTestV0(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+func geminiGoalRealSmokeCommandPathV0(t *testing.T) string {
+	t.Helper()
+	raw := strings.TrimSpace(os.Getenv("ORQUESTA_GEMINI_COMMAND"))
+	if raw == "" {
+		raw = "gemini"
+	}
+	if filepath.IsAbs(raw) {
+		return raw
+	}
+	path, err := exec.LookPath(raw)
+	if err != nil {
+		t.Skipf("Gemini CLI no disponible: %v", err)
+	}
+	return path
+}
+
+func geminiGoalRealSmokeRootV0(t *testing.T) string {
+	t.Helper()
+	if strings.TrimSpace(os.Getenv("SMOKE_GEMINI_KEEP_DIR")) != "1" {
+		return t.TempDir()
+	}
+	root, err := os.MkdirTemp("", "orquesta-gemini-goal-real-smoke-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp smoke real Gemini: %v", err)
+	}
+	t.Logf("SMOKE_GEMINI_KEEP_DIR=1 conserva %s", root)
+	return root
+}
+
+func geminiGoalRealSmokeTimeoutV0(t *testing.T) time.Duration {
+	t.Helper()
+	raw := strings.TrimSpace(os.Getenv("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_SECONDS"))
+	if raw == "" {
+		return 4 * time.Minute
+	}
+	seconds, err := time.ParseDuration(raw + "s")
+	if err != nil || seconds <= 0 {
+		t.Fatalf("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_SECONDS invalido: %q", raw)
+	}
+	return seconds
 }

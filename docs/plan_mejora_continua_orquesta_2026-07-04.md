@@ -172,6 +172,20 @@ Gemini. La brecha pendiente queda reducida a smoke opt-in contra proveedores
 reales con credenciales/tier validos y prueba real amplia de shutdown/control
 con proveedor externo.
 
+Avance 2026-07-04 noche 19: `claude_process` queda validado tambien contra
+Claude Code real en smoke opt-in acotado. El test
+`TestClaudeGoalProcessBackendV0RealOptInEscribeResultadoDurableV0`, activado
+con `SMOKE_CLAUDE_GOAL_PROCESS_REAL=1`, lanzo Claude Code `2.1.201`, escribio
+artefacto en proyecto temporal, produjo `orquesta_goal_result_v0.json`
+parseable con `status=complete`, `artifact_refs`, `materialized_artifacts` con
+`artifact_ref` y `required_test_results=passed`. A raiz del primer intento real
+se endurecio el protocolo de prompt para exigir JSON puro sin markdown/fences y
+`artifact_ref` no vacio en `materialized_artifacts`. Gemini CLI `0.45.1` sigue
+bloqueado por `IneligibleTierError/UNSUPPORTED_CLIENT`; el diagnostico queda
+como frontera externa ya cubierta por `BUG-ORQ-20260703-140`, no como bug nuevo
+de Orquesta. Runbook:
+`docs/runbooks/smoke_goal_first_provider_process_real_2026-07-04.md`.
+
 Alcance:
 
 - `modulos/orquesta-runtime-claude`

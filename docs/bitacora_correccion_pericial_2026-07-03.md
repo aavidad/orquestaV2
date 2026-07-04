@@ -1887,3 +1887,46 @@ Verificacion focal inicial:
 Pendiente real tras este tramo: smoke opt-in contra Claude real con
 credenciales, smoke opt-in contra Gemini real con credenciales/tier valido y
 prueba real amplia de shutdown/control con proveedor externo.
+
+## Continuacion Codex 2026-07-04 noche 19
+
+Avance MEJ-103/T18: smoke real opt-in de `claude_process`.
+
+- Preflight local: `claude --version` devuelve Claude Code `2.1.201` y
+  `gemini --version` devuelve `0.45.1`.
+- Claude real responde `OK` con `claude -p --model sonnet
+  --permission-mode bypassPermissions --output-format text --max-budget-usd
+  0.20`.
+- Gemini real queda bloqueado por `IneligibleTierError / UNSUPPORTED_CLIENT`;
+  esto coincide con `BUG-ORQ-20260703-140` y con el diagnostico estructurado ya
+  implementado `provider_auth_or_tier_blocked`.
+- Primer intento real Claude encontro un fallo de contrato blando: el fichero
+  durable podia no ser JSON puro o podia omitir `artifact_ref` en
+  `materialized_artifacts`. Se endurecio el protocolo de prompt para exigir JSON
+  puro sin markdown/fences y `artifact_ref` no vacio.
+- Segundo intento Claude real pasa con `status=complete`, artefacto material,
+  result durable parseable, `artifact_refs`, `materialized_artifacts` completos
+  y `required_test_results=passed`.
+
+Archivos tocados en este avance:
+
+- `modulos/orquesta-runtime-claude/claude_prompt_v0.go`
+- `modulos/orquesta-runtime-claude/claude_goal_process_backend_v0_test.go`
+- `modulos/orquesta-runtime-gemini/gemini_prompt_v0.go`
+- `modulos/orquesta-runtime-gemini/gemini_goal_process_backend_v0_test.go`
+- `docs/runbooks/smoke_goal_first_provider_process_real_2026-07-04.md`
+- `docs/plan_mejora_continua_orquesta_2026-07-04.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion:
+
+- `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-runtime-gemini`
+- `SMOKE_CLAUDE_GOAL_PROCESS_REAL=1 SMOKE_CLAUDE_MAX_BUDGET_USD=0.50 SMOKE_CLAUDE_KEEP_DIR=1 go test -count=1 ./modulos/orquesta-runtime-claude -run TestClaudeGoalProcessBackendV0RealOptInEscribeResultadoDurableV0 -v`
+
+Evidencia retenida:
+
+- `/tmp/orquesta-claude-goal-real-smoke-3215275659/project/docs/provider_goal_smoke.txt`
+- `/tmp/orquesta-claude-goal-real-smoke-3215275659/project/docs/orquesta_goal_result_v0.json`
+
+Pendiente real tras este tramo: smoke Gemini con tier valido y prueba real
+amplia a traves de `cmd/orquesta-server`/run-control con proveedor externo.
