@@ -3757,3 +3757,26 @@ Verificacion:
   -> sin coincidencias en codigo Go vivo.
 - `git diff --check` -> verde.
 - `GOCACHE=/tmp/orquesta-go-cache-poda-ola2 GOTMPDIR=/tmp go test ./modulos/orquesta-orchestration-core ./modulos/orquesta-runtime` -> verde.
+
+## Noche remota autonoma 2026-07-05: 9 goals, 9 integrados (Claude revisor)
+
+Ciclos 5-9 tras el wizard (1-4, ya registrados): 5) poda ola 1 deploy/capacity
+clasificada (7dcfed38); 6) TAREA-8 ola 1 envs pisadas consolidadas con alias
+deprecated (ed782213); 7) poda ola 2 orchestration-core/runtime: 221 clase C
+legacy con contrato — el deadcode restante ES el subsistema legacy, su
+retirada queda gateada a la ventana §9 de 7 nightlies verdes (9886f157);
+8) smoke OPES lifecycle real 24/24 fases en verde ejecutado por el revisor
+fuera del sandbox — residual comun de BUG-058/066/075 cubierto (d2ef83e7);
+9) TAREA-8 ola 2: familias OPES_BRIDGE(47)+CODEX_WAVE(26) al fichero
+canonico con envs de alias avisado (3b131124).
+
+Patron operativo consolidado: Orquesta ejecuta en pilot-remoto-1 (sandbox
+workspace-write, umbral 450k), Claude valida fuera del sandbox (suites +
+smokes con sockets), integra por cherry-pick, sincroniza servidor=local=
+GitHub tras cada ciclo. Bug de contrato anotado pendiente: placeholders de
+progreso usan status=blocked con redacciones variables; normalizar a un
+status/summary canonico de checkpoint para no confundir observadores.
+
+Cola restante gateada: retirada legacy (tras §9), G5 bot LLM (opt-in coste,
+decision operador), TAREA-8 olas 3+ (SERVER_IDLE, OPES_REGISTRY...),
+enforcement proveedor BUG-079 (frontera runtime externo).
