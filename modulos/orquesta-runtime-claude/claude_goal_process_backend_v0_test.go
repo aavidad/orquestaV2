@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -77,6 +78,42 @@ func TestClaudeGoalProcessBackendV0ProcesoSinResultadoBloqueaV0(t *testing.T) {
 		observed.Summary != ErrClaudeGoalProcessStoppedWithoutResultV0 ||
 		!containsClaudeGoalStringV0(observed.EvidenceRefs, ClaudeGoalEvidenceProcessStoppedV0) {
 		t.Fatalf("observed inesperado: %+v", observed)
+	}
+}
+
+func TestClaudeGoalProcessBackendV0StopParaProcesoVivoV0(t *testing.T) {
+	root := t.TempDir()
+	goalRef := "goal-ref-claude-process-stop-001"
+	startedPath := filepath.Join(root, "started.txt")
+	backend := claudeGoalProcessBackendForTestV0(
+		t,
+		root,
+		claudeGoalFakeCommandLongRunningV0(t, root, startedPath),
+	)
+	spec := claudeGoalProcessSpecForTestV0(goalRef)
+	if _, err := backend.LaunchGoalWorkV0(context.Background(), spec); err != nil {
+		t.Fatalf("LaunchGoalWorkV0: %v", err)
+	}
+	waitForClaudeGoalProcessTestV0(t, func() bool {
+		_, err := os.Stat(startedPath)
+		return err == nil
+	})
+
+	result, err := backend.StopClaudeGoalV0(context.Background(), ClaudeGoalStopRequestV0{
+		GoalRef:      goalRef,
+		Action:       "stop",
+		Reason:       "test_stop",
+		Forced:       true,
+		EvidenceRefs: []string{"evidence-ref-test-stop"},
+	})
+	if err != nil {
+		t.Fatalf("StopClaudeGoalV0: %v result=%+v", err, result)
+	}
+	if result.Status != orquestagoal.GoalStatusBlockedV0 ||
+		!result.GoalStatusSet ||
+		!result.BackendStopped ||
+		!containsClaudeGoalStringV0(result.EvidenceRefs, ClaudeGoalEvidenceStopCompletedV0) {
+		t.Fatalf("stop result inesperado: %+v", result)
 	}
 }
 
@@ -173,6 +210,16 @@ func claudeGoalFakeCommandNoResultV0(t *testing.T, root string) string {
 	return path
 }
 
+func claudeGoalFakeCommandLongRunningV0(t *testing.T, root string, startedPath string) string {
+	t.Helper()
+	path := filepath.Join(root, "fake-claude-long-running")
+	script := "#!/bin/sh\nset -eu\ncat >/dev/null\nprintf started > " + shellQuoteClaudeGoalProcessTestV0(startedPath) + "\nsleep 30\n"
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake claude long running: %v", err)
+	}
+	return path
+}
+
 func waitForClaudeGoalProcessTestV0(t *testing.T, ready func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -183,4 +230,8 @@ func waitForClaudeGoalProcessTestV0(t *testing.T, ready func() bool) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("timeout esperando proceso Claude goal")
+}
+
+func shellQuoteClaudeGoalProcessTestV0(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }

@@ -1769,3 +1769,39 @@ Verificacion focal inicial:
 Pendiente real: MEJ-103 queda reducido, no cerrado total. Faltan control y
 shutdown persistentes equivalentes a Codex app-server, smoke opt-in contra
 Claude real con credenciales y backend goal-first propio para Gemini.
+
+## Continuacion Codex 2026-07-04 noche 16
+
+Avance MEJ-103: control/stop para `claude_process` en la instancia viva del
+servidor.
+
+- `ClaudeGoalProcessBackendV0` anade `StopClaudeGoalV0` con request/result
+  propios, sin depender de `orquesta-app-codex-stack`.
+- El stop localiza el `process_ref` del `goal_ref`, llama a
+  `ProcessRuntimeConnectorV0.StopV0` y devuelve `status=blocked`,
+  `goal_status_set=true`, `backend_stopped=true`, `issue_code` si falla y
+  evidencias compactas `claude-goal-process-stop-*`.
+- `cmd/orquesta-server` adapta ese resultado al `GoalBackendControlPortV0`, el
+  mismo puerto usado por run-control goal-first para stops forzados.
+- Se anaden pruebas de módulo y servidor con proceso fake largo, verificando
+  que el control para el proceso y publica evidencia de stop completado.
+
+Archivos tocados en este avance:
+
+- `modulos/orquesta-runtime-claude/claude_goal_process_backend_v0.go`
+- `modulos/orquesta-runtime-claude/claude_goal_process_backend_v0_test.go`
+- `cmd/orquesta-server/codex_goal_app_server_v0.go`
+- `cmd/orquesta-server/codex_goal_control_adapter_v0.go`
+- `cmd/orquesta-server/codex_goal_backend_env_v0.go`
+- `cmd/orquesta-server/codex_goal_app_server_wiring_v0_test.go`
+- `docs/plan_mejora_continua_orquesta_2026-07-04.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion focal inicial:
+
+- `go test -count=1 ./modulos/orquesta-runtime-claude`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerGoalBackendFromEnvV0ClaudeProcess(ControlParaProceso|LanzaYObservaResultado)V0|TestServerGoalBackendFromEnvV0ClaudeFileControlExponePuertosNeutralesV0'`
+
+Pendiente real: el stop ya existe para la instancia viva; falta persistir o
+adoptar procesos Claude tras reinicio, smoke opt-in contra Claude real con
+credenciales y backend goal-first propio para Gemini.

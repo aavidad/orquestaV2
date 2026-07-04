@@ -274,8 +274,9 @@ func serverClaudeGoalBackendFromEnvForWorkDirV0(
 			},
 		}
 		return serverCodexGoalBackendV0{
-			GoalLauncher: client,
-			GoalObserver: client,
+			GoalLauncher:  client,
+			GoalObserver:  client,
+			ClaudeControl: client,
 		}, nil
 	}
 	client := control

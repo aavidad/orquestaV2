@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimeclaude "orquesta/modulos/orquesta-runtime-claude"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
@@ -223,6 +224,67 @@ func TestServerGoalBackendFromEnvV0ClaudeProcessLanzaYObservaResultadoV0(t *test
 	}
 }
 
+func TestServerGoalBackendFromEnvV0ClaudeProcessControlParaProcesoV0(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	stateDir := filepath.Join(root, "control", "state")
+	goalRef := "goal-ref-server-claude-process-control-001"
+	startedPath := filepath.Join(root, "started.txt")
+	t.Setenv(envCodexGoalBackendV0, claudeGoalBackendProcessV0)
+	t.Setenv(envClaudeCommandV0, fakeClaudeGoalLongRunningCommandForTestV0(t, root, startedPath))
+
+	backend, err := serverCodexGoalBackendFromEnvForWorkDirV0(orquestaserver.ConfigV0{
+		ProjectWorkDir: projectDir,
+		RuntimeWorkDir: filepath.Join(projectDir, ".orquesta-runtime"),
+		StateDir:       stateDir,
+	}, projectDir)
+	if err != nil {
+		t.Fatalf("serverCodexGoalBackendFromEnvForWorkDirV0: %v", err)
+	}
+	launcher := serverGoalWorkLauncherFromBackendV0(backend)
+	control := serverGoalBackendControlFromBackendV0(backend)
+	if control == nil {
+		t.Fatalf("backend Claude process debe exponer control")
+	}
+	_, err = launcher.LaunchGoalWorkV0(context.Background(), orquestagoal.GoalWorkSpecV0{
+		SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+		GoalRef:       goalRef,
+		RequestRef:    "request-ref-server-claude-process-control-001",
+		RunRef:        "run-ref-server-claude-process-control-001",
+		Objective:     "Probar control Claude process desde servidor.",
+		DirectorKind:  orquestagoal.GoalDirectorKindRuntimeGoalV0,
+		WriteSet: []orquestagoal.GoalWriteScopeV0{{
+			Path:    "docs",
+			Purpose: "resultado durable",
+		}},
+		RequiredTests: []orquestagoal.GoalRequiredTestV0{{
+			TestRef: "required-test-ref-server-claude-process-control",
+			Command: "fake claude process control",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("LaunchGoalWorkV0: %v", err)
+	}
+	waitForServerGoalFileV0(t, startedPath)
+
+	result, err := control.ControlGoalBackendV0(context.Background(), orquestaappcodexstack.GoalBackendControlRequestV0{
+		GoalRef:      goalRef,
+		Action:       "stop",
+		Reason:       "test_stop",
+		Forced:       true,
+		EvidenceRefs: []string{"evidence-ref-server-claude-control"},
+	})
+	if err != nil {
+		t.Fatalf("ControlGoalBackendV0: %v result=%+v", err, result)
+	}
+	if result.Status != orquestagoal.GoalStatusBlockedV0 ||
+		!result.GoalStatusSet ||
+		!result.BackendStopped ||
+		!containsServerGoalStringV0(result.EvidenceRefs, orquestaruntimeclaude.ClaudeGoalEvidenceStopCompletedV0) {
+		t.Fatalf("control result inesperado: %+v", result)
+	}
+}
+
 func TestServerGoalBackendFromEnvV0RechazaBackendNoSoportadoV0(t *testing.T) {
 	t.Setenv(envCodexGoalBackendV0, "claude_real_process")
 
@@ -317,6 +379,16 @@ func fakeClaudeGoalProcessCommandForTestV0(t *testing.T, root string, goalRef st
 	script := "#!/bin/sh\nset -eu\nprompt=$(cat)\ncase \"$prompt\" in\n  *" + goalRef + "*) ;;\n  *) exit 7 ;;\nesac\nmkdir -p docs\ncat > docs/" + orquestaruntimeclaude.ClaudeGoalResultFileNameV0 + " <<'JSON'\n{\"schema_version\":\"orquesta_goal_result.v0\",\"status\":\"complete\",\"goal_ref\":\"" + goalRef + "\",\"summary\":\"server claude process complete\",\"checklist\":{\"expected_refs\":[\"server_claude_process\"],\"completed_refs\":[\"server_claude_process\"]},\"required_test_results\":[{\"test_ref\":\"required-test-ref-server-claude-process\",\"status\":\"passed\",\"evidence_refs\":[\"evidence-ref-server-claude-process-test\"]}],\"evidence_refs\":[\"evidence-ref-server-claude-process-result\"]}\nJSON\n"
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
 		t.Fatalf("write fake claude process: %v", err)
+	}
+	return path
+}
+
+func fakeClaudeGoalLongRunningCommandForTestV0(t *testing.T, root string, startedPath string) string {
+	t.Helper()
+	path := filepath.Join(root, "fake-claude-goal-long-running")
+	script := "#!/bin/sh\nset -eu\ncat >/dev/null\nprintf started > " + shellQuoteCodexAppServerWiringTestV0(startedPath) + "\nsleep 30\n"
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake claude long running: %v", err)
 	}
 	return path
 }

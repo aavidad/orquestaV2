@@ -23,12 +23,13 @@ const (
 )
 
 type serverCodexGoalBackendV0 struct {
-	GoalLauncher orquestagoal.GoalWorkLauncherPortV0
-	GoalObserver orquestagoal.GoalWorkObservationPortV0
-	Starter      orquestaruntimecodexgoal.CodexGoalStarterPortV0
-	Observer     orquestaruntimecodexgoal.CodexGoalObserverPortV0
-	Controller   serverCodexGoalControllerV0
-	ShutdownHook orquestaserver.RuntimeShutdownHookPortV0
+	GoalLauncher  orquestagoal.GoalWorkLauncherPortV0
+	GoalObserver  orquestagoal.GoalWorkObservationPortV0
+	Starter       orquestaruntimecodexgoal.CodexGoalStarterPortV0
+	Observer      orquestaruntimecodexgoal.CodexGoalObserverPortV0
+	Controller    serverCodexGoalControllerV0
+	ClaudeControl serverClaudeGoalControllerV0
+	ShutdownHook  orquestaserver.RuntimeShutdownHookPortV0
 }
 
 type serverCodexAppServerGoalBackendV0 = orquestaruntimecodexappserver.GoalBackendV0

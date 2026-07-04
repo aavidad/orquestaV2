@@ -133,6 +133,17 @@ ya no es lanzamiento de proceso, sino control/shutdown persistente equivalente
 al backend Codex, smoke opt-in contra Claude real con credenciales y backend
 propio Gemini.
 
+Avance 2026-07-04 noche 16: `claude_process` ya expone control/stop en vida
+del servidor por `GoalBackendControlPortV0`. `ClaudeGoalProcessBackendV0`
+transporta `StopClaudeGoalV0`, detiene el `ProcessRuntimeConnectorV0`
+asociado al `goal_ref`, devuelve `status=blocked`, `goal_status_set=true`,
+`backend_stopped=true` y evidencias de stop solicitado/completado. El servidor
+lo adapta al mismo puerto usado por run-control goal-first, de modo que un stop
+forzado puede terminalizar un goal Claude activo igual que el backend Codex en
+la misma instancia. La brecha pendiente queda acotada a persistencia/adopcion
+del proceso tras reinicio, smoke opt-in contra Claude real con credenciales y
+backend propio Gemini.
+
 Alcance:
 
 - `modulos/orquesta-runtime-claude`

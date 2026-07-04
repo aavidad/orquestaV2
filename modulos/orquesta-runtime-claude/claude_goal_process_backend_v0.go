@@ -20,10 +20,15 @@ const (
 	ClaudeGoalEvidenceProcessLaunchedV0 = "evidence-ref-claude-goal-process-launched"
 	ClaudeGoalEvidenceProcessRunningV0  = "evidence-ref-claude-goal-process-running"
 	ClaudeGoalEvidenceProcessStoppedV0  = "evidence-ref-claude-goal-process-stopped"
+	ClaudeGoalEvidenceStopRequestedV0   = "evidence-ref-claude-goal-process-stop-requested"
+	ClaudeGoalEvidenceStopCompletedV0   = "evidence-ref-claude-goal-process-stop-completed"
+	ClaudeGoalEvidenceStopFailedV0      = "evidence-ref-claude-goal-process-stop-failed"
 
 	ErrClaudeGoalProcessInvalidV0              = "claude_goal_process_invalid"
 	ErrClaudeGoalProcessLaunchFailedV0         = "claude_goal_process_launch_failed"
 	ErrClaudeGoalProcessStoppedWithoutResultV0 = "claude_goal_process_stopped_without_result"
+	ErrClaudeGoalProcessRefMissingV0           = "claude_goal_process_ref_missing"
+	ErrClaudeGoalProcessStopFailedV0           = "claude_goal_process_stop_failed"
 )
 
 type ClaudeGoalProcessBackendV0 struct {
@@ -33,6 +38,25 @@ type ClaudeGoalProcessBackendV0 struct {
 
 	mu          sync.Mutex
 	processRefs map[string]string
+}
+
+type ClaudeGoalStopRequestV0 struct {
+	GoalRef         string   `json:"goal_ref,omitempty"`
+	ExternalGoalRef string   `json:"external_goal_ref,omitempty"`
+	Action          string   `json:"action,omitempty"`
+	Reason          string   `json:"reason,omitempty"`
+	Forced          bool     `json:"forced,omitempty"`
+	EvidenceRefs    []string `json:"evidence_refs,omitempty"`
+}
+
+type ClaudeGoalStopResultV0 struct {
+	Status          string   `json:"status,omitempty"`
+	GoalRef         string   `json:"goal_ref,omitempty"`
+	ExternalGoalRef string   `json:"external_goal_ref,omitempty"`
+	GoalStatusSet   bool     `json:"goal_status_set,omitempty"`
+	BackendStopped  bool     `json:"backend_stopped,omitempty"`
+	IssueCode       string   `json:"issue_code,omitempty"`
+	EvidenceRefs    []string `json:"evidence_refs,omitempty"`
 }
 
 func (backend *ClaudeGoalProcessBackendV0) LaunchGoalWorkV0(
@@ -124,6 +148,55 @@ func (backend *ClaudeGoalProcessBackendV0) ObserveGoalWorkV0(
 	}
 }
 
+func (backend *ClaudeGoalProcessBackendV0) StopClaudeGoalV0(
+	ctx context.Context,
+	request ClaudeGoalStopRequestV0,
+) (ClaudeGoalStopResultV0, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	request = normalizeClaudeGoalStopRequestV0(request)
+	result := ClaudeGoalStopResultV0{
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		GoalRef:         request.GoalRef,
+		ExternalGoalRef: request.ExternalGoalRef,
+		GoalStatusSet:   true,
+		EvidenceRefs: compactClaudeGoalStringsV0(append(
+			append([]string(nil), request.EvidenceRefs...),
+			ClaudeGoalEvidenceStopRequestedV0,
+		)),
+	}
+	if backend == nil || backend.ProcessRuntime == nil {
+		result.IssueCode = ErrClaudeGoalProcessRefMissingV0
+		result.EvidenceRefs = compactClaudeGoalStringsV0(append(result.EvidenceRefs, ClaudeGoalEvidenceStopFailedV0))
+		return normalizeClaudeGoalStopResultV0(result), errors.New(result.IssueCode)
+	}
+	processRef := backend.loadProcessRefV0(request.GoalRef)
+	if processRef == "" {
+		result.IssueCode = ErrClaudeGoalProcessRefMissingV0
+		result.EvidenceRefs = compactClaudeGoalStringsV0(append(result.EvidenceRefs, ClaudeGoalEvidenceStopFailedV0))
+		return normalizeClaudeGoalStopResultV0(result), errors.New(result.IssueCode)
+	}
+	snapshot, err := backend.ProcessRuntime.StopV0(ctx, processRef)
+	result.EvidenceRefs = compactClaudeGoalStringsV0(append(
+		result.EvidenceRefs,
+		orquestaruntime.ProcessRuntimeSnapshotEvidenceRefsV0(snapshot)...,
+	))
+	if err != nil {
+		result.IssueCode = ErrClaudeGoalProcessStopFailedV0
+		result.EvidenceRefs = compactClaudeGoalStringsV0(append(result.EvidenceRefs, ClaudeGoalEvidenceStopFailedV0))
+		return normalizeClaudeGoalStopResultV0(result), err
+	}
+	result.BackendStopped = snapshot.Status == orquestaruntime.ProcessRuntimeStoppedV0
+	if result.BackendStopped {
+		result.EvidenceRefs = compactClaudeGoalStringsV0(append(result.EvidenceRefs, ClaudeGoalEvidenceStopCompletedV0))
+	} else {
+		result.IssueCode = ErrClaudeGoalProcessStopFailedV0
+		result.EvidenceRefs = compactClaudeGoalStringsV0(append(result.EvidenceRefs, ClaudeGoalEvidenceStopFailedV0))
+	}
+	return normalizeClaudeGoalStopResultV0(result), nil
+}
+
 func (backend *ClaudeGoalProcessBackendV0) normalizedProfileV0() ClaudeConnectorProfileV0 {
 	profile := backend.Profile
 	if profile.SchemaVersion == "" {
@@ -194,4 +267,25 @@ func claudeGoalStdoutFileNameV0(goalRef string) string {
 
 func claudeGoalStderrFileNameV0(goalRef string) string {
 	return ClaudeGoalStderrFilePrefixV0 + claudeGoalSafeRefV0(goalRef) + ".log"
+}
+
+func normalizeClaudeGoalStopRequestV0(request ClaudeGoalStopRequestV0) ClaudeGoalStopRequestV0 {
+	request.GoalRef = strings.TrimSpace(request.GoalRef)
+	request.ExternalGoalRef = strings.TrimSpace(request.ExternalGoalRef)
+	request.Action = strings.ToLower(strings.TrimSpace(request.Action))
+	request.Reason = strings.TrimSpace(request.Reason)
+	request.EvidenceRefs = compactClaudeGoalStringsV0(request.EvidenceRefs)
+	return request
+}
+
+func normalizeClaudeGoalStopResultV0(result ClaudeGoalStopResultV0) ClaudeGoalStopResultV0 {
+	result.Status = strings.TrimSpace(result.Status)
+	if result.Status == "" {
+		result.Status = orquestagoal.GoalStatusBlockedV0
+	}
+	result.GoalRef = strings.TrimSpace(result.GoalRef)
+	result.ExternalGoalRef = strings.TrimSpace(result.ExternalGoalRef)
+	result.IssueCode = strings.TrimSpace(result.IssueCode)
+	result.EvidenceRefs = compactClaudeGoalStringsV0(result.EvidenceRefs)
+	return result
 }
