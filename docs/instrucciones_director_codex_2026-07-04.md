@@ -607,3 +607,21 @@ de que me preguntes nada". Política vigente para todas las olas:
 - Retirar módulos o subsistemas ENTEROS (p.ej. deploy/capacity completos a
   docs/historico) también queda autorizado bajo las mismas condiciones,
   en commit propio y reversible.
+
+#### TAREA-9: verificación obligatoria post-poda (operador, 2026-07-05)
+
+Orden textual: "se debe probar una vez quitado para ver que funcione sin lo
+quitado". Toda ola de poda, ANTES de integrarse a la rama de trabajo, debe
+pasar en este orden:
+
+1. `go build ./...` (todo el repo compila sin lo quitado).
+2. `go test ./...` completo en el entorno que lo aguante (el servidor lo
+   aguanta; en local acotar por módulos si hay riesgo de OOM).
+3. Smoke funcional mínimo: arrancar `orquesta-server` efímero y verificar
+   readiness `ready=true` + `POST /api/v0/autoprogramming/status` `estado=ok`
+   (prueba de humo de que la app VIVA funciona, no solo que compila).
+4. `scripts/orquesta_auditoria_codigo.sh` con el contador bajando.
+
+Si cualquiera falla: revertir la ola entera (commit propio reversible), no
+integrar parcial. El resultado durable del goal debe listar los 4 pasos con
+su evidencia.
