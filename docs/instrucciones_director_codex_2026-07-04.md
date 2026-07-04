@@ -385,3 +385,55 @@ Reglas vinculantes adicionales:
    turno) para no abrumar: primero uso/plataforma, luego datos/integraciones,
    luego despliegue/calidad. El flujo del ejemplo agenda debe caber en <=6
    turnos.
+
+### TAREA-8: configuración canónica por fichero y reducción de envs (orden del operador 2026-07-04)
+
+Motivación: el fallo T7A (umbral 450000 pedido, `100000 defaulted` efectivo)
+es una clase entera de bugs: la config depende de heredar cientos de envs
+entre shells/daemons y un valor puede perderse en silencio. Orden: que no
+vuelva a pasar, y no tener 500 variables.
+
+8.1 Fichero de configuración canónico:
+- `orquesta.config.toml` (o json) con TODAS las opciones tipadas por
+  secciones (server, goal_backend, autoprogramming, budgets, observability,
+  ...). `orquesta-server run|start --config <fichero>`.
+- Las envs quedan SOLO como override puntual y para secretos/rutas; el
+  daemon/start SIEMPRE recibe el fichero resuelto, nunca depende de heredar
+  el entorno del shell padre (esta es la causa raíz de T7A).
+- Al arrancar, el servidor materializa `effective_config` completo en el
+  state file con ORIGEN por setting: `file|env|default`. Ya existe parcial;
+  hacerlo total.
+
+8.2 Guard de lanzamiento (que no vuelva a pasar):
+- `prepare-run`/`apps/director` aceptan `required_settings` opcionales
+  (lista clave=valor críticos para ese run, ej. el umbral de consumo). Si la
+  config efectiva difiere, el lanzamiento se RECHAZA con
+  `config_projection_mismatch` y el detalle esperado-vs-efectivo. Test focal.
+- El smoke nightly añade fase que verifica eco de config crítica.
+
+8.3 Ratchet bidireccional de envs:
+- Test que falla si: (a) una env registrada en server_env_registry no la
+  consume ningún loader, (b) un loader lee una env no registrada, (c) el
+  conteo sube sobre el techo actual sin marca explícita (ya existe el
+  ratchet de conteo; añadir a+b).
+
+8.4 Reducción por olas (meta: <100 envs reales):
+- Clasificar las 511 en: CORE operativa (~30, siguen como env+fichero),
+  TUNING (pasan a secciones del fichero; env deprecada con alias y aviso
+  `deprecated_env_used` durante 2 versiones), SOLO-PILOTO/SMOKE (pasan a
+  perfiles, ver 8.5), MUERTAS (borrar ya con evidencia de no-uso via rg).
+- Una ola por PR, con tabla antes/después en el inventario y el ratchet
+  bajando en cada ola. No romper compatibilidad sin alias.
+
+8.5 Perfiles predefinidos:
+- `--profile production|pilot|smoke|self-programming` con los valores que
+  hoy exigen exportar 15 envs a mano en cada pilotaje (esa fricción manual
+  causó este incidente). Un perfil = sección del fichero canónico versionada
+  en el repo. Los runbooks/scripts de pilotaje pasan a una línea:
+  `orquesta-server run --profile self-programming --config ...`.
+
+Write-set: cmd/orquesta-server, modulos/orquesta-server,
+modulos/orquesta-autoprogramming, scripts, docs. Tests: los focales de 8.2 y
+8.3 + suites de cmd/orquesta-server y modulos/orquesta-server.
+Prioridad: 8.1+8.2 primero (cierran la clase del bug); 8.3 después; 8.4-8.5
+por olas. TAREA-8 precede a reintentar el lote de 7 pilotajes de BUG-165.
