@@ -24,6 +24,7 @@ const (
 	envClaudeExtraArgsV0      = "ORQUESTA_CLAUDE_EXTRA_ARGS"
 
 	claudeGoalBackendFileControlV0 = "claude_file_control"
+	claudeGoalBackendProcessV0     = "claude_process"
 )
 
 func init() {
@@ -82,12 +83,17 @@ func claudeCommandPathV0() string {
 
 func claudeGoalBackendFromEnvV0() string {
 	backend := codexGoalBackendFromEnvV0()
-	if backend == claudeGoalBackendFileControlV0 {
+	if backend == claudeGoalBackendFileControlV0 || backend == claudeGoalBackendProcessV0 {
 		return backend
 	}
 	return ""
 }
 
 func claudeGoalBackendOperationalFromEnvV0() bool {
-	return claudeGoalBackendFromEnvV0() == claudeGoalBackendFileControlV0
+	switch claudeGoalBackendFromEnvV0() {
+	case claudeGoalBackendFileControlV0, claudeGoalBackendProcessV0:
+		return true
+	default:
+		return false
+	}
 }

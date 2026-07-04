@@ -62,7 +62,9 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		return serverCodexGoalBackendV0{}, nil
 	}
 	if backend != orquestaruntimecodexappserver.CodexGoalBackendAppServerProxyV0 &&
-		backend != orquestaruntimecodexappserver.CodexGoalBackendAppServerTmuxV0 {
+		backend != orquestaruntimecodexappserver.CodexGoalBackendAppServerTmuxV0 &&
+		backend != claudeGoalBackendFileControlV0 &&
+		backend != claudeGoalBackendProcessV0 {
 		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_no_soportado:%s", backend)
 	}
 	if backend == orquestaruntimecodexappserver.CodexGoalBackendAppServerProxyV0 && !codexGoalBackendProxyDiagnosticAllowedV0() {
@@ -243,15 +245,40 @@ func serverClaudeGoalBackendFromEnvForWorkDirV0(
 	if backend == "" {
 		return serverCodexGoalBackendV0{}, nil
 	}
-	if backend != claudeGoalBackendFileControlV0 {
+	if backend != claudeGoalBackendFileControlV0 && backend != claudeGoalBackendProcessV0 {
 		return serverCodexGoalBackendV0{}, fmt.Errorf("claude_goal_backend_no_soportado:%s", backend)
 	}
 	projectWorkDir := firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir)
 	runtimeWorkDir := claudeGoalRuntimeWorkDirFromEnvV0(config)
-	client := orquestaruntimeclaude.ClaudeGoalBackendV0{
+	control := orquestaruntimeclaude.ClaudeGoalBackendV0{
 		ProjectWorkDir: projectWorkDir,
 		RuntimeWorkDir: runtimeWorkDir,
 	}
+	if backend == claudeGoalBackendProcessV0 {
+		client := &orquestaruntimeclaude.ClaudeGoalProcessBackendV0{
+			Control: control,
+			Profile: orquestaruntimeclaude.ClaudeConnectorProfileV0{
+				SchemaVersion:  orquestaruntimeclaude.ClaudeConnectorProfileSchemaVersionV0,
+				OptIn:          true,
+				CommandPath:    claudeCommandPathV0(),
+				ProjectWorkDir: projectWorkDir,
+				RuntimeWorkDir: runtimeWorkDir,
+				HomeDir:        strings.TrimSpace(os.Getenv(envClaudeHomeV0)),
+				PathEnv:        envOrDefaultV0(envClaudePathV0, os.Getenv("PATH")),
+				Model:          strings.TrimSpace(os.Getenv(envClaudeModelV0)),
+				PermissionMode: envOrDefaultV0(envClaudePermissionModeV0, "bypassPermissions"),
+				OutputFormat:   envOrDefaultV0(envClaudeOutputFormatV0, "text"),
+				Effort:         strings.TrimSpace(os.Getenv(envClaudeEffortV0)),
+				ExtraArgs:      strings.Fields(os.Getenv(envClaudeExtraArgsV0)),
+				PromptHints:    []string{"goal-first Claude process backend opt-in"},
+			},
+		}
+		return serverCodexGoalBackendV0{
+			GoalLauncher: client,
+			GoalObserver: client,
+		}, nil
+	}
+	client := control
 	return serverCodexGoalBackendV0{
 		GoalLauncher: client,
 		GoalObserver: client,

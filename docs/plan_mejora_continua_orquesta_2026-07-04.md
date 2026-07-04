@@ -121,6 +121,18 @@ fallando en arranque con diagnostico explicito. La brecha restante se reduce a
 proceso Claude real supervisado con shutdown/control equivalente a Codex, smoke
 fake/real opt-in de lanzamiento y backend propio Gemini.
 
+Avance 2026-07-04 noche 15: `ORQUESTA_CODEX_GOAL_BACKEND=claude_process`
+activa un backend Claude goal-first con proceso real supervisado por
+`ProcessRuntimeConnectorV0`. Reutiliza el mismo contrato durable del backend
+file-control, genera wrapper CLI por goal, lanza el comando Claude configurado
+por `ORQUESTA_CLAUDE_COMMAND`, observa el resultado
+`orquesta_goal_result_v0.json` y bloquea como
+`claude_goal_process_stopped_without_result` si el proceso termina sin result
+durable. Hay smoke fake de servidor con proceso real local. La brecha restante
+ya no es lanzamiento de proceso, sino control/shutdown persistente equivalente
+al backend Codex, smoke opt-in contra Claude real con credenciales y backend
+propio Gemini.
+
 Alcance:
 
 - `modulos/orquesta-runtime-claude`

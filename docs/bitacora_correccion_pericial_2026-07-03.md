@@ -1731,3 +1731,41 @@ Verificacion focal inicial:
 Pendiente real: MEJ-103 aun no se cierra al 100%. Queda lanzar proceso Claude
 real supervisado, control/shutdown equivalente al backend Codex, smoke fake/real
 opt-in de lanzamiento completo y backend goal-first propio para Gemini.
+
+## Continuacion Codex 2026-07-04 noche 15
+
+Avance MEJ-103: backend Claude goal-first con proceso supervisado.
+
+- Se anade `ClaudeGoalProcessBackendV0` en `orquesta-runtime-claude`.
+- El backend reutiliza `ClaudeGoalBackendV0` para spec/prompt/result durable y
+  lanza un wrapper CLI por goal con `ProcessRuntimeConnectorV0`.
+- Nuevo selector sin env adicional:
+  `ORQUESTA_CODEX_GOAL_BACKEND=claude_process`.
+- El wrapper ejecuta `ORQUESTA_CLAUDE_COMMAND -p` con el prompt del goal por
+  stdin y stdout/stderr redirigidos a runtime de control.
+- Si el proceso termina sin materializar `orquesta_goal_result_v0.json`, la
+  observacion devuelve `blocked` con
+  `claude_goal_process_stopped_without_result`; no queda como `running` falso.
+- `cmd/orquesta-server` cablea `claude_process` para app goal e idle goal y
+  conserva `claude_file_control` como modo sin proceso.
+
+Archivos tocados en este avance:
+
+- `modulos/orquesta-runtime-claude/claude_goal_process_backend_v0.go`
+- `modulos/orquesta-runtime-claude/claude_goal_process_backend_v0_test.go`
+- `modulos/orquesta-runtime-claude/claude_wrapper_v0.go`
+- `cmd/orquesta-server/claude_runtime_config_v0.go`
+- `cmd/orquesta-server/codex_goal_backend_env_v0.go`
+- `cmd/orquesta-server/effective_config_v0.go`
+- `cmd/orquesta-server/codex_goal_app_server_wiring_v0_test.go`
+- `docs/plan_mejora_continua_orquesta_2026-07-04.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion focal inicial:
+
+- `go test -count=1 ./modulos/orquesta-runtime-claude`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerGoalBackendFromEnvV0(ClaudeFileControlExponePuertosNeutrales|ClaudeProcessLanzaYObservaResultado|RechazaBackendNoSoportado)V0|TestServerConfigFromEnvV0DerivaAutomejoraGoalFirstDeBackendClaudeGoalV0'`
+
+Pendiente real: MEJ-103 queda reducido, no cerrado total. Faltan control y
+shutdown persistentes equivalentes a Codex app-server, smoke opt-in contra
+Claude real con credenciales y backend goal-first propio para Gemini.

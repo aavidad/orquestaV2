@@ -167,6 +167,62 @@ func TestServerGoalBackendFromEnvV0ClaudeFileControlExponePuertosNeutralesV0(t *
 	}
 }
 
+func TestServerGoalBackendFromEnvV0ClaudeProcessLanzaYObservaResultadoV0(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	stateDir := filepath.Join(root, "control", "state")
+	goalRef := "goal-ref-server-claude-process-001"
+	t.Setenv(envCodexGoalBackendV0, claudeGoalBackendProcessV0)
+	t.Setenv(envClaudeCommandV0, fakeClaudeGoalProcessCommandForTestV0(t, root, goalRef))
+
+	backend, err := serverCodexGoalBackendFromEnvForWorkDirV0(orquestaserver.ConfigV0{
+		ProjectWorkDir: projectDir,
+		RuntimeWorkDir: filepath.Join(projectDir, ".orquesta-runtime"),
+		StateDir:       stateDir,
+	}, projectDir)
+	if err != nil {
+		t.Fatalf("serverCodexGoalBackendFromEnvForWorkDirV0: %v", err)
+	}
+	launcher := serverGoalWorkLauncherFromBackendV0(backend)
+	observer := serverGoalWorkObserverFromBackendV0(backend)
+	spec := orquestagoal.GoalWorkSpecV0{
+		SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+		GoalRef:       goalRef,
+		RequestRef:    "request-ref-server-claude-process-001",
+		RunRef:        "run-ref-server-claude-process-001",
+		Objective:     "Probar backend Claude process desde servidor.",
+		DirectorKind:  orquestagoal.GoalDirectorKindRuntimeGoalV0,
+		WriteSet: []orquestagoal.GoalWriteScopeV0{{
+			Path:    "docs",
+			Purpose: "resultado durable",
+		}},
+		RequiredTests: []orquestagoal.GoalRequiredTestV0{{
+			TestRef: "required-test-ref-server-claude-process",
+			Command: "fake claude process",
+		}},
+	}
+	receipt, err := launcher.LaunchGoalWorkV0(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("LaunchGoalWorkV0: %v", err)
+	}
+	if !containsServerGoalStringV0(receipt.EvidenceRefs, orquestaruntimeclaude.ClaudeGoalEvidenceProcessLaunchedV0) {
+		t.Fatalf("receipt sin evidencia proceso: %+v", receipt)
+	}
+	resultPath := filepath.Join(projectDir, "docs", orquestaruntimeclaude.ClaudeGoalResultFileNameV0)
+	waitForServerGoalFileV0(t, resultPath)
+	observed, err := observer.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
+		GoalRef:         goalRef,
+		ExternalGoalRef: receipt.ExternalGoalRef,
+	})
+	if err != nil {
+		t.Fatalf("ObserveGoalWorkV0: %v", err)
+	}
+	if observed.Status != orquestagoal.GoalStatusCompleteV0 ||
+		!containsServerGoalStringV0(observed.EvidenceRefs, orquestaruntimeclaude.ClaudeGoalEvidenceResultReadV0) {
+		t.Fatalf("observed inesperado: %+v", observed)
+	}
+}
+
 func TestServerGoalBackendFromEnvV0RechazaBackendNoSoportadoV0(t *testing.T) {
 	t.Setenv(envCodexGoalBackendV0, "claude_real_process")
 
@@ -253,6 +309,28 @@ func containsServerGoalStringV0(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func fakeClaudeGoalProcessCommandForTestV0(t *testing.T, root string, goalRef string) string {
+	t.Helper()
+	path := filepath.Join(root, "fake-claude-goal-process")
+	script := "#!/bin/sh\nset -eu\nprompt=$(cat)\ncase \"$prompt\" in\n  *" + goalRef + "*) ;;\n  *) exit 7 ;;\nesac\nmkdir -p docs\ncat > docs/" + orquestaruntimeclaude.ClaudeGoalResultFileNameV0 + " <<'JSON'\n{\"schema_version\":\"orquesta_goal_result.v0\",\"status\":\"complete\",\"goal_ref\":\"" + goalRef + "\",\"summary\":\"server claude process complete\",\"checklist\":{\"expected_refs\":[\"server_claude_process\"],\"completed_refs\":[\"server_claude_process\"]},\"required_test_results\":[{\"test_ref\":\"required-test-ref-server-claude-process\",\"status\":\"passed\",\"evidence_refs\":[\"evidence-ref-server-claude-process-test\"]}],\"evidence_refs\":[\"evidence-ref-server-claude-process-result\"]}\nJSON\n"
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake claude process: %v", err)
+	}
+	return path
+}
+
+func waitForServerGoalFileV0(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("timeout esperando fichero %s", path)
 }
 
 type fakeCodexAppServerProbeV0 struct{}
