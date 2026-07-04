@@ -690,6 +690,83 @@ printf '%s\n' '"}}}'
 	}
 }
 
+func TestCodexAppServerLegacyRPCReaderResponseBudgetV0(t *testing.T) {
+	oversizedResponseBytes := codexAppServerCommandProtocolDefaultMaxResponseLineBytesV0 + 1
+	var payload bytes.Buffer
+	payload.WriteString(`{"jsonrpc":"2.0","id":2,"result":{"turn":{"id":"turn-legacy-big","status":"`)
+	payload.Write(bytes.Repeat([]byte("x"), oversizedResponseBytes))
+	payload.WriteString(`"}}}`)
+	payload.WriteByte('\n')
+
+	err := decodeCodexAppServerRPCResponseReaderV0(
+		bytes.NewReader(payload.Bytes()),
+		2,
+		&serverCodexAppServerTurnStartResponseV0{},
+	)
+	var callErr codexAppServerCallErrorV0
+	if !errors.As(err, &callErr) {
+		t.Fatalf("err=%T %v", err, err)
+	}
+	if callErr.Code != codexAppServerCommandResponseTooLargeIssueCodeV0 {
+		t.Fatalf("code=%q", callErr.Code)
+	}
+}
+
+func TestCodexAppServerCommandProtocolStderrDiagnosticoAcotadoV0(t *testing.T) {
+	root := t.TempDir()
+	fakeCodex := filepath.Join(root, "fake-codex-app-server")
+	body := `#!/bin/sh
+set -eu
+dd if=/dev/zero bs=1024 count=64 2>/dev/null | tr '\000' x >&2
+printf '%s\n' '401 unauthorized api.openai.com/v1/responses' >&2
+exit 1
+`
+	if err := os.WriteFile(fakeCodex, []byte(body), 0o700); err != nil {
+		t.Fatalf("write fake codex app server: %v", err)
+	}
+	protocol := serverCodexAppServerCommandProtocolV0{
+		CommandPath: fakeCodex,
+		Args:        []string{"--fake"},
+		Timeout:     2 * time.Second,
+	}
+
+	_, err := protocol.StartTurnV0(context.Background(), serverCodexAppServerTurnStartParamsV0{
+		ThreadID:  "thread-stderr-big",
+		InputText: "turn con stderr gigante",
+	})
+	var callErr codexAppServerCallErrorV0
+	if !errors.As(err, &callErr) {
+		t.Fatalf("err=%T %v", err, err)
+	}
+	if callErr.Code != "codex_app_server_provider_unauthorized" {
+		t.Fatalf("code=%q", callErr.Code)
+	}
+}
+
+func TestCodexAppServerDiagnosticTailFileV0LeeSoloColaV0(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app-server.log")
+	raw := strings.Repeat("prefix-noise\n", codexAppServerDiagnosticLogMaxBytesV0) +
+		"401 unauthorized api.openai.com/v1/responses\n"
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+
+	tail, err := readCodexAppServerDiagnosticTailFileV0(path, codexAppServerDiagnosticLogMaxBytesV0)
+
+	if err != nil {
+		t.Fatalf("tail: %v", err)
+	}
+	if len(tail) > codexAppServerDiagnosticLogMaxBytesV0 {
+		t.Fatalf("tail len=%d", len(tail))
+	}
+	if !strings.Contains(string(tail), "401 unauthorized api.openai.com/v1/responses") {
+		t.Fatalf("tail no conserva diagnostico final")
+	}
+	if got := codexAppServerIssueCodeFromLogFileV0(path); got != "codex_app_server_provider_unauthorized" {
+		t.Fatalf("issue=%q", got)
+	}
+}
+
 func TestCodexAppServerWebSocketDefaultFrameBudgetConserva16MiBV0(t *testing.T) {
 	payload := []byte(`{"id":2,"result":{"thread":{"id":"thread-ref-small","status":"closed"}}}`)
 	reader := bufio.NewReader(bytes.NewReader(codexAppServerTestWebSocketFrameV0(payload)))

@@ -64,6 +64,59 @@ func TestRESTClientV0SubmitDomainWorkArtifactRechazaReceiptNoCausal(t *testing.T
 	}
 }
 
+func TestRESTClientV0SubmitDomainWorkArtifactAceptaEstadosTerminalesNativosOPES(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		status       string
+		wantAccepted bool
+	}{
+		{name: "completed", status: "completed", wantAccepted: true},
+		{name: "done", status: "done", wantAccepted: true},
+		{name: "settled", status: "settled", wantAccepted: true},
+		{name: "pending", status: "pending", wantAccepted: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			client := newRESTClientForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/jobs/job-ref-opes-001/artifacts" {
+					t.Fatalf("path=%s", r.URL.Path)
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"id":     "artifact-receipt-ref-001",
+					"job_id": "job-ref-opes-001",
+					"artifact": map[string]any{
+						"job_id": "job-ref-opes-001",
+						"type":   "content_block",
+					},
+					"job": map[string]any{
+						"id":     "job-ref-opes-001",
+						"status": tc.status,
+					},
+				})
+			}))
+
+			result, err := client.SubmitDomainWorkArtifactV0(context.Background(), opesArtifactSubmissionForTestV0())
+
+			if err != nil {
+				t.Fatalf("SubmitDomainWorkArtifactV0: %v", err)
+			}
+			if tc.wantAccepted {
+				if result.Status != orquestadomainwork.DomainWorkStatusAcceptedV0 ||
+					result.JobRef != "job-ref-opes-001" ||
+					result.ReceiptRef != "artifact-receipt-ref-001" ||
+					len(result.Issues) != 0 {
+					t.Fatalf("receipt debe ser aceptado: %+v", result)
+				}
+				return
+			}
+			if result.Status != orquestadomainwork.DomainWorkStatusInvalidV0 ||
+				len(result.Issues) == 0 ||
+				result.Issues[0].Field != "job.status" {
+				t.Fatalf("receipt debe ser invalido por job.status: %+v", result)
+			}
+		})
+	}
+}
+
 func TestRESTClientV0SubmitDomainWorkArtifactDevuelveReceiptInvalidoConHTTP4xx(t *testing.T) {
 	client := newRESTClientForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/jobs/job-ref-opes-001/artifacts" {

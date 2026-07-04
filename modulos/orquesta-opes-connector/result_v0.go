@@ -1,6 +1,10 @@
 package orquestaopesconnector
 
-import orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+import (
+	"strings"
+
+	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
+)
 
 func domainWorkJobFromOPESV0(
 	request orquestadomainwork.DomainWorkJobRequestV0,
@@ -62,10 +66,19 @@ func validateOPESArtifactReceiptResponseV0(
 	if response.Artifact.Type != "" && response.Artifact.Type != submission.ArtifactType {
 		issues = append(issues, opesReceiptIssueV0(ErrOPESResponseInvalidV0, "artifact.type"))
 	}
-	if submission.CompleteJob && response.Job.Status != "" && response.Job.Status != "completed" {
+	if submission.CompleteJob && response.Job.Status != "" && !opesJobStatusTerminalForCompletionV0(response.Job.Status) {
 		issues = append(issues, opesReceiptIssueV0(ErrOPESResponseInvalidV0, "job.status"))
 	}
 	return issues
+}
+
+func opesJobStatusTerminalForCompletionV0(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "completed", "done", "settled":
+		return true
+	default:
+		return false
+	}
 }
 
 func opesReceiptIssueV0(code string, field string) orquestadomainwork.DomainWorkIssueV0 {

@@ -807,6 +807,60 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 	return blocked, resolved
 }
 
+func mcpAutoprogrammingGoalFirstRunningHighConsumptionActionsV0(
+	states []orquestagoal.GoalWorkStateV0,
+	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
+	policy MCPAutoprogrammingGoalProgressPolicyV0,
+) []MCPAutoprogrammingActionableRunV0 {
+	policy = NormalizeMCPAutoprogrammingGoalProgressPolicyV0(policy)
+	out := make([]MCPAutoprogrammingActionableRunV0, 0)
+	for _, state := range states {
+		if !mcpAutoprogrammingGoalStateObserveRequiredV0(state) ||
+			mcpAutoprogrammingGoalResultTerminalV0(state) {
+			continue
+		}
+		runRef := strings.TrimSpace(state.RunRef)
+		observed := observedByRunRef[runRef]
+		if !mcpAutoprogrammingObservedGoalActiveBlocksCleanupReconcileV0(observed) {
+			continue
+		}
+		action := MCPAutoprogrammingActionableRunV0{
+			Severity:          "blocked",
+			RunRef:            runRef,
+			Status:            strings.TrimSpace(state.Status),
+			RunStatus:         mcpAutoprogrammingObservedRunStatusV0(observedByRunRef, state.RunRef),
+			GoalRef:           strings.TrimSpace(state.GoalRef),
+			ExternalGoalRef:   strings.TrimSpace(state.ExternalGoalRef),
+			GoalStatus:        strings.TrimSpace(state.Status),
+			RecommendedAction: mcpQueueGlobalStatusActionReplanNarrowContextV0,
+			EvidenceRefs:      compactStringsMCPV0(state.EvidenceRefs),
+		}
+		action = mcpAutoprogrammingActionableRunWithGoalStateSnapshotV0(action, state)
+		action = mcpAutoprogrammingActionableRunWithObservedStatsV0(action, observed)
+		action = mcpAutoprogrammingActionableRunWithObservedGoalV0(action, observed)
+		switch {
+		case mcpAutoprogrammingNoCheckpointHighConsumptionV0(action, observed, policy):
+			action.Code = mcpAutoprogrammingActionNoCheckpointHighConsumptionV0
+			action.Reason = "goal_active_no_checkpoint_high_consumption: backend goal remains running after high token usage without checkpoint, artifacts or domain receipt; stop safely or replan with narrower context before relaunch"
+			action.EvidenceRefs = compactStringsMCPV0(append(
+				action.EvidenceRefs,
+				mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0,
+			))
+		case mcpAutoprogrammingCheckpointOnlyHighConsumptionV0(action, observed, policy):
+			action.Code = mcpAutoprogrammingActionCheckpointOnlyHighConsumptionV0
+			action.Reason = "checkpoint_only_high_consumption: backend goal remains running after high token usage with only checkpoint artifacts and no domain receipt; narrow context or stop safely before relaunch"
+			action.EvidenceRefs = compactStringsMCPV0(append(
+				action.EvidenceRefs,
+				mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0,
+			))
+		default:
+			continue
+		}
+		out = append(out, action)
+	}
+	return out
+}
+
 func mcpAutoprogrammingGoalBackendMissingAfterExternalCleanupActionsV0(
 	states []orquestagoal.GoalWorkStateV0,
 	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,

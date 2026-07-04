@@ -778,3 +778,55 @@ No sobrecerrar:
 5. Confirmar que no quedan procesos vivos con el `pgrep` indicado arriba.
 6. Si todo sigue verde, no preparar ola nueva salvo orden explicita: la cola
    esta congelada.
+
+## Actualizacion Codex 2026-07-04 tarde 3
+
+Avance aplicado y verificado para relevo de Claude:
+
+- App-server (`BUG-079`): se redujeron bordes locales de salida gigante. El
+  lector JSON-RPC legacy queda en 256 KiB, `stderr` command usa buffer tail
+  acotado y la deteccion de errores por log lee solo la cola del fichero.
+- MCP/autoprogramming (`BUG-079` / `BUG-165` residual): un goal `running` con
+  backend activo, alto consumo y cero checkpoint/artefactos/receipts ya entra
+  en `goal_active_no_checkpoint_high_consumption` con
+  `replan_narrow_context`. La guarda excluye backend stale sin proceso, que
+  sigue por `run_control_reconcile_external_cleanup`.
+- Shutdown (`BUG-065/165`): test combinado para dos goals activos valida
+  rePOSTs con `cleanup_goal_backends=true` hasta `cleanup_completed` no
+  bloqueante.
+- OPES connector (`BUG-058/066`): receipts con `CompleteJob=true` aceptan
+  estados terminales nativos `completed`, `done`, `settled`; `pending` sigue
+  invalido.
+- TAREA-6/MEJ-106: no se cambio el ratchet. La metrica real actual es
+  `env_vars_orquesta=513`; el objetivo `511` requiere retirar/consolidar dos
+  nombres `ORQUESTA_*` antes de bajar `env_vars_budget_test.go`.
+
+Archivos usados/modificados:
+
+- `cmd/orquesta-server/shutdown_client_v0_test.go`
+- `modulos/orquesta-mcp/autoprogramming_status_stale_running_v0.go`
+- `modulos/orquesta-mcp/autoprogramming_status_tool_v0.go`
+- `modulos/orquesta-mcp/autoprogramming_status_tool_v0_test.go`
+- `modulos/orquesta-opes-connector/result_v0.go`
+- `modulos/orquesta-opes-connector/rest_client_receipt_validation_v0_test.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_command_protocol_v0.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_migrated_v0_test.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_rpc_v0.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+- `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`
+
+Verificacion:
+
+- `git diff --check`
+- `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-opes-connector ./modulos/orquesta-runtime-codex-appserver ./cmd/orquesta-server`
+- `go test -count=1 ./...`
+
+Pendiente real:
+
+- `BUG-079`: enforcement duro pre-tool del runtime/proveedor y smoke largo real.
+- `BUG-065/165`: smoke real amplio con proveedor/status lento y coordinacion
+  automatica completa.
+- `BUG-058/066`: lifecycle OPES end-to-end con instancia temporal y
+  external-work real.
+- `MEJ-106`: bajar de 513 a 511 tras consolidar dos env vars reales.

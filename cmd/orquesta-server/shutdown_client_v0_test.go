@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -346,6 +347,25 @@ func shutdownClientBodyRefsContainForTestV0(values []any, want string) bool {
 	return false
 }
 
+func serverPublicStatusFromShutdownSnapshotForTestV0(snapshot serverShutdownClientResultV0) orquestaserver.ServerPublicStatusV0 {
+	snapshot = normalizeServerShutdownClientResultV0(snapshot)
+	return orquestaserver.ServerPublicStatusV0{
+		Status:                          "running",
+		ShutdownInProgress:              !snapshot.ShutdownReady,
+		ShutdownStatus:                  snapshot.Status,
+		ShutdownReady:                   snapshot.ShutdownReady,
+		ShutdownRunsRequested:           snapshot.RunsRequested,
+		ShutdownRunsStopped:             snapshot.RunsStopped,
+		ShutdownAgentsInFlight:          snapshot.AgentsInFlight,
+		ShutdownCheckpointsPending:      snapshot.CheckpointsPending,
+		ShutdownCheckpointAgentsPending: snapshot.CheckpointAgentsPending,
+		ShutdownAsyncWorkActive:         snapshot.AsyncWorkActive,
+		ShutdownActiveWorkCount:         snapshot.ActiveWorkCount,
+		ShutdownActiveWorkRefs:          snapshot.ActiveWorkRefs,
+		ShutdownGoalActions:             snapshot.GoalActions,
+	}
+}
+
 func TestRequestServerShutdownV0ReintentaPOSTParaIngerirCheckpointTardio(t *testing.T) {
 	shutdownCalls := 0
 	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -459,6 +479,120 @@ func TestRequestServerShutdownV0ReintentaCleanupBackendStillRunningHastaReady(t 
 	}
 	if shutdownCalls < 2 {
 		t.Fatalf("shutdownCalls=%d, esperaba rePOST para cleanup backend", shutdownCalls)
+	}
+}
+
+func TestRequestServerShutdownV0CoordinaDosGoalsActivosHastaGoalActionsResueltasV0(t *testing.T) {
+	snapshots := []serverShutdownClientResultV0{
+		{
+			Estado:        "ok",
+			Status:        "waiting_checkpoint",
+			ShutdownReady: false,
+			RunsRequested: 2,
+			RunsStopped:   0,
+			GoalActions: []orquestaserver.ShutdownGoalActionV0{
+				{Kind: "goal_backend", RunRef: "run-ref-a", WorkRef: "goal-ref-a", ActionTaken: "wait_checkpoint"},
+				{Kind: "goal_backend", RunRef: "run-ref-b", WorkRef: "goal-ref-b", ActionTaken: "wait_checkpoint"},
+			},
+		},
+		{
+			Estado:        "ok",
+			Status:        "waiting_drain",
+			ShutdownReady: false,
+			RunsRequested: 2,
+			RunsStopped:   0,
+			GoalActions: []orquestaserver.ShutdownGoalActionV0{
+				{Kind: "goal_backend", RunRef: "run-ref-a", WorkRef: "goal-ref-a", ActionTaken: "stop_requested_wait"},
+				{Kind: "goal_backend", RunRef: "run-ref-b", WorkRef: "goal-ref-b", ActionTaken: "stop_requested_wait"},
+			},
+		},
+		{
+			Estado:          "ok",
+			Status:          "backend_still_running",
+			ShutdownReady:   false,
+			RunsRequested:   2,
+			RunsStopped:     2,
+			ActiveWorkCount: 2,
+			ActiveWorks: []serverShutdownClientActiveWorkV0{
+				{Kind: "goal_backend", RunRef: "run-ref-a", WorkRef: "goal-ref-a", Status: "backend_still_running"},
+				{Kind: "goal_backend", RunRef: "run-ref-b", WorkRef: "goal-ref-b", Status: "backend_still_running"},
+			},
+			GoalActions: []orquestaserver.ShutdownGoalActionV0{
+				{Kind: "goal_backend", RunRef: "run-ref-a", WorkRef: "goal-ref-a", ActionTaken: "cleanup_requested"},
+				{Kind: "goal_backend", RunRef: "run-ref-b", WorkRef: "goal-ref-b", ActionTaken: "cleanup_attempted"},
+			},
+		},
+		{
+			Estado:          "ok",
+			Status:          "ready",
+			ShutdownReady:   true,
+			RunsRequested:   2,
+			RunsStopped:     2,
+			ActiveWorkCount: 0,
+			GoalActions: []orquestaserver.ShutdownGoalActionV0{
+				{Kind: "goal_backend", RunRef: "run-ref-a", WorkRef: "goal-ref-a", ActionTaken: "cleanup_completed"},
+				{Kind: "goal_backend", RunRef: "run-ref-b", WorkRef: "goal-ref-b", ActionTaken: "cleanup_completed"},
+			},
+		},
+	}
+	finalSnapshot := normalizeServerShutdownClientResultV0(snapshots[len(snapshots)-1])
+	if len(finalSnapshot.ActiveWorkRefs) != 0 {
+		t.Fatalf("snapshot final debe quedar sin active_work_refs: %#v", finalSnapshot.ActiveWorkRefs)
+	}
+	if len(finalSnapshot.GoalActions) != 0 {
+		t.Fatalf("goal_actions resueltas no deben bloquear: %#v", finalSnapshot.GoalActions)
+	}
+
+	var mu sync.Mutex
+	shutdownCalls := 0
+	statusCalls := 0
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/v0/server/shutdown":
+			var request map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatalf("request json=%v", err)
+			}
+			if request["cleanup_goal_backends"] != true {
+				t.Fatalf("cleanup_goal_backends=%v", request["cleanup_goal_backends"])
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if shutdownCalls >= len(snapshots) {
+				t.Fatalf("shutdownCalls=%d, snapshots=%d", shutdownCalls+1, len(snapshots))
+			}
+			snapshot := snapshots[shutdownCalls]
+			shutdownCalls++
+			_ = json.NewEncoder(w).Encode(snapshot)
+		case orquestaserver.ServerStatusEndpointV0:
+			mu.Lock()
+			defer mu.Unlock()
+			statusCalls++
+			snapshotIndex := shutdownCalls - 1
+			if snapshotIndex < 0 {
+				snapshotIndex = 0
+			}
+			if snapshotIndex >= len(snapshots) {
+				snapshotIndex = len(snapshots) - 1
+			}
+			_ = json.NewEncoder(w).Encode(serverPublicStatusFromShutdownSnapshotForTestV0(snapshots[snapshotIndex]))
+		default:
+			t.Fatalf("path inesperado: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	err := requestServerShutdownV0(strings.TrimPrefix(server.URL, "http://"), serverShutdownClientOptionsV0{})
+
+	if err != nil {
+		t.Fatalf("requestServerShutdownV0: %v", err)
+	}
+	if shutdownCalls != len(snapshots) {
+		t.Fatalf("shutdownCalls=%d, esperaba %d POSTs incluyendo rePOSTs", shutdownCalls, len(snapshots))
+	}
+	if statusCalls == 0 {
+		t.Fatalf("esperaba consultas status entre rePOSTs")
 	}
 }
 

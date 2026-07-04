@@ -423,6 +423,45 @@ antes de su cierre posterior:
   validacion global `go test -count=1 ./...`.
   Siguen abiertos el smoke OPES temporal end-to-end y la matriz completa de
   validadores semanticos/editoriales por artefacto canonico.
+- Continuacion Codex 2026-07-04 tarde 3: `BUG-ORQ-20260701-079` queda reducido
+  en bordes locales adicionales del app-server: el lector JSON-RPC legacy usa
+  el mismo presupuesto de linea de 256 KiB que el protocolo command, `stderr`
+  de comandos queda retenido como cola acotada para diagnostico y los logs de
+  app-server se inspeccionan por tail acotado antes de clasificar errores de
+  proveedor. Tests:
+  `TestCodexAppServerLegacyRPCReaderResponseBudgetV0`,
+  `TestCodexAppServerCommandProtocolStderrDiagnosticoAcotadoV0` y
+  `TestCodexAppServerDiagnosticTailFileV0LeeSoloColaV0`. Sigue abierto el
+  enforcement duro pre-tool dentro del runtime/proveedor.
+- Continuacion Codex 2026-07-04 tarde 3: `BUG-ORQ-20260701-079` y el residual
+  operativo de `BUG-ORQ-20260704-165` quedan reducidos en
+  `autoprogramming/status`: un goal durable `running`, backend observado
+  `active`, alto consumo y cero checkpoint/artefactos/receipts ya produce
+  `stale_running.code=goal_active_no_checkpoint_high_consumption` con
+  `recommended_action=replan_narrow_context`, sin degradarse a solo
+  `observe_goal`. Test:
+  `TestMCPAutoprogrammingStatusExecutorV0GoalRunningHighConsumptionNoDegradaAObserveGoal`.
+- Continuacion Codex 2026-07-04 tarde 3: `BUG-ORQ-20260701-065` /
+  `BUG-ORQ-20260704-165` quedan reducidos con test combinado de cliente
+  shutdown para dos goals activos: `waiting_checkpoint` ->
+  `waiting_drain` -> `backend_still_running` -> `ready`, siempre con
+  `cleanup_goal_backends=true` y acciones finales `cleanup_completed` no
+  bloqueantes. Test:
+  `TestRequestServerShutdownV0CoordinaDosGoalsActivosHastaGoalActionsResueltasV0`.
+  No sustituye al smoke real amplio con proveedor/status lento.
+- Continuacion Codex 2026-07-04 tarde 3: `BUG-ORQ-20260701-058/066` queda
+  reducido en el conector REST OPES: un receipt con `CompleteJob=true` acepta
+  estados terminales nativos `completed`, `done` y `settled`, y mantiene
+  `pending` como invalido. Test:
+  `TestRESTClientV0SubmitDomainWorkArtifactAceptaEstadosTerminalesNativosOPES`.
+  Sigue abierto el lifecycle OPES end-to-end con instancia temporal y
+  external-work.
+- Continuacion Codex 2026-07-04 tarde 3: TAREA-6/MEJ-106 no se endurece a
+  `511` porque la metrica real actual de
+  `scripts/orquesta_metricas_deuda.sh --json` es `env_vars_orquesta=513` y ya
+  existe `env_vars_budget_test.go` con ese ratchet. El pendiente verificable es
+  consolidar o retirar dos nombres `ORQUESTA_*` reales y solo entonces bajar el
+  ratchet a `511`; cambiarlo ahora introduciria un rojo falso en `go test ./...`.
 - `BUG-ORQ-20260702-120` queda cerrado por la proyeccion
   `stopped/crashed/unreachable` y los contratos OPES asociados. Sus notas de
   avance que decian "no cierra el bug padre" son historicas y quedan

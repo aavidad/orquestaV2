@@ -2316,3 +2316,69 @@ tareas autorizadas quedan en docs/instrucciones_director_codex_2026-07-04.md
 seccion 5 (MEJ-104 smoke+activacion, broker MCP, enrutado por coste,
 shutdown amplio, OPES 058/066/075, ratchet de envs), con orden sugerido y
 protocolo. Commit 465bf3e0. El director Codex vivo debe tomarlas de ahi.
+
+## Continuacion Codex 2026-07-04 tarde 3
+
+Trabajo ejecutado con subagentes read-only/worker y sin `codebase-memory-mcp`.
+`scripts/bootstrap_agent_tooling.sh --status` devolvio `broker_only`,
+`live_codebase_memory_mcp_processes=0`.
+
+Reducciones cerradas en este bloque:
+
+- `BUG-ORQ-20260701-079`: el app-server command/legacy RPC queda mas acotado.
+  El lector JSON-RPC legacy baja a 256 KiB, `stderr` de comandos queda retenido
+  como cola acotada y el clasificador de logs lee solo tail acotado.
+- `BUG-ORQ-20260701-079` / residual `BUG-ORQ-20260704-165`:
+  `autoprogramming/status` ya no deja un goal `running` con backend activo,
+  alto consumo y cero checkpoint/artefactos/receipts como simple
+  `observe_goal`; publica `goal_active_no_checkpoint_high_consumption` y
+  `replan_narrow_context`. Se ajusto la guarda para no pisar el caso distinto
+  de backend ausente/stale sin proceso, que sigue por reconciliacion de cleanup
+  externo.
+- `BUG-ORQ-20260701-065` / `BUG-ORQ-20260704-165`: test combinado de shutdown
+  con dos goals activos cubre la secuencia `waiting_checkpoint`,
+  `waiting_drain`, `backend_still_running`, `ready`, todos los POST con
+  `cleanup_goal_backends=true` y `cleanup_completed` no bloqueante.
+- `BUG-ORQ-20260701-058/066`: el conector REST OPES acepta `completed`,
+  `done` y `settled` como terminales nativos en receipts con `CompleteJob=true`,
+  manteniendo `pending` como invalido.
+
+TAREA-6/MEJ-106 queda documentada, no endurecida: la medicion real actual es
+`env_vars_orquesta=513` y ya existe `env_vars_budget_test.go` con ratchet 513.
+La orden de bajarlo a 511 requiere retirar o consolidar dos nombres
+`ORQUESTA_*` reales antes de cambiar el test; hacerlo ahora meteria un rojo
+falso.
+
+Archivos tocados:
+
+- `cmd/orquesta-server/shutdown_client_v0_test.go`
+- `modulos/orquesta-mcp/autoprogramming_status_stale_running_v0.go`
+- `modulos/orquesta-mcp/autoprogramming_status_tool_v0.go`
+- `modulos/orquesta-mcp/autoprogramming_status_tool_v0_test.go`
+- `modulos/orquesta-opes-connector/result_v0.go`
+- `modulos/orquesta-opes-connector/rest_client_receipt_validation_v0_test.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_command_protocol_v0.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_migrated_v0_test.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_rpc_v0.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPAutoprogrammingStatusExecutorV0(GoalRunningHighConsumptionNoDegradaAObserveGoal|GoalRunningStaleSinProcesoPideReconciliarCleanupExterno|SinCheckpointHighConsumptionEsBloqueante|CheckpointOnlyHighConsumptionEsBloqueante)'`
+- `go test -count=1 ./modulos/orquesta-opes-connector -run 'TestRESTClientV0SubmitDomainWorkArtifact(AceptaEstadosTerminalesNativosOPES|RechazaReceiptNoCausal)'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestCodexAppServer(CommandProtocol(ThreadReadResponseBudget|TurnStartResponseBudget|StderrDiagnosticoAcotado)|LegacyRPCReaderResponseBudget|DiagnosticTailFile|WebSocket(ThreadReadResponseBudget|DefaultFrameBudgetConserva16MiB))V0'`
+- `go test -count=1 ./cmd/orquesta-server -run TestRequestServerShutdownV0CoordinaDosGoalsActivosHastaGoalActionsResueltasV0`
+- `git diff --check`
+- `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-opes-connector ./modulos/orquesta-runtime-codex-appserver ./cmd/orquesta-server`
+- `go test -count=1 ./...`
+
+No sobrecerrar:
+
+- `BUG-079` sigue abierto para enforcement duro pre-tool dentro del
+  runtime/proveedor y smoke largo real.
+- `BUG-165/065` siguen abiertos para smoke real amplio de proveedor/status
+  lento y coordinacion automatica completa backend/checkpoint/stop/cancel/wait.
+- `BUG-058/066` siguen abiertos para lifecycle OPES end-to-end con instancia
+  temporal y external-work real.

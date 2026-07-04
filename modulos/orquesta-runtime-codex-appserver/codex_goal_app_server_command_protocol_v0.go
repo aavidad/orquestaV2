@@ -2,13 +2,13 @@ package orquestaruntimecodexappserver
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -142,8 +142,8 @@ func (protocol serverCodexAppServerCommandProtocolV0) callWithMaxResponseLineByt
 	if err != nil {
 		return err
 	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	stderr := newCodexAppServerDiagnosticTailBufferV0(codexAppServerDiagnosticLogMaxBytesV0)
+	cmd.Stderr = stderr
 	if strings.TrimSpace(protocol.PathEnv) != "" {
 		cmd.Env = append(os.Environ(), "PATH="+protocol.PathEnv)
 	}
@@ -355,14 +355,81 @@ func codexAppServerIssueCodeFromLogFileV0(path string) string {
 	if path == "" {
 		return ""
 	}
-	raw, err := os.ReadFile(path)
+	raw, err := readCodexAppServerDiagnosticTailFileV0(path, codexAppServerDiagnosticLogMaxBytesV0)
 	if err != nil {
 		return ""
 	}
-	if len(raw) > codexAppServerDiagnosticLogMaxBytesV0 {
-		raw = raw[len(raw)-codexAppServerDiagnosticLogMaxBytesV0:]
-	}
 	return codexAppServerIssueCodeFromMessageV0(string(raw))
+}
+
+type codexAppServerDiagnosticTailBufferV0 struct {
+	mu  sync.Mutex
+	max int
+	buf []byte
+}
+
+func newCodexAppServerDiagnosticTailBufferV0(max int) *codexAppServerDiagnosticTailBufferV0 {
+	if max <= 0 {
+		max = codexAppServerDiagnosticLogMaxBytesV0
+	}
+	return &codexAppServerDiagnosticTailBufferV0{max: max}
+}
+
+func (buffer *codexAppServerDiagnosticTailBufferV0) Write(p []byte) (int, error) {
+	if buffer == nil {
+		return len(p), nil
+	}
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	if len(p) >= buffer.max {
+		buffer.buf = append(buffer.buf[:0], p[len(p)-buffer.max:]...)
+		return len(p), nil
+	}
+	buffer.buf = append(buffer.buf, p...)
+	if len(buffer.buf) > buffer.max {
+		buffer.buf = append([]byte(nil), buffer.buf[len(buffer.buf)-buffer.max:]...)
+	}
+	return len(p), nil
+}
+
+func (buffer *codexAppServerDiagnosticTailBufferV0) String() string {
+	if buffer == nil {
+		return ""
+	}
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	return string(buffer.buf)
+}
+
+func readCodexAppServerDiagnosticTailFileV0(path string, max int) ([]byte, error) {
+	if max <= 0 {
+		max = codexAppServerDiagnosticLogMaxBytesV0
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	size := info.Size()
+	if size <= 0 {
+		return []byte{}, nil
+	}
+	readSize := int64(max)
+	if size < readSize {
+		readSize = size
+	}
+	if _, err := file.Seek(size-readSize, io.SeekStart); err != nil {
+		return nil, err
+	}
+	raw, err := io.ReadAll(io.LimitReader(file, readSize))
+	if err != nil {
+		return nil, err
+	}
+	return raw, nil
 }
 
 func codexAppServerIssueCodeFromStderrV0(message string, fallback string) string {

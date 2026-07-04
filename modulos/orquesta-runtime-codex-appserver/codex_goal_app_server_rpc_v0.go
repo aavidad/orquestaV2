@@ -70,8 +70,14 @@ func decodeCodexAppServerRPCResponseV0(stdout []byte, responseID int, out interf
 
 func decodeCodexAppServerRPCResponseReaderV0(stdout io.Reader, responseID int, out interface{}) error {
 	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	return decodeCodexAppServerRPCResponseScannerV0(scanner, responseID, out)
+	scanner.Buffer(
+		make([]byte, 0, codexAppServerCommandProtocolInitialResponseLineBufferBytesV0),
+		codexAppServerCommandProtocolDefaultMaxResponseLineBytesV0,
+	)
+	return codexAppServerScannerResponseErrorV0(
+		decodeCodexAppServerRPCResponseScannerV0(scanner, responseID, out),
+		codexAppServerCommandResponseTooLargeIssueCodeV0,
+	)
 }
 
 func decodeCodexAppServerRPCResponseScannerV0(scanner *bufio.Scanner, responseID int, out interface{}) error {
