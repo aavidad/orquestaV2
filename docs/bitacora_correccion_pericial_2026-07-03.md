@@ -2308,3 +2308,11 @@ Revision subagente `Hume`: coherente, riesgo bajo; no encontro contrato interno
 que dependa de conservar `stopped + shutdown_status=stop_timeout`. Sugirio
 blindar explicitamente `shutdown_runs_*`; el test de contadores queda ampliado
 con `ShutdownRunsRequested > ShutdownRunsStopped`.
+
+## Cola descongelada por el operador (2026-07-04 tarde)
+
+Orden textual: "dale todas las tareas a codex para que lo programe". Las 6
+tareas autorizadas quedan en docs/instrucciones_director_codex_2026-07-04.md
+seccion 5 (MEJ-104 smoke+activacion, broker MCP, enrutado por coste,
+shutdown amplio, OPES 058/066/075, ratchet de envs), con orden sugerido y
+protocolo. Commit 465bf3e0. El director Codex vivo debe tomarlas de ahi.
