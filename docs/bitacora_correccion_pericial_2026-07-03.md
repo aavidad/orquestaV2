@@ -2215,3 +2215,36 @@ Verificacion ejecutada en este corte:
 - `go test -count=1 ./modulos/orquesta-mcp`
 - `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0TurnStart(InyectaContratoSalidaCompacta|NoRelajaContratoSalidaCompacta)V0'`
 - `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`
+
+## Continuacion Codex 2026-07-04 noche 27
+
+Reduccion adicional de `BUG-ORQ-20260701-079`:
+
+- `orquesta-runtime-codex-appserver` materializa un checkpoint runtime dentro
+  del `write_set` autorizado tras `thread/start` y antes de `turn/start`. Asi,
+  cuando el agente empieza el turno y puede ejecutar herramientas internas del
+  app-server, ya existe una evidencia durable recuperable
+  `checkpoint_started.txt`.
+- La evidencia de launch incluye
+  `evidence-ref-codex-app-server-early-checkpoint-materialized:<relpath>` para
+  distinguir checkpoint materializado por runtime de avance semantico del
+  agente.
+- Auditoria del schema local generado por `codex app-server generate-json-schema`
+  confirma que `turn/start` no expone hoy un campo compatible de limite duro de
+  stdout/tool-output; Orquesta conserva los limites de `thread/read` y
+  saneamiento posterior, pero el cap pre-tool real queda como frontera del
+  runtime/proveedor.
+
+Archivos tocados:
+
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_v0.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_migrated_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion ejecutada en este corte:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0(TurnStart(InyectaContratoSalidaCompacta|NoRelajaContratoSalidaCompacta)|MaterializaCheckpointAntesDeTurnStart)V0'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`
+- `git diff --check`
+- `go test -count=1 ./...`

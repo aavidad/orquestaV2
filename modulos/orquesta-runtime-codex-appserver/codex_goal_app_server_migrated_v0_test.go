@@ -144,6 +144,56 @@ func TestServerCodexAppServerGoalBackendV0TurnStartNoRelajaContratoSalidaCompact
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0MaterializaCheckpointAntesDeTurnStartV0(t *testing.T) {
+	root := t.TempDir()
+	checkpointPath := filepath.Join(root, "generated-apps", "checkpoint_started.txt")
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-checkpoint-preturn-001"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-goal-checkpoint-preturn-001", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-goal-checkpoint-preturn-001", Status: "inProgress"},
+		onStartTurn: func() {
+			if _, err := os.Stat(checkpointPath); err != nil {
+				t.Fatalf("checkpoint no existe antes de turn/start: %v", err)
+			}
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol:       protocol,
+		CWD:            root,
+		Sandbox:        "workspace-write",
+		ApprovalPolicy: "never",
+	}
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef:   "goal-ref-checkpoint-preturn-001",
+		Objective: "materializar checkpoint antes de usar herramientas",
+		WriteSet: []orquestagoal.GoalWriteScopeV0{{
+			Path: "generated-apps",
+		}},
+		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
+			RequireEarlyCheckpoint: true,
+			EarlyCheckpointFile:    "checkpoint_started.txt",
+		},
+	}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	data, readErr := os.ReadFile(checkpointPath)
+	if readErr != nil {
+		t.Fatalf("read checkpoint: %v", readErr)
+	}
+	body := string(data)
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		!containsStringMigratedTestV0(protocol.calls, "turn/start") ||
+		!containsStringPrefixMigratedTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-early-checkpoint-materialized:generated-apps/checkpoint_started.txt") ||
+		!strings.Contains(body, "schema_version=orquesta.codex_app_server.early_checkpoint.v0") ||
+		!strings.Contains(body, "goal_ref=goal-ref-checkpoint-preturn-001") ||
+		!strings.Contains(body, "external_goal_ref=thread-ref-goal-checkpoint-preturn-001") {
+		t.Fatalf("receipt=%+v body=%q calls=%+v", receipt, body, protocol.calls)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0StopForcedBloqueaGoalYApagaBackendV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		goal: serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-stop-forced-001", Status: "blocked"},
@@ -662,6 +712,7 @@ type fakeCodexAppServerProtocolV0 struct {
 	setParams   serverCodexAppServerThreadGoalSetParamsV0
 	turnParams  serverCodexAppServerTurnStartParamsV0
 	getThreadID string
+	onStartTurn func()
 
 	thread           serverCodexAppServerThreadV0
 	goal             serverCodexAppServerThreadGoalV0
@@ -702,6 +753,9 @@ func (fake *fakeCodexAppServerProtocolV0) StartTurnV0(
 ) (serverCodexAppServerTurnV0, error) {
 	fake.calls = append(fake.calls, "turn/start")
 	fake.turnParams = params
+	if fake.onStartTurn != nil {
+		fake.onStartTurn()
+	}
 	return fake.turn, nil
 }
 

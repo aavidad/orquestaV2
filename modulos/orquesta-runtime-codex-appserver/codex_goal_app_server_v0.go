@@ -107,6 +107,14 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	if hasWriteSetBaseline {
 		backend.recordCodexAppServerRuntimeWriteSetBaselineV0(threadID, writeSetBaseline)
 	}
+	earlyCheckpointEvidence := ""
+	if checkpointRef, materialized, err := backend.materializeCodexAppServerEarlyCheckpointV0(packet, threadID); err != nil {
+		code := "codex_app_server_early_checkpoint_write_failed"
+		detail := backend.codexAppServerLaunchIssueDetailV0(code, err)
+		return codexAppServerStartReceiptV0(packet, threadID, codexAppServerIssueCodeWithDetailV0(code, detail)), err
+	} else if materialized {
+		earlyCheckpointEvidence = "evidence-ref-codex-app-server-early-checkpoint-materialized:" + checkpointRef
+	}
 	tokenBudget := 0
 	if packet.Budget.TokenBudget > 0 {
 		tokenBudget = packet.Budget.TokenBudget
@@ -137,16 +145,126 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 		backend.nowCodexAppServerGoalV0(),
 		backend.codexAppServerGoalTimeoutForPacketV0(packet),
 	)
+	evidenceRefs := []string{
+		"evidence-ref-codex-app-server-thread-started",
+		goalSetEvidence,
+		"evidence-ref-codex-app-server-turn-started",
+	}
+	if earlyCheckpointEvidence != "" {
+		evidenceRefs = append(evidenceRefs, earlyCheckpointEvidence)
+	}
 	return orquestaruntimecodexgoal.CodexGoalStartReceiptV0{
 		Status:          orquestagoal.GoalStatusRunningV0,
 		GoalRef:         packet.GoalRef,
 		ExternalGoalRef: threadID,
-		EvidenceRefs: []string{
-			"evidence-ref-codex-app-server-thread-started",
-			goalSetEvidence,
-			"evidence-ref-codex-app-server-turn-started",
-		},
+		EvidenceRefs:    compactServerStackStringsV0(evidenceRefs),
 	}, nil
+}
+
+func (backend serverCodexAppServerGoalBackendV0) materializeCodexAppServerEarlyCheckpointV0(
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+	externalGoalRef string,
+) (string, bool, error) {
+	if !packet.DirectionContract.RequireEarlyCheckpoint || len(packet.WriteSet) == 0 {
+		return "", false, nil
+	}
+	cwd := strings.TrimSpace(backend.CWD)
+	if cwd == "" {
+		return "", false, nil
+	}
+	root, err := filepath.Abs(cwd)
+	if err != nil {
+		return "", false, err
+	}
+	checkpointFile := codexAppServerEarlyCheckpointFileV0(packet.DirectionContract.EarlyCheckpointFile)
+	for _, scope := range packet.WriteSet {
+		dirRel, ok := codexAppServerWriteSetCheckpointDirRelV0(scope.Path)
+		if !ok {
+			continue
+		}
+		targetDir := filepath.Join(root, filepath.FromSlash(dirRel))
+		if !codexAppServerPathInsideRootV0(root, targetDir) {
+			continue
+		}
+		if err := os.MkdirAll(targetDir, 0o700); err != nil {
+			return "", false, codexAppServerWriteSetPrepareErrorV0{
+				Operation: "mkdir",
+				RelPath:   dirRel,
+				Err:       err,
+			}
+		}
+		target := filepath.Join(targetDir, filepath.FromSlash(checkpointFile))
+		if !codexAppServerPathInsideRootV0(root, target) {
+			continue
+		}
+		relRef := filepath.ToSlash(filepath.Join(dirRel, checkpointFile))
+		if info, statErr := os.Stat(target); statErr == nil && !info.IsDir() {
+			return relRef, true, nil
+		} else if statErr == nil && info.IsDir() {
+			return "", false, fmt.Errorf("early checkpoint target is directory: %s", relRef)
+		} else if statErr != nil && !os.IsNotExist(statErr) {
+			return "", false, statErr
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+			return "", false, err
+		}
+		body := codexAppServerEarlyCheckpointBodyV0(packet, externalGoalRef)
+		if err := os.WriteFile(target, []byte(body), 0o600); err != nil {
+			return "", false, err
+		}
+		return relRef, true, nil
+	}
+	return "", false, nil
+}
+
+func codexAppServerEarlyCheckpointFileV0(value string) string {
+	clean := filepath.ToSlash(filepath.Clean(strings.TrimSpace(value)))
+	if clean == "" || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || filepath.IsAbs(clean) {
+		return "checkpoint_started.txt"
+	}
+	if strings.HasPrefix(clean, ".git/") || clean == ".git" {
+		return "checkpoint_started.txt"
+	}
+	return clean
+}
+
+func codexAppServerWriteSetCheckpointDirRelV0(path string) (string, bool) {
+	raw := strings.TrimSpace(path)
+	if raw == "" || filepath.IsAbs(raw) {
+		return "", false
+	}
+	clean := filepath.ToSlash(filepath.Clean(strings.Trim(raw, "/")))
+	if clean == "" || clean == "." {
+		return ".", true
+	}
+	if clean == ".." || strings.HasPrefix(clean, "../") || clean == ".git" || strings.HasPrefix(clean, ".git/") || filepath.IsAbs(clean) {
+		return "", false
+	}
+	if codexAppServerWriteSetLooksLikeFileV0(clean) {
+		dir := filepath.ToSlash(filepath.Dir(clean))
+		if dir == "." || dir == "" {
+			return ".", true
+		}
+		return dir, true
+	}
+	return clean, true
+}
+
+func codexAppServerEarlyCheckpointBodyV0(
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+	externalGoalRef string,
+) string {
+	var b strings.Builder
+	b.WriteString("schema_version=orquesta.codex_app_server.early_checkpoint.v0\n")
+	b.WriteString("goal_ref=")
+	b.WriteString(strings.TrimSpace(packet.GoalRef))
+	b.WriteByte('\n')
+	b.WriteString("external_goal_ref=")
+	b.WriteString(strings.TrimSpace(externalGoalRef))
+	b.WriteByte('\n')
+	b.WriteString("reason=runtime_checkpoint_before_turn_start\n")
+	b.WriteString("created_by=orquesta-runtime-codex-appserver\n")
+	return b.String()
 }
 
 func (backend serverCodexAppServerGoalBackendV0) prepareCodexGoalWriteSetV0(
