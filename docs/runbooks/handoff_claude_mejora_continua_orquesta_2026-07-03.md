@@ -844,3 +844,17 @@ Nota de cierre operativo:
   `review_partial_artifacts:run:request-ref-t297-wizard-g1-20260704-001`.
   Si Claude retoma ese pilot, debe revisar/cerrar el goal o pararlo por control
   gobernado antes de limpiar procesos.
+
+## Coordinacion wizard TAREA-7 (Claude, 2026-07-04)
+
+Hubo doble implementacion simultanea de G1: la del director Codex en el repo
+principal (canonica: ya cableada al endpoint guided, suite orquesta-web verde)
+y la del pilot t297 de Orquesta (goal cerrado blocked solo por socket de
+httptest en sandbox; suite verde fuera del sandbox). Decision: se conserva la
+version del repo. La rama `pilot-t297` queda viva SOLO como cantera: contiene
+12 tests focales (R1-R8 individuales, contraste, defaults, agenda, i18n owner)
+en `modulos/orquesta-web/nueva_app_wizard_gaps_v0_test.go`. Codex: adoptar de
+ahi los tests focales que su version no cubra y despues borrar la rama.
+Pilot t297 limpiado (server+tmux); goal habia alcanzado result terminal.
+Falta del diseno: G2 (tool MCP + render web completo) y G3 (catalogo i18n en
+completo), segun docs/diseno_wizard_programacion_2026-07-04.md.
