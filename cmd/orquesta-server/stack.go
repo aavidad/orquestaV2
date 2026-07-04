@@ -265,6 +265,7 @@ func buildStackFromEnvWithGoalBackendV0(
 		AppGoalLauncher:       serverGoalWorkLauncherFromBackendV0(goalBackend),
 		AppGoalReworkLauncher: serverGoalWorkLauncherFromBackendV0(goalBackend),
 		AppGoalObserver:       serverGoalWorkObserverFromBackendV0(goalBackend),
+		AppGoalBackendControl: serverGoalBackendControlFromBackendV0(goalBackend),
 		RuntimeModels:         runtimeModelManagerFromEnvV0(),
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},

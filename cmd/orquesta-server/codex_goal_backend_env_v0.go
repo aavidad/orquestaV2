@@ -157,6 +157,7 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	}
 	client := orquestaruntimecodexappserver.GoalBackendV0{
 		Protocol:          runtimeProtocol,
+		BackendShutdown:   shutdownHook,
 		CWD:               firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir),
 		DiagnosticLogPath: orquestaruntimecodexappserver.DiagnosticLogPathForProtocolV0(runtimeProtocol),
 		AuthIssueCode:     authIssueCode,
@@ -171,7 +172,12 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		),
 		Runtime: &orquestaruntimecodexappserver.GoalRuntimeV0{},
 	}
-	return serverCodexGoalBackendV0{Starter: client, Observer: client, ShutdownHook: shutdownHook}, nil
+	return serverCodexGoalBackendV0{
+		Starter:      client,
+		Observer:     client,
+		Controller:   client,
+		ShutdownHook: shutdownHook,
+	}, nil
 }
 
 func codexAppServerConfigFromServerConfigV0(config orquestaserver.ConfigV0) orquestaruntimecodexappserver.ConfigV0 {

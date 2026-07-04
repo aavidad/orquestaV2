@@ -134,6 +134,9 @@ func ObserveAppDirectorGoalV0(
 	if ports.GoalStateStore == nil {
 		return ObserveAppDirectorGoalResultV0{}, AppDirectorServiceIssueV0{Field: "ports.goal_state_store"}
 	}
+	if terminal, ok, err := appDirectorForcedTerminalGoalObservationV0(ctx, request, ports); ok || err != nil {
+		return terminal, err
+	}
 	if ports.GoalObserver == nil {
 		return ObserveAppDirectorGoalResultV0{}, AppDirectorServiceIssueV0{Field: "ports.goal_observer"}
 	}
@@ -177,6 +180,135 @@ func ObserveAppDirectorGoalV0(
 		Closure:               closure,
 		EvidenceRefs:          append([]string(nil), state.EvidenceRefs...),
 	}, nil
+}
+
+func appDirectorForcedTerminalGoalObservationV0(
+	ctx context.Context,
+	request ObserveAppDirectorGoalRequestV0,
+	ports StartAppDirectorPortsV0,
+) (ObserveAppDirectorGoalResultV0, bool, error) {
+	state, err := ports.GoalStateStore.LoadGoalWorkStateV0(ctx, request.RunRef)
+	if err != nil {
+		return ObserveAppDirectorGoalResultV0{}, false, nil
+	}
+	state, err = NewAppDirectorGoalStateV0(state)
+	if err != nil || !appDirectorForcedTerminalGoalStateV0(state) {
+		return ObserveAppDirectorGoalResultV0{}, false, nil
+	}
+	result, closure := appDirectorForcedTerminalGoalStateObservationV0(state)
+	run, err := reflectAppDirectorGoalClosureInRunV0(ctx, request, state, result, closure, ports)
+	if err != nil {
+		return ObserveAppDirectorGoalResultV0{}, true, err
+	}
+	if refreshed, refreshErr := ports.GoalStateStore.LoadGoalWorkStateV0(ctx, request.RunRef); refreshErr == nil {
+		if normalized, normalizeErr := NewAppDirectorGoalStateV0(refreshed); normalizeErr == nil {
+			state = normalized
+		}
+	}
+	result, closure = appDirectorForcedTerminalGoalStateObservationV0(state)
+	return ObserveAppDirectorGoalResultV0{
+		SchemaVersion:         ObserveAppDirectorGoalResultSchemaV0,
+		Status:                state.Status,
+		DirectorExecutionMode: AppDirectorExecutionModeGoalFirstV0,
+		RunRef:                state.RunRef,
+		GoalRef:               state.GoalRef,
+		ExternalGoalRef:       state.ExternalGoalRef,
+		Run:                   run,
+		GoalResult:            result,
+		Closure:               closure,
+		EvidenceRefs:          append([]string(nil), state.EvidenceRefs...),
+	}, true, nil
+}
+
+func appDirectorForcedTerminalGoalStateObservationV0(
+	state AppDirectorGoalStateV0,
+) (orquestagoal.GoalWorkResultV0, orquestagoal.GoalClosureValidationV0) {
+	result := orquestagoal.GoalWorkResultV0{}
+	if state.LastResult != nil {
+		result = *state.LastResult
+	} else {
+		result = orquestagoal.GoalWorkResultV0{
+			SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+			Status:          orquestagoal.GoalStatusBlockedV0,
+			GoalRef:         state.GoalRef,
+			ExternalGoalRef: state.ExternalGoalRef,
+			Summary:         "operator forced stop kept terminal goal-first state",
+			EvidenceRefs:    append([]string(nil), state.EvidenceRefs...),
+			Issues: []orquestagoal.GoalWorkIssueV0{{
+				Code:  "operator_forced_stop_goal_first",
+				Field: "goal_backend",
+			}},
+		}
+	}
+	result = orquestagoal.NormalizeGoalWorkResultV0(result)
+	closure := orquestagoal.GoalClosureValidationV0{}
+	if state.LastClosure != nil {
+		closure = *state.LastClosure
+	} else {
+		closure = orquestagoal.GoalClosureValidationV0{
+			Status:       orquestagoal.GoalStatusBlockedV0,
+			NeedsRework:  true,
+			EvidenceRefs: append([]string(nil), result.EvidenceRefs...),
+			Issues:       append([]orquestagoal.GoalWorkIssueV0(nil), result.Issues...),
+		}
+	}
+	closure.Status = strings.TrimSpace(closure.Status)
+	if closure.Status == "" {
+		closure.Status = orquestagoal.GoalStatusBlockedV0
+	}
+	return result, closure
+}
+
+func appDirectorForcedTerminalGoalStateV0(state AppDirectorGoalStateV0) bool {
+	if strings.TrimSpace(state.Status) != orquestagoal.GoalStatusBlockedV0 {
+		return false
+	}
+	return appDirectorForcedTerminalGoalEvidenceV0(state.EvidenceRefs) ||
+		state.LastResult != nil && appDirectorForcedTerminalGoalResultV0(*state.LastResult) ||
+		state.LastClosure != nil && appDirectorForcedTerminalGoalClosureV0(*state.LastClosure)
+}
+
+func appDirectorForcedTerminalGoalResultV0(result orquestagoal.GoalWorkResultV0) bool {
+	if appDirectorForcedTerminalGoalEvidenceV0(result.EvidenceRefs) {
+		return true
+	}
+	for _, issue := range result.Issues {
+		if appDirectorForcedTerminalGoalCodeV0(issue.Code) {
+			return true
+		}
+	}
+	return appDirectorForcedTerminalGoalCodeV0(result.Summary)
+}
+
+func appDirectorForcedTerminalGoalClosureV0(closure orquestagoal.GoalClosureValidationV0) bool {
+	if appDirectorForcedTerminalGoalEvidenceV0(closure.EvidenceRefs) {
+		return true
+	}
+	for _, issue := range closure.Issues {
+		if appDirectorForcedTerminalGoalCodeV0(issue.Code) {
+			return true
+		}
+	}
+	return false
+}
+
+func appDirectorForcedTerminalGoalEvidenceV0(refs []string) bool {
+	for _, ref := range refs {
+		if appDirectorForcedTerminalGoalCodeV0(ref) {
+			return true
+		}
+	}
+	return false
+}
+
+func appDirectorForcedTerminalGoalCodeV0(value string) bool {
+	value = strings.TrimSpace(value)
+	return value == "evidence-ref-run-control-goal-forced-stop-terminal" ||
+		value == "evidence-ref-run-control-goal-forced-cancel-terminal" ||
+		value == "evidence-ref-run-control-goal-forced-terminal-reconciled" ||
+		value == "evidence-ref-server-shutdown-goal-forced-terminal-reconciled" ||
+		strings.Contains(value, "operator_forced_stop") ||
+		strings.Contains(value, "operator_forced_cancel")
 }
 
 func appDirectorGoalObservationForCurrentStateV0(

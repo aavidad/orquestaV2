@@ -59,6 +59,7 @@ type serverCodexAppServerGoalBackendV0 struct {
 	Timeout                 time.Duration
 	HighTokenUsageThreshold int
 	Runtime                 *serverCodexAppServerGoalRuntimeV0
+	BackendShutdown         BackendShutdownPortV0
 	Now                     func() time.Time
 }
 

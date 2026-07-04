@@ -808,6 +808,87 @@ func TestObserveAppDirectorGoalV0RecuperaEntregaTardiaTrasTimeoutBloqueadoV0(t *
 	}
 }
 
+func TestObserveAppDirectorGoalV0NoReobservaGoalTerminalPorForcedStopV0(t *testing.T) {
+	store, sink, goalStates, launcher, started := serviceStartGoalFirstForObserveTestV0(t)
+	spec := launcher.specs[0]
+	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), spec.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	evidenceRefs := []string{
+		"evidence-ref-operator-forced-stop",
+		"evidence-ref-run-control-goal-forced-stop-terminal",
+	}
+	state.Status = orquestagoal.GoalStatusBlockedV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: started.ExternalGoalRef,
+		Summary:         "forced stop accepted; goal backend stopped and marked blocked for rework",
+		EvidenceRefs:    evidenceRefs,
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  "operator_forced_stop_no_artifacts",
+			Field: "goal_backend",
+		}},
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:       orquestagoal.GoalStatusBlockedV0,
+		NeedsRework:  true,
+		EvidenceRefs: evidenceRefs,
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  "operator_forced_stop_no_artifacts",
+			Field: "goal_backend",
+		}},
+	}
+	state.EvidenceRefs = compactStartAppDirectorStringsV0(append(state.EvidenceRefs, evidenceRefs...))
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	observerCalls := 0
+	runningObserver := serviceGoalObserverForTestV0{
+		calls: &observerCalls,
+		result: orquestagoal.GoalWorkResultV0{
+			SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         spec.GoalRef,
+			ExternalGoalRef: started.ExternalGoalRef,
+			EvidenceRefs:    []string{"evidence-ref-backend-still-running"},
+		},
+	}
+
+	result, err := ObserveAppDirectorGoalV0(
+		context.Background(),
+		ObserveAppDirectorGoalRequestV0{RunRef: spec.RunRef},
+		StartAppDirectorPortsV0{
+			RunStore:             store,
+			EventSink:            sink,
+			GoalStateStore:       goalStates,
+			GoalObserver:         runningObserver,
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if observerCalls != 0 ||
+		result.Status != orquestagoal.GoalStatusBlockedV0 ||
+		result.GoalResult.Status != orquestagoal.GoalStatusBlockedV0 ||
+		result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusBlockedV0 {
+		t.Fatalf("observerCalls=%d result=%+v", observerCalls, result)
+	}
+	persisted, err := goalStates.LoadGoalWorkStateV0(context.Background(), spec.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0 persisted: %v", err)
+	}
+	if persisted.Status != orquestagoal.GoalStatusBlockedV0 ||
+		persisted.LastResult == nil ||
+		persisted.LastResult.Status != orquestagoal.GoalStatusBlockedV0 ||
+		serviceStringInSetV0(persisted.EvidenceRefs, "evidence-ref-backend-still-running") {
+		t.Fatalf("persisted=%+v", persisted)
+	}
+}
+
 func TestObserveAppDirectorGoalV0BloqueaRunSiClosureNoAcepta(t *testing.T) {
 	store, sink, goalStates, launcher, started := serviceStartGoalFirstForObserveTestV0(t)
 	spec := launcher.specs[0]
@@ -1563,6 +1644,7 @@ func (launcher *serviceGoalLauncherForTestV0) LaunchGoalWorkV0(
 }
 
 type serviceGoalObserverForTestV0 struct {
+	calls  *int
 	result orquestagoal.GoalWorkResultV0
 }
 
@@ -1570,6 +1652,9 @@ func (observer serviceGoalObserverForTestV0) ObserveGoalWorkV0(
 	_ context.Context,
 	_ orquestagoal.GoalObservationRequestV0,
 ) (orquestagoal.GoalWorkResultV0, error) {
+	if observer.calls != nil {
+		*observer.calls = *observer.calls + 1
+	}
 	return observer.result, nil
 }
 

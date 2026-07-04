@@ -109,6 +109,7 @@ func buildStackMCPTransportBindingsV0(
 		Reason: "run creado desde director app",
 	})
 	estadoVivoSource := estadoVivoSourceV0(config)
+	runControlPort := goalFirstRunControlPortFromConfigV0(config)
 	directorStats := orquestamcp.MCPDirectorStatsToolExecutorV0{
 		RunStore:          config.Stores.RunStore,
 		RunControl:        config.Stores.RunControl,
@@ -136,7 +137,7 @@ func buildStackMCPTransportBindingsV0(
 		RequestAppChange: orquestamcp.NewMCPRequestAppChangeToolExecutorV0(appChangePortsV0(config)),
 		DirectorStats:    directorStats,
 		RunControl: orquestamcp.MCPRunControlToolExecutorV0{
-			Port:               config.Stores.RunControl,
+			Port:               runControlPort,
 			ExternalJobSource:  externalJobStatsSourceV0(config),
 			GoalBackendState:   directorStats,
 			GoalStateStore:     config.Stores.AppGoalStateStore,

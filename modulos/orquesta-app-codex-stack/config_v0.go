@@ -44,6 +44,7 @@ type ConfigV0 struct {
 	AppGoalLauncher                                orquestagoal.GoalWorkLauncherPortV0
 	AppGoalReworkLauncher                          orquestagoal.GoalWorkLauncherPortV0
 	AppGoalObserver                                orquestagoal.GoalWorkObservationPortV0
+	AppGoalBackendControl                          GoalBackendControlPortV0
 	AppGoalClosureValidator                        orquestagoal.GoalWorkClosureValidatorPortV0
 	DomainTests                                    DomainWorkRequiredTestConfigV0
 	AppChange                                      orquestaappchange.AppChangePortsV0

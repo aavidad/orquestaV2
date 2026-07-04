@@ -51,6 +51,38 @@ func TestServerCodexAppServerGoalBackendV0LanzaThreadGoalYTurnMigradoV0(t *testi
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0StopForcedBloqueaGoalYApagaBackendV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		goal: serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-stop-forced-001", Status: "blocked"},
+	}
+	shutdown := &fakeCodexAppServerBackendShutdownV0{}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol:        protocol,
+		BackendShutdown: shutdown,
+	}
+
+	result, err := backend.StopCodexGoalV0(context.Background(), CodexGoalStopRequestV0{
+		GoalRef:         "goal-ref-stop-forced-001",
+		ExternalGoalRef: "thread-ref-stop-forced-001",
+		Action:          "stop",
+		Forced:          true,
+		EvidenceRefs:    []string{"evidence-ref-operator-forced-stop"},
+	})
+	if err != nil {
+		t.Fatalf("StopCodexGoalV0: %v result=%+v", err, result)
+	}
+	if !result.GoalStatusSet ||
+		!result.BackendStopped ||
+		result.Status != orquestagoal.GoalStatusBlockedV0 ||
+		protocol.setParams.ThreadID != "thread-ref-stop-forced-001" ||
+		protocol.setParams.Status != "blocked" ||
+		shutdown.calls != 1 ||
+		!containsStringMigratedTestV0(result.EvidenceRefs, codexAppServerGoalForcedStopSetEvidenceV0) ||
+		!containsStringMigratedTestV0(result.EvidenceRefs, codexAppServerGoalForcedStopTmuxStoppedV0) {
+		t.Fatalf("result=%+v set=%+v shutdown_calls=%d", result, protocol.setParams, shutdown.calls)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0ObservaResultadoMarcadoMigradoV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		observedGoal: &serverCodexAppServerThreadGoalV0{
@@ -429,6 +461,16 @@ type fakeCodexAppServerProbeV0 struct{}
 
 func (fakeCodexAppServerProbeV0) ProbeV0(context.Context) error {
 	return nil
+}
+
+type fakeCodexAppServerBackendShutdownV0 struct {
+	calls int
+	err   error
+}
+
+func (fake *fakeCodexAppServerBackendShutdownV0) ShutdownV0(context.Context) error {
+	fake.calls++
+	return fake.err
 }
 
 type fakeCodexAppServerProtocolV0 struct {

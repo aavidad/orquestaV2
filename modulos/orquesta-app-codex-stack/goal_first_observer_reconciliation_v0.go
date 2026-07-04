@@ -38,6 +38,9 @@ func (observer goalFirstReconciledObserverV0) ObserveGoalWorkV0(
 ) (orquestagoal.GoalWorkResultV0, error) {
 	state, stateOK := observer.goalStateForObservationV0(ctx, request)
 	if stateOK {
+		if goalFirstForcedTerminalStateV0(state) {
+			return goalFirstForcedTerminalResultV0(state), nil
+		}
 		if result, ok, err := observer.MaterializedResultSource.LoadTerminalGoalMaterializedResultV0(ctx, state); err != nil {
 			return orquestagoal.GoalWorkResultV0{}, err
 		} else if ok {
@@ -149,4 +152,76 @@ func goalFirstBackendGoneWithoutResultV0(
 			Field: "goal_backend",
 		}},
 	})
+}
+
+func goalFirstForcedTerminalStateV0(state orquestagoal.GoalWorkStateV0) bool {
+	if strings.TrimSpace(state.Status) != orquestagoal.GoalStatusBlockedV0 {
+		return false
+	}
+	return goalFirstForcedTerminalEvidenceV0(state.EvidenceRefs) ||
+		state.LastResult != nil && goalFirstForcedTerminalResultEvidenceV0(*state.LastResult) ||
+		state.LastClosure != nil && goalFirstForcedTerminalClosureEvidenceV0(*state.LastClosure)
+}
+
+func goalFirstForcedTerminalResultV0(
+	state orquestagoal.GoalWorkStateV0,
+) orquestagoal.GoalWorkResultV0 {
+	if state.LastResult != nil {
+		return orquestagoal.NormalizeGoalWorkResultV0(*state.LastResult)
+	}
+	return orquestagoal.NormalizeGoalWorkResultV0(orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		GoalRef:         state.GoalRef,
+		ExternalGoalRef: state.ExternalGoalRef,
+		Summary:         "operator forced stop kept terminal goal-first state",
+		EvidenceRefs:    compactStringsV0(state.EvidenceRefs),
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  "operator_forced_stop_goal_first",
+			Field: "goal_backend",
+		}},
+	})
+}
+
+func goalFirstForcedTerminalResultEvidenceV0(result orquestagoal.GoalWorkResultV0) bool {
+	if goalFirstForcedTerminalEvidenceV0(result.EvidenceRefs) {
+		return true
+	}
+	for _, issue := range result.Issues {
+		if goalFirstForcedTerminalCodeV0(issue.Code) {
+			return true
+		}
+	}
+	return goalFirstForcedTerminalCodeV0(result.Summary)
+}
+
+func goalFirstForcedTerminalClosureEvidenceV0(closure orquestagoal.GoalClosureValidationV0) bool {
+	if goalFirstForcedTerminalEvidenceV0(closure.EvidenceRefs) {
+		return true
+	}
+	for _, issue := range closure.Issues {
+		if goalFirstForcedTerminalCodeV0(issue.Code) {
+			return true
+		}
+	}
+	return false
+}
+
+func goalFirstForcedTerminalEvidenceV0(refs []string) bool {
+	for _, ref := range refs {
+		if goalFirstForcedTerminalCodeV0(ref) {
+			return true
+		}
+	}
+	return false
+}
+
+func goalFirstForcedTerminalCodeV0(value string) bool {
+	value = strings.TrimSpace(value)
+	return value == runControlGoalForcedStopTerminalEvidenceV0 ||
+		value == runControlGoalForcedCancelTerminalEvidenceV0 ||
+		value == "evidence-ref-run-control-goal-forced-terminal-reconciled" ||
+		value == "evidence-ref-server-shutdown-goal-forced-terminal-reconciled" ||
+		strings.Contains(value, "operator_forced_stop") ||
+		strings.Contains(value, "operator_forced_cancel")
 }
