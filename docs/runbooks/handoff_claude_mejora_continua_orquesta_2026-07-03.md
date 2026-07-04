@@ -724,6 +724,49 @@ GOCACHE=/tmp/orquesta-codex-gocache GOTMPDIR=/tmp/orquesta-codex-gotmp go test -
 No actualizar el inventario como cierre salvo que haya test rojo, parche y
 verificacion. No tocar OPES/MCP en este microfrente.
 
+## Actualizacion Codex 2026-07-04 tarde 2
+
+Avance de este bloque:
+
+- La hipotesis del corte de auditoria se confirmo con test rojo.
+- `NormalizeStoppedServerSnapshotV0` ahora trata como snapshot sucio un
+  `Status="stopped"` que conserve narrativa vieja de shutdown aunque no tenga
+  active work: por ejemplo `shutdown_status=stop_timeout` y
+  `shutdown_ready=false`.
+- La reconciliacion fija `shutdown_status=stopped` y `shutdown_ready=true` al
+  limpiar la proyeccion de shutdown de un servidor ya parado.
+- Tambien limpia contadores residuales de shutdown (`shutdown_runs_*`, agentes
+  en vuelo y checkpoints pendientes), para que un `stopped` no conserve
+  narrativa de trabajo activo.
+- `orquesta-server status` queda cubierto para persistir esa correccion en el
+  statefile, evitando que el operador vea un servidor `stopped` con narrativa de
+  timeout activo ya sin proceso ni active work.
+- Revision subagente `Hume`: veredicto coherente, riesgo bajo; no encontro
+  contrato interno que dependa de `stopped + shutdown_status=stop_timeout`.
+  Sugirio blindar `shutdown_runs_*`, cubierto en el test de contadores.
+
+Archivos tocados:
+
+- `modulos/orquesta-server/status_process_stale_v0.go`
+- `modulos/orquesta-server/status_process_stale_v0_test.go`
+- `cmd/orquesta-server/command_public_output_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Pruebas focales ejecutadas:
+
+- `go test -count=1 ./modulos/orquesta-server -run 'TestNormalizeStoppedServerSnapshotV0|TestStatusTracker(Stopped|RuntimeStopped)'`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestStatusServerCommandV0ReconciliaStopped'`
+- `go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server`
+
+No sobrecerrar:
+
+- Esto reduce `BUG-165/065` en el subcaso statefile stopped con narrativa stale.
+- No cierra el smoke real amplio de observabilidad/control lento.
+- No cierra la coordinacion automatica completa
+  backend/checkpoint/stop/cancel/wait.
+
 ## Checklist de Claude
 
 1. Revisar `git status --short` y separar cambios de cada frente.

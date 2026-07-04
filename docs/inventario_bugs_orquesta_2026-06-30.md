@@ -44,6 +44,20 @@ antes de su cierre posterior:
   `external cleanup`, no `forced`, y conserva
   `evidence-ref-run-control-terminal-after-goal-reconcile`. Sigue abierto el
   smoke real amplio de shutdown/backend.
+- Avance 2026-07-04 tarde 2: `BUG-165/065` queda reducido en la reconciliacion
+  de snapshots `stopped`: `NormalizeStoppedServerSnapshotV0` ya no considera
+  limpio un state `stopped` que conserva narrativa vieja de shutdown
+  (`shutdown_status=stop_timeout` o `shutdown_ready=false`) aunque no tenga
+  active work; lo normaliza a `shutdown_status=stopped`,
+  `shutdown_ready=true` y limpia contadores residuales de shutdown
+  (`shutdown_runs_*`, agentes y checkpoints), y `orquesta-server status`
+  persiste esa correccion.
+  Tests:
+  `TestNormalizeStoppedServerSnapshotV0ReparaNarrativaShutdownContradictoriaV0`,
+  `TestNormalizeStoppedServerSnapshotV0LimpiaContadoresShutdownResidualesV0` y
+  `TestStatusServerCommandV0ReconciliaStoppedConShutdownNarrativoStaleV0`.
+  Siguen abiertos los residuales amplios de smoke real lento y coordinacion
+  automatica completa backend/checkpoint/stop/cancel/wait.
 - Avance 2026-07-04 noche 8: `BUG-ORQ-20260701-079` queda reducido en el borde
   app-server: `turn/start` ya no envia solo `packet.Prompt`; inyecta contrato
   preventivo de checkpoint temprano, comandos acotados, `max_text_bytes`,

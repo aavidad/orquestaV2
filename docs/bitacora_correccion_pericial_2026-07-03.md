@@ -2303,3 +2303,8 @@ con agentes en vuelo declarados. Fix minimo: esos contadores (y
 `TestNormalizeStoppedServerSnapshotV0LimpiaContadoresShutdownResidualesV0`.
 Suites: `./modulos/orquesta-server` y `./cmd/orquesta-server` verdes.
 Reduce el residual de narrativa stale de BUG-ORQ-20260704-165/BUG-065.
+
+Revision subagente `Hume`: coherente, riesgo bajo; no encontro contrato interno
+que dependa de conservar `stopped + shutdown_status=stop_timeout`. Sugirio
+blindar explicitamente `shutdown_runs_*`; el test de contadores queda ampliado
+con `ShutdownRunsRequested > ShutdownRunsStopped`.

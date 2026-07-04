@@ -208,6 +208,8 @@ func TestNormalizeStoppedServerSnapshotV0LimpiaContadoresShutdownResidualesV0(t 
 		ShutdownInProgress:              false,
 		ShutdownStatus:                  "stop_timeout",
 		ShutdownReady:                   false,
+		ShutdownRunsRequested:           5,
+		ShutdownRunsStopped:             3,
 		ShutdownAgentsInFlight:          3,
 		ShutdownCheckpointsPending:      2,
 		ShutdownCheckpointAgentsPending: 2,
@@ -221,7 +223,9 @@ func TestNormalizeStoppedServerSnapshotV0LimpiaContadoresShutdownResidualesV0(t 
 	if reconciled.ShutdownStatus != "stopped" || !reconciled.ShutdownReady {
 		t.Fatalf("snapshot stopped conserva narrativa shutdown contradictoria: %+v", reconciled)
 	}
-	if reconciled.ShutdownAgentsInFlight != 0 ||
+	if reconciled.ShutdownRunsRequested != 0 ||
+		reconciled.ShutdownRunsStopped != 0 ||
+		reconciled.ShutdownAgentsInFlight != 0 ||
 		reconciled.ShutdownCheckpointsPending != 0 ||
 		reconciled.ShutdownCheckpointAgentsPending != 0 {
 		t.Fatalf("snapshot stopped ready no puede declarar agentes en vuelo ni checkpoints pendientes: %+v", reconciled)
