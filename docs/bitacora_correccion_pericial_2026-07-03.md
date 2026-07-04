@@ -1930,3 +1930,64 @@ Evidencia retenida:
 
 Pendiente real tras este tramo: smoke Gemini con tier valido y prueba real
 amplia a traves de `cmd/orquesta-server`/run-control con proveedor externo.
+
+## Continuacion Codex 2026-07-04 noche 20
+
+Avance MEJ-103/T18 y `BUG-ORQ-20260704-165`: smoke real de `claude_process`
+atravesando `cmd/orquesta-server`.
+
+- Nuevo smoke opt-in
+  `scripts/smoke_goal_first_claude_process_server_real.sh`: arranca
+  `orquesta-server` temporal con `ORQUESTA_CODEX_GOAL_BACKEND=claude_process`,
+  automejora/resident observer desactivados, proyecto/runtime aislados,
+  lanzamiento por `POST /api/v0/apps/director`, observacion por
+  `POST /api/v0/apps/director/goal/observe` y cleanup con
+  `cleanup_goal_backends=true` mas fallback por manifiesto interno Claude.
+- Resultado real aceptado: `smoke_goal_first_claude_process_server_real=ok`,
+  `poll=31`, `goal_status=complete`, `run_status=cerrada`,
+  `closure_status=accepted`, `closure_accepted=true`,
+  `recommended_action=no_action_closed`.
+- Evidencia retenida:
+  `/tmp/orquesta-claude-process-server.x5N8pq`,
+  `run_ref=run-spec-smoke-claude-process-server-req-smoke-claude-process-server-389d151256b512f15e130b3042aa99fe`,
+  `external_goal_ref=claude-goal-c51e3c2c56c62b53`.
+- Metricas del cierre: `observe_response.json` contiene 9 `artifact_refs` y
+  16 `evidence_refs`; `orquesta_goal_result_v0.json` contiene 3 refs
+  requeridas, 13 `artifact_paths`, 3 `materialized_artifacts` y 1
+  `required_test_results` `passed`.
+- Incidencia recuperable cerrada: Claude real puede devolver `evidence_refs`
+  como objetos `{ref, description}`; Claude/Gemini normalizan ahora solo esa
+  forma recuperable y los prompts exigen arrays de strings.
+- Incidencia operativa cerrada: un intento sin `--safe-mode` heredo
+  configuracion local de Claude y lanzo `codebase-memory-mcp`; el smoke usa
+  `SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SAFE_MODE=1` por defecto y el wrapper
+  retenido muestra `claude -p ... --safe-mode`. La comprobacion posterior no
+  encontro procesos residuales de `orquesta-server run`, wrapper Claude,
+  `claude -p`, `codebase-memory-mcp`, `codex app-server` ni
+  `orquesta-goal-*`.
+
+Archivos tocados en este avance:
+
+- `scripts/smoke_goal_first_claude_process_server_real.sh`
+- `cmd/orquesta-server/smoke_goal_first_script_guard_v0_test.go`
+- `modulos/orquesta-runtime-claude/claude_goal_backend_v0.go`
+- `modulos/orquesta-runtime-claude/claude_goal_backend_v0_test.go`
+- `modulos/orquesta-runtime-claude/claude_prompt_v0.go`
+- `modulos/orquesta-runtime-gemini/gemini_goal_backend_v0.go`
+- `modulos/orquesta-runtime-gemini/gemini_goal_backend_v0_test.go`
+- `modulos/orquesta-runtime-gemini/gemini_prompt_v0.go`
+- `docs/runbooks/smoke_goal_first_provider_process_real_2026-07-04.md`
+- `docs/plan_mejora_continua_orquesta_2026-07-04.md`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion ejecutada en este tramo:
+
+- `bash -n scripts/smoke_goal_first_claude_process_server_real.sh`
+- `go test -count=1 ./cmd/orquesta-server -run TestSmokeGoalFirstClaudeProcessServerRealEsOptInYLimpiaBackendV0`
+- `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-runtime-gemini`
+- `SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REAL=1 SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SKIP_PREFLIGHT=1 SMOKE_CLAUDE_GOAL_PROCESS_SERVER_KEEP_DIR=1 SMOKE_CLAUDE_GOAL_PROCESS_SERVER_MAX_BUDGET_USD=0.80 ./scripts/smoke_goal_first_claude_process_server_real.sh`
+
+Pendiente real tras este tramo: `runs/control`/shutdown con proveedor externo
+vivo o lento, y smoke Gemini cuando exista tier/credencial valido. Antes de
+commit quedan `git diff --check` y `go test -count=1 ./...`.

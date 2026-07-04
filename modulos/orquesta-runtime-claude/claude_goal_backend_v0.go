@@ -136,6 +136,17 @@ func BuildClaudeGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 	b.WriteString(spec.GoalRef)
 	b.WriteString("\nTrabaja solo dentro del write-set del proyecto y conserva evidencia compacta.\n")
 	writeClaudeDurableResultProtocolV0(&b)
+	if len(spec.AcceptanceCriteria) > 0 {
+		b.WriteString("Criterios de aceptacion:\n")
+		for _, criterion := range spec.AcceptanceCriteria {
+			if strings.TrimSpace(criterion) == "" {
+				continue
+			}
+			b.WriteString("- ")
+			b.WriteString(strings.TrimSpace(criterion))
+			b.WriteString("\n")
+		}
+	}
 	b.WriteString("Write-set permitido:\n")
 	for _, scope := range spec.WriteSet {
 		b.WriteString("- ")
@@ -146,11 +157,41 @@ func BuildClaudeGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 		}
 		b.WriteString("\n")
 	}
+	if len(spec.ArtifactContracts) > 0 {
+		b.WriteString("Contratos de artefacto para artifact_refs del resultado:\n")
+		for _, artifact := range spec.ArtifactContracts {
+			if strings.TrimSpace(artifact.ArtifactRef) == "" {
+				continue
+			}
+			b.WriteString("- ")
+			b.WriteString(strings.TrimSpace(artifact.ArtifactRef))
+			if strings.TrimSpace(artifact.ArtifactType) != "" {
+				b.WriteString(" :: ")
+				b.WriteString(strings.TrimSpace(artifact.ArtifactType))
+			}
+			if artifact.Required {
+				b.WriteString(" :: required=true")
+			}
+			b.WriteString("\n")
+		}
+		b.WriteString("Incluye en artifact_refs todos los artifact_ref requeridos que hayas materializado o deja status blocked con rework_plan_refs si falta alguno.\n")
+	}
 	b.WriteString("Tests requeridos:\n")
 	for _, test := range spec.RequiredTests {
 		b.WriteString("- ")
 		b.WriteString(firstNonEmptyClaudeGoalV0(test.TestRef, test.CommandRef, test.Command))
 		b.WriteString("\n")
+	}
+	if len(spec.ClosurePolicy.RequiredEvidenceRefs) > 0 {
+		b.WriteString("Evidencias requeridas para cierre accepted; incluyelas como strings en evidence_refs si el trabajo queda complete:\n")
+		for _, evidenceRef := range spec.ClosurePolicy.RequiredEvidenceRefs {
+			if strings.TrimSpace(evidenceRef) == "" {
+				continue
+			}
+			b.WriteString("- ")
+			b.WriteString(strings.TrimSpace(evidenceRef))
+			b.WriteString("\n")
+		}
 	}
 	return b.String()
 }
@@ -200,7 +241,7 @@ func (backend ClaudeGoalBackendV0) readResultFromWriteSetV0(
 			return orquestagoal.GoalWorkResultV0{}, false, err
 		}
 		var result orquestagoal.GoalWorkResultV0
-		if err := json.Unmarshal(data, &result); err != nil {
+		if err := json.Unmarshal(normalizeClaudeGoalResultJSONV0(data), &result); err != nil {
 			return claudeGoalInvalidResultV0(request, ErrClaudeGoalResultInvalidV0, "result_json"), true, nil
 		}
 		result = orquestagoal.NormalizeGoalWorkResultV0(result)
@@ -217,6 +258,65 @@ func (backend ClaudeGoalBackendV0) readResultFromWriteSetV0(
 		return orquestagoal.NormalizeGoalWorkResultV0(result), true, nil
 	}
 	return orquestagoal.GoalWorkResultV0{}, false, nil
+}
+
+func normalizeClaudeGoalResultJSONV0(data []byte) []byte {
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		return data
+	}
+	normalized := normalizeClaudeGoalEvidenceRefsJSONValueV0(value)
+	out, err := json.Marshal(normalized)
+	if err != nil {
+		return data
+	}
+	return out
+}
+
+func normalizeClaudeGoalEvidenceRefsJSONValueV0(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for key, nested := range typed {
+			if key == "evidence_refs" {
+				out[key] = normalizeClaudeGoalEvidenceRefsJSONArrayV0(nested)
+				continue
+			}
+			out[key] = normalizeClaudeGoalEvidenceRefsJSONValueV0(nested)
+		}
+		return out
+	case []any:
+		out := make([]any, 0, len(typed))
+		for _, nested := range typed {
+			out = append(out, normalizeClaudeGoalEvidenceRefsJSONValueV0(nested))
+		}
+		return out
+	default:
+		return value
+	}
+}
+
+func normalizeClaudeGoalEvidenceRefsJSONArrayV0(value any) any {
+	items, ok := value.([]any)
+	if !ok {
+		return normalizeClaudeGoalEvidenceRefsJSONValueV0(value)
+	}
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		switch typed := item.(type) {
+		case string:
+			out = append(out, typed)
+		case map[string]any:
+			if ref, ok := typed["ref"].(string); ok && strings.TrimSpace(ref) != "" {
+				out = append(out, strings.TrimSpace(ref))
+				continue
+			}
+			out = append(out, normalizeClaudeGoalEvidenceRefsJSONValueV0(item))
+		default:
+			out = append(out, normalizeClaudeGoalEvidenceRefsJSONValueV0(item))
+		}
+	}
+	return out
 }
 
 func claudeGoalInvalidLaunchReceiptV0(goalRef string, code string, field string) orquestagoal.GoalLaunchReceiptV0 {

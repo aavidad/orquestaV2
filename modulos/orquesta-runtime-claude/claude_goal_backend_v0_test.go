@@ -18,6 +18,13 @@ func TestClaudeGoalBackendV0LaunchMaterializaSpecYPromptDurableV0(t *testing.T) 
 		RuntimeWorkDir: filepath.Join(root, "runtime"),
 	}
 	spec := claudeGoalSpecForTestV0()
+	spec.AcceptanceCriteria = []string{"criterio-ref-claude-goal-prompt"}
+	spec.ArtifactContracts = []orquestagoal.GoalArtifactContractV0{{
+		ArtifactRef:  "artifact-ref-claude-goal-source",
+		ArtifactType: "source_tree",
+		Required:     true,
+	}}
+	spec.ClosurePolicy.RequiredEvidenceRefs = []string{"evidence-ref-claude-goal-required"}
 
 	receipt, err := backend.LaunchGoalWorkV0(context.Background(), spec)
 	if err != nil {
@@ -43,12 +50,68 @@ func TestClaudeGoalBackendV0LaunchMaterializaSpecYPromptDurableV0(t *testing.T) 
 		"orquesta_goal_result_v0.json",
 		"schema_version orquesta_goal_result.v0",
 		"materialized_artifacts",
+		"arrays de strings",
+		"no uses objetos",
+		"criterio-ref-claude-goal-prompt",
+		"artifact-ref-claude-goal-source",
+		"evidence-ref-claude-goal-required",
 		"docs",
 		"required-test-ref-claude-goal",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt sin %q:\n%s", want, prompt)
 		}
+	}
+}
+
+func TestClaudeGoalBackendV0ObserveNormalizaEvidenceRefsObjetoRecuperableV0(t *testing.T) {
+	root := t.TempDir()
+	backend := ClaudeGoalBackendV0{
+		ProjectWorkDir: filepath.Join(root, "project"),
+		RuntimeWorkDir: filepath.Join(root, "runtime"),
+	}
+	spec := claudeGoalSpecForTestV0()
+	if _, err := backend.LaunchGoalWorkV0(context.Background(), spec); err != nil {
+		t.Fatalf("LaunchGoalWorkV0: %v", err)
+	}
+	resultPath := filepath.Join(backend.ProjectWorkDir, "docs", ClaudeGoalResultFileNameV0)
+	if err := os.MkdirAll(filepath.Dir(resultPath), 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	raw := `{
+		"schema_version":"orquesta_goal_result.v0",
+		"status":"complete",
+		"goal_ref":"goal-ref-claude-runtime-001",
+		"artifact_refs":["artifact-ref-provider-described"],
+		"artifact_paths":["docs/orquesta_goal_result_v0.json"],
+		"materialized_artifacts":[{
+			"artifact_ref":"artifact-ref-provider-described",
+			"path":"docs/orquesta_goal_result_v0.json",
+			"status":"valid",
+			"evidence_refs":[{"ref":"evidence-ref-nested-described","description":"detalle no canonico"}]
+		}],
+		"required_test_results":[{
+			"test_ref":"required-test-ref-claude-goal",
+			"status":"passed",
+			"evidence_refs":[{"ref":"evidence-ref-test-described","description":"detalle no canonico"}]
+		}],
+		"evidence_refs":[{"ref":"evidence-ref-provider-described","description":"detalle no canonico"}]
+	}`
+	if err := os.WriteFile(resultPath, []byte(raw), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	got, err := backend.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
+		GoalRef: spec.GoalRef,
+	})
+	if err != nil {
+		t.Fatalf("ObserveGoalWorkV0: %v", err)
+	}
+	if len(got.MaterializedArtifacts) != 1 || len(got.RequiredTestResults) != 1 ||
+		got.Status != orquestagoal.GoalStatusCompleteV0 ||
+		!containsClaudeGoalStringV0(got.EvidenceRefs, "evidence-ref-provider-described") ||
+		!containsClaudeGoalStringV0(got.MaterializedArtifacts[0].EvidenceRefs, "evidence-ref-nested-described") ||
+		!containsClaudeGoalStringV0(got.RequiredTestResults[0].EvidenceRefs, "evidence-ref-test-described") {
+		t.Fatalf("result no normalizado: %+v", got)
 	}
 }
 

@@ -186,6 +186,25 @@ como frontera externa ya cubierta por `BUG-ORQ-20260703-140`, no como bug nuevo
 de Orquesta. Runbook:
 `docs/runbooks/smoke_goal_first_provider_process_real_2026-07-04.md`.
 
+Avance 2026-07-04 noche 20: `claude_process` queda validado tambien por la
+superficie HTTP real de `cmd/orquesta-server`. El smoke opt-in
+`scripts/smoke_goal_first_claude_process_server_real.sh` arranca un servidor
+temporal con `ORQUESTA_CODEX_GOAL_BACKEND=claude_process`, lanza
+`POST /api/v0/apps/director`, observa por
+`POST /api/v0/apps/director/goal/observe` y cierra en `poll=31` con
+`goal_status=complete`, `run_status=cerrada`, `closure_status=accepted` y
+`closure_accepted=true`. La ejecucion retenida en
+`/tmp/orquesta-claude-process-server.x5N8pq` produjo 9 `artifact_refs` y 16
+`evidence_refs` reconciliadas por Orquesta; el result durable contiene 3 refs
+requeridas, 13 paths, 3 artefactos materializados y 1 test requerido `passed`.
+Durante el corte se corrigio una forma recuperable de proveedor
+(`evidence_refs` como objetos `{ref, description}`) mediante normalizacion
+acotada en Claude/Gemini y se fijo `--safe-mode` por defecto en el smoke para
+evitar heredar MCPs locales de Claude. Gemini real sigue pendiente por
+`IneligibleTierError/UNSUPPORTED_CLIENT`; la prueba real de
+`runs/control`/shutdown con proveedor externo vivo o lento sigue como residual
+separado de `BUG-ORQ-20260704-165`.
+
 Alcance:
 
 - `modulos/orquesta-runtime-claude`

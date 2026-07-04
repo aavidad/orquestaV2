@@ -135,6 +135,32 @@ func TestSmokeGoalFirstForcedStopWrapperEjercitaRunControlBackendVivoV0(t *testi
 	}
 }
 
+func TestSmokeGoalFirstClaudeProcessServerRealEsOptInYLimpiaBackendV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_claude_process_server_real.sh")
+
+	for _, want := range []string{
+		"SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REAL",
+		"SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SAFE_MODE",
+		"--safe-mode",
+		"ORQUESTA_CODEX_GOAL_BACKEND=claude_process",
+		"ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DISABLED=true",
+		"ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false",
+		"ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED=false",
+		"/api/v0/apps/director",
+		"/api/v0/apps/director/goal/observe",
+		"cleanup_goal_backends",
+		"stop_claude_processes_from_runtime_manifest",
+		"claude_goal_process_state_",
+		"claude_goal_wrapper_",
+		"smoke_goal_first_claude_process_server_real=ok",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("smoke Claude process server real incompleto: falta %q", want)
+		}
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealRetriesTransientObservationRejectedV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")

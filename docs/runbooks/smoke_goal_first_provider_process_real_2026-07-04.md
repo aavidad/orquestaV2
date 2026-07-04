@@ -2,8 +2,8 @@
 
 Fecha: 2026-07-04.
 
-Estado: Claude real validado; Gemini real bloqueado por tier externo del CLI
-actual.
+Estado: Claude real validado en runtime directo y por `cmd/orquesta-server`;
+Gemini real bloqueado por tier externo del CLI actual.
 
 ## Alcance
 
@@ -12,8 +12,9 @@ Este smoke valida los backends goal-first opt-in de proceso:
 - `ORQUESTA_CODEX_GOAL_BACKEND=claude_process`
 - `ORQUESTA_CODEX_GOAL_BACKEND=gemini_process`
 
-No toca OPES productivo ni arranca servidor residente. Ejecuta el backend de
-runtime contra un proyecto temporal aislado y exige un
+No toca OPES productivo. Ejecuta el backend de runtime contra un proyecto
+temporal aislado y, en el smoke de servidor, arranca un `orquesta-server`
+temporal con puerto local efimero. Ambos caminos exigen un
 `orquesta_goal_result_v0.json` durable dentro del write-set.
 
 ## Preflight ejecutado
@@ -90,6 +91,66 @@ Contenido clave validado:
   `status=valid` y `evidence_refs`
 - `required_test_results`: `passed`
 
+## Smoke Claude real por servidor
+
+Comando reproducible validado:
+
+```bash
+SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REAL=1 \
+SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SKIP_PREFLIGHT=1 \
+SMOKE_CLAUDE_GOAL_PROCESS_SERVER_KEEP_DIR=1 \
+SMOKE_CLAUDE_GOAL_PROCESS_SERVER_MAX_BUDGET_USD=0.80 \
+./scripts/smoke_goal_first_claude_process_server_real.sh
+```
+
+Resultado: `smoke_goal_first_claude_process_server_real=ok`.
+
+Evidencia retenida de la ejecucion aceptada:
+
+- `smoke_root=/tmp/orquesta-claude-process-server.x5N8pq`
+- `run_ref=run-spec-smoke-claude-process-server-req-smoke-claude-process-server-389d151256b512f15e130b3042aa99fe`
+- `goal_ref=goal-ref-app-director-run-spec-smoke-claude-process-server-req-smoke-claude-process-server-389d151256b512f15e130b3042aa99fe`
+- `external_goal_ref=claude-goal-c51e3c2c56c62b53`
+- `result_file=/tmp/orquesta-claude-process-server.x5N8pq/project/generated-apps/smoke-claude-process-server/orquesta_goal_result_v0.json`
+
+Salida terminal observada en `poll=31`:
+
+- `director_execution_mode=goal_first`
+- `goal_status=complete`
+- `run_status=cerrada`
+- `closure_status=accepted`
+- `closure_accepted=true`
+- `recommended_action=no_action_closed`
+
+Contenido clave validado por `observe_response.json`:
+
+- `artifact_refs`: 9 refs reconciliadas por Orquesta.
+- `evidence_refs`: 16 refs reconciliadas por Orquesta.
+
+Contenido clave validado por `orquesta_goal_result_v0.json`:
+
+- `status=complete`
+- `artifact_refs`: 3 refs requeridas (`source`, `handoff`,
+  `technical-stack`).
+- `artifact_paths`: 13 paths.
+- `materialized_artifacts`: 3 artefactos.
+- `required_test_results`: 1 test requerido `passed`.
+
+Incidencias detectadas y cerradas durante el smoke de servidor:
+
+- Primer intento: `tipo_app=web_app` no era aceptado por el contrato HTTP de
+  Nueva App; el smoke usa `tipo_app=mixed`.
+- Segundo intento: Claude devolvio `evidence_refs` como objetos `{ref,
+  description}` y el observe quedo `goal_status=invalid`; los backends
+  Claude/Gemini normalizan ahora solo esa forma recuperable y el prompt exige
+  arrays de strings.
+- Un intento sin `--safe-mode` heredo configuracion local de Claude y lanzo
+  `codebase-memory-mcp`; el smoke servidor usa por defecto
+  `SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SAFE_MODE=1` y el wrapper retenido muestra
+  `claude -p ... --safe-mode`. La comprobacion posterior no encontro
+  `orquesta-server run`, `claude_goal_wrapper`, `claude -p`,
+  `codebase-memory-mcp`, `codex app-server` ni `orquesta-goal-*` vivos.
+
 ## Cobertura permanente
 
 Tests por defecto, sin proveedor real:
@@ -107,6 +168,13 @@ go test -count=1 ./modulos/orquesta-runtime-claude \
   -run TestClaudeGoalProcessBackendV0RealOptInEscribeResultadoDurableV0 -v
 ```
 
+Smoke opt-in Claude por `cmd/orquesta-server`:
+
+```bash
+SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REAL=1 \
+./scripts/smoke_goal_first_claude_process_server_real.sh
+```
+
 Smoke opt-in Gemini, cuando exista tier/credencial valido:
 
 ```bash
@@ -119,5 +187,6 @@ go test -count=1 ./modulos/orquesta-runtime-gemini \
 
 - Repetir el smoke Gemini cuando el proveedor deje de devolver
   `IneligibleTierError`.
-- Ejecutar una prueba real amplia a traves de `cmd/orquesta-server` y
-  run-control, no solo runtime directo.
+- Ejecutar una prueba real de `runs/control`/shutdown contra proveedor externo
+  vivo o lento; el smoke de servidor ya cubre launch/observe/closure accepted
+  por HTTP, pero no fuerza stop/cancel durante ejecucion.
