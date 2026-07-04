@@ -3,6 +3,7 @@ package orquestamcp
 import (
 	"context"
 	"strings"
+	"time"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
@@ -14,6 +15,12 @@ const (
 	MCPAutoprogrammingObserveActiveGoalsHTTPPathV0    = "/api/v0/autoprogramming/goals/observe-active"
 	MCPAutoprogrammingObserveActiveGoalsEstadoOKV0    = "ok"
 	MCPAutoprogrammingObserveActiveGoalsEstadoErrorV0 = "error"
+)
+
+const (
+	defaultMCPAutoprogrammingObserveActiveGoalTimeoutV0  = 2 * time.Second
+	mcpAutoprogrammingObserveActiveGoalTimeoutCodeV0     = "autoprogramming_observe_active_goal_timeout"
+	mcpAutoprogrammingObserveActiveGoalTimeoutEvidenceV0 = "evidence-ref-autoprogramming-observe-active-goal-timeout"
 )
 
 type MCPAutoprogrammingObserveActiveGoalsToolDescriptorV0 struct {
@@ -51,6 +58,7 @@ type MCPAutoprogrammingObserveActiveGoalsToolResultV0 struct {
 type MCPAutoprogrammingObserveActiveGoalsToolExecutorV0 struct {
 	GoalStateStore orquestagoal.GoalWorkStateStorePortV0
 	ObserveGoal    MCPTransportAutoprogrammingObserveGoalExecutorV0
+	PerGoalTimeout time.Duration
 }
 
 func MCPAutoprogrammingObserveActiveGoalsDescriptorV0() MCPAutoprogrammingObserveActiveGoalsToolDescriptorV0 {
@@ -77,6 +85,7 @@ func NewMCPAutoprogrammingObserveActiveGoalsToolExecutorV0(
 	return MCPAutoprogrammingObserveActiveGoalsToolExecutorV0{
 		GoalStateStore: goalStateStore,
 		ObserveGoal:    observeGoal,
+		PerGoalTimeout: defaultMCPAutoprogrammingObserveActiveGoalTimeoutV0,
 	}
 }
 
@@ -140,13 +149,17 @@ func (executor MCPAutoprogrammingObserveActiveGoalsToolExecutorV0) Execute(
 			})
 			continue
 		}
-		observed, err := executor.ObserveGoal.Execute(ctx, MCPAutoprogrammingObserveGoalToolInputV0{
+		observed, err, timedOut := executor.observeGoalWithTimeoutV0(ctx, MCPAutoprogrammingObserveGoalToolInputV0{
 			RequestID:     strings.TrimSpace(input.RequestID),
 			CorrelationID: strings.TrimSpace(input.CorrelationID),
 			RunRef:        runRef,
 			OccurredAt:    strings.TrimSpace(input.OccurredAt),
 			RequestedBy:   firstNonEmptyMCPV0(input.RequestedBy, "orquesta-mcp-observe-active-goals"),
 		})
+		if timedOut {
+			mcpAutoprogrammingObserveActiveGoalsRecordTimeoutV0(&result, input, state)
+			continue
+		}
 		if err != nil {
 			result.Issues = append(result.Issues, MCPValidationIssueV0{
 				Code:    "autoprogramming_observe_goal_failed",
@@ -193,6 +206,99 @@ func mcpAutoprogrammingObserveActiveGoalsListRequestV0(
 		}
 	}
 	return orquestagoal.NormalizeGoalWorkStateListRequestV0(request)
+}
+
+type mcpAutoprogrammingObserveActiveGoalExecutionV0 struct {
+	Observed MCPAutoprogrammingObserveGoalToolResultV0
+	Err      error
+}
+
+func (executor MCPAutoprogrammingObserveActiveGoalsToolExecutorV0) observeGoalWithTimeoutV0(
+	ctx context.Context,
+	input MCPAutoprogrammingObserveGoalToolInputV0,
+) (MCPAutoprogrammingObserveGoalToolResultV0, error, bool) {
+	timeout := executor.PerGoalTimeout
+	if timeout == 0 {
+		timeout = defaultMCPAutoprogrammingObserveActiveGoalTimeoutV0
+	}
+	if timeout < 0 {
+		observed, err := executor.ObserveGoal.Execute(ctx, input)
+		return observed, err, false
+	}
+	observeCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	done := make(chan mcpAutoprogrammingObserveActiveGoalExecutionV0, 1)
+	go func() {
+		observed, err := executor.ObserveGoal.Execute(observeCtx, input)
+		done <- mcpAutoprogrammingObserveActiveGoalExecutionV0{Observed: observed, Err: err}
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case execution := <-done:
+		return execution.Observed, execution.Err, false
+	case <-ctx.Done():
+		return MCPAutoprogrammingObserveGoalToolResultV0{}, ctx.Err(), false
+	case <-timer.C:
+		cancel()
+		return MCPAutoprogrammingObserveGoalToolResultV0{}, context.DeadlineExceeded, true
+	}
+}
+
+func mcpAutoprogrammingObserveActiveGoalsRecordTimeoutV0(
+	result *MCPAutoprogrammingObserveActiveGoalsToolResultV0,
+	input MCPAutoprogrammingObserveActiveGoalsToolInputV0,
+	state orquestagoal.GoalWorkStateV0,
+) {
+	if result == nil {
+		return
+	}
+	runRef := strings.TrimSpace(state.RunRef)
+	observed, err := NewMCPObserveAppDirectorGoalPartialResultFromStateV0(
+		MCPObserveAppDirectorGoalToolInputV0{
+			RequestID:     strings.TrimSpace(input.RequestID),
+			CorrelationID: strings.TrimSpace(input.CorrelationID),
+			RunRef:        runRef,
+			OccurredAt:    strings.TrimSpace(input.OccurredAt),
+			RequestedBy:   firstNonEmptyMCPV0(input.RequestedBy, "orquesta-mcp-observe-active-goals"),
+		},
+		state,
+	)
+	if err == nil {
+		observed.RecommendedAction = firstNonEmptyMCPV0(observed.RecommendedAction, "observe_goal_single_run")
+		observed.EvidenceRefs = compactStringsMCPV0(append(
+			observed.EvidenceRefs,
+			mcpAutoprogrammingObserveActiveGoalTimeoutEvidenceV0,
+		))
+		result.Observations = append(result.Observations, observed)
+		mcpAutoprogrammingObserveActiveGoalsRecordObservationV0(result, observed)
+	} else {
+		result.Issues = append(result.Issues, MCPValidationIssueV0{
+			Code:    "autoprogramming_goal_state_snapshot_invalid",
+			Field:   firstNonEmptyMCPV0(runRef, strings.TrimSpace(state.GoalRef), "goal_state"),
+			Message: publicMCPExecutorErrorMessageFromErrorV0("autoprogramming_goal_state_snapshot_invalid", err),
+		})
+	}
+	result.Issues = append(result.Issues, MCPValidationIssueV0{
+		Code:    mcpAutoprogrammingObserveActiveGoalTimeoutCodeV0,
+		Field:   firstNonEmptyMCPV0(runRef, "run_ref"),
+		Message: "observe_goal_timeout",
+	})
+	result.Diagnostics = append(result.Diagnostics, MCPAutoprogrammingDiagnosticV0{
+		Code:         mcpAutoprogrammingObserveActiveGoalTimeoutCodeV0,
+		Scope:        firstNonEmptyMCPV0(runRef, "run_ref"),
+		Message:      "observe_goal excedio timeout por run; observe_active_goals continua con snapshot parcial",
+		EvidenceRefs: []string{mcpAutoprogrammingObserveActiveGoalTimeoutEvidenceV0},
+	})
+	result.NextActions = compactStringsMCPV0(append(
+		result.NextActions,
+		"observe_goal_single_run",
+		"poll_autoprogramming_status",
+	))
+	result.EvidenceRefs = compactStringsMCPV0(append(
+		result.EvidenceRefs,
+		mcpAutoprogrammingObserveActiveGoalTimeoutEvidenceV0,
+	))
 }
 
 func mcpAutoprogrammingObserveActiveGoalsRecordObservationV0(

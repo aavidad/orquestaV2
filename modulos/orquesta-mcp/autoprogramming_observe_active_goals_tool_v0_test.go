@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -200,6 +201,58 @@ func TestMCPAutoprogrammingObserveActiveGoalsToolExecutorV0ConservaIncidenciaYCo
 	}
 }
 
+func TestMCPAutoprogrammingObserveActiveGoalsToolExecutorV0TimeoutPorRunConservaBatch(t *testing.T) {
+	store := newMCPAutoprogrammingObserveActiveGoalsStoreForTestV0(t,
+		"run-ref-observe-active-goals-timeout-001",
+		"goal-ref-observe-active-goals-timeout-001",
+		orquestagoal.GoalStatusRunningV0,
+	)
+	store.mustSaveV0(t,
+		"run-ref-observe-active-goals-timeout-002",
+		"goal-ref-observe-active-goals-timeout-002",
+		orquestagoal.GoalStatusRunningV0,
+	)
+	observer := &fakeMCPAutoprogrammingObserveActiveGoalsExecutorForTestV0{
+		results: map[string]MCPAutoprogrammingObserveGoalToolResultV0{
+			"run-ref-observe-active-goals-timeout-002": {
+				Estado:       MCPAutoprogrammingObserveGoalEstadoOKV0,
+				RunRef:       "run-ref-observe-active-goals-timeout-002",
+				GoalRef:      "goal-ref-observe-active-goals-timeout-002",
+				GoalStatus:   orquestagoal.GoalStatusRunningV0,
+				EvidenceRefs: []string{"evidence-ref-observe-active-goals-timeout-002"},
+			},
+		},
+		blockUntilContextDoneByRun: map[string]bool{
+			"run-ref-observe-active-goals-timeout-001": true,
+		},
+	}
+	executor := NewMCPAutoprogrammingObserveActiveGoalsToolExecutorV0(store, observer)
+	executor.PerGoalTimeout = time.Millisecond
+
+	result, err := executor.Execute(
+		context.Background(),
+		MCPAutoprogrammingObserveActiveGoalsToolInputV0{},
+	)
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	inputs := observer.inputsSnapshotV0()
+	if len(result.Observations) != 2 ||
+		!hasInputRunMCPAutoprogrammingObserveActiveGoalsTestV0(inputs, "run-ref-observe-active-goals-timeout-001") ||
+		!hasInputRunMCPAutoprogrammingObserveActiveGoalsTestV0(inputs, "run-ref-observe-active-goals-timeout-002") ||
+		!hasMCPAutoprogrammingObserveActiveGoalsObservationForTestV0(result.Observations, "run-ref-observe-active-goals-timeout-002", false) ||
+		!hasMCPAutoprogrammingObserveActiveGoalsObservationForTestV0(result.Observations, "run-ref-observe-active-goals-timeout-001", true) ||
+		!hasMCPAutoprogrammingObserveActiveGoalsIssueCodeForTestV0(result.Issues, mcpAutoprogrammingObserveActiveGoalTimeoutCodeV0) ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, mcpAutoprogrammingObserveActiveGoalTimeoutCodeV0) ||
+		!hasStringMCPAutoprogrammingObserveActiveGoalsTestV0(result.NextActions, "observe_goal_single_run") ||
+		!hasStringMCPAutoprogrammingObserveActiveGoalsTestV0(result.NextActions, "poll_autoprogramming_status") ||
+		!hasStringMCPAutoprogrammingObserveActiveGoalsTestV0(result.EvidenceRefs, mcpAutoprogrammingObserveActiveGoalTimeoutEvidenceV0) ||
+		!hasStringMCPAutoprogrammingObserveActiveGoalsTestV0(result.EvidenceRefs, "evidence-ref-observe-active-goals-timeout-002") {
+		t.Fatalf("result=%+v inputs=%+v", result, inputs)
+	}
+}
+
 func TestMCPAutoprogrammingObserveActiveGoalsToolExecutorV0MarcaEstadoNoOKComoIncidencia(t *testing.T) {
 	store := newMCPAutoprogrammingObserveActiveGoalsStoreForTestV0(t,
 		"run-ref-observe-active-goals-non-ok-001",
@@ -375,16 +428,28 @@ func (err errMCPAutoprogrammingObserveActiveGoalsForTestV0) Error() string {
 }
 
 type fakeMCPAutoprogrammingObserveActiveGoalsExecutorForTestV0 struct {
-	inputs      []MCPAutoprogrammingObserveGoalToolInputV0
-	results     map[string]MCPAutoprogrammingObserveGoalToolResultV0
-	errorsByRun map[string]error
+	mu                         sync.Mutex
+	inputs                     []MCPAutoprogrammingObserveGoalToolInputV0
+	results                    map[string]MCPAutoprogrammingObserveGoalToolResultV0
+	errorsByRun                map[string]error
+	blockUntilContextDoneByRun map[string]bool
 }
 
 func (executor *fakeMCPAutoprogrammingObserveActiveGoalsExecutorForTestV0) Execute(
-	_ context.Context,
+	ctx context.Context,
 	input MCPAutoprogrammingObserveGoalToolInputV0,
 ) (MCPAutoprogrammingObserveGoalToolResultV0, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	executor.mu.Lock()
 	executor.inputs = append(executor.inputs, input)
+	blockUntilContextDone := executor.blockUntilContextDoneByRun[input.RunRef]
+	executor.mu.Unlock()
+	if blockUntilContextDone {
+		<-ctx.Done()
+		return MCPAutoprogrammingObserveGoalToolResultV0{}, ctx.Err()
+	}
 	if err := executor.errorsByRun[input.RunRef]; err != nil {
 		return MCPAutoprogrammingObserveGoalToolResultV0{}, err
 	}
@@ -395,6 +460,12 @@ func (executor *fakeMCPAutoprogrammingObserveActiveGoalsExecutorForTestV0) Execu
 		Estado: MCPAutoprogrammingObserveGoalEstadoOKV0,
 		RunRef: input.RunRef,
 	}, nil
+}
+
+func (executor *fakeMCPAutoprogrammingObserveActiveGoalsExecutorForTestV0) inputsSnapshotV0() []MCPAutoprogrammingObserveGoalToolInputV0 {
+	executor.mu.Lock()
+	defer executor.mu.Unlock()
+	return append([]MCPAutoprogrammingObserveGoalToolInputV0(nil), executor.inputs...)
 }
 
 type fakeMCPAutoprogrammingObserveActiveGoalsHTTPExecutorForTestV0 struct {
@@ -539,6 +610,19 @@ func hasMCPAutoprogrammingObserveActiveGoalsIssueCodeForTestV0(
 ) bool {
 	for _, issue := range issues {
 		if issue.Code == want {
+			return true
+		}
+	}
+	return false
+}
+
+func hasMCPAutoprogrammingObserveActiveGoalsObservationForTestV0(
+	observations []MCPAutoprogrammingObserveGoalToolResultV0,
+	runRef string,
+	partial bool,
+) bool {
+	for _, observation := range observations {
+		if observation.RunRef == runRef && observation.Partial == partial {
 			return true
 		}
 	}

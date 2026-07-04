@@ -2096,13 +2096,17 @@ sin ediciones delegadas.
   cierran las subfilas de QA/materialized artifacts, fase 0, required evidence,
   `observe_goal`, `domain-work/status`, `efficiency_summary`, `queue/global`
   y `ops_snapshot`.
+- `BUG-ORQ-20260704-165`: se deja una sola fila abierta para el residual global
+  de observabilidad/control largo; las filas duplicadas de Sueldos forced-stop
+  y timeout del observador residente quedan cerradas por los cierres ya
+  documentados de app-server, Claude process y `GoalObserverTimeout`.
 
 Conteo despues del corte documental:
 
 - 208 filas de tabla.
 - 173 IDs/keys.
-- 9 filas `abierto`.
-- 185 filas `cerrado`, 1 `cerrado funcionalmente`,
+- 7 filas `abierto`.
+- 187 filas `cerrado`, 1 `cerrado funcionalmente`,
   5 `cerrado/supersedido`, 8 `historico/supersedido`.
 
 Abiertos reales que quedan:
@@ -2141,5 +2145,35 @@ Evidencia revisada por subagentes y Codex local:
 Verificacion ejecutada en este corte:
 
 - `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-codex-appserver ./modulos/orquesta-server-shutdown ./modulos/orquesta-server ./cmd/orquesta-server`
+- `git diff --check`
+- `go test -count=1 ./...`
+
+## Continuacion Codex 2026-07-04 noche 24
+
+Reduccion adicional de `BUG-ORQ-20260704-165` en la superficie
+`orquesta.autoprogramming.observe_active_goals.v0`.
+
+- La pasada de `observe_active_goals` ya no queda bloqueada por un unico
+  `observe_goal` lento: cada run se observa con `PerGoalTimeout` propio
+  (`2s` por defecto).
+- Si un run excede el timeout, se cancela su contexto, se conserva snapshot
+  parcial desde `GoalWorkState`, se publica issue/diagnostico
+  `autoprogramming_observe_active_goal_timeout`, evidencia
+  `evidence-ref-autoprogramming-observe-active-goal-timeout` y acciones
+  `observe_goal_single_run`/`poll_autoprogramming_status`.
+- El batch continua y puede devolver observaciones de los demas runs sin caer
+  a timeout global ni relanzar proveedor.
+
+Archivos tocados:
+
+- `modulos/orquesta-mcp/autoprogramming_observe_active_goals_tool_v0.go`
+- `modulos/orquesta-mcp/autoprogramming_observe_active_goals_tool_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion ejecutada en este corte:
+
+- `go test -count=1 ./modulos/orquesta-mcp -run TestMCPAutoprogrammingObserveActiveGoalsToolExecutorV0TimeoutPorRunConservaBatch`
+- `go test -count=1 ./modulos/orquesta-mcp`
 - `git diff --check`
 - `go test -count=1 ./...`
