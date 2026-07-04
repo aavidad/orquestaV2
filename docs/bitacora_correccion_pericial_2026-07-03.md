@@ -1688,3 +1688,46 @@ Pendiente real: `BUG-058/075` no queda cerrado por completo. Faltan smoke OPES
 temporal end-to-end y validadores semanticos/editoriales completos por
 artefacto canonico; este corte cierra el falso verde mecanico de banco de
 preguntas con evidencia nominal.
+
+## Continuacion Codex 2026-07-04 noche 14
+
+Avance MEJ-103: backend goal-first Claude cableado por composicion/env en el
+servidor sin cambiar el default Codex.
+
+- Se anade `ORQUESTA_CODEX_GOAL_BACKEND=claude_file_control` como opt-in
+  explicito para Claude goal-first sin crear una variable `ORQUESTA_*` nueva;
+  esto respeta el ratchet MEJ-106 de presupuesto de configuracion.
+- `serverCodexGoalBackendV0` acepta ahora puertos neutrales
+  `GoalWorkLauncherPortV0`/`GoalWorkObservationPortV0`; Codex conserva sus
+  puertos especificos y Claude entra por el contrato neutral.
+- `cmd/orquesta-server` materializa el backend
+  `orquesta-runtime-claude.ClaudeGoalBackendV0` para app goal e idle goal,
+  usando runtime de control fuera del proyecto por defecto cuando no se define
+  `ORQUESTA_CLAUDE_RUNTIME_WORKDIR`.
+- La automejora goal-first se deriva tambien de Claude cuando
+  `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_GOAL_FIRST_ENABLED` no esta fijada; el
+  effective config publica el valor `claude_file_control` en
+  `ORQUESTA_CODEX_GOAL_BACKEND` y el diagnostico de derivacion.
+- Valores de backend no soportados siguen cortando en arranque con diagnostico
+  explicito; Codex no cambia cuando el valor es `app_server_tmux`.
+
+Archivos tocados en este avance:
+
+- `cmd/orquesta-server/codex_goal_app_server_v0.go`
+- `cmd/orquesta-server/codex_goal_backend_env_v0.go`
+- `cmd/orquesta-server/claude_runtime_config_v0.go`
+- `cmd/orquesta-server/config.go`
+- `cmd/orquesta-server/effective_config_v0.go`
+- `cmd/orquesta-server/codex_goal_app_server_wiring_v0_test.go`
+- `cmd/orquesta-server/config_test.go`
+- `docs/plan_mejora_continua_orquesta_2026-07-04.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion focal inicial:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'Test(ServerGoalBackendFromEnvV0ClaudeFileControlExponePuertosNeutrales|ServerGoalBackendFromEnvV0RechazaBackendNoSoportado|ServerConfigFromEnvV0DerivaAutomejoraGoalFirstDeBackend(Claude|Codex)Goal|ServerEffectiveConfigV0ExponeGoalFirstYBackend)V0'`
+- `go test -count=1 ./modulos/orquesta-runtime-claude`
+
+Pendiente real: MEJ-103 aun no se cierra al 100%. Queda lanzar proceso Claude
+real supervisado, control/shutdown equivalente al backend Codex, smoke fake/real
+opt-in de lanzamiento completo y backend goal-first propio para Gemini.

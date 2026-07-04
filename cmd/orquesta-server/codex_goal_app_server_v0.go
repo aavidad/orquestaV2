@@ -23,6 +23,8 @@ const (
 )
 
 type serverCodexGoalBackendV0 struct {
+	GoalLauncher orquestagoal.GoalWorkLauncherPortV0
+	GoalObserver orquestagoal.GoalWorkObservationPortV0
 	Starter      orquestaruntimecodexgoal.CodexGoalStarterPortV0
 	Observer     orquestaruntimecodexgoal.CodexGoalObserverPortV0
 	Controller   serverCodexGoalControllerV0
@@ -65,6 +67,13 @@ func serverSupervisorWithCodexGoalBackendV0(
 	base serverStackSupervisorV0,
 	backend serverCodexGoalBackendV0,
 ) orquestaserver.SupervisorPortV0 {
+	if backend.GoalLauncher != nil && backend.GoalObserver != nil {
+		return serverGoalSupervisorV0{
+			serverStackSupervisorV0: base,
+			launcher:                backend.GoalLauncher,
+			observer:                backend.GoalObserver,
+		}
+	}
 	if backend.Starter == nil || backend.Observer == nil {
 		return base
 	}
@@ -82,6 +91,9 @@ func serverSupervisorWithCodexGoalBackendV0(
 func serverGoalWorkLauncherFromBackendV0(
 	backend serverCodexGoalBackendV0,
 ) orquestagoal.GoalWorkLauncherPortV0 {
+	if backend.GoalLauncher != nil {
+		return backend.GoalLauncher
+	}
 	if backend.Starter == nil {
 		return nil
 	}
@@ -103,6 +115,9 @@ func serverGoalWorkLauncherFromBackendV0(
 func serverGoalWorkObserverFromBackendV0(
 	backend serverCodexGoalBackendV0,
 ) orquestagoal.GoalWorkObservationPortV0 {
+	if backend.GoalObserver != nil {
+		return backend.GoalObserver
+	}
 	if backend.Observer == nil {
 		return nil
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestaruntimeclaude "orquesta/modulos/orquesta-runtime-claude"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 	orquestaserver "orquesta/modulos/orquesta-server"
 	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
@@ -102,6 +103,83 @@ func TestServerCodexGoalBackendFromEnvV0TmuxNoArrancaAppServerEnConstruccionV0(t
 	}
 }
 
+func TestServerGoalBackendFromEnvV0ClaudeFileControlExponePuertosNeutralesV0(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	stateDir := filepath.Join(root, "control", "state")
+	t.Setenv(envCodexGoalBackendV0, claudeGoalBackendFileControlV0)
+
+	config := orquestaserver.ConfigV0{
+		ProjectWorkDir: projectDir,
+		RuntimeWorkDir: filepath.Join(projectDir, ".orquesta-runtime"),
+		StateDir:       stateDir,
+	}
+	backend, err := serverCodexGoalBackendFromEnvForWorkDirV0(config, projectDir)
+	if err != nil {
+		t.Fatalf("serverCodexGoalBackendFromEnvForWorkDirV0: %v", err)
+	}
+	if backend.Starter != nil || backend.Observer != nil {
+		t.Fatalf("backend Claude goal no debe usar puertos Codex: %+v", backend)
+	}
+	if backend.GoalLauncher == nil || backend.GoalObserver == nil {
+		t.Fatalf("backend Claude goal sin puertos neutrales: %+v", backend)
+	}
+	launcher := serverGoalWorkLauncherFromBackendV0(backend)
+	observer := serverGoalWorkObserverFromBackendV0(backend)
+	spec := orquestagoal.GoalWorkSpecV0{
+		SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+		GoalRef:       "goal-ref-server-claude-file-control-001",
+		RequestRef:    "request-ref-server-claude-file-control-001",
+		RunRef:        "run-ref-server-claude-file-control-001",
+		Objective:     "Probar backend Claude file-control desde servidor.",
+		DirectorKind:  orquestagoal.GoalDirectorKindRuntimeGoalV0,
+		WriteSet: []orquestagoal.GoalWriteScopeV0{{
+			Path:    "docs",
+			Purpose: "resultado durable",
+		}},
+		RequiredTests: []orquestagoal.GoalRequiredTestV0{{
+			TestRef: "required-test-ref-server-claude-file-control",
+			Command: "go test ./cmd/orquesta-server",
+		}},
+	}
+	receipt, err := launcher.LaunchGoalWorkV0(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("LaunchGoalWorkV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		!strings.HasPrefix(receipt.ExternalGoalRef, "claude-goal-") {
+		t.Fatalf("receipt Claude inesperado: %+v", receipt)
+	}
+	runtimeDir := filepath.Join(filepath.Dir(stateDir), "claude-goal")
+	if _, err := os.Stat(filepath.Join(runtimeDir, "claude_goal_prompt_goal-ref-server-claude-file-control-001.txt")); err != nil {
+		t.Fatalf("prompt Claude no materializado: %v", err)
+	}
+	observed, err := observer.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: receipt.ExternalGoalRef,
+	})
+	if err != nil {
+		t.Fatalf("ObserveGoalWorkV0: %v", err)
+	}
+	if observed.Status != orquestagoal.GoalStatusRunningV0 ||
+		!containsServerGoalStringV0(observed.EvidenceRefs, orquestaruntimeclaude.ClaudeGoalEvidenceResultPendingV0) {
+		t.Fatalf("observed Claude inesperado: %+v", observed)
+	}
+}
+
+func TestServerGoalBackendFromEnvV0RechazaBackendNoSoportadoV0(t *testing.T) {
+	t.Setenv(envCodexGoalBackendV0, "claude_real_process")
+
+	_, err := serverCodexGoalBackendFromEnvForWorkDirV0(orquestaserver.ConfigV0{
+		ProjectWorkDir: t.TempDir(),
+		RuntimeWorkDir: t.TempDir(),
+		StateDir:       filepath.Join(t.TempDir(), "state"),
+	}, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "codex_goal_backend_no_soportado") {
+		t.Fatalf("backend no soportado no rechazado: %v", err)
+	}
+}
+
 func TestServerGoalShutdownHooksFromBackendsV0DeduplicaMismoHookV0(t *testing.T) {
 	hook := serverCodexAppServerTmuxBackendV0{
 		SocketPath:  filepath.Join(t.TempDir(), "s.sock"),
@@ -166,6 +244,15 @@ func TestServerEffectiveConfigV0ExponeGoalFirstYBackendV0(t *testing.T) {
 
 func shellQuoteCodexAppServerWiringTestV0(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+func containsServerGoalStringV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 type fakeCodexAppServerProbeV0 struct{}

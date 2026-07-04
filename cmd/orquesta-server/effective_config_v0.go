@@ -324,31 +324,31 @@ func serverIdleSelfImprovementGoalFirstSettingV0(config orquestaserver.ConfigV0)
 		strconv.FormatBool(config.IdleSelfImprovementGoalFirst),
 	)
 	if strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementGoalFirstV0)) == "" &&
-		codexGoalBackendOperationalFromEnvV0() {
-		setting.Source = "derived_from_codex_goal_backend"
+		serverGoalBackendOperationalFromEnvV0() {
+		setting.Source = serverGoalBackendDerivationSourceV0()
 	}
 	return setting
 }
 
 func serverEffectiveConfigDiagnosticsFromEnvV0() []orquestaserver.ServerDiagnosticV0 {
 	diagnostics := []orquestaserver.ServerDiagnosticV0{}
-	if !codexGoalBackendOperationalFromEnvV0() &&
+	if !serverGoalBackendOperationalFromEnvV0() &&
 		!boolEnvOrDefaultV0(envExternalWorkLegacyDirectorLoopV0, false) {
 		diagnostics = append(diagnostics, orquestaserver.ServerDiagnosticV0{
 			Code:    orquestamcp.MCPExternalWorkRunGoalBackendRequiredV0,
 			Scope:   "external_work",
-			Message: "external_work goal-first no ejecutable sin " + envCodexGoalBackendV0 + "; export " + envCodexGoalBackendV0 + "=" + codexGoalBackendAppServerTmuxV0 + " y reinicia el servidor",
+			Message: "external_work goal-first no ejecutable sin backend goal; export " + envCodexGoalBackendV0 + "=" + codexGoalBackendAppServerTmuxV0 + " o " + envCodexGoalBackendV0 + "=" + claudeGoalBackendFileControlV0 + " y reinicia el servidor",
 			EvidenceRefs: []string{
 				"evidence-ref-server-external-work-goal-backend-required",
 			},
 		})
 	}
 	if strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementGoalFirstV0)) == "" &&
-		codexGoalBackendOperationalFromEnvV0() {
+		serverGoalBackendOperationalFromEnvV0() {
 		diagnostics = append(diagnostics, orquestaserver.ServerDiagnosticV0{
 			Code:         "idle_self_improvement_goal_first_derived",
 			Scope:        "autoprogramming",
-			Message:      envServerIdleSelfImprovementGoalFirstV0 + " derivada de " + envCodexGoalBackendV0,
+			Message:      envServerIdleSelfImprovementGoalFirstV0 + " derivada de " + serverGoalBackendDerivationEnvV0(),
 			EvidenceRefs: []string{"evidence-ref-server-idle-self-improvement-goal-first-derived"},
 		})
 	}

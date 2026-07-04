@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	orquestaruntimeclaude "orquesta/modulos/orquesta-runtime-claude"
 	orquestaruntimecodexappserver "orquesta/modulos/orquesta-runtime-codex-appserver"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
@@ -53,6 +54,10 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	workDir string,
 ) (serverCodexGoalBackendV0, error) {
 	backend := codexGoalBackendFromEnvV0()
+	claudeBackend := claudeGoalBackendFromEnvV0()
+	if claudeBackend != "" {
+		return serverClaudeGoalBackendFromEnvForWorkDirV0(config, workDir)
+	}
 	if backend == "" {
 		return serverCodexGoalBackendV0{}, nil
 	}
@@ -228,6 +233,64 @@ func codexGoalBackendFromEnvV0() string {
 
 func codexGoalBackendOperationalFromEnvV0() bool {
 	return codexGoalBackendFromEnvV0() == codexGoalBackendAppServerTmuxV0
+}
+
+func serverClaudeGoalBackendFromEnvForWorkDirV0(
+	config orquestaserver.ConfigV0,
+	workDir string,
+) (serverCodexGoalBackendV0, error) {
+	backend := claudeGoalBackendFromEnvV0()
+	if backend == "" {
+		return serverCodexGoalBackendV0{}, nil
+	}
+	if backend != claudeGoalBackendFileControlV0 {
+		return serverCodexGoalBackendV0{}, fmt.Errorf("claude_goal_backend_no_soportado:%s", backend)
+	}
+	projectWorkDir := firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir)
+	runtimeWorkDir := claudeGoalRuntimeWorkDirFromEnvV0(config)
+	client := orquestaruntimeclaude.ClaudeGoalBackendV0{
+		ProjectWorkDir: projectWorkDir,
+		RuntimeWorkDir: runtimeWorkDir,
+	}
+	return serverCodexGoalBackendV0{
+		GoalLauncher: client,
+		GoalObserver: client,
+	}, nil
+}
+
+func claudeGoalRuntimeWorkDirFromEnvV0(config orquestaserver.ConfigV0) string {
+	if strings.TrimSpace(os.Getenv(envClaudeRuntimeWorkDirV0)) != "" {
+		return absDirEnvOrDefaultV0(envClaudeRuntimeWorkDirV0, config.RuntimeWorkDir)
+	}
+	stateDir := strings.TrimSpace(config.StateDir)
+	if stateDir != "" && filepath.IsAbs(stateDir) {
+		return filepath.Join(filepath.Dir(stateDir), "claude-goal")
+	}
+	return filepath.Join(filepath.Dir(config.RuntimeWorkDir), ".orquesta-claude-goal")
+}
+
+func serverGoalBackendOperationalFromEnvV0() bool {
+	return codexGoalBackendOperationalFromEnvV0() || claudeGoalBackendOperationalFromEnvV0()
+}
+
+func serverGoalBackendDerivationSourceV0() string {
+	if codexGoalBackendOperationalFromEnvV0() {
+		return "derived_from_codex_goal_backend"
+	}
+	if claudeGoalBackendOperationalFromEnvV0() {
+		return "derived_from_claude_goal_backend"
+	}
+	return ""
+}
+
+func serverGoalBackendDerivationEnvV0() string {
+	if codexGoalBackendOperationalFromEnvV0() {
+		return envCodexGoalBackendV0
+	}
+	if claudeGoalBackendOperationalFromEnvV0() {
+		return envCodexGoalBackendV0
+	}
+	return ""
 }
 
 func serverConfigWithCodexGoalBackendDiagnosticsV0(

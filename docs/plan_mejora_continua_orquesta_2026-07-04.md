@@ -107,6 +107,20 @@ No cambia defaults ni convierte Claude/Gemini en backend residente productivo.
 La brecha de MEJ-103 sigue abierta hasta cablear seleccion opt-in por
 composicion/env, proceso real Claude y smoke fake/real de lanzamiento.
 
+Avance 2026-07-04 noche 14: `cmd/orquesta-server` ya reconoce
+`ORQUESTA_CODEX_GOAL_BACKEND=claude_file_control` como backend goal-first
+opt-in neutral sin anadir variables nuevas, respetando el ratchet MEJ-106 de
+configuracion. La composicion expone los puertos `GoalWorkLauncherPortV0` y
+`GoalWorkObservationPortV0` desde `orquesta-runtime-claude`, materializa
+spec/prompt bajo control fuera del proyecto por defecto y deriva
+`ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_GOAL_FIRST_ENABLED=true` cuando el
+backend Claude esta configurado y no hay override explicito. Codex sigue siendo
+el camino operativo normal cuando se configura
+`ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`; valores no soportados siguen
+fallando en arranque con diagnostico explicito. La brecha restante se reduce a
+proceso Claude real supervisado con shutdown/control equivalente a Codex, smoke
+fake/real opt-in de lanzamiento y backend propio Gemini.
+
 Alcance:
 
 - `modulos/orquesta-runtime-claude`

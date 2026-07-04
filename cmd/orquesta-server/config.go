@@ -238,7 +238,7 @@ func idleSelfImprovementGoalFirstFromEnvV0() bool {
 	if strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementGoalFirstV0)) != "" {
 		return boolEnvOrDefaultV0(envServerIdleSelfImprovementGoalFirstV0, false)
 	}
-	return codexGoalBackendOperationalFromEnvV0()
+	return serverGoalBackendOperationalFromEnvV0()
 }
 
 func sameAbsDirForConfigV0(left string, right string) bool {
