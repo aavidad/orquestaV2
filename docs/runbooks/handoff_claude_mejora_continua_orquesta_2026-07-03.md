@@ -434,6 +434,39 @@ Pruebas ejecutadas en esta tanda:
 - `go test -count=1 ./modulos/orquesta-opes-director`
 - `go test -count=1 ./modulos/orquesta-opes-director ./modulos/orquesta-opes-bridge`
 
+## Actualizacion Codex 2026-07-04 noche 31
+
+Avance de este bloque:
+
+- `BUG-ORQ-20260701-058` queda reducido en `orquesta-opes-director`.
+- El registro OPES ya no libera un `completed_syllabus_package` aunque el
+  `manifest_cierre` traiga HTML/RAG/audio/tests/tutor/visual/QA, QA estricta y
+  reports, si faltan refs durables de resultados `OPESTopicQualityContractV0`
+  por tema (`topic_quality_contract_result_refs` o
+  `topic_quality_contract_results`).
+- En el caso incompleto mantiene `registry_action=update`,
+  `proposed_status=pendiente_validacion_paquete_final`,
+  `pending_refs=final-package-manifest-closure-evidence-required` y rework
+  causal `finalize_temario_package`.
+- El caso positivo de liberacion exige ahora `topic-quality-contract-result-ref`
+  en el manifest y lo conserva como `settled_refs`.
+- No cerrar `BUG-058` todavia: esto prueba el borde local de registro y lo
+  alinea con `orquesta-app-codex-stack`, pero falta smoke temporal OPES de todo
+  el arbol tema asentado -> derivados -> paquete final.
+
+Archivos tocados en esta tanda:
+
+- `modulos/orquesta-opes-director/topic_registry_v0.go`
+- `modulos/orquesta-opes-director/producer_v0_test.go`
+- `modulos/orquesta-opes-director/README.md`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`
+
+Pruebas ejecutadas en esta tanda:
+
+- `go test -count=1 ./modulos/orquesta-opes-director -run 'TestProduceOPESCausalJobsV0PaqueteFinal'`
+- `go test -count=1 ./modulos/orquesta-opes-director`
+
 ## Checklist de Claude
 
 1. Revisar `git status --short` y separar cambios de cada frente.

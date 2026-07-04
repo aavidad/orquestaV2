@@ -16,7 +16,8 @@ Responsabilidad:
 - evitar cierres falsos de paquetes OPES con `pendiente_continuar`;
 - liberar un paquete final solo si `CompleteJob=true`, no quedan pendientes y
   viajan evidencias del `manifest_cierre.json` completo: HTML, RAG, audio,
-  tests, visual y QA;
+  tests, tutor, visual, QA y refs durables de resultados de calidad por tema
+  (`topic_quality_contract_result_refs` o `topic_quality_contract_results`);
 - crear rework causal `finalize_temario_package` cuando un paquete final llega
   con `CompleteJob=true` pero sin evidencias completas de manifest de cierre;
 - preservar estados estructurados de avance parcial del registro OPES, por

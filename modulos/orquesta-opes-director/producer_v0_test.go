@@ -476,14 +476,14 @@ func TestProduceOPESCausalJobsV0PaqueteFinalSinBancoYTutorNoLiberaRegistroV0(t *
 	}
 }
 
-func TestProduceOPESCausalJobsV0PaqueteFinalCompleteConManifestCompatibleYQATernaLiberaRegistro(t *testing.T) {
+func TestProduceOPESCausalJobsV0PaqueteFinalSinTopicQualityRefsNoLiberaRegistroV0(t *testing.T) {
 	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
 		Status:       "accepted",
 		DomainRef:    "opes",
-		JobRef:       "job-final-evidence-001",
-		ArtifactRef:  "artifact-final-evidence-001",
+		JobRef:       "job-final-sin-topic-quality-001",
+		ArtifactRef:  "artifact-final-sin-topic-quality-001",
 		ArtifactType: orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0,
-		ReceiptRef:   "receipt-final-evidence-001",
+		ReceiptRef:   "receipt-final-sin-topic-quality-001",
 		CompleteJob:  true,
 		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
 			{Name: "course_id", Value: "curso-final"},
@@ -532,11 +532,85 @@ func TestProduceOPESCausalJobsV0PaqueteFinalCompleteConManifestCompatibleYQATern
 	}
 	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
 	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "registry_action", "update") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "pendiente_validacion_paquete_final") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "final-package-manifest-closure-evidence-required") ||
+		domainWorkFieldValueForDirectorTestV0(request.InputFields, "registry_action", "release") {
+		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
+	}
+	followup, ok := requestedWorkKindForTestV0(result.RequestedJobs, "finalize_temario_package")
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "followup_ref", "final-package-manifest-closure-evidence-required") ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "expected_artifact_type", orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0) {
+		t.Fatalf("followup=%+v ok=%v result=%+v", followup, ok, result)
+	}
+}
+
+func TestProduceOPESCausalJobsV0PaqueteFinalCompleteConManifestCompatibleYQATernaLiberaRegistro(t *testing.T) {
+	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
+		Status:       "accepted",
+		DomainRef:    "opes",
+		JobRef:       "job-final-evidence-001",
+		ArtifactRef:  "artifact-final-evidence-001",
+		ArtifactType: orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0,
+		ReceiptRef:   "receipt-final-evidence-001",
+		CompleteJob:  true,
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "course_id", Value: "curso-final"},
+			{Name: "topic_id", Value: "tema-004"},
+			{Name: "manifest_cierre", ValueJSON: json.RawMessage(`{
+				"schema_version":"opes_final_package_evidence_manifest.v0",
+				"package_ref":"package-ref-final-001",
+				"manifest_ref":"manifest-cierre-ref-final-001",
+				"checksum_refs":["checksum-ref-final-001"],
+				"validation_report_ref":"validation-report-ref-final-001",
+				"review_matrix_ref":"review-matrix-ref-final-001",
+				"topic_quality_contract_result_refs":{
+					"tema_004":"topic-quality-contract-result-ref-final-004"
+				},
+				"qa_passes":{
+					"extension_pass":true,
+					"official_text_qa_pass":true,
+					"strict_editorial_qa_pass":true,
+					"question_bank_publicable":true,
+					"tutor_assets_publicable":true
+				},
+				"qa_report_refs":{
+					"extension":"09_validacion/informe_extension_temario.json",
+					"official_text":[
+						"09_validacion/informe_texto_publico_sin_notas_autor.json",
+						"09_validacion/informe_texto_publico_sin_metacomentarios_examen.json"
+					],
+					"strict_editorial":"09_validacion/informe_texto_publico_sin_andamiaje_interno.json",
+					"question_bank_publicable":"09_validacion/informe_question_bank_publicable.json",
+					"tutor_assets_publicable":"09_validacion/informe_tutor_assets_publicable.json"
+				},
+				"required_evidence_refs":{
+					"html":"opes-final-evidence:html:001",
+					"rag":"opes-final-evidence:rag:001",
+					"audio":"opes-final-evidence:audio:001",
+					"tests":"opes-final-evidence:tests:001",
+					"tutor":"opes-final-evidence:tutor:001",
+					"visual":"opes-final-evidence:visual:001",
+					"qa":"opes-final-evidence:qa:001"
+				}
+			}`)},
+		},
+	}}}
+	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+	result, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{},
+		OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator})
+	if err != nil {
+		t.Fatalf("ProduceOPESCausalJobsV0: %v", err)
+	}
+	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
+	if !ok ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "registry_action", "release") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "paquete_final_local_verificable") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_status", topicRegistrySettlementFinalV0) ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_scope", "final_package") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_reason", "final_package_closure_evidence_complete") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settled_refs", "topic-quality-contract-result-ref-final-004") ||
 		domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "final-package-manifest-closure-evidence-required") {
 		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
 	}

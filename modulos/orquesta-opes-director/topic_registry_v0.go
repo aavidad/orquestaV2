@@ -293,14 +293,16 @@ func topicRegistryFinalPackageHasStrictQAEvidenceV0(refs []string) bool {
 }
 
 type topicRegistryFinalPackageManifestV0 struct {
-	SchemaVersion        string                     `json:"schema_version"`
-	PackageRef           string                     `json:"package_ref"`
-	ManifestRef          string                     `json:"manifest_ref"`
-	ChecksumRefs         []string                   `json:"checksum_refs"`
-	ValidationReportRef  string                     `json:"validation_report_ref"`
-	ReviewMatrixRef      string                     `json:"review_matrix_ref"`
-	RequiredEvidenceRefs map[string]json.RawMessage `json:"required_evidence_refs"`
-	QAPasses             struct {
+	SchemaVersion                  string                     `json:"schema_version"`
+	PackageRef                     string                     `json:"package_ref"`
+	ManifestRef                    string                     `json:"manifest_ref"`
+	ChecksumRefs                   []string                   `json:"checksum_refs"`
+	ValidationReportRef            string                     `json:"validation_report_ref"`
+	ReviewMatrixRef                string                     `json:"review_matrix_ref"`
+	RequiredEvidenceRefs           map[string]json.RawMessage `json:"required_evidence_refs"`
+	TopicQualityContractResultRefs json.RawMessage            `json:"topic_quality_contract_result_refs"`
+	TopicQualityContractResults    json.RawMessage            `json:"topic_quality_contract_results"`
+	QAPasses                       struct {
 		ExtensionPass              bool `json:"extension_pass"`
 		OfficialTextQAPass         bool `json:"official_text_qa_pass"`
 		StrictEditorialQAPass      bool `json:"strict_editorial_qa_pass"`
@@ -332,6 +334,9 @@ func topicRegistryFinalPackageHasCompatibleManifestV0(fields []orquestadomainwor
 			return false
 		}
 	}
+	if len(topicRegistryFinalPackageTopicQualityRefsV0(manifest)) == 0 {
+		return false
+	}
 	return true
 }
 
@@ -345,6 +350,13 @@ func topicRegistryFinalPackageManifestEvidenceRefsV0(fields []orquestadomainwork
 	for _, raw := range manifest.RequiredEvidenceRefs {
 		refs = append(refs, topicRegistryJSONRawRefsV0(raw)...)
 	}
+	refs = append(refs, topicRegistryFinalPackageTopicQualityRefsV0(manifest)...)
+	return compactStringsV0(refs)
+}
+
+func topicRegistryFinalPackageTopicQualityRefsV0(manifest topicRegistryFinalPackageManifestV0) []string {
+	refs := topicRegistryJSONRawRefsV0(manifest.TopicQualityContractResultRefs)
+	refs = append(refs, topicRegistryJSONRawRefsV0(manifest.TopicQualityContractResults)...)
 	return compactStringsV0(refs)
 }
 
@@ -398,6 +410,22 @@ func topicRegistryJSONRawRefsV0(raw json.RawMessage) []string {
 	var value string
 	if err := json.Unmarshal(raw, &value); err == nil {
 		return compactStringsV0([]string{value})
+	}
+	var valuesByKey map[string]string
+	if err := json.Unmarshal(raw, &valuesByKey); err == nil {
+		refs := make([]string, 0, len(valuesByKey))
+		for _, item := range valuesByKey {
+			refs = append(refs, item)
+		}
+		return compactStringsV0(refs)
+	}
+	var arraysByKey map[string][]string
+	if err := json.Unmarshal(raw, &arraysByKey); err == nil {
+		var refs []string
+		for _, items := range arraysByKey {
+			refs = append(refs, items...)
+		}
+		return compactStringsV0(refs)
 	}
 	return nil
 }
