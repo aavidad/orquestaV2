@@ -24,10 +24,17 @@ func ShutdownServerV0(
 	if result, ok := missingRequiredServerShutdownDepsV0(deps); ok {
 		return result, nil
 	}
-	if result, ok, evidenceRefs, err := blockingActiveShutdownWorkV0(ctx, deps, command); err != nil || ok {
+	goalActions := []ServerShutdownGoalActionV0{}
+	initialActiveWorks := []ActiveShutdownWorkV0{}
+	if result, ok, evidenceRefs, actions, observedWorks, err := blockingActiveShutdownWorkV0(ctx, deps, command); err != nil || ok {
 		return result, err
 	} else if len(evidenceRefs) > 0 {
 		command.EvidenceRefs = compactServerShutdownStringsV0(append(command.EvidenceRefs, evidenceRefs...))
+		goalActions = mergeServerShutdownGoalActionsV0(goalActions, actions)
+	} else if len(actions) > 0 {
+		goalActions = mergeServerShutdownGoalActionsV0(goalActions, actions)
+	} else if len(observedWorks) > 0 {
+		initialActiveWorks = observedWorks
 	}
 	candidates, err := deps.QueueReader.ListRunSchedulingCandidatesV0(
 		ctx,
@@ -45,11 +52,12 @@ func ShutdownServerV0(
 		Runs:          targets,
 		RunsRequested: len(targets),
 		EvidenceRefs:  compactServerShutdownStringsV0(command.EvidenceRefs),
+		GoalActions:   goalActions,
 	}
 	if len(targets) == 0 {
 		result.Status = ServerShutdownStatusReadyV0
 		result.ShutdownReady = true
-		return withServerShutdownRecommendedActionV0(result), nil
+		return finalizeShutdownActiveWorkV0(ctx, deps, command, withServerShutdownRecommendedActionV0(result), initialActiveWorks)
 	}
 	result.Runs, err = refreshShutdownRunsV0(ctx, deps, command, result.Runs)
 	if err != nil {
@@ -69,5 +77,5 @@ func ShutdownServerV0(
 	if err != nil {
 		return ServerShutdownResultV0{}, err
 	}
-	return summarizeShutdownResultV0(result), nil
+	return finalizeShutdownActiveWorkV0(ctx, deps, command, summarizeShutdownResultV0(result), initialActiveWorks)
 }

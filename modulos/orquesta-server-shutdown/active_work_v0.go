@@ -11,9 +11,9 @@ func blockingActiveShutdownWorkV0(
 	ctx context.Context,
 	deps ServerShutdownDepsV0,
 	command ServerShutdownCommandV0,
-) (ServerShutdownResultV0, bool, []string, error) {
+) (ServerShutdownResultV0, bool, []string, []ServerShutdownGoalActionV0, []ActiveShutdownWorkV0, error) {
 	if deps.ActiveWorkReader == nil {
-		return ServerShutdownResultV0{}, false, nil, nil
+		return ServerShutdownResultV0{}, false, nil, nil, nil, nil
 	}
 	active, err := deps.ActiveWorkReader.ReadActiveShutdownWorkV0(ctx, ActiveShutdownWorkRequestV0{
 		QueueRef:      command.QueueRef,
@@ -23,19 +23,29 @@ func blockingActiveShutdownWorkV0(
 		MaxItems:      activeShutdownWorkMaxItemsV0(command.QueueLimit),
 	})
 	if err != nil {
-		return ServerShutdownResultV0{}, false, nil, err
+		return ServerShutdownResultV0{}, false, nil, nil, nil, err
 	}
 	works := compactActiveShutdownWorksV0(active.ActiveWorks)
+	if !activeShutdownWorksAreOnlyBackendsV0(works) {
+		return ServerShutdownResultV0{}, false, nil, nil, works, nil
+	}
 	cleanupEvidenceRefs := []string{}
+	goalActions := []ServerShutdownGoalActionV0{}
 	if command.CleanupGoalBackends && deps.ActiveWorkCleaner != nil {
 		var cleaned ActiveShutdownWorkCleanupResultV0
 		var cleanupRan bool
+		cleanupTargetWorks := append([]ActiveShutdownWorkV0(nil), works...)
 		cleaned, cleanupRan, err = cleanupActiveGoalBackendsV0(ctx, deps, command, works)
 		if err != nil {
-			return activeShutdownWorkCleanupErrorResultV0(command, active, works), true, nil, nil
+			return activeShutdownWorkCleanupErrorResultV0(command, active, works), true, nil, nil, nil, nil
 		}
 		if cleanupRan {
 			cleanupEvidenceRefs = compactServerShutdownStringsV0(cleaned.EvidenceRefs)
+			goalActions = mergeServerShutdownGoalActionsV0(goalActions, serverShutdownGoalActionsForWorksV0(
+				works,
+				ServerShutdownGoalActionCleanupRequestedV0,
+				[]string{serverShutdownGoalActionCleanupRequestedEvidenceV0},
+			))
 			active, err = deps.ActiveWorkReader.ReadActiveShutdownWorkV0(ctx, ActiveShutdownWorkRequestV0{
 				QueueRef:      command.QueueRef,
 				AppRefs:       append([]string(nil), command.AppRefs...),
@@ -47,30 +57,43 @@ func blockingActiveShutdownWorkV0(
 				MaxItems: activeShutdownWorkMaxItemsV0(command.QueueLimit),
 			})
 			if err != nil {
-				return ServerShutdownResultV0{}, false, nil, err
+				return ServerShutdownResultV0{}, false, nil, nil, nil, err
 			}
 			works = compactActiveShutdownWorksV0(active.ActiveWorks)
+			if len(works) == 0 && cleaned.CleanedWorkCount > 0 {
+				goalActions = mergeServerShutdownGoalActionsV0(goalActions, serverShutdownGoalActionsForWorksV0(
+					cleanupTargetWorks,
+					ServerShutdownGoalActionCleanupCompletedV0,
+					[]string{serverShutdownGoalActionCleanupCompletedEvidenceV0},
+				))
+			}
 		}
 	}
 	if command.Forced {
 		works = forcedBlockingActiveShutdownWorksV0(works)
 	}
 	if len(works) == 0 {
-		return ServerShutdownResultV0{}, false, cleanupEvidenceRefs, nil
+		return ServerShutdownResultV0{}, false, cleanupEvidenceRefs, goalActions, nil, nil
 	}
 	status := activeShutdownWorkBlockingStatusV0(works)
+	works, actions := annotateActiveShutdownWorksV0(works, ServerShutdownResultV0{
+		Status:       status,
+		EvidenceRefs: compactServerShutdownStringsV0(append(command.EvidenceRefs, cleanupEvidenceRefs...)),
+	}, cleanupEvidenceRefs)
+	goalActions = mergeServerShutdownGoalActionsV0(goalActions, actions)
 	result := ServerShutdownResultV0{
 		SchemaVersion:   ServerShutdownSchemaVersionV0,
 		Status:          status,
 		ShutdownReady:   false,
 		ActiveWorkCount: len(works),
 		ActiveWorks:     works,
+		GoalActions:     goalActions,
 		EvidenceRefs: compactServerShutdownStringsV0(append(
 			append([]string(nil), command.EvidenceRefs...),
 			append(append(active.EvidenceRefs, cleanupEvidenceRefs...), activeShutdownWorkBlockingEvidenceV0(status))...,
 		)),
 	}
-	return withServerShutdownRecommendedActionV0(result), true, nil, nil
+	return withServerShutdownRecommendedActionV0(result), true, nil, nil, nil, nil
 }
 
 func cleanupActiveGoalBackendsV0(
@@ -116,6 +139,15 @@ func activeShutdownBackendWorksV0(
 	return out
 }
 
+func activeShutdownWorksAreOnlyBackendsV0(
+	works []ActiveShutdownWorkV0,
+) bool {
+	if len(works) == 0 {
+		return false
+	}
+	return len(activeShutdownBackendWorksV0(works)) == len(works)
+}
+
 func activeShutdownWorkBlockingStatusV0(
 	works []ActiveShutdownWorkV0,
 ) string {
@@ -155,12 +187,21 @@ func activeShutdownWorkCleanupErrorResultV0(
 	works []ActiveShutdownWorkV0,
 ) ServerShutdownResultV0 {
 	status := activeShutdownWorkBlockingStatusV0(works)
+	works, actions := annotateActiveShutdownWorksV0(works, ServerShutdownResultV0{
+		Status: status,
+		EvidenceRefs: compactServerShutdownStringsV0(append(
+			append([]string(nil), command.EvidenceRefs...),
+			"evidence-ref-shutdown-goal-backend-cleanup-requested",
+			"evidence-ref-shutdown-goal-backend-cleanup-error",
+		)),
+	}, []string{"evidence-ref-shutdown-goal-backend-cleanup-requested"})
 	return withServerShutdownRecommendedActionV0(ServerShutdownResultV0{
 		SchemaVersion:   ServerShutdownSchemaVersionV0,
 		Status:          status,
 		ShutdownReady:   false,
 		ActiveWorkCount: len(works),
 		ActiveWorks:     works,
+		GoalActions:     actions,
 		EvidenceRefs: compactServerShutdownStringsV0(append(
 			append([]string(nil), command.EvidenceRefs...),
 			append(active.EvidenceRefs,
@@ -217,6 +258,8 @@ func normalizeActiveShutdownWorkV0(
 	work.WorkRef = strings.TrimSpace(work.WorkRef)
 	work.ExternalWorkRef = strings.TrimSpace(work.ExternalWorkRef)
 	work.Status = strings.TrimSpace(work.Status)
+	work.ActionTaken = strings.TrimSpace(work.ActionTaken)
+	work.ActionEvidenceRefs = compactServerShutdownStringsV0(work.ActionEvidenceRefs)
 	work.EvidenceRefs = compactServerShutdownStringsV0(work.EvidenceRefs)
 	return work
 }

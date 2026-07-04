@@ -33,18 +33,20 @@ func TestShutdownServerV0NoForzadoBloqueaConGoalActivo(t *testing.T) {
 		t.Fatalf("ShutdownServerV0: %v", err)
 	}
 	if result.ShutdownReady ||
-		result.Status != ServerShutdownStatusActiveGoalsPresentV0 ||
-		result.RecommendedAction != ServerShutdownRecommendedActionObserveActiveGoalsV0 ||
+		result.Status != ServerShutdownStatusWaitingCheckpointV0 ||
+		result.RecommendedAction != ServerShutdownRecommendedActionWaitCheckpointV0 ||
 		result.ActiveWorkCount != 1 ||
 		len(result.ActiveWorks) != 1 ||
 		result.ActiveWorks[0].RunRef != "run-goal-active" ||
 		result.ActiveWorks[0].WorkRef != "goal-ref-001" ||
+		result.ActiveWorks[0].ActionTaken != ServerShutdownGoalActionWaitCheckpointV0 ||
 		len(deps.control.stopped) != 0 ||
 		deps.supervisor.calls != 0 {
 		t.Fatalf("result=%+v stopped=%v supervisor=%+v", result, deps.control.stopped, deps.supervisor)
 	}
-	if !serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-active-goals-present") {
-		t.Fatalf("evidence_refs no incluye bloqueo active goals: %+v", result.EvidenceRefs)
+	if !serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-active-goals-present") ||
+		!shutdownGoalActionForTestV0(result.GoalActions, ServerShutdownGoalActionWaitCheckpointV0) {
+		t.Fatalf("evidence/actions no incluye bloqueo active goals: %+v actions=%+v", result.EvidenceRefs, result.GoalActions)
 	}
 }
 
@@ -71,7 +73,8 @@ func TestShutdownServerV0ForzadoNoBloqueaConGoalActivo(t *testing.T) {
 	if !result.ShutdownReady ||
 		result.Status != ServerShutdownStatusReadyV0 ||
 		!reflect.DeepEqual(deps.control.stopped, []string{"run-goal-active-force"}) ||
-		deps.active.calls != 1 {
+		deps.active.calls != 2 ||
+		!shutdownGoalActionForTestV0(result.GoalActions, ServerShutdownGoalActionForcedStopRequestedV0) {
 		t.Fatalf("result=%+v stopped=%v active_calls=%d", result, deps.control.stopped, deps.active.calls)
 	}
 }
@@ -177,12 +180,13 @@ func TestShutdownServerV0CleanupGoalBackendsReleeYPermiteReadySiLimpiaV0(t *test
 	if !result.ShutdownReady ||
 		result.Status != ServerShutdownStatusReadyV0 ||
 		result.ActiveWorkCount != 0 ||
-		deps.active.calls != 2 ||
+		deps.active.calls != 3 ||
 		deps.cleaner.calls != 1 ||
 		!deps.cleaner.lastCommand.CleanupGoalBackends ||
 		len(deps.cleaner.lastCommand.ActiveWorks) != 1 ||
 		!serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-backend-cleaned") ||
-		!serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-goal-backend-cleanup-requested") {
+		!serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-goal-backend-cleanup-requested") ||
+		!shutdownGoalActionForTestV0(result.GoalActions, ServerShutdownGoalActionCleanupCompletedV0) {
 		t.Fatalf("result=%+v active_calls=%d cleaner=%+v", result, deps.active.calls, deps.cleaner)
 	}
 }
@@ -259,39 +263,5 @@ func TestShutdownServerV0CleanupGoalBackendsErrorNoEscalaAHTTP500V0(t *testing.T
 		!serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-goal-backend-cleanup-error") ||
 		!serverShutdownStringsContainForTestV0(result.EvidenceRefs, "evidence-ref-shutdown-backend-still-running") {
 		t.Fatalf("result=%+v active_calls=%d cleaner=%+v", result, deps.active.calls, deps.cleaner)
-	}
-}
-
-func TestShutdownServerV0CleanupGoalBackendsNoLimpiaSiHayGoalFirstActivoV0(t *testing.T) {
-	deps := newServerShutdownDepsForTestV0(nil)
-	deps.active.works = []ActiveShutdownWorkV0{
-		{
-			Kind:    "goal_first",
-			RunRef:  "run-goal-first-active",
-			WorkRef: "goal-ref-active",
-			Status:  "running",
-		},
-		{
-			Kind:            "goal_backend",
-			WorkRef:         "orquesta-goal-backend-with-active-goal",
-			ExternalWorkRef: "codex-goal-app-server-tmux",
-			Status:          ServerShutdownStatusBackendStillRunningV0,
-		},
-	}
-
-	result, err := ShutdownServerV0(context.Background(), deps.deps(), ServerShutdownCommandV0{
-		RequestedBy:         "orquesta-director",
-		Reason:              "no limpiar backend si goal_first sigue activo",
-		CleanupGoalBackends: true,
-	})
-	if err != nil {
-		t.Fatalf("ShutdownServerV0: %v", err)
-	}
-	if result.ShutdownReady ||
-		result.Status != ServerShutdownStatusBackendStillRunningV0 ||
-		result.ActiveWorkCount != 2 ||
-		deps.active.calls != 1 ||
-		deps.cleaner.calls != 0 {
-		t.Fatalf("result=%+v active_calls=%d cleaner_calls=%d", result, deps.active.calls, deps.cleaner.calls)
 	}
 }

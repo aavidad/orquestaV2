@@ -258,3 +258,12 @@ func (fake *fakeShutdownActiveWorkCleanerV0) CleanupActiveShutdownWorkV0(
 	}
 	return fake.result, nil
 }
+
+func shutdownGoalActionForTestV0(actions []ServerShutdownGoalActionV0, action string) bool {
+	for _, value := range actions {
+		if value.ActionTaken == action {
+			return true
+		}
+	}
+	return false
+}

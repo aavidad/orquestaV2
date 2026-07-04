@@ -23,6 +23,17 @@ const (
 	ServerShutdownStatusBackendStillRunningV0 = "backend_still_running"
 )
 
+const (
+	ServerShutdownGoalActionObserveActiveV0       = "observe_active_goal"
+	ServerShutdownGoalActionWaitCheckpointV0      = "wait_checkpoint"
+	ServerShutdownGoalActionStopRequestedWaitV0   = "stop_requested_wait"
+	ServerShutdownGoalActionForcedStopRequestedV0 = "forced_stop_requested"
+	ServerShutdownGoalActionCleanupRequiredV0     = "cleanup_required"
+	ServerShutdownGoalActionCleanupRequestedV0    = "cleanup_requested"
+	ServerShutdownGoalActionCleanupAttemptedV0    = "cleanup_attempted_wait"
+	ServerShutdownGoalActionCleanupCompletedV0    = "cleanup_completed"
+)
+
 type ServerShutdownCommandV0 struct {
 	RequestID            string    `json:"request_id,omitempty"`
 	CorrelationID        string    `json:"correlation_id,omitempty"`
@@ -118,12 +129,25 @@ type ActiveShutdownWorkCleanupResultV0 struct {
 }
 
 type ActiveShutdownWorkV0 struct {
-	Kind            string   `json:"kind,omitempty"`
-	RunRef          string   `json:"run_ref,omitempty"`
-	WorkRef         string   `json:"work_ref,omitempty"`
-	ExternalWorkRef string   `json:"external_work_ref,omitempty"`
-	Status          string   `json:"status,omitempty"`
-	EvidenceRefs    []string `json:"evidence_refs,omitempty"`
+	Kind               string   `json:"kind,omitempty"`
+	RunRef             string   `json:"run_ref,omitempty"`
+	WorkRef            string   `json:"work_ref,omitempty"`
+	ExternalWorkRef    string   `json:"external_work_ref,omitempty"`
+	Status             string   `json:"status,omitempty"`
+	ActionTaken        string   `json:"action_taken,omitempty"`
+	ActionEvidenceRefs []string `json:"action_evidence_refs,omitempty"`
+	EvidenceRefs       []string `json:"evidence_refs,omitempty"`
+}
+
+type ServerShutdownGoalActionV0 struct {
+	Kind               string   `json:"kind,omitempty"`
+	RunRef             string   `json:"run_ref,omitempty"`
+	WorkRef            string   `json:"work_ref,omitempty"`
+	ExternalWorkRef    string   `json:"external_work_ref,omitempty"`
+	Status             string   `json:"status,omitempty"`
+	ActionTaken        string   `json:"action_taken"`
+	ActionEvidenceRefs []string `json:"action_evidence_refs,omitempty"`
+	EvidenceRefs       []string `json:"evidence_refs,omitempty"`
 }
 
 type PrepareAgentShutdownCommandV0 struct {
@@ -181,6 +205,7 @@ type ServerShutdownResultV0 struct {
 	CheckpointDeadlinesExpired int                                          `json:"checkpoint_deadlines_expired,omitempty"`
 	ActiveWorkCount            int                                          `json:"active_work_count,omitempty"`
 	ActiveWorks                []ActiveShutdownWorkV0                       `json:"active_works,omitempty"`
+	GoalActions                []ServerShutdownGoalActionV0                 `json:"goal_actions,omitempty"`
 	Runs                       []ServerShutdownRunResultV0                  `json:"runs,omitempty"`
 	Supervisor                 *orquestarunsupervisor.RunSupervisorResultV0 `json:"supervisor,omitempty"`
 	EvidenceRefs               []string                                     `json:"evidence_refs,omitempty"`
