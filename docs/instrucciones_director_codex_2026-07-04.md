@@ -495,3 +495,13 @@ E. Tests: tool responde en sandbox real (smoke), fallback sin
    de los tokens de la línea base (165k, brazo A del experimento).
 Prioridad: sube a la cabeza de la cola junto a TAREA-8 (ambas atacan las dos
 causas orgánicas: config y contexto).
+
+#### Regla de persistencia (aclaración del operador 2026-07-04, aplica a TAREA-2/9)
+
+Un solo motor de BD por despliegue, nunca dos: si la infraestructura ya tiene
+PostgreSQL, el analizador/auditoría/métricas usan ese (vía el adaptador SQL
+neutral existente, placeholders dollar); en nodo local sin servidor, motor
+embebido. El índice del analizador es caché DERIVADA y reconstruible desde el
+repo: no es verdad operativa. La verdad operativa de Orquesta sigue siendo
+los ficheros de estado/receipts. Prohibido introducir un segundo motor en un
+despliegue que ya tiene uno.
