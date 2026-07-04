@@ -830,3 +830,17 @@ Pendiente real:
 - `BUG-058/066`: lifecycle OPES end-to-end con instancia temporal y
   external-work real.
 - `MEJ-106`: bajar de 513 a 511 tras consolidar dos env vars reales.
+
+Nota de cierre operativo:
+
+- Git quedo limpio y empujado hasta `535ab198`.
+- Sigue vivo un pilot ajeno previo bajo
+  `/tmp/claude-1000/-home-alberto-Trabajo-orquesta/8be66426-b9e9-428a-a040-c4ee62477495/scratchpad/pilot-t297`.
+  No se paro porque `/api/v0/server/shutdown` informo goal activo
+  `run_ref=request-ref-t297-wizard-g1-20260704-001`,
+  `goal_ref=goal-ref-task-autoprogramming-5b1bf1c819cc-g01` y backend
+  `orquesta-goal-2b3a252e09893ce4` vivo. `autoprogramming/status` lo clasifica
+  como `partial_artifacts_written` con accion
+  `review_partial_artifacts:run:request-ref-t297-wizard-g1-20260704-001`.
+  Si Claude retoma ese pilot, debe revisar/cerrar el goal o pararlo por control
+  gobernado antes de limpiar procesos.
