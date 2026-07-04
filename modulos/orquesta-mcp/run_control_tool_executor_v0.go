@@ -448,7 +448,9 @@ func mcpRunControlGoalBackendActiveV0(stats *MCPDirectorStatsToolResultV0) bool 
 func mcpRunControlGoalBackendTerminalV0(stats *MCPDirectorStatsToolResultV0) bool {
 	status := strings.ToLower(mcpRunControlGoalStatusFromStatsV0(stats))
 	switch status {
-	case "complete", "completed", "accepted", "blocked", "invalid", "canceled", "cancelled", "stopped", "failed":
+	case "complete", "completed", "accepted", "blocked", "invalid", "canceled", "cancelled", "stopped", "failed",
+		"usagelimited", "usage_limited", "quotalimited", "quota_limited", "providerlimited", "provider_limited",
+		"budgetlimited", "budget_limited", "policylimited", "policy_limited":
 		return true
 	default:
 		return false

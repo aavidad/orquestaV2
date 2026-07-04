@@ -1459,8 +1459,13 @@ Avance adicional sobre `BUG-ORQ-20260704-165` / control goal-first:
   como `goal_control_signal_confirmed=false` aunque el backend ya no estuviera
   activo.
 - Ahora `blocked` e `invalid` cuentan como terminales para confirmar la senal
-  de control del backend goal-first. Si el backend sigue `active`, se conserva
-  el bloqueo duro existente `control_not_propagated_to_goal_backend`.
+  de control del backend goal-first.
+- Tambien cuentan como terminales los estados de proveedor/presupuesto/politica
+  `usageLimited`, `quotaLimited`, `providerLimited`, `budgetLimited`,
+  `policyLimited` y sus variantes snake_case, coherentes con la normalizacion
+  del app-server a `GoalStatusBlockedV0`.
+- Si el backend sigue `active`, se conserva el bloqueo duro existente
+  `control_not_propagated_to_goal_backend`.
 
 Archivos tocados en este avance:
 
@@ -1471,6 +1476,7 @@ Archivos tocados en este avance:
 
 Evidencia ejecutada:
 
+- `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPRunControlExecutorV0StopForced(ConfirmaBackendBlocked|ConfirmaBackendProviderLimited|PermiteTerminalSiGoalBackendYaComplete|NoPublicaStoppedSiGoalBackendSigueActive)'`
 - `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPRunControlExecutorV0StopForced(ConfirmaBackendBlocked|PermiteTerminalSiGoalBackendYaComplete|NoPublicaStoppedSiGoalBackendSigueActive|ReconcilesGoalHighConsumptionSinCheckpoint|ReconcilesGoalHighConsumptionCheckpointOnly)'`
 
 Pendiente real: `BUG-165` sigue abierto para smoke real amplio con proveedor o
