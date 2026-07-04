@@ -120,18 +120,42 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverConfigSettingFromRegistryV0(envServerSelfWatchdogCPUHighPercentV0, strconv.Itoa(config.SelfWatchdog.CPUHighPercent)),
 		serverConfigSettingFromRegistryV0(envServerSelfWatchdogSustainedSecondsV0, strconv.Itoa(int(config.SelfWatchdog.SustainedFor/time.Second))),
 		serverConfigSettingFromRegistryV0(envServerSelfWatchdogNoProgressSecondsV0, strconv.Itoa(int(config.SelfWatchdog.NoProgressFor/time.Second))),
-		serverConfigSettingFromRegistryV0(envServerIdleSelfImprovementDisabledV0, strconv.FormatBool(config.IdleSelfImprovementDisabled)),
+		serverConfigSettingFromRegistryWithSourceV0(
+			envServerIdleSelfImprovementDisabledV0,
+			strconv.FormatBool(config.IdleSelfImprovementDisabled),
+			configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementDisabledV0),
+		),
 		serverIdleSelfImprovementAfterSettingV0(config),
-		serverConfigSettingFromRegistryV0(envServerIdleSelfImprovementTargetQueueV0, strconv.Itoa(config.IdleSelfImprovementTargetQueue)),
+		serverConfigSettingFromRegistryWithSourceV0(
+			envServerIdleSelfImprovementTargetQueueV0,
+			strconv.Itoa(config.IdleSelfImprovementTargetQueue),
+			configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementTargetQueueV0),
+		),
 		serverIdleSelfImprovementGoalFirstSettingV0(config, projectConfig),
-		serverConfigSettingFromRegistryV0(envServerIdleSelfImprovementFrozenTestsV0, strconv.FormatBool(config.IdleSelfImprovementFrozenTests)),
-		serverSensitiveConfigSettingFromRegistryV0(
+		serverConfigSettingFromRegistryWithSourceV0(
+			envServerIdleSelfImprovementFrozenTestsV0,
+			strconv.FormatBool(config.IdleSelfImprovementFrozenTests),
+			configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementFrozenTestsV0),
+		),
+		serverSensitiveConfigSettingFromRegistryWithSourceV0(
 			envServerIdleSelfImprovementProjectWorkDirV0,
 			configuredRefValueV0(config.IdleSelfImprovementProjectWorkDir, "idle-self-improvement-project-workdir-configured"),
+			configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementProjectWorkDirV0),
 		),
+		serverConfigSettingFromRegistryWithSourceV0(envServerIdleSelfImprovementProjectRefV0, config.IdleSelfImprovementProjectRef, configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementProjectRefV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envServerIdleSelfImprovementWorktreeRefV0, config.IdleSelfImprovementWorktreeRef, configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementWorktreeRefV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envServerIdleSelfImprovementBranchRefV0, config.IdleSelfImprovementBranchRef, configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementBranchRefV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envServerIdleSelfImprovementAreaV0, config.IdleSelfImprovementSuggestedArea, configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementAreaV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envServerIdleSelfImprovementWriteSetV0, strings.Join(config.IdleSelfImprovementWriteSet, ","), configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementWriteSetV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envServerIdleSelfImprovementRequiredTestsV0, strings.Join(config.IdleSelfImprovementRequiredTests, ","), configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementRequiredTestsV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envServerIdleSelfImprovementContextRefsV0, strings.Join(config.IdleSelfImprovementContextRefs, ","), configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementContextRefsV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envServerIdleSelfImprovementEvidenceRefsV0, strings.Join(config.IdleSelfImprovementEvidenceRefs, ","), configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementEvidenceRefsV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envServerIdleSelfImprovementAcceptanceV0, strings.Join(config.IdleSelfImprovementAcceptance, ","), configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementAcceptanceV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envServerIdleSelfImprovementCompactRulesV0, strings.Join(config.IdleSelfImprovementCompactRules, ","), configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementCompactRulesV0)),
+		serverPositiveConfigSettingFromConfigV0(config, envServerIdleSelfImprovementPriorityScoreV0, config.IdleSelfImprovementPriorityScore),
 		serverPositiveConfigSettingFromConfigV0(config, envServerIdleSelfImprovementMaxRequestsV0, config.IdleSelfImprovementMaxRequests),
-		serverConfigSettingFromRegistryV0(envServerIdleSelfImprovementDailyGoalBudgetV0, strconv.Itoa(config.IdleSelfImprovementBudget.MaxGoalsPerDay)),
-		serverConfigSettingFromRegistryV0(envServerIdleSelfImprovementDailyContextBudgetBytesV0, strconv.FormatInt(config.IdleSelfImprovementBudget.MaxContextBudgetBytesPerDay, 10)),
+		serverConfigSettingFromRegistryWithSourceV0(envServerIdleSelfImprovementDailyGoalBudgetV0, strconv.Itoa(config.IdleSelfImprovementBudget.MaxGoalsPerDay), configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementDailyGoalBudgetV0)),
+		serverConfigSettingFromRegistryWithSourceV0(envServerIdleSelfImprovementDailyContextBudgetBytesV0, strconv.FormatInt(config.IdleSelfImprovementBudget.MaxContextBudgetBytesPerDay, 10), configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementDailyContextBudgetBytesV0)),
 		serverConfigSettingFromRegistryV0(envSelfAuditBacklogEnabledV0, strconv.FormatBool(config.SelfAuditBacklogEnabled)),
 		serverConfigSettingFromRegistryWithSourceV0(
 			envServerDaemonLogMaxBytesV0,
@@ -385,9 +409,10 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 }
 
 func serverIdleSelfImprovementAfterSettingV0(config orquestaserver.ConfigV0) orquestaserver.ServerConfigSettingV0 {
-	setting := serverConfigSettingFromRegistryV0(
+	setting := serverConfigSettingFromRegistryWithSourceV0(
 		envServerIdleSelfImprovementAfterV0,
 		strconv.Itoa(int(config.IdleSelfImprovementAfter/time.Second)),
+		configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementAfterV0),
 	)
 	if serverIdleSelfImprovementAfterLegacyActiveV0() {
 		setting.Source = "legacy_alias"
@@ -404,8 +429,11 @@ func serverIdleSelfImprovementGoalFirstSettingV0(
 		strconv.FormatBool(config.IdleSelfImprovementGoalFirst),
 	)
 	if strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementGoalFirstV0)) == "" &&
+		!serverIdleProjectConfigHasValueForEnvKeyV0(projectConfig, envServerIdleSelfImprovementGoalFirstV0) &&
 		serverGoalBackendOperationalFromProjectConfigFileV0(projectConfig) {
 		setting.Source = serverGoalBackendDerivationSourceFromProjectConfigFileV0(projectConfig)
+	} else {
+		setting.Source = configSettingSourceFromConfigOrProjectConfigV0(config, envServerIdleSelfImprovementGoalFirstV0)
 	}
 	return setting
 }
@@ -477,6 +505,13 @@ func serverEffectiveConfigDiagnosticsFromConfigV0(projectConfig serverProjectCon
 		"codex_wave.*",
 		"evidence-ref-config-deprecated-env-override-codex-wave",
 		codexWaveEnvKeysV0()...,
+	)...)
+	diagnostics = append(diagnostics, serverDeprecatedEnvOverridesForProjectConfigV0(
+		projectConfig,
+		"server_idle",
+		"server_idle.*",
+		"evidence-ref-config-deprecated-env-override-server-idle",
+		serverIdleEnvKeysV0()...,
 	)...)
 	if !serverGoalBackendOperationalFromProjectConfigFileV0(projectConfig) &&
 		!boolEnvOrDefaultV0(envExternalWorkLegacyDirectorLoopV0, false) {

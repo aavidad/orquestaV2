@@ -432,6 +432,116 @@ func TestServerConfigFromEnvV0EnvExplicitoGanaGoalBackendFicheroCanonicoV0(t *te
 	}
 }
 
+func TestServerConfigFromEnvV0LeeServerIdleCanonicoYEnvDeprecatedOverrideV0(t *testing.T) {
+	projectDir := t.TempDir()
+	idleDir := filepath.Join(projectDir, "idle")
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envServerIdleSelfImprovementPriorityScoreV0, "88")
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"server_idle":{
+			"after_seconds":12,
+			"disabled":false,
+			"project_workdir":"` + filepath.ToSlash(idleDir) + `",
+			"project_ref":"project-ref-idle-file",
+			"worktree_ref":"worktree-ref-idle-file",
+			"branch_ref":"branch-ref-idle-file",
+			"area":"area-idle-file",
+			"write_set":["cmd/orquesta-server","modulos/orquesta-server"],
+			"required_tests":["go test ./cmd/orquesta-server"],
+			"context_refs":["context-ref-idle-file"],
+			"evidence_refs":["evidence-ref-idle-file"],
+			"acceptance":["idle acceptance"],
+			"goal_first_enabled":false,
+			"frozen_tests_enabled":true,
+			"compact_rules":["compact-rule-file"],
+			"priority_score":77,
+			"max_requests":4,
+			"target_queue":6,
+			"daily_goal_budget":3,
+			"daily_context_budget_bytes":12345
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.IdleSelfImprovementAfter != 12*time.Second ||
+		config.IdleSelfImprovementDisabled ||
+		config.IdleSelfImprovementProjectWorkDir != idleDir ||
+		config.IdleSelfImprovementProjectRef != "project-ref-idle-file" ||
+		config.IdleSelfImprovementWorktreeRef != "worktree-ref-idle-file" ||
+		config.IdleSelfImprovementBranchRef != "branch-ref-idle-file" ||
+		config.IdleSelfImprovementSuggestedArea != "area-idle-file" ||
+		config.IdleSelfImprovementGoalFirst ||
+		!config.IdleSelfImprovementFrozenTests ||
+		config.IdleSelfImprovementPriorityScore != 88 ||
+		config.IdleSelfImprovementMaxRequests != 4 ||
+		config.IdleSelfImprovementTargetQueue != 6 ||
+		config.IdleSelfImprovementBudget.MaxGoalsPerDay != 3 ||
+		config.IdleSelfImprovementBudget.MaxContextBudgetBytesPerDay != 12345 {
+		t.Fatalf("config idle=%+v budget=%+v", config, config.IdleSelfImprovementBudget)
+	}
+	if strings.Join(config.IdleSelfImprovementWriteSet, ",") != "cmd/orquesta-server,modulos/orquesta-server" ||
+		strings.Join(config.IdleSelfImprovementRequiredTests, ",") != "go test ./cmd/orquesta-server" ||
+		strings.Join(config.IdleSelfImprovementContextRefs, ",") != "context-ref-idle-file" ||
+		strings.Join(config.IdleSelfImprovementEvidenceRefs, ",") != "evidence-ref-idle-file" ||
+		strings.Join(config.IdleSelfImprovementAcceptance, ",") != "idle acceptance" ||
+		strings.Join(config.IdleSelfImprovementCompactRules, ",") != "compact-rule-file" {
+		t.Fatalf("idle slices write_set=%v required=%v context=%v evidence=%v acceptance=%v compact=%v",
+			config.IdleSelfImprovementWriteSet,
+			config.IdleSelfImprovementRequiredTests,
+			config.IdleSelfImprovementContextRefs,
+			config.IdleSelfImprovementEvidenceRefs,
+			config.IdleSelfImprovementAcceptance,
+			config.IdleSelfImprovementCompactRules)
+	}
+
+	settings := config.EffectiveConfig.Settings
+	for key, want := range map[string]string{
+		envServerIdleSelfImprovementAfterV0:                   "12",
+		envServerIdleSelfImprovementDisabledV0:                "false",
+		envServerIdleSelfImprovementProjectRefV0:              "project-ref-idle-file",
+		envServerIdleSelfImprovementWorktreeRefV0:             "worktree-ref-idle-file",
+		envServerIdleSelfImprovementBranchRefV0:               "branch-ref-idle-file",
+		envServerIdleSelfImprovementAreaV0:                    "area-idle-file",
+		envServerIdleSelfImprovementWriteSetV0:                "cmd/orquesta-server,modulos/orquesta-server",
+		envServerIdleSelfImprovementRequiredTestsV0:           "go test ./cmd/orquesta-server",
+		envServerIdleSelfImprovementContextRefsV0:             "context-ref-idle-file",
+		envServerIdleSelfImprovementEvidenceRefsV0:            "evidence-ref-idle-file",
+		envServerIdleSelfImprovementAcceptanceV0:              "idle acceptance",
+		envServerIdleSelfImprovementGoalFirstV0:               "false",
+		envServerIdleSelfImprovementFrozenTestsV0:             "true",
+		envServerIdleSelfImprovementCompactRulesV0:            "compact-rule-file",
+		envServerIdleSelfImprovementMaxRequestsV0:             "4",
+		envServerIdleSelfImprovementTargetQueueV0:             "6",
+		envServerIdleSelfImprovementDailyGoalBudgetV0:         "3",
+		envServerIdleSelfImprovementDailyContextBudgetBytesV0: "12345",
+	} {
+		setting := effectiveSettingForTestV0(settings, key)
+		if setting.Value != want || setting.Source != configSettingSourceConfigFileV0 {
+			t.Fatalf("%s setting=%+v want value=%q source=config_file", key, setting, want)
+		}
+	}
+	projectWorkdirSetting := effectiveSettingForTestV0(settings, envServerIdleSelfImprovementProjectWorkDirV0)
+	if projectWorkdirSetting.Value != "idle-self-improvement-project-workdir-configured" ||
+		projectWorkdirSetting.Source != configSettingSourceConfigFileV0 ||
+		!projectWorkdirSetting.Sensitive {
+		t.Fatalf("project workdir setting=%+v", projectWorkdirSetting)
+	}
+	priority := effectiveSettingForTestV0(settings, envServerIdleSelfImprovementPriorityScoreV0)
+	if priority.Value != "88" || priority.Source != "explicit" {
+		t.Fatalf("priority setting=%+v", priority)
+	}
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, "deprecated_env_used", envServerIdleSelfImprovementPriorityScoreV0, "server_idle.*") {
+		t.Fatalf("diagnostico deprecated server_idle ausente: %+v", config.EffectiveConfig.Diagnostics)
+	}
+}
+
 func TestServerConfigFromEnvV0ExternalWorkLegacyDirectorLoopPorDefectoFalseV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 

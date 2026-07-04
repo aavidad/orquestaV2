@@ -27,7 +27,8 @@ type serverProjectConfigFileV0 struct {
 	ServerHTTP           serverProjectConfigServerHTTPV0           `json:"server_http,omitempty"`
 	ServerLifecycle      serverProjectConfigServerLifecycleV0      `json:"server_lifecycle,omitempty"`
 	ServerSupervisor     serverProjectConfigServerSupervisorV0     `json:"server_supervisor,omitempty"`
-	ServerIdle           serverProjectConfigServerIdleV0           `json:"server_idle_self_improvement,omitempty"`
+	ServerIdle           serverProjectConfigServerIdleV0           `json:"server_idle,omitempty"`
+	ServerIdleLegacy     serverProjectConfigServerIdleV0           `json:"server_idle_self_improvement,omitempty"`
 	ServerResident       serverProjectConfigServerResidentV0       `json:"server_resident_director,omitempty"`
 	WorktreeSnapshot     serverProjectConfigWorktreeSnapshotV0     `json:"worktree_snapshot,omitempty"`
 	DaemonLogs           serverProjectConfigDaemonLogsV0           `json:"daemon_logs,omitempty"`
@@ -78,7 +79,26 @@ type serverProjectConfigServerSupervisorV0 struct {
 }
 
 type serverProjectConfigServerIdleV0 struct {
-	MaxRequests *int `json:"max_requests,omitempty"`
+	AfterSeconds            *int      `json:"after_seconds,omitempty"`
+	Disabled                *bool     `json:"disabled,omitempty"`
+	ProjectWorkDir          *string   `json:"project_workdir,omitempty"`
+	ProjectRef              *string   `json:"project_ref,omitempty"`
+	WorktreeRef             *string   `json:"worktree_ref,omitempty"`
+	BranchRef               *string   `json:"branch_ref,omitempty"`
+	Area                    *string   `json:"area,omitempty"`
+	WriteSet                *[]string `json:"write_set,omitempty"`
+	RequiredTests           *[]string `json:"required_tests,omitempty"`
+	ContextRefs             *[]string `json:"context_refs,omitempty"`
+	EvidenceRefs            *[]string `json:"evidence_refs,omitempty"`
+	Acceptance              *[]string `json:"acceptance,omitempty"`
+	GoalFirstEnabled        *bool     `json:"goal_first_enabled,omitempty"`
+	FrozenTestsEnabled      *bool     `json:"frozen_tests_enabled,omitempty"`
+	CompactRules            *[]string `json:"compact_rules,omitempty"`
+	PriorityScore           *int      `json:"priority_score,omitempty"`
+	MaxRequests             *int      `json:"max_requests,omitempty"`
+	TargetQueue             *int      `json:"target_queue,omitempty"`
+	DailyGoalBudget         *int      `json:"daily_goal_budget,omitempty"`
+	DailyContextBudgetBytes *int      `json:"daily_context_budget_bytes,omitempty"`
 }
 
 type serverProjectConfigServerResidentV0 struct {
@@ -552,7 +572,18 @@ func serverProjectConfigHasEffectiveValueForEnvKeyV0(config serverProjectConfigF
 	case envServerDrainMaxExternalWaitsV0:
 		return configIntPointerPositiveV0(config.ServerSupervisor.DrainMaxExternalWaits)
 	case envServerIdleSelfImprovementMaxRequestsV0:
-		return configIntPointerPositiveV0(config.ServerIdle.MaxRequests)
+		return serverIdleProjectConfigHasValueForEnvKeyV0(config, key)
+	case envServerIdleSelfImprovementAfterV0, envServerIdleSelfImprovementDisabledV0,
+		envServerIdleSelfImprovementProjectWorkDirV0, envServerIdleSelfImprovementProjectRefV0,
+		envServerIdleSelfImprovementWorktreeRefV0, envServerIdleSelfImprovementBranchRefV0,
+		envServerIdleSelfImprovementAreaV0, envServerIdleSelfImprovementWriteSetV0,
+		envServerIdleSelfImprovementRequiredTestsV0, envServerIdleSelfImprovementContextRefsV0,
+		envServerIdleSelfImprovementEvidenceRefsV0, envServerIdleSelfImprovementAcceptanceV0,
+		envServerIdleSelfImprovementGoalFirstV0, envServerIdleSelfImprovementFrozenTestsV0,
+		envServerIdleSelfImprovementCompactRulesV0, envServerIdleSelfImprovementPriorityScoreV0,
+		envServerIdleSelfImprovementTargetQueueV0, envServerIdleSelfImprovementDailyGoalBudgetV0,
+		envServerIdleSelfImprovementDailyContextBudgetBytesV0:
+		return serverIdleProjectConfigHasValueForEnvKeyV0(config, key)
 	case envServerResidentDirectorMaxActionsV0:
 		return configIntPointerPositiveV0(config.ServerResident.MaxActions)
 	case envWorktreeSnapshotMaxFilesV0:

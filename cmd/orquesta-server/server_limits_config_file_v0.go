@@ -77,7 +77,7 @@ func serverIdleSelfImprovementMaxRequestsFromProjectConfigFileV0(
 ) int {
 	return intProjectConfigOrEnvOrDefaultV0(
 		envServerIdleSelfImprovementMaxRequestsV0,
-		projectConfig.ServerIdle.MaxRequests,
+		firstIntPointerV0(projectConfig.ServerIdle.MaxRequests, projectConfig.ServerIdleLegacy.MaxRequests),
 		orquestaserver.DefaultIdleSelfImprovementMaxRequestsV0,
 	)
 }

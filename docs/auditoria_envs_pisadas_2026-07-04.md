@@ -678,3 +678,35 @@ Verificación:
   `go test -count=1 ./cmd/orquesta-server -run 'Test(CodexWaveConfigV0|OPESBridgeConfig|OPESDrainConfig|OPESBridgeLoopConfig|OPESSpeechSynthesis|ServerConfigFromEnvV0PublicaOPESSpeechSynthesisPreflightRedactadoV0)'`.
 - Requerida:
   `go test ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+## Actualización Codex 2026-07-05 ola 3 familias restantes
+
+TAREA-8.4 cierra la familia `server_idle` y verifica el estado ya presente de
+las otras tres familias del paquete:
+
+- `server_idle.*` cubre la familia `ORQUESTA_SERVER_IDLE_*`: 20 envs canónicas
+  `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_*` más el alias legacy
+  `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER`. Incluye espera, desactivación, refs,
+  write-set, required tests, contexto/evidencia, aceptación, goal-first, tests
+  congelados, reglas compactas, prioridad, límites de cola y presupuestos
+  diarios. `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER` sigue como alias legacy
+  específico de `after_seconds`.
+- `server_idle_self_improvement` se conserva como sección legacy de lectura
+  para no romper ficheros existentes, pero la sección canónica nueva es
+  `server_idle`.
+- `opes_registry_finalpkg.*` ya cubría las 15 envs de
+  `ORQUESTA_OPES_REGISTRY_FINALPKG_*`.
+- `codebase_broker.*` ya cubría las 10 envs de
+  `ORQUESTA_CODEBASE_BROKER_*`.
+- `domain_work.*` ya cubría las 9 envs de `ORQUESTA_DOMAIN_WORK_*` y
+  `ORQUESTA_DOMAIN_DELIVERY_LEDGER_PATH`.
+- Las envs explícitas siguen ganando como override deprecated; si coexisten
+  con valor de fichero, `effective_config` emite `deprecated_env_used` con
+  scope `server_idle`, `opes_registry_finalpkg`, `codebase_broker` o
+  `domain_work` según familia.
+
+Verificación:
+
+- Focal `TestServerConfigFromEnvV0LeeServerIdleCanonicoYEnvDeprecatedOverrideV0`.
+- Requerida de goal:
+  `go test ./cmd/orquesta-server ./modulos/orquesta-server`.

@@ -37,13 +37,10 @@ func serverConfigFromEnvWithProjectConfigPathV0(projectConfigPath string) (orque
 		return orquestaserver.ConfigV0{}, err
 	}
 	autoprogrammingGoalProgressPolicy := serverAutoprogrammingGoalProgressPolicyConfigFromProjectFileV0(projectConfig)
-	idleSelfImprovementProjectDir := absDirEnvOrDefaultV0(
-		envServerIdleSelfImprovementProjectWorkDirV0,
-		projectDir,
-	)
-	idleSelfImprovementAfterSeconds := idleSelfImprovementAfterSecondsFromEnvV0()
+	idleSelfImprovementProjectDir := serverIdleSelfImprovementProjectWorkDirFromProjectConfigFileV0(projectConfig, projectDir)
+	idleSelfImprovementAfterSeconds := serverIdleSelfImprovementAfterSecondsFromProjectConfigFileV0(projectConfig)
 	idleSelfImprovementIdleDisabled := idleSelfImprovementAfterSeconds == 0
-	idleSelfImprovementDisabled := boolEnvOrDefaultV0(envServerIdleSelfImprovementDisabledV0, false) ||
+	idleSelfImprovementDisabled := serverIdleSelfImprovementDisabledFromProjectConfigFileV0(projectConfig, false) ||
 		serverIdleSelfImprovementDisabledForOPESContextV0(
 			opesAutomationContext,
 			projectDir,
@@ -140,27 +137,27 @@ func serverConfigFromEnvWithProjectConfigPathV0(projectConfigPath string) (orque
 		IdleSelfImprovementAfter:         time.Duration(idleSelfImprovementAfterSeconds) * time.Second,
 		IdleSelfImprovementDisabled:      idleSelfImprovementDisabled,
 		IdleSelfImprovementIdleDisabled:  idleSelfImprovementIdleDisabled,
-		IdleSelfImprovementProjectRef:    envOrDefaultV0(envServerIdleSelfImprovementProjectRefV0, orquestaserver.DefaultIdleSelfImprovementProjectRefV0),
-		IdleSelfImprovementWorktreeRef:   envOrDefaultV0(envServerIdleSelfImprovementWorktreeRefV0, orquestaserver.DefaultIdleSelfImprovementWorktreeRefV0),
-		IdleSelfImprovementBranchRef:     envOrDefaultV0(envServerIdleSelfImprovementBranchRefV0, orquestaserver.DefaultIdleSelfImprovementBranchRefV0),
-		IdleSelfImprovementSuggestedArea: envOrDefaultV0(envServerIdleSelfImprovementAreaV0, orquestaserver.DefaultIdleSelfImprovementSuggestedAreaV0),
-		IdleSelfImprovementWriteSet:      csvEnvOrDefaultV0(envServerIdleSelfImprovementWriteSetV0, defaultIdleSelfImprovementWriteSetV0()),
-		IdleSelfImprovementRequiredTests: csvEnvOrDefaultV0(envServerIdleSelfImprovementRequiredTestsV0, []string{orquestaserver.DefaultIdleSelfImprovementRequiredTestV0}),
-		IdleSelfImprovementContextRefs:   csvEnvOrDefaultV0(envServerIdleSelfImprovementContextRefsV0, nil),
-		IdleSelfImprovementEvidenceRefs:  csvEnvOrDefaultV0(envServerIdleSelfImprovementEvidenceRefsV0, nil),
-		IdleSelfImprovementAcceptance:    csvEnvOrDefaultV0(envServerIdleSelfImprovementAcceptanceV0, defaultIdleSelfImprovementAcceptanceV0()),
-		IdleSelfImprovementGoalFirst:     idleSelfImprovementGoalFirstFromProjectConfigFileV0(projectConfig),
-		IdleSelfImprovementFrozenTests:   boolEnvOrDefaultV0(envServerIdleSelfImprovementFrozenTestsV0, false),
-		IdleSelfImprovementCompactRules: csvEnvOrDefaultV0(envServerIdleSelfImprovementCompactRulesV0, []string{
+		IdleSelfImprovementProjectRef:    serverIdleSelfImprovementStringFromProjectConfigFileV0(projectConfig, envServerIdleSelfImprovementProjectRefV0, orquestaserver.DefaultIdleSelfImprovementProjectRefV0),
+		IdleSelfImprovementWorktreeRef:   serverIdleSelfImprovementStringFromProjectConfigFileV0(projectConfig, envServerIdleSelfImprovementWorktreeRefV0, orquestaserver.DefaultIdleSelfImprovementWorktreeRefV0),
+		IdleSelfImprovementBranchRef:     serverIdleSelfImprovementStringFromProjectConfigFileV0(projectConfig, envServerIdleSelfImprovementBranchRefV0, orquestaserver.DefaultIdleSelfImprovementBranchRefV0),
+		IdleSelfImprovementSuggestedArea: serverIdleSelfImprovementStringFromProjectConfigFileV0(projectConfig, envServerIdleSelfImprovementAreaV0, orquestaserver.DefaultIdleSelfImprovementSuggestedAreaV0),
+		IdleSelfImprovementWriteSet:      serverIdleSelfImprovementStringSliceFromProjectConfigFileV0(projectConfig, envServerIdleSelfImprovementWriteSetV0, defaultIdleSelfImprovementWriteSetV0()),
+		IdleSelfImprovementRequiredTests: serverIdleSelfImprovementStringSliceFromProjectConfigFileV0(projectConfig, envServerIdleSelfImprovementRequiredTestsV0, []string{orquestaserver.DefaultIdleSelfImprovementRequiredTestV0}),
+		IdleSelfImprovementContextRefs:   serverIdleSelfImprovementStringSliceFromProjectConfigFileV0(projectConfig, envServerIdleSelfImprovementContextRefsV0, nil),
+		IdleSelfImprovementEvidenceRefs:  serverIdleSelfImprovementStringSliceFromProjectConfigFileV0(projectConfig, envServerIdleSelfImprovementEvidenceRefsV0, nil),
+		IdleSelfImprovementAcceptance:    serverIdleSelfImprovementStringSliceFromProjectConfigFileV0(projectConfig, envServerIdleSelfImprovementAcceptanceV0, defaultIdleSelfImprovementAcceptanceV0()),
+		IdleSelfImprovementGoalFirst:     serverIdleSelfImprovementGoalFirstFromProjectConfigFileV0(projectConfig),
+		IdleSelfImprovementFrozenTests:   serverIdleSelfImprovementFrozenTestsFromProjectConfigFileV0(projectConfig),
+		IdleSelfImprovementCompactRules: serverIdleSelfImprovementStringSliceFromProjectConfigFileV0(projectConfig, envServerIdleSelfImprovementCompactRulesV0, []string{
 			"comunicacion compacta",
 			"trabajo secundario: no bloquear ni mezclar con el trabajo principal",
 		}),
-		IdleSelfImprovementPriorityScore: intEnvOrDefaultV0(envServerIdleSelfImprovementPriorityScoreV0, orquestaserver.DefaultIdleSelfImprovementPriorityScoreV0),
+		IdleSelfImprovementPriorityScore: serverIdleSelfImprovementIntFromProjectConfigFileV0(projectConfig, envServerIdleSelfImprovementPriorityScoreV0, orquestaserver.DefaultIdleSelfImprovementPriorityScoreV0),
 		IdleSelfImprovementMaxRequests:   serverIdleSelfImprovementMaxRequestsFromProjectConfigFileV0(projectConfig),
-		IdleSelfImprovementTargetQueue:   intEnvOrDefaultV0(envServerIdleSelfImprovementTargetQueueV0, orquestaserver.DefaultIdleSelfImprovementTargetQueueV0),
+		IdleSelfImprovementTargetQueue:   serverIdleSelfImprovementIntFromProjectConfigFileV0(projectConfig, envServerIdleSelfImprovementTargetQueueV0, orquestaserver.DefaultIdleSelfImprovementTargetQueueV0),
 		IdleSelfImprovementBudget: orquestaautoprogramming.AutoprogrammingIdleSelfImprovementBudgetConfigV0{
-			MaxGoalsPerDay:              intEnvOrDefaultV0(envServerIdleSelfImprovementDailyGoalBudgetV0, 0),
-			MaxContextBudgetBytesPerDay: int64EnvOrDefaultV0(envServerIdleSelfImprovementDailyContextBudgetBytesV0, 0),
+			MaxGoalsPerDay:              serverIdleSelfImprovementIntFromProjectConfigFileV0(projectConfig, envServerIdleSelfImprovementDailyGoalBudgetV0, 0),
+			MaxContextBudgetBytesPerDay: int64(serverIdleSelfImprovementIntFromProjectConfigFileV0(projectConfig, envServerIdleSelfImprovementDailyContextBudgetBytesV0, 0)),
 		},
 		SelfAuditBacklogEnabled:       boolEnvOrDefaultV0(envSelfAuditBacklogEnabledV0, false),
 		GoalObserverEnabled:           goalObserverEnabled,

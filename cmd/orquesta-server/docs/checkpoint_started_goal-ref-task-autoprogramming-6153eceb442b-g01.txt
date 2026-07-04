@@ -1,0 +1,7 @@
+goal_ref: goal-ref-task-autoprogramming-6153eceb442b-g01
+source_task_ref: task-envs-ola3-familias-restantes
+request_ref: request-ref-remoto-envs-ola3-20260705-001
+scope: cmd/orquesta-server, modulos/orquesta-server, docs/auditoria_envs_pisadas_2026-07-04.md, docs/autoprogramacion_orquesta_pendientes_2026-05-23.md
+objective: migrate ORQUESTA_SERVER_IDLE_*, ORQUESTA_OPES_REGISTRY_*, ORQUESTA_CODEBASE_BROKER_* and ORQUESTA_DOMAIN_WORK_* env families to canonical orquesta.config.json keys while preserving deprecated env overrides with diagnostics.
+next_artifact: cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-6153eceb442b-g01.json
+evidence: checkpoint materializado antes de exploracion larga; orquesta.codebase.query.v0 no esta expuesto como recurso MCP en esta sesion, se usaran consultas rg acotadas sin arrancar indexadores propios.
