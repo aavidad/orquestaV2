@@ -16,19 +16,20 @@ import (
 )
 
 type serverShutdownClientResultV0 struct {
-	Estado                  string                             `json:"estado"`
-	Status                  string                             `json:"status"`
-	RecommendedAction       string                             `json:"recommended_action,omitempty"`
-	ShutdownReady           bool                               `json:"shutdown_ready"`
-	RunsRequested           int                                `json:"runs_requested"`
-	RunsStopped             int                                `json:"runs_stopped"`
-	AgentsInFlight          int                                `json:"agents_in_flight"`
-	CheckpointsPending      int                                `json:"checkpoints_pending"`
-	CheckpointAgentsPending int                                `json:"checkpoint_agents_pending"`
-	AsyncWorkActive         int                                `json:"shutdown_async_work_active,omitempty"`
-	ActiveWorkCount         int                                `json:"active_work_count,omitempty"`
-	ActiveWorkRefs          []string                           `json:"active_work_refs,omitempty"`
-	ActiveWorks             []serverShutdownClientActiveWorkV0 `json:"active_works,omitempty"`
+	Estado                  string                                `json:"estado"`
+	Status                  string                                `json:"status"`
+	RecommendedAction       string                                `json:"recommended_action,omitempty"`
+	ShutdownReady           bool                                  `json:"shutdown_ready"`
+	RunsRequested           int                                   `json:"runs_requested"`
+	RunsStopped             int                                   `json:"runs_stopped"`
+	AgentsInFlight          int                                   `json:"agents_in_flight"`
+	CheckpointsPending      int                                   `json:"checkpoints_pending"`
+	CheckpointAgentsPending int                                   `json:"checkpoint_agents_pending"`
+	AsyncWorkActive         int                                   `json:"shutdown_async_work_active,omitempty"`
+	ActiveWorkCount         int                                   `json:"active_work_count,omitempty"`
+	ActiveWorkRefs          []string                              `json:"active_work_refs,omitempty"`
+	ActiveWorks             []serverShutdownClientActiveWorkV0    `json:"active_works,omitempty"`
+	GoalActions             []orquestaserver.ShutdownGoalActionV0 `json:"goal_actions,omitempty"`
 }
 
 type serverShutdownClientActiveWorkV0 struct {
@@ -170,19 +171,77 @@ func readServerShutdownClientResponseBodyV0(response *http.Response) ([]byte, er
 
 func normalizeServerShutdownClientResultV0(result serverShutdownClientResultV0) serverShutdownClientResultV0 {
 	result.RecommendedAction = strings.TrimSpace(result.RecommendedAction)
-	activeWorkRefs := compactStringsV0(append(
-		append([]string(nil), result.ActiveWorkRefs...),
-		serverShutdownClientActiveWorkRefsV0(result.ActiveWorks)...,
-	))
+	result.GoalActions = shutdownClientBlockingGoalActionsV0(result.GoalActions)
+	activeWorkRefs := compactStringsV0(append(append([]string(nil), result.ActiveWorkRefs...), serverShutdownClientActiveWorkRefsV0(result.ActiveWorks)...))
+	goalActionRefs := serverShutdownClientGoalActionRefsV0(result.GoalActions)
+	activeWorkRefs = compactStringsV0(append(activeWorkRefs, goalActionRefs...))
 	result.ActiveWorkRefs = activeWorkRefs
 	if result.ActiveWorkCount <= 0 {
 		if len(result.ActiveWorks) > 0 {
 			result.ActiveWorkCount = len(result.ActiveWorks)
+		} else if len(result.GoalActions) > 0 {
+			result.ActiveWorkCount = len(result.GoalActions)
 		} else if len(activeWorkRefs) > 0 {
 			result.ActiveWorkCount = len(activeWorkRefs)
 		}
 	}
 	return result
+}
+
+func shutdownClientBlockingGoalActionsV0(
+	actions []orquestaserver.ShutdownGoalActionV0,
+) []orquestaserver.ShutdownGoalActionV0 {
+	out := make([]orquestaserver.ShutdownGoalActionV0, 0, len(actions))
+	seen := map[string]struct{}{}
+	for _, action := range actions {
+		action.Kind = strings.TrimSpace(action.Kind)
+		action.RunRef = strings.TrimSpace(action.RunRef)
+		action.WorkRef = strings.TrimSpace(action.WorkRef)
+		action.ExternalWorkRef = strings.TrimSpace(action.ExternalWorkRef)
+		action.Status = strings.TrimSpace(action.Status)
+		action.ActionTaken = strings.TrimSpace(action.ActionTaken)
+		switch action.ActionTaken {
+		case "", "cleanup_completed":
+			continue
+		}
+		if action.Kind == "" && action.RunRef == "" && action.WorkRef == "" && action.ExternalWorkRef == "" {
+			continue
+		}
+		key := strings.Join([]string{action.Kind, action.RunRef, action.WorkRef, action.ExternalWorkRef, action.Status, action.ActionTaken}, "\x00")
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, action)
+	}
+	if out == nil {
+		return []orquestaserver.ShutdownGoalActionV0{}
+	}
+	return out
+}
+
+func serverShutdownClientGoalActionRefsV0(
+	actions []orquestaserver.ShutdownGoalActionV0,
+) []string {
+	out := make([]string, 0, len(actions)*5)
+	for _, action := range actions {
+		prefix := "shutdown-goal-action"
+		if kind := safeShutdownClientRefPartV0(action.Kind); kind != "" {
+			prefix += "-" + kind
+		}
+		for _, ref := range []string{
+			action.RunRef,
+			action.WorkRef,
+			action.ExternalWorkRef,
+			action.Status,
+			action.ActionTaken,
+		} {
+			if safe := safeShutdownClientRefPartV0(ref); safe != "" {
+				out = append(out, prefix+"-"+safe)
+			}
+		}
+	}
+	return compactStringsV0(out)
 }
 
 func serverShutdownClientActiveWorkRefsV0(works []serverShutdownClientActiveWorkV0) []string {

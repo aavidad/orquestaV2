@@ -1229,3 +1229,50 @@ Evidencia ejecutada:
 Pendiente real: `BUG-165` no se declara cerrado total sin un smoke real amplio
 de `status/observe` lento con backend/proveedor y coordinacion completa con
 `runs/control`/cleanup.
+
+## Continuacion Codex 2026-07-04 noche 3
+
+Avance adicional sobre `BUG-ORQ-20260701-065` / `BUG-076`:
+
+- El contrato de shutdown ya no deja `goal_actions` como informacion interna de
+  `orquesta-server-shutdown`: MCP/HTTP las serializan, `active_works` conserva
+  `action_taken`/`action_evidence_refs` y el status publico del servidor
+  persiste `shutdown_goal_actions`.
+- `orquesta-server stop` normaliza `goal_actions` en refs compactas y las trata
+  como bloqueo operativo si `action_taken` no es `cleanup_completed`. Una
+  respuesta `ready/shutdown_ready=true` con acciones pendientes ya no permite
+  enviar la senal final.
+- `shutdown_freeze` parsea `goal_actions` desde el body HTTP upstream, las
+  conserva en `StateV0`/status publico y fuerza `stop_pending` si quedan
+  acciones bloqueantes aunque no haya `active_work_count` ni `active_work_refs`.
+
+Archivos tocados en este avance:
+
+- `modulos/orquesta-server/status_tracker_idle_shutdown_v0.go`
+- `modulos/orquesta-server/state_v0.go`
+- `modulos/orquesta-server/status_public_v0.go`
+- `modulos/orquesta-server/status_tracker_v0.go`
+- `modulos/orquesta-server/status_tracker_restore_v0.go`
+- `modulos/orquesta-server/status_process_stale_v0.go`
+- `modulos/orquesta-server/shutdown_freeze_v0.go`
+- `modulos/orquesta-server/shutdown_freeze_v0_test.go`
+- `cmd/orquesta-server/shutdown_client.go`
+- `cmd/orquesta-server/shutdown_client_readiness_v0.go`
+- `cmd/orquesta-server/shutdown_client_v0_test.go`
+- `modulos/orquesta-mcp/server_shutdown_tool_v0.go`
+- `modulos/orquesta-mcp/server_shutdown_tool_v0_test.go`
+- `modulos/orquesta-mcp/server_shutdown_http_v0_test.go`
+- `modulos/orquesta-mcp/docs/contratos.md`
+- `modulos/orquesta-mcp/docs/pruebas.md`
+- `modulos/orquesta-server-shutdown/docs/contratos.md`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Evidencia ejecutada:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'TestRequestServerShutdownV0ReadyNoSaltaGoalActionsSinActiveWorkV0|TestNormalizeServerShutdownClientResultV0ConvierteActiveWorksEnRefs|TestShutdownClientReadyV0'`
+- `go test -count=1 ./modulos/orquesta-server -run 'TestShutdownProjectionFromHTTPV0ReadyConGoalActionsQuedaStopPendingV0|TestServerPublicStatusV0ExponeShutdownGoalActionsV0'`
+- `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPServerShutdown(DescriptorV0DeclaraEvidenciaV0|ToolExecutorV0ExponeGoalsActivos|HTTPHandlerV0BackendStillRunningDevuelveConflict)'`
+
+Pendiente real: `BUG-065/076` sigue abierto para smoke real/corte externo
+amplio y coordinacion automatica completa backend/checkpoint/stop/cancel/wait.

@@ -123,6 +123,35 @@ func TestRequestServerShutdownV0ReadyNoSaltaActiveWorksEstructuradosV0(t *testin
 	}
 }
 
+func TestRequestServerShutdownV0ReadyNoSaltaGoalActionsSinActiveWorkV0(t *testing.T) {
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v0/server/shutdown" {
+			t.Fatalf("request inesperada: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(serverShutdownClientResultV0{
+			Estado:        "ok",
+			Status:        "ready",
+			ShutdownReady: true,
+			GoalActions: []orquestaserver.ShutdownGoalActionV0{{
+				Kind:        "goal_backend",
+				WorkRef:     "goal-ref-action-ready-001",
+				ActionTaken: "cleanup_required",
+			}},
+		})
+	}))
+	defer server.Close()
+
+	err := requestServerShutdownV0(strings.TrimPrefix(server.URL, "http://"), serverShutdownClientOptionsV0{})
+
+	if err == nil ||
+		!strings.Contains(err.Error(), "shutdown_not_ready status=ready") ||
+		!strings.Contains(err.Error(), "active_work=1") ||
+		!strings.Contains(err.Error(), "shutdown-goal-action-goal-backend-goal-ref-action-ready-001") {
+		t.Fatalf("ready con goal_actions sin active_work no debe cerrar signal: %v", err)
+	}
+}
+
 func TestParseStopOptionsV0ExigeRazonParaForce(t *testing.T) {
 	_, err := parseStopOptionsV0([]string{"--force"}, bytes.NewBuffer(nil))
 

@@ -26,6 +26,11 @@ Invariantes:
 - `forced=true` permite drenar agentes sin checkpoint previo, pero no puede
   declarar `shutdown_ready` si el lector de trabajo activo informa un backend
   Goal vivo (`backend_still_running`);
+- el resultado expone `goal_actions` tipadas para el handoff operativo de
+  goal-first/backend (`observe_active_goal`, `wait_checkpoint`,
+  `stop_requested_wait`, `forced_stop_requested`, `cleanup_required`,
+  `cleanup_requested`, `cleanup_attempted_wait`, `cleanup_completed`) con refs
+  y evidencias compactas;
 - `cleanup_goal_backends=true` habilita una limpieza gobernada de backends Goal
   propios antes de decidir `shutdown_ready`: solo se ejecuta si todo el trabajo
   activo observado son backends Goal residuales, nunca si queda un `goal_first`

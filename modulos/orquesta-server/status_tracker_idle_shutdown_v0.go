@@ -19,7 +19,19 @@ type ShutdownProjectionV0 struct {
 	AsyncWorkActive         int
 	ActiveWorkCount         int
 	ActiveWorkRefs          []string
+	GoalActions             []ShutdownGoalActionV0
 	EvidenceRefs            []string
+}
+
+type ShutdownGoalActionV0 struct {
+	Kind               string   `json:"kind,omitempty"`
+	RunRef             string   `json:"run_ref,omitempty"`
+	WorkRef            string   `json:"work_ref,omitempty"`
+	ExternalWorkRef    string   `json:"external_work_ref,omitempty"`
+	Status             string   `json:"status,omitempty"`
+	ActionTaken        string   `json:"action_taken"`
+	ActionEvidenceRefs []string `json:"action_evidence_refs,omitempty"`
+	EvidenceRefs       []string `json:"evidence_refs,omitempty"`
 }
 
 func (tracker *StatusTrackerV0) MarkShutdownRequestedV0(now time.Time) StateV0 {
@@ -57,11 +69,53 @@ func (tracker *StatusTrackerV0) MarkShutdownResultV0(
 		state.ShutdownAsyncWorkActive = nonNegativeServerIntV0(result.AsyncWorkActive)
 		state.ShutdownActiveWorkCount = nonNegativeServerIntV0(result.ActiveWorkCount)
 		state.ShutdownActiveWorkRefs = compactServerStringsV0(result.ActiveWorkRefs)
+		state.ShutdownGoalActions = compactShutdownGoalActionsV0(result.GoalActions)
 		state.SupervisorFrozen = keepFrozen
 		if keepFrozen {
 			state.SupervisorTickActive = false
 		}
 	})
+}
+
+func compactShutdownGoalActionsV0(actions []ShutdownGoalActionV0) []ShutdownGoalActionV0 {
+	out := make([]ShutdownGoalActionV0, 0, len(actions))
+	seen := map[string]struct{}{}
+	for _, action := range actions {
+		action = normalizeShutdownGoalActionV0(action)
+		if action.ActionTaken == "" ||
+			(action.Kind == "" && action.RunRef == "" && action.WorkRef == "" && action.ExternalWorkRef == "") {
+			continue
+		}
+		key := strings.Join([]string{
+			action.Kind,
+			action.RunRef,
+			action.WorkRef,
+			action.ExternalWorkRef,
+			action.Status,
+			action.ActionTaken,
+		}, "\x00")
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, action)
+	}
+	if out == nil {
+		return []ShutdownGoalActionV0{}
+	}
+	return out
+}
+
+func normalizeShutdownGoalActionV0(action ShutdownGoalActionV0) ShutdownGoalActionV0 {
+	action.Kind = strings.TrimSpace(action.Kind)
+	action.RunRef = strings.TrimSpace(action.RunRef)
+	action.WorkRef = strings.TrimSpace(action.WorkRef)
+	action.ExternalWorkRef = strings.TrimSpace(action.ExternalWorkRef)
+	action.Status = strings.TrimSpace(action.Status)
+	action.ActionTaken = strings.TrimSpace(action.ActionTaken)
+	action.ActionEvidenceRefs = compactServerStringsV0(action.ActionEvidenceRefs)
+	action.EvidenceRefs = compactServerStringsV0(action.EvidenceRefs)
+	return action
 }
 
 func (tracker *StatusTrackerV0) MarkIdleSelfImprovementPreparedV0(

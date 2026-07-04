@@ -45,34 +45,48 @@ type MCPServerShutdownToolInputV0 struct {
 }
 
 type MCPServerShutdownToolResultV0 struct {
-	Estado                     string                    `json:"estado"`
-	RequestID                  string                    `json:"request_id,omitempty"`
-	CorrelationID              string                    `json:"correlation_id,omitempty"`
-	Status                     string                    `json:"status,omitempty"`
-	RecommendedAction          string                    `json:"recommended_action,omitempty"`
-	ShutdownReady              bool                      `json:"shutdown_ready"`
-	ExitPending                bool                      `json:"exit_pending,omitempty"`
-	PID                        int                       `json:"pid,omitempty"`
-	RunsRequested              int                       `json:"runs_requested"`
-	RunsStopped                int                       `json:"runs_stopped"`
-	AgentsInFlight             int                       `json:"agents_in_flight"`
-	CheckpointsPending         int                       `json:"checkpoints_pending"`
-	CheckpointAgentsPending    int                       `json:"checkpoint_agents_pending,omitempty"`
-	CheckpointDeadlinesExpired int                       `json:"checkpoint_deadlines_expired,omitempty"`
-	ActiveWorkCount            int                       `json:"active_work_count,omitempty"`
-	ActiveWorks                []MCPServerShutdownWorkV0 `json:"active_works,omitempty"`
-	Runs                       []MCPServerShutdownRunV0  `json:"runs,omitempty"`
-	EvidenceRefs               []string                  `json:"evidence_refs,omitempty"`
-	Errores                    []MCPValidationIssueV0    `json:"errores_publicos,omitempty"`
+	Estado                     string                          `json:"estado"`
+	RequestID                  string                          `json:"request_id,omitempty"`
+	CorrelationID              string                          `json:"correlation_id,omitempty"`
+	Status                     string                          `json:"status,omitempty"`
+	RecommendedAction          string                          `json:"recommended_action,omitempty"`
+	ShutdownReady              bool                            `json:"shutdown_ready"`
+	ExitPending                bool                            `json:"exit_pending,omitempty"`
+	PID                        int                             `json:"pid,omitempty"`
+	RunsRequested              int                             `json:"runs_requested"`
+	RunsStopped                int                             `json:"runs_stopped"`
+	AgentsInFlight             int                             `json:"agents_in_flight"`
+	CheckpointsPending         int                             `json:"checkpoints_pending"`
+	CheckpointAgentsPending    int                             `json:"checkpoint_agents_pending,omitempty"`
+	CheckpointDeadlinesExpired int                             `json:"checkpoint_deadlines_expired,omitempty"`
+	ActiveWorkCount            int                             `json:"active_work_count,omitempty"`
+	ActiveWorks                []MCPServerShutdownWorkV0       `json:"active_works,omitempty"`
+	GoalActions                []MCPServerShutdownGoalActionV0 `json:"goal_actions,omitempty"`
+	Runs                       []MCPServerShutdownRunV0        `json:"runs,omitempty"`
+	EvidenceRefs               []string                        `json:"evidence_refs,omitempty"`
+	Errores                    []MCPValidationIssueV0          `json:"errores_publicos,omitempty"`
 }
 
 type MCPServerShutdownWorkV0 struct {
-	Kind            string   `json:"kind,omitempty"`
-	RunRef          string   `json:"run_ref,omitempty"`
-	WorkRef         string   `json:"work_ref,omitempty"`
-	ExternalWorkRef string   `json:"external_work_ref,omitempty"`
-	Status          string   `json:"status,omitempty"`
-	EvidenceRefs    []string `json:"evidence_refs,omitempty"`
+	Kind               string   `json:"kind,omitempty"`
+	RunRef             string   `json:"run_ref,omitempty"`
+	WorkRef            string   `json:"work_ref,omitempty"`
+	ExternalWorkRef    string   `json:"external_work_ref,omitempty"`
+	Status             string   `json:"status,omitempty"`
+	ActionTaken        string   `json:"action_taken,omitempty"`
+	ActionEvidenceRefs []string `json:"action_evidence_refs,omitempty"`
+	EvidenceRefs       []string `json:"evidence_refs,omitempty"`
+}
+
+type MCPServerShutdownGoalActionV0 struct {
+	Kind               string   `json:"kind,omitempty"`
+	RunRef             string   `json:"run_ref,omitempty"`
+	WorkRef            string   `json:"work_ref,omitempty"`
+	ExternalWorkRef    string   `json:"external_work_ref,omitempty"`
+	Status             string   `json:"status,omitempty"`
+	ActionTaken        string   `json:"action_taken"`
+	ActionEvidenceRefs []string `json:"action_evidence_refs,omitempty"`
+	EvidenceRefs       []string `json:"evidence_refs,omitempty"`
 }
 
 type MCPServerShutdownRunV0 struct {
@@ -98,7 +112,7 @@ func MCPServerShutdownDescriptorV0() MCPServerShutdownToolDescriptorV0 {
 		Name:        MCPServerShutdownToolNameV0,
 		Version:     MCPServerShutdownToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,queue_ref?,app_refs?,forced?,cleanup_goal_backends?,checkpoint_deadline_at?,max_ticks?,max_runs_per_tick?,max_executions?,requested_by?,reason?,idempotency_key?,evidence_refs?}",
-		Output:      "ok:{status=ready|waiting_drain|waiting_checkpoint|stop_pending|active_goals_present|backend_still_running,recommended_action?,shutdown_ready,exit_pending?,pid?,runs_requested,runs_stopped,agents_in_flight,checkpoints_pending,checkpoint_agents_pending,checkpoint_deadlines_expired,active_work_count,active_works?[]{kind,run_ref?,work_ref?,external_work_ref?,status?,evidence_refs?},runs?[]{run_ref,control_status?,checkpoint_required?,checkpoint_ref?,pending_checkpoint_agent_refs?,checkpoint_evidence_refs?,ready},evidence_refs?}|error:{errores_publicos,recommended_action?,evidence_refs?}",
+		Output:      "ok:{status=ready|waiting_drain|waiting_checkpoint|stop_pending|active_goals_present|backend_still_running,recommended_action?,shutdown_ready,exit_pending?,pid?,runs_requested,runs_stopped,agents_in_flight,checkpoints_pending,checkpoint_agents_pending,checkpoint_deadlines_expired,active_work_count,active_works?[]{kind,run_ref?,work_ref?,external_work_ref?,status?,action_taken?,action_evidence_refs?,evidence_refs?},goal_actions?[]{kind,run_ref?,work_ref?,external_work_ref?,status?,action_taken,action_evidence_refs?,evidence_refs?},runs?[]{run_ref,control_status?,checkpoint_required?,checkpoint_ref?,pending_checkpoint_agent_refs?,checkpoint_evidence_refs?,ready},evidence_refs?}|error:{errores_publicos,recommended_action?,evidence_refs?}",
 		ResourceURI: MCPServerShutdownResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -140,6 +154,7 @@ func newMCPServerShutdownResultV0(
 		estado = MCPServerShutdownEstadoErrorV0
 	}
 	activeWorks := mcpServerShutdownActiveWorksV0(result.ActiveWorks)
+	goalActions := mcpServerShutdownGoalActionsV0(result.GoalActions)
 	return MCPServerShutdownToolResultV0{
 		Estado:                     estado,
 		RequestID:                  strings.TrimSpace(input.RequestID),
@@ -157,9 +172,13 @@ func newMCPServerShutdownResultV0(
 		CheckpointDeadlinesExpired: result.CheckpointDeadlinesExpired,
 		ActiveWorkCount:            result.ActiveWorkCount,
 		ActiveWorks:                activeWorks,
+		GoalActions:                goalActions,
 		Runs:                       mcpServerShutdownRunsV0(result.Runs),
 		EvidenceRefs: compactStringsMCPV0(append(
-			append([]string(nil), result.EvidenceRefs...),
+			append(
+				append([]string(nil), result.EvidenceRefs...),
+				mcpServerShutdownGoalActionEvidenceRefsV0(goalActions)...,
+			),
 			mcpServerShutdownActiveWorkEvidenceRefsV0(activeWorks)...,
 		)),
 		Errores: serverShutdownErrorsV0(result.Status),
@@ -243,16 +262,46 @@ func mcpServerShutdownActiveWorksV0(
 	out := make([]MCPServerShutdownWorkV0, 0, len(works))
 	for _, work := range works {
 		out = append(out, MCPServerShutdownWorkV0{
-			Kind:            strings.TrimSpace(work.Kind),
-			RunRef:          strings.TrimSpace(work.RunRef),
-			WorkRef:         strings.TrimSpace(work.WorkRef),
-			ExternalWorkRef: strings.TrimSpace(work.ExternalWorkRef),
-			Status:          strings.TrimSpace(work.Status),
-			EvidenceRefs:    compactStringsMCPV0(work.EvidenceRefs),
+			Kind:               strings.TrimSpace(work.Kind),
+			RunRef:             strings.TrimSpace(work.RunRef),
+			WorkRef:            strings.TrimSpace(work.WorkRef),
+			ExternalWorkRef:    strings.TrimSpace(work.ExternalWorkRef),
+			Status:             strings.TrimSpace(work.Status),
+			ActionTaken:        strings.TrimSpace(work.ActionTaken),
+			ActionEvidenceRefs: compactStringsMCPV0(work.ActionEvidenceRefs),
+			EvidenceRefs: compactStringsMCPV0(append(
+				append([]string(nil), work.EvidenceRefs...),
+				work.ActionEvidenceRefs...,
+			)),
 		})
 	}
 	if out == nil {
 		return []MCPServerShutdownWorkV0{}
+	}
+	return out
+}
+
+func mcpServerShutdownGoalActionsV0(
+	actions []orquestaservershutdown.ServerShutdownGoalActionV0,
+) []MCPServerShutdownGoalActionV0 {
+	out := make([]MCPServerShutdownGoalActionV0, 0, len(actions))
+	for _, action := range actions {
+		out = append(out, MCPServerShutdownGoalActionV0{
+			Kind:               strings.TrimSpace(action.Kind),
+			RunRef:             strings.TrimSpace(action.RunRef),
+			WorkRef:            strings.TrimSpace(action.WorkRef),
+			ExternalWorkRef:    strings.TrimSpace(action.ExternalWorkRef),
+			Status:             strings.TrimSpace(action.Status),
+			ActionTaken:        strings.TrimSpace(action.ActionTaken),
+			ActionEvidenceRefs: compactStringsMCPV0(action.ActionEvidenceRefs),
+			EvidenceRefs: compactStringsMCPV0(append(
+				append([]string(nil), action.EvidenceRefs...),
+				action.ActionEvidenceRefs...,
+			)),
+		})
+	}
+	if out == nil {
+		return []MCPServerShutdownGoalActionV0{}
 	}
 	return out
 }
@@ -263,6 +312,18 @@ func mcpServerShutdownActiveWorkEvidenceRefsV0(
 	out := []string{}
 	for _, work := range works {
 		out = append(out, work.EvidenceRefs...)
+		out = append(out, work.ActionEvidenceRefs...)
+	}
+	return compactStringsMCPV0(out)
+}
+
+func mcpServerShutdownGoalActionEvidenceRefsV0(
+	actions []MCPServerShutdownGoalActionV0,
+) []string {
+	out := []string{}
+	for _, action := range actions {
+		out = append(out, action.EvidenceRefs...)
+		out = append(out, action.ActionEvidenceRefs...)
 	}
 	return compactStringsMCPV0(out)
 }

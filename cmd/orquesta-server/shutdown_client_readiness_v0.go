@@ -17,7 +17,9 @@ func shutdownClientResultCanWaitV0(result serverShutdownClientResultV0) bool {
 			result.CheckpointAgentsPending == 0 &&
 			result.AsyncWorkActive == 0 &&
 			(result.RunsRequested <= 0 || result.RunsStopped >= result.RunsRequested) &&
-			(result.ActiveWorkCount > 0 || len(compactStringsV0(result.ActiveWorkRefs)) > 0)
+			(result.ActiveWorkCount > 0 ||
+				len(compactStringsV0(result.ActiveWorkRefs)) > 0 ||
+				len(shutdownClientBlockingGoalActionsV0(result.GoalActions)) > 0)
 	default:
 		return false
 	}
@@ -53,7 +55,8 @@ func shutdownClientResultHasNoBlockingWorkV0(result serverShutdownClientResultV0
 		result.CheckpointAgentsPending == 0 &&
 		result.AsyncWorkActive == 0 &&
 		result.ActiveWorkCount == 0 &&
-		len(compactStringsV0(result.ActiveWorkRefs)) == 0
+		len(compactStringsV0(result.ActiveWorkRefs)) == 0 &&
+		len(shutdownClientBlockingGoalActionsV0(result.GoalActions)) == 0
 }
 
 func shutdownPublicStatusHasNoBlockingWorkV0(status orquestaserver.ServerPublicStatusV0) bool {
@@ -62,11 +65,12 @@ func shutdownPublicStatusHasNoBlockingWorkV0(status orquestaserver.ServerPublicS
 		status.ShutdownCheckpointAgentsPending == 0 &&
 		status.ShutdownAsyncWorkActive == 0 &&
 		status.ShutdownActiveWorkCount == 0 &&
-		len(compactStringsV0(status.ShutdownActiveWorkRefs)) == 0
+		len(compactStringsV0(status.ShutdownActiveWorkRefs)) == 0 &&
+		len(shutdownClientBlockingGoalActionsV0(status.ShutdownGoalActions)) == 0
 }
 
 func serverShutdownClientResultFromStatusV0(status orquestaserver.ServerPublicStatusV0) serverShutdownClientResultV0 {
-	return serverShutdownClientResultV0{
+	return normalizeServerShutdownClientResultV0(serverShutdownClientResultV0{
 		Estado:                  "ok",
 		Status:                  strings.TrimSpace(status.ShutdownStatus),
 		ShutdownReady:           status.ShutdownReady,
@@ -78,7 +82,8 @@ func serverShutdownClientResultFromStatusV0(status orquestaserver.ServerPublicSt
 		AsyncWorkActive:         status.ShutdownAsyncWorkActive,
 		ActiveWorkCount:         status.ShutdownActiveWorkCount,
 		ActiveWorkRefs:          compactStringsV0(status.ShutdownActiveWorkRefs),
-	}
+		GoalActions:             shutdownClientBlockingGoalActionsV0(status.ShutdownGoalActions),
+	})
 }
 
 func shutdownClientNotReadyErrorV0(result serverShutdownClientResultV0) error {
@@ -183,7 +188,8 @@ func shutdownPublicStatusHasBlockingWorkV0(status orquestaserver.ServerPublicSta
 		status.ShutdownCheckpointAgentsPending > 0 ||
 		status.ShutdownAsyncWorkActive > 0 ||
 		status.ShutdownActiveWorkCount > 0 ||
-		len(compactStringsV0(status.ShutdownActiveWorkRefs)) > 0
+		len(compactStringsV0(status.ShutdownActiveWorkRefs)) > 0 ||
+		len(shutdownClientBlockingGoalActionsV0(status.ShutdownGoalActions)) > 0
 }
 
 func shutdownPublicStatusHasLiveWorkConflictV0(status orquestaserver.ServerPublicStatusV0) bool {

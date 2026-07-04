@@ -120,6 +120,13 @@ func TestMCPServerShutdownHTTPHandlerV0BackendStillRunningDevuelveConflict(t *te
 				WorkRef: "goal-backend-running-http",
 				Status:  "backend_still_running",
 			}},
+			GoalActions: []MCPServerShutdownGoalActionV0{{
+				Kind:        "goal_backend",
+				RunRef:      "run-backend-running-http",
+				WorkRef:     "goal-backend-running-http",
+				Status:      "backend_still_running",
+				ActionTaken: "cleanup_required",
+			}},
 		},
 	}
 	body := bytes.NewBuffer(nil)
@@ -144,7 +151,9 @@ func TestMCPServerShutdownHTTPHandlerV0BackendStillRunningDevuelveConflict(t *te
 		result.Status != "backend_still_running" ||
 		result.ActiveWorkCount != 1 ||
 		len(result.ActiveWorks) != 1 ||
-		result.ActiveWorks[0].Kind != "goal_backend" {
+		result.ActiveWorks[0].Kind != "goal_backend" ||
+		len(result.GoalActions) != 1 ||
+		result.GoalActions[0].ActionTaken != "cleanup_required" {
 		t.Fatalf("result=%+v", result)
 	}
 }

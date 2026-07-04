@@ -581,6 +581,52 @@ func TestShutdownProjectionFromHTTPV0ReadyConActiveWorkRefsQuedaStopPendingV0(t 
 	}
 }
 
+func TestShutdownProjectionFromHTTPV0ReadyConGoalActionsQuedaStopPendingV0(t *testing.T) {
+	body := []byte(`{
+		"estado":"ok",
+		"status":"ready",
+		"shutdown_ready":true,
+		"goal_actions":[{
+			"kind":"goal_backend",
+			"work_ref":"goal-ref-action-freeze-001",
+			"status":"backend_still_running",
+			"action_taken":"cleanup_required",
+			"action_evidence_refs":["evidence-ref-shutdown-goal-action-cleanup-required"]
+		}]
+	}`)
+
+	projection, keepFrozen := shutdownProjectionFromHTTPV0(http.StatusOK, body)
+
+	if !keepFrozen ||
+		projection.Ready ||
+		projection.Status != "stop_pending" ||
+		len(projection.GoalActions) != 1 ||
+		projection.GoalActions[0].ActionTaken != "cleanup_required" ||
+		len(blockingShutdownGoalActionsV0(projection.GoalActions)) != 1 {
+		t.Fatalf("projection=%+v keep_frozen=%v", projection, keepFrozen)
+	}
+}
+
+func TestServerPublicStatusV0ExponeShutdownGoalActionsV0(t *testing.T) {
+	status := NewServerPublicStatusV0(StateV0{
+		Status:             "running",
+		ShutdownInProgress: true,
+		ShutdownStatus:     "backend_still_running",
+		ShutdownGoalActions: []ShutdownGoalActionV0{{
+			Kind:        "goal_backend",
+			WorkRef:     "goal-ref-public-action-001",
+			Status:      "backend_still_running",
+			ActionTaken: "cleanup_required",
+		}},
+	})
+
+	if len(status.ShutdownGoalActions) != 1 ||
+		status.ShutdownGoalActions[0].ActionTaken != "cleanup_required" ||
+		status.ShutdownGoalActions[0].WorkRef != "goal-ref-public-action-001" {
+		t.Fatalf("status no expone goal_actions: %+v", status)
+	}
+}
+
 func TestRuntimeV0ServerShutdownSnapshotPrevioSobreviveRespuestaSinCuerpoV0(t *testing.T) {
 	stateDir := t.TempDir()
 	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

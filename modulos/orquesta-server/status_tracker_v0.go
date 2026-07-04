@@ -91,6 +91,7 @@ func (tracker *StatusTrackerV0) MarkStartupReadyV0(
 		state.ShutdownCheckpointAgentsPending = 0
 		state.ShutdownActiveWorkCount = 0
 		state.ShutdownActiveWorkRefs = nil
+		state.ShutdownGoalActions = nil
 		state.ShutdownAsyncWorkActive = 0
 		state.ShutdownStopTimeoutAt = ""
 		if state.IdleSelfImprovementReason == "shutdown_in_progress" {

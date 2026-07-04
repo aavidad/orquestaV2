@@ -36,6 +36,7 @@ func MarkServerProcessStaleStateV0(state StateV0, now time.Time) StateV0 {
 	state.ShutdownCheckpointAgentsPending = 0
 	state.ShutdownActiveWorkCount = 0
 	state.ShutdownActiveWorkRefs = nil
+	state.ShutdownGoalActions = nil
 	state.ShutdownAsyncWorkActive = 0
 	state.ShutdownStopTimeoutAt = ""
 	state.LastError = "server_process_not_alive"
@@ -88,6 +89,7 @@ func stoppedShutdownActiveProjectionCleanV0(state StateV0) bool {
 		state.ShutdownHTTPStatus == 0 &&
 		state.ShutdownActiveWorkCount == 0 &&
 		len(state.ShutdownActiveWorkRefs) == 0 &&
+		len(state.ShutdownGoalActions) == 0 &&
 		state.ShutdownAsyncWorkActive == 0 &&
 		state.ShutdownStopTimeoutAt == ""
 }
@@ -100,6 +102,7 @@ func clearStoppedShutdownActiveProjectionV0(state *StateV0) {
 	state.ShutdownHTTPStatus = 0
 	state.ShutdownActiveWorkCount = 0
 	state.ShutdownActiveWorkRefs = nil
+	state.ShutdownGoalActions = nil
 	state.ShutdownAsyncWorkActive = 0
 	state.ShutdownStopTimeoutAt = ""
 }

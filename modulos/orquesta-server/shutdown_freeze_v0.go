@@ -27,6 +27,7 @@ type serverShutdownHTTPProjectionV0 struct {
 	ActiveWorkCount         int                                  `json:"active_work_count,omitempty"`
 	ActiveWorkRefs          []string                             `json:"active_work_refs,omitempty"`
 	ActiveWorks             []serverShutdownHTTPWorkProjectionV0 `json:"active_works,omitempty"`
+	GoalActions             []ShutdownGoalActionV0               `json:"goal_actions,omitempty"`
 	EvidenceRefs            []string                             `json:"evidence_refs,omitempty"`
 }
 
@@ -134,11 +135,17 @@ func (runtime *RuntimeV0) shutdownProjectionWithPreviousSnapshotV0(
 		projection.ActiveWorkCount = state.ShutdownActiveWorkCount
 		projection.ActiveWorkRefs = compactServerStringsV0(state.ShutdownActiveWorkRefs)
 	}
+	if len(projection.GoalActions) == 0 && len(state.ShutdownGoalActions) > 0 {
+		projection.GoalActions = compactShutdownGoalActionsV0(state.ShutdownGoalActions)
+	}
 	if projection.AsyncWorkActive <= 0 && state.ShutdownAsyncWorkActive > 0 {
 		projection.AsyncWorkActive = state.ShutdownAsyncWorkActive
 	}
 	if strings.TrimSpace(projection.Status) == "http_status" &&
-		(projection.ActiveWorkCount > 0 || len(projection.ActiveWorkRefs) > 0 || projection.AsyncWorkActive > 0) {
+		(projection.ActiveWorkCount > 0 ||
+			len(projection.ActiveWorkRefs) > 0 ||
+			len(blockingShutdownGoalActionsV0(projection.GoalActions)) > 0 ||
+			projection.AsyncWorkActive > 0) {
 		projection.Status = firstNonEmptyShutdownFreezeV0(state.ShutdownStatus, projection.Status)
 	}
 	return projection
@@ -155,6 +162,7 @@ func shutdownProjectionHasBlockingWorkV0(projection ShutdownProjectionV0) bool {
 		projection.AsyncWorkActive > 0 ||
 		projection.ActiveWorkCount > 0 ||
 		len(projection.ActiveWorkRefs) > 0 ||
+		len(blockingShutdownGoalActionsV0(projection.GoalActions)) > 0 ||
 		(projection.RunsRequested > 0 && projection.RunsStopped < projection.RunsRequested)
 }
 
@@ -166,6 +174,23 @@ func shutdownProjectionHasCleanupEvidenceV0(projection ShutdownProjectionV0) boo
 		}
 	}
 	return false
+}
+
+func blockingShutdownGoalActionsV0(actions []ShutdownGoalActionV0) []ShutdownGoalActionV0 {
+	actions = compactShutdownGoalActionsV0(actions)
+	out := make([]ShutdownGoalActionV0, 0, len(actions))
+	for _, action := range actions {
+		switch strings.TrimSpace(action.ActionTaken) {
+		case "", "cleanup_completed":
+			continue
+		default:
+			out = append(out, action)
+		}
+	}
+	if out == nil {
+		return []ShutdownGoalActionV0{}
+	}
+	return out
 }
 
 func (runtime *RuntimeV0) requestShutdownReadyV0() {
@@ -242,6 +267,7 @@ func shutdownProjectionFromHTTPV0(statusCode int, body []byte) (ShutdownProjecti
 			shutdownProjectionDirectActiveWorkRefsV0(payload.ActiveWorkRefs),
 			shutdownProjectionActiveWorkRefsV0(payload.ActiveWorks)...,
 		)),
+		GoalActions:  compactShutdownGoalActionsV0(payload.GoalActions),
 		EvidenceRefs: compactServerStringsV0(payload.EvidenceRefs),
 	}
 	if projection.ActiveWorkCount <= 0 && len(payload.ActiveWorks) > 0 {

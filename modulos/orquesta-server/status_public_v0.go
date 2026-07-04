@@ -70,6 +70,7 @@ type ServerPublicStatusV0 struct {
 	ShutdownCheckpointAgentsPending       int                                                                        `json:"shutdown_checkpoint_agents_pending,omitempty"`
 	ShutdownActiveWorkCount               int                                                                        `json:"shutdown_active_work_count,omitempty"`
 	ShutdownActiveWorkRefs                []string                                                                   `json:"shutdown_active_work_refs,omitempty"`
+	ShutdownGoalActions                   []ShutdownGoalActionV0                                                     `json:"shutdown_goal_actions,omitempty"`
 	ShutdownAsyncWorkActive               int                                                                        `json:"shutdown_async_work_active,omitempty"`
 	ShutdownStopTimeoutAt                 string                                                                     `json:"shutdown_stop_timeout_at,omitempty"`
 	ShutdownSignalName                    string                                                                     `json:"shutdown_signal_name,omitempty"`
@@ -230,6 +231,7 @@ func NewServerPublicStatusV0(state StateV0) ServerPublicStatusV0 {
 		ShutdownCheckpointAgentsPending:       state.ShutdownCheckpointAgentsPending,
 		ShutdownActiveWorkCount:               state.ShutdownActiveWorkCount,
 		ShutdownActiveWorkRefs:                compactServerStringsV0(state.ShutdownActiveWorkRefs),
+		ShutdownGoalActions:                   compactShutdownGoalActionsV0(state.ShutdownGoalActions),
 		ShutdownAsyncWorkActive:               state.ShutdownAsyncWorkActive,
 		ShutdownStopTimeoutAt:                 state.ShutdownStopTimeoutAt,
 		ShutdownSignalName:                    state.ShutdownSignalName,

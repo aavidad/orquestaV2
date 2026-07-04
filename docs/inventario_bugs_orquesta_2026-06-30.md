@@ -30,12 +30,14 @@ antes de su cierre posterior:
 - Checkpoint de mantenimiento `task-ref-doc-cleanup-inventario-20260704`:
   alcance limitado a marcar supersedencias/estado vigente en este inventario,
   sin borrar historia ni cambiar el conteo de bugs vivos por texto antiguo.
-- `BUG-ORQ-20260701-065` sigue abierto, pero reducido por `67dd7fa9`: shutdown
-  ya expone `goal_actions` tipadas para active work goal-first/backend
-  (`wait_checkpoint`, `forced_stop_requested`, `cleanup_required`,
-  `cleanup_requested`, `cleanup_completed`) y revalida active work antes de
-  publicar ready. Pendiente: smoke real/corte externo amplio y coordinacion
-  automatica completa backend/checkpoint/stop/cancel/wait.
+- `BUG-ORQ-20260701-065` sigue abierto, pero reducido por `67dd7fa9` y el
+  avance Codex 2026-07-04 noche 3: shutdown expone `goal_actions` tipadas para
+  active work goal-first/backend (`wait_checkpoint`, `forced_stop_requested`,
+  `cleanup_required`, `cleanup_requested`, `cleanup_completed`), las conserva en
+  MCP/HTTP/status/CLI, las trata como bloqueo operativo si no estan resueltas y
+  revalida active work antes de publicar ready. Pendiente: smoke real/corte
+  externo amplio y coordinacion automatica completa
+  backend/checkpoint/stop/cancel/wait.
 - `BUG-ORQ-20260704-166` queda cerrado funcionalmente por `ff620ecf` y
   `0e0dcedc`, incluyendo el ajuste posterior de `.gocache-local`, para la causa
   observada: el escaneo de

@@ -30,7 +30,8 @@ func TestMCPServerShutdownDescriptorV0DeclaraEvidenciaV0(t *testing.T) {
 		!strings.Contains(descriptor.Output, "active_goals_present") ||
 		!strings.Contains(descriptor.Output, "backend_still_running") ||
 		!strings.Contains(descriptor.Output, "checkpoints_pending") ||
-		!strings.Contains(descriptor.Output, "active_works?[]{kind,run_ref?,work_ref?,external_work_ref?,status?,evidence_refs?}") ||
+		!strings.Contains(descriptor.Output, "active_works?[]{kind,run_ref?,work_ref?,external_work_ref?,status?,action_taken?,action_evidence_refs?,evidence_refs?}") ||
+		!strings.Contains(descriptor.Output, "goal_actions?[]{kind,run_ref?,work_ref?,external_work_ref?,status?,action_taken,action_evidence_refs?,evidence_refs?}") ||
 		!strings.Contains(descriptor.Output, "runs?[]{run_ref,control_status?,checkpoint_required?,checkpoint_ref?,pending_checkpoint_agent_refs?,checkpoint_evidence_refs?,ready}") {
 		t.Fatalf("descriptor shutdown debe declarar evidencia en entrada y salida: %+v", descriptor)
 	}
@@ -216,7 +217,12 @@ func TestMCPServerShutdownToolExecutorV0ExponeGoalsActivos(t *testing.T) {
 		len(result.ActiveWorks) != 1 ||
 		result.ActiveWorks[0].RunRef != "run-ref-goal-active-001" ||
 		result.ActiveWorks[0].ExternalWorkRef != "external-goal-ref-active-001" ||
+		result.ActiveWorks[0].ActionTaken != orquestaservershutdown.ServerShutdownGoalActionObserveActiveV0 ||
+		len(result.GoalActions) != 1 ||
+		result.GoalActions[0].ActionTaken != orquestaservershutdown.ServerShutdownGoalActionObserveActiveV0 ||
+		result.GoalActions[0].RunRef != "run-ref-goal-active-001" ||
 		!containsStringMCPTestV0(result.EvidenceRefs, "goal-state-ref-active-001") ||
+		!containsStringMCPTestV0(result.EvidenceRefs, "evidence-ref-shutdown-goal-action-observe-active") ||
 		control.stop.RunRef != "" {
 		t.Fatalf("result=%+v stop=%+v", result, control.stop)
 	}
