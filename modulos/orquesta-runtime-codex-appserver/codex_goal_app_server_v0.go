@@ -18,6 +18,8 @@ const (
 	codexGoalBackendAppServerProxyV0      = "app_server_proxy"
 	codexGoalBackendAppServerTmuxV0       = "app_server_tmux"
 	codexAppServerGoalObjectiveMaxRunesV0 = 4000
+
+	codexAppServerTurnStartRuntimeContractHeaderV0 = "Contrato runtime Orquesta para este turn/start:"
 )
 
 type serverCodexUnavailableGoalBackendV0 struct {
@@ -691,13 +693,60 @@ func (backend serverCodexAppServerGoalBackendV0) turnStartParamsV0(
 	return serverCodexAppServerTurnStartParamsV0{
 		ThreadID:        threadID,
 		CWD:             strings.TrimSpace(backend.CWD),
-		InputText:       packet.Prompt,
+		InputText:       codexAppServerTurnStartInputTextV0(packet),
 		ClientMessageID: packet.GoalRef,
 		Model:           strings.TrimSpace(backend.Model),
 		Effort:          strings.TrimSpace(backend.ReasoningEffort),
 		ApprovalPolicy:  strings.TrimSpace(backend.ApprovalPolicy),
 		ServiceTier:     strings.TrimSpace(backend.ServiceTier),
 	}
+}
+
+func codexAppServerTurnStartInputTextV0(packet orquestaruntimecodexgoal.CodexGoalStartPacketV0) string {
+	base := strings.TrimSpace(packet.Prompt)
+	if base == "" {
+		base = strings.TrimSpace(packet.Objective)
+	}
+	if strings.Contains(base, codexAppServerTurnStartRuntimeContractHeaderV0) {
+		return base
+	}
+	contract := codexAppServerTurnStartRuntimeContractV0(packet)
+	if base == "" {
+		return contract
+	}
+	return base + "\n\n" + contract
+}
+
+func codexAppServerTurnStartRuntimeContractV0(packet orquestaruntimecodexgoal.CodexGoalStartPacketV0) string {
+	directionContract := packet.DirectionContract
+	checkpointFile := strings.TrimSpace(directionContract.EarlyCheckpointFile)
+	if checkpointFile == "" {
+		checkpointFile = "checkpoint_started.txt"
+	}
+	maxTextBytes := directionContract.ToolOutputPolicy.MaxTextBytes
+	if maxTextBytes <= 0 {
+		maxTextBytes = orquestaruntimecodexgoal.CodexGoalToolOutputMaxBytesV0
+	}
+	hints := compactServerStackStringsV0(directionContract.ToolOutputPolicy.BoundedCommandHints)
+	if len(hints) == 0 {
+		hints = []string{"head", "tail", "sed -n", "rg --max-count", "rg --files | head"}
+	}
+	var b strings.Builder
+	b.WriteString(codexAppServerTurnStartRuntimeContractHeaderV0)
+	b.WriteByte('\n')
+	b.WriteString("- Antes de exploracion larga o comandos costosos, materializa ")
+	b.WriteString(checkpointFile)
+	b.WriteString(" dentro del write-set autorizado cuando exista; luego declaralo como artifact_paths/materialized_artifacts/evidence_refs.\n")
+	b.WriteString("- No pegues salidas largas de comandos, busquedas, dumps, logs, binarios ni base64 en la conversacion; max_text_bytes=")
+	b.WriteString(fmt.Sprintf("%d", maxTextBytes))
+	b.WriteString(" y thread_read_max_bytes=256 KiB.\n")
+	b.WriteString("- Usa comandos acotados como ")
+	b.WriteString(strings.Join(hints, ", "))
+	b.WriteString("; si una salida no cabe compacta, guardala como artefacto/evidencia dentro del write-set y resume ruta/ref.\n")
+	b.WriteString("- Manten el ACK/final breve y cierra con ")
+	b.WriteString(orquestaruntimecodexgoal.CodexGoalResultMarkerV0)
+	b.WriteString(" seguido de JSON compacto.")
+	return b.String()
 }
 
 func codexAppServerStartReceiptV0(

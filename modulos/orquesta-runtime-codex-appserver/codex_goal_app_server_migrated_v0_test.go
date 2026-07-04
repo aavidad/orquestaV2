@@ -55,6 +55,55 @@ func TestServerCodexAppServerGoalBackendV0LanzaThreadGoalYTurnMigradoV0(t *testi
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0TurnStartInyectaContratoSalidaCompactaV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-compacto-001"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-goal-compacto-001", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-goal-compacto-001", Status: "inProgress"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol:       protocol,
+		Sandbox:        "workspace-write",
+		ApprovalPolicy: "never",
+	}
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef:   "goal-ref-compacto-001",
+		Objective: "hacer una migracion acotada",
+		Prompt:    "prompt operativo minimo",
+		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
+			RequireEarlyCheckpoint: true,
+			EarlyCheckpointFile:    "checkpoint_started.txt",
+			ToolOutputPolicy: orquestaruntimecodexgoal.CodexGoalToolOutputPolicyV0{
+				MaxTextBytes:           orquestaruntimecodexgoal.CodexGoalToolOutputMaxBytesV0,
+				RequireBoundedCommands: true,
+				BoundedCommandHints:    []string{"rg --max-count", "sed -n"},
+			},
+		},
+	}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	input := protocol.turnParams.InputText
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		!containsStringMigratedTestV0(protocol.calls, "turn/start") ||
+		!strings.Contains(input, "prompt operativo minimo") ||
+		!strings.Contains(input, codexAppServerTurnStartRuntimeContractHeaderV0) ||
+		!strings.Contains(input, "checkpoint_started.txt") ||
+		!strings.Contains(input, "max_text_bytes=16384") ||
+		!strings.Contains(input, "thread_read_max_bytes=256 KiB") ||
+		!strings.Contains(input, "rg --max-count") ||
+		!strings.Contains(input, orquestaruntimecodexgoal.CodexGoalResultMarkerV0) {
+		t.Fatalf("receipt=%+v input=%q calls=%+v", receipt, input, protocol.calls)
+	}
+	if strings.Contains(protocol.startParams.CWD, "prompt operativo minimo") ||
+		strings.Contains(protocol.startParams.Model, "prompt operativo minimo") ||
+		strings.Contains(protocol.startParams.Sandbox, "prompt operativo minimo") {
+		t.Fatalf("thread/start no debe transportar prompt en campos de arranque: %+v", protocol.startParams)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0StopForcedBloqueaGoalYApagaBackendV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		goal: serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-stop-forced-001", Status: "blocked"},

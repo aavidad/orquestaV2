@@ -1406,3 +1406,44 @@ Evidencia ejecutada:
 Pendiente real: `BUG-065` sigue abierto para smoke real amplio y coordinacion
 automatica completa backend/checkpoint/stop/cancel/wait tras cortes externos o
 manuales.
+
+## Continuacion Codex 2026-07-04 noche 8
+
+Avance adicional sobre `BUG-ORQ-20260701-079`:
+
+- `serverCodexAppServerGoalBackendV0.turnStartParamsV0` ya no copia
+  `packet.Prompt` sin refuerzo al `turn/start`.
+- Antes de llamar al provider, el input efectivo inyecta un contrato runtime
+  con checkpoint temprano dentro del write-set, no pegar salidas largas,
+  `max_text_bytes`, `thread_read_max_bytes=256 KiB`, comandos acotados,
+  evidencia durable y final/ACK compacto.
+- El contrato se deduplica si ya esta presente y usa defaults seguros si un
+  packet legacy no trae `DirectionContract`.
+- Un subagente reviso el runtime app-server: `turnStartParamsV0` es el unico
+  punto donde `packet.Prompt` alimenta `turn/start`; WebSocket y command
+  protocol consumen el mismo `params.toJSONV0()`.
+
+Archivos tocados en este avance:
+
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_v0.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_migrated_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Evidencia ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0(TurnStartInyectaContratoSalidaCompacta|LanzaThreadGoalYTurnMigrado)V0'`
+
+Pendiente real: `BUG-079` sigue abierto para enforcement duro del
+proveedor/runtime antes de ejecutar herramientas y smoke real largo que confirme
+checkpoint temprano sin consumo gigante previo.
+
+Revision adicional sobre scanner idle/T295:
+
+- La lectura vigente del inventario marca `BUG-ORQ-20260704-169` cerrado por
+  `6fe19d06`: `Dependencias: ninguna` ya no bloquea una tarea ejecutable ni
+  cede el ciclo al scanner.
+- Riesgo residual documentado: si un scanner futuro deja solo `## Escaneo
+  backlog ...` y no materializa/actualiza secciones `## Txx` pendientes, el
+  planner no tendra tarea ejecutable. Eso debe reabrirse como regresion nueva
+  del contrato scanner -> `Txx pendiente`, no como cierre de T295.
