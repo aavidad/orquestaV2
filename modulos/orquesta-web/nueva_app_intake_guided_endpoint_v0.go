@@ -29,6 +29,7 @@ type WebNuevaAppIntakeGuidedRequestV0 struct {
 	ActionIDs     []string                    `json:"action_ids,omitempty"`
 	AnswerField   string                      `json:"answer_field,omitempty"`
 	Answer        string                      `json:"answer,omitempty"`
+	WizardAnswers []WizardAnswerV0            `json:"wizard_answers,omitempty"`
 	Session       *WebNuevaAppIntakeSessionV0 `json:"session,omitempty"`
 }
 
@@ -38,6 +39,7 @@ type WebNuevaAppIntakeGuidedResponseV0 struct {
 	Warnings        []WebNuevaAppIntakeWarningV0  `json:"warnings,omitempty"`
 	Turn            WebNuevaAppIntakeGuidedTurnV0 `json:"turn"`
 	Session         WebNuevaAppIntakeSessionV0    `json:"session"`
+	Wizard          WizardTurnResultV0            `json:"wizard"`
 }
 
 type WebNuevaAppIntakeWarningV0 struct {
@@ -135,12 +137,19 @@ func (handler NuevaAppIntakeGuidedHTTPHandlerV0) NewResponseV0(
 	for _, actionID := range append([]string{request.ActionID}, request.ActionIDs...) {
 		session = ApplyWebNuevaAppIntakeGuidedActionV0(session, actionID)
 	}
+	wizard := NewWebNuevaAppWizardTurnResultV0(session)
+	if len(request.WizardAnswers) > 0 {
+		var applied WizardTurnResultV0
+		session, applied = ApplyWebNuevaAppWizardAnswersV0(session, request.WizardAnswers)
+		wizard = applied
+	}
 	return WebNuevaAppIntakeGuidedResponseV0{
 		SchemaVersion:   WebNuevaAppIntakeGuidedResponseSchemaV0,
 		AssistantStatus: assistantStatus,
 		Warnings:        warnings,
 		Turn:            turn,
 		Session:         session,
+		Wizard:          wizard,
 	}
 }
 

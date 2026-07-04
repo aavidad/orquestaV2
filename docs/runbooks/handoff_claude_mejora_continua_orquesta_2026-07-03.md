@@ -858,3 +858,41 @@ ahi los tests focales que su version no cubra y despues borrar la rama.
 Pilot t297 limpiado (server+tmux); goal habia alcanzado result terminal.
 Falta del diseno: G2 (tool MCP + render web completo) y G3 (catalogo i18n en
 completo), segun docs/diseno_wizard_programacion_2026-07-04.md.
+
+## Actualizacion Codex 2026-07-04 tarde 4
+
+Continuacion de TAREA-7/7b tras revisar el pilot t297 y la implementacion
+principal.
+
+Integrado:
+
+- Nucleo web del wizard en `modulos/orquesta-web/nueva_app_wizard_*`:
+  preguntas ricas, opciones con recomendacion, contraste usuario vs
+  recomendacion, defaults de ingenieria y aceptacion automatica de
+  recomendaciones.
+- Endpoint guided: `WebNuevaAppIntakeGuidedRequestV0` acepta
+  `wizard_answers []WizardAnswerV0` y la respuesta devuelve `wizard` con
+  decisiones/contrastes del turno aplicado.
+- i18n: catalogos es/en y `nueva_app_i18n_keys_v0.go` incluyen todas las claves
+  nuevas generadas por agenda, pagos, mapas, storage, mobile, deploy y usuarios
+  compartidos. Se anadio test exacto por locale para evitar fallback silencioso.
+- Riesgo corregido: `wizard-r5-integracion-gobierno` queda como `question_ref`
+  estable; el indice de integracion permanece en `field`, evitando claves
+  dinamicas `...-0`, `...-1`, etc.
+- `docs/diseno_wizard_programacion_2026-07-04.md` actualizado: ya no declara
+  "NO implementado"; queda como implementacion parcial verificada.
+
+Verificado hasta ahora:
+
+- `go test -count=1 ./modulos/orquesta-web -run 'TestWizard|TestNuevaAppIntakeGuidedResponseV0IncluyeWizardRicoV0|TestNuevaAppIntakeGuidedResponseV0AplicaWizardAnswersV0|TestNuevaAppI18nCatalogV0CatalogosCubrenClavesRequeridas'`
+- `go test -count=1 ./modulos/orquesta-web`
+- `go test -count=1 ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`
+- `git diff --check`
+- `go test -count=1 ./...`
+
+Pendiente real para Claude si retoma:
+
+- Tool MCP equivalente `orquesta.nueva_app.wizard.v0`.
+- Render web usable del turno: radios/opciones, recomendacion visible,
+  contraste y panel de defaults.
+- Commit y push de este corte si la sesion se cierra desde Codex.

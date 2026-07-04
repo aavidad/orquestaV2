@@ -2382,3 +2382,56 @@ No sobrecerrar:
   lento y coordinacion automatica completa backend/checkpoint/stop/cancel/wait.
 - `BUG-058/066` siguen abiertos para lifecycle OPES end-to-end con instancia
   temporal y external-work real.
+
+## Continuacion Codex 2026-07-04 tarde 4
+
+TAREA-7/7b wizard de programacion conversacional: integrado el nucleo web y
+corregidos los huecos detectados por revision paralela de subagente.
+
+Hecho:
+
+- `orquesta-web` tiene tipos puros de wizard, motor de huecos R1-R8,
+  defaults de ingenieria y aceptacion automatica de recomendaciones.
+- El caso canonico `"quiero una app para una agenda"` pregunta por movil/PC,
+  personal/compartido e integracion de agenda Google/Microsoft/CalDAV, y llega
+  a spec valido en <=6 turnos con recomendaciones.
+- El endpoint guided devuelve `wizard` y acepta `wizard_answers`, manteniendo
+  `Contrasts` si el usuario elige una opcion distinta de la recomendada.
+- Se corrigio un riesgo estructural: la pregunta de gobierno de integracion ya
+  no genera claves i18n dinamicas por indice; el `question_ref` es estable y el
+  indice queda solo en `field`.
+- Catalogos es/en y `NuevaAppI18nRequiredKeysV0` cubren las claves nuevas;
+  test exacto por locale recorre agenda, pagos, mapas, uso compartido, mobile,
+  storage, integracion y deploy incompatible.
+- `docs/diseno_wizard_programacion_2026-07-04.md` deja de declarar
+  falsamente "NO implementado" y marca estado parcial verificado.
+
+Archivos tocados:
+
+- `modulos/orquesta-web/nueva_app_wizard_types_v0.go`
+- `modulos/orquesta-web/nueva_app_wizard_defaults_v0.go`
+- `modulos/orquesta-web/nueva_app_wizard_gaps_v0.go`
+- `modulos/orquesta-web/nueva_app_wizard_turn_v0.go`
+- `modulos/orquesta-web/nueva_app_wizard_turn_v0_test.go`
+- `modulos/orquesta-web/nueva_app_intake_guided_endpoint_v0.go`
+- `modulos/orquesta-web/nueva_app_i18n_es_v0.go`
+- `modulos/orquesta-web/nueva_app_i18n_en_v0.go`
+- `modulos/orquesta-web/nueva_app_i18n_keys_v0.go`
+- `docs/diseno_wizard_programacion_2026-07-04.md`
+- `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-web -run 'TestWizard|TestNuevaAppIntakeGuidedResponseV0IncluyeWizardRicoV0|TestNuevaAppIntakeGuidedResponseV0AplicaWizardAnswersV0|TestNuevaAppI18nCatalogV0CatalogosCubrenClavesRequeridas'`
+- `go test -count=1 ./modulos/orquesta-web`
+- `go test -count=1 ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`
+- `git diff --check`
+- `go test -count=1 ./...`
+
+No sobrecerrar:
+
+- Falta tool MCP equivalente `orquesta.nueva_app.wizard.v0`.
+- Falta render web completo de preguntas/opciones/recomendacion/contraste.
+- El pilot t297 queda como contexto historico; la version canonica es la del
+  repo principal.

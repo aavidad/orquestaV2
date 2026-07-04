@@ -1,0 +1,226 @@
+package orquestaweb
+
+import (
+	"strings"
+	"testing"
+
+	orquestafactory "orquesta/modulos/orquesta-factory"
+)
+
+func TestWizardAgendaDesdeSoloObjetivoV0(t *testing.T) {
+	session := NewWebNuevaAppIntakeSessionV0("session-wizard-agenda", "", "", "")
+	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{
+		Field: "objetivo",
+		Value: "quiero una app para una agenda",
+	})
+
+	allQuestions := webNuevaAppWizardAllGapQuestionsV0(session.Form)
+
+	if !hasWizardQuestionRefV0(allQuestions, "wizard-r2-plataformas") ||
+		!hasWizardQuestionOptionV0(allQuestions, "wizard-r2-plataformas", "web_mobile") ||
+		!hasWizardQuestionRefV0(allQuestions, "wizard-r1-uso-personal-compartido") ||
+		!hasWizardQuestionOptionV0(allQuestions, "wizard-r1-uso-personal-compartido", "compartir_auth_simple") ||
+		!hasWizardQuestionRefV0(allQuestions, "wizard-r3-integracion-agenda") ||
+		!hasWizardQuestionOptionV0(allQuestions, "wizard-r3-integracion-agenda", "calendar_google_workspace") ||
+		!hasWizardQuestionOptionV0(allQuestions, "wizard-r3-integracion-agenda", "calendar_microsoft_365") ||
+		!hasWizardQuestionOptionV0(allQuestions, "wizard-r3-integracion-agenda", "calendar_caldav") {
+		t.Fatalf("preguntas agenda incompletas: %+v", allQuestions)
+	}
+
+	session, turns := AcceptWebNuevaAppWizardRecommendationsV0(session, 6)
+
+	if len(turns) == 0 || len(turns) > 6 {
+		t.Fatalf("turns=%d", len(turns))
+	}
+	final := NewWebNuevaAppWizardTurnResultV0(session)
+	if !final.LaunchReady || !final.SpecComplete || final.SpecPreview == nil {
+		t.Fatalf("final no listo: %+v", final)
+	}
+	if issues := orquestafactory.ValidateAppSpecRequestV0(*final.SpecPreview); len(issues) != 0 {
+		t.Fatalf("spec final invalida: %+v\n%+v", issues, *final.SpecPreview)
+	}
+	if session.Form.TipoApp != "web" ||
+		!stringSliceHasV0(session.Form.Plataformas, "web") ||
+		!stringSliceHasV0(session.Form.Plataformas, "mobile") ||
+		len(session.Form.Integraciones) == 0 ||
+		session.Form.Integraciones[0].Tipo != "calendar" ||
+		session.Form.Integraciones[0].Auth == "" ||
+		session.Form.Integraciones[0].Criticidad == "" {
+		t.Fatalf("session agenda incompleta: %+v", session.Form)
+	}
+	if !stringSliceHasV0(final.SpecPreview.PreferenciasTecnicas.Preferencias, "hexagonal_puertos_adaptadores") ||
+		!stringSliceHasV0(final.SpecPreview.PreferenciasTecnicas.Preferencias, "logging_estructurado") ||
+		final.SpecPreview.I18N.Enabled == nil ||
+		!*final.SpecPreview.I18N.Enabled ||
+		final.SpecPreview.Calidad.Pruebas != "alta" ||
+		final.SpecPreview.Calidad.Observabilidad == nil ||
+		!*final.SpecPreview.Calidad.Observabilidad ||
+		final.SpecPreview.Documentacion.Desarrollo == nil ||
+		!*final.SpecPreview.Documentacion.Desarrollo {
+		t.Fatalf("defaults de ingenieria no aplicados: %+v", *final.SpecPreview)
+	}
+}
+
+func TestWizardHuecosCruzadosDetectaDatosIntegracionMovilYDeployV0(t *testing.T) {
+	session := NewWebNuevaAppIntakeSessionV0("session-wizard-cross", "es-ES", "App mixta", "app movil con datos externos")
+	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "tipo_app", Value: "mobile"})
+	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "datos.db_required", Value: "true"})
+	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "integraciones.0.tipo", Value: "api"})
+	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "deploy.target", Value: "desktop"})
+
+	allQuestions := webNuevaAppWizardAllGapQuestionsV0(session.Form)
+
+	for _, ref := range []string{
+		"wizard-r4-storage-db",
+		"wizard-r5-integracion-gobierno",
+		"wizard-r6-movil-plataformas",
+		"wizard-r7-deploy-compatible",
+	} {
+		if !hasWizardQuestionRefV0(allQuestions, ref) {
+			t.Fatalf("no detecta %s en %+v", ref, allQuestions)
+		}
+	}
+}
+
+func TestWizardConservaRecomendacionVisibleSiUsuarioEligeOtraOpcionV0(t *testing.T) {
+	session := NewWebNuevaAppIntakeSessionV0("session-wizard-contrast", "es-ES", "", "quiero una app para una agenda")
+	questions := webNuevaAppWizardAllGapQuestionsV0(session.Form)
+	if !hasWizardQuestionOptionV0(questions, "wizard-r2-plataformas", "web_mobile") {
+		t.Fatalf("pregunta plataforma sin recomendacion esperada: %+v", questions)
+	}
+
+	session, result := ApplyWebNuevaAppWizardAnswersV0(session, []WizardAnswerV0{{
+		QuestionRef: "wizard-r2-plataformas",
+		UserChoice:  "web",
+	}})
+
+	if len(result.Contrasts) != 1 ||
+		result.Contrasts[0].QuestionRef != "wizard-r2-plataformas" ||
+		result.Contrasts[0].UserChoice != "web" ||
+		result.Contrasts[0].Recommended != "web_mobile" ||
+		result.Contrasts[0].RationaleKey == "" {
+		t.Fatalf("contraste no conserva recomendacion: %+v", result.Contrasts)
+	}
+	if !stringSliceHasV0(session.Form.Plataformas, "web") ||
+		stringSliceHasV0(session.Form.Plataformas, "mobile") {
+		t.Fatalf("eleccion del usuario no debe sobreescribirse: %+v", session.Form.Plataformas)
+	}
+}
+
+func TestNuevaAppIntakeGuidedResponseV0IncluyeWizardRicoV0(t *testing.T) {
+	response := NewWebNuevaAppIntakeGuidedResponseV0(WebNuevaAppIntakeGuidedRequestV0{
+		SessionID: "session-wizard-endpoint",
+		Need:      "quiero una app para una agenda",
+	})
+
+	if response.Wizard.SchemaVersion != WebNuevaAppWizardTurnSchemaV0 ||
+		len(response.Wizard.Questions) == 0 ||
+		len(response.Wizard.EngineeringDefaults) == 0 ||
+		response.Wizard.SpecPreview == nil {
+		t.Fatalf("wizard no incluido en respuesta: %+v", response.Wizard)
+	}
+	if !hasWizardQuestionRefV0(response.Wizard.Questions, "wizard-q-locale") &&
+		!hasWizardQuestionRefV0(response.Wizard.Questions, "wizard-q-tipo-app") {
+		t.Fatalf("primer turno wizard inesperado: %+v", response.Wizard.Questions)
+	}
+}
+
+func TestNuevaAppIntakeGuidedResponseV0AplicaWizardAnswersV0(t *testing.T) {
+	response := NewWebNuevaAppIntakeGuidedResponseV0(WebNuevaAppIntakeGuidedRequestV0{
+		SessionID: "session-wizard-api-answer",
+		Need:      "quiero una app para una agenda",
+		WizardAnswers: []WizardAnswerV0{{
+			QuestionRef: "wizard-r2-plataformas",
+			UserChoice:  "web",
+		}},
+	})
+
+	if !stringSliceHasV0(response.Session.Form.Plataformas, "web") ||
+		stringSliceHasV0(response.Session.Form.Plataformas, "mobile") {
+		t.Fatalf("wizard_answers no aplico plataformas: %+v", response.Session.Form.Plataformas)
+	}
+	if len(response.Wizard.Decisions) == 0 {
+		t.Fatalf("wizard_answers no devolvio decisiones aplicadas: %+v", response.Wizard)
+	}
+	if len(response.Wizard.Contrasts) != 1 ||
+		response.Wizard.Contrasts[0].QuestionRef != "wizard-r2-plataformas" ||
+		response.Wizard.Contrasts[0].Recommended != "web_mobile" {
+		t.Fatalf("wizard_answers no conserva contraste: %+v", response.Wizard.Contrasts)
+	}
+}
+
+func TestWizardPreguntasRicasTienenCatalogoI18NV0(t *testing.T) {
+	catalog := NewNuevaAppI18nCatalogV0()
+	sessions := []WebNuevaAppIntakeSessionV0{
+		wizardSessionWithObjectiveV0("session-i18n-agenda", "quiero una app para una agenda"),
+		wizardSessionWithObjectiveV0("session-i18n-tienda", "quiero una tienda con pagos y checkout"),
+		wizardSessionWithObjectiveV0("session-i18n-mapas", "quiero una app con mapas y ubicacion cercana"),
+		wizardSessionWithObjectiveV0("session-i18n-compartida", "quiero una agenda compartida para clientes"),
+	}
+
+	cross := NewWebNuevaAppIntakeSessionV0("session-i18n-cross", "es-ES", "App mixta", "app movil con datos externos")
+	cross = cross.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "tipo_app", Value: "mobile"})
+	cross = cross.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "datos.db_required", Value: "true"})
+	cross = cross.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "integraciones.0.tipo", Value: "api"})
+	cross = cross.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "deploy.target", Value: "desktop"})
+	sessions = append(sessions, cross)
+
+	for _, session := range sessions {
+		for _, question := range webNuevaAppWizardAllGapQuestionsV0(session.Form) {
+			requireWizardI18nKeyV0(t, catalog, question.PromptKey)
+			requireWizardI18nKeyV0(t, catalog, question.WhyKey)
+			for _, option := range question.Options {
+				requireWizardI18nKeyV0(t, catalog, option.LabelKey)
+				if option.RationaleKey != "" {
+					requireWizardI18nKeyV0(t, catalog, option.RationaleKey)
+				}
+			}
+		}
+	}
+	for _, defaultValue := range WebNuevaAppWizardEngineeringDefaultsV0() {
+		requireWizardI18nKeyV0(t, catalog, defaultValue.WhyKey)
+	}
+}
+
+func hasWizardQuestionRefV0(questions []WizardQuestionV0, ref string) bool {
+	for _, question := range questions {
+		if question.QuestionRef == ref {
+			return true
+		}
+	}
+	return false
+}
+
+func wizardSessionWithObjectiveV0(sessionID string, objective string) WebNuevaAppIntakeSessionV0 {
+	session := NewWebNuevaAppIntakeSessionV0(sessionID, "", "", "")
+	return session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{
+		Field: "objetivo",
+		Value: objective,
+	})
+}
+
+func requireWizardI18nKeyV0(t *testing.T, catalog NuevaAppI18nCatalogV0, key string) {
+	t.Helper()
+	if strings.TrimSpace(key) == "" {
+		t.Fatalf("clave i18n vacia")
+	}
+	for _, locale := range []string{NuevaAppI18nDefaultLocaleV0, NuevaAppI18nEnglishLocaleV0} {
+		if text := strings.TrimSpace(catalog.lookupExact(locale, key)); text == "" {
+			t.Fatalf("clave wizard sin texto exacto %s/%s", locale, key)
+		}
+	}
+}
+
+func hasWizardQuestionOptionV0(questions []WizardQuestionV0, ref string, value string) bool {
+	for _, question := range questions {
+		if question.QuestionRef != ref {
+			continue
+		}
+		for _, option := range question.Options {
+			if option.Value == value {
+				return true
+			}
+		}
+	}
+	return false
+}
