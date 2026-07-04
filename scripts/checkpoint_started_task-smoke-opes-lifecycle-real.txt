@@ -1,0 +1,6 @@
+goal_ref=goal-ref-task-autoprogramming-57285ae2856f-g01
+source_task_ref=task-smoke-opes-lifecycle-real
+objective=crear smoke reproducible para lifecycle OPES real simulado con cierre durable y actualizar inventario 058/066/075
+scope=scripts, modulos/orquesta-opes-director, modulos/orquesta-opes-connector, modulos/orquesta-opes-bridge, docs/inventario_bugs_orquesta_2026-06-30.md, docs/autoprogramacion_orquesta_pendientes_2026-05-23.md
+next_artifact=scripts/smoke_opes_lifecycle_real.sh
+evidence=checkpoint materializado antes de exploracion larga; broker orquesta.codebase.query.v0 no disponible como MCP en esta sesion

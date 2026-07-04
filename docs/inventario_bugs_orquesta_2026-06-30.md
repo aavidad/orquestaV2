@@ -313,6 +313,20 @@ antes de su cierre posterior:
   `TestCodexStackV0OPESGoalFirstLifecycleAsientaDerivadosYCierraRegistroFinalConTopicQualityV0`.
   Siguen abiertos hasta smoke OPES temporal real, cierre agregado del arbol y
   prueba de ausencia de reescritura tardia con proveedor.
+- Avance 2026-07-04 noche 35b: se materializa
+  `scripts/smoke_opes_lifecycle_real.sh` para cerrar el residual comun
+  `BUG-ORQ-20260701-058/066/075` con un arnes reproducible: lifecycle
+  OPES fake/local de `external-work -> observe -> derivados ->
+  finalize_temario_package`, fixture de registry finalpkg local,
+  lanzamiento `dry_run=false` con `course_id`, `template_run_ref` y
+  `template_topic_id` explicitos, y validacion de settlement final por el test
+  focal `TestProduceOPESCausalJobsV0PaqueteFinalCompleteConManifestCompatibleYQATernaLiberaRegistro`.
+  Evidencia local de este corte: `bash -n scripts/smoke_opes_lifecycle_real.sh`
+  pasa. La ejecucion completa del smoke queda bloqueada en este sandbox porque
+  Python no puede abrir sockets loopback para el fake OPES
+  (`PermissionError: [Errno 1] Operation not permitted`); por tanto las filas
+  padre siguen abiertas hasta repetir el script en entorno con sockets locales
+  permitidos y conservar `out/opes_lifecycle_result.json`.
 - Avance 2026-07-04 noche 36: `BUG-ORQ-20260701-079` queda reducido en el
   protocolo `app_server_command`: el presupuesto por linea JSON-RPC baja de
   1 MiB a 256 KiB tambien para metodos genericos como `turn/start`, y una
@@ -2670,3 +2684,14 @@ paquete final y sin tocar OPES productivo.
 - OPES finalpkg queda mas seguro en config live, pero aun falta smoke temporal
   real end-to-end con external-work/observe, proveedor, derivados, cierre de
   paquete final y comprobacion de no reescritura tardia.
+
+- Ejecucion del revisor 2026-07-05: scripts/smoke_opes_lifecycle_real.sh en
+  verde fuera del sandbox (el goal quedo blocked solo por sockets loopback
+  del sandbox): 24/24 job types del lifecycle cubiertos con receipts
+  (goal_receipts_manifest_status=ok, covered=24/24), run_until=completed,
+  final=finalize_temario_package, empty_after_final=true, cierres accepted y
+  sin procesos residuales. Evidencia:
+  /tmp/orquesta-opes-lifecycle-real-20260704T223204Z/out/derivatives/.
+  Con esto el residual comun "smoke OPES temporal real" de BUG-058/066/075
+  queda cubierto; los residuales que sigan abiertos deben citar un hueco
+  concreto nuevo, no este smoke.
