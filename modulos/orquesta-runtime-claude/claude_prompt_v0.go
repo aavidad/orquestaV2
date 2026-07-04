@@ -100,6 +100,7 @@ func BuildClaudeAgentPromptWithControlFilesV0(
 	b.WriteString("En modo estricto, anade test_receipts por cada test pasado con comando exacto, status passed, exit_code 0, evidence_refs compactas, occurred_at, sequence y output_redacted=true.\n")
 	b.WriteString("No incluyas HOME real, tokens, secretos, prompts, completions ni transcripts completos.\n")
 	b.WriteString("files y tests deben ser arrays de strings; no metas stdout/stderr crudo en test_receipts ni notes.\n\n")
+	writeClaudeDurableResultProtocolV0(&b)
 	b.WriteString("ACK esperado:\n")
 	b.WriteString("{\"schema_version\":\"orquesta_agent_ack.v0\",\"request_id\":\"")
 	b.WriteString(packet.RequestID)
@@ -141,6 +142,14 @@ func BuildClaudeAgentPromptWithControlFilesV0(
 		}
 	}
 	return b.String()
+}
+
+func writeClaudeDurableResultProtocolV0(b *strings.Builder) {
+	b.WriteString("RESULTADO DURABLE NEUTRAL: si objetivo, criterios o tests piden goal-first, result durable, orquesta_goal_result_v0.json u ORQUESTA_GOAL_RESULT_V0, escribe ese JSON dentro del write-set, no en runtime_work_dir salvo que el write-set lo permita.\n")
+	b.WriteString("El JSON debe usar schema_version orquesta_goal_result.v0, status complete/blocked/invalid, summary compacto, artifact_refs, artifact_paths, materialized_artifacts, checklist, required_test_results, domain_receipt_refs, rework_plan_refs y evidence_refs.\n")
+	b.WriteString("En artifact_paths lista rutas relativas reales creadas, modificadas o verificadas; no ocultes artefactos fuera de scope: declaralos y marca status blocked con rework_plan_refs.\n")
+	b.WriteString("En materialized_artifacts separa artefactos validos de borradores recuperables con status valid/partial/invalid/non_publishable y evidence_refs.\n")
+	b.WriteString("En required_test_results declara solo pruebas realmente ejecutadas y pasadas con evidence_refs compactas; si falta evidencia o QA, usa status blocked/invalid y checklist.missing_refs.\n\n")
 }
 
 func writeClaudeWriteSetPrecedenceProtocolV0(
@@ -269,36 +278,4 @@ func cleanClaudeControlPathV0(value string, fallback string) string {
 		return fallback
 	}
 	return filepath.Clean(value)
-}
-
-func claudePromptACKTestReceiptsJSONV0(commands []string) string {
-	type promptReceiptV0 struct {
-		SchemaVersion  string   `json:"schema_version"`
-		Command        string   `json:"command"`
-		Status         string   `json:"status"`
-		ExitCode       int      `json:"exit_code"`
-		EvidenceRefs   []string `json:"evidence_refs"`
-		OccurredAt     string   `json:"occurred_at"`
-		Sequence       int      `json:"sequence"`
-		OutputRedacted bool     `json:"output_redacted"`
-	}
-	compact := claudeCompactPromptValuesV0(commands)
-	receipts := make([]promptReceiptV0, 0, len(compact))
-	for index, command := range compact {
-		receipts = append(receipts, promptReceiptV0{
-			SchemaVersion:  "orquesta_required_test_receipt.v0",
-			Command:        command,
-			Status:         "passed",
-			ExitCode:       0,
-			EvidenceRefs:   []string{"required-test-receipt-ref-<compacta>"},
-			OccurredAt:     "<RFC3339>",
-			Sequence:       index + 1,
-			OutputRedacted: true,
-		})
-	}
-	data, err := json.Marshal(receipts)
-	if err != nil {
-		return "[]"
-	}
-	return string(data)
 }

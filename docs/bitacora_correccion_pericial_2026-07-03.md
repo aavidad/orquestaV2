@@ -1597,3 +1597,47 @@ Pendiente real: `BUG-165` queda abierto solo para residuales amplios de
 `status/observe` lento y coordinacion automatica completa
 shutdown/backend/checkpoint/stop/cancel/wait. La ruta Sueldos forced stop con
 backend vivo queda cerrada.
+
+## Continuacion Codex 2026-07-04 noche 12
+
+Avance de conectores Claude/Gemini hacia paridad de contrato durable:
+
+- `modulos/orquesta-runtime-claude` y `modulos/orquesta-runtime-gemini` siguen
+  siendo conectores CLI opt-in de proceso externo, no backend goal-first
+  residente equivalente a Codex.
+- Se refuerza el prompt de ambos conectores para que, si objetivo, criterios o
+  tests piden `goal-first`, `result durable`, `orquesta_goal_result_v0.json` u
+  `ORQUESTA_GOAL_RESULT_V0`, escriban un JSON dentro del write-set con
+  `schema_version=orquesta_goal_result.v0`, estado terminal,
+  `artifact_paths`, `materialized_artifacts`, `checklist`,
+  `required_test_results` y evidencias compactas.
+- Se anade en `orquesta-runtime-claude` un primer backend goal-first offline
+  de fichero/control: implementa `GoalWorkLauncherPortV0` y
+  `GoalWorkObservationPortV0`, escribe spec/prompt en runtime aislado y observa
+  `orquesta_goal_result*.json` bajo el write-set del proyecto.
+- El protocolo explicita que no debe escribirse el resultado en
+  `runtime_work_dir` salvo que el write-set lo permita, que no se oculten
+  artefactos fuera de scope y que faltas de QA/evidencia cierren como
+  `blocked/invalid`.
+- No cambia el default Codex ni requiere credenciales Claude/Gemini.
+
+Archivos tocados en este avance:
+
+- `modulos/orquesta-runtime-claude/claude_prompt_v0.go`
+- `modulos/orquesta-runtime-claude/claude_goal_backend_v0.go`
+- `modulos/orquesta-runtime-claude/claude_goal_paths_v0.go`
+- `modulos/orquesta-runtime-claude/claude_goal_backend_v0_test.go`
+- `modulos/orquesta-runtime-claude/claude_resolver_v0_test.go`
+- `modulos/orquesta-runtime-gemini/gemini_prompt_v0.go`
+- `modulos/orquesta-runtime-gemini/gemini_resolver_v0_test.go`
+- `docs/plan_mejora_continua_orquesta_2026-07-04.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion focal:
+
+- `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-runtime-gemini`
+
+Pendiente real: MEJ-103 no queda cerrado. Falta cablear seleccion opt-in por
+composicion/env, proceso real Claude, state/shutdown/control equivalentes al
+backend Codex y smoke fake/real opt-in; Gemini queda pendiente de backend
+goal-first propio.

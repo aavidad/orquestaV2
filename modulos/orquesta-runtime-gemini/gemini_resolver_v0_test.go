@@ -98,6 +98,11 @@ func TestGeminiExecResolverV0PromptUsaControlFilesOperativos(t *testing.T) {
 		"No uses git status como criterio obligatorio",
 		"No incluyas archivos de control en ACK.files",
 		"files debe listar rutas reales",
+		"RESULTADO DURABLE NEUTRAL",
+		"orquesta_goal_result_v0.json",
+		"schema_version orquesta_goal_result.v0",
+		"materialized_artifacts",
+		"checklist.missing_refs",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt no contiene %q:\n%s", want, prompt)

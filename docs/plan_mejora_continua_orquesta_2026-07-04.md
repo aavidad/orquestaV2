@@ -96,6 +96,17 @@ Objetivo: primer corte de redundancia de proveedor: adaptador goal-first opt-in 
 
 Estado: aparcado/supersedido para la forma residente por el director de escalada; no relanzar sin credenciales y decision explicita.
 
+Avance 2026-07-04 noche 12: los conectores CLI opt-in de Claude y Gemini ya
+incluyen en su prompt operativo el contrato neutral de resultado durable
+`orquesta_goal_result.v0` cuando el objetivo, criterios o tests pidan
+goal-first/result durable. Ademas `orquesta-runtime-claude` ya tiene un primer
+backend goal-first offline de fichero/control que implementa
+`GoalWorkLauncherPortV0` y `GoalWorkObservationPortV0`: materializa spec/prompt
+en runtime aislado y observa `orquesta_goal_result*.json` dentro del write-set.
+No cambia defaults ni convierte Claude/Gemini en backend residente productivo.
+La brecha de MEJ-103 sigue abierta hasta cablear seleccion opt-in por
+composicion/env, proceso real Claude y smoke fake/real de lanzamiento.
+
 Alcance:
 
 - `modulos/orquesta-runtime-claude`
