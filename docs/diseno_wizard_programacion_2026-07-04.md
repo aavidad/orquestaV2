@@ -333,3 +333,116 @@ Pendiente real despues de este cierre:
   conversacional completo para cualquier app.
 - Opcional: alias explicito `mode:"wizard"` si se decide hacerlo obligatorio
   para clientes nuevos.
+
+## 10. Capa técnica T1-T8 y motor de exclusión (vinculante, orden del operador)
+
+Reglas del operador: (a) "todo de todo" en lo técnico; (b) por defecto SIEMPRE
+la mejor opción, y solo se desvía si el humano lo elige (quedando el contraste
+registrado, 7b.1); (c) las respuestas EXCLUYEN preguntas y opciones que dejan
+de tener sentido — no se pregunta lo irrelevante ni lo ya resuelto por
+exclusión (ej.: app para el núcleo de Linux en C → cero preguntas de aspecto
+web).
+
+### 10.1 Dimensiones técnicas (se preguntan SOLO si los hechos las activan;
+si no, se aplican como default silencioso en EngineeringDefaults)
+
+T1 Control de acceso: ¿RBAC por roles, permisos finos por recurso (ACL),
+   o ambos? ¿aislamiento multi-tenant? ¿MFA/passkeys? Sesiones (JWT vs
+   sesión de servidor, expiración, revocación). Activada por: U1=equipo o
+   público. Default si equipo: RBAC simple (admin/editor/lector) + MFA
+   opcional (porqué: cubre el 90% de casos sin matriz de permisos cara).
+T2 Identidad corporativa: ¿integrar con Active Directory/Samba AD/LDAP?
+   ¿SSO (OIDC/SAML/Kerberos)? ¿aprovisionamiento SCIM? ¿mapear grupos del
+   directorio a roles de la app? Activada por: keywords empresa/oficina/
+   dominio/AD/LDAP o U1=equipo en contexto corporativo. Default: OIDC si
+   hay SSO disponible (porqué: estándar, sin custodiar contraseñas);
+   LDAP-bind como alternativa si solo hay AD clásico.
+T3 Observabilidad: logging estructurado con ROTACIÓN completa (por tamaño y
+   tiempo, retención configurable, compresión, integración
+   journald/logrotate), niveles, log de auditoría separado e inmutable;
+   métricas Prometheus; trazas OpenTelemetry; healthchecks liveness/
+   readiness; alertas por umbral. Default SIEMPRE (silencioso): logs
+   estructurados rotados + healthchecks. Se pregunta solo el destino
+   (fichero local/journald/colector central) cuando U10=servidor o nube.
+T4 Persistencia técnica: motor (SQLite/PostgreSQL/MySQL/KV embebido),
+   migraciones versionadas con rollback, pooling, backups automáticos con
+   restore PROBADO, cache (memoria/Redis), tareas en segundo plano y cron.
+   Activada por: datos de usuario (U4). Default: SQLite si personal/local,
+   PostgreSQL si compartida (porqué: concurrencia y tipos ricos); backup
+   diario + restore verificado semanal.
+T5 API y contratos: ¿API pública propia? REST/gRPC/GraphQL/eventos;
+   versionado de API; OpenAPI generada; rate limiting; idempotencia en
+   mutaciones; webhooks salientes firmados con reintentos. Activada por:
+   U7=API propia o integraciones entrantes. Default: REST versionada +
+   OpenAPI (porqué: interoperable y autodocumentada).
+T6 Despliegue avanzado: contenedor/systemd; entornos dev/staging/prod;
+   CI/CD con gates de test; config 12-factor por entorno; feature flags;
+   actualizaciones con migración automática y rollback; HA/failover y
+   objetivos DR (RPO/RTO). Activada por: U10=servidor/nube. Default:
+   contenedor + systemd + CI con suites obligatorias.
+T7 Resiliencia y rendimiento: timeouts/reintentos/circuit breakers en toda
+   llamada externa; paginación por defecto en listados; límites de recursos;
+   presupuestos de latencia si U11 lo declara. Default SIEMPRE silencioso.
+T8 Cumplimiento técnico: auditoría inmutable de acciones sensibles,
+   retención de logs/datos conforme a normativa declarada en U5,
+   anonimización/pseudonimización, borrado real bajo petición (RGPD).
+   Activada por: U5=datos personales/sensibles.
+
+### 10.2 Motor de exclusión (hechos → poda de preguntas y opciones)
+
+Contrato nuevo en el motor de huecos:
+
+```go
+type WizardFactV0 struct { Key, Value string } // ej. {"runtime","kernel_c"}
+
+// En WizardQuestionV0 y WizardOptionV0:
+//   RequiresFacts []WizardFactV0   // solo aparece si TODOS los hechos casan
+//   ExcludedByFacts []WizardFactV0 // desaparece si ALGUNO casa
+// En WizardTurnResultV0:
+//   ResolvedByExclusion []WizardDecisionV0 // respondidas sin preguntar
+```
+
+- Cada respuesta consolida hechos (ej. U2=cli → {"ui","none"}; U1=personal →
+  {"audience","single"}; "sin red" → {"network","none"}; tipo_app=kernel/C →
+  {"runtime","kernel_c"},{"ui","none"},{"web","none"}).
+- Poda de PREGUNTAS: una pregunta cuyos RequiresFacts no casan o cuyos
+  ExcludedByFacts casan no se emite nunca. Ej. canónico del operador: app
+  para el núcleo de Linux en C → se excluyen aspecto web, i18n de UI,
+  accesibilidad de navegador, PWA/offline, RBAC de usuarios finales; siguen
+  activas T3 (logging kernel: printk/trace niveles), T6 (build/CI), pruebas.
+- Poda de OPCIONES: dentro de una pregunta viva se eliminan opciones
+  incompatibles (ej. U1=personal → en T4 no se ofrece "PostgreSQL en
+  clúster"; U10=local → en T3 no se ofrece "colector central").
+- Resolución por exclusión: si tras la poda queda UNA sola opción elegible,
+  no se pregunta: se adopta, se registra en ResolvedByExclusion con su
+  porqué, y aparece en el panel "decisiones tomadas por ti". Si quedan cero,
+  la pregunta se descarta y se anota el hecho que la cerró.
+- Coherencia retroactiva: si el usuario CAMBIA una respuesta que era hecho
+  excluyente, el motor reevalúa las podas: preguntas cerradas por exclusión
+  vuelven a la cola si recuperan sentido (test focal obligatorio).
+
+### 10.3 Regla "lo mejor por defecto, desviación justificada"
+
+Toda dimensión T no activada se aplica como default silencioso con la mejor
+práctica (visible en EngineeringDefaults). Toda dimensión activada llega con
+la opción recomendada premarcada. Si el humano elige otra, el turno pide una
+justificación breve OPCIONAL (campo libre `justification`) y registra el
+WizardContrastV0 con ella; nunca se bloquea por no justificar, pero el
+resumen final lista todas las desviaciones con su justificación (o "sin
+justificar") para revisión consciente.
+
+### 10.4 Tests adicionales
+
+- `TestWizardKernelLinuxCExcluyeWebV0`: objetivo "módulo para el núcleo de
+  Linux en C" → cero preguntas de web/UI/i18n-UI/PWA; T3/T6 siguen.
+- `TestWizardExclusionPorAudienciaPersonalV0`: U1=personal → no se pregunta
+  RBAC/AD/SSO; quedan resueltas por exclusión con porqué.
+- `TestWizardOpcionUnicaSeAdoptaSinPreguntarV0`: poda deja 1 opción →
+  ResolvedByExclusion la adopta con rationale.
+- `TestWizardReevaluaExclusionesAlCambiarRespuestaV0`: cambiar U1
+  personal→equipo devuelve T1/T2 a la cola.
+- `TestWizardDesviacionConJustificacionV0`: elegir opción no recomendada
+  registra contraste + justificación en el resumen final.
+- `TestWizardActiveDirectoryPorContextoEmpresaV0`: objetivo con "para mi
+  empresa con dominio Windows" activa T2 con opciones AD/LDAP/OIDC y
+  recomendación razonada.
