@@ -17,7 +17,6 @@ type wizardCrossGapRuleV0 struct {
 var wizardCrossGapRulesV0 = []wizardCrossGapRuleV0{
 	{RuleRef: "R1", Build: wizardRuleR1PersonalCompartidoV0},
 	{RuleRef: "R2", Build: wizardRuleR2PlataformasV0},
-	{RuleRef: "R3", Build: wizardRuleR3IntegracionDominioV0},
 	{RuleRef: "R4", Build: wizardRuleR4StorageV0},
 	{RuleRef: "R5", Build: wizardRuleR5IntegracionGobiernoV0},
 	{RuleRef: "R6", Build: wizardRuleR6MovilPlataformasV0},
@@ -38,6 +37,7 @@ func webNuevaAppWizardAllGapQuestionsV0(form WebNuevaAppFormV0) []WizardQuestion
 			out = append(out, *question)
 		}
 	}
+	out = append(out, wizardRuleR3IntegracionesDominioV0(form)...)
 	return dedupeWizardQuestionsV0(out)
 }
 
@@ -155,22 +155,46 @@ func wizardRuleR2PlataformasV0(form WebNuevaAppFormV0) *WizardQuestionV0 {
 	return &question
 }
 
-func wizardRuleR3IntegracionDominioV0(form WebNuevaAppFormV0) *WizardQuestionV0 {
+func wizardRuleR3IntegracionesDominioV0(form WebNuevaAppFormV0) []WizardQuestionV0 {
 	need := normalizeGuidedNeedV0(form.Objetivo + " " + form.Descripcion)
+	nextIntegrationIndex := wizardNextIntegrationIndexV0(form)
+	var out []WizardQuestionV0
 	for _, pack := range wizardDomainIntegrationPacksV0() {
 		if !guidedContainsAnyV0(need, pack.Keywords...) || wizardHasIntegrationTypeV0(form, pack.IntegrationType) {
 			continue
 		}
 		question := wizardQuestionV0(
 			pack.QuestionRef,
-			"integraciones."+strconv.Itoa(wizardNextIntegrationIndexV0(form))+".tipo",
+			"integraciones."+strconv.Itoa(nextIntegrationIndex)+".tipo",
 			WizardTopicDatosV0,
 			WizardImportanceAltaV0,
 			pack.Options,
 		)
-		return &question
+		out = append(out, question)
+		nextIntegrationIndex++
+		if nextIntegrationIndex >= nuevaAppMaxIntegrationRowsV0 {
+			break
+		}
 	}
-	return nil
+	if len(out) == 0 &&
+		trimV0(form.Objetivo) != "" &&
+		!wizardObjectiveMatchesKnownDomainPackV0(need) &&
+		!wizardHasOpenDomainDescriptionV0(form) {
+		out = append(out, wizardQuestionV0(
+			"wizard-r3-dominio-abierto",
+			"descripcion",
+			WizardTopicDatosV0,
+			WizardImportanceAltaV0,
+			[]WizardOptionV0{
+				wizardOptionV0("describir_flujo_diario", "nueva_app.wizard.option.dominio.flujo_diario", true, "nueva_app.wizard.rationale.dominio.flujo_diario"),
+				wizardOptionV0("describir_integraciones", "nueva_app.wizard.option.dominio.integraciones", false, ""),
+			},
+		))
+	}
+	if out == nil {
+		return []WizardQuestionV0{}
+	}
+	return out
 }
 
 func wizardRuleR4StorageV0(form WebNuevaAppFormV0) *WizardQuestionV0 {
@@ -295,10 +319,11 @@ func wizardDomainIntegrationPacksV0() []wizardDomainIntegrationPackV0 {
 		},
 		{
 			QuestionRef:     "wizard-r3-integracion-tienda",
-			IntegrationType: "payments",
-			Keywords:        []string{"tienda", "pago", "pagos", "cobro", "checkout"},
+			IntegrationType: "ecommerce",
+			Keywords:        []string{"tienda", "venta", "ventas", "ecommerce", "catalogo", "carrito", "pago", "pagos", "cobro", "checkout"},
 			Options: []WizardOptionV0{
-				wizardOptionV0("payments_capability", "nueva_app.wizard.option.integracion.payments.capability", true, "nueva_app.wizard.rationale.integracion.payments.capability"),
+				wizardOptionV0("ecommerce_capability", "nueva_app.wizard.option.integracion.ecommerce.capability", true, "nueva_app.wizard.rationale.integracion.ecommerce.capability"),
+				wizardOptionV0("ecommerce_payments_sync", "nueva_app.wizard.option.integracion.ecommerce.payments_sync", false, ""),
 				wizardOptionV0("payments_deferred", "nueva_app.wizard.option.integracion.deferred", false, ""),
 			},
 		},
@@ -310,6 +335,79 @@ func wizardDomainIntegrationPacksV0() []wizardDomainIntegrationPackV0 {
 				wizardOptionV0("maps_public_sources", "nueva_app.wizard.option.integracion.maps.public_sources", true, "nueva_app.wizard.rationale.integracion.maps.public_sources"),
 				wizardOptionV0("maps_deferred", "nueva_app.wizard.option.integracion.deferred", false, ""),
 			},
+		},
+		wizardDomainPackV0(
+			"wizard-r3-integracion-inventario",
+			"inventory",
+			[]string{"inventario", "almacen", "almacenaje", "stock", "qr", "codigo de barras", "proveedores"},
+		),
+		wizardDomainPackV0(
+			"wizard-r3-integracion-notas",
+			"documents",
+			[]string{"notas", "documentos", "wiki", "markdown", "plantillas", "adjuntos"},
+		),
+		wizardDomainPackV0(
+			"wizard-r3-integracion-tareas",
+			"project_tasks",
+			[]string{"tareas", "proyectos", "kanban", "subtareas", "dependencias", "prioridades"},
+		),
+		wizardDomainPackV0(
+			"wizard-r3-integracion-finanzas",
+			"finance",
+			[]string{"finanzas", "gastos", "presupuesto", "presupuestos", "extractos", "ofx", "ahorro"},
+		),
+		wizardDomainPackV0(
+			"wizard-r3-integracion-crm",
+			"crm",
+			[]string{"contactos", "crm", "clientes", "pipeline", "seguimientos", "vcard"},
+		),
+		wizardDomainPackV0(
+			"wizard-r3-integracion-reservas",
+			"booking",
+			[]string{"reservas", "turnos", "citas online", "disponibilidad", "lista de espera"},
+		),
+		wizardDomainPackV0(
+			"wizard-r3-integracion-salud",
+			"health",
+			[]string{"salud", "fitness", "habitos", "metricas", "wearables", "racha"},
+		),
+		wizardDomainPackV0(
+			"wizard-r3-integracion-educacion",
+			"education",
+			[]string{"educacion", "cursos", "lecciones", "alumnos", "ejercicios", "certificados"},
+		),
+		wizardDomainPackV0(
+			"wizard-r3-integracion-comunidad",
+			"community",
+			[]string{"comunidad", "foro", "hilos", "votos", "moderacion", "reputacion"},
+		),
+		wizardDomainPackV0(
+			"wizard-r3-integracion-iot",
+			"iot",
+			[]string{"domotica", "iot", "sensores", "mqtt", "dispositivos", "telemetria"},
+		),
+		wizardDomainPackV0(
+			"wizard-r3-integracion-media",
+			"media",
+			[]string{"galeria", "media", "fotos", "imagenes", "albumes", "miniaturas", "transcodificacion"},
+		),
+		wizardDomainPackV0(
+			"wizard-r3-integracion-facturacion",
+			"billing",
+			[]string{"facturacion", "facturas", "legal", "impuestos", "pdf", "numeracion"},
+		),
+	}
+}
+
+func wizardDomainPackV0(questionRef string, integrationType string, keywords []string) wizardDomainIntegrationPackV0 {
+	return wizardDomainIntegrationPackV0{
+		QuestionRef:     questionRef,
+		IntegrationType: integrationType,
+		Keywords:        keywords,
+		Options: []WizardOptionV0{
+			wizardOptionV0(integrationType+"_capability", "nueva_app.wizard.option.integracion.domain.capability", true, "nueva_app.wizard.rationale.integracion.domain.capability"),
+			wizardOptionV0(integrationType+"_sync", "nueva_app.wizard.option.integracion.domain.sync", false, ""),
+			wizardOptionV0(integrationType+"_deferred", "nueva_app.wizard.option.integracion.deferred", false, ""),
 		},
 	}
 }
@@ -516,6 +614,20 @@ func wizardHasIntegrationTypeV0(form WebNuevaAppFormV0, integrationType string) 
 func wizardHasStorageTypeV0(form WebNuevaAppFormV0) bool {
 	for _, storage := range form.Datos.Storage {
 		if orquestafactory.DataStorageTypeSupportedV0(trimV0(storage.Tipo)) {
+			return true
+		}
+	}
+	return false
+}
+
+func wizardHasOpenDomainDescriptionV0(form WebNuevaAppFormV0) bool {
+	description := normalizeGuidedNeedV0(form.Descripcion)
+	return guidedContainsAnyV0(description, "usuario un dia normal", "flujo diario", "funcion principal", "capacidad principal")
+}
+
+func wizardObjectiveMatchesKnownDomainPackV0(need string) bool {
+	for _, pack := range wizardDomainIntegrationPacksV0() {
+		if guidedContainsAnyV0(need, pack.Keywords...) {
 			return true
 		}
 	}

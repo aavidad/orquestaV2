@@ -46,6 +46,100 @@ func TestOPESRegistryFinalPkgConfigRequiresConfirmForEffectsV0(t *testing.T) {
 	}
 }
 
+func TestOPESRegistryFinalPkgConfigLiveRequiresExplicitCourseAndTemplateV0(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := filepath.Join(projectDir, "state")
+	registry := filepath.Join(projectDir, "registry.json")
+	courseRoot := filepath.Join(projectDir, "course")
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envOPESRegistryFinalPkgCourseIDV0, "")
+	t.Setenv(envOPESRegistryFinalPkgTemplateRunV0, "")
+	t.Setenv(envOPESRegistryFinalPkgTemplateTopicV0, "")
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"server":{"state_dir":"` + filepath.ToSlash(stateDir) + `"},
+		"opes_registry_finalpkg":{
+			"enabled":true,
+			"confirm":true,
+			"dry_run":false,
+			"registry_path":"` + filepath.ToSlash(registry) + `",
+			"course_root":"` + filepath.ToSlash(courseRoot) + `"
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	serverConfig, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	config, err := opesRegistryFinalPkgLoopConfigFromEnvV0(serverConfig, "http://127.0.0.1:8787")
+
+	if err == nil ||
+		!strings.Contains(err.Error(), "opes_registry_finalpkg_config_incomplete") ||
+		!strings.Contains(err.Error(), envOPESRegistryFinalPkgCourseIDV0) ||
+		!strings.Contains(err.Error(), envOPESRegistryFinalPkgTemplateRunV0) ||
+		!strings.Contains(err.Error(), envOPESRegistryFinalPkgTemplateTopicV0) ||
+		config.Loop.Enabled {
+		t.Fatalf("config=%+v err=%v", config, err)
+	}
+}
+
+func TestOPESRegistryFinalPkgConfigLiveLeeFicheroCanonicoExplicitoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := filepath.Join(projectDir, "state")
+	registry := filepath.Join(projectDir, "registry.json")
+	courseRoot := filepath.Join(projectDir, "course")
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"server":{"state_dir":"` + filepath.ToSlash(stateDir) + `"},
+		"opes_registry_finalpkg":{
+			"enabled":true,
+			"confirm":true,
+			"dry_run":false,
+			"registry_path":"` + filepath.ToSlash(registry) + `",
+			"course_id":"course-ref-live-file",
+			"course_root":"` + filepath.ToSlash(courseRoot) + `",
+			"template_run_ref":"run-ref-live-template-file",
+			"template_topic_id":"007"
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	serverConfig, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	config, err := opesRegistryFinalPkgLoopConfigFromEnvV0(serverConfig, "http://127.0.0.1:8787")
+	if err != nil {
+		t.Fatalf("opesRegistryFinalPkgLoopConfigFromEnvV0: %v", err)
+	}
+	if !config.Loop.Enabled ||
+		config.Producer.DryRun ||
+		config.Producer.CourseID != "course-ref-live-file" ||
+		config.Producer.TemplateRunRef != "run-ref-live-template-file" ||
+		config.Producer.TemplateTopicID != "007" {
+		t.Fatalf("config=%+v", config)
+	}
+	settings := serverConfig.EffectiveConfig.Settings
+	for key, want := range map[string]string{
+		envOPESRegistryFinalPkgConfirmV0:       "true",
+		envOPESRegistryFinalPkgDryRunV0:        "false",
+		envOPESRegistryFinalPkgCourseIDV0:      "course-ref-live-file",
+		envOPESRegistryFinalPkgTemplateRunV0:   "run-ref-live-template-file",
+		envOPESRegistryFinalPkgTemplateTopicV0: "007",
+	} {
+		setting := effectiveSettingForTestV0(settings, key)
+		if setting.Value != want || setting.Source != configSettingSourceConfigFileV0 {
+			t.Fatalf("%s setting=%+v want value=%q source=config_file", key, setting, want)
+		}
+	}
+}
+
 func TestOPESRegistryFinalPkgConfigDerivesStatePathsV0(t *testing.T) {
 	stateDir := t.TempDir()
 	registry := filepath.Join(t.TempDir(), "registry.json")

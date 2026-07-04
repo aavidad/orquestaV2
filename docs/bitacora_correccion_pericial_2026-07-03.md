@@ -3433,3 +3433,44 @@ Verificacion:
 - `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestSmokeCommon(Readiness|Shutdown)'` -> verde.
 - `ORQUESTA_LEGACY_DIRECTOR_LOOP_SMOKE_CONFIRM=1 GOFLAGS=-buildvcs=false ./scripts/smoke_orquesta_server_rest_director.sh` -> verde; `POST /api/v0/apps/director -> HTTP 200`, `agents_started=1`, progress/usage/process refs verificados y parada limpia.
 - `GOFLAGS=-buildvcs=false go test -count=1 ./...` -> verde.
+
+## Continuacion Codex 2026-07-04 tarde 31
+
+Wizard dominio y OPES finalpkg live-config.
+
+Hecho:
+
+- Avance parcial del wizard: la capa web soporta mas packs de dominio
+  (`inventario`, `notas/documentos`, `tareas/proyectos`, `finanzas`, `crm`,
+  `reservas`, `salud`, `educacion`, `comunidad`, `iot`, `media`,
+  `facturacion` y `ecommerce`) y puede emitir varias preguntas R3 de dominio
+  sin duplicar campos. La pregunta abierta de dominio solo aparece cuando el
+  objetivo no encaja con ningun pack conocido.
+- `BUG-ORQ-20260704-190` cerrado: OPES `finalpkg` ya no usa
+  `course_id`, `template_run_ref` ni `template_topic_id` hardcodeados cuando
+  `dry_run=false`; esos defaults quedan restringidos a dry-run/fixtures.
+- El cierre se hizo como reparacion local acotada de composicion y despues se
+  valido con Orquesta por API publica temporal, sin tocar OPES productivo.
+
+Verificacion:
+
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-web -run 'TestWizard|TestNuevaAppIntakeGuidedResponseV0IncluyeWizardRicoV0|TestNuevaAppIntakeGuidedResponseV0AplicaWizardAnswersV0|TestNuevaAppI18nCatalogV0CatalogosCubrenClavesRequeridas'` -> verde.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestOPESRegistryFinalPkgConfig|TestOPESRegistryFinalPkgDryRunSelectsCandidatesWithoutSubmit|TestOPESRegistryFinalPkgPostsExternalWorkRunEnvelope'` -> verde.
+- Smoke temporal con `orquesta-server run --config <temp>`:
+  `POST /api/v0/apps/intake/guided-turn` -> schema
+  `web_nueva_app_intake_guided_response.v0`, `wizard_questions=10`;
+  `POST /api/v0/autoprogramming/status` -> `estado=ok`; readiness `running`;
+  el loop residente `opes-registry-finalpkg` queda bloqueado con
+  `opes_registry_finalpkg_config_incomplete` y las tres claves live faltantes.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./...` -> verde.
+- Auditoria viva: `deadcode_candidates=1228`,
+  `helper_duplicate_definitions=288`, `orphan_modules=1`,
+  `large_files_over_800=17`; deuda config `env_vars_orquesta=512`.
+
+Pendiente:
+
+- Wizard no esta completo: faltan U1-U12 completos, T1-T8 efectivos, motor de
+  exclusion runtime, ayudas i18n/glosario y bot RAG determinista/LLM opt-in.
+- `BUG-058/066/075` siguen abiertos: falta smoke OPES temporal real con
+  external-work/observe, proveedor, derivados, paquete final y ausencia de
+  reescritura tardia.

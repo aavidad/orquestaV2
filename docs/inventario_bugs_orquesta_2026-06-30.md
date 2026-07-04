@@ -2624,6 +2624,29 @@ y `ORQUESTA_LEGACY_DIRECTOR_LOOP_SMOKE_CONFIRM=1 GOFLAGS=-buildvcs=false ./scrip
 verde con `POST /api/v0/apps/director -> HTTP 200`, stats con
 `agents_started=1`, progress/usage verificados y parada limpia.
 
+BUG nuevo `BUG-ORQ-20260704-190` (cerrado):
+El productor OPES `finalpkg` podia quedar habilitado en modo live
+(`dry_run=false` + confirmacion) usando `course_id`, `template_run_ref` y
+`template_topic_id` hardcodeados de una instalacion OPES concreta si el
+operador no los declaraba explicitamente. Causa estructural: los defaults de
+fixture/dry-run se aplicaban antes de `validateOPESRegistryFinalPkgConfigV0`,
+asi que la validacion no podia distinguir una configuracion live incompleta.
+Cierre: `CourseID`, `TemplateRunRef` y `TemplateTopicID` solo reciben fallback
+en `dry_run=true`; en live quedan vacios si no vienen de env/config canonica y
+la validacion devuelve `opes_registry_finalpkg_config_incomplete` con las claves
+faltantes. Evidencia:
+`GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestOPESRegistryFinalPkgConfig|TestOPESRegistryFinalPkgDryRunSelectsCandidatesWithoutSubmit|TestOPESRegistryFinalPkgPostsExternalWorkRunEnvelope'`
+y smoke temporal por API publica de Orquesta: servidor `running`,
+`POST /api/v0/apps/intake/guided-turn` -> schema
+`web_nueva_app_intake_guided_response.v0`, `wizard_questions=10`,
+`POST /api/v0/autoprogramming/status` -> `estado=ok`, y stderr del loop
+residente contiene bloqueo `opes-registry-finalpkg blocked` con
+`ORQUESTA_OPES_REGISTRY_FINALPKG_COURSE_ID`,
+`ORQUESTA_OPES_REGISTRY_FINALPKG_TEMPLATE_RUN_REF` y
+`ORQUESTA_OPES_REGISTRY_FINALPKG_TEMPLATE_TOPIC_ID`. Residual: no cerrar
+`BUG-058/066/075` sin smoke OPES temporal real con arbol tema -> derivados ->
+paquete final y sin tocar OPES productivo.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
@@ -2641,3 +2664,9 @@ verde con `POST /api/v0/apps/director -> HTTP 200`, stats con
   como valor historico de diagnostico pero no backend operativo.
 - Internacionalizar prompts legacy de agentes Claude/Gemini si el contrato i18n
   se extiende tambien a flujos no goal-first.
+- Wizard sigue parcial: esta tanda amplio packs de dominio y pruebas focales,
+  pero faltan U1-U12 completos, T1-T8 efectivos, motor de exclusion runtime,
+  ayudas HelpKey/ExampleKey, glosario y bot RAG antes de declararlo universal.
+- OPES finalpkg queda mas seguro en config live, pero aun falta smoke temporal
+  real end-to-end con external-work/observe, proveedor, derivados, cierre de
+  paquete final y comprobacion de no reescritura tardia.

@@ -1804,3 +1804,39 @@ Smoke REST/readiness y cierre de verificacion:
 - Auditoria viva final: `deadcode_candidates=1228`,
   `helper_duplicate_definitions=288`, `orphan_modules=1`,
   `large_files_over_800=17`; `env_vars_orquesta=512`.
+
+## Actualizacion Codex 2026-07-04 tarde 31
+
+Wizard dominio y OPES finalpkg live-config:
+
+- Avance parcial wizard: se ampliaron packs de dominio y preguntas R3
+  multi-pack en `modulos/orquesta-web`, con i18n es/en y pruebas focales.
+  No declarar completo: faltan U1-U12, T1-T8, exclusiones runtime,
+  HelpKey/ExampleKey completos, glosario y bot RAG.
+- Cerrado `BUG-ORQ-20260704-190`: `cmd/orquesta-server` ya no aplica
+  defaults OPES de `course_id`, `template_run_ref` ni `template_topic_id` en
+  `dry_run=false`; live exige config/env explicitos y bloquea efectos si
+  faltan.
+- Validado con Orquesta real temporal: API wizard `guided-turn` verde,
+  autoprogramming status `ok`, readiness `running`, y el loop
+  `opes-registry-finalpkg` bloquea la config live incompleta con las tres
+  claves faltantes. No se toco OPES productivo.
+
+Verificado:
+
+- Focales `./modulos/orquesta-web` para wizard/i18n.
+- Focales `./cmd/orquesta-server` para OPES finalpkg config/dry-run/submit.
+- Smoke API publica de Orquesta con servidor temporal aislado.
+- Suite completa `GOFLAGS=-buildvcs=false go test -count=1 ./...` verde.
+- Auditoria viva: `deadcode_candidates=1228`,
+  `helper_duplicate_definitions=288`, `orphan_modules=1`,
+  `large_files_over_800=17`; `env_vars_orquesta=512`.
+
+Mantener abiertos para siguiente agente:
+
+- `BUG-165`: residual global stop/observe/shutdown goal-first.
+- `BUG-058`, `BUG-066`, `BUG-075`: requieren smoke OPES temporal real
+  end-to-end con external-work/observe, proveedor, derivados y paquete final.
+- `BUG-065`, `BUG-079`: no cerrar sin evidencia real indicada en inventario.
+- Wizard universal: completar secciones 9-12 del diseno antes de venderlo como
+  generador universal.

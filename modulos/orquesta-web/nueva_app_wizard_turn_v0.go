@@ -114,6 +114,14 @@ func wizardDecisionsForAnswerV0(
 	if freeText {
 		return []WebNuevaAppIntakeDecisionV0{guidedAnswerDecisionV0(question.Field, choice)}
 	}
+	if question.Field == "descripcion" {
+		switch choice {
+		case "describir_flujo_diario":
+			return []WebNuevaAppIntakeDecisionV0{{Field: "descripcion", Value: "Describir que debe poder hacer un usuario un dia normal antes de cerrar el contrato."}}
+		case "describir_integraciones":
+			return []WebNuevaAppIntakeDecisionV0{{Field: "descripcion", Value: "Describir servicios, datos o herramientas existentes que deben conectarse por adaptadores."}}
+		}
+	}
 	if index, suffix, ok := indexedNuevaAppDecisionFieldV0(question.Field, "integraciones"); ok {
 		return wizardIntegrationDecisionsV0(index, suffix, choice)
 	}
@@ -159,9 +167,28 @@ func wizardIntegrationDecisionsV0(index int, suffix string, choice string) []Web
 				{Field: prefix + "auth", Value: "proveedor gestionado"},
 				{Field: prefix + "criticidad", Value: "alta"},
 			}
+		case "ecommerce_capability", "ecommerce_payments_sync":
+			return []WebNuevaAppIntakeDecisionV0{
+				{Field: prefix + "tipo", Value: "ecommerce"},
+				{Field: prefix + "nombre", Value: "catalogo, carrito y pagos"},
+				{Field: prefix + "proposito", Value: "Gobernar catalogo, carrito, pagos, stock y facturacion mediante adaptadores configurables."},
+				{Field: prefix + "auth", Value: "proveedor gestionado"},
+				{Field: prefix + "criticidad", Value: "alta"},
+				{Field: prefix + "requerido", Value: "true"},
+			}
 		case "maps_public_sources":
 			return guidedMapDecisionsV0(false)
 		default:
+			if integrationType, ok := wizardDomainIntegrationTypeFromChoiceV0(choice); ok {
+				return []WebNuevaAppIntakeDecisionV0{
+					{Field: prefix + "tipo", Value: integrationType},
+					{Field: prefix + "nombre", Value: wizardDomainIntegrationNameV0(integrationType)},
+					{Field: prefix + "proposito", Value: wizardDomainIntegrationPurposeV0(integrationType, choice)},
+					{Field: prefix + "auth", Value: "adaptador configurable"},
+					{Field: prefix + "criticidad", Value: wizardDomainIntegrationCriticalityV0(integrationType)},
+					{Field: prefix + "requerido", Value: "true"},
+				}
+			}
 			return []WebNuevaAppIntakeDecisionV0{{Field: prefix + "tipo", Value: choice}}
 		}
 	case "auth":
@@ -184,6 +211,65 @@ func wizardIntegrationDecisionsV0(index int, suffix string, choice string) []Web
 		}
 	default:
 		return []WebNuevaAppIntakeDecisionV0{{Field: prefix + suffix, Value: choice}}
+	}
+}
+
+func wizardDomainIntegrationTypeFromChoiceV0(choice string) (string, bool) {
+	for _, suffix := range []string{"_capability", "_sync"} {
+		if strings.HasSuffix(choice, suffix) {
+			integrationType := strings.TrimSuffix(choice, suffix)
+			if trimV0(integrationType) != "" {
+				return integrationType, true
+			}
+		}
+	}
+	return "", false
+}
+
+func wizardDomainIntegrationNameV0(integrationType string) string {
+	switch integrationType {
+	case "inventory":
+		return "inventario y stock"
+	case "documents":
+		return "documentos y wiki"
+	case "project_tasks":
+		return "tareas y proyectos"
+	case "finance":
+		return "finanzas y presupuestos"
+	case "crm":
+		return "contactos y CRM"
+	case "booking":
+		return "reservas y turnos"
+	case "health":
+		return "salud, fitness y habitos"
+	case "education":
+		return "educacion y cursos"
+	case "community":
+		return "comunidad y moderacion"
+	case "iot":
+		return "domotica, IoT y sensores"
+	case "media":
+		return "galeria y media"
+	case "billing":
+		return "facturacion y documentos legales"
+	default:
+		return integrationType
+	}
+}
+
+func wizardDomainIntegrationPurposeV0(integrationType string, choice string) string {
+	if strings.HasSuffix(choice, "_sync") {
+		return "Sincronizar datos y eventos del dominio mediante conectores autorizados."
+	}
+	return "Cubrir las capacidades principales del dominio mediante puertos y adaptadores configurables."
+}
+
+func wizardDomainIntegrationCriticalityV0(integrationType string) string {
+	switch integrationType {
+	case "finance", "billing", "health", "ecommerce":
+		return "alta"
+	default:
+		return "media"
 	}
 }
 

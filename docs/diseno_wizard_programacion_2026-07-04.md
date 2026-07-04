@@ -607,3 +607,27 @@ El operador lo quiere, pero como tiene coste debe ser OPCIONAL:
    que el resto de Orquesta para que el operador vea el gasto.
 5. Test: `TestWizardBotDegradaAPresupuestoAgotadoV0` y
    `TestWizardBotApagadoPorDefectoV0`.
+
+## 13. Estado vigente tras tanda Codex tarde 31
+
+El wizard no queda completo. Lo integrado hasta esta tanda cubre la base
+web/MCP y un avance parcial de dominio:
+
+- Packs nuevos o ampliados para `inventario`, `notas/documentos`,
+  `tareas/proyectos`, `finanzas`, `crm`, `reservas`, `salud`, `educacion`,
+  `comunidad`, `iot`, `media`, `facturacion` y `ecommerce`.
+- R3 puede emitir varias preguntas de dominio con campos `integraciones.N.tipo`
+  distintos y aplica decisiones como conectores sin duplicar el mismo campo.
+- La pregunta abierta de dominio se reserva para objetivos que no encajan con
+  ningun pack conocido.
+- Hay cobertura focal para tienda/ecommerce, finanzas, reservas, IoT,
+  combinacion de packs, dominio abierto e i18n de las claves nuevas.
+
+Pendiente vinculante antes de declarar "wizard universal para cualquier app":
+
+- Taxonomia U1-U12 completa y efectiva.
+- Capa tecnica T1-T8 completa y efectiva.
+- Motor de exclusion runtime con hechos/requires/excluded/resolved.
+- `HelpKey`/`ExampleKey`, glosario y boton "explicamelo todo".
+- Bot determinista/RAG y nivel LLM opt-in con presupuesto.
+- Tests de aceptacion completos de las secciones 9-12.

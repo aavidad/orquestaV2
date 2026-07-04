@@ -118,11 +118,21 @@ func validateOPESRegistryFinalPkgConfigV0(config opesRegistryFinalPkgConfigV0) e
 	if strings.TrimSpace(config.CourseRoot) == "" {
 		return fmt.Errorf("%s requerido", envOPESRegistryFinalPkgCourseRootV0)
 	}
-	if strings.TrimSpace(config.CourseID) == "" ||
-		strings.TrimSpace(config.TemplateRunRef) == "" ||
-		strings.TrimSpace(config.TemplateTopicID) == "" ||
-		strings.TrimSpace(config.QueueRef) == "" {
-		return fmt.Errorf("opes_registry_finalpkg_config_incomplete")
+	missing := make([]string, 0, 4)
+	if strings.TrimSpace(config.CourseID) == "" {
+		missing = append(missing, envOPESRegistryFinalPkgCourseIDV0)
+	}
+	if strings.TrimSpace(config.TemplateRunRef) == "" {
+		missing = append(missing, envOPESRegistryFinalPkgTemplateRunV0)
+	}
+	if strings.TrimSpace(config.TemplateTopicID) == "" {
+		missing = append(missing, envOPESRegistryFinalPkgTemplateTopicV0)
+	}
+	if strings.TrimSpace(config.QueueRef) == "" {
+		missing = append(missing, envOPESRegistryFinalPkgQueueRefV0)
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("opes_registry_finalpkg_config_incomplete: %s", strings.Join(missing, ","))
 	}
 	if config.BatchSize < 1 || config.MaxInFlight < 1 || config.ReconcileLimit < 1 {
 		return fmt.Errorf("opes_registry_finalpkg_limits_invalid")
@@ -161,7 +171,12 @@ func opesRegistryFinalPkgRegistryPathFromProjectConfigFileV0(config serverProjec
 }
 
 func opesRegistryFinalPkgCourseIDFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
-	return stringProjectConfigOrEnvOrDefaultV0(envOPESRegistryFinalPkgCourseIDV0, config.OPESRegistryFinalPkg.CourseID, defaultOPESRegistryFinalPkgCourseIDV0)
+	return opesRegistryFinalPkgStringWithDryRunDefaultFromProjectConfigFileV0(
+		config,
+		envOPESRegistryFinalPkgCourseIDV0,
+		config.OPESRegistryFinalPkg.CourseID,
+		defaultOPESRegistryFinalPkgCourseIDV0,
+	)
 }
 
 func opesRegistryFinalPkgCourseRootFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
@@ -169,11 +184,34 @@ func opesRegistryFinalPkgCourseRootFromProjectConfigFileV0(config serverProjectC
 }
 
 func opesRegistryFinalPkgTemplateRunRefFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
-	return stringProjectConfigOrEnvOrDefaultV0(envOPESRegistryFinalPkgTemplateRunV0, config.OPESRegistryFinalPkg.TemplateRunRef, defaultOPESRegistryFinalPkgTemplateRunRefV0)
+	return opesRegistryFinalPkgStringWithDryRunDefaultFromProjectConfigFileV0(
+		config,
+		envOPESRegistryFinalPkgTemplateRunV0,
+		config.OPESRegistryFinalPkg.TemplateRunRef,
+		defaultOPESRegistryFinalPkgTemplateRunRefV0,
+	)
 }
 
 func opesRegistryFinalPkgTemplateTopicIDFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
-	return stringProjectConfigOrEnvOrDefaultV0(envOPESRegistryFinalPkgTemplateTopicV0, config.OPESRegistryFinalPkg.TemplateTopicID, defaultOPESRegistryFinalPkgTemplateTopicV0)
+	return opesRegistryFinalPkgStringWithDryRunDefaultFromProjectConfigFileV0(
+		config,
+		envOPESRegistryFinalPkgTemplateTopicV0,
+		config.OPESRegistryFinalPkg.TemplateTopicID,
+		defaultOPESRegistryFinalPkgTemplateTopicV0,
+	)
+}
+
+func opesRegistryFinalPkgStringWithDryRunDefaultFromProjectConfigFileV0(
+	config serverProjectConfigFileV0,
+	key string,
+	fileValue *string,
+	dryRunFallback string,
+) string {
+	fallback := ""
+	if opesRegistryFinalPkgDryRunFromProjectConfigFileV0(config) {
+		fallback = dryRunFallback
+	}
+	return stringProjectConfigOrEnvOrDefaultV0(key, fileValue, fallback)
 }
 
 func opesRegistryFinalPkgBatchSizeFromProjectConfigFileV0(config serverProjectConfigFileV0) int {

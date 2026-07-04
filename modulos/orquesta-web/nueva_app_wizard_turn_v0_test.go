@@ -82,6 +82,93 @@ func TestWizardHuecosCruzadosDetectaDatosIntegracionMovilYDeployV0(t *testing.T)
 	}
 }
 
+func TestWizardPackDominioPorKeywordV0(t *testing.T) {
+	tests := []struct {
+		name        string
+		objective   string
+		questionRef string
+		optionValue string
+	}{
+		{
+			name:        "tienda",
+			objective:   "quiero una tienda con catalogo, carrito y pagos",
+			questionRef: "wizard-r3-integracion-tienda",
+			optionValue: "ecommerce_capability",
+		},
+		{
+			name:        "finanzas",
+			objective:   "quiero controlar gastos, presupuestos y extractos OFX",
+			questionRef: "wizard-r3-integracion-finanzas",
+			optionValue: "finance_capability",
+		},
+		{
+			name:        "reservas",
+			objective:   "quiero una app de reservas y turnos con disponibilidad",
+			questionRef: "wizard-r3-integracion-reservas",
+			optionValue: "booking_capability",
+		},
+		{
+			name:        "iot",
+			objective:   "quiero domotica con sensores MQTT y panel de telemetria",
+			questionRef: "wizard-r3-integracion-iot",
+			optionValue: "iot_capability",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			session := wizardSessionWithObjectiveV0("session-wizard-domain-"+tt.name, tt.objective)
+			questions := webNuevaAppWizardAllGapQuestionsV0(session.Form)
+			if !hasWizardQuestionRefV0(questions, tt.questionRef) ||
+				!hasWizardQuestionOptionV0(questions, tt.questionRef, tt.optionValue) {
+				t.Fatalf("pack dominio no activado: ref=%s option=%s questions=%+v", tt.questionRef, tt.optionValue, questions)
+			}
+		})
+	}
+}
+
+func TestWizardPacksCombinadosSinDuplicadosV0(t *testing.T) {
+	session := wizardSessionWithObjectiveV0("session-wizard-domain-combined", "quiero una tienda con reservas, turnos, catalogo y pagos")
+	questions := webNuevaAppWizardAllGapQuestionsV0(session.Form)
+	if !hasWizardQuestionRefV0(questions, "wizard-r3-integracion-tienda") ||
+		!hasWizardQuestionRefV0(questions, "wizard-r3-integracion-reservas") {
+		t.Fatalf("packs combinados no activados: %+v", questions)
+	}
+	fields := map[string]bool{}
+	for _, question := range questions {
+		if !strings.HasPrefix(question.QuestionRef, "wizard-r3-integracion-") {
+			continue
+		}
+		if fields[question.Field] {
+			t.Fatalf("pack dominio duplico field=%s en %+v", question.Field, questions)
+		}
+		fields[question.Field] = true
+	}
+}
+
+func TestWizardSinDominioPreguntaAbiertaV0(t *testing.T) {
+	session := wizardSessionWithObjectiveV0("session-wizard-domain-open", "quiero una herramienta para organizar ideas raras")
+	questions := webNuevaAppWizardAllGapQuestionsV0(session.Form)
+	if !hasWizardQuestionRefV0(questions, "wizard-r3-dominio-abierto") ||
+		!hasWizardQuestionOptionV0(questions, "wizard-r3-dominio-abierto", "describir_flujo_diario") {
+		t.Fatalf("sin dominio no pregunta abierto: %+v", questions)
+	}
+}
+
+func TestWizardPackDominioAplicaDecisionComoConectorV0(t *testing.T) {
+	session := wizardSessionWithObjectiveV0("session-wizard-domain-decision", "quiero controlar gastos y presupuestos")
+	session, result := ApplyWebNuevaAppWizardAnswersV0(session, []WizardAnswerV0{{
+		QuestionRef: "wizard-r3-integracion-finanzas",
+		UserChoice:  "finance_capability",
+	}})
+	if len(result.Decisions) == 0 ||
+		len(session.Form.Integraciones) == 0 ||
+		session.Form.Integraciones[0].Tipo != "finance" ||
+		session.Form.Integraciones[0].Criticidad != "alta" ||
+		!session.Form.Integraciones[0].Requerido {
+		t.Fatalf("pack dominio no materializa conector gobernado: session=%+v result=%+v", session.Form, result)
+	}
+}
+
 func TestWizardConservaRecomendacionVisibleSiUsuarioEligeOtraOpcionV0(t *testing.T) {
 	session := NewWebNuevaAppIntakeSessionV0("session-wizard-contrast", "es-ES", "", "quiero una app para una agenda")
 	questions := webNuevaAppWizardAllGapQuestionsV0(session.Form)
