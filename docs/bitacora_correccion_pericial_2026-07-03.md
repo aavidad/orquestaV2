@@ -3654,3 +3654,22 @@ Verificacion:
 
 - `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestServerCodexGoalCostRoutingStarterV0BajaSoloDocumentacionALowV0|TestServerCodexGoalTaskCostClassForPacketV0IgnoraDeclaradoIncoherenteV0|TestServerCodexGoalBackendFromEnvV0TmuxNoArrancaAppServerEnConstruccionV0'`
 - `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-runtime-codex-goal -run 'TestBuildCodexGoalStartPacketV0DerivaTaskCostClassDesdeWriteSetV0'`
+
+## Migración a servidor remoto COMPLETADA (Claude, 2026-07-04 noche)
+
+- Servidor: srv1651826 (berserk@uso.dipgra.cloud), repo en
+  /srv/orquesta-self/worktrees/orquesta, rama trabajo/plataforma-agentes
+  en f5a3d7a2 (idéntica a local y GitHub).
+- Respaldos previos al force-push autorizado: rama
+  respaldo-pre-migracion-2026-07-04 + tag homónimo-tag (estado anterior
+  1667a411) + stash triaje-claude-2026-07-04 intactos.
+- Verificado allí: go build ./... EXIT=0 (Go 1.25.11 en
+  /srv/orquesta-self/tools/go/bin), suites goal/estado-vivo/web verdes,
+  codex CLI en /usr/local/bin/codex, perfil self-programming en
+  /srv/orquesta-self/orquesta-self.env. Disco: 20G libres (80%),
+  primera tarea allí: limpiar caches/runtimes viejos.
+- GitHub queda como canal de sincronización (el fetch directo del servidor
+  a GitHub no tiene credenciales; empujar desde donde se trabaje).
+- El equipo local queda APAGADO. Continuación: cola vigente en
+  instrucciones del director (TAREA-2 ampliada, 8, 9, 10, wizard U/T/bot,
+  smoke OPES real).
