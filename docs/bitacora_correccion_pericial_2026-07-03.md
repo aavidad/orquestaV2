@@ -3806,3 +3806,26 @@ enforcement proveedor BUG-079 (frontera runtime externo).
   diseno). Ejecucion manual de validacion: status=ok, phase=preflight_ok.
 - La ventana §9 de 7 nightlies verdes cuenta desde ahora EN EL SERVIDOR;
   el timer del equipo local queda irrelevante (equipo se apaga).
+
+## Siguiente mision tras G5: test de campo OPES REAL (orden del operador 2026-07-05)
+
+Orden textual: "necesitaria probar orquesta con el conector de OPES y crear
+un temario que no tengamos entero, asi vemos si todo funciona bien".
+
+Plan (ejecutar cuando G5 este integrado y no quede nada en la tanda):
+1. Inventariar en el OPES real del servidor (opes-api + postgres ya
+   corriendo en srv1651826) los programas/temarios existentes y elegir uno
+   INCOMPLETO o inexistente como objetivo.
+2. Conectar Orquesta al OPES real (bridge/drain con ORQUESTA_OPES_BASE_URL
+   canonica apuntando al opes-api local; NADA de fixtures), perfil goal-first
+   con umbral 450k y guard required_settings del nuevo TAREA-8.2 para
+   garantizar la config proyectada.
+3. Dejar que la cadena real recorra las 24 fases (registry -> research ->
+   draft -> visual -> question bank -> 7 revisiones -> validate -> assemble
+   -> audio/tutor/juegos/html/manual -> finalize_temario_package) con
+   observacion por eventos y Claude de revisor.
+4. Criterio de exito: temario completo materializado en OPES con settlement
+   durable, calidad por tema aceptada, sin reescritura tardia y sin procesos
+   residuales. Cualquier fallo se registra como bug de campo con refs y se
+   programa el fix por Orquesta.
+Esto ejecuta de facto MEJ-101 (OPES real) con decision del operador.
