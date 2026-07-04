@@ -590,3 +590,20 @@ la TAREA-9: antes de borrar, clasificar "muerta-de-verdad" vs
 
 Prioridad: 10.3 dentro de TAREA-2 (ya en cabeza); 10.2 junto a TAREA-3;
 10.1 al cerrar el wizard. Cada retoma con test focal y nota en bitácora.
+
+#### TAREA-9: autorización permanente de poda (operador, 2026-07-05)
+
+Orden textual: "si se puede recuperar después lo podemos podar sin necesidad
+de que me preguntes nada". Política vigente para todas las olas:
+
+- La poda NO requiere consulta al operador, ni para clase A ni para clase B.
+  La garantía de recuperación es git (git log -S <simbolo>) más el JSON de
+  clasificación durable que cada ola DEBE producir antes de borrar (ruta,
+  símbolo, categoría, razón) — ese JSON es el mapa de recuperación.
+- Los guardas que SÍ siguen siendo obligatorios son técnicos, no de permiso:
+  go build ./... verde, suites de los módulos tocados verdes, ratchet de
+  auditoría bajando, y si se borra algo respaldado por tests, borrar también
+  sus tests en el mismo commit (nunca dejar suites rojas).
+- Retirar módulos o subsistemas ENTEROS (p.ej. deploy/capacity completos a
+  docs/historico) también queda autorizado bajo las mismas condiciones,
+  en commit propio y reversible.
