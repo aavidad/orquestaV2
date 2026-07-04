@@ -546,8 +546,8 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 	},
 	envCodexHomeV0: {
 		Scope:       "codex_runtime",
-		Label:       "HOME proceso Codex",
-		Description: "HOME del proceso Codex lanzado por la composicion; no sustituye a ORQUESTA_CODEX_CODE_HOME como fuente de auth/config.",
+		Label:       "CODEX_HOME alias Orquesta",
+		Description: "Alias historico de ORQUESTA_CODEX_CODE_HOME mantenido por compatibilidad; la fuente canonica de auth/config es ORQUESTA_CODEX_CODE_HOME.",
 	},
 	envCodexRuntimeWorkDirV0: {
 		Scope:       "codex_runtime",
@@ -557,7 +557,7 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 	envCodexCodeHomeV0: {
 		Scope:       "codex_runtime",
 		Label:       "CODEX_HOME fuente",
-		Description: "Directorio fuente de auth.json/config.toml para backends Codex; CODEX_HOME se conserva solo como alias legacy.",
+		Description: "Directorio fuente de auth.json/config.toml para backends Codex; ORQUESTA_CODEX_HOME y CODEX_HOME se conservan solo como aliases legacy.",
 	},
 	envCodexPromoteMaterializedArtifactWithoutAckV0: {
 		Scope:       "codex_runtime",

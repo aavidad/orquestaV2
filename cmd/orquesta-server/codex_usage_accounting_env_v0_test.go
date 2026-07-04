@@ -97,7 +97,7 @@ func TestCodexUsageMetricsFromProjectConfigV0EnvGana(t *testing.T) {
 }
 
 func TestInt64EnvOrDefaultV0(t *testing.T) {
-	const key = "ORQUESTA_CODEX_USAGE_ACCOUNTING_TEST_VALUE"
+	const key = "CODEX_USAGE_ACCOUNTING_TEST_VALUE"
 	_ = os.Unsetenv(key)
 	if got := int64EnvOrDefaultV0(key, 10); got != 10 {
 		t.Fatalf("default=%d", got)

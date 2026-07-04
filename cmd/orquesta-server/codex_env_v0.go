@@ -51,6 +51,10 @@ func codeHomeDirV0() string {
 	if value != "" {
 		return value
 	}
+	value = strings.TrimSpace(os.Getenv(envCodexHomeV0))
+	if value != "" {
+		return value
+	}
 	value = strings.TrimSpace(os.Getenv(envCodexCodeHomeLegacyV0))
 	if value != "" {
 		return value

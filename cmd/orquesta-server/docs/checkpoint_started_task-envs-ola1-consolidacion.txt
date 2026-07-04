@@ -1,0 +1,6 @@
+goal_ref: goal-ref-task-autoprogramming-5ccdd5fa3aea-g01
+source_task_ref: task-envs-ola1-consolidacion
+objective: consolidate env aliases and timeout unit registry for TAREA-8.4 ola 1
+scope: cmd/orquesta-server, modulos/orquesta-server, approved audit/backlog docs
+next_artifact: cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-5ccdd5fa3aea-g01.json
+evidence: checkpoint materialized before long exploration; code broker unavailable in this session

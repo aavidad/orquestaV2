@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -67,7 +68,7 @@ func TestSmokeCommonReadinessStateFileRechazaPIDMuertoV0(t *testing.T) {
 		t.Skip("jq no disponible")
 	}
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newLocalHTTPTestServerOrSkipV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v0/server/readiness" {
 			http.NotFound(w, r)
 			return
@@ -101,6 +102,18 @@ func TestSmokeCommonReadinessStateFileRechazaPIDMuertoV0(t *testing.T) {
 	}
 }
 
+func newLocalHTTPTestServerOrSkipV0(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("socket local no disponible en sandbox: %v", err)
+	}
+	server := httptest.NewUnstartedServer(handler)
+	server.Listener = listener
+	server.Start()
+	return server
+}
+
 func TestSmokeCommonReadinessAceptaStartupReadyDegradadoV0(t *testing.T) {
 	if _, err := exec.LookPath("bash"); err != nil {
 		t.Skip("bash no disponible")
@@ -109,7 +122,7 @@ func TestSmokeCommonReadinessAceptaStartupReadyDegradadoV0(t *testing.T) {
 		t.Skip("jq no disponible")
 	}
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := newLocalHTTPTestServerOrSkipV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v0/server/readiness" {
 			http.NotFound(w, r)
 			return

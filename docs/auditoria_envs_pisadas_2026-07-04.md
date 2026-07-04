@@ -519,6 +519,38 @@ Verificación:
 - Smoke real temporal:
   `orquesta_goal_backend_config_smoke=passed`.
 
+## Actualización Codex 2026-07-05 ola 1 consolidación
+
+TAREA-8.4 queda cerrada para el write-set de esta ola:
+
+- `ORQUESTA_CODEX_CODE_HOME` sigue como canónica de auth/config.
+- `ORQUESTA_CODEX_HOME` queda alineada como alias legacy directo en
+  `codeHomeDirV0`, igual que ya publicaba `effective_config`; si sólo existe
+  ese alias no se transforma en `<valor>/.codex`.
+- `CODEX_HOME` conserva compatibilidad como alias legacy posterior.
+- `effective_config` ya diagnostica `deprecated_env_used`,
+  `deprecated_env_duplicate` o `env_alias_conflict` para
+  `ORQUESTA_CODEX_HOME` y `CODEX_HOME` frente a la canónica.
+- `ORQUESTA_OPES_BASE_URL`/`OPES_BASE_URL` conservan el patrón canónico + alias
+  diagnosticado ya existente.
+- El ratchet de unidades de timeout queda cubierto por
+  `TestServerEnvRegistryV0TimeoutsDeclaranUnidadEnNombre`; no se añaden
+  nombres nuevos y el conteo global se mantiene en `env_vars_orquesta=512`.
+- Se retira un centinela de test con prefijo `ORQUESTA_` que no era superficie
+  operativa (`CODEX_USAGE_ACCOUNTING_TEST_VALUE`), para que el ratchet mida
+  configuración real.
+- Los fixtures fake de Claude/Gemini process escriben resultado durable completo
+  con `artifact_refs`, `artifact_paths` y `materialized_artifacts`, evitando
+  falsos rojos por schema de cierre actual.
+
+Verificación:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'Test(CodeHomeDirV0|Int64EnvOrDefaultV0|ServerConfigFromEnvV0Diagnostica(OPESBaseURLLegacyAlias|OPESBaseURLPisada|CodexCodeHomeLegacyAlias|OrquestaCodexHomeLegacyAlias|CodexCodeHomePisado|OrquestaCodexHomePisado)V0|ServerEnvRegistryV0|EnvVarsOrquestaRatchetMEJ106V0|ServerEnvRegistryASTV0)'`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerGoalBackendFromEnvV0(ClaudeProcessLanzaYObservaResultado|GeminiProcessLanzaYObservaResultado)V0|TestEnvVarsOrquestaRatchetMEJ106V0'`
+- `git diff --check`
+- `scripts/orquesta_metricas_deuda.sh --json` -> `env_vars_orquesta=512`
+- `go test ./cmd/orquesta-server ./modulos/orquesta-server`
+
 ## Actualización Codex 2026-07-04 tarde 14
 
 TAREA-8.1 consolida `rails_security` y `egress_sanitizer`:
@@ -586,3 +618,32 @@ Verificación:
 - Smoke real temporal:
   `orquesta_opes_config_smoke=passed`.
 - `go test -count=1 ./cmd/orquesta-server` verde.
+
+## Actualización Codex 2026-07-04 tarde 16
+
+TAREA-8.4 ola 1 consolida el frente estrecho de alias y unidades:
+
+- `ORQUESTA_CODEX_CODE_HOME` queda como setting canónico de auth/config Codex.
+  `ORQUESTA_CODEX_HOME` y `CODEX_HOME` se aceptan como aliases legacy:
+  publican el setting canónico con `source=legacy_alias` si no hay canónica,
+  emiten `deprecated_env_used`, y emiten `env_alias_conflict` cuando difieren
+  de la canónica.
+- `ORQUESTA_OPES_BASE_URL` mantiene `OPES_BASE_URL` como alias legacy con el
+  patrón ya verificado (`legacy_alias`, `deprecated_env_used` y conflicto si
+  ambas difieren).
+- El registro efectivo añade ratchet de unidades para timeouts: toda env
+  registrada que contenga `TIMEOUT` debe declarar unidad en el nombre
+  (`_TIMEOUT_MS`, `_TIMEOUT_SECONDS` o caso no duracional explícito como
+  `_TIMEOUT_READY`).
+- No se añaden envs nuevas; `scripts/orquesta_metricas_deuda.sh --json`
+  permanece en `env_vars_orquesta=512`.
+
+Verificación:
+
+- Focal aliases/registro:
+  `go test -count=1 ./cmd/orquesta-server -run 'Diagnostica.*(CodexCodeHome|OrquestaCodexHome|OPESBaseURL)|ServerEnvRegistryV0TimeoutsDeclaranUnidad|ServerEnvRegistryV0TieneMetadata'`.
+- Ratchets:
+  `go test -count=1 ./cmd/orquesta-server -run 'EnvRegistryAST|EnvVarsOrquestaRatchet'`.
+- Suite requerida de cierre:
+  `go test ./cmd/orquesta-server ./modulos/orquesta-server`.
+- `git diff --check` verde.

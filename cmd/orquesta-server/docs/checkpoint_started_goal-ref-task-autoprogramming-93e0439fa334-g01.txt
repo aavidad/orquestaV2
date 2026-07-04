@@ -1,0 +1,6 @@
+goal_ref: goal-ref-task-autoprogramming-93e0439fa334-g01
+source_task_ref: task-envs-ola1-consolidacion
+objective: consolidate Codex home aliases, OPES base URL aliases and timeout-unit ratchets for TAREA-8.4 ola 1
+scope: cmd/orquesta-server, modulos/orquesta-server, docs/auditoria_envs_pisadas_2026-07-04.md, docs/autoprogramacion_orquesta_pendientes_2026-05-23.md
+next_artifact: cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-93e0439fa334-g01.json
+evidence: checkpoint materialized before long exploration; MCP broker resources unavailable in this session; repo_map evidence ref from input used with local rg fallback

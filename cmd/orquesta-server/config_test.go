@@ -549,6 +549,28 @@ func TestServerConfigFromEnvV0DiagnosticaCodexCodeHomeLegacyAliasV0(t *testing.T
 	}
 }
 
+func TestServerConfigFromEnvV0DiagnosticaOrquestaCodexHomeLegacyAliasV0(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(envCodexProjectWorkDirV0, root)
+	t.Setenv(envCodexCodeHomeV0, "")
+	t.Setenv(envCodexHomeV0, filepath.Join(root, "orquesta-codex-home"))
+	t.Setenv(envCodexCodeHomeLegacyV0, "")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envCodexCodeHomeV0)
+	if setting.Value != "codex-code-home-configured" ||
+		setting.Source != "legacy_alias" ||
+		!setting.Sensitive {
+		t.Fatalf("setting codex code home ORQUESTA_CODEX_HOME legacy=%+v", setting)
+	}
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, "deprecated_env_used", envCodexHomeV0, envCodexCodeHomeV0) {
+		t.Fatalf("diagnostico ORQUESTA_CODEX_HOME alias ausente: %+v", config.EffectiveConfig.Diagnostics)
+	}
+}
+
 func TestServerConfigFromEnvV0DiagnosticaCodexCodeHomePisadoV0(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(envCodexProjectWorkDirV0, root)
@@ -567,6 +589,27 @@ func TestServerConfigFromEnvV0DiagnosticaCodexCodeHomePisadoV0(t *testing.T) {
 	}
 	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, "env_alias_conflict", envCodexCodeHomeLegacyV0, envCodexCodeHomeV0) {
 		t.Fatalf("diagnostico Codex code home conflicto ausente: %+v", config.EffectiveConfig.Diagnostics)
+	}
+}
+
+func TestServerConfigFromEnvV0DiagnosticaOrquestaCodexHomePisadoV0(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(envCodexProjectWorkDirV0, root)
+	t.Setenv(envCodexCodeHomeV0, filepath.Join(root, "canonical-codex-home"))
+	t.Setenv(envCodexHomeV0, filepath.Join(root, "orquesta-codex-home"))
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envCodexCodeHomeV0)
+	if setting.Value != "codex-code-home-configured" ||
+		setting.Source != "explicit" ||
+		!setting.Sensitive {
+		t.Fatalf("setting codex code home ORQUESTA_CODEX_HOME conflicto=%+v", setting)
+	}
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, "env_alias_conflict", envCodexHomeV0, envCodexCodeHomeV0) {
+		t.Fatalf("diagnostico ORQUESTA_CODEX_HOME conflicto ausente: %+v", config.EffectiveConfig.Diagnostics)
 	}
 }
 

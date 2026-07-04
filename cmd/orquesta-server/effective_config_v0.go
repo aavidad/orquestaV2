@@ -423,9 +423,9 @@ func serverOrquestaBaseURLSettingV0() orquestaserver.ServerConfigSettingV0 {
 func serverCodexCodeHomeSettingV0() orquestaserver.ServerConfigSettingV0 {
 	setting := serverSensitiveConfigSettingFromRegistryV0(
 		envCodexCodeHomeV0,
-		configuredRefValueV0(firstNonEmptyEnvV0(envCodexCodeHomeV0, envCodexCodeHomeLegacyV0), "codex-code-home-configured"),
+		configuredRefValueV0(firstNonEmptyEnvV0(envCodexCodeHomeV0, envCodexHomeV0, envCodexCodeHomeLegacyV0), "codex-code-home-configured"),
 	)
-	if configSettingSourceFromEnvOrLegacyV0(envCodexCodeHomeV0, envCodexCodeHomeLegacyV0) == "legacy_alias" {
+	if configSettingSourceFromEnvOrLegacyV0(envCodexCodeHomeV0, envCodexHomeV0, envCodexCodeHomeLegacyV0) == "legacy_alias" {
 		setting.Source = "legacy_alias"
 	}
 	return setting
@@ -446,21 +446,22 @@ func serverEffectiveConfigDiagnosticsFromConfigV0(projectConfig serverProjectCon
 	diagnostics := []orquestaserver.ServerDiagnosticV0{}
 	diagnostics = append(diagnostics, serverEnvAliasDiagnosticsV0(
 		envOrquestaServerURLV0,
-		envOrquestaBaseURLV0,
 		"server_endpoint",
 		"evidence-ref-config-alias-orquesta-server-url",
+		envOrquestaBaseURLV0,
 	)...)
 	diagnostics = append(diagnostics, serverEnvAliasDiagnosticsV0(
 		envCodexCodeHomeV0,
-		envCodexCodeHomeLegacyV0,
 		"codex_runtime",
 		"evidence-ref-config-alias-codex-code-home",
+		envCodexHomeV0,
+		envCodexCodeHomeLegacyV0,
 	)...)
 	diagnostics = append(diagnostics, serverEnvAliasDiagnosticsV0(
 		envOPESBaseURLV0,
-		envOPESBaseURLLegacyV0,
 		"opes_bridge",
 		"evidence-ref-config-alias-opes-base-url",
+		envOPESBaseURLLegacyV0,
 	)...)
 	if !serverGoalBackendOperationalFromProjectConfigFileV0(projectConfig) &&
 		!boolEnvOrDefaultV0(envExternalWorkLegacyDirectorLoopV0, false) {
@@ -504,47 +505,46 @@ func serverEffectiveConfigDiagnosticsFromConfigV0(projectConfig serverProjectCon
 
 func serverEnvAliasDiagnosticsV0(
 	canonical string,
-	legacy string,
 	scope string,
 	evidenceRef string,
+	legacies ...string,
 ) []orquestaserver.ServerDiagnosticV0 {
 	canonical = strings.TrimSpace(canonical)
-	legacy = strings.TrimSpace(legacy)
 	canonicalValue := strings.TrimSpace(os.Getenv(canonical))
-	legacyValue := strings.TrimSpace(os.Getenv(legacy))
-	if legacyValue == "" {
-		return nil
-	}
-	if canonicalValue == "" {
-		return []orquestaserver.ServerDiagnosticV0{{
-			Code:         "deprecated_env_used",
+	diagnostics := make([]orquestaserver.ServerDiagnosticV0, 0, len(legacies))
+	for _, legacy := range legacies {
+		legacy = strings.TrimSpace(legacy)
+		legacyValue := strings.TrimSpace(os.Getenv(legacy))
+		if legacy == "" || legacyValue == "" {
+			continue
+		}
+		code := "deprecated_env_used"
+		message := legacy + " es legacy; usar " + canonical
+		if canonicalValue != "" && canonicalValue != legacyValue {
+			code = "env_alias_conflict"
+			message = legacy + " ignorada porque " + canonical + " esta definida con otro valor"
+		} else if canonicalValue != "" {
+			code = "deprecated_env_duplicate"
+			message = legacy + " duplica " + canonical + "; mantener solo " + canonical
+		}
+		diagnostics = append(diagnostics, orquestaserver.ServerDiagnosticV0{
+			Code:         code,
 			Scope:        scope,
-			Message:      legacy + " es legacy; usar " + canonical,
+			Message:      message,
 			EvidenceRefs: []string{evidenceRef},
-		}}
+		})
 	}
-	if canonicalValue != legacyValue {
-		return []orquestaserver.ServerDiagnosticV0{{
-			Code:         "env_alias_conflict",
-			Scope:        scope,
-			Message:      legacy + " ignorada porque " + canonical + " esta definida con otro valor",
-			EvidenceRefs: []string{evidenceRef},
-		}}
-	}
-	return []orquestaserver.ServerDiagnosticV0{{
-		Code:         "deprecated_env_duplicate",
-		Scope:        scope,
-		Message:      legacy + " duplica " + canonical + "; mantener solo " + canonical,
-		EvidenceRefs: []string{evidenceRef},
-	}}
+	return diagnostics
 }
 
-func configSettingSourceFromEnvOrLegacyV0(canonical string, legacy string) string {
+func configSettingSourceFromEnvOrLegacyV0(canonical string, legacies ...string) string {
 	if strings.TrimSpace(os.Getenv(canonical)) != "" {
 		return "explicit"
 	}
-	if strings.TrimSpace(os.Getenv(legacy)) != "" {
-		return "legacy_alias"
+	for _, legacy := range legacies {
+		if strings.TrimSpace(os.Getenv(legacy)) != "" {
+			return "legacy_alias"
+		}
 	}
 	return "defaulted"
 }

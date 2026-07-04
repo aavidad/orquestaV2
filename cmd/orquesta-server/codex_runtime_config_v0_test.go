@@ -41,6 +41,7 @@ func configureServerPackageTestEnvV0() func() {
 			_ = os.Unsetenv(key)
 		}
 	}
+	_ = os.Unsetenv("CODEX_HOME")
 	_ = os.Setenv(envCodexSandboxV0, "danger-full-access")
 	return func() {
 		if tmpDir != "" {
@@ -98,13 +99,25 @@ func TestCodexRuntimeConfigV0UsaSandboxWorkspaceWritePorDefecto(t *testing.T) {
 	}
 }
 
-func TestCodeHomeDirV0UsaCODEXHOMEAntesDeHomeCodexV0(t *testing.T) {
+func TestCodeHomeDirV0UsaOrquestaCodexHomeComoAliasDirectoV0(t *testing.T) {
 	root := t.TempDir()
 	codexHome := filepath.Join(root, "codex-home")
 	processHome := filepath.Join(root, "home")
 	t.Setenv(envCodexCodeHomeV0, "")
-	t.Setenv("CODEX_HOME", codexHome)
-	t.Setenv(envCodexHomeV0, processHome)
+	t.Setenv(envCodexHomeV0, codexHome)
+	t.Setenv(envCodexCodeHomeLegacyV0, processHome)
+
+	if got := codeHomeDirV0(); got != codexHome {
+		t.Fatalf("code_home=%q want %q", got, codexHome)
+	}
+}
+
+func TestCodeHomeDirV0UsaCodexHomeLegacyAliasSiNoHayCanonicaNiOrquestaAliasV0(t *testing.T) {
+	root := t.TempDir()
+	codexHome := filepath.Join(root, "codex-home")
+	t.Setenv(envCodexCodeHomeV0, "")
+	t.Setenv(envCodexHomeV0, "")
+	t.Setenv(envCodexCodeHomeLegacyV0, codexHome)
 
 	if got := codeHomeDirV0(); got != codexHome {
 		t.Fatalf("code_home=%q want %q", got, codexHome)

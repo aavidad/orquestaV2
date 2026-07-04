@@ -49,3 +49,23 @@ func TestServerEnvRegistryV0TieneMetadataParaConfiguracionEfectiva(t *testing.T)
 		}
 	}
 }
+
+func TestServerEnvRegistryV0TimeoutsDeclaranUnidadEnNombre(t *testing.T) {
+	var invalid []string
+	for key := range serverEffectiveEnvRegistryV0 {
+		if !strings.Contains(key, "TIMEOUT") {
+			continue
+		}
+		if strings.HasSuffix(key, "_TIMEOUT_MS") ||
+			strings.HasSuffix(key, "_TIMEOUT_SECONDS") ||
+			strings.Contains(key, "_TIMEOUT_MS_") ||
+			strings.Contains(key, "_TIMEOUT_SECONDS_") ||
+			strings.HasSuffix(key, "_TIMEOUT_READY") {
+			continue
+		}
+		invalid = append(invalid, key)
+	}
+	if len(invalid) > 0 {
+		t.Fatalf("timeouts sin unidad explicita en serverEffectiveEnvRegistryV0: %s", strings.Join(invalid, ", "))
+	}
+}
