@@ -190,3 +190,110 @@ Pendiente real:
 - Si se exige `mode:"wizard"` explicito, anadirlo como alias compatible; el
   endpoint actual mantiene compatibilidad y acepta `wizard_answers` sin campo
   de modo.
+
+## 9. Taxonomía de preguntas (vinculante; generaliza R1-R8 y el ejemplo agenda)
+
+El operador aclaró que la agenda era solo un ejemplo. El wizard debe cubrir
+DOS capas: dimensiones universales (aplican a cualquier app) y packs de
+dominio (se activan por keywords del objetivo). Cada pregunta lleva 2-4
+opciones con una recomendada y su porqué.
+
+### 9.1 Dimensiones universales (toda app, en este orden de turnos)
+
+U1 Uso y audiencia: ¿personal, equipo, o público? ¿cuántos usuarios
+   esperas? ¿roles distintos (admin/editor/lector)? (rec.: empezar simple
+   con roles básicos; ampliar después cuesta poco si el dominio lo separa).
+U2 Plataformas: ¿móvil, PC o ambas? ¿necesita funcionar sin internet?
+   (rec.: web responsive/PWA salvo necesidad nativa: una base de código).
+U3 Identidad y acceso: ¿sin login / login local / Google-Microsoft /
+   invitaciones por enlace? ¿2FA? (rec. si compartida: OAuth, sin gestionar
+   contraseñas propias).
+U4 Datos y ciclo de vida: ¿los datos los crea el usuario, se importan o
+   vienen de fuentes externas? ¿import/export (CSV/Excel/JSON/PDF)?
+   ¿papelera/deshacer? ¿copias de seguridad? (rec.: export CSV+JSON y
+   backup automático siempre que haya datos de usuario).
+U5 Privacidad y cumplimiento: ¿datos personales de terceros (RGPD)?
+   ¿datos sensibles (salud/finanzas/menores)? ¿registro de auditoría?
+   (rec.: minimizar datos y auditoría si hay más de un rol).
+U6 Colaboración y avisos: ¿edición simultánea? ¿comentarios? ¿notificaciones
+   (email/push/in-app)? ¿compartir por enlace público? (rec.: in-app
+   primero; email solo para eventos importantes).
+U7 Integraciones: ¿conectar con servicios que ya usas? (ofrecer las del
+   pack de dominio + genéricas: email, almacenamiento en la nube, webhooks,
+   API propia para terceros).
+U8 Búsqueda y organización: ¿búsqueda de texto completo? ¿etiquetas/
+   categorías/filtros? (rec.: etiquetas + búsqueda simple; full-text solo
+   con volumen alto).
+U9 Idiomas y accesibilidad: es/en ya es default silencioso; ¿más idiomas?
+   ¿formatos regionales (fecha/moneda)? ¿accesibilidad reforzada/modo
+   oscuro? (rec.: seguir preferencia del sistema).
+U10 Despliegue y operación: ¿solo en tu equipo, servidor propio, o nube?
+   ¿dominio propio con HTTPS? ¿actualizaciones automáticas? (rec.:
+   contenedor local si personal; contenedor+nube si compartida).
+U11 Escala y rendimiento: ¿usuarios a la vez estimados? ¿algo debe ser
+   instantáneo? (solo se pregunta si U1=equipo/público; rec.: dimensionar
+   para 10x lo declarado).
+U12 Histórico y versiones: ¿ver cambios pasados / restaurar versiones?
+   (rec.: sí para documentos/datos editables; no para datos efímeros).
+
+Prioridad: score = importancia(alta=2, media=1) x incertidumbre(sin dato=2,
+inferido=1). Máx 3-4 preguntas/turno; alta sin responder bloquea cierre;
+`aceptar_recomendaciones` responde el resto de una vez.
+
+### 9.2 Packs de dominio (tabla keyword→pack, ampliable sin tocar el motor)
+
+Cada pack añade 3-6 preguntas específicas con opciones y recomendación:
+
+- **agenda/calendario/citas**: recurrencia; recordatorios (email/push/SMS);
+  invitados y confirmaciones; sincronización Google/Microsoft/CalDAV;
+  zonas horarias; reservas con disponibilidad.
+- **tienda/venta/ecommerce**: catálogo y variantes; carrito e invitado o
+  cuenta; pagos (Stripe/PayPal/manual); envíos y zonas; stock; facturas e
+  impuestos regionales.
+- **inventario/almacén**: códigos de barras/QR; ubicaciones/almacenes;
+  movimientos entrada/salida; stock mínimo con alertas; proveedores;
+  valoración (FIFO/medio).
+- **notas/documentos/wiki**: markdown o texto enriquecido; adjuntos;
+  plantillas; versionado; cifrado local; publicación selectiva.
+- **tareas/proyectos**: vista lista/kanban/calendario; asignación y
+  vencimientos; subtareas y dependencias; prioridades; informes de avance.
+- **finanzas/gastos/presupuesto**: categorías y reglas automáticas;
+  multi-moneda; importación extractos (CSV/OFX); presupuestos y alertas;
+  informes mensuales/fiscales; objetivos de ahorro.
+- **contactos/CRM**: etapas de pipeline; actividades y seguimientos;
+  deduplicación; importación vCard/CSV/Google; recordatorios de contacto.
+- **reservas/turnos**: calendario de disponibilidad; duración y buffers;
+  confirmación/cancelación con plazos; recordatorios; pago o señal
+  anticipada; lista de espera.
+- **mapa/geolocalización**: fuentes (OSM/publicas/propias); capas y
+  filtros; rutas; geocodificación; uso offline; privacidad de ubicación.
+- **salud/fitness/hábitos**: métricas y unidades; objetivos y rachas;
+  gráficas de evolución; recordatorios; dispositivos/wearables; privacidad
+  reforzada (datos sensibles → activa U5 en alta).
+- **educación/cursos**: lecciones y orden; progreso por alumno;
+  ejercicios/evaluaciones; certificados; cohortes/grupos.
+- **comunidad/foro**: perfiles; hilos y votos; moderación y reportes;
+  menciones y notificaciones; reputación.
+- **domótica/IoT/sensores**: dispositivos y protocolos (MQTT/HTTP);
+  paneles en tiempo real; umbrales y alertas; histórico de series;
+  control remoto seguro.
+- **galería/media**: subida masiva; miniaturas y transcodificación;
+  álbumes y etiquetas; compartir por enlace; almacenamiento (local/nube).
+- **facturación/documentos legales**: series y numeración; plantillas PDF;
+  clientes; impuestos; envío por email; archivado legal.
+
+Si el objetivo casa con VARIOS packs (ej. "tienda con reservas"), se
+combinan y se deduplica por Field. Si no casa con ninguno, el wizard hace
+una pregunta abierta de dominio en turno 1 ("¿qué debe poder hacer un
+usuario un día normal?") y reevalúa los packs con la respuesta.
+
+### 9.3 Tests adicionales de la taxonomía
+
+- `TestWizardDimensionesUniversalesCubiertasV0`: spec vacío genera preguntas
+  de todas las U con importancia alta.
+- `TestWizardPackDominioPorKeywordV0` (tabla): al menos tienda, finanzas,
+  reservas e IoT activan su pack.
+- `TestWizardPacksCombinadosSinDuplicadosV0`: "tienda con reservas" combina
+  packs sin preguntas repetidas por Field.
+- `TestWizardSinDominioPreguntaAbiertaV0`: objetivo sin keywords → pregunta
+  abierta y reevaluación.
