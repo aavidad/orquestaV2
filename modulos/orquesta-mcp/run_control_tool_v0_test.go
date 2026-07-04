@@ -218,6 +218,47 @@ func TestMCPRunControlExecutorV0StopForcedPermiteTerminalSiGoalBackendYaComplete
 	}
 }
 
+func TestMCPRunControlExecutorV0StopForcedConfirmaBackendBlockedV0(t *testing.T) {
+	runRef := "run-ref-run-control-goal-blocked-001"
+	goalRef := "goal-ref-run-control-goal-blocked-001"
+	port := &fakeMCPRunControlPortV0{
+		readState:  runControlStateForMCPTestV0(runRef, orquestaruncontrol.RunControlStatusRunningV0, false),
+		stopStatus: orquestaruncontrol.RunControlStatusStoppedV0,
+	}
+	goalBackend := &fakeMCPRunControlGoalBackendStateV0{
+		results: []MCPDirectorStatsToolResultV0{
+			mcpRunControlGoalBackendStatsForTestV0(runRef, goalRef, "active"),
+			mcpRunControlGoalBackendStatsForTestV0(runRef, goalRef, orquestagoal.GoalStatusBlockedV0),
+		},
+	}
+	executor := MCPRunControlToolExecutorV0{
+		Port:             port,
+		GoalBackendState: goalBackend,
+	}
+
+	result, err := executor.Execute(context.Background(), MCPRunControlToolInputV0{
+		RequestID: "req-run-control-goal-blocked-001",
+		Action:    "stop",
+		RunRef:    runRef,
+		Forced:    true,
+	})
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPRunControlEstadoOKV0 ||
+		result.Status != string(orquestaruncontrol.RunControlStatusStoppedV0) ||
+		result.FinalStatus != string(orquestaruncontrol.RunControlStatusStoppedV0) ||
+		result.GoalStatusBefore != "active" ||
+		result.GoalStatusAfter != orquestagoal.GoalStatusBlockedV0 ||
+		!result.GoalControlSignalConfirmed ||
+		result.RecommendedAction != "" ||
+		len(result.Diagnostics) != 0 ||
+		len(result.Errores) != 0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPRunControlExecutorV0StopForcedReconcilesGoalHighConsumptionCheckpointOnly(t *testing.T) {
 	runRef := "run-ref-run-control-goal-checkpoint-only-stop-001"
 	goalRef := "goal-ref-run-control-goal-checkpoint-only-stop-001"

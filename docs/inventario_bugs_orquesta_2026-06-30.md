@@ -95,6 +95,12 @@ antes de su cierre posterior:
   `goal_status=blocked`, `closure_status=blocked`, `recommended_action=replan`
   y evidencia `evidence-ref-observe-goal-run-control-terminal`. Sigue abierto
   para smoke real amplio con proveedor/backend lento o vivo tras stop forzado.
+- Avance 2026-07-04 noche 9: `runs/control` ya trata `blocked` e `invalid`
+  del backend goal-first como estados terminales confirmados. Esto cubre la
+  ruta exacta del app-server tras forced stop, que marca el thread goal como
+  `blocked`; la superficie publica ya no degrada esa respuesta a senal no
+  confirmada ni obliga a `observe_goal_backend_before_declaring_stopped` si el
+  backend no sigue activo. Sigue abierto el smoke real amplio de BUG-165.
 - Avance anterior 2026-07-04: `BUG-ORQ-20260704-165` queda parcialmente reducido para
   snapshots `stopped` heredados con shutdown activo stale: status normaliza y
   limpia `shutdown_in_progress`, `shutdown_active_work_count/refs`,

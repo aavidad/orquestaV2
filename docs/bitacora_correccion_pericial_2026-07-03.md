@@ -1447,3 +1447,32 @@ Revision adicional sobre scanner idle/T295:
   backlog ...` y no materializa/actualiza secciones `## Txx` pendientes, el
   planner no tendra tarea ejecutable. Eso debe reabrirse como regresion nueva
   del contrato scanner -> `Txx pendiente`, no como cierre de T295.
+
+## Continuacion Codex 2026-07-04 noche 9
+
+Avance adicional sobre `BUG-ORQ-20260704-165` / control goal-first:
+
+- `runs/control` consideraba terminales `complete`, `accepted`, `canceled`,
+  `stopped` y `failed`, pero no `blocked` ni `invalid`.
+- El backend `orquesta-runtime-codex-appserver` marca el thread goal como
+  `blocked` cuando ejecuta forced stop, por lo que esa respuesta podia salir
+  como `goal_control_signal_confirmed=false` aunque el backend ya no estuviera
+  activo.
+- Ahora `blocked` e `invalid` cuentan como terminales para confirmar la senal
+  de control del backend goal-first. Si el backend sigue `active`, se conserva
+  el bloqueo duro existente `control_not_propagated_to_goal_backend`.
+
+Archivos tocados en este avance:
+
+- `modulos/orquesta-mcp/run_control_tool_executor_v0.go`
+- `modulos/orquesta-mcp/run_control_tool_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Evidencia ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPRunControlExecutorV0StopForced(ConfirmaBackendBlocked|PermiteTerminalSiGoalBackendYaComplete|NoPublicaStoppedSiGoalBackendSigueActive|ReconcilesGoalHighConsumptionSinCheckpoint|ReconcilesGoalHighConsumptionCheckpointOnly)'`
+
+Pendiente real: `BUG-165` sigue abierto para smoke real amplio con proveedor o
+backend lento/vivo tras stop forzado, y `BUG-065/076` siguen abiertos para
+coordinacion automatica completa de shutdown/backend/checkpoint/stop/cancel/wait.
