@@ -1185,10 +1185,47 @@ Pendientes reales para Claude tras este tramo:
 - `BUG-079` queda reducido por corte de ingesta en Orquesta, pero sigue abierto
   para enforcement preventivo real antes de que el proveedor/runtime genere
   salidas gigantes o avance sin checkpoint temprano.
-- `BUG-165` queda reducido para el observador residente que respeta
-  `context.Context`, pero sigue abierto si un backend ignora el contexto y para
-  revalidacion real amplia de `status/observe` lento con backend/proveedor.
+- `BUG-165` queda reducido para el observador residente. Tras el avance
+  posterior de esta bitacora, el tick tampoco queda bloqueado si un backend
+  ignora `context.Context`; sigue abierto para revalidacion real amplia de
+  `status/observe` lento con backend/proveedor y coordinacion completa.
 - `BUG-065/076` siguen abiertos para smoke amplio de cleanup externo y
   coordinacion completa backend/checkpoint/stop/cancel/wait.
 - `BUG-058/066` siguen abiertos para lifecycle OPES end-to-end con instancia
   temporal y criterios nativos `done/settled`.
+
+## Continuacion Codex 2026-07-04 noche 2
+
+Avance adicional sobre `BUG-ORQ-20260704-165`:
+
+- `runGoalObservationTickV0` ya no llama directamente al backend residente.
+  La llamada `ObserveActiveGoalWorksV0` queda aislada con deadline duro; si el
+  backend no respeta `context.Context`, el tick vuelve igualmente, persiste
+  `goal_observer_timeout` y no bloquea el loop residente.
+- Mientras esa llamada backend anterior siga viva, ticks posteriores no abren
+  llamadas infinitas: publican `goal_observer_backend_call_in_flight`.
+- `self_watchdog` considera `goalObservationBackendActive` como causa
+  operacional viva, de forma que una llamada backend colgada no desaparece
+  del diagnostico interno al haber finalizado el tick externo.
+- La goroutine de backend conserva recuperacion de panics y los transforma en
+  error `panic:<causa>` en vez de sacar el proceso por un panic fuera del recover
+  del tick.
+
+Archivos tocados en este avance:
+
+- `modulos/orquesta-server/runtime_v0.go`
+- `modulos/orquesta-server/goal_observation_loop_v0.go`
+- `modulos/orquesta-server/goal_observation_loop_v0_test.go`
+- `modulos/orquesta-server/self_watchdog_loop_v0.go`
+- `modulos/orquesta-server/self_watchdog_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Evidencia ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0GoalObservation(TickTimeout|AsyncCoalescea|TickCorre|TickPanic)'`
+- `go test -count=1 ./modulos/orquesta-server`
+
+Pendiente real: `BUG-165` no se declara cerrado total sin un smoke real amplio
+de `status/observe` lento con backend/proveedor y coordinacion completa con
+`runs/control`/cleanup.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1103,8 +1104,8 @@ func TestRuntimeV0GoalObservationTickTimeoutPublicaErrorAccionableV0(t *testing.
 
 	runtime.runGoalObservationTickV0(context.Background())
 
-	if supervisor.calls != 1 {
-		t.Fatalf("goal observer calls=%d", supervisor.calls)
+	if calls := atomic.LoadInt32(&supervisor.calls); calls != 1 {
+		t.Fatalf("goal observer calls=%d", calls)
 	}
 	if store.last.GoalObserverStatus != "error" ||
 		store.last.GoalObserverLastError != "goal_observer_timeout" ||
@@ -1114,8 +1115,68 @@ func TestRuntimeV0GoalObservationTickTimeoutPublicaErrorAccionableV0(t *testing.
 	}
 }
 
+func TestRuntimeV0GoalObservationTickTimeoutNoBloqueaSiBackendIgnoraContextoV0(t *testing.T) {
+	store := &memoryStateStoreV0{}
+	supervisor := &ignoringContextGoalObserverSupervisorForTestV0{
+		started:  make(chan struct{}),
+		release:  make(chan struct{}),
+		returned: make(chan struct{}),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                      t.TempDir(),
+		TickInterval:                  time.Hour,
+		GoalObserverEnabledConfigured: true,
+		GoalObserverEnabled:           true,
+		GoalObserverTimeout:           20 * time.Millisecond,
+		AuditDisabled:                 true,
+	}, RuntimeDepsV0{
+		Supervisor:     supervisor,
+		GoalStateStore: newMemoryGoalStateStoreV0(),
+		StateStore:     store,
+		Clock:          fixedClockV0{now: time.Date(2026, 7, 4, 11, 30, 0, 0, time.UTC)},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	firstDone := make(chan struct{})
+	go func() {
+		runtime.runGoalObservationTickV0(context.Background())
+		close(firstDone)
+	}()
+	select {
+	case <-supervisor.started:
+	case <-time.After(time.Second):
+		t.Fatalf("goal observer backend call did not start")
+	}
+	select {
+	case <-firstDone:
+	case <-time.After(time.Second):
+		t.Fatalf("goal observer tick blocked behind backend that ignored context")
+	}
+	if store.last.GoalObserverStatus != "error" ||
+		store.last.GoalObserverLastError != "goal_observer_timeout" ||
+		store.last.GoalObserverErrorTicks != 1 {
+		t.Fatalf("first timeout state=%+v", store.last)
+	}
+
+	runtime.runGoalObservationTickV0(context.Background())
+	if store.last.GoalObserverStatus != "error" ||
+		store.last.GoalObserverLastError != "goal_observer_backend_call_in_flight" ||
+		store.last.GoalObserverErrorTicks != 2 {
+		t.Fatalf("second timeout state=%+v", store.last)
+	}
+	close(supervisor.release)
+	select {
+	case <-supervisor.returned:
+	case <-time.After(time.Second):
+		t.Fatalf("goal observer backend call did not return after release")
+	}
+	waitGoalObservationBackendInactiveForTestV0(t, runtime)
+}
+
 type timeoutGoalObserverSupervisorForTestV0 struct {
-	calls int
+	calls int32
 }
 
 func (supervisor *timeoutGoalObserverSupervisorForTestV0) RunGlobalSupervisorV0(
@@ -1129,9 +1190,44 @@ func (supervisor *timeoutGoalObserverSupervisorForTestV0) ObserveActiveGoalWorks
 	ctx context.Context,
 	_ orquestagoal.GoalWorkObserveActiveRequestV0,
 ) (orquestagoal.GoalWorkObserveActiveResultV0, error) {
-	supervisor.calls++
+	atomic.AddInt32(&supervisor.calls, 1)
 	<-ctx.Done()
 	return orquestagoal.GoalWorkObserveActiveResultV0{}, ctx.Err()
+}
+
+type ignoringContextGoalObserverSupervisorForTestV0 struct {
+	started     chan struct{}
+	release     chan struct{}
+	returned    chan struct{}
+	startedOnce sync.Once
+}
+
+func (supervisor *ignoringContextGoalObserverSupervisorForTestV0) RunGlobalSupervisorV0(
+	_ context.Context,
+	_ orquestarunsupervisor.RunSupervisorCommandV0,
+) (orquestarunsupervisor.RunSupervisorResultV0, error) {
+	return orquestarunsupervisor.RunSupervisorResultV0{}, nil
+}
+
+func (supervisor *ignoringContextGoalObserverSupervisorForTestV0) ObserveActiveGoalWorksV0(
+	_ context.Context,
+	_ orquestagoal.GoalWorkObserveActiveRequestV0,
+) (orquestagoal.GoalWorkObserveActiveResultV0, error) {
+	supervisor.startedOnce.Do(func() { close(supervisor.started) })
+	<-supervisor.release
+	close(supervisor.returned)
+	return orquestagoal.GoalWorkObserveActiveResultV0{}, nil
+}
+
+func waitGoalObservationBackendInactiveForTestV0(t *testing.T, runtime *RuntimeV0) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for atomic.LoadInt32(&runtime.goalObservationBackendActive) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("goal observer backend call stayed active")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 type goalObservationLifecycleSupervisorForTestV0 struct {

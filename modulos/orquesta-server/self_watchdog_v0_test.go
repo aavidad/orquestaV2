@@ -218,6 +218,47 @@ func TestRunSelfWatchdogTickV0RespetaDirectorResidenteAtomico(t *testing.T) {
 	}
 }
 
+func TestRunSelfWatchdogTickV0RespetaGoalObserverBackendActivoV0(t *testing.T) {
+	now := time.Date(2026, 7, 4, 12, 0, 0, 0, time.UTC)
+	runtime, err := NewRuntimeV0(ConfigV0{
+		Addr:          "127.0.0.1:0",
+		StateDir:      t.TempDir(),
+		AuditDisabled: true,
+		SelfWatchdog: SelfWatchdogConfigV0{
+			SustainedFor:  time.Nanosecond,
+			NoProgressFor: time.Nanosecond,
+		},
+	}, RuntimeDepsV0{
+		StateStore: &threadSafeStateStoreV0{},
+		Clock:      fixedClockV0{now: now},
+		SelfWatchdog: &fakeSelfWatchdogObserverV0{observation: SelfWatchdogObservationV0{
+			ObservedAt:   now,
+			CPUPercent:   99,
+			HighCPUSince: now.Add(-10 * time.Minute),
+			EvidenceRefs: []string{"evidence-ref-runtime-watchdog"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	atomic.StoreInt32(&runtime.goalObservationBackendActive, 1)
+
+	stop := make(chan SelfWatchdogDecisionV0, 1)
+	if stopped := runtime.runSelfWatchdogTickV0(context.Background(), stop); stopped {
+		t.Fatalf("watchdog pidio parada con backend de observador goal activo")
+	}
+	select {
+	case decision := <-stop:
+		t.Fatalf("stop inesperado: %+v", decision)
+	default:
+	}
+	state := runtime.StateV0()
+	if state.SelfWatchdogStatus != SelfWatchdogStatusHighCPUWithCauseV0 ||
+		state.SelfWatchdogReason != SelfWatchdogReasonOperationalCauseV0 {
+		t.Fatalf("state=%+v", state)
+	}
+}
+
 func TestProcessSelfWatchdogObserverV0DerivaCPUYVentanaAlta(t *testing.T) {
 	now := time.Date(2026, 6, 8, 12, 25, 0, 0, time.UTC)
 	observer := NewProcessSelfWatchdogObserverV0(&fakeSelfWatchdogCPUSamplerV0{

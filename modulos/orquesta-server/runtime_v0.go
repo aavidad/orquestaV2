@@ -53,6 +53,7 @@ type RuntimeV0 struct {
 	residentDirectorWakeups       chan ResidentDirectorWakeupV0
 	goalObservationTickActive     int32
 	goalObservationTickPending    int32
+	goalObservationBackendActive  int32
 	goalObservationWakeups        chan GoalObservationWakeupV0
 	shutdownInProgress            int32
 	stateStore                    StateStorePortV0

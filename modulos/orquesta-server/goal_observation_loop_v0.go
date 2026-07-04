@@ -3,12 +3,15 @@ package orquestaserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync/atomic"
 	"time"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
+
+var errGoalObservationBackendCallInFlightV0 = errors.New("goal_observer_backend_call_in_flight")
 
 func (runtime *RuntimeV0) runGoalObservationLoopV0(ctx context.Context) {
 	if !runtime.goalObservationAvailableV0() {
@@ -107,12 +110,10 @@ func (runtime *RuntimeV0) runGoalObservationTickV0(ctx context.Context) {
 		"run_refs":       compactServerDiagnosticStringsV0(request.List.RunRefs),
 		"skipped":        fingerprintPlan.Skipped,
 	})
-	observeCtx, cancelObserve := runtime.goalObservationTickContextV0(ctx)
-	defer cancelObserve()
-	result, err := observer.ObserveActiveGoalWorksV0(observeCtx, request)
+	result, err := runtime.observeActiveGoalWorksWithDeadlineV0(ctx, observer, request)
 	now := runtime.clock.Now()
 	if err != nil {
-		message := goalObservationErrorMessageV0(observeCtx, err)
+		message := goalObservationErrorMessageV0(err)
 		runtime.auditEventV0(ctx, "goal_observer_tick_error", "error", message, map[string]interface{}{
 			"result_summary": goalObservationResultAuditSummaryV0(result),
 			"correlation_id": correlationID,
@@ -144,6 +145,40 @@ func (runtime *RuntimeV0) runGoalObservationTickV0(ctx context.Context) {
 	}
 }
 
+type goalObservationBackendResultV0 struct {
+	result orquestagoal.GoalWorkObserveActiveResultV0
+	err    error
+}
+
+func (runtime *RuntimeV0) observeActiveGoalWorksWithDeadlineV0(
+	ctx context.Context,
+	observer GoalActiveObservationPortV0,
+	request orquestagoal.GoalWorkObserveActiveRequestV0,
+) (orquestagoal.GoalWorkObserveActiveResultV0, error) {
+	if !atomic.CompareAndSwapInt32(&runtime.goalObservationBackendActive, 0, 1) {
+		return orquestagoal.GoalWorkObserveActiveResultV0{}, errGoalObservationBackendCallInFlightV0
+	}
+	observeCtx, cancelObserve := runtime.goalObservationTickContextV0(ctx)
+	defer cancelObserve()
+	done := make(chan goalObservationBackendResultV0, 1)
+	go func() {
+		defer atomic.StoreInt32(&runtime.goalObservationBackendActive, 0)
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				done <- goalObservationBackendResultV0{err: fmt.Errorf("panic:%v", recovered)}
+			}
+		}()
+		result, err := observer.ObserveActiveGoalWorksV0(observeCtx, request)
+		done <- goalObservationBackendResultV0{result: result, err: err}
+	}()
+	select {
+	case out := <-done:
+		return out.result, out.err
+	case <-observeCtx.Done():
+		return orquestagoal.GoalWorkObserveActiveResultV0{}, observeCtx.Err()
+	}
+}
+
 func (runtime *RuntimeV0) goalObservationTickContextV0(
 	ctx context.Context,
 ) (context.Context, context.CancelFunc) {
@@ -154,13 +189,15 @@ func (runtime *RuntimeV0) goalObservationTickContextV0(
 	return context.WithTimeout(ctx, timeout)
 }
 
-func goalObservationErrorMessageV0(ctx context.Context, err error) string {
+func goalObservationErrorMessageV0(err error) string {
 	if err == nil {
 		return ""
 	}
-	if errors.Is(err, context.DeadlineExceeded) ||
-		(ctx != nil && errors.Is(ctx.Err(), context.DeadlineExceeded)) {
+	if errors.Is(err, context.DeadlineExceeded) {
 		return "goal_observer_timeout"
+	}
+	if errors.Is(err, errGoalObservationBackendCallInFlightV0) {
+		return "goal_observer_backend_call_in_flight"
 	}
 	return err.Error()
 }
