@@ -12,6 +12,7 @@ import (
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimeclaude "orquesta/modulos/orquesta-runtime-claude"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
+	orquestaruntimegemini "orquesta/modulos/orquesta-runtime-gemini"
 	orquestaserver "orquesta/modulos/orquesta-server"
 	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
@@ -285,6 +286,187 @@ func TestServerGoalBackendFromEnvV0ClaudeProcessControlParaProcesoV0(t *testing.
 	}
 }
 
+func TestServerGoalBackendFromEnvV0GeminiFileControlExponePuertosNeutralesV0(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	stateDir := filepath.Join(root, "control", "state")
+	t.Setenv(envCodexGoalBackendV0, geminiGoalBackendFileControlV0)
+
+	config := orquestaserver.ConfigV0{
+		ProjectWorkDir: projectDir,
+		RuntimeWorkDir: filepath.Join(projectDir, ".orquesta-runtime"),
+		StateDir:       stateDir,
+	}
+	backend, err := serverCodexGoalBackendFromEnvForWorkDirV0(config, projectDir)
+	if err != nil {
+		t.Fatalf("serverCodexGoalBackendFromEnvForWorkDirV0: %v", err)
+	}
+	if backend.Starter != nil || backend.Observer != nil {
+		t.Fatalf("backend Gemini goal no debe usar puertos Codex: %+v", backend)
+	}
+	if backend.GoalLauncher == nil || backend.GoalObserver == nil {
+		t.Fatalf("backend Gemini goal sin puertos neutrales: %+v", backend)
+	}
+	launcher := serverGoalWorkLauncherFromBackendV0(backend)
+	observer := serverGoalWorkObserverFromBackendV0(backend)
+	spec := orquestagoal.GoalWorkSpecV0{
+		SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+		GoalRef:       "goal-ref-server-gemini-file-control-001",
+		RequestRef:    "request-ref-server-gemini-file-control-001",
+		RunRef:        "run-ref-server-gemini-file-control-001",
+		Objective:     "Probar backend Gemini file-control desde servidor.",
+		DirectorKind:  orquestagoal.GoalDirectorKindRuntimeGoalV0,
+		WriteSet: []orquestagoal.GoalWriteScopeV0{{
+			Path:    "docs",
+			Purpose: "resultado durable",
+		}},
+		RequiredTests: []orquestagoal.GoalRequiredTestV0{{
+			TestRef: "required-test-ref-server-gemini-file-control",
+			Command: "go test ./cmd/orquesta-server",
+		}},
+	}
+	receipt, err := launcher.LaunchGoalWorkV0(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("LaunchGoalWorkV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		!strings.HasPrefix(receipt.ExternalGoalRef, "gemini-goal-") {
+		t.Fatalf("receipt Gemini inesperado: %+v", receipt)
+	}
+	runtimeDir := filepath.Join(filepath.Dir(stateDir), "gemini-goal")
+	if _, err := os.Stat(filepath.Join(runtimeDir, "gemini_goal_prompt_goal-ref-server-gemini-file-control-001.txt")); err != nil {
+		t.Fatalf("prompt Gemini no materializado: %v", err)
+	}
+	observed, err := observer.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: receipt.ExternalGoalRef,
+	})
+	if err != nil {
+		t.Fatalf("ObserveGoalWorkV0: %v", err)
+	}
+	if observed.Status != orquestagoal.GoalStatusRunningV0 ||
+		!containsServerGoalStringV0(observed.EvidenceRefs, orquestaruntimegemini.GeminiGoalEvidenceResultPendingV0) {
+		t.Fatalf("observed Gemini inesperado: %+v", observed)
+	}
+}
+
+func TestServerGoalBackendFromEnvV0GeminiProcessLanzaYObservaResultadoV0(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	stateDir := filepath.Join(root, "control", "state")
+	goalRef := "goal-ref-server-gemini-process-001"
+	t.Setenv(envCodexGoalBackendV0, geminiGoalBackendProcessV0)
+	t.Setenv(envGeminiCommandV0, fakeGeminiGoalProcessCommandForTestV0(t, root, goalRef))
+
+	backend, err := serverCodexGoalBackendFromEnvForWorkDirV0(orquestaserver.ConfigV0{
+		ProjectWorkDir: projectDir,
+		RuntimeWorkDir: filepath.Join(projectDir, ".orquesta-runtime"),
+		StateDir:       stateDir,
+	}, projectDir)
+	if err != nil {
+		t.Fatalf("serverCodexGoalBackendFromEnvForWorkDirV0: %v", err)
+	}
+	launcher := serverGoalWorkLauncherFromBackendV0(backend)
+	observer := serverGoalWorkObserverFromBackendV0(backend)
+	spec := orquestagoal.GoalWorkSpecV0{
+		SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+		GoalRef:       goalRef,
+		RequestRef:    "request-ref-server-gemini-process-001",
+		RunRef:        "run-ref-server-gemini-process-001",
+		Objective:     "Probar backend Gemini process desde servidor.",
+		DirectorKind:  orquestagoal.GoalDirectorKindRuntimeGoalV0,
+		WriteSet: []orquestagoal.GoalWriteScopeV0{{
+			Path:    "docs",
+			Purpose: "resultado durable",
+		}},
+		RequiredTests: []orquestagoal.GoalRequiredTestV0{{
+			TestRef: "required-test-ref-server-gemini-process",
+			Command: "fake gemini process",
+		}},
+	}
+	receipt, err := launcher.LaunchGoalWorkV0(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("LaunchGoalWorkV0: %v", err)
+	}
+	if !containsServerGoalStringV0(receipt.EvidenceRefs, orquestaruntimegemini.GeminiGoalEvidenceProcessLaunchedV0) {
+		t.Fatalf("receipt sin evidencia proceso: %+v", receipt)
+	}
+	resultPath := filepath.Join(projectDir, "docs", orquestaruntimegemini.GeminiGoalResultFileNameV0)
+	waitForServerGoalFileV0(t, resultPath)
+	observed, err := observer.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
+		GoalRef:         goalRef,
+		ExternalGoalRef: receipt.ExternalGoalRef,
+	})
+	if err != nil {
+		t.Fatalf("ObserveGoalWorkV0: %v", err)
+	}
+	if observed.Status != orquestagoal.GoalStatusCompleteV0 ||
+		!containsServerGoalStringV0(observed.EvidenceRefs, orquestaruntimegemini.GeminiGoalEvidenceResultReadV0) {
+		t.Fatalf("observed inesperado: %+v", observed)
+	}
+}
+
+func TestServerGoalBackendFromEnvV0GeminiProcessControlParaProcesoV0(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	stateDir := filepath.Join(root, "control", "state")
+	goalRef := "goal-ref-server-gemini-process-control-001"
+	startedPath := filepath.Join(root, "started.txt")
+	t.Setenv(envCodexGoalBackendV0, geminiGoalBackendProcessV0)
+	t.Setenv(envGeminiCommandV0, fakeGeminiGoalLongRunningCommandForTestV0(t, root, startedPath))
+
+	backend, err := serverCodexGoalBackendFromEnvForWorkDirV0(orquestaserver.ConfigV0{
+		ProjectWorkDir: projectDir,
+		RuntimeWorkDir: filepath.Join(projectDir, ".orquesta-runtime"),
+		StateDir:       stateDir,
+	}, projectDir)
+	if err != nil {
+		t.Fatalf("serverCodexGoalBackendFromEnvForWorkDirV0: %v", err)
+	}
+	launcher := serverGoalWorkLauncherFromBackendV0(backend)
+	control := serverGoalBackendControlFromBackendV0(backend)
+	if control == nil {
+		t.Fatalf("backend Gemini process debe exponer control")
+	}
+	_, err = launcher.LaunchGoalWorkV0(context.Background(), orquestagoal.GoalWorkSpecV0{
+		SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+		GoalRef:       goalRef,
+		RequestRef:    "request-ref-server-gemini-process-control-001",
+		RunRef:        "run-ref-server-gemini-process-control-001",
+		Objective:     "Probar control Gemini process desde servidor.",
+		DirectorKind:  orquestagoal.GoalDirectorKindRuntimeGoalV0,
+		WriteSet: []orquestagoal.GoalWriteScopeV0{{
+			Path:    "docs",
+			Purpose: "resultado durable",
+		}},
+		RequiredTests: []orquestagoal.GoalRequiredTestV0{{
+			TestRef: "required-test-ref-server-gemini-process-control",
+			Command: "fake gemini process control",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("LaunchGoalWorkV0: %v", err)
+	}
+	waitForServerGoalFileV0(t, startedPath)
+
+	result, err := control.ControlGoalBackendV0(context.Background(), orquestaappcodexstack.GoalBackendControlRequestV0{
+		GoalRef:      goalRef,
+		Action:       "stop",
+		Reason:       "test_stop",
+		Forced:       true,
+		EvidenceRefs: []string{"evidence-ref-server-gemini-control"},
+	})
+	if err != nil {
+		t.Fatalf("ControlGoalBackendV0: %v result=%+v", err, result)
+	}
+	if result.Status != orquestagoal.GoalStatusBlockedV0 ||
+		!result.GoalStatusSet ||
+		!result.BackendStopped ||
+		!containsServerGoalStringV0(result.EvidenceRefs, orquestaruntimegemini.GeminiGoalEvidenceStopCompletedV0) {
+		t.Fatalf("control result inesperado: %+v", result)
+	}
+}
+
 func TestServerGoalBackendFromEnvV0RechazaBackendNoSoportadoV0(t *testing.T) {
 	t.Setenv(envCodexGoalBackendV0, "claude_real_process")
 
@@ -389,6 +571,26 @@ func fakeClaudeGoalLongRunningCommandForTestV0(t *testing.T, root string, starte
 	script := "#!/bin/sh\nset -eu\ncat >/dev/null\nprintf started > " + shellQuoteCodexAppServerWiringTestV0(startedPath) + "\nsleep 30\n"
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
 		t.Fatalf("write fake claude long running: %v", err)
+	}
+	return path
+}
+
+func fakeGeminiGoalProcessCommandForTestV0(t *testing.T, root string, goalRef string) string {
+	t.Helper()
+	path := filepath.Join(root, "fake-gemini-goal-process")
+	script := "#!/bin/sh\nset -eu\nprompt=$(cat)\ncase \"$prompt\" in\n  *" + goalRef + "*) ;;\n  *) exit 7 ;;\nesac\nmkdir -p docs\ncat > docs/" + orquestaruntimegemini.GeminiGoalResultFileNameV0 + " <<'JSON'\n{\"schema_version\":\"orquesta_goal_result.v0\",\"status\":\"complete\",\"goal_ref\":\"" + goalRef + "\",\"summary\":\"server gemini process complete\",\"checklist\":{\"expected_refs\":[\"server_gemini_process\"],\"completed_refs\":[\"server_gemini_process\"]},\"required_test_results\":[{\"test_ref\":\"required-test-ref-server-gemini-process\",\"status\":\"passed\",\"evidence_refs\":[\"evidence-ref-server-gemini-process-test\"]}],\"evidence_refs\":[\"evidence-ref-server-gemini-process-result\"]}\nJSON\n"
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake gemini process: %v", err)
+	}
+	return path
+}
+
+func fakeGeminiGoalLongRunningCommandForTestV0(t *testing.T, root string, startedPath string) string {
+	t.Helper()
+	path := filepath.Join(root, "fake-gemini-goal-long-running")
+	script := "#!/bin/sh\nset -eu\ncat >/dev/null\nprintf started > " + shellQuoteCodexAppServerWiringTestV0(startedPath) + "\nsleep 30\n"
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake gemini long running: %v", err)
 	}
 	return path
 }

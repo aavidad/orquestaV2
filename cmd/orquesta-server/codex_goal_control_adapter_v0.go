@@ -6,6 +6,7 @@ import (
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestaruntimeclaude "orquesta/modulos/orquesta-runtime-claude"
 	orquestaruntimecodexappserver "orquesta/modulos/orquesta-runtime-codex-appserver"
+	orquestaruntimegemini "orquesta/modulos/orquesta-runtime-gemini"
 )
 
 type serverCodexGoalControllerV0 interface {
@@ -16,6 +17,10 @@ type serverClaudeGoalControllerV0 interface {
 	StopClaudeGoalV0(context.Context, orquestaruntimeclaude.ClaudeGoalStopRequestV0) (orquestaruntimeclaude.ClaudeGoalStopResultV0, error)
 }
 
+type serverGeminiGoalControllerV0 interface {
+	StopGeminiGoalV0(context.Context, orquestaruntimegemini.GeminiGoalStopRequestV0) (orquestaruntimegemini.GeminiGoalStopResultV0, error)
+}
+
 type serverCodexGoalBackendControlV0 struct {
 	Controller serverCodexGoalControllerV0
 }
@@ -24,11 +29,18 @@ type serverClaudeGoalBackendControlV0 struct {
 	Controller serverClaudeGoalControllerV0
 }
 
+type serverGeminiGoalBackendControlV0 struct {
+	Controller serverGeminiGoalControllerV0
+}
+
 func serverGoalBackendControlFromBackendV0(
 	backend serverCodexGoalBackendV0,
 ) orquestaappcodexstack.GoalBackendControlPortV0 {
 	if backend.ClaudeControl != nil {
 		return serverClaudeGoalBackendControlV0{Controller: backend.ClaudeControl}
+	}
+	if backend.GeminiControl != nil {
+		return serverGeminiGoalBackendControlV0{Controller: backend.GeminiControl}
 	}
 	if backend.Controller != nil {
 		return serverCodexGoalBackendControlV0{Controller: backend.Controller}
@@ -41,6 +53,29 @@ func (control serverCodexGoalBackendControlV0) ControlGoalBackendV0(
 	request orquestaappcodexstack.GoalBackendControlRequestV0,
 ) (orquestaappcodexstack.GoalBackendControlResultV0, error) {
 	result, err := control.Controller.StopCodexGoalV0(ctx, orquestaruntimecodexappserver.CodexGoalStopRequestV0{
+		GoalRef:         request.GoalRef,
+		ExternalGoalRef: request.ExternalGoalRef,
+		Action:          request.Action,
+		Reason:          request.Reason,
+		Forced:          request.Forced,
+		EvidenceRefs:    request.EvidenceRefs,
+	})
+	return orquestaappcodexstack.GoalBackendControlResultV0{
+		Status:          result.Status,
+		GoalRef:         result.GoalRef,
+		ExternalGoalRef: result.ExternalGoalRef,
+		GoalStatusSet:   result.GoalStatusSet,
+		BackendStopped:  result.BackendStopped,
+		IssueCode:       result.IssueCode,
+		EvidenceRefs:    result.EvidenceRefs,
+	}, err
+}
+
+func (control serverGeminiGoalBackendControlV0) ControlGoalBackendV0(
+	ctx context.Context,
+	request orquestaappcodexstack.GoalBackendControlRequestV0,
+) (orquestaappcodexstack.GoalBackendControlResultV0, error) {
+	result, err := control.Controller.StopGeminiGoalV0(ctx, orquestaruntimegemini.GeminiGoalStopRequestV0{
 		GoalRef:         request.GoalRef,
 		ExternalGoalRef: request.ExternalGoalRef,
 		Action:          request.Action,

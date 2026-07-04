@@ -21,6 +21,9 @@ const (
 	envGeminiApprovalModeV0   = "ORQUESTA_GEMINI_APPROVAL_MODE"
 	envGeminiOutputFormatV0   = "ORQUESTA_GEMINI_OUTPUT_FORMAT"
 	envGeminiExtraArgsV0      = "ORQUESTA_GEMINI_EXTRA_ARGS"
+
+	geminiGoalBackendFileControlV0 = "gemini_file_control"
+	geminiGoalBackendProcessV0     = "gemini_process"
 )
 
 func init() {
@@ -74,4 +77,21 @@ func geminiCommandPathV0() string {
 		return raw
 	}
 	return path
+}
+
+func geminiGoalBackendFromEnvV0() string {
+	backend := codexGoalBackendFromEnvV0()
+	if backend == geminiGoalBackendFileControlV0 || backend == geminiGoalBackendProcessV0 {
+		return backend
+	}
+	return ""
+}
+
+func geminiGoalBackendOperationalFromEnvV0() bool {
+	switch geminiGoalBackendFromEnvV0() {
+	case geminiGoalBackendFileControlV0, geminiGoalBackendProcessV0:
+		return true
+	default:
+		return false
+	}
 }

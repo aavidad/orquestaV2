@@ -337,7 +337,7 @@ func serverEffectiveConfigDiagnosticsFromEnvV0() []orquestaserver.ServerDiagnost
 		diagnostics = append(diagnostics, orquestaserver.ServerDiagnosticV0{
 			Code:    orquestamcp.MCPExternalWorkRunGoalBackendRequiredV0,
 			Scope:   "external_work",
-			Message: "external_work goal-first no ejecutable sin backend goal; export " + envCodexGoalBackendV0 + "=" + codexGoalBackendAppServerTmuxV0 + ", " + envCodexGoalBackendV0 + "=" + claudeGoalBackendFileControlV0 + " o " + envCodexGoalBackendV0 + "=" + claudeGoalBackendProcessV0 + " y reinicia el servidor",
+			Message: "external_work goal-first no ejecutable sin backend goal; export " + envCodexGoalBackendV0 + "=" + codexGoalBackendAppServerTmuxV0 + ", " + envCodexGoalBackendV0 + "=" + claudeGoalBackendFileControlV0 + ", " + envCodexGoalBackendV0 + "=" + claudeGoalBackendProcessV0 + ", " + envCodexGoalBackendV0 + "=" + geminiGoalBackendFileControlV0 + " o " + envCodexGoalBackendV0 + "=" + geminiGoalBackendProcessV0 + " y reinicia el servidor",
 			EvidenceRefs: []string{
 				"evidence-ref-server-external-work-goal-backend-required",
 			},

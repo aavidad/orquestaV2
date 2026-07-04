@@ -314,6 +314,33 @@ func TestServerConfigFromEnvV0DerivaAutomejoraGoalFirstDeBackendClaudeGoalV0(t *
 	}
 }
 
+func TestServerConfigFromEnvV0DerivaAutomejoraGoalFirstDeBackendGeminiGoalV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "")
+	t.Setenv(envCodexGoalBackendV0, geminiGoalBackendFileControlV0)
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if !config.IdleSelfImprovementGoalFirst {
+		t.Fatalf("goal-first idle debe derivarse del backend Gemini goal: %+v", config)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerIdleSelfImprovementGoalFirstV0)
+	if setting.Value != "true" || setting.Source != "derived_from_gemini_goal_backend" {
+		t.Fatalf("setting goal-first=%+v", setting)
+	}
+	if got := effectiveSettingValueForTestV0(config.EffectiveConfig.Settings, envCodexGoalBackendV0); got != geminiGoalBackendFileControlV0 {
+		t.Fatalf("setting Gemini goal backend=%q", got)
+	}
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, "idle_self_improvement_goal_first_derived", envCodexGoalBackendV0) {
+		t.Fatalf("diagnostico de derivacion Gemini ausente: %+v", config.EffectiveConfig.Diagnostics)
+	}
+	if effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, orquestamcp.MCPExternalWorkRunGoalBackendRequiredV0) {
+		t.Fatalf("diagnostico backend requerido no debe aparecer con Gemini goal: %+v", config.EffectiveConfig.Diagnostics)
+	}
+}
+
 func TestServerConfigFromEnvV0ExternalWorkLegacyDirectorLoopPorDefectoFalseV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 

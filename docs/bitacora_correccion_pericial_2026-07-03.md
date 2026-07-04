@@ -1805,3 +1805,52 @@ Verificacion focal inicial:
 Pendiente real: el stop ya existe para la instancia viva; falta persistir o
 adoptar procesos Claude tras reinicio, smoke opt-in contra Claude real con
 credenciales y backend goal-first propio para Gemini.
+
+## Continuacion Codex 2026-07-04 noche 17
+
+Avance MEJ-103/T18: backend goal-first Gemini con paridad fake/offline frente
+al corte Claude.
+
+- `orquesta-runtime-gemini` anade `GeminiGoalBackendV0` file-control: escribe
+  spec/prompt en runtime aislado y observa resultados durables
+  `orquesta_goal_result_v0.json` o `orquesta_goal_result_<goal>.json` dentro
+  del write-set.
+- `GeminiGoalProcessBackendV0` lanza un wrapper Gemini por goal usando
+  `ProcessRuntimeConnectorV0`, conserva refs de proceso en la instancia viva,
+  devuelve `blocked` si el proceso termina sin result durable y expone
+  `StopGeminiGoalV0` para control/stop.
+- `cmd/orquesta-server` reconoce sin variables nuevas:
+  `ORQUESTA_CODEX_GOAL_BACKEND=gemini_file_control` y
+  `ORQUESTA_CODEX_GOAL_BACKEND=gemini_process`.
+- La automejora goal-first se deriva tambien desde backend Gemini cuando
+  `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_GOAL_FIRST_ENABLED` no esta fijada.
+- El control Gemini se adapta al mismo `GoalBackendControlPortV0` usado por
+  Codex/Claude, de forma que run-control puede parar un `gemini_process` activo
+  en la misma instancia.
+
+Archivos tocados en este avance:
+
+- `modulos/orquesta-runtime-gemini/gemini_goal_backend_v0.go`
+- `modulos/orquesta-runtime-gemini/gemini_goal_backend_v0_test.go`
+- `modulos/orquesta-runtime-gemini/gemini_goal_process_backend_v0.go`
+- `modulos/orquesta-runtime-gemini/gemini_goal_process_backend_v0_test.go`
+- `modulos/orquesta-runtime-gemini/gemini_wrapper_v0.go`
+- `cmd/orquesta-server/gemini_runtime_config_v0.go`
+- `cmd/orquesta-server/codex_goal_backend_env_v0.go`
+- `cmd/orquesta-server/codex_goal_app_server_v0.go`
+- `cmd/orquesta-server/codex_goal_control_adapter_v0.go`
+- `cmd/orquesta-server/effective_config_v0.go`
+- `cmd/orquesta-server/codex_goal_app_server_wiring_v0_test.go`
+- `cmd/orquesta-server/config_test.go`
+- `docs/plan_mejora_continua_orquesta_2026-07-04.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion focal inicial:
+
+- `go test -count=1 ./modulos/orquesta-runtime-gemini`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerGoalBackendFromEnvV0Gemini|TestServerConfigFromEnvV0DerivaAutomejoraGoalFirstDeBackendGeminiGoalV0'`
+
+Pendiente real tras este tramo: smoke opt-in contra Gemini real con
+credenciales/tier valido, smoke opt-in contra Claude real con credenciales,
+persistencia/adopcion de procesos Claude/Gemini tras reinicio y prueba real
+amplia de shutdown/control con proveedor externo.

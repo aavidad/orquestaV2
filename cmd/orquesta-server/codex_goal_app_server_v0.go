@@ -29,6 +29,7 @@ type serverCodexGoalBackendV0 struct {
 	Observer      orquestaruntimecodexgoal.CodexGoalObserverPortV0
 	Controller    serverCodexGoalControllerV0
 	ClaudeControl serverClaudeGoalControllerV0
+	GeminiControl serverGeminiGoalControllerV0
 	ShutdownHook  orquestaserver.RuntimeShutdownHookPortV0
 }
 

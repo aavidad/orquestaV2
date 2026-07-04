@@ -144,6 +144,21 @@ la misma instancia. La brecha pendiente queda acotada a persistencia/adopcion
 del proceso tras reinicio, smoke opt-in contra Claude real con credenciales y
 backend propio Gemini.
 
+Avance 2026-07-04 noche 17: Gemini alcanza paridad offline/fake con el corte
+Claude goal-first. `orquesta-runtime-gemini` incorpora backend
+`GeminiGoalBackendV0` file-control y `GeminiGoalProcessBackendV0` con proceso
+supervisado, wrapper por goal, observacion de `orquesta_goal_result_v0.json`,
+bloqueo `gemini_goal_process_stopped_without_result` si el proceso termina sin
+resultado durable y `StopGeminiGoalV0` para parar procesos vivos en la
+instancia actual. `cmd/orquesta-server` reconoce
+`ORQUESTA_CODEX_GOAL_BACKEND=gemini_file_control` y `gemini_process`, deriva
+goal-first idle desde esos valores y adapta el control Gemini al mismo puerto
+neutral de run-control. Codex sigue siendo el camino por defecto cuando se
+configura `app_server_tmux`, y no se anaden variables `ORQUESTA_*` nuevas. La
+brecha pendiente queda acotada a smoke opt-in contra Gemini real con
+credenciales/tier valido, persistencia/adopcion de procesos Claude/Gemini tras
+reinicio y una prueba real amplia de shutdown/control con proveedor externo.
+
 Alcance:
 
 - `modulos/orquesta-runtime-claude`

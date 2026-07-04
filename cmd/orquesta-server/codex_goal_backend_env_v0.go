@@ -10,6 +10,7 @@ import (
 
 	orquestaruntimeclaude "orquesta/modulos/orquesta-runtime-claude"
 	orquestaruntimecodexappserver "orquesta/modulos/orquesta-runtime-codex-appserver"
+	orquestaruntimegemini "orquesta/modulos/orquesta-runtime-gemini"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
@@ -58,13 +59,19 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	if claudeBackend != "" {
 		return serverClaudeGoalBackendFromEnvForWorkDirV0(config, workDir)
 	}
+	geminiBackend := geminiGoalBackendFromEnvV0()
+	if geminiBackend != "" {
+		return serverGeminiGoalBackendFromEnvForWorkDirV0(config, workDir)
+	}
 	if backend == "" {
 		return serverCodexGoalBackendV0{}, nil
 	}
 	if backend != orquestaruntimecodexappserver.CodexGoalBackendAppServerProxyV0 &&
 		backend != orquestaruntimecodexappserver.CodexGoalBackendAppServerTmuxV0 &&
 		backend != claudeGoalBackendFileControlV0 &&
-		backend != claudeGoalBackendProcessV0 {
+		backend != claudeGoalBackendProcessV0 &&
+		backend != geminiGoalBackendFileControlV0 &&
+		backend != geminiGoalBackendProcessV0 {
 		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_no_soportado:%s", backend)
 	}
 	if backend == orquestaruntimecodexappserver.CodexGoalBackendAppServerProxyV0 && !codexGoalBackendProxyDiagnosticAllowedV0() {
@@ -297,8 +304,69 @@ func claudeGoalRuntimeWorkDirFromEnvV0(config orquestaserver.ConfigV0) string {
 	return filepath.Join(filepath.Dir(config.RuntimeWorkDir), ".orquesta-claude-goal")
 }
 
+func serverGeminiGoalBackendFromEnvForWorkDirV0(
+	config orquestaserver.ConfigV0,
+	workDir string,
+) (serverCodexGoalBackendV0, error) {
+	backend := geminiGoalBackendFromEnvV0()
+	if backend == "" {
+		return serverCodexGoalBackendV0{}, nil
+	}
+	if backend != geminiGoalBackendFileControlV0 && backend != geminiGoalBackendProcessV0 {
+		return serverCodexGoalBackendV0{}, fmt.Errorf("gemini_goal_backend_no_soportado:%s", backend)
+	}
+	projectWorkDir := firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir)
+	runtimeWorkDir := geminiGoalRuntimeWorkDirFromEnvV0(config)
+	control := orquestaruntimegemini.GeminiGoalBackendV0{
+		ProjectWorkDir: projectWorkDir,
+		RuntimeWorkDir: runtimeWorkDir,
+	}
+	if backend == geminiGoalBackendProcessV0 {
+		client := &orquestaruntimegemini.GeminiGoalProcessBackendV0{
+			Control: control,
+			Profile: orquestaruntimegemini.GeminiConnectorProfileV0{
+				SchemaVersion:  orquestaruntimegemini.GeminiConnectorProfileSchemaVersionV0,
+				OptIn:          true,
+				CommandPath:    geminiCommandPathV0(),
+				ProjectWorkDir: projectWorkDir,
+				RuntimeWorkDir: runtimeWorkDir,
+				HomeDir:        strings.TrimSpace(os.Getenv(envGeminiHomeV0)),
+				PathEnv:        envOrDefaultV0(envGeminiPathV0, os.Getenv("PATH")),
+				Model:          strings.TrimSpace(os.Getenv(envGeminiModelV0)),
+				ApprovalMode:   envOrDefaultV0(envGeminiApprovalModeV0, "auto_edit"),
+				OutputFormat:   envOrDefaultV0(envGeminiOutputFormatV0, "text"),
+				ExtraArgs:      strings.Fields(os.Getenv(envGeminiExtraArgsV0)),
+				PromptHints:    []string{"goal-first Gemini process backend opt-in"},
+			},
+		}
+		return serverCodexGoalBackendV0{
+			GoalLauncher:  client,
+			GoalObserver:  client,
+			GeminiControl: client,
+		}, nil
+	}
+	client := control
+	return serverCodexGoalBackendV0{
+		GoalLauncher: client,
+		GoalObserver: client,
+	}, nil
+}
+
+func geminiGoalRuntimeWorkDirFromEnvV0(config orquestaserver.ConfigV0) string {
+	if strings.TrimSpace(os.Getenv(envGeminiRuntimeWorkDirV0)) != "" {
+		return absDirEnvOrDefaultV0(envGeminiRuntimeWorkDirV0, config.RuntimeWorkDir)
+	}
+	stateDir := strings.TrimSpace(config.StateDir)
+	if stateDir != "" && filepath.IsAbs(stateDir) {
+		return filepath.Join(filepath.Dir(stateDir), "gemini-goal")
+	}
+	return filepath.Join(filepath.Dir(config.RuntimeWorkDir), ".orquesta-gemini-goal")
+}
+
 func serverGoalBackendOperationalFromEnvV0() bool {
-	return codexGoalBackendOperationalFromEnvV0() || claudeGoalBackendOperationalFromEnvV0()
+	return codexGoalBackendOperationalFromEnvV0() ||
+		claudeGoalBackendOperationalFromEnvV0() ||
+		geminiGoalBackendOperationalFromEnvV0()
 }
 
 func serverGoalBackendDerivationSourceV0() string {
@@ -308,6 +376,9 @@ func serverGoalBackendDerivationSourceV0() string {
 	if claudeGoalBackendOperationalFromEnvV0() {
 		return "derived_from_claude_goal_backend"
 	}
+	if geminiGoalBackendOperationalFromEnvV0() {
+		return "derived_from_gemini_goal_backend"
+	}
 	return ""
 }
 
@@ -316,6 +387,9 @@ func serverGoalBackendDerivationEnvV0() string {
 		return envCodexGoalBackendV0
 	}
 	if claudeGoalBackendOperationalFromEnvV0() {
+		return envCodexGoalBackendV0
+	}
+	if geminiGoalBackendOperationalFromEnvV0() {
 		return envCodexGoalBackendV0
 	}
 	return ""
