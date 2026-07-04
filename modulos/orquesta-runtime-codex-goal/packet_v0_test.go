@@ -61,6 +61,9 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"status blocked con summary out_of_scope_artifacts",
 		"Resultado estructurado obligatorio",
 		"Los command de Tests requeridos son parte del contrato neutral acotado",
+		"Antes de leer ficheros completos en un write-set de codigo",
+		"orquesta.codebase.query.v0",
+		"relevant_snippets",
 	} {
 		if !strings.Contains(packet.Prompt, expected) {
 			t.Fatalf("prompt no contiene %q:\n%s", expected, packet.Prompt)
@@ -73,6 +76,7 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		packet.ProjectRef != "project-ref-orquesta" ||
 		packet.WorkKind != "idle_self_improvement" ||
 		packet.WorkProfileKind != "implementation" ||
+		packet.TaskCostClass != CodexGoalTaskCostClassCodeV0 ||
 		len(packet.AcceptanceCriteria) != 1 ||
 		packet.AcceptanceCriteria[0] != "criterio-ref-goal-first" ||
 		len(packet.ArtifactContracts) != 1 ||
@@ -106,6 +110,77 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 	}
 	if !hasGoalStringForTestV0(packet.DirectionContract.ToolOutputPolicy.BoundedCommandHints, "rg --max-count") {
 		t.Fatalf("direction_contract sin hints de comandos acotados: %+v", packet.DirectionContract.ToolOutputPolicy)
+	}
+}
+
+func TestBuildCodexGoalStartPacketV0SoloExigeAnalizadorConWriteSetCodigoV0(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.WriteSet = []orquestagoal.GoalWriteScopeV0{{Path: "docs"}}
+	packet, issues := BuildCodexGoalStartPacketV0(spec)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if strings.Contains(packet.Prompt, "Antes de leer ficheros completos en un write-set de codigo") {
+		t.Fatalf("prompt exige analizador en write-set documental:\n%s", packet.Prompt)
+	}
+
+	spec.WriteSet = []orquestagoal.GoalWriteScopeV0{{Path: "cmd/orquesta-server"}}
+	packet, issues = BuildCodexGoalStartPacketV0(spec)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if !strings.Contains(packet.Prompt, "orquesta.codebase.query.v0") ||
+		!strings.Contains(packet.Prompt, "module_exports") {
+		t.Fatalf("prompt no exige analizador en write-set codigo:\n%s", packet.Prompt)
+	}
+}
+
+func TestBuildCodexGoalStartPacketV0DerivaTaskCostClassDesdeWriteSetV0(t *testing.T) {
+	tests := []struct {
+		name     string
+		writeSet []orquestagoal.GoalWriteScopeV0
+		want     string
+	}{
+		{
+			name: "doc si todos los scopes son markdown",
+			writeSet: []orquestagoal.GoalWriteScopeV0{
+				{Path: "docs/runbooks/incidencia.md"},
+				{Path: "docs/bitacora_correccion_pericial_2026-07-03.md"},
+			},
+			want: CodexGoalTaskCostClassDocV0,
+		},
+		{
+			name:     "code si no hay markdown",
+			writeSet: []orquestagoal.GoalWriteScopeV0{{Path: "cmd/orquesta-server"}},
+			want:     CodexGoalTaskCostClassCodeV0,
+		},
+		{
+			name: "mixed si conviven markdown y codigo",
+			writeSet: []orquestagoal.GoalWriteScopeV0{
+				{Path: "docs/runbooks/incidencia.md"},
+				{Path: "cmd/orquesta-server"},
+			},
+			want: CodexGoalTaskCostClassMixedV0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			spec := validCodexGoalSpecV0()
+			spec.WriteSet = tt.writeSet
+
+			packet, issues := BuildCodexGoalStartPacketV0(spec)
+
+			if len(issues) != 0 {
+				t.Fatalf("issues=%+v", issues)
+			}
+			if packet.TaskCostClass != tt.want {
+				t.Fatalf("task_cost_class=%q want %q", packet.TaskCostClass, tt.want)
+			}
+			wantPrompt := "task_cost_class: " + tt.want
+			if !strings.Contains(packet.Prompt, wantPrompt) {
+				t.Fatalf("prompt no contiene %q:\n%s", wantPrompt, packet.Prompt)
+			}
+		})
 	}
 }
 

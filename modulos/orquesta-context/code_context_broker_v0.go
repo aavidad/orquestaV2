@@ -17,10 +17,14 @@ const (
 	CodeContextEstadoOKV0    = "ok"
 	CodeContextEstadoErrorV0 = "error"
 
-	CodeContextQueryKindSearchV0       = "search"
-	CodeContextQueryKindSymbolV0       = "symbol"
-	CodeContextQueryKindArchitectureV0 = "architecture"
-	CodeContextQueryKindRepoMapV0      = "repo_map"
+	CodeContextQueryKindSearchV0           = "search"
+	CodeContextQueryKindSymbolV0           = "symbol"
+	CodeContextQueryKindArchitectureV0     = "architecture"
+	CodeContextQueryKindRepoMapV0          = "repo_map"
+	CodeContextQueryKindCallersV0          = "callers"
+	CodeContextQueryKindImportsV0          = "imports"
+	CodeContextQueryKindModuleExportsV0    = "module_exports"
+	CodeContextQueryKindRelevantSnippetsV0 = "relevant_snippets"
 
 	CodeContextCacheHitV0   = "hit"
 	CodeContextCacheMissV0  = "miss"
@@ -313,7 +317,14 @@ func ValidateCodeContextQueryV0(query CodeContextQueryV0) []CodeContextIssueV0 {
 		}
 	}
 	switch query.QueryKind {
-	case CodeContextQueryKindSearchV0, CodeContextQueryKindSymbolV0, CodeContextQueryKindArchitectureV0, CodeContextQueryKindRepoMapV0:
+	case CodeContextQueryKindSearchV0,
+		CodeContextQueryKindSymbolV0,
+		CodeContextQueryKindArchitectureV0,
+		CodeContextQueryKindRepoMapV0,
+		CodeContextQueryKindCallersV0,
+		CodeContextQueryKindImportsV0,
+		CodeContextQueryKindModuleExportsV0,
+		CodeContextQueryKindRelevantSnippetsV0:
 	default:
 		issues = append(issues, codeContextIssueV0(ErrCodeContextQueryKindNoSoportadoV0, "query_kind", "tipo de consulta no soportado"))
 	}

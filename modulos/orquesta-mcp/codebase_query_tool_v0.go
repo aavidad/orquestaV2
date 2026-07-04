@@ -47,6 +47,7 @@ func MCPCodebaseQueryDescriptorV0() MCPCodebaseQueryToolDescriptorV0 {
 			"la indexacion externa solo puede activarla el broker central con opt-in explicito",
 			"las consultas de lectura son compactas, cacheables y acotadas por resultados y bytes",
 			"repo_map devuelve rutas, tipos/funciones y snippets minimos por el mismo broker central",
+			"callers/imports/module_exports/relevant_snippets tienen fallback estructurado sin indexador externo",
 			"rg/documentos siguen siendo fallback para strings exactos y docs no indexados",
 			"sin HOME, OAuth, tokens, rutas privadas ni procesos externos dentro de orquesta-mcp",
 		},

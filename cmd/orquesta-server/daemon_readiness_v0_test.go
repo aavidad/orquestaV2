@@ -31,6 +31,32 @@ func TestServerReadinessOKV0UsaReadinessNoHealthzV0(t *testing.T) {
 	}
 }
 
+func TestServerReadinessOKV0AceptaStartupReadyConReadinessDegradadaV0(t *testing.T) {
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != orquestaserver.ServerReadinessEndpointV0 {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{
+			"schema_version":"orquesta_server_readiness.v0",
+			"ready":false,
+			"status":"running",
+			"availability_status":"running",
+			"availability_reason":"server_ready",
+			"startup_ready":true,
+			"startup_status":"startup_degraded_external_work_goal_backend_required",
+			"diagnostics":[{"code":"external_work_goal_backend_required"}]
+		}`))
+	}))
+	defer server.Close()
+
+	if !serverReadinessOKV0(strings.TrimPrefix(server.URL, "http://")) {
+		t.Fatalf("start debe aceptar startup_ready aunque readiness estricta este degradada por conectores externos")
+	}
+}
+
 func TestWaitForStateHealthyV0AceptaReadinessEstableV0(t *testing.T) {
 	var calls int32
 	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

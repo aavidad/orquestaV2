@@ -1,9 +1,6 @@
 package orquestadeploy
 
-import (
-	"errors"
-	"strings"
-)
+import "strings"
 
 const (
 	LocalDeployAdapterNameV0     = "LocalDeployAdapterV0"
@@ -270,17 +267,4 @@ func copyStringsV0(values []string) []string {
 		copied = append(copied, strings.TrimSpace(value))
 	}
 	return copied
-}
-
-func HasLocalDeployIssueV0(err error, code string) bool {
-	var localErr LocalDeployAdapterV0Error
-	if !errors.As(err, &localErr) {
-		return false
-	}
-	for _, issue := range localErr.Issues {
-		if issue.Code == code {
-			return true
-		}
-	}
-	return false
 }

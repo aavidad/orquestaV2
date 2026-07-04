@@ -36,6 +36,7 @@ const (
 type GeminiGoalBackendV0 struct {
 	ProjectWorkDir string
 	RuntimeWorkDir string
+	PromptLocale   string
 }
 
 func (backend GeminiGoalBackendV0) LaunchGoalWorkV0(
@@ -71,6 +72,9 @@ func (backend GeminiGoalBackendV0) LaunchGoalWorkV0(
 		return geminiGoalInvalidLaunchReceiptV0(spec.GoalRef, ErrGeminiGoalControlWriteFailedV0, "spec"), err
 	}
 	prompt := BuildGeminiGoalPromptV0(spec)
+	if strings.TrimSpace(backend.PromptLocale) != "" {
+		prompt = BuildGeminiGoalPromptWithLocaleV0(spec, backend.PromptLocale)
+	}
 	promptPath := filepath.Join(backend.RuntimeWorkDir, geminiGoalPromptFileNameV0(spec.GoalRef))
 	if err := writeGeminiControlFileV0(backend.RuntimeWorkDir, promptPath, filepath.Base(promptPath), []byte(prompt), 0o600); err != nil {
 		return geminiGoalInvalidLaunchReceiptV0(spec.GoalRef, ErrGeminiGoalControlWriteFailedV0, "prompt"), err
@@ -127,17 +131,34 @@ func (backend GeminiGoalBackendV0) ObserveGoalWorkV0(
 }
 
 func BuildGeminiGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
+	return BuildGeminiGoalPromptWithLocaleV0(spec, "")
+}
+
+func BuildGeminiGoalPromptWithLocaleV0(spec orquestagoal.GoalWorkSpecV0, locale string) string {
 	spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
 	var b strings.Builder
-	b.WriteString("Eres un backend goal-first Gemini gobernado por Orquesta.\n")
-	b.WriteString("Objetivo: ")
+	if geminiGoalPromptEnglishLocaleV0(locale) {
+		b.WriteString("You are a Gemini goal-first backend governed by Orquesta.\n")
+		b.WriteString("Objective: ")
+	} else {
+		b.WriteString("Eres un backend goal-first Gemini gobernado por Orquesta.\n")
+		b.WriteString("Objetivo: ")
+	}
 	b.WriteString(spec.Objective)
 	b.WriteString("\nGoalRef: ")
 	b.WriteString(spec.GoalRef)
-	b.WriteString("\nTrabaja solo dentro del write-set del proyecto y conserva evidencia compacta.\n")
-	writeGeminiDurableResultProtocolV0(&b)
+	if geminiGoalPromptEnglishLocaleV0(locale) {
+		b.WriteString("\nWork only inside the project write-set and keep compact evidence.\n")
+	} else {
+		b.WriteString("\nTrabaja solo dentro del write-set del proyecto y conserva evidencia compacta.\n")
+	}
+	writeGeminiDurableResultProtocolForLocaleV0(&b, locale)
 	if len(spec.AcceptanceCriteria) > 0 {
-		b.WriteString("Criterios de aceptacion:\n")
+		if geminiGoalPromptEnglishLocaleV0(locale) {
+			b.WriteString("Acceptance criteria:\n")
+		} else {
+			b.WriteString("Criterios de aceptacion:\n")
+		}
 		for _, criterion := range spec.AcceptanceCriteria {
 			if strings.TrimSpace(criterion) == "" {
 				continue
@@ -147,7 +168,11 @@ func BuildGeminiGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 			b.WriteString("\n")
 		}
 	}
-	b.WriteString("Write-set permitido:\n")
+	if geminiGoalPromptEnglishLocaleV0(locale) {
+		b.WriteString("Allowed write-set:\n")
+	} else {
+		b.WriteString("Write-set permitido:\n")
+	}
 	for _, scope := range spec.WriteSet {
 		b.WriteString("- ")
 		b.WriteString(scope.Path)
@@ -158,7 +183,11 @@ func BuildGeminiGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 		b.WriteString("\n")
 	}
 	if len(spec.ArtifactContracts) > 0 {
-		b.WriteString("Contratos de artefacto para artifact_refs del resultado:\n")
+		if geminiGoalPromptEnglishLocaleV0(locale) {
+			b.WriteString("Artifact contracts for result artifact_refs:\n")
+		} else {
+			b.WriteString("Contratos de artefacto para artifact_refs del resultado:\n")
+		}
 		for _, artifact := range spec.ArtifactContracts {
 			if strings.TrimSpace(artifact.ArtifactRef) == "" {
 				continue
@@ -174,16 +203,28 @@ func BuildGeminiGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 			}
 			b.WriteString("\n")
 		}
-		b.WriteString("Incluye en artifact_refs todos los artifact_ref requeridos que hayas materializado o deja status blocked con rework_plan_refs si falta alguno.\n")
+		if geminiGoalPromptEnglishLocaleV0(locale) {
+			b.WriteString("Include in artifact_refs every required artifact_ref you materialized, or leave status blocked with rework_plan_refs when any required artifact is missing.\n")
+		} else {
+			b.WriteString("Incluye en artifact_refs todos los artifact_ref requeridos que hayas materializado o deja status blocked con rework_plan_refs si falta alguno.\n")
+		}
 	}
-	b.WriteString("Tests requeridos:\n")
+	if geminiGoalPromptEnglishLocaleV0(locale) {
+		b.WriteString("Required tests:\n")
+	} else {
+		b.WriteString("Tests requeridos:\n")
+	}
 	for _, test := range spec.RequiredTests {
 		b.WriteString("- ")
 		b.WriteString(firstNonEmptyGeminiGoalV0(test.TestRef, test.CommandRef, test.Command))
 		b.WriteString("\n")
 	}
 	if len(spec.ClosurePolicy.RequiredEvidenceRefs) > 0 {
-		b.WriteString("Evidencias requeridas para cierre accepted; incluyelas como strings en evidence_refs si el trabajo queda complete:\n")
+		if geminiGoalPromptEnglishLocaleV0(locale) {
+			b.WriteString("Evidence required for accepted closure; include it as strings in evidence_refs if the work is complete:\n")
+		} else {
+			b.WriteString("Evidencias requeridas para cierre accepted; incluyelas como strings en evidence_refs si el trabajo queda complete:\n")
+		}
 		for _, evidenceRef := range spec.ClosurePolicy.RequiredEvidenceRefs {
 			if strings.TrimSpace(evidenceRef) == "" {
 				continue
@@ -194,6 +235,11 @@ func BuildGeminiGoalPromptV0(spec orquestagoal.GoalWorkSpecV0) string {
 		}
 	}
 	return b.String()
+}
+
+func geminiGoalPromptEnglishLocaleV0(locale string) bool {
+	locale = strings.ToLower(strings.TrimSpace(locale))
+	return strings.HasPrefix(locale, "en")
 }
 
 func (backend GeminiGoalBackendV0) validateDirsV0() error {

@@ -24,6 +24,9 @@ const (
 	CodexGoalToolOutputMaxBytesV0       = 16 * 1024
 	CodexGoalWriteSetEnforcementV0      = "workspace_write_guard"
 	CodexGoalMinimumSandboxV0           = "workspace-write"
+	CodexGoalTaskCostClassDocV0         = "doc"
+	CodexGoalTaskCostClassCodeV0        = "code"
+	CodexGoalTaskCostClassMixedV0       = "mixed"
 
 	ErrCodexGoalStarterMissingV0      = "codex_goal_starter_missing"
 	ErrCodexGoalObserverMissingV0     = "codex_goal_observer_missing"
@@ -42,6 +45,7 @@ type CodexGoalStartPacketV0 struct {
 	ProjectRef         string                                `json:"project_ref,omitempty"`
 	WorkKind           string                                `json:"work_kind,omitempty"`
 	WorkProfileKind    string                                `json:"work_profile_kind,omitempty"`
+	TaskCostClass      string                                `json:"task_cost_class,omitempty"`
 	Objective          string                                `json:"objective"`
 	Prompt             string                                `json:"prompt"`
 	PromptCache        CodexGoalPromptCacheProjectionV0      `json:"prompt_cache,omitempty"`
@@ -159,6 +163,7 @@ func BuildCodexGoalStartPacketV0(spec orquestagoal.GoalWorkSpecV0) (CodexGoalSta
 		ProjectRef:         spec.ProjectRef,
 		WorkKind:           spec.WorkKind,
 		WorkProfileKind:    spec.WorkProfileKind,
+		TaskCostClass:      CodexGoalTaskCostClassForWriteSetV0(spec.WriteSet),
 		Objective:          spec.Objective,
 		Prompt:             prompt,
 		PromptCache:        promptParts.PromptCache,
@@ -373,6 +378,11 @@ func buildCodexGoalPromptLegacyV0(spec orquestagoal.GoalWorkSpecV0) string {
 	if spec.WorkProfileKind != "" {
 		b.WriteString("- work_profile_kind: ")
 		b.WriteString(spec.WorkProfileKind)
+		b.WriteString("\n")
+	}
+	if taskCostClass := CodexGoalTaskCostClassForWriteSetV0(spec.WriteSet); taskCostClass != "" {
+		b.WriteString("- task_cost_class: ")
+		b.WriteString(taskCostClass)
 		b.WriteString("\n")
 	}
 	b.WriteString("\n\nReglas:\n")
@@ -637,7 +647,35 @@ func writeCodexGoalStablePromptPrefixV0(
 		b.WriteString(skillRef)
 		b.WriteString("\n")
 	}
+	writeCodexGoalStableCodeContextRuleV0(b, spec)
 	writeCodexGoalStableClosureContractV0(b, spec, directionContract)
+}
+
+func writeCodexGoalStableCodeContextRuleV0(
+	b *strings.Builder,
+	spec orquestagoal.GoalWorkSpecV0,
+) {
+	if !codexGoalHasCodeWriteSetV0(spec) {
+		return
+	}
+	b.WriteString("\nAnalizador de codigo:\n")
+	b.WriteString("- Antes de leer ficheros completos en un write-set de codigo, consulta el broker central `orquesta.codebase.query.v0` con query_kind `repo_map`, `callers`, `imports`, `module_exports` o `relevant_snippets` segun la tarea.\n")
+	b.WriteString("- Usa esas respuestas compactas para decidir que fragmentos abrir; no arranques indexadores propios ni codebase-memory-mcp dentro del agente.\n")
+}
+
+func codexGoalHasCodeWriteSetV0(spec orquestagoal.GoalWorkSpecV0) bool {
+	for _, scope := range spec.WriteSet {
+		path := strings.ToLower(strings.TrimSpace(scope.Path))
+		purpose := strings.ToLower(strings.TrimSpace(scope.Purpose))
+		if strings.HasPrefix(path, "cmd/") ||
+			strings.HasPrefix(path, "modulos/") ||
+			strings.HasSuffix(path, ".go") ||
+			strings.Contains(purpose, "codigo") ||
+			strings.Contains(purpose, "code") {
+			return true
+		}
+	}
+	return false
 }
 
 func writeCodexGoalStableClosureContractV0(
@@ -754,6 +792,11 @@ func writeCodexGoalDynamicPromptSuffixV0(
 	if spec.WorkProfileKind != "" {
 		b.WriteString("- work_profile_kind: ")
 		b.WriteString(spec.WorkProfileKind)
+		b.WriteString("\n")
+	}
+	if taskCostClass := CodexGoalTaskCostClassForWriteSetV0(spec.WriteSet); taskCostClass != "" {
+		b.WriteString("- task_cost_class: ")
+		b.WriteString(taskCostClass)
 		b.WriteString("\n")
 	}
 	b.WriteString("\nEstado vivo y refs:\n")
@@ -952,6 +995,30 @@ func codexGoalResultFilePathV0(spec orquestagoal.GoalWorkSpecV0) string {
 	return ""
 }
 
+func CodexGoalTaskCostClassForWriteSetV0(writeSet []orquestagoal.GoalWriteScopeV0) string {
+	hasDoc := false
+	hasCode := false
+	for _, scope := range writeSet {
+		path := strings.Trim(strings.TrimSpace(scope.Path), "/")
+		if path == "" {
+			continue
+		}
+		if codexGoalWriteScopeIsMarkdownFileV0(path) {
+			hasDoc = true
+			continue
+		}
+		hasCode = true
+	}
+	switch {
+	case hasDoc && hasCode:
+		return CodexGoalTaskCostClassMixedV0
+	case hasDoc:
+		return CodexGoalTaskCostClassDocV0
+	default:
+		return CodexGoalTaskCostClassCodeV0
+	}
+}
+
 func CodexGoalResultFileNameForGoalRefV0(goalRef string) string {
 	part := codexGoalResultFileSafePartV0(goalRef)
 	if part == "" {
@@ -1043,7 +1110,7 @@ func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec o
 		Status:          status,
 		GoalRef:         packet.GoalRef,
 		ExternalGoalRef: receipt.ExternalGoalRef,
-		ContextBudget: orquestagoal.MergeGoalContextBudgetV0(packet.ContextBudget, receipt.ContextBudget),
+		ContextBudget:   orquestagoal.MergeGoalContextBudgetV0(packet.ContextBudget, receipt.ContextBudget),
 		EvidenceRefs: codexGoalCompactStringsV0(append(
 			append([]string(nil), receipt.EvidenceRefs...),
 			codexGoalPromptCacheEvidenceRefsV0(packet.PromptCache, receipt.PromptCache)...,

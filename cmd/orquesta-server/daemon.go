@@ -1,19 +1,30 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
-func startServerCommandV0(stdout io.Writer, stderr io.Writer) int {
-	config, err := serverConfigFromEnvV0()
+const serverDaemonConfigSnapshotDirV0 = "config-snapshots"
+
+const serverStartReadinessTimeoutV0 = 45 * time.Second
+
+func startServerCommandV0(args []string, stdout io.Writer, stderr io.Writer) int {
+	options, err := parseServerCommandConfigOptionsV0("start", args)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "orquesta-server start: %v\n", err)
+		return 2
+	}
+	config, err := serverConfigFromEnvWithProjectConfigPathV0(options.ConfigPath)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server start: %v\n", err)
 		return 1
@@ -27,7 +38,7 @@ func startServerCommandV0(stdout io.Writer, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server start: %v\n", err)
 		return 1
 	}
-	state, err := waitForStateHealthyV0(config, 15*time.Second)
+	state, err := waitForStateHealthyV0(config, serverStartReadinessTimeoutV0)
 	if err != nil {
 		cleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0(config, pid)
 		_, _ = fmt.Fprintf(stderr, "orquesta-server start pid=%d: %v\n", pid, err)
@@ -50,7 +61,11 @@ func startDetachedRunV0(config orquestaserver.ConfigV0) (int, error) {
 	}
 	defer stdoutLog.Close()
 	defer stderrLog.Close()
-	cmd := exec.Command(exe, "run")
+	runArgs, err := serverDaemonRunArgsV0(config)
+	if err != nil {
+		return 0, err
+	}
+	cmd := exec.Command(exe, runArgs...)
 	cmd.Env = serverDaemonStartEnvironmentV0(os.Environ(), config)
 	cmd.Stdin = nil
 	cmd.Stdout = stdoutLog
@@ -60,6 +75,50 @@ func startDetachedRunV0(config orquestaserver.ConfigV0) (int, error) {
 		return 0, fmt.Errorf("daemon_start_failed")
 	}
 	return cmd.Process.Pid, cmd.Process.Release()
+}
+
+func serverDaemonRunArgsV0(config orquestaserver.ConfigV0) ([]string, error) {
+	snapshotPath, err := writeServerDaemonConfigSnapshotV0(config)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(snapshotPath) == "" {
+		return []string{"run"}, nil
+	}
+	return []string{"run", "--config", snapshotPath}, nil
+}
+
+func writeServerDaemonConfigSnapshotV0(config orquestaserver.ConfigV0) (string, error) {
+	config = orquestaserver.NormalizeConfigV0(config)
+	sourcePath := strings.TrimSpace(config.ProjectConfigFilePath)
+	if sourcePath == "" {
+		return "", nil
+	}
+	raw, err := os.ReadFile(sourcePath)
+	if err != nil {
+		return "", fmt.Errorf("%s: read", configFileInvalidPublicCodeV0)
+	}
+	if _, _, err := loadServerProjectConfigPathV0(sourcePath); err != nil {
+		return "", err
+	}
+	stateDir := strings.TrimSpace(config.StateDir)
+	if stateDir == "" {
+		return "", fmt.Errorf("server_state_dir_unavailable")
+	}
+	snapshotDir := filepath.Join(stateDir, serverDaemonConfigSnapshotDirV0)
+	if err := os.MkdirAll(snapshotDir, 0o700); err != nil {
+		return "", fmt.Errorf("daemon_config_snapshot_unavailable")
+	}
+	snapshotPath := filepath.Join(snapshotDir, serverProjectConfigFileNameV0)
+	tmpPath := snapshotPath + ".tmp"
+	if err := os.WriteFile(tmpPath, raw, 0o600); err != nil {
+		return "", fmt.Errorf("daemon_config_snapshot_write_failed")
+	}
+	if err := os.Rename(tmpPath, snapshotPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("daemon_config_snapshot_write_failed")
+	}
+	return snapshotPath, nil
 }
 
 var (
@@ -190,5 +249,17 @@ func serverReadinessOKV0(addr string) bool {
 		return false
 	}
 	defer response.Body.Close()
-	return response.StatusCode == http.StatusOK
+	if response.StatusCode == http.StatusOK {
+		return true
+	}
+	if response.StatusCode != http.StatusServiceUnavailable {
+		return false
+	}
+	var readiness orquestaserver.ServerReadinessV0
+	if err := json.NewDecoder(response.Body).Decode(&readiness); err != nil {
+		return false
+	}
+	return readiness.StartupReady &&
+		strings.TrimSpace(readiness.Status) == "running" &&
+		strings.TrimSpace(readiness.AvailabilityStatus) == "running"
 }

@@ -26,6 +26,13 @@ smoke_require_confirm() {
 }
 
 smoke_orquesta_base_url_from_env_or_runtime() {
+  if [[ -n "${ORQUESTA_SERVER_URL:-}" && -n "${ORQUESTA_BASE_URL:-}" && "${ORQUESTA_SERVER_URL%/}" != "${ORQUESTA_BASE_URL%/}" ]]; then
+    echo "aviso: ORQUESTA_BASE_URL es legacy e ignorada porque ORQUESTA_SERVER_URL tiene otro valor" >&2
+  elif [[ -n "${ORQUESTA_SERVER_URL:-}" && -n "${ORQUESTA_BASE_URL:-}" ]]; then
+    echo "aviso: ORQUESTA_BASE_URL duplica ORQUESTA_SERVER_URL; manten solo ORQUESTA_SERVER_URL" >&2
+  elif [[ -z "${ORQUESTA_SERVER_URL:-}" && -n "${ORQUESTA_BASE_URL:-}" ]]; then
+    echo "aviso: ORQUESTA_BASE_URL es legacy; usa ORQUESTA_SERVER_URL" >&2
+  fi
   if [[ -n "${ORQUESTA_SERVER_URL:-}" ]]; then
     printf '%s\n' "${ORQUESTA_SERVER_URL%/}"
     return 0
@@ -126,6 +133,25 @@ smoke_get_json() {
   curl -sS -f "$url" >"$output"
 }
 
+smoke_orquesta_readiness_ok() {
+  local base_url="$1"
+  local body_file
+  body_file="$(mktemp "${TMPDIR:-/tmp}/orquesta-readiness.XXXXXX.json")"
+  local status
+  status="$(curl -sS -m 2 -o "$body_file" -w "%{http_code}" "$base_url/api/v0/server/readiness" || true)"
+  if [[ "$status" -ge 200 && "$status" -le 299 ]]; then
+    rm -f "$body_file"
+    return 0
+  fi
+  if [[ "$status" == "503" ]] && command -v jq >/dev/null 2>&1 &&
+    jq -e '.startup_ready == true and .status == "running" and .availability_status == "running"' "$body_file" >/dev/null 2>&1; then
+    rm -f "$body_file"
+    return 0
+  fi
+  rm -f "$body_file"
+  return 1
+}
+
 smoke_json_id() {
   jq -r '.id // .ID // empty' "$1"
 }
@@ -156,7 +182,7 @@ smoke_wait_orquesta_readiness_from_state_file() {
       addr="$(jq -r '.addr // empty' "$state_file" 2>/dev/null || true)"
       if [[ -n "$addr" ]]; then
         url="http://$addr"
-        if curl -fsS -m 2 "$url/api/v0/server/readiness" >/dev/null; then
+        if smoke_orquesta_readiness_ok "$url"; then
           printf -v "$out_var" '%s' "$url"
           return 0
         fi

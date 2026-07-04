@@ -341,6 +341,97 @@ func TestServerConfigFromEnvV0DerivaAutomejoraGoalFirstDeBackendGeminiGoalV0(t *
 	}
 }
 
+func TestServerConfigFromEnvV0LeeGoalBackendDesdeFicheroCanonicoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envServerIdleSelfImprovementGoalFirstV0, "")
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"goal_backend":{
+			"kind":"claude_file_control",
+			"timeout_ms":12000,
+			"preflight_timeout_ms":3400,
+			"allow_app_server_proxy_diagnostic":true
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if !config.IdleSelfImprovementGoalFirst {
+		t.Fatalf("goal-first idle debe derivarse del backend goal del fichero: %+v", config)
+	}
+	for key, want := range map[string]string{
+		envCodexGoalBackendV0:              claudeGoalBackendFileControlV0,
+		envAllowAppServerProxyDiagnosticV0: "true",
+		envCodexGoalTimeoutMSV0:            "12000",
+		envCodexGoalPreflightTimeoutMSV0:   "3400",
+	} {
+		setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, key)
+		if setting.Value != want || setting.Source != configSettingSourceConfigFileV0 {
+			t.Fatalf("setting %s=%+v want value=%q source=config_file", key, setting, want)
+		}
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerIdleSelfImprovementGoalFirstV0)
+	if setting.Value != "true" || setting.Source != "derived_from_claude_goal_backend" {
+		t.Fatalf("setting goal-first=%+v", setting)
+	}
+	if effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, orquestamcp.MCPExternalWorkRunGoalBackendRequiredV0) {
+		t.Fatalf("diagnostico backend requerido no debe aparecer con backend en fichero: %+v", config.EffectiveConfig.Diagnostics)
+	}
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, "idle_self_improvement_goal_first_derived", envCodexGoalBackendV0) {
+		t.Fatalf("diagnostico derivacion ausente: %+v", config.EffectiveConfig.Diagnostics)
+	}
+}
+
+func TestServerConfigFromEnvV0EnvExplicitoGanaGoalBackendFicheroCanonicoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envCodexGoalBackendV0, geminiGoalBackendFileControlV0)
+	t.Setenv(envCodexGoalTimeoutMSV0, "22000")
+	t.Setenv(envAllowAppServerProxyDiagnosticV0, "false")
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"goal_backend":{
+			"kind":"claude_file_control",
+			"timeout_ms":12000,
+			"preflight_timeout_ms":3400,
+			"allow_app_server_proxy_diagnostic":true
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	expect := map[string]struct {
+		value  string
+		source string
+	}{
+		envCodexGoalBackendV0:              {value: geminiGoalBackendFileControlV0, source: "explicit"},
+		envAllowAppServerProxyDiagnosticV0: {value: "false", source: "explicit"},
+		envCodexGoalTimeoutMSV0:            {value: "22000", source: "explicit"},
+		envCodexGoalPreflightTimeoutMSV0:   {value: "3400", source: configSettingSourceConfigFileV0},
+	}
+	for key, want := range expect {
+		setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, key)
+		if setting.Value != want.value || setting.Source != want.source {
+			t.Fatalf("setting %s=%+v want=%+v", key, setting, want)
+		}
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerIdleSelfImprovementGoalFirstV0)
+	if setting.Value != "true" || setting.Source != "derived_from_gemini_goal_backend" {
+		t.Fatalf("setting goal-first=%+v", setting)
+	}
+}
+
 func TestServerConfigFromEnvV0ExternalWorkLegacyDirectorLoopPorDefectoFalseV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 
@@ -354,6 +445,128 @@ func TestServerConfigFromEnvV0ExternalWorkLegacyDirectorLoopPorDefectoFalseV0(t 
 	}
 	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, orquestamcp.MCPExternalWorkRunGoalBackendRequiredV0, envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0) {
 		t.Fatalf("diagnostico goal backend requerido ausente: %+v", config.EffectiveConfig.Diagnostics)
+	}
+}
+
+func TestServerConfigFromEnvV0DiagnosticaOrquestaBaseURLLegacyAliasV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envOrquestaServerURLV0, "")
+	t.Setenv(envOrquestaBaseURLV0, "http://127.0.0.1:18080")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envOrquestaServerURLV0)
+	if setting.Value != "orquesta-server-url-configured" ||
+		setting.Source != "legacy_alias" ||
+		!setting.Sensitive {
+		t.Fatalf("setting Orquesta server URL legacy=%+v", setting)
+	}
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, "deprecated_env_used", envOrquestaBaseURLV0, envOrquestaServerURLV0) {
+		t.Fatalf("diagnostico Orquesta URL alias ausente: %+v", config.EffectiveConfig.Diagnostics)
+	}
+}
+
+func TestServerConfigFromEnvV0DiagnosticaOrquestaBaseURLPisadaV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envOrquestaServerURLV0, "http://127.0.0.1:18080")
+	t.Setenv(envOrquestaBaseURLV0, "http://127.0.0.1:18081")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envOrquestaServerURLV0)
+	if setting.Value != "orquesta-server-url-configured" ||
+		setting.Source != "explicit" ||
+		!setting.Sensitive {
+		t.Fatalf("setting Orquesta server URL conflicto=%+v", setting)
+	}
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, "env_alias_conflict", envOrquestaBaseURLV0, envOrquestaServerURLV0) {
+		t.Fatalf("diagnostico Orquesta URL conflicto ausente: %+v", config.EffectiveConfig.Diagnostics)
+	}
+}
+
+func TestServerConfigFromEnvV0DiagnosticaOPESBaseURLLegacyAliasV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envOPESBaseURLV0, "")
+	t.Setenv(envOPESBaseURLLegacyV0, "http://127.0.0.1:18082")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envOPESBaseURLV0)
+	if setting.Value != "opes-base-url-configured" ||
+		setting.Source != "legacy_alias" ||
+		!setting.Sensitive {
+		t.Fatalf("setting OPES base URL legacy=%+v", setting)
+	}
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, "deprecated_env_used", envOPESBaseURLLegacyV0, envOPESBaseURLV0) {
+		t.Fatalf("diagnostico OPES alias ausente: %+v", config.EffectiveConfig.Diagnostics)
+	}
+}
+
+func TestServerConfigFromEnvV0DiagnosticaOPESBaseURLPisadaV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envOPESBaseURLV0, "http://127.0.0.1:18082")
+	t.Setenv(envOPESBaseURLLegacyV0, "http://127.0.0.1:18083")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envOPESBaseURLV0)
+	if setting.Value != "opes-base-url-configured" ||
+		setting.Source != "explicit" ||
+		!setting.Sensitive {
+		t.Fatalf("setting OPES base URL conflicto=%+v", setting)
+	}
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, "env_alias_conflict", envOPESBaseURLLegacyV0, envOPESBaseURLV0) {
+		t.Fatalf("diagnostico OPES conflicto ausente: %+v", config.EffectiveConfig.Diagnostics)
+	}
+}
+
+func TestServerConfigFromEnvV0DiagnosticaCodexCodeHomeLegacyAliasV0(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(envCodexProjectWorkDirV0, root)
+	t.Setenv(envCodexCodeHomeV0, "")
+	t.Setenv(envCodexCodeHomeLegacyV0, filepath.Join(root, "legacy-codex-home"))
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envCodexCodeHomeV0)
+	if setting.Value != "codex-code-home-configured" ||
+		setting.Source != "legacy_alias" ||
+		!setting.Sensitive {
+		t.Fatalf("setting codex code home legacy=%+v", setting)
+	}
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, "deprecated_env_used", envCodexCodeHomeLegacyV0, envCodexCodeHomeV0) {
+		t.Fatalf("diagnostico Codex code home alias ausente: %+v", config.EffectiveConfig.Diagnostics)
+	}
+}
+
+func TestServerConfigFromEnvV0DiagnosticaCodexCodeHomePisadoV0(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(envCodexProjectWorkDirV0, root)
+	t.Setenv(envCodexCodeHomeV0, filepath.Join(root, "canonical-codex-home"))
+	t.Setenv(envCodexCodeHomeLegacyV0, filepath.Join(root, "legacy-codex-home"))
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envCodexCodeHomeV0)
+	if setting.Value != "codex-code-home-configured" ||
+		setting.Source != "explicit" ||
+		!setting.Sensitive {
+		t.Fatalf("setting codex code home conflicto=%+v", setting)
+	}
+	if !effectiveConfigHasDiagnosticForTestV0(config.EffectiveConfig, "env_alias_conflict", envCodexCodeHomeLegacyV0, envCodexCodeHomeV0) {
+		t.Fatalf("diagnostico Codex code home conflicto ausente: %+v", config.EffectiveConfig.Diagnostics)
 	}
 }
 
@@ -542,6 +755,508 @@ func TestServerConfigFromEnvV0PublicaUmbralCheckpointGoalConfigurableV0(t *testi
 	setting = effectiveSettingForTestV0(config.EffectiveConfig.Settings, envAutoprogrammingNoCheckpointWarningMaxWaitSecondsV0)
 	if setting.Value != "900" || setting.Source != "explicit" {
 		t.Fatalf("setting no checkpoint wait=%+v", setting)
+	}
+}
+
+func TestServerConfigFromEnvV0LeeUmbralCheckpointDesdeFicheroCanonicoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"autoprogramming":{
+			"checkpoint_only_high_consumption_tokens":450000,
+			"checkpoint_only_max_wait_seconds":1500,
+			"no_checkpoint_warning_max_wait_seconds":900
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	policy := serverAutoprogrammingGoalProgressPolicyFromConfigV0(config)
+	if policy.CheckpointOnlyHighConsumptionTokens != 450000 ||
+		policy.CheckpointOnlyMaxWaitSeconds != 1500 ||
+		policy.NoCheckpointWarningMaxWaitSeconds != 900 {
+		t.Fatalf("policy=%+v", policy)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0)
+	if setting.Value != "450000" || setting.Source != configSettingSourceConfigFileV0 {
+		t.Fatalf("setting checkpoint threshold=%+v", setting)
+	}
+	setting = effectiveSettingForTestV0(config.EffectiveConfig.Settings, envAutoprogrammingCheckpointOnlyMaxWaitSecondsV0)
+	if setting.Value != "1500" || setting.Source != configSettingSourceConfigFileV0 {
+		t.Fatalf("setting checkpoint wait=%+v", setting)
+	}
+	setting = effectiveSettingForTestV0(config.EffectiveConfig.Settings, envAutoprogrammingNoCheckpointWarningMaxWaitSecondsV0)
+	if setting.Value != "900" || setting.Source != configSettingSourceConfigFileV0 {
+		t.Fatalf("setting no checkpoint wait=%+v", setting)
+	}
+	stack, err := buildStackFromEnvWithGoalBackendV0(config, serverCodexGoalBackendV0{})
+	if err != nil {
+		t.Fatalf("buildStackFromEnvWithGoalBackendV0: %v", err)
+	}
+	if stack.MCPTransportBindings.AutoprogrammingGoalProgressPolicy.CheckpointOnlyHighConsumptionTokens != 450000 ||
+		stack.MCPTransportBindings.AutoprogrammingGoalProgressPolicy.CheckpointOnlyMaxWaitSeconds != 1500 {
+		t.Fatalf("stack goal_progress_policy=%+v", stack.MCPTransportBindings.AutoprogrammingGoalProgressPolicy)
+	}
+}
+
+func TestServerConfigFromEnvV0EnvExplicitoGanaAlFicheroCanonicoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0, "42000")
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"autoprogramming":{
+			"checkpoint_only_high_consumption_tokens":450000,
+			"checkpoint_only_max_wait_seconds":1500
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	policy := serverAutoprogrammingGoalProgressPolicyFromConfigV0(config)
+	if policy.CheckpointOnlyHighConsumptionTokens != 42000 ||
+		policy.CheckpointOnlyMaxWaitSeconds != 1500 {
+		t.Fatalf("policy=%+v", policy)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0)
+	if setting.Value != "42000" || setting.Source != "explicit" {
+		t.Fatalf("setting checkpoint threshold=%+v", setting)
+	}
+	setting = effectiveSettingForTestV0(config.EffectiveConfig.Settings, envAutoprogrammingCheckpointOnlyMaxWaitSecondsV0)
+	if setting.Value != "1500" || setting.Source != configSettingSourceConfigFileV0 {
+		t.Fatalf("setting checkpoint wait=%+v", setting)
+	}
+}
+
+func TestServerConfigFromEnvWithProjectConfigPathV0CargaFicheroExplicito(t *testing.T) {
+	root := t.TempDir()
+	stateDir := filepath.Join(root, "state-from-explicit-config")
+	runtimeDir := filepath.Join(root, "runtime-from-explicit-config")
+	configPath := filepath.Join(root, "custom-orquesta.config.json")
+	t.Setenv(envCodexProjectWorkDirV0, "")
+	t.Setenv(envServerStateDirV0, "")
+	t.Setenv(envCodexRuntimeWorkDirV0, "")
+	t.Setenv(envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0, "")
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"server":{"state_dir":"` + filepath.ToSlash(stateDir) + `"},
+		"codex_runtime":{"runtime_work_dir":"` + filepath.ToSlash(runtimeDir) + `"},
+		"autoprogramming":{"checkpoint_only_high_consumption_tokens":450000}
+	}`
+	if err := os.WriteFile(configPath, []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	config, err := serverConfigFromEnvWithProjectConfigPathV0(configPath)
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvWithProjectConfigPathV0: %v", err)
+	}
+	absConfigPath, err := filepath.Abs(configPath)
+	if err != nil {
+		t.Fatalf("abs config: %v", err)
+	}
+	if config.ProjectWorkDir != root ||
+		config.ProjectConfigFilePath != absConfigPath ||
+		config.StateDir != stateDir ||
+		config.RuntimeWorkDir != runtimeDir {
+		t.Fatalf("config explicita no aplicada: %+v", config)
+	}
+	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0)
+	if setting.Value != "450000" || setting.Source != configSettingSourceConfigFileV0 {
+		t.Fatalf("setting checkpoint threshold=%+v", setting)
+	}
+}
+
+func TestServerDaemonRunArgsV0UsaSnapshotDeConfigExplicita(t *testing.T) {
+	root := t.TempDir()
+	stateDir := filepath.Join(root, "state")
+	sourcePath := filepath.Join(root, "orquesta.config.json")
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"server":{"state_dir":"` + filepath.ToSlash(stateDir) + `"},
+		"autoprogramming":{"checkpoint_only_high_consumption_tokens":450000}
+	}`
+	if err := os.WriteFile(sourcePath, []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	args, err := serverDaemonRunArgsV0(orquestaserver.ConfigV0{
+		StateDir:              stateDir,
+		ProjectConfigFilePath: sourcePath,
+	})
+	if err != nil {
+		t.Fatalf("serverDaemonRunArgsV0: %v", err)
+	}
+	snapshotPath := filepath.Join(stateDir, serverDaemonConfigSnapshotDirV0, serverProjectConfigFileNameV0)
+	wantArgs := strings.Join([]string{"run", "--config", snapshotPath}, "\x00")
+	if strings.Join(args, "\x00") != wantArgs {
+		t.Fatalf("args=%v want=%v", args, wantArgs)
+	}
+	if err := os.WriteFile(sourcePath, []byte(`{"schema_version":"orquesta_config.v0","autoprogramming":{"checkpoint_only_high_consumption_tokens":1}}`), 0o600); err != nil {
+		t.Fatalf("mutate source config: %v", err)
+	}
+	rawSnapshot, err := os.ReadFile(snapshotPath)
+	if err != nil {
+		t.Fatalf("read snapshot: %v", err)
+	}
+	if !strings.Contains(string(rawSnapshot), `"checkpoint_only_high_consumption_tokens":450000`) {
+		t.Fatalf("snapshot no conserva config original: %s", string(rawSnapshot))
+	}
+}
+
+func TestServerConfigFromEnvV0LeeServerDaemonRuntimeDesdeFicheroCanonicoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := filepath.Join(projectDir, "state-from-file")
+	runtimeDir := filepath.Join(projectDir, "runtime-from-file")
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"server":{
+			"addr":"127.0.0.1:18787",
+			"state_dir":"` + filepath.ToSlash(stateDir) + `",
+			"audit_file":"audit-file.jsonl",
+			"audit_disabled":false
+		},
+		"daemon_logs":{
+			"max_bytes":1048576,
+			"max_rotated_files":5,
+			"retention_days":9,
+			"local_raw_enabled":true,
+			"local_raw_reason":"local_diagnostic"
+		},
+		"codex_runtime":{
+			"runtime_work_dir":"` + filepath.ToSlash(runtimeDir) + `"
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.Addr != "127.0.0.1:18787" ||
+		config.StateDir != stateDir ||
+		config.RuntimeWorkDir != runtimeDir ||
+		config.AuditFile != "audit-file.jsonl" ||
+		config.AuditDisabled {
+		t.Fatalf("config desde fichero inesperada: addr=%q state=%q runtime=%q audit=%q disabled=%v",
+			config.Addr, config.StateDir, config.RuntimeWorkDir, config.AuditFile, config.AuditDisabled)
+	}
+	if config.DaemonLogPolicy.MaxBytes != 1048576 ||
+		config.DaemonLogPolicy.MaxRotatedFiles != 5 ||
+		config.DaemonLogPolicy.RetentionDays != 9 ||
+		!config.DaemonLogPolicy.LocalRawEnabled ||
+		config.DaemonLogPolicy.LocalRawReason != "local_diagnostic" {
+		t.Fatalf("daemon log policy=%+v", config.DaemonLogPolicy)
+	}
+	for _, key := range []string{
+		envServerAddrV0,
+		envServerStateDirV0,
+		envServerAuditFileV0,
+		envServerAuditDisabledV0,
+		envServerDaemonLogMaxBytesV0,
+		envServerDaemonLogMaxRotatedV0,
+		envServerDaemonLogRetentionDaysV0,
+		envServerDaemonLogRawEnabledV0,
+		envServerDaemonLogRawReasonV0,
+		envCodexRuntimeWorkDirV0,
+	} {
+		setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, key)
+		if setting.Source != configSettingSourceConfigFileV0 {
+			t.Fatalf("setting %s=%+v", key, setting)
+		}
+	}
+	stateSetting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerStateDirV0)
+	runtimeSetting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envCodexRuntimeWorkDirV0)
+	if !stateSetting.Sensitive || stateSetting.Value != "server-state-dir-configured" ||
+		!runtimeSetting.Sensitive || runtimeSetting.Value != "codex-runtime-workdir-configured" {
+		t.Fatalf("settings sensibles state=%+v runtime=%+v", stateSetting, runtimeSetting)
+	}
+}
+
+func TestServerConfigFromEnvV0LeeHTTPYLifecycleDesdeFicheroCanonicoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"server_http":{
+			"read_header_timeout_ms":1111,
+			"read_timeout_ms":2222,
+			"write_timeout_ms":3333,
+			"idle_timeout_ms":4444,
+			"max_header_bytes":5555,
+			"control_body_max_bytes":6666
+		},
+		"server_lifecycle":{
+			"shutdown_grace_ms":7777
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.HTTPResourceLimits.ReadHeaderTimeout != 1111*time.Millisecond ||
+		config.HTTPResourceLimits.ReadTimeout != 2222*time.Millisecond ||
+		config.HTTPResourceLimits.WriteTimeout != 3333*time.Millisecond ||
+		config.HTTPResourceLimits.IdleTimeout != 4444*time.Millisecond ||
+		config.HTTPResourceLimits.MaxHeaderBytes != 5555 ||
+		config.HTTPResourceLimits.ControlBodyBytes != 6666 ||
+		config.ShutdownGracePeriod != 7777*time.Millisecond {
+		t.Fatalf("http/lifecycle desde fichero inesperado: http=%+v shutdown=%s",
+			config.HTTPResourceLimits, config.ShutdownGracePeriod)
+	}
+	for _, key := range []string{
+		envServerReadHeaderTimeoutMSV0,
+		envServerReadTimeoutMSV0,
+		envServerWriteTimeoutMSV0,
+		envServerIdleTimeoutMSV0,
+		envServerMaxHeaderBytesV0,
+		envServerControlBodyMaxBytesV0,
+		envServerShutdownGraceMSV0,
+	} {
+		setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, key)
+		if setting.Source != configSettingSourceConfigFileV0 {
+			t.Fatalf("setting %s=%+v", key, setting)
+		}
+	}
+}
+
+func TestServerConfigFromEnvV0EnvExplicitoGanaCampoAFicheroCanonicoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := filepath.Join(projectDir, "state-from-file")
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envServerAddrV0, "127.0.0.1:28787")
+	t.Setenv(envServerReadHeaderTimeoutMSV0, "9876")
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"server":{
+			"addr":"127.0.0.1:18787",
+			"state_dir":"` + filepath.ToSlash(stateDir) + `"
+		},
+		"server_http":{
+			"read_header_timeout_ms":1111,
+			"read_timeout_ms":2222
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.Addr != "127.0.0.1:28787" || config.StateDir != stateDir {
+		t.Fatalf("config=%+v", config)
+	}
+	if config.HTTPResourceLimits.ReadHeaderTimeout != 9876*time.Millisecond ||
+		config.HTTPResourceLimits.ReadTimeout != 2222*time.Millisecond {
+		t.Fatalf("http limits=%+v", config.HTTPResourceLimits)
+	}
+	addrSetting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerAddrV0)
+	stateSetting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerStateDirV0)
+	readHeaderSetting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerReadHeaderTimeoutMSV0)
+	readSetting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envServerReadTimeoutMSV0)
+	if addrSetting.Source != "explicit" ||
+		stateSetting.Source != configSettingSourceConfigFileV0 ||
+		readHeaderSetting.Source != "explicit" ||
+		readSetting.Source != configSettingSourceConfigFileV0 {
+		t.Fatalf("addr=%+v state=%+v read_header=%+v read=%+v", addrSetting, stateSetting, readHeaderSetting, readSetting)
+	}
+}
+
+func TestServerConfigFromEnvV0LeeLimitesCodexYSupervisorDesdeFicheroCanonicoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	for _, key := range []string{
+		envServerMaxRunsPerTickV0,
+		envServerMaxExecutionsPerTickV0,
+		envServerQueueLimitV0,
+		envServerDrainMaxDispatchesV0,
+		envServerDrainMaxCommandsV0,
+		envServerDrainMaxOutboxV0,
+		envServerDrainMaxExternalWaitsV0,
+		envServerIdleSelfImprovementMaxRequestsV0,
+		envServerResidentDirectorMaxActionsV0,
+		envCodexExecutionModeV0,
+		envCodexMaxBatchReadyV0,
+		envCodexMaxConcurrencyV0,
+		envCodexReasoningEffortV0,
+		envCodexMaxExpectedSecondsV0,
+		envCodexDirectorWaveAgentsV0,
+		envCodexDirectorMaxSubagentsPerAgentV0,
+		envCodexDirectorRecursiveAgentBudgetV0,
+	} {
+		t.Setenv(key, "")
+	}
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"server_supervisor":{
+			"max_runs_per_tick":31,
+			"max_executions_per_tick":32,
+			"queue_limit":33,
+			"drain_max_dispatches":34,
+			"drain_max_commands":35,
+			"drain_max_outbox":36,
+			"drain_max_external_waits":37
+		},
+		"server_idle_self_improvement":{"max_requests":5},
+		"server_resident_director":{"max_actions":6},
+		"codex_runtime":{
+			"execution_mode":"parallel",
+			"reasoning_effort":"high",
+			"max_expected_seconds":41,
+			"max_batch_ready":42,
+			"max_concurrency":43
+		},
+		"codex_director":{
+			"wave_agents":44,
+			"max_subagents_per_agent":7,
+			"recursive_agent_budget":45
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	if config.SupervisorCommand.MaxRunsPerTick != 31 ||
+		config.SupervisorCommand.MaxExecutions != 32 ||
+		config.SupervisorCommand.DrainLimits.MaxDispatchesPerWait != 34 ||
+		config.SupervisorCommand.DrainLimits.MaxCommands != 35 ||
+		config.SupervisorCommand.DrainLimits.MaxOutboxPerCycle != 36 ||
+		config.SupervisorCommand.DrainLimits.MaxExternalWaits != 37 ||
+		config.IdleSelfImprovementMaxRequests != 5 ||
+		config.ResidentDirectorMaxActions != 6 {
+		t.Fatalf("config limites=%+v idle=%d resident=%d", config.SupervisorCommand, config.IdleSelfImprovementMaxRequests, config.ResidentDirectorMaxActions)
+	}
+	runtimeConfig := codexRuntimeConfigV0(config, nil)
+	if runtimeConfig.ReasoningEffort != "high" ||
+		runtimeConfig.MaxBatchReady != 42 ||
+		runtimeConfig.MaxConcurrency != 43 ||
+		runtimeConfig.ProgressBudget.MaxExpected != 41*time.Second {
+		t.Fatalf("runtime_config=%+v", runtimeConfig)
+	}
+	for key, want := range map[string]string{
+		envServerMaxRunsPerTickV0:                 "31",
+		envServerMaxExecutionsPerTickV0:           "32",
+		envServerQueueLimitV0:                     "33",
+		envServerDrainMaxDispatchesV0:             "34",
+		envServerDrainMaxCommandsV0:               "35",
+		envServerDrainMaxOutboxV0:                 "36",
+		envServerDrainMaxExternalWaitsV0:          "37",
+		envServerIdleSelfImprovementMaxRequestsV0: "5",
+		envServerResidentDirectorMaxActionsV0:     "6",
+		envCodexExecutionModeV0:                   codexExecutionModeParallelV0,
+		envCodexMaxBatchReadyV0:                   "42",
+		envCodexMaxConcurrencyV0:                  "43",
+		envCodexReasoningEffortV0:                 "high",
+		envCodexMaxExpectedSecondsV0:              "41",
+		envCodexDirectorWaveAgentsV0:              "44",
+		envCodexDirectorMaxSubagentsPerAgentV0:    "7",
+		envCodexDirectorRecursiveAgentBudgetV0:    "45",
+	} {
+		setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, key)
+		if setting.Value != want || setting.Source != configSettingSourceConfigFileV0 {
+			t.Fatalf("setting %s=%+v want value=%q source=config_file", key, setting, want)
+		}
+	}
+}
+
+func TestServerConfigFromEnvV0EnvExplicitoGanaLimitesCodexYSupervisorV0(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envServerMaxRunsPerTickV0, "9")
+	t.Setenv(envCodexReasoningEffortV0, "low")
+	t.Setenv(envCodexMaxExpectedSecondsV0, "19")
+	t.Setenv(envCodexDirectorWaveAgentsV0, "8")
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"server_supervisor":{"max_runs_per_tick":31,"max_executions_per_tick":32},
+		"codex_runtime":{"reasoning_effort":"high","max_expected_seconds":41,"max_batch_ready":42},
+		"codex_director":{"wave_agents":44}
+	}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	runtimeConfig := codexRuntimeConfigV0(config, nil)
+	if config.SupervisorCommand.MaxRunsPerTick != 9 ||
+		config.SupervisorCommand.MaxExecutions != 32 ||
+		runtimeConfig.ReasoningEffort != "low" ||
+		runtimeConfig.ProgressBudget.MaxExpected != 19*time.Second {
+		t.Fatalf("config=%+v runtime=%+v", config.SupervisorCommand, runtimeConfig)
+	}
+	for key, wantSource := range map[string]string{
+		envServerMaxRunsPerTickV0:       "explicit",
+		envServerMaxExecutionsPerTickV0: configSettingSourceConfigFileV0,
+		envCodexReasoningEffortV0:       "explicit",
+		envCodexMaxExpectedSecondsV0:    "explicit",
+		envCodexMaxBatchReadyV0:         configSettingSourceConfigFileV0,
+		envCodexDirectorWaveAgentsV0:    "explicit",
+	} {
+		setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, key)
+		if setting.Source != wantSource {
+			t.Fatalf("setting %s=%+v want source=%s", key, setting, wantSource)
+		}
+	}
+}
+
+func TestServerConfigFromEnvV0RechazaAuditFileInvalidoDesdeFicheroCanonicoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	if err := os.WriteFile(
+		filepath.Join(projectDir, serverProjectConfigFileNameV0),
+		[]byte(`{"schema_version":"orquesta_config.v0","server":{"audit_file":"logs/audit.json"}}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	_, err := serverConfigFromEnvV0()
+	if err == nil || !strings.Contains(err.Error(), "audit_file invalido") {
+		t.Fatalf("serverConfigFromEnvV0 err=%v", err)
+	}
+}
+
+func TestServerConfigFromEnvV0RechazaFicheroCanonicoConSchemaInvalidoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	if err := os.WriteFile(
+		filepath.Join(projectDir, serverProjectConfigFileNameV0),
+		[]byte(`{"schema_version":"otro","autoprogramming":{"checkpoint_only_high_consumption_tokens":450000}}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	_, err := serverConfigFromEnvV0()
+	if err == nil || !strings.Contains(err.Error(), configFileUnsupportedSchemaCodeV0) {
+		t.Fatalf("serverConfigFromEnvV0 err=%v", err)
 	}
 }
 
@@ -745,7 +1460,7 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 		envCodebaseBrokerExternalIndexerEnabledV0:            "false",
 		envCodebaseBrokerMaxConcurrentV0:                     "3",
 		envCodebaseBrokerTimeoutMSV0:                         "1500",
-		envCodebaseBrokerCommandV0:                           "codebase-memory-mcp-test",
+		envCodebaseBrokerCommandV0:                           codebaseBrokerConfiguredCommandRefV0,
 		envCodebaseBrokerProjectNameV0:                       "orquesta-test-index",
 		envOPESBridgeWaitResidentSecondsV0:                   "15",
 		envOPESBridgeWaitResidentIntervalMSV0:                "250",
@@ -909,6 +1624,93 @@ func TestServerConfigFromEnvV0PublicaEgressSanitizerCanonicoRedactadoV0(t *testi
 		if !containsStringV0(hidden, wantHidden) {
 			t.Fatalf("hidden no contiene %s: %v", wantHidden, hidden)
 		}
+	}
+}
+
+func TestServerConfigFromEnvV0LeeEgressSanitizerDesdeFicheroCanonicoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := filepath.Join(projectDir, "state")
+	runtimeDir := filepath.Join(projectDir, "runtime")
+	rawModelPath := "/home/alberto/private/models/openai-privacy-filter.gguf"
+	rawSidecarCommand := "/home/alberto/bin/privacy-filter --model " + rawModelPath
+	rawSidecarEndpoint := "http://127.0.0.1:17777/filter"
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"server":{"state_dir":"` + filepath.ToSlash(stateDir) + `"},
+		"codex_runtime":{"runtime_work_dir":"` + filepath.ToSlash(runtimeDir) + `"},
+		"egress_sanitizer":{
+			"enabled":true,
+			"sanitizer_ref":"sanitizer-ref-file-test",
+			"local_model":{
+				"enabled":true,
+				"model_ref":"model-ref-sensitive-file",
+				"model_path":"` + rawModelPath + `",
+				"runtime_ref":"runtime-ref-sensitive-file",
+				"evidence_ref":"evidence-ref-sensitive-file"
+			},
+			"sidecar":{
+				"enabled":true,
+				"sidecar_ref":"sidecar-ref-file-test",
+				"adapter_ref":"adapter-ref-file-test",
+				"transport_ref":"transport-ref-file-test",
+				"evidence_ref":"evidence-ref-sidecar-file",
+				"command":"` + rawSidecarCommand + `",
+				"local_endpoint":"` + rawSidecarEndpoint + `"
+			}
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	settings := config.EffectiveConfig.Settings
+	for key, want := range map[string]string{
+		envEgressSanitizerEnabledV0:              "true",
+		envEgressSanitizerRefV0:                  "sanitizer-ref-file-test",
+		envEgressSanitizerLocalModelEnabledV0:    "true",
+		envEgressSanitizerLocalModelRefV0:        "egress-sanitizer-local-model-ref-configured",
+		envEgressSanitizerLocalModelPathV0:       "egress-sanitizer-local-model-path-configured",
+		envEgressSanitizerLocalRuntimeRefV0:      "egress-sanitizer-local-runtime-ref-configured",
+		envEgressSanitizerLocalEvidenceRefV0:     "egress-sanitizer-local-evidence-ref-configured",
+		envEgressSanitizerSidecarEnabledV0:       "true",
+		envEgressSanitizerSidecarRefV0:           "sidecar-ref-file-test",
+		envEgressSanitizerSidecarAdapterRefV0:    "adapter-ref-file-test",
+		envEgressSanitizerSidecarTransportRefV0:  "transport-ref-file-test",
+		envEgressSanitizerSidecarEvidenceRefV0:   "evidence-ref-sidecar-file",
+		envEgressSanitizerSidecarCommandV0:       "egress-sanitizer-sidecar-command-configured",
+		envEgressSanitizerSidecarLocalEndpointV0: "egress-sanitizer-sidecar-local-endpoint-configured",
+	} {
+		setting := effectiveSettingForTestV0(settings, key)
+		if setting.Value != want || setting.Source != configSettingSourceConfigFileV0 {
+			t.Fatalf("setting %s=%+v want value=%q source=config_file", key, setting, want)
+		}
+	}
+	rawEffectiveConfig, err := json.Marshal(config.EffectiveConfig)
+	if err != nil {
+		t.Fatalf("marshal effective config: %v", err)
+	}
+	for _, forbidden := range []string{rawModelPath, rawSidecarCommand, rawSidecarEndpoint} {
+		if strings.Contains(string(rawEffectiveConfig), forbidden) {
+			t.Fatalf("effective_config filtra valor crudo %q: %s", forbidden, string(rawEffectiveConfig))
+		}
+	}
+	stack, err := buildStackFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("buildStackFromEnvV0: %v", err)
+	}
+	if !stack.EgressSanitizer.Enabled ||
+		!stack.EgressSanitizer.Sidecar.Enabled ||
+		stack.EgressSanitizer.SanitizerRef != "sanitizer-ref-file-test" ||
+		stack.EgressSanitizer.Sidecar.SidecarRef != "sidecar-ref-file-test" ||
+		!stack.EgressSanitizer.Sidecar.CommandConfigured ||
+		!stack.EgressSanitizer.Sidecar.LocalEndpointConfigured ||
+		stack.EgressSanitizer.Sidecar.Port == nil {
+		t.Fatalf("egress sanitizer desde fichero=%+v", stack.EgressSanitizer)
 	}
 }
 
@@ -1798,6 +2600,56 @@ func TestDomainWorkExecutorFromEnvV0ConectaFileCreatorOptIn(t *testing.T) {
 	}
 }
 
+func TestDomainWorkExecutorFromProjectConfigV0ConectaFileCreatorOptIn(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	fileDir := filepath.Join(stateDir, "domain-work-from-config")
+	writeServerProjectConfigForDomainWorkTestV0(t, projectDir, serverProjectConfigFileV0{
+		DomainWork: serverProjectConfigDomainWorkV0{
+			FileEnabled: boolPointerForDomainWorkTestV0(true),
+			FileDir:     stringPointerForDomainWorkTestV0(fileDir),
+		},
+	})
+	clearDomainWorkEnvForTestV0(t)
+
+	executor, err := domainWorkExecutorFromEnvV0(orquestaserver.ConfigV0{
+		ProjectWorkDir: projectDir,
+		StateDir:       stateDir,
+	})
+	if err != nil {
+		t.Fatalf("domainWorkExecutorFromEnvV0: %v", err)
+	}
+	if executor == nil {
+		t.Fatalf("executor file no configurado")
+	}
+	result, err := executor.Execute(context.Background(), orquestamcp.MCPDomainWorkToolInputV0{
+		RequestID:     "request-ref-file-config-001",
+		CorrelationID: "corr-file-config-001",
+		Action:        orquestamcp.MCPDomainWorkActionCreateJobV0,
+		JobRequest: orquestadomainwork.DomainWorkJobRequestV0{
+			SchemaVersion:  orquestadomainwork.DomainWorkJobRequestSchemaV0,
+			RequestID:      "request-ref-file-config-001",
+			CorrelationID:  "corr-file-config-001",
+			IdempotencyKey: "idem-file-config-001",
+			RequestedBy:    "orquesta",
+			DomainRef:      "dominio-demo",
+			WorkKind:       "generate_content_package",
+			Objective:      "crear paquete desde config file",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPDomainWorkEstadoOKV0 ||
+		result.Job == nil ||
+		result.Job.JobRef == "" {
+		t.Fatalf("result=%+v", result)
+	}
+	if !pathExistsForTestV0(filepath.Join(fileDir, "domain_work_jobs_v0.json")) {
+		t.Fatalf("snapshot domain-work file no creado en file_dir configurado")
+	}
+}
+
 func TestDomainWorkExecutorFromEnvV0ConectaHTTPNeutralOptIn(t *testing.T) {
 	var gotJobRequest orquestadomainwork.DomainWorkJobRequestV0
 	var gotSubmission orquestadomainwork.DomainWorkArtifactSubmissionV0
@@ -1902,6 +2754,126 @@ func TestDomainWorkExecutorFromEnvV0ConectaHTTPNeutralOptIn(t *testing.T) {
 	}
 }
 
+func TestDomainWorkExecutorFromProjectConfigV0ConectaHTTPNeutralOptIn(t *testing.T) {
+	var gotJobRequest orquestadomainwork.DomainWorkJobRequestV0
+	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/jobs-config" || r.Method != http.MethodPost {
+			t.Fatalf("request=%s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&gotJobRequest); err != nil {
+			t.Fatalf("decode job: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"job": map[string]any{
+				"schema_version":  orquestadomainwork.DomainWorkJobSchemaV0,
+				"status":          orquestadomainwork.DomainWorkStatusAcceptedV0,
+				"job_ref":         "job-ref-http-config-001",
+				"domain_ref":      gotJobRequest.DomainRef,
+				"work_kind":       gotJobRequest.WorkKind,
+				"correlation_id":  gotJobRequest.CorrelationID,
+				"idempotency_key": gotJobRequest.IdempotencyKey,
+			},
+		})
+	}))
+	defer server.Close()
+	projectDir := t.TempDir()
+	writeServerProjectConfigForDomainWorkTestV0(t, projectDir, serverProjectConfigFileV0{
+		DomainWork: serverProjectConfigDomainWorkV0{
+			HTTPBaseURL:        stringPointerForDomainWorkTestV0(server.URL),
+			HTTPCreatePath:     stringPointerForDomainWorkTestV0("/jobs-config"),
+			HTTPTimeoutSeconds: intPointerForDomainWorkTestV0(3),
+			HTTPEgressMode:     stringPointerForDomainWorkTestV0("smoke_local"),
+		},
+	})
+	clearDomainWorkEnvForTestV0(t)
+
+	executor, err := domainWorkExecutorFromEnvV0(orquestaserver.ConfigV0{
+		ProjectWorkDir: projectDir,
+		StateDir:       t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("domainWorkExecutorFromEnvV0: %v", err)
+	}
+	if executor == nil {
+		t.Fatalf("executor HTTP neutral no configurado")
+	}
+	createResult, err := executor.Execute(context.Background(), orquestamcp.MCPDomainWorkToolInputV0{
+		Action: orquestamcp.MCPDomainWorkActionCreateJobV0,
+		JobRequest: orquestadomainwork.DomainWorkJobRequestV0{
+			RequestID:      "request-ref-http-config-001",
+			CorrelationID:  "corr-http-config-001",
+			IdempotencyKey: "idem-http-config-001",
+			RequestedBy:    "test",
+			DomainRef:      "domain-ref-http-config-001",
+			WorkKind:       "compose_external_summary",
+			Objective:      "crear job por HTTP neutral desde config file",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Execute create: %v", err)
+	}
+	if createResult.Estado != orquestamcp.MCPDomainWorkEstadoOKV0 ||
+		createResult.Job == nil ||
+		createResult.Job.JobRef != "job-ref-http-config-001" ||
+		gotJobRequest.WorkKind != "compose_external_summary" {
+		t.Fatalf("createResult=%+v got=%+v", createResult, gotJobRequest)
+	}
+}
+
+func TestServerEffectiveConfigV0PublicaDomainWorkDesdeProjectConfigV0(t *testing.T) {
+	projectDir := t.TempDir()
+	fileDir := filepath.Join(projectDir, "domain-work-jobs")
+	ledgerPath := filepath.Join(projectDir, "domain-work-ledger.json")
+	allowedHosts := []string{"127.0.0.1", "localhost"}
+	writeServerProjectConfigForDomainWorkTestV0(t, projectDir, serverProjectConfigFileV0{
+		DomainWork: serverProjectConfigDomainWorkV0{
+			HTTPBaseURL:        stringPointerForDomainWorkTestV0("http://127.0.0.1:18080"),
+			HTTPDomainRef:      stringPointerForDomainWorkTestV0("demo"),
+			FileDir:            stringPointerForDomainWorkTestV0(fileDir),
+			FileEnabled:        boolPointerForDomainWorkTestV0(true),
+			HTTPCreatePath:     stringPointerForDomainWorkTestV0("/jobs"),
+			HTTPSubmitPath:     stringPointerForDomainWorkTestV0("/artifacts"),
+			HTTPTimeoutSeconds: intPointerForDomainWorkTestV0(9),
+			HTTPEgressMode:     stringPointerForDomainWorkTestV0("allowlist"),
+			HTTPAllowedHosts:   stringSlicePointerForDomainWorkTestV0(allowedHosts),
+			DeliveryLedgerPath: stringPointerForDomainWorkTestV0(ledgerPath),
+		},
+	})
+	clearDomainWorkEnvForTestV0(t)
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	settings := config.EffectiveConfig.Settings
+	for key, want := range map[string]string{
+		envDomainWorkHTTPBaseURLV0:        domainWorkHTTPBaseURLConfiguredRefV0,
+		envDomainWorkHTTPDomainRefV0:      "demo",
+		envDomainWorkFileDirV0:            domainWorkFileDirConfiguredRefV0,
+		envDomainWorkFileEnabledV0:        "true",
+		envDomainWorkHTTPCreatePathV0:     "/jobs",
+		envDomainWorkHTTPSubmitPathV0:     "/artifacts",
+		envDomainWorkHTTPTimeoutSecondsV0: "9",
+		envDomainWorkHTTPEgressModeV0:     "allowlist",
+		envDomainWorkHTTPAllowedHostsV0:   "127.0.0.1,localhost",
+		envDomainDeliveryLedgerPathV0:     domainWorkDeliveryLedgerPathConfiguredRefV0,
+	} {
+		setting := effectiveSettingForTestV0(settings, key)
+		if setting.Value != want ||
+			setting.Source != configSettingSourceConfigFileV0 {
+			t.Fatalf("%s setting=%+v want value=%q source=%s", key, setting, want, configSettingSourceConfigFileV0)
+		}
+	}
+	for _, key := range []string{envDomainWorkHTTPBaseURLV0, envDomainWorkFileDirV0, envDomainDeliveryLedgerPathV0} {
+		setting := effectiveSettingForTestV0(settings, key)
+		if !setting.Sensitive {
+			t.Fatalf("%s debe quedar marcado como sensible: %+v", key, setting)
+		}
+	}
+}
+
 func TestDomainWorkDeliveryEnabledFromEnvV0IncluyeBackendFile(t *testing.T) {
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
 	t.Setenv("OPES_BASE_URL", "")
@@ -1951,6 +2923,58 @@ func TestDomainWorkExecutorFromEnvV0RechazaHTTPConOtroBackend(t *testing.T) {
 	if err == nil || err.Error() != "domain_work_backend_ambiguous" || executor != nil {
 		t.Fatalf("executor=%v err=%v", executor, err)
 	}
+}
+
+func writeServerProjectConfigForDomainWorkTestV0(
+	t *testing.T,
+	root string,
+	config serverProjectConfigFileV0,
+) {
+	t.Helper()
+	config.SchemaVersion = serverProjectConfigSchemaVersionV0
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal project config: %v", err)
+	}
+	if err := os.WriteFile(serverProjectConfigFilePathV0(root), data, 0o644); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+}
+
+func clearDomainWorkEnvForTestV0(t *testing.T) {
+	t.Helper()
+	for _, key := range []string{
+		envOPESBaseURLV0,
+		envOPESBaseURLLegacyV0,
+		envDomainWorkHTTPBaseURLV0,
+		envDomainWorkHTTPDomainRefV0,
+		envDomainWorkFileDirV0,
+		envDomainWorkFileEnabledV0,
+		envDomainWorkHTTPCreatePathV0,
+		envDomainWorkHTTPSubmitPathV0,
+		envDomainWorkHTTPTimeoutSecondsV0,
+		envDomainWorkHTTPEgressModeV0,
+		envDomainWorkHTTPAllowedHostsV0,
+		envDomainDeliveryLedgerPathV0,
+	} {
+		t.Setenv(key, "")
+	}
+}
+
+func stringPointerForDomainWorkTestV0(value string) *string {
+	return &value
+}
+
+func boolPointerForDomainWorkTestV0(value bool) *bool {
+	return &value
+}
+
+func intPointerForDomainWorkTestV0(value int) *int {
+	return &value
+}
+
+func stringSlicePointerForDomainWorkTestV0(value []string) *[]string {
+	return &value
 }
 
 func pathExistsForTestV0(path string) bool {

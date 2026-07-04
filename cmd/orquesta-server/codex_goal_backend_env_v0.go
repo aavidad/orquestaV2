@@ -54,14 +54,15 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	config orquestaserver.ConfigV0,
 	workDir string,
 ) (serverCodexGoalBackendV0, error) {
-	backend := codexGoalBackendFromEnvV0()
-	claudeBackend := claudeGoalBackendFromEnvV0()
+	projectConfig := projectConfigFromServerConfigBestEffortV0(config)
+	backend := codexGoalBackendFromProjectConfigFileV0(projectConfig)
+	claudeBackend := claudeGoalBackendFromValueV0(backend)
 	if claudeBackend != "" {
-		return serverClaudeGoalBackendFromEnvForWorkDirV0(config, workDir)
+		return serverClaudeGoalBackendFromValueForWorkDirV0(config, workDir, claudeBackend)
 	}
-	geminiBackend := geminiGoalBackendFromEnvV0()
+	geminiBackend := geminiGoalBackendFromValueV0(backend)
 	if geminiBackend != "" {
-		return serverGeminiGoalBackendFromEnvForWorkDirV0(config, workDir)
+		return serverGeminiGoalBackendFromValueForWorkDirV0(config, workDir, geminiBackend)
 	}
 	if backend == "" {
 		return serverCodexGoalBackendV0{}, nil
@@ -74,22 +75,24 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		backend != geminiGoalBackendProcessV0 {
 		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_no_soportado:%s", backend)
 	}
-	if backend == orquestaruntimecodexappserver.CodexGoalBackendAppServerProxyV0 && !codexGoalBackendProxyDiagnosticAllowedV0() {
+	if backend == orquestaruntimecodexappserver.CodexGoalBackendAppServerProxyV0 &&
+		!codexGoalBackendProxyDiagnosticAllowedFromProjectConfigFileV0(projectConfig) {
 		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_proxy_diagnostic_opt_in_required:%s", envAllowAppServerProxyDiagnosticV0)
 	}
 	if backend == orquestaruntimecodexappserver.CodexGoalBackendAppServerProxyV0 {
 		return serverCodexGoalBackendV0{}, fmt.Errorf("codex_goal_backend_proxy_diagnostic_not_operational")
 	}
 	runtimeConfig := codexRuntimeEnvConfigFromEnvV0()
+	goalProgressPolicy := serverAutoprogrammingGoalProgressPolicyConfigFromProjectFileV0(projectConfig)
 	commandProtocol := orquestaruntimecodexappserver.CommandProtocolV0{
 		CommandPath: runtimeConfig.CommandPath,
 		Args:        codexGoalBackendArgsV0(backend),
 		PathEnv:     runtimeConfig.PathEnv,
-		Timeout:     time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
+		Timeout:     time.Duration(codexGoalTimeoutMSFromProjectConfigFileV0(projectConfig)) * time.Millisecond,
 	}
 	var runtimeProtocol orquestaruntimecodexappserver.ProtocolPortV0 = commandProtocol
 	commandPreflightProtocol := commandProtocol
-	commandPreflightProtocol.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
+	commandPreflightProtocol.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromProjectConfigFileV0(projectConfig)) * time.Millisecond
 	var preflightProtocol orquestaruntimecodexappserver.ProbePortV0 = commandPreflightProtocol
 	preflightAtStartup := true
 	authCheckedAtStartup := false
@@ -123,10 +126,12 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 			RuntimeWorkDir:    config.RuntimeWorkDir,
 			ProjectWorkDir:    firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir),
 			SourceCodeHomeDir: runtimeConfig.CodeHomeDir,
-			Timeout:           orquestaruntimecodexappserver.CodexAppServerTmuxStartupTimeoutV0(time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond),
+			Timeout: orquestaruntimecodexappserver.CodexAppServerTmuxStartupTimeoutV0(
+				time.Duration(codexGoalPreflightTimeoutMSFromProjectConfigFileV0(projectConfig)) * time.Millisecond,
+			),
 		}
 		shutdownTmuxBackend := tmuxBackend
-		shutdownTmuxBackend.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
+		shutdownTmuxBackend.Timeout = time.Duration(codexGoalPreflightTimeoutMSFromProjectConfigFileV0(projectConfig)) * time.Millisecond
 		shutdownHook = shutdownTmuxBackend
 		authIssueCode = codexAppServerAuthIssueCodeFromDirsV0(runtimeConfig.CodeHomeDir, tmuxCodeHomePath)
 		authCheckedAtStartup = true
@@ -136,12 +141,12 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		}
 		websocketProtocol := orquestaruntimecodexappserver.WebSocketProtocolV0{
 			SocketPath:        socketPath,
-			Timeout:           time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
+			Timeout:           time.Duration(codexGoalTimeoutMSFromProjectConfigFileV0(projectConfig)) * time.Millisecond,
 			DiagnosticLogPath: orquestaruntimecodexappserver.CodexAppServerTmuxLogPathV0(tmuxBackend),
 		}
 		tmuxPreflightProtocol := orquestaruntimecodexappserver.WebSocketProtocolV0{
 			SocketPath:        socketPath,
-			Timeout:           time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond,
+			Timeout:           time.Duration(codexGoalPreflightTimeoutMSFromProjectConfigFileV0(projectConfig)) * time.Millisecond,
 			DiagnosticLogPath: websocketProtocol.DiagnosticLogPath,
 		}
 		runtimeProtocol = orquestaruntimecodexappserver.LazyTmuxProtocolV0{
@@ -170,24 +175,21 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		return serverCodexGoalBackendV0{Starter: degraded, Observer: degraded, ShutdownHook: shutdownHook}, nil
 	}
 	client := orquestaruntimecodexappserver.GoalBackendV0{
-		Protocol:          runtimeProtocol,
-		BackendShutdown:   shutdownHook,
-		CWD:               firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir),
-		DiagnosticLogPath: orquestaruntimecodexappserver.DiagnosticLogPathForProtocolV0(runtimeProtocol),
-		AuthIssueCode:     authIssueCode,
-		Model:             runtimeConfig.Model,
-		ReasoningEffort:   runtimeConfig.ReasoningEffort,
-		Sandbox:           runtimeConfig.Sandbox,
-		ApprovalPolicy:    runtimeConfig.ApprovalPolicy,
-		Timeout:           time.Duration(codexGoalTimeoutMSFromEnvV0()) * time.Millisecond,
-		HighTokenUsageThreshold: intEnvOrDefaultV0(
-			envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0,
-			0,
-		),
-		Runtime: &orquestaruntimecodexappserver.GoalRuntimeV0{},
+		Protocol:                runtimeProtocol,
+		BackendShutdown:         shutdownHook,
+		CWD:                     firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir),
+		DiagnosticLogPath:       orquestaruntimecodexappserver.DiagnosticLogPathForProtocolV0(runtimeProtocol),
+		AuthIssueCode:           authIssueCode,
+		Model:                   runtimeConfig.Model,
+		ReasoningEffort:         runtimeConfig.ReasoningEffort,
+		Sandbox:                 runtimeConfig.Sandbox,
+		ApprovalPolicy:          runtimeConfig.ApprovalPolicy,
+		Timeout:                 time.Duration(codexGoalTimeoutMSFromProjectConfigFileV0(projectConfig)) * time.Millisecond,
+		HighTokenUsageThreshold: int(goalProgressPolicy.CheckpointOnlyHighConsumptionTokens),
+		Runtime:                 &orquestaruntimecodexappserver.GoalRuntimeV0{},
 	}
 	return serverCodexGoalBackendV0{
-		Starter:      client,
+		Starter:      serverCodexGoalCostRoutingStarterV0{Backend: client},
 		Observer:     client,
 		Controller:   client,
 		ShutdownHook: shutdownHook,
@@ -244,11 +246,30 @@ func codexGoalBackendOperationalFromEnvV0() bool {
 	return codexGoalBackendFromEnvV0() == codexGoalBackendAppServerTmuxV0
 }
 
+func codexGoalBackendFromConfigV0(config orquestaserver.ConfigV0) string {
+	return codexGoalBackendFromProjectConfigFileV0(projectConfigFromServerConfigBestEffortV0(config))
+}
+
+func codexGoalBackendOperationalFromProjectConfigFileV0(fileConfig serverProjectConfigFileV0) bool {
+	return codexGoalBackendFromProjectConfigFileV0(fileConfig) == codexGoalBackendAppServerTmuxV0
+}
+
 func serverClaudeGoalBackendFromEnvForWorkDirV0(
 	config orquestaserver.ConfigV0,
 	workDir string,
 ) (serverCodexGoalBackendV0, error) {
-	backend := claudeGoalBackendFromEnvV0()
+	return serverClaudeGoalBackendFromValueForWorkDirV0(
+		config,
+		workDir,
+		claudeGoalBackendFromValueV0(codexGoalBackendFromConfigV0(config)),
+	)
+}
+
+func serverClaudeGoalBackendFromValueForWorkDirV0(
+	config orquestaserver.ConfigV0,
+	workDir string,
+	backend string,
+) (serverCodexGoalBackendV0, error) {
 	if backend == "" {
 		return serverCodexGoalBackendV0{}, nil
 	}
@@ -256,10 +277,12 @@ func serverClaudeGoalBackendFromEnvForWorkDirV0(
 		return serverCodexGoalBackendV0{}, fmt.Errorf("claude_goal_backend_no_soportado:%s", backend)
 	}
 	projectWorkDir := firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir)
+	projectConfig := projectConfigFromServerConfigBestEffortV0(config)
 	runtimeWorkDir := claudeGoalRuntimeWorkDirFromEnvV0(config)
 	control := orquestaruntimeclaude.ClaudeGoalBackendV0{
 		ProjectWorkDir: projectWorkDir,
 		RuntimeWorkDir: runtimeWorkDir,
+		PromptLocale:   goalBackendPromptLocaleFromProjectConfigFileV0(projectConfig),
 	}
 	if backend == claudeGoalBackendProcessV0 {
 		client := &orquestaruntimeclaude.ClaudeGoalProcessBackendV0{
@@ -308,7 +331,18 @@ func serverGeminiGoalBackendFromEnvForWorkDirV0(
 	config orquestaserver.ConfigV0,
 	workDir string,
 ) (serverCodexGoalBackendV0, error) {
-	backend := geminiGoalBackendFromEnvV0()
+	return serverGeminiGoalBackendFromValueForWorkDirV0(
+		config,
+		workDir,
+		geminiGoalBackendFromValueV0(codexGoalBackendFromConfigV0(config)),
+	)
+}
+
+func serverGeminiGoalBackendFromValueForWorkDirV0(
+	config orquestaserver.ConfigV0,
+	workDir string,
+	backend string,
+) (serverCodexGoalBackendV0, error) {
 	if backend == "" {
 		return serverCodexGoalBackendV0{}, nil
 	}
@@ -316,10 +350,12 @@ func serverGeminiGoalBackendFromEnvForWorkDirV0(
 		return serverCodexGoalBackendV0{}, fmt.Errorf("gemini_goal_backend_no_soportado:%s", backend)
 	}
 	projectWorkDir := firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir)
+	projectConfig := projectConfigFromServerConfigBestEffortV0(config)
 	runtimeWorkDir := geminiGoalRuntimeWorkDirFromEnvV0(config)
 	control := orquestaruntimegemini.GeminiGoalBackendV0{
 		ProjectWorkDir: projectWorkDir,
 		RuntimeWorkDir: runtimeWorkDir,
+		PromptLocale:   goalBackendPromptLocaleFromProjectConfigFileV0(projectConfig),
 	}
 	if backend == geminiGoalBackendProcessV0 {
 		client := &orquestaruntimegemini.GeminiGoalProcessBackendV0{
@@ -369,6 +405,13 @@ func serverGoalBackendOperationalFromEnvV0() bool {
 		geminiGoalBackendOperationalFromEnvV0()
 }
 
+func serverGoalBackendOperationalFromProjectConfigFileV0(fileConfig serverProjectConfigFileV0) bool {
+	backend := codexGoalBackendFromProjectConfigFileV0(fileConfig)
+	return backend == codexGoalBackendAppServerTmuxV0 ||
+		claudeGoalBackendFromValueV0(backend) != "" ||
+		geminiGoalBackendFromValueV0(backend) != ""
+}
+
 func serverGoalBackendDerivationSourceV0() string {
 	if codexGoalBackendOperationalFromEnvV0() {
 		return "derived_from_codex_goal_backend"
@@ -377,6 +420,20 @@ func serverGoalBackendDerivationSourceV0() string {
 		return "derived_from_claude_goal_backend"
 	}
 	if geminiGoalBackendOperationalFromEnvV0() {
+		return "derived_from_gemini_goal_backend"
+	}
+	return ""
+}
+
+func serverGoalBackendDerivationSourceFromProjectConfigFileV0(fileConfig serverProjectConfigFileV0) string {
+	backend := codexGoalBackendFromProjectConfigFileV0(fileConfig)
+	if backend == codexGoalBackendAppServerTmuxV0 {
+		return "derived_from_codex_goal_backend"
+	}
+	if claudeGoalBackendFromValueV0(backend) != "" {
+		return "derived_from_claude_goal_backend"
+	}
+	if geminiGoalBackendFromValueV0(backend) != "" {
 		return "derived_from_gemini_goal_backend"
 	}
 	return ""

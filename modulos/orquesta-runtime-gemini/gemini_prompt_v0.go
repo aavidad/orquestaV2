@@ -146,6 +146,21 @@ func BuildGeminiAgentPromptWithControlFilesV0(
 }
 
 func writeGeminiDurableResultProtocolV0(b *strings.Builder) {
+	writeGeminiDurableResultProtocolForLocaleV0(b, "")
+}
+
+func writeGeminiDurableResultProtocolForLocaleV0(b *strings.Builder, locale string) {
+	if geminiGoalPromptEnglishLocaleV0(locale) {
+		b.WriteString("NEUTRAL DURABLE RESULT: if the objective, criteria or tests request goal-first, durable result, orquesta_goal_result_v0.json or ORQUESTA_GOAL_RESULT_V0, write that JSON inside the write-set, not in runtime_work_dir unless the write-set allows it.\n")
+		b.WriteString("The orquesta_goal_result_v0.json file must contain pure JSON parseable from the first byte: no markdown, no ```json fences, no comments and no surrounding text.\n")
+		b.WriteString("The JSON must use schema_version orquesta_goal_result.v0, status complete/blocked/invalid, compact summary, artifact_refs, artifact_paths, materialized_artifacts, checklist, required_test_results, domain_receipt_refs, rework_plan_refs and evidence_refs.\n")
+		b.WriteString("All evidence_refs fields, including nested ones in materialized_artifacts and required_test_results, must be arrays of strings: [\"evidence-ref-...\"]; do not use objects {\"ref\":...,\"description\":...} or maps.\n")
+		b.WriteString("If you need to describe evidence, put the short description in summary, README, handoff or a documentary artifact; evidence_refs only contains compact string refs.\n")
+		b.WriteString("In artifact_paths list real relative paths created, modified or verified; do not hide out-of-scope artifacts: declare them and mark status blocked with rework_plan_refs.\n")
+		b.WriteString("In materialized_artifacts separate valid artifacts from recoverable drafts with non-empty artifact_ref, relative path, status valid/partial/invalid/non_publishable and evidence_refs.\n")
+		b.WriteString("In required_test_results declare only tests really executed and passed with compact evidence_refs; if evidence or QA is missing, use status blocked/invalid and checklist.missing_refs.\n\n")
+		return
+	}
 	b.WriteString("RESULTADO DURABLE NEUTRAL: si objetivo, criterios o tests piden goal-first, result durable, orquesta_goal_result_v0.json u ORQUESTA_GOAL_RESULT_V0, escribe ese JSON dentro del write-set, no en runtime_work_dir salvo que el write-set lo permita.\n")
 	b.WriteString("El fichero orquesta_goal_result_v0.json debe contener JSON puro y parseable desde el primer byte: sin markdown, sin fences ```json, sin comentarios y sin texto alrededor.\n")
 	b.WriteString("El JSON debe usar schema_version orquesta_goal_result.v0, status complete/blocked/invalid, summary compacto, artifact_refs, artifact_paths, materialized_artifacts, checklist, required_test_results, domain_receipt_refs, rework_plan_refs y evidence_refs.\n")

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -382,13 +383,45 @@ func geminiGoalRealSmokeRootV0(t *testing.T) string {
 
 func geminiGoalRealSmokeTimeoutV0(t *testing.T) time.Duration {
 	t.Helper()
-	raw := strings.TrimSpace(os.Getenv("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_SECONDS"))
-	if raw == "" {
+	msRaw := strings.TrimSpace(os.Getenv("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_MS"))
+	legacySecondsRaw := strings.TrimSpace(os.Getenv("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_SECONDS"))
+	if msRaw == "" && legacySecondsRaw == "" {
 		return 4 * time.Minute
 	}
-	seconds, err := time.ParseDuration(raw + "s")
-	if err != nil || seconds <= 0 {
-		t.Fatalf("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_SECONDS invalido: %q", raw)
+	if msRaw != "" {
+		milliseconds, err := strconv.Atoi(msRaw)
+		if err != nil || milliseconds <= 0 {
+			t.Fatalf("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_MS invalido: %q", msRaw)
+		}
+		if legacySecondsRaw != "" {
+			t.Logf("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_SECONDS es legacy e ignorada porque SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_MS esta definida")
+		}
+		return time.Duration(milliseconds) * time.Millisecond
 	}
-	return seconds
+	seconds, err := strconv.Atoi(legacySecondsRaw)
+	if err != nil || seconds <= 0 {
+		t.Fatalf("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_SECONDS invalido: %q", legacySecondsRaw)
+	}
+	t.Logf("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_SECONDS es legacy; usa SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_MS")
+	return time.Duration(seconds) * time.Second
+}
+
+func TestGeminiGoalRealSmokeTimeoutV0AceptaMSCanonicoYAliasLegacyV0(t *testing.T) {
+	t.Setenv("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_SECONDS", "")
+	t.Setenv("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_MS", "1500")
+	if got := geminiGoalRealSmokeTimeoutV0(t); got != 1500*time.Millisecond {
+		t.Fatalf("timeout ms=%s", got)
+	}
+
+	t.Setenv("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_MS", "")
+	t.Setenv("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_SECONDS", "2")
+	if got := geminiGoalRealSmokeTimeoutV0(t); got != 2*time.Second {
+		t.Fatalf("timeout legacy seconds=%s", got)
+	}
+
+	t.Setenv("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_MS", "3000")
+	t.Setenv("SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_SECONDS", "99")
+	if got := geminiGoalRealSmokeTimeoutV0(t); got != 3*time.Second {
+		t.Fatalf("timeout conflicto=%s", got)
+	}
 }

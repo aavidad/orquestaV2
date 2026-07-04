@@ -1403,6 +1403,44 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveErroresPublicos(t *test
 	}
 }
 
+func TestCodexStackAutoprogrammingPrepareRunAPIV0BloqueaConfigProjectionMismatchV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	config := codexStackBaseConfigForTestV0(t, runtime, nil, nil)
+	config.ConfigProjectionSettings = []orquestamcp.MCPConfigProjectionSettingV0{{
+		Key:   "ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS",
+		Value: "450000",
+	}}
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-ref-autoprogramming-config-projection-mismatch-001"
+
+	result := postAutoprogrammingPrepareRunStackV0(t, stack, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-autoprogramming-config-projection-mismatch-001",
+		CorrelationID:          "corr-autoprogramming-config-projection-mismatch-001",
+		DirectorExecutionMode:  orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		AutoprogrammingRequest: request,
+		RequiredSettings: []orquestamcp.MCPRequiredSettingV0{{
+			Key:   "ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS",
+			Value: "999999",
+		}},
+	})
+
+	if result.Estado != orquestamcp.MCPAutoprogrammingPrepareRunEstadoErrorV0 ||
+		result.Accepted ||
+		result.RunRef != "" ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != orquestamcp.MCPConfigProjectionMismatchV0 ||
+		runtime.launchCountV0() != 0 {
+		t.Fatalf("result=%+v launches=%d", result, runtime.launchCountV0())
+	}
+	if _, err := stack.Ports.RunStore.LoadRunV0(context.Background(), request.RequestRef); !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
+		t.Fatalf("prepare-run con mismatch no debe persistir run, err=%v", err)
+	}
+}
+
 func postAutoprogrammingPrepareRunStackV0(
 	t *testing.T,
 	stack StackV0,

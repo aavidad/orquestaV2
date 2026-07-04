@@ -29,7 +29,12 @@ func codeContextBrokerFromEnvV0(config orquestaserver.ConfigV0) orquestacontext.
 }
 
 func codeContextBrokerWiringFromEnvV0(config orquestaserver.ConfigV0) codeContextBrokerWiringV0 {
-	providerKind := envOrDefaultV0(envCodebaseBrokerProviderKindV0, orquestacontext.CodeContextProviderKindFallbackRGV0)
+	projectConfig := projectConfigFromProjectDirBestEffortV0(config.ProjectWorkDir)
+	providerKind := stringProjectConfigOrEnvOrDefaultV0(
+		envCodebaseBrokerProviderKindV0,
+		projectConfig.CodebaseBroker.ProviderKind,
+		orquestacontext.CodeContextProviderKindFallbackRGV0,
+	)
 	var provider orquestacontext.CodeContextProviderPortV0
 	if providerKind == orquestacontext.CodeContextProviderKindFallbackRGV0 &&
 		strings.TrimSpace(config.ProjectWorkDir) != "" {
@@ -46,7 +51,7 @@ func codeContextBrokerWiringFromEnvV0(config orquestaserver.ConfigV0) codeContex
 	}
 	cache := orquestacontext.CodeContextCachePortV0(orquestacontext.NewInMemoryCodeContextCacheV0())
 	var ownerObserver serverCodeContextToolOwnerObserverV0
-	stateDir := strings.TrimSpace(envOrDefaultV0(envCodebaseBrokerStateDirV0, ""))
+	stateDir := codebaseBrokerStateDirFromProjectConfigFileV0(projectConfig)
 	if stateDir != "" {
 		ownerRegistry := newServerFileCodeContextToolOwnerRegistryV0(stateDir)
 		fileLeaseStore := newServerFileCodeContextToolLeaseStoreV0(filepath.Join(stateDir, serverCodeContextLeasesFileV0))
@@ -57,8 +62,8 @@ func codeContextBrokerWiringFromEnvV0(config orquestaserver.ConfigV0) codeContex
 			leasePort = fileLeaseStore
 			provider = serverCodebaseMemoryCLIProviderV0{
 				RootDir:     strings.TrimSpace(config.ProjectWorkDir),
-				ProjectName: serverCodebaseMemoryProjectNameV0(config.ProjectWorkDir, envOrDefaultV0(envCodebaseBrokerProjectNameV0, "")),
-				Command:     envOrDefaultV0(envCodebaseBrokerCommandV0, "codebase-memory-mcp"),
+				ProjectName: serverCodebaseMemoryProjectNameV0(config.ProjectWorkDir, codebaseBrokerProjectNameFromProjectConfigFileV0(projectConfig)),
+				Command:     codebaseBrokerCommandFromProjectConfigFileV0(projectConfig),
 				Registry:    ownerRegistry,
 			}
 		}
@@ -69,9 +74,9 @@ func codeContextBrokerWiringFromEnvV0(config orquestaserver.ConfigV0) codeContex
 			Cache:                  cache,
 			ProviderRef:            "provider-ref-orquesta-code-context-central",
 			ProviderKind:           providerKind,
-			ExternalIndexerEnabled: boolEnvOrDefaultV0(envCodebaseBrokerExternalIndexerEnabledV0, false),
-			MaxConcurrent:          intEnvOrDefaultV0(envCodebaseBrokerMaxConcurrentV0, 4),
-			Timeout:                time.Duration(intEnvOrDefaultV0(envCodebaseBrokerTimeoutMSV0, 3000)) * time.Millisecond,
+			ExternalIndexerEnabled: codebaseBrokerExternalIndexerEnabledFromProjectConfigFileV0(projectConfig),
+			MaxConcurrent:          codebaseBrokerMaxConcurrentFromProjectConfigFileV0(projectConfig),
+			Timeout:                codebaseBrokerTimeoutFromProjectConfigFileV0(projectConfig),
 			ToolLeasePort:          leasePort,
 		}),
 		ToolLeases:        leaseStore,
@@ -173,7 +178,14 @@ func serverCodebaseMemoryCLIToolPayloadV0(
 	switch query.QueryKind {
 	case orquestacontext.CodeContextQueryKindArchitectureV0:
 		return "get_architecture", map[string]any{"project": projectName}, nil
-	case orquestacontext.CodeContextQueryKindSearchV0, orquestacontext.CodeContextQueryKindSymbolV0, orquestacontext.CodeContextQueryKindRepoMapV0, "":
+	case orquestacontext.CodeContextQueryKindSearchV0,
+		orquestacontext.CodeContextQueryKindSymbolV0,
+		orquestacontext.CodeContextQueryKindRepoMapV0,
+		orquestacontext.CodeContextQueryKindCallersV0,
+		orquestacontext.CodeContextQueryKindImportsV0,
+		orquestacontext.CodeContextQueryKindModuleExportsV0,
+		orquestacontext.CodeContextQueryKindRelevantSnippetsV0,
+		"":
 		limit := query.MaxResults
 		if limit <= 0 {
 			limit = 8
@@ -327,6 +339,21 @@ func (provider serverRGCodeContextProviderV0) QueryCodeContextV0(
 	if query.QueryKind == orquestacontext.CodeContextQueryKindRepoMapV0 {
 		return provider.queryRepoMapCodeContextV0(ctx, root, command, query)
 	}
+	switch query.QueryKind {
+	case orquestacontext.CodeContextQueryKindCallersV0,
+		orquestacontext.CodeContextQueryKindImportsV0,
+		orquestacontext.CodeContextQueryKindModuleExportsV0,
+		orquestacontext.CodeContextQueryKindRelevantSnippetsV0:
+		hits, err := serverStructuredCodeContextHitsV0(root, query)
+		if err != nil {
+			return orquestacontext.CodeContextResultV0{}, err
+		}
+		return serverRGCodeContextResultWithEvidenceV0(
+			query,
+			hits,
+			[]string{"evidence-ref-code-context-go-structured-fallback-v0"},
+		), nil
+	}
 	if _, err := exec.LookPath(command); err != nil {
 		hits, fallbackErr := serverGoCodeContextHitsV0(root, query)
 		if fallbackErr != nil {
@@ -391,7 +418,7 @@ func serverRGCodeContextScopesV0(scopes []string) []string {
 	out := make([]string, 0, len(scopes))
 	for _, scope := range scopes {
 		scope = filepath.Clean(strings.TrimSpace(scope))
-		if scope == "." || scope == "" || strings.HasPrefix(scope, "..") || filepath.IsAbs(scope) {
+		if scope == "" || strings.HasPrefix(scope, "..") || filepath.IsAbs(scope) {
 			continue
 		}
 		out = append(out, scope)

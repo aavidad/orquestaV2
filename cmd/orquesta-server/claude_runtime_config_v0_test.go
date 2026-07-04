@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -45,10 +46,18 @@ func TestClaudeRuntimeConfigV0OptInDesdeEnv(t *testing.T) {
 	t.Setenv(envClaudeOutputFormatV0, "text")
 	t.Setenv(envClaudeEffortV0, "medium")
 	t.Setenv(envClaudeExtraArgsV0, "--bare")
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatalf("mkdir project: %v", err)
+	}
+	configFile := `{"schema_version":"orquesta_config.v0","goal_backend":{"prompt_locale":"en-US"}}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
 
 	config := claudeRuntimeConfigV0(orquestaserver.ConfigV0{
-		ProjectWorkDir: filepath.Join(root, "fallback-project"),
-		RuntimeWorkDir: filepath.Join(root, "fallback-runtime"),
+		ProjectWorkDir:        filepath.Join(root, "fallback-project"),
+		RuntimeWorkDir:        filepath.Join(root, "fallback-runtime"),
+		ProjectConfigFilePath: filepath.Join(projectDir, serverProjectConfigFileNameV0),
 	})
 	if !config.Enabled ||
 		config.CommandPath != fakeClaude ||
@@ -58,6 +67,7 @@ func TestClaudeRuntimeConfigV0OptInDesdeEnv(t *testing.T) {
 		config.PermissionMode != "dontAsk" ||
 		config.OutputFormat != "text" ||
 		config.Effort != "medium" ||
+		config.PromptLocale != "en-US" ||
 		len(config.ExtraArgs) != 1 ||
 		config.ExtraArgs[0] != "--bare" {
 		t.Fatalf("config=%+v", config)

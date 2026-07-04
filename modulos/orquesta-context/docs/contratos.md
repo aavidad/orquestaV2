@@ -148,9 +148,13 @@ Entrada:
   `worktree_fingerprint` opcional, `dirty_worktree`, `query_kind`, `query`,
   `scope`, `max_results`, `max_bytes`, `cache_only`,
   `allow_external_indexer` y `requested_by`.
-- `query_kind` admite `search`, `symbol`, `architecture` y `repo_map`.
+- `query_kind` admite `search`, `symbol`, `architecture`, `repo_map`,
+  `callers`, `imports`, `module_exports` y `relevant_snippets`.
   `repo_map` usa el mismo puerto para pedir un mapa compacto del repo/scope:
   rutas, tipos, funciones/metodos y snippets minimos, nunca ficheros completos.
+  Los modos estructurados devuelven llamadas entrantes simples, imports del
+  modulo/scope, exports publicos y snippets relevantes bajo el mismo DTO plano
+  `CodeContextHitV0`.
 
 Salida:
 
@@ -167,11 +171,13 @@ Reglas:
   esperan el resultado de la primera.
 - La cache incluye fingerprint/dirty-worktree para no ocultar cambios locales
   sin commit limpio.
-- `repo_map` comparte la misma cache, dedupe in-flight, `query_hash`,
-  fingerprint de worktree y politicas de max_results/max_bytes que `search`.
-- El primer proveedor productivo de `repo_map` es el proveedor central existente
-  `rg` con fallback Go local; tree-sitter y `codebase-memory-mcp` quedan fuera
-  de este primer corte salvo opt-in central posterior.
+- `repo_map`, `callers`, `imports`, `module_exports` y `relevant_snippets`
+  comparten la misma cache, dedupe in-flight, `query_hash`, fingerprint de
+  worktree y politicas de max_results/max_bytes que `search`.
+- El proveedor productivo por defecto vive en la composicion de servidor:
+  `repo_map` usa `rg` con fallback Go local; los modos estructurados usan
+  `go/parser` como fallback determinista sin indexador externo. Tree-sitter y
+  `codebase-memory-mcp` quedan fuera salvo opt-in central posterior.
 - Los resultados son snippets compactos; no transportan contexto bruto ni
   secretos.
 

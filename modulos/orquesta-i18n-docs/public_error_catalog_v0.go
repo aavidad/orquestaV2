@@ -59,6 +59,7 @@ const (
 	PublicErrorRunRefRequiredV0                  = "run_ref_requerido"
 	PublicErrorDomainWorkCompletedReviewFailedV0 = "domain_work_completed_review_failed"
 	PublicErrorRunControlGoalBackendActiveV0     = "control_not_propagated_to_goal_backend"
+	PublicErrorConfigProjectionMismatchV0        = "config_projection_mismatch"
 )
 
 type PublicErrorDescriptorV0 struct {
@@ -132,6 +133,7 @@ var publicErrorCatalogV0 = []PublicErrorDescriptorV0{
 	publicErrorV0(PublicErrorMCPTransportSchemaV0, "mcp-transport", "mcp", 500, -32000, false, PublicErrorSeverityErrorV0),
 	publicErrorV0("autoprogramming_prepare_run_no_configurado", "http", "mcp", 503, -32000, true, PublicErrorSeverityWarnV0),
 	publicErrorV0("autoprogramming_prepare_run_executor_error", "http", "mcp", 500, -32000, false, PublicErrorSeverityErrorV0),
+	publicErrorV0(PublicErrorConfigProjectionMismatchV0, "mcp-transport", "mcp", 400, -32602, false, PublicErrorSeverityErrorV0),
 	publicErrorV0("autoprogramming_status_no_configurado", "http", "mcp", 503, -32000, true, PublicErrorSeverityWarnV0),
 	publicErrorV0("autoprogramming_status_executor_error", "http", "mcp", 500, -32000, false, PublicErrorSeverityErrorV0),
 	publicErrorV0("autoprogramming_supervise_no_configurado", "http", "mcp", 503, -32000, true, PublicErrorSeverityWarnV0),

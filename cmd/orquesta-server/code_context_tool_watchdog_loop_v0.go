@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -28,20 +27,22 @@ type serverCodeContextToolWatchdogLoopConfigV0 struct {
 }
 
 func serverCodeContextToolWatchdogLoopConfigFromEnvV0() (serverCodeContextToolWatchdogLoopConfigV0, error) {
-	if !boolEnvOrDefaultV0(envCodebaseBrokerWatchdogEnabledV0, false) {
+	projectDir, err := projectDirFromEnvV0()
+	if err != nil {
+		return serverCodeContextToolWatchdogLoopConfigV0{}, err
+	}
+	projectConfig := projectConfigFromProjectDirBestEffortV0(projectDir)
+	if !codebaseBrokerWatchdogEnabledFromProjectConfigFileV0(projectConfig) {
 		return serverCodeContextToolWatchdogLoopConfigV0{}, nil
 	}
-	stateDir := strings.TrimSpace(os.Getenv(envCodebaseBrokerStateDirV0))
+	stateDir := codebaseBrokerStateDirFromProjectConfigFileV0(projectConfig)
 	if stateDir == "" {
 		return serverCodeContextToolWatchdogLoopConfigV0{}, fmt.Errorf("codebase_broker_state_dir_required")
 	}
-	orphanMinAgeSeconds := intEnvOrDefaultV0(envCodebaseBrokerWatchdogOrphanMinAgeSecondsV0, int(defaultCodeContextToolOrphanMinAgeV0/time.Second))
-	if orphanMinAgeSeconds < 0 {
-		orphanMinAgeSeconds = int(defaultCodeContextToolOrphanMinAgeV0 / time.Second)
-	}
+	orphanMinAgeSeconds := codebaseBrokerWatchdogOrphanMinAgeSecondsFromProjectConfigFileV0(projectConfig)
 	return serverCodeContextToolWatchdogLoopConfigV0{
 		StateDir:     stateDir,
-		StopOrphans:  boolEnvOrDefaultV0(envCodebaseBrokerWatchdogStopOrphansV0, false),
+		StopOrphans:  codebaseBrokerWatchdogStopOrphansFromProjectConfigFileV0(projectConfig),
 		OrphanMinAge: time.Duration(orphanMinAgeSeconds) * time.Second,
 		Loop: externalBridgeLoopConfigV0{
 			Enabled:       true,

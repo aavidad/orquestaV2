@@ -39,3 +39,72 @@ Listado completo de deadcode: `docs/auditoria_codigo_deadcode_2026-07-04.txt`.
 - Esta auditoría debe SER DE ORQUESTA (orden del operador): ver TAREA-9.4.
 
 ## Entregado a Codex: TAREA-9 (en instrucciones del director)
+
+## Actualización Codex — 2026-07-04 tarde
+
+TAREA-9.4 queda implementada como herramienta reproducible:
+
+- Nuevo `scripts/orquesta_auditoria_codigo.sh`.
+- Salidas: JSON y SQLite local como caché/reporte derivado, no verdad
+  operativa.
+- Métricas: candidatos `deadcode`, módulos huérfanos, familias de helpers
+  copiadas y ficheros no-test de más de 800 líneas.
+- `scripts/orquesta_smoke_nightly.sh` ejecuta la auditoría por defecto y aplica
+  ratchet contra el último nightly verde con métricas de auditoría: falla si
+  suben `deadcode_candidates` o `helper_duplicate_definitions`.
+- Tests: `scripts/test_orquesta_auditoria_codigo.sh` y
+  `scripts/test_orquesta_smoke_nightly.sh`.
+
+Incidencia cerrada durante la integración:
+
+- `BUG-ORQ-20260704-182`: la primera versión caminaba `**/*.go` desde la raíz
+  y podía quedarse demasiado tiempo en workspaces grandes. Cierre: recorrido
+  acotado desde `cmd/` y `modulos/`.
+
+Medición fresca con `deadcode` instalado en GOPATH tras la primera ola segura:
+
+- `deadcode_source=deadcode_tool`.
+- `deadcode_candidates=1230`.
+- `helper_duplicate_definitions=288`.
+- `orphan_modules=1`.
+- `large_files_over_800=17`.
+- `modulos/orquesta-deploy=87`, frente a 94 en el snapshot histórico de Claude.
+
+Nota de comparación: el snapshot inicial de Claude marcaba 1188 candidatos, pero
+el árbol actual ya incluye cambios posteriores y el comando reproducible fresco
+devuelve 1230. Para futuros ratchets usar la métrica fresca de
+`scripts/orquesta_auditoria_codigo.sh`, no comparar directamente contra el
+snapshot histórico.
+
+Primera ola segura aplicada:
+
+- Eliminados siete helpers `Has*IssueV0` sin consumidores internos en
+  `modulos/orquesta-deploy`.
+- No se borra `orquesta-deploy` completo: sigue importado por
+  `orquesta-app-planner`.
+- No se borra `orquesta-work-profiles`: queda como placeholder histórico y
+  requiere decisión documental separada si se reabre.
+
+Segunda ola segura aplicada:
+
+- `modulos/orquesta-capacity`: inlinados helpers privados de un solo uso en
+  `capacity_policy_v0.go` y `model_escalation_policy_helpers_v0.go`.
+- No se tocan APIs exportadas (`DefaultCapacityPolicyV0`, Decode/Validate,
+  contratos de decision) ni helpers con consumidores internos.
+- Medición fresca posterior:
+  `deadcode_candidates=1228`, `helper_duplicate_definitions=288`,
+  `orphan_modules=1`, `large_files_over_800=17`,
+  `modulos/orquesta-capacity=89`.
+
+Correccion de ratchet aplicada despues de la segunda ola:
+
+- `BUG-ORQ-20260704-184`: el auditor ya no depende solo de `PATH`; localiza
+  `deadcode` en `PATH`, `GOBIN` o `GOPATH/bin`, evitando caer al snapshot
+  historico cuando la herramienta Go esta instalada de forma canonica.
+- `BUG-ORQ-20260704-185`: el nightly rechaza auditorias con schema invalido,
+  metricas requeridas ausentes/no enteras o fuente `snapshot_file`,
+  `unavailable`/`deadcode_tool_failed`.
+- Medicion viva posterior al fix:
+  `deadcode_source=deadcode_tool`, `deadcode_candidates=1228`,
+  `helper_duplicate_definitions=288`, `orphan_modules=1`,
+  `large_files_over_800=17`.

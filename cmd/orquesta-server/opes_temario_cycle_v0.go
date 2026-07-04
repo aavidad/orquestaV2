@@ -70,6 +70,7 @@ func opesTemarioCycleCommandV0(stdout io.Writer, stderr io.Writer) int {
 }
 
 func opesTemarioCycleConfigFromEnvV0() (opesTemarioCycleConfigV0, error) {
+	projectConfig := opesProjectConfigFromEnvBestEffortV0()
 	drainConfig, err := opesDrainConfigFromEnvV0()
 	if err != nil {
 		return opesTemarioCycleConfigV0{}, err
@@ -86,8 +87,9 @@ func opesTemarioCycleConfigFromEnvV0() (opesTemarioCycleConfigV0, error) {
 	if len(drainConfig.JobTypeSequence) == 0 {
 		return opesTemarioCycleConfigV0{}, fmt.Errorf("opes_temario_sequence_required")
 	}
-	maxTicks := intEnvOrDefaultV0(envOPESBridgeMaxTicksV0, defaultOPESTemarioCycleMaxTicksV0)
-	tickSleep := durationSecondsEnvOrDefaultV0(
+	maxTicks := opesBridgeIntValueFromProjectConfigFileV0(projectConfig, envOPESBridgeMaxTicksV0, defaultOPESTemarioCycleMaxTicksV0)
+	tickSleep := opesBridgeDurationSecondsFromProjectConfigFileV0(
+		projectConfig,
 		envOPESBridgeIntervalSecondsV0,
 		defaultOPESTemarioCycleIntervalSeconds*time.Second,
 	)

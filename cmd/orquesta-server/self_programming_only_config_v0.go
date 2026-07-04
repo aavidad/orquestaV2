@@ -53,7 +53,7 @@ func validateServerSelfProgrammingOnlyConfigV0(config orquestaserver.ConfigV0) e
 	if err != nil {
 		return err
 	}
-	if codexGoalBackendFromEnvV0() != codexGoalBackendAppServerTmuxV0 {
+	if codexGoalBackendFromConfigV0(config) != codexGoalBackendAppServerTmuxV0 {
 		return fmt.Errorf("orquesta_server: self_programming_only_requires_app_server_tmux")
 	}
 	if config.ResidentDirectorEnabled {

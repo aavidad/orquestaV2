@@ -8,12 +8,9 @@ import (
 
 func topicRegistryRequiredEvidencePendingRefsForRecordV0(record OPESCausalArtifactRecordV0) []string {
 	sourceWorkKind := strings.TrimSpace(fieldStringV0(record.PayloadFields, "source_work_kind", "work_kind"))
-	artifactType := strings.TrimSpace(record.ArtifactType)
+	artifactType := topicRegistryEffectiveArtifactTypeForWorkKindV0(sourceWorkKind, record.ArtifactType)
 	if artifactType == orquestadomainwork.DomainWorkArtifactTypeTopicRegistryUpdateV0 {
 		return nil
-	}
-	if artifactType == "" && sourceWorkKind != "" {
-		artifactType = orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(sourceWorkKind)
 	}
 	if sourceWorkKind == "" && !topicRegistryArtifactRequiresEvidenceGateV0(artifactType) {
 		return nil
@@ -219,4 +216,22 @@ func topicRegistryRequiredEvidenceRefsForRecordV0(record OPESCausalArtifactRecor
 
 func topicRegistryArtifactRequiresEvidenceGateV0(artifactType string) bool {
 	return len(topicRegistryRequiredEvidenceRequirementsV0("", artifactType)) > 0
+}
+
+func topicRegistryEffectiveArtifactTypeForWorkKindV0(sourceWorkKind string, artifactType string) string {
+	sourceWorkKind = strings.TrimSpace(sourceWorkKind)
+	artifactType = strings.TrimSpace(artifactType)
+	if sourceWorkKind == "" {
+		return artifactType
+	}
+	expected := strings.TrimSpace(orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(sourceWorkKind))
+	if expected == "" || expected == orquestadomainwork.DomainWorkArtifactTypeGenericWorkDeliveryV0 {
+		return artifactType
+	}
+	switch artifactType {
+	case "", orquestadomainwork.DomainWorkArtifactTypeGenericWorkDeliveryV0:
+		return expected
+	default:
+		return artifactType
+	}
 }

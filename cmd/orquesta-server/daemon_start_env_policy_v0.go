@@ -13,6 +13,7 @@ const (
 	daemonStartEnvCategoriesSettingV0 = "ORQUESTA_SERVER_DAEMON_START_ENV_CATEGORIES"
 	daemonStartEnvCountsSettingV0     = "ORQUESTA_SERVER_DAEMON_START_ENV_COUNTS"
 	daemonStartEnvIssuesSettingV0     = "ORQUESTA_SERVER_DAEMON_START_ENV_ISSUES"
+	daemonAutoprogrammingEnvPrefixV0  = "ORQUESTA_" + "AUTOPROGRAMMING_"
 )
 
 type daemonStartEnvPolicyV0 struct {
@@ -85,6 +86,7 @@ func (builder daemonStartEnvBuilderV0) addParentV0(parent []string) {
 
 func (builder daemonStartEnvBuilderV0) addDerivedV0(config orquestaserver.ConfigV0) {
 	config = orquestaserver.NormalizeConfigV0(config)
+	projectConfig := projectConfigFromServerConfigBestEffortV0(config)
 	builder.setConfigV0(envServerAddrV0, config.Addr, "defaulted", "server_bootstrap", true)
 	builder.setConfigV0(envServerStateDirV0, config.StateDir, "derived", "server_bootstrap", true)
 	builder.setConfigV0(envServerAuditFileV0, config.AuditFile, "defaulted", "server_bootstrap", false)
@@ -97,10 +99,10 @@ func (builder daemonStartEnvBuilderV0) addDerivedV0(config orquestaserver.Config
 	builder.setV0(envCodexHomeV0, homeDirV0(), "derived", "codex_runtime", false)
 	builder.setV0(envCodexCodeHomeV0, codeHomeDirV0(), "derived", "codex_runtime", false)
 	builder.setV0(envCodexPathV0, envOrDefaultV0(envCodexPathV0, getenvRawV0("PATH")), "derived", "codex_runtime", false)
-	builder.setConfigV0(envSecurityModeV0, serverSecurityModeEffectiveValueV0(), "defaulted", "rails", false)
-	builder.setConfigV0(envRailsModeV0, serverRailsModeEffectiveValueV0(), "defaulted", "rails", false)
-	builder.setConfigV0(detailProhibitedRailsEnvV0, serverDetailRailsEffectiveValueV0(), "defaulted", "rails", false)
-	builder.setConfigV0(detailProhibitedRailsScopeEnvV0, serverDetailRailsScopeEffectiveValueV0(), "defaulted", "rails", false)
+	builder.setConfigV0(envSecurityModeV0, serverSecurityModeEffectiveValueFromProjectConfigFileV0(projectConfig), "defaulted", "rails", false)
+	builder.setConfigV0(envRailsModeV0, serverRailsModeEffectiveValueFromProjectConfigFileV0(projectConfig), "defaulted", "rails", false)
+	builder.setConfigV0(detailProhibitedRailsEnvV0, serverDetailRailsEffectiveValueFromProjectConfigFileV0(projectConfig), "defaulted", "rails", false)
+	builder.setConfigV0(detailProhibitedRailsScopeEnvV0, serverDetailRailsScopeEffectiveValueFromProjectConfigFileV0(projectConfig), "defaulted", "rails", false)
 	builder.setConfigV0(envStartupCleanupModeV0, startupCleanupModeEffectiveValueV0(), "defaulted", "startup", false)
 	builder.setConfigV0(envServerDaemonLogMaxBytesV0, strconv.FormatInt(config.DaemonLogPolicy.MaxBytes, 10), "defaulted", "daemon_logs", false)
 	builder.setConfigV0(envServerDaemonLogMaxRotatedV0, strconv.Itoa(config.DaemonLogPolicy.MaxRotatedFiles), "defaulted", "daemon_logs", false)
@@ -198,6 +200,7 @@ func daemonStartEnvPrefixRulesV0() []daemonStartEnvPrefixRuleV0 {
 		{"ORQUESTA_RAILS_", "rails"},
 		{"ORQUESTA_DETAIL_", "rails"},
 		{"ORQUESTA_CODEX_", "codex_runtime"},
+		{daemonAutoprogrammingEnvPrefixV0, "autoprogramming"},
 		{"ORQUESTA_CAPACITY_", "capacity"},
 		{"ORQUESTA_DIRECTOR_", "director"},
 		{"ORQUESTA_OPES_", "opes_bridge"},
@@ -210,6 +213,9 @@ func daemonStartEnvPrefixRulesV0() []daemonStartEnvPrefixRuleV0 {
 
 func daemonStartEnvBlockedKeyV0(key string) bool {
 	if key == envServerControlTokenV0 {
+		return false
+	}
+	if key == envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0 {
 		return false
 	}
 	switch strings.ToUpper(strings.TrimSpace(key)) {

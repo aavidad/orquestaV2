@@ -24,8 +24,12 @@ func scanForbiddenModelEscalationKeysV0(path string, value any, issues *[]ModelE
 	switch node := value.(type) {
 	case map[string]any:
 		for key, child := range node {
-			field := joinModelEscalationPathV0(path, key)
-			if isForbiddenModelEscalationKeyV0(key) {
+			field := key
+			if path != "" {
+				field = path + "." + key
+			}
+			switch strings.ToLower(key) {
+			case "role_model", "role_model_table", "role_models", "role_to_model", "roles_to_models":
 				*issues = append(*issues, ModelEscalationPolicyIssueV0{
 					Code:  ErrModelEscalationPolicyTablaRolModeloV0,
 					Field: field,
@@ -37,22 +41,6 @@ func scanForbiddenModelEscalationKeysV0(path string, value any, issues *[]ModelE
 		for i, child := range node {
 			scanForbiddenModelEscalationKeysV0(fmt.Sprintf("%s[%d]", path, i), child, issues)
 		}
-	}
-}
-
-func joinModelEscalationPathV0(path, key string) string {
-	if path == "" {
-		return key
-	}
-	return path + "." + key
-}
-
-func isForbiddenModelEscalationKeyV0(key string) bool {
-	switch strings.ToLower(key) {
-	case "role_model", "role_model_table", "role_models", "role_to_model", "roles_to_models":
-		return true
-	default:
-		return false
 	}
 }
 

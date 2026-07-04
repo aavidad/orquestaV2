@@ -114,6 +114,75 @@ func TestBuildServerAppHandlerV0CodebaseStatusPublicoUsaOwnerMarkersFileBased(t 
 	assertCodebaseStatusOwnerMarkerActiveRequestsV0(t, result)
 }
 
+func TestBuildServerAppHandlerV0CodebaseQueryPublicoUsaBindingDirecto(t *testing.T) {
+	handler, err := buildServerAppHandlerV0(orquestaappcodexstack.StackV0{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "fallback-query-route-not-used", http.StatusTeapot)
+		}),
+		MCPTransportBindings: orquestamcp.MCPTransportBindingsV0{
+			CodebaseQuery: orquestamcp.MCPCodebaseQueryToolExecutorV0{
+				Broker: fakeServerCodebaseQueryBrokerV0{},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildServerAppHandlerV0: %v", err)
+	}
+	body, err := json.Marshal(orquestamcp.MCPCodebaseQueryToolInputV0{
+		SchemaVersion: orquestacontext.CodeContextQuerySchemaVersionV0,
+		RequestRef:    "request-ref-codebase-query-public",
+		RepositoryRef: "repo-ref-orquesta",
+		QueryKind:     orquestacontext.CodeContextQueryKindSearchV0,
+		Query:         "CodebaseQueryPublic",
+		MaxResults:    1,
+		MaxBytes:      2000,
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, orquestamcp.MCPCodebaseQueryHTTPPathV0, bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPCodebaseQueryToolResultV0
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Estado != orquestacontext.CodeContextEstadoOKV0 ||
+		result.ProviderKind != orquestacontext.CodeContextProviderKindFallbackRGV0 ||
+		len(result.Results) != 1 ||
+		result.Results[0].Symbol != "CodebaseQueryPublic" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+type fakeServerCodebaseQueryBrokerV0 struct{}
+
+func (fakeServerCodebaseQueryBrokerV0) QueryCodeContextV0(
+	_ context.Context,
+	query orquestacontext.CodeContextQueryV0,
+) (orquestacontext.CodeContextResultV0, error) {
+	return orquestacontext.CodeContextResultV0{
+		SchemaVersion: orquestacontext.CodeContextResultSchemaVersionV0,
+		Estado:        orquestacontext.CodeContextEstadoOKV0,
+		RequestRef:    query.RequestRef,
+		RepositoryRef: query.RepositoryRef,
+		QueryKind:     query.QueryKind,
+		ProviderKind:  orquestacontext.CodeContextProviderKindFallbackRGV0,
+		IndexerPolicy: orquestacontext.CodeContextProviderPolicyCentralOnlyV0,
+		Results: []orquestacontext.CodeContextHitV0{{
+			HitRef: "hit-ref-codebase-query-public",
+			Kind:   "function",
+			Path:   "cmd/orquesta-server/stack.go",
+			Symbol: "CodebaseQueryPublic",
+		}},
+	}, nil
+}
+
 func codebaseStatusOwnerMarkerFixtureV0(
 	t *testing.T,
 	started time.Time,

@@ -157,7 +157,7 @@ with open(sys.argv[1], encoding="utf-8") as fh:
     print(json.load(fh).get("addr", ""))
 PY
 )"
-    if [[ -n "$server_addr" ]] && curl -fsS -m 2 "http://$server_addr/api/v0/server/readiness" >/dev/null; then
+    if [[ -n "$server_addr" ]] && smoke_orquesta_readiness_ok "http://$server_addr"; then
       server_ready="1"
       break
     fi

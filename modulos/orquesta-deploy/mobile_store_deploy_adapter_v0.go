@@ -1,9 +1,6 @@
 package orquestadeploy
 
-import (
-	"errors"
-	"strings"
-)
+import "strings"
 
 const (
 	MobileStoreDeployAdapterNameV0     = "MobileStoreDeployAdapterV0"
@@ -251,19 +248,6 @@ func mobileStoreHasClientRowsV0(rows []MobileStoreDeployOSV0) bool {
 func mobileStoreHasMetadataArtifactV0(artifacts []ArtefactoPrevistoV0) bool {
 	for _, artifact := range artifacts {
 		if strings.TrimSpace(artifact.Tipo) == "metadata_publicacion" {
-			return true
-		}
-	}
-	return false
-}
-
-func HasMobileStoreDeployIssueV0(err error, code string) bool {
-	var mobileErr MobileStoreDeployAdapterV0Error
-	if !errors.As(err, &mobileErr) {
-		return false
-	}
-	for _, issue := range mobileErr.Issues {
-		if issue.Code == code {
 			return true
 		}
 	}

@@ -13,6 +13,7 @@ func TestMCPPublicErrorCatalogV0CubreCodigosCompartidosYHTTPV0(t *testing.T) {
 		MCPPublicErrTransportUnboundV0,
 		MCPAutoprogrammingPrepareRunHTTPNotConfiguredCodeV0,
 		MCPAutoprogrammingPrepareRunHTTPExecutorErrorCodeV0,
+		MCPConfigProjectionMismatchV0,
 		MCPDomainWorkHTTPNotConfiguredCodeV0,
 		MCPDomainWorkHTTPExecutorErrorCodeV0,
 		MCPExternalWorkRunHTTPNotConfiguredCodeV0,

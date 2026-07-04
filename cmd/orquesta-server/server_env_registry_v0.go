@@ -1,6 +1,8 @@
 package main
 
 import (
+	"strings"
+
 	orquestarails "orquesta/modulos/orquesta-rails"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
@@ -98,6 +100,7 @@ const (
 	envCodexCommandV0                               = "ORQUESTA_CODEX_COMMAND"
 	envCodexCodeHomeV0                              = "ORQUESTA_CODEX_CODE_HOME"
 	envCodexHomeV0                                  = "ORQUESTA_CODEX_HOME"
+	envCodexCodeHomeLegacyV0                        = "CODEX_HOME"
 	envCodexPathV0                                  = "ORQUESTA_CODEX_PATH"
 	envCodexModelV0                                 = "ORQUESTA_CODEX_MODEL"
 	envCodexReasoningEffortV0                       = "ORQUESTA_CODEX_REASONING_EFFORT"
@@ -162,8 +165,10 @@ const (
 	envCapacityReasoningEffortV0 = "ORQUESTA_CAPACITY_REASONING_EFFORT"
 	envCapacityPolicyRefV0       = "ORQUESTA_CAPACITY_POLICY_REF"
 	envCapacityPoolRefV0         = "ORQUESTA_CAPACITY_POOL_REF"
-	envCapacityModelRefV0        = "ORQUESTA_CAPACITY_MODEL_REF"
-	envCapacityQuotaRefV0        = "ORQUESTA_CAPACITY_QUOTA_REF"
+
+	envWorktreeSnapshotMaxFilesV0      = "ORQUESTA_WORKTREE_SNAPSHOT_MAX_FILES"
+	envWorktreeSnapshotMaxFileBytesV0  = "ORQUESTA_WORKTREE_SNAPSHOT_MAX_FILE_BYTES"
+	envWorktreeSnapshotMaxTotalBytesV0 = "ORQUESTA_WORKTREE_SNAPSHOT_MAX_TOTAL_BYTES"
 
 	envOPESBaseURLV0                            = "ORQUESTA_OPES_BASE_URL"
 	envOPESBaseURLLegacyV0                      = "OPES_BASE_URL"
@@ -282,15 +287,25 @@ type serverEnvSettingMetadataV0 struct {
 }
 
 var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
+	envServerAddrV0: {
+		Scope:       "server_bootstrap",
+		Label:       "Direccion servidor",
+		Description: "Direccion bind local del servidor Orquesta.",
+	},
+	envServerStateDirV0: {
+		Scope:       "server_bootstrap",
+		Label:       "Estado servidor",
+		Description: "Directorio local donde el servidor conserva statefile y runtime operacional.",
+	},
 	envOrquestaServerURLV0: {
 		Scope:       "server_endpoint",
 		Label:       "URL servidor Orquesta",
-		Description: "Endpoint gestionado del servidor Orquesta para wrappers y conectores operadores.",
+		Description: "Endpoint canonico gestionado del servidor Orquesta para wrappers y conectores operadores.",
 	},
 	envOrquestaBaseURLV0: {
 		Scope:       "server_endpoint",
 		Label:       "Base URL Orquesta",
-		Description: "Alias historico de endpoint Orquesta mantenido por compatibilidad con conectores existentes.",
+		Description: "Alias historico de ORQUESTA_SERVER_URL mantenido por compatibilidad con conectores existentes.",
 	},
 	envOrquestaRuntimeDirV0: {
 		Scope:       "server_endpoint",
@@ -529,6 +544,21 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Label:       "Reasoning Codex",
 		Description: "Esfuerzo de razonamiento para agentes Codex.",
 	},
+	envCodexHomeV0: {
+		Scope:       "codex_runtime",
+		Label:       "HOME proceso Codex",
+		Description: "HOME del proceso Codex lanzado por la composicion; no sustituye a ORQUESTA_CODEX_CODE_HOME como fuente de auth/config.",
+	},
+	envCodexRuntimeWorkDirV0: {
+		Scope:       "codex_runtime",
+		Label:       "Runtime Codex",
+		Description: "Directorio de trabajo runtime para procesos Codex gestionados por la composicion.",
+	},
+	envCodexCodeHomeV0: {
+		Scope:       "codex_runtime",
+		Label:       "CODEX_HOME fuente",
+		Description: "Directorio fuente de auth.json/config.toml para backends Codex; CODEX_HOME se conserva solo como alias legacy.",
+	},
 	envCodexPromoteMaterializedArtifactWithoutAckV0: {
 		Scope:       "codex_runtime",
 		Label:       "Promocion sin ACK",
@@ -568,6 +598,11 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "opes_bridge",
 		Label:       "Intervalo espera OPES",
 		Description: "Intervalo en milisegundos entre lecturas pasivas de director/stats durante la espera residente OPES.",
+	},
+	envOPESBaseURLV0: {
+		Scope:       "opes_bridge",
+		Label:       "Base URL OPES",
+		Description: "Endpoint de la instancia OPES temporal/productiva autorizada; OPES_BASE_URL se conserva solo como alias legacy.",
 	},
 	envOPESBridgeRequireRuntimeCompatibilityV0: {
 		Scope:       "opes_bridge",
@@ -704,16 +739,6 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Label:       "Pool capacidad",
 		Description: "Ref opaca del pool de capacidad usado por la politica.",
 	},
-	envCapacityModelRefV0: {
-		Scope:       "capacity",
-		Label:       "Modelo capacidad",
-		Description: "Ref opaca del modelo logico usado por la politica; no contiene proveedor real.",
-	},
-	envCapacityQuotaRefV0: {
-		Scope:       "capacity",
-		Label:       "Cuota capacidad",
-		Description: "Ref opaca de evidencia de cuota usada por la politica.",
-	},
 	envCodexDirectorWaveAgentsV0: {
 		Scope:       "director_wave",
 		Label:       "Agentes por ola",
@@ -831,8 +856,23 @@ func serverConfigSettingFromRegistryV0(key string, value string) orquestaserver.
 	return serverConfigSettingV0(key, value, metadata.Scope, metadata.Label, metadata.Description)
 }
 
+func serverConfigSettingFromRegistryWithSourceV0(key string, value string, source string) orquestaserver.ServerConfigSettingV0 {
+	setting := serverConfigSettingFromRegistryV0(key, value)
+	source = strings.TrimSpace(source)
+	if source != "" {
+		setting.Source = source
+	}
+	return setting
+}
+
 func serverSensitiveConfigSettingFromRegistryV0(key string, value string) orquestaserver.ServerConfigSettingV0 {
 	setting := serverConfigSettingFromRegistryV0(key, value)
+	setting.Sensitive = true
+	return setting
+}
+
+func serverSensitiveConfigSettingFromRegistryWithSourceV0(key string, value string, source string) orquestaserver.ServerConfigSettingV0 {
+	setting := serverConfigSettingFromRegistryWithSourceV0(key, value, source)
 	setting.Sensitive = true
 	return setting
 }

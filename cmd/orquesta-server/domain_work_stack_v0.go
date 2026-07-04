@@ -20,10 +20,11 @@ import (
 func domainWorkExecutorFromEnvV0(
 	serverConfig orquestaserver.ConfigV0,
 ) (orquestamcp.MCPDomainWorkExecutorPortV0, error) {
+	projectConfig := projectConfigFromProjectDirBestEffortV0(serverConfig.ProjectWorkDir)
 	baseURL := firstNonEmptyEnvV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0)
-	httpBaseURL := strings.TrimSpace(os.Getenv(envDomainWorkHTTPBaseURLV0))
-	fileDir := strings.TrimSpace(os.Getenv(envDomainWorkFileDirV0))
-	fileEnabled := strings.TrimSpace(os.Getenv(envDomainWorkFileEnabledV0)) == "1" ||
+	httpBaseURL := strings.TrimSpace(domainWorkHTTPBaseURLFromProjectConfigFileV0(projectConfig))
+	fileDir := strings.TrimSpace(domainWorkFileDirFromProjectConfigFileV0(projectConfig))
+	fileEnabled := domainWorkFileEnabledFromProjectConfigFileV0(projectConfig) ||
 		fileDir != ""
 	configuredBackends := 0
 	for _, enabled := range []bool{baseURL != "", httpBaseURL != "", fileEnabled} {
@@ -46,19 +47,19 @@ func domainWorkExecutorFromEnvV0(
 		return orquestamcp.NewMCPDomainWorkToolExecutorV0(client, client), nil
 	}
 	if httpBaseURL != "" {
-		if err := domainWorkHTTPDestinationPolicyFromEnvV0(); err != nil {
+		if err := domainWorkHTTPDestinationPolicyFromProjectConfigFileV0(projectConfig); err != nil {
 			return nil, err
 		}
-		egressPolicy, err := domainWorkHTTPEgressPolicyFromEnvV0()
+		egressPolicy, err := domainWorkHTTPEgressPolicyFromProjectConfigFileV0(projectConfig)
 		if err != nil {
 			return nil, err
 		}
 		client, err := orquestadomainworkhttp.NewClientV0(orquestadomainworkhttp.ConfigV0{
 			BaseURL:            httpBaseURL,
-			CreateJobPath:      strings.TrimSpace(os.Getenv(envDomainWorkHTTPCreatePathV0)),
-			SubmitArtifactPath: strings.TrimSpace(os.Getenv(envDomainWorkHTTPSubmitPathV0)),
+			CreateJobPath:      domainWorkHTTPCreatePathFromProjectConfigFileV0(projectConfig),
+			SubmitArtifactPath: domainWorkHTTPSubmitPathFromProjectConfigFileV0(projectConfig),
 			EgressPolicy:       egressPolicy,
-			Timeout:            time.Duration(intEnvOrDefaultV0(envDomainWorkHTTPTimeoutSecondsV0, 30)) * time.Second,
+			Timeout:            time.Duration(domainWorkHTTPTimeoutSecondsFromProjectConfigFileV0(projectConfig)) * time.Second,
 		})
 		if err != nil {
 			return nil, err
@@ -83,19 +84,27 @@ func domainWorkExecutorFromEnvV0(
 }
 
 func domainWorkHTTPDestinationPolicyFromEnvV0() error {
-	if strings.EqualFold(strings.TrimSpace(os.Getenv(envDomainWorkHTTPDomainRefV0)), "opes") {
+	return domainWorkHTTPDestinationPolicyFromProjectConfigFileV0(serverProjectConfigFileV0{})
+}
+
+func domainWorkHTTPDestinationPolicyFromProjectConfigFileV0(config serverProjectConfigFileV0) error {
+	if strings.EqualFold(domainWorkHTTPDomainRefFromProjectConfigFileV0(config), "opes") {
 		return fmt.Errorf("opes_destination_productive_not_allowed")
 	}
 	return nil
 }
 
 func domainWorkHTTPEgressPolicyFromEnvV0() (orquestadomainworkhttp.EgressPolicyV0, error) {
-	mode := strings.TrimSpace(os.Getenv(envDomainWorkHTTPEgressModeV0))
+	return domainWorkHTTPEgressPolicyFromProjectConfigFileV0(serverProjectConfigFileV0{})
+}
+
+func domainWorkHTTPEgressPolicyFromProjectConfigFileV0(config serverProjectConfigFileV0) (orquestadomainworkhttp.EgressPolicyV0, error) {
+	mode := strings.TrimSpace(domainWorkHTTPEgressModeFromProjectConfigFileV0(config))
 	switch mode {
 	case orquestadomainworkhttp.EgressModeSmokeLocalV0:
 		return orquestadomainworkhttp.SmokeLocalEgressPolicyV0(), nil
 	case orquestadomainworkhttp.EgressModeAllowlistV0:
-		allowedHosts := splitCSVEnvV0(os.Getenv(envDomainWorkHTTPAllowedHostsV0))
+		allowedHosts := domainWorkHTTPAllowedHostsFromProjectConfigFileV0(config)
 		if len(allowedHosts) == 0 {
 			return orquestadomainworkhttp.EgressPolicyV0{}, errors.New(orquestadomainworkhttp.ErrDomainWorkHTTPEgressPolicyRequiredV0)
 		}
@@ -138,10 +147,7 @@ func splitCSVEnvV0(raw string) []string {
 }
 
 func domainWorkDeliveryEnabledFromEnvV0() bool {
-	return firstNonEmptyEnvV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0) != "" ||
-		strings.TrimSpace(os.Getenv(envDomainWorkHTTPBaseURLV0)) != "" ||
-		strings.TrimSpace(os.Getenv(envDomainWorkFileEnabledV0)) == "1" ||
-		strings.TrimSpace(os.Getenv(envDomainWorkFileDirV0)) != ""
+	return domainWorkDeliveryEnabledFromProjectConfigFileV0(serverProjectConfigFileV0{})
 }
 
 func domainWorkRequiredTestConfigFromEnvV0() orquestaappcodexstack.DomainWorkRequiredTestConfigV0 {

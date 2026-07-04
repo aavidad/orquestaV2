@@ -17,26 +17,27 @@ type opesTopicRegistryConfigV0 struct {
 }
 
 func opesTopicRegistryConfigFromEnvV0() opesTopicRegistryConfigV0 {
-	enabled := boolEnvOrDefaultV0(envOPESTopicRegistryEnabledV0, false)
-	toolPath := strings.TrimSpace(os.Getenv(envOPESTopicRegistryToolPathV0))
+	return opesTopicRegistryConfigFromProjectConfigFileV0(serverProjectConfigFileV0{})
+}
+
+func opesTopicRegistryConfigFromProjectConfigFileV0(config serverProjectConfigFileV0) opesTopicRegistryConfigV0 {
+	enabled := boolProjectConfigOrEnvOrDefaultV0(envOPESTopicRegistryEnabledV0, config.OPESTopicRegistry.Enabled, false)
+	toolPath := stringProjectConfigOrEnvOrDefaultV0(envOPESTopicRegistryToolPathV0, config.OPESTopicRegistry.ToolPath, "")
 	if toolPath == "" {
-		toolPath = discoveredOPESTopicRegistryToolPathV0(enabled)
+		toolPath = discoveredOPESTopicRegistryToolPathV0(opesProjectWorkDirFromProjectConfigFileV0(config))
 	}
 	return opesTopicRegistryConfigV0{
 		Enabled:  enabled || toolPath != "",
 		ToolPath: toolPath,
-		AgentID:  strings.TrimSpace(os.Getenv(envOPESTopicRegistryAgentIDV0)),
-		Force:    boolEnvOrDefaultV0(envOPESTopicRegistryForceV0, false),
+		AgentID:  stringProjectConfigOrEnvOrDefaultV0(envOPESTopicRegistryAgentIDV0, config.OPESTopicRegistry.AgentID, ""),
+		Force:    boolProjectConfigOrEnvOrDefaultV0(envOPESTopicRegistryForceV0, config.OPESTopicRegistry.Force, false),
 	}
 }
 
-func discoveredOPESTopicRegistryToolPathV0(enabled bool) string {
-	projectWorkDir := strings.TrimSpace(os.Getenv(envOPESProjectWorkDirV0))
+func discoveredOPESTopicRegistryToolPathV0(projectWorkDir string) string {
+	projectWorkDir = strings.TrimSpace(projectWorkDir)
 	if projectWorkDir == "" {
-		if !enabled {
-			return ""
-		}
-		projectWorkDir = defaultOPESProjectWorkDirV0
+		return ""
 	}
 	candidate := filepath.Join(projectWorkDir, "opes-salidas", "coordinacion_temarios", "tools", "registro_trabajo_temas.py")
 	info, err := os.Stat(candidate)
@@ -46,12 +47,32 @@ func discoveredOPESTopicRegistryToolPathV0(enabled bool) string {
 	return candidate
 }
 
-func opesTopicRegistryEffectiveConfigSettingsV0() []orquestaserver.ServerConfigSettingV0 {
-	config := opesTopicRegistryConfigFromEnvV0()
+func opesTopicRegistryEffectiveConfigSettingsV0(
+	serverConfig orquestaserver.ConfigV0,
+	projectConfig serverProjectConfigFileV0,
+) []orquestaserver.ServerConfigSettingV0 {
+	config := opesTopicRegistryConfigFromProjectConfigFileV0(projectConfig)
+	toolPathSource := configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envOPESTopicRegistryToolPathV0)
 	return []orquestaserver.ServerConfigSettingV0{
-		serverConfigSettingFromRegistryV0(envOPESTopicRegistryEnabledV0, strconv.FormatBool(config.Enabled)),
-		serverSensitiveConfigSettingFromRegistryV0(envOPESTopicRegistryToolPathV0, configuredRefValueV0(config.ToolPath, "opes-topic-registry-tool-configured")),
-		serverConfigSettingFromRegistryV0(envOPESTopicRegistryAgentIDV0, config.AgentID),
-		serverConfigSettingFromRegistryV0(envOPESTopicRegistryForceV0, strconv.FormatBool(config.Force)),
+		serverConfigSettingFromRegistryWithSourceV0(
+			envOPESTopicRegistryEnabledV0,
+			strconv.FormatBool(config.Enabled),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envOPESTopicRegistryEnabledV0),
+		),
+		serverSensitiveConfigSettingFromRegistryWithSourceV0(
+			envOPESTopicRegistryToolPathV0,
+			sensitiveConfigValueFromSourceV0(config.ToolPath, "opes-topic-registry-tool-configured", toolPathSource),
+			toolPathSource,
+		),
+		serverConfigSettingFromRegistryWithSourceV0(
+			envOPESTopicRegistryAgentIDV0,
+			config.AgentID,
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envOPESTopicRegistryAgentIDV0),
+		),
+		serverConfigSettingFromRegistryWithSourceV0(
+			envOPESTopicRegistryForceV0,
+			strconv.FormatBool(config.Force),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envOPESTopicRegistryForceV0),
+		),
 	}
 }

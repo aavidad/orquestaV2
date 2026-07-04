@@ -38,6 +38,7 @@ type MCPArrancarDirectorAppToolInputV0 struct {
 	MaxCommands           int                              `json:"max_commands,omitempty"`
 	MaxOutboxPerCycle     int                              `json:"max_outbox_per_cycle,omitempty"`
 	MaxExternalWaits      int                              `json:"max_external_waits,omitempty"`
+	RequiredSettings      []MCPRequiredSettingV0           `json:"required_settings,omitempty"`
 }
 
 type MCPArrancarDirectorAppToolResultV0 struct {
@@ -73,15 +74,61 @@ func MCPArrancarDirectorAppDescriptorV0() MCPArrancarDirectorAppToolDescriptorV0
 	return MCPArrancarDirectorAppToolDescriptorV0{
 		Name:        MCPArrancarDirectorAppToolNameV0,
 		Version:     MCPArrancarDirectorAppToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,respuesta?,director_execution_mode?:goal_first|legacy_director_loop,app_spec_request:AppSpecRequestV0(request_kind?,execution_mode?),max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_external_waits?}",
-		Output:      "ok:{route_policy,app_spec,run_ref,director_execution_mode?,legacy_sunset_notice?,goal_ref?,external_goal_ref?,goal_status?,phase_id?,loop_status?,evidence_refs?}|error:{route_policy,errores_publicos,evidence_refs?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,respuesta?,director_execution_mode?:goal_first|legacy_director_loop,app_spec_request:AppSpecRequestV0(request_kind?,execution_mode?),max_bursts?,max_steps_per_burst?,max_dispatches_per_wait?,max_commands?,max_outbox_per_cycle?,max_external_waits?,required_settings?[]{key,value}}",
+		Output:      "ok:{route_policy,app_spec,run_ref,director_execution_mode?,legacy_sunset_notice?,goal_ref?,external_goal_ref?,goal_status?,phase_id?,loop_status?,evidence_refs?}|error:{route_policy,errores_publicos(config_projection_mismatch?),evidence_refs?}",
 		ResourceURI: MCPArrancarDirectorAppResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
 			"entrada operativa preferente para apps nuevas con juicio del Director",
 			"no elige proveedor modelo credenciales home runtime ni DB",
 			"delegacion en orquesta-app-director-service",
+			"required_settings valida la proyeccion efectiva de configuracion antes de lanzar trabajo",
 		},
+	}
+}
+
+func NewMCPArrancarDirectorAppErrorResultV0(
+	input MCPArrancarDirectorAppToolInputV0,
+	code string,
+	field string,
+	message string,
+) MCPArrancarDirectorAppToolResultV0 {
+	return NewMCPArrancarDirectorAppIssuesResultV0(input, []MCPValidationIssueV0{{
+		Code:    strings.TrimSpace(code),
+		Field:   strings.TrimSpace(field),
+		Message: strings.TrimSpace(message),
+	}})
+}
+
+func NewMCPArrancarDirectorAppIssuesResultV0(
+	input MCPArrancarDirectorAppToolInputV0,
+	issues []MCPValidationIssueV0,
+) MCPArrancarDirectorAppToolResultV0 {
+	out := make([]MCPValidationIssueV0, 0, len(issues))
+	for _, issue := range issues {
+		code := strings.TrimSpace(issue.Code)
+		if code == "" {
+			code = "arrancar_director_error"
+		}
+		message := strings.TrimSpace(issue.Message)
+		if message == "" {
+			message = code
+		}
+		out = append(out, MCPValidationIssueV0{
+			Code:    code,
+			Field:   strings.TrimSpace(issue.Field),
+			Message: message,
+		})
+	}
+	if out == nil {
+		out = []MCPValidationIssueV0{}
+	}
+	return MCPArrancarDirectorAppToolResultV0{
+		Estado:        MCPArrancarDirectorAppEstadoErrorV0,
+		RequestID:     strings.TrimSpace(input.RequestID),
+		CorrelationID: firstNonEmptyMCPV0(input.CorrelationID, input.RequestID, input.AppSpecRequest.RequestID),
+		RoutePolicy:   mcpPreferredDirectorRoutePolicyV0(),
+		Errores:       out,
 	}
 }
 

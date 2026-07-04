@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+const (
+	codexRealSmokeTimeoutMSKeyV0      = "ORQUESTA_CODEX_SMOKE_TIMEOUT_MS"
+	codexRealSmokeTimeoutSecondsKeyV0 = "ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS"
+)
+
 type codexRealSmokeConfigV0 struct {
 	CommandPath     string
 	ProjectWorkDir  string
@@ -106,13 +111,53 @@ func codexRealSmokeCommandPathForTestV0(t *testing.T) string {
 
 func codexRealSmokeTimeoutFromEnvV0(t *testing.T) time.Duration {
 	t.Helper()
-	raw := strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS"))
+	rawMS := strings.TrimSpace(os.Getenv(codexRealSmokeTimeoutMSKeyV0))
+	if rawMS != "" {
+		milliseconds, err := strconv.Atoi(rawMS)
+		if err != nil || milliseconds < 10000 {
+			t.Fatalf("%s invalido: %q", codexRealSmokeTimeoutMSKeyV0, rawMS)
+		}
+		return time.Duration(milliseconds) * time.Millisecond
+	}
+	raw := strings.TrimSpace(os.Getenv(codexRealSmokeTimeoutSecondsKeyV0))
 	if raw == "" {
 		return 120 * time.Second
 	}
 	seconds, err := strconv.Atoi(raw)
 	if err != nil || seconds < 10 {
-		t.Fatalf("ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS invalido: %q", raw)
+		t.Fatalf("%s invalido: %q", codexRealSmokeTimeoutSecondsKeyV0, raw)
 	}
-	return time.Duration(seconds) * time.Second
+	t.Logf("%s deprecado; usa %s", codexRealSmokeTimeoutSecondsKeyV0, codexRealSmokeTimeoutMSKeyV0)
+	milliseconds := seconds * 1000
+	return time.Duration(milliseconds) * time.Millisecond
+}
+
+func TestCodexRealSmokeTimeoutFromEnvV0UsaMilisegundosCanonicos(t *testing.T) {
+	t.Setenv(codexRealSmokeTimeoutMSKeyV0, "11500")
+	t.Setenv(codexRealSmokeTimeoutSecondsKeyV0, "")
+
+	got := codexRealSmokeTimeoutFromEnvV0(t)
+	if got != 11500*time.Millisecond {
+		t.Fatalf("timeout = %s, want %s", got, 11500*time.Millisecond)
+	}
+}
+
+func TestCodexRealSmokeTimeoutFromEnvV0AceptaAliasLegacySeconds(t *testing.T) {
+	t.Setenv(codexRealSmokeTimeoutMSKeyV0, "")
+	t.Setenv(codexRealSmokeTimeoutSecondsKeyV0, "11")
+
+	got := codexRealSmokeTimeoutFromEnvV0(t)
+	if got != 11*time.Second {
+		t.Fatalf("timeout = %s, want %s", got, 11*time.Second)
+	}
+}
+
+func TestCodexRealSmokeTimeoutFromEnvV0PriorizaMilisegundosSobreLegacy(t *testing.T) {
+	t.Setenv(codexRealSmokeTimeoutMSKeyV0, "12500")
+	t.Setenv(codexRealSmokeTimeoutSecondsKeyV0, "99")
+
+	got := codexRealSmokeTimeoutFromEnvV0(t)
+	if got != 12500*time.Millisecond {
+		t.Fatalf("timeout = %s, want %s", got, 12500*time.Millisecond)
+	}
 }

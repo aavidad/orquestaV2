@@ -213,6 +213,10 @@ func mcpTransportToolEnumsV0(name string) map[string][]string {
 			orquestacontext.CodeContextQueryKindSymbolV0,
 			orquestacontext.CodeContextQueryKindArchitectureV0,
 			orquestacontext.CodeContextQueryKindRepoMapV0,
+			orquestacontext.CodeContextQueryKindCallersV0,
+			orquestacontext.CodeContextQueryKindImportsV0,
+			orquestacontext.CodeContextQueryKindModuleExportsV0,
+			orquestacontext.CodeContextQueryKindRelevantSnippetsV0,
 		}}
 	default:
 		return map[string][]string{}

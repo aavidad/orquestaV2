@@ -1,9 +1,6 @@
 package orquestadeploy
 
-import (
-	"errors"
-	"strings"
-)
+import "strings"
 
 const (
 	DesktopDeployAdapterNameV0     = "DesktopDeployAdapterV0"
@@ -220,19 +217,6 @@ func desktopDeployOSExactosV0(rows []DesktopDeployOSV0) bool {
 func desktopHasPackageArtifactV0(artifacts []ArtefactoPrevistoV0) bool {
 	for _, artifact := range artifacts {
 		if strings.TrimSpace(artifact.Tipo) == "paquete_desktop" {
-			return true
-		}
-	}
-	return false
-}
-
-func HasDesktopDeployIssueV0(err error, code string) bool {
-	var desktopErr DesktopDeployAdapterV0Error
-	if !errors.As(err, &desktopErr) {
-		return false
-	}
-	for _, issue := range desktopErr.Issues {
-		if issue.Code == code {
 			return true
 		}
 	}

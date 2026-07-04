@@ -51,6 +51,7 @@ func claudeRuntimeConfigV0(
 	if !boolEnvOrDefaultV0(envClaudeEnabledV0, false) {
 		return orquestaappcodexstack.ClaudeRuntimeConfigV0{}
 	}
+	projectConfig := projectConfigFromServerConfigBestEffortV0(serverConfig)
 	return orquestaappcodexstack.ClaudeRuntimeConfigV0{
 		Enabled:        true,
 		CommandPath:    claudeCommandPathV0(),
@@ -62,6 +63,7 @@ func claudeRuntimeConfigV0(
 		PermissionMode: envOrDefaultV0(envClaudePermissionModeV0, "bypassPermissions"),
 		OutputFormat:   envOrDefaultV0(envClaudeOutputFormatV0, "text"),
 		Effort:         strings.TrimSpace(os.Getenv(envClaudeEffortV0)),
+		PromptLocale:   goalBackendPromptLocaleFromProjectConfigFileV0(projectConfig),
 		ExtraArgs:      strings.Fields(os.Getenv(envClaudeExtraArgsV0)),
 	}
 }
@@ -82,7 +84,11 @@ func claudeCommandPathV0() string {
 }
 
 func claudeGoalBackendFromEnvV0() string {
-	backend := codexGoalBackendFromEnvV0()
+	return claudeGoalBackendFromValueV0(codexGoalBackendFromEnvV0())
+}
+
+func claudeGoalBackendFromValueV0(backend string) string {
+	backend = strings.TrimSpace(backend)
 	if backend == claudeGoalBackendFileControlV0 || backend == claudeGoalBackendProcessV0 {
 		return backend
 	}

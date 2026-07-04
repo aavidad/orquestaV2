@@ -375,6 +375,9 @@ func serverConfigSettingMustRedactV0(setting ServerConfigSettingV0) bool {
 		return true
 	}
 	key := strings.ToUpper(strings.TrimSpace(setting.Key))
+	if serverConfigSettingPublicNumericLimitKeyV0(key) {
+		return false
+	}
 	for _, fragment := range []string{"TOKEN", "SECRET", "PASSWORD", "HOME", "WORKDIR", "WORK_DIR", "STATE_DIR", "RUNTIME_WORKDIR", "COMMAND", "PROVIDER", "MODEL"} {
 		if strings.Contains(key, fragment) {
 			return true
@@ -382,6 +385,10 @@ func serverConfigSettingMustRedactV0(setting ServerConfigSettingV0) bool {
 	}
 	value := strings.TrimSpace(setting.Value)
 	return filepath.IsAbs(value) || strings.Contains(value, `:\`)
+}
+
+func serverConfigSettingPublicNumericLimitKeyV0(key string) bool {
+	return strings.HasSuffix(key, "_MAX_COMMANDS")
 }
 
 func publicStatusRefIfConfiguredV0(value string, ref string) string {

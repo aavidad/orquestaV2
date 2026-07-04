@@ -29,4 +29,9 @@ func init() {
 		Label:       "Raw daemon opt-in",
 		Description: "Captura local de stdout stderr crudos del daemon; por defecto queda desactivada.",
 	}
+	serverEffectiveEnvRegistryV0[envServerDaemonLogRawReasonV0] = serverEnvSettingMetadataV0{
+		Scope:       "daemon_logs",
+		Label:       "Motivo raw daemon",
+		Description: "Motivo publico requerido para capturar stdout stderr crudos del daemon.",
+	}
 }

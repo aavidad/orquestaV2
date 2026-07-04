@@ -1,9 +1,6 @@
 package orquestadeploy
 
-import (
-	"errors"
-	"strings"
-)
+import "strings"
 
 const (
 	PaaSDeployAdapterNameV0     = "PaaSDeployAdapterV0"
@@ -243,19 +240,6 @@ func paasHasProviderRestrictionV0(restrictions []RestriccionV0) bool {
 		key := strings.ToLower(strings.TrimSpace(restriction.Clave))
 		value := strings.ToLower(strings.TrimSpace(restriction.Valor))
 		if strings.Contains(key, "plataforma") && (strings.Contains(value, "opaco") || strings.Contains(value, "pendiente")) {
-			return true
-		}
-	}
-	return false
-}
-
-func HasPaaSDeployIssueV0(err error, code string) bool {
-	var paasErr PaaSDeployAdapterV0Error
-	if !errors.As(err, &paasErr) {
-		return false
-	}
-	for _, issue := range paasErr.Issues {
-		if issue.Code == code {
 			return true
 		}
 	}

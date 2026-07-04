@@ -30,6 +30,7 @@ type StackV0 struct {
 	Clock                                 orquestafactoryhttp.AppSpecHTTPClockV0
 	AutoprogrammingPromotion              AutoprogrammingPromotionConfigV0
 	DomainWork                            orquestamcp.MCPDomainWorkExecutorPortV0
+	ConfigProjectionSettings              []orquestamcp.MCPConfigProjectionSettingV0
 	CodeContext                           orquestacontext.CodeContextQueryPortV0
 	CodeContextToolLeases                 orquestacontext.CodeContextToolLeaseListPortV0
 	RuntimeModels                         orquestaruntime.RuntimeModelManagerPortV0
@@ -68,6 +69,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		Clock:                                 config.Clock,
 		AutoprogrammingPromotion:              config.AutoprogrammingPromotion,
 		DomainWork:                            config.DomainWork,
+		ConfigProjectionSettings:              configProjectionSettingsV0(config.ConfigProjectionSettings),
 		CodeContext:                           config.CodeContext,
 		CodeContextToolLeases:                 config.CodeContextToolLeases,
 		RuntimeModels:                         config.RuntimeModels,
@@ -101,12 +103,13 @@ func buildStackMCPTransportBindingsV0(
 	stack *StackV0,
 ) orquestamcp.MCPTransportBindingsV0 {
 	arrancar := NewQueuedArrancarDirectorExecutorV0(QueuedArrancarDirectorConfigV0{
-		Inner:  orquestamcp.NewMCPArrancarDirectorAppToolExecutorV0(startOnlyPortsV0(ports)),
-		Writer: config.Stores.RunQueue,
-		Queue:  queueConfig,
-		Clock:  config.Clock,
-		Source: "orquesta-app-codex-stack",
-		Reason: "run creado desde director app",
+		Inner:                    orquestamcp.NewMCPArrancarDirectorAppToolExecutorV0(startOnlyPortsV0(ports)),
+		Writer:                   config.Stores.RunQueue,
+		Queue:                    queueConfig,
+		Clock:                    config.Clock,
+		Source:                   "orquesta-app-codex-stack",
+		Reason:                   "run creado desde director app",
+		ConfigProjectionSettings: config.ConfigProjectionSettings,
 	})
 	estadoVivoSource := estadoVivoSourceV0(config)
 	runControlPort := goalFirstRunControlPortFromConfigV0(config)
@@ -229,6 +232,7 @@ func buildStackHTTPHandlerV0(
 		AutoprogrammingEstadoVivoSource:   bindings.AutoprogrammingEstadoVivoSource,
 		AutoprogrammingIdleSelfImprovementBudgetSource: bindings.AutoprogrammingIdleSelfImprovementBudgetSource,
 		AutoprogrammingStatusDiagnostics:               bindings.AutoprogrammingStatusDiagnostics,
+		AutoprogrammingGoalProgressPolicy:              bindings.AutoprogrammingGoalProgressPolicy,
 		AllowLegacyAutoprogrammingSupervisorActions:    bindings.AllowLegacyAutoprogrammingSupervisorActions,
 		ServerShutdown:           bindings.ServerShutdown,
 		DomainWork:               bindings.DomainWork,
@@ -274,8 +278,8 @@ func buildDirectorPortsV0(
 		OperationalPlanStateStore:   operationalPlanStateStoreV0(config),
 		RequiredTestEvidenceStore:   requiredTestEvidenceStoreV0(config),
 		RequiredTestRunner:          requiredTestRunnerV0(config),
-		GoalLauncher:                config.AppGoalLauncher,
-		GoalReworkLauncher:          config.AppGoalReworkLauncher,
+		GoalLauncher:                goalLauncherWithCodeContextPrepareFromConfigV0(config.AppGoalLauncher, config.CodeContext),
+		GoalReworkLauncher:          goalLauncherWithCodeContextPrepareFromConfigV0(config.AppGoalReworkLauncher, config.CodeContext),
 		GoalObserver:                goalFirstReconciledObserverFromConfigV0(config),
 		GoalClosureValidator:        appGoalClosureValidatorV0(config),
 		GoalStateStore:              config.Stores.AppGoalStateStore,

@@ -1,9 +1,6 @@
 package orquestadeploy
 
-import (
-	"errors"
-	"strings"
-)
+import "strings"
 
 const (
 	KubernetesDeployAdapterNameV0     = "KubernetesDeployAdapterV0"
@@ -233,19 +230,6 @@ func kubernetesMatrixHasClientRowsV0(rows []KubernetesDeployOSV0) bool {
 func algunaAccionTipoV0(actions []AccionPrevistaV0, want string) bool {
 	for _, action := range actions {
 		if strings.TrimSpace(action.Tipo) == want {
-			return true
-		}
-	}
-	return false
-}
-
-func HasKubernetesDeployIssueV0(err error, code string) bool {
-	var kubernetesErr KubernetesDeployAdapterV0Error
-	if !errors.As(err, &kubernetesErr) {
-		return false
-	}
-	for _, issue := range kubernetesErr.Issues {
-		if issue.Code == code {
 			return true
 		}
 	}

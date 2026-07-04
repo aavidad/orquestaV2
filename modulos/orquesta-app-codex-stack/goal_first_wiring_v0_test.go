@@ -2,8 +2,11 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
+	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
@@ -70,6 +73,101 @@ func TestBuildDirectorPortsV0CableaAppGoalLauncher(t *testing.T) {
 	}
 }
 
+func TestBuildDirectorPortsV0PrecargaCodeContextParaGoalCodigo(t *testing.T) {
+	launcher := &codexStackGoalLauncherForTestV0{}
+	codeContext := &codexStackCodeContextForTestV0{
+		result: orquestacontext.CodeContextResultV0{
+			SchemaVersion: orquestacontext.CodeContextResultSchemaVersionV0,
+			Estado:        orquestacontext.CodeContextEstadoOKV0,
+			QueryHash:     "code-context-sha256-test",
+			CacheStatus:   orquestacontext.CodeContextCacheStoreV0,
+			EvidenceRefs:  []string{"evidence-ref-code-context-prepared"},
+		},
+	}
+	ports := buildDirectorPortsV0(ConfigV0{
+		AppGoalLauncher: launcher,
+		CodeContext:     codeContext,
+	})
+
+	receipt, err := ports.GoalLauncher.LaunchGoalWorkV0(context.Background(), orquestagoal.GoalWorkSpecV0{
+		GoalRef:      "goal-ref-stack-code-context-001",
+		ProjectRef:   "repo-ref-orquesta",
+		Objective:    "Modificar broker de codigo.",
+		DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+		WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "cmd/orquesta-server"}},
+		RuleRefs:     []orquestagoal.GoalRuleRefV0{{Ref: "AGENTS.md"}},
+		ContextRefs:  []orquestagoal.GoalContextRefV0{{Ref: "context-ref-existing"}},
+	})
+	if err != nil {
+		t.Fatalf("LaunchGoalWorkV0: %v", err)
+	}
+	if codeContext.calls != 1 ||
+		codeContext.last.QueryKind != orquestacontext.CodeContextQueryKindRepoMapV0 ||
+		len(codeContext.last.Scope) != 1 ||
+		codeContext.last.Scope[0] != "cmd/orquesta-server" {
+		t.Fatalf("query=%+v calls=%d", codeContext.last, codeContext.calls)
+	}
+	launched := launcher.lastSpec
+	if !goalContextRefPrefixForTestV0(launched.ContextRefs, "code_context_prepared:repo_map:code-context-sha256-test") ||
+		!goalStringInSetForTestV0(launched.EvidenceRefs, "evidence-ref-code-context-prepared") {
+		t.Fatalf("spec no enriquecido: %+v", launched)
+	}
+	if receipt.ContextBudget.CodeContextCacheStatus != orquestacontext.CodeContextCacheStoreV0 {
+		t.Fatalf("receipt sin cache status: %+v", receipt.ContextBudget)
+	}
+}
+
+func TestBuildDirectorPortsV0NoPrecargaCodeContextParaGoalDocumental(t *testing.T) {
+	launcher := &codexStackGoalLauncherForTestV0{}
+	codeContext := &codexStackCodeContextForTestV0{}
+	ports := buildDirectorPortsV0(ConfigV0{
+		AppGoalLauncher: launcher,
+		CodeContext:     codeContext,
+	})
+
+	_, err := ports.GoalLauncher.LaunchGoalWorkV0(context.Background(), orquestagoal.GoalWorkSpecV0{
+		GoalRef:      "goal-ref-stack-doc-context-001",
+		ProjectRef:   "repo-ref-orquesta",
+		Objective:    "Actualizar documentacion.",
+		DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+		WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		RuleRefs:     []orquestagoal.GoalRuleRefV0{{Ref: "AGENTS.md"}},
+	})
+	if err != nil {
+		t.Fatalf("LaunchGoalWorkV0: %v", err)
+	}
+	if codeContext.calls != 0 {
+		t.Fatalf("codeContext calls=%d", codeContext.calls)
+	}
+	if goalContextRefPrefixForTestV0(launcher.lastSpec.ContextRefs, "code_context_prepared:") {
+		t.Fatalf("spec documental enriquecido: %+v", launcher.lastSpec.ContextRefs)
+	}
+}
+
+func TestBuildDirectorPortsV0CodeContextFallidoNoBloqueaGoal(t *testing.T) {
+	launcher := &codexStackGoalLauncherForTestV0{}
+	codeContext := &codexStackCodeContextForTestV0{err: errors.New("broker_down")}
+	ports := buildDirectorPortsV0(ConfigV0{
+		AppGoalLauncher: launcher,
+		CodeContext:     codeContext,
+	})
+
+	receipt, err := ports.GoalLauncher.LaunchGoalWorkV0(context.Background(), orquestagoal.GoalWorkSpecV0{
+		GoalRef:      "goal-ref-stack-code-context-failed-001",
+		ProjectRef:   "repo-ref-orquesta",
+		Objective:    "Modificar codigo con broker caido.",
+		DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+		WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-context"}},
+		RuleRefs:     []orquestagoal.GoalRuleRefV0{{Ref: "AGENTS.md"}},
+	})
+	if err != nil || receipt.GoalRef != "goal-ref-stack-code-context-failed-001" {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
+	if !goalContextRefPrefixForTestV0(launcher.lastSpec.ContextRefs, "code_context_prepare_failed") {
+		t.Fatalf("spec sin diagnostico de fallo: %+v", launcher.lastSpec.ContextRefs)
+	}
+}
+
 func TestQueuedArrancarDirectorExecutorV0NoEncolaGoalFirst(t *testing.T) {
 	writer := &queuedGoalFirstWriterForTestV0{}
 	executor := NewQueuedArrancarDirectorExecutorV0(QueuedArrancarDirectorConfigV0{
@@ -88,7 +186,8 @@ func TestQueuedArrancarDirectorExecutorV0NoEncolaGoalFirst(t *testing.T) {
 }
 
 type codexStackGoalLauncherForTestV0 struct {
-	calls int
+	calls    int
+	lastSpec orquestagoal.GoalWorkSpecV0
 }
 
 func (launcher *codexStackGoalLauncherForTestV0) LaunchGoalWorkV0(
@@ -96,11 +195,57 @@ func (launcher *codexStackGoalLauncherForTestV0) LaunchGoalWorkV0(
 	spec orquestagoal.GoalWorkSpecV0,
 ) (orquestagoal.GoalLaunchReceiptV0, error) {
 	launcher.calls++
+	launcher.lastSpec = spec
 	return orquestagoal.GoalLaunchReceiptV0{
 		SchemaVersion: orquestagoal.GoalWorkLaunchReceiptSchemaV0,
 		Status:        orquestagoal.GoalStatusRunningV0,
 		GoalRef:       spec.GoalRef,
 	}, nil
+}
+
+type codexStackCodeContextForTestV0 struct {
+	calls  int
+	last   orquestacontext.CodeContextQueryV0
+	result orquestacontext.CodeContextResultV0
+	err    error
+}
+
+func (fake *codexStackCodeContextForTestV0) QueryCodeContextV0(
+	_ context.Context,
+	query orquestacontext.CodeContextQueryV0,
+) (orquestacontext.CodeContextResultV0, error) {
+	fake.calls++
+	fake.last = query
+	if fake.err != nil {
+		return orquestacontext.CodeContextResultV0{}, fake.err
+	}
+	if fake.result.SchemaVersion == "" {
+		fake.result = orquestacontext.CodeContextResultV0{
+			SchemaVersion: orquestacontext.CodeContextResultSchemaVersionV0,
+			Estado:        orquestacontext.CodeContextEstadoOKV0,
+			QueryHash:     "code-context-sha256-default",
+			CacheStatus:   orquestacontext.CodeContextCacheStoreV0,
+		}
+	}
+	return fake.result, nil
+}
+
+func goalContextRefPrefixForTestV0(refs []orquestagoal.GoalContextRefV0, prefix string) bool {
+	for _, ref := range refs {
+		if strings.HasPrefix(ref.Ref, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func goalStringInSetForTestV0(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 type codexStackGoalObserverForTestV0 struct {

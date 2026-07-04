@@ -7,7 +7,6 @@ import (
 	"time"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
-	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
@@ -23,7 +22,7 @@ func codexRuntimeConfigV0(
 	if len(usageMetrics) > 0 {
 		usageSource = usageMetrics[0]
 	}
-	envConfig := codexRuntimeEnvConfigFromEnvV0()
+	envConfig := codexRuntimeEnvConfigFromProjectConfigV0(serverConfig.ProjectWorkDir)
 	return orquestaappcodexstack.CodexRuntimeConfigV0{
 		CommandPath:              envConfig.CommandPath,
 		ProjectWorkDir:           serverConfig.ProjectWorkDir,
@@ -76,6 +75,14 @@ type codexRuntimeEnvConfigV0 struct {
 }
 
 func codexRuntimeEnvConfigFromEnvV0() codexRuntimeEnvConfigV0 {
+	return codexRuntimeEnvConfigFromProjectFileV0(serverProjectConfigFileV0{})
+}
+
+func codexRuntimeEnvConfigFromProjectConfigV0(projectDir string) codexRuntimeEnvConfigV0 {
+	return codexRuntimeEnvConfigFromProjectFileV0(projectConfigFromProjectDirBestEffortV0(projectDir))
+}
+
+func codexRuntimeEnvConfigFromProjectFileV0(projectConfig serverProjectConfigFileV0) codexRuntimeEnvConfigV0 {
 	return codexRuntimeEnvConfigV0{
 		CommandPath: codexCommandPathV0(),
 		CodeHomeDir: codeHomeDirV0(),
@@ -85,10 +92,7 @@ func codexRuntimeEnvConfigFromEnvV0() codexRuntimeEnvConfigV0 {
 		// Default medium: Goal-first y la recuperacion de artefacto-sin-ACK
 		// reducen el coste de exigir high por defecto. Las composiciones pueden
 		// subirlo con ORQUESTA_CODEX_REASONING_EFFORT cuando el riesgo lo justifique.
-		ReasoningEffort: codexReasoningEffortPolicyV0(envOrDefaultV0(
-			envCodexReasoningEffortV0,
-			string(orquestacoreworkflow.OrchestrationCapacityMediumV0),
-		)),
+		ReasoningEffort:          codexReasoningEffortFromProjectConfigFileV0(projectConfig),
 		Profile:                  strings.TrimSpace(os.Getenv(envCodexProfileV0)),
 		Sandbox:                  codexSandboxFromEnvV0(envCodexSandboxV0, "workspace-write"),
 		ApprovalPolicy:           envOrDefaultV0(envCodexApprovalPolicyV0, "never"),
@@ -97,14 +101,14 @@ func codexRuntimeEnvConfigFromEnvV0() codexRuntimeEnvConfigV0 {
 		InteractiveApprovalOptIn: boolEnvOrDefaultV0(envCodexAllowInteractiveApprovalV0, false),
 		ExtraArgs:                strings.Fields(os.Getenv(envCodexExtraArgsV0)),
 		SkillInstructions:        codexSkillInstructionsFromEnvV0(),
-		Limits:                   codexRuntimeLimitsFromEnvV0(),
+		Limits:                   codexRuntimeLimitsFromProjectConfigFileV0(projectConfig),
 		WaitInterval:             time.Duration(intEnvOrDefaultV0(envCodexWaitIntervalMSV0, defaultCodexWaitIntervalMSV0)) * time.Millisecond,
 		ProgressPolicy: orquestaruntime.AgentProgressHeartbeatPolicyV0{
 			StalledAfterNoProgressTicks: intEnvOrDefaultV0(envCodexStalledTicksV0, defaultCodexStalledTicksV0),
 			LoopAfterRepeatedActions:    intEnvOrDefaultV0(envCodexLoopTicksV0, defaultCodexLoopTicksV0),
 		},
 		ProgressBudget: orquestaruntimecodexdelivery.CodexBudgetActivityPolicyV0{
-			MaxExpected:     time.Duration(intEnvOrDefaultV0(envCodexMaxExpectedSecondsV0, defaultCodexMaxExpectedSecondsV0)) * time.Second,
+			MaxExpected:     time.Duration(codexMaxExpectedSecondsFromProjectConfigFileV0(projectConfig)) * time.Second,
 			NoActivityLimit: time.Duration(intEnvOrDefaultV0(envCodexNoActivitySecondsV0, defaultCodexNoActivitySecondsV0)) * time.Second,
 		},
 	}
@@ -149,9 +153,5 @@ type codexRuntimeLimitsV0 struct {
 }
 
 func codexRuntimeLimitsFromEnvV0() codexRuntimeLimitsV0 {
-	executionMode := codexExecutionModeFromEnvV0()
-	return codexRuntimeLimitsV0{
-		MaxBatchReady:    codexExecutionModeCapPositiveV0(executionMode, intEnvOrDefaultV0(envCodexMaxBatchReadyV0, defaultCodexMaxBatchReadyV0)),
-		MaxLiveProcesses: codexExecutionModeCapPositiveV0(executionMode, intEnvOrDefaultV0(envCodexMaxConcurrencyV0, defaultCodexMaxConcurrencyV0)),
-	}
+	return codexRuntimeLimitsFromProjectConfigFileV0(serverProjectConfigFileV0{})
 }

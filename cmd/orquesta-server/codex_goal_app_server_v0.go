@@ -59,6 +59,34 @@ type serverCodexAppServerTurnStartParamsV0 = orquestaruntimecodexappserver.TurnS
 type serverCodexAppServerTurnStartResponseV0 = orquestaruntimecodexappserver.TurnStartResponseV0
 type serverCodexAppServerTurnV0 = orquestaruntimecodexappserver.TurnV0
 
+const serverCodexGoalDocTaskReasoningEffortV0 = "low"
+
+type serverCodexGoalCostRoutingStarterV0 struct {
+	Backend serverCodexAppServerGoalBackendV0
+}
+
+func (starter serverCodexGoalCostRoutingStarterV0) StartCodexGoalV0(
+	ctx context.Context,
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+) (orquestaruntimecodexgoal.CodexGoalStartReceiptV0, error) {
+	backend := starter.Backend
+	if serverCodexGoalTaskCostClassForPacketV0(packet) == orquestaruntimecodexgoal.CodexGoalTaskCostClassDocV0 {
+		backend.ReasoningEffort = serverCodexGoalDocTaskReasoningEffortV0
+	}
+	return backend.StartCodexGoalV0(ctx, packet)
+}
+
+func serverCodexGoalTaskCostClassForPacketV0(
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+) string {
+	derived := orquestaruntimecodexgoal.CodexGoalTaskCostClassForWriteSetV0(packet.WriteSet)
+	declared := strings.TrimSpace(packet.TaskCostClass)
+	if declared == "" || declared != derived {
+		return derived
+	}
+	return declared
+}
+
 type serverGoalSupervisorV0 struct {
 	serverStackSupervisorV0
 	launcher orquestaserver.IdleSelfImprovementGoalLauncherPortV0

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Lectura MEJ-106 2026-07-03: env=513, status=16, interfaces=65, director=17.
+# Lectura MEJ-106 2026-07-04: base env=511; actual temporal=512 por
+# env_vars_orquesta_allow_increase_to=512 documentado. status=16,
+# interfaces=65, director=17.
 
 usage() {
   echo "usage: scripts/orquesta_metricas_deuda.sh [--json]" >&2

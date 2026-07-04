@@ -99,6 +99,7 @@ func TestAutoprogrammingPromotionGuardianRunnerEnvV0NoHeredaVarsGuardianDelPadre
 		[]string{
 			"PATH=/bin",
 			"ORQUESTA_GUARDIAN_BUILD_COMMAND=rm -rf forbidden",
+			"ORQUESTA_GUARDIAN_CANDIDATE_BIN=/tmp/forbidden-candidate",
 			"ORQUESTA_GUARDIAN_WORKTREE_REF=worktree-ref-forbidden",
 		},
 		serverAutoprogrammingPromotionGuardianRequestV0{
@@ -106,16 +107,20 @@ func TestAutoprogrammingPromotionGuardianRunnerEnvV0NoHeredaVarsGuardianDelPadre
 			BuildCommand: "go test ./...",
 			WorktreeRef:  "worktree-ref-owned",
 		},
-		[]string{"PATH", "ORQUESTA_GUARDIAN_BUILD_COMMAND", "ORQUESTA_GUARDIAN_WORKTREE_REF"},
+		[]string{"PATH", "ORQUESTA_GUARDIAN_BUILD_COMMAND", "ORQUESTA_GUARDIAN_CANDIDATE_BIN", "ORQUESTA_GUARDIAN_WORKTREE_REF"},
 	)
 	joined := strings.Join(env, "\n")
 	for _, forbidden := range []string{
 		"ORQUESTA_GUARDIAN_BUILD_COMMAND=rm -rf forbidden",
+		"ORQUESTA_GUARDIAN_CANDIDATE_BIN=/tmp/forbidden-candidate",
 		"ORQUESTA_GUARDIAN_WORKTREE_REF=worktree-ref-forbidden",
 	} {
 		if strings.Contains(joined, forbidden) {
 			t.Fatalf("env hereda var guardian del padre %q: %s", forbidden, joined)
 		}
+	}
+	if strings.Contains(joined, "ORQUESTA_GUARDIAN_CANDIDATE_BIN=") {
+		t.Fatalf("env hereda clave guardian sin valor propio: %s", joined)
 	}
 	for _, want := range []string{
 		"ORQUESTA_GUARDIAN_BUILD_COMMAND=go test ./...",

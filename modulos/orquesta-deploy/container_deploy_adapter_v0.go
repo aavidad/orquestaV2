@@ -1,9 +1,6 @@
 package orquestadeploy
 
-import (
-	"errors"
-	"strings"
-)
+import "strings"
 
 const (
 	ContainerDeployAdapterNameV0     = "ContainerDeployAdapterV0"
@@ -215,17 +212,4 @@ func containerDeployOSExactosV0(rows []ContainerDeployOSV0) bool {
 		values = append(values, row.OS)
 	}
 	return osExactosV0(values)
-}
-
-func HasContainerDeployIssueV0(err error, code string) bool {
-	var containerErr ContainerDeployAdapterV0Error
-	if !errors.As(err, &containerErr) {
-		return false
-	}
-	for _, issue := range containerErr.Issues {
-		if issue.Code == code {
-			return true
-		}
-	}
-	return false
 }

@@ -11,12 +11,13 @@ import (
 )
 
 type QueuedArrancarDirectorConfigV0 struct {
-	Inner  orquestamcp.MCPTransportArrancarDirectorAppExecutorV0
-	Writer orquestarunqueue.RunQueuePriorityWriterPortV0
-	Queue  RunQueueConfigV0
-	Clock  orquestafactoryhttp.AppSpecHTTPClockV0
-	Source string
-	Reason string
+	Inner                    orquestamcp.MCPTransportArrancarDirectorAppExecutorV0
+	Writer                   orquestarunqueue.RunQueuePriorityWriterPortV0
+	Queue                    RunQueueConfigV0
+	Clock                    orquestafactoryhttp.AppSpecHTTPClockV0
+	Source                   string
+	Reason                   string
+	ConfigProjectionSettings []orquestamcp.MCPConfigProjectionSettingV0
 }
 
 type QueuedArrancarDirectorExecutorV0 struct {
@@ -36,6 +37,9 @@ func (executor QueuedArrancarDirectorExecutorV0) Execute(
 ) (orquestamcp.MCPArrancarDirectorAppToolResultV0, error) {
 	if executor.config.Inner == nil {
 		return orquestamcp.MCPArrancarDirectorAppToolResultV0{}, fmt.Errorf("arrancar_director.inner requerido")
+	}
+	if issues := configProjectionRequiredSettingIssuesV0(input.RequiredSettings, executor.config.ConfigProjectionSettings); len(issues) > 0 {
+		return orquestamcp.NewMCPArrancarDirectorAppIssuesResultV0(input, issues), nil
 	}
 	result, err := executor.config.Inner.Execute(ctx, input)
 	if err != nil || result.Estado != orquestamcp.MCPArrancarDirectorAppEstadoOKV0 {

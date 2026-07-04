@@ -14,6 +14,8 @@ const (
 	codexToolbeltStatusConnectorOptInV0   = "puede_devolver_mcp_transport_tool_unbound_si_falta_puerto"
 	codexToolbeltStatusTransportMissingV0 = "transport_missing_from_registry"
 	codexToolbeltStatusResourceV0         = "resource_registrado_con_subtools_operador"
+	codexToolbeltTransportLocalMCPV0      = "mcp_local_sin_http_localhost"
+	codexToolbeltContractCodeContextV0    = "CodeContextQueryPortV0"
 )
 
 type codexToolbeltHTTPEntryV0 struct {
@@ -23,8 +25,11 @@ type codexToolbeltHTTPEntryV0 struct {
 }
 
 type codexToolbeltMCPEntryV0 struct {
-	Name   string
-	Status string
+	Name        string
+	Status      string
+	Transport   string
+	Contract    string
+	ResourceURI string
 }
 
 func codexToolbeltHTTPHintV0() string {
@@ -84,9 +89,19 @@ func codexToolbeltMCPEntriesV0() []codexToolbeltMCPEntryV0 {
 	})
 	for _, name := range names {
 		status := codexToolbeltStatusForMCPToolV0(name, registered)
-		out = append(out, codexToolbeltMCPEntryV0{Name: name, Status: status})
+		out = append(out, codexToolbeltMCPEntryWithMetadataV0(name, status))
 	}
 	return out
+}
+
+func codexToolbeltMCPEntryWithMetadataV0(name string, status string) codexToolbeltMCPEntryV0 {
+	entry := codexToolbeltMCPEntryV0{Name: strings.TrimSpace(name), Status: strings.TrimSpace(status)}
+	if entry.Name == orquestamcp.MCPCodebaseQueryToolNameV0 {
+		entry.Transport = codexToolbeltTransportLocalMCPV0
+		entry.Contract = codexToolbeltContractCodeContextV0
+		entry.ResourceURI = orquestamcp.MCPCodebaseQueryResourceURIV0
+	}
+	return entry
 }
 
 func codexRegisteredMCPToolNamesV0() map[string]struct{} {
@@ -126,7 +141,17 @@ func formatCodexToolbeltHTTPEntriesV0(entries []codexToolbeltHTTPEntryV0) []stri
 func formatCodexToolbeltMCPEntriesV0(entries []codexToolbeltMCPEntryV0) []string {
 	out := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		out = append(out, fmt.Sprintf("%s [%s]", strings.TrimSpace(entry.Name), strings.TrimSpace(entry.Status)))
+		metadata := []string{strings.TrimSpace(entry.Status)}
+		if value := strings.TrimSpace(entry.Transport); value != "" {
+			metadata = append(metadata, "transport="+value)
+		}
+		if value := strings.TrimSpace(entry.Contract); value != "" {
+			metadata = append(metadata, "contract="+value)
+		}
+		if value := strings.TrimSpace(entry.ResourceURI); value != "" {
+			metadata = append(metadata, "resource="+value)
+		}
+		out = append(out, fmt.Sprintf("%s [%s]", strings.TrimSpace(entry.Name), strings.Join(metadata, ";")))
 	}
 	return out
 }

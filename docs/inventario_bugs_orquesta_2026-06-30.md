@@ -148,11 +148,50 @@ antes de su cierre posterior:
   control largo si reaparece y automatizacion completa.
 - Avance 2026-07-04 noche 25: `BUG-ORQ-20260704-165` queda reducido en la ruta
   de backend goal-first ausente/stale: `autoprogramming/status` publica
-  `safe_actions` hacia `/api/v0/runs/control` con
+  safe actions y `runs/control` puede reconciliar cleanup externo cuando no hay
+  proceso vivo. `safe_actions` hacia `/api/v0/runs/control` incluyen
   `run_control_reconcile_external_cleanup` y evidencia de cleanup externo; si
-  `Goal.Status=running` viene de stats stale sin proceso vivo y `SafeToReconcile`,
-  status/control ya no lo tratan como backend activo ni devuelven
-  `control_not_propagated_to_goal_backend`.
+  `Goal.Status=running` viene de stats stale sin proceso vivo y
+  `SafeToReconcile`, status/control ya no lo tratan como backend activo ni
+  devuelven `control_not_propagated_to_goal_backend`.
+- Reproduccion 2026-07-04 tarde Codex: `BUG-ORQ-20260704-165` sigue abierto
+  para el residual amplio de observabilidad/control con varios goals reales.
+  Se lanzaron por Orquesta siete pilotajes aislados T1-T7; los T1/T4/T6
+  terminaron `goal_status=invalid` con solo checkpoint inicial y T2/T3/T5/T7
+  quedaron `blocked` por alto consumo sin receipt terminal util. `runs/control
+  stop forced=true` devolvio `estado=ok`, `status=stopped` y
+  `goal_control_signal_confirmed=true`, pero `/api/v0/server/shutdown` devolvio
+  `backend_still_running` para los backends `app_server_tmux` y fue necesaria
+  limpieza local de procesos temporales. Evidencia: roots
+  `/tmp/orquesta-autonomia-t7-single-20260704T142642Z` y
+  `/tmp/orquesta-autonomia-isolated-batch-20260704T142715Z`; result placeholders
+  `cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-1b05f5450521-g01.json`,
+  `modulos/orquesta-context/docs/orquesta_goal_result_goal-ref-task-autoprogramming-b16dbf6de0af-g01.json`,
+  `modulos/orquesta-runtime-codex-goal/docs/orquesta_goal_result_goal-ref-task-autoprogramming-5fb5b8417b08-g01.json`,
+  `modulos/orquesta-server-shutdown/docs/orquesta_goal_result_goal-ref-task-autoprogramming-edd43a30277f-g01.json`,
+  `modulos/orquesta-opes-director/docs/orquesta_goal_result_goal-ref-task-autoprogramming-8b61180dcd7d-g01.json`
+  y `cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-d75ef5f8379d-g01.json`.
+  Lectura: no son cierres funcionales; son reproduccion del residual
+  `BUG-165/079/065`. Para continuar, relanzar goals pequenos con contexto
+  estrecho, umbral correcto
+  `ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS` y
+  validacion de cleanup final.
+- Reproduccion adicional 2026-07-04 tarde Codex T7A: se relanzo un goal
+  estrecho solo para `modulos/orquesta-web` con write-set aceptado
+  (`run-autonomia-t7a-wizard-contracts-small-20260704-001`,
+  `goal-ref-task-autoprogramming-1d01424da32d-g01`). Orquesta arranco Codex y
+  materializo checkpoint, pero `observe_goal` quedo en
+  `codex_app_server_goal_status_active_high_token_usage tokens_used=121675`
+  sin receipt terminal. Aunque el proceso se arranco con
+  `ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS=450000`,
+  el state efectivo publico el setting como `100000 defaulted`; por tanto el
+  servidor `start` no proyecto el umbral esperado. `runs/control stop
+  forced=true` cerro el run como `stopped` y `goal_control_signal_confirmed`,
+  pero `/api/v0/server/shutdown` volvio a `backend_still_running` y hubo que
+  parar el servidor temporal por `SIGINT`. Evidencia local:
+  `/tmp/orquesta-autonomia-t7a-wizard-contracts-20260704T163755`.
+  Lectura: T7A no se cierra; refuerza `BUG-165` y anade subcausa de
+  configuracion efectiva/daemon start para el umbral de alto consumo.
 - Avance 2026-07-04 noche 26: `BUG-ORQ-20260701-079` queda reducido en el borde
   app-server: el contrato runtime de `turn/start` ya no relaja
   `max_text_bytes` por un packet debil y conserva los hints acotados canonicos
@@ -462,6 +501,23 @@ antes de su cierre posterior:
   existe `env_vars_budget_test.go` con ese ratchet. El pendiente verificable es
   consolidar o retirar dos nombres `ORQUESTA_*` reales y solo entonces bajar el
   ratchet a `511`; cambiarlo ahora introduciria un rojo falso en `go test ./...`.
+- Continuacion Codex 2026-07-04 tarde 4: TAREA-6/MEJ-106 queda reducida a
+  `env_vars_orquesta=511` tras retirar de la superficie de entorno dos refs de
+  capacidad configurables no usadas por operadores,
+  `ORQUESTA_CAPACITY_MODEL_REF` y `ORQUESTA_CAPACITY_QUOTA_REF`. El stack
+  conserva refs internas por defecto para decisiones de capacidad y mantiene
+  configurables `ORQUESTA_CAPACITY_POLICY_REF` y `ORQUESTA_CAPACITY_POOL_REF`.
+  Se anade `TestEnvVarsOrquestaRatchetMEJ106V0` en `cmd/orquesta-server` para
+  fallar si el conteo sube sobre 511 sin marca explicita
+  `env_vars_orquesta_allow_increase_to=<valor>` en este inventario o bitacora.
+- Continuacion Codex 2026-07-04 tarde 9: TAREA-8.4 introduce
+  `ORQUESTA_CODEX_SMOKE_TIMEOUT_MS` como canónica temporal de los smokes Codex
+  para cerrar la mezcla de unidades, conservando
+  `ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS` como alias legacy durante la ventana de
+  compatibilidad. Esto sube el ratchet a
+  `env_vars_orquesta_allow_increase_to=512` de forma justificada y reversible;
+  la siguiente ola debe retirar los ejemplos/lecturas legacy `_SECONDS` y bajar
+  otra vez el techo.
 - `BUG-ORQ-20260702-120` queda cerrado por la proyeccion
   `stopped/crashed/unreachable` y los contratos OPES asociados. Sus notas de
   avance que decian "no cierra el bug padre" son historicas y quedan
@@ -486,6 +542,9 @@ antes de su cierre posterior:
 | BUG-ORQ-20260704-172 | cerrado | Tooling/higiene de disco | durante la verificacion de OPES 2026-07-04 noche 30, `go test` fallo antes de compilar con `no space left on device` al escribir en `/home/alberto/.cache/go-build`; `/home` estaba al 100%, `go-build` ocupaba 17G y `pkg/mod` 12G | las sesiones largas pueden llenar la cache de build en `/home` y convertir tests verdes en fallos operativos si no se presupuestan caches temporales aisladas | `df -h /home/alberto /tmp` mostro `/home` 100%; `du -sh /home/alberto/.cache/go-build /home/alberto/go/pkg/mod` mostro 17G y 12G; `go clean -cache` dejo 17G libres; los tests OPES se reejecutaron con `GOCACHE=/tmp/orquesta-codex-gocache` y `GOTMPDIR=/tmp/orquesta-codex-gotmp`; `go test -count=1 ./modulos/orquesta-opes-director ./modulos/orquesta-opes-bridge` verde | Cierre operativo local: cache Go de build limpiada y verificacion reanudada con cache temporal en `/tmp`. Residual estructural: futuras sesiones largas deben declarar `GOCACHE`/`GOTMPDIR` fuera de `/home` o ejecutar limpieza gobernada antes de smokes/builds amplios |
 | BUG-ORQ-20260704-171 | cerrado | Claude process/MCP heredado | un intento real de `claude_process` por servidor sin `--safe-mode` heredo la configuracion local de Claude y arranco `codebase-memory-mcp` como hijo del proceso Claude aunque el smoke no necesitaba consulta de grafo | el wrapper de proveedor real heredaba customizaciones/MCP del HOME de Claude; en Orquesta, `codebase-memory-mcp` debe ser opt-in por broker central y no aparecer como efecto lateral de un smoke de proveedor | observado durante el smoke servidor 2026-07-04 antes del ajuste; cierre validado con `/tmp/orquesta-claude-process-server.x5N8pq`, wrapper `claude -p ... --safe-mode`, `poll=31`, `closure_status=accepted`, y comprobacion posterior sin `orquesta-server run`, `claude_goal_wrapper`, `claude -p`, `codebase-memory-mcp`, `codex app-server` ni `orquesta-goal-*`; test `TestSmokeGoalFirstClaudeProcessServerRealEsOptInYLimpiaBackendV0` exige `SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SAFE_MODE` y `--safe-mode` | Cierre: `scripts/smoke_goal_first_claude_process_server_real.sh` usa `SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SAFE_MODE=1` por defecto, aplica `--safe-mode` en preflight y ejecucion real, y conserva fallback de limpieza por manifiesto interno del runtime |
 | BUG-ORQ-20260704-170 | cerrado | Goal-first/proveedor Claude result durable | en el segundo intento real de smoke servidor, Claude escribio `evidence_refs` como objetos `{ref, description}` en vez de strings, y Orquesta proyecto `goal_status=invalid`, `run_status=bloqueada`, `closure_status=blocked`, `summary=claude_goal_result_invalid` pese a que el trabajo era recuperable | el contrato de result durable exigia `[]string`, pero los proveedores tienden a enriquecer refs con descripcion; esa forma es normalizable si conserva `ref` no vacio y no debe invalidar todo el cierre | fallo retenido en `/tmp/orquesta-claude-process-server.aCyaLx`; cierre validado con `/tmp/orquesta-claude-process-server.x5N8pq`, `goal_status=complete`, `run_status=cerrada`, `closure_status=accepted`, 9 `artifact_refs`, 16 `evidence_refs`, 3 refs requeridas en result durable y 1 test requerido `passed`; tests `TestClaudeGoalBackendV0ObserveNormalizaEvidenceRefsObjetoRecuperableV0` y `TestGeminiGoalBackendV0ObserveNormalizaEvidenceRefsObjetoRecuperableV0`; focal `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-runtime-gemini` | Cierre: Claude/Gemini normalizan de forma acotada solo arrays `evidence_refs` cuyos items traen `ref` string no vacio, conservando bloqueo para objetos no recuperables; los prompts de ambos backends exigen arrays de strings y desplazan descripciones a summary/README/handoff |
+| BUG-ORQ-20260704-173 | cerrado | Config/env alias pisados | auditoria `docs/auditoria_envs_pisadas_2026-07-04.md`: `ORQUESTA_CODEX_CODE_HOME`/`CODEX_HOME`, `ORQUESTA_OPES_BASE_URL`/`OPES_BASE_URL`, `ORQUESTA_SERVER_URL`/`ORQUESTA_BASE_URL`, timeouts de smoke y `ORQUESTA_GUARDIAN_*` podian coexistir o quedar fuera de eco canonico | habia aliases de compatibilidad sin fuente tipada ni diagnostico de conflicto en `effective_config`; esto repite la clase T7A, pero por nombres multiples del mismo concepto en vez de por proyeccion al daemon | tests `TestServerConfigFromEnvV0DiagnosticaOPESBaseURLLegacyAliasV0`, `TestServerConfigFromEnvV0DiagnosticaOPESBaseURLPisadaV0`, `TestServerConfigFromEnvV0DiagnosticaCodexCodeHomeLegacyAliasV0`, `TestServerConfigFromEnvV0DiagnosticaCodexCodeHomePisadoV0`, `TestServerConfigFromEnvV0DiagnosticaOrquestaBaseURLLegacyAliasV0`, `TestServerConfigFromEnvV0DiagnosticaOrquestaBaseURLPisadaV0`, tests de timeout Claude/Gemini/Codex, tests guardian child env, `TestCodexStackAutoprogrammingPrepareRunAPIV0BloqueaConfigProjectionMismatchV0`, `TestCodexStackAppsDirectorAPIV0BloqueaConfigProjectionMismatchV0`, `TestServerConfigProjectionSettingsForMCPV0ProyectaEffectiveConfigV0`; `go test -count=1 ./...`; smoke Orquesta temporal de `effective_config` y de `required_settings` divergente | Cierre ampliado ola 1 TAREA-8: `ORQUESTA_CODEX_CODE_HOME`, `ORQUESTA_OPES_BASE_URL` y `ORQUESTA_SERVER_URL` son settings canonicos sensibles con alias legacy diagnosticados; `ORQUESTA_CODEX_HOME` queda documentada como HOME del proceso; los timeouts de smoke nuevos usan `_MS` y conservan `_SECONDS` como alias temporal; `ORQUESTA_GUARDIAN_*` emitidas por servidor quedan clasificadas como `child_process`; `prepare-run` y `apps/director` bloquean `required_settings` divergentes con `config_projection_mismatch` antes de lanzar trabajo. Pendiente estructural: fichero canónico `orquesta.config.*`, ratchet bidireccional completo y retirada de aliases legacy tras compatibilidad |
+| BUG-ORQ-20260704-174 | cerrado | Config canónica/status REST | al probar `orquesta.config.json` con `autoprogramming.checkpoint_only_high_consumption_tokens=450000`, `/api/v0/autoprogramming/status` seguía publicando defaults `100000/900/600`, aunque el stack MCP y `required_settings` ya tenían la política efectiva | había dos superficies de verdad: el transporte MCP recibía `AutoprogrammingGoalProgressPolicy`, pero el handler REST creado por `orquesta-app-gateway` no la transportaba y construía `MCPAutoprogrammingStatusToolExecutorV0` con policy vacía | primer smoke temporal fallido con status `goal_progress_policy=100000/900/600`; cierre con `TestAutoprogrammingStatusAPIRouteV0PublicaGoalProgressPolicyConfigurada`, `TestServerConfigFromEnvV0LeeUmbralCheckpointDesdeFicheroCanonicoV0`, smoke temporal `orquesta_temp_config_file_smoke=passed`, `git diff --check` y `go test -count=1 ./cmd/orquesta-server` | Cierre: `orquesta-app-gateway.ConfigV0` incorpora `AutoprogrammingGoalProgressPolicy`; `NewAPIRouteHandlersV0` la pasa al executor de status REST; `orquesta-app-codex-stack` cablea la policy desde bindings. Residual: TAREA-8.1 solo cubre por ahora la familia `autoprogramming`; faltan familias completas y ratchet AST estricto |
+| BUG-ORQ-20260704-175 | cerrado | Config canónica/ratchet envs | tras registrar config canónica inicial, el AST seguía como diagnóstico no bloqueante y podía volver a subir el número de lecturas `ORQUESTA_*` no registradas sin romper tests | el ratchet global por conteo único no ve si una lectura nueva queda fuera de `serverEffectiveEnvRegistryV0`; hacía falta una baseline de no-incremento antes de poder clasificar toda la deuda por categorías | `TestServerEnvRegistryASTV0LecturasORQUESTARegistradas` pasa de diagnóstico a ratchet con baseline 220; focal `go test -count=1 ./cmd/orquesta-server -run 'FicheroCanonico|EnvExplicitoGana|AuditFileInvalido|EnvRegistryAST|EnvVars|Ratchet'`; métrica `scripts/orquesta_metricas_deuda.sh --json` conserva `env_vars_orquesta=512` | Cierre: se registran `ORQUESTA_SERVER_ADDR`, `ORQUESTA_SERVER_STATE_DIR`, `ORQUESTA_CODEX_RUNTIME_WORKDIR` y `ORQUESTA_SERVER_DAEMON_LOG_RAW_REASON`, el fichero canónico cubre `server`, `daemon_logs` y `codex_runtime`, y el AST falla si la deuda sube por encima de 220. Residual: bajar 220 por fases y separar effective/config, child_process, smoke/test y provider runtime |
 | BUG-ORQ-20260704-169 | cerrado | Autoprogramacion idle/scanner | el pilotaje T295 reprodujo que, con `capacity_free` y una seccion pendiente ejecutable que declaraba `Dependencias: ninguna`, el planner devolvia una tarea de `backlog_scan`/fallback en vez del request ejecutable; la cadena idle parecia escanear y declarar no-op sin programar el backlog ya escrito | el parser normalizaba `ninguna` como dependencia real no completada, por lo que la tarea quedaba no ejecutable y el scanner ocupaba el ciclo; faltaba una regresion que impidiera sustituir trabajo pendiente por scanner cuando hay backlog minimo valido | request `request-ref-t295-scanner-noop-20260704-001`; commit `6fe19d06`; test `TestIdleSelfImprovementBacklogPlannerV0BacklogMinimoPendienteNoCedeCicloAlScannerV0`; `go test -count=1 ./cmd/orquesta-server -run 'TestIdleSelfImprovementBacklogPlannerV0(BacklogMinimoPendienteNoCedeCicloAlScanner|RespetaDependencias|PlanificaDependiente|SaltaTareasYaEnCola|AnadeScannerSiTodoEstaEnCola|NoInventaFallbackSiTodoEstaEnCola)'`; `go test -count=1 ./cmd/orquesta-server` | Cierre: `idleSelfImprovementNormalizeDependencyRefV0` descarta marcadores de ausencia de dependencias (`ninguna`, `none`, `sin dependencias`, etc.); el planner conserva el request `backlog_autoprogramming` y no anade scanner si ya hay tarea ejecutable |
 | BUG-ORQ-20260704-163 | cerrado | Autoprogramacion/skills curadas | la validacion de skills curadas de MEJ-206 rechazaba rutas absolutas conocidas como `/home/`, `/srv/` o `/tmp/`, pero podia aceptar metadata con rutas absolutas genericas como `/workspaces/...`, `/project/.../private.md`, `C:\Users\...` o UNC `\\server\share\...` | el filtro de contexto reutilizable dependia de una allowlist corta de prefijos locales; una skill propuesta o cargada podia introducir paths privados de otros entornos aunque no contuviera secretos explicitos | observado en revision de handoff Claude MEJ-206; tests `TestValidateAutoprogrammingCuratedSkillCatalogV0RechazaRutasAbsolutasGenericas`, `TestBuildAutoprogrammingSkillDistillationReviewProposalV0RechazaRutaAbsolutaGenerica`, `TestServerCuratedSkillsFromProjectV0IgnoraRutaAbsolutaGenericaV0`; `go test -count=1 ./modulos/orquesta-autoprogramming ./cmd/orquesta-server -run 'Test(ValidateAutoprogrammingCuratedSkillCatalogV0RechazaRutasAbsolutasGenericas|BuildAutoprogrammingSkillDistillationReviewProposalV0RechazaRutaAbsolutaGenerica|ServerCuratedSkillsFromProjectV0IgnoraRutaAbsolutaGenerica)V0?'` | Cierre: el detector de detalle sensible conserva marcadores existentes y detecta rutas absolutas Unix genericas con fichero, prefijos `/workspace(s)`, `/private`, `/volumes`, rutas Windows con unidad y UNC. El loader de `skills/*/SKILL.md` descarta esas entradas antes de inyectar `skill_ref` en goals idle. El guard runtime fuerte de write-set queda cubierto despues por `BUG-ORQ-20260704-164` |
 | BUG-ORQ-20260704-164 | cerrado | Goal-first/write-set runtime | el backend `orquesta-runtime-codex-appserver` podia aceptar un resultado `complete` aunque el agente hubiera modificado rutas fuera de `DirectionContract.allowed_write_set`, siempre que el recibo terminal no declarase esas rutas fuera de scope | la politica de `workspace_write_guard` viajaba en el start packet y en validacion de receipt, pero faltaba una verificacion runtime independiente del worktree antes de promover un cierre terminal | cierre residual de `BUG-ORQ-20260701-085`; tests `TestServerCodexAppServerGoalBackendV0RuntimeWriteSetGuardBloqueaCambioFueraDeScope`, `TestServerCodexAppServerGoalBackendV0RuntimeWriteSetGuardPermiteCambioDentroDeScope`, `TestVerifyWorktreeWriteSetV0RechazaCambioFueraDelWriteSet`, `TestVerifyWorktreeWriteSetV0AceptaCambiosDentroDelWriteSet`, `TestMCPAutoprogrammingStatusExecutorV0RuntimeWriteSetViolationPideReworkV0`, `TestMCPDirectorStatsToolExecutorV0GoalFirstProyectaRuntimeWriteSetViolationV0`, `TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0RuntimeWriteSetViolationPideRework`, `TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesGoalFirstRecuperablesComoBloqueadas` | Cierre: appserver captura baseline del worktree al arrancar goals con `write_set_enforcement=workspace_write_guard`, verifica `VerifyWorktreeWriteSetV0` antes de fusionar un resultado `complete`, bloquea como `codex_app_server_runtime_write_set_violation` si detecta cambios fuera de scope, elimina recibos de dominio/rework refs de ese cierre y publica evidencias compactas por ruta fuera de scope. MCP/status, `director.stats`, `observe_goal`, `efficiency_summary` y `domain-work/status` lo proyectan como bloqueo recuperable con `rework_write_set_violation`. No se ejecuta smoke real OPES/productivo en este cierre |
@@ -494,6 +553,7 @@ antes de su cierre posterior:
 | BUG-ORQ-20260704-165 | cerrado | Goal-first/control Sueldos forced stop | cierre 2026-07-04 noche 11: se reproduce el caso bloqueante de Sueldos con backend `app_server_tmux` vivo, alto consumo y `runs/control stop forced=true`; tras el fix, control devuelve `estado=ok`, `status=stopped`, `final_status=stopped`, `goal_status_after=blocked`, el observe posterior devuelve `goal_status=blocked`, `closure_status=blocked`, `recommended_action=replan`, y el cleanup no deja procesos ni tmux `orquesta-goal-*` | faltaban dos cierres de fuente de verdad: si el observer ya habia bloqueado el goal por alto consumo, run-control debia completar el control forzado aunque el goal ya no estuviera `running`; y el shutdown forzado del backend tmux no podia depender de un contexto ya agotado antes de limpiar proceso/socket | runbook `docs/runbooks/smoke_goal_first_forced_stop_backend_real_2026-07-04.md`; smoke real `smoke_goal_first_forced_stop_backend_real=ok`; `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-116f51fcff09efa9aa525ee7dfd94ce7`; `external_goal_ref=019f2c28-d0c3-7551-9972-dcba0f3daeb2`; evidencia saneada `/tmp/orquesta-goal-first-app-server.Sc7e7K`; tests `TestGoalFirstRunControlPortV0ForcedStopCompletaControlSiObserverYaBloqueoAltoConsumoV0`, `TestServerCodexAppServerGoalBackendV0StopForcedBloqueaGoalYApagaBackendV0`, `TestSmokeGoalFirstForcedStopWrapperEjercitaRunControlBackendVivoV0`; `go test -count=1 ./...`; `git diff --check` | Cierre de la ruta Sueldos: nuevo wrapper `scripts/smoke_goal_first_forced_stop_backend_real.sh`, modo interno `SMOKE_GOAL_FIRST_FORCED_STOP_MODE`, fast-path de run-control para goal ya terminal/bloqueado, puerto opcional `ShutdownForcedStopV0` y cleanup tmux con timeout fresco. Residual separado: `BUG-165` global sigue abierto para `status/observe` lento no cubierto por este smoke y para coordinacion automatica completa de shutdown/backend/checkpoint/stop/cancel/wait |
 | BUG-ORQ-20260704-165 | cerrado | Goal-first/control Claude process forced stop | cierre 2026-07-04 noche 21: se valida la ruta equivalente con backend externo `claude_process` vivo, lanzado por `cmd/orquesta-server`, manifiesto interno presente y `runs/control stop forced=true`; el control devuelve `estado=ok`, `status=stopped`, `final_status=stopped`, `goal_status_before=running`, `goal_status_after=blocked`, `goal_control_signal_confirmed=true`; el observe posterior devuelve `goal_status=blocked`, `run_status=bloqueada`, `closure_status=blocked`, `recommended_action=replan`; el shutdown final deja `status=stopped`, `shutdown_status=stopped`, `shutdown_ready=true` y no quedan procesos | tras cerrar Codex/app-server, faltaba evidencia real de que el puerto neutral de control tambien terminaliza un proveedor externo de proceso no Codex y que el cleanup no depende de inspeccion manual | runbook `docs/runbooks/smoke_goal_first_provider_process_real_2026-07-04.md`; smoke real `smoke_goal_first_claude_process_forced_stop_server_real=ok`; `run_ref=run-spec-smoke-claude-process-server-req-smoke-claude-process-server-dff02568d5f2f00ac86d8f91237536c7`; `external_goal_ref=claude-goal-06148fd846fd9f64`; evidencia retenida `/tmp/orquesta-claude-process-server.GnFFpX`; evidencias `evidence-ref-claude-goal-process-stop-completed`, `evidence-ref-run-control-goal-forced-stop-terminal`, `evidence-ref-run-control-terminal-after-goal-forced-stop`; test guard `TestSmokeGoalFirstClaudeProcessServerRealEsOptInYLimpiaBackendV0` | Cierre de la ruta Claude process: `scripts/smoke_goal_first_claude_process_server_real.sh` gana `SMOKE_CLAUDE_GOAL_PROCESS_SERVER_CONTROL_MODE=forced_stop`, espera proceso vivo por manifiesto, llama `/api/v0/runs/control`, valida observe posterior y comprueba cero procesos. Residual separado: Gemini real bloqueado por tier/credencial y observabilidad global larga si reaparece |
 | BUG-ORQ-20260704-165 | cerrado | Goal-first/observabilidad y control Orquesta | actualizacion 2026-07-04 noche: el observador residente de goals podia quedar bloqueado en una llamada lenta a `ObserveActiveGoalWorksV0`, impidiendo publicar una causa accionable en el state | el tick residente dependia de que cada backend retornase pronto; sin deadline propio, una observacion lenta degradaba `status/observe` y mezclaba progreso real con bloqueo de observabilidad | tests `TestRuntimeV0GoalObservationTickTimeoutPublicaErrorAccionableV0`, `TestRuntimeV0GoalObservationTickTimeoutNoBloqueaSiBackendIgnoraContextoV0`, `TestRunSelfWatchdogTickV0RespetaGoalObserverBackendActivoV0`, `TestNormalizeConfigV0ObservadorGoalFirstActivoPorDefectoV0`, `TestServerConfigFromEnvV0ObservadorGoalFirstResidentePorDefectoV0`; `go test -count=1 ./modulos/orquesta-server`; `TestEnvVarsBudgetMEJ106V0` conserva el presupuesto de envs | Avance: se anade `GoalObserverTimeout` interno con default 2000 ms, configurable por composicion `ConfigV0` sin crear env nueva; la llamada backend queda aislada con deadline duro, publica `goal_observer_timeout` aunque el backend ignore `context.Context`, nuevos ticks no abren llamadas infinitas y publican `goal_observer_backend_call_in_flight`; self-watchdog conserva la llamada backend como causa operacional viva. Residual: falta smoke real amplio de proveedor/status lento y coordinacion completa con `runs/control`/backend |
+| BUG-ORQ-20260704-165 | cerrado | Goal-first/start daemon env autoprogramming | reproduccion 2026-07-04 tarde Codex T7A: se arranco un servidor temporal con `ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS=450000`, pero el daemon publico `100000 defaulted`; el goal quedo bloqueado por `codex_app_server_goal_status_active_high_token_usage` con `tokens_used=121675`, aunque el operador habia subido el umbral | `orquesta-server start` filtraba el entorno por allowlist y no proyectaba `ORQUESTA_AUTOPROGRAMMING_*`; ademas el filtro anti-secretos bloqueaba la clave publica `...HIGH_CONSUMPTION_TOKENS` por contener la subcadena `TOKEN`, aunque es un contador, no un secreto | tests `TestServerDaemonStartEnvironmentV0ProyectaPoliticaAutoprogramacion`, `TestServerConfigFromEnvV0PublicaUmbralCheckpointGoalConfigurableV0`, `TestServerCodexGoalBackendFromEnvV0TmuxNoArrancaAppServerEnConstruccionV0`, `TestServerDaemonStartEnvPolicyV0PublicaCategoriasSinValoresCrudos`; smoke manual aislado `/tmp/orquesta-envcheck-20260704T164447` confirmo state efectivo `450000 explicit`, `900 explicit` y categoria `autoprogramming`; `scripts/orquesta_metricas_deuda.sh --json` conserva `env_vars_orquesta=511`; `go test -count=1 ./cmd/orquesta-server` | Cierre acotado: la allowlist de daemon incluye prefijo de autoprogramacion como categoria publica `autoprogramming`, `daemonStartEnvBlockedKeyV0` exceptua solo la clave exacta de conteo `envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0`, y el test del backend tmux se actualiza para el nuevo starter envuelto por `serverCodexGoalCostRoutingStarterV0`. Residual: el `BUG-165` global sigue abierto para observabilidad/control largo, `backend_still_running` en shutdown de goals reales y smoke amplio con proveedor lento |
 | BUG-ORQ-20260704-166 | cerrado | Nueva App/goal-first checkpoint invalido y recibo durable no reconciliado | al crear `/home/alberto/Trabajo/Sueldos/generated-apps/mapa-de-gasto-publico` via `POST /api/v0/apps/director` con `director_execution_mode=goal_first`, Orquesta acepto el run y lanzo el goal, pero primero solo materializo `checkpoint_started.txt` y un `orquesta_goal_result.v0` con `status=invalid` y `missing_refs=[source_tree,handoff_report,technical_stack_manifest,go_app,tests]`; en el reintento real del 2026-07-04 ya existia un `orquesta_goal_result.v0` durable `status=complete`, `artifact_refs=3`, `artifact_paths=32`, `materialized_artifacts=3`, `missing_refs=[]` y test `passed`, pero `/api/v0/apps/director/goal/observe` devolvia `estado=error`, `run_status=activa`, `goal_status=running`, `closure_status=blocked`, `summary=codex_app_server_goal_status_active`, `partial_artifacts_written` y `codex_goal_observation_rejected`; reintento posterior al fix con `request-ref-sueldos-gasto-publico-osm-observe-after-fix-20260704-001` devuelve `estado=ok`, `run_status=cerrada`, `goal_status=complete`, `closure_status=accepted`, `closure_accepted=true` y `recommended_action=no_action_closed` | la causa reproducida fue que el scanner de resultados podia gastar el limite de ficheros en `.gocache` o `.gocache-local` antes de encontrar el receipt terminal; tras `codex_app_server_tmux_pane_exit_timeout`, el observer acepta el recibo `complete` si el write-set valida, y conserva la ruta `codex_app_server_runtime_write_set_violation` para bloqueos reales de write-set | `docs/incidencia_sueldos_goal_first_app_invalid_checkpoint_2026-07-04.md`; run `run-spec-mapa-de-gasto-publico-req-mapa-de-gasto-publico-43c20b877af23ecc450d324a25c1e616`; goal `goal-ref-app-director-run-spec-mapa-de-gasto-publico-req-mapa-de-gasto-publico-43c20b877af23ecc450d324a25c1e616`; external goal `019f2a37-df1f-7e00-a60b-dab168d79d38`; request previo `request-ref-sueldos-gasto-publico-osm-observe-retry-20260704-001`; request de cierre `request-ref-sueldos-gasto-publico-osm-observe-after-fix-20260704-001`; fichero `/home/alberto/Trabajo/Sueldos/generated-apps/mapa-de-gasto-publico/docs/orquesta_goal_result_goal-ref-app-director-run-spec-mapa-de-gasto-publico-req-mapa-de-gasto-publico-4.json`; tests previos `TestObserveAppDirectorGoalV0LanzaReworkGoalSiNuevaAppSoloCheckpointInvalidV0`, `TestServerCodexAppServerGoalBackendV0NormalizaMissingRefsRaizEnChecklistV0`, `TestStackGoalMaterializedRefsSourceV0NormalizaMissingRefsRaizEnReceiptDurable`; cierre `ff620ecf` con `TestStackGoalMaterializedRefsSourceV0EncuentraReceiptTerminalTrasCacheVoluminosaV0` | Cierre: `goalMaterializedResultSkipDirV0` y `codexAppServerGoalResultSkipDirV0` saltan `.gocache`/`.gocache-local` ademas de `.git/.codex/node_modules/vendor`; el test reproduce receipt terminal tras cache voluminosa y verifica que no se proyecta `partial_artifacts_written`. El reintento de campo Sueldos/Orquesta cierra el run historico como `accepted`; el active work residual visto al apagar el servidor de prueba queda cubierto por `BUG-ORQ-20260704-165` |
 | BUG-ORQ-20260704-167 | cerrado | Runtime worktree/write-set guard | al reintentar Orquesta para ampliar la app Sueldos con cargos publicos, partidos y retribuciones, `POST /api/v0/apps/director` fallo con `arrancar_director_http_error` y `codex_app_server_runtime_write_set_guard_snapshot_failed` antes de lanzar el goal; el workspace de producto estaba en `/home/alberto/Trabajo/Sueldos` y el estado temporal del servidor bajo `.orquesta-feature-cargos` quedaba dentro del mismo arbol | el snapshot runtime excluia prefijos de control Orquesta conocidos, pero no una variante nueva `.orquesta-*`; al capturar baseline de todo el worktree para proteger el write-set, podia incluir estado/audit/runtime local del propio servidor y fallar o contaminar la auditoria del producto | request fallido `request-ref-sueldos-cargos-partidos-20260704-002`; reintento validado `request-ref-sueldos-cargos-partidos-20260704-003` con `estado=ok`, `goal_status=running`; state temporal `/home/alberto/Trabajo/Sueldos/.orquesta-feature-cargos`; test `TestCaptureWorktreeSnapshotV0ExcluyeControlFilesPorDefectoV0`; `go test -count=1 ./modulos/orquesta-runtime-worktree`; `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`; `go test -count=1 ./cmd/orquesta-server` | Cierre: `worktreeDefaultControlPrefixesV0` incluye `.orquesta`, lo que activa la regla existente de prefijos versionados y excluye cualquier primer segmento `.orquesta-*` como `runtime_control_dir`; la regresion cubre `.orquesta-feature-cargos/state/orquesta_server_state_v0.json`; el reintento de campo ya no falla en `codex_app_server_runtime_write_set_guard_snapshot_failed` |
 | BUG-ORQ-20260704-168 | cerrado | Goal-first/materialized refs | tras cerrar `BUG-167`, el reintento Sueldos `request-ref-sueldos-cargos-partidos-20260704-003` lanzo goal nuevo `run-spec-...7c369...`, pero `observe_goal` proyecto `goal_status=complete` y `closure_status=blocked` mezclando `artifact_refs`, `required_test_results` y summary del run antiguo `...43c20...`; el unico receipt durable bajo `generated-apps/mapa-de-gasto-publico/docs` tenia `goal_ref=...43c20...` | el escaneo general de refs materializadas usaba una lectura permisiva de `orquesta_goal_result*.json` que aceptaba cualquier receipt terminal `complete` del write-set; la carga terminal estricta ya validaba `goal_ref`, pero el escaneo/repair podia contaminar el estado del run nuevo con artefactos/tests antiguos | request `request-ref-sueldos-cargos-partidos-20260704-003`; observe `request-ref-sueldos-cargos-partidos-observe-20260704-001`; validacion de campo `request-ref-sueldos-cargos-partidos-20260704-004` y observes posteriores sin mezclar refs del run `...43c20...`; receipt antiguo `generated-apps/mapa-de-gasto-publico/docs/orquesta_goal_result_goal-ref-app-director-run-spec-mapa-de-gasto-publico-req-mapa-de-gasto-publico-4.json`; test `TestStackGoalMaterializedRefsSourceV0IgnoraReceiptTerminalDeOtroGoalV0`; `go test -count=1 ./modulos/orquesta-app-codex-stack`; `go test -count=1 ./modulos/orquesta-mcp`; `go test -count=1 ./cmd/orquesta-server` | Cierre: el escaneo de `orquesta_goal_result*.json` usa una lectura scannable ligada al estado: acepta receipts legacy sin `goal_ref`, pero rechaza receipts con `goal_ref` no vacio y distinto al goal actual; la carga terminal estricta se mantiene. El reintento de campo ya no mezclo artefactos/tests antiguos; el bloqueo posterior por alto consumo queda separado en `BUG-ORQ-20260704-165` |
@@ -2383,6 +2443,187 @@ proteccion general contra falsos `ready` sin esa evidencia. Evidencia:
 `TestRuntimeV0ServerShutdownReadyNoBorraSnapshotPrevioActivoV0` y
 `TestRuntimeV0ServerShutdownConflictSinCuerpoConservaSnapshotPrevioActivoV0`.
 
+BUG nuevo `BUG-ORQ-20260704-176` (cerrado):
+Durante la ampliacion de TAREA-8.1, añadir metadata nueva directamente en
+`cmd/orquesta-server/server_env_registry_v0.go` rompio el ratchet T90:
+`TestResidualGoFileBudgetT90V0` fallo porque el fichero subio a 903 lineas
+(`fichero inmanejable >900 lineas`). Causa estructural: el registro central ya
+era un hotspot y no debe recibir nuevas familias completas. Cierre:
+`codex_usage_accounting` y `worktree_snapshot` registran metadata en ficheros
+familiares pequeños (`codex_usage_accounting_env_registry_v0.go` y
+`worktree_snapshot_budget_env_registry_v0.go`), dejando
+`server_env_registry_v0.go` en 878 lineas. Evidencia:
+`go test -count=1 ./cmd/orquesta-server -run 'ResidualGoFileBudget|CodexUsage|WorktreeSnapshot|EnvRegistryAST|EnvVarsOrquestaRatchet' -v`.
+
+BUG nuevo `BUG-ORQ-20260704-177` (cerrado):
+El toolbelt y las instrucciones de agentes anunciaban
+`POST /api/v0/codebase/query`, pero `buildServerAppHandlerV0` no montaba esa
+ruta directa; solo exponia `codebase/status`. En servidor real temporal, la
+peticion caia al handler general y devolvia 400, aunque el binding MCP de query
+existia. Causa estructural: divergencia entre contrato publicado y wiring HTTP
+directo del stack. Cierre: `cmd/orquesta-server/stack.go` registra
+`orquestamcp.NewMCPCodebaseQueryHTTPHandlerV0` cuando existe
+`MCPTransportBindings.CodebaseQuery`. Evidencia:
+`TestBuildServerAppHandlerV0CodebaseQueryPublicoUsaBindingDirecto` y smoke
+Orquesta temporal `codebase_query=passed`.
+
+BUG nuevo `BUG-ORQ-20260704-178` (cerrado):
+El broker `fallback_rg` descartaba el scope explicito `"."` y caia a los
+defaults `cmd`, `modulos`, `docs`, `scripts`, `AGENTS.md`. En apps externas o
+proyectos temporales con codigo en la raiz, `POST /api/v0/codebase/query`
+devolvia `code_context_proveedor_error` aunque el fichero existiera. Causa
+estructural: normalizacion demasiado estricta de scopes recuperables; `"."`
+debe significar raiz del proyecto, no default canonico del repo Orquesta.
+Cierre: `serverRGCodeContextScopesV0` conserva `"."` y sigue rechazando scopes
+vacios, `..` y rutas absolutas. Evidencia:
+`TestServerRGCodeContextProviderV0ScopePuntoBuscaRaizDelProyecto` y smoke
+Orquesta temporal con `scope:["."]` -> `codebase_query=passed`.
+
+BUG nuevo `BUG-ORQ-20260704-179` (cerrado):
+Durante el smoke Orquesta de config canonica de limites, `/api/v0/server/status`
+publico devolvia `ORQUESTA_SERVER_DRAIN_MAX_COMMANDS` como `redacted` y
+`sensitive=true`, aunque es un limite numerico publico de supervisor. Causa
+estructural: la redaccion publica por fragmentos trataba cualquier clave con
+`COMMAND` como sensible y atrapaba tambien `*_MAX_COMMANDS`. Cierre: la capa
+publica de `orquesta-server` conserva la redaccion de comandos reales, pero
+exceptua claves numericas `*_MAX_COMMANDS` no marcadas explicitamente como
+sensibles. Evidencia: `TestPublicServerEffectiveConfigV0NoRedactaLimitesNumericosMaxCommandsV0`
+y smoke Orquesta temporal de config de limites.
+
+BUG nuevo `BUG-ORQ-20260704-180` (cerrado):
+Durante el smoke real de `orquesta-server start --config`, el comando devolvia
+`readiness_timeout` aunque el daemon quedaba vivo, `running` y
+`startup_ready`. Causa estructural: `start` usaba readiness estricta como unica
+señal de arranque, y esa readiness puede responder 503 cuando hay diagnosticos
+de conectores externos degradados (`external_work_goal_backend_required`) aunque
+la disponibilidad del servidor ya sea `running/server_ready`. Cierre:
+`serverReadinessOKV0` acepta para el arranque el payload 503 con
+`startup_ready=true`, `status=running` y `availability_status=running`; la
+readiness estricta sigue devolviendo 503 para consumidores que necesiten todos
+los conectores listos. Evidencia:
+`TestServerReadinessOKV0AceptaStartupReadyConReadinessDegradadaV0` y smoke real
+`orquesta_start_config_snapshot_smoke=passed`.
+
+BUG nuevo `BUG-ORQ-20260704-181` (cerrado):
+Durante el smoke real de `rails_security` + `egress_sanitizer` con
+`orquesta-server start --config`, el daemon hijo publicaba en `/status` las
+claves de rails (`ORQUESTA_SECURITY_MODE`, `ORQUESTA_RAILS_MODE` y
+`ORQUESTA_DETAIL_PROHIBITED_RAILS*`) con `source=explicit`, aunque el valor
+procedia del snapshot canonico de `orquesta.config.json`. Causa estructural:
+`start` proyecta defaults/derivados al entorno del daemon para estabilizar el
+arranque, y el proceso hijo no distinguia una env proyectada por el padre de un
+override manual. Cierre: `configSettingSourceFromConfigOrProjectConfigV0`
+reclasifica como `config_file` solo cuando el proceso lee el snapshot daemon
+`state/config-snapshots/orquesta.config.json` y la env coincide con el valor
+efectivo normalizado del fichero; un `run --config` manual con env explicita
+sigue apareciendo como `explicit`. Evidencia:
+`TestServerEffectiveConfigV0ConservaFuenteFicheroTrasProyeccionDaemonRails`,
+focal `Rails|EgressSanitizer|EnvRegistryAST|EnvVarsOrquestaRatchet|ResidualGoFileBudget|DaemonStartEnvironment`
+y smoke real `orquesta_rails_egress_config_smoke=passed`.
+
+BUG nuevo `BUG-ORQ-20260704-182` (cerrado):
+Durante la primera ejecucion real de `scripts/orquesta_auditoria_codigo.sh`, la
+herramienta recorria `**/*.go` desde la raiz del repositorio y solo despues
+filtraba `cmd/` y `modulos/`; en un workspace grande eso podia dejar la
+auditoria viva demasiado tiempo antes de producir evidencia. Causa
+estructural: auditoria de codigo implementada como barrido global, no como
+consulta acotada al write-set canonico del repo. Cierre: el script usa
+`iter_project_go_files()` y solo camina `cmd/` y `modulos/` desde el origen.
+Evidencia: `scripts/test_orquesta_auditoria_codigo.sh` y
+`scripts/test_orquesta_smoke_nightly.sh`.
+
+BUG nuevo `BUG-ORQ-20260704-183` (cerrado):
+Durante la implementacion de la preparacion automatica del analizador para
+goals de codigo, la auditoria fresca `scripts/orquesta_auditoria_codigo.sh`
+detecto que `helper_duplicate_definitions` subia de 288 a 289 por introducir un
+nuevo helper `compact*` local en `orquesta-app-codex-stack`. Causa estructural:
+un parche nuevo volvia a copiar la familia de helpers que TAREA-9 precisamente
+quiere reducir. Cierre: renombrado el helper local a
+`uniqueCodeContextGoalStringsV0` para no incrementar la familia `compact*` y
+mantener el ratchet de helpers. Evidencia: auditoria fresca posterior y focales
+de `orquesta-app-codex-stack`.
+
+BUG nuevo `BUG-ORQ-20260704-184` (cerrado):
+Durante la verificacion de TAREA-9, `scripts/orquesta_auditoria_codigo.sh`
+cayo a `docs/auditoria_codigo_deadcode_2026-07-04.txt` aunque `deadcode`
+estaba instalado en `/home/alberto/go/bin/deadcode`: el script solo miraba
+`PATH`, no `GOBIN`/`GOPATH/bin`. Causa estructural: una herramienta Go
+instalada de forma canonica podia quedar fuera de la auditoria viva y reactivar
+el snapshot historico de 1188 candidatos como falso verde. Cierre: el auditor
+resuelve `deadcode` por `PATH`, `GOBIN` y `GOPATH/bin`, con test que fuerza
+`GOPATH/bin/deadcode` sin `PATH`. Evidencia:
+`scripts/test_orquesta_auditoria_codigo.sh` y auditoria fresca
+`code_audit_source=deadcode_tool`, `deadcode_candidates=1228`,
+`helper_duplicate_definitions=288`, `orphan_modules=1`,
+`large_files_over_800=17`.
+
+BUG nuevo `BUG-ORQ-20260704-185` (cerrado):
+El nightly smoke aceptaba reportes de auditoria incompletos como no regresion:
+si faltaban metricas, el ratchet convertia ausentes en `0`, y tampoco validaba
+`schema_version` ni rechazaba `deadcode_source=snapshot_file`. Causa
+estructural: el ratchet comparaba numeros sin validar la calidad del reporte,
+con riesgo de publicar verde una auditoria obsoleta o corrupta. Cierre:
+`scripts/orquesta_smoke_nightly.sh` exige schema
+`orquesta_code_audit.v0`, metricas requeridas enteras y rechaza fuentes
+`snapshot_file`, `unavailable` y `deadcode_tool_failed`. Evidencia:
+`scripts/test_orquesta_smoke_nightly.sh` cubre regresion, snapshot, schema
+invalido y metricas ausentes.
+
+BUG nuevo `BUG-ORQ-20260704-186` (cerrado):
+El runtime Gemini no-goal podia quedar con `OutputFormat` vacio aunque Claude y
+el backend goal Gemini usan `text` por defecto. Causa estructural: dos caminos
+de configuracion del mismo conector no compartian default operativo. Cierre:
+`geminiRuntimeConfigV0` usa `envOrDefaultV0(ORQUESTA_GEMINI_OUTPUT_FORMAT,
+"text")` y se anade test especifico. Evidencia:
+`GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestGeminiRuntimeConfigV0|GoalBackend|Claude|Gemini'`.
+
+BUG nuevo `BUG-ORQ-20260704-187` (cerrado):
+El guard de `external_work` OPES y el descubrimiento del topic registry
+inyectaban por defecto `/home/alberto/Trabajo/OPES` cuando no habia
+`ORQUESTA_OPES_PROJECT_WORKDIR`. Causa estructural: una ruta local de una
+instalacion concreta se habia convertido en default de composicion, reduciendo
+portabilidad hexagonal del conector. Cierre: ambos caminos consumen ahora la
+fuente canonica `opes.project_workdir` de `orquesta.config.json` o su env
+`ORQUESTA_OPES_PROJECT_WORKDIR`; si no existe, no inventan ruta local y la
+regla OPES queda inactiva hasta configuracion explicita. Evidencia:
+`GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestExternalWorkRunProjectWorkDirGuardConfigV0|TestOPESTopicRegistryConfig|TestOPESTopicRegistryEffectiveConfig|TestServerConfigFromEnvV0ContextoOPES|TestServerConfigFromEnvV0PermiteOPES'`
+y `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestExternalWorkRunProjectWorkDirGuard'`.
+
+BUG nuevo `BUG-ORQ-20260704-188` (cerrado parcial goal-first):
+Los prompts goal-first de Claude/Gemini estaban fijados en español dentro del
+adaptador runtime, sin forma de elegir idioma desde composicion. Causa
+estructural: el contrato i18n existia para docs/errores, pero el adaptador de
+proveedor conservaba textos operativos monolingues. Cierre acotado: se anade
+`PromptLocale` a los backends goal-first Claude/Gemini, builders
+`Build*GoalPromptWithLocaleV0`, protocolo durable localizado `es-ES/en-US` y
+config canonica `goal_backend.prompt_locale` en `orquesta.config.json`
+cableada a `file_control` y `process`, sin nuevas variables `ORQUESTA_*`.
+Default compatible: `es-ES`. Evidencia:
+`GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-runtime-gemini ./cmd/orquesta-server -run 'Test(Build(Claude|Gemini)GoalPromptWithLocale|ClaudeGoalBackendV0Launch|GeminiGoalBackendV0Launch|ServerGoalBackendFromEnvV0(Claude|Gemini)FileControl|ClaudeRuntimeConfigV0|GeminiRuntimeConfigV0)'`.
+Ratchet de envs y auditoria de deuda conservados: `EnvVarsOrquestaRatchet`
+verde, `scripts/orquesta_metricas_deuda.sh --json` reporta
+`env_vars_orquesta=512` sin aumento por BUG-188, y
+`scripts/orquesta_auditoria_codigo.sh` mantiene
+`deadcode_candidates=1228` / `helper_duplicate_definitions=288`.
+Residual: prompts legacy de agente Claude/Gemini (`Build*AgentPrompt*`) siguen
+en español y deben tratarse en otra fila si se exige i18n transversal fuera de
+goal-first.
+
+BUG nuevo `BUG-ORQ-20260704-189` (cerrado):
+El smoke REST `scripts/smoke_orquesta_server_rest_director.sh` fallaba en
+readiness con HTTP 503 aunque el servidor estuviera arrancado con
+`startup_ready=true`, `status=running` y `availability_status=running`. Causa
+estructural: el harness shell seguia usando readiness estricta HTTP 200 como
+unica senal de arranque, mientras el contrato vigente permite readiness
+operativa degradada por conectores externos y los tests Go ya aceptaban ese
+caso para `start`. Cierre: `scripts/lib/smoke_common.sh` anade
+`smoke_orquesta_readiness_ok`, que acepta 2xx o JSON 503 con startup listo y
+proceso running; el smoke REST usa ese helper. Evidencia:
+`GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestSmokeCommon(Readiness|Shutdown)'`
+y `ORQUESTA_LEGACY_DIRECTOR_LOOP_SMOKE_CONFIRM=1 GOFLAGS=-buildvcs=false ./scripts/smoke_orquesta_server_rest_director.sh`
+verde con `POST /api/v0/apps/director -> HTTP 200`, stats con
+`agents_started=1`, progress/usage verificados y parada limpia.
+
 ## Pendientes de analisis agrupado
 
 - Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
@@ -2396,3 +2637,7 @@ proteccion general contra falsos `ready` sin esa evidencia. Evidencia:
 - Revalidar con smokes OPES temporales largos de audio/visual bajo entorno
   aislado; el contrato ejecutable de supuestos practicos ya publica rework
   causal por faltante y queda cubierto en BUG-ORQ-20260630-027.
+- Decidir retirada o implementacion real de `app_server_proxy`, hoy conservado
+  como valor historico de diagnostico pero no backend operativo.
+- Internacionalizar prompts legacy de agentes Claude/Gemini si el contrato i18n
+  se extiende tambien a flujos no goal-first.

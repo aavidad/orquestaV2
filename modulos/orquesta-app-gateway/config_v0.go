@@ -44,6 +44,7 @@ type ConfigV0 struct {
 	AutoprogrammingEstadoVivoSource                orquestaestadovivo.FuenteEvidenciaEstadoPortV0
 	AutoprogrammingIdleSelfImprovementBudgetSource orquestamcp.MCPAutoprogrammingIdleSelfImprovementBudgetSourceV0
 	AutoprogrammingStatusDiagnostics               []orquestamcp.MCPAutoprogrammingDiagnosticV0
+	AutoprogrammingGoalProgressPolicy              orquestamcp.MCPAutoprogrammingGoalProgressPolicyV0
 	AllowLegacyAutoprogrammingSupervisorActions    bool
 	GovernanceCatalog                              orquestagovernance.GovernanceCatalogProviderV0
 	OperatorQuery                                  operator.OperatorMCPDirectedQueryPortV0

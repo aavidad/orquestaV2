@@ -24,6 +24,7 @@ func TestPublicErrorCatalogV0DeclaraMetadataYCodigosUnicos(t *testing.T) {
 		PublicErrorTransportV0,
 		PublicErrorRunRefRequiredV0,
 		PublicErrorRunControlGoalBackendActiveV0,
+		PublicErrorConfigProjectionMismatchV0,
 	} {
 		if !seen[code] {
 			t.Fatalf("catalogo no contiene %s", code)

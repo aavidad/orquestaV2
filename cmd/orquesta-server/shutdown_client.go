@@ -41,8 +41,9 @@ type serverShutdownClientActiveWorkV0 struct {
 }
 
 type serverShutdownClientOptionsV0 struct {
-	Forced bool
-	Reason string
+	Forced     bool
+	Reason     string
+	ConfigPath string
 }
 
 const (

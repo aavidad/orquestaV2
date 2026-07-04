@@ -53,6 +53,16 @@ func TestMCPCodebaseQueryInputSchemaV0ExponeCamposYEnum(t *testing.T) {
 	if !containsMCPStringTestV0(enums["query_kind"], orquestacontext.CodeContextQueryKindRepoMapV0) {
 		t.Fatalf("query_kind no expone repo_map: %+v", enums["query_kind"])
 	}
+	for _, expected := range []string{
+		orquestacontext.CodeContextQueryKindCallersV0,
+		orquestacontext.CodeContextQueryKindImportsV0,
+		orquestacontext.CodeContextQueryKindModuleExportsV0,
+		orquestacontext.CodeContextQueryKindRelevantSnippetsV0,
+	} {
+		if !containsMCPStringTestV0(enums["query_kind"], expected) {
+			t.Fatalf("query_kind no expone %s: %+v", expected, enums["query_kind"])
+		}
+	}
 }
 
 func TestMCPCodebaseQueryToolExecutorV0RellenaRequestedByPorDefecto(t *testing.T) {

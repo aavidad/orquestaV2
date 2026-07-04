@@ -53,6 +53,33 @@ func TestCodexToolbeltSourceV0DerivaMCPDeRegistroYPublicaDirectedQuery(t *testin
 	}
 }
 
+func TestCodexToolbeltSourceV0PublicaCodeContextQueryComoMCPLocal(t *testing.T) {
+	entry, ok := codexToolbeltMCPEntryForTestV0(orquestamcp.MCPCodebaseQueryToolNameV0)
+	if !ok {
+		t.Fatalf("toolbelt MCP no publica %s", orquestamcp.MCPCodebaseQueryToolNameV0)
+	}
+	if entry.Contract != codexToolbeltContractCodeContextV0 {
+		t.Fatalf("contract=%q", entry.Contract)
+	}
+	if entry.Transport != codexToolbeltTransportLocalMCPV0 {
+		t.Fatalf("transport=%q", entry.Transport)
+	}
+	if entry.ResourceURI != orquestamcp.MCPCodebaseQueryResourceURIV0 {
+		t.Fatalf("resource_uri=%q", entry.ResourceURI)
+	}
+	formatted := strings.Join(formatCodexToolbeltMCPEntriesV0([]codexToolbeltMCPEntryV0{entry}), "\n")
+	for _, forbidden := range []string{"POST ", orquestamcp.MCPCodebaseQueryHTTPPathV0, "http://", "https://", "127.0.0.1"} {
+		if strings.Contains(formatted, forbidden) {
+			t.Fatalf("entrada MCP de code context depende de HTTP local %q: %s", forbidden, formatted)
+		}
+	}
+	for _, want := range []string{codexToolbeltContractCodeContextV0, codexToolbeltTransportLocalMCPV0, orquestamcp.MCPCodebaseQueryResourceURIV0} {
+		if !strings.Contains(formatted, want) {
+			t.Fatalf("entrada MCP no contiene metadata %q: %s", want, formatted)
+		}
+	}
+}
+
 func TestCodexToolbeltSourceV0NoFiltraDatosSensiblesEnHints(t *testing.T) {
 	joined := codexToolbeltHTTPHintV0() + "\n" + codexToolbeltMCPHintV0()
 	for _, forbidden := range []string{"HOME", "token", "secret", "prompt completo", "transcript", "/home/"} {
@@ -80,10 +107,15 @@ func codexToolbeltHTTPPathsForTestV0() map[string]bool {
 }
 
 func codexToolbeltMCPNameForTestV0(name string) bool {
+	_, ok := codexToolbeltMCPEntryForTestV0(name)
+	return ok
+}
+
+func codexToolbeltMCPEntryForTestV0(name string) (codexToolbeltMCPEntryV0, bool) {
 	for _, entry := range codexToolbeltMCPEntriesV0() {
 		if entry.Name == name {
-			return true
+			return entry, true
 		}
 	}
-	return false
+	return codexToolbeltMCPEntryV0{}, false
 }

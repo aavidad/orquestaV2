@@ -18,6 +18,11 @@ result_file="$results_dir/resultado_${date_id}.json"
 log_file="$logs_dir/${run_id}.log"
 retention_days="${ORQUESTA_NIGHTLY_RETENTION_DAYS:-30}"
 smoke_script="${ORQUESTA_NIGHTLY_SMOKE_SCRIPT:-$repo_root/scripts/smoke_goal_first_app_server_real.sh}"
+code_audit_enabled="${ORQUESTA_NIGHTLY_CODE_AUDIT:-1}"
+code_audit_script="${ORQUESTA_NIGHTLY_CODE_AUDIT_SCRIPT:-$repo_root/scripts/orquesta_auditoria_codigo.sh}"
+code_audit_dir="$results_dir/code_audit"
+code_audit_json=""
+code_audit_sqlite=""
 mode="preflight"
 phase="init"
 finalized="0"
@@ -57,6 +62,8 @@ write_result_json() {
   finished_epoch="$(date -u +%s)"
   duration_seconds="$((finished_epoch - started_epoch))"
 
+  CODE_AUDIT_ENABLED="$code_audit_enabled" \
+  CODE_AUDIT_JSON_FILE="$code_audit_json" \
   python3 - \
     "$result_file" \
     "$log_file" \
@@ -118,6 +125,12 @@ for raw in lines:
         continue
     if "smoke_goal_first_app_server_preflight=ok" in line:
         add_phase("preflight_ok")
+    if line.startswith("code_audit_json="):
+        add_phase("code_audit_reported")
+    if line.startswith("code_audit_ratchet=ok"):
+        add_phase("code_audit_ratchet_ok")
+    if line.startswith("code_audit_ratchet=failed"):
+        add_phase("code_audit_ratchet_failed")
     if "smoke_goal_first_app_server_preflight=blocked" in line:
         add_phase("preflight_blocked")
     if "Codex app-server preparado" in line or "daemon Codex app-server accesible" in line:
@@ -176,6 +189,21 @@ payload = {
         "the wrapper never commits repository changes",
     ],
 }
+
+code_audit = {"enabled": os.environ.get("CODE_AUDIT_ENABLED", "1") == "1"}
+code_audit_json = os.environ.get("CODE_AUDIT_JSON_FILE", "").strip()
+if code_audit_json:
+    code_audit["json_file"] = code_audit_json
+    try:
+        with open(code_audit_json, encoding="utf-8") as fh:
+            audit_payload = json.load(fh)
+        code_audit["schema_version"] = audit_payload.get("schema_version", "")
+        code_audit["deadcode_source"] = (audit_payload.get("deadcode") or {}).get("source", "")
+        code_audit["metrics"] = audit_payload.get("metrics") or {}
+    except (OSError, json.JSONDecodeError) as exc:
+        code_audit["load_error"] = str(exc)
+if code_audit["enabled"] or code_audit_json:
+    payload["code_audit"] = code_audit
 
 tmp = result_file + ".tmp"
 with open(tmp, "w", encoding="utf-8") as fh:
@@ -272,9 +300,145 @@ if [[ -n "${ORQUESTA_OPES_BASE_URL:-}" ||
   finish 2
 fi
 
+run_code_audit_phase() {
+  if [[ "$code_audit_enabled" != "1" ]]; then
+    echo "code_audit=disabled" | tee -a "$log_file"
+    return 0
+  fi
+  if [[ ! -x "$code_audit_script" ]]; then
+    echo "code_audit_unavailable=$code_audit_script" | tee -a "$log_file" >&2
+    phase="code_audit_unavailable"
+    return 2
+  fi
+
+  phase="code_audit_started"
+  mkdir -p "$code_audit_dir" || {
+    echo "code_audit_results_dir_unavailable=$code_audit_dir" | tee -a "$log_file" >&2
+    return 2
+  }
+
+  local audit_output audit_status line
+  audit_output="$(
+    ORQUESTA_AUDIT_RUN_ID="$run_id" \
+      "$code_audit_script" --out-dir "$code_audit_dir" 2>&1
+  )"
+  audit_status=$?
+  printf '%s\n' "$audit_output" | tee -a "$log_file"
+  while IFS= read -r line; do
+    case "$line" in
+      code_audit_json=*)
+        code_audit_json="${line#code_audit_json=}"
+        ;;
+      code_audit_sqlite=*)
+        code_audit_sqlite="${line#code_audit_sqlite=}"
+        ;;
+    esac
+  done <<<"$audit_output"
+  if [[ "$audit_status" != "0" ]]; then
+    phase="code_audit_failed"
+    return "$audit_status"
+  fi
+  if [[ -z "$code_audit_json" || ! -f "$code_audit_json" ]]; then
+    echo "code_audit_json_missing=$code_audit_json" | tee -a "$log_file" >&2
+    phase="code_audit_json_missing"
+    return 1
+  fi
+
+  phase="code_audit_ratchet"
+  python3 - "$results_dir" "$result_file" "$code_audit_json" <<'PY' | tee -a "$log_file"
+import glob
+import json
+import os
+import sys
+
+results_dir, result_file, current_json = sys.argv[1:4]
+
+with open(current_json, encoding="utf-8") as fh:
+    current = json.load(fh)
+current_metrics = current.get("metrics") or {}
+
+if current.get("schema_version") != "orquesta_code_audit.v0":
+    print("code_audit_ratchet=invalid")
+    print("code_audit_invalid_reason=schema_version")
+    raise SystemExit(1)
+
+deadcode_source = (current.get("deadcode") or {}).get("source", "")
+if deadcode_source in {"snapshot_file", "unavailable", "deadcode_tool_failed"}:
+    print("code_audit_ratchet=invalid")
+    print("code_audit_invalid_reason=deadcode_source:" + str(deadcode_source))
+    raise SystemExit(1)
+
+required_keys = ("deadcode_candidates", "helper_duplicate_definitions")
+missing = [key for key in required_keys if key not in current_metrics]
+if missing:
+    print("code_audit_ratchet=invalid")
+    print("code_audit_invalid_reason=missing_metrics:" + ",".join(missing))
+    raise SystemExit(1)
+
+try:
+    current_values = {key: int(current_metrics[key]) for key in required_keys}
+except (TypeError, ValueError):
+    print("code_audit_ratchet=invalid")
+    print("code_audit_invalid_reason=non_integer_metrics")
+    raise SystemExit(1)
+
+last_green = None
+current_result_path = os.path.realpath(result_file)
+for path in sorted(glob.glob(os.path.join(results_dir, "resultado_*.json"))):
+    if os.path.realpath(path) == current_result_path:
+        continue
+    try:
+        with open(path, encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        continue
+    if payload.get("status") != "ok":
+        continue
+    metrics = (payload.get("code_audit") or {}).get("metrics") or {}
+    if "deadcode_candidates" in metrics and "helper_duplicate_definitions" in metrics:
+        last_green = (path, metrics)
+
+if not last_green:
+    print("code_audit_ratchet=unavailable")
+    raise SystemExit(0)
+
+green_path, green_metrics = last_green
+regressions = []
+for key in required_keys:
+    current_value = current_values[key]
+    green_value = int(green_metrics.get(key, 0))
+    if current_value > green_value:
+        regressions.append((key, green_value, current_value))
+
+if regressions:
+    print("code_audit_ratchet=failed")
+    print("code_audit_ratchet_baseline=" + os.path.basename(green_path))
+    for key, green_value, current_value in regressions:
+        print(f"code_audit_ratchet_regression={key}:{green_value}->{current_value}")
+    raise SystemExit(1)
+
+print("code_audit_ratchet=ok")
+print("code_audit_ratchet_baseline=" + os.path.basename(green_path))
+PY
+  local ratchet_status=${PIPESTATUS[0]}
+  if [[ "$ratchet_status" != "0" ]]; then
+    phase="code_audit_ratchet_failed"
+    return "$ratchet_status"
+  fi
+  phase="code_audit_completed"
+  return 0
+}
+
 echo "orquesta_smoke_nightly_mode=$mode"
 echo "orquesta_smoke_nightly_result=$result_file"
 echo "orquesta_smoke_nightly_log=$log_file"
+
+: >"$log_file"
+run_code_audit_phase
+audit_status=$?
+if [[ "$audit_status" != "0" ]]; then
+  finish "$audit_status"
+fi
 
 if [[ "$mode" == "real" ]]; then
   phase="real_started"
@@ -285,7 +449,7 @@ if [[ "$mode" == "real" ]]; then
     export ORQUESTA_OPES_BASE_URL=""
     export OPES_BASE_URL=""
     "$smoke_script"
-  ) > >(tee "$log_file") 2>&1
+  ) > >(tee -a "$log_file") 2>&1
   smoke_status=$?
 else
   phase="preflight_started"
@@ -294,7 +458,7 @@ else
     export ORQUESTA_OPES_BASE_URL=""
     export OPES_BASE_URL=""
     "$smoke_script"
-  ) > >(tee "$log_file") 2>&1
+  ) > >(tee -a "$log_file") 2>&1
   smoke_status=$?
 fi
 

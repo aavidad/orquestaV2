@@ -238,16 +238,3 @@ func aceptacionContenedorFalseV0(value any) bool {
 	accepted, ok := value.(bool)
 	return ok && !accepted
 }
-
-func HasDeploymentPlanIssueV0(err error, code string) bool {
-	var contractErr DeploymentPlanContractV0Error
-	if !errors.As(err, &contractErr) {
-		return false
-	}
-	for _, issue := range contractErr.Issues {
-		if issue.Code == code {
-			return true
-		}
-	}
-	return false
-}

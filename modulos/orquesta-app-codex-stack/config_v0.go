@@ -52,6 +52,7 @@ type ConfigV0 struct {
 	AutoprogrammingStatusDiagnostics               []orquestamcp.MCPAutoprogrammingDiagnosticV0
 	AutoprogrammingIdleSelfImprovementBudgetSource orquestamcp.MCPAutoprogrammingIdleSelfImprovementBudgetSourceV0
 	AutoprogrammingGoalProgressPolicy              orquestamcp.MCPAutoprogrammingGoalProgressPolicyV0
+	ConfigProjectionSettings                       []orquestamcp.MCPConfigProjectionSettingV0
 	DomainWork                                     orquestamcp.MCPDomainWorkExecutorPortV0
 	CodeContext                                    orquestacontext.CodeContextQueryPortV0
 	CodeContextToolLeases                          orquestacontext.CodeContextToolLeaseListPortV0
@@ -145,6 +146,7 @@ type GeminiRuntimeConfigV0 struct {
 	Model          string
 	ApprovalMode   string
 	OutputFormat   string
+	PromptLocale   string
 	ExtraArgs      []string
 	PromptHints    []string
 }
@@ -160,6 +162,7 @@ type ClaudeRuntimeConfigV0 struct {
 	PermissionMode string
 	OutputFormat   string
 	Effort         string
+	PromptLocale   string
 	ExtraArgs      []string
 	PromptHints    []string
 }

@@ -72,12 +72,14 @@ type ConfigV0 struct {
 	EffectiveConfig                   ServerEffectiveConfigV0
 	RuntimeIdentity                   ServerRuntimeIdentityV0
 	ProjectWorkDir                    string
+	ProjectConfigFilePath             string
 	RuntimeWorkDir                    string
 	IdleSelfImprovementProjectWorkDir string
 	ShutdownSignalPolicy              ShutdownSignalPolicyV0
 	TickInterval                      time.Duration
 	ShutdownGracePeriod               time.Duration
 	SupervisorCommand                 orquestarunsupervisor.RunSupervisorCommandV0
+	AutoprogrammingGoalProgressPolicy AutoprogrammingGoalProgressPolicyConfigV0
 	IdleSelfImprovementDisabled       bool
 	IdleSelfImprovementIdleDisabled   bool
 	IdleSelfImprovementAfter          time.Duration
@@ -121,6 +123,12 @@ type ControlPlaneConfigV0 struct {
 	PublicReason      string
 }
 
+type AutoprogrammingGoalProgressPolicyConfigV0 struct {
+	CheckpointOnlyHighConsumptionTokens int64
+	CheckpointOnlyMaxWaitSeconds        int64
+	NoCheckpointWarningMaxWaitSeconds   int64
+}
+
 func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	config.Addr = strings.TrimSpace(config.Addr)
 	if config.Addr == "" {
@@ -153,6 +161,7 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	config.EffectiveConfig = NormalizeServerEffectiveConfigV0(config.EffectiveConfig)
 	config.RuntimeIdentity = NormalizeServerRuntimeIdentityV0(config.RuntimeIdentity)
 	config.ProjectWorkDir = strings.TrimSpace(config.ProjectWorkDir)
+	config.ProjectConfigFilePath = strings.TrimSpace(config.ProjectConfigFilePath)
 	config.RuntimeWorkDir = strings.TrimSpace(config.RuntimeWorkDir)
 	config.IdleSelfImprovementProjectWorkDir = strings.TrimSpace(config.IdleSelfImprovementProjectWorkDir)
 	if config.IdleSelfImprovementProjectWorkDir == "" {
@@ -177,6 +186,7 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	if config.SupervisorCommand.MaxTicks <= 0 {
 		config.SupervisorCommand.MaxTicks = DefaultSupervisorMaxTicksV0
 	}
+	config.AutoprogrammingGoalProgressPolicy = NormalizeAutoprogrammingGoalProgressPolicyConfigV0(config.AutoprogrammingGoalProgressPolicy)
 	if config.IdleSelfImprovementDisabled {
 		config.IdleSelfImprovementIdleDisabled = true
 		config.IdleSelfImprovementAfter = 0
@@ -257,6 +267,21 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	}
 	config.SelfWatchdog = NormalizeSelfWatchdogConfigV0(config.SelfWatchdog)
 	return config
+}
+
+func NormalizeAutoprogrammingGoalProgressPolicyConfigV0(
+	policy AutoprogrammingGoalProgressPolicyConfigV0,
+) AutoprogrammingGoalProgressPolicyConfigV0 {
+	if policy.CheckpointOnlyHighConsumptionTokens < 0 {
+		policy.CheckpointOnlyHighConsumptionTokens = 0
+	}
+	if policy.CheckpointOnlyMaxWaitSeconds < 0 {
+		policy.CheckpointOnlyMaxWaitSeconds = 0
+	}
+	if policy.NoCheckpointWarningMaxWaitSeconds < 0 {
+		policy.NoCheckpointWarningMaxWaitSeconds = 0
+	}
+	return policy
 }
 
 func ValidateConfigV0(config ConfigV0) error {

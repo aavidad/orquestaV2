@@ -18,19 +18,47 @@ const (
 )
 
 func serverSecurityModeEffectiveValueV0() string {
-	return orquestarails.NormalizeSecurityModeV0(envOrDefaultV0(envSecurityModeV0, securityModeServerDefaultV0))
+	return serverSecurityModeEffectiveValueFromProjectConfigFileV0(serverProjectConfigFileV0{})
 }
 
 func serverRailsModeEffectiveValueV0() string {
-	return orquestarails.NormalizeRailsModeV0(envOrDefaultV0(envRailsModeV0, railsModeServerDefaultV0))
+	return serverRailsModeEffectiveValueFromProjectConfigFileV0(serverProjectConfigFileV0{})
 }
 
 func serverDetailRailsEffectiveValueV0() string {
-	return "off"
+	return serverDetailRailsEffectiveValueFromProjectConfigFileV0(serverProjectConfigFileV0{})
 }
 
 func serverDetailRailsScopeEffectiveValueV0() string {
-	return envOrDefaultV0(detailProhibitedRailsScopeEnvV0, detailProhibitedRailsScopeServerDefaultV0)
+	return serverDetailRailsScopeEffectiveValueFromProjectConfigFileV0(serverProjectConfigFileV0{})
+}
+
+func serverSecurityModeEffectiveValueFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
+	return orquestarails.NormalizeSecurityModeV0(stringProjectConfigOrEnvOrDefaultV0(
+		envSecurityModeV0,
+		config.RailsSecurity.SecurityMode,
+		securityModeServerDefaultV0,
+	))
+}
+
+func serverRailsModeEffectiveValueFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
+	return orquestarails.NormalizeRailsModeV0(stringProjectConfigOrEnvOrDefaultV0(
+		envRailsModeV0,
+		config.RailsSecurity.RailsMode,
+		railsModeServerDefaultV0,
+	))
+}
+
+func serverDetailRailsEffectiveValueFromProjectConfigFileV0(serverProjectConfigFileV0) string {
+	return "off"
+}
+
+func serverDetailRailsScopeEffectiveValueFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
+	return stringProjectConfigOrEnvOrDefaultV0(
+		detailProhibitedRailsScopeEnvV0,
+		config.RailsSecurity.DetailProhibitedRailsScope,
+		detailProhibitedRailsScopeServerDefaultV0,
+	)
 }
 
 func serverEnvironmentWithDetailRailsDefaultV0(env []string) []string {

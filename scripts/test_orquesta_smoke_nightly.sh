@@ -8,6 +8,7 @@ trap 'rm -rf "$tmp_root"' EXIT
 results_dir="$tmp_root/results"
 fake_preflight="$tmp_root/fake-preflight.sh"
 fake_real="$tmp_root/fake-real.sh"
+fake_audit="$tmp_root/fake-audit.sh"
 
 cat >"$fake_preflight" <<'SH'
 #!/usr/bin/env bash
@@ -22,9 +23,74 @@ echo "goal_backend=app_server_tmux"
 SH
 chmod +x "$fake_preflight"
 
+cat >"$fake_audit" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+out_dir=""
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --out-dir)
+      out_dir="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+if [[ -z "$out_dir" ]]; then
+  echo "out-dir missing" >&2
+  exit 2
+fi
+mkdir -p "$out_dir"
+json_file="$out_dir/fake-audit-${ORQUESTA_AUDIT_RUN_ID:-run}.json"
+sqlite_file="$out_dir/fake-audit-${ORQUESTA_AUDIT_RUN_ID:-run}.sqlite"
+deadcode="${ORQUESTA_FAKE_AUDIT_DEADCODE:-2}"
+helpers="${ORQUESTA_FAKE_AUDIT_HELPERS:-3}"
+source="${ORQUESTA_FAKE_AUDIT_SOURCE:-fake}"
+schema="${ORQUESTA_FAKE_AUDIT_SCHEMA:-orquesta_code_audit.v0}"
+metrics_mode="${ORQUESTA_FAKE_AUDIT_METRICS_MODE:-complete}"
+python3 - "$json_file" "$deadcode" "$helpers" "$source" "$schema" "$metrics_mode" <<'PY'
+import json
+import sys
+
+path, deadcode, helpers, source, schema, metrics_mode = sys.argv[1:7]
+payload = {
+    "schema_version": schema,
+    "deadcode": {"source": source},
+}
+if metrics_mode == "complete":
+    payload["metrics"] = {
+        "deadcode_candidates": int(deadcode),
+        "helper_duplicate_definitions": int(helpers),
+        "orphan_modules": 0,
+        "large_files_over_800": 0,
+    }
+elif metrics_mode == "missing_deadcode":
+    payload["metrics"] = {
+        "helper_duplicate_definitions": int(helpers),
+        "orphan_modules": 0,
+        "large_files_over_800": 0,
+    }
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, sort_keys=True)
+    fh.write("\n")
+PY
+: >"$sqlite_file"
+echo "code_audit_json=$json_file"
+echo "code_audit_sqlite=$sqlite_file"
+echo "code_audit_source=$source"
+echo "code_audit_deadcode_candidates=$deadcode"
+echo "code_audit_helper_duplicate_definitions=$helpers"
+echo "code_audit_orphan_modules=0"
+echo "code_audit_large_files_over_800=0"
+SH
+chmod +x "$fake_audit"
+
 ORQUESTA_NIGHTLY_RESULTS_DIR="$results_dir" \
 ORQUESTA_NIGHTLY_DATE_ID="20990101" \
 ORQUESTA_NIGHTLY_SMOKE_SCRIPT="$fake_preflight" \
+ORQUESTA_NIGHTLY_CODE_AUDIT_SCRIPT="$fake_audit" \
   "$root/scripts/orquesta_smoke_nightly.sh" >"$tmp_root/preflight.out"
 
 python3 - "$results_dir/resultado_20990101.json" <<'PY'
@@ -37,6 +103,7 @@ assert payload["mode"] == "preflight", payload
 assert payload["exit_code"] == 0, payload
 assert payload["phase_reached"] == "preflight_ok", payload
 assert payload["real_confirmed"] is False, payload
+assert payload["code_audit"]["metrics"]["deadcode_candidates"] == 2, payload
 PY
 
 cat >"$fake_real" <<'SH'
@@ -72,6 +139,7 @@ ORQUESTA_NIGHTLY_RESULTS_DIR="$results_dir" \
 ORQUESTA_NIGHTLY_DATE_ID="20990102" \
 ORQUESTA_NIGHTLY_REAL_CONFIRM=1 \
 ORQUESTA_NIGHTLY_SMOKE_SCRIPT="$fake_real" \
+ORQUESTA_NIGHTLY_CODE_AUDIT_SCRIPT="$fake_audit" \
   "$root/scripts/orquesta_smoke_nightly.sh" >"$tmp_root/real.out"
 
 python3 - "$results_dir/resultado_20990102.json" <<'PY'
@@ -86,11 +154,67 @@ assert payload["phase_reached"] == "shutdown_verified", payload
 assert payload["real_confirmed"] is True, payload
 assert payload["refs"]["run_ref"] == "run-nightly-test", payload
 assert payload["refs"]["artifact_refs"] == "2", payload
+assert payload["code_audit"]["metrics"]["helper_duplicate_definitions"] == 3, payload
 PY
+
+if ORQUESTA_NIGHTLY_RESULTS_DIR="$results_dir" \
+  ORQUESTA_NIGHTLY_DATE_ID="20990104" \
+  ORQUESTA_NIGHTLY_SMOKE_SCRIPT="$fake_preflight" \
+  ORQUESTA_NIGHTLY_CODE_AUDIT_SCRIPT="$fake_audit" \
+  ORQUESTA_FAKE_AUDIT_DEADCODE=3 \
+    "$root/scripts/orquesta_smoke_nightly.sh" >"$tmp_root/ratchet.out" 2>&1; then
+  echo "nightly accepted code audit ratchet regression" >&2
+  exit 1
+fi
+
+python3 - "$results_dir/resultado_20990104.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    payload = json.load(fh)
+assert payload["status"] == "failed", payload
+assert payload["phase_reached"] == "code_audit_ratchet_failed", payload
+assert payload["code_audit"]["metrics"]["deadcode_candidates"] == 3, payload
+PY
+
+if ORQUESTA_NIGHTLY_RESULTS_DIR="$results_dir" \
+  ORQUESTA_NIGHTLY_DATE_ID="20990105" \
+  ORQUESTA_NIGHTLY_SMOKE_SCRIPT="$fake_preflight" \
+  ORQUESTA_NIGHTLY_CODE_AUDIT_SCRIPT="$fake_audit" \
+  ORQUESTA_FAKE_AUDIT_SOURCE="snapshot_file" \
+    "$root/scripts/orquesta_smoke_nightly.sh" >"$tmp_root/snapshot.out" 2>&1; then
+  echo "nightly accepted snapshot code audit source" >&2
+  exit 1
+fi
+grep -q 'code_audit_invalid_reason=deadcode_source:snapshot_file' "$tmp_root/snapshot.out"
+
+if ORQUESTA_NIGHTLY_RESULTS_DIR="$results_dir" \
+  ORQUESTA_NIGHTLY_DATE_ID="20990106" \
+  ORQUESTA_NIGHTLY_SMOKE_SCRIPT="$fake_preflight" \
+  ORQUESTA_NIGHTLY_CODE_AUDIT_SCRIPT="$fake_audit" \
+  ORQUESTA_FAKE_AUDIT_SCHEMA="bad.schema" \
+    "$root/scripts/orquesta_smoke_nightly.sh" >"$tmp_root/schema.out" 2>&1; then
+  echo "nightly accepted invalid code audit schema" >&2
+  exit 1
+fi
+grep -q 'code_audit_invalid_reason=schema_version' "$tmp_root/schema.out"
+
+if ORQUESTA_NIGHTLY_RESULTS_DIR="$results_dir" \
+  ORQUESTA_NIGHTLY_DATE_ID="20990107" \
+  ORQUESTA_NIGHTLY_SMOKE_SCRIPT="$fake_preflight" \
+  ORQUESTA_NIGHTLY_CODE_AUDIT_SCRIPT="$fake_audit" \
+  ORQUESTA_FAKE_AUDIT_METRICS_MODE="missing_deadcode" \
+    "$root/scripts/orquesta_smoke_nightly.sh" >"$tmp_root/missing-metrics.out" 2>&1; then
+  echo "nightly accepted missing code audit metrics" >&2
+  exit 1
+fi
+grep -q 'code_audit_invalid_reason=missing_metrics:deadcode_candidates' "$tmp_root/missing-metrics.out"
 
 if ORQUESTA_NIGHTLY_RESULTS_DIR="$results_dir" \
   ORQUESTA_NIGHTLY_DATE_ID="20990103" \
   ORQUESTA_NIGHTLY_SMOKE_SCRIPT="$fake_preflight" \
+  ORQUESTA_NIGHTLY_CODE_AUDIT_SCRIPT="$fake_audit" \
   OPES_BASE_URL="http://127.0.0.1:1" \
     "$root/scripts/orquesta_smoke_nightly.sh" >"$tmp_root/opes.out" 2>&1; then
   echo "nightly accepted OPES env" >&2

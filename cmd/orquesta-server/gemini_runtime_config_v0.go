@@ -50,6 +50,7 @@ func geminiRuntimeConfigV0(
 	if !boolEnvOrDefaultV0(envGeminiEnabledV0, false) {
 		return orquestaappcodexstack.GeminiRuntimeConfigV0{}
 	}
+	projectConfig := projectConfigFromServerConfigBestEffortV0(serverConfig)
 	return orquestaappcodexstack.GeminiRuntimeConfigV0{
 		Enabled:        true,
 		CommandPath:    geminiCommandPathV0(),
@@ -59,7 +60,8 @@ func geminiRuntimeConfigV0(
 		PathEnv:        envOrDefaultV0(envGeminiPathV0, os.Getenv("PATH")),
 		Model:          strings.TrimSpace(os.Getenv(envGeminiModelV0)),
 		ApprovalMode:   envOrDefaultV0(envGeminiApprovalModeV0, "auto_edit"),
-		OutputFormat:   strings.TrimSpace(os.Getenv(envGeminiOutputFormatV0)),
+		OutputFormat:   envOrDefaultV0(envGeminiOutputFormatV0, "text"),
+		PromptLocale:   goalBackendPromptLocaleFromProjectConfigFileV0(projectConfig),
 		ExtraArgs:      strings.Fields(os.Getenv(envGeminiExtraArgsV0)),
 	}
 }
@@ -80,7 +82,11 @@ func geminiCommandPathV0() string {
 }
 
 func geminiGoalBackendFromEnvV0() string {
-	backend := codexGoalBackendFromEnvV0()
+	return geminiGoalBackendFromValueV0(codexGoalBackendFromEnvV0())
+}
+
+func geminiGoalBackendFromValueV0(backend string) string {
+	backend = strings.TrimSpace(backend)
 	if backend == geminiGoalBackendFileControlV0 || backend == geminiGoalBackendProcessV0 {
 		return backend
 	}

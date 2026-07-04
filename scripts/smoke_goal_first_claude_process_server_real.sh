@@ -93,7 +93,23 @@ goal_ref=""
 external_goal_ref=""
 
 keep_dir="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_KEEP_DIR:-${ORQUESTA_KEEP_SMOKE_DIR:-0}}"
-request_timeout="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REQUEST_TIMEOUT_SECONDS:-120}"
+request_timeout_ms="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REQUEST_TIMEOUT_MS:-}"
+request_timeout_seconds_legacy="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REQUEST_TIMEOUT_SECONDS:-}"
+if [[ -n "$request_timeout_ms" ]]; then
+  if [[ ! "$request_timeout_ms" =~ ^[0-9]+$ || "$request_timeout_ms" -lt 1 ]]; then
+    echo "SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REQUEST_TIMEOUT_MS invalido: $request_timeout_ms" >&2
+    exit 2
+  fi
+  if [[ -n "$request_timeout_seconds_legacy" ]]; then
+    echo "aviso: SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REQUEST_TIMEOUT_SECONDS es legacy e ignorada porque SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REQUEST_TIMEOUT_MS esta definida" >&2
+  fi
+  request_timeout=$(((request_timeout_ms + 999) / 1000))
+else
+  request_timeout="${request_timeout_seconds_legacy:-120}"
+  if [[ -n "$request_timeout_seconds_legacy" ]]; then
+    echo "aviso: SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REQUEST_TIMEOUT_SECONDS es legacy; usa SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REQUEST_TIMEOUT_MS" >&2
+  fi
+fi
 polls="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_POLLS:-90}"
 sleep_seconds="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SLEEP_SECONDS:-5}"
 control_mode="${SMOKE_CLAUDE_GOAL_PROCESS_SERVER_CONTROL_MODE:-accepted}"

@@ -197,6 +197,32 @@ func TestClaudeGoalBackendV0ObserveSinResultadoDevuelveRunningV0(t *testing.T) {
 	}
 }
 
+func TestBuildClaudeGoalPromptWithLocaleV0UsaInglesSinCambiarContratoV0(t *testing.T) {
+	spec := claudeGoalSpecForTestV0()
+
+	prompt := BuildClaudeGoalPromptWithLocaleV0(spec, "en-US")
+
+	for _, want := range []string{
+		"You are a Claude goal-first backend governed by Orquesta.",
+		"Objective:",
+		"Allowed write-set:",
+		"Required tests:",
+		"NEUTRAL DURABLE RESULT",
+		"orquesta_goal_result_v0.json",
+		"schema_version orquesta_goal_result.v0",
+		"arrays of strings",
+		"required-test-ref-claude-goal",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt ingles sin %q:\n%s", want, prompt)
+		}
+	}
+	if strings.Contains(prompt, "Eres un backend goal-first Claude") ||
+		strings.Contains(prompt, "Tests requeridos:") {
+		t.Fatalf("prompt ingles conserva cabeceras españolas:\n%s", prompt)
+	}
+}
+
 func claudeGoalSpecForTestV0() orquestagoal.GoalWorkSpecV0 {
 	return orquestagoal.GoalWorkSpecV0{
 		SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,

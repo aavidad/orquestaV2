@@ -37,7 +37,7 @@ func TestStatusServerCommandV0EsEnvelopePublicoSinAddrNiPID(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	exitCode := statusServerCommandV0(&stdout, &stderr)
+	exitCode := statusServerCommandV0(nil, &stdout, &stderr)
 	if exitCode != 0 {
 		t.Fatalf("exit=%d stderr=%s", exitCode, stderr.String())
 	}
@@ -84,7 +84,7 @@ func TestStatusServerCommandV0FallbackStatefileNoPublicaEstadoCrudo(t *testing.T
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	exitCode := statusServerCommandV0(&stdout, &stderr)
+	exitCode := statusServerCommandV0(nil, &stdout, &stderr)
 	if exitCode != 1 {
 		t.Fatalf("exit=%d stderr=%s", exitCode, stderr.String())
 	}
@@ -130,7 +130,7 @@ func TestStatusServerCommandV0ReconciliaStatefileConPIDMuerto(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	exitCode := statusServerCommandV0(&stdout, &stderr)
+	exitCode := statusServerCommandV0(nil, &stdout, &stderr)
 	if exitCode != 1 {
 		t.Fatalf("exit=%d stderr=%s", exitCode, stderr.String())
 	}
@@ -215,7 +215,7 @@ func TestStatusServerCommandV0ReconciliaStoppedConStartupReadyHeredado(t *testin
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	exitCode := statusServerCommandV0(&stdout, &stderr)
+	exitCode := statusServerCommandV0(nil, &stdout, &stderr)
 	if exitCode != 1 {
 		t.Fatalf("exit=%d stderr=%s", exitCode, stderr.String())
 	}
@@ -299,7 +299,7 @@ func TestStatusServerCommandV0ReconciliaStoppedConActiveWorkStaleV0(t *testing.T
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	exitCode := statusServerCommandV0(&stdout, &stderr)
+	exitCode := statusServerCommandV0(nil, &stdout, &stderr)
 	if exitCode != 1 {
 		t.Fatalf("exit=%d stderr=%s", exitCode, stderr.String())
 	}
@@ -348,7 +348,7 @@ func TestStatusServerCommandV0ReconciliaStoppedConActiveWorkStaleV0(t *testing.T
 
 	stdout.Reset()
 	stderr.Reset()
-	exitCode = statusServerCommandV0(&stdout, &stderr)
+	exitCode = statusServerCommandV0(nil, &stdout, &stderr)
 	if exitCode != 1 {
 		t.Fatalf("exit segunda lectura=%d stderr=%s", exitCode, stderr.String())
 	}
@@ -392,7 +392,7 @@ func TestStatusServerCommandV0ReconciliaStoppedConShutdownNarrativoStaleV0(t *te
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	exitCode := statusServerCommandV0(&stdout, &stderr)
+	exitCode := statusServerCommandV0(nil, &stdout, &stderr)
 	if exitCode != 1 {
 		t.Fatalf("exit=%d stderr=%s", exitCode, stderr.String())
 	}
@@ -453,7 +453,7 @@ func TestStatusServerCommandV0FalloStdoutDevuelveReasonCode(t *testing.T) {
 	saveRunStatusServerStateV0(t, stateDir, strings.TrimPrefix(server.URL, "http://"))
 
 	var stderr bytes.Buffer
-	exitCode := statusServerCommandV0(failingCommandWriterV0{}, &stderr)
+	exitCode := statusServerCommandV0(nil, failingCommandWriterV0{}, &stderr)
 	if exitCode != 1 {
 		t.Fatalf("exit=%d stderr=%s", exitCode, stderr.String())
 	}

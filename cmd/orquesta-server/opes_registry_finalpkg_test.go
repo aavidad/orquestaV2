@@ -76,6 +76,90 @@ func TestOPESRegistryFinalPkgConfigDerivesStatePathsV0(t *testing.T) {
 	}
 }
 
+func TestOPESRegistryFinalPkgConfigLeeFicheroCanonicoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := filepath.Join(projectDir, "state")
+	registry := filepath.Join(projectDir, "registry.json")
+	courseRoot := filepath.Join(projectDir, "course")
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"server":{"state_dir":"` + filepath.ToSlash(stateDir) + `"},
+		"opes_registry_finalpkg":{
+			"enabled":true,
+			"dry_run":true,
+			"registry_path":"` + filepath.ToSlash(registry) + `",
+			"course_id":"course-ref-file",
+			"course_root":"` + filepath.ToSlash(courseRoot) + `",
+			"template_run_ref":"run-ref-template-file",
+			"template_topic_id":"099",
+			"batch_size":4,
+			"max_in_flight":5,
+			"interval_seconds":7,
+			"max_ticks":8,
+			"queue_ref":"queue-ref-file",
+			"reconcile_enabled":true,
+			"reconcile_limit":9
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	serverConfig, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	config, err := opesRegistryFinalPkgLoopConfigFromEnvV0(serverConfig, "http://127.0.0.1:8787")
+	if err != nil {
+		t.Fatalf("opesRegistryFinalPkgLoopConfigFromEnvV0: %v", err)
+	}
+	if !config.Loop.Enabled ||
+		config.Producer.RegistryPath != registry ||
+		config.Producer.CourseID != "course-ref-file" ||
+		config.Producer.CourseRoot != courseRoot ||
+		config.Producer.TemplateRunRef != "run-ref-template-file" ||
+		config.Producer.TemplateTopicID != "099" ||
+		config.Producer.BatchSize != 4 ||
+		config.Producer.MaxInFlight != 5 ||
+		config.Producer.QueueRef != "queue-ref-file" ||
+		!config.Producer.ReconcileCompleted ||
+		config.Producer.ReconcileLimit != 9 ||
+		config.Loop.Interval != 7*time.Second ||
+		config.Loop.MaxTicks != 8 {
+		t.Fatalf("config=%+v", config)
+	}
+	settings := serverConfig.EffectiveConfig.Settings
+	for key, want := range map[string]string{
+		envOPESRegistryFinalPkgEnabledV0:        "true",
+		envOPESRegistryFinalPkgDryRunV0:         "true",
+		envOPESRegistryFinalPkgCourseIDV0:       "course-ref-file",
+		envOPESRegistryFinalPkgTemplateRunV0:    "run-ref-template-file",
+		envOPESRegistryFinalPkgTemplateTopicV0:  "099",
+		envOPESRegistryFinalPkgBatchSizeV0:      "4",
+		envOPESRegistryFinalPkgMaxInFlightV0:    "5",
+		envOPESRegistryFinalPkgIntervalV0:       "7",
+		envOPESRegistryFinalPkgMaxTicksV0:       "8",
+		envOPESRegistryFinalPkgQueueRefV0:       "queue-ref-file",
+		envOPESRegistryFinalPkgReconcileV0:      "true",
+		envOPESRegistryFinalPkgReconcileLimitV0: "9",
+	} {
+		setting := effectiveSettingForTestV0(settings, key)
+		if setting.Value != want || setting.Source != configSettingSourceConfigFileV0 {
+			t.Fatalf("%s setting=%+v want value=%q source=config_file", key, setting, want)
+		}
+	}
+	for key, want := range map[string]string{
+		envOPESRegistryFinalPkgRegistryV0:   "opes-registry-finalpkg-registry-path-configured",
+		envOPESRegistryFinalPkgCourseRootV0: "opes-registry-finalpkg-course-root-configured",
+	} {
+		setting := effectiveSettingForTestV0(settings, key)
+		if setting.Value != want || setting.Source != configSettingSourceConfigFileV0 || !setting.Sensitive {
+			t.Fatalf("%s setting=%+v want sensitive config_file", key, setting)
+		}
+	}
+}
+
 func TestOPESRegistryFinalPkgDryRunSelectsCandidatesWithoutSubmitV0(t *testing.T) {
 	fixture := newOPESRegistryFinalPkgFixtureV0(t)
 	fixture.writeRegistry(map[string]any{

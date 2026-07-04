@@ -20,14 +20,23 @@ const (
 )
 
 func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
+	return serverConfigFromEnvWithProjectConfigPathV0("")
+}
+
+func serverConfigFromEnvWithProjectConfigPathV0(projectConfigPath string) (orquestaserver.ConfigV0, error) {
 	opesAutomationContext := serverOPESAutomationContextFromEnvV0()
 	if err := validateServerSelfProgrammingOnlyPathEnvBeforeMkdirV0(); err != nil {
 		return orquestaserver.ConfigV0{}, err
 	}
-	projectDir, err := projectDirFromEnvV0()
+	projectDir, err := projectDirFromEnvOrProjectConfigPathV0(projectConfigPath)
 	if err != nil {
 		return orquestaserver.ConfigV0{}, err
 	}
+	projectConfig, loadedProjectConfigPath, err := resolveServerProjectConfigV0(projectDir, projectConfigPath)
+	if err != nil {
+		return orquestaserver.ConfigV0{}, err
+	}
+	autoprogrammingGoalProgressPolicy := serverAutoprogrammingGoalProgressPolicyConfigFromProjectFileV0(projectConfig)
 	idleSelfImprovementProjectDir := absDirEnvOrDefaultV0(
 		envServerIdleSelfImprovementProjectWorkDirV0,
 		projectDir,
@@ -40,35 +49,73 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 			projectDir,
 			idleSelfImprovementProjectDir,
 		)
-	stateDir := absDirEnvOrDefaultV0(envServerStateDirV0,
+	stateDir := absDirProjectConfigOrEnvOrDefaultV0(envServerStateDirV0,
+		projectConfig.Server.StateDir,
 		filepath.Join(defaultControlDirV0(projectDir), "state"))
-	runtimeDir := absDirEnvOrDefaultV0(envCodexRuntimeWorkDirV0,
+	runtimeDir := absDirProjectConfigOrEnvOrDefaultV0(envCodexRuntimeWorkDirV0,
+		projectConfig.CodexRuntime.RuntimeWorkDir,
 		filepath.Join(projectDir, ".orquesta-runtime"))
-	supervisorMaxExternalWaits, err := serverSupervisorMaxExternalWaitsV0()
+	supervisorMaxExternalWaits, err := serverSupervisorMaxExternalWaitsFromProjectConfigV0(projectConfig)
 	if err != nil {
 		return orquestaserver.ConfigV0{}, err
 	}
-	executionMode := codexExecutionModeFromEnvV0()
+	executionMode := codexExecutionModeFromProjectConfigFileV0(projectConfig)
 	goalObserverEnabled, goalObserverConfigured := serverGoalObserverEnabledFromEnvV0()
 	config := orquestaserver.ConfigV0{
-		Addr:          envOrDefaultV0(envServerAddrV0, orquestaserver.DefaultAddrV0),
+		Addr:          stringProjectConfigOrEnvOrDefaultV0(envServerAddrV0, projectConfig.Server.Addr, orquestaserver.DefaultAddrV0),
 		StateDir:      stateDir,
-		AuditFile:     envOrDefaultV0(envServerAuditFileV0, orquestaserver.DefaultAuditFileV0),
-		AuditDisabled: boolEnvOrDefaultV0(envServerAuditDisabledV0, false),
+		AuditFile:     stringProjectConfigOrEnvOrDefaultV0(envServerAuditFileV0, projectConfig.Server.AuditFile, orquestaserver.DefaultAuditFileV0),
+		AuditDisabled: boolProjectConfigOrEnvOrDefaultV0(envServerAuditDisabledV0, projectConfig.Server.AuditDisabled, false),
 		DaemonLogPolicy: orquestaserver.DaemonLogPolicyV0{
-			MaxBytes:        int64(intEnvOrDefaultV0(envServerDaemonLogMaxBytesV0, int(orquestaserver.DefaultDaemonLogMaxBytesV0))),
-			MaxRotatedFiles: intEnvOrDefaultV0(envServerDaemonLogMaxRotatedV0, orquestaserver.DefaultDaemonLogMaxRotatedV0),
-			RetentionDays:   intEnvOrDefaultV0(envServerDaemonLogRetentionDaysV0, orquestaserver.DefaultDaemonLogRetentionDaysV0),
-			LocalRawEnabled: boolEnvOrDefaultV0(envServerDaemonLogRawEnabledV0, false),
-			LocalRawReason:  envOrDefaultV0(envServerDaemonLogRawReasonV0, ""),
+			MaxBytes: int64ProjectConfigOrEnvOrDefaultV0(
+				envServerDaemonLogMaxBytesV0,
+				projectConfig.DaemonLogs.MaxBytes,
+				orquestaserver.DefaultDaemonLogMaxBytesV0,
+			),
+			MaxRotatedFiles: intProjectConfigOrEnvOrDefaultV0(
+				envServerDaemonLogMaxRotatedV0,
+				projectConfig.DaemonLogs.MaxRotatedFiles,
+				orquestaserver.DefaultDaemonLogMaxRotatedV0,
+			),
+			RetentionDays: intProjectConfigOrEnvOrDefaultV0(
+				envServerDaemonLogRetentionDaysV0,
+				projectConfig.DaemonLogs.RetentionDays,
+				orquestaserver.DefaultDaemonLogRetentionDaysV0,
+			),
+			LocalRawEnabled: boolProjectConfigOrEnvOrDefaultV0(envServerDaemonLogRawEnabledV0, projectConfig.DaemonLogs.LocalRawEnabled, false),
+			LocalRawReason:  stringProjectConfigOrEnvOrDefaultV0(envServerDaemonLogRawReasonV0, projectConfig.DaemonLogs.LocalRawReason, ""),
 		},
 		HTTPResourceLimits: orquestaserver.HTTPResourceLimitsV0{
-			ReadHeaderTimeout: time.Duration(intEnvOrDefaultV0(envServerReadHeaderTimeoutMSV0, int(orquestaserver.DefaultHTTPReadHeaderTimeoutV0/time.Millisecond))) * time.Millisecond,
-			ReadTimeout:       time.Duration(intEnvOrDefaultV0(envServerReadTimeoutMSV0, int(orquestaserver.DefaultHTTPReadTimeoutV0/time.Millisecond))) * time.Millisecond,
-			WriteTimeout:      time.Duration(intEnvOrDefaultV0(envServerWriteTimeoutMSV0, int(orquestaserver.DefaultHTTPWriteTimeoutV0/time.Millisecond))) * time.Millisecond,
-			IdleTimeout:       time.Duration(intEnvOrDefaultV0(envServerIdleTimeoutMSV0, int(orquestaserver.DefaultHTTPIdleTimeoutV0/time.Millisecond))) * time.Millisecond,
-			MaxHeaderBytes:    intEnvOrDefaultV0(envServerMaxHeaderBytesV0, orquestaserver.DefaultHTTPMaxHeaderBytesV0),
-			ControlBodyBytes:  int64(intEnvOrDefaultV0(envServerControlBodyMaxBytesV0, int(orquestaserver.DefaultHTTPControlBodyBytesV0))),
+			ReadHeaderTimeout: time.Duration(intProjectConfigOrEnvOrDefaultV0(
+				envServerReadHeaderTimeoutMSV0,
+				projectConfig.ServerHTTP.ReadHeaderTimeoutMS,
+				int(orquestaserver.DefaultHTTPReadHeaderTimeoutV0/time.Millisecond),
+			)) * time.Millisecond,
+			ReadTimeout: time.Duration(intProjectConfigOrEnvOrDefaultV0(
+				envServerReadTimeoutMSV0,
+				projectConfig.ServerHTTP.ReadTimeoutMS,
+				int(orquestaserver.DefaultHTTPReadTimeoutV0/time.Millisecond),
+			)) * time.Millisecond,
+			WriteTimeout: time.Duration(intProjectConfigOrEnvOrDefaultV0(
+				envServerWriteTimeoutMSV0,
+				projectConfig.ServerHTTP.WriteTimeoutMS,
+				int(orquestaserver.DefaultHTTPWriteTimeoutV0/time.Millisecond),
+			)) * time.Millisecond,
+			IdleTimeout: time.Duration(intProjectConfigOrEnvOrDefaultV0(
+				envServerIdleTimeoutMSV0,
+				projectConfig.ServerHTTP.IdleTimeoutMS,
+				int(orquestaserver.DefaultHTTPIdleTimeoutV0/time.Millisecond),
+			)) * time.Millisecond,
+			MaxHeaderBytes: intProjectConfigOrEnvOrDefaultV0(
+				envServerMaxHeaderBytesV0,
+				projectConfig.ServerHTTP.MaxHeaderBytes,
+				orquestaserver.DefaultHTTPMaxHeaderBytesV0,
+			),
+			ControlBodyBytes: int64(intProjectConfigOrEnvOrDefaultV0(
+				envServerControlBodyMaxBytesV0,
+				projectConfig.ServerHTTP.ControlBodyMaxBytes,
+				int(orquestaserver.DefaultHTTPControlBodyBytesV0),
+			)),
 		},
 		ControlPlane: orquestaserver.ControlPlaneConfigV0{
 			RemoteAccessOptIn: boolEnvOrDefaultV0(envServerRemoteControlPlaneConfirmV0, false),
@@ -79,12 +126,15 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		},
 		RuntimeIdentity:                   serverRuntimeIdentityFromExecutableV0(),
 		ProjectWorkDir:                    projectDir,
+		ProjectConfigFilePath:             loadedProjectConfigPath,
 		RuntimeWorkDir:                    runtimeDir,
 		IdleSelfImprovementProjectWorkDir: idleSelfImprovementProjectDir,
 		ShutdownSignalPolicy:              serverShutdownSignalPolicyV0(),
+		AutoprogrammingGoalProgressPolicy: autoprogrammingGoalProgressPolicy,
 		TickInterval:                      time.Duration(intEnvOrDefaultV0(envServerTickIntervalMSV0, 5000)) * time.Millisecond,
-		ShutdownGracePeriod: time.Duration(intEnvOrDefaultV0(
+		ShutdownGracePeriod: time.Duration(intProjectConfigOrEnvOrDefaultV0(
 			envServerShutdownGraceMSV0,
+			projectConfig.ServerLifecycle.ShutdownGraceMS,
 			int(orquestaserver.DefaultShutdownGracePeriodV0/time.Millisecond),
 		)) * time.Millisecond,
 		IdleSelfImprovementAfter:         time.Duration(idleSelfImprovementAfterSeconds) * time.Second,
@@ -99,14 +149,14 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		IdleSelfImprovementContextRefs:   csvEnvOrDefaultV0(envServerIdleSelfImprovementContextRefsV0, nil),
 		IdleSelfImprovementEvidenceRefs:  csvEnvOrDefaultV0(envServerIdleSelfImprovementEvidenceRefsV0, nil),
 		IdleSelfImprovementAcceptance:    csvEnvOrDefaultV0(envServerIdleSelfImprovementAcceptanceV0, defaultIdleSelfImprovementAcceptanceV0()),
-		IdleSelfImprovementGoalFirst:     idleSelfImprovementGoalFirstFromEnvV0(),
+		IdleSelfImprovementGoalFirst:     idleSelfImprovementGoalFirstFromProjectConfigFileV0(projectConfig),
 		IdleSelfImprovementFrozenTests:   boolEnvOrDefaultV0(envServerIdleSelfImprovementFrozenTestsV0, false),
 		IdleSelfImprovementCompactRules: csvEnvOrDefaultV0(envServerIdleSelfImprovementCompactRulesV0, []string{
 			"comunicacion compacta",
 			"trabajo secundario: no bloquear ni mezclar con el trabajo principal",
 		}),
 		IdleSelfImprovementPriorityScore: intEnvOrDefaultV0(envServerIdleSelfImprovementPriorityScoreV0, orquestaserver.DefaultIdleSelfImprovementPriorityScoreV0),
-		IdleSelfImprovementMaxRequests:   intEnvOrDefaultV0(envServerIdleSelfImprovementMaxRequestsV0, orquestaserver.DefaultIdleSelfImprovementMaxRequestsV0),
+		IdleSelfImprovementMaxRequests:   serverIdleSelfImprovementMaxRequestsFromProjectConfigFileV0(projectConfig),
 		IdleSelfImprovementTargetQueue:   intEnvOrDefaultV0(envServerIdleSelfImprovementTargetQueueV0, orquestaserver.DefaultIdleSelfImprovementTargetQueueV0),
 		IdleSelfImprovementBudget: orquestaautoprogramming.AutoprogrammingIdleSelfImprovementBudgetConfigV0{
 			MaxGoalsPerDay:              intEnvOrDefaultV0(envServerIdleSelfImprovementDailyGoalBudgetV0, 0),
@@ -118,7 +168,7 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 		GoalObserverInterval:          time.Duration(intEnvOrZeroV0(envServerGoalObserverIntervalMSV0)) * time.Millisecond,
 		GoalObserverMaxItems:          intEnvOrDefaultV0(envServerGoalObserverMaxItemsV0, orquestaserver.DefaultGoalObserverMaxItemsV0),
 		ResidentDirectorEnabled:       serverResidentDirectorEnabledFromEnvV0(),
-		ResidentDirectorMaxActions:    intEnvOrDefaultV0(envServerResidentDirectorMaxActionsV0, orquestaserver.DefaultResidentDirectorMaxActionsV0),
+		ResidentDirectorMaxActions:    serverResidentDirectorMaxActionsFromProjectConfigFileV0(projectConfig),
 		EscalationDirectorEnabled:     boolEnvOrDefaultV0(envServerEscalationDirectorEnabledV0, false),
 		EscalationDirectorCommand:     csvEnvOrDefaultV0(envServerEscalationDirectorCommandV0, nil),
 		EscalationDirectorTimeout:     time.Duration(intEnvOrDefaultV0(envServerEscalationDirectorTimeoutSecondsV0, 0)) * time.Second,
@@ -135,7 +185,7 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 				int(orquestaserver.DefaultSelfWatchdogNoProgressForV0/time.Second),
 			)) * time.Second,
 		},
-		SupervisorCommand: serverSupervisorCommandFromEnvV0(executionMode, supervisorMaxExternalWaits),
+		SupervisorCommand: serverSupervisorCommandFromProjectConfigV0(executionMode, projectConfig, supervisorMaxExternalWaits),
 	}
 	config = orquestaserver.NormalizeConfigV0(config)
 	if err := validateServerSelfProgrammingOnlyConfigV0(config); err != nil {
@@ -198,7 +248,26 @@ func defaultControlDirV0(projectDir string) string {
 }
 
 func projectDirFromEnvV0() (string, error) {
+	return projectDirFromEnvOrFallbackV0("")
+}
+
+func projectDirFromEnvOrProjectConfigPathV0(projectConfigPath string) (string, error) {
+	projectConfigPath = strings.TrimSpace(projectConfigPath)
+	if projectConfigPath == "" {
+		return projectDirFromEnvV0()
+	}
+	abs, err := filepath.Abs(projectConfigPath)
+	if err != nil {
+		return "", fmt.Errorf("project_config_path_invalid")
+	}
+	return projectDirFromEnvOrFallbackV0(filepath.Dir(abs))
+}
+
+func projectDirFromEnvOrFallbackV0(fallback string) (string, error) {
 	value := strings.TrimSpace(os.Getenv(envCodexProjectWorkDirV0))
+	if value == "" {
+		value = strings.TrimSpace(fallback)
+	}
 	if value == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -235,10 +304,14 @@ func serverIdleSelfImprovementDisabledForOPESContextV0(
 }
 
 func idleSelfImprovementGoalFirstFromEnvV0() bool {
+	return idleSelfImprovementGoalFirstFromProjectConfigFileV0(serverProjectConfigFileV0{})
+}
+
+func idleSelfImprovementGoalFirstFromProjectConfigFileV0(projectConfig serverProjectConfigFileV0) bool {
 	if strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementGoalFirstV0)) != "" {
 		return boolEnvOrDefaultV0(envServerIdleSelfImprovementGoalFirstV0, false)
 	}
-	return serverGoalBackendOperationalFromEnvV0()
+	return serverGoalBackendOperationalFromProjectConfigFileV0(projectConfig)
 }
 
 func sameAbsDirForConfigV0(left string, right string) bool {

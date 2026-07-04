@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"os/exec"
@@ -148,6 +149,39 @@ func TestServerRGCodeContextProviderV0UsaFallbackGoSiRGAusente(t *testing.T) {
 	}
 }
 
+func TestServerRGCodeContextProviderV0ScopePuntoBuscaRaizDelProyecto(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(root, "smoke.go"),
+		[]byte("package smoke\n\nconst BrokerNeedle = \"codebase-broker-smoke\"\n"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	provider := serverRGCodeContextProviderV0{
+		RootDir: root,
+		Command: filepath.Join(t.TempDir(), "rg-no-existe"),
+	}
+	result, err := provider.QueryCodeContextV0(context.Background(), orquestacontext.CodeContextQueryV0{
+		SchemaVersion: orquestacontext.CodeContextQuerySchemaVersionV0,
+		RepositoryRef: "repo-ref-test",
+		QueryKind:     orquestacontext.CodeContextQueryKindSearchV0,
+		Query:         "BrokerNeedle",
+		Scope:         []string{"."},
+		MaxResults:    3,
+		MaxBytes:      3000,
+	})
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if result.Estado != orquestacontext.CodeContextEstadoOKV0 ||
+		result.ProviderKind != orquestacontext.CodeContextProviderKindFallbackRGV0 ||
+		len(result.Results) != 1 ||
+		result.Results[0].Path != "smoke.go" {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestServerRGCodeContextProviderV0RepoMapUsaFallbackGoSiRGAusente(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "modulos", "demo"), 0o755); err != nil {
@@ -185,6 +219,108 @@ func TestServerRGCodeContextProviderV0RepoMapUsaFallbackGoSiRGAusente(t *testing
 		result.Results[1].HitRef != "code-context-repo-map-hit-2" ||
 		!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-code-context-go-repo-map-fallback-v0") {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestServerRGCodeContextProviderV0ConsultasEstructuradasSinIndexerExterno(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "modulos", "demo"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	source := `package demo
+
+import "context"
+
+type ExportedService struct{}
+
+func (ExportedService) Serve(ctx context.Context) {
+	TargetCall()
+}
+
+func TargetCall() {}
+
+func helperLocal() {}
+`
+	if err := os.WriteFile(filepath.Join(root, "modulos", "demo", "service.go"), []byte(source), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	provider := serverRGCodeContextProviderV0{
+		RootDir: root,
+		Command: filepath.Join(t.TempDir(), "rg-no-existe"),
+	}
+
+	cases := []struct {
+		name       string
+		queryKind  string
+		query      string
+		wantKind   string
+		wantSymbol string
+		wantText   string
+	}{
+		{
+			name:       "callers",
+			queryKind:  orquestacontext.CodeContextQueryKindCallersV0,
+			query:      "TargetCall",
+			wantKind:   "caller",
+			wantSymbol: "ExportedService.Serve",
+			wantText:   "TargetCall()",
+		},
+		{
+			name:       "imports",
+			queryKind:  orquestacontext.CodeContextQueryKindImportsV0,
+			query:      "context",
+			wantKind:   "import",
+			wantSymbol: "context",
+			wantText:   `"context"`,
+		},
+		{
+			name:       "module_exports",
+			queryKind:  orquestacontext.CodeContextQueryKindModuleExportsV0,
+			query:      "modulos/demo",
+			wantKind:   "exported_type",
+			wantSymbol: "ExportedService",
+			wantText:   "ExportedService",
+		},
+		{
+			name:       "relevant_snippets",
+			queryKind:  orquestacontext.CodeContextQueryKindRelevantSnippetsV0,
+			query:      "Serve",
+			wantKind:   "relevant_snippet",
+			wantSymbol: "ExportedService.Serve",
+			wantText:   "func (ExportedService) Serve",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := provider.QueryCodeContextV0(context.Background(), orquestacontext.CodeContextQueryV0{
+				SchemaVersion: orquestacontext.CodeContextQuerySchemaVersionV0,
+				RepositoryRef: "repo-ref-test",
+				QueryKind:     tc.queryKind,
+				Query:         tc.query,
+				Scope:         []string{"modulos/demo"},
+				MaxResults:    5,
+				MaxBytes:      2200,
+			})
+			if err != nil {
+				t.Fatalf("query: %v", err)
+			}
+			if result.Estado != orquestacontext.CodeContextEstadoOKV0 ||
+				result.ProviderKind != orquestacontext.CodeContextProviderKindFallbackRGV0 ||
+				len(result.Results) == 0 ||
+				!containsStringForTestV0(result.EvidenceRefs, "evidence-ref-code-context-go-structured-fallback-v0") {
+				t.Fatalf("result=%+v", result)
+			}
+			hit := result.Results[0]
+			if hit.Kind != tc.wantKind ||
+				hit.Path != "modulos/demo/service.go" ||
+				hit.Symbol != tc.wantSymbol ||
+				!strings.Contains(hit.Snippet, tc.wantText) {
+				t.Fatalf("hit=%+v want kind=%s symbol=%s text=%q", hit, tc.wantKind, tc.wantSymbol, tc.wantText)
+			}
+			if len(hit.Snippet) > 760 {
+				t.Fatalf("snippet demasiado grande: %d", len(hit.Snippet))
+			}
+		})
 	}
 }
 
@@ -273,6 +409,106 @@ echo '{"total":1,"results":[{"name":"CodebaseBroker","qualified_name":"repo.pkg.
 	}
 	if len(completed) != 1 || completed[0].OwnerRef != orquestacontext.CodeContextToolOwnerRefV0(query) {
 		t.Fatalf("completed=%+v", completed)
+	}
+}
+
+func TestCodeContextBrokerWiringFromProjectConfigV0ConfiguraCodebaseMemoryCLIConOptInV0(t *testing.T) {
+	stateDir := t.TempDir()
+	root := t.TempDir()
+	command := writeCodebaseMemoryFakeCLIForTestV0(t, `#!/bin/sh
+echo '{"total":1,"results":[{"name":"CodebaseBrokerConfig","qualified_name":"repo.pkg.CodebaseBrokerConfig","label":"Function","file_path":"cmd/orquesta-server/codebase_broker_config_file_v0.go","start_line":21,"rank":1}]}'
+`)
+	writeServerProjectConfigForCodebaseBrokerTestV0(t, root, serverProjectConfigFileV0{
+		CodebaseBroker: serverProjectConfigCodebaseBrokerV0{
+			ProviderKind:           stringPointerForCodebaseBrokerTestV0(orquestacontext.CodeContextProviderKindCodebaseMCPV0),
+			ExternalIndexerEnabled: boolPointerForCodebaseBrokerTestV0(true),
+			MaxConcurrent:          intPointerForCodebaseBrokerTestV0(2),
+			TimeoutMS:              intPointerForCodebaseBrokerTestV0(9000),
+			StateDir:               stringPointerForCodebaseBrokerTestV0(stateDir),
+			Command:                stringPointerForCodebaseBrokerTestV0(command),
+			ProjectName:            stringPointerForCodebaseBrokerTestV0("project-ref-orquesta-index"),
+		},
+	})
+	wiring := codeContextBrokerWiringFromEnvV0(orquestaserver.ConfigV0{ProjectWorkDir: root})
+	query := orquestacontext.CodeContextQueryV0{
+		SchemaVersion:        orquestacontext.CodeContextQuerySchemaVersionV0,
+		RequestRef:           "request-ref-codebase-wiring-config-file",
+		RepositoryRef:        "repo-ref-orquesta",
+		QueryKind:            orquestacontext.CodeContextQueryKindSearchV0,
+		Query:                "CodebaseBrokerConfig",
+		MaxResults:           2,
+		MaxBytes:             3000,
+		AllowExternalIndexer: true,
+	}
+
+	result, err := wiring.Query.QueryCodeContextV0(context.Background(), query)
+	if err != nil {
+		t.Fatalf("QueryCodeContextV0: %v", err)
+	}
+	if result.Estado != orquestacontext.CodeContextEstadoOKV0 ||
+		result.ProviderKind != orquestacontext.CodeContextProviderKindCodebaseMCPV0 ||
+		len(result.Results) != 1 ||
+		result.Results[0].Symbol != "CodebaseBrokerConfig" {
+		t.Fatalf("result=%+v", result)
+	}
+	completed, err := wiring.ToolLeases.ListCodeContextToolLeasesV0(context.Background(), orquestacontext.CodeContextToolLeaseListFilterV0{
+		Status: orquestacontext.CodeContextToolLeaseStatusCompletedV0,
+	})
+	if err != nil {
+		t.Fatalf("List leases: %v", err)
+	}
+	if len(completed) != 1 || completed[0].OwnerRef != orquestacontext.CodeContextToolOwnerRefV0(query) {
+		t.Fatalf("completed=%+v", completed)
+	}
+}
+
+func TestServerEffectiveConfigV0PublicaCodebaseBrokerDesdeProjectConfigV0(t *testing.T) {
+	root := t.TempDir()
+	stateDir := filepath.Join(root, "codebase-state")
+	writeServerProjectConfigForCodebaseBrokerTestV0(t, root, serverProjectConfigFileV0{
+		CodebaseBroker: serverProjectConfigCodebaseBrokerV0{
+			ProviderKind:                stringPointerForCodebaseBrokerTestV0("fallback_rg"),
+			ExternalIndexerEnabled:      boolPointerForCodebaseBrokerTestV0(false),
+			MaxConcurrent:               intPointerForCodebaseBrokerTestV0(3),
+			TimeoutMS:                   intPointerForCodebaseBrokerTestV0(1500),
+			StateDir:                    stringPointerForCodebaseBrokerTestV0(stateDir),
+			WatchdogEnabled:             boolPointerForCodebaseBrokerTestV0(false),
+			WatchdogStopOrphans:         boolPointerForCodebaseBrokerTestV0(false),
+			WatchdogOrphanMinAgeSeconds: intPointerForCodebaseBrokerTestV0(17),
+			Command:                     stringPointerForCodebaseBrokerTestV0("codebase-memory-mcp-test"),
+			ProjectName:                 stringPointerForCodebaseBrokerTestV0("orquesta-test-index"),
+		},
+	})
+	t.Setenv(envCodexProjectWorkDirV0, root)
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	settings := config.EffectiveConfig.Settings
+	for key, want := range map[string]string{
+		envCodebaseBrokerProviderKindV0:                "fallback_rg",
+		envCodebaseBrokerExternalIndexerEnabledV0:      "false",
+		envCodebaseBrokerMaxConcurrentV0:               "3",
+		envCodebaseBrokerTimeoutMSV0:                   "1500",
+		envCodebaseBrokerStateDirV0:                    codebaseBrokerConfiguredStateDirRefV0,
+		envCodebaseBrokerWatchdogEnabledV0:             "false",
+		envCodebaseBrokerWatchdogStopOrphansV0:         "false",
+		envCodebaseBrokerWatchdogOrphanMinAgeSecondsV0: "17",
+		envCodebaseBrokerCommandV0:                     codebaseBrokerConfiguredCommandRefV0,
+		envCodebaseBrokerProjectNameV0:                 "orquesta-test-index",
+	} {
+		setting := effectiveSettingForTestV0(settings, key)
+		if setting.Value != want ||
+			setting.Source != configSettingSourceConfigFileV0 {
+			t.Fatalf("%s setting=%+v want value=%q source=%s", key, setting, want, configSettingSourceConfigFileV0)
+		}
+	}
+	for _, key := range []string{envCodebaseBrokerStateDirV0, envCodebaseBrokerCommandV0} {
+		setting := effectiveSettingForTestV0(settings, key)
+		if !setting.Sensitive {
+			t.Fatalf("%s debe quedar marcado como sensible: %+v", key, setting)
+		}
 	}
 }
 
@@ -568,6 +804,32 @@ func TestServerCodeContextToolWatchdogLoopConfigV0ExigeStateDirOptIn(t *testing.
 	}
 }
 
+func TestServerCodeContextToolWatchdogLoopConfigV0UsaProjectConfigV0(t *testing.T) {
+	root := t.TempDir()
+	stateDir := filepath.Join(root, "codebase-state")
+	writeServerProjectConfigForCodebaseBrokerTestV0(t, root, serverProjectConfigFileV0{
+		CodebaseBroker: serverProjectConfigCodebaseBrokerV0{
+			StateDir:                    stringPointerForCodebaseBrokerTestV0(stateDir),
+			WatchdogEnabled:             boolPointerForCodebaseBrokerTestV0(true),
+			WatchdogStopOrphans:         boolPointerForCodebaseBrokerTestV0(true),
+			WatchdogOrphanMinAgeSeconds: intPointerForCodebaseBrokerTestV0(7),
+		},
+	})
+	t.Setenv(envCodexProjectWorkDirV0, root)
+
+	config, err := serverCodeContextToolWatchdogLoopConfigFromEnvV0()
+
+	if err != nil {
+		t.Fatalf("serverCodeContextToolWatchdogLoopConfigFromEnvV0: %v", err)
+	}
+	if !config.Loop.Enabled ||
+		config.StateDir != stateDir ||
+		!config.StopOrphans ||
+		config.OrphanMinAge != 7*time.Second {
+		t.Fatalf("config=%+v", config)
+	}
+}
+
 func TestRunServerCodeContextToolWatchdogLoopAsyncV0DesactivadoNoProyectaBridgeV0(t *testing.T) {
 	events := 0
 	config := serverCodeContextToolWatchdogLoopConfigV0{
@@ -586,6 +848,34 @@ func TestRunServerCodeContextToolWatchdogLoopAsyncV0DesactivadoNoProyectaBridgeV
 	if events != 0 {
 		t.Fatalf("events=%d, want 0", events)
 	}
+}
+
+func writeServerProjectConfigForCodebaseBrokerTestV0(
+	t *testing.T,
+	root string,
+	config serverProjectConfigFileV0,
+) {
+	t.Helper()
+	config.SchemaVersion = serverProjectConfigSchemaVersionV0
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal project config: %v", err)
+	}
+	if err := os.WriteFile(serverProjectConfigFilePathV0(root), data, 0o644); err != nil {
+		t.Fatalf("write project config: %v", err)
+	}
+}
+
+func stringPointerForCodebaseBrokerTestV0(value string) *string {
+	return &value
+}
+
+func boolPointerForCodebaseBrokerTestV0(value bool) *bool {
+	return &value
+}
+
+func intPointerForCodebaseBrokerTestV0(value int) *int {
+	return &value
 }
 
 func TestRunServerCodeContextToolWatchdogLoopAsyncV0ParaLeaseExpiradoSinPIDV0(t *testing.T) {

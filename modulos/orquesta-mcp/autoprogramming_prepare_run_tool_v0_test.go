@@ -24,6 +24,9 @@ func TestMCPAutoprogrammingPrepareRunDescriptorV0EsAdaptadorOptIn(t *testing.T) 
 	if !strings.Contains(descriptor.InputSchema, "autoprogramming_request:AutoprogrammingRequestV0") {
 		t.Fatalf("descriptor debe publicar autoprogramming_request como objeto tipado, no string generico: %q", descriptor.InputSchema)
 	}
+	if !strings.Contains(descriptor.InputSchema, "required_settings?[]{key,value}") {
+		t.Fatalf("descriptor debe publicar required_settings: %q", descriptor.InputSchema)
+	}
 	if !strings.Contains(descriptor.Output, "goal_spec_summaries?") ||
 		strings.Contains(descriptor.Output, "goal_specs?") {
 		t.Fatalf("descriptor debe publicar solo resumenes de specs en prepare-run: %q", descriptor.Output)
@@ -53,6 +56,28 @@ func TestMCPAutoprogrammingPrepareRunDescriptorV0EsAdaptadorOptIn(t *testing.T) 
 		!containsMCPStringPartForTestV0(descriptor.Invariantes, "compatibilidad legacy") ||
 		!containsMCPStringPartForTestV0(descriptor.Invariantes, "goals[] es canonico") {
 		t.Fatalf("descriptor debe demotar continue legacy frente a goal-first: %+v", descriptor.Invariantes)
+	}
+}
+
+func TestValidateMCPRequiredSettingsProjectionV0DetectaMismatchSinValoresSensibles(t *testing.T) {
+	issues := ValidateMCPRequiredSettingsProjectionV0(
+		[]MCPRequiredSettingV0{{
+			Key:   "ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS",
+			Value: "450000",
+		}},
+		[]MCPConfigProjectionSettingV0{{
+			Key:       "ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS",
+			Value:     "123",
+			Sensitive: true,
+		}},
+	)
+
+	if len(issues) != 1 ||
+		issues[0].Code != MCPConfigProjectionMismatchV0 ||
+		!strings.Contains(issues[0].Field, "ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS") ||
+		strings.Contains(issues[0].Message, "450000") ||
+		strings.Contains(issues[0].Message, "123") {
+		t.Fatalf("issues=%+v", issues)
 	}
 }
 

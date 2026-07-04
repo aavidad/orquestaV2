@@ -184,6 +184,34 @@ func TestServerDaemonStartEnvironmentV0ProyectaDirectorResidenteEfectivo(t *test
 	}
 }
 
+func TestServerDaemonStartEnvironmentV0ProyectaPoliticaAutoprogramacion(t *testing.T) {
+	projectDir := t.TempDir()
+	config := orquestaserver.ConfigV0{
+		Addr:           "127.0.0.1:19101",
+		ProjectWorkDir: projectDir,
+		RuntimeWorkDir: filepath.Join(projectDir, "runtime"),
+		StateDir:       filepath.Join(projectDir, "state"),
+		AuditFile:      "audit.jsonl",
+	}
+
+	got := serverDaemonStartEnvironmentV0([]string{
+		envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0 + "=450000",
+		envAutoprogrammingCheckpointOnlyMaxWaitSecondsV0 + "=900",
+	}, config)
+	policy := serverDaemonStartEnvPolicyV0([]string{
+		envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0 + "=450000",
+		envAutoprogrammingCheckpointOnlyMaxWaitSecondsV0 + "=900",
+	}, config)
+
+	if !daemonStartEnvHasPairForTestV0(got, envAutoprogrammingCheckpointOnlyHighConsumptionTokensV0, "450000") ||
+		!daemonStartEnvHasPairForTestV0(got, envAutoprogrammingCheckpointOnlyMaxWaitSecondsV0, "900") {
+		t.Fatalf("politica autoprogramacion no proyectada al daemon: %v", got)
+	}
+	if !strings.Contains(strings.Join(policy.Categories, ","), "autoprogramming") {
+		t.Fatalf("policy no publica categoria autoprogramming: %#v", policy)
+	}
+}
+
 func TestServerDaemonStartEnvironmentV0ProyectaEgressSanitizerSinAbrirSecretosV0(t *testing.T) {
 	projectDir := t.TempDir()
 	config := orquestaserver.ConfigV0{

@@ -206,7 +206,7 @@ func codexWaveCommandPathV0(raw string) (string, error) {
 }
 
 func codexWaveSourceCodeHomeV0(raw string) string {
-	for _, candidate := range []string{raw, strings.TrimSpace(os.Getenv(envCodexCodeHomeV0)), strings.TrimSpace(os.Getenv("CODEX_HOME"))} {
+	for _, candidate := range []string{raw, strings.TrimSpace(os.Getenv(envCodexCodeHomeV0)), strings.TrimSpace(os.Getenv(envCodexCodeHomeLegacyV0))} {
 		if candidate == "" {
 			continue
 		}

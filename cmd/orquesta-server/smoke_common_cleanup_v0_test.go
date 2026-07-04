@@ -100,3 +100,43 @@ func TestSmokeCommonReadinessStateFileRechazaPIDMuertoV0(t *testing.T) {
 		t.Fatalf("salida inesperada: err=%v output=%s", err, string(output))
 	}
 }
+
+func TestSmokeCommonReadinessAceptaStartupReadyDegradadoV0(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash no disponible")
+	}
+	if _, err := exec.LookPath("jq"); err != nil {
+		t.Skip("jq no disponible")
+	}
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v0/server/readiness" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{
+			"schema_version":"orquesta_server_readiness.v0",
+			"ready":false,
+			"status":"running",
+			"availability_status":"running",
+			"availability_reason":"server_ready",
+			"startup_ready":true,
+			"startup_status":"startup_degraded_external_work_goal_backend_required",
+			"diagnostics":[{"code":"external_work_goal_backend_required"}]
+		}`))
+	}))
+	defer server.Close()
+
+	check := exec.Command(
+		"bash",
+		"-c",
+		`source scripts/lib/smoke_common.sh; smoke_orquesta_readiness_ok "$TEST_BASE_URL"`,
+	)
+	check.Dir = root
+	check.Env = append(os.Environ(), "TEST_BASE_URL="+server.URL)
+	if output, err := check.CombinedOutput(); err != nil {
+		t.Fatalf("readiness degradada con startup_ready no aceptada: %v output=%s", err, string(output))
+	}
+}

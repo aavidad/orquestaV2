@@ -129,6 +129,21 @@ func TestCodeContextBrokerV0BloqueaCodebaseMCPHastaOptInCentral(t *testing.T) {
 	requireCodeContextIssueTestV0(t, result, ErrCodeContextProveedorNoConfiguradoV0)
 }
 
+func TestValidateCodeContextQueryV0AceptaConsultasEstructuradasV0(t *testing.T) {
+	for _, queryKind := range []string{
+		CodeContextQueryKindCallersV0,
+		CodeContextQueryKindImportsV0,
+		CodeContextQueryKindModuleExportsV0,
+		CodeContextQueryKindRelevantSnippetsV0,
+	} {
+		query := validCodeContextQueryTestV0()
+		query.QueryKind = queryKind
+		if issues := ValidateCodeContextQueryV0(query); len(issues) != 0 {
+			t.Fatalf("query_kind=%s issues=%+v", queryKind, issues)
+		}
+	}
+}
+
 func TestCodeContextBrokerV0ExigeLeaseCentralParaCodebaseMCP(t *testing.T) {
 	query := validCodeContextQueryTestV0()
 	query.AllowExternalIndexer = true

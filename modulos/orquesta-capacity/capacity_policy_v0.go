@@ -43,8 +43,16 @@ func (policy DefaultCapacityPolicyV0) DecideCapacityV0(
 	request CapacityPolicyRequestV0,
 ) (CapacityPolicyDecisionV0, error) {
 	request = normalizeCapacityPolicyRequestV0(request)
-	refs := buildCapacityPolicyRefsV0(policy)
-	if issues := validateCapacityPolicyRefsV0(refs); len(issues) > 0 {
+	policyRef := capacityPolicyRefOrDefaultV0(policy.PolicyRef, "capacity-policy-ref-default-v0")
+	poolRef := capacityPolicyRefOrDefaultV0(policy.PoolRef, "capacity-pool-ref-default-v0")
+	modelRef := capacityPolicyRefOrDefaultV0(policy.ModelRef, "capacity-model-ref-default-v0")
+	quotaRef := capacityPolicyRefOrDefaultV0(policy.QuotaRef, "capacity-quota-ref-default-v0")
+	var issues []CapacityDecisionIssueV0
+	issues = appendCapacityPolicyRefIssueV0(issues, "policy_ref", policyRef)
+	issues = appendCapacityPolicyRefIssueV0(issues, "pool_ref", poolRef)
+	issues = appendCapacityPolicyRefIssueV0(issues, "model_ref", modelRef)
+	issues = appendCapacityPolicyRefIssueV0(issues, "quota_ref", quotaRef)
+	if len(issues) > 0 {
 		return CapacityPolicyDecisionV0{}, CapacityDecisionValidationErrorV0{Issues: issues}
 	}
 	tier := chooseCapacityPolicyLevelV0(policy.DefaultTier, request.DefaultTier, request.MinimumRecommendedCapacity)
@@ -55,42 +63,21 @@ func (policy DefaultCapacityPolicyV0) DecideCapacityV0(
 		reasoning = chooseCapacityPolicyLevelV0("", reasoning, tier)
 		motivos = append(motivos, "xhigh-degraded-without-evidence")
 	}
+	decisionRef := strings.TrimSpace(request.DecisionRef)
+	if decisionRef == "" {
+		decisionRef = "capacity-decision-ref-" + strings.TrimSpace(request.CapacityRequestID)
+	}
 	return CapacityPolicyDecisionV0{
-		DecisionRef:     capacityPolicyDecisionRefV0(request),
+		DecisionRef:     decisionRef,
 		NivelCapacidad:  tier,
 		ReasoningEffort: reasoning,
-		PolicyRef:       refs.policyRef,
-		PoolRef:         refs.poolRef,
-		ModelRef:        refs.modelRef,
-		QuotaRef:        refs.quotaRef,
+		PolicyRef:       policyRef,
+		PoolRef:         poolRef,
+		ModelRef:        modelRef,
+		QuotaRef:        quotaRef,
 		Motivos:         compactCapacityPolicyStringsV0(motivos),
 		EvidenceRefs:    compactCapacityPolicyStringsV0(append(request.EvidenceRefs, policy.EvidenceRefs...)),
 	}, nil
-}
-
-type capacityPolicyRefsV0 struct {
-	policyRef string
-	poolRef   string
-	modelRef  string
-	quotaRef  string
-}
-
-func buildCapacityPolicyRefsV0(policy DefaultCapacityPolicyV0) capacityPolicyRefsV0 {
-	return capacityPolicyRefsV0{
-		policyRef: capacityPolicyRefOrDefaultV0(policy.PolicyRef, "capacity-policy-ref-default-v0"),
-		poolRef:   capacityPolicyRefOrDefaultV0(policy.PoolRef, "capacity-pool-ref-default-v0"),
-		modelRef:  capacityPolicyRefOrDefaultV0(policy.ModelRef, "capacity-model-ref-default-v0"),
-		quotaRef:  capacityPolicyRefOrDefaultV0(policy.QuotaRef, "capacity-quota-ref-default-v0"),
-	}
-}
-
-func validateCapacityPolicyRefsV0(refs capacityPolicyRefsV0) []CapacityDecisionIssueV0 {
-	var issues []CapacityDecisionIssueV0
-	issues = appendCapacityPolicyRefIssueV0(issues, "policy_ref", refs.policyRef)
-	issues = appendCapacityPolicyRefIssueV0(issues, "pool_ref", refs.poolRef)
-	issues = appendCapacityPolicyRefIssueV0(issues, "model_ref", refs.modelRef)
-	issues = appendCapacityPolicyRefIssueV0(issues, "quota_ref", refs.quotaRef)
-	return issues
 }
 
 func appendCapacityPolicyRefIssueV0(issues []CapacityDecisionIssueV0, field string, value string) []CapacityDecisionIssueV0 {
@@ -114,13 +101,6 @@ func normalizeCapacityPolicyRequestV0(request CapacityPolicyRequestV0) CapacityP
 	request.DefaultReasoningEffort = strings.TrimSpace(request.DefaultReasoningEffort)
 	request.EvidenceRefs = compactCapacityPolicyStringsV0(request.EvidenceRefs)
 	return request
-}
-
-func capacityPolicyDecisionRefV0(request CapacityPolicyRequestV0) string {
-	if strings.TrimSpace(request.DecisionRef) != "" {
-		return strings.TrimSpace(request.DecisionRef)
-	}
-	return "capacity-decision-ref-" + strings.TrimSpace(request.CapacityRequestID)
 }
 
 func chooseCapacityPolicyLevelV0(values ...string) string {

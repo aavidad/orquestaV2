@@ -2487,3 +2487,949 @@ No sobrecerrar:
   motor actual cubre R1-R8 y packs iniciales, no el universo completo.
 - Siguen abiertos `BUG-079`, `BUG-165/065`, `BUG-058/066`, `BUG-075` y
   `MEJ-106` segun el handoff vigente.
+
+## Continuacion Codex 2026-07-04 tarde 6
+
+TAREA-6/MEJ-106 avanza el ratchet de entorno de 513 a 511 sin tocar nucleo
+neutral. Se consolidan dos `ORQUESTA_*` reales de la composition root:
+`ORQUESTA_CAPACITY_MODEL_REF` y `ORQUESTA_CAPACITY_QUOTA_REF` salen de la
+superficie configurable porque no tenian uso operativo documentado fuera del
+registro/lectura de la composicion. El stack conserva `ModelRef` y `QuotaRef`
+internos por defecto para la decision de capacidad, y mantiene como knobs
+externos `ORQUESTA_CAPACITY_POLICY_REF` y `ORQUESTA_CAPACITY_POOL_REF`.
+
+Cambios aplicados:
+
+- `cmd/orquesta-server/server_env_registry_v0.go` retira los dos nombres y su
+  metadata publica.
+- `cmd/orquesta-server/stack.go` deriva `ModelRef`/`QuotaRef` desde defaults
+  internos estables.
+- `cmd/orquesta-server/effective_config_v0.go` deja de publicar settings de
+  entorno que ya no existen.
+- `cmd/orquesta-server/env_vars_ratchet_v0_test.go` fija ratchet focal
+  `env_vars_orquesta <= 511` y falla ante subidas salvo justificacion explicita
+  con `env_vars_orquesta_allow_increase_to=<valor>` en inventario o bitacora.
+- `scripts/orquesta_metricas_deuda.sh` actualiza la lectura comentada a 511.
+
+Evidencia local antes de cierre:
+
+- `scripts/orquesta_metricas_deuda.sh --json` devuelve
+  `{"env_vars_orquesta":511,"endpoints_status":16,"interfaces_estado":65,"modulos_director":17}`.
+
+Pendiente antes de cerrar la tarea: ejecutar el test requerido
+`go test -count=1 ./cmd/orquesta-server`.
+
+## Continuacion Codex 2026-07-04 tarde 7
+
+Corte de auditoria tras intentar paralelizar T1-T7 por Orquesta. No hay cierre
+funcional nuevo de esas tareas: el resultado util de esta tanda es diagnostico
+de autonomia y limpieza, mas un relanzamiento previsto con contexto estrecho.
+
+Observado:
+
+- El lote conjunto en `/tmp/orquesta-autonomia-start-20260704T142421Z` fallo
+  durante `prepare-run` por carreras/ownership del backend `app_server_tmux`
+  (`codex_app_server_tmux_session_exited`, `code_home_unavailable`,
+  `start_failed`, `session_unowned`, `kill_failed`).
+- Los relanzamientos aislados T1-T6 fueron aceptados, pero materializaron solo
+  checkpoints o quedaron bloqueados por alto consumo sin receipt terminal util.
+- El T7 viejo del wizard quedo obsoleto: su payload solo cubria la seccion 10
+  antigua y no las secciones 10 tecnica, 11/11.5 y 12 que Claude anadio
+  despues.
+- `POST /api/v0/runs/control` con `forced=true` devolvio `status=stopped` y
+  `goal_control_signal_confirmed=true`, pero `/api/v0/server/shutdown` siguio
+  devolviendo `backend_still_running` para backends `app_server_tmux`.
+  Se hizo limpieza local limitada a procesos temporales bajo
+  `/tmp/orquesta-autonomia-*` y `/tmp/oq-gsrv-*`; comprobacion posterior sin
+  `orquesta-server run`, sin `codex app-server` y sin `codebase-memory-mcp`.
+
+Subagentes read-only usados, sin `codebase-memory-mcp`:
+
+- Euler audito el wizard frente a las secciones nuevas: faltan T1-T8,
+  `WizardFactV0`, `RequiresFacts`, `ExcludedByFacts`,
+  `ResolvedByExclusion`, `HelpKey`, `ExampleKey`, justificacion de contraste,
+  `GlossaryExpanded`, `ComprehensionQuery`, glosario generado y bot RAG/MCP
+  `orquesta.nueva_app.wizard.bot.v0`.
+- Darwin audito los pilotajes: confirma que no son verdes y recomienda tratar
+  el patron como residual abierto de lifecycle goal-first/Codex tmux y shutdown
+  no cooperativo.
+
+Decision de direccion:
+
+- No integrar checkpoints/result placeholders como cierre funcional.
+- Documentar la reproduccion en `BUG-ORQ-20260704-165`.
+- Relanzar por Orquesta solo goals pequenos con contexto estrecho. Primero T7A:
+  contratos/exclusion/ayuda del wizard en `orquesta-web`, sin tocar MCP bot ni
+  stack. Despues, si T7A cierra, T7B para corpus/bot determinista y T7C para
+  MCP/web chat/LLM opt-in.
+
+## Continuacion Codex 2026-07-04 tarde 8
+
+Revision de `docs/auditoria_envs_pisadas_2026-07-04.md` y TAREA-8 de
+`docs/instrucciones_director_codex_2026-07-04.md`.
+
+Hecho en codigo:
+
+- `ORQUESTA_CODEX_CODE_HOME` queda como canónica para auth/config Codex;
+  `CODEX_HOME` queda como alias legacy diagnosticado. Si solo existe legacy, el
+  setting canónico sale con `source=legacy_alias` y `deprecated_env_used`; si
+  ambas existen y difieren, sale `env_alias_conflict` y gana la canónica.
+- `ORQUESTA_OPES_BASE_URL` queda como canónica para OPES; `OPES_BASE_URL` queda
+  como alias legacy con el mismo patrón.
+- `ORQUESTA_CODEX_HOME` se documenta en el registry como HOME del proceso Codex,
+  no como fuente de auth/config.
+- Se conserva `env_vars_orquesta=511`; no se sube el ratchet.
+
+Archivos principales:
+
+- `cmd/orquesta-server/server_env_registry_v0.go`
+- `cmd/orquesta-server/codex_env_v0.go`
+- `cmd/orquesta-server/codex_wave_config_v0.go`
+- `cmd/orquesta-server/effective_config_v0.go`
+- `cmd/orquesta-server/config_test.go`
+- `docs/auditoria_envs_pisadas_2026-07-04.md`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+
+Verificacion:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerConfigFromEnvV0Diagnostica(OPESBaseURLLegacyAlias|OPESBaseURLPisada|CodexCodeHomeLegacyAlias|CodexCodeHomePisado)V0|TestServerDaemonStartEnvironmentV0ProyectaPoliticaAutoprogramacion|TestServerCodexGoalBackendFromEnvV0TmuxNoArrancaAppServerEnConstruccionV0'`
+- `go test -count=1 ./cmd/orquesta-server`
+- `scripts/orquesta_metricas_deuda.sh --json`
+
+Pendiente de la auditoria de variables:
+
+- `ORQUESTA_SERVER_URL`/`ORQUESTA_BASE_URL`: riesgo bajo, falta diagnostico de
+  conflicto.
+- Timeouts de smoke con unidades distintas: mover a prefijo claro o marcar como
+  solo-proceso-hijo.
+- `ORQUESTA_GUARDIAN_*`: declarar como `child_process_env` o excluir con
+  metadata.
+- TAREA-8.1/8.2 grande: fichero canónico `orquesta.config.*` y guard
+  `config_projection_mismatch`.
+
+## Continuacion Codex 2026-07-04 tarde 9
+
+Se completa otro corte de la ola 1 de TAREA-8 con paralelizacion por
+subagentes y prueba real acotada de Orquesta.
+
+Hecho:
+
+- `ORQUESTA_SERVER_URL` queda canónica frente a `ORQUESTA_BASE_URL`, con
+  setting sensible en `effective_config`, alias legacy, conflicto diagnosticado
+  y precedencia corregida en scripts OPES.
+- Timeouts de smoke normalizados a sufijo `_MS`: Codex usa
+  `ORQUESTA_CODEX_SMOKE_TIMEOUT_MS` con alias legacy
+  `ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS`; Claude/Gemini directos usan
+  `SMOKE_*_TIMEOUT_MS`; el script Claude server acepta
+  `SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REQUEST_TIMEOUT_MS`.
+- `ORQUESTA_GUARDIAN_*` emitidas por el servidor quedan en registry de
+  `child_process` y los tests impiden claves no registradas o heredadas desde
+  el entorno padre.
+- Se uso Orquesta real temporal: `orquesta-server run` con state/runtime bajo
+  `/tmp` publico `env_alias_conflict` para `ORQUESTA_BASE_URL`,
+  `deprecated_env_used` para `CODEX_HOME` y `deprecated_env_used` para
+  `OPES_BASE_URL`, sin valores crudos. El primer intento quedo bloqueado por la
+  guarda correcta `opes_destination_confirmation_required`; se reintento contra
+  loopback con `ORQUESTA_OPES_TEMPORAL_CONFIRM=1`.
+
+Ratchet:
+
+- `scripts/orquesta_metricas_deuda.sh --json` devuelve
+  `env_vars_orquesta=512`. La subida es temporal y justificada por la canónica
+  nueva `ORQUESTA_CODEX_SMOKE_TIMEOUT_MS` mientras se mantiene el alias legacy
+  `_SECONDS`; el inventario incluye
+  `env_vars_orquesta_allow_increase_to=512`. Proxima ola: retirar docs/lecturas
+  legacy `_SECONDS` y bajar el techo.
+
+Verificado:
+
+- `go test -count=1 ./cmd/orquesta-server`
+- `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-runtime-gemini ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack`
+- `bash -n` de los scripts de smoke tocados.
+- `git diff --check`
+
+Pendiente real:
+
+- TAREA-8.1: fichero canónico `orquesta.config.*`.
+- TAREA-8.3 completa: ratchet bidireccional de envs registradas/leídas.
+- Retirada final de aliases legacy tras compatibilidad.
+
+## Continuacion Codex 2026-07-04 tarde 10
+
+Se cierra TAREA-8.2 en primer corte operativo para las dos rutas que lanzan
+trabajo:
+
+- `POST /api/v0/autoprogramming/prepare-run` y `POST /api/v0/apps/director`
+  aceptan `required_settings:[{key,value}]`.
+- `cmd/orquesta-server` convierte `effective_config.settings` a una proyección
+  MCP pequeña y la inyecta en `orquesta-app-codex-stack`.
+- El stack valida antes de lanzar goal, persistir run legacy o encolar. En
+  mismatch devuelve `config_projection_mismatch` con HTTP 400.
+- El guard queda en adaptador/composición; no se mete `effective_config` en
+  `orquesta-goal` ni en core.
+
+Verificado:
+
+- `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-i18n-docs`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack`
+- `go test -count=1 ./cmd/orquesta-server`
+- `go test -count=1 ./...`
+- Smoke Orquesta temporal: ambos endpoints devuelven
+  `config_projection_mismatch` cuando `required_settings` exige un umbral que
+  no coincide con la proyección efectiva.
+
+Pendiente real ahora:
+
+- TAREA-8.1: fichero canónico `orquesta.config.*`.
+- TAREA-8.3 completa: ratchet bidireccional y reducción del techo
+  `env_vars_orquesta=512` cuando se retiren aliases legacy.
+- Retirada final de aliases legacy tras ventana de compatibilidad.
+
+## Continuacion Codex 2026-07-04 tarde 11
+
+Se cierra un primer corte de TAREA-8.1 y se deja TAREA-8.3 como diagnóstico
+AST no bloqueante.
+
+Hecho:
+
+- Nuevo `orquesta.config.json` por proyecto con
+  `schema_version:"orquesta_config.v0"`.
+- Primer bloque soportado: `autoprogramming.checkpoint_only_high_consumption_tokens`,
+  `checkpoint_only_max_wait_seconds` y
+  `no_checkpoint_warning_max_wait_seconds`.
+- Precedencia: env explícita gana al fichero; fichero gana a default.
+- `effective_config` publica `source=config_file` para esos valores.
+- El stack y `/api/v0/autoprogramming/status` consumen la política efectiva
+  desde `ConfigV0`, no recalculada solo desde env.
+
+Bug encontrado y cerrado durante smoke:
+
+- El status REST del gateway no recibía `AutoprogrammingGoalProgressPolicy`;
+  con fichero `450000/1500/900` publicaba defaults `100000/900/600`.
+- Cierre: `orquesta-app-gateway.ConfigV0` y el handler REST reciben
+  `AutoprogrammingGoalProgressPolicy` desde `orquesta-app-codex-stack`.
+
+Ratchet:
+
+- `cmd/orquesta-server/server_env_registry_ast_v0_test.go` detecta por AST
+  lecturas `ORQUESTA_*` en producción. Queda no-failing: 226 lecturas actuales
+  faltan en registry/allowlist. Es deuda estructural para TAREA-8.3, no verde
+  falso.
+
+Verificado:
+
+- `go test -count=1 ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server -run 'AutoprogrammingStatusAPIRouteV0PublicaGoalProgressPolicy|FicheroCanonico|EnvExplicito|SchemaInvalido|BuildStackFromEnvV0'`
+- `go test -count=1 ./modulos/orquesta-server`
+- `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./modulos/orquesta-i18n-docs`
+- `go test -count=1 ./cmd/orquesta-server`
+- `git diff --check`
+- Smoke Orquesta temporal con `orquesta.config.json`:
+  `status_http=200`, `match_http=400` por validación de spec incompleta pero
+  sin `config_projection_mismatch`, y `mismatch_http=400` con
+  `config_projection_mismatch`.
+
+Pendiente:
+
+- Ampliar fichero canónico a todas las familias grandes de configuración.
+- Diseñar `--config`/snapshot de daemon si se adopta como contrato operativo.
+- Hacer estricto el ratchet AST por fases y bajar las 226 lecturas pendientes.
+
+## Continuacion Codex 2026-07-04 tarde 12
+
+Se amplía TAREA-8.1 y se endurece TAREA-8.3 sin romper compatibilidad.
+
+Hecho:
+
+- `orquesta.config.json` ya no cubre solo `autoprogramming`: añade `server`,
+  `daemon_logs` y `codex_runtime`.
+- Campos activos: `server.addr`, `server.state_dir`, `server.audit_file`,
+  `server.audit_disabled`, `daemon_logs.max_bytes`,
+  `daemon_logs.max_rotated_files`, `daemon_logs.retention_days`,
+  `daemon_logs.local_raw_enabled`, `daemon_logs.local_raw_reason` y
+  `codex_runtime.runtime_work_dir`.
+- `effective_config` publica `source=config_file` campo a campo y redacta paths
+  sensibles como refs.
+- `cmd/orquesta-server/server_env_registry_ast_v0_test.go` pasa a ratchet de
+  no-incremento. La baseline vigente baja a 220 lecturas pendientes.
+
+Verificado:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'FicheroCanonico|EnvExplicitoGana|AuditFileInvalido|EnvRegistryAST|EnvVars|Ratchet'`
+- `go test -count=1 ./cmd/orquesta-server`
+- `go test -count=1 ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack ./modulos/orquesta-mcp ./modulos/orquesta-i18n-docs ./modulos/orquesta-server`
+- Smoke Orquesta temporal ampliado:
+  `orquesta_temp_config_file_expanded_smoke=passed`, status publicó
+  `450000/1500`, `required_settings=450000` no produjo mismatch y
+  `required_settings=999999` produjo `400/config_projection_mismatch`.
+
+Pendiente:
+
+- Familias restantes de fichero canónico: `goal_backend`, límites Codex/agentes,
+  OPES/bridges, codebase broker, rails/seguridad y domain work.
+- `--config`/snapshot daemon.
+- Ratchet AST estricto por categorías hasta bajar de 220 a cero.
+
+## Continuacion Codex 2026-07-04 tarde 13
+
+Se amplía TAREA-8.1 con otra familia pequeña y segura del servidor.
+
+Hecho:
+
+- `orquesta.config.json` soporta ahora `server_http`:
+  `read_header_timeout_ms`, `read_timeout_ms`, `write_timeout_ms`,
+  `idle_timeout_ms`, `max_header_bytes` y `control_body_max_bytes`.
+- Añadido `server_lifecycle.shutdown_grace_ms`.
+- La precedencia sigue siendo por campo: env explícita > fichero > default.
+- `effective_config` marca `source=config_file` para estos nuevos settings.
+- Se revisó el aviso sobre `ORQUESTA_CAPACITY_MODEL_REF` y
+  `ORQUESTA_CAPACITY_QUOTA_REF`: no se repone. Su retirada era intencional para
+  MEJ-106; reponerlas subía el ratchet a 514 y sería regresión.
+
+Verificación:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'LeeHTTPYLifecycle|LeeServerDaemonRuntime|EnvExplicitoGanaCampo|ShutdownGrace|EnvRegistryAST|EnvVarsOrquestaRatchet'`
+- Smoke Orquesta temporal aislado fuera del repo:
+  `orquesta_config_http_smoke=passed`; `/api/v0/server/status` publicó
+  `ORQUESTA_SERVER_READ_HEADER_TIMEOUT_MS=1111` y
+  `ORQUESTA_SERVER_SHUTDOWN_GRACE_MS=7777` con `source=config_file`;
+  `POST /api/v0/autoprogramming/prepare-run` devolvió
+  `config_projection_mismatch` al exigir un valor divergente.
+
+Pendiente:
+
+- Familias restantes: `goal_backend`, límites Codex/agentes, OPES/bridges,
+  codebase broker, rails/seguridad, domain work, usage accounting y snapshot de
+  daemon/`--config`.
+- Ratchet AST vigente: 220 lecturas pendientes. Métrica global vigente:
+  `env_vars_orquesta=512`.
+
+## Continuacion Codex 2026-07-04 tarde 14
+
+Se completa otro bloque pequeño de TAREA-8.1 y baja el ratchet AST.
+
+Hecho:
+
+- `orquesta.config.json` soporta ahora `worktree_snapshot.max_files`,
+  `worktree_snapshot.max_file_bytes` y
+  `worktree_snapshot.max_total_bytes`.
+- El presupuesto efectivo alimenta tanto `effective_config` como el
+  `SnapshotReadBudget` del stack Codex.
+- Las tres envs `ORQUESTA_WORKTREE_SNAPSHOT_*` pasan al registro central.
+- Baseline AST baja de 220 a 217 lecturas pendientes.
+
+Verificación:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'WorktreeSnapshot|EnvRegistryAST|EnvVarsOrquestaRatchet|LeeHTTPYLifecycle' -v`
+- `scripts/orquesta_metricas_deuda.sh --json` -> `env_vars_orquesta=512`
+- Smoke Orquesta temporal aislado:
+  `orquesta_config_snapshot_smoke=passed`; status publicó
+  `ORQUESTA_WORKTREE_SNAPSHOT_MAX_FILES=17` y
+  `ORQUESTA_WORKTREE_SNAPSHOT_MAX_FILE_BYTES=18000` con
+  `source=config_file`; `required_settings` divergente devolvió
+  `config_projection_mismatch`.
+
+Pendiente:
+
+- Familias restantes: `goal_backend`, límites Codex/agentes, OPES/bridges,
+  codebase broker, rails/seguridad, domain work, usage accounting y snapshot de
+  daemon/`--config`.
+- Ratchet AST vigente: 217.
+
+## Continuacion Codex 2026-07-04 tarde 15
+
+Se completa `codex_usage_accounting` dentro de TAREA-8.1.
+
+Hecho:
+
+- `orquesta.config.json` soporta `codex_usage_accounting.mode` y
+  `codex_usage_accounting.log_max_bytes`.
+- El opt-in sigue siendo explícito: solo activa métricas con
+  `redacted_report` o `runtime_usage_report`.
+- `effective_config` publica `ORQUESTA_CODEX_USAGE_ACCOUNTING` y
+  `ORQUESTA_CODEX_USAGE_LOG_MAX_BYTES` con `source=config_file` cuando aplica.
+- Ambas envs quedan registradas en `serverEffectiveEnvRegistryV0`.
+- Baseline AST baja de 217 a 215.
+- Bug cerrado durante verificación: `BUG-ORQ-20260704-176`. T90 falló al
+  crecer `server_env_registry_v0.go` a 903 líneas; se movió la metadata nueva a
+  registries por familia y el fichero queda en 878 líneas.
+
+Verificación:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'CodexUsage|EnvRegistryAST|EnvVarsOrquestaRatchet' -v`
+- `go test -count=1 ./cmd/orquesta-server -run 'ResidualGoFileBudget|CodexUsage|WorktreeSnapshot|EnvRegistryAST|EnvVarsOrquestaRatchet' -v`
+- Smoke Orquesta temporal aislado: `orquesta_config_usage_smoke=passed`, con
+  `required_settings` divergente detectado como `config_projection_mismatch`.
+- Métrica global sigue en `env_vars_orquesta=512`.
+
+Pendiente:
+
+- `goal_backend`, límites Codex/agentes, OPES/bridges, codebase broker,
+  rails/seguridad, domain work y `--config`/snapshot daemon.
+- Ratchet AST vigente: 215.
+
+## Continuacion Codex 2026-07-04 tarde 16
+
+Se completa `codebase_broker` dentro de TAREA-8.1 y se usa Orquesta para
+verificarlo con servidor temporal aislado.
+
+Hecho:
+
+- `orquesta.config.json` soporta ahora `codebase_broker`:
+  `provider_kind`, `external_indexer_enabled`, `max_concurrent`, `timeout_ms`,
+  `state_dir`, `watchdog_enabled`, `watchdog_stop_orphans`,
+  `watchdog_orphan_min_age_seconds`, `command` y `project_name`.
+- El wiring del broker central lee esa seccion con precedencia
+  `env explicita > fichero > default`, sin arrancar `codebase-memory-mcp` salvo
+  opt-in central `provider_kind=codebase_memory_mcp` con `state_dir`.
+- El watchdog de herramientas de contexto lee la misma seccion desde el
+  proyecto.
+- `effective_config` publica la familia con `source=config_file`; rutas y
+  comandos quedan como settings sensibles/redactados en estado publico.
+- Se cerro `BUG-ORQ-20260704-177`: faltaba montar
+  `/api/v0/codebase/query` en el handler HTTP directo del servidor.
+- Se cerro `BUG-ORQ-20260704-178`: `scope:["."]` se descartaba y no buscaba en
+  la raiz de apps externas.
+
+Verificacion:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'CodeContextBroker|Codebase|EnvRegistryAST|EnvVarsOrquestaRatchet|ResidualGoFileBudget|EffectiveConfigV0PublicaCodebaseBroker|WatchdogLoopConfig' -v`
+- `go test -count=1 ./cmd/orquesta-server -run 'ScopePunto|CodebaseQueryPublico|CodeContextBroker|Codebase|EnvRegistryAST|EnvVarsOrquestaRatchet|ResidualGoFileBudget' -v`
+- `go test -count=1 ./cmd/orquesta-server` -> verde en 65.685s antes de los dos
+  fixes de ruta/scope; queda pendiente repetir paquete completo tras este corte.
+- Smoke Orquesta temporal aislado:
+  `effective_config_codebase_broker=passed`, `codebase_status=passed`,
+  `codebase_query=passed`.
+- Ratchet AST sigue en 215. `env_vars_orquesta` no sube.
+
+Pendiente:
+
+- Repetir `go test -count=1 ./cmd/orquesta-server` y el set transversal tras
+  documentacion.
+- Siguiente bloque TAREA-8 sugerido por subagente: `domain_work`, con cuidado
+  en `domain_work_stack_v0.go`, `config_file_v0.go`, `config.go`,
+  `effective_config_v0.go` y tests.
+- Siguen pendientes `goal_backend`, limites Codex/agentes, OPES/bridges,
+  rails/seguridad y `--config`/snapshot daemon.
+
+## Continuacion Codex 2026-07-04 tarde 17
+
+Se completa `domain_work` dentro de TAREA-8.1.
+
+Hecho:
+
+- `orquesta.config.json` soporta ahora `domain_work`:
+  `http_base_url`, `http_domain_ref`, `file_dir`, `file_enabled`,
+  `http_create_path`, `http_submit_path`, `http_timeout_seconds`,
+  `http_egress_mode`, `http_allowed_hosts` y `delivery_ledger_path`.
+- El executor `domain_work` consume esos campos con precedencia
+  `env explicita > fichero > default`.
+- El backend file y el adaptador HTTP neutral quedan cubiertos por tests desde
+  config file.
+- El ledger de entregas domain_work lee `delivery_ledger_path` desde config.
+- `effective_config` publica la familia con `source=config_file`; URL, rutas
+  locales y ledger quedan como sensibles/redactados.
+- La metadata se añadio en `domain_work_env_registry_v0.go`, no en el registro
+  grande.
+- Baseline AST baja de 215 a 202.
+
+Verificacion:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'DomainWork|EnvRegistryAST|EnvVarsOrquestaRatchet|ResidualGoFileBudget' -v`
+- Smoke Orquesta temporal aislado:
+  `effective_config_domain_work=passed`, `domain_work_create=passed`,
+  `domain_work_snapshot=passed`.
+
+Pendiente:
+
+- Repetir `go test -count=1 ./cmd/orquesta-server` y set transversal tras
+  documentacion.
+- Siguen pendientes `goal_backend`, limites Codex/agentes, OPES/bridges,
+  rails/seguridad y `--config`/snapshot daemon.
+- Ratchet AST vigente: 202.
+
+## Continuacion Codex 2026-07-04 tarde 18
+
+Se completa el bloque de limites Codex/agentes y supervisor residente dentro de
+TAREA-8.1.
+
+Hecho:
+
+- `orquesta.config.json` soporta ahora `server_supervisor`:
+  `max_runs_per_tick`, `max_executions_per_tick`, `queue_limit`,
+  `drain_max_dispatches`, `drain_max_commands`, `drain_max_outbox` y
+  `drain_max_external_waits`.
+- Añade `server_idle_self_improvement.max_requests` y
+  `server_resident_director.max_actions`.
+- Amplia `codex_runtime` con `execution_mode`, `reasoning_effort`,
+  `max_expected_seconds`, `max_batch_ready` y `max_concurrency`.
+- Añade `codex_director.wave_agents`, `max_subagents_per_agent` y
+  `recursive_agent_budget`.
+- La precedencia queda `env explicita > fichero > default`; `serial` sigue
+  capando batch/concurrency/wave agents a `1`.
+- `effective_config` publica esos limites con `source=config_file`.
+- `ORQUESTA_CODEX_MAX_EXPECTED_SECONDS` y
+  `ORQUESTA_SERVER_DRAIN_MAX_COMMANDS` quedan visibles en effective config.
+- Se bajo el ratchet AST de 202 a 201.
+- Se cerro `BUG-ORQ-20260704-179`: el status publico redactaba
+  `ORQUESTA_SERVER_DRAIN_MAX_COMMANDS` por contener `COMMAND`; ahora los
+  limites numericos `*_MAX_COMMANDS` no se redactan salvo marca sensible
+  explicita.
+
+Verificacion:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'FicheroCanonico|LimitesCodex|Capacidad|CodexRuntime|CodexStackCapacity|CodexDirectorWaveConfig|ModoSerial|SupervisorResidente|EnvRegistryAST|EnvVarsOrquestaRatchet|ResidualGoFileBudget' -v`
+- `go test -count=1 ./modulos/orquesta-server -run 'PublicServerEffectiveConfig|StatusPublic' -v`
+- Smoke Orquesta temporal aislado:
+  `orquesta_config_limits_smoke=passed`.
+
+Pendiente:
+
+- Repetir `go test -count=1 ./cmd/orquesta-server` y set transversal tras
+  documentacion.
+- Siguen pendientes `goal_backend`, OPES/bridges, rails/seguridad y
+  `--config`/snapshot daemon.
+
+## Continuacion Codex 2026-07-04 tarde 19
+
+Se completa el bloque `--config`/snapshot daemon de TAREA-8.1.
+
+Hecho:
+
+- `orquesta-server run --config <path>`, `start --config <path>`,
+  `status --config <path>` y `stop --config <path>` cargan el fichero canonico
+  explicito.
+- Si no hay `ORQUESTA_CODEX_PROJECT_WORKDIR`, `--config` usa el directorio del
+  fichero como fallback de proyecto; si la env existe, sigue ganando la env.
+- `start --config` escribe un snapshot validado en
+  `state/config-snapshots/orquesta.config.json` y arranca el hijo como
+  `run --config <snapshot>`, sin introducir env nueva.
+- `ConfigV0` conserva `ProjectConfigFilePath` como dato interno para que
+  `effective_config` marque `source=config_file` aunque el daemon lea desde
+  snapshot.
+- Se cerro `BUG-ORQ-20260704-180`: `start` devolvia `readiness_timeout` cuando
+  readiness estricta estaba degradada por conectores externos aunque el
+  servidor ya estaba `startup_ready`.
+
+Uso de Orquesta:
+
+- `prepare-run` real contra servidor temporal con
+  `ORQUESTA_CODEX_GOAL_BACKEND=claude_file_control`; primer intento rechazo
+  `worktree_isolated=false`, segundo accepted con
+  `goal_ref=goal-ref-task-autoprogramming-00f701576d89-g01`.
+- Evidencia:
+  `/tmp/orquesta-config-cli.kXgni4/prepare.out.json` y
+  `/tmp/orquesta-config-cli.kXgni4/claude-goal/`.
+
+Verificacion:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'ReadinessOK|ConfigPath|DaemonRunArgs|DaemonStart|Status|CommandPublic|EnvRegistryAST|EnvVarsOrquestaRatchet' -v`
+- Smoke real temporal:
+  `orquesta_start_config_snapshot_smoke=passed root=/tmp/orquesta-start-config-smoke.fImpbt`.
+  El smoke arranca con config, muta el fichero original y verifica que el daemon
+  sigue usando el snapshot.
+
+Pendiente:
+
+- Repetir `go test -count=1 ./cmd/orquesta-server`, set transversal y
+  `go test -count=1 ./...`.
+- Resto TAREA-8: `goal_backend`, OPES/bridges y rails/seguridad.
+
+## Continuacion Codex 2026-07-04 tarde 20
+
+Se completa el bloque `goal_backend` de TAREA-8.1.
+
+Hecho:
+
+- `orquesta.config.json` soporta ahora `goal_backend`:
+  `kind`, `timeout_ms`, `preflight_timeout_ms` y
+  `allow_app_server_proxy_diagnostic`.
+- Se consolidan `ORQUESTA_CODEX_GOAL_BACKEND`,
+  `ORQUESTA_CODEX_GOAL_TIMEOUT_MS`,
+  `ORQUESTA_CODEX_GOAL_PREFLIGHT_TIMEOUT_MS` y
+  `ORQUESTA_ALLOW_APP_SERVER_PROXY_DIAGNOSTIC` con precedencia
+  `env explicita > fichero > default`.
+- El wiring de Codex app-server, Claude file/process y Gemini file/process
+  resuelve el backend desde el fichero cargado/snapshot cuando existe.
+- La derivacion de `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_GOAL_FIRST_ENABLED`
+  y el diagnostico `external_work_goal_backend_required` ya usan el backend
+  efectivo, no solo env cruda.
+- `cleanup` de app-server tmux tras fallo de startup y la guarda
+  `self_programming_only` respetan el backend efectivo.
+- `effective_config` publica `source=config_file` para backend, timeouts y
+  opt-in proxy.
+
+Uso de Orquesta:
+
+- Smoke real con `orquesta-server start --config` y
+  `goal_backend.kind=claude_file_control`.
+- `POST /api/v0/autoprogramming/prepare-run` aceptado con
+  `goal_ref=goal-ref-task-autoprogramming-88e68c22e8c4-g01`.
+- El primer assert del arnes esperaba `.status=="accepted"` aunque el contrato
+  real devuelve `accepted:true`; no fue bug de Orquesta. Se materializo resultado
+  durable temporal en el write-set del smoke y se cerro el daemon
+  cooperativamente.
+
+Verificacion:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'GoalBackend|GoalFirst|ExternalWorkLegacy|EnvRegistryAST|EnvVarsOrquestaRatchet|ResidualGoFileBudget' -v`
+- Smoke real temporal:
+  `orquesta_goal_backend_config_smoke=passed root=/tmp/orquesta-goal-backend-config-smoke.7TWwyo`.
+
+Pendiente:
+
+- Repetir `go test -count=1 ./cmd/orquesta-server`, set transversal y
+  `go test -count=1 ./...`.
+- Resto TAREA-8: OPES/bridges, OPES registry y rails/egress.
+
+## Continuacion Codex 2026-07-04 tarde 21
+
+Se completa el bloque `rails_security` + `egress_sanitizer` de TAREA-8.1.
+
+Hecho:
+
+- `orquesta.config.json` soporta ahora `rails_security.security_mode`,
+  `rails_security.rails_mode`, `rails_security.detail_prohibited_rails` y
+  `rails_security.detail_prohibited_rails_scope`.
+- Aunque el fichero pida `rails_mode=enforced` o `detail_prohibited_rails=on`,
+  la normalizacion mantiene `ORQUESTA_RAILS_MODE=offline` y
+  `ORQUESTA_DETAIL_PROHIBITED_RAILS=off`; no se reactivan rails duros.
+- `orquesta.config.json` soporta `egress_sanitizer.enabled`,
+  `sanitizer_ref`, `local_model.*` y `sidecar.*`.
+- `effective_config` publica `source=config_file` para estas familias y redacta
+  rutas, comandos, endpoints y refs sensibles.
+- `buildStackFromEnvV0` cablea el sanitizer desde el fichero/snapshot, sin
+  meter opciones concretas en core.
+- Se cerro `BUG-ORQ-20260704-181`: en `start --config`, las envs de rails
+  proyectadas al daemon ocultaban el origen `config_file`. Ahora solo el
+  snapshot daemon reclasifica esa proyeccion como `config_file`; un
+  `run --config` manual con env explicita sigue siendo `explicit`.
+
+Uso de Orquesta:
+
+- Smoke real con `orquesta-server start --config` y configuracion canonica de
+  rails/egress.
+- Verificado que `/status` expone rails y egress con `source=config_file` y que
+  no filtra comando, ruta de modelo ni endpoint local.
+
+Verificacion:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'Rails|EgressSanitizer|EnvRegistryAST|EnvVarsOrquestaRatchet|ResidualGoFileBudget|DaemonStartEnvironment' -v`
+- Smoke real temporal:
+  `orquesta_rails_egress_config_smoke=passed root=/tmp/orquesta-rails-egress-config-smoke.hgpepi`.
+
+Pendiente:
+
+- Repetir `go test -count=1 ./cmd/orquesta-server`, set transversal y
+  `go test -count=1 ./...`.
+- Resto TAREA-8: OPES/bridge, OPES registry y limpieza final de docs/handoff.
+
+## Continuacion Codex 2026-07-04 tarde 22
+
+Se completa el bloque OPES seguro de TAREA-8.1.
+
+Hecho:
+
+- Se extrae `cmd/orquesta-server/opes_config_file_v0.go` para que las structs
+  OPES no hinchen `config_file_v0.go`; el fichero central baja a 846 lineas y
+  el ratchet T90 vuelve a verde.
+- `orquesta.config.json` soporta `opes.base_url`.
+- `orquesta.config.json` soporta campos seguros de `opes_bridge`: scope
+  (`job_type`, `job_type_sequence`, `job_ref`, `program_id`, `topic_id`,
+  `correlation_id`), limites (`limit`, `timeout_seconds`, `priority`,
+  `interval_seconds`, `initial_delay_seconds`, `max_ticks`), espera residente
+  (`wait_resident_seconds`, `wait_resident_interval_ms`),
+  `supervise_submitted`, `dry_run` y compatibilidad runtime declarativa.
+- `orquesta.config.json` soporta `opes_registry_finalpkg.*` y
+  `opes_topic_registry.*`; rutas locales se publican redactadas.
+- `effective_config` baja el ratchet AST de 201 a 191 al dejar de leer env
+  cruda de OPES bridge en el bloque de estado efectivo.
+- El parser de `opes_bridge.job_type_sequence` conserva la normalizacion
+  historica de comas, punto y coma, espacios y saltos de linea.
+
+Frontera deliberada:
+
+- Quedan env/script-only por seguridad operativa e idempotencia:
+  `ORQUESTA_OPES_BRIDGE_ENABLED`, `ORQUESTA_OPES_BRIDGE_CONFIRM`,
+  `ORQUESTA_OPES_TEMPORAL_CONFIRM`,
+  `ORQUESTA_OPES_BRIDGE_PRODUCTIVE_CONFIRM`,
+  `ORQUESTA_OPES_BRIDGE_ALLOW_UNFILTERED`,
+  `ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF`,
+  `ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_DISABLED`,
+  `ORQUESTA_OPES_BRIDGE_INPUT_LEDGER_PATH` y comandos/preflight/readiness live
+  de speech/remote QA. No se migran a fichero en este corte para no abrir
+  produccion, saltar filtros ni romper idempotencia de ledger desde un config
+  persistente.
+
+Uso de Orquesta:
+
+- Smoke real con `orquesta-server start --config` combinando OPES bridge seguro,
+  finalpkg y topic registry. Solo inspecciona `/status`; no drena OPES ni crea
+  runs.
+
+Verificacion:
+
+- Focal `OPESBridgeConfigLeeFicheroCanonico|OPESDrainConfig|OPESBridgeLoopConfig|OPESSpeechSynthesis|ServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica|ServerConfigFromEnvV0PublicaOPESSpeechSynthesisPreflightRedactado|EnvRegistryAST|EnvVarsOrquestaRatchet|ResidualGoFileBudget`.
+- Smoke real temporal:
+  `orquesta_opes_config_smoke=passed root=/tmp/orquesta-opes-config-smoke.R6mcB5`.
+- `go test -count=1 ./cmd/orquesta-server` -> verde en 66.096s.
+- `git diff --check` -> verde.
+- `bash scripts/orquesta_metricas_deuda.sh --json` ->
+  `{"env_vars_orquesta":512,"endpoints_status":16,"interfaces_estado":65,"modulos_director":17}`.
+- `go test -count=1 ./...` -> verde.
+- Comprobado que no quedan daemons temporales de smoke ni
+  `codebase-memory-mcp` vivos.
+
+Pendiente:
+
+- Repetir set transversal y `go test -count=1 ./...` tras documentacion.
+- Si se quiere migrar confirmaciones/ledger/comandos a fichero, debe hacerse
+  como tarea gobernada con nuevas guardas de operador, no como simple traslado
+  de envs.
+
+## Continuacion Codex 2026-07-04 tarde 23
+
+Se abre TAREA-9 con herramienta reproducible y primera ola segura de limpieza.
+
+Hecho:
+
+- Nuevo `scripts/orquesta_auditoria_codigo.sh`.
+  - Genera JSON y SQLite local como reporte/caché derivada.
+  - Mide `deadcode`, módulos huérfanos, helpers copiados y ficheros grandes.
+  - No escribe en el repo analizado salvo los artefactos de salida indicados.
+- Nuevo `scripts/test_orquesta_auditoria_codigo.sh`.
+- `scripts/orquesta_smoke_nightly.sh` ejecuta auditoría por defecto y añade
+  ratchet contra el último nightly verde: falla si suben
+  `deadcode_candidates` o `helper_duplicate_definitions`.
+- `scripts/test_orquesta_smoke_nightly.sh` cubre auditoría fake, baseline verde
+  y fallo de ratchet simulado.
+- `BUG-ORQ-20260704-182` cerrado: la primera versión recorría `**/*.go` desde
+  raíz y podía colgar auditorías en workspaces grandes; ahora solo recorre
+  `cmd/` y `modulos/`.
+- Primera ola `orquesta-deploy`: eliminados siete helpers exportados muertos
+  `Has*IssueV0` sin consumidores internos.
+
+Números actuales:
+
+- Medición fresca con `deadcode` instalado en GOPATH:
+  `deadcode_candidates=1230`, `helper_duplicate_definitions=288`,
+  `orphan_modules=1`, `large_files_over_800=17`.
+- `modulos/orquesta-deploy=87` candidatos frente a 94 en el snapshot histórico
+  de Claude.
+- El snapshot histórico marcaba 1188 globales; no usarlo como ratchet tras los
+  cambios de hoy. La línea base reproducible es la salida del script.
+
+Verificación focal:
+
+- `scripts/test_orquesta_auditoria_codigo.sh` -> verde.
+- `scripts/test_orquesta_smoke_nightly.sh` -> verde.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-deploy ./modulos/orquesta-app-planner` -> verde.
+
+Pendiente:
+
+- Ejecutar set transversal final tras TAREA-2.
+- TAREA-2: añadir operaciones estructuradas del analizador
+  (`callers`, `imports`, `module_exports`, `relevant_snippets`) y obligación en
+  prompt Goal para write-sets de código.
+
+## Continuacion Codex 2026-07-04 tarde 24
+
+TAREA-2 primer parche implementado.
+
+Hecho:
+
+- `CodeContextQueryPortV0` acepta nuevos `query_kind`: `callers`, `imports`,
+  `module_exports` y `relevant_snippets`.
+- MCP `orquesta.codebase.query.v0` publica esos enums.
+- `cmd/orquesta-server` añade `code_context_structured_fallback_v0.go`:
+  adaptador con `go/parser` para llamadas entrantes simples, imports, exports
+  de modulo y snippets relevantes. No usa `codebase-memory-mcp` ni arranca
+  indexadores.
+- `codebase-memory-mcp` opt-in ya no rompe por esos `query_kind`; degrada a
+  búsqueda central si se usa ese proveedor.
+- El prompt Goal añade regla estable solo con write-set de codigo: consultar
+  `orquesta.codebase.query.v0` antes de leer ficheros completos y no arrancar
+  indexadores propios.
+- Docs locales de `modulos/orquesta-context` actualizados: CTX-P008/CTX-009.
+
+Verificacion focal:
+
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-context ./modulos/orquesta-mcp ./modulos/orquesta-runtime-codex-goal` -> verde.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'Test(ServerRGCodeContextProviderV0|MCPCodebaseQuery|BuildServerAppHandlerV0CodebaseQuery)'` -> verde.
+- Smoke REST real con `orquesta-server` temporal y
+  `POST /api/v0/codebase/query`:
+  `callers`, `imports`, `module_exports` y `relevant_snippets` -> verde,
+  `codebase_query_structured_smoke=passed`.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./...` -> verde.
+- `scripts/test_orquesta_auditoria_codigo.sh`,
+  `scripts/test_orquesta_smoke_nightly.sh`,
+  `scripts/orquesta_metricas_deuda.sh --json` -> verde;
+  metricas `{"env_vars_orquesta":512,"endpoints_status":16,"interfaces_estado":65,"modulos_director":17}`.
+- `git diff --check` -> verde.
+- Comprobado despues del smoke: sin `orquesta-server run` ni
+  `codebase-memory-mcp` vivos.
+
+Pendiente TAREA-2:
+
+- Smoke sandbox real demostrando uso de `orquesta.codebase.query.v0`.
+- Métrica real de tokens antes/después contra baseline 165k.
+- Persistencia/caché derivada alineada con el motor único del despliegue cuando
+  exista Postgres; hoy sigue siendo caché local de servidor.
+
+## Continuacion Codex 2026-07-04 tarde 25
+
+TAREA-2: preparación automática de analizador para goals de código.
+
+Hecho:
+
+- `modulos/orquesta-app-codex-stack` envuelve `GoalLauncher` y
+  `GoalReworkLauncher` cuando la composición tiene `CodeContext`.
+- Antes de lanzar un goal con write-set de código, Orquesta ejecuta una consulta
+  `repo_map` por `CodeContextQueryPortV0` con scope del write-set para calentar
+  cache/broker.
+- El spec lanzado recibe `ContextRef` `code_context_prepared:repo_map:<hash>`
+  y evidencias del broker; si el broker falla, recibe
+  `code_context_prepare_failed` y el goal no se bloquea.
+- El receipt de lanzamiento propaga `ContextBudget.CodeContextCacheStatus`
+  cuando existe.
+- Los goals documentales no disparan esta precarga.
+- `BUG-ORQ-20260704-183` cerrado durante el parche: la primera version añadia
+  un helper `compact*` y subia `helper_duplicate_definitions` de 288 a 289; se
+  renombro a `uniqueCodeContextGoalStringsV0` y la auditoria volvio a 288.
+
+Verificacion focal:
+
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestBuildDirectorPortsV0.*CodeContext|TestBuildDirectorPortsV0CableaAppGoalLauncher'` -> verde.
+- Auditoria fresca posterior:
+  `deadcode_candidates=1230`, `helper_duplicate_definitions=288`,
+  `orphan_modules=1`, `large_files_over_800=17`.
+
+Pendiente TAREA-2:
+
+- Smoke sandbox real demostrando uso de `orquesta.codebase.query.v0` por un
+  goal.
+- Métrica real de tokens antes/después contra baseline 165k.
+- Persistencia/caché derivada alineada con el motor único del despliegue cuando
+  exista Postgres; hoy sigue siendo caché local de servidor.
+
+## Continuacion Codex 2026-07-04 tarde 26
+
+TAREA-9 segunda ola segura en `orquesta-capacity`.
+
+Hecho:
+
+- Inlinados helpers privados de un solo uso en
+  `modulos/orquesta-capacity/capacity_policy_v0.go`.
+- Inlinados `joinModelEscalationPathV0` e
+  `isForbiddenModelEscalationKeyV0` en
+  `modulos/orquesta-capacity/model_escalation_policy_helpers_v0.go`.
+- No se tocaron APIs exportadas ni helpers con consumidores internos.
+
+Verificacion:
+
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-capacity ./modulos/orquesta-app-codex-stack ./modulos/orquesta-director` -> verde.
+- Auditoria fresca:
+  `deadcode_candidates=1228`, `helper_duplicate_definitions=288`,
+  `orphan_modules=1`, `large_files_over_800=17`,
+  `modulos/orquesta-capacity=89`.
+
+## Continuacion Codex 2026-07-04 tarde 27
+
+TAREA-9 ratchet/auditoria y conector Gemini.
+
+Hecho:
+
+- `BUG-ORQ-20260704-184` cerrado: `scripts/orquesta_auditoria_codigo.sh`
+  localiza `deadcode` tambien en `GOBIN`/`GOPATH/bin`, no solo en `PATH`.
+- `BUG-ORQ-20260704-185` cerrado: `scripts/orquesta_smoke_nightly.sh` ya no
+  acepta auditorias con schema incorrecto, metricas requeridas ausentes o
+  fuente `snapshot_file`/`unavailable`/`deadcode_tool_failed`.
+- `BUG-ORQ-20260704-186` cerrado: `geminiRuntimeConfigV0` usa
+  `ORQUESTA_GEMINI_OUTPUT_FORMAT` con default `text`, igual que Claude y el
+  backend goal Gemini.
+- Residuales documentados para Claude: `app_server_proxy` sigue como valor
+  historico de diagnostico no operativo, el default local OPES debe moverse a
+  config canonica obligatoria cuando se cierre TAREA-8 completa, y los prompts
+  Claude/Gemini quedan pendientes si i18n cubre textos enviados a proveedores.
+
+Verificacion:
+
+- `bash -n scripts/orquesta_auditoria_codigo.sh scripts/test_orquesta_auditoria_codigo.sh scripts/orquesta_smoke_nightly.sh scripts/test_orquesta_smoke_nightly.sh` -> verde.
+- `scripts/test_orquesta_auditoria_codigo.sh` -> verde.
+- `scripts/test_orquesta_smoke_nightly.sh` -> verde.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestGeminiRuntimeConfigV0|GoalBackend|Claude|Gemini'` -> verde.
+- Auditoria viva:
+  `deadcode_source=deadcode_tool`, `deadcode_candidates=1228`,
+  `helper_duplicate_definitions=288`, `orphan_modules=1`,
+  `large_files_over_800=17`.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./...` -> verde.
+- Smoke Orquesta real por API publica con servidor temporal:
+  `POST /api/v0/codebase/query` (`schema_version=code_context_query.v0`,
+  `query_kind=relevant_snippets`, `query=geminiRuntimeConfigV0`) -> verde,
+  `provider_kind=fallback_rg`, `results=1`, shutdown sin proceso vivo. Un
+  primer intento fallo con HTTP 400 por payload manual con schema incorrecto
+  `orquesta_code_context_query.v0`; no fue bug de producto.
+
+## Continuacion Codex 2026-07-04 tarde 28
+
+Conector OPES/project workdir.
+
+Hecho:
+
+- `BUG-ORQ-20260704-187` cerrado: `external_work` guard y topic registry dejan
+  de inyectar `/home/alberto/Trabajo/OPES` como default local.
+- La fuente queda canonica: `opes.project_workdir` en `orquesta.config.json` o
+  `ORQUESTA_OPES_PROJECT_WORKDIR`.
+- Si OPES no esta configurado, no se inventa ruta local; si esta configurado,
+  se mantiene la guarda de `project_work_dir` y el descubrimiento de
+  `registro_trabajo_temas.py` bajo el workspace OPES.
+
+Verificacion:
+
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestExternalWorkRunProjectWorkDirGuardConfigV0|TestOPESTopicRegistryConfig|TestOPESTopicRegistryEffectiveConfig|TestServerConfigFromEnvV0ContextoOPES|TestServerConfigFromEnvV0PermiteOPES'` -> verde.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestExternalWorkRunProjectWorkDirGuard'` -> verde.
+
+## Continuacion Codex 2026-07-04 tarde 29
+
+i18n goal-first Claude/Gemini.
+
+Hecho:
+
+- `BUG-ORQ-20260704-188` cerrado parcialmente para goal-first: los backends
+  Claude/Gemini aceptan `PromptLocale`.
+- Builders nuevos `BuildClaudeGoalPromptWithLocaleV0` y
+  `BuildGeminiGoalPromptWithLocaleV0` soportan `es-ES` por defecto y `en-*`.
+- El protocolo durable del resultado goal-first se localiza en es/en sin tocar
+  el contrato JSON ni `orquesta-goal`.
+- Composicion: `goal_backend.prompt_locale` se lee desde
+  `orquesta.config.json` y se cablea a `file_control` y `process`, sin nuevas
+  variables `ORQUESTA_*`.
+- Residual documentado: prompts legacy de agente `Build*AgentPrompt*` siguen en
+  español si se exige i18n fuera de goal-first.
+
+Verificacion:
+
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-runtime-gemini ./cmd/orquesta-server -run 'Test(Build(Claude|Gemini)GoalPromptWithLocale|ClaudeGoalBackendV0Launch|GeminiGoalBackendV0Launch|ServerGoalBackendFromEnvV0(Claude|Gemini)FileControl|ClaudeRuntimeConfigV0|GeminiRuntimeConfigV0)'` -> verde.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'EnvVarsOrquestaRatchet|EnvRegistryAST|ClaudeRuntimeConfig|GeminiRuntimeConfig|ServerGoalBackendFromEnvV0(Claude|Gemini)FileControl'` -> verde.
+- `scripts/orquesta_auditoria_codigo.sh` -> `deadcode_candidates=1228`,
+  `helper_duplicate_definitions=288`.
+
+## Continuacion Codex 2026-07-04 tarde 30
+
+Smoke REST/readiness.
+
+Hecho:
+
+- `BUG-ORQ-20260704-189` cerrado: el smoke REST local fallaba porque trataba
+  HTTP 503 de readiness como servidor no listo, aunque el JSON publicara
+  `startup_ready=true`, `status=running` y `availability_status=running`.
+- `scripts/lib/smoke_common.sh` incorpora `smoke_orquesta_readiness_ok`, que
+  acepta 2xx o el 503 degradado compatible con el contrato vigente.
+- `scripts/smoke_orquesta_server_rest_director.sh` usa el helper comun en vez
+  de `curl -f` directo contra readiness.
+
+Verificacion:
+
+- `bash -n scripts/lib/smoke_common.sh scripts/smoke_orquesta_server_rest_director.sh` -> verde.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestSmokeCommon(Readiness|Shutdown)'` -> verde.
+- `ORQUESTA_LEGACY_DIRECTOR_LOOP_SMOKE_CONFIRM=1 GOFLAGS=-buildvcs=false ./scripts/smoke_orquesta_server_rest_director.sh` -> verde; `POST /api/v0/apps/director -> HTTP 200`, `agents_started=1`, progress/usage/process refs verificados y parada limpia.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./...` -> verde.

@@ -23,10 +23,7 @@ func topicRegistryArtifactQualityRequestForRecordV0(
 	record OPESCausalArtifactRecordV0,
 ) (OPESArtifactQualityContractRequestV0, bool) {
 	workKind := strings.TrimSpace(fieldStringV0(record.PayloadFields, "source_work_kind", "work_kind"))
-	artifactType := strings.TrimSpace(record.ArtifactType)
-	if artifactType == "" && workKind != "" {
-		artifactType = orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind)
-	}
+	artifactType := topicRegistryEffectiveArtifactTypeForWorkKindV0(workKind, record.ArtifactType)
 	if len(opesArtifactQualityRequirementsV0(artifactType)) == 0 {
 		return OPESArtifactQualityContractRequestV0{}, false
 	}

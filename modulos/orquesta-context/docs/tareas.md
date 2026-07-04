@@ -2,6 +2,36 @@
 
 Cada tarea debe ser pequena y cerrada.
 
+## CTX-009
+
+Estado: completada 2026-07-04.
+
+Objetivo: exponer `CodeContextQueryPortV0` al agente Codex por el toolbelt MCP
+local, sin depender de HTTP localhost para la ruta de consulta compacta.
+
+Write-set:
+
+- `cmd/orquesta-server/codex_toolbelt_source_v0.go`
+- `cmd/orquesta-server/codex_toolbelt_source_v0_test.go`
+- docs/runbooks.
+
+Contrato: `CodeContextQueryPortV0`.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-context ./modulos/orquesta-runtime-codex-appserver ./cmd/orquesta-server -run Toolbelt`
+
+Resultado:
+
+- `orquesta.codebase.query.v0` queda anunciado por el toolbelt como
+  `mcp_local_sin_http_localhost`;
+- la metadata del toolbelt enlaza el contrato `CodeContextQueryPortV0` y el
+  resource URI `orquesta://contracts/codebase-query/v0`;
+- HTTP `/api/v0/codebase/query` queda como compatibilidad de servidor, no como
+  requisito para el agente Codex;
+- queda runbook de harness para comparar tokens contra baseline T293=164945
+  sin inflar contexto crudo.
+
 ## CTX-008
 
 Estado: completada 2026-07-03.
@@ -27,6 +57,39 @@ Resultado:
 - el servidor usa proveedor central `rg` con fallback Go local para devolver
   rutas, tipos/funciones y snippets minimos;
 - MCP/HTTP conservan `CodeContextQueryPortV0` como unica entrada.
+
+## CTX-009
+
+Estado: completada 2026-07-04.
+
+Objetivo: convertir el analizador en capacidad basica para goals de codigo sin
+depender de `codebase-memory-mcp`.
+
+Write-set:
+
+- `modulos/orquesta-context/code_context_broker_v0.go`
+- `modulos/orquesta-mcp/codebase_query_tool_v0.go`
+- `cmd/orquesta-server/code_context_structured_fallback_v0.go`
+- `modulos/orquesta-runtime-codex-goal/packet_v0.go`
+- tests y docs locales.
+
+Contrato: `CodeContextQueryPortV0`.
+
+Validacion:
+
+- `go test -count=1 ./modulos/orquesta-context ./modulos/orquesta-mcp ./modulos/orquesta-runtime-codex-goal`
+- `go test -count=1 ./cmd/orquesta-server -run 'Test(ServerRGCodeContextProviderV0|MCPCodebaseQuery|BuildServerAppHandlerV0CodebaseQuery)'`
+
+Resultado:
+
+- nuevos `query_kind`: `callers`, `imports`, `module_exports`,
+  `relevant_snippets`;
+- el servidor usa `go/parser` para responder sin indexador externo;
+- MCP publica los enums nuevos;
+- el prompt Goal obliga a consultar `orquesta.codebase.query.v0` antes de leer
+  ficheros completos en write-sets de codigo.
+- `orquesta-app-codex-stack` precarga `repo_map` por `CodeContextQueryPortV0`
+  antes de lanzar goals de codigo y no bloquea el goal si el broker falla.
 
 ## CTX-007
 

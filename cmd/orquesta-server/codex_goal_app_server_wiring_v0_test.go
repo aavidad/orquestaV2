@@ -92,16 +92,91 @@ func TestServerCodexGoalBackendFromEnvV0TmuxNoArrancaAppServerEnConstruccionV0(t
 	if backend.Starter == nil || backend.Observer == nil || backend.ShutdownHook == nil {
 		t.Fatalf("backend no cableado: %+v", backend)
 	}
-	starter, ok := backend.Starter.(serverCodexAppServerGoalBackendV0)
-	if !ok || starter.HighTokenUsageThreshold != 37 {
+	starter := codexAppServerGoalBackendFromPortForTestV0(t, backend.Starter)
+	if starter.HighTokenUsageThreshold != 37 {
 		t.Fatalf("starter sin umbral alto configurable: %#v", backend.Starter)
 	}
-	observer, ok := backend.Observer.(serverCodexAppServerGoalBackendV0)
-	if !ok || observer.HighTokenUsageThreshold != 37 {
+	observer := codexAppServerGoalBackendFromPortForTestV0(t, backend.Observer)
+	if observer.HighTokenUsageThreshold != 37 {
 		t.Fatalf("observer sin umbral alto configurable: %#v", backend.Observer)
 	}
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatalf("construir backend no debe invocar app-server")
+	}
+}
+
+func TestServerCodexGoalBackendFromEnvV0TmuxLeeGoalBackendDesdeFicheroCanonicoV0(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	runtimeDir := filepath.Join(root, "runtime")
+	codeHome := filepath.Join(root, "codex-home")
+	if err := os.MkdirAll(codeHome, 0o700); err != nil {
+		t.Fatalf("mkdir code home: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(codeHome, "auth.json"), []byte(`{"ok":true}`), 0o600); err != nil {
+		t.Fatalf("write auth: %v", err)
+	}
+	marker := filepath.Join(root, "codex-invoked")
+	fakeCodex := filepath.Join(root, "codex")
+	script := "#!/usr/bin/env bash\nprintf invoked > " + shellQuoteCodexAppServerWiringTestV0(marker) + "\nexit 42\n"
+	if err := os.WriteFile(fakeCodex, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake codex: %v", err)
+	}
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatalf("mkdir project: %v", err)
+	}
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"codex_runtime":{"runtime_work_dir":"` + filepath.ToSlash(runtimeDir) + `"},
+		"autoprogramming":{"checkpoint_only_high_consumption_tokens":41},
+		"goal_backend":{
+			"kind":"app_server_tmux",
+			"timeout_ms":13000,
+			"preflight_timeout_ms":2400
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envCodexRuntimeWorkDirV0, "")
+	t.Setenv(envCodexCodeHomeV0, codeHome)
+	t.Setenv(envCodexCommandV0, fakeCodex)
+	t.Setenv(envCodexGoalBackendV0, "")
+	t.Setenv(envCodexGoalTimeoutMSV0, "")
+	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	backend, err := serverCodexGoalBackendFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("serverCodexGoalBackendFromEnvV0: %v", err)
+	}
+	starter := codexAppServerGoalBackendFromPortForTestV0(t, backend.Starter)
+	if starter.Timeout != 13*time.Second || starter.HighTokenUsageThreshold != 41 {
+		t.Fatalf("starter desde fichero inesperado: timeout=%s threshold=%d", starter.Timeout, starter.HighTokenUsageThreshold)
+	}
+	shutdownHook, ok := backend.ShutdownHook.(serverCodexAppServerTmuxBackendV0)
+	if !ok || shutdownHook.Timeout != 2400*time.Millisecond {
+		t.Fatalf("shutdown hook desde fichero inesperado: %#v", backend.ShutdownHook)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatalf("construir backend desde fichero no debe invocar app-server")
+	}
+}
+
+func codexAppServerGoalBackendFromPortForTestV0(t *testing.T, port any) serverCodexAppServerGoalBackendV0 {
+	t.Helper()
+	switch value := port.(type) {
+	case serverCodexAppServerGoalBackendV0:
+		return value
+	case serverCodexGoalCostRoutingStarterV0:
+		return value.Backend
+	default:
+		t.Fatalf("puerto codex app-server inesperado: %#v", port)
+		return serverCodexAppServerGoalBackendV0{}
 	}
 }
 
@@ -110,11 +185,19 @@ func TestServerGoalBackendFromEnvV0ClaudeFileControlExponePuertosNeutralesV0(t *
 	projectDir := filepath.Join(root, "project")
 	stateDir := filepath.Join(root, "control", "state")
 	t.Setenv(envCodexGoalBackendV0, claudeGoalBackendFileControlV0)
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatalf("mkdir project: %v", err)
+	}
+	configFile := `{"schema_version":"orquesta_config.v0","goal_backend":{"prompt_locale":"en-US"}}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
 
 	config := orquestaserver.ConfigV0{
-		ProjectWorkDir: projectDir,
-		RuntimeWorkDir: filepath.Join(projectDir, ".orquesta-runtime"),
-		StateDir:       stateDir,
+		ProjectWorkDir:        projectDir,
+		RuntimeWorkDir:        filepath.Join(projectDir, ".orquesta-runtime"),
+		StateDir:              stateDir,
+		ProjectConfigFilePath: filepath.Join(projectDir, serverProjectConfigFileNameV0),
 	}
 	backend, err := serverCodexGoalBackendFromEnvForWorkDirV0(config, projectDir)
 	if err != nil {
@@ -153,8 +236,14 @@ func TestServerGoalBackendFromEnvV0ClaudeFileControlExponePuertosNeutralesV0(t *
 		t.Fatalf("receipt Claude inesperado: %+v", receipt)
 	}
 	runtimeDir := filepath.Join(filepath.Dir(stateDir), "claude-goal")
-	if _, err := os.Stat(filepath.Join(runtimeDir, "claude_goal_prompt_goal-ref-server-claude-file-control-001.txt")); err != nil {
+	promptPath := filepath.Join(runtimeDir, "claude_goal_prompt_goal-ref-server-claude-file-control-001.txt")
+	if _, err := os.Stat(promptPath); err != nil {
 		t.Fatalf("prompt Claude no materializado: %v", err)
+	}
+	prompt := mustReadFileStringV0(t, promptPath)
+	if !strings.Contains(prompt, "You are a Claude goal-first backend governed by Orquesta.") ||
+		!strings.Contains(prompt, "NEUTRAL DURABLE RESULT") {
+		t.Fatalf("prompt Claude no usa locale en-US:\n%s", prompt)
 	}
 	observed, err := observer.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
 		GoalRef:         spec.GoalRef,
@@ -291,11 +380,19 @@ func TestServerGoalBackendFromEnvV0GeminiFileControlExponePuertosNeutralesV0(t *
 	projectDir := filepath.Join(root, "project")
 	stateDir := filepath.Join(root, "control", "state")
 	t.Setenv(envCodexGoalBackendV0, geminiGoalBackendFileControlV0)
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatalf("mkdir project: %v", err)
+	}
+	configFile := `{"schema_version":"orquesta_config.v0","goal_backend":{"prompt_locale":"en-US"}}`
+	if err := os.WriteFile(filepath.Join(projectDir, serverProjectConfigFileNameV0), []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
 
 	config := orquestaserver.ConfigV0{
-		ProjectWorkDir: projectDir,
-		RuntimeWorkDir: filepath.Join(projectDir, ".orquesta-runtime"),
-		StateDir:       stateDir,
+		ProjectWorkDir:        projectDir,
+		RuntimeWorkDir:        filepath.Join(projectDir, ".orquesta-runtime"),
+		StateDir:              stateDir,
+		ProjectConfigFilePath: filepath.Join(projectDir, serverProjectConfigFileNameV0),
 	}
 	backend, err := serverCodexGoalBackendFromEnvForWorkDirV0(config, projectDir)
 	if err != nil {
@@ -334,8 +431,14 @@ func TestServerGoalBackendFromEnvV0GeminiFileControlExponePuertosNeutralesV0(t *
 		t.Fatalf("receipt Gemini inesperado: %+v", receipt)
 	}
 	runtimeDir := filepath.Join(filepath.Dir(stateDir), "gemini-goal")
-	if _, err := os.Stat(filepath.Join(runtimeDir, "gemini_goal_prompt_goal-ref-server-gemini-file-control-001.txt")); err != nil {
+	promptPath := filepath.Join(runtimeDir, "gemini_goal_prompt_goal-ref-server-gemini-file-control-001.txt")
+	if _, err := os.Stat(promptPath); err != nil {
 		t.Fatalf("prompt Gemini no materializado: %v", err)
+	}
+	prompt := mustReadFileStringV0(t, promptPath)
+	if !strings.Contains(prompt, "You are a Gemini goal-first backend governed by Orquesta.") ||
+		!strings.Contains(prompt, "NEUTRAL DURABLE RESULT") {
+		t.Fatalf("prompt Gemini no usa locale en-US:\n%s", prompt)
 	}
 	observed, err := observer.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
 		GoalRef:         spec.GoalRef,

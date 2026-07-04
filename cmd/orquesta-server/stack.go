@@ -34,6 +34,10 @@ func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
 	if err != nil {
 		return nil, err
 	}
+	return buildRuntimeFromConfigV0(serverConfig)
+}
+
+func buildRuntimeFromConfigV0(serverConfig orquestaserver.ConfigV0) (*orquestaserver.RuntimeV0, error) {
 	supervisorWakeup := &serverSupervisorWakeupRelayV0{}
 	goalBackends, err := serverCodexGoalBackendsFromEnvV0(serverConfig)
 	if err != nil {
@@ -108,6 +112,11 @@ func buildServerAppHandlerV0(stack orquestaappcodexstack.StackV0) (http.Handler,
 			stack.MCPTransportBindings.CodebaseStatus,
 		))
 	}
+	if stack.MCPTransportBindings.CodebaseQuery != nil {
+		mux.Handle(orquestamcp.MCPCodebaseQueryHTTPPathV0, orquestamcp.NewMCPCodebaseQueryHTTPHandlerV0(
+			stack.MCPTransportBindings.CodebaseQuery,
+		))
+	}
 	observedWeb := orquestaappgateway.ObserveWebHTMLRenderErrorsV0(
 		stack.Handler,
 		serverWebHTMLRenderObserverV0(),
@@ -180,7 +189,9 @@ func buildStackFromEnvWithGoalBackendV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
-	egressSanitizer, err := egressSanitizerConfigWithSidecarPortFromEnvV0()
+	egressSanitizer, err := egressSanitizerConfigWithSidecarPortFromProjectConfigFileV0(
+		projectConfigFromServerConfigBestEffortV0(serverConfig),
+	)
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
@@ -244,7 +255,7 @@ func buildStackFromEnvWithGoalBackendV0(
 		RunQueue: orquestaappcodexstack.RunQueueConfigV0{
 			QueueRef:       "global",
 			MaxRunsPerTick: serverConfig.SupervisorCommand.MaxRunsPerTick,
-			QueueLimit:     serverRunQueueLimitFromEnvV0(),
+			QueueLimit:     serverRunQueueLimitFromProjectConfigV0(serverConfig.ProjectWorkDir),
 			DefaultPriorityScore: intEnvOrDefaultV0(
 				envServerDefaultPriorityV0, defaultCodexServerDefaultPriorityV0,
 			),
@@ -256,12 +267,12 @@ func buildStackFromEnvWithGoalBackendV0(
 		Codex: codexRuntimeConfigV0(
 			serverConfig,
 			processRuntime,
-			codexUsageMetricsFromEnvV0(receiptStorePort),
+			codexUsageMetricsFromProjectConfigV0(serverConfig.ProjectWorkDir, receiptStorePort),
 		),
 		Gemini:                geminiRuntimeConfigV0(serverConfig),
 		Claude:                claudeRuntimeConfigV0(serverConfig),
 		EgressSanitizer:       egressSanitizer,
-		Capacity:              codexStackCapacityConfigFromEnvV0(),
+		Capacity:              codexStackCapacityConfigFromProjectConfigV0(serverConfig.ProjectWorkDir),
 		AppGoalLauncher:       serverGoalWorkLauncherFromBackendV0(goalBackend),
 		AppGoalReworkLauncher: serverGoalWorkLauncherFromBackendV0(goalBackend),
 		AppGoalObserver:       serverGoalWorkObserverFromBackendV0(goalBackend),
@@ -271,14 +282,15 @@ func buildStackFromEnvWithGoalBackendV0(
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 			StrictGoLineBudget:      boolEnvOrDefaultV0(envReviewGateStrictGoLineBudgetV0, false),
 			LineBudgetSnapshotStore: worktreeSnapshotStore,
-			SnapshotReadBudget:      codexServerWorktreeSnapshotReadBudgetFromEnvV0(),
+			SnapshotReadBudget:      codexServerWorktreeSnapshotReadBudgetFromProjectConfigV0(serverConfig.ProjectWorkDir),
 		},
 		RequiredTests:                    requiredTestRunner,
 		DomainTests:                      domainWorkRequiredTestConfigFromEnvV0(),
 		AutoprogrammingPromotion:         autoprogrammingPromotionConfigFromEnvV0(serverConfig),
 		AutoprogrammingStatusDiagnostics: serverAutoprogrammingStatusDiagnosticsFromEffectiveConfigV0(serverConfig.EffectiveConfig),
 		AutoprogrammingIdleSelfImprovementBudgetSource: idleBudgetSource,
-		AutoprogrammingGoalProgressPolicy:              serverAutoprogrammingGoalProgressPolicyFromEnvV0(),
+		AutoprogrammingGoalProgressPolicy:              serverAutoprogrammingGoalProgressPolicyFromConfigV0(serverConfig),
+		ConfigProjectionSettings:                       serverConfigProjectionSettingsForMCPV0(serverConfig),
 		DomainWork:                                     domainWorkExecutor,
 		CodeContext:                                    codeContextWiring.Query,
 		CodeContextToolLeases:                          codeContextWiring.ToolLeases,
@@ -295,7 +307,7 @@ func buildStackFromEnvWithGoalBackendV0(
 			false,
 		),
 		DomainDelivery: orquestaappcodexstack.DomainWorkDeliveryBridgeConfigV0{
-			Enabled: domainWorkDeliveryEnabledFromEnvV0(),
+			Enabled: domainWorkDeliveryEnabledFromProjectConfigV0(serverConfig.ProjectWorkDir),
 			Ledger:  domainDeliveryLedger,
 		},
 	})
@@ -317,6 +329,27 @@ func buildStackFromEnvWithGoalBackendV0(
 	)
 	stack.Handler = withFunctionContractRoutesV0(stack.Handler, stateStore)
 	return stack, nil
+}
+
+func serverConfigProjectionSettingsForMCPV0(
+	serverConfig orquestaserver.ConfigV0,
+) []orquestamcp.MCPConfigProjectionSettingV0 {
+	effective := orquestaserver.NormalizeServerEffectiveConfigV0(serverConfig.EffectiveConfig)
+	if len(effective.Settings) == 0 {
+		return nil
+	}
+	out := make([]orquestamcp.MCPConfigProjectionSettingV0, 0, len(effective.Settings))
+	for _, setting := range effective.Settings {
+		if strings.TrimSpace(setting.Key) == "" {
+			continue
+		}
+		out = append(out, orquestamcp.MCPConfigProjectionSettingV0{
+			Key:       strings.TrimSpace(setting.Key),
+			Value:     strings.TrimSpace(setting.Value),
+			Sensitive: setting.Sensitive,
+		})
+	}
+	return out
 }
 
 func serverBackgroundWorkersFromStackV0(
@@ -361,7 +394,11 @@ func codexPromoteMaterializedArtifactWithoutAckFromEnvV0() bool {
 }
 
 func codexStackCapacityConfigFromEnvV0() orquestaappcodexstack.CapacityConfigV0 {
-	envConfig := codexStackCapacityEnvConfigFromEnvV0()
+	return codexStackCapacityConfigFromProjectConfigV0("")
+}
+
+func codexStackCapacityConfigFromProjectConfigV0(projectDir string) orquestaappcodexstack.CapacityConfigV0 {
+	envConfig := codexStackCapacityEnvConfigFromProjectConfigV0(projectDir)
 	return orquestaappcodexstack.CapacityConfigV0{
 		Tier:            envConfig.Tier,
 		ReasoningEffort: envConfig.ReasoningEffort,
@@ -386,23 +423,7 @@ type codexStackCapacityEnvConfigV0 struct {
 }
 
 func codexStackCapacityEnvConfigFromEnvV0() codexStackCapacityEnvConfigV0 {
-	return codexStackCapacityEnvConfigV0{
-		Tier: capacityRecommendationEnvOrDefaultV0(
-			envCapacityTierV0,
-			orquestacoreworkflow.OrchestrationCapacityMediumV0,
-		),
-		ReasoningEffort: capacityRecommendationEnvOrDefaultV0(
-			envCapacityReasoningEffortV0,
-			capacityRecommendationEnvOrDefaultV0(
-				envCodexReasoningEffortV0,
-				orquestacoreworkflow.OrchestrationCapacityMediumV0,
-			),
-		),
-		PolicyRef: envOrDefaultV0(envCapacityPolicyRefV0, "capacity-policy-ref-server-default-v0"),
-		PoolRef:   envOrDefaultV0(envCapacityPoolRefV0, "capacity-pool-ref-server-default-v0"),
-		ModelRef:  envOrDefaultV0(envCapacityModelRefV0, "capacity-model-ref-server-default-v0"),
-		QuotaRef:  envOrDefaultV0(envCapacityQuotaRefV0, "capacity-quota-ref-server-default-v0"),
-	}
+	return codexStackCapacityEnvConfigFromProjectConfigFileV0(serverProjectConfigFileV0{})
 }
 
 func (supervisor serverStackSupervisorV0) FilterIdleSelfImprovementRequestsV0(
@@ -447,7 +468,8 @@ func capacityRecommendationEnvOrDefaultV0(
 func domainDeliveryLedgerFromEnvV0(
 	serverConfig orquestaserver.ConfigV0,
 ) orquestaappcodexstack.DomainWorkArtifactSubmissionLedgerPortV0 {
-	path := strings.TrimSpace(os.Getenv(envDomainDeliveryLedgerPathV0))
+	projectConfig := projectConfigFromProjectDirBestEffortV0(serverConfig.ProjectWorkDir)
+	path := strings.TrimSpace(domainWorkDeliveryLedgerPathFromProjectConfigFileV0(projectConfig))
 	if path == "" {
 		path = filepath.Join(serverConfig.StateDir, "domain-work-artifact-ledger.json")
 	}
@@ -466,7 +488,7 @@ func directorLimitsV0() orquestaweb.WebArrancarDirectorAppLimitsV0 {
 }
 
 func serverRunQueueLimitFromEnvV0() int {
-	return intEnvOrDefaultV0(envServerQueueLimitV0, defaultCodexServerQueueLimitV0)
+	return serverRunQueueLimitFromProjectConfigFileV0(serverProjectConfigFileV0{})
 }
 
 type codexDirectorWaveLimitsEnvConfigV0 struct {
@@ -476,10 +498,5 @@ type codexDirectorWaveLimitsEnvConfigV0 struct {
 }
 
 func codexDirectorWaveLimitsEnvConfigFromEnvV0() codexDirectorWaveLimitsEnvConfigV0 {
-	executionMode := codexExecutionModeFromEnvV0()
-	return codexDirectorWaveLimitsEnvConfigV0{
-		Agents:               codexExecutionModeCapPositiveV0(executionMode, intEnvOrDefaultV0(envCodexDirectorWaveAgentsV0, defaultCodexDirectorWaveAgentsV0)),
-		MaxSubagentsPerAgent: intEnvOrDefaultV0(envCodexDirectorMaxSubagentsPerAgentV0, defaultCodexDirectorMaxSubagentsPerAgentV0),
-		RecursiveAgentBudget: intEnvOrDefaultV0(envCodexDirectorRecursiveAgentBudgetV0, defaultCodexDirectorRecursiveAgentBudgetV0),
-	}
+	return codexDirectorWaveLimitsFromProjectConfigFileV0(serverProjectConfigFileV0{})
 }

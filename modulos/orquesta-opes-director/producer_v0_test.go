@@ -1367,6 +1367,92 @@ func TestProduceOPESCausalJobsV0VisualConEvidenceRefPeroContratoFallidoCreaRewor
 	}
 }
 
+func TestProduceOPESCausalJobsV0WorkDeliveryGenericoConWorkKindHTMLSinEvidenciaMinimaCreaReworkV0(t *testing.T) {
+	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
+		IdempotencyKey: "idem-opes-work-delivery-html-no-evidence",
+		Status:         "accepted",
+		CorrelationID:  "corr-opes-work-delivery-html-no-evidence",
+		DomainRef:      OPESCausalProducerDefaultDomainRefV0,
+		JobRef:         "job-ref-opes-work-delivery-html-no-evidence",
+		ArtifactRef:    "artifact-ref-opes-work-delivery-html-no-evidence",
+		ArtifactType:   orquestadomainwork.DomainWorkArtifactTypeGenericWorkDeliveryV0,
+		CompleteJob:    true,
+		ReceiptRef:     "receipt-ref-opes-work-delivery-html-no-evidence",
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "course_id", Value: "curso-work-delivery"},
+			{Name: "topic_id", Value: "tema-html-work-delivery"},
+			{Name: "source_work_kind", Value: "generate_html_site"},
+			{Name: "status", Value: "complete"},
+		},
+	}}}
+	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+	result, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{
+		DomainRef:     OPESCausalProducerDefaultDomainRefV0,
+		CorrelationID: "corr-opes-work-delivery-html-no-evidence",
+	}, OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator})
+	if err != nil {
+		t.Fatalf("ProduceOPESCausalJobsV0: %v", err)
+	}
+	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "required-evidence-html-site-publicable") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_status", topicRegistrySettlementNeedsReworkV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_scope", "required_evidence") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_reason", "required_evidence_missing") {
+		t.Fatalf("registry_update=%+v ok=%v result=%+v", request, ok, result)
+	}
+	followup, ok := requestedWorkKindForTestV0(result.RequestedJobs, "review_director_consolidation")
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "required_evidence_missing_refs", "required-evidence-html-site-publicable") ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "recommended_action", "review_required_evidence") {
+		t.Fatalf("followup=%+v ok=%v result=%+v", followup, ok, result)
+	}
+}
+
+func TestProduceOPESCausalJobsV0WorkDeliveryGenericoConWorkKindVisualAplicaArtifactQualityV0(t *testing.T) {
+	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
+		IdempotencyKey: "idem-opes-work-delivery-visual-bad-contract",
+		Status:         "accepted",
+		CorrelationID:  "corr-opes-work-delivery-visual-bad-contract",
+		DomainRef:      OPESCausalProducerDefaultDomainRefV0,
+		JobRef:         "job-ref-opes-work-delivery-visual-bad-contract",
+		ArtifactRef:    "artifact-ref-opes-work-delivery-visual-bad-contract",
+		ArtifactType:   orquestadomainwork.DomainWorkArtifactTypeGenericWorkDeliveryV0,
+		CompleteJob:    true,
+		ReceiptRef:     "receipt-ref-opes-work-delivery-visual-bad-contract",
+		EvidenceRefs:   []string{"opes-final-evidence:visual_didactic_publicable"},
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "course_id", Value: "curso-work-delivery"},
+			{Name: "topic_id", Value: "tema-visual-work-delivery"},
+			{Name: "source_work_kind", Value: "generate_visual_asset"},
+			{Name: "status", Value: "complete"},
+		},
+	}}}
+	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+	result, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{
+		DomainRef:     OPESCausalProducerDefaultDomainRefV0,
+		CorrelationID: "corr-opes-work-delivery-visual-bad-contract",
+	}, OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator})
+	if err != nil {
+		t.Fatalf("ProduceOPESCausalJobsV0: %v", err)
+	}
+	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", topicRegistryArtifactQualityNeedsReworkRefV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "artifact_quality_status", OPESArtifactQualityStatusNeedsReworkV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "artifact_quality_artifact_type", orquestadomainwork.DomainWorkArtifactTypeVisualAssetV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_scope", "artifact_quality") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_reason", "artifact_quality_contract_failed") {
+		t.Fatalf("registry_update=%+v ok=%v result=%+v", request, ok, result)
+	}
+	followup, ok := requestedWorkKindForTestV0(result.RequestedJobs, "review_director_consolidation")
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "artifact_quality_artifact_type", orquestadomainwork.DomainWorkArtifactTypeVisualAssetV0) ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "recommended_action", "review_artifact_quality") {
+		t.Fatalf("followup=%+v ok=%v result=%+v", followup, ok, result)
+	}
+}
+
 func TestProduceOPESCausalJobsV0HTMLConContratoArtifactQualityPassNoCreaReworkV0(t *testing.T) {
 	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
 		IdempotencyKey: "idem-opes-html-good-contract",

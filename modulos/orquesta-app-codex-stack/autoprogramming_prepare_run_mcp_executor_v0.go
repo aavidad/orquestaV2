@@ -53,6 +53,9 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) Execute(
 			"stack requerido",
 		), nil
 	}
+	if issues := configProjectionRequiredSettingIssuesV0(input.RequiredSettings, executor.Stack.ConfigProjectionSettings); len(issues) > 0 {
+		return orquestamcp.NewMCPAutoprogrammingPrepareRunIssuesResultV0(input, issues), nil
+	}
 	input = executor.freshAttemptForStaleAutoprogrammingRunV0(ctx, input)
 	bridgeRequest := codexStackAutoprogrammingBridgeRequestFromMCPV0(
 		input,

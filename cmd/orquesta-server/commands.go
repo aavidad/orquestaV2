@@ -19,11 +19,11 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 	switch command {
 	case "run":
-		return runServerCommandV0(stdout, stderr)
+		return runServerCommandV0(args[1:], stdout, stderr)
 	case "start":
-		return startServerCommandV0(stdout, stderr)
+		return startServerCommandV0(args[1:], stdout, stderr)
 	case "status":
-		return statusServerCommandV0(stdout, stderr)
+		return statusServerCommandV0(args[1:], stdout, stderr)
 	case "run-status":
 		return runStatusCommandV0(args[1:], stdout, stderr)
 	case "stop":
@@ -50,8 +50,30 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 }
 
-func runServerCommandV0(_ io.Writer, stderr io.Writer) int {
-	serverConfig, err := serverConfigFromEnvV0()
+type serverCommandConfigOptionsV0 struct {
+	ConfigPath string
+}
+
+func parseServerCommandConfigOptionsV0(command string, args []string) (serverCommandConfigOptionsV0, error) {
+	flags := flag.NewFlagSet(command, flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	configPath := flags.String("config", "", "ruta a orquesta.config.json canonico")
+	if err := flags.Parse(args); err != nil {
+		return serverCommandConfigOptionsV0{}, fmt.Errorf("%s_args_invalid", command)
+	}
+	if flags.NArg() != 0 {
+		return serverCommandConfigOptionsV0{}, fmt.Errorf("%s_args_invalid", command)
+	}
+	return serverCommandConfigOptionsV0{ConfigPath: strings.TrimSpace(*configPath)}, nil
+}
+
+func runServerCommandV0(args []string, _ io.Writer, stderr io.Writer) int {
+	options, err := parseServerCommandConfigOptionsV0("run", args)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "orquesta-server run: %v\n", err)
+		return 2
+	}
+	serverConfig, err := serverConfigFromEnvWithProjectConfigPathV0(options.ConfigPath)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server: %v\n", err)
 		return 1
@@ -60,7 +82,7 @@ func runServerCommandV0(_ io.Writer, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server: detail_rails_env_default_failed: %v\n", err)
 		return 1
 	}
-	runtime, err := buildRuntimeFromEnvV0()
+	runtime, err := buildRuntimeFromConfigV0(serverConfig)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server: %v\n", err)
 		return 1
@@ -115,8 +137,13 @@ func runServerCommandV0(_ io.Writer, stderr io.Writer) int {
 	return 0
 }
 
-func statusServerCommandV0(stdout io.Writer, stderr io.Writer) int {
-	config, err := serverConfigFromEnvV0()
+func statusServerCommandV0(args []string, stdout io.Writer, stderr io.Writer) int {
+	options, err := parseServerCommandConfigOptionsV0("status", args)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "orquesta-server status: %v\n", err)
+		return 2
+	}
+	config, err := serverConfigFromEnvWithProjectConfigPathV0(options.ConfigPath)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server status: %v\n", err)
 		return 1
@@ -219,15 +246,15 @@ func serverStateStatusNeedsProcessReconciliationV0(status string) bool {
 }
 
 func stopServerCommandV0(args []string, stdout io.Writer, stderr io.Writer) int {
-	config, err := serverConfigFromEnvV0()
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "orquesta-server stop: %v\n", err)
-		return 1
-	}
 	options, err := parseStopOptionsV0(args, stderr)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server stop: %v\n", err)
 		return 2
+	}
+	config, err := serverConfigFromEnvWithProjectConfigPathV0(options.ConfigPath)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "orquesta-server stop: %v\n", err)
+		return 1
 	}
 	state, err := loadStateV0(config)
 	if err != nil {
@@ -344,6 +371,7 @@ func parseStopOptionsV0(args []string, stderr io.Writer) (serverShutdownClientOp
 	flags.SetOutput(io.Discard)
 	forced := flags.Bool("force", false, "forzar shutdown tras opt-in explicito")
 	reason := flags.String("reason", "", "causa publica compacta")
+	configPath := flags.String("config", "", "ruta a orquesta.config.json canonico")
 	if err := flags.Parse(args); err != nil {
 		return serverShutdownClientOptionsV0{}, fmt.Errorf("stop_args_invalid")
 	}
@@ -357,7 +385,11 @@ func parseStopOptionsV0(args []string, stderr io.Writer) (serverShutdownClientOp
 	if trimmedReason == "" {
 		trimmedReason = "apagado cooperativo solicitado por CLI al Director"
 	}
-	return serverShutdownClientOptionsV0{Forced: *forced, Reason: trimmedReason}, nil
+	return serverShutdownClientOptionsV0{
+		Forced:     *forced,
+		Reason:     trimmedReason,
+		ConfigPath: strings.TrimSpace(*configPath),
+	}, nil
 }
 
 func loadStateV0(config orquestaserver.ConfigV0) (orquestaserver.StateV0, error) {

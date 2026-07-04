@@ -93,30 +93,86 @@ func init() {
 }
 
 func egressSanitizerConfigFromEnvV0() orquestaappcodexstack.EgressSanitizerConfigV0 {
+	return egressSanitizerConfigFromProjectConfigFileV0(serverProjectConfigFileV0{})
+}
+
+func egressSanitizerConfigFromProjectConfigFileV0(
+	config serverProjectConfigFileV0,
+) orquestaappcodexstack.EgressSanitizerConfigV0 {
 	return orquestaappcodexstack.NormalizeEgressSanitizerConfigV0(orquestaappcodexstack.EgressSanitizerConfigV0{
-		Enabled:      boolEnvOrDefaultV0(envEgressSanitizerEnabledV0, false),
-		SanitizerRef: envOrDefaultV0(envEgressSanitizerRefV0, ""),
+		Enabled: boolProjectConfigOrEnvOrDefaultV0(
+			envEgressSanitizerEnabledV0,
+			config.EgressSanitizer.Enabled,
+			false,
+		),
+		SanitizerRef: stringProjectConfigOrEnvOrDefaultV0(
+			envEgressSanitizerRefV0,
+			config.EgressSanitizer.SanitizerRef,
+			"",
+		),
 		LocalModel: orquestaappcodexstack.PrivacyFilterModelConfigV0{
-			Enabled:     boolEnvOrDefaultV0(envEgressSanitizerLocalModelEnabledV0, false),
-			ModelRef:    envOrDefaultV0(envEgressSanitizerLocalModelRefV0, ""),
-			RuntimeRef:  envOrDefaultV0(envEgressSanitizerLocalRuntimeRefV0, ""),
-			EvidenceRef: envOrDefaultV0(envEgressSanitizerLocalEvidenceRefV0, ""),
+			Enabled: boolProjectConfigOrEnvOrDefaultV0(
+				envEgressSanitizerLocalModelEnabledV0,
+				config.EgressSanitizer.LocalModel.Enabled,
+				false,
+			),
+			ModelRef: stringProjectConfigOrEnvOrDefaultV0(
+				envEgressSanitizerLocalModelRefV0,
+				config.EgressSanitizer.LocalModel.ModelRef,
+				"",
+			),
+			RuntimeRef: stringProjectConfigOrEnvOrDefaultV0(
+				envEgressSanitizerLocalRuntimeRefV0,
+				config.EgressSanitizer.LocalModel.RuntimeRef,
+				"",
+			),
+			EvidenceRef: stringProjectConfigOrEnvOrDefaultV0(
+				envEgressSanitizerLocalEvidenceRefV0,
+				config.EgressSanitizer.LocalModel.EvidenceRef,
+				"",
+			),
 		},
 		Sidecar: orquestaappcodexstack.PrivacyFilterSidecarConfigV0{
-			Enabled:                 boolEnvOrDefaultV0(envEgressSanitizerSidecarEnabledV0, false),
-			SidecarRef:              envOrDefaultV0(envEgressSanitizerSidecarRefV0, ""),
-			AdapterRef:              envOrDefaultV0(envEgressSanitizerSidecarAdapterRefV0, ""),
-			TransportRef:            envOrDefaultV0(envEgressSanitizerSidecarTransportRefV0, ""),
-			EvidenceRef:             envOrDefaultV0(envEgressSanitizerSidecarEvidenceRefV0, ""),
-			CommandConfigured:       envOrDefaultV0(envEgressSanitizerSidecarCommandV0, "") != "",
-			LocalEndpointConfigured: envOrDefaultV0(envEgressSanitizerSidecarLocalEndpointV0, "") != "",
+			Enabled: boolProjectConfigOrEnvOrDefaultV0(
+				envEgressSanitizerSidecarEnabledV0,
+				config.EgressSanitizer.Sidecar.Enabled,
+				false,
+			),
+			SidecarRef: stringProjectConfigOrEnvOrDefaultV0(
+				envEgressSanitizerSidecarRefV0,
+				config.EgressSanitizer.Sidecar.SidecarRef,
+				"",
+			),
+			AdapterRef: stringProjectConfigOrEnvOrDefaultV0(
+				envEgressSanitizerSidecarAdapterRefV0,
+				config.EgressSanitizer.Sidecar.AdapterRef,
+				"",
+			),
+			TransportRef: stringProjectConfigOrEnvOrDefaultV0(
+				envEgressSanitizerSidecarTransportRefV0,
+				config.EgressSanitizer.Sidecar.TransportRef,
+				"",
+			),
+			EvidenceRef: stringProjectConfigOrEnvOrDefaultV0(
+				envEgressSanitizerSidecarEvidenceRefV0,
+				config.EgressSanitizer.Sidecar.EvidenceRef,
+				"",
+			),
+			CommandConfigured:       egressSanitizerSidecarCommandFromProjectConfigFileV0(config) != "",
+			LocalEndpointConfigured: egressSanitizerSidecarLocalEndpointFromProjectConfigFileV0(config) != "",
 		},
 	})
 }
 
 func egressSanitizerConfigWithSidecarPortFromEnvV0() (orquestaappcodexstack.EgressSanitizerConfigV0, error) {
-	config := egressSanitizerConfigFromEnvV0()
-	endpoint := envOrDefaultV0(envEgressSanitizerSidecarLocalEndpointV0, "")
+	return egressSanitizerConfigWithSidecarPortFromProjectConfigFileV0(serverProjectConfigFileV0{})
+}
+
+func egressSanitizerConfigWithSidecarPortFromProjectConfigFileV0(
+	projectConfig serverProjectConfigFileV0,
+) (orquestaappcodexstack.EgressSanitizerConfigV0, error) {
+	config := egressSanitizerConfigFromProjectConfigFileV0(projectConfig)
+	endpoint := egressSanitizerSidecarLocalEndpointFromProjectConfigFileV0(projectConfig)
 	if !config.Enabled || !config.Sidecar.Enabled || endpoint == "" {
 		return config, nil
 	}
@@ -136,4 +192,20 @@ func egressSanitizerConfigWithSidecarPortFromEnvV0() (orquestaappcodexstack.Egre
 	}
 	config.Sidecar.Port = port
 	return config, nil
+}
+
+func egressSanitizerSidecarCommandFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
+	return stringProjectConfigOrEnvOrDefaultV0(
+		envEgressSanitizerSidecarCommandV0,
+		config.EgressSanitizer.Sidecar.Command,
+		"",
+	)
+}
+
+func egressSanitizerSidecarLocalEndpointFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
+	return stringProjectConfigOrEnvOrDefaultV0(
+		envEgressSanitizerSidecarLocalEndpointV0,
+		config.EgressSanitizer.Sidecar.LocalEndpoint,
+		"",
+	)
 }

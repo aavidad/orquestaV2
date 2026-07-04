@@ -19,6 +19,7 @@ type opesBridgeDrainerV0 func(context.Context, opesDrainConfigV0) (opesDrainSumm
 func opesBridgeLoopConfigFromEnvV0(
 	orquestaBaseURLFallback string,
 ) (opesBridgeLoopConfigV0, error) {
+	projectConfig := opesProjectConfigFromEnvBestEffortV0()
 	if strings.TrimSpace(os.Getenv(envOPESBridgeEnabledV0)) != "1" {
 		return opesBridgeLoopConfigV0{}, nil
 	}
@@ -43,13 +44,13 @@ func opesBridgeLoopConfigFromEnvV0(
 			Component:     component,
 			ResultField:   "summary",
 			FilterSummary: opesBridgeFilterSummaryV0(drainConfig),
-			Interval:      durationSecondsEnvOrDefaultV0(envOPESBridgeIntervalSecondsV0, 60*time.Second),
-			InitialDelay:  durationSecondsEnvOrDefaultV0(envOPESBridgeInitialDelaySecondsV0, 2*time.Second),
-			MaxTicks:      intEnvOrZeroV0(envOPESBridgeMaxTicksV0),
+			Interval:      opesBridgeDurationSecondsFromProjectConfigFileV0(projectConfig, envOPESBridgeIntervalSecondsV0, 60*time.Second),
+			InitialDelay:  opesBridgeDurationSecondsFromProjectConfigFileV0(projectConfig, envOPESBridgeInitialDelaySecondsV0, 2*time.Second),
+			MaxTicks:      opesBridgeMaxTicksFromProjectConfigFileV0(projectConfig),
 			EffectTimeout: drainConfig.HTTPTimeout,
 			RetryPolicy: externalBridgeRetryPolicyV0{
 				MaxAttempts: 3,
-				BaseDelay:   durationSecondsEnvOrDefaultV0(envOPESBridgeIntervalSecondsV0, 60*time.Second),
+				BaseDelay:   opesBridgeDurationSecondsFromProjectConfigFileV0(projectConfig, envOPESBridgeIntervalSecondsV0, 60*time.Second),
 				MaxDelay:    5 * time.Minute,
 			},
 		},

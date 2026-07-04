@@ -52,6 +52,51 @@ func postDirectorAPIV0(
 	return result
 }
 
+func TestCodexStackAppsDirectorAPIV0BloqueaConfigProjectionMismatchV0(t *testing.T) {
+	config := codexStackBaseConfigForTestV0(t, newFakeCodexStackRuntimeV0(), nil, nil)
+	config.ConfigProjectionSettings = []orquestamcp.MCPConfigProjectionSettingV0{{
+		Key:   "ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS",
+		Value: "450000",
+	}}
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(orquestamcp.MCPArrancarDirectorAppToolInputV0{
+		RequestID:             "request-ref-app-config-projection-mismatch-001",
+		CorrelationID:         "corr-app-config-projection-mismatch-001",
+		DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		AppSpecRequest:        codexStackAppSpecRequestV0(),
+		RequiredSettings: []orquestamcp.MCPRequiredSettingV0{{
+			Key:   "ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS",
+			Value: "999999",
+		}},
+	}); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/apps/director", body)
+	req.Header.Set("Content-Type", "application/json")
+	stack.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("director status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPArrancarDirectorAppToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode director: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPArrancarDirectorAppEstadoErrorV0 ||
+		result.RunRef != "" ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != orquestamcp.MCPConfigProjectionMismatchV0 {
+		t.Fatalf("result=%+v", result)
+	}
+	if sink, ok := stack.Stores.EventSink.(*orquestacionnucleoapp.InMemoryEventSinkV0); ok && len(sink.EventsV0()) != 0 {
+		t.Fatalf("apps/director con mismatch no debe persistir eventos: %+v", sink.EventsV0())
+	}
+}
+
 func assertStatsForRunV0(t *testing.T, handler http.Handler, runRef string, agents int) {
 	t.Helper()
 	rec := httptest.NewRecorder()

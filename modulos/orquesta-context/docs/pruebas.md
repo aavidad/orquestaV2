@@ -1,5 +1,45 @@
 # Pruebas locales: orquesta-context
 
+## CTX-P007 toolbelt MCP local para code context
+
+Tipo: contract | adapter_boundary
+
+Comando: `go test -count=1 ./modulos/orquesta-context ./modulos/orquesta-runtime-codex-appserver ./cmd/orquesta-server -run Toolbelt`
+
+Evidencia esperada:
+
+- `orquesta.codebase.query.v0` aparece en el toolbelt MCP;
+- la entrada declara `transport=mcp_local_sin_http_localhost`;
+- la entrada declara `contract=CodeContextQueryPortV0`;
+- la entrada usa `orquesta://contracts/codebase-query/v0`;
+- la entrada MCP no contiene `POST`, `/api/v0/codebase/query`, `http://`,
+  `https://` ni `127.0.0.1`;
+- los hints del toolbelt no publican HOME, tokens, secretos, prompts completos
+  ni transcripts.
+
+Ultima ejecucion: pendiente de este cierre.
+
+## CTX-P008 consultas estructuradas del broker de codigo
+
+Tipo: unit_contract | adapter_boundary
+
+Comando: `go test -count=1 ./modulos/orquesta-context ./modulos/orquesta-mcp ./modulos/orquesta-runtime-codex-goal ./cmd/orquesta-server -run 'Test(ServerRGCodeContextProviderV0|MCPCodebaseQuery|BuildServerAppHandlerV0CodebaseQuery)|Test.*CodeContext.*|TestBuildCodexGoalStartPacketV0.*Analizador'`
+
+Evidencia esperada:
+
+- `callers`, `imports`, `module_exports` y `relevant_snippets` son aceptados por
+  `CodeContextQueryPortV0`;
+- MCP expone los nuevos valores en el enum de `query_kind`;
+- el servidor devuelve hits compactos usando `go/parser` sin arrancar
+  `codebase-memory-mcp`;
+- el prompt Goal exige consultar `orquesta.codebase.query.v0` antes de leer
+  ficheros completos cuando el write-set es de codigo;
+- la composicion Codex precarga `repo_map` antes de lanzar goals con write-set
+  de codigo y propaga `code_context_prepared:*`;
+- la regla no se inyecta en write-sets puramente documentales.
+
+Ultima ejecucion: 2026-07-04, ok en TAREA-2 primer parche y auto-prepare.
+
 ## CTX-P006 repo_map compacto del broker de codigo
 
 Tipo: unit_contract | adapter_boundary
@@ -15,6 +55,7 @@ Evidencia esperada:
   minimos con `rg`;
 - si `rg` falta, el fallback Go local produce refs compactas sin indexador;
 - MCP expone `repo_map` en el enum de `query_kind`.
+  Los modos estructurados quedan cubiertos en CTX-P008.
 
 Ultima ejecucion: 2026-07-03, ok en T278 con:
 `go test -count=1 ./modulos/orquesta-context ./modulos/orquesta-mcp ./cmd/orquesta-server -run 'Test.*CodeContext.*RepoMap|Test.*CodebaseQuery'`.

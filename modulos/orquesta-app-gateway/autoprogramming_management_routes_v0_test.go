@@ -80,6 +80,40 @@ func TestAutoprogrammingStatusAPIRouteV0PublicaDiagnosticosDeComposicion(t *test
 	}
 }
 
+func TestAutoprogrammingStatusAPIRouteV0PublicaGoalProgressPolicyConfigurada(t *testing.T) {
+	handler := NewHTTPHandlerV0(ConfigV0{
+		Timeout:          time.Second,
+		RunQueuePriority: &recordingAutoprogrammingStatusQueueExecutorV0{},
+		AutoprogrammingGoalProgressPolicy: orquestamcp.MCPAutoprogrammingGoalProgressPolicyV0{
+			CheckpointOnlyHighConsumptionTokens: 450000,
+			CheckpointOnlyMaxWaitSeconds:        1500,
+			NoCheckpointWarningMaxWaitSeconds:   900,
+		},
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v0/autoprogramming/status",
+		strings.NewReader(`{}`),
+	)
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPAutoprogrammingStatusToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v body=%s", err, rec.Body.String())
+	}
+	if result.GoalProgressPolicy == nil ||
+		result.GoalProgressPolicy.CheckpointOnlyHighConsumptionTokens != 450000 ||
+		result.GoalProgressPolicy.CheckpointOnlyMaxWaitSeconds != 1500 ||
+		result.GoalProgressPolicy.NoCheckpointWarningMaxWaitSeconds != 900 {
+		t.Fatalf("goal_progress_policy=%+v", result.GoalProgressPolicy)
+	}
+}
+
 func TestAutoprogrammingStatusAPIRouteV0DevuelveTimeoutJSONSinColgar(t *testing.T) {
 	queue := &blockingAutoprogrammingStatusQueueExecutorV0{}
 	handler := NewHTTPHandlerV0(ConfigV0{

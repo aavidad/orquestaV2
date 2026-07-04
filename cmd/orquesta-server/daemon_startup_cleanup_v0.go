@@ -16,7 +16,8 @@ func cleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0(config orquestaser
 }
 
 func cleanupCodexAppServerTmuxAfterStartupFailureV0(config orquestaserver.ConfigV0) {
-	if codexGoalBackendFromEnvV0() != codexGoalBackendAppServerTmuxV0 {
+	projectConfig := projectConfigFromServerConfigBestEffortV0(config)
+	if codexGoalBackendFromProjectConfigFileV0(projectConfig) != codexGoalBackendAppServerTmuxV0 {
 		return
 	}
 	socketPath, err := codexAppServerTmuxSocketPathV0(config)
@@ -28,7 +29,7 @@ func cleanupCodexAppServerTmuxAfterStartupFailureV0(config orquestaserver.Config
 		return
 	}
 	runtimeConfig := codexRuntimeEnvConfigFromEnvV0()
-	timeout := time.Duration(codexGoalPreflightTimeoutMSFromEnvV0()) * time.Millisecond
+	timeout := time.Duration(codexGoalPreflightTimeoutMSFromProjectConfigFileV0(projectConfig)) * time.Millisecond
 	if timeout <= 0 {
 		timeout = codexAppServerTmuxDefaultTimeoutV0
 	}

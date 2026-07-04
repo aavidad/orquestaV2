@@ -13,8 +13,33 @@ import (
 	orquestapersistence "orquesta/modulos/orquesta-persistence"
 	orquestarunfile "orquesta/modulos/orquesta-run-file"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
+	orquestaserver "orquesta/modulos/orquesta-server"
 	orquestastatefile "orquesta/modulos/orquesta-state-file"
 )
+
+func TestServerConfigProjectionSettingsForMCPV0ProyectaEffectiveConfigV0(t *testing.T) {
+	got := serverConfigProjectionSettingsForMCPV0(orquestaserver.ConfigV0{
+		EffectiveConfig: orquestaserver.ServerEffectiveConfigV0{
+			Settings: []orquestaserver.ServerConfigSettingV0{{
+				Key:   "ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS",
+				Value: "450000",
+			}, {
+				Key:       "ORQUESTA_CODEX_CODE_HOME",
+				Value:     "codex-code-home-configured",
+				Sensitive: true,
+			}},
+		},
+	})
+
+	if len(got) != 2 ||
+		got[0].Key != "ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS" ||
+		got[0].Value != "450000" ||
+		got[1].Key != "ORQUESTA_CODEX_CODE_HOME" ||
+		got[1].Value != "codex-code-home-configured" ||
+		!got[1].Sensitive {
+		t.Fatalf("projection=%+v", got)
+	}
+}
 
 func TestBuildStackFromEnvV0UsaConectoresDurablesFileBased(t *testing.T) {
 	projectDir := t.TempDir()
