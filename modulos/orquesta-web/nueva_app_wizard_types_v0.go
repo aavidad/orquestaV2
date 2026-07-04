@@ -18,12 +18,15 @@ type WizardQuestionV0 struct {
 	Importance  string           `json:"importance"`
 	PromptKey   string           `json:"prompt_key"`
 	WhyKey      string           `json:"why_key"`
+	HelpKey     string           `json:"help_key"`
 	Options     []WizardOptionV0 `json:"options"`
 }
 
 type WizardOptionV0 struct {
 	Value        string `json:"value"`
 	LabelKey     string `json:"label_key"`
+	HelpKey      string `json:"help_key"`
+	ExampleKey   string `json:"example_key,omitempty"`
 	Recommended  bool   `json:"recommended"`
 	RationaleKey string `json:"rationale_key,omitempty"`
 }
@@ -55,7 +58,9 @@ type WizardContrastV0 struct {
 }
 
 type WizardDefaultV0 struct {
-	Area   string `json:"area"`
-	Value  string `json:"value"`
-	WhyKey string `json:"why_key"`
+	Area       string `json:"area"`
+	Value      string `json:"value"`
+	WhyKey     string `json:"why_key"`
+	HelpKey    string `json:"help_key"`
+	ExampleKey string `json:"example_key,omitempty"`
 }

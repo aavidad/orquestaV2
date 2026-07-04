@@ -420,6 +420,7 @@ func wizardQuestionV0(ref, field, topic, importance string, options []WizardOpti
 		Importance:  importance,
 		PromptKey:   "nueva_app.wizard.question." + ref + ".prompt",
 		WhyKey:      "nueva_app.wizard.question." + ref + ".why",
+		HelpKey:     "nueva_app.wizard.question." + ref + ".help",
 		Options:     normalizeWizardOptionsV0(options),
 	}
 }
@@ -431,9 +432,23 @@ func wizardOptionV0(value, labelKey string, recommended bool, rationaleKey strin
 	return WizardOptionV0{
 		Value:        trimV0(value),
 		LabelKey:     trimV0(labelKey),
+		HelpKey:      wizardOptionHelpKeyV0(labelKey),
+		ExampleKey:   wizardOptionExampleKeyV0(labelKey),
 		Recommended:  recommended,
 		RationaleKey: trimV0(rationaleKey),
 	}
+}
+
+func wizardOptionHelpKeyV0(labelKey string) string {
+	return strings.Replace(trimV0(labelKey), "nueva_app.wizard.option.", "nueva_app.wizard.help.option.", 1)
+}
+
+func wizardOptionExampleKeyV0(labelKey string) string {
+	key := strings.Replace(trimV0(labelKey), "nueva_app.wizard.option.", "nueva_app.wizard.example.option.", 1)
+	if _, ok := nuevaAppWizardOptionExampleKeysV0()[key]; !ok {
+		return ""
+	}
+	return key
 }
 
 func normalizeWizardOptionsV0(options []WizardOptionV0) []WizardOptionV0 {

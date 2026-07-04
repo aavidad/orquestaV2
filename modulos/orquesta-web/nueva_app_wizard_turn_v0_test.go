@@ -1,6 +1,7 @@
 package orquestaweb
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -267,6 +268,67 @@ func TestWizardPreguntasRicasTienenCatalogoI18NV0(t *testing.T) {
 	for _, defaultValue := range WebNuevaAppWizardEngineeringDefaultsV0() {
 		requireWizardI18nKeyV0(t, catalog, defaultValue.WhyKey)
 	}
+}
+
+func TestWizardTodaOpcionTieneAyudaV0(t *testing.T) {
+	catalog := NewNuevaAppI18nCatalogV0()
+	for _, question := range wizardAllRegisteredQuestionsForHelpTestV0() {
+		requireWizardI18nKeyV0(t, catalog, question.PromptKey)
+		requireWizardI18nKeyV0(t, catalog, question.WhyKey)
+		requireWizardI18nKeyV0(t, catalog, question.HelpKey)
+		for _, option := range question.Options {
+			requireWizardI18nKeyV0(t, catalog, option.LabelKey)
+			requireWizardI18nKeyV0(t, catalog, option.HelpKey)
+			if option.ExampleKey != "" {
+				requireWizardI18nKeyV0(t, catalog, option.ExampleKey)
+			}
+			if option.RationaleKey != "" {
+				requireWizardI18nKeyV0(t, catalog, option.RationaleKey)
+			}
+		}
+	}
+	for _, defaultValue := range WebNuevaAppWizardEngineeringDefaultsV0() {
+		requireWizardI18nKeyV0(t, catalog, defaultValue.WhyKey)
+		requireWizardI18nKeyV0(t, catalog, defaultValue.HelpKey)
+		requireWizardI18nKeyV0(t, catalog, defaultValue.ExampleKey)
+	}
+}
+
+func TestWizardGlosarioGeneradoV0(t *testing.T) {
+	const glossaryPath = "../../docs/wizard_glosario_generado.md"
+	expected := wizardGlossaryMarkdownV0()
+	if os.Getenv("ORQUESTA_UPDATE_WIZARD_GLOSSARY") == "1" {
+		if err := os.WriteFile(glossaryPath, []byte(expected), 0o644); err != nil {
+			t.Fatalf("no se pudo actualizar glosario: %v", err)
+		}
+	}
+	current, err := os.ReadFile(glossaryPath)
+	if err != nil {
+		t.Fatalf("glosario generado ausente: %v", err)
+	}
+	if string(current) != expected {
+		t.Fatalf("glosario generado desactualizado; ejecuta ORQUESTA_UPDATE_WIZARD_GLOSSARY=1 go test ./modulos/orquesta-web -run TestWizardGlosarioGeneradoV0")
+	}
+}
+
+func wizardAllRegisteredQuestionsForHelpTestV0() []WizardQuestionV0 {
+	var questions []WizardQuestionV0
+	questions = append(questions, wizardRequiredGapQuestionsV0(WebNuevaAppFormV0{})...)
+	questions = append(questions, wizardRuleR3IntegracionesDominioV0(WebNuevaAppFormV0{Objetivo: "agenda tienda mapa inventario notas tareas finanzas contactos reservas salud educacion comunidad iot galeria facturacion"})...)
+	for _, question := range []*WizardQuestionV0{
+		wizardRuleR1PersonalCompartidoV0(WebNuevaAppFormV0{Objetivo: "agenda"}),
+		wizardRuleR2PlataformasV0(WebNuevaAppFormV0{Objetivo: "agenda"}),
+		wizardRuleR4StorageV0(WebNuevaAppFormV0{Datos: WebNuevaAppDatosFormV0{DBRequired: true}}),
+		wizardRuleR5IntegracionGobiernoV0(WebNuevaAppFormV0{Integraciones: []WebNuevaAppConnectorFormV0{{Tipo: "api", Nombre: "externa"}}}),
+		wizardRuleR6MovilPlataformasV0(WebNuevaAppFormV0{TipoApp: "mobile"}),
+		wizardRuleR7DeployCompatibleV0(WebNuevaAppFormV0{TipoApp: "mobile", Deploy: WebNuevaAppDeployFormV0{Target: "desktop"}}),
+		wizardRuleR8UsuariosCompartidosV0(WebNuevaAppFormV0{Objetivo: "app compartida para clientes"}),
+	} {
+		if question != nil {
+			questions = append(questions, *question)
+		}
+	}
+	return dedupeWizardQuestionsV0(questions)
 }
 
 func hasWizardQuestionRefV0(questions []WizardQuestionV0, ref string) bool {

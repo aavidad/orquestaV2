@@ -3,7 +3,10 @@ package orquestaweb
 import (
 	"net"
 	"net/http"
+	"sync"
 	"time"
+
+	"orquesta/modulos/orquesta-app-gateway/inprocesshttp"
 )
 
 const (
@@ -40,7 +43,7 @@ func DefaultWebHTTPTransportPolicyV0() WebHTTPTransportPolicyV0 {
 func newWebLoopbackHTTPClientV0(timeout time.Duration) *http.Client {
 	return &http.Client{
 		Timeout:   timeout,
-		Transport: newWebHTTPTransportV0(DefaultWebHTTPTransportPolicyV0()),
+		Transport: webInProcessRegistryTransportV0{base: newWebHTTPTransportV0(DefaultWebHTTPTransportPolicyV0())},
 	}
 }
 
@@ -77,4 +80,43 @@ func newWebHTTPTransportV0(policy WebHTTPTransportPolicyV0) *http.Transport {
 		TLSHandshakeTimeout:   policy.TLSHandshakeTimeout,
 		ResponseHeaderTimeout: policy.ResponseHeaderTimeout,
 	}
+}
+
+var webInProcessHTTPRegistryV0 sync.Map
+
+type webInProcessRegistryTransportV0 struct {
+	base http.RoundTripper
+}
+
+func registerWebInProcessHTTPHandlerV0(host string, handler http.Handler) {
+	if host == "" || handler == nil {
+		return
+	}
+	webInProcessHTTPRegistryV0.Store(host, handler)
+}
+
+func unregisterWebInProcessHTTPHandlerV0(host string) {
+	if host == "" {
+		return
+	}
+	webInProcessHTTPRegistryV0.Delete(host)
+}
+
+func (transport webInProcessRegistryTransportV0) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req != nil && req.URL != nil {
+		if handler, ok := webInProcessHTTPRegistryV0.Load(req.URL.Host); ok {
+			response, err := inprocesshttp.TransportV0{Handler: handler.(http.Handler)}.RoundTrip(req)
+			if err != nil {
+				return nil, err
+			}
+			if response.Header.Get("Content-Type") == "" && response.ContentLength > 0 {
+				response.Header.Set("Content-Type", "application/json")
+			}
+			return response, nil
+		}
+	}
+	if transport.base != nil {
+		return transport.base.RoundTrip(req)
+	}
+	return http.DefaultTransport.RoundTrip(req)
 }

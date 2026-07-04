@@ -2,13 +2,23 @@ package orquestaweb
 
 func WebNuevaAppWizardEngineeringDefaultsV0() []WizardDefaultV0 {
 	return []WizardDefaultV0{
-		{Area: "arquitectura", Value: "hexagonal_puertos_adaptadores", WhyKey: "nueva_app.wizard.default.architecture.why"},
-		{Area: "i18n", Value: "i18n_es_en_por_catalogo", WhyKey: "nueva_app.wizard.default.i18n.why"},
-		{Area: "calidad", Value: "tests_unitarios_y_arquitectura_ratchet", WhyKey: "nueva_app.wizard.default.tests.why"},
-		{Area: "calidad", Value: "linters_format_y_scripts_verificacion", WhyKey: "nueva_app.wizard.default.linters.why"},
-		{Area: "calidad", Value: "errores_tipados_catalogo_publico", WhyKey: "nueva_app.wizard.default.errors.why"},
-		{Area: "observabilidad", Value: "logging_estructurado", WhyKey: "nueva_app.wizard.default.observability.why"},
-		{Area: "docs", Value: "handoff_report_source_tree_technical_stack_manifest", WhyKey: "nueva_app.wizard.default.docs.why"},
+		wizardDefaultV0("arquitectura", "hexagonal_puertos_adaptadores", "architecture"),
+		wizardDefaultV0("i18n", "i18n_es_en_por_catalogo", "i18n"),
+		wizardDefaultV0("calidad", "tests_unitarios_y_arquitectura_ratchet", "tests"),
+		wizardDefaultV0("calidad", "linters_format_y_scripts_verificacion", "linters"),
+		wizardDefaultV0("calidad", "errores_tipados_catalogo_publico", "errors"),
+		wizardDefaultV0("observabilidad", "logging_estructurado", "observability"),
+		wizardDefaultV0("docs", "handoff_report_source_tree_technical_stack_manifest", "docs"),
+	}
+}
+
+func wizardDefaultV0(area, value, key string) WizardDefaultV0 {
+	return WizardDefaultV0{
+		Area:       area,
+		Value:      value,
+		WhyKey:     "nueva_app.wizard.default." + key + ".why",
+		HelpKey:    "nueva_app.wizard.default." + key + ".help",
+		ExampleKey: "nueva_app.wizard.default." + key + ".example",
 	}
 }
 

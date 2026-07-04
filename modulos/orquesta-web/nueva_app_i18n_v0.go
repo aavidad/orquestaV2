@@ -31,12 +31,22 @@ func (err NuevaAppI18nErrorV0) Error() string {
 }
 
 func NewNuevaAppI18nCatalogV0() NuevaAppI18nCatalogV0 {
+	es := nuevaAppI18nSpanishV0()
+	en := nuevaAppI18nEnglishV0()
+	mergeI18nMessagesV0(es, nuevaAppWizardHelpI18nSpanishV0())
+	mergeI18nMessagesV0(en, nuevaAppWizardHelpI18nEnglishV0())
 	return NuevaAppI18nCatalogV0{
 		defaultLocale: NuevaAppI18nDefaultLocaleV0,
 		messages: map[string]map[string]string{
-			NuevaAppI18nDefaultLocaleV0: nuevaAppI18nSpanishV0(),
-			NuevaAppI18nEnglishLocaleV0: nuevaAppI18nEnglishV0(),
+			NuevaAppI18nDefaultLocaleV0: es,
+			NuevaAppI18nEnglishLocaleV0: en,
 		},
+	}
+}
+
+func mergeI18nMessagesV0(dst map[string]string, src map[string]string) {
+	for key, value := range src {
+		dst[key] = value
 	}
 }
 
@@ -47,6 +57,7 @@ func NuevaAppI18nTextV0(locale, key string) (string, error) {
 func NuevaAppI18nRequiredKeysV0() []string {
 	keys := append([]string{}, nuevaAppI18nRequiredKeysV0...)
 	keys = append(keys, nuevaAppHTMLHelpI18nKeysV0()...)
+	keys = append(keys, nuevaAppWizardHelpI18nKeysV0()...)
 	return keys
 }
 

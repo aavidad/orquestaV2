@@ -2,9 +2,7 @@ package orquestaweb
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"strconv"
-	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -14,8 +12,7 @@ import (
 const webHTTPClientTestBaseURLV0 = "http://orquesta-web.test"
 
 var (
-	webHTTPClientTestServerSeqV0      atomic.Uint64
-	webHTTPClientTestServerRegistryV0 sync.Map
+	webHTTPClientTestServerSeqV0 atomic.Uint64
 )
 
 type webHTTPClientRoundTripperV0 struct {
@@ -23,9 +20,8 @@ type webHTTPClientRoundTripperV0 struct {
 }
 
 type webHTTPClientTestServerV0 struct {
-	URL    string
-	host   string
-	server *httptest.Server
+	URL  string
+	host string
 }
 
 type webHTTPClientRegistryRoundTripperV0 struct {
@@ -43,12 +39,10 @@ func newWebHTTPTestServerV0(t *testing.T, handler http.Handler) *webHTTPClientTe
 	}
 	id := webHTTPClientTestServerSeqV0.Add(1)
 	host := "orquesta-web-test-" + strconv.FormatUint(id, 10) + ".local"
-	server := httptest.NewServer(handler)
-	webHTTPClientTestServerRegistryV0.Store(host, handler)
+	registerWebInProcessHTTPHandlerV0(host, handler)
 	return &webHTTPClientTestServerV0{
-		URL:    server.URL,
-		host:   host,
-		server: server,
+		URL:  "http://" + host,
+		host: host,
 	}
 }
 
@@ -56,10 +50,7 @@ func (server *webHTTPClientTestServerV0) Close() {
 	if server == nil || server.host == "" {
 		return
 	}
-	webHTTPClientTestServerRegistryV0.Delete(server.host)
-	if server.server != nil {
-		server.server.Close()
-	}
+	unregisterWebInProcessHTTPHandlerV0(server.host)
 }
 
 func newWebHTTPClientForHandlerV0(handler http.Handler) *http.Client {
@@ -81,7 +72,7 @@ func (transport webHTTPClientRoundTripperV0) RoundTrip(req *http.Request) (*http
 
 func (transport webHTTPClientRegistryRoundTripperV0) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req != nil && req.URL != nil {
-		if handler, ok := webHTTPClientTestServerRegistryV0.Load(req.URL.Host); ok {
+		if handler, ok := webInProcessHTTPRegistryV0.Load(req.URL.Host); ok {
 			return webHTTPClientRoundTripperV0{handler: handler.(http.Handler)}.RoundTrip(req)
 		}
 	}

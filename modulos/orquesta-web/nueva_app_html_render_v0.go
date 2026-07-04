@@ -73,6 +73,8 @@ func nuevaAppHTMLWizardI18NKeyV0(key string) bool {
 	return strings.HasPrefix(key, "nueva_app.wizard.question.") ||
 		strings.HasPrefix(key, "nueva_app.wizard.option.") ||
 		strings.HasPrefix(key, "nueva_app.wizard.rationale.") ||
+		strings.HasPrefix(key, "nueva_app.wizard.help.") ||
+		strings.HasPrefix(key, "nueva_app.wizard.example.") ||
 		strings.HasPrefix(key, "nueva_app.wizard.default.") ||
 		strings.HasPrefix(key, "nueva_app.wizard.rich.")
 }
@@ -972,12 +974,14 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
                 <div class="wizard-question" data-wizard-question-ref="{{$questionRef}}">
                   <p class="wizard-question-title">{{i18nText $locale .PromptKey}}</p>
                   <p class="wizard-question-why">{{i18nText $locale .WhyKey}}</p>
+                  <details class="wizard-help"><summary>?</summary><p>{{i18nText $locale .HelpKey}}</p></details>
                   <div class="wizard-options">
                     {{range .Options}}
                     <button type="button" class="wizard-option{{if .Recommended}} recommended{{end}}" data-wizard-question-ref="{{$questionRef}}" data-wizard-option-value="{{.Value}}">
                       <span>{{i18nText $locale .LabelKey}}</span>
                       {{if .Recommended}}<strong>{{i18nText $locale "nueva_app.wizard.rich.recommended"}}</strong>{{end}}
                       {{if .RationaleKey}}<small>{{i18nText $locale .RationaleKey}}</small>{{end}}
+                      <details class="wizard-help" onclick="event.stopPropagation()"><summary>?</summary><small>{{i18nText $locale .HelpKey}}</small>{{if .ExampleKey}}<small>{{i18nText $locale .ExampleKey}}</small>{{end}}</details>
                     </button>
                     {{end}}
                   </div>
@@ -988,7 +992,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
               <div>
                 <p class="expert-row-title">{{i18nText $locale "nueva_app.wizard.rich.defaults"}}</p>
                 <div class="wizard-defaults" data-wizard-rich-defaults>
-                  {{range .Wizard.EngineeringDefaults}}<span class="wizard-default"><strong>{{.Area}}:</strong> {{.Value}}<small>{{i18nText $locale .WhyKey}}</small></span>{{end}}
+                  {{range .Wizard.EngineeringDefaults}}<span class="wizard-default"><strong>{{.Area}}:</strong> {{.Value}}<small>{{i18nText $locale .WhyKey}}</small><small>{{i18nText $locale .HelpKey}}</small>{{if .ExampleKey}}<small>{{i18nText $locale .ExampleKey}}</small>{{end}}</span>{{end}}
                 </div>
               </div>
             </div>
@@ -1423,6 +1427,15 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
           card.dataset.wizardQuestionRef=question.question_ref||'';
           appendWizardText(card,'p','wizard-question-title',wizardText(question.prompt_key));
           appendWizardText(card,'p','wizard-question-why',wizardText(question.why_key));
+          if(question.help_key){
+            const help=document.createElement('details');
+            help.className='wizard-help';
+            const summary=document.createElement('summary');
+            summary.textContent='?';
+            help.appendChild(summary);
+            appendWizardText(help,'p','',wizardText(question.help_key));
+            card.appendChild(help);
+          }
           const options=document.createElement('div');
           options.className='wizard-options';
           (question.options||[]).forEach(option=>{
@@ -1434,6 +1447,17 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
             appendWizardText(button,'span','',wizardText(option.label_key));
             if(option.recommended)appendWizardText(button,'strong','',wizardText('nueva_app.wizard.rich.recommended'));
             if(option.rationale_key)appendWizardText(button,'small','',wizardText(option.rationale_key));
+            if(option.help_key){
+              const help=document.createElement('details');
+              help.className='wizard-help';
+              help.addEventListener('click',event=>event.stopPropagation());
+              const summary=document.createElement('summary');
+              summary.textContent='?';
+              help.appendChild(summary);
+              appendWizardText(help,'small','',wizardText(option.help_key));
+              if(option.example_key)appendWizardText(help,'small','',wizardText(option.example_key));
+              button.appendChild(help);
+            }
             options.appendChild(button);
           });
           card.appendChild(options);
@@ -1460,6 +1484,8 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
           appendWizardText(row,'strong','',(item.area||'')+':');
           row.appendChild(document.createTextNode(' '+(item.value||'')));
           appendWizardText(row,'small','',wizardText(item.why_key));
+          appendWizardText(row,'small','',wizardText(item.help_key));
+          if(item.example_key)appendWizardText(row,'small','',wizardText(item.example_key));
           defaultsBox.appendChild(row);
         });
       }

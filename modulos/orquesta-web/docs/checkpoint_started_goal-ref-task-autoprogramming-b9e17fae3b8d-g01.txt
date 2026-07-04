@@ -1,0 +1,5 @@
+goal_ref: goal-ref-task-autoprogramming-b9e17fae3b8d-g01
+objective: task-wizard-ayudas-llano-i18n
+scope: modulos/orquesta-web, docs/wizard_glosario_generado.md, docs/autoprogramacion_orquesta_pendientes_2026-05-23.md
+next_artifact: wizard help keys, i18n catalog, generated glossary, focused tests
+evidence: checkpoint_started_20260704
