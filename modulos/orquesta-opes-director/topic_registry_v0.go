@@ -99,6 +99,9 @@ func topicRegistryStatusForRecordV0(record OPESCausalArtifactRecordV0) string {
 	if topicRegistryExplicitPartialStatusV0(status) {
 		return strings.TrimSpace(status)
 	}
+	if topicRegistryRequiredEvidenceShouldReworkV0(record) {
+		return "pendiente_rework_evidencia_minima"
+	}
 	if explicit, ok := topicRegistryExplicitOperationalStatusV0(status); ok {
 		return explicit
 	}
@@ -132,6 +135,9 @@ func topicRegistryOperationalStatusForRecordV0(record OPESCausalArtifactRecordV0
 	if refs := topicRegistryQualityPendingRefsForRecordV0(record); len(refs) > 0 {
 		return "needs_rework"
 	}
+	if topicRegistryRequiredEvidenceShouldReworkV0(record) {
+		return "needs_rework"
+	}
 	explicit, hasExplicit := topicRegistryExplicitOperationalStatusV0(status)
 	if hasExplicit && (explicit == "blocked" || explicit == "needs_rework") {
 		return explicit
@@ -158,6 +164,34 @@ func topicRegistryOperationalStatusForRecordV0(record OPESCausalArtifactRecordV0
 		return "complete"
 	}
 	return "working"
+}
+
+func topicRegistryRequiredEvidenceShouldReworkV0(record OPESCausalArtifactRecordV0) bool {
+	if len(topicRegistryRequiredEvidencePendingRefsForRecordV0(record)) == 0 {
+		return false
+	}
+	status := firstNonEmptyV0(
+		fieldStringV0(record.PayloadFields, "operational_status"),
+		fieldStringV0(record.PayloadFields, "status"),
+		fieldStringV0(record.PayloadFields, "estado"),
+		fieldStringV0(record.PayloadFields, "decision"),
+	)
+	if topicRegistryExplicitPartialStatusV0(status) {
+		return false
+	}
+	if record.CompleteJob {
+		return true
+	}
+	if explicit, ok := topicRegistryExplicitOperationalStatusV0(status); ok && explicit == "complete" {
+		return true
+	}
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	switch normalized {
+	case "ready", "listo", "lista", "listo_para_revision_operador", "html_validado":
+		return true
+	default:
+		return false
+	}
 }
 
 func topicRegistryPendingRefsForRecordV0(record OPESCausalArtifactRecordV0) []string {

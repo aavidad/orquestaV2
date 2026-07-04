@@ -13,9 +13,15 @@ Resumen de cierre:
   active work para backends Goal.
 - BUG-166/167/168 quedaron cerrados en `0e0dcedc`; Sueldos accepted queda como
   validacion de campo anterior a este relevo.
-- Queda pendiente no cerrado total: revalidacion real de BUG-165 post-fix y
-  backlog vivo 058, 066, 073, 075, 079, mas smoke real MEJ-104 si sigue
-  aplicando.
+- Actualizacion posterior: `BUG-073` queda cerrado por reejeucion real del
+  smoke high-consumption; MEJ-104 queda cerrado tambien por smoke real acotado
+  de `budget_deferred`; `BUG-075` queda reducido por rework causal de evidencia
+  minima OPES faltante.
+- Queda pendiente no cerrado total: `BUG-165` para timeouts amplios
+  status/observe y coordinacion real completa, `BUG-065/076` para smoke amplio,
+  `BUG-058/066` para lifecycle OPES end-to-end, `BUG-075` para matriz OPES
+  completa por `work_kind` y `BUG-079` para enforcement runtime/proveedor de
+  checkpoint temprano y salidas gigantes.
 
 Eres el DIRECTOR del proyecto Orquesta. Claude queda fuera por límite de
 tokens. Este documento es autocontenido: síguelo al pie de la letra y no

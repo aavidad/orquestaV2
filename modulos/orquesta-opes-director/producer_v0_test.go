@@ -975,9 +975,13 @@ func TestProduceOPESCausalJobsV0BloqueaDerivadoOPESSinEvidenciaMinimaV0(t *testi
 	}
 	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
 	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "pendiente_rework_evidencia_minima") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status", "needs_rework") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "required-evidence-html-site-publicable") ||
-		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_status", topicRegistrySettlementNotSettledV0) ||
-		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_reason", "pending_refs_open") {
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_status", topicRegistrySettlementNeedsReworkV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_scope", "required_evidence") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_reason", "required_evidence_missing") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "next_required_work_kinds", "review_director_consolidation") {
 		t.Fatalf("registry_update=%+v ok=%v result=%+v", request, ok, result)
 	}
 	followup, ok := requestedWorkKindForTestV0(result.RequestedJobs, "review_director_consolidation")

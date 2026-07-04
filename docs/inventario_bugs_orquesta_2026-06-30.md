@@ -89,6 +89,26 @@ antes de su cierre posterior:
   `smoke_goal_first_checkpoint_only_high_consumption_real=ok`; las menciones
   anteriores a "sigue abierto" son contexto historico, con residuales cerrados
   por `BUG-ORQ-20260703-161/162`.
+- `BUG-ORQ-20260701-073` queda cerrado por reejeucion real acotada del mismo
+  smoke el 2026-07-04:
+  `smoke_goal_first_high_consumption_real=ok`,
+  `bug088_path=second_artifact_or_partial_artifacts`,
+  `recommended_action=review_partial_artifacts` y
+  `app_server_tmux_processes_alive=0`. Esto cubre la ruta
+  checkpoint/alto consumo -> segundo artefacto recuperable o revision sin
+  falso `goal_first_blocked_no_artifacts` ni backend residual.
+- `BUG-ORQ-20260703-154` / MEJ-104 queda cerrado tambien en evidencia real
+  acotada: servidor temporal con budget diario agotado publico
+  `budget_deferred` en `/api/v0/server/status` y
+  `/api/v0/autoprogramming/status`, sin lanzar goal Codex. Runbook:
+  `docs/runbooks/smoke_autoprogramming_idle_budget_2026-07-04.md`.
+- `BUG-ORQ-20260701-075` queda reducido por el cierre de evidencia minima OPES:
+  una entrega terminal sin `required-evidence-*` ya no queda como
+  `not_settled` generico ni publicable, sino como
+  `pendiente_rework_evidencia_minima`, `operational_status=needs_rework`,
+  `settlement_status=needs_rework`, `settlement_scope=required_evidence` y
+  `settlement_reason=required_evidence_missing`. Sigue abierto para la matriz
+  completa de validadores OPES por `work_kind` y smoke OPES temporal.
 - `BUG-ORQ-20260702-120` queda cerrado por la proyeccion
   `stopped/crashed/unreachable` y los contratos OPES asociados. Sus notas de
   avance que decian "no cierra el bug padre" son historicas y quedan
@@ -1806,8 +1826,11 @@ Validacion focal reejecutada en este cierre documental:
 `go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0AutomejoraIdle(AplazaPorPresupuestoAgotado|DegradaLotePorPresupuestoContexto)V0|TestServerPublicStatusV0ExponePresupuestoAutomejoraIdleV0'`;
 `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPAutoprogrammingStatusExecutorV0PublicaPresupuestoIdleV0'`;
 `go test -count=1 ./cmd/orquesta-server -run 'TestServerConfigFromEnvV0LeePresupuestoAutomejoraIdleV0|TestServerAutoprogrammingIdleBudgetSourceV0(LeeEstadoDurable|OmiteDecisionVacia)'`.
-Residual: smoke real acotado de presupuesto antes de reactivar automejora
-productiva; no se lanza aqui por congelacion de pilotajes/automejora.
+Cierre de residual 2026-07-04: smoke real acotado de presupuesto con servidor
+temporal y backend `app_server_tmux` configurado publica `budget_deferred` en
+`/api/v0/server/status` y `/api/v0/autoprogramming/status`, no lanza goal Codex
+y deja limpieza sin procesos residentes. Runbook:
+`docs/runbooks/smoke_autoprogramming_idle_budget_2026-07-04.md`.
 
 Cierre T292/escalation director 2026-07-03 noche:
 El riesgo de que el director de escalada por eventos quedara inaccesible desde

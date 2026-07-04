@@ -63,6 +63,16 @@ func topicRegistrySettlementForRecordV0(record OPESCausalArtifactRecordV0) topic
 			NextWorkKinds: []string{"review_director_consolidation"},
 		}
 	}
+	if evidencePendingRefs := topicRegistryRequiredEvidencePendingRefsForRecordV0(record); len(evidencePendingRefs) > 0 &&
+		topicRegistryRequiredEvidenceShouldReworkV0(record) {
+		return topicRegistrySettlementV0{
+			Status:        topicRegistrySettlementNeedsReworkV0,
+			Scope:         "required_evidence",
+			Reason:        "required_evidence_missing",
+			Refs:          compactStringsV0(append(baseRefs, evidencePendingRefs...)),
+			NextWorkKinds: []string{"review_director_consolidation"},
+		}
+	}
 	operationalStatus := topicRegistryOperationalStatusForRecordV0(record)
 	switch operationalStatus {
 	case "blocked":

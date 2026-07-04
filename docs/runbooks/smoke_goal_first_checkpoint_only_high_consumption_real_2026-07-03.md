@@ -65,3 +65,30 @@ posterior de la misma noche los cubre por codigo y pruebas focales:
   vivos. Cierre: el runtime no hereda snapshots activos stale cuando el `ready`
   trae evidencia de cleanup de backend, por lo que vuelve a publicar
   `exit_pending/pid`.
+
+## Reejeucion 2026-07-04
+
+Comando:
+
+```bash
+ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 \
+ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 \
+ORQUESTA_GOAL_FIRST_SMOKE_POLLS=50 \
+./scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh
+```
+
+Resultado:
+
+- `smoke_goal_first_high_consumption_real=ok`
+- `bug088_path=second_artifact_or_partial_artifacts`
+- `recommended_action=review_partial_artifacts`
+- `app_server_tmux_processes_alive=0`
+- `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-e83f3577077c1956448f461f65d4230b`
+- `external_goal_ref=019f2bbd-86a5-7fd1-b7c1-bb7c39f220e7`
+
+Esta reejeucion valida tambien el residual de `BUG-ORQ-20260701-073`: ruta real
+checkpoint/alto consumo hacia segundo artefacto recuperable o revision, sin
+falso `goal_first_blocked_no_artifacts` y sin proceso `app_server_tmux`
+residual. No cierra por si sola todo `BUG-ORQ-20260704-165`, porque no reproduce
+el timeout amplio de `status/observe` de la limpieza documental ni el caso
+Sueldos de stop forzado posterior a alto consumo.

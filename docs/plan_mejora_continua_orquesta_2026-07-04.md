@@ -121,7 +121,10 @@ Tests:
 
 Objetivo: convertir la politica frugal en decision medida: un gobernador de presupuesto que, con las metricas 801A (context_budget), el prompt_cache 801C y un presupuesto operativo declarado por configuracion (tokens o goals por dia), decida antes de lanzar automejora idle si procede lanzar, aplazar con razon budget_deferred o degradar a tarea mas barata. Publicar en autoprogramming/status el presupuesto restante estimado y los aplazamientos con razon. Sin env vars nuevas mas alla del presupuesto declarado.
 
-Estado: cerrado localmente por MEJ-104/T290; queda solo smoke real acotado antes de reactivar automejora productiva.
+Estado: cerrado por MEJ-104/T290 y smoke real acotado del 2026-07-04. El smoke
+temporal valido `budget_deferred` en `/api/v0/server/status` y
+`/api/v0/autoprogramming/status` con backend `app_server_tmux` configurado y sin
+lanzar goal Codex.
 
 Alcance:
 

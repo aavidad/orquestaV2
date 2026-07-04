@@ -1073,3 +1073,61 @@ Estado y pendientes para Claude:
 - T295/BUG-169 queda cerrado en codigo y tests.
 - Siguen abiertos los frentes vivos ya listados por Claude: 058, 066, 073, 075,
   079 y smoke real MEJ-104 si sigue vigente.
+
+## Relevo director Codex 2026-07-04 tarde
+
+Avances integrados antes de entregar a Claude:
+
+- `BUG-ORQ-20260701-073` cerrado por reejeucion real acotada del smoke
+  `scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh` con
+  backend `app_server_tmux`: `smoke_goal_first_high_consumption_real=ok`,
+  `bug088_path=second_artifact_or_partial_artifacts`,
+  `recommended_action=review_partial_artifacts`,
+  `app_server_tmux_processes_alive=0`, run
+  `run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-e83f3577077c1956448f461f65d4230b`
+  y external goal `019f2bbd-86a5-7fd1-b7c1-bb7c39f220e7`.
+- MEJ-104 / `BUG-ORQ-20260703-154` cerrado tambien en smoke real acotado:
+  servidor temporal con budget diario agotado y backend `app_server_tmux`
+  publica `budget_deferred` en `/api/v0/server/status` y
+  `/api/v0/autoprogramming/status`, sin lanzar goal Codex. Evidencia en
+  `docs/runbooks/smoke_autoprogramming_idle_budget_2026-07-04.md`.
+- `BUG-ORQ-20260701-075` reducido por parche OPES: una entrega terminal sin
+  `required-evidence-*` queda en `pendiente_rework_evidencia_minima`,
+  `operational_status=needs_rework`,
+  `settlement_status=needs_rework`,
+  `settlement_scope=required_evidence` y
+  `settlement_reason=required_evidence_missing`, con siguiente trabajo
+  `review_director_consolidation`.
+- `BUG-ORQ-20260701-079` revisado por subagente: no hay parche pequeno seguro
+  en `modulos/orquesta-runtime-codex-goal`; el packet ya pide checkpoint
+  temprano y limite de salida, pero el enforcement preventivo real pertenece al
+  backend/proveedor o a un diseno runtime mayor.
+
+Evidencia ejecutada en este tramo:
+
+- `ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY=1 ./scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh`
+- `ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 ORQUESTA_GOAL_FIRST_SMOKE_POLLS=50 ./scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh`
+- smoke manual residente MEJ-104 con state temporal bajo
+  `/tmp/orquesta-idle-budget-smoke-20260704` y resultado `idle_budget_smoke=ok`.
+- `go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0GoalObservation|TestRuntimeV0AutomejoraIdle'`
+- `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPAutoprogrammingStatusExecutorV0(OutputGiganteSaneado|CheckpointOnlyHighConsumption|SinCheckpointHighConsumption)|TestMCPRunControlExecutorV0StopForcedReconcilesGoalHighConsumption'`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeGoalFirstHighConsumptionWrapperActivaObserverYUmbralBajoV0'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-goal`
+- `go test -count=1 ./modulos/orquesta-opes-director ./modulos/orquesta-opes-bridge`
+- `git diff --check -- modulos/orquesta-opes-director modulos/orquesta-opes-bridge`
+- `go test -count=1 ./modulos/orquesta-server ./modulos/orquesta-autoprogramming ./modulos/orquesta-mcp ./cmd/orquesta-server ./modulos/orquesta-runtime-codex-goal`
+- `go test -count=1 ./...`
+- `git diff --check`
+
+Pendientes reales para Claude:
+
+- `BUG-165` sigue abierto para timeouts amplios de `status/observe` y
+  reconciliacion/control completo en escenarios reales fuera del smoke acotado.
+- `BUG-065/076` siguen abiertos para smoke amplio de cleanup externo y
+  coordinacion backend/checkpoint/stop/cancel/wait.
+- `BUG-058/066` siguen abiertos para lifecycle OPES end-to-end con instancia
+  temporal y criterios nativos `done/settled`.
+- `BUG-075` sigue abierto para matriz completa de validadores OPES por
+  `work_kind`, aunque el caso terminal sin evidencia minima ya queda corregido.
+- `BUG-079` sigue abierto para enforcement runtime/proveedor de checkpoint
+  temprano y limites preventivos de salida de herramientas.
