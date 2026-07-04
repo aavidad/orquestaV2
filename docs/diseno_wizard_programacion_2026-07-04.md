@@ -484,3 +484,25 @@ Reglas:
    con todos los términos y sus explicaciones es/en a partir del catálogo
    (fuente única: las claves i18n; el doc es artefacto derivado, no se edita
    a mano).
+
+### 11.5 Botón "explícamelo todo" y preguntas libres (vinculante)
+
+Además de la ayuda plegada por opción, debe existir una forma explícita de
+pedir TODAS las explicaciones:
+
+1. **Botón global por turno** ("¿Qué significa todo esto?" / "Explícamelo
+   todo"): despliega de una vez la ayuda de la pregunta y de todas sus
+   opciones, en llano, con sus ejemplos. Estado persistente en la sesión
+   (si el usuario lo activó una vez, los turnos siguientes llegan ya
+   desplegados hasta que lo cierre).
+2. **Pregunta libre de comprensión**: en cualquier turno el usuario puede
+   escribir "¿qué es X?" en el campo libre; si X casa con un término del
+   glosario (matching por sinónimos del catálogo i18n), el wizard responde
+   con la explicación y RE-EMITE la misma pregunta sin consumir turno ni
+   registrar respuesta. Test: `TestWizardPreguntaQueEsRespondeYNoAvanzaV0`.
+3. **Contrato**: `WizardTurnResultV0.GlossaryExpanded bool` +
+   `WizardAnswerV0.ComprehensionQuery string` (si viene relleno, el motor
+   trata el turno como consulta, no como respuesta). En MCP/HTTP, mismo
+   contrato; en la web, botón visible junto al título del turno.
+4. El glosario completo (11.4) queda además enlazado desde cada turno
+   ("ver glosario completo").
