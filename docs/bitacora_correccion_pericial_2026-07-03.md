@@ -3780,3 +3780,17 @@ status/summary canonico de checkpoint para no confundir observadores.
 Cola restante gateada: retirada legacy (tras §9), G5 bot LLM (opt-in coste,
 decision operador), TAREA-8 olas 3+ (SERVER_IDLE, OPES_REGISTRY...),
 enforcement proveedor BUG-079 (frontera runtime externo).
+
+## Ciclos 10-11 y cierre de causas organicas (2026-07-05 madrugada)
+
+- Ciclo 10 (fb170012): TAREA-8 ola 3, server_idle al fichero canonico;
+  familias restantes verificadas con focales existentes.
+- Ciclo 11 (dcb41f04): TAREA-8.2 guard config_projection_mismatch con
+  required_settings en prepare-run/apps-director y evidencia de settings
+  verificados. La clase del incidente T7A (config perdida en silencio entre
+  shell y daemon) queda cerrada por diseno: fichero canonico + alias
+  deprecated avisados + ratchet doble + guard de proyeccion.
+- Marcador acumulado del ciclo remoto autonomo: 11 goals lanzados, 11
+  completados e integrados (servidor=local=GitHub) con revision externa al
+  sandbox en cada uno. Cola restante: gateada (legacy tras ventana §9;
+  G5 bot LLM opt-in; enforcement proveedor BUG-079).
