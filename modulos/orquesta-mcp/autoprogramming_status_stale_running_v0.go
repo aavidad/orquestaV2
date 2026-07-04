@@ -14,6 +14,7 @@ const (
 	mcpAutoprogrammingActionRunningStaleNoProcessV0                    = "running_stale_no_process"
 	mcpAutoprogrammingActionRunningWithoutRecentStatsV0                = "running_without_recent_stats"
 	mcpAutoprogrammingActionActiveNoCheckpointYetV0                    = "active_no_checkpoint_yet"
+	mcpAutoprogrammingActionActiveCheckpointOnlyYetV0                  = "active_checkpoint_only_yet"
 	mcpAutoprogrammingActionActiveTimeoutCheckpointRecentV0            = "active_timeout_checkpoint_recent"
 	mcpAutoprogrammingActionNoCheckpointConsumptionWarningV0           = "goal_active_no_checkpoint_consumption_warning"
 	mcpAutoprogrammingActionCheckpointOnlyConsumptionWarningV0         = "checkpoint_only_consumption_warning"
@@ -49,6 +50,7 @@ const (
 	mcpAutoprogrammingEvidenceRunCoordinatorExecutedV0                 = "evidence-ref-run-coordinator-executed"
 	mcpAutoprogrammingEvidenceGoalFirstStateMissingV0                  = "evidence-ref-autoprogramming-status-goal-first-state-missing"
 	mcpAutoprogrammingEvidenceGoalFirstBlockedV0                       = "evidence-ref-autoprogramming-status-goal-first-blocked"
+	mcpAutoprogrammingEvidenceActiveCheckpointOnlyYetV0                = "evidence-ref-autoprogramming-active-checkpoint-only-yet"
 	mcpAutoprogrammingEvidenceActiveTimeoutCheckpointRecentV0          = "evidence-ref-autoprogramming-active-timeout-checkpoint-recent"
 	mcpAutoprogrammingEvidenceNoCheckpointConsumptionWarningV0         = "evidence-ref-autoprogramming-no-checkpoint-consumption-warning"
 	mcpAutoprogrammingEvidenceCheckpointOnlyConsumptionWarningV0       = "evidence-ref-autoprogramming-checkpoint-only-consumption-warning"
@@ -646,13 +648,6 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 			reason = "goal_active_timeout_backend_active: local goal-first timed out while backend goal remains active; capture safe snapshot and replan before launching more parents"
 			recommendedAction = "replan_goal_after_active_timeout"
 		}
-		activeNoCheckpoint := !mcpAutoprogrammingGoalResultTerminalV0(state) &&
-			!activeTimeoutBackendActive &&
-			mcpAutoprogrammingObservedGoalActiveWithRecentActivityV0(observed)
-		if activeNoCheckpoint {
-			reason = "goal_backend_active_no_checkpoint_yet: backend goal is active with recent activity; wait for checkpoint/artifact before declaring stale"
-			recommendedAction = "observe_goal_backend_wait_for_checkpoint"
-		}
 		action := MCPAutoprogrammingActionableRunV0{
 			Code:              actionCode,
 			Severity:          "blocked",
@@ -695,6 +690,14 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 			observed,
 		)
 		action = mcpAutoprogrammingActionableRunWithObservedGoalV0(action, observed)
+		activeWithRecentActivity := !mcpAutoprogrammingGoalResultTerminalV0(state) &&
+			!activeTimeoutBackendActive &&
+			mcpAutoprogrammingObservedGoalActiveWithRecentActivityV0(observed)
+		activeNoCheckpoint := activeWithRecentActivity &&
+			len(compactStringsMCPV0(action.ArtifactRefs)) == 0 &&
+			len(compactStringsMCPV0(action.DomainReceiptRefs)) == 0
+		activeCheckpointOnly := activeWithRecentActivity &&
+			mcpAutoprogrammingActiveCheckpointOnlyYetV0(action, observed, policy)
 		activeTimeoutCheckpointRecent := activeTimeoutBackendActive &&
 			mcpAutoprogrammingActiveTimeoutCheckpointRecentV0(action, observed, policy)
 		noCheckpointConsumptionWarning := !activeTimeoutBackendActive &&
@@ -711,6 +714,18 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 		if activeNoCheckpoint {
 			action.Code = mcpAutoprogrammingActionActiveNoCheckpointYetV0
 			action.Severity = "info"
+			action.Reason = "goal_backend_active_no_checkpoint_yet: backend goal is active with recent activity; wait for checkpoint/artifact before declaring stale"
+			action.RecommendedAction = mcpQueueGlobalStatusActionObserveGoalWaitForCheckpointV0
+		}
+		if activeCheckpointOnly {
+			action.Code = mcpAutoprogrammingActionActiveCheckpointOnlyYetV0
+			action.Severity = "info"
+			action.Reason = "active_checkpoint_only_yet: backend goal is active after a checkpoint with recent activity; require next artifact before declaring stale"
+			action.RecommendedAction = mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0
+			action.EvidenceRefs = compactStringsMCPV0(append(
+				action.EvidenceRefs,
+				mcpAutoprogrammingEvidenceActiveCheckpointOnlyYetV0,
+			))
 		}
 		if noCheckpointConsumptionWarning && !noCheckpointWarningTimedOut {
 			action.Code = mcpAutoprogrammingActionNoCheckpointConsumptionWarningV0
@@ -766,7 +781,7 @@ func mcpAutoprogrammingGoalFirstBlockedActionsV0(
 			action.Code = mcpAutoprogrammingActionActiveTimeoutCheckpointRecentV0
 			action.Severity = "info"
 			action.Reason = "active_timeout_checkpoint_recent: local timeout fired after a checkpoint while backend goal remains active below high-consumption threshold; observe for next artifact before replan"
-			action.RecommendedAction = "observe_goal_backend_wait_for_checkpoint"
+			action.RecommendedAction = mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0
 			action.EvidenceRefs = compactStringsMCPV0(append(
 				action.EvidenceRefs,
 				mcpAutoprogrammingEvidenceActiveTimeoutCheckpointRecentV0,
@@ -1169,6 +1184,33 @@ func firstNonZeroInt64MCPV0(values ...int64) int64 {
 		}
 	}
 	return 0
+}
+
+func mcpAutoprogrammingActiveCheckpointOnlyYetV0(
+	action MCPAutoprogrammingActionableRunV0,
+	observed *MCPDirectorStatsToolResultV0,
+	policy MCPAutoprogrammingGoalProgressPolicyV0,
+) bool {
+	policy = NormalizeMCPAutoprogrammingGoalProgressPolicyV0(policy)
+	warningTokens := policy.CheckpointOnlyHighConsumptionTokens / 2
+	if warningTokens <= 0 {
+		warningTokens = mcpAutoprogrammingCheckpointOnlyHighConsumptionTokensDefaultV0 / 2
+	}
+	if !mcpAutoprogrammingObservedGoalActiveV0(observed) ||
+		action.TokensUsed >= warningTokens ||
+		len(action.DomainReceiptRefs) > 0 {
+		return false
+	}
+	artifactRefs := compactStringsMCPV0(action.ArtifactRefs)
+	if len(artifactRefs) == 0 {
+		return false
+	}
+	for _, ref := range artifactRefs {
+		if !mcpAutoprogrammingArtifactRefLooksCheckpointV0(ref) {
+			return false
+		}
+	}
+	return true
 }
 
 func mcpAutoprogrammingCheckpointOnlyHighConsumptionV0(

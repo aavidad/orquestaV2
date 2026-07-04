@@ -59,6 +59,8 @@ func TestStackGoalMaterializedRefsSourceV0DetectaCheckpointEnWriteSet(t *testing
 		len(result.ArtifactRefs) != 1 ||
 		!strings.Contains(result.ArtifactRefs[0], "artifact-ref-checkpoint") ||
 		strings.Contains(result.ArtifactRefs[0], projectDir) ||
+		containsStringPrefixForTestV0(result.ArtifactRefs, "artifact-ref-materialized:") ||
+		containsStringV0(result.IssueCodes, "partial_artifacts_written") ||
 		!containsStringV0(result.EvidenceRefs, "evidence-ref-goal-materialized-checkpoint-detected") ||
 		!containsStringV0(result.IssueCodes, "goal_first_materialized_checkpoint_detected") {
 		t.Fatalf("ok=%v result=%+v", ok, result)

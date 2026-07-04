@@ -528,6 +528,7 @@ func mcpDomainWorkStatusNormalizeStatusV0(status string, action string) string {
 		mcpAutoprogrammingHealthRunningWithoutRecentStatsV0,
 		mcpAutoprogrammingActionActiveTimeoutCheckpointRecentV0,
 		mcpAutoprogrammingActionActiveNoCheckpointYetV0,
+		mcpAutoprogrammingActionActiveCheckpointOnlyYetV0,
 		mcpAutoprogrammingActionCheckpointOnlyConsumptionWarningV0,
 		mcpAutoprogrammingActionNoCheckpointConsumptionWarningV0,
 		"running",

@@ -444,13 +444,19 @@ func TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesCheckpointComoEstadoOpe
 		{
 			name:              "active_timeout_checkpoint_recent",
 			code:              mcpAutoprogrammingActionActiveTimeoutCheckpointRecentV0,
-			recommendedAction: mcpQueueGlobalStatusActionObserveGoalWaitForCheckpointV0,
+			recommendedAction: mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0,
+			wantStatus:        "running",
+		},
+		{
+			name:              "active_checkpoint_only_yet",
+			code:              mcpAutoprogrammingActionActiveCheckpointOnlyYetV0,
+			recommendedAction: mcpQueueGlobalStatusActionObserveGoalRequireNextArtifactV0,
 			wantStatus:        "running",
 		},
 		{
 			name:              "active_no_checkpoint_yet",
 			code:              mcpAutoprogrammingActionActiveNoCheckpointYetV0,
-			recommendedAction: mcpQueueGlobalStatusActionObserveGoalRequireCheckpointV0,
+			recommendedAction: mcpQueueGlobalStatusActionObserveGoalWaitForCheckpointV0,
 			wantStatus:        "running",
 		},
 		{

@@ -329,6 +329,36 @@ Incidencia nueva para Claude:
   residual puede aparecer `stopped/degraded`. Revisar observabilidad/control
   goal-first, no reabrir la limpieza documental por este fallo.
 
+## Actualizacion Codex 2026-07-04 noche 28
+
+Commits ya empujados antes de este bloque:
+
+- `63f68213 fix: reconciliar goal stale sin proceso vivo`.
+- `89e390ac fix: materializar checkpoint antes del turn start`.
+
+Avance de este bloque:
+
+- `BUG-ORQ-20260701-073` pasa a cerrado funcionalmente: el checkpoint runtime
+  inicial ya no se interpreta como artefacto parcial ni como falta de
+  checkpoint.
+- `autoprogramming/status` distingue `active_no_checkpoint_yet` de
+  `active_checkpoint_only_yet`. Con checkpoint inicial pide
+  `observe_goal_backend_require_next_artifact`; tambien lo hace
+  `active_timeout_checkpoint_recent`.
+- `BUG-ORQ-20260701-079` sigue abierto solo por limite duro pre-tool/stdout del
+  app-server/proveedor y smoke real largo. No reabrirlo por checkpoint inicial:
+  ese borde queda reducido por codigo y pruebas.
+- Conteo vigente del inventario tras este bloque: 208 filas, 173 IDs unicos, 6
+  bugs abiertos reales: `BUG-165`, `BUG-058`, `BUG-065`, `BUG-066`, `BUG-075`,
+  `BUG-079`.
+
+Pruebas focales ejecutadas:
+
+- `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPAutoprogrammingStatusExecutorV0(GoalBloqueadoConBackendActivoPublicaSnapshotAccionable|CheckpointOnlyBajoConsumoPideSiguienteArtefacto|CheckpointOnlyHighConsumptionEsBloqueante|CheckpointOnlyConsumoMedioAvisaAntesDeUmbralAlto|GoalActiveTimeoutConCheckpointRecienteNoReplanificaAun|GoalActiveTimeoutConCheckpointEstancadoPromueveReplanV0)|TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesCheckpointComoEstadoOperacional'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestStackGoalMaterializedRefsSourceV0DetectaCheckpointEnWriteSet|TestStackGoalMaterializedRefsSourceV0DetectaArtefactosTxtBUG088V0'`
+- `git diff --check`
+- `go test -count=1 ./...`
+
 ## Checklist de Claude
 
 1. Revisar `git status --short` y separar cambios de cada frente.
