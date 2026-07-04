@@ -244,5 +244,9 @@ func idleSelfImprovementBacklogHasRunnableDependencyContractV0(
 
 func idleSelfImprovementNormalizeDependencyRefV0(value string) string {
 	value = strings.Trim(strings.ToLower(strings.TrimSpace(value)), "`.,; ")
+	switch value {
+	case "", "ninguna", "ninguno", "ningunas", "ningunos", "none", "no", "sin", "sin dependencia", "sin dependencias":
+		return ""
+	}
 	return idleSelfImprovementNormalizeQueuedRequestRefV0(value)
 }

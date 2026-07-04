@@ -56,6 +56,77 @@ Objetivo: mejorar director.
 	}
 }
 
+func TestIdleSelfImprovementBacklogPlannerV0BacklogMinimoPendienteNoCedeCicloAlScannerV0(t *testing.T) {
+	projectDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	content := `# Backlog
+
+## T295 backlog-scanner-ejecuta
+
+Objetivo: corregir que el scanner idle sustituya una tarea ejecutable.
+
+Estado: pendiente
+
+Alcance:
+
+- cmd/orquesta-server
+- modulos/orquesta-server
+
+Criterios:
+
+- el planner crea el request ejecutable de T295.
+- el escaner no sustituye a tareas ejecutables.
+
+Tests:
+
+- ` + "`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`" + `
+
+Dependencias: ninguna
+`
+	if err := os.WriteFile(filepath.Join(projectDir, idleSelfImprovementBacklogDocRelV0), []byte(content), 0o600); err != nil {
+		t.Fatalf("write backlog: %v", err)
+	}
+
+	result, err := (idleSelfImprovementBacklogPlannerV0{ProjectWorkDir: projectDir}).PlanV0(
+		orquestaserver.IdleSelfImprovementPlanRequestV0{
+			MaxRequests:  2,
+			Trigger:      "capacity_free",
+			QueueSize:    0,
+			FreeCapacity: 2,
+			BaseRequest: orquestaserver.IdleSelfImprovementRequestV0{
+				RequestRef:    "request-ref-base",
+				CorrelationID: "corr-request-ref-base",
+				ProjectRef:    "project-ref-orquesta",
+				WorktreeRef:   "worktree-ref-clean",
+				BranchRef:     "branch-ref-clean",
+				WriteSet:      []string{"cmd/orquesta-server"},
+				RequiredTests: []string{"go test -count=1 ./cmd/orquesta-server"},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("PlanV0: %v", err)
+	}
+	if len(result.Requests) != 1 {
+		t.Fatalf("requests=%+v", result.Requests)
+	}
+	request := result.Requests[0]
+	if request.FailureKind != "backlog_autoprogramming" ||
+		request.SuggestedArea != "t295-backlog-scanner-ejecuta" ||
+		!containsStringForTestV0(request.ContextRefs, "backlog_section:t295-backlog-scanner-ejecuta") ||
+		!containsStringForTestV0(request.RequiredTests, "go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server") {
+		t.Fatalf("request=%+v", request)
+	}
+	for _, request := range result.Requests {
+		if request.FailureKind == "backlog_scan" ||
+			request.SuggestedArea == "backlog-scan" {
+			t.Fatalf("scanner sustituyo tarea ejecutable: %+v", result.Requests)
+		}
+	}
+}
+
 func TestIdleSelfImprovementBacklogPlannerV0PlanificaDependienteSiDependenciaCompletadaV0(t *testing.T) {
 	projectDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
