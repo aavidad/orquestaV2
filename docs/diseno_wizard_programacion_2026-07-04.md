@@ -446,3 +446,41 @@ justificar") para revisión consciente.
 - `TestWizardActiveDirectoryPorContextoEmpresaV0`: objetivo con "para mi
   empresa con dominio Windows" activa T2 con opciones AD/LDAP/OIDC y
   recomendación razonada.
+
+## 11. Documentación de cada opción para humanos no técnicos (vinculante)
+
+Orden del operador: el humano puede no saber qué es cada cosa (ej.:
+"multi-tenant"). TODA pregunta y TODA opción llevan explicación en lenguaje
+llano, sin asumir conocimientos técnicos.
+
+Contrato (ampliar tipos existentes):
+
+```go
+// En WizardQuestionV0:
+//   HelpKey string // i18n: qué significa esta pregunta, en llano, con ejemplo
+// En WizardOptionV0:
+//   HelpKey    string // i18n: qué es esta opción explicada a un no técnico
+//   ExampleKey string // i18n opcional: ejemplo cotidiano ("multi-tenant:
+//                     // como un edificio de pisos: cada cliente tiene su
+//                     // piso con llave propia dentro del mismo edificio")
+// En WizardDefaultV0 y ResolvedByExclusion: WhyKey ya existe; añadir HelpKey
+// con la explicación llana del concepto adoptado.
+```
+
+Reglas:
+
+1. Redacción: una frase de qué es + una de cuándo conviene + un ejemplo
+   cotidiano si el término es técnico (multi-tenant, RBAC, SSO, LDAP, JWT,
+   circuit breaker, RPO/RTO, SCIM, webhook, full-text...). Prohibido definir
+   un término técnico usando otro término técnico sin explicar.
+2. Cobertura total verificada por test: `TestWizardTodaOpcionTieneAyudaV0`
+   recorre todas las preguntas/opciones/defaults registrados y falla si
+   falta HelpKey o si la clave no existe en es y en (reutilizar patrón
+   owner). Sin excepciones: opción sin ayuda = build rojo.
+3. Superficies: HTTP/MCP devuelven las claves resueltas al locale de la
+   sesión; el render web muestra la ayuda plegada (icono "?") por opción y
+   la de la pregunta bajo el enunciado.
+4. Glosario generado: script/test dora un `docs/wizard_glosario_generado.md`
+   con todos los términos y sus explicaciones es/en a partir del catálogo
+   (fuente única: las claves i18n; el doc es artefacto derivado, no se edita
+   a mano).
