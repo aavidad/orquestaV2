@@ -1,0 +1,6 @@
+goal_ref: goal-ref-task-autoprogramming-d75ef5f8379d-g01
+source_task_ref: task-autonomia-t6-env-ratchet-20260704-002
+objective: consolidate two real ORQUESTA_* env vars if safe to reduce env_vars_orquesta from 513 toward 511; otherwise keep current ratchet with explicit justification and MEJ-106 open.
+scope: cmd/orquesta-server, scripts, docs/runbooks, docs/bitacora_correccion_pericial_2026-07-03.md, docs/inventario_bugs_orquesta_2026-06-30.md
+next_artifact: cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-d75ef5f8379d-g01.json
+status: started

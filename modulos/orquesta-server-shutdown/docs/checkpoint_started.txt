@@ -1,0 +1,7 @@
+goal_ref: goal-ref-task-autoprogramming-edd43a30277f-g01
+source_task_ref: task-autonomia-t4-shutdown-wide-smoke-20260704-002
+started_at: 2026-07-04
+objective: Construir/ejecutar smoke real amplio con 2 goals activos donde shutdown cooperativo encadena backend/checkpoint/stop/cancel/wait sin intervencion, publica goal_actions resueltas y no deja procesos residuales.
+scope: write-set autorizado modulos/orquesta-server-shutdown, cmd/orquesta-server, docs/runbooks, docs/bitacora_correccion_pericial_2026-07-03.md, docs/inventario_bugs_orquesta_2026-06-30.md.
+next_artifact: modulos/orquesta-server-shutdown/docs/orquesta_goal_result_goal-ref-task-autoprogramming-edd43a30277f-g01.json
+evidence: checkpoint temprano materializado antes de exploracion larga o comandos costosos.

@@ -1,0 +1,9 @@
+goal_ref: goal-ref-task-autoprogramming-8b61180dcd7d-g01
+source_task_ref: task-autonomia-t5-opes-quality-residuals-20260704-002
+request_ref: run-autonomia-t5-opes-quality-residuals-20260704-002
+started_at: 2026-07-04
+objective: close pending OPES contract with scoped tests/fixes for durable settlement, minimal closure evidence, and partial artifact QA by work_kind.
+scope: modulos/orquesta-opes-director, modulos/orquesta-opes-connector, docs/runbooks, docs/bitacora_correccion_pericial_2026-07-03.md, docs/inventario_bugs_orquesta_2026-06-30.md.
+constraints: no OPES production access; semantic/editorial validators stay behind adapter/port boundaries and out of core.
+next_artifact: modulos/orquesta-opes-director/docs/orquesta_goal_result_goal-ref-task-autoprogramming-8b61180dcd7d-g01.json
+evidence: early checkpoint materialized before long exploration or costly commands.

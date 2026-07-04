@@ -1,0 +1,5 @@
+goal_ref: goal-ref-task-autoprogramming-1d01424da32d-g01
+source_task_ref: task-autonomia-t7a-wizard-contracts-small-20260704-001
+scope: modulos/orquesta-web wizard contract/base engine only
+next_artifact: wizard pure contract and tests in modulos/orquesta-web
+evidence: checkpoint materialized before long exploration or costly commands

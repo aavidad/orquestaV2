@@ -1,0 +1,5 @@
+schema_version=orquesta.codex_app_server.early_checkpoint.v0
+goal_ref=goal-ref-task-autoprogramming-b16dbf6de0af-g01
+external_goal_ref=019f2d86-d397-7772-ac27-b7b5b7e03604
+reason=runtime_checkpoint_before_turn_start
+created_by=orquesta-runtime-codex-appserver

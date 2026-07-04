@@ -1,0 +1,11 @@
+goal_ref: goal-ref-task-autoprogramming-5fb5b8417b08-g01
+source_task_ref: task-autonomia-t3-cost-routing-goal-20260704-002
+objective: add task_cost_class doc|code|mixed derived from write-set and wire it to goal-first backend/effort selection without compatibility breaks.
+authorized_write_set:
+- modulos/orquesta-runtime-codex-goal
+- cmd/orquesta-server
+- docs/runbooks
+- docs/bitacora_correccion_pericial_2026-07-03.md
+next_artifact: modulos/orquesta-runtime-codex-goal/docs/orquesta_goal_result_goal-ref-task-autoprogramming-5fb5b8417b08-g01.json
+status: started
+evidence: checkpoint materialized before repository exploration and required tests.

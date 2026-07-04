@@ -3487,3 +3487,23 @@ completo del analizador (rg fallback + codebase-MCP + cache + leases) ya
 existe y no se llama — la TAREA-2 parte de ahí. Detalle e instrucciones en
 docs/instrucciones_director_codex_2026-07-04.md TAREA-10. Regla nueva para
 TAREA-9: clasificar antes de borrar.
+
+## AVISO OPERATIVO: migración a servidor remoto (2026-07-04 noche)
+
+Orden del operador: este equipo local SE APAGA. Todo el trabajo continúa en
+el servidor remoto. Para el director Codex:
+
+1. NO iniciar tareas nuevas en este equipo local. Termina el corte actual,
+   commitea TODO (incluida obra a medias, marcada WIP si hace falta) y
+   registra aquí el estado exacto en que lo dejas.
+2. La rama `trabajo/plataforma-agentes` se empuja a origin (GitHub
+   aavidad/orquestador) como canal de sincronización; el servidor remoto
+   hace pull de ahí.
+3. El relevo continúa en el servidor: mismos documentos de coordinación
+   (esta bitácora, instrucciones del director, inventario). La cola vigente
+   es: TAREA-2 AMPLIADA (analizador, partir del wiring TAREA-10.3),
+   TAREA-8 olas de envs, TAREA-9 poda con ratchet, TAREA-10 retomas,
+   wizard pendiente (U/T/exclusión/glosario/bot RAG), smoke OPES real
+   (058/066/075).
+4. Los placeholders de goal results y checkpoints sueltos de los pilotajes
+   T1-T7A quedan commiteados como evidencia citada por el inventario.

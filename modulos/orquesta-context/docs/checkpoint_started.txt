@@ -1,0 +1,14 @@
+goal_ref: goal-ref-task-autoprogramming-b16dbf6de0af-g01
+source_task_ref: task-autonomia-t2-context-broker-mcp-toolbelt-20260704-002
+request_ref: run-autonomia-t2-context-broker-mcp-toolbelt-20260704-002
+started_at: 2026-07-04
+objective: Exponer CodeContextQueryPortV0 como herramienta local accesible al agente Codex por toolbelt/MCP sin HTTP localhost, y dejar medicion o harness contra baseline T293=164945.
+authorized_write_set:
+- modulos/orquesta-context
+- modulos/orquesta-runtime-codex-appserver
+- cmd/orquesta-server/codex_toolbelt_source_v0.go
+- cmd/orquesta-server/codex_toolbelt_source_v0_test.go
+- docs/runbooks
+- docs/bitacora_correccion_pericial_2026-07-03.md
+next_artifact: modulos/orquesta-context/docs/orquesta_goal_result_goal-ref-task-autoprogramming-b16dbf6de0af-g01.json
+evidence: checkpoint temprano materializado antes de exploracion larga o comandos costosos.
