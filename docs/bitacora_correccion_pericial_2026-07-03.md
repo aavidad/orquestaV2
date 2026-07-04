@@ -2264,3 +2264,42 @@ Resumen:
 - Hallazgo: gran parte de la limpieza stale/stopped ya existe; la siguiente
   accion recomendada es test focal sobre narrativa contradictoria
   `shutdown_status`/`shutdown_ready` en snapshot `stopped`, no refactor amplio.
+
+## Continuacion Codex 2026-07-04 tarde 2
+
+Reduccion adicional de `BUG-ORQ-20260704-165` y
+`BUG-ORQ-20260701-065`:
+
+- El test focal recomendado en el corte de auditoria fallo: un snapshot
+  `Status="stopped"` podia conservar `shutdown_status=stop_timeout` y
+  `shutdown_ready=false` si no tenia active work vivo.
+- `NormalizeStoppedServerSnapshotV0` ya considera ese caso sucio y lo
+  reconcilia a `shutdown_status=stopped` y `shutdown_ready=true`.
+- `orquesta-server status` cubre y persiste esa normalizacion desde statefile.
+
+Archivos tocados:
+
+- `modulos/orquesta-server/status_process_stale_v0.go`
+- `modulos/orquesta-server/status_process_stale_v0_test.go`
+- `cmd/orquesta-server/command_public_output_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion focal ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-server -run 'TestNormalizeStoppedServerSnapshotV0|TestStatusTracker(Stopped|RuntimeStopped)'`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestStatusServerCommandV0ReconciliaStopped'`
+
+## Claude: test focal narrativa shutdown residual (2026-07-04 tarde)
+
+Siguiendo el "Mensaje para Claude" del corte de auditoria: el test focal
+demostro incoherencia real. `NormalizeStoppedServerSnapshotV0` reparaba
+status/ready/active_work pero conservaba `shutdown_agents_in_flight`,
+`shutdown_checkpoints_pending` y `shutdown_checkpoint_agents_pending`
+residuales: un snapshot `stopped` heredado de timeout quedaba `shutdown_ready`
+con agentes en vuelo declarados. Fix minimo: esos contadores (y
+`shutdown_runs_*`) entran en el clean-check y en el clear. Test
+`TestNormalizeStoppedServerSnapshotV0LimpiaContadoresShutdownResidualesV0`.
+Suites: `./modulos/orquesta-server` y `./cmd/orquesta-server` verdes.
+Reduce el residual de narrativa stale de BUG-ORQ-20260704-165/BUG-065.

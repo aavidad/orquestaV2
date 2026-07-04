@@ -175,6 +175,59 @@ func TestNormalizeStoppedServerSnapshotV0LimpiaActiveWorkStaleV0(t *testing.T) {
 	}
 }
 
+func TestNormalizeStoppedServerSnapshotV0ReparaNarrativaShutdownContradictoriaV0(t *testing.T) {
+	state := StateV0{
+		SchemaVersion:      StateSchemaVersionV0,
+		Status:             "stopped",
+		StartupReady:       false,
+		StartupStatus:      "stopped",
+		ShutdownInProgress: false,
+		ShutdownStatus:     "stop_timeout",
+		ShutdownReady:      false,
+	}
+
+	reconciled, ok := NormalizeStoppedServerSnapshotV0(state)
+
+	if !ok {
+		t.Fatalf("snapshot stopped con narrativa shutdown contradictoria debe reconciliarse")
+	}
+	if reconciled.Status != "stopped" ||
+		reconciled.ShutdownInProgress ||
+		reconciled.ShutdownStatus != "stopped" ||
+		!reconciled.ShutdownReady {
+		t.Fatalf("snapshot stopped conserva narrativa shutdown contradictoria: %+v", reconciled)
+	}
+}
+
+func TestNormalizeStoppedServerSnapshotV0LimpiaContadoresShutdownResidualesV0(t *testing.T) {
+	state := StateV0{
+		SchemaVersion:                   StateSchemaVersionV0,
+		Status:                          "stopped",
+		StartupReady:                    false,
+		StartupStatus:                   "stopped",
+		ShutdownInProgress:              false,
+		ShutdownStatus:                  "stop_timeout",
+		ShutdownReady:                   false,
+		ShutdownAgentsInFlight:          3,
+		ShutdownCheckpointsPending:      2,
+		ShutdownCheckpointAgentsPending: 2,
+	}
+
+	reconciled, ok := NormalizeStoppedServerSnapshotV0(state)
+
+	if !ok {
+		t.Fatalf("snapshot stopped con contadores shutdown residuales debe reconciliarse")
+	}
+	if reconciled.ShutdownStatus != "stopped" || !reconciled.ShutdownReady {
+		t.Fatalf("snapshot stopped conserva narrativa shutdown contradictoria: %+v", reconciled)
+	}
+	if reconciled.ShutdownAgentsInFlight != 0 ||
+		reconciled.ShutdownCheckpointsPending != 0 ||
+		reconciled.ShutdownCheckpointAgentsPending != 0 {
+		t.Fatalf("snapshot stopped ready no puede declarar agentes en vuelo ni checkpoints pendientes: %+v", reconciled)
+	}
+}
+
 func TestStatusTrackerStoppedV0LimpiaStartupReadyV0(t *testing.T) {
 	now := time.Date(2026, 7, 3, 9, 0, 0, 0, time.UTC)
 	tracker := NewStatusTrackerV0(ConfigV0{Addr: "127.0.0.1:18787"}, now)

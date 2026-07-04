@@ -86,7 +86,14 @@ func stoppedStartupProjectionCleanV0(state StateV0) bool {
 
 func stoppedShutdownActiveProjectionCleanV0(state StateV0) bool {
 	return !state.ShutdownInProgress &&
+		state.ShutdownStatus == "stopped" &&
+		state.ShutdownReady &&
 		state.ShutdownHTTPStatus == 0 &&
+		state.ShutdownRunsRequested == 0 &&
+		state.ShutdownRunsStopped == 0 &&
+		state.ShutdownAgentsInFlight == 0 &&
+		state.ShutdownCheckpointsPending == 0 &&
+		state.ShutdownCheckpointAgentsPending == 0 &&
 		state.ShutdownActiveWorkCount == 0 &&
 		len(state.ShutdownActiveWorkRefs) == 0 &&
 		len(state.ShutdownGoalActions) == 0 &&
@@ -99,7 +106,14 @@ func clearStoppedShutdownActiveProjectionV0(state *StateV0) {
 		return
 	}
 	state.ShutdownInProgress = false
+	state.ShutdownStatus = "stopped"
+	state.ShutdownReady = true
 	state.ShutdownHTTPStatus = 0
+	state.ShutdownRunsRequested = 0
+	state.ShutdownRunsStopped = 0
+	state.ShutdownAgentsInFlight = 0
+	state.ShutdownCheckpointsPending = 0
+	state.ShutdownCheckpointAgentsPending = 0
 	state.ShutdownActiveWorkCount = 0
 	state.ShutdownActiveWorkRefs = nil
 	state.ShutdownGoalActions = nil
