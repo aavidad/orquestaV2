@@ -92,3 +92,63 @@ falso `goal_first_blocked_no_artifacts` y sin proceso `app_server_tmux`
 residual. No cierra por si sola todo `BUG-ORQ-20260704-165`, porque no reproduce
 el timeout amplio de `status/observe` de la limpieza documental ni el caso
 Sueldos de stop forzado posterior a alto consumo.
+
+## Reejeucion 2026-07-04 noche 10
+
+Preflight:
+
+```bash
+ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY=1 \
+ORQUESTA_CODEX_COMMAND="$(command -v codex)" \
+./scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh
+```
+
+Resultado preflight:
+
+- `smoke_goal_first_app_server_preflight=ok`
+- `codex_command=/home/alberto/.nvm/versions/node/v20.19.2/bin/codex`
+- `goal_backend=app_server_tmux`
+
+Smoke real:
+
+```bash
+ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 \
+ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 \
+ORQUESTA_GOAL_FIRST_SMOKE_POLLS=50 \
+ORQUESTA_KEEP_SMOKE_DIR=1 \
+./scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh
+```
+
+Resultado:
+
+- `smoke_goal_first_high_consumption_real=ok`
+- `bug088_path=second_artifact_or_partial_artifacts`
+- `recommended_action=review_partial_artifacts`
+- `app_server_tmux_processes_alive=0`
+- `smoke_root=/tmp/orquesta-goal-first-app-server.gibwtZ`
+- `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-6c8dc4317888c8e25bb0e91f7f910aab`
+- `goal_ref=goal-ref-app-director-run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-6c8dc4317888c8e25bb0e91f7f910aab`
+- `external_goal_ref=019f2c17-c3a7-78c3-857b-93f04e3286b1`
+
+Evidencia:
+
+- `observe_response.json`: `goal_status=running`,
+  `summary=codex_app_server_goal_status_active_high_token_usage tokens_used=13658 time_used_seconds=17`,
+  `evidence_refs_count=14`.
+- Artefactos directos en write-set:
+  `generated-apps/checkpoint_started_bug088.txt` y
+  `generated-apps/bug088_second_artifact.txt`.
+- `state/orquesta_server_state_v0.json`: `status=stopped`,
+  `shutdown_status=stopped`, `shutdown_ready=true`.
+- Comprobacion de procesos posterior: sin `orquesta-server run`,
+  `codex app-server` ni sesion `orquesta-goal-e6a74570c0641004` vivos.
+- Higiene de evidencia: se borro el binario temporal `bin/orquesta-server` y
+  el `runtime/goal-srv/codex-home` retenido por el smoke para no conservar
+  credenciales ni cache del proveedor; quedan solo JSON, logs compactos,
+  estado y artefactos, con tamano aproximado 256 KiB.
+
+Esta reejecucion confirma de nuevo la ruta real alto consumo -> checkpoint ->
+segundo artefacto recuperable -> cleanup sin backend residual tras los cambios
+de control de `BUG-ORQ-20260704-165`. Sigue sin cerrar por si sola el caso
+Sueldos de forced stop con backend vivo ni el enforcement duro previo a
+herramientas de `BUG-ORQ-20260701-079`.

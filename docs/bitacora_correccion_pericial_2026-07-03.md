@@ -1482,3 +1482,45 @@ Evidencia ejecutada:
 Pendiente real: `BUG-165` sigue abierto para smoke real amplio con proveedor o
 backend lento/vivo tras stop forzado, y `BUG-065/076` siguen abiertos para
 coordinacion automatica completa de shutdown/backend/checkpoint/stop/cancel/wait.
+
+## Continuacion Codex 2026-07-04 noche 10
+
+Reejecucion real del smoke alto consumo goal-first:
+
+- Preflight `app_server_tmux`: `smoke_goal_first_app_server_preflight=ok`.
+- Smoke real:
+  `ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1`,
+  `ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1`,
+  `ORQUESTA_GOAL_FIRST_SMOKE_POLLS=50`,
+  `ORQUESTA_KEEP_SMOKE_DIR=1`,
+  `./scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh`.
+- Resultado: `smoke_goal_first_high_consumption_real=ok`,
+  `bug088_path=second_artifact_or_partial_artifacts`,
+  `recommended_action=review_partial_artifacts`,
+  `app_server_tmux_processes_alive=0`.
+- Refs: `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-6c8dc4317888c8e25bb0e91f7f910aab`,
+  `goal_ref=goal-ref-app-director-run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-6c8dc4317888c8e25bb0e91f7f910aab`,
+  `external_goal_ref=019f2c17-c3a7-78c3-857b-93f04e3286b1`.
+- `observe_response.json` publico alto consumo con `tokens_used=13658` y
+  `time_used_seconds=17`; el write-set contiene
+  `generated-apps/checkpoint_started_bug088.txt` y
+  `generated-apps/bug088_second_artifact.txt`.
+- `state/orquesta_server_state_v0.json` quedo `status=stopped`,
+  `shutdown_status=stopped`, `shutdown_ready=true`; comprobacion de procesos
+  posterior sin `orquesta-server run`, `codex app-server` ni sesion
+  `orquesta-goal-e6a74570c0641004` vivos.
+- Higiene: el temporal retenido
+  `/tmp/orquesta-goal-first-app-server.gibwtZ` se saneo borrando
+  `bin/orquesta-server` y `runtime/goal-srv/codex-home` para no conservar
+  credenciales/cache; quedan JSON/logs/estado/artefactos (~256 KiB).
+
+Archivos tocados en este avance:
+
+- `docs/runbooks/smoke_goal_first_checkpoint_only_high_consumption_real_2026-07-03.md`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Pendiente real: la reejecucion reduce `BUG-079`, `BUG-165` y `BUG-065/076` en
+la ruta alto consumo -> artefacto recuperable -> cleanup, pero no cierra el
+caso Sueldos de forced stop con backend vivo ni el enforcement duro previo a
+herramientas.

@@ -51,6 +51,14 @@ antes de su cierre posterior:
   compacto. Sigue abierto para enforcement duro del proveedor/runtime antes de
   ejecutar herramientas y smoke real largo que demuestre checkpoint temprano sin
   consumo gigante previo.
+- Reejeucion real 2026-07-04 noche 10:
+  `smoke_goal_first_checkpoint_only_high_consumption_real=ok` con
+  `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-6c8dc4317888c8e25bb0e91f7f910aab`,
+  `tokens_used=13658`, checkpoint y segundo artefacto materializados, servidor
+  final `stopped/shutdown_ready=true` y `app_server_tmux_processes_alive=0`.
+  Evidencia retenida en `/tmp/orquesta-goal-first-app-server.gibwtZ` saneada
+  sin `codex-home` ni binario temporal. Reduce `BUG-079/165/065`, pero no cierra
+  el forced stop de Sueldos ni el enforcement duro previo a herramientas.
 - `BUG-ORQ-20260704-166` queda cerrado funcionalmente por `ff620ecf` y
   `0e0dcedc`, incluyendo el ajuste posterior de `.gocache-local`, para la causa
   observada: el escaneo de
