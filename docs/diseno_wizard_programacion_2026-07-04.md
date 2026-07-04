@@ -506,3 +506,84 @@ pedir TODAS las explicaciones:
    contrato; en la web, botón visible junto al título del turno.
 4. El glosario completo (11.4) queda además enlazado desde cada turno
    ("ver glosario completo").
+
+## 12. Bot guía con RAG sobre el catálogo (vinculante, orden del operador)
+
+El operador quiere que un bot conversacional sea quien le guíe, con RAG de
+todas las opciones/explicaciones. Principio rector: el bot es una CAPA DE
+CONVERSACIÓN sobre el motor del wizard; el motor sigue siendo la única
+fuente de verdad. El bot nunca inventa preguntas ni opciones: solo
+parafrasea, explica y rellena lo que el motor emite.
+
+### 12.1 Corpus RAG (fuente única, ya estructurada)
+
+- Catálogo i18n completo del wizard: preguntas, opciones, HelpKey,
+  ExampleKey, RationaleKey (es/en).
+- Glosario generado (11.4) con sinónimos por término.
+- Packs de dominio (9.2) y dimensiones U/T con sus condiciones de
+  activación y hechos de exclusión (10.2).
+- Defaults de ingeniería con sus porqués.
+El corpus se reconstruye en build desde el catálogo (artefacto derivado,
+como el glosario): no hay segunda redacción que mantener.
+
+### 12.2 Recuperación en dos niveles
+
+1. Determinista (siempre, sin coste): índice léxico local sobre el corpus
+   (términos + sinónimos del catálogo + matching difuso acentos/plurales).
+   Cubre "¿qué es X?", "¿cuál me recomiendas?", "¿qué opciones hay de
+   logs?". Testeable sin proveedor.
+2. LLM opcional (si hay proveedor configurado): usa el director de
+   escalada existente (claude/gemini/codex, perfil barato reasoning=low)
+   SOLO para: parafrasear la pregunta del turno en tono conversacional,
+   extraer respuestas de un texto libre largo (slot-filling: "quiero una
+   agenda para mi empresa conectada al AD y que me avise por correo" →
+   U1=equipo, T2=AD, U6=email), y reformular explicaciones. El prompt
+   SIEMPRE lleva el fragmento recuperado del corpus como única base
+   (grounding estricto); si el corpus no cubre la duda, el bot dice que no
+   lo sabe y ofrece la pregunta abierta del turno.
+
+### 12.3 Flujo del bot
+
+- Usuario escribe libre → slot-filling responde todo lo que el texto ya
+  contesta (cada asignación se registra como WizardAnswerV0 normal, con
+  contraste si contradice la recomendación) → el motor recalcula huecos y
+  exclusiones → el bot presenta el siguiente turno en conversación:
+  pregunta parafraseada + opciones numeradas con la recomendada marcada y
+  su porqué + "responde con el número, con tus palabras, o pregúntame qué
+  significa cualquier cosa".
+- "¿qué es X?" en cualquier momento → RAG responde y re-emite el turno
+  (mismo contrato 11.5, sin consumir turno).
+- "acepta lo que recomiendes" → acción aceptar_recomendaciones existente.
+- Al cierre: el bot lee el resumen (decisiones, desviaciones con
+  justificación, decisiones tomadas por ti) y pide confirmación explícita
+  antes de LaunchReady.
+
+### 12.4 Superficies y contrato
+
+- `WizardBotTurnV0 { SessionRef, UserText, Locale }` →
+  `WizardBotReplyV0 { Say string; TurnResult WizardTurnResultV0;
+  FilledAnswers []WizardAnswerV0; GroundingRefs []string }`.
+- Web: panel de chat como modo alternativo al formulario del wizard
+  (mismo SessionRef: se puede alternar entre chat y formulario sin perder
+  estado). MCP: tool `orquesta.nueva_app.wizard.bot.v0`.
+- Sin proveedor LLM configurado el bot funciona en modo determinista
+  (nivel 1): menos florido, misma capacidad de guiar/explicar/rellenar por
+  número. Nunca es requisito tener LLM para completar el wizard.
+
+### 12.5 Tests
+
+- `TestWizardBotGroundingEstrictoV0`: toda Say referencia GroundingRefs
+  del corpus; término fuera de corpus → respuesta honesta "no lo sé" +
+  re-emisión del turno.
+- `TestWizardBotSlotFillingRegistraRespuestasV0`: texto libre multi-dato
+  registra las WizardAnswerV0 correctas y respeta exclusiones (10.2).
+- `TestWizardBotSinProveedorFuncionaV0`: modo determinista completa una
+  sesión entera de la agenda solo con números y "qué es X".
+- `TestWizardBotNoInventaOpcionesV0`: la respuesta nunca contiene valores
+  fuera de las opciones emitidas por el motor para ese turno.
+
+### 12.6 Reparto
+
+- G4: corpus derivado + índice léxico + bot determinista + tests (web).
+- G5: slot-filling/parafraseo vía director de escalada + panel chat web +
+  tool MCP. Depende de G4 y de G2.

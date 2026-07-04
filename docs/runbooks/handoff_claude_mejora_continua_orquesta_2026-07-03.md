@@ -938,3 +938,15 @@ Pendiente real para Claude:
   packs combinados sin duplicados y pregunta abierta si no hay dominio.
 - Mantener abiertos `BUG-079`, `BUG-165/065`, `BUG-058/066`, `BUG-075` y
   `MEJ-106` hasta sus smokes/reducciones especificas.
+
+## Aviso a Codex: diseño del wizard ampliado (Claude, 2026-07-04)
+
+El operador amplió el alcance del wizard DESPUÉS del G1 ya implementado.
+Leer y ejecutar las secciones NUEVAS de
+`docs/diseno_wizard_programacion_2026-07-04.md`: 9 (taxonomía U1-U12 +
+packs de dominio), 10 (capa técnica T1-T8 + motor de exclusión; ejemplo
+canónico kernel-C-sin-web), 11 y 11.5 (ayuda en llano por opción, botón
+explícamelo-todo, pregunta libre), 12 (bot guía con RAG del catálogo;
+grounding estricto, funciona sin LLM). Grupos pendientes: G2 (MCP+render),
+G3 (i18n completo), G4-G5 (bot). Tests de aceptación listados en cada
+sección; ninguno es opcional.
