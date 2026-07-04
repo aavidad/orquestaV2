@@ -3729,3 +3729,31 @@ apuntaba a una ruta runtime de solo lectura; se reejecuto con cache temporal
 aislada. El primer intento de `go build ./...` con `GOMODCACHE` vacio fallo por
 red restringida; el build verde uso el cache de modulos existente y solo
 movio `GOCACHE`/`GOTMPDIR`.
+
+## Actualizacion Codex remoto 2026-07-04 noche 36
+
+TAREA-9 ola 2 `orquesta-orchestration-core` + `orquesta-runtime`, goal
+`goal-ref-task-autoprogramming-7050ce832266-g01`.
+
+Hecho:
+
+- Checkpoint temprano conservado en
+  `modulos/orquesta-orchestration-core/checkpoint_started.txt` y checkpoint del
+  agente en `modulos/orquesta-orchestration-core/docs/checkpoint_started_goal-ref-task-autoprogramming-7050ce832266-g01.txt`.
+- Clasificadas las 222 candidatas del scope desde
+  `docs/auditoria_codigo_deadcode_2026-07-04.txt` en
+  `modulos/orquesta-orchestration-core/docs/deadcode_classification_goal-ref-task-autoprogramming-7050ce832266-g01.json`.
+- Poda real aplicada a la unica entrada clase `b` verificable:
+  `ValidateProcessRuntimeSnapshotV0`. Se elimina solo el wrapper exportado sin
+  consumidores; el validador interno `validateProcessRuntimeSnapshotV0` se
+  conserva porque lo usan adaptadores del runtime.
+- El resto queda clase `c` por contrato, tests, docs o integracion externa
+  vigente; no se borra API publica usada por otros modulos aunque el snapshot
+  de deadcode la marque unreachable.
+
+Verificacion:
+
+- `rg -n "ValidateProcessRuntimeSnapshotV0" modulos/orquesta-orchestration-core modulos/orquesta-runtime cmd --glob '*.go'`
+  -> sin coincidencias en codigo Go vivo.
+- `git diff --check` -> verde.
+- `GOCACHE=/tmp/orquesta-go-cache-poda-ola2 GOTMPDIR=/tmp go test ./modulos/orquesta-orchestration-core ./modulos/orquesta-runtime` -> verde.

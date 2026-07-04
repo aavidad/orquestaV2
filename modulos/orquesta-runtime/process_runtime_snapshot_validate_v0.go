@@ -1,9 +1,5 @@
 package orquestaruntime
 
-func ValidateProcessRuntimeSnapshotV0(snapshot ProcessRuntimeSnapshotV0) []ProcessRuntimeErrorV0 {
-	return validateProcessRuntimeSnapshotV0(snapshot)
-}
-
 func validateProcessRuntimeSnapshotV0(snapshot ProcessRuntimeSnapshotV0) []ProcessRuntimeErrorV0 {
 	var issues []ProcessRuntimeErrorV0
 	if snapshot.SchemaVersion != ProcessRuntimeConnectorVersionV0 {

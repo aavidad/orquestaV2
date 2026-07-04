@@ -1,0 +1,40 @@
+{
+  "schema_version": "orquesta_deadcode_post_poda_verification.v0",
+  "goal_ref": "goal-ref-task-autoprogramming-7050ce832266-g01",
+  "source_task_ref": "task-poda-ola2-orchestration-runtime",
+  "classification_path": "modulos/orquesta-orchestration-core/docs/deadcode_classification_goal-ref-task-autoprogramming-7050ce832266-g01.json",
+  "deleted_symbols": [
+    {
+      "path": "modulos/orquesta-runtime/process_runtime_snapshot_validate_v0.go",
+      "symbol": "ValidateProcessRuntimeSnapshotV0",
+      "category": "b",
+      "verification": "rg_absent_after_delete"
+    }
+  ],
+  "verification_steps": [
+    {
+      "step_ref": "post-poda-rg-absent",
+      "command": "rg -n \"ValidateProcessRuntimeSnapshotV0\" modulos/orquesta-orchestration-core modulos/orquesta-runtime cmd --glob '*.go'",
+      "status": "passed",
+      "evidence_ref": "evidence-ref-poda-ola2-rg-symbol-absent"
+    },
+    {
+      "step_ref": "diff-check",
+      "command": "git diff --check",
+      "status": "passed",
+      "evidence_ref": "evidence-ref-poda-ola2-git-diff-check"
+    },
+    {
+      "step_ref": "required-go-test",
+      "command": "GOCACHE=/tmp/orquesta-go-cache-poda-ola2 GOTMPDIR=/tmp go test ./modulos/orquesta-orchestration-core ./modulos/orquesta-runtime",
+      "status": "passed",
+      "evidence_ref": "evidence-ref-poda-ola2-required-go-test"
+    },
+    {
+      "step_ref": "docs-updated",
+      "command": "manual review of docs/bitacora_correccion_pericial_2026-07-03.md and docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+      "status": "passed",
+      "evidence_ref": "evidence-ref-poda-ola2-docs-updated"
+    }
+  ]
+}

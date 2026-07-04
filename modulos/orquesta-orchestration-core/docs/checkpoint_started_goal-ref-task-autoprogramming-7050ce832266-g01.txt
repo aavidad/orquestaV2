@@ -1,0 +1,5 @@
+goal_ref=goal-ref-task-autoprogramming-7050ce832266-g01
+source_task_ref=task-poda-ola2-orchestration-runtime
+scope=modulos/orquesta-orchestration-core,modulos/orquesta-runtime
+next_artifact=deadcode_classification_json_before_delete
+started_at=2026-07-04T00:00:00Z
