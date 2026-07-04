@@ -3673,3 +3673,28 @@ Verificacion:
 - El equipo local queda APAGADO. Continuación: cola vigente en
   instrucciones del director (TAREA-2 ampliada, 8, 9, 10, wizard U/T/bot,
   smoke OPES real).
+
+## Ciclo remoto autonomo: wizard completado en 4 goals (Claude revisor, 2026-07-05 madrugada)
+
+Orquesta autonoma en srv1651826 (worktree pilot-remoto-1, sandbox
+workspace-write, umbral 450k) completo en cadena, con Claude validando e
+integrando cada uno fuera del sandbox:
+
+1. afa499ef ayudas en lenguaje llano + glosario generado (seccion 11) —
+   incluyo transporte de test in-process sin sockets para el sandbox.
+2. 7ef4385c dimensiones universales U1-U12 + motor de exclusion por hechos
+   (9.1/10.2), con TestWizardKernelLinuxCExcluyeWebV0.
+3. 83241927 capa tecnica T1-T8 activada por hechos + defaults silenciosos
+   (10.1/10.3), con test de Active Directory por contexto de empresa.
+4. 638148ff bot guia determinista con RAG del catalogo (G4, 12.1-12.5),
+   grounding estricto, sesion completable sin LLM.
+
+El wizard del diseno docs/diseno_wizard_programacion_2026-07-04.md queda
+implementado salvo el nivel LLM del bot (G5, opt-in con presupuesto, 12.7).
+Todo sincronizado servidor=local=GitHub tras cada ciclo. Hallazgo menor
+anotado: un placeholder de progreso uso status=blocked+"implementacion
+pendiente" y confundio a observe/watchers; el contrato de placeholder
+deberia reservar blocked para estados terminales reales.
+
+Siguiente en cola remota: TAREA-9 ola 1 (poda deadcode orquesta-deploy),
+TAREA-8 olas de envs, smoke OPES real (058/066/075), G5 opt-in.
