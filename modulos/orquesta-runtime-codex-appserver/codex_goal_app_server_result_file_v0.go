@@ -255,7 +255,7 @@ func codexAppServerGoalResultFromWorkspaceV0(
 
 func codexAppServerGoalResultSkipDirV0(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case ".git", ".codex", ".gocache", "node_modules", "vendor":
+	case ".git", ".codex", ".gocache", ".gocache-local", "node_modules", "vendor":
 		return true
 	default:
 		return false

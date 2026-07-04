@@ -356,7 +356,275 @@ go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCode
 
 Estado:
 
-cerrado funcionalmente para la causa reproducida. Queda pendiente no bloqueante
-reintentar el caso de campo Sueldos/Orquesta para comprobar que el run historico
-pasa a `goal_status=complete`, `run_status=cerrada` y
-`closure_status=accepted` con el state/runtime existente.
+cerrado para la causa reproducida y comprobado contra el caso de campo
+Sueldos/Orquesta.
+
+Reintento de campo posterior al fix:
+
+```text
+POST /api/v0/apps/director/goal/observe
+request_id=request-ref-sueldos-gasto-publico-osm-observe-after-fix-20260704-001
+run_ref=run-spec-mapa-de-gasto-publico-req-mapa-de-gasto-publico-43c20b877af23ecc450d324a25c1e616
+```
+
+Resultado observado con el state/runtime existente:
+
+- `estado=ok`
+- `run_status=cerrada`
+- `goal_status=complete`
+- `closure_status=accepted`
+- `closure_accepted=true`
+- `recommended_action=no_action_closed`
+
+El `result_ref` apunta al receipt durable materializado bajo
+`generated-apps/mapa-de-gasto-publico/docs/orquesta_goal_result_*.json`.
+La limpieza HTTP del servidor de prueba detecto un active work tmux residual
+interno aunque no habia sesion tmux ni `codex app-server` visible; se paro el
+servidor con SIGINT y la comprobacion final no dejo `orquesta-server`,
+`codex app-server`, tmux ni `codebase-memory-mcp` vivos. Ese residuo de shutdown
+queda cubierto por la familia abierta `BUG-ORQ-20260704-165`, no por esta causa
+de reconciliacion de receipts.
+
+## Reintento de campo: cargos publicos y partidos bloqueado por snapshot
+
+Fecha: 2026-07-04
+
+Inventario: `BUG-ORQ-20260704-167`.
+
+Objetivo del reintento:
+
+- ampliar la app Sueldos con cargos politicos/funcionarios;
+- asociar partido politico por zona/entidad cuando la fuente lo permita;
+- exponer retribuciones y fuente auditada junto al mapa de gasto publico.
+
+Servidor temporal aislado:
+
+- `ORQUESTA_CODEX_PROJECT_WORKDIR=/home/alberto/Trabajo/Sueldos`
+- `ORQUESTA_SERVER_STATE_DIR=/home/alberto/Trabajo/Sueldos/.orquesta-feature-cargos/state`
+- `ORQUESTA_CODEX_RUNTIME_WORKDIR=/home/alberto/Trabajo/Sueldos/.orquesta-feature-cargos/runtime`
+
+Primer intento:
+
+```text
+POST /api/v0/apps/director
+request_id=request-ref-sueldos-cargos-partidos-20260704-001
+```
+
+Resultado: validacion rechazada por `datos.storage.0.tipo` porque `local_json`
+no es un tipo de storage soportado por el contrato actual.
+
+Segundo intento:
+
+```text
+POST /api/v0/apps/director
+request_id=request-ref-sueldos-cargos-partidos-20260704-002
+datos.storage[0].tipo=mixta
+```
+
+Resultado publico:
+
+```json
+{
+  "estado": "error",
+  "errores_publicos": [
+    {
+      "code": "arrancar_director_http_error",
+      "field": "executor",
+      "message": "codex_app_server_runtime_write_set_guard_snapshot_failed"
+    }
+  ]
+}
+```
+
+Diagnostico:
+
+El snapshot runtime de write-set estaba capturando el worktree raiz
+`/home/alberto/Trabajo/Sueldos`. Los prefijos de control excluian varias rutas
+Orquesta conocidas, pero no una variante nueva como `.orquesta-feature-cargos`.
+Ese estado local temporal podia contaminar o romper la captura de baseline
+antes de lanzar el goal.
+
+Reparacion aplicada:
+
+- `worktreeDefaultControlPrefixesV0` incluye `.orquesta`.
+- La regla existente de prefijos versionados excluye ahora cualquier primer
+  segmento `.orquesta-*` como `runtime_control_dir`.
+- Se agrego regresion para `.orquesta-feature-cargos/state/orquesta_server_state_v0.json`.
+
+Pruebas:
+
+```sh
+go test -count=1 ./modulos/orquesta-runtime-worktree
+go test -count=1 ./modulos/orquesta-runtime-codex-appserver
+go test -count=1 ./cmd/orquesta-server
+```
+
+Estado: validado despues en campo por el reintento
+`request-ref-sueldos-cargos-partidos-20260704-003`: el goal arranco sin volver
+a fallar en `codex_app_server_runtime_write_set_guard_snapshot_failed`.
+
+## Reintento de campo: arranque corregido y receipt antiguo mezclado
+
+Fecha: 2026-07-04
+
+Inventario: `BUG-ORQ-20260704-168`.
+
+Tras reiniciar el servidor temporal con el fix de `BUG-ORQ-20260704-167`, se
+repitio el arranque:
+
+```text
+POST /api/v0/apps/director
+request_id=request-ref-sueldos-cargos-partidos-20260704-003
+run_ref=run-spec-mapa-de-gasto-publico-req-mapa-de-gasto-publico-7c369c2822cc7539368ab681f036d69c
+goal_ref=goal-ref-app-director-run-spec-mapa-de-gasto-publico-req-mapa-de-gasto-publico-7c369c2822cc7539368ab681f036d69c
+external_goal_ref=019f2a6a-dedd-77a2-91ce-b4e35b2294c3
+```
+
+Resultado: `estado=ok`, `goal_status=running`. Esto valida en campo la causa
+de snapshot de `BUG-167`.
+
+Al observar despues:
+
+```text
+POST /api/v0/apps/director/goal/observe
+request_id=request-ref-sueldos-cargos-partidos-observe-20260704-001
+```
+
+la respuesta publico:
+
+- `goal_status=complete`
+- `closure_status=blocked`
+- `recommended_action=replan`
+- `closure_issues=[goal_closure_invalid, repair_receipt_requires_rework, goal_first_materialized_checkpoint_detected]`
+
+Pero los `artifact_refs`, `required_test_results` y parte de la evidencia
+venian del run antiguo `...43c20...`. El unico receipt durable presente bajo
+`generated-apps/mapa-de-gasto-publico/docs` era:
+
+```text
+generated-apps/mapa-de-gasto-publico/docs/orquesta_goal_result_goal-ref-app-director-run-spec-mapa-de-gasto-publico-req-mapa-de-gasto-publico-4.json
+```
+
+Ese fichero declara:
+
+```text
+goal_ref=goal-ref-app-director-run-spec-mapa-de-gasto-publico-req-mapa-de-gasto-publico-43c20b877af23ecc450d324a25c1e616
+status=complete
+```
+
+Diagnostico:
+
+El escaneo general de refs materializadas aceptaba cualquier
+`orquesta_goal_result*.json` terminal `complete` dentro del write-set, aunque
+su `goal_ref` perteneciera a otro run. La carga terminal estricta ya rechazaba
+ese caso, pero el escaneo/repair podia mezclar artefactos y pruebas antiguos en
+el estado del goal nuevo.
+
+Reparacion aplicada:
+
+- `scanGoalMaterializedFileV0` ya no usa una lectura permisiva de receipts.
+- Nuevo helper `goalMaterializedReadScannableTerminalGoalResultForStateV0`
+  acepta receipts legacy sin `goal_ref`, pero rechaza cualquier receipt con
+  `goal_ref` no vacio y distinto al goal actual.
+- Regresion `TestStackGoalMaterializedRefsSourceV0IgnoraReceiptTerminalDeOtroGoalV0`.
+
+Pruebas:
+
+```sh
+go test -count=1 ./modulos/orquesta-app-codex-stack
+go test -count=1 ./modulos/orquesta-mcp
+```
+
+Estado: validado despues en campo por
+`request-ref-sueldos-cargos-partidos-20260704-004`: `observe_goal` ya no mezclo
+`artifact_refs` ni tests del run antiguo `...43c20...`. El bloqueo posterior
+por alto consumo queda separado en `BUG-ORQ-20260704-165`.
+
+## Reintento de campo: Orquesta edita parcialmente y run-control no cierra
+
+Fecha: 2026-07-04
+
+Inventario: actualizacion de `BUG-ORQ-20260704-165`.
+
+Con el fix de `BUG-168` cargado se lanzo:
+
+```text
+POST /api/v0/apps/director
+request_id=request-ref-sueldos-cargos-partidos-20260704-004
+run_ref=run-spec-mapa-de-gasto-publico-req-mapa-de-gasto-publico-8b296fb9a1686321493fbea06204d7bf
+goal_ref=goal-ref-app-director-run-spec-mapa-de-gasto-publico-req-mapa-de-gasto-publico-8b296fb9a1686321493fbea06204d7bf
+external_goal_ref=019f2a72-a465-77c2-9335-99f49769cdbd
+```
+
+Resultado del arranque: `estado=ok`, `goal_status=running`.
+
+Validacion de `BUG-168`:
+
+- `observe_goal` ya no mezclo artifact refs ni tests del run antiguo
+  `...43c20...`.
+- Los refs materializados se emitieron con run nuevo `...8b296...`.
+- El escaneo de resultados tambien se ajusto para saltar `.gocache-local`,
+  ademas de `.gocache`, en `goalMaterializedResultSkipDirV0` y
+  `codexAppServerGoalResultSkipDirV0`.
+
+Trabajo parcial materializado por Orquesta:
+
+- `internal/domain/types.go`
+- `internal/domain/validation.go`
+- `internal/domain/seed.go`
+- `internal/application/service.go`
+- `docs/orquesta_goal_result_goal-ref-app-director-run-spec-mapa-de-gasto-publico-req-mapa-de-gasto-publico-8.json`
+
+El receipt nuevo quedo como placeholder:
+
+```text
+status=invalid
+summary=work_in_progress: durable result placeholder created before verification
+missing_refs=[source_tree,handoff_report,technical_stack_manifest,required_tests]
+```
+
+Despues el observer publico alto consumo:
+
+```text
+goal_status=running
+recommended_action=observe_later
+summary=codex_app_server_goal_status_active_high_token_usage tokens_used=183001 time_used_seconds=246
+evidence-ref-goal-observer-high-consumption-stop-requested
+```
+
+Se envio control forzado:
+
+```text
+POST /api/v0/runs/control
+request_id=request-ref-sueldos-cargos-partidos-stop-20260704-001
+action=stop
+forced=true
+```
+
+Respuesta:
+
+```text
+estado=ok
+status=stop_requested
+final_status=stop_requested
+goal_status_before=blocked
+goal_status_after=blocked
+```
+
+Pero una observacion posterior siguio devolviendo:
+
+```text
+goal_status=running
+recommended_action=observe_later
+summary=codex_app_server_goal_status_active_high_token_usage tokens_used=183001 time_used_seconds=246
+```
+
+El proceso tmux/app-server `orquesta-goal-807a9ad83922105c` seguia vivo. Esto
+queda dentro de `BUG-ORQ-20260704-165`: run-control, observer y proceso real no
+publican una transicion terminal unica tras stop forzado por alto consumo.
+
+Decision operativa:
+
+Se permite limpieza manual del runtime temporal y desbloqueo directo sobre la
+app Sueldos, conservando los cambios parciales de Orquesta que sean utiles y
+sin tocar fuera de `generated-apps/mapa-de-gasto-publico`.

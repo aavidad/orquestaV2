@@ -351,8 +351,8 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalMaterializedFileV0(
 		scan.Result.ArtifactRefs = []string{goalMaterializedArtifactRefV0(projectRoot, path, state.RunRef)}
 	}
 	if goalMaterializedFileIsGoalResultV0(base) {
-		scan.HasTerminalReceipt = true
-		if result, ok := goalMaterializedReadTerminalGoalResultV0(path); ok {
+		if result, ok := goalMaterializedReadScannableTerminalGoalResultForStateV0(path, state); ok {
+			scan.HasTerminalReceipt = true
 			scan.TerminalResult = &result
 			scan.HasArtifact = scan.HasArtifact || len(result.ArtifactRefs) > 0 || len(result.ArtifactPaths) > 0
 			scan.HasQAPass = scan.HasQAPass || goalMaterializedGoalResultRequiredTestsPassedV0(result)
@@ -397,6 +397,25 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalMaterializedFileV0(
 		scan.Result.IssueCodes = append(scan.Result.IssueCodes, orquestamcp.MCPGoalFirstQAFailedPublicTextV0)
 	}
 	return scan
+}
+
+func goalMaterializedReadScannableTerminalGoalResultForStateV0(
+	path string,
+	state orquestagoal.GoalWorkStateV0,
+) (orquestagoal.GoalWorkResultV0, bool) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return orquestagoal.GoalWorkResultV0{}, false
+	}
+	result, err := goalMaterializedDecodeGoalWorkResultV0(raw)
+	if err != nil {
+		return orquestagoal.GoalWorkResultV0{}, false
+	}
+	if strings.TrimSpace(result.Status) != orquestagoal.GoalStatusCompleteV0 ||
+		!goalMaterializedTerminalResultMatchesStateV0(result, state) {
+		return orquestagoal.GoalWorkResultV0{}, false
+	}
+	return result, true
 }
 
 func goalMaterializedOPESOutOfScopeArtifactsV0(
@@ -562,21 +581,6 @@ func mergeGoalMaterializedRefsScanV0(
 	return current
 }
 
-func goalMaterializedReadTerminalGoalResultV0(path string) (orquestagoal.GoalWorkResultV0, bool) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return orquestagoal.GoalWorkResultV0{}, false
-	}
-	result, err := goalMaterializedDecodeGoalWorkResultV0(raw)
-	if err != nil {
-		return orquestagoal.GoalWorkResultV0{}, false
-	}
-	if strings.TrimSpace(result.Status) != orquestagoal.GoalStatusCompleteV0 {
-		return orquestagoal.GoalWorkResultV0{}, false
-	}
-	return result, true
-}
-
 func goalMaterializedReadValidTerminalGoalResultForStateV0(
 	projectRoot string,
 	path string,
@@ -622,7 +626,17 @@ func goalMaterializedTerminalResultMatchesStateV0(
 	state orquestagoal.GoalWorkStateV0,
 ) bool {
 	goalRef := strings.TrimSpace(state.GoalRef)
-	return goalRef != "" && strings.TrimSpace(result.GoalRef) == goalRef
+	if goalRef == "" {
+		goalRef = strings.TrimSpace(state.Spec.GoalRef)
+	}
+	if goalRef == "" {
+		goalRef = strings.TrimSpace(state.LaunchReceipt.GoalRef)
+	}
+	resultGoalRef := strings.TrimSpace(result.GoalRef)
+	if resultGoalRef == "" {
+		return goalRef != ""
+	}
+	return goalRef != "" && resultGoalRef == goalRef
 }
 
 func goalMaterializedGoalResultRequiredTestsPassedV0(result orquestagoal.GoalWorkResultV0) bool {
@@ -816,7 +830,7 @@ func goalMaterializedFileIsGoalResultV0(base string) bool {
 
 func goalMaterializedResultSkipDirV0(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case ".git", ".codex", ".gocache", "node_modules", "vendor":
+	case ".git", ".codex", ".gocache", ".gocache-local", "node_modules", "vendor":
 		return true
 	default:
 		return false

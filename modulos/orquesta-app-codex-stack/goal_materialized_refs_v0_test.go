@@ -650,19 +650,22 @@ func TestStackGoalMaterializedRefsSourceV0EncuentraReceiptTerminalTrasCacheVolum
 	projectDir := t.TempDir()
 	appDir := filepath.Join(projectDir, "generated-apps", "cache-heavy")
 	cacheDir := filepath.Join(appDir, ".gocache", "00")
+	localCacheDir := filepath.Join(appDir, ".gocache-local", "00")
 	docsDir := filepath.Join(appDir, "docs")
-	for _, dir := range []string{cacheDir, docsDir} {
+	for _, dir := range []string{cacheDir, localCacheDir, docsDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			t.Fatalf("mkdir %s: %v", dir, err)
 		}
 	}
 	for i := 0; i < goalMaterializedQAScanMaxFilesV0+40; i++ {
-		if err := os.WriteFile(
-			filepath.Join(cacheDir, "cache-"+strconv.Itoa(i)+".txt"),
-			[]byte("cache\n"),
-			0o600,
-		); err != nil {
-			t.Fatalf("write cache %d: %v", i, err)
+		for _, dir := range []string{cacheDir, localCacheDir} {
+			if err := os.WriteFile(
+				filepath.Join(dir, "cache-"+strconv.Itoa(i)+".txt"),
+				[]byte("cache\n"),
+				0o600,
+			); err != nil {
+				t.Fatalf("write cache %d: %v", i, err)
+			}
 		}
 	}
 	if err := os.WriteFile(filepath.Join(appDir, "source_tree.md"), []byte("# Source\n"), 0o600); err != nil {
@@ -713,6 +716,60 @@ func TestStackGoalMaterializedRefsSourceV0EncuentraReceiptTerminalTrasCacheVolum
 		!containsStringV0(result.ArtifactRefs, artifactRef) ||
 		!containsStringV0(result.EvidenceRefs, evidenceRef) {
 		t.Fatalf("ok=%v result=%+v", ok, result)
+	}
+}
+
+func TestStackGoalMaterializedRefsSourceV0IgnoraReceiptTerminalDeOtroGoalV0(t *testing.T) {
+	projectDir := t.TempDir()
+	appDir := filepath.Join(projectDir, "generated-apps", "stale-receipt")
+	docsDir := filepath.Join(appDir, "docs")
+	if err := os.MkdirAll(docsDir, 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(appDir, "source_tree.md"), []byte("# Source\n"), 0o600); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(
+		t,
+		"run-goal-materialized-stale-receipt-001",
+		"generated-apps/stale-receipt",
+	)
+	staleArtifactRef := "artifact-ref-run-goal-materialized-old-source"
+	receipt := `{
+  "schema_version":"orquesta_goal_result.v0",
+  "goal_ref":"goal-ref-run-goal-materialized-old-001",
+  "status":"complete",
+  "summary":"receipt terminal antiguo",
+  "artifact_refs":["` + staleArtifactRef + `"],
+  "artifact_paths":["generated-apps/stale-receipt/source_tree.md"],
+  "required_test_results":[{"test_ref":"test-ref-old","status":"passed","evidence_refs":["evidence-ref-old"]}],
+  "evidence_refs":["evidence-ref-old"]
+}`
+	if err := os.WriteFile(filepath.Join(docsDir, goalMaterializedGoalResultFileV0), []byte(receipt), 0o600); err != nil {
+		t.Fatalf("write stale receipt: %v", err)
+	}
+
+	terminal, terminalOK, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).LoadTerminalGoalMaterializedResultV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("LoadTerminalGoalMaterializedResultV0: %v", err)
+	}
+	if terminalOK || terminal.Status != "" {
+		t.Fatalf("receipt antiguo aceptado: terminalOK=%v terminal=%+v", terminalOK, terminal)
+	}
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		containsStringV0(result.ArtifactRefs, staleArtifactRef) ||
+		containsStringV0(result.EvidenceRefs, "evidence-ref-old") ||
+		!containsStringV0(result.IssueCodes, "partial_artifacts_written") {
+		t.Fatalf("receipt antiguo no ignorado: ok=%v result=%+v", ok, result)
 	}
 }
 

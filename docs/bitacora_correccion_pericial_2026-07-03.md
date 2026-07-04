@@ -997,3 +997,27 @@ de esta limpieza. Se aborto el cliente de parada y se envio SIGINT al
 `orquesta-server run`, `codex app-server`, sesiones tmux `orquesta-goal-*` ni
 `codebase-memory-mcp`. El state residual queda `stopped/degraded` y forma parte
 de `BUG-ORQ-20260704-165`.
+
+## Test de campo Sueldos cerrado accepted (director Claude, 2026-07-04 madrugada)
+
+- Run `run-spec-mapa-de-gasto-publico-req-mapa-de-gasto-publico-1edc177159293ad5e0cd489f78a5fb96`
+  (feature cargos/partidos) lanzado goal-first por `/api/v0/apps/director` en
+  servidor aislado `.orquesta-feature-cargos-2` con umbral de consumo 450k.
+- Resultado durable `complete` con `missing_refs=[]` y test requerido `passed`;
+  `observe` reconcilio y cerro: `run=cerrada, goal=complete, closure=accepted,
+  no_action_closed`. Autonomia extremo a extremo verificada sin intervencion
+  manual (validacion de campo de los fixes BUG-166/167/168).
+- Servidor parado limpio con SIGINT; sin tmux ni app-server residuales del run.
+- En paralelo sigue `pilot-t294` (fix BUG-ORQ-20260704-165) con watcher activo.
+- Instrucciones de relevo para director Codex: `docs/instrucciones_director_codex_2026-07-04.md`.
+
+## Relevo nocturno a director Codex (2026-07-04 ~06:30)
+
+- Sueldos cerrado accepted (ver seccion anterior). Tres pilotajes prepare-run
+  corriendo: t294 (BUG-165), t295 (regresion escaner idle: 3 ciclos no-op sin
+  ejecutar tarea; via idle inutilizable hoy), t296 (BUG-065/076 shutdown).
+- Hallazgo: receta de pilotaje por cola idle OBSOLETA con el escaner nuevo;
+  usar prepare-run directo (contrato en docs/instrucciones_director_codex_2026-07-04.md §4).
+- Umbral aplicado en pilotajes: ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS=450000,
+  ORQUESTA_CODEX_GOAL_TIMEOUT_MS=1800000.
+- Pendientes tras integrar: 058, 066, 073, 075, 079 y smoke real MEJ-104.

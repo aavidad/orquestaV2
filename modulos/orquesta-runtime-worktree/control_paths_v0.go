@@ -4,6 +4,7 @@ import "strings"
 
 var worktreeDefaultControlPrefixesV0 = []string{
 	".orquesta-runtime",
+	".orquesta",
 	".orquesta-codex-runtime",
 	".orquesta-local",
 	".orquesta-local-runtime",
