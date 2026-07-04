@@ -437,3 +437,32 @@ modulos/orquesta-autoprogramming, scripts, docs. Tests: los focales de 8.2 y
 8.3 + suites de cmd/orquesta-server y modulos/orquesta-server.
 Prioridad: 8.1+8.2 primero (cierran la clase del bug); 8.3 después; 8.4-8.5
 por olas. TAREA-8 precede a reintentar el lote de 7 pilotajes de BUG-165.
+
+### TAREA-9: limpieza de código muerto/duplicado guiada por herramientas (orden del operador 2026-07-04)
+
+Base: docs/auditoria_codigo_muerto_duplicado_2026-07-04.md (+ listado
+deadcode completo en docs/auditoria_codigo_deadcode_2026-07-04.txt).
+
+9.1 Ola deadcode por módulo (empezar por orquesta-deploy y
+   orquesta-capacity, los más señalados): para cada función candidata,
+   verificar con rg que no la usan tests ni docs de contrato; borrar en
+   PRs pequeños por módulo con suites verdes. Si algo debe conservarse
+   (API pública intencional), anotarlo con comentario de contrato para que
+   deje de contar. Meta medible: candidatas de 1188 a <300.
+9.2 Decisión de módulos: orquesta-work-profiles (0 importadores) — borrar o
+   justificar; revisar si deploy/capacity enteros son generación anterior
+   del director y pueden retirarse a docs/historico como hizo T272.
+9.3 Helpers compartidos: crear/usar orquesta-core para compact*/
+   firstNonEmpty*/contains* y el símbolo repetido en 81 módulos; migrar por
+   olas SIN tocar contratos hexagonales por módulo (contracts_v0/errors_v0
+   se quedan donde están).
+9.4 Herramienta EN Orquesta (orden explícita del operador): script
+   `scripts/orquesta_auditoria_codigo.sh` que reproduce esta auditoría
+   (deadcode+huérfanos+helpers copiados+ficheros grandes) volcando a
+   SQLite/JSON; fase nueva del nightly que la ejecuta y RATCHET: falla si
+   deadcode o copias SUBEN respecto al último verde (mismo patrón que el
+   ratchet de envs). Así la limpieza no se revierte sola.
+9.5 Partir los 15 ficheros >800 líneas solo cuando se toque su módulo por
+   otra causa (no refactor gratuito).
+Write-set: módulos afectados por ola + scripts + docs. Tests: suites de
+cada módulo tocado + go build ./... por ola.
