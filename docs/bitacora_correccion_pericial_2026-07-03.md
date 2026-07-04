@@ -2248,3 +2248,19 @@ Verificacion ejecutada en este corte:
 - `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`
 - `git diff --check`
 - `go test -count=1 ./...`
+
+## Corte Codex para auditoria 2026-07-04 tarde
+
+El operador paro la implementacion para auditoria. El detalle operativo queda en
+`docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`, seccion
+`Corte Codex para auditoria 2026-07-04 tarde`.
+
+Resumen:
+
+- No se aplico parche nuevo despues de `f4c9984e`.
+- Git estaba limpio y sincronizado con origin.
+- El inventario tenia 209 filas, 167 IDs unicos y 6 bugs abiertos reales.
+- Se estaba investigando `BUG-ORQ-20260704-165`/`BUG-ORQ-20260701-065`.
+- Hallazgo: gran parte de la limpieza stale/stopped ya existe; la siguiente
+  accion recomendada es test focal sobre narrativa contradictoria
+  `shutdown_status`/`shutdown_ready` en snapshot `stopped`, no refactor amplio.

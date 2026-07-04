@@ -661,6 +661,69 @@ No sobrecerrar:
   soporte del runtime/proveedor o mediacion real de herramientas por app-server.
 - Falta smoke largo real con proveedor.
 
+## Corte Codex para auditoria 2026-07-04 tarde
+
+El operador paro la implementacion para preparar auditoria. No se habia aplicado
+ningun parche despues de `f4c9984e`.
+
+Estado verificado:
+
+- Rama `trabajo/plataforma-agentes`.
+- Git limpio y sincronizado con origin (`0 0` en `@{u}...HEAD`).
+- HEAD `f4c9984e fix: acotar respuestas command del app-server`.
+- Inventario: 209 filas, 167 IDs unicos, 6 bugs abiertos reales.
+- No quedaban procesos `orquesta-server run`, `codex app-server`,
+  `codebase-memory-mcp`, `orquesta-goal-*` ni `go test` vivos al cierre de este
+  corte.
+
+Lo que se estaba revisando:
+
+- `BUG-ORQ-20260704-165` y `BUG-ORQ-20260701-065`, por ser los residuales mas
+  transversales del nucleo: observabilidad/control goal-first lento o stale,
+  shutdown con backend Goal propio y reconciliacion tras cortes externos.
+
+Hallazgos confirmados:
+
+- `MarkServerProcessStaleStateV0` ya limpia actividad viva cuando el proceso
+  registrado no existe.
+- `NormalizeStoppedServerSnapshotV0` ya limpia `shutdown_active_work`,
+  `shutdown_goal_actions`, async work y timeout stale en snapshots `stopped`.
+- `MarkStoppedV0` y `MarkRuntimeStoppedV0` limpian proyecciones heredadas de
+  startup/shutdown.
+- `orquesta-server status` reconcilia snapshots `stopped` sucios y persiste la
+  limpieza.
+- `shutdown_freeze` conserva `active_work_refs` y `goal_actions` cuando una
+  respuesta HTTP sin cuerpo/conflictiva podria borrar evidencia necesaria.
+- `goal_actions` bloqueantes se publican en status y evitan falso `ready`;
+  `cleanup_completed` no cuenta como bloqueante.
+
+Mensaje para Claude:
+
+No resolveria `BUG-165/065` con otro refactor amplio. La siguiente accion debe
+ser un test focal. Construir un snapshot `Status="stopped"` heredado de timeout,
+sin active work vivo, pero con narrativa contradictoria de shutdown
+(`shutdown_status`/`shutdown_ready`). Si el test demuestra incoherencia real,
+ajustar `NormalizeStoppedServerSnapshotV0` para publicar una parada coherente,
+no solo campos activos limpios. Si el test no falla, no inventar codigo: pasar
+al smoke real amplio de observabilidad/control lento.
+
+Write-set recomendado si se continua:
+
+- `modulos/orquesta-server/status_process_stale_v0.go`
+- `modulos/orquesta-server/status_process_stale_v0_test.go`
+- opcionalmente `cmd/orquesta-server/command_public_output_v0_test.go` si hace
+  falta cubrir la proyeccion CLI.
+
+Comandos recomendados:
+
+```bash
+git status --short --branch
+GOCACHE=/tmp/orquesta-codex-gocache GOTMPDIR=/tmp/orquesta-codex-gotmp go test -count=1 ./modulos/orquesta-server ./cmd/orquesta-server
+```
+
+No actualizar el inventario como cierre salvo que haya test rojo, parche y
+verificacion. No tocar OPES/MCP en este microfrente.
+
 ## Checklist de Claude
 
 1. Revisar `git status --short` y separar cambios de cada frente.
