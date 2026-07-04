@@ -26,6 +26,9 @@ Responsabilidad:
   quiera asentarse como `settled_text` o `settled_final`; si solo hay heartbeat
   o no hay checkpoint, publicar `goal-first-topic-checkpoint-required` y rework
   causal en vez de cerrar por estado implicito;
+- publicar un texto ya asentado como `texto_asentado_pendiente_derivados` y
+  `operational_status=waiting`, no como `working`, para evitar reescritura
+  tardia sin rework causal mientras quedan derivados por completar;
 - aplicar el actualizador del registro OPES antes de persistir el job
   `update_topic_registry`, de modo que un fallo de herramienta no bloquee el
   siguiente tick por idempotencia prematura;

@@ -9,6 +9,8 @@ import (
 
 const opesTopicRegistryUpdateWorkKindV0 = "update_topic_registry"
 
+const topicRegistryStatusTextSettledPendingDerivativesV0 = "texto_asentado_pendiente_derivados"
+
 func shouldRequestTopicRegistryUpdateV0(record OPESCausalArtifactRecordV0) bool {
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeTopicRegistryUpdateV0 {
 		return false
@@ -122,6 +124,9 @@ func topicRegistryStatusForRecordV0(record OPESCausalArtifactRecordV0) string {
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 {
 		return "paquete_final_local_verificable"
 	}
+	if topicRegistryTextSettledReadyV0(record) {
+		return topicRegistryStatusTextSettledPendingDerivativesV0
+	}
 	return "en_progreso_orquesta"
 }
 
@@ -163,7 +168,22 @@ func topicRegistryOperationalStatusForRecordV0(record OPESCausalArtifactRecordV0
 		topicRegistryFinalPackageHasClosureEvidenceV0(record) {
 		return "complete"
 	}
+	if topicRegistryTextSettledReadyV0(record) {
+		return "waiting"
+	}
 	return "working"
+}
+
+func topicRegistryTextSettledReadyV0(record OPESCausalArtifactRecordV0) bool {
+	if !topicRegistryTextSettlementCandidateV0(record) ||
+		len(topicRegistryQualityPendingRefsForRecordV0(record)) > 0 ||
+		topicRegistryRequiredEvidenceShouldReworkV0(record) ||
+		len(topicRegistryLifecyclePendingRefsForRecordV0(record)) > 0 ||
+		len(topicRegistryPendingRefsForRecordV0(record)) > 0 {
+		return false
+	}
+	qualityResult, qualityOK := topicRegistryQualityResultForRecordV0(record)
+	return qualityOK && qualityResult.Status == OPESTopicQualityStatusCompleteV0
 }
 
 func topicRegistryRequiredEvidenceShouldReworkV0(record OPESCausalArtifactRecordV0) bool {

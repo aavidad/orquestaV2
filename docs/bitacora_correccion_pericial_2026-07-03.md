@@ -1276,3 +1276,44 @@ Evidencia ejecutada:
 
 Pendiente real: `BUG-065/076` sigue abierto para smoke real/corte externo
 amplio y coordinacion automatica completa backend/checkpoint/stop/cancel/wait.
+
+## Continuacion Codex 2026-07-04 noche 4
+
+Avance adicional sobre `BUG-ORQ-20260701-058/066`:
+
+- `update_topic_registry` ya no publica un tema con `settlement_status=settled_text`
+  como `proposed_status=en_progreso_orquesta` y
+  `operational_status=working`.
+- Si el texto OPES tiene contrato de calidad completo, no tiene rework/pending
+  refs, cumple el checkpoint goal-first cuando aplica y aun quedan derivados,
+  publica `proposed_status=texto_asentado_pendiente_derivados` y
+  `operational_status=waiting`.
+- El objetivo es distinguir texto asentado de trabajo todavia escribiendose,
+  sin promoverlo a `settled_final` ni a paquete completo.
+
+Archivos tocados en este avance:
+
+- `modulos/orquesta-opes-director/topic_registry_v0.go`
+- `modulos/orquesta-opes-director/producer_v0_test.go`
+- `modulos/orquesta-opes-director/README.md`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Evidencia ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-opes-director`
+- `go test -count=1 ./modulos/orquesta-opes-director ./modulos/orquesta-opes-bridge ./modulos/orquesta-opes-topic-registry`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackV0ExternalWorkGoalFirstCierraSecuenciaOPESDerivadosConReceiptsLedgerV0|TestOperationalClosureSourceV0NoCierraOPESFinalSinResultadosTopicQualityPorTema|TestGoalDomainReceiptClosureValidatorV0BloqueaOPESFinalSinTopicQualityContractRefsV0'`
+- `go test -count=1 ./...`
+- `git diff --check`
+
+Pendiente real: `BUG-058/066` sigue abierto para smoke OPES temporal
+end-to-end, reconciliacion tras cortes externos/manuales y criterios completos
+de cierre del arbol OPES hasta paquete final.
+
+Siguiente brecha local detectada por subagentes:
+
+- `BUG-165`: `observe_goal` en timeout/snapshot puede publicar `goal_status=running`
+  si `GoalStateStore` sigue running pero `RunControl` ya esta terminal.
+- `BUG-079`: `CommandProtocolV0` todavia no aplica el budget especifico de
+  256 KiB de `thread/read`; el WebSocket si lo aplica.

@@ -193,8 +193,8 @@ func TestProduceOPESCausalJobsV0CreaActualizacionRegistroPorTema(t *testing.T) {
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "course_id", "curso-sintetico-a1") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_id", "tema-001") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "registry_action", "update") ||
-		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "en_progreso_orquesta") ||
-		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status", "working") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", topicRegistryStatusTextSettledPendingDerivativesV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status", "waiting") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status_contract", "working|waiting|needs_rework|blocked|complete") ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_status", topicRegistrySettlementTextV0) ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_scope", "topic_text") ||
@@ -617,7 +617,8 @@ func TestProduceOPESCausalJobsV0GoalFirstTextoQAPassConCheckpointAsientaTemaV0(t
 	}
 	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
 	if !ok ||
-		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "en_progreso_orquesta") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", topicRegistryStatusTextSettledPendingDerivativesV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status", "waiting") ||
 		domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", topicRegistryGoalFirstCheckpointRequiredRefV0) ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "goal_first_lifecycle_status", topicRegistryLifecycleCheckpointRecordedV0) ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "goal_first_checkpoint_refs", "checkpoint-ref-goal-first-tema-033") ||
@@ -884,7 +885,8 @@ func TestProduceOPESCausalJobsV0NoBloqueaRegistroConQATemaCompletaV0(t *testing.
 	}
 	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
 	if !ok ||
-		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "en_progreso_orquesta") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", topicRegistryStatusTextSettledPendingDerivativesV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status", "waiting") ||
 		domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", topicRegistryQualityNeedsReworkRefV0) ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_quality_status", OPESTopicQualityStatusCompleteV0) ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_status", topicRegistrySettlementTextV0) ||
@@ -936,7 +938,8 @@ func TestProduceOPESCausalJobsV0NoBloqueaRegistroConVisualDidacticoDeclaradoV0(t
 	}
 	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
 	if !ok ||
-		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "en_progreso_orquesta") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", topicRegistryStatusTextSettledPendingDerivativesV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status", "waiting") ||
 		domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", topicRegistryQualityNeedsReworkRefV0) ||
 		domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_quality_issue_refs", ErrOPESTopicQualityDidacticVisualRequiredV0) ||
 		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "topic_quality_status", OPESTopicQualityStatusCompleteV0) {

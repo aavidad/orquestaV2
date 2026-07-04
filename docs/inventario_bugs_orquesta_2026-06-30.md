@@ -137,6 +137,14 @@ antes de su cierre posterior:
   los RPCs no `thread/read` conservan el limite global de 16 MiB. Sigue abierto
   porque esto corta la ingesta en Orquesta, pero no impide que el proveedor o
   runtime genere la salida gigante antes de responder.
+- Avance 2026-07-04 noche 4: `BUG-ORQ-20260701-058/066` queda reducido para
+  criterios `done/settled` de texto OPES: un tema con
+  `settlement_status=settled_text`, QA de tema completa, sin rework pendiente y
+  con checkpoint lifecycle requerido ya satisfecho publica
+  `proposed_status=texto_asentado_pendiente_derivados` y
+  `operational_status=waiting`, no `en_progreso_orquesta/working`. Asi el
+  registro distingue texto asentado de trabajo aun escribiendose y deja
+  pendientes los derivados sin promover a paquete final completo.
 - `BUG-ORQ-20260702-120` queda cerrado por la proyeccion
   `stopped/crashed/unreachable` y los contratos OPES asociados. Sus notas de
   avance que decian "no cierra el bug padre" son historicas y quedan
