@@ -2072,3 +2072,74 @@ Archivos tocados:
 Verificacion focal:
 
 - `go test -count=1 ./modulos/orquesta-mcp -run TestMCPDirectorStatsToolDescriptorV0ExponeContratoCompacto`
+
+## Continuacion Codex 2026-07-04 noche 23
+
+Limpieza de filas stale del inventario tras auditoria paralela con subagentes
+read-only (`Franklin` y `Hubble`), sin `codebase-memory-mcp`, sin indexadores y
+sin ediciones delegadas.
+
+- `BUG-ORQ-20260701-065`: se mantienen abierto el padre de coordinacion
+  automatica `shutdown/backend/checkpoint/stop/cancel/wait`, pero se cierran las
+  cinco subfilas de cleanup externo no forzado (`stop/cancel`, HTTP y transporte
+  MCP) porque ya tienen pruebas y defaults `external cleanup` sin degradar a
+  `forced`.
+- `BUG-ORQ-20260701-076`: se cierra como stale/supersedido por el cierre real de
+  forced stop app-server y la cobertura actual de active work/cleanup propio.
+  El residual de cleanup externo amplio queda en `BUG-065`/`BUG-165`.
+- `BUG-ORQ-20260701-079`: se mantienen abierto el padre por enforcement duro de
+  checkpoint temprano/salidas gigantes antes de herramientas, pero se cierran
+  las subfilas de `turn/start`, `thread_read` saneado y proyeccion publica en
+  status/queue/observe/efficiency/domain-work.
+- `BUG-ORQ-20260701-075` y `BUG-ORQ-20260701-066/075`: se mantienen abiertos los
+  padres OPES que requieren smoke temporal/e2e y criterios done/settled, pero se
+  cierran las subfilas de QA/materialized artifacts, fase 0, required evidence,
+  `observe_goal`, `domain-work/status`, `efficiency_summary`, `queue/global`
+  y `ops_snapshot`.
+
+Conteo despues del corte documental:
+
+- 208 filas de tabla.
+- 173 IDs/keys.
+- 9 filas `abierto`.
+- 185 filas `cerrado`, 1 `cerrado funcionalmente`,
+  5 `cerrado/supersedido`, 8 `historico/supersedido`.
+
+Abiertos reales que quedan:
+
+- `BUG-ORQ-20260704-165`: observabilidad/control global largo si reaparece,
+  aunque Codex app-server y Claude process ya cubren forced stop real.
+- `BUG-ORQ-20260701-058`: OPES contrato calidad/lifecycle amplio.
+- `BUG-ORQ-20260701-065`: coordinacion automatica shutdown/backend/checkpoint/
+  stop/cancel/wait.
+- `BUG-ORQ-20260701-066`: OPES cierre/observacion done-settled y evitar
+  reescritura tardia.
+- `BUG-ORQ-20260701-073`: timeout tras checkpoint con reconciliacion real amplia.
+- `BUG-ORQ-20260701-075`: QA OPES temporal end-to-end y validadores semanticos
+  por work kind.
+- `BUG-ORQ-20260701-079`: enforcement duro runtime/proveedor de checkpoint
+  temprano y salida gigante.
+
+Archivos usados/tocados:
+
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Evidencia revisada por subagentes y Codex local:
+
+- `modulos/orquesta-mcp/run_control_tool_executor_v0.go`
+- `modulos/orquesta-mcp/run_control_http_v0_test.go`
+- `modulos/orquesta-mcp/run_control_transport_v0_test.go`
+- `modulos/orquesta-server-shutdown/*`
+- `modulos/orquesta-runtime-codex-appserver/*`
+- `modulos/orquesta-app-codex-stack/*`
+- `modulos/orquesta-mcp/autoprogramming_status_tool_v0_test.go`
+- `modulos/orquesta-mcp/domain_work_http_v0_test.go`
+- `modulos/orquesta-mcp/observe_app_director_goal_*`
+- `modulos/orquesta-opes-director/*`
+
+Verificacion ejecutada en este corte:
+
+- `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-codex-appserver ./modulos/orquesta-server-shutdown ./modulos/orquesta-server ./cmd/orquesta-server`
+- `git diff --check`
+- `go test -count=1 ./...`
