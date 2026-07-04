@@ -1,6 +1,7 @@
 package orquestaweb
 
 import (
+	"encoding/json"
 	"html/template"
 	"net/http"
 	"strings"
@@ -13,6 +14,8 @@ type nuevaAppHTMLDataV0 struct {
 	Labels               map[string]string
 	Help                 map[string]string
 	HTML                 map[string]string
+	Wizard               WizardTurnResultV0
+	WizardI18N           map[string]string
 	StorageTypes         []string
 	IntegrationTypes     []string
 	AccessibilityOptions []string
@@ -32,15 +35,62 @@ func writeNuevaAppHTMLPageWithTemplateV0(
 }
 
 func nuevaAppHTMLDataFromPageV0(page NuevaAppWebPageV0) nuevaAppHTMLDataV0 {
+	catalog := NewNuevaAppI18nCatalogV0()
 	return nuevaAppHTMLDataV0{
 		Page:                 page,
 		Labels:               nuevaAppHTMLLabelsV0(page.Formulario.Campos),
-		Help:                 nuevaAppHTMLHelpV0(page.Locale, NewNuevaAppI18nCatalogV0()),
-		HTML:                 nuevaAppHTMLTextosV0(page.Locale, NewNuevaAppI18nCatalogV0()),
+		Help:                 nuevaAppHTMLHelpV0(page.Locale, catalog),
+		HTML:                 nuevaAppHTMLTextosV0(page.Locale, catalog),
+		Wizard:               nuevaAppHTMLInitialWizardV0(page),
+		WizardI18N:           nuevaAppHTMLWizardI18NV0(page.Locale, catalog),
 		StorageTypes:         orquestafactory.SupportedDataStorageTypesV0(),
 		IntegrationTypes:     nuevaAppHTMLIntegrationTypesV0(),
 		AccessibilityOptions: nuevaAppHTMLAccessibilityOptionsV0(),
 	}
+}
+
+func nuevaAppHTMLInitialWizardV0(page NuevaAppWebPageV0) WizardTurnResultV0 {
+	session := NewWebNuevaAppIntakeSessionV0("", page.Locale, "", "")
+	return NewWebNuevaAppWizardTurnResultV0(session)
+}
+
+func nuevaAppHTMLWizardI18NV0(locale string, catalog NuevaAppI18nCatalogV0) map[string]string {
+	out := map[string]string{}
+	for _, key := range NuevaAppI18nRequiredKeysV0() {
+		if !nuevaAppHTMLWizardI18NKeyV0(key) {
+			continue
+		}
+		text, err := catalog.Lookup(locale, key)
+		if err != nil {
+			continue
+		}
+		out[key] = text
+	}
+	return out
+}
+
+func nuevaAppHTMLWizardI18NKeyV0(key string) bool {
+	return strings.HasPrefix(key, "nueva_app.wizard.question.") ||
+		strings.HasPrefix(key, "nueva_app.wizard.option.") ||
+		strings.HasPrefix(key, "nueva_app.wizard.rationale.") ||
+		strings.HasPrefix(key, "nueva_app.wizard.default.") ||
+		strings.HasPrefix(key, "nueva_app.wizard.rich.")
+}
+
+func nuevaAppHTMLI18nTextV0(locale, key string) string {
+	text, err := NewNuevaAppI18nCatalogV0().Lookup(locale, key)
+	if err != nil {
+		return key
+	}
+	return text
+}
+
+func nuevaAppHTMLJSONValueV0(value any) template.JS {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return template.JS("{}")
+	}
+	return template.JS(data)
 }
 
 func nuevaAppHTMLIntegrationTypesV0() []string {
@@ -750,6 +800,8 @@ var nuevaAppHTMLOptionHelpsENV0 = map[string]string{
 var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Funcs(template.FuncMap{
 	"optionLabel": nuevaAppHTMLOptionLabelV0,
 	"optionHelp":  nuevaAppHTMLOptionHelpV0,
+	"i18nText":    nuevaAppHTMLI18nTextV0,
+	"jsonValue":   nuevaAppHTMLJSONValueV0,
 }).Parse(`<!doctype html>
 <html lang="{{.Page.Locale}}">
 <head>
@@ -802,6 +854,20 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     .guided-actions{display:flex;gap:8px;flex-wrap:wrap}
     .guided-actions button{background:#e8efe8;color:var(--ink);border:1px solid var(--line)}
     .guided-actions button.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+    .wizard-rich{display:grid;gap:12px;border:1px solid #cfe0d1;border-radius:12px;background:#fff;padding:12px}
+    .wizard-rich-grid{display:grid;gap:10px}
+    .wizard-question{display:grid;gap:8px;border:1px solid var(--line);border-radius:10px;background:#f9fcf8;padding:10px}
+    .wizard-question-title{font-weight:850;margin:0;color:#1f3527}
+    .wizard-question-why{margin:0;color:var(--muted);font-size:.9rem}
+    .wizard-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
+    .wizard-option{width:100%;display:grid;gap:4px;text-align:left;background:#f0f5ef;color:var(--ink);border:1px solid #cad8cc;border-radius:10px;padding:9px 10px}
+    .wizard-option.recommended{background:#173c28;color:#f8fff3;border-color:#173c28}
+    .wizard-option strong{font-size:.75rem;text-transform:uppercase;letter-spacing:0;color:inherit}
+    .wizard-option small{font-weight:650;line-height:1.35;color:inherit;opacity:.82}
+    .wizard-contrast{border-left:4px solid var(--warn);background:#fff9f0;border-radius:8px;padding:8px 10px;color:#5c3510}
+    .wizard-defaults{display:flex;gap:8px;flex-wrap:wrap}
+    .wizard-default{border:1px solid #d4dfd0;border-radius:999px;background:#f2f7ef;padding:7px 9px;color:#24332a;font-size:.85rem}
+    .wizard-default small{display:block;color:var(--muted);font-weight:700}
     .expert-block{display:grid;gap:12px;margin-top:10px}
     .expert-row{border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff}
     .expert-row-title{font-weight:850;margin:0 0 8px;color:var(--brand)}
@@ -897,6 +963,35 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
             <label data-help="{{index .Help "objetivo"}}">{{index .HTML "nueva_app.wizard.guided_need"}}<textarea id="guided-need" placeholder="{{index .HTML "nueva_app.wizard.placeholder.objetivo"}}"></textarea></label>
             <div class="guided-actions"><button class="primary" type="button" data-guided-action="analyze" data-help="{{index .Help "guided.analyze"}}">{{index .HTML "nueva_app.wizard.guided_analyze"}}</button><button type="button" data-guided-action="review" data-help="{{index .Help "guided.review"}}">{{index .HTML "nueva_app.wizard.guided_review"}}</button></div>
             <div class="guided-thread" id="guided-thread" aria-live="polite"></div>
+            {{$locale := .Page.Locale}}
+            <div class="wizard-rich" data-wizard-rich>
+              <p class="expert-row-title">{{i18nText $locale "nueva_app.wizard.rich.title"}}</p>
+              <div class="wizard-rich-grid" data-wizard-rich-questions>
+                {{range .Wizard.Questions}}
+                {{$questionRef := .QuestionRef}}
+                <div class="wizard-question" data-wizard-question-ref="{{$questionRef}}">
+                  <p class="wizard-question-title">{{i18nText $locale .PromptKey}}</p>
+                  <p class="wizard-question-why">{{i18nText $locale .WhyKey}}</p>
+                  <div class="wizard-options">
+                    {{range .Options}}
+                    <button type="button" class="wizard-option{{if .Recommended}} recommended{{end}}" data-wizard-question-ref="{{$questionRef}}" data-wizard-option-value="{{.Value}}">
+                      <span>{{i18nText $locale .LabelKey}}</span>
+                      {{if .Recommended}}<strong>{{i18nText $locale "nueva_app.wizard.rich.recommended"}}</strong>{{end}}
+                      {{if .RationaleKey}}<small>{{i18nText $locale .RationaleKey}}</small>{{end}}
+                    </button>
+                    {{end}}
+                  </div>
+                </div>
+                {{end}}
+              </div>
+              <div class="wizard-rich-grid" data-wizard-rich-contrasts>{{range .Wizard.Contrasts}}<div class="wizard-contrast" data-wizard-contrast="{{.QuestionRef}}"><strong>{{i18nText $locale "nueva_app.wizard.rich.contrasts"}}</strong> {{i18nText $locale "nueva_app.wizard.rich.user_choice"}} <code>{{.UserChoice}}</code> · {{i18nText $locale "nueva_app.wizard.rich.recommended_choice"}} <code>{{.Recommended}}</code>. {{i18nText $locale .RationaleKey}}</div>{{end}}</div>
+              <div>
+                <p class="expert-row-title">{{i18nText $locale "nueva_app.wizard.rich.defaults"}}</p>
+                <div class="wizard-defaults" data-wizard-rich-defaults>
+                  {{range .Wizard.EngineeringDefaults}}<span class="wizard-default"><strong>{{.Area}}:</strong> {{.Value}}<small>{{i18nText $locale .WhyKey}}</small></span>{{end}}
+                </div>
+              </div>
+            </div>
             <div id="guided-followups" hidden>
               <p class="expert-row-title">{{index .HTML "nueva_app.wizard.guided_followups"}}</p>
               <p class="guided-status" id="guided-session-status" aria-live="polite"></p>
@@ -1291,6 +1386,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     </aside>
   </form>
 </main>
+<script type="application/json" id="wizard-i18n-json">{{jsonValue .WizardI18N}}</script>
 <script>
   (function(){
     const form=document.querySelector('form[action="/nueva-app"]');
@@ -1299,11 +1395,75 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     document.documentElement.classList.add('wizard-ready');
     let step=0;
     let guidedSession=null;
+    const wizardI18nNode=document.getElementById('wizard-i18n-json');
+    let wizardI18n={};
+    try{wizardI18n=wizardI18nNode?JSON.parse(wizardI18nNode.textContent||'{}'):{};}catch(_){wizardI18n={};}
     const steps=[...wizard.querySelectorAll('[data-step]')];
     const tabs=[...wizard.querySelectorAll('[data-goto-step]')];
     const prev=wizard.querySelector('[data-prev-step]');
     const next=wizard.querySelector('[data-next-step]');
     const errors=document.getElementById('wizard-errors');
+    function wizardText(key){return (key&&wizardI18n[key])||key||'';}
+    function appendWizardText(parent,tag,className,text){
+      const node=document.createElement(tag);
+      if(className)node.className=className;
+      node.textContent=text||'';
+      parent.appendChild(node);
+      return node;
+    }
+    function renderRichWizard(wiz){
+      const root=wizard.querySelector('[data-wizard-rich]');
+      if(!root||!wiz)return;
+      const questionsBox=root.querySelector('[data-wizard-rich-questions]');
+      if(questionsBox){
+        questionsBox.innerHTML='';
+        (wiz.questions||[]).forEach(question=>{
+          const card=document.createElement('div');
+          card.className='wizard-question';
+          card.dataset.wizardQuestionRef=question.question_ref||'';
+          appendWizardText(card,'p','wizard-question-title',wizardText(question.prompt_key));
+          appendWizardText(card,'p','wizard-question-why',wizardText(question.why_key));
+          const options=document.createElement('div');
+          options.className='wizard-options';
+          (question.options||[]).forEach(option=>{
+            const button=document.createElement('button');
+            button.type='button';
+            button.className='wizard-option'+(option.recommended?' recommended':'');
+            button.dataset.wizardQuestionRef=question.question_ref||'';
+            button.dataset.wizardOptionValue=option.value||'';
+            appendWizardText(button,'span','',wizardText(option.label_key));
+            if(option.recommended)appendWizardText(button,'strong','',wizardText('nueva_app.wizard.rich.recommended'));
+            if(option.rationale_key)appendWizardText(button,'small','',wizardText(option.rationale_key));
+            options.appendChild(button);
+          });
+          card.appendChild(options);
+          questionsBox.appendChild(card);
+        });
+      }
+      const contrastsBox=root.querySelector('[data-wizard-rich-contrasts]');
+      if(contrastsBox){
+        contrastsBox.innerHTML='';
+        (wiz.contrasts||[]).forEach(item=>{
+          const contrast=document.createElement('div');
+          contrast.className='wizard-contrast';
+          contrast.dataset.wizardContrast=item.question_ref||'';
+          contrast.textContent=wizardText('nueva_app.wizard.rich.contrasts')+': '+wizardText('nueva_app.wizard.rich.user_choice')+' '+(item.user_choice||'')+' · '+wizardText('nueva_app.wizard.rich.recommended_choice')+' '+(item.recommended||'')+'. '+wizardText(item.rationale_key);
+          contrastsBox.appendChild(contrast);
+        });
+      }
+      const defaultsBox=root.querySelector('[data-wizard-rich-defaults]');
+      if(defaultsBox){
+        defaultsBox.innerHTML='';
+        (wiz.engineering_defaults||[]).forEach(item=>{
+          const row=document.createElement('span');
+          row.className='wizard-default';
+          appendWizardText(row,'strong','',(item.area||'')+':');
+          row.appendChild(document.createTextNode(' '+(item.value||'')));
+          appendWizardText(row,'small','',wizardText(item.why_key));
+          defaultsBox.appendChild(row);
+        });
+      }
+    }
     function field(name){return form.elements[name];}
     function fieldList(el){return el&&typeof el.length==='number'&&!el.tagName;}
     function val(name){const el=field(name);return el?String(el.value||'').trim():'';}
@@ -1784,6 +1944,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
         const response=await fetch('/api/v0/apps/intake/guided-turn',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body)});
         if(!response.ok)return null;
         const out=await response.json();
+        if(out&&out.wizard)renderRichWizard(out.wizard);
         if(out&&out.session){guidedSession=out.session;updateGuidedQuestion();}
         return out;
       }catch(_){return null;}
@@ -1808,6 +1969,12 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
         return;
       }
       if(answerField){setValue(answerField,answer);guidedLog(wizard.dataset.guidedMsgAnswer);input.value='';renderSummary();}
+    }
+    async function chooseWizardOption(ref,value){
+      if(!ref||!value)return;
+      if(await applyServerGuided({wizard_answers:[{question_ref:ref,user_choice:value}]},wizard.dataset.guidedMsgAnswer)){
+        updateGuidedQuestion();
+      }
     }
     function titleFromNeed(text){
       const lower=text.toLowerCase();
@@ -1953,6 +2120,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     const guided=document.getElementById('guided-assistant');
     if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-guided-action]');if(target)guidedAction(target.dataset.guidedAction);});}
     if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-guided-answer]');if(target)submitGuidedAnswer();});}
+    if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-wizard-option-value]');if(target)chooseWizardOption(target.dataset.wizardQuestionRef,target.dataset.wizardOptionValue);});}
     wizard.querySelectorAll('[data-apply-connectors]').forEach(node=>node.addEventListener('click',applySelectedConnectors));
     wizard.querySelectorAll('[data-preset]').forEach(node=>node.addEventListener('click',()=>preset(node.dataset.preset)));
     const goalButton=document.querySelector('[data-goal-observe]');

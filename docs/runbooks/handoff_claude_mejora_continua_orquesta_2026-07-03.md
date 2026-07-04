@@ -896,3 +896,45 @@ Pendiente real para Claude si retoma:
 - Render web usable del turno: radios/opciones, recomendacion visible,
   contraste y panel de defaults.
 - Commit y push de este corte si la sesion se cierra desde Codex.
+
+## Actualizacion Codex 2026-07-04 tarde 5
+
+Se cierra el pendiente inmediato de TAREA-7/7b G2 en el repo principal:
+
+- Tool MCP `orquesta.nueva_app.wizard.v0` implementada y registrada en el
+  transporte MCP. Acepta el mismo contrato operativo del endpoint guiado:
+  `need`, `action_id`, `answer`, `wizard_answers`, `session`, `locale`,
+  `nombre` e `idea`; devuelve `turn`, `session` y `wizard`.
+- `orquesta-app-codex-stack` cablea el executor real del wizard MCP contra el
+  handler guiado existente.
+- `/nueva-app` renderiza turno rico: preguntas, opciones, recomendacion,
+  racionales y defaults. Los clicks envian `wizard_answers` y el cliente
+  repinta preguntas/contrastes/defaults con la respuesta.
+- `docs/diseno_wizard_programacion_2026-07-04.md` queda actualizado: MCP y
+  render web pasan a cerrados; la nueva taxonomia U1-U12 y packs de dominio se
+  conserva como pendiente vinculante, no implementada en este corte.
+
+Archivos principales usados/modificados:
+
+- `modulos/orquesta-mcp/nueva_app_wizard_tool_v0.go`
+- `modulos/orquesta-mcp/nueva_app_wizard_transport_v0.go`
+- `modulos/orquesta-app-codex-stack/nueva_app_wizard_mcp_executor_v0.go`
+- `modulos/orquesta-web/nueva_app_html_render_v0.go`
+- `modulos/orquesta-web/nueva_app_html_handler_v0_test.go`
+- `docs/diseno_wizard_programacion_2026-07-04.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+- `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`
+
+Verificado:
+
+- `go test -count=1 ./modulos/orquesta-web -run 'TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar|TestWizard|TestNuevaAppIntakeGuidedResponseV0IncluyeWizardRicoV0|TestNuevaAppIntakeGuidedResponseV0AplicaWizardAnswersV0|TestNuevaAppI18nCatalogV0CatalogosCubrenClavesRequeridas'`
+- `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./modulos/orquesta-web`
+
+Pendiente real para Claude:
+
+- Implementar la taxonomia U1-U12 y packs de dominio de
+  `docs/diseno_wizard_programacion_2026-07-04.md`.
+- Anadir los tests de taxonomia: dimensiones universales, packs por keyword,
+  packs combinados sin duplicados y pregunta abierta si no hay dominio.
+- Mantener abiertos `BUG-079`, `BUG-165/065`, `BUG-058/066`, `BUG-075` y
+  `MEJ-106` hasta sus smokes/reducciones especificas.

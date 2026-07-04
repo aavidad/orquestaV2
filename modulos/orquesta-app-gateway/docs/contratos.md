@@ -17,9 +17,11 @@ Rutas montadas:
 - `/api/v0/apps/director/goal/observe`: bridge REST de MCP para observar un
   goal-first ya lanzado por `run_ref`.
 - `/api/v0/apps/intake/guided-turn`: endpoint JSON puro de intake guiado de
-  nueva app; calcula decisiones/followups de wizard y sesion parcial sin
-  persistir estado ni arrancar trabajo. Si `ConfigV0.AppIntakeAssistant` esta
-  configurado, el gateway lo inyecta como puerto conversacional opcional.
+  nueva app; calcula decisiones/followups de wizard, acepta
+  `wizard_answers`, devuelve `wizard` con preguntas/recomendaciones/contrastes
+  y sesion parcial sin persistir estado ni arrancar trabajo. Si
+  `ConfigV0.AppIntakeAssistant` esta configurado, el gateway lo inyecta como
+  puerto conversacional opcional.
 - `/api/v0/apps/vcs`: overlay REST de MCP para AppVCS; se monta como ruta
   exacta antes del fallback `/api/v0/apps/{app_ref}/changes`.
 - `/api/v0/apps/{app_ref}/changes`: bridge REST de MCP para cambios de app.
@@ -102,7 +104,8 @@ Entrada de composicion:
   handler catch-all de app-change.
 - `/api/v0/apps/intake/guided-turn` debe preceder al prefijo `/api/v0/apps/`,
   no llegar al handler catch-all de app-change y no conocer Director, runtime,
-  DB, proveedores ni LLM real.
+  DB, proveedores ni LLM real. La respuesta rica `wizard` es contrato de
+  intake/UI; el lanzamiento sigue pasando por `/api/v0/apps/director`.
 - `/api/v0/apps/director/goal/observe` debe preceder al prefijo
   `/api/v0/apps/` y delega en `orquesta-mcp`; este modulo no interpreta
   `GoalWorkResultV0`, no valida cierre, no toca cola y no conoce runtime goal,

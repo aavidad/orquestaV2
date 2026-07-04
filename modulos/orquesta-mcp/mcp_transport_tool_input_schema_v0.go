@@ -34,6 +34,8 @@ func mcpTransportToolInputDTOByNameV0(name string) (any, bool) {
 	switch name {
 	case MCPNuevaAppToolNameV0:
 		return MCPNuevaAppToolInputV0{}, true
+	case MCPNuevaAppWizardToolNameV0:
+		return MCPNuevaAppWizardToolInputV0{}, true
 	case MCPArrancarDirectorAppToolNameV0:
 		return MCPArrancarDirectorAppToolInputV0{}, true
 	case MCPObserveAppDirectorGoalToolNameV0:

@@ -129,6 +129,7 @@ func buildStackMCPTransportBindingsV0(
 		},
 	}
 	return orquestamcp.MCPTransportBindingsV0{
+		NuevaAppWizard:   NewCodexStackNuevaAppWizardExecutorV0(config.AppIntakeAssistant),
 		ArrancarDirector: arrancar,
 		PreviewDirector:  orquestamcp.NewMCPPreviewDirectorAppToolExecutorV0(),
 		ObserveDirectorGoal: NewCodexStackObserveAppDirectorGoalExecutorV0(

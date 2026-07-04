@@ -32,6 +32,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 	}
 	for _, name := range []string{
 		MCPNuevaAppToolNameV0,
+		MCPNuevaAppWizardToolNameV0,
 		MCPArrancarDirectorAppToolNameV0,
 		MCPObserveAppDirectorGoalToolNameV0,
 		MCPDirectorAgentDecisionToolNameV0,
@@ -76,7 +77,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		}
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, transport.resources, 22000)
-	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 31800)
+	assertTransportPayloadSaneadoMCPTestV0(t, transport.tools, 33600)
 }
 
 func TestMCPTransportV0SirveResourceIndividualSolicitarNuevaApp(t *testing.T) {
@@ -198,6 +199,25 @@ func TestMCPTransportV0NuevaAppQuedaOptInSinPuerto(t *testing.T) {
 	}
 	if result.ErrorCode != MCPTransportToolUnboundV0 {
 		t.Fatalf("nueva app debe ser opt-in: %+v", result)
+	}
+	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 300)
+}
+
+func TestMCPTransportV0NuevaAppWizardQuedaOptInSinPuerto(t *testing.T) {
+	transport := newFakeMCPTransportV0()
+	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{}); err != nil {
+		t.Fatalf("register transport: %v", err)
+	}
+	output, err := transport.CallToolV0(context.Background(), MCPNuevaAppWizardToolNameV0, MCPNuevaAppWizardToolInputV0{})
+	if err != nil {
+		t.Fatalf("call nueva app wizard unbound: %v", err)
+	}
+	var result MCPTransportToolErrorV0
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode unbound: %v", err)
+	}
+	if result.ErrorCode != MCPTransportToolUnboundV0 {
+		t.Fatalf("nueva app wizard debe ser opt-in: %+v", result)
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 300)
 }

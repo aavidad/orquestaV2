@@ -2435,3 +2435,55 @@ No sobrecerrar:
 - Falta render web completo de preguntas/opciones/recomendacion/contraste.
 - El pilot t297 queda como contexto historico; la version canonica es la del
   repo principal.
+
+## Continuacion Codex 2026-07-04 tarde 5
+
+TAREA-7/7b G2 cerrada en el repo principal, tras revisar la ampliacion de
+Claude en `docs/diseno_wizard_programacion_2026-07-04.md`.
+
+Hecho:
+
+- MCP expone `orquesta.nueva_app.wizard.v0` con contrato de turno compatible
+  con `need`, `action_id`, `answer`, `wizard_answers`, `session`, `locale`,
+  `nombre` e `idea`; devuelve `turn`, `session` y `wizard` como JSON.
+- `orquesta-app-codex-stack` cablea el executor real del wizard MCP usando el
+  handler guiado existente, sin duplicar reglas de negocio.
+- `/nueva-app` renderiza el turno rico: preguntas, opciones, recomendacion
+  visible, racionales y defaults de ingenieria.
+- El cliente web envia clicks como `wizard_answers` y repinta preguntas,
+  contrastes y defaults desde la respuesta del endpoint.
+- Se serializa un mapa i18n es/en del wizard al cliente para no mostrar claves
+  internas en turnos dinamicos.
+
+Archivos tocados:
+
+- `modulos/orquesta-mcp/nueva_app_wizard_tool_v0.go`
+- `modulos/orquesta-mcp/nueva_app_wizard_transport_v0.go`
+- `modulos/orquesta-mcp/nueva_app_wizard_tool_v0_test.go`
+- `modulos/orquesta-mcp/mcp_transport_bindings_v0.go`
+- `modulos/orquesta-mcp/mcp_transport_registry_v0_test.go`
+- `modulos/orquesta-mcp/mcp_transport_tool_descriptors_v0.go`
+- `modulos/orquesta-mcp/mcp_transport_tool_input_schema_v0.go`
+- `modulos/orquesta-mcp/mcp_transport_tools_v0.go`
+- `modulos/orquesta-app-codex-stack/nueva_app_wizard_mcp_executor_v0.go`
+- `modulos/orquesta-app-codex-stack/stack_v0.go`
+- `modulos/orquesta-app-codex-stack/stack_flow_build_v0_test.go`
+- `modulos/orquesta-app-codex-stack/stack_flow_v0_test.go`
+- `modulos/orquesta-web/nueva_app_html_render_v0.go`
+- `modulos/orquesta-web/nueva_app_html_handler_v0_test.go`
+- `modulos/orquesta-web/nueva_app_i18n_es_v0.go`
+- `modulos/orquesta-web/nueva_app_i18n_en_v0.go`
+- `modulos/orquesta-web/nueva_app_i18n_keys_v0.go`
+- `docs/diseno_wizard_programacion_2026-07-04.md`
+
+Verificacion ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-web -run 'TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar|TestWizard|TestNuevaAppIntakeGuidedResponseV0IncluyeWizardRicoV0|TestNuevaAppIntakeGuidedResponseV0AplicaWizardAnswersV0|TestNuevaAppI18nCatalogV0CatalogosCubrenClavesRequeridas'`
+- `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./modulos/orquesta-web`
+
+No sobrecerrar:
+
+- La taxonomia nueva de Claude U1-U12 y packs de dominio queda pendiente; el
+  motor actual cubre R1-R8 y packs iniciales, no el universo completo.
+- Siguen abiertos `BUG-079`, `BUG-165/065`, `BUG-058/066`, `BUG-075` y
+  `MEJ-106` segun el handoff vigente.

@@ -2,6 +2,7 @@ package orquestamcp
 
 type mcpTransportToolDescriptorsV0 struct {
 	nueva                    MCPNuevaAppToolDescriptorV0
+	nuevaWizard              MCPNuevaAppWizardToolDescriptorV0
 	director                 MCPArrancarDirectorAppToolDescriptorV0
 	observeDirectorGoal      MCPObserveAppDirectorGoalToolDescriptorV0
 	change                   MCPRequestAppChangeToolDescriptorV0
@@ -37,6 +38,7 @@ type mcpTransportToolDescriptorsV0 struct {
 func newMCPTransportToolDescriptorsV0() mcpTransportToolDescriptorsV0 {
 	return mcpTransportToolDescriptorsV0{
 		nueva:                    MCPNuevaAppDescriptorV0(),
+		nuevaWizard:              MCPNuevaAppWizardDescriptorV0(),
 		director:                 MCPArrancarDirectorAppDescriptorV0(),
 		observeDirectorGoal:      MCPObserveAppDirectorGoalDescriptorV0(),
 		change:                   MCPRequestAppChangeDescriptorV0(),

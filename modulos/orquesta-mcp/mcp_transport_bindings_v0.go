@@ -12,6 +12,7 @@ import (
 
 type MCPTransportBindingsV0 struct {
 	NuevaApp                                       MCPTransportNuevaAppExecutorV0
+	NuevaAppWizard                                 MCPNuevaAppWizardExecutorPortV0
 	ArrancarDirector                               MCPTransportArrancarDirectorAppExecutorV0
 	PreviewDirector                                MCPTransportPreviewDirectorAppExecutorV0
 	ObserveDirectorGoal                            MCPTransportObserveAppDirectorGoalExecutorV0

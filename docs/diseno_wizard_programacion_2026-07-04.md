@@ -1,9 +1,11 @@
 # Diseño: wizard de programación conversacional (TAREA-7/7b)
 
 Fecha: 2026-07-04. Autor: Claude (director). Implementa: Orquesta/Codex.
-Estado: diseño aprobado por el operador; parcialmente implementado por Codex
-en `modulos/orquesta-web` el 2026-07-04. No tratar como cierre total: quedan
-pendientes tool MCP equivalente y render web completo del turno.
+Estado: diseño aprobado por el operador; implementacion base G1+G2 integrada
+por Codex en `modulos/orquesta-web`, `modulos/orquesta-mcp` y
+`modulos/orquesta-app-codex-stack` el 2026-07-04. No tratar como cierre total:
+queda pendiente la ampliacion de taxonomia universal U1-U12 y packs de dominio
+definida al final de este documento.
 
 Orden del operador: partir de "quiero una app para una agenda" y llegar a la
 app completa preguntando por los huecos, mostrando SIEMPRE la mejor opción y
@@ -183,22 +185,24 @@ Pruebas ejecutadas en este corte:
 - `go test -count=1 ./modulos/orquesta-web`
 - `go test -count=1 ./modulos/orquesta-app-gateway ./modulos/orquesta-http-gateway`
 
-Pendiente real:
+Pendiente real tras el corte inicial:
 
-- Tool MCP `orquesta.nueva_app.wizard.v0` con el mismo contrato de turno.
-- Render web usable de preguntas/opciones/recomendacion/contraste/defaults.
+- Tool MCP `orquesta.nueva_app.wizard.v0` con el mismo contrato de turno
+  (cerrado en la continuacion Codex 2026-07-04 tarde 5).
+- Render web usable de preguntas/opciones/recomendacion/contraste/defaults
+  (cerrado en la continuacion Codex 2026-07-04 tarde 5).
 - Si se exige `mode:"wizard"` explicito, anadirlo como alias compatible; el
   endpoint actual mantiene compatibilidad y acepta `wizard_answers` sin campo
   de modo.
 
-## 9. Taxonomía de preguntas (vinculante; generaliza R1-R8 y el ejemplo agenda)
+## 10. Taxonomía de preguntas (vinculante; generaliza R1-R8 y el ejemplo agenda)
 
 El operador aclaró que la agenda era solo un ejemplo. El wizard debe cubrir
 DOS capas: dimensiones universales (aplican a cualquier app) y packs de
 dominio (se activan por keywords del objetivo). Cada pregunta lleva 2-4
 opciones con una recomendada y su porqué.
 
-### 9.1 Dimensiones universales (toda app, en este orden de turnos)
+### 10.1 Dimensiones universales (toda app, en este orden de turnos)
 
 U1 Uso y audiencia: ¿personal, equipo, o público? ¿cuántos usuarios
    esperas? ¿roles distintos (admin/editor/lector)? (rec.: empezar simple
@@ -240,7 +244,7 @@ Prioridad: score = importancia(alta=2, media=1) x incertidumbre(sin dato=2,
 inferido=1). Máx 3-4 preguntas/turno; alta sin responder bloquea cierre;
 `aceptar_recomendaciones` responde el resto de una vez.
 
-### 9.2 Packs de dominio (tabla keyword→pack, ampliable sin tocar el motor)
+### 10.2 Packs de dominio (tabla keyword→pack, ampliable sin tocar el motor)
 
 Cada pack añade 3-6 preguntas específicas con opciones y recomendación:
 
@@ -287,7 +291,7 @@ combinan y se deduplica por Field. Si no casa con ninguno, el wizard hace
 una pregunta abierta de dominio en turno 1 ("¿qué debe poder hacer un
 usuario un día normal?") y reevalúa los packs con la respuesta.
 
-### 9.3 Tests adicionales de la taxonomía
+### 10.3 Tests adicionales de la taxonomía
 
 - `TestWizardDimensionesUniversalesCubiertasV0`: spec vacío genera preguntas
   de todas las U con importancia alta.
@@ -297,3 +301,35 @@ usuario un día normal?") y reevalúa los packs con la respuesta.
   packs sin preguntas repetidas por Field.
 - `TestWizardSinDominioPreguntaAbiertaV0`: objetivo sin keywords → pregunta
   abierta y reevaluación.
+
+## 11. Estado Codex 2026-07-04 tarde 5
+
+Cerrado en el repo principal:
+
+- MCP tool `orquesta.nueva_app.wizard.v0` con entrada compatible con
+  `WebNuevaAppIntakeGuidedRequestV0`: `need`, `action_id`, `answer`,
+  `wizard_answers`, `session`, `locale`, `nombre` e `idea`. Devuelve `turn`,
+  `session` y `wizard` como JSON durable y conserva errores publicos.
+- Stack Codex cablea el executor MCP real para el wizard, usando el mismo
+  handler guiado y sin duplicar reglas de negocio.
+- Web `/nueva-app` renderiza preguntas ricas del primer turno, opciones,
+  insignia de recomendacion, racionales y defaults de ingenieria. Los clicks en
+  opciones envian `wizard_answers` al endpoint guiado y el cliente vuelve a
+  pintar preguntas, contrastes y defaults desde la respuesta.
+- El mapa i18n del wizard se serializa a cliente desde el catalogo es/en para
+  evitar mostrar claves internas en turnos dinamicos.
+
+Pruebas ejecutadas en este cierre:
+
+- `go test -count=1 ./modulos/orquesta-web -run 'TestNuevaAppHTMLHandlerV0GETMuestraFormularioUsableSinDelegar|TestWizard|TestNuevaAppIntakeGuidedResponseV0IncluyeWizardRicoV0|TestNuevaAppIntakeGuidedResponseV0AplicaWizardAnswersV0|TestNuevaAppI18nCatalogV0CatalogosCubrenClavesRequeridas'`
+- `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./modulos/orquesta-web`
+
+Pendiente real despues de este cierre:
+
+- Implementar la taxonomia universal U1-U12 y los packs de dominio de la
+  seccion 10. El motor actual sigue cubriendo R1-R8 y packs iniciales
+  agenda/pagos/mapas/storage/mobile/deploy/usuarios, no toda la taxonomia.
+- Anadir los tests adicionales de la seccion 10.3 antes de declarar el wizard
+  conversacional completo para cualquier app.
+- Opcional: alias explicito `mode:"wizard"` si se decide hacerlo obligatorio
+  para clientes nuevos.

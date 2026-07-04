@@ -114,6 +114,51 @@ func TestBuildStackHTTPHandlerV0WiresNuevaAppIntakeAssistant(t *testing.T) {
 	}
 }
 
+func TestBuildStackV0CableaNuevaAppWizardMCPRico(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	result, err := stack.MCPTransportBindings.NuevaAppWizard.Execute(context.Background(), orquestamcp.MCPNuevaAppWizardToolInputV0{
+		RequestID: "request-ref-stack-wizard-001",
+		SessionID: "session-stack-wizard-001",
+		Session:   json.RawMessage(`{"schema_version":"web_nueva_app_intake_session.v0","session_id":"session-stack-wizard-001","form":{"request_id":"request-ref-stack-wizard-001","objetivo":"quiero una app para una agenda"}}`),
+	})
+	if err != nil {
+		t.Fatalf("execute wizard: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPNuevaAppWizardEstadoOKV0 ||
+		!strings.Contains(string(result.Wizard), "wizard-r1-uso-personal-compartido") ||
+		!strings.Contains(string(result.Wizard), "hexagonal_puertos_adaptadores") {
+		t.Fatalf("wizard inicial incompleto: estado=%s wizard=%s", result.Estado, result.Wizard)
+	}
+	dataTurn, err := stack.MCPTransportBindings.NuevaAppWizard.Execute(context.Background(), orquestamcp.MCPNuevaAppWizardToolInputV0{
+		RequestID: "request-ref-stack-wizard-data-001",
+		SessionID: "session-stack-wizard-data-001",
+		Session:   json.RawMessage(`{"schema_version":"web_nueva_app_intake_session.v0","session_id":"session-stack-wizard-data-001","form":{"request_id":"request-ref-stack-wizard-data-001","locale":"es-ES","nombre":"Agenda","objetivo":"quiero una app para una agenda","tipo_app":"web","usuarios_objetivo":["usuarios autenticados"],"plataformas":["web","mobile"]}}`),
+	})
+	if err != nil {
+		t.Fatalf("execute wizard data: %v", err)
+	}
+	if !strings.Contains(string(dataTurn.Wizard), "wizard-r3-integracion-agenda") ||
+		!strings.Contains(string(dataTurn.Wizard), "calendar_google_workspace") {
+		t.Fatalf("wizard data no ofrece integracion agenda: %s", dataTurn.Wizard)
+	}
+
+	next, err := stack.MCPTransportBindings.NuevaAppWizard.Execute(context.Background(), orquestamcp.MCPNuevaAppWizardToolInputV0{
+		RequestID: "request-ref-stack-wizard-002",
+		Need:      "quiero una app para una agenda",
+		WizardAnswers: []orquestamcp.MCPNuevaAppWizardAnswerV0{{
+			QuestionRef: "wizard-r2-plataformas",
+			UserChoice:  "web",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("execute wizard answer: %v", err)
+	}
+	if !strings.Contains(string(next.Wizard), `"recommended":"web_mobile"`) ||
+		!strings.Contains(string(next.Wizard), `"user_choice":"web"`) {
+		t.Fatalf("wizard no conserva contraste: %s", next.Wizard)
+	}
+}
+
 type fakeCodexStackNuevaAppIntakeAssistantV0 struct{}
 
 func (fakeCodexStackNuevaAppIntakeAssistantV0) BuildNuevaAppIntakeGuidedTurnV0(
