@@ -232,3 +232,77 @@ quedan abiertos 058, 066, 073, 075, 079 — lanza un prepare-run por bug con
 write-sets disjuntos (plantilla: los requests de arriba estan en la bitacora),
 integra y cierra inventario. Objetivo del operador: Orquesta y conectores al
 100%. Autorizado por el operador 2026-07-04: "si hazlo todo".
+
+## 5. COLA DE TAREAS AUTORIZADA POR EL OPERADOR (2026-07-04 tarde)
+
+Orden textual del operador: "dale todas las tareas a codex para que lo
+programe". Esto DESCONGELA la cola solo para las tareas de esta seccion.
+Ejecutalas via `POST /api/v0/autoprogramming/prepare-run` (goal_first) en
+pilotajes aislados, PARALELIZANDO las que tienen write-sets disjuntos.
+Protocolo de integracion: suites del write-set en el worktree -> commit ->
+cherry-pick a `trabajo/plataforma-agentes` -> suites en main -> actualizar
+inventario/bitacora -> limpiar procesos. Umbral consumo 450000, timeout 30m,
+checkpoint temprano SIEMPRE como primera accion.
+
+### TAREA-1 (prioridad maxima): smoke real acotado MEJ-104 + activar presupuesto
+
+- Ejecutar el smoke real del gobernador de presupuesto con presupuesto bajo:
+  `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DAILY_GOAL_BUDGET=2` y
+  `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DAILY_CONTEXT_BUDGET_BYTES=262144`
+  en un pilotaje aislado con backlog minimo de UNA tarea trivial.
+- Verificar `budget_deferred`/`budget_degraded` en `autoprogramming/status`
+  cuando se agota, y que el dia siguiente (simulado) repone cupo.
+- Si el smoke va bien: documentar en el runbook los valores recomendados de
+  produccion y dejar nota en el plan MEJ-104 como CERRADO.
+- Write-set: cmd/orquesta-server, modulos/orquesta-autoprogramming, docs.
+
+### TAREA-2: broker de contexto expuesto como herramienta MCP del agente
+
+- Hallazgo previo: el sandbox workspace-write bloquea HTTP a localhost, asi que
+  los agentes no pueden consultar el broker por red (experimento A/B 2026-07-04,
+  brazo B bloqueado con socket Operation not permitted).
+- Exponer `CodeContextQueryPortV0` como tool MCP en el codex-home del goal
+  (toolbelt), de modo que el agente consulte contexto (rg + codebase-memory)
+  sin red y sin contexto crudo inflado.
+- Medir: tokens_used de un goal de documentacion CON tool vs linea base 164945
+  (brazo A, tarea T293). Criterio de exito del experimento: >=15% menos.
+- Write-set: modulos/orquesta-context, modulos/orquesta-runtime-codex-appserver,
+  cmd/orquesta-server, docs.
+
+### TAREA-3: enrutado por coste en el director de escalada
+
+- Las tareas solo-documentales (escaneos, docs, inventarios) deben enrutarse a
+  proveedor/effort barato (p.ej. gemini o codex con reasoning_effort=low), y
+  las de codigo al perfil actual. Evidencia: el escaner de backlog gasto
+  150k-210k tokens en ciclos documentales.
+- Anadir al goal spec una pista `task_cost_class` (doc|code|mixed) derivada del
+  write-set (solo .md => doc) y cablearla a la seleccion de backend/effort.
+- Write-set: modulos/orquesta-runtime-codex-goal, cmd/orquesta-server, docs.
+
+### TAREA-4: coordinacion automatica completa de shutdown (residual BUG-065/165)
+
+- Smoke real amplio: servidor con 2 goals activos, shutdown cooperativo debe
+  encadenar backend/checkpoint/stop/cancel/wait sin intervencion y publicar
+  `goal_actions` resueltas; ningun proceso residual.
+- Si el smoke revela huecos, fix focal (no refactor amplio) y test.
+- Write-set: modulos/orquesta-server-shutdown, cmd/orquesta-server, docs.
+
+### TAREA-5: residuales OPES 058/066/075
+
+- Cerrar el contrato de calidad OPES pendiente: settlement durable, cierre con
+  evidencia minima y QA de artefactos parciales, segun las filas del
+  inventario. Solo tests focales + fixes acotados.
+- Write-set: modulos/orquesta-opes-director, modulos/orquesta-opes-connector,
+  docs.
+
+### TAREA-6: ratchet de deuda de configuracion
+
+- La pericial fijo la vigilancia: env_vars 500 -> hoy 511. Anadir test ratchet
+  que falle si `env_vars_orquesta` supera el valor actual (511) sin actualizar
+  explicitamente el limite con justificacion en el propio test.
+- Write-set: cmd/orquesta-server (o modulo de registry de envs), scripts, docs.
+
+Orden sugerido: TAREA-1 sola primero (toca la cola idle). Despues 2+3 en
+paralelo (eficiencia) y 4+5 en paralelo (residuales). TAREA-6 en cualquier
+hueco. Al terminar todo: informe en bitacora con SHAs y estado del inventario;
+los 6 bugs abiertos deberian quedar en 0-2 filas con residual justificado.
