@@ -1311,9 +1311,38 @@ Pendiente real: `BUG-058/066` sigue abierto para smoke OPES temporal
 end-to-end, reconciliacion tras cortes externos/manuales y criterios completos
 de cierre del arbol OPES hasta paquete final.
 
-Siguiente brecha local detectada por subagentes:
+Brechas locales detectadas por subagentes al inicio de este corte:
 
 - `BUG-165`: `observe_goal` en timeout/snapshot puede publicar `goal_status=running`
   si `GoalStateStore` sigue running pero `RunControl` ya esta terminal.
-- `BUG-079`: `CommandProtocolV0` todavia no aplica el budget especifico de
-  256 KiB de `thread/read`; el WebSocket si lo aplica.
+- `BUG-079`: `CommandProtocolV0` todavia no aplicaba el budget especifico de
+  256 KiB de `thread/read`; el WebSocket si lo aplicaba.
+
+## Continuacion Codex 2026-07-04 noche 5
+
+Avance adicional sobre `BUG-ORQ-20260701-079`:
+
+- `serverCodexAppServerCommandProtocolV0.ReadThreadV0` usa ahora el mismo
+  presupuesto especifico de 256 KiB que WebSocket para respuestas
+  `thread/read`.
+- Si la linea stdout JSON-RPC de `thread/read` supera ese limite, Orquesta
+  devuelve `codex_app_server_thread_read_response_too_large`, cierra stdin y
+  mata el proceso hijo para que el diagnostico no se degrade a timeout.
+- Las llamadas command no `thread/read` mantienen el limite historico de 1 MiB;
+  los RPCs WebSocket no `thread/read` mantienen su limite global.
+
+Archivos tocados en este avance:
+
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_command_protocol_v0.go`
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_migrated_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Evidencia ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`
+
+Pendiente real: `BUG-079` sigue abierto para enforcement runtime/proveedor de
+checkpoint temprano y limites de salidas de herramientas antes de que se genere
+la salida gigante. `BUG-165` sigue abierto para reconciliar `observe_goal`
+timeout/snapshot con `RunControl` terminal.

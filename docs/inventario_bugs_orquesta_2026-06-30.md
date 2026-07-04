@@ -130,13 +130,14 @@ antes de su cierre posterior:
   `recommended_action=review_required_evidence`. Sigue abierto para validadores
   OPES semanticos/editoriales por artefacto canonico y smoke OPES temporal
   end-to-end.
-- Avance 2026-07-04 noche: `BUG-ORQ-20260701-079` queda reducido por corte
+- Avance 2026-07-04 noche 5: `BUG-ORQ-20260701-079` queda reducido por corte
   semipreventivo de `thread/read` en el backend `app_server`: respuestas
-  WebSocket de `thread/read` mayores de 256 KiB fallan antes de reservar/leer
-  el payload completo con issue `codex_app_server_thread_read_response_too_large`;
-  los RPCs no `thread/read` conservan el limite global de 16 MiB. Sigue abierto
-  porque esto corta la ingesta en Orquesta, pero no impide que el proveedor o
-  runtime genere la salida gigante antes de responder.
+  WebSocket y lineas stdout del protocolo command de `thread/read` mayores de
+  256 KiB fallan antes de reservar/decodificar el payload completo con issue
+  `codex_app_server_thread_read_response_too_large`; los RPCs no `thread/read`
+  conservan sus limites globales. Sigue abierto porque esto corta la ingesta en
+  Orquesta, pero no impide que el proveedor o runtime genere la salida gigante
+  antes de responder.
 - Avance 2026-07-04 noche 4: `BUG-ORQ-20260701-058/066` queda reducido para
   criterios `done/settled` de texto OPES: un tema con
   `settlement_status=settled_text`, QA de tema completa, sin rework pendiente y
@@ -1348,17 +1349,22 @@ salida textual gigante, sin marcar terminal ni bloquear el timeout/replan
 posterior. Evidencia:
 `TestServerCodexAppServerGoalBackendV0ObservaOutputGiganteConEvidenciaSaneadaV0`.
 
-Avance BUG-ORQ-20260701-079 2026-07-04 noche: `thread/read` por WebSocket en
+Avance BUG-ORQ-20260701-079 2026-07-04 noche 5: `thread/read` en
 `orquesta-runtime-codex-appserver` tiene presupuesto especifico de respuesta
-de 256 KiB. Si el frame anunciado supera ese limite, falla antes de reservar y
-leer el payload completo con `codex_app_server_thread_read_response_too_large`;
-el lector generico conserva 16 MiB para el resto de RPCs. Es un corte
-semipreventivo de ingesta, no enforcement total de proveedor: el runtime externo
-puede haber generado ya la salida grande antes de que Orquesta la rechace.
+de 256 KiB tanto por WebSocket como por protocolo command. En WebSocket, si el
+frame anunciado supera ese limite, falla antes de reservar y leer el payload
+completo; en command, si la linea stdout JSON-RPC de `thread/read` supera ese
+limite, el scanner devuelve `codex_app_server_thread_read_response_too_large`,
+cierra stdin y mata el proceso hijo para no degradar a timeout. El lector
+generico conserva 16 MiB para el resto de RPCs y el command conserva 1 MiB para
+respuestas no `thread/read`. Es un corte semipreventivo de ingesta, no
+enforcement total de proveedor: el runtime externo puede haber generado ya la
+salida grande antes de que Orquesta la rechace.
 Evidencia:
 `TestCodexAppServerWebSocketThreadReadResponseBudgetV0`,
+`TestCodexAppServerCommandProtocolThreadReadResponseBudgetV0`,
 `TestCodexAppServerWebSocketDefaultFrameBudgetConserva16MiBV0` y
-`go test -count=1 ./modulos/orquesta-runtime-codex-appserver ./cmd/orquesta-server`.
+`go test -count=1 ./modulos/orquesta-runtime-codex-appserver`.
 
 Avance BUG-ORQ-20260701-058/066 2026-07-02 noche 7:
 `orquesta-opes-bridge` normaliza los aliases de cierre

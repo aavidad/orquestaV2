@@ -20,7 +20,11 @@ type serverCodexAppServerCommandProtocolV0 struct {
 	Timeout     time.Duration
 }
 
-const codexAppServerDiagnosticLogMaxBytesV0 = 8192
+const (
+	codexAppServerDiagnosticLogMaxBytesV0                         = 8192
+	codexAppServerCommandProtocolDefaultMaxResponseLineBytesV0    = 1024 * 1024
+	codexAppServerCommandProtocolInitialResponseLineBufferBytesV0 = 64 * 1024
+)
 
 func (protocol serverCodexAppServerCommandProtocolV0) ProbeV0(ctx context.Context) error {
 	var response serverCodexAppServerThreadLoadedListResponseV0
@@ -72,10 +76,17 @@ func (protocol serverCodexAppServerCommandProtocolV0) ReadThreadV0(
 	includeTurns bool,
 ) (serverCodexAppServerThreadReadV0, error) {
 	var response serverCodexAppServerThreadReadResponseV0
-	err := protocol.callV0(ctx, "thread/read", map[string]interface{}{
-		"threadId":     strings.TrimSpace(threadID),
-		"includeTurns": includeTurns,
-	}, &response)
+	err := protocol.callWithMaxResponseLineBytesV0(
+		ctx,
+		"thread/read",
+		map[string]interface{}{
+			"threadId":     strings.TrimSpace(threadID),
+			"includeTurns": includeTurns,
+		},
+		&response,
+		codexAppServerThreadReadMaxResponseFrameBytesV0,
+		codexAppServerThreadReadFrameTooLargeIssueCodeV0,
+	)
 	return response.Thread, err
 }
 
@@ -84,6 +95,17 @@ func (protocol serverCodexAppServerCommandProtocolV0) callV0(
 	method string,
 	params interface{},
 	out interface{},
+) error {
+	return protocol.callWithMaxResponseLineBytesV0(ctx, method, params, out, 0, "")
+}
+
+func (protocol serverCodexAppServerCommandProtocolV0) callWithMaxResponseLineBytesV0(
+	ctx context.Context,
+	method string,
+	params interface{},
+	out interface{},
+	maxResponseLineBytes int,
+	lineTooLargeIssueCode string,
 ) error {
 	commandPath := strings.TrimSpace(protocol.CommandPath)
 	if commandPath == "" {
@@ -145,11 +167,21 @@ func (protocol serverCodexAppServerCommandProtocolV0) callV0(
 		return err
 	}
 	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	responseLineMaxBytes := codexAppServerCommandProtocolDefaultMaxResponseLineBytesV0
+	if maxResponseLineBytes > 0 && maxResponseLineBytes < responseLineMaxBytes {
+		responseLineMaxBytes = maxResponseLineBytes
+	}
+	scanner.Buffer(
+		make([]byte, 0, codexAppServerCommandProtocolInitialResponseLineBufferBytesV0),
+		responseLineMaxBytes,
+	)
 	var initResponse map[string]interface{}
-	if decodeErr := decodeCodexAppServerRPCResponseScannerWithContextV0(callCtx, scanner, cmd, stdin, 1, &initResponse); decodeErr != nil {
+	if decodeErr := decodeCodexAppServerRPCResponseScannerWithContextV0(callCtx, scanner, cmd, stdin, 1, &initResponse, lineTooLargeIssueCode); decodeErr != nil {
 		var callErr codexAppServerCallErrorV0
 		if errors.As(decodeErr, &callErr) {
+			_ = stdin.Close()
+			codexAppServerKillProcessGroupV0(cmd)
+			_ = cmd.Wait()
 			return callErr
 		}
 		_ = stdin.Close()
@@ -184,7 +216,13 @@ func (protocol serverCodexAppServerCommandProtocolV0) callV0(
 	if err := writeLine(callLine); err != nil {
 		return err
 	}
-	decodeErr := decodeCodexAppServerRPCResponseScannerWithContextV0(callCtx, scanner, cmd, stdin, 2, out)
+	decodeErr := decodeCodexAppServerRPCResponseScannerWithContextV0(callCtx, scanner, cmd, stdin, 2, out, lineTooLargeIssueCode)
+	if codexAppServerCallErrorHasCodeV0(decodeErr, lineTooLargeIssueCode) {
+		_ = stdin.Close()
+		codexAppServerKillProcessGroupV0(cmd)
+		_ = cmd.Wait()
+		return decodeErr
+	}
 	_ = stdin.Close()
 	err = cmd.Wait()
 	if callCtx.Err() != nil {
@@ -206,10 +244,14 @@ func decodeCodexAppServerRPCResponseScannerWithContextV0(
 	stdin io.Closer,
 	responseID int,
 	out interface{},
+	lineTooLargeIssueCode string,
 ) error {
 	resultCh := make(chan error, 1)
 	go func() {
-		resultCh <- decodeCodexAppServerRPCResponseScannerV0(scanner, responseID, out)
+		resultCh <- codexAppServerScannerResponseErrorV0(
+			decodeCodexAppServerRPCResponseScannerV0(scanner, responseID, out),
+			lineTooLargeIssueCode,
+		)
 	}()
 	select {
 	case err := <-resultCh:
@@ -224,6 +266,26 @@ func decodeCodexAppServerRPCResponseScannerWithContextV0(
 		}
 		return codexAppServerCallErrorV0{Code: "codex_app_server_timeout", Err: ctx.Err()}
 	}
+}
+
+func codexAppServerCallErrorHasCodeV0(err error, code string) bool {
+	code = strings.TrimSpace(code)
+	if err == nil || code == "" {
+		return false
+	}
+	var callErr codexAppServerCallErrorV0
+	return errors.As(err, &callErr) && strings.TrimSpace(callErr.Code) == code
+}
+
+func codexAppServerScannerResponseErrorV0(err error, lineTooLargeIssueCode string) error {
+	if err == nil {
+		return nil
+	}
+	code := strings.TrimSpace(lineTooLargeIssueCode)
+	if code != "" && strings.Contains(strings.ToLower(err.Error()), "token too long") {
+		return codexAppServerCallErrorV0{Code: code, Err: err}
+	}
+	return err
 }
 
 func codexAppServerKillProcessGroupV0(cmd *exec.Cmd) {
