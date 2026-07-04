@@ -1928,3 +1928,36 @@ Comando verde:
 No borrar todavia `modulos/orquesta-app-director-intake` ni sus `wizard_*.go`:
 el modulo sigue importado por `orquesta-app-director-service`/`orquesta-mcp` y
 la retirada requiere deprecacion compatible o refactor con tests propios.
+
+## Actualizacion Codex 2026-07-04 noche 33
+
+TAREA-10.2 integrada:
+
+- `AutonomousDirectorPolicyPortV0` entra en `StartAppDirectorPortsV0`.
+- `startAppDirectorGoalFirstV0` llama a la politica con
+  `BuildDirectorRunStatsV0(prepared.Run)` antes de lanzar el goal.
+- La decision ajusta `GoalWorkSpecV0.Budget.MaxSubgoals` y anade evidencia y
+  contexto `autonomous_director_policy:v0`.
+- `BuildStackV0` cablea `ConfigV0.AutonomousDirectorPolicy`.
+- `cmd/orquesta-server` inyecta `HeuristicAutonomousDirectorPolicyV0` en el
+  stack real.
+
+Evidencia:
+
+- `TestStartAppDirectorV0GoalFirstAplicaPoliticaAutonomaV0`.
+- `TestStartAppDirectorGoalSpecWithAutonomousPolicyV0StatsDistintosDecisionDistinta`.
+- `TestBuildDirectorPortsV0CableaPoliticaAutonomaV0`.
+- `TestBuildStackFromEnvV0CableaBrokerContextoEnMCPHTTPYGoalV0` ampliado con
+  assert del puerto.
+- Suite afectada verde:
+  `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-app-director-service ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
+- Smoke Orquesta seguro: servidor temporal sin backend Goal, POST
+  `/api/v0/apps/director` en `goal_first` -> HTTP 500
+  `goal_backend_unavailable`, sin fallback legacy.
+
+Pendiente separado para Claude/servidor remoto:
+
+- TAREA-3 no queda cerrada por esto. `task_cost_class` ya existe en
+  `orquesta-runtime-codex-goal` y se deriva del write-set, pero aun falta
+  usarlo para seleccionar backend/effort barato en tareas documentales desde la
+  composicion, sin meter proveedor/modelo en core ni goal neutral.

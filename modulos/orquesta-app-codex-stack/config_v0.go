@@ -41,6 +41,7 @@ type ConfigV0 struct {
 	Capacity                                       CapacityConfigV0
 	ReviewGate                                     ReviewGateConfigV0
 	RequiredTests                                  orquestacionnucleoapp.RequiredTestRunnerPortV0
+	AutonomousDirectorPolicy                       orquestacionnucleoapp.AutonomousDirectorPolicyPortV0
 	AppGoalLauncher                                orquestagoal.GoalWorkLauncherPortV0
 	AppGoalReworkLauncher                          orquestagoal.GoalWorkLauncherPortV0
 	AppGoalObserver                                orquestagoal.GoalWorkObservationPortV0

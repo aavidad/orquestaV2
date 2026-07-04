@@ -278,6 +278,7 @@ func buildDirectorPortsV0(
 		OperationalPlanStateStore:   operationalPlanStateStoreV0(config),
 		RequiredTestEvidenceStore:   requiredTestEvidenceStoreV0(config),
 		RequiredTestRunner:          requiredTestRunnerV0(config),
+		AutonomousDirectorPolicy:    config.AutonomousDirectorPolicy,
 		GoalLauncher:                goalLauncherWithCodeContextPrepareFromConfigV0(config.AppGoalLauncher, config.CodeContext),
 		GoalReworkLauncher:          goalLauncherWithCodeContextPrepareFromConfigV0(config.AppGoalReworkLauncher, config.CodeContext),
 		GoalObserver:                goalFirstReconciledObserverFromConfigV0(config),

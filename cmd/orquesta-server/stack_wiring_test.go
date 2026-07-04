@@ -383,6 +383,9 @@ func TestBuildStackFromEnvV0CableaBrokerContextoEnMCPHTTPYGoalV0(t *testing.T) {
 		stack.MCPTransportBindings.CodebaseQuery == nil {
 		t.Fatalf("broker de contexto no cableado: stack.CodeContext=%T binding=%T", stack.CodeContext, stack.MCPTransportBindings.CodebaseQuery)
 	}
+	if stack.Ports.AutonomousDirectorPolicy == nil {
+		t.Fatalf("politica autonoma no cableada en stack desde env")
+	}
 
 	mcpResult, err := stack.MCPTransportBindings.CodebaseQuery.Execute(
 		context.Background(),

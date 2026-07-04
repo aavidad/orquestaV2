@@ -7,8 +7,10 @@ import (
 	"testing"
 
 	orquestacontext "orquesta/modulos/orquesta-context"
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
 
@@ -70,6 +72,32 @@ func TestBuildDirectorPortsV0CableaAppGoalLauncher(t *testing.T) {
 	stats, ok := bindings.DirectorStats.(orquestamcp.MCPDirectorStatsToolExecutorV0)
 	if !ok || stats.GoalStateSource == nil || stats.GoalMarkerSource == nil {
 		t.Fatalf("director stats sin goal state source: ok=%v stats=%+v", ok, stats)
+	}
+}
+
+func TestBuildDirectorPortsV0CableaPoliticaAutonomaV0(t *testing.T) {
+	policy := &codexStackAutonomousDirectorPolicyForTestV0{}
+	ports := buildDirectorPortsV0(ConfigV0{AutonomousDirectorPolicy: policy})
+	if ports.AutonomousDirectorPolicy == nil {
+		t.Fatalf("politica autonoma no cableada")
+	}
+	decision, err := ports.AutonomousDirectorPolicy.DecideAutonomousDirectorV0(
+		context.Background(),
+		orquestacionnucleoapp.AutonomousDirectorDecisionInputV0{
+			Run: orquestacoreworkflow.OrchestrationRunV0{
+				RunID: "run-stack-policy-001",
+				Tasks: []string{"task-1", "task-2", "task-3"},
+			},
+			Stats: orquestacionnucleoapp.DirectorRunStatsV0{
+				RunRef: "run-stack-policy-001",
+				Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+					TasksOpen: 3,
+				},
+			},
+		},
+	)
+	if err != nil || policy.calls != 1 || decision.TeamSize != 3 {
+		t.Fatalf("decision=%+v err=%v calls=%d", decision, err, policy.calls)
 	}
 }
 
@@ -188,6 +216,21 @@ func TestQueuedArrancarDirectorExecutorV0NoEncolaGoalFirst(t *testing.T) {
 type codexStackGoalLauncherForTestV0 struct {
 	calls    int
 	lastSpec orquestagoal.GoalWorkSpecV0
+}
+
+type codexStackAutonomousDirectorPolicyForTestV0 struct {
+	calls int
+}
+
+func (policy *codexStackAutonomousDirectorPolicyForTestV0) DecideAutonomousDirectorV0(
+	_ context.Context,
+	input orquestacionnucleoapp.AutonomousDirectorDecisionInputV0,
+) (orquestacionnucleoapp.AutonomousDirectorDecisionV0, error) {
+	policy.calls++
+	return orquestacionnucleoapp.AutonomousDirectorDecisionV0{
+		TeamSize:     input.Stats.Counts.TasksOpen,
+		EvidenceRefs: []string{"evidence-ref-stack-policy"},
+	}, nil
 }
 
 func (launcher *codexStackGoalLauncherForTestV0) LaunchGoalWorkV0(

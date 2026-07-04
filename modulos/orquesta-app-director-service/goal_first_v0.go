@@ -29,6 +29,11 @@ func startAppDirectorGoalFirstV0(
 		return StartAppDirectorResultV0{}, false, nil
 	}
 	goalSpec := buildStartAppDirectorGoalWorkSpecV0(request, spec, prepared)
+	var err error
+	goalSpec, err = startAppDirectorGoalSpecWithAutonomousPolicyV0(ctx, request, prepared, ports, goalSpec)
+	if err != nil {
+		return StartAppDirectorResultV0{}, false, err
+	}
 	if issues := orquestagoal.ValidateGoalWorkSpecV0(goalSpec); len(issues) > 0 {
 		return StartAppDirectorResultV0{}, false, AppDirectorServiceIssueV0{Field: "goal_spec"}
 	}
@@ -980,6 +985,99 @@ func buildStartAppDirectorGoalWorkSpecV0(
 		},
 		ReworkPolicy: startAppDirectorGoalReworkPolicyV0(),
 	})
+}
+
+func startAppDirectorGoalSpecWithAutonomousPolicyV0(
+	ctx context.Context,
+	request StartAppDirectorRequestV0,
+	prepared orquestaappdirectorintake.AppDirectorIntakePreparedV0,
+	ports StartAppDirectorPortsV0,
+	spec orquestagoal.GoalWorkSpecV0,
+) (orquestagoal.GoalWorkSpecV0, error) {
+	if ports.AutonomousDirectorPolicy == nil {
+		return spec, nil
+	}
+	decision, err := ports.AutonomousDirectorPolicy.DecideAutonomousDirectorV0(
+		ctx,
+		orquestacionnucleoapp.AutonomousDirectorDecisionInputV0{
+			Run:    prepared.Run,
+			Stats:  orquestacionnucleoapp.BuildDirectorRunStatsV0(prepared.Run),
+			Limits: startAppDirectorAutonomousPolicyLimitsV0(request, spec),
+			Requests: orquestacionnucleoapp.AutonomousDirectorRequestHintsV0{
+				CorrelationID: strings.TrimSpace(request.CorrelationID),
+				EvidenceRefs:  []string{"evidence-ref-app-director-goal-autonomous-policy-v0"},
+			},
+		},
+	)
+	if err != nil {
+		return orquestagoal.GoalWorkSpecV0{}, err
+	}
+	return startAppDirectorGoalSpecWithAutonomousDecisionV0(spec, decision), nil
+}
+
+func startAppDirectorAutonomousPolicyLimitsV0(
+	request StartAppDirectorRequestV0,
+	spec orquestagoal.GoalWorkSpecV0,
+) orquestacionnucleoapp.AutonomousDirectorLimitsV0 {
+	return orquestacionnucleoapp.AutonomousDirectorLimitsV0{
+		MaxTeamSize:          spec.Budget.MaxSubgoals,
+		MaxParallelAgents:    request.MaxDispatchesPerWait,
+		MaxBursts:            request.MaxBursts,
+		MaxStepsPerBurst:     request.MaxStepsPerBurst,
+		MaxDispatchesPerWait: request.MaxDispatchesPerWait,
+		MaxCommandsPerCycle:  request.MaxCommands,
+		MaxOutboxPerCycle:    request.MaxOutboxPerCycle,
+	}
+}
+
+func startAppDirectorGoalSpecWithAutonomousDecisionV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	decision orquestacionnucleoapp.AutonomousDirectorDecisionV0,
+) orquestagoal.GoalWorkSpecV0 {
+	if decision.TeamSize > 0 {
+		spec.Budget.MaxSubgoals = decision.TeamSize
+	}
+	if decision.MaxParallelAgents > spec.Budget.MaxSubgoals {
+		spec.Budget.MaxSubgoals = decision.MaxParallelAgents
+	}
+	purpose := strings.TrimSpace(decision.Summary)
+	if purpose == "" {
+		purpose = "Decision de politica autonoma para dimensionar goal-first."
+	}
+	spec.ContextRefs = append(spec.ContextRefs, orquestagoal.GoalContextRefV0{
+		Kind:     "autonomous_director_policy",
+		Ref:      "autonomous_director_policy:v0",
+		Purpose:  purpose,
+		Required: false,
+	})
+	spec.EvidenceRefs = compactStartAppDirectorStringsV0(append(spec.EvidenceRefs, decision.EvidenceRefs...))
+	spec.AcceptanceCriteria = compactStartAppDirectorStringsV0(append(
+		spec.AcceptanceCriteria,
+		startAppDirectorAutonomousQualityCriteriaV0(decision.QualityRecommendations)...,
+	))
+	return orquestagoal.NormalizeGoalWorkSpecV0(spec)
+}
+
+func startAppDirectorAutonomousQualityCriteriaV0(
+	recommendations []orquestacionnucleoapp.AutonomousQualityRecommendationV0,
+) []string {
+	criteria := make([]string, 0, len(recommendations))
+	for _, recommendation := range recommendations {
+		action := strings.TrimSpace(recommendation.RecommendedAction)
+		subject := strings.TrimSpace(recommendation.SubjectRef)
+		summary := strings.TrimSpace(recommendation.Summary)
+		if action == "" || subject == "" {
+			continue
+		}
+		if summary == "" {
+			summary = strings.TrimSpace(recommendation.ReasonCode)
+		}
+		criteria = append(criteria, "Politica autonoma de calidad: "+action+" sobre "+subject+"; "+summary+".")
+		if len(criteria) >= 3 {
+			break
+		}
+	}
+	return criteria
 }
 
 func startAppDirectorGoalTechnicalContextRefsV0(spec orquestafactory.AppSpecV0) []orquestagoal.GoalContextRefV0 {

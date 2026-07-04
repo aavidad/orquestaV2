@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	orquestaappdirectorintake "orquesta/modulos/orquesta-app-director-intake"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestafactory "orquesta/modulos/orquesta-factory"
 	orquestagoal "orquesta/modulos/orquesta-goal"
@@ -189,6 +190,112 @@ func TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy(t *testing.T) 
 		state.ExternalGoalRef != result.ExternalGoalRef ||
 		state.Spec.RunRef != result.Run.RunID {
 		t.Fatalf("goal state=%+v result=%+v", state, result)
+	}
+}
+
+func TestStartAppDirectorV0GoalFirstAplicaPoliticaAutonomaV0(t *testing.T) {
+	store := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	sink := orquestacionnucleoapp.NewInMemoryEventSinkV0()
+	launcher := &serviceGoalLauncherForTestV0{}
+	goalStates := newServiceGoalStateStoreForTestV0()
+	policy := &serviceAutonomousDirectorPolicyForTestV0{
+		decision: orquestacionnucleoapp.AutonomousDirectorDecisionV0{
+			TeamSize:          4,
+			MaxParallelAgents: 3,
+			Summary:           "policy-test team=4 parallel=3",
+			EvidenceRefs:      []string{"evidence-ref-policy-test"},
+		},
+	}
+	request := validStartAppDirectorRequestForTestV0()
+	request.DirectorExecutionMode = AppDirectorExecutionModeGoalFirstV0
+
+	result, err := StartAppDirectorV0(
+		context.Background(),
+		request,
+		StartAppDirectorPortsV0{
+			RunStore:                 store,
+			EventSink:                sink,
+			GoalLauncher:             launcher,
+			GoalObserver:             serviceGoalObserverForTestV0{},
+			GoalClosureValidator:     orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+			GoalStateStore:           goalStates,
+			AutonomousDirectorPolicy: policy,
+		},
+	)
+	if err != nil {
+		t.Fatalf("StartAppDirectorV0: %v", err)
+	}
+	if result.DirectorExecutionMode != AppDirectorExecutionModeGoalFirstV0 || launcher.calls != 1 || policy.calls != 1 {
+		t.Fatalf("result=%+v launcher_calls=%d policy_calls=%d", result, launcher.calls, policy.calls)
+	}
+	if len(policy.inputs) != 1 ||
+		policy.inputs[0].Run.RunID != result.Run.RunID ||
+		policy.inputs[0].Stats.RunRef != result.Run.RunID ||
+		policy.inputs[0].Limits.MaxTeamSize != 6 {
+		t.Fatalf("policy input=%+v result=%+v", policy.inputs, result)
+	}
+	spec := launcher.specs[0]
+	if spec.Budget.MaxSubgoals != 4 ||
+		!serviceGoalContextRefInSetForTestV0(spec.ContextRefs, "autonomous_director_policy", "autonomous_director_policy:v0") ||
+		!serviceStringInSetV0(spec.EvidenceRefs, "evidence-ref-policy-test") {
+		t.Fatalf("spec sin decision autonoma aplicada: %+v", spec)
+	}
+}
+
+func TestStartAppDirectorGoalSpecWithAutonomousPolicyV0StatsDistintosDecisionDistinta(t *testing.T) {
+	policy := &serviceAutonomousDirectorPolicyForTestV0{
+		decide: func(input orquestacionnucleoapp.AutonomousDirectorDecisionInputV0) orquestacionnucleoapp.AutonomousDirectorDecisionV0 {
+			teamSize := 2
+			if input.Stats.Counts.TasksOpen >= 4 {
+				teamSize = 6
+			}
+			return orquestacionnucleoapp.AutonomousDirectorDecisionV0{
+				TeamSize:     teamSize,
+				Summary:      "policy-test tasks_open",
+				EvidenceRefs: []string{"evidence-ref-policy-stats"},
+			}
+		},
+	}
+	baseSpec := orquestagoal.GoalWorkSpecV0{
+		Budget:       orquestagoal.GoalBudgetV0{MaxSubgoals: 10},
+		EvidenceRefs: []string{"evidence-ref-base"},
+	}
+	request := StartAppDirectorRequestV0{CorrelationID: "corr-policy-stats"}
+	smallRun := orquestacoreworkflow.OrchestrationRunV0{
+		RunID:        "run-policy-small",
+		CurrentPhase: orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Tasks:        []string{"task-1"},
+	}
+	largeRun := smallRun
+	largeRun.RunID = "run-policy-large"
+	largeRun.Tasks = []string{"task-1", "task-2", "task-3", "task-4", "task-5"}
+
+	smallSpec, err := startAppDirectorGoalSpecWithAutonomousPolicyV0(
+		context.Background(),
+		request,
+		orquestaappdirectorintake.AppDirectorIntakePreparedV0{Run: smallRun},
+		StartAppDirectorPortsV0{AutonomousDirectorPolicy: policy},
+		baseSpec,
+	)
+	if err != nil {
+		t.Fatalf("small policy: %v", err)
+	}
+	largeSpec, err := startAppDirectorGoalSpecWithAutonomousPolicyV0(
+		context.Background(),
+		request,
+		orquestaappdirectorintake.AppDirectorIntakePreparedV0{Run: largeRun},
+		StartAppDirectorPortsV0{AutonomousDirectorPolicy: policy},
+		baseSpec,
+	)
+	if err != nil {
+		t.Fatalf("large policy: %v", err)
+	}
+	if smallSpec.Budget.MaxSubgoals != 2 || largeSpec.Budget.MaxSubgoals != 6 {
+		t.Fatalf("budgets small=%+v large=%+v", smallSpec.Budget, largeSpec.Budget)
+	}
+	if len(policy.inputs) != 2 ||
+		policy.inputs[0].Stats.Counts.TasksOpen == policy.inputs[1].Stats.Counts.TasksOpen {
+		t.Fatalf("policy stats no variaron: %+v", policy.inputs)
 	}
 }
 
@@ -1623,6 +1730,29 @@ type serviceGoalLauncherForTestV0 struct {
 	calls int
 	specs []orquestagoal.GoalWorkSpecV0
 	err   error
+}
+
+type serviceAutonomousDirectorPolicyForTestV0 struct {
+	calls    int
+	inputs   []orquestacionnucleoapp.AutonomousDirectorDecisionInputV0
+	decision orquestacionnucleoapp.AutonomousDirectorDecisionV0
+	decide   func(orquestacionnucleoapp.AutonomousDirectorDecisionInputV0) orquestacionnucleoapp.AutonomousDirectorDecisionV0
+	err      error
+}
+
+func (policy *serviceAutonomousDirectorPolicyForTestV0) DecideAutonomousDirectorV0(
+	_ context.Context,
+	input orquestacionnucleoapp.AutonomousDirectorDecisionInputV0,
+) (orquestacionnucleoapp.AutonomousDirectorDecisionV0, error) {
+	policy.calls++
+	policy.inputs = append(policy.inputs, input)
+	if policy.err != nil {
+		return orquestacionnucleoapp.AutonomousDirectorDecisionV0{}, policy.err
+	}
+	if policy.decide != nil {
+		return policy.decide(input), nil
+	}
+	return policy.decision, nil
 }
 
 func (launcher *serviceGoalLauncherForTestV0) LaunchGoalWorkV0(

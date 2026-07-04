@@ -544,6 +544,20 @@ la TAREA-9: antes de borrar, clasificar "muerta-de-verdad" vs
    demuestre una decisión distinta ante stats distintos. Si algún criterio
    está obsoleto respecto al director actual, adaptarlo, no borrarlo.
 
+   Estado Codex 2026-07-04 noche: cableada al goal-first de Nueva App por el
+   puerto `AutonomousDirectorPolicyPortV0`. `StartAppDirectorPortsV0` recibe la
+   politica, `BuildStackV0` la transporta desde `ConfigV0` y
+   `cmd/orquesta-server` inyecta `HeuristicAutonomousDirectorPolicyV0`. La
+   decision ajusta `GoalWorkSpecV0.Budget.MaxSubgoals`, anade contexto/evidencia
+   `autonomous_director_policy:v0` y conserva recomendaciones de calidad como
+   criterios compactos. Tests nuevos:
+   `TestStartAppDirectorV0GoalFirstAplicaPoliticaAutonomaV0`,
+   `TestStartAppDirectorGoalSpecWithAutonomousPolicyV0StatsDistintosDecisionDistinta`
+   y `TestBuildDirectorPortsV0CableaPoliticaAutonomaV0`. Residual de TAREA-3:
+   `task_cost_class` ya se deriva en `orquesta-runtime-codex-goal`; falta
+   seleccion real backend/effort barato para doc vs code, sin meter proveedor
+   en el nucleo.
+
 10.3 Cableado del broker de contexto (cmd/orquesta-server/
    code_context_broker_v0.go: codeContextBrokerFromEnvV0 y
    codeContextBrokerWiringFromEnvV0): el wiring COMPLETO del analizador ya

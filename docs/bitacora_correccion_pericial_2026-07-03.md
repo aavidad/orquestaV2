@@ -3603,3 +3603,32 @@ Estado: el hueco funcional "wizard nuevo listo -> cierre factory real" queda
 cubierto por test. No borrar aun `modulos/orquesta-app-director-intake` ni sus
 `wizard_*.go`: el modulo tiene consumidores historicos y el borrado exige
 deprecacion/refactor con evidencia propia.
+
+## Actualizacion Codex 2026-07-04 noche 33
+
+TAREA-10.2 queda cerrada para el cableado de politica autonoma en goal-first:
+
+- `StartAppDirectorPortsV0` ahora expone `AutonomousDirectorPolicy`.
+- `startAppDirectorGoalFirstV0` invoca la politica antes de lanzar el goal,
+  con `DirectorRunStatsV0` derivado del run preparado y limites de la request.
+- La decision ajusta `GoalWorkSpecV0.Budget.MaxSubgoals`, anade
+  `context_ref kind=autonomous_director_policy ref=autonomous_director_policy:v0`
+  y conserva evidencias/recomendaciones de calidad como criterios compactos.
+- `BuildStackV0` transporta la politica desde `ConfigV0` y
+  `cmd/orquesta-server` inyecta
+  `HeuristicAutonomousDirectorPolicyV0`.
+- No se toca `orquesta-goal` ni se mete proveedor/modelo/coste en el nucleo.
+  Residual TAREA-3: `task_cost_class` ya se deriva en
+  `orquesta-runtime-codex-goal`, pero falta seleccionar backend/effort barato
+  para doc vs code desde la composicion.
+
+Tests/smoke verdes:
+
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-app-director-service -run 'TestStartAppDirectorV0GoalFirstAplicaPoliticaAutonomaV0|TestStartAppDirectorGoalSpecWithAutonomousPolicyV0StatsDistintosDecisionDistinta|TestStartAppDirectorV0GoalFirstLanzaGoalYNoEjecutaLoopLegacy'`
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestBuildDirectorPortsV0CableaPoliticaAutonomaV0|TestBuildDirectorPortsV0CableaAppGoalLauncher|TestBuildDirectorPortsV0PrecargaCodeContextParaGoalCodigo'`
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestBuildStackFromEnvV0CableaBrokerContextoEnMCPHTTPYGoalV0'`
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-app-director-service ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPCodebaseQuery|TestMCPArrancarDirectorApp.*GoalFirst|TestToStartAppDirectorRequestV0TransportaDirectorExecutionMode'`
+- Smoke Orquesta temporal sin backend Goal: `/api/v0/apps/director` con
+  `director_execution_mode=goal_first` devuelve HTTP 500
+  `goal_backend_unavailable` y no cae a legacy.

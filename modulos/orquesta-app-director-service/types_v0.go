@@ -80,6 +80,7 @@ type StartAppDirectorPortsV0 struct {
 	OperationalPlanStateStore   orquestacionnucleoapp.OperationalDirectorPlanStateStorePortV0
 	RequiredTestEvidenceStore   orquestacionnucleoapp.RequiredTestEvidenceReaderPortV0
 	RequiredTestRunner          orquestacionnucleoapp.RequiredTestRunnerPortV0
+	AutonomousDirectorPolicy    orquestacionnucleoapp.AutonomousDirectorPolicyPortV0
 	GoalLauncher                orquestagoal.GoalWorkLauncherPortV0
 	GoalReworkLauncher          orquestagoal.GoalWorkLauncherPortV0
 	GoalObserver                orquestagoal.GoalWorkObservationPortV0
