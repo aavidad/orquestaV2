@@ -203,6 +203,27 @@ antes de su cierre posterior:
   y rework causal `finalize_temario_package`. Pendiente: smoke temporal OPES
   que demuestre el arbol completo tema asentado -> derivados -> paquete final
   solo con refs de calidad por tema.
+- Avance 2026-07-04 noche 32: `BUG-ORQ-20260701-058/066` queda reducido con
+  smoke offline transversal en `orquesta-app-codex-stack`:
+  `TestCodexStackV0OPESGoalFirstLifecycleAsientaDerivadosYCierraRegistroFinalConTopicQualityV0`
+  cubre `external-work` goal-first -> receipt de dominio -> productor OPES ->
+  `update_topic_registry`. El texto con checkpoint y QA pasada queda
+  `settled_text`, `operational_status=waiting` y derivados pendientes; el
+  paquete final con `manifest_cierre` y refs de resultados
+  `OPESTopicQualityContractV0` libera registro como `settled_final`. Durante
+  el smoke se corrigio una frontera real: los refs agregados
+  `topic_quality_contract_result_refs` de un `final_domain_package` ya no
+  activan por si solos la QA textual de tema; esa QA solo se declara por campos
+  textuales/estado explicitos. Sigue abierto el smoke temporal OPES real y la
+  prueba de no reescritura tardia/corte automatico tras entregas suficientes.
+- Avance 2026-07-04 noche 32: `BUG-ORQ-20260701-079` queda documentado con
+  frontera contractual explicita en
+  `modulos/orquesta-runtime-codex-goal/docs/contratos.md`: `direction_contract`,
+  checkpoint temprano, `max_text_bytes=16384` y `thread_read_max_bytes=256 KiB`
+  limitan ingestion/observacion y salida compacta, pero no son enforcement duro
+  pre-tool del proveedor. Sigue abierto hasta que el runtime/proveedor exponga
+  ese corte o el app-server medie la ejecucion real de herramientas, mas smoke
+  largo con proveedor real.
 - Incidencia operativa 2026-07-04 noche 30: durante la verificacion de OPES,
   `go test` fallo antes de compilar por `/home` al 100% y cache Go
   `/home/alberto/.cache/go-build` de 17G. Se libero con `go clean -cache` y la

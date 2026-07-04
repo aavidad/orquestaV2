@@ -555,6 +555,7 @@ func TestProduceOPESCausalJobsV0PaqueteFinalCompleteConManifestCompatibleYQATern
 		ArtifactType: orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0,
 		ReceiptRef:   "receipt-final-evidence-001",
 		CompleteJob:  true,
+		EvidenceRefs: []string{"topic-quality-contract-result-ref-final-004"},
 		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
 			{Name: "course_id", Value: "curso-final"},
 			{Name: "topic_id", Value: "tema-004"},

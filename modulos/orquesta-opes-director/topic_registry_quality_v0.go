@@ -88,6 +88,9 @@ func topicRegistryRecordDeclaresTopicQualityV0(
 		strings.TrimSpace(request.ReportText) != "" {
 		return true
 	}
+	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 {
+		return false
+	}
 	values := append([]string(nil), record.EvidenceRefs...)
 	values = append(values, record.PayloadRefs...)
 	values = append(values, fieldStringsV0(record.PayloadFields, "topic_quality_evidence_refs", "qa_report_refs", "validation_refs")...)

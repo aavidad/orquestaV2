@@ -26,6 +26,22 @@ El prompt no debe superar 32 KiB y el paquete JSON completo no debe superar
 `codex_goal_prompt_too_large` o `codex_goal_start_packet_too_large` antes de
 llamar al puerto real.
 
+El paquete incluye `direction_contract` como contrato operativo compacto para
+el proveedor: materializar checkpoint temprano dentro del `write_set`, evitar
+pegar salidas largas, mantener final/ACK compacto y preservar evidencias
+durables. La frontera app-server inyecta ese mismo contrato en `turn/start`
+aunque el `prompt` legacy venga incompleto, con `max_text_bytes=16384` y
+`thread_read_max_bytes=256 KiB` como limites de ingestion/lectura. El
+app-server tambien materializa `checkpoint_started.txt` antes de `turn/start`
+cuando hay `write_set` autorizado.
+
+Estos limites no equivalen a un corte duro previo a herramientas internas del
+proveedor: Orquesta puede acotar `thread/read`, sanear outputs ya generados y
+pedir/replanificar contexto estrecho, pero no puede impedir por este contrato
+que una herramienta interna produzca stdout gigante antes de que el backend lo
+exponga. Ese cierre requiere soporte explicito del runtime/proveedor o que el
+app-server medie la ejecucion real de herramientas.
+
 No contiene HOME, token, OAuth, proveedor, modelo, comando de runtime/local,
 ruta absoluta ni transcript. La excepcion deliberada son los comandos de tests
 requeridos que ya viajan en `required_tests[].command` dentro del contrato

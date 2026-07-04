@@ -467,6 +467,52 @@ Pruebas ejecutadas en esta tanda:
 - `go test -count=1 ./modulos/orquesta-opes-director -run 'TestProduceOPESCausalJobsV0PaqueteFinal'`
 - `go test -count=1 ./modulos/orquesta-opes-director`
 
+## Actualizacion Codex 2026-07-04 noche 32
+
+Avance de este bloque:
+
+- `BUG-ORQ-20260701-058/066` queda reducido con un smoke offline transversal
+  en `orquesta-app-codex-stack`: goal-first OPES escribe artefacto, el stack
+  produce receipt de dominio, el productor OPES genera `update_topic_registry`
+  y el registro pasa de texto asentado con derivados pendientes a paquete final
+  liberado solo cuando hay refs de resultados `OPESTopicQualityContractV0`.
+- Se corrigio una frontera real de `orquesta-opes-director`: los refs agregados
+  de calidad por tema que viajan en un `final_domain_package` ya no activan por
+  si solos la QA textual de tema. Si un paquete final trae campos textuales o
+  estado QA explicito, la validacion textual sigue pudiendo declararse; el
+  manifest agregado se valida por el contrato de paquete final.
+- `BUG-ORQ-20260701-079` queda mejor documentado, no cerrado: el contrato
+  Codex Goal declara `direction_contract`, checkpoint temprano,
+  `max_text_bytes=16384` y `thread_read_max_bytes=256 KiB`, pero el limite duro
+  previo a stdout de herramientas internas sigue dependiendo del proveedor o de
+  mediacion real del app-server.
+- Subagentes read-only usados en esta tanda: 4 terminados, 0 corriendo. Dos
+  confirmaron que `BUG-058/066` solo se podia reducir por smoke local sin
+  cerrar el E2E real; otro confirmo que `BUG-079` no tenia patch runtime seguro
+  sin soporte de proveedor.
+
+Archivos tocados en esta tanda:
+
+- `modulos/orquesta-app-codex-stack/external_work_goal_first_opes_sequence_v0_test.go`
+- `modulos/orquesta-opes-director/topic_registry_quality_v0.go`
+- `modulos/orquesta-opes-director/producer_v0_test.go`
+- `modulos/orquesta-runtime-codex-goal/docs/contratos.md`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`
+
+Pruebas focales ejecutadas antes de la verificacion amplia:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackV0OPESGoalFirstLifecycleAsientaDerivadosYCierraRegistroFinalConTopicQualityV0'`
+- `go test -count=1 ./modulos/orquesta-opes-director -run 'TestProduceOPESCausalJobsV0PaqueteFinalCompleteConManifestCompatibleYQATernaLiberaRegistro'`
+
+Pendiente para no sobrecerrar:
+
+- `BUG-058/066`: smoke temporal OPES real via `/api/v0/external-work/observe`,
+  sin OPES productivo, demostrando no reescritura tardia y registro final sin
+  active/stale goal residual.
+- `BUG-079`: soporte runtime/proveedor para limite duro pre-tool stdout o
+  mediacion del app-server, mas smoke largo con proveedor real.
+
 ## Checklist de Claude
 
 1. Revisar `git status --short` y separar cambios de cada frente.
