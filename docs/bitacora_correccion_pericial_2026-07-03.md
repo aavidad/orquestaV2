@@ -1641,3 +1641,50 @@ Pendiente real: MEJ-103 no queda cerrado. Falta cablear seleccion opt-in por
 composicion/env, proceso real Claude, state/shutdown/control equivalentes al
 backend Codex y smoke fake/real opt-in; Gemini queda pendiente de backend
 goal-first propio.
+
+## Continuacion Codex 2026-07-04 noche 13
+
+Avance OPES `question_bank` para reducir falsos verdes de `BUG-058/075`:
+
+- Se anade contrato puro `ValidateOPESQuestionBankQualityContractV0` en
+  `modulos/orquesta-opes-director`: valida banco por tema con minimo 50
+  preguntas, 4 opciones, una unica respuesta correcta resoluble, explicacion
+  tutor, informe estructural, informe de dificultad/proximidad y revision triple
+  Codex/Gemini/Claude.
+- Se cablea en `update_topic_registry` y settlement: si una entrega
+  `question_bank` trae evidencia nominal `question_bank_publicable` pero falla
+  el contrato, no queda publicable; publica
+  `proposed_status=pendiente_rework_tests`,
+  `operational_status=needs_rework`,
+  `settlement_scope=question_bank_quality` y crea rework causal
+  `review_director_consolidation` con
+  `recommended_action=review_question_bank_quality`.
+- Se conserva la precedencia previa: si falta toda la evidencia minima, el
+  camino primario sigue siendo `required_evidence_missing`, no un falso fallo
+  estructural de preguntas.
+
+Archivos tocados en este avance:
+
+- `modulos/orquesta-opes-director/question_bank_quality_contract_v0.go`
+- `modulos/orquesta-opes-director/question_bank_quality_helpers_v0.go`
+- `modulos/orquesta-opes-director/question_bank_payload_v0.go`
+- `modulos/orquesta-opes-director/topic_registry_question_bank_quality_v0.go`
+- `modulos/orquesta-opes-director/topic_registry_settlement_v0.go`
+- `modulos/orquesta-opes-director/topic_registry_v0.go`
+- `modulos/orquesta-opes-director/job_requests_v0.go`
+- `modulos/orquesta-opes-director/question_bank_quality_contract_v0_test.go`
+- `modulos/orquesta-opes-director/producer_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion focal:
+
+- `go test -count=1 ./modulos/orquesta-opes-director`
+- `go test -count=1 ./modulos/orquesta-opes-director ./modulos/orquesta-opes-bridge`
+- `go test -count=1 ./...`
+- `git diff --check`
+
+Pendiente real: `BUG-058/075` no queda cerrado por completo. Faltan smoke OPES
+temporal end-to-end y validadores semanticos/editoriales completos por
+artefacto canonico; este corte cierra el falso verde mecanico de banco de
+preguntas con evidencia nominal.

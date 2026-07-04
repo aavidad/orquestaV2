@@ -199,6 +199,29 @@ antes de su cierre posterior:
   `operational_status=waiting`, no `en_progreso_orquesta/working`. Asi el
   registro distingue texto asentado de trabajo aun escribiendose y deja
   pendientes los derivados sin promover a paquete final completo.
+- Avance 2026-07-04 noche 13: `BUG-ORQ-20260701-058/075` queda reducido para
+  bancos de preguntas OPES. `orquesta-opes-director` incorpora
+  `ValidateOPESQuestionBankQualityContractV0` y lo cablea en
+  `update_topic_registry`: una entrega `question_bank` con evidencia nominal
+  `opes-final-evidence:question_bank_publicable` ya no cierra si el contrato no
+  prueba al menos 50 preguntas, 4 opciones, una unica respuesta correcta,
+  explicacion tutor, informe estructural, informe de dificultad/proximidad y
+  revision triple Codex/Gemini/Claude. El registro publica
+  `proposed_status=pendiente_rework_tests`,
+  `operational_status=needs_rework`,
+  `settlement_scope=question_bank_quality`,
+  `settlement_reason=question_bank_quality_contract_failed` y crea rework causal
+  `review_director_consolidation` con
+  `recommended_action=review_question_bank_quality`. La ausencia total de
+  evidencia minima sigue usando el camino previo `required_evidence_missing`.
+  Evidencia: `TestValidateOPESQuestionBankQualityContractV0*`,
+  `TestProduceOPESCausalJobsV0QuestionBankConEvidenceRefPeroContratoFallidoCreaReworkV0`,
+  `TestProduceOPESCausalJobsV0QuestionBankConContratoPassNoCreaReworkV0`,
+  `go test -count=1 ./modulos/orquesta-opes-director` y
+  `go test -count=1 ./modulos/orquesta-opes-director ./modulos/orquesta-opes-bridge`;
+  validacion global `go test -count=1 ./...`.
+  Siguen abiertos el smoke OPES temporal end-to-end y la matriz completa de
+  validadores semanticos/editoriales por artefacto canonico.
 - `BUG-ORQ-20260702-120` queda cerrado por la proyeccion
   `stopped/crashed/unreachable` y los contratos OPES asociados. Sus notas de
   avance que decian "no cierra el bug padre" son historicas y quedan

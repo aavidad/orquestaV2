@@ -45,6 +45,7 @@ func topicRegistryUpdateRequestV0(
 	fields = append(fields, topicRegistryLifecycleFieldsForRecordV0(record)...)
 	fields = append(fields, topicRegistrySettlementFieldsForRecordV0(record)...)
 	fields = append(fields, topicRegistryQualityFieldsForRecordV0(record)...)
+	fields = append(fields, topicRegistryQuestionBankQualityFieldsForRecordV0(record)...)
 	if sourceWorkKind := fieldStringV0(record.PayloadFields, "source_work_kind", "work_kind"); sourceWorkKind != "" {
 		fields = append(fields, orquestadomainwork.DomainWorkFieldV0{Name: "source_work_kind", Value: sourceWorkKind})
 	}
@@ -104,13 +105,16 @@ func topicRegistryStatusForRecordV0(record OPESCausalArtifactRecordV0) string {
 	if topicRegistryRequiredEvidenceShouldReworkV0(record) {
 		return "pendiente_rework_evidencia_minima"
 	}
+	if refs := topicRegistryQualityPendingRefsForRecordV0(record); len(refs) > 0 {
+		return "pendiente_rework_editorial"
+	}
+	if refs := topicRegistryQuestionBankQualityPendingRefsForRecordV0(record); len(refs) > 0 {
+		return "pendiente_rework_tests"
+	}
 	if explicit, ok := topicRegistryExplicitOperationalStatusV0(status); ok {
 		return explicit
 	}
 	normalized := strings.ToLower(strings.TrimSpace(status))
-	if refs := topicRegistryQualityPendingRefsForRecordV0(record); len(refs) > 0 {
-		return "pendiente_rework_editorial"
-	}
 	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 && !record.CompleteJob {
 		return "pendiente_continuar"
 	}
@@ -138,6 +142,9 @@ func topicRegistryOperationalStatusForRecordV0(record OPESCausalArtifactRecordV0
 		fieldStringV0(record.PayloadFields, "decision"),
 	)
 	if refs := topicRegistryQualityPendingRefsForRecordV0(record); len(refs) > 0 {
+		return "needs_rework"
+	}
+	if refs := topicRegistryQuestionBankQualityPendingRefsForRecordV0(record); len(refs) > 0 {
 		return "needs_rework"
 	}
 	if topicRegistryRequiredEvidenceShouldReworkV0(record) {
@@ -177,6 +184,7 @@ func topicRegistryOperationalStatusForRecordV0(record OPESCausalArtifactRecordV0
 func topicRegistryTextSettledReadyV0(record OPESCausalArtifactRecordV0) bool {
 	if !topicRegistryTextSettlementCandidateV0(record) ||
 		len(topicRegistryQualityPendingRefsForRecordV0(record)) > 0 ||
+		len(topicRegistryQuestionBankQualityPendingRefsForRecordV0(record)) > 0 ||
 		topicRegistryRequiredEvidenceShouldReworkV0(record) ||
 		len(topicRegistryLifecyclePendingRefsForRecordV0(record)) > 0 ||
 		len(topicRegistryPendingRefsForRecordV0(record)) > 0 {

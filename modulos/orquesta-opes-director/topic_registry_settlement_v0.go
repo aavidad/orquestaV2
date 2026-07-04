@@ -63,6 +63,17 @@ func topicRegistrySettlementForRecordV0(record OPESCausalArtifactRecordV0) topic
 			NextWorkKinds: []string{"review_director_consolidation"},
 		}
 	}
+	questionBankResult, questionBankOK := topicRegistryQuestionBankQualityResultForRecordV0(record)
+	questionBankPendingRefs := topicRegistryQuestionBankQualityPendingRefsForRecordV0(record)
+	if len(questionBankPendingRefs) > 0 {
+		return topicRegistrySettlementV0{
+			Status:        topicRegistrySettlementNeedsReworkV0,
+			Scope:         "question_bank_quality",
+			Reason:        "question_bank_quality_contract_failed",
+			Refs:          compactStringsV0(append(append(baseRefs, questionBankPendingRefs...), questionBankResult.EvidenceRefs...)),
+			NextWorkKinds: []string{"review_director_consolidation"},
+		}
+	}
 	if evidencePendingRefs := topicRegistryRequiredEvidencePendingRefsForRecordV0(record); len(evidencePendingRefs) > 0 &&
 		topicRegistryRequiredEvidenceShouldReworkV0(record) {
 		return topicRegistrySettlementV0{
@@ -135,6 +146,14 @@ func topicRegistrySettlementForRecordV0(record OPESCausalArtifactRecordV0) topic
 			Scope:  "topic_text",
 			Reason: "topic_quality_contract_required",
 			Refs:   baseRefs,
+		}
+	}
+	if questionBankOK && questionBankResult.Status == OPESQuestionBankQualityStatusCompleteV0 {
+		return topicRegistrySettlementV0{
+			Status: topicRegistrySettlementNotSettledV0,
+			Scope:  "question_bank",
+			Reason: "question_bank_quality_contract_passed",
+			Refs:   compactStringsV0(append(baseRefs, questionBankResult.EvidenceRefs...)),
 		}
 	}
 	if operationalStatus == "waiting" {

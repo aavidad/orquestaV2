@@ -1102,6 +1102,115 @@ func TestProduceOPESCausalJobsV0DerivadoOPESConEvidenciaMinimaNoCreaReworkV0(t *
 	}
 }
 
+func TestProduceOPESCausalJobsV0QuestionBankConEvidenceRefPeroContratoFallidoCreaReworkV0(t *testing.T) {
+	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
+		IdempotencyKey: "idem-opes-question-bank-bad-contract",
+		Status:         "accepted",
+		CorrelationID:  "corr-opes-question-bank-bad-contract",
+		DomainRef:      OPESCausalProducerDefaultDomainRefV0,
+		JobRef:         "job-ref-opes-question-bank-bad-contract",
+		ArtifactRef:    "artifact-ref-opes-question-bank-bad-contract",
+		ArtifactType:   orquestadomainwork.DomainWorkArtifactTypeQuestionBankV0,
+		CompleteJob:    true,
+		ReceiptRef:     "receipt-ref-opes-question-bank-bad-contract",
+		EvidenceRefs:   []string{"opes-final-evidence:question_bank_publicable"},
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "course_id", Value: "curso-question-bank"},
+			{Name: "topic_id", Value: "tema-question-bank-bad"},
+			{Name: "source_work_kind", Value: "generate_question_bank"},
+			{Name: "status", Value: "complete"},
+			{Name: "question_bank", ValueJSON: json.RawMessage(`{
+				"questions":[{
+					"stem":"Pregunta pobre",
+					"options":["A","B"],
+					"correct_answers":["A","B"],
+					"explanation":"breve"
+				}]
+			}`)},
+		},
+	}}}
+	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+	result, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{
+		DomainRef:     OPESCausalProducerDefaultDomainRefV0,
+		CorrelationID: "corr-opes-question-bank-bad-contract",
+	}, OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator})
+	if err != nil {
+		t.Fatalf("ProduceOPESCausalJobsV0: %v", err)
+	}
+	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "pendiente_rework_tests") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status", "needs_rework") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", topicRegistryQuestionBankQualityNeedsReworkRefV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "question_bank_quality_status", OPESQuestionBankQualityStatusNeedsReworkV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "question_bank_quality_issue_refs", ErrOPESQuestionBankQuestionCountBelowMinV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "question_bank_quality_issue_refs", ErrOPESQuestionBankOptionsInvalidV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "question_bank_quality_issue_refs", ErrOPESQuestionBankCorrectAnswerInvalidV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_status", topicRegistrySettlementNeedsReworkV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_scope", "question_bank_quality") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_reason", "question_bank_quality_contract_failed") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "next_required_work_kinds", "review_director_consolidation") {
+		t.Fatalf("registry_update=%+v ok=%v result=%+v", request, ok, result)
+	}
+	followup, ok := requestedWorkKindForTestV0(result.RequestedJobs, "review_director_consolidation")
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "followup_ref", topicRegistryQuestionBankQualityNeedsReworkRefV0) ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "rework_reason", "question_bank_quality_contract_failed") ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "question_bank_quality_missing_refs", topicRegistryQuestionBankQualityNeedsReworkRefV0) ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "publication_status", "not_publicable_question_bank_quality_failed") ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "recommended_action", "review_question_bank_quality") ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "topic_id", "tema-question-bank-bad") {
+		t.Fatalf("followup=%+v ok=%v result=%+v", followup, ok, result)
+	}
+}
+
+func TestProduceOPESCausalJobsV0QuestionBankConContratoPassNoCreaReworkV0(t *testing.T) {
+	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
+		IdempotencyKey: "idem-opes-question-bank-pass-contract",
+		Status:         "accepted",
+		CorrelationID:  "corr-opes-question-bank-pass-contract",
+		DomainRef:      OPESCausalProducerDefaultDomainRefV0,
+		JobRef:         "job-ref-opes-question-bank-pass-contract",
+		ArtifactRef:    "artifact-ref-opes-question-bank-pass-contract",
+		ArtifactType:   orquestadomainwork.DomainWorkArtifactTypeQuestionBankV0,
+		CompleteJob:    true,
+		ReceiptRef:     "receipt-ref-opes-question-bank-pass-contract",
+		EvidenceRefs: []string{
+			"opes-final-evidence:question_bank_publicable",
+			"question_bank_structural_report",
+			"question_bank_difficulty_report",
+			"question_bank_three_model_review",
+		},
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "course_id", Value: "curso-question-bank"},
+			{Name: "topic_id", Value: "tema-question-bank-pass"},
+			{Name: "source_work_kind", Value: "generate_question_bank"},
+			{Name: "status", Value: "complete"},
+			{Name: "question_bank", ValueJSON: validQuestionBankRawForDirectorTestV0(t, 50)},
+		},
+	}}}
+	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+	result, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{
+		DomainRef:     OPESCausalProducerDefaultDomainRefV0,
+		CorrelationID: "corr-opes-question-bank-pass-contract",
+	}, OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator})
+	if err != nil {
+		t.Fatalf("ProduceOPESCausalJobsV0: %v", err)
+	}
+	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "question_bank_quality_status", OPESQuestionBankQualityStatusCompleteV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "question_bank_question_count", "50") ||
+		domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", topicRegistryQuestionBankQualityNeedsReworkRefV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_scope", "question_bank") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_reason", "question_bank_quality_contract_passed") {
+		t.Fatalf("registry_update=%+v ok=%v result=%+v", request, ok, result)
+	}
+	if _, ok := requestedWorkKindForTestV0(result.RequestedJobs, "review_director_consolidation"); ok {
+		t.Fatalf("no debe crear rework con banco publicable: result=%+v", result)
+	}
+}
+
 func TestTopicRegistryRequiredEvidencePolicyV0CubreSecuenciaOPESCompletaV0(t *testing.T) {
 	for _, workKind := range orquestaopesbridge.OPESFullTemarioJobTypeSequenceV0() {
 		t.Run(workKind, func(t *testing.T) {
@@ -1296,4 +1405,27 @@ func domainWorkIssueCodeForDirectorTestV0(
 		}
 	}
 	return false
+}
+
+func validQuestionBankRawForDirectorTestV0(t *testing.T, count int) json.RawMessage {
+	t.Helper()
+	questions := make([]map[string]any, 0, count)
+	for i := 0; i < count; i++ {
+		questions = append(questions, map[string]any{
+			"stem": "Pregunta publicable sobre contenido canonico del tema",
+			"options": []string{
+				"Respuesta correcta desarrollada",
+				"Distractor plausible relacionado",
+				"Distractor parcial razonable",
+				"Distractor tecnico alternativo",
+			},
+			"correct_answer": "A",
+			"explanation":    "Explicacion tutor para aciertos y fallos",
+		})
+	}
+	raw, err := json.Marshal(map[string]any{"questions": questions})
+	if err != nil {
+		t.Fatalf("marshal question bank fixture: %v", err)
+	}
+	return raw
 }
