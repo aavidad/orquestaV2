@@ -466,3 +466,32 @@ deadcode completo en docs/auditoria_codigo_deadcode_2026-07-04.txt).
    otra causa (no refactor gratuito).
 Write-set: módulos afectados por ola + scripts + docs. Tests: suites de
 cada módulo tocado + go build ./... por ola.
+
+### TAREA-2 AMPLIADA (orden del operador 2026-07-04): el analizador de código es subsistema BÁSICO de Orquesta
+
+Orden textual: "si no existe hay que crearlo, es básico para analizar código
+y que el agente no pierda el contexto". Existe a medias (codebase-memory MCP
++ CodeContextQueryPortV0); hay que convertirlo en capacidad de primera clase:
+
+A. **Índice siempre disponible**: al preparar cualquier goal con write-set de
+   código, Orquesta garantiza índice fresco del repo (symbols, imports,
+   callers, arquitectura por módulo). Si codebase-memory está caído o sin
+   indexar, fallback determinista propio (go list + rg estructurado) — el
+   agente NUNCA se queda sin analizador.
+B. **Consulta desde el sandbox**: tool MCP en el toolbelt del goal (la ruta
+   HTTP a localhost está vedada por el sandbox — hallazgo del experimento
+   A/B). Operaciones mínimas: buscar símbolo, quién llama a X, qué expone el
+   módulo Y, resumen de arquitectura de Z, y "dame SOLO los fragmentos
+   relevantes para esta tarea" (presupuesto de bytes por respuesta).
+C. **Contrato de uso en el prompt del goal**: el packet instruye al agente a
+   consultar el analizador ANTES de leer ficheros enteros; el contexto crudo
+   inicial se reduce al mínimo (esto ataca la causa de los goals de 100-200k
+   tokens). Métrica: tokens_used medio por goal antes/después.
+D. **Modo auditoría** (une TAREA-9.4): el mismo subsistema expone
+   deadcode/huérfanos/duplicados para el nightly y su ratchet.
+E. Tests: tool responde en sandbox real (smoke), fallback sin
+   codebase-memory, presupuesto de bytes respetado, y goal de prueba que
+   completa una tarea de código consultando el analizador con menos del 50%
+   de los tokens de la línea base (165k, brazo A del experimento).
+Prioridad: sube a la cabeza de la cola junto a TAREA-8 (ambas atacan las dos
+causas orgánicas: config y contexto).
