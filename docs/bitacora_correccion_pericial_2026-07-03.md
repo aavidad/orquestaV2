@@ -2045,3 +2045,30 @@ Verificacion ejecutada:
 Pendiente real tras este tramo: Gemini real con tier/credencial valido y, si
 reaparece, smoke largo de observabilidad global `status/observe`; Claude ya
 cubre launch/observe/closure accepted y forced stop por HTTP con backend vivo.
+
+## Continuacion Codex 2026-07-04 noche 22
+
+Limpieza de residuales de contrato publico MCP enlazados a
+`BUG-ORQ-20260701-065/088` y `BUG-ORQ-20260701-066/088`.
+
+- Se revisan las filas del inventario que seguian contando como mixtas/abiertas
+  por descriptores compactos obsoletos.
+- `external_work.run`, `run_queue.priority` y `arrancar_director` ya tenian
+  descriptores y tests que declaran `external_goal_ref?`/`evidence_refs?`.
+- `director.stats` transportaba `external_goal_ref` en `external_job` y `goal`,
+  pero su descriptor compacto no lo anunciaba. Se actualiza el output compacto
+  y se endurece `TestMCPDirectorStatsToolDescriptorV0ExponeContratoCompacto`.
+- El inventario marca esas cuatro filas como `cerrado` para el residual de
+  discovery/descriptor. Los bugs padre `065` y `066` siguen abiertos solo por
+  sus filas propias de coordinacion automatica/OPES.
+
+Archivos tocados:
+
+- `modulos/orquesta-mcp/director_stats_tool_v0.go`
+- `modulos/orquesta-mcp/director_stats_tool_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Verificacion focal:
+
+- `go test -count=1 ./modulos/orquesta-mcp -run TestMCPDirectorStatsToolDescriptorV0ExponeContratoCompacto`
