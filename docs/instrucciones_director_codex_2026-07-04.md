@@ -505,3 +505,44 @@ embebido. El índice del analizador es caché DERIVADA y reconstruible desde el
 repo: no es verdad operativa. La verdad operativa de Orquesta sigue siendo
 los ficheros de estado/receipts. Prohibido introducir un segundo motor en un
 despliegue que ya tiene uno.
+
+### TAREA-10: retomar código construido-y-nunca-cableado (orden del operador 2026-07-04 noche)
+
+Análisis Claude sobre docs/auditoria_codigo_deadcode_2026-07-04.txt: tres
+piezas muertas NO son basura sino inversión parada. Regla general para toda
+la TAREA-9: antes de borrar, clasificar "muerta-de-verdad" vs
+"construida-y-nunca-cableada"; las segundas van a esta lista.
+
+10.1 Wizard viejo de intake (modulos/orquesta-app-director-intake/wizard_*.go,
+   530 líneas, inalcanzable): SUPERSEDIDO por el wizard nuevo de orquesta-web
+   en riqueza (sin recomendaciones, sin huecos cruzados, campos lineales).
+   PERO tiene dos piezas maduras que el nuevo debe absorber si no las tiene
+   ya: (a) aplicación de respuestas con rutas punteadas al draft
+   (applyAppDirectorIntakeWizardAnswersV0, p.ej. "datos.necesidad_funcional");
+   (b) el CIERRE REAL: validación de envelope + occurred_at +
+   orquestafactory.SolicitarNuevaAppV0(draft, now) que produce el spec final
+   con evidencia. Verificar que el flujo LaunchReady del wizard nuevo termina
+   igual de sólido; absorber lo que falte con sus tests; después BORRAR el
+   módulo viejo de wizard entero (no dejar dos wizards otra vez).
+
+10.2 Política autónoma de dirección (modulos/orquesta-orchestration-core/
+   autonomous_director_policy.go + autonomous_quality_policy.go, ~31
+   funciones): heurística completa que decide TeamSize, MaxParallelAgents,
+   MaxBursts y recomendaciones de calidad a partir de DirectorRunStatsV0,
+   implementando el puerto AutonomousDirectorPolicyPortV0. Nadie la invoca.
+   RETOMAR: es exactamente el cerebro que falta para (a) TAREA-3 enrutado
+   por coste y (b) dimensionar paralelismo por evidencia en vez de constantes.
+   Cablearla al director goal-first actual detrás de su puerto, con test que
+   demuestre una decisión distinta ante stats distintos. Si algún criterio
+   está obsoleto respecto al director actual, adaptarlo, no borrarlo.
+
+10.3 Cableado del broker de contexto (cmd/orquesta-server/
+   code_context_broker_v0.go: codeContextBrokerFromEnvV0 y
+   codeContextBrokerWiringFromEnvV0): el wiring COMPLETO del analizador ya
+   existe (proveedor rg fallback, proveedor codebase-MCP, cache en memoria,
+   leases, state dir desde project config) y nunca se llama en el arranque.
+   La TAREA-2 AMPLIADA debe partir de aquí: conectar este constructor al
+   stack del servidor y exponerlo como tool del goal, NO reescribirlo.
+
+Prioridad: 10.3 dentro de TAREA-2 (ya en cabeza); 10.2 junto a TAREA-3;
+10.1 al cerrar el wizard. Cada retoma con test focal y nota en bitácora.

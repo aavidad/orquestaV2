@@ -3474,3 +3474,16 @@ Pendiente:
 - `BUG-058/066/075` siguen abiertos: falta smoke OPES temporal real con
   external-work/observe, proveedor, derivados, paquete final y ausencia de
   reescritura tardia.
+
+## Claude: análisis de retomables en el deadcode (2026-07-04 noche)
+
+Analizadas las candidatas de la auditoría: tres piezas son inversión parada,
+no basura — (1) wizard viejo de intake: absorber cierre real
+SolicitarNuevaAppV0 + rutas punteadas en el wizard nuevo y borrar el resto;
+(2) HeuristicAutonomousDirectorPolicyV0 + quality policy: cerebro de
+dimensionado de equipo/paralelismo/calidad sin invocar — retomar para
+TAREA-3/paralelismo por evidencia; (3) codeContextBrokerFromEnvV0: el wiring
+completo del analizador (rg fallback + codebase-MCP + cache + leases) ya
+existe y no se llama — la TAREA-2 parte de ahí. Detalle e instrucciones en
+docs/instrucciones_director_codex_2026-07-04.md TAREA-10. Regla nueva para
+TAREA-9: clasificar antes de borrar.
