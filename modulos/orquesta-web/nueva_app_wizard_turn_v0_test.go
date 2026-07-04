@@ -294,6 +294,106 @@ func TestWizardTodaOpcionTieneAyudaV0(t *testing.T) {
 	}
 }
 
+func TestWizardPreguntaQueEsRespondeYNoAvanzaV0(t *testing.T) {
+	session := wizardSessionWithObjectiveV0("session-wizard-comprehension", "quiero una app para una agenda")
+	before := NewWebNuevaAppWizardTurnResultV0(session)
+	if len(before.Questions) == 0 {
+		t.Fatalf("sesion sin preguntas para consulta")
+	}
+	nextSession, result := ApplyWebNuevaAppWizardAnswersV0(session, []WizardAnswerV0{{
+		ComprehensionQuery: "que es CalDAV?",
+	}})
+	if len(nextSession.Decisions) != len(session.Decisions) {
+		t.Fatalf("consulta de comprension no debe consumir turno: before=%d after=%d", len(session.Decisions), len(nextSession.Decisions))
+	}
+	if result.GlossaryResponse == nil ||
+		result.GlossaryResponse.HelpKey != "nueva_app.wizard.help.option.integracion.calendar.caldav" ||
+		result.GlossaryResponse.ExampleKey == "" {
+		t.Fatalf("respuesta de glosario inesperada: %+v", result.GlossaryResponse)
+	}
+	if !hasWizardQuestionRefV0(result.Questions, before.Questions[0].QuestionRef) {
+		t.Fatalf("la consulta debe reemitir la misma pregunta: before=%+v after=%+v", before.Questions, result.Questions)
+	}
+}
+
+func TestWizardKernelLinuxCExcluyeWebV0(t *testing.T) {
+	session := wizardSessionWithObjectiveV0("session-wizard-kernel", "modulo para el nucleo de Linux en C con build y pruebas")
+	questions := webNuevaAppWizardAllGapQuestionsV0(session.Form)
+	for _, ref := range []string{"wizard-q-tipo-app", "wizard-r2-plataformas", "wizard-t1-control-acceso", "wizard-t2-identidad-corporativa"} {
+		if hasWizardQuestionRefV0(questions, ref) {
+			t.Fatalf("kernel C no debe preguntar %s: %+v", ref, questions)
+		}
+	}
+	if !hasWizardQuestionRefV0(questions, "wizard-t3-observabilidad") ||
+		!hasWizardQuestionRefV0(questions, "wizard-t6-despliegue-avanzado") {
+		t.Fatalf("kernel C debe conservar observabilidad y despliegue: %+v", questions)
+	}
+}
+
+func TestWizardExclusionPorAudienciaPersonalV0(t *testing.T) {
+	session := wizardSessionWithObjectiveV0("session-wizard-personal", "agenda personal solo para mi")
+	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "usuarios_objetivo", Values: []string{"personal"}})
+	questions, resolved := webNuevaAppWizardAllGapQuestionsWithResolvedV0(session.Form)
+	if hasWizardQuestionRefV0(questions, "wizard-t1-control-acceso") ||
+		hasWizardQuestionRefV0(questions, "wizard-t2-identidad-corporativa") {
+		t.Fatalf("audiencia personal no debe preguntar RBAC/AD/SSO: %+v", questions)
+	}
+	if resolved == nil {
+		t.Fatalf("resolved debe ser slice no nil")
+	}
+}
+
+func TestWizardOpcionUnicaSeAdoptaSinPreguntarV0(t *testing.T) {
+	form := WebNuevaAppFormV0{Objetivo: "agenda personal"}
+	question := wizardQuestionV0("wizard-test-opcion-unica", "usuarios_objetivo", WizardTopicUsoV0, WizardImportanceAltaV0, []WizardOptionV0{
+		wizardOptionV0("personal", "nueva_app.wizard.option.u1.personal", true, "nueva_app.wizard.rationale.u1.equipo"),
+		wizardOptionV0("equipo", "nueva_app.wizard.option.u1.equipo", false, "").withRequiresFactsV0([]WizardFactV0{{Key: "audience", Value: "team"}}),
+	})
+	questions, resolved := wizardQuestionsAfterFactExclusionsV0(form, []WizardQuestionV0{question})
+	if hasWizardQuestionRefV0(questions, "wizard-test-opcion-unica") {
+		t.Fatalf("opcion unica no debe preguntarse: %+v", questions)
+	}
+	if len(resolved) == 0 {
+		t.Fatalf("opcion unica debe producir resolucion por exclusion")
+	}
+}
+
+func TestWizardReevaluaExclusionesAlCambiarRespuestaV0(t *testing.T) {
+	personal := wizardSessionWithObjectiveV0("session-wizard-reevalua-personal", "agenda personal")
+	personal = personal.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "usuarios_objetivo", Values: []string{"personal"}})
+	if hasWizardQuestionRefV0(webNuevaAppWizardAllGapQuestionsV0(personal.Form), "wizard-t1-control-acceso") {
+		t.Fatalf("personal no debe activar T1")
+	}
+	equipo := wizardSessionWithObjectiveV0("session-wizard-reevalua-equipo", "agenda para equipo")
+	equipo = equipo.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "usuarios_objetivo", Values: []string{"equipo"}})
+	if !hasWizardQuestionRefV0(webNuevaAppWizardAllGapQuestionsV0(equipo.Form), "wizard-t1-control-acceso") {
+		t.Fatalf("equipo debe devolver T1 a la cola")
+	}
+}
+
+func TestWizardDesviacionConJustificacionV0(t *testing.T) {
+	session := wizardSessionWithObjectiveV0("session-wizard-justificacion", "quiero una app para una agenda")
+	_, result := ApplyWebNuevaAppWizardAnswersV0(session, []WizardAnswerV0{{
+		QuestionRef:   "wizard-r2-plataformas",
+		UserChoice:    "web",
+		Justification: "solo se usara en oficina",
+	}})
+	if len(result.Contrasts) != 1 || result.Contrasts[0].Justification != "solo se usara en oficina" {
+		t.Fatalf("contraste no conserva justificacion: %+v", result.Contrasts)
+	}
+}
+
+func TestWizardActiveDirectoryPorContextoEmpresaV0(t *testing.T) {
+	session := wizardSessionWithObjectiveV0("session-wizard-ad", "app para mi empresa con dominio Windows y Active Directory")
+	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "usuarios_objetivo", Values: []string{"equipo"}})
+	questions := webNuevaAppWizardAllGapQuestionsV0(session.Form)
+	if !hasWizardQuestionRefV0(questions, "wizard-t2-identidad-corporativa") ||
+		!hasWizardQuestionOptionV0(questions, "wizard-t2-identidad-corporativa", "ldap_bind") ||
+		!hasWizardQuestionOptionV0(questions, "wizard-t2-identidad-corporativa", "oidc_sso") {
+		t.Fatalf("contexto empresa no activa AD/LDAP/OIDC: %+v", questions)
+	}
+}
+
 func TestWizardGlosarioGeneradoV0(t *testing.T) {
 	const glossaryPath = "../../docs/wizard_glosario_generado.md"
 	expected := wizardGlossaryMarkdownV0()
@@ -314,6 +414,12 @@ func TestWizardGlosarioGeneradoV0(t *testing.T) {
 func wizardAllRegisteredQuestionsForHelpTestV0() []WizardQuestionV0 {
 	var questions []WizardQuestionV0
 	questions = append(questions, wizardRequiredGapQuestionsV0(WebNuevaAppFormV0{})...)
+	questions = append(questions, wizardUniversalDimensionQuestionsV0(WebNuevaAppFormV0{Objetivo: "app de equipo con datos y servidor"})...)
+	questions = append(questions, wizardTechnicalDimensionQuestionsV0(WebNuevaAppFormV0{
+		Objetivo:         "app para empresa con dominio Windows",
+		UsuariosObjetivo: []string{"equipo"},
+		Deploy:           WebNuevaAppDeployFormV0{Target: "contenedor"},
+	})...)
 	questions = append(questions, wizardRuleR3IntegracionesDominioV0(WebNuevaAppFormV0{Objetivo: "agenda tienda mapa inventario notas tareas finanzas contactos reservas salud educacion comunidad iot galeria facturacion"})...)
 	for _, question := range []*WizardQuestionV0{
 		wizardRuleR1PersonalCompartidoV0(WebNuevaAppFormV0{Objetivo: "agenda"}),

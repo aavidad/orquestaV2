@@ -28,6 +28,7 @@ type WebNuevaAppIntakeSessionV0 struct {
 	PendingQuestions     []string                         `json:"pending_questions"`
 	RecommendedQuestions []string                         `json:"recommended_questions,omitempty"`
 	Decisions            []WebNuevaAppIntakeDecisionV0    `json:"decisions"`
+	GlossaryExpanded     bool                             `json:"glossary_expanded,omitempty"`
 	AppSpecPartial       orquestafactory.AppSpecRequestV0 `json:"app_spec_partial"`
 	Handoff              WebNuevaAppIntakeHandoffV0       `json:"handoff"`
 }

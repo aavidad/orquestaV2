@@ -34,7 +34,11 @@ func NewNuevaAppI18nCatalogV0() NuevaAppI18nCatalogV0 {
 	es := nuevaAppI18nSpanishV0()
 	en := nuevaAppI18nEnglishV0()
 	mergeI18nMessagesV0(es, nuevaAppWizardHelpI18nSpanishV0())
+	mergeI18nMessagesV0(es, nuevaAppWizardUniversalI18nSpanishV0())
+	mergeI18nMessagesV0(es, nuevaAppWizardUniversalGeneratedI18nSpanishV0())
 	mergeI18nMessagesV0(en, nuevaAppWizardHelpI18nEnglishV0())
+	mergeI18nMessagesV0(en, nuevaAppWizardUniversalI18nEnglishV0())
+	mergeI18nMessagesV0(en, nuevaAppWizardUniversalGeneratedI18nEnglishV0())
 	return NuevaAppI18nCatalogV0{
 		defaultLocale: NuevaAppI18nDefaultLocaleV0,
 		messages: map[string]map[string]string{

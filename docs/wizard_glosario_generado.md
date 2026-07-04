@@ -243,6 +243,76 @@ Fuente generada desde el catalogo i18n es/en del wizard.
 - es: Sin preferencia deja que el diseno elija el guardado. Conviene si te importa el resultado pero no la tecnologia.
 - en: No preference lets design choose storage. Use it when the result matters more than the technology.
 
+## nueva_app.wizard.help.option.t1.acl_fina
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.t1.multi_tenant
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.t1.rbac_simple
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.t2.ldap_bind
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.t2.oidc_sso
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.t2.saml_sso
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.t2.scim_groups
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.t3.colector
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.t3.fichero
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.t3.journald
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.t3.kernel
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.t6.contenedor_systemd
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.t6.ha_failover
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.t6.kernel_build_ci
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
 ## nueva_app.wizard.help.option.tipo_app.api
 
 - es: API es una puerta para que otros programas pidan o envien datos. Conviene cuando no necesitas pantalla principal.
@@ -265,6 +335,166 @@ Fuente generada desde el catalogo i18n es/en del wizard.
 
 - es: Web es una app usada desde navegador. Conviene cuando quieres acceso facil desde varios ordenadores o moviles.
 - en: Web is an app used from a browser. Use it when you want easy access from different computers or phones.
+
+## nueva_app.wizard.help.option.u1.equipo
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u1.personal
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u1.publico
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u11.alta
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u11.critica
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u11.media
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u12.alta
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u12.baja
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u12.media
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u2.api
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u2.cli
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u2.mobile
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u2.web
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u3.automatizacion
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u3.catalogo_contenido
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u3.flujo_operativo
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u5.financiera
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u5.interna
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u5.personal
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u5.sanitaria
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u6.alta
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u6.baja
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u6.media
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u7.api
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u7.sin_integraciones
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u7.webhook
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u8.offline_parcial
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u8.offline_total
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u8.online
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u9.basica
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u9.normal
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+
+## nueva_app.wizard.help.option.u9.profunda
+
+- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
+- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
 
 ## nueva_app.wizard.help.option.uso.compartir
 

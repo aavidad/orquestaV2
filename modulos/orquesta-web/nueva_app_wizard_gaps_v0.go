@@ -38,7 +38,95 @@ func webNuevaAppWizardAllGapQuestionsV0(form WebNuevaAppFormV0) []WizardQuestion
 		}
 	}
 	out = append(out, wizardRuleR3IntegracionesDominioV0(form)...)
-	return dedupeWizardQuestionsV0(out)
+	out = append(out, wizardUniversalDimensionQuestionsV0(form)...)
+	out = append(out, wizardTechnicalDimensionQuestionsV0(form)...)
+	filtered, _ := wizardQuestionsAfterFactExclusionsV0(form, dedupeWizardQuestionsV0(out))
+	return filtered
+}
+
+func webNuevaAppWizardAllGapQuestionsWithResolvedV0(form WebNuevaAppFormV0) ([]WizardQuestionV0, []WizardDecisionV0) {
+	form = normalizeWizardFormForQuestionsV0(form)
+	out := make([]WizardQuestionV0, 0, 24)
+	out = append(out, wizardRequiredGapQuestionsV0(form)...)
+	for _, rule := range wizardCrossGapRulesV0 {
+		if question := rule.Build(form); question != nil {
+			out = append(out, *question)
+		}
+	}
+	out = append(out, wizardRuleR3IntegracionesDominioV0(form)...)
+	out = append(out, wizardUniversalDimensionQuestionsV0(form)...)
+	out = append(out, wizardTechnicalDimensionQuestionsV0(form)...)
+	return wizardQuestionsAfterFactExclusionsV0(form, dedupeWizardQuestionsV0(out))
+}
+
+func wizardUniversalDimensionQuestionsV0(form WebNuevaAppFormV0) []WizardQuestionV0 {
+	if trimV0(form.Objetivo) == "" {
+		return nil
+	}
+	if wizardNeedIsKernelCV0(form) {
+		return nil
+	}
+	questions := []WizardQuestionV0{
+		wizardQuestionV0("wizard-u1-audiencia", "usuarios_objetivo", WizardTopicUsoV0, WizardImportanceMediaV0, []WizardOptionV0{
+			wizardOptionV0("personal", "nueva_app.wizard.option.u1.personal", false, ""),
+			wizardOptionV0("equipo", "nueva_app.wizard.option.u1.equipo", true, "nueva_app.wizard.rationale.u1.equipo"),
+			wizardOptionV0("publico", "nueva_app.wizard.option.u1.publico", false, ""),
+		}),
+		wizardQuestionV0("wizard-u2-superficie", "tipo_app", WizardTopicUsoV0, WizardImportanceMediaV0, []WizardOptionV0{
+			wizardOptionV0("web", "nueva_app.wizard.option.u2.web", true, "nueva_app.wizard.rationale.u2.web"),
+			wizardOptionV0("cli", "nueva_app.wizard.option.u2.cli", false, ""),
+			wizardOptionV0("api", "nueva_app.wizard.option.u2.api", false, ""),
+			wizardOptionV0("mobile", "nueva_app.wizard.option.u2.mobile", false, ""),
+		}),
+		wizardQuestionV0("wizard-u3-dominio-flujo", "descripcion", WizardTopicUsoV0, WizardImportanceMediaV0, []WizardOptionV0{
+			wizardOptionV0("flujo_operativo", "nueva_app.wizard.option.u3.flujo_operativo", true, "nueva_app.wizard.rationale.u3.flujo_operativo"),
+			wizardOptionV0("catalogo_contenido", "nueva_app.wizard.option.u3.catalogo_contenido", false, ""),
+			wizardOptionV0("automatizacion", "nueva_app.wizard.option.u3.automatizacion", false, ""),
+		}),
+		wizardQuestionV0("wizard-u4-datos", "datos.necesidad_funcional", WizardTopicDatosV0, WizardImportanceMediaV0, []WizardOptionV0{
+			wizardOptionV0("gestion_con_persistencia", "nueva_app.wizard.option.datos.gestion", true, "nueva_app.wizard.rationale.datos.gestion"),
+			wizardOptionV0("solo_consulta", "nueva_app.wizard.option.datos.consulta", false, ""),
+			wizardOptionV0("sin_persistencia", "nueva_app.wizard.option.datos.sin_persistencia", false, ""),
+		}),
+		wizardQuestionV0("wizard-u5-sensibilidad", "datos.sensibilidad", WizardTopicDatosV0, WizardImportanceMediaV0, []WizardOptionV0{
+			wizardOptionV0("interna", "nueva_app.wizard.option.u5.interna", true, "nueva_app.wizard.rationale.u5.interna"),
+			wizardOptionV0("personal", "nueva_app.wizard.option.u5.personal", false, ""),
+			wizardOptionV0("sanitaria", "nueva_app.wizard.option.u5.sanitaria", false, ""),
+			wizardOptionV0("financiera", "nueva_app.wizard.option.u5.financiera", false, ""),
+		}),
+		wizardQuestionV0("wizard-u6-colaboracion", "agentes.autonomia", WizardTopicUsoV0, WizardImportanceMediaV0, []WizardOptionV0{
+			wizardOptionV0("baja", "nueva_app.wizard.option.u6.baja", false, ""),
+			wizardOptionV0("media", "nueva_app.wizard.option.u6.media", true, "nueva_app.wizard.rationale.u6.media"),
+			wizardOptionV0("alta", "nueva_app.wizard.option.u6.alta", false, ""),
+		}),
+		wizardQuestionV0("wizard-u7-integraciones", "integraciones.0.tipo", WizardTopicDatosV0, WizardImportanceMediaV0, []WizardOptionV0{
+			wizardOptionV0("sin_integraciones", "nueva_app.wizard.option.u7.sin_integraciones", false, ""),
+			wizardOptionV0("api", "nueva_app.wizard.option.u7.api", true, "nueva_app.wizard.rationale.u7.api"),
+			wizardOptionV0("webhook", "nueva_app.wizard.option.u7.webhook", false, ""),
+		}),
+		wizardQuestionV0("wizard-u8-offline", "restricciones", WizardTopicEntregaV0, WizardImportanceMediaV0, []WizardOptionV0{
+			wizardOptionV0("online", "nueva_app.wizard.option.u8.online", true, "nueva_app.wizard.rationale.u8.online"),
+			wizardOptionV0("offline_parcial", "nueva_app.wizard.option.u8.offline_parcial", false, ""),
+			wizardOptionV0("offline_total", "nueva_app.wizard.option.u8.offline_total", false, ""),
+		}),
+		wizardQuestionV0("wizard-u9-contenido", "documentacion.profundidad", WizardTopicDatosV0, WizardImportanceMediaV0, []WizardOptionV0{
+			wizardOptionV0("normal", "nueva_app.wizard.option.u9.normal", true, "nueva_app.wizard.rationale.u9.normal"),
+			wizardOptionV0("profunda", "nueva_app.wizard.option.u9.profunda", false, ""),
+			wizardOptionV0("basica", "nueva_app.wizard.option.u9.basica", false, ""),
+		}),
+		wizardQuestionV0("wizard-u10-entrega", "deploy.target", WizardTopicEntregaV0, WizardImportanceMediaV0, wizardDeployOptionsV0(form.TipoApp, wizardRecommendedDeployTargetV0(form.TipoApp))),
+		wizardQuestionV0("wizard-u11-carga", "datos.operacion.criticidad", WizardTopicEntregaV0, WizardImportanceMediaV0, []WizardOptionV0{
+			wizardOptionV0("media", "nueva_app.wizard.option.u11.media", true, "nueva_app.wizard.rationale.u11.media"),
+			wizardOptionV0("alta", "nueva_app.wizard.option.u11.alta", false, ""),
+			wizardOptionV0("critica", "nueva_app.wizard.option.u11.critica", false, ""),
+		}),
+		wizardQuestionV0("wizard-u12-autonomia", "agentes.autonomia", WizardTopicEntregaV0, WizardImportanceMediaV0, []WizardOptionV0{
+			wizardOptionV0("media", "nueva_app.wizard.option.u12.media", true, "nueva_app.wizard.rationale.u12.media"),
+			wizardOptionV0("baja", "nueva_app.wizard.option.u12.baja", false, ""),
+			wizardOptionV0("alta", "nueva_app.wizard.option.u12.alta", false, ""),
+		}),
+	}
+	return wizardUniversalQuestionsStillOpenV0(form, questions)
 }
 
 func wizardRequiredGapQuestionsV0(form WebNuevaAppFormV0) []WizardQuestionV0 {
@@ -80,7 +168,7 @@ func wizardRequiredGapQuestionsV0(form WebNuevaAppFormV0) []WizardQuestionV0 {
 	}
 	if trimV0(form.TipoApp) == "" {
 		recommended := wizardRecommendedTipoAppV0(form)
-		out = append(out, wizardQuestionV0(
+		question := wizardQuestionV0(
 			"wizard-q-tipo-app",
 			"tipo_app",
 			WizardTopicUsoV0,
@@ -91,7 +179,9 @@ func wizardRequiredGapQuestionsV0(form WebNuevaAppFormV0) []WizardQuestionV0 {
 				wizardOptionV0("mobile", "nueva_app.wizard.option.tipo_app.mobile", recommended == "mobile", "nueva_app.wizard.rationale.tipo_app.mobile"),
 				wizardOptionV0("desktop", "nueva_app.wizard.option.tipo_app.desktop", recommended == "desktop", "nueva_app.wizard.rationale.tipo_app.desktop"),
 			},
-		))
+		)
+		question.ExcludedByFacts = []WizardFactV0{{Key: "ui", Value: "none"}}
+		out = append(out, question)
 	}
 	if !webNuevaAppIntakeFieldCapturedV0(form, "datos") {
 		out = append(out, wizardQuestionV0(
@@ -137,6 +227,122 @@ func wizardRuleR1PersonalCompartidoV0(form WebNuevaAppFormV0) *WizardQuestionV0 
 	return &question
 }
 
+func wizardTechnicalDimensionQuestionsV0(form WebNuevaAppFormV0) []WizardQuestionV0 {
+	facts := wizardFactsForFormV0(form)
+	var out []WizardQuestionV0
+	nextIntegrationIndex := wizardNextIntegrationIndexV0(form)
+	if !wizardHasAccessDecisionV0(form) {
+		q := wizardQuestionV0("wizard-t1-control-acceso", "integraciones."+strconv.Itoa(nextIntegrationIndex)+".tipo", WizardTopicEntregaV0, WizardImportanceAltaV0, []WizardOptionV0{
+			wizardOptionV0("rbac_simple_mfa", "nueva_app.wizard.option.t1.rbac_simple", true, "nueva_app.wizard.rationale.t1.rbac_simple"),
+			wizardOptionV0("acl_fina", "nueva_app.wizard.option.t1.acl_fina", false, ""),
+			wizardOptionV0("multi_tenant", "nueva_app.wizard.option.t1.multi_tenant", false, ""),
+		})
+		q.RequiresFacts = []WizardFactV0{{Key: "audience", Value: "team"}}
+		q.ExcludedByFacts = []WizardFactV0{{Key: "audience", Value: "single"}, {Key: "ui", Value: "none"}}
+		out = append(out, q)
+		if nextIntegrationIndex < nuevaAppMaxIntegrationRowsV0-1 {
+			nextIntegrationIndex++
+		}
+	}
+	if !wizardHasIdentityDecisionV0(form) {
+		q := wizardQuestionV0("wizard-t2-identidad-corporativa", "integraciones."+strconv.Itoa(nextIntegrationIndex)+".tipo", WizardTopicEntregaV0, WizardImportanceAltaV0, []WizardOptionV0{
+			wizardOptionV0("oidc_sso", "nueva_app.wizard.option.t2.oidc_sso", true, "nueva_app.wizard.rationale.t2.oidc_sso"),
+			wizardOptionV0("ldap_bind", "nueva_app.wizard.option.t2.ldap_bind", false, ""),
+			wizardOptionV0("saml_sso", "nueva_app.wizard.option.t2.saml_sso", false, ""),
+			wizardOptionV0("scim_groups", "nueva_app.wizard.option.t2.scim_groups", false, ""),
+		})
+		q.RequiresFacts = []WizardFactV0{{Key: "corporate_identity", Value: "true"}}
+		q.ExcludedByFacts = []WizardFactV0{{Key: "audience", Value: "single"}, {Key: "ui", Value: "none"}}
+		out = append(out, q)
+	}
+	if !wizardHasObservabilityDecisionV0(form) {
+		q := wizardQuestionV0("wizard-t3-observabilidad", "calidad.observabilidad", WizardTopicEntregaV0, WizardImportanceAltaV0, []WizardOptionV0{
+			wizardOptionV0("journald_rotado_healthchecks", "nueva_app.wizard.option.t3.journald", true, "nueva_app.wizard.rationale.t3.journald"),
+			wizardOptionV0("fichero_rotado_healthchecks", "nueva_app.wizard.option.t3.fichero", false, ""),
+			wizardOptionV0("colector_central", "nueva_app.wizard.option.t3.colector", false, "").withRequiresFactsV0([]WizardFactV0{{Key: "deploy", Value: "server"}}),
+			wizardOptionV0("kernel_printk_trace", "nueva_app.wizard.option.t3.kernel", false, "").withRequiresFactsV0([]WizardFactV0{{Key: "runtime", Value: "kernel_c"}}),
+		})
+		q.RequiresFacts = []WizardFactV0{{Key: "observability_question", Value: "true"}}
+		out = append(out, q)
+	}
+	if !wizardHasDeployAdvancedDecisionV0(form) {
+		q := wizardQuestionV0("wizard-t6-despliegue-avanzado", "deploy.restricciones", WizardTopicEntregaV0, WizardImportanceAltaV0, []WizardOptionV0{
+			wizardOptionV0("contenedor_systemd_ci", "nueva_app.wizard.option.t6.contenedor_systemd", true, "nueva_app.wizard.rationale.t6.contenedor_systemd"),
+			wizardOptionV0("kernel_build_ci", "nueva_app.wizard.option.t6.kernel_build_ci", false, "").withRequiresFactsV0([]WizardFactV0{{Key: "runtime", Value: "kernel_c"}}),
+			wizardOptionV0("ha_failover", "nueva_app.wizard.option.t6.ha_failover", false, "").withRequiresFactsV0([]WizardFactV0{{Key: "deploy", Value: "server"}}),
+		})
+		q.RequiresFacts = []WizardFactV0{{Key: "deploy", Value: "server"}}
+		out = append(out, q)
+	}
+	if len(out) == 0 && len(facts) == 0 {
+		return []WizardQuestionV0{}
+	}
+	return out
+}
+
+func (option WizardOptionV0) withRequiresFactsV0(facts []WizardFactV0) WizardOptionV0 {
+	option.RequiresFacts = facts
+	return option
+}
+
+func wizardUniversalQuestionsStillOpenV0(form WebNuevaAppFormV0, questions []WizardQuestionV0) []WizardQuestionV0 {
+	out := make([]WizardQuestionV0, 0, len(questions))
+	for _, question := range questions {
+		switch question.QuestionRef {
+		case "wizard-u1-audiencia":
+			if len(compactStringsV0(form.UsuariosObjetivo)) > 0 {
+				continue
+			}
+		case "wizard-u2-superficie":
+			if trimV0(form.TipoApp) != "" {
+				continue
+			}
+		case "wizard-u3-dominio-flujo":
+			if trimV0(form.Descripcion) != "" {
+				continue
+			}
+		case "wizard-u4-datos":
+			if webNuevaAppIntakeFieldCapturedV0(form, "datos") {
+				continue
+			}
+		case "wizard-u5-sensibilidad":
+			if trimV0(form.Datos.Sensibilidad) != "" {
+				continue
+			}
+		case "wizard-u6-colaboracion":
+			if trimV0(form.Agentes.Autonomia) != "" {
+				continue
+			}
+		case "wizard-u7-integraciones":
+			if len(form.Integraciones) > 0 && trimV0(form.Integraciones[0].Tipo) != "" {
+				continue
+			}
+		case "wizard-u8-offline":
+			if len(compactStringsV0(form.Restricciones)) > 0 {
+				continue
+			}
+		case "wizard-u9-contenido":
+			if trimV0(form.Documentacion.Profundidad) != "" {
+				continue
+			}
+		case "wizard-u10-entrega":
+			if trimV0(form.Deploy.Target) != "" {
+				continue
+			}
+		case "wizard-u11-carga":
+			if trimV0(form.Datos.Operacion.Criticidad) != "" {
+				continue
+			}
+		case "wizard-u12-autonomia":
+			if trimV0(form.Agentes.Autonomia) != "" {
+				continue
+			}
+		}
+		out = append(out, question)
+	}
+	return out
+}
+
 func wizardRuleR2PlataformasV0(form WebNuevaAppFormV0) *WizardQuestionV0 {
 	if len(compactStringsV0(form.Plataformas)) > 0 || wizardTipoAppIsMobileLikeV0(form.TipoApp) {
 		return nil
@@ -152,6 +358,7 @@ func wizardRuleR2PlataformasV0(form WebNuevaAppFormV0) *WizardQuestionV0 {
 			wizardOptionV0("mobile", "nueva_app.wizard.option.plataformas.movil", false, ""),
 		},
 	)
+	question.ExcludedByFacts = []WizardFactV0{{Key: "ui", Value: "none"}}
 	return &question
 }
 
@@ -676,6 +883,161 @@ func wizardQuestionRecommendedOptionV0(question WizardQuestionV0) (WizardOptionV
 		}
 	}
 	return WizardOptionV0{}, false
+}
+
+func wizardQuestionsAfterFactExclusionsV0(form WebNuevaAppFormV0, questions []WizardQuestionV0) ([]WizardQuestionV0, []WizardDecisionV0) {
+	facts := wizardFactsForFormV0(form)
+	out := make([]WizardQuestionV0, 0, len(questions))
+	var resolved []WizardDecisionV0
+	for _, question := range questions {
+		if !wizardFactsMatchAllV0(facts, question.RequiresFacts) || wizardFactsMatchAnyV0(facts, question.ExcludedByFacts) {
+			continue
+		}
+		originalOptionCount := len(question.Options)
+		options := make([]WizardOptionV0, 0, len(question.Options))
+		for _, option := range question.Options {
+			if !wizardFactsMatchAllV0(facts, option.RequiresFacts) || wizardFactsMatchAnyV0(facts, option.ExcludedByFacts) {
+				continue
+			}
+			options = append(options, option)
+		}
+		question.Options = normalizeWizardOptionsV0(options)
+		if len(question.Options) == 0 {
+			continue
+		}
+		if originalOptionCount > 1 && len(question.Options) == 1 {
+			for _, decision := range wizardDecisionsForAnswerV0(question, question.Options[0].Value, false) {
+				resolved = append(resolved, decision)
+			}
+			continue
+		}
+		out = append(out, question)
+	}
+	if out == nil {
+		out = []WizardQuestionV0{}
+	}
+	if resolved == nil {
+		resolved = []WizardDecisionV0{}
+	}
+	return out, resolved
+}
+
+func wizardFactsForFormV0(form WebNuevaAppFormV0) map[string]map[string]bool {
+	facts := map[string]map[string]bool{}
+	add := func(key, value string) {
+		key = trimV0(key)
+		value = trimV0(value)
+		if key == "" || value == "" {
+			return
+		}
+		if facts[key] == nil {
+			facts[key] = map[string]bool{}
+		}
+		facts[key][value] = true
+	}
+	need := normalizeGuidedNeedV0(form.Objetivo + " " + form.Descripcion + " " + strings.Join(form.Restricciones, " "))
+	if wizardNeedIsKernelCV0(form) {
+		add("runtime", "kernel_c")
+		add("ui", "none")
+		add("web", "none")
+		add("deploy", "server")
+		add("observability_question", "true")
+	}
+	switch normalizeGuidedNeedV0(form.TipoApp) {
+	case "cli":
+		add("ui", "none")
+	case "api":
+		add("ui", "api")
+	case "web", "mobile", "desktop":
+		add("ui", "human")
+	}
+	if trimV0(form.Deploy.Target) != "" && !containsStringV0(trimV0(form.Deploy.Target), "local", "desktop", "mobile_store") {
+		add("deploy", "server")
+		add("observability_question", "true")
+	}
+	if wizardAudienceLooksPersonalV0(form) {
+		add("audience", "single")
+	} else if wizardFormSharedUseV0(form) || len(compactStringsV0(form.UsuariosObjetivo)) > 0 {
+		add("audience", "team")
+	}
+	if guidedContainsAnyV0(need, "empresa", "oficina", "dominio", "active directory", "samba ad", "ldap", "oidc", "saml", "kerberos", "windows") {
+		add("corporate_identity", "true")
+		add("audience", "team")
+	}
+	if form.Datos.DBRequired || trimV0(form.Datos.NecesidadFuncional) != "" {
+		add("data", "own")
+	}
+	if guidedContainsAnyV0(normalizeGuidedNeedV0(form.Datos.Sensibilidad), "personal", "sanitaria", "salud", "financiera") {
+		add("sensitive_data", "true")
+	}
+	if len(form.Integraciones) > 0 {
+		add("integrations", "present")
+	}
+	return facts
+}
+
+func wizardFactsMatchAllV0(facts map[string]map[string]bool, required []WizardFactV0) bool {
+	for _, fact := range required {
+		if !wizardFactMatchesV0(facts, fact) {
+			return false
+		}
+	}
+	return true
+}
+
+func wizardFactsMatchAnyV0(facts map[string]map[string]bool, excluded []WizardFactV0) bool {
+	for _, fact := range excluded {
+		if wizardFactMatchesV0(facts, fact) {
+			return true
+		}
+	}
+	return false
+}
+
+func wizardFactMatchesV0(facts map[string]map[string]bool, fact WizardFactV0) bool {
+	key := trimV0(fact.Key)
+	value := trimV0(fact.Value)
+	if key == "" || value == "" {
+		return false
+	}
+	return facts[key] != nil && facts[key][value]
+}
+
+func wizardNeedIsKernelCV0(form WebNuevaAppFormV0) bool {
+	need := normalizeGuidedNeedV0(form.Objetivo + " " + form.Descripcion + " " + strings.Join(form.PreferenciasTecnicas.Preferencias, " "))
+	return guidedContainsAnyV0(need, "nucleo de linux", "kernel linux", "linux kernel", "modulo para el nucleo") &&
+		guidedContainsAnyV0(need, " c ", " en c", "lenguaje c", "kernel c")
+}
+
+func wizardAudienceLooksPersonalV0(form WebNuevaAppFormV0) bool {
+	joined := normalizeGuidedNeedV0(strings.Join(append([]string{form.Objetivo, form.Descripcion}, form.UsuariosObjetivo...), " "))
+	return guidedContainsAnyV0(joined, "personal", "solo para mi", "una sola persona", "uso privado", "individual")
+}
+
+func wizardHasAccessDecisionV0(form WebNuevaAppFormV0) bool {
+	for _, integration := range form.Integraciones {
+		if trimV0(integration.Tipo) == "auth" {
+			return true
+		}
+	}
+	return false
+}
+
+func wizardHasIdentityDecisionV0(form WebNuevaAppFormV0) bool {
+	var integrationText []string
+	for _, integration := range form.Integraciones {
+		integrationText = append(integrationText, integration.Tipo, integration.Nombre, integration.Auth, integration.Proposito)
+	}
+	need := normalizeGuidedNeedV0(strings.Join(form.PreferenciasTecnicas.Preferencias, " ") + " " + strings.Join(integrationText, " "))
+	return guidedContainsAnyV0(need, "oidc", "ldap", "saml", "kerberos", "sso", "active directory")
+}
+
+func wizardHasObservabilityDecisionV0(form WebNuevaAppFormV0) bool {
+	return form.Calidad.Observabilidad != nil
+}
+
+func wizardHasDeployAdvancedDecisionV0(form WebNuevaAppFormV0) bool {
+	return len(compactStringsV0(form.Deploy.Restricciones)) > 0
 }
 
 func containsStringV0(value string, candidates ...string) bool {

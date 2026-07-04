@@ -10,6 +10,12 @@ func nuevaAppWizardHelpI18nKeysV0() []string {
 	for key := range nuevaAppWizardHelpI18nSpanishV0() {
 		keys = append(keys, key)
 	}
+	for key := range nuevaAppWizardUniversalI18nSpanishV0() {
+		keys = append(keys, key)
+	}
+	for key := range nuevaAppWizardUniversalGeneratedI18nSpanishV0() {
+		keys = append(keys, key)
+	}
 	sort.Strings(keys)
 	return keys
 }
@@ -154,6 +160,8 @@ func nuevaAppWizardHelpI18nSpanishV0() map[string]string {
 		"nueva_app.wizard.default.errors.help":                                "Errores tipados usan codigos publicos estables. Conviene para que UI y operadores entiendan fallos sin leer detalles internos.",
 		"nueva_app.wizard.default.observability.help":                         "Logging estructurado registra hechos operativos con campos claros. Conviene para investigar problemas sin depender de frases sueltas.",
 		"nueva_app.wizard.default.docs.help":                                  "Documentacion de handoff deja estructura, arbol de ficheros y stack tecnico. Conviene para que otro equipo pueda continuar.",
+		"nueva_app.wizard.rich.explain_all":                                   "Que significa todo esto?",
+		"nueva_app.wizard.rich.full_glossary":                                 "Ver glosario completo",
 		"nueva_app.wizard.example.option.tipo_app.api":                        "Ejemplo: una app de reservas puede ofrecer una puerta para que la web y el movil consulten los mismos horarios.",
 		"nueva_app.wizard.example.option.deploy.contenedor":                   "Ejemplo: como una caja cerrada con la app y sus piezas, lista para abrirse igual en varios servidores.",
 		"nueva_app.wizard.example.option.deploy.paas":                         "Ejemplo: como alquilar un local con luz y mantenimiento incluidos en vez de construir el edificio.",
@@ -208,6 +216,8 @@ func nuevaAppWizardHelpI18nEnglishV0() map[string]string {
 		"nueva_app.wizard.question.wizard-r6-movil-plataformas.help":       "Asks which mobile systems must be covered. Choose where real users are. Example: iOS and Android when the team uses both.",
 		"nueva_app.wizard.question.wizard-r7-deploy-compatible.help":       "Asks for another target when the selected one does not fit. Correcting it allows build and test. Example: a mobile app needs a mobile package, not just desktop.",
 		"nueva_app.wizard.question.wizard-r8-usuarios-compartido.help":     "Asks which group will use the shared app. This shapes permissions and screens. Example: a small team with an admin and readers.",
+		"nueva_app.wizard.rich.explain_all":                                "Explain everything",
+		"nueva_app.wizard.rich.full_glossary":                              "Open full glossary",
 	}
 	for key, value := range nuevaAppWizardHelpOptionEnglishV0() {
 		out[key] = value

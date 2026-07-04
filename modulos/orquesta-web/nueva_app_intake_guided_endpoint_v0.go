@@ -19,18 +19,19 @@ const (
 )
 
 type WebNuevaAppIntakeGuidedRequestV0 struct {
-	SchemaVersion string                      `json:"schema_version,omitempty"`
-	SessionID     string                      `json:"session_id,omitempty"`
-	Locale        string                      `json:"locale,omitempty"`
-	Nombre        string                      `json:"nombre,omitempty"`
-	Idea          string                      `json:"idea,omitempty"`
-	Need          string                      `json:"need,omitempty"`
-	ActionID      string                      `json:"action_id,omitempty"`
-	ActionIDs     []string                    `json:"action_ids,omitempty"`
-	AnswerField   string                      `json:"answer_field,omitempty"`
-	Answer        string                      `json:"answer,omitempty"`
-	WizardAnswers []WizardAnswerV0            `json:"wizard_answers,omitempty"`
-	Session       *WebNuevaAppIntakeSessionV0 `json:"session,omitempty"`
+	SchemaVersion    string                      `json:"schema_version,omitempty"`
+	SessionID        string                      `json:"session_id,omitempty"`
+	Locale           string                      `json:"locale,omitempty"`
+	Nombre           string                      `json:"nombre,omitempty"`
+	Idea             string                      `json:"idea,omitempty"`
+	Need             string                      `json:"need,omitempty"`
+	ActionID         string                      `json:"action_id,omitempty"`
+	ActionIDs        []string                    `json:"action_ids,omitempty"`
+	AnswerField      string                      `json:"answer_field,omitempty"`
+	Answer           string                      `json:"answer,omitempty"`
+	GlossaryExpanded bool                        `json:"glossary_expanded,omitempty"`
+	WizardAnswers    []WizardAnswerV0            `json:"wizard_answers,omitempty"`
+	Session          *WebNuevaAppIntakeSessionV0 `json:"session,omitempty"`
 }
 
 type WebNuevaAppIntakeGuidedResponseV0 struct {
@@ -111,6 +112,9 @@ func (handler NuevaAppIntakeGuidedHTTPHandlerV0) NewResponseV0(
 	request WebNuevaAppIntakeGuidedRequestV0,
 ) WebNuevaAppIntakeGuidedResponseV0 {
 	session := webNuevaAppIntakeGuidedSessionV0(request)
+	if request.GlossaryExpanded {
+		session.GlossaryExpanded = true
+	}
 	turn := WebNuevaAppIntakeGuidedTurnV0{
 		SchemaVersion: WebNuevaAppIntakeGuidedTurnSchemaV0,
 		Followups:     guidedFollowupActionsV0(),
@@ -133,6 +137,20 @@ func (handler NuevaAppIntakeGuidedHTTPHandlerV0) NewResponseV0(
 	if len(turn.Decisions) > 0 {
 		session = ApplyWebNuevaAppIntakeGuidedTurnV0(session, turn)
 	}
+	if query := wizardComprehensionQueryFromFreeTextV0(request.Answer); query != "" {
+		wizard := NewWebNuevaAppWizardTurnResultV0(session)
+		if response, ok := wizardComprehensionResponseV0(wizard.Questions, query); ok {
+			wizard.GlossaryResponse = &response
+			return WebNuevaAppIntakeGuidedResponseV0{
+				SchemaVersion:   WebNuevaAppIntakeGuidedResponseSchemaV0,
+				AssistantStatus: assistantStatus,
+				Warnings:        warnings,
+				Turn:            turn,
+				Session:         session,
+				Wizard:          wizard,
+			}
+		}
+	}
 	session = ApplyWebNuevaAppIntakeGuidedAnswerV0(session, request.AnswerField, request.Answer)
 	for _, actionID := range append([]string{request.ActionID}, request.ActionIDs...) {
 		session = ApplyWebNuevaAppIntakeGuidedActionV0(session, actionID)
@@ -151,6 +169,15 @@ func (handler NuevaAppIntakeGuidedHTTPHandlerV0) NewResponseV0(
 		Session:         session,
 		Wizard:          wizard,
 	}
+}
+
+func wizardComprehensionQueryFromFreeTextV0(answer string) string {
+	trimmed := trimV0(answer)
+	normalized := normalizeGuidedNeedV0(trimmed)
+	if strings.HasPrefix(normalized, "que es ") || strings.HasPrefix(normalized, "que significa ") {
+		return trimmed
+	}
+	return ""
 }
 
 func webNuevaAppIntakeAssistantUnavailableWarningV0(locale string) WebNuevaAppIntakeWarningV0 {

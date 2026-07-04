@@ -1,0 +1,7 @@
+schema_version=orquesta.goal_checkpoint.v0
+goal_ref=goal-ref-task-autoprogramming-2d2ba45d5118-g01
+source_task_ref=task-wizard-u112-exclusion
+objective=implement_wizard_universal_dimensions_and_fact_exclusion_engine
+scope=modulos/orquesta-web
+next_artifact=modulos/orquesta-web/docs/orquesta_goal_result_goal-ref-task-autoprogramming-2d2ba45d5118-g01.json
+evidence=input_evidence_refs_present

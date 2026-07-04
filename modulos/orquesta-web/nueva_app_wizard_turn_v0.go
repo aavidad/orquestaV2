@@ -13,15 +13,18 @@ func NewWebNuevaAppWizardTurnResultV0(session WebNuevaAppIntakeSessionV0) Wizard
 	session = refreshWebNuevaAppIntakeSessionV0(session)
 	previewForm := ApplyWebNuevaAppWizardEngineeringDefaultsV0(session.Form)
 	specPreview := previewForm.ToAppSpecRequestV0()
-	questions := WebNuevaAppWizardGapQuestionsV0(previewForm)
-	specComplete := len(webNuevaAppWizardHighImportanceQuestionsV0(questions)) == 0 &&
+	allQuestions, resolved := webNuevaAppWizardAllGapQuestionsWithResolvedV0(previewForm)
+	questions := selectWizardTurnQuestionsV0(allQuestions)
+	specComplete := len(webNuevaAppWizardHighImportanceQuestionsV0(allQuestions)) == 0 &&
 		len(orquestafactory.ValidateAppSpecRequestV0(specPreview)) == 0
 	return WizardTurnResultV0{
 		SchemaVersion:       WebNuevaAppWizardTurnSchemaV0,
 		SessionRef:          firstNuevaAppValueV0(session.SessionRef, session.SessionID),
 		Turn:                len(session.Decisions) + 1,
 		Questions:           questions,
+		ResolvedByExclusion: resolved,
 		EngineeringDefaults: WebNuevaAppWizardEngineeringDefaultsV0(),
+		GlossaryExpanded:    session.GlossaryExpanded,
 		SpecComplete:        specComplete,
 		SpecPreview:         &specPreview,
 		LaunchReady:         specComplete,
@@ -33,7 +36,7 @@ func ApplyWebNuevaAppWizardAnswersV0(
 	answers []WizardAnswerV0,
 ) (WebNuevaAppIntakeSessionV0, WizardTurnResultV0) {
 	session = refreshWebNuevaAppIntakeSessionV0(session)
-	questions := webNuevaAppWizardAllGapQuestionsV0(ApplyWebNuevaAppWizardEngineeringDefaultsV0(session.Form))
+	questions, _ := webNuevaAppWizardAllGapQuestionsWithResolvedV0(ApplyWebNuevaAppWizardEngineeringDefaultsV0(session.Form))
 	questionsByRef := map[string]WizardQuestionV0{}
 	for _, question := range questions {
 		questionsByRef[question.QuestionRef] = question
@@ -41,6 +44,11 @@ func ApplyWebNuevaAppWizardAnswersV0(
 	var decisions []WebNuevaAppIntakeDecisionV0
 	var contrasts []WizardContrastV0
 	for _, answer := range answers {
+		if response, ok := wizardComprehensionResponseV0(questions, answer.ComprehensionQuery); ok {
+			result := NewWebNuevaAppWizardTurnResultV0(session)
+			result.GlossaryResponse = &response
+			return session, result
+		}
 		question, ok := questionsByRef[trimV0(answer.QuestionRef)]
 		if !ok {
 			continue
@@ -52,10 +60,11 @@ func ApplyWebNuevaAppWizardAnswersV0(
 		recommended, hasRecommended := wizardQuestionRecommendedOptionV0(question)
 		if hasRecommended && recommended.Value != choice {
 			contrasts = append(contrasts, WizardContrastV0{
-				QuestionRef:  question.QuestionRef,
-				UserChoice:   choice,
-				Recommended:  recommended.Value,
-				RationaleKey: recommended.RationaleKey,
+				QuestionRef:   question.QuestionRef,
+				UserChoice:    choice,
+				Recommended:   recommended.Value,
+				RationaleKey:  recommended.RationaleKey,
+				Justification: trimV0(answer.Justification),
 			})
 		}
 		next := wizardDecisionsForAnswerV0(question, choice, answer.FreeText)
@@ -65,11 +74,70 @@ func ApplyWebNuevaAppWizardAnswersV0(
 		decisions = append(decisions, next...)
 	}
 	session.Form = ApplyWebNuevaAppWizardEngineeringDefaultsV0(session.Form)
+	for {
+		_, resolved := webNuevaAppWizardAllGapQuestionsWithResolvedV0(session.Form)
+		if len(resolved) == 0 {
+			break
+		}
+		for _, decision := range resolved {
+			session = session.ApplyDecisionV0(decision)
+			decisions = append(decisions, decision)
+		}
+	}
 	session = refreshWebNuevaAppIntakeSessionV0(session)
 	result := NewWebNuevaAppWizardTurnResultV0(session)
 	result.Decisions = decisions
 	result.Contrasts = contrasts
 	return session, result
+}
+
+func wizardComprehensionResponseV0(
+	questions []WizardQuestionV0,
+	query string,
+) (WizardGlossaryResponseV0, bool) {
+	normalized := normalizeGuidedNeedV0(query)
+	normalized = strings.TrimPrefix(normalized, "que es ")
+	normalized = strings.TrimPrefix(normalized, "que significa ")
+	normalized = strings.Trim(normalized, " ?")
+	if normalized == "" {
+		return WizardGlossaryResponseV0{}, false
+	}
+	for _, question := range questions {
+		if wizardGlossaryTextMatchesV0(normalized, question.PromptKey, question.HelpKey) {
+			return WizardGlossaryResponseV0{Query: trimV0(query), TermKey: question.PromptKey, HelpKey: question.HelpKey}, true
+		}
+		for _, option := range question.Options {
+			if wizardGlossaryTextMatchesV0(normalized, option.LabelKey, option.HelpKey, option.ExampleKey) {
+				return WizardGlossaryResponseV0{Query: trimV0(query), TermKey: option.LabelKey, HelpKey: option.HelpKey, ExampleKey: option.ExampleKey}, true
+			}
+		}
+	}
+	for _, defaultValue := range WebNuevaAppWizardEngineeringDefaultsV0() {
+		if wizardGlossaryTextMatchesV0(normalized, defaultValue.Value, defaultValue.HelpKey, defaultValue.ExampleKey) {
+			return WizardGlossaryResponseV0{Query: trimV0(query), TermKey: defaultValue.Value, HelpKey: defaultValue.HelpKey, ExampleKey: defaultValue.ExampleKey}, true
+		}
+	}
+	return WizardGlossaryResponseV0{}, false
+}
+
+func wizardGlossaryTextMatchesV0(needle string, values ...string) bool {
+	catalog := NewNuevaAppI18nCatalogV0()
+	for _, value := range values {
+		for _, candidate := range []string{
+			value,
+			catalog.lookupExact(NuevaAppI18nDefaultLocaleV0, value),
+			catalog.lookupExact(NuevaAppI18nEnglishLocaleV0, value),
+		} {
+			haystack := normalizeGuidedNeedV0(candidate)
+			if haystack == "" {
+				continue
+			}
+			if strings.Contains(haystack, needle) || strings.Contains(needle, haystack) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func AcceptWebNuevaAppWizardRecommendationsV0(
@@ -121,6 +189,43 @@ func wizardDecisionsForAnswerV0(
 		case "describir_integraciones":
 			return []WebNuevaAppIntakeDecisionV0{{Field: "descripcion", Value: "Describir servicios, datos o herramientas existentes que deben conectarse por adaptadores."}}
 		}
+	}
+	switch question.QuestionRef {
+	case "wizard-t1-control-acceso":
+		index, _, ok := indexedNuevaAppDecisionFieldV0(question.Field, "integraciones")
+		if !ok {
+			index = 0
+		}
+		prefix := "integraciones." + strconv.Itoa(index) + "."
+		return []WebNuevaAppIntakeDecisionV0{
+			{Field: prefix + "tipo", Value: "auth"},
+			{Field: prefix + "nombre", Value: "control de acceso"},
+			{Field: prefix + "proposito", Value: wizardAccessPurposeV0(choice)},
+			{Field: prefix + "auth", Value: "gestionado por adaptador"},
+			{Field: prefix + "criticidad", Value: "alta"},
+			{Field: prefix + "requerido", Value: "true"},
+		}
+	case "wizard-t2-identidad-corporativa":
+		index, _, ok := indexedNuevaAppDecisionFieldV0(question.Field, "integraciones")
+		if !ok {
+			index = 0
+		}
+		prefix := "integraciones." + strconv.Itoa(index) + "."
+		return []WebNuevaAppIntakeDecisionV0{
+			{Field: prefix + "tipo", Value: "auth"},
+			{Field: prefix + "nombre", Value: "identidad corporativa"},
+			{Field: prefix + "proposito", Value: wizardIdentityPurposeV0(choice)},
+			{Field: prefix + "auth", Value: choice},
+			{Field: prefix + "criticidad", Value: "alta"},
+			{Field: prefix + "requerido", Value: "true"},
+		}
+	case "wizard-t3-observabilidad":
+		return []WebNuevaAppIntakeDecisionV0{
+			{Field: "calidad.observabilidad", Value: "true"},
+			{Field: "agentes.preferencias", Values: []string{"observabilidad: " + choice}},
+		}
+	case "wizard-t6-despliegue-avanzado":
+		return []WebNuevaAppIntakeDecisionV0{{Field: "deploy.restricciones", Values: []string{choice}}}
 	}
 	if index, suffix, ok := indexedNuevaAppDecisionFieldV0(question.Field, "integraciones"); ok {
 		return wizardIntegrationDecisionsV0(index, suffix, choice)
@@ -290,6 +395,30 @@ func wizardDataNeedDecisionsV0(choice string) []WebNuevaAppIntakeDecisionV0 {
 			{Field: "datos.db_required", Value: "false"},
 			{Field: "datos.necesidad_funcional", Value: "No requiere persistencia propia inicialmente."},
 		}
+	}
+}
+
+func wizardAccessPurposeV0(choice string) string {
+	switch choice {
+	case "acl_fina":
+		return "Gestionar permisos finos por recurso mediante adaptador de autorizacion."
+	case "multi_tenant":
+		return "Aislar clientes o grupos dentro de la misma app con permisos separados."
+	default:
+		return "Gestionar roles simples, sesiones y MFA opcional para usuarios autenticados."
+	}
+}
+
+func wizardIdentityPurposeV0(choice string) string {
+	switch choice {
+	case "ldap_bind":
+		return "Integrar entrada con directorio LDAP o Active Directory clasico."
+	case "saml_sso":
+		return "Integrar SSO corporativo SAML manteniendo proveedor como adaptador."
+	case "scim_groups":
+		return "Sincronizar usuarios y grupos corporativos para roles de la app."
+	default:
+		return "Integrar SSO OIDC corporativo sin custodiar contrasenas en la app."
 	}
 }
 

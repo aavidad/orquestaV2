@@ -968,6 +968,9 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
             {{$locale := .Page.Locale}}
             <div class="wizard-rich" data-wizard-rich>
               <p class="expert-row-title">{{i18nText $locale "nueva_app.wizard.rich.title"}}</p>
+              <button class="secondary" type="button" data-wizard-explain-all>{{i18nText $locale "nueva_app.wizard.rich.explain_all"}}</button>
+              <a href="/docs/wizard_glosario_generado.md">{{i18nText $locale "nueva_app.wizard.rich.full_glossary"}}</a>
+              {{if .Wizard.GlossaryResponse}}<p class="wizard-question-why">{{i18nText $locale .Wizard.GlossaryResponse.HelpKey}} {{if .Wizard.GlossaryResponse.ExampleKey}}{{i18nText $locale .Wizard.GlossaryResponse.ExampleKey}}{{end}}</p>{{end}}
               <div class="wizard-rich-grid" data-wizard-rich-questions>
                 {{range .Wizard.Questions}}
                 {{$questionRef := .QuestionRef}}
@@ -1402,6 +1405,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     const wizardI18nNode=document.getElementById('wizard-i18n-json');
     let wizardI18n={};
     try{wizardI18n=wizardI18nNode?JSON.parse(wizardI18nNode.textContent||'{}'):{};}catch(_){wizardI18n={};}
+    let glossaryExpanded=false;
     const steps=[...wizard.querySelectorAll('[data-step]')];
     const tabs=[...wizard.querySelectorAll('[data-goto-step]')];
     const prev=wizard.querySelector('[data-prev-step]');
@@ -1418,6 +1422,16 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     function renderRichWizard(wiz){
       const root=wizard.querySelector('[data-wizard-rich]');
       if(!root||!wiz)return;
+      const glossaryResponse=wiz.glossary_response;
+      const oldGlossary=root.querySelector('[data-wizard-glossary-response]');
+      if(oldGlossary)oldGlossary.remove();
+      if(glossaryResponse&&glossaryResponse.help_key){
+        const response=document.createElement('p');
+        response.dataset.wizardGlossaryResponse='true';
+        response.className='wizard-question-why';
+        response.textContent=wizardText(glossaryResponse.help_key)+' '+wizardText(glossaryResponse.example_key);
+        root.insertBefore(response, root.querySelector('[data-wizard-rich-questions]'));
+      }
       const questionsBox=root.querySelector('[data-wizard-rich-questions]');
       if(questionsBox){
         questionsBox.innerHTML='';
@@ -1488,6 +1502,10 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
           if(item.example_key)appendWizardText(row,'small','',wizardText(item.example_key));
           defaultsBox.appendChild(row);
         });
+      }
+      if(wiz.glossary_expanded){
+        glossaryExpanded=true;
+        root.querySelectorAll('.wizard-help').forEach(help=>{help.open=true;});
       }
     }
     function field(name){return form.elements[name];}
@@ -1967,6 +1985,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       try{
         const body=Object.assign({},payload||{});
         if(guidedSession)body.session=guidedSession;
+        if(glossaryExpanded)body.glossary_expanded=true;
         const response=await fetch('/api/v0/apps/intake/guided-turn',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body)});
         if(!response.ok)return null;
         const out=await response.json();
@@ -2147,6 +2166,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-guided-action]');if(target)guidedAction(target.dataset.guidedAction);});}
     if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-guided-answer]');if(target)submitGuidedAnswer();});}
     if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-wizard-option-value]');if(target)chooseWizardOption(target.dataset.wizardQuestionRef,target.dataset.wizardOptionValue);});}
+    wizard.querySelectorAll('[data-wizard-explain-all]').forEach(node=>node.addEventListener('click',()=>{glossaryExpanded=true;if(guidedSession)guidedSession.glossary_expanded=true;wizard.querySelectorAll('.wizard-help').forEach(help=>{help.open=true;});}));
     wizard.querySelectorAll('[data-apply-connectors]').forEach(node=>node.addEventListener('click',applySelectedConnectors));
     wizard.querySelectorAll('[data-preset]').forEach(node=>node.addEventListener('click',()=>preset(node.dataset.preset)));
     const goalButton=document.querySelector('[data-goal-observe]');
