@@ -11,6 +11,7 @@ import (
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 )
 
 func TestCodexStackObserveAppDirectorGoalExecutorV0TimeoutSnapshotIncluyeProcessRefsV0(t *testing.T) {
@@ -75,6 +76,65 @@ func TestCodexStackObserveAppDirectorGoalExecutorV0TimeoutSnapshotIncluyeProcess
 		result.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
 		!codexStackStringInSetForTestV0(result.ProcessRefs, "process-ref-stack-observe-snapshot-001") ||
 		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-stack-observe-snapshot-process-001") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestCodexStackObserveAppDirectorGoalExecutorV0TimeoutSnapshotRespetaRunControlTerminalV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-stack-observe-run-control-terminal-001"
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       "goal-ref-stack-observe-run-control-terminal-001",
+			RunRef:        runRef,
+			Objective:     "Snapshot no debe publicar running tras RunControl terminal.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{
+				Path: "docs/goal_snapshot_terminal.md",
+			}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         "goal-ref-stack-observe-run-control-terminal-001",
+			ExternalGoalRef: "thread-ref-stack-observe-run-control-terminal-001",
+		},
+		EvidenceRefs: []string{"evidence-ref-stack-observe-run-control-terminal-state"},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	if err := goalStates.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	stack := &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore: goalStates,
+			RunControl: codexStackRunControlReaderForObserveTestV0{state: orquestaruncontrol.RunControlStateV0{
+				RunRef:       runRef,
+				Status:       orquestaruncontrol.RunControlStatusStoppedV0,
+				Forced:       true,
+				EvidenceRefs: []string{"evidence-ref-stack-run-control-terminal-stopped"},
+			}},
+		},
+	}
+
+	result, err := NewCodexStackObserveAppDirectorGoalExecutorV0(stack).ObserveAppDirectorGoalTimeoutSnapshotV0(
+		ctx,
+		orquestamcp.MCPObserveAppDirectorGoalToolInputV0{RunRef: runRef},
+	)
+
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalTimeoutSnapshotV0: %v", err)
+	}
+	if result.GoalStatus != orquestagoal.GoalStatusBlockedV0 ||
+		result.RecommendedAction != "replan" ||
+		result.ClosureStatus != orquestagoal.GoalStatusBlockedV0 ||
+		!result.ClosureNeedsRework ||
+		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-stack-run-control-terminal-stopped") ||
+		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-observe-goal-run-control-terminal") {
 		t.Fatalf("result=%+v", result)
 	}
 }
@@ -422,6 +482,17 @@ func TestCodexStackAutoprogrammingObserveGoalExecutorV0ErrorPublicoIncluyeSnapsh
 
 type codexStackObserveRejectedForTestV0 struct {
 	result orquestagoal.GoalWorkResultV0
+}
+
+type codexStackRunControlReaderForObserveTestV0 struct {
+	state orquestaruncontrol.RunControlStateV0
+}
+
+func (reader codexStackRunControlReaderForObserveTestV0) ReadRunControlStateV0(
+	_ context.Context,
+	_ orquestaruncontrol.RunControlReadRequestV0,
+) (orquestaruncontrol.RunControlStateV0, error) {
+	return reader.state, nil
 }
 
 func (observer codexStackObserveRejectedForTestV0) ObserveGoalWorkV0(

@@ -1346,3 +1346,34 @@ Pendiente real: `BUG-079` sigue abierto para enforcement runtime/proveedor de
 checkpoint temprano y limites de salidas de herramientas antes de que se genere
 la salida gigante. `BUG-165` sigue abierto para reconciliar `observe_goal`
 timeout/snapshot con `RunControl` terminal.
+
+## Continuacion Codex 2026-07-04 noche 6
+
+Avance adicional sobre `BUG-ORQ-20260704-165`:
+
+- `ObserveAppDirectorGoalTimeoutSnapshotV0` consulta ahora `RunControl` cuando
+  construye un snapshot parcial desde `GoalStateStore`.
+- Si el estado goal local sigue `running/accepted`, pero `RunControl` ya esta
+  terminal (`stopped` o `canceled`), el snapshot no publica `goal_status=running`.
+- La proyeccion publica pasa a `goal_status=blocked`,
+  `closure_status=blocked`, `closure_needs_rework=true`,
+  `recommended_action=replan` y conserva evidencia de `RunControl` junto a
+  `evidence-ref-observe-goal-run-control-terminal`.
+- El cambio es no destructivo: no persiste estado goal desde la ruta de
+  timeout; solo evita que la superficie publica contradiga un control terminal.
+
+Archivos tocados en este avance:
+
+- `modulos/orquesta-mcp/observe_app_director_goal_tool_executor_v0.go`
+- `modulos/orquesta-mcp/observe_app_director_goal_http_v0_test.go`
+- `modulos/orquesta-app-codex-stack/goal_first_observe_mcp_executor_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+
+Evidencia ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack -run 'TestMCPObserveAppDirectorGoalToolExecutorV0TimeoutSnapshot(NoPublicaRunningSiRunControlTerminal|LeeGoalState)|TestCodexStackObserveAppDirectorGoalExecutorV0TimeoutSnapshot(RespetaRunControlTerminal|IncluyeProcessRefs)'`
+
+Pendiente real: `BUG-165` sigue abierto para smoke real amplio con
+backend/proveedor lento o vivo tras stop forzado, y para confirmar propagacion
+completa de stop/cancel cuando el backend siga activo.

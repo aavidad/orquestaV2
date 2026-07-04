@@ -6,6 +6,8 @@ import (
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
+	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 )
 
 type MCPObserveAppDirectorGoalToolExecutorV0 struct {
@@ -81,6 +83,7 @@ func (executor MCPObserveAppDirectorGoalToolExecutorV0) ObserveAppDirectorGoalTi
 			result.CurrentPhase = strings.TrimSpace(string(run.CurrentPhase))
 		}
 	}
+	result = executor.withRunControlTerminalSnapshotV0(ctx, input, result)
 	if executor.Ports.EventReader != nil {
 		if events, loadErr := executor.Ports.EventReader.LoadRunEventsV0(ctx, strings.TrimSpace(input.RunRef)); loadErr == nil {
 			for _, event := range events {
@@ -92,4 +95,51 @@ func (executor MCPObserveAppDirectorGoalToolExecutorV0) ObserveAppDirectorGoalTi
 	}
 	result = executor.withEstadoVivoSnapshotV0(ctx, input, result)
 	return result, nil
+}
+
+func (executor MCPObserveAppDirectorGoalToolExecutorV0) withRunControlTerminalSnapshotV0(
+	ctx context.Context,
+	input MCPObserveAppDirectorGoalToolInputV0,
+	result MCPObserveAppDirectorGoalToolResultV0,
+) MCPObserveAppDirectorGoalToolResultV0 {
+	if executor.Ports.RunControl == nil || !mcpObserveAppDirectorGoalStatusCanBeOverriddenByRunControlV0(result.GoalStatus) {
+		return result
+	}
+	control, err := executor.Ports.RunControl.ReadRunControlStateV0(ctx, orquestaruncontrol.RunControlReadRequestV0{
+		RunRef: strings.TrimSpace(input.RunRef),
+	})
+	if err != nil || strings.TrimSpace(control.RunRef) != strings.TrimSpace(input.RunRef) {
+		return result
+	}
+	switch control.Status {
+	case orquestaruncontrol.RunControlStatusStoppedV0, orquestaruncontrol.RunControlStatusCanceledV0:
+	default:
+		return result
+	}
+	result.GoalStatus = orquestagoal.GoalStatusBlockedV0
+	result.ClosureStatus = firstNonEmptyMCPV0(result.ClosureStatus, orquestagoal.GoalStatusBlockedV0)
+	result.ClosureAccepted = false
+	result.ClosureNeedsRework = true
+	result.Summary = firstNonEmptyMCPV0(
+		result.Summary,
+		"run_control_terminal_overrides_stale_goal_running",
+	)
+	evidenceRefs := append(result.EvidenceRefs, control.EvidenceRefs...)
+	evidenceRefs = append(
+		evidenceRefs,
+		"evidence-ref-observe-goal-run-control-terminal",
+		"evidence-ref-run-control-terminal-"+strings.TrimSpace(string(control.Status)),
+	)
+	result.EvidenceRefs = compactStringsMCPV0(evidenceRefs)
+	result.RecommendedAction = mcpObserveAppDirectorGoalRecommendedActionV0(result)
+	return result
+}
+
+func mcpObserveAppDirectorGoalStatusCanBeOverriddenByRunControlV0(status string) bool {
+	switch strings.TrimSpace(status) {
+	case "", orquestagoal.GoalStatusAcceptedV0, orquestagoal.GoalStatusRunningV0:
+		return true
+	default:
+		return false
+	}
 }

@@ -14,6 +14,7 @@ import (
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 )
 
 func TestMCPObserveAppDirectorGoalHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
@@ -409,6 +410,62 @@ func TestMCPObserveAppDirectorGoalToolExecutorV0TimeoutSnapshotLeeGoalStateV0(t 
 	}
 }
 
+func TestMCPObserveAppDirectorGoalToolExecutorV0TimeoutSnapshotNoPublicaRunningSiRunControlTerminalV0(t *testing.T) {
+	runRef := "run-ref-goal-snapshot-run-control-terminal-001"
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       "goal-ref-snapshot-run-control-terminal-001",
+			RunRef:        runRef,
+			Objective:     "No publicar running si RunControl ya esta terminal.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{
+				Path: "docs/resultado_snapshot_terminal.md",
+			}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         "goal-ref-snapshot-run-control-terminal-001",
+			ExternalGoalRef: "thread-ref-snapshot-run-control-terminal-001",
+			EvidenceRefs:    []string{"evidence-ref-snapshot-run-control-terminal-launch"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	store := &mcpGoalStateStoreForTestV0{states: map[string]orquestagoal.GoalWorkStateV0{}}
+	if err := store.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+
+	result, err := NewMCPObserveAppDirectorGoalToolExecutorV0(orquestaappdirectorservice.StartAppDirectorPortsV0{
+		GoalStateStore: store,
+		RunControl: mcpObserveGoalRunControlForTestV0{state: orquestaruncontrol.RunControlStateV0{
+			RunRef:       runRef,
+			Status:       orquestaruncontrol.RunControlStatusStoppedV0,
+			Forced:       true,
+			EvidenceRefs: []string{"evidence-ref-run-control-stopped-forced"},
+		}},
+	}).ObserveAppDirectorGoalTimeoutSnapshotV0(
+		context.Background(),
+		MCPObserveAppDirectorGoalToolInputV0{
+			RequestID: "req-goal-snapshot-run-control-terminal-001",
+			RunRef:    runRef,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalTimeoutSnapshotV0: %v", err)
+	}
+	if result.GoalStatus == orquestagoal.GoalStatusRunningV0 ||
+		result.GoalStatus != orquestagoal.GoalStatusBlockedV0 ||
+		result.RecommendedAction != "replan" ||
+		!stringInSliceForMCPObserveGoalHTTPTestV0(result.EvidenceRefs, "evidence-ref-run-control-stopped-forced") ||
+		!stringInSliceForMCPObserveGoalHTTPTestV0(result.EvidenceRefs, "evidence-ref-observe-goal-run-control-terminal") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestMCPObserveAppDirectorGoalToolExecutorV0TimeoutSnapshotProyectaMetadataOPESAudioV0(t *testing.T) {
 	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
 		RunRef: "run-ref-goal-snapshot-opes-audio-001",
@@ -497,6 +554,17 @@ func (store mcpObserveGoalRunStoreForTestV0) SaveRunV0(
 	_ orquestacoreworkflow.OrchestrationRunV0,
 ) error {
 	return nil
+}
+
+type mcpObserveGoalRunControlForTestV0 struct {
+	state orquestaruncontrol.RunControlStateV0
+}
+
+func (control mcpObserveGoalRunControlForTestV0) ReadRunControlStateV0(
+	_ context.Context,
+	_ orquestaruncontrol.RunControlReadRequestV0,
+) (orquestaruncontrol.RunControlStateV0, error) {
+	return control.state, nil
 }
 
 type fakeMCPObserveAppDirectorGoalHTTPExecutorV0 struct {
