@@ -587,3 +587,23 @@ como el glosario): no hay segunda redacción que mantener.
 - G4: corpus derivado + índice léxico + bot determinista + tests (web).
 - G5: slot-filling/parafraseo vía director de escalada + panel chat web +
   tool MCP. Depende de G4 y de G2.
+
+### 12.7 Opcionalidad y coste (aclaración vinculante del operador)
+
+El operador lo quiere, pero como tiene coste debe ser OPCIONAL:
+
+1. El nivel LLM del bot (12.2.2) es opt-in explícito:
+   `ORQUESTA_WIZARD_BOT_LLM_ENABLED=true` + proveedor configurado. Por
+   defecto APAGADO: el wizard y el bot determinista funcionan completos sin
+   gastar un token.
+2. Presupuesto propio cuando está encendido:
+   `ORQUESTA_WIZARD_BOT_DAILY_TOKEN_BUDGET` (por defecto conservador). Al
+   agotarse, el bot degrada SOLO el parafraseo/slot-filling al modo
+   determinista y lo dice en la conversación ("sigo contigo en modo básico
+   por presupuesto"); la sesión nunca se corta.
+3. En la web, activar el chat con LLM muestra una nota de coste una vez por
+   sesión; el modo formulario y el chat determinista nunca la muestran.
+4. Registro: tokens del bot van a la misma contabilidad thread_goals/uso
+   que el resto de Orquesta para que el operador vea el gasto.
+5. Test: `TestWizardBotDegradaAPresupuestoAgotadoV0` y
+   `TestWizardBotApagadoPorDefectoV0`.
