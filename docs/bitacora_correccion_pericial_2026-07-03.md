@@ -3794,3 +3794,15 @@ enforcement proveedor BUG-079 (frontera runtime externo).
   completados e integrados (servidor=local=GitHub) con revision externa al
   sandbox en cada uno. Cola restante: gateada (legacy tras ventana §9;
   G5 bot LLM opt-in; enforcement proveedor BUG-079).
+
+## Nightly instalado en el servidor (2026-07-05 madrugada)
+
+- Cron 03:30 en srv1651826 ejecutando scripts/orquesta_smoke_nightly.sh con
+  PATH del toolchain y ORQUESTA_CODEX_COMMAND; log en
+  /srv/orquesta-self/nightly/cron.log; resultados en
+  /home/berserk/.orquesta-nightly/resultado_YYYYMMDD.json.
+- Herramienta deadcode instalada en /srv/orquesta-self/tools/go/bin (la fase
+  de auditoria del nightly la exige; el fallback a snapshot se rechaza por
+  diseno). Ejecucion manual de validacion: status=ok, phase=preflight_ok.
+- La ventana §9 de 7 nightlies verdes cuenta desde ahora EN EL SERVIDOR;
+  el timer del equipo local queda irrelevante (equipo se apaga).
