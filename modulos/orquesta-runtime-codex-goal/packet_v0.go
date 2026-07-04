@@ -1003,7 +1003,7 @@ func CodexGoalTaskCostClassForWriteSetV0(writeSet []orquestagoal.GoalWriteScopeV
 		if path == "" {
 			continue
 		}
-		if codexGoalWriteScopeIsMarkdownFileV0(path) {
+		if codexGoalWriteScopeIsDocumentationV0(path) {
 			hasDoc = true
 			continue
 		}
@@ -1070,6 +1070,22 @@ func codexGoalResultFileSafePartV0(value string) string {
 func codexGoalWriteScopeIsMarkdownFileV0(path string) bool {
 	lower := strings.ToLower(strings.TrimSpace(path))
 	return strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".markdown")
+}
+
+func codexGoalWriteScopeIsDocumentationV0(path string) bool {
+	if codexGoalWriteScopeIsMarkdownFileV0(path) {
+		return true
+	}
+	lower := strings.ToLower(strings.Trim(strings.TrimSpace(path), "/"))
+	if lower == "" {
+		return false
+	}
+	for _, segment := range strings.Split(lower, "/") {
+		if segment == "docs" {
+			return true
+		}
+	}
+	return false
 }
 
 func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec orquestagoal.GoalWorkSpecV0) (orquestagoal.GoalLaunchReceiptV0, error) {

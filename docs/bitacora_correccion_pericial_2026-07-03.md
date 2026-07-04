@@ -3632,3 +3632,25 @@ Tests/smoke verdes:
 - Smoke Orquesta temporal sin backend Goal: `/api/v0/apps/director` con
   `director_execution_mode=goal_first` devuelve HTTP 500
   `goal_backend_unavailable` y no cae a legacy.
+
+## Actualizacion Codex 2026-07-04 noche 34
+
+TAREA-3 queda cerrada para el routing por coste del backend Codex app-server:
+
+- `orquesta-runtime-codex-goal` deriva `task_cost_class` desde el write-set
+  (`doc|code|mixed`) y lo incluye en el prompt/packet. Se amplia para tratar
+  carpetas `docs/...` como documentales, no solo ficheros `.md/.markdown`.
+- `serverCodexGoalCostRoutingStarterV0` en `cmd/orquesta-server` ya envolvia
+  el backend app-server; se deja evidencia con tests de que `doc` fuerza
+  `reasoning_effort=low`, mientras `code` y `mixed` conservan el esfuerzo
+  configurado.
+- El wrapper vuelve a derivar la clase desde el write-set y no confia en una
+  clase declarada incoherente.
+- No se anaden envs ni campos nuevos: el default barato `low` queda como
+  politica de composicion Codex app-server; proveedor alternativo barato
+  (Gemini/Claude) queda como decision de producto/config futura, no como core.
+
+Verificacion:
+
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestServerCodexGoalCostRoutingStarterV0BajaSoloDocumentacionALowV0|TestServerCodexGoalTaskCostClassForPacketV0IgnoraDeclaradoIncoherenteV0|TestServerCodexGoalBackendFromEnvV0TmuxNoArrancaAppServerEnConstruccionV0'`
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-runtime-codex-goal -run 'TestBuildCodexGoalStartPacketV0DerivaTaskCostClassDesdeWriteSetV0'`

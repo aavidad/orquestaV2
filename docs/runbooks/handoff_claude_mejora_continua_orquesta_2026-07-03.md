@@ -1961,3 +1961,22 @@ Pendiente separado para Claude/servidor remoto:
   `orquesta-runtime-codex-goal` y se deriva del write-set, pero aun falta
   usarlo para seleccionar backend/effort barato en tareas documentales desde la
   composicion, sin meter proveedor/modelo en core ni goal neutral.
+
+## Actualizacion Codex 2026-07-04 noche 34
+
+TAREA-3 cerrada para Codex app-server:
+
+- `task_cost_class` se deriva en `orquesta-runtime-codex-goal`; ficheros
+  `.md/.markdown` y carpetas `docs/...` clasifican como `doc`.
+- `serverCodexGoalCostRoutingStarterV0` ya envolvia el app-server; ahora queda
+  probado por `TestServerCodexGoalCostRoutingStarterV0BajaSoloDocumentacionALowV0`.
+- Regla verificada: write-set solo Markdown -> `reasoning_effort=low`; write-set
+  de codigo o mixto -> conserva el esfuerzo configurado.
+- `TestServerCodexGoalTaskCostClassForPacketV0IgnoraDeclaradoIncoherenteV0`
+  fija que la composicion no se deja enganar por un `TaskCostClass` declarado
+  que contradiga el write-set.
+- No se anaden variables nuevas ni se toca core/goal neutral.
+
+Residual opcional, no bloqueo: si producto quiere mover docs a Gemini/Claude en
+vez de Codex low, hacerlo como politica de composicion configurable y con
+evidencia propia.

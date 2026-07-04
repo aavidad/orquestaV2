@@ -57,6 +57,87 @@ func TestServerGoalObservationFingerprintFromBackendV0EsOptInV0(t *testing.T) {
 	}
 }
 
+func TestServerCodexGoalCostRoutingStarterV0BajaSoloDocumentacionALowV0(t *testing.T) {
+	tests := []struct {
+		name     string
+		writeSet []orquestagoal.GoalWriteScopeV0
+		want     string
+	}{
+		{
+			name: "doc markdown baja a low",
+			writeSet: []orquestagoal.GoalWriteScopeV0{{
+				Path: "docs/auditoria.md",
+			}},
+			want: serverCodexGoalDocTaskReasoningEffortV0,
+		},
+		{
+			name: "doc folder baja a low",
+			writeSet: []orquestagoal.GoalWriteScopeV0{{
+				Path: "docs/runbooks",
+			}},
+			want: serverCodexGoalDocTaskReasoningEffortV0,
+		},
+		{
+			name: "code conserva esfuerzo configurado",
+			writeSet: []orquestagoal.GoalWriteScopeV0{{
+				Path: "cmd/orquesta-server",
+			}},
+			want: "high",
+		},
+		{
+			name: "mixed conserva esfuerzo configurado",
+			writeSet: []orquestagoal.GoalWriteScopeV0{
+				{Path: "docs/auditoria.md"},
+				{Path: "cmd/orquesta-server"},
+			},
+			want: "high",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			protocol := &fakeCodexAppServerProtocolV0{
+				thread: serverCodexAppServerThreadV0{ID: "thread-ref-cost-routing"},
+				goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-cost-routing", Status: "active"},
+				turn:   serverCodexAppServerTurnV0{ID: "turn-ref-cost-routing", Status: "inProgress"},
+			}
+			starter := serverCodexGoalCostRoutingStarterV0{
+				Backend: serverCodexAppServerGoalBackendV0{
+					Protocol:        protocol,
+					CWD:             t.TempDir(),
+					ReasoningEffort: "high",
+					ApprovalPolicy:  "never",
+				},
+			}
+			packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+				GoalRef:       "goal-ref-cost-routing-" + strings.ReplaceAll(tt.name, " ", "-"),
+				Objective:     "probar routing de coste goal-first",
+				WriteSet:      tt.writeSet,
+				TaskCostClass: orquestaruntimecodexgoal.CodexGoalTaskCostClassForWriteSetV0(tt.writeSet),
+			}
+
+			receipt, err := starter.StartCodexGoalV0(context.Background(), packet)
+			if err != nil {
+				t.Fatalf("StartCodexGoalV0: %v receipt=%+v", err, receipt)
+			}
+			if protocol.turnParams.Effort != tt.want {
+				t.Fatalf("effort=%q want %q packet=%+v", protocol.turnParams.Effort, tt.want, packet)
+			}
+		})
+	}
+}
+
+func TestServerCodexGoalTaskCostClassForPacketV0IgnoraDeclaradoIncoherenteV0(t *testing.T) {
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		TaskCostClass: orquestaruntimecodexgoal.CodexGoalTaskCostClassDocV0,
+		WriteSet: []orquestagoal.GoalWriteScopeV0{{
+			Path: "cmd/orquesta-server",
+		}},
+	}
+	if got := serverCodexGoalTaskCostClassForPacketV0(packet); got != orquestaruntimecodexgoal.CodexGoalTaskCostClassCodeV0 {
+		t.Fatalf("task_cost_class=%q want code", got)
+	}
+}
+
 func TestServerCodexGoalBackendFromEnvV0TmuxNoArrancaAppServerEnConstruccionV0(t *testing.T) {
 	root := t.TempDir()
 	projectDir := filepath.Join(root, "project")

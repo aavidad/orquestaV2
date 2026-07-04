@@ -279,6 +279,20 @@ checkpoint temprano SIEMPRE como primera accion.
   write-set (solo .md => doc) y cablearla a la seleccion de backend/effort.
 - Write-set: modulos/orquesta-runtime-codex-goal, cmd/orquesta-server, docs.
 
+Estado Codex 2026-07-04 noche: cerrado para el backend Codex app-server. El
+runtime `orquesta-runtime-codex-goal` deriva `task_cost_class` desde
+`GoalWorkSpecV0.WriteSet`; quedan como `doc` los ficheros Markdown y carpetas
+documentales `docs/...`, para cubrir inventarios/runbooks sin escribir cada
+`.md`. El wrapper de composicion
+`serverCodexGoalCostRoutingStarterV0` en `cmd/orquesta-server` fuerza
+`reasoning_effort=low` solo cuando la clase efectiva es `doc`; `code` y `mixed`
+conservan el esfuerzo configurado. Se anaden pruebas directas
+`TestServerCodexGoalCostRoutingStarterV0BajaSoloDocumentacionALowV0` y
+`TestServerCodexGoalTaskCostClassForPacketV0IgnoraDeclaradoIncoherenteV0`.
+No se anade env nueva ni se mete proveedor/modelo en core. Seleccionar otro
+proveedor barato (Gemini/Claude) para docs queda como politica opcional de
+producto, no como bloqueo del routing por coste actual.
+
 ### TAREA-4: coordinacion automatica completa de shutdown (residual BUG-065/165)
 
 - Smoke real amplio: servidor con 2 goals activos, shutdown cooperativo debe

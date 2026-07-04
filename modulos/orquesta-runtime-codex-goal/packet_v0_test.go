@@ -150,6 +150,14 @@ func TestBuildCodexGoalStartPacketV0DerivaTaskCostClassDesdeWriteSetV0(t *testin
 			want: CodexGoalTaskCostClassDocV0,
 		},
 		{
+			name: "doc si el write-set es carpeta docs",
+			writeSet: []orquestagoal.GoalWriteScopeV0{
+				{Path: "docs"},
+				{Path: "docs/runbooks"},
+			},
+			want: CodexGoalTaskCostClassDocV0,
+		},
+		{
 			name:     "code si no hay markdown",
 			writeSet: []orquestagoal.GoalWriteScopeV0{{Path: "cmd/orquesta-server"}},
 			want:     CodexGoalTaskCostClassCodeV0,
