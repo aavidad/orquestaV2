@@ -1,5 +1,22 @@
 # Instrucciones para el director Codex (relevo de Claude) — 2026-07-04
 
+Estado final 2026-07-04 tras relevo Codex: documento historico ejecutado.
+No usar como plan vivo sin leer antes la seccion final de
+`docs/bitacora_correccion_pericial_2026-07-03.md`.
+
+Resumen de cierre:
+- T294 integrado en `7a6dea0d`: stop/cancel forzado goal-first propaga al
+  backend tmux y `observe_goal` respeta evidencia terminal forzada.
+- T295 cerrado en `6fe19d06`: el planner no deja que el scanner idle sustituya
+  una tarea ejecutable por interpretar `Dependencias: ninguna` como pendiente.
+- T296 integrado en `67dd7fa9`: shutdown expone `goal_actions` y relectura de
+  active work para backends Goal.
+- BUG-166/167/168 quedaron cerrados en `0e0dcedc`; Sueldos accepted queda como
+  validacion de campo anterior a este relevo.
+- Queda pendiente no cerrado total: revalidacion real de BUG-165 post-fix y
+  backlog vivo 058, 066, 073, 075, 079, mas smoke real MEJ-104 si sigue
+  aplicando.
+
 Eres el DIRECTOR del proyecto Orquesta. Claude queda fuera por límite de
 tokens. Este documento es autocontenido: síguelo al pie de la letra y no
 improvises fuera de él. Idioma de trabajo: español. Registra TODO avance en

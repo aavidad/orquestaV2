@@ -1021,3 +1021,55 @@ de `BUG-ORQ-20260704-165`.
 - Umbral aplicado en pilotajes: ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS=450000,
   ORQUESTA_CODEX_GOAL_TIMEOUT_MS=1800000.
 - Pendientes tras integrar: 058, 066, 073, 075, 079 y smoke real MEJ-104.
+
+## Relevo director Codex 2026-07-04
+
+Integrado en rama `trabajo/plataforma-agentes`:
+
+- `0e0dcedc`: BUG-166/167/168 Sueldos. Reconciliacion de receipts por
+  `goal_ref`, exclusion de `.orquesta-*`/`.gocache-local` y evidencia de campo
+  accepted ya documentada.
+- `7a6dea0d`: T294 / BUG-165 parcial. `runs/control stop|cancel forced=true`
+  propaga cierre al backend Goal tmux por puerto de control, conserva cierre
+  terminal `blocked/canceled` con evidencias y evita que `observe_goal` siga
+  publicando `running` cuando ya hay evidencia terminal forzada.
+- `6fe19d06`: T295 / BUG-169 cerrado. `Dependencias: ninguna` ya no se trata
+  como dependencia real pendiente; el planner emite `backlog_autoprogramming`
+  antes que scanner/fallback cuando hay backlog ejecutable.
+- `67dd7fa9`: T296 / BUG-065/076 reducido. Shutdown publica `goal_actions`
+  tipadas (`wait_checkpoint`, `forced_stop_requested`, `cleanup_required`,
+  `cleanup_requested`, `cleanup_completed`) y revalida active work antes de
+  publicar ready.
+
+Evidencia ejecutada por Codex:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'TestIdleSelfImprovementBacklogPlannerV0(BacklogMinimoPendienteNoCedeCicloAlScanner|RespetaDependencias|PlanificaDependiente|SaltaTareasYaEnCola|AnadeScannerSiTodoEstaEnCola|NoInventaFallbackSiTodoEstaEnCola)'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver ./modulos/orquesta-app-director-service ./modulos/orquesta-app-codex-stack ./modulos/orquesta-orchestration-core ./modulos/orquesta-server-shutdown`
+- `go test -count=1 ./modulos/orquesta-server-shutdown`
+- `go test -count=1 ./cmd/orquesta-server`
+- `git diff --check`
+
+Limpieza operativa:
+
+- Cerrados servidores piloto T294/T295/T296 (`server.pid` 2226334, 2435566,
+  2435721).
+- Cerradas sesiones tmux `orquesta-goal-7905bea451024ae4`,
+  `orquesta-goal-c2a9a1ad94fcc2a2` y
+  `orquesta-goal-7b561bb4f88959a8`.
+- Cerrados app-servers residuales de esos sockets.
+- Retirados worktrees/ramas `pilot-t294`, `pilot-t295`, `pilot-t296`.
+- `scripts/bootstrap_agent_tooling.sh --status` queda `estado=ok`,
+  `live_codebase_memory_mcp_processes=0`. Se dejo viva solo la sesion
+  `claude --resume`.
+
+Estado y pendientes para Claude:
+
+- BUG-165 no se declara cerrado total: falta revalidacion real posterior al
+  fix con alto consumo/status lento o un smoke equivalente. El codigo de stop
+  forzado esta integrado y probado en suites focales.
+- BUG-065/076 quedan reducidos por acciones tipadas y relectura de active work,
+  pero falta smoke/escenario real amplio de cleanup externo y coordinacion
+  completa backend/checkpoint/stop/cancel/wait.
+- T295/BUG-169 queda cerrado en codigo y tests.
+- Siguen abiertos los frentes vivos ya listados por Claude: 058, 066, 073, 075,
+  079 y smoke real MEJ-104 si sigue vigente.

@@ -30,28 +30,37 @@ antes de su cierre posterior:
 - Checkpoint de mantenimiento `task-ref-doc-cleanup-inventario-20260704`:
   alcance limitado a marcar supersedencias/estado vigente en este inventario,
   sin borrar historia ni cambiar el conteo de bugs vivos por texto antiguo.
-- `BUG-ORQ-20260701-065` sigue abierto. El cierre de residuales de
-  shutdown/run-control no cubre todavia la coordinacion automatica completa
-  backend/checkpoint/stop/cancel/wait ni cualquier hueco restante donde
-  `recommended_action` no este publicado en el contrato tipado compacto.
-- `BUG-ORQ-20260704-166` queda cerrado funcionalmente por `ff620ecf` y el
-  ajuste posterior de `.gocache-local` para la causa observada: el escaneo de
+- `BUG-ORQ-20260701-065` sigue abierto, pero reducido por `67dd7fa9`: shutdown
+  ya expone `goal_actions` tipadas para active work goal-first/backend
+  (`wait_checkpoint`, `forced_stop_requested`, `cleanup_required`,
+  `cleanup_requested`, `cleanup_completed`) y revalida active work antes de
+  publicar ready. Pendiente: smoke real/corte externo amplio y coordinacion
+  automatica completa backend/checkpoint/stop/cancel/wait.
+- `BUG-ORQ-20260704-166` queda cerrado funcionalmente por `ff620ecf` y
+  `0e0dcedc`, incluyendo el ajuste posterior de `.gocache-local`, para la causa
+  observada: el escaneo de
   resultados saltaba caches voluminosas tarde y podia agotar el limite antes de
   encontrar el receipt terminal `complete`.
   Reintento de campo Sueldos/Orquesta posterior al fix aceptado:
   `run_status=cerrada`, `goal_status=complete`, `closure_status=accepted`.
-- `BUG-ORQ-20260704-167` queda cerrado: el reintento de campo
+- `BUG-ORQ-20260704-167` queda cerrado por `0e0dcedc`: el reintento de campo
   `request-ref-sueldos-cargos-partidos-20260704-003` arranco el goal con
   `goal_status=running` tras reiniciar Orquesta con el fix de snapshot.
   el snapshot runtime de write-set saltaba prefijos Orquesta conocidos pero no
   variantes nuevas como `.orquesta-feature-cargos`, de modo que un servidor
   temporal podia auditar su propio estado local y fallar el arranque con
   `codex_app_server_runtime_write_set_guard_snapshot_failed`.
-- `BUG-ORQ-20260704-168` queda cerrado: el reintento de campo
+- `BUG-ORQ-20260704-168` queda cerrado por `0e0dcedc`: el reintento de campo
   `request-ref-sueldos-cargos-partidos-20260704-004` ya no mezclo
   `artifact_refs` ni tests del run antiguo `...43c20...` tras rechazar receipts
   terminales con `goal_ref` distinto al goal actual.
-- Avance 2026-07-04: `BUG-ORQ-20260704-165` queda parcialmente reducido para
+- Avance 2026-07-04: `BUG-ORQ-20260704-165` queda parcialmente reducido por
+  `7a6dea0d`: `runs/control stop/cancel forced=true` propaga el stop al backend
+  Goal cuando el puerto de control esta disponible, guarda cierre terminal
+  `blocked/canceled` con evidencias y `observe_goal` no vuelve a publicar
+  `running` si ya existe evidencia terminal forzada. No se declara cerrado
+  total sin reejecutar un caso real posterior de alto consumo/status lento.
+- Avance anterior 2026-07-04: `BUG-ORQ-20260704-165` queda parcialmente reducido para
   snapshots `stopped` heredados con shutdown activo stale: status normaliza y
   limpia `shutdown_in_progress`, `shutdown_active_work_count/refs`,
   `shutdown_async_work_active` y timeout de parada antes de publicar salida
@@ -65,6 +74,12 @@ antes de su cierre posterior:
   resultado tipado de shutdown, MCP `orquesta.server.shutdown.v0` y el error
   compacto de `orquesta-server stop`; el bug sigue abierto para la coordinacion
   automatica backend/checkpoint/stop/cancel/wait.
+- `BUG-ORQ-20260704-169` queda cerrado por `6fe19d06`: el planner de
+  automejora ya no interpreta `Dependencias: ninguna` como dependencia real
+  pendiente y, con capacidad libre, planifica la tarea ejecutable antes que el
+  scanner idle. Esto cierra la regresion T295 observada como tres ciclos no-op
+  del scanner; si la via idle vuelve a no ejecutar backlog pendiente, reabrir
+  como regresion nueva enlazada.
 - `BUG-ORQ-20260701-085` queda historico/supersedido por
   `BUG-ORQ-20260704-164` para runtime/write-set: el residual de enforcement
   fuerte ya no cuenta como bug vivo. Solo queda como limite preventivo externo
@@ -95,6 +110,7 @@ antes de su cierre posterior:
 
 | ID | Estado | Area | Sintoma | Hipotesis arquitectonica | Evidencia / enlace | Accion |
 | --- | --- | --- | --- | --- | --- | --- |
+| BUG-ORQ-20260704-169 | cerrado | Autoprogramacion idle/scanner | el pilotaje T295 reprodujo que, con `capacity_free` y una seccion pendiente ejecutable que declaraba `Dependencias: ninguna`, el planner devolvia una tarea de `backlog_scan`/fallback en vez del request ejecutable; la cadena idle parecia escanear y declarar no-op sin programar el backlog ya escrito | el parser normalizaba `ninguna` como dependencia real no completada, por lo que la tarea quedaba no ejecutable y el scanner ocupaba el ciclo; faltaba una regresion que impidiera sustituir trabajo pendiente por scanner cuando hay backlog minimo valido | request `request-ref-t295-scanner-noop-20260704-001`; commit `6fe19d06`; test `TestIdleSelfImprovementBacklogPlannerV0BacklogMinimoPendienteNoCedeCicloAlScannerV0`; `go test -count=1 ./cmd/orquesta-server -run 'TestIdleSelfImprovementBacklogPlannerV0(BacklogMinimoPendienteNoCedeCicloAlScanner|RespetaDependencias|PlanificaDependiente|SaltaTareasYaEnCola|AnadeScannerSiTodoEstaEnCola|NoInventaFallbackSiTodoEstaEnCola)'`; `go test -count=1 ./cmd/orquesta-server` | Cierre: `idleSelfImprovementNormalizeDependencyRefV0` descarta marcadores de ausencia de dependencias (`ninguna`, `none`, `sin dependencias`, etc.); el planner conserva el request `backlog_autoprogramming` y no anade scanner si ya hay tarea ejecutable |
 | BUG-ORQ-20260704-163 | cerrado | Autoprogramacion/skills curadas | la validacion de skills curadas de MEJ-206 rechazaba rutas absolutas conocidas como `/home/`, `/srv/` o `/tmp/`, pero podia aceptar metadata con rutas absolutas genericas como `/workspaces/...`, `/project/.../private.md`, `C:\Users\...` o UNC `\\server\share\...` | el filtro de contexto reutilizable dependia de una allowlist corta de prefijos locales; una skill propuesta o cargada podia introducir paths privados de otros entornos aunque no contuviera secretos explicitos | observado en revision de handoff Claude MEJ-206; tests `TestValidateAutoprogrammingCuratedSkillCatalogV0RechazaRutasAbsolutasGenericas`, `TestBuildAutoprogrammingSkillDistillationReviewProposalV0RechazaRutaAbsolutaGenerica`, `TestServerCuratedSkillsFromProjectV0IgnoraRutaAbsolutaGenericaV0`; `go test -count=1 ./modulos/orquesta-autoprogramming ./cmd/orquesta-server -run 'Test(ValidateAutoprogrammingCuratedSkillCatalogV0RechazaRutasAbsolutasGenericas|BuildAutoprogrammingSkillDistillationReviewProposalV0RechazaRutaAbsolutaGenerica|ServerCuratedSkillsFromProjectV0IgnoraRutaAbsolutaGenerica)V0?'` | Cierre: el detector de detalle sensible conserva marcadores existentes y detecta rutas absolutas Unix genericas con fichero, prefijos `/workspace(s)`, `/private`, `/volumes`, rutas Windows con unidad y UNC. El loader de `skills/*/SKILL.md` descarta esas entradas antes de inyectar `skill_ref` en goals idle. El guard runtime fuerte de write-set queda cubierto despues por `BUG-ORQ-20260704-164` |
 | BUG-ORQ-20260704-164 | cerrado | Goal-first/write-set runtime | el backend `orquesta-runtime-codex-appserver` podia aceptar un resultado `complete` aunque el agente hubiera modificado rutas fuera de `DirectionContract.allowed_write_set`, siempre que el recibo terminal no declarase esas rutas fuera de scope | la politica de `workspace_write_guard` viajaba en el start packet y en validacion de receipt, pero faltaba una verificacion runtime independiente del worktree antes de promover un cierre terminal | cierre residual de `BUG-ORQ-20260701-085`; tests `TestServerCodexAppServerGoalBackendV0RuntimeWriteSetGuardBloqueaCambioFueraDeScope`, `TestServerCodexAppServerGoalBackendV0RuntimeWriteSetGuardPermiteCambioDentroDeScope`, `TestVerifyWorktreeWriteSetV0RechazaCambioFueraDelWriteSet`, `TestVerifyWorktreeWriteSetV0AceptaCambiosDentroDelWriteSet`, `TestMCPAutoprogrammingStatusExecutorV0RuntimeWriteSetViolationPideReworkV0`, `TestMCPDirectorStatsToolExecutorV0GoalFirstProyectaRuntimeWriteSetViolationV0`, `TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0RuntimeWriteSetViolationPideRework`, `TestMCPDomainWorkStatusHTTPHandlerV0NormalizaSenalesGoalFirstRecuperablesComoBloqueadas` | Cierre: appserver captura baseline del worktree al arrancar goals con `write_set_enforcement=workspace_write_guard`, verifica `VerifyWorktreeWriteSetV0` antes de fusionar un resultado `complete`, bloquea como `codex_app_server_runtime_write_set_violation` si detecta cambios fuera de scope, elimina recibos de dominio/rework refs de ese cierre y publica evidencias compactas por ruta fuera de scope. MCP/status, `director.stats`, `observe_goal`, `efficiency_summary` y `domain-work/status` lo proyectan como bloqueo recuperable con `rework_write_set_violation`. No se ejecuta smoke real OPES/productivo en este cierre |
 | BUG-ORQ-20260704-165 | abierto | Goal-first/observabilidad y control Orquesta | durante la limpieza documental 2026-07-04, Orquesta acepto tres goals paralelos y escribio los documentos esperados, pero `/api/v0/autoprogramming/status` y `observe_goal` devolvieron timeouts; antes del reinicio con backend, un `runs/control stop forced=true` sobre T260 devolvio `control_not_propagated_to_goal_backend` pese a no observarse `codex app-server` local vivo; al cierre, `orquesta-server stop --force --reason ...` no devolvio en mas de 60s y el servidor publico `shutdown_in_progress` con active works stale hasta cortarlo por SIGINT local | la ejecucion goal-first puede avanzar por backend mientras las superficies de observacion/control quedan lentas o no reconcilian un estado stale sin proceso; esto vuelve a obligar a integracion manual para saber si el trabajo termino, fallo o sigue vivo, y puede dejar un state `stopped/degraded` con refs de active work ya sin procesos | observado con request `request-ref-doc-cleanup-historicos-falsos-20260704`, goals `goal-ref-task-autoprogramming-39ecd0187760-g01/g02/g03`, errores `autoprogramming_status_timeout` y `autoprogramming_observe_goal_timeout`; T260 previo `request-ref-autoprogramming-backlog-t260-goal-first-codex-loop-delgado-c13b7862` fallo con `control_not_propagated_to_goal_backend`; limpieza final: SIGINT local dejo sin `orquesta-server run`, `codex app-server` ni tmux `orquesta-goal-*`, pero `orquesta-server status` quedo `stopped/degraded` por snapshot de shutdown activo | Pendiente: acotar `status/observe` por run sin bloquear toda la lectura, reconciliar estados goal-first stale cuando el backend local no esta vivo, terminar `stop --force --reason` con cuerpo accionable y publicar una accion unica `wait/retry/stop/reconcile` con evidencia suficiente para no depender de inspeccion manual |
