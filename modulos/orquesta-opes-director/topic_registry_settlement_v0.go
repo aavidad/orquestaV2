@@ -74,6 +74,17 @@ func topicRegistrySettlementForRecordV0(record OPESCausalArtifactRecordV0) topic
 			NextWorkKinds: []string{"review_director_consolidation"},
 		}
 	}
+	artifactQualityResult, _ := topicRegistryArtifactQualityResultForRecordV0(record)
+	artifactQualityPendingRefs := topicRegistryArtifactQualityPendingRefsForRecordV0(record)
+	if len(artifactQualityPendingRefs) > 0 {
+		return topicRegistrySettlementV0{
+			Status:        topicRegistrySettlementNeedsReworkV0,
+			Scope:         "artifact_quality",
+			Reason:        "artifact_quality_contract_failed",
+			Refs:          compactStringsV0(append(append(baseRefs, artifactQualityPendingRefs...), artifactQualityResult.EvidenceRefs...)),
+			NextWorkKinds: []string{"review_director_consolidation"},
+		}
+	}
 	if evidencePendingRefs := topicRegistryRequiredEvidencePendingRefsForRecordV0(record); len(evidencePendingRefs) > 0 &&
 		topicRegistryRequiredEvidenceShouldReworkV0(record) {
 		return topicRegistrySettlementV0{

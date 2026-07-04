@@ -16,6 +16,7 @@ func followupRequestV0(
 	fields := provenanceFieldsV0(record, followupRef, expectedArtifactType)
 	fields = appendRequiredEvidenceReworkFieldsV0(record, followupRef, fields)
 	fields = appendQuestionBankQualityReworkFieldsV0(record, followupRef, fields)
+	fields = appendArtifactQualityReworkFieldsV0(record, followupRef, fields)
 	return orquestadomainwork.NormalizeDomainWorkJobRequestV0(orquestadomainwork.DomainWorkJobRequestV0{
 		RequestID:      "request-" + key,
 		CorrelationID:  firstNonEmptyV0(record.CorrelationID, record.IdempotencyKey),
@@ -89,6 +90,38 @@ func appendQuestionBankQualityReworkFieldsV0(
 		orquestadomainwork.DomainWorkFieldV0{Name: "question_bank_quality_issue_refs", Values: compactStringsV0(issueRefs)},
 		orquestadomainwork.DomainWorkFieldV0{Name: "publication_status", Value: "not_publicable_question_bank_quality_failed"},
 		orquestadomainwork.DomainWorkFieldV0{Name: "recommended_action", Value: "review_question_bank_quality"},
+	)
+}
+
+func appendArtifactQualityReworkFieldsV0(
+	record OPESCausalArtifactRecordV0,
+	followupRef string,
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) []orquestadomainwork.DomainWorkFieldV0 {
+	if !strings.HasPrefix(strings.TrimSpace(followupRef), "artifact-quality-") &&
+		strings.TrimSpace(followupRef) != topicRegistryArtifactQualityNeedsReworkRefV0 {
+		return fields
+	}
+	pending := topicRegistryArtifactQualityPendingRefsForRecordV0(record)
+	result, ok := topicRegistryArtifactQualityResultForRecordV0(record)
+	issueRefs := make([]string, 0, len(result.Issues))
+	if ok {
+		for _, issue := range result.Issues {
+			if code := strings.TrimSpace(issue.Code); code != "" {
+				issueRefs = append(issueRefs, code)
+			}
+		}
+	}
+	if len(pending) == 0 {
+		pending = []string{followupRef}
+	}
+	return append(fields,
+		orquestadomainwork.DomainWorkFieldV0{Name: "rework_reason", Value: "artifact_quality_contract_failed"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "artifact_quality_missing_refs", Values: compactStringsV0(pending)},
+		orquestadomainwork.DomainWorkFieldV0{Name: "artifact_quality_issue_refs", Values: compactStringsV0(issueRefs)},
+		orquestadomainwork.DomainWorkFieldV0{Name: "artifact_quality_artifact_type", Value: result.ArtifactType},
+		orquestadomainwork.DomainWorkFieldV0{Name: "publication_status", Value: "not_publicable_artifact_quality_failed"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "recommended_action", Value: "review_artifact_quality"},
 	)
 }
 
@@ -228,6 +261,7 @@ func followupRefsForRecordV0(record OPESCausalArtifactRecordV0) []string {
 	refs = append(refs, topicRegistryLifecyclePendingRefsForRecordV0(record)...)
 	refs = append(refs, topicRegistryQualityPendingRefsForRecordV0(record)...)
 	refs = append(refs, topicRegistryQuestionBankQualityPendingRefsForRecordV0(record)...)
+	refs = append(refs, topicRegistryArtifactQualityPendingRefsForRecordV0(record)...)
 	refs = append(refs, topicRegistryRequiredEvidencePendingRefsForRecordV0(record)...)
 	status := strings.ToLower(firstNonEmptyV0(
 		fieldStringV0(record.PayloadFields, "status"),

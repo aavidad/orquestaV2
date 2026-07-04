@@ -403,6 +403,37 @@ Pendiente para Claude si reanuda desde aqui:
 - Confirmar el commit/push de esta tanda si aparece como pendiente.
 - No cerrar `BUG-075/058/066` sin las evidencias indicadas arriba.
 
+## Actualizacion Codex 2026-07-04 noche 30
+
+Avance de este bloque:
+
+- `BUG-ORQ-20260701-075` queda reducido por un contrato ejecutable nuevo en
+  `orquesta-opes-director`: `OPESArtifactQualityContractV0`.
+- El contrato valida campos/refs estructurados minimos para HTML, visuales,
+  audio, tutor/RAG, fuentes, revisiones, supuestos, juegos, ayuda y
+  reutilizacion visual. No usa rails por texto libre.
+- Si una entrega terminal trae evidencia nominal `opes-final-evidence:*` pero
+  no trae manifest/refs/QA estructurada del artefacto, el registro queda
+  `needs_rework`, settlement `artifact_quality_contract_failed` y followup
+  `review_artifact_quality`.
+- Si falta toda la evidencia minima, se conserva el diagnostico anterior
+  `required_evidence_missing`; no se mezcla con artifact quality.
+- `BUG-075` sigue abierto para smoke temporal OPES/external-work con artefactos
+  reales y para demostrar que no hay reescritura tardia tras suficiente entrega.
+
+Incidencia operativa cerrada:
+
+- `BUG-ORQ-20260704-172`: `go test` fallo inicialmente por `/home` al 100% y
+  cache Go de 17G en `/home/alberto/.cache/go-build`. Se limpio con
+  `go clean -cache` y se verifico usando `GOCACHE=/tmp/orquesta-codex-gocache`
+  y `GOTMPDIR=/tmp/orquesta-codex-gotmp`.
+
+Pruebas ejecutadas en esta tanda:
+
+- `go test -count=1 ./modulos/orquesta-opes-director -run 'TestValidateOPESArtifactQualityContractV0CubreWorkKindsMinimos|TestProduceOPESCausalJobsV0(VisualConEvidenceRefPeroContratoFallidoCreaRework|HTMLConContratoArtifactQualityPassNoCreaRework|QuestionBankConEvidenceRefPeroContratoFallidoCreaRework|QuestionBankConContratoPassNoCreaRework)'`
+- `go test -count=1 ./modulos/orquesta-opes-director`
+- `go test -count=1 ./modulos/orquesta-opes-director ./modulos/orquesta-opes-bridge`
+
 ## Checklist de Claude
 
 1. Revisar `git status --short` y separar cambios de cada frente.
