@@ -422,7 +422,7 @@ vuelva a pasar, y no tener 500 variables.
   TUNING (pasan a secciones del fichero; env deprecada con alias y aviso
   `deprecated_env_used` durante 2 versiones), SOLO-PILOTO/SMOKE (pasan a
   perfiles, ver 8.5), MUERTAS (borrar ya con evidencia de no-uso via rg).
-- Una ola por PR, con tabla antes/después en el inventario y el ratchet
+- Ola 1 definida por docs/auditoria_envs_pisadas_2026-07-04.md (3 variantes codex home, 2 OPES base URL, unidades de timeout, familia GUARDIAN fuera de registro). Una ola por PR, con tabla antes/después en el inventario y el ratchet
   bajando en cada ola. No romper compatibilidad sin alias.
 
 8.5 Perfiles predefinidos:
