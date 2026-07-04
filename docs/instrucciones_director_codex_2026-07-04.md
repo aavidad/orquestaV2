@@ -352,3 +352,36 @@ Criterio de aceptacion global: una sesion de wizard simulada en test parte de
 solo `nombre+objetivo` y llega a spec completo valido en <=6 turnos usando
 recomendaciones; y una segunda sesion detecta al menos 3 huecos cruzados de
 los listados arriba.
+
+#### TAREA-7b: refinamiento del operador (2026-07-04, vinculante)
+
+Ejemplo canonico del operador (usarlo como test de aceptacion literal):
+entrada inicial "quiero una app para una agenda" y NADA mas. El wizard debe
+preguntar, entre otras: ¿movil, PC o ambas?; ¿personal o para compartir?;
+¿integrarla con la agenda de la empresa (y cual: Google/Microsoft/CalDAV)?;
+y asi con cada dimension relevante hasta poder terminar la app completa.
+Anadir test `TestWizardAgendaDesdeSoloObjetivoV0` que parta de ese texto y
+verifique que el wizard genera esas familias de preguntas con opciones.
+
+Reglas vinculantes adicionales:
+
+1. **La recomendacion se muestra SIEMPRE, incluso contra la eleccion del
+   usuario**: si el usuario elige una opcion distinta de la recomendada, la
+   respuesta del turno debe conservar `recommended` + `rationale` visibles
+   junto a la eleccion registrada (campo `user_choice` vs `recommended`).
+   Nunca se sobreescribe la eleccion del usuario, pero nunca se oculta cual
+   era la mejor opcion y por que. Test focal de este contraste.
+2. **Defaults de ingenieria silenciosos**: si el usuario no dice nada al
+   respecto, el spec compuesto SIEMPRE incluye: arquitectura hexagonal
+   (puertos/adaptadores), i18n es/en por catalogo, tests unitarios +
+   arquitectura (ratchet), linters/format, manejo de errores tipado con
+   catalogo publico, logging estructurado, CI-ready (make/scripts de
+   verificacion), y documentacion tecnica (handoff, source_tree, stack
+   manifest). Estos defaults se declaran en `preferencias_tecnicas` y
+   `calidad` del AppSpecRequestV0 sin preguntar, y el resumen final los lista
+   en una seccion "decisiones tomadas por ti" para transparencia. Solo se
+   pregunta si el usuario contradice un default explicitamente.
+3. Las preguntas se agrupan por turnos tematicos (max 3-4 preguntas por
+   turno) para no abrumar: primero uso/plataforma, luego datos/integraciones,
+   luego despliegue/calidad. El flujo del ejemplo agenda debe caber en <=6
+   turnos.
