@@ -88,6 +88,8 @@ func buildMCPAutoprogrammingEfficiencySummaryV0(
 			parts = append(parts, "run", runRef)
 		}
 		summary.RecommendedAction = strings.Join(parts, ":")
+	} else if runRef := pendingIntegrationRunRefMCPAutoprogrammingEfficiencyV0(diagnostics, run); runRef != "" {
+		summary.RecommendedAction = strings.Join([]string{mcpAutoprogrammingActionWaitForIntegrationReceiptV0, "run", runRef}, ":")
 	} else if repairRunRef := repairReceiptRunRefMCPAutoprogrammingEfficiencyV0(diagnostics, run); repairRunRef != "" {
 		summary.RecommendedAction = strings.Join([]string{MCPGoalFirstRepairReceiptActionV0, "run", repairRunRef}, ":")
 	} else if runRef := phase0CompleteNonPublishableRunRefMCPAutoprogrammingEfficiencyV0(diagnostics, run); runRef != "" {
@@ -253,6 +255,10 @@ func operationalHealthMCPAutoprogrammingEfficiencyV0(
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 60)
 		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, mcpAutoprogrammingActionEstadoVivoDesconocidoV0)
 	}
+	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, mcpAutoprogrammingActionPendingIntegrationV0) {
+		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
+		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, mcpAutoprogrammingActionPendingIntegrationV0)
+	}
 	if hasDiagnosticMCPAutoprogrammingEfficiencyV0(diagnostics, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
 		health = minIntMCPAutoprogrammingEfficiencyV0(health, 70)
 		summary.Reasons = appendUniqueMCPAutoprogrammingReasonV0(summary.Reasons, MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0)
@@ -387,6 +393,24 @@ func repairReceiptRunRefMCPAutoprogrammingEfficiencyV0(
 		}
 	}
 	if matched && run != nil {
+		return strings.TrimSpace(run.RunRef)
+	}
+	return ""
+}
+
+func pendingIntegrationRunRefMCPAutoprogrammingEfficiencyV0(
+	diagnostics []MCPAutoprogrammingDiagnosticV0,
+	run *MCPDirectorStatsToolResultV0,
+) string {
+	for _, diagnostic := range diagnostics {
+		if strings.TrimSpace(diagnostic.Code) != mcpAutoprogrammingActionPendingIntegrationV0 {
+			continue
+		}
+		if runRef := runRefFromScopeMCPAutoprogrammingEfficiencyV0(diagnostic.Scope); runRef != "" {
+			return runRef
+		}
+	}
+	if run != nil && run.Stats != nil && strings.TrimSpace(run.Stats.Status) == "closed" {
 		return strings.TrimSpace(run.RunRef)
 	}
 	return ""

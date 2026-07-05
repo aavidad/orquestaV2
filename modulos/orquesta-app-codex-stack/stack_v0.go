@@ -1,6 +1,8 @@
 package orquestaappcodexstack
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -13,6 +15,7 @@ import (
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	channel "orquesta/modulos/orquesta-operator-director-channel"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
@@ -131,7 +134,7 @@ func buildStackMCPTransportBindingsV0(
 			RepairMissingTerminalReceipt: true,
 		},
 	}
-	return orquestamcp.MCPTransportBindingsV0{
+	bindings := orquestamcp.MCPTransportBindingsV0{
 		NuevaAppWizard:   NewCodexStackNuevaAppWizardExecutorV0(config.AppIntakeAssistant),
 		ArrancarDirector: arrancar,
 		PreviewDirector:  orquestamcp.NewMCPPreviewDirectorAppToolExecutorV0(),
@@ -188,6 +191,335 @@ func buildStackMCPTransportBindingsV0(
 		ExternalWorkDryRun: externalWorkDryRunExecutorV0(config, queueConfig),
 		ExternalWorkRun:    externalWorkRunGuardedExecutorV0(config, queueConfig),
 	}
+	bindings.OperatorDirectorMessage = channel.OperatorDirectorChannelServiceV0{
+		Dispatcher: stackOperatorDirectorDispatcherV0{Bindings: bindings, Queue: queueConfig},
+		Store:      newStackOperatorDirectorMemoryStoreV0(),
+	}
+	return bindings
+}
+
+type stackOperatorDirectorDispatcherV0 struct {
+	Bindings orquestamcp.MCPTransportBindingsV0
+	Queue    RunQueueConfigV0
+}
+
+func (dispatcher stackOperatorDirectorDispatcherV0) DispatchOperatorMessageV0(
+	ctx context.Context,
+	message channel.OperatorMessageV0,
+) (channel.OperatorDirectorResponseV0, error) {
+	operation := stackOperatorDirectorOperationV0(message)
+	switch operation {
+	case "status":
+		return dispatcher.dispatchOperatorDirectorStatusV0(ctx, message), nil
+	case "queue":
+		return dispatcher.dispatchOperatorDirectorQueueV0(ctx, message), nil
+	case "observe":
+		return dispatcher.dispatchOperatorDirectorObserveV0(ctx, message), nil
+	case "launch", "handoff":
+		return dispatcher.dispatchOperatorDirectorLaunchHandoffV0(message, operation), nil
+	case "stop", "control":
+		return dispatcher.dispatchOperatorDirectorControlV0(ctx, message, operation), nil
+	default:
+		return stackOperatorDirectorResponseV0(
+			message,
+			"blocked",
+			"operator_director_operation_not_supported",
+			"use status, queue, observe, launch, handoff, stop or control",
+			[]string{"evidence-ref-operator-director-operation-unsupported"},
+		), nil
+	}
+}
+
+func (dispatcher stackOperatorDirectorDispatcherV0) dispatchOperatorDirectorStatusV0(
+	ctx context.Context,
+	message channel.OperatorMessageV0,
+) channel.OperatorDirectorResponseV0 {
+	if stackOperatorDirectorRunRefV0(message) == "" {
+		if dispatcher.Bindings.RunQueuePriority == nil {
+			return stackOperatorDirectorPortUnavailableResponseV0(message, "status")
+		}
+		result, err := dispatcher.Bindings.RunQueuePriority.Execute(ctx, orquestamcp.MCPRunQueuePriorityToolInputV0{
+			RequestID:     message.RequestRef,
+			CorrelationID: message.ConversationRef,
+			Action:        orquestamcp.MCPRunQueuePriorityActionRankV0,
+			QueueRef:      normalizeRunQueueConfigV0(dispatcher.Queue).QueueRef,
+			Limit:         10,
+		})
+		if err != nil || result.Estado != orquestamcp.MCPRunQueuePriorityEstadoOKV0 {
+			return stackOperatorDirectorBlockedResponseV0(message, "status", "operator_director_status_unavailable")
+		}
+		return stackOperatorDirectorResponseV0(
+			message,
+			"accepted",
+			"operator_director_status_ready",
+			stackOperatorDirectorJSONSummaryV0(result),
+			[]string{"evidence-ref-operator-director-status"},
+		)
+	}
+	if dispatcher.Bindings.DirectorStats == nil {
+		return stackOperatorDirectorPortUnavailableResponseV0(message, "status")
+	}
+	result, err := dispatcher.Bindings.DirectorStats.Execute(ctx, orquestamcp.MCPDirectorStatsToolInputV0{
+		RequestID:     message.RequestRef,
+		CorrelationID: message.ConversationRef,
+		RunRef:        stackOperatorDirectorRunRefV0(message),
+	})
+	if err != nil || result.Estado != orquestamcp.MCPDirectorStatsEstadoOKV0 {
+		return stackOperatorDirectorBlockedResponseV0(message, "status", "operator_director_status_unavailable")
+	}
+	return stackOperatorDirectorResponseV0(
+		message,
+		"accepted",
+		"operator_director_status_ready",
+		stackOperatorDirectorJSONSummaryV0(result),
+		[]string{"evidence-ref-operator-director-status"},
+	)
+}
+
+func (dispatcher stackOperatorDirectorDispatcherV0) dispatchOperatorDirectorQueueV0(
+	ctx context.Context,
+	message channel.OperatorMessageV0,
+) channel.OperatorDirectorResponseV0 {
+	if dispatcher.Bindings.RunQueuePriority == nil {
+		return stackOperatorDirectorPortUnavailableResponseV0(message, "queue")
+	}
+	result, err := dispatcher.Bindings.RunQueuePriority.Execute(ctx, orquestamcp.MCPRunQueuePriorityToolInputV0{
+		RequestID:     message.RequestRef,
+		CorrelationID: message.ConversationRef,
+		Action:        orquestamcp.MCPRunQueuePriorityActionRankV0,
+		QueueRef:      normalizeRunQueueConfigV0(dispatcher.Queue).QueueRef,
+		Limit:         10,
+	})
+	if err != nil || result.Estado != orquestamcp.MCPRunQueuePriorityEstadoOKV0 {
+		return stackOperatorDirectorBlockedResponseV0(message, "queue", "operator_director_queue_unavailable")
+	}
+	return stackOperatorDirectorResponseV0(
+		message,
+		"accepted",
+		"operator_director_queue_ready",
+		stackOperatorDirectorJSONSummaryV0(result),
+		[]string{"evidence-ref-operator-director-queue"},
+	)
+}
+
+func (dispatcher stackOperatorDirectorDispatcherV0) dispatchOperatorDirectorObserveV0(
+	ctx context.Context,
+	message channel.OperatorMessageV0,
+) channel.OperatorDirectorResponseV0 {
+	if dispatcher.Bindings.ObserveDirectorGoal == nil {
+		return stackOperatorDirectorPortUnavailableResponseV0(message, "observe")
+	}
+	runRef := stackOperatorDirectorRunRefV0(message)
+	if runRef == "" {
+		return stackOperatorDirectorBlockedResponseV0(message, "observe", "operator_director_observe_run_ref_required")
+	}
+	result, err := dispatcher.Bindings.ObserveDirectorGoal.Execute(ctx, orquestamcp.MCPObserveAppDirectorGoalToolInputV0{
+		RequestID:     message.RequestRef,
+		CorrelationID: message.ConversationRef,
+		RunRef:        runRef,
+		RequestedBy:   message.SenderRef,
+	})
+	if err != nil || result.Estado != orquestamcp.MCPObserveAppDirectorGoalEstadoOKV0 {
+		return stackOperatorDirectorBlockedResponseV0(message, "observe", "operator_director_observe_unavailable")
+	}
+	return stackOperatorDirectorResponseV0(
+		message,
+		"accepted",
+		"operator_director_observe_ready",
+		stackOperatorDirectorJSONSummaryV0(result),
+		[]string{"evidence-ref-operator-director-observe"},
+	)
+}
+
+func (dispatcher stackOperatorDirectorDispatcherV0) dispatchOperatorDirectorLaunchHandoffV0(
+	message channel.OperatorMessageV0,
+	operation string,
+) channel.OperatorDirectorResponseV0 {
+	if dispatcher.Bindings.AutoprogrammingPrepareRun == nil && dispatcher.Bindings.ArrancarDirector == nil {
+		return stackOperatorDirectorPortUnavailableResponseV0(message, operation)
+	}
+	return stackOperatorDirectorResponseV0(
+		message,
+		"blocked",
+		"operator_director_"+operation+"_requires_structured_payload",
+		"launch/handoff requiere payload estructurado por orquesta.autoprogramming.prepare_run.v0 u orquesta.apps.arrancar_director.v0",
+		[]string{"evidence-ref-operator-director-" + operation + "-safe-blocked"},
+	)
+}
+
+func (dispatcher stackOperatorDirectorDispatcherV0) dispatchOperatorDirectorControlV0(
+	ctx context.Context,
+	message channel.OperatorMessageV0,
+	operation string,
+) channel.OperatorDirectorResponseV0 {
+	if dispatcher.Bindings.RunControl == nil {
+		return stackOperatorDirectorPortUnavailableResponseV0(message, operation)
+	}
+	if !stackOperatorDirectorControlConfirmedV0(message) {
+		return stackOperatorDirectorResponseV0(
+			message,
+			"blocked",
+			"operator_director_control_confirmation_required",
+			"stop/control requiere confirmacion explicita y run_ref opaca antes de tocar runtime",
+			[]string{"evidence-ref-operator-director-control-confirmation-required"},
+		)
+	}
+	runRef := stackOperatorDirectorRunRefV0(message)
+	if runRef == "" {
+		return stackOperatorDirectorBlockedResponseV0(message, operation, "operator_director_control_run_ref_required")
+	}
+	result, err := dispatcher.Bindings.RunControl.Execute(ctx, orquestamcp.MCPRunControlToolInputV0{
+		RequestID:     message.RequestRef,
+		CorrelationID: message.ConversationRef,
+		Action:        "stop",
+		RunRef:        runRef,
+		RequestedBy:   message.SenderRef,
+		Reason:        "operator_director_confirmed_control",
+		Forced:        strings.Contains(strings.ToLower(message.Body), "forced"),
+		EvidenceRefs:  message.EvidenceRefs,
+	})
+	if err != nil || result.Estado != orquestamcp.MCPRunControlEstadoOKV0 {
+		return stackOperatorDirectorBlockedResponseV0(message, operation, "operator_director_control_unavailable")
+	}
+	return stackOperatorDirectorResponseV0(
+		message,
+		"accepted",
+		"operator_director_control_applied",
+		stackOperatorDirectorJSONSummaryV0(result),
+		[]string{"evidence-ref-operator-director-control"},
+	)
+}
+
+type stackOperatorDirectorMemoryStoreV0 struct {
+	exchanges []channel.OperatorDirectorExchangeV0
+}
+
+func newStackOperatorDirectorMemoryStoreV0() *stackOperatorDirectorMemoryStoreV0 {
+	return &stackOperatorDirectorMemoryStoreV0{}
+}
+
+func (store *stackOperatorDirectorMemoryStoreV0) SaveOperatorDirectorExchangeV0(
+	_ context.Context,
+	exchange channel.OperatorDirectorExchangeV0,
+) error {
+	store.exchanges = append(store.exchanges, exchange)
+	return nil
+}
+
+func stackOperatorDirectorOperationV0(message channel.OperatorMessageV0) string {
+	body := strings.ToLower(message.Body)
+	switch message.Intent {
+	case channel.OperatorMessageIntentStatusV0:
+		return "status"
+	case channel.OperatorMessageIntentObserveRunV0:
+		return "observe"
+	case channel.OperatorMessageIntentInstructionV0:
+		if strings.Contains(body, "stop") || strings.Contains(body, "control") {
+			return "control"
+		}
+		if strings.Contains(body, "launch") || strings.Contains(body, "arranca") {
+			return "launch"
+		}
+		if strings.Contains(body, "handoff") || strings.Contains(body, "deriva") {
+			return "handoff"
+		}
+	}
+	for _, item := range []struct {
+		op      string
+		markers []string
+	}{
+		{"queue", []string{"queue", "cola"}},
+		{"observe", []string{"observe", "observa"}},
+		{"launch", []string{"launch", "arranca", "lanza"}},
+		{"handoff", []string{"handoff", "deriva"}},
+		{"control", []string{"control", "stop", "deten"}},
+		{"status", []string{"status", "estado"}},
+	} {
+		for _, marker := range item.markers {
+			if strings.Contains(body, marker) {
+				return item.op
+			}
+		}
+	}
+	return "general"
+}
+
+func stackOperatorDirectorRunRefV0(message channel.OperatorMessageV0) string {
+	for _, value := range append([]string{message.TargetRef}, strings.Fields(message.Body)...) {
+		value = strings.Trim(value, ".,;:()[]{}")
+		if strings.HasPrefix(value, "run-ref-") {
+			return value
+		}
+	}
+	return ""
+}
+
+func stackOperatorDirectorControlConfirmedV0(message channel.OperatorMessageV0) bool {
+	body := strings.ToLower(message.Body)
+	if strings.Contains(body, "confirmacion") ||
+		strings.Contains(body, "confirmation") ||
+		strings.Contains(body, "confirmed") ||
+		strings.Contains(body, "confirmado") {
+		return true
+	}
+	for _, ref := range message.EvidenceRefs {
+		if strings.Contains(strings.ToLower(ref), "confirm") {
+			return true
+		}
+	}
+	return false
+}
+
+func stackOperatorDirectorPortUnavailableResponseV0(
+	message channel.OperatorMessageV0,
+	operation string,
+) channel.OperatorDirectorResponseV0 {
+	return stackOperatorDirectorResponseV0(
+		message,
+		"blocked",
+		"operator_director_"+operation+"_port_unavailable",
+		"puerto real no configurado para "+operation,
+		[]string{"evidence-ref-operator-director-" + operation + "-port-unavailable"},
+	)
+}
+
+func stackOperatorDirectorBlockedResponseV0(
+	message channel.OperatorMessageV0,
+	operation string,
+	reason string,
+) channel.OperatorDirectorResponseV0 {
+	return stackOperatorDirectorResponseV0(
+		message,
+		"blocked",
+		reason,
+		operation+" blocked: "+reason,
+		[]string{"evidence-ref-" + reason},
+	)
+}
+
+func stackOperatorDirectorResponseV0(
+	message channel.OperatorMessageV0,
+	status string,
+	summary string,
+	text string,
+	evidenceRefs []string,
+) channel.OperatorDirectorResponseV0 {
+	return channel.OperatorDirectorResponseV0{
+		MessageRef:   message.MessageRef,
+		Status:       status,
+		Summary:      summary,
+		ResponseRef:  "operator-director-response-ref-" + message.MessageRef,
+		ResponseText: text,
+		EvidenceRefs: evidenceRefs,
+	}
+}
+
+func stackOperatorDirectorJSONSummaryV0(value any) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return "operator_director_response_ready"
+	}
+	return string(data)
 }
 
 func externalWorkRunGuardedExecutorV0(

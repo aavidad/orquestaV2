@@ -1,0 +1,6 @@
+goal_ref: goal-ref-task-autoprogramming-72bb10d53162-g01
+source_task_ref: task-remote-g5-integrate-20260705
+objective: integrate existing G5 wizard bot changes, adapt to HEAD, run required tests, commit or report blocked push.
+scope: authorized write-set only; no OPES production access.
+next_artifact: durable goal result JSON after diff review and verification.
+evidence: checkpoint materialized before long exploration.

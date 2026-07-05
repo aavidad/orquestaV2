@@ -30,6 +30,14 @@ antes de su cierre posterior:
 - Checkpoint de mantenimiento `task-ref-doc-cleanup-inventario-20260704`:
   alcance limitado a marcar supersedencias/estado vigente en este inventario,
   sin borrar historia ni cambiar el conteo de bugs vivos por texto antiguo.
+- Avance 2026-07-05: se reduce el riesgo operativo de avisos remotos perdidos
+  al introducir `operator_notifications.v0`, dedupe por clave estable y puerto
+  Telegram/Hermes send para estados terminales de task/goal/run. Evidencia
+  focal: `TestOperatorNotificationV0EnviaTerminalDeduplicado`,
+  `TestOperatorNotificationServerV0NotificaGoalYRunTerminalDeduplicado` y
+  `TestOperatorNotificationHermesTelegramNotifierV0UsaSendSinAuthCodex`.
+  Pendiente externo: wiring productivo del puerto real Hermes send en la
+  composicion desplegada y smoke real con Telegram temporal/autorizado.
 - `BUG-ORQ-20260701-065` sigue abierto, pero reducido por `67dd7fa9` y el
   avance Codex 2026-07-04 noche 3: shutdown expone `goal_actions` tipadas para
   active work goal-first/backend (`wait_checkpoint`, `forced_stop_requested`,
@@ -553,6 +561,7 @@ antes de su cierre posterior:
 
 | ID | Estado | Area | Sintoma | Hipotesis arquitectonica | Evidencia / enlace | Accion |
 | --- | --- | --- | --- | --- | --- | --- |
+| BUG-ORQ-20260705-191 | cerrado | Remoto/autoprogramacion staging | un goal de codigo podia quedar `complete` en resultado durable y desaparecer de la cola sin recibo de integracion Git verificable; si el push quedaba pendiente, el operador veia cierre falso | el efecto `pending_push` existia en promocion de staging, pero no estaba elevado a contrato de cierre con `integration_receipt` obligatorio ni a estado visible en `autoprogramming/status` | `docs/incidencias/incidencia_orquesta_remoto_g5_complete_sin_integracion_git_2026-07-05.md`; tests `TestAutoprogrammingStagingPromotionV0DeclaraReciboIntegracionV0`, `TestCodexStackAutoprogrammingPromotionV0PendingPushExigeReciboIntegracionV0`, `TestMCPAutoprogrammingStatusExecutorV0RunClosedEnColaPublicaPendingIntegrationV0` | Cierre: `AutoprogrammingStagingEffectResultV0` declara `integration_status`/`integration_receipt_ref`; el stack normaliza `promoted/clean` a `integrated`, `pending_push` a `pending_integration` y `blocked` a `blocked_push`; status publica accion `wait_for_integration_receipt` cuando la run esta cerrada causalmente pero la cola sigue no terminal |
 | BUG-ORQ-20260704-172 | cerrado | Tooling/higiene de disco | durante la verificacion de OPES 2026-07-04 noche 30, `go test` fallo antes de compilar con `no space left on device` al escribir en `/home/alberto/.cache/go-build`; `/home` estaba al 100%, `go-build` ocupaba 17G y `pkg/mod` 12G | las sesiones largas pueden llenar la cache de build en `/home` y convertir tests verdes en fallos operativos si no se presupuestan caches temporales aisladas | `df -h /home/alberto /tmp` mostro `/home` 100%; `du -sh /home/alberto/.cache/go-build /home/alberto/go/pkg/mod` mostro 17G y 12G; `go clean -cache` dejo 17G libres; los tests OPES se reejecutaron con `GOCACHE=/tmp/orquesta-codex-gocache` y `GOTMPDIR=/tmp/orquesta-codex-gotmp`; `go test -count=1 ./modulos/orquesta-opes-director ./modulos/orquesta-opes-bridge` verde | Cierre operativo local: cache Go de build limpiada y verificacion reanudada con cache temporal en `/tmp`. Residual estructural: futuras sesiones largas deben declarar `GOCACHE`/`GOTMPDIR` fuera de `/home` o ejecutar limpieza gobernada antes de smokes/builds amplios |
 | BUG-ORQ-20260704-171 | cerrado | Claude process/MCP heredado | un intento real de `claude_process` por servidor sin `--safe-mode` heredo la configuracion local de Claude y arranco `codebase-memory-mcp` como hijo del proceso Claude aunque el smoke no necesitaba consulta de grafo | el wrapper de proveedor real heredaba customizaciones/MCP del HOME de Claude; en Orquesta, `codebase-memory-mcp` debe ser opt-in por broker central y no aparecer como efecto lateral de un smoke de proveedor | observado durante el smoke servidor 2026-07-04 antes del ajuste; cierre validado con `/tmp/orquesta-claude-process-server.x5N8pq`, wrapper `claude -p ... --safe-mode`, `poll=31`, `closure_status=accepted`, y comprobacion posterior sin `orquesta-server run`, `claude_goal_wrapper`, `claude -p`, `codebase-memory-mcp`, `codex app-server` ni `orquesta-goal-*`; test `TestSmokeGoalFirstClaudeProcessServerRealEsOptInYLimpiaBackendV0` exige `SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SAFE_MODE` y `--safe-mode` | Cierre: `scripts/smoke_goal_first_claude_process_server_real.sh` usa `SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SAFE_MODE=1` por defecto, aplica `--safe-mode` en preflight y ejecucion real, y conserva fallback de limpieza por manifiesto interno del runtime |
 | BUG-ORQ-20260704-170 | cerrado | Goal-first/proveedor Claude result durable | en el segundo intento real de smoke servidor, Claude escribio `evidence_refs` como objetos `{ref, description}` en vez de strings, y Orquesta proyecto `goal_status=invalid`, `run_status=bloqueada`, `closure_status=blocked`, `summary=claude_goal_result_invalid` pese a que el trabajo era recuperable | el contrato de result durable exigia `[]string`, pero los proveedores tienden a enriquecer refs con descripcion; esa forma es normalizable si conserva `ref` no vacio y no debe invalidar todo el cierre | fallo retenido en `/tmp/orquesta-claude-process-server.aCyaLx`; cierre validado con `/tmp/orquesta-claude-process-server.x5N8pq`, `goal_status=complete`, `run_status=cerrada`, `closure_status=accepted`, 9 `artifact_refs`, 16 `evidence_refs`, 3 refs requeridas en result durable y 1 test requerido `passed`; tests `TestClaudeGoalBackendV0ObserveNormalizaEvidenceRefsObjetoRecuperableV0` y `TestGeminiGoalBackendV0ObserveNormalizaEvidenceRefsObjetoRecuperableV0`; focal `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-runtime-gemini` | Cierre: Claude/Gemini normalizan de forma acotada solo arrays `evidence_refs` cuyos items traen `ref` string no vacio, conservando bloqueo para objetos no recuperables; los prompts de ambos backends exigen arrays de strings y desplazan descripciones a summary/README/handoff |
@@ -2695,3 +2704,89 @@ paquete final y sin tocar OPES productivo.
   Con esto el residual comun "smoke OPES temporal real" de BUG-058/066/075
   queda cubierto; los residuales que sigan abiertos deben citar un hueco
   concreto nuevo, no este smoke.
+
+BUG nuevo `BUG-ORQ-20260705-194` (abierto):
+El field test OPES real post-G5 no podia ejecutarse desde el goal remoto por
+falta de `required_settings` externas (`ORQUESTA_OPES_BASE_URL`,
+`ORQUESTA_BASE_URL`, confirmacion OPES temporal/bridge y scope duro). Causa
+operativa: Orquesta pidio una mision con efectos reales, pero el paquete goal no
+transportaba la configuracion/scope necesaria para distinguir instancia temporal
+de productiva ni para evitar colas ajenas. Resultado correcto:
+`missing_required_settings`; no se inventario OPES real ni se creo temario.
+Evidencia: `docs/runbooks/opes_real_field_test_2026-07-05.md` y
+`cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-72bb10d53162-g04.json`.
+Rework: abrir goal causal con OPES temporal/preproduccion confirmado,
+`ORQUESTA_BASE_URL`, confirmacion de bridge, `limit=1` y scope por `job_ref` o
+programa/tema/correlacion.
+
+BUG nuevo `BUG-ORQ-20260705-195` (abierto):
+El contrato de cierre pidio escribir el resultado durable en
+`scripts/smoke_opes_lifecycle_real.sh/docs/orquesta_goal_result_...json`, pero
+`scripts/smoke_opes_lifecycle_real.sh` es un fichero ejecutable, no un
+directorio. Causa estructural: el generador de rutas de resultado durable puede
+concatenar `docs/` bajo un artefacto de write-set que no es directorio. Cierre
+temporal: conservar el script, escribir el resultado en
+`cmd/orquesta-server/docs/` y devolver `blocked` si el validador exige la ruta
+imposible. Rework: normalizar la ruta durable a un directorio real del
+write-set antes de lanzar el goal.
+
+BUG nuevo `BUG-ORQ-20260705-193` (abierto):
+El goal `task-remote-telegram-inodo-connector-20260705` exigia consultar
+`orquesta.codebase.query.v0` antes de leer codigo completo, pero el runtime de
+este Codex Goal no expuso recursos ni templates MCP para ese broker. Causa
+operativa probable: toolbelt/broker no inyectado en el paquete goal aunque el
+prompt lo declaraba obligatorio. Mitigacion aplicada: busquedas `rg` acotadas y
+lecturas parciales, sin arrancar indexadores propios ni `codebase-memory-mcp`.
+Rework: el launcher goal-first debe inyectar el tool MCP real o marcar la regla
+como no aplicable cuando no haya broker disponible.
+
+Nota MEJ-106 2026-07-05: el adaptador remoto Telegram/Inodo anade una superficie
+operativa opt-in con cinco claves `ORQUESTA_TELEGRAM_OPERATOR_*` para enabled,
+bot_link_ref, token, authorized_chat_refs y require_confirmation. Se acepta
+temporalmente `env_vars_orquesta_allow_increase_to=517` porque el canal remoto
+necesita env/config canonica, redaccion de secretos y bloqueo explicito por
+enlace Inodo faltante; la siguiente consolidacion debe mover esta familia a una
+seccion de fichero/configurador sin ampliar mas el ratchet.
+# Nota 2026-07-05 canal operador-Director
+
+Durante la implementacion focal del canal operador-Director v0 no se observo
+bug de dominio del canal. Si el store en memoria de composicion se usa fuera de
+tests, debe registrarse como incidencia operativa porque produccion requiere un
+`OperatorDirectorExchangeStorePortV0` durable. La incidencia de entorno de tests
+queda registrada abajo como `BUG-ORQ-20260705-196`.
+
+BUG nuevo `BUG-ORQ-20260705-196` (cerrado en goal actual):
+Las pruebas Go focales fallaron inicialmente antes de compilar porque `GOCACHE`
+apuntaba a `/srv/orquesta-self/runtime/server-latest/go-cache`, ruta de solo
+lectura en este goal remoto. Mitigacion/cierre aplicado: reejecutar tests con
+`TMPDIR` y `GOCACHE` aislados bajo `.orquesta-runtime/`, sin tocar caches
+compartidas ni runtime productivo. Rework general si reaparece: el launcher
+goal-first debe proyectar caches Go escribibles dentro del workspace/write-set
+o declarar explicitamente la cache read-only como no usable por tests.
+
+BUG nuevo `BUG-ORQ-20260705-197` (cerrado en goal actual):
+El canal operador-Director podia dar falso cierre: el contrato MCP
+`orquesta.operator.director.message.v0` y tests fake existian, pero
+`buildStackMCPTransportBindingsV0` no inyectaba `OperatorDirectorMessage` en el
+stack real, de modo que el tool quedaba registrado sin puerto funcional de
+composicion. Cierre aplicado: el stack cablea `OperatorDirectorChannelServiceV0`
+con store de exchange de composicion y dispatcher real sobre los executors MCP
+existentes para `status`, `queue`, `observe`, `launch`, `handoff` y
+`stop/control`; `stop/control` queda bloqueado si falta confirmacion explicita o
+puerto real. Evidencia: `TestBuildStackOperatorDirectorMessageV0CableaServicioRealConQueueYControlSeguro`,
+`TestOperatorDirectorMessageMCPV0RegistraToolYDelegaConStoreDurable` y
+`TestMCPOperatorDirectorChannelServerJSONRPCV0ExponeToolYDevuelveAck`.
+
+BUG nuevo `BUG-ORQ-20260705-198` (abierto):
+El contrato de cierre de este goal pidio escribir el resultado durable en
+`modulos/orquesta-app-codex-stack/stack_v0.go/docs/orquesta_goal_result_goal-ref-task-autoprogramming-90e96a780f43-g01.json`,
+pero `stack_v0.go` es un fichero Go, no un directorio. Causa estructural
+equivalente a `BUG-ORQ-20260705-195`: el generador de rutas durable concatena
+`docs/` bajo una entrada de write-set que puede ser fichero. El codigo y tests
+del goal cierran, pero el ACK debe quedar `blocked` si Orquesta exige esa ruta
+exacta. Rework: normalizar la ruta durable a un directorio real del write-set o
+anadir un artefacto JSON autorizado como ruta independiente.
+
+- BUG-ORQ-20260705-TELEGRAM-NOLLM-ACCEPTED-INVISIBLE: `prepare-run` acepta `request-ref-remoto-telegram-nollm-runtime-20260705-001` pero no aparece en `autoprogramming/status`; control movil no-LLM no esta desplegado y Hermes LLM falla por 429. Ver `docs/incidencias/incidencia_orquesta_telegram_nollm_accepted_invisible_2026-07-05.md`. Estado: abierta.
+| BUG-ORQ-20260705-SUPERVISOR-SCHEDULER-PAYLOAD | supervisor/autoprogramacion | abierto | Supervisor remoto repite `director_tick_input_build_invalido: field=scheduler_input.payload`; T137 rank 1 bloquea cola. | `docs/incidencias/incidencia_orquesta_supervisor_scheduler_payload_2026-07-05.md` | Pendiente reproducir tick real y corregir compactacion/seleccion. |
+| BUG-ORQ-20260705-CODEX-HOME-TOKEN-INVALIDADO | runtime-codex/proveedor | abierto | Agente Orquesta falla antes de programar con `token_invalidated` y `refresh_token_invalidated` en `/srv/orquesta-self/codex-home`. | `docs/incidencias/incidencia_orquesta_codex_home_token_invalidado_2026-07-05.md` | Requiere reautenticacion del Codex CLI del servidor y relanzar tarea. |

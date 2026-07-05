@@ -132,13 +132,17 @@ func TestBuildStackV0CableaNuevaAppWizardMCPRico(t *testing.T) {
 	dataTurn, err := stack.MCPTransportBindings.NuevaAppWizard.Execute(context.Background(), orquestamcp.MCPNuevaAppWizardToolInputV0{
 		RequestID: "request-ref-stack-wizard-data-001",
 		SessionID: "session-stack-wizard-data-001",
-		Session:   json.RawMessage(`{"schema_version":"web_nueva_app_intake_session.v0","session_id":"session-stack-wizard-data-001","form":{"request_id":"request-ref-stack-wizard-data-001","locale":"es-ES","nombre":"Agenda","objetivo":"quiero una app para una agenda","tipo_app":"web","usuarios_objetivo":["usuarios autenticados"],"plataformas":["web","mobile"]}}`),
+		Session:   json.RawMessage(`{"schema_version":"web_nueva_app_intake_session.v0","session_id":"session-stack-wizard-data-001","form":{"request_id":"request-ref-stack-wizard-data-001","locale":"es-ES","nombre":"Agenda","objetivo":"quiero una app para una agenda","descripcion":"flujo operativo de agenda","tipo_app":"web","usuarios_objetivo":["usuarios autenticados"],"plataformas":["web","mobile"],"agentes":{"autonomia":"media"}}}`),
 	})
 	if err != nil {
 		t.Fatalf("execute wizard data: %v", err)
 	}
-	if !strings.Contains(string(dataTurn.Wizard), "wizard-r3-integracion-agenda") ||
-		!strings.Contains(string(dataTurn.Wizard), "calendar_google_workspace") {
+	wizardData := string(dataTurn.Wizard)
+	hasDomainCalendar := strings.Contains(wizardData, "wizard-r3-integracion-agenda") &&
+		strings.Contains(wizardData, "calendar_google_workspace")
+	hasUniversalCalendar := strings.Contains(wizardData, "wizard-u7-integraciones") &&
+		strings.Contains(wizardData, "integracion_calendario")
+	if !hasDomainCalendar && !hasUniversalCalendar {
 		t.Fatalf("wizard data no ofrece integracion agenda: %s", dataTurn.Wizard)
 	}
 

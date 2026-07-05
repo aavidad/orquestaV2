@@ -7,6 +7,7 @@ run autoprogramming cerrada causalmente
   -> review aceptada + RequiredTestEvidenceV0 passed
   -> sin runs vivos con write-set solapado
   -> promocion por puerto de staging
+  -> integration_receipt Git obligatorio
   -> archivo idempotente de manifest sin borrar la worktree
 ```
 
@@ -56,6 +57,10 @@ run autoprogramming cerrada causalmente
 - Si promocion, push o archivo devuelve `pending`, `pending_push` o `blocked`,
   la cola no se marca como `closed`; el retry debe conservar evidence refs
   compactas.
+- Un efecto `promoted` o `clean` debe materializar `integration_status=integrated`
+  y `integration_receipt_ref`; si el push remoto queda pendiente, el efecto se
+  trata como `pending_integration` y `autoprogramming/status` debe publicar
+  `recommended_action=wait_for_integration_receipt`.
 - Si el guardian esta activo y el candidato no compila, no pasa tests o no
   responde al healthcheck temporal, el puerto devuelve `blocked` retryable con
   evidencia `guardian_failed`; el binario vivo no se sustituye y la cola no se
@@ -86,7 +91,9 @@ tick y verifica que no aparecen commits ni manifests duplicados.
 
 Push remoto/productivo no queda habilitado por este runbook. Esa superficie
 requiere guardas propias de remoto, rama, ventana operativa y confirmacion de
-operador.
+operador. Si una composicion remota exige push, el preflight debe detectar
+origen/rama remota ausente antes de declarar cierre: sin recibo de integracion,
+el estado operativo es `pending_integration` o `blocked_push`, nunca `closed`.
 
 Validacion focal:
 

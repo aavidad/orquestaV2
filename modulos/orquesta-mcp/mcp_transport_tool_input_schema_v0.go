@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	orquestacontext "orquesta/modulos/orquesta-context"
+	channel "orquesta/modulos/orquesta-operator-director-channel"
 	operator "orquesta/modulos/orquesta-operator-mcp"
 )
 
@@ -96,6 +97,8 @@ func mcpTransportToolInputDTOByNameV0(name string) (any, bool) {
 		return MCPCodebaseStatusToolInputV0{}, true
 	case MCPAppVCSToolNameV0:
 		return MCPAppVCSToolInputV0{}, true
+	case channel.OperatorDirectorMessageToolNameV0:
+		return channel.OperatorMessageV0{}, true
 	case operator.OperatorMCPStatusToolNameV0:
 		return operator.OperatorStatusQueryV0{}, true
 	case operator.OperatorMCPBurstToolNameV0:
@@ -173,6 +176,8 @@ func mcpTransportToolRequiredFieldsV0(name string) map[string]bool {
 		return map[string]bool{"repository_ref": true, "query": true}
 	case MCPDirectorSupervisorBriefingToolNameV0:
 		return map[string]bool{"briefing_input": true}
+	case channel.OperatorDirectorMessageToolNameV0:
+		return map[string]bool{"request_ref": true, "target_ref": true, "body": true}
 	case operator.OperatorMCPStatusToolNameV0:
 		return map[string]bool{"request_ref": true, "subject_ref": true, "status_connector_ref": true}
 	case operator.OperatorMCPBurstToolNameV0:

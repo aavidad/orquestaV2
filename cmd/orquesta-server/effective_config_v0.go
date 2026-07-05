@@ -392,6 +392,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverPositiveConfigSettingFromConfigV0(config, envCodexDirectorRecursiveAgentBudgetV0, directorWaveLimits.RecursiveAgentBudget),
 	}
 	settings = append(settings, codebaseBrokerEffectiveSettingsV0(config.ProjectWorkDir, projectConfig)...)
+	settings = append(settings, telegramOperatorEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, domainWorkEffectiveSettingsV0(config.ProjectWorkDir, projectConfig)...)
 	settings = append(settings, opesBridgeEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, codexWaveEffectiveConfigSettingsV0(config, projectConfig)...)

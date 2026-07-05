@@ -322,6 +322,10 @@ func buildStackFromEnvWithGoalBackendV0(
 	if operatorConnector != nil {
 		stack.MCPTransportBindings.OperatorConnector = operatorConnector
 	}
+	stack.MCPTransportBindings.OperatorDirectorMessage = newOperatorDirectorChannelServiceV0(
+		operatorConnector,
+		newOperatorDirectorChannelMemoryStoreV0(),
+	)
 	stack.MCPTransportBindings.CodebaseStatus = serverCodebaseStatusExecutorWithOwnerMarkersV0(
 		stack.MCPTransportBindings.CodebaseStatus,
 		codeContextWiring.ToolLeases,

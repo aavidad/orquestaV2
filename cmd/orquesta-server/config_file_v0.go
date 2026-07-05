@@ -38,6 +38,8 @@ type serverProjectConfigFileV0 struct {
 	GoalBackend          serverProjectConfigGoalBackendV0          `json:"goal_backend,omitempty"`
 	CodexUsageAccounting serverProjectConfigCodexUsageAccountingV0 `json:"codex_usage_accounting,omitempty"`
 	CodebaseBroker       serverProjectConfigCodebaseBrokerV0       `json:"codebase_broker,omitempty"`
+	WizardBot            serverProjectConfigWizardBotV0            `json:"wizard_bot,omitempty"`
+	TelegramOperator     serverProjectConfigTelegramOperatorV0     `json:"telegram_operator,omitempty"`
 	DomainWork           serverProjectConfigDomainWorkV0           `json:"domain_work,omitempty"`
 	OPES                 serverProjectConfigOPESV0                 `json:"opes,omitempty"`
 	OPESBridge           serverProjectConfigOPESBridgeV0           `json:"opes_bridge,omitempty"`
@@ -99,10 +101,6 @@ type serverProjectConfigServerIdleV0 struct {
 	TargetQueue             *int      `json:"target_queue,omitempty"`
 	DailyGoalBudget         *int      `json:"daily_goal_budget,omitempty"`
 	DailyContextBudgetBytes *int      `json:"daily_context_budget_bytes,omitempty"`
-}
-
-type serverProjectConfigServerResidentV0 struct {
-	MaxActions *int `json:"max_actions,omitempty"`
 }
 
 type serverProjectConfigWorktreeSnapshotV0 struct {

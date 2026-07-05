@@ -1,6 +1,9 @@
 package orquestamcp
 
-import operator "orquesta/modulos/orquesta-operator-mcp"
+import (
+	channel "orquesta/modulos/orquesta-operator-director-channel"
+	operator "orquesta/modulos/orquesta-operator-mcp"
+)
 
 func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnvelopeV0 {
 	descriptors := newMCPTransportToolDescriptorsV0()
@@ -37,6 +40,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 		mcpTransportToolEnvelopeV0(descriptors.codebaseQuery.Name, descriptors.codebaseQuery.Version, descriptors.codebaseQuery.ResourceURI, descriptors.codebaseQuery.InputSchema, descriptors.codebaseQuery.Output, mcpCodebaseQueryTransportHandlerV0(bindings.CodebaseQuery)),
 		mcpTransportToolEnvelopeV0(descriptors.codebaseStatus.Name, descriptors.codebaseStatus.Version, descriptors.codebaseStatus.ResourceURI, descriptors.codebaseStatus.InputSchema, descriptors.codebaseStatus.Output, mcpCodebaseStatusTransportHandlerV0(bindings.CodebaseStatus)),
 		mcpTransportToolEnvelopeV0(descriptors.appVCS.Name, descriptors.appVCS.Version, descriptors.appVCS.ResourceURI, descriptors.appVCS.InputSchema, descriptors.appVCS.Output, mcpAppVCSTransportHandlerV0(bindings.AppVCS)),
+		mcpTransportToolEnvelopeV0(descriptors.operatorDirectorMessage.Name, descriptors.operatorDirectorMessage.Version, descriptors.operatorDirectorMessage.ResourceURI, descriptors.operatorDirectorMessage.InputSchema, descriptors.operatorDirectorMessage.Output, mcpOperatorDirectorMessageTransportHandlerV0(MCPTransportOperatorDirectorMessageExecutorV0{Service: bindings.OperatorDirectorMessage})),
 		mcpOperatorTransportToolV0(operator.OperatorMCPStatusToolNameV0, mcpOperatorStatusBindingV0(bindings)),
 		mcpOperatorTransportToolV0(operator.OperatorMCPBurstToolNameV0, mcpOperatorBurstBindingV0(bindings)),
 		mcpOperatorTransportToolV0(operator.OperatorMCPOutboxToolNameV0, mcpOperatorOutboxBindingV0(bindings)),
@@ -64,6 +68,7 @@ func applyMCPTransportExecutionProfilesV0(
 		case MCPWorkspaceTimelineToolNameV0,
 			MCPCodebaseQueryToolNameV0,
 			MCPCodebaseStatusToolNameV0,
+			channel.OperatorDirectorMessageToolNameV0,
 			MCPDirectorStatsToolNameV0,
 			MCPDirectorSupervisorBriefingToolNameV0,
 			MCPAutoprogrammingStatusToolNameV0:

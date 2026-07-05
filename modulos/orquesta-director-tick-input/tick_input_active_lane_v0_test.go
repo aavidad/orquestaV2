@@ -6,7 +6,9 @@ import (
 	"reflect"
 	"testing"
 
+	orquestaagentprogress "orquesta/modulos/orquesta-agent-progress"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirector "orquesta/modulos/orquesta-director"
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
 )
 
@@ -66,6 +68,53 @@ func TestBuildDirectorSchedulerTickInputV0FiltraConfirmedStoppedAgentsEnCarrilDe
 	}
 }
 
+func TestBuildDirectorSchedulerTickInputV0CompactaCarrilProgressConHistorialLargo(t *testing.T) {
+	run := tickInputProgramacionRunV0(t)
+	run.Tasks = append(run.Tasks, "task-ref-progress-target")
+	run.Agents = append(run.Agents, "agent-ref-progress-target")
+	run.StartedAgents = append(run.StartedAgents, "agent-ref-progress-target")
+	run.AgentAssessments = append(run.AgentAssessments, "assessment-ref-progress-target")
+	run.DirectorQuestions = append(run.DirectorQuestions, "question-ref-progress-target")
+	for i := 0; i < 1400; i++ {
+		run.AgentAssessments = append(run.AgentAssessments, fmt.Sprintf("assessment-ref-progress-history-%04d", i))
+		run.DirectorQuestions = append(run.DirectorQuestions, fmt.Sprintf("question-ref-progress-history-%04d", i))
+	}
+	if issues := orquestacoreworkflow.ValidateOrchestrationRunV0(run); len(issues) > 0 {
+		t.Fatalf("run invalido: %+v", issues)
+	}
+
+	input, err := BuildDirectorSchedulerTickInputV0(DirectorTickInputBuildRequestV0{
+		TickRef:                       "tick-ref-progress-compact-001",
+		OccurredAt:                    "2026-05-06T12:10:00Z",
+		Run:                           run,
+		ProgressSupervisionCandidates: []orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0{tickInputProgressCandidateV0()},
+		EvidenceRefs:                  []string{"evidence-ref-progress-compact-001"},
+	})
+	if err != nil {
+		t.Fatalf("BuildDirectorSchedulerTickInputV0: %v", err)
+	}
+	data, err := json.Marshal(input)
+	if err != nil {
+		t.Fatalf("marshal input: %v", err)
+	}
+	if len(data) > 64*1024 {
+		t.Fatalf("scheduler input no compacto: bytes=%d", len(data))
+	}
+	if !reflect.DeepEqual(input.Snapshot.AgentAssessments, []string{"assessment-ref-progress-target"}) {
+		t.Fatalf("agent_assessments=%v", input.Snapshot.AgentAssessments)
+	}
+	if !reflect.DeepEqual(input.Snapshot.DirectorQuestions, []string{"question-ref-progress-target"}) {
+		t.Fatalf("director_questions=%v", input.Snapshot.DirectorQuestions)
+	}
+	if !reflect.DeepEqual(input.Snapshot.Agents, []string{"agent-ref-progress-target"}) ||
+		!reflect.DeepEqual(input.Snapshot.StartedAgents, []string{"agent-ref-progress-target"}) {
+		t.Fatalf("agents=%v started=%v", input.Snapshot.Agents, input.Snapshot.StartedAgents)
+	}
+	if len(input.Snapshot.Reviews) != 0 || len(input.Snapshot.ReviewResults) != 0 || len(input.WorkCandidates) != 0 {
+		t.Fatalf("snapshot conserva historial innecesario: %+v", input.Snapshot)
+	}
+}
+
 func TestBuildDirectorSchedulerTickInputV0FiltraConfirmedStoppedAgentsEnCarrilPhaseArtifact(t *testing.T) {
 	run := tickInputRevisionRunWithHistoryV0(t)
 	run.Agents = append(run.Agents, "agent-ref-artifact-target", "agent-ref-artifact-other")
@@ -113,6 +162,29 @@ func tickInputRevisionRunWithHistoryV0(t *testing.T) orquestacoreworkflow.Orches
 		t.Fatalf("run invalido: %+v", issues)
 	}
 	return run
+}
+
+func tickInputProgressCandidateV0() orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0 {
+	return orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0{
+		CandidateRef: "progress-candidate-ref-tick-input-target",
+		SupervisionInput: orquestadirector.AgentProgressSupervisionInputV0{
+			CommandMeta:   tickInputCommandMetaV0("cmd-progress-tick-input-target", "progress-target"),
+			PhaseID:       string(orquestacoreworkflow.OrchestrationPhaseProgramacionV0),
+			TaskRef:       "task-ref-progress-target",
+			AssessmentRef: "assessment-ref-progress-target",
+			QuestionID:    "question-ref-progress-target",
+			Report: orquestaagentprogress.AgentProgressReportV0{
+				ReportID:        "progress-report-ref-tick-input-target",
+				RunID:           tickInputRunRefV0,
+				AgentRequestID:  "agent-ref-progress-target",
+				Status:          orquestaagentprogress.AgentStalledV0,
+				NoProgressTicks: 5,
+				Summary:         "Agente sin progreso reciente; preguntar al director sin transportar historial.",
+				EvidenceRefs:    []string{"evidence-ref-progress-target"},
+			},
+		},
+		EvidenceRefs: []string{"evidence-ref-progress-candidate-target"},
+	}
 }
 
 func tickInputPhaseArtifactCandidateV0() orquestadirectorscheduler.SchedulablePhaseArtifactCandidateV0 {

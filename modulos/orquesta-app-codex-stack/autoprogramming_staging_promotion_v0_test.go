@@ -149,6 +149,28 @@ func TestCodexStackAutoprogrammingPromotionV0BloqueaRefsStagingInconsistentesV0(
 	}
 }
 
+func TestCodexStackAutoprogrammingPromotionV0PendingPushExigeReciboIntegracionV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	stack = withAutoprogrammingPromotionStoresForTestV0(stack)
+	port := &statusAutoprogrammingPromotionPortForTestV0{
+		promoteStatus: orquestaautoprogramming.AutoprogrammingStagingEffectPendingPushV0,
+	}
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{Enabled: true, Port: port}
+	runRef := "run-autoprogramming-pending-integration-001"
+	seedAutoprogrammingPromotionRunV0(t, ctx, stack, runRef, []string{"modulos/orquesta-app-codex-stack"})
+
+	run := mustLoadCodexStackRunForTestV0(t, stack, runRef)
+	complete, refs, err := stack.maybePromoteClosedAutoprogrammingRunV0(ctx, run)
+	if err != nil {
+		t.Fatalf("maybePromoteClosedAutoprogrammingRunV0: %v", err)
+	}
+	if complete || port.promotions != 1 || port.archives != 0 ||
+		!codexStackStringInSetForTestV0(refs, "evidence-ref-autoprogramming-pending-integration") {
+		t.Fatalf("complete=%v refs=%v port=%+v", complete, refs, port)
+	}
+}
+
 func seedAutoprogrammingPromotionLiveGoalFirstRunV0(
 	t *testing.T,
 	ctx context.Context,

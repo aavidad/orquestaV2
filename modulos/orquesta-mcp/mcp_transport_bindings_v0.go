@@ -6,6 +6,7 @@ import (
 	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
+	channel "orquesta/modulos/orquesta-operator-director-channel"
 	operator "orquesta/modulos/orquesta-operator-mcp"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
@@ -47,6 +48,7 @@ type MCPTransportBindingsV0 struct {
 	OperatorBurst                                  operator.OperatorMCPBurstPortV0
 	OperatorOutbox                                 operator.OperatorMCPOutboxPortV0
 	OperatorQuery                                  operator.OperatorMCPDirectedQueryPortV0
+	OperatorDirectorMessage                        channel.OperatorDirectorChannelServiceV0
 }
 
 type MCPTransportNuevaAppExecutorV0 interface {

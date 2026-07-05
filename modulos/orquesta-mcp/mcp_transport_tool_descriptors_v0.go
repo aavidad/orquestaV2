@@ -33,6 +33,7 @@ type mcpTransportToolDescriptorsV0 struct {
 	codebaseQuery            MCPCodebaseQueryToolDescriptorV0
 	codebaseStatus           MCPCodebaseStatusToolDescriptorV0
 	appVCS                   MCPAppVCSToolDescriptorV0
+	operatorDirectorMessage  operatorDirectorMessageToolDescriptorV0
 }
 
 func newMCPTransportToolDescriptorsV0() mcpTransportToolDescriptorsV0 {
@@ -69,5 +70,6 @@ func newMCPTransportToolDescriptorsV0() mcpTransportToolDescriptorsV0 {
 		codebaseQuery:            MCPCodebaseQueryDescriptorV0(),
 		codebaseStatus:           MCPCodebaseStatusDescriptorV0(),
 		appVCS:                   MCPAppVCSDescriptorV0(),
+		operatorDirectorMessage:  operatorDirectorMessageDescriptorV0(),
 	}
 }

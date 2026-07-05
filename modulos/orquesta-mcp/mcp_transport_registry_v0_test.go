@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	channel "orquesta/modulos/orquesta-operator-director-channel"
 	operator "orquesta/modulos/orquesta-operator-mcp"
 )
 
@@ -62,6 +63,7 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		MCPCodebaseQueryToolNameV0,
 		MCPCodebaseStatusToolNameV0,
 		MCPAppVCSToolNameV0,
+		channel.OperatorDirectorMessageToolNameV0,
 		operator.OperatorMCPStatusToolNameV0,
 		operator.OperatorMCPBurstToolNameV0,
 		operator.OperatorMCPOutboxToolNameV0,

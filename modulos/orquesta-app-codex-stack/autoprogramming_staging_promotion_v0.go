@@ -47,7 +47,8 @@ func (stack StackV0) maybePromoteClosedAutoprogrammingRunV0(
 	if err != nil {
 		return false, promoted.EvidenceRefs, err
 	}
-	refs := compactStringsV0(append(decision.EvidenceRefs, promoted.EvidenceRefs...))
+	promoted = autoprogrammingPromotionEffectWithIntegrationStatusV0(promoted)
+	refs := compactStringsV0(append(decision.EvidenceRefs, autoprogrammingPromotionEffectEvidenceRefsV0(promoted)...))
 	if !autoprogrammingPromotionEffectCompleteV0(promoted.Status) {
 		return false, refs, nil
 	}
@@ -464,4 +465,49 @@ func autoprogrammingPromotionEffectCompleteV0(status string) bool {
 	default:
 		return false
 	}
+}
+
+func autoprogrammingPromotionEffectWithIntegrationStatusV0(
+	result orquestaautoprogramming.AutoprogrammingStagingEffectResultV0,
+) orquestaautoprogramming.AutoprogrammingStagingEffectResultV0 {
+	result.IntegrationReceiptRef = strings.TrimSpace(result.IntegrationReceiptRef)
+	result.IntegrationStatus = strings.TrimSpace(result.IntegrationStatus)
+	if result.IntegrationStatus == "" {
+		switch strings.TrimSpace(result.Status) {
+		case orquestaautoprogramming.AutoprogrammingStagingEffectPromotedV0,
+			orquestaautoprogramming.AutoprogrammingStagingEffectCleanV0:
+			result.IntegrationStatus = orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusIntegratedV0
+		case orquestaautoprogramming.AutoprogrammingStagingEffectPendingPushV0:
+			result.IntegrationStatus = orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusPendingIntegrationV0
+		case orquestaautoprogramming.AutoprogrammingStagingEffectBlockedV0:
+			result.IntegrationStatus = orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusBlockedPushV0
+		}
+	}
+	if result.IntegrationReceiptRef == "" &&
+		result.IntegrationStatus == orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusIntegratedV0 {
+		result.IntegrationReceiptRef = "integration-receipt-ref-" + codexStackOperationalClosureSafeRefV0(
+			firstNonEmptyQueuedSourceV0(result.RunRef, result.PromotionRef),
+		) + "-" + codexStackOperationalClosureSafeRefV0(
+			firstNonEmptyQueuedSourceV0(result.CommitShortRef, result.CommitRef, result.Status),
+		)
+	}
+	return result
+}
+
+func autoprogrammingPromotionEffectEvidenceRefsV0(
+	result orquestaautoprogramming.AutoprogrammingStagingEffectResultV0,
+) []string {
+	refs := append([]string{}, result.EvidenceRefs...)
+	switch strings.TrimSpace(result.IntegrationStatus) {
+	case orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusIntegratedV0:
+		refs = append(refs, "evidence-ref-autoprogramming-integration-receipt")
+		if result.IntegrationReceiptRef != "" {
+			refs = append(refs, result.IntegrationReceiptRef)
+		}
+	case orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusPendingIntegrationV0:
+		refs = append(refs, "evidence-ref-autoprogramming-pending-integration")
+	case orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusBlockedPushV0:
+		refs = append(refs, "evidence-ref-autoprogramming-blocked-push")
+	}
+	return compactStringsV0(refs)
 }

@@ -1,0 +1,6 @@
+goal_ref: goal-ref-task-autoprogramming-72bb10d53162-g02
+source_task_ref: task-remote-bug191-integration-receipt-20260705
+objective: enforce integration receipt before code goals are considered terminal complete
+write_set: modulos/orquesta-autoprogramming, modulos/orquesta-app-codex-stack, modulos/orquesta-mcp, docs incident/inventory/runbook
+next_artifact: durable goal result JSON and focused code/docs patch
+started_utc: 2026-07-05T00:00:00Z

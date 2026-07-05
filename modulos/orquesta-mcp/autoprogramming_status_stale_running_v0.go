@@ -43,6 +43,8 @@ const (
 	mcpAutoprogrammingActionRequiredTestEvidenceMissingV0              = MCPGoalFirstRequiredTestEvidenceMissingV0
 	mcpAutoprogrammingActionRepairReceiptRequiresReworkV0              = MCPGoalFirstRepairReceiptRequiresReworkV0
 	mcpAutoprogrammingActionGoalActiveTimeoutBackendActiveV0           = "goal_active_timeout_backend_active"
+	mcpAutoprogrammingActionPendingIntegrationV0                       = "pending_integration"
+	mcpAutoprogrammingActionWaitForIntegrationReceiptV0                = "wait_for_integration_receipt"
 	mcpAutoprogrammingEvidenceRunningStaleReconciledV0                 = "evidence-ref-run-queue-running-stale-no-live-process-reconciled"
 	mcpAutoprogrammingEvidenceProviderUsageLimitRetryV0                = "evidence-ref-provider-usage-limit-retry-after"
 	mcpAutoprogrammingEvidenceExternalWorkRunStartedV0                 = "evidence-ref-external-work-run-started"
@@ -64,6 +66,7 @@ const (
 	mcpAutoprogrammingEvidenceRequiredTestEvidenceMissingV0            = "evidence-ref-autoprogramming-status-required-test-evidence-missing"
 	mcpAutoprogrammingEvidenceRepairReceiptRequiresReworkV0            = "evidence-ref-autoprogramming-status-repair-receipt-requires-rework"
 	mcpAutoprogrammingEvidenceGoalActiveTimeoutBackendV0               = "evidence-ref-autoprogramming-goal-active-timeout-backend-active"
+	mcpAutoprogrammingEvidencePendingIntegrationV0                     = "evidence-ref-autoprogramming-pending-integration"
 	mcpAutoprogrammingEvidenceNoCheckpointHighConsumptionV0            = "evidence-ref-autoprogramming-no-checkpoint-high-consumption"
 	mcpAutoprogrammingEvidenceCheckpointOnlyHighConsumptionV0          = "evidence-ref-autoprogramming-checkpoint-only-high-consumption"
 	mcpAutoprogrammingEvidenceThreadOutputSanitizedV0                  = "evidence-ref-autoprogramming-status-thread-output-sanitized"
@@ -98,6 +101,44 @@ func buildMCPAutoprogrammingStaleRunningV0(
 		if ok {
 			out = append(out, action)
 		}
+	}
+	return out
+}
+
+func mcpAutoprogrammingPendingIntegrationActionsV0(
+	queue *MCPRunQueuePriorityToolResultV0,
+	observedByRunRef map[string]*MCPDirectorStatsToolResultV0,
+) []MCPAutoprogrammingActionableRunV0 {
+	if queue == nil {
+		return nil
+	}
+	out := make([]MCPAutoprogrammingActionableRunV0, 0)
+	for _, candidate := range queue.Ranked {
+		runRef := strings.TrimSpace(candidate.RunRef)
+		if runRef == "" || mcpAutoprogrammingTerminalRunV0(candidate.Status) {
+			continue
+		}
+		observed := observedByRunRef[runRef]
+		if observed == nil || observed.Stats == nil ||
+			strings.TrimSpace(observed.Stats.Status) != "closed" {
+			continue
+		}
+		action := MCPAutoprogrammingActionableRunV0{
+			Code:              mcpAutoprogrammingActionPendingIntegrationV0,
+			Severity:          "blocked",
+			RunRef:            runRef,
+			AppRef:            strings.TrimSpace(candidate.AppRef),
+			Status:            strings.TrimSpace(candidate.Status),
+			RunStatus:         strings.TrimSpace(observed.Stats.Status),
+			Reason:            "run closed causally but queue remains non-terminal until Git integration receipt is present",
+			RecommendedAction: mcpAutoprogrammingActionWaitForIntegrationReceiptV0,
+			EvidenceRefs: []string{
+				mcpAutoprogrammingEvidencePendingIntegrationV0,
+			},
+		}
+		action = mcpAutoprogrammingActionableRunWithObservedStatsV0(action, observed)
+		action = mcpAutoprogrammingActionableRunWithObservedGoalV0(action, observed)
+		out = append(out, action)
 	}
 	return out
 }
