@@ -45,6 +45,7 @@ type ConfigV0 struct {
 	AutonomousDirectorPolicy                       orquestacionnucleoapp.AutonomousDirectorPolicyPortV0
 	AppGoalLauncher                                orquestagoal.GoalWorkLauncherPortV0
 	AppGoalReworkLauncher                          orquestagoal.GoalWorkLauncherPortV0
+	GoalRequiredTestDependencies                   GoalRequiredTestDependencyResolverPortV0
 	AppGoalObserver                                orquestagoal.GoalWorkObservationPortV0
 	AppGoalBackendControl                          GoalBackendControlPortV0
 	AppGoalClosureValidator                        orquestagoal.GoalWorkClosureValidatorPortV0

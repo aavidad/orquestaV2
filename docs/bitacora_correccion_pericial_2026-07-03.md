@@ -4242,3 +4242,24 @@ Pruebas verdes:
 
 Residual: pendiente despliegue/verificacion remota. D2 no cambia valores ni
 arregla D5; solo evita que vuelvan a divergir presupuestos entre capas.
+
+## TAREA-D3 completada por Claude sobre WIP de Codex (2026-07-06)
+
+Codex dejo la D3 (bateria requerida derivada de dependencias del write-set) a
+mitad al agotar cuota: 4 ficheros nuevos sin compilar. Claude la termino:
+
+- Corregido el corte de edicion (campo `Detail` de `GoalWorkIssueV0`).
+- Dos correcciones de diseno sobre el WIP, coherentes con la auditoria P2:
+  1. El resolver ya NO cachea errores de `go list` (un fallo transitorio
+     quedaba pegado hasta reiniciar el servidor).
+  2. Fail-open gobernado: si la resolucion falla, el goal se lanza con sus
+     tests declarados y evidencia
+     `evidence-ref-goal-required-test-dependency-resolution-unavailable`,
+     en vez de bloquear todos los lanzamientos (el nightly completo sigue
+     siendo la red dura). Test del contrato actualizado.
+- Suites completas verdes: `./modulos/orquesta-app-codex-stack` y
+  `./cmd/orquesta-server` (los dos flujos que el fail-closed rompia pasan).
+
+Con esto D1, D2 y D3 de la cola del 2026-07-06 quedan cerradas. Siguientes
+para Codex: D4 (emisores sin dedupe), D5 (gate comun de compactacion), D6
+(reason codes de placeholders), D7 (runbook de arranque).
