@@ -2790,3 +2790,19 @@ anadir un artefacto JSON autorizado como ruta independiente.
 - BUG-ORQ-20260705-TELEGRAM-NOLLM-ACCEPTED-INVISIBLE: `prepare-run` acepta `request-ref-remoto-telegram-nollm-runtime-20260705-001` pero no aparece en `autoprogramming/status`; control movil no-LLM no esta desplegado y Hermes LLM falla por 429. Avance 2026-07-06: `cmd/orquesta-server` tiene endpoint `POST /api/v0/operator/telegram/update` y sender Bot API directo sin LLM ni env nueva; falta desplegar en `srv1651826`, conectar webhook/poller y validar desde Telegram real. Ver `docs/incidencias/incidencia_orquesta_telegram_nollm_accepted_invisible_2026-07-05.md`. Estado: abierta con avance local.
 | BUG-ORQ-20260705-SUPERVISOR-SCHEDULER-PAYLOAD | supervisor/autoprogramacion | abierto | Supervisor remoto repite `director_tick_input_build_invalido: field=scheduler_input.payload`; T137 rank 1 bloquea cola. | `docs/incidencias/incidencia_orquesta_supervisor_scheduler_payload_2026-07-05.md` | Pendiente reproducir tick real y corregir compactacion/seleccion. |
 | BUG-ORQ-20260705-CODEX-HOME-TOKEN-INVALIDADO | runtime-codex/proveedor | abierto | Agente Orquesta falla antes de programar con `token_invalidated` y `refresh_token_invalidated` en `/srv/orquesta-self/codex-home`. | `docs/incidencias/incidencia_orquesta_codex_home_token_invalidado_2026-07-05.md` | Requiere reautenticacion del Codex CLI del servidor y relanzar tarea. |
+
+BUG nuevo `BUG-ORQ-20260706-WIZARD-I18N-PLACEHOLDER` (cerrado):
+El wizard de nueva app tenia cobertura de presencia de claves i18n, pero no
+detectaba textos genericos usados como relleno en U1-U12/T1-T8:
+`Plain English explanation for ...`, `Plain explanation for this wizard choice`
+y `Explica esta opcion en lenguaje llano`. Esto producia falso verde: HTTP/MCP
+y el glosario podian mostrar ayuda no accionable aunque
+`TestWizardTodaOpcionTieneAyudaV0` pasara. Cierre aplicado por Codex: el
+catalogo universal del wizard tiene ayudas reales es/en para opciones y
+rationales U/T, el test prohibe placeholders conocidos y
+`docs/wizard_glosario_generado.md` se regenero desde el catalogo. Evidencia:
+`go test -count=1 ./modulos/orquesta-web -run 'TestWizard|TestNuevaApp.*Wizard'`.
+Residual separado: el subagente Codex detecto que MCP no transporta todavia
+`justification`, `comprehension_query` ni `glossary_expanded`, y falta tool MCP
+`orquesta.nueva_app.wizard.bot.v0`; tratar como siguiente microtarea de paridad
+MCP, sin tocar supervisor/state-file/app-codex-stack.

@@ -245,148 +245,148 @@ Fuente generada desde el catalogo i18n es/en del wizard.
 
 ## nueva_app.wizard.help.option.t1.acl_fina
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Permisos finos controlan acceso por recurso concreto. Conviene si cada registro puede tener reglas distintas. Ejemplo: cada expediente tiene lectores propios.
+- en: Fine-grained permissions control access to specific records or resources. Use it when each item may have different rules. Example: each case file has its own readers.
 
 ## nueva_app.wizard.help.option.t1.multi_tenant
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Multi-tenant separa clientes dentro de una misma app. Conviene si varias organizaciones comparten instalacion. Ejemplo: cada clinica ve solo sus datos.
+- en: Multi-tenant separates customers inside one app. Use it when several organizations share one installation. Example: each clinic sees only its own data.
 
 ## nueva_app.wizard.help.option.t1.rbac_simple
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: RBAC simple usa roles como admin, editor y lector. Conviene para permisos faciles de entender. Ejemplo: recepcion edita citas y direccion solo revisa.
+- en: Simple RBAC uses roles such as admin, editor, and reader. Use it for permissions people can understand. Example: reception edits appointments and management only reviews.
 
 ## nueva_app.wizard.help.option.t2.ldap_bind
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: LDAP o Active Directory valida usuarios contra el directorio existente. Conviene en empresas con dominio Windows clasico. Ejemplo: usar los grupos del dominio.
+- en: LDAP or Active Directory checks users against the existing directory. Use it in companies with a classic Windows domain. Example: reuse domain groups.
 
 ## nueva_app.wizard.help.option.t2.oidc_sso
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: OIDC SSO permite entrar con el proveedor corporativo moderno. Conviene para no guardar contrasenas en la app. Ejemplo: iniciar sesion con la cuenta de empresa.
+- en: OIDC SSO lets people sign in with a modern corporate provider. Use it to avoid storing passwords in the app. Example: sign in with the company account.
 
 ## nueva_app.wizard.help.option.t2.saml_sso
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: SAML SSO es una entrada corporativa habitual en organizaciones grandes. Conviene si el proveedor actual usa SAML. Ejemplo: login unico del portal interno.
+- en: SAML SSO is a common corporate sign-in method in large organizations. Use it when the current provider uses SAML. Example: single login from the internal portal.
 
 ## nueva_app.wizard.help.option.t2.scim_groups
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: SCIM y grupos sincronizan altas, bajas y pertenencia a grupos. Conviene cuando RRHH o IT gestionan usuarios centralmente. Ejemplo: quitar acceso al dar de baja a alguien.
+- en: SCIM and groups synchronize user creation, removal, and group membership. Use it when HR or IT centrally manages users. Example: remove access when someone leaves.
 
 ## nueva_app.wizard.help.option.t3.colector
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Colector central envia senales a una plataforma comun. Conviene si hay muchos servicios. Ejemplo: ver metricas y alertas en un panel unico.
+- en: A central collector sends signals to a shared monitoring platform. Use it when there are many services. Example: see metrics and alerts in one dashboard.
 
 ## nueva_app.wizard.help.option.t3.fichero
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Fichero rotado guarda logs en archivos con limite y retencion. Conviene si soporte recoge ficheros. Ejemplo: conservar siete dias comprimidos.
+- en: Rotated file logs keep files under size and retention limits. Use it when support collects files. Example: keep seven compressed days.
 
 ## nueva_app.wizard.help.option.t3.journald
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: journald guarda logs del servicio con rotacion del sistema. Conviene en servidores Linux con systemd. Ejemplo: revisar fallos con journalctl.
+- en: journald stores service logs with system rotation. Use it on Linux servers with systemd. Example: inspect failures with journalctl.
 
 ## nueva_app.wizard.help.option.t3.kernel
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: printk y trace son senales para codigo del nucleo Linux. Conviene para modulos en C sin UI. Ejemplo: registrar eventos del driver.
+- en: printk and trace are signals for Linux kernel code. Use them for C modules without UI. Example: record driver events.
 
 ## nueva_app.wizard.help.option.t4.kv_embebido
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: KV embebido guarda pares clave-valor dentro de la app. Conviene para configuracion o cache local. Ejemplo: recordar preferencias simples.
+- en: An embedded key-value store keeps simple pairs inside the app. Use it for configuration or local cache. Example: remember simple preferences.
 
 ## nueva_app.wizard.help.option.t4.mysql
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: MySQL es una base relacional comun. Conviene si el entorno ya lo opera. Ejemplo: reutilizar la base que administra hosting.
+- en: MySQL is a common relational database. Use it if the environment already operates it. Example: reuse the database managed by the hosting provider.
 
 ## nueva_app.wizard.help.option.t4.postgresql
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: PostgreSQL es una base de datos compartida robusta. Conviene cuando varios usuarios escriben a la vez. Ejemplo: agenda de equipo con historico.
+- en: PostgreSQL is a robust shared database. Use it when several users write at the same time. Example: a team calendar with history.
 
 ## nueva_app.wizard.help.option.t4.redis_jobs
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Redis, cache y jobs aceleran lecturas y tareas en segundo plano. Conviene con carga o trabajos diferidos. Ejemplo: procesar emails en cola.
+- en: Redis, cache, jobs, and cron speed reads and background work. Use them with load or delayed jobs. Example: process emails in a queue.
 
 ## nueva_app.wizard.help.option.t4.sqlite
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: SQLite guarda datos en un fichero local. Conviene para uso pequeno o una sola instancia. Ejemplo: app interna sencilla con backup del fichero.
+- en: SQLite stores data in a local file. Use it for small use or a single instance. Example: a simple internal app with file backups.
 
 ## nueva_app.wizard.help.option.t5.graphql
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: GraphQL deja pedir exactamente los campos necesarios. Conviene para frontends con vistas variadas. Ejemplo: una pantalla pide cliente y ultimos pedidos.
+- en: GraphQL lets a client ask for exactly the needed fields. Use it for frontends with varied views. Example: one screen asks for a customer and recent orders.
 
 ## nueva_app.wizard.help.option.t5.grpc
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: gRPC define contratos rapidos entre servicios. Conviene para sistemas internos controlados. Ejemplo: microservicios que intercambian datos.
+- en: gRPC defines fast contracts between services. Use it for controlled internal systems. Example: microservices exchanging data.
 
 ## nueva_app.wizard.help.option.t5.rest_openapi
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: REST con OpenAPI documenta endpoints HTTP versionados. Conviene porque muchas herramientas lo entienden. Ejemplo: publicar /api/v1/reservas.
+- en: REST with OpenAPI documents versioned HTTP endpoints. Use it because many tools understand it. Example: publish /api/v1/bookings.
 
 ## nueva_app.wizard.help.option.t5.webhooks
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Webhooks firmados envian eventos a otros sistemas con prueba de origen. Conviene para integraciones reactivas. Ejemplo: avisar de pago confirmado.
+- en: Signed webhooks send events to other systems with proof of origin. Use them for reactive integrations. Example: notify that a payment was confirmed.
 
 ## nueva_app.wizard.help.option.t6.contenedor_systemd
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Contenedor y systemd empaquetan y arrancan la app de forma repetible. Conviene para servidor propio. Ejemplo: servicio que reinicia si cae.
+- en: Container and systemd package and start the app repeatably. Use them for your own server. Example: a service that restarts if it crashes.
 
 ## nueva_app.wizard.help.option.t6.ha_failover
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: HA y failover preparan continuidad si una maquina falla. Conviene para criticidad alta. Ejemplo: cambiar a otro nodo automaticamente.
+- en: HA and failover preserve service when a machine fails. Use them for high criticality. Example: switch to another node automatically.
 
 ## nueva_app.wizard.help.option.t6.kernel_build_ci
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Build de modulo kernel compila y prueba codigo del nucleo. Conviene cuando el objetivo es Linux en C. Ejemplo: validar contra una version concreta.
+- en: Kernel module build compiles and tests kernel code. Use it when the target is Linux in C. Example: validate against a specific version.
 
 ## nueva_app.wizard.help.option.t7.latencia
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Presupuesto de latencia fija cuanto debe tardar una accion. Conviene si la rapidez es requisito. Ejemplo: responder busquedas en menos de un segundo.
+- en: A latency budget sets how long an action may take. Use it when speed is a requirement. Example: answer searches in less than one second.
 
 ## nueva_app.wizard.help.option.t7.paginacion
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Paginacion y limites evitan cargar demasiados datos de golpe. Conviene en listados y busquedas. Ejemplo: mostrar 50 resultados por pagina.
+- en: Pagination and limits avoid loading too much data at once. Use them in lists and searches. Example: show 50 results per page.
 
 ## nueva_app.wizard.help.option.t7.timeouts
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Timeouts, reintentos y circuit breakers cortan esperas y fallos repetidos. Conviene en toda llamada externa. Ejemplo: no quedarse colgado por una API lenta.
+- en: Timeouts, retries, and circuit breakers cut waiting and repeated failures. Use them on every external call. Example: avoid hanging on a slow API.
 
 ## nueva_app.wizard.help.option.t8.anonimizacion
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Anonimizacion o pseudonimizacion reduce datos identificables. Conviene para analitica o pruebas. Ejemplo: reemplazar nombres por codigos.
+- en: Anonymization or pseudonymization reduces identifiable data. Use it for analytics or tests. Example: replace names with codes.
 
 ## nueva_app.wizard.help.option.t8.auditoria_rgpd
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Auditoria y retencion RGPD registran acciones sensibles y cuanto tiempo se guardan datos. Conviene con datos personales. Ejemplo: saber quien vio una ficha.
+- en: Audit and GDPR retention record sensitive actions and how long data is kept. Use them with personal data. Example: know who viewed a record.
 
 ## nueva_app.wizard.help.option.t8.borrado_real
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Borrado real elimina datos cuando una persona lo solicita y procede. Conviene para cumplir privacidad. Ejemplo: borrar una cuenta y sus datos asociados.
+- en: Real deletion removes data when a person requests it and the rule applies. Use it for privacy compliance. Example: delete an account and related data.
 
 ## nueva_app.wizard.help.option.tipo_app.api
 
@@ -413,163 +413,163 @@ Fuente generada desde el catalogo i18n es/en del wizard.
 
 ## nueva_app.wizard.help.option.u1.equipo
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Equipo significa que varias personas trabajan dentro de la misma app. Conviene cuando hay roles sencillos y revision compartida. Ejemplo: recepcion y administracion usan la misma agenda.
+- en: Team means several people work in the same app. Use it for simple roles and shared review. Example: reception and administration use the same calendar.
 
 ## nueva_app.wizard.help.option.u1.personal
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Personal significa que solo una persona usa la app. Conviene si no habra cuentas, permisos ni colaboracion. Ejemplo: una agenda privada.
+- en: Personal means one person uses the app. Use it when there will be no accounts, permissions, or collaboration. Example: a private calendar.
 
 ## nueva_app.wizard.help.option.u1.publico
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Publico significa que usuarios externos pueden entrar. Conviene cuando clientes o visitantes usan la app. Ejemplo: un portal para reservar cita.
+- en: Public means external users may enter. Use it when clients or visitors use the app. Example: a booking portal.
 
 ## nueva_app.wizard.help.option.u11.alta
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Criticidad alta significa que el fallo afecta a usuarios o ingresos. Conviene anadir alertas y recuperacion. Ejemplo: reservas de clientes.
+- en: High criticality means failures affect users or revenue. Use it with alerts and recovery. Example: customer bookings.
 
 ## nueva_app.wizard.help.option.u11.critica
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Criticidad critica significa que parar no es aceptable. Conviene solo si hay necesidad real. Ejemplo: proceso operativo esencial.
+- en: Critical means stopping is not acceptable. Use it only for a real need. Example: an essential operational process.
 
 ## nueva_app.wizard.help.option.u11.media
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Criticidad media significa impacto controlado si falla. Conviene por defecto. Ejemplo: se puede reintentar sin parar el negocio.
+- en: Medium criticality means failure has controlled impact. Use it as a default. Example: work can be retried without stopping the business.
 
 ## nueva_app.wizard.help.option.u12.alta
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Autonomia alta permite mas decisiones automaticas. Conviene cuando reglas, tests y rollback estan claros. Ejemplo: tareas repetibles de mantenimiento.
+- en: High autonomy allows more automatic decisions. Use it when rules, tests, and rollback are clear. Example: repeated maintenance tasks.
 
 ## nueva_app.wizard.help.option.u12.baja
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Autonomia baja obliga a preguntar mas antes de actuar. Conviene si hay riesgo alto o requisitos poco claros. Ejemplo: cambios legales.
+- en: Low autonomy asks more often before acting. Use it for high risk or unclear requirements. Example: legal changes.
 
 ## nueva_app.wizard.help.option.u12.media
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Autonomia media permite que los agentes avancen y pidan confirmacion en puntos sensibles. Conviene para equilibrio entre velocidad y control.
+- en: Medium autonomy lets agents progress and ask for confirmation on sensitive points. Use it to balance speed and control.
 
 ## nueva_app.wizard.help.option.u2.api
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: API significa que otros programas hablan con la app. Conviene si no hace falta una pantalla principal. Ejemplo: otra web consulta disponibilidad.
+- en: API means other programs talk to the app. Use it when a main screen is not needed. Example: another website checks availability.
 
 ## nueva_app.wizard.help.option.u2.cli
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: CLI significa usar comandos de terminal sin pantalla grafica. Conviene para herramientas tecnicas o automatizaciones. Ejemplo: ejecutar una importacion con un comando.
+- en: CLI means using terminal commands without a graphical screen. Use it for technical tools or automation. Example: run an import with a command.
 
 ## nueva_app.wizard.help.option.u2.mobile
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Movil significa que el telefono es la superficie principal. Conviene para trabajo fuera de una mesa. Ejemplo: confirmar una tarea desde el movil.
+- en: Mobile means the phone is the main surface. Use it for work away from a desk. Example: confirm a task from a phone.
 
 ## nueva_app.wizard.help.option.u2.web
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Web significa usar la app desde navegador. Conviene para acceso facil desde varios equipos. Ejemplo: abrir la aplicacion con una URL.
+- en: Web means using the app from a browser. Use it for easy access from different devices. Example: opening the app with a URL.
 
 ## nueva_app.wizard.help.option.u3.automatizacion
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Automatizacion ejecuta acciones con poca intervencion humana. Conviene para tareas repetibles. Ejemplo: enviar avisos cuando llega una solicitud.
+- en: Automation runs actions with little human input. Use it for repeatable tasks. Example: send alerts when a request arrives.
 
 ## nueva_app.wizard.help.option.u3.catalogo_contenido
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Catalogo o contenido organiza elementos que se consultan o publican. Conviene cuando el valor esta en listar, buscar o leer. Ejemplo: productos, documentos o cursos.
+- en: Catalog or content organizes items to search, read, or publish. Use it when value is in lists and browsing. Example: products, documents, or courses.
 
 ## nueva_app.wizard.help.option.u3.flujo_operativo
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Flujo operativo es una secuencia de pasos de trabajo. Conviene cuando la app guia tareas repetidas. Ejemplo: recibir solicitud, revisarla y cerrarla.
+- en: Operational workflow is a sequence of work steps. Use it when the app guides repeated tasks. Example: receive a request, review it, and close it.
 
 ## nueva_app.wizard.help.option.u5.financiera
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Financiera significa datos de dinero, cobros o cuentas. Conviene para activar auditoria y proteccion. Ejemplo: facturas o movimientos bancarios.
+- en: Financial means money, charges, or account data. Use it to enable audit and protection. Example: invoices or bank movements.
 
 ## nueva_app.wizard.help.option.u5.interna
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Interna significa informacion de la organizacion pero no especialmente sensible. Conviene para empezar con proteccion normal. Ejemplo: notas de trabajo internas.
+- en: Internal means organization information that is not especially sensitive. Use it for normal protection. Example: internal work notes.
 
 ## nueva_app.wizard.help.option.u5.personal
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Personal significa datos que identifican a personas. Conviene marcarlo para activar privacidad y borrado. Ejemplo: nombre, telefono o email.
+- en: Personal means data that identifies people. Use it to enable privacy and deletion duties. Example: name, phone, or email.
 
 ## nueva_app.wizard.help.option.u5.sanitaria
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Sanitaria significa datos de salud. Conviene porque exige mas cuidado y trazabilidad. Ejemplo: medicacion, diagnosticos o citas medicas.
+- en: Health means medical or wellbeing data. Use it because it needs extra care and traceability. Example: medication, diagnoses, or appointments.
 
 ## nueva_app.wizard.help.option.u6.alta
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Colaboracion alta significa aprobaciones, comentarios o trazabilidad detallada. Conviene cuando varias areas participan. Ejemplo: expediente con validaciones.
+- en: High collaboration means approvals, comments, or detailed traceability. Use it when several areas participate. Example: a case file with validations.
 
 ## nueva_app.wizard.help.option.u6.baja
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Colaboracion baja significa que casi no hay revision entre personas. Conviene para uso individual o tareas simples. Ejemplo: una lista privada.
+- en: Low collaboration means little review between people. Use it for individual or simple work. Example: a private list.
 
 ## nueva_app.wizard.help.option.u6.media
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Colaboracion media significa que varias personas comparten trabajo con reglas sencillas. Conviene por defecto. Ejemplo: editar y revisar tareas de equipo.
+- en: Medium collaboration means several people share work with simple rules. Use it as a default. Example: edit and review team tasks.
 
 ## nueva_app.wizard.help.option.u7.api
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: API externa significa conectar por una puerta tecnica documentada. Conviene cuando otra herramienta debe enviar o leer datos. Ejemplo: consultar clientes desde un CRM.
+- en: External API means connecting through a documented technical doorway. Use it when another tool must send or read data. Example: query customers from a CRM.
 
 ## nueva_app.wizard.help.option.u7.sin_integraciones
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Sin integraciones significa que la app no se conecta con otros sistemas al principio. Conviene para reducir riesgo. Ejemplo: cargar datos manualmente.
+- en: No integrations means the app does not connect to other systems at first. Use it to reduce risk. Example: load data manually.
 
 ## nueva_app.wizard.help.option.u7.webhook
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Webhook significa recibir o enviar avisos automaticos entre sistemas. Conviene para reaccionar a eventos. Ejemplo: avisar cuando se paga una reserva.
+- en: Webhook means automatic notifications between systems. Use it to react to events. Example: notify when a booking is paid.
 
 ## nueva_app.wizard.help.option.u8.offline_parcial
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Offline parcial permite seguir algunas tareas sin red y sincronizar despues. Conviene para movilidad. Ejemplo: tomar notas en una visita.
+- en: Partial offline lets some tasks continue without network and sync later. Use it for mobile work. Example: take notes during a visit.
 
 ## nueva_app.wizard.help.option.u8.offline_total
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Offline total significa que el uso principal no depende de red. Conviene para entornos aislados. Ejemplo: herramienta local de campo.
+- en: Full offline means main use does not depend on network access. Use it for isolated environments. Example: a local field tool.
 
 ## nueva_app.wizard.help.option.u8.online
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Solo online significa que la app necesita red para funcionar. Conviene si todos trabajan conectados. Ejemplo: panel interno de oficina.
+- en: Online only means the app needs network access. Use it when everyone works connected. Example: an internal office dashboard.
 
 ## nueva_app.wizard.help.option.u9.basica
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Documentacion basica deja solo lo imprescindible. Conviene para prototipos pequenos. Ejemplo: comandos de ejecucion y pruebas.
+- en: Basic documentation keeps only the essentials. Use it for small prototypes. Example: run and test commands.
 
 ## nueva_app.wizard.help.option.u9.normal
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Documentacion normal cubre uso, desarrollo y despliegue basico. Conviene para la mayoria de apps. Ejemplo: guia de arranque y pruebas.
+- en: Normal documentation covers usage, development, and basic deployment. Use it for most apps. Example: startup and test guide.
 
 ## nueva_app.wizard.help.option.u9.profunda
 
-- es: Explica esta opcion en lenguaje llano. Conviene elegirla cuando encaja con el uso real declarado. Ejemplo: se traduce a un requisito visible del contrato.
-- en: Plain explanation for this wizard choice. Use it when it matches the declared real use.
+- es: Documentacion profunda explica reglas, decisiones y operacion con mas detalle. Conviene para equipos grandes o auditoria. Ejemplo: manual de soporte.
+- en: Deep documentation explains rules, decisions, and operations in more detail. Use it for large teams or audit. Example: a support manual.
 
 ## nueva_app.wizard.help.option.uso.compartir
 

@@ -276,14 +276,18 @@ func TestWizardTodaOpcionTieneAyudaV0(t *testing.T) {
 		requireWizardI18nKeyV0(t, catalog, question.PromptKey)
 		requireWizardI18nKeyV0(t, catalog, question.WhyKey)
 		requireWizardI18nKeyV0(t, catalog, question.HelpKey)
+		requireWizardI18nNotPlaceholderV0(t, catalog, question.PromptKey, question.WhyKey, question.HelpKey)
 		for _, option := range question.Options {
 			requireWizardI18nKeyV0(t, catalog, option.LabelKey)
 			requireWizardI18nKeyV0(t, catalog, option.HelpKey)
+			requireWizardI18nNotPlaceholderV0(t, catalog, option.LabelKey, option.HelpKey)
 			if option.ExampleKey != "" {
 				requireWizardI18nKeyV0(t, catalog, option.ExampleKey)
+				requireWizardI18nNotPlaceholderV0(t, catalog, option.ExampleKey)
 			}
 			if option.RationaleKey != "" {
 				requireWizardI18nKeyV0(t, catalog, option.RationaleKey)
+				requireWizardI18nNotPlaceholderV0(t, catalog, option.RationaleKey)
 			}
 		}
 	}
@@ -291,6 +295,7 @@ func TestWizardTodaOpcionTieneAyudaV0(t *testing.T) {
 		requireWizardI18nKeyV0(t, catalog, defaultValue.WhyKey)
 		requireWizardI18nKeyV0(t, catalog, defaultValue.HelpKey)
 		requireWizardI18nKeyV0(t, catalog, defaultValue.ExampleKey)
+		requireWizardI18nNotPlaceholderV0(t, catalog, defaultValue.WhyKey, defaultValue.HelpKey, defaultValue.ExampleKey)
 	}
 }
 
@@ -562,6 +567,26 @@ func requireWizardI18nKeyV0(t *testing.T, catalog NuevaAppI18nCatalogV0, key str
 	for _, locale := range []string{NuevaAppI18nDefaultLocaleV0, NuevaAppI18nEnglishLocaleV0} {
 		if text := strings.TrimSpace(catalog.lookupExact(locale, key)); text == "" {
 			t.Fatalf("clave wizard sin texto exacto %s/%s", locale, key)
+		}
+	}
+}
+
+func requireWizardI18nNotPlaceholderV0(t *testing.T, catalog NuevaAppI18nCatalogV0, keys ...string) {
+	t.Helper()
+	for _, key := range keys {
+		for _, locale := range []string{NuevaAppI18nDefaultLocaleV0, NuevaAppI18nEnglishLocaleV0} {
+			text := catalog.lookupExact(locale, key)
+			for _, forbidden := range []string{
+				"Plain English explanation for ",
+				"Use it to choose the option without technical assumptions.",
+				"Plain explanation for this wizard choice.",
+				"Explica esta opcion en lenguaje llano.",
+				"Recomendacion conservadora para completar el contrato sin sobredisenar.",
+			} {
+				if strings.Contains(text, forbidden) {
+					t.Fatalf("clave wizard con placeholder %s/%s: %q", locale, key, text)
+				}
+			}
 		}
 	}
 }

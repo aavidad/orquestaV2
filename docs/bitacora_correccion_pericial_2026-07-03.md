@@ -3959,3 +3959,30 @@ En paralelo Codex trabaja en local: consolidacion de envs telegram_operator al
 fichero canonico (`74a98263c`, metricas 518 -> 512) y endpoint Telegram no-LLM
 (en curso, sin commitear al escribir esta entrada). El nightly del servidor
 (cron 03:30) sigue activo y no depende del server Orquesta.
+
+## Codex local 2026-07-06: falso verde i18n del wizard
+
+Frente disjunto del supervisor para no pisar a Claude. Se detecto que el wizard
+de nueva app ya tenia U1-U12/T1-T8, ayuda, glosario y bot con pruebas focales,
+pero el catalogo universal aceptaba textos genericos como si fueran ayuda real.
+Esto era un falso verde de i18n: el test comprobaba clave presente, no calidad
+minima del texto.
+
+Cierre aplicado:
+
+- `modulos/orquesta-web/nueva_app_wizard_universal_i18n_v0.go`: ayudas y
+  rationales es/en reales para las opciones universales y tecnicas.
+- `modulos/orquesta-web/nueva_app_wizard_turn_v0_test.go`: ratchet contra
+  placeholders conocidos en preguntas, opciones, rationales y defaults.
+- `docs/wizard_glosario_generado.md`: regenerado desde el catalogo i18n.
+- `docs/inventario_bugs_orquesta_2026-06-30.md`: registrado
+  `BUG-ORQ-20260706-WIZARD-I18N-PLACEHOLDER` como cerrado.
+
+Prueba verde:
+
+- `go test -count=1 ./modulos/orquesta-web -run 'TestWizard|TestNuevaApp.*Wizard'`
+
+Subagente Codex reviso el wizard y dejo siguiente brecha separada: MCP wizard
+no transporta `justification`, `comprehension_query` ni `glossary_expanded`, y
+no existe todavia `orquesta.nueva_app.wizard.bot.v0`. Esa microtarea puede
+hacerse en `modulos/orquesta-mcp` sin tocar supervisor/state-file/app-codex-stack.
