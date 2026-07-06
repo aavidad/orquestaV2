@@ -48,7 +48,7 @@ func buildRuntimeFromConfigV0(serverConfig orquestaserver.ConfigV0) (*orquestase
 	if err != nil {
 		return nil, err
 	}
-	appHandler, err := buildServerAppHandlerV0(stack)
+	appHandler, err := buildServerAppHandlerV0(stack, serverConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +92,14 @@ func (serverForceExitPortV0) ExitV0(code int) {
 	os.Exit(code)
 }
 
-func buildServerAppHandlerV0(stack orquestaappcodexstack.StackV0) (http.Handler, error) {
+func buildServerAppHandlerV0(
+	stack orquestaappcodexstack.StackV0,
+	serverConfigs ...orquestaserver.ConfigV0,
+) (http.Handler, error) {
+	var serverConfig orquestaserver.ConfigV0
+	if len(serverConfigs) > 0 {
+		serverConfig = serverConfigs[0]
+	}
 	eventReader, _ := stack.Stores.EventSink.(orquestacionnucleoapp.RunEventReaderPortV0)
 	stack.MCPTransportBindings.WorkspaceTimeline = newServerWorkspaceTimelineSourceWithEventsV0(
 		stack.MCPTransportBindings,
@@ -121,6 +128,19 @@ func buildServerAppHandlerV0(stack orquestaappcodexstack.StackV0) (http.Handler,
 		stack.Handler,
 		serverWebHTMLRenderObserverV0(),
 	)
+	telegramOperator := telegramOperatorAdapterFromProjectConfigFileV0(
+		projectConfigFromServerConfigBestEffortV0(serverConfig),
+		telegramOperatorHTTPPortsV0{
+			Handler:         observedWeb,
+			DirectorMessage: stack.MCPTransportBindings.OperatorDirectorMessage,
+		},
+	)
+	if telegramOperator.Enabled {
+		mux.Handle(
+			telegramOperatorUpdateHTTPPathV0,
+			newTelegramOperatorUpdateHTTPHandlerV0(telegramOperator, nil),
+		)
+	}
 	mux.Handle("/", withGovernanceCatalogRouteV0(observedWeb))
 	return orquestahttpgateway.NewControlPlaneHTTPHeadersV0(mux), nil
 }

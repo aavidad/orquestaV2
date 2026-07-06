@@ -146,6 +146,12 @@ Limitacion: no se relanzo Orquesta ni se verifico el supervisor vivo porque el r
 1. Corregir el fallo `director_tick_input_build_invalido: field=scheduler_input.payload` en datos reales del supervisor.
 2. Reconciliar `request-ref-remoto-telegram-nollm-runtime-20260705-001`: accepted no puede quedar invisible.
 3. Implementar o completar runtime Telegram no-LLM en Orquesta: endpoint/poller opt-in, autorizacion de chat, comandos contra canal operador-Director, respuestas por Bot API/Hermes-send sin LLM.
+   - Avance Codex 2026-07-06: existe `POST /api/v0/operator/telegram/update`
+     en `cmd/orquesta-server`, montado solo con `telegram_operator.enabled`.
+     Acepta update Telegram real o payload compacto, valida chat autorizado,
+     responde JSON y puede enviar por puerto `hermesTelegramSendPortV0`; `/msg`
+     usa `OperatorDirectorMessage`. Pendiente: despliegue remoto y validacion
+     Telegram real/poller/Bot API.
 4. Desplegar de forma controlada el build nuevo solo cuando el servidor pueda apagarse/reiniciarse con evidencia de `shutdown_ready` o procedimiento documentado.
 5. Revalidar `/api/status`, `/api/v0/autoprogramming/status`, MCP `orquesta.operator.director.message.v0` y envio Telegram tras despliegue.
 6. Mantener los cron jobs Hermes LLM pausados hasta que haya cuota o proveedor alternativo; no usarlos como control plane principal.

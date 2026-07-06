@@ -35,11 +35,41 @@ Conclusion actual: ademas de la invisibilidad/proyeccion del run, hay un bloqueo
 
 ## Estado
 
-Abierta. Requiere una de estas salidas verificables:
+Abierta con avance de codigo local integrado el 2026-07-06. Requiere una de
+estas salidas verificables:
 
 1. Orquesta ejecuta el rework no-LLM y deja resultado durable con tests y despliegue; o
 2. Se implementa/despliega un puente temporal no-LLM documentado, y se deja tarea de producto para integrarlo en Orquesta; o
 3. Se corrige la proyeccion/reconciliacion para que el run aceptado sea observable y supervisable.
+
+## Avance manual 2026-07-06: endpoint no-LLM en servidor
+
+Se materializa una primera entrada no-LLM propia de Orquesta:
+
+- Ruta HTTP opt-in: `POST /api/v0/operator/telegram/update`.
+- Montaje: solo aparece cuando `telegram_operator.enabled=true` en
+  `orquesta.config.json` y el wiring Telegram esta activo.
+- Entrada aceptada: update Telegram real (`update_id`, `message.chat.id`,
+  `message.text`) o payload compacto (`update_ref`, `chat_ref`, `text`).
+- Seguridad: el adaptador existente valida `authorized_chat_refs` antes de
+  parsear comandos; si falta configuracion, la ruta devuelve `blocked` con
+  `telegram_inodo_bot_link_missing` y `missing_fields`, no queda invisible.
+- Salida: devuelve JSON compacto y puede enviar respuesta por puerto
+  `hermesTelegramSendPortV0` sin LLM. El comando `/msg` usa el servicio real
+  `OperatorDirectorMessage`, no una ruta inventada.
+
+Evidencia local:
+
+- `TestTelegramOperatorUpdateHTTPV0DespachaUpdateAutorizadoSinLLM`.
+- `TestTelegramOperatorUpdateHTTPV0BloqueoConfigVisible`.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestTelegramOperator|TestOperatorDirector|TestOperatorNotificationHermes|TestEnvVarsOrquestaRatchetMEJ106V0'`.
+- `scripts/orquesta_metricas_deuda.sh --json` mantiene
+  `env_vars_orquesta=514`.
+- `git diff --check`.
+
+Residual: no se ha desplegado en `srv1651826` ni se ha validado con Telegram
+real/Bot API porque el trabajo de servidor remoto estaba parado por peticion del
+operador y el proveedor Codex remoto seguia sin autenticacion valida.
 
 ## Refs
 

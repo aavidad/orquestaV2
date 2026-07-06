@@ -51,6 +51,11 @@ redactados en `effective_config`.
 
 ## Comandos autorizados
 
+- Endpoint no-LLM de Orquesta: `POST /api/v0/operator/telegram/update`.
+  Acepta update Telegram (`update_id`, `message.chat.id`, `message.text`) o
+  payload compacto (`update_ref`, `chat_ref`, `text`). La ruta esta montada solo
+  si `telegram_operator.enabled=true`; si falta configuracion devuelve
+  `blocked` con campos pendientes.
 - `/status [run-ref]`: estado compacto.
 - `/queue [subject-ref]`: cola/outbox compactos.
 - `/observe_goal <goal-ref>`: observa un goal/run goal-first.
@@ -71,3 +76,5 @@ Tests focales añadidos:
 - `TestOperatorNotificationServerV0NotificaGoalYRunTerminalDeduplicado`
 - `TestOperatorNotificationHermesTelegramNotifierV0UsaSendSinAuthCodex`
 - `TestAdapterV0DespachaMensajeAlCanalDirector`
+- `TestTelegramOperatorUpdateHTTPV0DespachaUpdateAutorizadoSinLLM`
+- `TestTelegramOperatorUpdateHTTPV0BloqueoConfigVisible`
