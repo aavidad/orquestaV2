@@ -68,6 +68,45 @@ func TestBuildDirectorSchedulerTickInputV0FiltraConfirmedStoppedAgentsEnCarrilDe
 	}
 }
 
+func TestBuildDirectorSchedulerTickInputV0CarrilProgressPequenoConservaSnapshotCompletoV0(t *testing.T) {
+	run := tickInputProgramacionRunV0(t)
+	run.Tasks = append(run.Tasks, "task-ref-progress-target")
+	run.Agents = append(run.Agents, "agent-ref-progress-target", "agent-ref-progress-superviviente")
+	run.StartedAgents = append(run.StartedAgents, "agent-ref-progress-target", "agent-ref-progress-superviviente")
+	run.CapacityRequests = append(run.CapacityRequests, "capacity-ref-progress-001")
+	run.ConcurrencyGates = append(run.ConcurrencyGates, "concurrency_gate:plan-progress-001#decision:allow_request_agent#plan:plan-progress-001")
+	if issues := orquestacoreworkflow.ValidateOrchestrationRunV0(run); len(issues) > 0 {
+		t.Fatalf("run invalido: %+v", issues)
+	}
+
+	input, err := BuildDirectorSchedulerTickInputV0(DirectorTickInputBuildRequestV0{
+		TickRef:                       "tick-ref-progress-small-001",
+		OccurredAt:                    "2026-05-06T12:11:00Z",
+		Run:                           run,
+		ProgressSupervisionCandidates: []orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0{tickInputProgressCandidateV0()},
+		EvidenceRefs:                  []string{"evidence-ref-progress-small-001"},
+	})
+	if err != nil {
+		t.Fatalf("BuildDirectorSchedulerTickInputV0: %v", err)
+	}
+	if !tickInputRefsContainV0(input.Snapshot.Agents, "agent-ref-progress-superviviente") ||
+		!tickInputRefsContainV0(input.Snapshot.StartedAgents, "agent-ref-progress-superviviente") {
+		t.Fatalf("carril progress pequeno no debe filtrar agentes no candidatos: agents=%v started=%v", input.Snapshot.Agents, input.Snapshot.StartedAgents)
+	}
+	if len(input.Snapshot.CapacityRequests) == 0 || len(input.Snapshot.ConcurrencyGates) == 0 {
+		t.Fatalf("carril progress pequeno no debe anular capacity/gates: capacity=%v gates=%v", input.Snapshot.CapacityRequests, input.Snapshot.ConcurrencyGates)
+	}
+}
+
+func tickInputRefsContainV0(refs []string, target string) bool {
+	for _, ref := range refs {
+		if ref == target {
+			return true
+		}
+	}
+	return false
+}
+
 func TestBuildDirectorSchedulerTickInputV0CompactaCarrilProgressConHistorialLargo(t *testing.T) {
 	run := tickInputProgramacionRunV0(t)
 	run.Tasks = append(run.Tasks, "task-ref-progress-target")

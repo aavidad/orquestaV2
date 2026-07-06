@@ -1,6 +1,7 @@
 package orquestadirectortickinput
 
 import (
+	"encoding/json"
 	"strings"
 
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
@@ -38,9 +39,14 @@ func compactTickInputSnapshotForDeliveriesV0(
 	return input
 }
 
+const progressLaneCompactionThresholdBytesV0 = 64 * 1024
+
 func compactTickInputSnapshotForProgressV0(
 	input orquestadirectorscheduler.DirectorSchedulerTickInputV0,
 ) orquestadirectorscheduler.DirectorSchedulerTickInputV0 {
+	if tickInputWithinProgressBudgetV0(input) {
+		return input
+	}
 	agents := map[string]bool{}
 	tasks := map[string]bool{}
 	deliveries := map[string]bool{}
@@ -73,6 +79,16 @@ func compactTickInputSnapshotForProgressV0(
 	snapshot.BlockingQualityGateRefs = nil
 	input.Snapshot = snapshot
 	return input
+}
+
+func tickInputWithinProgressBudgetV0(
+	input orquestadirectorscheduler.DirectorSchedulerTickInputV0,
+) bool {
+	data, err := json.Marshal(input)
+	if err != nil {
+		return false
+	}
+	return len(data) <= progressLaneCompactionThresholdBytesV0
 }
 
 func compactTickInputSnapshotForAgentsV0(
