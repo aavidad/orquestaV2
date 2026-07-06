@@ -185,8 +185,10 @@ func TestProgressSupervisionCandidateProviderV0CompletaQuestionIDParaStoppedSinA
 	if candidate.SupervisionInput.QuestionID == "" {
 		t.Fatalf("question_id vacio para stopped sin ack: %+v", candidate.SupervisionInput)
 	}
-	if candidate.SupervisionInput.QuestionID != "question-ref-report-stopped-sin-ack-001" {
-		t.Fatalf("question_id=%s", candidate.SupervisionInput.QuestionID)
+	// Contrato D4: la ref es semantica estable, nunca derivada del ReportID
+	// (re-observar el mismo stopped no debe crear una pregunta nueva por tick).
+	if candidate.SupervisionInput.QuestionID == "question-ref-report-stopped-sin-ack-001" {
+		t.Fatalf("question_id sigue ligado al ReportID del tick: %s", candidate.SupervisionInput.QuestionID)
 	}
 }
 

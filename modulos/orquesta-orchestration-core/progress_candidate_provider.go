@@ -55,6 +55,9 @@ func (provider ProgressSupervisionCandidateProviderV0) BuildSchedulerCandidatesV
 		if !progressObservationRequiresSchedulerDecisionV0(observation) {
 			continue
 		}
+		if progressObservationAlreadyHandledInRunV0(request.Run, observation) {
+			continue
+		}
 		candidate, err := provider.progressCandidateV0(request, observation)
 		if err != nil {
 			return SchedulerCandidateSetV0{}, err
@@ -137,7 +140,7 @@ func (provider ProgressSupervisionCandidateProviderV0) progressCandidateV0(
 	observation = normalizeProgressObservationV0(request, observation)
 	stopAllowed := protectedDirectionStopAllowedV0(request.Run, observation)
 	if stopAllowed != nil && !*stopAllowed && observation.QuestionID == "" {
-		observation.QuestionID = "question-ref-" + observation.Report.ReportID
+		observation.QuestionID = progressObservationQuestionRefV0(observation)
 	}
 	if err := validateProgressObservationV0(request, observation); err != nil {
 		return orquestadirectorscheduler.SchedulableProgressSupervisionCandidateV0{}, err
@@ -215,13 +218,14 @@ func progressObservationQuestionRefV0(observation AgentProgressObservationV0) st
 func progressObservationNeedsStableAdvisoryRefV0(
 	observation AgentProgressObservationV0,
 ) bool {
-	if observation.Report.Status == orquestaruntime.AgentStoppedV0 ||
-		observation.Report.Status == orquestaruntime.AgentLoopDetectedV0 {
-		return false
-	}
+	// Tambien stopped/loop_detected usan ref semantica estable: re-observar el
+	// mismo estado en cada tick generaba una pareja assessment+question nueva
+	// por ReportID y inflo el historial de T137 a 2669 eventos (TAREA-D4/P3).
 	return observation.DecisionRequired ||
 		observation.Report.DecisionRequired ||
 		observation.Report.Status == orquestaruntime.AgentStalledV0 ||
+		observation.Report.Status == orquestaruntime.AgentStoppedV0 ||
+		observation.Report.Status == orquestaruntime.AgentLoopDetectedV0 ||
 		observation.Report.BudgetStatus == orquestaruntime.AgentProgressBudgetOverBudgetButActiveV0 ||
 		observation.Report.BudgetStatus == orquestaruntime.AgentProgressBudgetOverBudgetNoActivityV0
 }
@@ -237,6 +241,54 @@ func progressObservationStableAdvisoryHashV0(
 		string(observation.Report.BudgetStatus),
 	}
 	return "agent-progress-" + deterministicRefDigestPrefixV0("agent_progress_assessment", 32, parts...)
+}
+
+// progressObservationAlreadyHandledInRunV0 evita re-emitir la misma pareja
+// assessment+question (o assessment+stop) en cada tick mientras la accion
+// anterior sigue pendiente: es el dedupe causal en origen de TAREA-D4/P3.
+func progressObservationAlreadyHandledInRunV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	observation AgentProgressObservationV0,
+) bool {
+	assessment := strings.TrimSpace(observation.AssessmentRef)
+	if assessment == "" || !progressRunRefsContainWithPartsV0(run.AgentAssessments, assessment) {
+		return false
+	}
+	question := strings.TrimSpace(observation.QuestionID)
+	if question != "" &&
+		progressRunRefsContainExactV0(run.DirectorQuestions, question) &&
+		!progressRunRefsContainExactV0(run.DirectorAnsweredQuestions, question) {
+		return true
+	}
+	if observation.Report.Status == orquestaruntime.AgentStoppedV0 ||
+		observation.Report.Status == orquestaruntime.AgentLoopDetectedV0 {
+		agentRef := strings.TrimSpace(observation.Report.AgentRequestID)
+		if agentRef != "" &&
+			(progressRunRefsContainWithPartsV0(run.AgentStopRequests, agentRef) ||
+				progressRunRefsContainExactV0(run.ConfirmedStoppedAgents, agentRef)) {
+			return true
+		}
+	}
+	return false
+}
+
+func progressRunRefsContainWithPartsV0(refs []string, target string) bool {
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if ref == target || strings.HasPrefix(ref, target+"#") {
+			return true
+		}
+	}
+	return false
+}
+
+func progressRunRefsContainExactV0(refs []string, target string) bool {
+	for _, ref := range refs {
+		if strings.TrimSpace(ref) == target {
+			return true
+		}
+	}
+	return false
 }
 
 func validateProgressObservationV0(
