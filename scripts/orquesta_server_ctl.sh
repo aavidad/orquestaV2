@@ -81,12 +81,16 @@ stop)
     exit 0
   fi
   PID=$(cat "$R/server.pid")
-  kill -INT "$PID"
-  for _ in $(seq 1 15); do
-    kill -0 "$PID" 2>/dev/null || { echo "parado limpio (SIGINT cooperativo)"; exit 0; }
-    sleep 2
-  done
-  fail "stop_timeout" "sigue vivo tras 30s de SIGINT; revisar shutdown_status antes de escalar senal"
+  # Parada comun del repo: shutdown por API -> SIGINT -> SIGTERM escalonados,
+  # con limpieza del runtime tmux de agentes (invariante del repo: sin
+  # procesos residuales tras parar el servidor).
+  . "$(dirname "$0")/lib/smoke_common.sh"
+  runtime_dir="$R/runtime"
+  smoke_shutdown_orquesta_server "$PID" "http://$ADDR" 8 60 "$runtime_dir"
+  if kill -0 "$PID" 2>/dev/null; then
+    fail "stop_timeout" "sigue vivo tras el shutdown comun; revisar shutdown_status antes de escalar senal"
+  fi
+  echo "parado limpio (shutdown comun)"
   ;;
 status)
   if is_alive; then
