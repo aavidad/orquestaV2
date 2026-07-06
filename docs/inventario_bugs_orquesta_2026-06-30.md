@@ -2919,3 +2919,19 @@ registra `POST /api/v0/apps/intake/wizard-bot` como ruta exacta de lectura bajo
 endpoint HTTP real. Evidencia:
 `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack -run 'TestNuevaAppWizardBotHTTPHandler|TestNuevaAppHTMLHandlerV0GET|TestWizardBot|TestNuevaAppHTMLHelpKeysV0CubrenClavesUsadasEnPlantilla|TestNewAppGatewayMux|TestPublicRouteMutability|TestPublicRouteManifest|TestGatewayRouteRegistrations|TestNewHTTPHandlerV0ExponeNuevaApp(IntakeGuidedTurn|WizardBot)|TestNewHTTPHandlerV0InyectaNuevaAppIntakeAssistant|TestNewHTTPHandlerV0PropagaFallback|TestBuildStackV0(CableaNuevaAppWizardBotMCPDeterminista|ExponeNuevaAppWizardBotHTTP|ExponeBindingsMCPNativos)'`
 y `git diff --check`.
+
+BUG nuevo `BUG-ORQ-20260706-SMOKE-SHUTDOWN-PAYLOAD-STALE` (cerrado):
+Durante el smoke manual local del binario
+`/tmp/orquesta-builds/orquesta-server-221a4f07d`, el servidor arranco y
+respondio `healthz`/`api/status`, pero el apagado cooperativo fallo primero por
+`idempotency_key_requerida` y despues por `requester_not_authorized` al usar
+payloads manuales no alineados con el contrato vigente. Al revisar el helper
+comun se detecto que `scripts/lib/smoke_common.sh` tambien llamaba
+`POST /api/v0/server/shutdown` sin `idempotency_key`, de modo que los smokes
+podian depender del fallback por senal aunque el endpoint HTTP estuviera bien.
+Cierre aplicado: el helper comun envia `idempotency_key` y
+`requested_by=orquesta-director`; se anade test focal
+`TestSmokeCommonShutdownCleanupEnviaContratoDirectorV0`. Evidencia:
+`go test -count=1 ./cmd/orquesta-server -run 'TestSmokeCommonShutdownCleanupEnviaContratoDirectorV0|TestSmokeCommonShutdownCleanupMataAppServerPropioSinBaseURLV0|TestSmokeCommonReadiness'`,
+`go test -count=1 ./cmd/orquesta-server`, `git diff --check` y
+`docs/runbooks/smoke_manual_orquesta_server_2026-07-06.md`.

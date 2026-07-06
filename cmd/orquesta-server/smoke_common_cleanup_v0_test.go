@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -99,6 +100,82 @@ func TestSmokeCommonReadinessStateFileRechazaPIDMuertoV0(t *testing.T) {
 	}
 	if !strings.Contains(string(output), "pid_dead") {
 		t.Fatalf("salida inesperada: err=%v output=%s", err, string(output))
+	}
+}
+
+func TestSmokeCommonShutdownCleanupEnviaContratoDirectorV0(t *testing.T) {
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash no disponible")
+	}
+	if _, err := exec.LookPath("sleep"); err != nil {
+		t.Skip("sleep no disponible")
+	}
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	process := exec.Command("sleep", "30")
+	if err := process.Start(); err != nil {
+		t.Fatalf("start sleep: %v", err)
+	}
+	processDone := make(chan error, 1)
+	go func() {
+		processDone <- process.Wait()
+	}()
+	defer func() {
+		_ = process.Process.Kill()
+		select {
+		case <-processDone:
+		case <-time.After(time.Second):
+		}
+	}()
+
+	received := make(chan map[string]any, 1)
+	server := newLocalHTTPTestServerOrSkipV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v0/server/shutdown" {
+			http.NotFound(w, r)
+			return
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			http.Error(w, "bad json", http.StatusBadRequest)
+			return
+		}
+		select {
+		case received <- payload:
+		default:
+		}
+		_ = process.Process.Signal(os.Interrupt)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ready","shutdown_ready":true}`))
+	}))
+	defer server.Close()
+
+	cleanup := exec.Command(
+		"bash",
+		"-c",
+		`source scripts/lib/smoke_common.sh; smoke_shutdown_orquesta_server "$SMOKE_TEST_SERVER_PID" "$SMOKE_TEST_BASE_URL" 2 20 ""`,
+	)
+	cleanup.Dir = root
+	cleanup.Env = append(
+		os.Environ(),
+		fmt.Sprintf("SMOKE_TEST_SERVER_PID=%d", process.Process.Pid),
+		"SMOKE_TEST_BASE_URL="+server.URL,
+	)
+	if output, err := cleanup.CombinedOutput(); err != nil {
+		t.Fatalf("cleanup failed: %v output=%s", err, string(output))
+	}
+	var payload map[string]any
+	select {
+	case payload = <-received:
+	case <-time.After(time.Second):
+		t.Fatalf("shutdown HTTP no recibido")
+	}
+	if got := payload["idempotency_key"]; got != "idem-smoke-shutdown-cleanup" {
+		t.Fatalf("idempotency_key inesperada: %v", got)
+	}
+	if got := payload["requested_by"]; got != "orquesta-director" {
+		t.Fatalf("requested_by inesperado: %v", got)
+	}
+	if got := payload["cleanup_goal_backends"]; got != true {
+		t.Fatalf("cleanup_goal_backends inesperado: %v", got)
 	}
 }
 

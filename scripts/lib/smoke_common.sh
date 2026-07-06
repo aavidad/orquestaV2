@@ -206,7 +206,7 @@ smoke_shutdown_orquesta_server() {
   if [[ -n "$base_url" ]] && command -v curl >/dev/null 2>&1; then
     curl -sS -m "$shutdown_timeout" -X POST "$base_url/api/v0/server/shutdown" \
       -H "Content-Type: application/json" \
-      -d '{"request_id":"req-smoke-shutdown-cleanup","correlation_id":"corr-smoke-shutdown-cleanup","reason":"smoke_shutdown_orquesta_server","cleanup_goal_backends":true}' \
+      -d '{"request_id":"req-smoke-shutdown-cleanup","correlation_id":"corr-smoke-shutdown-cleanup","idempotency_key":"idem-smoke-shutdown-cleanup","requested_by":"orquesta-director","reason":"smoke_shutdown_orquesta_server","cleanup_goal_backends":true}' \
       >/dev/null 2>&1 || true
     local _
     for _ in $(seq 1 "$grace_polls"); do
