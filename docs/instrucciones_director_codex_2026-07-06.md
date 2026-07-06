@@ -40,7 +40,7 @@ write-set en `orquesta-director-tick-input` exige orchestration-core; uno en
 `orquesta-web` no arrastra el mundo entero (limitar profundidad o lista de
 modulos de plataforma).
 
-## TAREA-D4 (P3): auditoria de emisores sin dedupe semantico
+## TAREA-D4 (P3): auditoria de emisores sin dedupe semantico — CERRADA por Claude 2026-07-06 (`0670415ba`, ver bitacora)
 
 Inventariar todos los emisores de `AgentWorkAssessed`,
 `DirectorQuestionRaised` y `ReplanDecisionRecorded` invocados desde bucles de

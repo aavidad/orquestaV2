@@ -4296,3 +4296,33 @@ SIGTERM + limpieza tmux); los dos guards de scripts pasan. Suites verdes:
 runtime-codex-appserver, cmd/orquesta-server completa, app-codex-stack.
 
 Cola D1-D7: solo queda D4 (auditoria de emisores) integra para Codex.
+
+## TAREA-D4 completada por Claude (2026-07-06) — cola D1-D7 CERRADA
+
+`0670415ba`: dedupe causal en origen en la supervision de progreso
+(`progress_candidate_provider.go`):
+
+- Refs semanticas estables tambien para stopped/loop_detected (antes
+  excluidos del hash estable: era el camino que inflo T137 a 2669 eventos,
+  una pareja assessment+question nueva por ReportID en cada tick).
+- Salto del candidato cuando la misma pareja sigue pendiente en la proyeccion
+  del run: pregunta sin responder o stop ya pedido/confirmado. Al responderse
+  la pregunta la supervision vuelve a ser elegible.
+- Mecanismo check-before-emit (mismo patron que el drain ec07bf300): las
+  claves de comando/evento siguen siendo por-reporte (los payloads llevan
+  refs volatiles y una clave estable provocaria conflicto de payload en el
+  store idempotente); lo que se evita es emitir el duplicado.
+
+Auditoria del resto del inventario D4 (justificaciones):
+- `progress_lease_bridge_v0.go` (refs por ReportID): no es fuente de
+  inflacion observada (T137: AgentLeaseExpirations=[]); el ciclo de vida de
+  una lease (expira -> stop) limita la repeticion. Vigilar si aparece
+  inflacion de AgentLeaseExpired en runs atascados.
+- Emisores de replan (app-director-service, core-replanner,
+  assessment_replan_source): claves derivadas de refs causales de
+  review/delivery (one-shot por ciclo de review); T137 tenia cero
+  ReplanDecisionRecorded. Sin accion.
+
+Bateria: orchestration-core, app-director-service, app-codex-stack y
+cmd/orquesta-server completas en verde. Con esto la cola
+docs/instrucciones_director_codex_2026-07-06.md queda CERRADA (D1-D7).
