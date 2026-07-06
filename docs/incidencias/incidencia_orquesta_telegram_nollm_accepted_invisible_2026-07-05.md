@@ -57,19 +57,29 @@ Se materializa una primera entrada no-LLM propia de Orquesta:
 - Salida: devuelve JSON compacto y puede enviar respuesta por puerto
   `hermesTelegramSendPortV0` sin LLM. El comando `/msg` usa el servicio real
   `OperatorDirectorMessage`, no una ruta inventada.
+- Avance posterior: `cmd/orquesta-server` ya cablea un sender Bot API directo
+  (`telegramBotAPISenderV0`) cuando existe `telegram_operator.token`; no anade
+  variables `ORQUESTA_*` nuevas y no pasa Telegram al core.
 
 Evidencia local:
 
 - `TestTelegramOperatorUpdateHTTPV0DespachaUpdateAutorizadoSinLLM`.
 - `TestTelegramOperatorUpdateHTTPV0BloqueoConfigVisible`.
+- `TestTelegramBotAPISenderV0EnviaMensajeSinExponerTokenEnReceipt`.
+- `TestTelegramBotAPISenderV0OcultaTokenEnError`.
+- `TestTelegramBotAPISenderFromProjectConfigFileV0EsOptInPorToken`.
 - `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestTelegramOperator|TestOperatorDirector|TestOperatorNotificationHermes|TestEnvVarsOrquestaRatchetMEJ106V0'`.
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestTelegram(BotAPI|Operator)|TestOperatorNotificationHermes'`.
 - `scripts/orquesta_metricas_deuda.sh --json` mantiene
   `env_vars_orquesta=514`.
 - `git diff --check`.
 
-Residual: no se ha desplegado en `srv1651826` ni se ha validado con Telegram
-real/Bot API porque el trabajo de servidor remoto estaba parado por peticion del
-operador y el proveedor Codex remoto seguia sin autenticacion valida.
+Residual: no se ha desplegado este ultimo commit en `srv1651826` ni se ha
+validado con Telegram real/Bot API contra el servidor vivo. La cuota/auth del
+proveedor solo afecta a agentes de programacion; no deberia bloquear los
+comandos Telegram no-LLM tras desplegar el binario nuevo. Quedan pendientes:
+pull/build/restart solo de Orquesta en remoto, alta de webhook o poller de
+updates Telegram y prueba real desde el movil.
 
 ## Refs
 

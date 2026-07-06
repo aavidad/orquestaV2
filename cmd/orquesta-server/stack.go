@@ -128,8 +128,9 @@ func buildServerAppHandlerV0(
 		stack.Handler,
 		serverWebHTMLRenderObserverV0(),
 	)
+	projectConfig := projectConfigFromServerConfigBestEffortV0(serverConfig)
 	telegramOperator := telegramOperatorAdapterFromProjectConfigFileV0(
-		projectConfigFromServerConfigBestEffortV0(serverConfig),
+		projectConfig,
 		telegramOperatorHTTPPortsV0{
 			Handler:         observedWeb,
 			DirectorMessage: stack.MCPTransportBindings.OperatorDirectorMessage,
@@ -138,7 +139,10 @@ func buildServerAppHandlerV0(
 	if telegramOperator.Enabled {
 		mux.Handle(
 			telegramOperatorUpdateHTTPPathV0,
-			newTelegramOperatorUpdateHTTPHandlerV0(telegramOperator, nil),
+			newTelegramOperatorUpdateHTTPHandlerV0(
+				telegramOperator,
+				telegramBotAPISenderFromProjectConfigFileV0(projectConfig),
+			),
 		)
 	}
 	mux.Handle("/", withGovernanceCatalogRouteV0(observedWeb))

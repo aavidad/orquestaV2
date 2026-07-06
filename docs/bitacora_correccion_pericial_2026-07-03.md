@@ -3900,6 +3900,29 @@ Pruebas:
 No se declara cerrado el bug completo: falta desplegar en remoto, conectar
 poller/webhook/Bot API real y revalidar desde Telegram movil.
 
+## Sender Bot API directo para endpoint Telegram no-LLM (2026-07-06)
+
+Avance pequeno adicional sobre `BUG-ORQ-20260705-TELEGRAM-NOLLM-ACCEPTED-INVISIBLE`:
+
+- `cmd/orquesta-server/telegram_bot_api_sender_v0.go` implementa
+  `telegramBotAPISenderV0`, adaptador Bot API directo sobre el puerto
+  `SendTelegramMessageV0`.
+- `buildServerAppHandlerV0` inyecta ese sender en
+  `POST /api/v0/operator/telegram/update` cuando existe
+  `telegram_operator.token`.
+- No se anaden variables `ORQUESTA_*`; el token sigue en
+  `telegram_operator.token` o en el override secreto ya existente
+  `ORQUESTA_TELEGRAM_OPERATOR_TOKEN`.
+- Los errores publicos del sender no incluyen el token.
+
+Pruebas:
+
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestTelegram(BotAPI|Operator)|TestOperatorNotificationHermes'`.
+
+Estado para Claude: codigo local listo y probado. No esta verificado en
+produccion/remoto hasta que se haga pull/build/restart solo de Orquesta en
+`srv1651826` y se pruebe un update real desde Telegram.
+
 ## Direccion Claude 2026-07-06: sync, redeploy remoto, supervisor y repliegue a local
 
 Acciones ejecutadas por el director sobre el servidor remoto:

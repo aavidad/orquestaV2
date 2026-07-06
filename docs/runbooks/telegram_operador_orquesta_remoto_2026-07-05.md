@@ -18,9 +18,9 @@ Cada cierre de tarea, goal o run debe proyectarse como
 El servicio `modulos/orquesta-operator-notifications` compacta el texto para
 Telegram, deduplica por clave estable y llama a un puerto de envio. En
 `cmd/orquesta-server`, `operatorTaskTerminalNotifierV0` adapta estados
-terminales de Goal/RunControl/tarea a ese contrato y
-`hermesTelegramNotifierV0` delega en un puerto `SendTelegramMessageV0`. El
-puerto permite usar Hermes send como adaptador externo sin reactivar crons.
+terminales de Goal/RunControl/tarea a ese contrato. El puerto
+`SendTelegramMessageV0` puede apuntar a Hermes send como adaptador externo o al
+sender Bot API directo de Orquesta; no requiere crons LLM ni cuota de proveedor.
 
 ## Configuracion canonica
 
@@ -56,6 +56,10 @@ redactados en `effective_config`.
   payload compacto (`update_ref`, `chat_ref`, `text`). La ruta esta montada solo
   si `telegram_operator.enabled=true`; si falta configuracion devuelve
   `blocked` con campos pendientes.
+- En el servidor, la ruta responde al chat por Bot API directo cuando
+  `telegram_operator.token` esta configurado. El token vive en composicion
+  (`orquesta.config.json` o `ORQUESTA_TELEGRAM_OPERATOR_TOKEN`) y no pasa al
+  nucleo.
 - `/status [run-ref]`: estado compacto.
 - `/queue [subject-ref]`: cola/outbox compactos.
 - `/observe_goal <goal-ref>`: observa un goal/run goal-first.
@@ -78,3 +82,15 @@ Tests focales añadidos:
 - `TestAdapterV0DespachaMensajeAlCanalDirector`
 - `TestTelegramOperatorUpdateHTTPV0DespachaUpdateAutorizadoSinLLM`
 - `TestTelegramOperatorUpdateHTTPV0BloqueoConfigVisible`
+- `TestTelegramBotAPISenderV0EnviaMensajeSinExponerTokenEnReceipt`
+- `TestTelegramBotAPISenderV0OcultaTokenEnError`
+- `TestTelegramBotAPISenderFromProjectConfigFileV0EsOptInPorToken`
+
+## Pendiente remoto
+
+El codigo local ya tiene endpoint y sender Bot API. Para que Alberto lo use
+desde el movil falta desplegar el commit en `srv1651826`, reiniciar solo
+Orquesta y validar una llamada real a `/api/v0/operator/telegram/update` desde
+Telegram webhook/poller. Si el proveedor Codex/Claude/Gemini no tiene cuota, los
+comandos no-LLM deben seguir funcionando; solo fallaran las acciones que lancen
+agentes de programacion.

@@ -152,6 +152,14 @@ Limitacion: no se relanzo Orquesta ni se verifico el supervisor vivo porque el r
      responde JSON y puede enviar por puerto `hermesTelegramSendPortV0`; `/msg`
      usa `OperatorDirectorMessage`. Pendiente: despliegue remoto y validacion
      Telegram real/poller/Bot API.
+   - Avance Codex 2026-07-06 posterior: el stack ya inyecta
+     `telegramBotAPISenderV0` si existe `telegram_operator.token`, por tanto el
+     endpoint puede responder al chat por Bot API sin Hermes LLM. Tests focales:
+     `TestTelegramBotAPISenderV0EnviaMensajeSinExponerTokenEnReceipt`,
+     `TestTelegramBotAPISenderV0OcultaTokenEnError` y
+     `TestTelegramBotAPISenderFromProjectConfigFileV0EsOptInPorToken`.
+     Sigue pendiente desplegar el commit en `srv1651826`, reiniciar solo
+     Orquesta y validar webhook/poller real desde Telegram movil.
 4. Desplegar de forma controlada el build nuevo solo cuando el servidor pueda apagarse/reiniciarse con evidencia de `shutdown_ready` o procedimiento documentado.
 5. Revalidar `/api/status`, `/api/v0/autoprogramming/status`, MCP `orquesta.operator.director.message.v0` y envio Telegram tras despliegue.
 6. Mantener los cron jobs Hermes LLM pausados hasta que haya cuota o proveedor alternativo; no usarlos como control plane principal.
