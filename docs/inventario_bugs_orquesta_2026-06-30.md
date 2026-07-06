@@ -2806,3 +2806,20 @@ Residual separado: el subagente Codex detecto que MCP no transporta todavia
 `justification`, `comprehension_query` ni `glossary_expanded`, y falta tool MCP
 `orquesta.nueva_app.wizard.bot.v0`; tratar como siguiente microtarea de paridad
 MCP, sin tocar supervisor/state-file/app-codex-stack.
+
+BUG nuevo `BUG-ORQ-20260706-WIZARD-MCP-CONTRACT-PARITY` (cerrado parcial):
+El motor web del wizard ya soportaba `WizardAnswerV0.justification`,
+`WizardAnswerV0.comprehension_query` y `glossary_expanded`, pero el DTO MCP
+`orquesta.nueva_app.wizard.v0` no los exponia ni los normalizaba. Esto rompia
+la paridad del contrato 10.3/11.5 para clientes MCP: una desviacion podia
+llegar sin justificacion y una pregunta libre de comprension no podia viajar
+por el tool. Cierre aplicado: `modulos/orquesta-mcp/nueva_app_wizard_tool_v0.go`
+incluye los tres campos en input/schema/normalizacion, los tests MCP cubren el
+transporte al puerto y `modulos/orquesta-app-codex-stack/stack_flow_v0_test.go`
+verifica que el stack real conserva `justification`, `glossary_expanded` y
+`comprehension_query` hasta el handler web. Evidencia:
+`go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPNuevaAppWizard|TestNormalizeMCPNuevaAppWizard|TestNewMCPNuevaAppWizard|TestMCPTransportV0NuevaAppWizard'`
+y `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestBuildStackV0CableaNuevaAppWizardMCPRico'`.
+Residual no cerrado: crear `orquesta.nueva_app.wizard.bot.v0` y superficie chat
+web si producto exige el bot conversacional por MCP/UI; este corte solo cierra
+paridad del tool wizard existente.

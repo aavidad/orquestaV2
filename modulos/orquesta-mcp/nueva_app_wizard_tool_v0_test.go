@@ -14,6 +14,9 @@ func TestMCPNuevaAppWizardDescriptorV0EsAdaptadorFino(t *testing.T) {
 		descriptor.Version != MCPNuevaAppWizardToolVersionV0 ||
 		descriptor.ResourceURI != MCPNuevaAppWizardResourceURIV0 ||
 		!strings.Contains(descriptor.InputSchema, "wizard_answers") ||
+		!strings.Contains(descriptor.InputSchema, "justification") ||
+		!strings.Contains(descriptor.InputSchema, "comprehension_query") ||
+		!strings.Contains(descriptor.InputSchema, "glossary_expanded") ||
 		!strings.Contains(descriptor.Output, "wizard") {
 		t.Fatalf("descriptor inesperado: %+v", descriptor)
 	}
@@ -37,8 +40,10 @@ func TestNormalizeMCPNuevaAppWizardInputV0DerivaIdentidadYRecorta(t *testing.T) 
 		Need:          " quiero una app para una agenda ",
 		ActionIDs:     []string{" review ", "", " review "},
 		WizardAnswers: []MCPNuevaAppWizardAnswerV0{{
-			QuestionRef: " wizard-r2-plataformas ",
-			UserChoice:  " web ",
+			QuestionRef:        " wizard-r2-plataformas ",
+			UserChoice:         " web ",
+			ComprehensionQuery: " que es CalDAV? ",
+			Justification:      " solo oficina ",
 		}},
 	})
 
@@ -48,7 +53,9 @@ func TestNormalizeMCPNuevaAppWizardInputV0DerivaIdentidadYRecorta(t *testing.T) 
 		input.Need != "quiero una app para una agenda" ||
 		len(input.ActionIDs) != 1 ||
 		input.WizardAnswers[0].QuestionRef != "wizard-r2-plataformas" ||
-		input.WizardAnswers[0].UserChoice != "web" {
+		input.WizardAnswers[0].UserChoice != "web" ||
+		input.WizardAnswers[0].ComprehensionQuery != "que es CalDAV?" ||
+		input.WizardAnswers[0].Justification != "solo oficina" {
 		t.Fatalf("input normalizado inesperado: %+v", input)
 	}
 }
@@ -90,11 +97,13 @@ func TestMCPNuevaAppWizardTransportV0DelegaEnPuerto(t *testing.T) {
 	}
 
 	output, err := transport.CallToolV0(context.Background(), MCPNuevaAppWizardToolNameV0, MCPNuevaAppWizardToolInputV0{
-		RequestID: "request-ref-wizard-transport",
-		Need:      "quiero una app para una agenda",
+		RequestID:        "request-ref-wizard-transport",
+		Need:             "quiero una app para una agenda",
+		GlossaryExpanded: true,
 		WizardAnswers: []MCPNuevaAppWizardAnswerV0{{
-			QuestionRef: "wizard-r2-plataformas",
-			UserChoice:  "web",
+			QuestionRef:   "wizard-r2-plataformas",
+			UserChoice:    "web",
+			Justification: "solo oficina",
 		}},
 	})
 	if err != nil {
@@ -102,7 +111,9 @@ func TestMCPNuevaAppWizardTransportV0DelegaEnPuerto(t *testing.T) {
 	}
 	if fake.input.Need != "quiero una app para una agenda" ||
 		len(fake.input.WizardAnswers) != 1 ||
-		fake.input.WizardAnswers[0].UserChoice != "web" {
+		fake.input.WizardAnswers[0].UserChoice != "web" ||
+		fake.input.WizardAnswers[0].Justification != "solo oficina" ||
+		!fake.input.GlossaryExpanded {
 		t.Fatalf("puerto no recibio input normalizado: %+v", fake.input)
 	}
 	var result MCPNuevaAppWizardToolResultV0

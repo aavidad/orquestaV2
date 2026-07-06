@@ -3986,3 +3986,29 @@ Subagente Codex reviso el wizard y dejo siguiente brecha separada: MCP wizard
 no transporta `justification`, `comprehension_query` ni `glossary_expanded`, y
 no existe todavia `orquesta.nueva_app.wizard.bot.v0`. Esa microtarea puede
 hacerse en `modulos/orquesta-mcp` sin tocar supervisor/state-file/app-codex-stack.
+
+## Codex local 2026-07-06: paridad MCP del wizard existente
+
+Se cierra la brecha pequena detectada por subagente para el tool
+`orquesta.nueva_app.wizard.v0`:
+
+- `modulos/orquesta-mcp/nueva_app_wizard_tool_v0.go` expone y normaliza
+  `glossary_expanded`, `wizard_answers[].comprehension_query` y
+  `wizard_answers[].justification`.
+- `modulos/orquesta-mcp/nueva_app_wizard_tool_v0_test.go` exige esos campos en
+  el descriptor y verifica que llegan al puerto MCP normalizados.
+- `modulos/orquesta-app-codex-stack/stack_flow_v0_test.go` valida el stack real:
+  la justificacion aparece en `wizard.contrasts`, `glossary_expanded` vuelve en
+  el turno y una consulta de comprension via MCP produce `glossary_response`.
+- `docs/inventario_bugs_orquesta_2026-06-30.md` registra
+  `BUG-ORQ-20260706-WIZARD-MCP-CONTRACT-PARITY` como cerrado parcial.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPNuevaAppWizard|TestNormalizeMCPNuevaAppWizard|TestNewMCPNuevaAppWizard|TestMCPTransportV0NuevaAppWizard'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestBuildStackV0CableaNuevaAppWizardMCPRico'`
+
+Residual vivo: falta tool MCP especifico del bot
+`orquesta.nueva_app.wizard.bot.v0` y, segun revision del subagente, panel chat
+web visible para alternar formulario/chat. No se aborda en este corte para no
+mezclar superficies.

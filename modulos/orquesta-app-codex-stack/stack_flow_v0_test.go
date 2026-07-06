@@ -147,19 +147,38 @@ func TestBuildStackV0CableaNuevaAppWizardMCPRico(t *testing.T) {
 	}
 
 	next, err := stack.MCPTransportBindings.NuevaAppWizard.Execute(context.Background(), orquestamcp.MCPNuevaAppWizardToolInputV0{
-		RequestID: "request-ref-stack-wizard-002",
-		Need:      "quiero una app para una agenda",
+		RequestID:        "request-ref-stack-wizard-002",
+		Need:             "quiero una app para una agenda",
+		GlossaryExpanded: true,
 		WizardAnswers: []orquestamcp.MCPNuevaAppWizardAnswerV0{{
-			QuestionRef: "wizard-r2-plataformas",
-			UserChoice:  "web",
+			QuestionRef:   "wizard-r2-plataformas",
+			UserChoice:    "web",
+			Justification: "solo oficina",
 		}},
 	})
 	if err != nil {
 		t.Fatalf("execute wizard answer: %v", err)
 	}
 	if !strings.Contains(string(next.Wizard), `"recommended":"web_mobile"`) ||
-		!strings.Contains(string(next.Wizard), `"user_choice":"web"`) {
+		!strings.Contains(string(next.Wizard), `"user_choice":"web"`) ||
+		!strings.Contains(string(next.Wizard), `"justification":"solo oficina"`) ||
+		!strings.Contains(string(next.Wizard), `"glossary_expanded":true`) {
 		t.Fatalf("wizard no conserva contraste: %s", next.Wizard)
+	}
+
+	glossary, err := stack.MCPTransportBindings.NuevaAppWizard.Execute(context.Background(), orquestamcp.MCPNuevaAppWizardToolInputV0{
+		RequestID: "request-ref-stack-wizard-glossary-001",
+		Need:      "quiero una app para una agenda",
+		WizardAnswers: []orquestamcp.MCPNuevaAppWizardAnswerV0{{
+			ComprehensionQuery: "que es web?",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("execute wizard glossary: %v", err)
+	}
+	if !strings.Contains(string(glossary.Wizard), `"glossary_response"`) ||
+		!strings.Contains(string(glossary.Wizard), "tipo_app.web") {
+		t.Fatalf("wizard MCP no propaga consulta de comprension: %s", glossary.Wizard)
 	}
 }
 

@@ -24,26 +24,29 @@ type MCPNuevaAppWizardToolDescriptorV0 struct {
 }
 
 type MCPNuevaAppWizardToolInputV0 struct {
-	RequestID      string                      `json:"request_id,omitempty"`
-	CorrelationID  string                      `json:"correlation_id,omitempty"`
-	SessionID      string                      `json:"session_id,omitempty"`
-	Locale         string                      `json:"locale,omitempty"`
-	Nombre         string                      `json:"nombre,omitempty"`
-	Idea           string                      `json:"idea,omitempty"`
-	Need           string                      `json:"need,omitempty"`
-	ActionID       string                      `json:"action_id,omitempty"`
-	ActionIDs      []string                    `json:"action_ids,omitempty"`
-	AnswerField    string                      `json:"answer_field,omitempty"`
-	Answer         string                      `json:"answer,omitempty"`
-	WizardAnswers  []MCPNuevaAppWizardAnswerV0 `json:"wizard_answers,omitempty"`
-	Session        json.RawMessage             `json:"session,omitempty"`
-	IdempotencyKey string                      `json:"idempotency_key,omitempty"`
+	RequestID        string                      `json:"request_id,omitempty"`
+	CorrelationID    string                      `json:"correlation_id,omitempty"`
+	SessionID        string                      `json:"session_id,omitempty"`
+	Locale           string                      `json:"locale,omitempty"`
+	Nombre           string                      `json:"nombre,omitempty"`
+	Idea             string                      `json:"idea,omitempty"`
+	Need             string                      `json:"need,omitempty"`
+	ActionID         string                      `json:"action_id,omitempty"`
+	ActionIDs        []string                    `json:"action_ids,omitempty"`
+	AnswerField      string                      `json:"answer_field,omitempty"`
+	Answer           string                      `json:"answer,omitempty"`
+	GlossaryExpanded bool                        `json:"glossary_expanded,omitempty"`
+	WizardAnswers    []MCPNuevaAppWizardAnswerV0 `json:"wizard_answers,omitempty"`
+	Session          json.RawMessage             `json:"session,omitempty"`
+	IdempotencyKey   string                      `json:"idempotency_key,omitempty"`
 }
 
 type MCPNuevaAppWizardAnswerV0 struct {
-	QuestionRef string `json:"question_ref"`
-	UserChoice  string `json:"user_choice"`
-	FreeText    bool   `json:"free_text,omitempty"`
+	QuestionRef        string `json:"question_ref"`
+	UserChoice         string `json:"user_choice"`
+	FreeText           bool   `json:"free_text,omitempty"`
+	ComprehensionQuery string `json:"comprehension_query,omitempty"`
+	Justification      string `json:"justification,omitempty"`
 }
 
 type MCPNuevaAppWizardToolResultV0 struct {
@@ -82,7 +85,7 @@ func MCPNuevaAppWizardDescriptorV0() MCPNuevaAppWizardToolDescriptorV0 {
 	return MCPNuevaAppWizardToolDescriptorV0{
 		Name:        MCPNuevaAppWizardToolNameV0,
 		Version:     MCPNuevaAppWizardToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,session_id?,locale?,nombre?,idea?,need?,action_id?,action_ids?,answer_field?,answer?,wizard_answers?,session?,idempotency_key?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,session_id?,locale?,nombre?,idea?,need?,action_id?,action_ids?,answer_field?,answer?,glossary_expanded?,wizard_answers?[question_ref,user_choice,free_text?,comprehension_query?,justification?],session?,idempotency_key?}",
 		Output:      "ok:{turn,session,wizard}|error:{errores_publicos}",
 		ResourceURI: MCPNuevaAppWizardResourceURIV0,
 		Invariantes: []string{
@@ -125,6 +128,8 @@ func NormalizeMCPNuevaAppWizardInputV0(input MCPNuevaAppWizardToolInputV0) MCPNu
 	for idx := range input.WizardAnswers {
 		input.WizardAnswers[idx].QuestionRef = strings.TrimSpace(input.WizardAnswers[idx].QuestionRef)
 		input.WizardAnswers[idx].UserChoice = strings.TrimSpace(input.WizardAnswers[idx].UserChoice)
+		input.WizardAnswers[idx].ComprehensionQuery = strings.TrimSpace(input.WizardAnswers[idx].ComprehensionQuery)
+		input.WizardAnswers[idx].Justification = strings.TrimSpace(input.WizardAnswers[idx].Justification)
 	}
 	if input.SessionID == "" {
 		input.SessionID = firstNonEmptyMCPV0(input.RequestID, input.CorrelationID)
