@@ -423,6 +423,33 @@ func TestBuildCodexGoalPromptV0NoTrataMarkdownWriteSetComoDirectorioV0(t *testin
 	}
 }
 
+func TestBuildCodexGoalPromptV0NoCuelgaResultadoDurableBajoFicherosCodigoOScriptV0(t *testing.T) {
+	for _, path := range []string{
+		"modulos/orquesta-app-codex-stack/stack_v0.go",
+		"scripts/smoke_opes_lifecycle_real.sh",
+	} {
+		t.Run(path, func(t *testing.T) {
+			spec := validCodexGoalSpecV0()
+			spec.WriteSet = []orquestagoal.GoalWriteScopeV0{{Path: path}}
+
+			packet, issues := BuildCodexGoalStartPacketV0(spec)
+
+			if len(issues) != 0 {
+				t.Fatalf("issues=%+v", issues)
+			}
+			for _, forbidden := range []string{
+				path + "/docs/" + CodexGoalResultFileNameV0,
+				path + "/docs/" + CodexGoalResultFileNameForGoalRefV0(spec.GoalRef),
+				"Materializa primero el directorio del write-set",
+			} {
+				if strings.Contains(packet.Prompt, forbidden) {
+					t.Fatalf("prompt contiene ruta/instruccion imposible %q:\n%s", forbidden, packet.Prompt)
+				}
+			}
+		})
+	}
+}
+
 func TestBuildCodexGoalPromptV0UsaSiguienteWriteSetDirectorioParaResultadoDurableV0(t *testing.T) {
 	spec := validCodexGoalSpecV0()
 	spec.WriteSet = []orquestagoal.GoalWriteScopeV0{
@@ -440,6 +467,27 @@ func TestBuildCodexGoalPromptV0UsaSiguienteWriteSetDirectorioParaResultadoDurabl
 	}
 	if !strings.Contains(packet.Prompt, "external/opes/control_audio/docs/"+CodexGoalResultFileNameForGoalRefV0(spec.GoalRef)) {
 		t.Fatalf("prompt no usa write-set directorio para resultado durable:\n%s", packet.Prompt)
+	}
+}
+
+func TestBuildCodexGoalPromptV0SaltaFicheroCodigoYUsaSiguienteDirectorioV0(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.WriteSet = []orquestagoal.GoalWriteScopeV0{
+		{Path: "modulos/orquesta-app-codex-stack/stack_v0.go"},
+		{Path: "modulos/orquesta-app-codex-stack"},
+	}
+
+	packet, issues := BuildCodexGoalStartPacketV0(spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if strings.Contains(packet.Prompt, "modulos/orquesta-app-codex-stack/stack_v0.go/docs/"+CodexGoalResultFileNameForGoalRefV0(spec.GoalRef)) {
+		t.Fatalf("prompt cuelga resultado bajo fichero Go:\n%s", packet.Prompt)
+	}
+	want := "modulos/orquesta-app-codex-stack/docs/" + CodexGoalResultFileNameForGoalRefV0(spec.GoalRef)
+	if !strings.Contains(packet.Prompt, want) {
+		t.Fatalf("prompt no usa siguiente directorio para resultado durable: want=%s\n%s", want, packet.Prompt)
 	}
 }
 

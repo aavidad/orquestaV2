@@ -2719,7 +2719,7 @@ Rework: abrir goal causal con OPES temporal/preproduccion confirmado,
 `ORQUESTA_BASE_URL`, confirmacion de bridge, `limit=1` y scope por `job_ref` o
 programa/tema/correlacion.
 
-BUG nuevo `BUG-ORQ-20260705-195` (abierto):
+BUG nuevo `BUG-ORQ-20260705-195` (cerrado en codigo 2026-07-06):
 El contrato de cierre pidio escribir el resultado durable en
 `scripts/smoke_opes_lifecycle_real.sh/docs/orquesta_goal_result_...json`, pero
 `scripts/smoke_opes_lifecycle_real.sh` es un fichero ejecutable, no un
@@ -2728,7 +2728,14 @@ concatenar `docs/` bajo un artefacto de write-set que no es directorio. Cierre
 temporal: conservar el script, escribir el resultado en
 `cmd/orquesta-server/docs/` y devolver `blocked` si el validador exige la ruta
 imposible. Rework: normalizar la ruta durable a un directorio real del
-write-set antes de lanzar el goal.
+write-set antes de lanzar el goal. Cierre aplicado por Codex local: el runtime
+Codex Goal ya no cuelga `docs/orquesta_goal_result_*.json` bajo scopes que
+parecen fichero `.go` o `.sh`; si existe un siguiente scope directorio lo usa
+para el JSON durable, y si todos los scopes son ficheros no pide una ruta de
+fichero imposible. Evidencia:
+`TestBuildCodexGoalPromptV0NoCuelgaResultadoDurableBajoFicherosCodigoOScriptV0`,
+`TestBuildCodexGoalPromptV0SaltaFicheroCodigoYUsaSiguienteDirectorioV0` y
+`go test -count=1 ./modulos/orquesta-runtime-codex-goal`.
 
 BUG nuevo `BUG-ORQ-20260705-193` (abierto):
 El goal `task-remote-telegram-inodo-connector-20260705` exigia consultar
@@ -2777,7 +2784,7 @@ puerto real. Evidencia: `TestBuildStackOperatorDirectorMessageV0CableaServicioRe
 `TestOperatorDirectorMessageMCPV0RegistraToolYDelegaConStoreDurable` y
 `TestMCPOperatorDirectorChannelServerJSONRPCV0ExponeToolYDevuelveAck`.
 
-BUG nuevo `BUG-ORQ-20260705-198` (abierto):
+BUG nuevo `BUG-ORQ-20260705-198` (cerrado en codigo 2026-07-06):
 El contrato de cierre de este goal pidio escribir el resultado durable en
 `modulos/orquesta-app-codex-stack/stack_v0.go/docs/orquesta_goal_result_goal-ref-task-autoprogramming-90e96a780f43-g01.json`,
 pero `stack_v0.go` es un fichero Go, no un directorio. Causa estructural
@@ -2785,7 +2792,14 @@ equivalente a `BUG-ORQ-20260705-195`: el generador de rutas durable concatena
 `docs/` bajo una entrada de write-set que puede ser fichero. El codigo y tests
 del goal cierran, pero el ACK debe quedar `blocked` si Orquesta exige esa ruta
 exacta. Rework: normalizar la ruta durable a un directorio real del write-set o
-anadir un artefacto JSON autorizado como ruta independiente.
+anadir un artefacto JSON autorizado como ruta independiente. Cierre aplicado por
+Codex local junto con `BUG-ORQ-20260705-195`: `codexGoalResultFilePathV0` salta
+write-sets `.go`/`.sh` al construir la ruta durable, conserva el cierre por
+`ORQUESTA_GOAL_RESULT_V0` y solo pide fichero JSON durable cuando puede
+ubicarlo bajo un scope directorio autorizado. Evidencia:
+`TestBuildCodexGoalPromptV0NoCuelgaResultadoDurableBajoFicherosCodigoOScriptV0`,
+`TestBuildCodexGoalPromptV0SaltaFicheroCodigoYUsaSiguienteDirectorioV0` y
+`go test -count=1 ./modulos/orquesta-runtime-codex-goal`.
 
 - BUG-ORQ-20260705-TELEGRAM-NOLLM-ACCEPTED-INVISIBLE: `prepare-run` acepta `request-ref-remoto-telegram-nollm-runtime-20260705-001` pero no aparece en `autoprogramming/status`; control movil no-LLM no esta desplegado y Hermes LLM falla por 429. Avance 2026-07-06: `cmd/orquesta-server` tiene endpoint `POST /api/v0/operator/telegram/update` y sender Bot API directo sin LLM ni env nueva; falta desplegar en `srv1651826`, conectar webhook/poller y validar desde Telegram real. Ver `docs/incidencias/incidencia_orquesta_telegram_nollm_accepted_invisible_2026-07-05.md`. Estado: abierta con avance local.
 | BUG-ORQ-20260705-SUPERVISOR-SCHEDULER-PAYLOAD | supervisor/autoprogramacion | abierto | Supervisor remoto repite `director_tick_input_build_invalido: field=scheduler_input.payload`; T137 rank 1 bloquea cola. | `docs/incidencias/incidencia_orquesta_supervisor_scheduler_payload_2026-07-05.md` | Pendiente reproducir tick real y corregir compactacion/seleccion. |

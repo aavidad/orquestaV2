@@ -4064,3 +4064,27 @@ Pruebas verdes:
 
 - `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack -run 'TestNuevaAppWizardBotHTTPHandler|TestNuevaAppHTMLHandlerV0GET|TestWizardBot|TestNuevaAppHTMLHelpKeysV0CubrenClavesUsadasEnPlantilla|TestNewAppGatewayMux|TestPublicRouteMutability|TestPublicRouteManifest|TestGatewayRouteRegistrations|TestNewHTTPHandlerV0ExponeNuevaApp(IntakeGuidedTurn|WizardBot)|TestNewHTTPHandlerV0InyectaNuevaAppIntakeAssistant|TestNewHTTPHandlerV0PropagaFallback|TestBuildStackV0(CableaNuevaAppWizardBotMCPDeterminista|ExponeNuevaAppWizardBotHTTP|ExponeBindingsMCPNativos)'`
 - `git diff --check`
+
+## Codex local 2026-07-06: rutas durables de Codex Goal sobre write-set fichero
+
+Frente disjunto de Telegram/supervisor. Se revisaron `BUG-ORQ-20260705-195` y
+`BUG-ORQ-20260705-198`: el prompt de Codex Goal podia pedir
+`<fichero>.go/docs/orquesta_goal_result_*.json` o
+`<script>.sh/docs/orquesta_goal_result_*.json` porque solo detectaba Markdown
+como write-set fichero.
+
+Cierre aplicado:
+
+- `modulos/orquesta-runtime-codex-goal/packet_v0.go`: nuevo helper
+  `codexGoalWriteScopeLooksLikeFileV0`; `codexGoalResultFilePathV0` salta
+  scopes `.go` y `.sh` igual que ya saltaba `.md/.markdown`.
+- Si hay un siguiente scope directorio autorizado, el resultado durable se pide
+  ahi (`directorio/docs/orquesta_goal_result_<goal>.json`).
+- Si todos los scopes son ficheros, no se pide una ruta durable imposible; se
+  conserva el cierre obligatorio por marcador `ORQUESTA_GOAL_RESULT_V0`.
+- `docs/inventario_bugs_orquesta_2026-06-30.md`: `BUG-ORQ-20260705-195` y
+  `BUG-ORQ-20260705-198` pasan a cerrado en codigo.
+
+Prueba verde:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-goal`

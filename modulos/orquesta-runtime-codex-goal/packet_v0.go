@@ -987,7 +987,7 @@ func codexGoalResultFilePathV0(spec orquestagoal.GoalWorkSpecV0) string {
 		if path == "" {
 			continue
 		}
-		if codexGoalWriteScopeIsMarkdownFileV0(path) {
+		if codexGoalWriteScopeLooksLikeFileV0(path) {
 			continue
 		}
 		return path + "/docs/" + resultFileName
@@ -1070,6 +1070,25 @@ func codexGoalResultFileSafePartV0(value string) string {
 func codexGoalWriteScopeIsMarkdownFileV0(path string) bool {
 	lower := strings.ToLower(strings.TrimSpace(path))
 	return strings.HasSuffix(lower, ".md") || strings.HasSuffix(lower, ".markdown")
+}
+
+func codexGoalWriteScopeLooksLikeFileV0(path string) bool {
+	lower := strings.ToLower(strings.Trim(strings.TrimSpace(path), "/"))
+	if lower == "" {
+		return false
+	}
+	if codexGoalWriteScopeIsMarkdownFileV0(lower) {
+		return true
+	}
+	for _, suffix := range []string{
+		".go",
+		".sh",
+	} {
+		if strings.HasSuffix(lower, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 func codexGoalWriteScopeIsDocumentationV0(path string) bool {
