@@ -11,6 +11,9 @@ import (
 func compactTickInputSnapshotForPhaseArtifactsV0(
 	input orquestadirectorscheduler.DirectorSchedulerTickInputV0,
 ) orquestadirectorscheduler.DirectorSchedulerTickInputV0 {
+	if tickInputWithinSnapshotBudgetV0(input) {
+		return input
+	}
 	artifacts := map[string]bool{}
 	agents := map[string]bool{}
 	for _, candidate := range input.PhaseArtifactCandidates {
@@ -25,6 +28,9 @@ func compactTickInputSnapshotForPhaseArtifactsV0(
 func compactTickInputSnapshotForDeliveriesV0(
 	input orquestadirectorscheduler.DirectorSchedulerTickInputV0,
 ) orquestadirectorscheduler.DirectorSchedulerTickInputV0 {
+	if tickInputWithinSnapshotBudgetV0(input) {
+		return input
+	}
 	deliveries := map[string]bool{}
 	tasks := map[string]bool{}
 	agents := map[string]bool{}
@@ -40,12 +46,12 @@ func compactTickInputSnapshotForDeliveriesV0(
 	return input
 }
 
-const progressLaneCompactionThresholdBytesV0 = orquestaorchestrationbudget.SchedulerTickSnapshotBudgetBytesV0
+const tickInputSnapshotCompactionThresholdBytesV0 = orquestaorchestrationbudget.SchedulerTickSnapshotBudgetBytesV0
 
 func compactTickInputSnapshotForProgressV0(
 	input orquestadirectorscheduler.DirectorSchedulerTickInputV0,
 ) orquestadirectorscheduler.DirectorSchedulerTickInputV0 {
-	if tickInputWithinProgressBudgetV0(input) {
+	if tickInputWithinSnapshotBudgetV0(input) {
 		return input
 	}
 	agents := map[string]bool{}
@@ -82,14 +88,18 @@ func compactTickInputSnapshotForProgressV0(
 	return input
 }
 
-func tickInputWithinProgressBudgetV0(
+// tickInputWithinSnapshotBudgetV0 es el gate comun de compactacion de lanes:
+// con el input dentro del presupuesto no se recorta nada del snapshot, porque
+// anular familias sin necesidad ya causo una regresion real (ver
+// incidencia_orquesta_tick_input_progress_compaction_regresion_2026-07-06).
+func tickInputWithinSnapshotBudgetV0(
 	input orquestadirectorscheduler.DirectorSchedulerTickInputV0,
 ) bool {
 	data, err := json.Marshal(input)
 	if err != nil {
 		return false
 	}
-	return len(data) <= progressLaneCompactionThresholdBytesV0
+	return len(data) <= tickInputSnapshotCompactionThresholdBytesV0
 }
 
 func compactTickInputSnapshotForAgentsV0(

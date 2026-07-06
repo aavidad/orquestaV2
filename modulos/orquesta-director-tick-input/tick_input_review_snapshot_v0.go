@@ -15,6 +15,9 @@ const (
 func compactTickInputSnapshotForReviewGateV0(
 	input orquestadirectorscheduler.DirectorSchedulerTickInputV0,
 ) orquestadirectorscheduler.DirectorSchedulerTickInputV0 {
+	if tickInputWithinSnapshotBudgetV0(input) {
+		return input
+	}
 	refs := collectTickInputReviewGateRefsV0(input.ReviewGateCandidates)
 	snapshot := input.Snapshot
 	snapshot.Tasks = nil

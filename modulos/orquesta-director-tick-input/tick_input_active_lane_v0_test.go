@@ -14,6 +14,9 @@ import (
 
 func TestBuildDirectorSchedulerTickInputV0CompactaCarrilReviewGate(t *testing.T) {
 	run := tickInputRevisionRunWithHistoryV0(t)
+	for i := 0; i < 3000; i++ {
+		run.AgentAssessments = append(run.AgentAssessments, fmt.Sprintf("assessment-ref-review-history-%04d", i))
+	}
 	candidate := tickInputReviewGateCandidateV0("delivery-ref-review-target")
 
 	input, err := BuildDirectorSchedulerTickInputV0(DirectorTickInputBuildRequestV0{
@@ -48,6 +51,9 @@ func TestBuildDirectorSchedulerTickInputV0CompactaCarrilReviewGate(t *testing.T)
 func TestBuildDirectorSchedulerTickInputV0FiltraConfirmedStoppedAgentsEnCarrilDelivery(t *testing.T) {
 	run := tickInputProgramacionRunV0(t)
 	run.Tasks = append(run.Tasks, "task-ref-delivery-target")
+	for i := 0; i < 3000; i++ {
+		run.Tasks = append(run.Tasks, fmt.Sprintf("task-ref-delivery-history-%04d", i))
+	}
 	run.Agents = append(run.Agents, "agent-ref-delivery-target", "agent-ref-delivery-other")
 	run.StartedAgents = append(run.StartedAgents, "agent-ref-delivery-target", "agent-ref-delivery-other")
 	run.StoppedAgents = append(run.StoppedAgents, "agent-ref-delivery-target", "agent-ref-delivery-other")
@@ -95,6 +101,63 @@ func TestBuildDirectorSchedulerTickInputV0CarrilProgressPequenoConservaSnapshotC
 	}
 	if len(input.Snapshot.CapacityRequests) == 0 || len(input.Snapshot.ConcurrencyGates) == 0 {
 		t.Fatalf("carril progress pequeno no debe anular capacity/gates: capacity=%v gates=%v", input.Snapshot.CapacityRequests, input.Snapshot.ConcurrencyGates)
+	}
+}
+
+func TestBuildDirectorSchedulerTickInputV0CarrilReviewGatePequenoConservaSnapshotCompletoV0(t *testing.T) {
+	run := tickInputRevisionRunWithHistoryV0(t)
+	run.Tasks = append(run.Tasks, "task-ref-review-superviviente")
+	input, err := BuildDirectorSchedulerTickInputV0(DirectorTickInputBuildRequestV0{
+		TickRef:              "tick-ref-review-small-001",
+		OccurredAt:           "2026-05-06T12:12:00Z",
+		Run:                  run,
+		ReviewGateCandidates: []orquestadirectorscheduler.SchedulableReviewGateCandidateV0{tickInputReviewGateCandidateV0("delivery-ref-review-target")},
+		EvidenceRefs:         []string{"evidence-ref-review-small-001"},
+	})
+	if err != nil {
+		t.Fatalf("BuildDirectorSchedulerTickInputV0: %v", err)
+	}
+	if !tickInputRefsContainV0(input.Snapshot.Tasks, "task-ref-review-superviviente") {
+		t.Fatalf("carril review pequeno no debe anular tasks: %v", input.Snapshot.Tasks)
+	}
+}
+
+func TestBuildDirectorSchedulerTickInputV0CarrilDeliveryPequenoConservaSnapshotCompletoV0(t *testing.T) {
+	run := tickInputProgramacionRunV0(t)
+	run.Tasks = append(run.Tasks, "task-ref-delivery-target")
+	run.Agents = append(run.Agents, "agent-ref-delivery-target", "agent-ref-delivery-superviviente")
+	run.StartedAgents = append(run.StartedAgents, "agent-ref-delivery-target", "agent-ref-delivery-superviviente")
+	input, err := BuildDirectorSchedulerTickInputV0(DirectorTickInputBuildRequestV0{
+		TickRef:            "tick-ref-delivery-small-001",
+		OccurredAt:         "2026-05-06T12:13:00Z",
+		Run:                run,
+		DeliveryCandidates: []orquestadirectorscheduler.SchedulableDeliveryCandidateV0{tickInputDeliveryCandidateV0()},
+		EvidenceRefs:       []string{"evidence-ref-delivery-small-001"},
+	})
+	if err != nil {
+		t.Fatalf("BuildDirectorSchedulerTickInputV0: %v", err)
+	}
+	if !tickInputRefsContainV0(input.Snapshot.Agents, "agent-ref-delivery-superviviente") {
+		t.Fatalf("carril delivery pequeno no debe filtrar agentes no candidatos: %v", input.Snapshot.Agents)
+	}
+}
+
+func TestBuildDirectorSchedulerTickInputV0CarrilPhaseArtifactPequenoConservaSnapshotCompletoV0(t *testing.T) {
+	run := tickInputRevisionRunWithHistoryV0(t)
+	run.Agents = append(run.Agents, "agent-ref-artifact-superviviente")
+	run.StartedAgents = append(run.StartedAgents, "agent-ref-artifact-superviviente")
+	input, err := BuildDirectorSchedulerTickInputV0(DirectorTickInputBuildRequestV0{
+		TickRef:                 "tick-ref-artifact-small-001",
+		OccurredAt:              "2026-05-06T12:14:00Z",
+		Run:                     run,
+		PhaseArtifactCandidates: []orquestadirectorscheduler.SchedulablePhaseArtifactCandidateV0{tickInputPhaseArtifactCandidateV0()},
+		EvidenceRefs:            []string{"evidence-ref-artifact-small-001"},
+	})
+	if err != nil {
+		t.Fatalf("BuildDirectorSchedulerTickInputV0: %v", err)
+	}
+	if !tickInputRefsContainV0(input.Snapshot.Agents, "agent-ref-artifact-superviviente") {
+		t.Fatalf("carril phase-artifact pequeno no debe filtrar agentes no candidatos: %v", input.Snapshot.Agents)
 	}
 }
 
@@ -156,6 +219,11 @@ func TestBuildDirectorSchedulerTickInputV0CompactaCarrilProgressConHistorialLarg
 
 func TestBuildDirectorSchedulerTickInputV0FiltraConfirmedStoppedAgentsEnCarrilPhaseArtifact(t *testing.T) {
 	run := tickInputRevisionRunWithHistoryV0(t)
+	for i := 0; i < 3000; i++ {
+		agentRef := fmt.Sprintf("agent-ref-artifact-history-%04d", i)
+		run.Agents = append(run.Agents, agentRef)
+		run.StartedAgents = append(run.StartedAgents, agentRef)
+	}
 	run.Agents = append(run.Agents, "agent-ref-artifact-target", "agent-ref-artifact-other")
 	run.StartedAgents = append(run.StartedAgents, "agent-ref-artifact-target", "agent-ref-artifact-other")
 	run.StoppedAgents = append(run.StoppedAgents, "agent-ref-artifact-target", "agent-ref-artifact-other")
