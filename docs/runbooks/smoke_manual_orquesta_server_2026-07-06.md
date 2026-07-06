@@ -54,3 +54,37 @@ git diff --check
 
 Estado: smoke local de arranque/readiness/shutdown verde. No se lanzaron goals
 reales ni consumo de proveedor.
+
+## Revalidacion post-commit e1a0fa4ef
+
+Tras commitear el fix del helper de shutdown, se ejecuto el corte prudente
+solicitado: test completo, build nuevo y smoke local del binario actualizado.
+
+Verificacion:
+
+```bash
+go test -count=1 ./...
+go build -trimpath -o /tmp/orquesta-builds/orquesta-server-e1a0fa4ef ./cmd/orquesta-server
+sha256sum /tmp/orquesta-builds/orquesta-server-e1a0fa4ef
+```
+
+Resultado:
+
+- `go test -count=1 ./...`: verde.
+- Binario: `/tmp/orquesta-builds/orquesta-server-e1a0fa4ef`
+- sha256:
+  `49ef50c2b63dcb10aabf4d28f63fea11bda43a4e202902fe1a981b64f4788bae`
+- Smoke local aislado:
+  - runtime: `/tmp/orquesta-manual-smoke-e1a0fa4ef-M8wPCq`
+  - addr: `127.0.0.1:42923`
+  - `GET /healthz`: HTTP 200
+  - `GET /api/status`: HTTP 200, `status=running`
+  - `GET /api/v0/server/readiness`: HTTP 200, `ready=true`,
+    `startup_status=startup_ready`, `diagnostics=[]`
+  - `POST /api/v0/server/shutdown`: HTTP 200, `status=ready`,
+    `shutdown_ready=true`
+  - cierre: `SERVER_EXITED_CLEAN=1`
+
+Estado: nucleo compilable y smoke de servidor local verde en `e1a0fa4ef`.
+Siguiente prueba no cubierta aqui: goal real minimo con proveedor
+`app_server_tmux`.
