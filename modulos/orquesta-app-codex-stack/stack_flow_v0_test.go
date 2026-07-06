@@ -182,6 +182,38 @@ func TestBuildStackV0CableaNuevaAppWizardMCPRico(t *testing.T) {
 	}
 }
 
+func TestBuildStackV0CableaNuevaAppWizardBotMCPDeterminista(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	session := json.RawMessage(`{
+		"schema_version":"web_nueva_app_intake_session.v0",
+		"session_id":"session-stack-wizard-bot-001",
+		"session_ref":"session-stack-wizard-bot-001",
+		"form":{
+			"request_id":"request-ref-stack-wizard-bot-001",
+			"locale":"es-ES",
+			"objetivo":"quiero una app para una agenda"
+		}
+	}`)
+
+	result, err := stack.MCPTransportBindings.NuevaAppWizardBot.Execute(context.Background(), orquestamcp.MCPNuevaAppWizardBotToolInputV0{
+		RequestID:  "request-ref-stack-wizard-bot-001",
+		SessionRef: "session-stack-wizard-bot-001",
+		UserText:   "que es CalDAV?",
+		Locale:     "es-ES",
+		Session:    session,
+	})
+	if err != nil {
+		t.Fatalf("execute wizard bot: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPNuevaAppWizardBotEstadoOKV0 ||
+		!strings.Contains(string(result.Reply), `"schema_version":"web_nueva_app_wizard_bot_reply.v0"`) ||
+		!strings.Contains(string(result.Reply), "CalDAV") ||
+		!strings.Contains(string(result.Reply), "wizard-corpus:") ||
+		!strings.Contains(string(result.Session), "session-stack-wizard-bot-001") {
+		t.Fatalf("wizard bot MCP incompleto: estado=%s reply=%s session=%s", result.Estado, result.Reply, result.Session)
+	}
+}
+
 type fakeCodexStackNuevaAppIntakeAssistantV0 struct{}
 
 func (fakeCodexStackNuevaAppIntakeAssistantV0) BuildNuevaAppIntakeGuidedTurnV0(

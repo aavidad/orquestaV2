@@ -168,6 +168,7 @@ func TestBuildStackV0ExponeBindingsMCPNativosV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	if stack.MCPTransportBindings.ArrancarDirector == nil ||
 		stack.MCPTransportBindings.NuevaAppWizard == nil ||
+		stack.MCPTransportBindings.NuevaAppWizardBot == nil ||
 		stack.MCPTransportBindings.DirectorStats == nil ||
 		stack.MCPTransportBindings.RunQueuePriority == nil ||
 		stack.MCPTransportBindings.RunSupervisor == nil ||

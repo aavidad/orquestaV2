@@ -2802,10 +2802,11 @@ catalogo universal del wizard tiene ayudas reales es/en para opciones y
 rationales U/T, el test prohibe placeholders conocidos y
 `docs/wizard_glosario_generado.md` se regenero desde el catalogo. Evidencia:
 `go test -count=1 ./modulos/orquesta-web -run 'TestWizard|TestNuevaApp.*Wizard'`.
-Residual separado: el subagente Codex detecto que MCP no transporta todavia
-`justification`, `comprehension_query` ni `glossary_expanded`, y falta tool MCP
-`orquesta.nueva_app.wizard.bot.v0`; tratar como siguiente microtarea de paridad
-MCP, sin tocar supervisor/state-file/app-codex-stack.
+Residual separado detectado por subagente Codex: faltaban paridad MCP de
+`justification`, `comprehension_query`, `glossary_expanded` y tool MCP
+`orquesta.nueva_app.wizard.bot.v0`. La paridad del tool existente queda
+cerrada en `BUG-ORQ-20260706-WIZARD-MCP-CONTRACT-PARITY`; el tool MCP del bot
+queda cerrado en `BUG-ORQ-20260706-WIZARD-MCP-BOT-TOOL`.
 
 BUG nuevo `BUG-ORQ-20260706-WIZARD-MCP-CONTRACT-PARITY` (cerrado parcial):
 El motor web del wizard ya soportaba `WizardAnswerV0.justification`,
@@ -2820,6 +2821,21 @@ verifica que el stack real conserva `justification`, `glossary_expanded` y
 `comprehension_query` hasta el handler web. Evidencia:
 `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPNuevaAppWizard|TestNormalizeMCPNuevaAppWizard|TestNewMCPNuevaAppWizard|TestMCPTransportV0NuevaAppWizard'`
 y `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestBuildStackV0CableaNuevaAppWizardMCPRico'`.
-Residual no cerrado: crear `orquesta.nueva_app.wizard.bot.v0` y superficie chat
-web si producto exige el bot conversacional por MCP/UI; este corte solo cierra
-paridad del tool wizard existente.
+Residual no cerrado: superficie chat web visible si producto exige alternar
+formulario/chat en UI; este corte solo cierra paridad del tool wizard existente.
+
+BUG nuevo `BUG-ORQ-20260706-WIZARD-MCP-BOT-TOOL` (cerrado):
+El bot determinista/RAG del wizard existia en `modulos/orquesta-web`, y el
+servidor tenia adaptador LLM opt-in por `wizard_bot.*`, pero MCP no exponia
+`orquesta.nueva_app.wizard.bot.v0`. Esto dejaba incompleto el contrato de la
+seccion 12.4 para clientes IA: solo podian usar el formulario/wizard, no la
+capa conversacional. Cierre aplicado: `modulos/orquesta-mcp` define contrato,
+descriptor, normalizacion, transporte opt-in y tests del tool bot; el stack
+Codex adapta ese puerto al bot web sin importar `orquesta-web` desde MCP; el
+servidor inyecta el asistente LLM opcional cuando `wizard_bot.llm_enabled=true`
+y conserva modo determinista sin proveedor. Evidencia:
+`go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPNuevaAppWizardBot|TestMCPTransportV0(NuevaAppWizardBot|ExponeOperaciones)'`,
+`go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestBuildStackV0(CableaNuevaAppWizardBotMCPDeterminista|ExponeBindingsMCPNativos)'`
+y `go test -count=1 ./cmd/orquesta-server -run 'TestWizardBot|TestBuildStack|TestServerCodexGoal'`.
+Residual: no se implementa aqui panel chat web visible; queda como mejora UI
+separada.

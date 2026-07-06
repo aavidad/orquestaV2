@@ -4008,7 +4008,34 @@ Pruebas verdes:
 - `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPNuevaAppWizard|TestNormalizeMCPNuevaAppWizard|TestNewMCPNuevaAppWizard|TestMCPTransportV0NuevaAppWizard'`
 - `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestBuildStackV0CableaNuevaAppWizardMCPRico'`
 
-Residual vivo: falta tool MCP especifico del bot
-`orquesta.nueva_app.wizard.bot.v0` y, segun revision del subagente, panel chat
-web visible para alternar formulario/chat. No se aborda en este corte para no
-mezclar superficies.
+Residual vivo tras este corte: falta panel chat web visible para alternar
+formulario/chat. El tool MCP especifico del bot queda abordado en el corte
+siguiente.
+
+## Codex local 2026-07-06: tool MCP del bot del wizard
+
+Se cierra el contrato MCP pendiente `orquesta.nueva_app.wizard.bot.v0` sin
+meter logica web en MCP:
+
+- `modulos/orquesta-mcp/nueva_app_wizard_bot_tool_v0.go`: contrato, descriptor,
+  normalizacion, resultado y transporte opt-in del bot.
+- `modulos/orquesta-mcp/nueva_app_wizard_bot_tool_v0_test.go` y
+  `mcp_transport_registry_v0_test.go`: descriptor, transporte, publicacion y
+  unbound opt-in.
+- `modulos/orquesta-app-codex-stack/nueva_app_wizard_bot_mcp_executor_v0.go`:
+  adaptador del stack que llama a `NewWebNuevaAppWizardBotReplyWithLLMV0` y
+  devuelve `reply` + `session` compactos.
+- `modulos/orquesta-app-codex-stack/config_v0.go` y `stack_v0.go`: puerto
+  opcional `WizardBotAssistant`; sin proveedor funciona determinista.
+- `cmd/orquesta-server/stack.go`: inyecta el asistente LLM opt-in existente
+  desde `wizard_bot.*` cuando esta habilitado.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPNuevaAppWizardBot|TestMCPTransportV0(NuevaAppWizardBot|ExponeOperaciones)'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestBuildStackV0(CableaNuevaAppWizardBotMCPDeterminista|ExponeBindingsMCPNativos)'`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestWizardBot|TestBuildStack|TestServerCodexGoal'`
+- Verificacion conjunta: `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack -run 'Test.*Wizard.*MCP|TestMCPNuevaAppWizardBot|TestMCPTransportV0NuevaAppWizardBot|TestBuildStackV0ExponeBindingsMCPNativos'`
+
+Residual vivo para siguiente frente: panel chat web visible. No se toca en este
+corte para mantener write-set de MCP/stack/servidor.

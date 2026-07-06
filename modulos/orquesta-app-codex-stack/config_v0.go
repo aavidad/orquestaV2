@@ -30,6 +30,7 @@ type ConfigV0 struct {
 	Timeout                                        time.Duration
 	DirectorLimits                                 orquestaweb.WebArrancarDirectorAppLimitsV0
 	AppIntakeAssistant                             orquestaweb.WebNuevaAppIntakeAssistantPortV0
+	WizardBotAssistant                             orquestaweb.WizardBotLLMAssistPortV0
 	DirectorDecisionBudget                         orquestadirectoragentworkflow.DirectorAgentDecisionBatchBudgetV0
 	Stores                                         StoresV0
 	RunQueue                                       RunQueueConfigV0

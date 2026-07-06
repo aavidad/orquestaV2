@@ -213,8 +213,9 @@ func buildStackFromEnvWithGoalBackendV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	projectConfig := projectConfigFromServerConfigBestEffortV0(serverConfig)
 	egressSanitizer, err := egressSanitizerConfigWithSidecarPortFromProjectConfigFileV0(
-		projectConfigFromServerConfigBestEffortV0(serverConfig),
+		projectConfig,
 	)
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
@@ -296,6 +297,7 @@ func buildStackFromEnvWithGoalBackendV0(
 		Gemini:                   geminiRuntimeConfigV0(serverConfig),
 		Claude:                   claudeRuntimeConfigV0(serverConfig),
 		EgressSanitizer:          egressSanitizer,
+		WizardBotAssistant:       serverWizardBotLLMAssistantFromConfigV0(serverConfig.ProjectWorkDir, projectConfig, goalBackend),
 		Capacity:                 codexStackCapacityConfigFromProjectConfigV0(serverConfig.ProjectWorkDir),
 		AutonomousDirectorPolicy: orquestacionnucleoapp.HeuristicAutonomousDirectorPolicyV0{},
 		AppGoalLauncher:          serverGoalWorkLauncherFromBackendV0(goalBackend),
