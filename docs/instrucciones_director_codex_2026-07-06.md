@@ -49,6 +49,31 @@ o clave semantica estable (patron de `liveAgentReconciliationSemanticDigestV0`)
 o justificacion escrita de por que no puede duplicar. Test por emisor
 corregido: dos ticks sin cambio causal no producen segundo evento.
 
+INVENTARIO de Claude (2026-07-06, greps verificados) — empezar por el 1, que
+es la causa raiz confirmada de los 2669 eventos de T137:
+
+1. CULPABLE PRINCIPAL: `modulos/orquesta-orchestration-core/progress_candidate_provider.go`
+   - linea ~140: `QuestionID = "question-ref-" + Report.ReportID`
+   - linea ~149: `IdempotencyKey = "idem-progress-supervision-" + report.ReportID`
+   - linea ~205: fallback `AssessmentRef = "assessment-ref-" + Report.ReportID`
+   El ReportID es NUEVO en cada tick => pareja nueva identica por tick en un
+   run atascado. El patron bueno ya existe en el MISMO fichero (linea ~203:
+   `progressObservationStableAdvisoryHashV0`): extenderlo a question,
+   idempotency y fallback de assessment. OJO al efecto colateral bueno: con
+   clave estable, el event store idempotente dedupe solo (ver
+   TestStoreV0AppendRunEventsV0EsIdempotentePorEventIDYPayload).
+2. `modulos/orquesta-orchestration-core/progress_lease_bridge_v0.go` (~268):
+   `lease-assessment-ref-` deriva de reportRef — misma clase, revisar.
+3. Revisar (probablemente ya semanticos, confirmar y justificar por escrito):
+   `orquesta-app-director-service/operational_director_quality_gate_replan_v0.go`,
+   `operational_director_review_events_rework_replan_v0.go`,
+   `operational_director_closure_replan_state_v0.go`,
+   `orquesta-core-replanner/assessment_replan_v0.go`,
+   `orquesta-app-codex-stack/assessment_replan_source_v0.go`.
+4. Regla P5 al tocar orchestration-core: bateria minima
+   `./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service
+   ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
+
 ## TAREA-D5 (P4): gate comun de compactacion de lanes
 
 Extraer el gate de tamano del carril progress
