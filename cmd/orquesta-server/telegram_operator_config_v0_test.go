@@ -36,15 +36,18 @@ func TestTelegramOperatorConfigV0LeeFicheroYRedactaEffectiveConfig(t *testing.T)
 		t.Fatalf("enabled=%q", got)
 	}
 	for _, key := range []string{
-		envTelegramOperatorBotLinkRefV0,
+		telegramOperatorConfigKeyBotLinkRefV0,
 		envTelegramOperatorTokenV0,
-		envTelegramOperatorAuthorizedChatRefsV0,
-		envTelegramOperatorNotificationTargetV0,
+		telegramOperatorConfigKeyAuthorizedChatRefsV0,
+		telegramOperatorConfigKeyNotificationTargetV0,
 	} {
 		setting := effectiveSettingForTestV0(settings, key)
 		if !setting.Sensitive || strings.Contains(setting.Value, "secret") || strings.Contains(setting.Value, "alberto") {
 			t.Fatalf("setting sensible no redactado para %s: %+v", key, setting)
 		}
+	}
+	if got := effectiveSettingForTestV0(settings, telegramOperatorConfigKeyRequireConfirmationV0); got.Source != configSettingSourceConfigFileV0 || got.Value != "true" {
+		t.Fatalf("require_confirmation canonico inesperado: %+v", got)
 	}
 }
 

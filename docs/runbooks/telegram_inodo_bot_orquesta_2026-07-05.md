@@ -25,11 +25,12 @@ En `orquesta.config.json`:
 Equivalentes por entorno:
 
 - `ORQUESTA_TELEGRAM_OPERATOR_ENABLED=true`
-- `ORQUESTA_TELEGRAM_OPERATOR_BOT_LINK_REF=<ref opaca del enlace Inodo Bot>`
 - `ORQUESTA_TELEGRAM_OPERATOR_TOKEN=<token del bot existente>`
-- `ORQUESTA_TELEGRAM_OPERATOR_AUTHORIZED_CHAT_REFS=<chat refs separados por coma>`
-- `ORQUESTA_TELEGRAM_OPERATOR_NOTIFICATION_TARGET_REF=<chat ref destino>`
-- `ORQUESTA_TELEGRAM_OPERATOR_REQUIRE_CONFIRMATION=true`
+
+El resto de campos (`bot_link_ref`, `authorized_chat_refs`,
+`notification_target_ref`, `require_confirmation`) debe ir en
+`orquesta.config.json`. No se conserva env equivalente para ellos: son refs y
+politica estable de composicion, no secretos ni override puntual.
 
 El token, el enlace real y los chats autorizados se publican en
 `effective_config` solo como valores redactados. No deben aparecer en logs,

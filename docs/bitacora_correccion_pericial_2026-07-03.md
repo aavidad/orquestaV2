@@ -3872,9 +3872,11 @@ proveedor/ratchet; no se crea commit local para no mezclar esos cambios.
 ## Ratchet de envs tras canal operador Telegram (2026-07-05)
 
 El checkpoint remoto introduce el adaptador operador Telegram opt-in para que el
-operador reciba avisos terminales y pueda enviar comandos al Director. Las
-variables nuevas quedan registradas en `serverEffectiveEnvRegistryV0` bajo scope
-`telegram_operator` y no sustituyen al fichero canonico; se mantienen como
-puente operativo mientras se completa la reduccion TAREA-8. El aumento queda
-justificado de forma temporal para que el ratchet no oculte la deuda:
-`env_vars_orquesta_allow_increase_to=518`.
+operador reciba avisos terminales y pueda enviar comandos al Director. Primer
+recorte tras el merge: `bot_link_ref`, `authorized_chat_refs`,
+`notification_target_ref` y `require_confirmation` dejan de tener env propia y
+quedan solo en `orquesta.config.json`/`effective_config` como
+`telegram_operator.*`; se conservan como env solo `enabled` y `token`, por
+arranque/secretos. La metrica baja de 518 a 514 y el aumento queda justificado
+de forma temporal para que el ratchet no oculte la deuda restante:
+`env_vars_orquesta_allow_increase_to=514`.

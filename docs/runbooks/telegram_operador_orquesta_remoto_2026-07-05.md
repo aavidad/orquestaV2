@@ -39,17 +39,15 @@ En `orquesta.config.json`:
 }
 ```
 
-Variables equivalentes:
+Variables equivalentes de operacion:
 
 - `ORQUESTA_TELEGRAM_OPERATOR_ENABLED`
-- `ORQUESTA_TELEGRAM_OPERATOR_BOT_LINK_REF`
 - `ORQUESTA_TELEGRAM_OPERATOR_TOKEN`
-- `ORQUESTA_TELEGRAM_OPERATOR_AUTHORIZED_CHAT_REFS`
-- `ORQUESTA_TELEGRAM_OPERATOR_NOTIFICATION_TARGET_REF`
-- `ORQUESTA_TELEGRAM_OPERATOR_REQUIRE_CONFIRMATION`
 
-Token, chat refs y target de notificacion se publican redactados en
-`effective_config`.
+`bot_link_ref`, `authorized_chat_refs`, `notification_target_ref` y
+`require_confirmation` quedan solo en `orquesta.config.json` para no duplicar
+superficie de entorno. Token, chat refs y target de notificacion se publican
+redactados en `effective_config`.
 
 ## Comandos autorizados
 

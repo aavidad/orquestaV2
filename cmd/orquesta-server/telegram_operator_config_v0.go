@@ -13,12 +13,13 @@ const (
 	telegramOperatorTokenConfiguredRefV0   = "telegram-operator-token-configured"
 	telegramOperatorChatRefsConfiguredV0   = "telegram-operator-chat-refs-configured"
 
-	envTelegramOperatorEnabledV0             = "ORQUESTA_TELEGRAM_OPERATOR_ENABLED"
-	envTelegramOperatorBotLinkRefV0          = "ORQUESTA_TELEGRAM_OPERATOR_BOT_LINK_REF"
-	envTelegramOperatorTokenV0               = "ORQUESTA_TELEGRAM_OPERATOR_TOKEN"
-	envTelegramOperatorAuthorizedChatRefsV0  = "ORQUESTA_TELEGRAM_OPERATOR_AUTHORIZED_CHAT_REFS"
-	envTelegramOperatorRequireConfirmationV0 = "ORQUESTA_TELEGRAM_OPERATOR_REQUIRE_CONFIRMATION"
-	envTelegramOperatorNotificationTargetV0  = "ORQUESTA_TELEGRAM_OPERATOR_NOTIFICATION_TARGET_REF"
+	telegramOperatorConfigKeyBotLinkRefV0          = "telegram_operator.bot_link_ref"
+	telegramOperatorConfigKeyAuthorizedChatRefsV0  = "telegram_operator.authorized_chat_refs"
+	telegramOperatorConfigKeyRequireConfirmationV0 = "telegram_operator.require_confirmation"
+	telegramOperatorConfigKeyNotificationTargetV0  = "telegram_operator.notification_target_ref"
+
+	envTelegramOperatorEnabledV0 = "ORQUESTA_TELEGRAM_OPERATOR_ENABLED"
+	envTelegramOperatorTokenV0   = "ORQUESTA_TELEGRAM_OPERATOR_TOKEN"
 )
 
 type serverProjectConfigTelegramOperatorV0 struct {
@@ -39,11 +40,7 @@ func telegramOperatorEnabledFromProjectConfigFileV0(config serverProjectConfigFi
 }
 
 func telegramOperatorBotLinkRefFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
-	return stringProjectConfigOrEnvOrDefaultV0(
-		envTelegramOperatorBotLinkRefV0,
-		config.TelegramOperator.BotLinkRef,
-		"",
-	)
+	return stringProjectConfigFileOrDefaultV0(config.TelegramOperator.BotLinkRef, "")
 }
 
 func telegramOperatorTokenFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
@@ -55,27 +52,15 @@ func telegramOperatorTokenFromProjectConfigFileV0(config serverProjectConfigFile
 }
 
 func telegramOperatorAuthorizedChatRefsFromProjectConfigFileV0(config serverProjectConfigFileV0) []string {
-	return stringSliceProjectConfigOrEnvOrDefaultV0(
-		envTelegramOperatorAuthorizedChatRefsV0,
-		config.TelegramOperator.AuthorizedChatRefs,
-		nil,
-	)
+	return stringSliceProjectConfigFileOrDefaultV0(config.TelegramOperator.AuthorizedChatRefs, nil)
 }
 
 func telegramOperatorRequireConfirmationFromProjectConfigFileV0(config serverProjectConfigFileV0) bool {
-	return boolProjectConfigOrEnvOrDefaultV0(
-		envTelegramOperatorRequireConfirmationV0,
-		config.TelegramOperator.RequireConfirmation,
-		true,
-	)
+	return boolProjectConfigFileOrDefaultV0(config.TelegramOperator.RequireConfirmation, true)
 }
 
 func telegramOperatorNotificationTargetFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
-	target := stringProjectConfigOrEnvOrDefaultV0(
-		envTelegramOperatorNotificationTargetV0,
-		config.TelegramOperator.NotificationTargetRef,
-		"",
-	)
+	target := stringProjectConfigFileOrDefaultV0(config.TelegramOperator.NotificationTargetRef, "")
 	if strings.TrimSpace(target) != "" {
 		return strings.TrimSpace(target)
 	}
@@ -91,24 +76,28 @@ func telegramOperatorEffectiveConfigSettingsV0(
 	projectConfig serverProjectConfigFileV0,
 ) []orquestaserver.ServerConfigSettingV0 {
 	_ = config
-	botLinkSource := telegramOperatorConfigSettingSourceV0(envTelegramOperatorBotLinkRefV0, projectConfig)
 	tokenSource := telegramOperatorConfigSettingSourceV0(envTelegramOperatorTokenV0, projectConfig)
-	chatsSource := telegramOperatorConfigSettingSourceV0(envTelegramOperatorAuthorizedChatRefsV0, projectConfig)
-	targetSource := telegramOperatorConfigSettingSourceV0(envTelegramOperatorNotificationTargetV0, projectConfig)
+	botLinkSource := configFileSettingSourceFromStringPointerV0(projectConfig.TelegramOperator.BotLinkRef)
+	chatsSource := configFileSettingSourceFromStringSlicePointerV0(projectConfig.TelegramOperator.AuthorizedChatRefs)
+	confirmationSource := configFileSettingSourceFromBoolPointerV0(projectConfig.TelegramOperator.RequireConfirmation)
+	targetSource := configFileSettingSourceFromStringPointerV0(projectConfig.TelegramOperator.NotificationTargetRef)
 	return []orquestaserver.ServerConfigSettingV0{
 		serverConfigSettingFromRegistryWithSourceV0(
 			envTelegramOperatorEnabledV0,
 			strconv.FormatBool(telegramOperatorEnabledFromProjectConfigFileV0(projectConfig)),
 			telegramOperatorConfigSettingSourceV0(envTelegramOperatorEnabledV0, projectConfig),
 		),
-		serverSensitiveConfigSettingFromRegistryWithSourceV0(
-			envTelegramOperatorBotLinkRefV0,
+		telegramOperatorConfigFileSettingV0(
+			telegramOperatorConfigKeyBotLinkRefV0,
 			sensitiveConfigValueFromSourceV0(
 				telegramOperatorBotLinkRefFromProjectConfigFileV0(projectConfig),
 				telegramOperatorBotLinkConfiguredRefV0,
 				botLinkSource,
 			),
 			botLinkSource,
+			"Ref enlace bot",
+			"Ref opaca del enlace/configuracion existente del bot; se configura por fichero canonico.",
+			true,
 		),
 		serverSensitiveConfigSettingFromRegistryWithSourceV0(
 			envTelegramOperatorTokenV0,
@@ -119,30 +108,120 @@ func telegramOperatorEffectiveConfigSettingsV0(
 			),
 			tokenSource,
 		),
-		serverSensitiveConfigSettingFromRegistryWithSourceV0(
-			envTelegramOperatorAuthorizedChatRefsV0,
+		telegramOperatorConfigFileSettingV0(
+			telegramOperatorConfigKeyAuthorizedChatRefsV0,
 			sensitiveConfigValueFromSourceV0(
 				strings.Join(telegramOperatorAuthorizedChatRefsFromProjectConfigFileV0(projectConfig), ","),
 				telegramOperatorChatRefsConfiguredV0,
 				chatsSource,
 			),
 			chatsSource,
+			"Chats autorizados Telegram",
+			"Refs opacas de chats autorizados para operar Orquesta; se configuran por fichero canonico.",
+			true,
 		),
-		serverConfigSettingFromRegistryWithSourceV0(
-			envTelegramOperatorRequireConfirmationV0,
+		telegramOperatorConfigFileSettingV0(
+			telegramOperatorConfigKeyRequireConfirmationV0,
 			strconv.FormatBool(telegramOperatorRequireConfirmationFromProjectConfigFileV0(projectConfig)),
-			telegramOperatorConfigSettingSourceV0(envTelegramOperatorRequireConfirmationV0, projectConfig),
+			confirmationSource,
+			"Confirmacion Telegram",
+			"Exige confirmacion explicita en comandos de detener/controlar.",
+			false,
 		),
-		serverSensitiveConfigSettingFromRegistryWithSourceV0(
-			envTelegramOperatorNotificationTargetV0,
+		telegramOperatorConfigFileSettingV0(
+			telegramOperatorConfigKeyNotificationTargetV0,
 			sensitiveConfigValueFromSourceV0(
 				telegramOperatorNotificationTargetFromProjectConfigFileV0(projectConfig),
 				"telegram-operator-notification-target-configured",
 				targetSource,
 			),
 			targetSource,
+			"Target notificaciones Telegram",
+			"Ref opaca del chat destino para avisos terminales deduplicados.",
+			true,
 		),
 	}
+}
+
+func telegramOperatorConfigFileSettingV0(
+	key string,
+	value string,
+	source string,
+	label string,
+	description string,
+	sensitive bool,
+) orquestaserver.ServerConfigSettingV0 {
+	setting := orquestaserver.ServerConfigSettingV0{
+		Key:             key,
+		Value:           value,
+		Source:          strings.TrimSpace(source),
+		Scope:           "telegram_operator",
+		Label:           label,
+		Description:     description,
+		RestartBehavior: "restart_required",
+		Editable:        true,
+		Canonical:       true,
+		Sensitive:       sensitive,
+	}
+	if setting.Source == "" {
+		setting.Source = "defaulted"
+	}
+	return setting
+}
+
+func stringProjectConfigFileOrDefaultV0(fileValue *string, fallback string) string {
+	if fileValue != nil {
+		if value := strings.TrimSpace(*fileValue); value != "" {
+			return value
+		}
+	}
+	return fallback
+}
+
+func stringSliceProjectConfigFileOrDefaultV0(fileValue *[]string, fallback []string) []string {
+	if fileValue == nil {
+		return fallback
+	}
+	out := make([]string, 0, len(*fileValue))
+	for _, raw := range *fileValue {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			continue
+		}
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return fallback
+	}
+	return out
+}
+
+func boolProjectConfigFileOrDefaultV0(fileValue *bool, fallback bool) bool {
+	if fileValue != nil {
+		return *fileValue
+	}
+	return fallback
+}
+
+func configFileSettingSourceFromStringPointerV0(value *string) string {
+	if configStringPointerHasValueV0(value) {
+		return configSettingSourceConfigFileV0
+	}
+	return "defaulted"
+}
+
+func configFileSettingSourceFromStringSlicePointerV0(value *[]string) string {
+	if configStringSlicePointerHasValueV0(value) {
+		return configSettingSourceConfigFileV0
+	}
+	return "defaulted"
+}
+
+func configFileSettingSourceFromBoolPointerV0(value *bool) string {
+	if value != nil {
+		return configSettingSourceConfigFileV0
+	}
+	return "defaulted"
 }
 
 func telegramOperatorConfigSettingSourceV0(key string, config serverProjectConfigFileV0) string {
@@ -154,24 +233,8 @@ func telegramOperatorConfigSettingSourceV0(key string, config serverProjectConfi
 		if config.TelegramOperator.Enabled != nil {
 			return configSettingSourceConfigFileV0
 		}
-	case envTelegramOperatorBotLinkRefV0:
-		if configStringPointerHasValueV0(config.TelegramOperator.BotLinkRef) {
-			return configSettingSourceConfigFileV0
-		}
 	case envTelegramOperatorTokenV0:
 		if configStringPointerHasValueV0(config.TelegramOperator.Token) {
-			return configSettingSourceConfigFileV0
-		}
-	case envTelegramOperatorAuthorizedChatRefsV0:
-		if configStringSlicePointerHasValueV0(config.TelegramOperator.AuthorizedChatRefs) {
-			return configSettingSourceConfigFileV0
-		}
-	case envTelegramOperatorRequireConfirmationV0:
-		if config.TelegramOperator.RequireConfirmation != nil {
-			return configSettingSourceConfigFileV0
-		}
-	case envTelegramOperatorNotificationTargetV0:
-		if configStringPointerHasValueV0(config.TelegramOperator.NotificationTargetRef) {
 			return configSettingSourceConfigFileV0
 		}
 	}
