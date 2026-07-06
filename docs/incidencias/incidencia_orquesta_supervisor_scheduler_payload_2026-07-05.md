@@ -52,4 +52,8 @@ Pendiente: levantar Orquesta con auth/cuota recuperada y confirmar que `/api/sta
 
 ## Estado
 
-Abierta. No corregida en esta sesion; documentada para que Claude la cierre con reproduccion y test.
+Cerrada la capa `scheduler_input.payload` (2026-07-06): Claude desplego en el
+servidor el binario `173b69e41c` con la mitigacion y verifico en vivo que el
+error desaparecio de `/api/status`. El supervisor avanza una capa y ahora falla
+por presupuesto de historial de eventos; continua en
+`docs/incidencias/incidencia_orquesta_supervisor_events_budget_2026-07-06.md`.

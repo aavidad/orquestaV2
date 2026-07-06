@@ -3880,3 +3880,59 @@ quedan solo en `orquesta.config.json`/`effective_config` como
 arranque/secretos. La metrica baja de 518 a 514 y el aumento queda justificado
 de forma temporal para que el ratchet no oculte la deuda restante:
 `env_vars_orquesta_allow_increase_to=514`.
+
+## Endpoint Telegram no-LLM propio de Orquesta (2026-07-06)
+
+Se completa un avance pequeno del pendiente
+`BUG-ORQ-20260705-TELEGRAM-NOLLM-ACCEPTED-INVISIBLE`: `cmd/orquesta-server`
+monta `POST /api/v0/operator/telegram/update` cuando
+`telegram_operator.enabled=true`. La ruta procesa updates Telegram sin LLM,
+normaliza `chat.id` a `telegram:<id>`, valida chat autorizado con
+`modulos/orquesta-operator-telegram`, despacha comandos contra los puertos ya
+existentes y expone el bloqueo de configuracion como JSON `blocked` con
+`missing_fields`.
+
+Pruebas:
+- `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestTelegramOperator|TestOperatorDirector|TestOperatorNotificationHermes|TestEnvVarsOrquestaRatchetMEJ106V0'`.
+- `scripts/orquesta_metricas_deuda.sh --json` -> `env_vars_orquesta=514`.
+- `git diff --check`.
+
+No se declara cerrado el bug completo: falta desplegar en remoto, conectar
+poller/webhook/Bot API real y revalidar desde Telegram movil.
+
+## Direccion Claude 2026-07-06: sync, redeploy remoto, supervisor y repliegue a local
+
+Acciones ejecutadas por el director sobre el servidor remoto:
+
+1. Limpieza de disco ordenada por el operador: solo cachés regenerables
+   (cachés Go de agentes 8G, cachés del runtime antiguo `server-latest` 4.7G
+   conservando su `state/` y logs, smokes y workspace de auditoria viejos,
+   `/tmp/orquesta-*` de goals integrados). Disco: 17G -> 33G libres.
+2. Sincronizacion a tres bandas: el merge local de Codex `173b69e41c`
+   (checkpoint remoto G5 + canal operador-Director + Telegram + mitigacion
+   tick-input) quedo en servidor = local = GitHub. Suite de validacion en el
+   servidor: verde salvo el ratchet MEJ-106, que pasa en el arbol sincronizado
+   (la aguja `env_vars_orquesta_allow_increase_to=518` esta en esta bitacora).
+3. Redeploy: binario recompilado desde `173b69e41c` como
+   `orquesta-server-claude` (backup `.885e76b0.bak`). Incidencia de arranque:
+   el estado quedo con dueno root de la tanda del 2026-07-05
+   (`codex_receipt_descriptor_file_store: read_failed`); corregido con chown
+   a berserk. Servidor arranco `startup_ready` con 10 runs adoptados.
+4. Verificacion del supervisor en vivo: el error
+   `director_tick_input_build_invalido: field=scheduler_input.payload`
+   DESAPARECIO (mitigacion verificada). Emerge la capa siguiente:
+   `nucleo_orquestacion_store: events.budget: events_full_history_budget_exceeded`
+   (~1 error tick cada 5s sobre el run T137, historial > 10000 eventos).
+   Incidencia nueva con plan de fix para Codex:
+   `docs/incidencias/incidencia_orquesta_supervisor_events_budget_2026-07-06.md`.
+5. Decision del operador: el servidor no tiene cuota de proveedor (ademas del
+   401 de auth); "hay que trabajar en local hasta entonces". El servidor
+   remoto se detiene limpiamente para no quemar ticks en error; la cola queda
+   congelada sin perdida de estado. Al recuperar cuota/auth: reautenticar
+   `CODEX_HOME=/srv/orquesta-self/codex-home`, redeployar el fix del
+   presupuesto de eventos y drenar la cola.
+
+En paralelo Codex trabaja en local: consolidacion de envs telegram_operator al
+fichero canonico (`74a98263c`, metricas 518 -> 512) y endpoint Telegram no-LLM
+(en curso, sin commitear al escribir esta entrada). El nightly del servidor
+(cron 03:30) sigue activo y no depende del server Orquesta.
