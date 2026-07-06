@@ -167,6 +167,31 @@ func mergeCodexAppServerGoalResultV0(
 		append(receipt.EvidenceRefs, sourceEvidenceRef),
 		marked.EvidenceRefs...,
 	))
+	if codexAppServerGoalResultMarkerLooksPlaceholderV0(marked) {
+		if strings.TrimSpace(receipt.IssueCode) == "" {
+			receipt.IssueCode = codexAppServerGoalResultPlaceholderReasonCodeV0
+		}
+		receipt.EvidenceRefs = compactServerStackStringsV0(append(
+			receipt.EvidenceRefs,
+			"evidence-ref-goal-result-placeholder-in-progress",
+		))
+	}
+}
+
+const codexAppServerGoalResultPlaceholderReasonCodeV0 = "goal_result_placeholder_in_progress"
+
+// Un resultado blocked sin tests requeridos, sin checklist completada y sin
+// missing_refs es un placeholder de progreso del agente, no un blocked real:
+// los watchers deben discriminar por este reason code y nunca por el texto
+// libre del summary (TAREA-D6 / P7).
+func codexAppServerGoalResultMarkerLooksPlaceholderV0(marked codexAppServerGoalResultMarkerV0) bool {
+	if codexAppServerGoalResultExplicitStatusV0(marked) != orquestagoal.GoalStatusBlockedV0 {
+		return false
+	}
+	return len(marked.RequiredTestResults) == 0 &&
+		len(marked.Checklist.CompletedRefs) == 0 &&
+		len(marked.Checklist.MissingRefs) == 0 &&
+		len(marked.MissingRefs) == 0
 }
 
 func mergeCodexAppServerGoalResultChecklistV0(
