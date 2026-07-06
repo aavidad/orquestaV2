@@ -92,3 +92,15 @@ cambio causal no deberia emitir eventos nuevos ilimitadamente.
   `docs/incidencias/incidencia_orquesta_supervisor_scheduler_payload_2026-07-05.md`
 - Guard: `modulos/orquesta-orchestration-core/run_event_reader_v0.go`
 - Inventario: pendiente de alta como BUG de plataforma clase supervisor.
+
+## Actualizacion 2026-07-06: fixes 1 y 2 integrados
+
+- Fix 1 (cargador): `fdbb131c2` — `LoadRunEventsV0` pagina internamente hasta
+  `MaxRunEvents` (implementado por Codex, validado por Claude; suite
+  `orquesta-state-file` verde, incluye test con >1000 eventos).
+- Fix 2 (dedupe): `ec07bf300` — clave semantica en la reconciliacion de
+  agentes vivos del drain (sin ReportID/ticks/summary); re-evaluar sin cambio
+  causal ya no genera assessments/preguntas duplicados. Suite
+  `orquesta-app-codex-stack` completa verde.
+- Pendiente: fix 3 (parking de runs sobredimensionados) y verificacion viva
+  tras redeploy cuando haya cuota/auth en el servidor.

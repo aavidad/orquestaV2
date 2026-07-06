@@ -59,3 +59,16 @@ mismo; NO redeployar hasta corregir esto junto con el fix del events budget.
 - Commit que introduce la regresion: `28c562bccf` (mitigacion payload).
 - Fix relacionado en curso: `docs/incidencias/incidencia_orquesta_supervisor_events_budget_2026-07-06.md`.
 - Bisect: 885e76b021 ok (5/5), 28c562bccf FAIL, 173b69e41c FAIL (5/5).
+
+## Cierre 2026-07-06
+
+Corregido en `3c323763c` por Claude: la compactacion agresiva del carril
+progress solo se aplica cuando el input marshalizado supera 64 KiB
+(`progressLaneCompactionThresholdBytesV0`); con inputs normales el snapshot
+queda intacto y la supervision progresiva vuelve a `wait_external`.
+Tests: `TestExternalProcessAgentBatchExecutorV0StopsOnlyLoopingProcess` verde,
+`TestBuildDirectorSchedulerTickInputV0CompactaCarrilProgressConHistorialLargo`
+verde, y test nuevo
+`TestBuildDirectorSchedulerTickInputV0CarrilProgressPequenoConservaSnapshotCompletoV0`
+fija el contrato. Modulos verdes: tick-input, orchestration-core, scheduler,
+cycle, app-codex-stack, state-file.
