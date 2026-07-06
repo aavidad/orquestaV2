@@ -32,9 +32,8 @@ func TestApplyStoppedAgentReconciliationV0ReproyectaAssessmentDurableStale(t *te
 		reportRef,
 		[]string{"evidence-ref-provider-quota-exhausted"},
 	)
-	original, err := orquestadirector.BuildAgentProgressSupervisionV0(
-		stoppedAgentSupervisionInputV0(request, run, originalObservation),
-	)
+	originalInput := stoppedAgentSupervisionInputV0(request, run, originalObservation)
+	original, err := orquestadirector.BuildAgentProgressSupervisionV0(originalInput)
 	if err != nil {
 		t.Fatalf("BuildAgentProgressSupervisionV0 original: %v", err)
 	}
@@ -52,7 +51,7 @@ func TestApplyStoppedAgentReconciliationV0ReproyectaAssessmentDurableStale(t *te
 	if err != nil {
 		t.Fatalf("LoadRunV0 stale: %v", err)
 	}
-	assessmentBaseRef := "assessment-ref-" + reportRef
+	assessmentBaseRef := liveAgentReconciliationAssessmentBaseRefV0(originalInput.AssessmentRef)
 	if codexStackRefsContainPartV0(stale.AgentAssessments, assessmentBaseRef) {
 		t.Fatalf("la preparacion del test no debe proyectar assessment: %v", stale.AgentAssessments)
 	}
@@ -121,6 +120,12 @@ func TestStoppedAgentSupervisionInputV0ClaveCambiaConPayloadYRepiteIgual(t *test
 		reportRef,
 		[]string{"evidence-ref-provider-quota-exhausted"},
 	))
+	repeatedNewReport := stoppedAgentSupervisionInputV0(request, run, stoppedAgentReconciliationObservationForTestV0(
+		run,
+		agentRef,
+		"agent-progress-report-ref-live-reconciliation-key-000053",
+		[]string{"evidence-ref-provider-quota-exhausted"},
+	))
 	changed := stoppedAgentSupervisionInputV0(request, run, stoppedAgentReconciliationObservationForTestV0(
 		run,
 		agentRef,
@@ -132,13 +137,18 @@ func TestStoppedAgentSupervisionInputV0ClaveCambiaConPayloadYRepiteIgual(t *test
 		first.AssessmentRef != repeated.AssessmentRef {
 		t.Fatalf("payload identico debe conservar ids: first=%+v repeated=%+v", first, repeated)
 	}
+	if first.CommandMeta.IdempotencyKey != repeatedNewReport.CommandMeta.IdempotencyKey ||
+		first.AssessmentRef != repeatedNewReport.AssessmentRef ||
+		first.QuestionID != repeatedNewReport.QuestionID {
+		t.Fatalf("mismo estado con report_id nuevo debe conservar ids: first=%+v repeated_new_report=%+v", first, repeatedNewReport)
+	}
 	if first.CommandMeta.IdempotencyKey == changed.CommandMeta.IdempotencyKey ||
 		first.AssessmentRef == changed.AssessmentRef {
 		t.Fatalf("payload distinto debe cambiar ids: first=%+v changed=%+v", first, changed)
 	}
 	if liveAgentReconciliationAssessmentBaseRefV0(first.AssessmentRef) !=
 		liveAgentReconciliationAssessmentBaseRefV0(changed.AssessmentRef) {
-		t.Fatalf("payload distinto debe conservar base de reporte: first=%s changed=%s", first.AssessmentRef, changed.AssessmentRef)
+		t.Fatalf("payload distinto debe conservar base semantica: first=%s changed=%s", first.AssessmentRef, changed.AssessmentRef)
 	}
 }
 

@@ -129,15 +129,11 @@ func durableAgentWorkAssessedEventByAssessmentBaseV0(
 }
 
 type liveAgentReconciliationAssessmentKeyPayloadV0 struct {
-	ReportID             string   `json:"report_id"`
 	RunID                string   `json:"run_id"`
 	AgentRequestID       string   `json:"agent_request_id"`
 	Status               string   `json:"status"`
 	BudgetStatus         string   `json:"budget_status,omitempty"`
 	BudgetReason         string   `json:"budget_reason,omitempty"`
-	NoProgressTicks      int      `json:"no_progress_ticks,omitempty"`
-	RepeatedActionCount  int      `json:"repeated_action_count,omitempty"`
-	Summary              string   `json:"summary"`
 	EvidenceRefs         []string `json:"evidence_refs,omitempty"`
 	PhaseID              string   `json:"phase_id"`
 	TaskRef              string   `json:"task_ref,omitempty"`
@@ -151,15 +147,11 @@ func liveAgentReconciliationAssessmentKeyV0(
 ) string {
 	report := observation.Report
 	payload := liveAgentReconciliationAssessmentKeyPayloadV0{
-		ReportID:             strings.TrimSpace(report.ReportID),
 		RunID:                strings.TrimSpace(report.RunID),
 		AgentRequestID:       strings.TrimSpace(report.AgentRequestID),
 		Status:               strings.TrimSpace(string(report.Status)),
 		BudgetStatus:         strings.TrimSpace(string(report.BudgetStatus)),
 		BudgetReason:         strings.TrimSpace(report.BudgetReason),
-		NoProgressTicks:      report.NoProgressTicks,
-		RepeatedActionCount:  report.RepeatedActionCount,
-		Summary:              strings.TrimSpace(report.Summary),
 		EvidenceRefs:         compactStringsV0(report.EvidenceRefs),
 		PhaseID:              stoppedAgentObservationPhaseV0(run, observation),
 		TaskRef:              strings.TrimSpace(observation.TaskRef),
@@ -175,6 +167,60 @@ func liveAgentReconciliationAssessmentKeyV0(
 		digest = digest[:24]
 	}
 	return digest
+}
+
+type liveAgentReconciliationAssessmentBasePayloadV0 struct {
+	RunID          string `json:"run_id"`
+	AgentRequestID string `json:"agent_request_id"`
+	Status         string `json:"status"`
+	PhaseID        string `json:"phase_id"`
+	TaskRef        string `json:"task_ref,omitempty"`
+	DeliveryRef    string `json:"delivery_ref,omitempty"`
+}
+
+func liveAgentReconciliationAssessmentBaseV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	observation orquestacionnucleoapp.AgentProgressObservationV0,
+) string {
+	return "assessment-ref-live-agent-reconciliation-" + liveAgentReconciliationSemanticDigestV0(run, observation)
+}
+
+func liveAgentReconciliationQuestionBaseV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	observation orquestacionnucleoapp.AgentProgressObservationV0,
+) string {
+	return "question-ref-live-agent-reconciliation-" + liveAgentReconciliationSemanticDigestV0(run, observation)
+}
+
+func liveAgentReconciliationSemanticDigestV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+	observation orquestacionnucleoapp.AgentProgressObservationV0,
+) string {
+	report := observation.Report
+	payload := liveAgentReconciliationAssessmentBasePayloadV0{
+		RunID:          strings.TrimSpace(report.RunID),
+		AgentRequestID: strings.TrimSpace(report.AgentRequestID),
+		Status:         strings.TrimSpace(string(report.Status)),
+		PhaseID:        stoppedAgentObservationPhaseV0(run, observation),
+		TaskRef:        strings.TrimSpace(observation.TaskRef),
+		DeliveryRef:    strings.TrimSpace(observation.DeliveryRef),
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "unknown"
+	}
+	digest := codexStackDeterministicDigestV0(string(data))
+	if len(digest) > 24 {
+		digest = digest[:24]
+	}
+	return digest
+}
+
+func liveAgentReconciliationCommandSeedV0(
+	assessmentBaseRef string,
+	refSuffix string,
+) string {
+	return codexStackOperationalClosureSafeRefV0(strings.TrimSpace(assessmentBaseRef) + strings.TrimSpace(refSuffix))
 }
 
 func liveAgentReconciliationAssessmentBaseRefV0(

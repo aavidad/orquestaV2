@@ -671,18 +671,20 @@ func stoppedAgentSupervisionInputV0(
 	observation orquestacionnucleoapp.AgentProgressObservationV0,
 ) orquestadirector.AgentProgressSupervisionInputV0 {
 	report := observation.Report
-	reportID := strings.TrimSpace(report.ReportID)
 	key := liveAgentReconciliationAssessmentKeyV0(run, observation)
+	assessmentBaseRef := liveAgentReconciliationAssessmentBaseV0(run, observation)
+	questionBaseRef := liveAgentReconciliationQuestionBaseV0(run, observation)
 	refSuffix := ""
 	if key != "" {
 		refSuffix = "-" + key
 	}
-	assessmentRef := "assessment-ref-" + reportID + refSuffix
+	assessmentRef := assessmentBaseRef + refSuffix
+	commandSeed := liveAgentReconciliationCommandSeedV0(assessmentBaseRef, refSuffix)
 	return orquestadirector.AgentProgressSupervisionInputV0{
 		CommandMeta: orquestacoreworkflow.OrchestrationCommandMetaV0{
-			CommandID:      "cmd-live-agent-reconciliation-" + codexStackOperationalClosureSafeRefV0(reportID+refSuffix),
+			CommandID:      "cmd-live-agent-reconciliation-" + commandSeed,
 			RunID:          strings.TrimSpace(run.RunID),
-			IdempotencyKey: "idem-live-agent-reconciliation-" + codexStackOperationalClosureSafeRefV0(reportID+refSuffix),
+			IdempotencyKey: "idem-live-agent-reconciliation-" + commandSeed,
 			CorrelationID:  strings.TrimSpace(request.CorrelationID),
 			RequestedBy:    "orquesta-app-codex-stack-live-agent-reconciliation",
 			OccurredAt:     firstNonEmptyQueuedSourceV0(strings.TrimSpace(request.OccurredAt), "1970-01-01T00:00:00Z"),
@@ -692,7 +694,7 @@ func stoppedAgentSupervisionInputV0(
 		TaskRef:       strings.TrimSpace(observation.TaskRef),
 		DeliveryRef:   strings.TrimSpace(observation.DeliveryRef),
 		AssessmentRef: firstNonEmptyQueuedSourceV0(strings.TrimSpace(observation.AssessmentRef), assessmentRef),
-		QuestionID:    firstNonEmptyQueuedSourceV0(strings.TrimSpace(observation.QuestionID), "question-ref-"+reportID+refSuffix),
+		QuestionID:    firstNonEmptyQueuedSourceV0(strings.TrimSpace(observation.QuestionID), questionBaseRef+refSuffix),
 	}
 }
 
