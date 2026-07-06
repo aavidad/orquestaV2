@@ -29,6 +29,7 @@ const (
 	RouteRefAppDirectorPreviewV0                = "route-ref-app-director-preview-v0"
 	RouteRefAppDirectorGoalObserveV0            = "route-ref-app-director-goal-observe-v0"
 	RouteRefAppIntakeGuidedTurnV0               = "route-ref-app-intake-guided-turn-v0"
+	RouteRefAppIntakeWizardBotV0                = "route-ref-app-intake-wizard-bot-v0"
 	RouteRefAppChangeV0                         = "route-ref-app-change-prefix-v0"
 	RouteRefAppVCSV0                            = "route-ref-app-vcs-v0"
 	RouteRefDirectorStatsV0                     = "route-ref-director-stats-v0"

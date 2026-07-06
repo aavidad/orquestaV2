@@ -214,6 +214,37 @@ func TestBuildStackV0CableaNuevaAppWizardBotMCPDeterminista(t *testing.T) {
 	}
 }
 
+func TestBuildStackV0ExponeNuevaAppWizardBotHTTPV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	body := `{
+		"session_ref":"session-stack-wizard-bot-http-001",
+		"locale":"es-ES",
+		"user_text":"que es CalDAV?",
+		"session":{
+			"schema_version":"web_nueva_app_intake_session.v0",
+			"session_id":"session-stack-wizard-bot-http-001",
+			"session_ref":"session-stack-wizard-bot-http-001",
+			"form":{
+				"request_id":"request-ref-stack-wizard-bot-http-001",
+				"locale":"es-ES",
+				"objetivo":"quiero una app para una agenda"
+			}
+		}
+	}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, orquestahttpgateway.RouteAppIntakeWizardBotV0, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	stack.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK ||
+		!strings.Contains(rec.Body.String(), `"schema_version":"web_nueva_app_wizard_bot_response.v0"`) ||
+		!strings.Contains(rec.Body.String(), `"schema_version":"web_nueva_app_wizard_bot_reply.v0"`) ||
+		!strings.Contains(rec.Body.String(), "session-stack-wizard-bot-http-001") {
+		t.Fatalf("wizard bot http status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 type fakeCodexStackNuevaAppIntakeAssistantV0 struct{}
 
 func (fakeCodexStackNuevaAppIntakeAssistantV0) BuildNuevaAppIntakeGuidedTurnV0(

@@ -52,6 +52,13 @@ func TestNewAppGatewayMuxV0RegistersConfiguredRoutes(t *testing.T) {
 			},
 		},
 		{
+			name:  "app intake wizard bot",
+			route: RouteAppIntakeWizardBotV0,
+			handlers: RouteHandlersV0{
+				AppIntakeWizardBot: markerHandler("app-intake-wizard-bot"),
+			},
+		},
+		{
 			name:  "app change",
 			route: "/api/v0/apps/app-ref-001/changes",
 			handlers: RouteHandlersV0{
@@ -252,6 +259,7 @@ func TestNewAppGatewayMuxV0PrefiereRutasExactasAntesDeCambioDinamico(t *testing.
 		AppDirectorPreview:     markerHandler("app-director-preview"),
 		AppDirectorGoalObserve: markerHandler("app-director-goal-observe"),
 		AppIntakeGuidedTurn:    markerHandler("app-intake-guided-turn"),
+		AppIntakeWizardBot:     markerHandler("app-intake-wizard-bot"),
 		AppChange:              markerHandler("app-change"),
 	})
 
@@ -264,6 +272,7 @@ func TestNewAppGatewayMuxV0PrefiereRutasExactasAntesDeCambioDinamico(t *testing.
 		{RouteAppDirectorPreviewV0, "app-director-preview"},
 		{RouteAppDirectorGoalObserveV0, "app-director-goal-observe"},
 		{RouteAppIntakeGuidedTurnV0, "app-intake-guided-turn"},
+		{RouteAppIntakeWizardBotV0, "app-intake-wizard-bot"},
 		{"/api/v0/apps/app-ref-001/changes", "app-change"},
 	} {
 		response := httptest.NewRecorder()

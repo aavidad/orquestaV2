@@ -18,6 +18,7 @@ const (
 	RouteAppDirectorPreviewV0                = "/api/v0/apps/director/preview"
 	RouteAppDirectorGoalObserveV0            = "/api/v0/apps/director/goal/observe"
 	RouteAppIntakeGuidedTurnV0               = "/api/v0/apps/intake/guided-turn"
+	RouteAppIntakeWizardBotV0                = "/api/v0/apps/intake/wizard-bot"
 	RouteAppChangeV0                         = "/api/v0/apps/"
 	RouteDirectorStatsV0                     = "/api/v0/director/stats"
 	RouteRunControlV0                        = "/api/v0/runs/control"
@@ -64,6 +65,7 @@ type RouteHandlersV0 struct {
 	AppDirectorPreview                http.Handler
 	AppDirectorGoalObserve            http.Handler
 	AppIntakeGuidedTurn               http.Handler
+	AppIntakeWizardBot                http.Handler
 	AppChange                         http.Handler
 	DirectorStats                     http.Handler
 	RunControl                        http.Handler
@@ -141,6 +143,7 @@ func gatewayRouteRegistrationsV0(handlers RouteHandlersV0) []gatewayRouteRegistr
 		{ref: RouteRefAppDirectorPreviewV0, route: RouteAppDirectorPreviewV0, handler: handlers.AppDirectorPreview},
 		{ref: RouteRefAppDirectorGoalObserveV0, route: RouteAppDirectorGoalObserveV0, handler: handlers.AppDirectorGoalObserve},
 		{ref: RouteRefAppIntakeGuidedTurnV0, route: RouteAppIntakeGuidedTurnV0, handler: handlers.AppIntakeGuidedTurn},
+		{ref: RouteRefAppIntakeWizardBotV0, route: RouteAppIntakeWizardBotV0, handler: handlers.AppIntakeWizardBot},
 		{ref: RouteRefAppChangeV0, route: RouteAppChangeV0, handler: handlers.AppChange},
 		{ref: RouteRefDirectorStatsV0, route: RouteDirectorStatsV0, handler: handlers.DirectorStats},
 		{ref: RouteRefRunControlV0, route: RouteRunControlV0, handler: handlers.RunControl},

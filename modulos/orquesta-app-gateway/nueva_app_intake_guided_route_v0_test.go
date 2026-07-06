@@ -45,6 +45,39 @@ func TestNewHTTPHandlerV0ExponeNuevaAppIntakeGuidedTurnV0(t *testing.T) {
 	}
 }
 
+func TestNewHTTPHandlerV0ExponeNuevaAppWizardBotV0(t *testing.T) {
+	handler := NewHTTPHandlerV0(ConfigV0{Timeout: time.Second})
+	session := orquestaweb.NewWebNuevaAppIntakeSessionV0("session-app-gateway-wizard-bot", "es-ES", "Agenda", "quiero una app para agenda")
+	var body bytes.Buffer
+	if err := json.NewEncoder(&body).Encode(orquestaweb.WebNuevaAppWizardBotRequestV0{
+		SessionRef: session.SessionRef,
+		Locale:     "es-ES",
+		UserText:   "que es CalDAV?",
+		Session:    &session,
+	}); err != nil {
+		t.Fatalf("encode request: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, orquestahttpgateway.RouteAppIntakeWizardBotV0, &body)
+	req.Header.Set("Content-Type", "application/json")
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var out orquestaweb.WebNuevaAppWizardBotResponseV0
+	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if out.SchemaVersion != orquestaweb.WebNuevaAppWizardBotResponseSchemaV0 ||
+		out.Reply.SchemaVersion != orquestaweb.WizardBotReplySchemaV0 ||
+		out.Session.SessionRef != session.SessionRef {
+		t.Fatalf("wizard bot response=%+v", out)
+	}
+}
+
 func TestNewHTTPHandlerV0InyectaNuevaAppIntakeAssistantV0(t *testing.T) {
 	handler := NewHTTPHandlerV0(ConfigV0{
 		Timeout:            time.Second,

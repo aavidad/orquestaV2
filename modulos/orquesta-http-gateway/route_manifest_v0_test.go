@@ -18,6 +18,7 @@ func TestPublicRouteManifestV0DeclaraInventarioYPrecedenciaV0(t *testing.T) {
 		RouteRefAppDirectorPreviewV0,
 		RouteRefAppDirectorGoalObserveV0,
 		RouteRefAppIntakeGuidedTurnV0,
+		RouteRefAppIntakeWizardBotV0,
 		RouteRefAutoprogrammingObserveGoalV0,
 		RouteRefAutoprogrammingObserveActiveGoalsV0,
 		RouteRefAppVCSV0,
@@ -31,7 +32,7 @@ func TestPublicRouteManifestV0DeclaraInventarioYPrecedenciaV0(t *testing.T) {
 	if byRef[RouteRefAppChangeV0].Kind != RouteManifestKindPrefixV0 {
 		t.Fatalf("app-change kind=%s", byRef[RouteRefAppChangeV0].Kind)
 	}
-	for _, ref := range []string{RouteRefAppSpecV0, RouteRefAppDirectorV0, RouteRefAppDirectorPreviewV0, RouteRefAppDirectorGoalObserveV0, RouteRefAppIntakeGuidedTurnV0, RouteRefAppVCSV0} {
+	for _, ref := range []string{RouteRefAppSpecV0, RouteRefAppDirectorV0, RouteRefAppDirectorPreviewV0, RouteRefAppDirectorGoalObserveV0, RouteRefAppIntakeGuidedTurnV0, RouteRefAppIntakeWizardBotV0, RouteRefAppVCSV0} {
 		if !containsRouteManifestStringV0(byRef[ref].ShadowsPrefixRefs, RouteRefAppChangeV0) {
 			t.Fatalf("%s no declara shadow de %s", ref, RouteRefAppChangeV0)
 		}

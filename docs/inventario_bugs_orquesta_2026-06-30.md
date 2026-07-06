@@ -2837,5 +2837,21 @@ y conserva modo determinista sin proveedor. Evidencia:
 `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPNuevaAppWizardBot|TestMCPTransportV0(NuevaAppWizardBot|ExponeOperaciones)'`,
 `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestBuildStackV0(CableaNuevaAppWizardBotMCPDeterminista|ExponeBindingsMCPNativos)'`
 y `go test -count=1 ./cmd/orquesta-server -run 'TestWizardBot|TestBuildStack|TestServerCodexGoal'`.
-Residual: no se implementa aqui panel chat web visible; queda como mejora UI
-separada.
+Residual anterior: no se implementaba aqui panel chat web visible. Queda
+cerrado posteriormente en `BUG-ORQ-20260706-WIZARD-WEB-CHAT-PANEL`.
+
+BUG nuevo `BUG-ORQ-20260706-WIZARD-WEB-CHAT-PANEL` (cerrado):
+El bot del wizard ya existia como motor web y como tool MCP
+`orquesta.nueva_app.wizard.bot.v0`, pero `/nueva-app` no exponia un panel de
+chat visible ni una ruta HTTP propia para navegador. Esto dejaba incompleto el
+contrato conversacional: el usuario humano solo podia usar botones/formulario
+guiado, mientras clientes MCP si podian hablar con el bot. Cierre aplicado:
+`modulos/orquesta-web` anade endpoint `web_nueva_app_wizard_bot_response.v0`,
+panel `data-wizard-bot` en la UI, JS que conserva `session` y aplica
+`turn_result`, i18n es/en y ratchet de render; `modulos/orquesta-http-gateway`
+registra `POST /api/v0/apps/intake/wizard-bot` como ruta exacta de lectura bajo
+`/api/v0/apps/`; `modulos/orquesta-app-gateway` y
+`modulos/orquesta-app-codex-stack` cablean el puerto LLM opcional existente al
+endpoint HTTP real. Evidencia:
+`go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack -run 'TestNuevaAppWizardBotHTTPHandler|TestNuevaAppHTMLHandlerV0GET|TestWizardBot|TestNuevaAppHTMLHelpKeysV0CubrenClavesUsadasEnPlantilla|TestNewAppGatewayMux|TestPublicRouteMutability|TestPublicRouteManifest|TestGatewayRouteRegistrations|TestNewHTTPHandlerV0ExponeNuevaApp(IntakeGuidedTurn|WizardBot)|TestNewHTTPHandlerV0InyectaNuevaAppIntakeAssistant|TestNewHTTPHandlerV0PropagaFallback|TestBuildStackV0(CableaNuevaAppWizardBotMCPDeterminista|ExponeNuevaAppWizardBotHTTP|ExponeBindingsMCPNativos)'`
+y `git diff --check`.

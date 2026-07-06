@@ -4037,5 +4037,30 @@ Pruebas verdes:
 - `go test -count=1 ./cmd/orquesta-server -run 'TestWizardBot|TestBuildStack|TestServerCodexGoal'`
 - Verificacion conjunta: `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack -run 'Test.*Wizard.*MCP|TestMCPNuevaAppWizardBot|TestMCPTransportV0NuevaAppWizardBot|TestBuildStackV0ExponeBindingsMCPNativos'`
 
-Residual vivo para siguiente frente: panel chat web visible. No se toca en este
-corte para mantener write-set de MCP/stack/servidor.
+Residual anterior: panel chat web visible. Queda cerrado por Codex en el corte
+siguiente `BUG-ORQ-20260706-WIZARD-WEB-CHAT-PANEL`.
+
+## Codex local 2026-07-06: panel chat web del bot del wizard
+
+Se cierra la brecha UI dejada tras el tool MCP del bot. El objetivo fue exponer
+el mismo bot conversacional en `/nueva-app` sin meter logica de dominio en el
+gateway ni duplicar el motor:
+
+- `modulos/orquesta-web/nueva_app_wizard_bot_endpoint_v0.go`: endpoint HTTP
+  fino para `POST /api/v0/apps/intake/wizard-bot`, devuelve `reply` y
+  `session`, funciona sin proveedor LLM y rechaza metodo/content-type invalido.
+- `modulos/orquesta-web/nueva_app_html_render_v0.go`: panel `data-wizard-bot`,
+  log accesible, input, envio por fetch, conservacion de `guidedSession`,
+  aplicacion del formulario y render de `turn_result`.
+- `modulos/orquesta-web/nueva_app_i18n_*`: textos es/en y ayuda del boton sin
+  placeholders ni tooltips vacios.
+- `modulos/orquesta-http-gateway`: ruta exacta
+  `/api/v0/apps/intake/wizard-bot`, manifiesto y guard de mutabilidad como
+  lectura aunque cuelgue bajo `/api/v0/apps/`.
+- `modulos/orquesta-app-gateway` y `modulos/orquesta-app-codex-stack`: cableado
+  del asistente LLM opcional existente hasta el endpoint HTTP real.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack -run 'TestNuevaAppWizardBotHTTPHandler|TestNuevaAppHTMLHandlerV0GET|TestWizardBot|TestNuevaAppHTMLHelpKeysV0CubrenClavesUsadasEnPlantilla|TestNewAppGatewayMux|TestPublicRouteMutability|TestPublicRouteManifest|TestGatewayRouteRegistrations|TestNewHTTPHandlerV0ExponeNuevaApp(IntakeGuidedTurn|WizardBot)|TestNewHTTPHandlerV0InyectaNuevaAppIntakeAssistant|TestNewHTTPHandlerV0PropagaFallback|TestBuildStackV0(CableaNuevaAppWizardBotMCPDeterminista|ExponeNuevaAppWizardBotHTTP|ExponeBindingsMCPNativos)'`
+- `git diff --check`

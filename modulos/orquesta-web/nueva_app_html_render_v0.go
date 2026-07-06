@@ -326,6 +326,7 @@ var nuevaAppHTMLHelpKeysV0 = []string{
 	"guided.analyze",
 	"guided.review",
 	"guided.answer",
+	"wizard.bot_send",
 	"guided.mobile_both",
 	"guided.mobile_ios",
 	"guided.mobile_android",
@@ -856,6 +857,10 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     .guided-actions{display:flex;gap:8px;flex-wrap:wrap}
     .guided-actions button{background:#e8efe8;color:var(--ink);border:1px solid var(--line)}
     .guided-actions button.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+    .wizard-bot{display:grid;gap:8px;border:1px solid #cfe0d1;border-radius:12px;background:#fff;padding:12px}
+    .wizard-bot-log{display:grid;gap:6px;min-height:38px}
+    .wizard-bot-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end}
+    .wizard-bot-row textarea{min-height:54px}
     .wizard-rich{display:grid;gap:12px;border:1px solid #cfe0d1;border-radius:12px;background:#fff;padding:12px}
     .wizard-rich-grid{display:grid;gap:10px}
     .wizard-question{display:grid;gap:8px;border:1px solid var(--line);border-radius:10px;background:#f9fcf8;padding:10px}
@@ -948,7 +953,9 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       data-guided-msg-answer="{{index .HTML "nueva_app.wizard.guided_msg_answer"}}"
       data-guided-pending-intro="{{index .HTML "nueva_app.wizard.guided_pending_intro"}}"
       data-guided-ready-state="{{index .HTML "nueva_app.wizard.guided_ready_state"}}"
-      data-guided-incomplete-launch="{{index .HTML "nueva_app.wizard.guided_incomplete_launch"}}">
+      data-guided-incomplete-launch="{{index .HTML "nueva_app.wizard.guided_incomplete_launch"}}"
+      data-wizard-bot-error="{{index .HTML "nueva_app.wizard.bot_error"}}"
+      data-wizard-bot-empty="{{index .HTML "nueva_app.wizard.bot_empty"}}">
       <div class="steps" role="tablist" aria-label="{{index .HTML "nueva_app.wizard.steps_label"}}">
         <button class="step-tab active" type="button" role="tab" id="nueva-app-step-tab-0" aria-controls="nueva-app-step-panel-0" aria-selected="true" data-goto-step="0" data-help="{{index .Help "step.idea"}}">{{index .HTML "nueva_app.wizard.step.idea"}}</button>
         <button class="step-tab" type="button" role="tab" id="nueva-app-step-tab-1" aria-controls="nueva-app-step-panel-1" aria-selected="false" data-goto-step="1" data-help="{{index .Help "step.tipo"}}">{{index .HTML "nueva_app.wizard.step.tipo"}}</button>
@@ -966,6 +973,14 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
             <div class="guided-actions"><button class="primary" type="button" data-guided-action="analyze" data-help="{{index .Help "guided.analyze"}}">{{index .HTML "nueva_app.wizard.guided_analyze"}}</button><button type="button" data-guided-action="review" data-help="{{index .Help "guided.review"}}">{{index .HTML "nueva_app.wizard.guided_review"}}</button></div>
             <div class="guided-thread" id="guided-thread" aria-live="polite"></div>
             {{$locale := .Page.Locale}}
+            <div class="wizard-bot" data-wizard-bot>
+              <p class="expert-row-title">{{index .HTML "nueva_app.wizard.bot_title"}}</p>
+              <div class="wizard-bot-log" id="wizard-bot-log" aria-live="polite"></div>
+              <div class="wizard-bot-row">
+                <textarea id="wizard-bot-input" placeholder="{{index .HTML "nueva_app.wizard.bot_placeholder"}}"></textarea>
+                <button type="button" data-wizard-bot-send data-help="{{index .Help "wizard.bot_send"}}">{{index .HTML "nueva_app.wizard.bot_send"}}</button>
+              </div>
+            </div>
             <div class="wizard-rich" data-wizard-rich>
               <p class="expert-row-title">{{i18nText $locale "nueva_app.wizard.rich.title"}}</p>
               <button class="secondary" type="button" data-wizard-explain-all>{{i18nText $locale "nueva_app.wizard.rich.explain_all"}}</button>
@@ -1875,6 +1890,22 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
       node.textContent=message;
       thread.appendChild(node);
     }
+    function wizardBotLog(message){
+      const thread=document.getElementById('wizard-bot-log');
+      if(!thread||!message)return;
+      const node=document.createElement('div');
+      node.className='guided-message';
+      node.textContent=message;
+      thread.appendChild(node);
+    }
+    function wizardBotSessionRef(){
+      if(guidedSession&&(guidedSession.session_ref||guidedSession.session_id)){
+        return String(guidedSession.session_ref||guidedSession.session_id||'');
+      }
+      const requestID=val('request_id');
+      if(requestID)return requestID;
+      return 'web-wizard-bot-'+Date.now();
+    }
     function guidedActiveQuestionField(){
       if(guidedSession&&Array.isArray(guidedSession.pending_questions)&&guidedSession.pending_questions.length){
         return String(guidedSession.pending_questions[0]||'');
@@ -1993,6 +2024,46 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
         if(out&&out.session){guidedSession=out.session;updateGuidedQuestion();}
         return out;
       }catch(_){return null;}
+    }
+    async function ensureWizardBotSession(){
+      if(guidedSession)return true;
+      const need=val('objetivo')||val('descripcion')||String((document.getElementById('guided-need')||{}).value||'').trim();
+      if(!need)return true;
+      const out=await requestGuided({locale:val('locale')||'es',session_id:wizardBotSessionRef(),need:need});
+      if(out&&out.session&&out.session.form){
+        guidedSession=out.session;
+        applyGuidedForm(out.session.form);
+        updateGuidedQuestion();
+        renderSummary();
+      }
+      return true;
+    }
+    async function submitWizardBot(){
+      const input=document.getElementById('wizard-bot-input');
+      const text=input?String(input.value||'').trim():'';
+      if(!text){wizardBotLog(wizard.dataset.wizardBotEmpty);return;}
+      await ensureWizardBotSession();
+      try{
+        const body={
+          session_ref:wizardBotSessionRef(),
+          user_text:text,
+          locale:val('locale')||'es'
+        };
+        if(guidedSession)body.session=guidedSession;
+        const response=await fetch('/api/v0/apps/intake/wizard-bot',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body)});
+        if(!response.ok){wizardBotLog(wizard.dataset.wizardBotError);return;}
+        const out=await response.json();
+        if(out&&out.session){
+          guidedSession=out.session;
+          if(out.session.form)applyGuidedForm(out.session.form);
+          updateGuidedQuestion();
+          document.getElementById('guided-followups').hidden=false;
+        }
+        if(out&&out.reply&&out.reply.turn_result)renderRichWizard(out.reply.turn_result);
+        wizardBotLog(out&&out.reply&&out.reply.say?out.reply.say:wizard.dataset.guidedMsgAnswer);
+        input.value='';
+        renderSummary();
+      }catch(_){wizardBotLog(wizard.dataset.wizardBotError);}
     }
     async function applyServerGuided(payload,message){
       const out=await requestGuided(Object.assign({locale:val('locale')||'es'},payload||{}));
@@ -2166,6 +2237,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-guided-action]');if(target)guidedAction(target.dataset.guidedAction);});}
     if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-guided-answer]');if(target)submitGuidedAnswer();});}
     if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-wizard-option-value]');if(target)chooseWizardOption(target.dataset.wizardQuestionRef,target.dataset.wizardOptionValue);});}
+    if(guided){guided.addEventListener('click',event=>{const target=event.target.closest('[data-wizard-bot-send]');if(target)submitWizardBot();});}
     wizard.querySelectorAll('[data-wizard-explain-all]').forEach(node=>node.addEventListener('click',()=>{glossaryExpanded=true;if(guidedSession)guidedSession.glossary_expanded=true;wizard.querySelectorAll('.wizard-help').forEach(help=>{help.open=true;});}));
     wizard.querySelectorAll('[data-apply-connectors]').forEach(node=>node.addEventListener('click',applySelectedConnectors));
     wizard.querySelectorAll('[data-preset]').forEach(node=>node.addEventListener('click',()=>preset(node.dataset.preset)));
