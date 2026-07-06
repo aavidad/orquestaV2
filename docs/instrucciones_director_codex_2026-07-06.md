@@ -64,6 +64,16 @@ Antes de tocar, correr orchestration-core en verde como linea base (regla P5).
 
 ## TAREA-D6 (P7): reason codes para estados intermedios
 
+NOTA de Claude (2026-07-06, tras intento acotado): las redacciones libres las
+escribe el AGENTE en su result JSON; el fix real esta en tres puntos: (1) el
+paquete goal-first debe instruir/exigir `reason_code` de catalogo en
+placeholders; (2) el normalizador de resultados en
+`orquesta-runtime-codex-appserver` (codex_goal_app_server_result_file_v0.go)
+debe proyectar reason_code derivado de los markers (checkpoint_started.txt
+presente + sin resultado final => `checkpoint_started`) ignorando el summary
+libre; (3) observe/status discriminan SOLO por status+reason_code. La ruta de
+thread status ya usa issue codes: replicar ese patron.
+
 Sustituir las redacciones libres de los placeholders de progreso
 ("started", "checkpoint_started; implementacion pendiente",
 "in_progress_checkpoint_materializado"...) por un reason code de catalogo

@@ -4263,3 +4263,21 @@ mitad al agotar cuota: 4 ficheros nuevos sin compilar. Claude la termino:
 Con esto D1, D2 y D3 de la cola del 2026-07-06 quedan cerradas. Siguientes
 para Codex: D4 (emisores sin dedupe), D5 (gate comun de compactacion), D6
 (reason codes de placeholders), D7 (runbook de arranque).
+
+## TAREAS D5 y D7 completadas por Claude (2026-07-06)
+
+- D5 (`f83014450`): gate comun de compactacion en las lanes delivery,
+  phase-artifact y review-gate — solo recortan snapshot si el input supera
+  `SchedulerTickSnapshotBudgetBytesV0`. Tests de compactacion actualizados a
+  fixtures sobre presupuesto + tests espejo de conservacion por lane. Suites
+  verdes: tick-input, orchestration-core, director-cycle, director-scheduler,
+  app-codex-stack, cmd/orquesta-server (regla P5 aplicada).
+- D7 (`cf6632f71`): `scripts/orquesta_server_ctl.sh` — arranque/parada/status
+  con usuario de servicio verificado (rechaza root: `wrong_service_user`),
+  deteccion previa de estado con dueno equivocado
+  (`state_permission_denied`), perfil de envs canonico y SIGINT cooperativo
+  verificado.
+
+Quedan para Codex: D4 (auditoria de emisores sin dedupe semantico) y D6
+(reason codes de placeholders — ver nota anadida a la tarea con el analisis
+de los 3 puntos de fix). Estado cola: D1-D3, D5, D7 cerradas.
