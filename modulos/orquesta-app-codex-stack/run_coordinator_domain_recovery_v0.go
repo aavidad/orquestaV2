@@ -38,6 +38,12 @@ func (stack StackV0) recoverQueuedControlledDomainWorkArtifactsV0(
 				}
 				continue
 			}
+			if codexSupervisorRunEventsBudgetExceededV0(err) {
+				if markErr := stack.markQueuedCandidateRunEventsOversizedV0(ctx, command, candidate); markErr != nil {
+					return markErr
+				}
+				continue
+			}
 			return err
 		}
 		if !ok {
@@ -58,6 +64,12 @@ func (stack StackV0) recoverQueuedControlledDomainWorkArtifactsV0(
 		); err != nil {
 			if codexSupervisorRecoverableOperationalPlanStateErrorV0(err) {
 				if markErr := stack.markQueuedCandidateOperationalPlanStateNeedsReplanV0(ctx, command, candidate); markErr != nil {
+					return markErr
+				}
+				continue
+			}
+			if codexSupervisorRunEventsBudgetExceededV0(err) {
+				if markErr := stack.markQueuedCandidateRunEventsOversizedV0(ctx, command, candidate); markErr != nil {
 					return markErr
 				}
 				continue

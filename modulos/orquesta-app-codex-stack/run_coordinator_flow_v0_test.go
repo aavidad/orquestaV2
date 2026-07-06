@@ -56,6 +56,127 @@ func TestCodexStackV0RunGlobalTickEjecutaRunConMasPrioridadV0(t *testing.T) {
 	}
 }
 
+func TestCodexStackV0RunGlobalTickAparcaRunSobredimensionadoYContinuaColaV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	delegate, _ := stack.Stores.EventSink.(orquestacionnucleoapp.RunEventReaderPortV0)
+	oversizedRunRef := "run-ref-events-budget-oversized-001"
+	oversizedTaskRef := "task-ref-events-budget-oversized-001"
+	agentRef := "agent-ref-events-budget-oversized-001"
+	stack.Ports.EventReader = runEventBudgetErrorReaderForTestV0{
+		delegate:   delegate,
+		failRunRef: oversizedRunRef,
+	}
+	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(oversizedRunRef, oversizedTaskRef)
+	run.Agents = []string{agentRef}
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0 oversized: %v", err)
+	}
+	if err := stack.Ports.DirectorTaskStore.SaveWorkflowTaskV0(
+		context.Background(),
+		stackDeliveredAutoprogrammingTaskForTestV0(oversizedRunRef, oversizedTaskRef),
+	); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0 oversized: %v", err)
+	}
+	setRunQueueCandidateForTestV0(
+		t,
+		stack,
+		oversizedRunRef,
+		orquestarunqueue.RunStatusReadyV0,
+		90,
+		time.Date(2026, 7, 6, 9, 0, 0, 0, time.UTC),
+	)
+	next := postDirectorAPIWithNameV0(t, stack, "app-after-oversized", "Agenda Tras Oversized")
+	setStackRunPriorityForTestV0(t, stack, next.RunRef, next.AppSpec.Slug, 10)
+
+	command := globalTickCommandForTestV0()
+	command.MaxRuns = 2
+	command.OccurredAt = time.Date(2026, 7, 6, 9, 5, 0, 0, time.UTC)
+	result, err := stack.RunGlobalTickV0(context.Background(), command)
+	if err != nil {
+		t.Fatalf("RunGlobalTickV0: %v result=%+v", err, result)
+	}
+	if got := executionRefsForStackCoordinatorTestV0(result); !reflect.DeepEqual(got, []string{oversizedRunRef, next.RunRef}) {
+		t.Fatalf("executions got %#v result=%+v", got, result)
+	}
+	first := result.Executions[0]
+	if first.Outcome != codexSupervisorRunEventsOversizedOutcomeV0 ||
+		first.QueueStatus != orquestarunqueue.RunStatusStoppedV0 ||
+		!codexStackDrainDiagnosticsContainKindStatusForTestV0(
+			first.Diagnostics,
+			"run_events_budget_exceeded",
+			codexSupervisorRunEventsOversizedOutcomeV0,
+		) ||
+		!containsStringV0(first.EvidenceRefs, "evidence-ref-codex-supervisor-run-oversized-parked") {
+		t.Fatalf("primera ejecucion oversized invalida=%+v", first)
+	}
+	candidate := runQueueCandidateForStackTestV0(t, stack, oversizedRunRef)
+	if candidate.Status != orquestarunqueue.RunStatusStoppedV0 ||
+		!containsStringV0(candidate.EvidenceRefs, "evidence-ref-codex-supervisor-run-oversized-parked") {
+		t.Fatalf("candidate oversized no aparcado=%+v", candidate)
+	}
+	state, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: oversizedRunRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0 oversized: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusStoppedV0 ||
+		state.Meta.Reason != "run_oversized_events_budget" ||
+		!containsStringV0(state.EvidenceRefs, "evidence-ref-codex-supervisor-run-oversized-parked") {
+		t.Fatalf("run-control oversized no aparcado=%+v", state)
+	}
+}
+
+func TestCodexStackV0RunSobredimensionadoAparcadoNoSeReanudaEnPreparacionV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	runRef := "run-ref-events-budget-parked-stable-001"
+	taskRef := "task-ref-events-budget-parked-stable-001"
+	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, taskRef)
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	if err := stack.Ports.DirectorTaskStore.SaveWorkflowTaskV0(
+		context.Background(),
+		stackDeliveredAutoprogrammingTaskForTestV0(runRef, taskRef),
+	); err != nil {
+		t.Fatalf("SaveWorkflowTaskV0: %v", err)
+	}
+	candidate := orquestarunqueue.RunSchedulingCandidateV0{
+		RunRef:        runRef,
+		AppRef:        "project-ref-orquesta-server",
+		Status:        orquestarunqueue.RunStatusReadyV0,
+		PriorityScore: 80,
+		UpdatedAt:     time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC),
+		EvidenceRefs:  []string{"evidence-ref-test-parkable-candidate"},
+	}
+	command := globalTickCommandForTestV0()
+	command.OccurredAt = time.Date(2026, 7, 6, 10, 5, 0, 0, time.UTC)
+	if err := stack.markQueuedCandidateRunEventsOversizedV0(context.Background(), command, candidate); err != nil {
+		t.Fatalf("markQueuedCandidateRunEventsOversizedV0: %v", err)
+	}
+	if err := stack.recoverQueuedStoppedActiveRunsV0(context.Background(), command); err != nil {
+		t.Fatalf("recoverQueuedStoppedActiveRunsV0: %v", err)
+	}
+	got := runQueueCandidateForStackTestV0(t, stack, runRef)
+	if got.Status != orquestarunqueue.RunStatusStoppedV0 ||
+		got.RescueReason != "run_oversized_events_budget" ||
+		!containsStringV0(got.EvidenceRefs, "evidence-ref-codex-supervisor-run-oversized-parked") {
+		t.Fatalf("run oversized reactivado o sin evidencia=%+v", got)
+	}
+	state, err := stack.Stores.RunControl.ReadRunControlStateV0(
+		context.Background(),
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if state.Status != orquestaruncontrol.RunControlStatusStoppedV0 ||
+		state.Meta.Reason != "run_oversized_events_budget" {
+		t.Fatalf("run-control no estable=%+v", state)
+	}
+}
+
 func TestCodexStackV0RunGlobalTickResidenteNoBloqueaEnExternalWaiterV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	stack.Ports.ExternalWaiter = failingCoordinatorExternalWaiterV0{t: t}
@@ -2038,6 +2159,53 @@ func setRunQueueCandidateForTestV0(
 	}); err != nil {
 		t.Fatalf("SetRunPriorityV0 %s: %v", runRef, err)
 	}
+}
+
+type runEventBudgetErrorReaderForTestV0 struct {
+	delegate   orquestacionnucleoapp.RunEventReaderPortV0
+	failRunRef string
+}
+
+func (reader runEventBudgetErrorReaderForTestV0) LoadRunEventsV0(
+	ctx context.Context,
+	runRef string,
+) ([]orquestacoreworkflow.OrchestrationEventV0, error) {
+	if runRef == reader.failRunRef {
+		return nil, orquestacionnucleoapp.ErrorV0{
+			Code:    orquestacionnucleoapp.ErrNucleoOrquestacionStoreV0,
+			Field:   "events.budget",
+			Message: "events_full_history_budget_exceeded",
+		}
+	}
+	if reader.delegate == nil {
+		return nil, nil
+	}
+	return reader.delegate.LoadRunEventsV0(ctx, runRef)
+}
+
+func runQueueCandidateForStackTestV0(
+	t *testing.T,
+	stack StackV0,
+	runRef string,
+) orquestarunqueue.RunSchedulingCandidateV0 {
+	t.Helper()
+	candidates, err := stack.Stores.RunQueue.ListRunSchedulingCandidatesV0(
+		context.Background(),
+		orquestarunqueue.RunQueueReadRequestV0{
+			QueueRef:             DefaultRunQueueRefV0,
+			IncludeNonExecutable: true,
+		},
+	)
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	for _, candidate := range candidates {
+		if candidate.RunRef == runRef {
+			return candidate
+		}
+	}
+	t.Fatalf("candidate %s no encontrado en %+v", runRef, candidates)
+	return orquestarunqueue.RunSchedulingCandidateV0{}
 }
 
 func markRunControlStoppedAutoResumeForTestV0(

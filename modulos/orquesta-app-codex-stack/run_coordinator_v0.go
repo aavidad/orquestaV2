@@ -126,6 +126,12 @@ func (drainer stackRunDrainerV0) DrainRunV0(
 		if codexSupervisorRecoverableOperationalPlanStateErrorV0(err) {
 			return stackDrainOperationalPlanStateNeedsReplanCoordinatorResultV0(request, result, err), nil
 		}
+		if codexSupervisorRunEventsBudgetExceededV0(err) {
+			if markErr := stack.markRunEventsOversizedRunControlV0(ctx, request.RunRef); markErr != nil {
+				return stackDrainCoordinatorResultV0(request, result, "error", "", markErr.Error()), markErr
+			}
+			return stackDrainRunEventsOversizedCoordinatorResultV0(request, result, err), nil
+		}
 		return stackDrainCoordinatorResultV0(request, result, "error", "", err.Error()), err
 	}
 	result, err := stack.DrainRunV0(ctx, drainRequest)
@@ -133,10 +139,22 @@ func (drainer stackRunDrainerV0) DrainRunV0(
 		if codexSupervisorRecoverableOperationalPlanStateErrorV0(err) {
 			return stackDrainOperationalPlanStateNeedsReplanCoordinatorResultV0(request, result, err), nil
 		}
+		if codexSupervisorRunEventsBudgetExceededV0(err) {
+			if markErr := stack.markRunEventsOversizedRunControlV0(ctx, request.RunRef); markErr != nil {
+				return stackDrainCoordinatorResultV0(request, result, "error", "", markErr.Error()), markErr
+			}
+			return stackDrainRunEventsOversizedCoordinatorResultV0(request, result, err), nil
+		}
 		return stackDrainCoordinatorResultV0(request, result, "error", "", err.Error()), err
 	}
 	queueStatus, evidenceRefs, err := stack.stackDrainQueueStatusAndEvidenceForCoordinatorV0(ctx, result)
 	if err != nil {
+		if codexSupervisorRunEventsBudgetExceededV0(err) {
+			if markErr := stack.markRunEventsOversizedRunControlV0(ctx, request.RunRef); markErr != nil {
+				return stackDrainCoordinatorResultV0(request, result, "error", "", markErr.Error()), markErr
+			}
+			return stackDrainRunEventsOversizedCoordinatorResultV0(request, result, err), nil
+		}
 		return stackDrainCoordinatorResultV0(request, result, "error", "", err.Error()), err
 	}
 	drainResult := stackDrainCoordinatorResultV0(request, result, stackDrainOutcomeV0(result), queueStatus, "")
@@ -204,6 +222,30 @@ func stackDrainOperationalPlanStateNeedsReplanCoordinatorResultV0(
 			stackDrainEvidenceRefsV0(result),
 			"evidence-ref-codex-supervisor-operational-plan-state-active-step-needs-replan",
 			"evidence-ref-codex-supervisor-operational-plan-needs-replan",
+		)),
+		Diagnostics: diagnostics,
+	}
+}
+
+func stackDrainRunEventsOversizedCoordinatorResultV0(
+	request orquestaruncoordinator.RunDrainRequestV0,
+	result orquestacionnucleoapp.ManagedProgressiveLoopResultV0,
+	err error,
+) orquestaruncoordinator.RunDrainResultV0 {
+	diagnostics := stackDrainDiagnosticsV0(result)
+	diagnostics = append(
+		diagnostics,
+		codexSupervisorRunEventsOversizedDiagnosticV0(request.RunRef, err),
+	)
+	return orquestaruncoordinator.RunDrainResultV0{
+		RunRef:      strings.TrimSpace(request.RunRef),
+		AppRef:      strings.TrimSpace(request.AppRef),
+		Outcome:     codexSupervisorRunEventsOversizedOutcomeV0,
+		QueueStatus: orquestarunqueue.RunStatusStoppedV0,
+		EvidenceRefs: compactStringsV0(append(
+			stackDrainEvidenceRefsV0(result),
+			"evidence-ref-codex-supervisor-run-events-budget-exceeded",
+			"evidence-ref-codex-supervisor-run-oversized-parked",
 		)),
 		Diagnostics: diagnostics,
 	}

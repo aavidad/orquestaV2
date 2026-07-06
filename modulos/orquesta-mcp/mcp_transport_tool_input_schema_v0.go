@@ -37,6 +37,8 @@ func mcpTransportToolInputDTOByNameV0(name string) (any, bool) {
 		return MCPNuevaAppToolInputV0{}, true
 	case MCPNuevaAppWizardToolNameV0:
 		return MCPNuevaAppWizardToolInputV0{}, true
+	case MCPNuevaAppWizardBotToolNameV0:
+		return MCPNuevaAppWizardBotToolInputV0{}, true
 	case MCPArrancarDirectorAppToolNameV0:
 		return MCPArrancarDirectorAppToolInputV0{}, true
 	case MCPObserveAppDirectorGoalToolNameV0:
@@ -176,6 +178,8 @@ func mcpTransportToolRequiredFieldsV0(name string) map[string]bool {
 		return map[string]bool{"repository_ref": true, "query": true}
 	case MCPDirectorSupervisorBriefingToolNameV0:
 		return map[string]bool{"briefing_input": true}
+	case MCPNuevaAppWizardBotToolNameV0:
+		return map[string]bool{"user_text": true}
 	case channel.OperatorDirectorMessageToolNameV0:
 		return map[string]bool{"request_ref": true, "target_ref": true, "body": true}
 	case operator.OperatorMCPStatusToolNameV0:

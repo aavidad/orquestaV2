@@ -104,3 +104,31 @@ cambio causal no deberia emitir eventos nuevos ilimitadamente.
   `orquesta-app-codex-stack` completa verde.
 - Pendiente: fix 3 (parking de runs sobredimensionados) y verificacion viva
   tras redeploy cuando haya cuota/auth en el servidor.
+
+## Actualizacion 2026-07-06: fix 3 integrado en codigo
+
+Codex local implementa el parking de runs que superan el presupuesto real de
+eventos, sin tocar core puro ni elevar limites:
+
+- `modulos/orquesta-app-codex-stack/operational_plan_state_recoverable_error_v0.go`
+  clasifica `nucleo_orquestacion_store` + `events.budget` +
+  `events_full_history_budget_exceeded`/`events_run_limit_exceeded` y marca el
+  candidato como `stopped` con `RescueReason=run_oversized_events_budget`.
+- El mismo parking completa `RunControl` como `stopped` con evidencia
+  `evidence-ref-codex-supervisor-run-oversized-parked`; esto evita que la
+  reconciliacion de runs parados lo reactive en el siguiente tick.
+- `run_coordinator_v0.go`, `run_coordinator_reconcile_v0.go`,
+  `run_coordinator_running_stale_reconcile_v0.go` y
+  `run_coordinator_domain_recovery_v0.go` convierten ese error en
+  `Outcome=run_oversized`/`QueueStatus=stopped` cuando hay candidato concreto,
+  y continuan con el resto de la cola.
+
+Pruebas locales verdes:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackV0RunGlobalTickAparcaRunSobredimensionadoYContinuaColaV0|TestCodexStackV0RunSobredimensionadoAparcadoNoSeReanudaEnPreparacionV0'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackV0RunGlobalTick|TestCodexStackV0RunSobredimensionado|TestCodexStackV0RunGlobalSupervisor|TestCoordinate|TestCodexSupervisorRuntimeStateFromGlobalSupervisor'`
+- `go test -count=1 ./modulos/orquesta-run-coordinator`
+
+Residual: falta redeploy/verificacion viva en remoto cuando haya cuota/auth:
+`supervisor_error_ticks` debe estabilizarse y el siguiente candidato de cola
+debe avanzar tras aparcar T137 si vuelve a superar el presupuesto real.

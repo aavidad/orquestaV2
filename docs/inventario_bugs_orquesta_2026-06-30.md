@@ -2805,6 +2805,43 @@ ubicarlo bajo un scope directorio autorizado. Evidencia:
 | BUG-ORQ-20260705-SUPERVISOR-SCHEDULER-PAYLOAD | supervisor/autoprogramacion | abierto | Supervisor remoto repite `director_tick_input_build_invalido: field=scheduler_input.payload`; T137 rank 1 bloquea cola. | `docs/incidencias/incidencia_orquesta_supervisor_scheduler_payload_2026-07-05.md` | Pendiente reproducir tick real y corregir compactacion/seleccion. |
 | BUG-ORQ-20260705-CODEX-HOME-TOKEN-INVALIDADO | runtime-codex/proveedor | abierto | Agente Orquesta falla antes de programar con `token_invalidated` y `refresh_token_invalidated` en `/srv/orquesta-self/codex-home`. | `docs/incidencias/incidencia_orquesta_codex_home_token_invalidado_2026-07-05.md` | Requiere reautenticacion del Codex CLI del servidor y relanzar tarea. |
 
+BUG nuevo `BUG-ORQ-20260706-SUPERVISOR-EVENTS-BUDGET-PARKING` (cerrado en codigo):
+Tras cerrar el falso presupuesto por pagina y el dedupe de eventos duplicados,
+seguia abierta la resiliencia de cola: si un run supera de verdad el presupuesto
+de historial, `events_full_history_budget_exceeded` podia tumbar el tick del
+supervisor o reintentar el mismo candidato indefinidamente. Cierre aplicado por
+Codex local: `orquesta-app-codex-stack` clasifica el error tipado
+`nucleo_orquestacion_store/events.budget`, aparca el candidato con
+`Outcome=run_oversized`, `QueueStatus=stopped`, `RescueReason=run_oversized_events_budget`
+cuando el error ocurre en preparacion, completa `RunControl` como `stopped` sin
+auto-resume y continua con el resto de la cola cuando el error aparece en drain.
+Evidencia:
+`TestCodexStackV0RunGlobalTickAparcaRunSobredimensionadoYContinuaColaV0`,
+`TestCodexStackV0RunSobredimensionadoAparcadoNoSeReanudaEnPreparacionV0`,
+`go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackV0RunGlobalTick|TestCodexStackV0RunSobredimensionado|TestCodexStackV0RunGlobalSupervisor|TestCoordinate|TestCodexSupervisorRuntimeStateFromGlobalSupervisor'`
+y `go test -count=1 ./modulos/orquesta-run-coordinator`. Residual operativo:
+redeploy/verificacion viva en remoto cuando haya cuota/auth; ver
+`docs/incidencias/incidencia_orquesta_supervisor_events_budget_2026-07-06.md`.
+
+BUG nuevo `BUG-ORQ-20260706-MCP-WIZARD-BOT-SCHEMA-STALE` (cerrado):
+Durante `go test -count=1 ./...`, el contrato real MCP fallaba porque
+`orquesta.nueva_app.wizard.bot.v0` estaba registrado en el transporte, pero no
+en `MCPTransportToolInputFieldsV0`; el servidor publicaba schema
+`schema_stale`. Ademas el test de paridad del modulo MCP no trataba `[...]`
+como nesting y leia los campos internos de `wizard_answers` como top-level.
+Cierre aplicado: el DTO canonico del bot queda registrado, `user_text` es
+required y el parser de test ignora contenido anidado en arrays. Evidencia:
+`go test -count=1 ./modulos/orquesta-mcp ./cmd/orquesta-server -run 'TestMCPTransportToolInputSchemaV0CubreToolsRegistrados|TestMCPRealTransportV0InputSchemaSaleDeDTOCanonico'`.
+
+BUG nuevo `BUG-ORQ-20260706-ENV-RATCHET-ROOT-DIVERGENCE` (cerrado):
+Durante `go test -count=1 ./...`, el test raiz de presupuesto de variables de
+entorno fallaba con medicion 514 frente a base 513, aunque el test equivalente
+de `cmd/orquesta-server` ya aceptaba la excepcion documentada en bitacora/
+inventario. Cierre aplicado: el test raiz mantiene el limite base 513 pero
+reusa la excepcion documentada exacta `env_vars_orquesta_allow_increase_to=<n>`
+sin subir el ratchet. Evidencia:
+`go test -count=1 . -run TestEnvVarsBudgetMEJ106V0`.
+
 BUG nuevo `BUG-ORQ-20260706-WIZARD-I18N-PLACEHOLDER` (cerrado):
 El wizard de nueva app tenia cobertura de presencia de claves i18n, pero no
 detectaba textos genericos usados como relleno en U1-U12/T1-T8:

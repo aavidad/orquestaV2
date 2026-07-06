@@ -79,9 +79,9 @@ func mcpSplitTopLevelTestV0(text string, sep rune) []string {
 	start := 0
 	for idx, char := range text {
 		switch char {
-		case '{', '(':
+		case '{', '(', '[':
 			depth++
-		case '}', ')':
+		case '}', ')', ']':
 			if depth > 0 {
 				depth--
 			}
@@ -99,6 +99,9 @@ func mcpSplitTopLevelTestV0(text string, sep rune) []string {
 func mcpToolInputNamesFromTokenTestV0(token string) []string {
 	namePart := strings.TrimSpace(token)
 	if idx := strings.Index(namePart, ":"); idx >= 0 {
+		namePart = namePart[:idx]
+	}
+	if idx := strings.Index(namePart, "["); idx >= 0 {
 		namePart = namePart[:idx]
 	}
 	names := []string{}

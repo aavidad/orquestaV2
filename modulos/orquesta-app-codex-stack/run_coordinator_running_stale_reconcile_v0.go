@@ -43,6 +43,12 @@ func (stack StackV0) reconcileQueuedRunningStaleRunsV0(
 			continue
 		}
 		if err := stack.reconcileQueuedRunningStaleCandidateV0(ctx, command, candidate); err != nil {
+			if codexSupervisorRunEventsBudgetExceededV0(err) {
+				if markErr := stack.markQueuedCandidateRunEventsOversizedV0(ctx, command, candidate); markErr != nil {
+					return markErr
+				}
+				continue
+			}
 			return err
 		}
 	}

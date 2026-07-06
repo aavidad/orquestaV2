@@ -47,6 +47,12 @@ func (stack StackV0) recoverQueuedStoppedActiveRunsV0(
 				}
 				continue
 			}
+			if codexSupervisorRunEventsBudgetExceededV0(err) {
+				if markErr := stack.markQueuedCandidateRunEventsOversizedV0(ctx, command, candidate); markErr != nil {
+					return markErr
+				}
+				continue
+			}
 			return err
 		}
 	}

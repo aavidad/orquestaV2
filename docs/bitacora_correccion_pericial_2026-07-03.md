@@ -4088,3 +4088,70 @@ Cierre aplicado:
 Prueba verde:
 
 - `go test -count=1 ./modulos/orquesta-runtime-codex-goal`
+
+## Codex local 2026-07-06: parking de runs sobredimensionados por presupuesto de eventos
+
+Frente disjunto de Telegram. Se cierra en codigo
+`BUG-ORQ-20260706-SUPERVISOR-EVENTS-BUDGET-PARKING`, el fix 3 pendiente de
+`docs/incidencias/incidencia_orquesta_supervisor_events_budget_2026-07-06.md`.
+
+Lectura tecnica:
+
+- El coordinador ya podia continuar tras un error de drain si
+  `ContinueOnDrainError=true`, pero la preparacion previa de
+  `StackV0.RunGlobalTickV0` podia devolver
+  `events_full_history_budget_exceeded` antes de entrar al coordinador.
+- Si se limitaba el cambio a poner la cola en `stopped`, el reconciliador de
+  runs parados podia reactivar el candidato en el tick siguiente. Por eso el
+  parking ahora tambien completa `RunControl` como `stopped` sin evidencia de
+  auto-resume.
+
+Cierre aplicado:
+
+- `modulos/orquesta-app-codex-stack/operational_plan_state_recoverable_error_v0.go`:
+  clasificador tipado del error de presupuesto de eventos, diagnostico
+  `run_events_budget_exceeded`, helper de parking de cola y run-control.
+- `modulos/orquesta-app-codex-stack/run_coordinator_v0.go`: el drain convierte
+  ese error en `Outcome=run_oversized`, `QueueStatus=stopped`, evidencia durable
+  y sin error de tick si el run-control pudo sellarse.
+- `modulos/orquesta-app-codex-stack/run_coordinator_reconcile_v0.go`,
+  `run_coordinator_running_stale_reconcile_v0.go` y
+  `run_coordinator_domain_recovery_v0.go`: las rutas de preparacion con
+  candidato concreto aparcan y continuan en lugar de tumbar el tick global.
+- `modulos/orquesta-app-codex-stack/run_coordinator_flow_v0_test.go`: tests de
+  continuidad de cola y de no reactivacion posterior.
+- `docs/incidencias/incidencia_orquesta_supervisor_events_budget_2026-07-06.md`
+  y `docs/inventario_bugs_orquesta_2026-06-30.md`: cierre documentado y
+  residual de redeploy/verificacion viva.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackV0RunGlobalTickAparcaRunSobredimensionadoYContinuaColaV0|TestCodexStackV0RunSobredimensionadoAparcadoNoSeReanudaEnPreparacionV0'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackV0RunGlobalTick|TestCodexStackV0RunSobredimensionado|TestCodexStackV0RunGlobalSupervisor|TestCoordinate|TestCodexSupervisorRuntimeStateFromGlobalSupervisor'`
+- `go test -count=1 ./modulos/orquesta-run-coordinator`
+
+Durante la verificacion transversal, `go test -count=1 ./...` destapo dos
+fallos ajenos al parking pero pequenos y disjuntos:
+
+- `BUG-ORQ-20260706-MCP-WIZARD-BOT-SCHEMA-STALE`: el bot nuevo del wizard no
+  estaba en el registro canonico de DTOs MCP y el test de schema no entendia
+  arrays `[...]`.
+- `BUG-ORQ-20260706-ENV-RATCHET-ROOT-DIVERGENCE`: el test raiz de ratchet de
+  entorno no aceptaba la excepcion documentada que ya acepta el test del
+  servidor.
+
+Ambos quedan cerrados en el mismo corte para recuperar la suite completa sin
+tocar Telegram:
+
+- `modulos/orquesta-mcp/mcp_transport_tool_input_schema_v0.go`
+- `modulos/orquesta-mcp/mcp_transport_tool_input_schema_v0_test.go`
+- `env_vars_budget_test.go`
+
+Pruebas verdes adicionales:
+
+- `go test -count=1 ./modulos/orquesta-mcp ./cmd/orquesta-server -run 'TestMCPTransportToolInputSchemaV0CubreToolsRegistrados|TestMCPRealTransportV0InputSchemaSaleDeDTOCanonico'`
+- `go test -count=1 . -run TestEnvVarsBudgetMEJ106V0`
+
+Residual para Claude/remoto: desplegar cuando haya cuota/auth y verificar que
+`supervisor_error_ticks` no crece, T137 queda aparcado si supera presupuesto
+real y la cola avanza al siguiente candidato.
