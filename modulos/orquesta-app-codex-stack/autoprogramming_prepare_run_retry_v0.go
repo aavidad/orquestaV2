@@ -30,6 +30,9 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) freshAttemptForSta
 	if err != nil {
 		return input
 	}
+	if executor.autoprogrammingPrepareRunHasRegisteredLiveOrAmbiguousProcessV0(ctx, run) {
+		return input
+	}
 	if !autoprogrammingPrepareRunNeedsFreshAttemptWithRuntimeV0(run, executor.RuntimeWorkDir) &&
 		!executor.autoprogrammingPrepareRunControlNeedsFreshAttemptV0(ctx, run) {
 		return input
@@ -70,6 +73,20 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) autoprogrammingPre
 	}
 	return autoprogrammingPrepareRunHasFailureSignalV0(run) ||
 		len(AutoprogrammingRunPendingAgentRefsV0(run)) == 0
+}
+
+func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) autoprogrammingPrepareRunHasRegisteredLiveOrAmbiguousProcessV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) bool {
+	if executor.Stack == nil || strings.TrimSpace(run.RunID) == "" {
+		return false
+	}
+	liveness, err := executor.Stack.queuedRunningStaleProcessLivenessV0(ctx, run.RunID)
+	if err != nil {
+		return true
+	}
+	return liveness.RecordCount > 0 && (!liveness.Verifiable || liveness.Live)
 }
 
 func autoprogrammingPrepareRunNeedsFreshAttemptWithRuntimeV0(

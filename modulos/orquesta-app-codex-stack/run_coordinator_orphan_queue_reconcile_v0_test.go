@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
@@ -241,6 +242,86 @@ func TestCodexStackV0RunGlobalTickReconciliaRunningStaleGenericoConProcesoParado
 	latest := mustLoadCodexStackRunForTestV0(t, stack, staleRunRef)
 	if !codexStackStringInSetV0(latest.LostAgents, staleAgentRef) {
 		t.Fatalf("run stale generica no reconciliada como lost: lost=%v assessments=%v", latest.LostAgents, latest.AgentAssessments)
+	}
+}
+
+func TestCodexStackV0NoReconciliaRunningStaleSiTieneEstadoGoalFirstV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack.Ports.GoalStateStore = goalStates
+	stack.Stores.AppGoalStateStore = goalStates
+	runRef := "run-goal-first-running-stale-guard-001"
+	taskRef := "task-goal-first-running-stale-guard-001"
+	agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+	run := codexStackAutoprogrammingRunForCoordinatorRepairTestV0(runRef, taskRef)
+	run.Agents = []string{agentRef}
+	run.StartedAgents = []string{agentRef}
+	if err := stack.Ports.RunStore.SaveRunV0(context.Background(), run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       "goal-ref-goal-first-running-stale-guard-001",
+			RunRef:        runRef,
+			Objective:     "No reconciliar como stale mientras goal-first conserva estado vivo.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "docs/goal-first-running-stale-guard.md"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:  orquestagoal.GoalStatusRunningV0,
+			GoalRef: "goal-ref-goal-first-running-stale-guard-001",
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	processRef := "process-ref-goal-first-running-stale-guard-001"
+	runtime.snapshots[processRef] = orquestaruntime.ProcessRuntimeSnapshotV0{
+		SchemaVersion: orquestaruntime.ProcessRuntimeConnectorVersionV0,
+		ProcessRef:    processRef,
+		SessionRef:    "session-ref-goal-first-running-stale-guard-001",
+		LaunchRef:     "launch-ref-goal-first-running-stale-guard-001",
+		Status:        orquestaruntime.ProcessRuntimeStoppedV0,
+	}
+	if err := stack.Stores.ProcessRegistry.RecordAgentProcessV0(
+		context.Background(),
+		orquestacionnucleoapp.AgentProcessRegistryRecordV0{
+			RunID:          runRef,
+			AgentRequestID: agentRef,
+			ProcessRef:     processRef,
+			SessionRef:     "session-ref-goal-first-running-stale-guard-001",
+			LaunchRef:      "launch-ref-goal-first-running-stale-guard-001",
+			ReadinessRef:   "readiness-ref-goal-first-running-stale-guard-001",
+			EvidenceRefs:   []string{"evidence-ref-goal-first-running-stale-guard-process"},
+		},
+	); err != nil {
+		t.Fatalf("RecordAgentProcessV0: %v", err)
+	}
+	setRunQueueCandidateForTestV0(
+		t,
+		stack,
+		runRef,
+		orquestarunqueue.RunStatusRunningV0,
+		100,
+		time.Date(2026, 7, 6, 20, 10, 0, 0, time.UTC),
+	)
+
+	if err := stack.reconcileQueuedRunningStaleRunsV0(context.Background(), globalTickCommandForTestV0()); err != nil {
+		t.Fatalf("reconcileQueuedRunningStaleRunsV0: %v", err)
+	}
+	candidate := mustQueueCandidateForTestV0(t, stack, runRef)
+	if candidate.Status != orquestarunqueue.RunStatusRunningV0 ||
+		codexStackStringInSetV0(candidate.EvidenceRefs, "evidence-ref-run-queue-running-stale-no-live-process-reconciled") {
+		t.Fatalf("candidate=%+v", candidate)
+	}
+	if latest := mustLoadCodexStackRunForTestV0(t, stack, runRef); codexStackStringInSetV0(latest.LostAgents, agentRef) {
+		t.Fatalf("run goal-first marcado lost: lost=%v", latest.LostAgents)
 	}
 }
 

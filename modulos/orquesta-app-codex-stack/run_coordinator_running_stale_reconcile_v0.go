@@ -67,6 +67,9 @@ func (stack StackV0) reconcileQueuedRunningStaleCandidateV0(
 	if orquestaruncontrol.NormalizeRunControlStatusV0(state.Status) != orquestaruncontrol.RunControlStatusRunningV0 {
 		return nil
 	}
+	if _, ok := stack.goalFirstSupervisorDispositionV0(ctx, candidate.RunRef); ok {
+		return nil
+	}
 	run, err := stack.Ports.RunStore.LoadRunV0(ctx, candidate.RunRef)
 	if err != nil {
 		if orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {

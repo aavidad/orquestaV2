@@ -1431,8 +1431,13 @@ func goalDomainReceiptRecordMatchesContractV0(
 ) bool {
 	artifactRef := strings.TrimSpace(contract.ArtifactRef)
 	artifactType := strings.TrimSpace(contract.ArtifactType)
-	return (artifactRef != "" && strings.TrimSpace(record.ArtifactRef) == artifactRef) ||
-		(artifactType != "" && strings.TrimSpace(record.ArtifactType) == artifactType)
+	recordArtifactRef := strings.TrimSpace(record.ArtifactRef)
+	recordArtifactType := strings.TrimSpace(record.ArtifactType)
+	if artifactRef != "" {
+		return recordArtifactRef == artifactRef &&
+			(artifactType == "" || recordArtifactType == artifactType)
+	}
+	return artifactType != "" && recordArtifactType == artifactType
 }
 
 func goalDomainReceiptOPESSubrolesIssueV0(

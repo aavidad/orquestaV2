@@ -434,6 +434,26 @@ func TestBuildExternalWorkGoalWorkSpecV0LimitaPayloadRefsDeInputFields(t *testin
 	}
 }
 
+func TestBuildExternalWorkGoalWorkSpecV0RespetaExpectedArtifactTypeV0(t *testing.T) {
+	request := validExternalWorkRunRequestForTestV0()
+	request.AppChangeRequest.ExternalWork.WorkKind = "generate_visual_asset"
+	request.AppChangeRequest.ExternalWork.InputFields = []orquestadomainwork.DomainWorkFieldV0{
+		{Name: "expected_artifact_type", Value: "completed_syllabus_package"},
+	}
+
+	spec, issues := BuildExternalWorkGoalWorkSpecV0(
+		request,
+		StartExternalWorkRunConfigV0{OccurredAt: "2026-05-10T10:00:00Z"},
+	)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if len(spec.ArtifactContracts) != 1 ||
+		spec.ArtifactContracts[0].ArtifactType != orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 {
+		t.Fatalf("artifact contracts=%+v", spec.ArtifactContracts)
+	}
+}
+
 func TestBuildExternalWorkGoalWorkSpecV0CompilaDominioNoOPESYWorkKindDesconocido(t *testing.T) {
 	request := validExternalWorkRunRequestForTestV0()
 	request.AppChangeRequest.AppRef = "agenda"

@@ -228,6 +228,24 @@ func TestGoalDomainReceiptClosureValidatorV0BloqueaOPESFinalSinTopicQualityContr
 	}
 }
 
+func TestGoalDomainReceiptRecordMatchesContractV0ExigeTipoSiHayArtifactRefV0(t *testing.T) {
+	contract := orquestagoal.GoalArtifactContractV0{
+		ArtifactRef:  "artifact-ref-contract-001",
+		ArtifactType: "completed_syllabus_package",
+	}
+	record := DomainWorkArtifactSubmissionRecordV0{
+		ArtifactRef:  "artifact-ref-contract-001",
+		ArtifactType: "visual_asset",
+	}
+	if goalDomainReceiptRecordMatchesContractV0(record, contract) {
+		t.Fatalf("receipt aceptado con artifact_ref exacto pero tipo incorrecto")
+	}
+	record.ArtifactType = contract.ArtifactType
+	if !goalDomainReceiptRecordMatchesContractV0(record, contract) {
+		t.Fatalf("receipt exacto rechazado")
+	}
+}
+
 func goalDomainReceiptRequiredTestSpecForTestV0(
 	testRef string,
 	command string,

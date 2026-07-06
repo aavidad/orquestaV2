@@ -174,6 +174,7 @@ func ObserveGoalWorkV0(
 	if err != nil {
 		result = NormalizeGoalWorkResultV0(result)
 		if len(result.Issues) > 0 {
+			persistFailedGoalObservationV0(ctx, ports.StateStore, state, result)
 			return GoalWorkObserveResultV0{}, GoalWorkLifecycleIssueErrorV0{
 				Field:  "goal_result",
 				Issues: append([]GoalWorkIssueV0(nil), result.Issues...),
@@ -221,6 +222,31 @@ func ObserveGoalWorkV0(
 		NeedsRework:      closure.NeedsRework,
 		EvidenceRefs:     append([]string(nil), state.EvidenceRefs...),
 	}, nil
+}
+
+func persistFailedGoalObservationV0(
+	ctx context.Context,
+	store GoalWorkStateStorePortV0,
+	state GoalWorkStateV0,
+	result GoalWorkResultV0,
+) {
+	if store == nil {
+		return
+	}
+	if strings.TrimSpace(result.GoalRef) == "" {
+		result.GoalRef = state.GoalRef
+	}
+	if strings.TrimSpace(result.ExternalGoalRef) == "" {
+		result.ExternalGoalRef = state.ExternalGoalRef
+	}
+	state.LastResult = &result
+	state.Status = result.Status
+	state.EvidenceRefs = compactGoalStringsV0(append(state.EvidenceRefs, result.EvidenceRefs...))
+	normalized, err := NewGoalWorkStateV0(state)
+	if err != nil {
+		return
+	}
+	_ = store.SaveGoalWorkStateV0(ctx, normalized)
 }
 
 func NewGoalWorkStateFromLaunchV0(

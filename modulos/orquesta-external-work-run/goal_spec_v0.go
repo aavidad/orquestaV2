@@ -105,7 +105,7 @@ func externalWorkGoalWorkSpecFromRequestV0(
 		AcceptanceCriteria: externalWorkGoalAcceptanceCriteriaV0(domainRequest),
 		ArtifactContracts: []orquestagoal.GoalArtifactContractV0{{
 			ArtifactRef:  "artifact-ref-external-work-" + token + "-domain-work",
-			ArtifactType: externalWorkGoalArtifactTypeV0(domainRequest.WorkKind),
+			ArtifactType: externalWorkGoalArtifactTypeV0(domainRequest),
 			Required:     true,
 			EvidenceRefs: []string{externalWorkGoalSpecEvidenceRefV0},
 		}},
@@ -732,8 +732,74 @@ func boundedExternalWorkGoalTextV0(value string, maxBytes int) (string, bool) {
 	return value[:maxBytes] + "...[truncated]", true
 }
 
-func externalWorkGoalArtifactTypeV0(workKind string) string {
-	return orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(workKind)
+func externalWorkGoalArtifactTypeV0(
+	domainRequest orquestadomainwork.DomainWorkJobRequestV0,
+) string {
+	if expected := externalWorkGoalExpectedArtifactTypeFieldV0(domainRequest.InputFields); expected != "" {
+		return expected
+	}
+	return orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(domainRequest.WorkKind)
+}
+
+func externalWorkGoalExpectedArtifactTypeFieldV0(
+	fields []orquestadomainwork.DomainWorkFieldV0,
+) string {
+	for _, field := range fields {
+		if strings.TrimSpace(field.Name) != "expected_artifact_type" {
+			continue
+		}
+		for _, value := range append([]string{field.Value}, field.Values...) {
+			if artifactType := externalWorkGoalExpectedArtifactTypeValueV0(value); artifactType != "" {
+				return artifactType
+			}
+		}
+		for _, value := range externalWorkRunJSONFieldValuesV0(field.ValueJSON) {
+			if artifactType := externalWorkGoalExpectedArtifactTypeValueV0(value); artifactType != "" {
+				return artifactType
+			}
+		}
+	}
+	return ""
+}
+
+func externalWorkGoalExpectedArtifactTypeValueV0(value string) string {
+	artifactType := compactExternalWorkRunRefV0(value)
+	if artifactType == "" || artifactType == "external-work" {
+		return ""
+	}
+	switch artifactType {
+	case "completed_syllabus_package", "finalize_temario_package", "finalize_syllabus_package":
+		return orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0
+	case orquestadomainwork.DomainWorkArtifactTypeContentBlockV0,
+		orquestadomainwork.DomainWorkArtifactTypeVisualAssetV0,
+		orquestadomainwork.DomainWorkArtifactTypeBlockRevisionV0,
+		orquestadomainwork.DomainWorkArtifactTypeSourceV0,
+		orquestadomainwork.DomainWorkArtifactTypeTopicStructureV0,
+		orquestadomainwork.DomainWorkArtifactTypeTopicOutlineV0,
+		orquestadomainwork.DomainWorkArtifactTypeTopicSummaryV0,
+		orquestadomainwork.DomainWorkArtifactTypeTopicExpansionPackageV0,
+		orquestadomainwork.DomainWorkArtifactTypeAssembledTopicV0,
+		orquestadomainwork.DomainWorkArtifactTypeAudioAssetV0,
+		orquestadomainwork.DomainWorkArtifactTypeExamResearchReportV0,
+		orquestadomainwork.DomainWorkArtifactTypeQuestionBankV0,
+		orquestadomainwork.DomainWorkArtifactTypePracticalCasesV0,
+		orquestadomainwork.DomainWorkArtifactTypeLocalHTMLSiteV0,
+		orquestadomainwork.DomainWorkArtifactTypeTutorBotPackageV0,
+		orquestadomainwork.DomainWorkArtifactTypeInteractivePracticeV0,
+		orquestadomainwork.DomainWorkArtifactTypeHelpPackageV0,
+		orquestadomainwork.DomainWorkArtifactTypeAgentReviewReportV0,
+		orquestadomainwork.DomainWorkArtifactTypeAgentPairReviewReportV0,
+		orquestadomainwork.DomainWorkArtifactTypeAgentCandidateV0,
+		orquestadomainwork.DomainWorkArtifactTypeAgentCandidateVoteV0,
+		orquestadomainwork.DomainWorkArtifactTypeAgentCandidateSelectV0,
+		orquestadomainwork.DomainWorkArtifactTypeDirectorReviewMatrixV0,
+		orquestadomainwork.DomainWorkArtifactTypeTopicRegistryUpdateV0,
+		orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0,
+		orquestadomainwork.DomainWorkArtifactTypeGenericWorkDeliveryV0:
+		return artifactType
+	default:
+		return artifactType
+	}
 }
 
 func externalWorkGoalEvidenceRefsV0(

@@ -470,8 +470,8 @@ func TestCodexStackAutoprogrammingObserveGoalExecutorV0ErrorPublicoIncluyeSnapsh
 		!result.Partial ||
 		result.GoalRef != goalRef ||
 		result.ExternalGoalRef != externalGoalRef ||
-		result.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
-		result.RecommendedAction != "observe_later" ||
+		result.GoalStatus != orquestagoal.GoalStatusInvalidV0 ||
+		result.RecommendedAction != "blocked" ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "codex_goal_observation_rejected" ||
 		!codexStackStringInSetForTestV0(result.ProcessRefs, "process-ref-stack-autoprogramming-observe-rejected-001") ||

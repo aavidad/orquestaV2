@@ -319,8 +319,8 @@ func TestMCPObserveAppDirectorGoalToolExecutorV0ErrorPublicoIncluyeSnapshotParci
 		!result.Partial ||
 		result.GoalRef != state.GoalRef ||
 		result.ExternalGoalRef != state.ExternalGoalRef ||
-		result.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
-		result.RecommendedAction != "observe_later" ||
+		result.GoalStatus != orquestagoal.GoalStatusInvalidV0 ||
+		result.RecommendedAction != "blocked" ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "codex_goal_observation_rejected" ||
 		result.Errores[0].Field != "codex_goal_backend" ||

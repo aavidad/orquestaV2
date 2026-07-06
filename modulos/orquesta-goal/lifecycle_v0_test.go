@@ -442,8 +442,18 @@ func TestObserveGoalWorkV0ConservaIssuesDeObserverFallidoV0(t *testing.T) {
 		lifecycleIssue.Issues[0].Field != "codex_goal_backend" {
 		t.Fatalf("err=%v lifecycleIssue=%+v", err, lifecycleIssue)
 	}
-	if store.saves != 1 {
+	if store.saves != 2 {
 		t.Fatalf("store saves=%d", store.saves)
+	}
+	saved, err := store.LoadGoalWorkStateV0(context.Background(), state.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if saved.LastResult == nil ||
+		saved.LastResult.Status != GoalStatusInvalidV0 ||
+		len(saved.LastResult.Issues) != 1 ||
+		saved.LastResult.Issues[0].Code != "codex_app_server_control_socket_missing" {
+		t.Fatalf("last result no persistido=%+v", saved.LastResult)
 	}
 }
 
