@@ -3,6 +3,7 @@ package orquestastatefile
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -105,6 +106,44 @@ func TestStoreV0AppendRunEventsV0UsaIndiceDurableYRegistros(t *testing.T) {
 	}
 }
 
+func TestStoreV0LoadRunEventsV0PaginaInternamenteMasDeMilEventos(t *testing.T) {
+	ctx := context.Background()
+	store := mustStoreV0(t, t.TempDir())
+	total := maxEventLogPageLimitV0 + 37
+	batch := make([]orquestacoreworkflow.OrchestrationEventV0, 0, 128)
+	for index := 0; index < total; index++ {
+		batch = append(batch, mustStateFileRunStartedEventWithSequenceV0(
+			t,
+			fmt.Sprintf("evt-state-file-many-%04d", index),
+			fmt.Sprintf("project-ref-state-file-%04d", index),
+			int64(index+1),
+		))
+		if len(batch) == cap(batch) {
+			if err := store.AppendRunEventsV0(ctx, batch[0].RunID, batch); err != nil {
+				t.Fatalf("append batch ending %d: %v", index, err)
+			}
+			batch = batch[:0]
+		}
+	}
+	if len(batch) > 0 {
+		if err := store.AppendRunEventsV0(ctx, batch[0].RunID, batch); err != nil {
+			t.Fatalf("append final batch: %v", err)
+		}
+	}
+
+	got, err := store.LoadRunEventsV0(ctx, "run-state-file-event-sink-001")
+	if err != nil {
+		t.Fatalf("LoadRunEventsV0 con mas de %d eventos no debe tratar el limite de pagina como presupuesto total: %v", maxEventLogPageLimitV0, err)
+	}
+	if len(got) != total {
+		t.Fatalf("events len=%d, want %d", len(got), total)
+	}
+	if got[0].EventID != "evt-state-file-many-0000" ||
+		got[len(got)-1].EventID != fmt.Sprintf("evt-state-file-many-%04d", total-1) {
+		t.Fatalf("orden inesperado: first=%q last=%q", got[0].EventID, got[len(got)-1].EventID)
+	}
+}
+
 func TestStoreV0AppendRunEventsV0AplicaPresupuestoPorAppendYRun(t *testing.T) {
 	ctx := context.Background()
 	store, err := NewStoreV0(ConfigV0{RootDir: t.TempDir(), MaxAppendEvents: 1, MaxRunEvents: 1})
@@ -142,11 +181,21 @@ func mustStateFileRunStartedEventV0(
 	projectRef string,
 ) orquestacoreworkflow.OrchestrationEventV0 {
 	t.Helper()
+	return mustStateFileRunStartedEventWithSequenceV0(t, eventID, projectRef, 1)
+}
+
+func mustStateFileRunStartedEventWithSequenceV0(
+	t *testing.T,
+	eventID string,
+	projectRef string,
+	sequence int64,
+) orquestacoreworkflow.OrchestrationEventV0 {
+	t.Helper()
 	event, err := orquestacoreworkflow.NewRunStartedEventV0(
 		orquestacoreworkflow.OrchestrationEventMetaV0{
 			EventID:    eventID,
 			RunID:      "run-state-file-event-sink-001",
-			Sequence:   1,
+			Sequence:   sequence,
 			OccurredAt: "2026-05-17T10:00:00Z",
 		},
 		orquestacoreworkflow.RunStartedPayloadV0{

@@ -70,20 +70,43 @@ func (store *StoreV0) LoadRunEventsV0(
 	ctx context.Context,
 	runRef string,
 ) ([]orquestacoreworkflow.OrchestrationEventV0, error) {
-	result, err := store.LoadRunEventsPageV0(ctx, orquestacionnucleoapp.RunEventPageRequestV0{
-		RunRef: runRef,
-		Limit:  store.events.MaxRunEvents,
-	})
-	if err != nil {
+	runRef = normalizeRefV0(runRef)
+	limit := store.events.MaxRunEvents
+	var out []orquestacoreworkflow.OrchestrationEventV0
+	cursor := ""
+	for {
+		remaining := limit - len(out)
+		if remaining <= 0 {
+			return nil, storeErrorV0("events.budget", "events_full_history_budget_exceeded")
+		}
+		pageLimit := maxEventLogPageLimitV0
+		if remaining < pageLimit {
+			pageLimit = remaining
+		}
+		result, err := store.LoadRunEventsPageV0(ctx, orquestacionnucleoapp.RunEventPageRequestV0{
+			RunRef: runRef,
+			Limit:  pageLimit,
+			Cursor: cursor,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if result.Total > limit || len(out)+len(result.Events) > limit {
+			return nil, storeErrorV0("events.budget", "events_full_history_budget_exceeded")
+		}
+		out = append(out, result.Events...)
+		if !result.HasMore {
+			break
+		}
+		if result.NextCursor == "" || result.NextCursor == cursor {
+			return nil, storeErrorV0("events.cursor", "cursor invalido")
+		}
+		cursor = result.NextCursor
+	}
+	if err := validateLoadedRunEventsV0(runRef, out); err != nil {
 		return nil, err
 	}
-	if result.HasMore {
-		return nil, storeErrorV0("events.budget", "events_full_history_budget_exceeded")
-	}
-	if err := validateLoadedRunEventsV0(normalizeRefV0(runRef), result.Events); err != nil {
-		return nil, err
-	}
-	return result.Events, nil
+	return cloneEventsV0(out), nil
 }
 
 func (store *StoreV0) LoadRunEventsPageV0(
