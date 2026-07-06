@@ -281,6 +281,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 		observedByRunRef,
 	)
 	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, goalStatesByRunRef, goalRunMarkersByRunRef, healthRun, healthObservedRuns...)
+	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingPendingIntegrationActionsV0(result.Queue, observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, staleRunningFromEstadoVivoMCPAutoprogrammingV0(estadoVivo)...)
 	blockedGoalActions, resolvedGoalActions := mcpAutoprogrammingGoalFirstBlockedActionsV0(
 		goalStates,

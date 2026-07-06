@@ -1,0 +1,6 @@
+goal_ref: goal-ref-task-autoprogramming-0cc9487d6778-g01
+source_task_ref: task-wizard-bot-llm-g5
+objective: implement wizard bot LLM group G5 with canonical wizard_bot config, Codex provider through existing app-server backend, strict grounding, deterministic fallback, and required tests.
+scope: modulos/orquesta-web, cmd/orquesta-server, docs/diseno_wizard_programacion_2026-07-04.md, docs/autoprogramacion_orquesta_pendientes_2026-05-23.md
+next_artifact: modulos/orquesta-web/docs/orquesta_goal_result_goal-ref-task-autoprogramming-0cc9487d6778-g01.json
+evidence_refs: evidence-ref-goal-migration-goal_ready,evidence-ref-code-context-go-repo-map-fallback-v0,code_context_prepared:repo_map:code-context-sha256-4124b33a83746e80806525de

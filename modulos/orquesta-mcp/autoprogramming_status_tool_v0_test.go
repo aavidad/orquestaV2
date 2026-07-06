@@ -189,6 +189,70 @@ func TestMCPAutoprogrammingStatusExecutorV0DerivaVidaDesdeProyeccionV0(t *testin
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0RunClosedEnColaPublicaPendingIntegrationV0(t *testing.T) {
+	runRef := "run-ref-autoprogramming-pending-integration-001"
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{
+			ranked: []MCPRunQueueRankedCandidateCompactV0{{
+				Rank:          1,
+				RunRef:        runRef,
+				AppRef:        "app-ref-autoprogramming-pending-integration",
+				Status:        "running",
+				PriorityScore: 80,
+			}},
+		},
+		Stats: &fakeMCPAutoprogrammingRunStatusV0{
+			statsByRun: map[string]*orquestacionnucleoapp.DirectorRunStatsV0{
+				runRef: {
+					RunRef:       runRef,
+					ProjectRef:   "project-ref-autoprogramming-pending-integration",
+					Status:       "closed",
+					CurrentPhase: "cierre",
+					Counts: orquestacionnucleoapp.DirectorRunStatsCountsV0{
+						TasksTotal:  1,
+						TasksClosed: 1,
+					},
+					Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+						TasksTotal:      1,
+						TasksClosed:     1,
+						PercentComplete: 100,
+					},
+					Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
+						Status: orquestacionnucleoapp.DirectorClosureStatusClosedV0,
+					},
+				},
+			},
+		},
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{
+		RunRef: runRef,
+	})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if !hasMCPAutoprogrammingActionCodeV0(result.StaleRunning, mcpAutoprogrammingActionPendingIntegrationV0) ||
+		!hasMCPAutoprogrammingDiagnosticCodeV0(result.Diagnostics, mcpAutoprogrammingActionPendingIntegrationV0) {
+		t.Fatalf("stale_running=%+v diagnostics=%+v", result.StaleRunning, result.Diagnostics)
+	}
+	var action MCPAutoprogrammingActionableRunV0
+	for _, candidate := range result.StaleRunning {
+		if candidate.Code == mcpAutoprogrammingActionPendingIntegrationV0 {
+			action = candidate
+			break
+		}
+	}
+	if action.RecommendedAction != mcpAutoprogrammingActionWaitForIntegrationReceiptV0 ||
+		action.RunStatus != "closed" ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, mcpAutoprogrammingEvidencePendingIntegrationV0) {
+		t.Fatalf("action=%+v", action)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.RecommendedAction != mcpAutoprogrammingActionWaitForIntegrationReceiptV0+":run:"+runRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(result.EfficiencySummary.Reasons, mcpAutoprogrammingActionPendingIntegrationV0) {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0ConflictoEstadoVivoNuncaProyectaVerdeV0(t *testing.T) {
 	runRef := "run-ref-estado-vivo-conflicto-001"
 	estadoVivo := &fakeMCPAutoprogrammingEstadoVivoSourceV0{

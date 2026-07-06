@@ -1,6 +1,8 @@
 package orquestaweb
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -128,6 +130,83 @@ func TestWizardBotNoInventaOpcionesV0(t *testing.T) {
 	}
 }
 
+func TestWizardBotLLMAplicaSlotFillingGroundedV0(t *testing.T) {
+	session := wizardSessionWithObjectiveV0("session-bot-llm-slot", "agenda para empresa con dominio Windows")
+	session.Form.Nombre = "Agenda Empresa"
+	session.Form.Locale = "es-ES"
+	session.Form.TipoApp = "web"
+	session.Form.Plataformas = []string{"web"}
+	session.Form.Descripcion = "flujo diario de agenda para empresa"
+	session.Form.Datos.NecesidadFuncional = "gestion_con_persistencia"
+	session.Form.Datos.Sensibilidad = "interna"
+	session.Form.Deploy.Target = "contenedor"
+	session.Form.UsuariosObjetivo = []string{"equipo"}
+	session.Form.Agentes.Autonomia = "media"
+	session.Form.Restricciones = []string{"online"}
+	session.Form.Documentacion.Profundidad = "normal"
+	session.Form.Integraciones = []WebNuevaAppConnectorFormV0{{Tipo: "calendar", Nombre: "agenda"}}
+	session = refreshWebNuevaAppIntakeSessionV0(session)
+	for step := 0; step < 8; step++ {
+		if hasWizardQuestionRefV0(NewWebNuevaAppWizardTurnResultV0(session).Questions, "wizard-t2-identidad-corporativa") {
+			break
+		}
+		session, _ = NewWebNuevaAppWizardBotReplyV0(session, WizardBotTurnV0{SessionRef: session.SessionRef, UserText: "1", Locale: "es-ES"})
+	}
+	before := NewWebNuevaAppWizardTurnResultV0(session)
+	if !hasWizardQuestionRefV0(before.Questions, "wizard-t2-identidad-corporativa") {
+		t.Fatalf("precondicion sin pregunta identidad: %+v", before.Questions)
+	}
+
+	session, reply := NewWebNuevaAppWizardBotReplyWithLLMV0(context.Background(), session, WizardBotTurnV0{
+		SessionRef: session.SessionRef,
+		UserText:   "directorio interno principal",
+		Locale:     "es-ES",
+	}, fakeWizardBotLLMV0{
+		result: WizardBotLLMResultV0{
+			Status:        "ok",
+			Say:           "Identidad corporativa registrada desde el catalogo.",
+			FilledAnswers: []WizardAnswerV0{{QuestionRef: "wizard-t2-identidad-corporativa", UserChoice: "ldap_bind"}},
+			GroundingRefs: []string{"wizard-corpus:question:wizard-t2-identidad-corporativa"},
+		},
+	})
+
+	if reply.LLMStatus != "ok" || reply.CostNotice == "" {
+		t.Fatalf("estado/coste LLM inesperado: %+v", reply)
+	}
+	if len(reply.FilledAnswers) != 1 || reply.FilledAnswers[0].UserChoice != "ldap_bind" {
+		t.Fatalf("slot filling LLM no aplicado: %+v", reply.FilledAnswers)
+	}
+	if !hasWizardIntegrationAuthV0(session.Form.Integraciones, "auth", "ldap_bind") {
+		t.Fatalf("session no actualizada: %+v", session.Form.Integraciones)
+	}
+}
+
+func TestWizardBotDegradaAPresupuestoAgotadoV0(t *testing.T) {
+	session := wizardSessionWithObjectiveV0("session-bot-budget", "quiero una app para una agenda")
+	_, reply := NewWebNuevaAppWizardBotReplyWithLLMV0(context.Background(), session, WizardBotTurnV0{
+		SessionRef: session.SessionRef,
+		UserText:   "quiero explicarlo con mucho detalle",
+		Locale:     "es-ES",
+	}, fakeWizardBotLLMV0{result: WizardBotLLMResultV0{Status: "budget_exhausted"}})
+
+	if reply.LLMStatus != "budget_exhausted" || !strings.Contains(reply.Say, "modo basico") {
+		t.Fatalf("degradacion por presupuesto inesperada: %+v", reply)
+	}
+}
+
+func TestWizardBotLLMFalloProveedorDegradaADeterministaV0(t *testing.T) {
+	session := wizardSessionWithObjectiveV0("session-bot-provider", "quiero una app para una agenda")
+	_, reply := NewWebNuevaAppWizardBotReplyWithLLMV0(context.Background(), session, WizardBotTurnV0{
+		SessionRef: session.SessionRef,
+		UserText:   "texto libre largo sin match determinista",
+		Locale:     "es-ES",
+	}, fakeWizardBotLLMV0{err: errors.New("provider_failed")})
+
+	if reply.LLMStatus != "provider_failed" || len(reply.TurnResult.Questions) == 0 {
+		t.Fatalf("degradacion por proveedor inesperada: %+v", reply)
+	}
+}
+
 func hasStringPrefixV0(values []string, prefix string) bool {
 	for _, value := range values {
 		if strings.HasPrefix(value, prefix) {
@@ -144,4 +223,16 @@ func hasWizardIntegrationAuthV0(values []WebNuevaAppConnectorFormV0, tipo string
 		}
 	}
 	return false
+}
+
+type fakeWizardBotLLMV0 struct {
+	result WizardBotLLMResultV0
+	err    error
+}
+
+func (fake fakeWizardBotLLMV0) AssistWizardBotTurnV0(
+	context.Context,
+	WizardBotLLMRequestV0,
+) (WizardBotLLMResultV0, error) {
+	return fake.result, fake.err
 }

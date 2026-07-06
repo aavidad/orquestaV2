@@ -92,7 +92,7 @@ func compactTickInputProgressLaneV0(
 	input.ReplanFollowupCandidates = nil
 	input.WorkCandidates = nil
 	input.WorkClaims = nil
-	return input
+	return compactTickInputSnapshotForProgressV0(input)
 }
 
 func compactTickInputReplanLaneV0(

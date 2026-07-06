@@ -18,6 +18,35 @@ DERIVATIVES_OUT="$SMOKE_OUT_DIR/derivatives"
 FINALPKG_OUT="$SMOKE_OUT_DIR/finalpkg"
 KEEP_DIR="${ORQUESTA_KEEP_SMOKE_DIR:-1}"
 
+usage() {
+  cat <<'EOF'
+Uso:
+  scripts/smoke_opes_lifecycle_real.sh [--help]
+
+Ejecuta el smoke OPES lifecycle acotado. Por defecto usa fixtures/fake server
+locales para reproducir las 24 fases sin tocar OPES productivo.
+
+Para una ejecucion con efectos contra OPES real/temporal, no uses este arnes
+sin declarar antes, en la composicion externa, las guardas requeridas:
+  ORQUESTA_OPES_BASE_URL
+  ORQUESTA_BASE_URL
+  ORQUESTA_OPES_TEMPORAL_CONFIRM=1
+  ORQUESTA_OPES_BRIDGE_CONFIRM=1
+  ORQUESTA_OPES_BRIDGE_LIMIT=1
+  ORQUESTA_OPES_BRIDGE_JOB_REF o PROGRAM_ID/TOPIC_ID/CORRELATION_ID
+
+Si esas settings faltan, el goal debe cerrar blocked con
+missing_required_settings en vez de improvisar una ejecucion real.
+EOF
+}
+
+case "${1:-}" in
+  -h|--help)
+    usage
+    exit 0
+    ;;
+esac
+
 cleanup() {
   if [[ -n "$FAKE_ORQUESTA_PID" ]]; then
     kill "$FAKE_ORQUESTA_PID" >/dev/null 2>&1 || true

@@ -532,8 +532,10 @@ como el glosario): no hay segunda redacción que mantener.
    (términos + sinónimos del catálogo + matching difuso acentos/plurales).
    Cubre "¿qué es X?", "¿cuál me recomiendas?", "¿qué opciones hay de
    logs?". Testeable sin proveedor.
-2. LLM opcional (si hay proveedor configurado): usa el director de
-   escalada existente (claude/gemini/codex, perfil barato reasoning=low)
+2. LLM opcional (si hay proveedor configurado): usa el backend Codex
+   app-server existente con `model=gpt-5.5` y `reasoning_effort=high`.
+   La decision del operador del 2026-07-05 prohíbe degradar este nivel a
+   `low`; si la configuracion pide `low`, se normaliza a `high`.
    SOLO para: parafrasear la pregunta del turno en tono conversacional,
    extraer respuestas de un texto libre largo (slot-filling: "quiero una
    agenda para mi empresa conectada al AD y que me avise por correo" →
@@ -592,15 +594,16 @@ como el glosario): no hay segunda redacción que mantener.
 
 El operador lo quiere, pero como tiene coste debe ser OPCIONAL:
 
-1. El nivel LLM del bot (12.2.2) es opt-in explícito:
-   `ORQUESTA_WIZARD_BOT_LLM_ENABLED=true` + proveedor configurado. Por
-   defecto APAGADO: el wizard y el bot determinista funcionan completos sin
-   gastar un token.
+1. El nivel LLM del bot (12.2.2) es opt-in explícito por la seccion canonica
+   `wizard_bot.*` de `orquesta.config.json`: `llm_enabled`, `model`,
+   `reasoning_effort` y `daily_token_budget`. No se introducen envs nuevas.
+   Por defecto APAGADO: el wizard y el bot determinista funcionan completos
+   sin gastar un token.
 2. Presupuesto propio cuando está encendido:
-   `ORQUESTA_WIZARD_BOT_DAILY_TOKEN_BUDGET` (por defecto conservador). Al
-   agotarse, el bot degrada SOLO el parafraseo/slot-filling al modo
-   determinista y lo dice en la conversación ("sigo contigo en modo básico
-   por presupuesto"); la sesión nunca se corta.
+   `wizard_bot.daily_token_budget` (por defecto conservador). Al agotarse, el
+   bot degrada SOLO el parafraseo/slot-filling al modo determinista y lo dice
+   en la conversación ("sigo contigo en modo básico por presupuesto"); la
+   sesión nunca se corta.
 3. En la web, activar el chat con LLM muestra una nota de coste una vez por
    sesión; el modo formulario y el chat determinista nunca la muestran.
 4. Registro: tokens del bot van a la misma contabilidad thread_goals/uso

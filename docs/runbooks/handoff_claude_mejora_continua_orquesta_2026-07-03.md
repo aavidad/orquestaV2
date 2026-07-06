@@ -1980,3 +1980,9 @@ TAREA-3 cerrada para Codex app-server:
 Residual opcional, no bloqueo: si producto quiere mover docs a Gemini/Claude en
 vez de Codex low, hacerlo como politica de composicion configurable y con
 evidencia propia.
+
+## Codex remoto 2026-07-05: Telegram, supervisor y accepted invisible
+
+Ver handoff detallado: `docs/runbooks/handoff_codex_orquesta_remoto_telegram_supervisor_2026-07-05.md`.
+
+Resumen: Codex verifico que Orquesta genera codigo y pasa focales recientes, pero el servidor vivo no esta ejecutando el build nuevo y el supervisor sigue con `director_tick_input_build_invalido: field=scheduler_input.payload`. Se documento `BUG-ORQ-20260705-TELEGRAM-NOLLM-ACCEPTED-INVISIBLE`: `prepare-run` acepta `request-ref-remoto-telegram-nollm-runtime-20260705-001` pero no aparece en `autoprogramming/status`. Telegram salida funciona; control por Hermes LLM falla por 429; queda pendiente runtime Telegram no-LLM propio de Orquesta.

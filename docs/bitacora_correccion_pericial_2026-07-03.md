@@ -3829,3 +3829,52 @@ Plan (ejecutar cuando G5 este integrado y no quede nada en la tanda):
    residuales. Cualquier fallo se registra como bug de campo con refs y se
    programa el fix por Orquesta.
 Esto ejecuta de facto MEJ-101 (OPES real) con decision del operador.
+
+## Resultado del field test OPES real tras G5 (2026-07-05)
+
+Goal `goal-ref-task-autoprogramming-72bb10d53162-g04`, tarea
+`task-remote-opes-real-field-test-after-g5-20260705`.
+
+Resultado: blocked por `missing_required_settings`. La sesion del goal solo
+tenia `ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux`; no estaban declarados
+`ORQUESTA_OPES_BASE_URL`, `ORQUESTA_BASE_URL`,
+`ORQUESTA_OPES_TEMPORAL_CONFIRM=1`, `ORQUESTA_OPES_BRIDGE_CONFIRM=1` ni scope
+duro por `job_ref` o programa/tema/correlacion. No se inventario OPES real, no
+se dreno cola y no se creo ni completo temario para evitar efectos sobre OPES
+productivo o colas ajenas.
+
+Artefactos: `docs/runbooks/opes_real_field_test_2026-07-05.md` documenta el
+bloqueo gobernado y `scripts/smoke_opes_lifecycle_real.sh --help` queda como
+ruta sin efectos con settings requeridas. El resultado durable del goal se
+conserva en `cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-72bb10d53162-g04.json`
+porque la ruta pedida bajo `scripts/smoke_opes_lifecycle_real.sh/docs/` no es
+materializable sin convertir el script existente en directorio.
+
+## Integracion G5 wizard bot LLM (2026-07-05)
+
+Goal `goal-ref-task-autoprogramming-72bb10d53162-g01`, tarea
+`task-remote-g5-integrate-20260705`.
+
+Resultado: blocked por pruebas requeridas externas al cambio y worktree vivo con
+cambios concurrentes fuera del write-set. Queda integrado el diff G5 dentro del
+write-set autorizado: puerto LLM opt-in para el bot del wizard, adaptador
+app-server Codex con `wizard_bot.*` canonico, degradacion determinista por
+presupuesto/proveedor, tests focales y documentacion de no introducir envs
+`ORQUESTA_WIZARD_BOT_*`.
+
+Evidencia: `git diff --check` verde; prueba focal
+`GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-web
+./cmd/orquesta-server -run 'Test.*Wizard.*Bot|Test.*WizardBot|Test.*ConfigFile|TestServerConfig'`
+verde usando cache Go local offline. La bateria amplia requerida falla en
+frentes ajenos a G5, incluyendo `orquesta-app-codex-stack` y tests de proceso
+proveedor/ratchet; no se crea commit local para no mezclar esos cambios.
+
+## Ratchet de envs tras canal operador Telegram (2026-07-05)
+
+El checkpoint remoto introduce el adaptador operador Telegram opt-in para que el
+operador reciba avisos terminales y pueda enviar comandos al Director. Las
+variables nuevas quedan registradas en `serverEffectiveEnvRegistryV0` bajo scope
+`telegram_operator` y no sustituyen al fichero canonico; se mantienen como
+puente operativo mientras se completa la reduccion TAREA-8. El aumento queda
+justificado de forma temporal para que el ratchet no oculte la deuda:
+`env_vars_orquesta_allow_increase_to=518`.

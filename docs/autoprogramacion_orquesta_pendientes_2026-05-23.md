@@ -22617,3 +22617,15 @@ pruebas de scanners; T252/T254 gobiernan ids humanos, reserva, colisiones,
 aliases y read model; T253/T255/T256/T257/T258 cubren splits concretos recientes.
 Esta pasada queda como evidencia de no-op cubierto y debe cerrarse mediante ACK
 con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
+
+## Nota 2026-07-05: wizard bot LLM G5
+
+- Implementado en el goal `task-wizard-bot-llm-g5` el contrato base del bot LLM:
+  puerto web de asistencia con grounding estricto, validacion de opciones
+  permitidas, degradacion determinista por presupuesto/proveedor y configuracion
+  canonica `wizard_bot.*` en `orquesta.config.json` con `gpt-5.5` y
+  `reasoning_effort=high`.
+- Frontera pendiente fuera del write-set de este goal: cablear superficies no
+  autorizadas aqui, como tool MCP especifica del bot o gateway si se exige una
+  ruta HTTP nueva dedicada. El nucleo reusable ya no debe usar envs
+  `ORQUESTA_WIZARD_BOT_*`.

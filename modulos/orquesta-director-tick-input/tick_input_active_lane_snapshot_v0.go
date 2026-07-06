@@ -38,6 +38,43 @@ func compactTickInputSnapshotForDeliveriesV0(
 	return input
 }
 
+func compactTickInputSnapshotForProgressV0(
+	input orquestadirectorscheduler.DirectorSchedulerTickInputV0,
+) orquestadirectorscheduler.DirectorSchedulerTickInputV0 {
+	agents := map[string]bool{}
+	tasks := map[string]bool{}
+	deliveries := map[string]bool{}
+	assessments := map[string]bool{}
+	questions := map[string]bool{}
+	for _, candidate := range input.ProgressSupervisionCandidates {
+		supervision := candidate.SupervisionInput
+		agents[strings.TrimSpace(supervision.Report.AgentRequestID)] = true
+		tasks[strings.TrimSpace(supervision.TaskRef)] = true
+		deliveries[strings.TrimSpace(supervision.DeliveryRef)] = true
+		assessments[strings.TrimSpace(supervision.AssessmentRef)] = true
+		questions[strings.TrimSpace(supervision.QuestionID)] = true
+	}
+	snapshot := compactTickInputSnapshotForAgentsV0(input.Snapshot, agents)
+	snapshot.Tasks = filterTickInputRefsByExactV0(snapshot.Tasks, tasks)
+	snapshot.CapacityRequests = nil
+	snapshot.CapacityDecisions = nil
+	snapshot.ConcurrencyGates = nil
+	snapshot.PhaseArtifacts = nil
+	snapshot.Deliveries = filterTickInputRefsByExactV0(snapshot.Deliveries, deliveries)
+	snapshot.Reviews = nil
+	snapshot.ReviewResults = nil
+	snapshot.AcceptedReviews = nil
+	snapshot.ReworkRequests = nil
+	snapshot.AgentAssessments = filterTickInputRefsByExactV0(snapshot.AgentAssessments, assessments)
+	snapshot.DirectorQuestions = filterTickInputRefsByExactV0(snapshot.DirectorQuestions, questions)
+	snapshot.DirectorAnsweredQuestions = filterTickInputRefsByExactV0(snapshot.DirectorAnsweredQuestions, questions)
+	snapshot.ExpiredLeaseRefs = nil
+	snapshot.ReplanRefs = nil
+	snapshot.BlockingQualityGateRefs = nil
+	input.Snapshot = snapshot
+	return input
+}
+
 func compactTickInputSnapshotForAgentsV0(
 	snapshot orquestadirectorscheduler.RunSchedulingSnapshotV0,
 	agents map[string]bool,

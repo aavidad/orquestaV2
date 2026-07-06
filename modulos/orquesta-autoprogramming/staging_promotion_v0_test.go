@@ -82,3 +82,19 @@ func TestEvaluateAutoprogrammingStagingPromotionV0PendientePorSolapeVivoV0(t *te
 		t.Fatalf("decision=%+v", decision)
 	}
 }
+
+func TestAutoprogrammingStagingPromotionV0DeclaraReciboIntegracionV0(t *testing.T) {
+	result := AutoprogrammingStagingEffectResultV0{
+		SchemaVersion:     AutoprogrammingStagingPromotionSchemaVersionV0,
+		Status:            AutoprogrammingStagingEffectPendingPushV0,
+		IntegrationStatus: AutoprogrammingStagingIntegrationStatusPendingIntegrationV0,
+		CommitRef:         "commit-ref-autoprogramming-pending-integration-001",
+		EvidenceRefs:      []string{"evidence-ref-autoprogramming-pending-integration"},
+	}
+
+	if result.IntegrationStatus != AutoprogrammingStagingIntegrationStatusPendingIntegrationV0 ||
+		result.Status != AutoprogrammingStagingEffectPendingPushV0 ||
+		result.IntegrationReceiptRef != "" {
+		t.Fatalf("result=%+v", result)
+	}
+}

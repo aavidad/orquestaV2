@@ -12,6 +12,10 @@ const (
 	AutoprogrammingStagingPromotionStatusPendingV0 = "promotion_pending"
 	AutoprogrammingStagingPromotionStatusBlockedV0 = "promotion_blocked"
 
+	AutoprogrammingStagingIntegrationStatusIntegratedV0         = "integrated"
+	AutoprogrammingStagingIntegrationStatusPendingIntegrationV0 = "pending_integration"
+	AutoprogrammingStagingIntegrationStatusBlockedPushV0        = "blocked_push"
+
 	AutoprogrammingStagingEffectPromotedV0    = "promoted"
 	AutoprogrammingStagingEffectCleanV0       = "clean"
 	AutoprogrammingStagingEffectPendingV0     = "pending"
@@ -91,6 +95,8 @@ type AutoprogrammingStagingEffectResultV0 struct {
 	ChangedPaths              []string                                    `json:"changed_paths,omitempty"`
 	CommitRef                 string                                      `json:"commit_ref,omitempty"`
 	CommitShortRef            string                                      `json:"commit_short_ref,omitempty"`
+	IntegrationReceiptRef     string                                      `json:"integration_receipt_ref,omitempty"`
+	IntegrationStatus         string                                      `json:"integration_status,omitempty"`
 	Retryable                 bool                                        `json:"retryable,omitempty"`
 	EvidenceRefs              []string                                    `json:"evidence_refs,omitempty"`
 	PromotionGuardianReceipts []AutoprogrammingPromotionGuardianReceiptV0 `json:"promotion_guardian_receipts,omitempty"`

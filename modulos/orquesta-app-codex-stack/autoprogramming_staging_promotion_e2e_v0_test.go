@@ -357,12 +357,15 @@ func autoprogrammingPromotionEffectForTestV0(
 type statusAutoprogrammingPromotionPortForTestV0 struct {
 	promoteStatus string
 	archiveStatus string
+	promotions    int
+	archives      int
 }
 
 func (port *statusAutoprogrammingPromotionPortForTestV0) PromoteAutoprogrammingStagingV0(
 	context.Context,
 	orquestaautoprogramming.AutoprogrammingStagingPromotionCommandV0,
 ) (orquestaautoprogramming.AutoprogrammingStagingEffectResultV0, error) {
+	port.promotions++
 	return orquestaautoprogramming.AutoprogrammingStagingEffectResultV0{Status: port.promoteStatus, EvidenceRefs: []string{"evidence-ref-promotion-status"}}, nil
 }
 
@@ -370,6 +373,7 @@ func (port *statusAutoprogrammingPromotionPortForTestV0) ArchiveAutoprogrammingS
 	context.Context,
 	orquestaautoprogramming.AutoprogrammingStagingCleanupCommandV0,
 ) (orquestaautoprogramming.AutoprogrammingStagingEffectResultV0, error) {
+	port.archives++
 	return orquestaautoprogramming.AutoprogrammingStagingEffectResultV0{Status: port.archiveStatus, EvidenceRefs: []string{"evidence-ref-archive-status"}}, nil
 }
 

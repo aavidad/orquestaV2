@@ -1,0 +1,5 @@
+goal_ref: goal-ref-task-autoprogramming-afceb345c0cf-g01-rework-1
+objective: canal directo operador-director Orquesta
+scope: contratos/puertos hexagonales, MCP/API, server bridge, docs/tests
+next_artifact: durable goal result json and focused implementation review
+evidence_ref: evidence-ref-checkpoint-started-20260705-rework-1

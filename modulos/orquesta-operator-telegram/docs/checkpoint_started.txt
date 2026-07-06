@@ -1,0 +1,5 @@
+goal_ref: goal-ref-task-autoprogramming-8f064b280aca-g01
+objetivo: telegram terminal notifications and remote operator commands
+alcance: modulos/orquesta-operator-telegram, operator-director-channel, operator-notifications, mcp/server telegram wiring, runbooks
+siguiente_artefacto: orquesta_goal_result_goal-ref-task-autoprogramming-8f064b280aca-g01.json
+evidencia: checkpoint_started

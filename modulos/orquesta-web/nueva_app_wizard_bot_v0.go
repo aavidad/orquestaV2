@@ -1,6 +1,7 @@
 package orquestaweb
 
 import (
+	"context"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,6 +22,40 @@ type WizardBotReplyV0 struct {
 	TurnResult    WizardTurnResultV0 `json:"turn_result"`
 	FilledAnswers []WizardAnswerV0   `json:"filled_answers,omitempty"`
 	GroundingRefs []string           `json:"grounding_refs"`
+	LLMStatus     string             `json:"llm_status,omitempty"`
+	CostNotice    string             `json:"cost_notice,omitempty"`
+}
+
+type WizardBotLLMAssistPortV0 interface {
+	AssistWizardBotTurnV0(context.Context, WizardBotLLMRequestV0) (WizardBotLLMResultV0, error)
+}
+
+type WizardBotLLMRequestV0 struct {
+	SessionRef        string                        `json:"session_ref"`
+	UserText          string                        `json:"user_text"`
+	Locale            string                        `json:"locale,omitempty"`
+	TurnResult        WizardTurnResultV0            `json:"turn_result"`
+	GroundingSnippets []WizardBotGroundingSnippetV0 `json:"grounding_snippets"`
+	AllowedAnswers    []WizardBotAllowedAnswerV0    `json:"allowed_answers"`
+}
+
+type WizardBotGroundingSnippetV0 struct {
+	Ref  string `json:"ref"`
+	Kind string `json:"kind"`
+	Text string `json:"text"`
+}
+
+type WizardBotAllowedAnswerV0 struct {
+	QuestionRef string `json:"question_ref"`
+	UserChoice  string `json:"user_choice"`
+}
+
+type WizardBotLLMResultV0 struct {
+	Status        string           `json:"status"`
+	Say           string           `json:"say,omitempty"`
+	FilledAnswers []WizardAnswerV0 `json:"filled_answers,omitempty"`
+	GroundingRefs []string         `json:"grounding_refs,omitempty"`
+	EvidenceRefs  []string         `json:"evidence_refs,omitempty"`
 }
 
 type wizardRAGCorpusEntryV0 struct {
@@ -41,6 +76,15 @@ type wizardLexicalMatchV0 struct {
 func NewWebNuevaAppWizardBotReplyV0(
 	session WebNuevaAppIntakeSessionV0,
 	turn WizardBotTurnV0,
+) (WebNuevaAppIntakeSessionV0, WizardBotReplyV0) {
+	return NewWebNuevaAppWizardBotReplyWithLLMV0(context.Background(), session, turn, nil)
+}
+
+func NewWebNuevaAppWizardBotReplyWithLLMV0(
+	ctx context.Context,
+	session WebNuevaAppIntakeSessionV0,
+	turn WizardBotTurnV0,
+	assistant WizardBotLLMAssistPortV0,
 ) (WebNuevaAppIntakeSessionV0, WizardBotReplyV0) {
 	session = refreshWebNuevaAppIntakeSessionV0(session)
 	if trimV0(turn.SessionRef) != "" {
@@ -80,6 +124,11 @@ func NewWebNuevaAppWizardBotReplyV0(
 		var applied WizardTurnResultV0
 		session, applied = ApplyWebNuevaAppWizardAnswersV0(session, answers)
 		return session, wizardBotReplyV0(turn.Locale, applied, answers, wizardBotSayForTurnV0(turn.Locale, applied, NewWebNuevaAppWizardRAGCorpusV0(applied), "He registrado tu respuesta."), wizardGroundingRefsForAnswersV0(applied, answers))
+	}
+	if assistant != nil && text != "" {
+		if assistedSession, reply, ok := wizardBotTryLLMAssistV0(ctx, session, turn, current, corpus, assistant); ok {
+			return assistedSession, reply
+		}
 	}
 
 	return session, wizardBotReplyV0(turn.Locale, current, nil, wizardBotSayForTurnV0(turn.Locale, current, corpus, ""), wizardGroundingRefsForTurnV0(current))
@@ -462,6 +511,138 @@ func wizardBotReplyV0(locale string, turn WizardTurnResultV0, answers []WizardAn
 		FilledAnswers: answers,
 		GroundingRefs: compactStringsV0(refs),
 	}
+}
+
+func wizardBotTryLLMAssistV0(
+	ctx context.Context,
+	session WebNuevaAppIntakeSessionV0,
+	turn WizardBotTurnV0,
+	current WizardTurnResultV0,
+	corpus []wizardRAGCorpusEntryV0,
+	assistant WizardBotLLMAssistPortV0,
+) (WebNuevaAppIntakeSessionV0, WizardBotReplyV0, bool) {
+	request := WizardBotLLMRequestV0{
+		SessionRef:        session.SessionRef,
+		UserText:          trimV0(turn.UserText),
+		Locale:            trimV0(turn.Locale),
+		TurnResult:        current,
+		GroundingSnippets: wizardBotGroundingSnippetsV0(turn.Locale, current, corpus),
+		AllowedAnswers:    wizardBotAllowedAnswersV0(current),
+	}
+	result, err := assistant.AssistWizardBotTurnV0(ctx, request)
+	if err != nil || wizardBotLLMDegradedV0(result.Status) {
+		say := wizardBotSayForTurnV0(turn.Locale, current, corpus, wizardBotLLMDegradedMessageV0(turn.Locale, result.Status))
+		reply := wizardBotReplyV0(turn.Locale, current, nil, say, wizardGroundingRefsForTurnV0(current))
+		reply.LLMStatus = wizardBotLLMStatusOrDefaultV0(result.Status, "provider_failed")
+		return session, reply, true
+	}
+	answers := wizardBotValidLLMAnswersV0(result.FilledAnswers, current)
+	refs := wizardBotValidLLMGroundingRefsV0(result.GroundingRefs, request.GroundingSnippets)
+	if len(refs) == 0 {
+		refs = wizardGroundingRefsForTurnV0(current)
+	}
+	if len(answers) > 0 {
+		var applied WizardTurnResultV0
+		session, applied = ApplyWebNuevaAppWizardAnswersV0(session, answers)
+		say := trimV0(result.Say)
+		if say == "" || !wizardBotLLMSayGroundedV0(say, refs) {
+			say = wizardBotSayForTurnV0(turn.Locale, applied, NewWebNuevaAppWizardRAGCorpusV0(applied), "He registrado tu respuesta.")
+		}
+		reply := wizardBotReplyV0(turn.Locale, applied, answers, say, appendUniqueStringsV0(refs, wizardGroundingRefsForAnswersV0(applied, answers)...))
+		reply.LLMStatus = "ok"
+		reply.CostNotice = wizardBotCostNoticeV0(turn.Locale)
+		return session, reply, true
+	}
+	if say := trimV0(result.Say); say != "" && wizardBotLLMSayGroundedV0(say, refs) {
+		reply := wizardBotReplyV0(turn.Locale, current, nil, say, refs)
+		reply.LLMStatus = "ok"
+		reply.CostNotice = wizardBotCostNoticeV0(turn.Locale)
+		return session, reply, true
+	}
+	return session, WizardBotReplyV0{}, false
+}
+
+func wizardBotGroundingSnippetsV0(locale string, turn WizardTurnResultV0, corpus []wizardRAGCorpusEntryV0) []WizardBotGroundingSnippetV0 {
+	refs := wizardGroundingRefsForTurnV0(turn)
+	out := make([]WizardBotGroundingSnippetV0, 0, len(refs))
+	for _, ref := range refs {
+		for _, entry := range corpus {
+			if entry.Ref != ref {
+				continue
+			}
+			out = append(out, WizardBotGroundingSnippetV0{Ref: entry.Ref, Kind: entry.Kind, Text: wizardBestEntryTextV0(locale, entry)})
+			break
+		}
+	}
+	return out
+}
+
+func wizardBotAllowedAnswersV0(turn WizardTurnResultV0) []WizardBotAllowedAnswerV0 {
+	var out []WizardBotAllowedAnswerV0
+	for _, question := range turn.Questions {
+		for _, option := range question.Options {
+			out = append(out, WizardBotAllowedAnswerV0{QuestionRef: question.QuestionRef, UserChoice: option.Value})
+		}
+	}
+	return out
+}
+
+func wizardBotValidLLMAnswersV0(values []WizardAnswerV0, turn WizardTurnResultV0) []WizardAnswerV0 {
+	allowed := map[string]bool{}
+	for _, allowedAnswer := range wizardBotAllowedAnswersV0(turn) {
+		allowed[allowedAnswer.QuestionRef+"\x00"+allowedAnswer.UserChoice] = true
+	}
+	var out []WizardAnswerV0
+	for _, answer := range values {
+		answer.QuestionRef = trimV0(answer.QuestionRef)
+		answer.UserChoice = trimV0(answer.UserChoice)
+		if allowed[answer.QuestionRef+"\x00"+answer.UserChoice] && !wizardAnswerAlreadyFilledV0(out, answer.QuestionRef) {
+			out = append(out, answer)
+		}
+	}
+	return out
+}
+
+func wizardBotValidLLMGroundingRefsV0(refs []string, snippets []WizardBotGroundingSnippetV0) []string {
+	allowed := map[string]bool{}
+	for _, snippet := range snippets {
+		allowed[snippet.Ref] = true
+	}
+	var out []string
+	for _, ref := range refs {
+		ref = trimV0(ref)
+		if allowed[ref] {
+			out = append(out, ref)
+		}
+	}
+	return compactStringsV0(out)
+}
+
+func wizardBotLLMSayGroundedV0(say string, refs []string) bool {
+	return trimV0(say) != "" && len(refs) > 0
+}
+
+func wizardBotLLMDegradedV0(status string) bool {
+	status = trimV0(status)
+	return status == "budget_exhausted" || status == "provider_failed" || status == "disabled"
+}
+
+func wizardBotLLMStatusOrDefaultV0(status, fallback string) string {
+	if status = trimV0(status); status != "" {
+		return status
+	}
+	return fallback
+}
+
+func wizardBotLLMDegradedMessageV0(locale, status string) string {
+	if trimV0(status) == "budget_exhausted" {
+		return wizardBotLocaleTextV0(locale, "Sigo contigo en modo basico por presupuesto.", "I am continuing in basic mode because the budget is exhausted.")
+	}
+	return wizardBotLocaleTextV0(locale, "Sigo contigo en modo basico porque el proveedor no esta disponible.", "I am continuing in basic mode because the provider is unavailable.")
+}
+
+func wizardBotCostNoticeV0(locale string) string {
+	return wizardBotLocaleTextV0(locale, "El chat con LLM consume presupuesto del bot.", "LLM chat consumes the bot budget.")
 }
 
 func wizardBotSayForMatchesV0(locale string, matches []wizardLexicalMatchV0, turn WizardTurnResultV0, corpus []wizardRAGCorpusEntryV0) string {
