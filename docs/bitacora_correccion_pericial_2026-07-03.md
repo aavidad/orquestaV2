@@ -4281,3 +4281,18 @@ para Codex: D4 (emisores sin dedupe), D5 (gate comun de compactacion), D6
 Quedan para Codex: D4 (auditoria de emisores sin dedupe semantico) y D6
 (reason codes de placeholders — ver nota anadida a la tarea con el analisis
 de los 3 puntos de fix). Estado cola: D1-D3, D5, D7 cerradas.
+
+## TAREA-D6 (nucleo) cerrada por Claude (2026-07-06)
+
+`32be9b9dd`: el normalizador de resultados del appserver clasifica los
+placeholders por FORMA (blocked sin tests, sin checklist completada y sin
+missing_refs) y proyecta `IssueCode=goal_result_placeholder_in_progress` +
+evidencia estable. Watchers y status pueden discriminar sin leer texto libre.
+Tests con las redacciones reales que causaron las falsas alarmas. Residual
+menor de D6 para Codex: instruir el reason_code en el paquete goal-first y
+usar el IssueCode en las proyecciones de observe (el dato ya viaja).
+`9a031eb96`: el runbook D7 usa el shutdown comun del repo (API -> SIGINT ->
+SIGTERM + limpieza tmux); los dos guards de scripts pasan. Suites verdes:
+runtime-codex-appserver, cmd/orquesta-server completa, app-codex-stack.
+
+Cola D1-D7: solo queda D4 (auditoria de emisores) integra para Codex.
