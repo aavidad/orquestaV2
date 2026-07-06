@@ -2805,6 +2805,19 @@ ubicarlo bajo un scope directorio autorizado. Evidencia:
 | BUG-ORQ-20260705-SUPERVISOR-SCHEDULER-PAYLOAD | supervisor/autoprogramacion | abierto | Supervisor remoto repite `director_tick_input_build_invalido: field=scheduler_input.payload`; T137 rank 1 bloquea cola. | `docs/incidencias/incidencia_orquesta_supervisor_scheduler_payload_2026-07-05.md` | Pendiente reproducir tick real y corregir compactacion/seleccion. |
 | BUG-ORQ-20260705-CODEX-HOME-TOKEN-INVALIDADO | runtime-codex/proveedor | abierto | Agente Orquesta falla antes de programar con `token_invalidated` y `refresh_token_invalidated` en `/srv/orquesta-self/codex-home`. | `docs/incidencias/incidencia_orquesta_codex_home_token_invalidado_2026-07-05.md` | Requiere reautenticacion del Codex CLI del servidor y relanzar tarea. |
 
+BUG-ORQ-20260706-BUDGET-CONTRACT-DESALINEADO (cerrado en codigo local):
+La auditoria estructural P1 detecto presupuestos de eventos/payload definidos
+en privado por capas: pagina de lectura 250, pagina store 1000, lectura total
+10000, maximo store 20000 y payload scheduler 256 KiB. Esa dispersion ya habia
+producido falsos diagnosticos de presupuesto y riesgo de payload excesivo.
+Cierre aplicado por Codex local: nuevo paquete neutral
+`modulos/orquesta-orchestration-budget` con constantes canonicas, consumo desde
+`orquesta-state-file`, `orquesta-orchestration-core`,
+`orquesta-app-director-service`, `orquesta-director-scheduler` y
+`orquesta-director-tick-input`; tests de coherencia `pagina <= lectura <= store`
+y `snapshot <= payload scheduler`; tests focales de lectores paginados.
+Estado: pendiente commit/despliegue remoto.
+
 BUG nuevo `BUG-ORQ-20260706-SUPERVISOR-EVENTS-BUDGET-PARKING` (cerrado en codigo):
 Tras cerrar el falso presupuesto por pagina y el dedupe de eventos duplicados,
 seguia abierta la resiliencia de cola: si un run supera de verdad el presupuesto

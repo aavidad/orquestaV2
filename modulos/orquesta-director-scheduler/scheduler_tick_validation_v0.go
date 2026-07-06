@@ -5,11 +5,12 @@ import (
 	"strings"
 
 	orquestacoreconcurrency "orquesta/modulos/orquesta-core-concurrency"
+	orquestaorchestrationbudget "orquesta/modulos/orquesta-orchestration-budget"
 	orquestarails "orquesta/modulos/orquesta-rails"
 )
 
 const (
-	maxSchedulerTickPayloadBytesV0 = 262144
+	maxSchedulerTickPayloadBytesV0 = orquestaorchestrationbudget.SchedulerTickPayloadMaxBytesV0
 	maxSchedulerTickRefsV0         = 1024
 )
 

@@ -198,9 +198,11 @@ persistencia pensando en paralelo antes de esperar entregas. El limite anterior
 de 8 KiB cortaba esa cohorte aunque seguia siendo contexto pequeno.
 Alternativas: lanzar los agentes por tandas de 2; eliminar el limite; mover la
 cohorte fuera del scheduler.
-Impacto: `maxSchedulerTickPayloadBytesV0` queda en 16 KiB. El scheduler sigue
-rechazando payloads grandes, proveedores/modelos/HOME/credenciales y no lee
-runtime ni DB.
+Impacto: el limite vivo de payload del tick queda en el contrato canonico
+`orquesta-orchestration-budget.SchedulerTickPayloadMaxBytesV0` y hoy vale
+256 KiB; el presupuesto de snapshot compactado queda por debajo de ese limite.
+El scheduler sigue rechazando payloads grandes, proveedores/modelos/HOME/
+credenciales y no lee runtime ni DB.
 Estado: aceptada
 ```
 

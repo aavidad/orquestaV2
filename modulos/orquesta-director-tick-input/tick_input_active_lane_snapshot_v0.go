@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	orquestadirectorscheduler "orquesta/modulos/orquesta-director-scheduler"
+	orquestaorchestrationbudget "orquesta/modulos/orquesta-orchestration-budget"
 )
 
 func compactTickInputSnapshotForPhaseArtifactsV0(
@@ -39,7 +40,7 @@ func compactTickInputSnapshotForDeliveriesV0(
 	return input
 }
 
-const progressLaneCompactionThresholdBytesV0 = 64 * 1024
+const progressLaneCompactionThresholdBytesV0 = orquestaorchestrationbudget.SchedulerTickSnapshotBudgetBytesV0
 
 func compactTickInputSnapshotForProgressV0(
 	input orquestadirectorscheduler.DirectorSchedulerTickInputV0,

@@ -4,11 +4,12 @@ import (
 	"context"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestaorchestrationbudget "orquesta/modulos/orquesta-orchestration-budget"
 )
 
 const (
-	runEventsFullReadPageLimitV0 = 250
-	runEventsFullReadMaxV0       = 10000
+	runEventsFullReadPageLimitV0 = orquestaorchestrationbudget.RunEventReadPageLimitV0
+	runEventsFullReadMaxV0       = orquestaorchestrationbudget.RunEventReadMaxV0
 )
 
 func loadRunEventsWithBudgetV0(

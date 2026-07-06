@@ -1,14 +1,18 @@
 package orquestastatefile
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	orquestaorchestrationbudget "orquesta/modulos/orquesta-orchestration-budget"
+)
 
 const (
-	defaultEventLogMaxAppendEventsV0       = 256
-	defaultEventLogMaxRunEventsV0          = 20000
-	defaultEventLogMaxEventBytesV0         = 256 * 1024
+	defaultEventLogMaxAppendEventsV0       = orquestaorchestrationbudget.RunEventStoreDefaultAppendEventLimitV0
+	defaultEventLogMaxRunEventsV0          = orquestaorchestrationbudget.RunEventStoreMaxEventsV0
+	defaultEventLogMaxEventBytesV0         = orquestaorchestrationbudget.StateFileEventPayloadMaxBytesV0
 	defaultEventLogMaxEventSnapshotBytesV0 = stateFileJSONMaxBytesV0
-	defaultEventLogPageLimitV0             = 100
-	maxEventLogPageLimitV0                 = 1000
+	defaultEventLogPageLimitV0             = orquestaorchestrationbudget.RunEventStoreDefaultPageLimitV0
+	maxEventLogPageLimitV0                 = orquestaorchestrationbudget.RunEventStorePageLimitV0
 )
 
 type eventLogBudgetV0 struct {

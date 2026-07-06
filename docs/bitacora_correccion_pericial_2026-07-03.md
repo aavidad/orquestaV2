@@ -4203,3 +4203,42 @@ Residual: queda desplegar en remoto y probar desde Telegram real. Si el run ya
 visible intenta ejecutar agente, el servidor aun puede topar con
 `BUG-ORQ-20260705-CODEX-HOME-TOKEN-INVALIDADO`, que es un bloqueo de proveedor
 separado.
+
+## D2 contrato unico de presupuestos (2026-07-06)
+
+Se cierra en codigo local `BUG-ORQ-20260706-BUDGET-CONTRACT-DESALINEADO`,
+derivado de la auditoria P1 de Claude: las capas tenian presupuestos privados
+para eventos y payload (`250`, `1000`, `10000`, `20000`, `256 KiB`) sin contrato
+comun ni test de coherencia.
+
+Commit: este mismo corte con mensaje `budget: centralizar presupuestos de
+orquestacion`.
+
+Cierre aplicado:
+
+- `modulos/orquesta-orchestration-budget`: paquete neutral nuevo, sin imports,
+  con constantes canonicas de pagina de lectura, pagina store, lectura total,
+  maximo store, payload de evento, snapshot de tick y payload scheduler.
+- `modulos/orquesta-state-file`: consume el contrato para pagina/maximo de
+  eventos y payload de evento, conservando overrides de `ConfigV0`.
+- `modulos/orquesta-orchestration-core` y
+  `modulos/orquesta-app-director-service`: lectores paginados usan pagina
+  canonica `250` y corte total `10000`.
+- `modulos/orquesta-director-scheduler`: el limite de payload del tick sale de
+  `SchedulerTickPayloadMaxBytesV0` y sigue en 256 KiB.
+- `modulos/orquesta-director-tick-input`: el gate de compactacion del snapshot
+  de progreso usa el presupuesto canonico de snapshot, menor que el payload del
+  scheduler.
+- `modulos/orquesta-director-scheduler/docs/decisiones.md`: se corrige el dato
+  stale que seguia diciendo 16 KiB.
+- `docs/inventario_bugs_orquesta_2026-06-30.md`: se registra la clase de bug y
+  el cierre local.
+
+Pruebas verdes:
+
+- `git diff --check`
+- `go test -count=1 ./modulos/orquesta-orchestration-budget ./modulos/orquesta-state-file ./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service ./modulos/orquesta-director-scheduler ./modulos/orquesta-director-tick-input`
+- `go test -count=1 ./modulos/orquesta-director-cycle ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`
+
+Residual: pendiente despliegue/verificacion remota. D2 no cambia valores ni
+arregla D5; solo evita que vuelvan a divergir presupuestos entre capas.
