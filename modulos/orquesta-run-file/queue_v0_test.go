@@ -181,6 +181,50 @@ func TestRunFileStoreListSchedulingCandidatesFiltraTerminalesAntesDeLimitV0(t *t
 	}
 }
 
+func TestRunFileStoreListSchedulingCandidatesFiltraRunRefAntesDeLimitV0(t *testing.T) {
+	dir := t.TempDir()
+	store := mustNewRunFileStoreV0(t, dir)
+	ctx := context.Background()
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+	for _, command := range []orquestarunqueue.RunQueuePriorityCommandV0{
+		{
+			RunRef:        "run-primero",
+			QueueRef:      "global",
+			AppRef:        "app-1",
+			PriorityScore: 90,
+			UpdatedAt:     now,
+			Reason:        "seed-first",
+		},
+		{
+			RunRef:        "run-accepted-visible",
+			QueueRef:      "global",
+			AppRef:        "app-2",
+			PriorityScore: 10,
+			UpdatedAt:     now.Add(time.Minute),
+			Reason:        "autoprogramming_prepare_run",
+		},
+	} {
+		if _, err := store.SetRunPriorityV0(ctx, command); err != nil {
+			t.Fatalf("seed %s: %v", command.RunRef, err)
+		}
+	}
+
+	reopened := mustNewRunFileStoreV0(t, dir)
+	listed, err := reopened.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{
+		QueueRef: "global",
+		RunRef:   "run-accepted-visible",
+		Limit:    1,
+	})
+	if err != nil {
+		t.Fatalf("ListRunSchedulingCandidatesV0: %v", err)
+	}
+	if len(listed) != 1 ||
+		listed[0].RunRef != "run-accepted-visible" ||
+		listed[0].Reason != "autoprogramming_prepare_run" {
+		t.Fatalf("listed=%+v", listed)
+	}
+}
+
 func TestRunFileStorePriorityWriterPuedePersistirEstadoTerminalV0(t *testing.T) {
 	dir := t.TempDir()
 	store := mustNewRunFileStoreV0(t, dir)

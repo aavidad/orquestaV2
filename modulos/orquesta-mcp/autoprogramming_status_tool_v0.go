@@ -959,6 +959,7 @@ func mcpAutoprogrammingQueueInputV0(
 		CorrelationID:        input.CorrelationID,
 		Action:               MCPRunQueuePriorityActionRankV0,
 		QueueRef:             input.QueueRef,
+		RunRef:               input.RunRef,
 		AppRefs:              input.AppRefs,
 		Limit:                input.QueueLimit,
 		IncludeNonExecutable: true,

@@ -43,6 +43,7 @@ type ScopeRefV0 = orquestacoreconcurrency.ScopeRefV0
 
 type RunQueueReadRequestV0 struct {
 	QueueRef             string   `json:"queue_ref,omitempty"`
+	RunRef               string   `json:"run_ref,omitempty"`
 	AppRefs              []string `json:"app_refs,omitempty"`
 	Limit                int      `json:"limit,omitempty"`
 	IncludeNonExecutable bool     `json:"include_non_executable,omitempty"`
@@ -78,6 +79,7 @@ type RunSchedulingCandidateV0 struct {
 	ParentRunRef     string                                   `json:"parent_run_ref,omitempty"`
 	SupersedesRunRef string                                   `json:"supersedes_run_ref,omitempty"`
 	RescueReason     string                                   `json:"rescue_reason,omitempty"`
+	Reason           string                                   `json:"reason,omitempty"`
 	EvidenceRefs     []string                                 `json:"evidence_refs,omitempty"`
 	WorksetClaims    []orquestacoreconcurrency.WorksetClaimV0 `json:"workset_claims,omitempty"`
 }

@@ -15,9 +15,9 @@ func TestMCPRunQueuePriorityDescriptorV0DeclaraEvidenciaDeCandidatos(t *testing.
 	descriptor := MCPRunQueuePriorityDescriptorV0()
 
 	for _, want := range []string{
-		"ranked?[]{run_ref,status,priority_score,evidence_refs?}",
-		"terminal?[]{run_ref,status,priority_score,evidence_refs?}",
-		"updated?{run_ref,status,priority_score,evidence_refs?}",
+		"ranked?[]{run_ref,status,priority_score,reason?,evidence_refs?}",
+		"terminal?[]{run_ref,status,priority_score,reason?,evidence_refs?}",
+		"updated?{run_ref,status,priority_score,reason?,evidence_refs?}",
 	} {
 		if !strings.Contains(descriptor.Output, want) {
 			t.Fatalf("descriptor run_queue.priority no declara evidencia de candidatos %q: %s", want, descriptor.Output)
@@ -106,6 +106,32 @@ func TestMCPRunQueuePriorityExecutorV0ValidaActionYPuerto(t *testing.T) {
 	}
 	if result.Errores[0].Code != "run_queue_writer_no_disponible" {
 		t.Fatalf("writer nil no validado: %+v", result)
+	}
+}
+
+func TestMCPRunQueuePriorityExecutorV0RankTransportaRunRefExactoV0(t *testing.T) {
+	reader := &fakeMCPRunQueueReaderV0{
+		candidates: []orquestarunqueue.RunSchedulingCandidateV0{
+			runQueueCandidateMCPTestV0("run-visible", "app", "ready", 20, time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)),
+		},
+	}
+	result, err := (MCPRunQueuePriorityToolExecutorV0{Reader: reader}).Execute(
+		context.Background(),
+		MCPRunQueuePriorityToolInputV0{
+			Action:   "rank",
+			QueueRef: "global",
+			RunRef:   " run-visible ",
+			Limit:    1,
+		},
+	)
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if reader.request.RunRef != "run-visible" ||
+		result.Estado != MCPRunQueuePriorityEstadoOKV0 ||
+		len(result.Ranked) != 1 ||
+		result.Ranked[0].RunRef != "run-visible" {
+		t.Fatalf("request=%+v result=%+v", reader.request, result)
 	}
 }
 
@@ -333,6 +359,7 @@ func (fake *fakeMCPRunQueueWriterV0) SetRunPriorityV0(
 		ParentRunRef:     command.ParentRunRef,
 		SupersedesRunRef: command.SupersedesRunRef,
 		RescueReason:     command.RescueReason,
+		Reason:           command.Reason,
 		EvidenceRefs:     command.EvidenceRefs,
 	}, nil
 }

@@ -6,7 +6,13 @@ import (
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
-const mcpAutoprogrammingQueuedNotDispatchedV0 = "queued_not_dispatched"
+const (
+	mcpAutoprogrammingQueuedNotDispatchedV0        = "queued_not_dispatched"
+	mcpAutoprogrammingPrepareRunQueuedReasonV0     = "autoprogramming_prepare_run"
+	mcpAutoprogrammingPrepareRunPendingDispatchV0  = "autoprogramming_prepare_run_pending_dispatch"
+	mcpAutoprogrammingPrepareRunPendingEvidenceV0  = "evidence-ref-autoprogramming-prepare-run-pending-dispatch"
+	mcpAutoprogrammingQueueNotDispatchedEvidenceV0 = "evidence-ref-run-queue-queued-not-dispatched"
+)
 
 func diagnosticsFromQueuedNotDispatchedMCPAutoprogrammingV0(
 	queue *MCPRunQueuePriorityToolResultV0,
@@ -33,10 +39,22 @@ func diagnosticsFromQueuedNotDispatchedMCPAutoprogrammingV0(
 			"run en cola sin agente/proceso observado; action=supervise_or_enable_resident_director",
 		)
 		diagnostic.EvidenceRefs = compactStringsMCPV0(append(
-			[]string{"evidence-ref-run-queue-queued-not-dispatched"},
+			[]string{mcpAutoprogrammingQueueNotDispatchedEvidenceV0},
 			candidate.EvidenceRefs...,
 		))
 		out = append(out, diagnostic)
+		if strings.TrimSpace(candidate.Reason) == mcpAutoprogrammingPrepareRunQueuedReasonV0 {
+			prepared := mcpAutoprogrammingDiagnosticV0(
+				mcpAutoprogrammingPrepareRunPendingDispatchV0,
+				"run:"+runRef,
+				"prepare-run accepted visible en cola; reason_code=autoprogramming_prepare_run action=supervise_or_wait_resident_director",
+			)
+			prepared.EvidenceRefs = compactStringsMCPV0(append(
+				[]string{mcpAutoprogrammingPrepareRunPendingEvidenceV0},
+				candidate.EvidenceRefs...,
+			))
+			out = append(out, prepared)
+		}
 	}
 	return out
 }
@@ -46,11 +64,17 @@ func countMCPAutoprogrammingQueuedNotDispatchedV0(
 	goalStatesByRunRef map[string]struct{},
 	observedRuns ...*MCPDirectorStatsToolResultV0,
 ) int {
-	return len(diagnosticsFromQueuedNotDispatchedMCPAutoprogrammingV0(
+	count := 0
+	for _, diagnostic := range diagnosticsFromQueuedNotDispatchedMCPAutoprogrammingV0(
 		queue,
 		goalStatesByRunRef,
 		observedRuns...,
-	))
+	) {
+		if diagnostic.Code == mcpAutoprogrammingQueuedNotDispatchedV0 {
+			count++
+		}
+	}
+	return count
 }
 
 func mcpAutoprogrammingQueuedNotDispatchedStatusV0(status string) bool {

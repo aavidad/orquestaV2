@@ -84,6 +84,7 @@ type MCPRunQueueRankedCandidateCompactV0 struct {
 	ParentRunRef     string   `json:"parent_run_ref,omitempty"`
 	SupersedesRunRef string   `json:"supersedes_run_ref,omitempty"`
 	RescueReason     string   `json:"rescue_reason,omitempty"`
+	Reason           string   `json:"reason,omitempty"`
 	ActiveAttemptRef string   `json:"active_attempt_ref,omitempty"`
 	EvidenceRefs     []string `json:"evidence_refs,omitempty"`
 }
@@ -98,7 +99,7 @@ func MCPRunQueuePriorityDescriptorV0() MCPRunQueuePriorityToolDescriptorV0 {
 		Name:        MCPRunQueuePriorityToolNameV0,
 		Version:     MCPRunQueuePriorityToolVersionV0,
 		InputSchema: "envelope:{action,queue_ref?,run_ref?,app_ref?,status?,priority_score?,attempt_group_ref?,parent_run_ref?,supersedes_run_ref?,rescue_reason?,limit?,include_non_executable?,occurred_at?}",
-		Output:      "ok:{action,queue_ref,count,ranked?[]{run_ref,status,priority_score,evidence_refs?},terminal?[]{run_ref,status,priority_score,evidence_refs?},updated?{run_ref,status,priority_score,evidence_refs?}}|error:{errores_publicos}",
+		Output:      "ok:{action,queue_ref,count,ranked?[]{run_ref,status,priority_score,reason?,evidence_refs?},terminal?[]{run_ref,status,priority_score,reason?,evidence_refs?},updated?{run_ref,status,priority_score,reason?,evidence_refs?}}|error:{errores_publicos}",
 		ResourceURI: MCPRunQueuePriorityResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -165,6 +166,7 @@ func (executor MCPRunQueuePriorityToolExecutorV0) executeRankV0(
 	}
 	request := orquestarunqueue.RunQueueReadRequestV0{
 		QueueRef:             strings.TrimSpace(input.QueueRef),
+		RunRef:               strings.TrimSpace(input.RunRef),
 		AppRefs:              compactStringsMCPV0(input.AppRefs),
 		Limit:                input.Limit,
 		IncludeNonExecutable: input.IncludeNonExecutable,
@@ -286,6 +288,7 @@ func compactRunQueueRankedCandidatesMCPV0(
 			ParentRunRef:     strings.TrimSpace(value.ParentRunRef),
 			SupersedesRunRef: strings.TrimSpace(value.SupersedesRunRef),
 			RescueReason:     strings.TrimSpace(value.RescueReason),
+			Reason:           strings.TrimSpace(value.Reason),
 			ActiveAttemptRef: strings.TrimSpace(attempt.ActiveAttemptRef),
 			EvidenceRefs:     compactStringsMCPV0(value.EvidenceRefs),
 		})

@@ -13,6 +13,7 @@ func (store *RunMemoryStoreV0) ListRunSchedulingCandidatesV0(
 ) ([]orquestarunqueue.RunSchedulingCandidateV0, error) {
 	filter := runQueueFilterV0{
 		queueRef:             strings.TrimSpace(request.QueueRef),
+		runRef:               strings.TrimSpace(request.RunRef),
 		appRefs:              stringSetV0(request.AppRefs),
 		limit:                request.Limit,
 		includeNonExecutable: request.IncludeNonExecutable,
@@ -54,6 +55,7 @@ func (store *RunMemoryStoreV0) SetRunPriorityV0(
 
 type runQueueFilterV0 struct {
 	queueRef             string
+	runRef               string
 	appRefs              map[string]struct{}
 	limit                int
 	includeNonExecutable bool
@@ -61,6 +63,9 @@ type runQueueFilterV0 struct {
 
 func (filter runQueueFilterV0) matches(entry runQueueEntryV0) bool {
 	if filter.queueRef != "" && entry.queueRef != filter.queueRef {
+		return false
+	}
+	if filter.runRef != "" && entry.candidate.RunRef != filter.runRef {
 		return false
 	}
 	if len(filter.appRefs) == 0 {
@@ -106,6 +111,9 @@ func applyPriorityCommandV0(
 	}
 	if command.RescueReason != "" {
 		candidate.RescueReason = command.RescueReason
+	}
+	if command.Reason != "" {
+		candidate.Reason = command.Reason
 	}
 	candidate.PriorityScore = command.PriorityScore
 	if !command.UpdatedAt.IsZero() {

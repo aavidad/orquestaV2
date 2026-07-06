@@ -160,6 +160,104 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0PreparaRunYSupervisorArranca(t 
 	}
 }
 
+func TestCodexStackAutoprogrammingPrepareRunAPIV0AcceptedLegacyVisibleEnStatusV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "request-ref-remoto-telegram-nollm-runtime-20260705-001"
+	request.Tasks[0].TaskRef = "task-autoprogramming-c20a585ff5c3-g01"
+
+	prepared := postAutoprogrammingPrepareRunStackV0(t, stack, legacyAutoprogrammingPrepareRunInputForStackTestV0(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              request.RequestRef,
+		CorrelationID:          "corr-telegram-nollm-runtime-20260705-001",
+		OccurredAt:             "2026-07-05T21:00:00Z",
+		RequestedBy:            "orquesta-stack-api-test",
+		AutoprogrammingRequest: request,
+		MaxBursts:              3,
+		MaxStepsPerBurst:       3,
+		MaxDispatchesPerWait:   3,
+		MaxCommands:            5,
+		MaxOutboxPerCycle:      5,
+	}))
+	if !prepared.Accepted ||
+		prepared.RunRef != request.RequestRef ||
+		len(prepared.WorkflowTaskRefs) != 1 ||
+		len(prepared.WaitAgentRefs) != 1 ||
+		prepared.Continue == nil ||
+		prepared.Goal != nil {
+		t.Fatalf("prepared=%+v", prepared)
+	}
+
+	status := postAutoprogrammingStatusStackV0(t, stack, orquestamcp.MCPAutoprogrammingStatusToolInputV0{
+		RequestID:  "request-ref-telegram-nollm-status-after-prepare-001",
+		OccurredAt: "2026-07-05T21:00:05Z",
+	})
+	if status.Estado != orquestamcp.MCPAutoprogrammingStatusEstadoOKV0 ||
+		status.Queue == nil ||
+		!autoprogrammingStatusRankedRunForTestV0(status.Queue.Ranked, prepared.RunRef, "autoprogramming_prepare_run") ||
+		status.Operator == nil ||
+		!autoprogrammingStatusActiveRunForTestV0(status.Operator.ActiveRuns, prepared.RunRef) ||
+		status.QueueHealth == nil ||
+		status.QueueHealth.QueuedNotDispatched != 1 ||
+		!autoprogrammingStatusDiagnosticForTestV0(status.Diagnostics, "autoprogramming_prepare_run_pending_dispatch", prepared.RunRef) {
+		t.Fatalf("status=%+v", status)
+	}
+
+	otroRun := postDirectorAPIWithNameV0(t, stack, "app-prioritaria-d1", "App Prioritaria D1")
+	setStackRunPriorityForTestV0(t, stack, otroRun.RunRef, otroRun.AppSpec.Slug, 90)
+	explicit := postAutoprogrammingStatusStackV0(t, stack, orquestamcp.MCPAutoprogrammingStatusToolInputV0{
+		RequestID:  "request-ref-telegram-nollm-status-explicit-001",
+		RunRef:     prepared.RunRef,
+		QueueLimit: 1,
+		OccurredAt: "2026-07-05T21:00:06Z",
+	})
+	if explicit.Run == nil ||
+		explicit.Run.Stats == nil ||
+		explicit.Run.Stats.RunRef != prepared.RunRef ||
+		explicit.Queue == nil ||
+		!autoprogrammingStatusRankedRunForTestV0(explicit.Queue.Ranked, prepared.RunRef, "autoprogramming_prepare_run") ||
+		len(explicit.Tasks) != 1 ||
+		explicit.Tasks[0].TaskRef != prepared.WorkflowTaskRefs[0] {
+		t.Fatalf("explicit=%+v prepared=%+v", explicit, prepared)
+	}
+}
+
+func TestCodexStackAutoprogrammingPrepareRunAPIV0NoAceptaSiColaNoProyectaRunV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "request-ref-autoprogramming-invisible-queue-001"
+
+	result, err := NewCodexStackAutoprogrammingPrepareRunExecutorV0(
+		&stack,
+		"2026-07-06T12:00:00Z",
+		"orquesta-stack-api-test",
+		droppingRunQueueWriterForTestV0{},
+		stack.RunQueue,
+		stack.Clock,
+		stack.Codex.RuntimeWorkDir,
+	).Execute(context.Background(), legacyAutoprogrammingPrepareRunInputForStackTestV0(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              request.RequestRef,
+		CorrelationID:          "corr-autoprogramming-invisible-queue-001",
+		OccurredAt:             "2026-07-06T12:00:00Z",
+		RequestedBy:            "orquesta-stack-api-test",
+		AutoprogrammingRequest: request,
+		MaxBursts:              3,
+		MaxStepsPerBurst:       3,
+		MaxDispatchesPerWait:   3,
+		MaxCommands:            5,
+		MaxOutboxPerCycle:      5,
+	}))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPAutoprogrammingPrepareRunEstadoErrorV0 ||
+		result.Accepted ||
+		len(result.Errores) != 1 ||
+		result.Errores[0].Code != "autoprogramming_prepare_run_queue_error" ||
+		!strings.Contains(result.Errores[0].Message, "autoprogramming_prepare_run_visibility_error") {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestCodexStackAutoprogrammingPrepareRunAPIV0BloqueaLegacySinOptInV0(t *testing.T) {
 	config := codexStackBaseConfigForTestV0(t, newFakeCodexStackRuntimeV0(), nil, nil)
 	config.AllowLegacyAutoprogrammingRun = false
@@ -1463,6 +1561,80 @@ func postAutoprogrammingPrepareRunStackV0(
 		t.Fatalf("decode prepare run: %v", err)
 	}
 	return result
+}
+
+func postAutoprogrammingStatusStackV0(
+	t *testing.T,
+	stack StackV0,
+	input orquestamcp.MCPAutoprogrammingStatusToolInputV0,
+) orquestamcp.MCPAutoprogrammingStatusToolResultV0 {
+	t.Helper()
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(input); err != nil {
+		t.Fatalf("encode autoprogramming status: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v0/autoprogramming/status", body)
+	req.Header.Set("Content-Type", "application/json")
+	stack.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK && rec.Code != http.StatusBadRequest {
+		t.Fatalf("autoprogramming status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPAutoprogrammingStatusToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode autoprogramming status: %v", err)
+	}
+	return result
+}
+
+func autoprogrammingStatusRankedRunForTestV0(
+	candidates []orquestamcp.MCPRunQueueRankedCandidateCompactV0,
+	runRef string,
+	reason string,
+) bool {
+	for _, candidate := range candidates {
+		if strings.TrimSpace(candidate.RunRef) == runRef &&
+			strings.TrimSpace(candidate.Reason) == reason {
+			return true
+		}
+	}
+	return false
+}
+
+func autoprogrammingStatusActiveRunForTestV0(
+	runs []orquestamcp.MCPAutoprogrammingActiveRunV0,
+	runRef string,
+) bool {
+	for _, run := range runs {
+		if strings.TrimSpace(run.RunRef) == runRef {
+			return true
+		}
+	}
+	return false
+}
+
+func autoprogrammingStatusDiagnosticForTestV0(
+	diagnostics []orquestamcp.MCPAutoprogrammingDiagnosticV0,
+	code string,
+	runRef string,
+) bool {
+	wantScope := "run:" + strings.TrimSpace(runRef)
+	for _, diagnostic := range diagnostics {
+		if strings.TrimSpace(diagnostic.Code) == code &&
+			strings.TrimSpace(diagnostic.Scope) == wantScope {
+			return true
+		}
+	}
+	return false
+}
+
+type droppingRunQueueWriterForTestV0 struct{}
+
+func (droppingRunQueueWriterForTestV0) SetRunPriorityV0(
+	context.Context,
+	orquestarunqueue.RunQueuePriorityCommandV0,
+) (orquestarunqueue.RunSchedulingCandidateV0, error) {
+	return orquestarunqueue.RunSchedulingCandidateV0{}, nil
 }
 
 func legacyAutoprogrammingPrepareRunInputForStackTestV0(

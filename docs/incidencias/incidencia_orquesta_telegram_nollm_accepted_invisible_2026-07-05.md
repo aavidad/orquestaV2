@@ -35,12 +35,13 @@ Conclusion actual: ademas de la invisibilidad/proyeccion del run, hay un bloqueo
 
 ## Estado
 
-Abierta con avance de codigo local integrado el 2026-07-06. Requiere una de
-estas salidas verificables:
+Cerrada en codigo local para la parte `accepted invisible` el 2026-07-06.
+Sigue abierta operativamente hasta desplegar en remoto y validar Telegram real.
+Requiere una de estas salidas verificables:
 
 1. Orquesta ejecuta el rework no-LLM y deja resultado durable con tests y despliegue; o
 2. Se implementa/despliega un puente temporal no-LLM documentado, y se deja tarea de producto para integrarlo en Orquesta; o
-3. Se corrige la proyeccion/reconciliacion para que el run aceptado sea observable y supervisable.
+3. Se corrige la proyeccion/reconciliacion para que el run aceptado sea observable y supervisable. Esta salida queda cerrada en codigo local por D1, pendiente de despliegue remoto.
 
 ## Avance manual 2026-07-06: endpoint no-LLM en servidor
 
@@ -80,6 +81,43 @@ proveedor solo afecta a agentes de programacion; no deberia bloquear los
 comandos Telegram no-LLM tras desplegar el binario nuevo. Quedan pendientes:
 pull/build/restart solo de Orquesta en remoto, alta de webhook o poller de
 updates Telegram y prueba real desde el movil.
+
+## Actualizacion 2026-07-06: D1 accepted legacy visible
+
+Diagnostico nuevo: el fallo no estaba solo en Telegram. La ruta legacy de
+`prepare-run` aceptaba el encargo, guardaba `workflow_task_refs` y encolaba el
+run con razon `autoprogramming_prepare_run`, pero la lectura publica de cola no
+transportaba `run_ref` hasta el store. Ademas, `orquesta-run-file` aplicaba el
+limite antes de poder filtrar por run exacto; por tanto un run aceptado podia
+quedar fuera de `autoprogramming/status` si habia candidatos delante.
+
+Cierre de codigo aplicado:
+
+- `RunQueueReadRequestV0` transporta `RunRef`.
+- `RunSchedulingCandidateV0` conserva `Reason`.
+- `orquesta-run-file` y `orquesta-run-memory` filtran por `RunRef` antes de
+  rankear/limitar.
+- `orquesta-mcp` pasa `run_ref` desde `autoprogramming/status` y expone
+  `reason` en candidatos compactos.
+- `autoprogramming/status` emite diagnostico especifico
+  `autoprogramming_prepare_run_pending_dispatch` cuando ve un run aceptado por
+  `prepare-run` aun en cola.
+- `enqueuePreparedRunV0` hace readback inmediato tras `SetRunPriorityV0`; si el
+  run aceptado no puede verse, devuelve error
+  `autoprogramming_prepare_run_visibility_error` y no deja un
+  `accepted=true` invisible.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackAutoprogrammingPrepareRunAPIV0AcceptedLegacyVisibleEnStatusV0|TestCodexStackAutoprogrammingPrepareRunAPIV0NoAceptaSiColaNoProyectaRunV0|TestCodexStackAutoprogrammingPrepareRunAPIV0PreparaRunYSupervisorArranca'`
+- `go test -count=1 ./modulos/orquesta-run-memory ./modulos/orquesta-run-file ./modulos/orquesta-mcp -run 'TestRunMemoryStoreListSchedulingCandidatesFiltraRunRefAntesDeLimitV0|TestRunFileStoreListSchedulingCandidatesFiltraRunRefAntesDeLimitV0|TestMCPRunQueuePriorityExecutorV0RankTransportaRunRefExactoV0|TestMCPRunQueuePriorityDescriptorV0DeclaraEvidenciaDeCandidatos|TestMCPAutoprogrammingStatusExecutorV0DiagnosticaQueuedNotDispatchedV0'`
+- `go test -count=1 ./modulos/orquesta-run-queue ./modulos/orquesta-run-memory ./modulos/orquesta-run-file ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack`
+- `git diff --check`
+
+Residual separado: si el agente llega a ejecutarse, el remoto aun puede fallar
+por `401 Unauthorized token_invalidated` en el proveedor Codex del servidor. Ese
+bloqueo esta documentado como bug de autenticacion independiente y no invalida
+el cierre local de la invisibilidad.
 
 ## Refs
 

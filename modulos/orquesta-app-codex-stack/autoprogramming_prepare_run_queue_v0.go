@@ -51,7 +51,10 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) enqueuePreparedRun
 		IdempotencyKey: "idem-run-queue-autoprogramming-prepare-" + runRef,
 		EvidenceRefs:   []string{"evidence-ref-autoprogramming-prepare-run-enqueued"},
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	return executor.ensurePreparedRunQueueVisibleV0(ctx, runRef)
 }
 
 func autoprogrammingPreparedRunTerminalQueueStatusV0(
@@ -61,6 +64,45 @@ func autoprogrammingPreparedRunTerminalQueueStatusV0(
 		return orquestarunqueue.RunStatusClosedV0
 	}
 	return ""
+}
+
+func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) ensurePreparedRunQueueVisibleV0(
+	ctx context.Context,
+	runRef string,
+) error {
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" {
+		return fmt.Errorf("run_ref preparado requerido")
+	}
+	reader := executor.preparedRunQueueReaderV0()
+	if reader == nil {
+		return fmt.Errorf("autoprogramming_prepare_run_visibility_error: run_queue.reader requerido")
+	}
+	candidates, err := reader.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{
+		QueueRef:             executor.Queue.QueueRef,
+		RunRef:               runRef,
+		Limit:                1,
+		IncludeNonExecutable: true,
+	})
+	if err != nil {
+		return fmt.Errorf("autoprogramming_prepare_run_visibility_error: %w", err)
+	}
+	for _, candidate := range candidates {
+		if strings.TrimSpace(candidate.RunRef) == runRef {
+			return nil
+		}
+	}
+	return fmt.Errorf("autoprogramming_prepare_run_visibility_error: run_ref no visible en cola: %s", runRef)
+}
+
+func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) preparedRunQueueReaderV0() orquestarunqueue.RunQueueReaderPortV0 {
+	if reader, ok := executor.QueueWriter.(orquestarunqueue.RunQueueReaderPortV0); ok && reader != nil {
+		return reader
+	}
+	if executor.Stack != nil && executor.Stack.Stores.RunQueue != nil {
+		return executor.Stack.Stores.RunQueue
+	}
+	return nil
 }
 
 func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) markPreparedRunTerminalV0(

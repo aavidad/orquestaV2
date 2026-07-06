@@ -288,6 +288,48 @@ func TestRunMemoryStoreListSchedulingCandidatesIncluyeNoEjecutablesOptInV0(t *te
 	}
 }
 
+func TestRunMemoryStoreListSchedulingCandidatesFiltraRunRefAntesDeLimitV0(t *testing.T) {
+	store := NewRunMemoryStoreV0()
+	ctx := context.Background()
+	now := time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
+	for _, command := range []orquestarunqueue.RunQueuePriorityCommandV0{
+		{
+			RunRef:        "run-primero",
+			QueueRef:      "main",
+			AppRef:        "app-1",
+			PriorityScore: 90,
+			UpdatedAt:     now,
+			Reason:        "seed-first",
+		},
+		{
+			RunRef:        "run-accepted-visible",
+			QueueRef:      "main",
+			AppRef:        "app-2",
+			PriorityScore: 10,
+			UpdatedAt:     now.Add(time.Minute),
+			Reason:        "autoprogramming_prepare_run",
+		},
+	} {
+		if _, err := store.SetRunPriorityV0(ctx, command); err != nil {
+			t.Fatalf("seed %s: %v", command.RunRef, err)
+		}
+	}
+
+	listed, err := store.ListRunSchedulingCandidatesV0(ctx, orquestarunqueue.RunQueueReadRequestV0{
+		QueueRef: "main",
+		RunRef:   "run-accepted-visible",
+		Limit:    1,
+	})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(listed) != 1 ||
+		listed[0].RunRef != "run-accepted-visible" ||
+		listed[0].Reason != "autoprogramming_prepare_run" {
+		t.Fatalf("listed=%+v", listed)
+	}
+}
+
 func TestRunMemoryStoreRankingUsesQueuePolicyV0(t *testing.T) {
 	store := NewRunMemoryStoreV0()
 	ctx := context.Background()

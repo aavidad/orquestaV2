@@ -4155,3 +4155,51 @@ Pruebas verdes adicionales:
 Residual para Claude/remoto: desplegar cuando haya cuota/auth y verificar que
 `supervisor_error_ticks` no crece, T137 queda aparcado si supera presupuesto
 real y la cola avanza al siguiente candidato.
+
+## D1 accepted legacy nunca invisible (2026-07-06)
+
+Se cierra el tramo de codigo de
+`BUG-ORQ-20260705-TELEGRAM-NOLLM-ACCEPTED-INVISIBLE` que podia dejar un
+`prepare-run` aceptado fuera de `autoprogramming/status`.
+
+Lectura tecnica para Claude:
+
+- La ruta legacy aceptaba el request
+  `request-ref-remoto-telegram-nollm-runtime-20260705-001`, persistia
+  `workflow_task_refs` y encolaba el run con `reason=autoprogramming_prepare_run`.
+- La proyeccion publica de `autoprogramming/status` no pasaba `run_ref` hasta
+  `run_queue.priority`.
+- `orquesta-run-file` podia aplicar `limit` antes de filtrar el run exacto, asi
+  que una consulta con `run_ref` y ventana pequena podia no ver el run aceptado.
+- El resultado era un falso positivo: `accepted=true` sin visibilidad durable en
+  cola/status.
+
+Cierre aplicado:
+
+- `modulos/orquesta-run-queue/contracts_v0.go`: `RunQueueReadRequestV0.RunRef`
+  y `RunSchedulingCandidateV0.Reason`.
+- `modulos/orquesta-run-memory/queue_v0.go` y
+  `modulos/orquesta-run-file/queue_v0.go`: filtro exacto por `RunRef` antes de
+  ranking/limite, y conservacion de `Reason`.
+- `modulos/orquesta-mcp/run_queue_priority_tool_v0.go`: transporte de
+  `run_ref` y salida compacta con `reason`.
+- `modulos/orquesta-mcp/autoprogramming_status_tool_v0.go`: `status(run_ref)`
+  consulta la cola por ese run exacto.
+- `modulos/orquesta-mcp/autoprogramming_status_queued_not_dispatched_v0.go`:
+  diagnostico especifico `autoprogramming_prepare_run_pending_dispatch` cuando
+  el run aceptado por `prepare-run` sigue en cola.
+- `modulos/orquesta-app-codex-stack/autoprogramming_prepare_run_queue_v0.go`:
+  readback inmediato tras encolar; si no se ve el run, devuelve error
+  `autoprogramming_prepare_run_visibility_error` en vez de aceptar invisible.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestCodexStackAutoprogrammingPrepareRunAPIV0AcceptedLegacyVisibleEnStatusV0|TestCodexStackAutoprogrammingPrepareRunAPIV0NoAceptaSiColaNoProyectaRunV0|TestCodexStackAutoprogrammingPrepareRunAPIV0PreparaRunYSupervisorArranca'`
+- `go test -count=1 ./modulos/orquesta-run-memory ./modulos/orquesta-run-file ./modulos/orquesta-mcp -run 'TestRunMemoryStoreListSchedulingCandidatesFiltraRunRefAntesDeLimitV0|TestRunFileStoreListSchedulingCandidatesFiltraRunRefAntesDeLimitV0|TestMCPRunQueuePriorityExecutorV0RankTransportaRunRefExactoV0|TestMCPRunQueuePriorityDescriptorV0DeclaraEvidenciaDeCandidatos|TestMCPAutoprogrammingStatusExecutorV0DiagnosticaQueuedNotDispatchedV0'`
+- `go test -count=1 ./modulos/orquesta-run-queue ./modulos/orquesta-run-memory ./modulos/orquesta-run-file ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack`
+- `git diff --check`
+
+Residual: queda desplegar en remoto y probar desde Telegram real. Si el run ya
+visible intenta ejecutar agente, el servidor aun puede topar con
+`BUG-ORQ-20260705-CODEX-HOME-TOKEN-INVALIDADO`, que es un bloqueo de proveedor
+separado.
