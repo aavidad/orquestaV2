@@ -65,6 +65,23 @@ func TestMergeCodexAppServerGoalResultV0BlockedRealNoEsPlaceholderV0(t *testing.
 	}
 }
 
+func TestMergeCodexAppServerGoalResultV0ProyectaReasonCodeExplicitoV0(t *testing.T) {
+	receipt := orquestaruntimecodexgoal.CodexGoalObservationReceiptV0{}
+	mergeCodexAppServerGoalResultV0(&receipt, codexAppServerGoalResultMarkerV0{
+		SchemaVersion: "orquesta_goal_result.v0",
+		Status:        orquestagoal.GoalStatusBlockedV0,
+		GoalRef:       "goal-ref-reason-code-001",
+		ReasonCode:    codexAppServerGoalResultCheckpointReasonCodeV0,
+		Summary:       "started",
+		Checklist: orquestagoal.GoalWorkChecklistV0{
+			MissingRefs: []string{"implementation"},
+		},
+	}, "evidence-ref-source-test")
+	if receipt.IssueCode != codexAppServerGoalResultCheckpointReasonCodeV0 {
+		t.Fatalf("issue_code=%q", receipt.IssueCode)
+	}
+}
+
 func stackStringsContainForPlaceholderTestV0(values []string, target string) bool {
 	for _, value := range values {
 		if value == target {

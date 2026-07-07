@@ -49,6 +49,8 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"goal_ref",
 		"schema_version",
 		"status/estado debe ser terminal explicito",
+		"reason_code",
+		"checkpoint_started",
 		"usa literalmente los test_ref",
 		"usa literalmente los artifact_ref",
 		"\"artifact_paths\":[]",

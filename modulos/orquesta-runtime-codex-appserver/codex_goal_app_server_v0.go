@@ -460,6 +460,22 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 	if codexGoalWorkStatusIsTerminalV0(status) {
 		return backend.observeCodexAppServerTerminalGoalResultV0(ctx, request, receipt)
 	}
+	if checkpointRef, ok := codexAppServerCheckpointStartedFromWorkspaceV0(
+		backend.CWD,
+		request.GoalRef,
+		receipt.ExternalGoalRef,
+	); ok {
+		receipt.Summary = firstNonEmptyServerStackV0(receipt.Summary, codexAppServerGoalResultCheckpointReasonCodeV0)
+		if strings.TrimSpace(receipt.IssueCode) == "" {
+			receipt.IssueCode = codexAppServerGoalResultCheckpointReasonCodeV0
+		}
+		receipt.ArtifactPaths = compactServerStackStringsV0(append(receipt.ArtifactPaths, checkpointRef))
+		receipt.EvidenceRefs = compactServerStackStringsV0(append(
+			receipt.EvidenceRefs,
+			codexAppServerGoalResultCheckpointEvidenceRefV0,
+			"evidence-ref-codex-app-server-early-checkpoint-materialized:"+checkpointRef,
+		))
+	}
 	return receipt, nil
 }
 
@@ -618,6 +634,22 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 	}
 	if timedOut, timeoutReceipt := backend.codexAppServerThreadReadGoalResultTimeoutV0(request, status, thread, receipt); timedOut {
 		return timeoutReceipt, nil
+	}
+	if checkpointRef, ok := codexAppServerCheckpointStartedFromWorkspaceV0(
+		backend.CWD,
+		request.GoalRef,
+		request.ExternalGoalRef,
+	); ok {
+		receipt.Summary = firstNonEmptyServerStackV0(receipt.Summary, codexAppServerGoalResultCheckpointReasonCodeV0)
+		if strings.TrimSpace(receipt.IssueCode) == "" {
+			receipt.IssueCode = codexAppServerGoalResultCheckpointReasonCodeV0
+		}
+		receipt.ArtifactPaths = compactServerStackStringsV0(append(receipt.ArtifactPaths, checkpointRef))
+		receipt.EvidenceRefs = compactServerStackStringsV0(append(
+			receipt.EvidenceRefs,
+			codexAppServerGoalResultCheckpointEvidenceRefV0,
+			"evidence-ref-codex-app-server-early-checkpoint-materialized:"+checkpointRef,
+		))
 	}
 	return receipt, nil
 }

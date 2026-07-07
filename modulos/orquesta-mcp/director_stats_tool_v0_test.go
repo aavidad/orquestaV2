@@ -463,7 +463,10 @@ func TestMCPDirectorStatsToolExecutorV0GoalFirstBloqueadoSinTareasNoDaCienV0(t *
 		Status:        orquestagoal.GoalStatusBlockedV0,
 		GoalRef:       state.GoalRef,
 		Summary:       "codex_app_server_goal_active_timeout",
-		EvidenceRefs:  []string{"evidence-ref-codex-app-server-goal-active-timeout"},
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code: "codex_app_server_goal_active_timeout",
+		}},
+		EvidenceRefs: []string{"evidence-ref-codex-app-server-goal-active-timeout"},
 	}
 	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
 		Status:      orquestagoal.GoalStatusBlockedV0,
@@ -508,7 +511,10 @@ func TestMCPDirectorStatsToolExecutorV0GoalFirstBloqueadoConReceiptParcialNoPier
 		Summary:           "codex_app_server_goal_active_timeout",
 		ArtifactRefs:      []string{"artifact-ref-work-delivery-json-001"},
 		DomainReceiptRefs: []string{"domain-receipt-ref-work-delivery-001"},
-		EvidenceRefs:      []string{"evidence-ref-work-delivery-detected"},
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code: "codex_app_server_goal_active_timeout",
+		}},
+		EvidenceRefs: []string{"evidence-ref-work-delivery-detected"},
 	}
 	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
 		Status:      orquestagoal.GoalStatusBlockedV0,
@@ -554,7 +560,10 @@ func TestMCPDirectorStatsToolExecutorV0GoalFirstReconcilaWorkDeliveryMaterializa
 		Status:        orquestagoal.GoalStatusBlockedV0,
 		GoalRef:       state.GoalRef,
 		Summary:       "codex_app_server_goal_active_timeout",
-		EvidenceRefs:  []string{"evidence-ref-codex-app-server-goal-active-timeout"},
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code: "codex_app_server_goal_active_timeout",
+		}},
+		EvidenceRefs: []string{"evidence-ref-codex-app-server-goal-active-timeout"},
 	}
 	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
 		Status:      orquestagoal.GoalStatusBlockedV0,
@@ -622,6 +631,39 @@ func TestMCPDirectorStatsToolExecutorV0GoalFirstProyectaQAFailedPublicTextV0(t *
 		!containsStringMCPTestV0(result.Stats.Refs.Deliveries, "artifact-ref-materialized-qa-failed-public-text-001") ||
 		!mcpDirectorStatsProgressIssueExistsV0(result.Stats.Progress.Issues, MCPGoalFirstQAFailedPublicTextV0) {
 		t.Fatalf("goal=%+v stats=%+v", result.Goal, result.Stats)
+	}
+}
+
+func TestMCPDirectorStatsToolExecutorV0NoUsaSummaryComoIssueCodeV0(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-goal-summary-not-issue-001")
+	run.Tasks = nil
+	run.ClosedTasks = nil
+	run.DeliveredTasks = nil
+	run.Deliveries = nil
+	run.Agents = nil
+	run.StartedAgents = nil
+	state := mcpDirectorGoalStateForTestV0(run.RunID)
+	state.Status = orquestagoal.GoalStatusRunningV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		Status:  orquestagoal.GoalStatusRunningV0,
+		GoalRef: state.GoalRef,
+		Summary: "checkpoint_started; implementacion pendiente",
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code: "checkpoint_started",
+		}},
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		GoalStateSource: mcpDirectorGoalStateSourceForTestV0{State: state},
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{RunRef: run.RunID})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Goal == nil ||
+		!containsStringMCPTestV0(result.Goal.IssueCodes, "checkpoint_started") ||
+		containsStringMCPTestV0(result.Goal.IssueCodes, "checkpoint_started; implementacion pendiente") {
+		t.Fatalf("issue_codes=%+v", result.Goal)
 	}
 }
 

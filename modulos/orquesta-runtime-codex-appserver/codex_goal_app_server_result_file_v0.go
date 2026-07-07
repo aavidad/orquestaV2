@@ -169,6 +169,23 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 		}
 		return observed, true
 	}
+	if checkpointRef, ok := codexAppServerCheckpointStartedFromWorkspaceV0(
+		backend.CWD,
+		request.GoalRef,
+		request.ExternalGoalRef,
+	); ok {
+		observed.Summary = firstNonEmptyServerStackV0(observed.Summary, codexAppServerGoalResultCheckpointReasonCodeV0)
+		if strings.TrimSpace(observed.IssueCode) == "" {
+			observed.IssueCode = codexAppServerGoalResultCheckpointReasonCodeV0
+		}
+		observed.ArtifactPaths = compactServerStackStringsV0(append(observed.ArtifactPaths, checkpointRef))
+		observed.EvidenceRefs = compactServerStackStringsV0(append(
+			observed.EvidenceRefs,
+			codexAppServerGoalResultCheckpointEvidenceRefV0,
+			"evidence-ref-codex-app-server-early-checkpoint-materialized:"+checkpointRef,
+		))
+		return observed, true
+	}
 	return observed, false
 }
 
@@ -253,6 +270,78 @@ func codexAppServerGoalResultFromWorkspaceV0(
 	return found, foundOK, nil
 }
 
+func codexAppServerCheckpointStartedFromWorkspaceV0(
+	root string,
+	goalRef string,
+	externalGoalRef string,
+) (string, bool) {
+	root = strings.TrimSpace(root)
+	goalRef = strings.TrimSpace(goalRef)
+	if root == "" || goalRef == "" {
+		return "", false
+	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return "", false
+	}
+	foundRef := ""
+	_ = filepath.WalkDir(rootAbs, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil || entry == nil {
+			return nil
+		}
+		if entry.IsDir() {
+			if path != rootAbs && codexAppServerGoalResultSkipDirV0(entry.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if entry.Type()&fs.ModeSymlink != 0 || entry.Name() != "checkpoint_started.txt" {
+			return nil
+		}
+		info, statErr := entry.Info()
+		if statErr != nil || info.Size() <= 0 || info.Size() > 16*1024 {
+			return nil
+		}
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil || !codexAppServerCheckpointStartedMatchesV0(string(raw), goalRef, externalGoalRef) {
+			return nil
+		}
+		rel, relErr := filepath.Rel(rootAbs, path)
+		if relErr != nil || rel == "" {
+			return nil
+		}
+		foundRef = filepath.ToSlash(rel)
+		return errCodexAppServerGoalResultWalkDoneV0
+	})
+	return foundRef, foundRef != ""
+}
+
+func codexAppServerCheckpointStartedMatchesV0(
+	body string,
+	goalRef string,
+	externalGoalRef string,
+) bool {
+	values := map[string]string{}
+	for _, line := range strings.Split(body, "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if !ok {
+			continue
+		}
+		values[strings.TrimSpace(key)] = strings.TrimSpace(value)
+	}
+	if values["schema_version"] != "orquesta.codex_app_server.early_checkpoint.v0" {
+		return false
+	}
+	if values["goal_ref"] != strings.TrimSpace(goalRef) {
+		return false
+	}
+	expectedExternal := strings.TrimSpace(externalGoalRef)
+	if expectedExternal == "" {
+		return true
+	}
+	return values["external_goal_ref"] == expectedExternal
+}
+
 func codexAppServerGoalResultSkipDirV0(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case ".git", ".codex", ".gocache", ".gocache-local", "node_modules", "vendor":
@@ -300,6 +389,7 @@ func normalizeCodexAppServerGoalResultMarkerV0(
 	marked.Estado = strings.TrimSpace(marked.Estado)
 	marked.GoalRef = strings.TrimSpace(marked.GoalRef)
 	marked.ExternalGoalRef = strings.TrimSpace(marked.ExternalGoalRef)
+	marked.ReasonCode = strings.TrimSpace(marked.ReasonCode)
 	sanitized := false
 	if summary, ok := sanitizeCodexAppServerGoalResultSummaryV0(marked.Summary); ok {
 		marked.Summary = summary

@@ -4353,3 +4353,30 @@ Pruebas verdes:
 
 - `go test -count=1 ./modulos/orquesta-runtime-codex-goal`
 - `git diff --check`
+
+## Codex local 2026-07-07: residual D6 reason_code en placeholders
+
+Se cierra el residual menor que habia quedado tras `32be9b9dd`: el runtime ya
+clasificaba placeholders por forma, pero el contrato de prompt no exigia
+`reason_code`, el app-server no proyectaba `checkpoint_started` cuando solo
+existia el checkpoint temprano sin resultado final, y `director_stats` podia
+meter `LastResult.Summary` dentro de `issue_codes`.
+
+Cierre aplicado:
+
+- `modulos/orquesta-runtime-codex-goal/packet_v0.go`: el JSON obligatorio del
+  goal incluye `reason_code`; los placeholders/intermedios deben usar codigos
+  de catalogo y dejar `summary` solo como texto informativo.
+- `modulos/orquesta-runtime-codex-appserver`: el resultado durable acepta
+  `reason_code`, lo proyecta como `IssueCode`, y si encuentra
+  `checkpoint_started.txt` validado por `goal_ref`/`external_goal_ref` en un
+  goal running, observa `IssueCode=checkpoint_started` sin depender de
+  substrings del summary.
+- `modulos/orquesta-mcp/director_stats_tool_v0.go`: `issue_codes` sale solo de
+  `GoalWorkIssue.Code`, no de `LastResult.Summary`; los tests historicos de
+  timeout quedan migrados a `Issues.Code`.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-goal ./modulos/orquesta-runtime-codex-appserver ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`
+- `git diff --check`

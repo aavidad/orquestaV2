@@ -15,6 +15,7 @@ type codexAppServerGoalResultMarkerV0 struct {
 	Estado                string                                    `json:"estado,omitempty"`
 	GoalRef               string                                    `json:"goal_ref,omitempty"`
 	ExternalGoalRef       string                                    `json:"external_goal_ref,omitempty"`
+	ReasonCode            string                                    `json:"reason_code,omitempty"`
 	Summary               string                                    `json:"summary,omitempty"`
 	ArtifactRefs          []string                                  `json:"artifact_refs,omitempty"`
 	ArtifactPaths         []string                                  `json:"artifact_paths,omitempty"`
@@ -156,6 +157,10 @@ func mergeCodexAppServerGoalResultV0(
 	if strings.TrimSpace(marked.Summary) != "" {
 		receipt.Summary = strings.TrimSpace(marked.Summary)
 	}
+	if reasonCode := codexAppServerGoalResultReasonCodeV0(marked); reasonCode != "" &&
+		strings.TrimSpace(receipt.IssueCode) == "" {
+		receipt.IssueCode = reasonCode
+	}
 	receipt.ArtifactRefs = compactServerStackStringsV0(append(receipt.ArtifactRefs, marked.ArtifactRefs...))
 	receipt.ArtifactPaths = compactServerStackStringsV0(append(receipt.ArtifactPaths, marked.ArtifactPaths...))
 	receipt.MaterializedArtifacts = append(receipt.MaterializedArtifacts, marked.MaterializedArtifacts...)
@@ -173,12 +178,32 @@ func mergeCodexAppServerGoalResultV0(
 		}
 		receipt.EvidenceRefs = compactServerStackStringsV0(append(
 			receipt.EvidenceRefs,
-			"evidence-ref-goal-result-placeholder-in-progress",
+			codexAppServerGoalResultPlaceholderEvidenceRefV0,
 		))
 	}
 }
 
-const codexAppServerGoalResultPlaceholderReasonCodeV0 = "goal_result_placeholder_in_progress"
+const (
+	codexAppServerGoalResultPlaceholderReasonCodeV0  = "goal_result_placeholder_in_progress"
+	codexAppServerGoalResultCheckpointReasonCodeV0   = "checkpoint_started"
+	codexAppServerGoalResultCheckpointEvidenceRefV0  = "evidence-ref-codex-app-server-checkpoint-started"
+	codexAppServerGoalResultPlaceholderEvidenceRefV0 = "evidence-ref-goal-result-placeholder-in-progress"
+)
+
+func codexAppServerGoalResultReasonCodeV0(marked codexAppServerGoalResultMarkerV0) string {
+	reasonCode := strings.TrimSpace(marked.ReasonCode)
+	if reasonCode != "" {
+		return reasonCode
+	}
+	for _, artifact := range marked.MaterializedArtifacts {
+		for _, artifactIssue := range artifact.Issues {
+			if code := strings.TrimSpace(artifactIssue.Code); code != "" {
+				return code
+			}
+		}
+	}
+	return ""
+}
 
 // Un resultado blocked sin tests requeridos, sin checklist completada y sin
 // missing_refs es un placeholder de progreso del agente, no un blocked real:

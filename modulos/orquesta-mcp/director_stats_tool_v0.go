@@ -676,9 +676,6 @@ func mcpDirectorGoalIssueCodesFromStateV0(state orquestagoal.GoalWorkStateV0) []
 		codes = append(codes, issue.Code)
 	}
 	if state.LastResult != nil {
-		if summary := strings.TrimSpace(state.LastResult.Summary); summary != "" {
-			codes = append(codes, summary)
-		}
 		for _, issue := range state.LastResult.Issues {
 			codes = append(codes, issue.Code)
 		}

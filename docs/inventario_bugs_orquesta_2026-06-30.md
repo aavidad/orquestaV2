@@ -2963,3 +2963,20 @@ pendiente reintento cuando haya cuota/modelo operativo. Reintento acotado con
 cierre `accepted`, por lo que no se insiste para no consumir mas intentos.
 Evidencia:
 `docs/incidencias/incidencia_orquesta_smoke_goal_first_usage_limited_2026-07-07.md`.
+
+BUG nuevo `BUG-ORQ-20260707-D6-PLACEHOLDER-REASON-CODE` (cerrado en codigo):
+El cierre D6 de reason codes tenia un residual: el prompt Goal no exigia
+`reason_code`, el app-server no derivaba `checkpoint_started` desde el
+checkpoint temprano si no habia resultado final, y `director_stats` podia
+publicar `LastResult.Summary` como `issue_code`. Eso reabria la clase de falsos
+diagnosticos por substrings libres (`started`, `checkpoint_started; ...`,
+`in_progress...`). Cierre aplicado por Codex local: JSON obligatorio con
+`reason_code`, soporte de `reason_code` explicito en resultados app-server,
+derivacion `checkpoint_started` validada por `goal_ref`/`external_goal_ref`,
+y MCP `issue_codes` solo desde `GoalWorkIssue.Code`. Evidencia:
+`TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion`,
+`TestMergeCodexAppServerGoalResultV0ProyectaReasonCodeExplicitoV0`,
+`TestServerCodexAppServerGoalBackendV0ObservaCheckpointStartedComoReasonCodeV0`,
+`TestMCPDirectorStatsToolExecutorV0NoUsaSummaryComoIssueCodeV0`,
+`go test -count=1 ./modulos/orquesta-runtime-codex-goal ./modulos/orquesta-runtime-codex-appserver ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`
+y `git diff --check`.

@@ -194,6 +194,56 @@ func TestServerCodexAppServerGoalBackendV0MaterializaCheckpointAntesDeTurnStartV
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0ObservaCheckpointStartedComoReasonCodeV0(t *testing.T) {
+	root := t.TempDir()
+	checkpointPath := filepath.Join(root, "generated-apps", "checkpoint_started.txt")
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID: "thread-ref-goal-checkpoint-observe-001",
+			Status:   "active",
+		},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     "thread-ref-goal-checkpoint-observe-001",
+			Status: "running",
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		CWD:      root,
+	}
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef: "goal-ref-checkpoint-observe-001",
+		WriteSet: []orquestagoal.GoalWriteScopeV0{{
+			Path: "generated-apps",
+		}},
+		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
+			RequireEarlyCheckpoint: true,
+			EarlyCheckpointFile:    "checkpoint_started.txt",
+		},
+	}
+	body := codexAppServerEarlyCheckpointBodyV0(packet, "thread-ref-goal-checkpoint-observe-001")
+	if err := os.MkdirAll(filepath.Dir(checkpointPath), 0o700); err != nil {
+		t.Fatalf("mkdir checkpoint: %v", err)
+	}
+	if err := os.WriteFile(checkpointPath, []byte(body), 0o600); err != nil {
+		t.Fatalf("write checkpoint: %v", err)
+	}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         "goal-ref-checkpoint-observe-001",
+		ExternalGoalRef: "thread-ref-goal-checkpoint-observe-001",
+	})
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		receipt.IssueCode != codexAppServerGoalResultCheckpointReasonCodeV0 ||
+		!containsStringMigratedTestV0(receipt.ArtifactPaths, "generated-apps/checkpoint_started.txt") ||
+		!containsStringMigratedTestV0(receipt.EvidenceRefs, codexAppServerGoalResultCheckpointEvidenceRefV0) {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0StopForcedBloqueaGoalYApagaBackendV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		goal: serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-stop-forced-001", Status: "blocked"},

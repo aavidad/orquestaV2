@@ -1712,7 +1712,10 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalActiveTimeoutConBackendActivoEsRe
 			Status:        orquestagoal.GoalStatusBlockedV0,
 			GoalRef:       goalRef,
 			Summary:       "codex_app_server_goal_active_timeout",
-			EvidenceRefs:  []string{"evidence-ref-codex-app-server-goal-active-timeout"},
+			Issues: []orquestagoal.GoalWorkIssueV0{{
+				Code: "codex_app_server_goal_active_timeout",
+			}},
+			EvidenceRefs: []string{"evidence-ref-codex-app-server-goal-active-timeout"},
 		},
 		LastClosure: &orquestagoal.GoalClosureValidationV0{
 			Status:      orquestagoal.GoalStatusBlockedV0,
@@ -1894,7 +1897,10 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalActiveTimeoutConCheckpointRecient
 			GoalRef:       goalRef,
 			Summary:       "codex_app_server_goal_active_timeout",
 			ArtifactRefs:  []string{checkpointRef},
-			EvidenceRefs:  []string{"evidence-ref-codex-app-server-goal-active-timeout"},
+			Issues: []orquestagoal.GoalWorkIssueV0{{
+				Code: "codex_app_server_goal_active_timeout",
+			}},
+			EvidenceRefs: []string{"evidence-ref-codex-app-server-goal-active-timeout"},
 		},
 		LastClosure: &orquestagoal.GoalClosureValidationV0{
 			Status:      orquestagoal.GoalStatusBlockedV0,
@@ -1993,7 +1999,10 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalActiveTimeoutConCheckpointEstanca
 			GoalRef:       goalRef,
 			Summary:       "codex_app_server_goal_active_timeout",
 			ArtifactRefs:  []string{checkpointRef},
-			EvidenceRefs:  []string{"evidence-ref-codex-app-server-goal-active-timeout"},
+			Issues: []orquestagoal.GoalWorkIssueV0{{
+				Code: "codex_app_server_goal_active_timeout",
+			}},
+			EvidenceRefs: []string{"evidence-ref-codex-app-server-goal-active-timeout"},
 		},
 		LastClosure: &orquestagoal.GoalClosureValidationV0{
 			Status:      orquestagoal.GoalStatusBlockedV0,
@@ -2100,7 +2109,10 @@ func TestMCPAutoprogrammingStatusExecutorV0GoalActiveTimeoutConCheckpointRespeta
 			GoalRef:       goalRef,
 			Summary:       "codex_app_server_goal_active_timeout",
 			ArtifactRefs:  []string{checkpointRef},
-			EvidenceRefs:  []string{"evidence-ref-codex-app-server-goal-active-timeout"},
+			Issues: []orquestagoal.GoalWorkIssueV0{{
+				Code: "codex_app_server_goal_active_timeout",
+			}},
+			EvidenceRefs: []string{"evidence-ref-codex-app-server-goal-active-timeout"},
 		},
 		LastClosure: &orquestagoal.GoalClosureValidationV0{
 			Status:      orquestagoal.GoalStatusBlockedV0,
