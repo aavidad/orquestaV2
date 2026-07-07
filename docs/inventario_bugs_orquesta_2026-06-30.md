@@ -2929,9 +2929,28 @@ payloads manuales no alineados con el contrato vigente. Al revisar el helper
 comun se detecto que `scripts/lib/smoke_common.sh` tambien llamaba
 `POST /api/v0/server/shutdown` sin `idempotency_key`, de modo que los smokes
 podian depender del fallback por senal aunque el endpoint HTTP estuviera bien.
-Cierre aplicado: el helper comun envia `idempotency_key` y
-`requested_by=orquesta-director`; se anade test focal
+Avance 2026-07-07: al lanzar el smoke real `app_server_tmux` se detectaron dos
+POST directos stale adicionales en `scripts/smoke_goal_first_app_server_real.sh`
+y `scripts/smoke_codex_required_test_runner_state_file.sh`; quedan corregidos
+con `idempotency_key` y `requested_by=orquesta-director`, y la guarda
+`TestScriptsConShutdownDirectoPidenContratoShutdownV0` impide nuevas llamadas
+directas sin contrato. Cierre aplicado: el helper comun envia `idempotency_key`
+y `requested_by=orquesta-director`; se anade test focal
 `TestSmokeCommonShutdownCleanupEnviaContratoDirectorV0`. Evidencia:
 `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeCommonShutdownCleanupEnviaContratoDirectorV0|TestSmokeCommonShutdownCleanupMataAppServerPropioSinBaseURLV0|TestSmokeCommonReadiness'`,
+`go test -count=1 ./cmd/orquesta-server -run 'TestScriptsConShutdownDirectoPidenContratoShutdownV0|TestScriptShutdownCurlCommandsV0|TestSmokeCommonShutdownCleanupEnviaContratoDirectorV0'`,
 `go test -count=1 ./cmd/orquesta-server`, `git diff --check` y
 `docs/runbooks/smoke_manual_orquesta_server_2026-07-06.md`.
+
+BUG nuevo `BUG-ORQ-20260707-SMOKE-GOAL-FIRST-USAGE-LIMITED` (bloqueo externo):
+El smoke real minimo `scripts/smoke_goal_first_app_server_real.sh` con backend
+`app_server_tmux` arranca Orquesta, crea run goal-first y materializa checkpoint,
+pero el proveedor corta el goal como `codex_app_server_goal_status_usageLimited`
+en fase `brainstorming_arquitectura`; Orquesta lo proyecta como
+`goal_status=blocked`, `closure_status=blocked`,
+`recommended_action=inspect_goal_backend_limits` y
+`codex_app_server_goal_provider_limited`. No se observaron procesos residuales
+tras el cleanup; la carpeta de evidencia se saneo eliminando el `codex-home`
+temporal con credenciales. Estado: no es cierre funcional del smoke real; queda
+pendiente reintento cuando haya cuota/modelo operativo. Evidencia:
+`docs/incidencias/incidencia_orquesta_smoke_goal_first_usage_limited_2026-07-07.md`.

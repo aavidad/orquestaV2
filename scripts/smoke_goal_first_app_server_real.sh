@@ -508,7 +508,7 @@ assert_app_server_tmux_shutdown_ready() {
       -H "Content-Type: application/json" \
       -H "Accept: application/json" \
       -H "X-Correlation-ID: $request_id-shutdown" \
-      --data-binary "{\"request_id\":\"$request_id-shutdown\",\"correlation_id\":\"$request_id-shutdown\",\"reason\":\"smoke_goal_first_app_server_real\",\"cleanup_goal_backends\":true}"
+      --data-binary "{\"request_id\":\"$request_id-shutdown\",\"correlation_id\":\"$request_id-shutdown\",\"idempotency_key\":\"idem-$request_id-shutdown\",\"requested_by\":\"orquesta-director\",\"reason\":\"smoke_goal_first_app_server_real\",\"cleanup_goal_backends\":true}"
   )"
   echo "POST /api/v0/server/shutdown -> HTTP $shutdown_status"
   if [[ "$shutdown_status" -lt 200 || "$shutdown_status" -gt 299 ]]; then
@@ -520,7 +520,7 @@ assert_app_server_tmux_shutdown_ready() {
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
             -H "X-Correlation-ID: $request_id-shutdown-retry" \
-            --data-binary "{\"request_id\":\"$request_id-shutdown-retry\",\"correlation_id\":\"$request_id-shutdown-retry\",\"reason\":\"smoke_goal_first_app_server_real_backend_cleanup_retry\",\"cleanup_goal_backends\":true}"
+            --data-binary "{\"request_id\":\"$request_id-shutdown-retry\",\"correlation_id\":\"$request_id-shutdown-retry\",\"idempotency_key\":\"idem-$request_id-shutdown-retry\",\"requested_by\":\"orquesta-director\",\"reason\":\"smoke_goal_first_app_server_real_backend_cleanup_retry\",\"cleanup_goal_backends\":true}"
         )"
         echo "POST /api/v0/server/shutdown retry -> HTTP $shutdown_status"
       fi

@@ -11,12 +11,12 @@ func TestScriptShutdownCurlCommandsV0DetectaRequestPostLargoV0(t *testing.T) {
 		`  --request \`,
 		`  POST \`,
 		`  "$base_url/api/v0/server/shutdown" \`,
-		`  --data-binary "{\"request_id\":\"req-shutdown\",\"cleanup_goal_backends\":true}"`,
+		`  --data-binary "{\"request_id\":\"req-shutdown\",\"idempotency_key\":\"idem-shutdown\",\"requested_by\":\"orquesta-director\",\"cleanup_goal_backends\":true}"`,
 		`)"`,
 		`shutdown_status_2="$(curl -sS \`,
 		`  --request=POST \`,
 		`  "$base_url/api/v0/server/shutdown" \`,
-		`  --data-binary "{\"request_id\":\"req-shutdown-2\",\"cleanup_goal_backends\":true}"`,
+		`  --data-binary "{\"request_id\":\"req-shutdown-2\",\"idempotency_key\":\"idem-shutdown-2\",\"requested_by\":\"orquesta-director\",\"cleanup_goal_backends\":true}"`,
 		`)"`,
 	}, "\n")
 

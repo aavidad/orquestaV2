@@ -560,7 +560,7 @@ func TestScriptsQueUsanShutdownComunPasanRuntimeDirV0(t *testing.T) {
 	}
 }
 
-func TestScriptsConShutdownDirectoPidenCleanupGoalBackendsV0(t *testing.T) {
+func TestScriptsConShutdownDirectoPidenContratoShutdownV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	scriptsDir := filepath.Join(root, "scripts")
 	err := filepath.WalkDir(scriptsDir, func(path string, entry os.DirEntry, err error) error {
@@ -576,8 +576,16 @@ func TestScriptsConShutdownDirectoPidenCleanupGoalBackendsV0(t *testing.T) {
 		}
 		text := readOperationalDocGuardV0(t, root, rel)
 		for _, command := range scriptShutdownCurlCommandsV0(text) {
-			if !strings.Contains(command, "cleanup_goal_backends") {
-				t.Fatalf("%s invoca shutdown HTTP directo sin cleanup_goal_backends:\n%s", rel, command)
+			for _, required := range []string{
+				"cleanup_goal_backends",
+				"idempotency_key",
+			} {
+				if !strings.Contains(command, required) {
+					t.Fatalf("%s invoca shutdown HTTP directo sin %s:\n%s", rel, required, command)
+				}
+			}
+			if !strings.Contains(command, "requested_by") || !strings.Contains(command, "orquesta-director") {
+				t.Fatalf("%s invoca shutdown HTTP directo sin autoridad del Director:\n%s", rel, command)
 			}
 		}
 		return nil
@@ -657,7 +665,7 @@ func TestScriptShutdownCurlCommandsV0DetectaCleanupLejanoV0(t *testing.T) {
 		`  -H "Content-Type: application/json" \`,
 		`  -H "Accept: application/json" \`,
 		`  -H "X-Correlation-ID: $request_id-shutdown" \`,
-		`  --data-binary "{\"request_id\":\"$request_id-shutdown\",\"cleanup_goal_backends\":true}"`,
+		`  --data-binary "{\"request_id\":\"$request_id-shutdown\",\"idempotency_key\":\"idem-shutdown\",\"requested_by\":\"orquesta-director\",\"cleanup_goal_backends\":true}"`,
 		`)"`,
 	}, "\n")
 
@@ -673,7 +681,7 @@ func TestScriptShutdownCurlCommandsV0DetectaPostSeparadoPorContinuacionV0(t *tes
 		`  -X \`,
 		`  POST \`,
 		`  "$base_url/api/v0/server/shutdown" \`,
-		`  --data-binary "{\"request_id\":\"req-shutdown\",\"cleanup_goal_backends\":true}"`,
+		`  --data-binary "{\"request_id\":\"req-shutdown\",\"idempotency_key\":\"idem-shutdown\",\"requested_by\":\"orquesta-director\",\"cleanup_goal_backends\":true}"`,
 		`)"`,
 	}, "\n")
 

@@ -428,7 +428,7 @@ shutdown_status="$(
     -X POST "$base_url/api/v0/server/shutdown" \
     -H "Content-Type: application/json" \
     -H "Accept: application/json" \
-    -d '{"request_id":"req-smoke-required-test-shutdown","correlation_id":"corr-smoke-required-test-shutdown","forced":true,"cleanup_goal_backends":true}'
+    -d '{"request_id":"req-smoke-required-test-shutdown","correlation_id":"corr-smoke-required-test-shutdown","idempotency_key":"idem-smoke-required-test-shutdown","requested_by":"orquesta-director","forced":true,"cleanup_goal_backends":true}'
 )"
 if [[ "$shutdown_status" -lt 200 || "$shutdown_status" -gt 299 ]]; then
   echo "shutdown devolvio HTTP $shutdown_status" >&2
