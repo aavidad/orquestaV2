@@ -595,6 +595,26 @@ func TestScriptsConShutdownDirectoPidenContratoShutdownV0(t *testing.T) {
 	}
 }
 
+func TestSmokeGoalFirstAppServerRealEsperaTrasKillKillSocketV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+	want := strings.Join([]string{
+		`for pid in $(app_server_process_pids_for_socket "$socket_path" || true); do`,
+		`kill -KILL "$pid"`,
+		`for _ in $(seq 1 40); do`,
+		`app_server_process_count_for_socket "$socket_path"`,
+		`return 1`,
+	}, "\n")
+	position := 0
+	for _, needle := range strings.Split(want, "\n") {
+		next := strings.Index(text[position:], needle)
+		if next < 0 {
+			t.Fatalf("smoke debe esperar procesos tras SIGKILL; falta %q", needle)
+		}
+		position += next + len(needle)
+	}
+}
+
 func scriptShutdownCurlCommandsV0(text string) []string {
 	lines := strings.Split(text, "\n")
 	var commands []string

@@ -298,6 +298,13 @@ stop_app_server_processes_for_socket() {
   for pid in $(app_server_process_pids_for_socket "$socket_path" || true); do
     kill -KILL "$pid" >/dev/null 2>&1 || true
   done
+  for _ in $(seq 1 40); do
+    if [[ "$(app_server_process_count_for_socket "$socket_path")" == "0" ]]; then
+      return 0
+    fi
+    sleep 0.25
+  done
+  return 1
 }
 
 cleanup_app_server_tmux_for_shutdown_retry() {
@@ -324,7 +331,7 @@ cleanup_app_server_tmux_for_shutdown_retry() {
     done
   fi
   if [[ -n "$socket_path" ]]; then
-    stop_app_server_processes_for_socket "$socket_path"
+    stop_app_server_processes_for_socket "$socket_path" || return 1
     rm -f "$socket_path"
   fi
   rm -f "$owner_file"

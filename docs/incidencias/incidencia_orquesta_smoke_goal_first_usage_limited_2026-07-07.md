@@ -98,6 +98,12 @@ sin contrato vigente:
 La guarda `TestScriptsConShutdownDirectoPidenContratoShutdownV0` exige ahora
 `cleanup_goal_backends`, `idempotency_key` y `requested_by=orquesta-director`.
 
+Avance posterior: el cleanup local del smoke real tambien espera tras
+`SIGKILL` hasta que no queden procesos `codex app-server` asociados al socket
+antes de reintentar el shutdown HTTP. Si el proceso sigue vivo, el helper falla
+sin declarar limpieza. Guarda:
+`TestSmokeGoalFirstAppServerRealEsperaTrasKillKillSocketV0`.
+
 ## Lectura
 
 El nucleo no queda validado al 100% por este smoke porque no hubo cierre
