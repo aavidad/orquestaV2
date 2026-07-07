@@ -4424,3 +4424,42 @@ Pendiente explicito para Claude:
 - Mantener `BUG-066` abierto para el tramo real/residente:
   `/api/v0/external-work/observe`, corte externo/manual del backend,
   reconciliacion automatica de terminalidad y ausencia de goal residual.
+
+## Codex local 2026-07-07: BUG-194 OPES required_settings transportado al goal
+
+Se reduce `BUG-ORQ-20260705-194` sin tocar OPES productivo.
+
+Hallazgo:
+
+- El bridge OPES ya tenia guardas de ejecucion real, pero `effective_config` no
+  proyectaba todas las confirmaciones que el runbook exigia para un field test
+  real (`TEMPORAL_CONFIRM`, `BRIDGE_CONFIRM`, `ENABLED`, `DRY_RUN`).
+- El compilador `external-work -> GoalWorkSpec` podia omitir por presupuesto
+  campos de contrato como `required_settings`, confirmaciones, `limit=1` y
+  scope duro; entonces el agente remoto solo podia bloquear por
+  `missing_required_settings` sin ver un contrato durable completo.
+
+Cierre aplicado:
+
+- `cmd/orquesta-server/opes_bridge_config.go`: `effective_config` publica las
+  guardas OPES bridge reales junto a URL, scope y limites, sin exponer URL cruda.
+- `modulos/orquesta-external-work-run/goal_spec_v0.go`: los input fields de
+  required settings/scope OPES pasan a prioridad maxima para quedar inlineados
+  antes que ruido operativo.
+- `modulos/orquesta-external-work-run/goal_spec_opes_v0.go`: detector OPES
+  separado para mantener `goal_spec_v0.go` bajo el ratchet T90.
+- `goal_spec_v0.go`: criterio de aceptacion OPES real exige settings, scope
+  duro y `limit=1`; si falta algo, bloquear con
+  `reason_code=missing_required_settings` y no tocar colas ni OPES productivo.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-external-work-run ./cmd/orquesta-server`
+
+Comprobacion remota:
+
+- `srv1651826:/srv/orquesta-self/worktrees/pilot-remoto-1` esta en
+  `0188739c`, 24 commits por detras de `origin/trabajo/plataforma-agentes`, con
+  remote local `/tmp/orquesta-self.bundle`; no hay cierre mas avanzado de este
+  bug en el servidor. Pendiente: redeploy/sync remoto antes del nuevo field
+  test real.

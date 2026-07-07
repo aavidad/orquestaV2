@@ -247,6 +247,20 @@ func externalWorkGoalPrioritizedInputFieldsV0(
 
 func externalWorkGoalInputFieldPriorityV0(name string) int {
 	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "required_settings", "required_setting", "opes_required_settings",
+		"opes_real_effects_scope", "opes_scope_guard", "scope_guard_ref", "hard_scope",
+		"orquesta_opes_base_url", "orquesta_base_url", "orquesta_server_url",
+		"orquesta_opes_temporal_confirm", "orquesta_opes_bridge_confirm",
+		"orquesta_opes_bridge_enabled", "orquesta_opes_bridge_dry_run",
+		"orquesta_opes_bridge_job_ref", "orquesta_opes_bridge_program_id",
+		"orquesta_opes_bridge_topic_id", "orquesta_opes_bridge_correlation_id",
+		"orquesta_opes_bridge_limit", "opes_base_url_configured",
+		"orquesta_base_url_configured", "opes_temporal_confirm",
+		"opes_bridge_confirm", "opes_bridge_enabled", "opes_bridge_dry_run",
+		"opes_bridge_job_ref", "opes_bridge_program_id", "opes_bridge_topic_id",
+		"opes_bridge_correlation_id", "opes_bridge_limit", "job_ref",
+		"correlation_id", "limit":
+		return 5
 	case "course_id", "program_id", "topic_id", "work_kind", "transport_job_type",
 		"expected_artifact_type", "official_order", "probe_ref",
 		"opes_subroles_materialization_status", "opes_subroles_blocking_reason",
@@ -353,6 +367,9 @@ func externalWorkGoalAcceptanceCriteriaV0(
 	domainRequest orquestadomainwork.DomainWorkJobRequestV0,
 ) []string {
 	criteria := append([]string(nil), domainRequest.AcceptanceCriteria...)
+	if externalWorkGoalIsOPESDomainV0(domainRequest) {
+		criteria = append(criteria, "Para OPES con efectos reales, verificar required_settings y scope duro antes de ejecutar: ORQUESTA_OPES_BASE_URL y ORQUESTA_BASE_URL configuradas, ORQUESTA_OPES_TEMPORAL_CONFIRM=1 o confirmacion productiva gobernada con evidencia externa, ORQUESTA_OPES_BRIDGE_CONFIRM=1, limit=1 y scope por job_ref o program_id/topic_id/correlation_id. Si falta cualquier requisito, bloquear con reason_code=missing_required_settings y no tocar colas ni OPES productivo.")
+	}
 	if len(domainRequest.InputFields) > 0 {
 		criteria = append(criteria, "Usar los input_fields inlineados en context_refs[input_field_value] como contrato operativo compacto; los local_path_ref estructurados son refs opacas no ejecutables y no deben tratarse como paths de filesystem. Los campos omitidos por redaccion o presupuesto quedan durables en AppChange/DomainWork y solo deben resolverse si son imprescindibles para el artefacto. Bloquear con rework de dominio solo si falta un input imprescindible, no por un campo accesorio omitido.")
 	}

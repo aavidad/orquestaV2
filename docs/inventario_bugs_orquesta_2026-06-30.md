@@ -2719,6 +2719,23 @@ Rework: abrir goal causal con OPES temporal/preproduccion confirmado,
 `ORQUESTA_BASE_URL`, confirmacion de bridge, `limit=1` y scope por `job_ref` o
 programa/tema/correlacion.
 
+Avance Codex 2026-07-07: cerrada la parte de codigo local que mantenia abierto
+el hueco de transporte del contrato. `cmd/orquesta-server` ahora publica en
+`effective_config` las guardas OPES bridge relevantes
+(`ORQUESTA_OPES_TEMPORAL_CONFIRM`, `ORQUESTA_OPES_BRIDGE_ENABLED`,
+`ORQUESTA_OPES_BRIDGE_CONFIRM`, `ORQUESTA_OPES_BRIDGE_DRY_RUN`) junto a URL,
+scope y limite. `orquesta-external-work-run` prioriza `required_settings`,
+base URLs redactadas/configuradas, confirmaciones, `limit=1` y scope OPES duro
+en `context_refs[input_field_value]`, y anade criterio de aceptacion: si falta
+cualquier requisito, bloquear con `reason_code=missing_required_settings` sin
+tocar colas ni OPES productivo. Pruebas verdes:
+`go test -count=1 ./modulos/orquesta-external-work-run ./cmd/orquesta-server`.
+Residual operativo: desplegar/sincronizar remoto y repetir field test solo con
+instancia OPES temporal/preproduccion y scope real aportados por operador.
+Comprobacion remota 2026-07-07: `srv1651826:/srv/orquesta-self/worktrees/pilot-remoto-1`
+estaba en `0188739c`, 24 commits por detras de `origin/trabajo/plataforma-agentes`;
+no habia un cierre mas avanzado publicado alli.
+
 BUG nuevo `BUG-ORQ-20260705-195` (cerrado en codigo 2026-07-06):
 El contrato de cierre pidio escribir el resultado durable en
 `scripts/smoke_opes_lifecycle_real.sh/docs/orquesta_goal_result_...json`, pero

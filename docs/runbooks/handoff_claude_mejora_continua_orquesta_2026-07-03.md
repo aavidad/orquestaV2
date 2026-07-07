@@ -2030,3 +2030,42 @@ No sobrecerrar:
   OPES/external-work, observacion por `/api/v0/external-work/observe`,
   reconciliacion automatica tras corte externo/manual y verificacion de que no
   queda backend goal-first activo/stale residual.
+
+## Actualizacion Codex 2026-07-07: BUG-194 OPES required_settings y scope en goal
+
+Se reduce `BUG-ORQ-20260705-194` en codigo local. No se toco OPES productivo.
+
+Hecho:
+
+- `cmd/orquesta-server/opes_bridge_config.go`: `effective_config` publica
+  `ORQUESTA_OPES_TEMPORAL_CONFIRM`, `ORQUESTA_OPES_BRIDGE_ENABLED`,
+  `ORQUESTA_OPES_BRIDGE_CONFIRM`, `ORQUESTA_OPES_BRIDGE_DRY_RUN`, ademas de
+  URL, scope y limite ya existentes. La URL sigue redactada como
+  `opes-base-url-configured`.
+- `modulos/orquesta-external-work-run/goal_spec_v0.go`: prioridad maxima para
+  `required_settings`, base URLs configuradas, confirmaciones OPES, `limit=1`,
+  `job_ref`, `program_id`, `topic_id` y `correlation_id`.
+- `modulos/orquesta-external-work-run/goal_spec_opes_v0.go`: helper OPES
+  separado para no romper el ratchet de tamano del archivo principal.
+- El criterio de aceptacion OPES real queda durable en el goal: si falta
+  required setting o scope, cerrar/bloquear con
+  `reason_code=missing_required_settings` y no tocar colas ni OPES productivo.
+
+Pruebas:
+
+- `go test -count=1 ./modulos/orquesta-external-work-run ./cmd/orquesta-server`
+
+Revision remoto:
+
+- Consulta SSH solo lectura a `srv1651826:/srv/orquesta-self/worktrees/pilot-remoto-1`:
+  HEAD `0188739c`, 24 commits por detras de
+  `origin/trabajo/plataforma-agentes`; `origin=/tmp/orquesta-self.bundle`.
+  No hay version remota mas avanzada de este bug. Queda pendiente sincronizar o
+  redesplegar Orquesta remoto antes de repetir el field test.
+
+Residual:
+
+- `BUG-194` queda cerrado en codigo local para transporte/contrato, pero el
+  field test real sigue pendiente de instancia OPES temporal/preproduccion,
+  `ORQUESTA_BASE_URL`, confirmacion de bridge, `limit=1` y scope duro aportados
+  por operador.

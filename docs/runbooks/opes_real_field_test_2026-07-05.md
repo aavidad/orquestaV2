@@ -36,6 +36,19 @@ ruta sin efectos y publique las settings minimas requeridas antes de cualquier
 ejecucion con efectos. Esto mantiene verde el test requerido de ayuda y evita
 que una consulta de uso dispare el smoke completo.
 
+Actualizacion Codex 2026-07-07: se cerro el hueco local de transporte del
+contrato hacia goal-first. `effective_config` del bridge OPES publica ahora
+`ORQUESTA_OPES_TEMPORAL_CONFIRM`, `ORQUESTA_OPES_BRIDGE_ENABLED`,
+`ORQUESTA_OPES_BRIDGE_CONFIRM` y `ORQUESTA_OPES_BRIDGE_DRY_RUN`, ademas de URL,
+scope y limite. El compilador `external-work -> GoalWorkSpec` prioriza
+`required_settings`, base URLs configuradas/redactadas, confirmaciones,
+`limit=1` y scope duro en `context_refs[input_field_value]`, y exige bloquear
+con `reason_code=missing_required_settings` si falta algo.
+
+No cambia el estado operativo de este field test historico: sigue bloqueado
+hasta tener instancia OPES temporal/preproduccion observable y scope real
+proporcionado por operador. No se toco OPES productivo.
+
 ## Evidencias
 
 - `checkpoint-started-opes-real-field-test-20260705`: checkpoint inicial

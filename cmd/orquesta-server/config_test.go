@@ -638,6 +638,47 @@ func TestServerConfigFromEnvV0DiagnosticaOPESBaseURLPisadaV0(t *testing.T) {
 	}
 }
 
+func TestServerConfigFromEnvV0PublicaGuardasOPESBridgeEnEffectiveConfigV0(t *testing.T) {
+	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
+	t.Setenv(envOPESBaseURLV0, "http://127.0.0.1:18082")
+	t.Setenv(envOPESTemporalConfirmV0, "true")
+	t.Setenv(envOPESBridgeEnabledV0, "true")
+	t.Setenv(envOPESBridgeConfirmV0, "true")
+	t.Setenv(envOPESBridgeDryRunV0, "true")
+	t.Setenv(envOPESBridgeJobRefV0, "job-ref-opes-real-field-test")
+	t.Setenv(envOPESBridgeLimitV0, "1")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	settings := config.EffectiveConfig.Settings
+	for key, want := range map[string]string{
+		envOPESBaseURLV0:              "opes-base-url-configured",
+		envOPESTemporalConfirmV0:      "true",
+		envOPESBridgeEnabledV0:        "true",
+		envOPESBridgeConfirmV0:        "true",
+		envOPESBridgeDryRunV0:         "true",
+		envOPESBridgeJobRefV0:         "job-ref-opes-real-field-test",
+		envOPESBridgeLimitV0:          "1",
+		envOPESBridgeTimeoutSecondsV0: "30",
+	} {
+		if got := effectiveSettingValueForTestV0(settings, key); got != want {
+			t.Fatalf("%s=%q want %q settings=%+v", key, got, want, settings)
+		}
+	}
+	if setting := effectiveSettingForTestV0(settings, envOPESBaseURLV0); !setting.Sensitive {
+		t.Fatalf("OPES base URL debe quedar sensible: %+v", setting)
+	}
+	rawEffectiveConfig, err := json.Marshal(config.EffectiveConfig)
+	if err != nil {
+		t.Fatalf("marshal effective config: %v", err)
+	}
+	if strings.Contains(string(rawEffectiveConfig), "http://127.0.0.1:18082") {
+		t.Fatalf("effective_config filtra OPES base URL cruda: %s", string(rawEffectiveConfig))
+	}
+}
+
 func TestServerConfigFromEnvV0DiagnosticaCodexCodeHomeLegacyAliasV0(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(envCodexProjectWorkDirV0, root)

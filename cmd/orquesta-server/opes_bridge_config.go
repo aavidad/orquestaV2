@@ -401,6 +401,26 @@ func opesBridgeEffectiveConfigSettingsV0(
 	return []orquestaserver.ServerConfigSettingV0{
 		opesBridgeBaseURLSettingV0(config, projectConfig),
 		serverConfigSettingFromRegistryWithSourceV0(
+			envOPESTemporalConfirmV0,
+			strconv.FormatBool(opesBridgeBoolValueFromProjectConfigFileV0(projectConfig, envOPESTemporalConfirmV0, false)),
+			configSettingSourceFromConfigOrProjectConfigV0(config, envOPESTemporalConfirmV0),
+		),
+		serverConfigSettingFromRegistryWithSourceV0(
+			envOPESBridgeEnabledV0,
+			strconv.FormatBool(opesBridgeBoolValueFromProjectConfigFileV0(projectConfig, envOPESBridgeEnabledV0, false)),
+			configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeEnabledV0),
+		),
+		serverConfigSettingFromRegistryWithSourceV0(
+			envOPESBridgeConfirmV0,
+			strconv.FormatBool(opesBridgeBoolValueFromProjectConfigFileV0(projectConfig, envOPESBridgeConfirmV0, false)),
+			configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeConfirmV0),
+		),
+		serverConfigSettingFromRegistryWithSourceV0(
+			envOPESBridgeDryRunV0,
+			strconv.FormatBool(opesBridgeBoolValueFromProjectConfigFileV0(projectConfig, envOPESBridgeDryRunV0, false)),
+			configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeDryRunV0),
+		),
+		serverConfigSettingFromRegistryWithSourceV0(
 			envOPESBridgeJobTypeV0,
 			opesBridgeStringValueFromProjectConfigFileV0(projectConfig, envOPESBridgeJobTypeV0),
 			configSettingSourceFromConfigOrProjectConfigV0(config, envOPESBridgeJobTypeV0),

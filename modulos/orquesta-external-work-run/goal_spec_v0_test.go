@@ -434,6 +434,72 @@ func TestBuildExternalWorkGoalWorkSpecV0LimitaPayloadRefsDeInputFields(t *testin
 	}
 }
 
+func TestBuildExternalWorkGoalWorkSpecV0PriorizaGuardasOPESRealesV0(t *testing.T) {
+	request := validExternalWorkRunRequestForTestV0()
+	fields := make([]orquestadomainwork.DomainWorkFieldV0, 0, externalWorkGoalInputFieldMaxInlineFieldsV0+16)
+	for index := 0; index < externalWorkGoalInputFieldMaxInlineFieldsV0+8; index++ {
+		fields = append(fields, orquestadomainwork.DomainWorkFieldV0{
+			Name:  "campo_secundario_" + string(rune('a'+index)),
+			Value: "valor-secundario",
+		})
+	}
+	fields = append(fields,
+		orquestadomainwork.DomainWorkFieldV0{
+			Name:      "required_settings",
+			ValueJSON: []byte(`{"settings":["ORQUESTA_OPES_BASE_URL","ORQUESTA_BASE_URL","ORQUESTA_OPES_TEMPORAL_CONFIRM","ORQUESTA_OPES_BRIDGE_CONFIRM","ORQUESTA_OPES_BRIDGE_LIMIT","ORQUESTA_OPES_BRIDGE_JOB_REF"]}`),
+		},
+		orquestadomainwork.DomainWorkFieldV0{Name: "ORQUESTA_OPES_BASE_URL", Value: "opes-base-url-configured"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "ORQUESTA_BASE_URL", Value: "orquesta-server-url-configured"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "ORQUESTA_OPES_TEMPORAL_CONFIRM", Value: "1"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "ORQUESTA_OPES_BRIDGE_CONFIRM", Value: "1"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "ORQUESTA_OPES_BRIDGE_LIMIT", Value: "1"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "ORQUESTA_OPES_BRIDGE_JOB_REF", Value: "job-ref-opes-real-field-test"},
+		orquestadomainwork.DomainWorkFieldV0{Name: "opes_scope_guard", Value: "job_ref"},
+	)
+	request.AppChangeRequest.ExternalWork.InputFields = fields
+
+	spec, issues := BuildExternalWorkGoalWorkSpecV0(
+		request,
+		StartExternalWorkRunConfigV0{OccurredAt: "2026-05-10T10:00:00Z"},
+	)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	context := externalWorkRunTestContextTextV0(spec.ContextRefs)
+	for _, want := range []string{
+		"input_fields.required_settings",
+		"ORQUESTA_OPES_BASE_URL",
+		"ORQUESTA_BASE_URL",
+		"ORQUESTA_OPES_TEMPORAL_CONFIRM",
+		"ORQUESTA_OPES_BRIDGE_CONFIRM",
+		"input_fields.ORQUESTA_OPES_BASE_URL",
+		"opes-base-url-configured",
+		"input_fields.ORQUESTA_BASE_URL",
+		"orquesta-server-url-configured",
+		"input_fields.ORQUESTA_OPES_BRIDGE_LIMIT",
+		`"value":"1"`,
+		"input_fields.ORQUESTA_OPES_BRIDGE_JOB_REF",
+		"job-ref-opes-real-field-test",
+		"input_fields.opes_scope_guard",
+		"job_ref",
+		"Contrato DomainWork trae 32 input_fields",
+	} {
+		if !strings.Contains(context, want) {
+			t.Fatalf("context no contiene %q:\n%s", want, context)
+		}
+	}
+	for _, want := range []string{
+		"required_settings y scope duro",
+		"reason_code=missing_required_settings",
+		"limit=1",
+		"no tocar colas ni OPES productivo",
+	} {
+		if !strings.Contains(strings.Join(spec.AcceptanceCriteria, "\n"), want) {
+			t.Fatalf("acceptance_criteria no contiene %q: %+v", want, spec.AcceptanceCriteria)
+		}
+	}
+}
+
 func TestBuildExternalWorkGoalWorkSpecV0RespetaExpectedArtifactTypeV0(t *testing.T) {
 	request := validExternalWorkRunRequestForTestV0()
 	request.AppChangeRequest.ExternalWork.WorkKind = "generate_visual_asset"
