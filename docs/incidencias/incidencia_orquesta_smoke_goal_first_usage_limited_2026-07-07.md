@@ -25,6 +25,8 @@ ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS=5 \
 
 ## Evidencia
 
+### Intento 1: modelo por defecto `gpt-5.5`
+
 - `run_ref`:
   `run-spec-smoke-goal-first-req-smoke-goal-first-31fdafe9a94789b0edb2bd8cf48bf476`
 - `goal_ref`:
@@ -56,6 +58,36 @@ pgrep -af 'orquesta-server|codex app-server|orquesta-goal-0240b08d917c2f4f|g-024
 ```
 
 Resultado: sin procesos vivos; solo aparecio el propio `pgrep`.
+
+### Intento 2: `ORQUESTA_CODEX_MODEL=gpt-5`
+
+Comando igual al anterior, anadiendo:
+
+```bash
+ORQUESTA_CODEX_MODEL=gpt-5
+ORQUESTA_CODEX_REASONING_EFFORT=medium
+```
+
+Resultado:
+
+- `run_ref`:
+  `run-spec-smoke-goal-first-req-smoke-goal-first-4959ed055bcf131f10d2a91796e8a36c`
+- `goal_ref`:
+  `goal-ref-app-director-run-spec-smoke-goal-first-req-smoke-goal-first-4959ed055bcf131f10d2a91796e8a36c`
+- `external_goal_ref`: `019f3b5a-99ca-7531-9ece-7b5d4520aa8b`
+- `poll=1`: `goal_status=running`
+- `poll=2`: `goal_status=blocked`, `run_status=bloqueada`,
+  `closure_status=blocked`
+- `summary`: `codex_app_server_goal_status_blocked`
+- `recommended_action`: `replan`
+- Artefacto parcial:
+  `project/generated-apps/smoke-goal-first/checkpoint_started.txt`
+- Sin procesos residuales tras cleanup.
+
+Directorio de evidencia saneado:
+
+- `/tmp/orquesta-goal-first-app-server.dDenPb`
+- Se elimino `runtime/goal-srv/codex-home`.
 
 Durante la revision previa al smoke se corrigieron POST directos de shutdown
 sin contrato vigente:

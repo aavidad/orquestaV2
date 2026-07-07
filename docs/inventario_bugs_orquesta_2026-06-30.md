@@ -2952,5 +2952,8 @@ en fase `brainstorming_arquitectura`; Orquesta lo proyecta como
 `codex_app_server_goal_provider_limited`. No se observaron procesos residuales
 tras el cleanup; la carpeta de evidencia se saneo eliminando el `codex-home`
 temporal con credenciales. Estado: no es cierre funcional del smoke real; queda
-pendiente reintento cuando haya cuota/modelo operativo. Evidencia:
+pendiente reintento cuando haya cuota/modelo operativo. Reintento acotado con
+`ORQUESTA_CODEX_MODEL=gpt-5` tambien queda `blocked` con solo checkpoint y sin
+cierre `accepted`, por lo que no se insiste para no consumir mas intentos.
+Evidencia:
 `docs/incidencias/incidencia_orquesta_smoke_goal_first_usage_limited_2026-07-07.md`.
