@@ -450,6 +450,11 @@ func codexAppServerIssueCodeFromMessageV0(message string) string {
 		strings.Contains(normalized, "node.cc:751"):
 		return "codex_app_server_wrapper_stdio_failed"
 	case strings.Contains(normalized, "401 unauthorized") ||
+		strings.Contains(normalized, "token_invalidated") ||
+		strings.Contains(normalized, "refresh_token_invalidated") ||
+		strings.Contains(normalized, "refresh_token_reused") ||
+		strings.Contains(normalized, "token_expired") ||
+		strings.Contains(normalized, "access token could not be refreshed") ||
 		(strings.Contains(normalized, "unauthorized") &&
 			(strings.Contains(normalized, "api.openai.com/v1/responses") ||
 				strings.Contains(normalized, "responses_websocket"))):

@@ -48,3 +48,26 @@ Conclusion: el bloqueo de agentes Codex no es cuota (`429`) sino autenticacion (
 ## Estado
 
 Abierta hasta que un agente real escriba `agent_ack.json` y complete una tarea nueva despues de la reautenticacion.
+
+## Actualizacion 2026-07-07: diagnostico de runtime endurecido
+
+Durante esta sesion, dos subagentes locales fallaron con el mensaje publico
+`access token could not be refreshed`, la misma clase operativa que los
+`token_invalidated`/`refresh_token_invalidated` del servidor remoto. No se
+leyeron ni copiaron secretos.
+
+Cierre de codigo local:
+
+- `orquesta-runtime-codex-appserver` clasifica ahora
+  `token_invalidated`, `refresh_token_invalidated`, `refresh_token_reused`,
+  `token_expired` y `access token could not be refreshed` como
+  `codex_app_server_provider_unauthorized`.
+- Ese issue code ya tiene evidencia y mensaje de accion en la composicion:
+  revisar/reautenticar Codex/OpenAI en el `CODEX_HOME` aislado y reiniciar.
+
+Prueba:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`
+
+El estado operativo no cambia: sigue abierta hasta reautenticar en remoto y
+verificar un agente real nuevo con ACK/resultado.

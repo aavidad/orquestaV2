@@ -793,6 +793,18 @@ exit 1
 	}
 }
 
+func TestCodexAppServerIssueCodeFromMessageV0ClasificaTokenInvalidadoV0(t *testing.T) {
+	for _, message := range []string{
+		`{"error":{"code":"token_invalidated","message":"refresh_token_invalidated"}}`,
+		"Your access token could not be refreshed because you have since logged out or signed in to another account. Please sign in again.",
+		"refresh_token_reused / token_expired",
+	} {
+		if got := codexAppServerIssueCodeFromMessageV0(message); got != "codex_app_server_provider_unauthorized" {
+			t.Fatalf("message=%q issue=%q", message, got)
+		}
+	}
+}
+
 func TestCodexAppServerDiagnosticTailFileV0LeeSoloColaV0(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "app-server.log")
 	raw := strings.Repeat("prefix-noise\n", codexAppServerDiagnosticLogMaxBytesV0) +

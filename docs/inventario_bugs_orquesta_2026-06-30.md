@@ -2705,7 +2705,7 @@ paquete final y sin tocar OPES productivo.
   queda cubierto; los residuales que sigan abiertos deben citar un hueco
   concreto nuevo, no este smoke.
 
-BUG nuevo `BUG-ORQ-20260705-194` (abierto):
+BUG nuevo `BUG-ORQ-20260705-194` (cerrado en codigo local; residual operativo):
 El field test OPES real post-G5 no podia ejecutarse desde el goal remoto por
 falta de `required_settings` externas (`ORQUESTA_OPES_BASE_URL`,
 `ORQUESTA_BASE_URL`, confirmacion OPES temporal/bridge y scope duro). Causa
@@ -2826,20 +2826,21 @@ ubicarlo bajo un scope directorio autorizado. Evidencia:
 
 - BUG-ORQ-20260705-TELEGRAM-NOLLM-ACCEPTED-INVISIBLE: `prepare-run` acepta `request-ref-remoto-telegram-nollm-runtime-20260705-001` pero no aparece en `autoprogramming/status`; control movil no-LLM no esta desplegado y Hermes LLM falla por 429. Avance 2026-07-06: el endpoint `POST /api/v0/operator/telegram/update` y el sender Bot API directo ya existen; D1 cierra en codigo la invisibilidad de `prepare-run` legacy con `RunRef` en lecturas de cola, `Reason=autoprogramming_prepare_run`, diagnostico `autoprogramming_prepare_run_pending_dispatch` y readback obligatorio tras encolar. Falta desplegar en `srv1651826`, conectar webhook/poller, validar desde Telegram real y resolver aparte la auth Codex 401 si se quiere que el agente programe. Ver `docs/incidencias/incidencia_orquesta_telegram_nollm_accepted_invisible_2026-07-05.md`. Estado: cerrada en codigo local para accepted-invisible; pendiente despliegue/verificacion remoto.
 | BUG-ORQ-20260705-SUPERVISOR-SCHEDULER-PAYLOAD | supervisor/autoprogramacion | cerrado | Supervisor remoto repetia `director_tick_input_build_invalido: field=scheduler_input.payload`; T137 rank 1 bloqueaba cola. | `docs/incidencias/incidencia_orquesta_supervisor_scheduler_payload_2026-07-05.md` | Cerrada la capa `scheduler_input.payload` el 2026-07-06 con despliegue remoto verificado del binario `173b69e41c`; el siguiente fallo observado fue presupuesto de historial de eventos y queda tratado por `BUG-ORQ-20260706-SUPERVISOR-EVENTS-BUDGET-PARKING`. |
-| BUG-ORQ-20260705-CODEX-HOME-TOKEN-INVALIDADO | runtime-codex/proveedor | abierto | Agente Orquesta falla antes de programar con `token_invalidated` y `refresh_token_invalidated` en `/srv/orquesta-self/codex-home`. | `docs/incidencias/incidencia_orquesta_codex_home_token_invalidado_2026-07-05.md` | Requiere reautenticacion del Codex CLI del servidor y relanzar tarea. |
+| BUG-ORQ-20260705-CODEX-HOME-TOKEN-INVALIDADO | runtime-codex/proveedor | abierto | Agente Orquesta falla antes de programar con `token_invalidated` y `refresh_token_invalidated` en `/srv/orquesta-self/codex-home`; en la sesion local 2026-07-07 dos subagentes fallaron con "access token could not be refreshed", misma clase de auth externa. | `docs/incidencias/incidencia_orquesta_codex_home_token_invalidado_2026-07-05.md` | Avance codigo local 2026-07-07: `orquesta-runtime-codex-appserver` clasifica `token_invalidated`, `refresh_token_invalidated`, `refresh_token_reused`, `token_expired` y "access token could not be refreshed" como `codex_app_server_provider_unauthorized`, para que status/diagnostico pidan reautenticacion en vez de error generico. Sigue abierto operativo: requiere reautenticacion del Codex CLI del servidor y relanzar tarea hasta ver `agent_ack.json` nuevo. |
 
 BUG-ORQ-20260706-BUDGET-CONTRACT-DESALINEADO (cerrado en codigo local):
 La auditoria estructural P1 detecto presupuestos de eventos/payload definidos
 en privado por capas: pagina de lectura 250, pagina store 1000, lectura total
 10000, maximo store 20000 y payload scheduler 256 KiB. Esa dispersion ya habia
 producido falsos diagnosticos de presupuesto y riesgo de payload excesivo.
-Cierre aplicado por Codex local: nuevo paquete neutral
+Cierre aplicado por Codex local en `029d0d2a1`: nuevo paquete neutral
 `modulos/orquesta-orchestration-budget` con constantes canonicas, consumo desde
 `orquesta-state-file`, `orquesta-orchestration-core`,
 `orquesta-app-director-service`, `orquesta-director-scheduler` y
 `orquesta-director-tick-input`; tests de coherencia `pagina <= lectura <= store`
 y `snapshot <= payload scheduler`; tests focales de lectores paginados.
-Estado: pendiente commit/despliegue remoto.
+Estado: commit integrado en `trabajo/plataforma-agentes`; pendiente solo
+despliegue/verificacion remota cuando haya cuota/auth.
 
 BUG nuevo `BUG-ORQ-20260706-SUPERVISOR-EVENTS-BUDGET-PARKING` (cerrado en codigo):
 Tras cerrar el falso presupuesto por pagina y el dedupe de eventos duplicados,

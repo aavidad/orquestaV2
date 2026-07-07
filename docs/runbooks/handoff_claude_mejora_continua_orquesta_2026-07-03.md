@@ -2069,3 +2069,28 @@ Residual:
   field test real sigue pendiente de instancia OPES temporal/preproduccion,
   `ORQUESTA_BASE_URL`, confirmacion de bridge, `limit=1` y scope duro aportados
   por operador.
+
+## Actualizacion Codex 2026-07-07: auth Codex invalidada clasificada
+
+Los subagentes de apoyo fallaron por proveedor con
+`access token could not be refreshed`, equivalente operativo a
+`BUG-ORQ-20260705-CODEX-HOME-TOKEN-INVALIDADO`. No se leyeron tokens ni
+`auth.json`.
+
+Cierre de codigo local:
+
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_command_protocol_v0.go`
+  clasifica `token_invalidated`, `refresh_token_invalidated`,
+  `refresh_token_reused`, `token_expired` y `access token could not be refreshed`
+  como `codex_app_server_provider_unauthorized`.
+- `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_migrated_v0_test.go`
+  fija la regresion con los mensajes reales.
+
+Prueba:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`
+
+Residual:
+
+- El bug sigue abierto operativo en remoto hasta reautenticar el `CODEX_HOME`
+  aislado y verificar una tarea nueva con `agent_ack.json`.
