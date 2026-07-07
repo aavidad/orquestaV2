@@ -2737,15 +2737,21 @@ fichero imposible. Evidencia:
 `TestBuildCodexGoalPromptV0SaltaFicheroCodigoYUsaSiguienteDirectorioV0` y
 `go test -count=1 ./modulos/orquesta-runtime-codex-goal`.
 
-BUG nuevo `BUG-ORQ-20260705-193` (abierto):
+BUG nuevo `BUG-ORQ-20260705-193` (cerrado en codigo 2026-07-07):
 El goal `task-remote-telegram-inodo-connector-20260705` exigia consultar
 `orquesta.codebase.query.v0` antes de leer codigo completo, pero el runtime de
 este Codex Goal no expuso recursos ni templates MCP para ese broker. Causa
 operativa probable: toolbelt/broker no inyectado en el paquete goal aunque el
 prompt lo declaraba obligatorio. Mitigacion aplicada: busquedas `rg` acotadas y
 lecturas parciales, sin arrancar indexadores propios ni `codebase-memory-mcp`.
-Rework: el launcher goal-first debe inyectar el tool MCP real o marcar la regla
-como no aplicable cuando no haya broker disponible.
+Cierre aplicado por Codex local: el prompt estable de Codex Goal conserva el
+broker como primera opcion, pero lo formula como disponible por toolbelt MCP
+local o por HTTP `POST /api/v0/codebase/query`; si el broker no esta inyectado,
+el agente debe continuar con `rg`/`sed` acotados, dejar evidencia
+`codebase_broker_unavailable` y no arrancar indexadores propios ni
+`codebase-memory-mcp`. Evidencia:
+`TestBuildCodexGoalStartPacketV0AnalizadorDegradaSiBrokerNoInyectadoV0` y
+`go test -count=1 ./modulos/orquesta-runtime-codex-goal`.
 
 Nota MEJ-106 2026-07-05: el adaptador remoto Telegram/Inodo anade una superficie
 operativa opt-in con cinco claves `ORQUESTA_TELEGRAM_OPERATOR_*` para enabled,
@@ -2802,7 +2808,7 @@ ubicarlo bajo un scope directorio autorizado. Evidencia:
 `go test -count=1 ./modulos/orquesta-runtime-codex-goal`.
 
 - BUG-ORQ-20260705-TELEGRAM-NOLLM-ACCEPTED-INVISIBLE: `prepare-run` acepta `request-ref-remoto-telegram-nollm-runtime-20260705-001` pero no aparece en `autoprogramming/status`; control movil no-LLM no esta desplegado y Hermes LLM falla por 429. Avance 2026-07-06: el endpoint `POST /api/v0/operator/telegram/update` y el sender Bot API directo ya existen; D1 cierra en codigo la invisibilidad de `prepare-run` legacy con `RunRef` en lecturas de cola, `Reason=autoprogramming_prepare_run`, diagnostico `autoprogramming_prepare_run_pending_dispatch` y readback obligatorio tras encolar. Falta desplegar en `srv1651826`, conectar webhook/poller, validar desde Telegram real y resolver aparte la auth Codex 401 si se quiere que el agente programe. Ver `docs/incidencias/incidencia_orquesta_telegram_nollm_accepted_invisible_2026-07-05.md`. Estado: cerrada en codigo local para accepted-invisible; pendiente despliegue/verificacion remoto.
-| BUG-ORQ-20260705-SUPERVISOR-SCHEDULER-PAYLOAD | supervisor/autoprogramacion | abierto | Supervisor remoto repite `director_tick_input_build_invalido: field=scheduler_input.payload`; T137 rank 1 bloquea cola. | `docs/incidencias/incidencia_orquesta_supervisor_scheduler_payload_2026-07-05.md` | Pendiente reproducir tick real y corregir compactacion/seleccion. |
+| BUG-ORQ-20260705-SUPERVISOR-SCHEDULER-PAYLOAD | supervisor/autoprogramacion | cerrado | Supervisor remoto repetia `director_tick_input_build_invalido: field=scheduler_input.payload`; T137 rank 1 bloqueaba cola. | `docs/incidencias/incidencia_orquesta_supervisor_scheduler_payload_2026-07-05.md` | Cerrada la capa `scheduler_input.payload` el 2026-07-06 con despliegue remoto verificado del binario `173b69e41c`; el siguiente fallo observado fue presupuesto de historial de eventos y queda tratado por `BUG-ORQ-20260706-SUPERVISOR-EVENTS-BUDGET-PARKING`. |
 | BUG-ORQ-20260705-CODEX-HOME-TOKEN-INVALIDADO | runtime-codex/proveedor | abierto | Agente Orquesta falla antes de programar con `token_invalidated` y `refresh_token_invalidated` en `/srv/orquesta-self/codex-home`. | `docs/incidencias/incidencia_orquesta_codex_home_token_invalidado_2026-07-05.md` | Requiere reautenticacion del Codex CLI del servidor y relanzar tarea. |
 
 BUG-ORQ-20260706-BUDGET-CONTRACT-DESALINEADO (cerrado en codigo local):

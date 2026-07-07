@@ -659,8 +659,9 @@ func writeCodexGoalStableCodeContextRuleV0(
 		return
 	}
 	b.WriteString("\nAnalizador de codigo:\n")
-	b.WriteString("- Antes de leer ficheros completos en un write-set de codigo, consulta el broker central `orquesta.codebase.query.v0` con query_kind `repo_map`, `callers`, `imports`, `module_exports` o `relevant_snippets` segun la tarea.\n")
-	b.WriteString("- Usa esas respuestas compactas para decidir que fragmentos abrir; no arranques indexadores propios ni codebase-memory-mcp dentro del agente.\n")
+	b.WriteString("- Antes de leer ficheros completos en un write-set de codigo, intenta usar el broker central por `orquesta.codebase.query.v0` si aparece en el toolbelt MCP local, o por `POST /api/v0/codebase/query` si el servidor Orquesta vivo lo anuncia.\n")
+	b.WriteString("- Usa query_kind `repo_map`, `callers`, `imports`, `module_exports` o `relevant_snippets` segun la tarea para decidir que fragmentos abrir.\n")
+	b.WriteString("- Si el broker no esta disponible en ese goal, no bloquees el trabajo por esa ausencia: usa `rg`/`sed` acotados, deja evidencia `codebase_broker_unavailable` y sigue sin arrancar indexadores propios ni codebase-memory-mcp dentro del agente.\n")
 }
 
 func codexGoalHasCodeWriteSetV0(spec orquestagoal.GoalWorkSpecV0) bool {

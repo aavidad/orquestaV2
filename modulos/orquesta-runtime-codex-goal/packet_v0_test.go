@@ -63,7 +63,9 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"Los command de Tests requeridos son parte del contrato neutral acotado",
 		"Antes de leer ficheros completos en un write-set de codigo",
 		"orquesta.codebase.query.v0",
+		"POST /api/v0/codebase/query",
 		"relevant_snippets",
+		"codebase_broker_unavailable",
 	} {
 		if !strings.Contains(packet.Prompt, expected) {
 			t.Fatalf("prompt no contiene %q:\n%s", expected, packet.Prompt)
@@ -130,8 +132,35 @@ func TestBuildCodexGoalStartPacketV0SoloExigeAnalizadorConWriteSetCodigoV0(t *te
 		t.Fatalf("issues=%+v", issues)
 	}
 	if !strings.Contains(packet.Prompt, "orquesta.codebase.query.v0") ||
+		!strings.Contains(packet.Prompt, "POST /api/v0/codebase/query") ||
+		!strings.Contains(packet.Prompt, "codebase_broker_unavailable") ||
 		!strings.Contains(packet.Prompt, "module_exports") {
 		t.Fatalf("prompt no exige analizador en write-set codigo:\n%s", packet.Prompt)
+	}
+}
+
+func TestBuildCodexGoalStartPacketV0AnalizadorDegradaSiBrokerNoInyectadoV0(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.WriteSet = []orquestagoal.GoalWriteScopeV0{{Path: "cmd/orquesta-server"}}
+	spec.SkillRefs = nil
+
+	packet, issues := BuildCodexGoalStartPacketV0(spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	for _, expected := range []string{
+		"si aparece en el toolbelt MCP local",
+		"POST /api/v0/codebase/query",
+		"Si el broker no esta disponible",
+		"no bloquees el trabajo por esa ausencia",
+		"`rg`/`sed` acotados",
+		"codebase_broker_unavailable",
+		"sin arrancar indexadores propios ni codebase-memory-mcp",
+	} {
+		if !strings.Contains(packet.Prompt, expected) {
+			t.Fatalf("prompt no contiene fallback %q:\n%s", expected, packet.Prompt)
+		}
 	}
 }
 

@@ -4326,3 +4326,30 @@ Auditoria del resto del inventario D4 (justificaciones):
 Bateria: orchestration-core, app-director-service, app-codex-stack y
 cmd/orquesta-server completas en verde. Con esto la cola
 docs/instrucciones_director_codex_2026-07-06.md queda CERRADA (D1-D7).
+
+## Codex local 2026-07-07: BUG-193 broker de codigo no inyectado en goal
+
+Se cierra en codigo `BUG-ORQ-20260705-193`. El prompt de Codex Goal trataba
+`orquesta.codebase.query.v0` como obligacion dura para write-sets de codigo,
+pero algunos goals no reciben el toolbelt MCP local ni recursos/templates del
+broker. Eso podia bloquear trabajos validos o forzar una excepcion manual aun
+cuando el servidor Orquesta publicaba HTTP o bastaba una lectura acotada.
+
+Cierre aplicado:
+
+- `modulos/orquesta-runtime-codex-goal/packet_v0.go`: el analizador de codigo
+  queda formulado por orden de preferencia: toolbelt MCP
+  `orquesta.codebase.query.v0`, HTTP `POST /api/v0/codebase/query`, y fallback
+  `rg`/`sed` acotado con evidencia `codebase_broker_unavailable` si el broker
+  no esta inyectado en ese goal.
+- `modulos/orquesta-runtime-codex-goal/packet_v0_test.go`: nuevo test de
+  degradacion sin broker inyectado y ajuste de expectativas del contrato.
+- `docs/inventario_bugs_orquesta_2026-06-30.md`: `BUG-ORQ-20260705-193` pasa
+  a cerrado en codigo; `BUG-ORQ-20260705-SUPERVISOR-SCHEDULER-PAYLOAD` queda
+  reconciliado como cerrado porque su incidencia ya tenia cierre remoto y el
+  fallo posterior pertenece al presupuesto de eventos.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-goal`
+- `git diff --check`
