@@ -250,30 +250,32 @@ func workKindForArtifactTypeV0(artifactType string) string {
 }
 
 func followupRefsForRecordV0(record OPESCausalArtifactRecordV0) []string {
-	refs := fieldStringsV0(
-		record.PayloadFields,
-		"followup_refs",
-		"pending_refs",
-		"pending_followup_refs",
-		"rework_refs",
-		"missing_required_refs",
-	)
-	refs = append(refs, topicRegistryLifecyclePendingRefsForRecordV0(record)...)
-	refs = append(refs, topicRegistryQualityPendingRefsForRecordV0(record)...)
-	refs = append(refs, topicRegistryQuestionBankQualityPendingRefsForRecordV0(record)...)
-	refs = append(refs, topicRegistryArtifactQualityPendingRefsForRecordV0(record)...)
-	refs = append(refs, topicRegistryRequiredEvidencePendingRefsForRecordV0(record)...)
+	terminalSettlement := topicRegistryHasValidTerminalSettlementV0(record)
+	var refs []string
+	if !terminalSettlement {
+		refs = fieldStringsV0(
+			record.PayloadFields,
+			"followup_refs",
+			"pending_refs",
+			"pending_followup_refs",
+			"rework_refs",
+			"missing_required_refs",
+		)
+	}
+	refs = append(refs, topicRegistryComputedSettlementBlockerRefsForRecordV0(record)...)
 	status := strings.ToLower(firstNonEmptyV0(
 		fieldStringV0(record.PayloadFields, "status"),
 		fieldStringV0(record.PayloadFields, "estado"),
 		fieldStringV0(record.PayloadFields, "decision"),
 	))
-	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+	if !terminalSettlement &&
+		record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
 		strings.Contains(status, "pendiente") &&
 		len(refs) == 0 {
 		refs = append(refs, "final-package-pendiente-continuar")
 	}
-	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+	if !terminalSettlement &&
+		record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
 		record.CompleteJob &&
 		len(refs) == 0 &&
 		!topicRegistryFinalPackageHasClosureEvidenceV0(record) {
@@ -367,6 +369,7 @@ func causalJobIdempotencyKeyV0(kind string, record OPESCausalArtifactRecordV0, f
 	return "opes-causal-" + safeRefV0(kind) +
 		"-job-" + safeRefV0(record.JobRef) +
 		"-artifact-" + safeRefV0(record.ArtifactRef) +
+		"-receipt-" + safeRefV0(record.ReceiptRef) +
 		"-followup-" + safeRefV0(followupRef) +
 		"-work-" + safeRefV0(workKind)
 }

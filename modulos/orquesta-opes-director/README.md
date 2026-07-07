@@ -30,11 +30,16 @@ Responsabilidad:
 - publicar un texto ya asentado como `texto_asentado_pendiente_derivados` y
   `operational_status=waiting`, no como `working`, para evitar reescritura
   tardia sin rework causal mientras quedan derivados por completar;
+- aceptar `settlement_status` terminal solo si los blockers calculados de QA,
+  evidencia minima y lifecycle goal-first estan limpios; en ese caso ignorar
+  `pending_refs` stale que reabren reescritura textual, pero no ocultar rework
+  estructurado real;
 - aplicar el actualizador del registro OPES antes de persistir el job
   `update_topic_registry`, de modo que un fallo de herramienta no bloquee el
   siguiente tick por idempotencia prematura;
 - acotar la lectura por `correlation_id` cuando el operador lo proporciona;
-- mantener idempotencia estable sin tocar core ni internals de OPES.
+- mantener idempotencia estable por source job, artifact, receipt,
+  followup/rework y work kind sin tocar core ni internals de OPES.
 
 Fuera de alcance:
 

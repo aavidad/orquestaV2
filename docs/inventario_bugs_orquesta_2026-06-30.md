@@ -2980,3 +2980,26 @@ y MCP `issue_codes` solo desde `GoalWorkIssue.Code`. Evidencia:
 `TestMCPDirectorStatsToolExecutorV0NoUsaSummaryComoIssueCodeV0`,
 `go test -count=1 ./modulos/orquesta-runtime-codex-goal ./modulos/orquesta-runtime-codex-appserver ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`
 y `git diff --check`.
+
+Avance `BUG-ORQ-20260701-066` 2026-07-07 (reducido, no cerrado completo):
+Codex local cierra dos bordes del contrato OPES done/settled sin tocar OPES
+productivo. Primero, la idempotencia de trabajos causales OPES incluye ahora
+`receipt_ref` ademas de source job, artifact, followup y work kind; asi una
+actualizacion de registro antigua con receipt incompleto no bloquea una entrega
+posterior del mismo artefacto que ya trae QA/evidencia suficiente para
+`settled_text` o `settled_final`. Segundo, `orquesta-opes-director` consume
+`settlement_status/status/operational_status` terminales solo despues de
+comprobar blockers calculados de QA, evidencia requerida y lifecycle
+goal-first; si el terminal es valido, ignora `pending_refs/rework_refs` stale
+de reescritura textual y conserva derivados reales. `settled_text` queda como
+`operational_status=waiting` y no crea `assemble_topic` ni
+`review_director_consolidation`; `settled_final` exige `CompleteJob=true` y
+manifest de cierre completo antes de `release`. Evidencia:
+`TestProduceOPESCausalJobsV0ActualizaRegistroSiCambiaReceiptDelMismoArtefactoV0`,
+`TestProduceOPESCausalJobsV0NoReescribeTextoYaSettledConPendingStaleV0`,
+`TestProduceOPESCausalJobsV0SettledFinalNoCreaFollowupsPorPendingStaleV0`,
+`TestTopicRegistryOperationalStatusV0NormalizaAliasesCanonicosV0` y
+`go test -count=1 ./modulos/orquesta-opes-director`. Pendiente de BUG-066:
+smoke temporal OPES/external-work con proveedor real o fake residente que
+demuestre reconciliacion automatica tras cortes externos/manuales y ausencia de
+goal backend residual; no se sobrecierra desde este patch local.

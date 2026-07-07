@@ -23,6 +23,97 @@ type topicRegistrySettlementV0 struct {
 	NextWorkKinds []string
 }
 
+func topicRegistryComputedSettlementBlockerRefsForRecordV0(record OPESCausalArtifactRecordV0) []string {
+	var refs []string
+	refs = append(refs, topicRegistryLifecyclePendingRefsForRecordV0(record)...)
+	refs = append(refs, topicRegistryQualityPendingRefsForRecordV0(record)...)
+	refs = append(refs, topicRegistryQuestionBankQualityPendingRefsForRecordV0(record)...)
+	refs = append(refs, topicRegistryArtifactQualityPendingRefsForRecordV0(record)...)
+	refs = append(refs, topicRegistryRequiredEvidencePendingRefsForRecordV0(record)...)
+	return compactStringsV0(refs)
+}
+
+func topicRegistryTerminalSettlementForRecordV0(
+	record OPESCausalArtifactRecordV0,
+	baseRefs []string,
+) (topicRegistrySettlementV0, bool) {
+	status, ok := topicRegistryExplicitTerminalSettlementStatusForRecordV0(record)
+	if !ok || len(topicRegistryComputedSettlementBlockerRefsForRecordV0(record)) > 0 {
+		return topicRegistrySettlementV0{}, false
+	}
+	switch status {
+	case topicRegistrySettlementTextV0:
+		qualityResult, qualityOK := topicRegistryQualityResultForRecordV0(record)
+		if !topicRegistryTextSettlementCandidateV0(record) ||
+			!qualityOK ||
+			qualityResult.Status != OPESTopicQualityStatusCompleteV0 {
+			return topicRegistrySettlementV0{}, false
+		}
+		return topicRegistrySettlementV0{
+			Status:        topicRegistrySettlementTextV0,
+			Scope:         "topic_text",
+			Reason:        "explicit_settled_text_valid",
+			Refs:          compactStringsV0(append(baseRefs, qualityResult.EvidenceRefs...)),
+			NextWorkKinds: topicRegistryNextWorkKindsAfterTextSettledV0(),
+		}, true
+	case topicRegistrySettlementFinalV0:
+		if record.ArtifactType != orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 ||
+			!record.CompleteJob ||
+			!topicRegistryFinalPackageHasClosureEvidenceV0(record) {
+			return topicRegistrySettlementV0{}, false
+		}
+		return topicRegistrySettlementV0{
+			Status: topicRegistrySettlementFinalV0,
+			Scope:  "final_package",
+			Reason: "explicit_settled_final_valid",
+			Refs:   compactStringsV0(append(baseRefs, topicRegistryFinalPackageEvidenceRefsV0(record)...)),
+		}, true
+	default:
+		return topicRegistrySettlementV0{}, false
+	}
+}
+
+func topicRegistryHasValidTerminalSettlementV0(record OPESCausalArtifactRecordV0) bool {
+	_, ok := topicRegistryTerminalSettlementForRecordV0(record, nil)
+	return ok
+}
+
+func topicRegistryExplicitTerminalSettlementStatusForRecordV0(record OPESCausalArtifactRecordV0) (string, bool) {
+	for _, value := range []string{
+		fieldStringV0(record.PayloadFields, "settlement_status"),
+		fieldStringV0(record.PayloadFields, "operational_status"),
+		fieldStringV0(record.PayloadFields, "status", "estado", "decision"),
+	} {
+		status, ok := topicRegistryNormalizeTerminalSettlementStatusV0(value, record)
+		if ok {
+			return status, true
+		}
+	}
+	return "", false
+}
+
+func topicRegistryNormalizeTerminalSettlementStatusV0(
+	status string,
+	record OPESCausalArtifactRecordV0,
+) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "settled_text", "text_settled", "texto_asentado":
+		return topicRegistrySettlementTextV0, true
+	case "settled_final", "final_settled", "paquete_final_asentado":
+		return topicRegistrySettlementFinalV0, true
+	case "settled", "complete", "completed", "done", "paquete_final_local_verificable":
+		if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 {
+			return topicRegistrySettlementFinalV0, true
+		}
+		if topicRegistryTextSettlementCandidateV0(record) {
+			return topicRegistrySettlementTextV0, true
+		}
+		return "", false
+	default:
+		return "", false
+	}
+}
+
 func topicRegistrySettlementFieldsForRecordV0(
 	record OPESCausalArtifactRecordV0,
 ) []orquestadomainwork.DomainWorkFieldV0 {
@@ -122,6 +213,9 @@ func topicRegistrySettlementForRecordV0(record OPESCausalArtifactRecordV0) topic
 			Refs:          compactStringsV0(append(append(baseRefs, lifecyclePendingRefs...), lifecycle.HeartbeatRefs...)),
 			NextWorkKinds: []string{"review_director_consolidation"},
 		}
+	}
+	if settlement, ok := topicRegistryTerminalSettlementForRecordV0(record, baseRefs); ok {
+		return settlement
 	}
 	pendingRefs := topicRegistryPendingRefsForRecordV0(record)
 	if len(pendingRefs) > 0 {

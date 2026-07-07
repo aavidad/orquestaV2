@@ -1993,3 +1993,40 @@ validacion de chat autorizado, comandos contra canal operador-Director y sender
 Bot API directo (`telegramBotAPISenderV0`) inyectado por config
 `telegram_operator.token`. Falta desplegar ese commit en `srv1651826`, reiniciar
 solo Orquesta y validar update real desde Telegram movil.
+
+## Actualizacion Codex 2026-07-07: BUG-066 OPES settlement local reducido
+
+Avance integrado para `BUG-ORQ-20260701-066`, sin tocar OPES productivo:
+
+- `update_topic_registry` ya no queda congelado por una actualizacion antigua
+  del mismo artefacto: la idempotencia causal incluye `receipt_ref` ademas de
+  source job, artifact, followup y work kind.
+- `settlement_status=settled_text|settled_final` y aliases terminales se
+  consumen en `orquesta-opes-director` solo si no hay blockers calculados de
+  QA, evidencia requerida o lifecycle goal-first.
+- Cuando el terminal es valido, `pending_refs/rework_refs` stale dejan de abrir
+  `assemble_topic`, `review_director_consolidation` o `finalize_temario_package`.
+- `settled_text` queda como `texto_asentado_pendiente_derivados` +
+  `operational_status=waiting`; `settled_final` exige `CompleteJob=true` y
+  manifest de cierre completo antes de `release`.
+
+Archivos tocados:
+
+- `modulos/orquesta-opes-director/job_requests_v0.go`
+- `modulos/orquesta-opes-director/topic_registry_settlement_v0.go`
+- `modulos/orquesta-opes-director/topic_registry_v0.go`
+- `modulos/orquesta-opes-director/producer_v0_test.go`
+- `docs/inventario_bugs_orquesta_2026-06-30.md`
+- `docs/bitacora_correccion_pericial_2026-07-03.md`
+- `docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md`
+
+Prueba ejecutada:
+
+- `go test -count=1 ./modulos/orquesta-opes-director`
+
+No sobrecerrar:
+
+- `BUG-066` sigue abierto para el tramo real/residente: smoke temporal
+  OPES/external-work, observacion por `/api/v0/external-work/observe`,
+  reconciliacion automatica tras corte externo/manual y verificacion de que no
+  queda backend goal-first activo/stale residual.

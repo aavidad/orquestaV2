@@ -115,6 +115,14 @@ func topicRegistryStatusForRecordV0(record OPESCausalArtifactRecordV0) string {
 	if refs := topicRegistryArtifactQualityPendingRefsForRecordV0(record); len(refs) > 0 {
 		return "pendiente_rework_artifact_quality"
 	}
+	if settlement, ok := topicRegistryTerminalSettlementForRecordV0(record, nil); ok {
+		switch settlement.Status {
+		case topicRegistrySettlementTextV0:
+			return topicRegistryStatusTextSettledPendingDerivativesV0
+		case topicRegistrySettlementFinalV0:
+			return "paquete_final_local_verificable"
+		}
+	}
 	if explicit, ok := topicRegistryExplicitOperationalStatusV0(status); ok {
 		return explicit
 	}
@@ -163,6 +171,14 @@ func topicRegistryOperationalStatusForRecordV0(record OPESCausalArtifactRecordV0
 	}
 	if refs := topicRegistryLifecyclePendingRefsForRecordV0(record); len(refs) > 0 {
 		return "waiting"
+	}
+	if settlement, ok := topicRegistryTerminalSettlementForRecordV0(record, nil); ok {
+		switch settlement.Status {
+		case topicRegistrySettlementTextV0:
+			return "waiting"
+		case topicRegistrySettlementFinalV0:
+			return "complete"
+		}
 	}
 	if hasExplicit {
 		return explicit
@@ -474,7 +490,9 @@ func topicRegistryExplicitOperationalStatusV0(status string) (string, bool) {
 		return "needs_rework", true
 	case "blocked", "bloqueado", "stale_lock_no_process":
 		return "blocked", true
-	case "complete", "completed", "done", "paquete_final_local_verificable":
+	case "settled_text", "text_settled", "texto_asentado":
+		return "waiting", true
+	case "complete", "completed", "done", "settled", "settled_final", "final_settled", "paquete_final_local_verificable":
 		return "complete", true
 	default:
 		return "", false

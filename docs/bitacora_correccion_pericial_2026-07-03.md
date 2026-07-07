@@ -4380,3 +4380,47 @@ Pruebas verdes:
 
 - `go test -count=1 ./modulos/orquesta-runtime-codex-goal ./modulos/orquesta-runtime-codex-appserver ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`
 - `git diff --check`
+
+## Codex local 2026-07-07: BUG-066 OPES done/settled sin reescritura tardia
+
+Se reduce `BUG-ORQ-20260701-066` en el adaptador OPES local. No se cierra el
+bug completo porque sigue pendiente el smoke temporal/residente que demuestre
+reconciliacion automatica tras cortes externos/manuales del backend goal-first.
+
+Hallazgo corregido:
+
+- La clave idempotente de trabajos causales OPES no incluia `receipt_ref`,
+  aunque el contrato local exige source job, artifact, receipt y followup/rework.
+  Una actualizacion antigua de `update_topic_registry` podia bloquear una
+  posterior del mismo artefacto con evidencia suficiente de settlement.
+- `pending_refs/rework_refs` stale podian reabrir `assemble_topic` o
+  `review_director_consolidation` aunque el record trajera
+  `settlement_status=settled_text|settled_final` valido.
+
+Cierre aplicado:
+
+- `modulos/orquesta-opes-director/job_requests_v0.go`: la idempotencia causal
+  incluye `receipt_ref`; `followupRefsForRecordV0` ignora pendientes declarados
+  solo si existe terminal settlement valido, pero conserva siempre blockers
+  calculados de QA/evidencia/lifecycle.
+- `modulos/orquesta-opes-director/topic_registry_settlement_v0.go`: nuevo
+  contrato de terminal settlement explicito. `settled_text` exige texto/QA
+  publicable; `settled_final` exige `CompleteJob=true` y manifest de cierre
+  completo. Ningun terminal tapa blockers estructurados.
+- `modulos/orquesta-opes-director/topic_registry_v0.go`: `settled_text` se
+  proyecta como `texto_asentado_pendiente_derivados` y
+  `operational_status=waiting`; `settled_final` como
+  `paquete_final_local_verificable` y `operational_status=complete`.
+- `modulos/orquesta-opes-director/producer_v0_test.go`: cobertura de cambio de
+  receipt en el mismo artefacto, pendientes stale en texto asentado, pendientes
+  stale en paquete final y alias `settled*`.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-opes-director`
+
+Pendiente explicito para Claude:
+
+- Mantener `BUG-066` abierto para el tramo real/residente:
+  `/api/v0/external-work/observe`, corte externo/manual del backend,
+  reconciliacion automatica de terminalidad y ausencia de goal residual.
