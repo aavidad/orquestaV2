@@ -4584,4 +4584,8 @@ Conclusion operativa:
   con tokens reales, diff stats, rework y score por `run_ref/goal_ref`, y solo
   activar defaults si el A/B no degrada calidad.
 
-No se activa ninguna regla nueva global en este corte.
+Avance de codigo: `scripts/orquesta_golden_evals.sh` acepta ahora
+`result.json.metrics`, agrega `summary.metrics` y conserva `tasks[].metrics`.
+`docs/runbooks/orquesta_golden_evals_2026-07-04.md` documenta el contrato.
+Queda pendiente el launcher A/B aislado que rellene tokens reales de proveedor y
+diff stats reales. No se activa ninguna regla nueva global en este corte.

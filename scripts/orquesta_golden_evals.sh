@@ -133,6 +133,121 @@ def result_paths(result):
     return paths
 
 
+def metric_int(value):
+    if isinstance(value, bool) or value is None:
+        return 0
+    if isinstance(value, list):
+        return len(value)
+    if isinstance(value, dict):
+        return len(value)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return 0
+
+
+def result_metric_value(raw, key, default=0):
+    if isinstance(raw, dict) and key in raw:
+        return metric_int(raw.get(key))
+    return default
+
+
+def result_metrics(result):
+    raw = result.get("metrics", {})
+    if not isinstance(raw, dict):
+        raw = {}
+    tokens = raw.get("tokens", {})
+    if not isinstance(tokens, dict):
+        tokens = {}
+    touched_files = result_metric_value(raw, "files_touched", len(set(result.get("touched_files", []))))
+    scope_reason = raw.get("scope_expansion_reason") or result.get("scope_expansion_reason")
+    return {
+        "reported": bool(raw),
+        "input_tokens": result_metric_value(raw, "input_tokens", metric_int(tokens.get("input"))),
+        "output_tokens": result_metric_value(raw, "output_tokens", metric_int(tokens.get("output"))),
+        "reasoning_tokens": result_metric_value(raw, "reasoning_tokens", metric_int(tokens.get("reasoning"))),
+        "cached_input_tokens": result_metric_value(raw, "cached_input_tokens", metric_int(tokens.get("cached_input"))),
+        "total_tokens": result_metric_value(raw, "total_tokens", metric_int(tokens.get("total"))),
+        "tool_calls": result_metric_value(raw, "tool_calls"),
+        "elapsed_ms": result_metric_value(raw, "elapsed_ms"),
+        "files_touched": touched_files,
+        "new_files_count": result_metric_value(raw, "new_files_count"),
+        "lines_added": result_metric_value(raw, "lines_added"),
+        "lines_deleted": result_metric_value(raw, "lines_deleted"),
+        "helpers_added": result_metric_value(raw, "helpers_added"),
+        "abstractions_added": result_metric_value(raw, "abstractions_added"),
+        "rework_count": result_metric_value(raw, "rework_count"),
+        "scope_expansions": 1 if str(scope_reason or "").strip() else 0,
+    }
+
+
+def empty_metrics_summary():
+    return {
+        "tasks_with_metrics": 0,
+        "input_tokens_total": 0,
+        "output_tokens_total": 0,
+        "reasoning_tokens_total": 0,
+        "cached_input_tokens_total": 0,
+        "total_tokens": 0,
+        "tool_calls_total": 0,
+        "elapsed_ms_total": 0,
+        "files_touched_total": 0,
+        "new_files_total": 0,
+        "lines_added_total": 0,
+        "lines_deleted_total": 0,
+        "helpers_added_total": 0,
+        "abstractions_added_total": 0,
+        "rework_count_total": 0,
+        "scope_expansions_total": 0,
+    }
+
+
+def merge_metrics_summary(summary, metrics):
+    if metrics.get("reported"):
+        summary["tasks_with_metrics"] += 1
+    for key in (
+        "input_tokens",
+        "output_tokens",
+        "reasoning_tokens",
+        "cached_input_tokens",
+        "tool_calls",
+        "elapsed_ms",
+        "files_touched",
+        "new_files_count",
+        "lines_added",
+        "lines_deleted",
+        "helpers_added",
+        "abstractions_added",
+        "rework_count",
+        "scope_expansions",
+    ):
+        summary_key = {
+            "input_tokens": "input_tokens_total",
+            "output_tokens": "output_tokens_total",
+            "reasoning_tokens": "reasoning_tokens_total",
+            "cached_input_tokens": "cached_input_tokens_total",
+            "tool_calls": "tool_calls_total",
+            "elapsed_ms": "elapsed_ms_total",
+            "files_touched": "files_touched_total",
+            "new_files_count": "new_files_total",
+            "lines_added": "lines_added_total",
+            "lines_deleted": "lines_deleted_total",
+            "helpers_added": "helpers_added_total",
+            "abstractions_added": "abstractions_added_total",
+            "rework_count": "rework_count_total",
+            "scope_expansions": "scope_expansions_total",
+        }[key]
+        summary[summary_key] += metric_int(metrics.get(key))
+    summary["total_tokens"] += metric_int(metrics.get("total_tokens")) or (
+        metric_int(metrics.get("input_tokens"))
+        + metric_int(metrics.get("output_tokens"))
+        + metric_int(metrics.get("reasoning_tokens"))
+    )
+
+
 def path_is_under(path, prefixes):
     clean = path.strip().replace("\\", "/")
     if not clean or clean.startswith("/") or clean.startswith("../") or "/../" in clean:
@@ -360,6 +475,7 @@ def evaluate(results_dir, manifest, manifest_issues):
             "failed": 0,
             "score": 0.0,
             "task_classes": sorted({task.get("task_class", "") for task in manifest.get("tasks", [])}),
+            "metrics": empty_metrics_summary(),
         },
         "tasks": [],
     }
@@ -379,6 +495,8 @@ def evaluate(results_dir, manifest, manifest_issues):
                 issues.append(f"unknown_verifier:{verifier}")
             else:
                 issues.extend(check(task, result, task_dir, report))
+        metrics = result_metrics(result)
+        merge_metrics_summary(report["summary"]["metrics"], metrics)
         passed = len(issues) == 0
         if passed:
             report["summary"]["passed"] += 1
@@ -391,6 +509,7 @@ def evaluate(results_dir, manifest, manifest_issues):
             "score": 1.0 if passed else 0.0,
             "issues": issues,
             "verifier_refs": task.get("verifier_refs", []),
+            "metrics": metrics,
         })
     total = report["summary"]["total"]
     if total:
@@ -469,6 +588,15 @@ def write_synthetic_results(results_dir, manifest):
             "artifact_paths": list(task.get("expected_files", [])),
             "tests": [{"command": command, "status": "passed"} for command in task.get("required_tests", [])],
             "evidence": synthetic_evidence(task),
+            "metrics": {
+                "files_touched": len(task.get("expected_files", [])),
+                "new_files_count": len(task.get("expected_files", [])),
+                "lines_added": len(task.get("expected_files", [])),
+                "lines_deleted": 0,
+                "tool_calls": 1,
+                "elapsed_ms": 1,
+                "total_tokens": 1,
+            },
             "opes_productive_touched": False,
         }
         write_json(task_dir / "result.json", result)

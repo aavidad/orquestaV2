@@ -138,6 +138,10 @@ contratos tecnicos.
 5. Si el A/B sale bien, entonces evaluar si una version ultracorta de la skill
    entra como default en la composicion de autoprogramacion, no en `AGENTS.md`.
 
+Avance 2026-07-08: el evaluador ya acepta `result.json.metrics`, agrega
+`summary.metrics` y conserva `tasks[].metrics`. Falta que un launcher aislado
+rellene tokens reales de proveedor y diff stats reales por brazo A/B.
+
 ## Decision actual
 
 No se activa ninguna regla nueva global en este commit. Este documento deja

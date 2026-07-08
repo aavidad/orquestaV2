@@ -61,6 +61,35 @@ con `task_id`, `status`, `touched_files`, `tests`, `artifact_paths` y
 `evidence`. El evaluador puntua tests pasados, ficheros esperados y ausencia de
 escrituras fuera de `write_set`.
 
+Desde 2026-07-08 el launcher puede anadir `metrics` para comparaciones A/B:
+
+```json
+{
+  "metrics": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "reasoning_tokens": 0,
+    "cached_input_tokens": 0,
+    "total_tokens": 0,
+    "tool_calls": 0,
+    "elapsed_ms": 0,
+    "files_touched": 0,
+    "new_files_count": 0,
+    "lines_added": 0,
+    "lines_deleted": 0,
+    "helpers_added": 0,
+    "abstractions_added": 0,
+    "rework_count": 0,
+    "scope_expansion_reason": ""
+  }
+}
+```
+
+Tambien se acepta `metrics.tokens.{input,output,reasoning,cached_input,total}`.
+El reporte agregado escribe `summary.metrics` y conserva `tasks[].metrics`.
+Si el launcher no informa metricas, el evaluador conserva compatibilidad y solo
+deriva `files_touched` desde `touched_files`.
+
 ## Evaluar Reglas De Programacion
 
 Antes de declarar mejor una regla de agente que pretende ahorrar tokens o
