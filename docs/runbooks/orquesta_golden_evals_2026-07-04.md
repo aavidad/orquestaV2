@@ -61,6 +61,23 @@ con `task_id`, `status`, `touched_files`, `tests`, `artifact_paths` y
 `evidence`. El evaluador puntua tests pasados, ficheros esperados y ausencia de
 escrituras fuera de `write_set`.
 
+## Evaluar Reglas De Programacion
+
+Antes de declarar mejor una regla de agente que pretende ahorrar tokens o
+reducir sobreingenieria, ejecuta comparacion A/B:
+
+1. Baseline: mismas tareas doradas sin la skill nueva.
+2. Variante: mismas tareas doradas con la `skill_ref` nueva inyectada por el
+   launcher o por la composicion aislada.
+3. Compara al menos: score del evaluador, tests pasados, ficheros tocados,
+   ficheros nuevos, lineas anadidas/eliminadas, rework y coste/tiempo si el
+   proveedor lo reporta.
+
+Para `orquesta-programacion-minima`, la variante debe inyectar
+`skill-ref-orquesta-programacion-minima-v0`. Si el score baja, aumentan los
+fallos o el ahorro de diff se consigue rompiendo tests/contratos, la regla se
+mantiene opt-in y se documenta como no apta para default amplio.
+
 ## Guardas OPES
 
 El harness no llama a OPES. Si detecta variables de entorno OPES productivas,

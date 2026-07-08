@@ -288,6 +288,8 @@ func codexSkillRefTextV0(ref string) (string, bool) {
 	switch ref {
 	case "skill-ref-orquesta-programacion-v0", "skill-ref-orquesta-programacion-autonoma-v0":
 		return "Lee AGENTS local, declara write-set estrecho, divide si procede, integra sin pisar cambios ajenos, prueba focal y conserva avances recuperables como evidencia o rework.", true
+	case "skill-ref-orquesta-programacion-minima-v0":
+		return "Diff minimo: reutiliza repo/stdlib/plataforma antes de escribir; no anadas helpers, capas, interfaces, ficheros, tests, logs, docs, dependencias ni abstracciones sin necesidad demostrada; justifica cualquier expansion.", true
 	case "skill-ref-orquesta-programacion-integracion-v0":
 		return "Mantén hexagonal: nucleo neutral, puerto pequeno, adaptador opt-in, configuracion canonica en composicion y tests de frontera/fake.", true
 	case "skill-ref-orquesta-programacion-web-app-v0", "skill-ref-orquesta-programacion-web-local-v0", "skill-ref-orquesta-programacion-ui-v0", "skill-ref-orquesta-web-app-v0", "skill-ref-orquesta-ui-v0":

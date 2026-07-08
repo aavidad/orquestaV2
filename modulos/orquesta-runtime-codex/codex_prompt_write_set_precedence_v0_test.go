@@ -80,6 +80,7 @@ func TestBuildCodexAgentPromptV0MaterializaSkillsProgramacionCompactas(t *testin
 	packet := codexPacketForTestV0()
 	packet.Task.SkillRefs = []string{
 		"skill-ref-orquesta-programacion-autonoma-v0",
+		"skill-ref-orquesta-programacion-minima-v0",
 		"skill-ref-orquesta-programacion-integracion-v0",
 	}
 
@@ -90,12 +91,42 @@ func TestBuildCodexAgentPromptV0MaterializaSkillsProgramacionCompactas(t *testin
 		"aplica las skill_refs materializadas como reglas de ejecucion",
 		"gana el contrato del paquete",
 		"Lee AGENTS local",
+		"Diff minimo",
+		"sin necesidad demostrada",
 		"Mantén hexagonal",
 		"adaptador opt-in",
 	} {
 		if !strings.Contains(prompt, want) {
 			t.Fatalf("prompt no materializa skill compacta %q:\n%s", want, prompt)
 		}
+	}
+}
+
+func TestBuildCodexAgentPromptV0SkillProgramacionMinimaOverheadAcotado(t *testing.T) {
+	base := codexPacketForTestV0()
+	base.Task.SkillRefs = []string{
+		"skill-ref-orquesta-programacion-autonoma-v0",
+		"skill-ref-orquesta-programacion-integracion-v0",
+	}
+	withMinimal := codexPacketForTestV0()
+	withMinimal.Task.SkillRefs = []string{
+		"skill-ref-orquesta-programacion-autonoma-v0",
+		"skill-ref-orquesta-programacion-minima-v0",
+		"skill-ref-orquesta-programacion-integracion-v0",
+	}
+
+	basePrompt := BuildCodexAgentPromptV0(base, nil)
+	minimalPrompt := BuildCodexAgentPromptV0(withMinimal, nil)
+	overheadBytes := len(minimalPrompt) - len(basePrompt)
+	t.Logf("programacion_minima_prompt_overhead_bytes=%d", overheadBytes)
+	if overheadBytes <= 0 || overheadBytes > 512 {
+		t.Fatalf("overhead skill programacion minima fuera de rango: %d bytes", overheadBytes)
+	}
+	if !strings.Contains(minimalPrompt, "skill-ref-orquesta-programacion-minima-v0") {
+		t.Fatalf("prompt no incluye skill minima:\n%s", minimalPrompt)
+	}
+	if strings.Count(minimalPrompt, "skill-ref-orquesta-programacion-minima-v0") != 2 {
+		t.Fatalf("prompt duplica o pierde skill minima:\n%s", minimalPrompt)
 	}
 }
 

@@ -183,6 +183,10 @@ Estas skills viven en este repo y valen para cualquier consumidor:
   artefactos, revisiones, pruebas y cierre.
 - `skills/orquesta-programacion-autonoma/SKILL.md`
   Programacion, arreglos, pruebas, limpieza de worktree y cierre con evidencia.
+- `skills/orquesta-programacion-minima/SKILL.md`
+  Programacion con diff minimo, sin helpers, capas, ficheros, dependencias ni
+  abstracciones no necesarias, conservando seguridad, pruebas y contratos.
+  Estado: opt-in hasta comparar A/B en golden tasks.
 - `skills/orquesta-programacion-integracion/SKILL.md`
   Integraciones hexagonales, puertos, adaptadores opt-in y configuracion.
 - `skills/orquesta-programacion-tests/SKILL.md`
@@ -236,6 +240,7 @@ Para programacion no se usan reglas OPES. El agente debe usar
 `orquesta-programacion-autonoma`, `orquesta-programacion-integracion`,
 `orquesta-programacion-tests`, `orquesta-programacion-web-local`,
 `orquesta-programacion-release`, `orquesta-revision-consejo-votacion`,
-`orquesta-artefacto-modular` y las reglas locales del repo objetivo. Cualquier
-skill especifica de un repo de programacion debe vivir en ese repo o en una
-composicion propia, no en OPES ni en el nucleo generico.
+`orquesta-artefacto-modular` y las reglas locales del repo objetivo. Puede
+anadir `orquesta-programacion-minima` como opt-in medido para comparar diff y
+coste. Cualquier skill especifica de un repo de programacion debe vivir en ese
+repo o en una composicion propia, no en OPES ni en el nucleo generico.

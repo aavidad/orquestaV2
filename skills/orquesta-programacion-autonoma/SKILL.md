@@ -32,6 +32,9 @@ codigo en cualquier repo consumidor de Orquesta.
 
 ## Programacion
 
+- Aplicar `orquesta-programacion-minima` si la tarea trae esa skill_ref o el
+  Director la activa para comparar diff minimo. No convertirla en default amplio
+  sin A/B en golden tasks.
 - Preferir patrones locales del repo.
 - Toda app generada o modificada por Orquesta debe ser hexagonal estricta:
   separar domain, application/usecases, ports, adapters y bootstrap.
