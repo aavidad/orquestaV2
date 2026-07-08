@@ -1,6 +1,6 @@
 # Incidencia: supervisor bloqueado por scheduler_input.payload - 2026-07-05
 
-Actualizado: 2026-07-05T21:15:15Z
+Actualizado: 2026-07-08T16:03:12+02:00
 
 ## Resumen
 
@@ -50,10 +50,50 @@ Pruebas pasadas:
 
 Pendiente: levantar Orquesta con auth/cuota recuperada y confirmar que `/api/status` deja de incrementar `supervisor_error_ticks`.
 
-## Estado
+## Cierre 2026-07-06
 
 Cerrada la capa `scheduler_input.payload` (2026-07-06): Claude desplego en el
 servidor el binario `173b69e41c` con la mitigacion y verifico en vivo que el
 error desaparecio de `/api/status`. El supervisor avanza una capa y ahora falla
 por presupuesto de historial de eventos; continua en
 `docs/incidencias/incidencia_orquesta_supervisor_events_budget_2026-07-06.md`.
+
+## Actualizacion 2026-07-08: regresion en snapshot sin carril activo
+
+Reabierta por evidencia remota en el servidor activo de Orquesta:
+
+- Proceso vivo: `/srv/orquesta-self/worktrees/pilot-remoto-1`, commit
+  `c68929696c550756f1c09fa4588e0206da385eee`, binario con hash
+  `f784628154cd404cac6ee12b81faa20a5d103a45ca38093e9f065c5b000a8cbd`.
+- State dir real del proceso:
+  `/srv/orquesta-self/claude-director-20260705/state`.
+- `/api/status` volvio a publicar `last_supervisor_status=error`,
+  `last_supervisor_stop_public=error_tick` y
+  `director_tick_input_build_invalido: field=scheduler_input.payload`.
+- El run T137
+  `request-ref-autoprogramming-backlog-t137-public-http-request-body-bounds-248bf945-retry-f7319198e315`
+  esta en `programacion`, pesa unos 2.34 MB y acumula 1333
+  `agent_assessments` y 1333 `director_questions`.
+- El ledger de outbox asociado tiene 1334 registros despachados; no es un
+  atasco por outbox pendiente.
+
+Causa nueva: la mitigacion anterior compactaba carriles activos (`progress`,
+`review`, `delivery`, etc.), pero el builder podia quedar sin carril activo y
+seguir enviando al scheduler un snapshot historico demasiado grande. El
+scheduler fallaba antes de poder devolver `waiting` o aparcar el run.
+
+Fix local aplicado el 2026-07-08:
+
+- `modulos/orquesta-director-tick-input/tick_input_payload_compaction_v0.go`
+  aplica una compactacion final por presion de payload si, tras recortar
+  `work_candidates`, el input sigue superando 256 KiB.
+- La compactacion conserva refs causales de candidatos y agentes en vuelo, y
+  recorta historico no causal de assessments/preguntas/listas de snapshot a una
+  cola acotada.
+- Test nuevo:
+  `TestBuildDirectorSchedulerTickInputV0CompactaSnapshotSobredimensionadoSinCarrilActivo`.
+
+## Estado actual
+
+2026-07-08T16:03:12+02:00: fix local con test focal verde; pendiente commit,
+push, despliegue remoto y verificacion viva de `/api/status`.
