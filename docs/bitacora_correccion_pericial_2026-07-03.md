@@ -4565,3 +4565,23 @@ Pruebas verdes:
 Residual: esto cierra el borde local de cleanup parcial; no cierra por si solo
 la observabilidad/control largo de `BUG-165` con proveedor real. Falta
 deploy/sync y smoke real residente amplio.
+
+## Codex local 2026-07-08: auditoria de programacion minima y tokens
+
+Se documenta en
+`docs/auditoria_programacion_minima_tokens_2026-07-08.md` la busqueda externa y
+la auditoria local sobre prompts/skills/reglas para reducir tokens y evitar
+codigo innecesario.
+
+Conclusion operativa:
+
+- Orquesta ya tiene `skills/orquesta-programacion-minima/SKILL.md`, reglas de
+  comunicacion compacta, write-set estrecho, contexto acotado, golden evals y
+  benchmark de compresion documental.
+- No conviene inflar `AGENTS.md`: hay evidencia externa de que context files
+  grandes pueden aumentar pasos, lecturas, escrituras y coste.
+- La mejora pendiente no es mas doctrina, sino medicion: extender golden evals
+  con tokens reales, diff stats, rework y score por `run_ref/goal_ref`, y solo
+  activar defaults si el A/B no degrada calidad.
+
+No se activa ninguna regla nueva global en este corte.
