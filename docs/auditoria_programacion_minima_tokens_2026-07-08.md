@@ -139,8 +139,11 @@ contratos tecnicos.
    entra como default en la composicion de autoprogramacion, no en `AGENTS.md`.
 
 Avance 2026-07-08: el evaluador ya acepta `result.json.metrics`, agrega
-`summary.metrics` y conserva `tasks[].metrics`. Falta que un launcher aislado
-rellene tokens reales de proveedor y diff stats reales por brazo A/B.
+`summary.metrics` y conserva `tasks[].metrics`. Tambien existe
+`scripts/orquesta_golden_metrics_launcher.sh`, wrapper opt-in que mide tiempo,
+exit code y diff Git cuando recibe `ORQUESTA_GOLDEN_TASK_WORKTREE`, y normaliza
+tokens si el launcher/proveedor los escribe. Falta conectar un launcher real de
+proveedor para rellenar tokens reales por brazo A/B.
 
 ## Decision actual
 

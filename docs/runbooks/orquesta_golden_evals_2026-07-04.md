@@ -90,6 +90,25 @@ El reporte agregado escribe `summary.metrics` y conserva `tasks[].metrics`.
 Si el launcher no informa metricas, el evaluador conserva compatibilidad y solo
 deriva `files_touched` desde `touched_files`.
 
+Tambien existe un wrapper opt-in para no duplicar medicion comun en cada
+launcher real:
+
+```sh
+ORQUESTA_GOLDEN_EVALS_CONFIRM=isolated \
+ORQUESTA_GOLDEN_METRICS_INNER_LAUNCHER='./scripts/mi_launcher_aislado.sh' \
+scripts/orquesta_golden_evals.sh --run --parallel \
+  --results-dir /tmp/orquesta-golden-run \
+  --launcher-command './scripts/orquesta_golden_metrics_launcher.sh' \
+  --output docs/evals/results/orquesta_golden_eval_manual.json
+```
+
+El wrapper conserva el `result.json` del launcher interno y anade metricas
+deterministas: `elapsed_ms`, exit code, ficheros tocados declarados, defaults de
+diff y, si `ORQUESTA_GOLDEN_TASK_WORKTREE` apunta a un repo Git, lineas y
+ficheros tocados por `git diff/status`. Los tokens reales siguen dependiendo
+del launcher/proveedor: si el launcher interno escribe `metrics.tokens` o los
+campos `*_tokens`, el wrapper los normaliza sin inventarlos.
+
 ## Evaluar Reglas De Programacion
 
 Antes de declarar mejor una regla de agente que pretende ahorrar tokens o

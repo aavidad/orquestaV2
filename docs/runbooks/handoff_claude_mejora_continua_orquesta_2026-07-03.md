@@ -2094,3 +2094,25 @@ Residual:
 
 - El bug sigue abierto operativo en remoto hasta reautenticar el `CODEX_HOME`
   aislado y verificar una tarea nueva con `agent_ack.json`.
+
+## Actualizacion Codex 2026-07-08: golden evals con metricas A/B
+
+Hecho:
+
+- `scripts/orquesta_golden_evals.sh` ya agrega `tasks[].metrics` y
+  `summary.metrics`.
+- `scripts/orquesta_golden_metrics_launcher.sh` queda como wrapper opt-in para
+  launchers reales: mide `elapsed_ms`, exit code, ficheros declarados y diff Git
+  si se le pasa `ORQUESTA_GOLDEN_TASK_WORKTREE`.
+- `scripts/test_orquesta_golden_metrics_launcher.sh` cubre caso correcto y
+  fallo de launcher sin `result.json`.
+- `docs/runbooks/orquesta_golden_evals_2026-07-04.md` documenta como usarlo
+  para comparar baseline vs `orquesta-programacion-minima`.
+- `docs/auditoria_programacion_minima_tokens_2026-07-08.md` queda actualizada:
+  no meter reglas anti-overengineering globales sin A/B empirico.
+
+Residual:
+
+- Falta launcher real de proveedor/agente que escriba tokens reales por brazo
+  A/B. El wrapper no inventa consumo: solo normaliza lo que publique el
+  proveedor y completa metricas deterministas locales.
