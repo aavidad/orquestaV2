@@ -4381,6 +4381,20 @@ Pruebas verdes:
 - `go test -count=1 ./modulos/orquesta-runtime-codex-goal ./modulos/orquesta-runtime-codex-appserver ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`
 - `git diff --check`
 
+Reverificacion Codex 2026-07-08:
+
+- D5 no se reprograma: el HEAD actual ya aplica `tickInputWithinSnapshotBudgetV0`
+  a progress, delivery, phase-artifact y review-gate, y mantiene tests espejo
+  de snapshot pequeno completo por lane.
+- D6 no se reprograma: el HEAD actual exige `reason_code` en el contrato
+  goal-first, normaliza placeholders por forma, proyecta `checkpoint_started`
+  desde checkpoint temprano validado y evita derivar `issue_codes` desde
+  `summary`.
+- Tests ejecutados:
+  `go test -count=1 ./modulos/orquesta-director-tick-input -run 'TestBuildDirectorSchedulerTickInputV0(CarrilProgressPequeno|CarrilReviewGatePequeno|CarrilDeliveryPequeno|CarrilPhaseArtifactPequeno|CompactaCarrilProgress|CompactaCarrilReviewGate|FiltraConfirmedStoppedAgents)'`
+  y
+  `go test -count=1 ./modulos/orquesta-runtime-codex-goal ./modulos/orquesta-runtime-codex-appserver ./modulos/orquesta-mcp -run 'Test(GoalWorkSpecV0|CodexGoal|ServerCodexAppServerGoalBackendV0ObservaCheckpointStartedComoReasonCodeV0|MergeCodexAppServerGoalResultV0|DirectorStats|AutoprogrammingStatus|ObserveAppDirectorGoal)'`.
+
 ## Codex local 2026-07-07: BUG-066 OPES done/settled sin reescritura tardia
 
 Se reduce `BUG-ORQ-20260701-066` en el adaptador OPES local. No se cierra el

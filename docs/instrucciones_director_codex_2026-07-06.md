@@ -10,6 +10,11 @@ bateria requerida incluye los paquetes DEPENDIENTES transitivos del write-set,
 no solo los tocados; minimo fijo al tocar `orquesta-director-*` u
 `orquesta-state-file`: incluir `./modulos/orquesta-orchestration-core`.
 
+Estado actualizado Codex 2026-07-08: la cola D1-D7 esta cerrada en codigo local
+segun bitacora y verificaciones focales. Este fichero se conserva como fuente
+historica de los requisitos; no relanzar D1-D7 salvo regresion nueva con
+evidencia. Ver `docs/bitacora_correccion_pericial_2026-07-03.md`.
+
 ## TAREA-D1 (P2, cierre): accepted nunca invisible
 
 Un `prepare-run` con `accepted=true` debe ser siempre observable en
@@ -74,7 +79,7 @@ es la causa raiz confirmada de los 2669 eventos de T137:
    `./modulos/orquesta-orchestration-core ./modulos/orquesta-app-director-service
    ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`.
 
-## TAREA-D5 (P4): gate comun de compactacion de lanes
+## TAREA-D5 (P4): gate comun de compactacion de lanes - CERRADA por Claude 2026-07-06 (`f83014450`, ver bitacora; reverificada por Codex 2026-07-08)
 
 Extraer el gate de tamano del carril progress
 (`progressLaneCompactionThresholdBytesV0`, 3c323763c) a un unico punto y
@@ -87,7 +92,7 @@ por cada lane el test espejo de
 `TestBuildDirectorSchedulerTickInputV0CarrilProgressPequenoConservaSnapshotCompletoV0`.
 Antes de tocar, correr orchestration-core en verde como linea base (regla P5).
 
-## TAREA-D6 (P7): reason codes para estados intermedios
+## TAREA-D6 (P7): reason codes para estados intermedios - CERRADA por Claude/Codex 2026-07-07, reverificada por Codex 2026-07-08
 
 NOTA de Claude (2026-07-06, tras intento acotado): las redacciones libres las
 escribe el AGENTE en su result JSON; el fix real esta en tres puntos: (1) el
@@ -107,7 +112,7 @@ libre solo como campo informativo. Actualizar observe/status para discriminar
 por reason code. Test: un placeholder nunca se distingue por substring de
 texto libre.
 
-## TAREA-D7 (P8): runbook ejecutable de arranque/parada del servidor
+## TAREA-D7 (P8): runbook ejecutable de arranque/parada del servidor - CERRADA por Claude 2026-07-06 (`cf6632f71`, ver bitacora)
 
 Script unico (`scripts/orquesta_server_ctl.sh` o similar) con usuario fijo,
 rutas del perfil remoto y verificacion post-arranque; el arranque falla con
