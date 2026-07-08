@@ -710,6 +710,48 @@ func TestMCPDirectorStatsToolExecutorV0GoalFirstProyectaArtifactPathsOmitidosV0(
 	}
 }
 
+func TestMCPDirectorStatsToolExecutorV0GoalFirstProyectaArtifactPathDeclaradoPeroBorradoV0(t *testing.T) {
+	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-goal-artifact-missing-001")
+	run.Tasks = nil
+	run.ClosedTasks = nil
+	run.DeliveredTasks = nil
+	run.Deliveries = nil
+	run.Agents = nil
+	run.StartedAgents = nil
+	state := mcpDirectorGoalStateForTestV0(run.RunID)
+	state.Status = orquestagoal.GoalStatusCompleteV0
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:      orquestagoal.GoalStatusBlockedV0,
+		NeedsRework: true,
+	}
+
+	result, err := (MCPDirectorStatsToolExecutorV0{
+		RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(run),
+		GoalStateSource: mcpDirectorGoalStateSourceForTestV0{State: state},
+		GoalMaterializedRefsSource: mcpDirectorMaterializedRefsSourceStaticForTestV0{
+			Resolved: MCPDirectorGoalMaterializedRefsV0{
+				EvidenceRefs: []string{
+					"evidence-ref-goal-materialized-terminal-artifact-missing-after-complete",
+					"evidence-ref-goal-materialized-terminal-artifact-missing-after-complete:run:tema_041_tema_ampliado_md",
+				},
+				IssueCodes: []string{MCPGoalFirstTerminalArtifactMissingAfterCompleteV0},
+			},
+		},
+	}).Execute(context.Background(), MCPDirectorStatsToolInputV0{RunRef: run.RunID})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Estado != MCPDirectorStatsEstadoOKV0 ||
+		result.Goal == nil ||
+		!containsStringMCPTestV0(result.Goal.IssueCodes, MCPGoalFirstTerminalArtifactMissingAfterCompleteV0) ||
+		result.Stats == nil ||
+		result.Stats.Status != MCPGoalFirstTerminalArtifactMissingAfterCompleteV0 ||
+		!containsStringMCPTestV0(result.Stats.Closure.BlockedBy, MCPGoalFirstTerminalArtifactMissingAfterCompleteV0) ||
+		!mcpDirectorStatsProgressIssueExistsV0(result.Stats.Progress.Issues, MCPGoalFirstTerminalArtifactMissingAfterCompleteV0) {
+		t.Fatalf("goal=%+v stats=%+v", result.Goal, result.Stats)
+	}
+}
+
 func TestMCPDirectorStatsToolExecutorV0GoalFirstProyectaOutOfScopeMaterializedV0(t *testing.T) {
 	run := mcpDirectorStatsRunForTestV0(t, "run-mcp-director-stats-goal-out-of-scope-001")
 	run.Tasks = nil

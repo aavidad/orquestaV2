@@ -551,6 +551,20 @@ func applyMCPDirectorGoalProgressProjectionV0(
 		})
 		return
 	}
+	if containsStringMCPV0(goal.IssueCodes, MCPGoalFirstTerminalArtifactMissingAfterCompleteV0) {
+		stats.Status = MCPGoalFirstTerminalArtifactMissingAfterCompleteV0
+		stats.Closure.BlockedBy = compactStringsMCPV0(append(
+			stats.Closure.BlockedBy,
+			MCPGoalFirstTerminalArtifactMissingAfterCompleteV0,
+		))
+		stats.Closure.BlockerRefs = compactStringsMCPV0(append(stats.Closure.BlockerRefs, goal.EvidenceRefs...))
+		stats.Progress.Issues = append(stats.Progress.Issues, orquestacionnucleoapp.DirectorProgressIssueV0{
+			Code:    MCPGoalFirstTerminalArtifactMissingAfterCompleteV0,
+			Field:   "goal_first.artifact_paths",
+			Message: "goal_first terminal state declares artifact paths that are missing from the current write_set; replan or restore artifacts before closure",
+		})
+		return
+	}
 	if containsStringMCPV0(goal.IssueCodes, MCPGoalFirstOutOfScopeMaterializedArtifactsV0) {
 		stats.Status = MCPGoalFirstOutOfScopeMaterializedArtifactsV0
 		stats.Closure.BlockedBy = compactStringsMCPV0(append(

@@ -829,6 +829,40 @@ func TestStackGoalMaterializedRefsSourceV0DetectaArtefactosOPESFueraDeWriteSet(t
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0DetectaArtifactPathDeclaradoPeroBorradoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	topicDir := filepath.Join(projectDir, "temas", "tema_041")
+	if err := os.MkdirAll(topicDir, 0o700); err != nil {
+		t.Fatalf("mkdir topic: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-missing-artifact-001", "temas/tema_041")
+	state.Status = orquestagoal.GoalStatusCompleteV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+		Status:        orquestagoal.GoalStatusCompleteV0,
+		GoalRef:       state.GoalRef,
+		ArtifactPaths: []string{"temas/tema_041/tema_ampliado.md"},
+		ArtifactRefs:  []string{"artifact-ref-tema-041-ampliado"},
+		EvidenceRefs:  []string{"evidence-ref-goal-result-durable-041"},
+	}
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		!containsStringV0(result.IssueCodes, "terminal_artifact_missing_after_goal_complete") ||
+		!containsStringV0(result.EvidenceRefs, "evidence-ref-goal-materialized-terminal-artifact-missing-after-complete") ||
+		!containsStringPrefixForTestV0(result.EvidenceRefs, "evidence-ref-goal-materialized-terminal-artifact-missing-after-complete:") {
+		t.Fatalf("artefacto terminal borrado no detectado: ok=%v result=%+v", ok, result)
+	}
+	if containsStringV0(result.IssueCodes, "artifact_paths_omitted_materialized") {
+		t.Fatalf("no debe tratar path declarado y ausente como path omitido: %+v", result.IssueCodes)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0DetectaRequiredTestEvidenceAusenteEnReceiptTerminal(t *testing.T) {
 	projectDir := t.TempDir()
 	topicDir := filepath.Join(projectDir, "temas", "tema_037")

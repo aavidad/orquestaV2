@@ -4503,3 +4503,30 @@ Residual para Claude:
 - Las medidas de ahorro de tokens/programacion minima quedan opt-in y sujetas a
   A/B empirico en golden tasks: si reducen tokens/diff pero aumentan fallos,
   rework, tiempo o tests rotos, no se activan como default amplio.
+
+## Codex local 2026-07-08: goal terminal con artefacto declarado y ausente
+
+Se cierra en codigo local la incidencia
+`docs/incidencias/incidencia_orquesta_remoto_automejora_goal_first_receipt_desreconciliado_2026-07-01.md`
+para la clase observada en APG-004: `GoalWorkState` terminal `complete` conserva
+`ArtifactPaths` o receipt en `LastResult`, pero el fichero ya no existe en el
+write-set.
+
+Cierre aplicado:
+
+- `modulos/orquesta-app-codex-stack` detecta rutas declaradas por resultados
+  terminales que faltan en disco y emite
+  `terminal_artifact_missing_after_goal_complete` con evidencia por path.
+- `modulos/orquesta-mcp` proyecta esa senal en `observe_goal`,
+  `director/stats`, `autoprogramming/status` y `efficiency_summary`.
+- La accion recomendada es `replan`, no `repair_receipt`: el recibo puede estar
+  formalmente completo, pero falta recuperar o rehacer el artefacto.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestStackGoalMaterializedRefsSourceV0(DetectaArtifactPathDeclaradoPeroBorrado|DetectaArtifactPathsOmitidos|DetectaRequiredTestEvidence)'`
+- `go test -count=1 ./modulos/orquesta-mcp -run 'Test(EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0QAFailedPublicTextRunningNoEspera|MCPDirectorStatsToolExecutorV0GoalFirstProyectaArtifactPathDeclaradoPeroBorrado|MCPAutoprogrammingStatusExecutorV0ArtifactPathDeclaradoPeroBorradoPideReplan)'`
+- `git diff --check`
+
+Residual: falta deploy/sync y repeticion remota de automejora residente cuando
+haya proveedor/cuota.

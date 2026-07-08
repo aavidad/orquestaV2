@@ -83,8 +83,35 @@ Evidencia concreta:
 - La automejora no debe borrar receipts versionados sin crear reemplazo
   verificable o sin dejar rework explicito.
 
-Estado: abierto.
+## Actualizacion 2026-07-08: cierre de codigo local
 
-Pendiente: enlazar esta incidencia desde
-`docs/inventario_bugs_orquesta_2026-06-30.md` cuando se integre el bloque
-documental ya modificado por el agente OPES con BUG-ORQ-20260701-091.
+Se cierra la parte local verificable de la incidencia con el reason code
+`terminal_artifact_missing_after_goal_complete`.
+
+Cambio aplicado:
+
+- `modulos/orquesta-app-codex-stack` detecta `GoalWorkState` terminal
+  `complete` con `LastResult.ArtifactPaths` declarados dentro del write-set que
+  ya no existen en disco.
+- La deteccion no lo mezcla con `artifact_paths_omitted_materialized`: aqui el
+  recibo si declaro la ruta, pero el artefacto desaparecio despues o no quedo
+  materializado.
+- `modulos/orquesta-mcp` propaga la senal a `observe_goal`,
+  `director/stats` y `autoprogramming/status`; la accion recomendada es
+  `replan`, no `repair_receipt`, porque reparar solo el recibo no recupera el
+  fichero ausente.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestStackGoalMaterializedRefsSourceV0(DetectaArtifactPathDeclaradoPeroBorrado|DetectaArtifactPathsOmitidos|DetectaRequiredTestEvidence)'`
+- `go test -count=1 ./modulos/orquesta-mcp -run 'Test(EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0QAFailedPublicTextRunningNoEspera|MCPDirectorStatsToolExecutorV0GoalFirstProyectaArtifactPathDeclaradoPeroBorrado|MCPAutoprogrammingStatusExecutorV0ArtifactPathDeclaradoPeroBorradoPideReplan)'`
+- `git diff --check`
+
+Estado: cerrado en codigo local para la clase "goal terminal con artefacto
+declarado y ausente". Pendiente solo verificacion remota cuando el servidor
+sincronice este commit y exista proveedor/cuota suficiente para repetir
+automejora residente.
+
+Inventario: enlazado como
+`BUG-ORQ-20260701-RECEIPT-DESRECONCILIADO` en
+`docs/inventario_bugs_orquesta_2026-06-30.md`.

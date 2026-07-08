@@ -2914,6 +2914,64 @@ func TestMCPAutoprogrammingStatusExecutorV0ArtifactPathsOmitidosPideRepairReceip
 	}
 }
 
+func TestMCPAutoprogrammingStatusExecutorV0ArtifactPathDeclaradoPeroBorradoPideReplanV0(t *testing.T) {
+	runRef := "run-ref-autop-status-artifact-missing-001"
+	goalRef := "goal-ref-autop-status-artifact-missing-001"
+	stats := &fakeMCPAutoprogrammingRunStatusV0{
+		stats: &orquestacionnucleoapp.DirectorRunStatsV0{
+			RunRef: runRef,
+			Status: MCPGoalFirstTerminalArtifactMissingAfterCompleteV0,
+			Closure: orquestacionnucleoapp.DirectorClosureStatsV0{
+				Status:    orquestacionnucleoapp.DirectorClosureStatusBlockedV0,
+				Blocked:   true,
+				BlockedBy: []string{MCPGoalFirstTerminalArtifactMissingAfterCompleteV0},
+			},
+			Progress: orquestacionnucleoapp.DirectorProgressStatsV0{
+				Issues: []orquestacionnucleoapp.DirectorProgressIssueV0{{
+					Code:  MCPGoalFirstTerminalArtifactMissingAfterCompleteV0,
+					Field: "goal_first.artifact_paths",
+				}},
+			},
+		},
+		goal: &MCPDirectorGoalStatsV0{
+			RunRef:       runRef,
+			GoalRef:      goalRef,
+			Status:       orquestagoal.GoalStatusCompleteV0,
+			EvidenceRefs: []string{"evidence-ref-goal-materialized-terminal-artifact-missing-after-complete"},
+			IssueCodes:   []string{MCPGoalFirstTerminalArtifactMissingAfterCompleteV0},
+		},
+	}
+
+	result, err := (MCPAutoprogrammingStatusToolExecutorV0{
+		Queue: &fakeMCPAutoprogrammingQueueStatusV0{empty: true},
+		Stats: stats,
+	}).Execute(context.Background(), MCPAutoprogrammingStatusToolInputV0{RunRef: runRef})
+
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(result.StaleRunning) != 1 {
+		t.Fatalf("stale_running=%+v", result.StaleRunning)
+	}
+	action := result.StaleRunning[0]
+	if action.Code != MCPGoalFirstTerminalArtifactMissingAfterCompleteV0 ||
+		action.RecommendedAction != "replan" ||
+		action.GoalRef != goalRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-autoprogramming-status-terminal-artifact-missing-after-complete") ||
+		!hasStringMCPAutoprogrammingStatusTestV0(action.EvidenceRefs, "evidence-ref-goal-materialized-terminal-artifact-missing-after-complete") {
+		t.Fatalf("action=%+v", action)
+	}
+	if result.EfficiencySummary == nil ||
+		result.EfficiencySummary.State != "attention_required" ||
+		result.EfficiencySummary.RecommendedAction != "replan:run:"+runRef ||
+		!hasStringMCPAutoprogrammingStatusTestV0(
+			result.EfficiencySummary.Reasons,
+			MCPGoalFirstTerminalArtifactMissingAfterCompleteV0,
+		) {
+		t.Fatalf("efficiency_summary=%+v", result.EfficiencySummary)
+	}
+}
+
 func TestMCPAutoprogrammingStatusExecutorV0OutOfScopeMaterializedPideReworkV0(t *testing.T) {
 	runRef := "run-ref-autop-status-out-of-scope-001"
 	goalRef := "goal-ref-autop-status-out-of-scope-001"

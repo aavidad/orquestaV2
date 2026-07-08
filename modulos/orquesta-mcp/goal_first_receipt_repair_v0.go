@@ -3,6 +3,7 @@ package orquestamcp
 const (
 	MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0 = "missing_terminal_receipt_after_artifacts_pass"
 	MCPGoalFirstArtifactPathsOmittedMaterializedV0         = "artifact_paths_omitted_materialized"
+	MCPGoalFirstTerminalArtifactMissingAfterCompleteV0     = "terminal_artifact_missing_after_goal_complete"
 	MCPGoalFirstOutOfScopeMaterializedArtifactsV0          = "out_of_scope_materialized_artifacts"
 	MCPGoalFirstQAFailedPublicTextV0                       = "qa_failed_public_text"
 	MCPGoalFirstPartialArtifactsWrittenV0                  = "partial_artifacts_written"

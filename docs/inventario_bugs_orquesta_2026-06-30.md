@@ -2999,6 +2999,24 @@ y MCP `issue_codes` solo desde `GoalWorkIssue.Code`. Evidencia:
 `go test -count=1 ./modulos/orquesta-runtime-codex-goal ./modulos/orquesta-runtime-codex-appserver ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./cmd/orquesta-server`
 y `git diff --check`.
 
+BUG nuevo `BUG-ORQ-20260701-RECEIPT-DESRECONCILIADO` (cerrado en codigo local):
+La incidencia remota
+`docs/incidencias/incidencia_orquesta_remoto_automejora_goal_first_receipt_desreconciliado_2026-07-01.md`
+mostraba un goal `complete` cuyo `last_result` conservaba artefactos/receipt,
+pero el fichero versionado habia desaparecido del worktree y `status` no lo
+proyectaba como problema resoluble. Cierre local 2026-07-08: nuevo reason code
+`terminal_artifact_missing_after_goal_complete`; `orquesta-app-codex-stack`
+detecta `ArtifactPaths` declarados por un resultado terminal que faltan dentro
+del write-set; `orquesta-mcp` lo publica en `observe_goal`, `director/stats` y
+`autoprogramming/status` con accion `replan` para recuperar o rehacer el
+artefacto, sin confundirlo con `artifact_paths_omitted_materialized`.
+Evidencia: tests focales
+`TestStackGoalMaterializedRefsSourceV0DetectaArtifactPathDeclaradoPeroBorradoV0`,
+`TestMCPDirectorStatsToolExecutorV0GoalFirstProyectaArtifactPathDeclaradoPeroBorradoV0`,
+`TestMCPAutoprogrammingStatusExecutorV0ArtifactPathDeclaradoPeroBorradoPideReplanV0`
+y `git diff --check`. Residual operativo: desplegar/sincronizar y repetir
+automejora residente cuando haya proveedor/cuota.
+
 Avance `BUG-ORQ-20260701-066` 2026-07-07 (reducido, no cerrado completo):
 Codex local cierra dos bordes del contrato OPES done/settled sin tocar OPES
 productivo. Primero, la idempotencia de trabajos causales OPES incluye ahora

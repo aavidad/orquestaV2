@@ -16,27 +16,28 @@ import (
 )
 
 const (
-	goalMaterializedRefsMaxFilesV0                 = 64
-	goalMaterializedQAScanMaxFilesV0               = 256
-	goalMaterializedQAScanMaxBytesV0               = 512 * 1024
-	goalMaterializedOPESOutOfScopeMaxFilesV0       = 128
-	goalMaterializedOPESOutOfScopeMaxRefsV0        = 16
-	goalMaterializedWorkDeliveryFileV0             = "work_delivery.json"
-	goalMaterializedOPESReworkDeliveryFileV0       = "opes_topic_rework_delivery.json"
-	goalMaterializedGoalResultFileV0               = "orquesta_goal_result_v0.json"
-	goalMaterializedCheckpointFileV0               = "checkpoint_started.txt"
-	goalMaterializedPhase0CheckpointDeliveryFileV0 = "orquesta_phase0_checkpoint_delivery.json"
-	goalMaterializedMissingTerminalReceiptEvidence = "evidence-ref-goal-materialized-missing-terminal-receipt-after-artifacts-pass"
-	goalMaterializedArtifactPathsOmittedEvidence   = "evidence-ref-goal-materialized-artifact-paths-omitted"
-	goalMaterializedOutOfScopeArtifactsEvidence    = "evidence-ref-goal-materialized-out-of-scope-artifacts"
-	goalMaterializedQAFailedPublicTextEvidence     = "evidence-ref-goal-materialized-qa-failed-public-text"
-	goalMaterializedPartialArtifactsEvidence       = "evidence-ref-goal-materialized-partial-artifacts-written"
-	goalMaterializedPhase0NonPublishableEvidence   = "evidence-ref-goal-materialized-phase0-complete-non-publishable"
-	goalMaterializedRequiredTestEvidenceMissing    = "evidence-ref-goal-materialized-required-test-evidence-missing"
-	goalMaterializedRequiredTestEvidenceDetected   = "evidence-ref-goal-materialized-required-test-evidence-detected"
-	goalMaterializedValidArtifactListEvidence      = "evidence-ref-goal-materialized-valid-artifact-list"
-	goalMaterializedInvalidArtifactListEvidence    = "evidence-ref-goal-materialized-invalid-artifact-list"
-	goalMaterializedTerminalResultEvidence         = "evidence-ref-goal-materialized-terminal-result"
+	goalMaterializedRefsMaxFilesV0                  = 64
+	goalMaterializedQAScanMaxFilesV0                = 256
+	goalMaterializedQAScanMaxBytesV0                = 512 * 1024
+	goalMaterializedOPESOutOfScopeMaxFilesV0        = 128
+	goalMaterializedOPESOutOfScopeMaxRefsV0         = 16
+	goalMaterializedWorkDeliveryFileV0              = "work_delivery.json"
+	goalMaterializedOPESReworkDeliveryFileV0        = "opes_topic_rework_delivery.json"
+	goalMaterializedGoalResultFileV0                = "orquesta_goal_result_v0.json"
+	goalMaterializedCheckpointFileV0                = "checkpoint_started.txt"
+	goalMaterializedPhase0CheckpointDeliveryFileV0  = "orquesta_phase0_checkpoint_delivery.json"
+	goalMaterializedMissingTerminalReceiptEvidence  = "evidence-ref-goal-materialized-missing-terminal-receipt-after-artifacts-pass"
+	goalMaterializedArtifactPathsOmittedEvidence    = "evidence-ref-goal-materialized-artifact-paths-omitted"
+	goalMaterializedTerminalArtifactMissingEvidence = "evidence-ref-goal-materialized-terminal-artifact-missing-after-complete"
+	goalMaterializedOutOfScopeArtifactsEvidence     = "evidence-ref-goal-materialized-out-of-scope-artifacts"
+	goalMaterializedQAFailedPublicTextEvidence      = "evidence-ref-goal-materialized-qa-failed-public-text"
+	goalMaterializedPartialArtifactsEvidence        = "evidence-ref-goal-materialized-partial-artifacts-written"
+	goalMaterializedPhase0NonPublishableEvidence    = "evidence-ref-goal-materialized-phase0-complete-non-publishable"
+	goalMaterializedRequiredTestEvidenceMissing     = "evidence-ref-goal-materialized-required-test-evidence-missing"
+	goalMaterializedRequiredTestEvidenceDetected    = "evidence-ref-goal-materialized-required-test-evidence-detected"
+	goalMaterializedValidArtifactListEvidence       = "evidence-ref-goal-materialized-valid-artifact-list"
+	goalMaterializedInvalidArtifactListEvidence     = "evidence-ref-goal-materialized-invalid-artifact-list"
+	goalMaterializedTerminalResultEvidence          = "evidence-ref-goal-materialized-terminal-result"
 )
 
 var errGoalMaterializedRefsScanDoneV0 = errors.New("goal_materialized_refs_scan_done")
@@ -133,6 +134,13 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedArtifactPathsOmittedEvidence)
 		for _, path := range omitted {
 			result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedArtifactPathOmittedRefV0(state.RunRef, path))
+		}
+	}
+	if missing := goalMaterializedTerminalArtifactPathsMissingV0(projectRoot, state, scan.TerminalResult); len(missing) > 0 {
+		result.IssueCodes = append(result.IssueCodes, orquestamcp.MCPGoalFirstTerminalArtifactMissingAfterCompleteV0)
+		result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedTerminalArtifactMissingEvidence)
+		for _, path := range missing {
+			result.EvidenceRefs = append(result.EvidenceRefs, goalMaterializedTerminalArtifactMissingRefV0(state.RunRef, path))
 		}
 	}
 	if outOfScope := goalMaterializedOPESOutOfScopeArtifactsV0(projectRoot, state); len(outOfScope) > 0 {
@@ -1452,6 +1460,50 @@ func goalMaterializedArtifactPathsOmittedV0(
 	return compactStringsV0(omitted)
 }
 
+func goalMaterializedTerminalArtifactPathsMissingV0(
+	projectRoot string,
+	state orquestagoal.GoalWorkStateV0,
+	terminalResult *orquestagoal.GoalWorkResultV0,
+) []string {
+	state = orquestagoal.NormalizeGoalWorkStateV0(state)
+	declaredResults := make([]orquestagoal.GoalWorkResultV0, 0, 2)
+	if state.LastResult != nil &&
+		strings.TrimSpace(state.LastResult.Status) == orquestagoal.GoalStatusCompleteV0 {
+		declaredResults = append(declaredResults, *state.LastResult)
+	}
+	if terminalResult != nil &&
+		strings.TrimSpace(terminalResult.Status) == orquestagoal.GoalStatusCompleteV0 {
+		declaredResults = append(declaredResults, *terminalResult)
+	}
+	if len(declaredResults) == 0 {
+		return nil
+	}
+	projectRoot = filepath.Clean(projectRoot)
+	allowedRoots := goalMaterializedWriteSetAbsRootsV0(projectRoot, state)
+	missing := make([]string, 0)
+	for _, result := range declaredResults {
+		for _, artifactPath := range result.ArtifactPaths {
+			rel := filepath.ToSlash(filepath.Clean(strings.TrimSpace(artifactPath)))
+			if rel == "" || rel == "." || rel == ".." || filepath.IsAbs(rel) || strings.HasPrefix(rel, "../") {
+				continue
+			}
+			target := filepath.Join(projectRoot, filepath.FromSlash(rel))
+			if !pathWithinRootV0(projectRoot, target) {
+				continue
+			}
+			if len(allowedRoots) > 0 && !goalMaterializedPathWithinAnyRootV0(allowedRoots, target) {
+				continue
+			}
+			if _, err := os.Stat(target); err == nil {
+				continue
+			} else if os.IsNotExist(err) {
+				missing = append(missing, rel)
+			}
+		}
+	}
+	return compactStringsV0(missing)
+}
+
 func goalFirstStringSliceContainsV0(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
@@ -1508,6 +1560,13 @@ func goalMaterializedArtifactPathOmittedRefV0(
 	path string,
 ) string {
 	return goalMaterializedArtifactPathsOmittedEvidence + ":" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(path)
+}
+
+func goalMaterializedTerminalArtifactMissingRefV0(
+	runRef string,
+	path string,
+) string {
+	return goalMaterializedTerminalArtifactMissingEvidence + ":" + safeGoalMaterializedRefPartV0(runRef) + ":" + safeGoalMaterializedRefPartV0(path)
 }
 
 func goalMaterializedOutOfScopeArtifactRefV0(

@@ -131,6 +131,11 @@ func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0QAFailedPublicText
 			recommendedAction: MCPGoalFirstRepairReceiptActionV0,
 		},
 		{
+			name:              "terminal_artifact_missing_after_goal_complete",
+			issueCode:         MCPGoalFirstTerminalArtifactMissingAfterCompleteV0,
+			recommendedAction: "replan",
+		},
+		{
 			name:              "out_of_scope_materialized_artifacts",
 			issueCode:         MCPGoalFirstOutOfScopeMaterializedArtifactsV0,
 			recommendedAction: MCPGoalFirstReworkWriteSetViolationActionV0,

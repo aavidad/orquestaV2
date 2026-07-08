@@ -299,6 +299,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingGoalBackendMissingAfterExternalCleanupActionsV0(goalStates, observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingQAFailedPublicTextActionsV0(observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingArtifactPathsOmittedActionsV0(observedByRunRef)...)
+	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingTerminalArtifactMissingActionsV0(observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingOutOfScopeMaterializedArtifactsActionsV0(observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingRuntimeWriteSetViolationActionsV0(observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingMissingTerminalReceiptActionsV0(observedByRunRef)...)
