@@ -60,9 +60,9 @@ func blockingActiveShutdownWorkV0(
 				return ServerShutdownResultV0{}, false, nil, nil, nil, err
 			}
 			works = compactActiveShutdownWorksV0(active.ActiveWorks)
-			if len(works) == 0 && cleaned.CleanedWorkCount > 0 {
+			if completedWorks := activeShutdownWorksCompletedAfterCleanupV0(cleanupTargetWorks, works, cleaned); len(completedWorks) > 0 {
 				goalActions = mergeServerShutdownGoalActionsV0(goalActions, serverShutdownGoalActionsForWorksV0(
-					cleanupTargetWorks,
+					completedWorks,
 					ServerShutdownGoalActionCleanupCompletedV0,
 					[]string{serverShutdownGoalActionCleanupCompletedEvidenceV0},
 				))

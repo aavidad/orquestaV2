@@ -3017,6 +3017,25 @@ Evidencia: tests focales
 y `git diff --check`. Residual operativo: desplegar/sincronizar y repetir
 automejora residente cuando haya proveedor/cuota.
 
+Avance `BUG-ORQ-20260701-065` / `BUG-ORQ-20260704-165` 2026-07-08
+(borde local cerrado):
+Un subagente detecto un caso parcial de shutdown: si `cleanup_goal_backends`
+recibia dos backends goal, limpiaba uno y el otro seguia vivo, Orquesta podia
+conservar `cleanup_requested` para el backend ya desaparecido y publicar una
+accion bloqueante stale aunque esa identidad estuviera resuelta. Cierre local:
+`orquesta-server-shutdown` compara identidades estables
+`kind/run_ref/work_ref/external_work_ref` antes y despues del cleanup, marca
+`cleanup_completed` solo para los works que desaparecen, y la compactacion de
+`goal_actions` elimina acciones previas no terminales de una identidad que ya
+tiene `cleanup_completed`. Evidencia:
+`TestShutdownServerV0CleanupGoalBackendsParcialNoConservaAccionBloqueanteDeWorkLimpioV0`,
+`go test -count=1 ./modulos/orquesta-server-shutdown`,
+`go test -count=1 ./cmd/orquesta-server -run 'Test(RequestServerShutdownV0CoordinaDosGoalsActivosHastaGoalActionsResueltas|RequestServerShutdownV0ReadyNoSaltaGoalActionsSinActiveWork|RequestServerShutdownV0PostColgadoConsultaStatusAccionable|WaitServerShutdownReadyV0RepostColgadoRespetaDeadlineYDevuelveStatusAccionable)'`
+y
+`go test -count=1 ./modulos/orquesta-server -run 'Test(ShutdownProjectionFromHTTPV0ReadyConGoalActionsQuedaStopPending|ServerPublicStatusV0ExponeShutdownGoalActions|StatusTracker|ServerPublicStatus)'`.
+Residual: no cierra el BUG-165 global de observabilidad/control largo con
+proveedor real; queda pendiente smoke real residente amplio tras deploy/sync.
+
 Avance `BUG-ORQ-20260701-066` 2026-07-07 (reducido, no cerrado completo):
 Codex local cierra dos bordes del contrato OPES done/settled sin tocar OPES
 productivo. Primero, la idempotencia de trabajos causales OPES incluye ahora

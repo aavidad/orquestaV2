@@ -267,3 +267,12 @@ func shutdownGoalActionForTestV0(actions []ServerShutdownGoalActionV0, action st
 	}
 	return false
 }
+
+func shutdownGoalActionForWorkForTestV0(actions []ServerShutdownGoalActionV0, workRef string, action string) bool {
+	for _, value := range actions {
+		if value.WorkRef == workRef && value.ActionTaken == action {
+			return true
+		}
+	}
+	return false
+}

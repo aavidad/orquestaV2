@@ -4530,3 +4530,38 @@ Pruebas verdes:
 
 Residual: falta deploy/sync y repeticion remota de automejora residente cuando
 haya proveedor/cuota.
+
+## Codex local 2026-07-08: shutdown parcial no deja goal_action stale
+
+Hallazgo:
+
+- El subagente de revision de `BUG-ORQ-20260701-065` /
+  `BUG-ORQ-20260704-165` detecto un borde no cubierto: con dos backends goal,
+  `cleanup_goal_backends=true` podia limpiar uno y dejar otro vivo.
+- El resultado re-leia `active_work`, pero `goal_actions` conservaba
+  `cleanup_requested` para todos los works iniciales; el work ya limpio podia
+  quedar como accion bloqueante stale para clientes que bloquean cualquier
+  accion distinta de `cleanup_completed`.
+
+Cierre local aplicado:
+
+- `orquesta-server-shutdown` calcula los works completados tras cleanup por
+  identidad estable `kind/run_ref/work_ref/external_work_ref`.
+- Si un work desaparece tras el cleanup y el cleaner reporta al menos un
+  limpiado, se publica `cleanup_completed` para esa identidad aunque otros
+  backends sigan vivos.
+- `compactServerShutdownGoalActionsV0` suprime acciones previas no terminales
+  de una identidad que ya tiene `cleanup_completed`, para no publicar falsos
+  bloqueos.
+- El helper nuevo vive en fichero propio para respetar el ratchet de tamano del
+  modulo.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-server-shutdown`
+- `go test -count=1 ./cmd/orquesta-server -run 'Test(RequestServerShutdownV0CoordinaDosGoalsActivosHastaGoalActionsResueltas|RequestServerShutdownV0ReadyNoSaltaGoalActionsSinActiveWork|RequestServerShutdownV0PostColgadoConsultaStatusAccionable|WaitServerShutdownReadyV0RepostColgadoRespetaDeadlineYDevuelveStatusAccionable)'`
+- `go test -count=1 ./modulos/orquesta-server -run 'Test(ShutdownProjectionFromHTTPV0ReadyConGoalActionsQuedaStopPending|ServerPublicStatusV0ExponeShutdownGoalActions|StatusTracker|ServerPublicStatus)'`
+
+Residual: esto cierra el borde local de cleanup parcial; no cierra por si solo
+la observabilidad/control largo de `BUG-165` con proveedor real. Falta
+deploy/sync y smoke real residente amplio.

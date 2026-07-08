@@ -123,12 +123,28 @@ func serverShutdownGoalActionFromWorkV0(
 func compactServerShutdownGoalActionsV0(
 	actions []ServerShutdownGoalActionV0,
 ) []ServerShutdownGoalActionV0 {
+	completed := map[string]struct{}{}
+	for _, action := range actions {
+		action = normalizeServerShutdownGoalActionV0(action)
+		if action.ActionTaken != ServerShutdownGoalActionCleanupCompletedV0 {
+			continue
+		}
+		key := serverShutdownGoalActionIdentityKeyV0(action)
+		if key == "" {
+			continue
+		}
+		completed[key] = struct{}{}
+	}
 	out := make([]ServerShutdownGoalActionV0, 0, len(actions))
 	seen := map[string]struct{}{}
 	for _, action := range actions {
 		action = normalizeServerShutdownGoalActionV0(action)
 		if action.ActionTaken == "" ||
 			(action.Kind == "" && action.RunRef == "" && action.WorkRef == "" && action.ExternalWorkRef == "") {
+			continue
+		}
+		if _, resolved := completed[serverShutdownGoalActionIdentityKeyV0(action)]; resolved &&
+			action.ActionTaken != ServerShutdownGoalActionCleanupCompletedV0 {
 			continue
 		}
 		key := strings.Join([]string{action.Kind, action.RunRef, action.WorkRef, action.ExternalWorkRef, action.Status, action.ActionTaken}, "\x00")
@@ -156,4 +172,13 @@ func normalizeServerShutdownGoalActionV0(
 	action.ActionEvidenceRefs = compactServerShutdownStringsV0(action.ActionEvidenceRefs)
 	action.EvidenceRefs = compactServerShutdownStringsV0(action.EvidenceRefs)
 	return action
+}
+
+func serverShutdownGoalActionIdentityKeyV0(
+	action ServerShutdownGoalActionV0,
+) string {
+	if action.Kind == "" && action.RunRef == "" && action.WorkRef == "" && action.ExternalWorkRef == "" {
+		return ""
+	}
+	return strings.Join([]string{action.Kind, action.RunRef, action.WorkRef, action.ExternalWorkRef}, "\x00")
 }
