@@ -1,6 +1,6 @@
 # Incidencia: supervisor bloqueado por scheduler_input.payload - 2026-07-05
 
-Actualizado: 2026-07-08T16:03:12+02:00
+Actualizado: 2026-07-08T16:19:30+02:00
 
 ## Resumen
 
@@ -95,5 +95,28 @@ Fix local aplicado el 2026-07-08:
 
 ## Estado actual
 
-2026-07-08T16:03:12+02:00: fix local con test focal verde; pendiente commit,
-push, despliegue remoto y verificacion viva de `/api/status`.
+2026-07-08T16:19:30+02:00: cerrado y verificado en remoto.
+
+Evidencia de cierre:
+
+- Commit desplegado: `d650d30e977380fc7c69771c83fc1d04cd023de8`
+  (`fix: compacta snapshot de tick sobredimensionado`), push realizado a
+  `origin/trabajo/plataforma-agentes`.
+- Pruebas pasadas antes de desplegar:
+  `go test -count=1 ./modulos/orquesta-director-tick-input
+  ./modulos/orquesta-director-scheduler ./modulos/orquesta-director-cycle`,
+  `go test -count=1 ./...` y build remoto de `./cmd/orquesta-server`.
+- Binario remoto instalado:
+  `/srv/orquesta-self/runtime/orquesta-server-claude`, hash
+  `3a402a9dc1ac78db19d1c3641b70c5f280b6d7675b658576521079d9afd7386e`.
+- El arranque remoto requirio limpieza logica explicita de cola
+  (`ORQUESTA_STARTUP_CLEANUP_MODE=forced_stop`) porque no habia procesos vivos
+  y el startup check detecto `runs transitorios activos=0
+  cola_desincronizada=1`.
+- `/api/status` remoto tras el arranque publica `status=running`,
+  `availability_status=running`, `startup_status=startup_ready`,
+  `last_supervisor_status=ok`, `last_supervisor_error=null` y el mismo hash de
+  binario `3a402a9dc1ac...`.
+- `supervisor_error_ticks` quedo en `19682` durante cuatro muestras separadas
+  por 3 segundos; se interpreta como contador acumulado historico, no como error
+  activo, porque `last_supervisor_error=null` y no crece.
