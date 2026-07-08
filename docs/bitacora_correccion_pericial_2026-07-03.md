@@ -4463,3 +4463,43 @@ Comprobacion remota:
   remote local `/tmp/orquesta-self.bundle`; no hay cierre mas avanzado de este
   bug en el servidor. Pendiente: redeploy/sync remoto antes del nuevo field
   test real.
+
+## Codex local 2026-07-08: Telegram no-LLM requiere config canonica en ctl
+
+Hallazgo:
+
+- D1 `accepted invisible` ya estaba desplegado en remoto y las pruebas focales
+  de visibilidad/cola/MCP/Telegram estaban verdes, pero la prueba real
+  `POST /api/v0/operator/telegram/update` devolvio `404`.
+- Causa inmediata: el servidor estaba arrancado sin `orquesta.config.json`; el
+  endpoint Telegram es opt-in y solo se monta cuando
+  `telegram_operator.enabled=true` llega a `cmd/orquesta-server`.
+- El script operativo `scripts/orquesta_server_ctl.sh` no pasaba `--config` al
+  binario, asi que una config canonica fuera del default podia quedar ignorada
+  en arranques gestionados por `ctl`.
+
+Cierre local aplicado:
+
+- `scripts/orquesta_server_ctl.sh` acepta `ORQUESTA_CTL_CONFIG` y, si no se
+  define, usa `$ORQUESTA_CTL_WORKDIR/orquesta.config.json` cuando existe.
+- `preflight` falla con `config_missing` si se declara una config no legible.
+- `start` ejecuta `orquesta-server run --config <config>` cuando corresponde y
+  conserva el comportamiento anterior si no hay config.
+- `scripts/test_orquesta_server_ctl.sh` prueba con binario fake que no se pasa
+  `--config` sin fichero y que si se pasa con auto-config.
+
+Pruebas verdes:
+
+- `bash scripts/test_orquesta_server_ctl.sh`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerConfigFromEnvWithProjectConfigPathV0CargaFicheroExplicito|TestServerDaemonRunArgsV0UsaSnapshotDeConfigExplicita|TestTelegram(BotAPI|Operator)|TestOperatorNotificationHermes'`
+- `git diff --check`
+
+Residual para Claude:
+
+- No se ha creado config real con token Telegram ni chats autorizados. Ese dato
+  no debe inventarse en codigo ni docs.
+- Falta deploy/sync del cambio de `ctl`, instalar config canonica, configurar
+  webhook o poller y validar desde el movil.
+- Las medidas de ahorro de tokens/programacion minima quedan opt-in y sujetas a
+  A/B empirico en golden tasks: si reducen tokens/diff pero aumentan fallos,
+  rework, tiempo o tests rotos, no se activan como default amplio.

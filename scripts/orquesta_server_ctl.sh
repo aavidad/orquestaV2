@@ -16,6 +16,8 @@
 #   ORQUESTA_CTL_USER     usuario de servicio esperado (default berserk)
 #   ORQUESTA_CTL_ADDR     addr de escucha (default 127.0.0.1:19071)
 #   ORQUESTA_CTL_WORKDIR  workdir de proyecto para agentes (default /srv/orquesta-self/worktrees/pilot-remoto-1)
+#   ORQUESTA_CTL_CONFIG   orquesta.config.json canonico; si no se indica, usa
+#                         $ORQUESTA_CTL_WORKDIR/orquesta.config.json cuando exista
 
 set -euo pipefail
 
@@ -24,6 +26,11 @@ BIN="${ORQUESTA_CTL_BINARY:-/srv/orquesta-self/runtime/orquesta-server-claude}"
 SVC_USER="${ORQUESTA_CTL_USER:-berserk}"
 ADDR="${ORQUESTA_CTL_ADDR:-127.0.0.1:19071}"
 WORKDIR="${ORQUESTA_CTL_WORKDIR:-/srv/orquesta-self/worktrees/pilot-remoto-1}"
+CONFIG="${ORQUESTA_CTL_CONFIG:-}"
+if [ -z "$CONFIG" ] && [ -f "$WORKDIR/orquesta.config.json" ]; then
+  CONFIG="$WORKDIR/orquesta.config.json"
+fi
+STARTUP_SLEEP="${ORQUESTA_CTL_STARTUP_SLEEP:-8}"
 
 fail() { echo "orquesta_server_ctl: reason_code=$1 $2" >&2; exit 1; }
 
@@ -32,6 +39,9 @@ preflight() {
     "debe ejecutarse como $SVC_USER (actual: $(id -un)); arrancar como otro usuario deja el estado con dueno equivocado"
   [ -x "$BIN" ] || fail "binary_missing" "no existe o no es ejecutable: $BIN"
   [ -d "$R/state" ] || fail "state_dir_missing" "no existe $R/state"
+  if [ -n "$CONFIG" ] && [ ! -r "$CONFIG" ]; then
+    fail "config_missing" "config canonica no legible: $CONFIG"
+  fi
   mkdir -p "$R/logs"
   # Distinguir permiso-denegado de fichero-corrupto ANTES de arrancar:
   bad_owner=$(find "$R/state" ! -user "$SVC_USER" -print -quit 2>/dev/null || true)
@@ -50,6 +60,10 @@ start)
     echo "ya vivo pid=$(cat "$R/server.pid")"
     exit 0
   fi
+  config_args=()
+  if [ -n "$CONFIG" ]; then
+    config_args=(--config "$CONFIG")
+  fi
   nohup env PATH=/srv/orquesta-self/tools/go/bin:/usr/local/bin:/usr/bin:/bin \
     ORQUESTA_SERVER_ADDR="$ADDR" \
     ORQUESTA_SERVER_STATE_DIR="$R/state" \
@@ -63,9 +77,9 @@ start)
     ORQUESTA_CODEX_GOAL_TIMEOUT_MS=1800000 \
     ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS=450000 \
     ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DISABLED=true \
-    "$BIN" run >"$R/logs/stdout.log" 2>"$R/logs/stderr.log" &
+    "$BIN" run "${config_args[@]}" >"$R/logs/stdout.log" 2>"$R/logs/stderr.log" &
   echo $! > "$R/server.pid"
-  sleep 8
+  sleep "$STARTUP_SLEEP"
   if ! is_alive; then
     echo "--- stderr ---" >&2; tail -5 "$R/logs/stderr.log" >&2 || true
     fail "startup_died" "el proceso murio en el arranque; ver stderr arriba"

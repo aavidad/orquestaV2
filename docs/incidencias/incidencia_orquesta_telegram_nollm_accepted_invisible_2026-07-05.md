@@ -119,6 +119,38 @@ por `401 Unauthorized token_invalidated` en el proveedor Codex del servidor. Ese
 bloqueo esta documentado como bug de autenticacion independiente y no invalida
 el cierre local de la invisibilidad.
 
+## Actualizacion 2026-07-08: despliegue D1 y bloqueo de config Telegram
+
+Verificacion local/remota posterior:
+
+- El codigo de D1 `accepted invisible` ya esta integrado y desplegado en el
+  servidor remoto usado por Orquesta (`75db992288`). El binario activo reporta
+  hash `39b5007cff0f59c1d262bd41b2d03a145f6d8fe3d754cbeeb292068dc36f7cfe`.
+- Pruebas focales verdes para visibilidad de `prepare-run`, stores de cola,
+  MCP status y Telegram no-LLM:
+  `go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-run-memory ./modulos/orquesta-run-file ./modulos/orquesta-mcp -run 'TestCodexStackAutoprogrammingPrepareRunAPIV0AcceptedLegacyVisibleEnStatusV0|TestCodexStackAutoprogrammingPrepareRunAPIV0NoAceptaSiColaNoProyectaRunV0|TestCodexStackAutoprogrammingPrepareRunAPIV0PreparaRunYSupervisorArranca|TestRunMemoryStoreListSchedulingCandidatesFiltraRunRefAntesDeLimitV0|TestRunFileStoreListSchedulingCandidatesFiltraRunRefAntesDeLimitV0|TestMCPRunQueuePriorityExecutorV0RankTransportaRunRefExactoV0|TestMCPRunQueuePriorityDescriptorV0DeclaraEvidenciaDeCandidatos|TestMCPAutoprogrammingStatusExecutorV0DiagnosticaQueuedNotDispatchedV0'`
+  y
+  `go test -count=1 ./cmd/orquesta-server -run 'TestTelegram(BotAPI|Operator)|TestOperatorNotificationHermes'`.
+- La prueba real contra el servidor vivo devolvio `404` en
+  `POST /api/v0/operator/telegram/update`. Diagnostico: el servicio estaba
+  arrancado sin `orquesta.config.json`; la ruta Telegram es opt-in y no se monta
+  si `telegram_operator.enabled=true` no llega a la composicion.
+- No se encontro `orquesta.config.json` canonico en
+  `/srv/orquesta-self/worktrees/pilot-remoto-1`; los request files encontrados
+  solo contienen objetivos, no credenciales ni token Telegram.
+
+Fix local aplicado para el siguiente deploy: `scripts/orquesta_server_ctl.sh`
+acepta `ORQUESTA_CTL_CONFIG` y, si no se indica, usa
+`$ORQUESTA_CTL_WORKDIR/orquesta.config.json` cuando exista. El test
+`scripts/test_orquesta_server_ctl.sh` cubre que `ctl start` no pase `--config`
+sin fichero y si pase `run --config <workdir>/orquesta.config.json` cuando el
+fichero existe.
+
+Residual operativo: Telegram real sigue abierto hasta crear/instalar config
+canonica con `telegram_operator.enabled=true`, token secreto, chats
+autorizados, webhook o poller, y prueba desde el movil. No declarar este frente
+cerrado solo por tener endpoint y `ctl` preparado.
+
 ## Refs
 
 - request: `request-ref-remoto-telegram-nollm-runtime-20260705-001`
