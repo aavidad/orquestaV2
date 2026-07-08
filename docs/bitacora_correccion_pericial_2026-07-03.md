@@ -4601,5 +4601,11 @@ Conclusion operativa:
 Avance de codigo: `scripts/orquesta_golden_evals.sh` acepta ahora
 `result.json.metrics`, agrega `summary.metrics` y conserva `tasks[].metrics`.
 `docs/runbooks/orquesta_golden_evals_2026-07-04.md` documenta el contrato.
-Queda pendiente el launcher A/B aislado que rellene tokens reales de proveedor y
-diff stats reales. No se activa ninguna regla nueva global en este corte.
+Avance posterior Codex 2026-07-08: `scripts/orquesta_golden_metrics_launcher.sh`
+queda como wrapper A/B opt-in para launchers reales: mide tiempo, exit code,
+diff Git si recibe `ORQUESTA_GOLDEN_TASK_WORKTREE` y normaliza tokens si el
+proveedor los publica. Test:
+`bash scripts/test_orquesta_golden_metrics_launcher.sh`.
+
+Residual: falta un launcher de proveedor/agente que ejecute cada brazo A/B y
+publique tokens reales. No se activa ninguna regla nueva global en este corte.
