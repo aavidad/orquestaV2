@@ -4390,10 +4390,15 @@ Reverificacion Codex 2026-07-08:
   goal-first, normaliza placeholders por forma, proyecta `checkpoint_started`
   desde checkpoint temprano validado y evita derivar `issue_codes` desde
   `summary`.
+- Refuerzo posterior: `TestCodexGoalObserverV0CheckpointStartedNoDerivaIssueDesdeSummaryV0`
+  fija que `IssueCode=checkpoint_started` viaja como codigo estructurado aunque
+  el `summary` conserve una redaccion libre historica.
 - Tests ejecutados:
   `go test -count=1 ./modulos/orquesta-director-tick-input -run 'TestBuildDirectorSchedulerTickInputV0(CarrilProgressPequeno|CarrilReviewGatePequeno|CarrilDeliveryPequeno|CarrilPhaseArtifactPequeno|CompactaCarrilProgress|CompactaCarrilReviewGate|FiltraConfirmedStoppedAgents)'`
   y
   `go test -count=1 ./modulos/orquesta-runtime-codex-goal ./modulos/orquesta-runtime-codex-appserver ./modulos/orquesta-mcp -run 'Test(GoalWorkSpecV0|CodexGoal|ServerCodexAppServerGoalBackendV0ObservaCheckpointStartedComoReasonCodeV0|MergeCodexAppServerGoalResultV0|DirectorStats|AutoprogrammingStatus|ObserveAppDirectorGoal)'`.
+  Verificacion adicional:
+  `go test -count=1 ./modulos/orquesta-runtime-codex-goal`.
 
 ## Codex local 2026-07-07: BUG-066 OPES done/settled sin reescritura tardia
 

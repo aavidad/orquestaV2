@@ -928,6 +928,34 @@ func TestCodexGoalObserverV0PreservaIssueCodeDeBackendV0(t *testing.T) {
 	}
 }
 
+func TestCodexGoalObserverV0CheckpointStartedNoDerivaIssueDesdeSummaryV0(t *testing.T) {
+	observer := CodexGoalObserverV0{Observer: &recordingCodexGoalObserverV0{
+		receipt: CodexGoalObservationReceiptV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         "goal-ref-checkpoint-001",
+			ExternalGoalRef: "external-goal-ref-checkpoint-001",
+			IssueCode:       "checkpoint_started",
+			Summary:         "checkpoint_started; implementacion pendiente",
+			ArtifactPaths:   []string{"generated-apps/checkpoint_started.txt"},
+			EvidenceRefs:    []string{"evidence-ref-codex-app-server-checkpoint-started"},
+		},
+	}}
+
+	result, err := observer.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
+		GoalRef:         "goal-ref-checkpoint-001",
+		ExternalGoalRef: "external-goal-ref-checkpoint-001",
+	})
+
+	if err != nil ||
+		result.Status != orquestagoal.GoalStatusRunningV0 ||
+		result.Summary != "checkpoint_started; implementacion pendiente" ||
+		!hasGoalIssueCodeForTestV0(result.Issues, "checkpoint_started") ||
+		hasGoalIssueCodeForTestV0(result.Issues, "checkpoint_started; implementacion pendiente") ||
+		hasGoalIssueCodeForTestV0(result.Issues, "started") {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+}
+
 func TestCodexGoalObserverV0ClasificaErrorBackendSinIssueCodeV0(t *testing.T) {
 	observer := CodexGoalObserverV0{Observer: &recordingCodexGoalObserverV0{
 		err: errors.New("codex app-server failed: Operation not permitted (os error 1)"),
