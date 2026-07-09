@@ -6177,3 +6177,42 @@ Lectura:
 - No se declara cerrado `BUG-065` global: el residual que queda es externo o de
   entorno, concretamente repetir evidencia en remoto/stale/proveedor lento y
   comprobar cortes manuales fuera de esta maquina.
+
+## Orquesta local 2026-07-09: E3 HTTP/web entra en inventario de contratos
+
+Se cerro el residual local de E3 que habia quedado tras el inventario MCP:
+las rutas HTTP/web focales podian existir en `PublicRouteManifestV0` sin decir
+que contrato canonico exponian.
+
+Cambio:
+
+- `RouteManifestEntryV0` gana `ContractRefs`.
+- `route_manifest_entries_v0.go` declara contratos para:
+  - `/nueva-app`: `nueva_app.solicitar.v0`, `nueva_app.wizard.v0`,
+    `nueva_app.wizard_bot.v0`.
+  - `/api/v0/apps/spec`: `nueva_app.solicitar.v0`.
+  - `/api/v0/apps/intake/guided-turn`: `nueva_app.wizard.v0`.
+  - `/api/v0/apps/intake/wizard-bot`: `nueva_app.wizard_bot.v0`.
+  - `/autoprogramming`: `autoprogramming.prepare_run.v0` y
+    `autoprogramming.status.v0`.
+  - `/api/v0/autoprogramming/prepare-run`:
+    `autoprogramming.prepare_run.v0`.
+  - `/api/v0/autoprogramming/status`: `autoprogramming.status.v0`.
+  - `/api/v0/director/human-work/review-plan`:
+    `operator_director.review_plan.v0`.
+- `ServerRouteResourceV0` propaga `contract_refs` en el discovery publico del
+  servidor.
+
+Guards:
+
+- `TestPublicRouteManifestV0DeclaraContratosE3InternosV0`.
+- `TestServerResourcesRouteManifestIncluyeDiscoveryOPESV0` comprueba que el
+  discovery conserva refs de wizard-bot, prepare-run y status.
+
+Lectura:
+
+- Esto no compara campos web y MCP 1:1: web usa formularios/viewmodels y MCP
+  usa envelopes canonicos. Forzar igualdad literal ahora produciria falsos
+  rojos y acoplaria mal las capas.
+- El siguiente paso, si se reabre E3 por campos web, debe ser un inventario de
+  aliases/nesting explicito por contrato, no reflexion ingenua.

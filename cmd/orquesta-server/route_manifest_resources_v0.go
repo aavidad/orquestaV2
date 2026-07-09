@@ -89,6 +89,7 @@ func serverRouteResourceFromHTTPGatewayV0(
 		Owner:             entry.Owner,
 		Methods:           append([]string{}, entry.Methods...),
 		SecurityProfile:   entry.SecurityProfile,
+		ContractRefs:      append([]string{}, entry.ContractRefs...),
 		Mounted:           true,
 		ShadowsPrefixRefs: append([]string{}, entry.ShadowsPrefixRefs...),
 	}

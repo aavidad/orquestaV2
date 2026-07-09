@@ -40,6 +40,7 @@ type ServerRouteResourceV0 struct {
 	Owner             string   `json:"owner"`
 	Methods           []string `json:"methods"`
 	SecurityProfile   string   `json:"security_profile"`
+	ContractRefs      []string `json:"contract_refs,omitempty"`
 	Mounted           bool     `json:"mounted"`
 	ShadowsPrefixRefs []string `json:"shadows_prefix_refs,omitempty"`
 }
@@ -165,6 +166,7 @@ func compactServerRouteResourcesV0(values []ServerRouteResourceV0) []ServerRoute
 		value.Owner = strings.TrimSpace(value.Owner)
 		value.SecurityProfile = strings.TrimSpace(value.SecurityProfile)
 		value.Methods = compactServerResourceStringsV0(value.Methods)
+		value.ContractRefs = compactServerResourceStringsV0(value.ContractRefs)
 		value.ShadowsPrefixRefs = compactServerResourceStringsV0(value.ShadowsPrefixRefs)
 		key := value.Ref + "\x00" + value.Pattern
 		if value.Ref == "" || value.Pattern == "" || len(value.Methods) == 0 || seen[key] {

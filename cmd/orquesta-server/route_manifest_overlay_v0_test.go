@@ -71,6 +71,24 @@ func TestServerResourcesRouteManifestIncluyeDiscoveryOPESV0(t *testing.T) {
 		!serverRouteHasMethodForTestV0(byPattern[orquestaserver.ServerReadinessEndpointV0], http.MethodGet) {
 		t.Fatalf("metodos discovery invalidos: %+v", byPattern)
 	}
+	assertServerRouteContractRefV0(
+		t,
+		byPattern,
+		orquestahttpgateway.RouteAppIntakeWizardBotV0,
+		orquestahttpgateway.RouteContractNuevaAppWizardBotV0,
+	)
+	assertServerRouteContractRefV0(
+		t,
+		byPattern,
+		orquestahttpgateway.RouteAutoprogrammingPrepareRunV0,
+		orquestahttpgateway.RouteContractAutoprogrammingPrepareRunV0,
+	)
+	assertServerRouteContractRefV0(
+		t,
+		byPattern,
+		orquestahttpgateway.RouteAutoprogrammingStatusV0,
+		orquestahttpgateway.RouteContractAutoprogrammingStatusV0,
+	)
 }
 
 func serverRouteHasMethodForTestV0(route orquestaserver.ServerRouteResourceV0, method string) bool {
@@ -80,4 +98,23 @@ func serverRouteHasMethodForTestV0(route orquestaserver.ServerRouteResourceV0, m
 		}
 	}
 	return false
+}
+
+func assertServerRouteContractRefV0(
+	t *testing.T,
+	routes map[string]orquestaserver.ServerRouteResourceV0,
+	pattern string,
+	contractRef string,
+) {
+	t.Helper()
+	route := routes[pattern]
+	if route.Pattern == "" {
+		t.Fatalf("missing route %s", pattern)
+	}
+	for _, got := range route.ContractRefs {
+		if got == contractRef {
+			return
+		}
+	}
+	t.Fatalf("ruta %s no expone contrato %s: %+v", pattern, contractRef, route.ContractRefs)
 }

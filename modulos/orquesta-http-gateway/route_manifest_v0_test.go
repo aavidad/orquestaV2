@@ -42,6 +42,39 @@ func TestPublicRouteManifestV0DeclaraInventarioYPrecedenciaV0(t *testing.T) {
 	}
 }
 
+func TestPublicRouteManifestV0DeclaraContratosE3InternosV0(t *testing.T) {
+	byRef := routeManifestEntryByRefV0(PublicRouteManifestV0())
+	cases := []struct {
+		ref       string
+		contract  string
+		pageRoute bool
+	}{
+		{ref: RouteRefNuevaAppV0, contract: RouteContractNuevaAppSolicitarV0, pageRoute: true},
+		{ref: RouteRefNuevaAppV0, contract: RouteContractNuevaAppWizardV0, pageRoute: true},
+		{ref: RouteRefNuevaAppV0, contract: RouteContractNuevaAppWizardBotV0, pageRoute: true},
+		{ref: RouteRefAppSpecV0, contract: RouteContractNuevaAppSolicitarV0},
+		{ref: RouteRefAppIntakeGuidedTurnV0, contract: RouteContractNuevaAppWizardV0},
+		{ref: RouteRefAppIntakeWizardBotV0, contract: RouteContractNuevaAppWizardBotV0},
+		{ref: RouteRefAutoprogrammingPageV0, contract: RouteContractAutoprogrammingPrepareRunV0, pageRoute: true},
+		{ref: RouteRefAutoprogrammingPageV0, contract: RouteContractAutoprogrammingStatusV0, pageRoute: true},
+		{ref: RouteRefAutoprogrammingPrepareRunV0, contract: RouteContractAutoprogrammingPrepareRunV0},
+		{ref: RouteRefAutoprogrammingStatusV0, contract: RouteContractAutoprogrammingStatusV0},
+		{ref: RouteRefHumanDirectorWorkReviewPlanV0, contract: RouteContractOperatorDirectorReviewPlanV0},
+	}
+	for _, tc := range cases {
+		entry := byRef[tc.ref]
+		if entry.Ref == "" {
+			t.Fatalf("ruta E3 sin manifest: %s", tc.ref)
+		}
+		if !containsRouteManifestStringV0(entry.ContractRefs, tc.contract) {
+			t.Fatalf("ruta E3 %s no declara contrato %s: %+v", tc.ref, tc.contract, entry.ContractRefs)
+		}
+		if !tc.pageRoute && !containsRouteManifestStringV0(entry.Methods, routeMethodPostV0) {
+			t.Fatalf("ruta E3 API %s no declara POST: %+v", tc.ref, entry.Methods)
+		}
+	}
+}
+
 func TestValidateRouteManifestV0DetectaColisionesYShadowsNoDeclarados(t *testing.T) {
 	entries := []RouteManifestEntryV0{
 		manifestEntryForTestV0("route-ref-prefix", "/api/v0/apps/", RouteManifestKindPrefixV0, "owner-a"),

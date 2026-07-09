@@ -360,6 +360,16 @@ antes de su cierre posterior:
   `go test -count=1 ./modulos/orquesta-operator-telegram`. Residual: la
   superficie HTTP/web debe entrar por inventario cuando se toque ese adaptador;
   la prueba real de bot/credenciales sigue en fase remoto, no en nucleo.
+- Avance E3 local 2026-07-09d: la superficie HTTP/web focal deja de depender
+  de rutas sueltas. `PublicRouteManifestV0` publica `contract_refs` para Nueva
+  App (`solicitar`, `wizard`, `wizard_bot`), autoprogramming
+  (`prepare_run`, `status`) y review operador-Director; el server resource
+  discovery propaga esos refs en `/api/v0/server/resources`. Guards:
+  `TestPublicRouteManifestV0DeclaraContratosE3InternosV0` y
+  `TestServerResourcesRouteManifestIncluyeDiscoveryOPESV0`. Residual: no se
+  fuerza comparacion 1:1 de campos web/MCP porque web usa formularios y
+  viewmodels, no los envelopes MCP; si se necesita paridad de campos web debe
+  entrar con aliases/nesting explicitos para evitar falsos rojos.
 - Residual E6 guard scripts: los guards de scripts estan verdes, pero siguen
   repartidos en varios tests de
   `cmd/orquesta-server/smoke_goal_first_script_guard_v0_test.go`. Propuesta de

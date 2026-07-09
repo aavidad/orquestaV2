@@ -82,6 +82,15 @@ const (
 	routeIssueMissingShadowV0   = "route_manifest_prefix_shadow_not_declared"
 )
 
+const (
+	RouteContractNuevaAppSolicitarV0          = "nueva_app.solicitar.v0"
+	RouteContractNuevaAppWizardV0             = "nueva_app.wizard.v0"
+	RouteContractNuevaAppWizardBotV0          = "nueva_app.wizard_bot.v0"
+	RouteContractAutoprogrammingPrepareRunV0  = "autoprogramming.prepare_run.v0"
+	RouteContractAutoprogrammingStatusV0      = "autoprogramming.status.v0"
+	RouteContractOperatorDirectorReviewPlanV0 = "operator_director.review_plan.v0"
+)
+
 type RouteManifestEntryV0 struct {
 	Ref               string
 	Pattern           string
@@ -89,6 +98,7 @@ type RouteManifestEntryV0 struct {
 	Owner             string
 	Methods           []string
 	SecurityProfile   string
+	ContractRefs      []string
 	ShadowsPrefixRefs []string
 }
 
@@ -188,6 +198,7 @@ func copyRouteManifestEntriesV0(entries []RouteManifestEntryV0) []RouteManifestE
 	out := make([]RouteManifestEntryV0, len(entries))
 	for i, entry := range entries {
 		entry.Methods = append([]string{}, entry.Methods...)
+		entry.ContractRefs = append([]string{}, entry.ContractRefs...)
 		entry.ShadowsPrefixRefs = append([]string{}, entry.ShadowsPrefixRefs...)
 		out[i] = entry
 	}
