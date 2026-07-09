@@ -24,3 +24,36 @@ func TestSmokeGoalFirstAppServerRealExponeToolOutputPolicyTransportV0(t *testing
 		}
 	}
 }
+
+func TestSmokeGoalFirstToolOutputPolicyAdversarialRealV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	base := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+	wrapper := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_tool_output_policy_adversarial_real.sh")
+
+	for _, want := range []string{
+		"ORQUESTA_GOAL_FIRST_SMOKE_TOOL_OUTPUT_POLICY_ADVERSARIAL_MODE",
+		"assert_tool_output_policy_transport_accepted",
+		"tool_output_policy_transport=accepted",
+		"evidence-ref-codex-app-server-thread-output-sanitized",
+		"codex_app_server_thread_read_response_too_large",
+		"checkpoint_started_bug079.txt",
+		"stdout gigante",
+		"smoke_goal_first_tool_output_policy_adversarial_real=ok",
+	} {
+		if !strings.Contains(base, want) {
+			t.Fatalf("smoke base no cubre modo adversarial toolOutputPolicy: falta %q", want)
+		}
+	}
+
+	for _, want := range []string{
+		"ORQUESTA_GOAL_FIRST_SMOKE_TOOL_OUTPUT_POLICY_ADVERSARIAL_MODE=1",
+		"scripts/smoke_goal_first_app_server_real.sh",
+		"tool_output_policy_transport=accepted",
+		"evidence-ref-codex-app-server-thread-output-sanitized",
+		"codex_app_server_thread_read_response_too_large",
+	} {
+		if !strings.Contains(wrapper, want) {
+			t.Fatalf("wrapper adversarial toolOutputPolicy incompleto: falta %q", want)
+		}
+	}
+}

@@ -125,6 +125,19 @@ antes de su cierre posterior:
   `/home/alberto/Trabajo/runtime/codex-process-done-repro-20260709T135205Z`,
   `agent-01/codex_process_done_v0=completed`. Esto convierte el fin de agente
   en evidencia durable del proceso que realmente vive.
+- `BUG-ORQ-20260709-200` queda abierto: se creo por Orquesta el smoke
+  adversarial `scripts/smoke_goal_first_tool_output_policy_adversarial_real.sh`
+  para `BUG-079`, pero dos ejecuciones reales quedaron `running/observe_later`
+  hasta timeout tras materializar solo checkpoint temprano. Evidencias:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.YAf0mK`
+  (`run_ref=run-spec-smoke-goal-first-bug079-tool-output-policy-req-smoke-goal-first-bug079-tool-output-policy-42cbaac6e57fce5425a51a63a`)
+  y `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.6wB72G`
+  (`run_ref=run-spec-smoke-goal-first-bug079-tool-output-policy-req-smoke-goal-first-bug079-tool-output-policy-5e97d87c7c9d9492c24b03907`).
+  En ambos casos hubo `toolOutputPolicy accepted`, sin
+  `thread-output-sanitized` ni `thread_read_response_too_large`, cleanup final
+  sin procesos y servidor `stopped/shutdown_ready=true`. Pendiente: hacer que
+  el harness adversarial fuerce/programe de forma fiable la ejecucion del probe
+  stdout gigante o bajar esta prueba a un nivel app-server/protocolo directo.
 - Reejeucion real 2026-07-04 noche 10:
   `smoke_goal_first_checkpoint_only_high_consumption_real=ok` con
   `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-6c8dc4317888c8e25bb0e91f7f910aab`,

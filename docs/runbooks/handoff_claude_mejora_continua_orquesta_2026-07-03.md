@@ -2527,3 +2527,47 @@ Pendiente real de `BUG-079`:
   ante stdout gigante. Si esa prueba muestra consumo grande antes del corte,
   el bug pasa a frontera runtime/proveedor; si pasa, se puede cerrar `BUG-079`
   con evidencia fuerte.
+
+## Actualizacion Orquesta/Codex 2026-07-09i: harness adversarial BUG-079 no concluyente
+
+Hecho con Orquesta:
+
+- Ola `codex-launch-director-wave`,
+  `wave_ref=codex-bug079-adversarial-smoke-20260709`, 1 agente.
+- El agente termino con `codex_process_done_v0=completed`.
+- Nuevo wrapper:
+  `scripts/smoke_goal_first_tool_output_policy_adversarial_real.sh`.
+- Nuevo modo:
+  `ORQUESTA_GOAL_FIRST_SMOKE_TOOL_OUTPUT_POLICY_ADVERSARIAL_MODE=1` en
+  `scripts/smoke_goal_first_app_server_real.sh`.
+- Test de guarda:
+  `cmd/orquesta-server/smoke_goal_first_scripts_v0_test.go`.
+
+Contrato del nuevo smoke:
+
+- Exige `tool_output_policy_transport=accepted`.
+- Falla si ve
+  `evidence-ref-codex-app-server-thread-output-sanitized` o
+  `codex_app_server_thread_read_response_too_large`.
+- Pide al agente checkpoint temprano, crear `probe_stdout.py`, ejecutar una vez
+  un stdout grande controlado y escribir `probe_result.txt` antes de
+  `ORQUESTA_GOAL_RESULT_V0`.
+
+Ejecucion real:
+
+- Intento 1: 30 polls, evidencia
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.YAf0mK`.
+- Intento 2: 60 polls, evidencia
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.6wB72G`.
+- Ambos quedaron `goal_status=running`, `recommended_action=observe_later`,
+  solo checkpoint temprano, `toolOutputPolicy accepted`, sin salida saneada y
+  sin procesos residuales tras cleanup.
+
+Lectura para continuar:
+
+- No cierres `BUG-079`.
+- Abre/usa `BUG-ORQ-20260709-200`: el harness adversarial existe, pero no fuerza
+  de forma fiable que el agente ejecute el probe stdout gigante.
+- Siguiente accion tecnica recomendada: bajar el adversarial a nivel
+  app-server/protocolo directo o hacer el probe determinista sin depender de
+  una decision libre del agente.

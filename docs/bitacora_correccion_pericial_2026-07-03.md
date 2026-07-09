@@ -5580,3 +5580,53 @@ Lectura:
 - `BUG-079` sigue abierto para la prueba adversarial/larga de enforcement
   pre-tool: stdout gigante debe cortarse antes de quemar contexto, no solo
   sanearse en lectura posterior.
+
+## Orquesta local 2026-07-09: harness adversarial BUG-079 y BUG-200
+
+Se uso Orquesta para programar el siguiente paso de `BUG-079`:
+
+- Ola: `codex-launch-director-wave`.
+- `wave_ref=codex-bug079-adversarial-smoke-20260709`.
+- Agentes: 1.
+- Resultado: `codex_process_done_v0=completed`.
+
+Cambios de harness:
+
+- Nuevo wrapper opt-in:
+  `scripts/smoke_goal_first_tool_output_policy_adversarial_real.sh`.
+- Nuevo modo en `scripts/smoke_goal_first_app_server_real.sh`:
+  `ORQUESTA_GOAL_FIRST_SMOKE_TOOL_OUTPUT_POLICY_ADVERSARIAL_MODE=1`.
+- El modo exige `tool_output_policy_transport=accepted`.
+- Falla si observa
+  `evidence-ref-codex-app-server-thread-output-sanitized` o
+  `codex_app_server_thread_read_response_too_large`.
+- El prompt del smoke pide checkpoint temprano, crear y ejecutar una vez un
+  probe que imprimiria `ORQUESTA_BUG079_STDOUT_PROBE:` + 200000 `X`, y escribir
+  solo `probe_result.txt` antes del `ORQUESTA_GOAL_RESULT_V0`.
+
+Verificacion local:
+
+- `bash -n scripts/smoke_goal_first_app_server_real.sh scripts/smoke_goal_first_tool_output_policy_adversarial_real.sh`.
+- `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeGoalFirst'`.
+- `git diff --check`.
+
+Ejecucion real:
+
+- Intento 1: 30 polls, evidencia
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.YAf0mK`,
+  `run_ref=run-spec-smoke-goal-first-bug079-tool-output-policy-req-smoke-goal-first-bug079-tool-output-policy-42cbaac6e57fce5425a51a63a`.
+- Intento 2: 60 polls, evidencia
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.6wB72G`,
+  `run_ref=run-spec-smoke-goal-first-bug079-tool-output-policy-req-smoke-goal-first-bug079-tool-output-policy-5e97d87c7c9d9492c24b03907`.
+- Ambos: `toolOutputPolicy accepted`, checkpoint temprano materializado,
+  `goal_status=running`, `recommended_action=observe_later`, sin
+  `thread-output-sanitized`, sin `thread_read_response_too_large`, cleanup sin
+  procesos y state final `stopped/shutdown_ready=true`.
+
+Lectura:
+
+- `BUG-079` no se cierra: aun no hay prueba de enforcement pre-tool.
+- Nuevo `BUG-ORQ-20260709-200` abierto: el harness adversarial existe pero el
+  agente real no avanza de checkpoint a ejecucion del probe. Siguiente paso:
+  hacer el probe mas determinista o bajar la prueba al nivel app-server/protocolo
+  directo para no depender de que el agente decida ejecutar la salida gigante.

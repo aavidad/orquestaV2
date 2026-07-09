@@ -70,6 +70,7 @@ polls="${ORQUESTA_GOAL_FIRST_SMOKE_POLLS:-120}"
 sleep_seconds="${ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS:-5}"
 goal_backend="${ORQUESTA_CODEX_GOAL_BACKEND:-app_server_tmux}"
 high_consumption_mode="${ORQUESTA_GOAL_FIRST_SMOKE_HIGH_CONSUMPTION_MODE:-0}"
+tool_output_policy_adversarial_mode="${ORQUESTA_GOAL_FIRST_SMOKE_TOOL_OUTPUT_POLICY_ADVERSARIAL_MODE:-0}"
 forced_stop_mode="${SMOKE_GOAL_FIRST_FORCED_STOP_MODE:-0}"
 shutdown_coordination_mode="${SMOKE_GOAL_FIRST_SHUTDOWN_COORDINATION_MODE:-0}"
 shutdown_coordination_polls="${ORQUESTA_GOAL_FIRST_SHUTDOWN_COORDINATION_POLLS:-12}"
@@ -306,6 +307,37 @@ assert_tool_output_policy_transport_observed() {
       fail_after_app_server_tmux_shutdown_ready 1
       ;;
   esac
+}
+
+assert_tool_output_policy_transport_accepted() {
+  local status
+  status="$(tool_output_policy_transport_status "$start_response" "$observe_response")"
+  echo "tool_output_policy_transport=$status"
+  if [[ "$status" == "accepted" ]]; then
+    return 0
+  fi
+  echo "smoke adversarial stdout gigante exige tool_output_policy_transport=accepted; status=$status" >&2
+  smoke_print_file_excerpt "$start_response"
+  smoke_print_file_excerpt "$observe_response"
+  fail_after_app_server_tmux_shutdown_ready 1
+}
+
+assert_no_tool_output_policy_adversarial_failure_signal() {
+  if json_contains_string "$observe_response" "evidence-ref-codex-app-server-thread-output-sanitized" ||
+    json_contains_string "$observe_response" "codex_app_server_thread_read_response_too_large"; then
+    echo "smoke adversarial detecto stdout gigante antes de cierre/replan; toolOutputPolicy no protegio el transporte:" >&2
+    smoke_print_file_excerpt "$observe_response"
+    fail_after_app_server_tmux_shutdown_ready 1
+  fi
+}
+
+assert_tool_output_policy_for_current_mode() {
+  if [[ "$tool_output_policy_adversarial_mode" == "1" ]]; then
+    assert_no_tool_output_policy_adversarial_failure_signal
+    assert_tool_output_policy_transport_accepted
+    return 0
+  fi
+  assert_tool_output_policy_transport_observed
 }
 
 post_autoprogramming_status_snapshot() {
@@ -1123,7 +1155,22 @@ mkdir -p "$state_dir" "$project_dir" "$idle_project_dir" "$runtime_dir" "$bin_di
   "$project_dir/modulos/orquesta-factory/docs" \
   "$project_dir/modulos/orquesta-web/docs"
 
-if [[ "$high_consumption_mode" == "1" ]]; then
+if [[ "$tool_output_policy_adversarial_mode" == "1" ]]; then
+  cat >"$project_dir/AGENTS.md" <<'EOF'
+# Smoke temporal goal-first BUG-079
+
+Trabaja solo dentro de este proyecto temporal. Escribe primero
+`generated-apps/checkpoint_started_bug079.txt` con una linea de estado. Despues
+crea `generated-apps/bug079-tool-output-policy/probe_stdout.py` y ejecutalo una
+sola vez. El probe debe imprimir una linea con prefijo
+`ORQUESTA_BUG079_STDOUT_PROBE:` seguida de 200000 caracteres `X`. No pegues esa
+salida en ningun fichero ni mensaje; solo escribe
+`generated-apps/bug079-tool-output-policy/probe_result.txt` con exit code,
+comando y bytes previstos. No publiques HOME, tokens ni rutas privadas. Escribe
+`trabajo/docs/orquesta_goal_result_v0.json` con marcador `ORQUESTA_GOAL_RESULT_V0`
+solo despues de checkpoint, probe y `probe_result.txt`.
+EOF
+elif [[ "$high_consumption_mode" == "1" ]]; then
   cat >"$project_dir/AGENTS.md" <<'EOF'
 # Smoke temporal goal-first BUG-088
 
@@ -1190,7 +1237,14 @@ fi
 echo "compilando servidor temporal..."
 go build -o "$bin_dir/orquesta-server" ./cmd/orquesta-server
 
-if [[ "$high_consumption_mode" == "1" ]]; then
+if [[ "$tool_output_policy_adversarial_mode" == "1" ]]; then
+  request_id="request-ref-goal-first-bug079-tool-output-policy-$(date -u +%Y%m%dT%H%M%SZ)"
+  app_name="Smoke Goal First BUG079 Tool Output Policy"
+  app_objective="BUG-079: crear primero generated-apps/checkpoint_started_bug079.txt; despues crear y ejecutar una sola vez generated-apps/bug079-tool-output-policy/probe_stdout.py, que imprime prefijo ORQUESTA_BUG079_STDOUT_PROBE y 200000 X; no pegar esa salida en mensajes ni ficheros; escribir probe_result.txt con exit code y bytes previstos; devolver ORQUESTA_GOAL_RESULT_V0 solo tras checkpoint, probe y resultado."
+  app_description="Smoke real adversarial minimo para validar que Codex app-server acepta toolOutputPolicy y evita lecturas gigantes de stdout antes de cierre o replan."
+  app_restriction_one="checkpoint_started_bug079.txt debe ser el primer artefacto durable"
+  app_restriction_two="ejecutar exactamente una vez el probe stdout gigante y no pegar su salida cruda"
+elif [[ "$high_consumption_mode" == "1" ]]; then
   request_id="request-ref-goal-first-bug088-$(date -u +%Y%m%dT%H%M%SZ)"
   app_name="Smoke Goal First BUG088"
   app_objective="BUG-088: crear primero generated-apps/checkpoint_started_bug088.txt; despues crear generated-apps/bug088_second_artifact.txt y resultado final solo si ese segundo artefacto existe."
@@ -1258,14 +1312,16 @@ export ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER=0
 export ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_TARGET_QUEUE=0
 export ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_MAX_REQUESTS=0
 export ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false
-if [[ "$high_consumption_mode" == "1" ]]; then
+if [[ "$high_consumption_mode" == "1" || "$tool_output_policy_adversarial_mode" == "1" ]]; then
   export ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED="${ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED:-true}"
   export ORQUESTA_SERVER_GOAL_OBSERVER_INTERVAL_MS="${ORQUESTA_SERVER_GOAL_OBSERVER_INTERVAL_MS:-1000}"
   export ORQUESTA_SERVER_GOAL_OBSERVER_MAX_ITEMS="${ORQUESTA_SERVER_GOAL_OBSERVER_MAX_ITEMS:-5}"
   export ORQUESTA_SERVER_GOAL_OBSERVER_FINGERPRINT_ENABLED="${ORQUESTA_SERVER_GOAL_OBSERVER_FINGERPRINT_ENABLED:-false}"
-  export ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS="${ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS:-1}"
-  export ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_MAX_WAIT_SECONDS="${ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_MAX_WAIT_SECONDS:-1}"
-  export ORQUESTA_AUTOPROGRAMMING_NO_CHECKPOINT_WARNING_MAX_WAIT_SECONDS="${ORQUESTA_AUTOPROGRAMMING_NO_CHECKPOINT_WARNING_MAX_WAIT_SECONDS:-1}"
+  if [[ "$high_consumption_mode" == "1" ]]; then
+    export ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS="${ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS:-1}"
+    export ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_MAX_WAIT_SECONDS="${ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_MAX_WAIT_SECONDS:-1}"
+    export ORQUESTA_AUTOPROGRAMMING_NO_CHECKPOINT_WARNING_MAX_WAIT_SECONDS="${ORQUESTA_AUTOPROGRAMMING_NO_CHECKPOINT_WARNING_MAX_WAIT_SECONDS:-1}"
+  fi
 else
   export ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED="${ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED:-false}"
 fi
@@ -1380,6 +1436,9 @@ JSON
   closure_status="$(json_get "$observe_response" "closure_status")"
   closure_accepted="$(json_get "$observe_response" "closure_accepted")"
   echo "poll=$i mode=$director_execution_mode goal_status=$goal_status run_status=$run_status closure_status=$closure_status closure_accepted=$closure_accepted"
+  if [[ "$tool_output_policy_adversarial_mode" == "1" ]]; then
+    assert_no_tool_output_policy_adversarial_failure_signal
+  fi
   if [[ "$director_execution_mode" == "goal_first" && "$goal_status" == "complete" && "$run_status" == "cerrada" && "$closure_status" == "accepted" && "$closure_accepted" == "true" ]]; then
     terminal="1"
     break
@@ -1436,7 +1495,7 @@ if [[ "$terminal" != "1" && "$terminal" != "bug088_replan" && "$terminal" != "bu
 fi
 
 if [[ "$terminal" == "bug088_replan" ]]; then
-  assert_tool_output_policy_transport_observed
+  assert_tool_output_policy_for_current_mode
   echo "smoke_goal_first_high_consumption_real=ok"
   if json_contains_string "$observe_response" "checkpoint_only_high_consumption"; then
     echo "bug088_path=checkpoint_only_replan"
@@ -1450,7 +1509,7 @@ if [[ "$terminal" == "bug088_replan" ]]; then
 fi
 
 if [[ "$terminal" == "bug088_second_artifact" ]]; then
-  assert_tool_output_policy_transport_observed
+  assert_tool_output_policy_for_current_mode
   echo "smoke_goal_first_high_consumption_real=ok"
   echo "bug088_path=second_artifact_or_partial_artifacts"
   echo "recommended_action=review_partial_artifacts"
@@ -1484,11 +1543,14 @@ if [[ "$evidence_count" -lt 1 ]]; then
 fi
 
 if [[ "$high_consumption_mode" == "1" ]]; then
-  assert_tool_output_policy_transport_observed
+  assert_tool_output_policy_for_current_mode
   echo "smoke_goal_first_high_consumption_real=ok"
   echo "bug088_path=second_artifact_or_terminal_artifact"
+elif [[ "$tool_output_policy_adversarial_mode" == "1" ]]; then
+  assert_tool_output_policy_for_current_mode
+  echo "smoke_goal_first_tool_output_policy_adversarial_real=ok"
 else
-  assert_tool_output_policy_transport_observed
+  assert_tool_output_policy_for_current_mode
 fi
 echo "smoke_goal_first_app_server_real=ok"
 echo "artifact_refs=$artifact_count"
