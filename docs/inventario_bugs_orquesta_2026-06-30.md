@@ -2693,8 +2693,10 @@ paquete final y sin tocar OPES productivo.
 - Revalidar con smokes OPES temporales largos de audio/visual bajo entorno
   aislado; el contrato ejecutable de supuestos practicos ya publica rework
   causal por faltante y queda cubierto en BUG-ORQ-20260630-027.
-- Decidir retirada o implementacion real de `app_server_proxy`, hoy conservado
-  como valor historico de diagnostico pero no backend operativo.
+- `app_server_proxy` queda decidido como valor historico no operacional: el
+  servidor lo reconoce solo para devolver `opt_in_required` o
+  `codex_goal_backend_proxy_diagnostic_not_operational`; los helpers que aun
+  podian construir `app-server proxy` se retiraron en local el 2026-07-09.
 - Internacionalizar prompts legacy de agentes Claude/Gemini si el contrato i18n
   se extiende tambien a flujos no goal-first.
 - Wizard sigue parcial: esta tanda amplio packs de dominio y pruebas focales,

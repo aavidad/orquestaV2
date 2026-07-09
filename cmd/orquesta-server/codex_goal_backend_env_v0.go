@@ -86,7 +86,7 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 	goalProgressPolicy := serverAutoprogrammingGoalProgressPolicyConfigFromProjectFileV0(projectConfig)
 	commandProtocol := orquestaruntimecodexappserver.CommandProtocolV0{
 		CommandPath: runtimeConfig.CommandPath,
-		Args:        codexGoalBackendArgsV0(backend),
+		Args:        nil,
 		PathEnv:     runtimeConfig.PathEnv,
 		Timeout:     time.Duration(codexGoalTimeoutMSFromProjectConfigFileV0(projectConfig)) * time.Millisecond,
 	}
@@ -519,27 +519,4 @@ func serverCodexGoalBackendDiagnosticMessageV0(issueCode string) string {
 		issueCode = "codex_app_server_unavailable"
 	}
 	return "codex goal backend degradado: " + issueCode
-}
-
-func codexGoalBackendProxyDiagnosticAllowedV0() bool {
-	return boolEnvOrDefaultV0(envAllowAppServerProxyDiagnosticV0, false)
-}
-
-func codexGoalBackendArgsV0(backend string) []string {
-	switch strings.TrimSpace(backend) {
-	case codexGoalBackendAppServerTmuxV0:
-		return nil
-	case codexGoalBackendAppServerProxyV0:
-		return []string{"app-server", "proxy"}
-	default:
-		return nil
-	}
-}
-
-func codexGoalBackendProxyArgsForSocketV0(socketPath string) []string {
-	socketPath = strings.TrimSpace(socketPath)
-	if socketPath == "" {
-		return []string{"app-server", "proxy"}
-	}
-	return []string{"app-server", "proxy", "--sock", socketPath}
 }

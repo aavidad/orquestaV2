@@ -664,6 +664,37 @@ func TestServerGoalBackendFromEnvV0RechazaBackendNoSoportadoV0(t *testing.T) {
 	}
 }
 
+func TestServerGoalBackendFromEnvV0RechazaProxyHistoricoAunqueTengaOptInV0(t *testing.T) {
+	baseConfig := func(t *testing.T) orquestaserver.ConfigV0 {
+		t.Helper()
+		return orquestaserver.ConfigV0{
+			ProjectWorkDir: t.TempDir(),
+			RuntimeWorkDir: t.TempDir(),
+			StateDir:       filepath.Join(t.TempDir(), "state"),
+		}
+	}
+
+	t.Run("sin opt-in exige diagnostico explicito", func(t *testing.T) {
+		t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+		t.Setenv(envAllowAppServerProxyDiagnosticV0, "false")
+
+		_, err := serverCodexGoalBackendFromEnvForWorkDirV0(baseConfig(t), t.TempDir())
+		if err == nil || !strings.Contains(err.Error(), "codex_goal_backend_proxy_diagnostic_opt_in_required") {
+			t.Fatalf("err=%v", err)
+		}
+	})
+
+	t.Run("con opt-in sigue sin ser backend operativo", func(t *testing.T) {
+		t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerProxyV0)
+		t.Setenv(envAllowAppServerProxyDiagnosticV0, "true")
+
+		_, err := serverCodexGoalBackendFromEnvForWorkDirV0(baseConfig(t), t.TempDir())
+		if err == nil || !strings.Contains(err.Error(), "codex_goal_backend_proxy_diagnostic_not_operational") {
+			t.Fatalf("err=%v", err)
+		}
+	})
+}
+
 func TestServerGoalShutdownHooksFromBackendsV0DeduplicaMismoHookV0(t *testing.T) {
 	hook := serverCodexAppServerTmuxBackendV0{
 		SocketPath:  filepath.Join(t.TempDir(), "s.sock"),

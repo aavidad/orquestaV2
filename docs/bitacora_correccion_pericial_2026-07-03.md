@@ -4876,3 +4876,32 @@ Lectura para Claude:
   gastar cuota en las cinco tareas cuando solo se quiere validar un brazo. Sigue
   pendiente la ejecucion con proveedor/cuota real para obtener tokens reales de
   Codex/Claude/Gemini.
+
+## Codex local 2026-07-09: retirada efectiva de app_server_proxy
+
+Contexto:
+
+- El inventario conservaba un residual de decision sobre `app_server_proxy`.
+- El contrato vigente ya decia que `app_server_tmux` es el unico backend Codex
+  app-server operativo normal.
+- El codigo rechazaba `app_server_proxy`, pero quedaban helpers muertos capaces
+  de construir `codex app-server proxy`.
+
+Cierre aplicado:
+
+- `serverCodexGoalBackendFromEnvForWorkDirV0` mantiene el reconocimiento del
+  valor historico para devolver errores especificos.
+- Sin opt-in devuelve `codex_goal_backend_proxy_diagnostic_opt_in_required`.
+- Con opt-in devuelve `codex_goal_backend_proxy_diagnostic_not_operational`.
+- Se retiraron los helpers muertos que generaban argumentos `app-server proxy`
+  y el lector directo de opt-in ya no usado.
+
+Prueba nueva:
+
+- `TestServerGoalBackendFromEnvV0RechazaProxyHistoricoAunqueTengaOptInV0`.
+
+Lectura para Claude:
+
+- No queda una ruta local que convierta `app_server_proxy` en comando ejecutable
+  desde el servidor. Si en remoto se quiere recuperar proxy real, debe entrar
+  como nuevo diseno/adaptador con contrato y pruebas, no como fallback oculto.
