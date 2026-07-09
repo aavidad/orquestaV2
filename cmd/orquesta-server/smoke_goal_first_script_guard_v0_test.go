@@ -8,6 +8,113 @@ import (
 	"testing"
 )
 
+type scriptContractGuardV0 struct {
+	name    string
+	script  string
+	wants   []string
+	forbids []string
+}
+
+func TestSmokeScriptContractsConsolidadosV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	for _, guard := range smokeScriptContractGuardsV0() {
+		t.Run(guard.name, func(t *testing.T) {
+			text := readOperationalDocGuardV0(t, root, guard.script)
+			for _, want := range guard.wants {
+				if !strings.Contains(text, want) {
+					t.Fatalf("%s no cumple contrato %s: falta %q", guard.script, guard.name, want)
+				}
+			}
+			for _, forbidden := range guard.forbids {
+				if strings.Contains(text, forbidden) {
+					t.Fatalf("%s incumple contrato %s: contiene %q", guard.script, guard.name, forbidden)
+				}
+			}
+		})
+	}
+}
+
+func smokeScriptContractGuardsV0() []scriptContractGuardV0 {
+	return []scriptContractGuardV0{
+		{
+			name:   "goal-first-app-server-shutdown-governed",
+			script: "scripts/smoke_goal_first_app_server_real.sh",
+			wants: []string{
+				"fail_after_app_server_tmux_shutdown_ready 1",
+				"assert_app_server_tmux_shutdown_ready",
+				"cleanup_goal_backends",
+				`smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 25 "$runtime_dir"`,
+				`export ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false`,
+				"print_app_server_failure_diagnostics",
+			},
+		},
+		{
+			name:   "goal-first-high-consumption-wrapper",
+			script: "scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh",
+			wants: []string{
+				"ORQUESTA" + "_GOAL_FIRST_SMOKE_HIGH_CONSUMPTION_MODE=1",
+				`ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED="${ORQUESTA_SERVER_GOAL_OBSERVER_ENABLED:-true}"`,
+				`ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS="${ORQUESTA_AUTOPROGRAMMING_CHECKPOINT_ONLY_HIGH_CONSUMPTION_TOKENS:-1}"`,
+				`exec "$repo_root/scripts/smoke_goal_first_app_server_real.sh" "$@"`,
+			},
+		},
+		{
+			name:   "goal-first-forced-stop-wrapper",
+			script: "scripts/smoke_goal_first_forced_stop_backend_real.sh",
+			wants: []string{
+				"SMOKE" + "_GOAL_FIRST_FORCED_STOP_MODE=1",
+				`ORQUESTA_CODEX_GOAL_BACKEND="${ORQUESTA_CODEX_GOAL_BACKEND:-app_server_tmux}"`,
+				`ORQUESTA_CODEX_GOAL_TIMEOUT_MS="${ORQUESTA_CODEX_GOAL_TIMEOUT_MS:-600000}"`,
+				`exec "$repo_root/scripts/smoke_goal_first_app_server_real.sh" "$@"`,
+			},
+		},
+		{
+			name:   "goal-first-shutdown-coordination-wrapper",
+			script: "scripts/smoke_goal_first_shutdown_coordination_real.sh",
+			wants: []string{
+				"SMOKE" + "_GOAL_FIRST_SHUTDOWN_COORDINATION_MODE=1",
+				"cleanup_goal_backends",
+				"ORQUESTA_GOAL_FIRST_SHUTDOWN_COORDINATION_POLLS",
+				`exec "$repo_root/scripts/smoke_goal_first_app_server_real.sh" "$@"`,
+			},
+			forbids: []string{"/api/v0/runs/control"},
+		},
+		{
+			name:   "claude-process-safe-forced-stop-wrapper",
+			script: "scripts/smoke_goal_first_claude_process_server_real.sh",
+			wants: []string{
+				"SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REAL",
+				"SMOKE_CLAUDE_GOAL_PROCESS_SERVER_SAFE_MODE",
+				"ORQUESTA_CODEX_GOAL_BACKEND=claude_process",
+				"/api/v0/runs/control",
+				"cleanup_goal_backends",
+				"smoke_goal_first_claude_process_forced_stop_server_real=ok",
+			},
+		},
+		{
+			name:   "smoke-common-managed-endpoint",
+			script: "scripts/lib/smoke_common.sh",
+			wants: []string{
+				"smoke_orquesta_base_url_from_env_or_runtime",
+				"ORQUESTA_SERVER_URL",
+				"ORQUESTA_RUNTIME_DIR",
+				"base_url.txt",
+			},
+			forbids: []string{"127.0.0.1:8787", "localhost:8787"},
+		},
+		{
+			name:   "deploy-script-is-managed-entrypoint",
+			script: "scripts/orquesta_server_deploy.sh",
+			wants: []string{
+				"deploy_not_fast_forward",
+				"deploy_config_missing",
+				"deploy_runtime_identity_mismatch",
+				"orquesta_server_ctl.sh",
+			},
+		},
+	}
+}
+
 func TestSmokeGoalFirstAppServerRealShutdownEvidenceOnGoalFailureV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")

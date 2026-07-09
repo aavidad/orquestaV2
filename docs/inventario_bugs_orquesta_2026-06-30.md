@@ -378,6 +378,14 @@ antes de su cierre posterior:
   `managed_endpoint`, `no_historical_port`,
   `no_managed_server_outside_ctl_deploy` y `delegated_start_cleanup`, sin tocar
   scripts. No bloquea el nucleo ni conectores locales.
+- Avance E6 local 2026-07-09: se anade la primera tabla consolidada
+  `scriptContractGuardV0` para contratos exactos `script -> snippets/forbidden`
+  en `cmd/orquesta-server/smoke_goal_first_script_guard_v0_test.go`, cubriendo
+  wrappers goal-first, forced-stop, shutdown coordination, Claude process,
+  `smoke_common` endpoint gestionado y deploy gestionado. Los guards globales
+  `WalkDir` y los checks de orden se conservan separados para no ocultar que
+  una regla aplica a toda la flota de scripts. Residual: consolidar mas bloques
+  solo cuando se vuelva a tocar esa zona.
 - Reejeucion real 2026-07-04 noche 10:
   `smoke_goal_first_checkpoint_only_high_consumption_real=ok` con
   `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-6c8dc4317888c8e25bb0e91f7f910aab`,

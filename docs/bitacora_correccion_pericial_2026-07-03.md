@@ -6216,3 +6216,31 @@ Lectura:
   rojos y acoplaria mal las capas.
 - El siguiente paso, si se reabre E3 por campos web, debe ser un inventario de
   aliases/nesting explicito por contrato, no reflexion ingenua.
+
+## Orquesta local 2026-07-09: E6 primera tabla de guards de scripts
+
+Se redujo el residual de mantenimiento E6 sin reescribir el archivo completo de
+guards.
+
+Cambio:
+
+- En `cmd/orquesta-server/smoke_goal_first_script_guard_v0_test.go` se anade
+  `scriptContractGuardV0`.
+- `TestSmokeScriptContractsConsolidadosV0` recorre una tabla
+  `script -> wants/forbids`.
+- La tabla cubre:
+  - `scripts/smoke_goal_first_app_server_real.sh`
+  - `scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh`
+  - `scripts/smoke_goal_first_forced_stop_backend_real.sh`
+  - `scripts/smoke_goal_first_shutdown_coordination_real.sh`
+  - `scripts/smoke_goal_first_claude_process_server_real.sh`
+  - `scripts/lib/smoke_common.sh`
+  - `scripts/orquesta_server_deploy.sh`
+
+Lectura:
+
+- Se dejan fuera de la tabla los guards `WalkDir` y los checks de orden porque
+  son reglas globales de flota o de precedencia, no contratos simples de un
+  script exacto. Moverlos ahora haria el fallo menos claro.
+- E6 queda reducido como mantenimiento local. No desbloquea ni bloquea OPES,
+  remoto, Hermes ni Telegram.
