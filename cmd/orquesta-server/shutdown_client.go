@@ -234,6 +234,22 @@ func normalizeServerShutdownClientResultV0(result serverShutdownClientResultV0) 
 func shutdownClientBlockingGoalActionsV0(
 	actions []orquestaserver.ShutdownGoalActionV0,
 ) []orquestaserver.ShutdownGoalActionV0 {
+	completed := map[string]struct{}{}
+	for _, action := range actions {
+		action.Kind = strings.TrimSpace(action.Kind)
+		action.RunRef = strings.TrimSpace(action.RunRef)
+		action.WorkRef = strings.TrimSpace(action.WorkRef)
+		action.ExternalWorkRef = strings.TrimSpace(action.ExternalWorkRef)
+		action.ActionTaken = strings.TrimSpace(action.ActionTaken)
+		if action.ActionTaken != "cleanup_completed" {
+			continue
+		}
+		key := shutdownClientGoalActionIdentityKeyV0(action)
+		if key == "" {
+			continue
+		}
+		completed[key] = struct{}{}
+	}
 	out := make([]orquestaserver.ShutdownGoalActionV0, 0, len(actions))
 	seen := map[string]struct{}{}
 	for _, action := range actions {
@@ -250,6 +266,9 @@ func shutdownClientBlockingGoalActionsV0(
 		if action.Kind == "" && action.RunRef == "" && action.WorkRef == "" && action.ExternalWorkRef == "" {
 			continue
 		}
+		if _, resolved := completed[shutdownClientGoalActionIdentityKeyV0(action)]; resolved {
+			continue
+		}
 		key := strings.Join([]string{action.Kind, action.RunRef, action.WorkRef, action.ExternalWorkRef, action.Status, action.ActionTaken}, "\x00")
 		if _, exists := seen[key]; exists {
 			continue
@@ -261,6 +280,15 @@ func shutdownClientBlockingGoalActionsV0(
 		return []orquestaserver.ShutdownGoalActionV0{}
 	}
 	return out
+}
+
+func shutdownClientGoalActionIdentityKeyV0(
+	action orquestaserver.ShutdownGoalActionV0,
+) string {
+	if action.Kind == "" && action.RunRef == "" && action.WorkRef == "" && action.ExternalWorkRef == "" {
+		return ""
+	}
+	return strings.Join([]string{action.Kind, action.RunRef, action.WorkRef, action.ExternalWorkRef}, "\x00")
 }
 
 func serverShutdownClientGoalActionRefsV0(

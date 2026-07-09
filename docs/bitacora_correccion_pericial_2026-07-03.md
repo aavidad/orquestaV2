@@ -4737,3 +4737,35 @@ Residual:
 - Falta un launcher real Codex/Claude/Gemini que ejecute cada brazo y deje esos
   reportes de usage en el resultado. La infraestructura de medicion ya puede
   ingerirlos sin activar reglas globales.
+
+## Codex local 2026-07-09: BUG-065/165 cleanup_completed compactado en cliente
+
+Hallazgo:
+
+- El servidor ya compactaba `goal_actions` de shutdown cuando una identidad
+  tenia `cleanup_completed`.
+- El cliente CLI podia recibir una respuesta/status heredada con
+  `cleanup_completed` y una accion antigua (`cleanup_requested`,
+  `cleanup_attempted`, etc.) para el mismo backend, ignorar solo el
+  `cleanup_completed` y conservar la accion vieja como bloqueo.
+
+Cierre local aplicado:
+
+- `shutdownClientBlockingGoalActionsV0` construye un set de identidades
+  resueltas por `cleanup_completed`.
+- Cualquier accion no terminal con la misma identidad
+  `kind/run_ref/work_ref/external_work_ref` se descarta antes de calcular
+  `active_work_refs` y `active_work_count`.
+- `normalizeServerShutdownClientResultV0` ya no publica un falso
+  `shutdown_not_ready active_work=1` cuando el unico bloqueo venia de una
+  accion stale ya resuelta.
+
+Pruebas verdes:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'Test(NormalizeServerShutdownClientResultV0GoalActionCompletedOcultaAccionStale|RequestServerShutdownV0ReadyNoSaltaGoalActionsSinActiveWork|RequestServerShutdownV0CoordinaDosGoalsActivosHastaGoalActionsResueltas|RequestServerShutdownV0PostColgadoConsultaStatusAccionable|WaitServerShutdownReadyV0RepostColgadoRespetaDeadline)'`
+- `go test -count=1 ./modulos/orquesta-server-shutdown ./modulos/orquesta-server ./cmd/orquesta-server`
+
+Residual:
+
+- Esto cierra un borde local del cliente. No sustituye el smoke real amplio de
+  `BUG-165/065` con proveedor lento, backend vivo tras stop o corte externo.

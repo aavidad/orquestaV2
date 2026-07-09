@@ -153,6 +153,37 @@ func TestRequestServerShutdownV0ReadyNoSaltaGoalActionsSinActiveWorkV0(t *testin
 	}
 }
 
+func TestNormalizeServerShutdownClientResultV0GoalActionCompletedOcultaAccionStaleV0(t *testing.T) {
+	result := normalizeServerShutdownClientResultV0(serverShutdownClientResultV0{
+		Estado:        "ok",
+		Status:        "ready",
+		ShutdownReady: true,
+		GoalActions: []orquestaserver.ShutdownGoalActionV0{
+			{
+				Kind:            "goal_backend",
+				RunRef:          "run-ref-cleanup-client-stale",
+				WorkRef:         "goal-ref-cleanup-client-stale",
+				ExternalWorkRef: "thread-ref-cleanup-client-stale",
+				ActionTaken:     "cleanup_requested",
+			},
+			{
+				Kind:            "goal_backend",
+				RunRef:          "run-ref-cleanup-client-stale",
+				WorkRef:         "goal-ref-cleanup-client-stale",
+				ExternalWorkRef: "thread-ref-cleanup-client-stale",
+				ActionTaken:     "cleanup_completed",
+			},
+		},
+	})
+
+	if result.ActiveWorkCount != 0 ||
+		len(result.ActiveWorkRefs) != 0 ||
+		len(result.GoalActions) != 0 ||
+		!shutdownClientResultReadyForSignalV0(result) {
+		t.Fatalf("accion stale no compactada: %+v", result)
+	}
+}
+
 func TestParseStopOptionsV0ExigeRazonParaForce(t *testing.T) {
 	_, err := parseStopOptionsV0([]string{"--force"}, bytes.NewBuffer(nil))
 
