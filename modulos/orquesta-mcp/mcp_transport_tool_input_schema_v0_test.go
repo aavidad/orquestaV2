@@ -64,6 +64,23 @@ func TestMCPInternalContractSurfaceInventoryV0CubreCamposCanonicos(t *testing.T)
 	}
 }
 
+func TestMCPInternalToolRequiresInventoryV0CubreFamiliasE3PorPrefijo(t *testing.T) {
+	for _, name := range []string{
+		"orquesta.nueva_app.future.v0",
+		"orquesta.director.human_work.future.v0",
+		"orquesta.operator.director.future.v0",
+		MCPAutoprogrammingPrepareRunToolNameV0,
+		MCPAutoprogrammingStatusToolNameV0,
+	} {
+		if !mcpInternalToolRequiresInventoryForTestV0(name) {
+			t.Fatalf("tool interna E3 sin exigencia de inventario: %s", name)
+		}
+	}
+	if mcpInternalToolRequiresInventoryForTestV0(MCPAutoprogrammingObserveGoalToolNameV0) {
+		t.Fatalf("observe_goal no pertenece al inventario E3 actual")
+	}
+}
+
 func assertMCPToolDescriptorFieldsMatchDTOV0(
 	t *testing.T,
 	name string,
@@ -100,14 +117,20 @@ func mcpInternalContractSurfaceInventoryForTestV0() []mcpContractSurfaceInventor
 }
 
 func mcpInternalToolRequiresInventoryForTestV0(name string) bool {
-	switch strings.TrimSpace(name) {
-	case MCPNuevaAppToolNameV0,
-		MCPNuevaAppWizardToolNameV0,
-		MCPNuevaAppWizardBotToolNameV0,
+	name = strings.TrimSpace(name)
+	for _, prefix := range []string{
+		"orquesta.nueva_app.",
+		"orquesta.director.human_work.",
+		"orquesta.operator.director.",
+	} {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	switch name {
+	case
 		MCPAutoprogrammingPrepareRunToolNameV0,
-		MCPAutoprogrammingStatusToolNameV0,
-		MCPHumanDirectorWorkReviewPlanToolNameV0,
-		channel.OperatorDirectorMessageToolNameV0:
+		MCPAutoprogrammingStatusToolNameV0:
 		return true
 	default:
 		return false

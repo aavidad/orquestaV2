@@ -61,6 +61,7 @@ const (
 	RouteRefCodebaseStatusV0                    = "route-ref-codebase-status-v0"
 	RouteRefMCPJSONRPCV0                        = "route-ref-mcp-jsonrpc-v0"
 	RouteRefWorkspaceTimelineV0                 = "route-ref-workspace-timeline-v0"
+	RouteRefOperatorTelegramUpdateV0            = "route-ref-operator-telegram-update-v0"
 )
 
 const (
@@ -89,6 +90,7 @@ const (
 	RouteContractAutoprogrammingPrepareRunV0  = "autoprogramming.prepare_run.v0"
 	RouteContractAutoprogrammingStatusV0      = "autoprogramming.status.v0"
 	RouteContractOperatorDirectorReviewPlanV0 = "operator_director.review_plan.v0"
+	RouteContractOperatorTelegramUpdateV0     = "operator_telegram.update.v0"
 )
 
 type RouteManifestEntryV0 struct {

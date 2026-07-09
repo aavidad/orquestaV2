@@ -2,6 +2,7 @@ package orquestaweb
 
 import (
 	"os"
+	"sort"
 	"strings"
 	"testing"
 
@@ -557,6 +558,44 @@ func TestWizardTurnQuestionsNoDuplicanCampoDestinoV0(t *testing.T) {
 	}
 }
 
+func TestWizardCatalogoRawCamposDestinoDuplicadosBajoAllowlistV0(t *testing.T) {
+	questions := wizardRawRegisteredQuestionsForGuardV0()
+	if len(questions) == 0 {
+		t.Fatalf("catalogo raw wizard vacio")
+	}
+
+	byField := map[string][]string{}
+	for _, question := range questions {
+		if trimV0(question.Field) == "" {
+			t.Fatalf("%s tiene campo destino vacio", question.QuestionRef)
+		}
+		byField[question.Field] = append(byField[question.Field], question.QuestionRef)
+	}
+
+	allowed := wizardRawQuestionDuplicateFieldAllowlistV0()
+	var residual []string
+	for field, refs := range byField {
+		if len(refs) < 2 {
+			continue
+		}
+		sort.Strings(refs)
+		if !sameStringSetV0(refs, allowed[field]) {
+			residual = append(residual, field+"="+strings.Join(refs, ","))
+		}
+	}
+	for field, refs := range allowed {
+		actual := append([]string{}, byField[field]...)
+		sort.Strings(actual)
+		if !sameStringSetV0(actual, refs) {
+			residual = append(residual, "allowlist_obsoleta:"+field+"="+strings.Join(actual, ","))
+		}
+	}
+	sort.Strings(residual)
+	if len(residual) > 0 {
+		t.Fatalf("duplicados raw de campo destino no inventariados: %s", strings.Join(residual, "; "))
+	}
+}
+
 func TestWizardRespuestasMismoTurnoNoPisanListasAcumulativasV0(t *testing.T) {
 	session := NewWebNuevaAppIntakeSessionV0("session-wizard-list-merge", "es-ES", "API interna", "API para empresa con datos sanitarios")
 	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "tipo_app", Value: "api"})
@@ -602,15 +641,26 @@ func TestWizardGlosarioGeneradoV0(t *testing.T) {
 }
 
 func wizardAllRegisteredQuestionsForHelpTestV0() []WizardQuestionV0 {
+	return dedupeWizardQuestionsV0(wizardRawRegisteredQuestionsForGuardV0())
+}
+
+func wizardRawRegisteredQuestionsForGuardV0() []WizardQuestionV0 {
 	var questions []WizardQuestionV0
 	questions = append(questions, wizardRequiredGapQuestionsV0(WebNuevaAppFormV0{})...)
 	questions = append(questions, wizardUniversalDimensionQuestionsV0(WebNuevaAppFormV0{Objetivo: "app de equipo con datos y servidor"})...)
 	questions = append(questions, wizardTechnicalDimensionQuestionsV0(WebNuevaAppFormV0{
-		Objetivo:         "app para empresa con dominio Windows",
+		Objetivo:         "API publica para empresa con Active Directory, datos sanitarios, muchos usuarios y contrato REST",
+		TipoApp:          "api",
 		UsuariosObjetivo: []string{"equipo"},
-		Deploy:           WebNuevaAppDeployFormV0{Target: "contenedor"},
+		Datos: WebNuevaAppDatosFormV0{
+			DBRequired:         true,
+			NecesidadFuncional: "Gestionar datos propios",
+			Sensibilidad:       "sanitaria",
+		},
+		Deploy: WebNuevaAppDeployFormV0{Target: "contenedor"},
 	})...)
 	questions = append(questions, wizardRuleR3IntegracionesDominioV0(WebNuevaAppFormV0{Objetivo: "agenda tienda mapa inventario notas tareas finanzas contactos reservas salud educacion comunidad iot galeria facturacion"})...)
+	questions = append(questions, wizardRuleR3IntegracionesDominioV0(WebNuevaAppFormV0{Objetivo: "herramienta para organizar ideas raras"})...)
 	for _, question := range []*WizardQuestionV0{
 		wizardRuleR1PersonalCompartidoV0(WebNuevaAppFormV0{Objetivo: "agenda"}),
 		wizardRuleR2PlataformasV0(WebNuevaAppFormV0{Objetivo: "agenda"}),
@@ -624,7 +674,22 @@ func wizardAllRegisteredQuestionsForHelpTestV0() []WizardQuestionV0 {
 			questions = append(questions, *question)
 		}
 	}
-	return dedupeWizardQuestionsV0(questions)
+	return questions
+}
+
+func wizardRawQuestionDuplicateFieldAllowlistV0() map[string][]string {
+	return map[string][]string{
+		"datos.necesidad_funcional": {"wizard-q-datos", "wizard-u4-datos"},
+		"datos.storage.0.tipo":      {"wizard-r4-storage-db", "wizard-t4-persistencia-tecnica"},
+		"deploy.target":             {"wizard-q-deploy", "wizard-r7-deploy-compatible", "wizard-u10-entrega"},
+		"descripcion":               {"wizard-r3-dominio-abierto", "wizard-u3-dominio-flujo"},
+		"integraciones.0.tipo":      {"wizard-r3-integracion-agenda", "wizard-t1-control-acceso", "wizard-u7-integraciones"},
+		"integraciones.1.tipo":      {"wizard-r3-integracion-tienda", "wizard-t2-identidad-corporativa"},
+		"integraciones.2.tipo":      {"wizard-r3-integracion-mapa", "wizard-t5-api-contratos"},
+		"plataformas":               {"wizard-r2-plataformas", "wizard-r6-movil-plataformas"},
+		"tipo_app":                  {"wizard-q-tipo-app", "wizard-u2-superficie"},
+		"usuarios_objetivo":         {"wizard-r1-uso-personal-compartido", "wizard-r8-usuarios-compartido", "wizard-u1-audiencia"},
+	}
 }
 
 func hasWizardQuestionRefV0(questions []WizardQuestionV0, ref string) bool {
@@ -668,6 +733,22 @@ func requireWizardQuestionsUniqueFieldV0(t *testing.T, questions []WizardQuestio
 		}
 		seen[question.Field] = question.QuestionRef
 	}
+}
+
+func sameStringSetV0(left []string, right []string) bool {
+	left = append([]string{}, left...)
+	right = append([]string{}, right...)
+	sort.Strings(left)
+	sort.Strings(right)
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func requireWizardI18nNotPlaceholderV0(t *testing.T, catalog NuevaAppI18nCatalogV0, keys ...string) {

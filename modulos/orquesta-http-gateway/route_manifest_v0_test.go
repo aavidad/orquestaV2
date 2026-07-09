@@ -60,6 +60,7 @@ func TestPublicRouteManifestV0DeclaraContratosE3InternosV0(t *testing.T) {
 		{ref: RouteRefAutoprogrammingPrepareRunV0, contract: RouteContractAutoprogrammingPrepareRunV0},
 		{ref: RouteRefAutoprogrammingStatusV0, contract: RouteContractAutoprogrammingStatusV0},
 		{ref: RouteRefHumanDirectorWorkReviewPlanV0, contract: RouteContractOperatorDirectorReviewPlanV0},
+		{ref: RouteRefOperatorTelegramUpdateV0, contract: RouteContractOperatorTelegramUpdateV0},
 	}
 	for _, tc := range cases {
 		entry := byRef[tc.ref]

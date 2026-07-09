@@ -55,9 +55,13 @@ func TestServerResourcesRouteManifestIncluyeDiscoveryOPESV0(t *testing.T) {
 		orquestahttpgateway.RouteExternalWorkRunV0,
 		orquestahttpgateway.RouteRunSupervisorV0,
 		orquestahttpgateway.RouteAutoprogrammingStatusV0,
+		orquestahttpgateway.RouteOperatorTelegramUpdateV0,
 	} {
 		route := byPattern[path]
-		if route.Pattern == "" || !route.Mounted {
+		if route.Pattern == "" {
+			t.Fatalf("ruta discovery ausente %s en %+v", path, routes)
+		}
+		if path != orquestahttpgateway.RouteOperatorTelegramUpdateV0 && !route.Mounted {
 			t.Fatalf("ruta discovery no montada %s en %+v", path, routes)
 		}
 		if len(route.Methods) == 0 {
@@ -67,6 +71,7 @@ func TestServerResourcesRouteManifestIncluyeDiscoveryOPESV0(t *testing.T) {
 	if !serverRouteHasMethodForTestV0(byPattern[orquestahttpgateway.RouteDomainWorkV0], http.MethodPost) ||
 		!serverRouteHasMethodForTestV0(byPattern[orquestahttpgateway.RouteDomainWorkStatusV0], http.MethodGet) ||
 		!serverRouteHasMethodForTestV0(byPattern[orquestahttpgateway.RouteExternalWorkRunV0], http.MethodPost) ||
+		!serverRouteHasMethodForTestV0(byPattern[orquestahttpgateway.RouteOperatorTelegramUpdateV0], http.MethodPost) ||
 		!serverRouteHasMethodForTestV0(byPattern["/health"], http.MethodGet) ||
 		!serverRouteHasMethodForTestV0(byPattern[orquestaserver.ServerReadinessEndpointV0], http.MethodGet) {
 		t.Fatalf("metodos discovery invalidos: %+v", byPattern)
@@ -89,6 +94,15 @@ func TestServerResourcesRouteManifestIncluyeDiscoveryOPESV0(t *testing.T) {
 		orquestahttpgateway.RouteAutoprogrammingStatusV0,
 		orquestahttpgateway.RouteContractAutoprogrammingStatusV0,
 	)
+	assertServerRouteContractRefV0(
+		t,
+		byPattern,
+		orquestahttpgateway.RouteOperatorTelegramUpdateV0,
+		orquestahttpgateway.RouteContractOperatorTelegramUpdateV0,
+	)
+	if byPattern[orquestahttpgateway.RouteOperatorTelegramUpdateV0].Mounted {
+		t.Fatalf("telegram operator debe declararse como opt-in no montado por defecto")
+	}
 }
 
 func serverRouteHasMethodForTestV0(route orquestaserver.ServerRouteResourceV0, method string) bool {

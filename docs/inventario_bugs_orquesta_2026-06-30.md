@@ -434,6 +434,42 @@ antes de su cierre posterior:
   `bash -n scripts/orquesta_smoke_nightly.sh scripts/test_orquesta_smoke_nightly.sh`,
   `bash scripts/test_orquesta_smoke_nightly.sh` y
   `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-operator-notifications ./modulos/orquesta-operator-telegram ./cmd/orquesta-server -run 'TestOperatorNotification|TestTelegram(BotAPI|Operator)|TestAdapterV0DespachaMensajeAlCanalDirector'`.
+- `BUG-ORQ-20260709-213` queda cerrado en E3 contratos multisuperficie local:
+  el manifest HTTP ya tenia parte de los `contract_refs`, pero Telegram
+  operador no figuraba como contrato opt-in y no habia una tabla cruzada que
+  obligase a alinear HTTP manifest, discovery del servidor y DTOs MCP. Cierre:
+  `RouteOperatorTelegramUpdateV0` vive en `orquesta-http-gateway`, el handler
+  del servidor usa esa constante, el discovery publica
+  `operator_telegram.update.v0` como ruta opt-in no montada por defecto, y
+  `TestServerE3ContractSurfaceCatalogV0*` inventaria los contratos internos
+  entre HTTP/discovery/MCP. Ademas `mcpInternalToolRequiresInventoryForTestV0`
+  cubre por prefijo las familias `nueva_app`, `director.human_work` y
+  `operator.director`, evitando que una tool interna futura quede fuera del
+  inventario E3. Evidencia:
+  `go test -count=1 ./modulos/orquesta-http-gateway ./modulos/orquesta-mcp ./cmd/orquesta-server -run 'TestPublicRouteManifestV0DeclaraContratosE3InternosV0|TestServerResourcesRouteManifestIncluyeDiscoveryOPESV0|TestServerE3ContractSurfaceCatalogV0|TestMCPInternal'`.
+- `BUG-ORQ-20260709-214` queda cerrado en E5 wizard/i18n local: el guard
+  anti-placeholders miraba el catalogo actual, pero no obligaba a inventariar
+  nuevas superficies i18n, y el guard de preguntas deduplicadas ocultaba
+  duplicados raw de campos destino que podian pisarse si cambiaba el selector.
+  Cierre: `nuevaAppI18nCatalogGuardInventoryV0` enumera los catalogos bajo
+  guard y falla ante claves fuera de inventario o locales incompletos; el
+  wizard declara una allowlist exacta de campos raw duplicados intencionales y
+  falla si aparece un duplicado nuevo o si la allowlist queda obsoleta.
+  Evidencia:
+  `go test -count=1 ./modulos/orquesta-web -run 'TestNuevaAppI18nCatalogV0|TestWizard'`,
+  `go test -count=1 ./modulos/orquesta-web` y `git diff --check`.
+- `BUG-ORQ-20260709-215` queda cerrado como flaky local de test app-server:
+  `go test -count=1 ./...` fallo una vez en
+  `TestServerCodexAppServerGoalBackendV0ToolOutputPolicyYThreadReadGigantePorWebSocketDeterministaV0`
+  con `fake websocket app-server: write ... broken pipe`. El test validaba que
+  el cliente corta/bloquea un `thread/read` gigante, pero el fake trataba como
+  fatal que el cliente cerrase la conexion tras detectar el exceso de
+  presupuesto. Cierre: el fake WebSocket conserva fallos reales, pero ignora
+  cierres benignos (`net.ErrClosed`, `os.ErrClosed`, `EPIPE`, `ECONNRESET`);
+  el contrato lo siguen comprobando las aserciones de policy enviada/aceptada y
+  `codex_app_server_thread_read_response_too_large`. Evidencia:
+  `go test -count=10 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0ToolOutputPolicyYThreadReadGigantePorWebSocketDeterministaV0'`
+  y `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`.
 - Revalidacion OPES local/fake 2026-07-09h:
   `scripts/smoke_opes_lifecycle_real.sh` vuelve a pasar en local con
   `ORQUESTA_KEEP_SMOKE_DIR=1`, 24/24 `work_kind` cubiertos hasta

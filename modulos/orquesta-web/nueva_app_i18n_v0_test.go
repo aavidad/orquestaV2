@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -32,7 +33,40 @@ func TestNuevaAppI18nCatalogV0CatalogosCubrenClavesRequeridas(t *testing.T) {
 
 func TestNuevaAppI18nCatalogV0NoUsaPlaceholdersGenericosV0(t *testing.T) {
 	catalog := NewNuevaAppI18nCatalogV0()
-	requireNuevaAppI18nNotPlaceholderV0(t, catalog, NuevaAppI18nRequiredKeysV0()...)
+	for _, guard := range nuevaAppI18nCatalogGuardInventoryV0() {
+		t.Run(guard.Name, func(t *testing.T) {
+			requireNuevaAppI18nNotPlaceholderV0(t, catalog, guard.Keys...)
+		})
+	}
+}
+
+func TestNuevaAppI18nCatalogV0CatalogosInventariadosBajoGuardV0(t *testing.T) {
+	catalog := NewNuevaAppI18nCatalogV0()
+	guarded := map[string]string{}
+	for _, guard := range nuevaAppI18nCatalogGuardInventoryV0() {
+		if len(guard.Keys) == 0 {
+			t.Fatalf("inventario i18n vacio: %s", guard.Name)
+		}
+		for _, key := range guard.Keys {
+			guarded[key] = guard.Name
+		}
+	}
+	if len(guarded) == 0 {
+		t.Fatalf("inventario i18n sin claves")
+	}
+
+	for _, locale := range catalog.SupportedLocales() {
+		for key := range catalog.messages[locale] {
+			if guarded[key] == "" {
+				t.Fatalf("catalogo %s contiene clave sin inventario guard: %s", locale, key)
+			}
+		}
+		for key, source := range guarded {
+			if catalog.lookupExact(locale, key) == "" {
+				t.Fatalf("inventario %s declara clave ausente en %s: %s", source, locale, key)
+			}
+		}
+	}
 }
 
 func TestNuevaAppI18nRequiredKeysV0DevuelveCopia(t *testing.T) {
@@ -70,6 +104,30 @@ func nuevaAppI18nForbiddenPlaceholderPatternsV0() []string {
 		"Explica esta opcion en lenguaje llano.",
 		"Recomendacion conservadora para completar el contrato sin sobredisenar.",
 	}
+}
+
+type nuevaAppI18nCatalogGuardV0 struct {
+	Name string
+	Keys []string
+}
+
+func nuevaAppI18nCatalogGuardInventoryV0() []nuevaAppI18nCatalogGuardV0 {
+	return []nuevaAppI18nCatalogGuardV0{
+		{Name: "base", Keys: nuevaAppI18nMapKeysV0(nuevaAppI18nSpanishV0())},
+		{Name: "html_help", Keys: nuevaAppHTMLHelpI18nKeysV0()},
+		{Name: "wizard_help", Keys: nuevaAppI18nMapKeysV0(nuevaAppWizardHelpI18nSpanishV0())},
+		{Name: "wizard_universal", Keys: nuevaAppI18nMapKeysV0(nuevaAppWizardUniversalI18nSpanishV0())},
+		{Name: "wizard_universal_generated", Keys: nuevaAppI18nMapKeysV0(nuevaAppWizardUniversalGeneratedI18nSpanishV0())},
+	}
+}
+
+func nuevaAppI18nMapKeysV0(messages map[string]string) []string {
+	keys := make([]string, 0, len(messages))
+	for key := range messages {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func TestNuevaAppI18nCatalogV0LookupPorLocaleYFallback(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -1297,11 +1298,21 @@ func startCodexAppServerWebSocketScriptForTestV0(
 		_ = listener.Close()
 		select {
 		case err := <-errs:
+			if codexAppServerWebSocketBenignCloseForTestV0(err) {
+				return
+			}
 			t.Fatalf("fake websocket app-server: %v", err)
 		default:
 		}
 	})
 	return socketPath, records
+}
+
+func codexAppServerWebSocketBenignCloseForTestV0(err error) bool {
+	return errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, os.ErrClosed) ||
+		errors.Is(err, syscall.EPIPE) ||
+		errors.Is(err, syscall.ECONNRESET)
 }
 
 func serveCodexAppServerWebSocketCallForTestV0(

@@ -2621,3 +2621,46 @@ Lectura para continuar:
 - Para sincronizar remoto: commit/push de esta rama; despues pull, build y
   restart gobernado solo de Orquesta en el servidor remoto. No asumir que el
   remoto tiene estos cambios hasta verificar hash y readiness.
+
+## Actualizacion Codex 2026-07-09k: E3/E5 cerrados antes de push remoto
+
+Para Claude:
+
+- Codex padre cerro E3 local y un subagente cerro E5 local.
+- Nuevos cierres documentados:
+  - `BUG-ORQ-20260709-213`: contratos E3 multisuperficie.
+  - `BUG-ORQ-20260709-214`: guards wizard/i18n.
+  - `BUG-ORQ-20260709-215`: flaky del fake WebSocket app-server.
+
+Cambios clave:
+
+- Telegram operador se declara en el manifest HTTP como
+  `operator_telegram.update.v0`; el servidor usa la constante canonica
+  `RouteOperatorTelegramUpdateV0`.
+- `/api/v0/operator/telegram/update` aparece en discovery como ruta conocida
+  pero `Mounted=false`, porque sigue siendo opt-in por config.
+- Nuevo test cruzado en `cmd/orquesta-server` comprueba que los contratos
+  internos tienen correspondencia entre manifest HTTP, discovery y DTOs MCP.
+- El inventario MCP de tools internas exige por prefijo nuevas tools de
+  `nueva_app`, `director.human_work` y `operator.director`.
+- Los guards i18n/wizard detectan nuevas claves fuera de inventario y duplicados
+  raw de campos destino no declarados.
+- Durante `go test ./...` aparecio un flaky previo del test WebSocket de
+  `thread/read` gigante; se corrigio para no fallar por `broken pipe` benigno
+  cuando el cliente cierra tras detectar frame demasiado grande.
+
+Verificacion local ya pasada antes del commit:
+
+- `go test -count=1 ./modulos/orquesta-http-gateway ./modulos/orquesta-mcp ./cmd/orquesta-server -run 'TestPublicRouteManifestV0DeclaraContratosE3InternosV0|TestServerResourcesRouteManifestIncluyeDiscoveryOPESV0|TestServerE3ContractSurfaceCatalogV0|TestMCPInternal'`
+- `go test -count=1 ./modulos/orquesta-web -run 'TestNuevaAppI18nCatalogV0|TestWizard'`
+- `go test -count=1 ./modulos/orquesta-web`
+- `go test -count=10 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0ToolOutputPolicyYThreadReadGigantePorWebSocketDeterministaV0'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`
+- `git diff --check`
+
+Pendiente al retomar en remoto:
+
+- Pull de la rama `trabajo/plataforma-agentes`.
+- Build/test focal del servidor remoto.
+- Reinicio gobernado solo de Orquesta si el hash remoto coincide con el commit
+  subido.

@@ -47,6 +47,7 @@ func routeManifestEntriesV0() []RouteManifestEntryV0 {
 		{Ref: RouteRefExternalWorkRunV0, Pattern: RouteExternalWorkRunV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0},
 		{Ref: RouteRefCodebaseQueryV0, Pattern: RouteCodebaseQueryV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneReadV0},
 		{Ref: RouteRefCodebaseStatusV0, Pattern: RouteCodebaseStatusV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerMCPV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneReadV0},
+		{Ref: RouteRefOperatorTelegramUpdateV0, Pattern: RouteOperatorTelegramUpdateV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerServerV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneMutationV0, ContractRefs: []string{RouteContractOperatorTelegramUpdateV0}},
 		{Ref: RouteRefMCPJSONRPCV0, Pattern: routeMCPJSONRPCOverlayV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerServerV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityMCPJSONRPCV0},
 		{Ref: RouteRefWorkspaceTimelineV0, Pattern: routeWorkspaceTimelineV0, Kind: RouteManifestKindExactV0, Owner: routeOwnerServerV0, Methods: []string{routeMethodPostV0}, SecurityProfile: RouteSecurityControlPlaneReadV0},
 	}

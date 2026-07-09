@@ -47,6 +47,7 @@ const (
 	RouteExternalWorkRunV0                   = "/api/v0/external-work/run"
 	RouteCodebaseQueryV0                     = "/api/v0/codebase/query"
 	RouteCodebaseStatusV0                    = "/api/v0/codebase/status"
+	RouteOperatorTelegramUpdateV0            = "/api/v0/operator/telegram/update"
 )
 
 type RouteHandlersV0 struct {

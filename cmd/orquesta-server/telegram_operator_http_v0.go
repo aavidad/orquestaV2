@@ -12,11 +12,12 @@ import (
 	"strconv"
 	"strings"
 
+	orquestahttpgateway "orquesta/modulos/orquesta-http-gateway"
 	channel "orquesta/modulos/orquesta-operator-director-channel"
 	orquestatelegram "orquesta/modulos/orquesta-operator-telegram"
 )
 
-const telegramOperatorUpdateHTTPPathV0 = "/api/v0/operator/telegram/update"
+const telegramOperatorUpdateHTTPPathV0 = orquestahttpgateway.RouteOperatorTelegramUpdateV0
 
 type telegramOperatorUpdateHTTPHandlerV0 struct {
 	wiring telegramOperatorWiringResultV0

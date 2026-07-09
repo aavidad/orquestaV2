@@ -90,7 +90,11 @@ func serverRouteResourceFromHTTPGatewayV0(
 		Methods:           append([]string{}, entry.Methods...),
 		SecurityProfile:   entry.SecurityProfile,
 		ContractRefs:      append([]string{}, entry.ContractRefs...),
-		Mounted:           true,
+		Mounted:           serverRouteManifestEntryMountedV0(entry),
 		ShadowsPrefixRefs: append([]string{}, entry.ShadowsPrefixRefs...),
 	}
+}
+
+func serverRouteManifestEntryMountedV0(entry orquestahttpgateway.RouteManifestEntryV0) bool {
+	return entry.Ref != orquestahttpgateway.RouteRefOperatorTelegramUpdateV0
 }

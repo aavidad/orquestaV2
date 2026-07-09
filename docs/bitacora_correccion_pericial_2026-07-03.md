@@ -6366,3 +6366,64 @@ Evidencia:
 - `bash scripts/test_orquesta_server_deploy.sh`
 - `bash scripts/test_orquesta_smoke_nightly.sh`
 - `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-operator-notifications ./modulos/orquesta-operator-telegram ./cmd/orquesta-server -run 'TestOperatorNotification|TestTelegram(BotAPI|Operator)|TestAdapterV0DespachaMensajeAlCanalDirector'`
+
+## Orquesta local 2026-07-09: cierre E3/E5 antes de sincronizar remoto
+
+Se cerro una microtanda local antes de subir al servidor remoto, con ayuda de un
+subagente para E5 y Codex padre integrando E3.
+
+Cambios E3:
+
+- `BUG-ORQ-20260709-213`: Telegram operador queda en el manifest canonico como
+  `RouteOperatorTelegramUpdateV0` / `operator_telegram.update.v0`.
+- El handler del servidor deja de duplicar el path literal y usa la constante de
+  `orquesta-http-gateway`.
+- El discovery del servidor publica la ruta Telegram como conocida pero
+  `Mounted=false`, porque es opt-in por config.
+- Nuevo guard cruzado `TestServerE3ContractSurfaceCatalogV0*`: todo contrato
+  interno inventariado debe existir en HTTP manifest, discovery y, si aplica,
+  DTO MCP; todo `contract_ref` HTTP debe estar en el catalogo E3.
+- MCP deja de depender solo de una lista exacta para detectar tools internas:
+  las familias `orquesta.nueva_app.*`,
+  `orquesta.director.human_work.*` y
+  `orquesta.operator.director.*` exigen inventario E3.
+
+Cambios E5:
+
+- `BUG-ORQ-20260709-214`: el guard anti-placeholders i18n usa inventario de
+  catalogos bajo guard y falla si un locale trae claves fuera de inventario o
+  si una clave inventariada falta en un locale.
+- El wizard conserva el dedupe usado por la ayuda, pero anade guard raw de
+  campos destino duplicados con allowlist exacta. Duplicados intencionales:
+  `datos.necesidad_funcional`, `datos.storage.0.tipo`, `deploy.target`,
+  `descripcion`, `integraciones.0.tipo`, `integraciones.1.tipo`,
+  `integraciones.2.tipo`, `plataformas`, `tipo_app` y
+  `usuarios_objetivo`.
+
+Lectura:
+
+- No se toca core/workflow/domain-work ni se mete Telegram en el nucleo. La ruta
+  Telegram es contrato de borde `cmd/orquesta-server` y queda opt-in.
+- No se fuerza igualdad 1:1 entre formularios web y envelopes MCP; E3 cierra
+  presencia de contrato/superficie y DTO MCP, no semantica de aliases/nesting.
+- Residual externo: despues de commit/push hay que pull/build/verificar en el
+  servidor remoto. Este cambio solo declara la parte local.
+
+Evidencia local:
+
+- `go test -count=1 ./modulos/orquesta-http-gateway ./modulos/orquesta-mcp ./cmd/orquesta-server -run 'TestPublicRouteManifestV0DeclaraContratosE3InternosV0|TestServerResourcesRouteManifestIncluyeDiscoveryOPESV0|TestServerE3ContractSurfaceCatalogV0|TestMCPInternal'`
+- `go test -count=1 ./modulos/orquesta-web -run 'TestNuevaAppI18nCatalogV0|TestWizard'`
+- `go test -count=1 ./modulos/orquesta-web`
+- `git diff --check`
+
+Incidencia adicional detectada por `go test ./...`:
+
+- `BUG-ORQ-20260709-215`: flaky en
+  `TestServerCodexAppServerGoalBackendV0ToolOutputPolicyYThreadReadGigantePorWebSocketDeterministaV0`.
+  La suite completa fallo con `broken pipe` en el fake WebSocket al escribir un
+  frame gigante de `thread/read`; el cliente podia cerrar correctamente tras
+  detectar que el frame excedia el presupuesto. Cierre: el fake ignora cierres
+  benignos (`net.ErrClosed`, `os.ErrClosed`, `EPIPE`, `ECONNRESET`) y conserva
+  las aserciones funcionales del contrato. Evidencia:
+  `go test -count=10 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0ToolOutputPolicyYThreadReadGigantePorWebSocketDeterministaV0'`
+  y `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`.
