@@ -78,6 +78,10 @@ func TestServerAppHTTPGoalFirstLanzaObservaYCierraV0(t *testing.T) {
 	if backend.packet.GoalRef != started.GoalRef || backend.packet.Objective == "" || len(backend.packet.ArtifactContracts) == 0 {
 		t.Fatalf("packet no capturado: %+v started=%+v", backend.packet, started)
 	}
+	if !goalFirstHTTPStringInSetForTestV0(started.EvidenceRefs, "evidence-ref-codex-app-server-turn-start-tool-output-policy-sent") ||
+		!goalFirstHTTPStringInSetForTestV0(started.EvidenceRefs, "evidence-ref-codex-app-server-turn-start-tool-output-policy-accepted") {
+		t.Fatalf("start sin evidencia toolOutputPolicy sent/accepted: %+v", started.EvidenceRefs)
+	}
 
 	observed := postGoalFirstObserveForTestV0(t, handler, started.RunRef)
 	if observed.Estado != orquestamcp.MCPObserveAppDirectorGoalEstadoOKV0 ||
@@ -1130,7 +1134,11 @@ func (backend *goalFirstHTTPBackendForTestV0) StartCodexGoalV0(
 		Status:          orquestagoal.GoalStatusRunningV0,
 		GoalRef:         packet.GoalRef,
 		ExternalGoalRef: "thread-ref-http-goal-first-001",
-		EvidenceRefs:    []string{"evidence-ref-http-goal-first-launch"},
+		EvidenceRefs: []string{
+			"evidence-ref-http-goal-first-launch",
+			"evidence-ref-codex-app-server-turn-start-tool-output-policy-sent",
+			"evidence-ref-codex-app-server-turn-start-tool-output-policy-accepted",
+		},
 	}, nil
 }
 

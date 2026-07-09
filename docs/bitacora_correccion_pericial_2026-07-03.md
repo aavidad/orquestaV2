@@ -5462,3 +5462,74 @@ Verificado:
 Pendiente: no cerrar `BUG-079` hasta una prueba real que demuestre que el
 proveedor/app-server aplica el limite antes de ejecutar herramientas con stdout
 gigante. Este corte solo mejora la evidencia causal del transporte.
+
+## Codex local 2026-07-09: BUG-066 cierre local/fake-residente
+
+Lectura actualizada para Claude:
+
+- `BUG-ORQ-20260701-066` queda cerrado en alcance local/fake-residente.
+- Evidencia OPES lifecycle: `scripts/smoke_opes_lifecycle_real.sh` paso con
+  24/24 work kinds, `finalpkg_dry_run=false`,
+  `settlement_status=settled_final` y `no_residual_processes=true`.
+- Evidencia retenida:
+  `/tmp/orquesta-opes-lifecycle-real-20260709T111212Z/out/opes_lifecycle_result.json`.
+- Evidencia shutdown local complementaria: smoke real goal-first con backend
+  `app_server_tmux`, `runs_requested=1`, `runs_stopped=1`,
+  `run_control_statuses=stopped`, cleanup completo y sin procesos residuales.
+- Evidencia retenida:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.kALS5q`.
+
+No sobrecerrar producto: queda como residual externo repetir la misma clase de
+prueba en servidor remoto/stale, OPES temporal/preproduccion o proveedor real
+autorizado si se exige evidencia fuera de local. Eso ya no debe contarse como
+bug local de codigo abierto.
+
+## Orquesta local 2026-07-09: ola real BUG-079 y BUG-199
+
+Se uso Orquesta para programar, no solo Codex directo:
+
+- Ola: `codex-launch-director-wave`.
+- `wave_ref=codex-bug079-smoke-policy-real-20260709`.
+- Agentes: 1.
+- Write-set declarado:
+  `scripts/smoke_goal_first_app_server_real.sh`,
+  `scripts/smoke_goal_first_forced_stop_backend_real.sh`,
+  `cmd/orquesta-server/goal_first_app_http_flow_v0_test.go`,
+  `cmd/orquesta-server/smoke_goal_first_scripts_v0_test.go`.
+
+Entrega de Orquesta:
+
+- `scripts/smoke_goal_first_app_server_real.sh` ahora calcula
+  `tool_output_policy_transport=accepted|fallback|sent_without_accept_or_fallback|missing`.
+- El smoke falla si va a declarar verde sin evidencia
+  `evidence-ref-codex-app-server-turn-start-tool-output-policy-sent` y
+  `accepted` o `fallback`.
+- `cmd/orquesta-server/goal_first_app_http_flow_v0_test.go` fija evidencia
+  `sent` + `accepted` en el fake HTTP.
+- `cmd/orquesta-server/smoke_goal_first_scripts_v0_test.go` guarda que el
+  script no pierda esa comprobacion.
+
+Lectura:
+
+- `BUG-ORQ-20260701-079` sigue abierto para enforcement pre-tool real del
+  proveedor/app-server. Este corte solo evita falsos verdes del smoke cuando no
+  hay evidencia de transporte.
+- La ola de Orquesta destapo `BUG-ORQ-20260709-199`: el agente termino y dejo
+  `codex_last_message.txt`, pero no aparecio `codex_process_done_v0` porque el
+  marcador dependia de un goroutine `cmd.Wait()` del CLI lanzador. Si el CLI
+  sale, esa evidencia durable puede perderse.
+- Cierre de `BUG-199`: `orquesta_codex_exec_v0.sh` escribe por si mismo
+  `codex_process_done_v0=completed|failed`, con escritura temporal + `mv`, y
+  tambien marca `failed` en trap de senal.
+- Reproduccion post-fix con Orquesta y runtime fake:
+  `wave=codex-process-done-repro-20260709T135205Z`,
+  runtime `/home/alberto/Trabajo/runtime/codex-process-done-repro-20260709T135205Z`,
+  resultado `agent-01/codex_process_done_v0=completed`.
+
+Verificado:
+
+- `bash -n scripts/smoke_goal_first_app_server_real.sh scripts/smoke_goal_first_forced_stop_backend_real.sh`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeGoalFirst(AppServerReal|ForcedStop|ShutdownCoordinationReal)|TestServerAppHTTPGoalFirstLanzaObservaYCierraV0|TestCodexLaunchDirectorWaveCommandV0RecursiveFakeRuntimeEjecutableConLinaje'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex -run 'TestCodexWrapperV0EscribeProcessDone|TestCodexWrapperV0'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0TurnStart|TestServerCodexAppServerTurnStartParamsV0'`

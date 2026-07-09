@@ -18,6 +18,7 @@ const (
 	CodexShutdownRequestFileNameV0       = "orquesta_shutdown_request.json"
 	CodexShutdownCheckpointAckFileNameV0 = "agent_shutdown_checkpoint_ack.json"
 	CodexLastMessageFileNameV0           = "codex_last_message.txt"
+	CodexProcessDoneFileNameV0           = "codex_process_done_v0"
 	CodexStdoutFileNameV0                = "codex_stdout.log"
 	CodexStderrFileNameV0                = "codex_stderr.log"
 	CodexUsageAccountingFileNameV0       = "codex_usage_accounting.json"

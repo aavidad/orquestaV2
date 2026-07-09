@@ -60,6 +60,34 @@ func TestCodexWrapperV0NoDuplicaSkipGitRepoCheck(t *testing.T) {
 	}
 }
 
+func TestCodexWrapperV0EscribeProcessDoneCompletadoV0(t *testing.T) {
+	profile, wrapperPath := prepareCodexStartupLockWrapperV0(t, writeFakeCodexNoUsageCommandV0)
+
+	cmd := exec.Command(wrapperPath)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("wrapper fallo: %v\n%s", err, out)
+	}
+	done := readCodexWrapperTestFileV0(t, filepath.Join(profile.RuntimeWorkDir, CodexProcessDoneFileNameV0))
+	if strings.TrimSpace(done) != "completed" {
+		t.Fatalf("process done inesperado: %q", done)
+	}
+}
+
+func TestCodexWrapperV0EscribeProcessDoneFallidoV0(t *testing.T) {
+	profile, wrapperPath := prepareCodexStartupLockWrapperV0(t, writeFakeCodexFailingCommandV0)
+
+	cmd := exec.Command(wrapperPath)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("wrapper debia fallar:\n%s", out)
+	}
+	done := readCodexWrapperTestFileV0(t, filepath.Join(profile.RuntimeWorkDir, CodexProcessDoneFileNameV0))
+	if strings.TrimSpace(done) != "failed" {
+		t.Fatalf("process done inesperado: %q", done)
+	}
+}
+
 func TestCodexWrapperV0SerializaArranqueCompartidoDeCodexHomeV0(t *testing.T) {
 	profile := codexProfileForTestV0(t)
 	profile.CodeHomeDir = filepath.Join(t.TempDir(), "codex-home")
@@ -619,6 +647,19 @@ func writeFakeCodexNoUsageCommandV0(t *testing.T, dir string) string {
 		"cat >/dev/null\n" +
 		"echo 'done without accounting' >&2\n" +
 		"exit 0\n"
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake codex: %v", err)
+	}
+	return path
+}
+
+func writeFakeCodexFailingCommandV0(t *testing.T, dir string) string {
+	t.Helper()
+	path := filepath.Join(dir, "fake-codex-failing.sh")
+	script := "#!/bin/sh\n" +
+		"cat >/dev/null\n" +
+		"echo 'failed without accounting' >&2\n" +
+		"exit 42\n"
 	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
 		t.Fatalf("write fake codex: %v", err)
 	}

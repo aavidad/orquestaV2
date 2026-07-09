@@ -27,6 +27,7 @@ func BuildCodexWrapperScriptV0(profile CodexConnectorProfileV0) string {
 	b.WriteString("#!/bin/sh\n")
 	b.WriteString("set -eu\n")
 	b.WriteString(codexUsageAccountingShellFunctionV0(profile))
+	b.WriteString(codexProcessDoneShellFunctionV0(profile))
 	if profile.HomeDir != "" {
 		b.WriteString("export HOME=")
 		b.WriteString(shellQuoteV0(profile.HomeDir))
@@ -58,13 +59,33 @@ func BuildCodexWrapperScriptV0(profile CodexConnectorProfileV0) string {
 	b.WriteString("orquesta_codex_child_v0=$!\n")
 	b.WriteString(codexSharedStartupLockReleaseAfterLaunchShellV0())
 	b.WriteString("trap 'kill \"$orquesta_codex_child_v0\" 2>/dev/null; orquesta_codex_release_startup_lock_v0; ")
-	b.WriteString("wait \"$orquesta_codex_child_v0\" 2>/dev/null; exit 143' INT TERM\n")
+	b.WriteString("wait \"$orquesta_codex_child_v0\" 2>/dev/null; orquesta_codex_write_usage_accounting_v0 || true; orquesta_codex_write_process_done_v0 failed || true; exit 143' INT TERM\n")
 	b.WriteString("wait \"$orquesta_codex_child_v0\"\n")
 	b.WriteString("orquesta_codex_status_v0=$?\n")
 	b.WriteString("trap - INT TERM\n")
 	b.WriteString("set -e\n")
 	b.WriteString("orquesta_codex_write_usage_accounting_v0 || true\n")
+	b.WriteString("if [ \"$orquesta_codex_status_v0\" -eq 0 ]; then orquesta_codex_write_process_done_v0 completed || true; else orquesta_codex_write_process_done_v0 failed || true; fi\n")
 	b.WriteString("exit \"$orquesta_codex_status_v0\"\n")
+	return b.String()
+}
+
+func codexProcessDoneShellFunctionV0(profile CodexConnectorProfileV0) string {
+	donePath := shellQuoteV0(profile.RuntimeWorkDir + "/" + CodexProcessDoneFileNameV0)
+	tempPath := shellQuoteV0(profile.RuntimeWorkDir + "/." + CodexProcessDoneFileNameV0 + ".tmp")
+	var b strings.Builder
+	b.WriteString("orquesta_codex_write_process_done_v0() {\n")
+	b.WriteString("  orquesta_codex_done_status_v0=\"${1:-failed}\"\n")
+	b.WriteString("  case \"$orquesta_codex_done_status_v0\" in completed|failed) ;; *) orquesta_codex_done_status_v0=\"failed\" ;; esac\n")
+	b.WriteString("  printf '%s\\n' \"$orquesta_codex_done_status_v0\" > ")
+	b.WriteString(tempPath)
+	b.WriteString("\n")
+	b.WriteString("  mv ")
+	b.WriteString(tempPath)
+	b.WriteString(" ")
+	b.WriteString(donePath)
+	b.WriteString("\n")
+	b.WriteString("}\n")
 	return b.String()
 }
 

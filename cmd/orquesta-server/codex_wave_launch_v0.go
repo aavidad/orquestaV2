@@ -14,7 +14,7 @@ import (
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 )
 
-const codexWaveProcessDoneFileNameV0 = "codex_process_done_v0"
+const codexWaveProcessDoneFileNameV0 = orquestaruntimecodex.CodexProcessDoneFileNameV0
 
 func runCodexLaunchWaveV0(
 	ctx context.Context,

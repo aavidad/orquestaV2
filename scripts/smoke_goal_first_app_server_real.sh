@@ -238,6 +238,76 @@ sys.exit(0 if walk(data) else 1)
 PY
 }
 
+tool_output_policy_transport_status() {
+  python3 - "$@" <<'PY'
+import json
+import sys
+
+sent = False
+accepted = False
+fallback = False
+for path in sys.argv[1:]:
+    if not path:
+        continue
+    try:
+        with open(path, encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except Exception:
+        continue
+
+    def walk(value):
+        global sent, accepted, fallback
+        if isinstance(value, str):
+            if value == "evidence-ref-codex-app-server-turn-start-tool-output-policy-sent":
+                sent = True
+            elif value == "evidence-ref-codex-app-server-turn-start-tool-output-policy-accepted":
+                accepted = True
+            elif value == "evidence-ref-codex-app-server-turn-start-tool-output-policy-fallback":
+                fallback = True
+            return
+        if isinstance(value, list):
+            for item in value:
+                walk(item)
+            return
+        if isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+
+    walk(payload)
+
+if fallback:
+    status = "fallback"
+elif accepted:
+    status = "accepted"
+elif sent:
+    status = "sent_without_accept_or_fallback"
+else:
+    status = "missing"
+print(status)
+PY
+}
+
+assert_tool_output_policy_transport_observed() {
+  local status
+  status="$(tool_output_policy_transport_status "$start_response" "$observe_response")"
+  echo "tool_output_policy_transport=$status"
+  case "$status" in
+    accepted|fallback) return 0 ;;
+    sent_without_accept_or_fallback)
+      echo "toolOutputPolicy fue enviada pero el smoke no observa aceptacion ni fallback:" >&2
+      smoke_print_file_excerpt "$start_response"
+      smoke_print_file_excerpt "$observe_response"
+      fail_after_app_server_tmux_shutdown_ready 1
+      ;;
+    *)
+      echo "smoke sin evidencia de transporte toolOutputPolicy sent/accepted/fallback:" >&2
+      smoke_print_file_excerpt "$start_response"
+      smoke_print_file_excerpt "$observe_response"
+      fail_after_app_server_tmux_shutdown_ready 1
+      ;;
+  esac
+}
+
 post_autoprogramming_status_snapshot() {
   local label="$1"
   local payload="$2"
@@ -1366,6 +1436,7 @@ if [[ "$terminal" != "1" && "$terminal" != "bug088_replan" && "$terminal" != "bu
 fi
 
 if [[ "$terminal" == "bug088_replan" ]]; then
+  assert_tool_output_policy_transport_observed
   echo "smoke_goal_first_high_consumption_real=ok"
   if json_contains_string "$observe_response" "checkpoint_only_high_consumption"; then
     echo "bug088_path=checkpoint_only_replan"
@@ -1379,6 +1450,7 @@ if [[ "$terminal" == "bug088_replan" ]]; then
 fi
 
 if [[ "$terminal" == "bug088_second_artifact" ]]; then
+  assert_tool_output_policy_transport_observed
   echo "smoke_goal_first_high_consumption_real=ok"
   echo "bug088_path=second_artifact_or_partial_artifacts"
   echo "recommended_action=review_partial_artifacts"
@@ -1412,8 +1484,11 @@ if [[ "$evidence_count" -lt 1 ]]; then
 fi
 
 if [[ "$high_consumption_mode" == "1" ]]; then
+  assert_tool_output_policy_transport_observed
   echo "smoke_goal_first_high_consumption_real=ok"
   echo "bug088_path=second_artifact_or_terminal_artifact"
+else
+  assert_tool_output_policy_transport_observed
 fi
 echo "smoke_goal_first_app_server_real=ok"
 echo "artifact_refs=$artifact_count"

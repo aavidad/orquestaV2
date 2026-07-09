@@ -86,6 +86,31 @@ antes de su cierre posterior:
   y `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`. Sigue abierto
   hasta probar que el proveedor/app-server aplica el limite antes de que una
   herramienta genere stdout gigante.
+- Avance 2026-07-09f: `BUG-ORQ-20260701-066` queda cerrado en alcance
+  local/fake-residente. La evidencia vigente combina el smoke OPES lifecycle
+  fake-residente con 24/24 work kinds, `settlement_status=settled_final` y sin
+  procesos residuales, mas el smoke real local de shutdown goal-first con
+  backend `app_server_tmux`, `runs_requested=1`, `runs_stopped=1`,
+  `run_control_statuses=stopped` y cleanup completo. No cierra despliegue
+  remoto, OPES temporal/preproduccion ni proveedor real/productivo; esos quedan
+  como residual externo de evidencia, no como bug local abierto.
+- Avance 2026-07-09g: `BUG-ORQ-20260701-079` queda mas acotado por una ola real
+  de Orquesta (`codex-launch-director-wave`,
+  `wave_ref=codex-bug079-smoke-policy-real-20260709`). El smoke
+  `scripts/smoke_goal_first_app_server_real.sh` ahora falla si va a dar verde
+  sin evidencia de transporte `toolOutputPolicy` enviada y aceptada o fallback;
+  publica `tool_output_policy_transport=accepted|fallback|sent_without_accept_or_fallback|missing`.
+  No cierra enforcement pre-tool del proveedor.
+- `BUG-ORQ-20260709-199` queda cerrado: la misma ola real de Orquesta entrego
+  cambios y `codex_last_message.txt`, pero no dejo `codex_process_done_v0`
+  porque el marcador dependia de un goroutine `cmd.Wait()` en el CLI lanzador,
+  que ya habia salido. Cierre: el wrapper `orquesta_codex_exec_v0.sh` escribe
+  por si mismo `codex_process_done_v0=completed|failed` antes de salir, tambien
+  en trap de senal. Reproduccion post-fix:
+  `wave=codex-process-done-repro-20260709T135205Z`, runtime
+  `/home/alberto/Trabajo/runtime/codex-process-done-repro-20260709T135205Z`,
+  `agent-01/codex_process_done_v0=completed`. Esto convierte el fin de agente
+  en evidencia durable del proceso que realmente vive.
 - Reejeucion real 2026-07-04 noche 10:
   `smoke_goal_first_checkpoint_only_high_consumption_real=ok` con
   `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-6c8dc4317888c8e25bb0e91f7f910aab`,
