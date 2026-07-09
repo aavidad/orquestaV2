@@ -184,6 +184,21 @@ evidencias/retencion o retirarlos del arbol fuente con commit explicito.
 
 Relacion: limpieza de historicos falsos y `BUG-ORQ-20260710-208E`.
 
+### S14 - Codigo pusheado pero binario remoto vivo no desplegado
+
+Local, GitHub y remoto quedaron sincronizados en `f379e4b95`, pero la API
+`/api/status` sigue reportando el proceso vivo
+`/srv/orquesta-self/runtime/orquesta-server-claude` arrancado antes del commit,
+con `binary_sha256=9541e2f0019819e58577e8c2fcbc202e602f636321e3a66f42ad618e0a876b47`.
+
+Estado: abierto. No se hizo despliegue/restart del binario nuevo en este corte
+porque habia goals/app-server/go tests antiguos vivos y el propio bug 208
+demuestra que `runs/control` no propaga parada fiable al backend. Antes de
+reanudar autoprogramacion hay que hacer drain/backup/cleanup gobernado solo de
+Orquesta, desplegar el binario nuevo y revalidar API. No tocar `uso-app`.
+
+Relacion: `BUG-ORQ-20260710-208C` y `208E`.
+
 ## Patrones estructurales detectados
 
 - Varias fuentes de verdad para un goal: estado persistido, checkpoint/result
@@ -195,6 +210,8 @@ Relacion: limpieza de historicos falsos y `BUG-ORQ-20260710-208E`.
 - Verificaciones amplias no estan aisladas de procesos residentes.
 - Remoto puede quedar fuera de GitHub por remoto Git configurado a bundle.
 - Artefactos de ejecucion pueden acabar versionados como si fueran fuente.
+- Un commit/push correcto no implica que el binario remoto vivo este
+  desplegado.
 
 ## Estado de mitigaciones ya hechas
 
