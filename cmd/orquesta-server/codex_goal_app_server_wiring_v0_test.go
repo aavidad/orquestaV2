@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -829,12 +830,34 @@ func waitForServerGoalFileV0(t *testing.T, path string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); err == nil {
+		raw, err := os.ReadFile(path)
+		if err == nil && serverGoalFileReadyForTestV0(path, raw) {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("timeout esperando fichero %s", path)
+}
+
+func serverGoalFileReadyForTestV0(path string, raw []byte) bool {
+	if filepath.Base(path) == orquestaruntimeclaude.ClaudeGoalResultFileNameV0 {
+		return serverGoalResultFileCompleteForTestV0(raw)
+	}
+	return true
+}
+
+func serverGoalResultFileCompleteForTestV0(raw []byte) bool {
+	var result struct {
+		SchemaVersion string `json:"schema_version"`
+		Status        string `json:"status"`
+		GoalRef       string `json:"goal_ref"`
+	}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return false
+	}
+	return strings.TrimSpace(result.SchemaVersion) != "" &&
+		strings.TrimSpace(result.Status) != "" &&
+		strings.TrimSpace(result.GoalRef) != ""
 }
 
 type fakeCodexAppServerProbeV0 struct{}

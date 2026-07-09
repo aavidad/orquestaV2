@@ -22,6 +22,15 @@ sobre los mismos ejes, y define cortes de trabajo accionables para Codex con
 criterio de cierre verificable. Cada corte debe citar este documento y el
 fallo `F<n>` que ataca.
 
+Verificacion contra codigo: todas las afirmaciones sobre simbolos, patches y
+comportamiento estan contrastadas con el arbol en `43aea232b` el 2026-07-10
+(rg/git ls-files/lectura de los ficheros citados). Tres afirmaciones de la
+primera version quedaron corregidas tras esa revision: F2 (la deteccion de
+no-propagacion ya existe; el hueco es proyecciones-vs-identidad-runtime y la
+falta de actuador de proceso en `runs/control`), F6 (Gemini ya tiene
+normalizador tolerante; el fallo es la duplicacion por proveedor) y el
+ejemplo de IDs duplicados del fallo meta.
+
 ## Lectura global
 
 El inventario tiene ~250 filas; mas del 90% figuran `cerrado`. Pero los bugs
@@ -51,10 +60,23 @@ textualmente), BUG-141, BUG-165, BUG-198 y BUG-208B (goal con
 `orquesta_goal_result status=blocked` en disco mientras `observe` publica
 `goal_status=running`; 504 parcial que mezclaba running con cierre blocked).
 
-Que hay ya: `ActiveShutdownWorkCleanerPortV0` (cierre de BUG-131),
-`NormalizeStoppedServerSnapshotV0`, fuente neutral `orquesta-estado-vivo` en
-operational-status, y los patches focales 2026-07-10 (workdir inexistente,
-rework residente, normalizacion del 504).
+Que hay ya (verificado en codigo en `43aea232b`):
+`ActiveShutdownWorkCleanerPortV0` en
+`modulos/orquesta-server-shutdown/contracts_v0.go` (cierre de BUG-131),
+`NormalizeStoppedServerSnapshotV0` en
+`modulos/orquesta-server/status_process_stale_v0.go`, modulo neutral
+`modulos/orquesta-estado-vivo`, y los patches focales 2026-07-10: workdir
+inexistente (`workdir_unavailable` en
+`orquesta-runtime-codex-appserver/codex_goal_app_server_v0.go`), rework
+residente (`goal_first_resident_rework_v0_test.go` en
+`orquesta-app-codex-stack`) y normalizacion del 504
+(`mcpObserveAppDirectorGoalNormalizeTimeoutPartialV0` suprime cierre stale y
+fuerza `recommended_action=observe_later` si el goal sigue
+`running/accepted`, con test
+`TestMCPAutoprogrammingObserveGoalHTTPHandlerV0TimeoutNoPublicaClosureBloqueadoSiGoalSigueRunningV0`).
+Dato que apoya el patron: hay 116 ficheros Go en `modulos`/`cmd` que
+mencionan reconciliacion; son reconciliaciones locales por superficie, no un
+reconciliador unico.
 
 Accion para Codex: definir UN reconciliador causal de goal-first como
 contrato unico (no otra proyeccion): dado `run_ref/goal_ref`, debe leer
@@ -72,27 +94,41 @@ y test de simulacion que inyecte las cuatro fuentes en desacuerdo.
 
 ## F2 - Control plane que no confirma la parada del backend real
 
-Patron: `runs/control stop/cancel` (incluso `forced=true`) escribe intencion
-en el estado logico y puede devolver aceptacion sin verificar contra la
-identidad runtime (pid/sesion tmux/socket) que el backend murio. El resultado
-repetido es `control_not_propagated_to_goal_backend` o `goal_status_after=
-running` tras un forced stop.
+Patron (precisado tras revisar el codigo): `runs/control stop/cancel` SI
+detecta hoy la no-propagacion y la publica honestamente --
+`enrichRunControlGoalBackendResultV0` en
+`modulos/orquesta-mcp/run_control_tool_executor_v0.go` emite
+`control_not_propagated_to_goal_backend` con `Estado=error` y
+`recommended_action=observe_goal_backend_before_declaring_stopped` cuando el
+backend sigue activo. El hueco estructural esta en dos sitios: (1) esa
+verificacion consulta proyecciones (`director/stats` antes/despues), no la
+identidad runtime real (pid/sesion tmux/socket); (2) la ruta forzada
+(`reconcileGoalStateAfterForcedControlV0`) reconcilia ESTADO a terminal, pero
+no tiene actuador de proceso: la maquinaria que de verdad mata el backend
+(SIGTERM cooperativo, kill-session, cleaner) vive solo en el contrato de
+shutdown (`ActiveShutdownWorkCleanerPortV0`) y `runs/control` no puede
+invocarla. Por eso en remoto el forced dejo `goal_status_after=running`.
 
 Evidencia: BUG-063, BUG-121/122/123 (catalogo run control), BUG-165 (Sueldos
 forced stop), BUG-207 (crash ResetStdio en forced stop), BUG-208C / S5 de la
 sesion remota 2026-07-10.
 
-Que hay ya: forced stop real verde en local (`smoke_goal_first_forced_stop_
-backend_real.sh`), SIGTERM cooperativo + FIFO stdin en `app_server_tmux`,
-identidad `ActiveShutdownWorkIdentityPortV0` para dedupe.
+Que hay ya (verificado en codigo): forced stop real verde en local
+(`smoke_goal_first_forced_stop_backend_real.sh`), SIGTERM cooperativo + FIFO
+`stdin.pipe` en `app_server_tmux`
+(`codex_goal_app_server_tmux_v0.go`), identidad
+`ActiveShutdownWorkIdentityPortV0` para dedupe, y la deteccion honesta de
+no-propagacion descrita arriba.
 
-Accion para Codex: hacer de la confirmacion runtime parte del contrato de
-`runs/control`: la respuesta no puede ser `status=stopped` hasta observar
-muerte del proceso/sesion o declarar explicitamente
-`stop_requested_backend_unconfirmed` con next action tipada. En remoto, el
-caso BUG-208C sugiere ademas que el control apuntaba a un backend cuya
-identidad ya no casaba con el proceso vivo (worktree retirado, S1): el
-control debe fallar con causa de identidad, no con un generico no-propagado.
+Accion para Codex: dar a `runs/control` acceso al mismo actuador de proceso
+que ya usa shutdown: cuando el control detecta backend activo tras stop
+(el caso `control_not_propagated_to_goal_backend`), debe poder escalar a la
+parada por identidad runtime via los puertos ActiveShutdownWork ya
+existentes, y solo publicar `status=stopped` tras confirmar muerte del
+proceso/sesion. En remoto, el caso BUG-208C sugiere ademas que el control
+apuntaba a un backend cuya identidad ya no casaba con el proceso vivo
+(worktree retirado, S1): el control debe fallar con causa de identidad, no
+con un generico no-propagado.
 
 Criterio de cierre: repro/API remota de stop y forced stop sobre un goal con
 backend vivo y sobre un goal con backend huerfano; en ambos, estado final
@@ -118,8 +154,11 @@ Accion para Codex: un corte unico "harness remoto aislado o drain gobernado":
 (a) inventario de procesos Orquesta vivos con clasificacion (protegido /
 drenable), (b) comando de drain gobernado que use los puertos de shutdown ya
 existentes y NUNCA toque `uso-app`, (c) perfil de test aislado (TMPDIR,
-GOCACHE, CODEX_HOME, puertos) reutilizable por deploy y nightly. No mezclar
-este corte con limpieza de codigo muerto (regla S2).
+GOCACHE, CODEX_HOME, puertos) reutilizable por deploy y nightly. Verificado
+en codigo: hoy solo un script de `scripts/` exporta `GOCACHE` propio
+(`smoke_self_programming_composite_goal_first.sh`); no existe un perfil de
+aislamiento reutilizable. No mezclar este corte con limpieza de codigo
+muerto (regla S2).
 
 Restriccion clave aprendida en S14: el drain NO puede depender de
 `runs/control`, porque 208C demuestra que esa parada no es fiable; debe
@@ -138,16 +177,22 @@ Patron: el write-set se declara y se valida en algunos bordes, pero no
 gobierna (1) el scheduling paralelo -- se aceptaron dos tareas con write-set
 `scripts` solapado en paralelo (S7/208D), (2) la generacion de rutas durables
 -- resultados colgados bajo ficheros `.go`/`.sh` (BUG-195, BUG-198-ruta) y
-checkpoints escritos en el arbol fuente (S10), ni (3) la frontera con git --
-37 ficheros de ejecucion (`checkpoint_started_*`, `orquesta_goal_result_*`)
-ya versionados como si fueran fuente (S13).
+checkpoints escritos en el arbol fuente (S10), ni (3) la frontera con git.
+Conteo verificado con `git ls-files` en `43aea232b`: los 37 ficheros de S13
+son los del patron exacto `*goal-ref-task-autoprogramming*`; con el patron
+amplio (`checkpoint_started_goal-ref*` / `orquesta_goal_result_goal-ref*`,
+incluyendo la familia `goal-ref-autoprogramming-backlog-*`) hay 61 ficheros
+versionados, repartidos en al menos 10 directorios `docs/` de modulos, `cmd`,
+`scripts/docs` e incluso `docs/evals` y `docs/historico`.
 
 Evidencia: BUG-009, BUG-036, BUG-102, BUG-164, BUG-167, BUG-195, BUG-198,
 S7/S10/S13 de la sesion 2026-07-10.
 
-Que hay ya: secuenciacion de write-sets solapados (patch focal 2026-07-10,
-`orquesta-autoprogramming`), salto de scopes fichero para la ruta durable,
-`workspace_write_guard` en validacion de recibos.
+Que hay ya (verificado en codigo): secuenciacion de write-sets solapados con
+codigos `write_set_overlap_sequenced` y `declared_write_set_overlap_sequenced`
+en `modulos/orquesta-autoprogramming/autoprogramming_partition_policy_v0.go`,
+salto de scopes fichero para la ruta durable, `workspace_write_guard` en
+validacion de recibos.
 
 Accion para Codex (dos piezas):
 1. Canonizar el destino de artefactos de ejecucion fuera del arbol fuente
@@ -177,13 +222,26 @@ BUG-191 (goal complete sin commit_sha en GitHub), BUG-194, protocolo remoto
 pendiente de validar en
 `docs/runbooks/protocolo_git_remoto_orquesta_2026-07-02.md`.
 
+Hueco verificado en codigo: `scripts/orquesta_server_ctl.sh` toma
+`ORQUESTA_CTL_WORKDIR` con default `/srv/orquesta-self/worktrees/pilot-remoto-1`
+(justo el worktree que el inventario documenta como stale) y solo comprueba
+si existe `orquesta.config.json` dentro; no valida que el workdir exista, sea
+worktree git vivo ni que no este retirado. En `cmd/orquesta-server` no hay
+ninguna validacion de identidad de worktree al arrancar (la unica validacion
+de workdir es la del backend app-server por goal, BUG-198). El deploy si
+valida identidad (`verify_runtime_identity` en
+`scripts/orquesta_server_deploy.sh` acepta `runtime_identity.binary_sha256`
+anidado), pero eso solo protege el camino deploy, no un arranque por ctl
+contra un workdir muerto.
+
 Accion para Codex: startup guard de identidad de despliegue: al arrancar, el
 servidor valida que su workdir existe, es worktree git valido, no esta
 retirado/detached inesperado, y que el binario coincide con
 `runtime_identity.binary_sha256` del receipt de deploy; si no, arranca en
 modo `degraded_identity` que rechaza `prepare-run` amplio y lo publica en
-status. Ademas, fijar el remote GitHub canonico en el servidor (o remote
-explicito adicional) como parte del receipt de deploy.
+status. Revisar tambien el default de `ORQUESTA_CTL_WORKDIR` en el ctl, que
+hoy apunta a `pilot-remoto-1`. Ademas, fijar el remote GitHub canonico en el
+servidor (o remote explicito adicional) como parte del receipt de deploy.
 
 Criterio de cierre: repro remota: arrancar contra worktree retirado debe
 producir bloqueo visible por API, no aceptar cuatro goals como el 2026-07-10.
@@ -194,32 +252,44 @@ Patron: cada vez que un contrato de cierre vive como texto/narrativa (prompt,
 informe del agente, doc) en vez de como validador ejecutable unico, aparece
 un falso verde: QA editorial OPES, `evidence_refs` con forma inesperada,
 resultados de proveedor no normalizados. La familia OPES esta mayormente
-cerrada con la terna QA ejecutable, pero la frontera de proveedor multi-agente
-sigue fragil: la tanda remota 2026-07-10 fallo con `claude_goal_result_invalid`
-y `gemini_goal_result_invalid`, la misma clase que BUG-170 cerro para Claude
-(objetos `{ref, description}` vs strings).
+cerrada con la terna QA ejecutable. En la frontera de proveedor, la revision
+de codigo 2026-07-10 confirma que la tolerancia de BUG-170 SI existe hoy en
+Claude Y en Gemini, pero como implementaciones paralelas duplicadas:
+`normalizeClaudeGoalEvidenceRefsJSONValueV0` en `orquesta-runtime-claude` y
+`normalizeGeminiGoalResultJSONV0`/`normalizeGeminiGoalEvidenceRefsJSONValueV0`
+en `orquesta-runtime-gemini`. El fallo estructural es esa duplicacion: cada
+mejora del normalizador hay que copiarla a mano por proveedor, y el proximo
+proveedor (o el proximo campo con forma flexible) reabre la clase BUG-170.
 
 Evidencia: BUG-058 (vivo), BUG-061, BUG-064, BUG-067, BUG-070, BUG-093,
 BUG-095, BUG-097, BUG-108/109/110, BUG-170, fallos S9 de la tanda remota.
+Nota sobre S9: los strings `claude_goal_result_invalid` y
+`gemini_goal_result_invalid` no aparecen en las fuentes de
+`cmd/orquesta-server` (solo como constantes en los modulos runtime), lo que
+refuerza la hipotesis de que la tanda amplia remota fallo por contaminacion
+de F3 (procesos vivos) y no por un hueco nuevo de contrato; confirmarlo tras
+el drain, no antes.
 
-Accion para Codex: un normalizador tolerante unico de `orquesta_goal_result`
-por proveedor (Claude/Gemini/Codex) con corpus de fixtures reales de cada
-uno, que degrade a `recuperable + repair_receipt` en vez de `invalid`
-terminal cuando la desviacion es de forma y no de contenido. Investigar si
-los `*_goal_result_invalid` de la tanda remota eran contaminacion de F3 o
-contrato real; si es contrato, ampliar fixtures.
+Accion para Codex: extraer el normalizador tolerante de `orquesta_goal_result`
+a una pieza neutral compartida (un solo sitio con corpus de fixtures reales
+por proveedor Claude/Gemini/Codex), que los tres backends consuman, y que
+degrade a `recuperable + repair_receipt` en vez de `invalid` terminal cuando
+la desviacion es de forma y no de contenido. Prioridad por detras de F3:
+primero confirmar con harness limpio si S9 era ruido.
 
-Criterio de cierre: fixtures por proveedor en tests focales; ningun
-`goal_result_invalid` terminal por desviacion de forma recuperable.
+Criterio de cierre: un unico normalizador con fixtures por proveedor en tests
+focales; ningun `goal_result_invalid` terminal por desviacion de forma
+recuperable; tanda amplia limpia sin esos codigos tras el drain.
 
 ## Fallo meta - El propio inventario como fuente de verdad degradada
 
 El inventario mezcla tabla, avances cronologicos y notas; hay IDs duplicados
-con estados contradictorios (BUG-165 figura `abierto` y `cerrado` en filas
-distintas; BUG-121/122/123 estan reutilizados para bugs diferentes; hay dos
-`BUG-ORQ-20260709-196` distintos y un `BUG-ORQ-20260709-208` local distinto
-del `BUG-ORQ-20260710-208` remoto). La "Lectura vigente" corrige a mano lo
-que la tabla dice. Esto ya obligo a una regla especial (prevalece la lectura
+con estados contradictorios (BUG-ORQ-20260704-165 figura `abierto` y
+`cerrado` en filas distintas; BUG-ORQ-20260702-121/122/123 estan reutilizados
+para bugs diferentes -- 121 es a la vez "Run control/Goal backend" y
+"OPES/final package topic quality" --; y existe un `BUG-ORQ-20260709-208`
+local distinto del `BUG-ORQ-20260710-208` remoto, que solo se distinguen por
+la fecha embebida). La "Lectura vigente" corrige a mano lo que la tabla dice. Esto ya obligo a una regla especial (prevalece la lectura
 sobre filas antiguas) y hace imposible contar bugs vivos por maquina.
 
 Accion para Codex (barata, alto retorno): no reescribir la historia; anadir
