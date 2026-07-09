@@ -2688,8 +2688,11 @@ paquete final y sin tocar OPES productivo.
 - Auditar todos los validadores OPES contra artefactos canonicos vs
   regenerables.
 - Revisar write-set y consolidacion canonica para padres/subagentes.
-- Documentar protocolo remoto unico: bundle, checkout, identidad Git, patch,
-  summary y no tocar produccion.
+- Protocolo remoto unico documentado en
+  `docs/runbooks/protocolo_git_remoto_orquesta_2026-07-02.md`: bundle,
+  checkout, identidad Git, patch, summary, recibo de integracion y no tocar
+  produccion. Queda pendiente validarlo en servidor con remote Git canonico o
+  flujo bundle/push oficial.
 - Revalidar con smokes OPES temporales largos de audio/visual bajo entorno
   aislado; el contrato ejecutable de supuestos practicos ya publica rework
   causal por faltante y queda cubierto en BUG-ORQ-20260630-027.

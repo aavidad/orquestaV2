@@ -129,3 +129,15 @@ remote GitHub directo: el checkpoint tuvo que exportarse como bundle para
 integrarlo desde un entorno con `origin` canonico. Queda pendiente validar en el
 servidor remoto un smoke end-to-end con remote Git canonico o con protocolo
 oficial de bundle/push, para que `blocked_push` no dependa de inspeccion manual.
+
+Actualizacion 2026-07-09:
+
+- El protocolo oficial queda en
+  `docs/runbooks/protocolo_git_remoto_orquesta_2026-07-02.md`.
+- El cierre remoto ya no puede basarse solo en `goal_result status=complete`,
+  `queue.count=0` o cambios en un worktree piloto.
+- Debe conservar `integration_receipt_ref` o dejar el estado como
+  `pending_integration`/`blocked_push` con patch o bundle exportado, summary,
+  write-set, pruebas y accion siguiente.
+- Si el remoto vuelve a tener `origin` no canonico o sin credenciales, el fallo
+  es operativo de integracion Git, no exito del goal.

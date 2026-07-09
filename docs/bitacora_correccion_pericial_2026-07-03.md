@@ -4905,3 +4905,31 @@ Lectura para Claude:
 - No queda una ruta local que convierta `app_server_proxy` en comando ejecutable
   desde el servidor. Si en remoto se quiere recuperar proxy real, debe entrar
   como nuevo diseno/adaptador con contrato y pruebas, no como fallback oculto.
+
+## Codex local 2026-07-09: protocolo remoto unico de integracion Git
+
+Contexto:
+
+- `BUG-ORQ-20260705-191` mostro que un goal remoto podia terminar `complete`
+  con codigo util en un worktree piloto, pero sin commit ni integracion en la
+  rama principal.
+- El inventario mantenia pendiente documentar un protocolo unico para bundle,
+  checkout, identidad Git, patch, summary y no tocar produccion.
+
+Cierre documental:
+
+- `docs/runbooks/protocolo_git_remoto_orquesta_2026-07-02.md` queda como
+  protocolo canonico.
+- Declara que `goal_result status=complete`, `queue.count=0`,
+  `pending_push` o cambios en piloto no equivalen a integracion.
+- Exige `integration_receipt_ref` o estado `pending_integration`/`blocked_push`
+  con patch o bundle exportado, summary, write-set, pruebas y accion siguiente.
+- Añade comprobacion de identidad Git, checkout/worktrees y modo bundle/patch
+  oficial si el remoto no puede hacer `fetch`/`push` directo a GitHub.
+- La incidencia G5 queda enlazada al protocolo.
+
+Lectura para Claude:
+
+- El residual documental queda cerrado localmente. Sigue pendiente la validacion
+  operativa en servidor con remote Git canonico o flujo bundle/push real cuando
+  haya acceso remoto/auth/cuota.
