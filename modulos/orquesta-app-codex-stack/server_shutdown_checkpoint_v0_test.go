@@ -13,6 +13,7 @@ import (
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
+	orquestarunfile "orquesta/modulos/orquesta-run-file"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
@@ -388,6 +389,111 @@ func TestStackShutdownActiveWorkReaderV0BloqueaBackendActivoTrasGoalTimeout(t *t
 	}
 }
 
+func TestStackShutdownV0ForzadoCoordinaGoalFirstTerminalFueraDeColaV0(t *testing.T) {
+	fixture := newStackShutdownCheckpointFixtureV0(t)
+	ctx := context.Background()
+	runStore, err := orquestarunfile.NewRunFileStoreV0(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewRunFileStoreV0: %v", err)
+	}
+	if _, err := runStore.StopRunV0(ctx, orquestaruncontrol.StopRunCommandV0{
+		RunRef:       fixture.runRef,
+		RequestedBy:  "test",
+		Reason:       "estado previo dejado por shutdown anterior",
+		Forced:       true,
+		EvidenceRefs: []string{"evidence-ref-run-control-stop-requested-previo"},
+	}); err != nil {
+		t.Fatalf("StopRunV0 previo: %v", err)
+	}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	goalRef := "goal-ref-shutdown-terminal-outside-queue-001"
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: fixture.runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			GoalRef:    goalRef,
+			RunRef:     fixture.runRef,
+			ProjectRef: "app-spec-ref-shutdown-stack-001",
+			Objective:  "probar shutdown goal-first terminal fuera de cola",
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{
+				Path:    "docs/shutdown_goal_terminal_outside_queue.md",
+				Purpose: "test",
+			}},
+			EvidenceRefs: []string{"goal-state-ref-shutdown-terminal-outside-queue"},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			GoalRef:         goalRef,
+			ExternalGoalRef: "external-goal-ref-shutdown-terminal-outside-queue-001",
+			Status:          orquestagoal.GoalStatusRunningV0,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	state.Status = orquestagoal.GoalStatusCompleteV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusCompleteV0,
+		GoalRef:         goalRef,
+		ExternalGoalRef: "external-goal-ref-shutdown-terminal-outside-queue-001",
+		Summary:         "goal-first ya estaba completo antes del shutdown amplio",
+		ArtifactRefs:    []string{"artifact-ref-shutdown-terminal-outside-queue"},
+		EvidenceRefs:    []string{"evidence-ref-goal-terminal-before-shutdown"},
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:       orquestagoal.GoalStatusAcceptedV0,
+		Accepted:     true,
+		EvidenceRefs: []string{"evidence-ref-goal-closure-accepted-before-shutdown"},
+	}
+	state.EvidenceRefs = compactStringsV0(append(state.EvidenceRefs, "goal-state-ref-shutdown-terminal-outside-queue"))
+	if err := goalStates.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	config := fixture.preparer.Config
+	config.Stores.RunControl = runStore
+	config.Stores.RunQueue = runStore
+	config.Stores.AppGoalStateStore = goalStates
+
+	result, err := orquestaservershutdown.ShutdownServerV0(ctx, orquestaservershutdown.ServerShutdownDepsV0{
+		QueueReader:         stackShutdownQueueReaderFromConfigV0(config),
+		RunControlReader:    config.Stores.RunControl,
+		RunControlWriter:    stackShutdownRunControlWriterFromConfigV0(config),
+		RunCheckpointWriter: config.Stores.RunControl,
+		CheckpointPreparer:  stackShutdownCheckpointPreparerV0{Config: config},
+		StatsReader:         stackShutdownStatsReaderV0{Config: config},
+		ActiveWorkReader:    stackShutdownActiveWorkReaderV0{Config: config},
+		ActiveWorkCleaner:   stackShutdownActiveWorkCleanerV0{Config: config},
+	}, orquestaservershutdown.ServerShutdownCommandV0{
+		Forced:              true,
+		CleanupGoalBackends: true,
+		RequestedBy:         "orquesta-director",
+		Reason:              "shutdown amplio coordina goal-first fuera de cola",
+		CorrelationID:       "corr-shutdown-goal-terminal-outside-queue",
+		EvidenceRefs:        []string{"operator-shutdown-goal-terminal-outside-queue"},
+	})
+	if err != nil {
+		t.Fatalf("ShutdownServerV0: %v", err)
+	}
+	control, err := runStore.ReadRunControlStateV0(ctx, orquestaruncontrol.RunControlReadRequestV0{
+		RunRef: fixture.runRef,
+	})
+	if err != nil {
+		t.Fatalf("ReadRunControlStateV0: %v", err)
+	}
+	if !result.ShutdownReady ||
+		result.Status != orquestaservershutdown.ServerShutdownStatusReadyV0 ||
+		result.RunsRequested != 1 ||
+		result.RunsStopped != 1 ||
+		len(result.Runs) != 1 ||
+		result.Runs[0].RunRef != fixture.runRef ||
+		result.Runs[0].ControlStatus != string(orquestaruncontrol.RunControlStatusStoppedV0) ||
+		control.Status != orquestaruncontrol.RunControlStatusStoppedV0 ||
+		result.ActiveWorkCount != 0 ||
+		!hasStackShutdownGoalActionForTestV0(result.GoalActions, orquestaservershutdown.ServerShutdownGoalActionForcedStopRequestedV0) ||
+		!hasStackShutdownEvidenceForTestV0(control.EvidenceRefs, serverShutdownGoalTerminalRunControlReconciledEvidenceV0) {
+		t.Fatalf("result=%+v control=%+v", result, control)
+	}
+}
+
 type stackShutdownCheckpointFixtureDataV0 struct {
 	runRef     string
 	agentRef   string
@@ -586,6 +692,18 @@ func writeStackShutdownAckForTestV0(
 func hasStackShutdownEvidenceForTestV0(refs []string, want string) bool {
 	for _, ref := range refs {
 		if strings.Contains(ref, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasStackShutdownGoalActionForTestV0(
+	actions []orquestaservershutdown.ServerShutdownGoalActionV0,
+	want string,
+) bool {
+	for _, action := range actions {
+		if action.ActionTaken == want {
 			return true
 		}
 	}

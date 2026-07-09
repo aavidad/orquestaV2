@@ -116,6 +116,20 @@ antes de su cierre posterior:
   bloqueo de cleanup `app_server_tmux`; no cierra `BUG-165/065` global porque
   este smoke finaliza con `runs_requested=0` y queda pendiente la reconciliacion
   completa de runs goal-first fuera de cola durante shutdown amplio.
+- Avance 2026-07-09b: queda cerrado el subcaso offline/focal de esa
+  reconciliacion pendiente. El stack Codex de shutdown ahora suplementa la
+  cola con candidatos goal-first terminales que no estan visibles en
+  `RunQueue` ejecutable pero conservan `RunControl=stop_requested` o
+  `cancel_requested`; el `ActiveWorkReader` los publica como `goal_first`
+  pendiente mientras no haya backend vivo; y el writer de shutdown completa
+  `RunControl` a `stopped/canceled` cuando el goal ya esta terminal. Prueba:
+  `TestStackShutdownV0ForzadoCoordinaGoalFirstTerminalFueraDeColaV0` valida
+  cola vacia, `runs_requested=1`, `runs_stopped=1`, `shutdown_ready=true`,
+  `RunControl stopped` y evidencia
+  `evidence-ref-server-shutdown-goal-terminal-run-control-reconciled`.
+  Verificado con `go test -count=1 ./modulos/orquesta-app-codex-stack` y
+  `go test -count=1 ./modulos/orquesta-server-shutdown`. Pendiente para cerrar
+  `BUG-165/065` global: smoke real amplio con proveedor lento/stale/remoto.
 - `BUG-ORQ-20260704-166` queda cerrado funcionalmente por `ff620ecf` y
   `0e0dcedc`, incluyendo el ajuste posterior de `.gocache-local`, para la causa
   observada: el escaneo de

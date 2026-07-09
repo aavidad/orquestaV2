@@ -5324,3 +5324,39 @@ Lectura para Claude:
   `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.Ya4ayF` (verde)
   y `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.3QX7lP`
   (reproduccion fallida), ambas sin `codex-home` ni binario temporal.
+
+## Codex local 2026-07-09: shutdown coordina goal-first terminal fuera de cola
+
+Subcaso nuevo cerrado sobre el residual anterior de `BUG-165/065`: si un run
+goal-first ya no aparece como candidato ejecutable de `RunQueue`, pero conserva
+`RunControl=stop_requested`/`cancel_requested` y el `GoalWorkState` ya esta
+terminal, `/api/v0/server/shutdown` no debe publicar un falso
+`runs_requested=0` invisible.
+
+Cambio aplicado en `modulos/orquesta-app-codex-stack/server_shutdown_v0.go`,
+sin tocar core puro:
+
+- `serverShutdownExecutorV0` usa un `QueueReader` de stack que suplementa
+  candidatos goal-first terminales con control pendiente.
+- `stackShutdownActiveWorkReaderV0` publica esos estados como `goal_first`
+  activo mientras no haya backend Goal vivo, para impedir falso `ready`.
+- `stackShutdownRunControlWriterV0` completa el control forzado a
+  `stopped/canceled` cuando el goal ya esta terminal y conserva evidencia
+  `evidence-ref-server-shutdown-goal-terminal-run-control-reconciled`.
+
+Prueba nueva:
+
+- `TestStackShutdownV0ForzadoCoordinaGoalFirstTerminalFueraDeColaV0`: cola
+  vacia, `GoalWorkState=complete` con closure aceptada,
+  `RunControl=stop_requested`; el shutdown forzado acaba con
+  `runs_requested=1`, `runs_stopped=1`, `shutdown_ready=true`,
+  `ControlStatus=stopped` y `RunControl=stopped`.
+
+Verificado:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestStackShutdown(V0ForzadoCoordinaGoalFirstTerminalFueraDeCola|ActiveWorkReaderV0|RunControlWriterV0)'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack`
+- `go test -count=1 ./modulos/orquesta-server-shutdown`
+
+Pendiente: smoke real amplio con proveedor lento/stale/remoto antes de cerrar
+`BUG-165/065` global.

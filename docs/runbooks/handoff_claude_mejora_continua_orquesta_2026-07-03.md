@@ -2295,3 +2295,36 @@ Pendiente:
   cleanup real del backend, pero el shutdown final tiene `runs_requested=0`;
   queda reconciliar/probar runs goal-first fuera de cola durante shutdown amplio
   y los escenarios lentos/stale/remotos.
+
+## Actualizacion Codex 2026-07-09b: goal-first fuera de cola coordinado offline
+
+Hecho despues del corte anterior:
+
+- Se corrigio el stack Codex, no el core puro. `serverShutdownExecutorV0` ya no
+  pasa la cola directa al shutdown: usa un wrapper del adaptador que anade
+  candidatos goal-first terminales cuando el run no aparece en la cola
+  ejecutable pero `RunControl` sigue en `stop_requested` o `cancel_requested`.
+- `stackShutdownActiveWorkReaderV0` publica esos controles pendientes como
+  `goal_first` activo mientras no haya backend Goal vivo; asi no queda un
+  `ready` silencioso si la cola no lo ve.
+- `stackShutdownRunControlWriterV0` completa el control forzado a
+  `stopped/canceled` si el `GoalWorkState` ya esta terminal.
+
+Evidencia:
+
+- Test nuevo:
+  `TestStackShutdownV0ForzadoCoordinaGoalFirstTerminalFueraDeColaV0`.
+- Cubre: cola vacia, `GoalWorkState=complete` con closure aceptada,
+  `RunControl=stop_requested`, shutdown forzado, resultado
+  `runs_requested=1`, `runs_stopped=1`, `shutdown_ready=true`,
+  `RunControl=stopped` y evidencia
+  `evidence-ref-server-shutdown-goal-terminal-run-control-reconciled`.
+- Focales ejecutados:
+  `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestStackShutdown(V0ForzadoCoordinaGoalFirstTerminalFueraDeCola|ActiveWorkReaderV0|RunControlWriterV0)'`,
+  `go test -count=1 ./modulos/orquesta-app-codex-stack` y
+  `go test -count=1 ./modulos/orquesta-server-shutdown`.
+
+Pendiente para Claude:
+
+- No cierres `BUG-165/065` global aun. Falta smoke real amplio con proveedor
+  lento/stale/remoto que demuestre el mismo contrato fuera del test offline.

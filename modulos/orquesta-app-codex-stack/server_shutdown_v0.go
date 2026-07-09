@@ -2,12 +2,14 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
 	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
@@ -18,7 +20,7 @@ func serverShutdownExecutorV0(
 ) orquestamcp.MCPServerShutdownToolExecutorV0 {
 	return orquestamcp.NewMCPServerShutdownToolExecutorV0(
 		orquestaservershutdown.ServerShutdownDepsV0{
-			QueueReader:         config.Stores.RunQueue,
+			QueueReader:         stackShutdownQueueReaderFromConfigV0(config),
 			RunControlReader:    config.Stores.RunControl,
 			RunControlWriter:    stackShutdownRunControlWriterFromConfigV0(config),
 			RunCheckpointWriter: config.Stores.RunControl,
@@ -45,7 +47,20 @@ func stackShutdownRunControlWriterFromConfigV0(
 	}
 	return stackShutdownRunControlWriterV0{
 		Inner:          config.Stores.RunControl,
+		Terminal:       config.Stores.RunControl,
 		GoalStateStore: config.Stores.AppGoalStateStore,
+	}
+}
+
+func stackShutdownQueueReaderFromConfigV0(
+	config ConfigV0,
+) orquestarunqueue.RunQueueReaderPortV0 {
+	if config.Stores.RunQueue == nil {
+		return nil
+	}
+	return stackShutdownGoalFirstQueueReaderV0{
+		Inner:  config.Stores.RunQueue,
+		Config: config,
 	}
 }
 
@@ -74,6 +89,11 @@ type stackShutdownActiveWorkReaderV0 struct {
 type stackShutdownActiveWorkCleanerV0 struct {
 	Config ConfigV0
 }
+
+const (
+	serverShutdownGoalTerminalRunControlPendingEvidenceV0    = "evidence-ref-server-shutdown-goal-terminal-run-control-pending"
+	serverShutdownGoalTerminalRunControlReconciledEvidenceV0 = "evidence-ref-server-shutdown-goal-terminal-run-control-reconciled"
+)
 
 func (reader stackShutdownActiveWorkReaderV0) ReadActiveShutdownWorkV0(
 	ctx context.Context,
@@ -106,6 +126,13 @@ func (reader stackShutdownActiveWorkReaderV0) ReadActiveShutdownWorkV0(
 	if err != nil {
 		return orquestaservershutdown.ActiveShutdownWorkResultV0{}, err
 	}
+	backendObserved := stackShutdownActiveWorkResultHasGoalBackendV0(out)
+	for _, state := range states {
+		if stackShutdownGoalBackendStillRunningV0(state) {
+			backendObserved = true
+			break
+		}
+	}
 	for _, state := range states {
 		if stackShutdownGoalBackendStillRunningV0(state) {
 			evidenceRefs := stackShutdownGoalBackendEvidenceRefsV0(state)
@@ -119,6 +146,32 @@ func (reader stackShutdownActiveWorkReaderV0) ReadActiveShutdownWorkV0(
 			})
 			out.EvidenceRefs = compactStringsV0(append(out.EvidenceRefs, evidenceRefs...))
 			continue
+		}
+		if !backendObserved {
+			control, pending, err := stackShutdownTerminalGoalRunControlPendingV0(
+				ctx,
+				reader.Config.Stores.RunControl,
+				state,
+			)
+			if err != nil {
+				return orquestaservershutdown.ActiveShutdownWorkResultV0{}, err
+			}
+			if pending {
+				evidenceRefs := compactStringsV0(append(
+					append([]string(nil), state.EvidenceRefs...),
+					serverShutdownGoalTerminalRunControlPendingEvidenceV0,
+				))
+				out.ActiveWorks = append(out.ActiveWorks, orquestaservershutdown.ActiveShutdownWorkV0{
+					Kind:            "goal_first",
+					RunRef:          strings.TrimSpace(state.RunRef),
+					WorkRef:         strings.TrimSpace(state.GoalRef),
+					ExternalWorkRef: strings.TrimSpace(state.ExternalGoalRef),
+					Status:          string(orquestaruncontrol.NormalizeRunControlStatusV0(control.Status)),
+					EvidenceRefs:    evidenceRefs,
+				})
+				out.EvidenceRefs = compactStringsV0(append(out.EvidenceRefs, evidenceRefs...))
+				continue
+			}
 		}
 		if !orquestagoal.GoalWorkStatePendingObservationV0(state) {
 			continue
@@ -134,6 +187,206 @@ func (reader stackShutdownActiveWorkReaderV0) ReadActiveShutdownWorkV0(
 		out.EvidenceRefs = compactStringsV0(append(out.EvidenceRefs, state.EvidenceRefs...))
 	}
 	return out, nil
+}
+
+type stackShutdownGoalFirstQueueReaderV0 struct {
+	Inner  orquestarunqueue.RunQueueReaderPortV0
+	Config ConfigV0
+}
+
+func (reader stackShutdownGoalFirstQueueReaderV0) ListRunSchedulingCandidatesV0(
+	ctx context.Context,
+	request orquestarunqueue.RunQueueReadRequestV0,
+) ([]orquestarunqueue.RunSchedulingCandidateV0, error) {
+	candidates, err := reader.Inner.ListRunSchedulingCandidatesV0(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	supplemental, err := reader.goalFirstPendingControlCandidatesV0(ctx, candidates, request)
+	if err != nil {
+		return nil, err
+	}
+	return stackShutdownCompactQueueCandidatesV0(append(candidates, supplemental...)), nil
+}
+
+func (reader stackShutdownGoalFirstQueueReaderV0) goalFirstPendingControlCandidatesV0(
+	ctx context.Context,
+	existing []orquestarunqueue.RunSchedulingCandidateV0,
+	request orquestarunqueue.RunQueueReadRequestV0,
+) ([]orquestarunqueue.RunSchedulingCandidateV0, error) {
+	if reader.Config.Stores.AppGoalStateStore == nil ||
+		reader.Config.Stores.RunControl == nil {
+		return []orquestarunqueue.RunSchedulingCandidateV0{}, nil
+	}
+	lister, ok := reader.Config.Stores.AppGoalStateStore.(orquestagoal.GoalWorkStateListPortV0)
+	if !ok || lister == nil {
+		return []orquestarunqueue.RunSchedulingCandidateV0{}, nil
+	}
+	states, err := lister.ListGoalWorkStatesV0(ctx, orquestagoal.GoalWorkStateListRequestV0{
+		Statuses: []string{
+			orquestagoal.GoalStatusCompleteV0,
+			orquestagoal.GoalStatusBlockedV0,
+			orquestagoal.GoalStatusInvalidV0,
+		},
+		MaxItems: request.Limit,
+	})
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]struct{}{}
+	for _, candidate := range existing {
+		if runRef := strings.TrimSpace(candidate.RunRef); runRef != "" {
+			seen[runRef] = struct{}{}
+		}
+	}
+	out := make([]orquestarunqueue.RunSchedulingCandidateV0, 0, len(states))
+	for _, state := range states {
+		state, err = orquestagoal.NewGoalWorkStateV0(state)
+		if err != nil {
+			return nil, err
+		}
+		runRef := strings.TrimSpace(state.RunRef)
+		if runRef == "" || request.RunRef != "" && runRef != strings.TrimSpace(request.RunRef) {
+			continue
+		}
+		if _, exists := seen[runRef]; exists {
+			continue
+		}
+		control, pending, err := stackShutdownTerminalGoalRunControlPendingV0(ctx, reader.Config.Stores.RunControl, state)
+		if err != nil {
+			return nil, err
+		}
+		if !pending {
+			continue
+		}
+		appRef := stackShutdownGoalCandidateAppRefV0(state)
+		if len(compactStringsV0(request.AppRefs)) > 0 && !stackShutdownAppRefAllowedV0(appRef, request.AppRefs) {
+			continue
+		}
+		seen[runRef] = struct{}{}
+		out = append(out, orquestarunqueue.RunSchedulingCandidateV0{
+			RunRef:        runRef,
+			AppRef:        appRef,
+			Status:        orquestarunqueue.RunStatusRunningV0,
+			PriorityScore: 1,
+			EvidenceRefs: compactStringsV0(append(
+				append([]string(nil), state.EvidenceRefs...),
+				serverShutdownGoalTerminalRunControlPendingEvidenceV0,
+				string(orquestaruncontrol.NormalizeRunControlStatusV0(control.Status)),
+			)),
+		})
+	}
+	if out == nil {
+		return []orquestarunqueue.RunSchedulingCandidateV0{}, nil
+	}
+	return out, nil
+}
+
+func stackShutdownTerminalGoalRunControlPendingV0(
+	ctx context.Context,
+	runControl orquestaruncontrol.RunControlReaderPortV0,
+	state orquestagoal.GoalWorkStateV0,
+) (orquestaruncontrol.RunControlStateV0, bool, error) {
+	if runControl == nil || !stackShutdownGoalReadyForRunControlTerminalV0(state) {
+		return orquestaruncontrol.RunControlStateV0{}, false, nil
+	}
+	runRef := strings.TrimSpace(state.RunRef)
+	if runRef == "" {
+		return orquestaruncontrol.RunControlStateV0{}, false, nil
+	}
+	control, err := runControl.ReadRunControlStateV0(
+		ctx,
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		var notFound orquestaruncontrol.RunControlStateNotFoundErrorV0
+		if errors.As(err, &notFound) {
+			return orquestaruncontrol.RunControlStateV0{}, false, nil
+		}
+		return orquestaruncontrol.RunControlStateV0{}, false, err
+	}
+	_, pending := stackShutdownTerminalRunControlTargetV0(control.Status)
+	return control, pending, nil
+}
+
+func stackShutdownGoalReadyForRunControlTerminalV0(
+	state orquestagoal.GoalWorkStateV0,
+) bool {
+	return orquestagoal.GoalWorkResultTerminalV0(state.Status) &&
+		!orquestagoal.GoalWorkStatePendingObservationV0(state)
+}
+
+func stackShutdownTerminalRunControlTargetV0(
+	status orquestaruncontrol.RunControlStatusV0,
+) (orquestaruncontrol.RunControlStatusV0, bool) {
+	switch orquestaruncontrol.NormalizeRunControlStatusV0(status) {
+	case orquestaruncontrol.RunControlStatusStopRequestedV0:
+		return orquestaruncontrol.RunControlStatusStoppedV0, true
+	case orquestaruncontrol.RunControlStatusCancelRequestedV0:
+		return orquestaruncontrol.RunControlStatusCanceledV0, true
+	default:
+		return "", false
+	}
+}
+
+func stackShutdownActiveWorkResultHasGoalBackendV0(
+	result orquestaservershutdown.ActiveShutdownWorkResultV0,
+) bool {
+	for _, work := range result.ActiveWorks {
+		if strings.TrimSpace(work.Kind) == "goal_backend" ||
+			strings.TrimSpace(work.Status) == orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0 {
+			return true
+		}
+	}
+	return false
+}
+
+func stackShutdownGoalCandidateAppRefV0(
+	state orquestagoal.GoalWorkStateV0,
+) string {
+	return firstNonEmptyQueuedSourceV0(
+		state.Spec.ProjectRef,
+		state.Spec.DomainRef,
+		state.RunRef,
+	)
+}
+
+func stackShutdownAppRefAllowedV0(
+	appRef string,
+	allowed []string,
+) bool {
+	appRef = strings.TrimSpace(appRef)
+	for _, candidate := range allowed {
+		if appRef != "" && appRef == strings.TrimSpace(candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func stackShutdownCompactQueueCandidatesV0(
+	candidates []orquestarunqueue.RunSchedulingCandidateV0,
+) []orquestarunqueue.RunSchedulingCandidateV0 {
+	out := make([]orquestarunqueue.RunSchedulingCandidateV0, 0, len(candidates))
+	seen := map[string]struct{}{}
+	for _, candidate := range candidates {
+		candidate.RunRef = strings.TrimSpace(candidate.RunRef)
+		candidate.AppRef = strings.TrimSpace(candidate.AppRef)
+		candidate.Status = strings.TrimSpace(candidate.Status)
+		candidate.EvidenceRefs = compactStringsV0(candidate.EvidenceRefs)
+		if candidate.RunRef == "" {
+			continue
+		}
+		if _, exists := seen[candidate.RunRef]; exists {
+			continue
+		}
+		seen[candidate.RunRef] = struct{}{}
+		out = append(out, candidate)
+	}
+	if out == nil {
+		return []orquestarunqueue.RunSchedulingCandidateV0{}
+	}
+	return out
 }
 
 func stackShutdownActiveWorkReadersFromGoalBackendV0(
@@ -271,6 +524,7 @@ func stackShutdownGoalBackendEvidenceRefsV0(state orquestagoal.GoalWorkStateV0) 
 
 type stackShutdownRunControlWriterV0 struct {
 	Inner          orquestaruncontrol.RunControlWriterPortV0
+	Terminal       orquestaruncontrol.RunControlTerminalWriterPortV0
 	GoalStateStore orquestagoal.GoalWorkStateStorePortV0
 }
 
@@ -301,8 +555,32 @@ func (writer stackShutdownRunControlWriterV0) StopRunV0(
 	if writer.Inner == nil {
 		return orquestaruncontrol.RunControlStateV0{}, nil
 	}
+	if command.Forced {
+		if completed, ok, err := writer.completeTerminalGoalRunControlV0(
+			ctx,
+			command.RunRef,
+			orquestaruncontrol.RunControlStatusStoppedV0,
+			command.RequestedBy,
+			command.Reason,
+			command.IdempotencyKey,
+			command.EvidenceRefs,
+		); ok || err != nil {
+			return completed, err
+		}
+	}
 	state, err := writer.Inner.StopRunV0(ctx, command)
 	if err == nil && command.Forced {
+		if completed, ok, completeErr := writer.completeTerminalGoalRunControlV0(
+			ctx,
+			command.RunRef,
+			orquestaruncontrol.RunControlStatusStoppedV0,
+			command.RequestedBy,
+			command.Reason,
+			command.IdempotencyKey,
+			command.EvidenceRefs,
+		); ok || completeErr != nil {
+			return completed, completeErr
+		}
 		writer.reconcileForcedGoalStateV0(ctx, command)
 	}
 	return state, err
@@ -315,8 +593,32 @@ func (writer stackShutdownRunControlWriterV0) CancelRunV0(
 	if writer.Inner == nil {
 		return orquestaruncontrol.RunControlStateV0{}, nil
 	}
+	if command.Forced {
+		if completed, ok, err := writer.completeTerminalGoalRunControlV0(
+			ctx,
+			command.RunRef,
+			orquestaruncontrol.RunControlStatusCanceledV0,
+			command.RequestedBy,
+			command.Reason,
+			command.IdempotencyKey,
+			command.EvidenceRefs,
+		); ok || err != nil {
+			return completed, err
+		}
+	}
 	state, err := writer.Inner.CancelRunV0(ctx, command)
 	if err == nil && command.Forced {
+		if completed, ok, completeErr := writer.completeTerminalGoalRunControlV0(
+			ctx,
+			command.RunRef,
+			orquestaruncontrol.RunControlStatusCanceledV0,
+			command.RequestedBy,
+			command.Reason,
+			command.IdempotencyKey,
+			command.EvidenceRefs,
+		); ok || completeErr != nil {
+			return completed, completeErr
+		}
 		writer.reconcileForcedGoalStateV0(ctx, orquestaruncontrol.StopRunCommandV0{
 			RunRef:       command.RunRef,
 			RequestedBy:  command.RequestedBy,
@@ -326,6 +628,54 @@ func (writer stackShutdownRunControlWriterV0) CancelRunV0(
 		})
 	}
 	return state, err
+}
+
+func (writer stackShutdownRunControlWriterV0) completeTerminalGoalRunControlV0(
+	ctx context.Context,
+	runRef string,
+	target orquestaruncontrol.RunControlStatusV0,
+	requestedBy string,
+	reason string,
+	idempotencyKey string,
+	evidenceRefs []string,
+) (orquestaruncontrol.RunControlStateV0, bool, error) {
+	if writer.Terminal == nil || writer.GoalStateStore == nil {
+		return orquestaruncontrol.RunControlStateV0{}, false, nil
+	}
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" {
+		return orquestaruncontrol.RunControlStateV0{}, false, nil
+	}
+	state, err := writer.GoalStateStore.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil {
+		return orquestaruncontrol.RunControlStateV0{}, false, nil
+	}
+	state, err = orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		return orquestaruncontrol.RunControlStateV0{}, false, err
+	}
+	if !stackShutdownGoalReadyForRunControlTerminalV0(state) {
+		return orquestaruncontrol.RunControlStateV0{}, false, nil
+	}
+	completed, err := writer.Terminal.CompleteRunControlV0(ctx, orquestaruncontrol.CompleteRunControlCommandV0{
+		RunRef:       runRef,
+		TargetStatus: target,
+		RequestedBy:  firstNonEmptyQueuedSourceV0(requestedBy, "orquesta-server-shutdown"),
+		Reason: firstNonEmptyQueuedSourceV0(
+			reason,
+			"server shutdown reconciled terminal goal-first run control",
+		),
+		IdempotencyKey: firstNonEmptyQueuedSourceV0(
+			idempotencyKey,
+			"idem-server-shutdown-goal-terminal-run-control-"+
+				string(target)+"-"+safeStackShutdownRefPartV0(runRef),
+		),
+		EvidenceRefs: compactStringsV0(append(
+			append(append([]string(nil), evidenceRefs...), state.EvidenceRefs...),
+			serverShutdownGoalTerminalRunControlReconciledEvidenceV0,
+		)),
+	})
+	return completed, true, err
 }
 
 func (writer stackShutdownRunControlWriterV0) reconcileForcedGoalStateV0(
