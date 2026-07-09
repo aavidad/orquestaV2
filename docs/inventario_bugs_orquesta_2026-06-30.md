@@ -167,6 +167,19 @@ antes de su cierre posterior:
   cubre success, config ausente, no-fast-forward e identidad/hash mismatch; el
   guard Go limita copia/arranque gestionado a `ctl`/`deploy`. No ejecuta remoto
   real ni cierra la verificacion productiva externa.
+- `BUG-ORQ-20260709-202` queda cerrado en harness local: el smoke recursivo
+  `scripts/smoke_codex_director_recursive_wave.sh` lanzaba
+  `codex-launch-director-wave` sin el breakglass auditado que exige el guard
+  vigente de lanzamientos no gestionados, por lo que fallaba con
+  `unmanaged_launch_blocked` aunque el cierre recursivo offline estuviera verde;
+  despues aparecieron el guard equivalente de purga
+  `runtime_purge_confirmation_required` y aserciones stale del harness contra
+  `registry_path` publico y `reasoning_effort=high`.
+  Cierre: el smoke declara `--allow-unmanaged-launch`,
+  `--unmanaged-launch-reason`, `--confirm-unmanaged-launch=recursive-wave-smoke`
+  y `--confirm-purge-runtime=recursive-wave-smoke`; valida rutas internas desde
+  el registry local derivado de `wave_ref` y permite `medium`/`high` sin aceptar
+  `xhigh`.
 - Reejeucion real 2026-07-04 noche 10:
   `smoke_goal_first_checkpoint_only_high_consumption_real=ok` con
   `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-6c8dc4317888c8e25bb0e91f7f910aab`,

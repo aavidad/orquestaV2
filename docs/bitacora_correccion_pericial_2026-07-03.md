@@ -94,6 +94,20 @@ Cobertura: `scripts/test_orquesta_server_deploy.sh` con fakes para success,
 gestionados fuera de `ctl`/`deploy`; runbook
 `docs/runbooks/orquesta_server_deploy_atomico_2026-07-09.md`.
 
+### 2026-07-09 — BUG-ORQ-20260709-202 smoke recursivo alineado con guard unmanaged
+
+Durante la verificacion local inside-out, `go test -count=1 ./...` paso y el
+smoke de ola operativa fake paso, pero
+`scripts/smoke_codex_director_recursive_wave.sh` fallo con
+`unmanaged_launch_blocked`. La causa no era el nucleo recursivo: el comando
+`codex-launch-director-wave` ya exige breakglass auditado para launches fuera
+del servidor/cola de Orquesta y confirmacion explicita para `--purge-runtime`.
+Se actualizo el smoke para declarar `--allow-unmanaged-launch`, razon auditada,
+confirmacion unmanaged por `wave_ref` y confirmacion de purga por `wave_ref`.
+Tambien se alineo el validador con el resumen publico `refs_only`: las rutas
+internas se comprueban leyendo los registries locales por `wave_ref`, y el
+wrapper acepta `medium`/`high` sin permitir `xhigh`.
+
 ### 2026-07-03 (tarde) — claude-fable-5: pilotaje real ejecutado, 3 bugs nuevos encontrados, 1 arreglado
 
 **El pilotaje funcionó como prueba de fuego: Orquesta NO pudo lanzar el goal

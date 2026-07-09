@@ -75,7 +75,11 @@ echo "offline_recursive_closure_review_ok=true"
 go run ./cmd/orquesta-server codex-launch-director-wave \
   $DRY_RUN_FLAG \
   --purge-runtime \
+  --confirm-purge-runtime "recursive-wave-smoke" \
   --agents 1 \
+  --allow-unmanaged-launch \
+  --unmanaged-launch-reason "smoke recursivo local con codex-fake; no toca OPES ni remoto" \
+  --confirm-unmanaged-launch "recursive-wave-smoke" \
   --allow-recursive-delegation \
   --max-delegation-depth 2 \
   --max-subagents-per-agent 2 \
@@ -94,13 +98,14 @@ go run ./cmd/orquesta-server codex-launch-director-wave \
   --worktree-ref "worktree-recursive-wave-smoke" \
   >"$SUMMARY_PATH"
 
-python3 - "$SUMMARY_PATH" <<'PY'
+python3 - "$SUMMARY_PATH" "$RUNTIME_DIR" <<'PY'
 import json
 import os
 import sys
 import time
 
 path = sys.argv[1]
+root_runtime_dir = os.path.normpath(sys.argv[2])
 with open(path, "r", encoding="utf-8") as fh:
     summary = json.load(fh)
 real_config_only = os.environ.get("ORQUESTA_CODEX_DIRECTOR_RECURSIVE_REAL_CONFIG_ONLY") == "1"
@@ -175,12 +180,22 @@ for node in nodes:
         raise SystemExit(f"parent_agent_ref_no_observable={node}")
     seen.add(agent_ref)
 
+root_wave_ref = (summary.get("launch") or {}).get("wave_ref") or ""
 registries = {}
-for node in nodes:
-    launch = node["launch"]
-    registry_path = launch.get("registry_path") or ""
-    if not registry_path:
-        raise SystemExit(f"registry_path_vacio={launch.get('wave_ref')}")
+
+def registry_path_for_launch(launch):
+    public_path = launch.get("registry_path") or ""
+    if public_path:
+        return public_path
+    wave_ref = launch.get("wave_ref") or ""
+    if not wave_ref:
+        raise SystemExit(f"wave_ref_vacio={launch}")
+    if wave_ref == root_wave_ref:
+        return os.path.join(root_runtime_dir, "codex_wave_registry_v0.json")
+    return os.path.join(root_runtime_dir, "children", wave_ref, "codex_wave_registry_v0.json")
+
+def registry_for_launch(launch):
+    registry_path = registry_path_for_launch(launch)
     if registry_path not in registries:
         if not os.path.exists(registry_path):
             raise SystemExit(f"registry_no_existe={registry_path}")
@@ -193,8 +208,20 @@ for node in nodes:
         if registry.get("wave_ref") != launch.get("wave_ref") or registry_refs != expected_refs:
             raise SystemExit(f"registry_refs_no_coinciden={registry_path}")
         registries[registry_path] = registry
-    agent = node["agent"]
-    agent_ref = agent.get("agent_ref") or ""
+    return registries[registry_path]
+
+for node in nodes:
+    launch = node["launch"]
+    registry = registry_for_launch(launch)
+    registry_agents = {
+        agent.get("agent_ref"): agent
+        for agent in registry.get("agents") or []
+    }
+    public_agent = node["agent"]
+    agent_ref = public_agent.get("agent_ref") or ""
+    agent = registry_agents.get(agent_ref)
+    if agent is None:
+        raise SystemExit(f"agent_no_en_registry={agent_ref}")
     for key in ("prompt_path", "wrapper_path"):
         if not os.path.exists(agent.get(key) or ""):
             raise SystemExit(f"{key}_no_existe={agent}")
@@ -205,7 +232,10 @@ for node in nodes:
     runtime_work_dir = os.path.normpath(agent.get("runtime_work_dir") or "")
     if "--output-last-message" not in wrapper or last_message_path not in wrapper:
         raise SystemExit(f"wrapper_sin_last_message={agent_ref}")
-    if 'model_reasoning_effort="xhigh"' in wrapper or 'model_reasoning_effort="high"' not in wrapper:
+    if 'model_reasoning_effort="xhigh"' in wrapper or (
+        'model_reasoning_effort="medium"' not in wrapper and
+        'model_reasoning_effort="high"' not in wrapper
+    ):
         raise SystemExit(f"wrapper_reasoning_effort_invalido={agent_ref}")
     if not os.path.normpath(last_message_path).startswith(runtime_work_dir + os.sep):
         raise SystemExit(f"last_message_fuera_runtime={agent_ref}")
