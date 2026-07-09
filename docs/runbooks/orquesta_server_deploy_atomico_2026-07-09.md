@@ -8,6 +8,13 @@ compila desde un arbol exportado, calcula `sha256`, conserva backup del binario
 previo, hace swap atomico por `mv`, arranca solo mediante
 `scripts/orquesta_server_ctl.sh start` y deja recibo durable en el state dir.
 
+Actualizacion 2026-07-09: el recibo tambien cubre fallos no manejados por fase
+(`deploy_unhandled_failure`). La verificacion runtime ya no es opcional: `ctl
+status` debe responder, y `status`, readiness o supervisor deben exponer un
+`sha256` del binario vivo que coincida con el instalado. Si se configura una URL
+de verificacion, una respuesta vacia, inalcanzable o sin readiness positiva
+bloquea el despliegue.
+
 Uso minimo:
 
 ```bash
@@ -31,9 +38,20 @@ Contrato operativo:
 - `deploy_runtime_identity_mismatch` bloquea si `status`, readiness o supervisor
   exponen `binary_sha256`, `runtime_binary_sha256` u
   `orquesta_server_sha256` distinto del binario instalado.
+- `deploy_runtime_identity_missing` bloquea si ninguna superficie de estado
+  expone identidad del binario vivo.
+- `deploy_status_failed` bloquea si `scripts/orquesta_server_ctl.sh status`
+  falla tras arrancar.
+- `deploy_readiness_unreachable` bloquea si una URL configurada de verificacion
+  no responde.
 - El recibo queda en
   `$ORQUESTA_DEPLOY_STATE_DIR/orquesta_server_deploy_receipt_v0.json` o, si no
   se define, en `$ORQUESTA_CTL_HOME/state/`.
+
+El swap de binario es atomico; el despliegue completo no es una transaccion con
+rollback automatico. Si `start` o la verificacion final fallan, queda backup del
+binario previo y recibo `failed` para que el operador restaure de forma
+gobernada.
 
 No ejecutar comandos remotos desde este script. La promocion a un host real debe
 inyectar rutas locales ya montadas o ejecutarse dentro del host objetivo con

@@ -17,8 +17,9 @@ Resultado por defecto:
 ```
 
 El JSON incluye `exit_code`, `status`, `phase_reached`, `phases`, refs
-observadas, duracion y ruta del log. La retencion borra resultados y logs con
-mas de 30 dias; ajustar con `ORQUESTA_NIGHTLY_RETENTION_DAYS`.
+observadas, ref git, estado dirty/clean, notificacion terminal, duracion y ruta
+del log. La retencion borra resultados y logs con mas de 30 dias; ajustar con
+`ORQUESTA_NIGHTLY_RETENTION_DAYS`.
 
 ## Preflight
 
@@ -107,6 +108,25 @@ Environment=ORQUESTA_NIGHTLY_REAL_CONFIRM=1
 
 No poner variables OPES en esta unidad.
 
+## Notificacion Telegram
+
+El nightly lee la configuracion canonica de Telegram desde:
+
+1. `ORQUESTA_CTL_CONFIG`, si existe.
+2. `$ORQUESTA_CTL_WORKDIR/orquesta.config.json`, si existe.
+3. `./orquesta.config.json`, si existe.
+
+Si `telegram_operator.enabled=true`, el script envia un mensaje terminal por
+Bot API con `status`, `mode`, `phase`, `run_id`, ref git, dirty/clean y ruta del
+resultado. El token y el target salen solo de `telegram_operator.*`; no hay
+variables de entorno para token/chat. Si Telegram esta activado pero incompleto
+o la API rechaza el envio, un smoke que iba verde pasa a `failed` con
+`phase_reached=notification_failed`.
+
+Para tests locales con Bot API falso se puede inyectar
+`ORQUESTA_NIGHTLY_TELEGRAM_BOT_API_BASE_URL`; no usarla como configuracion
+productiva.
+
 ## cron de usuario
 
 Preflight diario:
@@ -133,6 +153,10 @@ Estados esperados:
 - `blocked`: falta configuracion local o hay entorno OPES/productivo.
 - `failed`: el smoke base arranco y fallo.
 
+Nota: `ok` en modo `preflight` no demuestra ejecucion real de proveedor. Para
+cerrar un nightly real de campo debe constar `mode=real`,
+`ORQUESTA_NIGHTLY_REAL_CONFIRM=1`, `git.ref` y notificacion Telegram recibida.
+
 ## Verificacion local
 
 Sin cuota:
@@ -142,4 +166,4 @@ bash -n scripts/orquesta_smoke_nightly.sh scripts/test_orquesta_smoke_nightly.sh
 scripts/test_orquesta_smoke_nightly.sh
 ```
 
-El guard usa un smoke falso y escribe en un directorio temporal.
+El guard usa un smoke falso, Bot API falso y escribe en un directorio temporal.

@@ -45,6 +45,27 @@ SH
   chmod +x "$ctl"
 }
 
+make_ctl_status_fails() {
+  ctl="$1"
+  cat >"$ctl" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+case "\${1:-}" in
+start)
+  printf 'start %s\n' "\${ORQUESTA_CTL_BINARY:-}" >>"$workdir/ctl.log"
+  ;;
+status)
+  echo "status failed" >&2
+  exit 7
+  ;;
+*)
+  exit 2
+  ;;
+esac
+SH
+  chmod +x "$ctl"
+}
+
 run_deploy() {
   case_dir="$1"
   repo="$case_dir/repo"
@@ -86,6 +107,8 @@ test_success() {
   run_deploy "$case_dir" >/tmp/orquesta-deploy-success.out
   grep -q 'orquesta_server_deploy=ok' /tmp/orquesta-deploy-success.out
   grep -q "start $case_dir/runtime/orquesta-server" "$workdir/ctl.log"
+  [ -x "$case_dir/runtime/orquesta-server" ]
+  grep -q 'deploy-test-binary' "$case_dir/runtime/orquesta-server"
   assert_receipt_status "$case_dir/state/orquesta_server_deploy_receipt_v0.json" ok ""
 }
 
@@ -137,9 +160,39 @@ test_deploy_runtime_identity_mismatch() {
   assert_receipt_status "$case_dir/state/orquesta_server_deploy_receipt_v0.json" failed deploy_runtime_identity_mismatch
 }
 
+test_deploy_runtime_identity_missing() {
+  case_dir="$workdir/sha-missing"
+  make_repo "$case_dir/repo"
+  mkdir -p "$case_dir"
+  make_ctl "$case_dir/ctl.sh" ""
+  set +e
+  run_deploy "$case_dir" >/tmp/orquesta-deploy-sha-missing.out 2>&1
+  code=$?
+  set -e
+  [ "$code" -ne 0 ]
+  grep -q 'reason_code=deploy_runtime_identity_missing' /tmp/orquesta-deploy-sha-missing.out
+  assert_receipt_status "$case_dir/state/orquesta_server_deploy_receipt_v0.json" failed deploy_runtime_identity_missing
+}
+
+test_deploy_status_failed() {
+  case_dir="$workdir/status-failed"
+  make_repo "$case_dir/repo"
+  mkdir -p "$case_dir"
+  make_ctl_status_fails "$case_dir/ctl.sh"
+  set +e
+  run_deploy "$case_dir" >/tmp/orquesta-deploy-status-failed.out 2>&1
+  code=$?
+  set -e
+  [ "$code" -ne 0 ]
+  grep -q 'reason_code=deploy_status_failed' /tmp/orquesta-deploy-status-failed.out
+  assert_receipt_status "$case_dir/state/orquesta_server_deploy_receipt_v0.json" failed deploy_status_failed
+}
+
 bash -n "$script"
 test_success
 test_deploy_config_missing
 test_deploy_not_fast_forward
 test_deploy_runtime_identity_mismatch
+test_deploy_runtime_identity_missing
+test_deploy_status_failed
 echo "orquesta_server_deploy_tests=ok"

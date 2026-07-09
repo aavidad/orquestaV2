@@ -3,7 +3,7 @@
 # No toca remoto: opera sobre repo/worktree/binario recibidos por env y arranca
 # siempre via scripts/orquesta_server_ctl.sh.
 
-set -euo pipefail
+set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPLOY_REPO="${ORQUESTA_DEPLOY_REPO:-$ROOT}"
@@ -23,6 +23,9 @@ tmp_root=""
 target_sha=""
 binary_sha=""
 status_text=""
+phase="init"
+receipt_written="0"
+writing_receipt="0"
 
 cleanup() {
   if [ -n "$tmp_root" ] && [ -d "$tmp_root" ]; then
@@ -30,6 +33,15 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+on_error() {
+  exit_code="$?"
+  if [ "${receipt_written:-0}" != "1" ] && [ "${writing_receipt:-0}" != "1" ]; then
+    write_receipt "failed" "deploy_unhandled_failure" "phase=$phase exit_code=$exit_code"
+  fi
+  exit "$exit_code"
+}
+trap on_error ERR
 
 json_string() {
   python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"
@@ -39,6 +51,7 @@ write_receipt() {
   status="$1"
   reason_code="${2:-}"
   message="${3:-}"
+  writing_receipt="1"
   mkdir -p "$DEPLOY_STATE_DIR"
   tmp_receipt="$DEPLOY_RECEIPT.tmp.$$"
   python3 - "$status" "$reason_code" "$message" "$DEPLOY_REF" "$target_sha" "$binary_sha" "$DEPLOY_BINARY" "$status_text" >"$tmp_receipt" <<'PY'
@@ -63,6 +76,8 @@ receipt = {
 print(json.dumps(receipt, sort_keys=True))
 PY
   mv "$tmp_receipt" "$DEPLOY_RECEIPT"
+  receipt_written="1"
+  writing_receipt="0"
 }
 
 fail() {
@@ -153,11 +168,12 @@ PY
 }
 
 verify_runtime_identity() {
-  status_text="$("$DEPLOY_CTL" status 2>&1 || true)"
+  status_text="$("$DEPLOY_CTL" status 2>&1)" || fail "deploy_status_failed" "ctl status fallo"
   combined="$status_text"
   for url in "$DEPLOY_STATUS_URL" "$DEPLOY_READINESS_URL" "$DEPLOY_SUPERVISOR_URL"; do
     if [ -n "$url" ] && command -v curl >/dev/null 2>&1; then
-      body="$(curl -fsS -m 8 "$url" 2>/dev/null || true)"
+      body="$(curl -fsS -m 8 "$url" 2>/dev/null)" || fail "deploy_readiness_unreachable" "$url no responde"
+      [ -n "$body" ] || fail "deploy_readiness_unreachable" "$url respuesta vacia"
       combined="$combined
 $body"
       if [ -n "$body" ]; then
@@ -166,6 +182,8 @@ $body"
         verify_json_bool_if_present "$body" "supervisor" "true" || fail "deploy_supervisor_failed" "$url supervisor=false"
         verify_json_bool_if_present "$body" "supervisor_ok" "true" || fail "deploy_supervisor_failed" "$url supervisor_ok=false"
       fi
+    elif [ -n "$url" ]; then
+      fail "deploy_curl_missing" "curl requerido para verificar $url"
     fi
   done
   status_text="$combined"
@@ -190,19 +208,30 @@ if match:
     print(match.group(1))
 PY
 )"
+  if [ -z "$observed_sha" ]; then
+    fail "deploy_runtime_identity_missing" "status/readiness no exponen sha256 del binario"
+  fi
   if [ -n "$observed_sha" ] && [ "$observed_sha" != "$binary_sha" ]; then
     fail "deploy_runtime_identity_mismatch" "esperado=$binary_sha observado=$observed_sha"
   fi
 }
 
 main() {
+  phase="resolve_config"
   resolve_config
+  phase="sync_worktree"
   sync_worktree_ff_only
+  phase="build"
   build_from_tree
+  phase="swap_binary"
   swap_binary
+  phase="start"
   ORQUESTA_CTL_BINARY="$DEPLOY_BINARY" "$DEPLOY_CTL" start
+  phase="verify_runtime_identity"
   verify_runtime_identity
+  phase="write_receipt_ok"
   write_receipt "ok" "" ""
+  phase="done"
   echo "orquesta_server_deploy=ok ref=$DEPLOY_REF git_sha=$target_sha binary_sha256=$binary_sha receipt=$DEPLOY_RECEIPT"
 }
 

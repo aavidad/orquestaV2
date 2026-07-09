@@ -26,6 +26,29 @@ code_audit_sqlite=""
 mode="preflight"
 phase="init"
 finalized="0"
+git_ref="$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || true)"
+git_branch="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+git_dirty="unknown"
+notification_status="not_attempted"
+notification_receipt_ref=""
+notification_reason=""
+telegram_config_path=""
+
+if [[ -n "$git_ref" ]]; then
+  if git -C "$repo_root" diff --quiet 2>/dev/null && git -C "$repo_root" diff --cached --quiet 2>/dev/null; then
+    git_dirty="clean"
+  else
+    git_dirty="dirty"
+  fi
+fi
+
+if [[ -n "${ORQUESTA_CTL_CONFIG:-}" ]]; then
+  telegram_config_path="$ORQUESTA_CTL_CONFIG"
+elif [[ -n "${ORQUESTA_CTL_WORKDIR:-}" && -f "$ORQUESTA_CTL_WORKDIR/orquesta.config.json" ]]; then
+  telegram_config_path="$ORQUESTA_CTL_WORKDIR/orquesta.config.json"
+elif [[ -f "$repo_root/orquesta.config.json" ]]; then
+  telegram_config_path="$repo_root/orquesta.config.json"
+fi
 
 if [[ "${ORQUESTA_NIGHTLY_REAL_CONFIRM:-0}" == "1" ]]; then
   mode="real"
@@ -76,7 +99,13 @@ write_result_json() {
     "$started_at" \
     "$finished_at" \
     "$duration_seconds" \
-    "$smoke_script" <<'PY'
+    "$smoke_script" \
+    "$git_ref" \
+    "$git_branch" \
+    "$git_dirty" \
+    "$notification_status" \
+    "$notification_receipt_ref" \
+    "$notification_reason" <<'PY'
 import json
 import os
 import re
@@ -95,7 +124,13 @@ import sys
     finished_at,
     duration_seconds,
     smoke_script,
-) = sys.argv[1:13]
+    git_ref,
+    git_branch,
+    git_dirty,
+    notification_status,
+    notification_receipt_ref,
+    notification_reason,
+) = sys.argv[1:19]
 
 phases = []
 refs = {}
@@ -131,6 +166,10 @@ for raw in lines:
         add_phase("code_audit_ratchet_ok")
     if line.startswith("code_audit_ratchet=failed"):
         add_phase("code_audit_ratchet_failed")
+    if line.startswith("nightly_notification_status=sent"):
+        add_phase("notification_sent")
+    if line.startswith("nightly_notification_status=blocked") or line.startswith("nightly_notification_status=failed"):
+        add_phase("notification_failed")
     if "smoke_goal_first_app_server_preflight=blocked" in line:
         add_phase("preflight_blocked")
     if "Codex app-server preparado" in line or "daemon Codex app-server accesible" in line:
@@ -180,8 +219,18 @@ payload = {
     "phase_reached": phases[-1],
     "phases": phases,
     "refs": refs,
+    "git": {
+        "ref": git_ref,
+        "branch": git_branch,
+        "dirty": git_dirty,
+    },
     "command": os.path.relpath(smoke_script, os.getcwd()) if os.path.isabs(smoke_script) else smoke_script,
     "log_file": log_file,
+    "notification": {
+        "status": notification_status,
+        "receipt_ref": notification_receipt_ref,
+        "reason": notification_reason,
+    },
     "notes": [
         "default mode is preflight and must not consume provider quota",
         "real mode requires ORQUESTA_NIGHTLY_REAL_CONFIRM=1 in the caller environment",
@@ -211,6 +260,125 @@ with open(tmp, "w", encoding="utf-8") as fh:
     fh.write("\n")
 os.replace(tmp, result_file)
 PY
+}
+
+send_terminal_notification() {
+  local exit_code="$1"
+  local status
+  status="$(json_result_status "$exit_code")"
+  local text
+  text="Orquesta nightly | status=$status | mode=$mode | phase=$phase | run_id=$run_id | git=${git_branch:-unknown}@${git_ref:-unknown} dirty=$git_dirty | result=$result_file"
+  python3 - \
+    "$telegram_config_path" \
+    "$status" \
+    "$run_id" \
+    "$text" <<'PY'
+import hashlib
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+config_path, status, run_id, text = sys.argv[1:5]
+
+def line(status_value, reason="", receipt=""):
+    print("nightly_notification_status=" + status_value)
+    if reason:
+        print("nightly_notification_reason=" + reason)
+    if receipt:
+        print("nightly_notification_receipt_ref=" + receipt)
+
+if not config_path:
+    line("disabled", "config_missing")
+    raise SystemExit(0)
+
+try:
+    with open(config_path, encoding="utf-8") as fh:
+        config = json.load(fh)
+except FileNotFoundError:
+    line("disabled", "config_missing")
+    raise SystemExit(0)
+except (OSError, json.JSONDecodeError):
+    line("blocked", "config_invalid")
+    raise SystemExit(3)
+
+if str(config.get("schema_version") or "").strip() != "orquesta_config.v0":
+    line("blocked", "config_schema_unsupported")
+    raise SystemExit(3)
+
+telegram = config.get("telegram_operator") or {}
+if not telegram.get("enabled", False):
+    line("disabled", "telegram_operator_disabled")
+    raise SystemExit(0)
+
+token = str(telegram.get("token") or "").strip()
+target = str(telegram.get("notification_target_ref") or "").strip()
+if not target:
+    chats = telegram.get("authorized_chat_refs") or []
+    if isinstance(chats, list) and chats:
+        target = str(chats[0] or "").strip()
+
+missing = []
+if not token:
+    missing.append("token")
+if not target.startswith("telegram:") or not target.removeprefix("telegram:").strip():
+    missing.append("notification_target_ref")
+if missing:
+    line("blocked", "telegram_config_incomplete:" + ",".join(missing))
+    raise SystemExit(3)
+
+chat_id = target.removeprefix("telegram:").strip()
+payload = {
+    "chat_id": chat_id,
+    "text": text[:3500],
+    "disable_web_page_preview": True,
+}
+base_url = os.environ.get("ORQUESTA_NIGHTLY_TELEGRAM_BOT_API_BASE_URL", "https://api.telegram.org").rstrip("/")
+url = base_url + "/bot" + token + "/sendMessage"
+request = urllib.request.Request(
+    url,
+    data=json.dumps(payload).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+try:
+    with urllib.request.urlopen(request, timeout=8) as response:
+        if response.status < 200 or response.status >= 300:
+            line("failed", "telegram_bot_api_send_rejected")
+            raise SystemExit(4)
+except urllib.error.HTTPError:
+    line("failed", "telegram_bot_api_send_rejected")
+    raise SystemExit(4)
+except Exception:
+    line("failed", "telegram_bot_api_send_failed")
+    raise SystemExit(4)
+
+receipt = "evidence-ref-nightly-telegram-send-" + hashlib.sha1(run_id.encode("utf-8")).hexdigest()[:12]
+line("sent", receipt=receipt)
+PY
+}
+
+capture_terminal_notification() {
+  local exit_code="$1"
+  local output notify_status line
+  output="$(send_terminal_notification "$exit_code" 2>&1)"
+  notify_status=$?
+  printf '%s\n' "$output" | tee -a "$log_file"
+  while IFS= read -r line; do
+    case "$line" in
+      nightly_notification_status=*)
+        notification_status="${line#nightly_notification_status=}"
+        ;;
+      nightly_notification_reason=*)
+        notification_reason="${line#nightly_notification_reason=}"
+        ;;
+      nightly_notification_receipt_ref=*)
+        notification_receipt_ref="${line#nightly_notification_receipt_ref=}"
+        ;;
+    esac
+  done <<<"$output"
+  return "$notify_status"
 }
 
 print_phase_diff_if_failed() {
@@ -270,15 +438,22 @@ PY
 
 finish() {
   local exit_code="$1"
-  write_result_json "$exit_code" "$phase" || true
+  local final_exit_code="$exit_code"
+  capture_terminal_notification "$exit_code"
+  notification_exit_code=$?
+  if [[ "$exit_code" == "0" && "$notification_exit_code" != "0" ]]; then
+    phase="notification_failed"
+    final_exit_code="$notification_exit_code"
+  fi
+  write_result_json "$final_exit_code" "$phase" || true
   echo "nightly_result_json=$result_file"
-  print_phase_diff_if_failed "$exit_code" || true
+  print_phase_diff_if_failed "$final_exit_code" || true
   finalized="1"
-  exit "$exit_code"
+  exit "$final_exit_code"
 }
 
 trap 'if [[ "$finalized" != "1" ]]; then write_result_json "$?" "$phase" || true; fi' EXIT
-trap 'phase="interrupted"; exit 130' INT TERM
+trap 'phase="interrupted"; finish 130' INT TERM
 
 if ! command -v python3 >/dev/null 2>&1; then
   echo "python3 es requerido para escribir resultado JSON" >&2

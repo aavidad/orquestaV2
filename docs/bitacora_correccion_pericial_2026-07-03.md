@@ -6314,3 +6314,55 @@ Lectura:
 
 - En local, el conector OPES queda validado en fake-residente. No se toca OPES
   productivo ni se declara cerrado el residual externo.
+
+## Orquesta local 2026-07-09: cierre E1/E2 de borde operativo
+
+Siguiendo la regla dentro -> fuera, despues de nucleo local, runtime local y
+OPES fake-residente se revisaron los bordes operativos E1/E2 con subagentes
+read-only.
+
+Hallazgos:
+
+- E1 deploy atomico tenia falsos verdes: `ctl status` podia fallar sin bloquear,
+  URLs de readiness configuradas podian no responder sin bloquear, y si ninguna
+  superficie exponia `sha256` del binario vivo el deploy seguia como `ok`.
+  Tambien habia fallos por `set -e` sin recibo durable.
+- E2 nightly guardaba JSON/log, pero no registraba ref git ni notificaba
+  Telegram. Si Telegram estaba activado pero incompleto, no habia fallo terminal
+  visible.
+
+Cambios:
+
+- `scripts/orquesta_server_deploy.sh` registra fase, usa recibo
+  `deploy_unhandled_failure` para roturas no controladas, exige `ctl status`,
+  bloquea readiness configurada inalcanzable y requiere identidad runtime
+  `binary_sha256`, `runtime_binary_sha256` u `orquesta_server_sha256`.
+- `scripts/test_orquesta_server_deploy.sh` comprueba que el binario se instala
+  realmente y cubre `deploy_status_failed` y
+  `deploy_runtime_identity_missing`.
+- `scripts/orquesta_smoke_nightly.sh` anade `git.ref`, `git.branch`,
+  `git.dirty` al resultado JSON y envia notificacion terminal por Bot API si
+  `telegram_operator.enabled=true` en `orquesta.config.json`. El token/chat
+  siguen saliendo solo de config canonica; no se reintroducen envs Telegram de
+  secreto. Si Telegram activado esta roto, el cierre pasa a
+  `notification_failed`.
+- `scripts/test_orquesta_smoke_nightly.sh` cubre Bot API falso, envio correcto,
+  config Telegram incompleta y presencia de git/ref en JSON.
+
+Lectura:
+
+- No se toca core/workflow/domain-work. Deploy y nightly son composicion
+  operativa exterior.
+- `ok` en preflight nightly sigue siendo solo preflight; para cierre real de
+  campo hace falta `mode=real`, ref git, despliegue del arbol correcto y mensaje
+  Telegram recibido.
+- Queda residual externo: ejecutar E1/E2 en el host real con config canonica y
+  confirmar Telegram real. La parte local ya no debe dar falso verde por
+  identidad runtime o notificacion terminal.
+
+Evidencia:
+
+- `bash -n scripts/orquesta_server_deploy.sh scripts/test_orquesta_server_deploy.sh scripts/orquesta_smoke_nightly.sh scripts/test_orquesta_smoke_nightly.sh`
+- `bash scripts/test_orquesta_server_deploy.sh`
+- `bash scripts/test_orquesta_smoke_nightly.sh`
+- `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-operator-notifications ./modulos/orquesta-operator-telegram ./cmd/orquesta-server -run 'TestOperatorNotification|TestTelegram(BotAPI|Operator)|TestAdapterV0DespachaMensajeAlCanalDirector'`

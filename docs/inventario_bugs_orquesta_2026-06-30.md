@@ -410,6 +410,30 @@ antes de su cierre posterior:
   identidad antes de leer o limpiar active work. Evidencia focal:
   `TestStackShutdownActiveWorkCleanerV0DeduplicaPuertosConMismaIdentidadV0` y
   `TestServerGoalWorkPortsFromBackendV0PropaganActiveShutdownWorkV0`.
+- `BUG-ORQ-20260709-211` queda cerrado en el borde E1 de deploy atomico: el
+  script podia declarar `ok` aunque `ctl status` fallase, una URL de readiness
+  configurada no respondiese o ninguna superficie expusiera `sha256` del binario
+  vivo. Ademas, algunos fallos por `set -e` no dejaban recibo durable. Cierre:
+  `scripts/orquesta_server_deploy.sh` registra fase, escribe recibo
+  `deploy_unhandled_failure` para roturas no controladas, exige `ctl status`,
+  bloquea URLs configuradas inalcanzables y requiere identidad runtime
+  `binary_sha256`/`runtime_binary_sha256`/`orquesta_server_sha256`. El guard
+  comprueba binario instalado, `deploy_status_failed` y
+  `deploy_runtime_identity_missing`. Evidencia:
+  `bash -n scripts/orquesta_server_deploy.sh scripts/test_orquesta_server_deploy.sh`
+  y `bash scripts/test_orquesta_server_deploy.sh`.
+- `BUG-ORQ-20260709-212` queda cerrado en el borde E2 nightly local: el JSON no
+  registraba ref git y el cierre nightly podia quedar verde sin notificacion
+  Telegram, incluso con canal operador activado pero incompleto. Cierre:
+  `scripts/orquesta_smoke_nightly.sh` anade `git.ref`, `git.branch`,
+  `git.dirty`, bloquea config Telegram con schema invalido, envia notificacion
+  terminal por Bot API cuando `telegram_operator.enabled=true` en la config
+  canonica, y convierte un fallo de envio/config en
+  `phase_reached=notification_failed`. El guard usa Bot API falso y prueba tanto
+  envio correcto como Telegram activado mal configurado. Evidencia:
+  `bash -n scripts/orquesta_smoke_nightly.sh scripts/test_orquesta_smoke_nightly.sh`,
+  `bash scripts/test_orquesta_smoke_nightly.sh` y
+  `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-operator-notifications ./modulos/orquesta-operator-telegram ./cmd/orquesta-server -run 'TestOperatorNotification|TestTelegram(BotAPI|Operator)|TestAdapterV0DespachaMensajeAlCanalDirector'`.
 - Revalidacion OPES local/fake 2026-07-09h:
   `scripts/smoke_opes_lifecycle_real.sh` vuelve a pasar en local con
   `ORQUESTA_KEEP_SMOKE_DIR=1`, 24/24 `work_kind` cubiertos hasta

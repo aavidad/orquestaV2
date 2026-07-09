@@ -3,12 +3,21 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/orquesta-nightly-test.XXXXXX")"
-trap 'rm -rf "$tmp_root"' EXIT
+telegram_pid=""
+cleanup() {
+  if [[ -n "$telegram_pid" ]]; then
+    kill "$telegram_pid" 2>/dev/null || true
+    wait "$telegram_pid" 2>/dev/null || true
+  fi
+  rm -rf "$tmp_root"
+}
+trap cleanup EXIT
 
 results_dir="$tmp_root/results"
 fake_preflight="$tmp_root/fake-preflight.sh"
 fake_real="$tmp_root/fake-real.sh"
 fake_audit="$tmp_root/fake-audit.sh"
+export ORQUESTA_CTL_CONFIG="$tmp_root/no-config.json"
 
 cat >"$fake_preflight" <<'SH'
 #!/usr/bin/env bash
@@ -87,6 +96,45 @@ echo "code_audit_large_files_over_800=0"
 SH
 chmod +x "$fake_audit"
 
+start_fake_telegram() {
+  local request_log="$1"
+  local port_file="$2"
+  python3 - "$request_log" "$port_file" <<'PY' &
+import http.server
+import json
+import sys
+
+request_log, port_file = sys.argv[1:3]
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length).decode("utf-8")
+        with open(request_log, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"path": self.path, "body": body}, sort_keys=True) + "\n")
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'{"ok":true}')
+
+    def log_message(self, format, *args):
+        return
+
+server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+with open(port_file, "w", encoding="utf-8") as fh:
+    fh.write(str(server.server_address[1]))
+server.serve_forever()
+PY
+  telegram_pid=$!
+  for _ in $(seq 1 100); do
+    if [[ -s "$port_file" ]]; then
+      return 0
+    fi
+    sleep 0.05
+  done
+  echo "fake telegram server did not start" >&2
+  exit 1
+}
+
 ORQUESTA_NIGHTLY_RESULTS_DIR="$results_dir" \
 ORQUESTA_NIGHTLY_DATE_ID="20990101" \
 ORQUESTA_NIGHTLY_SMOKE_SCRIPT="$fake_preflight" \
@@ -104,6 +152,8 @@ assert payload["exit_code"] == 0, payload
 assert payload["phase_reached"] == "preflight_ok", payload
 assert payload["real_confirmed"] is False, payload
 assert payload["code_audit"]["metrics"]["deadcode_candidates"] == 2, payload
+assert payload["git"]["ref"], payload
+assert payload["notification"]["status"] == "disabled", payload
 PY
 
 cat >"$fake_real" <<'SH'
@@ -155,6 +205,85 @@ assert payload["real_confirmed"] is True, payload
 assert payload["refs"]["run_ref"] == "run-nightly-test", payload
 assert payload["refs"]["artifact_refs"] == "2", payload
 assert payload["code_audit"]["metrics"]["helper_duplicate_definitions"] == 3, payload
+assert payload["notification"]["status"] == "disabled", payload
+PY
+
+telegram_config="$tmp_root/orquesta.config.json"
+telegram_requests="$tmp_root/telegram_requests.jsonl"
+telegram_port_file="$tmp_root/telegram_port"
+cat >"$telegram_config" <<'JSON'
+{
+  "schema_version":"orquesta_config.v0",
+  "telegram_operator":{
+    "enabled":true,
+    "token":"test-token",
+    "authorized_chat_refs":["telegram:999"],
+    "notification_target_ref":"telegram:999",
+    "require_confirmation":true
+  }
+}
+JSON
+start_fake_telegram "$telegram_requests" "$telegram_port_file"
+telegram_base_url="http://127.0.0.1:$(cat "$telegram_port_file")"
+
+ORQUESTA_CTL_CONFIG="$telegram_config" \
+ORQUESTA_NIGHTLY_TELEGRAM_BOT_API_BASE_URL="$telegram_base_url" \
+ORQUESTA_NIGHTLY_RESULTS_DIR="$results_dir" \
+ORQUESTA_NIGHTLY_DATE_ID="20990108" \
+ORQUESTA_NIGHTLY_SMOKE_SCRIPT="$fake_preflight" \
+ORQUESTA_NIGHTLY_CODE_AUDIT_SCRIPT="$fake_audit" \
+  "$root/scripts/orquesta_smoke_nightly.sh" >"$tmp_root/telegram.out"
+
+python3 - "$results_dir/resultado_20990108.json" "$telegram_requests" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    payload = json.load(fh)
+assert payload["status"] == "ok", payload
+assert payload["notification"]["status"] == "sent", payload
+assert payload["notification"]["receipt_ref"].startswith("evidence-ref-nightly-telegram-send-"), payload
+
+with open(sys.argv[2], encoding="utf-8") as fh:
+    request = json.loads(fh.readline())
+assert request["path"] == "/bottest-token/sendMessage", request
+body = json.loads(request["body"])
+assert body["chat_id"] == "999", body
+assert "git=" in body["text"] and "run_id=nightly-20990108" in body["text"], body
+PY
+
+bad_telegram_config="$tmp_root/orquesta-bad-telegram.config.json"
+cat >"$bad_telegram_config" <<'JSON'
+{
+  "schema_version":"orquesta_config.v0",
+  "telegram_operator":{
+    "enabled":true,
+    "token":"test-token",
+    "authorized_chat_refs":["chat-ref-not-telegram"]
+  }
+}
+JSON
+
+if ORQUESTA_CTL_CONFIG="$bad_telegram_config" \
+  ORQUESTA_NIGHTLY_RESULTS_DIR="$results_dir" \
+  ORQUESTA_NIGHTLY_DATE_ID="20990109" \
+  ORQUESTA_NIGHTLY_SMOKE_SCRIPT="$fake_preflight" \
+  ORQUESTA_NIGHTLY_CODE_AUDIT_SCRIPT="$fake_audit" \
+    "$root/scripts/orquesta_smoke_nightly.sh" >"$tmp_root/telegram-bad.out" 2>&1; then
+  echo "nightly accepted broken enabled telegram config" >&2
+  exit 1
+fi
+
+python3 - "$results_dir/resultado_20990109.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as fh:
+    payload = json.load(fh)
+assert payload["status"] == "failed", payload
+assert payload["phase_reached"] == "notification_failed", payload
+assert payload["notification"]["status"] == "blocked", payload
+assert "telegram_config_incomplete" in payload["notification"]["reason"], payload
 PY
 
 if ORQUESTA_NIGHTLY_RESULTS_DIR="$results_dir" \
