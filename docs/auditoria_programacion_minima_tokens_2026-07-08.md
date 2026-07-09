@@ -133,7 +133,7 @@ contratos tecnicos.
 2. Mantener `orquesta-programacion-minima` como skill canonica opt-in.
 3. Crear una tarea separada para extender `scripts/orquesta_golden_evals.sh` y
    `result.json` con metricas reales de tokens/diff/rework por `run_ref`.
-4. Crear un launcher A/B aislado para comparar baseline vs
+4. Usar el launcher A/B aislado para comparar baseline vs
    `skill-ref-orquesta-programacion-minima-v0`.
 5. Si el A/B sale bien, entonces evaluar si una version ultracorta de la skill
    entra como default en la composicion de autoprogramacion, no en `AGENTS.md`.
@@ -142,8 +142,11 @@ Avance 2026-07-08: el evaluador ya acepta `result.json.metrics`, agrega
 `summary.metrics` y conserva `tasks[].metrics`. Tambien existe
 `scripts/orquesta_golden_metrics_launcher.sh`, wrapper opt-in que mide tiempo,
 exit code y diff Git cuando recibe `ORQUESTA_GOLDEN_TASK_WORKTREE`, y normaliza
-tokens si el launcher/proveedor los escribe. Falta conectar un launcher real de
-proveedor para rellenar tokens reales por brazo A/B.
+tokens si el launcher/proveedor los escribe. Avance 2026-07-09:
+`scripts/orquesta_golden_ab_launcher.sh` ejecuta brazo baseline y variante por
+tarea, conserva resultados por brazo, publica deltas comparables y no anade
+variables `ORQUESTA_*`. Falta conectar un launcher real de proveedor para
+rellenar tokens reales desde Codex/Claude/Gemini en cada brazo.
 
 ## Decision actual
 

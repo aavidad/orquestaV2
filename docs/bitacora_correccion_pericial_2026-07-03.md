@@ -4612,8 +4612,13 @@ diff Git si recibe `ORQUESTA_GOLDEN_TASK_WORKTREE` y normaliza tokens si el
 proveedor los publica. Test:
 `bash scripts/test_orquesta_golden_metrics_launcher.sh`.
 
-Residual: falta un launcher de proveedor/agente que ejecute cada brazo A/B y
-publique tokens reales. No se activa ninguna regla nueva global en este corte.
+Avance Codex 2026-07-09: `scripts/orquesta_golden_ab_launcher.sh` ejecuta brazo
+baseline y variante por tarea, conserva `arms/baseline` y `arms/variant`,
+publica deltas de tokens/tiempo/diff/rework y falla sin perder diagnostico si
+un brazo falla. Test: `bash scripts/test_orquesta_golden_ab_launcher.sh`.
+Residual: falta un launcher de proveedor/agente que rellene tokens reales desde
+Codex/Claude/Gemini en cada brazo. No se activa ninguna regla nueva global en
+este corte.
 
 ## Codex local 2026-07-09: BUG-188 ampliado a prompts legacy Claude/Gemini
 

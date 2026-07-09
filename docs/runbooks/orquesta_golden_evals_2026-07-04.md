@@ -109,6 +109,33 @@ ficheros tocados por `git diff/status`. Los tokens reales siguen dependiendo
 del launcher/proveedor: si el launcher interno escribe `metrics.tokens` o los
 campos `*_tokens`, el wrapper los normaliza sin inventarlos.
 
+Desde 2026-07-09 existe tambien un launcher A/B opt-in:
+
+```sh
+ORQUESTA_GOLDEN_EVALS_CONFIRM=isolated \
+scripts/orquesta_golden_evals.sh --run --parallel \
+  --results-dir /tmp/orquesta-golden-ab-run \
+  --launcher-command './scripts/orquesta_golden_ab_launcher.sh \
+    --baseline-command "./scripts/launcher_baseline.sh" \
+    --variant-command "./scripts/launcher_minimal.sh" \
+    --variant-skill-ref skill-ref-orquesta-programacion-minima-v0' \
+  --output docs/evals/results/orquesta_golden_eval_ab_manual.json
+```
+
+El launcher ejecuta ambos brazos por tarea, escribe resultados separados en
+`arms/baseline` y `arms/variant`, y publica un `result.json` unico con:
+
+- `metrics.baseline_total_tokens`, `metrics.variant_total_tokens` y
+  `metrics.token_delta`.
+- Deltas de tiempo, ficheros tocados, ficheros nuevos, lineas anadidas y rework.
+- `evidence.ab_comparison` con estados de ambos brazos y brazos fallidos.
+
+El brazo primario por defecto es `variant`, por lo que el evaluador valida la
+salida de la variante y conserva la comparacion en metricas/evidencia. Si algun
+brazo falla, el resultado queda `failed` sin perder el diagnostico A/B. El
+launcher no crea variables de configuracion `ORQUESTA_*` nuevas: los comandos se
+pasan por argumentos y solo consume los `ORQUESTA_GOLDEN_TASK_*` ya existentes.
+
 ## Evaluar Reglas De Programacion
 
 Antes de declarar mejor una regla de agente que pretende ahorrar tokens o
