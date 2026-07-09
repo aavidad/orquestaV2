@@ -85,7 +85,7 @@ func topicRegistryUpdateRequestV0(
 }
 
 func topicRegistryActionForRecordV0(record OPESCausalArtifactRecordV0) string {
-	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+	if opesDirectorIsFinalPackageArtifactTypeV0(record.ArtifactType) &&
 		record.CompleteJob &&
 		len(topicRegistryPendingRefsForRecordV0(record)) == 0 &&
 		topicRegistryFinalPackageHasClosureEvidenceV0(record) {
@@ -127,17 +127,17 @@ func topicRegistryStatusForRecordV0(record OPESCausalArtifactRecordV0) string {
 		return explicit
 	}
 	normalized := strings.ToLower(strings.TrimSpace(status))
-	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 && !record.CompleteJob {
+	if opesDirectorIsFinalPackageArtifactTypeV0(record.ArtifactType) && !record.CompleteJob {
 		return "pendiente_continuar"
 	}
-	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+	if opesDirectorIsFinalPackageArtifactTypeV0(record.ArtifactType) &&
 		!topicRegistryFinalPackageHasClosureEvidenceV0(record) {
 		return "pendiente_validacion_paquete_final"
 	}
 	if len(followupRefsForRecordV0(record)) > 0 || strings.Contains(normalized, "pendiente") {
 		return "pendiente_continuar"
 	}
-	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 {
+	if opesDirectorIsFinalPackageArtifactTypeV0(record.ArtifactType) {
 		return "paquete_final_local_verificable"
 	}
 	if topicRegistryTextSettledReadyV0(record) {
@@ -192,7 +192,7 @@ func topicRegistryOperationalStatusForRecordV0(record OPESCausalArtifactRecordV0
 	if strings.Contains(normalized, "blocked") || strings.Contains(normalized, "bloqueado") {
 		return "blocked"
 	}
-	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+	if opesDirectorIsFinalPackageArtifactTypeV0(record.ArtifactType) &&
 		record.CompleteJob &&
 		len(topicRegistryPendingRefsForRecordV0(record)) == 0 &&
 		topicRegistryFinalPackageHasClosureEvidenceV0(record) {
@@ -248,7 +248,7 @@ func topicRegistryRequiredEvidenceShouldReworkV0(record OPESCausalArtifactRecord
 
 func topicRegistryPendingRefsForRecordV0(record OPESCausalArtifactRecordV0) []string {
 	refs := followupRefsForRecordV0(record)
-	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+	if opesDirectorIsFinalPackageArtifactTypeV0(record.ArtifactType) &&
 		record.CompleteJob &&
 		len(refs) == 0 &&
 		!topicRegistryFinalPackageHasClosureEvidenceV0(record) {

@@ -80,7 +80,7 @@ func topicRegistryLifecyclePendingRefsForRecordV0(record OPESCausalArtifactRecor
 }
 
 func topicRegistryGoalFirstLifecycleNeedsTerminalCheckpointV0(record OPESCausalArtifactRecordV0) bool {
-	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 {
+	if opesDirectorIsFinalPackageArtifactTypeV0(record.ArtifactType) {
 		return record.CompleteJob && topicRegistryFinalPackageHasClosureEvidenceV0(record)
 	}
 	return topicRegistryTextSettlementCandidateV0(record)

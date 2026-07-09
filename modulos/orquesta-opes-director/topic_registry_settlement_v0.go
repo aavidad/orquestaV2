@@ -57,7 +57,7 @@ func topicRegistryTerminalSettlementForRecordV0(
 			NextWorkKinds: topicRegistryNextWorkKindsAfterTextSettledV0(),
 		}, true
 	case topicRegistrySettlementFinalV0:
-		if record.ArtifactType != orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 ||
+		if !opesDirectorIsFinalPackageArtifactTypeV0(record.ArtifactType) ||
 			!record.CompleteJob ||
 			!topicRegistryFinalPackageHasClosureEvidenceV0(record) {
 			return topicRegistrySettlementV0{}, false
@@ -102,7 +102,7 @@ func topicRegistryNormalizeTerminalSettlementStatusV0(
 	case "settled_final", "final_settled", "paquete_final_asentado":
 		return topicRegistrySettlementFinalV0, true
 	case "settled", "complete", "completed", "done", "paquete_final_local_verificable":
-		if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 {
+		if opesDirectorIsFinalPackageArtifactTypeV0(record.ArtifactType) {
 			return topicRegistrySettlementFinalV0, true
 		}
 		if topicRegistryTextSettlementCandidateV0(record) {
@@ -226,7 +226,7 @@ func topicRegistrySettlementForRecordV0(record OPESCausalArtifactRecordV0) topic
 			Refs:   compactStringsV0(append(baseRefs, pendingRefs...)),
 		}
 	}
-	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+	if opesDirectorIsFinalPackageArtifactTypeV0(record.ArtifactType) &&
 		record.CompleteJob &&
 		topicRegistryFinalPackageHasClosureEvidenceV0(record) {
 		return topicRegistrySettlementV0{

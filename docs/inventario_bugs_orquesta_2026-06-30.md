@@ -254,6 +254,19 @@ antes de su cierre posterior:
   diagnostico anterior `required_evidence_missing` para no mezclar causas.
   Pendiente: smoke temporal OPES/external-work que pruebe el ciclo completo con
   artefactos reales y sin reescritura tardia.
+- Avance 2026-07-09: `BUG-ORQ-20260701-075` queda reducido en el adaptador
+  `orquesta-opes-director` para aliases OPES emitidos por el bridge:
+  `learning_games_package` se normaliza a `interactive_practice_package`,
+  `help_manual_package` a `help_package`, `opes_quality_audit_report` exige
+  `decision_global` y evidencias/rework, y `completed_syllabus_package` se trata
+  como paquete final solo dentro del director OPES para liberar o replanificar
+  por `manifest_cierre` sin tocar el core. Tests:
+  `TestValidateOPESArtifactQualityContractV0NormalizaArtefactosOPESExtendidosV0`,
+  `TestProduceOPESCausalJobsV0ArtefactoOPESExtendidoAplicaArtifactQualityV0`,
+  `TestProduceOPESCausalJobsV0CompletedSyllabusPackageConManifestLiberaRegistroV0`;
+  `go test -count=1 ./modulos/orquesta-opes-director`. No cierra `BUG-075`
+  completo: siguen pendientes smoke OPES temporal/external-work con artefactos
+  reales, proveedor y ausencia de reescritura tardia.
 - Avance 2026-07-04 noche 31: `BUG-ORQ-20260701-058` queda reducido en el
   borde local de `orquesta-opes-director`: el registro OPES ya no libera un
   `completed_syllabus_package` aunque traiga `manifest_cierre` completo,

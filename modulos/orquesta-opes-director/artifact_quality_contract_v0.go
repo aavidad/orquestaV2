@@ -33,6 +33,8 @@ const (
 	ErrOPESArtifactQualityHelpQARequiredV0                 = "opes_artifact_help_qa_required"
 	ErrOPESArtifactQualityVisualReuseManifestRequiredV0    = "opes_artifact_visual_reuse_manifest_required"
 	ErrOPESArtifactQualityVisualReuseDecisionRequiredV0    = "opes_artifact_visual_reuse_decision_required"
+	ErrOPESArtifactQualityAuditDecisionRequiredV0          = "opes_artifact_audit_decision_required"
+	ErrOPESArtifactQualityAuditEvidenceRequiredV0          = "opes_artifact_audit_evidence_required"
 )
 
 type OPESArtifactQualityContractRequestV0 struct {
@@ -101,9 +103,11 @@ func normalizeOPESArtifactQualityContractRequestV0(
 	request OPESArtifactQualityContractRequestV0,
 ) OPESArtifactQualityContractRequestV0 {
 	request.WorkKind = strings.TrimSpace(request.WorkKind)
-	request.ArtifactType = strings.TrimSpace(request.ArtifactType)
+	request.ArtifactType = normalizeOPESDirectorArtifactTypeV0(request.ArtifactType)
 	if request.ArtifactType == "" && request.WorkKind != "" {
-		request.ArtifactType = orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(request.WorkKind)
+		request.ArtifactType = normalizeOPESDirectorArtifactTypeV0(
+			orquestadomainwork.ExpectedDomainWorkArtifactTypeForWorkKindV0(request.WorkKind),
+		)
 	}
 	request.TopicRef = strings.TrimSpace(request.TopicRef)
 	request.EvidenceRefs = compactStringsV0(request.EvidenceRefs)
@@ -286,6 +290,22 @@ func opesArtifactQualityRequirementsV0(artifactType string) []opesArtifactQualit
 				Field:      "visual_reuse_decision",
 				Message:    "visual reuse requires copied/inserted counters or not-applicable justification",
 				FieldNames: []string{"copied_visual_count", "inserted_visual_count", "visual_requirement_status", "visual_zero_justification_ref"},
+			},
+		}
+	case opesDirectorArtifactTypeQualityAuditReportV0:
+		return []opesArtifactQualityRequirementV0{
+			{
+				Code:       ErrOPESArtifactQualityAuditDecisionRequiredV0,
+				Field:      "decision_global",
+				Message:    "existing syllabus quality audit requires structured global decision",
+				FieldNames: []string{"decision_global", "audit_decision", "quality_audit_decision"},
+			},
+			{
+				Code:         ErrOPESArtifactQualityAuditEvidenceRequiredV0,
+				Field:        "audit_evidence_refs",
+				Message:      "existing syllabus quality audit requires findings, evidence refs or rework task requests",
+				FieldNames:   []string{"audit_evidence_refs", "evidence_refs", "findings", "topic_refs", "rework_task_requests"},
+				EvidenceRefs: []string{"opes_quality_audit_report", "existing_syllabus_quality_audit"},
 			},
 		}
 	default:

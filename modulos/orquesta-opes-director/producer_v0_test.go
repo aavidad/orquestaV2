@@ -1657,6 +1657,91 @@ func TestProduceOPESCausalJobsV0HTMLConContratoArtifactQualityPassNoCreaReworkV0
 	}
 }
 
+func TestProduceOPESCausalJobsV0ArtefactoOPESExtendidoAplicaArtifactQualityV0(t *testing.T) {
+	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
+		IdempotencyKey: "idem-opes-learning-games-bad-contract",
+		Status:         "accepted",
+		CorrelationID:  "corr-opes-learning-games-bad-contract",
+		DomainRef:      OPESCausalProducerDefaultDomainRefV0,
+		JobRef:         "job-ref-opes-learning-games-bad-contract",
+		ArtifactRef:    "artifact-ref-opes-learning-games-bad-contract",
+		ArtifactType:   opesDirectorArtifactTypeLearningGamesPackageV0,
+		CompleteJob:    true,
+		ReceiptRef:     "receipt-ref-opes-learning-games-bad-contract",
+		EvidenceRefs:   []string{"opes-final-evidence:interactive_practice_publicable"},
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "course_id", Value: "curso-learning-games"},
+			{Name: "topic_id", Value: "tema-learning-games-bad"},
+			{Name: "source_work_kind", Value: "generate_learning_games"},
+			{Name: "status", Value: "complete"},
+		},
+	}}}
+	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+	result, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{
+		DomainRef:     OPESCausalProducerDefaultDomainRefV0,
+		CorrelationID: "corr-opes-learning-games-bad-contract",
+	}, OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator})
+	if err != nil {
+		t.Fatalf("ProduceOPESCausalJobsV0: %v", err)
+	}
+	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", topicRegistryArtifactQualityNeedsReworkRefV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "artifact_quality_status", OPESArtifactQualityStatusNeedsReworkV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "artifact_quality_artifact_type", orquestadomainwork.DomainWorkArtifactTypeInteractivePracticeV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "artifact_quality_issue_refs", ErrOPESArtifactQualityInteractiveManifestRequiredV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_scope", "artifact_quality") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_reason", "artifact_quality_contract_failed") {
+		t.Fatalf("registry_update=%+v ok=%v result=%+v", request, ok, result)
+	}
+	followup, ok := requestedWorkKindForTestV0(result.RequestedJobs, "review_director_consolidation")
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "artifact_quality_artifact_type", orquestadomainwork.DomainWorkArtifactTypeInteractivePracticeV0) ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "artifact_quality_issue_refs", ErrOPESArtifactQualityInteractiveQARequiredV0) ||
+		!domainWorkFieldValueForDirectorTestV0(followup.InputFields, "recommended_action", "review_artifact_quality") {
+		t.Fatalf("followup=%+v ok=%v result=%+v", followup, ok, result)
+	}
+}
+
+func TestProduceOPESCausalJobsV0CompletedSyllabusPackageConManifestLiberaRegistroV0(t *testing.T) {
+	source := fakeArtifactSourceV0{records: []OPESCausalArtifactRecordV0{{
+		Status:       "accepted",
+		DomainRef:    "opes",
+		JobRef:       "job-completed-syllabus-package-001",
+		ArtifactRef:  "artifact-completed-syllabus-package-001",
+		ArtifactType: opesDirectorArtifactTypeCompletedSyllabusPackageV0,
+		ReceiptRef:   "receipt-completed-syllabus-package-001",
+		CompleteJob:  true,
+		EvidenceRefs: []string{"topic-quality-contract-result-ref-final-004"},
+		PayloadFields: []orquestadomainwork.DomainWorkFieldV0{
+			{Name: "course_id", Value: "curso-completed-syllabus"},
+			{Name: "topic_id", Value: "tema-completed-syllabus"},
+			{Name: "source_work_kind", Value: "finalize_temario_package"},
+			{Name: "manifest_cierre", ValueJSON: validFinalPackageManifestRawForDirectorTestV0()},
+		},
+	}}}
+	creator := orquestadomainworkmemory.NewInMemoryDomainWorkJobCreatorV0()
+	result, err := ProduceOPESCausalJobsV0(context.Background(), OPESCausalProducerRequestV0{},
+		OPESCausalProducerPortsV0{ArtifactSource: source, JobCreator: creator})
+	if err != nil {
+		t.Fatalf("ProduceOPESCausalJobsV0: %v", err)
+	}
+	request, ok := requestedWorkKindForTestV0(result.RequestedJobs, opesTopicRegistryUpdateWorkKindV0)
+	if !ok ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "source_artifact_type", opesDirectorArtifactTypeCompletedSyllabusPackageV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "registry_action", "release") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "proposed_status", "paquete_final_local_verificable") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "operational_status", "complete") ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_status", topicRegistrySettlementFinalV0) ||
+		!domainWorkFieldValueForDirectorTestV0(request.InputFields, "settlement_scope", "final_package") ||
+		domainWorkFieldValueForDirectorTestV0(request.InputFields, "pending_refs", "final-package-manifest-closure-evidence-required") {
+		t.Fatalf("request=%+v ok=%v result=%+v", request, ok, result)
+	}
+	if _, ok := requestedWorkKindForTestV0(result.RequestedJobs, "finalize_temario_package"); ok {
+		t.Fatalf("no debe crear followup de cierre con manifest compatible: result=%+v", result)
+	}
+}
+
 func opesSequenceArtifactTypeForEvidenceGateTestV0(workKind string) string {
 	switch workKind {
 	case "review_codex", "review_gemini", "review_claude":

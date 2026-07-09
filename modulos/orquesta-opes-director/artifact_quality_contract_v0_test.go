@@ -154,6 +154,63 @@ func TestValidateOPESArtifactQualityContractV0CubreWorkKindsMinimosV0(t *testing
 	}
 }
 
+func TestValidateOPESArtifactQualityContractV0NormalizaArtefactosOPESExtendidosV0(t *testing.T) {
+	cases := []struct {
+		name         string
+		artifactType string
+		goodFields   []orquestadomainwork.DomainWorkFieldV0
+		wantIssue    string
+	}{
+		{
+			name:         "learning_games_package",
+			artifactType: opesDirectorArtifactTypeLearningGamesPackageV0,
+			goodFields: []orquestadomainwork.DomainWorkFieldV0{
+				{Name: "learning_games_manifest", Value: "juegos/manifest.json"},
+				{Name: "learning_games_qa_report", Value: "validacion/juegos.json"},
+			},
+			wantIssue: ErrOPESArtifactQualityInteractiveManifestRequiredV0,
+		},
+		{
+			name:         "help_manual_package",
+			artifactType: opesDirectorArtifactTypeHelpManualPackageV0,
+			goodFields: []orquestadomainwork.DomainWorkFieldV0{
+				{Name: "help_manual_manifest", Value: "ayuda/manifest.json"},
+				{Name: "help_manual_qa_report", Value: "validacion/ayuda.json"},
+			},
+			wantIssue: ErrOPESArtifactQualityHelpManifestRequiredV0,
+		},
+		{
+			name:         "quality_audit_report",
+			artifactType: opesDirectorArtifactTypeQualityAuditReportV0,
+			goodFields: []orquestadomainwork.DomainWorkFieldV0{
+				{Name: "decision_global", Value: "rework_menor"},
+				{Name: "rework_task_requests", ValueJSON: []byte(`[{"topic_ref":"tema-001"}]`)},
+			},
+			wantIssue: ErrOPESArtifactQualityAuditDecisionRequiredV0,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name+"_bad", func(t *testing.T) {
+			result := ValidateOPESArtifactQualityContractV0(OPESArtifactQualityContractRequestV0{
+				ArtifactType: tc.artifactType,
+			})
+			if result.Status != OPESArtifactQualityStatusNeedsReworkV0 ||
+				!artifactQualityIssueCodeForTestV0(result.Issues, tc.wantIssue) {
+				t.Fatalf("result=%+v want_issue=%s", result, tc.wantIssue)
+			}
+		})
+		t.Run(tc.name+"_good", func(t *testing.T) {
+			result := ValidateOPESArtifactQualityContractV0(OPESArtifactQualityContractRequestV0{
+				ArtifactType: tc.artifactType,
+				Fields:       tc.goodFields,
+			})
+			if result.Status != OPESArtifactQualityStatusCompleteV0 || len(result.Issues) != 0 {
+				t.Fatalf("result=%+v", result)
+			}
+		})
+	}
+}
+
 func artifactQualityIssueCodeForTestV0(issues []OPESArtifactQualityIssueV0, code string) bool {
 	for _, issue := range issues {
 		if issue.Code == code {

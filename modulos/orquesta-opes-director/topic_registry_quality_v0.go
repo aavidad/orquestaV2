@@ -88,7 +88,7 @@ func topicRegistryRecordDeclaresTopicQualityV0(
 		strings.TrimSpace(request.ReportText) != "" {
 		return true
 	}
-	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 {
+	if opesDirectorIsFinalPackageArtifactTypeV0(record.ArtifactType) {
 		return false
 	}
 	values := append([]string(nil), record.EvidenceRefs...)

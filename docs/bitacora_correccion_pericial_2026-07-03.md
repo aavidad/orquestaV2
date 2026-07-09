@@ -5030,3 +5030,37 @@ Lectura para Claude:
 
 - El harness local esta listo; falta A/B con proveedor/cuota real para saber si
   la skill reduce tokens/diff sin aumentar rework ni bajar calidad.
+
+## Codex local 2026-07-09: BUG-075 aliases OPES extendidos en director
+
+Contexto:
+
+- El explorador read-only confirmo que `BUG-075` no se puede cerrar completo con
+  unit tests: faltan smoke OPES temporal/external-work, proveedor real y prueba
+  de ausencia de reescritura tardia.
+- Hueco local detectado: el bridge OPES emite tipos propietarios
+  `learning_games_package`, `help_manual_package`,
+  `opes_quality_audit_report` y `completed_syllabus_package`; el director OPES
+  podia no aplicarles el mismo contrato estructurado que a los tipos neutrales.
+
+Cierre aplicado:
+
+- Nuevo helper local `artifact_type_aliases_v0.go` en `orquesta-opes-director`
+  normaliza esos aliases solo dentro del adaptador OPES.
+- `OPESArtifactQualityContractV0` valida `learning_games_package` como
+  practica interactiva, `help_manual_package` como paquete de ayuda y
+  `opes_quality_audit_report` con `decision_global` + evidencias/rework.
+- El registro OPES trata `completed_syllabus_package` como paquete final para
+  release/followup de `manifest_cierre`, conservando el tipo original como
+  `source_artifact_type`.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-opes-director -run 'Test(ValidateOPESArtifactQualityContractV0(CubreWorkKindsMinimos|NormalizaArtefactosOPESExtendidos)|ProduceOPESCausalJobsV0(ArtefactoOPESExtendidoAplicaArtifactQuality|CompletedSyllabusPackageConManifestLiberaRegistro|WorkDeliveryGenericoConWorkKindVisualAplicaArtifactQuality|HTMLConContratoArtifactQualityPassNoCreaRework|BloqueaSecuenciaOPESCompletaSinEvidenciaMinima)|TopicRegistryRequiredEvidencePolicyV0CubreSecuenciaOPESCompleta)V0'`
+- `go test -count=1 ./modulos/orquesta-opes-director`
+
+Lectura para Claude:
+
+- Esto reduce `BUG-075`; no lo cierres como resuelto total. Pendientes reales:
+  smoke OPES temporal con external-work, artefactos reales/proveedor y prueba de
+  que el cierre no reescribe tarde ni deja parcialidades sin rework causal.

@@ -35,7 +35,7 @@ func topicRegistryRequiredEvidenceRequirementsV0(
 	artifactType string,
 ) []topicRegistryRequiredEvidenceRequirementV0 {
 	sourceWorkKind = strings.TrimSpace(sourceWorkKind)
-	artifactType = strings.TrimSpace(artifactType)
+	artifactType = normalizeOPESDirectorArtifactTypeV0(artifactType)
 	switch artifactType {
 	case orquestadomainwork.DomainDocumentPlanArtifactTypeV0:
 		return []topicRegistryRequiredEvidenceRequirementV0{{
@@ -157,6 +157,16 @@ func topicRegistryRequiredEvidenceRequirementsV0(
 				"visual_reuse_manifest",
 			},
 		}}
+	case opesDirectorArtifactTypeQualityAuditReportV0:
+		return []topicRegistryRequiredEvidenceRequirementV0{{
+			PendingRef: "required-evidence-existing-syllabus-quality-audit",
+			AcceptedRefs: []string{
+				"opes-final-evidence:existing_syllabus_quality_audit",
+				"opes_quality_audit_report",
+				"decision_global",
+				"rework_task_requests",
+			},
+		}}
 	}
 	return nil
 }
@@ -220,7 +230,7 @@ func topicRegistryArtifactRequiresEvidenceGateV0(artifactType string) bool {
 
 func topicRegistryEffectiveArtifactTypeForWorkKindV0(sourceWorkKind string, artifactType string) string {
 	sourceWorkKind = strings.TrimSpace(sourceWorkKind)
-	artifactType = strings.TrimSpace(artifactType)
+	artifactType = normalizeOPESDirectorArtifactTypeV0(artifactType)
 	if sourceWorkKind == "" {
 		return artifactType
 	}

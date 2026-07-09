@@ -216,7 +216,7 @@ func followupWorkKindV0(record OPESCausalArtifactRecordV0) string {
 			return workKind
 		}
 	}
-	if record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+	if opesDirectorIsFinalPackageArtifactTypeV0(record.ArtifactType) &&
 		record.CompleteJob &&
 		!topicRegistryFinalPackageHasClosureEvidenceV0(record) {
 		return "finalize_temario_package"
@@ -242,7 +242,8 @@ func workKindForArtifactTypeV0(artifactType string) string {
 		return "generate_learning_games"
 	case orquestadomainwork.DomainWorkArtifactTypeHelpPackageV0:
 		return "generate_help_manual_assets"
-	case orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0:
+	case orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0,
+		opesDirectorArtifactTypeCompletedSyllabusPackageV0:
 		return "finalize_temario_package"
 	default:
 		return ""
@@ -269,13 +270,13 @@ func followupRefsForRecordV0(record OPESCausalArtifactRecordV0) []string {
 		fieldStringV0(record.PayloadFields, "decision"),
 	))
 	if !terminalSettlement &&
-		record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+		opesDirectorIsFinalPackageArtifactTypeV0(record.ArtifactType) &&
 		strings.Contains(status, "pendiente") &&
 		len(refs) == 0 {
 		refs = append(refs, "final-package-pendiente-continuar")
 	}
 	if !terminalSettlement &&
-		record.ArtifactType == orquestadomainwork.DomainWorkArtifactTypeFinalDomainPackageV0 &&
+		opesDirectorIsFinalPackageArtifactTypeV0(record.ArtifactType) &&
 		record.CompleteJob &&
 		len(refs) == 0 &&
 		!topicRegistryFinalPackageHasClosureEvidenceV0(record) {
