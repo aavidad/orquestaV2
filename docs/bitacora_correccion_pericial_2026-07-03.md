@@ -5959,3 +5959,65 @@ Lectura:
 - `BUG-ORQ-20260701-079` sigue abierto solo para proveedor/app-server real:
   falta ejecutar o construir la prueba E2E que fuerce stdout gigante y confirme
   si el proveedor aplica el cap pre-tool o si hay que corregir esa frontera.
+
+## Orquesta local 2026-07-09: BUG-079 smoke real adversarial pasa con forced-stop
+
+Se ejecuto el smoke real adversarial tras corregir el contrato de write-set del
+probe. El fallo anterior no era que el proveedor no ejecutara el probe: lo
+ejecutaba, pero el arnes lo habia pedido fuera del write-set autorizado
+(`generated-apps/bug079-tool-output-policy`). Orquesta solo observaba el
+checkpoint dentro de
+`generated-apps/smoke-goal-first-bug079-tool-output-policy`, por eso el goal
+seguia `running`.
+
+Cambios:
+
+- El checkpoint BUG-079 y `probe_stdout.py`/`probe_result.txt` viven ahora bajo
+  `generated-apps/smoke-goal-first-bug079-tool-output-policy`.
+- El guard falla con `reason=bug079_probe_out_of_write_set` si detecta el probe
+  en la ruta legacy fuera del write-set.
+- El modo adversarial ya no exige cierre completo de app de negocio: si
+  `toolOutputPolicy` fue `accepted`, el probe esta ejecutado dentro del
+  write-set y no hay senal de salida gigante, marca
+  `smoke_goal_first_tool_output_policy_adversarial_real=ok` y corta el goal con
+  `runs/control forced=true`, verificando que queda `blocked` y sin proceso
+  app-server vivo.
+
+Ejecucion real:
+
+- `ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1
+  ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1
+  ORQUESTA_KEEP_SMOKE_DIR=1 ORQUESTA_GOAL_FIRST_SMOKE_POLLS=60
+  ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS=2
+  ./scripts/smoke_goal_first_tool_output_policy_adversarial_real.sh`
+- `run_ref=run-spec-smoke-goal-first-bug079-tool-output-policy-req-smoke-goal-first-bug079-tool-output-policy-e4e76c6dacea00864e51d01ef`
+- `external_goal_ref=019f47b3-3b98-7e30-8fc1-6704b4f5bdfb`
+- Evidencia retenida:
+  `/tmp/orquesta-goal-first-app-server.ZHXRWf`
+
+Resultado:
+
+- `tool_output_policy_transport=accepted`
+- `bug079_probe_path=generated-apps/smoke-goal-first-bug079-tool-output-policy/bug079-tool-output-policy/probe_result.txt`
+- `bug079_probe_result=executed`
+- `smoke_goal_first_tool_output_policy_adversarial_real=ok`
+- `run_control_status=stopped`
+- `run_control_goal_status_after=blocked`
+- `observe_after_forced_stop_goal_status=blocked`
+- `autoprogramming_status_after_forced_stop_not_running=true`
+- `app_server_tmux_processes_alive=0`
+
+Lectura:
+
+- Esto cierra el smoke operativo real de BUG-079 y demuestra que el proveedor
+  real acepto `toolOutputPolicy`, ejecuto el probe dentro del write-set y no
+  expuso una salida gigante a Orquesta. `rg -a 'X{100,}'` sobre runtime,
+  proyecto, JSON y logs del smoke no encontro salida cruda.
+- No cierra el residual teorico de cap duro si una herramienta vuelca stdout
+  crudo sin redireccion: en esta ejecucion el agente ejecuto
+  `probe_stdout.py > /dev/null`, que es comportamiento seguro pero no una prueba
+  de truncado forzado por el proveedor.
+- Nuevo residual `BUG-ORQ-20260709-207`: el log del app-server en el forced-stop
+  contiene `Node.js[...] ResetStdio` / `Assertion failed`, aunque el control
+  termino `stopped`, el goal quedo `blocked` replanificable y no quedaron
+  procesos vivos.

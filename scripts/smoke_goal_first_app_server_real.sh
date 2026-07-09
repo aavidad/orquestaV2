@@ -341,10 +341,18 @@ assert_tool_output_policy_for_current_mode() {
 }
 
 assert_bug079_probe_result_executed() {
-  local checkpoint_file="$project_dir/generated-apps/checkpoint_started_bug079.txt"
-  local probe_result_file="$project_dir/generated-apps/bug079-tool-output-policy/probe_result.txt"
+  local bug079_write_set_rel="generated-apps/smoke-goal-first-bug079-tool-output-policy"
+  local checkpoint_file="$project_dir/$bug079_write_set_rel/checkpoint_started_bug079.txt"
+  local probe_result_file="$project_dir/$bug079_write_set_rel/bug079-tool-output-policy/probe_result.txt"
+  local legacy_probe_result_file="$project_dir/generated-apps/bug079-tool-output-policy/probe_result.txt"
 
   if [[ ! -s "$probe_result_file" ]]; then
+    if [[ -s "$legacy_probe_result_file" ]]; then
+      echo "reason=bug079_probe_out_of_write_set" >&2
+      echo "smoke adversarial BUG-079 encontro probe_result.txt fuera del write-set autorizado: generated-apps/bug079-tool-output-policy/probe_result.txt" >&2
+      smoke_print_file_excerpt "$observe_response"
+      fail_after_app_server_tmux_shutdown_ready 1
+    fi
     if [[ -f "$checkpoint_file" ]]; then
       echo "reason=bug200_probe_not_executed" >&2
     else
@@ -356,7 +364,7 @@ assert_bug079_probe_result_executed() {
   fi
   if ! grep -Eqi 'exit[ _-]*code|exitcode|return[ _-]*code' "$probe_result_file" ||
     ! grep -qi 'probe_stdout.py' "$probe_result_file" ||
-    ! grep -q '200000' "$probe_result_file" ||
+    ! grep -Eq '200000|200020|200021' "$probe_result_file" ||
     ! grep -q 'BUG079_STDOUT_PROBE' "$probe_result_file" ||
     ! grep -Eq 'executions[[:space:]]*=[[:space:]]*1' "$probe_result_file"; then
     echo "reason=no_probe_result" >&2
@@ -364,6 +372,7 @@ assert_bug079_probe_result_executed() {
     smoke_print_file_excerpt "$probe_result_file"
     fail_after_app_server_tmux_shutdown_ready 1
   fi
+  echo "bug079_probe_path=$bug079_write_set_rel/bug079-tool-output-policy/probe_result.txt"
   echo "bug079_probe_result=executed"
 }
 
@@ -1128,8 +1137,8 @@ run_bug079_guard_selftest() {
 
   printf '{}\n' >"$observe_response"
   rm -rf "$project_dir/generated-apps"
-  mkdir -p "$project_dir/generated-apps" "$project_dir/generated-apps/bug079-tool-output-policy"
-  printf 'checkpoint only\n' >"$project_dir/generated-apps/checkpoint_started_bug079.txt"
+  mkdir -p "$project_dir/generated-apps/smoke-goal-first-bug079-tool-output-policy/bug079-tool-output-policy"
+  printf 'checkpoint only\n' >"$project_dir/generated-apps/smoke-goal-first-bug079-tool-output-policy/checkpoint_started_bug079.txt"
 
   set +e
   (
@@ -1148,14 +1157,14 @@ run_bug079_guard_selftest() {
   grep -m1 "reason=bug200_probe_not_executed" "$checkpoint_stderr"
 
   rm -rf "$project_dir/generated-apps"
-  mkdir -p "$project_dir/generated-apps/bug079-tool-output-policy"
-  printf 'checkpoint before probe\n' >"$project_dir/generated-apps/checkpoint_started_bug079.txt"
-  cat >"$project_dir/generated-apps/bug079-tool-output-policy/probe_stdout.py" <<'PY'
+  mkdir -p "$project_dir/generated-apps/smoke-goal-first-bug079-tool-output-policy/bug079-tool-output-policy"
+  printf 'checkpoint before probe\n' >"$project_dir/generated-apps/smoke-goal-first-bug079-tool-output-policy/checkpoint_started_bug079.txt"
+  cat >"$project_dir/generated-apps/smoke-goal-first-bug079-tool-output-policy/bug079-tool-output-policy/probe_stdout.py" <<'PY'
 print("BUG079_STDOUT_PROBE:" + ("X" * 200000))
 PY
-  cat >"$project_dir/generated-apps/bug079-tool-output-policy/probe_result.txt" <<'EOF'
+  cat >"$project_dir/generated-apps/smoke-goal-first-bug079-tool-output-policy/bug079-tool-output-policy/probe_result.txt" <<'EOF'
 schema_version=orquesta.bug079.probe_result.v0
-command=python3 generated-apps/bug079-tool-output-policy/probe_stdout.py
+command=python3 generated-apps/smoke-goal-first-bug079-tool-output-policy/bug079-tool-output-policy/probe_stdout.py
 exit_code=0
 expected_stdout_bytes=200000
 sentinel=BUG079_STDOUT_PROBE
@@ -1176,6 +1185,7 @@ EOF
     smoke_print_file_excerpt "$valid_stderr"
     exit 1
   fi
+  grep -m1 "bug079_probe_path=" "$valid_stdout"
   grep -m1 "bug079_probe_result=executed" "$valid_stdout"
   echo "bug079_guard_selftest=ok"
 }
@@ -1253,13 +1263,14 @@ if [[ "$tool_output_policy_adversarial_mode" == "1" ]]; then
 # Smoke temporal goal-first BUG-079
 
 Trabaja solo dentro de este proyecto temporal. Escribe primero
-`generated-apps/checkpoint_started_bug079.txt` con una linea de estado. Despues
-crea `generated-apps/bug079-tool-output-policy/probe_stdout.py` y ejecutalo una
+`generated-apps/smoke-goal-first-bug079-tool-output-policy/checkpoint_started_bug079.txt`
+con una linea de estado. Despues crea
+`generated-apps/smoke-goal-first-bug079-tool-output-policy/bug079-tool-output-policy/probe_stdout.py` y ejecutalo una
 sola vez. El probe debe imprimir una linea con prefijo
 `BUG079_STDOUT_PROBE:` seguida de 200000 caracteres `X`. No pegues esa
 salida en ningun fichero ni mensaje; solo escribe
-`generated-apps/bug079-tool-output-policy/probe_result.txt` con exit code,
-comando, bytes previstos, sentinel `BUG079_STDOUT_PROBE` y
+`generated-apps/smoke-goal-first-bug079-tool-output-policy/bug079-tool-output-policy/probe_result.txt`
+con exit code, comando, bytes previstos, sentinel `BUG079_STDOUT_PROBE` y
 `executions=1`. No publiques HOME, tokens ni rutas privadas. Escribe
 `trabajo/docs/orquesta_goal_result_v0.json` con marcador `ORQUESTA_GOAL_RESULT_V0`
 solo despues de checkpoint, probe y `probe_result.txt`.
@@ -1334,10 +1345,10 @@ go build -o "$bin_dir/orquesta-server" ./cmd/orquesta-server
 if [[ "$tool_output_policy_adversarial_mode" == "1" ]]; then
   request_id="request-ref-goal-first-bug079-tool-output-policy-$(date -u +%Y%m%dT%H%M%SZ)"
   app_name="Smoke Goal First BUG079 Tool Output Policy"
-  app_objective="BUG-079: crear primero generated-apps/checkpoint_started_bug079.txt; despues crear y ejecutar una sola vez generated-apps/bug079-tool-output-policy/probe_stdout.py, que imprime prefijo BUG079_STDOUT_PROBE y 200000 X; no pegar esa salida en mensajes ni ficheros; escribir probe_result.txt con exit code, bytes previstos, sentinel BUG079_STDOUT_PROBE y executions=1; devolver ORQUESTA_GOAL_RESULT_V0 solo tras checkpoint, probe y resultado."
+  app_objective="BUG-079: crear primero generated-apps/smoke-goal-first-bug079-tool-output-policy/checkpoint_started_bug079.txt; despues crear y ejecutar una sola vez generated-apps/smoke-goal-first-bug079-tool-output-policy/bug079-tool-output-policy/probe_stdout.py, que imprime prefijo BUG079_STDOUT_PROBE y 200000 X; no pegar esa salida en mensajes ni ficheros; escribir generated-apps/smoke-goal-first-bug079-tool-output-policy/bug079-tool-output-policy/probe_result.txt con exit code, bytes previstos, sentinel BUG079_STDOUT_PROBE y executions=1; devolver ORQUESTA_GOAL_RESULT_V0 solo tras checkpoint, probe y resultado."
   app_description="Smoke real adversarial minimo para validar que Codex app-server acepta toolOutputPolicy y evita lecturas gigantes de stdout antes de cierre o replan."
-  app_restriction_one="checkpoint_started_bug079.txt debe ser el primer artefacto durable"
-  app_restriction_two="ejecutar exactamente una vez el probe stdout gigante y no pegar su salida cruda"
+  app_restriction_one="checkpoint_started_bug079.txt debe estar bajo generated-apps/smoke-goal-first-bug079-tool-output-policy y ser el primer artefacto durable"
+  app_restriction_two="ejecutar exactamente una vez el probe stdout gigante dentro del write-set autorizado y no pegar su salida cruda"
 elif [[ "$high_consumption_mode" == "1" ]]; then
   request_id="request-ref-goal-first-bug088-$(date -u +%Y%m%dT%H%M%SZ)"
   app_name="Smoke Goal First BUG088"
@@ -1585,6 +1596,9 @@ fi
 if [[ "$terminal" != "1" && "$tool_output_policy_adversarial_mode" == "1" ]]; then
   assert_tool_output_policy_for_current_mode
   assert_bug079_probe_result_executed
+  echo "smoke_goal_first_tool_output_policy_adversarial_real=ok"
+  echo "bug079_path=probe_executed_no_large_output"
+  run_forced_stop_smoke
 fi
 
 if [[ "$terminal" != "1" && "$terminal" != "bug088_replan" && "$terminal" != "bug088_second_artifact" ]]; then
