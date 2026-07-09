@@ -30,6 +30,11 @@ func TestNuevaAppI18nCatalogV0CatalogosCubrenClavesRequeridas(t *testing.T) {
 	}
 }
 
+func TestNuevaAppI18nCatalogV0NoUsaPlaceholdersGenericosV0(t *testing.T) {
+	catalog := NewNuevaAppI18nCatalogV0()
+	requireNuevaAppI18nNotPlaceholderV0(t, catalog, NuevaAppI18nRequiredKeysV0()...)
+}
+
 func TestNuevaAppI18nRequiredKeysV0DevuelveCopia(t *testing.T) {
 	keys := NuevaAppI18nRequiredKeysV0()
 	if len(keys) == 0 {
@@ -40,6 +45,30 @@ func TestNuevaAppI18nRequiredKeysV0DevuelveCopia(t *testing.T) {
 	freshKeys := NuevaAppI18nRequiredKeysV0()
 	if freshKeys[0] == "nueva_app.clave_mutada" {
 		t.Fatalf("NuevaAppI18nRequiredKeysV0 no debe exponer slice mutable")
+	}
+}
+
+func requireNuevaAppI18nNotPlaceholderV0(t *testing.T, catalog NuevaAppI18nCatalogV0, keys ...string) {
+	t.Helper()
+	for _, key := range keys {
+		for _, locale := range []string{NuevaAppI18nDefaultLocaleV0, NuevaAppI18nEnglishLocaleV0} {
+			text := catalog.lookupExact(locale, key)
+			for _, forbidden := range nuevaAppI18nForbiddenPlaceholderPatternsV0() {
+				if strings.Contains(text, forbidden) {
+					t.Fatalf("clave i18n con placeholder %s/%s: %q", locale, key, text)
+				}
+			}
+		}
+	}
+}
+
+func nuevaAppI18nForbiddenPlaceholderPatternsV0() []string {
+	return []string{
+		"Plain English explanation for ",
+		"Use it to choose the option without technical assumptions.",
+		"Plain explanation for this wizard choice.",
+		"Explica esta opcion en lenguaje llano.",
+		"Recomendacion conservadora para completar el contrato sin sobredisenar.",
 	}
 }
 

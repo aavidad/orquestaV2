@@ -37,7 +37,7 @@ func applyWebNuevaAppIntakeDecisionToFormV0(
 		case "requerido":
 			form.Integraciones[index].Requerido = decision.Value == "true"
 		case "restricciones":
-			form.Integraciones[index].Restricciones = decision.Values
+			form.Integraciones[index].Restricciones = mergeNuevaAppDecisionValuesV0(form.Integraciones[index].Restricciones, decision)
 		}
 		return form
 	}
@@ -55,7 +55,7 @@ func applyWebNuevaAppIntakeDecisionToFormV0(
 		case "volumen":
 			form.Datos.TiposDetallados[index].Volumen = decision.Value
 		case "restricciones":
-			form.Datos.TiposDetallados[index].Restricciones = decision.Values
+			form.Datos.TiposDetallados[index].Restricciones = mergeNuevaAppDecisionValuesV0(form.Datos.TiposDetallados[index].Restricciones, decision)
 		}
 		return form
 	}
@@ -73,7 +73,7 @@ func applyWebNuevaAppIntakeDecisionToFormV0(
 		case "frecuencia":
 			form.Datos.Fuentes[index].Frecuencia = decision.Value
 		case "restricciones":
-			form.Datos.Fuentes[index].Restricciones = decision.Values
+			form.Datos.Fuentes[index].Restricciones = mergeNuevaAppDecisionValuesV0(form.Datos.Fuentes[index].Restricciones, decision)
 		}
 		return form
 	}
@@ -87,7 +87,7 @@ func applyWebNuevaAppIntakeDecisionToFormV0(
 		case "requerido":
 			form.Datos.Storage[index].Requerido = decision.Value == "true"
 		case "restricciones":
-			form.Datos.Storage[index].Restricciones = decision.Values
+			form.Datos.Storage[index].Restricciones = mergeNuevaAppDecisionValuesV0(form.Datos.Storage[index].Restricciones, decision)
 		}
 		return form
 	}
@@ -111,7 +111,7 @@ func applyWebNuevaAppIntakeDecisionToFormV0(
 	case "plataformas":
 		form.Plataformas = decision.Values
 	case "restricciones":
-		form.Restricciones = decision.Values
+		form.Restricciones = mergeNuevaAppDecisionValuesV0(form.Restricciones, decision)
 	case "preferencias_tecnicas.arquitectura":
 		form.PreferenciasTecnicas.Arquitectura = decision.Value
 	case "preferencias_tecnicas.lenguaje":
@@ -119,9 +119,9 @@ func applyWebNuevaAppIntakeDecisionToFormV0(
 	case "preferencias_tecnicas.framework":
 		form.PreferenciasTecnicas.Framework = decision.Value
 	case "preferencias_tecnicas.restricciones":
-		form.PreferenciasTecnicas.Restricciones = nuevaAppDecisionValuesOrScalarV0(decision)
+		form.PreferenciasTecnicas.Restricciones = mergeNuevaAppDecisionValuesV0(form.PreferenciasTecnicas.Restricciones, decision)
 	case "preferencias_tecnicas.preferencias":
-		form.PreferenciasTecnicas.Preferencias = nuevaAppDecisionValuesOrScalarV0(decision)
+		form.PreferenciasTecnicas.Preferencias = mergeNuevaAppDecisionValuesV0(form.PreferenciasTecnicas.Preferencias, decision)
 	case "project_source.kind":
 		form.ProjectSource.Kind = decision.Value
 	case "project_source.git_url":
@@ -133,7 +133,7 @@ func applyWebNuevaAppIntakeDecisionToFormV0(
 	case "deploy.target":
 		form.Deploy.Target = decision.Value
 	case "deploy.restricciones":
-		form.Deploy.Restricciones = decision.Values
+		form.Deploy.Restricciones = mergeNuevaAppDecisionValuesV0(form.Deploy.Restricciones, decision)
 	case "datos.db_required":
 		form.Datos.DBRequired = decision.Value == "true"
 	case "datos.necesidad_funcional":
@@ -155,7 +155,7 @@ func applyWebNuevaAppIntakeDecisionToFormV0(
 	case "datos.operacion.auditoria":
 		form.Datos.Operacion.Auditoria = decision.Value == "true"
 	case "datos.operacion.restricciones":
-		form.Datos.Operacion.Restricciones = decision.Values
+		form.Datos.Operacion.Restricciones = mergeNuevaAppDecisionValuesV0(form.Datos.Operacion.Restricciones, decision)
 	case "calidad.pruebas":
 		form.Calidad.Pruebas = decision.Value
 	case "calidad.accesibilidad":
@@ -163,7 +163,7 @@ func applyWebNuevaAppIntakeDecisionToFormV0(
 	case "calidad.accesibilidad_opciones":
 		form.Calidad.AccesibilidadOpciones = decision.Values
 	case "calidad.compliance":
-		form.Calidad.Compliance = nuevaAppDecisionValuesOrScalarV0(decision)
+		form.Calidad.Compliance = mergeNuevaAppDecisionValuesV0(form.Calidad.Compliance, decision)
 	case "calidad.observabilidad":
 		form.Calidad.Observabilidad = nuevaAppDecisionOptionalBoolV0(decision)
 	case "documentacion.usuario":
@@ -175,25 +175,29 @@ func applyWebNuevaAppIntakeDecisionToFormV0(
 	case "documentacion.profundidad":
 		form.Documentacion.Profundidad = decision.Value
 	case "documentacion.locales":
-		form.Documentacion.Locales = nuevaAppDecisionValuesOrScalarV0(decision)
+		form.Documentacion.Locales = mergeNuevaAppDecisionValuesV0(form.Documentacion.Locales, decision)
 	case "agentes.revision_humana":
 		form.Agentes.RevisionHumana = nuevaAppDecisionOptionalBoolV0(decision)
 	case "agentes.autonomia":
 		form.Agentes.Autonomia = decision.Value
 	case "agentes.preferencias":
-		form.Agentes.Preferencias = decision.Values
+		form.Agentes.Preferencias = mergeNuevaAppDecisionValuesV0(form.Agentes.Preferencias, decision)
 	case "i18n.enabled":
 		form.I18N.Enabled = nuevaAppDecisionOptionalBoolV0(decision)
 	case "i18n.default_locale":
 		form.I18N.DefaultLocale = decision.Value
 	case "i18n.locales":
-		form.I18N.Locales = nuevaAppDecisionValuesOrScalarV0(decision)
+		form.I18N.Locales = mergeNuevaAppDecisionValuesV0(form.I18N.Locales, decision)
 	case "i18n.justificacion":
 		form.I18N.Justificacion = decision.Value
 	case "project_source.project_ref":
 		form.ProjectSource.ProjectRef = decision.Value
 	}
 	return form
+}
+
+func mergeNuevaAppDecisionValuesV0(existing []string, decision WebNuevaAppIntakeDecisionV0) []string {
+	return compactStringsV0(append(append([]string{}, existing...), nuevaAppDecisionValuesOrScalarV0(decision)...))
 }
 
 func nuevaAppDecisionValuesOrScalarV0(decision WebNuevaAppIntakeDecisionV0) []string {

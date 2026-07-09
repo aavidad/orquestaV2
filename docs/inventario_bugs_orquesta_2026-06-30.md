@@ -192,6 +192,86 @@ antes de su cierre posterior:
   servidores temporales activan el opt-in legacy requerido; el `codex-fake`
   file-based escribe `external_summary.md` para que el intake seleccione el
   artefacto por `artifact_type` cuando hay varios ficheros.
+- `BUG-ORQ-20260709-204` queda cerrado en wizard/i18n local: E5 detecto dos
+  huecos estructurales en Nueva App. Primero, el guard de placeholders i18n
+  vivia copiado en un test del wizard y no protegía todo catalogo nuevo.
+  Segundo, algunas respuestas del wizard podian escribir campos de lista
+  acumulativa en el mismo batch y perder la decision anterior por reemplazo;
+  el caso observado fue T7 resiliencia + T8 cumplimiento sobre
+  `agentes.preferencias`. Cierre: el aplicador mezcla listas acumulativas de
+  restricciones/preferencias/compliance/locales sin duplicar valores, T8 declara
+  destino primario `calidad.compliance`, el selector de turno evita campos
+  destino repetidos en la pantalla visible y los tests centralizan los patrones
+  prohibidos de placeholders para todo `NuevaAppI18nRequiredKeysV0`. Evidencia:
+  `go test -count=1 ./modulos/orquesta-web` y `git diff --check`.
+- `BUG-ORQ-20260709-205` queda cerrado en alcance local para E4/proveedor:
+  el puerto `IdleSelfImprovementBlockersV0` existia, pero
+  `idleSelfImprovementRunHasProviderAuthBlockerV0` devolvia siempre `false`,
+  asi que la automejora podia seguir planificando aunque hubiese runs con
+  `codex_app_server_provider_unauthorized` o limite de proveedor ya observado.
+  Cierre: el detector busca codigos canonicos de proveedor/auth/cuota en las
+  proyecciones del run sin inferir por severidad critica generica, el reason
+  publico pasa a `provider_unavailable_paused`, y se anade evento local
+  `provider` en `operator_notifications.v0` para avisar una sola vez por
+  `reason_code+run_ref` con accion de reauth/cuota. Evidencia:
+  `go test -count=1 ./cmd/orquesta-server -run 'TestIdleSelfImprovementBlockersV0|TestOperatorNotificationServerV0Notifica'`,
+  `go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0SupervisorNoPreparaAutomejoraConProveedorAuthBloqueadoV0'`
+  y `go test -count=1 ./modulos/orquesta-operator-notifications`.
+  Residual externo: wiring/smoke con Telegram remoto real queda para la fase
+  remota con credenciales y bot autorizados.
+- Avance E4 local 2026-07-09b: el bloqueador
+  `provider_unavailable_paused` ya esta cableado al notifier opcional del
+  supervisor de `cmd/orquesta-server`. Si la configuracion canonica de Telegram
+  tiene token y `notification_target_ref`, envia un evento operador `provider`
+  deduplicado por `provider:reason:run_ref` y anade evidencia de notificacion
+  al resultado del blocker; si no hay sender, es no-op. Esto sigue dejando para
+  remoto solo el smoke con bot/credenciales reales. Evidencia:
+  `TestIdleSelfImprovementBlockersV0NotificaProviderPausadoUnaVezV0` y
+  `go test -count=1 ./cmd/orquesta-server -run 'TestIdleSelfImprovementBlockersV0|TestOperatorNotificationServerV0Notifica|TestOperatorNotificationHermesTelegramNotifierV0UsaSendSinAuthCodex|TestTelegramBotAPI'`.
+- Avance local BUG-079 2026-07-09k: ademas de limitar la respuesta de
+  `thread/read` en protocolo WebSocket/comando, la observacion activa de
+  `orquesta-runtime-codex-appserver` ya convierte una respuesta de hilo
+  sobredimensionada en `blocked` con issue exacto
+  `codex_app_server_thread_read_response_too_large` y evidencia
+  `evidence-ref-codex-app-server-active-goal-thread-read-failed`. Esto no
+  cierra el enforcement pre-tool del proveedor, pero evita que el observador
+  silencie un stdout gigante y siga publicando un falso `running` generico.
+  Evidencia: `TestServerCodexAppServerGoalBackendV0ObservaThreadReadGiganteComoBloqueoV0`,
+  `TestCodexAppServerCommandProtocolThreadReadResponseBudgetV0`,
+  `TestCodexAppServerWebSocketThreadReadResponseBudgetV0` y
+  `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`.
+- Avance E3 local 2026-07-09a/b: se anade inventario focal de superficies MCP
+  internas: Nueva App (`solicitar_nueva`, `wizard`, `wizard_bot`),
+  `autoprogramming.prepare_run`, `autoprogramming.status` y
+  `operator_director.message`. El guard existente ya detectaba tools
+  registradas sin DTO canonico y campos stale en `input_schema`, pero no
+  detectaba el inverso: un campo nuevo en el DTO no anunciado por el
+  descriptor. Nuevo test
+  `TestMCPInternalContractSurfaceInventoryV0CubreCamposCanonicos` falla si una
+  tool interna registrada no esta inventariada o si cualquier campo canonico
+  del DTO queda fuera del `input_schema`. Cierre local: se alinean los
+  descriptores de `orquesta.autoprogramming.status.v0` y
+  `orquesta.operator.director.message.v0` con sus DTOs reales. Evidencia:
+  `go test -count=1 ./modulos/orquesta-mcp -run 'TestMCP(TransportToolInputSchema|InternalContractSurfaceInventory)'`
+  y `go test -count=1 ./modulos/orquesta-mcp`.
+- Avance E3 local 2026-07-09c: Telegram queda cubierto en el borde local del
+  adaptador, no en remoto. `modulos/orquesta-operator-telegram` declara
+  `CommandCatalogV0` como inventario canonico de comandos/aliases/metadatos de
+  seguridad; `ParseCommandV0` resuelve desde ese catalogo y
+  `TestCommandCatalogV0CubreComandosPublicosYParserV0` falla si un comando
+  publico no esta inventariado, si hay aliases duplicados o si `stop` pierde
+  la confirmacion requerida. Evidencia:
+  `go test -count=1 ./modulos/orquesta-operator-telegram`. Residual: la
+  superficie HTTP/web debe entrar por inventario cuando se toque ese adaptador;
+  la prueba real de bot/credenciales sigue en fase remoto, no en nucleo.
+- Residual E6 guard scripts: los guards de scripts estan verdes, pero siguen
+  repartidos en varios tests de
+  `cmd/orquesta-server/smoke_goal_first_script_guard_v0_test.go`. Propuesta de
+  cierre futuro: tabla unica `script -> contratos exigidos` para
+  `shutdown_common_runtime_dir`, `direct_shutdown_http_contract`,
+  `managed_endpoint`, `no_historical_port`,
+  `no_managed_server_outside_ctl_deploy` y `delegated_start_cleanup`, sin tocar
+  scripts. No bloquea el nucleo ni conectores locales.
 - Reejeucion real 2026-07-04 noche 10:
   `smoke_goal_first_checkpoint_only_high_consumption_real=ok` con
   `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-6c8dc4317888c8e25bb0e91f7f910aab`,

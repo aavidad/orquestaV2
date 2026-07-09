@@ -104,6 +104,7 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 		return receipt, false
 	}
 	observed := receipt
+	threadReadIssueCode := ""
 	threadIssueCode := ""
 	threadStatus := ""
 	if threadID := strings.TrimSpace(observed.ExternalGoalRef); threadID != "" && backend.Protocol != nil {
@@ -135,6 +136,8 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 				return observed, true
 			}
 			threadIssueCode = backend.codexAppServerThreadIssueCodeV0(thread)
+		} else {
+			threadReadIssueCode = codexAppServerIssueCodeForErrorV0(err, "codex_app_server_thread_read_failed")
 		}
 	}
 	fileMarked, fileFound, fileErr := codexAppServerGoalResultFromWorkspaceV0(
@@ -153,6 +156,19 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 		observed.Status = "complete"
 		observed.Summary = "codex_app_server_goal_result_file"
 		backend.mergeCodexAppServerGoalResultGuardedV0(ctx, request, &observed, fileMarked, "evidence-ref-codex-app-server-goal-result-file")
+		return observed, true
+	}
+	if codexAppServerActiveThreadReadFailureBlocksV0(threadReadIssueCode) {
+		observed.Status = orquestagoal.GoalStatusBlockedV0
+		observed.Summary = threadReadIssueCode
+		observed.IssueCode = threadReadIssueCode
+		observed.EvidenceRefs = compactServerStackStringsV0(append(
+			observed.EvidenceRefs,
+			"evidence-ref-codex-app-server-active-goal-thread-read-failed",
+		))
+		if issueEvidence := codexAppServerIssueEvidenceRefV0(threadReadIssueCode); issueEvidence != "" {
+			observed.EvidenceRefs = compactServerStackStringsV0(append(observed.EvidenceRefs, issueEvidence))
+		}
 		return observed, true
 	}
 	if threadIssueCode != "" {
@@ -187,6 +203,15 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 		return observed, true
 	}
 	return observed, false
+}
+
+func codexAppServerActiveThreadReadFailureBlocksV0(issueCode string) bool {
+	switch strings.TrimSpace(issueCode) {
+	case codexAppServerThreadReadFrameTooLargeIssueCodeV0:
+		return true
+	default:
+		return false
+	}
 }
 
 func codexAppServerGoalResultReadyForActiveCompletionV0(marked codexAppServerGoalResultMarkerV0) bool {

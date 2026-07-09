@@ -16,29 +16,29 @@ func ParseCommandV0(text string) (CommandV0, []IssueV0) {
 	if len(fields) > 1 {
 		rest = strings.TrimSpace(strings.TrimPrefix(text, fields[0]))
 	}
-	command := CommandV0{Arguments: rest}
-	switch verb {
-	case "estado", "status":
+	command := CommandV0{Kind: commandKindForAliasV0(verb), Arguments: rest}
+	switch command.Kind {
+	case CommandStatusV0:
 		command.Kind = CommandStatusV0
 		command.TargetRef = firstFieldV0(rest)
-	case "cola", "queue":
+	case CommandQueueV0:
 		command.Kind = CommandQueueV0
 		command.TargetRef = firstFieldV0(rest)
-	case "lanzar", "launch", "launch_task", "task":
+	case CommandLaunchV0:
 		command.Kind = CommandLaunchV0
 		command.Arguments = strings.TrimSpace(rest)
-	case "observar", "observe", "observe_goal", "goal":
+	case CommandObserveV0:
 		command.Kind = CommandObserveV0
 		command.TargetRef = firstFieldV0(rest)
-	case "mensaje", "msg", "director", "director_message":
+	case CommandMessageV0:
 		command.Kind = CommandMessageV0
 		command.TargetRef = firstFieldV0(rest)
 		command.Arguments = strings.TrimSpace(strings.TrimPrefix(rest, command.TargetRef))
-	case "detener", "stop", "control":
+	case CommandStopV0:
 		command.Kind = CommandStopV0
 		command.TargetRef = firstFieldV0(rest)
 		command.Confirmed = hasConfirmationV0(rest)
-	case "handoff", "resumen":
+	case CommandHandoffV0:
 		command.Kind = CommandHandoffV0
 		command.TargetRef = firstFieldV0(rest)
 	default:
@@ -46,6 +46,18 @@ func ParseCommandV0(text string) (CommandV0, []IssueV0) {
 	}
 	command.EvidenceRef = "evidence-ref-telegram-command-" + command.Kind
 	return command, nil
+}
+
+func commandKindForAliasV0(alias string) string {
+	alias = strings.TrimSpace(alias)
+	for _, descriptor := range CommandCatalogV0() {
+		for _, candidate := range descriptor.Aliases {
+			if candidate == alias {
+				return descriptor.Kind
+			}
+		}
+	}
+	return ""
 }
 
 func firstFieldV0(value string) string {

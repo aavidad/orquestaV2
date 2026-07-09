@@ -9,9 +9,10 @@ import (
 const (
 	SchemaVersionV0 = "operator_notifications.v0"
 
-	EventKindTaskV0 = "task"
-	EventKindGoalV0 = "goal"
-	EventKindRunV0  = "run"
+	EventKindTaskV0     = "task"
+	EventKindGoalV0     = "goal"
+	EventKindRunV0      = "run"
+	EventKindProviderV0 = "provider"
 
 	StatusCompleteV0 = "complete"
 	StatusBlockedV0  = "blocked"

@@ -113,7 +113,7 @@ func MCPAutoprogrammingStatusDescriptorV0() MCPAutoprogrammingStatusToolDescript
 	return MCPAutoprogrammingStatusToolDescriptorV0{
 		Name:        MCPAutoprogrammingStatusToolNameV0,
 		Version:     MCPAutoprogrammingStatusToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,external_job_ref?,queue_ref?,app_refs?,queue_limit?,operator_advice?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,app_ref?,external_job_ref?,queue_ref?,app_refs?,queue_limit?,occurred_at?,include_process_refs?,include_agent_progress?,include_agent_usage?,telemetry_flags?,operator_advice?}",
 		Output:      "ok:{queue?,run?,queue_health?,stale_running?[]{code,severity?,run_ref?,status?,goal_ref?,goal_status?,context_budget_total_bytes?,static_prompt_bytes?,dynamic_context_bytes?,code_context_cache_status?,recommended_action?,evidence_refs?},projects?,tasks?,agents?,operator?,goal_progress_policy?,efficiency_summary?{schema_version,state,recommended_action?,reasons?},idle_self_improvement_budget?,ops_snapshot?,diagnostics?,evidence_refs?}|error:{errores_publicos,evidence_refs?,diagnostics?,operator_advice?}",
 		ResourceURI: MCPAutoprogrammingStatusResourceURIV0,
 		Invariantes: []string{

@@ -52,6 +52,7 @@ func buildRuntimeFromConfigV0(serverConfig orquestaserver.ConfigV0) (*orquestase
 	if err != nil {
 		return nil, err
 	}
+	projectConfig := projectConfigFromServerConfigBestEffortV0(serverConfig)
 	baseSupervisor := serverStackSupervisorV0{
 		stack:                   &stack,
 		projectWorkDir:          serverConfig.IdleSelfImprovementProjectWorkDir,
@@ -59,6 +60,7 @@ func buildRuntimeFromConfigV0(serverConfig orquestaserver.ConfigV0) (*orquestase
 		stateDir:                serverConfig.StateDir,
 		selfAuditBacklogEnabled: serverConfig.SelfAuditBacklogEnabled,
 		curatedSkills:           serverCuratedSkillsFromProjectV0(serverConfig.IdleSelfImprovementProjectWorkDir),
+		operatorNotifier:        operatorTaskTerminalNotifierFromProjectConfigFileV0(projectConfig),
 	}
 	supervisor := serverSupervisorWithCodexGoalBackendV0(baseSupervisor, goalBackends.IdleGoal)
 	residentDirector := newServerResidentDirectorV0(&stack, serverConfig)

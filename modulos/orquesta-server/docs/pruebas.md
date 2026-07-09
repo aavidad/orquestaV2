@@ -56,7 +56,7 @@
 - `cmd/orquesta-server` prueba que el planner de automejora salta tareas ya
   visibles en cola y anade una tarea scanner cuando hay capacidad libre para
   descubrir nuevos huecos.
-- `cmd/orquesta-server` prueba que `provider_auth_blocked` se detecta desde
+- `cmd/orquesta-server` prueba que `provider_unavailable_paused` se detecta desde
   runs activos con agente perdido, pregunta al director y assessment critico,
   y que la automejora residente no prepara trabajo nuevo mientras ese bloqueo
   este vigente.

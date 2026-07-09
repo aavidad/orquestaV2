@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	idleSelfImprovementProviderAuthBlockedReasonV0     = "provider_auth_blocked"
+	idleSelfImprovementProviderAuthBlockedReasonV0     = "provider_unavailable_paused"
 	idleSelfImprovementProviderAuthRecoveredReasonV0   = "provider_auth_recovered"
 	idleSelfImprovementProviderAuthRecoveredEvidenceV0 = "evidence-ref-provider-auth-recovered"
 	idleSelfImprovementProviderAuthRecoveryActionV0    = "restore_provider_credentials_then_resume_run"
@@ -38,7 +38,7 @@ func (supervisor serverStackSupervisorV0) IdleSelfImprovementBlockersV0(
 	if len(runRefs) == 0 {
 		return orquestaserver.IdleSelfImprovementBlockerResultV0{}, nil
 	}
-	return orquestaserver.IdleSelfImprovementBlockerResultV0{
+	result := orquestaserver.IdleSelfImprovementBlockerResultV0{
 		Blocked: true,
 		Reason:  idleSelfImprovementProviderAuthBlockedReasonV0,
 		RunRefs: limitServerStackStringsV0(runRefs, 20),
@@ -46,14 +46,41 @@ func (supervisor serverStackSupervisorV0) IdleSelfImprovementBlockersV0(
 			"evidence-ref-auth-config-blocker",
 			"evidence-ref-orquesta-provider-auth-blocker",
 		},
-		Message:        "provider_auth_blocked: restaurar proveedor y reanudar run antes de reintentar automejora.",
+		Message:        "provider_unavailable_paused: restaurar proveedor/cuota y reanudar run antes de reintentar automejora.",
 		RecoveryAction: idleSelfImprovementProviderAuthRecoveryActionV0,
 		NextActions: []string{
 			"restore_provider_credentials",
 			"confirm_provider_available",
 			"resume_run_with_provider_auth_recovered_evidence",
 		},
-	}, nil
+	}
+	return supervisor.notifyIdleSelfImprovementProviderBlockerV0(ctx, result), nil
+}
+
+func (supervisor serverStackSupervisorV0) notifyIdleSelfImprovementProviderBlockerV0(
+	ctx context.Context,
+	result orquestaserver.IdleSelfImprovementBlockerResultV0,
+) orquestaserver.IdleSelfImprovementBlockerResultV0 {
+	if !result.Blocked || result.Reason != idleSelfImprovementProviderAuthBlockedReasonV0 {
+		return result
+	}
+	message, sent, err := supervisor.operatorNotifier.NotifyProviderIssueV0(
+		ctx,
+		idleSelfImprovementProviderAuthBlockedReasonV0,
+		result.RunRefs,
+		result.EvidenceRefs,
+	)
+	if err != nil {
+		result.EvidenceRefs = compactServerStackStringsV0(append(
+			result.EvidenceRefs,
+			"evidence-ref-operator-provider-notification-failed",
+		))
+		return result
+	}
+	if sent {
+		result.EvidenceRefs = compactServerStackStringsV0(append(result.EvidenceRefs, message.EvidenceRefs...))
+	}
+	return result
 }
 
 func (supervisor serverStackSupervisorV0) idleSelfImprovementProviderBlockedRunRefsV0(
@@ -233,7 +260,56 @@ func readIdleSelfImprovementRunDocumentV0(path string) (
 func idleSelfImprovementRunHasProviderAuthBlockerV0(
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) bool {
-	_ = run
+	switch run.Status {
+	case orquestacoreworkflow.OrchestrationRunStatusClosedV0:
+		return false
+	}
+	for _, value := range idleSelfImprovementRunProviderBlockerRefsV0(run) {
+		if idleSelfImprovementProviderBlockerTextV0(value) {
+			return true
+		}
+	}
+	return false
+}
+
+func idleSelfImprovementRunProviderBlockerRefsV0(
+	run orquestacoreworkflow.OrchestrationRunV0,
+) []string {
+	var refs []string
+	refs = append(refs, run.AgentAssessments...)
+	refs = append(refs, run.FailedAgents...)
+	refs = append(refs, run.LostAgents...)
+	refs = append(refs, run.DirectorQuestions...)
+	refs = append(refs, run.CapacityDecisions...)
+	refs = append(refs, run.ReplanDecisions...)
+	refs = append(refs, run.Validations...)
+	refs = append(refs, run.ReviewResults...)
+	return refs
+}
+
+func idleSelfImprovementProviderBlockerTextV0(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return false
+	}
+	for _, marker := range []string{
+		"codex_app_server_provider_unauthorized",
+		"codex_app_server_auth_missing",
+		"codex_app_server_goal_provider_limited",
+		"provider_usage_limit_retry_after",
+		"usage_limit_reached",
+		"usage_limited",
+		"quota_limited",
+		"provider_limited",
+		"token_invalidated",
+		"refresh_token_invalidated",
+		"refresh_token_reused",
+		"access token could not be refreshed",
+	} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
 	return false
 }
 

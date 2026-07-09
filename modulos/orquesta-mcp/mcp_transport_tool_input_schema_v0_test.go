@@ -3,6 +3,8 @@ package orquestamcp
 import (
 	"strings"
 	"testing"
+
+	channel "orquesta/modulos/orquesta-operator-director-channel"
 )
 
 func TestMCPTransportToolInputSchemaV0CubreToolsRegistrados(t *testing.T) {
@@ -23,6 +25,45 @@ func TestMCPTransportToolInputSchemaV0CubreToolsRegistrados(t *testing.T) {
 	}
 }
 
+func TestMCPInternalContractSurfaceInventoryV0CubreCamposCanonicos(t *testing.T) {
+	transport := newFakeMCPTransportV0()
+	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{}); err != nil {
+		t.Fatalf("register transport: %v", err)
+	}
+	inventory := mcpInternalContractSurfaceInventoryForTestV0()
+	known := map[string]mcpContractSurfaceInventoryEntryForTestV0{}
+	for _, entry := range inventory {
+		known[entry.ToolName] = entry
+	}
+	for name := range transport.tools {
+		if mcpInternalToolRequiresInventoryForTestV0(name) {
+			if _, ok := known[name]; !ok {
+				t.Fatalf("tool interna sin inventario de contrato: %s", name)
+			}
+		}
+	}
+	for _, entry := range inventory {
+		tool, ok := transport.tools[entry.ToolName]
+		if !ok {
+			t.Fatalf("tool inventariada no registrada: %+v", entry)
+		}
+		fields, ok := MCPTransportToolInputFieldsV0(entry.ToolName)
+		if !ok || len(fields) == 0 {
+			t.Fatalf("tool inventariada sin DTO canonico: %+v", entry)
+		}
+		announced := map[string]bool{}
+		for _, field := range mcpToolInputFieldNamesFromShapeTestV0(tool.InputShape) {
+			announced[field] = true
+		}
+		for _, field := range fields {
+			if !announced[field.Name] {
+				t.Fatalf("contrato %s tool %s no anuncia campo canonico %q en input_schema=%q",
+					entry.ContractRef, entry.ToolName, field.Name, tool.InputShape)
+			}
+		}
+	}
+}
+
 func assertMCPToolDescriptorFieldsMatchDTOV0(
 	t *testing.T,
 	name string,
@@ -38,6 +79,36 @@ func assertMCPToolDescriptorFieldsMatchDTOV0(
 		if !known[field] {
 			t.Fatalf("tool %s anuncia campo stale %q en input_schema=%q", name, field, inputShape)
 		}
+	}
+}
+
+type mcpContractSurfaceInventoryEntryForTestV0 struct {
+	ContractRef string
+	ToolName    string
+}
+
+func mcpInternalContractSurfaceInventoryForTestV0() []mcpContractSurfaceInventoryEntryForTestV0 {
+	return []mcpContractSurfaceInventoryEntryForTestV0{
+		{ContractRef: "nueva_app.solicitar.v0", ToolName: MCPNuevaAppToolNameV0},
+		{ContractRef: "nueva_app.wizard.v0", ToolName: MCPNuevaAppWizardToolNameV0},
+		{ContractRef: "nueva_app.wizard_bot.v0", ToolName: MCPNuevaAppWizardBotToolNameV0},
+		{ContractRef: "autoprogramming.prepare_run.v0", ToolName: MCPAutoprogrammingPrepareRunToolNameV0},
+		{ContractRef: "autoprogramming.status.v0", ToolName: MCPAutoprogrammingStatusToolNameV0},
+		{ContractRef: "operator_director.message.v0", ToolName: channel.OperatorDirectorMessageToolNameV0},
+	}
+}
+
+func mcpInternalToolRequiresInventoryForTestV0(name string) bool {
+	switch strings.TrimSpace(name) {
+	case MCPNuevaAppToolNameV0,
+		MCPNuevaAppWizardToolNameV0,
+		MCPNuevaAppWizardBotToolNameV0,
+		MCPAutoprogrammingPrepareRunToolNameV0,
+		MCPAutoprogrammingStatusToolNameV0,
+		channel.OperatorDirectorMessageToolNameV0:
+		return true
+	default:
+		return false
 	}
 }
 

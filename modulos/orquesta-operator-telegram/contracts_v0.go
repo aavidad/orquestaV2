@@ -39,6 +39,26 @@ type CommandV0 struct {
 	EvidenceRef string
 }
 
+type CommandDescriptorV0 struct {
+	Kind                 string
+	Aliases              []string
+	TargetRefRequired    bool
+	ArgumentsRequired    bool
+	ConfirmationRequired bool
+}
+
+func CommandCatalogV0() []CommandDescriptorV0 {
+	return []CommandDescriptorV0{
+		{Kind: CommandStatusV0, Aliases: []string{"estado", "status"}},
+		{Kind: CommandQueueV0, Aliases: []string{"cola", "queue"}},
+		{Kind: CommandLaunchV0, Aliases: []string{"lanzar", "launch", "launch_task", "task"}, ArgumentsRequired: true},
+		{Kind: CommandObserveV0, Aliases: []string{"observar", "observe", "observe_goal", "goal"}, TargetRefRequired: true},
+		{Kind: CommandMessageV0, Aliases: []string{"mensaje", "msg", "director", "director_message"}, TargetRefRequired: true, ArgumentsRequired: true},
+		{Kind: CommandStopV0, Aliases: []string{"detener", "stop", "control"}, TargetRefRequired: true, ConfirmationRequired: true},
+		{Kind: CommandHandoffV0, Aliases: []string{"handoff", "resumen"}},
+	}
+}
+
 type ResponseV0 struct {
 	Status       string    `json:"status"`
 	Summary      string    `json:"summary"`

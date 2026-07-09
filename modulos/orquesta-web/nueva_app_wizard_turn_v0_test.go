@@ -447,6 +447,7 @@ func TestWizardTecnicoActivaT1AT8V0(t *testing.T) {
 		Deploy: WebNuevaAppDeployFormV0{Target: "contenedor"},
 	}
 	questions := webNuevaAppWizardAllGapQuestionsV0(form)
+	technicalQuestions := wizardTechnicalDimensionQuestionsV0(form)
 	for _, ref := range []string{
 		"wizard-t1-control-acceso",
 		"wizard-t2-identidad-corporativa",
@@ -461,6 +462,7 @@ func TestWizardTecnicoActivaT1AT8V0(t *testing.T) {
 			t.Fatalf("dimension tecnica %s no activada: %+v", ref, questions)
 		}
 	}
+	requireWizardQuestionsUniqueFieldV0(t, technicalQuestions)
 }
 
 func TestWizardDefaultsTecnicosSilenciososIncluyenMejoresPracticasV0(t *testing.T) {
@@ -501,7 +503,7 @@ func TestWizardTecnicoMaterializaDecisionesT4T5T7T8V0(t *testing.T) {
 	t7 := wizardQuestionV0("wizard-t7-resiliencia-rendimiento", "agentes.preferencias", WizardTopicEntregaV0, WizardImportanceAltaV0, []WizardOptionV0{
 		wizardOptionV0("timeouts_reintentos_circuit_breakers", "nueva_app.wizard.option.t7.timeouts", true, "nueva_app.wizard.rationale.t7.timeouts"),
 	})
-	t8 := wizardQuestionV0("wizard-t8-cumplimiento-tecnico", "agentes.preferencias", WizardTopicDatosV0, WizardImportanceAltaV0, []WizardOptionV0{
+	t8 := wizardQuestionV0("wizard-t8-cumplimiento-tecnico", "calidad.compliance", WizardTopicDatosV0, WizardImportanceAltaV0, []WizardOptionV0{
 		wizardOptionV0("auditoria_inmutable_retencion_rgpd", "nueva_app.wizard.option.t8.auditoria_rgpd", true, "nueva_app.wizard.rationale.t8.auditoria_rgpd"),
 	})
 
@@ -531,6 +533,54 @@ func TestWizardTecnicoMaterializaDecisionesT4T5T7T8V0(t *testing.T) {
 		!session.Form.Datos.Operacion.Auditoria ||
 		!stringSliceHasV0(session.Form.Agentes.Preferencias, "cumplimiento tecnico: auditoria_inmutable_retencion_rgpd") {
 		t.Fatalf("T8 no materializa preferencias/compliance: calidad=%+v datos=%+v agentes=%+v", session.Form.Calidad, session.Form.Datos.Operacion, session.Form.Agentes)
+	}
+}
+
+func TestWizardTurnQuestionsNoDuplicanCampoDestinoV0(t *testing.T) {
+	sessions := []WebNuevaAppIntakeSessionV0{
+		wizardSessionWithObjectiveV0("session-unique-basic", "quiero una app para una agenda"),
+		wizardSessionWithObjectiveV0("session-unique-shared", "agenda compartida para clientes"),
+		wizardSessionWithObjectiveV0("session-unique-shop", "tienda con pagos, catalogo, stock y facturacion"),
+		wizardSessionWithObjectiveV0("session-unique-kernel", "modulo para el nucleo de Linux en C con build y pruebas"),
+	}
+	technical := NewWebNuevaAppIntakeSessionV0("session-unique-technical", "es-ES", "API interna", "API publica para empresa con Active Directory y datos sanitarios")
+	technical = technical.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "tipo_app", Value: "api"})
+	technical = technical.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "usuarios_objetivo", Values: []string{"equipo"}})
+	technical = technical.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "datos.db_required", Value: "true"})
+	technical = technical.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "datos.necesidad_funcional", Value: "Gestionar datos propios"})
+	technical = technical.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "datos.sensibilidad", Value: "sanitaria"})
+	technical = technical.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "deploy.target", Value: "contenedor"})
+	sessions = append(sessions, technical)
+
+	for _, session := range sessions {
+		requireWizardQuestionsUniqueFieldV0(t, WebNuevaAppWizardGapQuestionsV0(session.Form))
+	}
+}
+
+func TestWizardRespuestasMismoTurnoNoPisanListasAcumulativasV0(t *testing.T) {
+	session := NewWebNuevaAppIntakeSessionV0("session-wizard-list-merge", "es-ES", "API interna", "API para empresa con datos sanitarios")
+	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "tipo_app", Value: "api"})
+	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "usuarios_objetivo", Values: []string{"equipo"}})
+	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "datos.db_required", Value: "true"})
+	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "datos.necesidad_funcional", Value: "Gestionar datos propios"})
+	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "datos.sensibilidad", Value: "sanitaria"})
+	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "deploy.target", Value: "contenedor"})
+
+	questions := webNuevaAppWizardAllGapQuestionsV0(session.Form)
+	if !hasWizardQuestionRefV0(questions, "wizard-t7-resiliencia-rendimiento") ||
+		!hasWizardQuestionRefV0(questions, "wizard-t8-cumplimiento-tecnico") {
+		t.Fatalf("las preguntas tecnicas deben contener T7 y T8 para probar no pisada: %+v", questions)
+	}
+	session, _ = ApplyWebNuevaAppWizardAnswersV0(session, []WizardAnswerV0{
+		{QuestionRef: "wizard-t7-resiliencia-rendimiento", UserChoice: "timeouts_reintentos_circuit_breakers"},
+		{QuestionRef: "wizard-t8-cumplimiento-tecnico", UserChoice: "auditoria_inmutable_retencion_rgpd"},
+	})
+	if !stringSliceHasV0(session.Form.Agentes.Preferencias, "resiliencia: timeouts_reintentos_circuit_breakers") ||
+		!stringSliceHasV0(session.Form.Agentes.Preferencias, "cumplimiento tecnico: auditoria_inmutable_retencion_rgpd") {
+		t.Fatalf("T7/T8 se pisaron en preferencias acumulativas: %+v", session.Form.Agentes.Preferencias)
+	}
+	if !stringSliceHasV0(session.Form.Calidad.Compliance, "auditoria_inmutable_retencion_rgpd") {
+		t.Fatalf("T8 no conservo compliance acumulativa: %+v", session.Form.Calidad.Compliance)
 	}
 }
 
@@ -606,24 +656,23 @@ func requireWizardI18nKeyV0(t *testing.T, catalog NuevaAppI18nCatalogV0, key str
 	}
 }
 
+func requireWizardQuestionsUniqueFieldV0(t *testing.T, questions []WizardQuestionV0) {
+	t.Helper()
+	seen := map[string]string{}
+	for _, question := range questions {
+		if trimV0(question.Field) == "" {
+			t.Fatalf("%s tiene campo destino vacio", question.QuestionRef)
+		}
+		if previous := seen[question.Field]; previous != "" {
+			t.Fatalf("wizard duplica campo destino %s entre %s y %s: %+v", question.Field, previous, question.QuestionRef, questions)
+		}
+		seen[question.Field] = question.QuestionRef
+	}
+}
+
 func requireWizardI18nNotPlaceholderV0(t *testing.T, catalog NuevaAppI18nCatalogV0, keys ...string) {
 	t.Helper()
-	for _, key := range keys {
-		for _, locale := range []string{NuevaAppI18nDefaultLocaleV0, NuevaAppI18nEnglishLocaleV0} {
-			text := catalog.lookupExact(locale, key)
-			for _, forbidden := range []string{
-				"Plain English explanation for ",
-				"Use it to choose the option without technical assumptions.",
-				"Plain explanation for this wizard choice.",
-				"Explica esta opcion en lenguaje llano.",
-				"Recomendacion conservadora para completar el contrato sin sobredisenar.",
-			} {
-				if strings.Contains(text, forbidden) {
-					t.Fatalf("clave wizard con placeholder %s/%s: %q", locale, key, text)
-				}
-			}
-		}
-	}
+	requireNuevaAppI18nNotPlaceholderV0(t, catalog, keys...)
 }
 
 func hasWizardQuestionOptionV0(questions []WizardQuestionV0, ref string, value string) bool {

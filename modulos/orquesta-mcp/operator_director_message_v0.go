@@ -34,7 +34,7 @@ func operatorDirectorMessageDescriptorV0() operatorDirectorMessageToolDescriptor
 		Name:        channel.OperatorDirectorMessageToolNameV0,
 		Version:     "v0",
 		ResourceURI: channel.OperatorDirectorMessageResourceURIV0,
-		InputSchema: "OperatorMessageV0",
+		InputSchema: "OperatorMessageV0:{schema_version?,request_ref,message_ref?,conversation_ref?,adapter_ref?,sender_ref?,target_ref,intent?,body,evidence_refs?}",
 		Output:      "OperatorDirectorResponseV0",
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
@@ -38,6 +39,34 @@ func TestOperatorNotificationServerV0NotificaGoalYRunTerminalDeduplicado(t *test
 	}
 }
 
+func TestOperatorNotificationServerV0NotificaProviderUnauthorizedUnaVezV0(t *testing.T) {
+	sender := &fakeOperatorNotificationSenderV0{}
+	notifier := newOperatorTaskTerminalNotifierV0("telegram:39995054", sender)
+	message, sent, err := notifier.NotifyProviderIssueV0(
+		context.Background(),
+		"codex_app_server_provider_unauthorized",
+		[]string{"run-ref-provider-unauthorized-001"},
+		[]string{"evidence-ref-codex-app-server-provider-unauthorized"},
+	)
+	if err != nil || !sent {
+		t.Fatalf("provider sent=%v err=%v", sent, err)
+	}
+	if message.DedupeKey != "provider:codex_app_server_provider_unauthorized:run-ref-provider-unauthorized-001" ||
+		!containsOperatorNotificationTestV0(message.Text, "hermes auth") ||
+		!containsOperatorNotificationTestV0(message.Text, "blocked") {
+		t.Fatalf("mensaje provider inesperado: %+v", message)
+	}
+	_, sent, err = notifier.NotifyProviderIssueV0(
+		context.Background(),
+		"codex_app_server_provider_unauthorized",
+		[]string{"run-ref-provider-unauthorized-001"},
+		[]string{"evidence-ref-codex-app-server-provider-unauthorized"},
+	)
+	if err != nil || sent || sender.calls != 1 {
+		t.Fatalf("dedupe provider sent=%v err=%v calls=%d", sent, err, sender.calls)
+	}
+}
+
 type fakeOperatorNotificationSenderV0 struct {
 	calls int
 }
@@ -51,4 +80,8 @@ func (fake *fakeOperatorNotificationSenderV0) SendOperatorNotificationV0(
 		return "", nil
 	}
 	return "evidence-ref-server-notification", nil
+}
+
+func containsOperatorNotificationTestV0(value string, target string) bool {
+	return strings.Contains(value, target)
 }

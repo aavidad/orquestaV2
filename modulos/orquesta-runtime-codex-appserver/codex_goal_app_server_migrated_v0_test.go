@@ -538,6 +538,34 @@ func TestServerCodexAppServerGoalBackendV0UmbralUsoAltoConfigurableV0(t *testing
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0ObservaThreadReadGiganteComoBloqueoV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{
+			ThreadID: "thread-ref-goal-thread-read-big-001",
+			Status:   "active",
+		},
+		readThreadErr: codexAppServerCallErrorV0{
+			Code: codexAppServerThreadReadFrameTooLargeIssueCodeV0,
+			Err:  errors.New("bytes=262145 limit=262144"),
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol}
+
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         "goal-ref-thread-read-big-001",
+		ExternalGoalRef: "thread-ref-goal-thread-read-big-001",
+	})
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusBlockedV0 ||
+		receipt.IssueCode != codexAppServerThreadReadFrameTooLargeIssueCodeV0 ||
+		receipt.Summary != codexAppServerThreadReadFrameTooLargeIssueCodeV0 ||
+		!containsStringMigratedTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-active-goal-thread-read-failed") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0UmbralUsoAltoDefaultConserva100kV0(t *testing.T) {
 	backend := serverCodexAppServerGoalBackendV0{}
 

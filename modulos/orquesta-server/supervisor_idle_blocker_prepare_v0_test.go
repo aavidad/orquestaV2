@@ -20,10 +20,10 @@ func TestRuntimeV0SupervisorNoPreparaAutomejoraConProveedorAuthBloqueadoV0(t *te
 		selfStarted:  make(chan struct{}, 1),
 		blocker: IdleSelfImprovementBlockerResultV0{
 			Blocked:        true,
-			Reason:         "provider_auth_blocked",
+			Reason:         "provider_unavailable_paused",
 			RunRefs:        []string{"run-ref-auth-blocked-001"},
 			EvidenceRefs:   []string{"evidence-ref-auth-config-blocker"},
-			Message:        "provider_auth_blocked: restaurar proveedor y reanudar run.",
+			Message:        "provider_unavailable_paused: restaurar proveedor y reanudar run.",
 			RecoveryAction: "restore_provider_credentials_then_resume_run",
 			NextActions:    []string{"restore_provider_credentials"},
 		},
@@ -50,13 +50,13 @@ func TestRuntimeV0SupervisorNoPreparaAutomejoraConProveedorAuthBloqueadoV0(t *te
 	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
 		t.Fatalf("bloqueo proveedor no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
 	}
-	if !strings.HasPrefix(store.last.IdleSelfImprovementReason, "provider_auth_blocked") ||
+	if !strings.HasPrefix(store.last.IdleSelfImprovementReason, "provider_unavailable_paused") ||
 		!strings.Contains(store.last.IdleSelfImprovementReason, "run-ref-auth-blocked-001") ||
 		!strings.Contains(store.last.IdleSelfImprovementReason, "restore_provider_credentials_then_resume_run") {
 		t.Fatalf("reason=%q state=%+v", store.last.IdleSelfImprovementReason, store.last)
 	}
 	if store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != "provider_auth_blocked" ||
+		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != "provider_unavailable_paused" ||
 		store.last.IdleSelfImprovementOperationalMessage.Status != "blocked" ||
 		store.last.IdleSelfImprovementOperationalMessage.RunRefs[0] != "run-ref-auth-blocked-001" ||
 		store.last.IdleSelfImprovementOperationalMessage.EvidenceRefs[0] != "evidence-ref-auth-config-blocker" {
@@ -157,7 +157,7 @@ func TestRuntimeV0AutomejoraIdleArrancaConWorkdirSeparadoEnSesionDominioV0(t *te
 
 func TestIdleSelfImprovementAuditPayloadRedactaMensajeDeBlockerV0(t *testing.T) {
 	payload := idleSelfImprovementScheduleDecisionV0{
-		Reason:          "provider_auth_blocked",
+		Reason:          "provider_unavailable_paused",
 		BlockerRunRefs:  []string{"run-ref-auth-blocked-001"},
 		BlockerEvidence: []string{"evidence-ref-auth-config-blocker"},
 		BlockerMessage:  "reautorizar token en /home/user/.config/provider",

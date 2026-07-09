@@ -123,6 +123,131 @@ del supervisor legacy que estos smokes aun ejercitan. El fake file-based escribe
 ahora `external_summary.md` en sus rutas de entrega para que el intake de
 DomainWork seleccione el artefacto por tipo cuando hay varios ficheros.
 
+### 2026-07-09 — BUG-ORQ-20260709-204 E5 wizard/i18n sin falsos verdes
+
+Siguiendo la orden de arreglar de dentro hacia afuera, se reviso primero el
+wizard de Nueva App antes de seguir con conectores/remoto. E5 tenia dos
+residuales reales: la lista de textos i18n prohibidos estaba copiada dentro de
+un helper del wizard, y el aplicador de decisiones reemplazaba listas
+acumulativas. Con respuestas T7 resiliencia + T8 cumplimiento en el mismo
+batch, `agentes.preferencias` podia perder la decision anterior.
+
+Cierre local: las listas acumulativas de restricciones/preferencias/compliance
+y locales se mezclan con dedupe; T8 declara destino primario
+`calidad.compliance`; el selector de preguntas de un turno evita campos destino
+repetidos; los tests cubren unicidad de campo en turno visible y en el catalogo
+tecnico T1-T8; y la prohibicion de placeholders se centraliza para aplicarse a
+todo `NuevaAppI18nRequiredKeysV0`, no solo al wizard. Evidencia:
+`go test -count=1 ./modulos/orquesta-web` y `git diff --check`.
+
+### 2026-07-09 — BUG-ORQ-20260709-205 E4 pausa local por proveedor caido
+
+Revision inside-out de E4: la clasificacion
+`codex_app_server_provider_unauthorized` ya existia, pero el bloqueador de
+automejora no actuaba porque `idleSelfImprovementRunHasProviderAuthBlockerV0`
+devolvia siempre `false`. Se arreglo para detectar codigos canonicos de
+provider/auth/cuota en proyecciones del run, sin inferir por assessments
+criticos genericos. La pausa publica queda como
+`provider_unavailable_paused`.
+
+Tambien se extendio `operator_notifications.v0` con evento `provider` y un
+metodo local de servidor que envia un aviso deduplicado por
+`reason_code+run_ref` con accion de reauth/cuota (`hermes auth`, `hermes model`
+o restaurar `CODEX_HOME` aislado segun caso). Evidencia focal:
+`go test -count=1 ./cmd/orquesta-server -run 'TestIdleSelfImprovementBlockersV0|TestOperatorNotificationServerV0Notifica'`,
+`go test -count=1 ./modulos/orquesta-server -run 'TestRuntimeV0SupervisorNoPreparaAutomejoraConProveedorAuthBloqueadoV0'`
+y `go test -count=1 ./modulos/orquesta-operator-notifications`. Residual:
+wiring/smoke Telegram remoto real se difiere a fase remota.
+
+Ampliacion local del mismo corte: `serverStackSupervisorV0` tiene ahora un
+notifier opcional construido desde la configuracion canonica Telegram
+(`token` + `notification_target_ref`). Cuando
+`IdleSelfImprovementBlockersV0` devuelve `provider_unavailable_paused`, invoca
+`NotifyProviderIssueV0` y anade evidencias de notificacion al blocker. Sin
+sender configurado es no-op; si el envio falla, no anula la pausa. Evidencia:
+`TestIdleSelfImprovementBlockersV0NotificaProviderPausadoUnaVezV0` y
+`go test -count=1 ./cmd/orquesta-server -run 'TestIdleSelfImprovementBlockersV0|TestOperatorNotificationServerV0Notifica|TestOperatorNotificationHermesTelegramNotifierV0UsaSendSinAuthCodex|TestTelegramBotAPI'`.
+
+### 2026-07-09 — BUG-079 observacion activa de stdout gigante
+
+Inside-out adicional antes de volver a remoto: el protocolo ya tenia tests
+directos para respuesta `thread/read` sobredimensionada, pero faltaba fijar que
+la capa superior de observacion no silenciase ese error si el goal seguia
+activo. Se cambio `observeCodexAppServerActiveGoalResultV0` para que solo el
+caso estructural `codex_app_server_thread_read_response_too_large` bloquee la
+observacion activa con ese issue exacto y evidencia
+`evidence-ref-codex-app-server-active-goal-thread-read-failed`; si existe
+resultado durable en fichero, ese resultado sigue teniendo prioridad.
+
+Evidencia focal:
+`go test -count=1 ./modulos/orquesta-runtime-codex-appserver`. Esto no cierra
+`BUG-079`: sigue faltando demostrar con proveedor/app-server real que el limite
+se aplica antes de que una herramienta emita stdout gigante. Si no se cumple,
+queda como frontera externa del runtime, no como fallo del nucleo puro.
+
+### 2026-07-09 — TAREA-E3 inventario focal MCP interno
+
+Avance inside-out de E3 sin tocar remoto ni conectores externos. El test global
+de MCP ya impedia registrar tools sin DTO canonico y detectaba campos stale
+anunciados por `input_schema`, pero no detectaba el caso contrario: campo nuevo
+en DTO y descriptor sin actualizar. Se anadio un inventario focal para
+superficies internas: Nueva App (`orquesta.apps.solicitar_nueva.v0`,
+`orquesta.nueva_app.wizard.v0`, `orquesta.nueva_app.wizard.bot.v0`),
+`orquesta.autoprogramming.prepare_run.v0`,
+`orquesta.autoprogramming.status.v0` y
+`orquesta.operator.director.message.v0`. El guard exige que esas tools esten
+inventariadas y que todos sus campos DTO aparezcan en el descriptor. En el
+cierre local se alinearon los `input_schema` de autoprogramming status y del
+canal operador-Director.
+
+Evidencia:
+`go test -count=1 ./modulos/orquesta-mcp -run 'TestMCP(TransportToolInputSchema|InternalContractSurfaceInventory)'`
+y `go test -count=1 ./modulos/orquesta-mcp`.
+Continuacion local: Telegram se cubre en el adaptador puro
+`modulos/orquesta-operator-telegram`, sin tocar bot remoto ni credenciales.
+`CommandCatalogV0` pasa a ser el inventario canonico de comandos/aliases y
+`ParseCommandV0` lo usa; el test
+`TestCommandCatalogV0CubreComandosPublicosYParserV0` valida comandos publicos,
+aliases duplicados y metadatos de seguridad (`stop` con confirmacion,
+`director_message` con destino y cuerpo).
+
+Evidencia adicional:
+`go test -count=1 ./modulos/orquesta-operator-telegram`.
+Residual: falta extender el inventario a HTTP/web cuando esa superficie se
+trabaje. La prueba real de Telegram remoto queda fuera de este cierre interno.
+
+### 2026-07-09 — checkpoint dentro-fuera local
+
+Revision de prioridad tras el cierre E3/E4/E5 local y la orden del operador de
+arreglar dentro hacia afuera:
+
+- Capa 1 nucleo/contratos puros: E3 queda reducido a HTTP/web residual; E5
+  queda cerrado local; subagentes/causalidad no muestra un bug puro nuevo sin
+  entrar en backend/OPES. Tests y build globales verdes.
+- Capa 2 composicion/adaptadores locales: E4 queda reducido a frontera de probe
+  real de proveedor; BUG-079/200 ya tiene transporte `toolOutputPolicy`,
+  budgets de respuestas y harness adversarial, pero el enforcement pre-tool
+  real sigue dependiendo del app-server/proveedor. BUG-065/165 conserva
+  residuales de smoke amplio con proveedor lento/stale, no de unit local.
+- Capa 3 conectores externos/OPES: siguen pendientes BUG-058/066/075 en
+  field tests OPES temporal/preprod, no en core.
+- Capa 4 remoto/Hermes/Telegram/deploy: E1/E2, auth/cuota, Git remoto y bot real
+  quedan al final por instruccion vigente.
+
+Verificado tras este checkpoint:
+`git diff --check`, `go test -count=1 ./...` y `go build ./...`.
+
+### 2026-07-09 — E6 guard scripts revisado como residual no bloqueante
+
+Subagente Godel reviso E6 en modo read-only. Resultado: los guards funcionales
+estan verdes, pero la consolidacion no esta hecha como tabla unica. Tests
+actuales cubren shutdown comun, cleanup delegado, `runtime_dir`, shutdown HTTP
+directo, endpoint gestionado, puerto historico y arranque/copia de servidor
+fuera de `ctl/deploy`, repartidos en
+`cmd/orquesta-server/smoke_goal_first_script_guard_v0_test.go`. No bloquea el
+cierre local de nucleo/conectores; queda como limpieza futura de test:
+`scriptGuardContractV0` + tabla `script -> contratos exigidos`.
+
 ### 2026-07-03 (tarde) — claude-fable-5: pilotaje real ejecutado, 3 bugs nuevos encontrados, 1 arreglado
 
 **El pilotaje funcionó como prueba de fuego: Orquesta NO pudo lanzar el goal

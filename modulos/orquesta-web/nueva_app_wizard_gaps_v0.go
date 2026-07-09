@@ -311,7 +311,7 @@ func wizardTechnicalDimensionQuestionsV0(form WebNuevaAppFormV0) []WizardQuestio
 		out = append(out, q)
 	}
 	if !wizardHasComplianceDecisionV0(form) {
-		q := wizardQuestionV0("wizard-t8-cumplimiento-tecnico", "agentes.preferencias", WizardTopicDatosV0, WizardImportanceAltaV0, []WizardOptionV0{
+		q := wizardQuestionV0("wizard-t8-cumplimiento-tecnico", "calidad.compliance", WizardTopicDatosV0, WizardImportanceAltaV0, []WizardOptionV0{
 			wizardOptionV0("auditoria_inmutable_retencion_rgpd", "nueva_app.wizard.option.t8.auditoria_rgpd", true, "nueva_app.wizard.rationale.t8.auditoria_rgpd"),
 			wizardOptionV0("anonimizacion_pseudonimizacion", "nueva_app.wizard.option.t8.anonimizacion", false, ""),
 			wizardOptionV0("borrado_real_bajo_peticion", "nueva_app.wizard.option.t8.borrado_real", false, ""),
@@ -735,10 +735,15 @@ func selectWizardTurnQuestionsV0(questions []WizardQuestionV0) []WizardQuestionV
 	questions = dedupeWizardQuestionsV0(questions)
 	for _, topic := range []string{WizardTopicUsoV0, WizardTopicDatosV0, WizardTopicEntregaV0} {
 		var selected []WizardQuestionV0
+		seenField := map[string]bool{}
 		for _, question := range questions {
 			if question.TopicGroup != topic {
 				continue
 			}
+			if trimV0(question.Field) != "" && seenField[question.Field] {
+				continue
+			}
+			seenField[question.Field] = true
 			selected = append(selected, question)
 			if len(selected) == wizardMaxQuestionsPerTurnV0 {
 				break
