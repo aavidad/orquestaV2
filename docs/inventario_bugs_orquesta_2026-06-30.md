@@ -3782,3 +3782,7 @@ concurrencia.
 Indice de sesion para Claude: todos los fallos operativos observados por Codex
 en el corte remoto 2026-07-10 quedan agrupados en
 `docs/incidencias/incidencias_sesion_codex_remoto_orquesta_2026-07-10.md`.
+
+Analisis estructural Claude/Codex 2026-07-10: los patrones transversales del
+inventario y el orden de ataque recomendado quedan en
+`docs/analisis_fallos_estructurales_orquesta_2026-07-10.md`.
