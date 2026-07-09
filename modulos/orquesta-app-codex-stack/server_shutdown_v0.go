@@ -47,6 +47,7 @@ func stackShutdownRunControlWriterFromConfigV0(
 	}
 	return stackShutdownRunControlWriterV0{
 		Inner:          config.Stores.RunControl,
+		Reader:         config.Stores.RunControl,
 		Terminal:       config.Stores.RunControl,
 		GoalStateStore: config.Stores.AppGoalStateStore,
 	}
@@ -524,6 +525,7 @@ func stackShutdownGoalBackendEvidenceRefsV0(state orquestagoal.GoalWorkStateV0) 
 
 type stackShutdownRunControlWriterV0 struct {
 	Inner          orquestaruncontrol.RunControlWriterPortV0
+	Reader         orquestaruncontrol.RunControlReaderPortV0
 	Terminal       orquestaruncontrol.RunControlTerminalWriterPortV0
 	GoalStateStore orquestagoal.GoalWorkStateStorePortV0
 }
@@ -657,6 +659,10 @@ func (writer stackShutdownRunControlWriterV0) completeTerminalGoalRunControlV0(
 	if !stackShutdownGoalReadyForRunControlTerminalV0(state) {
 		return orquestaruncontrol.RunControlStateV0{}, false, nil
 	}
+	target, err = writer.targetForCurrentRunControlV0(ctx, runRef, target)
+	if err != nil {
+		return orquestaruncontrol.RunControlStateV0{}, true, err
+	}
 	completed, err := writer.Terminal.CompleteRunControlV0(ctx, orquestaruncontrol.CompleteRunControlCommandV0{
 		RunRef:       runRef,
 		TargetStatus: target,
@@ -676,6 +682,38 @@ func (writer stackShutdownRunControlWriterV0) completeTerminalGoalRunControlV0(
 		)),
 	})
 	return completed, true, err
+}
+
+func (writer stackShutdownRunControlWriterV0) targetForCurrentRunControlV0(
+	ctx context.Context,
+	runRef string,
+	fallback orquestaruncontrol.RunControlStatusV0,
+) (orquestaruncontrol.RunControlStatusV0, error) {
+	if writer.Reader == nil {
+		return fallback, nil
+	}
+	state, err := writer.Reader.ReadRunControlStateV0(
+		ctx,
+		orquestaruncontrol.RunControlReadRequestV0{RunRef: runRef},
+	)
+	if err != nil {
+		var notFound orquestaruncontrol.RunControlStateNotFoundErrorV0
+		if errors.As(err, &notFound) {
+			return fallback, nil
+		}
+		return "", err
+	}
+	if target, ok := stackShutdownTerminalRunControlTargetV0(state.Status); ok {
+		return target, nil
+	}
+	switch orquestaruncontrol.NormalizeRunControlStatusV0(state.Status) {
+	case orquestaruncontrol.RunControlStatusCanceledV0:
+		return orquestaruncontrol.RunControlStatusCanceledV0, nil
+	case orquestaruncontrol.RunControlStatusStoppedV0:
+		return orquestaruncontrol.RunControlStatusStoppedV0, nil
+	default:
+		return fallback, nil
+	}
 }
 
 func (writer stackShutdownRunControlWriterV0) reconcileForcedGoalStateV0(

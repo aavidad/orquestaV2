@@ -833,7 +833,7 @@ JSON
 run_shutdown_coordination_smoke() {
   local owner_file session_name pane_pid socket_path
   local shutdown_status shutdown_status_value shutdown_ready exit_pending shutdown_pid active_work_count
-  local recommended_action goal_actions_count app_processes_alive
+  local recommended_action goal_actions_count app_processes_alive runs_requested runs_stopped run_control_statuses run_control_all_stopped
 
   pane_pid=""
   socket_path=""
@@ -891,6 +891,24 @@ JSON
     exit_pending="$(json_get "$shutdown_coordination_response" "exit_pending")"
     shutdown_pid="$(json_get "$shutdown_coordination_response" "pid")"
     active_work_count="$(json_get "$shutdown_coordination_response" "active_work_count")"
+    runs_requested="$(json_get "$shutdown_coordination_response" "runs_requested")"
+    runs_stopped="$(json_get "$shutdown_coordination_response" "runs_stopped")"
+    run_control_statuses="$(python3 - "$shutdown_coordination_response" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    payload = json.load(fh)
+runs = payload.get("runs") or []
+print(",".join(str(run.get("control_status", "")).strip() for run in runs))
+PY
+)"
+    run_control_all_stopped="$(python3 - "$shutdown_coordination_response" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    payload = json.load(fh)
+runs = payload.get("runs") or []
+print("true" if runs and all(str(run.get("control_status", "")).strip() == "stopped" for run in runs) else "false")
+PY
+)"
     recommended_action="$(json_get "$shutdown_coordination_response" "recommended_action")"
     goal_actions_count="$(python3 - "$shutdown_coordination_response" <<'PY'
 import json, sys
@@ -898,9 +916,14 @@ with open(sys.argv[1], encoding="utf-8") as fh:
     print(len(json.load(fh).get("goal_actions") or []))
 PY
 )"
-    echo "shutdown_coordination_poll=$i status=$shutdown_status_value shutdown_ready=$shutdown_ready active_work_count=${active_work_count:-0} goal_actions=$goal_actions_count recommended_action=$recommended_action"
+    echo "shutdown_coordination_poll=$i status=$shutdown_status_value shutdown_ready=$shutdown_ready runs_requested=${runs_requested:-0} runs_stopped=${runs_stopped:-0} run_control_statuses=$run_control_statuses all_runs_stopped=$run_control_all_stopped active_work_count=${active_work_count:-0} goal_actions=$goal_actions_count recommended_action=$recommended_action"
 
     if [[ "$shutdown_ready" == "true" ]]; then
+      if [[ "${runs_requested:-0}" -lt 1 || "${runs_stopped:-0}" -lt "${runs_requested:-0}" || "$run_control_all_stopped" != "true" ]]; then
+        echo "shutdown coordination listo sin coordinar run goal-first fuera de cola:" >&2
+        smoke_print_file_excerpt "$shutdown_coordination_response"
+        exit 1
+      fi
       if [[ "$exit_pending" != "true" || -z "$shutdown_pid" ]]; then
         echo "shutdown coordination listo sin exit_pending/pid:" >&2
         smoke_print_file_excerpt "$shutdown_coordination_response"
@@ -945,6 +968,10 @@ PY
         exit 1
       fi
       echo "app_server_tmux_shutdown_ready=true"
+      echo "shutdown_coordination_runs_requested=$runs_requested"
+      echo "shutdown_coordination_runs_stopped=$runs_stopped"
+      echo "shutdown_coordination_run_control_statuses=$run_control_statuses"
+      echo "shutdown_coordination_all_runs_stopped=$run_control_all_stopped"
       echo "app_server_tmux_processes_alive=0"
       echo "smoke_goal_first_shutdown_coordination_real=ok"
       echo "smoke_root=$smoke_root"

@@ -2328,3 +2328,33 @@ Pendiente para Claude:
 
 - No cierres `BUG-165/065` global aun. Falta smoke real amplio con proveedor
   lento/stale/remoto que demuestre el mismo contrato fuera del test offline.
+
+## Actualizacion Codex 2026-07-09c: HTTP semi-real y guard del smoke real
+
+Hecho:
+
+- Se anadio `TestServerAppHTTPGoalFirstShutdownCoordinaControlPendienteFueraDeColaV0`
+  en `cmd/orquesta-server/goal_first_app_http_flow_v0_test.go`.
+- Cubre por HTTP real sin cuota:
+  `/api/v0/apps/director` -> `/api/v0/apps/director/goal/observe` ->
+  `/api/v0/runs/control forced=false` con `stop` y `cancel` ->
+  `/api/v0/server/shutdown forced=true cleanup_goal_backends=true`.
+- Resultado esperado verificado: `runs_requested=1`, `runs_stopped=1`,
+  `shutdown_ready=true`, `active_work_count=0`, `control_status=stopped` para
+  `stop_requested` y `control_status=canceled` para `cancel_requested`.
+- `stackShutdownRunControlWriterV0` preserva `cancel_requested -> canceled` en
+  shutdown amplio.
+- `scripts/smoke_goal_first_app_server_real.sh` queda endurecido: en modo
+  `shutdown_coordination` ya no acepta `ready` si `runs_requested<1`,
+  `runs_stopped<runs_requested` o algun `runs[].control_status!=stopped`.
+
+Verificado:
+
+- `bash -n scripts/smoke_goal_first_app_server_real.sh scripts/smoke_goal_first_shutdown_coordination_real.sh`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerAppHTTPGoalFirstShutdownCoordinaControlPendienteFueraDeCola|TestSmokeGoalFirstShutdownCoordinationReal'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestStackShutdownV0ForzadoCoordinaGoalFirstTerminalFueraDeCola|TestStackShutdownRunControlWriterV0ForcedStopMarcaGoalTerminalReplanificable'`
+
+Siguiente paso:
+
+- Ejecutar el smoke real amplio. Ahora debe fallar si vuelve el falso verde
+  `shutdown_ready=true` con `runs_requested=0`.

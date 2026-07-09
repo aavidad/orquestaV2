@@ -90,6 +90,76 @@ func TestServerAppHTTPGoalFirstLanzaObservaYCierraV0(t *testing.T) {
 	}
 }
 
+func TestServerAppHTTPGoalFirstShutdownCoordinaControlPendienteFueraDeColaV0(t *testing.T) {
+	for _, tc := range []struct {
+		action        string
+		pendingStatus string
+		finalStatus   string
+	}{
+		{action: "stop", pendingStatus: "stop_requested", finalStatus: "stopped"},
+		{action: "cancel", pendingStatus: "cancel_requested", finalStatus: "canceled"},
+	} {
+		t.Run(tc.action, func(t *testing.T) {
+			disableSelfProgrammingOnlyForGoalFirstHTTPTestV0(t)
+			projectDir := t.TempDir()
+			stateDir := t.TempDir()
+			runtimeDir := filepath.Join(t.TempDir(), "runtime")
+			t.Setenv(envCodexProjectWorkDirV0, projectDir)
+			t.Setenv(envServerStateDirV0, stateDir)
+			t.Setenv(envCodexRuntimeWorkDirV0, runtimeDir)
+			t.Setenv(envCodexCommandV0, filepath.Join(projectDir, "codex-bin"))
+			t.Setenv(envOPESBaseURLV0, "")
+			t.Setenv("OPES_BASE_URL", "")
+
+			backend := &goalFirstHTTPBackendForTestV0{}
+			config, err := serverConfigFromEnvV0()
+			if err != nil {
+				t.Fatalf("serverConfigFromEnvV0: %v", err)
+			}
+			stack, err := buildStackFromEnvWithGoalBackendV0(config, serverCodexGoalBackendV0{
+				Starter:  backend,
+				Observer: backend,
+			})
+			if err != nil {
+				t.Fatalf("buildStackFromEnvWithGoalBackendV0: %v", err)
+			}
+			handler, err := buildServerAppHandlerV0(stack)
+			if err != nil {
+				t.Fatalf("buildServerAppHandlerV0: %v", err)
+			}
+
+			started := postGoalFirstStartForTestV0(t, handler)
+			observed := postGoalFirstObserveForTestV0(t, handler, started.RunRef)
+			if observed.GoalStatus != orquestagoal.GoalStatusCompleteV0 ||
+				observed.RunStatus != "cerrada" ||
+				!observed.ClosureAccepted {
+				t.Fatalf("goal no quedo terminal antes del control: %+v", observed)
+			}
+			control := postGoalFirstRunControlForTestV0(t, handler, started.RunRef, tc.action, false)
+			if control.Estado != orquestamcp.MCPRunControlEstadoOKV0 ||
+				control.Status != tc.pendingStatus ||
+				control.FinalStatus != tc.pendingStatus ||
+				control.Forced {
+				t.Fatalf("control pendiente inesperado: %+v", control)
+			}
+
+			shutdown := postGoalFirstServerShutdownForTestV0(t, handler, tc.action)
+			if shutdown.Estado != orquestamcp.MCPServerShutdownEstadoOKV0 ||
+				shutdown.Status != "ready" ||
+				!shutdown.ShutdownReady ||
+				shutdown.RunsRequested != 1 ||
+				shutdown.RunsStopped != 1 ||
+				shutdown.ActiveWorkCount != 0 ||
+				len(shutdown.Runs) != 1 ||
+				shutdown.Runs[0].RunRef != started.RunRef ||
+				shutdown.Runs[0].ControlStatus != tc.finalStatus ||
+				!shutdown.Runs[0].Ready {
+				t.Fatalf("shutdown no coordino control pendiente: shutdown=%+v control=%+v", shutdown, control)
+			}
+		})
+	}
+}
+
 func TestRuntimeGoalFirstResidenteCierraAppSinObserveManualV0(t *testing.T) {
 	requireLocalTCPForTestV0(t)
 	disableSelfProgrammingOnlyForGoalFirstHTTPTestV0(t)
@@ -689,6 +759,79 @@ func postGoalFirstObserveForTestV0(
 	var result orquestamcp.MCPObserveAppDirectorGoalToolResultV0
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode observe: %v", err)
+	}
+	return result
+}
+
+func postGoalFirstRunControlForTestV0(
+	t *testing.T,
+	handler http.Handler,
+	runRef string,
+	action string,
+	forced bool,
+) orquestamcp.MCPRunControlToolResultV0 {
+	t.Helper()
+	payload, err := json.Marshal(orquestamcp.MCPRunControlToolInputV0{
+		RequestID:      "req-http-goal-first-run-control-" + action,
+		CorrelationID:  "corr-http-goal-first-run-control-" + action,
+		Action:         action,
+		RunRef:         runRef,
+		RequestedBy:    "orquesta-server-test",
+		Reason:         "probar control pendiente goal-first fuera de cola",
+		Forced:         forced,
+		IdempotencyKey: "idem-http-goal-first-run-control-" + action,
+		EvidenceRefs:   []string{"evidence-ref-http-goal-first-run-control-" + action},
+	})
+	if err != nil {
+		t.Fatalf("marshal run control: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, orquestamcp.MCPRunControlHTTPPathV0, bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Correlation-ID", "corr-http-goal-first-run-control-"+action)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("run control status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPRunControlToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode run control: %v", err)
+	}
+	return result
+}
+
+func postGoalFirstServerShutdownForTestV0(
+	t *testing.T,
+	handler http.Handler,
+	suffix string,
+) orquestamcp.MCPServerShutdownToolResultV0 {
+	t.Helper()
+	payload, err := json.Marshal(orquestamcp.MCPServerShutdownToolInputV0{
+		RequestID:           "req-http-goal-first-shutdown-" + suffix,
+		CorrelationID:       "corr-http-goal-first-shutdown-" + suffix,
+		RequestedBy:         "orquesta-director",
+		Reason:              "probar shutdown goal-first fuera de cola",
+		Forced:              true,
+		CleanupGoalBackends: true,
+		IdempotencyKey:      "idem-http-goal-first-shutdown-" + suffix,
+		EvidenceRefs:        []string{"evidence-ref-http-goal-first-shutdown-" + suffix},
+	})
+	if err != nil {
+		t.Fatalf("marshal shutdown: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, orquestamcp.MCPServerShutdownHTTPPathV0, bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Correlation-ID", "corr-http-goal-first-shutdown-"+suffix)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("shutdown status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result orquestamcp.MCPServerShutdownToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode shutdown: %v", err)
 	}
 	return result
 }

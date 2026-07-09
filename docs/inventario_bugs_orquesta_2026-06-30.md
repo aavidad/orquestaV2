@@ -130,6 +130,23 @@ antes de su cierre posterior:
   Verificado con `go test -count=1 ./modulos/orquesta-app-codex-stack` y
   `go test -count=1 ./modulos/orquesta-server-shutdown`. Pendiente para cerrar
   `BUG-165/065` global: smoke real amplio con proveedor lento/stale/remoto.
+- Avance 2026-07-09c: se amplia la cobertura semi-real por HTTP y se endurece
+  el smoke real existente. Nuevo test
+  `TestServerAppHTTPGoalFirstShutdownCoordinaControlPendienteFueraDeColaV0`
+  arranca goal-first por `/api/v0/apps/director`, cierra el goal con observe,
+  deja `RunControl=stop_requested` y `RunControl=cancel_requested` mediante
+  `/api/v0/runs/control forced=false`, y verifica que
+  `/api/v0/server/shutdown forced=true cleanup_goal_backends=true` devuelve
+  `runs_requested=1`, `runs_stopped=1`, `shutdown_ready=true` y estado terminal
+  `stopped/canceled` sin active work. Ademas
+  `scripts/smoke_goal_first_app_server_real.sh` ya no acepta `ready` si
+  `runs_requested<1`, `runs_stopped<runs_requested` o algun
+  `runs[].control_status` no es `stopped` en el modo `shutdown_coordination`.
+  Focales:
+  `go test -count=1 ./cmd/orquesta-server -run 'TestServerAppHTTPGoalFirstShutdownCoordinaControlPendienteFueraDeCola|TestSmokeGoalFirstShutdownCoordinationReal'`
+  y `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestStackShutdownV0ForzadoCoordinaGoalFirstTerminalFueraDeCola|TestStackShutdownRunControlWriterV0ForcedStopMarcaGoalTerminalReplanificable'`.
+  Pendiente para cerrar `BUG-165/065` global: ejecutar smoke real amplio con
+  proveedor lento/stale/remoto.
 - `BUG-ORQ-20260704-166` queda cerrado funcionalmente por `ff620ecf` y
   `0e0dcedc`, incluyendo el ajuste posterior de `.gocache-local`, para la causa
   observada: el escaneo de

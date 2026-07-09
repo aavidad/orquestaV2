@@ -145,15 +145,23 @@ func TestSmokeGoalFirstForcedStopWrapperEjercitaRunControlBackendVivoV0(t *testi
 func TestSmokeGoalFirstShutdownCoordinationRealNoEsNoopV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_shutdown_coordination_real.sh")
+	delegated := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")
+	combined := text + "\n" + delegated
 
 	for _, want := range []string{
 		"app_server_tmux",
 		"/api/v0/autoprogramming/status",
 		"/api/v0/server/shutdown",
+		`"${runs_requested:-0}" -lt 1`,
+		`"${runs_stopped:-0}" -lt "${runs_requested:-0}"`,
+		`"$run_control_all_stopped" != "true"`,
+		"shutdown_coordination_runs_requested=$runs_requested",
+		"shutdown_coordination_run_control_statuses=$run_control_statuses",
+		"shutdown_coordination_all_runs_stopped=$run_control_all_stopped",
 		"app_server_tmux_processes_alive=0",
 		"smoke_goal_first_shutdown_coordination_real=ok",
 	} {
-		if !strings.Contains(text, want) {
+		if !strings.Contains(combined, want) {
 			t.Fatalf("smoke shutdown/status goal-first no debe ser no-op: falta %q", want)
 		}
 	}

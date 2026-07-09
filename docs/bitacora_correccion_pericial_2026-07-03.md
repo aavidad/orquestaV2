@@ -5360,3 +5360,35 @@ Verificado:
 
 Pendiente: smoke real amplio con proveedor lento/stale/remoto antes de cerrar
 `BUG-165/065` global.
+
+## Codex local 2026-07-09: shutdown HTTP semi-real y smoke real endurecido
+
+Avance adicional sobre `BUG-165/065`:
+
+- `cmd/orquesta-server/goal_first_app_http_flow_v0_test.go` anade
+  `TestServerAppHTTPGoalFirstShutdownCoordinaControlPendienteFueraDeColaV0`.
+  La prueba levanta el handler HTTP real con backend goal-first fake, lanza por
+  `/api/v0/apps/director`, cierra el goal con `/api/v0/apps/director/goal/observe`,
+  deja `RunControl=stop_requested` y `RunControl=cancel_requested` con
+  `/api/v0/runs/control forced=false`, y verifica que
+  `/api/v0/server/shutdown forced=true cleanup_goal_backends=true` devuelve
+  `runs_requested=1`, `runs_stopped=1`, `shutdown_ready=true`,
+  `active_work_count=0` y terminaliza en `stopped/canceled`.
+- `stackShutdownRunControlWriterV0` conserva un `cancel_requested` previo como
+  `canceled` aunque el shutdown amplio invoque internamente `StopRunV0`.
+- `scripts/smoke_goal_first_app_server_real.sh` ya no acepta un
+  `shutdown_ready=true` del modo `shutdown_coordination` si no hay
+  `runs_requested>=1`, `runs_stopped>=runs_requested` y todos los
+  `runs[].control_status=stopped`.
+- El guard `TestSmokeGoalFirstShutdownCoordinationRealNoEsNoopV0` comprueba ese
+  contrato en el script real.
+
+Verificado:
+
+- `bash -n scripts/smoke_goal_first_app_server_real.sh scripts/smoke_goal_first_shutdown_coordination_real.sh`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerAppHTTPGoalFirstShutdownCoordinaControlPendienteFueraDeCola|TestSmokeGoalFirstShutdownCoordinationReal'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestStackShutdownV0ForzadoCoordinaGoalFirstTerminalFueraDeCola|TestStackShutdownRunControlWriterV0ForcedStopMarcaGoalTerminalReplanificable'`
+
+Pendiente: ejecutar el smoke real amplio con proveedor lento/stale/remoto. Este
+corte prepara el smoke para fallar si reaparece el falso `runs_requested=0`,
+pero no sustituye la ejecucion real.
