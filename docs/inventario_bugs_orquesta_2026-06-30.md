@@ -3741,3 +3741,22 @@ Evidencia: tests focales de `cmd/orquesta-server`,
 `scripts/orquesta_metricas_deuda.sh --json` con `env_vars_orquesta=511`.
 Residual: perfil remoto/script de arranque y secretos reales deben migrarse en
 un corte remoto separado.
+
+BUG nuevo `BUG-ORQ-20260710-208` (abierto): el goal-first remoto puede quedar
+publicado como `running` con solo checkpoint parcial y `runs/control` no
+confirma parada del backend app-server. Durante el goal remoto
+`run-ref-orquesta-100-continuous-20260710-001` se lanzaron cuatro goals; dos
+dejaron `orquesta_goal_result` con `status=blocked` y
+`reason_code=checkpoint_started`, pero `observe` seguia mostrando
+`goal_status=running`. El intento de parar
+`run-ref-orquesta-100-continuous-20260710-001-goal-04` por
+`/api/v0/runs/control` devolvio `control_not_propagated_to_goal_backend`; el
+reintento con `forced=true` mantuvo `goal_status_after=running`. Ademas el
+servidor remoto estaba vivo con `ORQUESTA_CTL_WORKDIR` apuntando a un worktree
+retirado, y la request acepto dos tareas paralelas con write-set solapado
+`scripts`. Incidencia detallada:
+`docs/incidencias/incidencia_orquesta_goal_first_remote_checkpoint_control_2026-07-10.md`.
+Hipotesis estructural: divergencia entre estado goal-first, artefactos
+checkpoint/resultado y proceso real app-server/tmux; Orquesta necesita
+reconciliacion causal antes de declarar progreso vivo o aceptar nuevos batches
+amplios.
