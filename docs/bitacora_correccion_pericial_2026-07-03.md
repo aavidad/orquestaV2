@@ -4662,3 +4662,42 @@ Residual para Claude:
 
 - Falta smoke real opt-in con proveedor verificando idioma efectivo en sesion
   viva. No se lanza localmente porque depende de credenciales/cuota/modelo.
+
+## Codex local 2026-07-09: BUG-079 policy estructurada en turn/start
+
+Hallazgo:
+
+- `BUG-ORQ-20260701-079` seguia abierto por el residual de salidas gigantes
+  antes de herramientas internas.
+- El contrato `DirectionContract.ToolOutputPolicy` ya existia y el app-server
+  lo inyectaba como texto en `input`, pero `turn/start` no transportaba un
+  parametro estructurado que un app-server compatible pudiera aplicar antes de
+  ejecutar herramientas.
+
+Cierre local aplicado:
+
+- `serverCodexAppServerTurnStartParamsV0` gana `ToolOutputPolicy` y lo serializa
+  como `toolOutputPolicy` con `maxTextBytes`, `threadReadMaxBytes`,
+  `requireBoundedCommands`, `boundedCommandHints` y
+  `durableEvidenceRequired`.
+- La politica se deriva de `DirectionContract.ToolOutputPolicy` y se clampa al
+  maximo canonico de Orquesta; no puede relajar `max_text_bytes` ni sustituir
+  los hints acotados por defecto.
+- Compatibilidad: si el app-server real responde `invalid_params` o
+  `invalid_request` por `toolOutputPolicy`, Orquesta reintenta el mismo
+  `turn/start` sin ese campo JSON, mantiene el contrato textual y conserva una
+  evidencia de fallback.
+- `codexAppServerStartImmediateLimitedReceiptV0` conserva ahora las evidencias
+  reales de `turn/start`, incluido el fallback si ocurrio.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0TurnStart|TestServerCodexAppServerTurnStartParamsV0|TestCodexAppServerCommandProtocolTurnStartResponseBudgetV0|TestCodexAppServerLegacyRPCReaderResponseBudgetV0'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`
+
+Residual:
+
+- No se declara cierre total del bug hasta probar con app-server/proveedor real
+  que `toolOutputPolicy` se aplica antes de herramientas. Si el proveedor ignora
+  el campo, Orquesta conserva prompt/read caps/sanitizacion/replan, pero no un
+  corte duro pre-tool.

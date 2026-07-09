@@ -42,14 +42,16 @@ func (params serverCodexAppServerThreadGoalSetParamsV0) toJSONV0() map[string]in
 }
 
 type serverCodexAppServerTurnStartParamsV0 struct {
-	ThreadID        string
-	CWD             string
-	InputText       string
-	ClientMessageID string
-	Model           string
-	Effort          string
-	ApprovalPolicy  string
-	ServiceTier     string
+	ThreadID          string
+	CWD               string
+	InputText         string
+	ClientMessageID   string
+	Model             string
+	Effort            string
+	ApprovalPolicy    string
+	ServiceTier       string
+	ToolOutputPolicy  serverCodexAppServerTurnStartToolOutputPolicyV0
+	DisablePolicyJSON bool
 }
 
 func (params serverCodexAppServerTurnStartParamsV0) toJSONV0() map[string]interface{} {
@@ -66,6 +68,45 @@ func (params serverCodexAppServerTurnStartParamsV0) toJSONV0() map[string]interf
 	setNonEmptyJSONFieldV0(out, "effort", params.Effort)
 	setNonEmptyJSONFieldV0(out, "approvalPolicy", params.ApprovalPolicy)
 	setNonEmptyJSONFieldV0(out, "serviceTier", params.ServiceTier)
+	if !params.DisablePolicyJSON && !params.ToolOutputPolicy.emptyV0() {
+		out["toolOutputPolicy"] = params.ToolOutputPolicy.toJSONV0()
+	}
+	return out
+}
+
+type serverCodexAppServerTurnStartToolOutputPolicyV0 struct {
+	MaxTextBytes            int
+	ThreadReadMaxBytes      int
+	RequireBoundedCommands  bool
+	BoundedCommandHints     []string
+	DurableEvidenceRequired bool
+}
+
+func (policy serverCodexAppServerTurnStartToolOutputPolicyV0) emptyV0() bool {
+	return policy.MaxTextBytes <= 0 &&
+		policy.ThreadReadMaxBytes <= 0 &&
+		!policy.RequireBoundedCommands &&
+		len(compactServerStackStringsV0(policy.BoundedCommandHints)) == 0 &&
+		!policy.DurableEvidenceRequired
+}
+
+func (policy serverCodexAppServerTurnStartToolOutputPolicyV0) toJSONV0() map[string]interface{} {
+	out := map[string]interface{}{}
+	if policy.MaxTextBytes > 0 {
+		out["maxTextBytes"] = policy.MaxTextBytes
+	}
+	if policy.ThreadReadMaxBytes > 0 {
+		out["threadReadMaxBytes"] = policy.ThreadReadMaxBytes
+	}
+	if policy.RequireBoundedCommands {
+		out["requireBoundedCommands"] = true
+	}
+	if hints := compactServerStackStringsV0(policy.BoundedCommandHints); len(hints) > 0 {
+		out["boundedCommandHints"] = hints
+	}
+	if policy.DurableEvidenceRequired {
+		out["durableEvidenceRequired"] = true
+	}
 	return out
 }
 

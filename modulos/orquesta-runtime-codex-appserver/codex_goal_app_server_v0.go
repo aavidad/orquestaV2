@@ -133,11 +133,25 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 			return codexAppServerStartReceiptV0(packet, threadID, code), err
 		}
 	}
-	if _, err := backend.Protocol.StartTurnV0(ctx, backend.turnStartParamsV0(threadID, packet)); err != nil {
-		code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_turn_start_failed")
-		return codexAppServerStartReceiptV0(packet, threadID, code), err
+	turnParams := backend.turnStartParamsV0(threadID, packet)
+	turnStartPolicyFallback := false
+	if _, err := backend.Protocol.StartTurnV0(ctx, turnParams); err != nil {
+		if retryParams, ok := codexAppServerTurnStartWithoutToolOutputPolicyFallbackV0(turnParams, err); ok {
+			if _, retryErr := backend.Protocol.StartTurnV0(ctx, retryParams); retryErr != nil {
+				code := codexAppServerIssueCodeForErrorV0(retryErr, "codex_app_server_turn_start_failed")
+				return codexAppServerStartReceiptV0(packet, threadID, code), retryErr
+			}
+			turnStartPolicyFallback = true
+		} else {
+			code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_turn_start_failed")
+			return codexAppServerStartReceiptV0(packet, threadID, code), err
+		}
 	}
-	if receipt, limited := backend.codexAppServerStartImmediateLimitedReceiptV0(ctx, packet, threadID, goalSetEvidence); limited {
+	turnStartEvidenceRefs := []string{"evidence-ref-codex-app-server-turn-started"}
+	if turnStartPolicyFallback {
+		turnStartEvidenceRefs = append(turnStartEvidenceRefs, "evidence-ref-codex-app-server-turn-start-tool-output-policy-fallback")
+	}
+	if receipt, limited := backend.codexAppServerStartImmediateLimitedReceiptV0(ctx, packet, threadID, goalSetEvidence, turnStartEvidenceRefs); limited {
 		return receipt, errors.New(receipt.IssueCode)
 	}
 	backend.recordCodexAppServerGoalRuntimeV0(
@@ -148,8 +162,8 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	evidenceRefs := []string{
 		"evidence-ref-codex-app-server-thread-started",
 		goalSetEvidence,
-		"evidence-ref-codex-app-server-turn-started",
 	}
+	evidenceRefs = append(evidenceRefs, turnStartEvidenceRefs...)
 	if earlyCheckpointEvidence != "" {
 		evidenceRefs = append(evidenceRefs, earlyCheckpointEvidence)
 	}
@@ -849,7 +863,54 @@ func (backend serverCodexAppServerGoalBackendV0) turnStartParamsV0(
 		Effort:          strings.TrimSpace(backend.ReasoningEffort),
 		ApprovalPolicy:  strings.TrimSpace(backend.ApprovalPolicy),
 		ServiceTier:     strings.TrimSpace(backend.ServiceTier),
+		ToolOutputPolicy: codexAppServerTurnStartToolOutputPolicyV0(
+			packet.DirectionContract.ToolOutputPolicy,
+		),
 	}
+}
+
+func codexAppServerTurnStartToolOutputPolicyV0(
+	policy orquestaruntimecodexgoal.CodexGoalToolOutputPolicyV0,
+) serverCodexAppServerTurnStartToolOutputPolicyV0 {
+	return serverCodexAppServerTurnStartToolOutputPolicyV0{
+		MaxTextBytes:            codexAppServerRuntimeContractMaxTextBytesV0(policy.MaxTextBytes),
+		ThreadReadMaxBytes:      codexAppServerThreadReadMaxResponseFrameBytesV0,
+		RequireBoundedCommands:  true,
+		BoundedCommandHints:     codexAppServerRuntimeContractBoundedCommandHintsV0(policy.BoundedCommandHints),
+		DurableEvidenceRequired: true,
+	}
+}
+
+func codexAppServerTurnStartWithoutToolOutputPolicyFallbackV0(
+	params serverCodexAppServerTurnStartParamsV0,
+	err error,
+) (serverCodexAppServerTurnStartParamsV0, bool) {
+	if params.DisablePolicyJSON || params.ToolOutputPolicy.emptyV0() {
+		return params, false
+	}
+	if !codexAppServerTurnStartToolOutputPolicySchemaErrorV0(err) {
+		return params, false
+	}
+	params.DisablePolicyJSON = true
+	return params, true
+}
+
+func codexAppServerTurnStartToolOutputPolicySchemaErrorV0(err error) bool {
+	var callErr codexAppServerCallErrorV0
+	if !errors.As(err, &callErr) {
+		return false
+	}
+	if callErr.Code != "codex_app_server_rpc_invalid_params" &&
+		callErr.Code != "codex_app_server_rpc_invalid_request" {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	if callErr.Err != nil {
+		message += " " + strings.ToLower(callErr.Err.Error())
+	}
+	return strings.Contains(message, "tooloutputpolicy") ||
+		strings.Contains(message, "tool_output_policy") ||
+		(strings.Contains(message, "tool") && strings.Contains(message, "policy"))
 }
 
 func codexAppServerTurnStartInputTextV0(packet orquestaruntimecodexgoal.CodexGoalStartPacketV0) string {

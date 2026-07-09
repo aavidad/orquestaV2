@@ -102,6 +102,15 @@ func TestServerCodexAppServerGoalBackendV0TurnStartInyectaContratoSalidaCompacta
 		strings.Contains(protocol.startParams.Sandbox, "prompt operativo minimo") {
 		t.Fatalf("thread/start no debe transportar prompt en campos de arranque: %+v", protocol.startParams)
 	}
+	policy := protocol.turnParams.ToolOutputPolicy
+	if policy.MaxTextBytes != orquestaruntimecodexgoal.CodexGoalToolOutputMaxBytesV0 ||
+		policy.ThreadReadMaxBytes != codexAppServerThreadReadMaxResponseFrameBytesV0 ||
+		!policy.RequireBoundedCommands ||
+		!policy.DurableEvidenceRequired ||
+		!containsStringMigratedTestV0(policy.BoundedCommandHints, "rg --max-count") ||
+		!containsStringMigratedTestV0(policy.BoundedCommandHints, "sed -n") {
+		t.Fatalf("tool output policy turn/start=%+v", policy)
+	}
 }
 
 func TestServerCodexAppServerGoalBackendV0TurnStartNoRelajaContratoSalidaCompactaV0(t *testing.T) {
@@ -141,6 +150,104 @@ func TestServerCodexAppServerGoalBackendV0TurnStartNoRelajaContratoSalidaCompact
 		!strings.Contains(input, "rg --files | head") ||
 		!strings.Contains(input, "custom bounded helper") {
 		t.Fatalf("contrato runtime relajado: receipt=%+v input=%q", receipt, input)
+	}
+	policy := protocol.turnParams.ToolOutputPolicy
+	if policy.MaxTextBytes != orquestaruntimecodexgoal.CodexGoalToolOutputMaxBytesV0 ||
+		!containsStringMigratedTestV0(policy.BoundedCommandHints, "rg --files | head") ||
+		!containsStringMigratedTestV0(policy.BoundedCommandHints, "custom bounded helper") {
+		t.Fatalf("tool output policy relajado: %+v", policy)
+	}
+}
+
+func TestServerCodexAppServerTurnStartParamsV0SerializaToolOutputPolicyV0(t *testing.T) {
+	params := serverCodexAppServerTurnStartParamsV0{
+		ThreadID:  "thread-policy-json-001",
+		InputText: "turn acotado",
+		ToolOutputPolicy: serverCodexAppServerTurnStartToolOutputPolicyV0{
+			MaxTextBytes:            4096,
+			ThreadReadMaxBytes:      codexAppServerThreadReadMaxResponseFrameBytesV0,
+			RequireBoundedCommands:  true,
+			BoundedCommandHints:     []string{"rg --max-count", "rg --max-count", "sed -n"},
+			DurableEvidenceRequired: true,
+		},
+	}
+
+	raw := params.toJSONV0()
+	policy, ok := raw["toolOutputPolicy"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("toolOutputPolicy no serializado: %#v", raw)
+	}
+	if policy["maxTextBytes"] != 4096 ||
+		policy["threadReadMaxBytes"] != codexAppServerThreadReadMaxResponseFrameBytesV0 ||
+		policy["requireBoundedCommands"] != true ||
+		policy["durableEvidenceRequired"] != true {
+		t.Fatalf("policy json=%#v", policy)
+	}
+	hints, ok := policy["boundedCommandHints"].([]string)
+	if !ok ||
+		len(hints) != 2 ||
+		!containsStringMigratedTestV0(hints, "rg --max-count") ||
+		!containsStringMigratedTestV0(hints, "sed -n") {
+		t.Fatalf("hints=%#v policy=%#v", policy["boundedCommandHints"], policy)
+	}
+
+	params.DisablePolicyJSON = true
+	if _, exists := params.toJSONV0()["toolOutputPolicy"]; exists {
+		t.Fatalf("DisablePolicyJSON debe omitir toolOutputPolicy")
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0TurnStartToolOutputPolicyFallbackCompatibleV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-policy-fallback-001"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-policy-fallback-001", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-policy-fallback-001", Status: "inProgress"},
+		startTurnErrs: []error{
+			codexAppServerCallErrorV0{
+				Code: "codex_app_server_rpc_invalid_params",
+				Err:  errors.New("unknown field toolOutputPolicy"),
+			},
+			nil,
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol:       protocol,
+		Sandbox:        "workspace-write",
+		ApprovalPolicy: "never",
+	}
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef:   "goal-ref-policy-fallback-001",
+		Objective: "lanzar goal con app-server legacy",
+		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
+			ToolOutputPolicy: orquestaruntimecodexgoal.CodexGoalToolOutputPolicyV0{
+				MaxTextBytes:        2048,
+				BoundedCommandHints: []string{"custom head helper"},
+			},
+		},
+	}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0 receipt=%+v err=%v", receipt, err)
+	}
+	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		!containsStringMigratedTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-turn-start-tool-output-policy-fallback") {
+		t.Fatalf("receipt=%+v", receipt)
+	}
+	if len(protocol.turnParamsHistory) != 2 {
+		t.Fatalf("turn starts=%d calls=%+v", len(protocol.turnParamsHistory), protocol.calls)
+	}
+	first := protocol.turnParamsHistory[0]
+	second := protocol.turnParamsHistory[1]
+	if first.DisablePolicyJSON || first.ToolOutputPolicy.emptyV0() {
+		t.Fatalf("primer turn/start debe enviar policy estructurada: %+v", first)
+	}
+	if !second.DisablePolicyJSON || second.ToolOutputPolicy.emptyV0() {
+		t.Fatalf("retry debe conservar contrato textual y omitir policy JSON: %+v", second)
+	}
+	if !strings.Contains(second.InputText, "max_text_bytes=2048") ||
+		!strings.Contains(second.InputText, "custom head helper") {
+		t.Fatalf("retry perdio contrato textual: %q", second.InputText)
 	}
 }
 
@@ -882,17 +989,19 @@ func (fake *fakeCodexAppServerBackendShutdownV0) ShutdownForcedStopV0(context.Co
 }
 
 type fakeCodexAppServerProtocolV0 struct {
-	calls       []string
-	startParams serverCodexAppServerThreadStartParamsV0
-	setParams   serverCodexAppServerThreadGoalSetParamsV0
-	turnParams  serverCodexAppServerTurnStartParamsV0
-	getThreadID string
-	onStartTurn func()
+	calls             []string
+	startParams       serverCodexAppServerThreadStartParamsV0
+	setParams         serverCodexAppServerThreadGoalSetParamsV0
+	turnParams        serverCodexAppServerTurnStartParamsV0
+	turnParamsHistory []serverCodexAppServerTurnStartParamsV0
+	getThreadID       string
+	onStartTurn       func()
 
 	thread           serverCodexAppServerThreadV0
 	goal             serverCodexAppServerThreadGoalV0
 	turn             serverCodexAppServerTurnV0
 	setGoalErr       error
+	startTurnErrs    []error
 	getGoalErr       error
 	observedGoal     *serverCodexAppServerThreadGoalV0
 	readThread       serverCodexAppServerThreadReadV0
@@ -928,8 +1037,16 @@ func (fake *fakeCodexAppServerProtocolV0) StartTurnV0(
 ) (serverCodexAppServerTurnV0, error) {
 	fake.calls = append(fake.calls, "turn/start")
 	fake.turnParams = params
+	fake.turnParamsHistory = append(fake.turnParamsHistory, params)
 	if fake.onStartTurn != nil {
 		fake.onStartTurn()
+	}
+	if len(fake.startTurnErrs) > 0 {
+		err := fake.startTurnErrs[0]
+		fake.startTurnErrs = fake.startTurnErrs[1:]
+		if err != nil {
+			return serverCodexAppServerTurnV0{}, err
+		}
 	}
 	return fake.turn, nil
 }

@@ -31,7 +31,10 @@ el proveedor: materializar checkpoint temprano dentro del `write_set`, evitar
 pegar salidas largas, mantener final/ACK compacto y preservar evidencias
 durables. La frontera app-server inyecta ese mismo contrato en `turn/start`
 aunque el `prompt` legacy venga incompleto, con `max_text_bytes=16384` y
-`thread_read_max_bytes=256 KiB` como limites de ingestion/lectura. El
+`thread_read_max_bytes=256 KiB` como limites de ingestion/lectura. Tambien
+transporta un `toolOutputPolicy` estructurado con esos limites, hints de
+comandos acotados y evidencia durable; si un app-server legacy rechaza el campo
+por schema, Orquesta reintenta sin ese JSON y conserva el contrato textual. El
 app-server tambien materializa `checkpoint_started.txt` antes de `turn/start`
 cuando hay `write_set` autorizado.
 
@@ -40,9 +43,9 @@ quedan acotadas a 256 KiB por linea. `thread/read` conserva el codigo especifico
 `codex_app_server_thread_read_response_too_large`; otros metodos devuelven
 `codex_app_server_command_response_too_large` y el proceso se corta por grupo.
 
-Estos limites no equivalen a un corte duro previo a herramientas internas del
-proveedor: Orquesta puede acotar `thread/read`, sanear outputs ya generados y
-pedir/replanificar contexto estrecho, pero no puede impedir por este contrato
+Estos limites no equivalen por si solos a un corte duro previo a herramientas
+internas del proveedor: Orquesta puede acotar `thread/read`, sanear outputs ya
+generados y pedir/replanificar contexto estrecho, pero no puede impedir por este contrato
 que una herramienta interna produzca stdout gigante antes de que el backend lo
 exponga. Ese cierre requiere soporte explicito del runtime/proveedor o que el
 app-server medie la ejecucion real de herramientas.

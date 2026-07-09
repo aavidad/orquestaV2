@@ -16,6 +16,7 @@ func (backend serverCodexAppServerGoalBackendV0) codexAppServerStartImmediateLim
 	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
 	threadID string,
 	goalSetEvidence string,
+	turnStartEvidenceRefs []string,
 ) (orquestaruntimecodexgoal.CodexGoalStartReceiptV0, bool) {
 	if backend.Protocol == nil {
 		return orquestaruntimecodexgoal.CodexGoalStartReceiptV0{}, false
@@ -30,12 +31,13 @@ func (backend serverCodexAppServerGoalBackendV0) codexAppServerStartImmediateLim
 	}
 	receipt := codexAppServerStartReceiptV0(packet, threadID, code)
 	receipt.Status = orquestagoal.GoalStatusBlockedV0
-	receipt.EvidenceRefs = compactServerStackStringsV0([]string{
+	evidenceRefs := []string{
 		"evidence-ref-codex-app-server-thread-started",
 		goalSetEvidence,
-		"evidence-ref-codex-app-server-turn-started",
-		evidenceRef,
-	})
+	}
+	evidenceRefs = append(evidenceRefs, turnStartEvidenceRefs...)
+	evidenceRefs = append(evidenceRefs, evidenceRef)
+	receipt.EvidenceRefs = compactServerStackStringsV0(evidenceRefs)
 	return receipt, true
 }
 
