@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -41,6 +44,8 @@ func TestSmokeGoalFirstToolOutputPolicyAdversarialRealV0(t *testing.T) {
 		"probe_result.txt",
 		"bug200_probe_not_executed",
 		"no_probe_result",
+		"BUG079_STDOUT_PROBE",
+		"executions=1",
 		"stdout gigante",
 		"smoke_goal_first_tool_output_policy_adversarial_real=ok",
 	} {
@@ -58,6 +63,31 @@ func TestSmokeGoalFirstToolOutputPolicyAdversarialRealV0(t *testing.T) {
 	} {
 		if !strings.Contains(wrapper, want) {
 			t.Fatalf("wrapper adversarial toolOutputPolicy incompleto: falta %q", want)
+		}
+	}
+}
+
+func TestSmokeGoalFirstToolOutputPolicyAdversarialGuardSelfTestV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	cmd := exec.Command("bash", filepath.Join(root, "scripts/smoke_goal_first_app_server_real.sh"))
+	cmd.Env = append(os.Environ(),
+		"SMOKE_GOAL_FIRST_BUG079_GUARD_SELFTEST=1",
+		"TMPDIR="+t.TempDir(),
+	)
+	out, err := cmd.CombinedOutput()
+	text := string(out)
+	if err != nil {
+		t.Fatalf("BUG-079 guard selftest fallo: %v\n%s", err, text)
+	}
+	for _, want := range []string{
+		"bug079_guard_checkpoint_only_status=",
+		"reason=bug200_probe_not_executed",
+		"bug079_guard_valid_status=0",
+		"bug079_probe_result=executed",
+		"bug079_guard_selftest=ok",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("selftest BUG-079 incompleto: falta %q\n%s", want, text)
 		}
 	}
 }

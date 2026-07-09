@@ -566,6 +566,70 @@ func TestServerCodexAppServerGoalBackendV0ObservaThreadReadGiganteComoBloqueoV0(
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0PolicyAceptadaYThreadReadGiganteBloqueaV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-policy-big-read-001"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-policy-big-read-001", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-policy-big-read-001", Status: "inProgress"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol:       protocol,
+		Sandbox:        "workspace-write",
+		ApprovalPolicy: "never",
+	}
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef:   "goal-ref-policy-big-read-001",
+		Objective: "probar salida gigante sin relajar policy",
+		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
+			ToolOutputPolicy: orquestaruntimecodexgoal.CodexGoalToolOutputPolicyV0{
+				MaxTextBytes:           2048,
+				RequireBoundedCommands: true,
+				BoundedCommandHints:    []string{"custom bounded helper"},
+			},
+		},
+	}
+
+	startReceipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	if startReceipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		!containsStringMigratedTestV0(startReceipt.EvidenceRefs, codexAppServerTurnStartToolOutputPolicySentV0) ||
+		!containsStringMigratedTestV0(startReceipt.EvidenceRefs, codexAppServerTurnStartToolOutputPolicyAcceptedV0) ||
+		containsStringMigratedTestV0(startReceipt.EvidenceRefs, codexAppServerTurnStartToolOutputPolicyFallbackV0) {
+		t.Fatalf("start receipt=%+v", startReceipt)
+	}
+	if protocol.turnParams.ToolOutputPolicy.ThreadReadMaxBytes != codexAppServerThreadReadMaxResponseFrameBytesV0 ||
+		protocol.turnParams.ToolOutputPolicy.MaxTextBytes != 2048 ||
+		!protocol.turnParams.ToolOutputPolicy.RequireBoundedCommands {
+		t.Fatalf("policy=%+v", protocol.turnParams.ToolOutputPolicy)
+	}
+
+	protocol.observedGoal = &serverCodexAppServerThreadGoalV0{
+		ThreadID: startReceipt.ExternalGoalRef,
+		Status:   "active",
+	}
+	protocol.readThreadErr = codexAppServerCallErrorV0{
+		Code: codexAppServerThreadReadFrameTooLargeIssueCodeV0,
+		Err:  errors.New("bytes=262145 limit=262144"),
+	}
+
+	observeReceipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         packet.GoalRef,
+		ExternalGoalRef: startReceipt.ExternalGoalRef,
+	})
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if observeReceipt.Status != orquestagoal.GoalStatusBlockedV0 ||
+		observeReceipt.IssueCode != codexAppServerThreadReadFrameTooLargeIssueCodeV0 ||
+		observeReceipt.Summary != codexAppServerThreadReadFrameTooLargeIssueCodeV0 ||
+		!containsStringMigratedTestV0(observeReceipt.EvidenceRefs, "evidence-ref-codex-app-server-active-goal-thread-read-failed") ||
+		!containsStringMigratedTestV0(observeReceipt.EvidenceRefs, "evidence-ref-codex-app-server-thread-read-response-too-large") {
+		t.Fatalf("observe receipt=%+v", observeReceipt)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0UmbralUsoAltoDefaultConserva100kV0(t *testing.T) {
 	backend := serverCodexAppServerGoalBackendV0{}
 

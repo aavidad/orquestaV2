@@ -45,6 +45,8 @@ func codexAppServerIssueEvidenceRefV0(issueCode string) string {
 		return "evidence-ref-codex-app-server-provider-unauthorized"
 	case "codex_app_server_auth_missing":
 		return "evidence-ref-codex-app-server-auth-missing"
+	case codexAppServerThreadReadFrameTooLargeIssueCodeV0:
+		return "evidence-ref-codex-app-server-thread-read-response-too-large"
 	default:
 		return ""
 	}

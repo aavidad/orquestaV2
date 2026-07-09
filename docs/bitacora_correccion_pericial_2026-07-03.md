@@ -5918,3 +5918,44 @@ Residual:
   proveedor real, OPES temporal/preprod ni despliegue remoto.
 - Si `estado-vivo` detecta conflicto duro real, el cierre sigue bloqueado de
   forma intencionada.
+
+## Orquesta local 2026-07-09: BUG-200 cerrado como harness local de BUG-079
+
+Se siguio arreglando de dentro hacia afuera. El residual de `BUG-079` no estaba
+ya en el transporte local de `toolOutputPolicy`, sino en demostrar enforcement
+real del proveedor antes de que una herramienta emita stdout gigante. El bug
+local pendiente era `BUG-ORQ-20260709-200`: el smoke adversarial podia quedar
+inconcluso si el agente solo escribia checkpoint y no ejecutaba el probe.
+
+Cambios:
+
+- `scripts/smoke_goal_first_app_server_real.sh` incorpora
+  `SMOKE_GOAL_FIRST_BUG079_GUARD_SELFTEST=1`, un self-test local que
+  no arranca servidor ni Codex.
+- El self-test crea un fixture checkpoint-only y exige fallo con
+  `reason=bug200_probe_not_executed`.
+- El fixture valido solo pasa con `probe_result.txt` que declare exit code,
+  `probe_stdout.py`, `200000`, sentinel `BUG079_STDOUT_PROBE` y
+  `executions=1`.
+- El test Go de scripts ejecuta ese self-test, ya no se limita a buscar strings.
+- El runtime app-server anade cobertura para `toolOutputPolicy` aceptada seguida
+  de `thread/read` gigante: Orquesta bloquea con
+  `codex_app_server_thread_read_response_too_large` y evidencia especifica.
+
+Evidencia:
+
+- `SMOKE_GOAL_FIRST_BUG079_GUARD_SELFTEST=1
+  scripts/smoke_goal_first_app_server_real.sh`
+- `bash -n scripts/smoke_goal_first_app_server_real.sh
+  scripts/smoke_goal_first_tool_output_policy_adversarial_real.sh`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run
+  'TestServerCodexAppServerGoalBackendV0(PolicyAceptadaYThreadReadGiganteBloquea|TurnStartToolOutputPolicy|ObservaThreadReadGigante|LanzaThreadGoalYTurnMigrado)|TestCodexAppServer(WebSocketThreadReadResponseBudget|CommandProtocolThreadReadResponseBudget)'`
+- `go test -count=1 ./cmd/orquesta-server -run
+  'TestSmokeGoalFirstToolOutputPolicyAdversarial|TestSmokeGoalFirstAppServerRealExponeToolOutputPolicyTransport'`
+
+Lectura:
+
+- `BUG-ORQ-20260709-200` queda cerrado como falso inconcluso/harness local.
+- `BUG-ORQ-20260701-079` sigue abierto solo para proveedor/app-server real:
+  falta ejecutar o construir la prueba E2E que fuerce stdout gigante y confirme
+  si el proveedor aplica el cap pre-tool o si hay que corregir esa frontera.

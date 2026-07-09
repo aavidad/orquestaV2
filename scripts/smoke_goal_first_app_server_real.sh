@@ -356,9 +356,11 @@ assert_bug079_probe_result_executed() {
   fi
   if ! grep -Eqi 'exit[ _-]*code|exitcode|return[ _-]*code' "$probe_result_file" ||
     ! grep -qi 'probe_stdout.py' "$probe_result_file" ||
-    ! grep -q '200000' "$probe_result_file"; then
+    ! grep -q '200000' "$probe_result_file" ||
+    ! grep -q 'BUG079_STDOUT_PROBE' "$probe_result_file" ||
+    ! grep -Eq 'executions[[:space:]]*=[[:space:]]*1' "$probe_result_file"; then
     echo "reason=no_probe_result" >&2
-    echo "smoke adversarial BUG-079 probe_result.txt no documenta exit code, comando y bytes previstos" >&2
+    echo "smoke adversarial BUG-079 probe_result.txt no documenta exit code, comando, bytes previstos, sentinel y executions=1" >&2
     smoke_print_file_excerpt "$probe_result_file"
     fail_after_app_server_tmux_shutdown_ready 1
   fi
@@ -1117,6 +1119,72 @@ bug088_second_artifact_exists() {
   [[ -s "$project_dir/generated-apps/bug088_second_artifact.txt" ]]
 }
 
+run_bug079_guard_selftest() {
+  local checkpoint_stdout="$smoke_root/bug079_guard_checkpoint.stdout"
+  local checkpoint_stderr="$smoke_root/bug079_guard_checkpoint.stderr"
+  local valid_stdout="$smoke_root/bug079_guard_valid.stdout"
+  local valid_stderr="$smoke_root/bug079_guard_valid.stderr"
+  local checkpoint_status valid_status
+
+  printf '{}\n' >"$observe_response"
+  rm -rf "$project_dir/generated-apps"
+  mkdir -p "$project_dir/generated-apps" "$project_dir/generated-apps/bug079-tool-output-policy"
+  printf 'checkpoint only\n' >"$project_dir/generated-apps/checkpoint_started_bug079.txt"
+
+  set +e
+  (
+    assert_bug079_probe_result_executed
+  ) >"$checkpoint_stdout" 2>"$checkpoint_stderr"
+  checkpoint_status=$?
+  set -e
+  echo "bug079_guard_checkpoint_only_status=$checkpoint_status"
+  if [[ "$checkpoint_status" -eq 0 ]] ||
+    ! grep -q "reason=bug200_probe_not_executed" "$checkpoint_stderr"; then
+    echo "BUG-079 guard selftest no fallo en checkpoint-only con causa esperada" >&2
+    smoke_print_file_excerpt "$checkpoint_stdout"
+    smoke_print_file_excerpt "$checkpoint_stderr"
+    exit 1
+  fi
+  grep -m1 "reason=bug200_probe_not_executed" "$checkpoint_stderr"
+
+  rm -rf "$project_dir/generated-apps"
+  mkdir -p "$project_dir/generated-apps/bug079-tool-output-policy"
+  printf 'checkpoint before probe\n' >"$project_dir/generated-apps/checkpoint_started_bug079.txt"
+  cat >"$project_dir/generated-apps/bug079-tool-output-policy/probe_stdout.py" <<'PY'
+print("BUG079_STDOUT_PROBE:" + ("X" * 200000))
+PY
+  cat >"$project_dir/generated-apps/bug079-tool-output-policy/probe_result.txt" <<'EOF'
+schema_version=orquesta.bug079.probe_result.v0
+command=python3 generated-apps/bug079-tool-output-policy/probe_stdout.py
+exit_code=0
+expected_stdout_bytes=200000
+sentinel=BUG079_STDOUT_PROBE
+executions=1
+EOF
+
+  set +e
+  (
+    assert_bug079_probe_result_executed
+  ) >"$valid_stdout" 2>"$valid_stderr"
+  valid_status=$?
+  set -e
+  echo "bug079_guard_valid_status=$valid_status"
+  if [[ "$valid_status" -ne 0 ]] ||
+    ! grep -q "bug079_probe_result=executed" "$valid_stdout"; then
+    echo "BUG-079 guard selftest rechazo fixture valido" >&2
+    smoke_print_file_excerpt "$valid_stdout"
+    smoke_print_file_excerpt "$valid_stderr"
+    exit 1
+  fi
+  grep -m1 "bug079_probe_result=executed" "$valid_stdout"
+  echo "bug079_guard_selftest=ok"
+}
+
+if [[ "${SMOKE_GOAL_FIRST_BUG079_GUARD_SELFTEST:-0}" == "1" ]]; then
+  run_bug079_guard_selftest
+  exit 0
+fi
+
 need_cmd python3
 
 codex_command="$(resolve_command "${ORQUESTA_CODEX_COMMAND:-codex}")" || {
@@ -1188,10 +1256,11 @@ Trabaja solo dentro de este proyecto temporal. Escribe primero
 `generated-apps/checkpoint_started_bug079.txt` con una linea de estado. Despues
 crea `generated-apps/bug079-tool-output-policy/probe_stdout.py` y ejecutalo una
 sola vez. El probe debe imprimir una linea con prefijo
-`ORQUESTA_BUG079_STDOUT_PROBE:` seguida de 200000 caracteres `X`. No pegues esa
+`BUG079_STDOUT_PROBE:` seguida de 200000 caracteres `X`. No pegues esa
 salida en ningun fichero ni mensaje; solo escribe
 `generated-apps/bug079-tool-output-policy/probe_result.txt` con exit code,
-comando y bytes previstos. No publiques HOME, tokens ni rutas privadas. Escribe
+comando, bytes previstos, sentinel `BUG079_STDOUT_PROBE` y
+`executions=1`. No publiques HOME, tokens ni rutas privadas. Escribe
 `trabajo/docs/orquesta_goal_result_v0.json` con marcador `ORQUESTA_GOAL_RESULT_V0`
 solo despues de checkpoint, probe y `probe_result.txt`.
 EOF
@@ -1265,7 +1334,7 @@ go build -o "$bin_dir/orquesta-server" ./cmd/orquesta-server
 if [[ "$tool_output_policy_adversarial_mode" == "1" ]]; then
   request_id="request-ref-goal-first-bug079-tool-output-policy-$(date -u +%Y%m%dT%H%M%SZ)"
   app_name="Smoke Goal First BUG079 Tool Output Policy"
-  app_objective="BUG-079: crear primero generated-apps/checkpoint_started_bug079.txt; despues crear y ejecutar una sola vez generated-apps/bug079-tool-output-policy/probe_stdout.py, que imprime prefijo ORQUESTA_BUG079_STDOUT_PROBE y 200000 X; no pegar esa salida en mensajes ni ficheros; escribir probe_result.txt con exit code y bytes previstos; devolver ORQUESTA_GOAL_RESULT_V0 solo tras checkpoint, probe y resultado."
+  app_objective="BUG-079: crear primero generated-apps/checkpoint_started_bug079.txt; despues crear y ejecutar una sola vez generated-apps/bug079-tool-output-policy/probe_stdout.py, que imprime prefijo BUG079_STDOUT_PROBE y 200000 X; no pegar esa salida en mensajes ni ficheros; escribir probe_result.txt con exit code, bytes previstos, sentinel BUG079_STDOUT_PROBE y executions=1; devolver ORQUESTA_GOAL_RESULT_V0 solo tras checkpoint, probe y resultado."
   app_description="Smoke real adversarial minimo para validar que Codex app-server acepta toolOutputPolicy y evita lecturas gigantes de stdout antes de cierre o replan."
   app_restriction_one="checkpoint_started_bug079.txt debe ser el primer artefacto durable"
   app_restriction_two="ejecutar exactamente una vez el probe stdout gigante y no pegar su salida cruda"
