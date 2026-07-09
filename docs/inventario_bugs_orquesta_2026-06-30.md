@@ -386,6 +386,30 @@ antes de su cierre posterior:
   `WalkDir` y los checks de orden se conservan separados para no ocultar que
   una regla aplica a toda la flota de scripts. Residual: consolidar mas bloques
   solo cuando se vuelva a tocar esa zona.
+- `BUG-ORQ-20260709-208` queda cerrado en inventario MCP local: el contrato
+  HTTP `operator_director.review_plan.v0` ya estaba declarado en el manifest
+  de rutas, pero la tool MCP `orquesta.director.human_work.review_plan.v0`
+  quedaba fuera de `mcpInternalContractSurfaceInventoryForTestV0`. Eso dejaba
+  un falso verde E3: un campo nuevo en el DTO MCP de review-plan podia no
+  aparecer en `input_schema` sin que el guard focal lo detectase. Cierre: el
+  inventario MCP incluye `operator_director.review_plan.v0` y la tool pasa a
+  requerir inventario. Evidencia focal:
+  `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway -run 'TestMCPInternalContractSurfaceInventory|TestPublicRouteManifestV0DeclaraContratosE3InternosV0'`.
+- `BUG-ORQ-20260709-209` queda cerrado en `operator_notifications.v0`: el
+  dedupe se registraba antes del envio y, si el sender fallaba, el reintento
+  quedaba suprimido. Cierre: los stores que soportan `ForgetV0` liberan la
+  clave cuando `SendOperatorNotificationV0` devuelve error; el store en memoria
+  implementa esa liberacion. Evidencia focal:
+  `TestOperatorNotificationV0NoDeduplicaSiSenderFallaYPermiteRetry`.
+- `BUG-ORQ-20260709-210` queda cerrado en shutdown goal-first local: el stack
+  recogia readers/cleaners desde `AppGoalObserver`, `AppGoalLauncher` y
+  `AppGoalReworkLauncher` y podia invocar tres veces el mismo backend envuelto.
+  Cierre: `orquesta-server-shutdown` expone identidad opcional
+  `ActiveShutdownWorkIdentityPortV0`, los wrappers goal-first de `cmd` propagan
+  la identidad del backend `app_server_tmux`, y el stack deduplica por esa
+  identidad antes de leer o limpiar active work. Evidencia focal:
+  `TestStackShutdownActiveWorkCleanerV0DeduplicaPuertosConMismaIdentidadV0` y
+  `TestServerGoalWorkPortsFromBackendV0PropaganActiveShutdownWorkV0`.
 - Reejeucion real 2026-07-04 noche 10:
   `smoke_goal_first_checkpoint_only_high_consumption_real=ok` con
   `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-6c8dc4317888c8e25bb0e91f7f910aab`,

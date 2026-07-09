@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
@@ -67,6 +68,10 @@ func (launcher serverGoalWorkLauncherWithActiveShutdownWorkV0) CleanupActiveShut
 	return launcher.ActiveCleaner.CleanupActiveShutdownWorkV0(ctx, command)
 }
 
+func (launcher serverGoalWorkLauncherWithActiveShutdownWorkV0) ActiveShutdownWorkIdentityV0() string {
+	return serverGoalActiveShutdownWorkIdentityV0(launcher.ActiveWork, launcher.ActiveCleaner)
+}
+
 type serverGoalWorkObserverWithActiveShutdownWorkV0 struct {
 	Inner         orquestagoal.GoalWorkObservationPortV0
 	ActiveWork    orquestaservershutdown.ActiveShutdownWorkReaderPortV0
@@ -101,4 +106,24 @@ func (observer serverGoalWorkObserverWithActiveShutdownWorkV0) CleanupActiveShut
 		return orquestaservershutdown.ActiveShutdownWorkCleanupResultV0{}, nil
 	}
 	return observer.ActiveCleaner.CleanupActiveShutdownWorkV0(ctx, command)
+}
+
+func (observer serverGoalWorkObserverWithActiveShutdownWorkV0) ActiveShutdownWorkIdentityV0() string {
+	return serverGoalActiveShutdownWorkIdentityV0(observer.ActiveWork, observer.ActiveCleaner)
+}
+
+func serverGoalActiveShutdownWorkIdentityV0(
+	activeWork orquestaservershutdown.ActiveShutdownWorkReaderPortV0,
+	activeCleaner orquestaservershutdown.ActiveShutdownWorkCleanerPortV0,
+) string {
+	for _, candidate := range []interface{}{activeCleaner, activeWork} {
+		identity, ok := candidate.(orquestaservershutdown.ActiveShutdownWorkIdentityPortV0)
+		if !ok || identity == nil {
+			continue
+		}
+		if value := strings.TrimSpace(identity.ActiveShutdownWorkIdentityV0()); value != "" {
+			return value
+		}
+	}
+	return ""
 }

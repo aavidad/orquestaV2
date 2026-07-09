@@ -6244,3 +6244,41 @@ Lectura:
   script exacto. Moverlos ahora haria el fallo menos claro.
 - E6 queda reducido como mantenimiento local. No desbloquea ni bloquea OPES,
   remoto, Hermes ni Telegram.
+
+## Orquesta local 2026-07-09: cierre local dentro-fuera E3/notificaciones/shutdown
+
+Subagentes read-only encontraron tres falsos verdes locales despues del
+checkpoint dentro-fuera. Se corrigieron antes de pasar a OPES/remoto.
+
+Cambios:
+
+- `BUG-ORQ-20260709-208`: `operator_director.review_plan.v0` se incorpora al
+  inventario MCP interno. El contrato ya estaba en HTTP, pero la tool MCP
+  `orquesta.director.human_work.review_plan.v0` no exigia paridad DTO ->
+  `input_schema`.
+- `BUG-ORQ-20260709-209`: `operator_notifications.v0` libera la clave de
+  dedupe si el sender falla, para que un error temporal de Telegram/Hermes no
+  suprima el reintento.
+- `BUG-ORQ-20260709-210`: `orquesta-server-shutdown` gana identidad opcional de
+  active work; los wrappers goal-first de `cmd` propagan la identidad del
+  backend y `orquesta-app-codex-stack` deduplica readers/cleaners antes de
+  invocarlos. Evita limpiar varias veces el mismo backend cuando launcher,
+  rework y observer envuelven el mismo `app_server_tmux`.
+
+Lectura:
+
+- No se mete HTTP gateway dentro de MCP ni `cmd` dentro del stack. La identidad
+  vive en el puerto neutral de shutdown y es opcional.
+- Estos cierres son locales. No sustituyen los smokes remotos de Telegram,
+  proveedor lento ni deploy real.
+
+Evidencia focal:
+
+- `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway -run 'TestMCPInternalContractSurfaceInventory|TestPublicRouteManifestV0DeclaraContratosE3InternosV0'`
+- `go test -count=1 ./modulos/orquesta-operator-notifications -run 'TestOperatorNotificationV0'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestStackShutdownActiveWorkCleanerV0DeduplicaPuertosConMismaIdentidadV0'`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerGoalWorkPortsFromBackendV0PropaganActiveShutdownWorkV0'`
+- `go test -count=1 ./modulos/orquesta-mcp ./modulos/orquesta-http-gateway ./modulos/orquesta-operator-notifications ./modulos/orquesta-server-shutdown ./modulos/orquesta-app-codex-stack ./modulos/orquesta-runtime-codex-appserver ./cmd/orquesta-server`
+- `git diff --check`
+- `go test -count=1 ./...`
+- `go build ./...`

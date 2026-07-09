@@ -281,6 +281,36 @@ func TestStackShutdownActiveWorkReaderV0BloqueaRestosBackendAunqueStateStoreNoRu
 	}
 }
 
+func TestStackShutdownActiveWorkCleanerV0DeduplicaPuertosConMismaIdentidadV0(t *testing.T) {
+	port := &stackShutdownCountingGoalPortForTestV0{
+		identity: "codex_app_server_tmux:shared-shutdown-backend",
+		cleanupResult: orquestaservershutdown.ActiveShutdownWorkCleanupResultV0{
+			CleanedWorkCount: 1,
+			EvidenceRefs:     []string{"evidence-ref-shared-backend-cleaned"},
+		},
+	}
+	config := ConfigV0{
+		AppGoalObserver:       port,
+		AppGoalLauncher:       port,
+		AppGoalReworkLauncher: port,
+	}
+	result, err := stackShutdownActiveWorkCleanerV0{Config: config}.CleanupActiveShutdownWorkV0(
+		context.Background(),
+		orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0{
+			CleanupGoalBackends: true,
+			EvidenceRefs:        []string{"evidence-ref-shutdown-dedupe"},
+		},
+	)
+	if err != nil {
+		t.Fatalf("CleanupActiveShutdownWorkV0: %v", err)
+	}
+	if port.cleanupCalls != 1 ||
+		result.CleanedWorkCount != 1 ||
+		!hasStackShutdownEvidenceForTestV0(result.EvidenceRefs, "evidence-ref-shared-backend-cleaned") {
+		t.Fatalf("cleanupCalls=%d result=%+v", port.cleanupCalls, result)
+	}
+}
+
 func TestStackShutdownActiveWorkReaderV0ListaGoalFirstCompletoPendienteObservacion(t *testing.T) {
 	fixture := newStackShutdownCheckpointFixtureV0(t)
 	goalStates := newGoalFirstQueueStateStoreForTestV0()
@@ -599,6 +629,12 @@ type stackShutdownActiveGoalObserverForTestV0 struct {
 	result orquestaservershutdown.ActiveShutdownWorkResultV0
 }
 
+type stackShutdownCountingGoalPortForTestV0 struct {
+	identity      string
+	cleanupCalls  int
+	cleanupResult orquestaservershutdown.ActiveShutdownWorkCleanupResultV0
+}
+
 type fakeStackShutdownRunControlWriterV0 struct{}
 
 func (fakeStackShutdownRunControlWriterV0) PauseRunV0(
@@ -649,6 +685,32 @@ func (observer stackShutdownActiveGoalObserverForTestV0) ReadActiveShutdownWorkV
 	orquestaservershutdown.ActiveShutdownWorkRequestV0,
 ) (orquestaservershutdown.ActiveShutdownWorkResultV0, error) {
 	return observer.result, nil
+}
+
+func (port *stackShutdownCountingGoalPortForTestV0) LaunchGoalWorkV0(
+	context.Context,
+	orquestagoal.GoalWorkSpecV0,
+) (orquestagoal.GoalLaunchReceiptV0, error) {
+	return orquestagoal.GoalLaunchReceiptV0{}, nil
+}
+
+func (port *stackShutdownCountingGoalPortForTestV0) ObserveGoalWorkV0(
+	context.Context,
+	orquestagoal.GoalObservationRequestV0,
+) (orquestagoal.GoalWorkResultV0, error) {
+	return orquestagoal.GoalWorkResultV0{}, nil
+}
+
+func (port *stackShutdownCountingGoalPortForTestV0) CleanupActiveShutdownWorkV0(
+	context.Context,
+	orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0,
+) (orquestaservershutdown.ActiveShutdownWorkCleanupResultV0, error) {
+	port.cleanupCalls++
+	return port.cleanupResult, nil
+}
+
+func (port *stackShutdownCountingGoalPortForTestV0) ActiveShutdownWorkIdentityV0() string {
+	return port.identity
 }
 
 func (source stackShutdownSnapshotSourceForTestV0) SnapshotV0(

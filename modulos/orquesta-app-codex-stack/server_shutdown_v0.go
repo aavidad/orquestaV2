@@ -394,6 +394,7 @@ func stackShutdownActiveWorkReadersFromGoalBackendV0(
 	config ConfigV0,
 ) []orquestaservershutdown.ActiveShutdownWorkReaderPortV0 {
 	out := []orquestaservershutdown.ActiveShutdownWorkReaderPortV0{}
+	seen := map[string]struct{}{}
 	for _, candidate := range []interface{}{
 		config.AppGoalObserver,
 		config.AppGoalLauncher,
@@ -401,6 +402,9 @@ func stackShutdownActiveWorkReadersFromGoalBackendV0(
 	} {
 		activeReader, ok := candidate.(orquestaservershutdown.ActiveShutdownWorkReaderPortV0)
 		if !ok || activeReader == nil {
+			continue
+		}
+		if stackShutdownActiveWorkPortSeenV0(seen, activeReader) {
 			continue
 		}
 		out = append(out, activeReader)
@@ -428,6 +432,7 @@ func stackShutdownActiveWorkCleanersFromGoalBackendV0(
 	config ConfigV0,
 ) []orquestaservershutdown.ActiveShutdownWorkCleanerPortV0 {
 	out := []orquestaservershutdown.ActiveShutdownWorkCleanerPortV0{}
+	seen := map[string]struct{}{}
 	for _, candidate := range []interface{}{
 		config.AppGoalObserver,
 		config.AppGoalLauncher,
@@ -437,9 +442,31 @@ func stackShutdownActiveWorkCleanersFromGoalBackendV0(
 		if !ok || activeCleaner == nil {
 			continue
 		}
+		if stackShutdownActiveWorkPortSeenV0(seen, activeCleaner) {
+			continue
+		}
 		out = append(out, activeCleaner)
 	}
 	return out
+}
+
+func stackShutdownActiveWorkPortSeenV0(
+	seen map[string]struct{},
+	port interface{},
+) bool {
+	identity, ok := port.(orquestaservershutdown.ActiveShutdownWorkIdentityPortV0)
+	if !ok || identity == nil {
+		return false
+	}
+	key := strings.TrimSpace(identity.ActiveShutdownWorkIdentityV0())
+	if key == "" {
+		return false
+	}
+	if _, exists := seen[key]; exists {
+		return true
+	}
+	seen[key] = struct{}{}
+	return false
 }
 
 func stackShutdownMergeActiveWorkResultV0(

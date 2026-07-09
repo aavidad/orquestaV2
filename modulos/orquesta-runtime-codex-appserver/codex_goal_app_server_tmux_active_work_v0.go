@@ -48,6 +48,18 @@ func (backend serverCodexAppServerTmuxBackendV0) ReadActiveShutdownWorkV0(
 	}, nil
 }
 
+func (backend serverCodexAppServerTmuxBackendV0) ActiveShutdownWorkIdentityV0() string {
+	sessionName := strings.TrimSpace(backend.SessionName)
+	if sessionName != "" {
+		return "codex_app_server_tmux:" + sessionName
+	}
+	socketPath := strings.TrimSpace(backend.SocketPath)
+	if socketPath != "" {
+		return "codex_app_server_tmux_socket:" + socketPath
+	}
+	return ""
+}
+
 type codexAppServerTmuxResidueV0 struct {
 	Active       bool
 	WorkRef      string

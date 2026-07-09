@@ -94,6 +94,7 @@ func mcpInternalContractSurfaceInventoryForTestV0() []mcpContractSurfaceInventor
 		{ContractRef: "nueva_app.wizard_bot.v0", ToolName: MCPNuevaAppWizardBotToolNameV0},
 		{ContractRef: "autoprogramming.prepare_run.v0", ToolName: MCPAutoprogrammingPrepareRunToolNameV0},
 		{ContractRef: "autoprogramming.status.v0", ToolName: MCPAutoprogrammingStatusToolNameV0},
+		{ContractRef: "operator_director.review_plan.v0", ToolName: MCPHumanDirectorWorkReviewPlanToolNameV0},
 		{ContractRef: "operator_director.message.v0", ToolName: channel.OperatorDirectorMessageToolNameV0},
 	}
 }
@@ -105,6 +106,7 @@ func mcpInternalToolRequiresInventoryForTestV0(name string) bool {
 		MCPNuevaAppWizardBotToolNameV0,
 		MCPAutoprogrammingPrepareRunToolNameV0,
 		MCPAutoprogrammingStatusToolNameV0,
+		MCPHumanDirectorWorkReviewPlanToolNameV0,
 		channel.OperatorDirectorMessageToolNameV0:
 		return true
 	default:

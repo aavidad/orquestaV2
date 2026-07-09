@@ -101,6 +101,10 @@ type ActiveShutdownWorkCleanerPortV0 interface {
 	) (ActiveShutdownWorkCleanupResultV0, error)
 }
 
+type ActiveShutdownWorkIdentityPortV0 interface {
+	ActiveShutdownWorkIdentityV0() string
+}
+
 type ActiveShutdownWorkRequestV0 struct {
 	QueueRef      string   `json:"queue_ref,omitempty"`
 	AppRefs       []string `json:"app_refs,omitempty"`

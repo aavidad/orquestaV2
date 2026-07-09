@@ -733,6 +733,21 @@ func TestServerGoalWorkPortsFromBackendV0PropaganActiveShutdownWorkV0(t *testing
 	if _, ok := observer.(orquestaservershutdown.ActiveShutdownWorkCleanerPortV0); !ok {
 		t.Fatalf("observer debe propagar cleanup active shutdown work")
 	}
+	launcherIdentity, ok := launcher.(orquestaservershutdown.ActiveShutdownWorkIdentityPortV0)
+	if !ok {
+		t.Fatalf("launcher debe propagar identidad active shutdown work")
+	}
+	observerIdentity, ok := observer.(orquestaservershutdown.ActiveShutdownWorkIdentityPortV0)
+	if !ok {
+		t.Fatalf("observer debe propagar identidad active shutdown work")
+	}
+	if launcherIdentity.ActiveShutdownWorkIdentityV0() == "" ||
+		launcherIdentity.ActiveShutdownWorkIdentityV0() != observerIdentity.ActiveShutdownWorkIdentityV0() {
+		t.Fatalf("identidades shutdown launcher=%q observer=%q",
+			launcherIdentity.ActiveShutdownWorkIdentityV0(),
+			observerIdentity.ActiveShutdownWorkIdentityV0(),
+		)
+	}
 }
 
 func TestServerEffectiveConfigV0ExponeGoalFirstYBackendV0(t *testing.T) {

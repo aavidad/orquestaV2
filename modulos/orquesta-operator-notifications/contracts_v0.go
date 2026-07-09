@@ -50,6 +50,10 @@ type DedupeStoreV0 interface {
 	SeenOrRecordV0(string) bool
 }
 
+type DedupeForgetterV0 interface {
+	ForgetV0(string)
+}
+
 type ServiceV0 struct {
 	TargetRef string
 	Sender    SendPortV0
@@ -75,12 +79,21 @@ func NotifyTerminalEventV0(ctx context.Context, service ServiceV0, event Termina
 	}
 	receiptRef, err := service.Sender.SendOperatorNotificationV0(ctx, message)
 	if err != nil {
+		forgetNotificationDedupeKeyV0(service.Dedupe, key)
 		return message, false, err
 	}
 	if strings.TrimSpace(receiptRef) != "" {
 		message.EvidenceRefs = compactStringsV0(append(message.EvidenceRefs, receiptRef))
 	}
 	return message, true, nil
+}
+
+func forgetNotificationDedupeKeyV0(dedupe DedupeStoreV0, key string) {
+	forgetter, ok := dedupe.(DedupeForgetterV0)
+	if !ok || forgetter == nil {
+		return
+	}
+	forgetter.ForgetV0(key)
 }
 
 func NormalizeTerminalEventV0(event TerminalEventV0) TerminalEventV0 {
@@ -145,6 +158,16 @@ func (store *MemoryDedupeStoreV0) SeenOrRecordV0(key string) bool {
 	}
 	store.seen[key] = struct{}{}
 	return false
+}
+
+func (store *MemoryDedupeStoreV0) ForgetV0(key string) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	delete(store.seen, key)
 }
 
 func firstNonEmptyV0(values ...string) string {
