@@ -5184,9 +5184,19 @@ Verificado:
 
 - `bash -n scripts/smoke_goal_first_app_server_real.sh scripts/smoke_goal_first_forced_stop_backend_real.sh`
 - `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeGoalFirst(AppServerReal|ForcedStop)'`
+- Smoke real Codex app-server tmux:
+  `ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 ORQUESTA_GOAL_FIRST_SMOKE_POLLS=50 ORQUESTA_KEEP_SMOKE_DIR=1 ORQUESTA_SMOKE_PARENT=/tmp/orquesta-smokes-codex ./scripts/smoke_goal_first_forced_stop_backend_real.sh`
+  -> `smoke_goal_first_forced_stop_backend_real=ok`,
+  `autoprogramming_status_before_forced_stop_visible=true`,
+  `run_control_status=stopped`, `run_control_goal_status_after=blocked`,
+  `observe_after_forced_stop_goal_status=blocked`,
+  `autoprogramming_status_after_forced_stop_not_running=true`,
+  `app_server_tmux_processes_alive=0`.
 
 Lectura para Claude:
 
-- Esto mejora la evidencia requerida para cerrar `BUG-165/065/079`, pero no
-  cierra el bug global: falta ejecutar el smoke real con proveedor y conservar
-  respuesta/status/shutdown de esa ejecucion.
+- Esto cierra con proveedor real el subcaso forced-stop/status/observe/shutdown
+  del harness. No cierra el bug global: quedan escenarios amplios de
+  observabilidad lenta/stale fuera de este smoke y despliegue remoto.
+- Evidencia saneada: `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.5Y0PiP`
+  (~512 KiB; se borro `codex-home` y el binario temporal).

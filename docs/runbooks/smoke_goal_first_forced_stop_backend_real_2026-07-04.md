@@ -131,3 +131,54 @@ posterior bloqueado/replanificable y cleanup sin procesos.
 No declara cerrado todo `BUG-165`: siguen como residuales separados los casos
 amplios de `status/observe` lento y la coordinacion automatica completa de
 shutdown/backend/checkpoint/stop/cancel/wait.
+
+## Revalidacion Codex 2026-07-09 con status antes/despues
+
+Smoke real ejecutado desde repo local tras ampliar el harness con snapshots de
+`/api/v0/autoprogramming/status`.
+
+Comando:
+
+```bash
+ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 \
+ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 \
+ORQUESTA_GOAL_FIRST_SMOKE_POLLS=50 \
+ORQUESTA_KEEP_SMOKE_DIR=1 \
+ORQUESTA_SMOKE_PARENT=/tmp/orquesta-smokes-codex \
+./scripts/smoke_goal_first_forced_stop_backend_real.sh
+```
+
+Resultado:
+
+- `smoke_goal_first_forced_stop_backend_real=ok`
+- `autoprogramming_status_before_forced_stop_visible=true`
+- `run_control_status=stopped`
+- `run_control_final_status=stopped`
+- `run_control_goal_status_after=blocked`
+- `observe_after_forced_stop_goal_status=blocked`
+- `observe_after_forced_stop_closure_status=blocked`
+- `observe_after_forced_stop_recommended_action=replan`
+- `autoprogramming_status_after_forced_stop_visible=true`
+- `autoprogramming_status_after_forced_stop_not_running=true`
+- `app_server_tmux_processes_alive=0`
+
+Refs:
+
+- `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-90afbda75e7d98ff0be34efe74150090`
+- `goal_ref=goal-ref-app-director-run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-90afbda75e7d98ff0be34efe74150090`
+- `external_goal_ref=019f468d-b68f-7202-ad7a-0816a63663ae`
+
+Evidencia conservada y saneada:
+
+- `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.5Y0PiP`
+- Se elimino `runtime/goal-srv/codex-home` y el binario temporal; quedan JSON,
+  logs, state y artefactos compactos (~512 KiB).
+- Archivos clave: `status_before_control_response.json`,
+  `run_control_response.json`, `observe_after_forced_stop_response.json`,
+  `status_after_control_response.json`, `state/orquesta_server_state_v0.json`.
+
+Higiene posterior:
+
+- Sin `orquesta-server run` vivo del smoke.
+- Sin `codex app-server` vivo para el socket del smoke.
+- Sin tmux `orquesta-goal-*` vivo del smoke.

@@ -2183,10 +2183,22 @@ Pruebas:
 
 - `bash -n scripts/smoke_goal_first_app_server_real.sh scripts/smoke_goal_first_forced_stop_backend_real.sh`
 - `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeGoalFirst(AppServerReal|ForcedStop)'`
+- Smoke real:
+  `ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 ORQUESTA_GOAL_FIRST_SMOKE_POLLS=50 ORQUESTA_KEEP_SMOKE_DIR=1 ORQUESTA_SMOKE_PARENT=/tmp/orquesta-smokes-codex ./scripts/smoke_goal_first_forced_stop_backend_real.sh`
+  -> `smoke_goal_first_forced_stop_backend_real=ok`,
+  `autoprogramming_status_before_forced_stop_visible=true`,
+  `run_control_status=stopped`, `run_control_goal_status_after=blocked`,
+  `observe_after_forced_stop_goal_status=blocked`,
+  `autoprogramming_status_after_forced_stop_not_running=true`,
+  `app_server_tmux_processes_alive=0`.
 
 Residual:
 
-- Esto no cierra `BUG-165/065/079`. El siguiente paso real es ejecutar el smoke
-  con proveedor/cuota y conservar `status_before_control_response.json`,
-  `run_control_response.json`, `observe_after_forced_stop_response.json`,
-  `status_after_control_response.json` y `shutdown_response.json`.
+- Esto cierra el subcaso forced-stop/status/observe/shutdown con proveedor real.
+  No cierra `BUG-165/065/079` global: quedan observabilidad lenta/stale fuera
+  de este smoke y despliegue remoto.
+- Evidencia saneada:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.5Y0PiP` con
+  `status_before_control_response.json`, `run_control_response.json`,
+  `observe_after_forced_stop_response.json`, `status_after_control_response.json`
+  y state final; se elimino `codex-home` y el binario temporal.

@@ -3120,8 +3120,18 @@ sea visible y que tras forced-stop no se publique como `running`. Evidencia:
 `bash -n scripts/smoke_goal_first_app_server_real.sh scripts/smoke_goal_first_forced_stop_backend_real.sh`
 y
 `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeGoalFirst(AppServerReal|ForcedStop)'`.
-Residual: falta ejecutar el smoke real con proveedor/cuota y conservar evidencia
-runtime; no cierra `BUG-165/065/079` global.
+Revalidacion real posterior del mismo corte: smoke Codex `app_server_tmux`
+ejecutado con proveedor real, `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-90afbda75e7d98ff0be34efe74150090`,
+`external_goal_ref=019f468d-b68f-7202-ad7a-0816a63663ae`,
+`autoprogramming_status_before_forced_stop_visible=true`,
+`run_control_status=stopped`, `run_control_goal_status_after=blocked`,
+`observe_after_forced_stop_goal_status=blocked`,
+`autoprogramming_status_after_forced_stop_not_running=true` y
+`app_server_tmux_processes_alive=0`. Evidencia saneada:
+`/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.5Y0PiP` (~512 KiB,
+sin `codex-home` ni binario temporal). Residual: no cierra `BUG-165/065/079`
+global; quedan observabilidad lenta/stale fuera de este smoke y despliegue
+remoto.
 
 Avance `BUG-ORQ-20260701-066` 2026-07-07 (reducido, no cerrado completo):
 Codex local cierra dos bordes del contrato OPES done/settled sin tocar OPES
