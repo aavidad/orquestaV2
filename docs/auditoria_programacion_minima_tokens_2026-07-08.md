@@ -141,12 +141,15 @@ contratos tecnicos.
 Avance 2026-07-08: el evaluador ya acepta `result.json.metrics`, agrega
 `summary.metrics` y conserva `tasks[].metrics`. Tambien existe
 `scripts/orquesta_golden_metrics_launcher.sh`, wrapper opt-in que mide tiempo,
-exit code y diff Git cuando recibe `ORQUESTA_GOLDEN_TASK_WORKTREE`, y normaliza
-tokens si el launcher/proveedor los escribe. Avance 2026-07-09:
-`scripts/orquesta_golden_ab_launcher.sh` ejecuta brazo baseline y variante por
-tarea, conserva resultados por brazo, publica deltas comparables y no anade
-variables `ORQUESTA_*`. Falta conectar un launcher real de proveedor para
-rellenar tokens reales desde Codex/Claude/Gemini en cada brazo.
+exit code y diff Git cuando recibe `ORQUESTA_GOLDEN_TASK_WORKTREE`. Avance
+2026-07-09: el wrapper normaliza tokens si el launcher/proveedor los escribe en
+`metrics`, `usage_path`/`usage_report_path` o deja reportes como
+`codex_usage_accounting.json`, `usage.json`, `observe_response.json` o
+`status.json` en el resultado. `scripts/orquesta_golden_ab_launcher.sh` ejecuta
+brazo baseline y variante por tarea, conserva resultados por brazo, publica
+deltas comparables y no anade variables `ORQUESTA_*`. Falta conectar launchers
+reales Codex/Claude/Gemini que produzcan esos reportes por brazo en runs de
+proveedor.
 
 ## Decision actual
 

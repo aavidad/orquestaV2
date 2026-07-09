@@ -106,8 +106,11 @@ El wrapper conserva el `result.json` del launcher interno y anade metricas
 deterministas: `elapsed_ms`, exit code, ficheros tocados declarados, defaults de
 diff y, si `ORQUESTA_GOLDEN_TASK_WORKTREE` apunta a un repo Git, lineas y
 ficheros tocados por `git diff/status`. Los tokens reales siguen dependiendo
-del launcher/proveedor: si el launcher interno escribe `metrics.tokens` o los
-campos `*_tokens`, el wrapper los normaliza sin inventarlos.
+del launcher/proveedor: si el launcher interno escribe `metrics.tokens`,
+campos `*_tokens`, `usage_path`/`usage_report_path` o deja
+`codex_usage_accounting.json`, `usage.json`, `observe_response.json` o
+`status.json` en el directorio de resultado, el wrapper normaliza usage sin
+inventarlo y anota `metrics.provider_usage_source`.
 
 Desde 2026-07-09 existe tambien un launcher A/B opt-in:
 

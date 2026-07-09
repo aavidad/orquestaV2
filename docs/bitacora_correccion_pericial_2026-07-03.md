@@ -4701,3 +4701,39 @@ Residual:
   que `toolOutputPolicy` se aplica antes de herramientas. Si el proveedor ignora
   el campo, Orquesta conserva prompt/read caps/sanitizacion/replan, pero no un
   corte duro pre-tool.
+
+## Codex local 2026-07-09: golden metrics lee usage real de proveedor
+
+Hallazgo:
+
+- El A/B de programacion minima ya podia comparar deltas, pero el wrapper de
+  metricas solo normalizaba tokens si el launcher interno los escribia
+  directamente en `result.json.metrics`.
+- Para runs reales, Codex/launchers pueden dejar usage como artefacto separado
+  (`codex_usage_accounting.json`, `usage.json`, snapshots de observe/status o
+  ruta declarada). Sin lector comun, cada launcher tendria que duplicar parsing.
+
+Cierre local aplicado:
+
+- `scripts/orquesta_golden_metrics_launcher.sh` busca usage en
+  `metrics`, `usage_path`, `usage_report_path`, `codex_usage_accounting.json`,
+  `usage.json`, `observe_response.json` y `status.json`.
+- Normaliza `input_tokens`, `output_tokens`, `reasoning_tokens`,
+  `cached_input_tokens` y `total_tokens` desde formas snake/camel y wrappers
+  `usage`/`prompt_cache`, sin inventar valores si no hay reporte.
+- Anota `metrics.provider_usage_detected=true` y
+  `metrics.provider_usage_source` cuando la fuente existe.
+
+Pruebas verdes:
+
+- `bash -n scripts/orquesta_golden_metrics_launcher.sh scripts/test_orquesta_golden_metrics_launcher.sh`
+- `bash scripts/test_orquesta_golden_metrics_launcher.sh`
+- `bash -n scripts/orquesta_golden_ab_launcher.sh scripts/test_orquesta_golden_ab_launcher.sh`
+- `bash scripts/test_orquesta_golden_ab_launcher.sh`
+- `scripts/orquesta_golden_evals.sh --self-test --output /tmp/orquesta-golden-self-test-provider-usage.json`
+
+Residual:
+
+- Falta un launcher real Codex/Claude/Gemini que ejecute cada brazo y deje esos
+  reportes de usage en el resultado. La infraestructura de medicion ya puede
+  ingerirlos sin activar reglas globales.
