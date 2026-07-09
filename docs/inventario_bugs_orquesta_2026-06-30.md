@@ -3110,6 +3110,19 @@ si la fuente falla, sin tumbar el status. Evidencia:
 `cmd/orquesta-server`. Residual: no cierra el smoke real amplio con proveedor
 lento ni la auditoria completa de submit/ack/observe largos.
 
+Avance `BUG-ORQ-20260704-165` / `BUG-ORQ-20260701-065/079` 2026-07-09
+(harness real ampliado, no cerrado completo):
+El smoke real de forced-stop con backend vivo ya cubria `runs/control`,
+`observe` posterior y shutdown/cleanup, pero no guardaba snapshots de
+`/api/v0/autoprogramming/status`. Cierre local: el harness consulta status
+antes de `runs/control` y despues del `observe` terminal, exige que el run/goal
+sea visible y que tras forced-stop no se publique como `running`. Evidencia:
+`bash -n scripts/smoke_goal_first_app_server_real.sh scripts/smoke_goal_first_forced_stop_backend_real.sh`
+y
+`go test -count=1 ./cmd/orquesta-server -run 'TestSmokeGoalFirst(AppServerReal|ForcedStop)'`.
+Residual: falta ejecutar el smoke real con proveedor/cuota y conservar evidencia
+runtime; no cierra `BUG-165/065/079` global.
+
 Avance `BUG-ORQ-20260701-066` 2026-07-07 (reducido, no cerrado completo):
 Codex local cierra dos bordes del contrato OPES done/settled sin tocar OPES
 productivo. Primero, la idempotencia de trabajos causales OPES incluye ahora

@@ -2166,3 +2166,27 @@ Residual:
 - Telegram real no queda probado por este corte: falta `orquesta.config.json`
   local en remoto con token, reinicio de Orquesta y validacion desde
   webhook/poller o Telegram movil.
+
+## Actualizacion Codex 2026-07-09: forced-stop smoke cubre status
+
+Hecho:
+
+- `scripts/smoke_goal_first_app_server_real.sh` incorpora
+  `post_autoprogramming_status_snapshot`.
+- El modo `SMOKE_GOAL_FIRST_FORCED_STOP_MODE=1` consulta
+  `/api/v0/autoprogramming/status` antes de `runs/control` y despues del
+  `observe` terminal.
+- El snapshot exige visibilidad de `run_ref`/`goal_ref`/`external_goal_ref`; el
+  snapshot posterior al forced-stop falla si el goal sigue como `running`.
+
+Pruebas:
+
+- `bash -n scripts/smoke_goal_first_app_server_real.sh scripts/smoke_goal_first_forced_stop_backend_real.sh`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeGoalFirst(AppServerReal|ForcedStop)'`
+
+Residual:
+
+- Esto no cierra `BUG-165/065/079`. El siguiente paso real es ejecutar el smoke
+  con proveedor/cuota y conservar `status_before_control_response.json`,
+  `run_control_response.json`, `observe_after_forced_stop_response.json`,
+  `status_after_control_response.json` y `shutdown_response.json`.

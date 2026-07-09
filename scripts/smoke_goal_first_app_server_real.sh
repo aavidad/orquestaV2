@@ -42,6 +42,10 @@ payload_file="$smoke_root/start_request.json"
 start_response="$smoke_root/start_response.json"
 observe_payload="$smoke_root/observe_request.json"
 observe_response="$smoke_root/observe_response.json"
+status_before_control_payload="$smoke_root/status_before_control_request.json"
+status_before_control_response="$smoke_root/status_before_control_response.json"
+status_after_control_payload="$smoke_root/status_after_control_request.json"
+status_after_control_response="$smoke_root/status_after_control_response.json"
 control_payload="$smoke_root/run_control_request.json"
 control_response="$smoke_root/run_control_response.json"
 post_stop_observe_payload="$smoke_root/observe_after_forced_stop_request.json"
@@ -225,6 +229,81 @@ def walk(value):
 
 sys.exit(0 if walk(data) else 1)
 PY
+}
+
+post_autoprogramming_status_snapshot() {
+  local label="$1"
+  local payload="$2"
+  local response="$3"
+  local expected_state="${4:-visible}"
+  local status
+  cat >"$payload" <<JSON
+{
+  "request_id": "$request_id-status-$label",
+  "correlation_id": "$request_id-status-$label",
+  "run_ref": "$run_ref",
+  "include_process_refs": true,
+  "include_agent_progress": true
+}
+JSON
+  status="$(
+    curl -sS -m "$request_timeout" -o "$response" -w "%{http_code}" \
+      -X POST "$base_url/api/v0/autoprogramming/status" \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json" \
+      -H "X-Correlation-ID: $request_id-status-$label" \
+      --data-binary "@$payload"
+  )"
+  echo "POST /api/v0/autoprogramming/status $label -> HTTP $status"
+  if [[ "$status" -lt 200 || "$status" -gt 299 ]]; then
+    echo "autoprogramming/status $label no devolvio 2xx:" >&2
+    smoke_print_file_excerpt "$response"
+    fail_after_app_server_tmux_shutdown_ready 1
+  fi
+  python3 - "$response" "$run_ref" "$goal_ref" "$external_goal_ref" "$expected_state" "$label" <<'PY'
+import json
+import sys
+
+path, run_ref, goal_ref, external_goal_ref, expected_state, label = sys.argv[1:7]
+refs = {value for value in (run_ref, goal_ref, external_goal_ref) if value}
+with open(path, encoding="utf-8") as fh:
+    payload = json.load(fh)
+
+matches = []
+
+def has_ref(value):
+    if isinstance(value, str):
+        return value in refs
+    if isinstance(value, list):
+        return any(has_ref(item) for item in value)
+    if isinstance(value, dict):
+        return any(has_ref(item) for item in value.values())
+    return False
+
+def walk(value):
+    if isinstance(value, dict):
+        if has_ref(value):
+            matches.append(value)
+        for item in value.values():
+            walk(item)
+    elif isinstance(value, list):
+        for item in value:
+            walk(item)
+
+walk(payload)
+if not matches:
+    raise SystemExit(f"autoprogramming/status {label}: run_not_visible")
+
+if expected_state == "not_running":
+    for item in matches:
+        for key in ("goal_status", "status"):
+            if str(item.get(key, "")).strip() == "running":
+                raise SystemExit(f"autoprogramming/status {label}: run_still_running")
+PY
+  echo "autoprogramming_status_${label}_visible=true"
+  if [[ "$expected_state" == "not_running" ]]; then
+    echo "autoprogramming_status_${label}_not_running=true"
+  fi
 }
 
 find_tmux_owner_file() {
@@ -644,6 +723,8 @@ run_forced_stop_smoke() {
   local control_status control_estado control_status_value control_final_status control_goal_status_after
   local post_stop_observe_status post_stop_goal_status post_stop_closure_status post_stop_recommended_action
 
+  post_autoprogramming_status_snapshot "before_forced_stop" "$status_before_control_payload" "$status_before_control_response" "visible"
+
   cat >"$control_payload" <<JSON
 {
   "request_id": "$request_id-run-control-forced-stop",
@@ -730,6 +811,7 @@ JSON
     smoke_print_file_excerpt "$post_stop_observe_response"
     fail_after_app_server_tmux_shutdown_ready 1
   fi
+  post_autoprogramming_status_snapshot "after_forced_stop" "$status_after_control_payload" "$status_after_control_response" "not_running"
 
   echo "smoke_goal_first_forced_stop_backend_real=ok"
   echo "run_control_status=$control_status_value"

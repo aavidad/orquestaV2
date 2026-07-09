@@ -120,6 +120,12 @@ func TestSmokeGoalFirstForcedStopWrapperEjercitaRunControlBackendVivoV0(t *testi
 	for _, want := range []string{
 		`forced_stop_mode="${SMOKE_GOAL_FIRST_FORCED_STOP_MODE:-0}"`,
 		"run_forced_stop_smoke",
+		"post_autoprogramming_status_snapshot",
+		"/api/v0/autoprogramming/status",
+		`post_autoprogramming_status_snapshot "before_forced_stop"`,
+		`post_autoprogramming_status_snapshot "after_forced_stop"`,
+		`autoprogramming_status_${label}_visible=true`,
+		`autoprogramming_status_${label}_not_running=true`,
 		"/api/v0/runs/control",
 		`"forced": true`,
 		`"action": "stop"`,

@@ -5157,3 +5157,36 @@ Lectura para Claude:
 - Esto cierra el residual local de MEJ-106/TAREA-8 sobre Telegram envs. No
   cierra el despliegue remoto Telegram real: sigue haciendo falta config local
   con token, reinicio de Orquesta remoto y prueba desde Telegram/webhook/poller.
+
+## Codex local 2026-07-09: smoke forced-stop cubre autoprogramming/status
+
+Contexto:
+
+- El subagente Ptolemy recomendo como siguiente frente `BUG-165/065/079`:
+  smoke real amplio de `status/observe/runs-control/shutdown` con proveedor
+  lento/vivo.
+- El harness `scripts/smoke_goal_first_forced_stop_backend_real.sh` ya validaba
+  `runs/control`, `observe` posterior y shutdown/cleanup de app-server, pero no
+  materializaba snapshots de `/api/v0/autoprogramming/status`.
+
+Cierre aplicado:
+
+- `scripts/smoke_goal_first_app_server_real.sh` anade
+  `post_autoprogramming_status_snapshot`.
+- En modo forced-stop, el smoke consulta `/api/v0/autoprogramming/status` antes
+  de `runs/control` y despues del `observe` terminal.
+- El snapshot debe contener `run_ref`/`goal_ref`/`external_goal_ref`; despues del
+  forced-stop, el status no puede publicar ese goal como `running`.
+- El guard `TestSmokeGoalFirstForcedStopWrapperEjercitaRunControlBackendVivoV0`
+  fija que el contrato no desaparezca del harness.
+
+Verificado:
+
+- `bash -n scripts/smoke_goal_first_app_server_real.sh scripts/smoke_goal_first_forced_stop_backend_real.sh`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeGoalFirst(AppServerReal|ForcedStop)'`
+
+Lectura para Claude:
+
+- Esto mejora la evidencia requerida para cerrar `BUG-165/065/079`, pero no
+  cierra el bug global: falta ejecutar el smoke real con proveedor y conservar
+  respuesta/status/shutdown de esa ejecucion.
