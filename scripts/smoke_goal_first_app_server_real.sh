@@ -340,6 +340,31 @@ assert_tool_output_policy_for_current_mode() {
   assert_tool_output_policy_transport_observed
 }
 
+assert_bug079_probe_result_executed() {
+  local checkpoint_file="$project_dir/generated-apps/checkpoint_started_bug079.txt"
+  local probe_result_file="$project_dir/generated-apps/bug079-tool-output-policy/probe_result.txt"
+
+  if [[ ! -s "$probe_result_file" ]]; then
+    if [[ -f "$checkpoint_file" ]]; then
+      echo "reason=bug200_probe_not_executed" >&2
+    else
+      echo "reason=no_probe_result" >&2
+    fi
+    echo "smoke adversarial BUG-079 sin probe_result.txt ejecutado; checkpoint no basta para OK" >&2
+    smoke_print_file_excerpt "$observe_response"
+    fail_after_app_server_tmux_shutdown_ready 1
+  fi
+  if ! grep -Eqi 'exit[ _-]*code|exitcode|return[ _-]*code' "$probe_result_file" ||
+    ! grep -qi 'probe_stdout.py' "$probe_result_file" ||
+    ! grep -q '200000' "$probe_result_file"; then
+    echo "reason=no_probe_result" >&2
+    echo "smoke adversarial BUG-079 probe_result.txt no documenta exit code, comando y bytes previstos" >&2
+    smoke_print_file_excerpt "$probe_result_file"
+    fail_after_app_server_tmux_shutdown_ready 1
+  fi
+  echo "bug079_probe_result=executed"
+}
+
 post_autoprogramming_status_snapshot() {
   local label="$1"
   local payload="$2"
@@ -1488,6 +1513,11 @@ if [[ "$terminal" != "1" && "$terminal" != "bug088_replan" && "$terminal" != "bu
   terminal="bug088_second_artifact"
 fi
 
+if [[ "$terminal" != "1" && "$tool_output_policy_adversarial_mode" == "1" ]]; then
+  assert_tool_output_policy_for_current_mode
+  assert_bug079_probe_result_executed
+fi
+
 if [[ "$terminal" != "1" && "$terminal" != "bug088_replan" && "$terminal" != "bug088_second_artifact" ]]; then
   echo "timeout esperando cierre aceptado goal-first; ultimo observe:" >&2
   smoke_print_file_excerpt "$observe_response"
@@ -1548,6 +1578,7 @@ if [[ "$high_consumption_mode" == "1" ]]; then
   echo "bug088_path=second_artifact_or_terminal_artifact"
 elif [[ "$tool_output_policy_adversarial_mode" == "1" ]]; then
   assert_tool_output_policy_for_current_mode
+  assert_bug079_probe_result_executed
   echo "smoke_goal_first_tool_output_policy_adversarial_real=ok"
 else
   assert_tool_output_policy_for_current_mode

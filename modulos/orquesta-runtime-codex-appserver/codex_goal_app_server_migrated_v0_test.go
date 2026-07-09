@@ -256,6 +256,47 @@ func TestServerCodexAppServerGoalBackendV0TurnStartToolOutputPolicyFallbackCompa
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0TurnStartToolOutputPolicyFallbackSoloSchemaV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-policy-no-fallback-001"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-policy-no-fallback-001", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-policy-no-fallback-001", Status: "inProgress"},
+		startTurnErrs: []error{
+			codexAppServerCallErrorV0{
+				Code: "codex_app_server_rpc_internal",
+				Err:  errors.New("toolOutputPolicy runtime failure"),
+			},
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol:       protocol,
+		Sandbox:        "workspace-write",
+		ApprovalPolicy: "never",
+	}
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef:   "goal-ref-policy-no-fallback-001",
+		Objective: "no relajar policy ante error no schema",
+		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
+			ToolOutputPolicy: orquestaruntimecodexgoal.CodexGoalToolOutputPolicyV0{
+				MaxTextBytes:           2048,
+				RequireBoundedCommands: true,
+			},
+		},
+	}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err == nil {
+		t.Fatalf("StartCodexGoalV0 debe fallar sin fallback: receipt=%+v", receipt)
+	}
+	if len(protocol.turnParamsHistory) != 1 {
+		t.Fatalf("fallback inesperado: turn starts=%d calls=%+v", len(protocol.turnParamsHistory), protocol.calls)
+	}
+	first := protocol.turnParamsHistory[0]
+	if first.DisablePolicyJSON || first.ToolOutputPolicy.emptyV0() {
+		t.Fatalf("primer turn/start debe conservar policy estructurada: %+v", first)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0MaterializaCheckpointAntesDeTurnStartV0(t *testing.T) {
 	root := t.TempDir()
 	checkpointPath := filepath.Join(root, "generated-apps", "checkpoint_started.txt")

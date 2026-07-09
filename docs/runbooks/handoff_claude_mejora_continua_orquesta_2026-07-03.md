@@ -2571,3 +2571,53 @@ Lectura para continuar:
 - Siguiente accion tecnica recomendada: bajar el adversarial a nivel
   app-server/protocolo directo o hacer el probe determinista sin depender de
   una decision libre del agente.
+
+## Actualizacion Orquesta/Codex 2026-07-09j: BUG-200 reducido con olas paralelas
+
+Estado de sincronizacion al escribir esta nota:
+
+- Trabajo hecho primero en local, rama `trabajo/plataforma-agentes`.
+- El usuario ha pedido sincronizar tambien el servidor remoto de Orquesta; no
+  asumir despliegue remoto hasta ver commit/push y verificacion de servidor.
+
+Se uso Orquesta en paralelo:
+
+- Ola `codex-core-bug200-harness-20260709T141956Z`.
+  - Write-set: `scripts/smoke_goal_first_app_server_real.sh`,
+    `scripts/smoke_goal_first_tool_output_policy_adversarial_real.sh`,
+    `cmd/orquesta-server/smoke_goal_first_scripts_v0_test.go`.
+  - Resultado: `agent-01/codex_process_done_v0=completed`.
+  - Cambio integrado: el modo adversarial exige
+    `generated-apps/bug079-tool-output-policy/probe_result.txt`; si solo hay
+    checkpoint falla con `reason=bug200_probe_not_executed`, y si falta
+    resultado valido falla con `reason=no_probe_result`. Ya no puede declarar OK
+    solo por checkpoint.
+  - El agente pudo ejecutar `bash -n`, pero su `go test` quedo bloqueado por el
+    CODEX_HOME/Go cache aislado: intento descargar `golang.org/x/text v0.38.0`
+    y la sandbox nego DNS/socket. No fue fallo del cambio.
+
+- Ola `codex-core-bug079-protocol-20260709T141956Z`.
+  - Write-set:
+    `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_migrated_v0_test.go`.
+  - Resultado: `agent-01/codex_process_done_v0=completed`.
+  - Cambio integrado: nuevo test
+    `TestServerCodexAppServerGoalBackendV0TurnStartToolOutputPolicyFallbackSoloSchemaV0`.
+    Si `turn/start` falla con error no-schema aunque mencione
+    `toolOutputPolicy`, Orquesta no relaja la policy ni hace fallback legacy.
+
+Verificacion local posterior por Codex padre:
+
+- `bash -n scripts/smoke_goal_first_app_server_real.sh scripts/smoke_goal_first_tool_output_policy_adversarial_real.sh`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeGoalFirst'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0TurnStart|TestServerCodexAppServerTurnStartParamsV0'`
+- `git diff --check`
+
+Lectura para continuar:
+
+- `BUG-ORQ-20260709-200` queda reducido, no cerrado como prueba de proveedor:
+  el arnes ya falla de forma determinista si el probe no se ejecuta.
+- `BUG-ORQ-20260701-079` sigue abierto por frontera runtime/proveedor:
+  falta evidencia fuerte de enforcement pre-tool real ante stdout gigante.
+- Para sincronizar remoto: commit/push de esta rama; despues pull, build y
+  restart gobernado solo de Orquesta en el servidor remoto. No asumir que el
+  remoto tiene estos cambios hasta verificar hash y readiness.

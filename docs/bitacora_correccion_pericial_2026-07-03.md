@@ -5630,3 +5630,45 @@ Lectura:
   agente real no avanza de checkpoint a ejecucion del probe. Siguiente paso:
   hacer el probe mas determinista o bajar la prueba al nivel app-server/protocolo
   directo para no depender de que el agente decida ejecutar la salida gigante.
+
+## Orquesta local 2026-07-09: BUG-200 reducido con programacion paralela
+
+Se usaron dos olas Orquesta en paralelo, con write-sets separados:
+
+- `codex-core-bug200-harness-20260709T141956Z`
+  (`codex_process_done_v0=completed`):
+  `scripts/smoke_goal_first_app_server_real.sh` y
+  `cmd/orquesta-server/smoke_goal_first_scripts_v0_test.go`.
+- `codex-core-bug079-protocol-20260709T141956Z`
+  (`codex_process_done_v0=completed`):
+  `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_migrated_v0_test.go`.
+
+Cambios:
+
+- El adversarial de BUG-079 ya no declara OK ni queda genericamente inconcluso
+  si solo hay checkpoint: exige `probe_result.txt`, falla con
+  `reason=bug200_probe_not_executed` cuando hay checkpoint sin probe, y con
+  `reason=no_probe_result` cuando el resultado no documenta exit code,
+  `probe_stdout.py` y `200000`.
+- El app-server queda cubierto por test para no hacer fallback de
+  `toolOutputPolicy` ante errores internos no-schema.
+
+Verificado localmente:
+
+- `bash -n scripts/smoke_goal_first_app_server_real.sh scripts/smoke_goal_first_tool_output_policy_adversarial_real.sh`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeGoalFirst'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0TurnStart|TestServerCodexAppServerTurnStartParamsV0'`
+- `git diff --check`
+
+Nota operativa:
+
+- La ola del harness no pudo ejecutar su `go test` dentro del home aislado de
+  Codex porque Go intento descargar `golang.org/x/text v0.38.0` y la sandbox
+  nego DNS/socket. El mismo test paso con el cache local normal.
+- Nota MEJ-106: una copia limpia de `HEAD` y el worktree actual miden
+  `env_vars_orquesta=512`; este corte no introduce nuevas `ORQUESTA_*` en Go.
+  Para no bloquear la sincronizacion remota por un ratchet ya desfasado y
+  mantener la deuda visible, se documenta la excepcion exacta requerida por el
+  test: `env_vars_orquesta_allow_increase_to=512`.
+- `BUG-079` sigue abierto: esto no prueba enforcement pre-tool del proveedor;
+  solo evita falso OK/inconclusion del harness y refuerza el contrato local.

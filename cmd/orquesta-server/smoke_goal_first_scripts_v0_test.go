@@ -37,6 +37,10 @@ func TestSmokeGoalFirstToolOutputPolicyAdversarialRealV0(t *testing.T) {
 		"evidence-ref-codex-app-server-thread-output-sanitized",
 		"codex_app_server_thread_read_response_too_large",
 		"checkpoint_started_bug079.txt",
+		"assert_bug079_probe_result_executed",
+		"probe_result.txt",
+		"bug200_probe_not_executed",
+		"no_probe_result",
 		"stdout gigante",
 		"smoke_goal_first_tool_output_policy_adversarial_real=ok",
 	} {
