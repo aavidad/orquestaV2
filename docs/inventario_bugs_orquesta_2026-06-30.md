@@ -410,6 +410,16 @@ antes de su cierre posterior:
   identidad antes de leer o limpiar active work. Evidencia focal:
   `TestStackShutdownActiveWorkCleanerV0DeduplicaPuertosConMismaIdentidadV0` y
   `TestServerGoalWorkPortsFromBackendV0PropaganActiveShutdownWorkV0`.
+- Revalidacion OPES local/fake 2026-07-09h:
+  `scripts/smoke_opes_lifecycle_real.sh` vuelve a pasar en local con
+  `ORQUESTA_KEEP_SMOKE_DIR=1`, 24/24 `work_kind` cubiertos hasta
+  `finalize_temario_package`, `finalpkg_dry_run=false`,
+  `settlement_status=settled_final` y `no_residual_processes=true`. Evidencia
+  retenida:
+  `/tmp/orquesta-opes-lifecycle-real-20260709T172932Z/out/opes_lifecycle_result.json`.
+  Un subagente read-only reviso `BUG-058/066/075` y no encontro bug local de
+  codigo accionable; los residuales vigentes son OPES temporal/preproduccion,
+  proveedor real/remoto y prueba de campo de no reescritura tardia.
 - Reejeucion real 2026-07-04 noche 10:
   `smoke_goal_first_checkpoint_only_high_consumption_real=ok` con
   `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-6c8dc4317888c8e25bb0e91f7f910aab`,

@@ -6282,3 +6282,35 @@ Evidencia focal:
 - `git diff --check`
 - `go test -count=1 ./...`
 - `go build ./...`
+
+## Orquesta local 2026-07-09: revalidacion OPES fake-residente
+
+Tras cerrar los falsos verdes locales de nucleo/runtime, se paso al siguiente
+anillo: conectores OPES.
+
+Ejecucion:
+
+- `timeout 240 env ORQUESTA_KEEP_SMOKE_DIR=1 scripts/smoke_opes_lifecycle_real.sh`
+
+Resultado:
+
+- `status=passed`
+- 24/24 `work_kind` cubiertos hasta `finalize_temario_package`.
+- `finalpkg_dry_run=false`.
+- `finalpkg_run_ref=run-ref-opes-a1-t002-finalpkg-20260612`.
+- `settlement_status=settled_final`.
+- `settlement_reason=final_package_closure_evidence_complete`.
+- `no_residual_processes=true`.
+- Evidencia retenida:
+  `/tmp/orquesta-opes-lifecycle-real-20260709T172932Z/out/opes_lifecycle_result.json`.
+
+Revision paralela:
+
+- Subagente read-only sobre `BUG-058/066/075` no encontro bug local accionable.
+- Confirmo que los residuales vigentes son de campo: OPES temporal/preprod,
+  proveedor real/remoto y prueba con agente real de no reescritura tardia.
+
+Lectura:
+
+- En local, el conector OPES queda validado en fake-residente. No se toca OPES
+  productivo ni se declara cerrado el residual externo.
