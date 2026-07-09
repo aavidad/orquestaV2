@@ -32,12 +32,12 @@ func TestTelegramOperatorConfigV0LeeFicheroYRedactaEffectiveConfig(t *testing.T)
 	config.ProjectConfigFilePath = configPath
 	config.EffectiveConfig = serverEffectiveConfigFromEnvV0(config)
 	settings := config.EffectiveConfig.Settings
-	if got := effectiveSettingValueForTestV0(settings, envTelegramOperatorEnabledV0); got != "true" {
+	if got := effectiveSettingValueForTestV0(settings, telegramOperatorConfigKeyEnabledV0); got != "true" {
 		t.Fatalf("enabled=%q", got)
 	}
 	for _, key := range []string{
 		telegramOperatorConfigKeyBotLinkRefV0,
-		envTelegramOperatorTokenV0,
+		telegramOperatorConfigKeyTokenV0,
 		telegramOperatorConfigKeyAuthorizedChatRefsV0,
 		telegramOperatorConfigKeyNotificationTargetV0,
 	} {
@@ -48,6 +48,39 @@ func TestTelegramOperatorConfigV0LeeFicheroYRedactaEffectiveConfig(t *testing.T)
 	}
 	if got := effectiveSettingForTestV0(settings, telegramOperatorConfigKeyRequireConfirmationV0); got.Source != configSettingSourceConfigFileV0 || got.Value != "true" {
 		t.Fatalf("require_confirmation canonico inesperado: %+v", got)
+	}
+}
+
+func TestTelegramOperatorConfigV0DerivaTargetDesdeChatConSourceConfigFile(t *testing.T) {
+	projectDir := t.TempDir()
+	configPath := filepath.Join(projectDir, serverProjectConfigFileNameV0)
+	raw := `{
+		"schema_version":"orquesta_config.v0",
+		"telegram_operator":{
+			"enabled":true,
+			"bot_link_ref":"inodo-bot-link-ref-real",
+			"token":"123456:secret",
+			"authorized_chat_refs":["telegram:39995054"],
+			"require_confirmation":true
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0 without project: %v", err)
+	}
+	config.ProjectWorkDir = projectDir
+	config.ProjectConfigFilePath = configPath
+	config.EffectiveConfig = serverEffectiveConfigFromEnvV0(config)
+
+	target := effectiveSettingForTestV0(config.EffectiveConfig.Settings, telegramOperatorConfigKeyNotificationTargetV0)
+	if target.Source != configSettingSourceConfigFileV0 {
+		t.Fatalf("notification target source=%q, want %q: %+v", target.Source, configSettingSourceConfigFileV0, target)
+	}
+	if !target.Sensitive || target.Value != "telegram-operator-notification-target-configured" || strings.Contains(target.Value, "39995054") {
+		t.Fatalf("notification target no redactado desde chat autorizado: %+v", target)
 	}
 }
 

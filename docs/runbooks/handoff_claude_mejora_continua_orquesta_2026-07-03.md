@@ -2138,5 +2138,31 @@ Pruebas:
 
 Residual:
 
-- No cerrar TAREA-8 completa por esto. Quedan las dos envs Telegram
-  (`enabled`, `token`) y el pase mayor a config/secreto gestionado.
+- Este residual queda cerrado por el corte siguiente de Telegram config
+  canonica. Mantener pendiente solo el despliegue/prueba remota del bot.
+
+## Actualizacion Codex 2026-07-09: Telegram operator sin envs duplicadas
+
+Hecho:
+
+- `cmd/orquesta-server` deja de leer `ORQUESTA_TELEGRAM_OPERATOR_ENABLED` y
+  `ORQUESTA_TELEGRAM_OPERATOR_TOKEN`.
+- `telegram_operator.enabled` y `telegram_operator.token` viven solo en
+  `orquesta.config.json` y se publican como settings canonicos; el token queda
+  redactado.
+- `telegram_operator.notification_target_ref` derivado desde
+  `authorized_chat_refs[0]` se publica con `source=config_file`, no
+  `defaulted`.
+- `scripts/orquesta_metricas_deuda.sh --json` vuelve a
+  `env_vars_orquesta=511`.
+
+Pruebas:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'TestTelegramOperator|TestTelegramBotAPI|TestServerEnvRegistry|TestEnvVarsOrquestaRatchetMEJ106V0'`
+- `bash scripts/orquesta_metricas_deuda.sh --json`
+
+Residual:
+
+- Telegram real no queda probado por este corte: falta `orquesta.config.json`
+  local en remoto con token, reinicio de Orquesta y validacion desde
+  webhook/poller o Telegram movil.

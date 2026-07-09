@@ -3911,9 +3911,8 @@ Avance pequeno adicional sobre `BUG-ORQ-20260705-TELEGRAM-NOLLM-ACCEPTED-INVISIB
 - `buildServerAppHandlerV0` inyecta ese sender en
   `POST /api/v0/operator/telegram/update` cuando existe
   `telegram_operator.token`.
-- No se anaden variables `ORQUESTA_*`; el token sigue en
-  `telegram_operator.token` o en el override secreto ya existente
-  `ORQUESTA_TELEGRAM_OPERATOR_TOKEN`.
+- No se anaden variables `ORQUESTA_*`; tras el corte Codex 2026-07-09 el token
+  vive solo en `telegram_operator.token` dentro de `orquesta.config.json`.
 - Los errores publicos del sender no incluyen el token.
 
 Pruebas:
@@ -5122,3 +5121,39 @@ Lectura para Claude:
 - Este corte no cierra la consolidacion completa de variables. Cierra solo el
   alias de timeout Codex en segundos y deja el techo temporal documentado en
   `env_vars_orquesta_allow_increase_to=513`.
+
+## Codex local 2026-07-09: Telegram operator solo por config canonica
+
+Contexto:
+
+- El corte anterior dejo pendiente bajar `env_vars_orquesta=513` a la base 511:
+  las dos envs restantes eran `ORQUESTA_TELEGRAM_OPERATOR_ENABLED` y
+  `ORQUESTA_TELEGRAM_OPERATOR_TOKEN`.
+- Telegram operator ya tenia seccion canonica `telegram_operator.*` en
+  `orquesta.config.json`, con redaccion de token/chats/target en
+  `effective_config`; la duplicidad de envs ya no aportaba contrato nuevo.
+- El subagente Hume detecto ademas un falso source: si
+  `notification_target_ref` se derivaba de `authorized_chat_refs[0]`,
+  `effective_config` lo publicaba como `defaulted`.
+
+Cierre aplicado:
+
+- `cmd/orquesta-server` deja de leer `ORQUESTA_TELEGRAM_OPERATOR_ENABLED` y
+  `ORQUESTA_TELEGRAM_OPERATOR_TOKEN`.
+- `telegram_operator.enabled` y `telegram_operator.token` se publican como
+  settings canonicos de fichero, el token siempre redactado.
+- `telegram_operator.notification_target_ref` derivado desde chat autorizado
+  publica `source=config_file`, no `defaulted`, y mantiene valor redactado.
+- Se elimina el registry de envs Telegram operator y la metrica vuelve a
+  `env_vars_orquesta=511`.
+
+Verificado:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'TestTelegramOperator|TestTelegramBotAPI|TestServerEnvRegistry|TestEnvVarsOrquestaRatchetMEJ106V0'`
+- `bash scripts/orquesta_metricas_deuda.sh --json`
+
+Lectura para Claude:
+
+- Esto cierra el residual local de MEJ-106/TAREA-8 sobre Telegram envs. No
+  cierra el despliegue remoto Telegram real: sigue haciendo falta config local
+  con token, reinicio de Orquesta remoto y prueba desde Telegram/webhook/poller.

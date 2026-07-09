@@ -553,6 +553,12 @@ antes de su cierre posterior:
   operativas de Telegram (`enabled` y `token`) que no se eliminan en este
   corte. Pendiente: bajar a 511 solo cuando esas entradas pasen a config/secreto
   gestionado sin romper el canal operador.
+- Continuacion Codex 2026-07-09: las dos envs temporales Telegram operator se
+  retiran y toda la familia queda solo en `telegram_operator.*` dentro de
+  `orquesta.config.json`. `notification_target_ref` derivado de
+  `authorized_chat_refs[0]` publica `source=config_file`, no `defaulted`, y
+  sigue redactado. La metrica vuelve a `env_vars_orquesta=511`; se elimina la
+  necesidad de `env_vars_orquesta_allow_increase_to`.
 - `BUG-ORQ-20260702-120` queda cerrado por la proyeccion
   `stopped/crashed/unreachable` y los contratos OPES asociados. Sus notas de
   avance que decian "no cierra el bug padre" son historicas y quedan
@@ -2810,13 +2816,11 @@ el agente debe continuar con `rg`/`sed` acotados, dejar evidencia
 `TestBuildCodexGoalStartPacketV0AnalizadorDegradaSiBrokerNoInyectadoV0` y
 `go test -count=1 ./modulos/orquesta-runtime-codex-goal`.
 
-Nota MEJ-106 2026-07-05: el adaptador remoto Telegram/Inodo anade una superficie
-operativa opt-in con cinco claves `ORQUESTA_TELEGRAM_OPERATOR_*` para enabled,
-bot_link_ref, token, authorized_chat_refs y require_confirmation. Se acepta
-temporalmente `env_vars_orquesta_allow_increase_to=517` porque el canal remoto
-necesita env/config canonica, redaccion de secretos y bloqueo explicito por
-enlace Inodo faltante; la siguiente consolidacion debe mover esta familia a una
-seccion de fichero/configurador sin ampliar mas el ratchet.
+Nota MEJ-106 2026-07-05/2026-07-09: el adaptador remoto Telegram/Inodo entro
+primero con una superficie temporal `ORQUESTA_TELEGRAM_OPERATOR_*`; esa ventana
+queda retirada. La configuracion vigente es `telegram_operator.*` en
+`orquesta.config.json`, con token/chats/target redactados en `effective_config`
+y sin ampliar el ratchet de envs.
 # Nota 2026-07-05 canal operador-Director
 
 Durante la implementacion focal del canal operador-Director v0 no se observo

@@ -22,15 +22,11 @@ En `orquesta.config.json`:
 }
 ```
 
-Equivalentes por entorno:
-
-- `ORQUESTA_TELEGRAM_OPERATOR_ENABLED=true`
-- `ORQUESTA_TELEGRAM_OPERATOR_TOKEN=<token del bot existente>`
-
-El resto de campos (`bot_link_ref`, `authorized_chat_refs`,
-`notification_target_ref`, `require_confirmation`) debe ir en
-`orquesta.config.json`. No se conserva env equivalente para ellos: son refs y
-politica estable de composicion, no secretos ni override puntual.
+No hay equivalentes por entorno `ORQUESTA_TELEGRAM_OPERATOR_*`. Todos los campos
+(`enabled`, `bot_link_ref`, `token`, `authorized_chat_refs`,
+`notification_target_ref`, `require_confirmation`) deben ir en
+`orquesta.config.json`. El fichero local debe tratarse como secreto operativo y
+tener permisos restrictivos.
 
 El token, el enlace real y los chats autorizados se publican en
 `effective_config` solo como valores redactados. No deben aparecer en logs,

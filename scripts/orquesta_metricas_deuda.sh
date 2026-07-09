@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Lectura MEJ-106 2026-07-04: base env=511; actual temporal=514 por
-# env_vars_orquesta_allow_increase_to=514 documentado tras integrar Telegram.
+# Lectura MEJ-106 2026-07-09: env=511 tras retirar aliases Codex seconds y
+# envs temporales Telegram operator; Telegram queda en orquesta.config.json.
 # status=16, interfaces=67, director=18.
 
 usage() {

@@ -61,6 +61,9 @@ Se materializa una primera entrada no-LLM propia de Orquesta:
 - Avance posterior: `cmd/orquesta-server` ya cablea un sender Bot API directo
   (`telegramBotAPISenderV0`) cuando existe `telegram_operator.token`; no anade
   variables `ORQUESTA_*` nuevas y no pasa Telegram al core.
+- Actualizacion Codex 2026-07-09: `enabled` y `token` dejan de tener override
+  `ORQUESTA_TELEGRAM_OPERATOR_*`; la ruta se gobierna solo por
+  `telegram_operator.*` en `orquesta.config.json`.
 
 Evidencia local:
 
@@ -71,8 +74,8 @@ Evidencia local:
 - `TestTelegramBotAPISenderFromProjectConfigFileV0EsOptInPorToken`.
 - `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestTelegramOperator|TestOperatorDirector|TestOperatorNotificationHermes|TestEnvVarsOrquestaRatchetMEJ106V0'`.
 - `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestTelegram(BotAPI|Operator)|TestOperatorNotificationHermes'`.
-- `scripts/orquesta_metricas_deuda.sh --json` mantiene
-  `env_vars_orquesta=514`.
+- `scripts/orquesta_metricas_deuda.sh --json` baja a
+  `env_vars_orquesta=511` tras retirar la ventana temporal de envs Telegram.
 - `git diff --check`.
 
 Residual: no se ha desplegado este ultimo commit en `srv1651826` ni se ha

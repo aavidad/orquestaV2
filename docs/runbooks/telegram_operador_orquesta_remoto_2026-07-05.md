@@ -39,15 +39,11 @@ En `orquesta.config.json`:
 }
 ```
 
-Variables equivalentes de operacion:
-
-- `ORQUESTA_TELEGRAM_OPERATOR_ENABLED`
-- `ORQUESTA_TELEGRAM_OPERATOR_TOKEN`
-
-`bot_link_ref`, `authorized_chat_refs`, `notification_target_ref` y
-`require_confirmation` quedan solo en `orquesta.config.json` para no duplicar
-superficie de entorno. Token, chat refs y target de notificacion se publican
-redactados en `effective_config`.
+No hay variables `ORQUESTA_TELEGRAM_OPERATOR_*` equivalentes. Toda la familia
+queda en `orquesta.config.json` para no duplicar superficie de entorno. El
+fichero local debe tener permisos restrictivos porque contiene el token. Token,
+chat refs y target de notificacion se publican redactados en
+`effective_config`.
 
 ## Comandos autorizados
 
@@ -58,8 +54,7 @@ redactados en `effective_config`.
   `blocked` con campos pendientes.
 - En el servidor, la ruta responde al chat por Bot API directo cuando
   `telegram_operator.token` esta configurado. El token vive en composicion
-  (`orquesta.config.json` o `ORQUESTA_TELEGRAM_OPERATOR_TOKEN`) y no pasa al
-  nucleo.
+  (`orquesta.config.json`) y no pasa al nucleo.
 - `/status [run-ref]`: estado compacto.
 - `/queue [subject-ref]`: cola/outbox compactos.
 - `/observe_goal <goal-ref>`: observa un goal/run goal-first.

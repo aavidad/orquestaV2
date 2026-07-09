@@ -122,10 +122,11 @@ Estado tras implementación paralela con subagentes:
   clasificadas como `child_process` mediante registry local de guardian; los
   tests impiden emitir claves no registradas y verifican que el runner no hereda
   `ORQUESTA_GUARDIAN_*` del padre.
-- **Ratchet**: tras retirar el alias legacy Codex `_SECONDS`, el conteo vigente
-  queda en `env_vars_orquesta=513`. Está justificado en el inventario con
-  `env_vars_orquesta_allow_increase_to=513`; debe bajar cuando las dos envs
-  operativas de Telegram pasen a config/secreto gestionado.
+- **Ratchet**: tras retirar el alias legacy Codex `_SECONDS` y las dos envs
+  temporales Telegram operator, el conteo vigente vuelve a
+  `env_vars_orquesta=511`. Telegram queda en `telegram_operator.*` dentro de
+  `orquesta.config.json`; el token vive en fichero local con permisos
+  restrictivos y se publica redactado en `effective_config`.
 
 Verificación adicional ejecutada:
 

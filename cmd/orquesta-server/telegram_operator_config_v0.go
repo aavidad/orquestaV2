@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"strconv"
 	"strings"
 
@@ -13,13 +12,12 @@ const (
 	telegramOperatorTokenConfiguredRefV0   = "telegram-operator-token-configured"
 	telegramOperatorChatRefsConfiguredV0   = "telegram-operator-chat-refs-configured"
 
+	telegramOperatorConfigKeyEnabledV0             = "telegram_operator.enabled"
 	telegramOperatorConfigKeyBotLinkRefV0          = "telegram_operator.bot_link_ref"
+	telegramOperatorConfigKeyTokenV0               = "telegram_operator.token"
 	telegramOperatorConfigKeyAuthorizedChatRefsV0  = "telegram_operator.authorized_chat_refs"
 	telegramOperatorConfigKeyRequireConfirmationV0 = "telegram_operator.require_confirmation"
 	telegramOperatorConfigKeyNotificationTargetV0  = "telegram_operator.notification_target_ref"
-
-	envTelegramOperatorEnabledV0 = "ORQUESTA_TELEGRAM_OPERATOR_ENABLED"
-	envTelegramOperatorTokenV0   = "ORQUESTA_TELEGRAM_OPERATOR_TOKEN"
 )
 
 type serverProjectConfigTelegramOperatorV0 struct {
@@ -32,11 +30,7 @@ type serverProjectConfigTelegramOperatorV0 struct {
 }
 
 func telegramOperatorEnabledFromProjectConfigFileV0(config serverProjectConfigFileV0) bool {
-	return boolProjectConfigOrEnvOrDefaultV0(
-		envTelegramOperatorEnabledV0,
-		config.TelegramOperator.Enabled,
-		false,
-	)
+	return boolProjectConfigFileOrDefaultV0(config.TelegramOperator.Enabled, false)
 }
 
 func telegramOperatorBotLinkRefFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
@@ -44,11 +38,7 @@ func telegramOperatorBotLinkRefFromProjectConfigFileV0(config serverProjectConfi
 }
 
 func telegramOperatorTokenFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
-	return stringProjectConfigOrEnvOrDefaultV0(
-		envTelegramOperatorTokenV0,
-		config.TelegramOperator.Token,
-		"",
-	)
+	return stringProjectConfigFileOrDefaultV0(config.TelegramOperator.Token, "")
 }
 
 func telegramOperatorAuthorizedChatRefsFromProjectConfigFileV0(config serverProjectConfigFileV0) []string {
@@ -76,16 +66,20 @@ func telegramOperatorEffectiveConfigSettingsV0(
 	projectConfig serverProjectConfigFileV0,
 ) []orquestaserver.ServerConfigSettingV0 {
 	_ = config
-	tokenSource := telegramOperatorConfigSettingSourceV0(envTelegramOperatorTokenV0, projectConfig)
+	enabledSource := configFileSettingSourceFromBoolPointerV0(projectConfig.TelegramOperator.Enabled)
+	tokenSource := configFileSettingSourceFromStringPointerV0(projectConfig.TelegramOperator.Token)
 	botLinkSource := configFileSettingSourceFromStringPointerV0(projectConfig.TelegramOperator.BotLinkRef)
 	chatsSource := configFileSettingSourceFromStringSlicePointerV0(projectConfig.TelegramOperator.AuthorizedChatRefs)
 	confirmationSource := configFileSettingSourceFromBoolPointerV0(projectConfig.TelegramOperator.RequireConfirmation)
-	targetSource := configFileSettingSourceFromStringPointerV0(projectConfig.TelegramOperator.NotificationTargetRef)
+	targetSource := telegramOperatorNotificationTargetSourceV0(projectConfig)
 	return []orquestaserver.ServerConfigSettingV0{
-		serverConfigSettingFromRegistryWithSourceV0(
-			envTelegramOperatorEnabledV0,
+		telegramOperatorConfigFileSettingV0(
+			telegramOperatorConfigKeyEnabledV0,
 			strconv.FormatBool(telegramOperatorEnabledFromProjectConfigFileV0(projectConfig)),
-			telegramOperatorConfigSettingSourceV0(envTelegramOperatorEnabledV0, projectConfig),
+			enabledSource,
+			"Operador Telegram",
+			"Activa el adaptador operador Telegram opt-in reutilizando un bot existente.",
+			false,
 		),
 		telegramOperatorConfigFileSettingV0(
 			telegramOperatorConfigKeyBotLinkRefV0,
@@ -99,14 +93,17 @@ func telegramOperatorEffectiveConfigSettingsV0(
 			"Ref opaca del enlace/configuracion existente del bot; se configura por fichero canonico.",
 			true,
 		),
-		serverSensitiveConfigSettingFromRegistryWithSourceV0(
-			envTelegramOperatorTokenV0,
+		telegramOperatorConfigFileSettingV0(
+			telegramOperatorConfigKeyTokenV0,
 			sensitiveConfigValueFromSourceV0(
 				telegramOperatorTokenFromProjectConfigFileV0(projectConfig),
 				telegramOperatorTokenConfiguredRefV0,
 				tokenSource,
 			),
 			tokenSource,
+			"Token Telegram",
+			"Presencia del token del bot existente; el valor real nunca se publica.",
+			true,
 		),
 		telegramOperatorConfigFileSettingV0(
 			telegramOperatorConfigKeyAuthorizedChatRefsV0,
@@ -224,19 +221,12 @@ func configFileSettingSourceFromBoolPointerV0(value *bool) string {
 	return "defaulted"
 }
 
-func telegramOperatorConfigSettingSourceV0(key string, config serverProjectConfigFileV0) string {
-	if strings.TrimSpace(os.Getenv(key)) != "" {
-		return "explicit"
+func telegramOperatorNotificationTargetSourceV0(config serverProjectConfigFileV0) string {
+	if configStringPointerHasValueV0(config.TelegramOperator.NotificationTargetRef) {
+		return configSettingSourceConfigFileV0
 	}
-	switch key {
-	case envTelegramOperatorEnabledV0:
-		if config.TelegramOperator.Enabled != nil {
-			return configSettingSourceConfigFileV0
-		}
-	case envTelegramOperatorTokenV0:
-		if configStringPointerHasValueV0(config.TelegramOperator.Token) {
-			return configSettingSourceConfigFileV0
-		}
+	if configStringSlicePointerHasValueV0(config.TelegramOperator.AuthorizedChatRefs) {
+		return configSettingSourceConfigFileV0
 	}
 	return "defaulted"
 }
