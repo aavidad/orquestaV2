@@ -117,7 +117,8 @@ with open(url_file, "w", encoding="utf-8") as fh:
 server.serve_forever()
 PY
   : >"$FINALPKG_OUT/finalpkg_requests.jsonl"
-  python3 "$server_py" "$url_file" "$FINALPKG_OUT/finalpkg_requests.jsonl" &
+  python3 "$server_py" "$url_file" "$FINALPKG_OUT/finalpkg_requests.jsonl" \
+    >"$FINALPKG_OUT/fake_orquesta_server.log" 2>&1 &
   FAKE_ORQUESTA_PID="$!"
   for _ in $(seq 1 50); do
     if [[ -s "$url_file" ]]; then

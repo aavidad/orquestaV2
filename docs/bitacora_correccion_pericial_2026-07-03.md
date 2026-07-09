@@ -4769,3 +4769,60 @@ Residual:
 
 - Esto cierra un borde local del cliente. No sustituye el smoke real amplio de
   `BUG-165/065` con proveedor lento, backend vivo tras stop o corte externo.
+
+## Codex local 2026-07-09: BUG-196 smoke OPES lifecycle finalpkg sin cuelgue
+
+Contexto:
+
+- Estaba revalidando `BUG-ORQ-20260701-066` con
+  `scripts/smoke_opes_lifecycle_real.sh`, sin tocar OPES productivo.
+- El primer intento local quedo colgado en
+  `/tmp/orquesta-opes-lifecycle-real-20260709T065427Z`: derivados 24/24,
+  `goal_receipts_manifest_status=ok`, `empty_after_final=true`, pero
+  `finalpkg_requests.jsonl` seguia vacio y el fake server `finalpkg` vivo.
+
+Hallazgo:
+
+- El cuelgue estaba en el harness Bash, no en Orquesta/OPES.
+- `run_finalpkg_live_config` hacia
+  `fake_orquesta_url="$(start_fake_orquesta_for_finalpkg)"`.
+- `start_fake_orquesta_for_finalpkg` arrancaba el servidor Python en background
+  heredando stdout; el command substitution no cerraba porque el pipe quedaba
+  abierto por el proceso servidor.
+
+Cierre aplicado:
+
+- `scripts/smoke_opes_lifecycle_real.sh`: el fake server redirige stdout/stderr
+  a `finalpkg/fake_orquesta_server.log`, de forma que la captura de URL termina
+  y el launcher `finalpkg` puede continuar.
+- Se corto solo el smoke local colgado y su fake server; no habia proceso OPES
+  productivo ni servidor Orquesta real afectado.
+- Inventario actualizado con `BUG-ORQ-20260709-196`.
+
+Pruebas verdes:
+
+- `bash -n scripts/smoke_opes_lifecycle_real.sh`
+- `timeout 180 env ORQUESTA_KEEP_SMOKE_DIR=1 scripts/smoke_opes_lifecycle_real.sh`
+
+Resultado de revalidacion:
+
+- Evidencia:
+  `/tmp/orquesta-opes-lifecycle-real-20260709T065803Z/out/opes_lifecycle_result.json`
+- `status=passed`
+- 24/24 work kinds OPES cubiertos hasta `finalize_temario_package`.
+- `finalpkg_dry_run=false`.
+- Un unico POST fake:
+  `run-ref-opes-a1-t002-finalpkg-20260612`,
+  `job-ref-opes-a1-t002-finalpkg-20260612`,
+  `work_kind=finalize_temario_package`.
+- `settlement_status=settled_final`.
+- Verificacion externa posterior: sin procesos residuales
+  `smoke_opes_lifecycle_real`, `fake_orquesta_finalpkg` ni
+  `smoke_opes_derivatives_rest`.
+
+Lectura para Claude:
+
+- El residual comun del smoke temporal/fake OPES queda revalidado localmente.
+- `BUG-066` solo debe seguir abierto si se exige un hueco mas concreto:
+  proveedor real/residente, corte externo/manual real, deploy remoto o OPES
+  temporal/preproduccion con credenciales y scope duro.

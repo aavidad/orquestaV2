@@ -2714,6 +2714,14 @@ paquete final y sin tocar OPES productivo.
   Con esto el residual comun "smoke OPES temporal real" de BUG-058/066/075
   queda cubierto; los residuales que sigan abiertos deben citar un hueco
   concreto nuevo, no este smoke.
+- Revalidacion Codex local 2026-07-09: al repetir
+  `scripts/smoke_opes_lifecycle_real.sh` aparecio un bug del harness
+  (`BUG-ORQ-20260709-196`) por stdout heredado del fake server `finalpkg`; el
+  parche redirige stdout/stderr del server y el smoke completo vuelve a pasar:
+  24/24 fases, `finalpkg_dry_run=false`, un POST fake a
+  `run-ref-opes-a1-t002-finalpkg-20260612`, `settlement_status=settled_final` y
+  sin procesos residuales. Evidencia local:
+  `/tmp/orquesta-opes-lifecycle-real-20260709T065803Z/out/opes_lifecycle_result.json`.
 
 BUG nuevo `BUG-ORQ-20260705-194` (cerrado en codigo local; residual operativo):
 El field test OPES real post-G5 no podia ejecutarse desde el goal remoto por
@@ -3068,3 +3076,21 @@ manifest de cierre completo antes de `release`. Evidencia:
 smoke temporal OPES/external-work con proveedor real o fake residente que
 demuestre reconciliacion automatica tras cortes externos/manuales y ausencia de
 goal backend residual; no se sobrecierra desde este patch local.
+
+BUG nuevo `BUG-ORQ-20260709-196` (cerrado en harness local):
+`scripts/smoke_opes_lifecycle_real.sh` podia quedarse colgado antes de lanzar el
+launcher `finalpkg`. La causa no era OPES ni el nucleo: el script capturaba la
+URL con `fake_orquesta_url="$(start_fake_orquesta_for_finalpkg)"`, y esa funcion
+arrancaba un servidor Python en background heredando stdout; el command
+substitution esperaba indefinidamente porque el pipe seguia abierto. Evidencia
+del fallo: ejecucion local
+`/tmp/orquesta-opes-lifecycle-real-20260709T065427Z`, con derivados 24/24 y
+`finalpkg_requests.jsonl` vacio mientras el fake server seguia vivo. Cierre:
+redirigir stdout/stderr del fake server a
+`finalpkg/fake_orquesta_server.log`. Revalidacion: `bash -n
+scripts/smoke_opes_lifecycle_real.sh` y `timeout 180 env
+ORQUESTA_KEEP_SMOKE_DIR=1 scripts/smoke_opes_lifecycle_real.sh`, resultado
+`status=passed`, 24 work kinds cubiertos, un POST fake `finalize_temario_package`
+para `run-ref-opes-a1-t002-finalpkg-20260612`, `settlement_status=settled_final`
+y sin procesos residuales. Evidencia:
+`/tmp/orquesta-opes-lifecycle-real-20260709T065803Z/out/opes_lifecycle_result.json`.
