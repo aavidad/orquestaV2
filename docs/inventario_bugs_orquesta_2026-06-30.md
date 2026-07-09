@@ -545,14 +545,14 @@ antes de su cierre posterior:
   Se anade `TestEnvVarsOrquestaRatchetMEJ106V0` en `cmd/orquesta-server` para
   fallar si el conteo sube sobre 511 sin marca explicita
   `env_vars_orquesta_allow_increase_to=<valor>` en este inventario o bitacora.
-- Continuacion Codex 2026-07-04 tarde 9: TAREA-8.4 introduce
-  `ORQUESTA_CODEX_SMOKE_TIMEOUT_MS` como canónica temporal de los smokes Codex
-  para cerrar la mezcla de unidades, conservando
-  `ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS` como alias legacy durante la ventana de
-  compatibilidad. Esto sube el ratchet a
-  `env_vars_orquesta_allow_increase_to=512` de forma justificada y reversible;
-  la siguiente ola debe retirar los ejemplos/lecturas legacy `_SECONDS` y bajar
-  otra vez el techo.
+- Continuacion Codex 2026-07-09: TAREA-8.4 retira el alias legacy
+  `ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS`; los smokes Codex reales quedan solo
+  con `ORQUESTA_CODEX_SMOKE_TIMEOUT_MS`, y los ejemplos convierten segundos a
+  milisegundos. La metrica baja a `env_vars_orquesta=513`; el techo temporal
+  queda en `env_vars_orquesta_allow_increase_to=513` por las dos envs
+  operativas de Telegram (`enabled` y `token`) que no se eliminan en este
+  corte. Pendiente: bajar a 511 solo cuando esas entradas pasen a config/secreto
+  gestionado sin romper el canal operador.
 - `BUG-ORQ-20260702-120` queda cerrado por la proyeccion
   `stopped/crashed/unreachable` y los contratos OPES asociados. Sus notas de
   avance que decian "no cierra el bug padre" son historicas y quedan

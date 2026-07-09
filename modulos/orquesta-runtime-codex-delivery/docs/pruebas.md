@@ -107,7 +107,7 @@ ORQUESTA_CODEX_CODE_HOME="${CODEX_HOME:-$HOME/.codex}" \
 ORQUESTA_CODEX_PATH="$PATH" \
 ORQUESTA_CODEX_APPROVAL_POLICY=never \
 ORQUESTA_CODEX_SANDBOX=workspace-write \
-ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=120 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_MS=120000 \
 go test ./modulos/orquesta-runtime-codex-delivery \
   -run TestCodexReceiptDeliveryLoopV0SmokeCodexRealOptIn \
   -count=1 -timeout 150s
@@ -177,7 +177,7 @@ ORQUESTA_CODEX_PATH="$PATH" \
 ORQUESTA_CODEX_APPROVAL_POLICY=never \
 ORQUESTA_CODEX_SANDBOX=workspace-write \
 ORQUESTA_CODEX_MODEL=gpt-5.5 \
-ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=240 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_MS=240000 \
 ORQUESTA_CODEX_PROJECT_WORKDIR=/tmp/orquesta-smokes/mcp-form-director-20260509120532/project \
 ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-smokes/mcp-form-director-20260509120532/project/.orquesta-codex-runtime \
 go test ./modulos/orquesta-runtime-codex-delivery \
@@ -248,7 +248,7 @@ Prueba real multiagente de programacion:
 
 ```bash
 ORQUESTA_CODEX_PROGRAMMING_TEAM_SMOKE=1 \
-ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=420 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_MS=420000 \
 go test ./modulos/orquesta-runtime-codex-delivery \
   -run TestProgrammingTeamCodexRealOptInV0 \
   -count=1 -timeout 480s -v

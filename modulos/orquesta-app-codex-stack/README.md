@@ -68,7 +68,7 @@ ORQUESTA_CODEX_PATH="$PATH" \
 ORQUESTA_CODEX_APPROVAL_POLICY=never \
 ORQUESTA_CODEX_SANDBOX=workspace-write \
 ORQUESTA_CODEX_MODEL=gpt-5.5 \
-ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=240 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_MS=240000 \
 ORQUESTA_CODEX_PROJECT_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-real/project \
 ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-real/project/.orquesta-runtime \
 ./modulos/orquesta-app-codex-stack/arrancar_codex.sh

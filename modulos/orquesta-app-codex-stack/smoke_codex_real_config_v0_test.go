@@ -11,8 +11,7 @@ import (
 )
 
 const (
-	codexStackRealSmokeTimeoutMSKeyV0      = "ORQUESTA_CODEX_SMOKE_TIMEOUT_MS"
-	codexStackRealSmokeTimeoutSecondsKeyV0 = "ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS"
+	codexStackRealSmokeTimeoutMSKeyV0 = "ORQUESTA_CODEX_SMOKE_TIMEOUT_MS"
 )
 
 type codexStackRealSmokeConfigV0 struct {
@@ -125,23 +124,13 @@ func codexStackRealSmokeEnsureDirV0(t *testing.T, key string, value string) stri
 func codexStackRealSmokeTimeoutV0(t *testing.T) time.Duration {
 	t.Helper()
 	rawMS := strings.TrimSpace(os.Getenv(codexStackRealSmokeTimeoutMSKeyV0))
-	if rawMS != "" {
-		milliseconds, err := strconv.Atoi(rawMS)
-		if err != nil || milliseconds < 30000 {
-			t.Fatalf("%s invalido: %q", codexStackRealSmokeTimeoutMSKeyV0, rawMS)
-		}
-		return time.Duration(milliseconds) * time.Millisecond
-	}
-	raw := strings.TrimSpace(os.Getenv(codexStackRealSmokeTimeoutSecondsKeyV0))
-	if raw == "" {
+	if rawMS == "" {
 		return 240 * time.Second
 	}
-	seconds, err := strconv.Atoi(raw)
-	if err != nil || seconds < 30 {
-		t.Fatalf("%s invalido: %q", codexStackRealSmokeTimeoutSecondsKeyV0, raw)
+	milliseconds, err := strconv.Atoi(rawMS)
+	if err != nil || milliseconds < 30000 {
+		t.Fatalf("%s invalido: %q", codexStackRealSmokeTimeoutMSKeyV0, rawMS)
 	}
-	t.Logf("%s deprecado; usa %s", codexStackRealSmokeTimeoutSecondsKeyV0, codexStackRealSmokeTimeoutMSKeyV0)
-	milliseconds := seconds * 1000
 	return time.Duration(milliseconds) * time.Millisecond
 }
 
@@ -155,7 +144,6 @@ func codexStackRealSmokeMaxExternalWaitsV0(timeout time.Duration, interval time.
 
 func TestCodexStackRealSmokeTimeoutV0UsaMilisegundosCanonicos(t *testing.T) {
 	t.Setenv(codexStackRealSmokeTimeoutMSKeyV0, "31500")
-	t.Setenv(codexStackRealSmokeTimeoutSecondsKeyV0, "")
 
 	got := codexStackRealSmokeTimeoutV0(t)
 	if got != 31500*time.Millisecond {
@@ -163,22 +151,11 @@ func TestCodexStackRealSmokeTimeoutV0UsaMilisegundosCanonicos(t *testing.T) {
 	}
 }
 
-func TestCodexStackRealSmokeTimeoutV0AceptaAliasLegacySeconds(t *testing.T) {
+func TestCodexStackRealSmokeTimeoutV0UsaDefaultSiNoHayMilisegundos(t *testing.T) {
 	t.Setenv(codexStackRealSmokeTimeoutMSKeyV0, "")
-	t.Setenv(codexStackRealSmokeTimeoutSecondsKeyV0, "31")
 
 	got := codexStackRealSmokeTimeoutV0(t)
-	if got != 31*time.Second {
-		t.Fatalf("timeout = %s, want %s", got, 31*time.Second)
-	}
-}
-
-func TestCodexStackRealSmokeTimeoutV0PriorizaMilisegundosSobreLegacy(t *testing.T) {
-	t.Setenv(codexStackRealSmokeTimeoutMSKeyV0, "32500")
-	t.Setenv(codexStackRealSmokeTimeoutSecondsKeyV0, "99")
-
-	got := codexStackRealSmokeTimeoutV0(t)
-	if got != 32500*time.Millisecond {
-		t.Fatalf("timeout = %s, want %s", got, 32500*time.Millisecond)
+	if got != 240*time.Second {
+		t.Fatalf("timeout = %s, want %s", got, 240*time.Second)
 	}
 }

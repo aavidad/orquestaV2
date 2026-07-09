@@ -1032,8 +1032,8 @@ Hecho:
   `deprecated_env_used`, `deprecated_env_duplicate` o `env_alias_conflict`.
   `scripts/lib/smoke_common.sh`, `scripts/smoke_opes_plan_temario_operadores.sh`
   y `scripts/smoke_opes_derivatives_rest.sh` respetan la precedencia canónica.
-- Timeouts de smoke normalizados a `_MS` con aliases `_SECONDS` temporales:
-  Codex (`ORQUESTA_CODEX_SMOKE_TIMEOUT_MS`), Claude/Gemini directos
+- Timeouts de smoke normalizados a `_MS`: Codex usa solo
+  `ORQUESTA_CODEX_SMOKE_TIMEOUT_MS`; Claude/Gemini directos usan
   (`SMOKE_CLAUDE_GOAL_PROCESS_TIMEOUT_MS`,
   `SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_MS`) y Claude server request timeout
   (`SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REQUEST_TIMEOUT_MS`).
@@ -1052,11 +1052,10 @@ Verificado:
 
 Atencion:
 
-- `scripts/orquesta_metricas_deuda.sh --json` queda en
-  `env_vars_orquesta=512`, justificado en inventario con
-  `env_vars_orquesta_allow_increase_to=512` por la ventana de compatibilidad de
-  `ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS`. No subir mas el ratchet; siguiente
-  ola debe retirar legacy `_SECONDS` y bajarlo.
+- `scripts/orquesta_metricas_deuda.sh --json` queda vigente en
+  `env_vars_orquesta=513`: la ventana de compatibilidad Codex `_SECONDS` esta
+  retirada y las dos envs Telegram operativas explican el techo temporal.
+  No reintroducir `ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS`.
 - Siguen pendientes TAREA-8.1 (`orquesta.config.*`) y TAREA-8.3 completa. El
   guard `config_projection_mismatch` queda cerrado en primer corte para
   `prepare-run` y `apps/director`.
@@ -2116,3 +2115,28 @@ Residual:
 - Falta launcher real de proveedor/agente que escriba tokens reales por brazo
   A/B. El wrapper no inventa consumo: solo normaliza lo que publique el
   proveedor y completa metricas deterministas locales.
+
+## Actualizacion Codex 2026-07-09: alias seconds Codex retirado
+
+Hecho:
+
+- `orquesta-runtime-codex-delivery` y `orquesta-app-codex-stack` dejan de leer
+  `ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS`; solo aceptan
+  `ORQUESTA_CODEX_SMOKE_TIMEOUT_MS`.
+- Scripts y ejemplos de smokes Codex reales quedan convertidos a milisegundos.
+- `scripts/orquesta_metricas_deuda.sh --json` baja de 514 a
+  `env_vars_orquesta=513`; el inventario documenta
+  `env_vars_orquesta_allow_increase_to=513`.
+
+Pruebas:
+
+- `bash -n scripts/smoke_codex_real_required_test_runner.sh scripts/smoke_codex_real_operational_wave.sh scripts/smoke_codex_real_recursive_tree.sh`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack -run Smoke`
+- `go test -count=1 ./cmd/orquesta-server -run 'EnvVarsOrquestaRatchet|ServerEnvRegistry'`
+- `go test -count=1 ./...`
+- `git diff --check`
+
+Residual:
+
+- No cerrar TAREA-8 completa por esto. Quedan las dos envs Telegram
+  (`enabled`, `token`) y el pase mayor a config/secreto gestionado.

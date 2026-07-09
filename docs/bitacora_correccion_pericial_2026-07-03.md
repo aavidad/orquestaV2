@@ -2618,8 +2618,9 @@ Hecho:
   setting sensible en `effective_config`, alias legacy, conflicto diagnosticado
   y precedencia corregida en scripts OPES.
 - Timeouts de smoke normalizados a sufijo `_MS`: Codex usa
-  `ORQUESTA_CODEX_SMOKE_TIMEOUT_MS` con alias legacy
-  `ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS`; Claude/Gemini directos usan
+  `ORQUESTA_CODEX_SMOKE_TIMEOUT_MS`; el alias legacy
+  `ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS` queda retirado el 2026-07-09.
+  Claude/Gemini directos usan
   `SMOKE_*_TIMEOUT_MS`; el script Claude server acepta
   `SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REQUEST_TIMEOUT_MS`.
 - `ORQUESTA_GUARDIAN_*` emitidas por el servidor quedan en registry de
@@ -2634,12 +2635,12 @@ Hecho:
 
 Ratchet:
 
-- `scripts/orquesta_metricas_deuda.sh --json` devuelve
-  `env_vars_orquesta=512`. La subida es temporal y justificada por la canónica
-  nueva `ORQUESTA_CODEX_SMOKE_TIMEOUT_MS` mientras se mantiene el alias legacy
-  `_SECONDS`; el inventario incluye
-  `env_vars_orquesta_allow_increase_to=512`. Proxima ola: retirar docs/lecturas
-  legacy `_SECONDS` y bajar el techo.
+- `scripts/orquesta_metricas_deuda.sh --json` devolvia
+  `env_vars_orquesta=512` en esta ola historica. Tras cambios posteriores el
+  valor real subio a 514; la ola 2026-07-09 retira el alias legacy Codex
+  `_SECONDS` y deja el techo vigente en
+  `env_vars_orquesta_allow_increase_to=513` por las dos envs Telegram
+  operativas pendientes.
 
 Verificado:
 
@@ -5087,3 +5088,37 @@ Lectura para Claude:
 - Esto solo valida build/start/status/shutdown local aislado del servidor en el
   commit actual. No sustituye los smokes reales pendientes de proveedor Goal,
   OPES temporal, remoto ni Telegram.
+
+## Codex local 2026-07-09: retirada alias seconds en smokes Codex
+
+Contexto:
+
+- El subagente McClintock detecto un resto de TAREA-8.4/MEJ-106: el alias
+  legacy `ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS` seguia aceptado en smokes Codex
+  reales aunque la superficie canonica ya era `ORQUESTA_CODEX_SMOKE_TIMEOUT_MS`.
+- Mantener ambas unidades era una fuente de error x1000 y mantenia una env extra
+  en el ratchet.
+
+Cierre aplicado:
+
+- `orquesta-runtime-codex-delivery` y `orquesta-app-codex-stack` leen solo
+  `ORQUESTA_CODEX_SMOKE_TIMEOUT_MS`; si falta, usan su default local de smoke.
+- Scripts y ejemplos se pasan a milisegundos.
+- La metrica baja de 514 a `env_vars_orquesta=513`.
+- No se tocan `ORQUESTA_TELEGRAM_OPERATOR_ENABLED` ni
+  `ORQUESTA_TELEGRAM_OPERATOR_TOKEN`: pertenecen al canal operador y deben pasar
+  a config/secreto gestionado en un corte propio.
+
+Verificado:
+
+- `bash -n scripts/smoke_codex_real_required_test_runner.sh scripts/smoke_codex_real_operational_wave.sh scripts/smoke_codex_real_recursive_tree.sh`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-delivery ./modulos/orquesta-app-codex-stack -run Smoke`
+- `go test -count=1 ./cmd/orquesta-server -run 'EnvVarsOrquestaRatchet|ServerEnvRegistry'`
+- `bash scripts/orquesta_metricas_deuda.sh --json`
+- `git diff --check`
+
+Lectura para Claude:
+
+- Este corte no cierra la consolidacion completa de variables. Cierra solo el
+  alias de timeout Codex en segundos y deja el techo temporal documentado en
+  `env_vars_orquesta_allow_increase_to=513`.

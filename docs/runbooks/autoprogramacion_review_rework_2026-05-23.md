@@ -50,7 +50,7 @@ ORQUESTA_CODEX_PATH="$PATH" \
 ORQUESTA_CODEX_APPROVAL_POLICY=never \
 ORQUESTA_CODEX_SANDBOX=workspace-write \
 ORQUESTA_CODEX_MODEL=gpt-5.5 \
-ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=900 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_MS=900000 \
 ORQUESTA_CODEX_PROJECT_WORKDIR=/tmp/orquesta-smokes/review-rework-20260523/project \
 ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-smokes/review-rework-20260523/project/.orquesta-codex-runtime \
 go test ./modulos/orquesta-app-codex-stack \

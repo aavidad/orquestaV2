@@ -419,7 +419,7 @@ ORQUESTA_CODEX_PATH="$PATH" \
 ORQUESTA_CODEX_APPROVAL_POLICY=never \
 ORQUESTA_CODEX_SANDBOX=workspace-write \
 ORQUESTA_CODEX_MODEL=gpt-5.5 \
-ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=900 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_MS=900000 \
 ORQUESTA_CODEX_PROJECT_WORKDIR=/tmp/orquesta-smokes/review-rework-20260512/project \
 ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-smokes/review-rework-20260512/project/.orquesta-codex-runtime \
 go test ./modulos/orquesta-app-codex-stack \
@@ -502,7 +502,7 @@ ORQUESTA_CODEX_PATH="$PATH" \
 ORQUESTA_CODEX_APPROVAL_POLICY=never \
 ORQUESTA_CODEX_SANDBOX=workspace-write \
 ORQUESTA_CODEX_MODEL=gpt-5.5 \
-ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=900 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_MS=900000 \
 ORQUESTA_CODEX_PROJECT_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-change-real-4/project \
 ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-change-real-4/project/.orquesta-runtime \
 ./modulos/orquesta-app-codex-stack/arrancar_codex.sh
@@ -548,7 +548,7 @@ ORQUESTA_CODEX_PATH="$PATH" \
 ORQUESTA_CODEX_APPROVAL_POLICY=never \
 ORQUESTA_CODEX_SANDBOX=workspace-write \
 ORQUESTA_CODEX_MODEL=gpt-5.5 \
-ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=240 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_MS=240000 \
 ORQUESTA_CODEX_PROJECT_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-real/project \
 ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-real/project/.orquesta-runtime \
 ./modulos/orquesta-app-codex-stack/arrancar_codex.sh
@@ -583,7 +583,7 @@ ORQUESTA_CODEX_PATH="$PATH" \
 ORQUESTA_CODEX_APPROVAL_POLICY=never \
 ORQUESTA_CODEX_SANDBOX=workspace-write \
 ORQUESTA_CODEX_MODEL=gpt-5.5 \
-ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=300 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_MS=300000 \
 ORQUESTA_CODEX_PROJECT_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-multiagent-real-12/project \
 ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-multiagent-real-12/project/.orquesta-runtime \
 ./modulos/orquesta-app-codex-stack/arrancar_codex.sh
@@ -630,7 +630,7 @@ ORQUESTA_CODEX_PATH="$PATH" \
 ORQUESTA_CODEX_APPROVAL_POLICY=never \
 ORQUESTA_CODEX_SANDBOX=workspace-write \
 ORQUESTA_CODEX_MODEL=gpt-5.5 \
-ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=600 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_MS=600000 \
 ORQUESTA_CODEX_PROJECT_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-director-decisions-real-10/project \
 ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-director-decisions-real-10/project/.orquesta-runtime \
 ./modulos/orquesta-app-codex-stack/arrancar_codex.sh
@@ -668,7 +668,7 @@ ORQUESTA_CODEX_PATH="$PATH" \
 ORQUESTA_CODEX_APPROVAL_POLICY=never \
 ORQUESTA_CODEX_SANDBOX=workspace-write \
 ORQUESTA_CODEX_MODEL=gpt-5.5 \
-ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=900 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_MS=900000 \
 ORQUESTA_CODEX_PROJECT_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-director-decisions-real-12/project \
 ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-director-decisions-real-12/project/.orquesta-runtime \
 ./modulos/orquesta-app-codex-stack/arrancar_codex.sh
@@ -772,7 +772,7 @@ ORQUESTA_CODEX_PATH="$PATH" \
 ORQUESTA_CODEX_APPROVAL_POLICY=never \
 ORQUESTA_CODEX_SANDBOX=workspace-write \
 ORQUESTA_CODEX_MODEL=gpt-5.5 \
-ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=1200 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_MS=1200000 \
 ORQUESTA_CODEX_PROJECT_WORKDIR=/tmp/orquesta-smokes/multiagent2-20260511/project \
 ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-smokes/multiagent2-20260511/project/.orquesta-codex-runtime \
 go test ./modulos/orquesta-app-codex-stack -run TestNuevaAppWebCodexStackRealMultiagentOptInV0 -count=1 -timeout 1400s -v
@@ -1116,7 +1116,7 @@ ORQUESTA_CODEX_PATH="$PATH" \
 ORQUESTA_CODEX_APPROVAL_POLICY=never \
 ORQUESTA_CODEX_SANDBOX=workspace-write \
 ORQUESTA_CODEX_MODEL=gpt-5.5 \
-ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=240 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_MS=240000 \
 ORQUESTA_CODEX_PROJECT_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-shutdown-real/project \
 ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-smokes/app-codex-stack-shutdown-real/project/.orquesta-runtime \
 go test ./modulos/orquesta-app-codex-stack \

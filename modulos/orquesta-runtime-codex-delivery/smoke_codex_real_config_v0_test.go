@@ -11,8 +11,7 @@ import (
 )
 
 const (
-	codexRealSmokeTimeoutMSKeyV0      = "ORQUESTA_CODEX_SMOKE_TIMEOUT_MS"
-	codexRealSmokeTimeoutSecondsKeyV0 = "ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS"
+	codexRealSmokeTimeoutMSKeyV0 = "ORQUESTA_CODEX_SMOKE_TIMEOUT_MS"
 )
 
 type codexRealSmokeConfigV0 struct {
@@ -119,22 +118,11 @@ func codexRealSmokeTimeoutFromEnvV0(t *testing.T) time.Duration {
 		}
 		return time.Duration(milliseconds) * time.Millisecond
 	}
-	raw := strings.TrimSpace(os.Getenv(codexRealSmokeTimeoutSecondsKeyV0))
-	if raw == "" {
-		return 120 * time.Second
-	}
-	seconds, err := strconv.Atoi(raw)
-	if err != nil || seconds < 10 {
-		t.Fatalf("%s invalido: %q", codexRealSmokeTimeoutSecondsKeyV0, raw)
-	}
-	t.Logf("%s deprecado; usa %s", codexRealSmokeTimeoutSecondsKeyV0, codexRealSmokeTimeoutMSKeyV0)
-	milliseconds := seconds * 1000
-	return time.Duration(milliseconds) * time.Millisecond
+	return 120 * time.Second
 }
 
 func TestCodexRealSmokeTimeoutFromEnvV0UsaMilisegundosCanonicos(t *testing.T) {
 	t.Setenv(codexRealSmokeTimeoutMSKeyV0, "11500")
-	t.Setenv(codexRealSmokeTimeoutSecondsKeyV0, "")
 
 	got := codexRealSmokeTimeoutFromEnvV0(t)
 	if got != 11500*time.Millisecond {
@@ -142,22 +130,11 @@ func TestCodexRealSmokeTimeoutFromEnvV0UsaMilisegundosCanonicos(t *testing.T) {
 	}
 }
 
-func TestCodexRealSmokeTimeoutFromEnvV0AceptaAliasLegacySeconds(t *testing.T) {
+func TestCodexRealSmokeTimeoutFromEnvV0UsaDefaultSiNoHayMilisegundos(t *testing.T) {
 	t.Setenv(codexRealSmokeTimeoutMSKeyV0, "")
-	t.Setenv(codexRealSmokeTimeoutSecondsKeyV0, "11")
 
 	got := codexRealSmokeTimeoutFromEnvV0(t)
-	if got != 11*time.Second {
-		t.Fatalf("timeout = %s, want %s", got, 11*time.Second)
-	}
-}
-
-func TestCodexRealSmokeTimeoutFromEnvV0PriorizaMilisegundosSobreLegacy(t *testing.T) {
-	t.Setenv(codexRealSmokeTimeoutMSKeyV0, "12500")
-	t.Setenv(codexRealSmokeTimeoutSecondsKeyV0, "99")
-
-	got := codexRealSmokeTimeoutFromEnvV0(t)
-	if got != 12500*time.Millisecond {
-		t.Fatalf("timeout = %s, want %s", got, 12500*time.Millisecond)
+	if got != 120*time.Second {
+		t.Fatalf("timeout = %s, want %s", got, 120*time.Second)
 	}
 }

@@ -26,7 +26,7 @@ Autor: Claude (director), a petición del operador tras el incidente T7A
    `OPES_BASE_URL` (`opes_bridge_config.go`). Los scripts de pilotaje ya
    exportan AMBAS "por si acaso" — evidencia de que la duplicidad confunde.
 3. **Timeouts con unidades mezcladas**: `ORQUESTA_CODEX_GOAL_TIMEOUT_MS`
-   (milisegundos) convive con `ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS`,
+   (milisegundos) convivía con `ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS`,
    `SMOKE_CLAUDE_GOAL_PROCESS_TIMEOUT_SECONDS` y
    `SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_SECONDS` (segundos). Trampa de x1000
    esperando a ocurrir. Acción: sufijo de unidad único (_MS o _SECONDS) en
@@ -111,8 +111,9 @@ Estado tras implementación paralela con subagentes:
   por `smoke_orquesta_base_url_from_env_or_runtime`; el helper avisa por stderr
   sin cambiar stdout.
 - **Timeouts de smoke**: los smokes Codex pasan a
-  `ORQUESTA_CODEX_SMOKE_TIMEOUT_MS` y conservan
-  `ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS` como alias legacy temporal. Los smokes
+  `ORQUESTA_CODEX_SMOKE_TIMEOUT_MS`; el alias legacy
+  `ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS` queda retirado en la ola 2026-07-09.
+  Los smokes
   directos Claude/Gemini pasan a `SMOKE_CLAUDE_GOAL_PROCESS_TIMEOUT_MS` y
   `SMOKE_GEMINI_GOAL_PROCESS_TIMEOUT_MS`; el script Claude server acepta
   `SMOKE_CLAUDE_GOAL_PROCESS_SERVER_REQUEST_TIMEOUT_MS` y conserva el alias en
@@ -121,10 +122,10 @@ Estado tras implementación paralela con subagentes:
   clasificadas como `child_process` mediante registry local de guardian; los
   tests impiden emitir claves no registradas y verifican que el runner no hereda
   `ORQUESTA_GUARDIAN_*` del padre.
-- **Ratchet**: la canónica temporal `ORQUESTA_CODEX_SMOKE_TIMEOUT_MS` sube el
-  conteo a `env_vars_orquesta=512`. Está justificado en el inventario con
-  `env_vars_orquesta_allow_increase_to=512`; debe bajar cuando se retire el
-  alias legacy `_SECONDS`.
+- **Ratchet**: tras retirar el alias legacy Codex `_SECONDS`, el conteo vigente
+  queda en `env_vars_orquesta=513`. Está justificado en el inventario con
+  `env_vars_orquesta_allow_increase_to=513`; debe bajar cuando las dos envs
+  operativas de Telegram pasen a config/secreto gestionado.
 
 Verificación adicional ejecutada:
 

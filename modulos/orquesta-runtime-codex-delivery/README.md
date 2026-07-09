@@ -95,7 +95,7 @@ ORQUESTA_CODEX_CODE_HOME="${CODEX_HOME:-$HOME/.codex}" \
 ORQUESTA_CODEX_PATH="$PATH" \
 ORQUESTA_CODEX_APPROVAL_POLICY=never \
 ORQUESTA_CODEX_SANDBOX=workspace-write \
-ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=120 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_MS=120000 \
 go test ./modulos/orquesta-runtime-codex-delivery \
   -run TestCodexReceiptDeliveryLoopV0SmokeCodexRealOptIn \
   -count=1 -timeout 150s
@@ -137,7 +137,7 @@ ORQUESTA_CODEX_CODE_HOME="${CODEX_HOME:-$HOME/.codex}" \
 ORQUESTA_CODEX_PATH="$PATH" \
 ORQUESTA_CODEX_APPROVAL_POLICY=never \
 ORQUESTA_CODEX_SANDBOX=workspace-write \
-ORQUESTA_CODEX_SMOKE_TIMEOUT_SECONDS=420 \
+ORQUESTA_CODEX_SMOKE_TIMEOUT_MS=420000 \
 go test ./modulos/orquesta-runtime-codex-delivery \
   -run TestProgrammingTeamCodexRealOptInV0 \
   -count=1 -timeout 480s -v
