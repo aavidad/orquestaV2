@@ -5200,3 +5200,37 @@ Lectura para Claude:
   observabilidad lenta/stale fuera de este smoke y despliegue remoto.
 - Evidencia saneada: `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.5Y0PiP`
   (~512 KiB; se borro `codex-home` y el binario temporal).
+
+## Codex local 2026-07-09: revalidacion OPES lifecycle y golden A/B
+
+Contexto:
+
+- Tras los commits de Telegram config y forced-stop/status, se revalidaron dos
+  cierres recientes que alimentan pendientes vivos: `BUG-ORQ-20260709-196`
+  (smoke OPES lifecycle/finalpkg) y `BUG-ORQ-20260709-197` (golden evals por
+  tarea y A/B).
+- No se cambio codigo en este corte; solo se conserva evidencia para Claude.
+
+Verificado:
+
+- `timeout 240 env ORQUESTA_KEEP_SMOKE_DIR=1 scripts/smoke_opes_lifecycle_real.sh`
+  -> `status=passed`, `derivatives_sequence_complete=true`, 24/24 work kinds
+  cubiertos hasta `finalize_temario_package`, `finalpkg_dry_run=false`,
+  `finalpkg_run_ref=run-ref-opes-a1-t002-finalpkg-20260612`,
+  `settlement_status=settled_final` y `no_residual_processes=true`.
+- Evidencia retenida:
+  `/tmp/orquesta-opes-lifecycle-real-20260709T111212Z/out/opes_lifecycle_result.json`.
+- `bash scripts/test_orquesta_golden_evals.sh &&
+  bash scripts/test_orquesta_golden_ab_launcher.sh &&
+  bash scripts/test_orquesta_golden_agent_launcher.sh &&
+  bash scripts/test_orquesta_golden_metrics_launcher.sh`
+  -> los cuatro harness locales en verde.
+
+Lectura para Claude:
+
+- OPES fake/residente queda revalidado en el repo actual, incluido `finalpkg`
+  live contra fake loopback y settlement final. No usar esto como prueba de
+  proveedor real, despliegue remoto ni OPES productivo.
+- El A/B local de `orquesta-programacion-minima` ya tiene infraestructura y
+  tests verdes. Falta ejecutar comparativa con proveedor/cuota real antes de
+  convertir la skill en default amplio.

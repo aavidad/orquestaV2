@@ -3173,6 +3173,16 @@ ORQUESTA_KEEP_SMOKE_DIR=1 scripts/smoke_opes_lifecycle_real.sh`, resultado
 para `run-ref-opes-a1-t002-finalpkg-20260612`, `settlement_status=settled_final`
 y sin procesos residuales. Evidencia:
 `/tmp/orquesta-opes-lifecycle-real-20260709T065803Z/out/opes_lifecycle_result.json`.
+Revalidacion Codex 2026-07-09 11:12: el mismo smoke vuelve a pasar en el repo
+actual tras los commits de Telegram/status:
+`timeout 240 env ORQUESTA_KEEP_SMOKE_DIR=1 scripts/smoke_opes_lifecycle_real.sh`
+-> `status=passed`, `derivatives_sequence_complete=true`, 24/24 work kinds,
+`finalpkg_dry_run=false`, `finalpkg_run_ref=run-ref-opes-a1-t002-finalpkg-20260612`,
+`settlement_status=settled_final` y `no_residual_processes=true`. Evidencia
+retenida:
+`/tmp/orquesta-opes-lifecycle-real-20260709T111212Z/out/opes_lifecycle_result.json`.
+Esto mantiene cerrado el bug de harness y refuerza el cierre fake/residente de
+derivados OPES; no prueba proveedor real ni despliegue remoto.
 
 BUG nuevo `BUG-ORQ-20260709-197` (cerrado en harness local):
 `scripts/orquesta_golden_evals.sh --run --task <id>` lanzaba solo la tarea
@@ -3185,3 +3195,13 @@ filtrado mediante `manifest_with_tasks()` en `--run` y `--evaluate`. Evidencia:
 --self-test --output /tmp/orquesta-golden-self-test-agent-launcher.json` y
 reintento local con agente fake para `golden-new-app-smoke-v0` con
 `summary.total=1`, `score=1.0`, `status=passed`.
+Revalidacion Codex 2026-07-09 11:12: suite completa de harness de evaluacion
+local en verde:
+`bash scripts/test_orquesta_golden_evals.sh &&
+bash scripts/test_orquesta_golden_ab_launcher.sh &&
+bash scripts/test_orquesta_golden_agent_launcher.sh &&
+bash scripts/test_orquesta_golden_metrics_launcher.sh`. Resultado:
+`orquesta_golden_evals ok`, `orquesta_golden_ab_launcher ok`,
+`orquesta_golden_agent_launcher ok`, `orquesta_golden_metrics_launcher ok`.
+Sigue pendiente el A/B con proveedor/cuota real antes de activar
+`orquesta-programacion-minima` como default amplio.

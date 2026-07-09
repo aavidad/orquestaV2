@@ -2202,3 +2202,26 @@ Residual:
   `status_before_control_response.json`, `run_control_response.json`,
   `observe_after_forced_stop_response.json`, `status_after_control_response.json`
   y state final; se elimino `codex-home` y el binario temporal.
+
+## Actualizacion Codex 2026-07-09: revalidacion OPES lifecycle y golden local
+
+Hecho:
+
+- Reejecutado `scripts/smoke_opes_lifecycle_real.sh` en el repo actual tras los
+  ultimos commits: `status=passed`, 24/24 work kinds hasta
+  `finalize_temario_package`, `finalpkg_dry_run=false`,
+  `settlement_status=settled_final` y `no_residual_processes=true`.
+- Evidencia retenida:
+  `/tmp/orquesta-opes-lifecycle-real-20260709T111212Z/out/opes_lifecycle_result.json`.
+- Reejecutados harness locales de evaluacion:
+  `test_orquesta_golden_evals`, `test_orquesta_golden_ab_launcher`,
+  `test_orquesta_golden_agent_launcher` y `test_orquesta_golden_metrics_launcher`,
+  todos en verde.
+
+Lectura para Claude:
+
+- No reabrir `BUG-ORQ-20260709-196` ni `BUG-ORQ-20260709-197` salvo regresion:
+  ambos estan verdes en local actual.
+- Residual real: proveedor/cuota para A/B de `orquesta-programacion-minima`,
+  despliegue remoto/Telegram, y smoke amplio de observabilidad lenta/stale para
+  `BUG-165/065/079`.
