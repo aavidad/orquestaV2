@@ -180,6 +180,18 @@ antes de su cierre posterior:
   y `--confirm-purge-runtime=recursive-wave-smoke`; valida rutas internas desde
   el registry local derivado de `wave_ref` y permite `medium`/`high` sin aceptar
   `xhigh`.
+- `BUG-ORQ-20260709-203` queda cerrado en smokes de conectores locales:
+  `scripts/smoke_external_domain_fake_real.sh` esperaba todavia
+  `domain_work_submitter_no_disponible` aunque el backend file-based ya activa
+  submitter local y `DomainDelivery`; `scripts/smoke_external_domain_non_opes_real.sh`
+  configuraba `ORQUESTA_DOMAIN_WORK_HTTP_BASE_URL` sin declarar la politica de
+  egress exigida por el adaptador HTTP; ambos arrancaban el supervisor legacy
+  sin `ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=true`. Cierre: el smoke
+  file valida receipt `accepted` y snapshot `domain_work_artifacts_v0.json`; el
+  smoke HTTP exporta `ORQUESTA_DOMAIN_WORK_HTTP_EGRESS_MODE=smoke_local`; ambos
+  servidores temporales activan el opt-in legacy requerido; el `codex-fake`
+  file-based escribe `external_summary.md` para que el intake seleccione el
+  artefacto por `artifact_type` cuando hay varios ficheros.
 - Reejeucion real 2026-07-04 noche 10:
   `smoke_goal_first_checkpoint_only_high_consumption_real=ok` con
   `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-6c8dc4317888c8e25bb0e91f7f910aab`,

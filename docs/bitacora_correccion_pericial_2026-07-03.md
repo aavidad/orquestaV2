@@ -108,6 +108,21 @@ Tambien se alineo el validador con el resumen publico `refs_only`: las rutas
 internas se comprueban leyendo los registries locales por `wave_ref`, y el
 wrapper acepta `medium`/`high` sin permitir `xhigh`.
 
+### 2026-07-09 — BUG-ORQ-20260709-203 smokes de conectores actualizados
+
+Al pasar de nucleo a conectores locales, fallaron dos smokes por contrato
+antiguo. `smoke_external_domain_fake_real.sh` esperaba 400 en
+`submit_artifact`, pero el backend `orquesta-domain-work-file` ya tiene
+submitter local y devuelve receipt aceptado. `smoke_external_domain_non_opes_real.sh`
+arrancaba adaptador HTTP sin declarar `ORQUESTA_DOMAIN_WORK_HTTP_EGRESS_MODE`,
+lo que ahora bloquea correctamente con `domain_work_http_egress_policy_required`.
+Se actualizaron los smokes para validar receipt/snapshot file-based y para
+usar `smoke_local` en el adaptador HTTP temporal. En ambos casos se declara
+tambien `ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP=true`, requisito vigente
+del supervisor legacy que estos smokes aun ejercitan. El fake file-based escribe
+ahora `external_summary.md` en sus rutas de entrega para que el intake de
+DomainWork seleccione el artefacto por tipo cuando hay varios ficheros.
+
 ### 2026-07-03 (tarde) — claude-fable-5: pilotaje real ejecutado, 3 bugs nuevos encontrados, 1 arreglado
 
 **El pilotaje funcionó como prueba de fuego: Orquesta NO pudo lanzar el goal

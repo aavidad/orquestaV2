@@ -87,6 +87,7 @@ start_server() {
   ORQUESTA_CODEX_RUNTIME_WORKDIR="$runtime_dir" \
   ORQUESTA_SERVER_TICK_INTERVAL_MS="${ORQUESTA_SERVER_TICK_INTERVAL_MS:-60000}" \
   ORQUESTA_STARTUP_CLEANUP_MODE="off" \
+  ORQUESTA_AUTOPROGRAMMING_LEGACY_DIRECTOR_LOOP="true" \
   ORQUESTA_OPES_BASE_URL="" \
   OPES_BASE_URL="" \
   ORQUESTA_DOMAIN_WORK_FILE_ENABLED="1" \
@@ -212,13 +213,13 @@ write_set = [x for x in (task.get("write_set") or ["external/fake/entrega.md"]) 
 def delivery_file(target):
     target = str(target).strip().strip("/")
     if not target or target == ".":
-        return "external/fake/entrega.md"
+        return "external/fake/external_summary.md"
     if any(ch in target for ch in "*?["):
-        return "external/fake/entrega.md"
+        return "external/fake/external_summary.md"
     suffix = pathlib.PurePosixPath(target).suffix
     if suffix:
         return target
-    return target + "/entrega.md"
+    return target + "/external_summary.md"
 
 files = []
 root = pathlib.Path(project_dir)
@@ -323,7 +324,7 @@ payload = {
         "job_ref": job_ref,
         "artifact_ref": f"artifact-ref-fake-{smoke_id}",
         "artifact_type": "external_summary",
-        "summary": "Artefacto fake no enviado porque no hay submitter externo configurado.",
+        "summary": "Artefacto fake aceptado por el submitter file-based local.",
         "external_refs": [
             {"kind": "run_ref", "ref": f"run-ref-fake-{smoke_id}"},
             {"kind": "entity_ref", "ref": f"entity-ref-fake-{smoke_id}"}
@@ -688,18 +689,26 @@ main() {
   local submit_payload="$out_dir/submit_artifact_request.json"
   local submit_response="$out_dir/submit_artifact_response.json"
   write_submit_payload "$submit_payload" "$job_ref"
-  post_json_expect_status "$base_url/api/v0/domain-work" "$submit_payload" "$submit_response" "400"
-  local submit_code
-  submit_code="$(json_value "$submit_response" '.errores_publicos[0].code')"
-  if [[ "$submit_code" != "domain_work_submitter_no_disponible" ]]; then
-    echo "submit_artifact no fallo por frontera neutral: code=$submit_code" >&2
+  post_json "$base_url/api/v0/domain-work" "$submit_payload" "$submit_response"
+  local submit_estado submit_status submit_job_ref submit_receipt_ref
+  submit_estado="$(json_value "$submit_response" '.estado')"
+  submit_status="$(json_value "$submit_response" '.receipt.status')"
+  submit_job_ref="$(json_value "$submit_response" '.receipt.job_ref')"
+  submit_receipt_ref="$(json_value "$submit_response" '.receipt.receipt_ref')"
+  if [[ "$submit_estado" != "ok" || "$submit_status" != "accepted" || "$submit_job_ref" != "$job_ref" || -z "$submit_receipt_ref" ]]; then
+    echo "submit_artifact file-based invalido" >&2
     cat "$submit_response" >&2
     exit 1
   fi
 
   local snapshot="$state_dir/domain-work-jobs/domain_work_jobs_v0.json"
+  local artifact_snapshot="$state_dir/domain-work-jobs/domain_work_artifacts_v0.json"
   if [[ ! -s "$snapshot" ]]; then
     echo "snapshot domain-work no creado: $snapshot" >&2
+    exit 1
+  fi
+  if [[ ! -s "$artifact_snapshot" ]]; then
+    echo "snapshot domain-work artifacts no creado: $artifact_snapshot" >&2
     exit 1
   fi
   local snapshot_count snapshot_run_ref
@@ -708,6 +717,13 @@ main() {
   if [[ "$snapshot_count" -lt 1 || "$snapshot_run_ref" != "run-ref-fake-$smoke_id" ]]; then
     echo "snapshot no conserva job/refs esperados" >&2
     cat "$snapshot" >&2
+    exit 1
+  fi
+  local artifact_snapshot_count
+  artifact_snapshot_count="$(jq '[.. | objects | select(.artifact_ref? == "artifact-ref-fake-'"$smoke_id"'")] | length' "$artifact_snapshot")"
+  if [[ "$artifact_snapshot_count" -lt 1 ]]; then
+    echo "snapshot artifact no conserva artifact_ref esperado" >&2
+    cat "$artifact_snapshot" >&2
     exit 1
   fi
 
