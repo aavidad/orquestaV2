@@ -114,10 +114,11 @@ func (r GeminiExecResolverV0) materializeFilesV0(
 		}
 	}
 	promptHints := append([]string(nil), r.profile.PromptHints...)
-	promptHints = append(promptHints, geminiRuntimeWorkDirPromptHintV0(r.profile))
-	prompt := BuildGeminiAgentPromptWithControlFilesV0(
+	promptHints = append(promptHints, geminiRuntimeWorkDirPromptHintForLocaleV0(r.profile))
+	prompt := BuildGeminiAgentPromptWithLocaleAndControlFilesV0(
 		spec.AgentPacket,
 		promptHints,
+		r.profile.PromptLocale,
 		GeminiControlFilesV0{
 			PacketPath:          packetPath,
 			AckPath:             filepath.Join(r.profile.RuntimeWorkDir, GeminiAgentAckFileNameV0),
@@ -148,6 +149,20 @@ func geminiRuntimeWorkDirPromptHintV0(profile GeminiConnectorProfileV0) string {
 		return "runtime_work_dir es directorio de control dentro del proyecto; no incluyas sus ficheros en ACK.files ni en artefactos de producto."
 	default:
 		return "runtime_work_dir debe usarse solo para ficheros de control del agente."
+	}
+}
+
+func geminiRuntimeWorkDirPromptHintForLocaleV0(profile GeminiConnectorProfileV0) string {
+	if !geminiGoalPromptEnglishLocaleV0(profile.PromptLocale) {
+		return geminiRuntimeWorkDirPromptHintV0(profile)
+	}
+	switch strings.TrimSpace(profile.RuntimeWorkDirPlacement) {
+	case GeminiRuntimeWorkDirExternalRootV0:
+		return "runtime_work_dir is an external writable root for control only; do not create product docs/code there or treat it as the product workdir."
+	case GeminiRuntimeWorkDirInsideProjectV0:
+		return "runtime_work_dir is a control directory inside the project; do not include its files in ACK.files or product artifacts."
+	default:
+		return "runtime_work_dir must be used only for agent control files."
 	}
 }
 

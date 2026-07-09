@@ -18,7 +18,15 @@ type ClaudeControlFilesV0 struct {
 }
 
 func BuildClaudeAgentPromptV0(packet orquestaruntime.AgentStartPacketV0, hints []string) string {
-	return BuildClaudeAgentPromptWithControlFilesV0(packet, hints, ClaudeControlFilesV0{
+	return BuildClaudeAgentPromptWithLocaleV0(packet, hints, "")
+}
+
+func BuildClaudeAgentPromptWithLocaleV0(
+	packet orquestaruntime.AgentStartPacketV0,
+	hints []string,
+	locale string,
+) string {
+	return BuildClaudeAgentPromptWithLocaleAndControlFilesV0(packet, hints, locale, ClaudeControlFilesV0{
 		PacketPath: ClaudeAgentPacketFileNameV0,
 		AckPath:    ClaudeAgentAckFileNameV0,
 	})
@@ -29,11 +37,29 @@ func BuildClaudeAgentPromptWithControlFilesV0(
 	hints []string,
 	control ClaudeControlFilesV0,
 ) string {
+	return BuildClaudeAgentPromptWithLocaleAndControlFilesV0(packet, hints, "", control)
+}
+
+func BuildClaudeAgentPromptWithLocaleAndControlFilesV0(
+	packet orquestaruntime.AgentStartPacketV0,
+	hints []string,
+	locale string,
+	control ClaudeControlFilesV0,
+) string {
 	packetPath := cleanClaudeControlPathV0(control.PacketPath, ClaudeAgentPacketFileNameV0)
 	ackPath := cleanClaudeControlPathV0(control.AckPath, ClaudeAgentAckFileNameV0)
 	decisionPath := cleanClaudeControlPathV0(control.DecisionPath, "")
 	shutdownRequestPath := cleanClaudeControlPathV0(control.ShutdownRequestPath, "")
 	shutdownAckPath := cleanClaudeControlPathV0(control.ShutdownAckPath, "")
+	if claudeGoalPromptEnglishLocaleV0(locale) {
+		return buildClaudeAgentPromptEnglishV0(packet, hints, locale, ClaudeControlFilesV0{
+			PacketPath:          packetPath,
+			AckPath:             ackPath,
+			DecisionPath:        decisionPath,
+			ShutdownRequestPath: shutdownRequestPath,
+			ShutdownAckPath:     shutdownAckPath,
+		})
+	}
 	var b strings.Builder
 	b.WriteString("Eres un agente externo gobernado por OrquestaV2.\n")
 	b.WriteString("Lee ")
@@ -100,7 +126,7 @@ func BuildClaudeAgentPromptWithControlFilesV0(
 	b.WriteString("En modo estricto, anade test_receipts por cada test pasado con comando exacto, status passed, exit_code 0, evidence_refs compactas, occurred_at, sequence y output_redacted=true.\n")
 	b.WriteString("No incluyas HOME real, tokens, secretos, prompts, completions ni transcripts completos.\n")
 	b.WriteString("files y tests deben ser arrays de strings; no metas stdout/stderr crudo en test_receipts ni notes.\n\n")
-	writeClaudeDurableResultProtocolV0(&b)
+	writeClaudeDurableResultProtocolForLocaleV0(&b, locale)
 	b.WriteString("ACK esperado:\n")
 	b.WriteString("{\"schema_version\":\"orquesta_agent_ack.v0\",\"request_id\":\"")
 	b.WriteString(packet.RequestID)
@@ -144,6 +170,127 @@ func BuildClaudeAgentPromptWithControlFilesV0(
 	return b.String()
 }
 
+func buildClaudeAgentPromptEnglishV0(
+	packet orquestaruntime.AgentStartPacketV0,
+	hints []string,
+	locale string,
+	control ClaudeControlFilesV0,
+) string {
+	packetPath := control.PacketPath
+	ackPath := control.AckPath
+	decisionPath := control.DecisionPath
+	shutdownRequestPath := control.ShutdownRequestPath
+	shutdownAckPath := control.ShutdownAckPath
+	var b strings.Builder
+	b.WriteString("You are an external agent governed by OrquestaV2.\n")
+	b.WriteString("Read ")
+	b.WriteString(packetPath)
+	b.WriteString(" before touching files.\n")
+	b.WriteString("Safety: do not delete, move files outside scope, truncate existing files, or leave the project workdir.\n")
+	b.WriteString("If part of the task needs an unauthorized external effect, keep all possible progress inside the workdir and record the limitation as a note or derived task in the ACK.\n")
+	writeClaudeWriteSetPrecedenceProtocolForLocaleV0(&b, packet, locale)
+	b.WriteString("Write-set paths are relative to the project workdir, not to the control directory or .orquesta-runtime; create docs/code in the project.\n")
+	b.WriteString("Allowed control files outside the write-set: ")
+	b.WriteString(ackPath)
+	if decisionPath != "" {
+		b.WriteString(", ")
+		b.WriteString(decisionPath)
+	}
+	if shutdownRequestPath != "" && shutdownAckPath != "" {
+		b.WriteString(", ")
+		b.WriteString(shutdownRequestPath)
+		b.WriteString(" and ")
+		b.WriteString(shutdownAckPath)
+	}
+	b.WriteString(".\n")
+	b.WriteString("Keep every Go file below 300 lines; split responsibilities if a file approaches that limit.\n")
+	b.WriteString("Compact communication: enable $caveman full if available; otherwise use an equivalent compact style.\n")
+	b.WriteString("MANDATORY FINAL STEP: before ending the turn, ALWAYS write the control ACK ")
+	b.WriteString(packet.DeliveryRefs.AckRef)
+	b.WriteString(" with the real status (completed/blocked/failed), touched write-set files and test evidence. ")
+	b.WriteString("Do not omit this step or leave it for later: even if the work is already on disk, without ACK Orquesta does not receive causal acknowledgement. ")
+	b.WriteString("Write the ACK as the last action, not before finishing the work.\n")
+	b.WriteString("If context is missing, do not invent: use what is available, save progress and record the gap as a review note in the ACK.\n")
+	if claudePacketHasRequiredTruncatedContextV0(packet) {
+		b.WriteString("TRUNCATED CONTEXT: agent_packet.context contains required=true and truncated=true entries. Work with refs/external materialization when available; otherwise save partial progress and add contexto_truncado_pendiente or contexto_truncado_resuelto in notes.\n")
+	}
+	if claudePacketHasRequiredRefOnlyContextV0(packet) {
+		b.WriteString("REQUIRED REF_ONLY CONTEXT: agent_packet.context contains required=true and mode=ref_only entries. Follow required_ref_action when useful; if that is not enough, save partial progress and add contexto_ref_only_pendiente or contexto_ref_only_resuelto in notes.\n")
+	}
+	b.WriteString("Apply hexagonal architecture and i18n if the task generates an app or UI.\n")
+	b.WriteString("Concrete persistence belongs only to the generated app if the task asks for it; Orquesta does not use DB by default.\n")
+	b.WriteString("For OPES reviews or agent_review_report/agent_pair_review_report/director_review_matrix work, create a product file inside the write-set with structured JSON or Markdown. It must include verdict, findings, risks, causal rework, reuse of recoverable material and decision.\n")
+	b.WriteString("Run required tests listed in the packet when reasonable for the workdir.\n")
+	b.WriteString("Do not use git status as a mandatory criterion; if the workdir is not a git repository, ignore that check.\n")
+	b.WriteString("If required tests pass and write-set files exist, write ACK status completed even if git does not apply.\n")
+	b.WriteString("Do not print diffs or paste complete artifacts; validate compactly, write agent_ack.json and finish with the ACK line.\n")
+	writeClaudeShutdownProtocolForLocaleV0(&b, shutdownRequestPath, shutdownAckPath, locale)
+	b.WriteString("When finished, write ")
+	b.WriteString(ackPath)
+	b.WriteString(" with schema orquesta_agent_ack.v0. Legacy alias accepted for compatibility: codex_agent_ack.v0.\n\n")
+	writeClaudeAckWriteProtocolForLocaleV0(&b, ackPath, locale)
+	if decisionPath != "" {
+		b.WriteString("decision_path: ")
+		b.WriteString(decisionPath)
+		b.WriteString(" only for executable director decisions; it does not belong to the write-set.\n")
+		b.WriteString("It is mandatory only if the objective or closure criteria ask for it.\n")
+		if claudePacketTargetsDirectorV0(packet) {
+			b.WriteString("As a director target_module, write decision_path with the executable decisions you can; if incomplete, keep the diagnostic and leave follow-up in ACK.\n")
+		}
+		b.WriteString("If you write decision_path, first complete requested write-set files, then write ACK and stop; do not keep thinking or expanding scope.\n")
+	}
+	b.WriteString("In ACK, files must list real product file paths touched, not globs, directories or the full write-set; example cmd/server/main.go, not cmd/server/**.\n")
+	b.WriteString("Do not include control files in ACK.files: agent_ack.json, director_decisions.json, agent_packet.json, prompts, logs or checkpoints.\n")
+	b.WriteString("If you detect that a needed file is outside the write-set, do not edit it; continue with allowed scope and record the missing file as a note or derived task.\n")
+	b.WriteString("In ACK, tests must list only passed tests; each passed required test must appear exactly as it appears in the packet.\n")
+	b.WriteString("If a required test fails, keep evidence in test_receipts/notes and do not declare it passed.\n")
+	b.WriteString("In strict mode, add test_receipts for each passed test with exact command, status passed, exit_code 0, compact evidence_refs, occurred_at, sequence and output_redacted=true.\n")
+	b.WriteString("Do not include real HOME, tokens, secrets, prompts, completions or full transcripts.\n")
+	b.WriteString("files and tests must be string arrays; do not put raw stdout/stderr in test_receipts or notes.\n\n")
+	writeClaudeDurableResultProtocolForLocaleV0(&b, locale)
+	b.WriteString("Expected ACK:\n")
+	b.WriteString("{\"schema_version\":\"orquesta_agent_ack.v0\",\"request_id\":\"")
+	b.WriteString(packet.RequestID)
+	b.WriteString("\",\"correlation_id\":\"")
+	b.WriteString(packet.CorrelationID)
+	b.WriteString("\",\"ack_ref\":\"")
+	b.WriteString(packet.DeliveryRefs.AckRef)
+	b.WriteString("\",\"target_module\":\"")
+	b.WriteString(packet.TargetModule)
+	b.WriteString("\",\"task_ref\":\"")
+	b.WriteString(packet.Task.TaskRef)
+	b.WriteString("\",\"status\":\"completed\",\"files\":")
+	b.WriteString(claudePromptJSONStringArrayV0(claudePromptACKFilesV0(packet)))
+	b.WriteString(",\"tests\":")
+	b.WriteString(claudePromptJSONStringArrayV0(packet.Task.RequiredTests))
+	if len(claudeCompactPromptValuesV0(packet.Task.RequiredTests)) > 0 {
+		b.WriteString(",\"test_receipts\":")
+		b.WriteString(claudePromptACKTestReceiptsJSONV0(packet.Task.RequiredTests))
+	}
+	b.WriteString(",\"notes\":")
+	b.WriteString(claudePromptJSONStringArrayV0(claudePromptACKNotesV0(packet)))
+	b.WriteString("}\n\n")
+	b.WriteString("Title: ")
+	b.WriteString(packet.Task.Title)
+	b.WriteString("\nObjective: ")
+	b.WriteString(packet.Task.Objective)
+	b.WriteString("\n")
+	writeClaudePromptListSectionForLocaleV0(&b, "Allowed write-set:", packet.Task.WriteSet, locale)
+	writeClaudePromptListSectionForLocaleV0(&b, "Required tests:", packet.Task.RequiredTests, locale)
+	if len(hints) > 0 {
+		b.WriteString("\nConnector operational notes:\n")
+		for _, hint := range hints {
+			if strings.TrimSpace(hint) == "" {
+				continue
+			}
+			b.WriteString("- ")
+			b.WriteString(strings.TrimSpace(hint))
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
 func writeClaudeDurableResultProtocolV0(b *strings.Builder) {
 	writeClaudeDurableResultProtocolForLocaleV0(b, "")
 }
@@ -174,6 +321,24 @@ func writeClaudeWriteSetPrecedenceProtocolV0(
 	b *strings.Builder,
 	packet orquestaruntime.AgentStartPacketV0,
 ) {
+	writeClaudeWriteSetPrecedenceProtocolForLocaleV0(b, packet, "")
+}
+
+func writeClaudeWriteSetPrecedenceProtocolForLocaleV0(
+	b *strings.Builder,
+	packet orquestaruntime.AgentStartPacketV0,
+	locale string,
+) {
+	if claudeGoalPromptEnglishLocaleV0(locale) {
+		if orquestaruntime.AgentStartPacketWriteSetClosedV0(packet) {
+			b.WriteString("Use the packet write-set as write scope; if it contains '.', scope is the whole project repo, but deleting files or leaving the workdir is still forbidden.\n")
+			b.WriteString("If scope is missing, do not edit outside it: keep useful progress inside the write-set and record the missing scope as a review note or derived task.\n")
+			b.WriteString("The only exception is control files declared by Orquesta.\n")
+			return
+		}
+		b.WriteString("LEGACY COMPATIBILITY MODE: use the write-set as primary scope and do not expand scope when there is causal, safety or external-effect risk.\n")
+		return
+	}
 	if orquestaruntime.AgentStartPacketWriteSetClosedV0(packet) {
 		b.WriteString("Usa el write-set del paquete como alcance de escritura; si contiene '.', el alcance es todo el repo del proyecto, pero sigue prohibido borrar o salir del workdir.\n")
 		b.WriteString("Si falta alcance, no edites fuera: conserva lo util dentro del write-set y registra el faltante como nota de revision o tarea derivada.\n")
@@ -188,7 +353,17 @@ func claudePacketTargetsDirectorV0(packet orquestaruntime.AgentStartPacketV0) bo
 }
 
 func writeClaudeAckWriteProtocolV0(b *strings.Builder, ackPath string) {
+	writeClaudeAckWriteProtocolForLocaleV0(b, ackPath, "")
+}
+
+func writeClaudeAckWriteProtocolForLocaleV0(b *strings.Builder, ackPath string, locale string) {
 	if !filepath.IsAbs(ackPath) {
+		return
+	}
+	if claudeGoalPromptEnglishLocaleV0(locale) {
+		b.WriteString("ACK PROTOCOL OUTSIDE PROJECT: ")
+		b.WriteString(ackPath)
+		b.WriteString(" is a control file, not a project artifact. Write it from its control directory and do not create product there.\n\n")
 		return
 	}
 	b.WriteString("PROTOCOLO ACK FUERA DEL PROYECTO: ")
@@ -197,7 +372,21 @@ func writeClaudeAckWriteProtocolV0(b *strings.Builder, ackPath string) {
 }
 
 func writeClaudeShutdownProtocolV0(b *strings.Builder, requestPath string, ackPath string) {
+	writeClaudeShutdownProtocolForLocaleV0(b, requestPath, ackPath, "")
+}
+
+func writeClaudeShutdownProtocolForLocaleV0(b *strings.Builder, requestPath string, ackPath string, locale string) {
 	if requestPath == "" || ackPath == "" {
+		return
+	}
+	if claudeGoalPromptEnglishLocaleV0(locale) {
+		b.WriteString("SHUTDOWN CHECKPOINT: before each edit or test block, check whether ")
+		b.WriteString(requestPath)
+		b.WriteString(" exists.\n")
+		b.WriteString("If it exists, read that JSON, stop at a consistent point, do not expand scope and write ")
+		b.WriteString(ackPath)
+		b.WriteString(" with schema codex_shutdown_checkpoint_ack.v0, run_ref, agent_ref, checkpoint_ref and status checkpoint_ready.\n")
+		b.WriteString("After the checkpoint ACK, do not continue long-running work; finish with compact output.\n")
 		return
 	}
 	b.WriteString("CHECKPOINT DE APAGADO: antes de cada bloque de edicion o prueba comprueba si existe ")
@@ -261,11 +450,19 @@ func claudePromptACKFileLooksConcreteV0(value string) bool {
 }
 
 func writeClaudePromptListSectionV0(b *strings.Builder, title string, values []string) {
+	writeClaudePromptListSectionForLocaleV0(b, title, values, "")
+}
+
+func writeClaudePromptListSectionForLocaleV0(b *strings.Builder, title string, values []string, locale string) {
 	b.WriteString("\n")
 	b.WriteString(title)
 	b.WriteString("\n")
 	values = claudeCompactPromptValuesV0(values)
 	if len(values) == 0 {
+		if claudeGoalPromptEnglishLocaleV0(locale) {
+			b.WriteString("- <none>\n")
+			return
+		}
 		b.WriteString("- <ninguno>\n")
 		return
 	}

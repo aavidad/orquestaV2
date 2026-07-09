@@ -104,6 +104,57 @@ func TestClaudeExecResolverV0PromptUsaControlFilesOperativos(t *testing.T) {
 	}
 }
 
+func TestClaudeExecResolverV0PromptUsaPromptLocaleIngles(t *testing.T) {
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "runtime")
+	resolver := NewClaudeExecResolverV0(ClaudeConnectorProfileV0{
+		SchemaVersion:  ClaudeConnectorProfileSchemaVersionV0,
+		OptIn:          true,
+		CommandPath:    filepath.Join(root, "claude"),
+		ProjectWorkDir: filepath.Join(root, "project"),
+		RuntimeWorkDir: runtimeDir,
+		PermissionMode: "dontAsk",
+		OutputFormat:   "text",
+		PromptLocale:   "en-US",
+	})
+
+	_, issues := resolver.ResolveExternalAgentProcessCommandV0(
+		context.Background(),
+		claudeSpecForTestV0(),
+	)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	prompt := mustReadClaudeFileForTestV0(t, filepath.Join(runtimeDir, ClaudeAgentPromptFileNameV0))
+	for _, want := range []string{
+		"You are an external agent governed by OrquestaV2.",
+		"Read " + filepath.Join(runtimeDir, ClaudeAgentPacketFileNameV0),
+		"Allowed control files outside the write-set:",
+		"MANDATORY FINAL STEP",
+		"NEUTRAL DURABLE RESULT",
+		"Expected ACK:",
+		"Title: Revisar paquete",
+		"Objective: Crear informe de revision",
+		"Allowed write-set:",
+		"Required tests:",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt no contiene %q:\n%s", want, prompt)
+		}
+	}
+	for _, reject := range []string{
+		"Eres un agente externo gobernado",
+		"RESULTADO DURABLE NEUTRAL",
+		"Titulo:",
+		"Objetivo:",
+		"Write-set permitido:",
+	} {
+		if strings.Contains(prompt, reject) {
+			t.Fatalf("prompt contiene texto no localizado %q:\n%s", reject, prompt)
+		}
+	}
+}
+
 func claudeSpecForTestV0() orquestaruntime.ExternalAgentLaunchSpecV0 {
 	return orquestaruntime.ExternalAgentLaunchSpecV0{
 		SchemaVersion: orquestaruntime.ExternalAgentLaunchSpecSchemaVersionV0,

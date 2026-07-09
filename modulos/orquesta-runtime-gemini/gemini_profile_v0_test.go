@@ -22,6 +22,48 @@ func TestValidateGeminiConnectorProfileV0AceptaOptInSeguro(t *testing.T) {
 	}
 }
 
+func TestValidateGeminiConnectorProfileV0AceptaPromptLocale(t *testing.T) {
+	root := t.TempDir()
+	profile := GeminiConnectorProfileV0{
+		SchemaVersion:  GeminiConnectorProfileSchemaVersionV0,
+		OptIn:          true,
+		CommandPath:    filepath.Join(root, "gemini"),
+		ProjectWorkDir: filepath.Join(root, "project"),
+		RuntimeWorkDir: filepath.Join(root, "runtime"),
+		PromptLocale:   "en-US",
+	}
+
+	if issues := ValidateGeminiConnectorProfileV0(profile); len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+}
+
+func TestValidateGeminiConnectorProfileV0RechazaPromptLocaleInseguro(t *testing.T) {
+	root := t.TempDir()
+	profile := GeminiConnectorProfileV0{
+		SchemaVersion:  GeminiConnectorProfileSchemaVersionV0,
+		OptIn:          true,
+		CommandPath:    filepath.Join(root, "gemini"),
+		ProjectWorkDir: filepath.Join(root, "project"),
+		RuntimeWorkDir: filepath.Join(root, "runtime"),
+		PromptLocale:   "en-US\nunsafe-prompt",
+	}
+
+	issues := ValidateGeminiConnectorProfileV0(profile)
+	if len(issues) == 0 {
+		t.Fatalf("esperaba issue")
+	}
+	found := false
+	for _, issue := range issues {
+		if string(issue.Code) == string(GeminiConnectorValueInvalidV0) && issue.Field == "prompt_locale" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("issues=%+v", issues)
+	}
+}
+
 func TestValidateGeminiConnectorProfileV0RechazaPromptEnExtraArgs(t *testing.T) {
 	root := t.TempDir()
 	profile := GeminiConnectorProfileV0{

@@ -112,10 +112,11 @@ func (r ClaudeExecResolverV0) materializeFilesV0(
 		}
 	}
 	promptHints := append([]string(nil), r.profile.PromptHints...)
-	promptHints = append(promptHints, claudeRuntimeWorkDirPromptHintV0(r.profile))
-	prompt := BuildClaudeAgentPromptWithControlFilesV0(
+	promptHints = append(promptHints, claudeRuntimeWorkDirPromptHintForLocaleV0(r.profile))
+	prompt := BuildClaudeAgentPromptWithLocaleAndControlFilesV0(
 		spec.AgentPacket,
 		promptHints,
+		r.profile.PromptLocale,
 		ClaudeControlFilesV0{
 			PacketPath:          packetPath,
 			AckPath:             filepath.Join(r.profile.RuntimeWorkDir, ClaudeAgentAckFileNameV0),
@@ -146,6 +147,20 @@ func claudeRuntimeWorkDirPromptHintV0(profile ClaudeConnectorProfileV0) string {
 		return "runtime_work_dir es directorio de control dentro del proyecto; no incluyas sus ficheros en ACK.files ni en artefactos de producto."
 	default:
 		return "runtime_work_dir debe usarse solo para ficheros de control del agente."
+	}
+}
+
+func claudeRuntimeWorkDirPromptHintForLocaleV0(profile ClaudeConnectorProfileV0) string {
+	if !claudeGoalPromptEnglishLocaleV0(profile.PromptLocale) {
+		return claudeRuntimeWorkDirPromptHintV0(profile)
+	}
+	switch strings.TrimSpace(profile.RuntimeWorkDirPlacement) {
+	case ClaudeRuntimeWorkDirExternalRootV0:
+		return "runtime_work_dir is an external writable root for control only; do not create product docs/code there or treat it as the product workdir."
+	case ClaudeRuntimeWorkDirInsideProjectV0:
+		return "runtime_work_dir is a control directory inside the project; do not include its files in ACK.files or product artifacts."
+	default:
+		return "runtime_work_dir must be used only for agent control files."
 	}
 }
 

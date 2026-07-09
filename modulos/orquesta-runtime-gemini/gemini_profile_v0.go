@@ -50,6 +50,7 @@ type GeminiConnectorProfileV0 struct {
 	Model                   string   `json:"model,omitempty"`
 	ApprovalMode            string   `json:"approval_mode,omitempty"`
 	OutputFormat            string   `json:"output_format,omitempty"`
+	PromptLocale            string   `json:"prompt_locale,omitempty"`
 	ExtraArgs               []string `json:"extra_args,omitempty"`
 	PromptHints             []string `json:"prompt_hints,omitempty"`
 }
@@ -74,6 +75,7 @@ func ValidateGeminiConnectorProfileV0(
 	v.optionalSafeValue("model", profile.Model)
 	v.optionalSafeValue("approval_mode", profile.ApprovalMode)
 	v.optionalSafeValue("output_format", profile.OutputFormat)
+	v.optionalSafeValue("prompt_locale", profile.PromptLocale)
 	for i, value := range profile.ExtraArgs {
 		field := fmt.Sprintf("extra_args[%d]", i)
 		v.optionalSafeValue(field, value)

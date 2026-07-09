@@ -4614,3 +4614,46 @@ proveedor los publica. Test:
 
 Residual: falta un launcher de proveedor/agente que ejecute cada brazo A/B y
 publique tokens reales. No se activa ninguna regla nueva global en este corte.
+
+## Codex local 2026-07-09: BUG-188 ampliado a prompts legacy Claude/Gemini
+
+Hallazgo:
+
+- El cierre anterior de `BUG-ORQ-20260704-188` cubria goal-first
+  Claude/Gemini, pero los prompts legacy de agente (`Build*AgentPrompt*`)
+  seguian monolingues en español.
+- El stack ya tenia `PromptLocale` en config y `goal_backend.prompt_locale`,
+  pero los perfiles legacy no transportaban ese campo y los resolvers siempre
+  llamaban builders sin locale.
+
+Cierre local aplicado:
+
+- `ClaudeConnectorProfileV0` y `GeminiConnectorProfileV0` ganan
+  `prompt_locale` validado como valor seguro.
+- Builders nuevos `BuildClaudeAgentPromptWithLocaleV0`,
+  `BuildClaudeAgentPromptWithLocaleAndControlFilesV0`,
+  `BuildGeminiAgentPromptWithLocaleV0` y
+  `BuildGeminiAgentPromptWithLocaleAndControlFilesV0`.
+- Default compatible: locale vacio sigue generando el prompt español.
+- Locale `en-*`: protocolo operativo legacy, control files, ACK, shutdown,
+  durable result, secciones de titulo/objetivo/write-set/tests y notas del
+  conector salen en ingles; los codigos de contrato se mantienen iguales.
+- `ClaudeGoalProcessBackendV0` y `GeminiGoalProcessBackendV0` heredan
+  `PromptLocale` desde `Control.PromptLocale` si el perfil no lo trae.
+- `cmd/orquesta-server` propaga `goal_backend.prompt_locale` tambien al perfil
+  process.
+- `orquesta-app-codex-stack` propaga `PromptLocale` a perfiles reales
+  Claude/Gemini para lanzamientos legacy por proveedor.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-runtime-claude -run 'Test(ValidateClaudeConnectorProfileV0|ClaudeExecResolverV0|BuildClaudeAgentPrompt)'`
+- `go test -count=1 ./modulos/orquesta-runtime-gemini -run 'Test(ValidateGeminiConnectorProfileV0|GeminiExecResolverV0|BuildGeminiAgentPrompt)'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestProviderLaunchSpecResolverV0'`
+- `go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-runtime-gemini ./modulos/orquesta-app-codex-stack`
+- `go test -count=1 ./cmd/orquesta-server -run 'Test(ServerGoalBackendFromEnvV0|ClaudeRuntimeConfigV0|GeminiRuntimeConfigV0)'`
+
+Residual para Claude:
+
+- Falta smoke real opt-in con proveedor verificando idioma efectivo en sesion
+  viva. No se lanza localmente porque depende de credenciales/cuota/modelo.

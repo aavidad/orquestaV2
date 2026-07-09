@@ -2612,7 +2612,7 @@ regla OPES queda inactiva hasta configuracion explicita. Evidencia:
 `GOFLAGS=-buildvcs=false go test -count=1 ./cmd/orquesta-server -run 'TestExternalWorkRunProjectWorkDirGuardConfigV0|TestOPESTopicRegistryConfig|TestOPESTopicRegistryEffectiveConfig|TestServerConfigFromEnvV0ContextoOPES|TestServerConfigFromEnvV0PermiteOPES'`
 y `GOFLAGS=-buildvcs=false go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestExternalWorkRunProjectWorkDirGuard'`.
 
-BUG nuevo `BUG-ORQ-20260704-188` (cerrado parcial goal-first):
+BUG nuevo `BUG-ORQ-20260704-188` (cerrado ampliado):
 Los prompts goal-first de Claude/Gemini estaban fijados en español dentro del
 adaptador runtime, sin forma de elegir idioma desde composicion. Causa
 estructural: el contrato i18n existia para docs/errores, pero el adaptador de
@@ -2628,9 +2628,17 @@ verde, `scripts/orquesta_metricas_deuda.sh --json` reporta
 `env_vars_orquesta=512` sin aumento por BUG-188, y
 `scripts/orquesta_auditoria_codigo.sh` mantiene
 `deadcode_candidates=1228` / `helper_duplicate_definitions=288`.
-Residual: prompts legacy de agente Claude/Gemini (`Build*AgentPrompt*`) siguen
-en español y deben tratarse en otra fila si se exige i18n transversal fuera de
-goal-first.
+Ampliacion Codex 2026-07-09: los prompts legacy de agente Claude/Gemini
+(`Build*AgentPrompt*`) aceptan `prompt_locale` por perfil, conservan default
+español y generan protocolo operativo en ingles para `en-*`. El locale se
+propaga desde `goal_backend.prompt_locale` a backends `process` y desde la
+composicion `orquesta-app-codex-stack` a los perfiles reales Gemini/Claude.
+Evidencia: `go test -count=1 ./modulos/orquesta-runtime-claude
+./modulos/orquesta-runtime-gemini ./modulos/orquesta-app-codex-stack` y
+`go test -count=1 ./cmd/orquesta-server -run
+'Test(ServerGoalBackendFromEnvV0|ClaudeRuntimeConfigV0|GeminiRuntimeConfigV0)'`.
+Residual: no hay smoke real de proveedor por idioma; queda como validacion
+operativa opt-in cuando haya credenciales/cuota.
 
 BUG nuevo `BUG-ORQ-20260704-189` (cerrado):
 El smoke REST `scripts/smoke_orquesta_server_rest_director.sh` fallaba en

@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -134,6 +135,58 @@ func TestProviderLaunchSpecResolverV0RuteaVotoClaudeAClaude(t *testing.T) {
 	}
 	if !strings.HasPrefix(req.CommandPath, claudeRuntimeDir) {
 		t.Fatalf("command path=%s want under %s", req.CommandPath, claudeRuntimeDir)
+	}
+}
+
+func TestProviderLaunchSpecResolverV0PropagaPromptLocaleAProveedores(t *testing.T) {
+	geminiResolver, geminiInbound, geminiRuntimeDir := geminiProviderResolverForTestV0(
+		t,
+		"generate_visual_asset",
+	)
+	geminiResolver.Gemini.Config.PromptLocale = "en-US"
+	geminiResolution, err := geminiResolver.ResolveExternalAgentLaunchSpecV0(context.Background(), geminiInbound)
+	if err != nil {
+		t.Fatalf("ResolveExternalAgentLaunchSpecV0 gemini: %v", err)
+	}
+	geminiReq, issues := geminiResolution.CommandResolver.ResolveExternalAgentProcessCommandV0(
+		context.Background(),
+		geminiResolution.Spec,
+	)
+	if len(issues) != 0 {
+		t.Fatalf("gemini issues=%+v", issues)
+	}
+	if !strings.HasPrefix(geminiReq.CommandPath, geminiRuntimeDir) {
+		t.Fatalf("gemini command path=%s want under %s", geminiReq.CommandPath, geminiRuntimeDir)
+	}
+	geminiPrompt := mustReadProviderResolverFileForTestV0(t, filepath.Join(filepath.Dir(geminiReq.CommandPath), "agent_prompt.txt"))
+	if !strings.Contains(geminiPrompt, "You are an external agent governed by OrquestaV2.") ||
+		strings.Contains(geminiPrompt, "Eres un agente externo gobernado") {
+		t.Fatalf("prompt gemini no localizado:\n%s", geminiPrompt)
+	}
+
+	claudeResolver, claudeInbound, _, claudeRuntimeDir := providerResolverForTestV0(
+		t,
+		"review_claude",
+	)
+	claudeResolver.Claude.Config.PromptLocale = "en-US"
+	claudeResolution, err := claudeResolver.ResolveExternalAgentLaunchSpecV0(context.Background(), claudeInbound)
+	if err != nil {
+		t.Fatalf("ResolveExternalAgentLaunchSpecV0 claude: %v", err)
+	}
+	claudeReq, issues := claudeResolution.CommandResolver.ResolveExternalAgentProcessCommandV0(
+		context.Background(),
+		claudeResolution.Spec,
+	)
+	if len(issues) != 0 {
+		t.Fatalf("claude issues=%+v", issues)
+	}
+	if !strings.HasPrefix(claudeReq.CommandPath, claudeRuntimeDir) {
+		t.Fatalf("claude command path=%s want under %s", claudeReq.CommandPath, claudeRuntimeDir)
+	}
+	claudePrompt := mustReadProviderResolverFileForTestV0(t, filepath.Join(filepath.Dir(claudeReq.CommandPath), "agent_prompt.txt"))
+	if !strings.Contains(claudePrompt, "You are an external agent governed by OrquestaV2.") ||
+		strings.Contains(claudePrompt, "Eres un agente externo gobernado") {
+		t.Fatalf("prompt claude no localizado:\n%s", claudePrompt)
 	}
 }
 
@@ -319,4 +372,13 @@ func orquestaruntimecodexdeliveryRequestWithConnectorForTestV0(connectorRef stri
 			ConnectorRef: connectorRef,
 		},
 	}
+}
+
+func mustReadProviderResolverFileForTestV0(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	return string(data)
 }

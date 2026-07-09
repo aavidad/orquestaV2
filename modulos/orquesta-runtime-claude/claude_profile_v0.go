@@ -50,6 +50,7 @@ type ClaudeConnectorProfileV0 struct {
 	PermissionMode          string   `json:"permission_mode,omitempty"`
 	OutputFormat            string   `json:"output_format,omitempty"`
 	Effort                  string   `json:"effort,omitempty"`
+	PromptLocale            string   `json:"prompt_locale,omitempty"`
 	ExtraArgs               []string `json:"extra_args,omitempty"`
 	PromptHints             []string `json:"prompt_hints,omitempty"`
 }
@@ -75,6 +76,7 @@ func ValidateClaudeConnectorProfileV0(
 	v.optionalSafeValue("permission_mode", profile.PermissionMode)
 	v.optionalSafeValue("output_format", profile.OutputFormat)
 	v.optionalSafeValue("effort", profile.Effort)
+	v.optionalSafeValue("prompt_locale", profile.PromptLocale)
 	for i, value := range profile.ExtraArgs {
 		field := fmt.Sprintf("extra_args[%d]", i)
 		v.optionalSafeValue(field, value)

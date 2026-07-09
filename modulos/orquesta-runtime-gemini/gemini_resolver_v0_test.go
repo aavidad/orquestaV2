@@ -110,6 +110,58 @@ func TestGeminiExecResolverV0PromptUsaControlFilesOperativos(t *testing.T) {
 	}
 }
 
+func TestGeminiExecResolverV0PromptUsaPromptLocaleIngles(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	runtimeDir := filepath.Join(root, "runtime")
+	profile := GeminiConnectorProfileV0{
+		SchemaVersion:  GeminiConnectorProfileSchemaVersionV0,
+		OptIn:          true,
+		CommandPath:    filepath.Join(root, "gemini"),
+		ProjectWorkDir: projectDir,
+		RuntimeWorkDir: runtimeDir,
+		Model:          "gemini-2.5-pro",
+		ApprovalMode:   "auto_edit",
+		PromptLocale:   "en-US",
+	}
+
+	_, issues := NewGeminiExecResolverV0(profile).ResolveExternalAgentProcessCommandV0(
+		context.Background(),
+		geminiSpecForTestV0(),
+	)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	prompt := mustReadGeminiFileForTestV0(t, filepath.Join(runtimeDir, GeminiAgentPromptFileNameV0))
+	for _, want := range []string{
+		"You are an external agent governed by OrquestaV2.",
+		"Read " + filepath.Join(runtimeDir, GeminiAgentPacketFileNameV0),
+		"Allowed control files outside the write-set:",
+		"For generate_visual_asset, visual_asset or infographic tasks",
+		"NEUTRAL DURABLE RESULT",
+		"Expected ACK:",
+		"Title: Crear infografia",
+		"Objective: Crear visual_asset educativo.",
+		"Allowed write-set:",
+		"Required tests:",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Fatalf("prompt no contiene %q:\n%s", want, prompt)
+		}
+	}
+	for _, reject := range []string{
+		"Eres un agente externo gobernado",
+		"RESULTADO DURABLE NEUTRAL",
+		"Titulo:",
+		"Objetivo:",
+		"Write-set permitido:",
+	} {
+		if strings.Contains(prompt, reject) {
+			t.Fatalf("prompt contiene texto no localizado %q:\n%s", reject, prompt)
+		}
+	}
+}
+
 func geminiSpecForTestV0() orquestaruntime.ExternalAgentLaunchSpecV0 {
 	return orquestaruntime.ExternalAgentLaunchSpecV0{
 		SchemaVersion: orquestaruntime.ExternalAgentLaunchSpecSchemaVersionV0,

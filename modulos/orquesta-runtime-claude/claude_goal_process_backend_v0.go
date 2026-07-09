@@ -239,6 +239,9 @@ func (backend *ClaudeGoalProcessBackendV0) normalizedProfileV0() ClaudeConnector
 	if strings.TrimSpace(profile.RuntimeWorkDirPlacement) == "" {
 		profile.RuntimeWorkDirPlacement = InferClaudeRuntimeWorkDirPlacementV0(profile.ProjectWorkDir, profile.RuntimeWorkDir)
 	}
+	if strings.TrimSpace(profile.PromptLocale) == "" {
+		profile.PromptLocale = strings.TrimSpace(backend.Control.PromptLocale)
+	}
 	return profile
 }
 

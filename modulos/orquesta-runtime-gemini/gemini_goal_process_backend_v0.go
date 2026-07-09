@@ -239,6 +239,9 @@ func (backend *GeminiGoalProcessBackendV0) normalizedProfileV0() GeminiConnector
 	if strings.TrimSpace(profile.RuntimeWorkDirPlacement) == "" {
 		profile.RuntimeWorkDirPlacement = InferGeminiRuntimeWorkDirPlacementV0(profile.ProjectWorkDir, profile.RuntimeWorkDir)
 	}
+	if strings.TrimSpace(profile.PromptLocale) == "" {
+		profile.PromptLocale = strings.TrimSpace(backend.Control.PromptLocale)
+	}
 	return profile
 }
 

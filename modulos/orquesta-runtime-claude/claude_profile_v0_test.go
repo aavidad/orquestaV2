@@ -22,6 +22,48 @@ func TestValidateClaudeConnectorProfileV0AceptaOptIn(t *testing.T) {
 	}
 }
 
+func TestValidateClaudeConnectorProfileV0AceptaPromptLocale(t *testing.T) {
+	root := t.TempDir()
+	profile := ClaudeConnectorProfileV0{
+		SchemaVersion:  ClaudeConnectorProfileSchemaVersionV0,
+		OptIn:          true,
+		CommandPath:    filepath.Join(root, "claude"),
+		ProjectWorkDir: filepath.Join(root, "project"),
+		RuntimeWorkDir: filepath.Join(root, "runtime"),
+		PromptLocale:   "en-US",
+	}
+
+	if issues := ValidateClaudeConnectorProfileV0(profile); len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+}
+
+func TestValidateClaudeConnectorProfileV0RechazaPromptLocaleInseguro(t *testing.T) {
+	root := t.TempDir()
+	profile := ClaudeConnectorProfileV0{
+		SchemaVersion:  ClaudeConnectorProfileSchemaVersionV0,
+		OptIn:          true,
+		CommandPath:    filepath.Join(root, "claude"),
+		ProjectWorkDir: filepath.Join(root, "project"),
+		RuntimeWorkDir: filepath.Join(root, "runtime"),
+		PromptLocale:   "en-US\nunsafe-prompt",
+	}
+
+	issues := ValidateClaudeConnectorProfileV0(profile)
+	if len(issues) == 0 {
+		t.Fatalf("esperaba issue")
+	}
+	found := false
+	for _, issue := range issues {
+		if string(issue.Code) == string(ClaudeConnectorValueInvalidV0) && issue.Field == "prompt_locale" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("issues=%+v", issues)
+	}
+}
+
 func TestValidateClaudeConnectorProfileV0RechazaArgsPropios(t *testing.T) {
 	root := t.TempDir()
 	profile := ClaudeConnectorProfileV0{

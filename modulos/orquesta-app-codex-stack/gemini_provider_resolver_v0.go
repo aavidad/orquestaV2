@@ -179,6 +179,7 @@ func geminiProfileV0(
 		Model:          strings.TrimSpace(config.Model),
 		ApprovalMode:   strings.TrimSpace(config.ApprovalMode),
 		OutputFormat:   strings.TrimSpace(config.OutputFormat),
+		PromptLocale:   strings.TrimSpace(config.PromptLocale),
 		ExtraArgs:      append([]string(nil), config.ExtraArgs...),
 		PromptHints:    geminiPromptHintsV0(config.PromptHints),
 	}
@@ -352,6 +353,7 @@ func claudeProfileV0(
 		PermissionMode: strings.TrimSpace(config.PermissionMode),
 		OutputFormat:   strings.TrimSpace(config.OutputFormat),
 		Effort:         strings.TrimSpace(config.Effort),
+		PromptLocale:   strings.TrimSpace(config.PromptLocale),
 		ExtraArgs:      append([]string(nil), config.ExtraArgs...),
 		PromptHints:    claudePromptHintsV0(config.PromptHints),
 	}
