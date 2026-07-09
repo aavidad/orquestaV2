@@ -6465,3 +6465,28 @@ Primera ejecucion remota:
 - `BUG-ORQ-20260709-217`: el verificador acepta ahora
   `runtime_identity.binary_sha256` y el test reproduce esa forma anidada.
 - Evidencia local posterior: `bash scripts/test_orquesta_server_deploy.sh`.
+
+## Orquesta local/remoto 2026-07-09: deploy preserva rama del worktree
+
+Al repetir el deploy atomico en `srv1651826` aparecio un segundo fallo
+operativo: el primer deploy habia dejado
+`/srv/orquesta-self/worktrees/orquesta` en `detached HEAD`. Aunque el HEAD del
+worktree ya estaba en `7dcff1a`, la rama local
+`trabajo/plataforma-agentes` seguia apuntando a `c9027743`; por eso el segundo
+deploy, al resolver `ORQUESTA_DEPLOY_REF=trabajo/plataforma-agentes`, abortaba
+con `deploy_not_fast_forward HEAD=7dcff1a... target=c9027743...`.
+
+Cambio:
+
+- `BUG-ORQ-20260709-218`: si `ORQUESTA_DEPLOY_REF` es una rama valida,
+  `scripts/orquesta_server_deploy.sh` usa `checkout -B <ref> <target_sha>` para
+  conservar/actualizar la rama desplegable y no dejar el worktree detached.
+- `scripts/test_orquesta_server_deploy.sh` anade
+  `test_success_preserves_branch_worktree`, que despliega desde la rama
+  `trabajo/plataforma-agentes` y verifica que el worktree queda en esa rama.
+- El runbook de deploy queda actualizado con la regla de rama no detached.
+
+Evidencia local:
+
+- `bash -n scripts/orquesta_server_deploy.sh scripts/test_orquesta_server_deploy.sh`
+- `bash scripts/test_orquesta_server_deploy.sh`

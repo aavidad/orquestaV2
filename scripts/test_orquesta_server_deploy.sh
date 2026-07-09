@@ -168,18 +168,30 @@ test_success() {
 }
 
 test_success_nested_runtime_identity() {
-  case_dir="$workdir/success-nested-runtime-identity"
-  make_repo "$case_dir/repo"
+	case_dir="$workdir/success-nested-runtime-identity"
+	make_repo "$case_dir/repo"
   mkdir -p "$case_dir"
   make_ctl_nested_runtime_identity "$case_dir/ctl.sh" "$(printf deploy-test-binary | sha256sum | awk '{print $1}')"
   run_deploy "$case_dir" >/tmp/orquesta-deploy-success-nested.out
   grep -q 'orquesta_server_deploy=ok' /tmp/orquesta-deploy-success-nested.out
-  assert_receipt_status "$case_dir/state/orquesta_server_deploy_receipt_v0.json" ok ""
+	assert_receipt_status "$case_dir/state/orquesta_server_deploy_receipt_v0.json" ok ""
+}
+
+test_success_preserves_branch_worktree() {
+	case_dir="$workdir/success-branch"
+	make_repo "$case_dir/repo"
+	git_id -C "$case_dir/repo" branch -M trabajo/plataforma-agentes
+	mkdir -p "$case_dir"
+	make_ctl "$case_dir/ctl.sh" "$(printf deploy-test-binary | sha256sum | awk '{print $1}')"
+	ORQUESTA_DEPLOY_REF=trabajo/plataforma-agentes run_deploy "$case_dir" >/tmp/orquesta-deploy-success-branch.out
+	grep -q 'orquesta_server_deploy=ok' /tmp/orquesta-deploy-success-branch.out
+	[ "$(git -C "$case_dir/worktree" symbolic-ref --short -q HEAD)" = "trabajo/plataforma-agentes" ]
+	assert_receipt_status "$case_dir/state/orquesta_server_deploy_receipt_v0.json" ok ""
 }
 
 test_deploy_config_missing() {
-  case_dir="$workdir/config-missing"
-  make_repo "$case_dir/repo"
+	case_dir="$workdir/config-missing"
+	make_repo "$case_dir/repo"
   mkdir -p "$case_dir"
   make_ctl "$case_dir/ctl.sh" ""
   set +e
@@ -275,6 +287,7 @@ test_deploy_stop_failed() {
 bash -n "$script"
 test_success
 test_success_nested_runtime_identity
+test_success_preserves_branch_worktree
 test_deploy_config_missing
 test_deploy_not_fast_forward
 test_deploy_runtime_identity_mismatch

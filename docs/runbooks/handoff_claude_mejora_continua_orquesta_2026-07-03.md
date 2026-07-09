@@ -2657,6 +2657,12 @@ Cambios clave:
 - La primera ejecucion real del deploy fallo solo por verificacion de identidad:
   `/api/status` exponia `runtime_identity.binary_sha256` anidado y el script
   buscaba solo campos top-level. Queda corregido y cubierto por test.
+- La segunda ejecucion real del deploy detecto que el primer deploy habia
+  dejado el worktree en `detached HEAD`: HEAD estaba en el commit nuevo, pero la
+  rama local `trabajo/plataforma-agentes` seguia stale. Queda corregido como
+  `BUG-ORQ-20260709-218`: cuando `ORQUESTA_DEPLOY_REF` es una rama, el deploy
+  usa `checkout -B <ref> <sha>` y el test
+  `test_success_preserves_branch_worktree` lo cubre.
 
 Verificacion local ya pasada antes del commit:
 
@@ -2671,7 +2677,11 @@ Verificacion local ya pasada antes del commit:
 
 Pendiente al retomar en remoto:
 
-- Pull de la rama `trabajo/plataforma-agentes`.
-- Build/test focal del servidor remoto.
-- Reinicio gobernado solo de Orquesta si el hash remoto coincide con el commit
-  subido.
+- Pull/fetch de la rama `trabajo/plataforma-agentes` desde GitHub.
+- En `/srv/orquesta-self/worktrees/orquesta`, reparar la rama con
+  `git switch -C trabajo/plataforma-agentes <sha-subido>` porque ese worktree
+  quedo detached por el deploy anterior.
+- Ejecutar de nuevo el deploy atomico. Si pasa, el recibo debe quedar `ok` y
+  `/api/status` debe exponer el mismo `runtime_identity.binary_sha256`.
+- Despues de F0, activar F2 Telegram remoto con `orquesta.config.json`
+  canonico y credenciales reales; OPES/F1 sigue gateado por orden del operador.

@@ -121,7 +121,11 @@ sync_worktree_ff_only() {
   if [ -n "$current_sha" ] && ! git -C "$DEPLOY_WORKTREE" merge-base --is-ancestor "$current_sha" "$target_sha"; then
     fail "deploy_not_fast_forward" "HEAD=$current_sha target=$target_sha"
   fi
-  git -C "$DEPLOY_WORKTREE" checkout --quiet "$target_sha"
+  if [ "$DEPLOY_REF" != "HEAD" ] && git check-ref-format --branch "$DEPLOY_REF" >/dev/null 2>&1; then
+    git -C "$DEPLOY_WORKTREE" checkout --quiet -B "$DEPLOY_REF" "$target_sha"
+  else
+    git -C "$DEPLOY_WORKTREE" checkout --quiet "$target_sha"
+  fi
 }
 
 build_from_tree() {

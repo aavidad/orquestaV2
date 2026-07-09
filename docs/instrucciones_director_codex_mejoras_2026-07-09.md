@@ -25,13 +25,20 @@ Codex remoto YA esta hecha y verificada (2026-07-09: `auth.json` de berserk
 reescrito, probe real `codex exec` -> `ok`, 1447 tokens). El despliegue lo
 lanza el operador o Claude con permiso explicito.
 
-## F1 (LA IMPORTANTE): test de campo OPES real
+## F1 (GATEADA POR OPERADOR): test de campo OPES real
+
+Estado 2026-07-09, orden del operador: NO ejecutar todavia creacion de
+temarios ni escritura real en OPES. Primero debe quedar Orquesta perfecta en
+nucleo, despliegue, control movil, nightly/avisos y observabilidad. Cuando
+ese gate este cumplido, se probara con un temario que no exista ya o que este
+claramente incompleto.
 
 Es el unico examen que Orquesta no ha pasado nunca: el smoke de 24 fases pasa
 con fixtures; produccion real jamas se ejecuto. Cierra BUG-058/066/075 y la
 mision registrada en bitacora (commit 885e76b0).
 
-Gate: F0 hecho, servidor con supervisor sano.
+Gate: F0 hecho, servidor con supervisor sano, control/avisos operativos y
+autorizacion operativa expresa de reabrir OPES real.
 
 Pasos:
 

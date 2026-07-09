@@ -25,6 +25,11 @@ Actualizacion 2026-07-09 tarde 2: la verificacion de identidad acepta tanto
 `binary_sha256` top-level como `runtime_identity.binary_sha256`, que es la forma
 publicada por `/api/status` en el servidor real.
 
+Actualizacion 2026-07-09 tarde 3: cuando `ORQUESTA_DEPLOY_REF` es una rama, el
+worktree desplegable queda en esa rama con `checkout -B <ref> <sha>`, no en
+detached HEAD. Esto evita que un segundo deploy lea una rama local stale aunque
+el HEAD del worktree este en el commit correcto.
+
 Uso minimo:
 
 ```bash
@@ -46,8 +51,9 @@ Contrato operativo:
   no existe `ORQUESTA_CTL_CONFIG` ni
   `$ORQUESTA_CTL_WORKDIR/orquesta.config.json` legible.
 - `deploy_runtime_identity_mismatch` bloquea si `status`, readiness o supervisor
-  exponen `binary_sha256`, `runtime_binary_sha256` u
-  `orquesta_server_sha256` distinto del binario instalado.
+  exponen `binary_sha256`, `runtime_identity.binary_sha256`,
+  `runtime_binary_sha256` u `orquesta_server_sha256` distinto del binario
+  instalado.
 - `deploy_runtime_identity_missing` bloquea si ninguna superficie de estado
   expone identidad del binario vivo.
 - `deploy_status_failed` bloquea si `scripts/orquesta_server_ctl.sh status`

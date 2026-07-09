@@ -490,6 +490,20 @@ antes de su cierre posterior:
   `runtime_identity.binary_sha256=d8f42b0c746fc192f92d65c2b3905c55c646bf3e8de15da5765a3572e9105f85`,
   `bash -n scripts/orquesta_server_deploy.sh scripts/test_orquesta_server_deploy.sh`
   y `bash scripts/test_orquesta_server_deploy.sh`.
+- `BUG-ORQ-20260709-218` queda cerrado antes de repetir el deploy real remoto:
+  la primera ejecucion del deploy dejo
+  `/srv/orquesta-self/worktrees/orquesta` en `detached HEAD`. El HEAD del
+  worktree estaba en `7dcff1a`, pero la rama local
+  `trabajo/plataforma-agentes` seguia en `c9027743`; al ejecutar de nuevo con
+  `ORQUESTA_DEPLOY_REF=trabajo/plataforma-agentes`, el script resolvia la rama
+  stale y abortaba con
+  `deploy_not_fast_forward HEAD=7dcff1a... target=c9027743...`. Cierre: cuando
+  `ORQUESTA_DEPLOY_REF` es una rama valida, el deploy hace
+  `checkout -B <ref> <target_sha>` y conserva/actualiza la rama desplegable en
+  vez de dejarla detached. Evidencia:
+  `bash -n scripts/orquesta_server_deploy.sh scripts/test_orquesta_server_deploy.sh`
+  y `bash scripts/test_orquesta_server_deploy.sh` con
+  `test_success_preserves_branch_worktree`.
 - Revalidacion OPES local/fake 2026-07-09h:
   `scripts/smoke_opes_lifecycle_real.sh` vuelve a pasar en local con
   `ORQUESTA_KEEP_SMOKE_DIR=1`, 24/24 `work_kind` cubiertos hasta
