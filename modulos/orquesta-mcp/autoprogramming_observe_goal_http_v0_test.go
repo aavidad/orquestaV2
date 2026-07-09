@@ -142,6 +142,63 @@ func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0TimeoutIncluyeSnapshotParcial
 	}
 }
 
+func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0TimeoutNoPublicaClosureBloqueadoSiGoalSigueRunningV0(t *testing.T) {
+	executor := &blockingSnapshotMCPAutoprogrammingObserveGoalHTTPExecutorV0{
+		done: make(chan struct{}),
+		snapshot: MCPObserveAppDirectorGoalToolResultV0{
+			Estado:             MCPObserveAppDirectorGoalEstadoOKV0,
+			Partial:            true,
+			RunRef:             "run-ref-autoprogramming-goal-http-timeout-running-001",
+			GoalRef:            "goal-ref-autoprogramming-goal-http-timeout-running-001",
+			ExternalGoalRef:    "thread-ref-autoprogramming-goal-http-timeout-running-001",
+			GoalStatus:         "running",
+			RecommendedAction:  "replan",
+			ClosureStatus:      "blocked",
+			ClosureNeedsRework: true,
+			ClosureIssues: []MCPValidationIssueV0{{
+				Code:  MCPGoalFirstPartialArtifactsWrittenV0,
+				Field: "goal_first.partial_artifacts",
+			}},
+			ArtifactRefs: []string{"artifact-ref-checkpoint-timeout-running-001"},
+			EvidenceRefs: []string{"evidence-ref-autoprogramming-timeout-running-001"},
+		},
+	}
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(MCPAutoprogrammingObserveGoalToolInputV0{
+		RequestID: "request-ref-autoprogramming-observe-goal-http-timeout-running-001",
+		RunRef:    "run-ref-autoprogramming-goal-http-timeout-running-001",
+	}); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingObserveGoalHTTPPathV0, body)
+	rec := httptest.NewRecorder()
+
+	newMCPAutoprogrammingObserveGoalHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusGatewayTimeout {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var result MCPAutoprogrammingObserveGoalToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.GoalStatus != "running" ||
+		result.RecommendedAction != "observe_later" ||
+		result.ClosureStatus != "" ||
+		result.ClosureNeedsRework ||
+		result.ClosureAccepted ||
+		len(result.ClosureIssues) != 0 ||
+		!stringInSliceForMCPObserveGoalHTTPTestV0(result.ArtifactRefs, "artifact-ref-checkpoint-timeout-running-001") ||
+		!stringInSliceForMCPObserveGoalHTTPTestV0(result.EvidenceRefs, "evidence-ref-autoprogramming-timeout-running-001") {
+		t.Fatalf("result=%+v", result)
+	}
+	select {
+	case <-executor.done:
+	case <-time.After(time.Second):
+		t.Fatalf("executor no recibio cancelacion tras timeout HTTP")
+	}
+}
+
 func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0RunRefRequerido(t *testing.T) {
 	executor := &fakeMCPAutoprogrammingObserveGoalHTTPExecutorV0{}
 	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingObserveGoalHTTPPathV0, strings.NewReader(`{}`))

@@ -8,7 +8,7 @@ source "$repo_root/scripts/lib/smoke_common.sh"
 MODE="${ORQUESTA_OPES_PLAN_TEMARIO_SMOKE_MODE:-dry-run-once}"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 SMOKE_OUT_DIR="${SMOKE_OUT_DIR:-/tmp/opes-salidas/plan-temario-operadores-$SMOKE_ID}"
-OPES_BASE_URL_EFFECTIVE="${ORQUESTA_OPES_BASE_URL:-${OPES_BASE_URL:-}}"
+ORQUESTA_OPES_BASE_URL_EFFECTIVE="${ORQUESTA_OPES_BASE_URL:-}"
 ORQUESTA_BASE_URL_EFFECTIVE="$(smoke_orquesta_base_url_from_env_or_runtime || true)"
 JOB_REF="${ORQUESTA_OPES_BRIDGE_JOB_REF:-}"
 LIMIT="${ORQUESTA_OPES_BRIDGE_LIMIT:-1}"
@@ -167,9 +167,9 @@ PY
   FAKE_PID="$!"
   for _ in $(seq 1 50); do
     if [[ -s "$url_file" ]]; then
-      OPES_BASE_URL_EFFECTIVE="$(cat "$url_file")"
+      ORQUESTA_OPES_BASE_URL_EFFECTIVE="$(cat "$url_file")"
       if [[ "$MODE" == "drain-once" ]]; then
-        ORQUESTA_BASE_URL_EFFECTIVE="$OPES_BASE_URL_EFFECTIVE"
+        ORQUESTA_BASE_URL_EFFECTIVE="$ORQUESTA_OPES_BASE_URL_EFFECTIVE"
         export ORQUESTA_OPES_TEMPORAL_CONFIRM=1
       fi
       return
@@ -193,13 +193,13 @@ require_plan_temario_guard() {
       exit 2
     fi
   fi
-  if [[ -z "$OPES_BASE_URL_EFFECTIVE" ]]; then
-    echo "falta ORQUESTA_OPES_BASE_URL u OPES_BASE_URL apuntando a OPES temporal" >&2
+  if [[ -z "$ORQUESTA_OPES_BASE_URL_EFFECTIVE" ]]; then
+    echo "falta ORQUESTA_OPES_BASE_URL apuntando a OPES temporal" >&2
     exit 2
   fi
-  if ! smoke_is_local_url "$OPES_BASE_URL_EFFECTIVE" &&
+  if ! smoke_is_local_url "$ORQUESTA_OPES_BASE_URL_EFFECTIVE" &&
     [[ "${ORQUESTA_OPES_ALLOW_NONLOCAL_TEMPORAL:-0}" != "1" ]]; then
-    echo "OPES_BASE_URL no parece local: $OPES_BASE_URL_EFFECTIVE" >&2
+    echo "ORQUESTA_OPES_BASE_URL no parece local: $ORQUESTA_OPES_BASE_URL_EFFECTIVE" >&2
     echo "si es temporal no local, exporta ORQUESTA_OPES_ALLOW_NONLOCAL_TEMPORAL=1" >&2
     exit 2
   fi
@@ -237,7 +237,7 @@ write_metadata() {
     echo "smoke_id=$SMOKE_ID"
     echo "mode=$MODE"
     echo "fake_server=$FAKE_SERVER"
-    echo "opes_base_url_ref=$(url_ref "$OPES_BASE_URL_EFFECTIVE")"
+    echo "opes_base_url_ref=$(url_ref "$ORQUESTA_OPES_BASE_URL_EFFECTIVE")"
     echo "orquesta_base_url_ref=$(url_ref "$ORQUESTA_BASE_URL_EFFECTIVE")"
     echo "job_type=plan_temario"
     echo "job_ref=$JOB_REF"
@@ -248,7 +248,7 @@ write_metadata() {
 }
 
 run_dry_run_once() {
-  export ORQUESTA_OPES_BASE_URL="$OPES_BASE_URL_EFFECTIVE"
+  export ORQUESTA_OPES_BASE_URL="$ORQUESTA_OPES_BASE_URL_EFFECTIVE"
   export ORQUESTA_OPES_BRIDGE_DRY_RUN=1
   export ORQUESTA_OPES_BRIDGE_LIMIT="$LIMIT"
   export ORQUESTA_OPES_BRIDGE_JOB_TYPE=plan_temario
@@ -266,7 +266,7 @@ run_execute_drain_once() {
     echo "falta endpoint Orquesta gestionado para crear run plan_temario: define ORQUESTA_SERVER_URL u ORQUESTA_RUNTIME_DIR/base_url.txt" >&2
     exit 2
   fi
-  export ORQUESTA_OPES_BASE_URL="$OPES_BASE_URL_EFFECTIVE"
+  export ORQUESTA_OPES_BASE_URL="$ORQUESTA_OPES_BASE_URL_EFFECTIVE"
   export ORQUESTA_BASE_URL="$ORQUESTA_BASE_URL_EFFECTIVE"
   export ORQUESTA_OPES_BRIDGE_CONFIRM=1
   export ORQUESTA_OPES_BRIDGE_DRY_RUN=0

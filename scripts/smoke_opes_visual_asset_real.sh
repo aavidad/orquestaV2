@@ -9,8 +9,8 @@ smoke_require_confirm ORQUESTA_OPES_VISUAL_SMOKE_CONFIRM 1 \
   "smoke visual real desactivado: exporta ORQUESTA_OPES_VISUAL_SMOKE_CONFIRM=1"
 
 ORQUESTA_BASE_URL="$(smoke_require_orquesta_base_url ORQUESTA_SERVER_URL)"
-OPES_BASE_URL="${OPES_BASE_URL:-http://127.0.0.1:18082}"
-smoke_require_opes_temporal_destination "$OPES_BASE_URL" "OPES_BASE_URL"
+ORQUESTA_OPES_BASE_URL="${ORQUESTA_OPES_BASE_URL:-http://127.0.0.1:18082}"
+smoke_require_opes_temporal_destination "$ORQUESTA_OPES_BASE_URL" "ORQUESTA_OPES_BASE_URL"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 SMOKE_OUT_DIR="${SMOKE_OUT_DIR:-/tmp/orquesta-opes-visual-smoke/$SMOKE_ID/out}"
 
@@ -192,7 +192,7 @@ write_summary() {
   cat >"$SMOKE_OUT_DIR/summary.txt" <<EOF
 smoke_id=$SMOKE_ID
 orquesta_base_url_ref=$(url_ref "$ORQUESTA_BASE_URL")
-opes_base_url_ref=$(url_ref "$OPES_BASE_URL")
+opes_base_url_ref=$(url_ref "$ORQUESTA_OPES_BASE_URL")
 topic_id=$topic_id
 chapter_id=$chapter_id
 job_ref=$job_ref
@@ -208,9 +208,9 @@ main() {
   mkdir -p "$SMOKE_OUT_DIR"
 
   smoke_get_json "$ORQUESTA_BASE_URL/api/v0/server/readiness" "$SMOKE_OUT_DIR/orquesta_readiness.json"
-  smoke_get_json "$OPES_BASE_URL/api/health" "$SMOKE_OUT_DIR/opes_health.json"
+  smoke_get_json "$ORQUESTA_OPES_BASE_URL/api/health" "$SMOKE_OUT_DIR/opes_health.json"
 
-  smoke_post_json "$OPES_BASE_URL/api/topics" \
+  smoke_post_json "$ORQUESTA_OPES_BASE_URL/api/topics" \
     '{"title":"Smoke visual Orquesta OPES","subject_area":"redes"}' \
     "$SMOKE_OUT_DIR/topic.json"
   local topic_id
@@ -220,7 +220,7 @@ main() {
     exit 1
   fi
 
-  smoke_post_json "$OPES_BASE_URL/api/topics/$topic_id/chapters" \
+  smoke_post_json "$ORQUESTA_OPES_BASE_URL/api/topics/$topic_id/chapters" \
     '{"title":"Topologias de red","order":1}' \
     "$SMOKE_OUT_DIR/chapter.json"
   local chapter_id
@@ -258,8 +258,8 @@ main() {
     exit 1
   fi
 
-  smoke_get_json "$OPES_BASE_URL/api/jobs/$job_ref/artifacts" "$SMOKE_OUT_DIR/artifacts.json"
-  smoke_get_json "$OPES_BASE_URL/api/topics/$topic_id/blocks" "$SMOKE_OUT_DIR/blocks.json"
+  smoke_get_json "$ORQUESTA_OPES_BASE_URL/api/jobs/$job_ref/artifacts" "$SMOKE_OUT_DIR/artifacts.json"
+  smoke_get_json "$ORQUESTA_OPES_BASE_URL/api/topics/$topic_id/blocks" "$SMOKE_OUT_DIR/blocks.json"
   assert_visual_block "$SMOKE_OUT_DIR/blocks.json"
 
   local artifacts_count

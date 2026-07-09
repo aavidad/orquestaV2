@@ -87,6 +87,42 @@ goal_status_after=running
 code=control_not_propagated_to_goal_backend
 ```
 
+Ampliacion de observacion:
+
+```text
+POST /api/v0/autoprogramming/goal/observe
+run_ref=goal-01..goal-04
+HTTP 504
+code=autoprogramming_observe_goal_timeout
+```
+
+En los goals 02, 03 y 04 la respuesta parcial seguia mostrando:
+
+```text
+run_status=activa
+goal_status=running
+closure_status=blocked
+evidence-ref-codex-app-server-goal-rpc-unsupported
+evidence-ref-goal-materialized-partial-artifacts-written
+evidence-ref-goal-materialized-checkpoint-detected
+```
+
+Log del app-server vivo:
+
+```text
+ERROR codex_core::tools::router: apply_patch verification failed:
+Failed to find expected lines in
+/srv/orquesta-self/worktrees/orquesta/scripts/smoke_opes_domain_work_real.sh
+
+ERROR codex_core::tools::router: apply_patch verification failed:
+Failed to find expected lines in
+/srv/orquesta-self/worktrees/orquesta/scripts/orquesta_server_deploy.sh
+```
+
+Esto refuerza la hipotesis: habia trabajo parcial real, pero el backend quedo
+sin cierre util y la API de observacion/control no convirtio ese estado en
+rework/blocked accionable.
+
 ## Cambios parciales en curso
 
 Los goals remotos empezaron a modificar codigo, pero no hay cierre ni tests
@@ -101,6 +137,80 @@ todavia:
 
 Estas modificaciones son recuperables, pero no cierran la incidencia hasta que
 se integren, pasen tests y se demuestre reconciliacion real por API.
+
+Actualizacion Codex 2026-07-10:
+
+- Workdir inexistente: el adaptador app-server valida que el workdir raiz
+  exista y no lo recrea silenciosamente; si falta, devuelve diagnostico publico
+  `codex_app_server_write_set_prepare_failed` con causa
+  `workdir_unavailable`.
+- Rework operativo: el supervisor goal-first residente reconoce bloqueos
+  recuperables de workdir/auth/provider/quota/storage/backend y prepara rework
+  acotado.
+- Write-sets declarados: `orquesta-autoprogramming` secuencia tareas que
+  declaran write-sets solapados, en vez de lanzar goals paralelos sobre el
+  mismo alcance.
+- Timeout parcial: un 504 de `observe_goal` con snapshot `goal_status=running`
+  conserva refs/evidencias, pero ya no publica `closure_status=blocked`,
+  `closure_needs_rework=true` ni `recommended_action=replan`.
+
+Tests focales ejecutados en remoto con PATH del servidor:
+
+```text
+go test -count=1 ./modulos/orquesta-autoprogramming -run 'TestBuildAutoprogrammingProgrammableWorkV0(SecuenciaWriteSetDeclaradoSolapado|SequencesRepairableWriteSetOverlap|HonraWriteSetYDependsOnPorTarea)'
+go test -count=1 ./modulos/orquesta-mcp -run 'TestMCPAutoprogrammingObserveGoalHTTPHandlerV0Timeout'
+go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0LaunchBloqueaWorkdirInexistenteSinRecrearloV0'
+go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestRunSupervisorGoalFirstResidentPreparaReworkPorBloqueoOperativoRecuperableV0'
+go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-mcp
+git diff --check
+```
+
+Pendiente para cierre: compilar/desplegar el binario remoto con estos cambios y
+demostrar por API que los goals actuales o un repro nuevo no quedan en 504/409
+ni `running` falso.
+
+## Verificacion amplia pendiente
+
+Tras los tests focales, Codex lanzo una verificacion remota mas amplia:
+
+```text
+go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server \
+  ./modulos/orquesta-app-codex-stack \
+  ./modulos/orquesta-runtime-codex-appserver \
+  ./modulos/orquesta-autoprogramming ./modulos/orquesta-web ./modulos/orquesta-mcp
+```
+
+Resultado: fallo bajo concurrencia con goals/app-server vivos.
+
+Fallos observados:
+
+- `cmd/orquesta-server`:
+  `TestServerGoalBackendFromEnvV0ClaudeProcessLanzaYObservaResultadoV0`
+  termino con `claude_goal_result_invalid`.
+- `cmd/orquesta-server`:
+  `TestServerGoalBackendFromEnvV0GeminiProcessLanzaYObservaResultadoV0`
+  termino con `gemini_goal_result_invalid`.
+- `cmd/orquesta-server`:
+  `TestFlakyHarnessV0RepiteCasoDirectorRecursiveFakeRuntimeV0` fallo porque
+  un child de compilacion fue terminado.
+- `modulos/orquesta-app-codex-stack`:
+  `TestSimulacionDeterministaFallosGoalFirstV0` supero el umbral temporal
+  esperado (`elapsed` cercano a 66s).
+
+Paquetes que si pasaron en esa tanda:
+
+- `modulos/orquesta-server`
+- `modulos/orquesta-runtime-codex-appserver`
+- `modulos/orquesta-autoprogramming`
+- `modulos/orquesta-web`
+- `modulos/orquesta-mcp`
+
+Lectura provisional: no es una regresion focal de los patches ya aplicados,
+pero si otro sintoma estructural del frente 208. El sistema mezcla pruebas que
+asumen proveedor/proceso limpio, app-server residente y goals vivos en el mismo
+host; cuando hay concurrencia, aparecen timeouts, resultados invalidos o kills
+de compilacion. No se debe cerrar el bug hasta tener un harness remoto aislado
+o un modo de drenaje/parada que deje el servidor en estado verificable.
 
 ## Subfallos a analizar juntos
 
@@ -129,6 +239,15 @@ dejar el estado en "pedido" si el backend no recibe la senal o no se limpia.
 La request contenia dos tareas con `scripts` en el write-set. Fue error del
 operador, pero Orquesta ya tenia write-sets por tarea y deberia serializar,
 rechazar o pedir replan si dos goals paralelos pisan el mismo alcance.
+
+### 208E - Verificacion amplia no aislada de procesos residentes
+
+El remoto conserva `orquesta-server-claude`, `codex app-server`, sandboxes y
+`go test` lanzados por goals anteriores. Las pruebas amplias de servidor y
+backend provider no pueden considerarse diagnostico limpio mientras compartan
+host, caches y backend con goals vivos. Orquesta necesita un modo de prueba
+aislado o una fase de drain/cleanup gobernada para no convertir ruido de
+concurrencia en falso rojo o falso verde.
 
 ## Hipotesis estructural
 

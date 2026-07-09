@@ -10,22 +10,28 @@ import (
 )
 
 const (
-	goalFirstResidentReworkPreparedEvidenceRefV0    = "evidence-ref-goal-first-resident-rework-prepared"
-	goalFirstResidentReworkExistingEvidencePrefixV0 = "evidence-ref-goal-first-resident-rework-goal:"
-	goalFirstResidentReworkReasonCheckpointOnlyV0   = "checkpoint_only_high_consumption"
-	goalFirstResidentReworkReasonNoCheckpointV0     = "goal_active_no_checkpoint_high_consumption"
-	goalFirstResidentReworkReasonActiveTimeoutV0    = "codex_app_server_goal_active_timeout"
-	goalFirstResidentReworkReasonQAFailedTextV0     = orquestamcp.MCPGoalFirstQAFailedPublicTextV0
-	goalFirstResidentReworkReasonArtifactPathsV0    = orquestamcp.MCPGoalFirstArtifactPathsOmittedMaterializedV0
-	goalFirstResidentReworkReasonOutOfScopeV0       = orquestamcp.MCPGoalFirstOutOfScopeMaterializedArtifactsV0
-	goalFirstResidentReworkReasonMissingReceiptV0   = orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0
-	goalFirstResidentReworkReasonRequiredTestsV0    = orquestamcp.MCPGoalFirstRequiredTestEvidenceMissingV0
-	goalFirstResidentReworkReasonPhase0V0           = orquestamcp.MCPGoalFirstPhase0CompleteNonPublishableV0
-	goalFirstResidentReworkReasonPartialArtifactsV0 = orquestamcp.MCPGoalFirstPartialArtifactsWrittenV0
-	goalFirstResidentReworkReasonBackendMissingV0   = "goal_backend_missing_after_external_cleanup"
-	goalFirstResidentBackendMissingEvidenceRefV0    = "evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup"
-	goalFirstResidentBackendMissingReconciledV0     = "evidence-ref-goal-first-resident-backend-missing-reconciled"
-	goalFirstResidentRunControlTerminalEvidenceV0   = "evidence-ref-run-control-terminal-after-goal-reconcile"
+	goalFirstResidentReworkPreparedEvidenceRefV0      = "evidence-ref-goal-first-resident-rework-prepared"
+	goalFirstResidentReworkExistingEvidencePrefixV0   = "evidence-ref-goal-first-resident-rework-goal:"
+	goalFirstResidentReworkReasonCheckpointOnlyV0     = "checkpoint_only_high_consumption"
+	goalFirstResidentReworkReasonNoCheckpointV0       = "goal_active_no_checkpoint_high_consumption"
+	goalFirstResidentReworkReasonActiveTimeoutV0      = "codex_app_server_goal_active_timeout"
+	goalFirstResidentReworkReasonQAFailedTextV0       = orquestamcp.MCPGoalFirstQAFailedPublicTextV0
+	goalFirstResidentReworkReasonArtifactPathsV0      = orquestamcp.MCPGoalFirstArtifactPathsOmittedMaterializedV0
+	goalFirstResidentReworkReasonOutOfScopeV0         = orquestamcp.MCPGoalFirstOutOfScopeMaterializedArtifactsV0
+	goalFirstResidentReworkReasonMissingReceiptV0     = orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0
+	goalFirstResidentReworkReasonRequiredTestsV0      = orquestamcp.MCPGoalFirstRequiredTestEvidenceMissingV0
+	goalFirstResidentReworkReasonPhase0V0             = orquestamcp.MCPGoalFirstPhase0CompleteNonPublishableV0
+	goalFirstResidentReworkReasonPartialArtifactsV0   = orquestamcp.MCPGoalFirstPartialArtifactsWrittenV0
+	goalFirstResidentReworkReasonBackendMissingV0     = "goal_backend_missing_after_external_cleanup"
+	goalFirstResidentReworkReasonWorkdirV0            = "codex_app_server_write_set_prepare_failed"
+	goalFirstResidentReworkReasonAuthV0               = "codex_app_server_provider_unauthorized"
+	goalFirstResidentReworkReasonAuthMissingV0        = "codex_app_server_auth_missing"
+	goalFirstResidentReworkReasonProviderLimitedV0    = "codex_app_server_goal_provider_limited"
+	goalFirstResidentReworkReasonStorageQuotaV0       = "codex_app_server_storage_quota_exceeded"
+	goalFirstResidentReworkReasonBackendUnavailableV0 = "codex_app_server_unavailable"
+	goalFirstResidentBackendMissingEvidenceRefV0      = "evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup"
+	goalFirstResidentBackendMissingReconciledV0       = "evidence-ref-goal-first-resident-backend-missing-reconciled"
+	goalFirstResidentRunControlTerminalEvidenceV0     = "evidence-ref-run-control-terminal-after-goal-reconcile"
 )
 
 func (executor CodexStackRunSupervisorExecutorV0) maybePrepareGoalFirstResidentReworkV0(
@@ -105,6 +111,12 @@ func goalFirstResidentReworkReasonV0(state orquestagoal.GoalWorkStateV0) (string
 	}
 	for _, reason := range []string{
 		goalFirstResidentReworkReasonBackendMissingV0,
+		goalFirstResidentReworkReasonWorkdirV0,
+		goalFirstResidentReworkReasonAuthV0,
+		goalFirstResidentReworkReasonAuthMissingV0,
+		goalFirstResidentReworkReasonProviderLimitedV0,
+		goalFirstResidentReworkReasonStorageQuotaV0,
+		goalFirstResidentReworkReasonBackendUnavailableV0,
 		goalFirstResidentReworkReasonQAFailedTextV0,
 		goalFirstResidentReworkReasonArtifactPathsV0,
 		goalFirstResidentReworkReasonOutOfScopeV0,
@@ -215,6 +227,19 @@ func goalFirstResidentReworkEvidenceRefsV0(state orquestagoal.GoalWorkStateV0) [
 			strings.Contains(trimmed, "external_cleanup") ||
 			strings.Contains(trimmed, "backend-missing") ||
 			strings.Contains(trimmed, "backend_missing") ||
+			strings.Contains(trimmed, "backend-unavailable") ||
+			strings.Contains(trimmed, "backend_unavailable") ||
+			strings.Contains(trimmed, "write-set-prepare") ||
+			strings.Contains(trimmed, "write_set_prepare") ||
+			strings.Contains(trimmed, "workdir") ||
+			strings.Contains(trimmed, "provider-unauthorized") ||
+			strings.Contains(trimmed, "provider_unauthorized") ||
+			strings.Contains(trimmed, "auth-missing") ||
+			strings.Contains(trimmed, "auth_missing") ||
+			strings.Contains(trimmed, "provider-limited") ||
+			strings.Contains(trimmed, "provider_limited") ||
+			strings.Contains(trimmed, "storage-quota") ||
+			strings.Contains(trimmed, "storage_quota") ||
 			strings.Contains(trimmed, "required-test") ||
 			strings.Contains(trimmed, "required_test") {
 			refs = append(refs, trimmed)

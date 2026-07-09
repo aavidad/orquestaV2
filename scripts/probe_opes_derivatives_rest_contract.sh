@@ -11,7 +11,7 @@ default_sequence() {
 
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 SMOKE_OUT_DIR="${SMOKE_OUT_DIR:-/tmp/opes-salidas/opes-contract-probe-$SMOKE_ID}"
-OPES_BASE_URL_EFFECTIVE="${ORQUESTA_OPES_BASE_URL:-${OPES_BASE_URL:-}}"
+ORQUESTA_OPES_BASE_URL_EFFECTIVE="${ORQUESTA_OPES_BASE_URL:-}"
 SEQUENCE="${ORQUESTA_OPES_CONTRACT_PROBE_SEQUENCE:-${ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE:-$(default_sequence)}}"
 PROGRAM_ID="${ORQUESTA_OPES_CONTRACT_PROBE_PROGRAM_ID:-program-ref-orquesta-contract-probe-$SMOKE_ID}"
 TOPIC_ID="${ORQUESTA_OPES_CONTRACT_PROBE_TOPIC_ID:-topic-ref-orquesta-contract-probe-$SMOKE_ID}"
@@ -25,11 +25,11 @@ smoke_require_tools curl python3
 smoke_require_confirm ORQUESTA_OPES_TEMPORAL_CONFIRM 1 "probe contrato OPES bloqueado: confirma instancia temporal con ORQUESTA_OPES_TEMPORAL_CONFIRM=1"
 smoke_require_confirm ORQUESTA_OPES_CONTRACT_PROBE_CREATE 1 "probe contrato OPES bloqueado: crear jobs temporales requiere ORQUESTA_OPES_CONTRACT_PROBE_CREATE=1"
 
-if [[ -z "$OPES_BASE_URL_EFFECTIVE" ]]; then
+if [[ -z "$ORQUESTA_OPES_BASE_URL_EFFECTIVE" ]]; then
   echo "probe contrato OPES bloqueado: define ORQUESTA_OPES_BASE_URL apuntando a OPES temporal" >&2
   exit 2
 fi
-if ! smoke_is_local_url "$OPES_BASE_URL_EFFECTIVE"; then
+if ! smoke_is_local_url "$ORQUESTA_OPES_BASE_URL_EFFECTIVE"; then
   echo "probe contrato OPES bloqueado: ORQUESTA_OPES_BASE_URL debe ser loopback para este probe" >&2
   exit 2
 fi
@@ -41,12 +41,12 @@ fi
 smoke_temp_root_prepare "$SMOKE_OUT_DIR" "opes-contract-probe"
 
 health_file="$SMOKE_OUT_DIR/opes_health.json"
-if ! curl -fsS -m 5 "${OPES_BASE_URL_EFFECTIVE%/}/api/health" >"$health_file"; then
+if ! curl -fsS -m 5 "${ORQUESTA_OPES_BASE_URL_EFFECTIVE%/}/api/health" >"$health_file"; then
   echo "probe contrato OPES bloqueado: /api/health no responde en OPES temporal" >&2
   exit 2
 fi
 
-python3 - "$OPES_BASE_URL_EFFECTIVE" "$SEQUENCE" "$PROGRAM_ID" "$TOPIC_ID" "$CORRELATION_ID" "$REQUESTED_BY" "$SUMMARY_FILE" "$EXPECT_FULL_SEQUENCE" "$TRANSPORT_COMPAT" <<'PY'
+python3 - "$ORQUESTA_OPES_BASE_URL_EFFECTIVE" "$SEQUENCE" "$PROGRAM_ID" "$TOPIC_ID" "$CORRELATION_ID" "$REQUESTED_BY" "$SUMMARY_FILE" "$EXPECT_FULL_SEQUENCE" "$TRANSPORT_COMPAT" <<'PY'
 import json
 import os
 import sys

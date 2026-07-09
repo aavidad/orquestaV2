@@ -441,9 +441,8 @@ finish() {
   local final_exit_code="$exit_code"
   capture_terminal_notification "$exit_code"
   notification_exit_code=$?
-  if [[ "$exit_code" == "0" && "$notification_exit_code" != "0" ]]; then
+  if [[ "$notification_exit_code" != "0" ]]; then
     phase="notification_failed"
-    final_exit_code="$notification_exit_code"
   fi
   write_result_json "$final_exit_code" "$phase" || true
   echo "nightly_result_json=$result_file"

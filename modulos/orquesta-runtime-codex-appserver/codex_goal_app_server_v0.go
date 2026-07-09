@@ -301,6 +301,13 @@ func (backend serverCodexAppServerGoalBackendV0) prepareCodexGoalWriteSetV0(
 	if err != nil {
 		return fmt.Errorf("codex_app_server_write_set_prepare_failed: %w", err)
 	}
+	if err := codexAppServerExistingWorkdirRootV0(root); err != nil {
+		return codexAppServerWriteSetPrepareErrorV0{
+			Operation: "workdir",
+			RelPath:   ".",
+			Err:       err,
+		}
+	}
 	for _, scope := range packet.WriteSet {
 		rel, ok := codexAppServerWriteSetDirectoryRelV0(scope.Path)
 		if !ok {
@@ -322,6 +329,17 @@ func (backend serverCodexAppServerGoalBackendV0) prepareCodexGoalWriteSetV0(
 				Err:       err,
 			}
 		}
+	}
+	return nil
+}
+
+func codexAppServerExistingWorkdirRootV0(root string) error {
+	info, err := os.Stat(root)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("codex_app_server_workdir_not_directory")
 	}
 	return nil
 }
@@ -423,6 +441,10 @@ func codexAppServerWriteSetPrepareCauseV0(err error) string {
 		strings.Contains(message, "permission denied"),
 		strings.Contains(message, "operation not permitted"):
 		return "permission_denied"
+	case errors.Is(err, os.ErrNotExist),
+		strings.Contains(message, "no such file or directory"),
+		strings.Contains(message, "workdir_not_directory"):
+		return "workdir_unavailable"
 	case strings.Contains(message, "no space left on device"),
 		strings.Contains(message, "disk quota exceeded"):
 		return "storage_unavailable"
@@ -1013,6 +1035,8 @@ func codexAppServerStartIssueEvidenceRefsV0(code string) []string {
 		return []string{"evidence-ref-codex-app-server-write-set-guard-allowed-write-set-mismatch"}
 	case codexAppServerRuntimeWriteSetGuardSnapshotV0:
 		return []string{"evidence-ref-codex-app-server-runtime-write-set-guard-snapshot-failed"}
+	case "codex_app_server_write_set_prepare_failed":
+		return []string{"evidence-ref-codex-app-server-write-set-prepare-failed"}
 	default:
 		return nil
 	}

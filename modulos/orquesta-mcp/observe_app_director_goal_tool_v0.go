@@ -474,7 +474,22 @@ func NewMCPObserveAppDirectorGoalTimeoutResultWithPartialV0(
 	timeout MCPObserveAppDirectorGoalToolResultV0,
 	partial MCPObserveAppDirectorGoalToolResultV0,
 ) MCPObserveAppDirectorGoalToolResultV0 {
-	return mergeMCPObserveAppDirectorGoalPartialIntoTimeoutV0(timeout, partial)
+	return mcpObserveAppDirectorGoalNormalizeTimeoutPartialV0(
+		mergeMCPObserveAppDirectorGoalPartialIntoTimeoutV0(timeout, partial),
+	)
+}
+
+func mcpObserveAppDirectorGoalNormalizeTimeoutPartialV0(
+	result MCPObserveAppDirectorGoalToolResultV0,
+) MCPObserveAppDirectorGoalToolResultV0 {
+	status := strings.TrimSpace(result.GoalStatus)
+	if status != orquestagoal.GoalStatusRunningV0 && status != orquestagoal.GoalStatusAcceptedV0 {
+		return result
+	}
+	result = mcpObserveAppDirectorGoalSuppressStaleClosureForRunningGoalV0(result)
+	result.ClosureIssues = nil
+	result.RecommendedAction = "observe_later"
+	return result
 }
 
 func NewMCPObserveAppDirectorGoalErrorResultV0(

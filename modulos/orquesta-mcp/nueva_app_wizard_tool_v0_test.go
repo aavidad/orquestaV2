@@ -17,6 +17,7 @@ func TestMCPNuevaAppWizardDescriptorV0EsAdaptadorFino(t *testing.T) {
 		!strings.Contains(descriptor.InputSchema, "justification") ||
 		!strings.Contains(descriptor.InputSchema, "comprehension_query") ||
 		!strings.Contains(descriptor.InputSchema, "glossary_expanded") ||
+		!strings.Contains(descriptor.Output, "dossier") ||
 		!strings.Contains(descriptor.Output, "wizard") {
 		t.Fatalf("descriptor inesperado: %+v", descriptor)
 	}
@@ -69,7 +70,8 @@ func TestNewMCPNuevaAppWizardResultFromJSONV0ConservaWizardYContrastes(t *testin
 			"schema_version":"web_nueva_app_wizard_turn.v0",
 			"questions":[{"question_ref":"wizard-r2-plataformas"}],
 			"contrasts":[{"question_ref":"wizard-r2-plataformas","user_choice":"web","recommended":"web_mobile"}],
-			"engineering_defaults":[{"area":"arquitectura","value":"hexagonal_puertos_adaptadores"}]
+			"engineering_defaults":[{"area":"arquitectura","value":"hexagonal_puertos_adaptadores"}],
+			"dossier":{"schema_version":"web_nueva_app_wizard_dossier.v0","summary":"dossier amplio","architecture":{"style":"hexagonal"}}
 		}
 	}`)
 
@@ -84,6 +86,7 @@ func TestNewMCPNuevaAppWizardResultFromJSONV0ConservaWizardYContrastes(t *testin
 		result.RequestID != "request-ref-wizard-json" ||
 		result.CorrelationID != "corr-wizard-json" ||
 		!strings.Contains(string(result.Wizard), "web_mobile") ||
+		!strings.Contains(string(result.Wizard), "web_nueva_app_wizard_dossier.v0") ||
 		!strings.Contains(string(result.Session), "session-wizard-json") {
 		t.Fatalf("result=%+v wizard=%s", result, result.Wizard)
 	}

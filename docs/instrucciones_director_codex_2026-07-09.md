@@ -78,6 +78,31 @@ Cambios requeridos:
 Criterio de cierre: primer nightly verde de la nueva cuenta §9 + mensaje
 recibido en Telegram.
 
+### Avance goal `task-ref-orquesta-100-deadcode-envs-20260710`
+
+Limpieza acotada 2026-07-09:
+
+- `ORQUESTA_OPES_BASE_URL` queda como variable publica canonica para los
+  wrappers activos de OPES revisados en esta ola. Se retiro la lectura directa
+  del alias `OPES_BASE_URL` en `scripts/smoke_opes_domain_work_real.sh`,
+  `scripts/smoke_opes_visual_asset_real.sh`,
+  `scripts/probe_opes_derivatives_rest_contract.sh`,
+  `scripts/smoke_opes_plan_temario_operadores.sh` y
+  `scripts/smoke_opes_derivatives_rest.sh`.
+- `ORQUESTA_SERVER_URL` sigue siendo la entrada canonica de Orquesta para esos
+  wrappers a traves de `smoke_require_orquesta_base_url`. La compatibilidad
+  `ORQUESTA_BASE_URL` queda solo en helper comun/documentos historicos hasta
+  una ola separada, porque retirarla globalmente afecta a runbooks antiguos y
+  smokes no cubiertos por este write-set.
+- Candidatos `deadcode` en `modulos/orquesta-autoprogramming` revisados:
+  `BuildAutoprogrammingProgrammableWorkV1`,
+  `ValidateAutoprogrammingRequestSourceV0`,
+  `AutoprogrammingRequestSourceRefsV0`,
+  `BuildAutoprogrammingSkillDistillationReviewProposalV0` y
+  `ResolveAutoprogrammingIdleSelfImprovementConfigV0` son contratos publicos
+  o cubiertos por tests del modulo. No se borran; se documentan como falsos
+  positivos del analisis desde binarios.
+
 ## TAREA-E3 (familia E1): paridad de contratos por catalogo, no por parches
 
 Evidencia (5 bugs de la misma clase en 4 dias): MCP-WIZARD-BOT-SCHEMA-STALE

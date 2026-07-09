@@ -18,6 +18,7 @@ DEPLOY_BUILD_CMD="${ORQUESTA_DEPLOY_BUILD_CMD:-}"
 DEPLOY_STATUS_URL="${ORQUESTA_DEPLOY_STATUS_URL:-}"
 DEPLOY_READINESS_URL="${ORQUESTA_DEPLOY_READINESS_URL:-}"
 DEPLOY_SUPERVISOR_URL="${ORQUESTA_DEPLOY_SUPERVISOR_URL:-}"
+DEPLOY_TELEGRAM_CONFIG="${ORQUESTA_DEPLOY_TELEGRAM_CONFIG:-${ORQUESTA_CTL_CONFIG:-}}"
 
 tmp_root=""
 target_sha=""
@@ -26,6 +27,9 @@ status_text=""
 phase="init"
 receipt_written="0"
 writing_receipt="0"
+notification_status="not_attempted"
+notification_receipt_ref=""
+notification_reason=""
 
 cleanup() {
   if [ -n "$tmp_root" ] && [ -d "$tmp_root" ]; then
@@ -37,6 +41,7 @@ trap cleanup EXIT
 on_error() {
   exit_code="$?"
   if [ "${receipt_written:-0}" != "1" ] && [ "${writing_receipt:-0}" != "1" ]; then
+    capture_deploy_notification "failed" "deploy_unhandled_failure" "phase=$phase exit_code=$exit_code"
     write_receipt "failed" "deploy_unhandled_failure" "phase=$phase exit_code=$exit_code"
   fi
   exit "$exit_code"
@@ -54,13 +59,25 @@ write_receipt() {
   writing_receipt="1"
   mkdir -p "$DEPLOY_STATE_DIR"
   tmp_receipt="$DEPLOY_RECEIPT.tmp.$$"
-  python3 - "$status" "$reason_code" "$message" "$DEPLOY_REF" "$target_sha" "$binary_sha" "$DEPLOY_BINARY" "$status_text" >"$tmp_receipt" <<'PY'
+  python3 - "$status" "$reason_code" "$message" "$DEPLOY_REF" "$target_sha" "$binary_sha" "$DEPLOY_BINARY" "$status_text" "$notification_status" "$notification_receipt_ref" "$notification_reason" >"$tmp_receipt" <<'PY'
 import json
 import os
 import sys
 import time
 
-status, reason, message, ref, git_sha, binary_sha, binary, status_text = sys.argv[1:9]
+(
+    status,
+    reason,
+    message,
+    ref,
+    git_sha,
+    binary_sha,
+    binary,
+    status_text,
+    notification_status,
+    notification_receipt_ref,
+    notification_reason,
+) = sys.argv[1:12]
 receipt = {
     "schema_version": "orquesta_server_deploy_receipt.v0",
     "status": status,
@@ -71,6 +88,11 @@ receipt = {
     "binary_sha256": binary_sha,
     "binary_path": binary,
     "ctl_status": status_text[:4000],
+    "notification": {
+        "status": notification_status,
+        "receipt_ref": notification_receipt_ref,
+        "reason": notification_reason,
+    },
     "created_at_unix": int(time.time()),
 }
 print(json.dumps(receipt, sort_keys=True))
@@ -84,9 +106,159 @@ fail() {
   code="$1"
   shift || true
   message="$*"
+  capture_deploy_notification "failed" "$code" "$message"
   write_receipt "failed" "$code" "$message"
   echo "orquesta_server_deploy: reason_code=$code $message" >&2
   exit 1
+}
+
+resolve_telegram_config() {
+  if [ -n "$DEPLOY_TELEGRAM_CONFIG" ]; then
+    return 0
+  fi
+  if [ -n "${ORQUESTA_CTL_WORKDIR:-}" ] && [ -f "${ORQUESTA_CTL_WORKDIR:-}/orquesta.config.json" ]; then
+    DEPLOY_TELEGRAM_CONFIG="${ORQUESTA_CTL_WORKDIR:-}/orquesta.config.json"
+    return 0
+  fi
+  if [ -f "$DEPLOY_WORKTREE/orquesta.config.json" ]; then
+    DEPLOY_TELEGRAM_CONFIG="$DEPLOY_WORKTREE/orquesta.config.json"
+  fi
+}
+
+send_deploy_notification() {
+  local status="$1"
+  local reason="$2"
+  local message="$3"
+  resolve_telegram_config
+  python3 - \
+    "$DEPLOY_TELEGRAM_CONFIG" \
+    "$status" \
+    "$reason" \
+    "$message" \
+    "$phase" \
+    "$DEPLOY_REF" \
+    "$target_sha" \
+    "$binary_sha" \
+    "$DEPLOY_RECEIPT" <<'PY'
+import hashlib
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+config_path, status, reason, message, phase, deploy_ref, git_sha, binary_sha, receipt_path = sys.argv[1:10]
+
+def line(status_value, reason_value="", receipt=""):
+    print("deploy_notification_status=" + status_value)
+    if reason_value:
+        print("deploy_notification_reason=" + reason_value)
+    if receipt:
+        print("deploy_notification_receipt_ref=" + receipt)
+
+if not config_path:
+    line("disabled", "config_missing")
+    raise SystemExit(0)
+
+try:
+    with open(config_path, encoding="utf-8") as fh:
+        config = json.load(fh)
+except FileNotFoundError:
+    line("disabled", "config_missing")
+    raise SystemExit(0)
+except (OSError, json.JSONDecodeError):
+    line("blocked", "config_invalid")
+    raise SystemExit(0)
+
+if str(config.get("schema_version") or "").strip() != "orquesta_config.v0":
+    line("blocked", "config_schema_unsupported")
+    raise SystemExit(0)
+
+telegram = config.get("telegram_operator") or {}
+if not telegram.get("enabled", False):
+    line("disabled", "telegram_operator_disabled")
+    raise SystemExit(0)
+
+token = str(telegram.get("token") or "").strip()
+target = str(telegram.get("notification_target_ref") or "").strip()
+if not target:
+    chats = telegram.get("authorized_chat_refs") or []
+    if isinstance(chats, list) and chats:
+        target = str(chats[0] or "").strip()
+
+missing = []
+if not token:
+    missing.append("token")
+if not target.startswith("telegram:") or not target.removeprefix("telegram:").strip():
+    missing.append("notification_target_ref")
+if missing:
+    line("blocked", "telegram_config_incomplete:" + ",".join(missing))
+    raise SystemExit(0)
+
+short_sha = git_sha[:12] if git_sha else "unknown"
+short_binary = binary_sha[:12] if binary_sha else "unknown"
+text = (
+    "Orquesta deploy | estado=" + status +
+    " | fase=" + (phase or "unknown") +
+    " | ref=" + (deploy_ref or "HEAD") +
+    " | git=" + short_sha +
+    " | binario=" + short_binary +
+    " | receipt=" + receipt_path
+)
+if reason:
+    text += " | motivo=" + reason
+if message:
+    text += " | detalle=" + message[:700]
+
+payload = {
+    "chat_id": target.removeprefix("telegram:").strip(),
+    "text": text[:3500],
+    "disable_web_page_preview": True,
+}
+base_url = os.environ.get("ORQUESTA_DEPLOY_TELEGRAM_BOT_API_BASE_URL", "https://api.telegram.org").rstrip("/")
+request = urllib.request.Request(
+    base_url + "/bot" + token + "/sendMessage",
+    data=json.dumps(payload).encode("utf-8"),
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+try:
+    with urllib.request.urlopen(request, timeout=8) as response:
+        if response.status < 200 or response.status >= 300:
+            line("failed", "telegram_bot_api_send_rejected")
+            raise SystemExit(0)
+except urllib.error.HTTPError:
+    line("failed", "telegram_bot_api_send_rejected")
+    raise SystemExit(0)
+except Exception:
+    line("failed", "telegram_bot_api_send_failed")
+    raise SystemExit(0)
+
+dedupe = "|".join([status, deploy_ref, git_sha, binary_sha, reason])
+receipt = "evidence-ref-deploy-telegram-send-" + hashlib.sha1(dedupe.encode("utf-8")).hexdigest()[:12]
+line("sent", receipt=receipt)
+PY
+}
+
+capture_deploy_notification() {
+  local output line
+  output="$(send_deploy_notification "$1" "$2" "$3" 2>&1 || true)"
+  printf '%s\n' "$output"
+  while IFS= read -r line; do
+    case "$line" in
+      deploy_notification_status=*)
+        notification_status="${line#deploy_notification_status=}"
+        ;;
+      deploy_notification_reason=*)
+        notification_reason="${line#deploy_notification_reason=}"
+        ;;
+      deploy_notification_receipt_ref=*)
+        notification_receipt_ref="${line#deploy_notification_receipt_ref=}"
+        ;;
+    esac
+  done <<EOF
+$output
+EOF
 }
 
 sha256_file() {
@@ -245,6 +417,8 @@ main() {
   ORQUESTA_CTL_BINARY="$DEPLOY_BINARY" "$DEPLOY_CTL" start
   phase="verify_runtime_identity"
   verify_runtime_identity
+  phase="notify"
+  capture_deploy_notification "ok" "" "deploy completado"
   phase="write_receipt_ok"
   write_receipt "ok" "" ""
   phase="done"

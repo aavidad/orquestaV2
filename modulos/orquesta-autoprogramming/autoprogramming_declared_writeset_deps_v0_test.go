@@ -55,6 +55,53 @@ func TestBuildAutoprogrammingProgrammableWorkV0HonraWriteSetYDependsOnPorTareaV0
 	}
 }
 
+func TestBuildAutoprogrammingProgrammableWorkV0SecuenciaWriteSetDeclaradoSolapadoV0(t *testing.T) {
+	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{
+			{
+				TaskRef:  "task-ref-limpieza-scripts",
+				Area:     "deuda",
+				WriteSet: []string{"scripts"},
+			},
+			{
+				TaskRef:  "task-ref-telegram-scripts",
+				Area:     "operacion",
+				WriteSet: []string{"scripts/orquesta_smoke_nightly.sh"},
+			},
+		}
+		request.WriteSet = []string{"scripts"}
+	})
+
+	result := BuildAutoprogrammingProgrammableWorkV0(request)
+	if !result.Accepted {
+		t.Fatalf("accepted=false issues=%+v", result.Issues)
+	}
+	if len(result.Work.Groups) != 2 || len(result.Work.Tasks) != 2 {
+		t.Fatalf("groups=%+v tasks=%+v", result.Work.Groups, result.Work.Tasks)
+	}
+	byArea := map[string]int{}
+	for i, group := range result.Work.Groups {
+		byArea[group.Area] = i
+	}
+	deudaRef := autoprogrammingProgrammableTaskRefV0(request.RequestRef, byArea["deuda"])
+	operacion := result.Work.Tasks[byArea["operacion"]]
+	if !stringSliceEqualForDeclaredTestV0(operacion.DependsOn, []string{deudaRef}) {
+		t.Fatalf("operacion depends_on=%v want %s", operacion.DependsOn, deudaRef)
+	}
+	if !partitionRepairCodeForDeclaredTestV0(result.Work.Partition.Repairs, "declared_write_set_overlap_sequenced") {
+		t.Fatalf("repairs=%+v", result.Work.Partition.Repairs)
+	}
+}
+
+func partitionRepairCodeForDeclaredTestV0(repairs []AutoprogrammingPartitionRepairV0, code string) bool {
+	for _, repair := range repairs {
+		if repair.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
 func stringSliceEqualForDeclaredTestV0(got, want []string) bool {
 	if len(got) != len(want) {
 		return false

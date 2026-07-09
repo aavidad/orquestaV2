@@ -86,13 +86,14 @@ func MCPNuevaAppWizardDescriptorV0() MCPNuevaAppWizardToolDescriptorV0 {
 		Name:        MCPNuevaAppWizardToolNameV0,
 		Version:     MCPNuevaAppWizardToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,session_id?,locale?,nombre?,idea?,need?,action_id?,action_ids?,answer_field?,answer?,glossary_expanded?,wizard_answers?[question_ref,user_choice,free_text?,comprehension_query?,justification?],session?,idempotency_key?}",
-		Output:      "ok:{turn,session,wizard}|error:{errores_publicos}",
+		Output:      "ok:{turn,session,wizard{dossier}}|error:{errores_publicos}",
 		ResourceURI: MCPNuevaAppWizardResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
 			"delega en el intake guiado canonico de nueva app",
 			"no lanza agentes ni director",
 			"conserva recomendaciones y contrastes del wizard",
+			"conserva el dossier previo a aceptar dentro de wizard.dossier",
 		},
 	}
 }

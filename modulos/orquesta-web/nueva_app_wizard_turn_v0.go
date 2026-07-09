@@ -17,13 +17,15 @@ func NewWebNuevaAppWizardTurnResultV0(session WebNuevaAppIntakeSessionV0) Wizard
 	questions := selectWizardTurnQuestionsV0(allQuestions)
 	specComplete := len(webNuevaAppWizardHighImportanceQuestionsV0(allQuestions)) == 0 &&
 		len(orquestafactory.ValidateAppSpecRequestV0(specPreview)) == 0
+	defaults := WebNuevaAppWizardEngineeringDefaultsV0()
 	return WizardTurnResultV0{
 		SchemaVersion:       WebNuevaAppWizardTurnSchemaV0,
 		SessionRef:          firstNuevaAppValueV0(session.SessionRef, session.SessionID),
 		Turn:                len(session.Decisions) + 1,
 		Questions:           questions,
 		ResolvedByExclusion: resolved,
-		EngineeringDefaults: WebNuevaAppWizardEngineeringDefaultsV0(),
+		EngineeringDefaults: defaults,
+		Dossier:             BuildWebNuevaAppWizardDossierV0(specPreview, defaults, nil, specComplete),
 		GlossaryExpanded:    session.GlossaryExpanded,
 		SpecComplete:        specComplete,
 		SpecPreview:         &specPreview,
@@ -88,6 +90,9 @@ func ApplyWebNuevaAppWizardAnswersV0(
 	result := NewWebNuevaAppWizardTurnResultV0(session)
 	result.Decisions = decisions
 	result.Contrasts = contrasts
+	if result.SpecPreview != nil {
+		result.Dossier = BuildWebNuevaAppWizardDossierV0(*result.SpecPreview, result.EngineeringDefaults, result.Contrasts, result.LaunchReady)
+	}
 	return session, result
 }
 

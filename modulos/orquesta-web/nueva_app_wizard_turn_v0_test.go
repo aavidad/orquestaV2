@@ -63,6 +63,41 @@ func TestWizardAgendaDesdeSoloObjetivoV0(t *testing.T) {
 	}
 }
 
+func TestWizardDossierPrevioIncluyeArquitecturaI18NConectoresDocsEInfografiasV0(t *testing.T) {
+	session := wizardSessionWithObjectiveV0(
+		"session-wizard-dossier",
+		"quiero una agenda compartida para clientes con calendario, avisos y disponibilidad",
+	)
+	session, _ = AcceptWebNuevaAppWizardRecommendationsV0(session, 8)
+	final := NewWebNuevaAppWizardTurnResultV0(session)
+
+	if !final.LaunchReady || final.Dossier.SchemaVersion != WebNuevaAppWizardDossierSchemaV0 ||
+		final.Dossier.DossierRef == "" || !final.Dossier.Ready {
+		t.Fatalf("dossier no listo antes de aceptar: %+v", final.Dossier)
+	}
+	if !strings.Contains(final.Dossier.Summary, "documentacion extensa") ||
+		!strings.Contains(final.Dossier.Markdown, "# Dossier previo a aceptar") ||
+		final.Dossier.Architecture.Style != "hexagonal" ||
+		!stringSliceHasV0(final.Dossier.Architecture.Ports, "i18n_catalog_port") ||
+		!final.Dossier.I18N.Enabled ||
+		len(final.Dossier.I18N.Locales) < 2 ||
+		len(final.Dossier.Connectors) == 0 ||
+		len(final.Dossier.Documentation) < 4 ||
+		len(final.Dossier.Infographics) < 3 ||
+		len(final.Dossier.Sections) < 6 ||
+		len(final.Dossier.Diagrams) < 3 ||
+		len(final.Dossier.DecisionRefs) == 0 ||
+		len(final.Dossier.RiskRefs) == 0 ||
+		len(final.Dossier.Alternatives) == 0 ||
+		!stringSliceHasV0(final.Dossier.AcceptanceBeforeLaunch, "hexagonal puro conservado como frontera de implementacion") {
+		t.Fatalf("dossier incompleto: %+v", final.Dossier)
+	}
+	connector := final.Dossier.Connectors[0]
+	if connector.PortRef == "" || connector.AdapterRef == "" || connector.Proposito == "" {
+		t.Fatalf("conector sin puerto/adaptador/proposito: %+v", connector)
+	}
+}
+
 func TestWizardHuecosCruzadosDetectaDatosIntegracionMovilYDeployV0(t *testing.T) {
 	session := NewWebNuevaAppIntakeSessionV0("session-wizard-cross", "es-ES", "App mixta", "app movil con datos externos")
 	session = session.ApplyDecisionV0(WebNuevaAppIntakeDecisionV0{Field: "tipo_app", Value: "mobile"})

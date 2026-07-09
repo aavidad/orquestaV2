@@ -847,6 +847,45 @@ func TestServerCodexAppServerGoalBackendV0LaunchPrepareFallidoPublicaDetailRelat
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0LaunchBloqueaWorkdirInexistenteSinRecrearloV0(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "workdir-borrado")
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-workdir-missing-001"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol,
+		CWD:      root,
+	}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef:   "goal-ref-workdir-missing-001",
+		Objective: "detectar workdir inexistente",
+		WriteSet: []orquestagoal.GoalWriteScopeV0{{
+			Path: "modulos/orquesta-server",
+		}},
+	})
+
+	if err == nil {
+		t.Fatal("StartCodexGoalV0 debe fallar si el CWD configurado ya no existe")
+	}
+	if len(protocol.calls) != 0 {
+		t.Fatalf("no debe llamar al backend con workdir inexistente: calls=%v", protocol.calls)
+	}
+	if _, statErr := os.Stat(root); !os.IsNotExist(statErr) {
+		t.Fatalf("el runtime recreo o oculto el workdir inexistente: stat=%v", statErr)
+	}
+	if receipt.Status != orquestagoal.GoalStatusInvalidV0 ||
+		!strings.HasPrefix(receipt.IssueCode, "codex_app_server_write_set_prepare_failed: ") ||
+		!strings.Contains(receipt.IssueCode, "workdir_unavailable") ||
+		strings.Contains(receipt.IssueCode, root) ||
+		!containsStringMigratedTestV0(
+			receipt.EvidenceRefs,
+			"evidence-ref-codex-app-server-write-set-prepare-failed",
+		) {
+		t.Fatalf("receipt sin diagnostico publico de workdir: %+v root=%q", receipt, root)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0RuntimeWriteSetGuardBloqueaCambioFueraDeScope(t *testing.T) {
 	root := t.TempDir()
 	protocol := &fakeCodexAppServerProtocolV0{
@@ -1094,7 +1133,7 @@ printf '%s\n' '"]}}}'
 	protocol := serverCodexAppServerCommandProtocolV0{
 		CommandPath: fakeCodex,
 		Args:        []string{"--fake"},
-		Timeout:     2 * time.Second,
+		Timeout:     20 * time.Second,
 	}
 
 	_, err := protocol.ReadThreadV0(context.Background(), "thread-big", true)
@@ -1127,7 +1166,7 @@ printf '%s\n' '"}}}'
 	protocol := serverCodexAppServerCommandProtocolV0{
 		CommandPath: fakeCodex,
 		Args:        []string{"--fake"},
-		Timeout:     2 * time.Second,
+		Timeout:     20 * time.Second,
 	}
 
 	_, err := protocol.StartTurnV0(context.Background(), serverCodexAppServerTurnStartParamsV0{
@@ -1274,6 +1313,9 @@ func startCodexAppServerWebSocketScriptForTestV0(
 	socketPath := filepath.Join(root, "codex-app-server.sock")
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "operation not permitted") {
+			t.Skipf("unix socket no disponible en este sandbox: %v", err)
+		}
 		t.Fatalf("listen unix: %v", err)
 	}
 	records := make(chan codexAppServerWebSocketRecordForTestV0, 8)

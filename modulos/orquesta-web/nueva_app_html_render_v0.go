@@ -875,6 +875,13 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     .wizard-defaults{display:flex;gap:8px;flex-wrap:wrap}
     .wizard-default{border:1px solid #d4dfd0;border-radius:999px;background:#f2f7ef;padding:7px 9px;color:#24332a;font-size:.85rem}
     .wizard-default small{display:block;color:var(--muted);font-weight:700}
+    .wizard-dossier{display:grid;gap:12px;margin-top:14px}
+    .wizard-dossier-section{border:1px solid var(--line);border-radius:10px;background:#f9fcf8;padding:10px}
+    .wizard-dossier-section h3{margin:0 0 8px;font-size:.95rem;color:#1f3527}
+    .wizard-dossier-section p{margin:0 0 8px;color:#3c4b42}
+    .wizard-dossier-list{display:grid;gap:6px;margin:0;padding-left:18px;color:#405147}
+    .wizard-dossier-chips{display:flex;gap:7px;flex-wrap:wrap}
+    .wizard-dossier-chip{border:1px solid #cad8cc;border-radius:999px;background:#eef5ed;padding:5px 8px;color:#26372e;font-size:.84rem}
     .expert-block{display:grid;gap:12px;margin-top:10px}
     .expert-row{border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff}
     .expert-row-title{font-weight:850;margin:0 0 8px;color:var(--brand)}
@@ -1360,7 +1367,17 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
           <label data-help="{{index .Help "agentes.preferencias"}}">{{index .Labels "agentes.preferencias"}}<input name="agentes.preferencias"></label>
           <label data-help="{{index .Help "restricciones"}}">{{index .Labels "restricciones"}}<input name="restricciones"></label>
         </div></fieldset>
-        <fieldset><legend>{{index .HTML "nueva_app.wizard.revision_final"}}</legend><div id="wizard-final-summary" class="summary-list"></div><div class="final-actions"><button class="secondary hidden-final" type="submit" name="nueva_app_action" value="preview_goal" data-help="{{index .Help "action.preview"}}">{{.Page.Formulario.Acciones.Preview}}</button><button class="hidden-final" type="submit" name="nueva_app_action" value="launch" data-help="{{index .Help "action.launch"}}">{{.Page.Formulario.Acciones.Submit}}</button></div></fieldset>
+        <fieldset><legend>{{index .HTML "nueva_app.wizard.revision_final"}}</legend><div id="wizard-final-summary" class="summary-list"></div>
+          <div class="wizard-dossier" data-wizard-dossier>
+            <div class="wizard-dossier-section"><h3>{{i18nText .Page.Locale "nueva_app.wizard.rich.dossier_title"}}</h3><p data-wizard-dossier-summary>{{.Wizard.Dossier.Summary}}</p></div>
+            <div class="wizard-dossier-section"><h3>{{i18nText .Page.Locale "nueva_app.wizard.rich.dossier_architecture"}}</h3><ul class="wizard-dossier-list" data-wizard-dossier-architecture>{{range .Wizard.Dossier.Architecture.Layers}}<li>{{.}}</li>{{end}}{{range .Wizard.Dossier.Architecture.Ports}}<li><code>{{.}}</code></li>{{end}}</ul></div>
+            <div class="wizard-dossier-section"><h3>{{i18nText .Page.Locale "nueva_app.wizard.rich.dossier_i18n"}}</h3><div class="wizard-dossier-chips" data-wizard-dossier-i18n>{{range .Wizard.Dossier.I18N.Locales}}<span class="wizard-dossier-chip">{{.}}</span>{{end}}</div><ul class="wizard-dossier-list">{{range .Wizard.Dossier.I18N.Plan}}<li>{{.}}</li>{{end}}</ul></div>
+            <div class="wizard-dossier-section"><h3>{{i18nText .Page.Locale "nueva_app.wizard.rich.dossier_connectors"}}</h3><ul class="wizard-dossier-list" data-wizard-dossier-connectors>{{range .Wizard.Dossier.Connectors}}<li><strong>{{.Nombre}}</strong> <code>{{.PortRef}}</code> <code>{{.AdapterRef}}</code> {{.Proposito}}</li>{{else}}<li>{{i18nText $.Page.Locale "nueva_app.wizard.rich.dossier_no_connectors"}}</li>{{end}}</ul></div>
+            <div class="wizard-dossier-section"><h3>{{i18nText .Page.Locale "nueva_app.wizard.rich.dossier_docs"}}</h3><ul class="wizard-dossier-list" data-wizard-dossier-docs>{{range .Wizard.Dossier.Documentation}}<li><strong>{{.Title}}</strong> <code>{{.ArtifactRef}}</code> {{.Purpose}}</li>{{end}}</ul></div>
+            <div class="wizard-dossier-section"><h3>{{i18nText .Page.Locale "nueva_app.wizard.rich.dossier_infographics"}}</h3><ul class="wizard-dossier-list" data-wizard-dossier-infographics>{{range .Wizard.Dossier.Infographics}}<li><strong>{{.Title}}</strong> <code>{{.ArtifactRef}}</code> {{.Format}}</li>{{end}}</ul></div>
+            <div class="wizard-dossier-section"><h3>{{i18nText .Page.Locale "nueva_app.wizard.rich.dossier_alternatives"}}</h3><ul class="wizard-dossier-list" data-wizard-dossier-alternatives>{{range .Wizard.Dossier.Alternatives}}<li><strong>{{.Area}}</strong> {{.Option}}: {{.Tradeoff}}</li>{{end}}</ul></div>
+          </div>
+          <div class="final-actions"><button class="secondary hidden-final" type="submit" name="nueva_app_action" value="preview_goal" data-help="{{index .Help "action.preview"}}">{{.Page.Formulario.Acciones.Preview}}</button><button class="hidden-final" type="submit" name="nueva_app_action" value="launch" data-help="{{index .Help "action.launch"}}">{{.Page.Formulario.Acciones.Submit}}</button></div></fieldset>
       </div>
       <div id="wizard-errors" class="form-error-summary" role="alert" aria-live="polite" hidden></div>
       <div class="wizard-actions">
@@ -1437,6 +1454,7 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
     function renderRichWizard(wiz){
       const root=wizard.querySelector('[data-wizard-rich]');
       if(!root||!wiz)return;
+      renderWizardDossier(wiz.dossier);
       const glossaryResponse=wiz.glossary_response;
       const oldGlossary=root.querySelector('[data-wizard-glossary-response]');
       if(oldGlossary)oldGlossary.remove();
@@ -1522,6 +1540,49 @@ var nuevaAppHTMLTemplateV0 = template.Must(template.New("nueva_app_html_v0").Fun
         glossaryExpanded=true;
         root.querySelectorAll('.wizard-help').forEach(help=>{help.open=true;});
       }
+    }
+    function renderWizardDossier(dossier){
+      const root=wizard.querySelector('[data-wizard-dossier]');
+      if(!root||!dossier)return;
+      const summary=root.querySelector('[data-wizard-dossier-summary]');
+      if(summary)summary.textContent=dossier.summary||'';
+      renderDossierList(root.querySelector('[data-wizard-dossier-architecture]'), [
+        ...(((dossier.architecture||{}).layers)||[]).map(item=>escapeHTML(item)),
+        ...(((dossier.architecture||{}).ports)||[]).map(item=>'<code>'+escapeHTML(item)+'</code>')
+      ], true);
+      const i18nBox=root.querySelector('[data-wizard-dossier-i18n]');
+      if(i18nBox){
+        i18nBox.innerHTML='';
+        (((dossier.i18n||{}).locales)||[]).forEach(locale=>{
+          const chip=document.createElement('span');
+          chip.className='wizard-dossier-chip';
+          chip.textContent=locale;
+          i18nBox.appendChild(chip);
+        });
+      }
+      renderDossierList(root.querySelector('[data-wizard-dossier-connectors]'), (dossier.connectors||[]).map(item=>{
+        return '<strong>'+escapeHTML(item.nombre||item.tipo||'connector')+'</strong> <code>'+escapeHTML(item.port_ref||'')+'</code> <code>'+escapeHTML(item.adapter_ref||'')+'</code> '+escapeHTML(item.proposito||'');
+      }), true, wizardText('nueva_app.wizard.rich.dossier_no_connectors'));
+      renderDossierList(root.querySelector('[data-wizard-dossier-docs]'), (dossier.documentation||[]).map(item=>{
+        return '<strong>'+escapeHTML(item.title||'')+'</strong> <code>'+escapeHTML(item.artifact_ref||'')+'</code> '+escapeHTML(item.purpose||'');
+      }), true);
+      renderDossierList(root.querySelector('[data-wizard-dossier-infographics]'), (dossier.infographics||[]).map(item=>{
+        return '<strong>'+escapeHTML(item.title||'')+'</strong> <code>'+escapeHTML(item.artifact_ref||'')+'</code> '+escapeHTML(item.format||'');
+      }), true);
+      renderDossierList(root.querySelector('[data-wizard-dossier-alternatives]'), (dossier.alternatives||[]).map(item=>{
+        return '<strong>'+escapeHTML(item.area||'')+'</strong> '+escapeHTML(item.option||'')+': '+escapeHTML(item.tradeoff||'');
+      }), true);
+    }
+    function renderDossierList(box, items, html, emptyText){
+      if(!box)return;
+      box.innerHTML='';
+      const values=(items||[]).filter(Boolean);
+      if(values.length===0&&emptyText)values.push(html?escapeHTML(emptyText):emptyText);
+      values.forEach(value=>{
+        const li=document.createElement('li');
+        if(html){li.innerHTML=value;}else{li.textContent=value;}
+        box.appendChild(li);
+      });
     }
     function field(name){return form.elements[name];}
     function fieldList(el){return el&&typeof el.length==='number'&&!el.tagName;}

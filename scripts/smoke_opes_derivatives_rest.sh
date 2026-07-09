@@ -10,7 +10,7 @@ MODE="${ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE:-dry-run-once}"
 PREFLIGHT_TARGET_MODE="${ORQUESTA_OPES_DERIVATIVES_PREFLIGHT_TARGET_MODE:-run-until-finalize}"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 SMOKE_OUT_DIR="${SMOKE_OUT_DIR:-/tmp/opes-salidas/derivatives-rest-$SMOKE_ID}"
-OPES_BASE_URL_EFFECTIVE="${ORQUESTA_OPES_BASE_URL:-${OPES_BASE_URL:-}}"
+ORQUESTA_OPES_BASE_URL_EFFECTIVE="${ORQUESTA_OPES_BASE_URL:-}"
 ORQUESTA_BASE_URL_EFFECTIVE="$(smoke_orquesta_base_url_from_env_or_runtime || true)"
 SEQUENCE="${ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE:-$DEFAULT_SEQUENCE}"
 LIMIT="${ORQUESTA_OPES_BRIDGE_LIMIT:-1}"
@@ -520,9 +520,9 @@ python3 "$server_py" "$url_file" "$SEQUENCE" "$LIMIT" "$FAKE_PENDING_TYPE" "$MOD
   FAKE_PID="$!"
   for _ in $(seq 1 50); do
     if [[ -s "$url_file" ]]; then
-      OPES_BASE_URL_EFFECTIVE="$(cat "$url_file")"
+      ORQUESTA_OPES_BASE_URL_EFFECTIVE="$(cat "$url_file")"
       if is_run_until_mode "$MODE"; then
-        ORQUESTA_BASE_URL_EFFECTIVE="$OPES_BASE_URL_EFFECTIVE"
+        ORQUESTA_BASE_URL_EFFECTIVE="$ORQUESTA_OPES_BASE_URL_EFFECTIVE"
       fi
       export ORQUESTA_OPES_TEMPORAL_CONFIRM="${ORQUESTA_OPES_TEMPORAL_CONFIRM:-1}"
       export ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF="${ORQUESTA_OPES_BRIDGE_DESTINATION_EVIDENCE_REF:-evidence-ref-opes-derivatives-fake-goal-first}"
@@ -549,7 +549,7 @@ python3 "$server_py" "$url_file" "$SEQUENCE" "$LIMIT" "$FAKE_PENDING_TYPE" "$MOD
 require_temporal_opes() {
   if [[ "$FAKE_SERVER" == "1" ]]; then
     if [[ "$MODE" == "preflight-only" ]]; then
-      OPES_BASE_URL_EFFECTIVE="${OPES_BASE_URL_EFFECTIVE:-http://127.0.0.1:0}"
+      ORQUESTA_OPES_BASE_URL_EFFECTIVE="${ORQUESTA_OPES_BASE_URL_EFFECTIVE:-http://127.0.0.1:0}"
       return
     fi
     start_fake_opes
@@ -563,13 +563,13 @@ require_temporal_opes() {
     echo "falta confirmacion de instancia OPES temporal: exporta ORQUESTA_OPES_TEMPORAL_CONFIRM=1" >&2
     exit 2
   fi
-  if [[ -z "$OPES_BASE_URL_EFFECTIVE" ]]; then
-    echo "falta ORQUESTA_OPES_BASE_URL u OPES_BASE_URL apuntando a OPES temporal" >&2
+  if [[ -z "$ORQUESTA_OPES_BASE_URL_EFFECTIVE" ]]; then
+    echo "falta ORQUESTA_OPES_BASE_URL apuntando a OPES temporal" >&2
     exit 2
   fi
-  if ! smoke_is_local_url "$OPES_BASE_URL_EFFECTIVE" &&
+  if ! smoke_is_local_url "$ORQUESTA_OPES_BASE_URL_EFFECTIVE" &&
     [[ "${ORQUESTA_OPES_ALLOW_NONLOCAL_TEMPORAL:-0}" != "1" ]]; then
-    echo "OPES_BASE_URL no parece local: $OPES_BASE_URL_EFFECTIVE" >&2
+    echo "ORQUESTA_OPES_BASE_URL no parece local: $ORQUESTA_OPES_BASE_URL_EFFECTIVE" >&2
     echo "si es temporal no local, exporta ORQUESTA_OPES_ALLOW_NONLOCAL_TEMPORAL=1" >&2
     exit 2
   fi
@@ -731,7 +731,7 @@ scope_probe_file_matches_program_id() {
   local file="$1"
   [[ -f "$file" ]] || return 1
   smoke_require_tool python3
-  python3 - "$file" "${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-}" "$OPES_BASE_URL_EFFECTIVE" <<'PY'
+  python3 - "$file" "${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-}" "$ORQUESTA_OPES_BASE_URL_EFFECTIVE" <<'PY'
 import hashlib
 import json
 import sys
@@ -928,7 +928,7 @@ write_metadata() {
     echo "fake_goal_first=$FAKE_GOAL_FIRST"
     echo "fake_jobs_per_type=$FAKE_JOBS_PER_TYPE"
     echo "fake_audio_provider_status=$FAKE_AUDIO_PROVIDER_STATUS"
-    echo "opes_base_url_ref=$(url_ref "$OPES_BASE_URL_EFFECTIVE")"
+    echo "opes_base_url_ref=$(url_ref "$ORQUESTA_OPES_BASE_URL_EFFECTIVE")"
     echo "orquesta_base_url_ref=$(url_ref "$ORQUESTA_BASE_URL_EFFECTIVE")"
     echo "sequence=$SEQUENCE"
     echo "limit=$LIMIT"
@@ -980,7 +980,7 @@ run_scope_probe() {
   local output_file="$SCOPE_PROBE_OUTPUT"
   mkdir -p "$(dirname "$output_file")"
   python3 - \
-    "$OPES_BASE_URL_EFFECTIVE" \
+    "$ORQUESTA_OPES_BASE_URL_EFFECTIVE" \
     "$SEQUENCE" \
     "$(opes_bridge_scan_limit)" \
     "${ORQUESTA_OPES_BRIDGE_PROGRAM_ID:-}" \
@@ -1210,7 +1210,7 @@ PY
 }
 
 run_dry_run_once() {
-  export ORQUESTA_OPES_BASE_URL="$OPES_BASE_URL_EFFECTIVE"
+  export ORQUESTA_OPES_BASE_URL="$ORQUESTA_OPES_BASE_URL_EFFECTIVE"
   export ORQUESTA_OPES_BRIDGE_DRY_RUN=1
   export ORQUESTA_OPES_BRIDGE_LIMIT="$LIMIT"
   export ORQUESTA_OPES_BRIDGE_JOB_TYPE_SEQUENCE="$SEQUENCE"
@@ -1227,7 +1227,7 @@ run_execute_drain_once() {
     echo "falta endpoint Orquesta gestionado para crear runs desde derivados: define ORQUESTA_SERVER_URL u ORQUESTA_RUNTIME_DIR/base_url.txt" >&2
     exit 2
   fi
-  export ORQUESTA_OPES_BASE_URL="$OPES_BASE_URL_EFFECTIVE"
+  export ORQUESTA_OPES_BASE_URL="$ORQUESTA_OPES_BASE_URL_EFFECTIVE"
   export ORQUESTA_BASE_URL="$ORQUESTA_BASE_URL_EFFECTIVE"
   export ORQUESTA_OPES_BRIDGE_CONFIRM=1
   export ORQUESTA_OPES_BRIDGE_DRY_RUN=0
@@ -1248,7 +1248,7 @@ run_execute_drain_once_to() {
     echo "falta endpoint Orquesta gestionado para crear runs desde derivados: define ORQUESTA_SERVER_URL u ORQUESTA_RUNTIME_DIR/base_url.txt" >&2
     exit 2
   fi
-  export ORQUESTA_OPES_BASE_URL="$OPES_BASE_URL_EFFECTIVE"
+  export ORQUESTA_OPES_BASE_URL="$ORQUESTA_OPES_BASE_URL_EFFECTIVE"
   export ORQUESTA_BASE_URL="$ORQUESTA_BASE_URL_EFFECTIVE"
   export ORQUESTA_OPES_BRIDGE_CONFIRM=1
   export ORQUESTA_OPES_BRIDGE_DRY_RUN=0

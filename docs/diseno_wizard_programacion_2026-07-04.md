@@ -745,3 +745,27 @@ base no depende de proveedor LLM ni de imagen raster para existir.
   rutas locales, credenciales ni detalles de runtime proveedor.
 - `TestWizardDossierParidadHTTPMCPWebV0`: las tres superficies exponen los
   mismos campos canonicos.
+
+### 14.6 Estado implementado 2026-07-10
+
+Integrado en `modulos/orquesta-web` y expuesto por MCP como parte de
+`wizard.dossier`:
+
+- `WizardTurnResultV0.Dossier` con
+  `schema_version=web_nueva_app_wizard_dossier.v0`, `dossier_ref`, `markdown`,
+  `sections`, `diagrams`, `decision_refs`, `risk_refs` y vistas estructuradas
+  de arquitectura, i18n, conectores, documentacion, infografias, decisiones y
+  alternativas.
+- La pantalla final de `/nueva-app` muestra el dossier antes de los botones de
+  previsualizar o lanzar.
+- `orquesta.nueva_app.wizard.v0` declara y conserva el dossier dentro del JSON
+  `wizard` sin duplicar reglas en el adaptador MCP.
+
+Pruebas focales:
+
+- `TestWizardDossierPrevioIncluyeArquitecturaI18NConectoresDocsEInfografiasV0`.
+- `TestNewMCPNuevaAppWizardResultFromJSONV0ConservaWizardYContrastes`.
+
+Pendiente posterior no cerrado por este corte: confirmacion estricta por
+`confirm_launch_dossier_ref` antes del lanzamiento real y test de regeneracion
+del `DossierRef` al cambiar una respuesta.

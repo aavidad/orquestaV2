@@ -99,6 +99,7 @@ func autoprogrammingPartitionWriteSetByAreaV0(
 	}
 	plan = autoprogrammingApplySequencedPathDepsV0(request, plan, groups, sequenced)
 	plan = autoprogrammingApplyDeclaredTaskWriteSetAndDepsV0(request, plan, groups)
+	plan = autoprogrammingApplyDeclaredWriteSetOverlapDepsV0(request, plan, groups)
 	return autoprogrammingCompletePartitionPlanV0(request, plan, groups), nil
 }
 
@@ -133,6 +134,48 @@ func autoprogrammingApplyDeclaredTaskWriteSetAndDepsV0(
 		}
 		if len(declaredDeps) > 0 {
 			plan.DependsOnByArea[group.Area] = declaredDeps
+		}
+	}
+	return plan
+}
+
+func autoprogrammingApplyDeclaredWriteSetOverlapDepsV0(
+	request AutoprogrammingRequestV0,
+	plan AutoprogrammingPartitionPlanV0,
+	groups []AutoprogrammingTaskGroupV0,
+) AutoprogrammingPartitionPlanV0 {
+	declaredByArea := map[string]bool{}
+	groupIndex := map[string]int{}
+	for i, group := range groups {
+		groupIndex[group.Area] = i
+		for _, task := range group.Tasks {
+			if len(task.WriteSet) > 0 {
+				declaredByArea[group.Area] = true
+				break
+			}
+		}
+	}
+	for i := range groups {
+		for j := i + 1; j < len(groups); j++ {
+			left := groups[i]
+			right := groups[j]
+			if !declaredByArea[left.Area] && !declaredByArea[right.Area] {
+				continue
+			}
+			if !autoprogrammingWriteSetsOverlapV0(plan.WriteSetByArea[left.Area], plan.WriteSetByArea[right.Area]) {
+				continue
+			}
+			dependencyRef := autoprogrammingProgrammableTaskRefV0(request.RequestRef, groupIndex[left.Area])
+			before := len(plan.DependsOnByArea[right.Area])
+			plan.DependsOnByArea[right.Area] = appendUniqueStringV0(plan.DependsOnByArea[right.Area], dependencyRef)
+			if len(plan.DependsOnByArea[right.Area]) == before {
+				continue
+			}
+			plan.Repairs = append(plan.Repairs, AutoprogrammingPartitionRepairV0{
+				Code:    "declared_write_set_overlap_sequenced",
+				Areas:   []string{left.Area, right.Area},
+				Message: "write-set declarado compartido secuenciado para evitar ejecucion paralela sobre el mismo alcance",
+			})
 		}
 	}
 	return plan
