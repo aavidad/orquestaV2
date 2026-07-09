@@ -46,6 +46,15 @@ antes de su cierre posterior:
   revalida active work antes de publicar ready. Pendiente: smoke real/corte
   externo amplio y coordinacion automatica completa
   backend/checkpoint/stop/cancel/wait.
+- Avance Codex local 2026-07-09 tarde: el smoke real
+  `scripts/smoke_goal_first_shutdown_coordination_real.sh` volvio a pasar con
+  backend `app_server_tmux` real, status previo visible, shutdown amplio por
+  `/api/v0/server/shutdown`, `runs_requested=1`, `runs_stopped=1`,
+  `run_control_statuses=stopped`, `shutdown_ready=true` y
+  `app_server_tmux_processes_alive=0`. Esto cierra el residual local de nucleo
+  en el que un goal-first fuera de cola podia no coordinarse durante shutdown;
+  `BUG-065` permanece abierto solo para evidencia externa/remota/stale o
+  proveedor lento no reproducida en local.
 - Avance 2026-07-04 noche 7: el supervisor residente goal-first completa
   `RunControl` como `stopped` cuando reconcilia un backend Goal ausente por
   cleanup externo y prepara rework causal. Usa razon/idempotencia de

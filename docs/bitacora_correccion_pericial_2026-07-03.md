@@ -6120,3 +6120,60 @@ Lectura:
   desde este test un cap duro dentro del proveedor antes de que el stdout crudo
   entre en el historial del app-server. Ese residual sigue siendo frontera
   proveedor/runtime y queda documentado como tal.
+
+## Orquesta local 2026-07-09: shutdown goal-first validado dentro hacia afuera
+
+Se revalido el eje interior de `BUG-ORQ-20260701-065` /
+`BUG-ORQ-20260704-165` antes de tocar OPES, remoto, Hermes o Telegram.
+
+Ejecucion real:
+
+```bash
+ORQUESTA_KEEP_SMOKE_DIR=1 \
+ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 \
+ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 \
+./scripts/smoke_goal_first_shutdown_coordination_real.sh
+```
+
+Resultado:
+
+- `smoke_goal_first_shutdown_coordination_real=ok`.
+- `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-12dc1a2f9e726db1738e5b860b2227e1`.
+- `external_goal_ref=019f47d2-332b-7840-ae2f-94d096a8b55f`.
+- `autoprogramming_status_before_shutdown_visible=true`.
+- `/api/v0/server/shutdown` devolvio `status=ready`,
+  `shutdown_ready=true`, `runs_requested=1`, `runs_stopped=1`.
+- `run_control_statuses=stopped` y
+  `shutdown_coordination_all_runs_stopped=true`.
+- `goal_actions[0].action_taken=cleanup_completed`.
+- `app_server_tmux_processes_alive=0`.
+
+Evidencia:
+
+- Smoke crudo inicial: `/tmp/orquesta-goal-first-app-server.3sGyca`.
+- Copia saneada para revision:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-shutdown-coordination-20260709-local`.
+- Tras copiar la evidencia, se limpio del smoke crudo `runtime/goal-srv/codex-home`
+  y `bin` para no dejar credenciales, caches ni binario temporal retenidos.
+- No quedaron procesos `orquesta-server run`, `codex app-server`, socket
+  `g-78cec46f183f809b.sock` ni tmux `orquesta-goal-78cec46f183f809b`.
+
+Pruebas:
+
+- `bash -n scripts/smoke_goal_first_app_server_real.sh scripts/smoke_goal_first_shutdown_coordination_real.sh`
+- `go test -count=1 ./cmd/orquesta-server -run 'Test(ServerAppHTTPGoalFirstShutdownCoordinaControlPendienteFueraDeCola|SmokeGoalFirstShutdownCoordinationReal|NormalizeServerShutdownClientResultV0GoalActionCompletedOcultaAccionStale)'`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestStackShutdown(V0ForzadoCoordinaGoalFirstTerminalFueraDeCola|RunControlWriterV0ForcedStopMarcaGoalTerminalReplanificable)'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestCodexAppServerTmuxBackendV0(EnsureShutdownCleanupMigrado|ReadActiveShutdownWorkIgnoraEstadoDegradadoSinResiduoVivo)'`
+- `scripts/orquesta_metricas_deuda.sh --json` ->
+  `{"env_vars_orquesta":513,"endpoints_status":16,"interfaces_estado":67,"modulos_director":18}`.
+
+Lectura:
+
+- El nucleo/runtime local goal-first coordina shutdown de un goal fuera de cola
+  con backend `app_server_tmux` real: el status previo crea visibilidad, shutdown
+  amplio solicita control, `RunControl` termina `stopped`, el backend se limpia
+  y el proceso servidor sale.
+- No se cambia codigo en este corte porque la brecha local no reaparece.
+- No se declara cerrado `BUG-065` global: el residual que queda es externo o de
+  entorno, concretamente repetir evidencia en remoto/stale/proveedor lento y
+  comprobar cortes manuales fuera de esta maquina.
