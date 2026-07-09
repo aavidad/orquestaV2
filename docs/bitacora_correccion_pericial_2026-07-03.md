@@ -5533,3 +5533,50 @@ Verificado:
 - `go test -count=1 ./modulos/orquesta-runtime-codex -run 'TestCodexWrapperV0EscribeProcessDone|TestCodexWrapperV0'`
 - `go test -count=1 ./modulos/orquesta-runtime-codex`
 - `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0TurnStart|TestServerCodexAppServerTurnStartParamsV0'`
+
+## Codex local 2026-07-09: smoke real BUG-079 toolOutputPolicy accepted
+
+Objetivo: no cerrar `BUG-079` por unit tests; comprobar con app-server real si
+la politica estructurada `toolOutputPolicy` llega como `accepted`, `fallback` o
+`missing`.
+
+Preflight:
+
+- `ORQUESTA_GOAL_FIRST_SMOKE_PREFLIGHT_ONLY=1 ./scripts/smoke_goal_first_app_server_real.sh`
+- Resultado: `smoke_goal_first_app_server_preflight=ok`,
+  `goal_backend=app_server_tmux`.
+
+Smoke normal corto:
+
+- Comando: smoke real normal con 50 polls, `KEEP_SMOKE_DIR=1`.
+- `run_ref=run-spec-smoke-goal-first-req-smoke-goal-first-4bde3b2d0c8fc9f42c555b714a3521f0`.
+- Resultado: no cerro accepted en 50 polls; no se cuenta como verde.
+- Valor util: el estado de shutdown incluyo
+  `evidence-ref-codex-app-server-turn-start-tool-output-policy-sent` y
+  `evidence-ref-codex-app-server-turn-start-tool-output-policy-accepted`.
+- Cleanup: sin `orquesta-server run`, sin `codex app-server` ni tmux
+  `orquesta-goal-*` del smoke.
+- Evidencia retenida:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.ojE5Us`.
+
+Smoke alto consumo/checkpoint:
+
+- Comando:
+  `ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 ORQUESTA_GOAL_FIRST_SMOKE_POLLS=30 ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS=3 ORQUESTA_KEEP_SMOKE_DIR=1 ORQUESTA_SMOKE_PARENT=/tmp/orquesta-smokes-codex ./scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh`.
+- `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-a93fa78e27925c5262c0b25f2445dc0f`.
+- Resultado: `tool_output_policy_transport=accepted`,
+  `smoke_goal_first_high_consumption_real=ok`,
+  `bug088_path=second_artifact_or_partial_artifacts`,
+  `recommended_action=review_partial_artifacts`,
+  `tokens_used=8392`, checkpoint durable y
+  `app_server_tmux_processes_alive=0`.
+- Evidencia retenida:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.CZC8Ek`.
+
+Lectura:
+
+- El proveedor/app-server real actual acepta `toolOutputPolicy`; el residual ya
+  no es transporte local ni fallback legacy.
+- `BUG-079` sigue abierto para la prueba adversarial/larga de enforcement
+  pre-tool: stdout gigante debe cortarse antes de quemar contexto, no solo
+  sanearse en lectura posterior.

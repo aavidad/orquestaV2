@@ -101,6 +101,20 @@ antes de su cierre posterior:
   sin evidencia de transporte `toolOutputPolicy` enviada y aceptada o fallback;
   publica `tool_output_policy_transport=accepted|fallback|sent_without_accept_or_fallback|missing`.
   No cierra enforcement pre-tool del proveedor.
+- Avance 2026-07-09h: smoke real app-server confirma que el proveedor actual
+  acepta `toolOutputPolicy`. Primero se ejecuto el smoke normal con
+  `run_ref=run-spec-smoke-goal-first-req-smoke-goal-first-4bde3b2d0c8fc9f42c555b714a3521f0`;
+  no cerro en 50 polls y no se cuenta como verde, pero el shutdown publico
+  evidencias `evidence-ref-codex-app-server-turn-start-tool-output-policy-sent`
+  y `...-accepted`, y no quedaron procesos. Despues el smoke alto consumo
+  `scripts/smoke_goal_first_checkpoint_only_high_consumption_real.sh` paso con
+  `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-a93fa78e27925c5262c0b25f2445dc0f`,
+  `tool_output_policy_transport=accepted`, `smoke_goal_first_high_consumption_real=ok`,
+  `bug088_path=second_artifact_or_partial_artifacts`, `tokens_used=8392`,
+  checkpoint durable y `app_server_tmux_processes_alive=0`. Evidencia retenida:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.CZC8Ek`.
+  `BUG-079` sigue abierto solo para el smoke adversarial/largo que demuestre
+  enforcement pre-tool ante stdout gigante; ya no queda duda local de transporte.
 - `BUG-ORQ-20260709-199` queda cerrado: la misma ola real de Orquesta entrego
   cambios y `codex_last_message.txt`, pero no dejo `codex_process_done_v0`
   porque el marcador dependia de un goroutine `cmd.Wait()` en el CLI lanzador,

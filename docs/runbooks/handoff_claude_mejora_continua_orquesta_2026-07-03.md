@@ -2493,3 +2493,37 @@ Pendiente:
 - No cierres `BUG-079` completo: falta prueba real de enforcement pre-tool en
   proveedor/app-server. Este corte solo evita falso verde del smoke sin
   evidencia de transporte.
+
+## Actualizacion Codex 2026-07-09h: BUG-079 app-server real acepta toolOutputPolicy
+
+Para Claude:
+
+- Ya no trates `BUG-079` como duda de transporte local de `toolOutputPolicy`.
+  El app-server real actual acepta la politica estructurada.
+
+Evidencia:
+
+- Preflight app-server:
+  `smoke_goal_first_app_server_preflight=ok`, `goal_backend=app_server_tmux`.
+- Smoke normal corto:
+  `run_ref=run-spec-smoke-goal-first-req-smoke-goal-first-4bde3b2d0c8fc9f42c555b714a3521f0`.
+  No cerro accepted en 50 polls y no es verde, pero publico evidencias
+  `tool-output-policy-sent` y `tool-output-policy-accepted`; sin procesos
+  residuales. Evidencia:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.ojE5Us`.
+- Smoke alto consumo/checkpoint:
+  `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-a93fa78e27925c5262c0b25f2445dc0f`,
+  `tool_output_policy_transport=accepted`,
+  `smoke_goal_first_high_consumption_real=ok`,
+  `bug088_path=second_artifact_or_partial_artifacts`,
+  `tokens_used=8392`,
+  `app_server_tmux_processes_alive=0`.
+  Evidencia:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.CZC8Ek`.
+
+Pendiente real de `BUG-079`:
+
+- Ejecutar o construir smoke adversarial/largo que pruebe enforcement pre-tool
+  ante stdout gigante. Si esa prueba muestra consumo grande antes del corte,
+  el bug pasa a frontera runtime/proveedor; si pasa, se puede cerrar `BUG-079`
+  con evidencia fuerte.
