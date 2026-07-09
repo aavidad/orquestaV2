@@ -191,6 +191,11 @@ func wizardDecisionsForAnswerV0(
 		}
 	}
 	switch question.QuestionRef {
+	case "wizard-u12-historico-versiones":
+		return []WebNuevaAppIntakeDecisionV0{{
+			Field:  "datos.operacion.restricciones",
+			Values: wizardHistoryVersioningRestrictionsV0(choice),
+		}}
 	case "wizard-t1-control-acceso":
 		index, _, ok := indexedNuevaAppDecisionFieldV0(question.Field, "integraciones")
 		if !ok {
@@ -271,6 +276,17 @@ func wizardDecisionsForAnswerV0(
 		return wizardDataNeedDecisionsV0(choice)
 	default:
 		return []WebNuevaAppIntakeDecisionV0{guidedAnswerDecisionV0(question.Field, choice)}
+	}
+}
+
+func wizardHistoryVersioningRestrictionsV0(choice string) []string {
+	switch choice {
+	case "sin_historico":
+		return []string{"sin historico funcional salvo auditoria obligatoria"}
+	case "historial_completo":
+		return []string{"historial completo consultable y auditable"}
+	default:
+		return []string{"versionado basico de cambios relevantes"}
 	}
 }
 

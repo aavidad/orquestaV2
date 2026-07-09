@@ -4969,3 +4969,35 @@ Lectura para Claude:
   multi-fuente sin importar el stack desde `orquesta-server`. No declara cerrado
   `BUG-165` total; sigue pendiente smoke real amplio con proveedor lento y
   auditoria completa de submit/ack/observe largos.
+
+## Codex local 2026-07-09: wizard U12 deja de pisar autonomia
+
+Contexto:
+
+- Hubble reviso el wizard y encontro un bug concreto: U6 colaboracion y U12
+  usaban el mismo campo `agentes.autonomia`.
+- Eso podia cerrar U12 al responder U6 y podia sobrescribir la autonomia al
+  responder la pregunta que debia tratar historico/versiones.
+
+Cierre aplicado:
+
+- `wizard-u12-autonomia` se sustituye por
+  `wizard-u12-historico-versiones`.
+- U12 escribe en `datos.operacion.restricciones`, campo existente del contrato
+  publico, sin anadir schema nuevo.
+- Opciones U12: `sin_historico`, `versionado_basico`,
+  `historial_completo`.
+- `wizardDecisionsForAnswerV0` materializa esas opciones como restricciones
+  operativas y no toca `agentes.autonomia`.
+- Catalogo i18n es/en y `docs/wizard_glosario_generado.md` regenerado.
+
+Pruebas verdes:
+
+- `ORQUESTA_UPDATE_WIZARD_GLOSSARY=1 go test -count=1 ./modulos/orquesta-web -run TestWizardGlosarioGeneradoV0`
+- `go test -count=1 ./modulos/orquesta-web`
+
+Lectura para Claude:
+
+- Cierra `BUG-ORQ-20260709-WIZARD-U12-AUTONOMIA-PISADA`.
+- No declara completo todo el redisenyo U1-U12; solo corrige una pisada real
+  de campos dentro del wizard existente.

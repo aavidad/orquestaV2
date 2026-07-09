@@ -441,20 +441,20 @@ Fuente generada desde el catalogo i18n es/en del wizard.
 - es: Criticidad media significa impacto controlado si falla. Conviene por defecto. Ejemplo: se puede reintentar sin parar el negocio.
 - en: Medium criticality means failure has controlled impact. Use it as a default. Example: work can be retried without stopping the business.
 
-## nueva_app.wizard.help.option.u12.alta
+## nueva_app.wizard.help.option.u12.historial_completo
 
-- es: Autonomia alta permite mas decisiones automaticas. Conviene cuando reglas, tests y rollback estan claros. Ejemplo: tareas repetibles de mantenimiento.
-- en: High autonomy allows more automatic decisions. Use it when rules, tests, and rollback are clear. Example: repeated maintenance tasks.
+- es: Historial completo conserva cambios consultables y auditables. Conviene cuando hay trazabilidad fuerte. Ejemplo: expediente con versiones de cada decision.
+- en: Full history keeps changes reviewable and auditable. Use it when traceability is strong. Example: a case file with versions of each decision.
 
-## nueva_app.wizard.help.option.u12.baja
+## nueva_app.wizard.help.option.u12.sin_historico
 
-- es: Autonomia baja obliga a preguntar mas antes de actuar. Conviene si hay riesgo alto o requisitos poco claros. Ejemplo: cambios legales.
-- en: Low autonomy asks more often before acting. Use it for high risk or unclear requirements. Example: legal changes.
+- es: Sin historico evita guardar versiones funcionales. Conviene si los datos son temporales o se recalculan. Ejemplo: una simulacion sin expedientes.
+- en: No history avoids functional versions. Use it when data is temporary or recalculated. Example: a simulation without case files.
 
-## nueva_app.wizard.help.option.u12.media
+## nueva_app.wizard.help.option.u12.versionado_basico
 
-- es: Autonomia media permite que los agentes avancen y pidan confirmacion en puntos sensibles. Conviene para equilibrio entre velocidad y control.
-- en: Medium autonomy lets agents progress and ask for confirmation on sensitive points. Use it to balance speed and control.
+- es: Versionado basico guarda cambios relevantes sin conservar cada detalle. Conviene por defecto si hay datos editables. Ejemplo: saber quien modifico una ficha y cuando.
+- en: Basic versioning keeps relevant changes without retaining every detail. Use it by default when data is editable. Example: know who changed a record and when.
 
 ## nueva_app.wizard.help.option.u2.api
 

@@ -195,6 +195,41 @@ func TestWizardConservaRecomendacionVisibleSiUsuarioEligeOtraOpcionV0(t *testing
 	}
 }
 
+func TestWizardU6YU12NoCompartenCampoAutonomiaV0(t *testing.T) {
+	session := wizardSessionWithObjectiveV0("session-wizard-u6-u12", "quiero una app de equipo con fichas editables")
+	questions := webNuevaAppWizardAllGapQuestionsV0(session.Form)
+	if !hasWizardQuestionRefV0(questions, "wizard-u6-colaboracion") ||
+		!hasWizardQuestionRefV0(questions, "wizard-u12-historico-versiones") {
+		t.Fatalf("U6 y U12 deben coexistir antes de responder: %+v", questions)
+	}
+
+	session, _ = ApplyWebNuevaAppWizardAnswersV0(session, []WizardAnswerV0{{
+		QuestionRef: "wizard-u6-colaboracion",
+		UserChoice:  "media",
+	}})
+	questions = webNuevaAppWizardAllGapQuestionsV0(session.Form)
+	if session.Form.Agentes.Autonomia != "media" {
+		t.Fatalf("U6 debe conservar autonomia: %+v", session.Form.Agentes)
+	}
+	if !hasWizardQuestionRefV0(questions, "wizard-u12-historico-versiones") {
+		t.Fatalf("responder U6 no debe cerrar U12: %+v", questions)
+	}
+
+	session, _ = ApplyWebNuevaAppWizardAnswersV0(session, []WizardAnswerV0{{
+		QuestionRef: "wizard-u12-historico-versiones",
+		UserChoice:  "versionado_basico",
+	}})
+	if session.Form.Agentes.Autonomia != "media" {
+		t.Fatalf("U12 no debe modificar autonomia: %+v", session.Form.Agentes)
+	}
+	if !stringSliceHasV0(session.Form.Datos.Operacion.Restricciones, "versionado basico de cambios relevantes") {
+		t.Fatalf("U12 debe materializar restriccion operativa: %+v", session.Form.Datos.Operacion.Restricciones)
+	}
+	if hasWizardQuestionRefV0(webNuevaAppWizardAllGapQuestionsV0(session.Form), "wizard-u12-historico-versiones") {
+		t.Fatalf("U12 debe quedar cerrada al responder: %+v", session.Form.Datos.Operacion)
+	}
+}
+
 func TestNuevaAppIntakeGuidedResponseV0IncluyeWizardRicoV0(t *testing.T) {
 	response := NewWebNuevaAppIntakeGuidedResponseV0(WebNuevaAppIntakeGuidedRequestV0{
 		SessionID: "session-wizard-endpoint",

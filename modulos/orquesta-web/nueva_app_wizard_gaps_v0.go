@@ -120,10 +120,10 @@ func wizardUniversalDimensionQuestionsV0(form WebNuevaAppFormV0) []WizardQuestio
 			wizardOptionV0("alta", "nueva_app.wizard.option.u11.alta", false, ""),
 			wizardOptionV0("critica", "nueva_app.wizard.option.u11.critica", false, ""),
 		}),
-		wizardQuestionV0("wizard-u12-autonomia", "agentes.autonomia", WizardTopicEntregaV0, WizardImportanceMediaV0, []WizardOptionV0{
-			wizardOptionV0("media", "nueva_app.wizard.option.u12.media", true, "nueva_app.wizard.rationale.u12.media"),
-			wizardOptionV0("baja", "nueva_app.wizard.option.u12.baja", false, ""),
-			wizardOptionV0("alta", "nueva_app.wizard.option.u12.alta", false, ""),
+		wizardQuestionV0("wizard-u12-historico-versiones", "datos.operacion.restricciones", WizardTopicEntregaV0, WizardImportanceMediaV0, []WizardOptionV0{
+			wizardOptionV0("versionado_basico", "nueva_app.wizard.option.u12.versionado_basico", true, "nueva_app.wizard.rationale.u12.versionado_basico"),
+			wizardOptionV0("sin_historico", "nueva_app.wizard.option.u12.sin_historico", false, ""),
+			wizardOptionV0("historial_completo", "nueva_app.wizard.option.u12.historial_completo", false, ""),
 		}),
 	}
 	return wizardUniversalQuestionsStillOpenV0(form, questions)
@@ -378,8 +378,8 @@ func wizardUniversalQuestionsStillOpenV0(form WebNuevaAppFormV0, questions []Wiz
 			if trimV0(form.Datos.Operacion.Criticidad) != "" {
 				continue
 			}
-		case "wizard-u12-autonomia":
-			if trimV0(form.Agentes.Autonomia) != "" {
+		case "wizard-u12-historico-versiones":
+			if len(compactStringsV0(form.Datos.Operacion.Restricciones)) > 0 {
 				continue
 			}
 		}

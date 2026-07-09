@@ -2971,6 +2971,20 @@ endpoint HTTP real. Evidencia:
 `go test -count=1 ./modulos/orquesta-web ./modulos/orquesta-http-gateway ./modulos/orquesta-app-gateway ./modulos/orquesta-app-codex-stack -run 'TestNuevaAppWizardBotHTTPHandler|TestNuevaAppHTMLHandlerV0GET|TestWizardBot|TestNuevaAppHTMLHelpKeysV0CubrenClavesUsadasEnPlantilla|TestNewAppGatewayMux|TestPublicRouteMutability|TestPublicRouteManifest|TestGatewayRouteRegistrations|TestNewHTTPHandlerV0ExponeNuevaApp(IntakeGuidedTurn|WizardBot)|TestNewHTTPHandlerV0InyectaNuevaAppIntakeAssistant|TestNewHTTPHandlerV0PropagaFallback|TestBuildStackV0(CableaNuevaAppWizardBotMCPDeterminista|ExponeNuevaAppWizardBotHTTP|ExponeBindingsMCPNativos)'`
 y `git diff --check`.
 
+BUG nuevo `BUG-ORQ-20260709-WIZARD-U12-AUTONOMIA-PISADA` (cerrado):
+Una revision read-only del wizard detecto que `wizard-u6-colaboracion` y
+`wizard-u12-autonomia` escribian ambos en `agentes.autonomia`. Responder U6
+cerraba U12 aunque U12 representaba otra decision del diseno, y responder U12
+podia sobrescribir la autonomia elegida. Cierre aplicado: U12 pasa a
+`wizard-u12-historico-versiones`, escribe en
+`datos.operacion.restricciones`, ofrece `sin_historico`,
+`versionado_basico` e `historial_completo`, y materializa restricciones
+operativas sin tocar `agentes.autonomia`. El catalogo i18n es/en y
+`docs/wizard_glosario_generado.md` quedan actualizados. Evidencia:
+`TestWizardU6YU12NoCompartenCampoAutonomiaV0`,
+`ORQUESTA_UPDATE_WIZARD_GLOSSARY=1 go test -count=1 ./modulos/orquesta-web -run TestWizardGlosarioGeneradoV0`
+y `go test -count=1 ./modulos/orquesta-web`.
+
 BUG nuevo `BUG-ORQ-20260706-SMOKE-SHUTDOWN-PAYLOAD-STALE` (cerrado):
 Durante el smoke manual local del binario
 `/tmp/orquesta-builds/orquesta-server-221a4f07d`, el servidor arranco y
