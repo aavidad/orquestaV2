@@ -2682,7 +2682,11 @@ paquete final y sin tocar OPES productivo.
 
 ## Pendientes de analisis agrupado
 
-- Unificar diagnostico de estado vivo: goals, procesos, runs, ACK y deliveries.
+- Diagnostico residente de estado vivo parcialmente unificado: el endpoint
+  `/api/v0/operational-status/query` ya puede consumir la fuente neutral de
+  estado vivo con goals, procesos, runs, ACK/receipts y deliveries como
+  contadores/referencias compactas. Queda pendiente smoke real amplio de
+  observabilidad/control lento.
 - Revisar endpoints largos: separar submit/ack/observe de operaciones que
   pueden colgar HTTP.
 - Auditar todos los validadores OPES contra artefactos canonicos vs
@@ -3058,6 +3062,22 @@ y
 `go test -count=1 ./modulos/orquesta-server -run 'Test(ShutdownProjectionFromHTTPV0ReadyConGoalActionsQuedaStopPending|ServerPublicStatusV0ExponeShutdownGoalActions|StatusTracker|ServerPublicStatus)'`.
 Residual: no cierra el BUG-165 global de observabilidad/control largo con
 proveedor real; queda pendiente smoke real residente amplio tras deploy/sync.
+
+Avance `BUG-ORQ-20260704-165` 2026-07-09 (diagnostico vivo reducido):
+`ResidentOperationalStatusSourceV0` acepta ahora una fuente neutral
+`orquesta-estado-vivo` y la ruta residente de operational-status agrega
+contadores/referencias compactas de evidencias de run, goal, proceso,
+ACK/receipt y delivery. El stack Codex reutiliza su
+`AutoprogrammingEstadoVivoSource`, ya usado por MCP, y lo pasa a
+`orquesta-server` sin importar la composicion desde el modulo servidor. La
+consulta aplica timeout de 500 ms, limita evidencias a 32, respeta presupuesto
+de 24 contadores/20 referencias y degrada a warning `estado_vivo_unavailable`
+si la fuente falla, sin tumbar el status. Evidencia:
+`TestResidentOperationalStatusSourceV0AgregaEstadoVivoCompactoV0`,
+`TestResidentOperationalStatusSourceV0EstadoVivoErrorNoTumbaDiagnosticoV0`,
+`go test -count=1 ./modulos/orquesta-server` y focal de
+`cmd/orquesta-server`. Residual: no cierra el smoke real amplio con proveedor
+lento ni la auditoria completa de submit/ack/observe largos.
 
 Avance `BUG-ORQ-20260701-066` 2026-07-07 (reducido, no cerrado completo):
 Codex local cierra dos bordes del contrato OPES done/settled sin tocar OPES

@@ -4933,3 +4933,39 @@ Lectura para Claude:
 - El residual documental queda cerrado localmente. Sigue pendiente la validacion
   operativa en servidor con remote Git canonico o flujo bundle/push real cuando
   haya acceso remoto/auth/cuota.
+
+## Codex local 2026-07-09: operational-status consume estado vivo
+
+Contexto:
+
+- Russell reviso el residual de `BUG-ORQ-20260704-165`: habia mitigaciones para
+  `observe/status` largo, pero el diagnostico residente aun salia solo del
+  `StatusTrackerV0` y no agregaba la fuente neutral de runs, procesos,
+  ACK/receipts y deliveries que ya usa MCP.
+
+Cierre aplicado:
+
+- `ResidentOperationalStatusSourceV0` acepta `EstadoVivoSource` de
+  `orquesta-estado-vivo`.
+- La consulta agrega contadores compactos de evidencias, nodos, conflictos,
+  procesos vivos, terminales y entregas parciales.
+- Agrega referencias opacas a run/goal/evidencias respetando el presupuesto de
+  `DiagnosticoCompactoV0`.
+- La fuente se consulta con timeout de 500 ms y limite 32; si falla, queda
+  warning `estado_vivo_unavailable` y el status no se cae.
+- `RuntimeV0` recibe el puerto por deps y `cmd/orquesta-server` le pasa
+  `stack.MCPTransportBindings.AutoprogrammingEstadoVivoSource`, reutilizando la
+  composicion existente.
+
+Pruebas verdes:
+
+- `go test -count=1 ./modulos/orquesta-server -run 'TestResidentOperationalStatusSourceV0|TestHandlerV0OperationalStatusQueryV0'`
+- `go test -count=1 ./modulos/orquesta-server`
+- `go test -count=1 ./cmd/orquesta-server -run 'Test.*(OperationalStatus|Stack|Runtime|GoalFirstAppHTTP|BuildRuntime)'`
+
+Lectura para Claude:
+
+- Esto reduce el falso verde de operational-status: ahora puede ver estado vivo
+  multi-fuente sin importar el stack desde `orquesta-server`. No declara cerrado
+  `BUG-165` total; sigue pendiente smoke real amplio con proveedor lento y
+  auditoria completa de submit/ack/observe largos.

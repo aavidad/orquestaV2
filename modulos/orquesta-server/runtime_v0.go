@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sync"
 
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
@@ -18,6 +19,7 @@ type RuntimeDepsV0 struct {
 	GoalStateStore    orquestagoal.GoalWorkStateStorePortV0
 	GoalFingerprint   GoalObservationFingerprintPortV0
 	GoalStopper       GoalCooperativeStopPortV0
+	EstadoVivoSource  orquestaestadovivo.FuenteEvidenciaEstadoPortV0
 	ShutdownSnapshot  ShutdownSnapshotPortV0
 	ShutdownHooks     []RuntimeShutdownHookPortV0
 	BackgroundWorkers []RuntimeBackgroundWorkerPortV0
@@ -38,6 +40,7 @@ type RuntimeV0 struct {
 	goalStateStore                orquestagoal.GoalWorkStateStorePortV0
 	goalFingerprint               GoalObservationFingerprintPortV0
 	goalStopper                   GoalCooperativeStopPortV0
+	estadoVivoSource              orquestaestadovivo.FuenteEvidenciaEstadoPortV0
 	goalObservationFingerprintsMu sync.Mutex
 	goalObservationFingerprints   map[string]orquestagoal.GoalObservationFingerprintV0
 	shutdownSnapshot              ShutdownSnapshotPortV0
@@ -106,6 +109,7 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		goalStateStore:              deps.GoalStateStore,
 		goalFingerprint:             deps.GoalFingerprint,
 		goalStopper:                 deps.GoalStopper,
+		estadoVivoSource:            deps.EstadoVivoSource,
 		goalObservationFingerprints: map[string]orquestagoal.GoalObservationFingerprintV0{},
 		shutdownSnapshot:            deps.ShutdownSnapshot,
 		shutdownHooks:               compactRuntimeShutdownHooksV0(deps.ShutdownHooks),
@@ -130,8 +134,13 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 
 func (runtime *RuntimeV0) HandlerV0() http.Handler {
 	handler := NewHandlerV0(HandlerConfigV0{
-		AppHandler:    runtime.serverLifecycleHTTPHandlerV0(runtime.appHandler),
-		Tracker:       runtime.tracker,
+		AppHandler: runtime.serverLifecycleHTTPHandlerV0(runtime.appHandler),
+		Tracker:    runtime.tracker,
+		OperationalStatusSource: ResidentOperationalStatusSourceV0{
+			Tracker:          runtime.tracker,
+			EstadoVivoSource: runtime.estadoVivoSource,
+			Clock:            runtime.clock,
+		},
 		RouteManifest: runtime.routeManifest,
 	})
 	return runtime.auditHTTPHandlerV0(runtime.controlPlaneGuardHTTPHandlerV0(handler))

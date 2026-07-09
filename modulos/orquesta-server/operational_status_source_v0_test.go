@@ -2,13 +2,16 @@ package orquestaserver
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 )
@@ -74,6 +77,97 @@ func TestHandlerV0OperationalStatusQueryV0(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "diagnostico_compacto.v0") ||
 		!strings.Contains(rec.Body.String(), "runtime_not_available") {
 		t.Fatalf("body=%s", rec.Body.String())
+	}
+}
+
+func TestResidentOperationalStatusSourceV0AgregaEstadoVivoCompactoV0(t *testing.T) {
+	now := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
+	tracker := NewStatusTrackerV0(ConfigV0{Addr: "127.0.0.1:8787"}, now)
+	tracker.MarkServingV0("127.0.0.1:8787", now)
+	source := &fakeResidentEstadoVivoSourceV0{
+		evidencias: []orquestaestadovivo.EvidenciaEstadoV0{
+			{
+				RunRef:       "run-ref-estado-vivo-001",
+				Fuente:       "run_store",
+				Estado:       "running",
+				EvidenceRefs: []string{"delivery-ref-estado-vivo-001"},
+			},
+			{
+				RunRef:       "run-ref-estado-vivo-001",
+				GoalRef:      "goal-ref-estado-vivo-001",
+				Fuente:       "process_snapshot",
+				Estado:       "running",
+				ProcesoVivo:  true,
+				EvidenceRefs: []string{"process-ref-estado-vivo-001"},
+			},
+			{
+				RunRef:          "run-ref-estado-vivo-001",
+				GoalRef:         "goal-ref-estado-vivo-001",
+				ExternalGoalRef: "external-goal-ref-estado-vivo-001",
+				Fuente:          "receipt",
+				Estado:          orquestagoal.GoalStatusCompleteV0,
+				Terminal:        true,
+				Aceptado:        true,
+				EvidenceRefs:    []string{"ack-ref-estado-vivo-001"},
+			},
+		},
+	}
+	query := residentOperationalStatusQueryV0("corr-ref-estado-vivo-001")
+	query.IncludeSections = []string{
+		orquestaobservability.OperationalStatusSectionEstadoV0,
+		orquestaobservability.OperationalStatusSectionContadoresV0,
+		orquestaobservability.OperationalStatusSectionReferenciasV0,
+	}
+
+	diagnostic, err := (ResidentOperationalStatusSourceV0{
+		Tracker:          tracker,
+		EstadoVivoSource: source,
+		Clock:            fixedServerClockV0{now: now},
+	}).QueryOperationalStatusV0(query)
+
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if err := orquestaobservability.ValidateDiagnosticoCompactoV0(diagnostic); err != nil {
+		t.Fatalf("diagnostic invalid: %v", err)
+	}
+	assertOperationalCounterForTestV0(t, diagnostic, "estado_vivo_evidencias", 3)
+	assertOperationalCounterForTestV0(t, diagnostic, "estado_vivo_nodos", 1)
+	assertOperationalCounterForTestV0(t, diagnostic, "estado_vivo_conflictos", 1)
+	assertOperationalCounterForTestV0(t, diagnostic, "estado_vivo_procesos_vivos", 1)
+	if !diagnosticoContainsReferenceForTestV0(diagnostic, "run-ref-estado-vivo-001") ||
+		!diagnosticoContainsReferenceForTestV0(diagnostic, "ack-ref-estado-vivo-001") {
+		t.Fatalf("missing estado vivo refs: %+v", diagnostic.Referencias)
+	}
+	if source.lastFiltro.Limit != residentOperationalEstadoVivoEvidenceLimitV0 {
+		t.Fatalf("filtro=%+v", source.lastFiltro)
+	}
+}
+
+func TestResidentOperationalStatusSourceV0EstadoVivoErrorNoTumbaDiagnosticoV0(t *testing.T) {
+	now := time.Date(2026, 7, 9, 12, 5, 0, 0, time.UTC)
+	tracker := NewStatusTrackerV0(ConfigV0{Addr: "127.0.0.1:8787"}, now)
+	tracker.MarkServingV0("127.0.0.1:8787", now)
+	query := residentOperationalStatusQueryV0("corr-ref-estado-vivo-error-001")
+
+	diagnostic, err := (ResidentOperationalStatusSourceV0{
+		Tracker:          tracker,
+		EstadoVivoSource: &fakeResidentEstadoVivoSourceV0{err: errors.New("boom privado")},
+		Clock:            fixedServerClockV0{now: now},
+	}).QueryOperationalStatusV0(query)
+
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if diagnostic.Estado != orquestaobservability.DiagnosticoEstadoOKV0 {
+		t.Fatalf("diagnostic=%+v", diagnostic)
+	}
+	if !diagnosticoContainsWarningForTestV0(diagnostic, "estado_vivo_unavailable") {
+		t.Fatalf("missing warning: %+v", diagnostic.Warnings)
+	}
+	body, _ := json.Marshal(diagnostic)
+	if strings.Contains(string(body), "boom privado") {
+		t.Fatalf("diagnostic leaks source err: %s", string(body))
 	}
 }
 
@@ -601,4 +695,33 @@ func blockersContainRefForTestV0(
 		}
 	}
 	return false
+}
+
+func diagnosticoContainsWarningForTestV0(
+	diagnostic orquestaobservability.DiagnosticoCompactoV0,
+	code string,
+) bool {
+	for _, warning := range diagnostic.Warnings {
+		if warning.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
+type fakeResidentEstadoVivoSourceV0 struct {
+	evidencias []orquestaestadovivo.EvidenciaEstadoV0
+	err        error
+	lastFiltro orquestaestadovivo.FiltroEvidenciaEstadoV0
+}
+
+func (source *fakeResidentEstadoVivoSourceV0) ListarEvidenciasEstadoV0(
+	_ context.Context,
+	filtro orquestaestadovivo.FiltroEvidenciaEstadoV0,
+) ([]orquestaestadovivo.EvidenciaEstadoV0, error) {
+	source.lastFiltro = filtro
+	if source.err != nil {
+		return nil, source.err
+	}
+	return append([]orquestaestadovivo.EvidenciaEstadoV0(nil), source.evidencias...), nil
 }

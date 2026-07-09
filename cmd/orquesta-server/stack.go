@@ -70,6 +70,7 @@ func buildRuntimeFromConfigV0(serverConfig orquestaserver.ConfigV0) (*orquestase
 		GoalStateStore:    stack.Stores.AppGoalStateStore,
 		GoalFingerprint:   serverGoalObservationFingerprintFromBackendV0(goalBackends.AppGoal, serverGoalObserverFingerprintEnabledFromEnvV0()),
 		GoalStopper:       serverGoalCooperativeStopperFromRunControlV0(stack.Stores.RunControl),
+		EstadoVivoSource:  stack.MCPTransportBindings.AutoprogrammingEstadoVivoSource,
 		ShutdownSnapshot:  serverShutdownSnapshotFromStackV0(stack, goalBackends),
 		ShutdownHooks:     serverGoalShutdownHooksFromBackendsV0(goalBackends.AppGoal, goalBackends.IdleGoal),
 		BackgroundWorkers: serverBackgroundWorkersFromStackV0(stack),
