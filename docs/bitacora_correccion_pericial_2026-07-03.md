@@ -5839,3 +5839,32 @@ Nota operativa:
   test: `env_vars_orquesta_allow_increase_to=512`.
 - `BUG-079` sigue abierto: esto no prueba enforcement pre-tool del proveedor;
   solo evita falso OK/inconclusion del harness y refuerza el contrato local.
+
+## Codex local 2026-07-09: revalidacion OPES fake lifecycle
+
+Se aplico la regla de usar Orquesta como superficie para OPES. No habia servidor
+Orquesta local vivo (`pgrep` no encontro `orquesta-server`); para no tocar OPES
+productivo ni depender de remoto, se uso el smoke local con fake OPES y fake
+Orquesta/goal-first integrado por el propio arnes.
+
+Comandos ejecutados:
+
+- `ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=dry-run-once ./scripts/smoke_opes_derivatives_rest.sh`
+- `ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1 ORQUESTA_OPES_DERIVATIVES_EXECUTE=1 ORQUESTA_OPES_DERIVATIVES_SMOKE_MODE=run-until-finalize ORQUESTA_OPES_DERIVATIVES_TICK_SLEEP_SECONDS=0 ORQUESTA_OPES_BRIDGE_MAX_TICKS=40 ./scripts/smoke_opes_derivatives_rest.sh`
+
+Resultado:
+
+- `dry-run-once` selecciona `assemble_topic`, `seen=1`, `submitted=0`,
+  `status=dry_run`.
+- `run-until-finalize` completa 24/24 receipts hasta
+  `finalize_temario_package`, con `goal_receipts_manifest_status=ok`,
+  `run_until_status=completed` y `empty_after_final=true`.
+- Manifest:
+  `/tmp/opes-salidas/derivatives-rest-codex-local-finalize-20260709T154800Z/goal_receipts_manifest.json`.
+
+Lectura:
+
+- Esto valida el conector OPES local/fake y corrige la nota antigua de sandbox
+  sin sockets loopback.
+- No cierra `BUG-058/066/075`: siguen pendientes OPES temporal/preprod con
+  proveedor real y prueba de ausencia de reescritura tardia con agente real.

@@ -614,6 +614,19 @@ antes de su cierre posterior:
   (`PermissionError: [Errno 1] Operation not permitted`); por tanto las filas
   padre siguen abiertas hasta repetir el script en entorno con sockets locales
   permitidos y conservar `out/opes_lifecycle_result.json`.
+- Revalidacion Codex local 2026-07-09: el entorno local actual si permite el
+  fake loopback. Se ejecutan `scripts/smoke_opes_derivatives_rest.sh` en modo
+  `ORQUESTA_OPES_DERIVATIVES_FAKE_SERVER=1` con `dry-run-once` y despues
+  `run-until-finalize` effectful fake (`ORQUESTA_OPES_DERIVATIVES_EXECUTE=1`,
+  sleep 0, max 40 ticks). Resultado: `goal_receipts_manifest_expected=24`,
+  `goal_receipts_manifest_covered=24`,
+  `goal_receipts_manifest_final_work_kind=finalize_temario_package`,
+  `goal_receipts_manifest_status=ok`, `run_until_status=completed`,
+  `empty_after_final=true`. Manifest:
+  `/tmp/opes-salidas/derivatives-rest-codex-local-finalize-20260709T154800Z/goal_receipts_manifest.json`.
+  Esto valida el lifecycle local/fake del conector; no cierra los bugs padre
+  porque siguen pendientes smoke OPES temporal/preprod con proveedor real y
+  prueba de ausencia de reescritura tardia con agente real.
 - Avance 2026-07-04 noche 36: `BUG-ORQ-20260701-079` queda reducido en el
   protocolo `app_server_command`: el presupuesto por linea JSON-RPC baja de
   1 MiB a 256 KiB tambien para metodos genericos como `turn/start`, y una
