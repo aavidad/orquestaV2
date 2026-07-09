@@ -161,6 +161,29 @@ Estado: abierto. Alimentado por:
 - `docs/auditoria_codigo_muerto_duplicado_2026-07-04.md`
 - `docs/instrucciones_director_codex_2026-07-09.md`
 
+### S13 - Artefactos de ejecucion ya versionados en el repo
+
+Tras el push se comprobo que el repo remoto contiene 37 ficheros ya versionados
+con patrones de ejecucion:
+
+- `checkpoint_started_goal-ref-task-autoprogramming-*.txt`
+- `orquesta_goal_result_goal-ref-task-autoprogramming-*.json`
+
+Afectan a rutas como:
+
+- `cmd/orquesta-server/docs/`
+- `modulos/orquesta-web/docs/`
+- `modulos/orquesta-autoprogramming/docs/`
+- `modulos/orquesta-operator-telegram/docs/`
+- `scripts/docs/`
+
+Estado: abierto. No se borran en caliente porque pueden estar citados por
+incidencias, commits o evidencias de agentes. Necesitan una auditoria gobernada:
+clasificar si son evidencia historica valida, moverlos a una carpeta de
+evidencias/retencion o retirarlos del arbol fuente con commit explicito.
+
+Relacion: limpieza de historicos falsos y `BUG-ORQ-20260710-208E`.
+
 ## Patrones estructurales detectados
 
 - Varias fuentes de verdad para un goal: estado persistido, checkpoint/result
@@ -171,6 +194,7 @@ Estado: abierto. Alimentado por:
 - Limpieza operativa sin guardas puede borrar rutas que siguen referenciadas.
 - Verificaciones amplias no estan aisladas de procesos residentes.
 - Remoto puede quedar fuera de GitHub por remoto Git configurado a bundle.
+- Artefactos de ejecucion pueden acabar versionados como si fueran fuente.
 
 ## Estado de mitigaciones ya hechas
 
