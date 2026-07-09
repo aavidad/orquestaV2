@@ -5272,3 +5272,55 @@ Lectura para Claude:
 - Esto reduce TAREA-8 para control-plane local. No cierres el frente remoto:
   `scripts/orquesta_server_ctl.sh` y despliegue servidor siguen siendo corte
   separado, y el token real debe vivir en config/secreto del servidor.
+
+## Codex local 2026-07-09: shutdown/status real sin run-control directo
+
+Contexto:
+
+- Se uso subagentes para revisar servidor/status/shutdown, guard tests y docs
+  de `BUG-165/065/079`.
+- El objetivo era cubrir otro subcaso real: `app_server_tmux` vivo,
+  `/api/v0/autoprogramming/status` visible y shutdown por
+  `/api/v0/server/shutdown` con `cleanup_goal_backends=true`, sin llamar al
+  endpoint `/api/v0/runs/control` como camino principal del smoke.
+
+Hallazgo y fix:
+
+- Primer smoke retenido en
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.3QX7lP` reprodujo
+  `backend_still_running` falso: tras cleanup no quedaban tmux/socket/owner ni
+  procesos, pero `ReadActiveShutdownWorkV0` seguia reportando active work por
+  estado degradado sin evidencia viva. El harness tambien tenia
+  `session_name: unbound variable` al diagnosticar el fallo.
+- Se corrigio `app_server_tmux`: un residuo configurado solo bloquea shutdown si
+  observa owner, sesion, socket, pane o proceso real.
+- Se corrigio el harness inicializando `session_name` y se agrego wrapper
+  `scripts/smoke_goal_first_shutdown_coordination_real.sh` con guard para no
+  convertirse en no-op ni usar `/api/v0/runs/control`.
+
+Verificado:
+
+- `bash -n scripts/smoke_goal_first_app_server_real.sh scripts/smoke_goal_first_shutdown_coordination_real.sh`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestCodexAppServerTmuxBackendV0(EnsureShutdownCleanupMigrado|ReadActiveShutdownWorkIgnoraEstadoDegradadoSinResiduoVivo)'`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeGoalFirstShutdownCoordinationReal'`
+- Smoke real:
+  `ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 ORQUESTA_GOAL_FIRST_SMOKE_POLLS=50 ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS=3 ORQUESTA_KEEP_SMOKE_DIR=1 ORQUESTA_SMOKE_PARENT=/tmp/orquesta-smokes-codex ./scripts/smoke_goal_first_shutdown_coordination_real.sh`
+  -> `smoke_goal_first_shutdown_coordination_real=ok`,
+  `autoprogramming_status_before_shutdown_visible=true`,
+  `status=ready`, `shutdown_ready=true`, `active_work_count=0`,
+  `cleanup_completed` y `app_server_tmux_processes_alive=0`.
+- Verificacion final del corte: `go test -count=1 ./...` y
+  `git diff --check`.
+
+Lectura para Claude:
+
+- Esto cierra `BUG-ORQ-20260709-198` y reduce `BUG-165/065` en el subcaso
+  cleanup/status/shutdown real de backend `app_server_tmux`.
+- No cerrar `BUG-165/065` global: el smoke final acaba con
+  `runs_requested=0`, asi que queda pendiente una prueba/correccion de
+  reconciliacion completa de runs goal-first fuera de cola durante shutdown
+  amplio, mas los escenarios de proveedor lento/stale y despliegue remoto.
+- Evidencias saneadas:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.Ya4ayF` (verde)
+  y `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.3QX7lP`
+  (reproduccion fallida), ambas sin `codex-home` ni binario temporal.

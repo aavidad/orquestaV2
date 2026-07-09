@@ -46,8 +46,12 @@ status_before_control_payload="$smoke_root/status_before_control_request.json"
 status_before_control_response="$smoke_root/status_before_control_response.json"
 status_after_control_payload="$smoke_root/status_after_control_request.json"
 status_after_control_response="$smoke_root/status_after_control_response.json"
+status_before_shutdown_payload="$smoke_root/status_before_shutdown_request.json"
+status_before_shutdown_response="$smoke_root/status_before_shutdown_response.json"
 control_payload="$smoke_root/run_control_request.json"
 control_response="$smoke_root/run_control_response.json"
+shutdown_coordination_payload="$smoke_root/shutdown_coordination_request.json"
+shutdown_coordination_response="$smoke_root/shutdown_coordination_response.json"
 post_stop_observe_payload="$smoke_root/observe_after_forced_stop_request.json"
 post_stop_observe_response="$smoke_root/observe_after_forced_stop_response.json"
 shutdown_response="$smoke_root/shutdown_response.json"
@@ -67,6 +71,9 @@ sleep_seconds="${ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS:-5}"
 goal_backend="${ORQUESTA_CODEX_GOAL_BACKEND:-app_server_tmux}"
 high_consumption_mode="${ORQUESTA_GOAL_FIRST_SMOKE_HIGH_CONSUMPTION_MODE:-0}"
 forced_stop_mode="${SMOKE_GOAL_FIRST_FORCED_STOP_MODE:-0}"
+shutdown_coordination_mode="${SMOKE_GOAL_FIRST_SHUTDOWN_COORDINATION_MODE:-0}"
+shutdown_coordination_polls="${ORQUESTA_GOAL_FIRST_SHUTDOWN_COORDINATION_POLLS:-12}"
+shutdown_coordination_sleep_seconds="${ORQUESTA_GOAL_FIRST_SHUTDOWN_COORDINATION_SLEEP_SECONDS:-1}"
 
 cleanup() {
   smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 25 "$runtime_dir"
@@ -553,6 +560,7 @@ assert_app_server_tmux_shutdown_ready() {
     return 0
   fi
   local owner_file session_name pane_pid socket_path shutdown_status shutdown_ready exit_pending shutdown_pid app_processes_alive
+  session_name=""
   pane_pid=""
   socket_path=""
   owner_file="$(find_tmux_owner_file || true)"
@@ -820,6 +828,135 @@ JSON
   shutdown_high_consumption_smoke
   echo "smoke_root=$smoke_root"
   exit 0
+}
+
+run_shutdown_coordination_smoke() {
+  local owner_file session_name pane_pid socket_path
+  local shutdown_status shutdown_status_value shutdown_ready exit_pending shutdown_pid active_work_count
+  local recommended_action goal_actions_count app_processes_alive
+
+  pane_pid=""
+  socket_path=""
+  owner_file="$(find_tmux_owner_file || true)"
+  if [[ -n "$owner_file" ]]; then
+    session_name="$(json_owner_get "$owner_file" "session_name")"
+    socket_path="$(find_tmux_socket_for_owner "$owner_file")"
+    if [[ -n "$session_name" ]] && tmux has-session -t "$session_name" >/dev/null 2>&1; then
+      pane_pid="$(tmux_pane_pid_for_session "$session_name")"
+    fi
+    echo "app_server_tmux_owner_json=$owner_file"
+    echo "app_server_tmux_session_name=$session_name"
+    if [[ -n "$pane_pid" ]]; then
+      echo "app_server_tmux_pane_pid=$pane_pid"
+    fi
+    if [[ -n "$socket_path" ]]; then
+      echo "app_server_tmux_socket=$socket_path"
+    fi
+  else
+    session_name=""
+    echo "app_server_tmux_owner_json=absent_before_shutdown_coordination"
+  fi
+
+  post_autoprogramming_status_snapshot "before_shutdown" "$status_before_shutdown_payload" "$status_before_shutdown_response" "visible"
+
+  for i in $(seq 1 "$shutdown_coordination_polls"); do
+    cat >"$shutdown_coordination_payload" <<JSON
+{
+  "request_id": "$request_id-shutdown-coordination-$i",
+  "correlation_id": "$request_id-shutdown-coordination-$i",
+  "idempotency_key": "idem-$request_id-shutdown-coordination-$i",
+  "requested_by": "orquesta-director",
+  "reason": "smoke_goal_first_shutdown_coordination_real",
+  "forced": true,
+  "cleanup_goal_backends": true,
+  "evidence_refs": ["evidence-ref-smoke-goal-first-shutdown-coordination-real"]
+}
+JSON
+    shutdown_status="$(
+      curl -sS -m "$request_timeout" -o "$shutdown_coordination_response" -w "%{http_code}" \
+        -X POST "$base_url/api/v0/server/shutdown" \
+        -H "Content-Type: application/json" \
+        -H "Accept: application/json" \
+        -H "X-Correlation-ID: $request_id-shutdown-coordination-$i" \
+        --data-binary "{\"request_id\":\"$request_id-shutdown-coordination-$i\",\"correlation_id\":\"$request_id-shutdown-coordination-$i\",\"idempotency_key\":\"idem-$request_id-shutdown-coordination-$i\",\"requested_by\":\"orquesta-director\",\"reason\":\"smoke_goal_first_shutdown_coordination_real\",\"forced\":true,\"cleanup_goal_backends\":true,\"evidence_refs\":[\"evidence-ref-smoke-goal-first-shutdown-coordination-real\"]}"
+    )"
+    echo "POST /api/v0/server/shutdown coordination poll=$i -> HTTP $shutdown_status"
+    if [[ "$shutdown_status" -lt 200 || "$shutdown_status" -gt 299 ]] && [[ "$shutdown_status" != "409" ]]; then
+      smoke_print_file_excerpt "$shutdown_coordination_response"
+      fail_after_app_server_tmux_shutdown_ready 1
+    fi
+
+    shutdown_status_value="$(json_get "$shutdown_coordination_response" "status")"
+    shutdown_ready="$(json_get "$shutdown_coordination_response" "shutdown_ready")"
+    exit_pending="$(json_get "$shutdown_coordination_response" "exit_pending")"
+    shutdown_pid="$(json_get "$shutdown_coordination_response" "pid")"
+    active_work_count="$(json_get "$shutdown_coordination_response" "active_work_count")"
+    recommended_action="$(json_get "$shutdown_coordination_response" "recommended_action")"
+    goal_actions_count="$(python3 - "$shutdown_coordination_response" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as fh:
+    print(len(json.load(fh).get("goal_actions") or []))
+PY
+)"
+    echo "shutdown_coordination_poll=$i status=$shutdown_status_value shutdown_ready=$shutdown_ready active_work_count=${active_work_count:-0} goal_actions=$goal_actions_count recommended_action=$recommended_action"
+
+    if [[ "$shutdown_ready" == "true" ]]; then
+      if [[ "$exit_pending" != "true" || -z "$shutdown_pid" ]]; then
+        echo "shutdown coordination listo sin exit_pending/pid:" >&2
+        smoke_print_file_excerpt "$shutdown_coordination_response"
+        exit 1
+      fi
+      if [[ "$shutdown_pid" != "$server_pid" ]]; then
+        echo "shutdown coordination pid inesperado: respuesta=$shutdown_pid esperado=$server_pid" >&2
+        smoke_print_file_excerpt "$shutdown_coordination_response"
+        exit 1
+      fi
+      for _ in $(seq 1 80); do
+        if ! kill -0 "$shutdown_pid" >/dev/null 2>&1; then
+          wait "$shutdown_pid" >/dev/null 2>&1 || true
+          server_pid=""
+          break
+        fi
+        sleep 0.25
+      done
+      if [[ -n "$server_pid" ]] && kill -0 "$server_pid" >/dev/null 2>&1; then
+        echo "shutdown coordination ready=true pero proceso servidor sigue vivo" >&2
+        exit 1
+      fi
+      if [[ -n "$session_name" ]] && tmux has-session -t "$session_name" >/dev/null 2>&1; then
+        echo "tmux session sigue viva tras shutdown coordination: $session_name" >&2
+        exit 1
+      fi
+      if [[ -n "$owner_file" && -e "$owner_file" ]]; then
+        echo "owner.json sigue existiendo tras shutdown coordination: $owner_file" >&2
+        exit 1
+      fi
+      if [[ -n "$socket_path" && -e "$socket_path" ]]; then
+        echo "socket sigue existiendo tras shutdown coordination: $socket_path" >&2
+        exit 1
+      fi
+      if [[ -n "$pane_pid" ]] && kill -0 "$pane_pid" >/dev/null 2>&1; then
+        echo "pane_pid sigue vivo tras shutdown coordination: $pane_pid" >&2
+        exit 1
+      fi
+      app_processes_alive="$(app_server_process_count_for_socket "$socket_path")"
+      if [[ "$app_processes_alive" != "0" ]]; then
+        echo "quedan procesos codex app-server tras shutdown coordination: $app_processes_alive" >&2
+        exit 1
+      fi
+      echo "app_server_tmux_shutdown_ready=true"
+      echo "app_server_tmux_processes_alive=0"
+      echo "smoke_goal_first_shutdown_coordination_real=ok"
+      echo "smoke_root=$smoke_root"
+      exit 0
+    fi
+
+    sleep "$shutdown_coordination_sleep_seconds"
+  done
+
+  echo "shutdown coordination no llego a shutdown_ready=true; ultima respuesta:" >&2
+  smoke_print_file_excerpt "$shutdown_coordination_response"
+  fail_after_app_server_tmux_shutdown_ready 1
 }
 
 bug088_second_artifact_exists() {
@@ -1155,6 +1292,9 @@ JSON
     json_contains_string "$observe_response" "evidence-ref-goal-observer-high-consumption-stop-requested" &&
     { json_contains_string "$observe_response" "evidence-ref-goal-materialized-partial-artifacts-written" ||
       bug088_second_artifact_exists; }; then
+    if [[ "$shutdown_coordination_mode" == "1" ]]; then
+      run_shutdown_coordination_smoke
+    fi
     if [[ "$forced_stop_mode" == "1" ]]; then
       run_forced_stop_smoke
     fi
@@ -1166,6 +1306,9 @@ JSON
       { json_contains_string "$observe_response" "checkpoint_only_high_consumption" ||
         json_contains_string "$observe_response" "goal_active_no_checkpoint_high_consumption"; } &&
       json_contains_string "$observe_response" "replan_narrow_context"; then
+      if [[ "$shutdown_coordination_mode" == "1" ]]; then
+        run_shutdown_coordination_smoke
+      fi
       if [[ "$forced_stop_mode" == "1" ]]; then
         echo "forced-stop smoke no encontro backend vivo antes de replan alto consumo:" >&2
         smoke_print_file_excerpt "$observe_response"

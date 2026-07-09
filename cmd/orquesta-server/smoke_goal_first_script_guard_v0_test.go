@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -139,6 +140,41 @@ func TestSmokeGoalFirstForcedStopWrapperEjercitaRunControlBackendVivoV0(t *testi
 			t.Fatalf("smoke forced-stop no valida control/observe terminal: falta %q", want)
 		}
 	}
+}
+
+func TestSmokeGoalFirstShutdownCoordinationRealNoEsNoopV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_shutdown_coordination_real.sh")
+
+	for _, want := range []string{
+		"app_server_tmux",
+		"/api/v0/autoprogramming/status",
+		"/api/v0/server/shutdown",
+		"app_server_tmux_processes_alive=0",
+		"smoke_goal_first_shutdown_coordination_real=ok",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("smoke shutdown/status goal-first no debe ser no-op: falta %q", want)
+		}
+	}
+	if !scriptContainsJSONBoolFieldV0(text, "cleanup_goal_backends", true) {
+		t.Fatalf("smoke shutdown/status goal-first debe pedir cleanup_goal_backends=true")
+	}
+}
+
+func TestSmokeGoalFirstShutdownCoordinationRealNoUsaRunsControlComoCaminoPrincipalV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_shutdown_coordination_real.sh")
+
+	if strings.Contains(text, "/api/v0/runs/control") {
+		t.Fatalf("smoke shutdown/status goal-first debe coordinar por status/shutdown, no por runs/control")
+	}
+}
+
+func scriptContainsJSONBoolFieldV0(text string, field string, value bool) bool {
+	normalized := strings.NewReplacer(`\`, "", " ", "", "\t", "", "\n", "").Replace(text)
+	want := `"` + field + `":` + strings.ToLower(strconv.FormatBool(value))
+	return strings.Contains(normalized, want)
 }
 
 func TestSmokeGoalFirstClaudeProcessServerRealEsOptInYLimpiaBackendV0(t *testing.T) {

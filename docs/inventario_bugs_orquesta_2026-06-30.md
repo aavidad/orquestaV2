@@ -95,6 +95,27 @@ antes de su cierre posterior:
   `BUG-165` queda abierto solo para los residuales amplios de
   `status/observe` lento y coordinacion automatica completa de
   shutdown/backend/checkpoint/stop/cancel/wait.
+- Avance 2026-07-09: `BUG-ORQ-20260709-198` queda cerrado. El nuevo smoke real
+  `scripts/smoke_goal_first_shutdown_coordination_real.sh` reprodujo primero
+  un falso `backend_still_running`: tras 12 POST a `/api/v0/server/shutdown`
+  con `cleanup_goal_backends=true`, ya no quedaban tmux, socket, owner ni
+  proceso `codex app-server`, pero el adaptador `app_server_tmux` seguia
+  publicando active work por un estado degradado/preparando sin evidencia viva;
+  ademas el harness fallaba con `session_name: unbound variable` en la ruta de
+  diagnostico. Cierre: `ReadActiveShutdownWorkV0` solo reporta residuo
+  configurado si observa owner, sesion, socket, pane o proceso real, y el
+  harness inicializa `session_name`. Reejecucion real posterior:
+  `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-e166f0e04a747b89605e44a56019b11c`,
+  `external_goal_ref=019f46a9-4bad-7372-8196-1ba614ff51a0`,
+  `autoprogramming_status_before_shutdown_visible=true`,
+  `/server/shutdown status=ready`, `shutdown_ready=true`,
+  `active_work_count=0`, `goal_actions[0].action_taken=cleanup_completed` y
+  `app_server_tmux_processes_alive=0`. Evidencia saneada:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.Ya4ayF`
+  (~404 KiB, sin `codex-home` ni binario temporal). Alcance: cierra el falso
+  bloqueo de cleanup `app_server_tmux`; no cierra `BUG-165/065` global porque
+  este smoke finaliza con `runs_requested=0` y queda pendiente la reconciliacion
+  completa de runs goal-first fuera de cola durante shutdown amplio.
 - `BUG-ORQ-20260704-166` queda cerrado funcionalmente por `ff620ecf` y
   `0e0dcedc`, incluyendo el ajuste posterior de `.gocache-local`, para la causa
   observada: el escaneo de

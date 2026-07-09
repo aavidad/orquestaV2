@@ -93,13 +93,8 @@ func (backend serverCodexAppServerTmuxBackendV0) detectTmuxResidueV0(ctx context
 		CheckProcesses: true,
 	})
 	residue := codexAppServerTmuxResidueV0{
-		Active: observed.Estado != BackendInexistenteV0 &&
-			observed.Estado != BackendApagadoV0 &&
-			observed.Estado != "",
+		Active:       codexAppServerTmuxObservationHasLiveResidueV0(observed.Observacion),
 		EvidenceRefs: observed.EvidenceRefs,
-	}
-	if observed.Observacion.OwnerMarkerObserved {
-		residue.Active = true
 	}
 	if residue.Active {
 		residue.EvidenceRefs = compactStringsV0(append(
@@ -108,6 +103,18 @@ func (backend serverCodexAppServerTmuxBackendV0) detectTmuxResidueV0(ctx context
 		))
 	}
 	return residue
+}
+
+func codexAppServerTmuxObservationHasLiveResidueV0(
+	obs ObservacionBackendV0,
+) bool {
+	return obs.OwnerMarkerObserved ||
+		obs.OwnerMarkerValid ||
+		obs.SessionObserved ||
+		obs.SocketObserved ||
+		obs.PanePIDLive ||
+		obs.ProcessBySocketObserved ||
+		obs.ProcessByRuntimeObserved
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) detectTmuxOwnerMarkerResiduesV0(

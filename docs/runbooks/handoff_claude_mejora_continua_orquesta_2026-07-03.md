@@ -2252,3 +2252,46 @@ Pendiente:
 - No mover todavia `scripts/orquesta_server_ctl.sh` ni el perfil remoto en el
   mismo corte. Eso debe hacerse con prueba de servidor remoto y sin exponer el
   token real en logs/status.
+
+## Actualizacion Codex 2026-07-09: shutdown coordination real app_server_tmux
+
+Hecho:
+
+- Nuevo wrapper `scripts/smoke_goal_first_shutdown_coordination_real.sh`.
+- Extendido `scripts/smoke_goal_first_app_server_real.sh` con modo
+  `SMOKE_GOAL_FIRST_SHUTDOWN_COORDINATION_MODE=1`: consulta
+  `/api/v0/autoprogramming/status` antes del shutdown y luego coordina por
+  `/api/v0/server/shutdown` con `cleanup_goal_backends=true`; el wrapper no usa
+  `/api/v0/runs/control`.
+- Fix de producto: `app_server_tmux` ya no publica active work residual si no
+  observa owner, tmux session, socket, pane vivo ni proceso `codex app-server`.
+- Fix del harness: `assert_app_server_tmux_shutdown_ready` ya no revienta con
+  `session_name` sin inicializar si el owner desaparecio antes del diagnostico.
+
+Pruebas:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestCodexAppServerTmuxBackendV0(EnsureShutdownCleanupMigrado|ReadActiveShutdownWorkIgnoraEstadoDegradadoSinResiduoVivo)'`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestSmokeGoalFirstShutdownCoordinationReal'`
+- Smoke real con proveedor:
+  `ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 ORQUESTA_GOAL_FIRST_SMOKE_POLLS=50 ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS=3 ORQUESTA_KEEP_SMOKE_DIR=1 ORQUESTA_SMOKE_PARENT=/tmp/orquesta-smokes-codex ./scripts/smoke_goal_first_shutdown_coordination_real.sh`
+  -> `smoke_goal_first_shutdown_coordination_real=ok`,
+  `autoprogramming_status_before_shutdown_visible=true`, `status=ready`,
+  `shutdown_ready=true`, `active_work_count=0`, `cleanup_completed`,
+  `app_server_tmux_processes_alive=0`.
+- `go test -count=1 ./...`
+- `git diff --check`
+
+Evidencia:
+
+- Verde saneado:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.Ya4ayF`.
+- Reproduccion fallida saneada antes del fix:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.3QX7lP`.
+
+Pendiente:
+
+- No cerrar `BUG-165/065` global todavia. Este smoke cierra el falso
+  `backend_still_running` sin residuo vivo (`BUG-ORQ-20260709-198`) y valida
+  cleanup real del backend, pero el shutdown final tiene `runs_requested=0`;
+  queda reconciliar/probar runs goal-first fuera de cola durante shutdown amplio
+  y los escenarios lentos/stale/remotos.

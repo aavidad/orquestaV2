@@ -758,6 +758,39 @@ func TestCodexAppServerTmuxBackendV0EnsureShutdownCleanupMigradoV0(t *testing.T)
 	}
 }
 
+func TestCodexAppServerTmuxBackendV0ReadActiveShutdownWorkIgnoraEstadoDegradadoSinResiduoVivoV0(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		t.Fatalf("mkdir bin: %v", err)
+	}
+	fakeTmux := filepath.Join(binDir, "tmux")
+	if err := os.WriteFile(fakeTmux, []byte("#!/usr/bin/env bash\nexit 1\n"), 0o700); err != nil {
+		t.Fatalf("write fake tmux: %v", err)
+	}
+	runtimeDir := filepath.Join(root, "runtime")
+	goalDir := filepath.Join(runtimeDir, codexAppServerTmuxDirV0)
+	if err := os.MkdirAll(goalDir, 0o700); err != nil {
+		t.Fatalf("mkdir goal dir: %v", err)
+	}
+	backend := serverCodexAppServerTmuxBackendV0{
+		PathEnv:        binDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		SocketPath:     filepath.Join(goalDir, "goal.sock"),
+		SessionName:    "orquesta-goal-stale-1234567890",
+		RuntimeWorkDir: runtimeDir,
+		ProjectWorkDir: filepath.Join(root, "project"),
+		Timeout:        time.Second,
+	}
+
+	active, err := backend.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{})
+	if err != nil {
+		t.Fatalf("ReadActiveShutdownWorkV0: %v", err)
+	}
+	if len(active.ActiveWorks) != 0 {
+		t.Fatalf("active stale sin owner/socket/proceso=%+v", active)
+	}
+}
+
 func TestCodexAppServerWebSocketThreadReadResponseBudgetV0(t *testing.T) {
 	payload := bytes.Repeat([]byte("x"), codexAppServerThreadReadMaxResponseFrameBytesV0+1)
 	reader := bufio.NewReader(bytes.NewReader(codexAppServerTestWebSocketFrameV0(payload)))
