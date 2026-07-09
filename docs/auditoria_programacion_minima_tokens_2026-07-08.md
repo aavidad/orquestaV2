@@ -43,7 +43,7 @@ coste. La mejora correcta es:
 | claude-howto CLAUDE.md | https://github.com/luongnv89/claude-howto/blob/main/CLAUDE.md | Ejemplo real con seccion Token Efficiency. | Claude Code. | Ambos. | No re-leer lo recien editado; no eco de bloques grandes; batch edits; no tool calls de mas. | Copiar al runbook de medicion, no a AGENTS global sin A/B. | Util |
 | Lich skills / build-until-pass | https://github.com/LichAmnesia/lich-skills | Skills de loops acotados. | Claude/Gemini extension. | Codigo innecesario y rework. | Leer primer error, fix mas pequeno, re-run, cap de intentos, no fake green. | Excelente para Orquesta: skill de bugfix minimo con attempt cap y primer error. | Muy util |
 | Koroqe claude-code-sdlc | https://github.com/Koroqe/claude-code-sdlc | Pipeline multiagente/SDLC. | Claude Code. | Parcial: controla drift; puede aumentar coste. | Plan ejecutable con `Files/Changes/Verify/Done when`, waves por file overlap, minimal diff salvo items estructurales. | Adaptar formato de slices para Orquesta y paralelizacion por write-set. | Parcialmente util |
-| Evaluating AGENTS.md paper | https://arxiv.org/html/2602.11988v1 | Evidencia empirica sobre context files. | Codex/Claude-style coding agents en benchmark. | Advierte contra sobrecargar contexto. | Context files aumentan pasos/coste; developer-written ayuda poco; LLM-generated puede empeorar. | Regla clave: ningun prompt/AGENTS nuevo sin golden eval A/B. | Muy util |
+| On the Impact of AGENTS.md Files on the Efficiency of AI Coding Agents | https://arxiv.org/html/2601.20404v2 | Evidencia empirica sobre context files. | Codex en tareas tipo PR. | Advierte contra sobrecargar contexto; mide runtime y tokens. | El estudio compara ejecuciones con/sin `AGENTS.md` y trata tokens/tiempo como eficiencia operacional. | Regla clave: ningun prompt/AGENTS nuevo sin golden eval A/B. | Muy util |
 | Cursor Rules docs | https://cursor.com/docs/rules | Documentacion oficial de reglas persistentes. | Cursor. | Indirecto. | Project/team/user rules; scoping. | Si exportamos reglas para Cursor, deben ser dinamicas por tarea, no todo always-on. | Parcial |
 | Trigger.dev Cursor Rules | https://trigger.dev/blog/cursor-rules | Guia practica de reglas Cursor. | Cursor. | Codigo innecesario via convenciones/validacion. | Rule type correcto, ejemplos concretos, verificacion, pruebas de reglas. | Aplicar a Orquesta: reglas por skill_ref y tests de regla antes de default. | Util |
 | Devin/Cascade AGENTS.md y Rules | https://docs.devin.ai/desktop/cascade/agents-md / https://docs.devin.ai/desktop/cascade/memories | Scoping AGENTS y reglas/memorias. | Devin Desktop / Windsurf Cascade. | Tokens por scoping; menos repeticion. | AGENTS por directorio; reglas versionadas; memoria local no compartida. | Evitar memorias locales no auditables; usar docs/skills versionados. | Util |
@@ -160,6 +160,56 @@ que cada launcher improvise su propio prompt/contrato. Tambien queda corregido
 `scripts/orquesta_golden_evals.sh --task`: al lanzar una sola tarea ya evalua
 solo esa tarea, evitando falsos rojos `result_missing` y consumo innecesario de
 cuota en exploraciones parciales.
+
+## Revision Codex local 2026-07-09
+
+Se revalido esta auditoria con busqueda web y lectura local read-only por
+subagente. Resultado: las fuentes externas utiles no justifican anadir otro
+bloque always-on a `AGENTS.md`; refuerzan la decision de usar skills y medicion
+A/B.
+
+Recursos verificados:
+
+- OpenAI Codex `AGENTS.md`: carga global/proyecto/directorio; util para reglas
+  estables, no para playbooks largos.
+  https://developers.openai.com/codex/guides/agents-md
+- OpenAI Codex Skills: progressive disclosure; Codex solo carga `SKILL.md`
+  completo cuando la skill aplica.
+  https://developers.openai.com/codex/skills
+- Claude Code costes: recomienda gestionar contexto, modelo, MCP, hooks/skills,
+  prompts especificos y subagentes para salidas largas.
+  https://code.claude.com/docs/en/costs
+- Claude Code memoria: `CLAUDE.md` debe contener solo hechos que importan en
+  cada sesion; procedimientos especificos van mejor en skills/reglas acotadas.
+  https://code.claude.com/docs/en/memory
+- `agents-md` de Austin Serb: aporta reglas concretas de diff minimo,
+  exploracion pequena y byte caps para salidas de comandos.
+  https://github.com/Austin1serb/agents-md
+- Caveman y `claude-token-efficient`: utiles para salida compacta; no sustituyen
+  una politica de diff minimo ni garantizan menos codigo.
+  https://github.com/juliusbrussee/caveman
+  https://github.com/drona23/claude-token-efficient
+
+Medidas ya presentes en Orquesta:
+
+- `AGENTS.md` ya exige `rg`/lecturas parciales, contexto compacto,
+  comunicacion tipo caveman, `medium` por defecto y `xhigh` solo justificado.
+- `skills/orquesta-programacion-minima/SKILL.md` ya contiene las reglas que
+  buscabamos: no helpers, capas, interfaces, config, logs, validaciones, docs,
+  tests, ficheros o dependencias sin necesidad demostrada.
+- `docs/runbooks/orquesta_golden_evals_2026-07-04.md` ya define el camino A/B
+  para medir tokens, diff, helpers, abstracciones, rework y score.
+
+Prueba local ejecutada:
+
+```sh
+bash -n scripts/orquesta_golden_evals.sh scripts/orquesta_golden_metrics_launcher.sh scripts/orquesta_golden_ab_launcher.sh scripts/orquesta_golden_agent_launcher.sh
+scripts/orquesta_golden_evals.sh --self-test --output /tmp/orquesta-golden-selftest-codex-20260709.json
+```
+
+Resultado: `status=passed`, `score=1.0`. Esto valida el harness local, no
+declara que la skill ahorre tokens en proveedor real. Falta ejecutar A/B real
+con cuota/proveedor antes de activar la skill como default amplio.
 
 ## Decision actual
 

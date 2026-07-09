@@ -5001,3 +5001,32 @@ Lectura para Claude:
 - Cierra `BUG-ORQ-20260709-WIZARD-U12-AUTONOMIA-PISADA`.
 - No declara completo todo el redisenyo U1-U12; solo corrige una pisada real
   de campos dentro del wizard existente.
+
+## Codex local 2026-07-09: revision programacion minima/tokens
+
+Contexto:
+
+- El operador pidio buscar skills/prompts/configuracion anti-overengineering y
+  ahorro de tokens, pero con prueba empirica antes de activar medidas nuevas.
+- Ya existia `docs/auditoria_programacion_minima_tokens_2026-07-08.md`.
+
+Cierre documental:
+
+- Se revalido la auditoria con fuentes externas actuales: OpenAI Codex
+  `AGENTS.md`, OpenAI Skills, Claude Code Costs/Memory, `agents-md`, Caveman y
+  `claude-token-efficient`.
+- Se corrigio la referencia empirica de paper a
+  `https://arxiv.org/html/2601.20404v2`.
+- Conclusion conservadora: no tocar `AGENTS.md`; mantener
+  `skills/orquesta-programacion-minima/SKILL.md` como opt-in y activar default
+  solo tras A/B real.
+
+Pruebas verdes:
+
+- `bash -n scripts/orquesta_golden_evals.sh scripts/orquesta_golden_metrics_launcher.sh scripts/orquesta_golden_ab_launcher.sh scripts/orquesta_golden_agent_launcher.sh`
+- `scripts/orquesta_golden_evals.sh --self-test --output /tmp/orquesta-golden-selftest-codex-20260709.json` -> `status=passed`, `score=1.0`
+
+Lectura para Claude:
+
+- El harness local esta listo; falta A/B con proveedor/cuota real para saber si
+  la skill reduce tokens/diff sin aumentar rework ni bajar calidad.
