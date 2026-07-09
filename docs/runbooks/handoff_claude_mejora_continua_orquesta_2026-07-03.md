@@ -2632,6 +2632,7 @@ Para Claude:
   - `BUG-ORQ-20260709-214`: guards wizard/i18n.
   - `BUG-ORQ-20260709-215`: flaky del fake WebSocket app-server.
   - `BUG-ORQ-20260709-216`: deploy atomico reinicia servidor vivo.
+  - `BUG-ORQ-20260709-217`: deploy lee `runtime_identity.binary_sha256`.
 
 Cambios clave:
 
@@ -2653,6 +2654,9 @@ Cambios clave:
   ahora ejecuta `orquesta_server_ctl.sh stop` despues del build y antes del
   swap. Si falla la parada, aborta con `deploy_stop_failed` y no cambia el
   binario. Esto evita que un `ctl start` sobre servidor ya vivo sea no-op.
+- La primera ejecucion real del deploy fallo solo por verificacion de identidad:
+  `/api/status` exponia `runtime_identity.binary_sha256` anidado y el script
+  buscaba solo campos top-level. Queda corregido y cubierto por test.
 
 Verificacion local ya pasada antes del commit:
 

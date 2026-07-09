@@ -6452,3 +6452,16 @@ Evidencia local:
 
 - `bash -n scripts/orquesta_server_deploy.sh scripts/test_orquesta_server_deploy.sh`
 - `bash scripts/test_orquesta_server_deploy.sh`
+
+Primera ejecucion remota:
+
+- El deploy paro/arranco Orquesta y dejo servidor vivo en
+  `127.0.0.1:19071`, pero el receipt quedo `failed` con
+  `deploy_runtime_identity_missing`.
+- Causa: `/api/status` publicaba el SHA en
+  `runtime_identity.binary_sha256`, mientras el script solo buscaba claves
+  top-level. El SHA observado era
+  `d8f42b0c746fc192f92d65c2b3905c55c646bf3e8de15da5765a3572e9105f85`.
+- `BUG-ORQ-20260709-217`: el verificador acepta ahora
+  `runtime_identity.binary_sha256` y el test reproduce esa forma anidada.
+- Evidencia local posterior: `bash scripts/test_orquesta_server_deploy.sh`.

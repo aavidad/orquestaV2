@@ -207,6 +207,12 @@ for raw in text.splitlines():
         if isinstance(value, str) and value:
             print(value)
             raise SystemExit
+    runtime_identity = data.get("runtime_identity")
+    if isinstance(runtime_identity, dict):
+        value = runtime_identity.get("binary_sha256")
+        if isinstance(value, str) and value:
+            print(value)
+            raise SystemExit
 match = re.search(r"(?:binary_sha256|runtime_binary_sha256|orquesta_server_sha256)=([0-9a-fA-F]{64})", text)
 if match:
     print(match.group(1))

@@ -21,6 +21,10 @@ Actualizacion 2026-07-09 tarde: antes del swap atomico el deploy ejecuta
 con binario viejo convierta `ctl start` en no-op y termine verificando contra
 un proceso stale.
 
+Actualizacion 2026-07-09 tarde 2: la verificacion de identidad acepta tanto
+`binary_sha256` top-level como `runtime_identity.binary_sha256`, que es la forma
+publicada por `/api/status` en el servidor real.
+
 Uso minimo:
 
 ```bash

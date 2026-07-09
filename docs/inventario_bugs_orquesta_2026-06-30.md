@@ -478,6 +478,18 @@ antes de su cierre posterior:
   con `deploy_stop_failed` y conserva el binario anterior. Evidencia:
   `bash -n scripts/orquesta_server_deploy.sh scripts/test_orquesta_server_deploy.sh`
   y `bash scripts/test_orquesta_server_deploy.sh`.
+- `BUG-ORQ-20260709-217` queda cerrado tras la primera ejecucion real del deploy
+  remoto: el servidor publico exponia el SHA en
+  `runtime_identity.binary_sha256`, pero `scripts/orquesta_server_deploy.sh`
+  solo buscaba `binary_sha256`/`runtime_binary_sha256`/`orquesta_server_sha256`
+  en top-level y fallo con `deploy_runtime_identity_missing` pese a que el
+  binario vivo coincidia. Cierre: el verificador acepta tambien
+  `runtime_identity.binary_sha256` y el test reproduce esa forma anidada.
+  Evidencia: primera ejecucion remota con receipt failed por
+  `deploy_runtime_identity_missing`, `curl /api/status` mostrando
+  `runtime_identity.binary_sha256=d8f42b0c746fc192f92d65c2b3905c55c646bf3e8de15da5765a3572e9105f85`,
+  `bash -n scripts/orquesta_server_deploy.sh scripts/test_orquesta_server_deploy.sh`
+  y `bash scripts/test_orquesta_server_deploy.sh`.
 - Revalidacion OPES local/fake 2026-07-09h:
   `scripts/smoke_opes_lifecycle_real.sh` vuelve a pasar en local con
   `ORQUESTA_KEEP_SMOKE_DIR=1`, 24/24 `work_kind` cubiertos hasta

@@ -48,6 +48,30 @@ SH
   chmod +x "$ctl"
 }
 
+make_ctl_nested_runtime_identity() {
+  ctl="$1"
+  status_sha="$2"
+  cat >"$ctl" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+case "\${1:-}" in
+start)
+  printf 'start %s\n' "\${ORQUESTA_CTL_BINARY:-}" >>"$workdir/ctl.log"
+  ;;
+stop)
+  printf 'stop %s\n' "\${ORQUESTA_CTL_BINARY:-}" >>"$workdir/ctl.log"
+  ;;
+status)
+  printf '{"status":"running","readiness":true,"supervisor_ok":true,"runtime_identity":{"binary_sha256":"%s"}}\n' "$status_sha"
+  ;;
+*)
+  exit 2
+  ;;
+esac
+SH
+  chmod +x "$ctl"
+}
+
 make_ctl_status_fails() {
   ctl="$1"
   cat >"$ctl" <<SH
@@ -140,6 +164,16 @@ test_success() {
   grep -q "start $case_dir/runtime/orquesta-server" "$workdir/ctl.log"
   [ -x "$case_dir/runtime/orquesta-server" ]
   grep -q 'deploy-test-binary' "$case_dir/runtime/orquesta-server"
+  assert_receipt_status "$case_dir/state/orquesta_server_deploy_receipt_v0.json" ok ""
+}
+
+test_success_nested_runtime_identity() {
+  case_dir="$workdir/success-nested-runtime-identity"
+  make_repo "$case_dir/repo"
+  mkdir -p "$case_dir"
+  make_ctl_nested_runtime_identity "$case_dir/ctl.sh" "$(printf deploy-test-binary | sha256sum | awk '{print $1}')"
+  run_deploy "$case_dir" >/tmp/orquesta-deploy-success-nested.out
+  grep -q 'orquesta_server_deploy=ok' /tmp/orquesta-deploy-success-nested.out
   assert_receipt_status "$case_dir/state/orquesta_server_deploy_receipt_v0.json" ok ""
 }
 
@@ -240,6 +274,7 @@ test_deploy_stop_failed() {
 
 bash -n "$script"
 test_success
+test_success_nested_runtime_identity
 test_deploy_config_missing
 test_deploy_not_fast_forward
 test_deploy_runtime_identity_mismatch
