@@ -2396,3 +2396,30 @@ Lectura para Claude:
   `BUG-079`, pero no cerrarlo sin prueba real de que `toolOutputPolicy` se
   aplica antes de herramientas. El primer corte util es hacer visible
   `tool-output-policy-sent/accepted/fallback`.
+
+## Actualizacion Codex 2026-07-09e: BUG-079 observable
+
+Hecho:
+
+- `orquesta-runtime-codex-appserver` anade evidencias en el receipt de
+  `turn/start`:
+  `evidence-ref-codex-app-server-turn-start-tool-output-policy-sent`,
+  `evidence-ref-codex-app-server-turn-start-tool-output-policy-accepted` y
+  `evidence-ref-codex-app-server-turn-start-tool-output-policy-fallback`.
+- Si el app-server acepta `toolOutputPolicy`, el receipt conserva `sent` +
+  `accepted`.
+- Si el app-server rechaza el campo por schema legacy y Orquesta reintenta sin
+  JSON estructurado, el receipt conserva `sent` + `fallback`, pero no
+  `accepted`.
+
+Verificado:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0TurnStart|TestServerCodexAppServerTurnStartParamsV0'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`
+- `git diff --check`
+
+Pendiente:
+
+- No cerrar `BUG-079`: estas refs prueban transporte/aceptacion de la politica,
+  no enforcement pre-tool. Falta smoke/proveedor real que demuestre que stdout
+  gigante se corta antes de quemar contexto.

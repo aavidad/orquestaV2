@@ -5437,3 +5437,28 @@ Lectura:
 - Queda como residual externo, si se exige antes de cierre de producto, repetir
   la misma validacion en servidor remoto/stale. En local no queda un bug de
   codigo conocido en este eje.
+
+## Codex local 2026-07-09: BUG-079 evidencia toolOutputPolicy
+
+Avance pequeno y verificable sobre `BUG-ORQ-20260701-079`:
+
+- `orquesta-runtime-codex-appserver` ya distingue en el receipt de arranque si
+  la politica estructurada `toolOutputPolicy` fue enviada, aceptada por
+  `turn/start` o si se uso fallback legacy.
+- Evidencias nuevas:
+  `evidence-ref-codex-app-server-turn-start-tool-output-policy-sent`,
+  `evidence-ref-codex-app-server-turn-start-tool-output-policy-accepted` y
+  `evidence-ref-codex-app-server-turn-start-tool-output-policy-fallback`.
+- No cambia el contrato ni anade rails nuevos: solo hace observable el camino
+  real para que el siguiente smoke distinga "app-server acepto el campo" de
+  "Orquesta reintento sin JSON estructurado".
+
+Verificado:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0TurnStart|TestServerCodexAppServerTurnStartParamsV0'`
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`
+- `git diff --check`
+
+Pendiente: no cerrar `BUG-079` hasta una prueba real que demuestre que el
+proveedor/app-server aplica el limite antes de ejecutar herramientas con stdout
+gigante. Este corte solo mejora la evidencia causal del transporte.

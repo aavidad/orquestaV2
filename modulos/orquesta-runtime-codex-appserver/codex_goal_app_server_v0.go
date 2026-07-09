@@ -19,7 +19,10 @@ const (
 	codexGoalBackendAppServerTmuxV0       = "app_server_tmux"
 	codexAppServerGoalObjectiveMaxRunesV0 = 4000
 
-	codexAppServerTurnStartRuntimeContractHeaderV0 = "Contrato runtime Orquesta para este turn/start:"
+	codexAppServerTurnStartRuntimeContractHeaderV0    = "Contrato runtime Orquesta para este turn/start:"
+	codexAppServerTurnStartToolOutputPolicySentV0     = "evidence-ref-codex-app-server-turn-start-tool-output-policy-sent"
+	codexAppServerTurnStartToolOutputPolicyAcceptedV0 = "evidence-ref-codex-app-server-turn-start-tool-output-policy-accepted"
+	codexAppServerTurnStartToolOutputPolicyFallbackV0 = "evidence-ref-codex-app-server-turn-start-tool-output-policy-fallback"
 )
 
 type serverCodexUnavailableGoalBackendV0 struct {
@@ -135,6 +138,7 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	}
 	turnParams := backend.turnStartParamsV0(threadID, packet)
 	turnStartPolicyFallback := false
+	turnStartPolicySent := !turnParams.DisablePolicyJSON && !turnParams.ToolOutputPolicy.emptyV0()
 	if _, err := backend.Protocol.StartTurnV0(ctx, turnParams); err != nil {
 		if retryParams, ok := codexAppServerTurnStartWithoutToolOutputPolicyFallbackV0(turnParams, err); ok {
 			if _, retryErr := backend.Protocol.StartTurnV0(ctx, retryParams); retryErr != nil {
@@ -148,8 +152,13 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 		}
 	}
 	turnStartEvidenceRefs := []string{"evidence-ref-codex-app-server-turn-started"}
+	if turnStartPolicySent {
+		turnStartEvidenceRefs = append(turnStartEvidenceRefs, codexAppServerTurnStartToolOutputPolicySentV0)
+	}
 	if turnStartPolicyFallback {
-		turnStartEvidenceRefs = append(turnStartEvidenceRefs, "evidence-ref-codex-app-server-turn-start-tool-output-policy-fallback")
+		turnStartEvidenceRefs = append(turnStartEvidenceRefs, codexAppServerTurnStartToolOutputPolicyFallbackV0)
+	} else if turnStartPolicySent {
+		turnStartEvidenceRefs = append(turnStartEvidenceRefs, codexAppServerTurnStartToolOutputPolicyAcceptedV0)
 	}
 	if receipt, limited := backend.codexAppServerStartImmediateLimitedReceiptV0(ctx, packet, threadID, goalSetEvidence, turnStartEvidenceRefs); limited {
 		return receipt, errors.New(receipt.IssueCode)

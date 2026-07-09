@@ -73,6 +73,19 @@ antes de su cierre posterior:
   compacto. Sigue abierto para enforcement duro del proveedor/runtime antes de
   ejecutar herramientas y smoke real largo que demuestre checkpoint temprano sin
   consumo gigante previo.
+- Avance 2026-07-09e: `BUG-ORQ-20260701-079` queda mas observable sin declarar
+  enforcement. `orquesta-runtime-codex-appserver` anade evidencias de
+  `turn/start` estructurado:
+  `evidence-ref-codex-app-server-turn-start-tool-output-policy-sent`,
+  `evidence-ref-codex-app-server-turn-start-tool-output-policy-accepted` y
+  `evidence-ref-codex-app-server-turn-start-tool-output-policy-fallback`. Asi el
+  siguiente smoke real puede distinguir si el app-server acepto
+  `toolOutputPolicy` o si Orquesta tuvo que caer a contrato textual legacy.
+  Verificado con
+  `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0TurnStart|TestServerCodexAppServerTurnStartParamsV0'`
+  y `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`. Sigue abierto
+  hasta probar que el proveedor/app-server aplica el limite antes de que una
+  herramienta genere stdout gigante.
 - Reejeucion real 2026-07-04 noche 10:
   `smoke_goal_first_checkpoint_only_high_consumption_real=ok` con
   `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-6c8dc4317888c8e25bb0e91f7f910aab`,

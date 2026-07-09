@@ -88,6 +88,9 @@ func TestServerCodexAppServerGoalBackendV0TurnStartInyectaContratoSalidaCompacta
 	input := protocol.turnParams.InputText
 	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
 		!containsStringMigratedTestV0(protocol.calls, "turn/start") ||
+		!containsStringMigratedTestV0(receipt.EvidenceRefs, codexAppServerTurnStartToolOutputPolicySentV0) ||
+		!containsStringMigratedTestV0(receipt.EvidenceRefs, codexAppServerTurnStartToolOutputPolicyAcceptedV0) ||
+		containsStringMigratedTestV0(receipt.EvidenceRefs, codexAppServerTurnStartToolOutputPolicyFallbackV0) ||
 		!strings.Contains(input, "prompt operativo minimo") ||
 		!strings.Contains(input, codexAppServerTurnStartRuntimeContractHeaderV0) ||
 		!strings.Contains(input, "checkpoint_started.txt") ||
@@ -231,7 +234,9 @@ func TestServerCodexAppServerGoalBackendV0TurnStartToolOutputPolicyFallbackCompa
 		t.Fatalf("StartCodexGoalV0 receipt=%+v err=%v", receipt, err)
 	}
 	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
-		!containsStringMigratedTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-turn-start-tool-output-policy-fallback") {
+		!containsStringMigratedTestV0(receipt.EvidenceRefs, codexAppServerTurnStartToolOutputPolicySentV0) ||
+		!containsStringMigratedTestV0(receipt.EvidenceRefs, codexAppServerTurnStartToolOutputPolicyFallbackV0) ||
+		containsStringMigratedTestV0(receipt.EvidenceRefs, codexAppServerTurnStartToolOutputPolicyAcceptedV0) {
 		t.Fatalf("receipt=%+v", receipt)
 	}
 	if len(protocol.turnParamsHistory) != 2 {
