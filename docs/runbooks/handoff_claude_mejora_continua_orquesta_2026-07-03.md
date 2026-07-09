@@ -2631,6 +2631,7 @@ Para Claude:
   - `BUG-ORQ-20260709-213`: contratos E3 multisuperficie.
   - `BUG-ORQ-20260709-214`: guards wizard/i18n.
   - `BUG-ORQ-20260709-215`: flaky del fake WebSocket app-server.
+  - `BUG-ORQ-20260709-216`: deploy atomico reinicia servidor vivo.
 
 Cambios clave:
 
@@ -2648,6 +2649,10 @@ Cambios clave:
 - Durante `go test ./...` aparecio un flaky previo del test WebSocket de
   `thread/read` gigante; se corrigio para no fallar por `broken pipe` benigno
   cuando el cliente cierra tras detectar frame demasiado grande.
+- Antes de desplegar en remoto se corrigio `scripts/orquesta_server_deploy.sh`:
+  ahora ejecuta `orquesta_server_ctl.sh stop` despues del build y antes del
+  swap. Si falla la parada, aborta con `deploy_stop_failed` y no cambia el
+  binario. Esto evita que un `ctl start` sobre servidor ya vivo sea no-op.
 
 Verificacion local ya pasada antes del commit:
 
@@ -2656,6 +2661,8 @@ Verificacion local ya pasada antes del commit:
 - `go test -count=1 ./modulos/orquesta-web`
 - `go test -count=10 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0ToolOutputPolicyYThreadReadGigantePorWebSocketDeterministaV0'`
 - `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`
+- `bash -n scripts/orquesta_server_deploy.sh scripts/test_orquesta_server_deploy.sh`
+- `bash scripts/test_orquesta_server_deploy.sh`
 - `git diff --check`
 
 Pendiente al retomar en remoto:

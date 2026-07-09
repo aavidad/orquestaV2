@@ -139,6 +139,10 @@ build_from_tree() {
   binary_sha="$(sha256_file "$out")"
 }
 
+stop_existing_server() {
+  status_text="$(ORQUESTA_CTL_BINARY="$DEPLOY_BINARY" "$DEPLOY_CTL" stop 2>&1)" || fail "deploy_stop_failed" "ctl stop fallo: $status_text"
+}
+
 swap_binary() {
   install_dir="$(dirname "$DEPLOY_BINARY")"
   mkdir -p "$install_dir"
@@ -223,6 +227,8 @@ main() {
   sync_worktree_ff_only
   phase="build"
   build_from_tree
+  phase="stop"
+  stop_existing_server
   phase="swap_binary"
   swap_binary
   phase="start"

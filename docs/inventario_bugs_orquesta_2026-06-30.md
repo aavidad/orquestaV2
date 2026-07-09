@@ -470,6 +470,14 @@ antes de su cierre posterior:
   `codex_app_server_thread_read_response_too_large`. Evidencia:
   `go test -count=10 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0ToolOutputPolicyYThreadReadGigantePorWebSocketDeterministaV0'`
   y `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`.
+- `BUG-ORQ-20260709-216` queda cerrado en el deploy atomico antes de la primera
+  prueba real remota: si el servidor ya estaba vivo, `scripts/orquesta_server_deploy.sh`
+  hacia build y swap, pero `orquesta_server_ctl.sh start` podia ser un no-op
+  (`ya vivo`) y la verificacion final comparar contra el binario viejo. Cierre:
+  el deploy ejecuta `ctl stop` tras build y antes del swap; si falla, aborta
+  con `deploy_stop_failed` y conserva el binario anterior. Evidencia:
+  `bash -n scripts/orquesta_server_deploy.sh scripts/test_orquesta_server_deploy.sh`
+  y `bash scripts/test_orquesta_server_deploy.sh`.
 - Revalidacion OPES local/fake 2026-07-09h:
   `scripts/smoke_opes_lifecycle_real.sh` vuelve a pasar en local con
   `ORQUESTA_KEEP_SMOKE_DIR=1`, 24/24 `work_kind` cubiertos hasta

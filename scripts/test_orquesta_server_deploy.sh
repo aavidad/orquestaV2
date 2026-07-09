@@ -30,6 +30,9 @@ case "\${1:-}" in
 start)
   printf 'start %s\n' "\${ORQUESTA_CTL_BINARY:-}" >>"$workdir/ctl.log"
   ;;
+stop)
+  printf 'stop %s\n' "\${ORQUESTA_CTL_BINARY:-}" >>"$workdir/ctl.log"
+  ;;
 status)
   printf '{"status":"running","readiness":true,"supervisor_ok":true'
   if [ -n "$status_sha" ]; then
@@ -54,9 +57,36 @@ case "\${1:-}" in
 start)
   printf 'start %s\n' "\${ORQUESTA_CTL_BINARY:-}" >>"$workdir/ctl.log"
   ;;
+stop)
+  printf 'stop %s\n' "\${ORQUESTA_CTL_BINARY:-}" >>"$workdir/ctl.log"
+  ;;
 status)
   echo "status failed" >&2
   exit 7
+  ;;
+*)
+  exit 2
+  ;;
+esac
+SH
+  chmod +x "$ctl"
+}
+
+make_ctl_stop_fails() {
+  ctl="$1"
+  cat >"$ctl" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+case "\${1:-}" in
+stop)
+  echo "stop failed" >&2
+  exit 9
+  ;;
+start)
+  printf 'start %s\n' "\${ORQUESTA_CTL_BINARY:-}" >>"$workdir/ctl.log"
+  ;;
+status)
+  printf '{"status":"running","readiness":true,"supervisor_ok":true,"binary_sha256":"%s"}\n' "$(printf deploy-test-binary | sha256sum | awk '{print $1}')"
   ;;
 *)
   exit 2
@@ -106,6 +136,7 @@ test_success() {
   make_ctl "$case_dir/ctl.sh" "$(printf deploy-test-binary | sha256sum | awk '{print $1}')"
   run_deploy "$case_dir" >/tmp/orquesta-deploy-success.out
   grep -q 'orquesta_server_deploy=ok' /tmp/orquesta-deploy-success.out
+  grep -q "stop $case_dir/runtime/orquesta-server" "$workdir/ctl.log"
   grep -q "start $case_dir/runtime/orquesta-server" "$workdir/ctl.log"
   [ -x "$case_dir/runtime/orquesta-server" ]
   grep -q 'deploy-test-binary' "$case_dir/runtime/orquesta-server"
@@ -188,6 +219,25 @@ test_deploy_status_failed() {
   assert_receipt_status "$case_dir/state/orquesta_server_deploy_receipt_v0.json" failed deploy_status_failed
 }
 
+test_deploy_stop_failed() {
+  case_dir="$workdir/stop-failed"
+  make_repo "$case_dir/repo"
+  mkdir -p "$case_dir"
+  old_bin="$case_dir/runtime/orquesta-server"
+  mkdir -p "$(dirname "$old_bin")"
+  printf old-binary >"$old_bin"
+  chmod +x "$old_bin"
+  make_ctl_stop_fails "$case_dir/ctl.sh"
+  set +e
+  run_deploy "$case_dir" >/tmp/orquesta-deploy-stop-failed.out 2>&1
+  code=$?
+  set -e
+  [ "$code" -ne 0 ]
+  grep -q 'reason_code=deploy_stop_failed' /tmp/orquesta-deploy-stop-failed.out
+  grep -q 'old-binary' "$old_bin"
+  assert_receipt_status "$case_dir/state/orquesta_server_deploy_receipt_v0.json" failed deploy_stop_failed
+}
+
 bash -n "$script"
 test_success
 test_deploy_config_missing
@@ -195,4 +245,5 @@ test_deploy_not_fast_forward
 test_deploy_runtime_identity_mismatch
 test_deploy_runtime_identity_missing
 test_deploy_status_failed
+test_deploy_stop_failed
 echo "orquesta_server_deploy_tests=ok"

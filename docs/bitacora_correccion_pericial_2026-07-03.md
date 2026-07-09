@@ -6427,3 +6427,28 @@ Incidencia adicional detectada por `go test ./...`:
   las aserciones funcionales del contrato. Evidencia:
   `go test -count=10 ./modulos/orquesta-runtime-codex-appserver -run 'TestServerCodexAppServerGoalBackendV0ToolOutputPolicyYThreadReadGigantePorWebSocketDeterministaV0'`
   y `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`.
+
+## Orquesta local/remoto 2026-07-09: deploy atomico reinicia servidor vivo
+
+Antes de ejecutar la primera prueba real del deploy atomico en `srv1651826`, se
+detecto una condicion no cubierta: el servidor remoto estaba vivo. En ese caso,
+el script podia construir y hacer swap del binario, pero `orquesta_server_ctl.sh
+start` responderia `ya vivo` sin reiniciar el proceso. La verificacion de SHA
+acabaria comparando contra el binario viejo o, peor, un operador podria
+interpretar el arranque como despliegue efectivo.
+
+Cambio:
+
+- `BUG-ORQ-20260709-216`: `scripts/orquesta_server_deploy.sh` ejecuta
+  `ctl stop` despues de compilar y antes del swap.
+- Si `ctl stop` falla, el deploy aborta con `deploy_stop_failed` y no sustituye
+  el binario.
+- `scripts/test_orquesta_server_deploy.sh` cubre success con `stop` antes de
+  `start` y fallo de parada conservando el binario anterior.
+- Runbook actualizado en
+  `docs/runbooks/orquesta_server_deploy_atomico_2026-07-09.md`.
+
+Evidencia local:
+
+- `bash -n scripts/orquesta_server_deploy.sh scripts/test_orquesta_server_deploy.sh`
+- `bash scripts/test_orquesta_server_deploy.sh`

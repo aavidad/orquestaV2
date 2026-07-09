@@ -15,6 +15,12 @@ status` debe responder, y `status`, readiness o supervisor deben exponer un
 de verificacion, una respuesta vacia, inalcanzable o sin readiness positiva
 bloquea el despliegue.
 
+Actualizacion 2026-07-09 tarde: antes del swap atomico el deploy ejecuta
+`orquesta_server_ctl.sh stop`. Si la parada gobernada falla, aborta con
+`deploy_stop_failed` y no sustituye el binario. Esto evita que un servidor vivo
+con binario viejo convierta `ctl start` en no-op y termine verificando contra
+un proceso stale.
+
 Uso minimo:
 
 ```bash
@@ -42,6 +48,8 @@ Contrato operativo:
   expone identidad del binario vivo.
 - `deploy_status_failed` bloquea si `scripts/orquesta_server_ctl.sh status`
   falla tras arrancar.
+- `deploy_stop_failed` bloquea si `scripts/orquesta_server_ctl.sh stop` no
+  puede parar de forma gobernada el servidor vivo antes del swap.
 - `deploy_readiness_unreachable` bloquea si una URL configurada de verificacion
   no responde.
 - El recibo queda en
