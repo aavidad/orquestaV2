@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestadirectoroperativo "orquesta/modulos/orquesta-director-operativo"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -174,4 +175,67 @@ func mcpDirectorStatsProgressObservationForTestV0(
 	observation.Report.Summary = "avance observado por puerto de progreso"
 	observation.Report.EvidenceRefs = []string{"evidence-ref-mcp-director-stats-progress-report-001"}
 	return observation
+}
+
+func mcpDirectorStatsClosedOperationalPlanStateForTestV0(
+	runRef string,
+) orquestacionnucleoapp.OperationalDirectorPlanStateV0 {
+	acceptedReviewRef := "accepted-review-ref-mcp-director-stats-planstate-001"
+	return orquestacionnucleoapp.OperationalDirectorPlanStateV0{
+		SchemaVersion:   orquestacionnucleoapp.OperationalDirectorPlanStateSchemaVersionV0,
+		StateRef:        "operational-director-plan-state-mcp-stats-closed-001",
+		PlanRef:         mcpDirectorStatsDefaultOperationalPlanRefV0(runRef),
+		RequestRef:      "request-ref-mcp-director-stats-planstate-closed-001",
+		RunRef:          runRef,
+		ProjectRef:      "project-ref-mcp-director-stats-planstate-closed-001",
+		Mode:            orquestadirectoroperativo.OperationalDirectorModeDomainWorkV0,
+		Status:          orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0,
+		ActiveStepID:    "step-replan-or-close",
+		ActiveWaveRef:   "wave-ref-mcp-director-stats-planstate-001",
+		ActiveCohortRef: "cohort-ref-mcp-director-stats-planstate-001",
+		EvidenceRefs: []string{
+			"evidence-ref-mcp-director-stats-planstate-closed-001",
+		},
+		ClosureReason: "operational-closure-succeeded",
+		CorrelationID: "corr-mcp-director-stats-planstate-closed-001",
+		ObservedAt:    "2026-07-09T16:00:00Z",
+		UpdatedAt:     "2026-07-09T16:01:00Z",
+		Steps: []orquestacionnucleoapp.OperationalDirectorPlanStepStateV0{
+			{
+				StepID:    "step-review-deliveries",
+				Kind:      orquestadirectoroperativo.OperationalDirectorStepReviewDeliveriesV0,
+				Status:    orquestadirectoroperativo.OperationalDirectorStepAcceptedV0,
+				WaveRef:   "wave-ref-mcp-director-stats-planstate-001",
+				CohortRef: "cohort-ref-mcp-director-stats-planstate-001",
+				TaskRefs:  []string{"task-ref-mcp-director-stats-planstate-001"},
+				AgentRefs: []string{"agent-ref-mcp-director-stats-planstate-001"},
+				DeliveryRefs: []string{
+					"delivery-ref-mcp-director-stats-planstate-001",
+				},
+				ReviewResultRefs: []string{
+					"review-result-ref-mcp-director-stats-planstate-001",
+				},
+				AcceptedReviewRefs: []string{acceptedReviewRef},
+			},
+			{
+				StepID:    "step-replan-or-close",
+				Kind:      orquestadirectoroperativo.OperationalDirectorStepReplanOrCloseV0,
+				Status:    orquestadirectoroperativo.OperationalDirectorStepClosedV0,
+				WaveRef:   "wave-ref-mcp-director-stats-planstate-001",
+				CohortRef: "cohort-ref-mcp-director-stats-planstate-001",
+				TaskRefs:  []string{"task-ref-mcp-director-stats-planstate-001"},
+				AgentRefs: []string{"agent-ref-mcp-director-stats-planstate-001"},
+				DeliveryRefs: []string{
+					"delivery-ref-mcp-director-stats-planstate-001",
+				},
+				ReviewResultRefs: []string{
+					"review-result-ref-mcp-director-stats-planstate-001",
+				},
+				AcceptedReviewRefs:       []string{acceptedReviewRef},
+				RequiredTestEvidenceRefs: []string{"test-evidence-ref-mcp-director-stats-planstate-001"},
+				EvidenceRefs:             []string{"evidence-ref-mcp-director-stats-planstate-step-closed-001"},
+				Reason:                   "operational-closure-succeeded",
+			},
+		},
+	}
 }

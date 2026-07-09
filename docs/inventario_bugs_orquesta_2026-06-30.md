@@ -219,6 +219,21 @@ antes de su cierre posterior:
   y `go test -count=1 ./modulos/orquesta-operator-notifications`.
   Residual externo: wiring/smoke con Telegram remoto real queda para la fase
   remota con credenciales y bot autorizados.
+- `BUG-ORQ-20260709-206` queda cerrado en observabilidad local
+  DirectorStats/estado-vivo: los smokes no-OPES cerraban causalmente el
+  `OperationalPlanState` con `operational-closure-succeeded`, pero
+  `/api/v0/director/stats` podia seguir publicando `closure.status=blocked`
+  por una evidencia stale `estado_vivo_entregado_parcial`. Cierre:
+  `orquesta.director.stats.v0` consume el `OperationalPlanStateStore`
+  inyectado, aplica el PlanState cerrado despues de `estado_vivo` y solo
+  conserva bloqueos duros (`proceso_vivo`, `conflicto`, `bloqueado`,
+  `terminal_rework`). El stack Codex cablea el store real. Evidencia:
+  `go test -count=1 ./modulos/orquesta-mcp`, focales de stack/server,
+  `ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1
+  ./scripts/smoke_external_domain_fake_real.sh` con
+  `external_cycle_closure_status=closed`, y
+  `ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1
+  ./scripts/smoke_external_domain_non_opes_real.sh` con PlanState cerrado.
 - Avance E4 local 2026-07-09b: el bloqueador
   `provider_unavailable_paused` ya esta cableado al notifier opcional del
   supervisor de `cmd/orquesta-server`. Si la configuracion canonica de Telegram

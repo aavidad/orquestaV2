@@ -163,6 +163,7 @@ type MCPDirectorStatsToolExecutorV0 struct {
 	GoalStateSource            MCPDirectorGoalStateSourcePortV0
 	GoalMarkerSource           MCPDirectorGoalRunMarkerSourcePortV0
 	GoalMaterializedRefsSource MCPDirectorGoalMaterializedRefsSourcePortV0
+	OperationalPlanStateStore  orquestacionnucleoapp.OperationalDirectorPlanStateStorePortV0
 }
 
 func MCPDirectorStatsDescriptorV0() MCPDirectorStatsToolDescriptorV0 {
@@ -176,7 +177,7 @@ func MCPDirectorStatsDescriptorV0() MCPDirectorStatsToolDescriptorV0 {
 			"adaptador inbound fino",
 			"consulta el estado por RunStorePortV0 inyectado",
 			"enriquece control de procesos solo por AgentProcessRegistryPortV0 opcional",
-			"expone cierre bloqueado/ready/cerrado derivado solo del run",
+			"expone cierre bloqueado/ready/cerrado derivado del run y PlanState operativo inyectado",
 			"devuelve refs opacas sin rutas locales credenciales trazas sensibles ni detalles de runtime",
 		},
 	}
@@ -270,6 +271,7 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 	goal := executor.resolveGoalStatsV0(ctx, stats.RunRef)
 	applyMCPDirectorGoalRunProjectionV0(goal, &stats)
 	executor.applyEstadoVivoProjectionV0(ctx, input, &stats)
+	executor.applyOperationalPlanStateProjectionV0(ctx, stats.RunRef, &stats)
 	decisionContext := buildMCPDirectorDecisionContextV0(run, stats, input.OccurredAt)
 	return MCPDirectorStatsToolResultV0{
 		Estado:          MCPDirectorStatsEstadoOKV0,
@@ -283,6 +285,70 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 		OpsSnapshot:     buildMCPDirectorStatsOpsSnapshotV0(stats, decisionContext, input.OccurredAt),
 		Errores:         []MCPValidationIssueV0{},
 	}, nil
+}
+
+func (executor MCPDirectorStatsToolExecutorV0) applyOperationalPlanStateProjectionV0(
+	ctx context.Context,
+	runRef string,
+	stats *orquestacionnucleoapp.DirectorRunStatsV0,
+) {
+	if executor.OperationalPlanStateStore == nil || stats == nil {
+		return
+	}
+	runRef = strings.TrimSpace(runRef)
+	planRef := mcpDirectorStatsDefaultOperationalPlanRefV0(runRef)
+	if runRef == "" || planRef == "" {
+		return
+	}
+	state, err := executor.OperationalPlanStateStore.LoadOperationalDirectorPlanStateV0(ctx, runRef, planRef)
+	if err != nil || state.Status != orquestacionnucleoapp.OperationalDirectorPlanStateClosedV0 {
+		return
+	}
+	if mcpDirectorStatsHasHardEstadoVivoBlockV0(stats) {
+		return
+	}
+	stats.Status = "closed"
+	stats.Closure = orquestacionnucleoapp.DirectorClosureStatsV0{
+		Status: orquestacionnucleoapp.DirectorClosureStatusClosedV0,
+		Closed: true,
+	}
+	stats.Progress.PercentComplete = 100
+}
+
+func mcpDirectorStatsDefaultOperationalPlanRefV0(runRef string) string {
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" {
+		return ""
+	}
+	return "operational-director-plan-director-decisions-" + mcpDirectorStatsSafeRefPartV0(runRef)
+}
+
+func mcpDirectorStatsSafeRefPartV0(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.ReplaceAll(value, "\\", "-")
+	value = strings.ReplaceAll(value, "/", "-")
+	value = strings.ReplaceAll(value, " ", "-")
+	return value
+}
+
+func mcpDirectorStatsHasHardEstadoVivoBlockV0(
+	stats *orquestacionnucleoapp.DirectorRunStatsV0,
+) bool {
+	if stats == nil {
+		return false
+	}
+	for _, code := range []string{
+		mcpDirectorStatsEstadoVivoProcesoVivoV0,
+		mcpDirectorStatsEstadoVivoConflictoV0,
+		mcpDirectorStatsEstadoVivoBloqueadoV0,
+		mcpDirectorStatsEstadoVivoTerminalReworkV0,
+	} {
+		if strings.TrimSpace(stats.Status) == code ||
+			containsStringMCPV0(stats.Closure.BlockedBy, code) {
+			return true
+		}
+	}
+	return false
 }
 
 func (executor MCPDirectorStatsToolExecutorV0) resolveGoalStatsV0(

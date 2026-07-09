@@ -5868,3 +5868,53 @@ Lectura:
   sin sockets loopback.
 - No cierra `BUG-058/066/075`: siguen pendientes OPES temporal/preprod con
   proveedor real y prueba de ausencia de reescritura tardia con agente real.
+
+## Orquesta local 2026-07-09: BUG-206 cierre operativo proyectado en DirectorStats
+
+Se siguio el criterio de arreglo de dentro hacia afuera. El smoke no-OPES
+cerraba bien el `OperationalPlanState` con
+`operational-closure-succeeded`, pero la capa externa
+`/api/v0/director/stats` podia seguir publicando
+`closure.status=blocked` por una evidencia anterior de
+`estado_vivo_entregado_parcial`.
+
+Diagnostico:
+
+- El nucleo operativo no estaba reabierto: `operational_plan_status=closed` y
+  `operational_closure_reason=operational-closure-succeeded`.
+- El bug estaba en observabilidad/composicion: `DirectorStats` derivaba el
+  cierre desde el run y `estado-vivo`, pero no reconciliaba con el
+  `OperationalPlanStateStore` ya cerrado.
+- El estado parcial stale era blando. No debe ganar a un plan operativo cerrado;
+  los conflictos duros de proceso vivo, bloqueo, conflicto o rework terminal si
+  se conservan como veto.
+
+Cambios:
+
+- `orquesta.director.stats.v0` acepta ahora
+  `OperationalPlanStateStore` inyectado.
+- La proyeccion de PlanState cerrado se aplica despues de `estado-vivo` y marca
+  `status=closed`, `closure.status=closed`, `closed=true` y progreso 100.
+- No pisa bloqueos duros de `estado-vivo`: `proceso_vivo`, `conflicto`,
+  `bloqueado` ni `terminal_rework`.
+- El stack Codex cablea el store real hacia el executor MCP.
+
+Evidencia:
+
+- `go test -count=1 ./modulos/orquesta-mcp`
+- `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestBuildStackV0|Test.*DirectorStats|TestCodexStackV0DirectorStats|TestBuildStackFromEnvV0DirectorStats'`
+- `go test -count=1 ./cmd/orquesta-server -run 'TestBuildStackFromEnvV0DirectorStatsExponeProgressSourceConfiguradoV0|TestBuildStackFromEnvV0|TestStackWiring'`
+- `ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1 ./scripts/smoke_external_domain_fake_real.sh`
+  con `external_cycle_closure_status=closed`,
+  `external_cycle_closed=true`, `operational_plan_status=closed` y
+  `closure_status=closed`.
+- `ORQUESTA_EXTERNAL_WORK_LEGACY_DIRECTOR_LOOP=1 ./scripts/smoke_external_domain_non_opes_real.sh`
+  con app externa temporal, `external_app_artifact_count=2`,
+  `operational_plan_status=closed`, review aceptada y `opes_touched=false`.
+
+Residual:
+
+- Esto cierra el falso bloqueo local de `DirectorStats`, no los residuales de
+  proveedor real, OPES temporal/preprod ni despliegue remoto.
+- Si `estado-vivo` detecta conflicto duro real, el cierre sigue bloqueado de
+  forma intencionada.

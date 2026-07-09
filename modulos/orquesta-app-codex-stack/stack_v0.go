@@ -117,16 +117,17 @@ func buildStackMCPTransportBindingsV0(
 	estadoVivoSource := estadoVivoSourceV0(config)
 	runControlPort := goalFirstRunControlPortFromConfigV0(config)
 	directorStats := orquestamcp.MCPDirectorStatsToolExecutorV0{
-		RunStore:          config.Stores.RunStore,
-		RunControl:        config.Stores.RunControl,
-		ProcessRegistry:   config.Stores.ProcessRegistry,
-		ProcessSnapshot:   config.Codex.SnapshotSource,
-		ProgressSource:    statsProgressSourceV0(config),
-		AgentUsageSource:  agentUsageSourceV0(config),
-		EstadoVivoSource:  estadoVivoSource,
-		ExternalJobSource: externalJobStatsSourceV0(config),
-		GoalStateSource:   config.Stores.AppGoalStateStore,
-		GoalMarkerSource:  appGoalFirstRunMarkerStoreV0(config),
+		RunStore:                  config.Stores.RunStore,
+		RunControl:                config.Stores.RunControl,
+		ProcessRegistry:           config.Stores.ProcessRegistry,
+		ProcessSnapshot:           config.Codex.SnapshotSource,
+		ProgressSource:            statsProgressSourceV0(config),
+		AgentUsageSource:          agentUsageSourceV0(config),
+		EstadoVivoSource:          estadoVivoSource,
+		ExternalJobSource:         externalJobStatsSourceV0(config),
+		GoalStateSource:           config.Stores.AppGoalStateStore,
+		GoalMarkerSource:          appGoalFirstRunMarkerStoreV0(config),
+		OperationalPlanStateStore: config.Stores.OperationalPlanStateStore,
 		GoalMaterializedRefsSource: stackGoalMaterializedRefsSourceV0{
 			Config:                       config,
 			GoalStateStore:               config.Stores.AppGoalStateStore,
