@@ -13,6 +13,8 @@ write-set), `git diff --check`, bitacora al cerrar. NO ejecutar tareas
 gateadas antes de su gate.
 
 Orden recomendado (y gates): F1 -> F2 -> F3 -> F4 -> F5 -> F6 -> F7.
+F8 es independiente de OPES y puede hacerse en paralelo cuando no pise E3/E5
+del wizard.
 
 ---
 
@@ -190,6 +192,45 @@ Como activar cuando los gates esten verdes:
   correr solo. Registrar en bitacora la firma de autonomia.
 
 Si algun gate falla, NO activar y anotar el motivo en bitacora.
+
+## F8: dossier final pre-lanzamiento del wizard de programacion
+
+Orden del operador 2026-07-10: el wizard debe guiar la definicion de la app y,
+antes de aceptar crearla, entregar un resumen final muy completo de lo que se
+va a programar, con documentacion extensa e infografias/diagramas que expliquen
+la solucion elegida: arquitectura, i18n, datos, conectores, seguridad,
+operacion, plan de trabajo, pruebas y riesgos.
+
+Fuente vinculante: seccion 14 de
+`docs/diseno_wizard_programacion_2026-07-04.md`.
+
+Estado observado: el wizard ya guia, recomienda opciones, explica ayudas,
+aplica defaults de ingenieria y expone `SpecPreview`/`LaunchReady`, pero no
+hay contrato completo de `WizardLaunchDossierV0` ni confirmacion final por
+`dossier_ref`.
+
+Cambios requeridos:
+
+1. Anadir `WizardLaunchDossierV0` con secciones estructuradas y diagramas
+   verificables (`mermaid`, `diagram_blueprint` o brief infografico) generado
+   desde la sesion/spec del wizard, sin LLM obligatorio.
+2. Exponer el dossier en HTTP, web y MCP cuando `LaunchReady=true`.
+3. Cambiar el cierre: no lanzar la app solo por `LaunchReady`; exigir
+   confirmacion explicita `confirm_launch_dossier_ref`/`dossier_ref` vigente.
+4. Incluir contenido minimo: objetivo, alcance, usuarios/roles, decisiones,
+   desviaciones, arquitectura hexagonal/puertos/adaptadores, i18n/l10n, datos,
+   integraciones/conectores, seguridad/RGPD, UI/UX, deploy/operacion, plan de
+   Orquesta, tests requeridos, riesgos y dudas abiertas.
+5. Incluir diagramas obligatorios: arquitectura hexagonal, flujo de usuario,
+   flujo de datos/integraciones, mapa i18n y despliegue si aplica.
+6. Guardas: sin secretos, tokens, HOME, rutas locales, credenciales ni detalles
+   internos de runtime/proveedor en el dossier.
+7. Tests: los definidos en la seccion 14.5 del diseno, mas paridad HTTP/MCP/web.
+
+Criterio de cierre: una sesion tipo "quiero una app para una agenda" aceptando
+recomendaciones produce dossier completo y no permite crear la app hasta
+confirmar el `dossier_ref`; cambiar una respuesta regenera el dossier y anula
+la confirmacion anterior.
 
 ---
 

@@ -634,3 +634,114 @@ Pendiente vinculante antes de declarar "wizard universal para cualquier app":
 - `HelpKey`/`ExampleKey`, glosario y boton "explicamelo todo".
 - Bot determinista/RAG y nivel LLM opt-in con presupuesto.
 - Tests de aceptacion completos de las secciones 9-12.
+
+## 14. Dossier final pre-lanzamiento (vinculante)
+
+Orden del operador 2026-07-10: antes de aceptar crear la app, el wizard debe
+entregar un resumen final muy completo de lo que se va a programar. No basta
+con `SpecPreview` ni con listar defaults de ingenieria: debe existir un
+artefacto de decision comprensible para humanos y util para agentes.
+
+### 14.1 Contrato
+
+Anadir al cierre del wizard un `WizardLaunchDossierV0` y exponerlo en HTTP,
+web y MCP cuando `LaunchReady=true`:
+
+```go
+type WizardLaunchDossierV0 struct {
+    SchemaVersion string
+    DossierRef    string
+    Markdown      string
+    Sections      []WizardDossierSectionV0
+    Diagrams      []WizardDossierDiagramV0
+    DecisionRefs  []string
+    RiskRefs      []string
+}
+
+type WizardDossierSectionV0 struct {
+    SectionRef string // objetivo, alcance, usuarios, datos, arquitectura...
+    TitleKey   string
+    Markdown   string
+}
+
+type WizardDossierDiagramV0 struct {
+    DiagramRef string // arquitectura, flujo usuario, datos, deploy, i18n
+    Kind       string // mermaid | diagram_blueprint | infographic_brief
+    Source     string // texto fuente, sin rutas locales ni secretos
+    AltTextKey string
+}
+```
+
+El dossier es parte de la confirmacion: el boton final debe ser
+`confirmar_y_crear_app`, no un lanzamiento implicito al detectar
+`LaunchReady`. Si el usuario modifica una respuesta despues de ver el dossier,
+el dossier queda invalidado y se regenera con nueva `DossierRef`.
+
+### 14.2 Contenido minimo obligatorio
+
+El dossier debe incluir, como minimo:
+
+- objetivo de producto y alcance fuera/dentro;
+- usuarios, roles, permisos y flujo principal de uso;
+- decisiones elegidas por el usuario y recomendaciones aceptadas;
+- desviaciones respecto a la recomendacion, con justificacion si existe;
+- arquitectura elegida y por que: hexagonal por defecto, puertos, adaptadores,
+  dominio/aplicacion/infra/UI, composicion en bootstrap y limites de core;
+- i18n/l10n: idiomas iniciales, locales, formatos regionales y regla de no
+  hardcodear textos visibles;
+- datos: entidades principales, ciclo de vida, import/export, backups,
+  historico/versiones si aplica;
+- integraciones y conectores: APIs externas, auth, webhooks, almacenamiento,
+  correo/notificaciones, pagos, calendarios u otros packs de dominio;
+- seguridad y privacidad: datos personales/sensibles, RGPD si aplica,
+  autenticacion, autorizacion, auditoria y retencion;
+- UI/UX esperado: vistas principales, navegacion, estados vacios, errores,
+  accesibilidad y responsive/PWA si aplica;
+- despliegue y operacion: entorno objetivo, HTTPS/dominio, observabilidad,
+  logs, metricas, backups, actualizaciones y rollback;
+- plan de trabajo que Orquesta lanzara: fases, subagentes, write-sets,
+  tests requeridos, artefactos esperados y criterios de aceptacion;
+- riesgos, dudas abiertas y decisiones aplazadas.
+
+### 14.3 Infografias y diagramas
+
+El dossier debe traer infografias/diagramas generados desde datos
+estructurados, no imagen decorativa:
+
+- diagrama de arquitectura hexagonal con dominio, aplicacion, puertos,
+  adaptadores y composition root;
+- flujo principal de usuario;
+- flujo de datos e integraciones;
+- mapa i18n/l10n y superficies visibles;
+- diagrama de despliegue/operacion si hay servidor, contenedor o nube;
+- infografia de decisiones clave: recomendacion, eleccion y motivo.
+
+El formato inicial puede ser Mermaid o `diagram_blueprint` textual verificable.
+Si hay generador visual opt-in, puede producir imagen despues, pero el dossier
+base no depende de proveedor LLM ni de imagen raster para existir.
+
+### 14.4 Superficies
+
+- Web: pantalla de revision antes del boton final, con indice, secciones
+  plegables, diagramas visibles y boton de descarga del markdown.
+- MCP: `orquesta.nueva_app.wizard.v0` devuelve el dossier cuando
+  `launch_ready=true`; el lanzamiento exige `dossier_ref` confirmado.
+- HTTP: el endpoint guiado devuelve `launch_dossier` y acepta
+  `confirm_launch_dossier_ref`; si falta o no coincide, no lanza.
+- Bot: lee el dossier en lenguaje llano y pregunta confirmacion explicita.
+
+### 14.5 Tests de aceptacion
+
+- `TestWizardLaunchReadyIncluyeDossierCompletoV0`: una agenda completada por
+  recomendaciones tiene dossier con secciones obligatorias, arquitectura,
+  i18n, datos, integraciones y plan de tests.
+- `TestWizardNoLanzaSinConfirmarDossierV0`: `LaunchReady=true` no crea app sin
+  `confirm_launch_dossier_ref`.
+- `TestWizardDossierSeRegeneraAlCambiarRespuestaV0`: cambiar una respuesta
+  invalida el `DossierRef` anterior.
+- `TestWizardDossierDiagramasObligatoriosV0`: existen diagramas de
+  arquitectura, flujo usuario, datos/integraciones e i18n con alt text.
+- `TestWizardDossierSinSecretosNiRutasLocalesV0`: no filtra HOME, tokens,
+  rutas locales, credenciales ni detalles de runtime proveedor.
+- `TestWizardDossierParidadHTTPMCPWebV0`: las tres superficies exponen los
+  mismos campos canonicos.
