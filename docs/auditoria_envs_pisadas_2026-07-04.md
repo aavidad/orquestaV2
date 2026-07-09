@@ -712,3 +712,27 @@ Verificación:
 - Focal `TestServerConfigFromEnvV0LeeServerIdleCanonicoYEnvDeprecatedOverrideV0`.
 - Requerida de goal:
   `go test ./cmd/orquesta-server ./modulos/orquesta-server`.
+
+## Actualización Codex 2026-07-09 control_plane
+
+TAREA-8.1 añade la familia `control_plane` al fichero canónico:
+
+- `control_plane.remote_access_opt_in` cubre
+  `ORQUESTA_SERVER_REMOTE_CONTROL_PLANE_CONFIRM`.
+- `control_plane.token` cubre `ORQUESTA_SERVER_CONTROL_TOKEN`; el valor crudo
+  no se publica en `effective_config`, solo presencia `present/absent`.
+- `control_plane.principal`, `control_plane.permission_ref` y
+  `control_plane.public_reason` cubren las refs públicas de autorización.
+- Las envs existentes se mantienen como override deprecated con precedencia
+  sobre fichero; si coexisten con valor en config, `effective_config` emite
+  `deprecated_env_used` con scope `control_plane`.
+- No se añaden envs nuevas; `scripts/orquesta_metricas_deuda.sh --json`
+  permanece en `env_vars_orquesta=511`.
+
+Verificación:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerConfigFromEnvV0(.*Control|LeeControlPlane|ControlPlaneEnv)|TestServerEnvRegistry|TestEnvVarsOrquestaRatchetMEJ106V0|TestServerEnvRegistryASTV0'`
+- `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`
+- `go test -count=1 ./...`
+- `bash scripts/orquesta_metricas_deuda.sh --json`
+- `git diff --check`

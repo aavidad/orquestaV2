@@ -46,11 +46,31 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 			strconv.FormatBool(config.AuditDisabled),
 			configSettingSourceFromConfigOrProjectConfigV0(config, envServerAuditDisabledV0),
 		),
-		serverConfigSettingFromRegistryV0(envServerRemoteControlPlaneConfirmV0, strconv.FormatBool(config.ControlPlane.RemoteAccessOptIn)),
-		serverSensitiveConfigSettingFromRegistryV0(envServerControlTokenV0, tokenPresenceV0(config.ControlPlane.Token)),
-		serverConfigSettingFromRegistryV0(envServerControlPrincipalV0, config.ControlPlane.Principal),
-		serverConfigSettingFromRegistryV0(envServerControlPermissionRefV0, config.ControlPlane.PermissionRef),
-		serverConfigSettingFromRegistryV0(envServerControlPublicReasonV0, config.ControlPlane.PublicReason),
+		serverConfigSettingFromRegistryWithSourceV0(
+			envServerRemoteControlPlaneConfirmV0,
+			strconv.FormatBool(config.ControlPlane.RemoteAccessOptIn),
+			configSettingSourceFromConfigOrProjectConfigV0(config, envServerRemoteControlPlaneConfirmV0),
+		),
+		serverSensitiveConfigSettingFromRegistryWithSourceV0(
+			envServerControlTokenV0,
+			tokenPresenceV0(config.ControlPlane.Token),
+			configSettingSourceFromConfigOrProjectConfigV0(config, envServerControlTokenV0),
+		),
+		serverConfigSettingFromRegistryWithSourceV0(
+			envServerControlPrincipalV0,
+			config.ControlPlane.Principal,
+			configSettingSourceFromConfigOrProjectConfigV0(config, envServerControlPrincipalV0),
+		),
+		serverConfigSettingFromRegistryWithSourceV0(
+			envServerControlPermissionRefV0,
+			config.ControlPlane.PermissionRef,
+			configSettingSourceFromConfigOrProjectConfigV0(config, envServerControlPermissionRefV0),
+		),
+		serverConfigSettingFromRegistryWithSourceV0(
+			envServerControlPublicReasonV0,
+			config.ControlPlane.PublicReason,
+			configSettingSourceFromConfigOrProjectConfigV0(config, envServerControlPublicReasonV0),
+		),
 		serverConfigSettingFromRegistryV0(envServerSelfProgrammingOnlyV0, strconv.FormatBool(serverSelfProgrammingOnlyFromEnvV0())),
 		serverSensitiveConfigSettingFromRegistryV0(
 			envServerSelfProgrammingRootV0,
@@ -495,6 +515,13 @@ func serverEffectiveConfigDiagnosticsFromConfigV0(projectConfig serverProjectCon
 	)...)
 	diagnostics = append(diagnostics, serverDeprecatedEnvOverridesForProjectConfigV0(
 		projectConfig,
+		"control_plane",
+		"control_plane.*",
+		"evidence-ref-config-deprecated-env-override-control-plane",
+		controlPlaneEnvKeysV0()...,
+	)...)
+	diagnostics = append(diagnostics, serverDeprecatedEnvOverridesForProjectConfigV0(
+		projectConfig,
 		"opes_bridge",
 		"opes_bridge.*",
 		"evidence-ref-config-deprecated-env-override-opes-bridge",
@@ -578,6 +605,16 @@ func serverDeprecatedEnvOverridesForProjectConfigV0(
 		})
 	}
 	return diagnostics
+}
+
+func controlPlaneEnvKeysV0() []string {
+	return []string{
+		envServerRemoteControlPlaneConfirmV0,
+		envServerControlTokenV0,
+		envServerControlPrincipalV0,
+		envServerControlPermissionRefV0,
+		envServerControlPublicReasonV0,
+	}
 }
 
 func opesBridgeEnvKeysV0() []string {

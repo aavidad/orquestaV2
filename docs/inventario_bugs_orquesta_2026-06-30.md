@@ -3205,3 +3205,16 @@ bash scripts/test_orquesta_golden_metrics_launcher.sh`. Resultado:
 `orquesta_golden_agent_launcher ok`, `orquesta_golden_metrics_launcher ok`.
 Sigue pendiente el A/B con proveedor/cuota real antes de activar
 `orquesta-programacion-minima` como default amplio.
+
+Avance TAREA-8/config Codex 2026-07-09: se reduce el residual de variables
+pisadas llevando `control_plane.*` a `orquesta.config.json`:
+`remote_access_opt_in`, `token`, `principal`, `permission_ref` y
+`public_reason`. Las envs `ORQUESTA_SERVER_REMOTE_CONTROL_PLANE_CONFIRM` y
+`ORQUESTA_SERVER_CONTROL_*` quedan como override deprecated con diagnostico
+`deprecated_env_used`; el token no se publica crudo en `effective_config`.
+Evidencia: tests focales de `cmd/orquesta-server`,
+`go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`,
+`go test -count=1 ./...`, `git diff --check` y
+`scripts/orquesta_metricas_deuda.sh --json` con `env_vars_orquesta=511`.
+Residual: perfil remoto/script de arranque y secretos reales deben migrarse en
+un corte remoto separado.

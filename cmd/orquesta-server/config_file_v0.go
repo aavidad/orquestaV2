@@ -26,6 +26,7 @@ type serverProjectConfigFileV0 struct {
 	Server               serverProjectConfigServerV0               `json:"server,omitempty"`
 	ServerHTTP           serverProjectConfigServerHTTPV0           `json:"server_http,omitempty"`
 	ServerLifecycle      serverProjectConfigServerLifecycleV0      `json:"server_lifecycle,omitempty"`
+	ControlPlane         serverProjectConfigControlPlaneV0         `json:"control_plane,omitempty"`
 	ServerSupervisor     serverProjectConfigServerSupervisorV0     `json:"server_supervisor,omitempty"`
 	ServerIdle           serverProjectConfigServerIdleV0           `json:"server_idle,omitempty"`
 	ServerIdleLegacy     serverProjectConfigServerIdleV0           `json:"server_idle_self_improvement,omitempty"`
@@ -68,6 +69,14 @@ type serverProjectConfigServerHTTPV0 struct {
 
 type serverProjectConfigServerLifecycleV0 struct {
 	ShutdownGraceMS *int `json:"shutdown_grace_ms,omitempty"`
+}
+
+type serverProjectConfigControlPlaneV0 struct {
+	RemoteAccessOptIn *bool   `json:"remote_access_opt_in,omitempty"`
+	Token             *string `json:"token,omitempty"`
+	Principal         *string `json:"principal,omitempty"`
+	PermissionRef     *string `json:"permission_ref,omitempty"`
+	PublicReason      *string `json:"public_reason,omitempty"`
 }
 
 type serverProjectConfigServerSupervisorV0 struct {
@@ -497,37 +506,6 @@ func serverConfigUsesDaemonSnapshotV0(config orquestaserver.ConfigV0) bool {
 	return absPath == absSnapshotPath
 }
 
-func serverProjectConfigEffectiveValueMatchesEnvV0(config serverProjectConfigFileV0, key string) bool {
-	envValue := strings.TrimSpace(os.Getenv(key))
-	if envValue == "" {
-		return false
-	}
-	value, ok := serverProjectConfigEffectiveStringValueForEnvKeyV0(config, key)
-	return ok && strings.TrimSpace(value) == envValue
-}
-
-func serverProjectConfigEffectiveStringValueForEnvKeyV0(config serverProjectConfigFileV0, key string) (string, bool) {
-	switch key {
-	case envSecurityModeV0:
-		if configStringPointerHasValueV0(config.RailsSecurity.SecurityMode) {
-			return serverSecurityModeEffectiveValueFromProjectConfigFileV0(config), true
-		}
-	case envRailsModeV0:
-		if configStringPointerHasValueV0(config.RailsSecurity.RailsMode) {
-			return serverRailsModeEffectiveValueFromProjectConfigFileV0(config), true
-		}
-	case envDetailProhibitedRailsV0:
-		if configStringPointerHasValueV0(config.RailsSecurity.DetailProhibitedRails) {
-			return serverDetailRailsEffectiveValueFromProjectConfigFileV0(config), true
-		}
-	case envDetailProhibitedRailsScopeV0:
-		if configStringPointerHasValueV0(config.RailsSecurity.DetailProhibitedRailsScope) {
-			return serverDetailRailsScopeEffectiveValueFromProjectConfigFileV0(config), true
-		}
-	}
-	return "", false
-}
-
 func serverProjectConfigHasEffectiveValueForEnvKeyV0(config serverProjectConfigFileV0, key string) bool {
 	if value := serverProjectConfigAutoprogrammingValueForEnvKeyV0(config.Autoprogramming, key); value != nil {
 		return *value > 0
@@ -541,6 +519,16 @@ func serverProjectConfigHasEffectiveValueForEnvKeyV0(config serverProjectConfigF
 		return configStringPointerHasValueV0(config.Server.AuditFile)
 	case envServerAuditDisabledV0:
 		return config.Server.AuditDisabled != nil
+	case envServerRemoteControlPlaneConfirmV0:
+		return config.ControlPlane.RemoteAccessOptIn != nil
+	case envServerControlTokenV0:
+		return configStringPointerHasValueV0(config.ControlPlane.Token)
+	case envServerControlPrincipalV0:
+		return configStringPointerHasValueV0(config.ControlPlane.Principal)
+	case envServerControlPermissionRefV0:
+		return configStringPointerHasValueV0(config.ControlPlane.PermissionRef)
+	case envServerControlPublicReasonV0:
+		return configStringPointerHasValueV0(config.ControlPlane.PublicReason)
 	case envServerReadHeaderTimeoutMSV0:
 		return configIntPointerPositiveV0(config.ServerHTTP.ReadHeaderTimeoutMS)
 	case envServerReadTimeoutMSV0:

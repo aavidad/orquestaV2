@@ -2225,3 +2225,30 @@ Lectura para Claude:
 - Residual real: proveedor/cuota para A/B de `orquesta-programacion-minima`,
   despliegue remoto/Telegram, y smoke amplio de observabilidad lenta/stale para
   `BUG-165/065/079`.
+
+## Actualizacion Codex 2026-07-09: control_plane en config canonica
+
+Hecho:
+
+- `orquesta.config.json` acepta `control_plane.remote_access_opt_in`,
+  `control_plane.token`, `control_plane.principal`,
+  `control_plane.permission_ref` y `control_plane.public_reason`.
+- Las envs `ORQUESTA_SERVER_REMOTE_CONTROL_PLANE_CONFIRM` y
+  `ORQUESTA_SERVER_CONTROL_*` siguen funcionando como override deprecated.
+- `effective_config` publica `source=config_file` cuando procede y no filtra el
+  token crudo: solo `present/absent`.
+- La metrica de deuda sigue en `env_vars_orquesta=511`.
+
+Pruebas:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerConfigFromEnvV0(.*Control|LeeControlPlane|ControlPlaneEnv)|TestServerEnvRegistry|TestEnvVarsOrquestaRatchetMEJ106V0|TestServerEnvRegistryASTV0'`
+- `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`
+- `go test -count=1 ./...`
+- `bash scripts/orquesta_metricas_deuda.sh --json`
+- `git diff --check`
+
+Pendiente:
+
+- No mover todavia `scripts/orquesta_server_ctl.sh` ni el perfil remoto en el
+  mismo corte. Eso debe hacerse con prueba de servidor remoto y sin exponer el
+  token real en logs/status.

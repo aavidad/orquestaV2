@@ -5234,3 +5234,41 @@ Lectura para Claude:
 - El A/B local de `orquesta-programacion-minima` ya tiene infraestructura y
   tests verdes. Falta ejecutar comparativa con proveedor/cuota real antes de
   convertir la skill en default amplio.
+
+## Codex local 2026-07-09: control_plane en config canonica
+
+Contexto:
+
+- El subagente Cicero detecto un residual estrecho de TAREA-8: `control_plane`
+  seguia siendo env-only aunque el resto de familias operativas grandes ya
+  estaban movidas a `orquesta.config.json`.
+- No se retiran envs en este corte para conservar compatibilidad de despliegue
+  remoto; se mantiene `env > config > default` y se marca la env como override
+  deprecated cuando pisa fichero.
+
+Cierre aplicado:
+
+- `orquesta.config.json` acepta seccion `control_plane` con
+  `remote_access_opt_in`, `token`, `principal`, `permission_ref` y
+  `public_reason`.
+- `serverConfigFromEnvV0` usa esos valores para
+  `orquestaserver.ControlPlaneConfigV0`.
+- `effective_config` publica fuente `config_file` para las cinco claves y
+  redacta el token como presencia `present/absent`.
+- Si una env `ORQUESTA_SERVER_CONTROL_*` coexiste con fichero, se emite
+  diagnostico `deprecated_env_used` con scope `control_plane`.
+
+Verificado:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'TestServerConfigFromEnvV0(.*Control|LeeControlPlane|ControlPlaneEnv)|TestServerEnvRegistry|TestEnvVarsOrquestaRatchetMEJ106V0|TestServerEnvRegistryASTV0'`
+- `go test -count=1 ./cmd/orquesta-server ./modulos/orquesta-server`
+- `go test -count=1 ./...`
+- `bash scripts/orquesta_metricas_deuda.sh --json` ->
+  `env_vars_orquesta=511`
+- `git diff --check`
+
+Lectura para Claude:
+
+- Esto reduce TAREA-8 para control-plane local. No cierres el frente remoto:
+  `scripts/orquesta_server_ctl.sh` y despliegue servidor siguen siendo corte
+  separado, y el token real debe vivir en config/secreto del servidor.
