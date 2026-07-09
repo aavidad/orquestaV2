@@ -7,6 +7,9 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -681,6 +684,67 @@ func TestServerCodexAppServerGoalBackendV0PolicyAceptadaYThreadReadGiganteBloque
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0ToolOutputPolicyYThreadReadGigantePorWebSocketDeterministaV0(t *testing.T) {
+	socketPath, records := startCodexAppServerWebSocketScriptForTestV0(t)
+	protocol := serverCodexAppServerWebSocketProtocolV0{
+		SocketPath: socketPath,
+		Timeout:    2 * time.Second,
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol:       protocol,
+		Sandbox:        "workspace-write",
+		ApprovalPolicy: "never",
+	}
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef:   "goal-ref-websocket-policy-big-read-001",
+		Objective: "validar protocolo sin agente real",
+		DirectionContract: orquestaruntimecodexgoal.CodexGoalDirectionContractV0{
+			ToolOutputPolicy: orquestaruntimecodexgoal.CodexGoalToolOutputPolicyV0{
+				MaxTextBytes:           2048,
+				RequireBoundedCommands: true,
+				BoundedCommandHints:    []string{"usar comandos acotados"},
+			},
+		},
+	}
+
+	startReceipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	if startReceipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		!containsStringMigratedTestV0(startReceipt.EvidenceRefs, codexAppServerTurnStartToolOutputPolicySentV0) ||
+		!containsStringMigratedTestV0(startReceipt.EvidenceRefs, codexAppServerTurnStartToolOutputPolicyAcceptedV0) {
+		t.Fatalf("start receipt=%+v", startReceipt)
+	}
+	startCalls := readCodexAppServerWebSocketRecordsForTestV0(t, records, 3)
+	turnStart := findCodexAppServerWebSocketRecordForTestV0(t, startCalls, "turn/start")
+	policy, ok := turnStart.Params["toolOutputPolicy"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("turn/start sin toolOutputPolicy: %#v", turnStart.Params)
+	}
+	if policy["maxTextBytes"] != float64(2048) ||
+		policy["threadReadMaxBytes"] != float64(codexAppServerThreadReadMaxResponseFrameBytesV0) ||
+		policy["requireBoundedCommands"] != true {
+		t.Fatalf("policy websocket=%#v", policy)
+	}
+
+	observeReceipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef:         packet.GoalRef,
+		ExternalGoalRef: startReceipt.ExternalGoalRef,
+	})
+	if err != nil {
+		t.Fatalf("ObserveCodexGoalV0: %v", err)
+	}
+	if observeReceipt.Status != orquestagoal.GoalStatusBlockedV0 ||
+		observeReceipt.IssueCode != codexAppServerThreadReadFrameTooLargeIssueCodeV0 ||
+		!containsStringMigratedTestV0(observeReceipt.EvidenceRefs, "evidence-ref-codex-app-server-thread-read-response-too-large") {
+		t.Fatalf("observe receipt=%+v", observeReceipt)
+	}
+	observeCalls := readCodexAppServerWebSocketRecordsForTestV0(t, records, 3)
+	findCodexAppServerWebSocketRecordForTestV0(t, observeCalls, "thread/goal/get")
+	findCodexAppServerWebSocketRecordForTestV0(t, observeCalls, "thread/read")
+}
+
 func TestServerCodexAppServerGoalBackendV0UmbralUsoAltoDefaultConserva100kV0(t *testing.T) {
 	backend := serverCodexAppServerGoalBackendV0{}
 
@@ -1194,6 +1258,154 @@ func codexAppServerTestWebSocketFrameV0(payload []byte) []byte {
 		header = append(header, length[:]...)
 	}
 	return append(header, payload...)
+}
+
+type codexAppServerWebSocketRecordForTestV0 struct {
+	Method string
+	Params map[string]interface{}
+}
+
+func startCodexAppServerWebSocketScriptForTestV0(
+	t *testing.T,
+) (string, <-chan codexAppServerWebSocketRecordForTestV0) {
+	t.Helper()
+	root := t.TempDir()
+	socketPath := filepath.Join(root, "codex-app-server.sock")
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatalf("listen unix: %v", err)
+	}
+	records := make(chan codexAppServerWebSocketRecordForTestV0, 8)
+	errs := make(chan error, 1)
+	go func() {
+		defer close(records)
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			if err := serveCodexAppServerWebSocketCallForTestV0(conn, records); err != nil {
+				select {
+				case errs <- err:
+				default:
+				}
+				return
+			}
+		}
+	}()
+	t.Cleanup(func() {
+		_ = listener.Close()
+		select {
+		case err := <-errs:
+			t.Fatalf("fake websocket app-server: %v", err)
+		default:
+		}
+	})
+	return socketPath, records
+}
+
+func serveCodexAppServerWebSocketCallForTestV0(
+	conn net.Conn,
+	records chan<- codexAppServerWebSocketRecordForTestV0,
+) error {
+	defer conn.Close()
+	reader := bufio.NewReader(conn)
+	request, err := http.ReadRequest(reader)
+	if err != nil {
+		return err
+	}
+	accept := codexAppServerWebSocketAcceptV0(request.Header.Get("Sec-WebSocket-Key"))
+	if _, err := fmt.Fprintf(conn, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n", accept); err != nil {
+		return err
+	}
+	initPayload, _, err := codexAppServerWebSocketReadFrameV0(reader)
+	if err != nil {
+		return err
+	}
+	var initMessage map[string]interface{}
+	if err := json.Unmarshal(initPayload, &initMessage); err != nil {
+		return err
+	}
+	if method := strings.TrimSpace(fmt.Sprint(initMessage["method"])); method != "initialize" {
+		return fmt.Errorf("initialize method=%q", method)
+	}
+	if _, err := conn.Write(codexAppServerTestWebSocketFrameV0([]byte(`{"id":1,"result":{}}`))); err != nil {
+		return err
+	}
+	callPayload, _, err := codexAppServerWebSocketReadFrameV0(reader)
+	if err != nil {
+		return err
+	}
+	var call struct {
+		Method string                 `json:"method"`
+		Params map[string]interface{} `json:"params"`
+	}
+	if err := json.Unmarshal(callPayload, &call); err != nil {
+		return err
+	}
+	call.Method = strings.TrimSpace(call.Method)
+	records <- codexAppServerWebSocketRecordForTestV0{Method: call.Method, Params: call.Params}
+	return writeCodexAppServerWebSocketScriptResponseForTestV0(conn, call.Method)
+}
+
+func writeCodexAppServerWebSocketScriptResponseForTestV0(conn net.Conn, method string) error {
+	switch strings.TrimSpace(method) {
+	case "thread/start":
+		_, err := conn.Write(codexAppServerTestWebSocketFrameV0([]byte(`{"id":2,"result":{"thread":{"id":"thread-ref-websocket-direct-001"}}}`)))
+		return err
+	case "thread/goal/set":
+		_, err := conn.Write(codexAppServerTestWebSocketFrameV0([]byte(`{"id":2,"result":{"goal":{"threadId":"thread-ref-websocket-direct-001","status":"active"}}}`)))
+		return err
+	case "turn/start":
+		_, err := conn.Write(codexAppServerTestWebSocketFrameV0([]byte(`{"id":2,"result":{"turn":{"id":"turn-ref-websocket-direct-001","status":"inProgress"}}}`)))
+		return err
+	case "thread/goal/get":
+		_, err := conn.Write(codexAppServerTestWebSocketFrameV0([]byte(`{"id":2,"result":{"goal":{"threadId":"thread-ref-websocket-direct-001","status":"active"}}}`)))
+		return err
+	case "thread/read":
+		payload := bytes.Repeat([]byte("x"), codexAppServerThreadReadMaxResponseFrameBytesV0+1)
+		_, err := conn.Write(codexAppServerTestWebSocketFrameV0(payload))
+		return err
+	default:
+		return fmt.Errorf("method inesperado: %s", method)
+	}
+}
+
+func readCodexAppServerWebSocketRecordsForTestV0(
+	t *testing.T,
+	records <-chan codexAppServerWebSocketRecordForTestV0,
+	count int,
+) []codexAppServerWebSocketRecordForTestV0 {
+	t.Helper()
+	out := make([]codexAppServerWebSocketRecordForTestV0, 0, count)
+	timeout := time.After(2 * time.Second)
+	for len(out) < count {
+		select {
+		case record, ok := <-records:
+			if !ok {
+				t.Fatalf("records channel closed after %d/%d records", len(out), count)
+			}
+			out = append(out, record)
+		case <-timeout:
+			t.Fatalf("timeout esperando records websocket: got=%+v want=%d", out, count)
+		}
+	}
+	return out
+}
+
+func findCodexAppServerWebSocketRecordForTestV0(
+	t *testing.T,
+	records []codexAppServerWebSocketRecordForTestV0,
+	method string,
+) codexAppServerWebSocketRecordForTestV0 {
+	t.Helper()
+	for _, record := range records {
+		if record.Method == method {
+			return record
+		}
+	}
+	t.Fatalf("method %q no encontrado en %+v", method, records)
+	return codexAppServerWebSocketRecordForTestV0{}
 }
 
 type fakeCodexAppServerProbeV0 struct{}

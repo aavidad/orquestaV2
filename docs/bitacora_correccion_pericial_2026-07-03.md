@@ -6084,3 +6084,39 @@ Lectura:
   dentro del proveedor/runtime. Orquesta ya transporta `toolOutputPolicy`,
   sanea/corta `thread/read` y bloquea con evidencia si la salida gigante llega a
   observacion.
+
+## Orquesta local 2026-07-09: BUG-079 baja a protocolo determinista sin LLM
+
+Se reforzo la verificacion local de `BUG-079`/`BUG-200` siguiendo la TAREA-E4:
+la prueba adversarial ya no depende solo de que un agente real decida ejecutar
+el probe stdout gigante.
+
+Cambio:
+
+- Se anadio
+  `TestServerCodexAppServerGoalBackendV0ToolOutputPolicyYThreadReadGigantePorWebSocketDeterministaV0`.
+- La prueba levanta un servidor WebSocket Unix falso compatible con el protocolo
+  de `codex app-server`.
+- `StartCodexGoalV0` usa el protocolo real: `thread/start`,
+  `thread/goal/set` y `turn/start`.
+- El test inspecciona el JSON recibido en `turn/start` y exige
+  `toolOutputPolicy` con `maxTextBytes`, `threadReadMaxBytes` y
+  `requireBoundedCommands`.
+- Despues, en `ObserveCodexGoalV0`, el servidor falso inyecta un frame gigante
+  de `thread/read`; Orquesta corta antes de decodificar el payload completo y
+  devuelve `GoalStatus=blocked` con
+  `codex_app_server_thread_read_response_too_large` y evidencia especifica.
+
+Evidencia:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver -run
+  'TestServerCodexAppServerGoalBackendV0ToolOutputPolicyYThreadReadGigantePorWebSocketDeterministaV0'`
+
+Lectura:
+
+- Queda cerrada la cobertura local de protocolo/ingesta sin LLM para la familia
+  TAREA-E4 item 3.
+- No se declara cerrado `BUG-ORQ-20260701-079` entero: Orquesta no puede probar
+  desde este test un cap duro dentro del proveedor antes de que el stdout crudo
+  entre en el historial del app-server. Ese residual sigue siendo frontera
+  proveedor/runtime y queda documentado como tal.
