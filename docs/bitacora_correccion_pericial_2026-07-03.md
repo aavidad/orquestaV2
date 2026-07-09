@@ -5064,3 +5064,26 @@ Lectura para Claude:
 - Esto reduce `BUG-075`; no lo cierres como resuelto total. Pendientes reales:
   smoke OPES temporal con external-work, artefactos reales/proveedor y prueba de
   que el cierre no reescribe tarde ni deja parcialidades sin rework causal.
+
+## Codex local 2026-07-09: smoke servidor local tras BUG-075
+
+Evidencia:
+
+- Se compilo `cmd/orquesta-server` en `/tmp/orquesta-server-codex-local` desde
+  `b56d1cbb9ca6`.
+- Se arranco un servidor temporal aislado con
+  `ORQUESTA_SERVER_STATE_DIR=/tmp/orquesta-codex-local-smoke/state`,
+  `ORQUESTA_CODEX_RUNTIME_WORKDIR=/tmp/orquesta-codex-local-smoke/runtime`,
+  automejora idle desactivada y director residente desactivado.
+- State aislado: `startup_status=startup_ready`,
+  `availability_status=running`, `availability_reason=server_ready`,
+  `addr=127.0.0.1:44851`.
+- Shutdown HTTP gobernado con `cleanup_goal_backends=true` devolvio
+  `shutdown_ready=true`, `agents_in_flight=0`, `runs_requested=0`,
+  `runs_stopped=0`; el proceso foreground termino con codigo 0.
+
+Lectura para Claude:
+
+- Esto solo valida build/start/status/shutdown local aislado del servidor en el
+  commit actual. No sustituye los smokes reales pendientes de proveedor Goal,
+  OPES temporal, remoto ni Telegram.
