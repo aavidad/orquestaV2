@@ -4826,3 +4826,53 @@ Lectura para Claude:
 - `BUG-066` solo debe seguir abierto si se exige un hueco mas concreto:
   proveedor real/residente, corte externo/manual real, deploy remoto o OPES
   temporal/preproduccion con credenciales y scope duro.
+
+## Codex local 2026-07-09: golden agent launcher para A/B real
+
+Contexto:
+
+- El harness de golden evals ya tenia manifest, evaluador, wrapper de metricas
+  y launcher A/B.
+- El residual operativo era que cada proveedor real debia inventar como leer
+  `ORQUESTA_GOLDEN_TASK_REQUEST`, como convertirlo en prompt, donde dejar
+  `result.json` y como conservar diagnostico si fallaba.
+
+Cierre aplicado:
+
+- Nuevo `scripts/orquesta_golden_agent_launcher.sh`.
+- Consume solo las variables existentes `ORQUESTA_GOLDEN_TASK_ID`,
+  `ORQUESTA_GOLDEN_TASK_REQUEST` y `ORQUESTA_GOLDEN_TASK_RESULT_DIR`.
+- Genera `agent_prompt.md` con objetivo, write-set, ficheros esperados, tests,
+  paths prohibidos, skill refs y contrato de salida.
+- Ejecuta el proveedor/agent command con variables `GOLDEN_AGENT_*`
+  (`REQUEST_PATH`, `PROMPT_PATH`, `RESULT_DIR`, `RESULT_PATH`, `SKILL_REFS`).
+- Si falta `result.json`, o el agente sale con error, escribe/preserva
+  `status=failed`, `agent_exit_code`, `launcher_issues` y
+  `evidence.golden_agent_launcher`; no pierde diagnostico por un exit code.
+- No acopla el evaluador a Codex/Claude/Gemini y no anade variables
+  `ORQUESTA_*` nuevas.
+
+Pruebas verdes:
+
+- `bash -n scripts/orquesta_golden_agent_launcher.sh scripts/test_orquesta_golden_agent_launcher.sh`
+- `bash scripts/test_orquesta_golden_agent_launcher.sh`
+
+Bug adicional cerrado durante la verificacion:
+
+- `BUG-ORQ-20260709-197`: `scripts/orquesta_golden_evals.sh --run --task
+  golden-new-app-smoke-v0` lanzaba una sola tarea, pero evaluaba las cinco del
+  manifest. Resultado observado antes del fix: la tarea ejecutada pasaba con
+  `score=1.0`, pero el reporte global quedaba `score=0.2` y `status=failed`
+  por cuatro `result_missing` artificiales.
+- Cierre: `manifest_with_tasks()` filtra el manifest que llega a `evaluate()`
+  tanto en `--run` como en `--evaluate`.
+- Prueba nueva: `scripts/test_orquesta_golden_evals.sh`.
+
+Lectura para Claude:
+
+- El A/B empirico de `orquesta-programacion-minima` ya tiene tres piezas
+  locales: launcher puente de agente, wrapper de metricas/usage y comparador
+  A/B. Tambien queda corregida la ejecucion acotada por `--task`, clave para no
+  gastar cuota en las cinco tareas cuando solo se quiere validar un brazo. Sigue
+  pendiente la ejecucion con proveedor/cuota real para obtener tokens reales de
+  Codex/Claude/Gemini.

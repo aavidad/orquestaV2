@@ -61,6 +61,18 @@ con `task_id`, `status`, `touched_files`, `tests`, `artifact_paths` y
 `evidence`. El evaluador puntua tests pasados, ficheros esperados y ausencia de
 escrituras fuera de `write_set`.
 
+Para ahorrar cuota en una prueba exploratoria, usa `--task <task_id>`. Desde
+2026-07-09 el evaluador filtra tambien el manifest de puntuacion, de modo que
+las tareas no lanzadas no aparecen como `result_missing`:
+
+```sh
+ORQUESTA_GOLDEN_EVALS_CONFIRM=isolated \
+scripts/orquesta_golden_evals.sh --run \
+  --task golden-new-app-smoke-v0 \
+  --results-dir /tmp/orquesta-golden-one-task \
+  --launcher-command './scripts/orquesta_golden_agent_launcher.sh --agent-command "./scripts/mi_agente_real.sh"'
+```
+
 Desde 2026-07-08 el launcher puede anadir `metrics` para comparaciones A/B:
 
 ```json
@@ -111,6 +123,35 @@ campos `*_tokens`, `usage_path`/`usage_report_path` o deja
 `codex_usage_accounting.json`, `usage.json`, `observe_response.json` o
 `status.json` en el directorio de resultado, el wrapper normaliza usage sin
 inventarlo y anota `metrics.provider_usage_source`.
+
+Desde 2026-07-09 existe un launcher puente para agentes/proveedores reales:
+
+```sh
+ORQUESTA_GOLDEN_EVALS_CONFIRM=isolated \
+ORQUESTA_GOLDEN_METRICS_INNER_LAUNCHER='./scripts/orquesta_golden_agent_launcher.sh \
+  --agent-command "./scripts/mi_agente_real.sh" \
+  --skill-ref skill-ref-orquesta-programacion-minima-v0' \
+scripts/orquesta_golden_evals.sh --run --parallel \
+  --results-dir /tmp/orquesta-golden-agent-run \
+  --launcher-command './scripts/orquesta_golden_metrics_launcher.sh'
+```
+
+`orquesta_golden_agent_launcher.sh` consume solo `ORQUESTA_GOLDEN_TASK_*`,
+genera `agent_prompt.md` con objetivo, write-set, ficheros esperados, tests y
+contrato de salida, y ejecuta el agente con variables `GOLDEN_AGENT_*`:
+
+- `GOLDEN_AGENT_REQUEST_PATH`
+- `GOLDEN_AGENT_PROMPT_PATH`
+- `GOLDEN_AGENT_RESULT_DIR`
+- `GOLDEN_AGENT_RESULT_PATH`
+- `GOLDEN_AGENT_SKILL_REFS`
+
+El agente debe escribir `result.json` en `GOLDEN_AGENT_RESULT_PATH`. Si no lo
+hace, el launcher escribe un resultado `failed` con evidencia compacta. El
+launcher sale 0 cuando logra escribir diagnostico para que el evaluador no
+pierda el `result.json`; el estado real del agente queda en
+`agent_exit_code`, `launcher_issues` y `evidence.golden_agent_launcher`.
+Los reportes de usage reales siguen entrando por el wrapper de metricas.
 
 Desde 2026-07-09 existe tambien un launcher A/B opt-in:
 

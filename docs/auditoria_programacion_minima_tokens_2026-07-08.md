@@ -147,9 +147,19 @@ exit code y diff Git cuando recibe `ORQUESTA_GOLDEN_TASK_WORKTREE`. Avance
 `codex_usage_accounting.json`, `usage.json`, `observe_response.json` o
 `status.json` en el resultado. `scripts/orquesta_golden_ab_launcher.sh` ejecuta
 brazo baseline y variante por tarea, conserva resultados por brazo, publica
-deltas comparables y no anade variables `ORQUESTA_*`. Falta conectar launchers
-reales Codex/Claude/Gemini que produzcan esos reportes por brazo en runs de
-proveedor.
+deltas comparables y no anade variables `ORQUESTA_*`.
+
+Avance 2026-07-09 tarde: `scripts/orquesta_golden_agent_launcher.sh` cubre el
+hueco de conexion con agentes reales sin acoplarse a Codex/Claude/Gemini. El
+script consume el request golden, genera `agent_prompt.md`, expone
+`GOLDEN_AGENT_*` al comando proveedor y normaliza un `result.json` fallido si el
+agente no lo escribe o termina con error. Esto permite que cada proveedor deje
+usage real en el mismo directorio y que el wrapper de metricas lo ingiera. Falta
+ejecutar el A/B con proveedor/cuota real; la infraestructura local ya no exige
+que cada launcher improvise su propio prompt/contrato. Tambien queda corregido
+`scripts/orquesta_golden_evals.sh --task`: al lanzar una sola tarea ya evalua
+solo esa tarea, evitando falsos rojos `result_missing` y consumo innecesario de
+cuota en exploraciones parciales.
 
 ## Decision actual
 

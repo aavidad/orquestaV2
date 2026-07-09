@@ -3094,3 +3094,15 @@ ORQUESTA_KEEP_SMOKE_DIR=1 scripts/smoke_opes_lifecycle_real.sh`, resultado
 para `run-ref-opes-a1-t002-finalpkg-20260612`, `settlement_status=settled_final`
 y sin procesos residuales. Evidencia:
 `/tmp/orquesta-opes-lifecycle-real-20260709T065803Z/out/opes_lifecycle_result.json`.
+
+BUG nuevo `BUG-ORQ-20260709-197` (cerrado en harness local):
+`scripts/orquesta_golden_evals.sh --run --task <id>` lanzaba solo la tarea
+seleccionada, pero luego evaluaba el manifest completo y marcaba como fallidas
+las cuatro tareas no ejecutadas. Esto producia falsos rojos en pruebas A/B
+acotadas de `orquesta-programacion-minima` y podia impedir medir una sola tarea
+con proveedor real para ahorrar cuota. Cierre: `evaluate()` recibe un manifest
+filtrado mediante `manifest_with_tasks()` en `--run` y `--evaluate`. Evidencia:
+`bash scripts/test_orquesta_golden_evals.sh`, `scripts/orquesta_golden_evals.sh
+--self-test --output /tmp/orquesta-golden-self-test-agent-launcher.json` y
+reintento local con agente fake para `golden-new-app-smoke-v0` con
+`summary.total=1`, `score=1.0`, `status=passed`.

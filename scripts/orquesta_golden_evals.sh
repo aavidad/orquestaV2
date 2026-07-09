@@ -630,6 +630,13 @@ def selected_tasks(manifest, task_ids):
     return tasks
 
 
+def manifest_with_tasks(manifest, tasks):
+    selected = dict(manifest)
+    selected["tasks"] = list(tasks)
+    selected["selected_task_ids"] = [task.get("task_id") for task in tasks]
+    return selected
+
+
 def write_requests(run_root, manifest, tasks):
     requests_dir = Path(run_root) / "requests"
     requests_dir.mkdir(parents=True, exist_ok=True)
@@ -695,7 +702,7 @@ def run_tasks(args, manifest, manifest_issues):
     else:
         for task in tasks:
             launch_task(args.launcher_command, run_root, task)
-    report = evaluate(run_root / "results", manifest, manifest_issues)
+    report = evaluate(run_root / "results", manifest_with_tasks(manifest, tasks), manifest_issues)
     output = Path(args.output) if args.output else default_output_path("orquesta_golden_eval")
     write_json(output, report)
     print(json.dumps({"status": report["status"], "output": str(output), "score": report["summary"]["score"]}, sort_keys=True))
@@ -736,7 +743,8 @@ def main():
     if args.evaluate:
         if not args.results_dir:
             raise SystemExit("--results-dir es obligatorio con --evaluate")
-        report = evaluate(Path(args.results_dir), manifest, manifest_issues)
+        tasks = selected_tasks(manifest, args.task)
+        report = evaluate(Path(args.results_dir), manifest_with_tasks(manifest, tasks), manifest_issues)
         output = Path(args.output) if args.output else default_output_path("orquesta_golden_eval")
         write_json(output, report)
         print(json.dumps({"status": report["status"], "output": str(output), "score": report["summary"]["score"]}, sort_keys=True))
