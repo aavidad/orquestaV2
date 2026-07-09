@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -427,6 +428,56 @@ func TestServerCodexAppServerGoalBackendV0StopForcedBloqueaGoalYApagaBackendV0(t
 		!containsStringMigratedTestV0(result.EvidenceRefs, codexAppServerGoalForcedStopSetEvidenceV0) ||
 		!containsStringMigratedTestV0(result.EvidenceRefs, codexAppServerGoalForcedStopTmuxStoppedV0) {
 		t.Fatalf("result=%+v set=%+v shutdown_calls=%d forced_calls=%d", result, protocol.setParams, shutdown.calls, shutdown.forcedCalls)
+	}
+}
+
+func TestCodexAppServerTmuxBackendV0ForcedStopIntentaTerminarProcesoAntesDeKillTmuxV0(t *testing.T) {
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "runtime")
+	socketPath := filepath.Join(runtimeDir, codexAppServerTmuxDirV0, "s.sock")
+	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
+		t.Fatalf("mkdir socket dir: %v", err)
+	}
+	markerPath := filepath.Join(root, "term.marker")
+	cmd := exec.Command(
+		"sh",
+		"-c",
+		`trap 'printf term > "$TEST_TERM_MARKER"; exit 0' TERM; while :; do sleep 0.05; done`,
+		"codex",
+		"app-server",
+		"--listen",
+		"unix://"+socketPath,
+	)
+	cmd.Env = append(os.Environ(), "TEST_TERM_MARKER="+markerPath)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start fake app-server: %v", err)
+	}
+	t.Cleanup(func() {
+		if cmd.Process != nil && (cmd.ProcessState == nil || !cmd.ProcessState.Exited()) {
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+		}
+	})
+	backend := serverCodexAppServerTmuxBackendV0{
+		SocketPath:     socketPath,
+		SessionName:    "orquesta-goal-cooperative-1234567890",
+		RuntimeWorkDir: runtimeDir,
+		Timeout:        time.Second,
+	}
+	waitForMigratedTestConditionV0(t, time.Second, func() bool {
+		return len(backend.codexAppServerOwnedProcessPIDsV0(context.Background())) > 0
+	})
+	if ok := backend.requestCodexAppServerCooperativeStopV0(context.Background()); !ok {
+		t.Fatalf("cooperative stop no confirmo salida de proceso propio")
+	}
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("fake app-server no salio limpio tras SIGTERM: %v", err)
+	}
+	if _, err := os.Stat(markerPath); err != nil {
+		t.Fatalf("SIGTERM cooperativo no ejecuto trap: %v", err)
+	}
+	if pids := backend.codexAppServerOwnedProcessPIDsV0(context.Background()); len(pids) != 0 {
+		t.Fatalf("quedan procesos propios tras parada cooperativa: %v", pids)
 	}
 }
 
@@ -866,6 +917,15 @@ func TestCodexAppServerTmuxBackendV0EnsureShutdownCleanupMigradoV0(t *testing.T)
 
 	if err := backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{}); err != nil {
 		t.Fatalf("EnsureV0: %v", err)
+	}
+	rawTmuxLog, err := os.ReadFile(tmuxLog)
+	if err != nil {
+		t.Fatalf("read tmux log: %v", err)
+	}
+	if !strings.Contains(string(rawTmuxLog), "mkfifo") ||
+		!strings.Contains(string(rawTmuxLog), "stdin.pipe") ||
+		strings.Contains(string(rawTmuxLog), "< /dev/null") {
+		t.Fatalf("app-server tmux debe arrancar con stdin FIFO propia; log=%s", string(rawTmuxLog))
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(socketPath), codexAppServerTmuxMarkerFileV0)); err != nil {
 		t.Fatalf("owner marker ausente: %v", err)
@@ -1309,6 +1369,21 @@ func containsStringMigratedTestV0(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func waitForMigratedTestConditionV0(t *testing.T, timeout time.Duration, ready func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if ready() {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if ready() {
+		return
+	}
+	t.Fatalf("condition not ready before %s", timeout)
 }
 
 func containsStringPrefixMigratedTestV0(values []string, prefix string) bool {

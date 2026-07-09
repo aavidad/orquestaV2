@@ -6021,3 +6021,66 @@ Lectura:
   contiene `Node.js[...] ResetStdio` / `Assertion failed`, aunque el control
   termino `stopped`, el goal quedo `blocked` replanificable y no quedaron
   procesos vivos.
+
+## Orquesta local 2026-07-09: cierre BUG-207 forced-stop app-server sin ResetStdio
+
+Se corrigio el residual `BUG-ORQ-20260709-207` desde dentro hacia afuera, en el
+adaptador runtime `app_server_tmux`, sin tocar core puro ni conectores.
+
+Causa acotada:
+
+- `codex app-server --listen unix://...` se arrancaba dentro de tmux heredando
+  stdin del PTY de la sesion.
+- El control funcional ya era correcto: `runs/control forced=true` dejaba el
+  goal `blocked`, `autoprogramming/status` sin running y cero procesos.
+- El problema era el teardown ruidoso del proveedor: al cerrar/matar tmux, Node
+  podia registrar `ResetStdio` / `Assertion failed`.
+
+Intento descartado:
+
+- Se probo desacoplar stdin con `< /dev/null`.
+- El proveedor no lo tolero: el smoke dedicado fallo al arrancar con
+  `codex_app_server_tmux_session_exited` en
+  `/tmp/orquesta-goal-first-app-server.66gWvN`.
+- Lectura: el app-server necesita stdin abierto, aunque no deba depender del
+  PTY de tmux.
+
+Cambio aplicado:
+
+- `tmuxStartSessionV0` crea una FIFO propia `stdin.pipe` junto al socket y
+  alimenta stdin del app-server desde esa FIFO, no desde el PTY de tmux.
+- `ShutdownForcedStopV0` conserva una fase cooperativa: detecta procesos propios
+  por socket/runtime, envia `SIGTERM`, espera corto, reobserva, y solo cae a
+  `kill-session` si la sesion sigue viva.
+- El shutdown limpia socket, `stdin.pipe` y `owner.json`.
+
+Evidencia real:
+
+- `scripts/smoke_goal_first_forced_stop_backend_real.sh` en modo real opt-in
+  con directorio retenido.
+- `smoke_goal_first_forced_stop_backend_real=ok`
+- `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-b69a60d252ccb0cdd3440cad4adda2bb`
+- `external_goal_ref=019f47c5-99e2-7670-a175-2c2fad844a42`
+- Evidencia retenida: `/tmp/orquesta-goal-first-app-server.oj0Aat`
+- Resultado: `run_control_status=stopped`,
+  `run_control_goal_status_after=blocked`,
+  `autoprogramming_status_after_forced_stop_not_running=true`,
+  `app_server_tmux_processes_alive=0`.
+- `rg -a 'ResetStdio|Assertion failed'` sobre `runtime/goal-srv` y logs del
+  smoke no encontro coincidencias.
+- En `runtime/goal-srv` solo quedo el log del app-server; no quedo FIFO
+  residual.
+
+Tests:
+
+- `go test -count=1 ./modulos/orquesta-runtime-codex-appserver`
+- `git diff --check`
+
+Lectura:
+
+- `BUG-ORQ-20260709-207` queda cerrado.
+- `BUG-ORQ-20260701-079` no queda cerrado por este cambio: el residual vivo
+  sigue siendo el cap duro pre-tool si una herramienta vuelca stdout crudo
+  dentro del proveedor/runtime. Orquesta ya transporta `toolOutputPolicy`,
+  sanea/corta `thread/read` y bloquea con evidencia si la salida gigante llega a
+  observacion.
