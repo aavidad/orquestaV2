@@ -5392,3 +5392,48 @@ Verificado:
 Pendiente: ejecutar el smoke real amplio con proveedor lento/stale/remoto. Este
 corte prepara el smoke para fallar si reaparece el falso `runs_requested=0`,
 pero no sustituye la ejecucion real.
+
+## Codex local 2026-07-09: smoke real shutdown goal-first fuera de cola
+
+Ejecucion real posterior al endurecimiento del smoke:
+
+```bash
+ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 \
+ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 \
+ORQUESTA_GOAL_FIRST_SMOKE_POLLS=50 \
+ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS=3 \
+ORQUESTA_KEEP_SMOKE_DIR=1 \
+ORQUESTA_SMOKE_PARENT=/tmp/orquesta-smokes-codex \
+./scripts/smoke_goal_first_shutdown_coordination_real.sh
+```
+
+Resultado:
+
+- `smoke_goal_first_shutdown_coordination_real=ok`.
+- `autoprogramming_status_before_shutdown_visible=true`.
+- `/api/v0/server/shutdown` devolvio `status=ready`,
+  `shutdown_ready=true`, `runs_requested=1`, `runs_stopped=1`.
+- `run_control_statuses=stopped` y
+  `shutdown_coordination_all_runs_stopped=true`.
+- `goal_actions[0].action_taken=cleanup_completed`.
+- `app_server_tmux_processes_alive=0`.
+
+Refs:
+
+- `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-bd43a0d5c0ed93df6c8f195055979a74`.
+- `external_goal_ref=019f46cc-ae82-7352-bd4f-563f6ff34200`.
+- Evidencia retenida y saneada:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.kALS5q`
+  (~376 KiB, sin `codex-home`, `auth.json`, `config.toml` ni binario temporal).
+
+Lectura:
+
+- El hueco local `runs_requested=0` de `BUG-165/065` queda cerrado para
+  backend real `app_server_tmux`: el smoke no usa `/api/v0/runs/control` como
+  camino principal, el status previo crea el control pendiente por alto consumo
+  y el shutdown amplio lo reconcilia a `stopped`.
+- No se detectaron procesos residuales `orquesta-server run`,
+  `codex app-server`, `orquesta-goal-*` ni sesiones tmux al terminar.
+- Queda como residual externo, si se exige antes de cierre de producto, repetir
+  la misma validacion en servidor remoto/stale. En local no queda un bug de
+  codigo conocido en este eje.

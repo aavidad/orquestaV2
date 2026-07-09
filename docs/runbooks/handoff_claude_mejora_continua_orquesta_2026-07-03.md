@@ -2358,3 +2358,41 @@ Siguiente paso:
 
 - Ejecutar el smoke real amplio. Ahora debe fallar si vuelve el falso verde
   `shutdown_ready=true` con `runs_requested=0`.
+
+## Actualizacion Codex 2026-07-09d: smoke real amplio ejecutado
+
+Hecho:
+
+- Se ejecuto `scripts/smoke_goal_first_shutdown_coordination_real.sh` con
+  backend real `app_server_tmux`, doble confirmacion y `KEEP_SMOKE_DIR=1`.
+- Comando usado:
+  `ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 ORQUESTA_GOAL_FIRST_SMOKE_POLLS=50 ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS=3 ORQUESTA_KEEP_SMOKE_DIR=1 ORQUESTA_SMOKE_PARENT=/tmp/orquesta-smokes-codex ./scripts/smoke_goal_first_shutdown_coordination_real.sh`.
+- Resultado real:
+  `smoke_goal_first_shutdown_coordination_real=ok`,
+  `autoprogramming_status_before_shutdown_visible=true`,
+  `shutdown_ready=true`, `runs_requested=1`, `runs_stopped=1`,
+  `run_control_statuses=stopped`,
+  `shutdown_coordination_all_runs_stopped=true`,
+  `goal_actions[0].action_taken=cleanup_completed` y
+  `app_server_tmux_processes_alive=0`.
+- Refs:
+  `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-bd43a0d5c0ed93df6c8f195055979a74`,
+  `external_goal_ref=019f46cc-ae82-7352-bd4f-563f6ff34200`.
+- Evidencia saneada:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.kALS5q`
+  (~376 KiB, sin `codex-home`, `auth.json`, `config.toml` ni binario temporal).
+
+Lectura para Claude:
+
+- El falso verde/falso vacio `runs_requested=0` queda cerrado en local con
+  proveedor real `app_server_tmux`.
+- El script no llamo `/api/v0/runs/control` como camino principal: el estado
+  previo de alto consumo genero `RunControl=stop_requested` y
+  `/api/v0/server/shutdown` lo reconcilio a `stopped`.
+- Mantener como residual externo solo la repeticion en servidor remoto/stale si
+  se quiere evidencia fuera de la maquina local. No hay procesos locales vivos
+  tras el smoke.
+- Siguiente bug local recomendado por revision paralela si no se trabaja remoto:
+  `BUG-079`, pero no cerrarlo sin prueba real de que `toolOutputPolicy` se
+  aplica antes de herramientas. El primer corte util es hacer visible
+  `tool-output-policy-sent/accepted/fallback`.

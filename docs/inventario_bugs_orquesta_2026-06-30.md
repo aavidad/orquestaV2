@@ -147,6 +147,21 @@ antes de su cierre posterior:
   y `go test -count=1 ./modulos/orquesta-app-codex-stack -run 'TestStackShutdownV0ForzadoCoordinaGoalFirstTerminalFueraDeCola|TestStackShutdownRunControlWriterV0ForcedStopMarcaGoalTerminalReplanificable'`.
   Pendiente para cerrar `BUG-165/065` global: ejecutar smoke real amplio con
   proveedor lento/stale/remoto.
+- Avance 2026-07-09d: se ejecuto el smoke real amplio local con proveedor
+  `app_server_tmux` tras el endurecimiento anterior. Comando:
+  `ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1 ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1 ORQUESTA_GOAL_FIRST_SMOKE_POLLS=50 ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS=3 ORQUESTA_KEEP_SMOKE_DIR=1 ORQUESTA_SMOKE_PARENT=/tmp/orquesta-smokes-codex ./scripts/smoke_goal_first_shutdown_coordination_real.sh`.
+  Resultado: `smoke_goal_first_shutdown_coordination_real=ok`,
+  `autoprogramming_status_before_shutdown_visible=true`,
+  `runs_requested=1`, `runs_stopped=1`,
+  `shutdown_coordination_all_runs_stopped=true`,
+  `run_control_statuses=stopped`, `shutdown_ready=true`,
+  `goal_actions[0].action_taken=cleanup_completed` y
+  `app_server_tmux_processes_alive=0`. Evidencia saneada:
+  `/tmp/orquesta-smokes-codex/orquesta-goal-first-app-server.kALS5q` (~376 KiB,
+  sin `codex-home`, `auth.json`, `config.toml` ni binario temporal). Esto cierra
+  el hueco local `runs_requested=0` de `BUG-165/065` para el backend real
+  `app_server_tmux`; mantener como residual externo solo una validacion en
+  despliegue remoto/stale si se exige evidencia fuera de esta maquina.
 - `BUG-ORQ-20260704-166` queda cerrado funcionalmente por `ff620ecf` y
   `0e0dcedc`, incluyendo el ajuste posterior de `.gocache-local`, para la causa
   observada: el escaneo de
