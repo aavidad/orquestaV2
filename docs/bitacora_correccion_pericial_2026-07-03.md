@@ -81,6 +81,19 @@ nota, la última entrada cronológica aplicable y el inventario de bugs vigente.
 
 <!-- Añadir entradas nuevas debajo de esta línea, más reciente al final. -->
 
+### 2026-07-09 — TAREA-E1 deploy atomico local
+
+Implementado pipeline local `scripts/orquesta_server_deploy.sh`: sync
+fast-forward-only de worktree por ref, build desde arbol exportado, sha256,
+backup y swap de binario, validacion opcional de config canonica, arranque via
+`scripts/orquesta_server_ctl.sh start`, verificacion de identidad runtime si el
+status/readiness/supervisor expone hash, y receipt JSON durable en state dir.
+Cobertura: `scripts/test_orquesta_server_deploy.sh` con fakes para success,
+`deploy_config_missing`, `deploy_not_fast_forward` y
+`deploy_runtime_identity_mismatch`; guard Go para impedir copias/arranques
+gestionados fuera de `ctl`/`deploy`; runbook
+`docs/runbooks/orquesta_server_deploy_atomico_2026-07-09.md`.
+
 ### 2026-07-03 (tarde) — claude-fable-5: pilotaje real ejecutado, 3 bugs nuevos encontrados, 1 arreglado
 
 **El pilotaje funcionó como prueba de fuego: Orquesta NO pudo lanzar el goal

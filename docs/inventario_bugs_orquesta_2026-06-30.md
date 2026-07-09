@@ -158,6 +158,15 @@ antes de su cierre posterior:
   descargar `golang.org/x/text v0.38.0` y la sandbox bloqueo DNS; el mismo test
   paso en el entorno local con cache normal. `BUG-079` sigue abierto por
   enforcement pre-tool real del proveedor/app-server.
+- `BUG-ORQ-20260709-201` queda cerrado en alcance local: el deploy del servidor
+  dependia de pasos manuales para sync/build/swap/start/verificacion y podia
+  repetir el fallo de arrancar sin config canonica o con binario no identificado.
+  Cierre: `scripts/orquesta_server_deploy.sh` hace fast-forward-only, build
+  desde arbol, sha256, backup/swap atomico, arranque por `orquesta_server_ctl.sh`,
+  config canonica obligatoria opt-in y receipt JSON; `scripts/test_orquesta_server_deploy.sh`
+  cubre success, config ausente, no-fast-forward e identidad/hash mismatch; el
+  guard Go limita copia/arranque gestionado a `ctl`/`deploy`. No ejecuta remoto
+  real ni cierra la verificacion productiva externa.
 - Reejeucion real 2026-07-04 noche 10:
   `smoke_goal_first_checkpoint_only_high_consumption_real=ok` con
   `run_ref=run-spec-smoke-goal-first-bug088-req-smoke-goal-first-bug088-6c8dc4317888c8e25bb0e91f7f910aab`,

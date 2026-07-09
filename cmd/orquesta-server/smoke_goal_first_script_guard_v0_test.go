@@ -1414,6 +1414,75 @@ func TestSmokeGoalFirstAppServerRealDiagnosesAppServerAuthMissingV0(t *testing.T
 	}
 }
 
+func TestOrquestaServerScriptsNoCopianBinarioNiArrancanFueraDeCtlODeployV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	scriptsDir := filepath.Join(root, "scripts")
+	allowed := map[string]bool{
+		"scripts/orquesta_server_ctl.sh":    true,
+		"scripts/orquesta_server_deploy.sh": true,
+	}
+	err := filepath.WalkDir(scriptsDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".sh" {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if allowed[rel] {
+			return nil
+		}
+		text := readOperationalDocGuardV0(t, root, rel)
+		if scriptCopiesManagedOrquestaServerBinaryV0(text) {
+			t.Fatalf("%s copia binario gestionado fuera de ctl/deploy", rel)
+		}
+		if scriptStartsManagedOrquestaServerOutsideCtlV0(text) {
+			t.Fatalf("%s arranca servidor gestionado fuera de ctl/deploy", rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk scripts: %v", err)
+	}
+}
+
+func scriptCopiesManagedOrquestaServerBinaryV0(text string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if !strings.Contains(trimmed, "orquesta-server") {
+			continue
+		}
+		if (strings.HasPrefix(trimmed, "cp ") || strings.Contains(trimmed, " cp ")) &&
+			(strings.Contains(trimmed, "/srv/orquesta-self/runtime") || strings.Contains(trimmed, "ORQUESTA_CTL_BINARY")) {
+			return true
+		}
+	}
+	return false
+}
+
+func scriptStartsManagedOrquestaServerOutsideCtlV0(text string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if strings.Contains(trimmed, "orquesta_server_ctl.sh") || strings.Contains(trimmed, "$DEPLOY_CTL") {
+			continue
+		}
+		if strings.Contains(trimmed, "nohup") && strings.Contains(trimmed, "orquesta-server") && strings.Contains(trimmed, " run") {
+			return true
+		}
+	}
+	return false
+}
+
 func TestSmokeGoalFirstAppServerRealPrintsPublicReadinessDiagnosticsOnStartupFailureV0(t *testing.T) {
 	root := findRepoRootForResidualGoFileBudgetTestV0(t)
 	text := readOperationalDocGuardV0(t, root, "scripts/smoke_goal_first_app_server_real.sh")

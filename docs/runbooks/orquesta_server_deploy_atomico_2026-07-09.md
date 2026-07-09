@@ -1,0 +1,40 @@
+# Deploy atomico local de orquesta-server
+
+Fecha: 2026-07-09.
+
+`scripts/orquesta_server_deploy.sh` prepara un despliegue local sin tocar
+servidores remotos. Sincroniza un worktree por ref con fast-forward obligatorio,
+compila desde un arbol exportado, calcula `sha256`, conserva backup del binario
+previo, hace swap atomico por `mv`, arranca solo mediante
+`scripts/orquesta_server_ctl.sh start` y deja recibo durable en el state dir.
+
+Uso minimo:
+
+```bash
+ORQUESTA_DEPLOY_REPO=/ruta/repo \
+ORQUESTA_DEPLOY_WORKTREE=/ruta/worktree-deploy \
+ORQUESTA_DEPLOY_REF=main \
+ORQUESTA_DEPLOY_BINARY=/srv/orquesta-self/runtime/orquesta-server-claude \
+ORQUESTA_CTL_HOME=/srv/orquesta-self/claude-director-20260705 \
+ORQUESTA_CTL_WORKDIR=/srv/orquesta-self/worktrees/pilot-remoto-1 \
+ORQUESTA_DEPLOY_REQUIRE_CONFIG=1 \
+  scripts/orquesta_server_deploy.sh
+```
+
+Contrato operativo:
+
+- `deploy_not_fast_forward` bloquea si el worktree desplegable no puede avanzar
+  por fast-forward hacia la ref objetivo.
+- `deploy_config_missing` bloquea cuando `ORQUESTA_DEPLOY_REQUIRE_CONFIG=1` y
+  no existe `ORQUESTA_CTL_CONFIG` ni
+  `$ORQUESTA_CTL_WORKDIR/orquesta.config.json` legible.
+- `deploy_runtime_identity_mismatch` bloquea si `status`, readiness o supervisor
+  exponen `binary_sha256`, `runtime_binary_sha256` u
+  `orquesta_server_sha256` distinto del binario instalado.
+- El recibo queda en
+  `$ORQUESTA_DEPLOY_STATE_DIR/orquesta_server_deploy_receipt_v0.json` o, si no
+  se define, en `$ORQUESTA_CTL_HOME/state/`.
+
+No ejecutar comandos remotos desde este script. La promocion a un host real debe
+inyectar rutas locales ya montadas o ejecutarse dentro del host objetivo con
+confirmacion operativa externa.

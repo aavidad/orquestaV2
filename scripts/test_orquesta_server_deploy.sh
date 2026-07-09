@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+script="$ROOT/scripts/orquesta_server_deploy.sh"
+workdir="$(mktemp -d "${TMPDIR:-/tmp}/orquesta-server-deploy-test.XXXXXX")"
+trap 'rm -rf "$workdir"' EXIT
+
+git_id() {
+  git -c user.name="Deploy Test" -c user.email="deploy-test@example.invalid" "$@"
+}
+
+make_repo() {
+  repo="$1"
+  mkdir -p "$repo/cmd/orquesta-server"
+  git_id -C "$repo" init -q
+  printf 'module example.invalid/orquesta-deploy-test\n\ngo 1.22\n' >"$repo/go.mod"
+  printf 'package main\nfunc main(){}\n' >"$repo/cmd/orquesta-server/main.go"
+  git_id -C "$repo" add .
+  git_id -C "$repo" commit -q -m initial
+}
+
+make_ctl() {
+  ctl="$1"
+  status_sha="$2"
+  cat >"$ctl" <<SH
+#!/usr/bin/env bash
+set -euo pipefail
+case "\${1:-}" in
+start)
+  printf 'start %s\n' "\${ORQUESTA_CTL_BINARY:-}" >>"$workdir/ctl.log"
+  ;;
+status)
+  printf '{"status":"running","readiness":true,"supervisor_ok":true'
+  if [ -n "$status_sha" ]; then
+    printf ',"binary_sha256":"%s"' "$status_sha"
+  fi
+  printf '}\n'
+  ;;
+*)
+  exit 2
+  ;;
+esac
+SH
+  chmod +x "$ctl"
+}
+
+run_deploy() {
+  case_dir="$1"
+  repo="$case_dir/repo"
+  wt="$case_dir/worktree"
+  state="$case_dir/state"
+  bin="$case_dir/runtime/orquesta-server"
+  ctl="$case_dir/ctl.sh"
+  mkdir -p "$state"
+  ORQUESTA_DEPLOY_REPO="$repo" \
+  ORQUESTA_DEPLOY_WORKTREE="$wt" \
+  ORQUESTA_DEPLOY_REF="${ORQUESTA_DEPLOY_REF:-HEAD}" \
+  ORQUESTA_DEPLOY_CTL="$ctl" \
+  ORQUESTA_DEPLOY_BINARY="$bin" \
+  ORQUESTA_DEPLOY_STATE_DIR="$state" \
+  ORQUESTA_DEPLOY_BUILD_CMD='printf deploy-test-binary >"$ORQUESTA_DEPLOY_BUILD_OUT"; chmod +x "$ORQUESTA_DEPLOY_BUILD_OUT"' \
+    bash "$script"
+}
+
+assert_receipt_status() {
+  receipt="$1"
+  status="$2"
+  reason="$3"
+  python3 - "$receipt" "$status" "$reason" <<'PY'
+import json, sys
+path, status, reason = sys.argv[1:4]
+data = json.load(open(path))
+if data.get("status") != status:
+    raise SystemExit(f"status {data.get('status')} != {status}")
+if reason and data.get("reason_code") != reason:
+    raise SystemExit(f"reason {data.get('reason_code')} != {reason}")
+PY
+}
+
+test_success() {
+  case_dir="$workdir/success"
+  make_repo "$case_dir/repo"
+  mkdir -p "$case_dir"
+  make_ctl "$case_dir/ctl.sh" "$(printf deploy-test-binary | sha256sum | awk '{print $1}')"
+  run_deploy "$case_dir" >/tmp/orquesta-deploy-success.out
+  grep -q 'orquesta_server_deploy=ok' /tmp/orquesta-deploy-success.out
+  grep -q "start $case_dir/runtime/orquesta-server" "$workdir/ctl.log"
+  assert_receipt_status "$case_dir/state/orquesta_server_deploy_receipt_v0.json" ok ""
+}
+
+test_deploy_config_missing() {
+  case_dir="$workdir/config-missing"
+  make_repo "$case_dir/repo"
+  mkdir -p "$case_dir"
+  make_ctl "$case_dir/ctl.sh" ""
+  set +e
+  ORQUESTA_DEPLOY_REQUIRE_CONFIG=1 run_deploy "$case_dir" >/tmp/orquesta-deploy-config.out 2>&1
+  code=$?
+  set -e
+  [ "$code" -ne 0 ]
+  grep -q 'reason_code=deploy_config_missing' /tmp/orquesta-deploy-config.out
+  assert_receipt_status "$case_dir/state/orquesta_server_deploy_receipt_v0.json" failed deploy_config_missing
+}
+
+test_deploy_not_fast_forward() {
+  case_dir="$workdir/not-ff"
+  make_repo "$case_dir/repo"
+  git clone -q "$case_dir/repo" "$case_dir/worktree"
+  printf 'local\n' >"$case_dir/worktree/local.txt"
+  git_id -C "$case_dir/worktree" add local.txt
+  git_id -C "$case_dir/worktree" commit -q -m local
+  printf 'remote\n' >"$case_dir/repo/remote.txt"
+  git_id -C "$case_dir/repo" add remote.txt
+  git_id -C "$case_dir/repo" commit -q -m remote
+  make_ctl "$case_dir/ctl.sh" ""
+  set +e
+  ORQUESTA_DEPLOY_REF=HEAD run_deploy "$case_dir" >/tmp/orquesta-deploy-not-ff.out 2>&1
+  code=$?
+  set -e
+  [ "$code" -ne 0 ]
+  grep -q 'reason_code=deploy_not_fast_forward' /tmp/orquesta-deploy-not-ff.out
+  assert_receipt_status "$case_dir/state/orquesta_server_deploy_receipt_v0.json" failed deploy_not_fast_forward
+}
+
+test_deploy_runtime_identity_mismatch() {
+  case_dir="$workdir/sha-mismatch"
+  make_repo "$case_dir/repo"
+  mkdir -p "$case_dir"
+  make_ctl "$case_dir/ctl.sh" "$(printf wrong-binary | sha256sum | awk '{print $1}')"
+  set +e
+  run_deploy "$case_dir" >/tmp/orquesta-deploy-sha.out 2>&1
+  code=$?
+  set -e
+  [ "$code" -ne 0 ]
+  grep -q 'reason_code=deploy_runtime_identity_mismatch' /tmp/orquesta-deploy-sha.out
+  assert_receipt_status "$case_dir/state/orquesta_server_deploy_receipt_v0.json" failed deploy_runtime_identity_mismatch
+}
+
+bash -n "$script"
+test_success
+test_deploy_config_missing
+test_deploy_not_fast_forward
+test_deploy_runtime_identity_mismatch
+echo "orquesta_server_deploy_tests=ok"
