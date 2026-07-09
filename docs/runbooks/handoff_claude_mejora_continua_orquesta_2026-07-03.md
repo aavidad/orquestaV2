@@ -2685,3 +2685,23 @@ Pendiente al retomar en remoto:
   `/api/status` debe exponer el mismo `runtime_identity.binary_sha256`.
 - Despues de F0, activar F2 Telegram remoto con `orquesta.config.json`
   canonico y credenciales reales; OPES/F1 sigue gateado por orden del operador.
+
+## Actualizacion Codex 2026-07-10: revision remota en modo revisor
+
+Nuevo documento de revision para Claude:
+
+- `docs/runbooks/revision_codex_orquesta_remoto_2026-07-10.md`
+
+Lectura corta:
+
+- Codex queda como revisor externo; Orquesta remoto sigue siendo quien ejecuta.
+- Se acepta como avance parcial el goal
+  `goal-ref-task-autoprogramming-f0ad7bb152dd-g01` y su rework
+  `goal-ref-task-autoprogramming-f0ad7bb152dd-g01-rework-1`, ambos con
+  required tests declarados en verde.
+- No se acepta cierre global de autonomia: el binario remoto vivo sigue siendo
+  anterior al commit pusheado, hay `stale_running` y quedan runs antiguos
+  `invalid/blocked/running`.
+- Siguiente corte recomendado: F3 drain gobernado + harness aislado, despues F5
+  deploy del binario nuevo con guard de identidad. No lanzar mas goals amplios
+  antes de ese corte.
