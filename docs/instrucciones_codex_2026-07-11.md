@@ -75,3 +75,26 @@ Regla del revisor: features nuevas de capa 3 (como las de la noche del
 10-11: stdio, ingesta CSV/JSON, presentaciones) quedan CONGELADAS en cuanto
 cierres la limpieza actual, hasta que 1 y 2 esten terminadas. El revisor
 comprobara en cada despertar que los commits respetan el orden.
+
+## Protocolo de despertar al revisor (vigente desde 2026-07-11 ~01:30)
+
+Cuando TERMINES una tarea de esta cola (o un hito de la directiva
+dentro->fuera), avisa al revisor escribiendo una linea de resumen en el
+fichero senal (el revisor lo consume y se despierta en segundos):
+
+    echo "R1 cerrado en <commit>: <resumen de una linea>" > /home/alberto/Trabajo/orquesta/.orquesta-revisor-wake
+
+- Una senal por hito terminado (no por commit intermedio).
+- Tambien usa la senal si te BLOQUEAS y no puedes avanzar (di en la linea
+  "BLOQUEADO: <causa>"): el revisor lo arregla y te deja instrucciones aqui.
+- El fichero senal NO se commitea (esta fuera del contrato del repo).
+- Si no hay senal, el revisor tiene ademas un despertar fijo de respaldo
+  (~60 min) por si te quedas colgado sin poder avisar.
+
+## Plan final (cuando la directiva dentro->fuera este completa)
+
+Al terminar nucleo + conectores + auxiliares, el cierre del ciclo es que
+ORQUESTA cree una app REAL de verdad (no smoke): el operador quiere, por
+ejemplo, un modulo nuevo para Orquesta o una tool nueva, creado por
+Orquesta via su API nativa con goal acotado y revisor validando cierre.
+Candidatos se decidiran con el operador; no lanzar nada sin su visto bueno.
