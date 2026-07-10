@@ -2773,6 +2773,23 @@ drain/deploy/API reales: los residuales vivos siguen siendo los del indice
 `docs/inventario_bugs_estado_vivo.md` y requieren ventana operativa
 autorizada.
 
+Revalidacion focal adicional de F1/F5, tambien verde:
+
+```bash
+GOCACHE=/tmp/orquesta-core-identity-gocache \
+GOTMPDIR=/tmp/orquesta-core-identity-tmp \
+  go test -count=1 ./modulos/orquesta-estado-vivo ./modulos/orquesta-mcp \
+  -run 'Test(DerivarVeredictoCausalV0|ConstruirProyeccionCicloVidaV0|MCPObserveAppDirectorGoalEstadoVivo)'
+GOCACHE=/tmp/orquesta-core-identity-gocache \
+GOTMPDIR=/tmp/orquesta-core-identity-tmp \
+  go test -count=1 ./cmd/orquesta-server \
+  -run 'Test(DegradedIdentityHTTPHandlerV0|ValidateServerWorktreeIdentityV0|ServerIdentityPreflightV0|ServerWorktreeDirFromEnvV0|ServerYControlScriptCompartenRemoteCanonicoYPoliticaSymlinkV0|RunMainV0BloqueaLaunchAmplioAntesDeCrearRuntimeV0|ServerCommandRequiresExactIdentityV0|VerifyLiveDaemonIdentityV0|ServerReadiness)'
+```
+
+La cobertura local confirma que el veredicto causal no publica `running` sin
+liveness y que el servidor rechaza identidad/worktree degradados antes de crear
+runtime. No sustituye la comprobacion por API contra el binario desplegado.
+
 Checkpoint de limpieza no destructiva sincronizado: `4820516ec`
 (`chore: indexa funciones para limpieza segura`). El auditor genera un indice
 lexico de 25.199 funciones y una SQLite derivada; sirve para priorizar
