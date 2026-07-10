@@ -29,8 +29,8 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"artifact-ref-goal-summary",
 		"Materializa cada artefacto requerido dentro de un write-set autorizado",
 		"<artifact_type>.json",
-		"checkpoint temprano dentro del write-set autorizado",
-		"checkpoint_started.txt",
+		"checkpoint temprano en su runtime ignorado por Git",
+		"checkpoint_started_*",
 		"No vuelques salidas gigantes de herramientas",
 		"max_text_bytes=16384",
 		"rg --max-count",
@@ -45,7 +45,7 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		CodexGoalResultMarkerV0,
 		CodexGoalResultSchemaV0,
 		CodexGoalResultFileNameForGoalRefV0("goal-ref-001"),
-		"Materializa primero el directorio del write-set",
+		".orquesta-runtime/goal-receipts/goal-ref-001/orquesta_goal_result_goal-ref-001.json",
 		"goal_ref",
 		"schema_version",
 		"status/estado debe ser terminal explicito",
@@ -56,10 +56,10 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		"\"artifact_paths\":[]",
 		"\"materialized_artifacts\"",
 		"\"checklist\"",
-		"lista todas las rutas relativas de ficheros creados",
+		"lista solo rutas relativas de producto o validacion",
 		"separa artefactos validos de borradores recuperables",
 		"checklist.missing_refs",
-		"si escribiste algo fuera del write-set, no lo ocultes",
+		"Si escribiste un artefacto de producto fuera del write-set, no lo ocultes",
 		"status blocked con summary out_of_scope_artifacts",
 		"Resultado estructurado obligatorio",
 		"Los command de Tests requeridos son parte del contrato neutral acotado",
@@ -481,7 +481,7 @@ func TestBuildCodexGoalPromptV0NoCuelgaResultadoDurableBajoFicherosCodigoOScript
 	}
 }
 
-func TestBuildCodexGoalPromptV0UsaSiguienteWriteSetDirectorioParaResultadoDurableV0(t *testing.T) {
+func TestBuildCodexGoalPromptV0UsaRuntimeParaResultadoDurableV0(t *testing.T) {
 	spec := validCodexGoalSpecV0()
 	spec.WriteSet = []orquestagoal.GoalWriteScopeV0{
 		{Path: "external/opes/INCIDENCIA_TEST.md"},
@@ -496,12 +496,14 @@ func TestBuildCodexGoalPromptV0UsaSiguienteWriteSetDirectorioParaResultadoDurabl
 	if strings.Contains(packet.Prompt, "external/opes/INCIDENCIA_TEST.md/docs/"+CodexGoalResultFileNameV0) {
 		t.Fatalf("prompt cuelga resultado bajo markdown:\n%s", packet.Prompt)
 	}
-	if !strings.Contains(packet.Prompt, "external/opes/control_audio/docs/"+CodexGoalResultFileNameForGoalRefV0(spec.GoalRef)) {
-		t.Fatalf("prompt no usa write-set directorio para resultado durable:\n%s", packet.Prompt)
+	want := CodexGoalRuntimeReceiptRelativeDirV0(spec.GoalRef) + "/" + CodexGoalResultFileNameForGoalRefV0(spec.GoalRef)
+	if !strings.Contains(packet.Prompt, want) ||
+		strings.Contains(packet.Prompt, "external/opes/control_audio/docs/"+CodexGoalResultFileNameForGoalRefV0(spec.GoalRef)) {
+		t.Fatalf("prompt no usa runtime para resultado durable: want=%s\n%s", want, packet.Prompt)
 	}
 }
 
-func TestBuildCodexGoalPromptV0SaltaFicheroCodigoYUsaSiguienteDirectorioV0(t *testing.T) {
+func TestBuildCodexGoalPromptV0NoUsaFicheroCodigoNiDirectorioParaRecibosV0(t *testing.T) {
 	spec := validCodexGoalSpecV0()
 	spec.WriteSet = []orquestagoal.GoalWriteScopeV0{
 		{Path: "modulos/orquesta-app-codex-stack/stack_v0.go"},
@@ -516,13 +518,17 @@ func TestBuildCodexGoalPromptV0SaltaFicheroCodigoYUsaSiguienteDirectorioV0(t *te
 	if strings.Contains(packet.Prompt, "modulos/orquesta-app-codex-stack/stack_v0.go/docs/"+CodexGoalResultFileNameForGoalRefV0(spec.GoalRef)) {
 		t.Fatalf("prompt cuelga resultado bajo fichero Go:\n%s", packet.Prompt)
 	}
-	want := "modulos/orquesta-app-codex-stack/docs/" + CodexGoalResultFileNameForGoalRefV0(spec.GoalRef)
-	if !strings.Contains(packet.Prompt, want) {
-		t.Fatalf("prompt no usa siguiente directorio para resultado durable: want=%s\n%s", want, packet.Prompt)
+	for _, forbidden := range []string{
+		"modulos/orquesta-app-codex-stack/stack_v0.go/docs/" + CodexGoalResultFileNameForGoalRefV0(spec.GoalRef),
+		"modulos/orquesta-app-codex-stack/docs/" + CodexGoalResultFileNameForGoalRefV0(spec.GoalRef),
+	} {
+		if strings.Contains(packet.Prompt, forbidden) {
+			t.Fatalf("prompt cuelga recibo bajo write-set: %s\n%s", forbidden, packet.Prompt)
+		}
 	}
 }
 
-func TestBuildCodexGoalPromptV0UsaResultadoDurableUnicoPorGoalRefV0(t *testing.T) {
+func TestBuildCodexGoalPromptV0UsaResultadoRuntimeUnicoPorGoalRefV0(t *testing.T) {
 	spec := validCodexGoalSpecV0()
 	spec.GoalRef = "goal-ref-autoprogramming-backlog-srv-task-022-a54b0a70"
 	spec.WriteSet = []orquestagoal.GoalWriteScopeV0{{Path: "modulos/orquesta-server"}}
@@ -532,7 +538,7 @@ func TestBuildCodexGoalPromptV0UsaResultadoDurableUnicoPorGoalRefV0(t *testing.T
 	if len(issues) != 0 {
 		t.Fatalf("issues=%+v", issues)
 	}
-	want := "modulos/orquesta-server/docs/" + CodexGoalResultFileNameForGoalRefV0(spec.GoalRef)
+	want := CodexGoalRuntimeReceiptRelativeDirV0(spec.GoalRef) + "/" + CodexGoalResultFileNameForGoalRefV0(spec.GoalRef)
 	if !strings.Contains(packet.Prompt, want) ||
 		strings.Contains(packet.Prompt, "modulos/orquesta-server/docs/"+CodexGoalResultFileNameV0+" ") {
 		t.Fatalf("prompt=%s want=%s", packet.Prompt, want)

@@ -303,7 +303,7 @@ func TestServerCodexAppServerGoalBackendV0TurnStartToolOutputPolicyFallbackSoloS
 
 func TestServerCodexAppServerGoalBackendV0MaterializaCheckpointAntesDeTurnStartV0(t *testing.T) {
 	root := t.TempDir()
-	checkpointPath := filepath.Join(root, "generated-apps", "checkpoint_started.txt")
+	checkpointPath := filepath.Join(root, ".orquesta-runtime", "goal-receipts", "goal-ref-checkpoint-preturn-001", "checkpoint_started.txt")
 	protocol := &fakeCodexAppServerProtocolV0{
 		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-checkpoint-preturn-001"},
 		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-goal-checkpoint-preturn-001", Status: "active"},
@@ -343,7 +343,7 @@ func TestServerCodexAppServerGoalBackendV0MaterializaCheckpointAntesDeTurnStartV
 	body := string(data)
 	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
 		!containsStringMigratedTestV0(protocol.calls, "turn/start") ||
-		!containsStringPrefixMigratedTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-early-checkpoint-materialized:generated-apps/checkpoint_started.txt") ||
+		!containsStringPrefixMigratedTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-early-checkpoint-materialized:.orquesta-runtime/goal-receipts/goal-ref-checkpoint-preturn-001/checkpoint_started.txt") ||
 		!strings.Contains(body, "schema_version=orquesta.codex_app_server.early_checkpoint.v0") ||
 		!strings.Contains(body, "goal_ref=goal-ref-checkpoint-preturn-001") ||
 		!strings.Contains(body, "external_goal_ref=thread-ref-goal-checkpoint-preturn-001") {
@@ -353,7 +353,7 @@ func TestServerCodexAppServerGoalBackendV0MaterializaCheckpointAntesDeTurnStartV
 
 func TestServerCodexAppServerGoalBackendV0ObservaCheckpointStartedComoReasonCodeV0(t *testing.T) {
 	root := t.TempDir()
-	checkpointPath := filepath.Join(root, "generated-apps", "checkpoint_started.txt")
+	checkpointPath := filepath.Join(root, ".orquesta-runtime", "goal-receipts", "goal-ref-checkpoint-observe-001", "checkpoint_started.txt")
 	protocol := &fakeCodexAppServerProtocolV0{
 		observedGoal: &serverCodexAppServerThreadGoalV0{
 			ThreadID: "thread-ref-goal-checkpoint-observe-001",
@@ -395,9 +395,26 @@ func TestServerCodexAppServerGoalBackendV0ObservaCheckpointStartedComoReasonCode
 	}
 	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
 		receipt.IssueCode != codexAppServerGoalResultCheckpointReasonCodeV0 ||
-		!containsStringMigratedTestV0(receipt.ArtifactPaths, "generated-apps/checkpoint_started.txt") ||
+		!containsStringMigratedTestV0(receipt.ArtifactPaths, ".orquesta-runtime/goal-receipts/goal-ref-checkpoint-observe-001/checkpoint_started.txt") ||
 		!containsStringMigratedTestV0(receipt.EvidenceRefs, codexAppServerGoalResultCheckpointEvidenceRefV0) {
 		t.Fatalf("receipt=%+v", receipt)
+	}
+}
+
+func TestCodexAppServerGoalResultFromWorkspaceV0PrefiereReciboRuntimeV0(t *testing.T) {
+	root := t.TempDir()
+	goalRef := "goal-ref-runtime-receipt-priority-001"
+	externalGoalRef := "thread-ref-runtime-receipt-priority-001"
+	runtimeDir := orquestaruntimecodexgoal.CodexGoalRuntimeReceiptRelativeDirV0(goalRef)
+	writeCodexAppServerGoalResultForTestV0(t, root, runtimeDir, goalRef, externalGoalRef)
+	writeCodexAppServerGoalResultForTestV0(t, root, "legacy-write-set", goalRef, externalGoalRef)
+
+	result, ok, err := codexAppServerGoalResultFromWorkspaceV0(root, goalRef, externalGoalRef)
+	if err != nil || !ok ||
+		!containsStringMigratedTestV0(result.ArtifactPaths, runtimeDir+"/ok.md") ||
+		containsStringMigratedTestV0(result.ArtifactPaths, "legacy-write-set/ok.md") ||
+		containsStringMigratedTestV0(result.ArtifactPaths, runtimeDir+"/"+orquestaruntimecodexgoal.CodexGoalResultFileNameForGoalRefV0(goalRef)) {
+		t.Fatalf("result=%+v ok=%v err=%v", result, ok, err)
 	}
 }
 

@@ -188,7 +188,7 @@ func (backend serverCodexAppServerGoalBackendV0) materializeCodexAppServerEarlyC
 	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
 	externalGoalRef string,
 ) (string, bool, error) {
-	if !packet.DirectionContract.RequireEarlyCheckpoint || len(packet.WriteSet) == 0 {
+	if !packet.DirectionContract.RequireEarlyCheckpoint {
 		return "", false, nil
 	}
 	cwd := strings.TrimSpace(backend.CWD)
@@ -200,44 +200,31 @@ func (backend serverCodexAppServerGoalBackendV0) materializeCodexAppServerEarlyC
 		return "", false, err
 	}
 	checkpointFile := codexAppServerEarlyCheckpointFileV0(packet.DirectionContract.EarlyCheckpointFile)
-	for _, scope := range packet.WriteSet {
-		dirRel, ok := codexAppServerWriteSetCheckpointDirRelV0(scope.Path)
-		if !ok {
-			continue
-		}
-		targetDir := filepath.Join(root, filepath.FromSlash(dirRel))
-		if !codexAppServerPathInsideRootV0(root, targetDir) {
-			continue
-		}
-		if err := os.MkdirAll(targetDir, 0o700); err != nil {
-			return "", false, codexAppServerWriteSetPrepareErrorV0{
-				Operation: "mkdir",
-				RelPath:   dirRel,
-				Err:       err,
-			}
-		}
-		target := filepath.Join(targetDir, filepath.FromSlash(checkpointFile))
-		if !codexAppServerPathInsideRootV0(root, target) {
-			continue
-		}
-		relRef := filepath.ToSlash(filepath.Join(dirRel, checkpointFile))
-		if info, statErr := os.Stat(target); statErr == nil && !info.IsDir() {
-			return relRef, true, nil
-		} else if statErr == nil && info.IsDir() {
-			return "", false, fmt.Errorf("early checkpoint target is directory: %s", relRef)
-		} else if statErr != nil && !os.IsNotExist(statErr) {
-			return "", false, statErr
-		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
-			return "", false, err
-		}
-		body := codexAppServerEarlyCheckpointBodyV0(packet, externalGoalRef)
-		if err := os.WriteFile(target, []byte(body), 0o600); err != nil {
-			return "", false, err
-		}
-		return relRef, true, nil
+	dirRel := orquestaruntimecodexgoal.CodexGoalRuntimeReceiptRelativeDirV0(packet.GoalRef)
+	targetDir := filepath.Join(root, filepath.FromSlash(dirRel))
+	if !codexAppServerPathInsideRootV0(root, targetDir) {
+		return "", false, fmt.Errorf("early checkpoint runtime target outside workdir")
 	}
-	return "", false, nil
+	target := filepath.Join(targetDir, filepath.FromSlash(checkpointFile))
+	if !codexAppServerPathInsideRootV0(root, target) {
+		return "", false, fmt.Errorf("early checkpoint runtime file outside workdir")
+	}
+	relRef := filepath.ToSlash(filepath.Join(dirRel, checkpointFile))
+	if info, statErr := os.Stat(target); statErr == nil && !info.IsDir() {
+		return relRef, true, nil
+	} else if statErr == nil && info.IsDir() {
+		return "", false, fmt.Errorf("early checkpoint target is directory: %s", relRef)
+	} else if statErr != nil && !os.IsNotExist(statErr) {
+		return "", false, statErr
+	}
+	if err := os.MkdirAll(targetDir, 0o700); err != nil {
+		return "", false, err
+	}
+	body := codexAppServerEarlyCheckpointBodyV0(packet, externalGoalRef)
+	if err := os.WriteFile(target, []byte(body), 0o600); err != nil {
+		return "", false, err
+	}
+	return relRef, true, nil
 }
 
 func codexAppServerEarlyCheckpointFileV0(value string) string {

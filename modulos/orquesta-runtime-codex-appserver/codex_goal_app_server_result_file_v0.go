@@ -242,6 +242,24 @@ func codexAppServerGoalResultFromWorkspaceV0(
 	if err != nil {
 		return codexAppServerGoalResultMarkerV0{}, false, err
 	}
+	// Runtime receipts are authoritative for new launches. The project tree is
+	// retained below only as a compatibility fallback while S13 is migrated.
+	runtimePath := filepath.Join(
+		rootAbs,
+		filepath.FromSlash(orquestaruntimecodexgoal.CodexGoalRuntimeReceiptRelativeDirV0(goalRef)),
+		orquestaruntimecodexgoal.CodexGoalResultFileNameForGoalRefV0(goalRef),
+	)
+	if info, statErr := os.Stat(runtimePath); statErr == nil && !info.IsDir() {
+		marked, ok, readErr := codexAppServerGoalResultFromFileV0(runtimePath, goalRef, externalGoalRef)
+		if readErr != nil {
+			return codexAppServerGoalResultMarkerV0{}, false, readErr
+		}
+		if ok {
+			return marked, true, nil
+		}
+	} else if statErr != nil && !os.IsNotExist(statErr) {
+		return codexAppServerGoalResultMarkerV0{}, false, statErr
+	}
 	var found codexAppServerGoalResultMarkerV0
 	foundOK := false
 	var contractErr error
@@ -306,6 +324,18 @@ func codexAppServerCheckpointStartedFromWorkspaceV0(
 	}
 	rootAbs, err := filepath.Abs(root)
 	if err != nil {
+		return "", false
+	}
+	runtimeRel := filepath.ToSlash(filepath.Join(
+		orquestaruntimecodexgoal.CodexGoalRuntimeReceiptRelativeDirV0(goalRef),
+		"checkpoint_started.txt",
+	))
+	runtimePath := filepath.Join(rootAbs, filepath.FromSlash(runtimeRel))
+	if raw, readErr := os.ReadFile(runtimePath); readErr == nil {
+		if codexAppServerCheckpointStartedMatchesV0(string(raw), goalRef, externalGoalRef) {
+			return runtimeRel, true
+		}
+	} else if !os.IsNotExist(readErr) {
 		return "", false
 	}
 	foundRef := ""

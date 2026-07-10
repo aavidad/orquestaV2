@@ -477,9 +477,7 @@ func buildCodexGoalPromptLegacyV0(spec orquestagoal.GoalWorkSpecV0) string {
 	}
 	if len(spec.WriteSet) > 0 {
 		if directionContract.RequireEarlyCheckpoint {
-			b.WriteString("- Antes de exploracion larga o comandos costosos, materializa un checkpoint temprano dentro del write-set autorizado, por ejemplo ")
-			b.WriteString(directionContract.EarlyCheckpointFile)
-			b.WriteString(", con objetivo, alcance, siguiente artefacto y evidencia compacta; declaralo despues en artifact_paths, materialized_artifacts y evidence_refs.\n")
+			b.WriteString("- Orquesta ya materializa el checkpoint temprano en su runtime ignorado por Git; no crees checkpoint_started_* dentro del write-set ni lo declares como artefacto de producto.\n")
 		}
 		for _, scope := range spec.WriteSet {
 			path := strings.Trim(strings.TrimSpace(scope.Path), "/")
@@ -540,7 +538,7 @@ func buildCodexGoalPromptLegacyV0(spec orquestagoal.GoalWorkSpecV0) string {
 		b.WriteString(" como ")
 		b.WriteString(strings.Join(directionContract.ToolOutputPolicy.BoundedCommandHints, ", "))
 	}
-	b.WriteString(", guarda evidencia durable en el write-set si hace falta y resume refs compactas.\n")
+	b.WriteString(", guarda en el write-set solo evidencia de producto o de validacion y resume refs compactas.\n")
 	b.WriteString("- Devuelve blocked si falta input externo, permiso, proveedor o cambio de estado externo.\n")
 	b.WriteString("- Conserva refs opacas y no publiques HOME, tokens, OAuth, comandos internos de runtime/local ni transcripts completos.\n")
 	if len(spec.RequiredTests) > 0 {
@@ -567,20 +565,17 @@ func buildCodexGoalPromptLegacyV0(spec orquestagoal.GoalWorkSpecV0) string {
 		b.WriteString("- En artifact_refs usa literalmente los artifact_ref declarados arriba para los artefactos producidos; no uses rutas de fichero como refs.\n")
 	}
 	if len(spec.WriteSet) > 0 {
-		b.WriteString("- En artifact_paths lista todas las rutas relativas de ficheros creados, modificados o verificados para el cierre, incluido el JSON durable de resultado; si escribiste algo fuera del write-set, no lo ocultes: declaralo en artifact_paths y marca status blocked con summary out_of_scope_artifacts.\n")
+		b.WriteString("- En artifact_paths lista solo rutas relativas de producto o validacion dentro del write-set; no incluyas checkpoints ni recibos de ejecucion runtime. Si escribiste un artefacto de producto fuera del write-set, no lo ocultes: declaralo y marca status blocked con summary out_of_scope_artifacts.\n")
 	}
 	b.WriteString("- En materialized_artifacts separa artefactos validos de borradores recuperables: usa status partial/invalid/non_publishable con issues si falta QA, calidad publicable, cobertura, schema o validacion.\n")
 	b.WriteString("- En checklist.missing_refs declara lo que falta para completar el contrato; si hay faltantes o materialized_artifacts no validos, devuelve status blocked y rework_plan_refs accionables.\n")
-	if resultFilePath := codexGoalResultFilePathV0(spec); resultFilePath != "" {
-		b.WriteString("- Antes de marcar el goal como complete, escribe el mismo JSON en ")
-		b.WriteString(resultFilePath)
-		b.WriteString(" incluyendo \"goal_ref\":\"")
-		b.WriteString(spec.GoalRef)
-		b.WriteString("\", \"schema_version\":\"")
-		b.WriteString(CodexGoalResultSchemaV0)
-		b.WriteString("\" y \"status\":\"complete\" para que Orquesta pueda cerrar aunque no haya respuesta final textual.\n")
-		b.WriteString("- Materializa primero el directorio del write-set y este archivo durable de resultado; si luego corriges artefactos o tests, actualiza el JSON antes de cerrar.\n")
-	}
+	b.WriteString("- Antes de marcar el goal como complete, escribe el mismo JSON en ")
+	b.WriteString(codexGoalResultFilePathV0(spec))
+	b.WriteString(" incluyendo \"goal_ref\":\"")
+	b.WriteString(spec.GoalRef)
+	b.WriteString("\", \"schema_version\":\"")
+	b.WriteString(CodexGoalResultSchemaV0)
+	b.WriteString("\" y \"status\":\"complete\". Es un recibo runtime ignorado por Git: no lo declares en artifact_paths ni lo copies al write-set.\n")
 	b.WriteString("- Incluye en evidence_refs las evidencias requeridas solo si han sido verificadas; no inventes refs para forzar el cierre.\n")
 	b.WriteString("- Incluye en artifact_refs solo artefactos producidos o verificados que cumplan el contrato.\n")
 	return b.String()
@@ -736,7 +731,7 @@ func writeCodexGoalStableClosureContractV0(
 		b.WriteString(" como ")
 		b.WriteString(strings.Join(directionContract.ToolOutputPolicy.BoundedCommandHints, ", "))
 	}
-	b.WriteString(", guarda evidencia durable en el write-set si hace falta y resume refs compactas.\n")
+	b.WriteString(", guarda en el write-set solo evidencia de producto o de validacion y resume refs compactas.\n")
 	b.WriteString("- Devuelve blocked si falta input externo, permiso, proveedor o cambio de estado externo.\n")
 	b.WriteString("- Conserva refs opacas y no publiques HOME, tokens, OAuth, comandos internos de runtime/local ni transcripts completos.\n")
 	if len(spec.RequiredTests) > 0 {
@@ -761,7 +756,7 @@ func writeCodexGoalStableClosureContractV0(
 		b.WriteString("- En artifact_refs usa literalmente los artifact_ref declarados arriba para los artefactos producidos; no uses rutas de fichero como refs.\n")
 	}
 	if len(spec.WriteSet) > 0 {
-		b.WriteString("- En artifact_paths lista todas las rutas relativas de ficheros creados, modificados o verificados para el cierre, incluido el JSON durable de resultado; si escribiste algo fuera del write-set, no lo ocultes: declaralo en artifact_paths y marca status blocked con summary out_of_scope_artifacts.\n")
+		b.WriteString("- En artifact_paths lista solo rutas relativas de producto o validacion dentro del write-set; no incluyas checkpoints ni recibos de ejecucion runtime. Si escribiste un artefacto de producto fuera del write-set, no lo ocultes: declaralo y marca status blocked con summary out_of_scope_artifacts.\n")
 	}
 	b.WriteString("- En materialized_artifacts separa artefactos validos de borradores recuperables: usa status partial/invalid/non_publishable con issues si falta QA, calidad publicable, cobertura, schema o validacion.\n")
 	b.WriteString("- En checklist.missing_refs declara lo que falta para completar el contrato; si hay faltantes o materialized_artifacts no validos, devuelve status blocked y rework_plan_refs accionables.\n")
@@ -892,9 +887,7 @@ func writeCodexGoalDynamicPromptSuffixV0(
 	}
 	if len(spec.WriteSet) > 0 {
 		if directionContract.RequireEarlyCheckpoint {
-			b.WriteString("- Antes de exploracion larga o comandos costosos, materializa un checkpoint temprano dentro del write-set autorizado, por ejemplo ")
-			b.WriteString(directionContract.EarlyCheckpointFile)
-			b.WriteString(", con objetivo, alcance, siguiente artefacto y evidencia compacta; declaralo despues en artifact_paths, materialized_artifacts y evidence_refs.\n")
+			b.WriteString("- Orquesta ya materializa el checkpoint temprano en su runtime ignorado por Git; no crees checkpoint_started_* dentro del write-set ni lo declares como artefacto de producto.\n")
 		}
 		for _, scope := range spec.WriteSet {
 			path := strings.Trim(strings.TrimSpace(scope.Path), "/")
@@ -912,16 +905,13 @@ func writeCodexGoalDynamicPromptSuffixV0(
 	b.WriteString("- schema_version: ")
 	b.WriteString(CodexGoalResultSchemaV0)
 	b.WriteString("\n")
-	if resultFilePath := codexGoalResultFilePathV0(spec); resultFilePath != "" {
-		b.WriteString("- Antes de marcar el goal como complete, escribe el mismo JSON en ")
-		b.WriteString(resultFilePath)
-		b.WriteString(" incluyendo \"goal_ref\":\"")
-		b.WriteString(spec.GoalRef)
-		b.WriteString("\", \"schema_version\":\"")
-		b.WriteString(CodexGoalResultSchemaV0)
-		b.WriteString("\" y \"status\":\"complete\" para que Orquesta pueda cerrar aunque no haya respuesta final textual.\n")
-		b.WriteString("- Materializa primero el directorio del write-set y este archivo durable de resultado; si luego corriges artefactos o tests, actualiza el JSON antes de cerrar.\n")
-	}
+	b.WriteString("- Antes de marcar el goal como complete, escribe el mismo JSON en ")
+	b.WriteString(codexGoalResultFilePathV0(spec))
+	b.WriteString(" incluyendo \"goal_ref\":\"")
+	b.WriteString(spec.GoalRef)
+	b.WriteString("\", \"schema_version\":\"")
+	b.WriteString(CodexGoalResultSchemaV0)
+	b.WriteString("\" y \"status\":\"complete\". Es un recibo runtime ignorado por Git: no lo declares en artifact_paths ni lo copies al write-set.\n")
 }
 
 func codexGoalPromptCacheProjectionForPartsV0(stablePrefix string, dynamicSuffix string) CodexGoalPromptCacheProjectionV0 {
@@ -986,17 +976,19 @@ func codexGoalCompactStringsV0(values []string) []string {
 
 func codexGoalResultFilePathV0(spec orquestagoal.GoalWorkSpecV0) string {
 	resultFileName := CodexGoalResultFileNameForGoalRefV0(spec.GoalRef)
-	for _, scope := range spec.WriteSet {
-		path := strings.Trim(strings.TrimSpace(scope.Path), "/")
-		if path == "" {
-			continue
-		}
-		if codexGoalWriteScopeLooksLikeFileV0(path) {
-			continue
-		}
-		return path + "/docs/" + resultFileName
+	return CodexGoalRuntimeReceiptRelativeDirV0(spec.GoalRef) + "/" + resultFileName
+}
+
+const codexGoalRuntimeReceiptRootV0 = ".orquesta-runtime/goal-receipts"
+
+// CodexGoalRuntimeReceiptRelativeDirV0 is intentionally Git-ignored runtime
+// state. It is not part of the product write-set or the public core contract.
+func CodexGoalRuntimeReceiptRelativeDirV0(goalRef string) string {
+	part := codexGoalResultFileSafePartV0(goalRef)
+	if part == "" {
+		part = "unknown"
 	}
-	return ""
+	return codexGoalRuntimeReceiptRootV0 + "/" + part
 }
 
 func CodexGoalTaskCostClassForWriteSetV0(writeSet []orquestagoal.GoalWriteScopeV0) string {
