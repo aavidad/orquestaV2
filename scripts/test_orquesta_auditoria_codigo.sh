@@ -118,6 +118,8 @@ assert payload["deadcode"]["source"] == "provided_file", payload["deadcode"]
 assert payload["metrics"]["deadcode_candidates"] == 2, payload["metrics"]
 assert payload["metrics"]["helper_duplicate_definitions"] >= 2, payload["metrics"]
 assert payload["metrics"]["large_files_over_800"] == 1, payload["metrics"]
+assert payload["metrics"]["functions_indexed"] >= 7, payload["metrics"]
+assert any(item["name"] == "firstNonEmptyLiveV0" and item["classification"] == "static_candidate_requires_review" for item in payload["function_index"]["entries"]), payload["function_index"]
 assert any(item["module"] == "modulos/orphan" for item in payload["orphan_modules"]), payload["orphan_modules"]
 assert any(item["path"] == "modulos/large/large.go" for item in payload["large_files"]), payload["large_files"]
 
@@ -126,10 +128,13 @@ try:
     metrics = dict(con.execute("select metric, value from metrics"))
     assert metrics["deadcode_candidates"] == 2, metrics
     assert metrics["large_files_over_800"] == 1, metrics
+    assert metrics["functions_indexed"] >= 7, metrics
     deadcode_rows = con.execute("select count(*) from deadcode").fetchone()[0]
     helper_rows = con.execute("select count(*) from helper_copies").fetchone()[0]
     assert deadcode_rows == 2, deadcode_rows
     assert helper_rows >= 4, helper_rows
+    function_rows = con.execute("select count(*) from function_index").fetchone()[0]
+    assert function_rows >= 7, function_rows
 finally:
     con.close()
 PY

@@ -278,6 +278,50 @@ def collect_helper_copies():
             })
     return records
 
+def collect_function_index(deadcode_entries):
+    deadcode_keys = {(entry["path"], entry["line"], entry["symbol"].split(".")[-1]) for entry in deadcode_entries}
+    all_source = []
+    records = []
+    for path in iter_project_go_files():
+        relative = rel(path)
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        all_source.append(text)
+        for line_no, raw in enumerate(text.splitlines(), start=1):
+            match = FUNC_RE.match(raw)
+            if not match:
+                continue
+            name = match.group(1)
+            exported = bool(name) and name[0].isupper()
+            if relative.endswith("_test.go"):
+                classification = "test_only"
+            elif (relative, line_no, name) in deadcode_keys:
+                classification = "static_candidate_requires_review"
+            elif exported:
+                classification = "exported_or_contract_requires_review"
+            else:
+                classification = "unclassified_private"
+            records.append({
+                "path": relative,
+                "line": line_no,
+                "module": module_for_rel(relative),
+                "name": name,
+                "exported": exported,
+                "test_file": relative.endswith("_test.go"),
+                "classification": classification,
+            })
+    identifier_counts = Counter(
+        identifier
+        for text in all_source
+        for identifier in re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", text)
+    )
+    for record in records:
+        record["text_reference_count"] = identifier_counts[record["name"]]
+    records.sort(key=lambda item: (item["path"], item["line"], item["name"]))
+    return records
+
 def collect_orphan_modules(module_path):
     module_dirs = []
     for path in sorted((root / "modulos").iterdir()):
@@ -332,11 +376,13 @@ module_path = read_go_module()
 deadcode_source, deadcode_entries, deadcode_unparsable = collect_deadcode()
 large_files = collect_large_files()
 helper_copies = collect_helper_copies()
+function_index = collect_function_index(deadcode_entries)
 orphan_modules, go_list_error = collect_orphan_modules(module_path)
 
 deadcode_by_module = Counter(entry["module"] for entry in deadcode_entries)
 helper_family_counts = Counter(entry["family"] for entry in helper_copies)
 helper_duplicate_definitions = sum(max(0, count - 1) for count in helper_family_counts.values())
+function_classification_counts = Counter(entry["classification"] for entry in function_index)
 
 payload = {
     "schema_version": "orquesta_code_audit.v0",
@@ -356,6 +402,11 @@ payload = {
         "duplicate_definitions": helper_duplicate_definitions,
         "entries": helper_copies,
     },
+    "function_index": {
+        "parser": "go_function_declaration_lexical_v0",
+        "classification_counts": dict(sorted(function_classification_counts.items())),
+        "entries": function_index,
+    },
     "large_files": large_files,
     "metrics": {
         "deadcode_candidates": len(deadcode_entries),
@@ -364,10 +415,12 @@ payload = {
         "helper_duplicate_definitions": helper_duplicate_definitions,
         "helper_family_definitions": len(helper_copies),
         "large_files_over_800": len(large_files),
+        "functions_indexed": len(function_index),
     },
     "notes": [
         "SQLite output is a derived cache/report, not operational truth.",
         "deadcode candidates require per-module verification before deletion.",
+        "function index classifications and text_reference_count are triage signals, not proof of removability.",
     ],
 }
 if go_list_error:
@@ -393,6 +446,7 @@ if sqlite_out:
             create table orphan_modules(module text primary key, path text not null, importer_count integer not null);
             create table helper_copies(family text not null, name text not null, path text not null, line integer not null, module text not null);
             create table large_files(path text primary key, lines integer not null, module text not null);
+            create table function_index(path text not null, line integer not null, module text not null, name text not null, exported integer not null, test_file integer not null, classification text not null, text_reference_count integer not null);
             """
         )
         con.executemany(
@@ -425,6 +479,10 @@ if sqlite_out:
             "insert into large_files(path, lines, module) values(?, ?, ?)",
             [(item["path"], item["lines"], item["module"]) for item in large_files],
         )
+        con.executemany(
+            "insert into function_index(path, line, module, name, exported, test_file, classification, text_reference_count) values(?, ?, ?, ?, ?, ?, ?, ?)",
+            [(item["path"], item["line"], item["module"], item["name"], int(item["exported"]), int(item["test_file"]), item["classification"], item["text_reference_count"]) for item in function_index],
+        )
         con.commit()
     finally:
         con.close()
@@ -438,6 +496,7 @@ for key in [
     "helper_duplicate_definitions",
     "orphan_modules",
     "large_files_over_800",
+    "functions_indexed",
 ]:
     print(f"code_audit_{key}={payload['metrics'][key]}")
 PY

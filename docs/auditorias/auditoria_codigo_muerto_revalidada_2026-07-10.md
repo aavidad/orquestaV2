@@ -46,3 +46,7 @@ tests sin decidir primero si forman parte de API soportada.
 La ola Orquesta `wave-dead-code-audit-20260710` no entrego clasificacion y fue
 parada por presupuesto de diagnostico; esta auditoria manual es un desbloqueo
 documentado, no una aceptacion de esa ola.
+
+El indice reproducible de funciones que acota la siguiente fase esta en
+`docs/auditorias/indice_funciones_orquesta_2026-07-10.md`. Sus categorias son
+senales de revision, no autorizacion de borrado.

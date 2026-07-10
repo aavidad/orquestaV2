@@ -1,0 +1,50 @@
+# Indice de funciones Orquesta - 2026-07-10
+
+## Proposito
+
+Inventario no destructivo para la limpieza posterior al cierre del nucleo.
+No es una lista de borrado ni sustituye la revision de contratos, wiring,
+reflexion, CLI, plugins o adaptadores opt-in.
+
+## Generacion reproducible
+
+```bash
+scripts/orquesta_auditoria_codigo.sh \
+  --root "$PWD" \
+  --json-out /tmp/orquesta-function-index-YYYYMMDD/index.json \
+  --no-sqlite
+```
+
+El informe detallado se conserva como salida aislada de auditoria, no como
+artefacto versionado: contiene una fila por funcion y en este corte pesa
+aproximadamente 9,3 MB. El generador, su prueba de contrato y este resumen si
+quedan versionados.
+
+## Foto de este corte
+
+| Clasificacion | Funciones |
+| --- | ---: |
+| indexadas | 25.199 |
+| `static_candidate_requires_review` | 1.251 |
+| `exported_or_contract_requires_review` | 1.847 |
+| `test_only` | 10.582 |
+| `unclassified_private` | 11.519 |
+
+El analizador declara `go_function_declaration_lexical_v0`: localiza
+declaraciones Go y cuenta referencias textuales de identificador. Es una senal
+de triage barata; no resuelve llamadas con receptor, interfaces, reflexion,
+generacion, ensamblado ni alcance lexico.
+
+## Uso permitido en la limpieza
+
+1. Elegir una familia o modulo de write-set estrecho.
+2. Revisar entradas con `rg`, contratos y wiring de composicion.
+3. Clasificar cada candidato como conservar, migrar, deprecar o retirar.
+4. Solo retirar con prueba focal y descenso verificable del ratchet.
+5. Conservar el commit anterior y registrar en el inventario de bugs cualquier
+   falso positivo o patron estructural.
+
+La consolidacion amplia de variables de entorno queda deliberadamente despues
+del cierre del nucleo. La primera ola ya tiene ratchet en
+`cmd/orquesta-server/server_env_registry_ast_v0_test.go`; no se ampliara
+mientras F3/F5/208 y la atestacion independiente sigan pendientes.
