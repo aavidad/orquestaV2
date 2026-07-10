@@ -6,6 +6,13 @@ o cualquier sesion nueva) que continuen la programacion mientras Codex no
 tiene cuota. Objetivo final del operador: que Orquesta se programe a si misma;
 esta guia cubre lo que falta para llegar ahi.
 
+> Actualizacion 2026-07-10: las etapas A, B y C ya estan integradas; 208H y D3
+> estan cerrados localmente con verificacion independiente. Prevalecen
+> `docs/inventario_bugs_estado_vivo.md` y la bitacora S23 para los residuales
+> F3/F5/208S. D2 no se ejecuta hasta disponer de un encargo util indicado por
+> el operador y de su consentimiento explicito de coste; si crea una app, debe
+> ser una app real, no un smoke desechable.
+
 ## Como usar esta guia
 
 1. Lee "Reglas de oro" y "Que NO tocar" completas antes del primer edit.
@@ -72,9 +79,9 @@ esta guia cubre lo que falta para llegar ahi.
 Orquesta es un director de agentes goal-first en Go (modulos en `modulos/`,
 server en `cmd/orquesta-server`). Hoy: el circuito goal-first local YA
 funciona (smoke verde end-to-end tras el fix del lease `01cb27d77`). Falta,
-para autonomia: que TODAS las superficies publiquen estado desde el
-veredicto causal unico (F1), que `runs/control` pueda parar de verdad un
-backend (F2), la atestacion de tests (208H, de Codex), y el piloto real.
+para autonomia: verificar F1/F2 contra el binario desplegado y ejecutar un
+piloto real gobernado. F1/F2 y la atestacion 208H ya estan cerrados en local;
+el residual es operativo/de proveedor, no permiso para reabrir sus contratos.
 Analisis completo: `docs/analisis_fallos_estructurales_orquesta_2026-07-10.md`.
 
 ## ETAPA A - Adoptar el veredicto causal F1 en las superficies
@@ -188,13 +195,17 @@ backend tmux y cableados en
   goal `complete`, cierre `accepted`, shutdown HTTP `ready` y ningun proceso
   residual. La app temporal retenida solo es evidencia; no se repetira para
   regresiones generales.
-- [ ] PASO D2: piloto de autoprogramacion supervisado con el backlog de C2
+- [ ] PASO D2: piloto de autoprogramacion supervisado sobre un encargo util que
+  describa el operador. Si el encargo crea una app, debe ser real; no crear una
+  app de smoke. Usar el backlog de C2 solo para preparar/revisar el flujo cuando
+  el operador autorice coste y alcance
   (receta completa: `docs/bitacora_correccion_pericial_2026-07-03.md`,
   seccion "Receta completa"; MAX_REQUESTS=1; endpoints status/observe son
   SOLO POST con body `{}`). El revisor (Claude) valida cada cierre
-  ejecutando los tests declarados: 208H sigue abierto y NO se acepta un
-  cierre sin reejecutar sus tests.
-- [ ] PASO D3: `scripts/orquesta_test_batches.sh` dos pases verdes.
+  reejecutando los tests declarados; 208H no se reabre, pero su atestacion
+  independiente sigue siendo requisito del cierre.
+- [x] PASO D3: `scripts/orquesta_test_batches.sh` completo dos pases verdes
+  locales para los seis paquetes de D3/208H; ver inventario y bitacora S23.
 - App del operador: pendiente de que el operador describa la app; se lanza
   tras D1 por el flujo Nueva App.
 
@@ -203,11 +214,13 @@ backend tmux y cableados en
 - tmux: `display-message -t "=sesion"` sin `:` devuelve formatos vacios en
   tmux 3.6 (causa del bug del lease). El codigo ya esta corregido; no
   "simplifiques" selectores tmux.
-- Los goals escriben su resultado durable bajo el PRIMER scope directorio
-  del write-set: pon `docs/...` primero para no ensuciar `scripts/`.
+- Los resultados durables legacy usan el primer scope directorio; no usar ese
+  comportamiento para justificar rutas versionables. El prompt de ola Codex
+  dirige recibos tecnicos al runtime y el guard S13 rechaza candidatos nuevos
+  sin clasificar.
 - `checkpoint_started_*`/`orquesta_goal_result_*` NUNCA se commitean como
-  fuente (hay 61 versionados historicos pendientes de auditoria; no anadas
-  mas).
+  fuente. La auditoria S13 clasifica 68 candidatos historicos y el guard Git
+  impide ampliar esa deuda.
 - `GOTMPDIR`/`GOCACHE` heredados pueden ser de solo lectura en sandbox:
   si un build falla raro, usa `scripts/lib/isolated_test_env.sh`
   (`source` + `orquesta_use_isolated_test_env <dir>`).

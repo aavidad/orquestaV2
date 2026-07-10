@@ -10,8 +10,9 @@ cuota Codex y lanza ejecucion real). Base verificada: receta completa de
 
 Una tarea del backlog `docs/backlog_piloto_autonomia_2026-07-10.md`
 (empezar por T9101), de una en una, con `MAX_REQUESTS=1` y revisor externo
-(Claude) validando el cierre reejecutando los tests declarados. 208H sigue
-abierto: NO se acepta ningun cierre sin reejecutar sus tests.
+(Claude) validando el cierre reejecutando los tests declarados. 208H esta
+cerrado localmente, pero NO se acepta ningun cierre sin reejecutar sus tests
+de atestacion independiente.
 
 ## Pasos exactos
 
