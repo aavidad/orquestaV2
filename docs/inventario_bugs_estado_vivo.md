@@ -65,6 +65,12 @@ mismo commit.
   se alinean con routing tipado por tarea, sin reintroducir herencia global.
 - BUG-ORQ-20260710-208H: cerrado localmente. El atestador configurado se
   ejerce desde composicion y los dos pases aislados pasan sobre seis paquetes.
+- Cobertura local Claude/Gemini goal-first 20260711: cerrada con
+  `TestGoalFirstProcessBackendsE2EV0ReworkThenClose`. Ambos adaptadores de
+  proceso fake recorren `StartAppDirectorV0`, resultado durable, rework por
+  tests requeridos fallidos y cierre causal accepted. No equivale a smoke con
+  proveedor real: Claude conserva ese smoke remoto pendiente y Gemini depende
+  además de tier/autenticación operativos.
 - BUG-ORQ-20260710-208U: cerrado localmente. La consolidacion de guardian y
   configuracion efectiva habia dejado `config_file_v0.go` y
   `effective_config_v0.go` por encima del limite T90, y habia registrado dos

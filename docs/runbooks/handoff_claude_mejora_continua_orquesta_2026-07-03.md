@@ -3030,3 +3030,15 @@ reutiliza el dispatcher existente, reserva stdout para respuestas y stderr para
 diagnostico, y no inicia listener HTTP. Los focales cubren handshake, listas,
 lectura de recurso, notificacion y JSON invalido/trailing. El falso verde del
 primer fixture de recurso queda registrado y cerrado como 208V.
+
+## Actualizacion Codex 2026-07-11: e2e fake Claude y Gemini goal-first
+
+La prueba raíz `TestGoalFirstProcessBackendsE2EV0ReworkThenClose` cubre ambos
+backends de proceso reales contra ejecutables fake aislados. Deriva el spec,
+artefactos y tests del preview, arranca `StartAppDirectorV0` goal-first,
+fuerza rework por tests requeridos fallidos y cierra con evidencia/validación
+accepted en una segunda entrega. No crea app externa ni consume proveedor.
+
+Esto cierra el hueco de cobertura local completa de Claude/Gemini. No se debe
+declarar proveedor real cerrado: Claude necesita smoke real opt-in y Gemini
+sigue bloqueado por tier/autenticación hasta que haya acceso operativo.
