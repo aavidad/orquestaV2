@@ -153,7 +153,7 @@ este corte no autoriza remoto, deploy ni proveedor real.
 ## Receipt final local
 
 El receipt `orquesta_test_batches_receipt.v1` de
-`/tmp/orquesta-test-batches-208h-focal/receipt.json` registra dos pases
+`/tmp/orquesta-evidence-208h-20260710/focal-batch-receipt.json` registra dos pases
 consecutivos verdes: 6 paquetes, 4 lotes y 12 ejecuciones. Incluye
 `orquesta-goal`, `orquesta-runtime-required-test`, `orquesta-state-file`,
 `orquesta-app-director-service`, `orquesta-app-codex-stack` y
@@ -163,3 +163,9 @@ El lote ampliado que tambien incluyo `cmd/orquesta-server` fallo en dos pases.
 El test 208H desalineado se corrigio y su focal queda verde. Siguen abiertos y
 fuera de 208H: deduplicacion de shutdown hooks, cleanup tmux/app-server y el
 ratchet de variables (`537 > 511`). No se usan como evidencia de cierre.
+
+Tras extraer los receipts se eliminaron 476 MB de caches temporales. Go habia
+marcado contenidos del modulo como solo lectura (`0444/0500`) aunque eran de
+`alberto:alberto`; fue necesario `chmod -R u+w` antes de retirar los directorios.
+El perfil F3 debe incorporar esa limpieza para no dejar disco ocupado en cortes
+futuros.
