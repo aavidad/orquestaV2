@@ -19,7 +19,3 @@ func textContainsForbiddenOperationalSensitiveDetailV0(value string) bool {
 		value,
 	)
 }
-
-func operationalSensitiveFragmentsForTestV0() []string {
-	return orquestarails.OperationalSensitiveFragmentsV0
-}
