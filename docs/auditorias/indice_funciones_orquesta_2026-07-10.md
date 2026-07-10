@@ -116,3 +116,17 @@ El ratchet de entorno de `cmd/orquesta-server` se cerro en cero antes de seguir
 con conectores. Las siguientes extracciones solo se aceptaran por cohesion de
 responsabilidades y con regresion focal; no se dividiran archivos solo para
 reducir lineas.
+
+## Actualizacion 2026-07-11: wrappers de runtime retirados
+
+La revision manual de adaptadores encontro cinco wrappers privados sin callers:
+dos en el paquete goal Codex, uno que era el unico contenido de su fichero de
+perfil Codex y uno por cada protocolo de resultado durable Claude/Gemini. Las
+rutas activas ya usaban sus builders/localizadores actuales. Se retiraron sin
+modificar prompts, perfiles, contratos ni configuracion.
+
+La comprobacion por `rg` no encontro consumidores de codigo y los cuatro
+paquetes `orquesta-runtime-codex-goal`, `orquesta-runtime-codex`,
+`orquesta-runtime-claude` y `orquesta-runtime-gemini` pasaron `go test` de
+forma focal. Este cierre reduce 264 lineas; no autoriza retirada automatica de
+otros candidatos.

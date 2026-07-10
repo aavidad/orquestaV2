@@ -3073,3 +3073,13 @@ configuracion del bridge, bucle seguro de secuencia, runtime Codex appserver y
 state-file. No se arranco servidor, OPES, bridge, agente ni proveedor. Quedan
 en revision separada los coordinadores grandes y candidatos de conectores;
 ningun borrado masivo esta autorizado por el indice.
+
+## Actualizacion Codex 2026-07-11: wrappers privados de proveedores
+
+Se retiro una tanda independiente de cinco wrappers privados sin callers en
+los adaptadores Codex/Claude/Gemini. El constructor de prompt legacy Codex, un
+helper de write-set sin consumidor, el wrapper de effort que era todo su
+fichero y los dos wrappers de protocolo durable por locale estaban sustituidos
+por rutas activas. No cambian prompts, modelos, perfiles, contratos ni
+proveedores. `rg`, `git diff --check` y los cuatro `go test` focales de runtime
+quedaron verdes. Commit de codigo: `d53ff9090`.
