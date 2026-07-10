@@ -78,7 +78,8 @@ shutdown_coordination_sleep_seconds="${ORQUESTA_GOAL_FIRST_SHUTDOWN_COORDINATION
 
 cleanup() {
   smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 25 "$runtime_dir"
-  local tmux_owner="$runtime_dir/goal-srv/owner.json"
+  local tmux_owner
+  tmux_owner="$(find_tmux_owner_file || true)"
   if [[ -f "$tmux_owner" ]] && command -v python3 >/dev/null 2>&1 && command -v tmux >/dev/null 2>&1; then
     local tmux_session
     tmux_session="$(python3 - "$tmux_owner" <<'PY' 2>/dev/null || true
@@ -100,6 +101,11 @@ PY
 
 trap cleanup EXIT
 trap 'exit 130' INT TERM
+
+if [[ "${SMOKE_GOAL_FIRST_HANDOFF_FAILURE_SELFTEST:-0}" == "1" ]]; then
+  echo "smoke_goal_first_handoff_failure_selftest=expected_failure"
+  exit 41
+fi
 
 need_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -453,6 +459,11 @@ PY
 
 find_tmux_owner_file() {
   local owner
+  owner="$(find "$runtime_dir" -name '*.sock.owner.json' -type f -print -quit 2>/dev/null || true)"
+  if [[ -n "$owner" ]]; then
+    printf '%s' "$owner"
+    return 0
+  fi
   owner="$(find "$runtime_dir" -path '*/owner.json' -type f -print -quit 2>/dev/null || true)"
   if [[ -n "$owner" ]]; then
     printf '%s' "$owner"
@@ -819,8 +830,33 @@ assert_app_server_tmux_shutdown_ready() {
     echo "quedan procesos codex app-server para socket $socket_path: $app_processes_alive" >&2
     exit 1
   fi
+  assert_runtime_shutdown_hooks_success
   echo "app_server_tmux_shutdown_ready=true"
   echo "app_server_tmux_processes_alive=0"
+}
+
+assert_runtime_shutdown_hooks_success() {
+  local audit_file="$state_dir/audit/orquesta_server_audit_v0.jsonl"
+  python3 - "$audit_file" <<'PY'
+import json
+import os
+import sys
+
+path = sys.argv[1]
+failed = []
+if os.path.isfile(path):
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("event") == "runtime_shutdown_hook" and event.get("status") == "failed":
+                failed.append(event)
+if failed:
+    raise SystemExit(f"runtime_shutdown_hooks_failed={len(failed)}")
+print("runtime_shutdown_hooks_success=true")
+PY
 }
 
 fail_after_app_server_tmux_shutdown_ready() {
@@ -858,11 +894,12 @@ shutdown_high_consumption_smoke() {
     exit 1
   fi
   app_processes_alive="$(app_server_process_count_for_socket "$socket_path")"
-  if [[ "$app_processes_alive" != "0" ]]; then
+	if [[ "$app_processes_alive" != "0" ]]; then
     echo "quedan procesos codex app-server para socket $socket_path: $app_processes_alive" >&2
     exit 1
-  fi
-  echo "app_server_tmux_processes_alive=0"
+	fi
+	assert_runtime_shutdown_hooks_success
+	echo "app_server_tmux_processes_alive=0"
 }
 
 run_forced_stop_smoke() {
@@ -1101,11 +1138,12 @@ PY
         exit 1
       fi
       app_processes_alive="$(app_server_process_count_for_socket "$socket_path")"
-      if [[ "$app_processes_alive" != "0" ]]; then
+	      if [[ "$app_processes_alive" != "0" ]]; then
         echo "quedan procesos codex app-server tras shutdown coordination: $app_processes_alive" >&2
         exit 1
-      fi
-      echo "app_server_tmux_shutdown_ready=true"
+	      fi
+	      assert_runtime_shutdown_hooks_success
+	      echo "app_server_tmux_shutdown_ready=true"
       echo "shutdown_coordination_runs_requested=$runs_requested"
       echo "shutdown_coordination_runs_stopped=$runs_stopped"
       echo "shutdown_coordination_run_control_statuses=$run_control_statuses"

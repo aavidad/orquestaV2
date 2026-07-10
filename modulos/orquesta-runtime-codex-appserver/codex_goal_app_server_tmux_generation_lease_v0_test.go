@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -16,12 +17,26 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
 
 type failingCodexAppServerProbeGenerationV0 struct{}
 
 func (failingCodexAppServerProbeGenerationV0) ProbeV0(context.Context) error {
 	return errors.New("probe unavailable")
+}
+
+type transientPostCASCodexAppServerProbeV0 struct {
+	calls int
+}
+
+func (probe *transientPostCASCodexAppServerProbeV0) ProbeV0(context.Context) error {
+	probe.calls++
+	if probe.calls == 2 {
+		return errors.New("transient post-CAS probe observation")
+	}
+	return nil
 }
 
 func TestGenerationLeaseUnixServerHelperV0(t *testing.T) {
@@ -31,6 +46,9 @@ func TestGenerationLeaseUnixServerHelperV0(t *testing.T) {
 	args := os.Args
 	if len(args) == 0 {
 		os.Exit(2)
+	}
+	if os.Getenv("ORQUESTA_TEST_UNIX_SERVER_IGNORE_TERM") == "1" {
+		signal.Ignore(syscall.SIGTERM)
 	}
 	socketPath := strings.TrimSpace(os.Getenv("ORQUESTA_TEST_UNIX_SOCKET_PATH"))
 	if socketPath == "" {
@@ -425,6 +443,59 @@ func TestCleanupGeneracionV0RechazaSesionReemplazadaSinKillNiUnlinkV0(t *testing
 	}
 }
 
+func TestCleanupShutdownV0ReportaResiduoGeneracionalSinFalsoFalloNiMutacionV0(t *testing.T) {
+	backend, tmuxLog := newGenerationLeaseBackendForTestV0(t)
+	listener := listenUnixForGenerationTestV0(t, backend.SocketPath)
+	defer listener.Close()
+	marker := generationMarkerForCurrentProcessTestV0(t, backend, "generation-ref-cleanup-residual")
+	marker.AppServerPID = 99999999
+	marker.AppServerStartRef = "dead"
+	marker.TmuxSessionID = "$expected"
+	marker.TmuxSessionCreated = "10"
+	writeGenerationMarkerTestV0(t, backend.tmuxOwnerMarkerPathV0(), marker)
+	writeFakeTmuxStateTestV0(t, tmuxLog, "$replacement", "20", os.Getpid())
+
+	result, err := backend.CleanupActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0{
+		CleanupGoalBackends: true,
+	})
+	if err != nil {
+		t.Fatalf("cleanup shutdown no debe fallar solo por generation conflict: %v", err)
+	}
+	if result.CleanedWorkCount != 0 || !containsStringMigratedTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-generation-conflict-residual") {
+		t.Fatalf("cleanup residual=%+v", result)
+	}
+	assertTmuxLogExcludesV0(t, tmuxLog, "kill-session")
+	if !codexAppServerTmuxSocketListenerAliveV0(backend.SocketPath) {
+		t.Fatal("cleanup residual termino un socket no verificado")
+	}
+	if got, ok := backend.readTmuxOwnerMarkerV0(); !ok || !reflect.DeepEqual(got, marker) {
+		t.Fatalf("cleanup residual muto marker: got=%+v ok=%v", got, ok)
+	}
+	assertGenerationConflictTestV0(t, backend.ShutdownV0(context.Background()))
+	assertTmuxLogExcludesV0(t, tmuxLog, "kill-session")
+}
+
+func TestCleanupShutdownV0UsaMarkerYTokenSiReobservacionTmuxEsTransitoriaV0(t *testing.T) {
+	backend, _ := newGenerationLeaseBackendForTestV0(t)
+	t.Setenv("ORQUESTA_TEST_UNIX_SERVER_IGNORE_TERM", "1")
+	if err := backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{}); err != nil {
+		t.Fatalf("EnsureV0: %v", err)
+	}
+	t.Setenv("ORQUESTA_TEST_TMUX_INVALID_IDENTITY", "1")
+	result, err := backend.CleanupActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0{
+		CleanupGoalBackends: true,
+	})
+	if err != nil {
+		t.Fatalf("cleanup con reobservacion transitoria: %v", err)
+	}
+	if result.CleanedWorkCount != 1 || !containsStringMigratedTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-configured-cleaned") {
+		t.Fatalf("cleanup transitorio=%+v", result)
+	}
+	if _, ok := backend.readTmuxOwnerMarkerV0(); ok || codexAppServerTmuxSocketPresentV0(backend.SocketPath) {
+		t.Fatal("cleanup transitorio dejo marker o socket configurado")
+	}
+}
+
 func TestTmuxCommandsV0UsanTargetExactoV0(t *testing.T) {
 	backend, tmuxLog := newGenerationLeaseBackendForTestV0(t)
 	writeFakeTmuxStateTestV0(t, tmuxLog, "$exact", "30", os.Getpid())
@@ -445,17 +516,114 @@ func TestTmuxCommandsV0UsanTargetExactoV0(t *testing.T) {
 	raw, _ := os.ReadFile(tmuxLog)
 	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
 		if strings.Contains(line, "has-session") {
-			if !strings.Contains(line, "-t ="+backend.SessionName) {
+			if !strings.Contains(line, "-t ="+backend.SessionName+":") {
 				t.Fatalf("target tmux no exacto: %q", line)
 			}
 		}
 		if strings.Contains(line, "display-message") &&
-			!strings.Contains(line, "-t ="+backend.SessionName) && !strings.Contains(line, "-t $exact") {
+			!strings.Contains(line, "-t ="+backend.SessionName+":") && !strings.Contains(line, "-t $exact") {
 			t.Fatalf("display target inesperado: %q", line)
 		}
 		if strings.Contains(line, "kill-session") && !strings.Contains(line, "-t $exact") {
 			t.Fatalf("kill no usa session_id inmutable: %q", line)
 		}
+	}
+}
+
+func TestEnsureV0PrimerLanzamientoTmuxRealConSocketRealV0(t *testing.T) {
+	tmuxPath, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Skip("tmux no disponible")
+	}
+	root := shortUnixSocketTestRootV0(t)
+	tmuxRoot := filepath.Join(root, "tmux")
+	if err := os.MkdirAll(tmuxRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMUX_TMPDIR", tmuxRoot)
+	t.Setenv("ORQUESTA_TEST_BINARY", os.Args[0])
+	t.Setenv("ORQUESTA_TEST_UNIX_SERVER_HELPER", "1")
+
+	commandPath := filepath.Join(root, "codex-test-wrapper")
+	wrapper := "#!/bin/sh\nexec \"$ORQUESTA_TEST_BINARY\" -test.run=^TestGenerationLeaseUnixServerHelperV0$\n"
+	if err := os.WriteFile(commandPath, []byte(wrapper), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runtimeDir := filepath.Join(root, "runtime")
+	backend := serverCodexAppServerTmuxBackendV0{
+		CommandPath:    commandPath,
+		PathEnv:        os.Getenv("PATH"),
+		SocketPath:     filepath.Join(runtimeDir, codexAppServerTmuxDirV0, "real.sock"),
+		SessionName:    fmt.Sprintf("orquesta-goal-real-%d", os.Getpid()),
+		HomeDir:        root,
+		RuntimeWorkDir: runtimeDir,
+		ProjectWorkDir: root,
+		Timeout:        5 * time.Second,
+	}
+	t.Setenv("ORQUESTA_TEST_UNIX_SOCKET_PATH", backend.SocketPath)
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = backend.ShutdownV0(cleanupCtx)
+		_, _ = backend.runTmuxCommandV0(cleanupCtx, tmuxPath, "kill-server")
+	})
+
+	if err := backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{}); err != nil {
+		t.Fatalf("primer EnsureV0 con tmux real: %v", err)
+	}
+	marker, ok := backend.readTmuxOwnerMarkerV0()
+	if !ok || !marker.tmuxIdentityV0().completeV0() || !marker.appServerAliveV0(backend.SocketPath) {
+		t.Fatalf("primera generacion incompleta: marker=%+v ok=%v", marker, ok)
+	}
+	identity, err := backend.tmuxSessionIdentityV0(context.Background(), tmuxPath)
+	if err != nil || !reflect.DeepEqual(identity, marker.tmuxIdentityV0()) {
+		t.Fatalf("identidad tmux real: got=%+v want=%+v err=%v", identity, marker.tmuxIdentityV0(), err)
+	}
+	if err := backend.ShutdownV0(context.Background()); err != nil {
+		t.Fatalf("shutdown primera generacion tmux real: %v", err)
+	}
+	if _, ok := backend.readTmuxOwnerMarkerV0(); ok || codexAppServerTmuxSocketPresentV0(backend.SocketPath) {
+		t.Fatal("shutdown tmux real dejo marker o socket configurado")
+	}
+}
+
+func TestEnsureV0ReintentaPredicadoPostCASTransitorioV0(t *testing.T) {
+	backend, _ := newGenerationLeaseBackendForTestV0(t)
+	probe := &transientPostCASCodexAppServerProbeV0{}
+	if err := backend.EnsureV0(context.Background(), probe); err != nil {
+		t.Fatalf("EnsureV0 con observacion post-CAS transitoria: %v", err)
+	}
+	if probe.calls < 3 {
+		t.Fatalf("probe calls=%d; no reintento tras marker completo", probe.calls)
+	}
+	marker, ok := backend.readTmuxOwnerMarkerV0()
+	if !ok || marker.SocketOwnerPID <= 0 || marker.SocketOwnerStartRef == "" {
+		t.Fatalf("marker post-CAS incompleto: %+v ok=%v", marker, ok)
+	}
+	if err := backend.ShutdownV0(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+}
+
+func TestSmokeGoalFirstHandoffPipelinePropagaFalloV0(t *testing.T) {
+	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(repoRoot, "scripts", "smoke_goal_first_app_server_real.sh")
+	logPath := filepath.Join(t.TempDir(), "handoff.log")
+	command := exec.Command("bash", "-o", "pipefail", "-c", fmt.Sprintf("%q | tee %q", script, logPath))
+	command.Env = append(os.Environ(),
+		"SMOKE_GOAL_FIRST_HANDOFF_FAILURE_SELFTEST=1",
+		"TMPDIR="+t.TempDir(),
+	)
+	output, runErr := command.CombinedOutput()
+	var exitErr *exec.ExitError
+	if !errors.As(runErr, &exitErr) || exitErr.ExitCode() != 41 {
+		t.Fatalf("handoff pipeline rc=%v output=%s", runErr, output)
+	}
+	if !strings.Contains(string(output), "smoke_goal_first_handoff_failure_selftest=expected_failure") {
+		t.Fatalf("handoff pipeline sin evidencia: %s", output)
 	}
 }
 

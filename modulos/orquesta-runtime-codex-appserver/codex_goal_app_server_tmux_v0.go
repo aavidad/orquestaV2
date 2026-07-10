@@ -217,10 +217,18 @@ func (backend serverCodexAppServerTmuxBackendV0) waitTmuxPaneExitedV0(
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) ShutdownV0(ctx context.Context) error {
+	var err error
 	if marker, ok := backend.readTmuxOwnerMarkerV0(); ok && marker.generationMarkerV0() {
-		return backend.shutdownTmuxGenerationLeaseV0(ctx, marker, false)
+		err = backend.shutdownTmuxGenerationLeaseV0(ctx, marker, false)
+	} else {
+		err = backend.shutdownTmuxSessionV0(ctx, false)
 	}
-	return backend.shutdownTmuxSessionV0(ctx, false)
+	// Missing/ambiguous re-observation is residual evidence, not permission to
+	// kill or unlink. A live contradictory identity remains a hard conflict.
+	if codexAppServerTmuxIsObservationTransientV0(err) {
+		return nil
+	}
+	return err
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) ShutdownForcedStopV0(ctx context.Context) error {
@@ -489,12 +497,32 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 		if ctx.Err() != nil {
 			return backend.tmuxStartupFailureV0("codex_app_server_tmux_socket_timeout", ctx.Err())
 		}
-		if owner, ownerErr := codexAppServerTmuxSocketOwnerDescendantV0(socketPath, marker.TmuxPanePID); ownerErr == nil &&
-			backend.ensureTmuxSocketPrivateV0() == nil && preflight != nil && preflight.ProbeV0(ctx) == nil {
-			observedIdentity, identityErr := backend.tmuxSessionIdentityTargetV0(ctx, tmuxPath, marker.TmuxSessionID)
-			if identityErr != nil || !reflect.DeepEqual(observedIdentity, marker.tmuxIdentityV0()) ||
-				backend.verifyTmuxGenerationTokenV0(ctx, tmuxPath, marker.TmuxSessionID, marker.GenerationRef) != nil {
+		owner, ownerErr := codexAppServerTmuxSocketOwnerDescendantV0(socketPath, marker.TmuxPanePID)
+		if errors.Is(ownerErr, errCodexAppServerTmuxSocketOwnerOutsidePaneV0) {
+			return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
+		}
+		if marker.SocketOwnerPID > 0 {
+			current, currentOK := backend.readTmuxOwnerMarkerV0()
+			if currentOK && !reflect.DeepEqual(current, marker) {
 				return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
+			}
+			tmuxObservation := backend.observeRecordedTmuxGenerationV0(ctx, tmuxPath, marker)
+			appObservation := marker.observeAppServerV0(socketPath)
+			if tmuxObservation == codexAppServerTmuxGenerationContradictedV0 || appObservation == codexAppServerTmuxGenerationContradictedV0 {
+				return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
+			}
+			if currentOK && tmuxObservation == codexAppServerTmuxGenerationVerifiedV0 &&
+				appObservation == codexAppServerTmuxGenerationVerifiedV0 &&
+				backend.ensureTmuxSocketPrivateV0() == nil && preflight != nil && preflight.ProbeV0(ctx) == nil {
+				return nil
+			}
+		} else if ownerErr == nil && backend.ensureTmuxSocketPrivateV0() == nil && preflight != nil && preflight.ProbeV0(ctx) == nil {
+			tmuxObservation := backend.observeRecordedTmuxGenerationV0(ctx, tmuxPath, marker)
+			if tmuxObservation == codexAppServerTmuxGenerationContradictedV0 {
+				return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
+			}
+			if tmuxObservation != codexAppServerTmuxGenerationVerifiedV0 {
+				goto waitForNextObservation
 			}
 			updated := marker
 			updated.SocketOwnerPID = owner.PID
@@ -505,14 +533,8 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 			if err := backend.replaceTmuxOwnerMarkerWithLeaseV0(lease, marker, updated); err != nil {
 				return err
 			}
-			observedIdentity, identityErr = backend.tmuxSessionIdentityTargetV0(ctx, tmuxPath, updated.TmuxSessionID)
-			if current, ok := backend.readTmuxOwnerMarkerV0(); !ok || !reflect.DeepEqual(current, updated) ||
-				identityErr != nil || !reflect.DeepEqual(observedIdentity, updated.tmuxIdentityV0()) ||
-				backend.verifyTmuxGenerationTokenV0(ctx, tmuxPath, updated.TmuxSessionID, updated.GenerationRef) != nil ||
-				!updated.appServerAliveV0(socketPath) || preflight.ProbeV0(ctx) != nil {
-				return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
-			}
-			return nil
+			marker = updated
+			continue
 		}
 		if !nextSessionCheck.After(time.Now()) {
 			observed, err := backend.recolectarObservacionBackendV0(ctx, solicitudObservacionBackendV0{
@@ -528,13 +550,12 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 				return err
 			}
 			if !observed.Observacion.SessionObserved {
-				return backend.tmuxStartupFailureV0(
-					"codex_app_server_tmux_session_exited",
-					errors.New("codex_app_server_tmux_session_exited"),
-				)
+				nextSessionCheck = time.Now().Add(250 * time.Millisecond)
+				goto waitForNextObservation
 			}
 			nextSessionCheck = time.Now().Add(250 * time.Millisecond)
 		}
+	waitForNextObservation:
 		select {
 		case <-ctx.Done():
 			return backend.tmuxStartupFailureV0("codex_app_server_tmux_socket_timeout", ctx.Err())
