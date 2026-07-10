@@ -27,8 +27,8 @@ func init() {
 		envServerAutoprogrammingPromotionGuardianArtifactRootV0:               "Artefactos guardian",
 		envServerAutoprogrammingPromotionGuardianBuildCommandV0:               "Build guardian",
 		envServerAutoprogrammingPromotionGuardianTestCommandsV0:               "Tests guardian",
-		envServerAutoprogrammingPromotionGuardianHealthTimeoutMSV0:            "Timeout salud guardian ms",
-		envServerAutoprogrammingPromotionGuardianCommandTimeoutMSV0:           "Timeout comando guardian ms",
+		envServerAutoprogrammingPromotionGuardianHealthTimeoutV0:              "Timeout salud guardian",
+		envServerAutoprogrammingPromotionGuardianCommandTimeoutV0:             "Timeout comando guardian",
 		envServerAutoprogrammingPromotionGuardianArtifactMaxBytesV0:           "Maximo artefacto guardian",
 		envServerAutoprogrammingPromotionGuardianRepairCommandV0:              "Comando reparacion guardian",
 		envServerAutoprogrammingPromotionGuardianRepairCodexV0:                "Reparacion Codex guardian",
@@ -50,14 +50,6 @@ func init() {
 			Scope:       "autoprogramming_promotion_guardian",
 			Label:       label,
 			Description: "Parametro tipado del guardian de promocion; solo se proyecta al proceso hijo mediante allowlist.",
-		}
-	}
-	for _, alias := range serverAutoprogrammingPromotionGuardianDeprecatedEnvAliasesV0 {
-		serverEffectiveEnvRegistryV0[alias.LegacyKey] = serverEnvSettingMetadataV0{
-			Scope:       "autoprogramming_promotion_guardian",
-			Label:       "Alias deprecado timeout guardian",
-			Description: "Alias historico de " + alias.CanonicalKey + "; acepta una duracion Go por compatibilidad. La variable canonica usa milisegundos.",
-			Deprecated:  true,
 		}
 	}
 }
@@ -214,17 +206,11 @@ func autoprogrammingPromotionGuardianFromEnvV0(
 		TestCommands: autoprogrammingPromotionGuardianStringsFromProjectConfigV0(
 			envServerAutoprogrammingPromotionGuardianTestCommandsV0, guardianConfig.TestCommands, nil,
 		),
-		HealthTimeout: autoprogrammingPromotionGuardianTimeoutFromEnvOrProjectConfigV0(
-			envServerAutoprogrammingPromotionGuardianHealthTimeoutMSV0,
-			envServerAutoprogrammingPromotionGuardianHealthTimeoutV0,
-			guardianConfig.HealthTimeout,
-			"",
+		HealthTimeout: stringProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionGuardianHealthTimeoutV0, guardianConfig.HealthTimeout, "",
 		),
-		CommandTimeout: autoprogrammingPromotionGuardianTimeoutFromEnvOrProjectConfigV0(
-			envServerAutoprogrammingPromotionGuardianCommandTimeoutMSV0,
-			envServerAutoprogrammingPromotionGuardianCommandTimeoutV0,
-			guardianConfig.CommandTimeout,
-			"",
+		CommandTimeout: stringProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionGuardianCommandTimeoutV0, guardianConfig.CommandTimeout, "",
 		),
 		ArtifactMaxBytes: stringProjectConfigOrEnvOrDefaultV0(
 			envServerAutoprogrammingPromotionGuardianArtifactMaxBytesV0, guardianConfig.ArtifactMaxBytes, "",
@@ -293,21 +279,6 @@ func autoprogrammingPromotionGuardianStringsFromProjectConfigV0(
 		return append([]string(nil), fallback...)
 	}
 	return compactStringsV0(values)
-}
-
-// The Guardian process owns duration validation and its defaults. The server
-// translates its canonical millisecond settings into the duration syntax that
-// process accepts, while retaining the former duration-valued variables.
-func autoprogrammingPromotionGuardianTimeoutFromEnvOrProjectConfigV0(
-	canonicalKey string,
-	legacyKey string,
-	fileValue *string,
-	fallback string,
-) string {
-	if value := strings.TrimSpace(os.Getenv(canonicalKey)); value != "" {
-		return value + "ms"
-	}
-	return stringProjectConfigOrEnvOrDefaultV0(legacyKey, fileValue, fallback)
 }
 
 func autoprogrammingPromotionGuardianRequestV0(

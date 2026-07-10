@@ -17,6 +17,9 @@ func TestEnvVarsBudgetMEJ106V0(t *testing.T) {
 	root := findRepoRootForEnvVarsBudgetMEJ106V0(t)
 	cmd := exec.Command("bash", "scripts/orquesta_metricas_deuda.sh", "--json")
 	cmd.Dir = root
+	// Bash may emit a locale warning before the metric script can normalize it.
+	// The guard consumes JSON, so its child environment must be deterministic.
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("orquesta_metricas_deuda.sh --json fallo: %v\n%s", err, output)

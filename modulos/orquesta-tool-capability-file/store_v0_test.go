@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	fileStoreHelperEnvV0       = "ORQUESTA_TOOL_FILE_STORE_HELPER"
-	fileStoreHelperRootEnvV0   = "ORQUESTA_TOOL_FILE_STORE_ROOT"
-	fileStoreHelperResultEnvV0 = "ORQUESTA_TOOL_FILE_STORE_RESULT"
+	fileStoreHelperEnvV0       = "TEST_TOOL_FILE_STORE_HELPER"
+	fileStoreHelperRootEnvV0   = "TEST_TOOL_FILE_STORE_ROOT"
+	fileStoreHelperResultEnvV0 = "TEST_TOOL_FILE_STORE_RESULT"
 )
 
 func TestToolOperationFileStorePersistsPlanCASAndLeaseV0(t *testing.T) {
