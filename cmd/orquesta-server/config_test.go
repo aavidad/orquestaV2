@@ -197,7 +197,7 @@ func TestServerConfigFromEnvV0ExponeTestsCongeladosOptInV0(t *testing.T) {
 func TestServerConfigFromEnvV0LeeDirectorEscaladaV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envServerEscalationDirectorEnabledV0, "true")
-	t.Setenv(envServerEscalationDirectorCommandV0, "claude,-p,--model,sonnet")
+	t.Setenv(envServerEscalationDirectorCommandV0, "claude,-p,--model,sonnet-escalation-director-argv")
 	t.Setenv(envServerEscalationDirectorTimeoutSecondsV0, "33")
 	t.Setenv(envServerEscalationDirectorMaxPerDayV0, "5")
 
@@ -208,7 +208,7 @@ func TestServerConfigFromEnvV0LeeDirectorEscaladaV0(t *testing.T) {
 	if !config.EscalationDirectorEnabled {
 		t.Fatalf("director de escalada no activo: %+v", config)
 	}
-	wantCommand := []string{"claude", "-p", "--model", "sonnet"}
+	wantCommand := []string{"claude", "-p", "--model", "sonnet-escalation-director-argv"}
 	if len(config.EscalationDirectorCommand) != len(wantCommand) {
 		t.Fatalf("command=%v want=%v", config.EscalationDirectorCommand, wantCommand)
 	}
@@ -243,7 +243,7 @@ func TestServerConfigFromEnvV0LeeDirectorEscaladaV0(t *testing.T) {
 		t.Fatalf("marshal effective config: %v", err)
 	}
 	if strings.Contains(string(rawEffectiveConfig), "--model") ||
-		strings.Contains(string(rawEffectiveConfig), "sonnet") {
+		strings.Contains(string(rawEffectiveConfig), "sonnet-escalation-director-argv") {
 		t.Fatalf("effective_config filtra argv crudo: %s", string(rawEffectiveConfig))
 	}
 }

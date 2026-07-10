@@ -1,6 +1,7 @@
 # Incidencia: regresiones descubiertas por lote D3
 
-Fecha: 2026-07-10. Estado: abierto.
+Fecha: 2026-07-10. Estado: cerrado localmente; pendiente repetir el lote D3
+completo como evidencia conjunta.
 
 ## Evidencia comun
 
@@ -54,3 +55,19 @@ La separacion de metricas D3 pasa focalmente (`env_vars_orquesta=425`,
 las regresiones 208O/208P/208Q permitan dos pases aislados completos. 208H ya
 tiene atestador activo en composicion; su evidencia de lotes hereda este
 bloqueo, no un nuevo fallo de atestacion.
+
+## Correccion local
+
+- 208O: `codexCommandPathV0` exige ruta absoluta y el preflight requiere una
+  salida no vacia de `--version`; se retira el helper muerto que resolvia PATH.
+- 208P: `claude_process` prioriza el comando explicito de runtime antes de la
+  configuracion de proyecto, conservando perfiles, refs y control de proceso.
+- 208Q: la configuracion efectiva deriva el setting sensible desde la
+  configuracion normalizada y publica solo la ref redactada.
+
+Los cinco focales se reejecutaron juntos en cache aislada y pasaron:
+`TestServerGoalBackendFromEnvV0ClaudeProcessLanzaYObservaResultadoV0`,
+`TestServerGoalBackendFromEnvV0ClaudeProcessControlParaProcesoV0`,
+`TestCodexCommandPathV0RechazaRutaRelativaAunqueEsteEnPath`,
+`TestValidateCodexCommandAvailableV0PreflightVersion` y
+`TestServerConfigFromEnvV0LeeDirectorEscaladaV0`.

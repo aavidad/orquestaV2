@@ -96,7 +96,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 		serverConfigSettingFromRegistryV0(envServerEscalationDirectorEnabledV0, strconv.FormatBool(config.EscalationDirectorEnabled)),
 		serverSensitiveConfigSettingFromRegistryV0(
 			envServerEscalationDirectorCommandV0,
-			configuredEnvValueV0(envServerEscalationDirectorCommandV0, "escalation-director-command-configured"),
+			configuredRefValueV0(strings.Join(config.EscalationDirectorCommand, ","), "escalation-director-command-configured"),
 		),
 		serverConfigSettingFromRegistryV0(envServerEscalationDirectorTimeoutSecondsV0, strconv.Itoa(int(config.EscalationDirectorTimeout/time.Second))),
 		serverConfigSettingFromRegistryV0(envServerEscalationDirectorMaxPerDayV0, strconv.Itoa(config.EscalationDirectorMaxPerDay)),

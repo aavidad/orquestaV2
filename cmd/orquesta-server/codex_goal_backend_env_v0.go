@@ -289,12 +289,16 @@ func serverClaudeGoalBackendFromValueForWorkDirV0(
 		if err != nil {
 			return serverCodexGoalBackendV0{}, err
 		}
+		commandPath := firstNonEmptyServerStackV0(
+			strings.TrimSpace(os.Getenv(envClaudeCommandV0)),
+			claudeCommandPathV0(projectConfig),
+		)
 		client := &orquestaruntimeclaude.ClaudeGoalProcessBackendV0{
 			Control: control,
 			Profile: orquestaruntimeclaude.ClaudeConnectorProfileV0{
 				SchemaVersion:  orquestaruntimeclaude.ClaudeConnectorProfileSchemaVersionV0,
 				OptIn:          true,
-				CommandPath:    claudeCommandPathV0(projectConfig),
+				CommandPath:    commandPath,
 				ProjectWorkDir: projectWorkDir,
 				RuntimeWorkDir: runtimeWorkDir,
 				HomeDir:        strings.TrimSpace(os.Getenv(envClaudeHomeV0)),

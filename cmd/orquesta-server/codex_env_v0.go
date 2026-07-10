@@ -13,37 +13,10 @@ func codexCommandPathV0() string {
 	if raw == "" {
 		raw = "codex"
 	}
-	if filepath.IsAbs(raw) {
-		return raw
-	}
-	if path := lookPathInPathListV0(raw, os.Getenv(envCodexPathV0)); path != "" {
-		return path
-	}
-	path, err := exec.LookPath(raw)
-	if err != nil {
-		return raw
-	}
-	return path
-}
-
-func lookPathInPathListV0(command string, pathList string) string {
-	command = strings.TrimSpace(command)
-	if command == "" || strings.ContainsRune(command, os.PathSeparator) {
+	if !filepath.IsAbs(raw) {
 		return ""
 	}
-	for _, dir := range filepath.SplitList(pathList) {
-		dir = strings.TrimSpace(dir)
-		if dir == "" {
-			continue
-		}
-		candidate := filepath.Join(dir, command)
-		info, err := os.Stat(candidate)
-		if err != nil || info.IsDir() || info.Mode().Perm()&0o111 == 0 {
-			continue
-		}
-		return candidate
-	}
-	return ""
+	return raw
 }
 
 func codeHomeDirV0() string {
@@ -75,8 +48,13 @@ func homeDirV0() string {
 }
 
 func validateCodexCommandAvailableV0() error {
-	if !filepath.IsAbs(codexCommandPathV0()) {
+	command := codexCommandPathV0()
+	if !filepath.IsAbs(command) {
 		return fmt.Errorf("codex_command_unavailable")
+	}
+	version, err := exec.Command(command, "--version").Output()
+	if err != nil || strings.TrimSpace(string(version)) == "" {
+		return fmt.Errorf("codex_command_version_unavailable")
 	}
 	return nil
 }
