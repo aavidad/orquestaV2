@@ -12,6 +12,7 @@ import (
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func TestCodexStackObserveAppDirectorGoalExecutorV0TimeoutSnapshotIncluyeProcessRefsV0(t *testing.T) {
@@ -514,4 +515,96 @@ func codexStackValidationIssueCodeInSetForTestV0(
 		}
 	}
 	return false
+}
+
+type codexStackObserveRunningForTestV0 struct {
+	result orquestagoal.GoalWorkResultV0
+}
+
+func (observer codexStackObserveRunningForTestV0) ObserveGoalWorkV0(
+	_ context.Context,
+	_ orquestagoal.GoalObservationRequestV0,
+) (orquestagoal.GoalWorkResultV0, error) {
+	return observer.result, nil
+}
+
+func TestCodexStackObserveAppDirectorGoalExecutorV0ExecuteCableaVeredictoCausalV0(t *testing.T) {
+	ctx := context.Background()
+	runRef := "run-ref-stack-observe-causal-wiring-001"
+	goalRef := "goal-ref-stack-observe-causal-wiring-001"
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+			GoalRef:       goalRef,
+			RunRef:        runRef,
+			Objective:     "Execute debe publicar veredicto causal desde la fuente real.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet:      []orquestagoal.GoalWriteScopeV0{{Path: "docs/causal_wiring.md"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status:          orquestagoal.GoalStatusRunningV0,
+			GoalRef:         goalRef,
+			ExternalGoalRef: "thread-ref-stack-observe-causal-wiring-001",
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	if err := goalStates.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	processRegistry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
+	if err := processRegistry.RecordAgentProcessV0(ctx, orquestaagentprocessregistrymemory.AgentProcessRecordV0{
+		RunID:          runRef,
+		AgentRequestID: "agent-ref-stack-observe-causal-wiring-001",
+		ProcessRef:     "process-ref-stack-observe-causal-wiring-001",
+		SessionRef:     "session-ref-stack-observe-causal-wiring-001",
+		LaunchRef:      "launch-ref-stack-observe-causal-wiring-001",
+		ReadinessRef:   "readiness-ref-stack-observe-causal-wiring-001",
+		EvidenceRefs:   []string{"evidence-ref-stack-observe-causal-wiring-process"},
+	}); err != nil {
+		t.Fatalf("RecordAgentProcessV0: %v", err)
+	}
+	stack := &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore: goalStates,
+			GoalObserver: codexStackObserveRunningForTestV0{result: orquestagoal.GoalWorkResultV0{
+				SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+				Status:        orquestagoal.GoalStatusRunningV0,
+				GoalRef:       goalRef,
+			}},
+		},
+		Stores: StoresV0{
+			AppGoalStateStore: goalStates,
+			ProcessRegistry:   processRegistry,
+		},
+		Codex: CodexRuntimeConfigV0{SnapshotSource: evidenciaEstadoSnapshotSourceForTestV0{
+			snapshots: map[string]orquestaruntime.ProcessRuntimeSnapshotV0{
+				"process-ref-stack-observe-causal-wiring-001": {
+					SchemaVersion: orquestaruntime.ProcessRuntimeConnectorVersionV0,
+					ProcessRef:    "process-ref-stack-observe-causal-wiring-001",
+					SessionRef:    "session-ref-stack-observe-causal-wiring-001",
+					LaunchRef:     "launch-ref-stack-observe-causal-wiring-001",
+					Status:        orquestaruntime.ProcessRuntimeStoppedV0,
+				},
+			},
+		}},
+	}
+
+	result, err := NewCodexStackObserveAppDirectorGoalExecutorV0(stack).Execute(
+		ctx,
+		orquestamcp.MCPObserveAppDirectorGoalToolInputV0{RunRef: runRef},
+	)
+
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.CausalVerdict != "process_dead_state_stale" ||
+		result.CausalReasonCode == "" ||
+		result.GoalStatus == orquestagoal.GoalStatusRunningV0 ||
+		result.RecommendedAction != "reconcile_goal_state" {
+		t.Fatalf("veredicto causal no cableado en Execute: %+v", result)
+	}
 }

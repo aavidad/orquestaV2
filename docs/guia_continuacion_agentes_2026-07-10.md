@@ -95,7 +95,7 @@ romper campos existentes.
   estado limpio. Sin fuente inyectada: comportamiento actual intacto.
   Verifica: `go test -count=1 ./modulos/orquesta-mcp`.
 
-- [ ] PASO A2: cablear la fuente real de A1 en la composicion.
+- [x] PASO A2: cablear la fuente real de A1 en la composicion.
   Ficheros: donde el stack construye el executor de observe (buscar con
   `rg -ln "ObserveAppDirectorGoal" modulos/orquesta-app-codex-stack cmd/orquesta-server`).
   Pasa el `AutoprogrammingEstadoVivoSource`/adaptador de evidencias ya

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -39,7 +40,26 @@ func (executor CodexStackObserveAppDirectorGoalExecutorV0) Execute(
 		}
 		return orquestamcp.MCPObserveAppDirectorGoalToolResultV0{}, err
 	}
-	return executor.withMaterializedRefsV0(ctx, input, orquestamcp.NewMCPObserveAppDirectorGoalResultV0(input, result)), nil
+	return orquestamcp.WithMCPObserveAppDirectorGoalCausalVerdictV0(
+		ctx,
+		executor.estadoVivoSourceForObserveV0(),
+		input,
+		executor.withMaterializedRefsV0(ctx, input, orquestamcp.NewMCPObserveAppDirectorGoalResultV0(input, result)),
+	), nil
+}
+
+func (executor CodexStackObserveAppDirectorGoalExecutorV0) estadoVivoSourceForObserveV0() orquestaestadovivo.FuenteEvidenciaEstadoPortV0 {
+	if executor.stack == nil {
+		return nil
+	}
+	codex := executor.stack.Codex
+	if codex.SnapshotSource == nil {
+		codex.SnapshotSource = executor.stack.CodexSnapshotSource
+	}
+	return estadoVivoSourceV0(ConfigV0{
+		Stores: executor.stack.Stores,
+		Codex:  codex,
+	})
 }
 
 func (executor CodexStackObserveAppDirectorGoalExecutorV0) withPartialSnapshotAfterObserveErrorV0(
@@ -61,15 +81,8 @@ func (executor CodexStackObserveAppDirectorGoalExecutorV0) ObserveAppDirectorGoa
 	if executor.stack == nil {
 		return orquestamcp.MCPObserveAppDirectorGoalToolResultV0{}, fmt.Errorf("stack requerido")
 	}
-	codex := executor.stack.Codex
-	if codex.SnapshotSource == nil {
-		codex.SnapshotSource = executor.stack.CodexSnapshotSource
-	}
 	observeExecutor := orquestamcp.NewMCPObserveAppDirectorGoalToolExecutorV0(executor.stack.Ports)
-	observeExecutor.EstadoVivoSource = estadoVivoSourceV0(ConfigV0{
-		Stores: executor.stack.Stores,
-		Codex:  codex,
-	})
+	observeExecutor.EstadoVivoSource = executor.estadoVivoSourceForObserveV0()
 	result, err := observeExecutor.ObserveAppDirectorGoalTimeoutSnapshotV0(ctx, input)
 	if err != nil {
 		return result, err

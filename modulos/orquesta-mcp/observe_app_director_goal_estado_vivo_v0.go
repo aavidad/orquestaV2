@@ -13,6 +13,18 @@ const (
 	mcpObserveAppDirectorGoalActionReconcileGoalStateV0 = "reconcile_goal_state"
 )
 
+// WithMCPObserveAppDirectorGoalCausalVerdictV0 permite a composiciones que no
+// pasan por el executor MCP (p.ej. el stack) aplicar el mismo contrato de
+// veredicto causal sobre un resultado ya construido.
+func WithMCPObserveAppDirectorGoalCausalVerdictV0(
+	ctx context.Context,
+	source orquestaestadovivo.FuenteEvidenciaEstadoPortV0,
+	input MCPObserveAppDirectorGoalToolInputV0,
+	result MCPObserveAppDirectorGoalToolResultV0,
+) MCPObserveAppDirectorGoalToolResultV0 {
+	return MCPObserveAppDirectorGoalToolExecutorV0{EstadoVivoSource: source}.withCausalVerdictV0(ctx, input, result)
+}
+
 func (executor MCPObserveAppDirectorGoalToolExecutorV0) withCausalVerdictV0(
 	ctx context.Context,
 	input MCPObserveAppDirectorGoalToolInputV0,
