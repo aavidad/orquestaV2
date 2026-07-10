@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -15,21 +16,22 @@ func requiredTestRunnerFromEnvV0(
 	serverConfig orquestaserver.ConfigV0,
 	evidenceWriter orquestacionnucleoapp.RequiredTestEvidenceWriterPortV0,
 ) (orquestacionnucleoapp.RequiredTestRunnerPortV0, error) {
-	if strings.TrimSpace(os.Getenv(envRequiredTestRunnerEnabledV0)) != "1" {
+	projectConfig := projectConfigFromServerConfigBestEffortV0(serverConfig)
+	if !requiredTestRunnerEnabledFromProjectConfigV0(projectConfig) {
 		return nil, nil
 	}
 	if evidenceWriter == nil {
 		return nil, fmt.Errorf("required_test_evidence_writer_required")
 	}
-	allowed, err := requiredTestAllowedCommandsFromEnvV0()
+	allowed, err := requiredTestAllowedCommandsFromProjectConfigV0(projectConfig)
 	if err != nil {
 		return nil, err
 	}
-	absOutputDir, err := requiredTestOutputDirFromEnvV0(serverConfig)
+	absOutputDir, err := requiredTestOutputDirFromProjectConfigV0(serverConfig, projectConfig)
 	if err != nil {
 		return nil, err
 	}
-	env, err := requiredTestEnvFromEnvV0(allowed, absOutputDir)
+	env, err := requiredTestEnvFromProjectConfigV0(projectConfig, allowed, absOutputDir)
 	if err != nil {
 		return nil, err
 	}
@@ -39,23 +41,31 @@ func requiredTestRunnerFromEnvV0(
 			OutputDir:       absOutputDir,
 			AllowedCommands: allowed,
 			Env:             env,
-			MaxOutputBytes:  int64(intEnvOrDefaultV0(envRequiredTestMaxOutputBytesV0, 1024*1024)),
-			MaxArtifacts:    intEnvOrDefaultV0(envRequiredTestOutputMaxArtifactsV0, 200),
+			MaxOutputBytes:  int64(intProjectConfigOrEnvOrDefaultV0(envRequiredTestMaxOutputBytesV0, projectConfig.RequiredTestRunner.MaxOutputBytes, 1024*1024)),
+			MaxArtifacts:    intProjectConfigOrEnvOrDefaultV0(envRequiredTestOutputMaxArtifactsV0, projectConfig.RequiredTestRunner.MaxArtifacts, 200),
 		},
 		EvidenceWriter: evidenceWriter,
 	}, nil
 }
 
-func requiredTestAllowedCommandsFromEnvV0() (map[string]string, error) {
+func requiredTestRunnerEnabledFromProjectConfigV0(projectConfig serverProjectConfigFileV0) bool {
+	if value, ok := os.LookupEnv(envRequiredTestRunnerEnabledV0); ok {
+		return strings.TrimSpace(value) == "1"
+	}
+	return projectConfig.RequiredTestRunner.Enabled != nil && *projectConfig.RequiredTestRunner.Enabled
+}
+
+func requiredTestAllowedCommandsFromProjectConfigV0(projectConfig serverProjectConfigFileV0) (map[string]string, error) {
 	allowed := map[string]string{}
-	if goCommand := strings.TrimSpace(os.Getenv(envRequiredTestGoCommandV0)); goCommand != "" {
+	runtime := projectConfig.RequiredTestRunner
+	if goCommand := stringProjectConfigOrEnvOrDefaultV0(envRequiredTestGoCommandV0, runtime.GoCommand, ""); goCommand != "" {
 		abs, err := filepath.Abs(goCommand)
 		if err != nil {
 			return nil, fmt.Errorf("required_test_go_command_invalid")
 		}
 		allowed["go"] = abs
 	}
-	for _, item := range strings.Split(os.Getenv(envRequiredTestAllowedCommandsV0), ",") {
+	for _, item := range requiredTestAllowedCommandEntriesFromProjectConfigV0(runtime) {
 		item = strings.TrimSpace(item)
 		if item == "" {
 			continue
@@ -76,8 +86,31 @@ func requiredTestAllowedCommandsFromEnvV0() (map[string]string, error) {
 	return allowed, nil
 }
 
-func requiredTestOutputDirFromEnvV0(serverConfig orquestaserver.ConfigV0) (string, error) {
-	outputDir := strings.TrimSpace(os.Getenv(envRequiredTestOutputDirV0))
+func requiredTestAllowedCommandEntriesFromProjectConfigV0(runtime serverProjectConfigRequiredTestRunnerV0) []string {
+	if raw := strings.TrimSpace(os.Getenv(envRequiredTestAllowedCommandsV0)); raw != "" {
+		return strings.Split(raw, ",")
+	}
+	keys := make([]string, 0, len(runtime.AllowedCommands))
+	for name := range runtime.AllowedCommands {
+		keys = append(keys, name)
+	}
+	sort.Strings(keys)
+	entries := make([]string, 0, len(keys))
+	for _, name := range keys {
+		entries = append(entries, name+"="+runtime.AllowedCommands[name])
+	}
+	return entries
+}
+
+func requiredTestOutputDirFromProjectConfigV0(
+	serverConfig orquestaserver.ConfigV0,
+	projectConfig serverProjectConfigFileV0,
+) (string, error) {
+	outputDir := stringProjectConfigOrEnvOrDefaultV0(
+		envRequiredTestOutputDirV0,
+		projectConfig.RequiredTestRunner.OutputDir,
+		"",
+	)
 	if outputDir == "" {
 		outputDir = filepath.Join(serverConfig.StateDir, "required-test-output")
 	}
@@ -88,13 +121,14 @@ func requiredTestOutputDirFromEnvV0(serverConfig orquestaserver.ConfigV0) (strin
 	return absOutputDir, nil
 }
 
-func requiredTestEnvFromEnvV0(
+func requiredTestEnvFromProjectConfigV0(
+	projectConfig serverProjectConfigFileV0,
 	allowed map[string]string,
 	outputDir string,
 ) ([]string, error) {
 	env := []string(nil)
 	provided := map[string]bool{}
-	for _, item := range strings.Split(os.Getenv(envRequiredTestEnvV0), ",") {
+	for _, item := range requiredTestEnvEntriesFromProjectConfigV0(projectConfig.RequiredTestRunner) {
 		item = strings.TrimSpace(item)
 		if item == "" {
 			continue
@@ -126,6 +160,22 @@ func requiredTestEnvFromEnvV0(
 		}
 	}
 	return env, nil
+}
+
+func requiredTestEnvEntriesFromProjectConfigV0(runtime serverProjectConfigRequiredTestRunnerV0) []string {
+	if raw := strings.TrimSpace(os.Getenv(envRequiredTestEnvV0)); raw != "" {
+		return strings.Split(raw, ",")
+	}
+	keys := make([]string, 0, len(runtime.Environment))
+	for key := range runtime.Environment {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	entries := make([]string, 0, len(keys))
+	for _, key := range keys {
+		entries = append(entries, key+"="+runtime.Environment[key])
+	}
+	return entries
 }
 
 func requiredTestGoCacheDirV0(outputDir string) string {

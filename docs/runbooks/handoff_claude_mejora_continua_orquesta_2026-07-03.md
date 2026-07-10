@@ -2854,6 +2854,28 @@ go test -count=1 ./modulos/orquesta-runtime-gemini
 Resultado: verde. La siguiente familia no debe mezclar OPES: priorizar runner
 de tests requeridos o promotion/guardian con el mismo patron tipado y ratchet.
 
+## Actualizacion Codex 2026-07-10: runner de tests requeridos tipado
+
+Se consolido `orquesta.config.json > required_test_runner` sin ejecutar
+tests de proyecto ni proveedores. La seccion contiene opt-in, comando Go,
+allowlist adicional, salida aislada, entorno proyectado y limites de salida y
+retencion. Los mapas de allowlist y entorno se ordenan antes de construir el
+executor para conservar recibos deterministas.
+
+Las variables historicas siguen como override de compatibilidad. El opt-in
+explicito del entorno prevalece sobre el fichero y cualquier valor distinto de
+`1` mantiene el runner desactivado, igual que antes.
+
+Pruebas locales:
+
+```bash
+go test -count=1 ./cmd/orquesta-server \
+  -run 'TestRequiredTestRunnerFromEnvV0|TestServerEnvRegistryASTV0LecturasORQUESTARegistradas|TestConfig'
+```
+
+Resultado: verde; ratchet AST 49 -> 42. Siguiente familia candidata:
+promotion/guardian, no OPES.
+
 Checkpoint de limpieza no destructiva sincronizado: `4820516ec`
 (`chore: indexa funciones para limpieza segura`). El auditor genera un indice
 lexico de 25.199 funciones y una SQLite derivada; sirve para priorizar

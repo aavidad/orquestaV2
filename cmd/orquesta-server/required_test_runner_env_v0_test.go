@@ -203,6 +203,62 @@ func TestRequiredTestRunnerFromEnvV0ConfiguraRetencionDeOutput(t *testing.T) {
 	}
 }
 
+func TestRequiredTestRunnerFromEnvV0ConfigFileCanonicoV0(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	stateDir := filepath.Join(root, "state")
+	outputDir := filepath.Join(root, "runner-output")
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatalf("mkdir project: %v", err)
+	}
+	configPath := filepath.Join(projectDir, serverProjectConfigFileNameV0)
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"required_test_runner":{
+			"enabled":true,
+			"go_command":"/opt/go/bin/go",
+			"allowed_commands":{"lint":"/opt/tools/lint"},
+			"output_dir":"` + outputDir + `",
+			"environment":{"CUSTOM_FLAG":"enabled"},
+			"max_output_bytes":1234,
+			"max_artifacts":9
+		}
+	}`
+	if err := os.WriteFile(configPath, []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	stateStore, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{RootDir: stateDir})
+	if err != nil {
+		t.Fatalf("NewStoreV0: %v", err)
+	}
+	serverConfig := orquestaserver.ConfigV0{
+		StateDir:              stateDir,
+		ProjectWorkDir:        projectDir,
+		ProjectConfigFilePath: configPath,
+	}
+	runnerPort, err := requiredTestRunnerFromEnvV0(serverConfig, stateStore)
+	if err != nil {
+		t.Fatalf("requiredTestRunnerFromEnvV0: %v", err)
+	}
+	executor := requiredTestExecutorForEnvTestV0(t, runnerPort)
+	if executor.AllowedCommands["go"] != "/opt/go/bin/go" ||
+		executor.AllowedCommands["lint"] != "/opt/tools/lint" ||
+		executor.OutputDir != outputDir ||
+		executor.MaxOutputBytes != 1234 ||
+		executor.MaxArtifacts != 9 {
+		t.Fatalf("executor=%+v", executor)
+	}
+	if env := requiredTestExecutorEnvByKeyV0(t, runnerPort); env["CUSTOM_FLAG"] != "enabled" {
+		t.Fatalf("env=%v", env)
+	}
+
+	t.Setenv(envRequiredTestRunnerEnabledV0, "false")
+	runnerPort, err = requiredTestRunnerFromEnvV0(serverConfig, stateStore)
+	if err != nil || runnerPort != nil {
+		t.Fatalf("override false runner=%T err=%v", runnerPort, err)
+	}
+}
+
 func TestValidateCodexCommandAvailableV0MantieneRequisitoSinExternalOnly(t *testing.T) {
 	t.Setenv("ORQUESTA_CODEX_COMMAND", "codex-missing-orquesta-test")
 	t.Setenv("PATH", t.TempDir())

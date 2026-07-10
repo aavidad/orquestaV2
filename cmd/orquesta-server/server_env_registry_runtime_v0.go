@@ -126,6 +126,34 @@ func init() {
 			Scope: "startup_cleanup", Label: "Cola arranque",
 			Description: "Limite de elementos que la reconciliacion de arranque examina en una pasada.",
 		},
+		envRequiredTestRunnerEnabledV0: {
+			Scope: "required_test_runner", Label: "Runner de tests",
+			Description: "Opt-in del ejecutor local de tests requeridos con evidencia durable.",
+		},
+		envRequiredTestGoCommandV0: {
+			Scope: "required_test_runner", Label: "Comando Go permitido",
+			Description: "Ruta del comando Go permitido al runner aislado.",
+		},
+		envRequiredTestAllowedCommandsV0: {
+			Scope: "required_test_runner", Label: "Comandos permitidos",
+			Description: "Allowlist de comandos locales que el runner puede ejecutar.",
+		},
+		envRequiredTestOutputDirV0: {
+			Scope: "required_test_runner", Label: "Salida de tests",
+			Description: "Directorio aislado para evidencia y artefactos del runner.",
+		},
+		envRequiredTestEnvV0: {
+			Scope: "required_test_runner", Label: "Entorno de tests",
+			Description: "Variables de entorno explicitamente proyectadas al runner aislado.",
+		},
+		envRequiredTestMaxOutputBytesV0: {
+			Scope: "required_test_runner", Label: "Maximo de salida",
+			Description: "Limite en bytes de salida conservable por ejecucion de test.",
+		},
+		envRequiredTestOutputMaxArtifactsV0: {
+			Scope: "required_test_runner", Label: "Maximo de artefactos",
+			Description: "Limite de artefactos que el runner retiene por ejecucion.",
+		},
 	} {
 		serverEffectiveEnvRegistryV0[key] = metadata
 	}

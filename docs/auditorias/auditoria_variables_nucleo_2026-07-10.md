@@ -10,9 +10,9 @@ La prueba AST
 `TestServerEnvRegistryASTV0LecturasORQUESTARegistradas` contabilizaba 105
 lecturas `ORQUESTA_*` sin metadata efectiva. La primera ola de registro de
 runtime, Director Operativo, supervisor, arranque y review las reduce a 59.
-La segunda ola consolida Gemini en `gemini_runtime`, elimina la construccion
-duplicada del perfil de proceso y reduce el ratchet a 49. Una lectura nueva sin
-clasificar vuelve rojo.
+La segunda ola consolida Gemini en `gemini_runtime` y el runner de tests
+requeridos en `required_test_runner`. Elimina construcciones duplicadas y
+reduce el ratchet a 42. Una lectura nueva sin clasificar vuelve rojo.
 
 ## Decisiones
 
@@ -31,12 +31,16 @@ clasificar vuelve rojo.
   goal-first reutiliza la misma resolucion y conserva
   `env > fichero > default`, incluido el override explicito
   `ORQUESTA_GEMINI_ENABLED=false`.
+- `required_test_runner` ya concentra su opt-in, allowlist, directorio de
+  evidencia, entorno proyectado y limites. La seccion solo construye el
+  ejecutor aislado; no ejecuta tests por configurarse.
 
 ## Residual clasificado para la fase de limpieza
 
 | Familia | Tratamiento posterior |
 | --- | --- |
 | Gemini | Primera familia cerrada localmente: seccion tipada, perfil unico, registro de metadatos y ratchet 59 -> 49. |
+| Runner de tests requeridos | Segunda familia cerrada localmente: seccion tipada, allowlist/entorno deterministas y ratchet 49 -> 42. |
 | Otros proveedores opt-in | Secciones tipadas de configuración y retiro de lecturas directas por proveedor. |
 | OPES y domain-work | Fuera del núcleo; revisar después de cerrar autonomía local. |
 | Runner independiente de tests requeridos | Registrar como sección de atestación y probar aislamiento. |

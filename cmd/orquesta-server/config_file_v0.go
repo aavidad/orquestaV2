@@ -38,6 +38,7 @@ type serverProjectConfigFileV0 struct {
 	GeminiRuntime        serverProjectConfigGeminiRuntimeV0        `json:"gemini_runtime,omitempty"`
 	ClaudeRuntime        serverProjectConfigClaudeRuntimeV0        `json:"claude_runtime,omitempty"`
 	ClaudeModelRouting   *serverProjectConfigClaudeModelRoutingV0  `json:"claude_model_routing,omitempty"`
+	RequiredTestRunner   serverProjectConfigRequiredTestRunnerV0   `json:"required_test_runner,omitempty"`
 	CodexDirector        serverProjectConfigCodexDirectorV0        `json:"codex_director,omitempty"`
 	CodexWave            serverProjectConfigCodexWaveV0            `json:"codex_wave,omitempty"`
 	GoalBackend          serverProjectConfigGoalBackendV0          `json:"goal_backend,omitempty"`
@@ -150,6 +151,16 @@ type serverProjectConfigGeminiRuntimeV0 struct {
 	ApprovalMode   *string  `json:"approval_mode,omitempty"`
 	OutputFormat   *string  `json:"output_format,omitempty"`
 	ExtraArgs      []string `json:"extra_args,omitempty"`
+}
+
+type serverProjectConfigRequiredTestRunnerV0 struct {
+	Enabled         *bool             `json:"enabled,omitempty"`
+	GoCommand       *string           `json:"go_command,omitempty"`
+	AllowedCommands map[string]string `json:"allowed_commands,omitempty"`
+	OutputDir       *string           `json:"output_dir,omitempty"`
+	Environment     map[string]string `json:"environment,omitempty"`
+	MaxOutputBytes  *int              `json:"max_output_bytes,omitempty"`
+	MaxArtifacts    *int              `json:"max_artifacts,omitempty"`
 }
 
 type serverProjectConfigCodexDirectorV0 struct {
