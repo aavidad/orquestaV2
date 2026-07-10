@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
@@ -59,6 +61,72 @@ func TestBuildStackFromEnvV0WiresCompleteGoalRequiredTestAttestationConfig(t *te
 	}
 }
 
+func TestBuildStackFromEnvV0GoalRequiredTestAttestationExecutesIndependentReceipt(t *testing.T) {
+	projectDir := goalRequiredTestAttestationGitFixtureV0(t)
+	stateDir := t.TempDir()
+	runtimeDir := filepath.Join(t.TempDir(), "codex-runtime")
+	attestationRuntime := filepath.Join(t.TempDir(), "attestation-runtime")
+	configPath := writeCompleteGoalRequiredTestAttestationConfigForTestV0(t, projectDir, attestationRuntime)
+	info, err := os.Stat(configPath)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("owner-only config info=%v err=%v", info, err)
+	}
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envServerStateDirV0, stateDir)
+	t.Setenv(envCodexRuntimeWorkDirV0, runtimeDir)
+	t.Setenv(envCodexCommandV0, filepath.Join(projectDir, "codex-bin"))
+	t.Setenv(envGoalRequiredTestAttestationConfigFileV0, configPath)
+	t.Setenv(envOPESBaseURLV0, "")
+	t.Setenv(envOPESBaseURLLegacyV0, "")
+	t.Setenv(envDomainWorkFileEnabledV0, "")
+	t.Setenv(envDomainWorkFileDirV0, "")
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stack, err := buildStackFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("buildStackFromEnvV0: %v", err)
+	}
+	writeSet := []orquestagoal.GoalWriteScopeV0{{Path: "artifact.txt"}}
+	spec := orquestagoal.NormalizeGoalWorkSpecV0(orquestagoal.GoalWorkSpecV0{
+		RunRef: "run-ref-server-attestation-001", GoalRef: "goal-ref-server-attestation-001",
+		Objective: "Verify the final artifact.", DirectorKind: orquestagoal.GoalDirectorKindRuntimeGoalV0,
+		WriteSet: writeSet, WriteSetSHA256: orquestagoal.GoalWriteSetSHA256V0(writeSet),
+		RequiredTests: []orquestagoal.GoalRequiredTestV0{orquestagoal.FreezeGoalRequiredTestV0(orquestagoal.GoalRequiredTestV0{
+			TestRef: "test-ref-server-attestation-001", CommandRef: "command-ref-server-attestation-001", Command: "test -f artifact.txt",
+		})},
+		ClosurePolicy: orquestagoal.GoalClosurePolicyV0{RequireRequiredTests: true, RequireIndependentRequiredTestAttestation: true},
+	})
+	ctx := context.Background()
+	bound, err := stack.Ports.GoalRequiredTestSpecBinder.BindGoalRequiredTestSpecV0(ctx, spec)
+	if err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+	snapshot, err := stack.Ports.GoalRequiredTestSnapshotObserver.CaptureGoalRequiredTestFinalSnapshotV0(ctx, orquestagoal.GoalRequiredTestFinalSnapshotRequestV0{
+		RunRef: bound.RunRef, GoalRef: bound.GoalRef, WriteSet: bound.WriteSet, WriteSetSHA256: bound.WriteSetSHA256,
+	})
+	if err != nil || snapshot.RevisionRef == "" || len(snapshot.Hashes) != 1 {
+		t.Fatalf("snapshot=%+v err=%v", snapshot, err)
+	}
+	receipts, err := stack.Ports.GoalRequiredTestAttestor.AttestGoalRequiredTestsV0(ctx, orquestagoal.GoalRequiredTestAttestationRequestV0{
+		RunRef: bound.RunRef, GoalRef: bound.GoalRef, ImplementerAgentRef: bound.ImplementerAgentRef,
+		ImplementerCredentialRef: bound.ImplementerCredentialRef, AttestorTrustPolicyRef: bound.ClosurePolicy.RequiredAttestorTrustPolicyRef,
+		FinalSnapshot: snapshot, RequiredTests: bound.RequiredTests,
+	})
+	if err != nil || len(receipts) != 1 || receipts[0].Status != orquestagoal.GoalRequiredTestAttestationStatusPassedV0 || receipts[0].ExitCode != 0 {
+		t.Fatalf("receipts=%+v err=%v", receipts, err)
+	}
+	verification, err := stack.Ports.GoalRequiredTestIdentityVerifier.VerifyGoalRequiredTestIdentityV0(ctx, orquestagoal.GoalRequiredTestIdentityVerificationRequestV0{
+		AttestationRef: receipts[0].AttestationRef, TestRef: receipts[0].TestRef, ImplementerAgentRef: bound.ImplementerAgentRef,
+		ImplementerCredentialRef: bound.ImplementerCredentialRef, AttestorAgentRef: receipts[0].AttestorAgentRef,
+		AttestorCredentialRef: receipts[0].AttestorCredentialRef, RequiredTrustPolicyRef: bound.ClosurePolicy.RequiredAttestorTrustPolicyRef,
+	})
+	if err != nil || !verification.Verified || !verification.Independent || verification.ImplementerPrincipalRef == verification.AttestorPrincipalRef {
+		t.Fatalf("verification=%+v err=%v", verification, err)
+	}
+}
+
 func TestGoalRequiredTestAttestationConfigV0ProjectJSONPathIsCanonicalFallback(t *testing.T) {
 	withoutGoalRequiredTestAttestationEnvV0(t)
 	projectDir := t.TempDir()
@@ -106,6 +174,33 @@ func writeCompleteGoalRequiredTestAttestationConfigForTestV0(t *testing.T, proje
 		t.Fatal(err)
 	}
 	return path
+}
+
+func goalRequiredTestAttestationGitFixtureV0(t *testing.T) string {
+	t.Helper()
+	projectDir := t.TempDir()
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"init", "--quiet", projectDir},
+		{"-C", projectDir, "config", "user.name", "Orquesta Test"},
+		{"-C", projectDir, "config", "user.email", "orquesta-test@example.invalid"},
+	} {
+		if output, err := exec.Command(gitPath, args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, output)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, "artifact.txt"), []byte("final artifact\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"-C", projectDir, "add", "artifact.txt"}, {"-C", projectDir, "commit", "--quiet", "-m", "fixture"}} {
+		if output, err := exec.Command(gitPath, args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, output)
+		}
+	}
+	return projectDir
 }
 
 func withoutGoalRequiredTestAttestationEnvV0(t *testing.T) {

@@ -35,15 +35,19 @@ atascado indefinidamente. Esto contradecia el objetivo de autonomia de 208H.
 - Revision local posterior, 2026-07-10: `go test -count=1` para
   `orquesta-goal`, `orquesta-runtime-required-test` y los focales de
   `cmd/orquesta-server` de atestacion pasa en cache aislada.
+- La composicion ya se ejerce desde configuracion owner-only por
+  `TestBuildStackFromEnvV0GoalRequiredTestAttestationExecutesIndependentReceipt`:
+  construye el stack, activa sus cuatro puertos, usa un fixture Git minimo,
+  obtiene receipt `passed` e identidad de atestador independiente. Se lanzo por
+  una ola Orquesta local con write-set limitado a ese test, sin crear una app.
 
 ## Evidencia restante para 208H
 
-1. Arrancar una composicion ya existente con
-   `ORQUESTA_GOAL_REQUIRED_TEST_ATTESTATION_CONFIG_FILE` owner-only y comprobar
-   que los cuatro puertos de atestacion quedan activos.
-2. Ejercer una ruta de exito y una de fallo del atestador desde esa composicion,
-   verificando receipt, identidad independiente y `blocked/rework` durable.
-3. Reejecutar los lotes aislados cuando D3 deje de bloquearlos por el ratchet
+1. La ruta exitosa de la composicion queda acreditada. La ruta de error,
+   `blocked/rework` durable, recreacion de store y concurrencia quedan
+   acreditadas por los focales de `orquesta-goal` y `orquesta-state-file`; no
+   se reabre el antiguo claim `pending`.
+2. Reejecutar los lotes aislados cuando D3 deje de bloquearlos por el ratchet
    de variables de entorno.
 
 No se creara una aplicacion de ejemplo para esta evidencia. Debe emplear un
@@ -53,5 +57,4 @@ fixture minimo o una aplicacion real que el operador solicite construir.
 
 - Correccion de claim: cerrada localmente por `08a993a3e` y los tres focales
   anteriores.
-- Cierre global de 208H: falta activar y ejercer el atestador desde la
-  composicion y obtener los dos pases aislados por lotes tras D3.
+- Cierre global de 208H: solo faltan los dos pases aislados por lotes tras D3.
