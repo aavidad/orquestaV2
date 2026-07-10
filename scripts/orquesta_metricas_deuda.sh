@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Lectura MEJ-106 2026-07-09: env=511 tras retirar aliases Codex seconds y
-# envs temporales Telegram operator; Telegram queda en orquesta.config.json.
-# status=16, interfaces=67, director=18.
+# MEJ-106 mide por separado configuracion productiva y nombres exclusivos de
+# fixtures. Los harnesses no son configuracion global de la aplicacion.
 
 usage() {
   echo "usage: scripts/orquesta_metricas_deuda.sh [--json]" >&2
@@ -44,13 +43,30 @@ go_grep() {
   find modulos cmd -type f -name '*.go' -exec grep -hEo "$pattern" {} + 2>/dev/null || true
 }
 
+go_production_grep() {
+  local pattern="$1"
+  find modulos cmd -type f -name '*.go' ! -name '*_test.go' -exec grep -hEo "$pattern" {} + 2>/dev/null || true
+}
+
+go_test_grep() {
+  local pattern="$1"
+  find modulos cmd -type f -name '*_test.go' -exec grep -hEo "$pattern" {} + 2>/dev/null || true
+}
+
 count_lines() {
   wc -l | tr -d '[:space:]'
 }
 
 env_vars_orquesta="$(
-  go_grep 'ORQUESTA_[A-Z0-9_]+' |
+  go_production_grep 'ORQUESTA_[A-Z0-9_]+' |
     sort -u |
+    count_lines
+)"
+
+env_vars_orquesta_test_only="$(
+  comm -23 \
+    <(go_test_grep 'ORQUESTA_[A-Z0-9_]+' | sort -u) \
+    <(go_production_grep 'ORQUESTA_[A-Z0-9_]+' | sort -u) |
     count_lines
 )"
 
@@ -90,13 +106,15 @@ modulos_director="$(
 )"
 
 if [ "$json" = true ]; then
-  printf '{"env_vars_orquesta":%s,"endpoints_status":%s,"interfaces_estado":%s,"modulos_director":%s}\n' \
+  printf '{"env_vars_orquesta":%s,"env_vars_orquesta_test_only":%s,"endpoints_status":%s,"interfaces_estado":%s,"modulos_director":%s}\n' \
     "$env_vars_orquesta" \
+    "$env_vars_orquesta_test_only" \
     "$endpoints_status" \
     "$interfaces_estado" \
     "$modulos_director"
 else
   printf 'env_vars_orquesta=%s\n' "$env_vars_orquesta"
+  printf 'env_vars_orquesta_test_only=%s\n' "$env_vars_orquesta_test_only"
   printf 'endpoints_status=%s\n' "$endpoints_status"
   printf 'interfaces_estado=%s\n' "$interfaces_estado"
   printf 'modulos_director=%s\n' "$modulos_director"

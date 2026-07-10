@@ -5,12 +5,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"testing"
 )
 
-const envVarsBudgetMEJ106V0 = 513
+const (
+	envVarsBudgetMEJ106V0         = 425
+	envVarsTestOnlyBudgetMEJ106V0 = 103
+)
 
 func TestEnvVarsBudgetMEJ106V0(t *testing.T) {
 	root := findRepoRootForEnvVarsBudgetMEJ106V0(t)
@@ -21,7 +22,8 @@ func TestEnvVarsBudgetMEJ106V0(t *testing.T) {
 		t.Fatalf("orquesta_metricas_deuda.sh --json fallo: %v\n%s", err, output)
 	}
 	var metrics struct {
-		EnvVarsOrquesta int `json:"env_vars_orquesta"`
+		EnvVarsOrquesta         int `json:"env_vars_orquesta"`
+		EnvVarsOrquestaTestOnly int `json:"env_vars_orquesta_test_only"`
 	}
 	if err := json.Unmarshal(output, &metrics); err != nil {
 		t.Fatalf("JSON metricas invalido: %v\n%s", err, output)
@@ -30,29 +32,19 @@ func TestEnvVarsBudgetMEJ106V0(t *testing.T) {
 		t.Fatalf("env_vars_orquesta invalido: %d", metrics.EnvVarsOrquesta)
 	}
 	if metrics.EnvVarsOrquesta > envVarsBudgetMEJ106V0 {
-		if envVarsBudgetIncreaseJustifiedMEJ106V0(root, metrics.EnvVarsOrquesta) {
-			return
-		}
 		t.Fatalf(
-			"env vars ORQUESTA_* suben a %d, maximo MEJ-106=%d; baja o consolida variables antes de anadir nuevas",
+			"env vars productivas ORQUESTA_* suben a %d, maximo MEJ-106=%d; baja o consolida variables antes de anadir nuevas",
 			metrics.EnvVarsOrquesta,
 			envVarsBudgetMEJ106V0,
 		)
 	}
-}
-
-func envVarsBudgetIncreaseJustifiedMEJ106V0(root string, value int) bool {
-	needle := "env_vars_orquesta_allow_increase_to=" + strconv.Itoa(value)
-	for _, rel := range []string{
-		"docs/bitacora_correccion_pericial_2026-07-03.md",
-		"docs/inventario_bugs_orquesta_2026-06-30.md",
-	} {
-		data, err := os.ReadFile(filepath.Join(root, rel))
-		if err == nil && strings.Contains(string(data), needle) {
-			return true
-		}
+	if metrics.EnvVarsOrquestaTestOnly > envVarsTestOnlyBudgetMEJ106V0 {
+		t.Fatalf(
+			"env vars exclusivas de fixtures ORQUESTA_* suben a %d, maximo MEJ-106=%d; no las conviertas en configuracion global",
+			metrics.EnvVarsOrquestaTestOnly,
+			envVarsTestOnlyBudgetMEJ106V0,
+		)
 	}
-	return false
 }
 
 func findRepoRootForEnvVarsBudgetMEJ106V0(t *testing.T) string {

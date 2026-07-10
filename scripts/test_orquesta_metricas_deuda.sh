@@ -15,6 +15,7 @@ import re
 
 expected_keys = [
     "env_vars_orquesta",
+    "env_vars_orquesta_test_only",
     "endpoints_status",
     "interfaces_estado",
     "modulos_director",
@@ -31,8 +32,8 @@ for expected_key, line in zip(expected_keys, lines):
     key, value = line.split("=", 1)
     if key != expected_key:
         raise SystemExit(f"expected key {expected_key!r}, got {key!r}")
-    if not re.fullmatch(r"[1-9][0-9]*", value):
-        raise SystemExit(f"expected positive integer for {key}, got {value!r}")
+    if not re.fullmatch(r"[0-9]+", value) or (key != "env_vars_orquesta_test_only" and value == "0"):
+        raise SystemExit(f"expected valid integer for {key}, got {value!r}")
     values[key] = int(value)
 PY
 }
@@ -46,6 +47,7 @@ import os
 
 expected_keys = [
     "env_vars_orquesta",
+    "env_vars_orquesta_test_only",
     "endpoints_status",
     "interfaces_estado",
     "modulos_director",
@@ -110,7 +112,7 @@ type MarkerQueue interface{}
 type ledger interface{}
 GO
 
-expected_fixture_output=$'env_vars_orquesta=3\nendpoints_status=6\ninterfaces_estado=5\nmodulos_director=2'
+expected_fixture_output=$'env_vars_orquesta=3\nenv_vars_orquesta_test_only=0\nendpoints_status=6\ninterfaces_estado=5\nmodulos_director=2'
 fixture_output="$(cd "$fixture" && "$script")"
 if [ "$fixture_output" != "$expected_fixture_output" ]; then
   echo "unexpected fixture metrics" >&2

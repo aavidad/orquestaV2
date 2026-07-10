@@ -192,8 +192,8 @@ func serverEnvRegistryASTRelLocationV0(path string) string {
 		return filepath.ToSlash(path)
 	}
 	for {
-		if hasDirEnvVarsOrquestaRatchetMEJ106V0(root, "cmd") &&
-			hasDirEnvVarsOrquestaRatchetMEJ106V0(root, "modulos") {
+		if hasDirServerEnvRegistryASTV0(root, "cmd") &&
+			hasDirServerEnvRegistryASTV0(root, "modulos") {
 			break
 		}
 		parent := filepath.Dir(root)
@@ -277,8 +277,8 @@ func findRepoRootForServerEnvRegistryASTV0(t *testing.T) string {
 		t.Fatalf("getwd: %v", err)
 	}
 	for {
-		if hasDirEnvVarsOrquestaRatchetMEJ106V0(dir, "cmd") &&
-			hasDirEnvVarsOrquestaRatchetMEJ106V0(dir, "modulos") {
+		if hasDirServerEnvRegistryASTV0(dir, "cmd") &&
+			hasDirServerEnvRegistryASTV0(dir, "modulos") {
 			return dir
 		}
 		parent := filepath.Dir(dir)
@@ -287,4 +287,9 @@ func findRepoRootForServerEnvRegistryASTV0(t *testing.T) string {
 		}
 		dir = parent
 	}
+}
+
+func hasDirServerEnvRegistryASTV0(root string, name string) bool {
+	info, err := os.Stat(filepath.Join(root, name))
+	return err == nil && info.IsDir()
 }
