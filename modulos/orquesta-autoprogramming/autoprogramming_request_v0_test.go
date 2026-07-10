@@ -110,6 +110,20 @@ func TestValidateAutoprogrammingRequestV0RejectsUnsafeWriteSetPath(t *testing.T)
 	assertAutoprogrammingRequestIssueV0(t, result, "write_set_path_invalid")
 }
 
+func TestValidateAutoprogrammingRequestV0RejectsURIWriteSetPath(t *testing.T) {
+	for _, unsafe := range []string{"file:/tmp/escape", "https:opaque"} {
+		t.Run(unsafe, func(t *testing.T) {
+			result := ValidateAutoprogrammingRequestV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+				request.WriteSet = []string{unsafe}
+			}))
+			if result.Accepted {
+				t.Fatalf("accepted=true path=%q", unsafe)
+			}
+			assertAutoprogrammingRequestIssueV0(t, result, "write_set_path_invalid")
+		})
+	}
+}
+
 func TestValidateAutoprogrammingRequestV0RejectsDelegationBudgetFueraDeRango(t *testing.T) {
 	result := ValidateAutoprogrammingRequestV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
 		request.MaxDelegationDepth = AutoprogrammingRequestMaxDelegationDepthV0 + 1

@@ -1,6 +1,7 @@
 package orquestastatefile
 
 import (
+	orquestaautonomyprogram "orquesta/modulos/orquesta-autonomy-program"
 	orquestacore "orquesta/modulos/orquesta-core"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -24,3 +25,4 @@ var _ orquestacionnucleoapp.OperationalDirectorPlanStateStorePortV0 = (*StoreV0)
 var _ orquestacionnucleoapp.AgentProcessRegistryPortV0 = (*StoreV0)(nil)
 var _ orquestacionnucleoapp.AgentProcessRegistryListPortV0 = (*StoreV0)(nil)
 var _ orquestacore.FunctionContractReadIndexPortV0 = (*StoreV0)(nil)
+var _ orquestaautonomyprogram.AutonomyProgramStorePortV0 = (*StoreV0)(nil)

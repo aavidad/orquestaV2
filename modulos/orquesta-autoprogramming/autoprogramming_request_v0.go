@@ -257,7 +257,7 @@ func autoprogrammingRequestWriteSetPathAllowedV0(path string) bool {
 	trimmed := strings.TrimSpace(path)
 	if trimmed == "" ||
 		trimmed == "." ||
-		strings.Contains(trimmed, "://") ||
+		autoprogrammingPathHasURISchemeV0(trimmed) ||
 		strings.HasPrefix(trimmed, "~") ||
 		strings.Contains(trimmed, "$") ||
 		strings.Contains(trimmed, "\\") ||
@@ -287,6 +287,19 @@ func autoprogrammingPathHasDrivePrefixV0(path string) bool {
 	return len(path) >= 2 &&
 		((path[0] >= 'a' && path[0] <= 'z') || (path[0] >= 'A' && path[0] <= 'Z')) &&
 		path[1] == ':'
+}
+
+func autoprogrammingPathHasURISchemeV0(path string) bool {
+	separator := strings.IndexByte(path, ':')
+	if separator <= 0 || !((path[0] >= 'a' && path[0] <= 'z') || (path[0] >= 'A' && path[0] <= 'Z')) {
+		return false
+	}
+	for _, character := range path[1:separator] {
+		if !((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9') || character == '+' || character == '-' || character == '.') {
+			return false
+		}
+	}
+	return true
 }
 
 func autoprogrammingRequestMaxTaskRefsV0(request AutoprogrammingRequestV0) int {

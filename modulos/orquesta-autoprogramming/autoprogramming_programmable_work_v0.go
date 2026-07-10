@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	orquestaautonomyprogram "orquesta/modulos/orquesta-autonomy-program"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
@@ -18,16 +19,17 @@ type AutoprogrammingProgrammableWorkResultV0 struct {
 }
 
 type AutoprogrammingProgrammableWorkV0 struct {
-	RequestRef    string                                       `json:"request_ref"`
-	ProjectRef    string                                       `json:"project_ref"`
-	WorktreeRef   string                                       `json:"worktree_ref"`
-	BranchRef     string                                       `json:"branch_ref"`
-	GoalMigration AutoprogrammingGoalMigrationClassificationV0 `json:"goal_migration"`
-	Partition     AutoprogrammingPartitionPlanV0               `json:"partition,omitempty"`
-	Groups        []AutoprogrammingProgrammableGroupV0         `json:"groups"`
-	GoalSpecs     []orquestagoal.GoalWorkSpecV0                `json:"goal_specs,omitempty"`
-	Profiles      []orquestacoreworkflow.WorkProfileV0         `json:"profiles"`
-	Tasks         []orquestacoreworkflow.WorkflowTaskV0        `json:"tasks"`
+	RequestRef      string                                       `json:"request_ref"`
+	ProjectRef      string                                       `json:"project_ref"`
+	WorktreeRef     string                                       `json:"worktree_ref"`
+	BranchRef       string                                       `json:"branch_ref"`
+	GoalMigration   AutoprogrammingGoalMigrationClassificationV0 `json:"goal_migration"`
+	Partition       AutoprogrammingPartitionPlanV0               `json:"partition,omitempty"`
+	Groups          []AutoprogrammingProgrammableGroupV0         `json:"groups"`
+	GoalSpecs       []orquestagoal.GoalWorkSpecV0                `json:"goal_specs,omitempty"`
+	AutonomyProgram orquestaautonomyprogram.AutonomyProgramV0    `json:"autonomy_program,omitempty"`
+	Profiles        []orquestacoreworkflow.WorkProfileV0         `json:"profiles"`
+	Tasks           []orquestacoreworkflow.WorkflowTaskV0        `json:"tasks"`
 }
 
 type AutoprogrammingProgrammableGroupV0 struct {
@@ -119,6 +121,11 @@ func BuildAutoprogrammingProgrammableWorkV0(
 		}
 	}
 	work.GoalSpecs = goalSpecs
+	program, programIssues := BuildAutoprogrammingAutonomyProgramV0(work)
+	if len(programIssues) > 0 {
+		return AutoprogrammingProgrammableWorkResultV0{Accepted: false, Work: work, Issues: programIssues}
+	}
+	work.AutonomyProgram = program
 	work = autoprogrammingGoalReadyWithoutLegacyWorkflowSurfaceV0(work)
 
 	return AutoprogrammingProgrammableWorkResultV0{
