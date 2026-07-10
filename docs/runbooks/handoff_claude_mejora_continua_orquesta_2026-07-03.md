@@ -2920,8 +2920,9 @@ commit. El entorno continua teniendo precedencia por compatibilidad. El guard
 `self_programming_only` reutiliza la ruta resuelta en lugar de leer una
 segunda configuracion distinta.
 
-El guardian de reparacion no se modifica en este corte: ejecuta comandos y
-tiene mas de veinte inputs; requiere su propia revision y tests de seguridad.
+El guardian de reparacion se dejo inicialmente fuera porque ejecuta comandos y
+tiene mas de veinte inputs; su consolidacion se cerro en el corte siguiente,
+con pruebas especificas de aislamiento.
 
 Pruebas locales:
 
@@ -2937,3 +2938,18 @@ Checkpoint de limpieza no destructiva sincronizado: `4820516ec`
 lexico de 25.199 funciones y una SQLite derivada; sirve para priorizar
 revision, nunca para borrar automaticamente. Detalle:
 `docs/auditorias/indice_funciones_orquesta_2026-07-10.md`.
+
+## Actualizacion Codex 2026-07-10: guardian de promocion tipado local
+
+La cuarta familia de configuracion local es
+`autoprogramming.promotion.guardian`. Sus 29 inputs pasan a
+`orquesta.config.json`, con compatibilidad `env > fichero > default`,
+precedencia negativa de `enabled=false`, y registro efectivo con alcance
+propio. El proceso hijo conserva la allowlist y no recibe secretos del proceso
+padre por defecto.
+
+El corte fue solo local y focal: no se arranco servidor, promocion, guardian,
+agente ni proveedor. La prueba de configuracion canonica, la proyeccion
+auditable de Gemini/runner/promotion y las pruebas de allowlist/recibos pasan.
+El ratchet AST baja de 36 a 6: quedan solo cinco lecturas de OPES, fuera del
+nucleo, y la confirmacion del harness MCP opt-in.

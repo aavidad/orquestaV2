@@ -48,9 +48,35 @@ reduce el ratchet a 36. Una lectura nueva sin clasificar vuelve rojo.
 | Otros proveedores opt-in | Secciones tipadas de configuración y retiro de lecturas directas por proveedor. |
 | OPES y domain-work | Fuera del núcleo; revisar después de cerrar autonomía local. |
 | Runner independiente de tests requeridos | Registrar como sección de atestación y probar aislamiento. |
-| Promoción/guardian | Separar inputs del servidor de variables exclusivas de proceso-hijo, con registros distintos. |
+| Promoción/guardian | Cuarta familia cerrada localmente: sección tipada, precedencia comprobada y metadatos de las 29 entradas; el runner hijo conserva su allowlist. |
 | MCP smoke/harness | Declarar como harness o retirar si no tiene consumidor. |
 
 No se ha eliminado ninguna variable ni fichero. La limpieza posterior debe
 trabajar por familia, con búsqueda de referencias, prueba focal y commit
 recuperable por cada retirada.
+
+## Actualizacion Codex 2026-07-10: guardian de promocion tipado
+
+Se consolido `autoprogramming.promotion.guardian` dentro del mismo fichero
+canonico. La seccion tipada cubre opt-in, comando, allowlist del runner, rutas
+de estado y binarios, build/tests/health, limites, reparacion Codex y las
+referencias de evidencia. El entorno conserva prioridad explicita para
+compatibilidad; una variable `enabled` explicita desactiva el guardian aunque
+el fichero lo tenga habilitado.
+
+Las 29 variables de la familia quedan registradas con alcance
+`autoprogramming_promotion_guardian`. El registro no expone valores: documenta
+la configuracion efectiva y el runner hijo sigue proyectando unicamente su
+allowlist. No se ejecuto promotion, guardian, servidor, agente ni proveedor.
+
+Pruebas locales:
+
+```bash
+go test -count=1 ./cmd/orquesta-server \
+  -run 'TestAutoprogrammingPromotionGuardian(ConfigFileCanonicoV0|DistingueConfigInvalidaV0|DistinguePathPolicyInvalidaV0|EnvV0ConservaRefsOpacas|RepairCodexConfigFromEnvV0|RunnerEnvV0NoHeredarCredencialesPorDefecto|RunnerEnvV0PermiteOptInExplicito|RunnerEnvV0ConservaSoloAllowlistYVarsGuardian|RunnerEnvV0NoHeredaVarsGuardianDelPadre|EnvV0TodasClavesRegistradasComoChildProcess|ChildEnvRegistryV0NoPublicaValoresCrudos)'
+```
+
+Resultado: verde. La proyeccion efectiva de Gemini, runner de tests requeridos
+y promotion tambien queda cubierta; el ratchet AST baja de 36 a 6. Las seis
+lecturas residuales se limitan a OPES (conector, fuera de este corte) y al
+harness opt-in `ORQUESTA_MCP_REAL_SMOKE_CONFIRM`.

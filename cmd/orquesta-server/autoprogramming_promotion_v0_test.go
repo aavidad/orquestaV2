@@ -94,6 +94,81 @@ func TestAutoprogrammingPromotionConfigFromEnvV0ConfigFileCanonicoV0(t *testing.
 	}
 }
 
+func TestAutoprogrammingPromotionGuardianConfigFileCanonicoV0(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	stateDir := filepath.Join(root, "state")
+	guardianState := filepath.Join(root, "guardian-state")
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatalf("mkdir project: %v", err)
+	}
+	configPath := filepath.Join(projectDir, serverProjectConfigFileNameV0)
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"autoprogramming":{"promotion":{
+			"enabled":true,
+			"guardian":{
+				"enabled":true,
+				"command":"guardian-config-command",
+				"runner_env_allowlist":["PATH","HOME"],
+				"state_dir":"` + guardianState + `",
+				"current_bin":"current-bin",
+				"candidate_bin":"candidate-bin",
+				"last_good_bin":"last-good-bin",
+				"artifact_root":"artifact-root",
+				"build_command":"go build ./cmd/orquesta-server",
+				"test_commands":["go test ./cmd/orquesta-server"],
+				"health_timeout":"30s",
+				"command_timeout":"2m",
+				"artifact_max_bytes":"4096",
+				"repair_command":"repair-command",
+				"repair_codex":true,
+				"repair_codex_write_set":["cmd/orquesta-server"],
+				"repair_codex_required_tests":["go test ./cmd/orquesta-server"],
+				"repair_codex_worktree_ref":"worktree-ref-config",
+				"repair_codex_branch_ref":"branch-ref-config",
+				"repair_codex_run_ref":"run-ref-config",
+				"repair_codex_promotion_ref":"promotion-ref-config",
+				"repair_codex_sandbox":"workspace-write",
+				"repair_codex_reasoning_effort":"medium",
+				"repair_codex_runtime_dir":"runtime-config",
+				"repair_codex_allow_broad_sandbox":true,
+				"repair_codex_sandbox_evidence_ref":"evidence-ref-config",
+				"command_effect_evidence_refs":["effect-ref-config"],
+				"skip_health_evidence_refs":["skip-ref-config"]
+			}
+		}}
+	}`
+	if err := os.WriteFile(configPath, []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	promotion := autoprogrammingPromotionConfigFromEnvV0(orquestaserver.ConfigV0{
+		ProjectWorkDir:        projectDir,
+		StateDir:              stateDir,
+		ProjectConfigFilePath: configPath,
+	})
+	port, ok := promotion.Port.(serverAutoprogrammingPromotionPortV0)
+	guardian := port.Guardian
+	if !ok || !guardian.Enabled || guardian.Command != "guardian-config-command" ||
+		guardian.StateDir != guardianState || guardian.RepairCodexRuntimeDir != "runtime-config" ||
+		!guardian.RepairCodex || !guardian.RepairCodexAllowBroad ||
+		len(guardian.TestCommands) != 1 || len(guardian.SkipHealthEvidenceRefs) != 1 ||
+		guardian.Runner == nil {
+		t.Fatalf("promotion=%+v guardian=%+v ok=%v", promotion, guardian, ok)
+	}
+
+	t.Setenv(envServerAutoprogrammingPromotionGuardianEnabledV0, "false")
+	promotion = autoprogrammingPromotionConfigFromEnvV0(orquestaserver.ConfigV0{
+		ProjectWorkDir:        projectDir,
+		StateDir:              stateDir,
+		ProjectConfigFilePath: configPath,
+	})
+	port, ok = promotion.Port.(serverAutoprogrammingPromotionPortV0)
+	if !ok || port.Guardian.Enabled || port.Guardian.Runner != nil {
+		t.Fatalf("guardian enabled despite env override: %+v", port.Guardian)
+	}
+}
+
 func TestAutoprogrammingPromotionGuardianDistingueConfigInvalidaV0(t *testing.T) {
 	runner := shellAutoprogrammingPromotionGuardianRunnerV0{
 		Command: "printf 'orquesta-guardian: guardian_config_invalid_duration\\n' >&2; exit 2",

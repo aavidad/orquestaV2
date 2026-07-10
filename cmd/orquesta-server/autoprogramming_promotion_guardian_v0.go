@@ -15,6 +15,45 @@ import (
 
 const defaultAutoprogrammingPromotionGuardianCommandV0 = "go run ./cmd/orquesta-guardian check-promote"
 
+func init() {
+	for key, label := range map[string]string{
+		envServerAutoprogrammingPromotionGuardianEnabledV0:                    "Guardian activo",
+		envServerAutoprogrammingPromotionGuardianCommandV0:                    "Comando guardian",
+		envServerAutoprogrammingPromotionGuardianRunnerEnvAllowlistV0:         "Allowlist de entorno guardian",
+		envServerAutoprogrammingPromotionGuardianStateDirV0:                   "Estado guardian",
+		envServerAutoprogrammingPromotionGuardianCurrentBinV0:                 "Binario actual guardian",
+		envServerAutoprogrammingPromotionGuardianCandidateBinV0:               "Binario candidato guardian",
+		envServerAutoprogrammingPromotionGuardianLastGoodBinV0:                "Ultimo binario valido guardian",
+		envServerAutoprogrammingPromotionGuardianArtifactRootV0:               "Artefactos guardian",
+		envServerAutoprogrammingPromotionGuardianBuildCommandV0:               "Build guardian",
+		envServerAutoprogrammingPromotionGuardianTestCommandsV0:               "Tests guardian",
+		envServerAutoprogrammingPromotionGuardianHealthTimeoutV0:              "Timeout salud guardian",
+		envServerAutoprogrammingPromotionGuardianCommandTimeoutV0:             "Timeout comando guardian",
+		envServerAutoprogrammingPromotionGuardianArtifactMaxBytesV0:           "Maximo artefacto guardian",
+		envServerAutoprogrammingPromotionGuardianRepairCommandV0:              "Comando reparacion guardian",
+		envServerAutoprogrammingPromotionGuardianRepairCodexV0:                "Reparacion Codex guardian",
+		envServerAutoprogrammingPromotionGuardianRepairCodexWriteSetV0:        "Write set reparacion guardian",
+		envServerAutoprogrammingPromotionGuardianRepairCodexRequiredTestsV0:   "Tests reparacion guardian",
+		envServerAutoprogrammingPromotionGuardianRepairCodexWorktreeRefV0:     "Worktree reparacion guardian",
+		envServerAutoprogrammingPromotionGuardianRepairCodexBranchRefV0:       "Rama reparacion guardian",
+		envServerAutoprogrammingPromotionGuardianRepairCodexRunRefV0:          "Run reparacion guardian",
+		envServerAutoprogrammingPromotionGuardianRepairCodexPromotionRefV0:    "Promocion reparacion guardian",
+		envServerAutoprogrammingPromotionGuardianRepairCodexSandboxV0:         "Sandbox reparacion guardian",
+		envServerAutoprogrammingPromotionGuardianRepairCodexReasoningV0:       "Razonamiento reparacion guardian",
+		envServerAutoprogrammingPromotionGuardianRepairCodexRuntimeDirV0:      "Runtime reparacion guardian",
+		envServerAutoprogrammingPromotionGuardianRepairCodexAllowBroadV0:      "Sandbox amplio reparacion guardian",
+		envServerAutoprogrammingPromotionGuardianRepairCodexSandboxEvidenceV0: "Evidencia sandbox guardian",
+		envServerAutoprogrammingPromotionGuardianCommandEffectEvidenceRefsV0:  "Evidencia de efecto guardian",
+		envServerAutoprogrammingPromotionGuardianSkipHealthEvidenceRefsV0:     "Evidencia omitir salud guardian",
+	} {
+		serverEffectiveEnvRegistryV0[key] = serverEnvSettingMetadataV0{
+			Scope:       "autoprogramming_promotion_guardian",
+			Label:       label,
+			Description: "Parametro tipado del guardian de promocion; solo se proyecta al proceso hijo mediante allowlist.",
+		}
+	}
+}
+
 type serverAutoprogrammingPromotionGuardianV0 struct {
 	Enabled                    bool
 	Command                    string
@@ -126,52 +165,89 @@ type shellAutoprogrammingPromotionGuardianRunnerV0 struct {
 func autoprogrammingPromotionGuardianFromEnvV0(
 	config orquestaserver.ConfigV0,
 ) serverAutoprogrammingPromotionGuardianV0 {
-	if !boolEnvOrDefaultV0(envServerAutoprogrammingPromotionGuardianEnabledV0, false) {
+	projectConfig := projectConfigFromServerConfigBestEffortV0(config)
+	guardianConfig := projectConfig.Autoprogramming.Promotion.Guardian
+	if !autoprogrammingPromotionGuardianEnabledFromProjectConfigV0(guardianConfig) {
 		return serverAutoprogrammingPromotionGuardianV0{}
 	}
-	command := envOrDefaultV0(
+	command := stringProjectConfigOrEnvOrDefaultV0(
 		envServerAutoprogrammingPromotionGuardianCommandV0,
+		guardianConfig.Command,
 		defaultAutoprogrammingPromotionGuardianCommandV0,
 	)
 	guardian := serverAutoprogrammingPromotionGuardianV0{
-		Enabled:            true,
-		Command:            command,
-		RunnerEnvAllowlist: autoprogrammingPromotionGuardianRunnerEnvAllowlistFromEnvV0(),
-		StateDir:           absDirEnvOrDefaultV0(envServerAutoprogrammingPromotionGuardianStateDirV0, filepath.Join(config.StateDir, "guardian")),
-		CurrentBin:         strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianCurrentBinV0)),
-		CandidateBin:       strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianCandidateBinV0)),
-		LastGoodBin:        strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianLastGoodBinV0)),
-		ArtifactRoot:       strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianArtifactRootV0)),
-		BuildCommand:       strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianBuildCommandV0)),
-		TestCommands:       csvEnvOrDefaultV0(envServerAutoprogrammingPromotionGuardianTestCommandsV0, nil),
-		HealthTimeout:      strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianHealthTimeoutV0)),
-		CommandTimeout:     strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianCommandTimeoutV0)),
-		ArtifactMaxBytes:   strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianArtifactMaxBytesV0)),
-		RepairCommand:      strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianRepairCommandV0)),
-		RepairCodex:        boolEnvOrDefaultV0(envServerAutoprogrammingPromotionGuardianRepairCodexV0, false),
-		RepairCodexWriteSet: csvEnvOrDefaultV0(
+		Enabled: true,
+		Command: command,
+		RunnerEnvAllowlist: autoprogrammingPromotionGuardianStringsFromProjectConfigV0(
+			envServerAutoprogrammingPromotionGuardianRunnerEnvAllowlistV0,
+			guardianConfig.RunnerEnvAllowlist,
+			defaultAutoprogrammingPromotionGuardianRunnerEnvAllowlistV0(),
+		),
+		StateDir: absDirProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionGuardianStateDirV0,
+			guardianConfig.StateDir,
+			filepath.Join(config.StateDir, "guardian"),
+		),
+		CurrentBin: stringProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionGuardianCurrentBinV0, guardianConfig.CurrentBin, "",
+		),
+		CandidateBin: stringProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionGuardianCandidateBinV0, guardianConfig.CandidateBin, "",
+		),
+		LastGoodBin: stringProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionGuardianLastGoodBinV0, guardianConfig.LastGoodBin, "",
+		),
+		ArtifactRoot: stringProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionGuardianArtifactRootV0, guardianConfig.ArtifactRoot, "",
+		),
+		BuildCommand: stringProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionGuardianBuildCommandV0, guardianConfig.BuildCommand, "",
+		),
+		TestCommands: autoprogrammingPromotionGuardianStringsFromProjectConfigV0(
+			envServerAutoprogrammingPromotionGuardianTestCommandsV0, guardianConfig.TestCommands, nil,
+		),
+		HealthTimeout: stringProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionGuardianHealthTimeoutV0, guardianConfig.HealthTimeout, "",
+		),
+		CommandTimeout: stringProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionGuardianCommandTimeoutV0, guardianConfig.CommandTimeout, "",
+		),
+		ArtifactMaxBytes: stringProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionGuardianArtifactMaxBytesV0, guardianConfig.ArtifactMaxBytes, "",
+		),
+		RepairCommand: stringProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionGuardianRepairCommandV0, guardianConfig.RepairCommand, "",
+		),
+		RepairCodex: boolProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionGuardianRepairCodexV0, guardianConfig.RepairCodex, false,
+		),
+		RepairCodexWriteSet: autoprogrammingPromotionGuardianStringsFromProjectConfigV0(
 			envServerAutoprogrammingPromotionGuardianRepairCodexWriteSetV0,
+			guardianConfig.RepairCodexWriteSet,
 			nil,
 		),
-		RepairCodexRequiredTests: csvEnvOrDefaultV0(
+		RepairCodexRequiredTests: autoprogrammingPromotionGuardianStringsFromProjectConfigV0(
 			envServerAutoprogrammingPromotionGuardianRepairCodexRequiredTestsV0,
+			guardianConfig.RepairCodexRequiredTests,
 			nil,
 		),
-		RepairCodexWorktreeRef:     strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianRepairCodexWorktreeRefV0)),
-		RepairCodexBranchRef:       strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianRepairCodexBranchRefV0)),
-		RepairCodexRunRef:          strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianRepairCodexRunRefV0)),
-		RepairCodexPromotionRef:    strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianRepairCodexPromotionRefV0)),
-		RepairCodexSandbox:         strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianRepairCodexSandboxV0)),
-		RepairCodexReasoning:       strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianRepairCodexReasoningV0)),
-		RepairCodexRuntimeDir:      strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianRepairCodexRuntimeDirV0)),
-		RepairCodexAllowBroad:      boolEnvOrDefaultV0(envServerAutoprogrammingPromotionGuardianRepairCodexAllowBroadV0, false),
-		RepairCodexSandboxEvidence: strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionGuardianRepairCodexSandboxEvidenceV0)),
-		CommandEffectEvidenceRefs: csvEnvOrDefaultV0(
+		RepairCodexWorktreeRef:     stringProjectConfigOrEnvOrDefaultV0(envServerAutoprogrammingPromotionGuardianRepairCodexWorktreeRefV0, guardianConfig.RepairCodexWorktreeRef, ""),
+		RepairCodexBranchRef:       stringProjectConfigOrEnvOrDefaultV0(envServerAutoprogrammingPromotionGuardianRepairCodexBranchRefV0, guardianConfig.RepairCodexBranchRef, ""),
+		RepairCodexRunRef:          stringProjectConfigOrEnvOrDefaultV0(envServerAutoprogrammingPromotionGuardianRepairCodexRunRefV0, guardianConfig.RepairCodexRunRef, ""),
+		RepairCodexPromotionRef:    stringProjectConfigOrEnvOrDefaultV0(envServerAutoprogrammingPromotionGuardianRepairCodexPromotionRefV0, guardianConfig.RepairCodexPromotionRef, ""),
+		RepairCodexSandbox:         stringProjectConfigOrEnvOrDefaultV0(envServerAutoprogrammingPromotionGuardianRepairCodexSandboxV0, guardianConfig.RepairCodexSandbox, ""),
+		RepairCodexReasoning:       stringProjectConfigOrEnvOrDefaultV0(envServerAutoprogrammingPromotionGuardianRepairCodexReasoningV0, guardianConfig.RepairCodexReasoning, ""),
+		RepairCodexRuntimeDir:      stringProjectConfigOrEnvOrDefaultV0(envServerAutoprogrammingPromotionGuardianRepairCodexRuntimeDirV0, guardianConfig.RepairCodexRuntimeDir, ""),
+		RepairCodexAllowBroad:      boolProjectConfigOrEnvOrDefaultV0(envServerAutoprogrammingPromotionGuardianRepairCodexAllowBroadV0, guardianConfig.RepairCodexAllowBroad, false),
+		RepairCodexSandboxEvidence: stringProjectConfigOrEnvOrDefaultV0(envServerAutoprogrammingPromotionGuardianRepairCodexSandboxEvidenceV0, guardianConfig.RepairCodexSandboxEvidence, ""),
+		CommandEffectEvidenceRefs: autoprogrammingPromotionGuardianStringsFromProjectConfigV0(
 			envServerAutoprogrammingPromotionGuardianCommandEffectEvidenceRefsV0,
+			guardianConfig.CommandEffectEvidenceRefs,
 			nil,
 		),
-		SkipHealthEvidenceRefs: csvEnvOrDefaultV0(
+		SkipHealthEvidenceRefs: autoprogrammingPromotionGuardianStringsFromProjectConfigV0(
 			envServerAutoprogrammingPromotionGuardianSkipHealthEvidenceRefsV0,
+			guardianConfig.SkipHealthEvidenceRefs,
 			nil,
 		),
 	}
@@ -180,6 +256,29 @@ func autoprogrammingPromotionGuardianFromEnvV0(
 		EnvAllowlist: append([]string(nil), guardian.RunnerEnvAllowlist...),
 	}
 	return guardian
+}
+
+func autoprogrammingPromotionGuardianEnabledFromProjectConfigV0(
+	guardian serverProjectConfigAutoprogrammingPromotionGuardianV0,
+) bool {
+	if _, ok := os.LookupEnv(envServerAutoprogrammingPromotionGuardianEnabledV0); ok {
+		return boolEnvOrDefaultV0(envServerAutoprogrammingPromotionGuardianEnabledV0, false)
+	}
+	return guardian.Enabled != nil && *guardian.Enabled
+}
+
+func autoprogrammingPromotionGuardianStringsFromProjectConfigV0(
+	key string,
+	values []string,
+	fallback []string,
+) []string {
+	if raw := strings.TrimSpace(os.Getenv(key)); raw != "" {
+		return csvEnvOrDefaultV0(key, fallback)
+	}
+	if len(values) == 0 {
+		return append([]string(nil), fallback...)
+	}
+	return compactStringsV0(values)
 }
 
 func autoprogrammingPromotionGuardianRequestV0(
