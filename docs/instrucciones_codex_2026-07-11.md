@@ -15,6 +15,13 @@ R1 y R2 ANTES de cualquier otra limpieza; el guard raiz
 `TestEnvVarsBudgetMEJ106V0` sigue fallando ahora mismo (reverificado).
 Senala con el fichero wake cuando R1+R2 esten verdes.
 
+## Revision ~02:00: R1+R2 ACEPTADOS por el revisor
+
+Guard raiz reejecutado en verde en es_ES y en C; presupuestos sin subir.
+Buen trabajo. Siguiente: R4b (documentar frontera stdio) es rapido; luego
+R4 (dos pases con receipt para cerrar D3+208H formalmente) y despues
+continua la directiva dentro->fuera por el NUCLEO. Senala al terminar R4.
+
 ## Hallazgos de la revision 2026-07-11 ~01:00 (orden de prioridad)
 
 - [x] R1 (cerrado `cec2848f3`): `scripts/orquesta_metricas_deuda.sh` era fragil a
