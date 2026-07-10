@@ -49,6 +49,21 @@ deben devolver error tipado. Los resolvers Codex y Claude deben consumir el
 mismo resultado normalizado; no duplicar defaults ni convertir ausencia en
 `connector_value_invalido`.
 
+## Revision posterior del WIP
+
+La revision del worktree `wip/remote-main-20260710` confirma que el problema
+sigue presente con nombres nuevos: `codexModelRoutingFromProjectConfigFileV0`
+y `claudeModelRoutingFromProjectConfigFileV0` generan la politica tipada por
+defecto, pero inicializan `ModelAlias` desde el fichero y por tanto lo dejan
+vacio sin seccion explicita. Los dos resolvers buscan despues el
+`SelectedModelRef` en ese mapa y bloquean el launch.
+
+La correccion debe ser precisa: si la seccion de routing esta completamente
+ausente, el adaptador de composicion materializa los tres aliases canonicos
+del proveedor junto a la politica por defecto. Si la seccion esta presente,
+un alias faltante sigue siendo configuracion parcial y debe fallar cerrado.
+Asi no se reintroduce una eleccion por `PATH`, env global o herencia de padre.
+
 ## Criterio de cierre
 
 - Los paquetes de la reproduccion pasan con configuracion legacy sin
