@@ -18,7 +18,6 @@ mismo commit.
 | BUG-ORQ-20260710-208S | goal-first residente ya cubre bloqueo/rework/parada por falta de progreso; el residual es `codex-launch-wave`, utilidad breakglass cuyo presupuesto depende de `codex-wave-status` | no usar esa utilidad como flujo productivo; si se conserva para operacion real, conectarla a una tarea/observador gobernado; evidencia en la [incidencia 208S](incidencias/incidencia_orquesta_ola_codex_sin_progreso_diagnostico_excesivo_2026-07-10.md) |
 | BUG-ORQ-20260701-079 | solo frontera proveedor: cap duro pre-tool ante stdout crudo sin redireccion | esperar enforcement del proveedor o probe adversarial nuevo; no bloquea local |
 | BUG-ORQ-20260704-165 / 20260701-065 | residual amplio de observabilidad/control lento con proveedor real; nucleo local cerrado | se paga con la adopcion completa del veredicto F1 + repro 208 tras deploy |
-| BUG-ORQ-20260711-208Y | R4 aislado fallo en el segundo pase con `codex_app_server_tmux_generation_observation_transient`; el receipt queda retenido y los fallos deterministas de configuracion ya se corrigieron | reproducir el focal de cleanup con identidad/lease y clasificar carrera de fixture, identidad tmux o control de cleanup; evidencia en la [incidencia R4](incidencias/incidencia_orquesta_r4_lotes_config_y_tmux_transient_2026-07-11.md) |
 
 ## Vivos (operativos, no de codigo)
 
@@ -99,6 +98,15 @@ mismo commit.
   ejecutar el script; el guard raiz fija su propio hijo a `LC_ALL=C`. Focales
   guardian/tool-file, `TestEnvVarsBudgetMEJ106V0` en C y no-C, y el test del
   script verdes. No se arranco servidor, guardian, agente ni proveedor.
+- BUG-ORQ-20260711-208Y: cerrado localmente sin parche tmux especifico. El
+  primer R4 vio `codex_app_server_tmux_generation_observation_transient`; 20
+  focales secuenciales y el lote nuevo de dos pases no lo reprodujeron. Receipt
+  acreditado: `/tmp/orquesta-r4-retry-batches/receipt.json`, 14 ejecuciones y
+  `two_consecutive_passes_passed`. Reabrir con evidencia de identidad/lease y
+  log del hijo si reaparece; detalle en la [incidencia R4](incidencias/incidencia_orquesta_r4_lotes_config_y_tmux_transient_2026-07-11.md).
+- D3 / BUG-ORQ-20260710-208H: cierre formal local renovado por el receipt R4
+  acreditado de 2026-07-11 sobre siete paquetes y dos pases. No equivale a
+  smoke de proveedor, deploy remoto ni drain real.
 - D3 configuracion/envs 20260710: cerrado localmente. La metrica separa
   produccion `425/425` y fixtures exclusivos `103/103`, con dos pases verdes.
 - D3 local 2026-07-10: detenido tras el primer lote determinista para no

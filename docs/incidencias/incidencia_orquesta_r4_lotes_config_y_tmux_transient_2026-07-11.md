@@ -1,6 +1,6 @@
 # Incidencia R4: lote amplio, configuracion y tmux transitorio
 
-Fecha: 2026-07-11. Estado: parcialmente corregida; R4 sigue sin acreditar.
+Fecha: 2026-07-11. Estado: cerrado localmente; R4 acreditado.
 
 ## Evidencia retenida
 
@@ -31,13 +31,20 @@ no tienen variable de entorno ni alias. Los focales T90, registry, guardian,
 presupuesto y metricas locales pasan; la metrica queda 423 productivas y 103
 solo-fixture sin subir su ratchet.
 
-## Residual vivo: BUG-ORQ-20260711-208Y
+## BUG-ORQ-20260711-208Y: transitorio no reproducido
 
-La observacion tmux transitoria debe reproducirse con el focal aislado y
-clasificarse: carrera del fixture, identidad de sesion o defecto del control
-de cleanup. No se acepta reintentar el lote hasta hacerlo desaparecer; la
-causa debe conservar `run_ref`, identidad/lease, estado antes/despues y log
-del hijo. Hasta entonces, D3 y 208H no tienen dos pases independientes verdes.
+La observacion tmux transitoria no reaparecio en 20 ejecuciones focales
+secuenciales ni en el siguiente lote aislado completo. No hubo cambio de
+codigo especifico para tmux: la evidencia disponible apunta a contaminacion
+efimera del primer lote, no a una regresion demostrada. El cierre conserva
+receipts y obliga a reabrir con identidad/lease, estado antes/despues y log
+del hijo si vuelve a aparecer.
+
+El lote acreditado queda en
+`/tmp/orquesta-r4-retry-batches/receipt.json`: `status=passed`,
+`reason_code=two_consecutive_passes_passed`, 14 ejecuciones y pases 1/2
+completos. D3 y 208H recuperan evidencia amplia local, sin equivaler a smoke
+de proveedor o deploy remoto.
 
 ## Retencion
 

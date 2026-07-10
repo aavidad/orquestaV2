@@ -3112,3 +3112,15 @@ verdes. El segundo pase ademas vio
 `BUG-ORQ-20260711-208Y`. No declarar D3/208H cerrados ni borrar esa evidencia
 antes de su reproduccion focal. Incidencia completa:
 `docs/incidencias/incidencia_orquesta_r4_lotes_config_y_tmux_transient_2026-07-11.md`.
+
+## Actualizacion Codex 2026-07-11: R4 acreditado
+
+Tras `0b564992a`, el segundo R4 completo paso dos veces sobre goal,
+required-test, state-file, app-director-service, app-codex-stack,
+autoprogramming y cmd/orquesta-server. Receipt durable:
+`/tmp/orquesta-r4-retry-batches/receipt.json`, 14 ejecuciones,
+`two_consecutive_passes_passed`. El primer transitorio tmux se intento
+reproducir 20 veces de forma focal sin exito y no reaparecio en el lote; queda
+cerrado como 208Y no reproducido, con receipts retenidos. D3 y 208H recuperan
+cierre local formal. No hay evidencia nueva de proveedor, drain o deploy
+remoto.

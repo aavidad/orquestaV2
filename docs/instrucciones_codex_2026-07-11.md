@@ -52,9 +52,11 @@ continua la directiva dentro->fuera por el NUCLEO. Senala al terminar R4.
   La frontera queda documentada en
   `docs/runbooks/mcp_stdio_orquesta_2026-07-11.md`; no ampliar esta superficie
   hasta terminar nucleo y conectores.
-- [ ] R4 (pendiente ya conocido): con R1+R2 verdes, ejecutar los dos pases
-  de `scripts/orquesta_test_batches.sh` con rutas aisladas y receipt, y
-  cerrar formalmente D3 + `BUG-ORQ-20260710-208H` en el inventario.
+- [x] R4 (cerrado localmente 2026-07-11): dos pases aislados sobre siete
+  paquetes, 14 ejecuciones y receipt
+  `/tmp/orquesta-r4-retry-batches/receipt.json` con
+  `two_consecutive_passes_passed`. D3 y 208H quedan cerrados localmente; el
+  transitorio tmux 208Y no se reprodujo en 20 focales ni en el lote acreditado.
 
 ## Contexto que NO cambia
 
