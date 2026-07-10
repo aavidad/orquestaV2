@@ -75,6 +75,21 @@ func TestBuildDirectorPortsV0CableaAppGoalLauncher(t *testing.T) {
 	}
 }
 
+func TestBuildDirectorPortsV0CableaAttestorIndependienteOptIn(t *testing.T) {
+	attestor := &codexStackRequiredTestAttestorForTestV0{}
+	store := &codexStackRequiredTestAttestationStoreForTestV0{}
+	ports := buildDirectorPortsV0(ConfigV0{
+		AppGoalRequiredTestAttestor: attestor,
+		Stores:                      StoresV0{GoalRequiredTestAttestationStore: store},
+	})
+	if ports.GoalRequiredTestAttestor != attestor || ports.GoalRequiredTestAttestationStore != store {
+		t.Fatalf("wiring attestation incompleto: %+v", ports)
+	}
+	if _, ok := ports.GoalClosureValidator.(orquestagoal.IndependentGoalRequiredTestAttestationClosureValidatorV0); !ok {
+		t.Fatalf("closure validator no exige reader independiente: %T", ports.GoalClosureValidator)
+	}
+}
+
 func TestBuildDirectorPortsV0CableaPoliticaAutonomaV0(t *testing.T) {
 	policy := &codexStackAutonomousDirectorPolicyForTestV0{}
 	ports := buildDirectorPortsV0(ConfigV0{AutonomousDirectorPolicy: policy})
@@ -308,6 +323,31 @@ func (observer *codexStackGoalObserverForTestV0) ObserveGoalWorkV0(
 }
 
 type codexStackGoalStateStoreForTestV0 struct{}
+
+type codexStackRequiredTestAttestorForTestV0 struct{}
+
+func (codexStackRequiredTestAttestorForTestV0) AttestGoalRequiredTestsV0(
+	context.Context,
+	orquestagoal.GoalRequiredTestAttestationRequestV0,
+) ([]orquestagoal.GoalRequiredTestAttestationV0, error) {
+	return nil, nil
+}
+
+type codexStackRequiredTestAttestationStoreForTestV0 struct{}
+
+func (codexStackRequiredTestAttestationStoreForTestV0) SaveGoalRequiredTestAttestationV0(
+	context.Context,
+	orquestagoal.GoalRequiredTestAttestationV0,
+) error {
+	return nil
+}
+
+func (codexStackRequiredTestAttestationStoreForTestV0) ListGoalRequiredTestAttestationsV0(
+	context.Context,
+	orquestagoal.GoalRequiredTestAttestationQueryV0,
+) ([]orquestagoal.GoalRequiredTestAttestationV0, error) {
+	return nil, nil
+}
 
 func (codexStackGoalStateStoreForTestV0) SaveGoalWorkStateV0(
 	context.Context,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -99,6 +100,17 @@ func (store *StoreV0) saveAppDirectorGoalStateLockedV0(
 	state orquestagoal.GoalWorkStateV0,
 ) error {
 	runRef := normalizeRefV0(state.RunRef)
+	if existingDocument, ok, err := readJSONFileV0[appDirectorGoalStateDocumentV0](store.appDirectorGoalStatePathV0(runRef)); err != nil {
+		return err
+	} else if ok {
+		existing, err := validateAppDirectorGoalStateDocumentV0(existingDocument, runRef)
+		if err != nil {
+			return err
+		}
+		if !reflect.DeepEqual(existing.Spec, state.Spec) {
+			return storeErrorV0("app_director_goal_state.spec", "goal spec congelada no puede cambiar")
+		}
+	}
 	return writeJSONAtomicV0(store.appDirectorGoalStatePathV0(runRef), appDirectorGoalStateDocumentV0{
 		SchemaVersion: orquestagoal.GoalWorkStateSchemaV0,
 		RunRef:        runRef,

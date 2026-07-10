@@ -46,6 +46,21 @@ func TestStoreV0AppDirectorGoalStateRechazaRunRefInconsistente(t *testing.T) {
 	}
 }
 
+func TestStoreV0AppDirectorGoalStateNoPermiteMutarSpecCongelada(t *testing.T) {
+	store, err := NewStoreV0(ConfigV0{RootDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("NewStoreV0: %v", err)
+	}
+	state := appDirectorGoalStateForTestV0()
+	if err := store.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("Save inicial: %v", err)
+	}
+	state.Spec.WriteSet[0].Path = "modulos/otro-write-set"
+	if err := store.SaveGoalWorkStateV0(context.Background(), state); err == nil {
+		t.Fatalf("esperaba rechazo de spec mutada")
+	}
+}
+
 func TestStoreV0AppDirectorGoalFirstRunMarkerSobreviveRecreate(t *testing.T) {
 	root := t.TempDir()
 	store, err := NewStoreV0(ConfigV0{RootDir: root})

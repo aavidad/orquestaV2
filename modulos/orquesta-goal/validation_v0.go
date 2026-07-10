@@ -21,6 +21,8 @@ func NormalizeGoalWorkSpecV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
 	spec.GoalRef = strings.TrimSpace(spec.GoalRef)
 	spec.RequestRef = strings.TrimSpace(spec.RequestRef)
 	spec.RunRef = strings.TrimSpace(spec.RunRef)
+	spec.RevisionRef = strings.TrimSpace(spec.RevisionRef)
+	spec.ImplementerAgentRef = strings.TrimSpace(spec.ImplementerAgentRef)
 	spec.ProjectRef = strings.TrimSpace(spec.ProjectRef)
 	spec.DomainRef = strings.TrimSpace(spec.DomainRef)
 	spec.WorkKind = strings.TrimSpace(spec.WorkKind)
@@ -51,9 +53,7 @@ func NormalizeGoalWorkSpecV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
 		spec.WriteSet[i].Purpose = strings.TrimSpace(spec.WriteSet[i].Purpose)
 	}
 	for i := range spec.RequiredTests {
-		spec.RequiredTests[i].TestRef = strings.TrimSpace(spec.RequiredTests[i].TestRef)
-		spec.RequiredTests[i].CommandRef = strings.TrimSpace(spec.RequiredTests[i].CommandRef)
-		spec.RequiredTests[i].Command = strings.TrimSpace(spec.RequiredTests[i].Command)
+		spec.RequiredTests[i] = normalizeGoalRequiredTestAttestationTestV0(spec.RequiredTests[i])
 	}
 	for i := range spec.ArtifactContracts {
 		spec.ArtifactContracts[i].ArtifactRef = strings.TrimSpace(spec.ArtifactContracts[i].ArtifactRef)
@@ -258,6 +258,8 @@ func ValidateGoalWorkSpecV0(spec GoalWorkSpecV0) []GoalWorkIssueV0 {
 	}
 	validateGoalRefsV0(&issues, "request_ref", spec.RequestRef)
 	validateGoalRefsV0(&issues, "run_ref", spec.RunRef)
+	validateGoalRefsV0(&issues, "revision_ref", spec.RevisionRef)
+	validateGoalRefsV0(&issues, "implementer_agent_ref", spec.ImplementerAgentRef)
 	validateGoalRefsV0(&issues, "project_ref", spec.ProjectRef)
 	validateGoalRefsV0(&issues, "domain_ref", spec.DomainRef)
 	for _, ctx := range spec.ContextRefs {
@@ -275,6 +277,13 @@ func ValidateGoalWorkSpecV0(spec GoalWorkSpecV0) []GoalWorkIssueV0 {
 	for _, test := range spec.RequiredTests {
 		validateRequiredGoalRefV0(&issues, "required_tests.test_ref", test.TestRef)
 		validateGoalRefsV0(&issues, "required_tests.command_ref", test.CommandRef)
+	}
+	if spec.ClosurePolicy.RequireIndependentRequiredTestAttestation {
+		validateRequiredGoalRefV0(&issues, "revision_ref", spec.RevisionRef)
+		validateRequiredGoalRefV0(&issues, "implementer_agent_ref", spec.ImplementerAgentRef)
+		for _, test := range spec.RequiredTests {
+			validateFrozenGoalRequiredTestV0(&issues, test, "required_tests")
+		}
 	}
 	for _, artifact := range spec.ArtifactContracts {
 		validateRequiredGoalRefV0(&issues, "artifact_contracts.artifact_ref", artifact.ArtifactRef)

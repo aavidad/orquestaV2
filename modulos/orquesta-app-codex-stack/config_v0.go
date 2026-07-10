@@ -25,28 +25,31 @@ import (
 )
 
 type ConfigV0 struct {
-	Enabled                                        bool
-	Clock                                          orquestafactoryhttp.AppSpecHTTPClockV0
-	Timeout                                        time.Duration
-	DirectorLimits                                 orquestaweb.WebArrancarDirectorAppLimitsV0
-	AppIntakeAssistant                             orquestaweb.WebNuevaAppIntakeAssistantPortV0
-	WizardBotAssistant                             orquestaweb.WizardBotLLMAssistPortV0
-	DirectorDecisionBudget                         orquestadirectoragentworkflow.DirectorAgentDecisionBatchBudgetV0
-	Stores                                         StoresV0
-	RunQueue                                       RunQueueConfigV0
-	RunSupervisor                                  RunSupervisorConfigV0
-	Codex                                          CodexRuntimeConfigV0
-	Gemini                                         GeminiRuntimeConfigV0
-	Claude                                         ClaudeRuntimeConfigV0
-	EgressSanitizer                                EgressSanitizerConfigV0
-	Capacity                                       CapacityConfigV0
-	ReviewGate                                     ReviewGateConfigV0
-	RequiredTests                                  orquestacionnucleoapp.RequiredTestRunnerPortV0
-	AutonomousDirectorPolicy                       orquestacionnucleoapp.AutonomousDirectorPolicyPortV0
-	AppGoalLauncher                                orquestagoal.GoalWorkLauncherPortV0
-	AppGoalReworkLauncher                          orquestagoal.GoalWorkLauncherPortV0
-	GoalRequiredTestDependencies                   GoalRequiredTestDependencyResolverPortV0
-	AppGoalObserver                                orquestagoal.GoalWorkObservationPortV0
+	Enabled                      bool
+	Clock                        orquestafactoryhttp.AppSpecHTTPClockV0
+	Timeout                      time.Duration
+	DirectorLimits               orquestaweb.WebArrancarDirectorAppLimitsV0
+	AppIntakeAssistant           orquestaweb.WebNuevaAppIntakeAssistantPortV0
+	WizardBotAssistant           orquestaweb.WizardBotLLMAssistPortV0
+	DirectorDecisionBudget       orquestadirectoragentworkflow.DirectorAgentDecisionBatchBudgetV0
+	Stores                       StoresV0
+	RunQueue                     RunQueueConfigV0
+	RunSupervisor                RunSupervisorConfigV0
+	Codex                        CodexRuntimeConfigV0
+	Gemini                       GeminiRuntimeConfigV0
+	Claude                       ClaudeRuntimeConfigV0
+	EgressSanitizer              EgressSanitizerConfigV0
+	Capacity                     CapacityConfigV0
+	ReviewGate                   ReviewGateConfigV0
+	RequiredTests                orquestacionnucleoapp.RequiredTestRunnerPortV0
+	AutonomousDirectorPolicy     orquestacionnucleoapp.AutonomousDirectorPolicyPortV0
+	AppGoalLauncher              orquestagoal.GoalWorkLauncherPortV0
+	AppGoalReworkLauncher        orquestagoal.GoalWorkLauncherPortV0
+	GoalRequiredTestDependencies GoalRequiredTestDependencyResolverPortV0
+	AppGoalObserver              orquestagoal.GoalWorkObservationPortV0
+	// AppGoalRequiredTestAttestor is opt-in and must execute outside the
+	// implementer identity. It is intentionally not a Codex/runtime default.
+	AppGoalRequiredTestAttestor                    orquestagoal.GoalRequiredTestAttestorPortV0
 	AppGoalBackendControl                          GoalBackendControlPortV0
 	AppGoalClosureValidator                        orquestagoal.GoalWorkClosureValidatorPortV0
 	DomainTests                                    DomainWorkRequiredTestConfigV0
@@ -78,21 +81,22 @@ type DomainWorkRequiredTestConfigV0 struct {
 }
 
 type StoresV0 struct {
-	RunStore                   orquestacionnucleoapp.RunStorePortV0
-	EventSink                  orquestacionnucleoapp.EventSinkPortV0
-	OutboxLedger               OutboxLedgerPortV0
-	TaskStore                  orquestaappdirectorservice.AppDirectorWorkflowTaskStorePortV0
-	WaitStateStore             orquestacionnucleoapp.WorkflowTaskWaitStateStorePortV0
-	OperationalPlanStateWriter orquestacionnucleoapp.OperationalDirectorPlanStateWriterPortV0
-	OperationalPlanStateStore  orquestacionnucleoapp.OperationalDirectorPlanStateStorePortV0
-	RequiredTestEvidenceStore  orquestacionnucleoapp.RequiredTestEvidenceStorePortV0
-	AppChangeStore             orquestaappchange.AppChangeRecordStorePortV0
-	ReceiptStore               CodexReceiptStorePortV0
-	ProgressState              orquestaruntimecodexdelivery.CodexProgressStateStorePortV0
-	ProcessRegistry            orquestacionnucleoapp.AgentProcessRegistryPortV0
-	RunControl                 orquestaruncontrol.RunControlPortV0
-	RunQueue                   orquestarunqueue.RunQueuePortV0
-	AppGoalStateStore          orquestagoal.GoalWorkStateStorePortV0
+	RunStore                         orquestacionnucleoapp.RunStorePortV0
+	EventSink                        orquestacionnucleoapp.EventSinkPortV0
+	OutboxLedger                     OutboxLedgerPortV0
+	TaskStore                        orquestaappdirectorservice.AppDirectorWorkflowTaskStorePortV0
+	WaitStateStore                   orquestacionnucleoapp.WorkflowTaskWaitStateStorePortV0
+	OperationalPlanStateWriter       orquestacionnucleoapp.OperationalDirectorPlanStateWriterPortV0
+	OperationalPlanStateStore        orquestacionnucleoapp.OperationalDirectorPlanStateStorePortV0
+	RequiredTestEvidenceStore        orquestacionnucleoapp.RequiredTestEvidenceStorePortV0
+	AppChangeStore                   orquestaappchange.AppChangeRecordStorePortV0
+	ReceiptStore                     CodexReceiptStorePortV0
+	ProgressState                    orquestaruntimecodexdelivery.CodexProgressStateStorePortV0
+	ProcessRegistry                  orquestacionnucleoapp.AgentProcessRegistryPortV0
+	RunControl                       orquestaruncontrol.RunControlPortV0
+	RunQueue                         orquestarunqueue.RunQueuePortV0
+	AppGoalStateStore                orquestagoal.GoalWorkStateStorePortV0
+	GoalRequiredTestAttestationStore orquestagoal.GoalRequiredTestAttestationStorePortV0
 }
 
 type OutboxLedgerPortV0 interface {

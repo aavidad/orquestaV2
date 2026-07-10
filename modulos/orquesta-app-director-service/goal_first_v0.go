@@ -150,9 +150,11 @@ func ObserveAppDirectorGoalV0(
 		ctx,
 		orquestagoal.GoalWorkObserveRequestV0{RunRef: request.RunRef},
 		orquestagoal.GoalWorkLifecyclePortsV0{
-			Observer:         ports.GoalObserver,
-			ClosureValidator: appDirectorGoalClosureValidatorV0{Base: ports.GoalClosureValidator},
-			StateStore:       ports.GoalStateStore,
+			Observer:                     ports.GoalObserver,
+			RequiredTestAttestor:         ports.GoalRequiredTestAttestor,
+			RequiredTestAttestationStore: ports.GoalRequiredTestAttestationStore,
+			ClosureValidator:             appDirectorGoalClosureValidatorV0{Base: ports.GoalClosureValidator},
+			StateStore:                   ports.GoalStateStore,
 		},
 	)
 	if err != nil {

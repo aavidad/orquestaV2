@@ -6,10 +6,12 @@ import (
 )
 
 type GoalWorkLifecyclePortsV0 struct {
-	Launcher         GoalWorkLauncherPortV0
-	Observer         GoalWorkObservationPortV0
-	ClosureValidator GoalWorkClosureValidatorPortV0
-	StateStore       GoalWorkStateStorePortV0
+	Launcher                     GoalWorkLauncherPortV0
+	Observer                     GoalWorkObservationPortV0
+	ClosureValidator             GoalWorkClosureValidatorPortV0
+	StateStore                   GoalWorkStateStorePortV0
+	RequiredTestAttestor         GoalRequiredTestAttestorPortV0
+	RequiredTestAttestationStore GoalRequiredTestAttestationStorePortV0
 }
 
 type GoalWorkStartRequestV0 struct {
@@ -195,6 +197,25 @@ func ObserveGoalWorkV0(
 	terminal := GoalWorkResultTerminalV0(result.Status)
 	closure := GoalClosureValidationV0{}
 	if terminal {
+		if result.Status == GoalStatusCompleteV0 && state.Spec.ClosurePolicy.RequireIndependentRequiredTestAttestation &&
+			ports.RequiredTestAttestor != nil && ports.RequiredTestAttestationStore != nil {
+			existing, err := ports.RequiredTestAttestationStore.ListGoalRequiredTestAttestationsV0(ctx, GoalRequiredTestAttestationQueryV0{
+				RunRef: state.Spec.RunRef, GoalRef: state.Spec.GoalRef, RevisionRef: state.Spec.RevisionRef,
+			})
+			if err != nil {
+				return GoalWorkObserveResultV0{}, err
+			}
+			if len(existing) == 0 {
+				if _, err := RunAndPersistGoalRequiredTestAttestationsV0(
+					ctx,
+					GoalRequiredTestAttestationRequestFromSpecV0(state.Spec),
+					ports.RequiredTestAttestor,
+					ports.RequiredTestAttestationStore,
+				); err != nil {
+					return GoalWorkObserveResultV0{}, err
+				}
+			}
+		}
 		if ports.ClosureValidator == nil {
 			return GoalWorkObserveResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "ports.goal_closure_validator"}
 		}
