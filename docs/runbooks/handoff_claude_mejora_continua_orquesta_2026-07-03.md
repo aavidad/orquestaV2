@@ -3124,3 +3124,16 @@ reproducir 20 veces de forma focal sin exito y no reaparecio en el lote; queda
 cerrado como 208Y no reproducido, con receipts retenidos. D3 y 208H recuperan
 cierre local formal. No hay evidencia nueva de proveedor, drain o deploy
 remoto.
+
+## Actualizacion Codex 2026-07-11: limpieza del nucleo puro iniciada
+
+`8720dbce6` retira de produccion dos bloques que solo usaban tests en
+`orquesta-core-workflow`: fragments de detalle sensible y la busqueda con
+limites de token. Ahora viven en un fichero `_test.go`; `go test -count=1
+./modulos/orquesta-core-workflow` verde. No cambia rails ni contratos.
+
+Auditoria causal: `DerivarVeredictoCausalV0` en `orquesta-estado-vivo` es la
+unica autoridad que combina estado, terminalidad durable y liveness. Sus
+consumidores son proyeccion interna, MCP y rework residente Codex. Los
+predicados de run-control, cola y autoprogramming son politicas/proyecciones
+con vocabulario propio, no reconciliaciones duplicadas; no se borraron.

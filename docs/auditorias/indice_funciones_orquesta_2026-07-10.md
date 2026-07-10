@@ -130,3 +130,17 @@ paquetes `orquesta-runtime-codex-goal`, `orquesta-runtime-codex`,
 `orquesta-runtime-claude` y `orquesta-runtime-gemini` pasaron `go test` de
 forma focal. Este cierre reduce 264 lineas; no autoriza retirada automatica de
 otros candidatos.
+
+## Actualizacion 2026-07-11: primer corte de nucleo puro
+
+La auditoria de `orquesta-core-workflow`, `orquesta-goal` y
+`orquesta-orchestration-core` encontro dos bloques privados consumidos solo
+por tests. `8720dbce6` los mueve a `sensitive_detail_rails_v0_test.go` y los
+retira de los archivos de produccion, sin modificar rails, contratos ni
+mensajes. La suite completa de `orquesta-core-workflow` queda verde.
+
+La revision separada de estado-vivo, run-control, run-queue y
+autoprogramming confirma que `DerivarVeredictoCausalV0` sigue siendo la unica
+reconciliacion de estado persistido, terminalidad durable y liveness. Las
+proyecciones de fase, cola, control y review son politicas distintas; no se
+retiran ni se consolidan por parecido textual.
