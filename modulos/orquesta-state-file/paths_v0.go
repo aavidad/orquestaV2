@@ -86,6 +86,14 @@ func (store *StoreV0) agentProcessPathV0(runRef string, agentRequestRef string) 
 	return filepath.Join(store.rootDir, agentProcessesDirV0, hashRefsV0(runRef), hashRefsV0(agentRequestRef)+".json")
 }
 
+func (store *StoreV0) autonomyProgramPathV0(projectRef string, rootRef string, programRef string) string {
+	return filepath.Join(store.rootDir, autonomyProgramsDirV0, hashRefsV0(projectRef), hashRefsV0(rootRef), hashRefsV0(programRef)+".json")
+}
+
+func (store *StoreV0) autonomyProgramLockPathV0(projectRef string, rootRef string, programRef string) string {
+	return store.autonomyProgramPathV0(projectRef, rootRef, programRef) + ".lock"
+}
+
 func hashRefsV0(refs ...string) string {
 	hash := sha256.New()
 	for _, ref := range refs {

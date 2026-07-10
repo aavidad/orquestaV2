@@ -1,72 +1,133 @@
-# Handoff: atestación independiente 208H
+# Handoff: atestacion independiente 208H
 
-Fecha: 2026-07-10. Estado: `ready_for_operator_attestation_208h`.
+Fecha: 2026-07-10. Estado: `ready_for_terra_final_review_no_commit`.
 
-## Resultado
+## Alcance y frontera
 
-El cierre goal-first con política
-`require_independent_required_test_attestation=true` ya no acepta
-`required_test_results=passed` informado por el implementador. Ese campo queda
-como diagnóstico no autoritativo. Para cada prueba requerida debe existir un
-receipt durable, independiente y `passed`.
+Trabajo exclusivamente local en
+`/home/alberto/Trabajo/orquesta-worktrees/attestation-208h-20260710`. No se
+uso SSH, remoto, deploy, runtime productivo ni `codebase-memory-mcp`. La
+reparacion directa queda como excepcion acotada porque el operador prohibio
+arrancar Orquesta/runtimes para este corte critico.
 
-El contrato neutral reside en `modulos/orquesta-goal`:
+La rama se rebased localmente sobre `6a8cb3e066`. Se conservaron los documentos
+upstream de extraccion documental:
 
-- `GoalWorkSpecV0` congela `revision_ref`, `implementer_agent_ref`, write-set y
-  los refs/hashes de cada required test (`command_ref`, `command_sha256`,
-  `definition_sha256`).
-- `GoalRequiredTestAttestationV0` exige agente y credencial del atestador,
-  hashes antes/después, exit code, timestamps RFC3339, entorno aislado y refs
-  de evidencia. El agente atestador no puede ser el implementador.
-- `GoalRequiredTestAttestorPortV0` y
-  `GoalRequiredTestAttestationStorePortV0` son puertos neutrales; no conocen
-  shell, Codex, proveedores ni filesystem.
-- `IndependentGoalRequiredTestAttestationClosureValidatorV0` solo acepta
-  receipts que correspondan exactamente a run, goal, revisión, implementador,
-  test, command ref y hashes congelados. `failed`, ausente, identidad igual,
-  hash distinto o revisión stale devuelve `blocked` con código tipado y
-  `needs_rework=true`.
+- `docs/diseno_subsistema_extraccion_documental_2026-07-10.md`;
+- `docs/inventario_herramientas_extraccion_documental_2026-07-10.md`;
+- `docs/runbooks/handoff_codex_extraccion_documental_2026-07-10.md`.
 
-`orquesta-state-file` persiste receipts por run de forma inmutable e
-idempotente. Reutilizar la misma ref con payload distinto es conflicto. También
-impide cambiar la `GoalWorkSpecV0` de un run existente, para no sustituir tests,
-write-set o revisión después del lanzamiento.
+No hay commit nuevo.
 
-La composición Codex solo cablea el atestador si el operador inyecta
-`AppGoalRequiredTestAttestor` y un
-`GoalRequiredTestAttestationStore`. `LocalGoalRequiredTestAttestorV0` es un
-adaptador opt-in que delega a un executor local inyectado; no escoge ni ejecuta
-comandos por sí mismo y no hay fallback al implementador.
+## Findings cerrados en codigo local
 
-## Replay y frontera operativa
+1. Las specs goal-first reales de autoprogramacion activan
+   `require_independent_required_test_attestation`. El contrato de entrada
+   `AutoprogrammingRequiredTestAttestationV0` aporta checkout, revision,
+   implementador, credencial, policy y hashes esperados. Sin ese bloque una
+   request `goal_ready` queda invalida, no degrada a evidencia autodeclarada.
+2. La independencia ya no se decide comparando nombres de agente.
+   `GoalRequiredTestIdentityVerifierPortV0` verifica credenciales opacas bajo
+   la policy congelada y devuelve principal, independencia y evidencias. Alias
+   iguales pueden ser validos solo si el verificador confiable lo confirma;
+   nombres distintos no bastan si el verificador rechaza.
+3. Spec y receipt quedan ligados a `checkout_ref`, `revision_ref`, revision
+   observada del checkout, digest canonico del write-set, hashes esperados,
+   command hash y definition hash. Hashes before/after deben coincidir entre si
+   y con la foto congelada.
+4. `ObserveGoalWorkV0` impone el validator independiente aunque la composicion
+   entregue otro closure validator. Si faltan attestor, store, identity
+   verifier o closure validator, persiste cierre `blocked` tipado; no existe
+   bypass por `required_test_results=passed` del implementador.
+5. El replay consulta receipts de la revision actual y solicita al attestor
+   solo `RequiredTests` sin receipt. Un receipt presente pero fallido o
+   inconsistente bloquea; no se oculta repitiendo todo el lote.
+6. `orquesta-state-file` usa lock de fichero Linux por run/recurso y CAS por
+   `store_version` para estado de goal. Receipt repetido identico es
+   idempotente; mismo ref con payload distinto es conflicto. La spec permanece
+   inmutable.
+7. La decision del identity verifier se conserva en
+   `GoalClosureValidationV0.AttestationVerifications`; estado, principals,
+   policy y refs de evidencia sobreviven recrear el store. El servidor cablea
+   `GoalRequiredTestAttestationStore` al `stateStore` durable. No se inyecta
+   attestor/verifier real por defecto: sin opt-in de operador el servidor falla
+   cerrado, como demuestra el test HTTP.
+8. El rebase local sobre `6a8cb3e066` termino sin perder documentacion upstream.
 
-Antes de pedir una atestación el lifecycle consulta receipts de la misma
-`run_ref/goal_ref/revision_ref`. Si ya existen, no reinvoca al atestador; el
-store hace la segunda barrera idempotente. Un receipt de otra revisión queda
-fuera de la query y no puede cerrar la revisión actual.
+El contrato sigue hexagonal: `orquesta-goal` solo conoce DTOs y puertos;
+filesystem, locks y ejecucion local viven en adaptadores. No hay proveedor,
+modelo, comando, HOME ni credencial concreta hardcodeados.
 
-No se activó runtime, proceso, API, deploy, proveedor ni aplicación. Para un
-smoke futuro, el operador debe inyectar un executor aislado que emita el receipt
-completo; la atestación solo se considera válida al persistirse y validarse por
-el contrato, no por texto libre.
+## Evidencia adversarial
 
-## Regresiones cubiertas
+- implementador declara `passed` y attestor independiente falla;
+- verifier no confiable bloquea aunque los nombres de agente sean distintos;
+- alias de agente iguales no sustituyen la decision verificable del puerto;
+- mutacion de checkout, revision, write-set o hashes bloquea;
+- lifecycle con validator permisivo y puertos ausentes sigue bloqueando;
+- replay con dos tests y un receipt previo invoca solo el test ausente;
+- ocho subprocesos reales escribiendo el mismo receipt dejan un unico documento;
+- dos subprocesos haciendo CAS desde `store_version=1` dejan un unico ganador y
+  estado version 2;
+- evidencia de identidad sobrevive recrear `StoreV0`.
 
-- implementador dice `passed`, atestador independiente falla;
-- misma identidad implementador/atestador;
-- hash de test mutado;
-- `passed` independiente cierra;
-- replay no vuelve a ejecutar atestador;
-- varios tests y receipt de revisión stale;
-- persistencia tras recrear `state-file`, conflicto de receipt y spec congelada;
-- wiring opt-in y adaptador local inyectado sin fallback.
-
-Comandos focales ejecutados con temporales y cache de compilación fuera del
-worktree (`/tmp/attestation-208h-20260710`):
+## Pruebas verdes
 
 ```bash
-go test -count=1 ./modulos/orquesta-goal ./modulos/orquesta-state-file
-go test -count=1 ./modulos/orquesta-app-director-service
-go test -count=1 ./modulos/orquesta-app-codex-stack \
-  -run 'Test(LocalGoalRequiredTestAttestorV0EsInyectadoYNoHaceFallback|BuildDirectorPortsV0CableaAttestorIndependienteOptIn)$'
+go test -count=1 \
+  ./modulos/orquesta-goal \
+  ./modulos/orquesta-autoprogramming \
+  ./modulos/orquesta-state-file \
+  ./modulos/orquesta-app-director-service \
+  ./modulos/orquesta-app-codex-stack \
+  ./modulos/orquesta-mcp \
+  ./modulos/orquesta-web
+
+go test -race -count=1 \
+  ./modulos/orquesta-goal \
+  ./modulos/orquesta-autoprogramming \
+  ./modulos/orquesta-state-file \
+  ./modulos/orquesta-app-director-service \
+  ./modulos/orquesta-mcp \
+  ./modulos/orquesta-web
+
+go test -race -count=1 ./modulos/orquesta-app-codex-stack \
+  -run 'Test(LocalGoalRequiredTestAttestorV0|BuildDirectorPortsV0CableaAttestor|PrepareAutoprogrammingRunV0GoalReady|CodexStackAutoprogrammingPrepareRunAPIV0GoalReady|CodexStackAutoprogrammingPromotionV0GoalFirst)'
+
+go test -count=1 . \
+  -run 'Test(EnvVarsBudgetMEJ106V0|NeutralOrchestrationPackagesDoNotImportProductAdapters)$'
+go test -count=1 ./cmd/orquesta-server \
+  -run 'TestEnvVarsOrquestaRatchetMEJ106V0$'
+git diff --check
 ```
+
+La primera pasada `go test -race` del stack completo no detecto carreras, pero
+fallo el umbral temporal de `TestSimulacionDeterministaFallosGoalFirstV0`:
+74.97 s con instrumentacion race. La pasada focal anterior excluye solo esa
+prueba de rendimiento y queda verde.
+
+## Bateria transversal
+
+`go test -count=1 ./...` dejo verdes todos los modulos y comandos salvo siete
+tests preexistentes de cleanup/tmux en `cmd/orquesta-server`:
+
+- `TestWaitForStateHealthyV0LimpiaGoalBackendConfiguradoSiMuereTrasReadinessV0`;
+- `TestCleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0SoloMataSiProcesoCayo`;
+- `TestCleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0MataSesionConfiguradaSinOwnerMarker`;
+- `TestCleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0MataProcesoPropioSinSocketV0`;
+- `TestStopServerCommandV0ForceConDaemonMuertoLimpiaBackendGoalConfigurado`;
+- `TestStopServerCommandV0SinForceConDaemonMuertoNoLimpiaBackendGoal`;
+- `TestStopServerCommandV0ForceConDaemonIdentityMismatchNoLimpiaBackendGoal`.
+
+Los fallos observados son `codex_app_server_tmux_generation_conflict`, ausencia
+de `kill-session` en el fake y proceso fake que queda vivo. Ya aparecian en la
+linea base de esta sesion y no pertenecen al write-set 208H. Los ratchets
+MEJ-106 quedan verdes en 521 tras retirar prefijos `ORQUESTA_` de los helpers
+de test multiproceso.
+
+## Siguiente accion
+
+Terra debe revisar el diff local, especialmente el contrato del identity
+verifier y la semantica CAS. Para un smoke real posterior, el operador debe
+inyectar un attestor aislado, un verifier de credenciales y policy confiable;
+este corte no autoriza remoto, deploy ni proveedor real.

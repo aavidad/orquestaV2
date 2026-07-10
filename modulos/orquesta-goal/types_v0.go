@@ -183,21 +183,45 @@ type GoalContextBudgetV0 struct {
 }
 
 type GoalWorkResultV0 struct {
-	SchemaVersion         string                       `json:"schema_version"`
-	Status                string                       `json:"status"`
-	GoalRef               string                       `json:"goal_ref,omitempty"`
-	ExternalGoalRef       string                       `json:"external_goal_ref,omitempty"`
-	Summary               string                       `json:"summary,omitempty"`
-	ContextBudget         GoalContextBudgetV0          `json:"context_budget,omitempty"`
-	ArtifactRefs          []string                     `json:"artifact_refs,omitempty"`
-	ArtifactPaths         []string                     `json:"artifact_paths,omitempty"`
-	MaterializedArtifacts []GoalMaterializedArtifactV0 `json:"materialized_artifacts,omitempty"`
-	Checklist             GoalWorkChecklistV0          `json:"checklist,omitempty"`
-	RequiredTestResults   []GoalRequiredTestResultV0   `json:"required_test_results,omitempty"`
-	DomainReceiptRefs     []string                     `json:"domain_receipt_refs,omitempty"`
-	ReworkPlanRefs        []string                     `json:"rework_plan_refs,omitempty"`
-	EvidenceRefs          []string                     `json:"evidence_refs,omitempty"`
-	Issues                []GoalWorkIssueV0            `json:"issues,omitempty"`
+	SchemaVersion         string                         `json:"schema_version"`
+	Status                string                         `json:"status"`
+	GoalRef               string                         `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string                         `json:"external_goal_ref,omitempty"`
+	Summary               string                         `json:"summary,omitempty"`
+	ContextBudget         GoalContextBudgetV0            `json:"context_budget,omitempty"`
+	ArtifactRefs          []string                       `json:"artifact_refs,omitempty"`
+	ArtifactPaths         []string                       `json:"artifact_paths,omitempty"`
+	MaterializedArtifacts []GoalMaterializedArtifactV0   `json:"materialized_artifacts,omitempty"`
+	Checklist             GoalWorkChecklistV0            `json:"checklist,omitempty"`
+	RequiredTestResults   []GoalRequiredTestResultV0     `json:"required_test_results,omitempty"`
+	DomainReceiptRefs     []string                       `json:"domain_receipt_refs,omitempty"`
+	ReworkPlanRefs        []string                       `json:"rework_plan_refs,omitempty"`
+	EvidenceRefs          []string                       `json:"evidence_refs,omitempty"`
+	Issues                []GoalWorkIssueV0              `json:"issues,omitempty"`
+	RepairReceipt         *GoalWorkResultRepairReceiptV0 `json:"repair_receipt,omitempty"`
+}
+
+// GoalWorkResultJSONDecodeV0 is the neutral outcome of reading a durable goal
+// result. Disposition tells adapters whether the input was canonical,
+// recoverably repaired, or structurally impossible to use.
+type GoalWorkResultJSONDecodeV0 struct {
+	Result        GoalWorkResultV0               `json:"result"`
+	Disposition   string                         `json:"disposition"`
+	Issues        []GoalWorkIssueV0              `json:"issues,omitempty"`
+	RepairReceipt *GoalWorkResultRepairReceiptV0 `json:"repair_receipt,omitempty"`
+}
+
+type GoalWorkResultRepairReceiptV0 struct {
+	SchemaVersion         string                                 `json:"schema_version"`
+	OriginalSchemaVersion string                                 `json:"original_schema_version,omitempty"`
+	OriginalRefHash       string                                 `json:"original_ref_hash"`
+	Transformations       []GoalWorkResultRepairTransformationV0 `json:"transformations,omitempty"`
+	EvidenceRefs          []string                               `json:"evidence_refs,omitempty"`
+}
+
+type GoalWorkResultRepairTransformationV0 struct {
+	Field string `json:"field"`
+	Kind  string `json:"kind"`
 }
 
 type GoalMaterializedArtifactV0 struct {

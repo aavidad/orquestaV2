@@ -366,53 +366,17 @@ func TestServerAutoprogrammingHTTPGoalFirstFailClosedSinAttestorV0(t *testing.T)
 		t.Fatalf("buildServerAppHandlerV0: %v", err)
 	}
 
-	prepared := postAutoprogrammingGoalFirstPrepareForTestV0(t, handler)
-	if prepared.Estado != orquestamcp.MCPAutoprogrammingPrepareRunEstadoOKV0 ||
-		!prepared.Accepted ||
-		prepared.RunRef != "run-http-autoprogramming-goal-first-001" ||
-		prepared.Goal == nil ||
-		prepared.Goal.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
-		prepared.Goal.ExternalGoalRef != "thread-ref-http-goal-first-001" ||
-		len(prepared.GoalSpecs) != 0 ||
-		len(prepared.GoalSpecSummaries) != 1 ||
-		prepared.GoalSpecSummaries[0].SpecHash == "" ||
-		len(prepared.WorkflowTaskRefs) != 0 ||
-		len(prepared.WaitAgentRefs) != 0 ||
-		prepared.Continue != nil {
+	prepared, statusCode := postAutoprogrammingGoalFirstPrepareForTestV0(t, handler)
+	if statusCode != http.StatusBadRequest ||
+		prepared.Estado != orquestamcp.MCPAutoprogrammingPrepareRunEstadoErrorV0 ||
+		prepared.Accepted ||
+		prepared.RunRef != "" ||
+		len(prepared.Errores) != 1 ||
+		prepared.Errores[0].Code != "autoprogramming_goal_required_test_attestation_unavailable" {
 		t.Fatalf("prepared=%+v", prepared)
 	}
-	if backend.packet.RequestRef != prepared.RunRef ||
-		backend.packet.GoalRef != prepared.Goal.GoalRef ||
-		len(backend.packet.RequiredTests) == 0 {
-		t.Fatalf("packet=%+v prepared=%+v", backend.packet, prepared)
-	}
-
-	status := postAutoprogrammingGoalFirstStatusForTestV0(t, handler, prepared.RunRef)
-	if status.Estado != orquestamcp.MCPAutoprogrammingStatusEstadoOKV0 ||
-		status.RunRef != prepared.RunRef ||
-		!goalFirstHTTPDiagnosticsContainCodeForTestV0(status.Diagnostics, "autoprogramming_goal_first_observe_required") {
-		t.Fatalf("status=%+v", status)
-	}
-
-	supervisor := postAutoprogrammingGoalFirstSuperviseForTestV0(t, handler, prepared.RunRef)
-	if supervisor.Estado != orquestamcp.MCPRunSupervisorEstadoOKV0 ||
-		supervisor.RunRef != prepared.RunRef ||
-		supervisor.StopReason != "goal_first_observe_required" ||
-		supervisor.Last.Status != "running_live" ||
-		!goalFirstHTTPStringInSetForTestV0(supervisor.NextActions, "observe_goal") ||
-		!goalFirstHTTPDiagnosticsContainCodeForTestV0(supervisor.Diagnostics, "run_supervisor_goal_first_not_legacy") {
-		t.Fatalf("supervisor=%+v", supervisor)
-	}
-
-	observed := postAutoprogrammingGoalFirstObserveForTestV0(t, handler, prepared.RunRef)
-	if observed.Estado != orquestamcp.MCPAutoprogrammingObserveGoalEstadoErrorV0 ||
-		observed.GoalRef != prepared.Goal.GoalRef ||
-		observed.GoalStatus != orquestagoal.GoalStatusCompleteV0 ||
-		observed.RunStatus != "activa" ||
-		observed.ClosureStatus != orquestagoal.GoalStatusBlockedV0 ||
-		observed.ClosureAccepted || !observed.ClosureNeedsRework ||
-		!goalFirstHTTPMCPClosureIssuesContainCodeForTestV0(observed.ClosureIssues, orquestagoal.ErrGoalRequiredTestAttestationMissingV0) {
-		t.Fatalf("observed=%+v", observed)
+	if backend.packet.RequestRef != "" || backend.packet.GoalRef != "" {
+		t.Fatalf("el backend no debe lanzar goal sin atestador: packet=%+v", backend.packet)
 	}
 }
 
@@ -939,7 +903,7 @@ func waitRuntimeDoneForGoalFirstHTTPTestV0(
 func postAutoprogrammingGoalFirstPrepareForTestV0(
 	t *testing.T,
 	handler http.Handler,
-) orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0 {
+) (orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0, int) {
 	t.Helper()
 	writeSetPath := "cmd/orquesta-server/goal_first_app_http_flow_v0_test.go"
 	payload, err := json.Marshal(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
@@ -986,14 +950,11 @@ func postAutoprogrammingGoalFirstPrepareForTestV0(
 	req.Header.Set("X-Correlation-ID", "corr-http-autoprogramming-goal-first-001")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("prepare status=%d body=%s", rec.Code, rec.Body.String())
-	}
 	var result orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode prepare: %v", err)
 	}
-	return result
+	return result, rec.Code
 }
 
 func goalFirstHTTPMCPClosureIssuesContainCodeForTestV0(issues []orquestamcp.MCPValidationIssueV0, code string) bool {
