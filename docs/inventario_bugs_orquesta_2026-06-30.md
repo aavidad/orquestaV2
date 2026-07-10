@@ -3804,9 +3804,11 @@ el goal `goal-ref-task-autoprogramming-6efdd0df4cd6-g01` ya no quedo falso
 `missing_refs=[implementation, required_tests]`. Aun asi dejo cambios parciales
 validos en `cmd/orquesta-server` para guard de `prepare-run`; Codex integro esa
 entrega parcial, completo manualmente las guardas de `orquesta_server_ctl.sh` y
-el receipt de deploy, y valido `bash scripts/test_orquesta_server_ctl.sh`,
-`bash scripts/test_orquesta_server_deploy.sh` y
-`go test -count=1 ./cmd/orquesta-server -run TestSmokeGoalFirstScriptContractGuardV0|TestAutoprogrammingPrepareRunRuntimeWorkdirGuardV0` con entorno aislado.
+el receipt de deploy. Fuera del sandbox del goal se verifico `git diff --check`,
+`bash -n scripts/orquesta_server_ctl.sh scripts/orquesta_server_deploy.sh scripts/orquesta_server_drain.sh scripts/test_orquesta_server_ctl.sh scripts/test_orquesta_server_deploy.sh`,
+`bash scripts/test_orquesta_server_ctl.sh`, `bash scripts/test_orquesta_server_deploy.sh` y
+`go test -count=1 ./cmd/orquesta-server -run TestSmokeGoalFirstScriptContractGuardV0|TestAutoprogrammingPrepareRunRuntimeWorkdirGuardV0`
+con entorno aislado bajo `/srv/orquesta-self/runtime/test-cache/f5-2`.
 Sigue abierto como fallo de autonomia: Orquesta debe replanificar o pedir
 rework cuando un goal queda solo en checkpoint, no requerir integracion manual.
 

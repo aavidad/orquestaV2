@@ -30,6 +30,21 @@ worktree desplegable queda en esa rama con `checkout -B <ref> <sha>`, no en
 detached HEAD. Esto evita que un segundo deploy lea una rama local stale aunque
 el HEAD del worktree este en el commit correcto.
 
+Actualizacion F5 2026-07-10: `orquesta_server_ctl.sh start` valida antes de
+arrancar que `ORQUESTA_CTL_WORKDIR` existe, es un worktree git con `HEAD`
+verificable y no esta atrasado ni divergente respecto a su upstream local
+conocido. El default remoto del `ctl` pasa a
+`/srv/orquesta-self/worktrees/orquesta`; un workdir invalido corta con
+`ctl_workdir_invalid`, uno atrasado con `ctl_workdir_stale` y uno divergente con
+`ctl_workdir_not_aligned`. El endpoint `prepare-run` del servidor tambien queda
+envuelto en composicion para rechazar worktrees invalidos/stale antes de aceptar
+trabajo amplio.
+
+Actualizacion F5 2026-07-10 2: el recibo de deploy incluye `remote_url` junto a
+`git_sha`, `binary_sha256`, `binary_path` y el `ctl_status` recortado. Tras el
+deploy, validar el estado con `orquesta_server_ctl.sh status` o `/api/status` y
+comparar `runtime_identity.binary_sha256` con el `binary_sha256` del recibo.
+
 Uso minimo:
 
 ```bash
@@ -38,7 +53,7 @@ ORQUESTA_DEPLOY_WORKTREE=/ruta/worktree-deploy \
 ORQUESTA_DEPLOY_REF=main \
 ORQUESTA_DEPLOY_BINARY=/srv/orquesta-self/runtime/orquesta-server-claude \
 ORQUESTA_CTL_HOME=/srv/orquesta-self/claude-director-20260705 \
-ORQUESTA_CTL_WORKDIR=/srv/orquesta-self/worktrees/pilot-remoto-1 \
+ORQUESTA_CTL_WORKDIR=/srv/orquesta-self/worktrees/orquesta \
 ORQUESTA_DEPLOY_REQUIRE_CONFIG=1 \
   scripts/orquesta_server_deploy.sh
 ```
@@ -62,6 +77,9 @@ Contrato operativo:
   puede parar de forma gobernada el servidor vivo antes del swap.
 - `deploy_readiness_unreachable` bloquea si una URL configurada de verificacion
   no responde.
+- `ctl_workdir_invalid`, `ctl_workdir_stale` y `ctl_workdir_not_aligned`
+  bloquean el arranque si el workdir de agentes no es verificable o no esta
+  alineado con su upstream local conocido.
 - El recibo queda en
   `$ORQUESTA_DEPLOY_STATE_DIR/orquesta_server_deploy_receipt_v0.json` o, si no
   se define, en `$ORQUESTA_CTL_HOME/state/`.
