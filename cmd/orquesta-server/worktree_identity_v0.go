@@ -32,6 +32,7 @@ type serverWorktreeIdentityIssueV0 struct{ Code string }
 
 type serverIdentityPreflightV0 struct {
 	ProjectWorkDir  string
+	WorktreeDir     string
 	RuntimeIdentity orquestaserver.ServerRuntimeIdentityV0
 	Issue           *serverWorktreeIdentityIssueV0
 }
@@ -42,15 +43,41 @@ func serverIdentityPreflightFromEnvV0(projectConfigPath string) (serverIdentityP
 		return serverIdentityPreflightV0{}, err
 	}
 	identity := serverRuntimeIdentityFromExecutableV0()
+	return serverIdentityPreflightForWorkdirsV0(
+		context.Background(),
+		projectDir,
+		serverWorktreeDirFromEnvV0(projectDir),
+		identity,
+	), nil
+}
+
+// serverIdentityPreflightForWorkdirsV0 keeps the external target project
+// separate from the Orquesta source worktree that proves server identity.
+func serverIdentityPreflightForWorkdirsV0(
+	ctx context.Context,
+	projectWorkDir string,
+	worktreeDir string,
+	identity orquestaserver.ServerRuntimeIdentityV0,
+) serverIdentityPreflightV0 {
 	return serverIdentityPreflightV0{
-		ProjectWorkDir:  projectDir,
+		ProjectWorkDir:  projectWorkDir,
+		WorktreeDir:     worktreeDir,
 		RuntimeIdentity: identity,
 		Issue: validateServerWorktreeIdentityWithRuntimeV0(
-			context.Background(),
-			projectDir,
+			ctx,
+			worktreeDir,
 			identity,
 		),
-	}, nil
+	}
+}
+
+func serverWorktreeDirFromEnvV0(fallback string) string {
+	if configured := strings.TrimSpace(os.Getenv(envServerWorktreeV0)); configured != "" {
+		return configured
+	}
+	// Compatibility only: older compositions used the project workdir for both
+	// roles. New compositions must set ORQUESTA_SERVER_WORKTREE explicitly.
+	return fallback
 }
 
 func validateServerWorktreeIdentityV0(ctx context.Context, workdir string) *serverWorktreeIdentityIssueV0 {

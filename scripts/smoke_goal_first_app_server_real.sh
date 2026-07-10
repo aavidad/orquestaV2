@@ -1447,6 +1447,9 @@ JSON
 
 export ORQUESTA_SERVER_ADDR="127.0.0.1:0"
 export ORQUESTA_SERVER_STATE_DIR="$state_dir"
+# The smoke target is an external app and intentionally not an Orquesta Git
+# worktree. Server identity must be proven against the source being built.
+export ORQUESTA_SERVER_WORKTREE="$repo_root"
 export ORQUESTA_CODEX_PROJECT_WORKDIR="$project_dir"
 export ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_PROJECT_WORKDIR="$idle_project_dir"
 export ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_DISABLED=true

@@ -248,6 +248,7 @@ start)
   nohup setsid env PATH=/srv/orquesta-self/tools/npm-global/bin:/srv/orquesta-self/tools/go/bin:/usr/local/bin:/usr/bin:/bin \
     ORQUESTA_SERVER_ADDR="$ADDR" \
     ORQUESTA_SERVER_STATE_DIR="$R/state" \
+    ORQUESTA_SERVER_WORKTREE="$WORKDIR" \
     ORQUESTA_CODEX_RUNTIME_WORKDIR="$R/runtime" \
     ORQUESTA_CODEX_PROJECT_WORKDIR="$WORKDIR" \
     ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \

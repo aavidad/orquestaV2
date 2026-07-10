@@ -89,6 +89,7 @@ func (builder daemonStartEnvBuilderV0) addDerivedV0(config orquestaserver.Config
 	projectConfig := projectConfigFromServerConfigBestEffortV0(config)
 	builder.setConfigV0(envServerAddrV0, config.Addr, "defaulted", "server_bootstrap", true)
 	builder.setConfigV0(envServerStateDirV0, config.StateDir, "derived", "server_bootstrap", true)
+	builder.setV0(envServerWorktreeV0, serverWorktreeDirFromEnvV0(config.ProjectWorkDir), "derived", "server_bootstrap", false)
 	builder.setConfigV0(envServerAuditFileV0, config.AuditFile, "defaulted", "server_bootstrap", false)
 	builder.setConfigV0(envServerAutonomyEnabledV0, strconv.FormatBool(config.ResidentDirectorEnabled), "derived", "server", true)
 	builder.setConfigV0(envServerResidentDirectorEnabledV0, strconv.FormatBool(config.ResidentDirectorEnabled), "derived", "server", true)

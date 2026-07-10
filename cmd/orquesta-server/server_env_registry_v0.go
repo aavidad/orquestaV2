@@ -13,6 +13,7 @@ const (
 	envOrquestaRuntimeDirV0 = "ORQUESTA_RUNTIME_DIR"
 
 	envServerAddrV0                                         = "ORQUESTA_SERVER_ADDR"
+	envServerWorktreeV0                                     = "ORQUESTA_SERVER_WORKTREE"
 	envServerStateDirV0                                     = "ORQUESTA_SERVER_STATE_DIR"
 	envServerAuditFileV0                                    = "ORQUESTA_SERVER_AUDIT_FILE"
 	envServerAuditDisabledV0                                = "ORQUESTA_SERVER_AUDIT_DISABLED"
@@ -361,6 +362,11 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "server_supervisor",
 		Label:       "Runs por tick",
 		Description: "Runs candidatos por pulso residente.",
+	},
+	envServerWorktreeV0: {
+		Scope:       "server_bootstrap",
+		Label:       "Worktree identidad servidor",
+		Description: "Worktree Git canonico de Orquesta usado para validar que el binario vivo coincide con el codigo desplegado; no es el proyecto externo objetivo.",
 	},
 	envServerMaxExecutionsPerTickV0: {
 		Scope:       "server_supervisor",

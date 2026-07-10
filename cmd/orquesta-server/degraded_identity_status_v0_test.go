@@ -203,6 +203,26 @@ func TestServerIdentityPreflightV0NoCreaEstadoNiRuntimeSiWorktreeInvalidoV0(t *t
 	}
 }
 
+func TestServerIdentityPreflightV0AceptaProyectoExternoConWorktreeCanonicoSeparadoV0(t *testing.T) {
+	worktree, identity := canonicalServerIdentityRepoForTestV0(t)
+	project := t.TempDir()
+
+	preflight := serverIdentityPreflightForWorkdirsV0(t.Context(), project, worktree, identity)
+	if preflight.Issue != nil {
+		t.Fatalf("preflight rechazada: %+v", preflight.Issue)
+	}
+	if preflight.ProjectWorkDir != project || preflight.WorktreeDir != worktree {
+		t.Fatalf("project=%q worktree=%q", preflight.ProjectWorkDir, preflight.WorktreeDir)
+	}
+}
+
+func TestServerWorktreeDirFromEnvV0PrefiereConfiguracionExplicitaV0(t *testing.T) {
+	t.Setenv(envServerWorktreeV0, "/tmp/orquesta-source")
+	if got := serverWorktreeDirFromEnvV0("/tmp/external-app"); got != "/tmp/orquesta-source" {
+		t.Fatalf("worktree=%q", got)
+	}
+}
+
 func TestServerYControlScriptCompartenRemoteCanonicoYPoliticaSymlinkV0(t *testing.T) {
 	scriptPath := filepath.Join("..", "..", "scripts", "orquesta_server_ctl.sh")
 	raw, err := os.ReadFile(scriptPath)
