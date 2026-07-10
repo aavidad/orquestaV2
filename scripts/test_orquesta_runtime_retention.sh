@@ -51,11 +51,15 @@ touch -d '20 days ago' "$workdir/.orquesta-runtime/old-registry-running"
 cat >"$workdir/.orquesta-runtime/codex-waves/old-wave/codex_wave_registry_v0.json" <<'JSON'
 {"agents":[{"pid":0,"status":"completed"}]}
 JSON
+cat >"$workdir/.orquesta-runtime/codex-waves/domain-container/old-nested-wave/codex_wave_registry_v0.json" <<'JSON'
+{"agents":[{"pid":0,"status":"completed"}]}
+JSON
 cat >"$workdir/.orquesta-runtime/waves/old-director-wave/codex_wave_registry_v0.json" <<'JSON'
 {"agents":[{"pid":0,"status":"completed"}]}
 JSON
 touch -d '20 days ago' \
   "$workdir/.orquesta-runtime/codex-waves/old-wave/codex_wave_registry_v0.json" \
+  "$workdir/.orquesta-runtime/codex-waves/domain-container/old-nested-wave/codex_wave_registry_v0.json" \
   "$workdir/.orquesta-runtime/waves/old-director-wave/codex_wave_registry_v0.json" \
   "$workdir/.orquesta-runtime/codex-waves/old-wave" \
   "$workdir/.orquesta-runtime/waves/old-director-wave"
@@ -72,6 +76,8 @@ grep -q 'old-registry-running' <<<"$dry_run_output"
 grep -q 'agent_live' <<<"$dry_run_output"
 grep -q 'old-wave' <<<"$dry_run_output"
 grep -q 'old-director-wave' <<<"$dry_run_output"
+grep -q 'old-nested-wave' <<<"$dry_run_output"
+grep -q $'action=report\treason=old_runtime_nested_wave.*old-nested-wave' <<<"$dry_run_output"
 grep -q 'domain-container' <<<"$dry_run_output"
 grep -q 'wave_registry_missing' <<<"$dry_run_output"
 grep -q '.orquesta-purged-old' <<<"$dry_run_output"
@@ -83,6 +89,7 @@ fi
 for path in \
   "$workdir/.orquesta-runtime/old-run" \
   "$workdir/.orquesta-runtime/codex-waves/old-wave" \
+  "$workdir/.orquesta-runtime/codex-waves/domain-container/old-nested-wave" \
   "$workdir/.orquesta-runtime/old-blocked" \
   "$workdir/.orquesta-runtime/old-plan" \
   "$workdir/.orquesta-runtime/old-registry-running" \
@@ -120,7 +127,6 @@ for kept in \
   "$workdir/.orquesta-runtime/old-plan" \
   "$workdir/.orquesta-runtime/old-registry-running" \
   "$workdir/.orquesta-runtime/codex-waves/domain-container" \
-  "$workdir/.orquesta-runtime/codex-waves/domain-container/old-nested-wave" \
   "$workdir/.orquesta-runtime/new-run" \
   "$workdir/.orquesta-runtime/codex-waves/new-wave" \
   "$workdir/.orquesta-purged-new"; do

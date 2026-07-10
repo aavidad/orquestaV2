@@ -205,7 +205,8 @@ handle_candidate() {
     printf 'candidate\taction=blocked\treason=unsafe_path\tpath=%s\n' "$abs"
     return 0
   fi
-  if [ "$reason" = "old_runtime_wave" ] && [ ! -f "$abs/codex_wave_registry_v0.json" ]; then
+  if { [ "$reason" = "old_runtime_wave" ] || [ "$reason" = "old_runtime_nested_wave" ]; } &&
+    [ ! -f "$abs/codex_wave_registry_v0.json" ]; then
     printf 'candidate\taction=blocked\treason=wave_registry_missing\tsize=%s\tmtime=%s\tpath=%s\n' \
       "$(entry_size "$abs")" "$(entry_mtime "$abs")" "$abs"
     return 0
@@ -240,6 +241,14 @@ if [ -n "$runtime_abs" ]; then
     while IFS= read -r -d '' nested; do
       handle_candidate "$nested" "old_runtime_wave"
     done < <(find "$container" -mindepth 1 -maxdepth 1 -type d -mtime +"$min_age_days" -print0 2>/dev/null)
+    # Legacy domain containers (for example codex-waves/<domain>/<wave>) have
+    # no registry themselves. Inspect only their immediate wave children: a
+    # deeper registry belongs to that wave and must be retained or purged with
+    # its parent, never independently.
+    while IFS= read -r -d '' registry; do
+      nested="$(dirname "$registry")"
+      handle_candidate "$nested" "old_runtime_nested_wave"
+    done < <(find "$container" -mindepth 3 -maxdepth 3 -type f -name 'codex_wave_registry_v0.json' -mtime +"$min_age_days" -print0 2>/dev/null)
   done
   while IFS= read -r -d '' child; do
     name="$(basename "$child")"

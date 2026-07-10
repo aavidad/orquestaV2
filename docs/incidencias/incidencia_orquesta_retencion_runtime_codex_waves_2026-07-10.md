@@ -25,6 +25,13 @@ pero bloquea `codex-waves/psicologia` (16 GB) con
 `wave_registry_missing`. Tambien bloquea los artefactos con ACK o estado vivo
 pendiente; no hubo borrado.
 
+El retenedor se amplio y verifico para recorrer una capa de olas bajo un
+contenedor legacy sin registry. El dry-run descubre nueve raices completas de
+`psicologia` con registry propio como candidatas (172 MB a 2 GB cada una), sin
+borrar el contenedor ni subolas profundas. Las raices con ACK/checkpoint siguen
+bloqueadas por su propio estado; la eliminacion, si se autoriza, sera un corte
+separado con recibo.
+
 La laguna estructural no es ausencia total de politica: los runtimes legacy sin
 registry no pueden probar identidad, estado ni referencias y quedan retenidos
 indefinidamente. Sus 399 homes aislados explican la mayor parte del volumen.
