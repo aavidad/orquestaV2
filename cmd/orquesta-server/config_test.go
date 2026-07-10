@@ -1345,7 +1345,7 @@ func TestServerConfigFromEnvV0LeeLimitesCodexYSupervisorDesdeFicheroCanonicoV0(t
 		t.Fatalf("config limites=%+v idle=%d resident=%d", config.SupervisorCommand, config.IdleSelfImprovementMaxRequests, config.ResidentDirectorMaxActions)
 	}
 	runtimeConfig := codexRuntimeConfigV0(config, nil)
-	if runtimeConfig.ReasoningEffort != "high" ||
+	if runtimeConfig.ReasoningEffort != "" ||
 		runtimeConfig.MaxBatchReady != 42 ||
 		runtimeConfig.MaxConcurrency != 43 ||
 		runtimeConfig.ProgressBudget.MaxExpected != 41*time.Second {
@@ -1364,7 +1364,6 @@ func TestServerConfigFromEnvV0LeeLimitesCodexYSupervisorDesdeFicheroCanonicoV0(t
 		envCodexExecutionModeV0:                   codexExecutionModeParallelV0,
 		envCodexMaxBatchReadyV0:                   "42",
 		envCodexMaxConcurrencyV0:                  "43",
-		envCodexReasoningEffortV0:                 "high",
 		envCodexMaxExpectedSecondsV0:              "41",
 		envCodexDirectorWaveAgentsV0:              "44",
 		envCodexDirectorMaxSubagentsPerAgentV0:    "7",
@@ -1401,14 +1400,13 @@ func TestServerConfigFromEnvV0EnvExplicitoGanaLimitesCodexYSupervisorV0(t *testi
 	runtimeConfig := codexRuntimeConfigV0(config, nil)
 	if config.SupervisorCommand.MaxRunsPerTick != 9 ||
 		config.SupervisorCommand.MaxExecutions != 32 ||
-		runtimeConfig.ReasoningEffort != "low" ||
+		runtimeConfig.ReasoningEffort != "" ||
 		runtimeConfig.ProgressBudget.MaxExpected != 19*time.Second {
 		t.Fatalf("config=%+v runtime=%+v", config.SupervisorCommand, runtimeConfig)
 	}
 	for key, wantSource := range map[string]string{
 		envServerMaxRunsPerTickV0:       "explicit",
 		envServerMaxExecutionsPerTickV0: configSettingSourceConfigFileV0,
-		envCodexReasoningEffortV0:       "explicit",
 		envCodexMaxExpectedSecondsV0:    "explicit",
 		envCodexMaxBatchReadyV0:         configSettingSourceConfigFileV0,
 		envCodexDirectorWaveAgentsV0:    "explicit",
@@ -1647,7 +1645,6 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 		"ORQUESTA_SERVER_SELF_WATCHDOG_NO_PROGRESS_SECONDS":  "90",
 		"ORQUESTA_CODEX_MAX_BATCH_READY":                     "10",
 		"ORQUESTA_CODEX_MAX_CONCURRENCY":                     "10",
-		"ORQUESTA_CODEX_REASONING_EFFORT":                    "high",
 		envCodexPromoteMaterializedArtifactWithoutAckV0:      "true",
 		"ORQUESTA_CODEX_DIRECTOR_MAX_SUBAGENTS_PER_AGENT":    "6",
 		envCodebaseBrokerProviderKindV0:                      "fallback_rg",
@@ -1668,6 +1665,9 @@ func TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica(t *testing.T)
 		if got != want {
 			t.Fatalf("%s=%q want %q settings=%+v", key, got, want, settings)
 		}
+	}
+	if setting := effectiveSettingForTestV0(settings, envCodexReasoningEffortV0); setting.Value != "" {
+		t.Fatalf("reasoning_effort global no debe aplicarse en effective_config: %+v", setting)
 	}
 	for _, key := range []string{"ORQUESTA_HERMES_BASE_URL", "ORQUESTA_HERMES_API_KEY"} {
 		setting := effectiveSettingForTestV0(settings, key)

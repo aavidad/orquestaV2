@@ -86,3 +86,6 @@ el test es esperar que `ORQUESTA_CODEX_REASONING_EFFORT` o
 resuelven por tarea con routing tipado y no por una variable global. La
 corrección debe alinear pruebas y configuración efectiva con ese contrato, sin
 restaurar herencia global ni esconder la política de routing.
+
+Corrección local: los tres focales pasan con límites de fichero/env intactos,
+`ReasoningEffort` runtime vacío y `effective_config` sin valor global aplicado.
