@@ -84,3 +84,14 @@ un adaptador opt-in de codigo muerto. Se conservan, sin excepcion:
 Ninguno es candidato a retirada: todos tienen contrato, pruebas y/o tarea de
 integracion vigente. Antes de declarar huerfano un modulo se deben consultar
 sus tests, README y tarea de composicion, no solo el conteo de imports.
+
+## Refinamiento del indice 2026-07-10
+
+El generador conserva `deadcode_candidates` como señal bruta, pero separa las
+funciones privadas marcadas por esa señal en referencias de produccion, solo de
+tests o ninguna referencia lexica, excluyendo su propia declaracion. La foto
+actual queda en 731 candidatas con referencias de produccion, 41 con referencias
+solo de tests y 53 sin referencias lexicas; las 409 exportadas conservan la
+clasificacion anterior por contrato potencial. Los nuevos campos JSON/SQLite
+son aditivos. Ninguna de estas categorias autoriza borrar: sirven para priorizar
+la siguiente revision manual y evitar falsos positivos por tests.

@@ -280,7 +280,8 @@ def collect_helper_copies():
 
 def collect_function_index(deadcode_entries):
     deadcode_keys = {(entry["path"], entry["line"], entry["symbol"].split(".")[-1]) for entry in deadcode_entries}
-    all_source = []
+    production_source = []
+    test_source = []
     records = []
     for path in iter_project_go_files():
         relative = rel(path)
@@ -288,16 +289,18 @@ def collect_function_index(deadcode_entries):
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        all_source.append(text)
+        source_without_declarations = []
         for line_no, raw in enumerate(text.splitlines(), start=1):
             match = FUNC_RE.match(raw)
+            source_without_declarations.append(raw[:match.start(1)] + raw[match.end(1):] if match else raw)
             if not match:
                 continue
             name = match.group(1)
             exported = bool(name) and name[0].isupper()
+            deadcode_candidate = (relative, line_no, name) in deadcode_keys
             if relative.endswith("_test.go"):
                 classification = "test_only"
-            elif (relative, line_no, name) in deadcode_keys:
+            elif deadcode_candidate:
                 classification = "static_candidate_requires_review"
             elif exported:
                 classification = "exported_or_contract_requires_review"
@@ -310,15 +313,36 @@ def collect_function_index(deadcode_entries):
                 "name": name,
                 "exported": exported,
                 "test_file": relative.endswith("_test.go"),
+                "deadcode_candidate": deadcode_candidate,
                 "classification": classification,
             })
-    identifier_counts = Counter(
+        if relative.endswith("_test.go"):
+            test_source.append("\n".join(source_without_declarations))
+        else:
+            production_source.append("\n".join(source_without_declarations))
+    production_identifier_counts = Counter(
         identifier
-        for text in all_source
+        for text in production_source
+        for identifier in re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", text)
+    )
+    test_identifier_counts = Counter(
+        identifier
+        for text in test_source
         for identifier in re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", text)
     )
     for record in records:
-        record["text_reference_count"] = identifier_counts[record["name"]]
+        production_references = production_identifier_counts[record["name"]]
+        test_references = test_identifier_counts[record["name"]]
+        record["production_reference_count"] = production_references
+        record["test_reference_count"] = test_references
+        record["text_reference_count"] = production_references + test_references
+        if record["deadcode_candidate"] and not record["exported"] and not record["test_file"]:
+            if production_references:
+                record["classification"] = "static_candidate_with_production_references_requires_review"
+            elif test_references:
+                record["classification"] = "static_candidate_test_references_only_requires_review"
+            else:
+                record["classification"] = "static_candidate_without_text_references_requires_review"
     records.sort(key=lambda item: (item["path"], item["line"], item["name"]))
     return records
 
@@ -420,7 +444,8 @@ payload = {
     "notes": [
         "SQLite output is a derived cache/report, not operational truth.",
         "deadcode candidates require per-module verification before deletion.",
-        "function index classifications and text_reference_count are triage signals, not proof of removability.",
+        "function index classifications and reference counts are triage signals, not proof of removability.",
+        "private deadcode candidates distinguish production references from test-only references; neither classification authorizes immediate deletion.",
     ],
 }
 if go_list_error:
@@ -446,7 +471,7 @@ if sqlite_out:
             create table orphan_modules(module text primary key, path text not null, importer_count integer not null);
             create table helper_copies(family text not null, name text not null, path text not null, line integer not null, module text not null);
             create table large_files(path text primary key, lines integer not null, module text not null);
-            create table function_index(path text not null, line integer not null, module text not null, name text not null, exported integer not null, test_file integer not null, classification text not null, text_reference_count integer not null);
+            create table function_index(path text not null, line integer not null, module text not null, name text not null, exported integer not null, test_file integer not null, deadcode_candidate integer not null, classification text not null, text_reference_count integer not null, production_reference_count integer not null, test_reference_count integer not null);
             """
         )
         con.executemany(
@@ -480,8 +505,8 @@ if sqlite_out:
             [(item["path"], item["lines"], item["module"]) for item in large_files],
         )
         con.executemany(
-            "insert into function_index(path, line, module, name, exported, test_file, classification, text_reference_count) values(?, ?, ?, ?, ?, ?, ?, ?)",
-            [(item["path"], item["line"], item["module"], item["name"], int(item["exported"]), int(item["test_file"]), item["classification"], item["text_reference_count"]) for item in function_index],
+            "insert into function_index(path, line, module, name, exported, test_file, deadcode_candidate, classification, text_reference_count, production_reference_count, test_reference_count) values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [(item["path"], item["line"], item["module"], item["name"], int(item["exported"]), int(item["test_file"]), int(item["deadcode_candidate"]), item["classification"], item["text_reference_count"], item["production_reference_count"], item["test_reference_count"]) for item in function_index],
         )
         con.commit()
     finally:

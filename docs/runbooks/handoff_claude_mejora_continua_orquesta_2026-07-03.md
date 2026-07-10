@@ -2997,3 +2997,9 @@ manual: todos son contratos o adaptadores opt-in deliberadamente desacoplados
 presentaciones y tool-capability-file). Ninguno se borra; la clasificacion y
 las rutas de evidencia quedan en
 `docs/auditorias/indice_funciones_orquesta_2026-07-10.md`.
+
+El indice de funciones se refino sin tocar runtime: para privadas marcadas por
+deadcode distingue referencias de produccion, solo de tests y ninguna, sin
+contar la declaracion. Foto actual: 731 / 41 / 53 respectivamente; 409
+exportadas mantienen la categoria contractual previa. Los campos JSON/SQLite
+son aditivos y no autorizan ningun borrado automatico.
