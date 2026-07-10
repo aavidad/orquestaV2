@@ -264,6 +264,11 @@ func ObserveGoalWorkV0(
 							return GoalWorkObserveResultV0{}, err
 						}
 						if !claimResult.Acquired {
+							if claimResult.Claim.Status == GoalRequiredTestAttestationClaimStatusFailedV0 {
+								closure = blockedGoalRequiredTestAttestationClosureV0(GoalClosureValidationV0{}, ErrGoalRequiredTestAttestationFailedV0, "required_test_attestation_claim")
+								closure.EvidenceRefs = compactGoalStringsV0(append(closure.EvidenceRefs, claimResult.Claim.ClaimRef))
+								break
+							}
 							continue
 						}
 						attestationRequest := GoalRequiredTestAttestationRequestFromSpecV0(state.Spec, snapshot)
@@ -275,7 +280,13 @@ func ObserveGoalWorkV0(
 							ports.RequiredTestAttestor,
 							ports.RequiredTestAttestationStore,
 						); err != nil {
-							return GoalWorkObserveResultV0{}, err
+							failedClaim, failErr := ports.RequiredTestAttestationStore.FailGoalRequiredTestAttestationClaimV0(ctx, claimResult.Claim, ErrGoalRequiredTestAttestationFailedV0)
+							if failErr != nil {
+								return GoalWorkObserveResultV0{}, failErr
+							}
+							closure = blockedGoalRequiredTestAttestationClosureV0(GoalClosureValidationV0{}, ErrGoalRequiredTestAttestationFailedV0, "required_test_attestation")
+							closure.EvidenceRefs = compactGoalStringsV0(append(closure.EvidenceRefs, failedClaim.ClaimRef))
+							break
 						}
 					}
 				}

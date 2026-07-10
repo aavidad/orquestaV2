@@ -2,6 +2,7 @@ package orquestagoal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"sync"
@@ -112,6 +113,28 @@ func TestGoalRequiredTestAttestationV0ConcurrentClaimsRunOneAttestor(t *testing.
 	wait.Wait()
 	if attestor.calls != 1 || len(store.items) != 1 {
 		t.Fatalf("calls=%d receipts=%d", attestor.calls, len(store.items))
+	}
+}
+
+func TestGoalRequiredTestAttestationV0ErrorTrasClaimPersisteReworkSinReintento(t *testing.T) {
+	spec := attestationSpecForTestV0(1)
+	snapshot := attestationSnapshotForTestV0(spec, "revision-ref-current")
+	store := &attestationStoreForTestV0{snapshot: snapshot}
+	attestor := &attestorForTestV0{err: errors.New("attestor unavailable")}
+	stateStore := &attestationGoalStateStoreForTestV0{state: attestationRunningStateForTestV0(spec)}
+	ports := attestedLifecyclePortsForTestV0(snapshot, store, attestor, stateStore)
+	first, err := ObserveGoalWorkV0(context.Background(), GoalWorkObserveRequestV0{RunRef: spec.RunRef}, ports)
+	if err != nil || first.Accepted || !first.NeedsRework || !hasAttestationIssueForTestV0(first.Closure, ErrGoalRequiredTestAttestationFailedV0) {
+		t.Fatalf("first=%+v err=%v", first, err)
+	}
+	second, err := ObserveGoalWorkV0(context.Background(), GoalWorkObserveRequestV0{RunRef: spec.RunRef}, ports)
+	if err != nil || second.Accepted || !second.NeedsRework || attestor.calls != 1 {
+		t.Fatalf("second=%+v calls=%d err=%v", second, attestor.calls, err)
+	}
+	for _, claim := range store.claims {
+		if claim.Status != GoalRequiredTestAttestationClaimStatusFailedV0 || claim.FailureCode != ErrGoalRequiredTestAttestationFailedV0 {
+			t.Fatalf("claim=%+v", claim)
+		}
 	}
 }
 
@@ -230,6 +253,7 @@ type attestorForTestV0 struct {
 	mu       sync.Mutex
 	calls    int
 	requests []GoalRequiredTestAttestationRequestV0
+	err      error
 }
 
 func (attestor *attestorForTestV0) AttestGoalRequiredTestsV0(_ context.Context, request GoalRequiredTestAttestationRequestV0) ([]GoalRequiredTestAttestationV0, error) {
@@ -237,6 +261,9 @@ func (attestor *attestorForTestV0) AttestGoalRequiredTestsV0(_ context.Context, 
 	defer attestor.mu.Unlock()
 	attestor.calls++
 	attestor.requests = append(attestor.requests, request)
+	if attestor.err != nil {
+		return nil, attestor.err
+	}
 	test := request.RequiredTests[0]
 	spec := attestationSpecForTestV0(1)
 	spec.RunRef, spec.GoalRef = request.RunRef, request.GoalRef
@@ -344,6 +371,17 @@ func (store *attestationStoreForTestV0) CompleteGoalRequiredTestAttestationClaim
 	claim.CompletedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	store.claims[claim.ClaimRef] = claim
 	return nil
+}
+
+func (store *attestationStoreForTestV0) FailGoalRequiredTestAttestationClaimV0(_ context.Context, claim GoalRequiredTestAttestationClaimV0, code string) (GoalRequiredTestAttestationClaimV0, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	current := store.claims[claim.ClaimRef]
+	current.Status = GoalRequiredTestAttestationClaimStatusFailedV0
+	current.FailureCode = code
+	current.FailedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	store.claims[claim.ClaimRef] = current
+	return current, nil
 }
 
 type attestationGoalStateStoreForTestV0 struct {

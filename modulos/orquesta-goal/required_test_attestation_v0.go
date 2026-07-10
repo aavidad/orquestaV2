@@ -556,6 +556,8 @@ func NormalizeGoalRequiredTestAttestationClaimV0(claim GoalRequiredTestAttestati
 	claim.AttestationRef = strings.TrimSpace(claim.AttestationRef)
 	claim.ClaimedAt = strings.TrimSpace(claim.ClaimedAt)
 	claim.CompletedAt = strings.TrimSpace(claim.CompletedAt)
+	claim.FailedAt = strings.TrimSpace(claim.FailedAt)
+	claim.FailureCode = strings.TrimSpace(claim.FailureCode)
 	return claim
 }
 
@@ -575,7 +577,7 @@ func ValidateGoalRequiredTestAttestationClaimV0(claim GoalRequiredTestAttestatio
 	if !validGoalSHA256V0(claim.DefinitionSHA256) || claim.ClaimRef != GoalRequiredTestAttestationClaimRefV0(request) {
 		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationMismatchV0, Field: "claim_identity"})
 	}
-	if claim.Status != GoalRequiredTestAttestationClaimStatusPendingV0 && claim.Status != GoalRequiredTestAttestationClaimStatusCompletedV0 {
+	if claim.Status != GoalRequiredTestAttestationClaimStatusPendingV0 && claim.Status != GoalRequiredTestAttestationClaimStatusCompletedV0 && claim.Status != GoalRequiredTestAttestationClaimStatusFailedV0 {
 		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationMismatchV0, Field: "claim_status"})
 	}
 	if _, err := time.Parse(time.RFC3339Nano, claim.ClaimedAt); err != nil {
@@ -585,6 +587,12 @@ func ValidateGoalRequiredTestAttestationClaimV0(claim GoalRequiredTestAttestatio
 		validateRequiredGoalRefV0(&issues, "attestation_ref", claim.AttestationRef)
 		if _, err := time.Parse(time.RFC3339Nano, claim.CompletedAt); err != nil {
 			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationMismatchV0, Field: "completed_at"})
+		}
+	}
+	if claim.Status == GoalRequiredTestAttestationClaimStatusFailedV0 {
+		validateRequiredGoalRefV0(&issues, "failure_code", claim.FailureCode)
+		if _, err := time.Parse(time.RFC3339Nano, claim.FailedAt); err != nil {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationMismatchV0, Field: "failed_at"})
 		}
 	}
 	return issues

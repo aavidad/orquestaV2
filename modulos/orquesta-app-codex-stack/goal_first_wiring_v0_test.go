@@ -394,6 +394,14 @@ func (codexStackRequiredTestAttestationStoreForTestV0) CompleteGoalRequiredTestA
 	return nil
 }
 
+func (codexStackRequiredTestAttestationStoreForTestV0) FailGoalRequiredTestAttestationClaimV0(
+	context.Context,
+	orquestagoal.GoalRequiredTestAttestationClaimV0,
+	string,
+) (orquestagoal.GoalRequiredTestAttestationClaimV0, error) {
+	return orquestagoal.GoalRequiredTestAttestationClaimV0{}, nil
+}
+
 func (codexStackGoalStateStoreForTestV0) SaveGoalWorkStateV0(
 	context.Context,
 	orquestagoal.GoalWorkStateV0,

@@ -327,6 +327,55 @@ func (store *StoreV0) CompleteGoalRequiredTestAttestationClaimV0(
 	})
 }
 
+func (store *StoreV0) FailGoalRequiredTestAttestationClaimV0(
+	ctx context.Context,
+	claim orquestagoal.GoalRequiredTestAttestationClaimV0,
+	failureCode string,
+) (orquestagoal.GoalRequiredTestAttestationClaimV0, error) {
+	ctx = contextOrBackgroundV0(ctx)
+	claim = orquestagoal.NormalizeGoalRequiredTestAttestationClaimV0(claim)
+	failureCode = strings.TrimSpace(failureCode)
+	if issues := orquestagoal.ValidateGoalRequiredTestAttestationClaimV0(claim); len(issues) > 0 || failureCode == "" {
+		return orquestagoal.GoalRequiredTestAttestationClaimV0{}, invalidErrorV0("goal_required_test_attestation_claim", "claim o fallo invalido")
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	var failed orquestagoal.GoalRequiredTestAttestationClaimV0
+	err := withProcessFileLockV0(ctx, store.goalRequiredTestAttestationRunLockPathV0(claim.RunRef), func() error {
+		path := store.goalRequiredTestAttestationClaimPathV0(claim.RunRef, claim.GoalRef, claim.RevisionRef, claim.TestRef)
+		document, ok, err := readJSONFileV0[goalRequiredTestAttestationClaimDocumentV0](path)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return storeErrorV0("goal_required_test_attestation_claim", "claim durable no encontrado")
+		}
+		current, err := validateGoalRequiredTestAttestationClaimDocumentV0(document, claim.RunRef)
+		if err != nil {
+			return err
+		}
+		if current.ClaimRef != claim.ClaimRef {
+			return storeErrorV0("goal_required_test_attestation_claim", "claim durable distinto")
+		}
+		if current.Status == orquestagoal.GoalRequiredTestAttestationClaimStatusCompletedV0 {
+			return storeErrorV0("goal_required_test_attestation_claim", "claim ya completado")
+		}
+		if current.Status == orquestagoal.GoalRequiredTestAttestationClaimStatusFailedV0 {
+			failed = current
+			return nil
+		}
+		current.Status = orquestagoal.GoalRequiredTestAttestationClaimStatusFailedV0
+		current.FailureCode = failureCode
+		current.FailedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		if err := writeJSONAtomicV0(path, goalRequiredTestAttestationClaimDocumentV0{SchemaVersion: goalRequiredTestAttestationClaimDocumentSchemaV0, RunRef: current.RunRef, ClaimRef: current.ClaimRef, Claim: current}); err != nil {
+			return err
+		}
+		failed = current
+		return nil
+	})
+	return failed, err
+}
+
 func (store *StoreV0) goalRequiredTestAttestationRunLockPathV0(runRef string) string {
 	return filepath.Join(store.rootDir, goalRequiredTestAttestationsDirV0, hashRefsV0(runRef), ".run.lock")
 }

@@ -199,6 +199,16 @@ func (store *independentAttestationStoreForStackTestV0) CompleteGoalRequiredTest
 	return nil
 }
 
+func (store *independentAttestationStoreForStackTestV0) FailGoalRequiredTestAttestationClaimV0(_ context.Context, claim orquestagoal.GoalRequiredTestAttestationClaimV0, code string) (orquestagoal.GoalRequiredTestAttestationClaimV0, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	claim.Status = orquestagoal.GoalRequiredTestAttestationClaimStatusFailedV0
+	claim.FailureCode = code
+	claim.FailedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	store.claims[claim.ClaimRef] = claim
+	return claim, nil
+}
+
 type independentIdentityVerifierForStackTestV0 struct{}
 
 func (independentIdentityVerifierForStackTestV0) VerifyGoalRequiredTestIdentityV0(

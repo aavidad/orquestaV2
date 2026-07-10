@@ -364,6 +364,7 @@ type GoalRequiredTestAttestationQueryV0 struct {
 const (
 	GoalRequiredTestAttestationClaimStatusPendingV0   = "pending"
 	GoalRequiredTestAttestationClaimStatusCompletedV0 = "completed"
+	GoalRequiredTestAttestationClaimStatusFailedV0    = "failed"
 )
 
 type GoalRequiredTestAttestationClaimV0 struct {
@@ -378,6 +379,8 @@ type GoalRequiredTestAttestationClaimV0 struct {
 	AttestationRef   string `json:"attestation_ref,omitempty"`
 	ClaimedAt        string `json:"claimed_at"`
 	CompletedAt      string `json:"completed_at,omitempty"`
+	FailedAt         string `json:"failed_at,omitempty"`
+	FailureCode      string `json:"failure_code,omitempty"`
 }
 
 type GoalRequiredTestAttestationClaimRequestV0 struct {
@@ -477,6 +480,7 @@ type GoalRequiredTestAttestationStorePortV0 interface {
 	FreezeGoalRequiredTestFinalSnapshotV0(context.Context, GoalRequiredTestFinalSnapshotV0) (GoalRequiredTestFinalSnapshotV0, error)
 	AcquireGoalRequiredTestAttestationClaimV0(context.Context, GoalRequiredTestAttestationClaimRequestV0) (GoalRequiredTestAttestationClaimResultV0, error)
 	CompleteGoalRequiredTestAttestationClaimV0(context.Context, GoalRequiredTestAttestationClaimV0, GoalRequiredTestAttestationV0) error
+	FailGoalRequiredTestAttestationClaimV0(context.Context, GoalRequiredTestAttestationClaimV0, string) (GoalRequiredTestAttestationClaimV0, error)
 }
 
 type GoalWorkStateStorePortV0 interface {

@@ -170,6 +170,31 @@ func TestStoreV0GoalRequiredTestAttestationClaimMultiprocessHasSingleOwner(t *te
 	}
 }
 
+func TestStoreV0GoalRequiredTestAttestationClaimFailedSurvivesRecreateWithoutReacquire(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewStoreV0(ConfigV0{RootDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := goalRequiredTestAttestationClaimRequestForStoreTestV0()
+	acquired, err := store.AcquireGoalRequiredTestAttestationClaimV0(context.Background(), request)
+	if err != nil || !acquired.Acquired {
+		t.Fatalf("acquired=%+v err=%v", acquired, err)
+	}
+	failed, err := store.FailGoalRequiredTestAttestationClaimV0(context.Background(), acquired.Claim, orquestagoal.ErrGoalRequiredTestAttestationFailedV0)
+	if err != nil || failed.Status != orquestagoal.GoalRequiredTestAttestationClaimStatusFailedV0 {
+		t.Fatalf("failed=%+v err=%v", failed, err)
+	}
+	recovered, err := NewStoreV0(ConfigV0{RootDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayed, err := recovered.AcquireGoalRequiredTestAttestationClaimV0(context.Background(), request)
+	if err != nil || replayed.Acquired || replayed.Claim.Status != orquestagoal.GoalRequiredTestAttestationClaimStatusFailedV0 || replayed.Claim.FailureCode != orquestagoal.ErrGoalRequiredTestAttestationFailedV0 {
+		t.Fatalf("replayed=%+v err=%v", replayed, err)
+	}
+}
+
 func TestStoreV0GoalStateCASAcrossInstancesAllowsSingleWriterAndPersistsOperatorEvidence(t *testing.T) {
 	root := t.TempDir()
 	first, _ := NewStoreV0(ConfigV0{RootDir: root})
