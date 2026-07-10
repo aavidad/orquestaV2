@@ -131,7 +131,7 @@ maquinaria de parada real existe en el contrato de shutdown:
 backend tmux y cableados en
 `cmd/orquesta-server/codex_goal_active_shutdown_work_v0.go`.
 
-- [ ] PASO B1: puerto opcional de escalada en el executor de run control.
+- [x] PASO B1: puerto opcional de escalada en el executor de run control.
   Anade al executor MCP un campo opcional `BackendStopEscalator` (interfaz
   nueva pequena en orquesta-mcp con un metodo que recibe ctx + run/goal
   refs y devuelve resultado tipado stopped/residual/error). Cuando el

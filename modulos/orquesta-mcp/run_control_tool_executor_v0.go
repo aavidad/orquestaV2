@@ -10,11 +10,12 @@ import (
 )
 
 type MCPRunControlToolExecutorV0 struct {
-	Port               orquestaruncontrol.RunControlWriterPortV0
-	ExternalJobSource  MCPDirectorExternalJobStatsSourcePortV0
-	GoalBackendState   MCPTransportDirectorStatsExecutorV0
-	GoalStateStore     orquestagoal.GoalWorkStateStorePortV0
-	GoalProgressPolicy MCPAutoprogrammingGoalProgressPolicyV0
+	Port                 orquestaruncontrol.RunControlWriterPortV0
+	ExternalJobSource    MCPDirectorExternalJobStatsSourcePortV0
+	GoalBackendState     MCPTransportDirectorStatsExecutorV0
+	GoalStateStore       orquestagoal.GoalWorkStateStorePortV0
+	GoalProgressPolicy   MCPAutoprogrammingGoalProgressPolicyV0
+	BackendStopEscalator MCPRunControlBackendStopEscalatorPortV0
 }
 
 func NewMCPRunControlToolExecutorV0(
@@ -57,6 +58,7 @@ func (executor MCPRunControlToolExecutorV0) Execute(
 	afterGoal := executor.observeRunControlGoalBackendV0(ctx, resolved)
 	result := newMCPRunControlResultV0(resolved, state)
 	result = executor.enrichRunControlGoalBackendResultV0(result, resolved, beforeLocal, beforeGoal, afterGoal)
+	result = executor.escalateBackendStopIfRequestedV0(ctx, resolved, result)
 	result = executor.reconcileGoalStateAfterForcedControlV0(ctx, result, resolved, beforeGoal, afterGoal)
 	return result, nil
 }
