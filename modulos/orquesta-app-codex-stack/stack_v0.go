@@ -151,6 +151,10 @@ func buildStackMCPTransportBindingsV0(
 			GoalBackendState:   directorStats,
 			GoalStateStore:     config.Stores.AppGoalStateStore,
 			GoalProgressPolicy: config.AutoprogrammingGoalProgressPolicy,
+			BackendStopEscalator: stackRunControlBackendStopEscalatorV0{
+				Reader:  stackShutdownActiveWorkReaderV0{Config: config},
+				Cleaner: stackShutdownActiveWorkCleanerV0{Config: config},
+			},
 		},
 		RuntimeModels: config.RuntimeModels,
 		RunQueuePriority: orquestamcp.MCPRunQueuePriorityToolExecutorV0{

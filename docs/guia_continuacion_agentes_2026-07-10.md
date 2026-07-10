@@ -140,7 +140,7 @@ backend tmux y cableados en
   si no, conserva el error actual. Tests con escalador fake (confirma,
   residual, error). Verifica: `go test -count=1 ./modulos/orquesta-mcp`.
 
-- [ ] PASO B2: implementar el escalador real sobre los puertos de shutdown
+- [x] PASO B2: implementar el escalador real sobre los puertos de shutdown
   y cablearlo. Ficheros: adaptador nuevo en el stack o en
   `cmd/orquesta-server` (junto a `codex_goal_active_shutdown_work_v0.go`)
   que envuelva el `ActiveShutdownWorkCleanerPortV0` del backend goal
