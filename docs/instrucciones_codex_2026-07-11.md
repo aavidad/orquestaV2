@@ -17,21 +17,21 @@ Senala con el fichero wake cuando R1+R2 esten verdes.
 
 ## Hallazgos de la revision 2026-07-11 ~01:00 (orden de prioridad)
 
-- [ ] R1 (ROJO AHORA): `scripts/orquesta_metricas_deuda.sh` es fragil a
+- [x] R1 (cerrado `cec2848f3`): `scripts/orquesta_metricas_deuda.sh` era fragil a
   locale: usa `sort`/`comm` sin fijar `LC_ALL=C` y en un entorno es_ES
   casca con "comm: archivo 2 no esta en orden ordenado", tirando el guard
   raiz `TestEnvVarsBudgetMEJ106V0`. Reproduccion verificada por el revisor:
   `bash scripts/orquesta_metricas_deuda.sh --json` falla con locale es_ES y
   funciona con `LC_ALL=C`. Fix: fijar `LC_ALL=C` (export al inicio del
   script) y anadir a `scripts/test_orquesta_metricas_deuda.sh` un caso que
-  lo ejecute con un locale no-C para que no regrese.
-- [ ] R2 (ROJO AHORA): tus presupuestos de envs estan REBASADOS por tus
-  propias features de esta noche: medicion real con locale C =
-  produccion 427/425 y test-only 106/103. NO subas los presupuestos:
-  consolida las envs nuevas (transporte stdio, ingesta/presentaciones,
-  guardian) igual que hiciste con Gemini/test-runner. Criterio de cierre:
-  `go test -count=1 -run 'TestEnvVarsBudgetMEJ106V0' .` verde en locale C
-  y en es_ES.
+  lo ejecute con un locale no-C para que no regrese. El script exporta
+  `LC_ALL=C` y la prueba usa shims portables para no depender de `es_ES`.
+- [x] R2 (cerrado `31ecba309`): la medicion con locale C era produccion
+  427/425 y test-only 106/103. Sin elevar los presupuestos, se retiraron dos
+  overrides de timeout duplicados del guardian y tres nombres de IPC de
+  fixtures fuera del prefijo global. Criterio revalidado:
+  `go test -count=1 -run 'TestEnvVarsBudgetMEJ106V0' .` verde en locale C y
+  bajo locale heredado no-C; la metrica queda 425/425 y 103/103.
 - [ ] R3 (disciplina): antes de cerrar cada sesion de trabajo, reejecuta el
   guard raiz de budget y los focales de lo tocado. Esta noche dejaste tu
   propio guard rojo sin saberlo; la regla "no verde autodeclarado" tambien

@@ -3083,3 +3083,19 @@ fichero y los dos wrappers de protocolo durable por locale estaban sustituidos
 por rutas activas. No cambian prompts, modelos, perfiles, contratos ni
 proveedores. `rg`, `git diff --check` y los cuatro `go test` focales de runtime
 quedaron verdes. Commit de codigo: `d53ff9090`.
+
+## Actualizacion Codex 2026-07-11: guards de limpieza R1 y R2
+
+El revisor detecto dos guards rojos antes de continuar. R1 quedo cerrado en
+`cec2848f3`: `orquesta_metricas_deuda.sh` exporta `LC_ALL=C` y su prueba usa
+shims de `sort`/`comm` con locale sintetico, sin requerir que `es_ES` exista.
+R2 quedo cerrado en `31ecba309` sin elevar presupuestos: se retiraron los dos
+overrides `*_TIMEOUT_MS` duplicados del guardian, quedando fichero tipado y
+variables de duracion existentes; los tres nombres IPC del helper de tests se
+renombraron fuera de `ORQUESTA_*`. La metrica vuelve a 425 productivas y 103
+solo-fixture. El guard raiz tambien fija `LC_ALL=C` en su hijo porque Bash
+puede emitir un warning antes del script con un locale heredado invalido.
+
+Se reejecutaron focales guardian/tool-file, el guard raiz con C y no-C, y el
+test de metricas. Todo verde; no se inicio servidor, guardian, agente ni
+proveedor. La incidencia cerrada es `BUG-ORQ-20260711-208X`.

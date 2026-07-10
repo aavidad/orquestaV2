@@ -92,6 +92,15 @@ mismo commit.
   del array. Se anadio rechazo `data_file_json_trailing_data` con prueba focal;
   se preservan hash, snapshot y limites. No hubo acceso fuera del root ni
   efecto externo.
+- BUG-ORQ-20260711-208X: cerrado localmente. El guard MEJ-106 quedo rojo por
+  dos overrides `*_TIMEOUT_MS` del guardian y tres nombres de IPC de fixture
+  bajo el prefijo global, y el script de metricas dependia del locale heredado.
+  `cec2848f3` fija `LC_ALL=C` y cubre el caso portable; `31ecba309` conserva
+  los presupuestos 425/103 retirando los cinco nombres redundantes. Durante la
+  revalidacion se detecto que Bash puede avisar por locale invalido antes de
+  ejecutar el script; el guard raiz fija su propio hijo a `LC_ALL=C`. Focales
+  guardian/tool-file, `TestEnvVarsBudgetMEJ106V0` en C y no-C, y el test del
+  script verdes. No se arranco servidor, guardian, agente ni proveedor.
 - D3 configuracion/envs 20260710: cerrado localmente. La metrica separa
   produccion `425/425` y fixtures exclusivos `103/103`, con dos pases verdes.
 - D3 local 2026-07-10: detenido tras el primer lote determinista para no
