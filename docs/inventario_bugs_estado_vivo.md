@@ -16,7 +16,6 @@ mismo commit.
 | F5/identidad runtime | integrado en `2fe12f658` y completado localmente por D1 con `5f30973d7`: identidad de servidor y proyecto externo ya son distintos; closure accepted y shutdown listo | ejecutar drain/deploy gobernados y verificar por API el binario remoto, sin tocar `uso-app` |
 | BUG-ORQ-20260710-208H | integrado en `7444dcf8a`; revisor externo (Claude) reejecuto 2026-07-10 los 7 focales declarados (29 tests, conteo -v verificado) y las suites completas de los modulos tocados: todo verde. Lotes dos pases NO acreditados (bloqueados por ratchet envs 536>511, mismo bloqueador que D3) | probar atestador real integrado y sus rutas de fallo + lotes dos pases tras consolidar envs, antes de cerrar el bug |
 | BUG-ORQ-20260710-208J | integrado en `7444dcf8a`: fallo del atestador persiste claim `failed` y cierre `blocked/rework`, sin reintento por polling | D1 debe confirmar comportamiento con atestador real; conservar la [incidencia 208J](incidencias/incidencia_orquesta_208h_claim_pending_sin_reintento_2026-07-10.md) como evidencia |
-| BUG-ORQ-20260710-208K | candidato local: aliases/politicas estrictas se materializan solo con routing Go totalmente cero; los parciales siguen fail-closed y `xhigh` exige causa explicita. El revisor paso capacity, runtimes, `orquesta-app-codex-stack` completo y focales de `cmd/orquesta-server` con cache aislada | integrar y reejecutar los focales en la rama canonica; cerrar solo con commit revisado y evidencia conservada en la [incidencia 208K](incidencias/incidencia_orquesta_model_routing_fail_closed_legacy_2026-07-10.md) |
 | BUG-ORQ-20260710-208M | `codex-launch-wave` acepta un `--runtime-dir` arbitrario y lanza el agente, pero `codex-wave-status`/`tail` rechazan después ese mismo runtime como `blocked_registry_untrusted` si no cae bajo sus raíces permitidas | [incidencia 208M](incidencias/incidencia_orquesta_codex_wave_registry_untrusted_2026-07-10.md): unificar validación de ruta al lanzar y observar; no permitir una ola real inobservable |
 | BUG-ORQ-20260710-208I | timeout parcial de observe coexistio con `invalid` durable; causa raiz no demostrada. F1 YA adoptado en observe/status/stats (etapa A, 2026-07-10): la superficie local ya no puede publicar running contradicho; la evidencia del incidente es del servidor remoto | repro por API contra servidor desplegado y correlacionar refs/tiempos con el veredicto causal publicado; no cerrable en local |
 | SUBFALLO routing/modelos 20260710 | fail-open en defaults/args vacios, herencia xhigh, PATH ambiguo; D3 local mide 538 variables `ORQUESTA_*` frente al limite 513 | WIP en `fix/model-routing-p0-p1-sol-20260710`; consolidar/fusionar configuracion sin subir ratchet y repetir D3 |
@@ -45,6 +44,11 @@ mismo commit.
 - BUG-ORQ-20260710-208L: cerrado por `5f30973d7` y D1 local retenido en
   `/tmp/orquesta-goal-first-app-server.ZAorvf`; el target externo no Git ya
   no se usa como identidad del binario.
+- BUG-ORQ-20260710-208K: cerrado localmente por `4faf2fd2f`. La configuracion
+  ausente ya materializa aliases tipados, la parcial falla cerrada y `xhigh`
+  exige evidencia causal. Revisor: capacity, runtimes, stack completo y
+  focales del servidor verdes; evidencia en la
+  [incidencia 208K](incidencias/incidencia_orquesta_model_routing_fail_closed_legacy_2026-07-10.md).
 - D3 local 2026-07-10: detenido tras el primer lote determinista para no
   gastar un segundo pase imposible. `TestEnvVarsBudgetMEJ106V0` fallo con
   538 variables frente a 513; recibo y log retenidos en

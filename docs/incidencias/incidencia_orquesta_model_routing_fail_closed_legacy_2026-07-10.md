@@ -1,7 +1,6 @@
 # Incidencia: 208K model routing invalida configuraciones existentes
 
-Fecha: 2026-07-10. Estado: candidato corregido localmente; pendiente de
-integracion y revision sobre la rama canonica.
+Fecha: 2026-07-10. Estado: cerrado localmente en `4faf2fd2f`.
 
 ## Sintoma
 
@@ -127,6 +126,28 @@ de heredar el esfuerzo desde un campo runtime legacy. La ejecucion completa de
 `cmd/orquesta-server` arranca fakes amplios ajenos al write-set y se conserva
 como verificacion transversal posterior; no se usa como falso requisito ya
 cumplido para cerrar esta incidencia.
+
+## Cierre local
+
+El candidato se integro en `trabajo/plataforma-agentes` como `4faf2fd2f`.
+El revisor repitio sobre esa rama, con caches aisladas bajo
+`/tmp/orquesta-review-208k-main-cache`:
+
+```bash
+go test -count=1 \
+  ./modulos/orquesta-capacity \
+  ./modulos/orquesta-runtime-codex \
+  ./modulos/orquesta-runtime-claude \
+  ./modulos/orquesta-app-codex-stack
+
+go test -count=1 ./cmd/orquesta-server \
+  -run 'Test(Codex|Claude)ModelRoutingConfigV0|TestCodexRuntimeConfigV0'
+```
+
+Todo verde. El cierre cubre el defecto 208K: compatibilidad de routing ausente,
+rechazo de configuracion parcial, ausencia de herencia global y autorizacion
+causal de `xhigh`. No acredita por si solo pendientes de deploy, atestacion o
+limpieza de variables, que conservan sus entradas separadas.
 
 ## Reparacion mecanica de expectativas 2026-07-10
 
