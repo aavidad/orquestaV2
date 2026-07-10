@@ -3003,3 +3003,8 @@ deadcode distingue referencias de produccion, solo de tests y ninguna, sin
 contar la declaracion. Foto actual: 731 / 41 / 53 respectivamente; 409
 exportadas mantienen la categoria contractual previa. Los campos JSON/SQLite
 son aditivos y no autorizan ningun borrado automatico.
+
+Primera aplicacion del grupo sin referencias: retirados dos wrappers privados
+(allowlist legacy del runner guardian y acceso directo al broker de contexto).
+El wiring vigente permanece; focales verdes. Indice actual: 25.217 funciones y
+1.232 candidatas brutas.

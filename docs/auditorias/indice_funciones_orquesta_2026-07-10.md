@@ -95,3 +95,9 @@ solo de tests y 53 sin referencias lexicas; las 409 exportadas conservan la
 clasificacion anterior por contrato potencial. Los nuevos campos JSON/SQLite
 son aditivos. Ninguna de estas categorias autoriza borrar: sirven para priorizar
 la siguiente revision manual y evitar falsos positivos por tests.
+
+La primera aplicacion de la nueva categoria sin referencias retiro dos wrappers
+privados mas: el antiguo lector de allowlist del runner guardian y el acceso
+directo al broker de contexto, sustituido hace tiempo por su wiring. Tras
+verificar focales, el indice queda en 25.217 funciones y 1.232 candidatas
+brutas. No se alteraron contratos ni composicion activa.

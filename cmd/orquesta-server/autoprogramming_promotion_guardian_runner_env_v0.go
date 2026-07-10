@@ -147,13 +147,6 @@ func autoprogrammingPromotionGuardianRunnerCacheEnvV0(
 	}
 }
 
-func autoprogrammingPromotionGuardianRunnerEnvAllowlistFromEnvV0() []string {
-	return csvEnvOrDefaultV0(
-		envServerAutoprogrammingPromotionGuardianRunnerEnvAllowlistV0,
-		defaultAutoprogrammingPromotionGuardianRunnerEnvAllowlistV0(),
-	)
-}
-
 func autoprogrammingPromotionGuardianRunnerParentEnvV0() []string {
 	return os.Environ()
 }

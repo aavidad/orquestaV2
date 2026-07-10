@@ -24,10 +24,6 @@ type codeContextBrokerWiringV0 struct {
 	ToolOwnerObserver serverCodeContextToolOwnerObserverV0
 }
 
-func codeContextBrokerFromEnvV0(config orquestaserver.ConfigV0) orquestacontext.CodeContextQueryPortV0 {
-	return codeContextBrokerWiringFromEnvV0(config).Query
-}
-
 func codeContextBrokerWiringFromEnvV0(config orquestaserver.ConfigV0) codeContextBrokerWiringV0 {
 	projectConfig := projectConfigFromProjectDirBestEffortV0(config.ProjectWorkDir)
 	providerKind := stringProjectConfigOrEnvOrDefaultV0(
