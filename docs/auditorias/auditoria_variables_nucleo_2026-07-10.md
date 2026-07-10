@@ -69,6 +69,12 @@ Las 29 variables de la familia quedan registradas con alcance
 la configuracion efectiva y el runner hijo sigue proyectando unicamente su
 allowlist. No se ejecuto promotion, guardian, servidor, agente ni proveedor.
 
+Los timeout canonicos de la familia usan ahora `*_TIMEOUT_MS`; los nombres
+historicos sin unidad se mantienen solo como aliases deprecados que aceptan
+duracion Go. La precedencia comprobada es canonico, alias legacy, fichero y
+default. La extraccion de las estructuras de configuracion y de las
+proyecciones efectivas tambien mantiene ambos ficheros bajo el limite T90.
+
 Pruebas locales:
 
 ```bash
@@ -77,6 +83,7 @@ go test -count=1 ./cmd/orquesta-server \
 ```
 
 Resultado: verde. La proyeccion efectiva de Gemini, runner de tests requeridos
-y promotion tambien queda cubierta; el ratchet AST baja de 36 a 6. Las seis
-lecturas residuales se limitan a OPES (conector, fuera de este corte) y al
-harness opt-in `ORQUESTA_MCP_REAL_SMOKE_CONFIRM`.
+y promotion tambien queda cubierta; el ratchet AST baja de 36 a 5. Las cinco
+lecturas residuales pertenecen a OPES, conector fuera de este corte. El
+harness opt-in `ORQUESTA_MCP_REAL_SMOKE_CONFIRM` queda clasificado
+explícitamente y no forma parte de configuración de runtime.

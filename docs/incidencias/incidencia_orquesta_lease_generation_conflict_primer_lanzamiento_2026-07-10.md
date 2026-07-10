@@ -3,8 +3,8 @@
 Fecha: 2026-07-10, ~11:50 UTC.
 Detectado por: Claude (revisor), primera ejecucion local del smoke real tras el
 corte del lease de generacion unica.
-Estado: abierto. BLOQUEANTE: impide que Orquesta lance cualquier goal en local,
-y por tanto la prueba de app del operador y la conmutacion a autoprogramacion.
+Estado: cerrado por `01cb27d77`. El bloqueo del primer lanzamiento queda
+resuelto; se conserva debajo la evidencia historica del fallo original.
 Sospechosos directos: commits `6b848faa5` (enforce single app-server generation
 identity) y `4a97c37e3` (lease inicial), en
 `modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_tmux_generation_lease_v0.go`.
@@ -99,3 +99,11 @@ asercion de que los shutdown hooks no fallan.
   hooks ok y cleanup sin procesos.
 - Shutdown/cleanup nunca bloqueado por generation_conflict: degradacion
   documentada por identidad de proceso.
+
+## Cierre verificable
+
+El inventario canonico `docs/inventario_bugs_estado_vivo.md` registra esta
+incidencia como cerrada por `01cb27d77`. El arreglo usa el selector tmux
+`=sesion:` y verificacion triestado. Cleanup y shutdown degradan a evidencia
+residual cuando corresponde, en lugar de convertir ese estado en un bloqueo.
+El indice tambien registra el smoke real local verde end-to-end.

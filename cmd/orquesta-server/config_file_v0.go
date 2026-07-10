@@ -62,7 +62,6 @@ type serverProjectConfigServerV0 struct {
 	AuditFile     *string `json:"audit_file,omitempty"`
 	AuditDisabled *bool   `json:"audit_disabled,omitempty"`
 }
-
 type serverProjectConfigServerHTTPV0 struct {
 	ReadHeaderTimeoutMS *int `json:"read_header_timeout_ms,omitempty"`
 	ReadTimeoutMS       *int `json:"read_timeout_ms,omitempty"`
@@ -71,11 +70,9 @@ type serverProjectConfigServerHTTPV0 struct {
 	MaxHeaderBytes      *int `json:"max_header_bytes,omitempty"`
 	ControlBodyMaxBytes *int `json:"control_body_max_bytes,omitempty"`
 }
-
 type serverProjectConfigServerLifecycleV0 struct {
 	ShutdownGraceMS *int `json:"shutdown_grace_ms,omitempty"`
 }
-
 type serverProjectConfigControlPlaneV0 struct {
 	RemoteAccessOptIn *bool   `json:"remote_access_opt_in,omitempty"`
 	Token             *string `json:"token,omitempty"`
@@ -83,7 +80,6 @@ type serverProjectConfigControlPlaneV0 struct {
 	PermissionRef     *string `json:"permission_ref,omitempty"`
 	PublicReason      *string `json:"public_reason,omitempty"`
 }
-
 type serverProjectConfigServerSupervisorV0 struct {
 	MaxRunsPerTick        *int `json:"max_runs_per_tick,omitempty"`
 	MaxExecutionsPerTick  *int `json:"max_executions_per_tick,omitempty"`
@@ -93,7 +89,6 @@ type serverProjectConfigServerSupervisorV0 struct {
 	DrainMaxOutbox        *int `json:"drain_max_outbox,omitempty"`
 	DrainMaxExternalWaits *int `json:"drain_max_external_waits,omitempty"`
 }
-
 type serverProjectConfigServerIdleV0 struct {
 	AfterSeconds            *int      `json:"after_seconds,omitempty"`
 	Disabled                *bool     `json:"disabled,omitempty"`
@@ -116,13 +111,11 @@ type serverProjectConfigServerIdleV0 struct {
 	DailyGoalBudget         *int      `json:"daily_goal_budget,omitempty"`
 	DailyContextBudgetBytes *int      `json:"daily_context_budget_bytes,omitempty"`
 }
-
 type serverProjectConfigWorktreeSnapshotV0 struct {
 	MaxFiles      *int `json:"max_files,omitempty"`
 	MaxFileBytes  *int `json:"max_file_bytes,omitempty"`
 	MaxTotalBytes *int `json:"max_total_bytes,omitempty"`
 }
-
 type serverProjectConfigDaemonLogsV0 struct {
 	MaxBytes        *int    `json:"max_bytes,omitempty"`
 	MaxRotatedFiles *int    `json:"max_rotated_files,omitempty"`
@@ -130,7 +123,6 @@ type serverProjectConfigDaemonLogsV0 struct {
 	LocalRawEnabled *bool   `json:"local_raw_enabled,omitempty"`
 	LocalRawReason  *string `json:"local_raw_reason,omitempty"`
 }
-
 type serverProjectConfigCodexRuntimeV0 struct {
 	RuntimeWorkDir     *string `json:"runtime_work_dir,omitempty"`
 	ExecutionMode      *string `json:"execution_mode,omitempty"`
@@ -238,54 +230,6 @@ type serverProjectConfigEgressSanitizerSidecarV0 struct {
 	EvidenceRef   *string `json:"evidence_ref,omitempty"`
 	Command       *string `json:"command,omitempty"`
 	LocalEndpoint *string `json:"local_endpoint,omitempty"`
-}
-
-type serverProjectConfigAutoprogrammingV0 struct {
-	CheckpointOnlyHighConsumptionTokens *int                                          `json:"checkpoint_only_high_consumption_tokens,omitempty"`
-	CheckpointOnlyMaxWaitSeconds        *int                                          `json:"checkpoint_only_max_wait_seconds,omitempty"`
-	NoCheckpointWarningMaxWaitSeconds   *int                                          `json:"no_checkpoint_warning_max_wait_seconds,omitempty"`
-	RequiredTestAttestationConfigFile   *string                                       `json:"required_test_attestation_config_file,omitempty"`
-	Promotion                           serverProjectConfigAutoprogrammingPromotionV0 `json:"promotion,omitempty"`
-}
-
-type serverProjectConfigAutoprogrammingPromotionV0 struct {
-	Enabled       *bool                                                 `json:"enabled,omitempty"`
-	ArchiveDir    *string                                               `json:"archive_dir,omitempty"`
-	RepoRef       *string                                               `json:"repo_ref,omitempty"`
-	AppRef        *string                                               `json:"app_ref,omitempty"`
-	CommitMessage *string                                               `json:"commit_message,omitempty"`
-	Guardian      serverProjectConfigAutoprogrammingPromotionGuardianV0 `json:"guardian,omitempty"`
-}
-
-type serverProjectConfigAutoprogrammingPromotionGuardianV0 struct {
-	Enabled                    *bool    `json:"enabled,omitempty"`
-	Command                    *string  `json:"command,omitempty"`
-	RunnerEnvAllowlist         []string `json:"runner_env_allowlist,omitempty"`
-	StateDir                   *string  `json:"state_dir,omitempty"`
-	CurrentBin                 *string  `json:"current_bin,omitempty"`
-	CandidateBin               *string  `json:"candidate_bin,omitempty"`
-	LastGoodBin                *string  `json:"last_good_bin,omitempty"`
-	ArtifactRoot               *string  `json:"artifact_root,omitempty"`
-	BuildCommand               *string  `json:"build_command,omitempty"`
-	TestCommands               []string `json:"test_commands,omitempty"`
-	HealthTimeout              *string  `json:"health_timeout,omitempty"`
-	CommandTimeout             *string  `json:"command_timeout,omitempty"`
-	ArtifactMaxBytes           *string  `json:"artifact_max_bytes,omitempty"`
-	RepairCommand              *string  `json:"repair_command,omitempty"`
-	RepairCodex                *bool    `json:"repair_codex,omitempty"`
-	RepairCodexWriteSet        []string `json:"repair_codex_write_set,omitempty"`
-	RepairCodexRequiredTests   []string `json:"repair_codex_required_tests,omitempty"`
-	RepairCodexWorktreeRef     *string  `json:"repair_codex_worktree_ref,omitempty"`
-	RepairCodexBranchRef       *string  `json:"repair_codex_branch_ref,omitempty"`
-	RepairCodexRunRef          *string  `json:"repair_codex_run_ref,omitempty"`
-	RepairCodexPromotionRef    *string  `json:"repair_codex_promotion_ref,omitempty"`
-	RepairCodexSandbox         *string  `json:"repair_codex_sandbox,omitempty"`
-	RepairCodexReasoning       *string  `json:"repair_codex_reasoning_effort,omitempty"`
-	RepairCodexRuntimeDir      *string  `json:"repair_codex_runtime_dir,omitempty"`
-	RepairCodexAllowBroad      *bool    `json:"repair_codex_allow_broad_sandbox,omitempty"`
-	RepairCodexSandboxEvidence *string  `json:"repair_codex_sandbox_evidence_ref,omitempty"`
-	CommandEffectEvidenceRefs  []string `json:"command_effect_evidence_refs,omitempty"`
-	SkipHealthEvidenceRefs     []string `json:"skip_health_evidence_refs,omitempty"`
 }
 
 func serverProjectConfigFilePathV0(projectDir string) string {

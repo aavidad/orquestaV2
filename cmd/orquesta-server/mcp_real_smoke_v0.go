@@ -18,6 +18,7 @@ import (
 	operator "orquesta/modulos/orquesta-operator-mcp"
 )
 
+// mcpRealSmokeConfirmEnvV0 only authorizes the mcp-real-smoke harness; it is not runtime configuration.
 const mcpRealSmokeConfirmEnvV0 = "ORQUESTA_MCP_REAL_SMOKE_CONFIRM"
 
 type mcpRealSmokeSummaryV0 struct {

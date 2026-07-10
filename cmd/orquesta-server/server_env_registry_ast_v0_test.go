@@ -17,7 +17,7 @@ type serverEnvRegistryASTHitV0 struct {
 	Location string
 }
 
-const serverEnvRegistryASTMissingBaselineV0 = 6
+const serverEnvRegistryASTMissingBaselineV0 = 5
 
 func TestServerEnvRegistryASTV0LecturasORQUESTARegistradas(t *testing.T) {
 	root := findRepoRootForServerEnvRegistryASTV0(t)
@@ -246,6 +246,7 @@ func serverEnvRegistryASTLiteralStringV0(expr ast.Expr) (string, bool) {
 
 func serverEnvRegistryASTAllowlistV0() map[string]bool {
 	return map[string]bool{
+		mcpRealSmokeConfirmEnvV0:              true,
 		"ORQUESTA_GUARDIAN_BUILD_COMMAND":     true,
 		"ORQUESTA_GUARDIAN_CANDIDATE_BIN":     true,
 		"ORQUESTA_GUARDIAN_RUNNER_ENV_POLICY": true,

@@ -65,6 +65,15 @@ mismo commit.
   se alinean con routing tipado por tarea, sin reintroducir herencia global.
 - BUG-ORQ-20260710-208H: cerrado localmente. El atestador configurado se
   ejerce desde composicion y los dos pases aislados pasan sobre seis paquetes.
+- BUG-ORQ-20260710-208U: cerrado localmente. La consolidacion de guardian y
+  configuracion efectiva habia dejado `config_file_v0.go` y
+  `effective_config_v0.go` por encima del limite T90, y habia registrado dos
+  aliases de timeout sin unidad como si fueran canonicos. Se extrajeron
+  familias cohesivas, los nombres canonicos pasan a `*_TIMEOUT_MS` y los
+  aliases legacy quedan marcados deprecados con precedencia
+  canonico > legacy > fichero > default. Cierre: focales T90, registry,
+  guardian, effective config y MCP verdes; sin servidor, guardian, agente ni
+  proveedor real.
 - D3 configuracion/envs 20260710: cerrado localmente. La metrica separa
   produccion `425/425` y fixtures exclusivos `103/103`, con dos pases verdes.
 - D3 local 2026-07-10: detenido tras el primer lote determinista para no

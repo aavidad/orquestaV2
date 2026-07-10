@@ -2951,5 +2951,27 @@ padre por defecto.
 El corte fue solo local y focal: no se arranco servidor, promocion, guardian,
 agente ni proveedor. La prueba de configuracion canonica, la proyeccion
 auditable de Gemini/runner/promotion y las pruebas de allowlist/recibos pasan.
-El ratchet AST baja de 36 a 6: quedan solo cinco lecturas de OPES, fuera del
-nucleo, y la confirmacion del harness MCP opt-in.
+El ratchet AST baja de 36 a 5: quedan solo cinco lecturas de OPES, fuera del
+nucleo. La confirmacion del harness MCP opt-in queda clasificada aparte y no
+forma parte de configuracion de runtime.
+
+## Actualizacion Codex 2026-07-10: cierre de regresion 208U
+
+La verificacion amplia local descubrio dos regresiones del corte de
+configuracion antes de cualquier push: `config_file_v0.go` y
+`effective_config_v0.go` superaban T90, y los aliases históricos de timeout
+del guardian aparecian como nombres sin unidad. Se extrajeron familias
+cohesivas a ficheros propios; los timeout canonicos pasan a `*_TIMEOUT_MS` y
+los aliases de duracion Go quedan marcados como deprecados, con precedencia
+canonico > legacy > fichero > default.
+
+Se reejecutaron T90, registry/AST, guardian, configuracion efectiva y MCP:
+verde. No se arranco servidor, guardian, agente ni proveedor. El indice
+canonico conserva el cierre como `BUG-ORQ-20260710-208U`.
+
+Una tentativa posterior de `go test -count=1 ./cmd/orquesta-server` completo
+activo un fake OPES interno y quedo esperando; se termino cooperativamente por
+PID junto con su helper, sin cambios de fuente ni procesos residuales. No se
+usa esa tentativa como evidencia de cierre: para este corte valen los focales
+aislados anteriores. El paquete completo necesita ejecutarse solo en un corte
+que admita sus fixtures OPES y tenga timeout/cleanup gobernados.

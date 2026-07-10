@@ -285,6 +285,7 @@ type serverEnvSettingMetadataV0 struct {
 	Scope       string
 	Label       string
 	Description string
+	Deprecated  bool
 }
 
 var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{

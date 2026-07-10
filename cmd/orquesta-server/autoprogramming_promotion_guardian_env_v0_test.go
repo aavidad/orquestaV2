@@ -2,9 +2,92 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 )
+
+func TestAutoprogrammingPromotionGuardianTimeoutEnvPrecedenceV0(t *testing.T) {
+	fileValue := "30s"
+	tests := []struct {
+		name         string
+		canonicalKey string
+		legacyKey    string
+		canonical    string
+		legacy       string
+		fileValue    *string
+		fallback     string
+		want         string
+	}{
+		{
+			name:         "canonical env wins",
+			canonicalKey: envServerAutoprogrammingPromotionGuardianHealthTimeoutMSV0,
+			legacyKey:    envServerAutoprogrammingPromotionGuardianHealthTimeoutV0,
+			canonical:    "1200",
+			legacy:       "15s",
+			fileValue:    &fileValue,
+			fallback:     "5s",
+			want:         "1200ms",
+		},
+		{
+			name:         "legacy env wins over file",
+			canonicalKey: envServerAutoprogrammingPromotionGuardianCommandTimeoutMSV0,
+			legacyKey:    envServerAutoprogrammingPromotionGuardianCommandTimeoutV0,
+			legacy:       "45s",
+			fileValue:    &fileValue,
+			fallback:     "5s",
+			want:         "45s",
+		},
+		{
+			name:         "file wins over default",
+			canonicalKey: envServerAutoprogrammingPromotionGuardianCommandTimeoutMSV0,
+			legacyKey:    envServerAutoprogrammingPromotionGuardianCommandTimeoutV0,
+			fileValue:    &fileValue,
+			fallback:     "5s",
+			want:         "30s",
+		},
+		{
+			name:         "default when unset",
+			canonicalKey: envServerAutoprogrammingPromotionGuardianHealthTimeoutMSV0,
+			legacyKey:    envServerAutoprogrammingPromotionGuardianHealthTimeoutV0,
+			fallback:     "5s",
+			want:         "5s",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			unsetEnvForTestV0(t, test.canonicalKey)
+			unsetEnvForTestV0(t, test.legacyKey)
+			if test.canonical != "" {
+				t.Setenv(test.canonicalKey, test.canonical)
+			}
+			if test.legacy != "" {
+				t.Setenv(test.legacyKey, test.legacy)
+			}
+			if got := autoprogrammingPromotionGuardianTimeoutFromEnvOrProjectConfigV0(
+				test.canonicalKey, test.legacyKey, test.fileValue, test.fallback,
+			); got != test.want {
+				t.Fatalf("timeout=%q want=%q", got, test.want)
+			}
+		})
+	}
+}
+
+func unsetEnvForTestV0(t *testing.T, key string) {
+	t.Helper()
+	previous, existed := os.LookupEnv(key)
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("unset %s: %v", key, err)
+	}
+	t.Cleanup(func() {
+		if existed {
+			_ = os.Setenv(key, previous)
+			return
+		}
+		_ = os.Unsetenv(key)
+	})
+}
 
 func TestAutoprogrammingPromotionGuardianEnvV0TodasClavesRegistradasComoChildProcess(t *testing.T) {
 	request := fullAutoprogrammingPromotionGuardianEnvRequestForTestV0()

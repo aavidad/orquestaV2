@@ -1,17 +1,21 @@
 package main
 
 const (
-	envServerAutoprogrammingPromotionGuardianEnabledV0                    = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_ENABLED"
-	envServerAutoprogrammingPromotionGuardianCommandV0                    = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_COMMAND"
-	envServerAutoprogrammingPromotionGuardianRunnerEnvAllowlistV0         = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_RUNNER_ENV_ALLOWLIST"
-	envServerAutoprogrammingPromotionGuardianStateDirV0                   = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_STATE_DIR"
-	envServerAutoprogrammingPromotionGuardianCurrentBinV0                 = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_CURRENT_BIN"
-	envServerAutoprogrammingPromotionGuardianCandidateBinV0               = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_CANDIDATE_BIN"
-	envServerAutoprogrammingPromotionGuardianLastGoodBinV0                = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_LAST_GOOD_BIN"
-	envServerAutoprogrammingPromotionGuardianArtifactRootV0               = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_ARTIFACT_ROOT"
-	envServerAutoprogrammingPromotionGuardianTestCommandsV0               = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_TEST_COMMANDS"
-	envServerAutoprogrammingPromotionGuardianBuildCommandV0               = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_BUILD_COMMAND"
-	envServerAutoprogrammingPromotionGuardianHealthTimeoutV0              = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_HEALTH_TIMEOUT"
+	envServerAutoprogrammingPromotionGuardianEnabledV0            = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_ENABLED"
+	envServerAutoprogrammingPromotionGuardianCommandV0            = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_COMMAND"
+	envServerAutoprogrammingPromotionGuardianRunnerEnvAllowlistV0 = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_RUNNER_ENV_ALLOWLIST"
+	envServerAutoprogrammingPromotionGuardianStateDirV0           = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_STATE_DIR"
+	envServerAutoprogrammingPromotionGuardianCurrentBinV0         = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_CURRENT_BIN"
+	envServerAutoprogrammingPromotionGuardianCandidateBinV0       = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_CANDIDATE_BIN"
+	envServerAutoprogrammingPromotionGuardianLastGoodBinV0        = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_LAST_GOOD_BIN"
+	envServerAutoprogrammingPromotionGuardianArtifactRootV0       = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_ARTIFACT_ROOT"
+	envServerAutoprogrammingPromotionGuardianTestCommandsV0       = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_TEST_COMMANDS"
+	envServerAutoprogrammingPromotionGuardianBuildCommandV0       = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_BUILD_COMMAND"
+	envServerAutoprogrammingPromotionGuardianHealthTimeoutMSV0    = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_HEALTH_TIMEOUT_MS"
+	envServerAutoprogrammingPromotionGuardianCommandTimeoutMSV0   = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_COMMAND_TIMEOUT_MS"
+	// Deprecated: use envServerAutoprogrammingPromotionGuardianHealthTimeoutMSV0.
+	envServerAutoprogrammingPromotionGuardianHealthTimeoutV0 = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_HEALTH_TIMEOUT"
+	// Deprecated: use envServerAutoprogrammingPromotionGuardianCommandTimeoutMSV0.
 	envServerAutoprogrammingPromotionGuardianCommandTimeoutV0             = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_COMMAND_TIMEOUT"
 	envServerAutoprogrammingPromotionGuardianArtifactMaxBytesV0           = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_ARTIFACT_MAX_BYTES"
 	envServerAutoprogrammingPromotionGuardianRepairCommandV0              = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_REPAIR_COMMAND"
@@ -30,3 +34,19 @@ const (
 	envServerAutoprogrammingPromotionGuardianCommandEffectEvidenceRefsV0  = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_COMMAND_EFFECT_EVIDENCE_REFS"
 	envServerAutoprogrammingPromotionGuardianSkipHealthEvidenceRefsV0     = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_SKIP_HEALTH_EVIDENCE_REFS"
 )
+
+type serverAutoprogrammingPromotionGuardianDeprecatedEnvAliasV0 struct {
+	LegacyKey    string
+	CanonicalKey string
+}
+
+var serverAutoprogrammingPromotionGuardianDeprecatedEnvAliasesV0 = []serverAutoprogrammingPromotionGuardianDeprecatedEnvAliasV0{
+	{
+		LegacyKey:    envServerAutoprogrammingPromotionGuardianHealthTimeoutV0,
+		CanonicalKey: envServerAutoprogrammingPromotionGuardianHealthTimeoutMSV0,
+	},
+	{
+		LegacyKey:    envServerAutoprogrammingPromotionGuardianCommandTimeoutV0,
+		CanonicalKey: envServerAutoprogrammingPromotionGuardianCommandTimeoutMSV0,
+	},
+}

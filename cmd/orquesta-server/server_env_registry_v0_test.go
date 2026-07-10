@@ -52,7 +52,10 @@ func TestServerEnvRegistryV0TieneMetadataParaConfiguracionEfectiva(t *testing.T)
 
 func TestServerEnvRegistryV0TimeoutsDeclaranUnidadEnNombre(t *testing.T) {
 	var invalid []string
-	for key := range serverEffectiveEnvRegistryV0 {
+	for key, metadata := range serverEffectiveEnvRegistryV0 {
+		if metadata.Deprecated {
+			continue
+		}
 		if !strings.Contains(key, "TIMEOUT") {
 			continue
 		}
