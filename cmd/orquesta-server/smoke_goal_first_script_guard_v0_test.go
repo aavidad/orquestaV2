@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -36,6 +37,30 @@ func TestSmokeScriptContractsConsolidadosV0(t *testing.T) {
 
 func TestSmokeGoalFirstScriptContractGuardV0(t *testing.T) {
 	TestSmokeScriptContractsConsolidadosV0(t)
+}
+
+func TestF3DrainPidfdEsSemanticoYNoUsaKillPorPIDV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	script := filepath.Join(root, "scripts/lib/pidfd_signal.py")
+	program := `
+import ast, pathlib, sys
+tree=ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+calls=[]
+for node in ast.walk(tree):
+    if not isinstance(node, ast.Call): continue
+    if isinstance(node.func, ast.Attribute): name=node.func.attr
+    elif isinstance(node.func, ast.Name): name=node.func.id
+    else: name=""
+    calls.append((name,node.lineno))
+names=[name for name,_ in calls]
+assert "pidfd_open" in names and "pidfd_send_signal" in names
+assert min(line for name,line in calls if name=="pidfd_open") < min(line for name,line in calls if name=="pidfd_send_signal")
+assert not ({"kill","system","popen"} & set(names))
+`
+	command := exec.Command("python3", "-c", program, script)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("helper pidfd no cumple AST semantico: %v\n%s", err, output)
+	}
 }
 
 func smokeScriptContractGuardsV0() []scriptContractGuardV0 {
@@ -114,6 +139,8 @@ func smokeScriptContractGuardsV0() []scriptContractGuardV0 {
 				"deploy_config_missing",
 				"deploy_runtime_identity_mismatch",
 				"orquesta_server_ctl.sh",
+				"scripts/lib/isolated_test_env.sh",
+				"orquesta_use_isolated_test_env",
 			},
 		},
 		{
@@ -131,22 +158,27 @@ func smokeScriptContractGuardsV0() []scriptContractGuardV0 {
 		},
 		{
 			name:   "f3-drain-script-governed",
-			script: "scripts/orquesta_server_drain.sh",
+			script: "scripts/lib/orquesta_drain_runtime.py",
 			wants: []string{
-				"orquesta_server_drain_receipt.v0",
-				"orquesta_server_drain_inventory.v0",
+				"orquesta_server_drain_receipt.v2",
+				"orquesta_server_drain_inventory.v2",
 				"protected_uso_app",
-				"identity_not_managed",
+				"protected_uso_app_descendant",
+				"orquesta_identity_incomplete",
 				"backup_prepared_before_stop",
-				"orquesta-server-drain",
-				"DRAIN_DRY_RUN",
+				"refused_precondition",
+				"DRAIN_TEST_MODE",
 				"drain_status",
 				"/api/v0/server/shutdown",
+				`"requested_by": "orquesta-director"`,
+				`"cleanup_goal_backends": True`,
 				"kill-session",
-				"-INT",
-				"-TERM",
+				"pidfd_helper",
+				"urllib.parse.urlsplit",
+				"SIGTERM",
+				"SIGKILL",
 			},
-			forbids: []string{"/api/v0/runs/control", "kill -KILL", "kill -9"},
+			forbids: []string{"/api/v0/runs/control", "os.kill", "kill -9", "pkill", "killall"},
 		},
 		{
 			name:   "f3-isolated-test-env-profile",
@@ -166,6 +198,29 @@ func smokeScriptContractGuardsV0() []scriptContractGuardV0 {
 				"ORQUESTA_TEST_PORT_RANGE",
 				"ORQUESTA_TEST_PORT_LOCK_DIR",
 			},
+		},
+		{
+			name:   "f3-wide-tests-run-in-observable-batches",
+			script: "scripts/orquesta_test_batches.sh",
+			wants: []string{
+				"orquesta_use_isolated_test_env",
+				"orquesta_test_batches_receipt.v1",
+				"ORQUESTA_TEST_BATCH_SIZE",
+				"ORQUESTA_TEST_BATCH_TIMEOUT",
+				"--kill-after",
+				"two_consecutive_passes_passed",
+			},
+			forbids: []string{`go test ./...`},
+		},
+		{
+			name:   "f3-common-harness-consumers",
+			script: "scripts/smoke_self_programming_composite_goal_first.sh",
+			wants:  []string{"scripts/lib/isolated_test_env.sh", "orquesta_use_isolated_test_env"},
+		},
+		{
+			name:   "f3-nightly-consumes-common-harness",
+			script: "scripts/orquesta_smoke_nightly.sh",
+			wants:  []string{"scripts/lib/isolated_test_env.sh", "orquesta_use_isolated_test_env"},
 		},
 	}
 }

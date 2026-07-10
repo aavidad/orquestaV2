@@ -6,6 +6,8 @@
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/isolated_test_env.sh
+source "$ROOT/scripts/lib/isolated_test_env.sh"
 DEPLOY_REPO="${ORQUESTA_DEPLOY_REPO:-$ROOT}"
 DEPLOY_WORKTREE="${ORQUESTA_DEPLOY_WORKTREE:-$DEPLOY_REPO}"
 DEPLOY_REF="${ORQUESTA_DEPLOY_REF:-HEAD}"
@@ -33,6 +35,7 @@ notification_receipt_ref=""
 notification_reason=""
 
 cleanup() {
+  orquesta_release_test_port_lease || true
   if [ -n "$tmp_root" ] && [ -d "$tmp_root" ]; then
     rm -rf "$tmp_root"
   fi
@@ -310,11 +313,17 @@ build_from_tree() {
   out="$tmp_root/orquesta-server"
   mkdir -p "$src"
   git -C "$DEPLOY_WORKTREE" archive "$target_sha" | tar -x -C "$src"
-  if [ -n "$DEPLOY_BUILD_CMD" ]; then
-    ORQUESTA_DEPLOY_BUILD_SRC="$src" ORQUESTA_DEPLOY_BUILD_OUT="$out" bash -c "$DEPLOY_BUILD_CMD"
-  else
-    (cd "$src" && go build -o "$out" ./cmd/orquesta-server)
-  fi
+  # El mismo entorno/lease cubre build, arranque y postverify; no se limita al
+  # subshell de compilación.
+  orquesta_use_isolated_test_env "${ORQUESTA_DEPLOY_TEST_ENV_ROOT:-$tmp_root/test-env}"
+  (
+    if [ -n "$DEPLOY_BUILD_CMD" ]; then
+      ORQUESTA_DEPLOY_BUILD_SRC="$src" ORQUESTA_DEPLOY_BUILD_OUT="$out" bash -c "$DEPLOY_BUILD_CMD"
+    else
+      cd "$src"
+      go build -o "$out" ./cmd/orquesta-server
+    fi
+  )
   [ -x "$out" ] || fail "deploy_build_failed" "no se genero binario ejecutable"
   binary_sha="$(sha256_file "$out")"
 }

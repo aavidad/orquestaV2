@@ -6,6 +6,8 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$repo_root/scripts/lib/smoke_common.sh"
 # shellcheck source=scripts/lib/go_tool.sh
 source "$repo_root/scripts/lib/go_tool.sh"
+# shellcheck source=scripts/lib/isolated_test_env.sh
+source "$repo_root/scripts/lib/isolated_test_env.sh"
 
 if [[ "${ORQUESTA_SELF_PROGRAMMING_COMPOSITE_SMOKE_CONFIRM:-0}" != "1" ]]; then
   echo "confirmacion requerida: exporta ORQUESTA_SELF_PROGRAMMING_COMPOSITE_SMOKE_CONFIRM=1" >&2
@@ -59,17 +61,9 @@ smoke_temp_root_prepare "$smoke_root" "self-programming-composite"
 trap 'smoke_temp_root_cleanup "$smoke_root" "${ORQUESTA_KEEP_SMOKE_DIR:-0}"' EXIT
 
 summary="$smoke_root/self_programming_composite_summary.txt"
-gotmp="$smoke_root/go-tmp"
-gocache="$smoke_root/go-cache"
-gomodcache="$smoke_root/go-mod-cache"
-gopath="$smoke_root/go-path"
 archive_dir="$smoke_root/autoprogramming-promotion-archive"
-mkdir -p "$gotmp" "$gocache" "$gomodcache" "$gopath" "$archive_dir"
-
-export GOTMPDIR="$gotmp"
-export GOCACHE="$gocache"
-export GOMODCACHE="$gomodcache"
-export GOPATH="$gopath"
+mkdir -p "$archive_dir"
+orquesta_use_isolated_test_env "$smoke_root/test-env"
 export ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux
 export ORQUESTA_SERVER_SELF_PROGRAMMING_ONLY=true
 export ORQUESTA_SERVER_SELF_PROGRAMMING_ROOT="$smoke_root"

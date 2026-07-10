@@ -2,6 +2,8 @@
 set -uo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/isolated_test_env.sh
+source "$repo_root/scripts/lib/isolated_test_env.sh"
 
 if [[ -z "${ORQUESTA_NIGHTLY_RESULTS_DIR:-}" && -z "${HOME:-}" ]]; then
   echo "ORQUESTA_NIGHTLY_RESULTS_DIR o HOME son necesarios para escribir resultado JSON" >&2
@@ -58,11 +60,20 @@ mkdir -p "$results_dir" "$logs_dir" || {
   echo "no se pudo crear directorio nightly: $results_dir" >&2
   exit 2
 }
+nightly_env_root="${ORQUESTA_NIGHTLY_TEST_ENV_ROOT:-$results_dir/test-env/$run_id}"
+orquesta_use_isolated_test_env "$nightly_env_root"
 
 if [[ "$retention_days" =~ ^[0-9]+$ ]]; then
   find "$results_dir" -maxdepth 1 -type f -name 'resultado_*.json' -mtime +"$retention_days" -delete 2>/dev/null || true
   find "$logs_dir" -maxdepth 1 -type f -name 'nightly-*.log' -mtime +"$retention_days" -delete 2>/dev/null || true
+  find "$results_dir/test-env" -mindepth 1 -maxdepth 1 -type d -name 'nightly-*' -mtime +"$retention_days" -exec rm -rf -- {} + 2>/dev/null || true
 fi
+
+cleanup_nightly_env() {
+  [ -n "${nightly_env_root:-}" ] || return 0
+  orquesta_cleanup_isolated_test_env "$nightly_env_root" || true
+  nightly_env_root=""
+}
 
 json_result_status() {
   local code="$1"
@@ -448,10 +459,11 @@ finish() {
   echo "nightly_result_json=$result_file"
   print_phase_diff_if_failed "$final_exit_code" || true
   finalized="1"
+  cleanup_nightly_env
   exit "$final_exit_code"
 }
 
-trap 'if [[ "$finalized" != "1" ]]; then write_result_json "$?" "$phase" || true; fi' EXIT
+trap 'exit_code=$?; if [[ "$finalized" != "1" ]]; then write_result_json "$exit_code" "$phase" || true; fi; cleanup_nightly_env' EXIT
 trap 'phase="interrupted"; finish 130' INT TERM
 
 if ! command -v python3 >/dev/null 2>&1; then
