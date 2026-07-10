@@ -367,21 +367,26 @@ func serverGeminiGoalBackendFromValueForWorkDirV0(
 		PromptLocale:   goalBackendPromptLocaleFromProjectConfigFileV0(projectConfig),
 	}
 	if backend == geminiGoalBackendProcessV0 {
+		runtimeConfig := geminiRuntimeConfigFromProjectConfigV0(
+			projectConfig,
+			projectWorkDir,
+			runtimeWorkDir,
+		)
 		client := &orquestaruntimegemini.GeminiGoalProcessBackendV0{
 			Control: control,
 			Profile: orquestaruntimegemini.GeminiConnectorProfileV0{
 				SchemaVersion:  orquestaruntimegemini.GeminiConnectorProfileSchemaVersionV0,
 				OptIn:          true,
-				CommandPath:    geminiCommandPathV0(),
-				ProjectWorkDir: projectWorkDir,
-				RuntimeWorkDir: runtimeWorkDir,
-				HomeDir:        strings.TrimSpace(os.Getenv(envGeminiHomeV0)),
-				PathEnv:        envOrDefaultV0(envGeminiPathV0, os.Getenv("PATH")),
-				Model:          strings.TrimSpace(os.Getenv(envGeminiModelV0)),
-				ApprovalMode:   envOrDefaultV0(envGeminiApprovalModeV0, "auto_edit"),
-				OutputFormat:   envOrDefaultV0(envGeminiOutputFormatV0, "text"),
+				CommandPath:    runtimeConfig.CommandPath,
+				ProjectWorkDir: runtimeConfig.ProjectWorkDir,
+				RuntimeWorkDir: runtimeConfig.RuntimeWorkDir,
+				HomeDir:        runtimeConfig.HomeDir,
+				PathEnv:        runtimeConfig.PathEnv,
+				Model:          runtimeConfig.Model,
+				ApprovalMode:   runtimeConfig.ApprovalMode,
+				OutputFormat:   runtimeConfig.OutputFormat,
 				PromptLocale:   control.PromptLocale,
-				ExtraArgs:      strings.Fields(os.Getenv(envGeminiExtraArgsV0)),
+				ExtraArgs:      runtimeConfig.ExtraArgs,
 				PromptHints:    []string{"goal-first Gemini process backend opt-in"},
 			},
 		}
@@ -399,8 +404,15 @@ func serverGeminiGoalBackendFromValueForWorkDirV0(
 }
 
 func geminiGoalRuntimeWorkDirFromEnvV0(config orquestaserver.ConfigV0) string {
-	if strings.TrimSpace(os.Getenv(envGeminiRuntimeWorkDirV0)) != "" {
-		return absDirEnvOrDefaultV0(envGeminiRuntimeWorkDirV0, config.RuntimeWorkDir)
+	projectConfig := projectConfigFromServerConfigBestEffortV0(config)
+	if strings.TrimSpace(os.Getenv(envGeminiRuntimeWorkDirV0)) != "" ||
+		(projectConfig.GeminiRuntime.RuntimeWorkDir != nil &&
+			strings.TrimSpace(*projectConfig.GeminiRuntime.RuntimeWorkDir) != "") {
+		return absDirProjectConfigOrEnvOrDefaultV0(
+			envGeminiRuntimeWorkDirV0,
+			projectConfig.GeminiRuntime.RuntimeWorkDir,
+			config.RuntimeWorkDir,
+		)
 	}
 	stateDir := strings.TrimSpace(config.StateDir)
 	if stateDir != "" && filepath.IsAbs(stateDir) {

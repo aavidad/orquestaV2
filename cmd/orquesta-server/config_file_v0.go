@@ -35,6 +35,7 @@ type serverProjectConfigFileV0 struct {
 	DaemonLogs           serverProjectConfigDaemonLogsV0           `json:"daemon_logs,omitempty"`
 	CodexRuntime         serverProjectConfigCodexRuntimeV0         `json:"codex_runtime,omitempty"`
 	CodexModelRouting    *serverProjectConfigCodexModelRoutingV0   `json:"codex_model_routing,omitempty"`
+	GeminiRuntime        serverProjectConfigGeminiRuntimeV0        `json:"gemini_runtime,omitempty"`
 	ClaudeRuntime        serverProjectConfigClaudeRuntimeV0        `json:"claude_runtime,omitempty"`
 	ClaudeModelRouting   *serverProjectConfigClaudeModelRoutingV0  `json:"claude_model_routing,omitempty"`
 	CodexDirector        serverProjectConfigCodexDirectorV0        `json:"codex_director,omitempty"`
@@ -136,6 +137,19 @@ type serverProjectConfigCodexRuntimeV0 struct {
 	MaxExpectedSeconds *int    `json:"max_expected_seconds,omitempty"`
 	MaxBatchReady      *int    `json:"max_batch_ready,omitempty"`
 	MaxConcurrency     *int    `json:"max_concurrency,omitempty"`
+}
+
+type serverProjectConfigGeminiRuntimeV0 struct {
+	Enabled        *bool    `json:"enabled,omitempty"`
+	CommandPath    *string  `json:"command_path,omitempty"`
+	ProjectWorkDir *string  `json:"project_work_dir,omitempty"`
+	RuntimeWorkDir *string  `json:"runtime_work_dir,omitempty"`
+	HomeDir        *string  `json:"home_dir,omitempty"`
+	Path           *string  `json:"path,omitempty"`
+	Model          *string  `json:"model,omitempty"`
+	ApprovalMode   *string  `json:"approval_mode,omitempty"`
+	OutputFormat   *string  `json:"output_format,omitempty"`
+	ExtraArgs      []string `json:"extra_args,omitempty"`
 }
 
 type serverProjectConfigCodexDirectorV0 struct {

@@ -2829,6 +2829,31 @@ clasificar: 58 `movable_runtime_artifact`, 5 evidencia historica, 4 fixtures
 y una referencia pendiente. No cierra S13: siguen requeridos la migracion
 gobernada, procedencia comun y smoke real aislado.
 
+## Actualizacion Codex 2026-07-10: segunda ola de configuracion local
+
+El operador indico continuar la limpieza local sin crear apps de prueba ni
+ejecutar proveedores. Se consolido la familia Gemini en
+`orquesta.config.json > gemini_runtime`:
+
+- la seccion tipada admite `enabled`, comando, workdirs, `HOME`, `PATH`,
+  modelo, aprobacion, formato y argumentos;
+- runtime y backend goal-first reutilizan una sola resolucion de perfil;
+- se conserva `env > fichero > default`; un
+  `ORQUESTA_GEMINI_ENABLED=false` explicito prevalece sobre el fichero;
+- las diez variables Gemini quedan registradas y el ratchet AST baja de 59 a
+  49 lecturas no clasificadas.
+
+Pruebas locales, sin agente ni proveedor real:
+
+```bash
+go test -count=1 ./cmd/orquesta-server \
+  -run 'Test(GeminiRuntimeConfigV0|ServerGoalBackendFromEnvV0Gemini(Process|FileControl)|ServerEnvRegistryASTV0LecturasORQUESTARegistradas|Config)'
+go test -count=1 ./modulos/orquesta-runtime-gemini
+```
+
+Resultado: verde. La siguiente familia no debe mezclar OPES: priorizar runner
+de tests requeridos o promotion/guardian con el mismo patron tipado y ratchet.
+
 Checkpoint de limpieza no destructiva sincronizado: `4820516ec`
 (`chore: indexa funciones para limpieza segura`). El auditor genera un indice
 lexico de 25.199 funciones y una SQLite derivada; sirve para priorizar
