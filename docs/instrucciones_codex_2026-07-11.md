@@ -33,22 +33,25 @@ continua la directiva dentro->fuera por el NUCLEO. Senala al terminar R4.
   script) y anadir a `scripts/test_orquesta_metricas_deuda.sh` un caso que
   lo ejecute con un locale no-C para que no regrese. El script exporta
   `LC_ALL=C` y la prueba usa shims portables para no depender de `es_ES`.
-- [x] R2 (cerrado `31ecba309`): la medicion con locale C era produccion
+- [x] R2 (cerrado `31ecba309` + `0b564992a`): la medicion con locale C era produccion
   427/425 y test-only 106/103. Sin elevar los presupuestos, se retiraron dos
   overrides de timeout duplicados del guardian y tres nombres de IPC de
   fixtures fuera del prefijo global. Criterio revalidado:
   `go test -count=1 -run 'TestEnvVarsBudgetMEJ106V0' .` verde en locale C y
-  bajo locale heredado no-C; la metrica queda 425/425 y 103/103.
+  bajo locale heredado no-C; la metrica queda 423/425 y 103/103. El segundo
+  commit elimina tambien los aliases sin unidad: esos timeouts viven solo en
+  `orquesta.config.json` tipado y el helper comun se separa para respetar T90.
 - [ ] R3 (disciplina): antes de cerrar cada sesion de trabajo, reejecuta el
   guard raiz de budget y los focales de lo tocado. Esta noche dejaste tu
   propio guard rojo sin saberlo; la regla "no verde autodeclarado" tambien
   aplica a guards que tu mismo escribiste.
-- [ ] R4b (frontera permanente, orden del operador): `mcp-stdio` es SOLO
+- [x] R4b (cerrado documentalmente 2026-07-11): `mcp-stdio` es SOLO
   transporte de cliente MCP (JSON-RPC por stdin/stdout hacia las tools).
   PROHIBIDO usar stdio para pilotar/observar agentes o backends de goals:
   eso sigue siendo tmux (`app_server_tmux`) con identidad y evidencias.
-  Documentalo asi en `docs/runbooks/mcp_stdio_orquesta_2026-07-11.md` y no
-  amplies esta superficie hasta terminar nucleo y conectores.
+  La frontera queda documentada en
+  `docs/runbooks/mcp_stdio_orquesta_2026-07-11.md`; no ampliar esta superficie
+  hasta terminar nucleo y conectores.
 - [ ] R4 (pendiente ya conocido): con R1+R2 verdes, ejecutar los dos pases
   de `scripts/orquesta_test_batches.sh` con rutas aisladas y receipt, y
   cerrar formalmente D3 + `BUG-ORQ-20260710-208H` en el inventario.

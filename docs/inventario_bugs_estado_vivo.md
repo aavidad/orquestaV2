@@ -18,6 +18,7 @@ mismo commit.
 | BUG-ORQ-20260710-208S | goal-first residente ya cubre bloqueo/rework/parada por falta de progreso; el residual es `codex-launch-wave`, utilidad breakglass cuyo presupuesto depende de `codex-wave-status` | no usar esa utilidad como flujo productivo; si se conserva para operacion real, conectarla a una tarea/observador gobernado; evidencia en la [incidencia 208S](incidencias/incidencia_orquesta_ola_codex_sin_progreso_diagnostico_excesivo_2026-07-10.md) |
 | BUG-ORQ-20260701-079 | solo frontera proveedor: cap duro pre-tool ante stdout crudo sin redireccion | esperar enforcement del proveedor o probe adversarial nuevo; no bloquea local |
 | BUG-ORQ-20260704-165 / 20260701-065 | residual amplio de observabilidad/control lento con proveedor real; nucleo local cerrado | se paga con la adopcion completa del veredicto F1 + repro 208 tras deploy |
+| BUG-ORQ-20260711-208Y | R4 aislado fallo en el segundo pase con `codex_app_server_tmux_generation_observation_transient`; el receipt queda retenido y los fallos deterministas de configuracion ya se corrigieron | reproducir el focal de cleanup con identidad/lease y clasificar carrera de fixture, identidad tmux o control de cleanup; evidencia en la [incidencia R4](incidencias/incidencia_orquesta_r4_lotes_config_y_tmux_transient_2026-07-11.md) |
 
 ## Vivos (operativos, no de codigo)
 
@@ -71,15 +72,12 @@ mismo commit.
   tests requeridos fallidos y cierre causal accepted. No equivale a smoke con
   proveedor real: Claude conserva ese smoke remoto pendiente y Gemini depende
   además de tier/autenticación operativos.
-- BUG-ORQ-20260710-208U: cerrado localmente. La consolidacion de guardian y
-  configuracion efectiva habia dejado `config_file_v0.go` y
-  `effective_config_v0.go` por encima del limite T90, y habia registrado dos
-  aliases de timeout sin unidad como si fueran canonicos. Se extrajeron
-  familias cohesivas, los nombres canonicos pasan a `*_TIMEOUT_MS` y los
-  aliases legacy quedan marcados deprecados con precedencia
-  canonico > legacy > fichero > default. Cierre: focales T90, registry,
-  guardian, effective config y MCP verdes; sin servidor, guardian, agente ni
-  proveedor real.
+- BUG-ORQ-20260710-208U: cerrado localmente. La primera consolidacion de
+  guardian introdujo un helper en `config_file_v0.go` y aliases de timeout;
+  R4 demostro que volvian a romper T90 y la regla de unidad. `0b564992a`
+  extrae el helper a fichero propio y deja los timeouts solo en
+  `orquesta.config.json` tipado. T90, registry, guardian y presupuesto verdes;
+  no hubo servidor, guardian, agente ni proveedor real.
 - BUG-ORQ-20260711-208V: cerrado localmente. El primer test de `mcp-stdio`
   pidió `resources/read` con el nombre de una tool (`orquesta.status.v0`) en
   vez del URI canónico del recurso; el transporte devolvió correctamente
@@ -95,8 +93,8 @@ mismo commit.
 - BUG-ORQ-20260711-208X: cerrado localmente. El guard MEJ-106 quedo rojo por
   dos overrides `*_TIMEOUT_MS` del guardian y tres nombres de IPC de fixture
   bajo el prefijo global, y el script de metricas dependia del locale heredado.
-  `cec2848f3` fija `LC_ALL=C` y cubre el caso portable; `31ecba309` conserva
-  los presupuestos 425/103 retirando los cinco nombres redundantes. Durante la
+  `cec2848f3` fija `LC_ALL=C` y cubre el caso portable; `31ecba309` reduce la
+  superficie y `0b564992a` termina la consolidacion tipada en 423/103. Durante la
   revalidacion se detecto que Bash puede avisar por locale invalido antes de
   ejecutar el script; el guard raiz fija su propio hijo a `LC_ALL=C`. Focales
   guardian/tool-file, `TestEnvVarsBudgetMEJ106V0` en C y no-C, y el test del

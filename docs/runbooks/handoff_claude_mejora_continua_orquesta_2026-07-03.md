@@ -3099,3 +3099,16 @@ puede emitir un warning antes del script con un locale heredado invalido.
 Se reejecutaron focales guardian/tool-file, el guard raiz con C y no-C, y el
 test de metricas. Todo verde; no se inicio servidor, guardian, agente ni
 proveedor. La incidencia cerrada es `BUG-ORQ-20260711-208X`.
+
+## Actualizacion Codex 2026-07-11: R4 no acreditado y correccion de R2
+
+El primer R4 aislado produjo receipt fallido retenido en
+`/tmp/orquesta-r4-cleanup-batches/receipt.json`: T90 y la regla de unidad de
+timeouts expusieron que la primera solucion R2 aun era inconsistente. Se
+corrigio en `0b564992a`: helper de listas fuera de `config_file_v0.go` y
+timeouts guardian solo en configuracion tipada; metrica 423/103 y focales
+verdes. El segundo pase ademas vio
+`codex_app_server_tmux_generation_observation_transient`; queda abierto como
+`BUG-ORQ-20260711-208Y`. No declarar D3/208H cerrados ni borrar esa evidencia
+antes de su reproduccion focal. Incidencia completa:
+`docs/incidencias/incidencia_orquesta_r4_lotes_config_y_tmux_transient_2026-07-11.md`.

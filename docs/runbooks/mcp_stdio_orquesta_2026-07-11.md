@@ -21,6 +21,14 @@ El comando acepta las mismas opciones de configuracion que el servidor. No se
 debe usar con datos sensibles sin una composicion de credenciales y politica
 explicitas. Para transporte residente se mantiene `POST /mcp`.
 
+## Frontera operativa
+
+`mcp-stdio` es solo transporte de cliente MCP: JSON-RPC por stdin/stdout hacia
+tools y recursos del dispatcher. No se usa para lanzar, pilotar, observar ni
+parar agentes o backends goal. Esas operaciones permanecen en
+`app_server_tmux`, con identidad runtime, lease, observacion y recibos
+durables. Esta frontera no se amplia hasta completar nucleo y conectores.
+
 Prueba focal:
 
 ```bash
