@@ -101,3 +101,18 @@ privados mas: el antiguo lector de allowlist del runner guardian y el acceso
 directo al broker de contexto, sustituido hace tiempo por su wiring. Tras
 verificar focales, el indice queda en 25.217 funciones y 1.232 candidatas
 brutas. No se alteraron contratos ni composicion activa.
+
+## Actualizacion 2026-07-11: base de limpieza estabilizada
+
+Tras consolidar la configuracion OPES y retirar cinco wrappers privados
+adicionales de configuracion/runtime/state-file, el auditor reproducible
+informa 25.322 funciones indexadas y 1.227 candidatas brutas. La variacion del
+total indexado no se interpreta como codigo nuevo o muerto por si sola: el
+analizador es lexical y cambia al mover helpers. La prioridad sigue siendo la
+categoria privada sin referencias, confirmada con `rg`, contratos y prueba
+focal por paquete.
+
+El ratchet de entorno de `cmd/orquesta-server` se cerro en cero antes de seguir
+con conectores. Las siguientes extracciones solo se aceptaran por cohesion de
+responsabilidades y con regresion focal; no se dividiran archivos solo para
+reducir lineas.
