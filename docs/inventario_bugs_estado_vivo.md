@@ -1,0 +1,47 @@
+# Bugs vivos de Orquesta - indice canonico
+
+Actualizado: 2026-07-10 (post-integracion del fix del lease, HEAD `1f24eb9f2`).
+Mantenedor: Claude (revisor). Regla: UNA fila por bug vivo con su residual
+exacto; el historial completo vive en
+`docs/inventario_bugs_orquesta_2026-06-30.md` y NO se cuenta desde alli.
+No reutilizar IDs. Al cerrar o abrir un bug, actualizar este indice en el
+mismo commit.
+
+## Vivos (nucleo)
+
+| ID | Residual exacto que lo mantiene vivo | Siguiente accion |
+| --- | --- | --- |
+| BUG-ORQ-20260710-208A-D | patches focales (write-sets solapados, 504, workdir, rework) verdes en local; sin verificar por API contra servidor desplegado | tras deploy: repro/API de prepare-run, observe y runs/control |
+| BUG-ORQ-20260710-208E | tooling drain/harness listo (F3-R2); falta receipt real `clean` de drain + dos pases amplios verdes en ruta canonica | operador ejecuta drain + `orquesta_test_batches.sh` |
+| BUG-ORQ-20260710-208H | atestacion independiente de required tests: v1 reabierta (refs autodeclaradas, bypass); WIP en `wip/attestation-208h-20260710` | cerrar contratos con tests adversariales antes de integrar; BLOQUEA autonomia sin supervision |
+| BUG-ORQ-20260710-208I | timeout parcial de observe coexistio con `invalid` durable; causa raiz no demostrada | correlacionar refs/tiempos tras adoptar veredicto causal F1 en observe |
+| SUBFALLO routing/modelos 20260710 | fail-open en defaults/args vacios, herencia xhigh, PATH ambiguo; ratchet 521 vs limite 513 | WIP en `fix/model-routing-p0-p1-sol-20260710`; fail-closed y consolidar sin subir ratchet |
+| BUG-ORQ-20260701-079 | solo frontera proveedor: cap duro pre-tool ante stdout crudo sin redireccion | esperar enforcement del proveedor o probe adversarial nuevo; no bloquea local |
+| BUG-ORQ-20260704-165 / 20260701-065 | residual amplio de observabilidad/control lento con proveedor real; nucleo local cerrado | se paga con la adopcion completa del veredicto F1 + repro 208 tras deploy |
+
+## Vivos (operativos, no de codigo)
+
+| ID | Residual | Siguiente accion |
+| --- | --- | --- |
+| S14/deploy remoto | binario remoto vivo `9541e2f0...` anterior al codigo; flujo nuevo: remoto = solo destino de deploy | drain gobernado + `orquesta_server_deploy.sh` cuando el operador decida subir |
+| S13/F4 artefactos versionados | 61 ficheros de ejecucion en el arbol fuente (37 patron exacto S13 + 24 familia backlog) | auditoria gobernada de retencion con JSON de clasificacion |
+| S12 limpieza envs remota | perfil remoto/secretos/defaults sin corte gobernado | corte separado tras deploy; no mezclar con drain |
+| CODEX-HOME-TOKEN-INVALIDADO | auth Codex remota caducada | reauth del operador en servidor; hoy ademas cuota local agotada |
+| BUG-ORQ-20260701-058/066/075 (familia OPES) | solo residuales de campo: OPES temporal/preproduccion y proveedor real; local/fake cerrado | field test OPES temporal cuando se retome ese frente |
+
+## Cerrados hoy (referencia rapida)
+
+- Incidencia lease generation conflict primer lanzamiento: cerrada con
+  `01cb27d77` (selector tmux `=sesion:` + verificacion tri-estado +
+  cleanup/shutdown degradan a evidencia residual). Smoke real local verde
+  end-to-end verificado por revisor.
+- BUG-ORQ-20260710-210 (guard textual stale del smoke compuesto).
+- 208G (perdida causal de `checkpoint_started` en materializador) - reducido
+  local, pendiente confirmacion independiente.
+
+## Regla de conteo
+
+Bugs vivos de codigo del nucleo: los de la primera tabla (7 entradas, de las
+cuales 208A-E son el mismo frente con residuales distintos). Todo lo demas es
+operativo o de campo. Si una lectura antigua del inventario historico
+contradice este indice, prevalece este indice.
