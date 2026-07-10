@@ -71,3 +71,18 @@ Los cinco focales se reejecutaron juntos en cache aislada y pasaron:
 `TestCodexCommandPathV0RechazaRutaRelativaAunqueEsteEnPath`,
 `TestValidateCodexCommandAvailableV0PreflightVersion` y
 `TestServerConfigFromEnvV0LeeDirectorEscaladaV0`.
+
+## BUG-ORQ-20260710-208R: expectativas stale de effort global Codex
+
+La repeticion del lote confirma tres fallos deterministas restantes:
+`TestServerConfigFromEnvV0LeeLimitesCodexYSupervisorDesdeFicheroCanonicoV0`,
+`TestServerConfigFromEnvV0EnvExplicitoGanaLimitesCodexYSupervisorV0` y
+`TestServerConfigFromEnvV0PublicaConfiguracionEfectivaCanonica`.
+
+Los limites canónicos de fichero sí llegan a la composición; lo que contradice
+el test es esperar que `ORQUESTA_CODEX_REASONING_EFFORT` o
+`codex_runtime.reasoning_effort` rellenen `CodexRuntimeConfig.ReasoningEffort`.
+208K hizo esa herencia vacía de forma deliberada: el esfuerzo y modelo se
+resuelven por tarea con routing tipado y no por una variable global. La
+corrección debe alinear pruebas y configuración efectiva con ese contrato, sin
+restaurar herencia global ni esconder la política de routing.
