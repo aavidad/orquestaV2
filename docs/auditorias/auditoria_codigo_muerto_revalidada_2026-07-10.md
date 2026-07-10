@@ -50,3 +50,17 @@ documentado, no una aceptacion de esa ola.
 El indice reproducible de funciones que acota la siguiente fase esta en
 `docs/auditorias/indice_funciones_orquesta_2026-07-10.md`. Sus categorias son
 senales de revision, no autorizacion de borrado.
+
+## Retirada focal posterior
+
+Se retiraron `codexGoalTimeoutMSFromEnvV0` y
+`codexGoalPreflightTimeoutMSFromEnvV0` de
+`cmd/orquesta-server/codex_goal_app_server_v0.go`. Eran helpers privados sin
+llamadas; el camino vivo ya consume
+`codexGoalTimeoutMSFromProjectConfigFileV0` y
+`codexGoalPreflightTimeoutMSFromProjectConfigFileV0`, que respetan la
+precedencia tipada de `goal_backend`.
+
+Verificacion: pruebas focales del backend/configuracion verdes y auditoria
+reproducible sin ambas declaraciones. El conteo global no se usa como prueba
+de cierre: sigue requiriendo clasificacion por modulo.

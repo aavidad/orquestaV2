@@ -2876,6 +2876,24 @@ go test -count=1 ./cmd/orquesta-server \
 Resultado: verde; ratchet AST 49 -> 42. Siguiente familia candidata:
 promotion/guardian, no OPES.
 
+## Actualizacion Codex 2026-07-10: primera retirada de codigo privado
+
+Se retiro el par privado sin llamadas
+`codexGoalTimeoutMSFromEnvV0`/
+`codexGoalPreflightTimeoutMSFromEnvV0`. No se elimina la configuracion de
+timeouts: el backend vivo ya usa los lectores tipados de `goal_backend`.
+
+Prueba focal y auditoria:
+
+```bash
+go test -count=1 ./cmd/orquesta-server \
+  -run 'Test(ServerGoalBackend|Config|ServerEnvRegistryASTV0LecturasORQUESTARegistradas)'
+scripts/orquesta_auditoria_codigo.sh --root "$PWD" --no-sqlite
+```
+
+Resultado: verde; el indice ya no contiene ninguna de las dos funciones. No se
+usan los 1.249 candidatos restantes como autorizacion de borrado masivo.
+
 Checkpoint de limpieza no destructiva sincronizado: `4820516ec`
 (`chore: indexa funciones para limpieza segura`). El auditor genera un indice
 lexico de 25.199 funciones y una SQLite derivada; sirve para priorizar

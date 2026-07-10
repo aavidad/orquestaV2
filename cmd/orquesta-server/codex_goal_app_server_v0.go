@@ -215,14 +215,6 @@ func (supervisor serverGoalSupervisorV0) ObserveGoalWorkV0(
 	return supervisor.observer.ObserveGoalWorkV0(ctx, request)
 }
 
-func codexGoalTimeoutMSFromEnvV0() int {
-	return intEnvOrDefaultV0(envCodexGoalTimeoutMSV0, defaultCodexGoalTimeoutMSV0)
-}
-
-func codexGoalPreflightTimeoutMSFromEnvV0() int {
-	return intEnvOrDefaultV0(envCodexGoalPreflightTimeoutMSV0, defaultCodexGoalPreflightTimeoutMSV0)
-}
-
 func codexAppServerIssueCodeForErrorV0(err error, fallback string) string {
 	return orquestaruntimecodexappserver.CodexAppServerIssueCodeForErrorV0(err, fallback)
 }
