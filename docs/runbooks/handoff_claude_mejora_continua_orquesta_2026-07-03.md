@@ -2990,3 +2990,10 @@ politica desde directorio y adaptador runtime Codex desde directorio). El
 indice reproducible queda en 25.219 funciones y 1.234 candidatas. La regla se
 mantiene: candidatos estaticos no se borran sin verificar consumidores,
 contratos y prueba focal.
+
+La auditoria tambien marcaba siete modulos con `importer_count: 0`. Revision
+manual: todos son contratos o adaptadores opt-in deliberadamente desacoplados
+(`data-ingestion`, extraccion JSON/CSV/capability, SQL de referencia,
+presentaciones y tool-capability-file). Ninguno se borra; la clasificacion y
+las rutas de evidencia quedan en
+`docs/auditorias/indice_funciones_orquesta_2026-07-10.md`.

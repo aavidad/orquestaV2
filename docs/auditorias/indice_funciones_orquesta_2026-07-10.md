@@ -64,3 +64,23 @@ el lector de politica desde directorio de proyecto y el adaptador de runtime
 Codex desde directorio de proyecto. El indice baja a 25.219 funciones y 1.234
 candidatas. Siguen siendo necesarias referencias, contratos y pruebas focales
 antes de cualquier retirada posterior.
+
+## Revision de modulos huerfanos 2026-07-10
+
+Los siete modulos marcados por el auditor con `importer_count: 0` fueron
+revisados uno a uno. El auditor solo mira imports de composicion y no distingue
+un adaptador opt-in de codigo muerto. Se conservan, sin excepcion:
+
+| Modulo | Decision |
+| --- | --- |
+| `orquesta-data-ingestion` | Contrato de ingesta con adaptadores pendientes de integrar. |
+| `orquesta-document-extraction-csv` | Adaptador de exportacion documentado y probado. |
+| `orquesta-document-extraction-json` | Adaptador de exportacion documentado y probado. |
+| `orquesta-document-extraction-tool-capability` | Adaptador de capacidad pendiente de composicion. |
+| `orquesta-domain-work-sql` | Adaptador SQL de referencia deliberadamente sin wiring productivo. |
+| `orquesta-presentation-extraction` | Contrato PPTX/ODP con adaptadores reales pendientes. |
+| `orquesta-tool-capability-file` | Adaptador durable de referencia, pendiente de wiring. |
+
+Ninguno es candidato a retirada: todos tienen contrato, pruebas y/o tarea de
+integracion vigente. Antes de declarar huerfano un modulo se deben consultar
+sus tests, README y tarea de composicion, no solo el conteo de imports.
