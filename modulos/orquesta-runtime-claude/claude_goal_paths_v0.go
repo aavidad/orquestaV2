@@ -14,6 +14,14 @@ func (backend ClaudeGoalBackendV0) resultCandidatePathsV0(spec orquestagoal.Goal
 	goalFile := ClaudeGoalResultFilePrefixV0 + claudeGoalSafeRefV0(spec.GoalRef) + ".json"
 	seen := map[string]bool{}
 	var out []string
+	addRuntime := func(name string) {
+		path := filepath.Join(filepath.Clean(backend.RuntimeWorkDir), name)
+		if seen[path] {
+			return
+		}
+		seen[path] = true
+		out = append(out, path)
+	}
 	add := func(rel string) {
 		path, ok := backend.projectPathV0(rel)
 		if !ok || seen[path] {
@@ -22,6 +30,9 @@ func (backend ClaudeGoalBackendV0) resultCandidatePathsV0(spec orquestagoal.Goal
 		seen[path] = true
 		out = append(out, path)
 	}
+	// New launches write here. Project candidates remain below for governed
+	// migration of historical results.
+	addRuntime(goalFile)
 	for _, scope := range spec.WriteSet {
 		rel := strings.TrimSpace(filepath.ToSlash(scope.Path))
 		if rel == "" {
@@ -37,6 +48,10 @@ func (backend ClaudeGoalBackendV0) resultCandidatePathsV0(spec orquestagoal.Goal
 		add(filepath.ToSlash(filepath.Join(rel, "docs", goalFile)))
 	}
 	return out
+}
+
+func claudeGoalRuntimeResultPathV0(runtimeDir string, goalRef string) string {
+	return filepath.Join(filepath.Clean(strings.TrimSpace(runtimeDir)), ClaudeGoalResultFilePrefixV0+claudeGoalSafeRefV0(goalRef)+".json")
 }
 
 func (backend ClaudeGoalBackendV0) projectPathV0(rel string) (string, bool) {

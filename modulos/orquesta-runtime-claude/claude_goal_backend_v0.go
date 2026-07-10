@@ -75,6 +75,7 @@ func (backend ClaudeGoalBackendV0) LaunchGoalWorkV0(
 	if strings.TrimSpace(backend.PromptLocale) != "" {
 		prompt = BuildClaudeGoalPromptWithLocaleV0(spec, backend.PromptLocale)
 	}
+	prompt = claudeGoalPromptWithRuntimeReceiptV0(prompt, backend.RuntimeWorkDir, spec.GoalRef, backend.PromptLocale)
 	promptPath := filepath.Join(backend.RuntimeWorkDir, claudeGoalPromptFileNameV0(spec.GoalRef))
 	if err := writeClaudeControlFileV0(backend.RuntimeWorkDir, promptPath, filepath.Base(promptPath), []byte(prompt), 0o600); err != nil {
 		return claudeGoalInvalidLaunchReceiptV0(spec.GoalRef, ErrClaudeGoalControlWriteFailedV0, "prompt"), err

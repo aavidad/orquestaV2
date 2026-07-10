@@ -75,6 +75,7 @@ func (backend GeminiGoalBackendV0) LaunchGoalWorkV0(
 	if strings.TrimSpace(backend.PromptLocale) != "" {
 		prompt = BuildGeminiGoalPromptWithLocaleV0(spec, backend.PromptLocale)
 	}
+	prompt = geminiGoalPromptWithRuntimeReceiptV0(prompt, backend.RuntimeWorkDir, spec.GoalRef, backend.PromptLocale)
 	promptPath := filepath.Join(backend.RuntimeWorkDir, geminiGoalPromptFileNameV0(spec.GoalRef))
 	if err := writeGeminiControlFileV0(backend.RuntimeWorkDir, promptPath, filepath.Base(promptPath), []byte(prompt), 0o600); err != nil {
 		return geminiGoalInvalidLaunchReceiptV0(spec.GoalRef, ErrGeminiGoalControlWriteFailedV0, "prompt"), err
@@ -310,13 +311,17 @@ func (backend GeminiGoalBackendV0) readResultFromWriteSetV0(
 }
 
 func (backend GeminiGoalBackendV0) resultCandidatePathsV0(spec orquestagoal.GoalWorkSpecV0) []string {
-	candidates := []string{}
+	candidates := []string{geminiGoalRuntimeResultPathV0(backend.RuntimeWorkDir, spec.GoalRef)}
 	for _, scope := range spec.WriteSet {
 		root := filepath.Join(backend.ProjectWorkDir, filepath.Clean(strings.TrimSpace(scope.Path)))
 		candidates = append(candidates, filepath.Join(root, GeminiGoalResultFileNameV0))
 		candidates = append(candidates, filepath.Join(root, GeminiGoalResultFilePrefixV0+geminiGoalSafeRefV0(spec.GoalRef)+".json"))
 	}
 	return compactGeminiGoalStringsV0(candidates)
+}
+
+func geminiGoalRuntimeResultPathV0(runtimeDir string, goalRef string) string {
+	return filepath.Join(filepath.Clean(strings.TrimSpace(runtimeDir)), GeminiGoalResultFilePrefixV0+geminiGoalSafeRefV0(goalRef)+".json")
 }
 
 func geminiGoalInvalidLaunchReceiptV0(goalRef string, code string, field string) orquestagoal.GoalLaunchReceiptV0 {

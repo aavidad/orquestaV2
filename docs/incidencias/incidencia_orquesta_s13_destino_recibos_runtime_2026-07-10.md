@@ -18,7 +18,8 @@ packet; se revirtio y no hay cambio funcional pendiente de commit.
 
 ## Corte local 2026-07-10
 
-El primer adaptador corregido es `orquesta-runtime-codex-appserver`:
+Los adaptadores corregidos son `orquesta-runtime-codex-appserver`,
+`orquesta-runtime-claude` y `orquesta-runtime-gemini`:
 
 - checkpoint temprano y resultado Codex se dirigen a
   `.orquesta-runtime/goal-receipts/<goal_ref>/`, ruta ya ignorada por Git;
@@ -29,6 +30,10 @@ El primer adaptador corregido es `orquesta-runtime-codex-appserver`:
   fallback de compatibilidad;
 - las pruebas focales demuestran checkpoint fuera del write-set y prioridad
   de recibo runtime frente a un resultado legacy con el mismo goal.
+
+Claude y Gemini usan su `RuntimeWorkDir` externo ya validado para un resultado
+unico por `goal_ref`; sus pruebas ejercen la misma prioridad sobre un fichero
+legacy bajo `docs/`.
 
 Verificacion local: `go test -count=1
 ./modulos/orquesta-runtime-codex-goal
@@ -47,12 +52,13 @@ builder de packet no lo recibe; por eso los recibos historicos terminaron bajo
 
 ## Correccion requerida
 
-1. Aplicar el mismo contrato a Claude, Gemini y cualquier backend goal-first
-   que aun depende exclusivamente del fichero dentro del proyecto.
-2. Proyectar la procedencia runtime en el observador/materializador comun para
+1. Proyectar de forma comun la procedencia runtime en el materializador para
    que la reconciliacion no tenga que volver a inferirla de cada proveedor.
-3. Migrar con commits gobernados los 58 artefactos movibles, manteniendo los
+2. Migrar con commits gobernados los 58 artefactos movibles, manteniendo los
    cinco historicos, cuatro fixtures y una referencia pendiente del inventario.
+3. Ejecutar un smoke real aislado antes de declarar cerrado el frente de
+   prevencion; las pruebas de este corte son locales y no prueban proveedores
+   con cuota real.
 4. El guard Git S13 debe seguir rechazando cualquier recibo nuevo versionado.
 
 ## Limites

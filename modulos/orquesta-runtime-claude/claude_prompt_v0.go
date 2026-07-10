@@ -297,7 +297,7 @@ func writeClaudeDurableResultProtocolV0(b *strings.Builder) {
 
 func writeClaudeDurableResultProtocolForLocaleV0(b *strings.Builder, locale string) {
 	if claudeGoalPromptEnglishLocaleV0(locale) {
-		b.WriteString("NEUTRAL DURABLE RESULT: if the objective, criteria or tests request goal-first, durable result, orquesta_goal_result_v0.json or ORQUESTA_GOAL_RESULT_V0, write that JSON inside the write-set, not in runtime_work_dir unless the write-set allows it.\n")
+		b.WriteString("NEUTRAL DURABLE RESULT: the final goal receipt belongs in the designated runtime receipt path, never in the product write-set.\n")
 		b.WriteString("The orquesta_goal_result_v0.json file must contain pure JSON parseable from the first byte: no markdown, no ```json fences, no comments and no surrounding text.\n")
 		b.WriteString("The JSON must use schema_version orquesta_goal_result.v0, status complete/blocked/invalid, compact summary, artifact_refs, artifact_paths, materialized_artifacts, checklist, required_test_results, domain_receipt_refs, rework_plan_refs and evidence_refs.\n")
 		b.WriteString("All evidence_refs fields, including nested ones in materialized_artifacts and required_test_results, must be arrays of strings: [\"evidence-ref-...\"]; do not use objects {\"ref\":...,\"description\":...} or maps.\n")
@@ -307,7 +307,7 @@ func writeClaudeDurableResultProtocolForLocaleV0(b *strings.Builder, locale stri
 		b.WriteString("In required_test_results declare only tests really executed and passed with compact evidence_refs; if evidence or QA is missing, use status blocked/invalid and checklist.missing_refs.\n\n")
 		return
 	}
-	b.WriteString("RESULTADO DURABLE NEUTRAL: si objetivo, criterios o tests piden goal-first, result durable, orquesta_goal_result_v0.json u ORQUESTA_GOAL_RESULT_V0, escribe ese JSON dentro del write-set, no en runtime_work_dir salvo que el write-set lo permita.\n")
+	b.WriteString("RESULTADO DURABLE NEUTRAL: el recibo final del goal pertenece a la ruta runtime designada, nunca dentro del write-set de producto.\n")
 	b.WriteString("El fichero orquesta_goal_result_v0.json debe contener JSON puro y parseable desde el primer byte: sin markdown, sin fences ```json, sin comentarios y sin texto alrededor.\n")
 	b.WriteString("El JSON debe usar schema_version orquesta_goal_result.v0, status complete/blocked/invalid, summary compacto, artifact_refs, artifact_paths, materialized_artifacts, checklist, required_test_results, domain_receipt_refs, rework_plan_refs y evidence_refs.\n")
 	b.WriteString("Todos los campos evidence_refs, incluidos los anidados en materialized_artifacts y required_test_results, deben ser arrays de strings: [\"evidence-ref-...\"]; no uses objetos {\"ref\":...,\"description\":...} ni mapas.\n")
@@ -315,6 +315,14 @@ func writeClaudeDurableResultProtocolForLocaleV0(b *strings.Builder, locale stri
 	b.WriteString("En artifact_paths lista rutas relativas reales creadas, modificadas o verificadas; no ocultes artefactos fuera de scope: declaralos y marca status blocked con rework_plan_refs.\n")
 	b.WriteString("En materialized_artifacts separa artefactos validos de borradores recuperables con artifact_ref no vacio, path relativo, status valid/partial/invalid/non_publishable y evidence_refs.\n")
 	b.WriteString("En required_test_results declara solo pruebas realmente ejecutadas y pasadas con evidence_refs compactas; si falta evidencia o QA, usa status blocked/invalid y checklist.missing_refs.\n\n")
+}
+
+func claudeGoalPromptWithRuntimeReceiptV0(prompt string, runtimeDir string, goalRef string, locale string) string {
+	path := claudeGoalRuntimeResultPathV0(runtimeDir, goalRef)
+	if claudeGoalPromptEnglishLocaleV0(locale) {
+		return prompt + "Write the final pure JSON receipt to runtime path: " + path + ". Do not list that receipt in artifact_paths or materialized_artifacts.\n"
+	}
+	return prompt + "Escribe el recibo JSON final en la ruta runtime: " + path + ". No declares ese recibo en artifact_paths ni materialized_artifacts.\n"
 }
 
 func writeClaudeWriteSetPrecedenceProtocolV0(

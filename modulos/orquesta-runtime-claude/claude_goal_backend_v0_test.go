@@ -115,7 +115,7 @@ func TestClaudeGoalBackendV0ObserveNormalizaEvidenceRefsObjetoRecuperableV0(t *t
 	}
 }
 
-func TestClaudeGoalBackendV0ObserveLeeResultadoDurableDelWriteSetV0(t *testing.T) {
+func TestClaudeGoalBackendV0ObserveLeeResultadoDurableDelRuntimeV0(t *testing.T) {
 	root := t.TempDir()
 	backend := ClaudeGoalBackendV0{
 		ProjectWorkDir: filepath.Join(root, "project"),
@@ -125,7 +125,7 @@ func TestClaudeGoalBackendV0ObserveLeeResultadoDurableDelWriteSetV0(t *testing.T
 	if _, err := backend.LaunchGoalWorkV0(context.Background(), spec); err != nil {
 		t.Fatalf("LaunchGoalWorkV0: %v", err)
 	}
-	resultPath := filepath.Join(backend.ProjectWorkDir, "docs", ClaudeGoalResultFileNameV0)
+	resultPath := claudeGoalRuntimeResultPathV0(backend.RuntimeWorkDir, spec.GoalRef)
 	if err := os.MkdirAll(filepath.Dir(resultPath), 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -171,6 +171,30 @@ func TestClaudeGoalBackendV0ObserveLeeResultadoDurableDelWriteSetV0(t *testing.T
 		observed.GoalRef != spec.GoalRef ||
 		!containsClaudeGoalStringV0(observed.EvidenceRefs, ClaudeGoalEvidenceResultReadV0) {
 		t.Fatalf("observed inesperado: %+v", observed)
+	}
+}
+
+func TestClaudeGoalBackendV0RuntimeReceiptPrecedeFallbackWriteSetV0(t *testing.T) {
+	root := t.TempDir()
+	backend := ClaudeGoalBackendV0{ProjectWorkDir: filepath.Join(root, "project"), RuntimeWorkDir: filepath.Join(root, "runtime")}
+	spec := claudeGoalSpecForTestV0()
+	if _, err := backend.LaunchGoalWorkV0(context.Background(), spec); err != nil {
+		t.Fatalf("LaunchGoalWorkV0: %v", err)
+	}
+	runtimePath := claudeGoalRuntimeResultPathV0(backend.RuntimeWorkDir, spec.GoalRef)
+	legacyPath := filepath.Join(backend.ProjectWorkDir, "docs", ClaudeGoalResultFileNameV0)
+	for path, summary := range map[string]string{runtimePath: "runtime", legacyPath: "legacy"} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatalf("MkdirAll: %v", err)
+		}
+		raw := `{"schema_version":"orquesta_goal_work_result.v0","status":"complete","goal_ref":"` + spec.GoalRef + `","summary":"` + summary + `"}`
+		if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+	}
+	observed, err := backend.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{GoalRef: spec.GoalRef})
+	if err != nil || observed.Summary != "runtime" {
+		t.Fatalf("observed=%+v err=%v", observed, err)
 	}
 }
 
