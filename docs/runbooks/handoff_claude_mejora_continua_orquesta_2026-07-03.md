@@ -2804,6 +2804,19 @@ Resultado: binario local compilado (SHA-256
 Ese digest solo acredita este build local aislado; el digest exigible para F5
 es el que produzca el deploy remoto y publique despues `/api/status`.
 
+El contrato offline del deploy tambien fue reejecutado sin red ni cambio de
+binario vivo:
+
+```bash
+TMPDIR=/tmp/orquesta-deploy-test-audit \
+ORQUESTA_TEST_CACHE_ROOT=/tmp/orquesta-deploy-test-cache \
+GOTMPDIR=/tmp/orquesta-deploy-test-gotmp \
+  bash scripts/test_orquesta_server_deploy.sh
+```
+
+Resultado: `orquesta_server_deploy_tests=ok`. Permanece pendiente el receipt
+de un deploy real, que no se simula desde el equipo local.
+
 Checkpoint de limpieza no destructiva sincronizado: `4820516ec`
 (`chore: indexa funciones para limpieza segura`). El auditor genera un indice
 lexico de 25.199 funciones y una SQLite derivada; sirve para priorizar
