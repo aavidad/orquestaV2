@@ -14,9 +14,7 @@ mismo commit.
 | BUG-ORQ-20260710-208A-D | patches focales (write-sets solapados, 504, workdir, rework) verdes en local; sin verificar por API contra servidor desplegado | tras deploy: repro/API de prepare-run, observe y runs/control |
 | BUG-ORQ-20260710-208E | tooling drain/harness listo (F3-R2); falta receipt real `clean` de drain + dos pases amplios verdes. El perfil aislado exige `ORQUESTA_TEST_CACHE_ROOT` y `ORQUESTA_TEST_BATCH_ROOT` fuera de `/srv`; una revision local 2026-07-10 confirmo que Go 1.25 deja `GOMODCACHE` readonly y un runner desligado puede dejar helpers Unix bajo esa raiz | operador ejecuta drain + `orquesta_test_batches.sh` con ambas rutas aisladas; consolidar config y restaurar `chmod -R u+w` antes del cleanup, verificando que no quedan helpers por identidad de runtime |
 | F5/identidad runtime | integrado en `2fe12f658` y completado localmente por D1 con `5f30973d7`: identidad de servidor y proyecto externo ya son distintos; closure accepted y shutdown listo | ejecutar drain/deploy gobernados y verificar por API el binario remoto, sin tocar `uso-app` |
-| BUG-ORQ-20260710-208H | atestador real configurado y ejercido desde composicion local; claim/error durable ya cubierto. Los dos pases no acreditan por 208R, no por D3 | alinear 208R y repetir dos pases aislados antes de cerrar el bug |
 | BUG-ORQ-20260710-208I | timeout parcial de observe coexistio con `invalid` durable; causa raiz no demostrada. F1 YA adoptado en observe/status/stats (etapa A, 2026-07-10): la superficie local ya no puede publicar running contradicho; la evidencia del incidente es del servidor remoto | repro por API contra servidor desplegado y correlacionar refs/tiempos con el veredicto causal publicado; no cerrable en local |
-| D3 configuracion/envs 20260710 | metricas separadas: produccion `425/425`, fixtures exclusivos `103/103`; focales verdes. 208O/208P/208Q ya estan corregidos | repetir dos pases aislados para cierre conjunto de D3 y 208H |
 | BUG-ORQ-20260701-079 | solo frontera proveedor: cap duro pre-tool ante stdout crudo sin redireccion | esperar enforcement del proveedor o probe adversarial nuevo; no bloquea local |
 | BUG-ORQ-20260704-165 / 20260701-065 | residual amplio de observabilidad/control lento con proveedor real; nucleo local cerrado | se paga con la adopcion completa del veredicto F1 + repro 208 tras deploy |
 
@@ -63,6 +61,10 @@ mismo commit.
   la [incidencia de regresiones D3](incidencias/incidencia_orquesta_d3_batch_regresiones_2026-07-10.md).
 - BUG-ORQ-20260710-208R: cerrado localmente. Las expectativas de effort global
   se alinean con routing tipado por tarea, sin reintroducir herencia global.
+- BUG-ORQ-20260710-208H: cerrado localmente. El atestador configurado se
+  ejerce desde composicion y los dos pases aislados pasan sobre seis paquetes.
+- D3 configuracion/envs 20260710: cerrado localmente. La metrica separa
+  produccion `425/425` y fixtures exclusivos `103/103`, con dos pases verdes.
 - D3 local 2026-07-10: detenido tras el primer lote determinista para no
   gastar un segundo pase imposible. `TestEnvVarsBudgetMEJ106V0` fallo con
   538 variables frente a 513; recibo y log retenidos en

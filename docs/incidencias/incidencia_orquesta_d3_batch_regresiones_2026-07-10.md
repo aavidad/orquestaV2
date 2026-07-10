@@ -1,7 +1,7 @@
 # Incidencia: regresiones descubiertas por lote D3
 
-Fecha: 2026-07-10. Estado: cerrado localmente; pendiente repetir el lote D3
-completo como evidencia conjunta.
+Fecha: 2026-07-10. Estado: cerrado localmente; el lote D3 de verificacion ya
+paso dos veces de forma consecutiva.
 
 ## Evidencia comun
 
@@ -89,3 +89,11 @@ restaurar herencia global ni esconder la política de routing.
 
 Corrección local: los tres focales pasan con límites de fichero/env intactos,
 `ReasoningEffort` runtime vacío y `effective_config` sin valor global aplicado.
+
+## Cierre D3
+
+Tras integrar 208O/208P/208Q/208R, el runner aislado ejecuto raiz, servidor,
+goal, state-file, atestador runtime y stack Codex en dos pases: 12 ejecuciones,
+cuatro lotes verdes y `reason_code=two_consecutive_passes_passed` en
+`batch-ref-1783704161261141939-3224367-24237`. D3 queda cerrado localmente con
+`env_vars_orquesta=425/425` y `env_vars_orquesta_test_only=103/103`.

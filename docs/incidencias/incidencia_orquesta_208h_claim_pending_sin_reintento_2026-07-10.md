@@ -1,10 +1,9 @@
 # Incidencia: 208J claim de atestacion pendiente sin recuperacion
 
 Fecha: 2026-07-10.
-Estado: correccion local integrada en `08a993a3e`; permanece abierta como
-evidencia de cierre de `BUG-ORQ-20260710-208H` hasta probar la composicion con
-un atestador configurado. No queda un claim `pending` sin recuperacion en el
-contrato local.
+Estado: cerrado localmente. La composicion con atestador configurado y los dos
+pases aislados requeridos estan acreditados; no queda un claim `pending` sin
+recuperacion en el contrato local.
 
 ## Hallazgo original
 
@@ -57,4 +56,8 @@ fixture minimo o una aplicacion real que el operador solicite construir.
 
 - Correccion de claim: cerrada localmente por `08a993a3e` y los tres focales
   anteriores.
-- Cierre global de 208H: solo faltan los dos pases aislados por lotes tras D3.
+- Cierre local 2026-07-10: `orquesta_test_batches.sh` completa dos pases de
+  seis paquetes (12 ejecuciones), `status=passed` y
+  `reason_code=two_consecutive_passes_passed` en el recibo
+  `batch-ref-1783704161261141939-3224367-24237`. La evidencia cubre raiz,
+  servidor, goal, state-file, atestador runtime y stack Codex.
