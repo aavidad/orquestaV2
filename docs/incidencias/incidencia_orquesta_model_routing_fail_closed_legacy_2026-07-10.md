@@ -32,6 +32,13 @@ politica hace fallar smokes, lifecycle y tests que no declaraban routing por
 ser anteriores al contrato. Esto contradice la regla de no cortar trabajo
 recuperable por una forma omitida.
 
+La auditoria del codigo confirma el mecanismo: `modelRoutingPolicyFromConfigV0`
+crea refs y esfuerzos por defecto, pero `modelRoutingAliasesV0` devuelve un
+mapa vacio cuando el fichero no declara aliases. `exactModelRoutingAliasV0`
+rechaza entonces el resultado; Codex y Claude duplican despues ese veto al
+validar sus receipts. La normalizacion debe producir politica y aliases
+canónicos juntos, en la composicion comun, antes de los dos resolvers.
+
 ## Correccion requerida
 
 Definir una unica normalizacion de composicion: cuando no haya routing
