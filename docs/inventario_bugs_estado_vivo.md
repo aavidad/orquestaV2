@@ -27,6 +27,7 @@ mismo commit.
 | S13/F4 artefactos versionados | conteo vivo: 61 con nombre de checkpoint/resultado; 68 al incluir cuatro fixtures eval y tres artefactos auxiliares de la familia. La auditoria/guard Git rechazan nuevos no clasificados y la ola Codex ya dirige recibos tecnicos a su runtime, pero el contrato goal-first aun permite que recibos caigan dentro del write-set versionable | destino de recibos inyectado por composicion + observador que lo lea; despues migrar los 58 movibles con commits gobernados |
 | S12 limpieza envs remota | perfil remoto/secretos/defaults sin corte gobernado | corte separado tras deploy; no mezclar con drain |
 | CODEX-HOME-TOKEN-INVALIDADO | auth Codex remota caducada | reauth del operador en servidor; hoy ademas cuota local agotada |
+| BUG-ORQ-20260710-208T | retencion runtime sin cuota: `.orquesta-runtime/codex-waves` ocupa 16 GB y conserva 399 homes aislados; no se puede purgar sin clasificar evidencia | retenedor gobernado con inventario, dry-run, export/compresion, cuota y recibo; evidencia en la [incidencia 208T](incidencias/incidencia_orquesta_retencion_runtime_codex_waves_2026-07-10.md) |
 | BUG-ORQ-20260701-058/066/075 (familia OPES) | solo residuales de campo: OPES temporal/preproduccion y proveedor real; local/fake cerrado | field test OPES temporal cuando se retome ese frente |
 
 ## Cerrados hoy (referencia rapida)
