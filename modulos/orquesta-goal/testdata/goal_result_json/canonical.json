@@ -1,0 +1,12 @@
+{
+  "schema_version": "orquesta_goal_work_result.v0",
+  "status": "complete",
+  "goal_ref": "goal-ref-f6-corpus-001",
+  "external_goal_ref": "external-goal-ref-f6-001",
+  "summary": "canonical durable result",
+  "artifact_refs": ["artifact-ref-f6-001"],
+  "artifact_paths": ["modulos/orquesta-goal/result_json_v0.go"],
+  "checklist": {"expected_refs": ["check-f6-001"], "completed_refs": ["check-f6-001"], "missing_refs": [], "evidence_refs": ["evidence-ref-check-f6-001"]},
+  "required_test_results": [{"test_ref": "test-ref-f6-001", "status": "passed", "evidence_refs": ["evidence-ref-test-f6-001"]}],
+  "evidence_refs": ["evidence-ref-result-f6-001"]
+}

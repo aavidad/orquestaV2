@@ -614,26 +614,15 @@ func goalMaterializedReadValidTerminalGoalResultForStateV0(
 	return result, true
 }
 
-type goalMaterializedGoalWorkResultEnvelopeV0 struct {
-	orquestagoal.GoalWorkResultV0
-	ReasonCode  string   `json:"reason_code,omitempty"`
-	MissingRefs []string `json:"missing_refs,omitempty"`
-}
-
 func goalMaterializedDecodeGoalWorkResultV0(raw []byte) (orquestagoal.GoalWorkResultV0, error) {
-	var envelope goalMaterializedGoalWorkResultEnvelopeV0
-	if err := json.Unmarshal(raw, &envelope); err != nil {
+	decoded, err := orquestagoal.DecodeGoalWorkResultJSONV0(raw)
+	if err != nil {
 		return orquestagoal.GoalWorkResultV0{}, err
 	}
-	result := envelope.GoalWorkResultV0
-	result.Checklist.MissingRefs = compactStringsV0(append(result.Checklist.MissingRefs, envelope.MissingRefs...))
-	if reasonCode := strings.TrimSpace(envelope.ReasonCode); reasonCode != "" {
-		result.Issues = append(result.Issues, orquestagoal.GoalWorkIssueV0{
-			Code:  reasonCode,
-			Field: "reason_code",
-		})
+	if decoded.Disposition == orquestagoal.GoalWorkResultJSONDispositionIrrecoverableV0 {
+		return orquestagoal.GoalWorkResultV0{}, errors.New("goal_result_json_irrecoverable")
 	}
-	return orquestagoal.NormalizeGoalWorkResultV0(result), nil
+	return decoded.Result, nil
 }
 
 func goalMaterializedTerminalResultMatchesStateV0(

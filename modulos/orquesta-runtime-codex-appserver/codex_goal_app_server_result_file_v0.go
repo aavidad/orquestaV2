@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -389,10 +388,14 @@ func codexAppServerGoalResultFromFileV0(
 	if err != nil {
 		return codexAppServerGoalResultMarkerV0{}, false, err
 	}
-	var marked codexAppServerGoalResultMarkerV0
-	if err := json.Unmarshal(raw, &marked); err != nil {
+	decoded, err := orquestagoal.DecodeGoalWorkResultJSONV0(raw)
+	if err != nil {
 		return codexAppServerGoalResultMarkerV0{}, true, err
 	}
+	if decoded.Disposition == orquestagoal.GoalWorkResultJSONDispositionIrrecoverableV0 {
+		return codexAppServerGoalResultMarkerV0{}, true, errors.New("codex_app_server_goal_result_irrecoverable")
+	}
+	marked := codexAppServerGoalResultMarkerFromNeutralV0(decoded.Result)
 	marked = normalizeCodexAppServerGoalResultMarkerV0(marked)
 	if marked.GoalRef != strings.TrimSpace(goalRef) {
 		return codexAppServerGoalResultMarkerV0{}, false, nil

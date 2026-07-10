@@ -286,11 +286,14 @@ func (backend GeminiGoalBackendV0) readResultFromWriteSetV0(
 		if err != nil {
 			return orquestagoal.GoalWorkResultV0{}, false, err
 		}
-		var result orquestagoal.GoalWorkResultV0
-		if err := json.Unmarshal(normalizeGeminiGoalResultJSONV0(data), &result); err != nil {
+		decoded, err := orquestagoal.DecodeGoalWorkResultJSONV0(data)
+		if err != nil {
 			return geminiGoalInvalidResultV0(request, ErrGeminiGoalResultInvalidV0, "result_json"), true, nil
 		}
-		result = orquestagoal.NormalizeGoalWorkResultV0(result)
+		if decoded.Disposition == orquestagoal.GoalWorkResultJSONDispositionIrrecoverableV0 {
+			return geminiGoalInvalidResultV0(request, ErrGeminiGoalResultInvalidV0, "result_json"), true, nil
+		}
+		result := decoded.Result
 		if result.GoalRef != "" && result.GoalRef != request.GoalRef {
 			continue
 		}
@@ -304,65 +307,6 @@ func (backend GeminiGoalBackendV0) readResultFromWriteSetV0(
 		return orquestagoal.NormalizeGoalWorkResultV0(result), true, nil
 	}
 	return orquestagoal.GoalWorkResultV0{}, false, nil
-}
-
-func normalizeGeminiGoalResultJSONV0(data []byte) []byte {
-	var value any
-	if err := json.Unmarshal(data, &value); err != nil {
-		return data
-	}
-	normalized := normalizeGeminiGoalEvidenceRefsJSONValueV0(value)
-	out, err := json.Marshal(normalized)
-	if err != nil {
-		return data
-	}
-	return out
-}
-
-func normalizeGeminiGoalEvidenceRefsJSONValueV0(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(typed))
-		for key, nested := range typed {
-			if key == "evidence_refs" {
-				out[key] = normalizeGeminiGoalEvidenceRefsJSONArrayV0(nested)
-				continue
-			}
-			out[key] = normalizeGeminiGoalEvidenceRefsJSONValueV0(nested)
-		}
-		return out
-	case []any:
-		out := make([]any, 0, len(typed))
-		for _, nested := range typed {
-			out = append(out, normalizeGeminiGoalEvidenceRefsJSONValueV0(nested))
-		}
-		return out
-	default:
-		return value
-	}
-}
-
-func normalizeGeminiGoalEvidenceRefsJSONArrayV0(value any) any {
-	items, ok := value.([]any)
-	if !ok {
-		return normalizeGeminiGoalEvidenceRefsJSONValueV0(value)
-	}
-	out := make([]any, 0, len(items))
-	for _, item := range items {
-		switch typed := item.(type) {
-		case string:
-			out = append(out, typed)
-		case map[string]any:
-			if ref, ok := typed["ref"].(string); ok && strings.TrimSpace(ref) != "" {
-				out = append(out, strings.TrimSpace(ref))
-				continue
-			}
-			out = append(out, normalizeGeminiGoalEvidenceRefsJSONValueV0(item))
-		default:
-			out = append(out, normalizeGeminiGoalEvidenceRefsJSONValueV0(item))
-		}
-	}
-	return out
 }
 
 func (backend GeminiGoalBackendV0) resultCandidatePathsV0(spec orquestagoal.GoalWorkSpecV0) []string {

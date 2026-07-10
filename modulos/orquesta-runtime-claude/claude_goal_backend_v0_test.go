@@ -197,6 +197,33 @@ func TestClaudeGoalBackendV0ObserveSinResultadoDevuelveRunningV0(t *testing.T) {
 	}
 }
 
+func TestClaudeGoalBackendV0ObserveJSONParcialEsTerminalInvalidoV0(t *testing.T) {
+	root := t.TempDir()
+	backend := ClaudeGoalBackendV0{
+		ProjectWorkDir: filepath.Join(root, "project"),
+		RuntimeWorkDir: filepath.Join(root, "runtime"),
+	}
+	spec := claudeGoalSpecForTestV0()
+	if _, err := backend.LaunchGoalWorkV0(context.Background(), spec); err != nil {
+		t.Fatalf("LaunchGoalWorkV0: %v", err)
+	}
+	resultPath := filepath.Join(backend.ProjectWorkDir, "docs", ClaudeGoalResultFileNameV0)
+	if err := os.MkdirAll(filepath.Dir(resultPath), 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(resultPath, []byte(`{"status":`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	observed, err := backend.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{GoalRef: spec.GoalRef})
+	if err != nil {
+		t.Fatalf("ObserveGoalWorkV0: %v", err)
+	}
+	if observed.Status != orquestagoal.GoalStatusInvalidV0 || len(observed.Issues) != 1 || observed.Issues[0].Code != ErrClaudeGoalResultInvalidV0 {
+		t.Fatalf("observed=%+v", observed)
+	}
+}
+
 func TestBuildClaudeGoalPromptWithLocaleV0UsaInglesSinCambiarContratoV0(t *testing.T) {
 	spec := claudeGoalSpecForTestV0()
 

@@ -3,11 +3,12 @@ package orquestagoal
 import "context"
 
 const (
-	GoalWorkSpecSchemaV0          = "orquesta_goal_work_spec.v0"
-	GoalWorkLaunchReceiptSchemaV0 = "orquesta_goal_launch_receipt.v0"
-	GoalWorkResultSchemaV0        = "orquesta_goal_work_result.v0"
-	GoalWorkStateSchemaV0         = "orquesta_goal_work_state.v0"
-	GoalWorkRunMarkerSchemaV0     = "orquesta_goal_work_run_marker.v0"
+	GoalWorkSpecSchemaV0                = "orquesta_goal_work_spec.v0"
+	GoalWorkLaunchReceiptSchemaV0       = "orquesta_goal_launch_receipt.v0"
+	GoalWorkResultSchemaV0              = "orquesta_goal_work_result.v0"
+	GoalWorkResultRepairReceiptSchemaV0 = "orquesta_goal_work_result_repair_receipt.v0"
+	GoalWorkStateSchemaV0               = "orquesta_goal_work_state.v0"
+	GoalWorkRunMarkerSchemaV0           = "orquesta_goal_work_run_marker.v0"
 
 	GoalDirectorKindRuntimeGoalV0 = "runtime_goal"
 	GoalDirectorKindCodexGoalV0   = "codex_goal"
@@ -46,6 +47,7 @@ const (
 	ErrGoalMaterializedArtifactInvalidV0 = "goal_materialized_artifact_invalid"
 	ErrGoalChecklistIncompleteV0         = "goal_checklist_incomplete"
 	ErrGoalReworkPlanRequiredV0          = "goal_rework_plan_required"
+	ErrGoalResultJSONInvalidV0           = "goal_result_json_invalid"
 )
 
 const (
@@ -164,21 +166,46 @@ type GoalContextBudgetV0 struct {
 }
 
 type GoalWorkResultV0 struct {
-	SchemaVersion         string                       `json:"schema_version"`
-	Status                string                       `json:"status"`
-	GoalRef               string                       `json:"goal_ref,omitempty"`
-	ExternalGoalRef       string                       `json:"external_goal_ref,omitempty"`
-	Summary               string                       `json:"summary,omitempty"`
-	ContextBudget         GoalContextBudgetV0          `json:"context_budget,omitempty"`
-	ArtifactRefs          []string                     `json:"artifact_refs,omitempty"`
-	ArtifactPaths         []string                     `json:"artifact_paths,omitempty"`
-	MaterializedArtifacts []GoalMaterializedArtifactV0 `json:"materialized_artifacts,omitempty"`
-	Checklist             GoalWorkChecklistV0          `json:"checklist,omitempty"`
-	RequiredTestResults   []GoalRequiredTestResultV0   `json:"required_test_results,omitempty"`
-	DomainReceiptRefs     []string                     `json:"domain_receipt_refs,omitempty"`
-	ReworkPlanRefs        []string                     `json:"rework_plan_refs,omitempty"`
-	EvidenceRefs          []string                     `json:"evidence_refs,omitempty"`
-	Issues                []GoalWorkIssueV0            `json:"issues,omitempty"`
+	SchemaVersion         string                         `json:"schema_version"`
+	Status                string                         `json:"status"`
+	GoalRef               string                         `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string                         `json:"external_goal_ref,omitempty"`
+	Summary               string                         `json:"summary,omitempty"`
+	ContextBudget         GoalContextBudgetV0            `json:"context_budget,omitempty"`
+	ArtifactRefs          []string                       `json:"artifact_refs,omitempty"`
+	ArtifactPaths         []string                       `json:"artifact_paths,omitempty"`
+	MaterializedArtifacts []GoalMaterializedArtifactV0   `json:"materialized_artifacts,omitempty"`
+	Checklist             GoalWorkChecklistV0            `json:"checklist,omitempty"`
+	RequiredTestResults   []GoalRequiredTestResultV0     `json:"required_test_results,omitempty"`
+	DomainReceiptRefs     []string                       `json:"domain_receipt_refs,omitempty"`
+	ReworkPlanRefs        []string                       `json:"rework_plan_refs,omitempty"`
+	EvidenceRefs          []string                       `json:"evidence_refs,omitempty"`
+	Issues                []GoalWorkIssueV0              `json:"issues,omitempty"`
+	RepairReceipt         *GoalWorkResultRepairReceiptV0 `json:"repair_receipt,omitempty"`
+}
+
+// GoalWorkResultJSONDecodeV0 is the neutral outcome of reading a durable goal
+// result.  Disposition tells adapters whether the input was canonical,
+// recoverably repaired, or structurally impossible to use.  It intentionally
+// carries only hashes and compact transformation names, never source payload.
+type GoalWorkResultJSONDecodeV0 struct {
+	Result        GoalWorkResultV0               `json:"result"`
+	Disposition   string                         `json:"disposition"`
+	Issues        []GoalWorkIssueV0              `json:"issues,omitempty"`
+	RepairReceipt *GoalWorkResultRepairReceiptV0 `json:"repair_receipt,omitempty"`
+}
+
+type GoalWorkResultRepairReceiptV0 struct {
+	SchemaVersion         string                                 `json:"schema_version"`
+	OriginalSchemaVersion string                                 `json:"original_schema_version,omitempty"`
+	OriginalRefHash       string                                 `json:"original_ref_hash"`
+	Transformations       []GoalWorkResultRepairTransformationV0 `json:"transformations,omitempty"`
+	EvidenceRefs          []string                               `json:"evidence_refs,omitempty"`
+}
+
+type GoalWorkResultRepairTransformationV0 struct {
+	Field string `json:"field"`
+	Kind  string `json:"kind"`
 }
 
 type GoalMaterializedArtifactV0 struct {

@@ -108,21 +108,22 @@ type CodexGoalObservationRequestV0 struct {
 }
 
 type CodexGoalObservationReceiptV0 struct {
-	Status                string                                    `json:"status"`
-	GoalRef               string                                    `json:"goal_ref,omitempty"`
-	ExternalGoalRef       string                                    `json:"external_goal_ref,omitempty"`
-	Summary               string                                    `json:"summary,omitempty"`
-	ContextBudget         orquestagoal.GoalContextBudgetV0          `json:"context_budget,omitempty"`
-	ArtifactRefs          []string                                  `json:"artifact_refs,omitempty"`
-	ArtifactPaths         []string                                  `json:"artifact_paths,omitempty"`
-	MaterializedArtifacts []orquestagoal.GoalMaterializedArtifactV0 `json:"materialized_artifacts,omitempty"`
-	Checklist             orquestagoal.GoalWorkChecklistV0          `json:"checklist,omitempty"`
-	RequiredTestResults   []orquestagoal.GoalRequiredTestResultV0   `json:"required_test_results,omitempty"`
-	DomainReceiptRefs     []string                                  `json:"domain_receipt_refs,omitempty"`
-	ReworkPlanRefs        []string                                  `json:"rework_plan_refs,omitempty"`
-	EvidenceRefs          []string                                  `json:"evidence_refs,omitempty"`
-	IssueCode             string                                    `json:"issue_code,omitempty"`
-	PromptCache           CodexGoalPromptCacheProjectionV0          `json:"prompt_cache,omitempty"`
+	Status                string                                      `json:"status"`
+	GoalRef               string                                      `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string                                      `json:"external_goal_ref,omitempty"`
+	Summary               string                                      `json:"summary,omitempty"`
+	ContextBudget         orquestagoal.GoalContextBudgetV0            `json:"context_budget,omitempty"`
+	ArtifactRefs          []string                                    `json:"artifact_refs,omitempty"`
+	ArtifactPaths         []string                                    `json:"artifact_paths,omitempty"`
+	MaterializedArtifacts []orquestagoal.GoalMaterializedArtifactV0   `json:"materialized_artifacts,omitempty"`
+	Checklist             orquestagoal.GoalWorkChecklistV0            `json:"checklist,omitempty"`
+	RequiredTestResults   []orquestagoal.GoalRequiredTestResultV0     `json:"required_test_results,omitempty"`
+	DomainReceiptRefs     []string                                    `json:"domain_receipt_refs,omitempty"`
+	ReworkPlanRefs        []string                                    `json:"rework_plan_refs,omitempty"`
+	EvidenceRefs          []string                                    `json:"evidence_refs,omitempty"`
+	IssueCode             string                                      `json:"issue_code,omitempty"`
+	RepairReceipt         *orquestagoal.GoalWorkResultRepairReceiptV0 `json:"repair_receipt,omitempty"`
+	PromptCache           CodexGoalPromptCacheProjectionV0            `json:"prompt_cache,omitempty"`
 }
 
 type CodexGoalStarterPortV0 interface {
@@ -1244,6 +1245,7 @@ func goalWorkResultFromCodexObservationV0(
 			append([]string(nil), receipt.EvidenceRefs...),
 			codexGoalPromptCacheEvidenceRefsV0(receipt.PromptCache)...,
 		)),
+		RepairReceipt: receipt.RepairReceipt,
 	}
 	if receipt.IssueCode != "" {
 		result.Issues = append(result.Issues, orquestagoal.GoalWorkIssueV0{Code: receipt.IssueCode})

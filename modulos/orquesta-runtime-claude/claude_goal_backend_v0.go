@@ -286,11 +286,14 @@ func (backend ClaudeGoalBackendV0) readResultFromWriteSetV0(
 		if err != nil {
 			return orquestagoal.GoalWorkResultV0{}, false, err
 		}
-		var result orquestagoal.GoalWorkResultV0
-		if err := json.Unmarshal(normalizeClaudeGoalResultJSONV0(data), &result); err != nil {
+		decoded, err := orquestagoal.DecodeGoalWorkResultJSONV0(data)
+		if err != nil {
 			return claudeGoalInvalidResultV0(request, ErrClaudeGoalResultInvalidV0, "result_json"), true, nil
 		}
-		result = orquestagoal.NormalizeGoalWorkResultV0(result)
+		if decoded.Disposition == orquestagoal.GoalWorkResultJSONDispositionIrrecoverableV0 {
+			return claudeGoalInvalidResultV0(request, ErrClaudeGoalResultInvalidV0, "result_json"), true, nil
+		}
+		result := decoded.Result
 		if result.GoalRef != "" && result.GoalRef != request.GoalRef {
 			continue
 		}
@@ -304,65 +307,6 @@ func (backend ClaudeGoalBackendV0) readResultFromWriteSetV0(
 		return orquestagoal.NormalizeGoalWorkResultV0(result), true, nil
 	}
 	return orquestagoal.GoalWorkResultV0{}, false, nil
-}
-
-func normalizeClaudeGoalResultJSONV0(data []byte) []byte {
-	var value any
-	if err := json.Unmarshal(data, &value); err != nil {
-		return data
-	}
-	normalized := normalizeClaudeGoalEvidenceRefsJSONValueV0(value)
-	out, err := json.Marshal(normalized)
-	if err != nil {
-		return data
-	}
-	return out
-}
-
-func normalizeClaudeGoalEvidenceRefsJSONValueV0(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		out := make(map[string]any, len(typed))
-		for key, nested := range typed {
-			if key == "evidence_refs" {
-				out[key] = normalizeClaudeGoalEvidenceRefsJSONArrayV0(nested)
-				continue
-			}
-			out[key] = normalizeClaudeGoalEvidenceRefsJSONValueV0(nested)
-		}
-		return out
-	case []any:
-		out := make([]any, 0, len(typed))
-		for _, nested := range typed {
-			out = append(out, normalizeClaudeGoalEvidenceRefsJSONValueV0(nested))
-		}
-		return out
-	default:
-		return value
-	}
-}
-
-func normalizeClaudeGoalEvidenceRefsJSONArrayV0(value any) any {
-	items, ok := value.([]any)
-	if !ok {
-		return normalizeClaudeGoalEvidenceRefsJSONValueV0(value)
-	}
-	out := make([]any, 0, len(items))
-	for _, item := range items {
-		switch typed := item.(type) {
-		case string:
-			out = append(out, typed)
-		case map[string]any:
-			if ref, ok := typed["ref"].(string); ok && strings.TrimSpace(ref) != "" {
-				out = append(out, strings.TrimSpace(ref))
-				continue
-			}
-			out = append(out, normalizeClaudeGoalEvidenceRefsJSONValueV0(item))
-		default:
-			out = append(out, normalizeClaudeGoalEvidenceRefsJSONValueV0(item))
-		}
-	}
-	return out
 }
 
 func claudeGoalInvalidLaunchReceiptV0(goalRef string, code string, field string) orquestagoal.GoalLaunchReceiptV0 {

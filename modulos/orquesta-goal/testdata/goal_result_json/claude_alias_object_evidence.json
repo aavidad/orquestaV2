@@ -1,0 +1,11 @@
+{
+  "schema": "orquesta_goal_result.v0",
+  "estado": "completed",
+  "goal_id": "goal-ref-f6-corpus-001",
+  "external_goal_id": "external-goal-ref-f6-001",
+  "artifact_refs": ["artifact-ref-f6-001"],
+  "checklist": {"expected_refs": ["check-f6-001"], "completed_refs": ["check-f6-001"], "evidence_refs": [{"ref": "evidence-ref-check-f6-001", "description": "Claude compact evidence"}]},
+  "required_tests": [{"test_ref": "test-ref-f6-001", "status": "success", "evidence_refs": [{"ref": "evidence-ref-test-f6-001", "description": "BUG-170 test evidence"}]}],
+  "evidence_refs": [{"ref": "evidence-ref-result-f6-001", "description": "BUG-170 durable evidence"}],
+  "issues": ["recoverable_provider_note"]
+}

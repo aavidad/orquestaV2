@@ -599,6 +599,20 @@ func NormalizeGoalWorkResultV0(result GoalWorkResultV0) GoalWorkResultV0 {
 	for i := range result.Issues {
 		result.Issues[i] = normalizeGoalWorkIssueV0(result.Issues[i])
 	}
+	if result.RepairReceipt != nil {
+		receipt := *result.RepairReceipt
+		receipt.SchemaVersion = GoalWorkResultRepairReceiptSchemaV0
+		receipt.OriginalSchemaVersion = strings.TrimSpace(receipt.OriginalSchemaVersion)
+		receipt.OriginalRefHash = strings.TrimSpace(receipt.OriginalRefHash)
+		for i := range receipt.Transformations {
+			receipt.Transformations[i].Field = strings.TrimSpace(receipt.Transformations[i].Field)
+			receipt.Transformations[i].Kind = strings.TrimSpace(receipt.Transformations[i].Kind)
+		}
+		for i := range receipt.EvidenceRefs {
+			receipt.EvidenceRefs[i] = strings.TrimSpace(receipt.EvidenceRefs[i])
+		}
+		result.RepairReceipt = &receipt
+	}
 	return result
 }
 
@@ -815,6 +829,14 @@ func ValidateGoalWorkResultV0(result GoalWorkResultV0) []GoalWorkIssueV0 {
 	for _, issue := range result.Issues {
 		validateRequiredGoalRefV0(&issues, "issues.code", issue.Code)
 	}
+	if result.RepairReceipt != nil {
+		if strings.TrimSpace(result.RepairReceipt.OriginalRefHash) == "" {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalResultJSONInvalidV0, Field: "repair_receipt.original_ref_hash"})
+		}
+		for _, evidenceRef := range result.RepairReceipt.EvidenceRefs {
+			validateRequiredGoalRefV0(&issues, "repair_receipt.evidence_refs", evidenceRef)
+		}
+	}
 	return issues
 }
 
@@ -956,10 +978,16 @@ func allRequiredGoalTestsPassedV0(required []GoalRequiredTestV0, results []GoalR
 	if len(required) == 0 {
 		return true
 	}
+	requiresEvidence := make(map[string]bool, len(required))
+	for _, test := range required {
+		requiresEvidence[test.TestRef] = len(compactGoalStringsV0(test.EvidenceRefs)) > 0
+	}
 	passed := make(map[string]bool, len(results))
 	for _, result := range results {
 		if result.Status == GoalStatusAcceptedV0 || result.Status == "passed" {
-			passed[result.TestRef] = true
+			if !requiresEvidence[result.TestRef] || len(compactGoalStringsV0(result.EvidenceRefs)) > 0 {
+				passed[result.TestRef] = true
+			}
 		}
 	}
 	for _, test := range required {

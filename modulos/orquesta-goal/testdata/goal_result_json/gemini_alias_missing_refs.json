@@ -1,0 +1,9 @@
+{
+  "version": "orquesta_goal_result.v0",
+  "state": "done",
+  "goal": "goal-ref-f6-corpus-001",
+  "artifact_refs": ["artifact-ref-f6-001"],
+  "missing_refs": ["check-f6-remaining"],
+  "test_results": [{"test_ref": "test-ref-f6-001", "status": "pass", "evidence_refs": ["evidence-ref-test-f6-001"]}],
+  "evidence_refs": ["evidence-ref-result-f6-001"]
+}

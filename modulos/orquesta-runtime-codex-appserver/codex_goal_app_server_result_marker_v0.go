@@ -1,7 +1,6 @@
 package orquestaruntimecodexappserver
 
 import (
-	"encoding/json"
 	"errors"
 	"strings"
 
@@ -10,22 +9,23 @@ import (
 )
 
 type codexAppServerGoalResultMarkerV0 struct {
-	SchemaVersion         string                                    `json:"schema_version,omitempty"`
-	Status                string                                    `json:"status,omitempty"`
-	Estado                string                                    `json:"estado,omitempty"`
-	GoalRef               string                                    `json:"goal_ref,omitempty"`
-	ExternalGoalRef       string                                    `json:"external_goal_ref,omitempty"`
-	ReasonCode            string                                    `json:"reason_code,omitempty"`
-	Summary               string                                    `json:"summary,omitempty"`
-	ArtifactRefs          []string                                  `json:"artifact_refs,omitempty"`
-	ArtifactPaths         []string                                  `json:"artifact_paths,omitempty"`
-	MaterializedArtifacts []orquestagoal.GoalMaterializedArtifactV0 `json:"materialized_artifacts,omitempty"`
-	Checklist             orquestagoal.GoalWorkChecklistV0          `json:"checklist,omitempty"`
-	MissingRefs           []string                                  `json:"missing_refs,omitempty"`
-	RequiredTestResults   []orquestagoal.GoalRequiredTestResultV0   `json:"required_test_results,omitempty"`
-	DomainReceiptRefs     []string                                  `json:"domain_receipt_refs,omitempty"`
-	ReworkPlanRefs        []string                                  `json:"rework_plan_refs,omitempty"`
-	EvidenceRefs          []string                                  `json:"evidence_refs,omitempty"`
+	SchemaVersion         string                                      `json:"schema_version,omitempty"`
+	Status                string                                      `json:"status,omitempty"`
+	Estado                string                                      `json:"estado,omitempty"`
+	GoalRef               string                                      `json:"goal_ref,omitempty"`
+	ExternalGoalRef       string                                      `json:"external_goal_ref,omitempty"`
+	ReasonCode            string                                      `json:"reason_code,omitempty"`
+	Summary               string                                      `json:"summary,omitempty"`
+	ArtifactRefs          []string                                    `json:"artifact_refs,omitempty"`
+	ArtifactPaths         []string                                    `json:"artifact_paths,omitempty"`
+	MaterializedArtifacts []orquestagoal.GoalMaterializedArtifactV0   `json:"materialized_artifacts,omitempty"`
+	Checklist             orquestagoal.GoalWorkChecklistV0            `json:"checklist,omitempty"`
+	MissingRefs           []string                                    `json:"missing_refs,omitempty"`
+	RequiredTestResults   []orquestagoal.GoalRequiredTestResultV0     `json:"required_test_results,omitempty"`
+	DomainReceiptRefs     []string                                    `json:"domain_receipt_refs,omitempty"`
+	ReworkPlanRefs        []string                                    `json:"rework_plan_refs,omitempty"`
+	EvidenceRefs          []string                                    `json:"evidence_refs,omitempty"`
+	RepairReceipt         *orquestagoal.GoalWorkResultRepairReceiptV0 `json:"repair_receipt,omitempty"`
 }
 
 func codexAppServerGoalResultFromThreadV0(
@@ -76,15 +76,45 @@ func parseCodexAppServerGoalResultMarkerV0(text string) (codexAppServerGoalResul
 	if !ok {
 		return codexAppServerGoalResultMarkerV0{}, true, errors.New("codex_app_server_goal_result_marker_json_missing")
 	}
-	var marked codexAppServerGoalResultMarkerV0
-	if err := json.Unmarshal([]byte(payload), &marked); err != nil {
+	decoded, err := orquestagoal.DecodeGoalWorkResultJSONV0([]byte(payload))
+	if err != nil {
 		return codexAppServerGoalResultMarkerV0{}, true, err
 	}
+	if decoded.Disposition == orquestagoal.GoalWorkResultJSONDispositionIrrecoverableV0 {
+		return codexAppServerGoalResultMarkerV0{}, true, errors.New("codex_app_server_goal_result_irrecoverable")
+	}
+	marked := codexAppServerGoalResultMarkerFromNeutralV0(decoded.Result)
 	marked = normalizeCodexAppServerGoalResultMarkerV0(marked)
 	if issue := codexAppServerGoalResultContractIssueCodeV0(marked); issue != "" {
 		return marked, true, codexAppServerGoalResultContractErrorV0{Code: issue}
 	}
 	return marked, true, nil
+}
+
+func codexAppServerGoalResultMarkerFromNeutralV0(result orquestagoal.GoalWorkResultV0) codexAppServerGoalResultMarkerV0 {
+	marked := codexAppServerGoalResultMarkerV0{
+		SchemaVersion:         result.SchemaVersion,
+		Status:                result.Status,
+		GoalRef:               result.GoalRef,
+		ExternalGoalRef:       result.ExternalGoalRef,
+		Summary:               result.Summary,
+		ArtifactRefs:          result.ArtifactRefs,
+		ArtifactPaths:         result.ArtifactPaths,
+		MaterializedArtifacts: result.MaterializedArtifacts,
+		Checklist:             result.Checklist,
+		RequiredTestResults:   result.RequiredTestResults,
+		DomainReceiptRefs:     result.DomainReceiptRefs,
+		ReworkPlanRefs:        result.ReworkPlanRefs,
+		EvidenceRefs:          result.EvidenceRefs,
+		RepairReceipt:         result.RepairReceipt,
+	}
+	for _, issue := range result.Issues {
+		if strings.TrimSpace(issue.Field) == "reason_code" && strings.TrimSpace(issue.Code) != "" {
+			marked.ReasonCode = issue.Code
+			break
+		}
+	}
+	return marked
 }
 
 func codexAppServerGoalResultMarkerJSONV0(text string) (string, bool) {
@@ -172,6 +202,10 @@ func mergeCodexAppServerGoalResultV0(
 		append(receipt.EvidenceRefs, sourceEvidenceRef),
 		marked.EvidenceRefs...,
 	))
+	if marked.RepairReceipt != nil {
+		repair := *marked.RepairReceipt
+		receipt.RepairReceipt = &repair
+	}
 	if codexAppServerGoalResultMarkerLooksPlaceholderV0(marked) {
 		if strings.TrimSpace(receipt.IssueCode) == "" {
 			receipt.IssueCode = codexAppServerGoalResultPlaceholderReasonCodeV0

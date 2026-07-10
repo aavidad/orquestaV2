@@ -1,0 +1,9 @@
+{
+  "schema_version": "orquesta_goal_result.v0",
+  "status": "complete",
+  "goal_ref": "goal-ref-f6-corpus-001",
+  "reason_code": "goal_requires_review",
+  "artifact_refs": ["artifact-ref-f6-001"],
+  "required_test_results": [{"test_ref": "test-ref-f6-001", "status": "passed", "evidence_refs": [{"ref": "evidence-ref-test-f6-001", "description": "BUG-170 evidence object"}]}],
+  "evidence_refs": [{"ref": "evidence-ref-result-f6-001", "description": "Codex result evidence"}]
+}
