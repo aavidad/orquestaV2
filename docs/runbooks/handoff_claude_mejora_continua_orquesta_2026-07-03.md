@@ -3042,3 +3042,12 @@ accepted en una segunda entrega. No crea app externa ni consume proveedor.
 Esto cierra el hueco de cobertura local completa de Claude/Gemini. No se debe
 declarar proveedor real cerrado: Claude necesita smoke real opt-in y Gemini
 sigue bloqueado por tier/autenticación hasta que haya acceso operativo.
+
+## Actualizacion Codex 2026-07-11: adaptador CSV/JSON de ingesta
+
+Se incorporo `orquesta-data-ingestion-file`, primer adaptador real fuera del
+nucleo para fuente y perfilado CSV/JSON con stdlib. Usa catálogo de refs opacas,
+root explícito, hash/snapshot/provenance y límites; rechaza traversal, symlinks,
+mutación de snapshot y trailing JSON. Mapping/validación de dominio y otros
+formatos o BBDD siguen fuera de este adaptador. La omisión inicial del trailing
+JSON se detectó en revisión, se probó y quedó cerrada como 208W antes de commit.

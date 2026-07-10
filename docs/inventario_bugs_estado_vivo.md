@@ -87,6 +87,11 @@ mismo commit.
   fixture usa ahora `MCPOperatorOperationsResourceURIV0`; focales de stdio,
   JSON-RPC HTTP y montaje MCP verdes. No hubo servidor, proveedor ni efecto
   externo.
+- BUG-ORQ-20260711-208W: cerrado localmente. El primer adaptador CSV/JSON de
+  ingesta validaba el array JSON pero no comprobaba datos posteriores al cierre
+  del array. Se anadio rechazo `data_file_json_trailing_data` con prueba focal;
+  se preservan hash, snapshot y limites. No hubo acceso fuera del root ni
+  efecto externo.
 - D3 configuracion/envs 20260710: cerrado localmente. La metrica separa
   produccion `425/425` y fixtures exclusivos `103/103`, con dos pases verdes.
 - D3 local 2026-07-10: detenido tras el primer lote determinista para no

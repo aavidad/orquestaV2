@@ -69,3 +69,17 @@ go test -count=1 \
   ./modulos/orquesta-tool-capability
 go test -count=1 . -run 'TestNeutralOrchestrationPackagesDoNotImportProductAdapters'
 ```
+
+## Actualizacion 2026-07-11: primer adaptador real de ingesta
+
+`modulos/orquesta-data-ingestion-file` implementa los puertos de fuente y
+perfilado para CSV y JSON mediante biblioteca estándar. La composición registra
+refs opacas en un catálogo y un root permitido explícito; el adaptador rechaza
+rutas absolutas/traversal, symlinks, archivos no regulares, fuentes no
+registradas, snapshots modificados, exceso de bytes/filas y JSON trailing.
+Genera hash SHA-256, snapshot/provenance opacos y tipos de columnas sin exponer
+rutas en el material devuelto.
+
+No sustituye mapping ni validación de dominio, ni añade XLSX/ODS/Parquet/SQL,
+drivers, red o wiring de servidor. Es un adaptador opt-in que una composición
+de tool puede inyectar después de resolver la autoridad y el snapshot.
