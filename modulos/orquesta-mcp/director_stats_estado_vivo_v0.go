@@ -30,13 +30,13 @@ func (executor MCPDirectorStatsToolExecutorV0) applyEstadoVivoProjectionV0(
 	ctx context.Context,
 	input MCPDirectorStatsToolInputV0,
 	stats *orquestacionnucleoapp.DirectorRunStatsV0,
-) {
+) (causalVerdict string, causalReasonCode string) {
 	if executor.EstadoVivoSource == nil || stats == nil {
-		return
+		return "", ""
 	}
 	runRef := strings.TrimSpace(stats.RunRef)
 	if runRef == "" {
-		return
+		return "", ""
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -53,7 +53,7 @@ func (executor MCPDirectorStatsToolExecutorV0) applyEstadoVivoProjectionV0(
 			"fuente de estado vivo no disponible",
 			[]string{mcpDirectorStatsEvidenceEstadoVivoErrorV0},
 		)
-		return
+		return "", ""
 	}
 	projection := orquestaestadovivo.ConstruirProyeccionCicloVidaV0(
 		evidencias,
@@ -62,9 +62,10 @@ func (executor MCPDirectorStatsToolExecutorV0) applyEstadoVivoProjectionV0(
 	)
 	node, ok := mcpDirectorStatsEstadoVivoNodeForRunV0(projection, runRef)
 	if !ok {
-		return
+		return "", ""
 	}
 	applyMCPDirectorStatsEstadoVivoNodeV0(stats, node)
+	return string(node.Veredicto.Clase), strings.TrimSpace(node.Veredicto.ReasonCode)
 }
 
 func mcpDirectorStatsEstadoVivoNodeForRunV0(

@@ -108,7 +108,7 @@ romper campos existentes.
   localizar el executor. Mismo contrato que A1: campos opcionales + nunca
   running contradicho. Verifica: `go test -count=1 ./modulos/orquesta-mcp`.
 
-- [ ] PASO A4: veredicto en `director/stats`.
+- [x] PASO A4: veredicto en `director/stats`.
   Ficheros: `modulos/orquesta-mcp/director_stats_*` (localizar con rg).
   Mismo contrato. Verifica: `go test -count=1 ./modulos/orquesta-mcp`.
 

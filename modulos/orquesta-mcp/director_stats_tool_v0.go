@@ -41,16 +41,18 @@ type MCPDirectorStatsToolInputV0 struct {
 }
 
 type MCPDirectorStatsToolResultV0 struct {
-	Estado          string                                                 `json:"estado"`
-	RequestID       string                                                 `json:"request_id,omitempty"`
-	CorrelationID   string                                                 `json:"correlation_id,omitempty"`
-	RunRef          string                                                 `json:"run_ref,omitempty"`
-	ExternalJob     *MCPDirectorExternalJobStatsV0                         `json:"external_job,omitempty"`
-	Goal            *MCPDirectorGoalStatsV0                                `json:"goal,omitempty"`
-	Stats           *orquestacionnucleoapp.DirectorRunStatsV0              `json:"stats,omitempty"`
-	DecisionContext *orquestaobservability.DirectorDecisionContextV0       `json:"decision_context,omitempty"`
-	OpsSnapshot     *orquestaobservability.DirectorAutonomousOpsSnapshotV0 `json:"ops_snapshot,omitempty"`
-	Errores         []MCPValidationIssueV0                                 `json:"errores_publicos,omitempty"`
+	Estado           string                                                 `json:"estado"`
+	RequestID        string                                                 `json:"request_id,omitempty"`
+	CorrelationID    string                                                 `json:"correlation_id,omitempty"`
+	RunRef           string                                                 `json:"run_ref,omitempty"`
+	CausalVerdict    string                                                 `json:"causal_verdict,omitempty"`
+	CausalReasonCode string                                                 `json:"causal_reason_code,omitempty"`
+	ExternalJob      *MCPDirectorExternalJobStatsV0                         `json:"external_job,omitempty"`
+	Goal             *MCPDirectorGoalStatsV0                                `json:"goal,omitempty"`
+	Stats            *orquestacionnucleoapp.DirectorRunStatsV0              `json:"stats,omitempty"`
+	DecisionContext  *orquestaobservability.DirectorDecisionContextV0       `json:"decision_context,omitempty"`
+	OpsSnapshot      *orquestaobservability.DirectorAutonomousOpsSnapshotV0 `json:"ops_snapshot,omitempty"`
+	Errores          []MCPValidationIssueV0                                 `json:"errores_publicos,omitempty"`
 }
 
 type MCPDirectorExternalJobStatsRequestV0 struct {
@@ -270,20 +272,22 @@ func (executor MCPDirectorStatsToolExecutorV0) Execute(
 	enrichMCPDirectorStatsExternalWorkNoAgentMaterializedV0(&stats)
 	goal := executor.resolveGoalStatsV0(ctx, stats.RunRef)
 	applyMCPDirectorGoalRunProjectionV0(goal, &stats)
-	executor.applyEstadoVivoProjectionV0(ctx, input, &stats)
+	causalVerdict, causalReasonCode := executor.applyEstadoVivoProjectionV0(ctx, input, &stats)
 	executor.applyOperationalPlanStateProjectionV0(ctx, stats.RunRef, &stats)
 	decisionContext := buildMCPDirectorDecisionContextV0(run, stats, input.OccurredAt)
 	return MCPDirectorStatsToolResultV0{
-		Estado:          MCPDirectorStatsEstadoOKV0,
-		RequestID:       strings.TrimSpace(input.RequestID),
-		CorrelationID:   firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
-		RunRef:          stats.RunRef,
-		ExternalJob:     externalJob,
-		Goal:            goal,
-		Stats:           &stats,
-		DecisionContext: decisionContext,
-		OpsSnapshot:     buildMCPDirectorStatsOpsSnapshotV0(stats, decisionContext, input.OccurredAt),
-		Errores:         []MCPValidationIssueV0{},
+		Estado:           MCPDirectorStatsEstadoOKV0,
+		RequestID:        strings.TrimSpace(input.RequestID),
+		CorrelationID:    firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
+		RunRef:           stats.RunRef,
+		CausalVerdict:    causalVerdict,
+		CausalReasonCode: causalReasonCode,
+		ExternalJob:      externalJob,
+		Goal:             goal,
+		Stats:            &stats,
+		DecisionContext:  decisionContext,
+		OpsSnapshot:      buildMCPDirectorStatsOpsSnapshotV0(stats, decisionContext, input.OccurredAt),
+		Errores:          []MCPValidationIssueV0{},
 	}, nil
 }
 
