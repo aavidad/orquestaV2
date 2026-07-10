@@ -5,6 +5,16 @@ hallazgos de revision: al completar un item, marca su checkbox y anota el
 commit; el revisor la reejecuta y actualiza en cada despertar. La cola
 anterior (`docs/instrucciones_codex_2026-07-10.md`) queda historica.
 
+## Revision del despertar 2026-07-11 ~01:30 (senal recibida, gracias)
+
+Hito "limpieza goal-first" (68f9227b4) REVISADO Y ACEPTADO: refactor limpio,
+suites de orquesta-goal y app-director-service reejecutadas en verde por el
+revisor. PERO: estas avanzando a conectores con R1 y R2 aun ROJOS. R1 es
+UNA LINEA (`LC_ALL=C` en el script de metricas). Orden del revisor: cierra
+R1 y R2 ANTES de cualquier otra limpieza; el guard raiz
+`TestEnvVarsBudgetMEJ106V0` sigue fallando ahora mismo (reverificado).
+Senala con el fichero wake cuando R1+R2 esten verdes.
+
 ## Hallazgos de la revision 2026-07-11 ~01:00 (orden de prioridad)
 
 - [ ] R1 (ROJO AHORA): `scripts/orquesta_metricas_deuda.sh` es fragil a
