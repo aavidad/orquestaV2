@@ -20,7 +20,14 @@ Implementado solo en este worktree, sin proveedores, red, despliegue ni PII:
 - Descriptor provisional aislado de bundle para `embedded_module`,
   `local_sidecar` y `remote_connector`; incluye módulo/conector,
   config+i18n+tests+hashes y recibo, sin duplicar el SDK ToolBundle/AttachPlan
-  que se está realizando en otro worktree.
+  que ya esta integrado en la rama vigente.
+
+Actualizacion 2026-07-10: el SDK neutral
+`modulos/orquesta-tool-capability` y el adaptador durable de referencia
+`modulos/orquesta-tool-capability-file` estan integrados en `9748c76d0`.
+El descriptor provisional debe convertirse mediante esos puertos; no se crean
+tipos paralelos ni se copia su logica de claims, receipts, CAS, leases,
+snapshots o binding autorizado.
 
 Pendientes concretos:
 
@@ -30,8 +37,9 @@ Pendientes concretos:
   destinos) tras corpus autorizado, benchmark, licencia y política de datos.
 - Transporte MCP/API/CLI fino que delegue en el caso de uso y wizard que consulte
   el registro, cuando los módulos de composición correspondientes estén listos.
-- Integración con el SDK genérico ToolBundle/AttachPlan desde su worktree, sin
-  copiar sus tipos ni su lógica aquí.
+- Adaptador de integración del descriptor de extracción con el SDK genérico
+  ToolBundle/AttachPlan, por composición y sin copiar tipos ni lógica. Requiere
+  materializador idempotente, binding authority y snapshot resolver propios.
 
 Verificación local realizada:
 
@@ -86,11 +94,10 @@ ejemplo de personas, recomendación inicial y preparación del wizard.
 
 ## Excepción operativa
 
-Este lanzamiento directo de Codex es una excepción documentada: el binario vivo
-de Orquesta aún no ha superado F3/F5. El trabajo futuro de implementación,
-evaluación e integración debe volver a ejecutarse y coordinarse por Orquesta
-cuando esa frontera esté resuelta; no convertir esta excepción documental en
-flujo normal.
+El lanzamiento original directo de Codex fue una excepción documentada. El SDK
+integrado no habilita por sí solo una ejecución productiva: el trabajo futuro de
+composición, evaluación e integración debe coordinarse por Orquesta cuando F3/F5
+estén resueltos; no convertir aquella excepción en flujo normal.
 
 ## Siguiente acción del operador
 
