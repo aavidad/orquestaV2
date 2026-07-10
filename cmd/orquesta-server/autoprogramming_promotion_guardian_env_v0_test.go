@@ -3,69 +3,35 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
-func TestAutoprogrammingPromotionGuardianTimeoutEnvPrecedenceV0(t *testing.T) {
-	fileValue := "30s"
-	tests := []struct {
-		name      string
-		key       string
-		envValue  string
-		fileValue *string
-		fallback  string
-		want      string
-	}{
-		{
-			name:      "env wins",
-			key:       envServerAutoprogrammingPromotionGuardianHealthTimeoutV0,
-			envValue:  "15s",
-			fileValue: &fileValue,
-			fallback:  "5s",
-			want:      "15s",
-		},
-		{
-			name:      "file wins over default",
-			key:       envServerAutoprogrammingPromotionGuardianCommandTimeoutV0,
-			fileValue: &fileValue,
-			fallback:  "5s",
-			want:      "30s",
-		},
-		{
-			name:     "default when unset",
-			key:      envServerAutoprogrammingPromotionGuardianHealthTimeoutV0,
-			fallback: "5s",
-			want:     "5s",
-		},
+func TestAutoprogrammingPromotionGuardianTimeoutsFromTypedConfigOverrideProcessDefaultsV0(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, serverProjectConfigFileNameV0)
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"autoprogramming":{"promotion":{"guardian":{
+			"enabled":true,
+			"health_timeout":"30s",
+			"command_timeout":"2m"
+		}}}
+	}`
+	if err := os.WriteFile(configPath, []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
 	}
 
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			unsetEnvForTestV0(t, test.key)
-			if test.envValue != "" {
-				t.Setenv(test.key, test.envValue)
-			}
-			if got := stringProjectConfigOrEnvOrDefaultV0(test.key, test.fileValue, test.fallback); got != test.want {
-				t.Fatalf("timeout=%q want=%q", got, test.want)
-			}
-		})
-	}
-}
-
-func unsetEnvForTestV0(t *testing.T, key string) {
-	t.Helper()
-	previous, existed := os.LookupEnv(key)
-	if err := os.Unsetenv(key); err != nil {
-		t.Fatalf("unset %s: %v", key, err)
-	}
-	t.Cleanup(func() {
-		if existed {
-			_ = os.Setenv(key, previous)
-			return
-		}
-		_ = os.Unsetenv(key)
+	guardian := autoprogrammingPromotionGuardianFromEnvV0(orquestaserver.ConfigV0{
+		ProjectWorkDir:        root,
+		ProjectConfigFilePath: configPath,
 	})
+	if !guardian.Enabled || guardian.HealthTimeout != "30s" || guardian.CommandTimeout != "2m" {
+		t.Fatalf("guardian=%+v", guardian)
+	}
 }
 
 func TestAutoprogrammingPromotionGuardianEnvV0TodasClavesRegistradasComoChildProcess(t *testing.T) {

@@ -27,8 +27,6 @@ func init() {
 		envServerAutoprogrammingPromotionGuardianArtifactRootV0:               "Artefactos guardian",
 		envServerAutoprogrammingPromotionGuardianBuildCommandV0:               "Build guardian",
 		envServerAutoprogrammingPromotionGuardianTestCommandsV0:               "Tests guardian",
-		envServerAutoprogrammingPromotionGuardianHealthTimeoutV0:              "Timeout salud guardian",
-		envServerAutoprogrammingPromotionGuardianCommandTimeoutV0:             "Timeout comando guardian",
 		envServerAutoprogrammingPromotionGuardianArtifactMaxBytesV0:           "Maximo artefacto guardian",
 		envServerAutoprogrammingPromotionGuardianRepairCommandV0:              "Comando reparacion guardian",
 		envServerAutoprogrammingPromotionGuardianRepairCodexV0:                "Reparacion Codex guardian",
@@ -206,12 +204,8 @@ func autoprogrammingPromotionGuardianFromEnvV0(
 		TestCommands: autoprogrammingPromotionGuardianStringsFromProjectConfigV0(
 			envServerAutoprogrammingPromotionGuardianTestCommandsV0, guardianConfig.TestCommands, nil,
 		),
-		HealthTimeout: stringProjectConfigOrEnvOrDefaultV0(
-			envServerAutoprogrammingPromotionGuardianHealthTimeoutV0, guardianConfig.HealthTimeout, "",
-		),
-		CommandTimeout: stringProjectConfigOrEnvOrDefaultV0(
-			envServerAutoprogrammingPromotionGuardianCommandTimeoutV0, guardianConfig.CommandTimeout, "",
-		),
+		HealthTimeout:  stringProjectConfigFileOrDefaultV0(guardianConfig.HealthTimeout, ""),
+		CommandTimeout: stringProjectConfigFileOrDefaultV0(guardianConfig.CommandTimeout, ""),
 		ArtifactMaxBytes: stringProjectConfigOrEnvOrDefaultV0(
 			envServerAutoprogrammingPromotionGuardianArtifactMaxBytesV0, guardianConfig.ArtifactMaxBytes, "",
 		),

@@ -11,8 +11,6 @@ const (
 	envServerAutoprogrammingPromotionGuardianArtifactRootV0               = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_ARTIFACT_ROOT"
 	envServerAutoprogrammingPromotionGuardianTestCommandsV0               = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_TEST_COMMANDS"
 	envServerAutoprogrammingPromotionGuardianBuildCommandV0               = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_BUILD_COMMAND"
-	envServerAutoprogrammingPromotionGuardianHealthTimeoutV0              = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_HEALTH_TIMEOUT"
-	envServerAutoprogrammingPromotionGuardianCommandTimeoutV0             = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_COMMAND_TIMEOUT"
 	envServerAutoprogrammingPromotionGuardianArtifactMaxBytesV0           = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_ARTIFACT_MAX_BYTES"
 	envServerAutoprogrammingPromotionGuardianRepairCommandV0              = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_REPAIR_COMMAND"
 	envServerAutoprogrammingPromotionGuardianRepairCodexV0                = "ORQUESTA_SERVER_AUTOPROGRAMMING_PROMOTION_GUARDIAN_REPAIR_CODEX"
