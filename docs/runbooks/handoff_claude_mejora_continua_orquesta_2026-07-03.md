@@ -3008,3 +3008,16 @@ Primera aplicacion del grupo sin referencias: retirados dos wrappers privados
 (allowlist legacy del runner guardian y acceso directo al broker de contexto).
 El wiring vigente permanece; focales verdes. Indice actual: 25.217 funciones y
 1.232 candidatas brutas.
+
+## Actualizacion Codex 2026-07-11: tools de ingesta y presentaciones
+
+Se integraron en paralelo los adaptadores hexagonales
+`orquesta-data-ingestion-tool-capability` y
+`orquesta-presentation-extraction-tool-capability`. Ambos reutilizan el SDK
+`ToolBundle/AttachPlan`: descriptor neutral, autoridad de registro, intent por
+refs, snapshot opaco, efecto idempotente y delegacion de lease/CAS/recibos al
+SDK. Se verificaron sus cuatro modulos, el SDK y la frontera neutral raiz.
+
+No hay parser real, OCR, filesystem, driver SQL, DSN, red, LibreOffice ni
+composicion productiva en estos modulos. Esos adaptadores quedan como siguiente
+fase opt-in, no como dependencia del nucleo.
